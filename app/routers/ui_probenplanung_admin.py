@@ -26,8 +26,8 @@ from app.models.probenplanung import (
     ProbeartGruppe,
     ProbeartTerminTyp,
 )
-from app.models.teilnahme import Termin
 from app.models.sms import SmsGroup
+from app.models.teilnahme import Termin
 from app.models.user import User
 from app.services.checklist_template_service import (
     neue_version,
@@ -104,7 +104,12 @@ def _formularwerte(
 
 
 def _render_form(
-    request: Request, db: Session, user: User, probeart: Probeart | None, form: dict | None = None, fehler: list[str] | None = None
+    request: Request,
+    db: Session,
+    user: User,
+    probeart: Probeart | None,
+    form: dict | None = None,
+    fehler: list[str] | None = None,
 ):
     return templates.TemplateResponse(
         request,
@@ -114,19 +119,35 @@ def _render_form(
             "probeart": probeart,
             "form": form or {},
             "fehler": fehler or [],
-            "gruppen": db.query(SmsGroup).filter(SmsGroup.org_id == user.org_id).order_by(SmsGroup.display_order, SmsGroup.name).all(),
-            "ausgewaehlte_gruppen_ids": ({row.sms_group_id for row in db.query(ProbeartGruppe).filter(ProbeartGruppe.probeart_id == probeart.id).all()} if probeart else set()),
+            "gruppen": db.query(SmsGroup)
+            .filter(SmsGroup.org_id == user.org_id)
+            .order_by(SmsGroup.display_order, SmsGroup.name)
+            .all(),
+            "ausgewaehlte_gruppen_ids": (
+                {
+                    row.sms_group_id
+                    for row in db.query(ProbeartGruppe).filter(ProbeartGruppe.probeart_id == probeart.id).all()
+                }
+                if probeart
+                else set()
+            ),
         },
     )
 
 
 def _probeart_gruppen_setzen(db: Session, user: User, probeart: Probeart, gruppe_ids: list[int]) -> None:
     ids = set(gruppe_ids)
-    gueltig = {row.id for row in db.query(SmsGroup).filter(SmsGroup.org_id == user.org_id, SmsGroup.id.in_(ids)).all()} if ids else set()
+    gueltig = (
+        {row.id for row in db.query(SmsGroup).filter(SmsGroup.org_id == user.org_id, SmsGroup.id.in_(ids)).all()}
+        if ids
+        else set()
+    )
     if ids != gueltig:
         raise HTTPException(422, "Ungültige Gruppe")
     db.query(ProbeartGruppe).filter(ProbeartGruppe.probeart_id == probeart.id).delete()
-    db.add_all([ProbeartGruppe(org_id=user.org_id, probeart_id=probeart.id, sms_group_id=group_id) for group_id in gueltig])
+    db.add_all(
+        [ProbeartGruppe(org_id=user.org_id, probeart_id=probeart.id, sms_group_id=group_id) for group_id in gueltig]
+    )
 
 
 @router.get("/probearten", response_class=HTMLResponse)
@@ -146,6 +167,7 @@ def probearten_liste(
 @router.get("/probearten/neu", response_class=HTMLResponse)
 def probeart_neu(
     request: Request,
+    db: Session = Depends(get_db),
     user: User = Depends(require_role("org_admin")),
     _guard: None = Depends(require_probenplanung_enabled),
     _: CurrentOrgId = None,
@@ -833,8 +855,13 @@ def punkt_loeschen(
 
 def _public_token_liste(db: Session, org_id: int | None):
     from app.models.probenplanung import ProbePublicToken
-    return (db.query(ProbePublicToken).filter(ProbePublicToken.org_id == org_id)
-            .order_by(ProbePublicToken.erstellt_am.desc()).all())
+
+    return (
+        db.query(ProbePublicToken)
+        .filter(ProbePublicToken.org_id == org_id)
+        .order_by(ProbePublicToken.erstellt_am.desc())
+        .all()
+    )
 
 
 def _public_verwaltung_response(request: Request, db: Session, user: User, plain: str | None = None):
@@ -845,62 +872,94 @@ def _public_verwaltung_response(request: Request, db: Session, user: User, plain
     basis = (settings.PUBLIC_BASE_URL or settings.APP_BASE_URL).rstrip("/")
     url = f"{basis}/p/probenplan/{plain}" if plain else None
     from app.core.crypto import decrypt_secret
+
     token_links = []
     for token in _public_token_liste(db, user.org_id):
         try:
             raw = decrypt_secret(token.token_enc) if token.token_enc else None
         except Exception:
             raw = None
-        token_links.append({"token": token, "url": f"{basis}/p/probenplan/{raw}" if raw else None,
-                            "ics_url": f"{basis}/p/probenplan/{raw}.ics" if raw else None})
-    return templates.TemplateResponse(request, "probenplanung/verwaltung_oeffentlich.html", {
-        "user": user, "tokens": token_links,
-        "public_aktiv": bool(org_settings and org_settings.probenplanung_public_aktiv),
-        "public_url": url, "ics_url": f"{url}.ics" if url else None,
-        "webcal_url": "webcal://" + url.split("://", 1)[1] + ".ics" if url else None,
-    }, headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
+        token_links.append(
+            {
+                "token": token,
+                "url": f"{basis}/p/probenplan/{raw}" if raw else None,
+                "ics_url": f"{basis}/p/probenplan/{raw}.ics" if raw else None,
+            }
+        )
+    return templates.TemplateResponse(
+        request,
+        "probenplanung/verwaltung_oeffentlich.html",
+        {
+            "user": user,
+            "tokens": token_links,
+            "public_aktiv": bool(org_settings and org_settings.probenplanung_public_aktiv),
+            "public_url": url,
+            "ics_url": f"{url}.ics" if url else None,
+            "webcal_url": "webcal://" + url.split("://", 1)[1] + ".ics" if url else None,
+        },
+        headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"},
+    )
 
 
 @router.get("/oeffentlich", response_class=HTMLResponse)
 def public_verwaltung(
-    request: Request, db: Session = Depends(get_db),
+    request: Request,
+    db: Session = Depends(get_db),
     user: User = Depends(require_role("org_admin")),
-    _guard: None = Depends(require_probenplanung_enabled), _: CurrentOrgId = None,
+    _guard: None = Depends(require_probenplanung_enabled),
+    _: CurrentOrgId = None,
 ):
     return _public_verwaltung_response(request, db, user)
 
 
 @router.post("/oeffentlich/freigabe")
 def public_freigabe(
-    request: Request, public_aktiv: str = Form(""), db: Session = Depends(get_db),
+    request: Request,
+    public_aktiv: str = Form(""),
+    db: Session = Depends(get_db),
     user: User = Depends(require_role("org_admin")),
-    _guard: None = Depends(require_probenplanung_enabled), _: CurrentOrgId = None,
+    _guard: None = Depends(require_probenplanung_enabled),
+    _: CurrentOrgId = None,
 ):
     from app.models.master import OrgSettings
+
     row = db.query(OrgSettings).filter(OrgSettings.org_id == user.org_id).first()
     if row is None:
         raise HTTPException(404, "Nicht gefunden")
     row.probenplanung_public_aktiv = bool(public_aktiv)
-    write_audit(db, "probenplanung.public.freigabe", org_id=user.org_id, user_id=user.id,
-                payload={"aktiv": bool(public_aktiv)})
+    write_audit(
+        db, "probenplanung.public.freigabe", org_id=user.org_id, user_id=user.id, payload={"aktiv": bool(public_aktiv)}
+    )
     db.commit()
     return RedirectResponse("/admin/probenplanung/oeffentlich", 303)
 
 
 @router.post("/oeffentlich")
 def public_token_erzeugen(
-    request: Request, bezeichnung: str = Form(""), db: Session = Depends(get_db),
+    request: Request,
+    bezeichnung: str = Form(""),
+    db: Session = Depends(get_db),
     user: User = Depends(require_role("org_admin")),
-    _guard: None = Depends(require_probenplanung_enabled), _: CurrentOrgId = None,
+    _guard: None = Depends(require_probenplanung_enabled),
+    _: CurrentOrgId = None,
 ):
     import hashlib
     import secrets
 
     from app.models.probenplanung import ProbePublicToken
+
     plain = secrets.token_urlsafe(32)
     from app.core.crypto import encrypt_secret
-    db.add(ProbePublicToken(org_id=user.org_id, art="plan", bezeichnung=bezeichnung.strip()[:150] or None,
-                            token_hash=hashlib.sha256(plain.encode()).hexdigest(), token_enc=encrypt_secret(plain)))
+
+    db.add(
+        ProbePublicToken(
+            org_id=user.org_id,
+            art="plan",
+            bezeichnung=bezeichnung.strip()[:150] or None,
+            token_hash=hashlib.sha256(plain.encode()).hexdigest(),
+            token_enc=encrypt_secret(plain),
+        )
+    )
     write_audit(db, "probenplanung.public.token_erzeugt", org_id=user.org_id, user_id=user.id)
     db.commit()
     return _public_verwaltung_response(request, db, user, plain)
@@ -908,31 +967,53 @@ def public_token_erzeugen(
 
 @router.post("/oeffentlich/{token_id}/{aktion}")
 def public_token_aendern(
-    token_id: int, aktion: str, request: Request, db: Session = Depends(get_db),
+    token_id: int,
+    aktion: str,
+    request: Request,
+    db: Session = Depends(get_db),
     user: User = Depends(require_role("org_admin")),
-    _guard: None = Depends(require_probenplanung_enabled), _: CurrentOrgId = None,
+    _guard: None = Depends(require_probenplanung_enabled),
+    _: CurrentOrgId = None,
 ):
     import hashlib
     import secrets
     from datetime import UTC, datetime
 
     from app.models.probenplanung import ProbePublicToken
-    row = (db.query(ProbePublicToken)
-           .filter(ProbePublicToken.id == token_id, ProbePublicToken.org_id == user.org_id).first())
+
+    row = (
+        db.query(ProbePublicToken)
+        .filter(ProbePublicToken.id == token_id, ProbePublicToken.org_id == user.org_id)
+        .first()
+    )
     if row is None or aktion not in {"widerrufen", "regenerieren"}:
         raise HTTPException(404, "Nicht gefunden")
     row.widerrufen_am = datetime.now(UTC).replace(tzinfo=None)
     plain = None
     if aktion == "regenerieren":
         from app.core.crypto import encrypt_secret
+
         plain = secrets.token_urlsafe(32)
-        db.add(ProbePublicToken(
-            org_id=user.org_id, art=row.art, termin_id=row.termin_id, jahr=row.jahr,
-            filter_probeart_ids=row.filter_probeart_ids, bezeichnung=row.bezeichnung,
-            token_hash=hashlib.sha256(plain.encode()).hexdigest(), token_enc=encrypt_secret(plain),
-        ))
-    write_audit(db, "probenplanung.public.token_" + aktion, org_id=user.org_id, user_id=user.id,
-                entity_type="probe_public_token", entity_id=row.id)
+        db.add(
+            ProbePublicToken(
+                org_id=user.org_id,
+                art=row.art,
+                termin_id=row.termin_id,
+                jahr=row.jahr,
+                filter_probeart_ids=row.filter_probeart_ids,
+                bezeichnung=row.bezeichnung,
+                token_hash=hashlib.sha256(plain.encode()).hexdigest(),
+                token_enc=encrypt_secret(plain),
+            )
+        )
+    write_audit(
+        db,
+        "probenplanung.public.token_" + aktion,
+        org_id=user.org_id,
+        user_id=user.id,
+        entity_type="probe_public_token",
+        entity_id=row.id,
+    )
     db.commit()
     if plain:
         return _public_verwaltung_response(request, db, user, plain)

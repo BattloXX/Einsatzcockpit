@@ -121,12 +121,15 @@ class TeilnahmeStatus(StrEnum):
 
 class TerminGruppe(TenantScoped, Base):
     """Die für eine Probe ausgewählten bestehenden Mitgliedergruppen."""
+
     __tablename__ = "termin_gruppe"
     __table_args__ = (UniqueConstraint("org_id", "termin_id", "sms_group_id", name="uq_termin_gruppe"),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     termin_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("termin.id", ondelete="CASCADE"), nullable=False)
-    sms_group_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("sms_group.id", ondelete="CASCADE"), nullable=False)
+    sms_group_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("sms_group.id", ondelete="CASCADE"), nullable=False
+    )
 
 
 class Teilnahme(TenantScoped, Base):

@@ -166,25 +166,27 @@ def probenplan_liste(
         raise HTTPException(422, "Ungültiger Zeitraum")
     selected_year = jahr or now_local(user.org).year
     query = db.query(Termin).options(joinedload(Termin.probeart))
-    termine = _filter_query(
-        query,
-        org=user.org,
-        jahr=selected_year,
-        probeart_id=probeart_id,
-        status=status,
-        verantwortlich_id=verantwortlich_id,
-        von=von,
-        bis=bis,
-        q=q,
-        zeitraum=zeitraum,
-    ).order_by(Termin.beginn).all()
+    termine = (
+        _filter_query(
+            query,
+            org=user.org,
+            jahr=selected_year,
+            probeart_id=probeart_id,
+            status=status,
+            verantwortlich_id=verantwortlich_id,
+            von=von,
+            bis=bis,
+            q=q,
+            zeitraum=zeitraum,
+        )
+        .order_by(Termin.beginn)
+        .all()
+    )
     # Jahreszahlen bleiben beim Filtern stabil; Probearten werden gemeinsam geladen.
     jahrestermine = termine
     if probeart_id is not None or status or verantwortlich_id is not None or von or bis or q or zeitraum != "alle":
         start, ende = _jahr_grenzen(selected_year, user.org)
-        jahrestermine = query.filter(
-            Termin.beginn >= start, Termin.beginn < ende, Termin.archiviert_am.is_(None)
-        ).all()
+        jahrestermine = query.filter(Termin.beginn >= start, Termin.beginn < ende, Termin.archiviert_am.is_(None)).all()
     context: dict[str, Any] = {
         **_listen_context(db, user, termine),
         "hero": _vollprobe_context(db, user),
@@ -209,9 +211,7 @@ def probenplan_liste(
         "uebernommen": uebernommen,
     }
     template = (
-        "probenplanung/_plan_tabelle.html"
-        if request.headers.get("HX-Request") == "true"
-        else "probenplanung/plan.html"
+        "probenplanung/_plan_tabelle.html" if request.headers.get("HX-Request") == "true" else "probenplanung/plan.html"
     )
     return templates.TemplateResponse(request, template, context)
 
@@ -246,16 +246,20 @@ def probenplan_kalender(
         local = to_org_tz(termin.beginn, user.org)
         assert local is not None
         tage.setdefault(local.date(), []).append(termin)
-    return templates.TemplateResponse(request, "probenplanung/kalender.html", {
-        "user": user,
-        "jahr": selected_year,
-        "monat": selected_month,
-        "kalender_probearten": list({t.probeart.id: t.probeart for t in termine if t.probeart}.values()),
-        "monatsname": calendar.month_name[selected_month],
-        "wochen": calendar.Calendar(firstweekday=0).monthdatescalendar(selected_year, selected_month),
-        "tage": tage,
-        "can_edit": can_edit_proben(user),
-    })
+    return templates.TemplateResponse(
+        request,
+        "probenplanung/kalender.html",
+        {
+            "user": user,
+            "jahr": selected_year,
+            "monat": selected_month,
+            "kalender_probearten": list({t.probeart.id: t.probeart for t in termine if t.probeart}.values()),
+            "monatsname": calendar.month_name[selected_month],
+            "wochen": calendar.Calendar(firstweekday=0).monthdatescalendar(selected_year, selected_month),
+            "tage": tage,
+            "can_edit": can_edit_proben(user),
+        },
+    )
 
 
 def _require_login(request: Request) -> User:
@@ -279,10 +283,7 @@ def _termin_or_404(db: Session, org_id: int | None, termin_id: int) -> Termin:
 
 def _teilnehmer_context(db: Session, user: User, termin: Termin) -> dict[str, Any]:
     members = (
-        db.query(Member)
-        .filter(Member.active.is_(True))
-        .order_by(Member.lastname, Member.firstname, Member.id)
-        .all()
+        db.query(Member).filter(Member.active.is_(True)).order_by(Member.lastname, Member.firstname, Member.id).all()
     )
     rows = (
         db.query(Teilnahme)
@@ -346,7 +347,8 @@ def _appell_context(db: Session, user: User, termin: Termin) -> dict[str, Any]:
     context = _teilnehmer_context(db, user, termin)
     ausgewaehlte_ids = context["ausgewaehlte_gruppen_ids"]
     relevante = [
-        item for item in context["teilnehmer"]
+        item
+        for item in context["teilnehmer"]
         if not ausgewaehlte_ids or ausgewaehlte_ids.intersection(context["member_gruppen"].get(item["member"].id, []))
     ]
     teilnehmer = []
@@ -414,11 +416,7 @@ def _checkliste_or_404(db: Session, org_id: int | None, termin_id: int) -> tuple
 
 
 def _nachbereitung_context(db: Session, termin: Termin) -> dict[str, Any]:
-    nachbereitung = (
-        db.query(ProbeNachbereitung)
-        .filter(ProbeNachbereitung.termin_id == termin.id)
-        .first()
-    )
+    nachbereitung = db.query(ProbeNachbereitung).filter(ProbeNachbereitung.termin_id == termin.id).first()
     erkenntnisse = (
         db.query(ProbeErkenntnis)
         .filter(ProbeErkenntnis.termin_id == termin.id)
@@ -428,9 +426,7 @@ def _nachbereitung_context(db: Session, termin: Termin) -> dict[str, Any]:
     return {"nachbereitung": nachbereitung, "erkenntnisse": erkenntnisse}
 
 
-def _checklist_item_or_404(
-    db: Session, org_id: int | None, checkliste_id: int, item_id: int
-) -> ProbeChecklistItem:
+def _checklist_item_or_404(db: Session, org_id: int | None, checkliste_id: int, item_id: int) -> ProbeChecklistItem:
     item = (
         db.query(ProbeChecklistItem)
         .filter(
@@ -529,17 +525,27 @@ def _form_context(db: Session, user: User, termin: Termin | None = None) -> dict
         "probearten": db.query(Probeart).filter(Probeart.aktiv.is_(True)).order_by(Probeart.sortierung).all(),
         "members": db.query(Member).filter(Member.active.is_(True)).order_by(Member.lastname, Member.firstname).all(),
         "gruppen": db.query(SmsGroup).order_by(SmsGroup.display_order, SmsGroup.name).all(),
-        "ausgewaehlte_gruppen_ids": ({row.sms_group_id for row in db.query(TerminGruppe).filter(TerminGruppe.termin_id == termin.id).all()} if termin else set()),
+        "ausgewaehlte_gruppen_ids": (
+            {row.sms_group_id for row in db.query(TerminGruppe).filter(TerminGruppe.termin_id == termin.id).all()}
+            if termin
+            else set()
+        ),
     }
 
 
 def _gruppen_setzen(db: Session, user: User, termin: Termin, gruppe_ids: list[int]) -> None:
     ids = set(gruppe_ids)
-    gueltige_ids = {row.id for row in db.query(SmsGroup.id).filter(SmsGroup.org_id == user.org_id, SmsGroup.id.in_(ids)).all()} if ids else set()
+    gueltige_ids = (
+        {row.id for row in db.query(SmsGroup.id).filter(SmsGroup.org_id == user.org_id, SmsGroup.id.in_(ids)).all()}
+        if ids
+        else set()
+    )
     if ids != gueltige_ids:
         raise HTTPException(422, "Ungültige Gruppe")
     db.query(TerminGruppe).filter(TerminGruppe.termin_id == termin.id).delete()
-    db.add_all([TerminGruppe(org_id=user.org_id, termin_id=termin.id, sms_group_id=group_id) for group_id in gueltige_ids])
+    db.add_all(
+        [TerminGruppe(org_id=user.org_id, termin_id=termin.id, sms_group_id=group_id) for group_id in gueltige_ids]
+    )
 
 
 def _form_anwenden(
@@ -660,9 +666,7 @@ def probenplan_jahr_uebernehmen(
         source_local = to_org_tz(source.beginn, user.org)
         assert source_local is not None
         ziel_datum = _ziel_datum_wochentagsgleich(source_local.date(), zieljahr)
-        ziel_local = source_local.replace(
-            year=ziel_datum.year, month=ziel_datum.month, day=ziel_datum.day
-        )
+        ziel_local = source_local.replace(year=ziel_datum.year, month=ziel_datum.month, day=ziel_datum.day)
         ziel_beginn = ziel_local.astimezone(UTC).replace(tzinfo=None)
         ziel_ende = ziel_beginn + (source.ende - source.beginn) if source.ende else None
         clone = _termin_kopieren(db, source, user, beginn=ziel_beginn, ende=ziel_ende)
@@ -760,8 +764,13 @@ def probe_anlegen(
     db.add(termin)
     db.flush()
     _gruppen_setzen(
-        db, user, termin,
-        gruppe_ids or [row.sms_group_id for row in db.query(ProbeartGruppe).filter(ProbeartGruppe.probeart_id == probeart.id).all()],
+        db,
+        user,
+        termin,
+        gruppe_ids
+        or [
+            row.sms_group_id for row in db.query(ProbeartGruppe).filter(ProbeartGruppe.probeart_id == probeart.id).all()
+        ],
     )
     snapshot_erzeugen(db, termin, user.org)
     write_probe_change(
@@ -787,8 +796,7 @@ def probenplanung_uebersicht(
     _: CurrentOrgId = None,
 ):
     user = _require_login(request)
-    return templates.TemplateResponse(request, "probenplanung/_dashboard_kachel.html",
-                                      _vollprobe_context(db, user))
+    return templates.TemplateResponse(request, "probenplanung/_dashboard_kachel.html", _vollprobe_context(db, user))
 
 
 def _vollprobe_context(db: Session, user: User) -> dict[str, Any]:
@@ -841,9 +849,7 @@ def _vollprobe_context(db: Session, user: User) -> dict[str, Any]:
     ueberfaellig_gesamt = sum(values[3] for values in aggregate.values())
     gesamt, erledigt, offen, _ = aggregat
     verantwortlich = (
-        db.get(Member, termin.verantwortlich_member_id)
-        if termin and termin.verantwortlich_member_id
-        else None
+        db.get(Member, termin.verantwortlich_member_id) if termin and termin.verantwortlich_member_id else None
     )
     termin_lokal = to_org_tz(termin.beginn, user.org) if termin else None
     return {
@@ -882,7 +888,8 @@ def _druck_context(db: Session, user: User, termin: Termin) -> dict[str, Any]:
     for item in items:
         by_section.setdefault(item.section_id, []).append(item)
     member_ids = {
-        member_id for member_id in [termin.verantwortlich_member_id, termin.unterstuetzung_member_id]
+        member_id
+        for member_id in [termin.verantwortlich_member_id, termin.unterstuetzung_member_id]
         if member_id is not None
     } | {item.verantwortlich_member_id for item in items if item.verantwortlich_member_id is not None}
     members = db.query(Member).filter(Member.id.in_(member_ids)).all() if member_ids else []
@@ -938,13 +945,17 @@ def probenplan_druck(
             termin.probeart.name if termin.probeart else "Termine"
         )
         gruppen.setdefault(gruppe, []).append(termin)
-    return templates.TemplateResponse(request, "probenplanung/plan_druck.html", {
-        "user": user,
-        "jahr": selected_year,
-        "gruppen": gruppen,
-        "member_namen": {member.id: member.full_name for member in members},
-        "now": datetime.now(UTC),
-    })
+    return templates.TemplateResponse(
+        request,
+        "probenplanung/plan_druck.html",
+        {
+            "user": user,
+            "jahr": selected_year,
+            "gruppen": gruppen,
+            "member_namen": {member.id: member.full_name for member in members},
+            "now": datetime.now(UTC),
+        },
+    )
 
 
 @router.get("/{termin_id}/druck", response_class=HTMLResponse)
@@ -971,16 +982,18 @@ def probe_detail(
 ):
     user = _require_login(request)
     erlaubte_tabs = {
-        "uebersicht", "vorbereitung", "historie", "skizze", "dokumente",
-        "uebungseinsatz", "teilnehmer", "nachbereitung",
+        "uebersicht",
+        "vorbereitung",
+        "historie",
+        "skizze",
+        "dokumente",
+        "uebungseinsatz",
+        "teilnehmer",
+        "nachbereitung",
     }
     if tab not in erlaubte_tabs:
         raise HTTPException(404, "Unbekannter Tab")
     termin = _termin_or_404(db, user.org_id, termin_id)
-    if tab == "teilnehmer":
-        # Alte Detail-/Formularansicht nicht mehr ausliefern; ein einheitlicher
-        # Appell ist für jede Probe der einzige Teilnehmer-Workflow.
-        return RedirectResponse(f"/probenplanung/{termin.id}/teilnehmer/appell", status_code=303)
     checkliste = db.query(ProbeCheckliste).filter(ProbeCheckliste.termin_id == termin.id).first()
     termin_lokal = to_org_tz(termin.beginn, user.org)
     assert termin_lokal is not None
@@ -989,9 +1002,7 @@ def probe_detail(
         for member_id in (termin.verantwortlich_member_id, termin.unterstuetzung_member_id)
         if member_id is not None
     }
-    verantwortliche = (
-        db.query(Member).filter(Member.id.in_(verantwortliche_ids)).all() if verantwortliche_ids else []
-    )
+    verantwortliche = db.query(Member).filter(Member.id.in_(verantwortliche_ids)).all() if verantwortliche_ids else []
     heute = now_local(user.org).date()
     items = list(checkliste.items) if checkliste else []
     erledigt = [item for item in items if item.zustand in {"erledigt", "nicht_relevant"}]
@@ -1044,19 +1055,18 @@ def probe_detail(
         )
         uploader_ids = {medium.hochgeladen_von for medium in medien if medium.hochgeladen_von is not None}
         uploaders = db.query(User).filter(User.id.in_(uploader_ids)).all() if uploader_ids else []
-        context.update({
-            "skizzen": [medium for medium in medien if medium.kind == "image"],
-            "dokumente": [medium for medium in medien if medium.art == "dokument"],
-            "uploader_namen": {uploader.id: uploader.display_name for uploader in uploaders},
-        })
-    if (
-        tab == "skizze"
-        and termin.exercise_incident_id
-        and getattr(request.state, "lagefuehrung_modul_aktiv", False)
-    ):
+        context.update(
+            {
+                "skizzen": [medium for medium in medien if medium.kind == "image"],
+                "dokumente": [medium for medium in medien if medium.art == "dokument"],
+                "uploader_namen": {uploader.id: uploader.display_name for uploader in uploaders},
+            }
+        )
+    if tab == "skizze" and termin.exercise_incident_id and getattr(request.state, "lagefuehrung_modul_aktiv", False):
         # Die Momentaufnahme ist der stabile Übergabepunkt zwischen dem
         # einsatzbezogenen Board und dem dauerhaften Probeplan.
         from app.models.lagefuehrung import LagefuehrungSnapshot
+
         incident = db.get(Incident, termin.exercise_incident_id)
         if incident and incident.primary_org_id == user.org_id:
             context["lagefuehrung_incident"] = incident
@@ -1076,14 +1086,24 @@ def probe_detail(
 
         context["neueste_skizze"] = (
             db.query(ProbeMedia)
-            .filter(ProbeMedia.termin_id == termin.id, ProbeMedia.org_id == user.org_id,
-                    ProbeMedia.art == "skizze", ProbeMedia.kind == "image")
-            .order_by(ProbeMedia.hochgeladen_am.desc(), ProbeMedia.id.desc()).first()
+            .filter(
+                ProbeMedia.termin_id == termin.id,
+                ProbeMedia.org_id == user.org_id,
+                ProbeMedia.art == "skizze",
+                ProbeMedia.kind == "image",
+            )
+            .order_by(ProbeMedia.hochgeladen_am.desc(), ProbeMedia.id.desc())
+            .first()
         )
         context["public_token_aktiv"] = termin.public_sichtbar and (
             db.query(ProbePublicToken.id)
-            .filter(ProbePublicToken.org_id == user.org_id, ProbePublicToken.art == "plan",
-                    ProbePublicToken.widerrufen_am.is_(None)).first() is not None
+            .filter(
+                ProbePublicToken.org_id == user.org_id,
+                ProbePublicToken.art == "plan",
+                ProbePublicToken.widerrufen_am.is_(None),
+            )
+            .first()
+            is not None
         )
     if tab == "nachbereitung":
         context.update(_nachbereitung_context(db, termin))
@@ -1144,32 +1164,60 @@ def probe_checkliste_anlegen(
 
 @router.get("/{termin_id}/uebungseinsatz", response_class=HTMLResponse)
 def probe_uebungseinsatz_dialog(
-    request: Request, termin_id: int, db: Session = Depends(get_db),
-    _guard: None = Depends(require_probenplanung_enabled), _: CurrentOrgId = None,
+    request: Request,
+    termin_id: int,
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_probenplanung_enabled),
+    _: CurrentOrgId = None,
 ):
     user = _require_login(request)
     termin = _termin_or_404(db, user.org_id, termin_id)
     incident = db.get(Incident, termin.exercise_incident_id) if termin.exercise_incident_id else None
-    return templates.TemplateResponse(request, "probenplanung/_uebungseinsatz.html", {
-        "user": user, "termin": termin, "exercise_incident": incident,
-        "alarm_types": db.query(AlarmType).order_by(AlarmType.code).all(),
-        "can_edit": can_edit_proben(user),
-    })
+    return templates.TemplateResponse(
+        request,
+        "probenplanung/_uebungseinsatz.html",
+        {
+            "user": user,
+            "termin": termin,
+            "exercise_incident": incident,
+            "alarm_types": db.query(AlarmType).order_by(AlarmType.code).all(),
+            "can_edit": can_edit_proben(user),
+        },
+    )
 
 
 def _uebernahme_aus_form(
-    objekt_adresse: str, alarmtext: str, gefahren_hinweise: str, skizze: str, dokumente: str,
+    objekt_adresse: str,
+    alarmtext: str,
+    gefahren_hinweise: str,
+    skizze: str,
+    dokumente: str,
 ) -> set[str]:
-    return {name for name, value in (
-        ("objekt_adresse", objekt_adresse), ("alarmtext", alarmtext),
-        ("gefahren_hinweise", gefahren_hinweise), ("skizze", skizze), ("dokumente", dokumente),
-    ) if value}
+    return {
+        name
+        for name, value in (
+            ("objekt_adresse", objekt_adresse),
+            ("alarmtext", alarmtext),
+            ("gefahren_hinweise", gefahren_hinweise),
+            ("skizze", skizze),
+            ("dokumente", dokumente),
+        )
+        if value
+    }
 
 
 def _uebungseinsatz_anlegen(
-    request: Request, termin_id: int, alarm_type_code: str, objekt_adresse: str,
-    alarmtext: str, gefahren_hinweise: str, skizze: str, dokumente: str,
-    db: Session, *, weiterer: bool,
+    request: Request,
+    termin_id: int,
+    alarm_type_code: str,
+    objekt_adresse: str,
+    alarmtext: str,
+    gefahren_hinweise: str,
+    skizze: str,
+    dokumente: str,
+    db: Session,
+    *,
+    weiterer: bool,
 ) -> RedirectResponse:
     user = _require_login(request)
     _require_edit(user)
@@ -1184,7 +1232,12 @@ def _uebungseinsatz_anlegen(
             f"/probenplanung/{termin.id}?tab=uebungseinsatz&bereits_vorhanden={existing.id}", status_code=303
         )
     incident = uebungseinsatz_erstellen(
-        db, termin, user, request=request, alarm_type_code=alarm_type_code, weiterer=weiterer,
+        db,
+        termin,
+        user,
+        request=request,
+        alarm_type_code=alarm_type_code,
+        weiterer=weiterer,
         uebernehmen=_uebernahme_aus_form(objekt_adresse, alarmtext, gefahren_hinweise, skizze, dokumente),
     )
     db.commit()
@@ -1193,39 +1246,70 @@ def _uebungseinsatz_anlegen(
 
 @router.post("/{termin_id}/uebungseinsatz")
 def probe_uebungseinsatz_anlegen(
-    request: Request, termin_id: int, alarm_type_code: str = Form("T1"),
-    objekt_adresse: str = Form(""), alarmtext: str = Form(""),
-    gefahren_hinweise: str = Form(""), skizze: str = Form(""), dokumente: str = Form(""),
-    db: Session = Depends(get_db), _guard: None = Depends(require_probenplanung_enabled),
+    request: Request,
+    termin_id: int,
+    alarm_type_code: str = Form("T1"),
+    objekt_adresse: str = Form(""),
+    alarmtext: str = Form(""),
+    gefahren_hinweise: str = Form(""),
+    skizze: str = Form(""),
+    dokumente: str = Form(""),
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_probenplanung_enabled),
     _: CurrentOrgId = None,
 ):
     return _uebungseinsatz_anlegen(
-        request, termin_id, alarm_type_code, objekt_adresse, alarmtext,
-        gefahren_hinweise, skizze, dokumente, db, weiterer=False,
+        request,
+        termin_id,
+        alarm_type_code,
+        objekt_adresse,
+        alarmtext,
+        gefahren_hinweise,
+        skizze,
+        dokumente,
+        db,
+        weiterer=False,
     )
 
 
 @router.post("/{termin_id}/uebungseinsatz/weiterer")
 def probe_weiteren_uebungseinsatz_anlegen(
-    request: Request, termin_id: int, bestaetigt: bool = Form(False),
-    alarm_type_code: str = Form("T1"), objekt_adresse: str = Form(""),
-    alarmtext: str = Form(""), gefahren_hinweise: str = Form(""),
-    skizze: str = Form(""), dokumente: str = Form(""),
-    db: Session = Depends(get_db), _guard: None = Depends(require_probenplanung_enabled),
+    request: Request,
+    termin_id: int,
+    bestaetigt: bool = Form(False),
+    alarm_type_code: str = Form("T1"),
+    objekt_adresse: str = Form(""),
+    alarmtext: str = Form(""),
+    gefahren_hinweise: str = Form(""),
+    skizze: str = Form(""),
+    dokumente: str = Form(""),
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_probenplanung_enabled),
     _: CurrentOrgId = None,
 ):
     if not bestaetigt:
         raise HTTPException(400, "Weiteren Übungseinsatz ausdrücklich bestätigen")
     return _uebungseinsatz_anlegen(
-        request, termin_id, alarm_type_code, objekt_adresse, alarmtext,
-        gefahren_hinweise, skizze, dokumente, db, weiterer=True,
+        request,
+        termin_id,
+        alarm_type_code,
+        objekt_adresse,
+        alarmtext,
+        gefahren_hinweise,
+        skizze,
+        dokumente,
+        db,
+        weiterer=True,
     )
 
 
 @router.post("/{termin_id}/uebungseinsatz/starten")
 async def probe_uebungseinsatz_starten(
-    request: Request, termin_id: int, background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db), _guard: None = Depends(require_probenplanung_enabled),
+    request: Request,
+    termin_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_probenplanung_enabled),
     _: CurrentOrgId = None,
 ):
     user = _require_login(request)
@@ -1239,41 +1323,67 @@ async def probe_uebungseinsatz_starten(
     einsatzstart_synchronisieren(db, incident, user)
     db.commit()
     from app.services.incident_notify import notify_incident_created
+
     await notify_incident_created(
-        db, incident, org_id=user.org_id, triggered_by_user_id=user.id,
-        base_url=str(request.base_url), background_tasks=background_tasks,
+        db,
+        incident,
+        org_id=user.org_id,
+        triggered_by_user_id=user.id,
+        base_url=str(request.base_url),
+        background_tasks=background_tasks,
     )
     from app.services.broadcast import broadcast_org
     from app.services.exercise_guard import darf_extern
+
     assert user.org_id is not None
-    background_tasks.add_task(broadcast_org, user.org_id, {
-        "type": "incident_created", "incident_id": incident.id, "alarm": incident.alarm_type_code,
-        "alarm_erlaubt": darf_extern("ws_alarm", is_exercise=True, org_id=user.org_id, db=db),
-        "alarm_type_code": incident.alarm_type_code, "is_exercise": True,
-        "url": f"/einsatz/{incident.id}/info", "title": f"[ÜBUNG] Neuer Einsatz: {incident.alarm_type_code}",
-    })
+    background_tasks.add_task(
+        broadcast_org,
+        user.org_id,
+        {
+            "type": "incident_created",
+            "incident_id": incident.id,
+            "alarm": incident.alarm_type_code,
+            "alarm_erlaubt": darf_extern("ws_alarm", is_exercise=True, org_id=user.org_id, db=db),
+            "alarm_type_code": incident.alarm_type_code,
+            "is_exercise": True,
+            "url": f"/einsatz/{incident.id}/info",
+            "title": f"[ÜBUNG] Neuer Einsatz: {incident.alarm_type_code}",
+        },
+    )
     from app.core.resilience import run_side_effect
     from app.routers.ui_incident import _create_neighbor_invitations_guarded
-    run_side_effect("neighbor_invitations", _create_neighbor_invitations_guarded,
-                    db, incident, incident.alarm_type_code, user.org_id, user.id)
+
+    run_side_effect(
+        "neighbor_invitations",
+        _create_neighbor_invitations_guarded,
+        db,
+        incident,
+        incident.alarm_type_code,
+        user.org_id,
+        user.id,
+    )
     return RedirectResponse(f"/einsatz/{incident.id}", status_code=303)
 
 
 @router.post("/{termin_id}/uebungseinsatz/teilnehmer-uebernehmen")
 def probe_uebungseinsatz_teilnehmer_uebernehmen(
-    request: Request, termin_id: int, db: Session = Depends(get_db),
-    _guard: None = Depends(require_probenplanung_enabled), _: CurrentOrgId = None,
+    request: Request,
+    termin_id: int,
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_probenplanung_enabled),
+    _: CurrentOrgId = None,
 ):
     user = _require_login(request)
     _require_edit(user)
     termin = _termin_or_404(db, user.org_id, termin_id)
     from app.services.probe_exercise_service import teilnehmer_uebernehmen
+
     try:
         anzahl = teilnehmer_uebernehmen(db, termin, user)
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from exc
     db.commit()
-    return RedirectResponse(f"/probenplanung/{termin.id}/teilnehmer/appell", status_code=303)
+    return RedirectResponse(f"/probenplanung/{termin.id}/teilnehmer/appell?uebernommen={anzahl}", status_code=303)
 
 
 @router.get("/{termin_id}/teilnehmer", response_class=HTMLResponse)
@@ -1298,10 +1408,16 @@ def probe_teilnehmer_appell(
 ):
     user = _require_login(request)
     termin = _termin_or_404(db, user.org_id, termin_id)
-    return templates.TemplateResponse(request, "probenplanung/teilnehmer_appell.html", {
-        "user": user, "termin": termin, "can_edit": can_edit_proben(user),
-        **_appell_context(db, user, termin),
-    })
+    return templates.TemplateResponse(
+        request,
+        "probenplanung/teilnehmer_appell.html",
+        {
+            "user": user,
+            "termin": termin,
+            "can_edit": can_edit_proben(user),
+            **_appell_context(db, user, termin),
+        },
+    )
 
 
 @router.put("/{termin_id}/teilnehmer/appell/{member_id}")
@@ -1331,9 +1447,16 @@ async def probe_teilnehmer_appell_status(
     before = row.status
     row.set_status(status)
     write_probe_change(
-        db, termin.id, "teilnehmer.appell_status", "teilnehmer", "status",
-        {"member_id": member.id, "status": before}, {"member_id": member.id, "status": status.value},
-        org_id=user.org_id, user_id=user.id, ip=request.client.host if request.client else None,
+        db,
+        termin.id,
+        "teilnehmer.appell_status",
+        "teilnehmer",
+        "status",
+        {"member_id": member.id, "status": before},
+        {"member_id": member.id, "status": status.value},
+        org_id=user.org_id,
+        user_id=user.id,
+        ip=request.client.host if request.client else None,
     )
     db.commit()
     return JSONResponse({"ok": True, "member_id": member.id, "status": status.value})
@@ -1366,8 +1489,15 @@ async def probe_teilnehmer_appell_abschliessen(
     row.abgeschlossen_von = user.id
     row.abgeschlossen_am = datetime.now(UTC)
     write_probe_change(
-        db, termin.id, "teilnehmer.appell_abgeschlossen", "teilnehmer", None, None,
-        {"offen": offen, "vollstaendig": offen == 0}, org_id=user.org_id, user_id=user.id,
+        db,
+        termin.id,
+        "teilnehmer.appell_abgeschlossen",
+        "teilnehmer",
+        None,
+        None,
+        {"offen": offen, "vollstaendig": offen == 0},
+        org_id=user.org_id,
+        user_id=user.id,
         ip=request.client.host if request.client else None,
     )
     db.commit()
@@ -1460,11 +1590,15 @@ def probe_teilnehmer_zuruecksetzen(
     user = _require_login(request)
     _require_edit(user)
     termin = _termin_or_404(db, user.org_id, termin_id)
-    rows = db.query(Teilnahme).filter(
-        Teilnahme.org_id == user.org_id,
-        Teilnahme.bezug_typ == termin.typ,
-        Teilnahme.bezug_id == termin.id,
-    ).all()
+    rows = (
+        db.query(Teilnahme)
+        .filter(
+            Teilnahme.org_id == user.org_id,
+            Teilnahme.bezug_typ == termin.typ,
+            Teilnahme.bezug_id == termin.id,
+        )
+        .all()
+    )
     for row in rows:
         row.set_status(TeilnahmeStatus.NICHT_ERFASST)
         row.gekommen_um = None
@@ -1475,18 +1609,25 @@ def probe_teilnehmer_zuruecksetzen(
 
 
 def _nachbereitung_response(request: Request, db: Session, user: User, termin: Termin) -> HTMLResponse:
-    return templates.TemplateResponse(request, "probenplanung/_nachbereitung.html", {
-        "user": user,
-        "termin": termin,
-        "can_edit": can_edit_proben(user),
-        **_nachbereitung_context(db, termin),
-    })
+    return templates.TemplateResponse(
+        request,
+        "probenplanung/_nachbereitung.html",
+        {
+            "user": user,
+            "termin": termin,
+            "can_edit": can_edit_proben(user),
+            **_nachbereitung_context(db, termin),
+        },
+    )
 
 
 @router.get("/{termin_id}/nachbereitung", response_class=HTMLResponse)
 def probe_nachbereitung(
-    request: Request, termin_id: int, db: Session = Depends(get_db),
-    _guard: None = Depends(require_probenplanung_enabled), _: CurrentOrgId = None,
+    request: Request,
+    termin_id: int,
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_probenplanung_enabled),
+    _: CurrentOrgId = None,
 ):
     user = _require_login(request)
     return _nachbereitung_response(request, db, user, _termin_or_404(db, user.org_id, termin_id))
@@ -1522,11 +1663,15 @@ def probe_nachbereitung_speichern(
 
 
 def _erkenntnis_or_404(db: Session, org_id: int | None, termin_id: int, erkenntnis_id: int) -> ProbeErkenntnis:
-    row = db.query(ProbeErkenntnis).filter(
-        ProbeErkenntnis.id == erkenntnis_id,
-        ProbeErkenntnis.termin_id == termin_id,
-        ProbeErkenntnis.org_id == org_id,
-    ).first()
+    row = (
+        db.query(ProbeErkenntnis)
+        .filter(
+            ProbeErkenntnis.id == erkenntnis_id,
+            ProbeErkenntnis.termin_id == termin_id,
+            ProbeErkenntnis.org_id == org_id,
+        )
+        .first()
+    )
     if row is None:
         raise HTTPException(404, "Erkenntnis nicht gefunden")
     return row
@@ -1534,9 +1679,14 @@ def _erkenntnis_or_404(db: Session, org_id: int | None, termin_id: int, erkenntn
 
 @router.post("/{termin_id}/nachbereitung/erkenntnis", response_class=HTMLResponse)
 def probe_erkenntnis_anlegen(
-    request: Request, termin_id: int, text: str = Form(...), kategorie: str = Form("allgemein"),
-    massnahme_text: str = Form(""), db: Session = Depends(get_db),
-    _guard: None = Depends(require_probenplanung_enabled), _: CurrentOrgId = None,
+    request: Request,
+    termin_id: int,
+    text: str = Form(...),
+    kategorie: str = Form("allgemein"),
+    massnahme_text: str = Form(""),
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_probenplanung_enabled),
+    _: CurrentOrgId = None,
 ):
     user = _require_login(request)
     _require_edit(user)
@@ -1544,18 +1694,28 @@ def probe_erkenntnis_anlegen(
     if not text.strip() or not kategorie.strip():
         raise HTTPException(422, "Text und Kategorie sind erforderlich")
     sortierung = db.query(func.max(ProbeErkenntnis.sortierung)).filter(ProbeErkenntnis.termin_id == termin.id).scalar()
-    db.add(ProbeErkenntnis(
-        org_id=user.org_id, termin_id=termin.id, text=text.strip(), kategorie=kategorie.strip()[:30],
-        massnahme_text=massnahme_text.strip() or None, sortierung=int(sortierung or 0) + 1,
-    ))
+    db.add(
+        ProbeErkenntnis(
+            org_id=user.org_id,
+            termin_id=termin.id,
+            text=text.strip(),
+            kategorie=kategorie.strip()[:30],
+            massnahme_text=massnahme_text.strip() or None,
+            sortierung=int(sortierung or 0) + 1,
+        )
+    )
     db.commit()
     return _nachbereitung_response(request, db, user, termin)
 
 
 @router.patch("/{termin_id}/nachbereitung/erkenntnis/{erkenntnis_id}", response_class=HTMLResponse)
 async def probe_erkenntnis_bearbeiten(
-    request: Request, termin_id: int, erkenntnis_id: int, db: Session = Depends(get_db),
-    _guard: None = Depends(require_probenplanung_enabled), _: CurrentOrgId = None,
+    request: Request,
+    termin_id: int,
+    erkenntnis_id: int,
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_probenplanung_enabled),
+    _: CurrentOrgId = None,
 ):
     user = _require_login(request)
     _require_edit(user)
@@ -1576,8 +1736,12 @@ async def probe_erkenntnis_bearbeiten(
 
 @router.delete("/{termin_id}/nachbereitung/erkenntnis/{erkenntnis_id}", response_class=HTMLResponse)
 def probe_erkenntnis_loeschen(
-    request: Request, termin_id: int, erkenntnis_id: int, db: Session = Depends(get_db),
-    _guard: None = Depends(require_probenplanung_enabled), _: CurrentOrgId = None,
+    request: Request,
+    termin_id: int,
+    erkenntnis_id: int,
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_probenplanung_enabled),
+    _: CurrentOrgId = None,
 ):
     user = _require_login(request)
     _require_edit(user)
@@ -1589,8 +1753,11 @@ def probe_erkenntnis_loeschen(
 
 @router.post("/{termin_id}/abschliessen")
 def probe_abschliessen(
-    request: Request, termin_id: int, db: Session = Depends(get_db),
-    _guard: None = Depends(require_probenplanung_enabled), _: CurrentOrgId = None,
+    request: Request,
+    termin_id: int,
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_probenplanung_enabled),
+    _: CurrentOrgId = None,
 ):
     user = _require_login(request)
     _require_edit(user)
@@ -1751,9 +1918,7 @@ def probe_skizze_bearbeiten(
         ProbeMedia.kind == "image",
     )
     media = (
-        query.filter(ProbeMedia.id == media_id).first()
-        if media_id
-        else query.order_by(ProbeMedia.id.desc()).first()
+        query.filter(ProbeMedia.id == media_id).first() if media_id else query.order_by(ProbeMedia.id.desc()).first()
     )
     if media is None:
         raise HTTPException(404, "Kein Skizzenbild vorhanden")
@@ -1785,7 +1950,8 @@ def probe_lagefuehrung_uebernehmen(
             LagefuehrungSnapshot.id == snapshot_id,
             LagefuehrungSnapshot.incident_id == termin.exercise_incident_id,
             LagefuehrungSnapshot.org_id == user.org_id,
-        ).first()
+        )
+        .first()
     )
     if snapshot is None:
         raise HTTPException(404, "Momentaufnahme nicht gefunden")
@@ -1793,15 +1959,25 @@ def probe_lagefuehrung_uebernehmen(
     if not source.exists():
         raise HTTPException(404, "Bilddatei der Momentaufnahme nicht gefunden")
     create_probe_image_from_bytes(
-        source.read_bytes(), termin_id=termin.id, org_id=user.org_id, user_id=user.id,
+        source.read_bytes(),
+        termin_id=termin.id,
+        org_id=user.org_id,
+        user_id=user.id,
         name=f"Lageführung – {snapshot.label or 'Momentaufnahme'}",
         beschreibung=f"1:1 aus Einsatz #{termin.exercise_incident_id}, Momentaufnahme #{snapshot.id} übernommen.",
-        typ="Lageführung", db=db,
+        typ="Lageführung",
+        db=db,
     )
     write_probe_change(
-        db, termin.id, "probe.lagefuehrung_uebernommen", "skizze", "lagefuehrung_snapshot",
-        None, {"incident_id": termin.exercise_incident_id, "snapshot_id": snapshot.id},
-        org_id=user.org_id, user_id=user.id,
+        db,
+        termin.id,
+        "probe.lagefuehrung_uebernommen",
+        "skizze",
+        "lagefuehrung_snapshot",
+        None,
+        {"incident_id": termin.exercise_incident_id, "snapshot_id": snapshot.id},
+        org_id=user.org_id,
+        user_id=user.id,
     )
     db.commit()
     return RedirectResponse(f"/probenplanung/{termin.id}?tab=skizze", status_code=303)
@@ -1863,8 +2039,21 @@ def probe_speichern(
     ende_dt = local_input_to_utc(ende, user.org) if ende else None
     if beginn_dt is None or (ende and ende_dt is None):
         raise HTTPException(422, "Ungültiges Datum")
-    ics_felder = ("beginn", "ende", "ort", "titel", "status", "thema", "objekt", "info",
-                  "ganztaegig", "probeart_id", "public_sichtbar", "public_ort_sichtbar", "public_info_sichtbar")
+    ics_felder = (
+        "beginn",
+        "ende",
+        "ort",
+        "titel",
+        "status",
+        "thema",
+        "objekt",
+        "info",
+        "ganztaegig",
+        "probeart_id",
+        "public_sichtbar",
+        "public_ort_sichtbar",
+        "public_info_sichtbar",
+    )
     ics_vorher = tuple(getattr(termin, feld) for feld in ics_felder)
     before = {"titel": termin.titel, "beginn": termin.beginn}
     _form_anwenden(
@@ -2028,9 +2217,7 @@ def probe_checkliste_fortschritt(
     )
 
 
-def _patch_values(
-    db: Session, user: User, item: ProbeChecklistItem, feld: str, wert: str
-) -> dict[str, object]:
+def _patch_values(db: Session, user: User, item: ProbeChecklistItem, feld: str, wert: str) -> dict[str, object]:
     now = datetime.now(UTC).replace(tzinfo=None)
     values: dict[str, object] = {"aktualisiert_von": user.id, "aktualisiert_am": now}
     if feld == "zustand":
