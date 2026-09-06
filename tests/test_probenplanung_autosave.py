@@ -68,6 +68,35 @@ def test_korrekte_version_wird_erhoeht_und_fortschritt_aktualisiert(client):
     assert 'aria-valuenow="100"' in progress.text
 
 
+def test_mehrfachauswahl_wird_gespeichert_und_nach_dem_autosave_angezeigt(client):
+    csrf, termin_id, item_id = _setup(client, "phase5_multiple_choice")
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        item = db.get(ProbeChecklistItem, item_id)
+        item.typ = "mehrfachauswahl"
+        item.optionen = '["Funkgerät", "Warnweste", "Helm"]'
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.patch(
+        f"/probenplanung/{termin_id}/checkliste/punkt/{item_id}",
+        data={"_csrf": csrf, "feld": "wert_text", "wert": '["Funkgerät", "Helm"]', "version": "0"},
+    )
+
+    assert response.status_code == 200
+    assert 'value="Funkgerät" selected' in response.text
+    assert 'value="Helm" selected' in response.text
+    assert 'value="Warnweste" selected' not in response.text
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        assert db.get(ProbeChecklistItem, item_id).wert_text == '["Funkgerät", "Helm"]'
+    finally:
+        db.close()
+
+
 def test_zwei_verschiedene_punkte_blockieren_sich_nicht(client):
     csrf, termin_id, first_id = _setup(client, "phase5_parallel")
     response = client.post(

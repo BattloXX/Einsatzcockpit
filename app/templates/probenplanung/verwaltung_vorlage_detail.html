@@ -1,13 +1,14 @@
 {% extends "admin/_layout.html" %}
 {% block title %}{{ template.name }} - Checklisten-Vorlage{% endblock %}
 {% block admin_content %}
-<div class="page-header">
-  <div><h1>{{ template.name }}</h1><p class="text-muted">{{ template.beschreibung or "Keine Beschreibung" }}</p></div>
-  <a class="btn btn--secondary" href="/admin/probenplanung/vorlagen">Zurück</a>
-</div>
+<div class="pt-page pt-template-page">
+<header class="pt-header">
+  <div><p class="pt-header__eyebrow">Probenplanung · Checklisten-Vorlage</p><h1>{{ template.name }}</h1><p class="pt-header__sub">{{ template.beschreibung or "Keine Beschreibung hinterlegt." }}</p></div>
+  <a class="btn btn--secondary" href="/admin/probenplanung/vorlagen">Zurück zur Übersicht</a>
+</header>
 {% with active_tab="vorlagen" %}{% include "probenplanung/_tabs.html" %}{% endwith %}
-<div class="card" style="margin-top:1rem">
-  <div style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap">
+<section class="pt-card pt-template-toolbar">
+  <div class="pt-template-toolbar__inner">
     <div class="form-group"><label for="vorlage-version">Version</label>
       <select class="form-select" id="vorlage-version" onchange="location.href='/admin/probenplanung/vorlagen/{{ template.id }}?version='+this.value">
       {% for entry in versions %}<option value="{{ entry.id }}" {% if version and entry.id == version.id %}selected{% endif %}>V{{ entry.version }} · {{ "veröffentlicht" if entry.veroeffentlicht_am else "Entwurf" }}</option>{% endfor %}
@@ -23,19 +24,20 @@
       </form>
     {% endif %}
   </div>
-</div>
+</section>
 {% if version %}
   {% if not version.veroeffentlicht_am %}
-  <div class="card" style="margin-top:1rem">
-    <h2>Bereich hinzufügen</h2>
-    <form method="post" action="/admin/probenplanung/vorlagen/{{ template.id }}/version/{{ version.id }}/bereiche" class="form-grid">
+  <section class="pt-card">
+    <div class="pt-card__head"><span aria-hidden="true">+</span><h2>Bereich hinzufügen</h2></div>
+    <form method="post" action="/admin/probenplanung/vorlagen/{{ template.id }}/version/{{ version.id }}/bereiche" class="pt-template-form">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div class="form-group"><label for="neuer-bereich-titel">Titel</label><input class="form-input" id="neuer-bereich-titel" name="titel" maxlength="200" required></div>
       <div class="form-group"><label for="neuer-bereich-beschreibung">Beschreibung</label><textarea class="form-input form-input--textarea" id="neuer-bereich-beschreibung" name="beschreibung"></textarea></div>
       <div class="form-actions"><button class="btn btn--secondary" type="submit">Bereich hinzufügen</button></div>
     </form>
-  </div>
+  </section>
   {% endif %}
   {% for section, items in sections %}{% include "probenplanung/_vorlage_bereich.html" %}{% endfor %}
 {% endif %}
+</div>
 {% endblock %}

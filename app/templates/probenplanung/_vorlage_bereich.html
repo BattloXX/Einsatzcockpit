@@ -1,9 +1,11 @@
-<section class="card" style="margin-top:1rem">
-  <h2>{{ section.titel }}</h2>{% if section.beschreibung %}<p>{{ section.beschreibung }}</p>{% endif %}
-  {% for item in items %}{% include "probenplanung/_vorlage_punkt.html" %}{% else %}<p class="text-muted">Noch keine Punkte.</p>{% endfor %}
+<section class="pt-card pt-template-section">
+  <div class="pt-template-section__head"><div><p class="pt-template-section__label">Checklistenbereich</p><h2>{{ section.titel }}</h2>{% if section.beschreibung %}<p>{{ section.beschreibung }}</p>{% endif %}</div><span class="pt-template-section__count">{{ items|length }} Punkt{{ 'e' if items|length != 1 else '' }}</span></div>
+  <div class="pt-template-items">
+  {% for item in items %}{% include "probenplanung/_vorlage_punkt.html" %}{% else %}<p class="text-muted pt-template-empty">Noch keine Punkte.</p>{% endfor %}
+  </div>
   {% if not version.veroeffentlicht_am %}
-    <details style="margin-top:1rem"><summary>Bereich bearbeiten</summary>
-      <form method="post" action="/admin/probenplanung/vorlagen/{{ template.id }}/version/{{ version.id }}/bereiche/{{ section.id }}" class="form-grid">
+    <details class="pt-template-details"><summary>Bereich bearbeiten</summary>
+      <form method="post" action="/admin/probenplanung/vorlagen/{{ template.id }}/version/{{ version.id }}/bereiche/{{ section.id }}" class="pt-template-form">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
         <div class="form-group"><label for="bereich-titel-{{ section.id }}">Titel</label><input class="form-input" id="bereich-titel-{{ section.id }}" name="titel" maxlength="200" value="{{ section.titel }}" required></div>
         <div class="form-group"><label for="bereich-beschreibung-{{ section.id }}">Beschreibung</label><textarea class="form-input form-input--textarea" id="bereich-beschreibung-{{ section.id }}" name="beschreibung">{{ section.beschreibung or '' }}</textarea></div>
@@ -11,7 +13,7 @@
       </form>
     </details>
     {% include "probenplanung/_vorlage_punkt_formular.html" %}
-    <form method="post" action="/admin/probenplanung/vorlagen/{{ template.id }}/version/{{ version.id }}/bereiche/{{ section.id }}/loeschen" style="margin-top:.5rem">
+    <form method="post" action="/admin/probenplanung/vorlagen/{{ template.id }}/version/{{ version.id }}/bereiche/{{ section.id }}/loeschen" class="pt-template-delete">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><button class="btn btn--danger btn--sm" type="submit">Bereich löschen</button>
     </form>
   {% endif %}

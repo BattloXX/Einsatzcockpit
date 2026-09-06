@@ -29,7 +29,7 @@
     </form>
     {% elif item.typ == 'mehrfachauswahl' %}
     <form class="probe-autosave-form"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><input type="hidden" name="feld" value="wert_text"><input type="hidden" name="version" value="{{ item.version }}"><input type="hidden" name="wert" value="{{ item.wert_text or '[]' }}" hx-patch="/probenplanung/{{ termin.id }}/checkliste/punkt/{{ item.id }}" hx-trigger="change" hx-target="closest .probe-checklist-item" hx-swap="outerHTML" hx-include="closest form">
-      <select class="form-input" multiple {% if not can_edit %}disabled{% endif %} onchange="const h=this.form.elements.wert;h.value=JSON.stringify(Array.from(this.selectedOptions,o=>o.value));htmx.trigger(h,'change')">{% set selected = item.wert_text|default('[]', true) %}{% for choice in optionen(item) %}<option value="{{ choice }}" {% if ('&quot;' ~ choice ~ '&quot;') in selected %}selected{% endif %}>{{ choice }}</option>{% endfor %}</select>
+      <select class="form-input" multiple {% if not can_edit %}disabled{% endif %} onchange="const h=this.form.elements.wert;h.value=JSON.stringify(Array.from(this.selectedOptions,o=>o.value));htmx.trigger(h,'change')">{% set selected = ausgewaehlte_optionen(item) %}{% for choice in optionen(item) %}<option value="{{ choice }}" {% if choice in selected %}selected{% endif %}>{{ choice }}</option>{% endfor %}</select>
     </form>
     {% else %}
     <form class="probe-autosave-form"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><input type="hidden" name="feld" value="wert_text"><input type="hidden" name="version" value="{{ item.version }}">

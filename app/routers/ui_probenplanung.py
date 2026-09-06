@@ -418,6 +418,17 @@ def _optionen(item: ProbeChecklistItem) -> list[str]:
     return [value for value in result if isinstance(value, str)] if isinstance(result, list) else []
 
 
+def _ausgewaehlte_optionen(item: ProbeChecklistItem) -> list[str]:
+    """Liest die gespeicherte Mehrfachauswahl sicher für die Darstellung aus."""
+    if not item.wert_text:
+        return []
+    try:
+        result = json.loads(item.wert_text)
+    except json.JSONDecodeError:
+        return []
+    return [value for value in result if isinstance(value, str)] if isinstance(result, list) else []
+
+
 def _checkliste_context(db: Session, user: User, termin: Termin, checkliste: ProbeCheckliste) -> dict:
     sections = (
         db.query(ProbeChecklistSection)
@@ -433,6 +444,7 @@ def _checkliste_context(db: Session, user: User, termin: Termin, checkliste: Pro
         "members": db.query(Member).filter(Member.active.is_(True)).order_by(Member.lastname, Member.firstname).all(),
         "can_edit": can_edit_proben(user),
         "optionen": _optionen,
+        "ausgewaehlte_optionen": _ausgewaehlte_optionen,
         "heute": now_local(user.org).date(),
         "fortschritt": fortschritt(checkliste, user.org),
     }
