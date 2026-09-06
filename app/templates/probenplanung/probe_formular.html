@@ -35,6 +35,12 @@
       </div>
     </section>
 
+    <section class="pf-card">
+      <div class="pf-card__head"><p class="pf-card__label">Teilnehmer</p><h2>Teilnehmende Gruppen</h2></div>
+      <p class="text-muted">Die ausgewählten Gruppen werden in der Teilnehmererfassung als Filter und Appell-Reihenfolge verwendet.</p>
+      <div class="pf-form-checks">{% for gruppe in gruppen %}<div class="form-group form-group--checkbox"><label for="gruppe-{{ gruppe.id }}"><input type="checkbox" id="gruppe-{{ gruppe.id }}" name="gruppe_ids" value="{{ gruppe.id }}" {% if gruppe.id in ausgewaehlte_gruppen_ids %}checked{% endif %}> {{ gruppe.name }} <span class="text-muted">({{ gruppe.members|length }})</span></label></div>{% else %}<p class="text-muted">Noch keine Gruppen angelegt.</p>{% endfor %}</div>
+    </section>
+
     <section class="pf-card pf-card--scenario">
       <div class="pf-card__head"><p class="pf-card__label">Lage</p><h2>Szenario &amp; Hinweise</h2></div>
       <div class="pf-grid">

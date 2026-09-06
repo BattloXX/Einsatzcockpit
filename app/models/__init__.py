@@ -169,7 +169,7 @@ from app.models.sms import (
 )
 from app.models.sso import OrgSsoConfig, OrgSsoGroupMap
 from app.models.teams_bot import AlarmToken, TeamsAlarmConfig, TeamsCardPost, TeamsChannelBinding
-from app.models.teilnahme import Funktion, Teilnahme, Termin
+from app.models.teilnahme import Funktion, Teilnahme, Termin, TerminGruppe
 from app.models.uas import (
     UASCheckliste,
     UASDevice,

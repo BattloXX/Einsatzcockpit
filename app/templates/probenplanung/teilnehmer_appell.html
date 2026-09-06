@@ -11,6 +11,7 @@
     </div>
     <div class="appell-progress"><div role="progressbar" aria-label="Appellfortschritt" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ prozent }}"><i data-progress style="width:{{ prozent }}%"></i></div><strong data-percent>{{ prozent }} %</strong></div>
     <button class="appell-filter" type="button" aria-pressed="false" data-filter>Nur Offene (<span data-open-count>{{ offen }}</span>)</button>
+    {% if ausgewaehlte_gruppen %}<div class="appell-group-filter" aria-label="Teilnehmergruppen"><button type="button" class="is-active" data-group-filter="">Alle Gruppen</button>{% for gruppe in ausgewaehlte_gruppen %}<button type="button" data-group-filter="{{ gruppe.id }}">{{ gruppe.name }}</button>{% endfor %}</div>{% endif %}
     <p class="appell-sync" data-sync aria-live="polite"></p>
   </header>
 
@@ -18,7 +19,7 @@
   <section class="appell-list" aria-label="Teilnehmerliste">
   {% for item in teilnehmer %}
     {% set status = item.status %}
-    <article class="appell-person appell-person--{{ status }}" data-person data-id="{{ item.member.id }}" data-name="{{ item.member.full_name }}" data-status="{{ status }}" data-position="{{ item.position }}" data-letter="{{ item.member.lastname[:1]|upper }}">
+    <article class="appell-person appell-person--{{ status }}" data-person data-id="{{ item.member.id }}" data-name="{{ item.member.full_name }}" data-status="{{ status }}" data-position="{{ item.position }}" data-groups="{{ member_gruppen.get(item.member.id, [])|join(',') }}" data-letter="{{ item.member.lastname[:1]|upper }}">
       <div class="appell-person__head"><span class="appell-current" hidden>Aktueller Aufruf</span><span class="appell-status" data-status-label>{% if status == 'anwesend' %}✓ ANWESEND{% elif status == 'entschuldigt' %}✉ ENTSCHULDIGT{% elif status == 'unentschuldigt' %}✗ UNENTSCHULDIGT{% else %}○ OFFEN{% endif %}</span></div>
       <h2>{{ item.member.full_name }}</h2><p class="appell-position">Position {{ item.position }} von {{ gesamt }}</p>
       <div class="appell-actions" aria-label="Status für {{ item.member.full_name }}">

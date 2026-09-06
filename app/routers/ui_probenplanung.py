@@ -33,7 +33,7 @@ from app.models.probenplanung import (
     TerminStatus,
 )
 from app.models.sms import SmsGroup
-from app.models.teilnahme import Funktion, Teilnahme, TeilnahmeStatus, Termin
+from app.models.teilnahme import Funktion, Teilnahme, TeilnahmeStatus, Termin, TerminGruppe
 from app.models.user import User
 from app.routers.ui_probenplanung_admin import require_probenplanung_enabled
 from app.services.probe_checklist_service import (
@@ -306,6 +306,9 @@ def _teilnehmer_context(db: Session, user: User, termin: Termin) -> dict[str, An
         teilnehmer.append({"member": member, "teilnahme": row, "status": status})
 
     gruppen = db.query(SmsGroup).order_by(SmsGroup.display_order, SmsGroup.name).all()
+    ausgewaehlte_gruppen_ids = {
+        row.sms_group_id for row in db.query(TerminGruppe).filter(TerminGruppe.termin_id == termin.id).all()
+    }
     member_gruppen: dict[int, list[int]] = {}
     for gruppe in gruppen:
         for relation in gruppe.members:
@@ -316,6 +319,7 @@ def _teilnehmer_context(db: Session, user: User, termin: Termin) -> dict[str, An
         "teilnahme_summary": summary,
         "teilnahme_statuswerte": statuswerte,
         "gruppen": gruppen,
+        "ausgewaehlte_gruppen_ids": ausgewaehlte_gruppen_ids,
         "member_gruppen": member_gruppen,
         "funktionen": db.query(Funktion).filter(Funktion.aktiv.is_(True)).order_by(Funktion.sortierung).all(),
         "appell_abgeschlossen": bool(nachbereitung and nachbereitung.abgeschlossen_am),
@@ -339,10 +343,17 @@ def _teilnehmer_response(request: Request, db: Session, user: User, termin: Term
 def _appell_context(db: Session, user: User, termin: Termin) -> dict[str, Any]:
     """Kleiner, stabil sortierter Snapshot für die touchoptimierte Appellansicht."""
     context = _teilnehmer_context(db, user, termin)
+    ausgewaehlte_ids = context["ausgewaehlte_gruppen_ids"]
+    relevante = [
+        item for item in context["teilnehmer"]
+        if not ausgewaehlte_ids or ausgewaehlte_ids.intersection(context["member_gruppen"].get(item["member"].id, []))
+    ]
     teilnehmer = []
-    for position, item in enumerate(context["teilnehmer"], start=1):
+    for position, item in enumerate(relevante, start=1):
         teilnehmer.append({**item, "position": position})
-    summary = context["teilnahme_summary"]
+    summary = {status.value: 0 for status in TeilnahmeStatus}
+    for item in teilnehmer:
+        summary[item["status"]] += 1
     gesamt = len(teilnehmer)
     offen = summary[TeilnahmeStatus.NICHT_ERFASST.value]
     erfasst = gesamt - offen
@@ -353,6 +364,8 @@ def _appell_context(db: Session, user: User, termin: Termin) -> dict[str, Any]:
         "offen": offen,
         "erfasst": erfasst,
         "prozent": round(erfasst * 100 / gesamt) if gesamt else 100,
+        "ausgewaehlte_gruppen": [gruppe for gruppe in context["gruppen"] if gruppe.id in ausgewaehlte_ids],
+        "member_gruppen": context["member_gruppen"],
     }
 
 
@@ -514,7 +527,18 @@ def _form_context(db: Session, user: User, termin: Termin | None = None) -> dict
         "termin": termin,
         "probearten": db.query(Probeart).filter(Probeart.aktiv.is_(True)).order_by(Probeart.sortierung).all(),
         "members": db.query(Member).filter(Member.active.is_(True)).order_by(Member.lastname, Member.firstname).all(),
+        "gruppen": db.query(SmsGroup).order_by(SmsGroup.display_order, SmsGroup.name).all(),
+        "ausgewaehlte_gruppen_ids": ({row.sms_group_id for row in db.query(TerminGruppe).filter(TerminGruppe.termin_id == termin.id).all()} if termin else set()),
     }
+
+
+def _gruppen_setzen(db: Session, user: User, termin: Termin, gruppe_ids: list[int]) -> None:
+    ids = set(gruppe_ids)
+    gueltige_ids = {row.id for row in db.query(SmsGroup.id).filter(SmsGroup.org_id == user.org_id, SmsGroup.id.in_(ids)).all()} if ids else set()
+    if ids != gueltige_ids:
+        raise HTTPException(422, "Ungültige Gruppe")
+    db.query(TerminGruppe).filter(TerminGruppe.termin_id == termin.id).delete()
+    db.add_all([TerminGruppe(org_id=user.org_id, termin_id=termin.id, sms_group_id=group_id) for group_id in gueltige_ids])
 
 
 def _form_anwenden(
@@ -605,6 +629,8 @@ def _termin_kopieren(
     )
     db.add(clone)
     db.flush()
+    for row in db.query(TerminGruppe).filter(TerminGruppe.termin_id == source.id).all():
+        db.add(TerminGruppe(org_id=source.org_id, termin_id=clone.id, sms_group_id=row.sms_group_id))
     snapshot_erzeugen(db, clone, user.org)
     return clone
 
@@ -688,6 +714,7 @@ def probe_anlegen(
     public_sichtbar: str = Form(""),
     public_ort_sichtbar: str = Form(""),
     public_info_sichtbar: str = Form(""),
+    gruppe_ids: list[int] = Form([]),
     db: Session = Depends(get_db),
     _guard: None = Depends(require_probenplanung_enabled),
     _: CurrentOrgId = None,
@@ -731,6 +758,7 @@ def probe_anlegen(
     )
     db.add(termin)
     db.flush()
+    _gruppen_setzen(db, user, termin, gruppe_ids)
     snapshot_erzeugen(db, termin, user.org)
     write_probe_change(
         db,
@@ -1818,6 +1846,7 @@ def probe_speichern(
     public_sichtbar: str = Form(""),
     public_ort_sichtbar: str = Form(""),
     public_info_sichtbar: str = Form(""),
+    gruppe_ids: list[int] = Form([]),
     db: Session = Depends(get_db),
     _guard: None = Depends(require_probenplanung_enabled),
     _: CurrentOrgId = None,
@@ -1856,6 +1885,7 @@ def probe_speichern(
         public_ort_sichtbar=public_ort_sichtbar,
         public_info_sichtbar=public_info_sichtbar,
     )
+    _gruppen_setzen(db, user, termin, gruppe_ids)
     if ics_vorher != tuple(getattr(termin, feld) for feld in ics_felder):
         termin.ics_sequence = (termin.ics_sequence or 0) + 1
     write_probe_change(
