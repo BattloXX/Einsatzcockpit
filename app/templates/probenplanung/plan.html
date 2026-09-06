@@ -10,7 +10,6 @@
     {% if can_edit %}<a class="btn btn--primary" href="/probenplanung/neu">Probe anlegen</a>{% endif %}
   </div>
 </header>
-{% if uebernommen is not none %}<div class="alert alert--success pp-notice">{{ uebernommen }} Termin{{ 'e' if uebernommen != 1 else '' }} wurden als Entwürfe in den Jahresplan übernommen.</div>{% endif %}
 {% include "probenplanung/_plan_hero.html" %}
 <form class="pp-filter" method="get" action="/probenplanung" hx-get="/probenplanung" hx-target="#probenplan-tabelle" hx-swap="outerHTML" hx-push-url="true">
   <div class="form-group"><label for="f-jahr">Jahr</label><input class="form-input" id="f-jahr" type="number" name="jahr" value="{{ jahr }}" min="1900" max="9998"></div>
@@ -24,16 +23,5 @@
   <div class="form-group pp-filter__actions"><button class="btn btn--secondary" type="submit">Filtern</button></div>
 </form>
 {% include "probenplanung/_plan_tabelle.html" %}
-{% if can_edit %}
-<form class="pp-transfer" method="post" action="/probenplanung/jahr-uebernehmen">
-  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-  <h2>Jahresplan übernehmen</h2>
-  <div style="display:flex;gap:.75rem;align-items:end;flex-wrap:wrap">
-    <div class="form-group"><label for="quelljahr">Aus Jahr</label><input class="form-input" id="quelljahr" type="number" name="quelljahr" value="{{ jahr - 1 }}" min="1900" max="9998" required></div>
-    <div class="form-group"><label for="zieljahr">In Jahr</label><input class="form-input" id="zieljahr" type="number" name="zieljahr" value="{{ jahr }}" min="1900" max="9998" required></div>
-    <button class="btn btn--secondary" type="submit">Als Entwürfe übernehmen</button>
-  </div>
-</form>
-{% endif %}
 </div>
 {% endblock %}
