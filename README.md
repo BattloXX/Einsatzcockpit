@@ -43,6 +43,7 @@ Eine vollwertige Webapp, die Einsatzleitern und Schriftführern eine strukturier
 | **Wetter & lokale Stationen** | Nowcast, Warnungen, Radar und optionale Meteobridge-Anbindung |
 | **UAS / Drohne** | BOS-Drohnendokumentation gemäß RL-UAS LFV Vorarlberg 2024 |
 | **PWA & mobile Nutzung** | Offline-Betrieb, Push-Benachrichtigungen und QR-Schnellzugriff |
+| **Probenplan** | Jahresplanung für Übungen und Veranstaltungen mit Checklisten, Appell, Nachbereitung, Übungseinsatz und optionalem öffentlichem Kalender |
 | **KI-Assistent** | Optionale Auftragsvorschläge, Lagebilder und Priorisierung per Anthropic Claude |
 
 → [Vollständige Feature-Liste im Wiki](docs/wiki/Home.md#kernfunktionen)
@@ -131,6 +132,7 @@ Das Wiki ist die kanonische Quelle für Installation, Bedienung, Administration,
 |----------|--------|
 | [Wiki-Startseite](docs/wiki/Home.md) | Vollständiger Index und Feature-Überblick |
 | [Erste Schritte](docs/wiki/Anwender-Erste-Schritte.md) | Login, Oberfläche und Tastaturkürzel |
+| [Probenplan](docs/wiki/Anwender-Probenplan.md) | Jahresplanung, Vorbereitung, Appell, Nachbereitung und öffentlicher Kalender |
 | [Administration](docs/wiki/Administration-Einstellungen.md) | Organisations- und Systemeinstellungen |
 | [Architektur](docs/wiki/Entwickler-Architektur.md) | Schichten, Module, Datenflüsse und Multi-Tenancy |
 | [REST-API](docs/wiki/Entwickler-REST-API.md) | Endpunkte, Payloads und externe Alarmierung |

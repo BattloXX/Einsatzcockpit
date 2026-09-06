@@ -42,6 +42,7 @@ Eine Python-Webapp (FastAPI + HTMX + WebSocket), die ein bisheriges Single-File-
 - Datenbank-Backup & Disaster-Recovery: automatisierte Dumps beider DBs + Medien, wöchentlich getestete Restore-Probe, Off-Site-Upload (SFTP/SCP/rsync/FTPS/rclone), DR-Runbook
 - Rate-Limiting per IP und API-Key (slowapi)
 - Förderstrecken-Planer: Löschwasserförderung über lange Wegstrecke berechnen (Vollbild-Kartenmodus, automatischer Pumpenstandort-Vorschlag), optional mit Einsatz verknüpft (Einsatzort-Marker, eigener Kartenlayer in der Lageführung)
+- Probenplan: Jahresplanung von Übungen und Veranstaltungen mit Checklisten, Appell, Nachbereitung, Übungseinsatz und optionalem öffentlichen Kalender
 
 ## Inhaltsverzeichnis
 
@@ -99,6 +100,7 @@ unter [Server-Voraussetzungen](Installation-Server-Voraussetzungen).
 | [Objekte](Anwender-Objekte) | Objektdaten pflegen, PDF-Unterlagen klassifizieren, Einsatzansicht, Objektblatt-Druck |
 | [Nachschlagewerke](Anwender-Nachschlagewerke) | Gefahrgut nach UN-Nummer/Stoffname, Rettungsdatenblätter, Evakuierungsradius & Ausbreitung — offlinefähig |
 | [Förderstrecken-Planer](Anwender-Foerderstrecken-Planer) | Löschwasserförderung lange Wegstrecke: Q-Berechnung, Druckprofil mit Hochpunkt-Prüfung, Maschinisten-Sollwerte, Material, PDF & Zettel-Link |
+| [Probenplan](Anwender-Probenplan) | Jahresplanung, Vorbereitung, Teilnehmerappell, Nachbereitung, Übungseinsatz und öffentlicher Kalender |
 
 ### Administration
 | Seite | Beschreibung |
