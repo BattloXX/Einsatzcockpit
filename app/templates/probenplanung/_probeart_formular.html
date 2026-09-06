@@ -28,6 +28,9 @@
   {% endfor %}
   {% if probeart %}<div class="form-group form-group--checkbox"><label for="pa-aktiv"><input type="checkbox" id="pa-aktiv" name="aktiv" value="1" {% if v.aktiv %}checked{% endif %}> Aktiv</label></div>{% endif %}
   </div>
+  <div class="pa-form-card__head pa-form-card__head--spaced"><span aria-hidden="true">👥</span><h2>Standardgruppen</h2></div>
+  <p class="text-muted">Diese Gruppen werden bei neuen Proben dieser Art vorausgewählt.</p>
+  <div class="pa-form-checks">{% for gruppe in gruppen %}<div class="form-group form-group--checkbox"><label for="probeart-gruppe-{{ gruppe.id }}"><input type="checkbox" id="probeart-gruppe-{{ gruppe.id }}" name="gruppe_ids" value="{{ gruppe.id }}" {% if gruppe.id in ausgewaehlte_gruppen_ids %}checked{% endif %}> {{ gruppe.name }}</label></div>{% else %}<p class="text-muted">Noch keine Gruppen angelegt.</p>{% endfor %}</div>
   <div class="form-actions pa-form-actions"><button class="btn btn--primary" type="submit">Speichern</button><a class="btn btn--secondary" href="/admin/probenplanung/probearten">Abbrechen</a></div>
 </form>
 {% if probeart %}<form method="post" action="/admin/probenplanung/probearten/{{ probeart.id }}/loeschen" class="pa-delete-form"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><button class="btn btn--danger" type="submit">Probeart löschen</button></form>{% endif %}

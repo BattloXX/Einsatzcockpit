@@ -23,6 +23,7 @@ from app.models.probenplanung import (
     ChecklistItemTyp,
     ChecklistTemplate,
     Probeart,
+    ProbeartGruppe,
     ProbeChange,
     ProbeCheckliste,
     ProbeChecklistItem,
@@ -758,7 +759,10 @@ def probe_anlegen(
     )
     db.add(termin)
     db.flush()
-    _gruppen_setzen(db, user, termin, gruppe_ids)
+    _gruppen_setzen(
+        db, user, termin,
+        gruppe_ids or [row.sms_group_id for row in db.query(ProbeartGruppe).filter(ProbeartGruppe.probeart_id == probeart.id).all()],
+    )
     snapshot_erzeugen(db, termin, user.org)
     write_probe_change(
         db,

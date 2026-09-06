@@ -11,7 +11,7 @@
     </div>
     <div class="appell-progress"><div role="progressbar" aria-label="Appellfortschritt" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ prozent }}"><i data-progress style="width:{{ prozent }}%"></i></div><strong data-percent>{{ prozent }} %</strong></div>
     <button class="appell-filter" type="button" aria-pressed="false" data-filter>Nur Offene (<span data-open-count>{{ offen }}</span>)</button>
-    {% if ausgewaehlte_gruppen %}<div class="appell-group-filter" aria-label="Teilnehmergruppen"><button type="button" class="is-active" data-group-filter="">Alle Gruppen</button>{% for gruppe in ausgewaehlte_gruppen %}<button type="button" data-group-filter="{{ gruppe.id }}">{{ gruppe.name }}</button>{% endfor %}</div>{% endif %}
+    {% if ausgewaehlte_gruppen %}<label class="appell-group-filter" for="appell-gruppe" style="display:flex;align-items:center;gap:.45rem;margin-top:.5rem;font-size:.82rem;font-weight:700">Gruppe<select id="appell-gruppe" class="form-select" data-group-filter style="width:auto;min-height:40px;padding-top:.35rem;padding-bottom:.35rem"><option value="">Alle Gruppen</option>{% for gruppe in ausgewaehlte_gruppen %}<option value="{{ gruppe.id }}">{{ gruppe.name }}</option>{% endfor %}</select></label>{% endif %}
     <p class="appell-sync" data-sync aria-live="polite"></p>
   </header>
 

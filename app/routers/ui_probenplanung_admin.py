@@ -23,9 +23,11 @@ from app.models.probenplanung import (
     ChecklistTemplateSection,
     ChecklistTemplateVersion,
     Probeart,
+    ProbeartGruppe,
     ProbeartTerminTyp,
 )
 from app.models.teilnahme import Termin
+from app.models.sms import SmsGroup
 from app.models.user import User
 from app.services.checklist_template_service import (
     neue_version,
@@ -102,7 +104,7 @@ def _formularwerte(
 
 
 def _render_form(
-    request: Request, user: User, probeart: Probeart | None, form: dict | None = None, fehler: list[str] | None = None
+    request: Request, db: Session, user: User, probeart: Probeart | None, form: dict | None = None, fehler: list[str] | None = None
 ):
     return templates.TemplateResponse(
         request,
@@ -112,8 +114,19 @@ def _render_form(
             "probeart": probeart,
             "form": form or {},
             "fehler": fehler or [],
+            "gruppen": db.query(SmsGroup).filter(SmsGroup.org_id == user.org_id).order_by(SmsGroup.display_order, SmsGroup.name).all(),
+            "ausgewaehlte_gruppen_ids": ({row.sms_group_id for row in db.query(ProbeartGruppe).filter(ProbeartGruppe.probeart_id == probeart.id).all()} if probeart else set()),
         },
     )
+
+
+def _probeart_gruppen_setzen(db: Session, user: User, probeart: Probeart, gruppe_ids: list[int]) -> None:
+    ids = set(gruppe_ids)
+    gueltig = {row.id for row in db.query(SmsGroup).filter(SmsGroup.org_id == user.org_id, SmsGroup.id.in_(ids)).all()} if ids else set()
+    if ids != gueltig:
+        raise HTTPException(422, "Ungültige Gruppe")
+    db.query(ProbeartGruppe).filter(ProbeartGruppe.probeart_id == probeart.id).delete()
+    db.add_all([ProbeartGruppe(org_id=user.org_id, probeart_id=probeart.id, sms_group_id=group_id) for group_id in gueltig])
 
 
 @router.get("/probearten", response_class=HTMLResponse)
@@ -137,7 +150,7 @@ def probeart_neu(
     _guard: None = Depends(require_probenplanung_enabled),
     _: CurrentOrgId = None,
 ):
-    return _render_form(request, user, None)
+    return _render_form(request, db, user, None)
 
 
 @router.post("/probearten", response_class=HTMLResponse)
@@ -154,6 +167,7 @@ def probeart_anlegen(
     teilnahme_erforderlich: str = Form(""),
     nachbereitung_erforderlich: str = Form(""),
     uebungseinsatz_erlaubt: str = Form(""),
+    gruppe_ids: list[int] = Form([]),
     db: Session = Depends(get_db),
     user: User = Depends(require_role("org_admin")),
     _guard: None = Depends(require_probenplanung_enabled),
@@ -175,10 +189,11 @@ def probeart_anlegen(
     if db.query(Probeart).filter(Probeart.org_id == user.org_id, Probeart.name == values["name"]).first():
         fehler.append("Eine Probeart mit diesem Namen existiert bereits.")
     if fehler:
-        return _render_form(request, user, None, values, fehler)
+        return _render_form(request, db, user, None, values, fehler)
     row = Probeart(org_id=user.org_id, **values)
     db.add(row)
     db.flush()
+    _probeart_gruppen_setzen(db, user, row, gruppe_ids)
     write_audit(
         db,
         "probenplanung.probeart.erstellt",
@@ -201,7 +216,7 @@ def probeart_bearbeiten(
     _guard: None = Depends(require_probenplanung_enabled),
     _: CurrentOrgId = None,
 ):
-    return _render_form(request, user, _probeart_or_404(db, user.org_id, probeart_id))
+    return _render_form(request, db, user, _probeart_or_404(db, user.org_id, probeart_id))
 
 
 @router.post("/probearten/{probeart_id}", response_class=HTMLResponse)
@@ -220,6 +235,7 @@ def probeart_speichern(
     nachbereitung_erforderlich: str = Form(""),
     uebungseinsatz_erlaubt: str = Form(""),
     aktiv: str = Form(""),
+    gruppe_ids: list[int] = Form([]),
     db: Session = Depends(get_db),
     user: User = Depends(require_role("org_admin")),
     _guard: None = Depends(require_probenplanung_enabled),
@@ -248,10 +264,11 @@ def probeart_speichern(
         fehler.append("Eine Probeart mit diesem Namen existiert bereits.")
     values["aktiv"] = bool(aktiv)
     if fehler:
-        return _render_form(request, user, row, values, fehler)
+        return _render_form(request, db, user, row, values, fehler)
     before = {"name": row.name, "aktiv": row.aktiv}
     for key, value in values.items():
         setattr(row, key, value)
+    _probeart_gruppen_setzen(db, user, row, gruppe_ids)
     write_audit(
         db,
         "probenplanung.probeart.geaendert",

@@ -71,6 +71,15 @@ class Probeart(TenantScoped, Base):
     uebungseinsatz_erlaubt: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
 
+class ProbeartGruppe(TenantScoped, Base):
+    """Standardgruppen, die beim Anlegen einer Probe dieser Art übernommen werden."""
+    __tablename__ = "probeart_gruppe"
+    __table_args__ = (UniqueConstraint("org_id", "probeart_id", "sms_group_id", name="uq_probeart_gruppe"),)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    probeart_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("probeart.id", ondelete="CASCADE"), nullable=False)
+    sms_group_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("sms_group.id", ondelete="CASCADE"), nullable=False)
+
+
 class ChecklistTemplate(TenantScoped, Base):
     __tablename__ = "checklist_template"
     __table_args__ = (

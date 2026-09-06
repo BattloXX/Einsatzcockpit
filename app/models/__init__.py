@@ -148,6 +148,7 @@ from app.models.probenplanung import (  # noqa: F401 -- registriert ORM-Modelle
     ChecklistTemplateSection,
     ChecklistTemplateVersion,
     Probeart,
+    ProbeartGruppe,
     ProbeChange,
     ProbeCheckliste,
     ProbeChecklistItem,
