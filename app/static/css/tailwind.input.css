@@ -2677,6 +2677,22 @@ button.htmx-request,
 @media (max-width:760px) { .pt-page { padding: .75rem; } .pt-header { align-items: stretch; } .pt-form { grid-template-columns: 1fr; } .pt-form .btn, .pt-inline-form .btn { width: 100%; } .pt-inline-form { align-items: stretch; } .pt-token__actions { width: 100%; } .pt-token__actions form, .pt-token__actions .btn { flex: 1; } }
 
 /* Probenplanung: Detailseite – bestehende Theme-Tokens und Formulare. */
+.pf-page { max-width: 1100px; margin: 0 auto; padding: 1rem 1rem 3rem; }
+.pf-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
+.pf-header__left { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.pf-header__eyebrow, .pf-card__label { margin: 0 0 .2rem; color: var(--red-light); font-family: 'JetBrains Mono', monospace; font-size: .68rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.pf-header h1 { margin: 0; font-size: 1.5rem; line-height: 1.15; }
+.pf-header__sub { margin: .3rem 0 0; color: var(--text-muted); font-size: .85rem; }
+.pf-status { display: inline-flex; padding: 2px 10px; border-radius: 999px; font-family: 'JetBrains Mono', monospace; font-size: .68rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.pf-form { display: flex; flex-direction: column; gap: 1rem; }
+.pf-card { --pf-accent: var(--outline); padding: 1.1rem 1.2rem; background: var(--surface-mid); border: 1px solid var(--border); border-left: 4px solid var(--pf-accent); border-radius: var(--radius-lg); box-shadow: var(--shadow-card); }
+.pf-card--accent { --pf-accent: var(--red-light); }.pf-card--scenario { --pf-accent: var(--yellow); }.pf-card--public { --pf-accent: #3a7bd5; }
+.pf-card__head { margin-bottom: 1rem; }.pf-card__head h2 { margin: 0; font-size: 1.05rem; }.pf-card__label { color: var(--text-muted); }
+.pf-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .9rem 1rem; }.pf-grid--three { grid-template-columns: repeat(3, minmax(0, 1fr)); }.pf-span-two { grid-column: span 2; }.pf-grid .form-group { margin: 0; }
+.pf-checkbox { display: flex; align-items: end; }.pf-checkbox label { display: flex; align-items: center; min-height: 44px; }
+.pf-public-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(15rem, .8fr); gap: 1rem; }.pf-public-grid .form-group { margin: 0; }.pf-toggle-list { display: flex; flex-direction: column; justify-content: center; gap: .5rem; padding: .85rem; background: var(--surface-low); border: 1px solid var(--border); border-radius: var(--radius-md); }.pf-toggle-list .form-group { margin: 0; }
+.pf-actions { display: flex; justify-content: space-between; gap: 1rem; padding-top: 1.25rem; border-top: 2px solid rgba(228,64,63,.15); }.pf-actions__group { display: flex; flex-wrap: wrap; gap: .75rem; }
+@media (max-width: 760px) { .pf-page { padding: .75rem .75rem 2rem; }.pf-header__left { align-items: flex-start; }.pf-grid, .pf-grid--three, .pf-public-grid { grid-template-columns: 1fr; }.pf-span-two { grid-column: auto; }.pf-checkbox { align-items: initial; }.pf-actions__group, .pf-actions__group .btn { width: 100%; }.pf-actions__group .btn { text-align: center; } }
 .pd-page { max-width: 1280px; margin: 0 auto; padding: 1rem; min-width: 0; overflow-wrap: anywhere; }
 .pd-command { margin-bottom: 1rem; padding: 1rem; background: var(--surface-low); border: 1px solid var(--border); border-left: 4px solid var(--red); border-radius: var(--radius-lg); box-shadow: var(--shadow-card); }
 .pd-command__crumb { display: block; margin-bottom: .7rem; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; font-size: .72rem; }

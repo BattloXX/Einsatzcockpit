@@ -2,31 +2,60 @@
 {% block title %}Probe {{ "bearbeiten" if termin else "anlegen" }}{% endblock %}
 {% block content %}
 {% set v = termin %}
-<div class="page-header"><h1>Probe {{ "bearbeiten" if termin else "anlegen" }}</h1></div>
-<form method="post" action="{% if termin %}/probenplanung/{{ termin.id }}/bearbeiten{% else %}/probenplanung/neu{% endif %}" class="card">
-  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-  <div class="form-grid">
-    <div class="form-group"><label for="probeart_id">Probeart</label><select class="form-select" id="probeart_id" name="probeart_id" required>{% for p in probearten %}<option value="{{ p.id }}" {% if v and v.probeart_id == p.id %}selected{% endif %}>{{ p.name }}</option>{% endfor %}</select></div>
-    <div class="form-group"><label for="titel">Titel</label><input class="form-input" id="titel" name="titel" maxlength="200" required value="{{ v.titel if v else '' }}"></div>
-    <div class="form-group"><label for="thema">Thema</label><input class="form-input" id="thema" name="thema" maxlength="200" value="{{ v.thema or '' if v else '' }}"></div>
-    <div class="form-group"><label for="ort">Ort</label><input class="form-input" id="ort" name="ort" maxlength="200" value="{{ v.ort or '' if v else '' }}"></div>
-    <div class="form-group"><label for="objekt">Objekt</label><input class="form-input" id="objekt" name="objekt" maxlength="200" value="{{ v.objekt or '' if v else '' }}"></div>
-    <div class="form-group"><label for="beginn">Beginn</label><input class="form-input" id="beginn" type="datetime-local" name="beginn" required value="{{ (v.beginn|local).strftime('%Y-%m-%dT%H:%M') if v else '' }}"></div>
-    <div class="form-group"><label for="ende">Ende</label><input class="form-input" id="ende" type="datetime-local" name="ende" value="{{ (v.ende|local).strftime('%Y-%m-%dT%H:%M') if v and v.ende else '' }}"></div>
-    <div class="form-group"><label for="verantwortlich_member_id">Verantwortlich</label><select class="form-select" id="verantwortlich_member_id" name="verantwortlich_member_id"><option value="">Nicht zugeordnet</option>{% for m in members %}<option value="{{ m.id }}" {% if v and v.verantwortlich_member_id == m.id %}selected{% endif %}>{{ m.firstname }} {{ m.lastname }}</option>{% endfor %}</select></div>
-    <div class="form-group"><label for="unterstuetzung_member_id">Unterstützung</label><select class="form-select" id="unterstuetzung_member_id" name="unterstuetzung_member_id"><option value="">Nicht zugeordnet</option>{% for m in members %}<option value="{{ m.id }}" {% if v and v.unterstuetzung_member_id == m.id %}selected{% endif %}>{{ m.firstname }} {{ m.lastname }}</option>{% endfor %}</select></div>
-  </div>
-  <div class="form-group form-group--checkbox"><label for="ganztaegig"><input type="checkbox" id="ganztaegig" name="ganztaegig" value="1" {% if v and v.ganztaegig %}checked{% endif %}> Ganztägig</label></div>
-  {% for feld, beschriftung in [
-    ("beschreibung", "Beschreibung"), ("info", "Öffentliche Information"),
-    ("interne_bemerkung", "Interne Bemerkung"), ("alarmtext", "Alarmtext"),
-    ("besondere_gefahren", "Besondere Gefahren"), ("besondere_hinweise", "Besondere Hinweise"),
-  ] %}
-  <div class="form-group"><label for="{{ feld }}">{{ beschriftung }}</label><textarea class="form-input form-input--textarea" id="{{ feld }}" name="{{ feld }}">{{ (v|attr(feld) or '') if v else '' }}</textarea></div>
-  {% endfor %}
-  <div class="form-group form-group--checkbox"><label for="public_sichtbar"><input type="checkbox" id="public_sichtbar" name="public_sichtbar" value="1" {% if not v or v.public_sichtbar %}checked{% endif %}> Öffentlich sichtbar</label></div>
-  <div class="form-group form-group--checkbox"><label for="public_ort_sichtbar"><input type="checkbox" id="public_ort_sichtbar" name="public_ort_sichtbar" value="1" {% if v and v.public_ort_sichtbar %}checked{% endif %}> Ort öffentlich</label></div>
-  <div class="form-group form-group--checkbox"><label for="public_info_sichtbar"><input type="checkbox" id="public_info_sichtbar" name="public_info_sichtbar" value="1" {% if v and v.public_info_sichtbar %}checked{% endif %}> Information öffentlich</label></div>
-  <div class="form-actions"><button class="btn btn--primary" type="submit">Speichern</button>{% if v %}<a class="btn btn--secondary" href="/probenplanung/{{ v.id }}">Abbrechen</a>{% endif %}</div>
-</form>
+<main class="pf-page">
+  <header class="pf-header">
+    <div class="pf-header__left">
+      {% if v %}<a class="btn btn--ghost btn--sm" href="/probenplanung/{{ v.id }}">← Details</a>{% else %}<a class="btn btn--ghost btn--sm" href="/probenplanung">← Probeplan</a>{% endif %}
+      <div><p class="pf-header__eyebrow">Probenplanung · {{ "bestehender Termin" if v else "neuer Termin" }}</p><h1>Probe {{ "bearbeiten" if v else "anlegen" }}</h1><p class="pf-header__sub">{{ "Stammdaten, Ablauf und Sichtbarkeit der Probe verwalten." if v else "Termin und Vorbereitungsgrundlage anlegen." }}</p></div>
+    </div>
+    {% if v %}<span class="pf-status {{ v.status_css }}">{{ v.status_label }}</span>{% endif %}
+  </header>
+
+  <form method="post" action="{% if v %}/probenplanung/{{ v.id }}/bearbeiten{% else %}/probenplanung/neu{% endif %}" class="pf-form">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <section class="pf-card pf-card--accent">
+      <div class="pf-card__head"><p class="pf-card__label">Grunddaten</p><h2>Termin &amp; Einordnung</h2></div>
+      <div class="pf-grid pf-grid--three">
+        <div class="form-group"><label for="probeart_id">Probeart</label><select class="form-select" id="probeart_id" name="probeart_id" required>{% for p in probearten %}<option value="{{ p.id }}" {% if v and v.probeart_id == p.id %}selected{% endif %}>{{ p.name }}</option>{% endfor %}</select></div>
+        <div class="form-group pf-span-two"><label for="titel">Titel</label><input class="form-input" id="titel" name="titel" maxlength="200" required value="{{ v.titel if v else '' }}"></div>
+        <div class="form-group"><label for="beginn">Beginn</label><input class="form-input" id="beginn" type="datetime-local" name="beginn" required value="{{ (v.beginn|local).strftime('%Y-%m-%dT%H:%M') if v else '' }}"></div>
+        <div class="form-group"><label for="ende">Ende</label><input class="form-input" id="ende" type="datetime-local" name="ende" value="{{ (v.ende|local).strftime('%Y-%m-%dT%H:%M') if v and v.ende else '' }}"></div>
+        <div class="form-group form-group--checkbox pf-checkbox"><label for="ganztaegig"><input type="checkbox" id="ganztaegig" name="ganztaegig" value="1" {% if v and v.ganztaegig %}checked{% endif %}> Ganztägig</label></div>
+      </div>
+    </section>
+
+    <section class="pf-card">
+      <div class="pf-card__head"><p class="pf-card__label">Ort &amp; Leitung</p><h2>Durchführung</h2></div>
+      <div class="pf-grid">
+        <div class="form-group"><label for="thema">Thema</label><input class="form-input" id="thema" name="thema" maxlength="200" value="{{ v.thema or '' if v else '' }}"></div>
+        <div class="form-group"><label for="ort">Ort</label><input class="form-input" id="ort" name="ort" maxlength="200" value="{{ v.ort or '' if v else '' }}"></div>
+        <div class="form-group"><label for="objekt">Objekt</label><input class="form-input" id="objekt" name="objekt" maxlength="200" value="{{ v.objekt or '' if v else '' }}"></div>
+        <div class="form-group"><label for="verantwortlich_member_id">Verantwortlich</label><select class="form-select" id="verantwortlich_member_id" name="verantwortlich_member_id"><option value="">Nicht zugeordnet</option>{% for m in members %}<option value="{{ m.id }}" {% if v and v.verantwortlich_member_id == m.id %}selected{% endif %}>{{ m.firstname }} {{ m.lastname }}</option>{% endfor %}</select></div>
+        <div class="form-group"><label for="unterstuetzung_member_id">Unterstützung</label><select class="form-select" id="unterstuetzung_member_id" name="unterstuetzung_member_id"><option value="">Nicht zugeordnet</option>{% for m in members %}<option value="{{ m.id }}" {% if v and v.unterstuetzung_member_id == m.id %}selected{% endif %}>{{ m.firstname }} {{ m.lastname }}</option>{% endfor %}</select></div>
+      </div>
+    </section>
+
+    <section class="pf-card pf-card--scenario">
+      <div class="pf-card__head"><p class="pf-card__label">Lage</p><h2>Szenario &amp; Hinweise</h2></div>
+      <div class="pf-grid">
+        {% for feld, beschriftung in [("beschreibung", "Beschreibung"), ("alarmtext", "Alarmtext"), ("besondere_gefahren", "Besondere Gefahren"), ("besondere_hinweise", "Besondere Hinweise"), ("interne_bemerkung", "Interne Bemerkung")] %}
+        <div class="form-group"><label for="{{ feld }}">{{ beschriftung }}</label><textarea class="form-input form-input--textarea" id="{{ feld }}" name="{{ feld }}">{{ (v|attr(feld) or '') if v else '' }}</textarea></div>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="pf-card pf-card--public">
+      <div class="pf-card__head"><p class="pf-card__label">Freigabe</p><h2>Öffentliche Ansicht</h2></div>
+      <div class="pf-public-grid">
+        <div class="form-group"><label for="info">Öffentliche Information</label><textarea class="form-input form-input--textarea" id="info" name="info">{{ (v.info or '') if v else '' }}</textarea></div>
+        <div class="pf-toggle-list">
+          <div class="form-group form-group--checkbox"><label for="public_sichtbar"><input type="checkbox" id="public_sichtbar" name="public_sichtbar" value="1" {% if not v or v.public_sichtbar %}checked{% endif %}> Probe öffentlich sichtbar</label></div>
+          <div class="form-group form-group--checkbox"><label for="public_ort_sichtbar"><input type="checkbox" id="public_ort_sichtbar" name="public_ort_sichtbar" value="1" {% if v and v.public_ort_sichtbar %}checked{% endif %}> Ort öffentlich anzeigen</label></div>
+          <div class="form-group form-group--checkbox"><label for="public_info_sichtbar"><input type="checkbox" id="public_info_sichtbar" name="public_info_sichtbar" value="1" {% if v and v.public_info_sichtbar %}checked{% endif %}> Information öffentlich anzeigen</label></div>
+        </div>
+      </div>
+    </section>
+    <footer class="pf-actions"><div class="pf-actions__group"><button class="btn btn--primary" type="submit">{{ "Änderungen speichern" if v else "Probe anlegen" }}</button>{% if v %}<a class="btn btn--secondary" href="/probenplanung/{{ v.id }}">Abbrechen</a>{% endif %}</div></footer>
+  </form>
+</main>
 {% endblock %}
