@@ -83,11 +83,11 @@ def test_probeplan_navigation(client, enabled, role):
     _login(client, username)
     response = client.get("/probenplanung" if enabled else "/termine")
     assert response.status_code == 200
-    links = re.findall(r'<a href="([^"]+)" class="([^"]*)">(🗓 Probeplan|📋 Teilnahme)</a>', response.text)
+    links = re.findall(r'<a href="([^"]+)" class="([^"]*)">(📅 Probenplan|📋 Teilnahme)</a>', response.text)
     # Je ein Eintrag im Desktop- und Mobile-Menue.
     assert len(links) == 2
     for href, classes, label in links:
-        assert label == ("🗓 Probeplan" if enabled else "📋 Teilnahme")
+        assert label == ("📅 Probenplan" if enabled else "📋 Teilnahme")
         assert href == ("/probenplanung" if enabled else "/termine")
         assert "active" in classes.split()
     dashboard = client.get("/")

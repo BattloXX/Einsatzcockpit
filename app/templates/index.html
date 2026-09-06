@@ -78,6 +78,9 @@
   <h3 class="section-title">Module</h3>
   <div class="module-grid">
     <a href="/lage" class="module-btn"><span class="module-btn__icon">🚨</span><span class="module-btn__label">Lage</span></a>
+    {% if request.state.probenplanung_enabled %}
+    <a href="/probenplanung" class="module-btn"><span class="module-btn__icon">📅</span><span class="module-btn__label">Probenplan</span></a>
+    {% endif %}
     {% if is_fahrtenbuch %}
     <a href="/verwaltung/fahrten" class="module-btn"><span class="module-btn__icon">🚒</span><span class="module-btn__label">Fahrtenbuch</span></a>
     {% endif %}
