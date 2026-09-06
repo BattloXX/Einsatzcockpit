@@ -2551,39 +2551,75 @@ button.htmx-request,
 /* Bestehende Checklisten-Balken auch außerhalb des Checklisten-Fragments. */
 .progress-bar { height: 8px; background: rgba(255,255,255,.12); border-radius: 4px; margin: .5rem 0; overflow: hidden; }
 .progress-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg,#18a957,rgba(24,169,87,.6)); transition: width .3s ease; }
-.probeplan-hero { padding: 1rem; display: grid; grid-template-columns: minmax(0,2fr) minmax(0,1fr); gap: 1.5rem; margin-bottom: 1rem; border-left: 4px solid var(--red-light); overflow-wrap: anywhere; }
-.probeplan-hero h2 { margin: .25rem 0; }
-.probeplan-hero p, .probeplan-termin p { margin: .5rem 0; }
-.probeplan-hero__vorbereitung { align-self: center; min-width: 0; }
-.probeplan-hero .form-actions { flex-wrap: wrap; }
-.probeplan-hinweis { margin-bottom: 1rem; }
-.probeplan-kpis { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: .75rem; margin: 1rem 0; }
-.probeplan-kpis .card { padding: .85rem; }
-.probeplan-kpis dt { font-size: .8rem; color: var(--text-muted); }
-.probeplan-kpis dd { margin: .35rem 0 0; font-size: 1.25rem; font-weight: 700; }
-.probeplan-ergebnisse { min-width: 0; overflow-wrap: anywhere; }
-.probeplan-desktop { padding: .5rem; }
-.probeplan-desktop .table { width: 100%; table-layout: fixed; }
-.probeplan-desktop .table th, .probeplan-desktop .table td { padding: .6rem .4rem; white-space: normal; }
-.probeplan-desktop .status-pill { white-space: normal; }
+.pp-page { max-width: 1280px; margin: 0 auto; padding: 1rem; min-width: 0; }
+.pp-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.pp-header h1 { margin: .15rem 0 0; font-size: 1.6rem; line-height: 1.15; }
+.pp-header__eyebrow, .pp-hero__eyebrow { margin: 0; color: var(--red-light); font-family: 'JetBrains Mono', monospace; font-size: .68rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.pp-header__sub { margin: .4rem 0 0; color: var(--text-muted); font-size: .85rem; }
+.pp-header__actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+.pp-notice { margin-bottom: 1rem; }
+.pp-hero { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(15rem, 1fr); gap: 1.5rem; margin-bottom: 1rem; padding: 1.1rem 1rem; background: var(--surface-mid); border: 1px solid var(--border); border-left: 4px solid var(--red-light); border-radius: var(--radius-lg); box-shadow: var(--shadow-card); overflow-wrap: anywhere; }
+.pp-hero h2 { margin: .35rem 0 .5rem; font-size: 1.25rem; }
+.pp-hero__content > p:not(.pp-hero__eyebrow) { margin: .4rem 0; }
+.pp-hero__progress { align-self: center; min-width: 0; padding: .85rem; background: rgba(255,255,255,.025); border: 1px solid var(--border); border-radius: var(--radius-md); }
+.pp-hero__progress-label { margin: 0; font-size: .82rem; color: var(--text-muted); }
+.pp-hero__progress-label strong { display: block; margin-top: .2rem; color: var(--text); font-size: .95rem; }
+.pp-hero .form-actions { margin: .75rem 0 0; flex-wrap: wrap; }
+.pp-empty-hero { margin: 0 0 1rem; padding: 1rem; background: var(--surface-low); border: 1px dashed var(--border); border-radius: var(--radius-lg); }
+.pp-filter { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: .75rem; align-items: end; margin-bottom: 1rem; padding: 1rem; background: var(--surface-low); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-card); }
+.pp-filter .form-group { margin: 0; }
+.pp-filter label { margin-bottom: .3rem; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; font-size: .68rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+.pp-filter__actions { justify-content: end; }
+.pp-filter--compact { display: flex; flex-wrap: wrap; }
+.pp-filter--compact .form-group { min-width: 10rem; }
+.pp-results { min-width: 0; overflow-wrap: anywhere; }
+.pp-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; margin: 0 0 1rem; }
+.pp-kpi { padding: .9rem; background: var(--surface-low); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-card); }
+.pp-kpi dt { color: var(--text-muted); font-family: 'JetBrains Mono', monospace; font-size: .65rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.pp-kpi dd { margin: .35rem 0 0; font-size: 1.35rem; font-weight: 700; line-height: 1.1; }
+.pp-table-card { overflow: hidden; background: var(--surface-low); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-card); }
+.pp-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.pp-table th { padding: 10px 14px; background: var(--surface-mid); color: var(--text-muted); font-family: 'JetBrains Mono', monospace; font-size: .68rem; font-weight: 700; letter-spacing: .05em; text-align: left; text-transform: uppercase; }
+.pp-table td { padding: 12px 14px; border-bottom: 1px solid var(--border); font-size: .85rem; vertical-align: top; }
+.pp-table tbody tr:last-child td { border-bottom: none; }
+.pp-table tbody tr:hover td { background: rgba(255,255,255,.03); }
+.pp-table__date, .pp-mcard__date { color: var(--text-muted); font-family: 'JetBrains Mono', monospace; font-size: .75rem; }
+.pp-table__title a, .pp-mcard h3 a { color: var(--text); font-weight: 700; text-decoration: none; }
+.pp-table__title a:hover, .pp-mcard h3 a:hover { color: var(--red-light); }
+.pp-table .status-pill { white-space: normal; }
+.pp-type { display: inline-flex; align-items: center; gap: .4rem; }
 .probeplan-farbpunkt { display: inline-block; width: .65rem; height: .65rem; border-radius: 50%; }
 .probeplan-personen { display: flex; gap: .3rem; flex-wrap: wrap; align-items: center; }
 .initialen-chip { display: inline-flex; align-items: center; justify-content: center; min-width: 2rem; height: 2rem; padding: .2rem; border-radius: 50%; background: var(--surface-high); border: 1px solid var(--border); font-size: .75rem; font-weight: 600; }
 .probeplan-fortschritt { font-size: .8rem; }
-.probeplan-mobil { display: none; }
-.probeplan-termin { padding: 1rem; border-left: 4px solid var(--border); }
-.probeplan-termin__kopf { display: flex; justify-content: space-between; align-items: center; gap: .5rem; flex-wrap: wrap; font-size: .8rem; }
-.probeplan-termin h3 { margin: .75rem 0 .5rem; }
+.pp-mobile-list { display: none; flex-direction: column; gap: .6rem; }
+.pp-mcard { --pp-accent: var(--red); padding: .85rem; background: var(--surface-low); border: 1px solid var(--border); border-left: 4px solid var(--pp-accent); border-radius: var(--radius-md); box-shadow: var(--shadow-card); }
+.pp-mcard__top { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-bottom: .65rem; }
+.pp-mcard__type { font-family: 'JetBrains Mono', monospace; font-size: .72rem; font-weight: 700; text-transform: uppercase; }
+.pp-mcard h3 { margin: 0 0 .55rem; font-size: .98rem; }
+.pp-mcard p { margin: .4rem 0; }
+.pp-mcard .probeplan-personen, .pp-mcard .probeplan-fortschritt { margin-top: .65rem; }
 @media (max-width: 760px) {
-  .probeplan-hero { grid-template-columns: minmax(0,1fr); gap: .5rem; }
-  .probeplan-kpis { grid-template-columns: repeat(2,minmax(0,1fr)); }
-  .probeplan-desktop { display: none; }
-  .probeplan-mobil { display: grid; gap: .75rem; }
-  .probeplan-filter { grid-template-columns: minmax(0,1fr); }
+  .pp-page { padding: .75rem; }
+  .pp-hero { grid-template-columns: minmax(0, 1fr); gap: .75rem; }
+  .pp-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pp-table-card { display: none; }
+  .pp-mobile-list { display: flex; }
+  .pp-filter { grid-template-columns: minmax(0, 1fr); }
+  .pp-filter__actions { justify-content: stretch; }
+  .pp-filter__actions .btn { width: 100%; }
 }
-.probeplan-legende { display: flex; flex-wrap: wrap; gap: .5rem 1rem; margin: 1rem 0; font-size: .85rem; }
-
-.probeplan-filter, .probeplan-uebernahme { padding: 1rem; }
+.pp-transfer { margin-top: 1rem; padding: 1rem; background: var(--surface-low); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-card); }
+.pp-transfer h2 { margin-top: 0; font-size: 1.05rem; }
+.pp-legend { display: flex; flex-wrap: wrap; gap: .5rem 1rem; margin: 1rem 0; font-size: .82rem; }
+.pp-legend > span { display: inline-flex; align-items: center; gap: .35rem; padding: .3rem .55rem; background: var(--surface-low); border: 1px solid var(--border); border-radius: 999px; }
+.pp-calendar-card { overflow-x: auto; background: var(--surface-low); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-card); }
+.pp-calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(9rem, 1fr)); min-width: 63rem; gap: 1px; background: var(--border); }
+.pp-calendar-grid__day { padding: .65rem .75rem; background: var(--surface-mid); color: var(--text-muted); font-family: 'JetBrains Mono', monospace; font-size: .68rem; letter-spacing: .05em; text-transform: uppercase; }
+.pp-calendar-grid__cell { min-height: 8rem; padding: .55rem; background: var(--surface-low); }
+.pp-calendar-grid__cell--muted { opacity: .45; }
+.pp-calendar-entry { --pp-accent: var(--border); display: block; margin-top: .4rem; padding: .4rem .45rem; background: var(--surface-mid); border-left: .35rem solid var(--pp-accent); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; color: inherit; font-size: .78rem; line-height: 1.3; text-decoration: none; }
+.pp-calendar-entry:hover { background: var(--surface-high); }
 
 /* Probenplanung: Detailseite – bestehende Theme-Tokens und Formulare. */
 .probe-detail { min-width: 0; overflow-wrap: anywhere; }

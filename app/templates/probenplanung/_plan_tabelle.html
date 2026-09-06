@@ -16,21 +16,21 @@
     {% endfor %}
   </div>
 {% endmacro %}
-<div id="probenplan-tabelle" class="probeplan-ergebnisse">
-  <dl class="probeplan-kpis" aria-label="Kennzahlen im Jahr {{ jahr }}">
-    <div class="card"><dt>Termine · Jahr {{ jahr }}</dt><dd data-kpi="gesamt">{{ kpi.gesamt }}</dd></div>
-    <div class="card"><dt>Vollproben · Jahr {{ jahr }}</dt><dd data-kpi="vollproben">{{ kpi.vollproben }}</dd></div>
-    <div class="card"><dt>In Vorbereitung · Jahr {{ jahr }}</dt><dd data-kpi="vorbereitung">{{ kpi.vorbereitung }}</dd></div>
-    <div class="card"><dt>Nächste Vollprobe · unabhängig vom Filter</dt><dd>{% if hero.tage_bis is not none %}{{ hero.tage_bis }} Tage{% else %}Nicht geplant{% endif %}</dd></div>
+<div id="probenplan-tabelle" class="pp-results">
+  <dl class="pp-kpis" aria-label="Kennzahlen im Jahr {{ jahr }}">
+    <div class="pp-kpi"><dt>Termine · {{ jahr }}</dt><dd data-kpi="gesamt">{{ kpi.gesamt }}</dd></div>
+    <div class="pp-kpi"><dt>Vollproben · {{ jahr }}</dt><dd data-kpi="vollproben">{{ kpi.vollproben }}</dd></div>
+    <div class="pp-kpi"><dt>In Vorbereitung · {{ jahr }}</dt><dd data-kpi="vorbereitung">{{ kpi.vorbereitung }}</dd></div>
+    <div class="pp-kpi"><dt>Nächste Vollprobe</dt><dd>{% if hero.tage_bis is not none %}{{ hero.tage_bis }} Tage{% else %}Nicht geplant{% endif %}</dd></div>
   </dl>
-  <div class="card probeplan-desktop">
-    <table class="table">
+  <div class="pp-table-card">
+    <table class="pp-table">
       <thead><tr><th>Datum</th><th>Probeart</th><th>Termin</th><th>Status</th><th>Team</th><th>Vorbereitung</th></tr></thead>
       <tbody>{% for termin in termine %}
         <tr>
-          <td>{{ termin.beginn|local_datetime }}</td>
-          <td>{% if termin.probeart %}<span class="probeplan-farbpunkt" style="background:{{ termin.probeart.farbe }}" aria-hidden="true"></span> {{ termin.probeart.kurz }} · {{ termin.probeart.name }}{% else %}Termin{% endif %}</td>
-          <td><a href="/probenplanung/{{ termin.id }}">{{ termin.titel }}</a>{% if termin.thema %}<br><small>{{ termin.thema }}</small>{% endif %}{% if termin.ort %}<br><small class="text-muted">{{ termin.ort }}</small>{% endif %}</td>
+          <td class="pp-table__date">{{ termin.beginn|local_datetime }}</td>
+          <td>{% if termin.probeart %}<span class="pp-type"><span class="probeplan-farbpunkt" style="background:{{ termin.probeart.farbe }}" aria-hidden="true"></span>{{ termin.probeart.kurz }} · {{ termin.probeart.name }}</span>{% else %}Termin{% endif %}</td>
+          <td class="pp-table__title"><a href="/probenplanung/{{ termin.id }}">{{ termin.titel }}</a>{% if termin.thema %}<br><small>{{ termin.thema }}</small>{% endif %}{% if termin.ort %}<br><small class="text-muted">{{ termin.ort }}</small>{% endif %}</td>
           <td><span class="status-pill {{ termin.status_css }}">{{ termin.status_label }}</span></td>
           <td>{{ personen(termin) }}</td>
           <td>{{ fortschritt_balken(termin, fortschritte.get(termin.id)) }}</td>
@@ -38,13 +38,13 @@
       {% else %}<tr><td colspan="6">Keine Termine für diese Auswahl.</td></tr>{% endfor %}</tbody>
     </table>
   </div>
-  <div class="probeplan-mobil">
+  <div class="pp-mobile-list">
     {% for termin in termine %}
-      <article class="card probeplan-termin" style="border-left-color:{{ termin.probeart.farbe if termin.probeart else 'var(--border)' }}">
-        <div class="probeplan-termin__kopf"><span>{{ termin.probeart.name if termin.probeart else 'Termin' }}</span><span class="status-pill {{ termin.status_css }}">{{ termin.status_label }}</span></div>
+      <article class="pp-mcard" style="--pp-accent:{{ termin.probeart.farbe if termin.probeart else 'var(--border)' }}">
+        <div class="pp-mcard__top"><span class="pp-mcard__type">{{ termin.probeart.name if termin.probeart else 'Termin' }}</span><span class="status-pill {{ termin.status_css }}">{{ termin.status_label }}</span></div>
         <h3><a href="/probenplanung/{{ termin.id }}">{{ termin.titel }}</a></h3>
         {% if termin.thema %}<p>{{ termin.thema }}</p>{% endif %}
-        <p>{{ termin.beginn|local_datetime }}</p>
+        <p class="pp-mcard__date">{{ termin.beginn|local_datetime }}</p>
         {% if termin.ort %}<p class="text-muted">{{ termin.ort }}</p>{% endif %}
         {{ personen(termin) }}
         {{ fortschritt_balken(termin, fortschritte.get(termin.id)) }}

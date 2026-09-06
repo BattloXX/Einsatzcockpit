@@ -1,14 +1,14 @@
 {% if hero.termin %}
-<section class="card probeplan-hero" aria-labelledby="probeplan-hero-title">
-  <div>
-    <p class="text-muted">Nächste Vollprobe</p>
+<section class="pp-hero" aria-labelledby="probeplan-hero-title">
+  <div class="pp-hero__content">
+    <p class="pp-hero__eyebrow">Nächste Vollprobe</p>
     <h2 id="probeplan-hero-title">{{ hero.termin.titel }}</h2>
     {% if hero.termin.thema %}<p>{{ hero.termin.thema }}</p>{% endif %}
     <p>{{ hero.termin.beginn|local_datetime }}{% if hero.termin.ort %} · {{ hero.termin.ort }}{% endif %}</p>
     <p>Verantwortlich: {{ hero.verantwortlich.full_name if hero.verantwortlich else 'Noch nicht zugeteilt' }}</p>
   </div>
-  <div class="probeplan-hero__vorbereitung">
-    <p>Vorbereitung: {{ hero.erledigt }}/{{ hero.gesamt }} · {{ hero.prozent }}%</p>
+  <div class="pp-hero__progress">
+    <p class="pp-hero__progress-label">Vorbereitung <strong>{{ hero.erledigt }}/{{ hero.gesamt }} · {{ hero.prozent }}%</strong></p>
     <div class="progress-bar" role="progressbar" aria-label="Vorbereitung nächste Vollprobe" aria-valuenow="{{ hero.prozent }}" aria-valuemin="0" aria-valuemax="100"><div class="progress-fill" style="width:{{ hero.prozent }}%"></div></div>
     <div class="form-actions">
       <a class="btn btn--primary" href="/probenplanung/{{ hero.termin.id }}">Probe öffnen</a>
@@ -16,4 +16,4 @@
     </div>
   </div>
 </section>
-{% else %}<p class="text-muted probeplan-hinweis">Keine kommende Vollprobe geplant.</p>{% endif %}
+{% else %}<p class="text-muted pp-empty-hero">Keine kommende Vollprobe geplant.</p>{% endif %}
