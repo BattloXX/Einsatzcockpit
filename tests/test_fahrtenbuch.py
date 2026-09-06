@@ -1107,8 +1107,7 @@ def test_fahrzeuge_export_links_ohne_org_token_redirect(client: TestClient, db_s
 
 
 def test_fahrtenbuch_neu_rendert_offline_draft_markup(client: TestClient, db_session, org):
-    """PR6 (STAB-2): Formular muss ohne Jinja-/Template-Fehler rendern und den
-    Offline-Draft-Hinweis + localStorage-Key enthalten."""
+    """Das Formular bietet einen lokalen Entwurf zur expliziten Wiederherstellung an."""
     from app.core.security import hash_password
 
     user = User(
@@ -1136,7 +1135,10 @@ def test_fahrtenbuch_neu_rendert_offline_draft_markup(client: TestClient, db_ses
 
     r = client.get("/fahrtenbuch/neu", follow_redirects=False)
     assert r.status_code == 200
-    assert "draft-restored-hinweis" in r.text
+    assert 'id="draft-hinweis"' in r.text
+    assert "Entwurf wiederherstellen" in r.text
+    assert "DOMContentLoaded", r.text
+    assert "_fabRestoreDraftFields" in r.text
     assert "fahrt_draft_v1" in r.text
     assert 'name="zeitpunkt"' not in r.text
     assert "Zeitpunkt (Ankunftszeit)" not in r.text

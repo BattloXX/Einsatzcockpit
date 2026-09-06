@@ -123,8 +123,9 @@
   </div>
   {% endif %}
 
-  <div class="alert alert--info" style="margin-bottom:1rem;display:none;" id="draft-restored-hinweis">
-    &#8635; Entwurf wiederhergestellt (deine letzten, nicht gespeicherten Eingaben).
+  <div class="alert alert--info" style="margin-bottom:1rem;display:none;" id="draft-hinweis">
+    &#8635; Ein nicht gespeicherter Entwurf ist vorhanden.
+    <button type="button" class="btn btn--ghost btn--sm" id="draft-restore-button" style="margin-left:.5rem;">Entwurf wiederherstellen</button>
     <a href="#" id="draft-discard-link" style="margin-left:.5rem;">Verwerfen</a>
   </div>
 
@@ -444,7 +445,9 @@ document.body.addEventListener('htmx:afterSwap', function(ev) {
   if (!t) return;
   if (t.id === 'fahrzeug-felder' || t.id === 'zweck-felder') {
     if (window.Alpine) Alpine.initTree(t);
-    _fabApplyDraftTo(t);
+    // Dynamische Felder erst auffuellen, nachdem die Person den Entwurf
+    // ausdruecklich wiederhergestellt hat.
+    window._fabRestoreDraftFields?.(t);
   }
 });
 
@@ -464,10 +467,10 @@ document.body.addEventListener('htmx:afterSwap', function(ev) {
   }, reloadAfterMs);
 })();
 
-/* ─── Offline-Draft (STAB-2): Eingaben lokal sichern, bei Abbruch/Reload
-   wiederherstellen (Verbindungsabbruch am Fahrzeug ist der schmerzhafteste
-   Datenverlust in diesem Formular). Kein hx-post-Umbau — nativer POST bleibt,
-   der Draft ist nur eine clientseitige Sicherheitsnetz-Kopie. ─────────────── */
+/* ─── Offline-Draft (STAB-2): Eingaben lokal sichern. Bei einem neuen Aufruf
+   wird ein vorhandener Entwurf nur angeboten, nie automatisch eingespielt.
+   Kein hx-post-Umbau — nativer POST bleibt, der Draft ist nur eine
+   clientseitige Sicherheitsnetz-Kopie. ─────────────────────────────────── */
 (function() {
   const draftKey = 'fahrt_draft_v1:' + (window.FAB_TOKEN || 'web');
   const formEl = document.querySelector('form[action="/fahrtenbuch"]');
@@ -499,7 +502,9 @@ document.body.addEventListener('htmx:afterSwap', function(ev) {
     try { localStorage.removeItem(draftKey); } catch (e) {}
   }
 
-  window._fabApplyDraftTo = function(root) {
+  const pendingRestoreTargets = new Set();
+
+  function applyDraftTo(root) {
     const draft = loadDraft();
     if (!draft) return;
     let applied = false;
@@ -518,18 +523,21 @@ document.body.addEventListener('htmx:afterSwap', function(ev) {
     });
     if (applied) {
       root.querySelectorAll('.person-select').forEach((el) => el.dispatchEvent(new Event('person-select-restore')));
-      const hint = document.getElementById('draft-restored-hinweis');
-      if (hint) hint.style.display = '';
     }
+  }
+
+  // HTMX reicht die nachgeladenen Fahrzeug-/Zweckfelder hier herein. Außerhalb
+  // einer bewusst angeforderten Wiederherstellung bleibt das Formular unangetastet.
+  window._fabRestoreDraftFields = function(root) {
+    if (!pendingRestoreTargets.has(root.id)) return;
+    applyDraftTo(root);
+    pendingRestoreTargets.delete(root.id);
   };
 
-  // Statische Felder + Fahrzeug/Zweck-Auswahl direkt beim Laden wiederherstellen.
-  // _fabApplyDraftTo feuert für jedes wiederhergestellte Feld ein 'change' —
-  // bei fahrzeug_id/zweck_id löst das den bestehenden hx-trigger="change" aus,
-  // wodurch HTMX die dynamischen Unterformulare nachlädt (dort greift dann
-  // _fabApplyDraftTo erneut via htmx:afterSwap oben).
   document.addEventListener('DOMContentLoaded', () => {
-    _fabApplyDraftTo(formEl);
+    if (loadDraft()) {
+      document.getElementById('draft-hinweis')?.style.setProperty('display', '');
+    }
   });
 
   formEl.addEventListener('input', saveDraft);
@@ -540,7 +548,27 @@ document.body.addEventListener('htmx:afterSwap', function(ev) {
     discardLink.addEventListener('click', (e) => {
       e.preventDefault();
       clearDraft();
-      location.reload();
+      document.getElementById('draft-hinweis')?.style.setProperty('display', 'none');
+    });
+  }
+
+  const restoreButton = document.getElementById('draft-restore-button');
+  if (restoreButton) {
+    restoreButton.addEventListener('click', () => {
+      const draft = loadDraft();
+      if (!draft) return;
+      // Diese beiden Felder laden ihren jeweiligen Bereich per HTMX nach.
+      // Nur die als Teil dieser Wiederherstellung erwarteten Antworten duerfen
+      // den Entwurf in dynamische Felder eintragen; spaetere Nutzeraktionen
+      // bleiben davon unbeeinflusst.
+      pendingRestoreTargets.clear();
+      if ('fahrzeug_id' in draft) pendingRestoreTargets.add('fahrzeug-felder');
+      if ('zweck_id' in draft) pendingRestoreTargets.add('zweck-felder');
+      applyDraftTo(formEl);
+      const hint = document.getElementById('draft-hinweis');
+      if (hint) {
+        hint.innerHTML = '&#8635; Entwurf wiederhergestellt (deine letzten, nicht gespeicherten Eingaben).';
+      }
     });
   }
 
