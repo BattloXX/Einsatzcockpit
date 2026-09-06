@@ -2,20 +2,23 @@
 
 Die Versionshistorie wird reverse-chronologisch geführt.
 
-Unveröffentlicht (2026-09-05): Probeplan-Detailseite mit durchgängigem Kopfbereich,
+2026.09.06 (2026-09-06): Datenbank-Dumps werden beim Erstellen und Wiederherstellen
+robuster verarbeitet und sind damit wieder zuverlässig für den Restore verwendbar.
+
+2026.09.06 (2026-09-06): Probeplan-Detailseite mit durchgängigem Kopfbereich,
 Meta-Grid, Accordion-Checkliste, Widget-Spalte, mobiler Segmented-Navigation und
 Sticky-Bottom-Bar. Bestehendes Dark Theme und Autosave bleiben erhalten.
 
-Unveröffentlicht (2026-09-05): Jahresplan mit Hero-Karte für die nächste Vollprobe,
+2026.09.06 (2026-09-06): Jahresplan mit Hero-Karte für die nächste Vollprobe,
 KPI-Zeile, Fortschrittsbalken pro Termin und mobiler Karten-Ansicht statt Tabelle.
 
-Unveröffentlicht (2026-09-05): Probeplan UX Phase 1 konsolidiert die Navigation:
+2026.09.06 (2026-09-06): Probeplan UX Phase 1 konsolidiert die Navigation:
 bei aktivem Modul ersetzt Probeplan den Teilnahme-Eintrag für alle Angemeldeten.
 Die Konfiguration liegt jetzt in der Verwaltung mit Sidebar und bestehenden Tabs.
 Pfadwechsel (Breaking Change für Bookmarks): `/probenplanung/verwaltung/*` wird
 zu `/admin/probenplanung/*`; die drei bisherigen Übersichtsseiten leiten per 307 weiter.
 
-Unveröffentlicht (2026-09-05): Probenplanung – Formulare zeigten weiße Browser-
+2026.09.06 (2026-09-06): Probenplanung – Formulare zeigten weiße Browser-
 Standardfelder statt des dunklen App-Designs, weil 17 Templates die vorhandenen
 `.form-input`/`.form-select`/`.form-group`-Klassen nicht oder nur teilweise nutzten;
 Beschriftungen standen neben statt über dem Feld. Zusätzlich ragte der Sticky-Header
@@ -24,41 +27,41 @@ der Checkliste im Vorbereitung-Tab auf schmalen Bildschirmen 8px über den Rand 
 Beides behoben und per Playwright bei 320/390/820px nachgewiesen (33 vormals weiße
 Felder auf 0, kein horizontaler Überlauf mehr). Drei Regressionstests ergänzt.
 
-Unveröffentlicht (2026-09-05): Fehlende oder defekte Kalender-Abhängigkeiten blockieren
+2026.09.06 (2026-09-06): Fehlende oder defekte Kalender-Abhängigkeiten blockieren
 nicht mehr den App-Start. Nur der ICS-Feed liefert HTTP 503 mit Installationshinweis;
 der Fehler wird geloggt. Weitere Start-Blocker durch Excel-, QR-, KI-, SSO- und CRDT-Pakete
 werden ebenfalls erst beim Feature-Aufruf geladen und dort abgefangen. Die
 Update-Anleitung betont das Nachinstallieren von Abhängigkeiten nach manuellem `git pull`.
 
-Unveröffentlicht (2026-09-05): Probenplanung Phase 11 ergänzt öffentliche Leseansicht
+2026.09.06 (2026-09-06): Probenplanung Phase 11 ergänzt öffentliche Leseansicht
 und ICS-Abos mit gemeinsamer Feld-Positivliste, expliziter Organisationsbindung und
 widerrufbaren, nur gehasht gespeicherten Links. Ort und Info benötigen eine eigene
 Freigabe; Entwürfe und archivierte Proben bleiben unsichtbar. Kalender behalten
 stabile UIDs und erhalten Änderungen sowie Absagen. Öffentliche Auslieferung muss
 separat aktiviert werden; Antworten werden nicht gecacht.
 
-Unveröffentlicht (2026-09-04): Der systemweite Probenplanung-Schalter behält beim
+2026.09.06 (2026-09-06): Der systemweite Probenplanung-Schalter behält beim
 Umschalten den ausgewählten Organisationskontext bei und verwendet nun dieselbe
 responsive Darstellung wie die übrigen Modulschalter.
 
-Unveröffentlicht (2026-09-04): Probenplanung Phase 10 ergänzt die strukturierte
+2026.09.06 (2026-09-06): Probenplanung Phase 10 ergänzt die strukturierte
 Nachbereitung mit Erkenntnissen und Maßnahmen, einen abgesicherten Abschlussworkflow
 sowie die Startseiten-Kachel für die nächste Vollprobe mit aggregiertem Fortschritt und
 überfälligen Vorbereitungspunkten.
 
-Unveröffentlicht (2026-09-04): Probenplanung Phase 8 ergänzt die schnelle,
+2026.09.06 (2026-09-06): Probenplanung Phase 8 ergänzt die schnelle,
 tablet-taugliche Teilnehmererfassung für alle aktiven Mitglieder mit Statusübersicht,
 clientseitigen Filtern, optionalen Ankunfts-/Abgangszeiten und Bemerkungen. Der neue
 Teilnahmestatus hält die von Einsatzansicht, PDF- und XLSX-Export verwendeten Altfelder
 `ausgerueckt` und `entschuldigt` weiterhin konsistent; nicht erfasste Mitglieder bleiben
 streng von unentschuldigten getrennt.
 
-Unveröffentlicht (2026-09-04): Probenplanung Phase 7 ergänzt Skizzen auf
+2026.09.06 (2026-09-06): Probenplanung Phase 7 ergänzt Skizzen auf
 JPG-/PNG-Hintergründen im bestehenden Konva-Editor sowie Dokumentablage mit Metadaten.
 Uploads verwenden Magic-Byte-Prüfung, geschützte organisationsgebundene Auslieferung,
 Thumbnails und die bestehende Speicherquota.
 
-Unveröffentlicht (2026-09-04): Probenplanung Phase 6 macht das Modul mit Jahresplan,
+2026.09.06 (2026-09-06): Probenplanung Phase 6 macht das Modul mit Jahresplan,
 Monatskalender, kombinierbaren HTMX-Filtern und der gegliederten Probe-Detailansicht
 sichtbar. Termine lassen sich duplizieren und wochentagsgleich als Entwürfe in ein
 anderes Jahr übernehmen; die bisherigen `/termine`-GET-Seiten leiten bei aktivem Modul
@@ -78,7 +81,7 @@ sind ebenfalls enthalten.
 
 | Version | Datum | Highlights |
 |---------|-------|------------|
-| **Unveröffentlicht** | 2026-09-04 | **Probenplanung Phase 9**: sichere Probe-zu-Übungseinsatz-Brücke mit wählbarer, kopierender Daten-/Medienübernahme, Doppelanlage-Schutz und bewusst bestätigter Sonderaktion, Start-/Abschluss-Statussync, Teilnehmerübernahme und nachgewiesener Exercise-Guard-Abschirmung; **Phase 6**: Jahresplan und serverseitiger Monatskalender, kombinierbare HTMX-Filter, Detailtabs mit Vorbereitung und Historie, Duplizieren, wochentagsgleiche Jahresübernahme und modulabhängige `/termine`-Weiterleitung; **Phase 4**: Probe-CRUD mit Statusworkflow, Archivierung und Duplizierung, unveränderliche Checklisten-Snapshots beim Anlegen, Fortschritts- und Pflichtpunktberechnung sowie organisationslokale Datumsableitung für relative Fälligkeiten und Überfälligkeit; **Phase 3**: tenant-sichere Verwaltung versionierter Checklisten-Vorlagen, unveränderliche Veröffentlichungen, sortierbare Bereiche/Punkte und bewusster idempotenter Import der Standard-Vollprobencheckliste; **Phase 2**: zentraler Exercise-Guard unterdrückt externe Aktionen bei Übungseinsätzen standardmäßig kanalweise (Push, WebSocket-Alarmwirkung, Nachbar-Einladungen, LIS-Status und WordPress; Geocoding bleibt freigegeben) und ermöglicht bewusste Org-Opt-ins; **Phase 1**: vollständiges Datenfundament und Migration 0232, zweistufiges Modul-Flag, Rolle „Probenverwalter“ sowie tenant-sichere Verwaltung von Probearten mit Standard-Stammdaten und Übernahme bestehender Termine |
+| **2026.09.06** | 2026-09-06 | **Probenplanung**: vollständiger Jahresplan für Übungen und Veranstaltungen mit versionierten Checklisten, Vorbereitung, Teilnehmerappell, Nachbereitung, Druck, geschützter Dokumentablage und optionalem öffentlichem ICS-Kalender; sichere Probe-zu-Übungseinsatz-Brücke mit bewusster Daten-/Medienübernahme, Doppelanlage-Schutz, Statussync und Teilnehmerübernahme; Exercise-Guard unterdrückt externe Aktionen für Übungen standardmäßig kanalweise; responsive Detail- und Jahresansicht sowie konsolidierte Navigation und Verwaltung; optionale Zusatzabhängigkeiten blockieren den App-Start nicht mehr; **Backup**: Datenbank-Dumps wieder zuverlässig wiederherstellbar |
 | **2026.09.02** | 2026-09-02 | **Maschinisten-Matrix**: Jahresauswertung Mitglied × Fahrzeug (Übung/Einsatz) in der Fahrtenbuch-Statistik, als XLSX und als einseitiger farbiger A3-Querformat-Druck (lokal und über den Stationsdrucker); Maschinisten-Stufen M1–M4 im Qualifikationskatalog, pflegbar auch durch Fahrtenbuch-Administratoren; Fahrzeuge zusammenführen jetzt jederzeit über die Ressourcen-Verwaltung statt nur bei erkannten Dubletten; **Uptime-Kuma-SMS-Gateway**: synchroner `POST /api/v1/sms/send` mit Scope-Authentifizierung, Limits, Versandstatus, SMS-Protokoll und Audit |
 | **2026.09.01** | 2026-09-01 | **Nachrichten-API**: persistenter externer SMS- und E-Mail-Versand mit API-Key-Scopes, Idempotenz, Empfängerstatus, Limits, Mail-Retry, SMS-Protokoll und Audit |
 | **2026.08.27.1** | 2026-08-27 | **Druckregeln und Verleihschein-Autodruck**: Druckregeln als eigenes Gateway-Tab; Verleihschein-Autodruck vollständig über Druckregeln, bestehender Schalter migriert und entfernt; Übungsfilter greift nun auch bei Verleihscheinen |
