@@ -4,7 +4,7 @@
   {% if not version.veroeffentlicht_am %}
   <details><summary>Bearbeiten</summary>
     <form method="post" action="/admin/probenplanung/vorlagen/{{ template.id }}/version/{{ version.id }}/bereiche/{{ section.id }}/punkte/{{ item.id }}" class="form-grid">
-      <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div class="form-group"><label for="punkt-titel-{{ item.id }}">Titel</label><input class="form-input" id="punkt-titel-{{ item.id }}" name="titel" maxlength="200" value="{{ item.titel }}" required></div>
       <div class="form-group"><label for="punkt-typ-{{ item.id }}">Typ</label><select class="form-select" id="punkt-typ-{{ item.id }}" name="typ">{% for item_type in item_types %}<option value="{{ item_type }}" {% if item.typ == item_type %}selected{% endif %}>{{ item_type }}</option>{% endfor %}</select></div>
       <div class="form-group"><label for="punkt-hilfetext-{{ item.id }}">Hilfetext</label><textarea class="form-input form-input--textarea" id="punkt-hilfetext-{{ item.id }}" name="hilfetext">{{ item.hilfetext or '' }}</textarea></div>
@@ -15,7 +15,7 @@
       <div class="form-actions"><button class="btn btn--secondary btn--sm" type="submit">Punkt speichern</button></div>
     </form>
     <form method="post" action="/admin/probenplanung/vorlagen/{{ template.id }}/version/{{ version.id }}/bereiche/{{ section.id }}/punkte/{{ item.id }}/loeschen">
-      <input type="hidden" name="_csrf" value="{{ csrf_token }}"><button class="btn btn--danger btn--sm" type="submit">Punkt löschen</button>
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><button class="btn btn--danger btn--sm" type="submit">Punkt löschen</button>
     </form>
   </details>
   {% endif %}

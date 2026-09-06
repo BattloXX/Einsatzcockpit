@@ -4,7 +4,7 @@
   {% if not version.veroeffentlicht_am %}
     <details style="margin-top:1rem"><summary>Bereich bearbeiten</summary>
       <form method="post" action="/admin/probenplanung/vorlagen/{{ template.id }}/version/{{ version.id }}/bereiche/{{ section.id }}" class="form-grid">
-        <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
         <div class="form-group"><label for="bereich-titel-{{ section.id }}">Titel</label><input class="form-input" id="bereich-titel-{{ section.id }}" name="titel" maxlength="200" value="{{ section.titel }}" required></div>
         <div class="form-group"><label for="bereich-beschreibung-{{ section.id }}">Beschreibung</label><textarea class="form-input form-input--textarea" id="bereich-beschreibung-{{ section.id }}" name="beschreibung">{{ section.beschreibung or '' }}</textarea></div>
         <div class="form-actions"><button class="btn btn--secondary btn--sm" type="submit">Bereich speichern</button></div>
@@ -12,7 +12,7 @@
     </details>
     {% include "probenplanung/_vorlage_punkt_formular.html" %}
     <form method="post" action="/admin/probenplanung/vorlagen/{{ template.id }}/version/{{ version.id }}/bereiche/{{ section.id }}/loeschen" style="margin-top:.5rem">
-      <input type="hidden" name="_csrf" value="{{ csrf_token }}"><button class="btn btn--danger btn--sm" type="submit">Bereich löschen</button>
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><button class="btn btn--danger btn--sm" type="submit">Bereich löschen</button>
     </form>
   {% endif %}
 </section>

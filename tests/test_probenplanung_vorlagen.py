@@ -1,4 +1,5 @@
 """HTTP-Tests fuer Phase 3 der Probenplanung: versionierte Vorlagen."""
+import re
 
 from app.core.security import hash_password
 from app.core.tenant import set_tenant_context
@@ -135,6 +136,36 @@ def _add_item(
         )
     finally:
         db.close()
+
+
+def test_vorlagen_formulare_rendern_den_csrf_cookie(client):
+    _user("vorlagen_csrf_admin", "org_admin")
+    _flags(True)
+    csrf = _login(client, "vorlagen_csrf_admin")
+
+    response = client.get(BASE)
+    assert response.status_code == 200
+    assert re.search(
+        rf'<form[^>]+action="{BASE}"[^>]*>.*?name="_csrf" value="{re.escape(csrf)}"', response.text, re.S
+    )
+
+    template_id, version_id = _create_template(client, csrf, "CSRF-Vorlage")
+    section_id = _add_section(client, csrf, template_id, version_id, "CSRF-Bereich")
+    _add_item(client, csrf, template_id, version_id, section_id, "CSRF-Punkt")
+    response = client.get(f"{BASE}/{template_id}?version={version_id}")
+    assert response.status_code == 200
+    for action in (
+        f"{BASE}/{template_id}/version/{version_id}/veroeffentlichen",
+        f"{BASE}/{template_id}/version/{version_id}/bereiche",
+        f"{BASE}/{template_id}/version/{version_id}/bereiche/{section_id}",
+        f"{BASE}/{template_id}/version/{version_id}/bereiche/{section_id}/loeschen",
+        f"{BASE}/{template_id}/version/{version_id}/bereiche/{section_id}/punkte",
+    ):
+        assert re.search(
+            rf'<form[^>]+action="{re.escape(action)}"[^>]*>.*?name="_csrf" value="{re.escape(csrf)}"',
+            response.text,
+            re.S,
+        )
 
 
 def test_veroeffentlichen_immutability_und_versionsklon(client):

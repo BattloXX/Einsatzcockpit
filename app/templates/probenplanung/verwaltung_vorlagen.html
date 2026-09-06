@@ -4,7 +4,7 @@
 <div class="page-header">
   <div><h1>Checklisten-Vorlagen</h1><p class="text-muted">Versionierte Vorlagen für die Probenvorbereitung</p></div>
   <form method="post" action="/admin/probenplanung/vorlagen/standard-import">
-    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <button class="btn btn--secondary" type="submit">Standardvorlage importieren</button>
   </form>
 </div>
@@ -12,7 +12,7 @@
 <div class="card" style="margin-top:1rem">
   <h2>Neue Vorlage</h2>
   <form method="post" action="/admin/probenplanung/vorlagen" class="form-grid">
-    <input type="hidden" name="_csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <div class="form-group"><label for="vorlage-name">Name</label><input class="form-input" id="vorlage-name" name="name" maxlength="150" required></div>
     <div class="form-group"><label for="vorlage-beschreibung">Beschreibung</label><textarea class="form-input form-input--textarea" id="vorlage-beschreibung" name="beschreibung"></textarea></div>
     <div class="form-actions"><button class="btn btn--primary" type="submit">Vorlage anlegen</button></div>
