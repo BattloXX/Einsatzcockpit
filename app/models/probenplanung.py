@@ -230,6 +230,9 @@ class ProbePublicToken(TenantScoped, Base):
     jahr: Mapped[int | None] = mapped_column(Integer)
     filter_probeart_ids: Mapped[str | None] = mapped_column(Text)
     token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    # Der Bearbeiter darf öffentliche URLs dauerhaft kopieren; der Klartext liegt
+    # hierfür ausschließlich Fernet-verschlüsselt vor.
+    token_enc: Mapped[str | None] = mapped_column(Text)
     bezeichnung: Mapped[str | None] = mapped_column(String(150))
     erstellt_am: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
     widerrufen_am: Mapped[datetime | None] = mapped_column(DateTime)

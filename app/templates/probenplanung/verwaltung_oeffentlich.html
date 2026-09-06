@@ -29,9 +29,10 @@
 <button class="btn btn--primary">Link erzeugen</button>
 </form></section>
 <section class="pt-token-list" aria-label="Öffentliche Links">
-{% for token in tokens %}
+{% for entry in tokens %}{% set token = entry.token %}
 <article class="pt-token">
-<div><strong>{{ token.bezeichnung or "Probenplan" }}</strong><span class="pt-badge {% if token.is_active %}pt-badge--active{% else %}pt-badge--inactive{% endif %}">{{ "Aktiv" if token.is_active else "Widerrufen" }}</span></div>
+<div><strong>{{ token.bezeichnung or "Probenplan" }}</strong><span class="pt-badge {% if token.is_active %}pt-badge--active{% else %}pt-badge--inactive{% endif %}">{{ "Aktiv" if token.is_active else "Widerrufen" }}</span>
+{% if token.is_active and entry.url %}<div class="pt-link-list"><label>Öffentliche Ansicht <span><input class="form-input pt-link" value="{{ entry.url }}" readonly aria-label="Öffentlicher Link {{ token.bezeichnung or 'Probenplan' }}"><button class="btn btn--secondary btn--sm" type="button" data-copy-url="{{ entry.url }}">Kopieren</button></span></label><label>Kalender-Abo <span><input class="form-input pt-link" value="{{ entry.ics_url }}" readonly aria-label="Kalender-Link {{ token.bezeichnung or 'Probenplan' }}"><button class="btn btn--secondary btn--sm" type="button" data-copy-url="{{ entry.ics_url }}">Kopieren</button></span></label></div>{% elif token.is_active %}<p class="text-muted">Dieser ältere Link wurde nur gehasht gespeichert und kann nicht erneut angezeigt werden. Bitte neu generieren.</p>{% endif %}</div>
 <div class="pt-token__actions">
 {% if token.is_active %}
 <form method="post" action="/admin/probenplanung/oeffentlich/{{ token.id }}/widerrufen">
@@ -48,4 +49,5 @@
 {% endfor %}
 </section>
 </div>
+<script>document.addEventListener('click',function(event){var button=event.target.closest('[data-copy-url]');if(!button)return;navigator.clipboard.writeText(button.dataset.copyUrl).then(function(){var text=button.textContent;button.textContent='Kopiert';setTimeout(function(){button.textContent=text},1400)})})</script>
 {% endblock %}

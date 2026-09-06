@@ -3,7 +3,7 @@ import hashlib
 import re
 import secrets
 from dataclasses import FrozenInstanceError, fields
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -11,7 +11,7 @@ from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.master import OrgSettings
 from app.models.probenplanung import ProbeCheckliste, ProbeChecklistItem, ProbeMedia, ProbePublicToken
-from app.models.teilnahme import Teilnahme, Termin
+from app.models.teilnahme import Teilnahme
 from app.services.probenplanung_public import OeffentlicheProbe, oeffentliche_proben
 from tests.test_probenplanung_checkliste import _flags, _login, _probeart, _user
 from tests.test_probenplanung_plan import _termin
@@ -20,7 +20,8 @@ from tests.test_probenplanung_plan import _termin
 def public_setup(**values):
     _flags()
     art = _probeart(0, "Public " + secrets.token_hex(6))
-    termin_id = _termin(art, "Freigegebene Probe", "2026-07-10T20:00", **values)
+    future = datetime.now(UTC) + timedelta(days=30)
+    termin_id = _termin(art, "Freigegebene Probe", future.strftime("%Y-%m-%dT%H:%M"), **values)
     plain = secrets.token_urlsafe(32)
     with SessionLocal() as db:
         set_tenant_context(db, None)
@@ -120,7 +121,7 @@ def test_exakte_unveraenderliche_positivliste_und_template_context(client):
             p.info = "Manipulation"
     r = client.get(f"/p/probenplan/{plain}")
     assert all(type(p) is OeffentlicheProbe for p in r.context["proben"])
-    assert set(r.context) == {"request", "proben"}
+    assert set(r.context) == {"request", "proben", "org_name", "org_logo"}
 
 
 def test_token_verwaltung_einmalig_rotation_widerruf_und_csrf(client):
@@ -134,7 +135,7 @@ def test_token_verwaltung_einmalig_rotation_widerruf_und_csrf(client):
     plain = re.search(r"/p/probenplan/([A-Za-z0-9_-]+)", r.text).group(1)
     assert "webcal://" in r.text and plain + ".ics" in r.text
     assert r.headers["cache-control"] == "no-store"
-    assert plain not in client.get(url).text
+    assert plain in client.get(url).text
     with SessionLocal() as db:
         set_tenant_context(db, None)
         token = db.query(ProbePublicToken).filter_by(token_hash=hashlib.sha256(plain.encode()).hexdigest()).one()

@@ -77,10 +77,15 @@ def oeffentliche_proben(db: Session, token: str) -> tuple[OeffentlicherKalendere
             raise HTTPException(404, "Nicht gefunden") from None
         query = query.filter(Termin.probeart_id.in_(ids))
     result = []
+    jetzt = datetime.now(UTC).astimezone(tz)
     for t in query.order_by(Termin.beginn).all():
         beginn = t.beginn.replace(tzinfo=UTC).astimezone(tz)
         ende = t.ende.replace(tzinfo=UTC).astimezone(tz) if t.ende else None
         if row.jahr is not None and beginn.year != row.jahr:
+            continue
+        # Ganztägige Termine bleiben am selben Kalendertag sichtbar; Termine
+        # mit Uhrzeit verschwinden, sobald ihr Beginn vergangen ist.
+        if (t.ganztaegig and beginn.date() < jetzt.date()) or (not t.ganztaegig and beginn < jetzt):
             continue
         probe = OeffentlicheProbe(
             datum=beginn.date(), beginn=beginn, ende=ende, ganztaegig=t.ganztaegig,

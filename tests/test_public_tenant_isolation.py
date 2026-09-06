@@ -8,7 +8,7 @@ Neue öffentliche Routen (Token/QR/PIN/Signatur) bitte hier mit einem
 Cross-Org-Fall ergänzen (siehe CLAUDE.md, Abschnitt Tenant-Scoping).
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from app.core.security import hash_api_key
 from app.core.tenant import set_tenant_context
@@ -776,7 +776,7 @@ def test_probenplan_und_ics_token_isolieren_org_und_fremde_verknuepfungen(client
             db.add(art)
             db.flush()
             termin = Termin(org_id=org_id, typ="uebung", titel=name, probeart_id=art.id,
-                            beginn=datetime(2026, 7, 10, 18), public_sichtbar=True)
+                            beginn=datetime.now(UTC).replace(tzinfo=None) + timedelta(days=30), public_sichtbar=True)
             db.add(termin)
             db.flush()
             ids[org_id] = (termin.id, art.id)

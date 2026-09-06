@@ -2674,6 +2674,7 @@ button.htmx-request,
 .pt-token { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; padding: .9rem 1rem; background: var(--surface-low); border: 1px solid var(--border); border-left: 4px solid var(--red); border-radius: var(--radius-md); box-shadow: var(--shadow-card); }
 .pt-token__actions { display: flex; gap: .5rem; flex-wrap: wrap; }
 .pt-token__actions form { margin: 0; }
+.pt-link-list { display: grid; gap: .5rem; margin-top: .75rem; }.pt-link-list label { display: grid; gap: .3rem; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; font-size: .68rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }.pt-link-list label > span { display: flex; gap: .5rem; }.pt-link { min-width: min(100%, 31rem); font-family: 'JetBrains Mono', monospace; font-size: .75rem; }
 @media (max-width:760px) { .pt-page { padding: .75rem; } .pt-header { align-items: stretch; } .pt-form { grid-template-columns: 1fr; } .pt-form .btn, .pt-inline-form .btn { width: 100%; } .pt-inline-form { align-items: stretch; } .pt-token__actions { width: 100%; } .pt-token__actions form, .pt-token__actions .btn { flex: 1; } }
 
 /* Probenplanung: Detailseite – bestehende Theme-Tokens und Formulare. */

@@ -1,4 +1,5 @@
 """Loginfreie Probenpläne; SEC-11-Scoping ausschließlich im gemeinsamen Selektor."""
+import hashlib
 import logging
 from urllib.parse import urlsplit
 
@@ -9,6 +10,8 @@ from starlette.templating import Jinja2Templates
 
 from app.config import settings
 from app.db import get_db
+from app.models.master import FireDept
+from app.models.probenplanung import ProbePublicToken
 from app.services.probenplanung_ics import KalenderNichtVerfuegbar, probenplan_ics
 from app.services.probenplanung_public import oeffentliche_proben
 
@@ -37,7 +40,16 @@ def oeffentlicher_probenkalender(token: str, db: Session = Depends(get_db)):
 @public_router.get("/p/probenplan/{token}", response_class=HTMLResponse)
 def oeffentlicher_probenplan(token: str, request: Request, db: Session = Depends(get_db)):
     eintraege = oeffentliche_proben(db, token)
+    token_row = (db.query(ProbePublicToken).execution_options(include_all_tenants=True)
+                 .filter(ProbePublicToken.token_hash == hashlib.sha256(token.encode()).hexdigest())
+                 .first())
+    org = (db.query(FireDept).execution_options(include_all_tenants=True)
+           .filter(FireDept.id == token_row.org_id).first()) if token_row else None
     return public_templates.TemplateResponse(
-        request, "probenplanung/public_plan.html", {"proben": tuple(e.probe for e in eintraege)},
+        request, "probenplanung/public_plan.html", {
+            "proben": tuple(e.probe for e in eintraege),
+            "org_name": org.name if org else "Einsatzcockpit",
+            "org_logo": (org.logo_path if org and org.logo_path else "/static/img/logo_einsatzcockpit.png"),
+        },
         headers=_PUBLIC_HEADERS,
     )

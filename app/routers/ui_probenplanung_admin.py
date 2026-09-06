@@ -827,8 +827,17 @@ def _public_verwaltung_response(request: Request, db: Session, user: User, plain
     org_settings = db.query(OrgSettings).filter(OrgSettings.org_id == user.org_id).first()
     basis = (settings.PUBLIC_BASE_URL or settings.APP_BASE_URL).rstrip("/")
     url = f"{basis}/p/probenplan/{plain}" if plain else None
+    from app.core.crypto import decrypt_secret
+    token_links = []
+    for token in _public_token_liste(db, user.org_id):
+        try:
+            raw = decrypt_secret(token.token_enc) if token.token_enc else None
+        except Exception:
+            raw = None
+        token_links.append({"token": token, "url": f"{basis}/p/probenplan/{raw}" if raw else None,
+                            "ics_url": f"{basis}/p/probenplan/{raw}.ics" if raw else None})
     return templates.TemplateResponse(request, "probenplanung/verwaltung_oeffentlich.html", {
-        "user": user, "tokens": _public_token_liste(db, user.org_id),
+        "user": user, "tokens": token_links,
         "public_aktiv": bool(org_settings and org_settings.probenplanung_public_aktiv),
         "public_url": url, "ics_url": f"{url}.ics" if url else None,
         "webcal_url": "webcal://" + url.split("://", 1)[1] + ".ics" if url else None,
@@ -872,8 +881,9 @@ def public_token_erzeugen(
 
     from app.models.probenplanung import ProbePublicToken
     plain = secrets.token_urlsafe(32)
+    from app.core.crypto import encrypt_secret
     db.add(ProbePublicToken(org_id=user.org_id, art="plan", bezeichnung=bezeichnung.strip()[:150] or None,
-                            token_hash=hashlib.sha256(plain.encode()).hexdigest()))
+                            token_hash=hashlib.sha256(plain.encode()).hexdigest(), token_enc=encrypt_secret(plain)))
     write_audit(db, "probenplanung.public.token_erzeugt", org_id=user.org_id, user_id=user.id)
     db.commit()
     return _public_verwaltung_response(request, db, user, plain)
@@ -897,11 +907,12 @@ def public_token_aendern(
     row.widerrufen_am = datetime.now(UTC).replace(tzinfo=None)
     plain = None
     if aktion == "regenerieren":
+        from app.core.crypto import encrypt_secret
         plain = secrets.token_urlsafe(32)
         db.add(ProbePublicToken(
             org_id=user.org_id, art=row.art, termin_id=row.termin_id, jahr=row.jahr,
             filter_probeart_ids=row.filter_probeart_ids, bezeichnung=row.bezeichnung,
-            token_hash=hashlib.sha256(plain.encode()).hexdigest(),
+            token_hash=hashlib.sha256(plain.encode()).hexdigest(), token_enc=encrypt_secret(plain),
         ))
     write_audit(db, "probenplanung.public.token_" + aktion, org_id=user.org_id, user_id=user.id,
                 entity_type="probe_public_token", entity_id=row.id)
