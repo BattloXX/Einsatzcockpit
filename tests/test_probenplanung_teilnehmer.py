@@ -52,8 +52,8 @@ def test_default_bleibt_nicht_erfasst_und_alle_aktiven_werden_gelistet(client):
     assert response.status_code == 200
     assert "Phase8DefaultAktiv Teilnehmer" in response.text
     assert "Phase8DefaultInaktiv Teilnehmer" not in response.text
-    assert "noch nicht erfasst" in response.text
-    assert "unentschuldigt" in response.text
+    assert "· Teilnehmer" in response.text
+    assert "Nur Offene" in response.text
     assert _row(termin_id, active_id) is None
     assert _row(termin_id, inactive_id) is None
 
@@ -200,3 +200,43 @@ def test_rollen_und_modulguards_auf_teilnehmerrouten(client):
     assert client.post(
         f"/probenplanung/{termin_id}/teilnehmer/alle-anwesend", data={"_csrf": editor_csrf}
     ).status_code == 404
+
+
+def test_appell_ist_fuer_jede_probe_verfuegbar_und_speichert_einzelstatus_und_abschluss(client):
+    """Die Schnellansicht schreibt weiterhin ausschließlich Teilnahme-Zeilen."""
+    username = "phase8_appell"
+    _user(username, "probenverwalter")
+    _flags()
+    csrf = _login(client, username)
+    termin_id = _probe_anlegen(client, csrf, _probeart(0, "Phase8 Appell Probe"), "Phase8 Probe")
+    first_id, second_id = _member("AppellA"), _member("AppellB")
+
+    page = client.get(f"/probenplanung/{termin_id}/teilnehmer/appell")
+    assert page.status_code == 200
+    assert "· Teilnehmer" in page.text
+    assert "Nur Offene" in page.text
+    assert str(client.get(f"/probenplanung/{termin_id}/teilnehmer").url).endswith("/teilnehmer/appell")
+
+    headers = {"X-CSRF-Token": csrf}
+    present = client.put(
+        f"/probenplanung/{termin_id}/teilnehmer/appell/{first_id}",
+        json={"status": "anwesend"}, headers=headers,
+    )
+    excused = client.put(
+        f"/probenplanung/{termin_id}/teilnehmer/appell/{second_id}",
+        json={"status": "entschuldigt"}, headers=headers,
+    )
+    assert present.json() == {"ok": True, "member_id": first_id, "status": "anwesend"}
+    assert excused.json()["status"] == "entschuldigt"
+    assert _row(termin_id, first_id).status == "anwesend"  # type: ignore[union-attr]
+    assert _row(termin_id, second_id).status == "entschuldigt"  # type: ignore[union-attr]
+
+    # Offene Teilnehmer erzwingen die serverseitige Abschlusswarnung.
+    incomplete = client.post(
+        f"/probenplanung/{termin_id}/teilnehmer/appell/abschliessen", json={"force": False}, headers=headers,
+    )
+    assert incomplete.status_code == 409
+    assert incomplete.json()["offen"] > 0
+    assert client.post(
+        f"/probenplanung/{termin_id}/teilnehmer/appell/abschliessen", json={"force": True}, headers=headers,
+    ).json()["ok"] is True

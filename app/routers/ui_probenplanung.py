@@ -8,7 +8,7 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from sqlalchemy import case, func, or_, update
 from sqlalchemy.orm import Session, joinedload
 
@@ -310,6 +310,7 @@ def _teilnehmer_context(db: Session, user: User, termin: Termin) -> dict[str, An
     for gruppe in gruppen:
         for relation in gruppe.members:
             member_gruppen.setdefault(relation.member_id, []).append(gruppe.id)
+    nachbereitung = db.query(ProbeNachbereitung).filter(ProbeNachbereitung.termin_id == termin.id).first()
     return {
         "teilnehmer": teilnehmer,
         "teilnahme_summary": summary,
@@ -317,6 +318,8 @@ def _teilnehmer_context(db: Session, user: User, termin: Termin) -> dict[str, An
         "gruppen": gruppen,
         "member_gruppen": member_gruppen,
         "funktionen": db.query(Funktion).filter(Funktion.aktiv.is_(True)).order_by(Funktion.sortierung).all(),
+        "appell_abgeschlossen": bool(nachbereitung and nachbereitung.abgeschlossen_am),
+        "appell_abgeschlossen_am": nachbereitung.abgeschlossen_am if nachbereitung else None,
     }
 
 
@@ -331,6 +334,26 @@ def _teilnehmer_response(request: Request, db: Session, user: User, termin: Term
             **_teilnehmer_context(db, user, termin),
         },
     )
+
+
+def _appell_context(db: Session, user: User, termin: Termin) -> dict[str, Any]:
+    """Kleiner, stabil sortierter Snapshot für die touchoptimierte Appellansicht."""
+    context = _teilnehmer_context(db, user, termin)
+    teilnehmer = []
+    for position, item in enumerate(context["teilnehmer"], start=1):
+        teilnehmer.append({**item, "position": position})
+    summary = context["teilnahme_summary"]
+    gesamt = len(teilnehmer)
+    offen = summary[TeilnahmeStatus.NICHT_ERFASST.value]
+    erfasst = gesamt - offen
+    return {
+        "teilnehmer": teilnehmer,
+        "teilnahme_summary": summary,
+        "gesamt": gesamt,
+        "offen": offen,
+        "erfasst": erfasst,
+        "prozent": round(erfasst * 100 / gesamt) if gesamt else 100,
+    }
 
 
 def _teilnahme_or_neu(db: Session, user: User, termin: Termin, member: Member) -> Teilnahme:
@@ -922,6 +945,10 @@ def probe_detail(
     if tab not in erlaubte_tabs:
         raise HTTPException(404, "Unbekannter Tab")
     termin = _termin_or_404(db, user.org_id, termin_id)
+    if tab == "teilnehmer":
+        # Alte Detail-/Formularansicht nicht mehr ausliefern; ein einheitlicher
+        # Appell ist für jede Probe der einzige Teilnehmer-Workflow.
+        return RedirectResponse(f"/probenplanung/{termin.id}/teilnehmer/appell", status_code=303)
     checkliste = db.query(ProbeCheckliste).filter(ProbeCheckliste.termin_id == termin.id).first()
     termin_lokal = to_org_tz(termin.beginn, user.org)
     assert termin_lokal is not None
@@ -1214,7 +1241,7 @@ def probe_uebungseinsatz_teilnehmer_uebernehmen(
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from exc
     db.commit()
-    return RedirectResponse(f"/probenplanung/{termin.id}?tab=teilnehmer&uebernommen={anzahl}", status_code=303)
+    return RedirectResponse(f"/probenplanung/{termin.id}/teilnehmer/appell", status_code=303)
 
 
 @router.get("/{termin_id}/teilnehmer", response_class=HTMLResponse)
@@ -1225,7 +1252,94 @@ def probe_teilnehmer(
     _guard: None = Depends(require_probenplanung_enabled),
     _: CurrentOrgId = None,
 ):
-    return probe_detail(request, termin_id, tab="teilnehmer", db=db, _guard=_guard, _=_)
+    # Die frühere Formularansicht wurde durch den schnellen Appell ersetzt.
+    return RedirectResponse(f"/probenplanung/{termin_id}/teilnehmer/appell", status_code=303)
+
+
+@router.get("/{termin_id}/teilnehmer/appell", response_class=HTMLResponse)
+def probe_teilnehmer_appell(
+    request: Request,
+    termin_id: int,
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_probenplanung_enabled),
+    _: CurrentOrgId = None,
+):
+    user = _require_login(request)
+    termin = _termin_or_404(db, user.org_id, termin_id)
+    return templates.TemplateResponse(request, "probenplanung/teilnehmer_appell.html", {
+        "user": user, "termin": termin, "can_edit": can_edit_proben(user),
+        **_appell_context(db, user, termin),
+    })
+
+
+@router.put("/{termin_id}/teilnehmer/appell/{member_id}")
+async def probe_teilnehmer_appell_status(
+    request: Request,
+    termin_id: int,
+    member_id: int,
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_probenplanung_enabled),
+    _: CurrentOrgId = None,
+):
+    """Ein einzelner Appell-Tap: absichtlich nur Status, sofort als JSON bestätigt."""
+    user = _require_login(request)
+    _require_edit(user)
+    termin = _termin_or_404(db, user.org_id, termin_id)
+    member = db.query(Member).filter(Member.id == member_id, Member.active.is_(True)).first()
+    if member is None:
+        raise HTTPException(404, "Mitglied nicht gefunden")
+    try:
+        payload = await request.json()
+        status = TeilnahmeStatus(str(payload.get("status")))
+    except (ValueError, TypeError, AttributeError) as exc:
+        raise HTTPException(422, "Ungültiger Teilnahmestatus") from exc
+    if status is TeilnahmeStatus.NICHT_ERFASST:
+        raise HTTPException(422, "Im Appell sind nur die drei Erfassungsstatus zulässig")
+    row = _teilnahme_or_neu(db, user, termin, member)
+    before = row.status
+    row.set_status(status)
+    write_probe_change(
+        db, termin.id, "teilnehmer.appell_status", "teilnehmer", "status",
+        {"member_id": member.id, "status": before}, {"member_id": member.id, "status": status.value},
+        org_id=user.org_id, user_id=user.id, ip=request.client.host if request.client else None,
+    )
+    db.commit()
+    return JSONResponse({"ok": True, "member_id": member.id, "status": status.value})
+
+
+@router.post("/{termin_id}/teilnehmer/appell/abschliessen")
+async def probe_teilnehmer_appell_abschliessen(
+    request: Request,
+    termin_id: int,
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_probenplanung_enabled),
+    _: CurrentOrgId = None,
+):
+    user = _require_login(request)
+    _require_edit(user)
+    termin = _termin_or_404(db, user.org_id, termin_id)
+    try:
+        payload = await request.json()
+    except ValueError:
+        payload = {}
+    force = bool(payload.get("force"))
+    offen = _appell_context(db, user, termin)["offen"]
+    if offen and not force:
+        return JSONResponse({"ok": False, "offen": offen}, status_code=409)
+    row = db.query(ProbeNachbereitung).filter(ProbeNachbereitung.termin_id == termin.id).first()
+    if row is None:
+        row = ProbeNachbereitung(org_id=user.org_id, termin_id=termin.id)
+        db.add(row)
+    row.teilnehmer_vollstaendig = offen == 0
+    row.abgeschlossen_von = user.id
+    row.abgeschlossen_am = datetime.now(UTC)
+    write_probe_change(
+        db, termin.id, "teilnehmer.appell_abgeschlossen", "teilnehmer", None, None,
+        {"offen": offen, "vollstaendig": offen == 0}, org_id=user.org_id, user_id=user.id,
+        ip=request.client.host if request.client else None,
+    )
+    db.commit()
+    return JSONResponse({"ok": True, "offen": offen, "vollstaendig": offen == 0})
 
 
 @router.patch("/{termin_id}/teilnehmer/{member_id}", response_class=HTMLResponse)

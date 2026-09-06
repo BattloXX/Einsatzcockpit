@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Teilnehmer – {{ termin.titel }}{% endblock %}
+{% block head_extra %}<link rel="stylesheet" href="/static/css/probe-appell.css?v={{ ASSET_VERSION }}">{% endblock %}
+{% block content %}
+<main class="appell-page" id="appell" data-status-url="/probenplanung/{{ termin.id }}/teilnehmer/appell" data-csrf="{{ request.state.csrf_token }}" data-can-edit="{{ 'true' if can_edit else 'false' }}">
+  <header class="appell-header">
+    <a class="appell-back" href="/probenplanung/{{ termin.id }}">← Zur Probe</a>
+    <div class="appell-header__title"><p>{{ termin.probeart.name if termin.probeart else termin.typ_label }} · Teilnehmer</p><h1>{{ termin.titel }}</h1></div>
+    <div class="appell-stats" aria-live="polite">
+      <span data-stat="anwesend">{{ teilnahme_summary.anwesend }} ✓</span><span data-stat="entschuldigt">{{ teilnahme_summary.entschuldigt }} ✉</span><span data-stat="unentschuldigt">{{ teilnahme_summary.unentschuldigt }} ✗</span><span data-stat="offen">{{ offen }} offen</span>
+    </div>
+    <div class="appell-progress"><div role="progressbar" aria-label="Appellfortschritt" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ prozent }}"><i data-progress style="width:{{ prozent }}%"></i></div><strong data-percent>{{ prozent }} %</strong></div>
+    <button class="appell-filter" type="button" aria-pressed="false" data-filter>Nur Offene (<span data-open-count>{{ offen }}</span>)</button>
+    <p class="appell-sync" data-sync aria-live="polite"></p>
+  </header>
+
+  <nav class="appell-abc" aria-label="Alphabetische Schnellnavigation">{% for char in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' %}<button type="button" data-letter="{{ char }}">{{ char }}</button>{% endfor %}</nav>
+  <section class="appell-list" aria-label="Teilnehmerliste">
+  {% for item in teilnehmer %}
+    {% set status = item.status %}
+    <article class="appell-person appell-person--{{ status }}" data-person data-id="{{ item.member.id }}" data-name="{{ item.member.full_name }}" data-status="{{ status }}" data-position="{{ item.position }}" data-letter="{{ item.member.lastname[:1]|upper }}">
+      <div class="appell-person__head"><span class="appell-current" hidden>Aktueller Aufruf</span><span class="appell-status" data-status-label>{% if status == 'anwesend' %}✓ ANWESEND{% elif status == 'entschuldigt' %}✉ ENTSCHULDIGT{% elif status == 'unentschuldigt' %}✗ UNENTSCHULDIGT{% else %}○ OFFEN{% endif %}</span></div>
+      <h2>{{ item.member.full_name }}</h2><p class="appell-position">Position {{ item.position }} von {{ gesamt }}</p>
+      <div class="appell-actions" aria-label="Status für {{ item.member.full_name }}">
+        <button type="button" data-status-action="anwesend" {% if not can_edit %}disabled{% endif %} aria-label="{{ item.member.full_name }} als anwesend markieren">✓ <span>Anwesend</span></button>
+        <button type="button" data-status-action="entschuldigt" {% if not can_edit %}disabled{% endif %} aria-label="{{ item.member.full_name }} als entschuldigt markieren">✉ <span>Entschuldigt</span></button>
+        <button type="button" data-status-action="unentschuldigt" {% if not can_edit %}disabled{% endif %} aria-label="{{ item.member.full_name }} als unentschuldigt markieren">✗ <span>Fehlt</span></button>
+      </div>
+    </article>
+  {% else %}<p class="appell-empty">Keine aktiven Mitglieder vorhanden.</p>{% endfor %}
+  </section>
+  <footer class="appell-bottom"><div><strong data-next-label>Nächster Offener</strong><span data-next>–</span></div><button type="button" class="btn btn--secondary" data-jump>↓ Zum nächsten</button>{% if can_edit %}<button type="button" class="btn btn--primary" data-complete>Appell abschließen</button>{% endif %}</footer>
+  <dialog class="appell-dialog" data-complete-dialog><div data-dialog-body></div><div class="appell-dialog__actions"><button class="btn btn--secondary" type="button" data-close>Zurück zum Appell</button><button class="btn btn--primary" type="button" data-force hidden>Trotzdem abschließen</button></div></dialog>
+</main>
+<script src="/static/js/probe-appell.js?v={{ ASSET_VERSION }}"></script>
+{% endblock %}

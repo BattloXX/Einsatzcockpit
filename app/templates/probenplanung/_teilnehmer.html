@@ -12,6 +12,9 @@
       </div>
       {% if can_edit %}
       <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+        {% if termin.probeart and termin.probeart.name|lower == 'vollprobe' %}
+        <a class="btn btn--primary" style="min-height:44px" href="/probenplanung/{{ termin.id }}/teilnehmer/appell">{{ 'Teilnehmererfassung fortsetzen' if teilnahme_summary.nicht_erfasst < teilnehmer|length else 'Teilnehmer erfassen' }}</a>
+        {% endif %}
         <form hx-post="/probenplanung/{{ termin.id }}/teilnehmer/alle-anwesend" hx-target="#probe-teilnehmer" hx-swap="outerHTML">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
           <button class="btn btn--success" type="submit" style="min-height:44px">Alle nicht erfassten anwesend</button>
