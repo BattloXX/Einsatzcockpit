@@ -1,14 +1,27 @@
-<section class="card">
-  <h2>Skizze</h2>
+<section class="pd-card pd-card--accent">
+  <div class="pd-card__head"><h2>Skizze</h2><span class="pd-card__label">Vorbereitung</span></div>
   <p class="text-muted">JPG oder PNG als Hintergrund hochladen und im bestehenden Zeicheneditor bearbeiten.</p>
   {% if can_edit %}
     {% with upload_art='skizze', upload_accept='image/jpeg,image/png' %}{% include "probenplanung/_dokument_upload.html" %}{% endwith %}
   {% endif %}
 </section>
-<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(15rem,1fr));gap:1rem;margin-top:1rem">
+{% if lagefuehrung_incident %}
+<section class="pd-card pd-card--map">
+  <div class="pd-card__head"><div><p class="pd-card__label">Verknüpfter Übungseinsatz</p><h2>Lageführung übernehmen</h2></div><a class="btn btn--secondary" href="/einsatz/{{ lagefuehrung_incident.id }}/lagefuehrung" target="_blank" rel="noopener">Lageführung öffnen</a></div>
+  <p class="text-muted">Eine Momentaufnahme wird pixelgenau als eigene Skizze in diesen Probeplan kopiert. Anschließend kann sie gezeichnet, gedruckt und unabhängig vom Einsatz weiterverwendet werden.</p>
+  {% if can_edit and lagefuehrung_snapshots %}
+  <form class="pd-import-form" method="post" action="/probenplanung/{{ termin.id }}/skizze/lagefuehrung-uebernehmen">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <div class="form-group"><label for="lagefuehrung-snapshot">Momentaufnahme</label><select class="form-select" id="lagefuehrung-snapshot" name="snapshot_id">{% for snapshot in lagefuehrung_snapshots %}<option value="{{ snapshot.id }}">{{ snapshot.label or 'Momentaufnahme' }} · {{ snapshot.created_at|local_datetime }}</option>{% endfor %}</select></div>
+    <button class="btn btn--primary" type="submit">Als Skizze übernehmen</button>
+  </form>
+  {% elif not lagefuehrung_snapshots %}<p class="pd-card__notice">Noch keine Momentaufnahme vorhanden. In der Lageführung „Momentaufnahme“ wählen und danach hier übernehmen.</p>{% endif %}
+</section>
+{% endif %}
+<div class="pd-media-grid">
 {% for medium in skizzen %}
-  <article class="card">
-    <img src="/probenplanung/medien/{{ medium.id }}/thumb" alt="{{ medium.name }}" style="max-width:100%;height:10rem;object-fit:contain">
+  <article class="pd-card pd-media-card">
+    <img class="pd-media-card__image" src="/probenplanung/medien/{{ medium.id }}/thumb" alt="{{ medium.name }}">
     <h3>{{ medium.name }}</h3>
     {% if medium.typ %}<p>{{ medium.typ }}</p>{% endif %}
     {% if medium.beschreibung %}<p>{{ medium.beschreibung }}</p>{% endif %}
@@ -16,5 +29,5 @@
     <a class="btn btn--primary" href="/probenplanung/{{ termin.id }}/skizze?media_id={{ medium.id }}">Zeichnen</a>
     {% if can_edit %}<form hx-delete="/probenplanung/{{ termin.id }}/medien/{{ medium.id }}" hx-confirm="Medium wirklich löschen?" style="display:inline"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><button class="btn btn--danger" type="submit">Löschen</button></form>{% endif %}
   </article>
-{% else %}<div class="card"><p>Noch kein Hintergrundbild vorhanden.</p></div>{% endfor %}
+{% else %}<div class="pd-card"><p>Noch kein Hintergrundbild vorhanden.</p></div>{% endfor %}
 </div>

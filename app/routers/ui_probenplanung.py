@@ -978,6 +978,26 @@ def probe_detail(
             "dokumente": [medium for medium in medien if medium.art == "dokument"],
             "uploader_namen": {uploader.id: uploader.display_name for uploader in uploaders},
         })
+    if (
+        tab == "skizze"
+        and termin.exercise_incident_id
+        and getattr(request.state, "lagefuehrung_modul_aktiv", False)
+    ):
+        # Die Momentaufnahme ist der stabile Übergabepunkt zwischen dem
+        # einsatzbezogenen Board und dem dauerhaften Probeplan.
+        from app.models.lagefuehrung import LagefuehrungSnapshot
+        incident = db.get(Incident, termin.exercise_incident_id)
+        if incident and incident.primary_org_id == user.org_id:
+            context["lagefuehrung_incident"] = incident
+            context["lagefuehrung_snapshots"] = (
+                db.query(LagefuehrungSnapshot)
+                .filter(
+                    LagefuehrungSnapshot.incident_id == incident.id,
+                    LagefuehrungSnapshot.org_id == user.org_id,
+                )
+                .order_by(LagefuehrungSnapshot.created_at.desc(), LagefuehrungSnapshot.id.desc())
+                .all()
+            )
     if tab in {"teilnehmer", "uebersicht"}:
         context.update(_teilnehmer_context(db, user, termin))
     if tab == "uebersicht":
@@ -1580,6 +1600,53 @@ def probe_skizze_bearbeiten(
     if media is None:
         raise HTTPException(404, "Kein Skizzenbild vorhanden")
     return RedirectResponse(f"/annotieren/probe/{media.id}", status_code=303)
+
+
+@router.post("/{termin_id}/skizze/lagefuehrung-uebernehmen")
+def probe_lagefuehrung_uebernehmen(
+    request: Request,
+    termin_id: int,
+    snapshot_id: int = Form(...),
+    db: Session = Depends(get_db),
+    _guard: None = Depends(require_probenplanung_enabled),
+    _: CurrentOrgId = None,
+):
+    """Übernimmt eine Lageführungs-Momentaufnahme als bearbeitbare Probenskizze."""
+    user = _require_login(request)
+    _require_edit(user)
+    termin = _termin_or_404(db, user.org_id, termin_id)
+    if not termin.exercise_incident_id or user.org_id is None:
+        raise HTTPException(409, "Kein Übungseinsatz mit dieser Probe verknüpft")
+    from app.models.lagefuehrung import LagefuehrungSnapshot
+    from app.services.lagefuehrung_snapshot_service import snapshot_path
+    from app.services.probe_media_service import create_probe_image_from_bytes
+
+    snapshot = (
+        db.query(LagefuehrungSnapshot)
+        .filter(
+            LagefuehrungSnapshot.id == snapshot_id,
+            LagefuehrungSnapshot.incident_id == termin.exercise_incident_id,
+            LagefuehrungSnapshot.org_id == user.org_id,
+        ).first()
+    )
+    if snapshot is None:
+        raise HTTPException(404, "Momentaufnahme nicht gefunden")
+    source = snapshot_path(snapshot)
+    if not source.exists():
+        raise HTTPException(404, "Bilddatei der Momentaufnahme nicht gefunden")
+    create_probe_image_from_bytes(
+        source.read_bytes(), termin_id=termin.id, org_id=user.org_id, user_id=user.id,
+        name=f"Lageführung – {snapshot.label or 'Momentaufnahme'}",
+        beschreibung=f"1:1 aus Einsatz #{termin.exercise_incident_id}, Momentaufnahme #{snapshot.id} übernommen.",
+        typ="Lageführung", db=db,
+    )
+    write_probe_change(
+        db, termin.id, "probe.lagefuehrung_uebernommen", "skizze", "lagefuehrung_snapshot",
+        None, {"incident_id": termin.exercise_incident_id, "snapshot_id": snapshot.id},
+        org_id=user.org_id, user_id=user.id,
+    )
+    db.commit()
+    return RedirectResponse(f"/probenplanung/{termin.id}?tab=skizze", status_code=303)
 
 
 from app.services.probe_checklist_service import ERLAUBTE_STATUSWECHSEL  # noqa: E402

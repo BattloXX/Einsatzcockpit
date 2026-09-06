@@ -2718,6 +2718,28 @@ button.htmx-request,
 .probe-checklist-item--overdue > .probe-checklist-item-head .status-pill { color: var(--red-light); }
 .probe-detail-bottom { display: none; }
 #probe-teilnehmer > .card, .probe-teilnehmer-row { padding: 1rem; }
+
+/* Probendetails: dieselbe kompakte Kartenhierarchie wie das Fahrtenbuch.
+   Die Fragmente verwenden teils noch .card; die Regel hält auch diese Tabs
+   (Teilnehmer, Nachbereitung, Übungseinsatz, Historie) im selben Design. */
+.pd-page .card, .pd-card { --pd-accent: var(--outline); padding: 1rem 1.1rem; background: var(--surface-mid); border: 1px solid var(--border); border-left: 4px solid var(--pd-accent); border-radius: var(--radius-lg); box-shadow: var(--shadow-card); }
+.pd-page .card > h2, .pd-card h2 { margin: 0; font-size: 1.05rem; }
+.pd-page .card > h3, .pd-card h3 { margin: .85rem 0 .35rem; font-size: .92rem; }
+.pd-page .card + .card { margin-top: 1rem; }
+.pd-card { margin: 0 0 1rem; }
+.pd-card--accent { --pd-accent: var(--red-light); }
+.pd-card--map { --pd-accent: #3a7bd5; }
+.pd-card__head { display: flex; justify-content: space-between; align-items: center; gap: .75rem; flex-wrap: wrap; margin-bottom: .75rem; }
+.pd-card__head h2 { margin: 0; }
+.pd-card__label { margin: 0 0 .2rem; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; font-size: .66rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+.pd-card__notice { margin: .75rem 0 0; padding: .65rem .75rem; border-left: 3px solid var(--yellow); background: rgba(242,176,46,.1); color: var(--text-muted); font-size: .85rem; }
+.pd-import-form { display: flex; align-items: end; gap: .75rem; flex-wrap: wrap; margin-top: .8rem; padding-top: .8rem; border-top: 1px solid var(--border); }
+.pd-import-form .form-group { flex: 1 1 18rem; margin: 0; }
+.pd-media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr)); gap: 1rem; }
+.pd-media-card { display: flex; flex-direction: column; margin: 0; }
+.pd-media-card__image { width: 100%; height: 10rem; margin: -.15rem 0 .85rem; object-fit: contain; background: var(--surface-low); border: 1px solid var(--border); border-radius: var(--radius-md); }
+.pd-media-card .btn { margin-top: auto; align-self: flex-start; }
+.pd-page .form-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
 @media (min-width:1100px) {
   .probe-detail-overview { grid-template-columns: minmax(0,1fr) 19rem; }
 }
@@ -2729,6 +2751,10 @@ button.htmx-request,
   .pd-command .form-actions .btn, .pd-command .form-actions form { flex: 1; }
   .pd-checklist-empty__form { align-items: stretch; }
   .pd-checklist-empty__form .btn { width: 100%; }
+  .pd-card__head { align-items: stretch; }
+  .pd-card__head .btn { width: 100%; }
+  .pd-import-form { align-items: stretch; }
+  .pd-import-form .btn { width: 100%; }
   .tabnav { gap: .35rem; align-items: center; padding: .3rem; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-low); max-width: 100%; }
   .tabnav__item { padding: .4rem .75rem; font-size: .8rem; border: 0; border-radius: 999px; }
   .tabnav__item--active { background: var(--surface-high); box-shadow: inset 0 0 0 1px var(--border); }

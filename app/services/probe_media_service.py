@@ -116,6 +116,54 @@ async def upload_probe_media(
     return media
 
 
+def create_probe_image_from_bytes(
+    raw: bytes,
+    *,
+    termin_id: int,
+    org_id: int,
+    user_id: int | None,
+    name: str,
+    beschreibung: str | None = None,
+    typ: str | None = None,
+    db: Session,
+) -> ProbeMedia:
+    """Speichert ein vertrauenswürdiges, bereits vorhandenes PNG als Probenskizze.
+
+    Wird für die Übernahme einer Lageführungs-Momentaufnahme verwendet. Das Bild
+    wird bewusst in den Probe-Speicher kopiert: Die Skizze bleibt damit Teil des
+    Probeplans, auch wenn der Einsatz später archiviert oder gelöscht wird.
+    """
+    mime = _detect_mime(raw)
+    if mime not in IMAGE_MIMES:
+        raise HTTPException(415, "Die Lageführungs-Momentaufnahme ist kein Bild")
+    if len(raw) > _size_limit_for_kind("image"):
+        raise HTTPException(413, "Momentaufnahme ist zu groß")
+
+    destination = _probe_dir(org_id, termin_id)
+    root = _storage_root().resolve()
+    main_path, thumb_path, _width, _height, stored_mime = _process_image(raw, destination)
+    stored_bytes = main_path.stat().st_size
+    try:
+        reserve_storage(db, org_id, stored_bytes)
+    except Exception:
+        main_path.unlink(missing_ok=True)
+        thumb_path.unlink(missing_ok=True)
+        raise
+
+    def relative(path: Path) -> str:
+        return str(path.resolve().relative_to(root)).replace("\\", "/")
+
+    media = ProbeMedia(
+        termin_id=termin_id, org_id=org_id, art="skizze", name=name[:255],
+        beschreibung=beschreibung, typ=typ[:50] if typ else None, kind="image",
+        mime_type=stored_mime, path=relative(main_path), thumb_path=relative(thumb_path),
+        size_bytes=stored_bytes, hochgeladen_von=user_id,
+    )
+    db.add(media)
+    db.flush()
+    return media
+
+
 def delete_probe_media(db: Session, media: ProbeMedia) -> None:
     """Löscht Original, Thumbnail, Annotation und gibt die Quota frei."""
     from app.services.annotation_service import delete_annotation_and_files
