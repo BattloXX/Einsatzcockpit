@@ -659,6 +659,11 @@ function incidentBoard(incidentId, alarm, startedAt) {
           break;
         }
         case 'vehicle_added':
+          this._swapColumnBody(incidentId, ev.column_id);
+          htmx.ajax('GET', `/einsatz/${incidentId}/fahrzeuge/auswahl-fragment`, {
+            source: document.body, swap: 'none'
+          });
+          break;
         case 'vehicle_moved':
         case 'task_created':
         case 'message_created':

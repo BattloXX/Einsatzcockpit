@@ -226,6 +226,42 @@ def test_wizard_formulare_zeigen_neue_karten_ohne_reload(angemeldete_seite: Page
     assert loads == []
 
 
+def test_neue_fahrzeugkarte_weist_auftrag_und_meldung_ohne_reload_zu(
+    angemeldete_seite: Page, base_url: str
+) -> None:
+    """Die OOB-Auswahlen enthalten ein eben per Wizard angelegtes Fahrzeug sofort."""
+    page = angemeldete_seite
+    _board(page, base_url)
+    load_id = _load_id(page)
+
+    page.get_by_title("Einheit zum Einsatz hinzufügen").first.click()
+    suggestion = page.locator("#vehicleWizard .suggestion-pill--block:not([disabled])").first
+    expect(suggestion).to_be_visible(timeout=10_000)
+    vehicle_code = suggestion.locator("strong").inner_text()
+    suggestion.click()
+    page.locator("#vehicleWizard form").first.get_by_role("button", name="Einheit hinzufügen").click()
+    vehicle = page.locator('.card[data-kind="vehicle"]', has_text=vehicle_code).last
+    expect(vehicle).to_be_visible(timeout=10_000)
+
+    task_title = "E2E Fahrzeugauftrag " + uuid4().hex
+    vehicle.get_by_role("button", name="+ Auftrag").click()
+    page.locator("#quickAddTaskTitle").fill(task_title)
+    page.locator("#quickAddTaskDialog").get_by_role("button", name="Anlegen").click()
+    task = page.locator('.card[data-kind="task"]', has_text=task_title)
+    expect(task).to_be_visible(timeout=10_000)
+    expect(task).to_contain_text(vehicle_code)
+
+    message_title = "E2E Fahrzeugmeldung " + uuid4().hex
+    vehicle.get_by_role("button", name="+ Meldung").click()
+    page.locator("#quickAddMsgTitle").fill(message_title)
+    page.locator("#quickAddMsgDialog").get_by_role("button", name="Anlegen").click()
+    message = page.locator('.card[data-kind="message"]', has_text=message_title)
+    expect(message).to_be_visible(timeout=10_000)
+    expect(message).to_contain_text(vehicle_code)
+
+    assert _load_id(page) == load_id
+
+
 def test_gleiche_karte_mit_entwurf_zeigt_aktualisieren_hinweis(
     angemeldete_seite: Page, zweiter_kontext: BrowserContext, base_url: str
 ) -> None:
