@@ -1,0 +1,10 @@
+{% set mc_meldung     = col_messages | selectattr('status', 'equalto', 'meldung')     | list | length %}
+{% set mc_achtung     = col_messages | selectattr('status', 'equalto', 'achtung')     | list | length %}
+{% set mc_hinweis     = col_messages | selectattr('status', 'equalto', 'hinweis')     | list | length %}
+{% set mc_information = col_messages | selectattr('status', 'equalto', 'information') | list | length %}
+<div id="col-status-messages-{{ col.id }}"{% if oob %} hx-swap-oob="true"{% endif %}{% if mc_meldung or mc_achtung or mc_hinweis or mc_information %} style="display:flex; gap:5px; flex-wrap:wrap; margin-top:4px;"{% endif %}>
+  {% if mc_meldung     %}<span style="font-size:.7rem;padding:1px 6px;border-radius:8px;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);color:#fca5a5;">🔴 {{ mc_meldung }}</span>{% endif %}
+  {% if mc_achtung     %}<span style="font-size:.7rem;padding:1px 6px;border-radius:8px;background:rgba(249,115,22,.15);border:1px solid rgba(249,115,22,.3);color:#fdba74;">⚠️ {{ mc_achtung }}</span>{% endif %}
+  {% if mc_hinweis     %}<span style="font-size:.7rem;padding:1px 6px;border-radius:8px;background:rgba(234,179,8,.15);border:1px solid rgba(234,179,8,.3);color:#fef08a;">💡 {{ mc_hinweis }}</span>{% endif %}
+  {% if mc_information %}<span style="font-size:.7rem;padding:1px 6px;border-radius:8px;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.3);color:#93c5fd;">ℹ️ {{ mc_information }}</span>{% endif %}
+</div>

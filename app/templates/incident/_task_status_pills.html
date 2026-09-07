@@ -1,0 +1,8 @@
+{% set tc_open = col_tasks | selectattr('status', 'equalto', 'open') | list | length %}
+{% set tc_ip   = col_tasks | selectattr('status', 'equalto', 'in_progress') | list | length %}
+{% set tc_done = col_tasks | selectattr('is_done') | list | length %}
+<div id="col-status-tasks-{{ col.id }}"{% if oob %} hx-swap-oob="true"{% endif %}{% if tc_open or tc_ip or tc_done %} style="display:flex; gap:5px; flex-wrap:wrap; margin-top:4px;"{% endif %}>
+  {% if tc_open %}<span style="font-size:.7rem;padding:1px 6px;border-radius:8px;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);color:#fca5a5;">🔴 {{ tc_open }}</span>{% endif %}
+  {% if tc_ip   %}<span style="font-size:.7rem;padding:1px 6px;border-radius:8px;background:rgba(251,191,36,.15);border:1px solid rgba(251,191,36,.3);color:#fde68a;">🟡 {{ tc_ip }}</span>{% endif %}
+  {% if tc_done %}<span style="font-size:.7rem;padding:1px 6px;border-radius:8px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);color:#86efac;">🟢 {{ tc_done }}</span>{% endif %}
+</div>

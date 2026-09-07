@@ -1,4 +1,4 @@
-<div class="card card--vehicle" id="vehicle-card-{{ vehicle.id }}"
+<div class="card card--vehicle" id="vehicle-card-{{ vehicle.id }}"{% if oob %} hx-swap-oob="true"{% endif %}
      data-uid="{{ vehicle.id }}" data-kind="vehicle"
      style="--org-color: {{ vehicle.vehicle_master.dept.color }}; cursor: pointer;"
      hx-get="/einsatz/{{ incident.id }}/fahrzeug/{{ vehicle.id }}/detail"

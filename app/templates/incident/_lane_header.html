@@ -54,34 +54,10 @@
     </div>
 
     {# Status-Übersicht für Auftrags-Spalten #}
-    {% if col_tasks %}
-    {% set tc_open = col_tasks | selectattr('status', 'equalto', 'open') | list | length %}
-    {% set tc_ip   = col_tasks | selectattr('status', 'equalto', 'in_progress') | list | length %}
-    {% set tc_done = col_tasks | selectattr('is_done') | list | length %}
-    {% if tc_open or tc_ip or tc_done %}
-    <div style="display:flex; gap:5px; flex-wrap:wrap; margin-top:4px;">
-      {% if tc_open %}<span style="font-size:.7rem;padding:1px 6px;border-radius:8px;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);color:#fca5a5;">🔴 {{ tc_open }}</span>{% endif %}
-      {% if tc_ip   %}<span style="font-size:.7rem;padding:1px 6px;border-radius:8px;background:rgba(251,191,36,.15);border:1px solid rgba(251,191,36,.3);color:#fde68a;">🟡 {{ tc_ip }}</span>{% endif %}
-      {% if tc_done %}<span style="font-size:.7rem;padding:1px 6px;border-radius:8px;background:rgba(34,197,94,.12);border:1px solid rgba(34,197,94,.25);color:#86efac;">🟢 {{ tc_done }}</span>{% endif %}
-    </div>
-    {% endif %}
-    {% endif %}
+    {% include "incident/_task_status_pills.html" %}
 
     {# Status-Übersicht für Meldungs-Spalte #}
-    {% if col_messages %}
-    {% set mc_meldung     = col_messages | selectattr('status', 'equalto', 'meldung')     | list | length %}
-    {% set mc_achtung     = col_messages | selectattr('status', 'equalto', 'achtung')     | list | length %}
-    {% set mc_hinweis     = col_messages | selectattr('status', 'equalto', 'hinweis')     | list | length %}
-    {% set mc_information = col_messages | selectattr('status', 'equalto', 'information') | list | length %}
-    {% if mc_meldung or mc_achtung or mc_hinweis or mc_information %}
-    <div style="display:flex; gap:5px; flex-wrap:wrap; margin-top:4px;">
-      {% if mc_meldung     %}<span style="font-size:.7rem;padding:1px 6px;border-radius:8px;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);color:#fca5a5;">🔴 {{ mc_meldung }}</span>{% endif %}
-      {% if mc_achtung     %}<span style="font-size:.7rem;padding:1px 6px;border-radius:8px;background:rgba(249,115,22,.15);border:1px solid rgba(249,115,22,.3);color:#fdba74;">⚠️ {{ mc_achtung }}</span>{% endif %}
-      {% if mc_hinweis     %}<span style="font-size:.7rem;padding:1px 6px;border-radius:8px;background:rgba(234,179,8,.15);border:1px solid rgba(234,179,8,.3);color:#fef08a;">💡 {{ mc_hinweis }}</span>{% endif %}
-      {% if mc_information %}<span style="font-size:.7rem;padding:1px 6px;border-radius:8px;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.3);color:#93c5fd;">ℹ️ {{ mc_information }}</span>{% endif %}
-    </div>
-    {% endif %}
-    {% endif %}
+    {% include "incident/_message_status_pills.html" %}
 
     {# Abschnittsleiter: nur bei Einheiten-/Nachbar-Spalten sinnvoll (echte "Abschnitte").
        Aufträge, Meldungen und Gerettete Personen sind keine Abschnitte. #}

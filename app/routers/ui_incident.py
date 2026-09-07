@@ -1759,6 +1759,21 @@ async def set_task_ampel(
         "type": "task_updated", "task_id": task_id, "kind": "task", "uid": task.id,
         "column_id": col_id, "vehicle_uid": task.vehicle_id,
     })
+    if task.vehicle_id:
+        vehicle = db.get(IncidentVehicle, task.vehicle_id)
+        if vehicle:
+            board_incident = _load_board_incident(incident_id, db)
+            assert board_incident is not None
+            org_ids = [board_incident.primary_org_id] if board_incident.primary_org_id else []
+            for incident_org in (board_incident.collaborating_orgs or []):
+                if incident_org.org_id not in org_ids:
+                    org_ids.append(incident_org.org_id)
+            return templates.TemplateResponse(request, "incident/_vehicle_card.html", {
+                "vehicle": vehicle, "incident": board_incident, "can_edit": True,
+                "oob": True,
+                "unit_status_values": UNIT_STATUS_VALUES,
+                "gk_member_candidates": list_commander_candidates(db, org_ids),
+            })
     return Response(status_code=204)
 
 
@@ -2979,9 +2994,17 @@ async def update_task_endpoint(
     can_edit = has_role(request.state.user, "incident_leader", "admin", "recorder")
     can_note = has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
     task_logs = _entity_logs(db, incident_id, "task", task_id)
-    return templates.TemplateResponse(request, "incident/_task_modal.html", {
+    vehicle = db.get(IncidentVehicle, task.vehicle_id) if task.vehicle_id else None
+    org_ids = [incident.primary_org_id] if incident.primary_org_id else []
+    for incident_org in (incident.collaborating_orgs or []):
+        if incident_org.org_id not in org_ids:
+            org_ids.append(incident_org.org_id)
+    return templates.TemplateResponse(request, "incident/_task_modal_with_vehicle_oob.html", {
         "user": request.state.user, "incident": incident, "task": task, "can_edit": can_edit, "can_note": can_note,
         "entity_logs": task_logs,
+        "vehicle": vehicle,
+        "unit_status_values": UNIT_STATUS_VALUES,
+        "gk_member_candidates": list_commander_candidates(db, org_ids),
     })
 
 
