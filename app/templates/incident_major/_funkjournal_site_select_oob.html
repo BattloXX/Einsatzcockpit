@@ -1,0 +1,6 @@
+<select id="funkjournalRelatedSiteSelect" name="related_site_id" class="form-select form-select--sm" hx-swap-oob="true">
+  <option value="">— keine —</option>
+  {% for s in sites %}
+  <option value="{{ s.id }}">{% if s.strasse %}{{ s.strasse }}{% if s.hausnr %} {{ s.hausnr }}{% endif %} – {% endif %}{{ s.bezeichnung[:40] }}</option>
+  {% endfor %}
+</select>

@@ -24,7 +24,9 @@ from app.routers import ui_incident
 from app.routers.ui_incident import _column_card_count
 from app.db import Base
 from app.models.incident import Incident, IncidentColumn, IncidentLog, IncidentVehicle, Message, RescuedPerson, Task
+from app.models.major_incident import EinheitSiteDispatch, IncidentSite, LageEinheit, MajorIncident
 from app.models.master import FireDept, Member, MemberQualification, Qualification, VehicleMaster
+from app.services.resource_service import get_dispatch_counts_for_sites
 from app.services.incident_service import (
     combined_verlauf,
     list_section_leader_candidates,
@@ -85,6 +87,45 @@ def test_prepend_card_without_existing_card_order(db, incident):
     order = json.loads(col.card_order)
     assert order[0] == {"kind": "task", "id": t2.id}
     assert {"kind": "task", "id": t1.id} in order
+
+
+def test_bulk_dispatch_counts_are_grouped_by_site(db, org):
+    """Board-Refresh bekommt alle Dispatch-Badges ohne Einzelqueries pro Karte."""
+    from datetime import UTC, datetime
+
+    lage = MajorIncident(org_id=org.id, name="GSL")
+    db.add(lage)
+    db.flush()
+    first = IncidentSite(major_incident_id=lage.id, org_id=org.id, bezeichnung="A")
+    second = IncidentSite(major_incident_id=lage.id, org_id=org.id, bezeichnung="B")
+    unit_a = LageEinheit(lage_id=lage.id, label="A")
+    unit_b = LageEinheit(lage_id=lage.id, label="B")
+    db.add_all([first, second, unit_a, unit_b])
+    db.flush()
+    now = datetime.now(UTC)
+    db.add_all([
+        EinheitSiteDispatch(einheit_id=unit_a.id, site_id=first.id, dispatched_at=now),
+        EinheitSiteDispatch(einheit_id=unit_b.id, site_id=first.id, dispatched_at=now, vor_ort_at=now),
+    ])
+    db.flush()
+
+    counts = get_dispatch_counts_for_sites(db, [first.id, second.id])
+
+    assert counts[first.id] == {"alarmed": 1, "vor_ort": 1}
+    assert counts[second.id] == {"alarmed": 0, "vor_ort": 0}
+
+
+def test_gsl_select_fragments_are_oob_replacements():
+    """Live-Select-Refetches können nur ihr jeweiliges Feld austauschen."""
+    dispatch_html = templates.env.get_template("incident_major/_site_disponieren_select_oob.html").render(
+        available_einheiten=[], already_dispatched_ids=[]
+    )
+    funk_html = templates.env.get_template("incident_major/_funkjournal_site_select_oob.html").render(sites=[])
+
+    assert 'id="siteDisponierenEinheitSelect"' in dispatch_html
+    assert 'hx-swap-oob="true"' in dispatch_html
+    assert 'id="funkjournalRelatedSiteSelect"' in funk_html
+    assert 'hx-swap-oob="true"' in funk_html
 
 
 def test_col_body_liefert_zaehler_als_oob_fragment(db, incident):

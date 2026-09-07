@@ -1,0 +1,8 @@
+<select id="siteDisponierenEinheitSelect" name="einheit_id" class="form-select form-select--sm" style="flex:1;" hx-swap-oob="true">
+  {% for e in available_einheiten if e.id not in already_dispatched_ids and e.status != 'abgerueckt' %}
+  <option value="{{ e.id }}"
+          style="{% if e.incident_site_id %}color:var(--red);{% elif e.status == 'im_einsatz' %}color:var(--yellow);{% else %}color:var(--green);{% endif %}">
+    {% if e.incident_site_id %}🔴{% elif e.status == 'im_einsatz' %}🟡{% else %}🟢{% endif %} {{ e.label }}{% if e.incident_site_id %} (Im Einsatz){% elif e.status == 'im_einsatz' %} (disponiert){% endif %}
+  </option>
+  {% endfor %}
+</select>

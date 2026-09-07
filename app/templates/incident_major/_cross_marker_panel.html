@@ -1,6 +1,7 @@
 {# Detail-Panel für übergreifende Meldungen (in Seitenpanel) #}
 {# Kontext: lage, marker, type_label, type_icon, status_label, status_color, can_edit #}
-<div x-data="{editing:false}">
+<div x-data="{editing:false}" data-open-cross-marker-id="{{ marker.id }}"
+     :data-editing="editing ? 'true' : 'false'" id="crossMarkerPanel">
 
 {# ── Header (wie Einsatzstellen-Panel) ──────────────────────────────────────── #}
 <div style="padding:10px 14px 8px;border-bottom:1px solid var(--border);">

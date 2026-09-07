@@ -151,7 +151,8 @@
         const content = document.getElementById('siteDetailContent');
         if (modal && modal.open && content) {
           const header = content.querySelector('.modal__header[data-open-site-id]');
-          if (header && String(header.dataset.openSiteId) === String(siteId)) {
+          if (header && String(header.dataset.openSiteId) === String(siteId)
+              && header.dataset.editing !== 'true') {
             htmx.ajax('GET', `/lage/${lageId}/stellen/${siteId}`, {
               target: '#siteDetailContent',
               swap: 'innerHTML',
@@ -167,6 +168,13 @@
           updateConnectionStatus('verbunden');
           if (msg.type === 'cross_marker:changed') {
             htmx.trigger(document.body, 'crossMarkerChanged');
+            const panel = document.querySelector('[data-open-cross-marker-id]');
+            if (panel && String(panel.dataset.openCrossMarkerId) === String(msg.marker_id)
+                && panel.dataset.editing !== 'true') {
+              htmx.ajax('GET', `/lage/${lageId}/uebergreifend/${msg.marker_id}/panel`, {
+                target: '#siteDetailContent', swap: 'innerHTML',
+              });
+            }
             return;
           }
           // Reine Karten-Attribut-Aenderungen (keine Phasen-/Spaltenbewegung):
@@ -192,6 +200,12 @@
           }
           if (msg.type === 'staff:changed' || msg.type === 'ressource:changed') {
             htmx.trigger(document.body, 'sitePhaseChanged');
+            const header = document.querySelector('.modal__header[data-open-site-id]');
+            if (header && header.dataset.editing !== 'true') {
+              htmx.ajax('GET', `/lage/${lageId}/stellen/${header.dataset.openSiteId}/disponieren-select`, {
+                target: document.body, swap: 'none',
+              });
+            }
             return;
           }
           if (msg.type === 'section:changed') {
@@ -211,6 +225,15 @@
           // nachladen, kein Reload -- analog zur Kopfleiste des Einsatz-Boards.
           if (msg.type === 'lage_updated') {
             htmx.ajax('GET', `/lage/${lageId}/kopf`, { target: document.body, swap: 'none' });
+            return;
+          }
+          if (msg.type === 'journal_updated') {
+            // Das Board selbst hat keinen Journalbereich; das Event ist dennoch
+            // bewusst konsumiert, damit der zentrale WS-Vertrag vollständig bleibt.
+            return;
+          }
+          if (msg.type === 'funkjournal:changed' || msg.type === 'vehicle:position') {
+            // Diese Daten erscheinen auf eigenen GSL-Ansichten, nicht im Kanban.
             return;
           }
           // Lage beendet: Board ist als Live-Kontext vorbei -- gezielt aufs

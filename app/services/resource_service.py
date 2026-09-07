@@ -8,6 +8,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from app.models.major_incident import (
@@ -441,6 +442,31 @@ def get_dispatch_counts_for_site(
         "alarmed": sum(1 for d in dispatches if d.vor_ort_at is None),
         "vor_ort": sum(1 for d in dispatches if d.vor_ort_at is not None),
     }
+
+
+def get_dispatch_counts_for_sites(
+    db: Session, site_ids: list[int]
+) -> dict[int, dict[str, int]]:
+    """Liefert Alarm-/Vor-Ort-Zähler für mehrere Stellen in einer Abfrage."""
+    if not site_ids:
+        return {}
+    rows = (
+        db.query(
+            EinheitSiteDispatch.site_id,
+            func.sum(case((EinheitSiteDispatch.vor_ort_at.is_(None), 1), else_=0)).label("alarmed"),
+            func.sum(case((EinheitSiteDispatch.vor_ort_at.is_not(None), 1), else_=0)).label("vor_ort"),
+        )
+        .filter(
+            EinheitSiteDispatch.site_id.in_(site_ids),
+            EinheitSiteDispatch.withdrawn_at.is_(None),
+        )
+        .group_by(EinheitSiteDispatch.site_id)
+        .all()
+    )
+    counts = {site_id: {"alarmed": 0, "vor_ort": 0} for site_id in site_ids}
+    for site_id, alarmed, vor_ort in rows:
+        counts[site_id] = {"alarmed": int(alarmed or 0), "vor_ort": int(vor_ort or 0)}
+    return counts
 
 
 def move_to_pool(

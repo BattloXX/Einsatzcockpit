@@ -1,0 +1,20 @@
+<div class="modal__header" x-data="{editing:false}" data-open-site-id="{{ site.id }}"
+     :data-editing="editing ? 'true' : 'false'" id="siteDetailHeader"{% if oob %} hx-swap-oob="true"{% endif %}>
+  <div style="flex:1;min-width:0;">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <h3 class="modal__title" x-show="!editing">{{ site.bezeichnung }}</h3>
+      {% if can_edit %}<button class="btn btn--xs btn--ghost" x-show="!editing" @click.stop="editing=true" title="Bezeichnung/Adresse bearbeiten">✏️</button>{% endif %}
+      <button type="button" class="btn btn--xs btn--ghost" title="Drucken (Station/lokal)" style="text-decoration:none;"
+              onclick="ecpgPrint({document_type:'site_karte', gsl_id:{{ lage.id }}, artifact_ref:'{{ site.id }}', title:'Stelle drucken', localUrl:'/lage/{{ lage.id }}/stellen/{{ site.id }}/druck'})">🖨</button>
+    </div>
+    {% if can_edit %}
+    <form x-ref="editForm" x-show="editing" x-cloak style="margin-top:6px;" hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/bearbeiten" hx-swap="none" hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}' @htmx:after-request="if(event.detail.successful){editing=false;}">
+      <div class="form-group"><input type="text" name="bezeichnung" class="form-input" required maxlength="160" value="{{ site.bezeichnung }}" placeholder="Bezeichnung" autocomplete="off" @keydown.enter.prevent="$refs.editForm.requestSubmit()"></div>
+      <div style="display:flex;gap:6px;"><input type="text" name="strasse" class="form-input" style="flex:3;" value="{{ site.strasse or '' }}" placeholder="Straße" autocomplete="off" maxlength="120" @keydown.enter.prevent="$refs.editForm.requestSubmit()"><input type="text" name="hausnr" class="form-input" style="flex:1;" value="{{ site.hausnr or '' }}" placeholder="Nr." autocomplete="off" maxlength="20" @keydown.enter.prevent="$refs.editForm.requestSubmit()"></div>
+      <div class="form-group" style="margin-top:6px;"><input type="text" name="ort" class="form-input" value="{{ site.ort or '' }}" placeholder="Ort" autocomplete="off" maxlength="120" @keydown.enter.prevent="$refs.editForm.requestSubmit()"></div>
+      <div style="margin-top:6px;"><button type="button" class="btn btn--ghost btn--sm" @click="editing=false">Abbrechen</button></div>
+    </form>
+    {% endif %}
+  </div>
+  <button aria-label="Schließen" type="button" onclick="closeSiteDetailPanel(this)" class="modal__close">×</button>
+</div>
