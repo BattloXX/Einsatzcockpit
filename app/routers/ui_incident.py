@@ -865,6 +865,21 @@ def board_card_fragment(
     })
 
 
+@router.get("/einsatz/{incident_id}/fahrzeuge/auswahl-fragment", response_class=HTMLResponse)
+def vehicle_select_oob_fragment(
+    incident_id: int, request: Request, db: Session = Depends(get_db)
+):
+    """Aktualisierte Fahrzeug-Auswahlen für die Board-Dialoge (OOB-only)."""
+    if not getattr(request.state, "user", None):
+        return Response("Nicht eingeloggt", status_code=401)
+    incident = _load_board_incident(incident_id, db)
+    if not incident:
+        return Response("Nicht gefunden", status_code=404)
+    return templates.TemplateResponse(request, "incident/_vehicle_select_oob.html", {
+        "incident": incident,
+    })
+
+
 @router.get("/einsatz/{incident_id}/spalte/{column_id}/inhalt", response_class=HTMLResponse)
 def board_column_content_fragment(
     incident_id: int, column_id: int, request: Request, db: Session = Depends(get_db)
@@ -1954,10 +1969,16 @@ async def attach_vehicle_to_incident(
     board_incident = _load_board_incident(incident_id, db)
     assert board_incident is not None
     col = next(c for c in board_incident.columns if c.id == target_col.id)
+    org_ids = [board_incident.primary_org_id] if board_incident.primary_org_id else []
+    for incident_org in (board_incident.collaborating_orgs or []):
+        if incident_org.org_id not in org_ids:
+            org_ids.append(incident_org.org_id)
     return templates.TemplateResponse(request, "incident/_created_card_fragment.html", {
         "vehicle": next(v for v in board_incident.vehicles if v.id == iv.id), "incident": board_incident,
         "can_edit": True, "card_template": "incident/_vehicle_card.html", "col": col,
         "col_count": _column_card_count(board_incident, col),
+        "unit_status_values": UNIT_STATUS_VALUES,
+        "gk_member_candidates": list_commander_candidates(db, org_ids),
     }, headers={
         "HX-Retarget": f"#zone-{target_col.id}",
         "HX-Reswap": "beforeend" if target_col.code == "active" else "afterbegin",

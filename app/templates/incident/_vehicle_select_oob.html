@@ -1,0 +1,24 @@
+<select id="quickAddTaskVehicleSelect" name="vehicle_id" class="form-select" x-model="vehicleId" hx-swap-oob="true">
+  <option value="">– keine –</option>
+  {% for v in incident.vehicles %}
+  {% if v.removed_at is none %}
+  <option value="{{ v.id }}">{{ v.vehicle_master.display_label }}</option>
+  {% endif %}
+  {% endfor %}
+</select>
+<select id="quickAddMsgVehicleSelect" name="vehicle_id" class="form-select" x-model="vehicleId" hx-swap-oob="true">
+  <option value="">– keine –</option>
+  {% for v in incident.vehicles %}
+  {% if v.removed_at is none %}
+  <option value="{{ v.id }}">{{ v.vehicle_master.display_label }}</option>
+  {% endif %}
+  {% endfor %}
+</select>
+<select id="personWizardVehicleSelect" name="vehicle_id" class="form-select" hx-swap-oob="true">
+  <option value="">– keine –</option>
+  {% for v in incident.vehicles %}
+  {% if v.removed_at is none %}
+  <option value="{{ v.id }}">{{ v.vehicle_master.display_label }} ({{ v.vehicle_master.dept.name }})</option>
+  {% endif %}
+  {% endfor %}
+</select>

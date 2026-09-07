@@ -3,10 +3,14 @@
 - Neue Karten werden ganz oben in der Lane eingereiht (prepend_card, _ordered_col_items)
 - Abschnittsleiter je Lane (Qualifikation EL/GK) — Modellfelder + Kandidaten-Query
 """
+import asyncio
+from types import SimpleNamespace
+
 import pytest
 from sqlalchemy import BigInteger, create_engine
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import sessionmaker
+from starlette.requests import Request
 
 
 @compiles(BigInteger, "sqlite")
@@ -16,6 +20,7 @@ def _bigint_sqlite(element, compiler, **kw):
 from app.core.audit import write_incident_change
 from app.core.tenant import set_tenant_context
 from app.core.templating import _ordered_col_items, templates
+from app.routers import ui_incident
 from app.routers.ui_incident import _column_card_count
 from app.db import Base
 from app.models.incident import Incident, IncidentColumn, IncidentLog, IncidentVehicle, Message, RescuedPerson, Task
@@ -107,6 +112,51 @@ def test_col_body_liefert_zaehler_als_oob_fragment(db, incident):
 
     assert f'id="col-count-{col.id}"' in html
     assert 'hx-swap-oob="true">1</span>' in html
+
+
+def test_neues_fahrzeug_fragment_enthaelt_status_und_gk_auswahl(db, incident, org, monkeypatch):
+    """Das HTMX-Fragment eines live angelegten Fahrzeugs bekommt den Karten-Kontext."""
+    col = IncidentColumn(incident_id=incident.id, code="active", title="Im Einsatz", column_kind="vehicles")
+    master = VehicleMaster(dept_id=org.id, code="TEST-1", name="Testfahrzeug")
+    db.add_all([col, master])
+    db.commit()
+
+    async def no_broadcast(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(ui_incident.manager, "broadcast", no_broadcast)
+    monkeypatch.setattr(
+        ui_incident.templates, "TemplateResponse",
+        lambda request, name, context, **kwargs: context,
+    )
+    request = Request({
+        "type": "http", "method": "POST", "path": f"/einsatz/{incident.id}/fahrzeug-hinzufuegen",
+        "headers": [(b"hx-request", b"true")],
+    })
+    request.state.user = SimpleNamespace(id=1, org_id=org.id)
+
+    context = asyncio.run(ui_incident.attach_vehicle_to_incident(
+        incident.id,
+        request,
+        vehicle_master_id=master.id,
+        new_code="",
+        new_name="",
+        new_type="",
+        new_org_name="",
+        new_org_short="",
+        commander_member_id=None,
+        commander_free_text="",
+        note="",
+        column_id=None,
+        next_url="",
+        db=db,
+        _=None,
+    ))
+    html = templates.env.get_template("incident/_created_card_fragment.html").render(**context)
+
+    assert f'/einsatz/{incident.id}/fahrzeug/' in html
+    assert 'name="unit_status"' in html
+    assert 'name="member_id"' in html
 
 
 def test_prepend_card_with_existing_card_order(db, incident):

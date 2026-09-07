@@ -378,7 +378,7 @@
         </div>
         <div class="form-group">
           <label class="form-label" style="font-size:.82rem;">Einheit (optional)</label>
-          <select name="vehicle_id" class="form-select" x-model="vehicleId">
+          <select id="quickAddTaskVehicleSelect" name="vehicle_id" class="form-select" x-model="vehicleId">
             <option value="">– keine –</option>
             {% for v in incident.vehicles %}
             {% if v.removed_at is none %}
@@ -430,7 +430,7 @@
         </div>
         <div class="form-group">
           <label class="form-label" style="font-size:.82rem;">Einheit (optional)</label>
-          <select name="vehicle_id" class="form-select" x-model="vehicleId">
+          <select id="quickAddMsgVehicleSelect" name="vehicle_id" class="form-select" x-model="vehicleId">
             <option value="">– keine –</option>
             {% for v in incident.vehicles %}
             {% if v.removed_at is none %}
@@ -673,7 +673,7 @@
           <div class="form-row" style="display:flex; gap:10px;">
             <div class="form-group" style="flex:1; min-width:0;">
               <label class="form-label">Einheit</label>
-              <select name="vehicle_id" class="form-select">
+              <select id="personWizardVehicleSelect" name="vehicle_id" class="form-select">
                 <option value="">– keine –</option>
                 {% for v in incident.vehicles %}
                 {% if v.removed_at is none %}
