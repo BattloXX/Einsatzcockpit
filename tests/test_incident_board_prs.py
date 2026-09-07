@@ -15,7 +15,8 @@ def _bigint_sqlite(element, compiler, **kw):
 
 from app.core.audit import write_incident_change
 from app.core.tenant import set_tenant_context
-from app.core.templating import _ordered_col_items
+from app.core.templating import _ordered_col_items, templates
+from app.routers.ui_incident import _column_card_count
 from app.db import Base
 from app.models.incident import Incident, IncidentColumn, IncidentLog, IncidentVehicle, Message, RescuedPerson, Task
 from app.models.master import FireDept, Member, MemberQualification, Qualification, VehicleMaster
@@ -79,6 +80,33 @@ def test_prepend_card_without_existing_card_order(db, incident):
     order = json.loads(col.card_order)
     assert order[0] == {"kind": "task", "id": t2.id}
     assert {"kind": "task", "id": t1.id} in order
+
+
+def test_col_body_liefert_zaehler_als_oob_fragment(db, incident):
+    """Der Spalteninhalt aktualisiert den Header-Zaehler ohne ganzen Spalten-Swap."""
+    col = IncidentColumn(incident_id=incident.id, code="tasks", title="Aufträge", column_kind="tasks")
+    db.add(col)
+    db.flush()
+    task = Task(incident_id=incident.id, column_id=col.id, title="Neue Karte")
+    db.add(task)
+    db.flush()
+    assert _column_card_count(incident, col) == 1
+
+    html = templates.env.get_template("incident/_col_body.html").render(
+        incident=incident,
+        can_edit=False,
+        col=col,
+        col_vehicles=[],
+        col_tasks=[task],
+        col_messages=[],
+        col_persons=[],
+        lage_sprueche=[],
+        col_count=1,
+        oob_count=True,
+    )
+
+    assert f'id="col-count-{col.id}"' in html
+    assert 'hx-swap-oob="true">1</span>' in html
 
 
 def test_prepend_card_with_existing_card_order(db, incident):

@@ -250,7 +250,7 @@
     {% if can_edit %}
     <div class="sidebar-box">
       <div class="sidebar-box__title" {{ tip('Neuen Auftrag in die Liste „Aufträge" einreihen') }}>Auftrag hinzufügen</div>
-      <form hx-post="/einsatz/{{ incident.id }}/aufgabe" hx-swap="none"
+      <form hx-post="/einsatz/{{ incident.id }}/aufgabe" hx-target="#kanban" hx-swap="afterbegin"
             @htmx:after-request="if(event.detail.successful){$el.reset();}">
         <div class="input-row">
           <input type="text" name="title" placeholder="Auftrag..." class="form-input" id="taskInput"
@@ -268,7 +268,7 @@
         <button class="suggestion-pill"
                 hx-post="/einsatz/{{ incident.id }}/aufgabe"
                 hx-vals='{"title": "{{ ts.text }}"}'
-                hx-swap="none">{{ ts.text }}</button>
+                hx-target="#kanban" hx-swap="afterbegin">{{ ts.text }}</button>
         {% endfor %}
       </div>
       {% endif %}
@@ -277,7 +277,7 @@
     <!-- Meldung hinzufügen -->
     <div class="sidebar-box">
       <div class="sidebar-box__title" {{ tip('Lagemeldung mit optionalem Erinnerungs-Timer anlegen') }}>Meldung hinzufügen <kbd>Strg+M</kbd></div>
-      <form hx-post="/einsatz/{{ incident.id }}/meldung" hx-swap="none"
+      <form hx-post="/einsatz/{{ incident.id }}/meldung" hx-target="#kanban" hx-swap="afterbegin"
             @htmx:after-request="if(event.detail.successful){$el.reset();}">
         <div class="input-row">
           <input type="text" name="title" placeholder="Meldung..." class="form-input" id="msgInput" required autocomplete="off">
@@ -354,7 +354,7 @@
       <h3 class="modal__title">Auftrag anlegen</h3>
       <button aria-label="Schließen" type="button" @click="$el.closest('dialog').close()" class="modal__close">×</button>
     </div>
-    <form hx-post="/einsatz/{{ incident.id }}/aufgabe" hx-swap="none"
+    <form hx-post="/einsatz/{{ incident.id }}/aufgabe" hx-target="#kanban" hx-swap="afterbegin"
           @htmx:after-request="if(event.detail.successful){$el.reset();vehicleId='';$el.closest('dialog').close();}">
       <div class="modal__body">
         <input type="hidden" name="column_id" :value="colId">
@@ -407,7 +407,7 @@
       <h3 class="modal__title">Meldung anlegen</h3>
       <button aria-label="Schließen" type="button" @click="$el.closest('dialog').close()" class="modal__close">×</button>
     </div>
-    <form hx-post="/einsatz/{{ incident.id }}/meldung" hx-swap="none"
+    <form hx-post="/einsatz/{{ incident.id }}/meldung" hx-target="#kanban" hx-swap="afterbegin"
           hx-encoding="multipart/form-data"
           @htmx:after-request="if(event.detail.successful){$el.reset();vehicleId='';document.getElementById('newMsgPreview').innerHTML='';$el.closest('dialog').close();}">
       <div class="modal__body">
@@ -563,7 +563,8 @@
         <input type="text" class="form-input form-input--sm" x-model="noteText" placeholder="z. B. Befehlsübergabe erfolgt">
       </div>
 
-      <form method="post" :action="`/einsatz/${incidentId}/fahrzeug-hinzufuegen`" x-show="selectedId">
+      <form hx-post="/einsatz/{{ incident.id }}/fahrzeug-hinzufuegen" hx-target="#kanban" hx-swap="afterbegin"
+            @htmx:after-request="if(event.detail.successful){$el.reset();$el.closest('dialog').close();}" x-show="selectedId">
         <input type="hidden" name="vehicle_master_id" :value="selectedId">
         <input type="hidden" name="commander_member_id" :value="gkMemberId">
         <input type="hidden" name="commander_free_text" :value="gkFreeText">
@@ -580,7 +581,8 @@
         <summary style="cursor:pointer; font-weight:600;" title="Einheit anlegen, die nicht in den Stammdaten existiert">
           + Neue Einheit anlegen (nicht in Stammdaten)
         </summary>
-        <form method="post" :action="`/einsatz/${incidentId}/fahrzeug-hinzufuegen`" style="margin-top:12px;">
+        <form hx-post="/einsatz/{{ incident.id }}/fahrzeug-hinzufuegen" hx-target="#kanban" hx-swap="afterbegin"
+              @htmx:after-request="if(event.detail.successful){$el.reset();$el.closest('dialog').close();}" style="margin-top:12px;">
           <input type="hidden" name="commander_member_id" :value="gkMemberId">
           <input type="hidden" name="commander_free_text" :value="gkFreeText">
           <input type="hidden" name="note" :value="noteText">
@@ -655,7 +657,8 @@
       <h3>Gerettete Person erfassen</h3>
       <button aria-label="Schließen" type="button" @click="$el.closest('dialog').close()" class="modal__close">×</button>
     </div>
-    <form method="post" action="/einsatz/{{ incident.id }}/person">
+    <form hx-post="/einsatz/{{ incident.id }}/person" hx-target="#kanban" hx-swap="afterbegin"
+          @htmx:after-request="if(event.detail.successful){$el.reset();step=0;quickName='';$el.closest('dialog').close();}">
       <input type="hidden" name="gender" :value="gender">
       <input type="hidden" name="person_group" :value="group">
       <input type="hidden" name="name" :value="quickName">

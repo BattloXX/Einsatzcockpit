@@ -15,7 +15,7 @@
         {% endif %}
       </span>
       <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
-        <span class="kanban-col__count">{{ col_count }}</span>
+        <span class="kanban-col__count" id="col-count-{{ col.id }}">{{ col_count }}</span>
         {% if can_edit and not col.is_fixed %}
           <button type="button"
                   style="background:none;border:none;cursor:pointer;padding:2px 4px;opacity:.35;font-size:.8rem;line-height:1;color:var(--text-muted);"

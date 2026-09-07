@@ -31,3 +31,7 @@
 </div>
 {% endfor %}
 {% endif %}
+
+{% if oob_count %}
+<span id="col-count-{{ col.id }}" class="kanban-col__count" hx-swap-oob="true">{{ col_count }}</span>
+{% endif %}

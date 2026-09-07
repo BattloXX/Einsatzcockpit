@@ -50,6 +50,12 @@ def _mutation(page: Page, marker: str) -> None:
     field.locator("xpath=ancestor::form[1]").evaluate("form => form.requestSubmit()")
 
 
+def _task_mutation(page: Page, marker: str) -> None:
+    field = page.locator("#taskInput")
+    field.fill(marker)
+    field.locator("xpath=ancestor::form[1]").evaluate("form => form.requestSubmit()")
+
+
 def _load_id(page: Page) -> str | None:
     try:
         return page.evaluate("window.__ecLoadId")
@@ -186,10 +192,60 @@ def test_zwei_sessions_aendern_parallel(
     _board(first, base_url)
     _board(second, base_url)
     one, two = "e2e-a-" + uuid4().hex, "e2e-b-" + uuid4().hex
-    _mutation(first, one)
+    _task_mutation(first, one)
     _mutation(second, two)
+    expect(first.locator(".card", has_text=one)).to_be_visible(timeout=10_000)
+    expect(second.locator(".card", has_text=two)).to_be_visible(timeout=10_000)
     expect(first.locator(".card", has_text=two)).to_be_visible(timeout=10_000)
     expect(second.locator(".card", has_text=one)).to_be_visible(timeout=10_000)
+
+
+def test_wizard_formulare_zeigen_neue_karten_ohne_reload(angemeldete_seite: Page, base_url: str) -> None:
+    """Einheit und Person kommen per HTMX sofort in ihre Lane, ohne Navigation."""
+    page = angemeldete_seite
+    _board(page, base_url)
+    load_id = _load_id(page)
+    loads: list[float] = []
+    page.on("load", lambda _: loads.append(time.monotonic()))
+
+    page.get_by_title("Einheit zum Einsatz hinzufügen").first.click()
+    suggestion = page.locator("#vehicleWizard .suggestion-pill--block:not([disabled])").first
+    expect(suggestion).to_be_visible(timeout=10_000)
+    vehicle_code = suggestion.locator("strong").inner_text()
+    suggestion.click()
+    page.locator("#vehicleWizard form").first.get_by_role("button", name="Einheit hinzufügen").click()
+    expect(page.locator(".card", has_text=vehicle_code)).to_be_visible(timeout=10_000)
+
+    person_name = "E2E Person " + uuid4().hex[:8]
+    page.get_by_title("Gerettete Person erfassen").click()
+    page.locator("#personWizard input[x-model=quickName]").first.fill(person_name)
+    page.locator("#personWizard").get_by_role("button", name="Speichern").click()
+    expect(page.locator(".card", has_text=person_name)).to_be_visible(timeout=10_000)
+
+    assert _load_id(page) == load_id
+    assert loads == []
+
+
+def test_gleiche_karte_mit_entwurf_zeigt_aktualisieren_hinweis(
+    angemeldete_seite: Page, zweiter_kontext: BrowserContext, base_url: str
+) -> None:
+    """Ein Fremd-Update derselben Karte darf einen laufenden Entwurf nicht ersetzen."""
+    first, second = angemeldete_seite, zweiter_kontext.pages[0]
+    _board(first, base_url)
+    _board(second, base_url)
+    task = first.locator('.card[data-kind="task"]').first
+    task_id = task.get_attribute("data-uid")
+    assert task_id
+    task.locator(".card__title").click()
+    draft = "e2e-same-card-draft-" + uuid4().hex
+    draft_field = first.locator("#taskEditForm textarea[name=detail]")
+    draft_field.fill(draft)
+
+    second.locator(f"#task-card-{task_id} select[name=status]").select_option("in_progress")
+    expect(first.locator("#cardDetailRefreshNotice")).to_be_visible(timeout=10_000)
+    expect(draft_field).to_have_value(draft)
+    first.locator("#cardDetailRefreshNotice").get_by_role("button", name="Aktualisieren").click()
+    expect(first.locator("#cardDetailBody select[name=status]").first).to_have_value("in_progress")
 
 
 @pytest.mark.slow
