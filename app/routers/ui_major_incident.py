@@ -394,6 +394,9 @@ def lage_board(
     _check_org_access(user, lage)
 
     sites_by_phase = _sites_by_phase(lage)
+    dispatch_counts_by_site = resource_service.get_dispatch_counts_for_sites(
+        db, [site.id for site in lage.sites]
+    )
 
     open_count = sum(
         len(sites_by_phase[p])
@@ -433,6 +436,7 @@ def lage_board(
         "user": user,
         "lage": lage,
         "sites_by_phase": sites_by_phase,
+        "dispatch_counts_by_site": dispatch_counts_by_site,
         "phase_order": PHASE_ORDER,
         "phase_labels": PHASE_LABELS,
         "prio_color": SITE_PRIORITY_COLOR,
@@ -509,7 +513,7 @@ async def site_create(
         logger.exception("Fehler beim Anlegen der Einsatzstelle lage_id=%s", lage_id)
         db.rollback()
         raise
-    await broadcast_lage(lage_id, {"type": "site_created"})
+    await broadcast_lage(lage_id, {"type": "site_created", "site_id": site.id})
     from app.services.gsl_live_notify import notify_gsl_live
     await notify_gsl_live(db, lage, org_id=lage.org_id, reason="counts")
     # Board (board.html) ruft per HTMX auf (hx-swap="none") -- die neue Karte
@@ -576,7 +580,7 @@ async def site_create_via_karte(
         logger.exception("Fehler beim Anlegen via Karte lage_id=%s", lage_id)
         db.rollback()
         raise
-    await broadcast_lage(lage_id, {"type": "site_created"})
+    await broadcast_lage(lage_id, {"type": "site_created", "site_id": site.id})
     from app.services.gsl_live_notify import notify_gsl_live
     await notify_gsl_live(db, lage, org_id=lage.org_id, reason="counts")
     return JSONResponse({"id": site.id, "bezeichnung": site.bezeichnung,
@@ -760,6 +764,40 @@ def site_detail(
     })
 
 
+@router.get("/lage/{lage_id}/stellen/{site_id}/disponieren-select", response_class=HTMLResponse)
+def site_disponieren_select_oob(
+    request: Request, lage_id: int, site_id: int, db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    site = db.get(IncidentSite, site_id)
+    if not site or site.major_incident_id != lage_id:
+        raise HTTPException(status_code=404)
+    dispatched = resource_service.get_active_dispatches_for_site(db, site_id)
+    return templates.TemplateResponse(request, "incident_major/_site_disponieren_select_oob.html", {
+        "available_einheiten": sorted(
+            [e for e in lage.einheiten if e.status != resource_service.STATUS_ABGERUECKT],
+            key=lambda e: (e.incident_site_id is not None, e.label),
+        ),
+        "already_dispatched_ids": [dispatch.einheit_id for dispatch in dispatched],
+    })
+
+
+@router.get("/lage/{lage_id}/funkjournal/site-select", response_class=HTMLResponse)
+def funkjournal_site_select_oob(
+    request: Request, lage_id: int, db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db, eager_sites=True)
+    _check_org_access(user, lage)
+    return templates.TemplateResponse(request, "incident_major/_funkjournal_site_select_oob.html", {
+        "sites": sorted(lage.sites, key=lambda site: (site.sort_index, site.id)),
+    })
+
+
 # ── Karten-Partial (Board-Karte) ────────────────────────────────────────────
 
 @router.get("/lage/{lage_id}/stellen/{site_id}/card", response_class=HTMLResponse)
@@ -821,12 +859,16 @@ def phase_column_partial(
     )
     sectors = sorted(lage.sectors, key=lambda s: s.id)
     sectors_by_id = {s.id: s for s in sectors}
+    dispatch_counts_by_site = resource_service.get_dispatch_counts_for_sites(
+        db, [site.id for site in sites]
+    )
     return templates.TemplateResponse(request, "incident_major/_phase_col_body.html", {
         "lage": lage,
         "sites": sites,
         "prio_color": SITE_PRIORITY_COLOR,
         "prio_label": SITE_PRIORITY_LABEL,
         "sectors_by_id": sectors_by_id,
+        "dispatch_counts_by_site": dispatch_counts_by_site,
         "can_edit": _can_edit(user),
     })
 
@@ -3408,7 +3450,7 @@ async def meldung_annehmen(
                          lage_id, report_id)
         db.rollback()
         raise
-    await broadcast_lage(lage_id, {"type": "site_created"})
+    await broadcast_lage(lage_id, {"type": "site_created", "site_id": site.id})
     if _is_htmx(request):
         return templates.TemplateResponse(request, "incident_major/_meldung_card.html", {
             "r": report, "lage": lage, "can_edit": _can_edit(user),
@@ -4542,12 +4584,35 @@ def lage_karte_sites(
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
 ):
-    """JSON-API: gibt aktuelle Sektorzuordnungen der Einsatzstellen zurück."""
+    """JSON-API: gibt aktuelle Kartendaten der Einsatzstellen zurück."""
     from fastapi.responses import JSONResponse
     user = request.state.user
     lage = _lage_or_404(lage_id, db)
     _check_org_access(user, lage)
-    return JSONResponse([{"id": s.id, "sector_id": s.sector_id} for s in lage.sites])
+    def site_color(site: IncidentSite) -> str:
+        color = SITE_PRIORITY_COLOR.get(site.priority) if site.priority else None
+        if color == "red":
+            return "#ef4444"
+        if color == "orange":
+            return "#f97316"
+        if color == "yellow":
+            return "#eab308"
+        return "#22c55e" if site.phase == SitePhase.erledigt else "#6b7280"
+
+    priority_letters = {
+        SitePriority.sofort: "S", SitePriority.dringend: "D",
+        SitePriority.normal: "N", SitePriority.aufschiebbar: "A",
+    }
+    return JSONResponse([{
+        "id": site.id, "bezeichnung": site.bezeichnung,
+        "einsatzgrund": site.einsatzgrund or "", "lat": site.lat, "lng": site.lng,
+        "phase": site.phase.value, "phase_label": PHASE_LABELS.get(site.phase, site.phase.value),
+        "priority_label": SITE_PRIORITY_LABEL.get(site.priority, "") if site.priority else "",
+        "priority_letter": priority_letters.get(site.priority, "") if site.priority else "",
+        "color": site_color(site), "active_res": sum(1 for resource in site.resources if not resource.released_at),
+        "sector_id": site.sector_id, "incident_id": site.incident_id,
+        "strasse": site.strasse or "", "hausnr": site.hausnr or "", "ort": site.ort or "",
+    } for site in lage.sites if site.phase != SitePhase.abgebrochen and site.lat and site.lng])
 
 
 # ── Board→Kräfteübersicht Sync-Helpers ───────────────────────────────────────

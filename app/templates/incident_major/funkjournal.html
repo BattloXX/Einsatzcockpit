@@ -172,7 +172,7 @@
         {% if sites %}
         <div style="min-width:130px;">
           <label class="fj-field__label">Einsatzstelle</label>
-          <select name="related_site_id" class="form-select form-select--sm">
+          <select id="funkjournalRelatedSiteSelect" name="related_site_id" class="form-select form-select--sm">
             <option value="">— keine —</option>
             {% for s in sites %}
             <option value="{{ s.id }}">{% if s.strasse %}{{ s.strasse }}{% if s.hausnr %} {{ s.hausnr }}{% endif %} – {% endif %}{{ s.bezeichnung[:40] }}</option>
@@ -368,6 +368,8 @@ function openFjLm(lageId, siteId, label) {
         var msg = JSON.parse(ev.data);
         if (msg.type === 'funkjournal:changed') {
           htmx.ajax('GET', '/lage/{{ lage.id }}/funkjournal/rows', {target:'#fj-table-section', swap:'innerHTML'});
+        } else if (msg.type === 'site_created') {
+          htmx.ajax('GET', '/lage/{{ lage.id }}/funkjournal/site-select', {target:document.body, swap:'none'});
         } else if (msg.type === 'lage_updated') {
           htmx.ajax('GET', '/lage/{{ lage.id }}/kopf', { target: document.body, swap: 'none' });
         } else if (msg.type === 'lage_closed') {

@@ -1237,7 +1237,7 @@
   // Sektoren + Stellen (inkl. Sektorzuordnung) frisch nachladen, ohne die
   // Seite neu zu laden. Vormals nur fuer 'section:changed' genutzt; jetzt
   // auch fuer site_created/site_phase_changed/site_updated wiederverwendet,
-  // die zuvor per location.reload() liefen (GSL-Reload-Audit 2026-07-16).
+  // die zuvor eine vollständige Navigation auslösten (GSL-Reload-Audit 2026-07-16).
   function refreshSitesAndSectors() {
     return Promise.all([
       fetch('/lage/' + lageId + '/karte-sektoren').then(function(r) { return r.json(); }),
@@ -1246,11 +1246,18 @@
       SECTORS = results[0];
       sectorMap = {};
       SECTORS.forEach(function(s) { sectorMap[s.id] = s; });
-      var siteIdx = {};
-      results[1].forEach(function(e) { siteIdx[e.id] = e.sector_id; });
-      SITES.forEach(function(s) { if (s.id in siteIdx) s.sector_id = siteIdx[s.id]; });
+      SITES = results[1];
+      window._lageSites = SITES;
+      markers.forEach(function(obj) { map.removeLayer(obj.marker); });
+      markers = [];
+      SITES.forEach(function(s) {
+        var marker = L.marker([s.lat, s.lng], { icon: buildSiteIcon(s) });
+        marker.bindPopup(buildPopup(s), { maxWidth: 260 });
+        marker.bindTooltip(buildSiteTooltip(s), { direction: 'top', sticky: true, opacity: 0.95, className: 'lk-tip' });
+        markers.push({ marker: marker, phase: s.phase, site: s });
+      });
       renderSectorPolygons();
-      refreshMarkerColors();
+      renderMarkers();
     });
   }
 
@@ -1266,7 +1273,7 @@
         var lastReload = Number(sessionStorage.getItem('ec_last_karte_ws_reload') || 0);
         if (downMs > 2000 && Date.now() - lastReload > WS_RELOAD_COOLDOWN_MS) {
           sessionStorage.setItem('ec_last_karte_ws_reload', String(Date.now()));
-          location.reload();
+          refreshSitesAndSectors().catch(function() {});
         }
         wsDisconnectedAt = null;
       }
@@ -1291,17 +1298,10 @@
         } else if (msg.type === 'site_phase_changed' || msg.type === 'site_updated') {
           // Bestehende Marker aktualisieren (Phase/Sektor) ohne Reload.
           refreshSitesAndSectors().catch(function() {});
-        } else if (msg.type === 'site_created') {
-          // Bekannte, bewusst belassene Einschraenkung: eine neue Stelle bekommt
-          // hier noch keinen live eingefuegten Marker (die Karte kennt nur
-          // Stelle-ID+Sektor via /karte-sites, nicht Lat/Lng/Phase/Popup-Daten
-          // fuer einen neuen Marker) -- ein Reload bleibt fuer DIESEN einen Fall
-          // vorerst der einfachste korrekte Weg. site_phase_changed/site_updated/
-          // site:sector_changed betreffen dagegen immer einen bereits vorhandenen
-          // Marker und laufen oben gezielt ohne Reload.
-          location.reload();
+        } else if (msg.type === 'site_created' && msg.site_id) {
+          refreshSitesAndSectors().catch(function() {});
         } else if (msg.type === 'section:changed') {
-          refreshSitesAndSectors().catch(function() { location.reload(); });
+          refreshSitesAndSectors().catch(function() {});
         } else if (msg.type === 'cross_marker:changed') {
           fetch('/lage/' + lageId + '/karte-cross-markers')
             .then(function(r) { return r.json(); })

@@ -559,7 +559,22 @@ function applyBoardFilters() {
     });
     var badge = col.querySelector('.phase-col__count');
     if (badge) badge.textContent = visible !== cards.length ? (visible + '/' + cards.length) : cards.length;
+    var phase = (col.querySelector('.phase-col__body') || {}).dataset.phase;
+    if (phase) {
+      var phaseChip = document.querySelector('[data-phasechip="' + phase + '"] .lage-phasechip__n');
+      if (phaseChip) phaseChip.textContent = cards.length;
+    }
   });
+  var crossCards = document.querySelectorAll('#cross-marker-col-body [data-cm-status]');
+  var crossChip = document.querySelector('[data-phasechip="uebergreifend"] .lage-phasechip__n');
+  if (crossChip) crossChip.textContent = crossCards.length;
+  var open = 0;
+  ['eingegangen', 'erkundung', 'bewertet', 'disponiert', 'in_arbeit'].forEach(function(phase) {
+    open += document.querySelectorAll('.phase-col__body[data-phase="' + phase + '"] .site-card').length;
+  });
+  var done = document.querySelectorAll('.phase-col__body[data-phase="erledigt"] .site-card').length;
+  var boardCounts = document.getElementById('board-counts');
+  if (boardCounts) boardCounts.textContent = open + ' offen · ' + done + ' erledigt';
 }
 
 (function() {
@@ -593,6 +608,9 @@ window.toggleCmHideBehoben = function() {
 document.addEventListener('DOMContentLoaded', _applyCmHideBehoben);
 
 document.body.addEventListener('htmx:afterSwap', function(e) {
+  if (e.detail.target && (e.detail.target.classList.contains('phase-col__body') || e.detail.target.id === 'cross-marker-col-body')) {
+    applyBoardFilters();
+  }
   if (e.detail.target && e.detail.target.id === 'cross-marker-col-body') {
     _applyCmHideBehoben();
   }
