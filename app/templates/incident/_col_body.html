@@ -34,4 +34,6 @@
 
 {% if oob_count %}
 <span id="col-count-{{ col.id }}" class="kanban-col__count" hx-swap-oob="true">{{ col_count }}</span>
+{% with oob = True %}{% include "incident/_task_status_pills.html" %}{% endwith %}
+{% with oob = True %}{% include "incident/_message_status_pills.html" %}{% endwith %}
 {% endif %}

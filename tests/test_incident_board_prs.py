@@ -88,30 +88,74 @@ def test_prepend_card_without_existing_card_order(db, incident):
 
 
 def test_col_body_liefert_zaehler_als_oob_fragment(db, incident):
-    """Der Spalteninhalt aktualisiert den Header-Zaehler ohne ganzen Spalten-Swap."""
+    """Der Spalteninhalt aktualisiert Header-Zähler und Ampel-Pillen per OOB."""
     col = IncidentColumn(incident_id=incident.id, code="tasks", title="Aufträge", column_kind="tasks")
     db.add(col)
     db.flush()
-    task = Task(incident_id=incident.id, column_id=col.id, title="Neue Karte")
-    db.add(task)
+    task_open = Task(incident_id=incident.id, column_id=col.id, title="Offen", status="open")
+    task_in_progress = Task(
+        incident_id=incident.id, column_id=col.id, title="In Arbeit", status="in_progress"
+    )
+    task_done = Task(incident_id=incident.id, column_id=col.id, title="Erledigt", status="done", is_done=True)
+    db.add_all([task_open, task_in_progress, task_done])
     db.flush()
-    assert _column_card_count(incident, col) == 1
+    assert _column_card_count(incident, col) == 3
 
     html = templates.env.get_template("incident/_col_body.html").render(
         incident=incident,
         can_edit=False,
         col=col,
         col_vehicles=[],
-        col_tasks=[task],
+        col_tasks=[task_open, task_in_progress, task_done],
         col_messages=[],
         col_persons=[],
         lage_sprueche=[],
-        col_count=1,
+        col_count=3,
         oob_count=True,
     )
 
     assert f'id="col-count-{col.id}"' in html
-    assert 'hx-swap-oob="true">1</span>' in html
+    assert 'hx-swap-oob="true">3</span>' in html
+    assert f'id="col-status-tasks-{col.id}" hx-swap-oob="true"' in html
+    assert f'id="col-status-messages-{col.id}" hx-swap-oob="true"' in html
+    assert "🔴 1" in html
+    assert "🟡 1" in html
+    assert "🟢 1" in html
+
+
+def test_set_task_ampel_returns_assigned_vehicle_card_as_oob(db, incident, org, monkeypatch):
+    """Ampelwechsel aktualisiert die zugehörige Fahrzeugkarte beim handelnden Client."""
+    col = IncidentColumn(incident_id=incident.id, code="tasks", title="Aufträge", column_kind="tasks")
+    master = VehicleMaster(dept_id=org.id, code="TEST-1", name="Testfahrzeug")
+    db.add_all([col, master])
+    db.flush()
+    vehicle = IncidentVehicle(
+        incident_id=incident.id, column_id=col.id, vehicle_master_id=master.id,
+    )
+    db.add(vehicle)
+    db.flush()
+    task = Task(incident_id=incident.id, column_id=col.id, vehicle_id=vehicle.id, title="Auftrag")
+    db.add(task)
+    db.commit()
+
+    async def no_broadcast(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(ui_incident.manager, "broadcast", no_broadcast)
+    request = Request({
+        "type": "http", "method": "POST",
+        "path": f"/einsatz/{incident.id}/aufgabe/{task.id}/ampel",
+    })
+    request.state.user = SimpleNamespace(id=1, org_id=org.id)
+
+    response = asyncio.run(ui_incident.set_task_ampel(
+        incident.id, task.id, request, status="in_progress", db=db, _=None,
+    ))
+
+    html = response.body.decode()
+    assert response.status_code == 200
+    assert f'/einsatz/{incident.id}/fahrzeug/{vehicle.id}/status' in html
+    assert f'id="vehicle-card-{vehicle.id}" hx-swap-oob="true"' in html
 
 
 def test_neues_fahrzeug_fragment_enthaelt_status_und_gk_auswahl(db, incident, org, monkeypatch):

@@ -1,0 +1,4 @@
+{% include "incident/_task_modal.html" %}
+{% if vehicle %}
+{% with oob = True %}{% include "incident/_vehicle_card.html" %}{% endwith %}
+{% endif %}
