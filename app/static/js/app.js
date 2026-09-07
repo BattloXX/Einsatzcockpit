@@ -503,6 +503,18 @@ function incidentBoard(incidentId, alarm, startedAt) {
         const m = path && path.match(/\/einsatz\/\d+\/(fahrzeug|aufgabe|meldung|person)\/(\d+)\/detail/);
         e.target.dataset.openKind = m ? segToKind[m[1]] : '';
         e.target.dataset.openUid = m ? m[2] : '';
+        e.target.dataset.dirty = '';
+      });
+      document.body.addEventListener('input', (e) => {
+        if (e.target.closest('#cardDetailBody')) document.getElementById('cardDetailBody').dataset.dirty = '1';
+      });
+      document.body.addEventListener('change', (e) => {
+        if (e.target.closest('#cardDetailBody')) document.getElementById('cardDetailBody').dataset.dirty = '1';
+      });
+      document.body.addEventListener('htmx:afterRequest', (e) => {
+        if (e.detail.successful && e.target && e.target.closest('#cardDetailBody')) {
+          document.getElementById('cardDetailBody').dataset.dirty = '';
+        }
       });
     },
 
@@ -590,14 +602,36 @@ function incidentBoard(incidentId, alarm, startedAt) {
       }, wait);
     },
 
+    _loadOpenModal(incidentId, kind, uid) {
+      const seg = this._cardDetailUrlSegment(kind);
+      if (!seg) return;
+      htmx.ajax('GET', `/einsatz/${incidentId}/${seg}/${uid}/detail`, { target: '#cardDetailBody', swap: 'innerHTML' });
+    },
+
+    _showModalRefreshNotice(incidentId, kind, uid) {
+      if (document.getElementById('cardDetailRefreshNotice')) return;
+      const notice = document.createElement('div');
+      notice.id = 'cardDetailRefreshNotice';
+      notice.style.cssText = 'margin:0 0 10px;padding:8px 10px;border:1px solid rgba(251,191,36,.55);border-radius:6px;background:rgba(251,191,36,.12);font-size:.82rem;display:flex;gap:8px;align-items:center;justify-content:space-between;';
+      notice.innerHTML = '<span>Diese Karte wurde geaendert.</span><button type="button" class="btn btn--ghost btn--xs">Aktualisieren</button>';
+      notice.querySelector('button').addEventListener('click', () => {
+        const body = document.getElementById('cardDetailBody');
+        body.dataset.dirty = '';
+        this._loadOpenModal(incidentId, kind, uid);
+      });
+      document.getElementById('cardDetailBody').prepend(notice);
+    },
+
     _refreshOpenModal(incidentId, kind, uid) {
       const body = document.getElementById('cardDetailBody');
       const modal = document.getElementById('cardDetailModal');
       if (!body || !modal || !modal.open) return;
       if (body.dataset.openKind !== kind || String(body.dataset.openUid) !== String(uid)) return;
-      const seg = this._cardDetailUrlSegment(kind);
-      if (!seg) return;
-      htmx.ajax('GET', `/einsatz/${incidentId}/${seg}/${uid}/detail`, { target: '#cardDetailBody', swap: 'innerHTML' });
+      if (body.dataset.dirty === '1') {
+        this._showModalRefreshNotice(incidentId, kind, uid);
+        return;
+      }
+      this._loadOpenModal(incidentId, kind, uid);
     },
 
     _handleBoardEvent(ev, incidentId) {

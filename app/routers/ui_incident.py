@@ -209,6 +209,16 @@ def _load_board_incident(incident_id: int, db: Session) -> Incident | None:
     )
 
 
+def _column_card_count(incident: Incident, col: IncidentColumn) -> int:
+    """Anzahl der sichtbaren Karten einer Board-Spalte."""
+    return sum((
+        len([v for v in incident.vehicles if v.column_id == col.id and v.removed_at is None]),
+        len([t for t in incident.tasks if t.column_id == col.id]),
+        len([m for m in incident.messages if m.column_id == col.id]),
+        len(incident.rescued_persons) if col.column_kind == "rescued" else 0,
+    ))
+
+
 _visible_incidents_q = visible_incidents_q
 
 
@@ -884,11 +894,12 @@ def board_column_content_fragment(
     col_tasks = [t for t in incident.tasks if t.column_id == col.id]
     col_messages = [m for m in incident.messages if m.column_id == col.id]
     col_persons = incident.rescued_persons if col.column_kind == "rescued" else []
+    col_count = _column_card_count(incident, col)
     return templates.TemplateResponse(request, "incident/_col_body.html", {
         "incident": incident, "can_edit": can_edit, "col": col,
         "col_vehicles": col_vehicles, "col_tasks": col_tasks,
         "col_messages": col_messages, "col_persons": col_persons,
-        "lage_sprueche": lage_sprueche,
+        "lage_sprueche": lage_sprueche, "col_count": col_count, "oob_count": True,
     })
 
 
@@ -1658,10 +1669,14 @@ async def create_task(
     await manager.broadcast(incident_id, {
         "type": "task_created", "task_id": task.id, "column_id": task.column_id,
     })
-    return templates.TemplateResponse(request, "incident/_task_card.html", {
-        "task": task, "incident": incident,
-        "can_edit": True,
-    })
+    board_incident = _load_board_incident(incident_id, db)
+    assert board_incident is not None
+    col = next(c for c in board_incident.columns if c.id == task.column_id)
+    return templates.TemplateResponse(request, "incident/_created_card_fragment.html", {
+        "task": next(t for t in board_incident.tasks if t.id == task.id), "incident": board_incident,
+        "can_edit": True, "card_template": "incident/_task_card.html", "col": col,
+        "col_count": _column_card_count(board_incident, col),
+    }, headers={"HX-Retarget": f"#zone-{task.column_id}", "HX-Reswap": "afterbegin"})
 
 
 @router.post("/einsatz/{incident_id}/aufgabe/{task_id}/erledigt")
@@ -1841,14 +1856,12 @@ async def attach_vehicle_to_incident(
     """Fügt ein Fahrzeug zum laufenden Einsatz hinzu — entweder per Master-ID oder
     durch Anlegen eines neuen, nicht in den Stammdaten existierenden Fahrzeugs.
 
-    `next` (Formfeld): optionales Rücksprungziel (z. B. die Lagekarte statt des
-    Boards) — nur interne Pfade zulassen (Open-Redirect-Schutz, Muster
-    auth.py::_safe_next). Python-seitig als `next_url` benannt, um den
-    Builtin `next()` nicht zu verschatten (unten mehrfach für Generator-Suchen
-    verwendet).
+    HTMX-Aufrufe erhalten die neue Karte als Fragment, native Formulare den
+    geprüften Rücksprung zum übergebenen Ziel.
     """
+    is_htmx = request.headers.get("HX-Request") == "true"
     redirect_to = (
-        next_url if (next_url.startswith("/") and not next_url.startswith("//"))
+        next_url if next_url.startswith("/") and not next_url.startswith("//")
         else f"/einsatz/{incident_id}"
     )
     incident = _incident_or_404(incident_id, db)
@@ -1894,6 +1907,8 @@ async def attach_vehicle_to_incident(
         None,
     )
     if existing:
+        if is_htmx:
+            return Response(status_code=204)
         return RedirectResponse(redirect_to, status_code=303)
 
     # Wurde die Einheit über den "+ Einheit"-Button einer konkreten Spalte (Abschnitt) angelegt,
@@ -1934,7 +1949,19 @@ async def attach_vehicle_to_incident(
         prepend_card(db, target_col.id, "vehicle", iv.id)
     db.commit()
     await manager.broadcast(incident_id, {"type": "vehicle_added", "column_id": target_col.id})
-    return RedirectResponse(redirect_to, status_code=303)
+    if not is_htmx:
+        return RedirectResponse(redirect_to, status_code=303)
+    board_incident = _load_board_incident(incident_id, db)
+    assert board_incident is not None
+    col = next(c for c in board_incident.columns if c.id == target_col.id)
+    return templates.TemplateResponse(request, "incident/_created_card_fragment.html", {
+        "vehicle": next(v for v in board_incident.vehicles if v.id == iv.id), "incident": board_incident,
+        "can_edit": True, "card_template": "incident/_vehicle_card.html", "col": col,
+        "col_count": _column_card_count(board_incident, col),
+    }, headers={
+        "HX-Retarget": f"#zone-{target_col.id}",
+        "HX-Reswap": "beforeend" if target_col.code == "active" else "afterbegin",
+    })
 
 
 # ── Fahrzeug verschieben ──────────────────────────────────────────────────────
@@ -2164,7 +2191,14 @@ async def create_message(
                 pass
         db.commit()
     await manager.broadcast(incident_id, {"type": "message_created", "column_id": msg.column_id})
-    return Response(status_code=204)
+    board_incident = _load_board_incident(incident_id, db)
+    assert board_incident is not None
+    col = next(c for c in board_incident.columns if c.id == msg.column_id)
+    return templates.TemplateResponse(request, "incident/_created_card_fragment.html", {
+        "msg": next(m for m in board_incident.messages if m.id == msg.id), "incident": board_incident,
+        "can_edit": True, "card_template": "incident/_message_card.html", "col": col,
+        "col_count": _column_card_count(board_incident, col),
+    }, headers={"HX-Retarget": f"#zone-{msg.column_id}", "HX-Reswap": "afterbegin"})
 
 
 @router.post("/einsatz/{incident_id}/meldung/{msg_id}/erledigt")
@@ -2256,7 +2290,16 @@ async def create_person(
     await manager.broadcast(incident_id, {
         "type": "person_created", "column_id": rescued_col.id if rescued_col else None,
     })
-    return Response(status_code=204)
+    if not rescued_col:
+        return Response(status_code=204)
+    board_incident = _load_board_incident(incident_id, db)
+    assert board_incident is not None
+    col = next(c for c in board_incident.columns if c.id == rescued_col.id)
+    return templates.TemplateResponse(request, "incident/_created_card_fragment.html", {
+        "person": next(p for p in board_incident.rescued_persons if p.id == person.id), "incident": board_incident,
+        "can_edit": True, "card_template": "incident/_person_card.html", "col": col,
+        "col_count": _column_card_count(board_incident, col),
+    }, headers={"HX-Retarget": f"#zone-{rescued_col.id}", "HX-Reswap": "afterbegin"})
 
 
 # ── Einsatz abschließen ───────────────────────────────────────────────────────
