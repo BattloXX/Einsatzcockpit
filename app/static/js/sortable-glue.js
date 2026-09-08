@@ -200,6 +200,8 @@
       forceFallback: false, // Nur bei DnD-Problemen auf spez. Geräten auf true setzen
       preventOnFilter: false,
       filter: 'select,input,button,.task-check,a,label',
+      // Nur Karten sind Sortable-Items; Gruppen-Wrapper im Spalten-Fragment nicht.
+      draggable: '.card',
       onStart() {
         _dragging = true;
         document.body.classList.add('dnd-active');
@@ -232,6 +234,7 @@
         // Mini-Items im Fahrzeug haben keine .card-Klasse — kein handle setzen,
         // damit das ganze Mini-Item-Element draggable ist.
         handle: undefined,
+        draggable: '.assigned-task,.assigned-msg,.assigned-person',
       });
     });
   }
