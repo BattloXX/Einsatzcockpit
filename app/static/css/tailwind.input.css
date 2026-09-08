@@ -1224,8 +1224,11 @@ kbd { background: var(--surface-high); border: 1px solid var(--border); border-r
 
 /* ── Responsive ──────────────────────────────────────────── */
 @media (max-width: 1100px) {
-  .board-wrap { flex-direction: column; height: auto; }
-  .sidebar { width: 100%; min-width: 0; border-right: none; border-bottom: 1px solid var(--border); }
+  /* .board-wrap/.sidebar stacking removed here: it predates the unconditional
+     flex-row board layout further down (see "Incident board" rules below) and
+     conflicted with it (stale flex-direction:column survived the cascade),
+     collapsing the kanban board to a sliver whenever the sidebar was open at
+     tablet widths (769-1100px; below 768px .sidebar is hidden entirely). */
   .charts-grid { grid-template-columns: 1fr; }
 }
 /* ── Mobile Lane Tabs ────────────────────────────────────── */
