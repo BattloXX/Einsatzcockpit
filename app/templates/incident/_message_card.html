@@ -1,4 +1,6 @@
-<div class="card card--message {% if msg.is_done %}card--done{% endif %}"
+{% set sl = msg.status if msg.status else 'meldung' %}
+{% set is_overdue = msg.due_at and msg.due_at < utcnow() and not msg.is_done and not msg.is_cancelled %}
+<div class="card card--message {% if msg.is_done %}card--done{% endif %}{% if msg.is_cancelled %} card--cancelled{% endif %}{% if is_overdue %} card--overdue{% endif %}"
      id="msg-card-{{ msg.id }}"
      data-uid="{{ msg.id }}" data-kind="message" data-status="{{ msg.status or 'meldung' }}"
      style="cursor: pointer;"
@@ -12,21 +14,19 @@
       {{ msg.title }}
     </div>
     {% if can_edit %}
-    {% set sl = msg.status if msg.status else 'meldung' %}
-    <div onclick="event.stopPropagation()" style="margin-top:5px;">
-      <select name="status" class="form-select form-select--xs form-select--status status-{{ sl }}"
-              style="width:auto;min-width:90px;"
-              hx-post="/einsatz/{{ incident.id }}/meldung/{{ msg.id }}/ampel"
-              hx-trigger="change"
-              hx-swap="none"
-              onchange="this.className='form-select form-select--xs form-select--status status-'+this.value">
-        <option value="meldung"     {% if sl=='meldung'     or sl=='open'        %}selected{% endif %}>🔴 Meldung</option>
-        <option value="achtung"     {% if sl=='achtung'     or sl=='in_progress' %}selected{% endif %}>⚠️ Achtung</option>
-        <option value="hinweis"     {% if sl=='hinweis'     %}selected{% endif %}>💡 Hinweis</option>
-        <option value="information" {% if sl=='information' %}selected{% endif %}>ℹ️ Information</option>
-        <option value="erledigt"    {% if sl=='erledigt'    or sl=='done'        %}selected{% endif %}>✅ Erledigt</option>
-        <option value="storniert"   {% if sl=='storniert'   or sl=='cancelled'   %}selected{% endif %}>⚪ Storniert</option>
-      </select>
+    <div class="header-dropdown card__status-menu" x-data="{open:false}" @click.outside="open=false" style="margin-top:5px;">
+      <button type="button" class="ec-chip ec-chip--status status-{{ sl }}" aria-label="Meldungsstatus: {% if sl == 'achtung' or sl == 'in_progress' %}Achtung{% elif sl == 'hinweis' %}Hinweis{% elif sl == 'information' %}Information{% elif sl == 'erledigt' or sl == 'done' %}Erledigt{% elif sl == 'storniert' or sl == 'cancelled' %}Storniert{% else %}Meldung{% endif %}" aria-haspopup="menu" :aria-expanded="open.toString()" @click="open=!open">
+        {% if sl == 'achtung' or sl == 'in_progress' %}⚠️ Achtung{% elif sl == 'hinweis' %}💡 Hinweis{% elif sl == 'information' %}ℹ️ Information{% elif sl == 'erledigt' or sl == 'done' %}✅ Erledigt{% elif sl == 'storniert' or sl == 'cancelled' %}⚪ Storniert{% else %}🔴 Meldung{% endif %}
+      </button>
+      <div class="header-dropdown__menu" x-show="open" x-cloak x-transition.opacity.duration.150ms role="menu">
+        <div class="dropdown-section-label">Meldungsstatus</div>
+        <button type="button" role="menuitem" class="dropdown-item" aria-label="Status auf Meldung setzen" hx-post="/einsatz/{{ incident.id }}/meldung/{{ msg.id }}/ampel" hx-vals='{"status":"meldung"}' hx-swap="none" @click="open=false">🔴 Meldung</button>
+        <button type="button" role="menuitem" class="dropdown-item" aria-label="Status auf Achtung setzen" hx-post="/einsatz/{{ incident.id }}/meldung/{{ msg.id }}/ampel" hx-vals='{"status":"achtung"}' hx-swap="none" @click="open=false">⚠️ Achtung</button>
+        <button type="button" role="menuitem" class="dropdown-item" aria-label="Status auf Hinweis setzen" hx-post="/einsatz/{{ incident.id }}/meldung/{{ msg.id }}/ampel" hx-vals='{"status":"hinweis"}' hx-swap="none" @click="open=false">💡 Hinweis</button>
+        <button type="button" role="menuitem" class="dropdown-item" aria-label="Status auf Information setzen" hx-post="/einsatz/{{ incident.id }}/meldung/{{ msg.id }}/ampel" hx-vals='{"status":"information"}' hx-swap="none" @click="open=false">ℹ️ Information</button>
+        <button type="button" role="menuitem" class="dropdown-item" aria-label="Status auf Erledigt setzen" hx-post="/einsatz/{{ incident.id }}/meldung/{{ msg.id }}/ampel" hx-vals='{"status":"erledigt"}' hx-swap="none" @click="open=false">✅ Erledigt</button>
+        <button type="button" role="menuitem" class="dropdown-item" aria-label="Status auf Storniert setzen" hx-post="/einsatz/{{ incident.id }}/meldung/{{ msg.id }}/ampel" hx-vals='{"status":"storniert"}' hx-swap="none" @click="open=false">⚪ Storniert</button>
+      </div>
     </div>
     {% endif %}
     {% if msg.detail %}<div class="card__sub">{{ msg.detail }}</div>{% endif %}
@@ -37,7 +37,7 @@
     </div>
     {% endif %}{% endif %}
     {% if msg.due_at %}
-    <div class="card__due">⏰ Fällig: {{ msg.due_at|local_time }}</div>
+    <div class="card__due{% if is_overdue %} card__due--overdue{% endif %}">{% if is_overdue %}⚠️ Überfällig:{% else %}⏰ Fällig:{% endif %} {{ msg.due_at|local_time }}</div>
     {% endif %}
     {% if msg.vehicle %}
     <div class="card__gk" style="font-size:.75rem;opacity:.7;">→ {{ msg.vehicle.vehicle_master.display_label }}</div>

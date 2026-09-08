@@ -10,6 +10,8 @@ der jeweiligen Org-Zeitzone. Faellt auf settings.DEFAULT_TIMEZONE zurueck,
 wenn weder User noch Org-Zeitzone bekannt sind.
 """
 import json as _json
+from datetime import UTC
+from datetime import datetime as _datetime
 
 from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
@@ -188,6 +190,11 @@ def _ordered_col_items(col, vehicles, tasks, messages, persons):
 
 
 templates.env.globals["ordered_col_items"] = _ordered_col_items
+
+# Board-Karten vergleichen due_at (DateTime ohne Zeitzoneninformation) gegen UTC.
+# Die Funktion statt eines Import-Ausdrucks im Template hält den Vergleich testbar
+# und liefert bei jedem Fragment-Render den aktuellen Zeitpunkt.
+templates.env.globals["utcnow"] = lambda: _datetime.now(UTC).replace(tzinfo=None)
 
 # Lagekarte.info URL-Hilfsfunktion für Templates
 from app.services.lagekarte import resolve_lagekarte_url  # noqa: E402

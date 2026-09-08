@@ -915,16 +915,6 @@ async function moveVehicle(vehicleId, columnId, incidentId) {
   });
 }
 
-async function assignTask(taskId, vehicleId, incidentId) {
-  if (!vehicleId) return;
-  await fetch(`/einsatz/${incidentId}/aufgabe/${taskId}/zuweisen`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: `vehicle_id=${vehicleId}`,
-  });
-}
-
-
 /* ─── Timer alert popup ──────────────────────────────────────────── */
 function showTimerAlert(msg, level) {
   const div = document.createElement('div');
