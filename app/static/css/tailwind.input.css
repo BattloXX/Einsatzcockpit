@@ -348,8 +348,13 @@ body.mobile-menu-open { overflow: hidden; }
               font-family: 'JetBrains Mono', monospace; letter-spacing: .03em; }
 .card__time { font-family: 'JetBrains Mono', monospace; font-weight: 600; }
 .card__due  { font-size: .78rem; color: var(--yellow); }
+.card__due--overdue { color: #fecaca; font-weight: 750; }
+.card--overdue { border-color: var(--danger); box-shadow: inset 4px 0 0 var(--danger), 0 0 0 1px rgba(239,68,68,.28); }
 .card__age  { font-size: .78rem; color: var(--text-muted); margin-left: 6px; }
 .card__footer { padding: 6px 10px; border-top: 1px solid var(--border); display: flex; gap: 6px; align-items: center; background: rgba(0,0,0,.18); }
+.card__quick-complete { color: var(--green); border-color: color-mix(in srgb, var(--green) 45%, var(--border)); }
+.card__quick-complete:hover, .card__quick-complete:focus-visible { color: #fff; background: var(--green); border-color: var(--green); }
+.card--task, .card--message { overflow: visible; }
 .card__tasks { margin-top: 8px; }
 .assigned-task { display: flex; align-items: center; gap: 6px; font-size: .82rem; padding: 2px 0; }
 .assigned-task--done { text-decoration: line-through; color: var(--text-muted); }
@@ -468,6 +473,12 @@ body.mobile-menu-open { overflow: hidden; }
 .ec-chip { min-height:44px; max-width:100%; padding:0 11px; border:1px solid var(--border); border-radius:999px; background:var(--surface-highest); color:var(--text); cursor:pointer; display:inline-flex; align-items:center; gap:4px; font:inherit; font-size:.75rem; font-weight:650; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .ec-chip:hover, .ec-chip:focus-visible { border-color:var(--blue); background:var(--surface); }
 .ec-chip:disabled { cursor:default; opacity:.8; }
+.ec-chip--status.status-open, .ec-chip--status.status-meldung { border-color:rgba(239,68,68,.55); }
+.ec-chip--status.status-in_progress, .ec-chip--status.status-achtung { border-color:rgba(242,176,46,.65); }
+.ec-chip--status.status-done, .ec-chip--status.status-erledigt { border-color:rgba(24,169,87,.65); }
+.ec-chip--status.status-cancelled, .ec-chip--status.status-storniert { border-color:rgba(122,135,168,.7); }
+.card__status-menu { position:relative; z-index:2; }
+.card__status-menu .header-dropdown__menu { left:0; right:auto; min-width:200px; }
 .kanban-col__menu, .kanban-col__leader-picker { flex-shrink:0; }
 .kanban-col__menu .header-dropdown__menu { right:0; min-width:210px; }
 .kanban-col__leader { margin-top:3px; min-width:0; }

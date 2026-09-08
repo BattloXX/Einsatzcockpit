@@ -30,18 +30,17 @@
     </div>
     {% if can_edit %}
     {% set sl = task.status if task.status else 'open' %}
-    <div onclick="event.stopPropagation()" style="margin-top:5px;">
-      <select name="status" class="form-select form-select--xs form-select--status status-{{ sl }}"
-              style="width:auto;min-width:75px;"
-              hx-post="/einsatz/{{ incident.id }}/aufgabe/{{ task.id }}/ampel"
-              hx-trigger="change"
-              hx-swap="none"
-              onchange="this.className='form-select form-select--xs form-select--status status-'+this.value">
-        <option value="open" {% if sl=='open' %}selected{% endif %}>🔴 Offen</option>
-        <option value="in_progress" {% if sl=='in_progress' %}selected{% endif %}>🟡 In Arbeit</option>
-        <option value="done" {% if sl=='done' %}selected{% endif %}>🟢 Erledigt</option>
-        <option value="cancelled" {% if sl=='cancelled' %}selected{% endif %}>⚪ Storniert</option>
-      </select>
+    <div class="header-dropdown card__status-menu" x-data="{open:false}" @click.outside="open=false" style="margin-top:5px;">
+      <button type="button" class="ec-chip ec-chip--status status-{{ sl }}" aria-label="Auftragsstatus: {% if sl == 'in_progress' %}In Arbeit{% elif sl == 'done' %}Erledigt{% elif sl == 'cancelled' %}Storniert{% else %}Offen{% endif %}" aria-haspopup="menu" :aria-expanded="open.toString()" @click="open=!open">
+        {% if sl == 'in_progress' %}🟡 In Arbeit{% elif sl == 'done' %}🟢 Erledigt{% elif sl == 'cancelled' %}⚪ Storniert{% else %}🔴 Offen{% endif %}
+      </button>
+      <div class="header-dropdown__menu" x-show="open" x-cloak x-transition.opacity.duration.150ms role="menu">
+        <div class="dropdown-section-label">Auftragsstatus</div>
+        <button type="button" role="menuitem" class="dropdown-item" aria-label="Status auf Offen setzen" hx-post="/einsatz/{{ incident.id }}/aufgabe/{{ task.id }}/ampel" hx-vals='{"status":"open"}' hx-swap="none" @click="open=false">🔴 Offen</button>
+        <button type="button" role="menuitem" class="dropdown-item" aria-label="Status auf In Arbeit setzen" hx-post="/einsatz/{{ incident.id }}/aufgabe/{{ task.id }}/ampel" hx-vals='{"status":"in_progress"}' hx-swap="none" @click="open=false">🟡 In Arbeit</button>
+        <button type="button" role="menuitem" class="dropdown-item" aria-label="Status auf Erledigt setzen" hx-post="/einsatz/{{ incident.id }}/aufgabe/{{ task.id }}/ampel" hx-vals='{"status":"done"}' hx-swap="none" @click="open=false">🟢 Erledigt</button>
+        <button type="button" role="menuitem" class="dropdown-item" aria-label="Status auf Storniert setzen" hx-post="/einsatz/{{ incident.id }}/aufgabe/{{ task.id }}/ampel" hx-vals='{"status":"cancelled"}' hx-swap="none" @click="open=false">⚪ Storniert</button>
+      </div>
     </div>
     {% endif %}
     {% if task.detail %}<div class="card__sub">{{ task.detail }}</div>{% endif %}
@@ -63,15 +62,9 @@
   </div>
   {% if can_edit and not task.is_done %}
   <div class="card__footer">
-    <select class="form-select form-select--xs"
-            onchange="assignTask({{ task.id }}, this.value, {{ incident.id }})">
-      <option value="">Einheit zuweisen...</option>
-      {% for v in incident.vehicles %}
-      {% if v.removed_at is none %}
-      <option value="{{ v.id }}">{{ v.vehicle_master.display_label }}</option>
-      {% endif %}
-      {% endfor %}
-    </select>
+    <button type="button" class="ec-icon-button card__quick-complete" aria-label="Auftrag als erledigt markieren"
+            hx-post="/einsatz/{{ incident.id }}/aufgabe/{{ task.id }}/ampel"
+            hx-vals='{"status":"done"}' hx-swap="none">✓</button>
     <form hx-post="/einsatz/{{ incident.id }}/aufgabe/{{ task.id }}/medien"
           hx-encoding="multipart/form-data"
           hx-swap="none"

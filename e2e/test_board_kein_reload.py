@@ -277,7 +277,13 @@ def test_gleiche_karte_mit_entwurf_zeigt_aktualisieren_hinweis(
     draft_field = first.locator("#taskEditForm textarea[name=detail]")
     draft_field.fill(draft)
 
-    second.locator(f"#task-card-{task_id} select[name=status]").select_option("in_progress")
+    status_chip = second.locator(
+        f"#task-card-{task_id} button[aria-label^='Auftragsstatus:']"
+    )
+    status_chip.click()
+    second.locator(f"#task-card-{task_id}").get_by_role(
+        "menuitem", name="Status auf In Arbeit setzen"
+    ).click()
     expect(first.locator("#cardDetailRefreshNotice")).to_be_visible(timeout=10_000)
     expect(draft_field).to_have_value(draft)
     first.locator("#cardDetailRefreshNotice").get_by_role("button", name="Aktualisieren").click()
