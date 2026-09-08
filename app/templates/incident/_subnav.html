@@ -25,6 +25,7 @@
     {% for key, url, icon, label, visible in _targets %}{% if visible %}
     <a href="{{ url }}" class="incident-subnav__item{% if active == key %} incident-subnav__item--active{% endif %}"{% if active == key %} aria-current="page"{% endif %}>{{ icon }} {{ label }}</a>
     {% endif %}{% endfor %}
+    <a href="/einsatz/{{ incident.id }}/dashboard" class="incident-subnav__item" target="_blank" rel="noopener noreferrer">📊 Dashboard</a>
   </nav>
 </details>
 {% endif %}

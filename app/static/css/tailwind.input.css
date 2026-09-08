@@ -489,24 +489,23 @@ body.mobile-menu-open { overflow: hidden; }
 }
 .incident-header__alarm { display: flex; align-items: center; gap: 10px; }
 .incident-header__address { font-size: .9rem; color: var(--text-muted); }
-.incident-header__timer { flex: 1; text-align: center; }
+.incident-header__status { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 .timer {
-  font-size: 2.2rem; font-weight: 700; font-variant-numeric: tabular-nums;
+  font-size: 1.45rem; font-weight: 700; font-variant-numeric: tabular-nums;
   color: var(--on-surface); letter-spacing: 2px;
   font-family: 'JetBrains Mono', monospace;
 }
-.last-update {
-  display: inline-flex; align-items: center; gap: 4px; margin-left: 14px;
+.live-status {
+  display: inline-flex; align-items: center; gap: 4px;
   padding: 3px 10px; border-radius: 999px; font-size: .72rem; font-weight: 600;
   font-variant-numeric: tabular-nums; vertical-align: middle;
   background: rgba(46, 51, 71, .5); color: var(--text-muted);
   font-family: 'JetBrains Mono', monospace;
   transition: background .25s ease, color .25s ease;
 }
-.last-update__icon { font-size: .85rem; line-height: 1; }
-.last-update--fresh { background: rgba(24, 169, 87, .15); color: var(--green); }
-.last-update--warn  { background: rgba(242, 176, 46, .18); color: var(--yellow); }
-.last-update--stale { background: rgba(216, 48, 48, .2);  color: var(--danger); animation: lu-pulse 1.6s ease-in-out infinite; }
+.live-status--fresh { background: rgba(24, 169, 87, .15); color: var(--green); }
+.live-status--warn  { background: rgba(242, 176, 46, .18); color: var(--yellow); }
+.live-status--stale { background: rgba(216, 48, 48, .2);  color: var(--danger); animation: lu-pulse 1.6s ease-in-out infinite; }
 @keyframes lu-pulse { 0%,100% { opacity: 1; } 50% { opacity: .55; } }
 .incident-header__actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .alarm-badge {
@@ -532,13 +531,34 @@ body.mobile-menu-open { overflow: hidden; }
 .lage-status--closed  { background: rgba(122,135,168,.18); color: var(--text-muted); }
 .lage-status--standby { background: rgba(242,176,46,.18); color: var(--yellow); }
 
-/* ── Exercise Banner ─────────────────────────────────────── */
+.exercise-badge {
+  background: repeating-linear-gradient(45deg, #3a2e05, #3a2e05 6px, #2a2204 6px, #2a2204 12px);
+  color: var(--yellow); border: 1px solid rgba(242, 176, 46, .6); border-radius: 999px;
+  padding: 3px 8px; font-size: .68rem; font-weight: 800; letter-spacing: .08em;
+  font-family: 'JetBrains Mono', monospace; white-space: nowrap;
+}
+/* Vollbreites Übungsbanner bleibt für Nicht-Board-Seiten erhalten. */
 .exercise-topbar {
   background: repeating-linear-gradient(45deg, #3a2e05, #3a2e05 12px, #2a2204 12px, #2a2204 24px);
   color: var(--yellow); text-align: center; font-weight: 800; font-size: 13px;
   padding: 5px; letter-spacing: .1em; font-family: 'JetBrains Mono', monospace;
   flex-shrink: 0;
 }
+.weather-popover { position: relative; }
+.weather-chip {
+  min-width: 44px; min-height: 44px; padding: 0 10px; border: 1px solid var(--border);
+  border-radius: 999px; background: var(--surface-highest); color: var(--text); cursor: pointer;
+  font: inherit; font-size: .78rem; font-weight: 600;
+}
+.weather-chip:hover, .weather-chip:focus-visible { border-color: var(--blue); background: var(--surface); }
+.weather-popover__panel {
+  position: absolute; z-index: 30; top: calc(100% + 6px); right: 0; width: min(340px, calc(100vw - 24px));
+  padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface-elevated); box-shadow: 0 12px 28px rgba(0,0,0,.28);
+}
+.weather-popover__loading { font-size: .75rem; color: var(--text-muted); }
+.dropdown-section-label { padding: 7px 12px 3px; color: var(--text-muted); font-size: .66rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.dropdown-section-label--danger, .dropdown-item--danger { color: var(--danger); }
 
 /* ── Test System Badge (Topnav) ──────────────────────────── */
 .test-system-badge {
@@ -1198,9 +1218,7 @@ body.dnd-active .board-tabs { box-shadow: 0 0 0 2px var(--primary, #2563eb); }
   .incident-header { gap: 6px; padding: 8px 12px; }
   .incident-header__alarm { gap: 6px; flex-wrap: wrap; }
   .incident-header__address { font-size: .78rem; width: 100%; }
-  .incident-header__timer { flex: 0 0 auto; }
   .timer { font-size: 1.5rem; letter-spacing: 1px; }
-  .last-update { margin-left: 6px; font-size: .65rem; padding: 2px 6px; }
   .incident-header__actions { gap: 4px; }
   .incident-header__actions .btn--sm { padding: 5px 9px; font-size: .75rem; min-height: 30px; }
   .detail-grid { grid-template-columns: 1fr; }

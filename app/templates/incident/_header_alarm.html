@@ -9,6 +9,9 @@
   {% else %}
   <span class="alarm-badge alarm-badge--{{ incident.alarm_type_code[:1]|lower }}">{{ incident.alarm_type_code }}</span>
   {% endif %}
+  {% if incident.is_exercise %}
+  <span class="exercise-badge" aria-label="Übung / Simulation">ÜBUNG</span>
+  {% endif %}
   {% set _grund = (incident.reason or incident.report_text or '') %}
   <div class="incident-header__grundwrap">
   {% if _grund %}
