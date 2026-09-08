@@ -440,10 +440,15 @@ body.mobile-menu-open { overflow: hidden; }
   border: 1px solid var(--border); flex-shrink: 0;
 }
 .kanban-col__header {
-  padding: 10px 12px; border-bottom: 1px solid var(--border);
-  display: flex; justify-content: space-between; align-items: center;
+  padding: 7px 8px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: flex-start; gap: 4px;
   position: sticky; top: 0; background: var(--surface-low); z-index: 5; border-radius: 0.5rem 0.5rem 0 0;
 }
+.kanban-col__drag-handle { color:var(--text-muted); opacity:.32; font-size:.78rem; flex:0 0 28px; min-height:44px; display:flex; align-items:center; justify-content:center; cursor:grab; touch-action:none; user-select:none; }
+.kanban-col__drag-handle:hover { opacity:.65; }
+.kanban-col__header-content { flex:1; min-width:0; }
+.kanban-col__header-row { display:flex; align-items:center; gap:5px; min-height:44px; }
+.kanban-col__title { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .kanban-col__title { font-weight: 700; font-size: .9rem; color: var(--on-surface); }
 .kanban-col__count {
   background: var(--surface-high); border-radius: 999px; padding: 2px 10px;
@@ -452,12 +457,22 @@ body.mobile-menu-open { overflow: hidden; }
 }
 .kanban-col__body { flex: 1; overflow-y: auto; padding: 8px; min-height: 80px; }
 .kanban-col__add-btn {
-  height: 28px; border-radius: 14px; border: 1px solid var(--border);
+  min-width:44px; min-height:44px; border-radius:22px; border: 1px solid var(--border);
   background: var(--surface-highest); color: var(--text-muted); font-size: .78rem; font-weight: 600;
   line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center;
   transition: var(--transition); padding: 0 10px 0 8px; flex-shrink: 0; gap: 2px;
   white-space: nowrap;
 }
+.ec-icon-button { width:44px; min-width:44px; height:44px; padding:0; border:1px solid var(--border); border-radius:50%; background:var(--surface-highest); color:var(--text-muted); cursor:pointer; font:inherit; font-size:1.2rem; line-height:1; }
+.ec-icon-button:hover, .ec-icon-button:focus-visible { border-color:var(--blue); color:var(--text); }
+.ec-chip { min-height:44px; max-width:100%; padding:0 11px; border:1px solid var(--border); border-radius:999px; background:var(--surface-highest); color:var(--text); cursor:pointer; display:inline-flex; align-items:center; gap:4px; font:inherit; font-size:.75rem; font-weight:650; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.ec-chip:hover, .ec-chip:focus-visible { border-color:var(--blue); background:var(--surface); }
+.ec-chip:disabled { cursor:default; opacity:.8; }
+.kanban-col__menu, .kanban-col__leader-picker { flex-shrink:0; }
+.kanban-col__menu .header-dropdown__menu { right:0; min-width:210px; }
+.kanban-col__leader { margin-top:3px; min-width:0; }
+.kanban-col__leader-picker .header-dropdown__menu { right:auto; left:0; min-width:230px; }
+.kanban-col__status-overview { display:none; }
 .kanban-col__add-btn:hover { background: var(--red); border-color: var(--red); color: #fff; }
 /* Gerettete Personen: blauer Akzent zur besseren Auffindbarkeit */
 .kanban-col__add-btn--person { border-color: rgba(59,130,246,.5); color: #93c5fd; }

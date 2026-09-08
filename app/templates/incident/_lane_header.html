@@ -1,91 +1,73 @@
-{# Lane column header with title, count badge, and contextual + button.
-   Variables expected: col, col_count, can_edit, incident, col_tasks, col_messages,
-   section_leader_candidates #}
+{# Compact lane header. The drag handle remains the sole column-drag trigger. #}
 <div class="kanban-col__header">
-  <span class="kanban-col__drag-handle" style="color:var(--text-muted);opacity:.4;font-size:.9rem;margin-right:4px;flex-shrink:0;cursor:grab;touch-action:none;" title="Spalte verschieben">⣿</span>
-  <div style="flex:1; min-width:0;">
-    <div style="display:flex; align-items:center; justify-content:space-between; gap:6px;">
-      <span class="kanban-col__title">
-        {{ col.title }}
-        {% if can_edit %}
-        <button type="button" class="kanban-col__rename-btn"
-                style="background:none;border:none;cursor:pointer;padding:0 2px;opacity:.4;font-size:.75rem;vertical-align:middle;color:var(--text-muted);"
-                title="Abschnitt umbenennen"
-                onclick="renameColumn({{ col.id }}, '{{ col.title|replace("'", "\\'") }}')">✎</button>
+  <span class="kanban-col__drag-handle" title="Spalte verschieben" aria-label="Spalte verschieben">⣿</span>
+  <div class="kanban-col__header-content">
+    <div class="kanban-col__header-row">
+      <span class="kanban-col__title">{{ col.title }}</span>
+      <span class="kanban-col__count" id="col-count-{{ col.id }}">{{ col_count }}</span>
+      {% if can_edit %}
+        {% if col.column_kind in ('vehicles', 'neighbor') %}
+        <button class="kanban-col__add-btn" type="button" aria-label="Einheit zum Einsatz hinzufügen" onclick="openVehicleWizard({{ col.id }})" title="Einheit zum Einsatz hinzufügen">
+          <span class="kanban-col__add-label">+ Einheit</span><span class="kanban-col__add-icon" aria-hidden="true">+</span>
+        </button>
+        {% elif col.column_kind == 'rescued' %}
+        <button class="kanban-col__add-btn kanban-col__add-btn--person" type="button" aria-label="Gerettete Person erfassen" data-ec-action="open-dialog" data-ec-dialog="personWizard" title="Gerettete Person erfassen">
+          <span class="kanban-col__add-label">+ Person</span><span class="kanban-col__add-icon" aria-hidden="true">+</span>
+        </button>
+        {% elif col.column_kind == 'messages' %}
+        <button class="kanban-col__add-btn" type="button" aria-label="Meldung anlegen" data-ec-action="open-dialog" data-ec-dialog="quickAddMsgDialog" title="Meldung anlegen">
+          <span class="kanban-col__add-label">+ Meldung</span><span class="kanban-col__add-icon" aria-hidden="true">+</span>
+        </button>
+        {% else %}
+        <button class="kanban-col__add-btn" type="button" aria-label="Auftrag anlegen" onclick="openQuickAddTask({{ col.id }})" title="Auftrag anlegen">
+          <span class="kanban-col__add-label">+ Auftrag</span><span class="kanban-col__add-icon" aria-hidden="true">+</span>
+        </button>
         {% endif %}
-      </span>
-      <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
-        <span class="kanban-col__count" id="col-count-{{ col.id }}">{{ col_count }}</span>
-        {% if can_edit and not col.is_fixed %}
-          <button type="button"
-                  style="background:none;border:none;cursor:pointer;padding:2px 4px;opacity:.35;font-size:.8rem;line-height:1;color:var(--text-muted);"
-                  title="Spalte löschen"
-                  onclick="deleteColumn({{ col.id }}, '{{ col.title|replace("'", "\\'") }}')">🗑</button>
-        {% endif %}
-        {% if can_edit %}
-          {% if col.column_kind in ('vehicles', 'neighbor') %}
-          <button class="kanban-col__add-btn" type="button"
-                  onclick="openVehicleWizard({{ col.id }})"
-                  title="Einheit zum Einsatz hinzufügen">
-            <span class="kanban-col__add-label">+ Einheit</span><span class="kanban-col__add-icon" aria-hidden="true">+</span>
+        <div class="header-dropdown kanban-col__menu" x-data="{open:false}" @click.outside="open=false">
+          <button type="button" class="ec-icon-button" aria-label="Spaltenaktionen" aria-haspopup="menu" :aria-expanded="open.toString()" @click="open=!open">⋯</button>
+          <div class="header-dropdown__menu" x-show="open" x-cloak x-transition.opacity.duration.150ms role="menu">
+            <div class="dropdown-section-label">Spalte</div>
+            <button type="button" class="dropdown-item" aria-label="Abschnitt umbenennen" @click="open=false; renameColumn({{ col.id }}, '{{ col.title|replace("'", "\\'") }}')">✎ Abschnitt umbenennen</button>
+            {% if not col.is_fixed %}
+            <button type="button" class="dropdown-item dropdown-item--danger" aria-label="Spalte löschen" @click="open=false; deleteColumn({{ col.id }}, '{{ col.title|replace("'", "\\'") }}')">🗑 Spalte löschen</button>
+            {% endif %}
+          </div>
+        </div>
+      {% endif %}
+    </div>
+
+    {# Retained as OOB swap targets, but deliberately no longer consume header height. #}
+    <div class="kanban-col__status-overview" aria-hidden="true">
+      {% include "incident/_task_status_pills.html" %}
+      {% include "incident/_message_status_pills.html" %}
+    </div>
+
+    {% if col.column_kind in ('vehicles', 'neighbor') %}
+      {% if col.section_leader %}{% set leader_name = col.section_leader.full_name %}
+      {% elif col.section_leader_name %}{% set leader_name = col.section_leader_name %}
+      {% else %}{% set leader_name = '' %}{% endif %}
+      <div class="kanban-col__leader">
+        {% if can_edit and section_leader_candidates is defined %}
+        <div class="header-dropdown kanban-col__leader-picker" x-data="{open:false}" @click.outside="open=false">
+          <button type="button" class="ec-chip" aria-label="Abschnittsleiter auswählen" aria-haspopup="menu" :aria-expanded="open.toString()" @click="open=!open">
+            <span aria-hidden="true">👤</span> {% if leader_name %}AL: {{ leader_name }}{% else %}+ Abschnittsleiter{% endif %}
           </button>
-          {% elif col.column_kind == 'rescued' %}
-          <button class="kanban-col__add-btn kanban-col__add-btn--person" type="button"
-                  data-ec-action="open-dialog" data-ec-dialog="personWizard"
-                  title="Gerettete Person erfassen">
-            <span class="kanban-col__add-label">+ Person</span><span class="kanban-col__add-icon" aria-hidden="true">+</span>
-          </button>
-          {% elif col.column_kind == 'messages' %}
-          <button class="kanban-col__add-btn" type="button"
-                  data-ec-action="open-dialog" data-ec-dialog="quickAddMsgDialog"
-                  title="Meldung anlegen">
-            <span class="kanban-col__add-label">+ Meldung</span><span class="kanban-col__add-icon" aria-hidden="true">+</span>
-          </button>
-          {% else %}
-          {# tasks and custom section columns #}
-          <button class="kanban-col__add-btn" type="button"
-                  onclick="openQuickAddTask({{ col.id }})"
-                  title="Auftrag anlegen">
-            <span class="kanban-col__add-label">+ Auftrag</span><span class="kanban-col__add-icon" aria-hidden="true">+</span>
-          </button>
-          {% endif %}
+          <div class="header-dropdown__menu" x-show="open" x-cloak x-transition.opacity.duration.150ms role="menu">
+            <div class="dropdown-section-label">Abschnittsleiter</div>
+            <button type="button" class="dropdown-item" aria-label="Keinen Abschnittsleiter setzen" @click="open=false; setSectionLeader({{ col.id }}, '')">— Kein Abschnittsleiter —</button>
+            {% for m in section_leader_candidates %}
+            <button type="button" class="dropdown-item" aria-label="{{ m.full_name }} als Abschnittsleiter setzen" @click="open=false; setSectionLeader({{ col.id }}, '{{ m.id }}')">{{ m.full_name }}</button>
+            {% endfor %}
+            <hr class="dropdown-divider">
+            <button type="button" class="dropdown-item" aria-label="Abschnittsleiter als Freitext eingeben" @click="open=false; promptSectionLeaderFreitext({{ col.id }})">✎ Freitext eingeben…</button>
+          </div>
+        </div>
+        {% else %}
+        <button type="button" class="ec-chip" aria-label="Abschnittsleiter: {% if leader_name %}{{ leader_name }}{% else %}nicht gesetzt{% endif %}" disabled>
+          <span aria-hidden="true">👤</span> {% if leader_name %}AL: {{ leader_name }}{% else %}+ Abschnittsleiter{% endif %}
+        </button>
         {% endif %}
       </div>
-    </div>
-
-    {# Status-Übersicht für Auftrags-Spalten #}
-    {% include "incident/_task_status_pills.html" %}
-
-    {# Status-Übersicht für Meldungs-Spalte #}
-    {% include "incident/_message_status_pills.html" %}
-
-    {# Abschnittsleiter: nur bei Einheiten-/Nachbar-Spalten sinnvoll (echte "Abschnitte").
-       Aufträge, Meldungen und Gerettete Personen sind keine Abschnitte. #}
-    {% if col.column_kind in ('vehicles', 'neighbor') %}
-    <div class="kanban-col__leader" style="display:flex; align-items:center; gap:4px; margin-top:5px; font-size:.7rem;" onclick="event.stopPropagation()">
-      {% if can_edit and section_leader_candidates is defined %}
-      <select class="form-select form-select--xs" style="font-size:.68rem; flex:1; min-width:0;"
-              onchange="setSectionLeader({{ col.id }}, this.value)">
-        <option value="">— kein Abschnittsleiter —</option>
-        {% for m in section_leader_candidates %}
-        <option value="{{ m.id }}" {% if col.section_leader_member_id == m.id %}selected{% endif %}>{{ m.full_name }}</option>
-        {% endfor %}
-      </select>
-      <button type="button" class="btn btn--ghost btn--xs" style="padding:1px 5px; font-size:.65rem;"
-              title="Abschnittsleiter per Freitext eintragen"
-              onclick="promptSectionLeaderFreitext({{ col.id }})">✎</button>
-      {% if col.section_leader and col.section_leader_member_id not in (section_leader_candidates | map(attribute='id') | list) %}
-      <span style="opacity:.7;">AL: {{ col.section_leader.full_name }}</span>
-      {% elif not col.section_leader and col.section_leader_name %}
-      <span style="opacity:.7;">AL: {{ col.section_leader_name }}</span>
-      {% endif %}
-      {% elif col.section_leader %}
-      <span style="opacity:.7;">Abschnittsleiter: {{ col.section_leader.full_name }}</span>
-      {% elif col.section_leader_name %}
-      <span style="opacity:.7;">Abschnittsleiter: {{ col.section_leader_name }}</span>
-      {% endif %}
-    </div>
     {% endif %}
-
   </div>
 </div>
