@@ -367,7 +367,7 @@ body.mobile-menu-open { overflow: hidden; }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .task-check { accent-color: var(--green); width: 16px; height: 16px; cursor: pointer; }
-.card--vehicle { --org-color: var(--red); }
+.card--vehicle { --org-color: var(--red); overflow: visible; }
 .card--task    { --org-color: #3a7bd5; }
 .card--message { --org-color: var(--yellow); }
 .card--rescue  { --org-color: var(--green); }
@@ -479,6 +479,10 @@ body.mobile-menu-open { overflow: hidden; }
 .ec-chip--status.status-cancelled, .ec-chip--status.status-storniert { border-color:rgba(122,135,168,.7); }
 .card__status-menu { position:relative; z-index:2; }
 .card__status-menu .header-dropdown__menu { left:0; right:auto; min-width:200px; }
+.card__status-menu .dropdown-item { min-height:44px; }
+.card__vehicle-menu { margin-left:auto; position:relative; z-index:2; }
+.card__vehicle-menu .header-dropdown__menu { right:0; min-width:220px; }
+.card__vehicle-menu .dropdown-item { min-height:44px; }
 .kanban-col__menu, .kanban-col__leader-picker { flex-shrink:0; }
 .kanban-col__menu .header-dropdown__menu { right:0; min-width:210px; }
 .kanban-col__leader { margin-top:3px; min-width:0; }

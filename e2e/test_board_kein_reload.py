@@ -252,7 +252,8 @@ def test_neue_fahrzeugkarte_weist_auftrag_und_meldung_ohne_reload_zu(
     expect(task).to_contain_text(vehicle_code)
 
     message_title = "E2E Fahrzeugmeldung " + uuid4().hex
-    vehicle.get_by_role("button", name="+ Meldung").click()
+    vehicle.get_by_role("button", name="Fahrzeugaktionen").click()
+    page.get_by_role("menuitem", name="+ Meldung").click()
     page.locator("#quickAddMsgTitle").fill(message_title)
     page.locator("#quickAddMsgDialog").get_by_role("button", name="Anlegen").click()
     message = page.locator('.card[data-kind="message"]', has_text=message_title)
