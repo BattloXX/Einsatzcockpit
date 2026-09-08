@@ -138,6 +138,11 @@
   <div class="incident-header__actions">
     {% with active="board", subnav_display="desktop", breathing_enabled=breathing_enabled %}{% include "incident/_subnav.html" %}{% endwith %}
 
+    {% if can_edit %}
+    <button type="button" class="ec-chip" aria-label="Abschnitt hinzufügen"
+            onclick="document.getElementById('addColumnDialog').showModal()">+ Abschnitt</button>
+    {% endif %}
+
     {# ── Zu-/Absage-Zähler (Teams-Einsatzinfo) — Desktop only, erst ab erster Antwort ─ #}
     <div class="header-dropdown" x-data="rsvpWidget({{ incident.id }})"
          x-show="(zusagen + absagen) > 0" x-cloak
@@ -228,6 +233,7 @@
 
   <!-- Sidebar -->
   <aside class="sidebar" id="sidebar" :class="sidebarOpen ? '' : 'sidebar--collapsed'">
+    <h2 class="sidebar__heading">Einsatzdetails</h2>
 
     <!-- Lage-Ticker -->
     {% include "incident/_sidebar_lage_ticker.html" %}
@@ -284,21 +290,6 @@
       </form>
     </div>
 
-    <!-- Abschnitt hinzufügen -->
-    <div class="sidebar-box">
-      <div class="sidebar-box__title" {{ tip('Neue Kanban-Spalte für einen Einsatzabschnitt anlegen') }}>Abschnitt hinzufügen</div>
-      <form hx-post="/einsatz/{{ incident.id }}/abschnitt" hx-swap="none">
-        <div class="input-row">
-          <input type="text" name="title" class="form-input" placeholder="Abschnitt..." required>
-          <button type="submit" class="btn btn--primary btn--sm">+</button>
-        </div>
-      </form>
-      <div class="section-presets">
-        <button hx-post="/einsatz/{{ incident.id }}/abschnitt" hx-vals='{"title":"Abschnitt 1"}' hx-swap="none" class="btn btn--ghost btn--xs">Abschnitt 1</button>
-        <button hx-post="/einsatz/{{ incident.id }}/abschnitt" hx-vals='{"title":"Bereitstellung"}' hx-swap="none" class="btn btn--ghost btn--xs">Bereitstellung</button>
-        <button hx-post="/einsatz/{{ incident.id }}/abschnitt" hx-vals='{"title":"Atemschutz"}' hx-swap="none" class="btn btn--ghost btn--xs">Atemschutz</button>
-      </div>
-    </div>
     {% endif %}
 
     <!-- Einsatzleiter vor Ort -->
