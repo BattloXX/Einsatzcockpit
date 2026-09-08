@@ -553,7 +553,8 @@ body.mobile-menu-open { overflow: hidden; }
 .live-status--warn  { background: rgba(242, 176, 46, .18); color: var(--yellow); }
 .live-status--stale { background: rgba(216, 48, 48, .2);  color: var(--danger); animation: lu-pulse 1.6s ease-in-out infinite; }
 @keyframes lu-pulse { 0%,100% { opacity: 1; } 50% { opacity: .55; } }
-.incident-header__actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.incident-header__actions, .incident-header__utility-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.incident-header__utility-actions { align-items: center; }
 .alarm-badge {
   border-radius: 0.375rem; padding: 4px 12px; font-weight: 800; font-size: 1.1rem;
   font-family: 'JetBrains Mono', monospace; letter-spacing: .02em;
@@ -1269,6 +1270,10 @@ body.dnd-active .board-tabs { box-shadow: 0 0 0 2px var(--primary, #2563eb); }
   .incident-header__address { font-size: .78rem; width: 100%; }
   .timer { font-size: 1.5rem; letter-spacing: 1px; }
   .incident-header__actions { gap: 4px; }
+  .incident-header__utility-actions { gap: 4px; margin-left: auto; }
+  .incident-header__utility-actions .header-dropdown__menu { max-width: calc(100vw - 24px); }
+  .dropdown-item { min-height: 44px; }
+  .mobile-lane-select { min-height: 44px; }
   .incident-header__actions .btn--sm { padding: 5px 9px; font-size: .75rem; min-height: 30px; }
   .detail-grid { grid-template-columns: 1fr; }
   /* Mobile-spezifische Topnav-Anpassungen (überschreiben den 900px-Block) */

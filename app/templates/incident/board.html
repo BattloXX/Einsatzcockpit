@@ -106,72 +106,20 @@
 <div class="incident-header" x-data="headerState('{{ incident.started_at|local_iso }}')">
   {% include "incident/_header_alarm.html" %}
   {% with active="board", subnav_display="mobile", breathing_enabled=breathing_enabled %}{% include "incident/_subnav.html" %}{% endwith %}
-  <div class="incident-header__status">
-    <span class="timer" x-text="timerDisplay">00:00</span>
-    <span class="live-status" :class="'live-status--' + liveStatusState"
-          :title="connectionStatus + ' · Daten aktualisiert vor ' + lastUpdateAgeSec + ' Sek.'"
-          aria-live="polite">
-      <span aria-hidden="true">●</span>
-      <span x-text="liveStatusText">Live · vor 0 s</span>
-      <span class="sr-only" x-text="connectionStatus">verbunden</span>
-    </span>
-  </div>
-  {% if weather_enabled %}
-  <div class="weather-popover" x-data="{open:false}" @click.outside="open=false">
-    <button type="button" class="weather-chip" @click="open=!open" :aria-expanded="open.toString()"
-            aria-controls="wetter-panel" aria-label="Wetter öffnen oder schließen">🌦 Wetter</button>
-    <template x-if="open">
-      <div id="wetter-panel" class="weather-popover__panel" role="dialog" aria-label="Wetter"
-           hx-get="/einsatz/{{ incident.id }}/wetter/panel"
-           hx-trigger="load, every 300s, retry-wetter"
-           hx-swap="innerHTML"
-           hx-on::response-error="wetterPanelError(this)"
-           hx-on::send-error="wetterPanelError(this)"
-           x-init="$nextTick(() => { if (window.htmx) htmx.process($el); })">
-        <span class="weather-popover__loading">Lade…</span>
-      </div>
-    </template>
-  </div>
-  {% endif %}
-  {% if lage_hints %}{% include "incident/_header_lage_ticker.html" %}{% endif %}
-  {% include "incident/_wache_status.html" %}
-  <div class="incident-header__actions">
-    {% with active="board", subnav_display="desktop", breathing_enabled=breathing_enabled %}{% include "incident/_subnav.html" %}{% endwith %}
-
+  <div class="incident-header__utility-actions">
     {% if can_edit %}
     <button type="button" class="ec-chip" aria-label="Abschnitt hinzufügen"
             onclick="document.getElementById('addColumnDialog').showModal()">+ Abschnitt</button>
     {% endif %}
 
-    {# ── Zu-/Absage-Zähler (Teams-Einsatzinfo) — Desktop only, erst ab erster Antwort ─ #}
-    <div class="header-dropdown" x-data="rsvpWidget({{ incident.id }})"
-         x-show="(zusagen + absagen) > 0" x-cloak
-         @click.outside="open=false"
-         {{ tip('Zu-/Absagen aus der Teams-Einsatzinfo') }}>
-      <button class="btn btn--sm btn--secondary" @click="open=!open; if(open) load()">
-        <span class="badge-pill badge-pill--green" x-text="zusagen">0</span>
-        <span class="badge-pill badge-pill--red" x-text="absagen">0</span>
-        <span class="dropdown-arrow" :class="open && 'open'">▾</span>
-      </button>
-      <div class="header-dropdown__menu" x-show="open" x-cloak x-transition.opacity.duration.150ms style="min-width:220px;">
-        <template x-if="namen.length === 0">
-          <div class="dropdown-item" style="cursor:default;color:var(--text-muted);">Noch keine Antworten</div>
-        </template>
-        <template x-for="n in namen" :key="n.name + n.status">
-          <div class="dropdown-item" style="cursor:default;">
-            <span class="di-icon" x-text="n.status === 'zugesagt' ? '✅' : '❌'"></span>
-            <span x-text="n.name"></span>
-          </div>
-        </template>
-      </div>
-    </div>
-
-    {# ── Mehr-Menü: seltene Einsatzwerkzeuge und Ausgaben (nur Desktop) ── #}
+    {# Gleiches Menü auf Desktop und Mobil: muss außerhalb des auf Mobil
+       ausgeblendeten Desktop-/RSVP-Containers bleiben. #}
     <div class="header-dropdown" x-data="{open:false}" @click.outside="open=false">
-      <button type="button" class="btn btn--sm btn--ghost" aria-label="Weitere Einsatzaktionen"
+      <button type="button" class="ec-icon-button" aria-label="Weitere Einsatzaktionen"
+              :aria-expanded="open.toString()" aria-haspopup="menu"
               @click="open=!open"
               {{ tip('Weitere Aktionen: KI, Drohne, QR-Code, PDF-Export') }}>⋯</button>
-      <div class="header-dropdown__menu" x-show="open" x-cloak x-transition.opacity.duration.150ms>
+      <div class="header-dropdown__menu" x-show="open" x-cloak x-transition.opacity.duration.150ms role="menu">
         {% if uas_einsatz_id or can_start_uas or (can_edit and ai_enabled) %}
         <div class="dropdown-section-label">Einsatzwerkzeuge</div>
         {% if uas_einsatz_id %}
@@ -219,6 +167,62 @@
         {% endif %}
       </div>
     </div>
+  </div>
+  <div class="incident-header__status">
+    <span class="timer" x-text="timerDisplay">00:00</span>
+    <span class="live-status" :class="'live-status--' + liveStatusState"
+          :title="connectionStatus + ' · Daten aktualisiert vor ' + lastUpdateAgeSec + ' Sek.'"
+          aria-live="polite">
+      <span aria-hidden="true">●</span>
+      <span x-text="liveStatusText">Live · vor 0 s</span>
+      <span class="sr-only" x-text="connectionStatus">verbunden</span>
+    </span>
+  </div>
+  {% if weather_enabled %}
+  <div class="weather-popover" x-data="{open:false}" @click.outside="open=false">
+    <button type="button" class="weather-chip" @click="open=!open" :aria-expanded="open.toString()"
+            aria-controls="wetter-panel" aria-label="Wetter öffnen oder schließen">🌦 Wetter</button>
+    <template x-if="open">
+      <div id="wetter-panel" class="weather-popover__panel" role="dialog" aria-label="Wetter"
+           hx-get="/einsatz/{{ incident.id }}/wetter/panel"
+           hx-trigger="load, every 300s, retry-wetter"
+           hx-swap="innerHTML"
+           hx-on::response-error="wetterPanelError(this)"
+           hx-on::send-error="wetterPanelError(this)"
+           x-init="$nextTick(() => { if (window.htmx) htmx.process($el); })">
+        <span class="weather-popover__loading">Lade…</span>
+      </div>
+    </template>
+  </div>
+  {% endif %}
+  {% if lage_hints %}{% include "incident/_header_lage_ticker.html" %}{% endif %}
+  {% include "incident/_wache_status.html" %}
+  <div class="incident-header__actions">
+    {% with active="board", subnav_display="desktop", breathing_enabled=breathing_enabled %}{% include "incident/_subnav.html" %}{% endwith %}
+
+    {# ── Zu-/Absage-Zähler (Teams-Einsatzinfo) — Desktop only, erst ab erster Antwort ─ #}
+    <div class="header-dropdown" x-data="rsvpWidget({{ incident.id }})"
+         x-show="(zusagen + absagen) > 0" x-cloak
+         @click.outside="open=false"
+         {{ tip('Zu-/Absagen aus der Teams-Einsatzinfo') }}>
+      <button class="btn btn--sm btn--secondary" @click="open=!open; if(open) load()">
+        <span class="badge-pill badge-pill--green" x-text="zusagen">0</span>
+        <span class="badge-pill badge-pill--red" x-text="absagen">0</span>
+        <span class="dropdown-arrow" :class="open && 'open'">▾</span>
+      </button>
+      <div class="header-dropdown__menu" x-show="open" x-cloak x-transition.opacity.duration.150ms style="min-width:220px;">
+        <template x-if="namen.length === 0">
+          <div class="dropdown-item" style="cursor:default;color:var(--text-muted);">Noch keine Antworten</div>
+        </template>
+        <template x-for="n in namen" :key="n.name + n.status">
+          <div class="dropdown-item" style="cursor:default;">
+            <span class="di-icon" x-text="n.status === 'zugesagt' ? '✅' : '❌'"></span>
+            <span x-text="n.name"></span>
+          </div>
+        </template>
+      </div>
+    </div>
+
   </div>
 </div>
 
