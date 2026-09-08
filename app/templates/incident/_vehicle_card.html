@@ -21,42 +21,30 @@
       <span class="badge" style="font-size:.65rem; padding:1px 5px; border-radius:3px; background:rgba(255,255,255,.12); margin-left:4px;">{{ bos }}</span>
       {% endif %}
     </div>
-    {% if can_edit and gk_member_candidates is defined %}
-    <div style="margin-top:3px;" onclick="event.stopPropagation()">
-      <select class="form-select form-select--xs"
-              style="font-size:.7rem;"
-              hx-post="/einsatz/{{ incident.id }}/fahrzeug/{{ vehicle.id }}/gk"
-              hx-trigger="change"
-              hx-swap="none"
-              name="member_id">
-        <option value="">— kein GK —</option>
-        {% for m in gk_member_candidates %}
-        <option value="{{ m.id }}" {% if vehicle.commander_member_id == m.id %}selected{% endif %}>{{ m.full_name }}</option>
-        {% endfor %}
-      </select>
-      {% if vehicle.commander and vehicle.commander_member_id not in (gk_member_candidates | map(attribute='id') | list) %}
-      <div class="card__gk" style="font-size:.65rem;margin-top:1px;">GK: {{ vehicle.commander.full_name }}</div>
-      {% elif not vehicle.commander and vehicle.commander_name %}
-      <div class="card__gk" style="font-size:.65rem;margin-top:1px;">GK: {{ vehicle.commander_name }}</div>
-      {% endif %}
+    {% set gk_name = vehicle.commander.full_name if vehicle.commander else vehicle.commander_name %}
+    <div style="margin-top:4px;">
+      <button type="button" class="ec-chip" aria-label="Gruppenkommandant: {{ gk_name or 'nicht gesetzt' }}. Details öffnen"
+              hx-get="/einsatz/{{ incident.id }}/fahrzeug/{{ vehicle.id }}/detail"
+              hx-target="#cardDetailBody"
+              hx-swap="innerHTML"
+              hx-on::after-swap="document.getElementById('cardDetailModal').showModal()">
+        {% if gk_name %}GK: {{ gk_name }}{% else %}+ GK{% endif %}
+      </button>
     </div>
-    {% elif vehicle.commander %}
-    <div class="card__gk">GK: {{ vehicle.commander.full_name }}</div>
-    {% elif vehicle.commander_name %}
-    <div class="card__gk">GK: {{ vehicle.commander_name }}</div>
-    {% endif %}
     {% if can_edit and unit_status_values is defined %}
-    <div style="margin-top:4px;" onclick="event.stopPropagation()">
-      <select class="form-select form-select--xs form-select--unit-status unit-status-{{ vehicle.unit_status | unit_status_slug }}"
-              hx-post="/einsatz/{{ incident.id }}/fahrzeug/{{ vehicle.id }}/status"
-              hx-trigger="change"
-              hx-swap="none"
-              name="unit_status"
-              onchange="this.className='form-select form-select--xs form-select--unit-status unit-status-'+this.value.toLowerCase().replace(/ä/g,'ae').replace(/ö/g,'oe').replace(/ü/g,'ue').replace(/ß/g,'ss').replace(/ /g,'-')">
+    <div class="header-dropdown card__status-menu" x-data="{open:false}" @click.outside="open=false" style="margin-top:4px;">
+      <button type="button" class="ec-chip ec-chip--status unit-status-{{ vehicle.unit_status | unit_status_slug }}"
+              aria-label="Einheitenstatus: {{ vehicle.unit_status }}" aria-haspopup="menu" :aria-expanded="open.toString()" @click="open=!open">
+        {{ vehicle.unit_status }}
+      </button>
+      <div class="header-dropdown__menu" x-show="open" x-cloak x-transition.opacity.duration.150ms role="menu">
+        <div class="dropdown-section-label">Einheitenstatus</div>
         {% for s in unit_status_values %}
-        <option value="{{ s }}" {% if vehicle.unit_status == s %}selected{% endif %}>{{ s }}</option>
+        <button type="button" role="menuitem" class="dropdown-item" aria-label="Einheitenstatus auf {{ s }} setzen"
+                hx-post="/einsatz/{{ incident.id }}/fahrzeug/{{ vehicle.id }}/status"
+                hx-vals='{"unit_status":"{{ s }}"}' hx-swap="none" @click="open=false">{{ s }}</button>
         {% endfor %}
-      </select>
+      </div>
     </div>
     {% endif %}
     <div class="card__tasks sortable-zone sortable-zone--vehicle" data-vehicle-id="{{ vehicle.id }}">
@@ -92,22 +80,27 @@
     </div>
   </div>
   {% if can_edit %}
-  <div class="card__footer" style="gap:4px; flex-wrap:wrap;">
+  <div class="card__footer" style="gap:4px;">
     <button type="button" class="btn btn--ghost btn--xs"
             onclick="event.stopPropagation(); openQuickAddTaskForVehicle({{ vehicle.id }}, {{ vehicle.column_id }})">
       + Auftrag
     </button>
-    <button type="button" class="btn btn--ghost btn--xs"
-            onclick="event.stopPropagation(); openQuickAddMsgForVehicle({{ vehicle.id }})">
-      + Meldung
-    </button>
-    <select class="form-select form-select--xs" style="flex:1; min-width:100px;"
-            onchange="moveVehicle({{ vehicle.id }}, this.value, {{ incident.id }})">
-      <option value="">Verschieben...</option>
+    <div class="header-dropdown card__vehicle-menu" x-data="{open:false}" @click.outside="open=false">
+      <button type="button" class="ec-icon-button" aria-label="Fahrzeugaktionen" aria-haspopup="menu" :aria-expanded="open.toString()" @click="open=!open">⋯</button>
+      <div class="header-dropdown__menu" x-show="open" x-cloak x-transition.opacity.duration.150ms role="menu">
+        <div class="dropdown-section-label">Aktionen</div>
+        <button type="button" role="menuitem" class="dropdown-item"
+                @click="open=false; openQuickAddMsgForVehicle({{ vehicle.id }})">+ Meldung</button>
+        <div class="dropdown-divider"></div>
+        <div class="dropdown-section-label">Verschieben nach</div>
       {% for col in incident.columns %}
-      <option value="{{ col.id }}" {% if col.id == vehicle.column_id %}disabled{% endif %}>{{ col.title }}</option>
+        {% if col.id != vehicle.column_id %}
+        <button type="button" role="menuitem" class="dropdown-item" aria-label="Fahrzeug nach {{ col.title }} verschieben"
+                @click="open=false; moveVehicle({{ vehicle.id }}, {{ col.id }}, {{ incident.id }})">{{ col.title }}</button>
+        {% endif %}
       {% endfor %}
-    </select>
+      </div>
+    </div>
   </div>
   {% endif %}
 </div>

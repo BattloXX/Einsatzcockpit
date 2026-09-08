@@ -240,8 +240,8 @@ def test_neues_fahrzeug_fragment_enthaelt_status_und_gk_auswahl(db, incident, or
     html = templates.env.get_template("incident/_created_card_fragment.html").render(**context)
 
     assert f'/einsatz/{incident.id}/fahrzeug/' in html
-    assert 'name="unit_status"' in html
-    assert 'name="member_id"' in html
+    assert '/status"' in html
+    assert 'Gruppenkommandant' in html
 
 
 def test_prepend_card_with_existing_card_order(db, incident):
