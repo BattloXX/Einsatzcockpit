@@ -488,6 +488,22 @@ body.mobile-menu-open { overflow: hidden; }
 .kanban-col__leader { margin-top:3px; min-width:0; }
 .kanban-col__leader-picker .header-dropdown__menu { right:auto; left:0; min-width:230px; }
 .kanban-col__status-overview { display:none; }
+.kanban-col__done-group {
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.kanban-col__done-toggle {
+  width: 100%;
+  justify-content: center;
+  color: var(--text-muted);
+  border-style: dashed;
+}
+.kanban-col__done-toggle:hover, .kanban-col__done-toggle:focus-visible {
+  color: var(--text);
+}
+.kanban-col__done-items { padding-top: 8px; }
+.kanban-col__done-items .card:last-child { margin-bottom: 0; }
 .kanban-col__add-btn:hover { background: var(--red); border-color: var(--red); color: #fff; }
 /* Gerettete Personen: blauer Akzent zur besseren Auffindbarkeit */
 .kanban-col__add-btn--person { border-color: rgba(59,130,246,.5); color: #93c5fd; }

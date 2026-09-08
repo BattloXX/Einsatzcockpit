@@ -12,6 +12,7 @@
       <span onclick="event.stopPropagation()" style="flex-shrink:0;">
         <select name="status" class="form-select form-select--xs form-select--person-status-compact person-status-{{ ps }}"
                 title="{{ ps|person_status_label }}"
+                aria-label="{{ ps|person_status_label }}"
                 hx-post="/einsatz/{{ incident.id }}/person/{{ person.id }}/status"
                 hx-trigger="change"
                 hx-swap="none"
