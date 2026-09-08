@@ -237,9 +237,7 @@ document.addEventListener('alpine:init', () => {
       if (current === null || current === this.dismissedIncidentId) return false;
       if (this.lage) return true;
       const boardIncident = document.getElementById('incidentHeaderAlarm')?.dataset.incidentId;
-      const isOwnMobileBoard = window.matchMedia('(max-width: 760px)').matches
-        && boardIncident === String(this.incident.id);
-      return !isOwnMobileBoard;
+      return boardIncident !== String(this.incident.id);
     },
 
     init() {
@@ -326,14 +324,8 @@ document.addEventListener('alpine:init', () => {
       if (!live?.started_at) { this.duration = '0 min'; return; }
       const startedAt = Date.parse(live.started_at);
       if (isNaN(startedAt)) { this.duration = '0 min'; return; }
-      const elapsedMinutes = Math.max(0, Math.floor((Date.now() + this.serverTimeSkew - startedAt) / 60000));
-      if (elapsedMinutes < 60) {
-        this.duration = elapsedMinutes + ' min';
-        return;
-      }
-      const hours = Math.floor(elapsedMinutes / 60);
-      const minutes = String(elapsedMinutes % 60).padStart(2, '0');
-      this.duration = hours + ':' + minutes + ' h';
+      const elapsedSeconds = Math.max(0, Math.floor((Date.now() + this.serverTimeSkew - startedAt) / 1000));
+      this.duration = formatElapsedDuration(elapsedSeconds);
     },
 
     dismiss() {
@@ -417,7 +409,17 @@ function rsvpWidget(incidentId) {
   };
 }
 
-/* ─── Incident Header (timer + last-update only, no WS) ─────────── */
+/* Einheitliche Laufzeitdarstellung: MM:SS unter einer Stunde, sonst H:MM:SS. */
+function formatElapsedDuration(totalSeconds) {
+  const seconds = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remainder = String(seconds % 60).padStart(2, '0');
+  if (hours > 0) return hours + ':' + String(minutes).padStart(2, '0') + ':' + remainder;
+  return String(minutes).padStart(2, '0') + ':' + remainder;
+}
+
+/* ─── Incident Header (timer + live status only, no WS) ─────────── */
 function headerState(startedAt) {
   return {
     timerDisplay: '00:00',
@@ -426,6 +428,17 @@ function headerState(startedAt) {
     lastUpdateAgeSec: 0,
     lastUpdateState: 'fresh',
     connectionStatus: 'verbunden',
+
+    get liveStatusState() {
+      if (this.connectionStatus === 'verbindet neu') return 'warn';
+      if (this.connectionStatus !== 'verbunden') return 'stale';
+      return this.lastUpdateState;
+    },
+
+    get liveStatusText() {
+      const label = this.connectionStatus === 'verbunden' ? 'Live' : this.connectionStatus;
+      return label + ' · vor ' + this.lastUpdateAgeSec + ' s';
+    },
 
     init() {
       this._startTimer(new Date(startedAt));
@@ -436,10 +449,8 @@ function headerState(startedAt) {
 
     _startTimer(start) {
       const update = () => {
-        const sec = Math.floor((Date.now() - start) / 1000);
-        const m = String(Math.floor(sec / 60)).padStart(2, '0');
-        const s = String(sec % 60).padStart(2, '0');
-        this.timerDisplay = m + ':' + s;
+        const sec = Math.max(0, Math.floor((Date.now() - start) / 1000));
+        this.timerDisplay = formatElapsedDuration(sec);
         if (sec === 300 || sec === 301) showTimerAlert('Lagemeldung an RFL absetzen!', 'warn');
         if (sec === 600 || sec === 601) showTimerAlert('Spezialkräfte / Atemschutzsammelplatz prüfen!', 'alert');
       };

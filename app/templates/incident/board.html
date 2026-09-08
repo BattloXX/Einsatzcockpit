@@ -94,9 +94,7 @@
     .board-tabs { display: none !important; }
     .task-suggestions { display: none !important; }
     /* Mobil: Kopfzeile auf Spaltenwechsel reduzieren, maximaler Platz fuer die Karten */
-    .incident-header__timer { display: none !important; }
     .incident-header__actions { display: none !important; }
-    #wetter-details { display: none !important; }
     .bottom-nav { display: none !important; }
     .main-content { padding-bottom: 0 !important; }
   }
@@ -104,24 +102,37 @@
 {% endblock %}
 
 {% block content %}
-<!-- Exercise Banner -->
-{% if incident.is_exercise %}
-<div class="exercise-topbar">⚠ ÜBUNG / SIMULATION ⚠</div>
-{% endif %}
-
 <!-- Incident Header -->
 <div class="incident-header" x-data="headerState('{{ incident.started_at|local_iso }}')">
   {% include "incident/_header_alarm.html" %}
   {% with active="board", subnav_display="mobile", breathing_enabled=breathing_enabled %}{% include "incident/_subnav.html" %}{% endwith %}
-  <div class="incident-header__timer">
+  <div class="incident-header__status">
     <span class="timer" x-text="timerDisplay">00:00</span>
-    <span class="last-update" :class="'last-update--' + lastUpdateState"
-          :title="'Daten aktualisiert vor ' + lastUpdateAgeSec + ' Sek.'">
-      <span class="last-update__icon">⟳</span>
-      <span class="last-update__time" x-text="lastUpdateDisplay">–</span>
+    <span class="live-status" :class="'live-status--' + liveStatusState"
+          :title="connectionStatus + ' · Daten aktualisiert vor ' + lastUpdateAgeSec + ' Sek.'"
+          aria-live="polite">
+      <span aria-hidden="true">●</span>
+      <span x-text="liveStatusText">Live · vor 0 s</span>
+      <span class="sr-only" x-text="connectionStatus">verbunden</span>
     </span>
-    <span class="last-update" x-text="connectionStatus" aria-live="polite">verbunden</span>
   </div>
+  {% if weather_enabled %}
+  <div class="weather-popover" x-data="{open:false}" @click.outside="open=false">
+    <button type="button" class="weather-chip" @click="open=!open" :aria-expanded="open.toString()"
+            aria-controls="wetter-panel" aria-label="Wetter öffnen oder schließen">🌦 Wetter</button>
+    <template x-if="open">
+      <div id="wetter-panel" class="weather-popover__panel" role="dialog" aria-label="Wetter"
+           hx-get="/einsatz/{{ incident.id }}/wetter/panel"
+           hx-trigger="load, every 300s, retry-wetter"
+           hx-swap="innerHTML"
+           hx-on::response-error="wetterPanelError(this)"
+           hx-on::send-error="wetterPanelError(this)"
+           x-init="$nextTick(() => { if (window.htmx) htmx.process($el); })">
+        <span class="weather-popover__loading">Lade…</span>
+      </div>
+    </template>
+  </div>
+  {% endif %}
   {% if lage_hints %}{% include "incident/_header_lage_ticker.html" %}{% endif %}
   {% include "incident/_wache_status.html" %}
   <div class="incident-header__actions">
@@ -150,12 +161,14 @@
       </div>
     </div>
 
-    {# ── Mehr-Menü: KI, Dashboard, Drohne + seltene Aktionen (nur Desktop, mobil ausgeblendet) ── #}
+    {# ── Mehr-Menü: seltene Einsatzwerkzeuge und Ausgaben (nur Desktop) ── #}
     <div class="header-dropdown" x-data="{open:false}" @click.outside="open=false">
-      <button class="btn btn--sm btn--ghost"
+      <button type="button" class="btn btn--sm btn--ghost" aria-label="Weitere Einsatzaktionen"
               @click="open=!open"
-              {{ tip('Weitere Aktionen: KI, Dashboard, Drohne, QR-Code, PDF-Export') }}>⋯</button>
+              {{ tip('Weitere Aktionen: KI, Drohne, QR-Code, PDF-Export') }}>⋯</button>
       <div class="header-dropdown__menu" x-show="open" x-cloak x-transition.opacity.duration.150ms>
+        {% if uas_einsatz_id or can_start_uas or (can_edit and ai_enabled) %}
+        <div class="dropdown-section-label">Einsatzwerkzeuge</div>
         {% if uas_einsatz_id %}
         <a href="/uas/einsatz/{{ uas_einsatz_id }}" class="dropdown-item">
           <span class="di-icon">🚁</span> Drohneneinsatz öffnen
@@ -165,11 +178,7 @@
           <span class="di-icon">🚁</span> Drohne starten
         </a>
         {% endif %}
-        <a href="/einsatz/{{ incident.id }}/dashboard" target="_blank" rel="noopener noreferrer" class="dropdown-item">
-          <span class="di-icon">📊</span> Dashboard öffnen
-        </a>
         {% if can_edit and ai_enabled %}
-        <hr class="dropdown-divider">
         <button class="dropdown-item" id="ki-dropdown-btn" @click="open=false; openLagebild()">
           <span class="di-icon">✨</span> KI-Lagebild erzeugen
         </button>
@@ -181,6 +190,8 @@
         </button>
         {% endif %}
         <hr class="dropdown-divider">
+        {% endif %}
+        <div class="dropdown-section-label">Ausgabe</div>
         <a href="/einsatz/{{ incident.id }}/qr" class="dropdown-item">
           <span class="di-icon">🔗</span> QR-Code anzeigen
         </a>
@@ -193,36 +204,18 @@
                 onclick="ecpgPrint({document_type:'einsatzinfo', incident_id:{{ incident.id }}, title:'Einsatzinfo drucken'})">
           <span class="di-icon">🖨️</span> Drucken
         </button>
+        {% if can_edit %}
+        <hr class="dropdown-divider">
+        <div class="dropdown-section-label dropdown-section-label--danger">Gefahrbereich</div>
+        <button type="button" class="dropdown-item dropdown-item--danger"
+                @click="if(confirm('Einsatz wirklich abschließen?')) { fetch('/einsatz/{{ incident.id }}/abschliessen', {method:'POST'}); }">
+          <span class="di-icon">⚠</span> Einsatz abschließen
+        </button>
+        {% endif %}
       </div>
     </div>
-
-    {# ── Einsatz abschließen ──────────────────────────────────────────────── #}
-    {% if can_edit %}
-    <button class="btn btn--sm btn--danger"
-            onclick="if(confirm('Einsatz wirklich abschließen?')) { fetch('/einsatz/{{ incident.id }}/abschliessen', {method:'POST'}); }"
-            {{ tip('Einsatz abschließen und ins Archiv verschieben') }}>Abschließen</button>
-    {% endif %}
   </div>
 </div>
-
-{# ── Wetter-Panel (Einzeleinsatz) ───────────────────────────────────────────── #}
-{% if weather_enabled %}
-<details id="wetter-details" style="border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0;">
-  <summary style="padding:4px 14px;cursor:pointer;font-size:.75rem;color:var(--text-muted);
-                  user-select:none;list-style:none;display:flex;align-items:center;gap:6px;">
-    <span>▸</span><span>🌦 Wetter</span>
-  </summary>
-  <div id="wetter-panel"
-       hx-get="/einsatz/{{ incident.id }}/wetter/panel"
-       hx-trigger="intersect once, every 300s, retry-wetter"
-       hx-swap="innerHTML"
-       hx-on::response-error="wetterPanelError(this)"
-       hx-on::send-error="wetterPanelError(this)"
-       style="padding:8px 14px;">
-    <span style="font-size:.75rem;color:var(--text-muted);">Lade…</span>
-  </div>
-</details>
-{% endif %}
 
 <div class="board-wrap" x-data="incidentBoard({{ incident.id }}, '{{ incident.alarm_type_code }}', '{{ incident.started_at|local_iso }}')">
 
