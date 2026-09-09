@@ -322,16 +322,20 @@ def test_personen_abschnitt_erscheint_desktop_und_im_mobilen_personen_lane(
     dialog.locator('select[name="column_kind"]').select_option("rescued")
     dialog.get_by_role("button", name="Anlegen").click()
 
-    own_person_col = first.locator('.kanban-col[data-lane="persons"]', has_text="E2E Personenabschnitt")
+    own_person_col = first.locator(".kanban-col").filter(
+        has=first.locator(".kanban-col__title", has_text="E2E Personenabschnitt")
+    )
     expect(own_person_col).to_be_visible(timeout=10_000)
-    person_col = second.locator('.kanban-col[data-lane="persons"]', has_text="E2E Personenabschnitt")
+    person_col = second.locator(".kanban-col").filter(
+        has=second.locator(".kanban-col__title", has_text="E2E Personenabschnitt")
+    )
     expect(person_col).to_be_visible(timeout=10_000)
     col_id = person_col.get_attribute("id")
     assert col_id and col_id.startswith("col-")
     column_id = col_id.removeprefix("col-")
 
     second.set_viewport_size({"width": 390, "height": 844})
-    second.locator("#mobile-lane-select").select_option("persons")
+    second.locator("#mobile-lane-select").select_option(f"col-{column_id}")
     expect(person_col).to_have_attribute("data-lane-active", "")
     expect(person_col).to_be_visible()
 
@@ -361,10 +365,14 @@ def test_person_can_move_repeatedly_between_rescued_columns_without_duplicates(
     dialog.locator('select[name="column_kind"]').select_option("rescued")
     dialog.get_by_role("button", name="Anlegen").click()
 
-    second_column = first.locator('.kanban-col[data-lane="persons"]', has_text=title)
+    second_column = first.locator(".kanban-col").filter(
+        has=first.locator(".kanban-col__title", has_text=title)
+    )
     expect(second_column).to_be_visible(timeout=10_000)
     second_column_id = second_column.get_attribute("data-col-id")
-    first_column = first.locator('.kanban-col[data-lane="persons"]').filter(has_not_text=title).first
+    first_column = first.locator(
+        '.kanban-col:has([title="Gerettete Person erfassen"])'
+    ).filter(has_not_text=title).first
     first_column_id = first_column.get_attribute("data-col-id")
     assert first_column_id and second_column_id
 
@@ -400,6 +408,97 @@ def test_person_can_move_repeatedly_between_rescued_columns_without_duplicates(
         headers={"X-CSRF-Token": csrf_token},
     )
     assert response.status == 204
+
+
+def test_mobile_lane_selector_lists_each_custom_column_separately(
+    angemeldete_seite: Page, base_url: str
+) -> None:
+    """Zusatzspalten aller Kinds bleiben mobil einzeln statt gruppiert sichtbar."""
+    page = angemeldete_seite
+    _board(page, base_url)
+    columns: list[tuple[str, str]] = []
+    for kind, prefix in (("tasks", "E2E Zweiter Auftrag"), ("messages", "E2E Zweite Meldung")):
+        title = prefix + " " + uuid4().hex[:8]
+        page.get_by_role("button", name="Abschnitt hinzufügen").click()
+        dialog = page.locator("#addColumnDialog")
+        dialog.locator('input[name="title"]').fill(title)
+        dialog.locator('select[name="column_kind"]').select_option(kind)
+        dialog.get_by_role("button", name="Anlegen").click()
+        column = page.locator(".kanban-col").filter(
+            has=page.locator(".kanban-col__title", has_text=title)
+        )
+        expect(column).to_be_visible(timeout=10_000)
+        column_id = column.get_attribute("data-col-id")
+        assert column_id
+        columns.append((title, column_id))
+
+    page.set_viewport_size({"width": 390, "height": 844})
+    selector = page.locator("#mobile-lane-select")
+    expect(selector).to_be_visible()
+    values = selector.locator("option").evaluate_all("options => options.map(option => option.value)")
+    assert [f"col-{column_id}" for _, column_id in columns] == [
+        value for value in values if value in {f"col-{column_id}" for _, column_id in columns}
+    ]
+    for title, column_id in columns:
+        lane = f"col-{column_id}"
+        selector.select_option(lane)
+        selected = page.locator(f'.kanban-col[data-lane="{lane}"]')
+        expect(selected).to_have_attribute("data-lane-active", "")
+        expect(selected).to_be_visible()
+        for _, other_id in columns:
+            if other_id != column_id:
+                expect(page.locator(f'.kanban-col[data-lane="col-{other_id}"]')).not_to_have_attribute(
+                    "data-lane-active", ""
+                )
+
+    csrf_token = page.evaluate(
+        "document.cookie.split('; ').find(v => v.startsWith('ec_csrf='))?.split('=').slice(1).join('=')"
+    )
+    assert csrf_token
+    for _, column_id in columns:
+        response = page.request.delete(
+            f"{base_url}/einsatz/{INCIDENT_ID}/spalten/{column_id}", headers={"X-CSRF-Token": csrf_token}
+        )
+        assert response.status == 204
+
+
+def test_mobile_root_scrolling_bottom_nav_and_contextual_fab(
+    angemeldete_seite: Page, base_url: str
+) -> None:
+    """Root-Scroll bleibt fuer PTR frei; FAB delegiert nur auf dem Board."""
+    page = angemeldete_seite
+    page.set_viewport_size({"width": 390, "height": 844})
+    page.goto(f"{base_url}/einsatz/{INCIDENT_ID}/info")
+    page.wait_for_load_state("networkidle")
+    assert page.evaluate("document.scrollingElement.scrollHeight > document.scrollingElement.clientHeight")
+
+    _board(page, base_url)
+    assert page.evaluate("document.scrollingElement.scrollHeight > document.scrollingElement.clientHeight")
+    assert page.locator("#kanban").evaluate("el => el.scrollHeight >= el.clientHeight")
+
+    page.goto(base_url)
+    page.wait_for_load_state("networkidle")
+    expect(page.locator(".bottom-nav")).to_be_visible()
+    page.locator(".bottom-nav__fab").click()
+    expect(page.locator("#newIncidentModal")).to_have_js_property("open", True)
+    page.locator("#newIncidentModal").evaluate("dialog => dialog.close()")
+
+    # Die Bottom-Nav ist am Board nur bis 760px verborgen; bei 800px ist sie
+    # die mobile Navigation, waehrend alle Lanes zur gezielten FAB-Pruefung
+    # sichtbar bleiben.
+    page.set_viewport_size({"width": 800, "height": 844})
+    _board(page, base_url)
+    task_column = page.locator('.kanban-col:has([title="Auftrag anlegen"])').first
+    vehicle_column = page.locator('.kanban-col:has([title="Einheit zum Einsatz hinzufügen"])').first
+    expect(task_column).to_be_visible()
+    expect(vehicle_column).to_be_visible()
+    task_column.evaluate("el => { document.querySelectorAll('.kanban-col').forEach(col => col.removeAttribute('data-lane-active')); el.setAttribute('data-lane-active', ''); }")
+    page.locator(".bottom-nav__fab").click()
+    expect(page.locator("#quickAddTaskDialog")).to_have_js_property("open", True)
+    page.locator("#quickAddTaskDialog").evaluate("dialog => dialog.close()")
+    vehicle_column.evaluate("el => { document.querySelectorAll('.kanban-col').forEach(col => col.removeAttribute('data-lane-active')); el.setAttribute('data-lane-active', ''); }")
+    page.locator(".bottom-nav__fab").click()
+    expect(page.locator("#vehicleWizard")).to_be_visible()
 
 
 def test_fahrzeug_zuordnung_und_loesen_aktualisiert_beide_sessions(
@@ -464,9 +563,9 @@ def test_fahrzeug_zuordnung_und_loesen_aktualisiert_beide_sessions(
 
     # Reproduce Sortable's former optimistic invalid drop: it moved the DOM
     # node into a non-person lane although the server has no such person state.
-    # Both sessions must end with precisely one card in the rescued lane.
+    # Both sessions must end with precisely one card in the rescued column.
     invalid_zone = first.locator(
-        '.kanban-col:not([data-lane="persons"]) .kanban-col__body.sortable-zone'
+        '.kanban-col:has([title="Auftrag anlegen"]) .kanban-col__body.sortable-zone'
     ).first
     invalid_column_id = invalid_zone.evaluate(
         "el => el.closest('.kanban-col').dataset.colId"

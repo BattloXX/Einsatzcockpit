@@ -237,11 +237,11 @@
 
   </aside>
 
-  <!-- Mobile Lane Tabs (Reihenfolge: Aufträge · Meldungen · Personen · Fahrzeuge) -->
+  <!-- Tablet-Fallback: Jede Spalte bleibt wie im mobilen Auswähler einzeln adressierbar. -->
   <nav class="board-tabs" role="tablist" aria-label="Spalten">
-    <button class="board-tab active" data-lane="tasks"     type="button">📋 Aufträge</button>
-    <button class="board-tab"        data-lane="messages"  type="button">📨 Meldungen</button>
-    <button class="board-tab"        data-lane="persons"   type="button">👥 Personen</button>
+    {% for col in incident.columns %}
+    <button class="board-tab{% if loop.first %} active{% endif %}" data-lane="col-{{ col.id }}" type="button">{{ col.title }}</button>
+    {% endfor %}
   </nav>
 
   <!-- Kanban Board -->

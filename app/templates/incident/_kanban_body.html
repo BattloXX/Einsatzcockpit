@@ -1,6 +1,5 @@
 {# Inhalt von #kanban (alle Spalten + "+ Neue Spalte"-Button).
    Variablen: incident, can_edit, lage_sprueche, section_leader_candidates #}
-{% set kind_to_lane = {'tasks':'tasks','messages':'messages','rescued':'persons'} %}
 {% for col in incident.columns %}
 {% include "incident/_kanban_col.html" %}
 {% endfor %}

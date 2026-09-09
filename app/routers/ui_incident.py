@@ -959,7 +959,6 @@ def board_column_fragment(
     return templates.TemplateResponse(request, "incident/_kanban_col.html", {
         "incident": incident, "can_edit": can_edit, "col": col,
         "unit_status_values": UNIT_STATUS_VALUES,
-        "kind_to_lane": {"tasks": "tasks", "messages": "messages", "rescued": "persons"},
         "section_leader_candidates": list_section_leader_candidates(db, org_ids),
         "lage_sprueche": lage_sprueche, "oob": True,
     })
