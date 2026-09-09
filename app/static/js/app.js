@@ -703,6 +703,10 @@ function incidentBoard(incidentId, alarm, startedAt) {
           if (ev.source_column_id != null && ev.source_column_id !== ev.column_id) {
             this._swapColumnBody(incidentId, ev.source_column_id);
           }
+          if (ev.dropped_column_id != null && ev.dropped_column_id !== ev.column_id
+              && ev.dropped_column_id !== ev.source_column_id) {
+            this._swapColumnBody(incidentId, ev.dropped_column_id);
+          }
           if (ev.vehicle_uid != null) this._swapCard(incidentId, 'vehicle', ev.vehicle_uid);
           if (ev.source_vehicle_uid != null && ev.source_vehicle_uid !== ev.vehicle_uid) {
             this._swapCard(incidentId, 'vehicle', ev.source_vehicle_uid);

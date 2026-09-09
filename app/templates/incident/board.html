@@ -7,14 +7,32 @@
 <div class="incident-header" x-data="headerState('{{ incident.started_at|local_iso }}')">
   {% include "incident/_header_alarm.html" %}
   {% with active="board", subnav_display="mobile", breathing_enabled=breathing_enabled %}{% include "incident/_subnav.html" %}{% endwith %}
-  <div class="incident-header__utility-actions">
+  {% macro header_utility() %}
+  <div class="incident-header__utility-actions"{% if weather_enabled %} x-data="{weatherOpen:false}"{% endif %}>
     {% if can_edit %}
     <button type="button" class="ec-chip" aria-label="Abschnitt hinzufügen"
             onclick="document.getElementById('addColumnDialog').showModal()">+ Abschnitt</button>
     {% endif %}
 
-    {# Gleiches Menü auf Desktop und Mobil: muss außerhalb des auf Mobil
-       ausgeblendeten Desktop-/RSVP-Containers bleiben. #}
+    {% if weather_enabled %}
+    <div class="weather-popover">
+      <button type="button" class="weather-chip" aria-label="Wetter öffnen"
+              @click="weatherOpen=!weatherOpen" :aria-expanded="weatherOpen.toString()"
+              aria-controls="wetter-panel">🌦 <span id="weather-header-summary"
+              hx-get="/einsatz/{{ incident.id }}/wetter/summary" hx-trigger="load, every 300s" hx-swap="innerHTML">Wetter</span></button>
+      <template x-if="weatherOpen">
+        <div id="wetter-panel" class="weather-popover__panel" role="dialog" aria-label="Wetter"
+             hx-get="/einsatz/{{ incident.id }}/wetter/panel"
+             hx-trigger="load, every 300s, retry-wetter" hx-swap="innerHTML"
+             hx-on::response-error="wetterPanelError(this)" hx-on::send-error="wetterPanelError(this)"
+             x-init="$nextTick(() => { if (window.htmx) htmx.process($el); })">
+          <button type="button" class="weather-popover__close" aria-label="Wetter schließen" @click="weatherOpen=false">×</button>
+          <span class="weather-popover__loading">Lade…</span>
+        </div>
+      </template>
+    </div>
+    {% endif %}
+
     <div class="header-dropdown" x-data="{open:false}" @click.outside="open=false">
       <button type="button" class="ec-icon-button" aria-label="Weitere Einsatzaktionen"
               :aria-expanded="open.toString()" aria-haspopup="menu"
@@ -26,23 +44,10 @@
           <span class="di-icon">📊</span> Lagemonitor
         </a>
         {% if weather_enabled %}
-        <div class="weather-popover" x-data="{weatherOpen:false}">
-          <button type="button" class="dropdown-item" @click="weatherOpen=!weatherOpen"
-                  :aria-expanded="weatherOpen.toString()" aria-controls="wetter-panel">
-            <span class="di-icon">🌦</span> Wetter
-          </button>
-          <template x-if="weatherOpen">
-            <div id="wetter-panel" class="weather-popover__panel" role="dialog" aria-label="Wetter"
-                 hx-get="/einsatz/{{ incident.id }}/wetter/panel"
-                 hx-trigger="load, every 300s, retry-wetter"
-                 hx-swap="innerHTML"
-                 hx-on::response-error="wetterPanelError(this)"
-                 hx-on::send-error="wetterPanelError(this)"
-                 x-init="$nextTick(() => { if (window.htmx) htmx.process($el); })">
-              <span class="weather-popover__loading">Lade…</span>
-            </div>
-          </template>
-        </div>
+        <button type="button" class="dropdown-item" @click="weatherOpen=true; open=false"
+                :aria-expanded="weatherOpen.toString()" aria-controls="wetter-panel">
+          <span class="di-icon">🌦</span> Wetter
+        </button>
         {% endif %}
         <hr class="dropdown-divider">
         {% if uas_einsatz_id or can_start_uas or (can_edit and ai_enabled) %}
@@ -93,6 +98,7 @@
       </div>
     </div>
   </div>
+  {% endmacro %}
   <div class="incident-header__status">
     <span class="timer" x-text="timerDisplay">00:00</span>
     <span class="live-status" :class="'live-status--' + liveStatusState"
@@ -107,6 +113,7 @@
   {% include "incident/_wache_status.html" %}
   <div class="incident-header__actions">
     {% with active="board", subnav_display="desktop", breathing_enabled=breathing_enabled %}{% include "incident/_subnav.html" %}{% endwith %}
+    {{ header_utility() }}
 
     {# ── Zu-/Absage-Zähler (Teams-Einsatzinfo) — Desktop only, erst ab erster Antwort ─ #}
     <div class="header-dropdown" x-data="rsvpWidget({{ incident.id }})"

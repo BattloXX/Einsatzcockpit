@@ -189,7 +189,16 @@
     //    Änderungen an delay, delayOnTouchOnly, touchStartThreshold oder
     //    fallbackTolerance können DnD auf einer oder beiden Plattformen brechen.
     const commonOpts = {
-      group: { name: 'kanban', pull: true, put: true },
+      group: {
+        name: 'kanban', pull: true,
+        // Personen existieren entweder in der Personen-Lane oder in einer
+        // Fahrzeugkarte. Sortable darf sie deshalb nie in andere Lanes legen.
+        put(to, from, dragged) {
+          if (dragged?.dataset.kind !== 'person') return true;
+          return to.el.classList.contains('sortable-zone--vehicle')
+            || to.el.closest('.kanban-col')?.dataset.lane === 'persons';
+        },
+      },
       animation: 150,
       ghostClass: 'card--ghost',
       chosenClass: 'card--chosen',

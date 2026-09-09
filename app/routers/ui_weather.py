@@ -615,6 +615,9 @@ async def _render_weather_panel(
     now_utc = datetime.now(UTC)
     active_warnings = [w for w in warnings if w.valid_from <= now_utc]  # type: ignore[union-attr]
 
+    weather_values = _build_weather_view_model(
+        current, station_views or [], forecast, nowcast, warnings
+    )
     ctx = {
         "no_location": False,
         "focus_label": focus_label,
@@ -633,11 +636,16 @@ async def _render_weather_panel(
         "attribution": _build_attribution(current, forecast, nowcast, warnings, station_current),
         "abfluss_views": abfluss_views or [],
         "station_views": station_views or [],
-        "weather_values": _build_weather_view_model(
-            current, station_views or [], forecast, nowcast, warnings
-        ),
+        "weather_values": weather_values,
         "enable_station_history": enable_station_history,
     }
+    # A station card already presents these raw readings.  Do not present the
+    # same blended values as a second "current" line when they came from it.
+    ctx["current_values_duplicate_station"] = bool(
+        station_views
+        and weather_values["temp"]["source"] == "Lokale Wetterstation"
+        and weather_values["wind"]["source"] == "Lokale Wetterstation"
+    )
     ctx.update(extra_ctx)
     return templates.TemplateResponse(request, template_name, ctx)
 
@@ -866,6 +874,31 @@ async def einsatz_wetter_panel(
         request, lat, lng, focus_label, {"incident_id": incident_id},
         abfluss_views=abfluss_views, station_views=station_views, org_id=org_id,
     )
+
+
+@router.get("/einsatz/{incident_id}/wetter/summary", response_class=HTMLResponse, include_in_schema=False)
+async def einsatz_wetter_summary(request: Request, incident_id: int, db: Session = Depends(get_db)):
+    """Small, independently refreshable temperature label for the board header."""
+    from app.models.incident import Incident as _Inc
+
+    user = getattr(request.state, "user", None)
+    incident = db.get(_Inc, incident_id)
+    if not user or not incident or not can_access_incident(user, incident):
+        raise HTTPException(status_code=404)
+    org_id = incident.primary_org_id
+    if not _org_weather_enabled(org_id, db):
+        return HTMLResponse("Wetter")
+    lat, lng = incident.lat, incident.lng
+    if (lat is None or lng is None) and org_id:
+        from app.models.master import FireDept as _FD
+        org = db.get(_FD, org_id)
+        if org:
+            lat, lng = org.fallback_lat, org.fallback_lng
+    if lat is None or lng is None:
+        return HTMLResponse("Wetter")
+    current = await weather_service.get_current(lat, lng, org_id=org_id)
+    label = f"{current.temperature_c:.0f}°C" if current and current.temperature_c is not None else "Wetter"
+    return HTMLResponse(label)
 
 
 # ── Globale Wetter-Seite (/wetter) ───────────────────────────────────────────
