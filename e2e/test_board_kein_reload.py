@@ -216,6 +216,101 @@ def test_zwei_sessions_aendern_parallel(
     expect(second.locator(".card", has_text=one)).to_be_visible(timeout=10_000)
 
 
+def test_statuswechsel_aktualisieren_alle_kartentypen_in_zweiter_session(
+    angemeldete_seite: Page, zweiter_kontext: BrowserContext, base_url: str
+) -> None:
+    """Die echten Status-Controls synchronisieren jede Kartenart ohne Reload."""
+    first, second = angemeldete_seite, zweiter_kontext.pages[0]
+    _board(first, base_url)
+    _board(second, base_url)
+    second_load_id = _load_id(second)
+
+    first.get_by_title("Einheit zum Einsatz hinzufügen").first.click()
+    suggestion = first.locator("#vehicleWizard .suggestion-pill--block:not([disabled])").first
+    expect(suggestion).to_be_visible(timeout=10_000)
+    vehicle_code = suggestion.locator("strong").inner_text()
+    suggestion.click()
+    first.locator("#vehicleWizard form").first.get_by_role("button", name="Einheit hinzufügen").click()
+    vehicle = first.locator('.card[data-kind="vehicle"]', has_text=vehicle_code).last
+    expect(vehicle).to_be_visible(timeout=10_000)
+    vehicle_id = vehicle.get_attribute("data-uid")
+    assert vehicle_id
+    vehicle_status = vehicle.locator("button[aria-label^='Einheitenstatus:']")
+    vehicle_status.click()
+    vehicle_next = vehicle.locator("[role=menuitem]").first
+    expected_vehicle_status = vehicle_next.inner_text()
+    vehicle_next.click()
+    expect(second.locator(f"#vehicle-card-{vehicle_id} button[aria-label^='Einheitenstatus:']")).to_have_text(
+        expected_vehicle_status, timeout=10_000
+    )
+
+    task = first.locator('.card[data-kind="task"]').first
+    task_id = task.get_attribute("data-uid")
+    assert task_id
+    task.locator("button[aria-label^='Auftragsstatus:']").click()
+    task.get_by_role("menuitem", name="Status auf In Arbeit setzen").click()
+    expect(second.locator(f"#task-card-{task_id}")).to_have_attribute("data-status", "in_progress", timeout=10_000)
+
+    message_title = "E2E Status Meldung " + uuid4().hex
+    _mutation(first, message_title)
+    message = first.locator('.card[data-kind="message"]', has_text=message_title)
+    expect(message).to_be_visible(timeout=10_000)
+    message_id = message.get_attribute("data-uid")
+    assert message_id
+    message.locator("button[aria-label^='Meldungsstatus:']").click()
+    message.get_by_role("menuitem", name="Status auf Achtung setzen").click()
+    expect(second.locator(f"#msg-card-{message_id}")).to_have_attribute("data-status", "achtung", timeout=10_000)
+
+    person_name = "E2E Status Person " + uuid4().hex[:8]
+    first.get_by_title("Gerettete Person erfassen").click()
+    first.locator("#personWizard input[x-model=quickName]").first.fill(person_name)
+    first.locator("#personWizard").get_by_role("button", name="Speichern").click()
+    person = first.locator('.card[data-kind="person"]', has_text=person_name)
+    expect(person).to_be_visible(timeout=10_000)
+    person_id = person.get_attribute("data-uid")
+    assert person_id
+    person.locator("select[name=status]").select_option("versorgt")
+    expect(second.locator(f"#person-card-{person_id}")).to_have_attribute("data-status", "versorgt", timeout=10_000)
+
+    assert _load_id(second) == second_load_id
+
+
+def test_personen_abschnitt_erscheint_desktop_und_im_mobilen_personen_lane(
+    angemeldete_seite: Page, zweiter_kontext: BrowserContext, base_url: str
+) -> None:
+    first, second = angemeldete_seite, zweiter_kontext.pages[0]
+    first.set_viewport_size({"width": 1920, "height": 1080})
+    _board(first, base_url)
+    _board(second, base_url)
+
+    first.get_by_role("button", name="Abschnitt hinzufügen").click()
+    dialog = first.locator("#addColumnDialog")
+    dialog.locator('input[name="title"]').fill("E2E Personenabschnitt")
+    dialog.locator('select[name="column_kind"]').select_option("rescued")
+    dialog.get_by_role("button", name="Anlegen").click()
+
+    person_col = second.locator('.kanban-col[data-lane="persons"]', has_text="E2E Personenabschnitt")
+    expect(person_col).to_be_visible(timeout=10_000)
+    col_id = person_col.get_attribute("id")
+    assert col_id and col_id.startswith("col-")
+    column_id = col_id.removeprefix("col-")
+
+    second.set_viewport_size({"width": 390, "height": 844})
+    second.locator("#mobile-lane-select").select_option("persons")
+    expect(person_col).to_have_attribute("data-lane-active", "")
+    expect(person_col).to_be_visible()
+
+    csrf_token = first.evaluate(
+        "document.cookie.split('; ').find(v => v.startsWith('ec_csrf='))?.split('=').slice(1).join('=')"
+    )
+    assert csrf_token
+    response = first.request.delete(
+        f"{base_url}/einsatz/{INCIDENT_ID}/spalten/{column_id}",
+        headers={"X-CSRF-Token": csrf_token},
+    )
+    assert response.status == 204
+
+
 def test_fahrzeug_zuordnung_und_loesen_aktualisiert_beide_sessions(
     angemeldete_seite: Page, zweiter_kontext: BrowserContext, base_url: str
 ) -> None:
