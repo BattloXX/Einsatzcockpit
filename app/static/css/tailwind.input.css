@@ -608,6 +608,8 @@ body.mobile-menu-open { overflow: hidden; }
   background: var(--surface-elevated, var(--surface-highest)); box-shadow: 0 12px 28px rgba(0,0,0,.28);
 }
 .weather-popover__loading { font-size: .75rem; color: var(--text-muted); }
+.header-dropdown__menu .weather-popover { position: static; }
+.header-dropdown__menu .weather-popover__panel { left: 8px; right: 8px; width: auto; }
 .dropdown-section-label { padding: 7px 12px 3px; color: var(--text-muted); font-size: .66rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .dropdown-section-label--danger, .dropdown-item--danger { color: var(--danger); }
 

@@ -21,6 +21,30 @@
               @click="open=!open"
               {{ tip('Weitere Aktionen: KI, Drohne, QR-Code, PDF-Export') }}>⋯</button>
       <div class="header-dropdown__menu" x-show="open" x-cloak x-transition.opacity.duration.150ms role="menu">
+        <div class="dropdown-section-label">Einsatzübersicht</div>
+        <a href="/einsatz/{{ incident.id }}/dashboard" class="dropdown-item" target="_blank" rel="noopener noreferrer">
+          <span class="di-icon">📊</span> Lagemonitor
+        </a>
+        {% if weather_enabled %}
+        <div class="weather-popover" x-data="{weatherOpen:false}">
+          <button type="button" class="dropdown-item" @click="weatherOpen=!weatherOpen"
+                  :aria-expanded="weatherOpen.toString()" aria-controls="wetter-panel">
+            <span class="di-icon">🌦</span> Wetter
+          </button>
+          <template x-if="weatherOpen">
+            <div id="wetter-panel" class="weather-popover__panel" role="dialog" aria-label="Wetter"
+                 hx-get="/einsatz/{{ incident.id }}/wetter/panel"
+                 hx-trigger="load, every 300s, retry-wetter"
+                 hx-swap="innerHTML"
+                 hx-on::response-error="wetterPanelError(this)"
+                 hx-on::send-error="wetterPanelError(this)"
+                 x-init="$nextTick(() => { if (window.htmx) htmx.process($el); })">
+              <span class="weather-popover__loading">Lade…</span>
+            </div>
+          </template>
+        </div>
+        {% endif %}
+        <hr class="dropdown-divider">
         {% if uas_einsatz_id or can_start_uas or (can_edit and ai_enabled) %}
         <div class="dropdown-section-label">Einsatzwerkzeuge</div>
         {% if uas_einsatz_id %}
@@ -79,23 +103,6 @@
       <span class="sr-only" x-text="connectionStatus">verbunden</span>
     </span>
   </div>
-  {% if weather_enabled %}
-  <div class="weather-popover" x-data="{open:false}" @click.outside="open=false">
-    <button type="button" class="weather-chip" @click="open=!open" :aria-expanded="open.toString()"
-            aria-controls="wetter-panel" aria-label="Wetter öffnen oder schließen">🌦 Wetter</button>
-    <template x-if="open">
-      <div id="wetter-panel" class="weather-popover__panel" role="dialog" aria-label="Wetter"
-           hx-get="/einsatz/{{ incident.id }}/wetter/panel"
-           hx-trigger="load, every 300s, retry-wetter"
-           hx-swap="innerHTML"
-           hx-on::response-error="wetterPanelError(this)"
-           hx-on::send-error="wetterPanelError(this)"
-           x-init="$nextTick(() => { if (window.htmx) htmx.process($el); })">
-        <span class="weather-popover__loading">Lade…</span>
-      </div>
-    </template>
-  </div>
-  {% endif %}
   {% if lage_hints %}{% include "incident/_header_lage_ticker.html" %}{% endif %}
   {% include "incident/_wache_status.html" %}
   <div class="incident-header__actions">

@@ -538,6 +538,24 @@ function incidentBoard(incidentId, alarm, startedAt) {
       document.dispatchEvent(new CustomEvent('board-last-update', { detail: Date.now() }));
     },
 
+    // Einige Mutation-Endpunkte antworten absichtlich mit 204, weil es kein
+    // passendes lokales Fragment gibt (z. B. Status, DnD und Spaltenstruktur).
+    // Ihr WS-Echo ist damit auch in der auslösenden Sitzung die einzige
+    // Aktualisierung.  Anlage-Endpunkte dürfen ebenfalls hierdurch laufen:
+    // ein nachfolgender Fragment-Swap ist idempotent und hält insbesondere die
+    // Lane-Zähler zuverlässig synchron.
+    _needsOwnBoardEcho(type) {
+      return new Set([
+        'vehicle_updated', 'task_assigned', 'message_assigned', 'person_updated',
+        'task_updated', 'message_updated', 'task_cancelled', 'person_deleted',
+        'vehicle_added', 'vehicle_moved', 'task_created', 'message_created',
+        'ai_suggestions_ready', 'card_moved',
+        'column_renamed', 'column_updated', 'column_created', 'column_deleted',
+        'columns_reordered', 'alarm_type_changed', 'address_updated',
+        'incident_leader_changed', 'ai_hints_ready',
+      ]).has(type);
+    },
+
     // ── Board-Events: gezielter HTMX-Swap statt Voll-Reload ────────────────
     _cardElId(kind, uid) {
       return `${kind === 'message' ? 'msg' : kind}-card-${uid}`;
@@ -764,7 +782,11 @@ function incidentBoard(incidentId, alarm, startedAt) {
         ws.onmessage = (e) => {
           if (e.data === 'pong') return;
           const ev = JSON.parse(e.data);
-          if (ev.origin && ev.origin === this._clientId) return;
+          // Eigene Events werden normalerweise unterdrückt, damit lokale HTMX-
+          // Antworten nicht doppelt verarbeitet werden. Board-Mutationen sind
+          // die Ausnahme: mehrere davon liefern nur 204 und brauchen dieses
+          // Echo überhaupt erst; die gezielten Fragment-Swaps sind idempotent.
+          if (ev.origin && ev.origin === this._clientId && !this._needsOwnBoardEcho(ev.type)) return;
           this._bumpLastUpdate();
           this._handleBoardEvent(ev, id);
           if (ev.reload_breathing || ev.type === 'troop_created' || ev.type === 'troop_started' || ev.type === 'troop_status_changed') {

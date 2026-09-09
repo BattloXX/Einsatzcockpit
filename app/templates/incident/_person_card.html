@@ -15,6 +15,7 @@
                 aria-label="{{ ps|person_status_label }}"
                 hx-post="/einsatz/{{ incident.id }}/person/{{ person.id }}/status"
                 hx-trigger="change"
+                hx-include="this"
                 hx-swap="none"
                 onchange="this.className='form-select form-select--xs form-select--person-status-compact person-status-'+this.value">
           <option value="gefunden" {% if ps=='gefunden' %}selected{% endif %}>🔴</option>

@@ -14,7 +14,6 @@
   {% for key, url, icon, label, visible in _targets %}{% if visible %}
   <a href="{{ url }}" class="subtabnav__item{% if active == key %} subtabnav__item--active{% endif %}"{% if active == key %} aria-current="page"{% endif %}>{{ icon }} {{ label }}</a>
   {% endif %}{% endfor %}
-  <a href="/einsatz/{{ incident.id }}/dashboard" class="subtabnav__item" target="_blank" rel="noopener noreferrer">📊 Dashboard</a>
   {% if uas_einsatz_id is defined and uas_einsatz_id %}<a href="/uas/einsatz/{{ uas_einsatz_id }}" class="subtabnav__item">🚁 Drohne</a>{% endif %}
 </nav>
 {% endif %}
@@ -25,7 +24,6 @@
     {% for key, url, icon, label, visible in _targets %}{% if visible %}
     <a href="{{ url }}" class="incident-subnav__item{% if active == key %} incident-subnav__item--active{% endif %}"{% if active == key %} aria-current="page"{% endif %}>{{ icon }} {{ label }}</a>
     {% endif %}{% endfor %}
-    <a href="/einsatz/{{ incident.id }}/dashboard" class="incident-subnav__item" target="_blank" rel="noopener noreferrer">📊 Dashboard</a>
   </nav>
 </details>
 {% endif %}
