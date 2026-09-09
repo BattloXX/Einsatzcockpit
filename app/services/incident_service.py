@@ -665,7 +665,7 @@ def add_section_column(
     column_kind: str = "vehicles",
     user_id: int | None = None,
 ) -> IncidentColumn:
-    allowed_kinds = {"vehicles", "tasks", "messages"}
+    allowed_kinds = {"vehicles", "tasks", "messages", "rescued"}
     kind = column_kind if column_kind in allowed_kinds else "vehicles"
     max_order = max((c.display_order for c in incident.columns), default=0)
     col = IncidentColumn(

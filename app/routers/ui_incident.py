@@ -861,7 +861,9 @@ def board_card_fragment(
         return Response("Nicht gefunden", status_code=404)
     can_edit = has_role(user, "incident_leader", "admin", "recorder")
     return templates.TemplateResponse(request, f"incident/{template_name}", {
-        "incident": incident, "can_edit": can_edit, var_name: entity,
+        "incident": incident, "can_edit": can_edit,
+        "unit_status_values": UNIT_STATUS_VALUES,
+        var_name: entity,
     })
 
 
@@ -912,6 +914,7 @@ def board_column_content_fragment(
     col_count = _column_card_count(incident, col)
     return templates.TemplateResponse(request, "incident/_col_body.html", {
         "incident": incident, "can_edit": can_edit, "col": col,
+        "unit_status_values": UNIT_STATUS_VALUES,
         "col_vehicles": col_vehicles, "col_tasks": col_tasks,
         "col_messages": col_messages, "col_persons": col_persons,
         "lage_sprueche": lage_sprueche, "col_count": col_count, "oob_count": True,
@@ -949,6 +952,7 @@ def board_column_fragment(
     )
     return templates.TemplateResponse(request, "incident/_kanban_col.html", {
         "incident": incident, "can_edit": can_edit, "col": col,
+        "unit_status_values": UNIT_STATUS_VALUES,
         "kind_to_lane": {"tasks": "tasks", "messages": "messages", "rescued": "persons"},
         "section_leader_candidates": list_section_leader_candidates(db, org_ids),
         "lage_sprueche": lage_sprueche, "oob": True,
@@ -984,6 +988,7 @@ def board_kanban_fragment(
     )
     return templates.TemplateResponse(request, "incident/_kanban_body.html", {
         "incident": incident, "can_edit": can_edit,
+        "unit_status_values": UNIT_STATUS_VALUES,
         "section_leader_candidates": list_section_leader_candidates(db, org_ids),
         "lage_sprueche": lage_sprueche,
     })
