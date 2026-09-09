@@ -206,6 +206,14 @@ function openQuickAddMsgForVehicle(vehicleId) {
   dlg.showModal();
 }
 
+function openPersonWizard(columnId) {
+  const dlg = document.getElementById('personWizard');
+  if (!dlg) return;
+  const comp = Alpine.$data(dlg);
+  if (comp) comp.columnId = String(columnId);
+  dlg.showModal();
+}
+
 function personWizard() {
   return {
     step: 0, gender: 'Unbekannt', group: 'Erwachsen', quickName: '',
@@ -446,7 +454,7 @@ window.openVehicleWizard = openVehicleWizard;
 window.openQuickAddTask = openQuickAddTask;
 window.openQuickAddTaskForVehicle = openQuickAddTaskForVehicle;
 window.openQuickAddMsgForVehicle = openQuickAddMsgForVehicle;
+window.openPersonWizard = openPersonWizard;
 window.personWizard = personWizard;
 window.vehicleWizard = vehicleWizard;
 window.lageTicker = lageTicker;
-

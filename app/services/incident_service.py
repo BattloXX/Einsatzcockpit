@@ -1027,7 +1027,7 @@ def _card_order_or_default(db: Session, col: IncidentColumn) -> list[dict]:
     if col.column_kind == "rescued":
         persons = (
             db.query(RescuedPerson)
-            .filter(RescuedPerson.incident_id == col.incident_id, RescuedPerson.vehicle_id.is_(None))
+            .filter(RescuedPerson.column_id == col.id, RescuedPerson.vehicle_id.is_(None))
             .order_by(RescuedPerson.created_at)
             .all()
         )
@@ -1148,6 +1148,7 @@ def delete_section_column(db: Session, column: IncidentColumn, user_id: int | No
         Task.vehicle_id.is_(None),
     ).count()
     msgs = db.query(Message).filter(Message.column_id == column.id).count()
+    persons = db.query(RescuedPerson).filter(RescuedPerson.column_id == column.id).count()
 
     parts = []
     if active_vehicles:
@@ -1156,6 +1157,8 @@ def delete_section_column(db: Session, column: IncidentColumn, user_id: int | No
         parts.append(f"{tasks} Auftrag{'äge' if tasks != 1 else ''}")
     if msgs:
         parts.append(f"{msgs} Meldung{'en' if msgs != 1 else ''}")
+    if persons:
+        parts.append(f"{persons} Person{'en' if persons != 1 else ''}")
 
     if parts:
         raise ValueError(
@@ -1331,7 +1334,7 @@ def move_card(
         person = db.get(RescuedPerson, uid)
         if not person:
             return
-        before = {"vehicle_id": person.vehicle_id}
+        before = {"column_id": person.column_id, "vehicle_id": person.vehicle_id}
         if vehicle_id:
             v = db.get(IncidentVehicle, vehicle_id)
             if not v:
@@ -1344,17 +1347,15 @@ def move_card(
                 user_id=user_id,
             )
         else:
-            # Personen haben keine column_id. Eine freie Person gehoert daher
-            # ausschliesslich in die eine "rescued"-Spalte; ein Drop auf eine
-            # beliebige andere Lane darf ihren Zustand nicht veraendern.
             col = db.get(IncidentColumn, column_id) if column_id else None
             if not col or col.incident_id != incident_id or col.column_kind != "rescued":
                 return
             person.vehicle_id = None
+            person.column_id = col.id
             db.flush()
             write_incident_change(
                 db, incident_id, "person.moved", "rescued_person", uid,
-                before=before, after={"vehicle_id": None},
+                before=before, after={"column_id": col.id, "vehicle_id": None},
                 user_id=user_id,
             )
 

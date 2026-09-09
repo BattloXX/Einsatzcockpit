@@ -223,6 +223,9 @@ class IncidentColumn(Base):
         foreign_keys="Task.column_id",
         overlaps="column"
     )
+    persons: Mapped[list[RescuedPerson]] = relationship(
+        back_populates="column", foreign_keys="RescuedPerson.column_id"
+    )
     section_leader: Mapped[Member | None] = relationship(
         "Member", foreign_keys=[section_leader_member_id], lazy="joined"
     )
@@ -505,11 +508,15 @@ class RescuedPerson(Base):
     age_range: Mapped[str | None] = mapped_column(String(30), nullable=True)
     name: Mapped[str | None] = mapped_column(String(150), nullable=True)
     location: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    column_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("incident_column.id", ondelete="RESTRICT"), nullable=False
+    )
     vehicle_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("incident_vehicle.id"), nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="gefunden")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
     incident: Mapped[Incident] = relationship(back_populates="rescued_persons")
+    column: Mapped[IncidentColumn] = relationship(back_populates="persons", foreign_keys=[column_id])
     vehicle: Mapped[IncidentVehicle | None] = relationship(
         foreign_keys=[vehicle_id], lazy="joined",
     )

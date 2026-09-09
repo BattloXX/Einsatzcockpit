@@ -11,7 +11,7 @@
           <span class="kanban-col__add-label">+ Einheit</span><span class="kanban-col__add-icon" aria-hidden="true">+</span>
         </button>
         {% elif col.column_kind == 'rescued' %}
-        <button class="kanban-col__add-btn kanban-col__add-btn--person" type="button" aria-label="Gerettete Person erfassen" data-ec-action="open-dialog" data-ec-dialog="personWizard" title="Gerettete Person erfassen">
+        <button class="kanban-col__add-btn kanban-col__add-btn--person" type="button" aria-label="Gerettete Person erfassen" onclick="openPersonWizard({{ col.id }})" title="Gerettete Person erfassen">
           <span class="kanban-col__add-label">+ Person</span><span class="kanban-col__add-icon" aria-hidden="true">+</span>
         </button>
         {% elif col.column_kind == 'messages' %}
