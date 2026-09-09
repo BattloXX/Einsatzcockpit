@@ -29,7 +29,9 @@ from app.models.master import FireDept, Member, MemberQualification, Qualificati
 from app.services.resource_service import get_dispatch_counts_for_sites
 from app.services.incident_service import (
     combined_verlauf,
+    delete_section_column,
     list_section_leader_candidates,
+    move_card,
     prepend_card,
 )
 
@@ -378,19 +380,53 @@ def test_rescued_person_vehicle_relationship(db, incident, org):
     db.add(vm)
     db.flush()
     col = IncidentColumn(incident_id=incident.id, code="dispatched", title="Disponiert", column_kind="vehicles")
-    db.add(col)
+    persons_col = IncidentColumn(incident_id=incident.id, code="rescued", title="Personen", column_kind="rescued")
+    db.add_all([col, persons_col])
     db.flush()
     veh = IncidentVehicle(incident_id=incident.id, column_id=col.id, vehicle_master_id=vm.id)
     db.add(veh)
     db.flush()
 
-    person = RescuedPerson(incident_id=incident.id, name="Max Muster", vehicle_id=veh.id, status="versorgt")
+    person = RescuedPerson(
+        incident_id=incident.id, column_id=persons_col.id, name="Max Muster",
+        vehicle_id=veh.id, status="versorgt",
+    )
     db.add(person)
     db.flush()
     db.refresh(person)
 
     assert person.vehicle is not None
     assert person.vehicle.vehicle_master.code == "KDOF"
+
+
+def test_rescued_person_moves_between_rescued_columns_once(db, incident):
+    first = IncidentColumn(incident_id=incident.id, code="rescued-a", title="Personen A", column_kind="rescued")
+    second = IncidentColumn(incident_id=incident.id, code="rescued-b", title="Personen B", column_kind="rescued")
+    db.add_all([first, second])
+    db.flush()
+    person = RescuedPerson(incident_id=incident.id, column_id=first.id, name="Einmal")
+    db.add(person)
+    db.commit()
+
+    for target in (second, first, second, first):
+        move_card(db, incident.id, "person", person.id, column_id=target.id, position=0)
+        db.commit()
+        db.refresh(person)
+        assert person.column_id == target.id
+        assert _column_card_count(incident, target) == 1
+        other = first if target.id == second.id else second
+        assert _column_card_count(incident, other) == 0
+
+
+def test_rescued_column_with_person_cannot_be_deleted(db, incident):
+    column = IncidentColumn(incident_id=incident.id, code="rescued", title="Personen", column_kind="rescued")
+    db.add(column)
+    db.flush()
+    db.add(RescuedPerson(incident_id=incident.id, column_id=column.id, name="Geschützt"))
+    db.commit()
+
+    with pytest.raises(ValueError, match="1 Person"):
+        delete_section_column(db, column)
 
 
 # ── combined_verlauf: Karten-Journal (IncidentChange) + Notizen (IncidentLog) ────

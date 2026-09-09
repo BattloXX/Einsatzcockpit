@@ -215,7 +215,10 @@ def _column_card_count(incident: Incident, col: IncidentColumn) -> int:
         len([v for v in incident.vehicles if v.column_id == col.id and v.removed_at is None]),
         len([t for t in incident.tasks if t.column_id == col.id]),
         len([m for m in incident.messages if m.column_id == col.id]),
-        len([p for p in incident.rescued_persons if p.vehicle_id is None]) if col.column_kind == "rescued" else 0,
+        len([
+            p for p in incident.rescued_persons
+            if p.column_id == col.id and p.vehicle_id is None
+        ]) if col.column_kind == "rescued" else 0,
     ))
 
 
@@ -910,7 +913,10 @@ def board_column_content_fragment(
     col_vehicles = [v for v in incident.vehicles if v.column_id == col.id and v.removed_at is None]
     col_tasks = [t for t in incident.tasks if t.column_id == col.id]
     col_messages = [m for m in incident.messages if m.column_id == col.id]
-    col_persons = [p for p in incident.rescued_persons if p.vehicle_id is None] if col.column_kind == "rescued" else []
+    col_persons = (
+        [p for p in incident.rescued_persons if p.column_id == col.id and p.vehicle_id is None]
+        if col.column_kind == "rescued" else []
+    )
     col_count = _column_card_count(incident, col)
     return templates.TemplateResponse(request, "incident/_col_body.html", {
         "incident": incident, "can_edit": can_edit, "col": col,
@@ -2298,6 +2304,7 @@ async def create_person(
     incident_id: int, request: Request,
     gender: str = Form("Unbekannt"), person_group: str = Form("Erwachsen"),
     age_range: str = Form(""), name: str = Form(""), location: str = Form(""),
+    column_id: int | None = Form(None),
     vehicle_id: int | None = Form(None),
     status: str = Form("gefunden"),
     note: str = Form(""),
@@ -2306,11 +2313,17 @@ async def create_person(
 ):
     if status not in PERSON_STATUS_VALUES:
         status = "gefunden"
+    incident = _incident_or_404(incident_id, db)
+    rescued_col = db.get(IncidentColumn, column_id) if column_id else None
+    if not rescued_col or rescued_col.incident_id != incident_id or rescued_col.column_kind != "rescued":
+        rescued_col = next((c for c in incident.columns if c.column_kind == "rescued"), None)
+    if not rescued_col:
+        return Response("Keine Personen-Spalte vorhanden", status_code=400)
     person = RescuedPerson(
         incident_id=incident_id,
         gender=gender, person_group=person_group,
         age_range=age_range or None, name=name or None,
-        location=location or None, vehicle_id=vehicle_id,
+        location=location or None, column_id=rescued_col.id, vehicle_id=vehicle_id,
         status=status,
     )
     db.add(person)
@@ -2318,12 +2331,7 @@ async def create_person(
     if note.strip():
         db.add(IncidentLog(incident_id=incident_id, text=note.strip(),
                            user_id=request.state.user.id, author_name=get_author_name(request)))
-    _incident_for_col = db.get(Incident, incident_id)
-    rescued_col = next(
-        (c for c in _incident_for_col.columns if c.code == "rescued"), None
-    ) if _incident_for_col else None
-    if rescued_col:
-        prepend_card(db, rescued_col.id, "person", person.id)
+    prepend_card(db, rescued_col.id, "person", person.id)
     from app.core.audit import write_incident_change
     write_incident_change(
         db, incident_id, "person.created", "person", person.id,
@@ -2334,8 +2342,6 @@ async def create_person(
     await manager.broadcast(incident_id, {
         "type": "person_created", "column_id": rescued_col.id if rescued_col else None,
     })
-    if not rescued_col:
-        return Response(status_code=204)
     board_incident = _load_board_incident(incident_id, db)
     assert board_incident is not None
     col = next(c for c in board_incident.columns if c.id == rescued_col.id)
@@ -3378,14 +3384,7 @@ async def move_card_endpoint(
     if _entry:
         _entity_before = db.get(_entry[0], uid)
         if _entity_before and kind == "person":
-            if _entity_before.vehicle_id is None:
-                source_column_id = next(
-                    (col.id for col in db.query(IncidentColumn).filter(
-                        IncidentColumn.incident_id == incident_id,
-                        IncidentColumn.column_kind == "rescued",
-                    )),
-                    None,
-                )
+            source_column_id = _entity_before.column_id
         elif _entity_before:
             source_column_id = _entity_before.column_id
         if _entity_before and source_vehicle_id == getattr(_entity_before, "vehicle_id", None):
@@ -3421,16 +3420,7 @@ async def move_card_endpoint(
         _entity_after = db.get(_entry[0], uid)
         if _entity_after is not None:
             if kind == "person":
-                if _entity_after.vehicle_id is None:
-                    target_column_id = next(
-                        (col.id for col in db.query(IncidentColumn).filter(
-                            IncidentColumn.incident_id == incident_id,
-                            IncidentColumn.column_kind == "rescued",
-                        )),
-                        None,
-                    )
-                else:
-                    target_column_id = None
+                target_column_id = _entity_after.column_id
             else:
                 target_column_id = _entity_after.column_id
             if kind in {"task", "message", "person"}:

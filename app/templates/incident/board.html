@@ -555,7 +555,7 @@
 {% endif %}
 
 <!-- Person Wizard Dialog -->
-<dialog class="modal" id="personWizard">
+<dialog class="modal" id="personWizard" x-data="{columnId: null}">
   <div class="modal__content" x-data="personWizard()">
     <div class="modal__header">
       <h3>Gerettete Person erfassen</h3>
@@ -566,6 +566,7 @@
       <input type="hidden" name="gender" :value="gender">
       <input type="hidden" name="person_group" :value="group">
       <input type="hidden" name="name" :value="quickName">
+      <input type="hidden" name="column_id" :value="columnId">
       <div class="modal__body">
         <!-- Step 0: Quick-Erfassung (Name, Einheit, Status) -->
         <div x-show="step === 0">

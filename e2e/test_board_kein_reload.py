@@ -346,6 +346,62 @@ def test_personen_abschnitt_erscheint_desktop_und_im_mobilen_personen_lane(
     assert response.status == 204
 
 
+def test_person_can_move_repeatedly_between_rescued_columns_without_duplicates(
+    angemeldete_seite: Page, zweiter_kontext: BrowserContext, base_url: str
+) -> None:
+    """A person has one persisted rescued column, even across repeated DnD moves."""
+    first, second = angemeldete_seite, zweiter_kontext.pages[0]
+    _board(first, base_url)
+    _board(second, base_url)
+
+    title = "E2E Zweite Personen-Spalte " + uuid4().hex[:8]
+    first.get_by_role("button", name="Abschnitt hinzufügen").click()
+    dialog = first.locator("#addColumnDialog")
+    dialog.locator('input[name="title"]').fill(title)
+    dialog.locator('select[name="column_kind"]').select_option("rescued")
+    dialog.get_by_role("button", name="Anlegen").click()
+
+    second_column = first.locator('.kanban-col[data-lane="persons"]', has_text=title)
+    expect(second_column).to_be_visible(timeout=10_000)
+    second_column_id = second_column.get_attribute("data-col-id")
+    first_column = first.locator('.kanban-col[data-lane="persons"]').filter(has_not_text=title).first
+    first_column_id = first_column.get_attribute("data-col-id")
+    assert first_column_id and second_column_id
+
+    person_name = "E2E Mehrfachzug Person " + uuid4().hex[:8]
+    second_column.get_by_title("Gerettete Person erfassen").click()
+    first.locator("#personWizard input[x-model=quickName]").first.fill(person_name)
+    first.locator("#personWizard").get_by_role("button", name="Speichern").click()
+    person = first.locator('.card[data-kind="person"]', has_text=person_name)
+    expect(person).to_be_visible(timeout=10_000)
+    person_uid = person.get_attribute("data-uid")
+    assert person_uid
+
+    for target_column_id in (first_column_id, second_column_id, first_column_id, second_column_id):
+        _move_card(first, "person", person_uid, column_id=target_column_id)
+        for page in (first, second):
+            target_card = page.locator(
+                f"#zone-{target_column_id} .card[data-kind='person']", has_text=person_name
+            )
+            expect(target_card).to_have_count(1, timeout=10_000)
+            expect(page.locator('.card[data-kind="person"]', has_text=person_name)).to_have_count(1, timeout=10_000)
+
+    csrf_token = first.evaluate(
+        "document.cookie.split('; ').find(v => v.startsWith('ec_csrf='))?.split('=').slice(1).join('=')"
+    )
+    assert csrf_token
+    person_response = first.request.post(
+        f"{base_url}/einsatz/{INCIDENT_ID}/person/{person_uid}/loeschen",
+        headers={"X-CSRF-Token": csrf_token},
+    )
+    assert person_response.status in (200, 204)
+    response = first.request.delete(
+        f"{base_url}/einsatz/{INCIDENT_ID}/spalten/{second_column_id}",
+        headers={"X-CSRF-Token": csrf_token},
+    )
+    assert response.status == 204
+
+
 def test_fahrzeug_zuordnung_und_loesen_aktualisiert_beide_sessions(
     angemeldete_seite: Page, zweiter_kontext: BrowserContext, base_url: str
 ) -> None:
