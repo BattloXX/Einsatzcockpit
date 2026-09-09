@@ -131,7 +131,11 @@
           const vehicleId = toZone.dataset.vehicleId;
           if (!vehicleId) return;
           if (kind === 'vehicle') return; // Fahrzeug auf Fahrzeug ergibt keinen Sinn
-          postMove(incidentId, { kind, uid, vehicle_id: vehicleId, position });
+          const payload = { kind, uid, vehicle_id: vehicleId, position };
+          if (evt.from.classList.contains('sortable-zone--vehicle')) {
+            payload.source_vehicle_id = evt.from.dataset.vehicleId;
+          }
+          postMove(incidentId, payload);
           return;
         }
 
@@ -151,6 +155,7 @@
         const payload = { kind, uid, column_id: toColumnId, position, zone_order: zoneOrder };
         if (evt.from.classList.contains('sortable-zone--vehicle')) {
           payload.detach_vehicle = '1';
+          payload.source_vehicle_id = evt.from.dataset.vehicleId;
         }
         postMove(incidentId, payload);
       } catch (err) {

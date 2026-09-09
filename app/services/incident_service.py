@@ -1027,7 +1027,7 @@ def _card_order_or_default(db: Session, col: IncidentColumn) -> list[dict]:
     if col.column_kind == "rescued":
         persons = (
             db.query(RescuedPerson)
-            .filter(RescuedPerson.incident_id == col.incident_id)
+            .filter(RescuedPerson.incident_id == col.incident_id, RescuedPerson.vehicle_id.is_(None))
             .order_by(RescuedPerson.created_at)
             .all()
         )
@@ -1287,6 +1287,7 @@ def move_card(
             if not v:
                 return
             msg.vehicle_id = vehicle_id
+            msg.column_id = None
             db.flush()
             write_incident_change(
                 db, incident_id, "message.assigned", "message", uid,
