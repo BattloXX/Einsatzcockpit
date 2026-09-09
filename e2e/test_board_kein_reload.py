@@ -68,8 +68,12 @@ def _move_card(page: Page, kind: str, uid: str, **payload: str) -> None:
     data = {"kind": kind, "uid": uid, "position": "0", **payload}
     status = page.evaluate(
         """async ({incidentId, data}) => {
+          const clientId = sessionStorage.getItem('ecBoardClientId');
           const response = await fetch(`/einsatz/${incidentId}/karte/verschieben`, {
-            method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            method: 'POST', headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'X-EC-Client': clientId,
+            },
             body: new URLSearchParams(data), credentials: 'same-origin'
           });
           return response.status;
@@ -216,14 +220,14 @@ def test_zwei_sessions_aendern_parallel(
     expect(second.locator(".card", has_text=one)).to_be_visible(timeout=10_000)
 
 
-def test_statuswechsel_aktualisieren_alle_kartentypen_in_zweiter_session(
+def test_statuswechsel_aktualisieren_alle_kartentypen_in_beiden_sessions(
     angemeldete_seite: Page, zweiter_kontext: BrowserContext, base_url: str
 ) -> None:
     """Die echten Status-Controls synchronisieren jede Kartenart ohne Reload."""
     first, second = angemeldete_seite, zweiter_kontext.pages[0]
     _board(first, base_url)
     _board(second, base_url)
-    second_load_id = _load_id(second)
+    first_load_id, second_load_id = _load_id(first), _load_id(second)
 
     first.get_by_title("Einheit zum Einsatz hinzufügen").first.click()
     suggestion = first.locator("#vehicleWizard .suggestion-pill--block:not([disabled])").first
@@ -240,6 +244,9 @@ def test_statuswechsel_aktualisieren_alle_kartentypen_in_zweiter_session(
     vehicle_next = vehicle.locator("[role=menuitem]").first
     expected_vehicle_status = vehicle_next.inner_text()
     vehicle_next.click()
+    expect(first.locator(f"#vehicle-card-{vehicle_id} button[aria-label^='Einheitenstatus:']")).to_have_text(
+        expected_vehicle_status, timeout=10_000
+    )
     expect(second.locator(f"#vehicle-card-{vehicle_id} button[aria-label^='Einheitenstatus:']")).to_have_text(
         expected_vehicle_status, timeout=10_000
     )
@@ -249,6 +256,7 @@ def test_statuswechsel_aktualisieren_alle_kartentypen_in_zweiter_session(
     assert task_id
     task.locator("button[aria-label^='Auftragsstatus:']").click()
     task.get_by_role("menuitem", name="Status auf In Arbeit setzen").click()
+    expect(first.locator(f"#task-card-{task_id}")).to_have_attribute("data-status", "in_progress", timeout=10_000)
     expect(second.locator(f"#task-card-{task_id}")).to_have_attribute("data-status", "in_progress", timeout=10_000)
 
     message_title = "E2E Status Meldung " + uuid4().hex
@@ -259,10 +267,11 @@ def test_statuswechsel_aktualisieren_alle_kartentypen_in_zweiter_session(
     assert message_id
     message.locator("button[aria-label^='Meldungsstatus:']").click()
     message.get_by_role("menuitem", name="Status auf Achtung setzen").click()
+    expect(first.locator(f"#msg-card-{message_id}")).to_have_attribute("data-status", "achtung", timeout=10_000)
     expect(second.locator(f"#msg-card-{message_id}")).to_have_attribute("data-status", "achtung", timeout=10_000)
 
     person_name = "E2E Status Person " + uuid4().hex[:8]
-    first.get_by_title("Gerettete Person erfassen").click()
+    first.get_by_title("Gerettete Person erfassen").first.click()
     first.locator("#personWizard input[x-model=quickName]").first.fill(person_name)
     first.locator("#personWizard").get_by_role("button", name="Speichern").click()
     person = first.locator('.card[data-kind="person"]', has_text=person_name)
@@ -270,8 +279,10 @@ def test_statuswechsel_aktualisieren_alle_kartentypen_in_zweiter_session(
     person_id = person.get_attribute("data-uid")
     assert person_id
     person.locator("select[name=status]").select_option("versorgt")
+    expect(first.locator(f"#person-card-{person_id}")).to_have_attribute("data-status", "versorgt", timeout=10_000)
     expect(second.locator(f"#person-card-{person_id}")).to_have_attribute("data-status", "versorgt", timeout=10_000)
 
+    assert _load_id(first) == first_load_id
     assert _load_id(second) == second_load_id
 
 
@@ -289,6 +300,8 @@ def test_personen_abschnitt_erscheint_desktop_und_im_mobilen_personen_lane(
     dialog.locator('select[name="column_kind"]').select_option("rescued")
     dialog.get_by_role("button", name="Anlegen").click()
 
+    own_person_col = first.locator('.kanban-col[data-lane="persons"]', has_text="E2E Personenabschnitt")
+    expect(own_person_col).to_be_visible(timeout=10_000)
     person_col = second.locator('.kanban-col[data-lane="persons"]', has_text="E2E Personenabschnitt")
     expect(person_col).to_be_visible(timeout=10_000)
     col_id = person_col.get_attribute("id")
@@ -333,7 +346,7 @@ def test_fahrzeug_zuordnung_und_loesen_aktualisiert_beide_sessions(
     vehicle_id = vehicle.get_attribute("data-uid")
     assert vehicle_id
 
-    second_load_id = _load_id(second)
+    first_load_id, second_load_id = _load_id(first), _load_id(second)
 
     # Native SortableJS drag isn't reliably simulatable via Playwright's mouse API
     # (no other test in this suite attempts it either) — exercise the same
@@ -341,7 +354,7 @@ def test_fahrzeug_zuordnung_und_loesen_aktualisiert_beide_sessions(
     # like the task/message coverage below. A person must vanish from the rescued
     # column and appear in the other browser's vehicle mini-zone without reload.
     person_name = "E2E DnD Person " + uuid4().hex[:8]
-    first.get_by_title("Gerettete Person erfassen").click()
+    first.get_by_title("Gerettete Person erfassen").first.click()
     first.locator("#personWizard input[x-model=quickName]").first.fill(person_name)
     first.locator("#personWizard").get_by_role("button", name="Speichern").click()
     person = first.locator('.card[data-kind="person"]', has_text=person_name)
@@ -354,6 +367,8 @@ def test_fahrzeug_zuordnung_und_loesen_aktualisiert_beide_sessions(
     _move_card(first, "person", person_uid, vehicle_id=vehicle_id)
 
     other_vehicle = second.locator(f"#vehicle-card-{vehicle_id}")
+    own_vehicle = first.locator(f"#vehicle-card-{vehicle_id}")
+    expect(own_vehicle.locator(".assigned-person", has_text=person_name)).to_be_visible(timeout=10_000)
     expect(other_vehicle.locator(".assigned-person", has_text=person_name)).to_be_visible(timeout=10_000)
     expect(second.locator(f"#zone-{person_column_id}").locator(".card", has_text=person_name)).not_to_be_visible()
     assert _load_id(second) == second_load_id
@@ -364,6 +379,7 @@ def test_fahrzeug_zuordnung_und_loesen_aktualisiert_beide_sessions(
         first, "person", person_uid, column_id=person_column_id,
         detach_vehicle="true", source_vehicle_id=vehicle_id,
     )
+    expect(own_vehicle.locator(".assigned-person", has_text=person_name)).not_to_be_visible(timeout=10_000)
     expect(other_vehicle.locator(".assigned-person", has_text=person_name)).not_to_be_visible(timeout=10_000)
     expect(second.locator(f"#zone-{person_column_id}").locator(".card", has_text=person_name)).to_be_visible(
         timeout=10_000
@@ -387,6 +403,7 @@ def test_fahrzeug_zuordnung_und_loesen_aktualisiert_beide_sessions(
         assert uid and column_id
         _move_card(first, kind, uid, vehicle_id=vehicle_id)
         assigned_class = f".assigned-{'task' if kind == 'task' else 'msg'}"
+        expect(own_vehicle.locator(assigned_class, has_text=title)).to_be_visible(timeout=10_000)
         expect(other_vehicle.locator(assigned_class, has_text=title)).to_be_visible(timeout=10_000)
         source_html = first.evaluate(
             "url => fetch(url).then(response => response.text())",
@@ -403,6 +420,7 @@ def test_fahrzeug_zuordnung_und_loesen_aktualisiert_beide_sessions(
         _move_card(
             first, kind, uid, column_id=column_id, detach_vehicle="true", source_vehicle_id=vehicle_id
         )
+        expect(own_vehicle.locator(assigned_class, has_text=title)).not_to_be_visible(timeout=10_000)
         expect(other_vehicle.locator(assigned_class, has_text=title)).not_to_be_visible(timeout=10_000)
         source_html = first.evaluate(
             "url => fetch(url).then(response => response.text())",
@@ -413,7 +431,10 @@ def test_fahrzeug_zuordnung_und_loesen_aktualisiert_beide_sessions(
             f"/einsatz/{INCIDENT_ID}/karte/vehicle/{vehicle_id}",
         )
         assert f'id="{card_id}"' in source_html
-        assert title not in vehicle_html
+        assert f'id="{card_id}"' not in vehicle_html
+
+    assert _load_id(first) == first_load_id
+    assert _load_id(second) == second_load_id
 
 
 def test_wizard_formulare_zeigen_neue_karten_ohne_reload(angemeldete_seite: Page, base_url: str) -> None:
@@ -433,7 +454,7 @@ def test_wizard_formulare_zeigen_neue_karten_ohne_reload(angemeldete_seite: Page
     expect(page.locator(".card", has_text=vehicle_code)).to_be_visible(timeout=10_000)
 
     person_name = "E2E Person " + uuid4().hex[:8]
-    page.get_by_title("Gerettete Person erfassen").click()
+    page.get_by_title("Gerettete Person erfassen").first.click()
     page.locator("#personWizard input[x-model=quickName]").first.fill(person_name)
     page.locator("#personWizard").get_by_role("button", name="Speichern").click()
     expect(page.locator(".card", has_text=person_name)).to_be_visible(timeout=10_000)
