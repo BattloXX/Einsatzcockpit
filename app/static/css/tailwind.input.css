@@ -324,6 +324,10 @@ body.mobile-menu-open { overflow: hidden; }
         border-right: 1px solid rgba(255,255,255,.04);
         border-bottom: 1px solid rgba(255,255,255,.04); }
 .card:hover { box-shadow: 0 4px 20px rgba(0,0,0,.6); transform: translateY(-1px); }
+/* Dropdowns belong to a card, but their panels extend over following cards.
+   Elevate the focused card itself (not only its absolutely positioned child),
+   otherwise a later sibling card can paint across the panel on touch devices. */
+.card:focus-within { z-index: 10; }
 .card--done { opacity: .55; }
 .card--cancelled { opacity: .4; }
 .card__status { position: absolute; top: 8px; right: 8px; width: 10px; height: 10px; border-radius: 50%; }
@@ -531,7 +535,7 @@ body.mobile-menu-open { overflow: hidden; }
 .incident-header {
   display: flex; align-items: center; gap: 16px; padding: 10px 20px;
   background: var(--surface-low); border-bottom: 1px solid var(--border);
-  flex-wrap: wrap;
+  flex-wrap: wrap; position: relative; z-index: 20; isolation: isolate;
 }
 .incident-header__alarm { display: flex; align-items: center; gap: 10px; }
 .incident-header__address { font-size: .9rem; color: var(--text-muted); }
@@ -601,7 +605,7 @@ body.mobile-menu-open { overflow: hidden; }
 .weather-popover__panel {
   position: absolute; z-index: 30; top: calc(100% + 6px); right: 0; width: min(340px, calc(100vw - 24px));
   padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px;
-  background: var(--surface-elevated); box-shadow: 0 12px 28px rgba(0,0,0,.28);
+  background: var(--surface-elevated, var(--surface-highest)); box-shadow: 0 12px 28px rgba(0,0,0,.28);
 }
 .weather-popover__loading { font-size: .75rem; color: var(--text-muted); }
 .dropdown-section-label { padding: 7px 12px 3px; color: var(--text-muted); font-size: .66rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
@@ -1268,12 +1272,19 @@ body.dnd-active .board-tabs { box-shadow: 0 0 0 2px var(--primary, #2563eb); }
   .card__body { padding: 12px 14px; padding-right: 32px; }
   .card__title { font-size: 1rem; line-height: 1.3; overflow-wrap: anywhere; }
   .card__sub, .card__gk, .card__meta { overflow-wrap: anywhere; }
-  .incident-header { gap: 6px; padding: 8px 12px; }
-  .incident-header__alarm { gap: 6px; flex-wrap: wrap; }
-  .incident-header__address { font-size: .78rem; width: 100%; }
-  .timer { font-size: 1.5rem; letter-spacing: 1px; }
+  .incident-header { gap: 4px; padding: 6px 10px; }
+  .incident-header__alarm { flex: 1 1 100%; gap: 5px; flex-wrap: nowrap; min-width: 0; }
+  .incident-header__grundwrap { flex: 1 1 0; }
+  .incident-header__grund { max-width: none; font-size: .8rem; }
+  .incident-header__address { font-size: .72rem; width: auto; }
+  .alarm-badge { padding: 3px 8px; font-size: .95rem; }
+  .exercise-badge { padding: 2px 6px; font-size: .62rem; }
+  .timer { font-size: 1.15rem; letter-spacing: .5px; }
+  .live-status { padding: 3px 7px; font-size: .66rem; }
+  .weather-chip { padding: 0 8px; font-size: .72rem; }
+  .incident-subnav__trigger { min-height: 44px; padding: .35rem .6rem; font-size: .76rem; }
   .incident-header__actions { gap: 4px; }
-  .incident-header__utility-actions { gap: 4px; margin-left: auto; }
+  .incident-header__utility-actions { gap: 4px; margin-left: 0; }
   .incident-header__utility-actions .header-dropdown__menu { max-width: calc(100vw - 24px); }
   .dropdown-item { min-height: 44px; }
   .mobile-lane-select { min-height: 44px; }
@@ -2993,6 +3004,9 @@ button.htmx-request,
       cursor: pointer;
       max-width: 160px;
     }
+    /* Der OOB-Kopf wird vor dem Board aufgebaut. Bis JavaScript die Optionen
+       ergänzt, darf der leere native Select keine zusätzliche Header-Zeile bilden. */
+    .mobile-lane-select:empty { display: none; }
     .board-tabs { display: none !important; }
     .task-suggestions { display: none !important; }
     /* Mobil: Kopfzeile auf Spaltenwechsel reduzieren, maximaler Platz fuer die Karten */
