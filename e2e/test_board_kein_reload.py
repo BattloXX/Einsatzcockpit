@@ -63,6 +63,22 @@ def _load_id(page: Page) -> str | None:
         return None
 
 
+def _move_card(page: Page, kind: str, uid: str, **payload: str) -> None:
+    """Sendet denselben form-urlencoded DnD-Request wie sortable-glue.js."""
+    data = {"kind": kind, "uid": uid, "position": "0", **payload}
+    status = page.evaluate(
+        """async ({incidentId, data}) => {
+          const response = await fetch(`/einsatz/${incidentId}/karte/verschieben`, {
+            method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: new URLSearchParams(data), credentials: 'same-origin'
+          });
+          return response.status;
+        }""",
+        {"incidentId": INCIDENT_ID, "data": data},
+    )
+    assert status == 204
+
+
 def test_board_bleibt_bei_updates_und_reconnect_montiert(
     angemeldete_seite: Page, zweiter_kontext: BrowserContext, base_url: str
 ) -> None:
@@ -198,6 +214,111 @@ def test_zwei_sessions_aendern_parallel(
     expect(second.locator(".card", has_text=two)).to_be_visible(timeout=10_000)
     expect(first.locator(".card", has_text=two)).to_be_visible(timeout=10_000)
     expect(second.locator(".card", has_text=one)).to_be_visible(timeout=10_000)
+
+
+def test_fahrzeug_zuordnung_und_loesen_aktualisiert_beide_sessions(
+    angemeldete_seite: Page, zweiter_kontext: BrowserContext, base_url: str
+) -> None:
+    """DnD refreshes the vehicle card and the old column in every WS session."""
+    first, second = angemeldete_seite, zweiter_kontext.pages[0]
+    _board(first, base_url)
+    _board(second, base_url)
+
+    # Don't assume an earlier test already added a unit to this incident (this
+    # test must also pass in isolation) — add one via the wizard, same as
+    # test_wizard_formulare_zeigen_neue_karten_ohne_reload below.
+    first.get_by_title("Einheit zum Einsatz hinzufügen").first.click()
+    suggestion = first.locator("#vehicleWizard .suggestion-pill--block:not([disabled])").first
+    expect(suggestion).to_be_visible(timeout=10_000)
+    vehicle_code = suggestion.locator("strong").inner_text()
+    suggestion.click()
+    first.locator("#vehicleWizard form").first.get_by_role("button", name="Einheit hinzufügen").click()
+    vehicle = first.locator('.card[data-kind="vehicle"]', has_text=vehicle_code).last
+    expect(vehicle).to_be_visible(timeout=10_000)
+    vehicle_id = vehicle.get_attribute("data-uid")
+    assert vehicle_id
+
+    second_load_id = _load_id(second)
+
+    # Native SortableJS drag isn't reliably simulatable via Playwright's mouse API
+    # (no other test in this suite attempts it either) — exercise the same
+    # form-urlencoded endpoint sortable-glue.js's onEnd() POSTs to instead, exactly
+    # like the task/message coverage below. A person must vanish from the rescued
+    # column and appear in the other browser's vehicle mini-zone without reload.
+    person_name = "E2E DnD Person " + uuid4().hex[:8]
+    first.get_by_title("Gerettete Person erfassen").click()
+    first.locator("#personWizard input[x-model=quickName]").first.fill(person_name)
+    first.locator("#personWizard").get_by_role("button", name="Speichern").click()
+    person = first.locator('.card[data-kind="person"]', has_text=person_name)
+    expect(person).to_be_visible(timeout=10_000)
+    person_uid = person.get_attribute("data-uid")
+    person_column_id = person.locator(
+        "xpath=ancestor::div[contains(concat(' ', normalize-space(@class), ' '), ' kanban-col ')]"
+    ).get_attribute("data-col-id")
+    assert person_uid and person_column_id
+    _move_card(first, "person", person_uid, vehicle_id=vehicle_id)
+
+    other_vehicle = second.locator(f"#vehicle-card-{vehicle_id}")
+    expect(other_vehicle.locator(".assigned-person", has_text=person_name)).to_be_visible(timeout=10_000)
+    expect(second.locator(f"#zone-{person_column_id}").locator(".card", has_text=person_name)).not_to_be_visible()
+    assert _load_id(second) == second_load_id
+
+    # Detach direction: person must reappear in "Gerettete Personen" for the other
+    # session and vanish from the vehicle card, without duplicating anywhere.
+    _move_card(
+        first, "person", person_uid, column_id=person_column_id,
+        detach_vehicle="true", source_vehicle_id=vehicle_id,
+    )
+    expect(other_vehicle.locator(".assigned-person", has_text=person_name)).not_to_be_visible(timeout=10_000)
+    expect(second.locator(f"#zone-{person_column_id}").locator(".card", has_text=person_name)).to_be_visible(
+        timeout=10_000
+    )
+
+    # Endpoint-level regression coverage for task/message assignment and detach:
+    # assert the actual source-column and vehicle-card fragments, not just DB state.
+    # Don't assume an earlier test seeded a message on this incident (this test
+    # must also pass in isolation, and seed_board_ci.py only seeds a task).
+    message_marker = "E2E DnD Meldung " + uuid4().hex[:8]
+    _mutation(first, message_marker)
+    expect(first.locator('.card[data-kind="message"]', has_text=message_marker)).to_be_visible(timeout=10_000)
+
+    for kind in ("task", "message"):
+        card = first.locator(f'.card[data-kind="{kind}"]').first
+        uid = card.get_attribute("data-uid")
+        title = card.locator(".card__title").inner_text()
+        column_id = card.locator(
+            "xpath=ancestor::div[contains(concat(' ', normalize-space(@class), ' '), ' kanban-col ')]"
+        ).get_attribute("data-col-id")
+        assert uid and column_id
+        _move_card(first, kind, uid, vehicle_id=vehicle_id)
+        assigned_class = f".assigned-{'task' if kind == 'task' else 'msg'}"
+        expect(other_vehicle.locator(assigned_class, has_text=title)).to_be_visible(timeout=10_000)
+        source_html = first.evaluate(
+            "url => fetch(url).then(response => response.text())",
+            f"/einsatz/{INCIDENT_ID}/spalte/{column_id}/inhalt",
+        )
+        vehicle_html = first.evaluate(
+            "url => fetch(url).then(response => response.text())",
+            f"/einsatz/{INCIDENT_ID}/karte/vehicle/{vehicle_id}",
+        )
+        card_id = f"{'msg' if kind == 'message' else kind}-card-{uid}"
+        assert f'id="{card_id}"' not in source_html
+        assert title in vehicle_html
+
+        _move_card(
+            first, kind, uid, column_id=column_id, detach_vehicle="true", source_vehicle_id=vehicle_id
+        )
+        expect(other_vehicle.locator(assigned_class, has_text=title)).not_to_be_visible(timeout=10_000)
+        source_html = first.evaluate(
+            "url => fetch(url).then(response => response.text())",
+            f"/einsatz/{INCIDENT_ID}/spalte/{column_id}/inhalt",
+        )
+        vehicle_html = first.evaluate(
+            "url => fetch(url).then(response => response.text())",
+            f"/einsatz/{INCIDENT_ID}/karte/vehicle/{vehicle_id}",
+        )
+        assert f'id="{card_id}"' in source_html
+        assert title not in vehicle_html
 
 
 def test_wizard_formulare_zeigen_neue_karten_ohne_reload(angemeldete_seite: Page, base_url: str) -> None:

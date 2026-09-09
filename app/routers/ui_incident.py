@@ -215,7 +215,7 @@ def _column_card_count(incident: Incident, col: IncidentColumn) -> int:
         len([v for v in incident.vehicles if v.column_id == col.id and v.removed_at is None]),
         len([t for t in incident.tasks if t.column_id == col.id]),
         len([m for m in incident.messages if m.column_id == col.id]),
-        len(incident.rescued_persons) if col.column_kind == "rescued" else 0,
+        len([p for p in incident.rescued_persons if p.vehicle_id is None]) if col.column_kind == "rescued" else 0,
     ))
 
 
@@ -908,7 +908,7 @@ def board_column_content_fragment(
     col_vehicles = [v for v in incident.vehicles if v.column_id == col.id and v.removed_at is None]
     col_tasks = [t for t in incident.tasks if t.column_id == col.id]
     col_messages = [m for m in incident.messages if m.column_id == col.id]
-    col_persons = incident.rescued_persons if col.column_kind == "rescued" else []
+    col_persons = [p for p in incident.rescued_persons if p.vehicle_id is None] if col.column_kind == "rescued" else []
     col_count = _column_card_count(incident, col)
     return templates.TemplateResponse(request, "incident/_col_body.html", {
         "incident": incident, "can_edit": can_edit, "col": col,
@@ -3356,6 +3356,7 @@ async def move_card_endpoint(
     column_id: int | None = Form(None),
     position: int = Form(0),
     vehicle_id: int | None = Form(None),
+    source_vehicle_id: int | None = Form(None),
     zone_order: str | None = Form(None),
     detach_vehicle: bool = Form(False),
     db: Session = Depends(get_db),
@@ -3363,9 +3364,22 @@ async def move_card_endpoint(
 ):
     _entry = _CARD_KIND_MODEL.get(kind)
     source_column_id = None
+    source_vehicle_uid = None
     if _entry:
         _entity_before = db.get(_entry[0], uid)
-        source_column_id = getattr(_entity_before, "column_id", None) if _entity_before else None
+        if _entity_before and kind == "person":
+            if _entity_before.vehicle_id is None:
+                source_column_id = next(
+                    (col.id for col in db.query(IncidentColumn).filter(
+                        IncidentColumn.incident_id == incident_id,
+                        IncidentColumn.column_kind == "rescued",
+                    )),
+                    None,
+                )
+        elif _entity_before:
+            source_column_id = _entity_before.column_id
+        if _entity_before and source_vehicle_id == getattr(_entity_before, "vehicle_id", None):
+            source_vehicle_uid = source_vehicle_id
     vehicle_status_before = (
         getattr(_entity_before, "unit_status", None) if kind == "vehicle" and _entry else None
     )
@@ -3391,14 +3405,31 @@ async def move_card_endpoint(
             pass
     db.commit()
     target_column_id = column_id
+    vehicle_uid = None
     _entity_after = None
     if _entry:
         _entity_after = db.get(_entry[0], uid)
         if _entity_after is not None:
-            target_column_id = getattr(_entity_after, "column_id", target_column_id)
+            if kind == "person":
+                if _entity_after.vehicle_id is None:
+                    target_column_id = next(
+                        (col.id for col in db.query(IncidentColumn).filter(
+                            IncidentColumn.incident_id == incident_id,
+                            IncidentColumn.column_kind == "rescued",
+                        )),
+                        None,
+                    )
+                else:
+                    target_column_id = None
+            else:
+                target_column_id = _entity_after.column_id
+            if kind in {"task", "message", "person"}:
+                vehicle_uid = _entity_after.vehicle_id
     await manager.broadcast(incident_id, {
         "type": "card_moved", "kind": kind, "uid": uid,
         "column_id": target_column_id, "source_column_id": source_column_id,
+        "vehicle_uid": vehicle_uid,
+        "source_vehicle_uid": source_vehicle_uid,
     })
     if kind == "vehicle" and _entity_after is not None:
         vehicle_status_after = getattr(_entity_after, "unit_status", None)
