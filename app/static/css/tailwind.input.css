@@ -608,6 +608,7 @@ body.mobile-menu-open { overflow: hidden; }
   background: var(--surface-elevated, var(--surface-highest)); box-shadow: 0 12px 28px rgba(0,0,0,.28);
 }
 .weather-popover__loading { font-size: .75rem; color: var(--text-muted); }
+.weather-popover__close { float:right; border:0; background:none; color:var(--text-muted); cursor:pointer; font-size:1.2rem; line-height:1; }
 .header-dropdown__menu .weather-popover { position: static; }
 .header-dropdown__menu .weather-popover__panel { left: 8px; right: 8px; width: auto; }
 .dropdown-section-label { padding: 7px 12px 3px; color: var(--text-muted); font-size: .66rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
@@ -1285,7 +1286,9 @@ body.dnd-active .board-tabs { box-shadow: 0 0 0 2px var(--primary, #2563eb); }
   .live-status { padding: 3px 7px; font-size: .66rem; }
   .weather-chip { padding: 0 8px; font-size: .72rem; }
   .incident-subnav__trigger { min-height: 44px; padding: .35rem .6rem; font-size: .76rem; }
-  .incident-header__actions { gap: 4px; }
+  .incident-header__actions { display:flex !important; gap:4px; }
+  .incident-header__actions > .incident-subnav--desktop,
+  .incident-header__actions > .header-dropdown { display:none !important; }
   .incident-header__utility-actions { gap: 4px; margin-left: 0; }
   .incident-header__utility-actions .header-dropdown__menu { max-width: calc(100vw - 24px); }
   .dropdown-item { min-height: 44px; }
@@ -3012,7 +3015,7 @@ button.htmx-request,
     .board-tabs { display: none !important; }
     .task-suggestions { display: none !important; }
     /* Mobil: Kopfzeile auf Spaltenwechsel reduzieren, maximaler Platz fuer die Karten */
-    .incident-header__actions { display: none !important; }
+    .incident-header__actions > :not(.incident-header__utility-actions) { display: none !important; }
     .bottom-nav { display: none !important; }
     .main-content { padding-bottom: 0 !important; }
   }

@@ -33,7 +33,7 @@
 {# ── Messwerte · Nowcast · Vorhersage in einer Zeile ────────────────────────── #}
 <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:5px;">
 
-  {% if current or weather_values.temp.value is not none or weather_values.wind.value is not none %}
+  {% if not current_values_duplicate_station and (current or weather_values.temp.value is not none or weather_values.wind.value is not none) %}
     {% if weather_values.temp.value is not none %}
     <span style="font-size:.83rem;display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap;">&#x1F321; <strong>{{ '%.1f'|format(weather_values.temp.value) }} &deg;C</strong>{% if weather_values.humidity.value is not none %} <span style="color:var(--text-muted);font-size:.74rem;">{{ weather_values.humidity.value|int }}%</span>{% endif %}<span style="font-size:.59rem;color:var(--text-muted);border:1px solid var(--border);border-radius:999px;padding:1px 5px;">{{ weather_values.temp.source }}</span>{{ frost_ice_badges(weather_values.temp.value, weather_values.dewpoint.value) }}</span>
     {% endif %}

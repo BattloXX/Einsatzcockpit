@@ -1688,6 +1688,7 @@ async def create_task(
     db.commit()
     await manager.broadcast(incident_id, {
         "type": "task_created", "task_id": task.id, "column_id": task.column_id,
+        "vehicle_uid": task.vehicle_id,
     })
     board_incident = _load_board_incident(incident_id, db)
     assert board_incident is not None
@@ -2231,7 +2232,9 @@ async def create_message(
             except _HE:
                 pass
         db.commit()
-    await manager.broadcast(incident_id, {"type": "message_created", "column_id": msg.column_id})
+    await manager.broadcast(incident_id, {
+        "type": "message_created", "column_id": msg.column_id, "vehicle_uid": msg.vehicle_id,
+    })
     board_incident = _load_board_incident(incident_id, db)
     assert board_incident is not None
     col = next(c for c in board_incident.columns if c.id == msg.column_id)
@@ -3117,7 +3120,9 @@ async def save_lagebild_journal(
     user_id = getattr(getattr(request.state, "user", None), "id", None)
     write_audit(db, "ai.lagebild.journal", incident_id=incident_id, user_id=user_id)
     db.commit()
-    await manager.broadcast(incident_id, {"type": "message_created", "column_id": msg.column_id})
+    await manager.broadcast(incident_id, {
+        "type": "message_created", "column_id": msg.column_id, "vehicle_uid": msg.vehicle_id,
+    })
     return Response(status_code=204)
 
 
@@ -3433,6 +3438,10 @@ async def move_card_endpoint(
     await manager.broadcast(incident_id, {
         "type": "card_moved", "kind": kind, "uid": uid,
         "column_id": target_column_id, "source_column_id": source_column_id,
+        # The browser has already optimistically put a card into this zone.
+        # Include it even for rejected person drops so each client removes the
+        # stale DOM copy by refreshing that zone.
+        "dropped_column_id": column_id,
         "vehicle_uid": vehicle_uid,
         "source_vehicle_uid": source_vehicle_uid,
     })

@@ -205,6 +205,28 @@ def test_hintergrund_tab_und_viewports(angemeldete_seite: Page, base_url: str) -
     assert _load_id(page) == load_id
 
 
+def test_header_actions_follow_mannschaft_und_bleiben_mobil_erreichbar(
+    angemeldete_seite: Page, base_url: str
+) -> None:
+    page = angemeldete_seite
+    page.set_viewport_size({"width": 1920, "height": 1080})
+    _board(page, base_url)
+    crew = page.get_by_role("link", name=re.compile("Mannschaft"))
+    more = page.get_by_role("button", name="Weitere Einsatzaktionen")
+    expect(crew).to_be_visible()
+    expect(more).to_be_visible()
+    assert crew.bounding_box() and more.bounding_box()
+    assert more.bounding_box()["x"] > crew.bounding_box()["x"]
+
+    page.set_viewport_size({"width": 390, "height": 844})
+    expect(more).to_be_visible()
+    # The single weather control is independently reachable and opens one panel.
+    weather = page.get_by_role("button", name="Wetter öffnen")
+    if weather.count():
+        weather.click()
+        expect(page.locator("#wetter-panel")).to_have_count(1)
+
+
 def test_zwei_sessions_aendern_parallel(
     angemeldete_seite: Page, zweiter_kontext: BrowserContext, base_url: str
 ) -> None:
@@ -348,6 +370,25 @@ def test_fahrzeug_zuordnung_und_loesen_aktualisiert_beide_sessions(
 
     first_load_id, second_load_id = _load_id(first), _load_id(second)
 
+    # The vehicle's own quick-add flows must refresh its nested checklist in
+    # both websocket sessions (not merely the board lane).
+    vehicle_task = "E2E Fahrzeugauftrag " + uuid4().hex[:8]
+    own_vehicle = first.locator(f"#vehicle-card-{vehicle_id}")
+    other_vehicle = second.locator(f"#vehicle-card-{vehicle_id}")
+    own_vehicle.get_by_role("button", name="+ Auftrag").click()
+    first.locator("#quickAddTaskTitle").fill(vehicle_task)
+    first.locator("#quickAddTaskDialog").get_by_role("button", name="Anlegen").click()
+    for card in (own_vehicle, other_vehicle):
+        expect(card.locator(".assigned-task", has_text=vehicle_task)).to_be_visible(timeout=10_000)
+
+    vehicle_message = "E2E Fahrzeugmeldung " + uuid4().hex[:8]
+    own_vehicle.get_by_role("button", name="Fahrzeugaktionen").click()
+    own_vehicle.get_by_role("menuitem", name="+ Meldung").click()
+    first.locator("#quickAddMsgTitle").fill(vehicle_message)
+    first.locator("#quickAddMsgDialog").get_by_role("button", name="Anlegen").click()
+    for card in (own_vehicle, other_vehicle):
+        expect(card.locator(".assigned-msg", has_text=vehicle_message)).to_be_visible(timeout=10_000)
+
     # Native SortableJS drag isn't reliably simulatable via Playwright's mouse API
     # (no other test in this suite attempts it either) — exercise the same
     # form-urlencoded endpoint sortable-glue.js's onEnd() POSTs to instead, exactly
@@ -364,10 +405,28 @@ def test_fahrzeug_zuordnung_und_loesen_aktualisiert_beide_sessions(
         "xpath=ancestor::div[contains(concat(' ', normalize-space(@class), ' '), ' kanban-col ')]"
     ).get_attribute("data-col-id")
     assert person_uid and person_column_id
+
+    # Reproduce Sortable's former optimistic invalid drop: it moved the DOM
+    # node into a non-person lane although the server has no such person state.
+    # Both sessions must end with precisely one card in the rescued lane.
+    invalid_zone = first.locator(
+        '.kanban-col:not([data-lane="persons"]) .kanban-col__body.sortable-zone'
+    ).first
+    invalid_column_id = invalid_zone.evaluate(
+        "el => el.closest('.kanban-col').dataset.colId"
+    )
+    assert invalid_column_id
+    first.evaluate(
+        "({personId, zoneId}) => document.getElementById(zoneId).appendChild(document.getElementById(personId))",
+        {"personId": f"person-card-{person_uid}", "zoneId": f"zone-{invalid_column_id}"},
+    )
+    _move_card(first, "person", person_uid, column_id=invalid_column_id)
+    for page in (first, second):
+        expect(page.locator(f"#zone-{person_column_id} .card[data-kind='person']", has_text=person_name)).to_have_count(1, timeout=10_000)
+        expect(page.locator(f"#zone-{invalid_column_id} .card[data-kind='person']", has_text=person_name)).to_have_count(0, timeout=10_000)
+
     _move_card(first, "person", person_uid, vehicle_id=vehicle_id)
 
-    other_vehicle = second.locator(f"#vehicle-card-{vehicle_id}")
-    own_vehicle = first.locator(f"#vehicle-card-{vehicle_id}")
     expect(own_vehicle.locator(".assigned-person", has_text=person_name)).to_be_visible(timeout=10_000)
     expect(other_vehicle.locator(".assigned-person", has_text=person_name)).to_be_visible(timeout=10_000)
     expect(second.locator(f"#zone-{person_column_id}").locator(".card", has_text=person_name)).not_to_be_visible()

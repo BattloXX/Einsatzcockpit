@@ -1344,6 +1344,12 @@ def move_card(
                 user_id=user_id,
             )
         else:
+            # Personen haben keine column_id. Eine freie Person gehoert daher
+            # ausschliesslich in die eine "rescued"-Spalte; ein Drop auf eine
+            # beliebige andere Lane darf ihren Zustand nicht veraendern.
+            col = db.get(IncidentColumn, column_id) if column_id else None
+            if not col or col.incident_id != incident_id or col.column_kind != "rescued":
+                return
             person.vehicle_id = None
             db.flush()
             write_incident_change(
