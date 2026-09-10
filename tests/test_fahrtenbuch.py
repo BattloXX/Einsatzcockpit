@@ -766,6 +766,71 @@ def _korrektur_postdaten(csrf, fahrzeug, zweck, **extra):
     return daten
 
 
+def test_korrektur_erlaubt_niedrigeren_km_stand_und_berechnet_zaehler_neu(
+    client, db_session, org, zweck,
+):
+    korrektur_fahrzeug = VehicleMaster(
+        dept_id=org.id,
+        code="KORR-KM",
+        name="Korrekturfahrzeug",
+        type="Test",
+        km_aktuell=1200,
+        erfasst_km=True,
+        warn_schwelle_km=50,
+    )
+    db_session.add(korrektur_fahrzeug)
+    db_session.flush()
+    original = Fahrt(
+        org_id=org.id,
+        zeitpunkt=datetime.now(UTC) - timedelta(hours=2),
+        fahrzeug_id=korrektur_fahrzeug.id,
+        maschinist_name="Korrektur Maschinist",
+        km_stand_neu=1100,
+        zweck_id=zweck.id,
+        fahrttyp=zweck.kategorie,
+    )
+    spaetere_fahrt = Fahrt(
+        org_id=org.id,
+        zeitpunkt=datetime.now(UTC) - timedelta(hours=1),
+        fahrzeug_id=korrektur_fahrzeug.id,
+        maschinist_name="Spätere Fahrt",
+        km_stand_neu=1200,
+        zweck_id=zweck.id,
+        fahrttyp=zweck.kategorie,
+    )
+    db_session.add_all([original, spaetere_fahrt])
+    db_session.commit()
+    _login(client, db_session, org, "fb_korrektur_niedriger_km", role_code="fahrtenbuch_admin")
+
+    response = client.post(
+        f"/verwaltung/fahrten/{original.id}/korrektur",
+        data=_korrektur_postdaten(
+            client.cookies.get("ec_csrf"), korrektur_fahrzeug, zweck, km_stand_neu="1050",
+        ),
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    neue_fahrt = db_session.query(Fahrt).filter(Fahrt.original_fahrt_id == original.id).first()
+    assert neue_fahrt and neue_fahrt.km_stand_neu == 1050
+    db_session.refresh(korrektur_fahrzeug)
+    assert korrektur_fahrzeug.km_aktuell == spaetere_fahrt.km_stand_neu
+
+
+def test_korrektur_km_pflicht_bleibt_erhalten(client, db_session, org, fahrzeug, zweck):
+    fahrt = _korrektur_fahrt(db_session, org, fahrzeug, zweck)
+    _login(client, db_session, org, "fb_korrektur_km_pflicht", role_code="fahrtenbuch_admin")
+    daten = _korrektur_postdaten(client.cookies.get("ec_csrf"), fahrzeug, zweck)
+    daten.pop("km_stand_neu")
+
+    response = client.post(f"/verwaltung/fahrten/{fahrt.id}/korrektur", data=daten)
+
+    assert response.status_code == 200
+    assert "Bitte den km-Stand eingeben" in response.text
+    db_session.refresh(fahrt)
+    assert fahrt.status == FahrtStatus.aktiv
+
+
 def test_korrektur_einsatz_ohne_incident_zeigt_fehler(client, db_session, org, fahrzeug, zweck):
     zweck.kategorie = FahrtKategorie.einsatz
     fahrt = _korrektur_fahrt(db_session, org, fahrzeug, zweck)
