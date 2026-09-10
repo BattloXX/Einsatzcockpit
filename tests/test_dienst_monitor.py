@@ -6,7 +6,7 @@ import pytest
 
 from app.core.tenant import set_tenant_context
 from app.models.dienst_monitor import DienstStatus
-from app.services.dienst_monitor_service import DienstCheck, entscheide
+from app.services.dienst_monitor_service import DienstCheck, dienst_zustand, entscheide
 
 
 def row(**werte):
@@ -38,8 +38,27 @@ def test_entwarnung_genau_nach_gemeldeter_stoerung():
     status = row(outage_notified_at=now, down_since=now - timedelta(minutes=8))
     check = DienstCheck("print_gateway", "ok", "gut", True)
     assert entscheide(check, status, 5, 60, now).art == "entwarnung"
+    assert status.down_since is None
+    assert status.last_repeat_at is None
     status.outage_notified_at = None
     assert entscheide(check, status, 5, 60, now).art is None
+
+
+def test_sms_gateway_recovery_is_ok_even_if_sms_entwarnung_is_skipped():
+    """A stale outage marker must not keep the live-health endpoint down."""
+    now = datetime(2026, 1, 1, 12)
+    status = row(
+        key="sms_gateway", down_since=now - timedelta(minutes=10),
+        last_repeat_at=now - timedelta(minutes=5), outage_notified_at=now - timedelta(minutes=8),
+    )
+    check = DienstCheck("sms_gateway", "ok", "wieder erreichbar", True)
+
+    assert entscheide(check, status, 5, 60, now).art == "entwarnung"
+    # The dispatch has no usable channel when the org only configured SMS, but
+    # recovery bookkeeping has already happened before that best-effort attempt.
+    assert status.down_since is None
+    assert status.last_repeat_at is None
+    assert dienst_zustand(check, status, 5, now) == "ok"
 
 
 def test_wiederholung_erst_nach_cooldown():

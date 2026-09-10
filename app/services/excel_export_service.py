@@ -231,12 +231,12 @@ def exportiere_maschinisten_matrix(matrix: dict, org) -> bytes:
     for spalte in matrix["spalten"]:
         ws.merge_cells(start_row=1, start_column=col, end_row=1, end_column=col + 1)
         ws.cell(1, col, spalte["label"])
-        ws.cell(2, col, "Üng")
+        ws.cell(2, col, "Übung")
         ws.cell(2, col + 1, "Einsatz")
         col += 2
     ws.merge_cells(start_row=1, start_column=col, end_row=1, end_column=col + 1)
     ws.cell(1, col, f"Gesamt {matrix['jahr']}")
-    ws.cell(2, col, "Üng")
+    ws.cell(2, col, "Übung")
     ws.cell(2, col + 1, "Einsatz")
     for row in ws.iter_rows(min_row=1, max_row=2, min_col=1, max_col=col + 1):
         for cell in row:

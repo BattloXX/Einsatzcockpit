@@ -178,18 +178,21 @@
                       <input class="gwx-input gwx-input--mono" type="text" name="page_range" value="{{ o.get('page_range','') }}" placeholder="alle"></div>
                     <div class="gwx-field"><label class="gwx-label">Duplex</label>
                       <select name="duplex">
-                        <option value="off" {{ 'selected' if o.get('duplex','off')=='off' }}>Einseitig</option>
+                        <option value="" {{ 'selected' if not o.get('duplex') }}>Druckervorgabe</option>
+                        <option value="off" {{ 'selected' if o.get('duplex')=='off' }}>Einseitig</option>
                         <option value="long" {{ 'selected' if o.get('duplex')=='long' }}>Duplex (lang)</option>
                         <option value="short" {{ 'selected' if o.get('duplex')=='short' }}>Duplex (kurz)</option>
                       </select></div>
                     <div class="gwx-field"><label class="gwx-label">Farbe</label>
                       <select name="color">
-                        <option value="color" {{ 'selected' if o.get('color','color')=='color' }}>Farbe</option>
+                        <option value="" {{ 'selected' if not o.get('color') }}>Druckervorgabe</option>
+                        <option value="color" {{ 'selected' if o.get('color')=='color' }}>Farbe</option>
                         <option value="monochrome" {{ 'selected' if o.get('color')=='monochrome' }}>S/W</option>
                       </select></div>
                     <div class="gwx-field"><label class="gwx-label">Format (A3 nur, wenn Drucker es kann)</label>
                       <select name="media">
-                        <option value="A4" {{ 'selected' if o.get('media','A4')=='A4' }}>A4</option>
+                        <option value="" {{ 'selected' if not o.get('media') }}>Druckervorgabe</option>
+                        <option value="A4" {{ 'selected' if o.get('media')=='A4' }}>A4</option>
                         <option value="A3" {{ 'selected' if o.get('media')=='A3' }}>A3</option>
                       </select></div>
                   </div>

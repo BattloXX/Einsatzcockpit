@@ -242,10 +242,11 @@ def entscheide(
         return Entscheidung(None)
     row.ok_cycles = (row.ok_cycles or 0) + 1
     row.fail_cycles = 0
-    if row.outage_notified_at is not None:
-        return Entscheidung("entwarnung")
+    # Recovery state must not depend on whether an Entwarnung can be delivered.
     row.down_since = None
     row.last_repeat_at = None
+    if row.outage_notified_at is not None:
+        return Entscheidung("entwarnung")
     return Entscheidung(None)
 
 
@@ -268,6 +269,8 @@ def dienst_zustand(check: DienstCheck, row: DienstStatus | None, karenz_min: int
     """nicht_konfiguriert | ok | teilweise | down -- einzige Quelle fuer UI und Uptime-API."""
     if not check.relevant:
         return "nicht_konfiguriert"
+    if check.state == "ok":
+        return "ok"
     if not bestaetigt_down(row, karenz_min, now):
         return "ok"
     return "teilweise" if check.state == "teilweise" else "down"

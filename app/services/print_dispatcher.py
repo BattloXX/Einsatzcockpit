@@ -745,6 +745,7 @@ def _jobs_for_rule(
         DOC_OBJEKTBLATT,
         DOC_VERLEIH_SCHEIN,
         TRIGGER_DOCUMENT_TYPES,
+        Printer,
     )
 
     jobs: list[PrintJob] = []
@@ -753,10 +754,16 @@ def _jobs_for_rule(
         return jobs
 
     def _add(**kw):
+        printer = db.get(Printer, kw["printer_id"])
+        defaults = {
+            key: value for key, value in (printer.defaults or {}).items()
+            if key in ("duplex", "color", "media")
+        } if printer is not None else {}
+        options = defaults | (rule.options or {})
         job, created = create_print_job(
             db, org_id=rule.org_id, gateway_id=gateway.id, source=source,
             rule_id=rule.id, incident_id=context.get("incident_id"),
-            gsl_id=context.get("gsl_id"), options=rule.options or {}, **kw,
+            gsl_id=context.get("gsl_id"), options=options, **kw,
         )
         if created:
             jobs.append(job)
