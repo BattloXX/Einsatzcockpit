@@ -303,7 +303,7 @@
     </a>
     {% if darf_einsatz_anlegen %}
     <button type="button" class="bottom-nav__fab" aria-label="Neuen Einsatz starten"
-            @click="neuenEinsatzOeffnen()">
+            @click="if (!window.openActiveBoardLane || !window.openActiveBoardLane()) neuenEinsatzOeffnen()">
       <span class="bottom-nav__fab-plus" aria-hidden="true">+</span>
       <span class="bottom-nav__fab-label">Einsatz</span>
     </button>

@@ -332,6 +332,10 @@ function lageTicker(hints, aiFlags) {
     if (sel && sel.value !== lane) sel.value = lane;
   }
 
+  function firstAvailableLane() {
+    return document.querySelector('.kanban-col[data-lane]')?.dataset.lane || null;
+  }
+
   function applyLane(lane) {
     if (!lane) return false;
     const tab = document.querySelector(`.board-tab[data-lane="${lane}"]`);
@@ -350,23 +354,8 @@ function lageTicker(hints, aiFlags) {
   function buildLaneDropdown() {
     var sel = document.getElementById('mobile-lane-select');
     if (!sel) return;
-    var laneNames = {
-      'tasks': '📋 Aufträge', 'messages': '📨 Meldungen',
-      'persons': '👥 Personen'
-    };
     var added = new Set();
     var items = [];
-    ['tasks', 'messages', 'persons'].forEach(function(lane) {
-      var cols = document.querySelectorAll('.kanban-col[data-lane="' + lane + '"]');
-      if (!cols.length) return;
-      var count = 0;
-      cols.forEach(function(col) {
-        var c = col.querySelector('.kanban-col__count');
-        if (c) count += parseInt(c.textContent) || 0;
-      });
-      items.push({ lane: lane, label: laneNames[lane], count: count });
-      added.add(lane);
-    });
     document.querySelectorAll('.kanban-col[data-lane]').forEach(function(col) {
       var lane = col.dataset.lane;
       if (!lane || added.has(lane)) return;
@@ -384,18 +373,18 @@ function lageTicker(hints, aiFlags) {
       opt.textContent = info.label + (info.count ? ' (' + info.count + ')' : '');
       sel.appendChild(opt);
     });
-    var cur = 'tasks';
-    try { cur = localStorage.getItem(LANE_KEY) || 'tasks'; } catch(e) {}
+    var cur = document.querySelector('.kanban-col[data-lane-active]')?.dataset.lane || firstAvailableLane();
+    try { cur = localStorage.getItem(LANE_KEY) || cur; } catch(e) {}
     sel.value = cur;
   }
   // Für Re-Aufbau nach gezieltem HTMX-Swap der Kopfleiste (enthält #mobile-lane-select)
   window.buildLaneDropdown = buildLaneDropdown;
-  // Für Re-Anwendung nach Spalten-Swaps: neu eingefügte .kanban-col-Knoten haben das
-  // serverseitige data-lane-active nur auf der Default-Lane "tasks" gesetzt.
+  // Für Re-Anwendung nach Spalten-Swaps: eine gespeicherte, inzwischen entfernte
+  // Lane fällt sauber auf die erste noch vorhandene Spalte zurück.
   window.reapplyMobileLane = function () {
-    var lane = 'tasks';
-    try { lane = localStorage.getItem(LANE_KEY) || 'tasks'; } catch (e) { /* noop */ }
-    applyLane(lane);
+    var lane = firstAvailableLane();
+    try { lane = localStorage.getItem(LANE_KEY) || lane; } catch (e) { /* noop */ }
+    if (!applyLane(lane)) applyLane(firstAvailableLane());
     buildLaneDropdown();
   };
 
@@ -411,8 +400,8 @@ function lageTicker(hints, aiFlags) {
   // Initial lane setup
   try {
     const saved = localStorage.getItem(LANE_KEY);
-    if (!applyLane(saved)) applyLane('tasks');
-  } catch (e) { applyLane('tasks'); }
+    if (!applyLane(saved)) applyLane(firstAvailableLane());
+  } catch (e) { applyLane(firstAvailableLane()); }
 
   // Build select options after DOM ready
   if (document.readyState === 'loading') {
@@ -438,6 +427,16 @@ function lageTicker(hints, aiFlags) {
     if (!applyLane(lane)) return;
     try { localStorage.setItem(LANE_KEY, lane); } catch (e) { /* noop */ }
   });
+
+  // Das globale mobile FAB delegiert auf dem Board an die aktuell sichtbare
+  // Spalte und verwendet damit deren bereits vorhandene Kind-spezifische Aktion.
+  window.openActiveBoardLane = function () {
+    const board = document.querySelector('.board-wrap');
+    if (!board) return false;
+    const active = board.querySelector('.kanban-col[data-lane-active]') || board.querySelector('.kanban-col[data-lane]');
+    active?.querySelector('.kanban-col__add-btn')?.click();
+    return true;
+  };
 })();
 
 // Explicit exports for Jinja inline handlers and Alpine x-data expressions.
