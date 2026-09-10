@@ -147,7 +147,7 @@
     <div class="matrix-wrap">
       <table class="matrix-table">
         <thead><tr><th class="matrix-stage" rowspan="2">Stufe</th><th class="matrix-name" rowspan="2">Name</th>{% for s in matrix.spalten %}<th colspan="2">{{ s.label }}</th>{% endfor %}<th colspan="2">Gesamt</th></tr>
-        <tr>{% for s in matrix.spalten %}<th style="background:#{{ matrix_farben.uebung }};color:#172033">Üng</th><th style="background:#{{ matrix_farben.einsatz }};color:#172033">Einsatz</th>{% endfor %}<th>Üng</th><th>Einsatz</th></tr></thead>
+        <tr>{% for s in matrix.spalten %}<th style="background:#{{ matrix_farben.uebung }};color:#172033">Übung</th><th style="background:#{{ matrix_farben.einsatz }};color:#172033">Einsatz</th>{% endfor %}<th>Übung</th><th>Einsatz</th></tr></thead>
         <tbody>{% for z in matrix.zeilen %}<tr>
           <td class="matrix-stage" {% if z.stufe %}style="background:#{{ matrix_farben.stufe[z.stufe] }};color:{{ '#222' if z.stufe == 2 else '#fff' }}"{% endif %}>{{ 'M' ~ z.stufe if z.stufe else '' }}</td>
           <td class="matrix-name">{{ z.name }}</td>

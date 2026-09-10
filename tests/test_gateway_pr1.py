@@ -4,6 +4,7 @@ serieller Ingest, printer_report, Tenant-Isolation."""
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 import uuid
 
@@ -228,6 +229,97 @@ def test_create_print_job_manual_new_each_time(db):
     j2, c2 = disp.create_print_job(db, org_id=_ORG_A, gateway_id=gw.id, printer_id=1,
                                    document_type="einsatzinfo", source="manual", incident_id=100)
     assert c1 and c2 and j1.id != j2.id
+
+
+@pytest.mark.asyncio
+async def test_manual_print_uses_printer_defaults_and_explicit_override(monkeypatch):
+    """Dialog-Sentinels let defaults apply; an explicit choice takes precedence."""
+    from app.routers.ui_gateway import manual_print
+
+    printer = SimpleNamespace(
+        id=4, name="Develop", org_id=_ORG_A, gateway_id=2, aktiv=True,
+        defaults={"role": "standard", "duplex": "short", "color": "monochrome", "media": "A4"},
+        capabilities={"color": True, "media": ["A4"]},
+    )
+    db = MagicMock()
+    db.get.return_value = printer
+    saved_options = []
+
+    def create_job(*_args, **kwargs):
+        saved_options.append(kwargs["options"])
+        return SimpleNamespace(id=1), True
+
+    async def dispatch_job(*_args):
+        return {"status": "sent"}
+
+    monkeypatch.setattr(disp, "create_print_job", create_job)
+    monkeypatch.setattr(disp, "dispatch_job", dispatch_job)
+    user = SimpleNamespace(org_id=_ORG_A, id=7)
+    common = dict(request=MagicMock(), document_type="einsatzinfo", printer_id=4,
+                  incident_id=None, gsl_id=None, objekt_id=None, artifact_ref=None, copies=1,
+                  db=db, user=user, _guard=None)
+
+    await manual_print(**common, duplex="", media="", color="")
+    await manual_print(**common, duplex="off", media="A4", color="color")
+
+    assert saved_options[0] == {"copies": 1, "duplex": "short", "media": "A4", "color": "monochrome"}
+    assert saved_options[1]["duplex"] == "off"
+    assert saved_options[1]["color"] == "color"
+
+
+@pytest.mark.asyncio
+async def test_manual_print_color_capability_gate_applies_to_default(monkeypatch):
+    from app.routers.ui_gateway import manual_print
+
+    printer = SimpleNamespace(
+        id=4, name="Develop", org_id=_ORG_A, gateway_id=2, aktiv=True,
+        defaults={"color": "color"}, capabilities={"color": False, "media": ["A4"]},
+    )
+    db = MagicMock()
+    db.get.return_value = printer
+    saved_options = []
+
+    def create_job(*_args, **kwargs):
+        saved_options.append(kwargs["options"])
+        return SimpleNamespace(id=1), True
+
+    async def dispatch_job(*_args):
+        return {"status": "sent"}
+
+    monkeypatch.setattr(disp, "create_print_job", create_job)
+    monkeypatch.setattr(disp, "dispatch_job", dispatch_job)
+    await manual_print(
+        request=MagicMock(), document_type="einsatzinfo", printer_id=4, db=db,
+        user=SimpleNamespace(org_id=_ORG_A, id=7), _guard=None, incident_id=None,
+        gsl_id=None, objekt_id=None, artifact_ref=None, copies=1, duplex="", media="", color="",
+    )
+
+    assert "color" not in saved_options[0]
+
+
+def test_rule_options_override_printer_defaults(db):
+    from app.models.gateway import PrintRule
+
+    gateway = _make_gateway(db)
+    printer = Printer(
+        org_id=_ORG_A, gateway_id=gateway.id, name="Develop", uri="ipp://develop/print",
+        aktiv=True, defaults={"duplex": "short", "color": "monochrome", "media": "A4"},
+    )
+    db.add(printer)
+    db.flush()
+    rule = PrintRule(
+        org_id=_ORG_A, name="Defaults", aktiv=True, trigger="einsatz_created",
+        documents=["einsatzinfo"], printer_ids=[printer.id], options={"copies": 2},
+    )
+    db.add(rule)
+    db.flush()
+
+    jobs = disp._jobs_for_rule(db, gateway, rule, {"incident_id": 201})
+    assert jobs[0].options == {"duplex": "short", "color": "monochrome", "media": "A4", "copies": 2}
+
+    rule.options = {"copies": 2, "color": "color"}
+    jobs = disp._jobs_for_rule(db, gateway, rule, {"incident_id": 202})
+    assert jobs[0].options["color"] == "color"
 
 
 # ── Druckregel-Filter (on_event) ─────────────────────────────────────────────────

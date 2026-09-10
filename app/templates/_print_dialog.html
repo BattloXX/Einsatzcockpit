@@ -41,6 +41,7 @@
       </label>
       <label>Duplex
         <select name="duplex">
+          <option value="">Druckervorgabe</option>
           <option value="off">einseitig</option>
           <option value="long-edge">beidseitig (lange Kante)</option>
           <option value="short-edge">beidseitig (kurze Kante)</option>
@@ -49,12 +50,13 @@
       {# Format: A3 erscheint nur, wenn der gewählte Drucker es laut Discovery kann. #}
       <label id="ecpgFormatWrap" style="display:none">Format
         <select name="media" id="ecpgMedia">
+          <option value="">Druckervorgabe</option>
           <option value="A4">A4</option>
           <option value="A3">A3</option>
         </select>
       </label>
       <label id="ecpgColorWrap" style="display:none">Farbe
-        <select name="color" id="ecpgColor"><option value="color">Farbe</option><option value="mono">Schwarzweiß</option></select>
+        <select name="color" id="ecpgColor"><option value="">Druckervorgabe</option><option value="color">Farbe</option><option value="monochrome">Schwarzweiß</option></select>
       </label>
       <div id="ecpgPrintMsg" class="ecpg-msg"></div>
       <div class="ecpg-modal__actions">

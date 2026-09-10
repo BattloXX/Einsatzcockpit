@@ -506,9 +506,9 @@ def rule_save(
     zeit_bis: str = Form(""),
     copies: int = Form(1),
     page_range: str = Form(""),
-    duplex: str = Form("off"),
-    color: str = Form("color"),
-    media: str = Form("A4"),
+    duplex: str = Form(""),
+    color: str = Form(""),
+    media: str = Form(""),
     gw: int | None = Form(None),
     db: Session = Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin")),
@@ -558,7 +558,11 @@ def rule_save(
         filters["zeitfenster"] = {"von": zeit_von.strip()[:5], "bis": zeit_bis.strip()[:5]}
     rule.filters = filters
 
-    options: dict = {"copies": max(1, int(copies)), "duplex": duplex, "color": color}
+    options: dict = {"copies": max(1, int(copies))}
+    if duplex:
+        options["duplex"] = duplex
+    if color:
+        options["color"] = color
     if media in ("A3", "A4"):
         options["media"] = media
     if page_range.strip():
@@ -736,7 +740,7 @@ async def manual_print(
     objekt_id: int | None = Form(None),
     artifact_ref: str | None = Form(None),
     copies: int = Form(1),
-    duplex: str = Form("off"),
+    duplex: str = Form(""),
     media: str = Form(""),
     color: str = Form(""),
     db: Session = Depends(get_db),
@@ -753,13 +757,22 @@ async def manual_print(
     if printer is None or printer.org_id != user.org_id or not printer.aktiv:
         return JSONResponse({"ok": False, "error": "Drucker nicht verfügbar"}, status_code=400)
 
-    # Papiergröße nur übernehmen, wenn der Drucker sie laut Discovery kann (A4 = immer).
-    opts = {"copies": int(copies), "duplex": duplex}
+    # Druckervorgaben bilden die Basis; ``role`` ist kein Druckparameter.
+    defaults = {
+        key: value for key, value in (printer.defaults or {}).items()
+        if key in ("duplex", "color", "media")
+    }
+    opts = {"copies": int(copies), "duplex": defaults.get("duplex", "off")}
+    if duplex:
+        opts["duplex"] = duplex
+
+    effective_media = media or defaults.get("media", "A4")
     supported_media = (printer.capabilities or {}).get("media") or ["A4"]
-    if media in ("A3", "A4") and media in supported_media:
-        opts["media"] = media
-    if color in ("color", "mono") and (printer.capabilities or {}).get("color"):
-        opts["color"] = color
+    if effective_media in ("A3", "A4") and effective_media in supported_media:
+        opts["media"] = effective_media
+    effective_color = color or defaults.get("color", "color")
+    if effective_color in ("color", "monochrome") and (printer.capabilities or {}).get("color"):
+        opts["color"] = effective_color
 
     from app.services.print_dispatcher import create_print_job, dispatch_job
 

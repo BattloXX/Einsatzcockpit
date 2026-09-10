@@ -126,11 +126,7 @@ async def _process_org(org_id: int) -> None:
                 art=entscheidung.art,
                 base_url=settings.PUBLIC_BASE_URL or settings.APP_BASE_URL,
             )
-            if not ok:
+            if not ok and entscheidung.art != "entwarnung":
                 rollback_claim(db, row.id, org_id, entscheidung.art, now, vorher_outage, vorher_repeat)
-            elif entscheidung.art == "entwarnung":
-                row.down_since = None
-                row.last_repeat_at = None
-                db.commit()
     finally:
         db.close()
