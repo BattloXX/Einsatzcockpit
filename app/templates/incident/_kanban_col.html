@@ -8,7 +8,7 @@
 {% set lane = 'col-' + col.id|string %}
 <div class="kanban-col" id="col-{{ col.id }}"
      data-col-id="{{ col.id }}" data-col-code="{{ col.code }}"
-     data-lane="{{ lane }}"
+     data-lane="{{ lane }}" data-col-kind="{{ col.column_kind }}"
      {% if loop is defined and loop.first %}data-lane-active{% endif %}
      {% if oob %}hx-swap-oob="true"{% endif %}>
   {% include "incident/_lane_header.html" %}

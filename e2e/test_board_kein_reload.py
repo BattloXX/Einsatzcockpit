@@ -385,6 +385,43 @@ def test_person_can_move_repeatedly_between_rescued_columns_without_duplicates(
     person_uid = person.get_attribute("data-uid")
     assert person_uid
 
+    # This calls the live SortableJS group.put predicate used before a DOM drop.
+    # A rescued column has an individual `col-<id>` lane, so acceptance must be
+    # based on data-col-kind rather than the former shared `persons` lane.
+    # Note: SortableJS normalizes the `put` option into `group.checkPut`, which
+    # expects real Sortable instances (not plain {el} stand-ins) for `to`/`from`.
+    put_check = first.evaluate(
+        """({targetZoneId, sourceZoneId, personId}) => {
+          const targetZone = document.getElementById(targetZoneId);
+          const sourceZone = document.getElementById(sourceZoneId);
+          const person = document.getElementById(personId);
+          const toSortable = Sortable.get(targetZone);
+          const fromSortable = Sortable.get(sourceZone);
+          const nonRescued = [...document.querySelectorAll(
+            '.kanban-col:not([data-col-kind="rescued"])'
+          )][0];
+          const nonRescuedZone = nonRescued && nonRescued.querySelector('.sortable-zone');
+          const nonRescuedSortable = nonRescuedZone && Sortable.get(nonRescuedZone);
+          return {
+            intoOtherRescuedColumn: toSortable.options.group.checkPut(
+              toSortable, fromSortable, person, {}
+            ),
+            intoNonRescuedColumn: nonRescuedSortable
+              ? nonRescuedSortable.options.group.checkPut(
+                  nonRescuedSortable, fromSortable, person, {}
+                )
+              : null,
+          };
+        }""",
+        {
+            "targetZoneId": f"zone-{first_column_id}",
+            "sourceZoneId": f"zone-{second_column_id}",
+            "personId": f"person-card-{person_uid}",
+        },
+    )
+    assert put_check["intoOtherRescuedColumn"] is True
+    assert put_check["intoNonRescuedColumn"] is False
+
     for target_column_id in (first_column_id, second_column_id, first_column_id, second_column_id):
         _move_card(first, "person", person_uid, column_id=target_column_id)
         for page in (first, second):
