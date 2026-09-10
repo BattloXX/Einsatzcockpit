@@ -97,25 +97,7 @@
     <p class="fab-header__sub">Fahrzeugbewegungen, km-Stände und Betriebsstunden lückenlos digital erfassen.</p>
   </div>
 
-  {% if fehler %}
-  <div class="alert alert--error" style="margin-bottom:1rem;">
-    {% if fehler == "km_pflicht" %}
-      Bitte den km-Stand eingeben – für dieses Fahrzeug ist der km-Stand ein Pflichtfeld.
-    {% elif fehler == "einsatz_pflicht" %}
-      Bitte einen Einsatz auswählen – bei Fahrtzweck "Einsatz" ist die Einsatz-Verknüpfung ein Pflichtfeld.
-    {% elif fehler == "km_warnung_nicht_bestaetigt" %}
-      Bitte den km-Warnhinweis bestätigen.
-    {% elif fehler == "bh_warnung_nicht_bestaetigt" %}
-      Bitte den Betriebsstunden-Warnhinweis bestätigen.
-    {% elif fehler == "seilwinde_warnung_nicht_bestaetigt" %}
-      Bitte den Seilwinden-Warnhinweis bestätigen.
-    {% elif fehler == "doppelfahrt_nicht_bestaetigt" %}
-      Bitte die Doppelfahrt-Meldung bestätigen und erneut speichern.
-    {% else %}
-      Fehler: {{ fehler }}
-    {% endif %}
-  </div>
-  {% endif %}
+  {% include "fahrtenbuch/_fehler_meldung.html" %}
 
   {% if doppelfahrt_warnung %}
   <div class="alert alert--warn" style="margin-bottom:1rem;" id="doppelfahrt-hinweis">

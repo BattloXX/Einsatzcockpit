@@ -20,10 +20,19 @@ from app.core.tenant import set_tenant_context
 from app.core.timezones import local_date_to_utc
 from app.db import get_db
 from app.models.fahrtenbuch import Fahrt, FahrtKategorie, FahrtStatus, Fahrtzweck, Zielort
-from app.models.master import FireDept, OrgSettings, VehicleMaster
+from app.models.master import (
+    FireDept,
+    Member,
+    MemberQualification,
+    OrgSettings,
+    Qualification,
+    VehicleMaster,
+)
+from app.routers.ui_fahrtenbuch import _aktive_personen, _lade_einsaetze, _personen_fuer_client
 from app.services.excel_export_service import exportiere_fahrten, exportiere_fahrzeug_links
 from app.services.fahrtenbuch_service import (
     korrigiere_fahrt,
+    pruefe_doppelfahrt,
     stammdaten_korrektur_zaehler,
     storniere_fahrt,
 )
@@ -135,6 +144,23 @@ def _sysadmin_org_context(request: Request, user, org, db: Session) -> dict:
         # Query-Fragment zum Weiterreichen der gewählten Org an Links/Formulare.
         "org_q": f"?org={org.id}" if sysadmin else "",
     }
+
+
+def _gk_members(org_id: int, db: Session) -> list[Member]:
+    return (
+        db.query(Member)
+        .join(MemberQualification, MemberQualification.member_id == Member.id)
+        .join(Qualification, Qualification.id == MemberQualification.qualification_id)
+        .filter(
+            Member.active == True,  # noqa: E712
+            Member.org_id == org_id,
+            Qualification.is_gruppenkommandant == True,  # noqa: E712
+        )
+        .execution_options(include_all_tenants=True)
+        .order_by(Member.lastname, Member.firstname)
+        .distinct()
+        .all()
+    )
 
 
 # ── Verwaltungsliste ──────────────────────────────────────────────────────────
@@ -270,6 +296,68 @@ async def fahrten_export(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename=\"{dateiname}\""},
     )
+
+
+@router.get("/verwaltung/fahrten/hx/fahrzeug-felder", response_class=HTMLResponse)
+async def hx_fahrzeug_felder_korrektur(
+    request: Request, fahrzeug_id: int = 0, db: Session = Depends(get_db),
+):
+    _user, org_id, _org = _fb_admin(request, db)
+    fahrzeug = (
+        db.query(VehicleMaster)
+        .filter(VehicleMaster.id == fahrzeug_id, VehicleMaster.dept_id == org_id)
+        .execution_options(include_all_tenants=True)
+        .first()
+    )
+    if not fahrzeug:
+        return HTMLResponse("")
+    return templates.TemplateResponse(request, "fahrtenbuch/_fahrzeug_felder.html", {
+        "fahrzeug": fahrzeug,
+        "personen": _personen_fuer_client(_aktive_personen(org_id, db)),
+        "form_daten": {},
+        "fehler": None,
+    })
+
+
+@router.get("/verwaltung/fahrten/hx/zweck-felder", response_class=HTMLResponse)
+async def hx_zweck_felder_korrektur(
+    request: Request,
+    zweck_id: int = 0,
+    fahrzeug_id: int = 0,
+    incident_id: str = "",
+    db: Session = Depends(get_db),
+):
+    _user, org_id, _org = _fb_admin(request, db)
+    zweck = (
+        db.query(Fahrtzweck).filter(Fahrtzweck.id == zweck_id, Fahrtzweck.org_id == org_id)
+        .execution_options(include_all_tenants=True).first()
+        if zweck_id else None
+    )
+    fahrzeug = (
+        db.query(VehicleMaster)
+        .filter(VehicleMaster.id == fahrzeug_id, VehicleMaster.dept_id == org_id)
+        .execution_options(include_all_tenants=True).first()
+        if fahrzeug_id else None
+    )
+    try:
+        ensure_id = int(incident_id) if incident_id else None
+    except ValueError:
+        ensure_id = None
+    incidents = (
+        _lade_einsaetze(org_id, db, tage=92, ensure_id=ensure_id)
+        if zweck and zweck.kategorie == FahrtKategorie.einsatz else []
+    )
+    gk_members = _gk_members(org_id, db) if zweck and zweck.verlangt_gruppenkommandant else []
+    return templates.TemplateResponse(request, "fahrtenbuch/_zweck_felder.html", {
+        "zweck": zweck,
+        "fahrzeug": fahrzeug,
+        "incidents": incidents,
+        "incidents_listbox": True,
+        "gk_members": gk_members,
+        "personen": _personen_fuer_client(_aktive_personen(org_id, db)),
+        "gk_personen": _personen_fuer_client(gk_members),
+        "form_daten": {"incident_id": incident_id},
+    })
 
 
 @router.get("/verwaltung/fahrten/{fahrt_id}", response_class=HTMLResponse)
@@ -408,20 +496,15 @@ async def fahrten_loeschen(request: Request, db: Session = Depends(get_db)):
     return RedirectResponse(f"{ziel}{sep}geloescht={anzahl}", status_code=303)
 
 
-@router.get("/verwaltung/fahrten/{fahrt_id}/korrektur", response_class=HTMLResponse)
-async def fahrt_korrektur_formular(
-    request: Request, fahrt_id: int, db: Session = Depends(get_db)
-):
+async def _render_korrektur(
+    request: Request,
+    db: Session,
+    *,
+    fahrt: Fahrt,
+    fehler: str | None = None,
+    form_daten: dict | None = None,
+) -> HTMLResponse:
     user, org_id, org = _fb_admin(request, db)
-    fahrt = (
-        db.query(Fahrt)
-        .filter(Fahrt.id == fahrt_id, Fahrt.org_id == org_id)
-        .execution_options(include_all_tenants=True)
-        .options(joinedload(Fahrt.fahrzeug), joinedload(Fahrt.zweck))
-        .first()
-    )
-    if not fahrt:
-        raise HTTPException(status_code=404)
     fahrzeuge = (
         db.query(VehicleMaster)
         .filter(
@@ -436,10 +519,77 @@ async def fahrt_korrektur_formular(
     )
     zwecke = db.query(Fahrtzweck).filter(Fahrtzweck.aktiv == True).order_by(Fahrtzweck.sort).all()  # noqa: E712
     zielorte = db.query(Zielort).filter(Zielort.aktiv == True).order_by(Zielort.sort).all()  # noqa: E712
+    if form_daten is None:
+        form_daten = {
+            "fahrzeug_id": str(fahrt.fahrzeug_id),
+            "maschinist_member_id": str(fahrt.maschinist_member_id or ""),
+            "maschinist_name": fahrt.maschinist_name,
+            "maschinist2_member_id": str(fahrt.maschinist2_member_id or ""),
+            "maschinist2_name": fahrt.maschinist2_name or "",
+            "km_stand_neu": str(fahrt.km_stand_neu or ""),
+            "betriebsstunden_neu": str(fahrt.betriebsstunden_neu or ""),
+            "seilwinde_bh_neu": str(fahrt.seilwinde_bh_neu or ""),
+            "seilwinde_bediener_member_id": str(fahrt.seilwinde_bediener_member_id or ""),
+            "seilwinde_bediener_name": fahrt.seilwinde_bediener_name or "",
+            "seilwinde_zuege": str(fahrt.seilwinde_zuege or ""),
+            "seilwinde_wartung": (
+                "ja" if fahrt.seilwinde_wartung else "nein"
+                if fahrt.seilwinde_wartung is False else ""
+            ),
+            "zielort_id": str(fahrt.zielort_id or ""),
+            "zielort_freitext": fahrt.zielort_freitext or "",
+            "zweck_id": str(fahrt.zweck_id),
+            "zweck_freitext": fahrt.zweck_freitext or "",
+            "incident_id": str(fahrt.incident_id or ""),
+            "ausbildner_member_id": str(fahrt.ausbildner_member_id or ""),
+            "ausbildner_name": fahrt.ausbildner_name or "",
+            "gruppenkommandant_member_id": str(fahrt.gruppenkommandant_member_id or ""),
+            "gruppenkommandant_name": fahrt.gruppenkommandant_name or "",
+            "einsatzleiter_member_id": str(fahrt.einsatzleiter_member_id or ""),
+            "einsatzleiter_name": fahrt.einsatzleiter_name or "",
+            "schaden_vorhanden": "on" if fahrt.schaden_vorhanden else "",
+            "schaden_betriebsfaehig": "on" if fahrt.schaden_betriebsfaehig else "",
+            "schaden_beschreibung": fahrt.schaden_beschreibung or "",
+            "bemerkung": fahrt.bemerkung or "",
+            "nicht_statistikrelevant": "on" if fahrt.nicht_statistikrelevant else "",
+        }
+    fahrzeug = next((item for item in fahrzeuge if item.id == int(form_daten.get("fahrzeug_id") or 0)), None)
+    zweck = next((item for item in zwecke if item.id == int(form_daten.get("zweck_id") or 0)), None)
+    incident_id = form_daten.get("incident_id")
+    try:
+        ensure_id = int(incident_id) if incident_id else None
+    except (TypeError, ValueError):
+        ensure_id = None
+    incidents = (
+        _lade_einsaetze(org_id, db, tage=92, ensure_id=ensure_id)
+        if zweck and zweck.kategorie == FahrtKategorie.einsatz else []
+    )
+    gk_members = _gk_members(org_id, db) if zweck and zweck.verlangt_gruppenkommandant else []
     return templates.TemplateResponse(request, "fahrtenbuch/verwaltung/korrektur.html", {
         "user": user, "fahrt": fahrt, "fahrzeuge": fahrzeuge, "zwecke": zwecke, "zielorte": zielorte,
+        "fahrzeug": fahrzeug, "zweck": zweck, "incidents": incidents,
+        "incidents_listbox": True, "gk_members": gk_members,
+        "personen": _personen_fuer_client(_aktive_personen(org_id, db)),
+        "gk_personen": _personen_fuer_client(gk_members),
+        "doppelfahrt_warnung": pruefe_doppelfahrt(fahrzeug, db) if fahrzeug else False,
+        "fehler": fehler, "form_daten": form_daten,
         **_sysadmin_org_context(request, user, org, db),
     })
+
+
+@router.get("/verwaltung/fahrten/{fahrt_id}/korrektur", response_class=HTMLResponse)
+async def fahrt_korrektur_formular(
+    request: Request, fahrt_id: int, db: Session = Depends(get_db)
+):
+    _user, org_id, _org = _fb_admin(request, db)
+    fahrt = (
+        db.query(Fahrt).filter(Fahrt.id == fahrt_id, Fahrt.org_id == org_id)
+        .execution_options(include_all_tenants=True)
+        .options(joinedload(Fahrt.fahrzeug), joinedload(Fahrt.zweck)).first()
+    )
+    if not fahrt:
+        raise HTTPException(status_code=404)
+    return await _render_korrektur(request, db, fahrt=fahrt)
 
 
 @router.post("/verwaltung/fahrten/{fahrt_id}/korrektur")
@@ -458,8 +608,12 @@ async def fahrt_korrektur_speichern(
 
     from app.routers.ui_fahrtenbuch import _form_zu_daten
     form = await request.form()
-    daten = _form_zu_daten(form, org_id=org_id, user=user)
-    neue_fahrt = korrigiere_fahrt(fahrt, daten, user.id, db)
+    daten = _form_zu_daten(form, org_id=org_id, org=org, user=user)
+    try:
+        neue_fahrt = korrigiere_fahrt(fahrt, daten, user.id, db)
+    except HTTPException as exc:
+        db.rollback()
+        return await _render_korrektur(request, db, fahrt=fahrt, fehler=exc.detail, form_daten=dict(form))
     db.commit()
     return RedirectResponse(f"/verwaltung/fahrten/{neue_fahrt.id}{_redirect_q(request, korrigiert=1)}", status_code=303)
 

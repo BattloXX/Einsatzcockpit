@@ -155,18 +155,20 @@ def test_erstelle_fahrt_erfolgreich(db_session, org, fahrzeug, zweck):
     assert fahrzeug.km_aktuell == 1010
 
 
-def test_erfassungsformular_ignoriert_zeitpunkt():
-    """Der Erfassungs-POST darf keinen clientseitigen Zeitpunkt übernehmen."""
+def test_form_uebernimmt_zeitpunkt_in_org_zeitzone(org):
+    """Ein datetime-local-Wert wird als lokale Org-Zeit in UTC gespeichert."""
     from starlette.datastructures import FormData
 
+    from app.core.timezones import local_input_to_utc
     from app.routers.ui_fahrtenbuch import _form_zu_daten
 
     daten = _form_zu_daten(
         FormData({"zeitpunkt": "2000-01-01T00:00"}),
         org_id=1,
+        org=org,
     )
 
-    assert "zeitpunkt" not in daten
+    assert daten["zeitpunkt"] == local_input_to_utc("2000-01-01T00:00", org)
 
 
 def test_km_pflicht_bei_erfasst_km(db_session, org, fahrzeug, zweck):
@@ -733,6 +735,134 @@ def test_fahrt_detail_zeigt_leitstellennummer(
     assert "Leitstellennummer" in response.text
     assert "f26007777" in response.text
     assert "Einsatz-Nr." not in response.text
+
+
+def _korrektur_fahrt(db_session, org, fahrzeug, zweck):
+    fahrt = Fahrt(
+        org_id=org.id,
+        zeitpunkt=datetime.now(UTC) - timedelta(hours=2),
+        fahrzeug_id=fahrzeug.id,
+        maschinist_name="Korrektur Maschinist",
+        km_stand_neu=fahrzeug.km_aktuell,
+        zweck_id=zweck.id,
+        fahrttyp=zweck.kategorie,
+    )
+    db_session.add(fahrt)
+    db_session.commit()
+    return fahrt
+
+
+def _korrektur_postdaten(csrf, fahrzeug, zweck, **extra):
+    daten = {
+        "_csrf": csrf,
+        "fahrzeug_id": str(fahrzeug.id),
+        "maschinist_name": "Korrektur Maschinist",
+        "km_stand_neu": str(fahrzeug.km_aktuell),
+        "zweck_id": str(zweck.id),
+        "zeitpunkt": "2025-02-03T04:05",
+        "doppelfahrt_bestaetigt": "on",
+    }
+    daten.update(extra)
+    return daten
+
+
+def test_korrektur_einsatz_ohne_incident_zeigt_fehler(client, db_session, org, fahrzeug, zweck):
+    zweck.kategorie = FahrtKategorie.einsatz
+    fahrt = _korrektur_fahrt(db_session, org, fahrzeug, zweck)
+    _login(client, db_session, org, "fb_korrektur_einsatz_fehler", role_code="fahrtenbuch_admin")
+
+    response = client.post(
+        f"/verwaltung/fahrten/{fahrt.id}/korrektur",
+        data=_korrektur_postdaten(client.cookies.get("ec_csrf"), fahrzeug, zweck),
+    )
+
+    assert response.status_code == 200
+    assert "Bitte einen Einsatz auswählen" in response.text
+    db_session.refresh(fahrt)
+    assert fahrt.status == FahrtStatus.aktiv
+
+
+def test_korrektur_einsatz_setzt_incident(client, db_session, org, fahrzeug, zweck):
+    zweck.kategorie = FahrtKategorie.einsatz
+    incident = Incident(primary_org_id=org.id, alarm_type_code="KORR-INC", started_at=datetime.now(UTC))
+    db_session.add(incident)
+    db_session.flush()
+    fahrt = _korrektur_fahrt(db_session, org, fahrzeug, zweck)
+    _login(client, db_session, org, "fb_korrektur_einsatz_ok", role_code="fahrtenbuch_admin")
+
+    response = client.post(
+        f"/verwaltung/fahrten/{fahrt.id}/korrektur",
+        data=_korrektur_postdaten(client.cookies.get("ec_csrf"), fahrzeug, zweck, incident_id=str(incident.id)),
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    neue_fahrt = db_session.query(Fahrt).filter(Fahrt.original_fahrt_id == fahrt.id).first()
+    assert neue_fahrt and neue_fahrt.incident_id == incident.id
+
+
+def test_korrektur_einsatz_keiner_bleibt_unverknuepft(client, db_session, org, fahrzeug, zweck):
+    zweck.kategorie = FahrtKategorie.einsatz
+    fahrt = _korrektur_fahrt(db_session, org, fahrzeug, zweck)
+    _login(client, db_session, org, "fb_korrektur_einsatz_keiner", role_code="fahrtenbuch_admin")
+
+    response = client.post(
+        f"/verwaltung/fahrten/{fahrt.id}/korrektur",
+        data=_korrektur_postdaten(client.cookies.get("ec_csrf"), fahrzeug, zweck, incident_id="keiner"),
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    neue_fahrt = db_session.query(Fahrt).filter(Fahrt.original_fahrt_id == fahrt.id).first()
+    assert neue_fahrt and neue_fahrt.incident_id is None
+
+
+def test_korrektur_uebernimmt_zeitpunkt(client, db_session, org, fahrzeug, zweck):
+    from app.core.timezones import local_input_to_utc
+
+    fahrt = _korrektur_fahrt(db_session, org, fahrzeug, zweck)
+    _login(client, db_session, org, "fb_korrektur_zeitpunkt", role_code="fahrtenbuch_admin")
+    zeitpunkt = "2025-02-03T04:05"
+
+    response = client.post(
+        f"/verwaltung/fahrten/{fahrt.id}/korrektur",
+        data=_korrektur_postdaten(client.cookies.get("ec_csrf"), fahrzeug, zweck, zeitpunkt=zeitpunkt),
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    neue_fahrt = db_session.query(Fahrt).filter(Fahrt.original_fahrt_id == fahrt.id).first()
+    assert neue_fahrt and neue_fahrt.zeitpunkt == local_input_to_utc(zeitpunkt, org)
+
+
+def test_korrektur_zweck_felder_laden_drei_monate_und_ensure_incident(
+    client, db_session, org, fahrzeug, zweck,
+):
+    zweck.kategorie = FahrtKategorie.einsatz
+    now = datetime.now(UTC)
+    aktuelle = [
+        Incident(primary_org_id=org.id, alarm_type_code=f"NEU-{index}", started_at=now - timedelta(days=index))
+        for index in range(21)
+    ]
+    alter = Incident(primary_org_id=org.id, alarm_type_code="ALT-ENSURE", started_at=now - timedelta(days=100))
+    db_session.add_all([*aktuelle, alter])
+    db_session.commit()
+    _login(client, db_session, org, "fb_korrektur_hx", role_code="fahrtenbuch_admin")
+
+    response = client.get(
+        f"/verwaltung/fahrten/hx/zweck-felder?zweck_id={zweck.id}&fahrzeug_id={fahrzeug.id}"
+    )
+
+    assert response.status_code == 200
+    assert 'size="8"' in response.text
+    assert "NEU-20" in response.text
+    assert "ALT-ENSURE" not in response.text
+    assert response.text.index("NEU-0") < response.text.index("NEU-20")
+
+    ensured = client.get(
+        f"/verwaltung/fahrten/hx/zweck-felder?zweck_id={zweck.id}&incident_id={alter.id}"
+    )
+    assert "ALT-ENSURE" in ensured.text
 
 
 def test_zweck_felder_zeigt_letzten_einsatz_als_fallback(client: TestClient, db_session, org):

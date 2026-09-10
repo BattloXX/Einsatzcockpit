@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from starlette.datastructures import UploadFile as StarletteUploadFile
 
 from app.core.templating import templates
+from app.core.timezones import local_input_to_utc
 from app.db import get_db
 from app.models.fahrtenbuch import FahrtErfassungsweg, FahrtKategorie, Fahrtzweck, Zielort
 from app.models.incident import Incident
@@ -128,7 +129,11 @@ async def fahrtenbuch_speichern(
 
     org_id = user.org_id if user else token_org.org_id  # type: ignore[union-attr]
 
-    daten = _form_zu_daten(form, org_id=org_id, user=user, token_org=token_org)
+    org = (
+        db.query(FireDept).filter(FireDept.id == org_id)
+        .execution_options(include_all_tenants=True).first()
+    )
+    daten = _form_zu_daten(form, org_id=org_id, org=org, user=user, token_org=token_org)
 
     try:
         fahrt = erstelle_fahrt(daten, db)
@@ -290,27 +295,10 @@ async def hx_zweck_felder(
         if fahrzeug_id else None
     )
 
-    incidents = []
-    if zweck and zweck.kategorie == FahrtKategorie.einsatz and org_id:
-        grenze = datetime.now(UTC) - timedelta(days=3)
-        incidents = (
-            db.query(Incident)
-            .filter(Incident.primary_org_id == org_id, Incident.started_at >= grenze)
-            .execution_options(include_all_tenants=True)
-            .order_by(Incident.started_at.desc())
-            .limit(20)
-            .all()
-        )
-        if not incidents:
-            letzter_incident = (
-                db.query(Incident)
-                .filter(Incident.primary_org_id == org_id)
-                .execution_options(include_all_tenants=True)
-                .order_by(Incident.started_at.desc())
-                .first()
-            )
-            if letzter_incident:
-                incidents = [letzter_incident]
+    incidents = (
+        _lade_einsaetze(org_id, db, tage=3, limit=20)
+        if zweck and zweck.kategorie == FahrtKategorie.einsatz and org_id else []
+    )
 
     gk_members = []
     if zweck and zweck.verlangt_gruppenkommandant and org_id:
@@ -374,6 +362,46 @@ async def hx_zaehler_check(
 
 
 # ── Hilfsfunktionen ───────────────────────────────────────────────────────────
+
+def _lade_einsaetze(
+    org_id: int,
+    db: Session,
+    *,
+    tage: int,
+    limit: int | None = None,
+    ensure_id: int | None = None,
+) -> list[Incident]:
+    """Lädt die jüngsten Einsätze einer Org und erhält eine bestehende Verknüpfung."""
+    grenze = datetime.now(UTC) - timedelta(days=tage)
+    query = (
+        db.query(Incident)
+        .filter(Incident.primary_org_id == org_id, Incident.started_at >= grenze)
+        .execution_options(include_all_tenants=True)
+        .order_by(Incident.started_at.desc())
+    )
+    if limit is not None:
+        query = query.limit(limit)
+    incidents = query.all()
+    if not incidents:
+        letzter_incident = (
+            db.query(Incident)
+            .filter(Incident.primary_org_id == org_id)
+            .execution_options(include_all_tenants=True)
+            .order_by(Incident.started_at.desc())
+            .first()
+        )
+        if letzter_incident:
+            incidents = [letzter_incident]
+    if ensure_id and ensure_id not in {incident.id for incident in incidents}:
+        incident = (
+            db.query(Incident)
+            .filter(Incident.id == ensure_id, Incident.primary_org_id == org_id)
+            .execution_options(include_all_tenants=True)
+            .first()
+        )
+        if incident:
+            incidents.insert(0, incident)
+    return incidents
 
 async def _render_erfassung(
     request: Request,
@@ -442,7 +470,10 @@ async def _render_erfassung(
     })
 
 
-def _form_zu_daten(form, *, org_id: int, user=None, token_org: OrgSettings | None = None) -> dict:
+def _form_zu_daten(
+    form, *, org_id: int, org: FireDept | None = None, user=None,
+    token_org: OrgSettings | None = None,
+) -> dict:
     def _int(key: str) -> int | None:
         v = form.get(key, "").strip()
         return int(v) if v else None
@@ -470,9 +501,11 @@ def _form_zu_daten(form, *, org_id: int, user=None, token_org: OrgSettings | Non
     incident_id_raw = form.get("incident_id", "").strip()
     incident_nicht_zuordenbar = incident_id_raw == "keiner"
     incident_id = int(incident_id_raw) if incident_id_raw and not incident_nicht_zuordenbar else None
+    zeitpunkt_raw = form.get("zeitpunkt", "").strip()
 
     return {
         "org_id": org_id,
+        "zeitpunkt": local_input_to_utc(zeitpunkt_raw, org) if zeitpunkt_raw else None,
         "fahrzeug_id": _int("fahrzeug_id"),
         "maschinist_member_id": _int("maschinist_member_id"),
         "maschinist_name": _str("maschinist_name") or "",

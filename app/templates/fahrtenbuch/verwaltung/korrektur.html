@@ -1,253 +1,52 @@
 {% extends "base.html" %}
 {% block title %}Fahrt korrigieren #{{ fahrt.id }}{% endblock %}
-
 {% block head_extra %}
 <style>
-/* Gleiche Kartensprache wie fahrtenbuch/neu.html ("Fahrt erfassen"), damit
-   Erfassen und Korrigieren visuell identisch wirken. */
-.fab-page{max-width:680px;margin:0 auto;padding:1.25rem 1rem 6rem;}
-
-.fab-header{margin-bottom:var(--space-lg);}
-.fab-header__top{display:flex;align-items:center;justify-content:space-between;gap:1rem;}
-.fab-header__title{font-size:1.3rem;font-weight:700;margin:0;line-height:1.2;}
-
-.fab-card{--fab-accent:var(--red);background:var(--surface-mid);border:1px solid var(--border);border-left:4px solid var(--fab-accent);border-radius:var(--radius-lg);padding:1.1rem 1rem;box-shadow:var(--shadow-card);}
-.fab-card--ziel{--fab-accent:var(--org-task);}
-.fab-card--zeit{--fab-accent:var(--outline);}
-.fab-card__head{display:flex;align-items:center;gap:.55rem;margin-bottom:1rem;}
-.fab-card__icon{font-size:1.25rem;line-height:1;}
-.fab-card__title{font-size:1rem;font-weight:700;margin:0;}
-.fab-card__body{display:flex;flex-direction:column;gap:1.1rem;}
-
-.fab-card .form-control{padding:.8rem .85rem;font-size:1rem;min-height:48px;}
-.fab-card textarea.form-control{min-height:unset;}
-.fab-card select.form-control{cursor:pointer;}
-
-.fab-grid{display:flex;flex-direction:column;gap:var(--gutter);}
-
-.fb-input-warn{border-color:#f59e0b !important;background:rgba(245,158,11,.08) !important;}
-.fb-name-warn{font-size:.8rem;color:#f59e0b;margin:.35rem 0 0;font-weight:600;}
-
-.fab-actions{position:sticky;bottom:0;left:0;right:0;padding:1rem 0 max(.5rem, env(safe-area-inset-bottom));margin:.25rem -1rem 0;background:linear-gradient(to top, var(--bg) 60%, transparent);}
-.fab-actions .btn{width:100%;}
+.fab-page{max-width:680px;margin:0 auto;padding:1.25rem 1rem 6rem}.fab-header{margin-bottom:var(--space-lg)}.fab-header__top{display:flex;align-items:center;justify-content:space-between;gap:1rem}.fab-header__title{font-size:1.3rem;font-weight:700;margin:0;line-height:1.2}.fab-card{--fab-accent:var(--red);background:var(--surface-mid);border:1px solid var(--border);border-left:4px solid var(--fab-accent);border-radius:var(--radius-lg);padding:1.1rem 1rem;box-shadow:var(--shadow-card)}.fab-card--ziel{--fab-accent:var(--org-task)}.fab-card--zeit{--fab-accent:var(--outline)}.fab-card__head{display:flex;align-items:center;gap:.55rem;margin-bottom:1rem}.fab-card__icon{font-size:1.25rem;line-height:1}.fab-card__title{font-size:1rem;font-weight:700;margin:0}.fab-card__body{display:flex;flex-direction:column;gap:1.1rem}.fab-card__body>#fahrzeug-felder-korrektur,.fab-card__body>#zweck-felder-korrektur{display:contents}.fab-card .form-control{padding:.8rem .85rem;font-size:1rem;min-height:48px}.fab-card textarea.form-control{min-height:unset}.fab-card select.form-control{cursor:pointer}.fab-grid{display:flex;flex-direction:column;gap:var(--gutter)}.fab-subcard{border:1px solid var(--border);border-radius:var(--radius-md);padding:.8rem}.fab-actions{position:sticky;bottom:0;left:0;right:0;padding:1rem 0 max(.5rem,env(safe-area-inset-bottom));margin:.25rem -1rem 0;background:linear-gradient(to top,var(--bg) 60%,transparent)}.fab-actions .btn{width:100%}.fb-input-warn{border-color:#f59e0b!important;background:rgba(245,158,11,.08)!important}.fb-name-warn{font-size:.8rem;color:#f59e0b;margin:.35rem 0 0;font-weight:600}.person-select__trigger{display:flex;align-items:center;gap:.65rem;width:100%;min-height:50px;padding:.75rem .85rem;text-align:left;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);color:var(--text)}.person-select__trigger strong{flex:1;font-size:1rem}.person-select__chevron{font-size:1.6rem;line-height:.8;color:var(--text-muted)}.person-flyout-backdrop{position:fixed;z-index:1000;inset:0;display:flex;align-items:center;justify-content:center;padding:1rem;background:rgba(0,0,0,.62)}.person-flyout{display:flex;flex-direction:column;width:min(42rem,100%);max-height:min(84dvh,48rem);overflow:hidden;background:var(--surface-low);border:1px solid var(--border);border-radius:var(--radius-lg)}.person-flyout__header{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:1rem;border-bottom:1px solid var(--border)}.person-flyout__search{padding:.75rem 1rem;background:var(--surface-mid)}.person-flyout__list{overflow:auto;padding:.25rem 1rem 1rem}.person-flyout__person{display:block;width:100%;min-height:48px;padding:.7rem .5rem;text-align:left;border-bottom:1px solid var(--border)}@media(max-width:600px){.person-flyout-backdrop{align-items:stretch;padding:0}.person-flyout{width:100%;max-height:none;height:100dvh;border:0;border-radius:0}}
 </style>
 {% endblock %}
-
 {% block content %}
 <div class="fab-page">
-
-  <div class="fab-header">
-    <div class="fab-header__top">
-      <h1 class="fab-header__title">Fahrt #{{ fahrt.id }} korrigieren</h1>
-      <a href="/verwaltung/fahrten/{{ fahrt.id }}{{ org_q }}" class="btn btn--ghost btn--sm" style="flex-shrink:0;">&#8592; Zurück</a>
-    </div>
-  </div>
-
-  <div class="alert alert--warn">
-    Die ursprüngliche Fahrt wird als „ersetzt" markiert und eine neue Version erstellt.
-  </div>
-
-  <form method="post" class="fab-grid">
+  <div class="fab-header"><div class="fab-header__top"><h1 class="fab-header__title">Fahrt #{{ fahrt.id }} korrigieren</h1><a href="/verwaltung/fahrten/{{ fahrt.id }}{{ org_q }}" class="btn btn--ghost btn--sm">&#8592; Zurück</a></div></div>
+  <div class="alert alert--warn">Die ursprüngliche Fahrt wird als „ersetzt" markiert und eine neue Version erstellt.</div>
+  {% include "fahrtenbuch/_fehler_meldung.html" %}
+  {% if doppelfahrt_warnung %}<div class="alert alert--warn">&#9888; Für dieses Fahrzeug wurde in den letzten Minuten bereits eine Fahrt erfasst.</div>{% endif %}
+  <form method="post" class="fab-grid" x-data="korrekturForm()" @submit="onSubmit($event)">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-
-    {# 1. Fahrzeug & Maschinist #}
-    <div class="fab-card">
-      <div class="fab-card__head">
-        <span class="fab-card__icon">&#x1F692;</span>
-        <h2 class="fab-card__title">Fahrzeug &amp; Maschinist</h2>
-      </div>
-      <div class="fab-card__body">
-        <div class="form-group">
-          <label class="form-label">Fahrzeug *</label>
-          <select name="fahrzeug_id" class="form-control" required>
-            {% for fz in fahrzeuge %}
-            <option value="{{ fz.id }}" {% if fz.id == fahrt.fahrzeug_id %}selected{% endif %}>
-              {{ fz.code }}{% if fz.kennzeichen %} ({{ fz.kennzeichen }}){% endif %}
-            </option>
-            {% endfor %}
-          </select>
-        </div>
-
-        <div class="form-group" x-data="maschinistAutocomplete('maschinist', '{{ fahrt.maschinist_name }}', '{{ fahrt.maschinist_member_id or '' }}')">
-          <label class="form-label">Maschinist *</label>
-          <input type="hidden" name="maschinist_member_id" :value="memberId">
-          <div style="position:relative;">
-            <input type="text" name="maschinist_name" id="maschinist_name"
-                   class="form-control"
-                   placeholder="Name tippen…" required autocomplete="new-password"
-                   x-model="query"
-                   hx-get="/fahrtenbuch/hx/maschinist"
-                   hx-target="#maschinist-suggestions"
-                   hx-trigger="input changed delay:200ms"
-                   hx-include="[name='maschinist_name']"
-                   :class="warn ? 'fb-input-warn' : ''"
-                   @focus="open=true" @blur="setTimeout(()=>open=false,150)" @input="open=true">
-            <div id="maschinist-suggestions" x-show="open" style="position:absolute;z-index:50;width:100%;background:var(--surface-mid);border:1px solid var(--border);border-radius:.4rem;"></div>
-          </div>
-          <p class="fb-name-warn" x-show="warn" x-cloak>&#9888; Name nicht in der Mannschaftsliste – bitte den passenden Namen aus der Vorschlagsliste auswählen.</p>
-        </div>
-
-        {% if fahrt.fahrzeug and fahrt.fahrzeug.zweiter_maschinist_pflicht %}
-        <div class="form-group" x-data="maschinistAutocomplete('maschinist2', '{{ fahrt.maschinist2_name or '' }}', '{{ fahrt.maschinist2_member_id or '' }}')">
-          <label class="form-label">2. Maschinist (Korbmaschinist) *</label>
-          <input type="hidden" name="maschinist2_member_id" :value="memberId">
-          <div style="position:relative;">
-            <input type="text" name="maschinist2_name" id="maschinist2_name"
-                   class="form-control"
-                   placeholder="Name tippen…" required autocomplete="new-password"
-                   x-model="query"
-                   hx-get="/fahrtenbuch/hx/maschinist"
-                   hx-target="#maschinist2-suggestions"
-                   hx-trigger="input changed delay:200ms"
-                   hx-include="[name='maschinist2_name']"
-                   :class="warn ? 'fb-input-warn' : ''"
-                   @focus="open=true" @blur="setTimeout(()=>open=false,150)" @input="open=true">
-            <div id="maschinist2-suggestions" x-show="open" style="position:absolute;z-index:50;width:100%;background:var(--surface-mid);border:1px solid var(--border);border-radius:.4rem;"></div>
-          </div>
-          <p class="fb-name-warn" x-show="warn" x-cloak>&#9888; Name nicht in der Mannschaftsliste – bitte den passenden Namen aus der Vorschlagsliste auswählen.</p>
-        </div>
-        {% endif %}
-
-        {% if (fahrt.fahrzeug and fahrt.fahrzeug.einsatzleiter_abfrage) or (fahrt.zweck and fahrt.zweck.optional_einsatzleiter) %}
-        <div class="form-group" x-data="maschinistAutocomplete('einsatzleiter', '{{ fahrt.einsatzleiter_name or '' }}', '{{ fahrt.einsatzleiter_member_id or '' }}')">
-          <label class="form-label">Einsatzleiter (optional)</label>
-          <input type="hidden" name="einsatzleiter_member_id" :value="memberId">
-          <div style="position:relative;">
-            <input type="text" name="einsatzleiter_name" id="einsatzleiter_name"
-                   class="form-control"
-                   placeholder="Name tippen (optional)…" autocomplete="new-password"
-                   x-model="query"
-                   hx-get="/fahrtenbuch/hx/maschinist"
-                   hx-target="#einsatzleiter-suggestions"
-                   hx-trigger="input changed delay:200ms"
-                   hx-include="[name='einsatzleiter_name']"
-                   :class="warn ? 'fb-input-warn' : ''"
-                   @focus="open=true" @blur="setTimeout(()=>open=false,150)" @input="open=true">
-            <div id="einsatzleiter-suggestions" x-show="open" style="position:absolute;z-index:50;width:100%;background:var(--surface-mid);border:1px solid var(--border);border-radius:.4rem;"></div>
-          </div>
-          <p class="fb-name-warn" x-show="warn" x-cloak>&#9888; Name nicht in der Mannschaftsliste – bitte den passenden Namen aus der Vorschlagsliste auswählen.</p>
-        </div>
-        {% endif %}
-
-        {% if fahrt.fahrzeug and fahrt.fahrzeug.erfasst_km %}
-        <div class="form-group">
-          <label class="form-label">km-Stand *</label>
-          <input type="number" name="km_stand_neu" class="form-control" inputmode="numeric" required
-                 value="{{ fahrt.km_stand_neu or '' }}">
-        </div>
-        {% endif %}
-
-        {% if fahrt.fahrzeug and fahrt.fahrzeug.erfasst_betriebsstunden %}
-        <div class="form-group">
-          <label class="form-label">Betriebsstunden</label>
-          <input type="number" name="betriebsstunden_neu" class="form-control" step="0.1"
-                 value="{{ fahrt.betriebsstunden_neu or '' }}">
-        </div>
-        {% endif %}
-      </div>
-    </div>
-
-    {# 2. Ziel & Zweck #}
-    <div class="fab-card fab-card--ziel">
-      <div class="fab-card__head">
-        <span class="fab-card__icon">&#x1F4CD;</span>
-        <h2 class="fab-card__title">Ziel &amp; Zweck</h2>
-      </div>
-      <div class="fab-card__body">
-        <div class="form-group">
-          <label class="form-label">Zielort</label>
-          <select name="zielort_id" class="form-control">
-            <option value="">— wählen —</option>
-            {% for zo in zielorte %}
-            <option value="{{ zo.id }}" {% if fahrt.zielort_id == zo.id %}selected{% endif %}>{{ zo.name }}</option>
-            {% endfor %}
-          </select>
-          <input type="text" name="zielort_freitext" class="form-control" style="margin-top:.5rem;"
-                 value="{{ fahrt.zielort_freitext or '' }}" placeholder="Freitext">
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">Zweck *</label>
-          <select name="zweck_id" class="form-control" required>
-            {% for z in zwecke %}
-            <option value="{{ z.id }}" {% if fahrt.zweck_id == z.id %}selected{% endif %}>{{ z.name }}</option>
-            {% endfor %}
-          </select>
-        </div>
-
-        {% if fahrt.zweck and fahrt.zweck.kategorie.value == 'sonstige' %}
-        <div class="form-group">
-          <label class="form-label">Zweck (Freitext)</label>
-          <input type="text" name="zweck_freitext" class="form-control" maxlength="200"
-                 value="{{ fahrt.zweck_freitext or '' }}" placeholder="Zweck der Fahrt beschreiben…">
-        </div>
-        {% endif %}
-      </div>
-    </div>
-
-    {# 3. Zeitpunkt & Bemerkung #}
-    <div class="fab-card fab-card--zeit">
-      <div class="fab-card__head">
-        <span class="fab-card__icon">&#x1F550;</span>
-        <h2 class="fab-card__title">Zeitpunkt &amp; Bemerkung</h2>
-      </div>
-      <div class="fab-card__body">
-        <div class="form-group">
-          <label class="form-label">Zeitpunkt</label>
-          <input type="datetime-local" name="zeitpunkt" class="form-control"
-                 value="{{ (fahrt.zeitpunkt|local).strftime('%Y-%m-%dT%H:%M') }}">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Bemerkung</label>
-          <textarea name="bemerkung" class="form-control" rows="2">{{ fahrt.bemerkung or '' }}</textarea>
-        </div>
-      </div>
-    </div>
-
-    <div class="fab-actions">
-      <button type="submit" class="btn btn--primary btn--lg">Korrektur speichern</button>
-    </div>
+    <div class="fab-card"><div class="fab-card__head"><span class="fab-card__icon">&#x1F692;</span><h2 class="fab-card__title">Fahrzeug &amp; Maschinist</h2></div><div class="fab-card__body">
+      <div class="form-group"><label class="form-label" for="fahrzeug_id">Fahrzeug *</label><select name="fahrzeug_id" id="fahrzeug_id" class="form-control" required hx-get="/verwaltung/fahrten/hx/fahrzeug-felder" hx-target="#fahrzeug-felder-korrektur" hx-trigger="change" hx-include="[name='fahrzeug_id']" @change="$nextTick(() => { const z=document.getElementById('zweck_id'); if (z && z.value) htmx.trigger(z,'change'); })">{% for fz in fahrzeuge %}<option value="{{ fz.id }}"{% if form_daten.get('fahrzeug_id') == fz.id|string %} selected{% endif %}>{{ fz.code }}{% if fz.kennzeichen %} ({{ fz.kennzeichen }}){% endif %}</option>{% endfor %}</select></div>
+      <div id="fahrzeug-felder-korrektur">{% if fahrzeug %}{% include "fahrtenbuch/_fahrzeug_felder.html" %}{% endif %}</div>
+    </div></div>
+    <div class="fab-card fab-card--ziel"><div class="fab-card__head"><span class="fab-card__icon">&#x1F4CD;</span><h2 class="fab-card__title">Ziel &amp; Zweck</h2></div><div class="fab-card__body">
+      <div class="form-group"><label class="form-label" for="zielort_id">Zielort</label><select name="zielort_id" id="zielort_id" class="form-control"><option value="">— wählen —</option>{% for zo in zielorte %}<option value="{{ zo.id }}"{% if form_daten.get('zielort_id') == zo.id|string %} selected{% endif %}>{{ zo.name }}</option>{% endfor %}<option value="">Freitext ↓</option></select><input type="text" name="zielort_freitext" class="form-control" style="margin-top:.5rem" value="{{ form_daten.get('zielort_freitext', '') }}" placeholder="Sonstiger Zielort (optional)"></div>
+      <div class="form-group"><label class="form-label" for="zweck_id">Zweck *</label><select name="zweck_id" id="zweck_id" class="form-control" required hx-get="/verwaltung/fahrten/hx/zweck-felder" hx-target="#zweck-felder-korrektur" hx-trigger="change" hx-include="[name='zweck_id'],[name='fahrzeug_id'],[name='incident_id']">{% for z in zwecke %}<option value="{{ z.id }}"{% if form_daten.get('zweck_id') == z.id|string %} selected{% endif %}>{{ z.name }}</option>{% endfor %}</select></div>
+      <div id="zweck-felder-korrektur">{% if zweck %}{% include "fahrtenbuch/_zweck_felder.html" %}{% endif %}</div>
+    </div></div>
+    <div class="fab-card"><div class="fab-card__head"><span class="fab-card__icon">&#9888;</span><h2 class="fab-card__title">Schaden / Defekt?</h2></div><div class="fab-card__body" x-data="{schaden: {{ 'true' if form_daten.get('schaden_vorhanden') else 'false' }} }"><label class="form-label"><input type="checkbox" name="schaden_vorhanden" value="on" @change="schaden=$event.target.checked"{% if form_daten.get('schaden_vorhanden') %} checked{% endif %}> Schaden vorhanden</label><div x-show="schaden" x-cloak class="fab-subcard"><label class="form-label">Betriebsfähig?</label><label><input type="radio" name="schaden_betriebsfaehig" value="on"{% if form_daten.get('schaden_betriebsfaehig') == 'on' %} checked{% endif %}> Ja</label> <label><input type="radio" name="schaden_betriebsfaehig" value=""{% if form_daten.get('schaden_vorhanden') and form_daten.get('schaden_betriebsfaehig') != 'on' %} checked{% endif %}> Nein</label><label class="form-label" for="schaden_beschreibung" style="margin-top:.75rem">Beschreibung *</label><textarea name="schaden_beschreibung" id="schaden_beschreibung" class="form-control" rows="3" :required="schaden">{{ form_daten.get('schaden_beschreibung', '') }}</textarea></div></div></div>
+    <div class="fab-card fab-card--zeit"><div class="fab-card__head"><span class="fab-card__icon">&#x1F550;</span><h2 class="fab-card__title">Zeitpunkt &amp; Bemerkung</h2></div><div class="fab-card__body"><div class="form-group"><label class="form-label" for="zeitpunkt">Zeitpunkt</label><input type="datetime-local" name="zeitpunkt" id="zeitpunkt" class="form-control" value="{{ form_daten.get('zeitpunkt') or (fahrt.zeitpunkt|local).strftime('%Y-%m-%dT%H:%M') }}"></div><div class="form-group"><label class="form-label" for="bemerkung">Bemerkung</label><textarea name="bemerkung" id="bemerkung" class="form-control" rows="2">{{ form_daten.get('bemerkung', '') }}</textarea></div><label><input type="checkbox" name="nicht_statistikrelevant" value="on"{% if form_daten.get('nicht_statistikrelevant') %} checked{% endif %}> Nicht statistikrelevant</label></div></div>
+    {% if doppelfahrt_warnung %}<label><input type="checkbox" name="doppelfahrt_bestaetigt" value="on" required> Ja, ich bestätige die Doppelfahrt-Meldung</label>{% endif %}
+    <div class="fab-actions"><button type="submit" class="btn btn--primary btn--lg">Korrektur speichern</button></div>
   </form>
 </div>
-
 <script>
-function maschinistAutocomplete(prefix, initialName, initialId) {
+function personSelectFlyout(options) {
+  const collator = new Intl.Collator('de', { sensitivity: 'base' });
+  const normalize = (value) => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleUpperCase('de-DE');
+  const people = (options.people || []).slice().sort((a, b) => collator.compare(a.lastname || '', b.lastname || '') || collator.compare(a.firstname || '', b.firstname || ''));
+  const groups = {};
+  people.forEach((person) => { const letter = normalize(person.lastname || person.name).charAt(0) || '#'; (groups[letter] ||= []).push(person); });
   return {
-    query: initialName || '',
-    memberId: initialId || '',
-    selectedName: initialId ? (initialName || '') : '',
-    open: false,
-    get warn() {
-      return this.query.trim().length > 0 && !this.memberId && !this.open;
-    },
-    init() {
-      this.$el.addEventListener('member-selected', (e) => {
-        this.memberId = e.detail.id;
-        this.selectedName = e.detail.name;
-        this.query = e.detail.name;
-        this.open = false;
-      });
-      this.$watch('query', (val) => {
-        if (!val || val !== this.selectedName) this.memberId = '';
-      });
-    },
-    select(id, name) {
-      this.memberId = id;
-      this.selectedName = name;
-      this.query = name;
-      this.open = false;
-    }
+    title: options.title, people, groups, query: '', open: false,
+    memberId: options.initialId || '', selectedName: options.initialName || '', invalid: false,
+    uid: 'person-select-' + Math.random().toString(36).slice(2), letters: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split(''),
+    get availableLetters() { return Object.keys(this.groups).sort(collator.compare); },
+    get filtered() { const query = normalize(this.query).trim(); return query ? this.people.filter((person) => normalize([person.firstname, person.lastname, person.name].join(' ')).includes(query)) : this.people; },
+    openFlyout() { this.open = true; this.query = ''; this.invalid = false; this.$nextTick(() => this.$refs.search?.focus()); },
+    close() { this.open = false; },
+    jump(letter) { document.getElementById(this.uid + '-' + letter)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); },
+    select(person) { this.memberId = person.id; this.selectedName = person.name; this.invalid = false; this.close(); },
   };
 }
-document.addEventListener('pointerdown', function(e) {
-  const item = e.target.closest('.autocomplete-item');
-  if (!item) return;
-  e.preventDefault();
-  const container = item.closest('[x-data]');
-  if (!container) return;
-  container.dispatchEvent(new CustomEvent('member-selected', {
-    detail: { id: item.dataset.memberId, name: item.dataset.name }
-  }));
-}, { passive: false });
+function maschinistAutocomplete(prefix,initialName,initialId){return{query:initialName||'',memberId:initialId||'',selectedName:initialId?(initialName||''):'',open:false,get warn(){return this.query.trim().length>0&&!this.memberId&&!this.open},init(){this.$el.addEventListener('member-selected',e=>{this.memberId=e.detail.id;this.selectedName=e.detail.name;this.query=e.detail.name;this.open=false});this.$watch('query',value=>{if(!value||value!==this.selectedName)this.memberId=''})}}}function fuehrungAutocomplete(){const autocomplete=maschinistAutocomplete('fuehrung');autocomplete.rolle='gruppenkommandant';return autocomplete}function korrekturForm(){return{onSubmit(e){for(const picker of e.target.querySelectorAll('.person-select[data-required="true"]')){if(!picker.querySelector('input[name$="_member_id"]')?.value){e.preventDefault();const state=window.Alpine&&Alpine.$data(picker);if(state)state.invalid=true;picker.scrollIntoView({behavior:'smooth',block:'center'});return}}}}}document.addEventListener('pointerdown',e=>{const item=e.target.closest('.autocomplete-item');if(!item)return;e.preventDefault();item.closest('[x-data]')?.dispatchEvent(new CustomEvent('member-selected',{detail:{id:item.dataset.memberId,name:item.dataset.name}}))},{passive:false});document.body.addEventListener('htmx:afterSwap',ev=>{const target=ev.detail&&ev.detail.target;if(target&&(target.id==='fahrzeug-felder-korrektur'||target.id==='zweck-felder-korrektur')&&window.Alpine)Alpine.initTree(target)});
 </script>
 {% endblock %}
