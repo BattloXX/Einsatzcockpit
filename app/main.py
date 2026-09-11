@@ -63,6 +63,7 @@ from app.routers import (
     ui_infoscreen_alarm,
     ui_infoscreen_stats,
     ui_invitation,
+    ui_kontakt,
     ui_lagedokument,
     ui_lagefuehrung,
     ui_lis,
@@ -809,6 +810,7 @@ app.include_router(ui_bma_import.router)
 app.include_router(ui_einsatz_import.router)
 app.include_router(ui_objekt.router)
 app.include_router(ui_objekt_dokumente.router)
+app.include_router(ui_kontakt.router)
 app.include_router(ui_nachschlagewerke.router)
 app.include_router(ui_nachschlagewerke.cache_router)
 app.include_router(ui_wasserstelle.router)

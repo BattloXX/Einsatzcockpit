@@ -50,7 +50,7 @@ def require_scope(*scopes: str):
 # Modul ist identisch zu den *_effective_enabled-Helfern der Services
 # (effektiv = System-Flag "true" AND Org-Flag) — hier nur gebündelt, damit pro
 # Request 2 Queries statt bis zu 10 anfallen (Audit B4).
-_SYSTEM_FLAG_KEYS = ("uas_module_enabled", "objekt_module_enabled",
+_SYSTEM_FLAG_KEYS = ("uas_module_enabled", "objekt_module_enabled", "kontakte_module_enabled",
                      "gateway_module_enabled", "lagefuehrung_modul_aktiv",
                      "nachschlagewerke_module_enabled", "foerderstrecke_module_enabled",
                      "mailing_module_enabled", "probenplanung_module_enabled")
@@ -80,6 +80,8 @@ def _set_module_states(request: HTTPConnection, org_id: int | None, db: Session)
             "uas_module_enabled" in sys_on and org_s and org_s.uas_module_enabled)
         request.state.objekt_enabled = bool(
             "objekt_module_enabled" in sys_on and org_s and org_s.objekt_module_enabled)
+        request.state.kontakte_enabled = bool(
+            "kontakte_module_enabled" in sys_on and org_s and org_s.kontakte_module_enabled)
         request.state.nachschlagewerke_enabled = bool(
             "nachschlagewerke_module_enabled" in sys_on
             and org_s and org_s.nachschlagewerke_module_enabled)

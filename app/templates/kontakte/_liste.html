@@ -1,0 +1,10 @@
+{% for kontakt in kontakte %}
+<a class="kontakt-row {% if selected and selected.id == kontakt.id %}is-selected{% endif %}" href="/kontakte/{{ kontakt.id }}" hx-get="/kontakte/{{ kontakt.id }}" hx-target="#kontakt-detail" hx-swap="innerHTML" hx-push-url="true">
+  <span class="kontakt-avatar">{{ kontakt.anzeigename[:2]|upper }}</span>
+  <span><strong>{{ kontakt.anzeigename }}</strong><small>{{ kontakt.organisation or kontakt.funktion or 'Ohne Zusatzangabe' }}</small></span>
+  <span class="badge-pill">{{ 'Person' if kontakt.typ == 'person' else 'Stelle' }}</span>
+</a>
+{% else %}
+<p class="text-muted">Keine Kontakte gefunden.</p>
+{% endfor %}
+{% if total > pro_seite %}<nav class="kontakt-pages">{% for nummer in range(1, (total // pro_seite) + 2) %}<a href="/kontakte?q={{ q }}&amp;typ={{ typ }}&amp;kategorie={{ kategorie_id or '' }}&amp;page={{ nummer }}" hx-get="/kontakte/liste?q={{ q }}&amp;typ={{ typ }}&amp;kategorie={{ kategorie_id or '' }}&amp;page={{ nummer }}" hx-target="#kontakt-liste">{{ nummer }}</a>{% endfor %}</nav>{% endif %}
