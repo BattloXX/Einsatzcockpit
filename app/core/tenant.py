@@ -139,6 +139,7 @@ _TENANT_TABLE_NAMES: frozenset[str] = frozenset({
     "merkmal_katalog",
     "objekt_merkmal",
     "objekt_kontakt",
+    "objekt_kontakt_freigabe",
     "objekt_kontakt_benachrichtigung",
     "objekt_wohnanlage",
     "objekt_dokument",
@@ -149,6 +150,13 @@ _TENANT_TABLE_NAMES: frozenset[str] = frozenset({
     "infoscreen_url",
     "objekt_seite_ki_vorschlag",
     "objekt_stammdaten_vorschlag",
+    # Zentrale Kontakte (TenantScoped via Mixin)
+    "kontakt",
+    "kontakt_telefon",
+    "kontakt_kategorie",
+    "kontakt_kategorie_zuordnung",
+    "kontakt_anhang",
+    "kontakt_externe_referenz",
     # BMA-Webplattform-Import (TenantScoped via Mixin)
     "bma_import_satz",
     # Wasserstellen-/Löschwasser-Stammdaten (TenantScoped via Mixin)

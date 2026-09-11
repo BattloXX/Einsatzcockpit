@@ -52,6 +52,15 @@ from app.models.incident import (
     Task,
 )
 from app.models.invitation import OrgInvitation, OrgPartner
+from app.models.kontakt import (
+    Kontakt,
+    KontaktAnhang,
+    KontaktExterneReferenz,
+    KontaktKategorie,
+    KontaktKategorieZuordnung,
+    KontaktTelefon,
+    ObjektKontaktFreigabe,
+)
 from app.models.lagefuehrung import (
     LagefuehrungBerechtigung,
     LagefuehrungEvent,
@@ -346,6 +355,7 @@ __all__ = [
     "ObjektMerkmal",
     "ObjektAuswahl",
     "ObjektKontakt",
+    "ObjektKontaktFreigabe",
     "ObjektKontaktBenachrichtigung",
     "ObjektWohnanlage",
     "ObjektDokument",
@@ -356,6 +366,12 @@ __all__ = [
     "AlarmInfoscreenToken",
     "InfoscreenUrl",
     "ObjektSeiteKiVorschlag",
+    "Kontakt",
+    "KontaktTelefon",
+    "KontaktKategorie",
+    "KontaktKategorieZuordnung",
+    "KontaktAnhang",
+    "KontaktExterneReferenz",
     "Wasserstelle",
     "FoerderPumpenTyp",
     "FoerderSchlauchTyp",
