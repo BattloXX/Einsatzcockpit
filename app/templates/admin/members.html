@@ -126,7 +126,7 @@
             Bearbeiten
           </button>{% endif %}
           <button class="btn btn--ghost btn--xs"
-                  onclick="openQualiEditor({{ m.id }}, '{{ m.full_name|replace("'","\\'")|e }}', {{ _existing_quals|tojson }})">
+                  onclick="openQualiEditor({{ m.id }}, '{{ m.full_name|replace("'","\\'")|e }}', {{ _existing_quals|tojson|forceescape }})">
             Qualifikationen
           </button>
           {% if can_manage_members %}<form method="post" action="/admin/mitglieder/{{ m.id }}/toggle" style="display:inline">
