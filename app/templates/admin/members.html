@@ -118,13 +118,15 @@
           {% if m.active %}<span class="badge-pill badge-pill--green">Aktiv</span>
           {% else %}<span class="badge-pill badge-pill--gray">Inaktiv</span>{% endif %}
         </td>
+        {% set _existing_quals = {} %}
+        {% for mq in m.qualifications %}{% if mq.qualification %}{% set _ = _existing_quals.update({mq.qualification.code: (mq.valid_until.isoformat() if mq.valid_until else None)}) %}{% endif %}{% endfor %}
         <td data-label="Aktionen" style="display:flex;gap:6px;flex-wrap:wrap;">
           {% if can_manage_members %}<button class="btn btn--ghost btn--xs"
                   onclick="openEditMember({{ m.id }}, '{{ m.lastname|replace("'","\\'")|e }}', '{{ m.firstname|replace("'","\\'")|e }}', '{{ m.phone or "" }}', '{{ m.email or "" }}', '{{ m.sybos_id or "" }}')">
             Bearbeiten
           </button>{% endif %}
           <button class="btn btn--ghost btn--xs"
-                  onclick="openQualiEditor({{ m.id }}, '{{ m.full_name|replace("'","\\'")|e }}')">
+                  onclick="openQualiEditor({{ m.id }}, '{{ m.full_name|replace("'","\\'")|e }}', {{ _existing_quals|tojson }})">
             Qualifikationen
           </button>
           {% if can_manage_members %}<form method="post" action="/admin/mitglieder/{{ m.id }}/toggle" style="display:inline">
@@ -301,9 +303,22 @@ function openEditMember(id, lastname, firstname, phone, email, sybosId) {
   document.getElementById('editMemberForm').action = `/admin/mitglieder/${id}/edit`;
   document.getElementById('editMemberModal').showModal();
 }
-function openQualiEditor(id, name) {
+function openQualiEditor(id, name, existingQuals) {
+  const form = document.getElementById('qualiEditorForm');
+  form.querySelectorAll('input[name="qualification_codes"]').forEach(input => {
+    input.checked = false;
+  });
+  form.querySelectorAll('input[type="date"]').forEach(input => {
+    input.value = '';
+  });
+  Object.entries(existingQuals || {}).forEach(([code, validUntil]) => {
+    const checkbox = form.querySelector(`input[name="qualification_codes"][value="${CSS.escape(code)}"]`);
+    const dateInput = form.querySelector(`input[name="valid_until_${CSS.escape(code)}"]`);
+    if (checkbox) checkbox.checked = true;
+    if (dateInput && validUntil) dateInput.value = validUntil;
+  });
   document.getElementById('qe_name').textContent = name;
-  document.getElementById('qualiEditorForm').action = `/admin/mitglieder/${id}/quali`;
+  form.action = `/admin/mitglieder/${id}/quali`;
   document.getElementById('qualiEditorModal').showModal();
 }
 
