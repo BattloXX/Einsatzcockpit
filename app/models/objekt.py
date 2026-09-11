@@ -533,6 +533,11 @@ class ObjektKontakt(TenantScoped, Base):
     objekt_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("objekt.id", ondelete="CASCADE"), nullable=False
     )
+    # Phase Kontakte 1: optionaler Verweis auf den zentralen Kontakt; die
+    # bestehenden Snapshot-Felder bleiben bis zur spaeteren Datenmigration aktiv.
+    kontakt_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("kontakt.id", ondelete="SET NULL"), nullable=True
+    )
     # Art: brandschutzbeauftragter / betreiber / hausverwaltung / schluesseltraeger / sonstig
     art: Mapped[str] = mapped_column(String(50), nullable=False, default="sonstig")
     name: Mapped[str] = mapped_column(String(150), nullable=False)
