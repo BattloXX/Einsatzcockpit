@@ -3,13 +3,65 @@ from __future__ import annotations
 
 import csv
 import io
+from typing import Any
 
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.kontakt import Kontakt
 from app.models.objekt import Objekt, ObjektKontakt
+from app.services import kontakt_service
 
 FORMAT_VERSION = "1"
+
+
+def parse_import(content: bytes, filename: str) -> list[dict[str, Any]]:
+    """Read the v1 CSV or XLSX contact sheet into normalized import rows."""
+    if filename.lower().endswith(".csv"):
+        text = content.decode("utf-8-sig")
+        rows = list(csv.DictReader(io.StringIO(text), delimiter=";"))
+    elif filename.lower().endswith(".xlsx"):
+        from openpyxl import load_workbook
+        workbook = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+        if "Kontakte" not in workbook.sheetnames:
+            raise ValueError("XLSX braucht ein Blatt 'Kontakte'")
+        sheet = workbook["Kontakte"]
+        values = list(sheet.values)
+        if not values:
+            return []
+        headers = [str(value or "").strip() for value in values[0]]
+        rows = [dict(zip(headers, values_, strict=False)) for values_ in values[1:]]
+    else:
+        raise ValueError("Bitte eine CSV- oder XLSX-Datei hochladen")
+    if len(rows) > 1000:
+        raise ValueError("Hoechstens 1000 Kontakte pro Import")
+    return [{key: str(value or "").strip() for key, value in row.items()} for row in rows]
+
+
+def preview_import(db: Session, org_id: int, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Classify rows without changing data; all candidate queries stay in-org."""
+    preview = []
+    for row in rows:
+        name = row.get("anzeigename", "").strip()
+        if not name:
+            preview.append({"status": "fehler", "row": row, "message": "Anzeigename fehlt"})
+            continue
+        raw_id = row.get("id", "")
+        kontakt = None
+        if raw_id.isdigit():
+            kontakt = db.query(Kontakt).filter(Kontakt.org_id == org_id, Kontakt.id == raw_id).first()
+        if raw_id and kontakt is None:
+            preview.append({"status": "fehler", "row": row, "message": "Kontakt-ID gehoert nicht zur Organisation"})
+        elif kontakt is not None:
+            fields = ("typ", "anzeigename", "organisation", "funktion", "email", "erreichbarkeit")
+            changed = any((getattr(kontakt, field) or "") != row.get(field, "") for field in fields)
+            preview.append({"status": "geaendert" if changed else "unveraendert", "row": row, "kontakt_id": kontakt.id})
+        else:
+            duplicates = kontakt_service.find_duplicate_candidates(
+                db, anzeigename=name, organisation=row.get("organisation"), email=row.get("email"),
+            )
+            preview.append({"status": "dublette" if duplicates else "neu", "row": row,
+                            "kandidaten": [candidate.id for candidate in duplicates]})
+    return preview
 
 
 def _kontakte(db: Session, org_id: int) -> list[Kontakt]:
