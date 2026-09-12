@@ -11,6 +11,7 @@ from sqlalchemy.orm import sessionmaker
 from app.core.tenant import set_tenant_context
 from app.db import Base
 from app.models.bma_import import BmaImportSatz, OrgBmaImportConfig
+from app.models.kontakt import Kontakt, KontaktExterneReferenz
 from app.models.master import FireDept
 from app.models.objekt import OBJEKT_STATUS_ENTWURF, Objekt, ObjektBMA, ObjektKontakt
 from app.services.bma_import.bma_sync import _sync_kontakte, verarbeite_pdf_anlage
@@ -73,6 +74,13 @@ def test_import_adoptiert_haendisch_gepflegten_kontakt_statt_zu_duplizieren(db):
     assert hand.extern_quelle == "dibos_bma"
     assert hand.erreichbarkeit == "Mo-Fr 8-17"
     assert hand.telefone == ["+43 555 123"]
+    assert hand.kontakt_id is not None
+    zentral = session.get(Kontakt, hand.kontakt_id)
+    assert zentral is not None and zentral.anzeigename == "Max Muster"
+    referenz = session.query(KontaktExterneReferenz).filter_by(kontakt_id=zentral.id).one()
+    assert (referenz.quelle, referenz.quelle_kontext, referenz.extern_id) == (
+        "dibos_bma", "pdf:1332", "pdf:1332:bma_alarmperson:max-muster",
+    )
 
 
 def test_adoption_matcht_ueber_namensnormalisierung(db):
@@ -106,6 +114,8 @@ def test_gleiches_datenblatt_zweimal_in_einer_session_legt_jeden_kontakt_einmal_
     verarbeite_pdf_anlage(session, org.id, config, anlage, kontakte, user)
 
     assert session.query(ObjektKontakt).filter(ObjektKontakt.objekt_id == objekt.id).count() == len(kontakte)
+    assert session.query(Kontakt).filter(Kontakt.org_id == org.id).count() == len(kontakte)
+    assert session.query(KontaktExterneReferenz).filter(KontaktExterneReferenz.org_id == org.id).count() == len(kontakte)
 
 
 def test_zwei_datenblaetter_am_selben_objekt_bleiben_disjunkt(db):
