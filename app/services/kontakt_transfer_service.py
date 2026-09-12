@@ -76,12 +76,17 @@ def _normalize_related(row: dict[str, Any]) -> dict[str, str]:
 def preview_import(db: Session, org_id: int, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Classify rows without changing data; all candidate queries stay in-org."""
     preview: list[dict[str, Any]] = []
+    duplicate_ids = {row.get("id", "") for row in rows if row.get("id", "")}
+    conflicting_ids = {raw_id for raw_id in duplicate_ids if sum(row.get("id", "") == raw_id for row in rows) > 1}
     for row in rows:
         name = row.get("anzeigename", "").strip()
+        raw_id = row.get("id", "")
+        if raw_id in conflicting_ids:
+            preview.append({"status": "konflikt", "row": row, "message": "Kontakt-ID kommt in der Datei mehrfach vor"})
+            continue
         if not name:
             preview.append({"status": "fehler", "row": row, "message": "Anzeigename fehlt"})
             continue
-        raw_id = row.get("id", "")
         kontakt = None
         if raw_id.isdigit():
             kontakt = db.query(Kontakt).filter(Kontakt.org_id == org_id, Kontakt.id == raw_id).first()

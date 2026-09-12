@@ -11,8 +11,10 @@ from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.kontakt import Kontakt, KontaktKategorie
 from app.models.master import FireDept, OrgSettings, SystemSettings
+from app.models.objekt import Objekt, ObjektKontakt
 from app.models.user import Role, User, UserRole
 from app.services import kontakt_service
+from app.services.kontakt_transfer_service import apply_preview, export_xlsx, parse_import, preview_import, save_preview
 
 
 def _rolle(db, code: str) -> Role:
@@ -246,3 +248,64 @@ def test_import_vorschau_uebernimmt_telefon_und_liefert_ergebnis_csv(client):
     assert "uebernommen" in result.content.decode("utf-8-sig")
     assert client.get("/kontakte/vorlage.xlsx").status_code == 200
     assert client.get("/kontakte/vorlage.csv?beispiel=1").status_code == 200
+
+
+def test_xlsx_roundtrip_uebernimmt_telefone_und_objektzuordnungen(client):
+    user = _setup_user("kontakte_xlsx_roundtrip", "kontakt_verwalter")
+    _login(client, user.username)
+    csrf = client.cookies.get("ec_csrf")
+    assert (
+        client.post(
+            "/kontakte/",
+            data=_post_data(_csrf=csrf, typ="person", anzeigename="Roundtrip Kontakt", nummer=["+43 664 111"]),
+            follow_redirects=False,
+        ).status_code
+        == 303
+    )
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        kontakt = db.query(Kontakt).filter_by(org_id=user.org_id, anzeigename="Roundtrip Kontakt").one()
+        objekt = Objekt(org_id=user.org_id, nummer=981234, name="Roundtrip Objekt")
+        db.add(objekt)
+        db.flush()
+        db.add(ObjektKontakt(org_id=user.org_id, objekt_id=objekt.id, kontakt_id=kontakt.id, name=kontakt.anzeigename))
+        db.commit()
+        rows = parse_import(export_xlsx(db, user.org_id), "kontakte.xlsx")
+        row = next(row for row in rows if row["id"] == str(kontakt.id))
+        assert row["_telefone"][0]["nummer"] == kontakt.telefone[0].nummer
+        assert row["_zuordnungen"][0]["objekt_id"] == str(objekt.id)
+        row["funktion"] = "Aktualisiert"
+        row["_telefone"][0]["label"] = "Mobil"
+        row["_zuordnungen"][0]["rolle"] = "betreiber"
+        preview = preview_import(db, user.org_id, rows)
+        entry = save_preview(db, user.org_id, user.id, preview)
+        assert apply_preview(db, user.org_id, user.id, entry.id) == 1
+        db.expire_all()
+        assert db.get(Kontakt, kontakt.id).telefone[0].label == "Mobil"
+        assert db.query(ObjektKontakt).filter_by(objekt_id=objekt.id, kontakt_id=kontakt.id).one().art == "betreiber"
+    finally:
+        db.close()
+
+
+def test_import_markiert_doppelte_oder_fremde_ids_als_konflikt_oder_fehler(client):
+    user = _setup_user("kontakte_import_konflikt", "kontakt_verwalter")
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        foreign_org = FireDept(slug="kontakte-import-fremd", name="Import Fremd", color="#123456", bos="FW")
+        db.add(foreign_org)
+        db.flush()
+        foreign = Kontakt(org_id=foreign_org.id, anzeigename="Fremder Kontakt")
+        db.add(foreign)
+        db.commit()
+        duplicate = preview_import(
+            db,
+            user.org_id,
+            [{"id": "77", "anzeigename": "A"}, {"id": "77", "anzeigename": "B"}],
+        )
+        foreign_row = preview_import(db, user.org_id, [{"id": str(foreign.id), "anzeigename": "Fremd"}])
+        assert [item["status"] for item in duplicate] == ["konflikt", "konflikt"]
+        assert foreign_row[0]["status"] == "fehler"
+    finally:
+        db.close()
