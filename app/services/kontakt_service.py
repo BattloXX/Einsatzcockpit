@@ -124,6 +124,9 @@ def create_kontakt(
     db.add(kontakt)
     db.flush()
     _kategorien_sync(db, kontakt, kategorien, org_id)
+    from app.services.kontakt_sync_service import contact_payload, record_change
+
+    record_change(db, org_id, "kontakt", kontakt.id, "upsert", contact_payload(kontakt))
     db.commit()
     return get_kontakt(db, kontakt.id, include_archiviert=True)  # type: ignore[return-value]
 
@@ -148,6 +151,9 @@ def update_kontakt(
     _telefone_sync(kontakt, telefone, org_id)
     _kategorien_sync(db, kontakt, kategorien, org_id)
     kontakt.version += 1
+    from app.services.kontakt_sync_service import contact_payload, record_change
+
+    record_change(db, org_id, "kontakt", kontakt.id, "upsert", contact_payload(kontakt))
     db.commit()
     return get_kontakt(db, kontakt.id, include_archiviert=True)  # type: ignore[return-value]
 
@@ -160,6 +166,10 @@ def archive_kontakt(db: Session, kontakt_id: int, *, user_id: int | None) -> Kon
     kontakt.aktiv = False
     kontakt.aktualisiert_von_id = user_id
     kontakt.version += 1
+    from app.services.kontakt_sync_service import record_change
+
+    assert kontakt.org_id is not None
+    record_change(db, kontakt.org_id, "kontakt", kontakt.id, "tombstone")
     db.commit()
     return kontakt
 
@@ -249,8 +259,15 @@ def merge_kontakte(
         raise ValueError("Kontakte gehoeren nicht zur selben Organisation")
 
     for feld in (
-        "typ", "anzeigename", "vorname", "nachname", "funktion", "organisation",
-        "email", "erreichbarkeit", "notizen",
+        "typ",
+        "anzeigename",
+        "vorname",
+        "nachname",
+        "funktion",
+        "organisation",
+        "email",
+        "erreichbarkeit",
+        "notizen",
     ):
         if feldwahl.get(feld) == "quelle":
             setattr(ziel, feld, getattr(quelle, feld))
@@ -287,18 +304,27 @@ def merge_kontakte(
 
     konflikte: list[str] = []
     for objekt_zuordnung in db.query(ObjektKontakt).filter(ObjektKontakt.kontakt_id == quelle.id).all():
-        gleich = db.query(ObjektKontakt).filter(
-            ObjektKontakt.kontakt_id == ziel.id,
-            ObjektKontakt.objekt_id == objekt_zuordnung.objekt_id,
-            ObjektKontakt.art == objekt_zuordnung.art,
-        ).first()
+        gleich = (
+            db.query(ObjektKontakt)
+            .filter(
+                ObjektKontakt.kontakt_id == ziel.id,
+                ObjektKontakt.objekt_id == objekt_zuordnung.objekt_id,
+                ObjektKontakt.art == objekt_zuordnung.art,
+            )
+            .first()
+        )
         if gleich is None:
             objekt_zuordnung.kontakt_id = ziel.id
             continue
         for freigabe in list(objekt_zuordnung.freigaben):
-            vorhanden = next((ziel_freigabe for ziel_freigabe in gleich.freigaben
-                              if ziel_freigabe.kanal == freigabe.kanal
-                              and ziel_freigabe.ziel_wert == freigabe.ziel_wert), None)
+            vorhanden = next(
+                (
+                    ziel_freigabe
+                    for ziel_freigabe in gleich.freigaben
+                    if ziel_freigabe.kanal == freigabe.kanal and ziel_freigabe.ziel_wert == freigabe.ziel_wert
+                ),
+                None,
+            )
             if vorhanden is None:
                 freigabe.objekt_kontakt_id = gleich.id
             else:
@@ -330,6 +356,11 @@ def merge_kontakte(
     quelle.version += 1
     ziel.aktualisiert_von_id = user_id
     ziel.version += 1
+    from app.services.kontakt_sync_service import contact_payload, record_change
+
+    assert ziel.org_id is not None
+    record_change(db, ziel.org_id, "kontakt", ziel.id, "upsert", contact_payload(ziel))
+    record_change(db, ziel.org_id, "kontakt", quelle.id, "tombstone", {"merged_into": ziel.id})
     db.commit()
     kontakt = get_kontakt(db, ziel.id, include_archiviert=True)
     assert kontakt is not None

@@ -94,6 +94,20 @@ class KontaktImportVorschau(TenantScoped, Base):
     erstellt_am: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
 
+class KontaktSyncAenderung(TenantScoped, Base):
+    """Append-only change feed for offline contact clients."""
+
+    __tablename__ = "kontakt_sync_aenderung"
+    __table_args__ = (Index("ix_kontakt_sync_org_id", "org_id", "id"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    entitaet: Mapped[str] = mapped_column(String(20), nullable=False)
+    entitaet_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    operation: Mapped[str] = mapped_column(String(12), nullable=False)
+    payload_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    erstellt_am: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+
 class KontaktKategorie(TenantScoped, Base):
     """Frei pflegbare Kategorie fuer zentrale Kontakte."""
 
