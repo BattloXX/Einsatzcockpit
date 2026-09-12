@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from urllib.parse import urlencode
+
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
@@ -89,6 +91,8 @@ def _seite(
     page: int = 1,
     form_data: dict[str, object] | None = None,
     error: str | None = None,
+    duplicate_candidates: list | None = None,
+    merge_konflikte: list[str] | None = None,
 ):
     kategorie_id = int(kategorie) if kategorie.isdigit() else None
     kontakte, total = kontakt_service.list_kontakte(db, q=q, typ=typ, kategorie_id=kategorie_id, page=page)
@@ -109,6 +113,8 @@ def _seite(
             "pro_seite": kontakt_service.PRO_SEITE,
             "form_data": form_data,
             "error": error,
+            "duplicate_candidates": duplicate_candidates or [],
+            "merge_konflikte": merge_konflikte or [],
         },
     )
 
@@ -157,6 +163,25 @@ def liste_partial(
     )
 
 
+@router.get("/duplikatcheck", response_class=HTMLResponse)
+def duplikate_pruefen(
+    request: Request,
+    anzeigename: str = "",
+    organisation: str = "",
+    email: str = "",
+    nummer: list[str] | None = Query(None),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*_LESE_ROLLEN)),
+    _guard: None = Depends(require_kontakte_enabled),
+):
+    kandidaten = kontakt_service.find_duplicate_candidates(
+        db, anzeigename=anzeigename, organisation=organisation, email=email, telefone=nummer
+    )
+    return templates.TemplateResponse(
+        request, "kontakte/_duplikate.html", {"kandidaten": kandidaten, "form": None, "user": user}
+    )
+
+
 @router.get("/{kontakt_id}", response_class=HTMLResponse)
 def detail(
     request: Request,
@@ -164,14 +189,18 @@ def detail(
     db: Session = Depends(get_db),
     user: User = Depends(require_role(*_LESE_ROLLEN)),
     _guard: None = Depends(require_kontakte_enabled),
+    merge_konflikt: list[str] | None = Query(None),
 ):
     if kontakt_service.get_kontakt(db, kontakt_id) is None:
         raise HTTPException(status_code=404, detail="Kontakt nicht gefunden")
     if request.headers.get("HX-Request") == "true":
         return templates.TemplateResponse(
-            request, "kontakte/_detail.html", {"kontakt": kontakt_service.get_kontakt(db, kontakt_id), "user": user}
+            request, "kontakte/_detail.html", {
+                "kontakt": kontakt_service.get_kontakt(db, kontakt_id), "user": user,
+                "merge_konflikte": merge_konflikt or [],
+            }
         )
-    return _seite(request, db, user, selected_id=kontakt_id)
+    return _seite(request, db, user, selected_id=kontakt_id, merge_konflikte=merge_konflikt)
 
 
 @router.post("/", response_class=HTMLResponse)
@@ -191,11 +220,28 @@ def create(
     bevorzugt: list[str] = Form([]),
     sms_eignung: list[str] = Form([]),
     kategorien: str = Form(""),
+    duplikate_bestaetigt: str = Form(""),
     db: Session = Depends(get_db),
     user: User = Depends(require_role(*_SCHREIB_ROLLEN)),
     _guard: None = Depends(require_kontakte_enabled),
 ):
     daten = _form_daten(typ, anzeigename, vorname, nachname, funktion, organisation, email, erreichbarkeit, notizen)
+    form_data: dict[str, object] = {
+        **daten, "nummer": nummer, "telefon_label": telefon_label, "bevorzugt": bevorzugt,
+        "sms_eignung": sms_eignung, "kategorien": kategorien,
+    }
+    kandidaten = kontakt_service.find_duplicate_candidates(
+        db, anzeigename=anzeigename, organisation=organisation, email=email, telefone=nummer
+    )
+    if kandidaten and duplikate_bestaetigt != "1":
+        return _seite(
+            request, db, user, form_data=form_data,
+            error=(
+                "Moegliche doppelte Kontakte gefunden. Bitte bewusst bestaetigen "
+                "oder einen vorhandenen Kontakt verwenden."
+            ),
+            duplicate_candidates=kandidaten,
+        )
     try:
         kontakt = kontakt_service.create_kontakt(
             db,
@@ -210,17 +256,67 @@ def create(
             request,
             db,
             user,
-            form_data={
-                **daten,
-                "nummer": nummer,
-                "telefon_label": telefon_label,
-                "bevorzugt": bevorzugt,
-                "sms_eignung": sms_eignung,
-                "kategorien": kategorien,
-            },
+            form_data=form_data,
             error=str(exc),
         )
     return RedirectResponse(f"/kontakte/{kontakt.id}", status_code=303)
+
+
+_MERGE_FELDER = (
+    "typ", "anzeigename", "vorname", "nachname", "funktion", "organisation", "email", "erreichbarkeit", "notizen",
+)
+
+
+@router.get("/{quelle_id}/zusammenfuehren", response_class=HTMLResponse)
+def zusammenfuehren_form(
+    request: Request, quelle_id: int, ziel: int = 0,
+    db: Session = Depends(get_db), user: User = Depends(require_role(*_SCHREIB_ROLLEN)),
+    _guard: None = Depends(require_kontakte_enabled),
+):
+    quelle = kontakt_service.get_kontakt(db, quelle_id)
+    if quelle is None:
+        raise HTTPException(status_code=404, detail="Kontakt nicht gefunden")
+    kontakte, _ = kontakt_service.list_kontakte(db, q="", page=1)
+    ziel_kontakt = kontakt_service.get_kontakt(db, ziel) if ziel else None
+    return templates.TemplateResponse(request, "kontakte/zusammenfuehren.html", {
+        "user": user, "quelle": quelle, "ziel": ziel_kontakt, "kontakte": [k for k in kontakte if k.id != quelle.id],
+        "felder": _MERGE_FELDER,
+    })
+
+
+@router.post("/{quelle_id}/zusammenfuehren")
+def zusammenfuehren(
+    quelle_id: int,
+    ziel_id: int = Form(...),
+    feldwahl_typ: str = Form("ziel"),
+    feldwahl_anzeigename: str = Form("ziel"),
+    feldwahl_vorname: str = Form("ziel"),
+    feldwahl_nachname: str = Form("ziel"),
+    feldwahl_funktion: str = Form("ziel"),
+    feldwahl_organisation: str = Form("ziel"),
+    feldwahl_email: str = Form("ziel"),
+    feldwahl_erreichbarkeit: str = Form("ziel"),
+    feldwahl_notizen: str = Form("ziel"),
+    db: Session = Depends(get_db), user: User = Depends(require_role(*_SCHREIB_ROLLEN)),
+    _guard: None = Depends(require_kontakte_enabled),
+):
+    auswahl = {
+        "typ": feldwahl_typ, "anzeigename": feldwahl_anzeigename, "vorname": feldwahl_vorname,
+        "nachname": feldwahl_nachname, "funktion": feldwahl_funktion,
+        "organisation": feldwahl_organisation, "email": feldwahl_email,
+        "erreichbarkeit": feldwahl_erreichbarkeit, "notizen": feldwahl_notizen,
+    }
+    auswahl = {feld: seite for feld, seite in auswahl.items() if seite in ("quelle", "ziel")}
+    try:
+        ergebnis = kontakt_service.merge_kontakte(db, quelle_id, ziel_id, auswahl, user_id=user.id)
+    except LookupError:
+        raise HTTPException(status_code=404, detail="Kontakt nicht gefunden") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    url = f"/kontakte/{ergebnis.kontakt.id}"
+    if ergebnis.freigabe_konflikte:
+        url = f"{url}?{urlencode([('merge_konflikt', konflikt) for konflikt in ergebnis.freigabe_konflikte])}"
+    return RedirectResponse(url, status_code=303)
 
 
 @router.post("/{kontakt_id}", response_class=HTMLResponse)
