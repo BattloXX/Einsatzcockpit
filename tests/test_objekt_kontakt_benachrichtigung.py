@@ -18,6 +18,7 @@ def _bigint_sqlite(element, compiler, **kw):
 from app.core.tenant import set_tenant_context
 from app.db import Base
 from app.models.incident import Incident
+from app.models.kontakt import Kontakt, ObjektKontaktFreigabe
 from app.models.master import FireDept, OrgSettings
 from app.models.objekt import (
     Objekt,
@@ -34,8 +35,8 @@ from app.services.objekt_kontakt_notify import (
     sammle_ziele,
     stichwort_erlaubt,
 )
+from app.services.objekt_service import telefon_normalisiert, telefone_aus_form
 from app.services.sms_dispatch_service import render_template
-from app.services.objekt_service import telefone_aus_form, telefon_normalisiert
 
 
 @pytest.fixture()
@@ -206,6 +207,82 @@ def test_08_sms_freigabe_je_nummer(versand):
     assert [(kanal, ziel) for _, kanal, ziel in sammle_ziele(kontakt.objekt)] == [
         ("mail", "kontakt@example.at"), ("sms", "+43660999")
     ]
+
+
+def test_sammle_ziele_nutzt_freigaben_nur_fuer_zentrale_kontakte(versand):
+    db, org, _, objekt, kontakt, *_ = versand
+    zentral = Kontakt(org_id=org.id, anzeigename="Zentral gepflegt")
+    db.add(zentral)
+    db.flush()
+    kontakt.kontakt_id = zentral.id
+    db.add_all([
+        ObjektKontaktFreigabe(
+            org_id=org.id, objekt_kontakt_id=kontakt.id, kanal="sms",
+            ziel_wert="+43660999", aktiv=True,
+        ),
+        ObjektKontaktFreigabe(
+            org_id=org.id, objekt_kontakt_id=kontakt.id, kanal="mail",
+            ziel_wert="alt@example.at", aktiv=False,
+        ),
+    ])
+    legacy = ObjektKontakt(
+        org_id=org.id, objekt_id=objekt.id, name="Legacy", art="sonstig",
+        email="legacy@example.at", benachrichtigung_mail=True,
+        telefone_json=json.dumps([{"nummer": "+43660123", "label": None, "sms": True}]),
+    )
+    db.add(legacy)
+    db.commit()
+    assert [(k.name, kanal, ziel) for k, kanal, ziel in sammle_ziele(objekt)] == [
+        ("Frau Kontakt", "sms", "+43660999"),
+        ("Legacy", "mail", "legacy@example.at"),
+        ("Legacy", "sms", "+43660123"),
+    ]
+
+
+def test_versand_protokoll_bevorzugt_zentralen_anzeigenamen(versand):
+    db, org, _, _, kontakt, incident, _, mails, sms, _ = versand
+    zentral = Kontakt(org_id=org.id, anzeigename="Zentraler Name")
+    db.add(zentral)
+    db.flush()
+    kontakt.kontakt_id = zentral.id
+    kontakt.benachrichtigung_mail = False
+    db.add(ObjektKontaktFreigabe(
+        org_id=org.id, objekt_kontakt_id=kontakt.id, kanal="sms",
+        ziel_wert="+43660111", aktiv=True,
+    ))
+    db.commit()
+    assert _run(incident.id)["gesendet"] == 1
+    assert sms and not mails
+    assert db.query(ObjektKontaktBenachrichtigung).one().kontakt_name == "Zentraler Name"
+
+
+def test_idempotenz_bleibt_nach_noop_arbeitskopie_erhalten(versand):
+    db, org, _, objekt, kontakt, incident, _, mails, sms, _ = versand
+    from app.services.objekt_service import erstelle_arbeitskopie, uebernimm_arbeitskopie
+
+    zentral = Kontakt(org_id=org.id, anzeigename="Stabile Zuordnung")
+    db.add(zentral)
+    db.flush()
+    kontakt.kontakt_id = zentral.id
+    kontakt.benachrichtigung_mail = False
+    kontakt.telefone_json = None
+    db.add(ObjektKontaktFreigabe(
+        org_id=org.id, objekt_kontakt_id=kontakt.id, kanal="sms",
+        ziel_wert="+43660111", aktiv=True,
+    ))
+    db.commit()
+    kontakt_id = kontakt.id
+    assert _run(incident.id)["gesendet"] == 1
+
+    kopie = erstelle_arbeitskopie(db, objekt, None)
+    db.commit()
+    uebernimm_arbeitskopie(db, kopie, None)
+    db.commit()
+
+    assert _run(incident.id)["gesendet"] == 0
+    assert len(sms) == 1 and not mails
+    protokolle = db.query(ObjektKontaktBenachrichtigung).all()
+    assert len(protokolle) == 1 and protokolle[0].objekt_kontakt_id == kontakt_id
 
 
 def test_09_10_mail_sms_und_log(versand):

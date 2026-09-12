@@ -86,6 +86,11 @@ def stichwort_erlaubt(objekt: Objekt, alarm_type_code: str | None) -> bool:
 def sammle_ziele(objekt: Objekt) -> list[tuple[ObjektKontakt, str, str]]:
     ziele: list[tuple[ObjektKontakt, str, str]] = []
     for kontakt in objekt.kontakte:
+        if kontakt.kontakt_id is not None:
+            for freigabe in kontakt.freigaben:
+                if freigabe.aktiv:
+                    ziele.append((kontakt, freigabe.kanal, freigabe.ziel_wert))
+            continue
         email = (kontakt.email or "").strip()
         if kontakt.benachrichtigung_mail and _looks_like_email(email):
             ziele.append((kontakt, "mail", email.casefold()))
@@ -94,6 +99,12 @@ def sammle_ziele(objekt: Objekt) -> list[tuple[ObjektKontakt, str, str]]:
             if normalisiert:
                 ziele.append((kontakt, "sms", normalisiert))
     return ziele
+
+
+def _kontakt_anzeigename(kontakt: ObjektKontakt) -> str:
+    if kontakt.kontakt_id is not None and kontakt.zentraler_kontakt is not None:
+        return kontakt.zentraler_kontakt.anzeigename or kontakt.name or ""
+    return kontakt.name or ""
 
 
 def baue_kontext(db, incident: Incident, objekt: Objekt, kontakt: ObjektKontakt, org: FireDept) -> dict:
@@ -118,7 +129,7 @@ def baue_kontext(db, incident: Incident, objekt: Objekt, kontakt: ObjektKontakt,
         "datum": lokal.strftime("%d.%m.%Y"),
         "zeit": lokal.strftime("%H:%M"),
         "feuerwehr": org.name or "",
-        "kontakt": kontakt.name or "",
+        "kontakt": _kontakt_anzeigename(kontakt),
         "leitstellennummer": incident.lis_operation_number or "",
     }
 
@@ -144,7 +155,12 @@ async def dispatch_objekt_einsatzinfo(
             return ergebnis
 
         query = db.query(ObjektEinsatz).options(
-            selectinload(ObjektEinsatz.objekt).selectinload(Objekt.kontakte)
+            selectinload(ObjektEinsatz.objekt).selectinload(Objekt.kontakte).selectinload(
+                ObjektKontakt.freigaben
+            ),
+            selectinload(ObjektEinsatz.objekt).selectinload(Objekt.kontakte).selectinload(
+                ObjektKontakt.zentraler_kontakt
+            ),
         ).filter(
             ObjektEinsatz.incident_id == incident_id,
             ObjektEinsatz.org_id == org_id,
@@ -223,7 +239,7 @@ async def dispatch_objekt_einsatzinfo(
                         protokoll = ObjektKontaktBenachrichtigung(
                             org_id=org_id, incident_id=incident_id, objekt_id=objekt.id,
                             objekt_kontakt_id=kontakt.id, kanal=kanal,
-                            kontakt_name=kontakt.name, empfaenger=empfaenger,
+                            kontakt_name=_kontakt_anzeigename(kontakt), empfaenger=empfaenger,
                         )
                         db.add(protokoll)
                         db.flush()
@@ -232,7 +248,7 @@ async def dispatch_objekt_einsatzinfo(
                         savepoint.rollback()
                         ergebnis["uebersprungen"] += 1
                         continue
-                protokoll.kontakt_name = kontakt.name
+                protokoll.kontakt_name = _kontakt_anzeigename(kontakt)
                 protokoll.empfaenger = empfaenger
                 protokoll.text = versandtext
                 protokoll.ausgeloest_von_id = triggered_by_user_id
