@@ -106,6 +106,7 @@ def _seite(
             "user": user,
             "kontakte": kontakte,
             "selected": selected,
+            "kontakt": selected,
             "kategorien": kontakt_service.list_kategorien(db),
             "q": q,
             "typ": typ,

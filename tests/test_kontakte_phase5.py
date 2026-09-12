@@ -84,8 +84,8 @@ def test_gateway_sms_ist_auf_einen_kontakt_und_telefon_begrenzt(client):
     assert response.headers["location"].startswith(f"/kontakte/{kontakt_id}?sms_started=")
     assert dispatch.await_count == 1
     args = dispatch.await_args.args
-    assert args[3] == "Bitte rueckrufen"
-    assert args[4] == {"+4366455555": ("SMS Kontakt", None, "kontakt", kontakt_id)}
+    assert args[2] == "Bitte rueckrufen"
+    assert args[3] == {"+4366455555": ("SMS Kontakt", None, "kontakt", kontakt_id)}
     db = SessionLocal()
     set_tenant_context(db, None)
     try:

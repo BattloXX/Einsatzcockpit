@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
@@ -237,7 +237,7 @@ async def dispatch_manual_sms(
     org_id: int,
     log_id: int,
     text: str,
-    recipients: dict[
+    recipients: Mapping[
         str,
         tuple[str | None, int | None] | tuple[str | None, int | None, str | None, int | None],
     ],
