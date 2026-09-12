@@ -16,6 +16,7 @@ from app.models.bma_import import (
     BmaImportSatz,
     OrgBmaImportConfig,
 )
+from app.models.kontakt import Kontakt, KontaktExterneReferenz, KontaktTelefon
 from app.models.objekt import (
     AUSWAHL_KONTAKTART,
     OBJEKT_STATUS_ARCHIVIERT,
@@ -34,6 +35,7 @@ from app.services.objekt_service import aktualisiere_felder, telefon_normalisier
 
 _BMA_ALARMPERSON_CODE = "bma_alarmperson"
 _BMA_ALARMPERSON_NAME = "BMA Alarmperson"
+_BMA_KONTAKT_QUELLE = "dibos_bma"
 
 
 def hole_oder_erstelle_config(db: Session, org_id: int) -> OrgBmaImportConfig:
@@ -73,6 +75,63 @@ def _kontakt_felder(kontakt: dict) -> dict:
         "name": (kontakt.get("name") or "").strip()[:150],
         "email": kontakt.get("email") or None,
     }
+
+
+def _zentralen_bma_kontakt_sync(
+    db: Session, satz: BmaImportSatz, zuordnung: ObjektKontakt, daten: dict, user_id: int | None,
+) -> Kontakt:
+    """Upsert the source-owned contact without replacing the object assignment.
+
+    ``objekt_kontakt.extern_*`` remains the identity of this *assignment* so the
+    established BMA adoption and deletion logic keeps its stable row IDs.  The
+    central identity is separately held in ``kontakt_externe_referenz``.
+    """
+    extern_id = str(daten["extern_id"])
+    referenz = db.query(KontaktExterneReferenz).filter(
+        KontaktExterneReferenz.org_id == zuordnung.org_id,
+        KontaktExterneReferenz.quelle == _BMA_KONTAKT_QUELLE,
+        KontaktExterneReferenz.quelle_kontext == satz.extern_id,
+        KontaktExterneReferenz.extern_id == extern_id,
+    ).first()
+    if referenz is None:
+        referenz = next((item for item in db.new if isinstance(item, KontaktExterneReferenz)
+                         and item.org_id == zuordnung.org_id and item.quelle == _BMA_KONTAKT_QUELLE
+                         and item.quelle_kontext == satz.extern_id and item.extern_id == extern_id), None)
+    kontakt = referenz.kontakt if referenz is not None else (
+        db.get(Kontakt, zuordnung.kontakt_id) if zuordnung.kontakt_id else zuordnung.zentraler_kontakt
+    )
+    telefon_daten = [
+        {"nummer": eintrag["nummer"], "label": eintrag.get("label"), "sort": index}
+        for index, roh in enumerate(daten.get("telefone") or [])
+        if (eintrag := _telefon_daten(roh))["nummer"]
+    ]
+    if kontakt is None:
+        kontakt = Kontakt(
+            org_id=zuordnung.org_id, typ="person", anzeigename=(daten.get("name") or "").strip(),
+            email=(daten.get("email") or "").strip() or None,
+            erstellt_von_id=user_id, aktualisiert_von_id=user_id,
+        )
+        db.add(kontakt)
+        db.flush()
+    else:
+        kontakt.anzeigename = (daten.get("name") or "").strip()
+        kontakt.email = (daten.get("email") or "").strip() or None
+        kontakt.aktualisiert_von_id = user_id
+        kontakt.version += 1
+    kontakt.telefone[:] = [
+        KontaktTelefon(
+            org_id=zuordnung.org_id, nummer=eintrag["nummer"], label=eintrag["label"],
+            sort=eintrag["sort"], bevorzugt=index == 0, sms_eignung=None,
+        )
+        for index, eintrag in enumerate(telefon_daten)
+    ]
+    if referenz is None:
+        db.add(KontaktExterneReferenz(
+            org_id=zuordnung.org_id, kontakt_id=kontakt.id, quelle=_BMA_KONTAKT_QUELLE,
+            quelle_kontext=satz.extern_id, extern_id=extern_id,
+        ))
+    zuordnung.kontakt_id = kontakt.id
+    return kontakt
 
 
 def _telefon_daten(eintrag) -> dict:
@@ -226,6 +285,9 @@ def _sync_kontakte(db: Session, satz: BmaImportSatz, objekt: Objekt,
             bestehende[extern_id] = kontakt  # doppelte extern_id in EINER Liste -> Update
             naechster_sort += 1
             geaendert = True
+        # Central data is owned by the source identity; the association itself
+        # retains its old PK and BMA external identity for idempotent imports.
+        _zentralen_bma_kontakt_sync(db, satz, kontakt, daten, user_id)
         alte_sms_schluessel = {telefon_normalisiert(n) for n in kontakt.sms_nummern}
         neues_json = _telefone_zusammenfuehren(
             kontakt.telefone_json, daten.get("telefone") or [],

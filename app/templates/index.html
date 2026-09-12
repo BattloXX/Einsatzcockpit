@@ -87,6 +87,9 @@
     {% if request.state.objekt_enabled %}
     <a href="/objekte/" class="module-btn"><span class="module-btn__icon">🏢</span><span class="module-btn__label">Objekte</span></a>
     {% endif %}
+    {% if request.state.kontakte_enabled %}
+    <a href="/kontakte" class="module-btn"><span class="module-btn__icon">👥</span><span class="module-btn__label">Kontakte</span></a>
+    {% endif %}
     {% if is_as_pruefung %}
     <a href="/atemschutz-pruefung" class="module-btn"><span class="module-btn__icon">🫁</span><span class="module-btn__label">Atemschutzprüfung</span></a>
     {% endif %}
