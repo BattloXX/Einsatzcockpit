@@ -82,6 +82,17 @@ class KontaktTelefon(TenantScoped, Base):
         return nummer
 
 
+class KontaktImportVorschau(TenantScoped, Base):
+    """Kurzlebiger, serverseitiger Stand eines Kontaktimports vor der Uebernahme."""
+    __tablename__ = "kontakt_import_vorschau"
+    __table_args__ = (Index("ix_kontakt_import_vorschau_org_user", "org_id", "user_id"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
+    zeilen_json: Mapped[str] = mapped_column(Text, nullable=False)
+    erstellt_am: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+
 class KontaktKategorie(TenantScoped, Base):
     """Frei pflegbare Kategorie fuer zentrale Kontakte."""
     __tablename__ = "kontakt_kategorie"
