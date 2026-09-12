@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
@@ -237,7 +237,10 @@ async def dispatch_manual_sms(
     org_id: int,
     log_id: int,
     text: str,
-    recipients: dict[str, tuple[str | None, int | None]],
+    recipients: Mapping[
+        str,
+        tuple[str | None, int | None] | tuple[str | None, int | None, str | None, int | None],
+    ],
     triggered_by_user_id: int,
     target_type: str,
 ) -> None:
@@ -254,10 +257,14 @@ async def dispatch_manual_sms(
         sms_ctx = resolve_sms_config(org_id, db)
 
         async def _record(result: SmsSendResult) -> None:
-            name, member_id = recipients[result.phone_number]
+            recipient = recipients[result.phone_number]
+            name, member_id = recipient[:2]
+            source_type, source_id = (recipient[2], recipient[3]) if len(recipient) == 4 else (None, None)
             db.add(SmsLogRecipient(
                 sms_log_id=log_id,
                 member_id=member_id,
+                source_type=source_type,
+                source_id=source_id,
                 phone_number=result.phone_number,
                 name=name,
                 success=result.success,
