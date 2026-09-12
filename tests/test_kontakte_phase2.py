@@ -191,3 +191,22 @@ def test_kontakte_module_toggle_returns_404(client):
     assert client.get("/kontakte").status_code == 404
     assert client.get("/kontakte/liste").status_code == 404
     assert client.post("/kontakte/", data={"_csrf": client.cookies.get("ec_csrf")}).status_code == 404
+
+
+def test_kontakt_export_ist_org_gebunden_und_enthaelt_alle_xlsx_blaetter(client):
+    user = _setup_user("kontakte_export", "kontakt_verwalter")
+    _login(client, user.username)
+    csrf = client.cookies.get("ec_csrf")
+    assert client.post(
+        "/kontakte/", data=_post_data(_csrf=csrf, typ="person", anzeigename="Export Kontakt", nummer=["+43 664 1"]),
+        follow_redirects=False,
+    ).status_code == 303
+    csv_response = client.get("/kontakte/export.csv")
+    assert csv_response.status_code == 200
+    assert "Export Kontakt" in csv_response.content.decode("utf-8-sig")
+    xlsx_response = client.get("/kontakte/export.xlsx")
+    assert xlsx_response.status_code == 200
+    from io import BytesIO
+    from openpyxl import load_workbook
+    workbook = load_workbook(BytesIO(xlsx_response.content), read_only=True)
+    assert workbook.sheetnames == ["Kontakte", "Telefonnummern", "Objektzuordnungen", "Anleitung"]

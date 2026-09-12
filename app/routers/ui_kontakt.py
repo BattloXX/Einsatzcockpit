@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session
 
 from app.core.permissions import can_send_manual_sms, require_role
@@ -183,6 +183,23 @@ def duplikate_pruefen(
     return templates.TemplateResponse(
         request, "kontakte/_duplikate.html", {"kandidaten": kandidaten, "form": None, "user": user}
     )
+
+
+@router.get("/export.csv")
+def export_csv(db: Session = Depends(get_db), user: User = Depends(require_role(*_SCHREIB_ROLLEN)),
+               _guard: None = Depends(require_kontakte_enabled)):
+    from app.services.kontakt_transfer_service import export_csv as build_export
+    return Response(build_export(db, _org_id(user)), media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": "attachment; filename=kontakte.csv"})
+
+
+@router.get("/export.xlsx")
+def export_xlsx(db: Session = Depends(get_db), user: User = Depends(require_role(*_SCHREIB_ROLLEN)),
+                _guard: None = Depends(require_kontakte_enabled)):
+    from app.services.kontakt_transfer_service import export_xlsx as build_export
+    return Response(build_export(db, _org_id(user)),
+                    media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": "attachment; filename=kontakte.xlsx"})
 
 
 @router.get("/{kontakt_id}", response_class=HTMLResponse)
