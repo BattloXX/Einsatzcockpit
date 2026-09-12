@@ -104,3 +104,21 @@ def test_gateway_sms_lehnt_fremde_telefonnummer_ab(client):
         data={"_csrf": csrf, "telefon_id": foreign_phone_id, "text": "Darf nicht raus"},
     )
     assert response.status_code == 404
+
+
+def test_sms_aktionen_erfordern_explizite_sms_eignung(client):
+    username, kontakt_id, telefon_id = _setup_admin()
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        db.get(KontaktTelefon, telefon_id).sms_eignung = None
+        db.commit()
+    finally:
+        db.close()
+    csrf = _login(client, username)
+    assert "sms:+4366455555" not in client.get(f"/kontakte/{kontakt_id}").text
+    response = client.post(
+        f"/kontakte/{kontakt_id}/sms",
+        data={"_csrf": csrf, "telefon_id": telefon_id, "text": "Nicht senden"},
+    )
+    assert response.status_code == 400

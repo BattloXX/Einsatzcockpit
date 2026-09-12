@@ -7,7 +7,22 @@
   {% if request.query_params.get('sms_started') %}<div class="alert alert--success">SMS-Versand wurde gestartet.</div>{% endif %}
   {% if request.query_params.get('sms_error') == 'empty' %}<div class="alert alert--error">Nachrichtentext darf nicht leer sein.</div>{% endif %}
   {% if request.query_params.get('sms_error') == 'no_provider' %}<div class="alert alert--error">SMS-Versand derzeit nicht verfuegbar.</div>{% endif %}
-  {% if kontakt.telefone %}<h3>Telefon</h3>{% for telefon in kontakt.telefone %}<p><span>{{ telefon.label or 'Telefon' }}: {{ telefon.nummer }}{% if telefon.bevorzugt %} (Primär){% endif %}{% if telefon.sms_eignung %} (SMS-fähig){% endif %}</span> <a class="btn btn--ghost btn--xs" href="tel:{{ telefon.nummer_normalisiert }}" aria-label="{{ kontakt.anzeigename }} anrufen">Anrufen</a>{% if telefon.sms_eignung is not false %} <a class="btn btn--ghost btn--xs" href="sms:{{ telefon.nummer_normalisiert }}" aria-label="SMS an {{ kontakt.anzeigename }}">SMS</a>{% if sms_gateway_available %} <button class="btn btn--primary btn--xs kontakt-sms-gateway" type="button" data-ec-action="open-dialog" data-ec-dialog="smsKontaktModal" data-telefon-id="{{ telefon.id }}" data-telefon-label="{{ telefon.label or telefon.nummer }}">Gateway-SMS</button>{% endif %}{% endif %}</p>{% endfor %}{% endif %}
+  {% if request.query_params.get('sms_error') == 'no_recipient' %}<div class="alert alert--error">Die Telefonnummer ist nicht gueltig.</div>{% endif %}
+  {% if kontakt.telefone %}
+  <h3>Telefon</h3>
+  {% for telefon in kontakt.telefone %}
+  <div class="kontakt-phone-row">
+    <span>{{ telefon.label or 'Telefon' }}: {{ telefon.nummer }}{% if telefon.bevorzugt %} (Primär){% endif %}{% if telefon.sms_eignung %} (SMS-fähig){% endif %}</span>
+    <span class="kontakt-phone-actions">
+      <a class="btn btn--ghost btn--xs" href="tel:{{ telefon.nummer_normalisiert }}" aria-label="{{ kontakt.anzeigename }} anrufen">Anrufen</a>
+      {% if telefon.sms_eignung %}
+      <a class="btn btn--ghost btn--xs" href="sms:{{ telefon.nummer_normalisiert }}" aria-label="SMS an {{ kontakt.anzeigename }}">SMS</a>
+      {% if sms_gateway_available %}<button class="btn btn--primary btn--xs kontakt-sms-gateway" type="button" data-ec-action="open-dialog" data-ec-dialog="smsKontaktModal" data-telefon-id="{{ telefon.id }}" data-telefon-label="{{ telefon.label or telefon.nummer }}">Gateway-SMS</button>{% endif %}
+      {% endif %}
+    </span>
+  </div>
+  {% endfor %}
+  {% endif %}
   {% if kontakt.email %}<h3>E-Mail</h3><p>{{ kontakt.email }}</p>{% endif %}
   {% if kontakt.erreichbarkeit %}<h3>Erreichbarkeit</h3><p>{{ kontakt.erreichbarkeit }}</p>{% endif %}
   {% if kontakt.notizen %}<h3>Notizen</h3><p>{{ kontakt.notizen }}</p>{% endif %}

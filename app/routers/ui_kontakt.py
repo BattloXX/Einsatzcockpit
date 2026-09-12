@@ -239,7 +239,7 @@ async def sms_an_kontakt_senden(
     )
     if kontakt is None or telefon is None:
         raise HTTPException(status_code=404, detail="Kontakt oder Telefonnummer nicht gefunden")
-    if telefon.sms_eignung is False:
+    if telefon.sms_eignung is not True:
         raise HTTPException(status_code=400, detail="Diese Telefonnummer ist nicht SMS-faehig")
     text = text.strip()
     if not text:
