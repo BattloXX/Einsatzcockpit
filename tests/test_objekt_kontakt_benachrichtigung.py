@@ -447,10 +447,10 @@ def test_17_benachrichtigungsrouten_und_berechtigungen(client):
         data={"_csrf": csrf, "kontakt_info_betreff": "Test"},
     ).status_code == 200
     assert client.post(
-        f"/objekte/{objekt_id}/kontakte/neu",
-        data={"_csrf": csrf, "name": "Drei Nummern",
-              "telefon_nummer": ["+431", "+432", "+433"],
-              "telefon_label": ["A", "B", "C"], "telefon_sms": "1"},
+        f"/objekte/{objekt_id}/kontakte/anlegen",
+        data={"_csrf": csrf, "anzeigename": "Drei Nummern",
+              "nummer": ["+431", "+432", "+433"],
+              "telefon_label": ["A", "B", "C"], "sms_eignung": "1"},
     ).status_code == 200
     db = SessionLocal()
     set_tenant_context(db, None)
@@ -458,8 +458,9 @@ def test_17_benachrichtigungsrouten_und_berechtigungen(client):
         ObjektChange.objekt_id == objekt_id,
         ObjektChange.bereich == "benachrichtigung",
     ).count() >= 1
-    kontakt = db.query(ObjektKontakt).filter(ObjektKontakt.name == "Drei Nummern").one()
-    assert kontakt.sms_nummern == ["+432"]
+    kontakt = db.query(ObjektKontakt).filter(ObjektKontakt.objekt_id == objekt_id).one()
+    assert kontakt.kontakt_id is not None
+    assert kontakt.zentraler_kontakt.telefone[1].sms_eignung
     db.close()
 
 

@@ -1,0 +1,9 @@
+{% if q.strip() %}
+  {% for kontakt in kontakte %}
+  <form class="objekt-kontakt" style="margin-top:8px;" hx-post="/objekte/{{ objekt.id }}/kontakte/zuordnen" hx-target="#abschnitt-kontakte" hx-swap="innerHTML">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><input type="hidden" name="kontakt_id" value="{{ kontakt.id }}">
+    <strong>{{ kontakt.anzeigename }}</strong>{% if kontakt.funktion or kontakt.organisation %}<div class="text-muted">{{ kontakt.funktion or '' }}{% if kontakt.funktion and kontakt.organisation %} · {% endif %}{{ kontakt.organisation or '' }}</div>{% endif %}{% if kontakt.telefone %}<div class="text-muted">📞 {{ kontakt.telefone[0].nummer }}</div>{% endif %}
+    <div class="objekt-kontakt__aktionen" style="margin-top:8px;"><select name="art" class="form-input">{% for code, label in kontakt_arten.items() %}<option value="{{ code }}">{{ label }}</option>{% endfor %}</select><button class="btn btn--primary btn--xs">Verwenden</button></div>
+  </form>
+  {% else %}<p class="text-muted">Keine passenden Kontakte gefunden.</p>{% endfor %}
+{% endif %}
