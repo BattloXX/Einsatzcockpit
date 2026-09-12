@@ -186,27 +186,76 @@ def duplikate_pruefen(
 
 
 @router.get("/export.csv")
-def export_csv(db: Session = Depends(get_db), user: User = Depends(require_role(*_SCHREIB_ROLLEN)),
-               _guard: None = Depends(require_kontakte_enabled)):
+def export_csv(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*_SCHREIB_ROLLEN)),
+    _guard: None = Depends(require_kontakte_enabled),
+):
     from app.services.kontakt_transfer_service import export_csv as build_export
-    return Response(build_export(db, _org_id(user)), media_type="text/csv; charset=utf-8",
-                    headers={"Content-Disposition": "attachment; filename=kontakte.csv"})
+
+    return Response(
+        build_export(db, _org_id(user)),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=kontakte.csv"},
+    )
 
 
 @router.get("/export.xlsx")
-def export_xlsx(db: Session = Depends(get_db), user: User = Depends(require_role(*_SCHREIB_ROLLEN)),
-                _guard: None = Depends(require_kontakte_enabled)):
+def export_xlsx(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*_SCHREIB_ROLLEN)),
+    _guard: None = Depends(require_kontakte_enabled),
+):
     from app.services.kontakt_transfer_service import export_xlsx as build_export
-    return Response(build_export(db, _org_id(user)),
-                    media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    headers={"Content-Disposition": "attachment; filename=kontakte.xlsx"})
+
+    return Response(
+        build_export(db, _org_id(user)),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=kontakte.xlsx"},
+    )
+
+
+@router.get("/vorlage.csv")
+def vorlage_csv(
+    beispiel: bool = False,
+    user: User = Depends(require_role(*_SCHREIB_ROLLEN)),
+    _guard: None = Depends(require_kontakte_enabled),
+):
+    from app.services.kontakt_transfer_service import export_template_csv
+
+    suffix = "-beispiel" if beispiel else ""
+    return Response(
+        export_template_csv(beispiel),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f"attachment; filename=kontakte-vorlage{suffix}.csv"},
+    )
+
+
+@router.get("/vorlage.xlsx")
+def vorlage_xlsx(
+    beispiel: bool = False,
+    user: User = Depends(require_role(*_SCHREIB_ROLLEN)),
+    _guard: None = Depends(require_kontakte_enabled),
+):
+    from app.services.kontakt_transfer_service import export_template_xlsx
+
+    suffix = "-beispiel" if beispiel else ""
+    return Response(
+        export_template_xlsx(beispiel),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=kontakte-vorlage{suffix}.xlsx"},
+    )
 
 
 @router.post("/import/vorschau")
-async def import_vorschau(datei: UploadFile = File(...), db: Session = Depends(get_db),
-                          user: User = Depends(require_role(*_SCHREIB_ROLLEN)),
-                          _guard: None = Depends(require_kontakte_enabled)):
+async def import_vorschau(
+    datei: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*_SCHREIB_ROLLEN)),
+    _guard: None = Depends(require_kontakte_enabled),
+):
     from app.services.kontakt_transfer_service import parse_import, preview_import, save_preview
+
     try:
         rows = parse_import(await datei.read(), datei.filename or "")
         preview = preview_import(db, _org_id(user), rows)
@@ -217,27 +266,65 @@ async def import_vorschau(datei: UploadFile = File(...), db: Session = Depends(g
 
 
 @router.get("/import/{preview_id}", response_class=HTMLResponse)
-def import_anzeigen(preview_id: int, request: Request, db: Session = Depends(get_db),
-                    user: User = Depends(require_role(*_SCHREIB_ROLLEN)),
-                    _guard: None = Depends(require_kontakte_enabled)):
+def import_anzeigen(
+    preview_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*_SCHREIB_ROLLEN)),
+    _guard: None = Depends(require_kontakte_enabled),
+):
     from app.services.kontakt_transfer_service import load_preview
+
     try:
         _entry, preview = load_preview(db, _org_id(user), user.id, preview_id)
     except LookupError:
         raise HTTPException(404, "Importvorschau nicht gefunden") from None
-    return templates.TemplateResponse(request, "kontakte/import_vorschau.html", {"user": user, "preview": preview, "preview_id": preview_id})
+    return templates.TemplateResponse(
+        request,
+        "kontakte/import_vorschau.html",
+        {
+            "user": user,
+            "preview": preview,
+            "preview_id": preview_id,
+            "completed": bool(_entry.ergebnis_json),
+        },
+    )
 
 
 @router.post("/import/{preview_id}/uebernehmen")
-def import_uebernehmen(preview_id: int, db: Session = Depends(get_db),
-                       user: User = Depends(require_role(*_SCHREIB_ROLLEN)),
-                       _guard: None = Depends(require_kontakte_enabled)):
+def import_uebernehmen(
+    preview_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*_SCHREIB_ROLLEN)),
+    _guard: None = Depends(require_kontakte_enabled),
+):
     from app.services.kontakt_transfer_service import apply_preview
+
     try:
         changed = apply_preview(db, _org_id(user), user.id, preview_id)
     except LookupError:
         raise HTTPException(404, "Importvorschau nicht gefunden") from None
     return RedirectResponse(f"/kontakte?imported={changed}", status_code=303)
+
+
+@router.get("/import/{preview_id}/ergebnis.csv")
+def import_ergebnis(
+    preview_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*_SCHREIB_ROLLEN)),
+    _guard: None = Depends(require_kontakte_enabled),
+):
+    from app.services.kontakt_transfer_service import export_result_csv
+
+    try:
+        content = export_result_csv(db, _org_id(user), user.id, preview_id)
+    except LookupError:
+        raise HTTPException(404, "Importvorschau nicht gefunden") from None
+    return Response(
+        content,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=kontakt-import-ergebnis.csv"},
+    )
 
 
 @router.get("/{kontakt_id}", response_class=HTMLResponse)
@@ -254,13 +341,18 @@ def detail(
     sms_gateway_available = False
     if can_send_manual_sms(user):
         from app.services.sms_service import sms_available
+
         sms_gateway_available = sms_available(_org_id(user), db)
     if request.headers.get("HX-Request") == "true":
         return templates.TemplateResponse(
-            request, "kontakte/_detail.html", {
-                "kontakt": kontakt_service.get_kontakt(db, kontakt_id), "user": user,
-                "merge_konflikte": merge_konflikt or [], "sms_gateway_available": sms_gateway_available,
-            }
+            request,
+            "kontakte/_detail.html",
+            {
+                "kontakt": kontakt_service.get_kontakt(db, kontakt_id),
+                "user": user,
+                "merge_konflikte": merge_konflikt or [],
+                "sms_gateway_available": sms_gateway_available,
+            },
         )
     response = _seite(request, db, user, selected_id=kontakt_id, merge_konflikte=merge_konflikt)
     response.context["sms_gateway_available"] = sms_gateway_available
@@ -300,6 +392,7 @@ async def sms_an_kontakt_senden(
     if not text:
         return RedirectResponse(f"/kontakte/{kontakt_id}?sms_error=empty", status_code=303)
     from app.services.sms_service import sms_available
+
     if not sms_available(org_id, db):
         return RedirectResponse(f"/kontakte/{kontakt_id}?sms_error=no_provider", status_code=303)
     if not telefon.nummer_normalisiert:
@@ -320,6 +413,7 @@ async def sms_an_kontakt_senden(
     db.flush()
     db.commit()
     from app.services.sms_dispatch_service import dispatch_manual_sms
+
     background_tasks.add_task(
         dispatch_manual_sms,
         org_id,
@@ -356,15 +450,22 @@ def create(
 ):
     daten = _form_daten(typ, anzeigename, vorname, nachname, funktion, organisation, email, erreichbarkeit, notizen)
     form_data: dict[str, object] = {
-        **daten, "nummer": nummer, "telefon_label": telefon_label, "bevorzugt": bevorzugt,
-        "sms_eignung": sms_eignung, "kategorien": kategorien,
+        **daten,
+        "nummer": nummer,
+        "telefon_label": telefon_label,
+        "bevorzugt": bevorzugt,
+        "sms_eignung": sms_eignung,
+        "kategorien": kategorien,
     }
     kandidaten = kontakt_service.find_duplicate_candidates(
         db, anzeigename=anzeigename, organisation=organisation, email=email, telefone=nummer
     )
     if kandidaten and duplikate_bestaetigt != "1":
         return _seite(
-            request, db, user, form_data=form_data,
+            request,
+            db,
+            user,
+            form_data=form_data,
             error=(
                 "Moegliche doppelte Kontakte gefunden. Bitte bewusst bestaetigen "
                 "oder einen vorhandenen Kontakt verwenden."
@@ -392,14 +493,25 @@ def create(
 
 
 _MERGE_FELDER = (
-    "typ", "anzeigename", "vorname", "nachname", "funktion", "organisation", "email", "erreichbarkeit", "notizen",
+    "typ",
+    "anzeigename",
+    "vorname",
+    "nachname",
+    "funktion",
+    "organisation",
+    "email",
+    "erreichbarkeit",
+    "notizen",
 )
 
 
 @router.get("/{quelle_id}/zusammenfuehren", response_class=HTMLResponse)
 def zusammenfuehren_form(
-    request: Request, quelle_id: int, ziel: int = 0,
-    db: Session = Depends(get_db), user: User = Depends(require_role(*_SCHREIB_ROLLEN)),
+    request: Request,
+    quelle_id: int,
+    ziel: int = 0,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*_SCHREIB_ROLLEN)),
     _guard: None = Depends(require_kontakte_enabled),
 ):
     quelle = kontakt_service.get_kontakt(db, quelle_id)
@@ -407,10 +519,17 @@ def zusammenfuehren_form(
         raise HTTPException(status_code=404, detail="Kontakt nicht gefunden")
     kontakte, _ = kontakt_service.list_kontakte(db, q="", page=1)
     ziel_kontakt = kontakt_service.get_kontakt(db, ziel) if ziel else None
-    return templates.TemplateResponse(request, "kontakte/zusammenfuehren.html", {
-        "user": user, "quelle": quelle, "ziel": ziel_kontakt, "kontakte": [k for k in kontakte if k.id != quelle.id],
-        "felder": _MERGE_FELDER,
-    })
+    return templates.TemplateResponse(
+        request,
+        "kontakte/zusammenfuehren.html",
+        {
+            "user": user,
+            "quelle": quelle,
+            "ziel": ziel_kontakt,
+            "kontakte": [k for k in kontakte if k.id != quelle.id],
+            "felder": _MERGE_FELDER,
+        },
+    )
 
 
 @router.post("/{quelle_id}/zusammenfuehren")
@@ -426,14 +545,20 @@ def zusammenfuehren(
     feldwahl_email: str = Form("ziel"),
     feldwahl_erreichbarkeit: str = Form("ziel"),
     feldwahl_notizen: str = Form("ziel"),
-    db: Session = Depends(get_db), user: User = Depends(require_role(*_SCHREIB_ROLLEN)),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*_SCHREIB_ROLLEN)),
     _guard: None = Depends(require_kontakte_enabled),
 ):
     auswahl = {
-        "typ": feldwahl_typ, "anzeigename": feldwahl_anzeigename, "vorname": feldwahl_vorname,
-        "nachname": feldwahl_nachname, "funktion": feldwahl_funktion,
-        "organisation": feldwahl_organisation, "email": feldwahl_email,
-        "erreichbarkeit": feldwahl_erreichbarkeit, "notizen": feldwahl_notizen,
+        "typ": feldwahl_typ,
+        "anzeigename": feldwahl_anzeigename,
+        "vorname": feldwahl_vorname,
+        "nachname": feldwahl_nachname,
+        "funktion": feldwahl_funktion,
+        "organisation": feldwahl_organisation,
+        "email": feldwahl_email,
+        "erreichbarkeit": feldwahl_erreichbarkeit,
+        "notizen": feldwahl_notizen,
     }
     auswahl = {feld: seite for feld, seite in auswahl.items() if seite in ("quelle", "ziel")}
     try:
