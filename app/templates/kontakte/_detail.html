@@ -1,0 +1,14 @@
+{% if kontakt %}
+<div class="kontakt-detail-inner">
+  <a class="kontakt-back" href="/kontakte">&larr; Liste</a>
+  <div class="kontakt-detail-heading"><div><h2>{{ kontakt.anzeigename }}</h2><p>{{ kontakt.funktion or '' }}{% if kontakt.funktion and kontakt.organisation %} - {% endif %}{{ kontakt.organisation or '' }}</p></div><span class="badge-pill">{{ 'Person' if kontakt.typ == 'person' else 'Stelle' }}</span></div>
+  <div class="kontakt-badges">{% for zuordnung in kontakt.kategorien %}<span class="badge-pill">{{ zuordnung.kategorie.name }}</span>{% endfor %}</div>
+  {% if kontakt.telefone %}<h3>Telefon</h3>{% for telefon in kontakt.telefone %}<p>{{ telefon.label or 'Telefon' }}: {{ telefon.nummer }}{% if telefon.bevorzugt %} (Primär){% endif %}{% if telefon.sms_eignung %} (SMS-fähig){% endif %}</p>{% endfor %}{% endif %}
+  {% if kontakt.email %}<h3>E-Mail</h3><p>{{ kontakt.email }}</p>{% endif %}
+  {% if kontakt.erreichbarkeit %}<h3>Erreichbarkeit</h3><p>{{ kontakt.erreichbarkeit }}</p>{% endif %}
+  {% if kontakt.notizen %}<h3>Notizen</h3><p>{{ kontakt.notizen }}</p>{% endif %}
+  {% if user and user.roles|selectattr('code', 'in', ['kontakt_verwalter', 'objekt_verwalter', 'admin', 'org_admin', 'system_admin'])|list %}
+  <div class="kontakt-actions"><button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="kontaktModal">Bearbeiten</button><form method="post" action="/kontakte/{{ kontakt.id }}/archivieren" onsubmit="return confirm('Kontakt archivieren?')"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><button class="btn btn--danger">Archivieren</button></form></div>
+  {% endif %}
+</div>
+{% else %}<div class="kontakt-empty">Kontakt auswählen</div>{% endif %}

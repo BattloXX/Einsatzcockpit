@@ -10,6 +10,7 @@ ROLES = {
     "fahrtenbuch_admin": 80,    # Fahrtenbuch-Verwaltung der eigenen Org (ohne Benutzerverwaltung)
     "incident_leader": 70,
     "objekt_verwalter": 60,     # Objektverwaltung: Objekte pflegen/freigeben, Dokumente, Lagekarte
+    "kontakt_verwalter": 60,    # Zentrale Kontakte pflegen
     "probenverwalter": 60,      # Probenplanung bearbeiten
     "breathing_supervisor": 50,
     "recorder": 30,
@@ -27,6 +28,7 @@ FAHRTENBUCH_ADMIN_ROLES = {"system_admin", "admin", "org_admin", "fahrtenbuch_ad
 
 # Roles that can manage Objekte (anlegen, bearbeiten, freigeben, Dokumente, Lagekarte)
 OBJEKT_VERWALTER_ROLES = {"system_admin", "admin", "org_admin", "objekt_verwalter"}
+KONTAKT_VERWALTER_ROLES = {"system_admin", "admin", "org_admin", "objekt_verwalter", "kontakt_verwalter"}
 PROBEN_EDIT_ROLES = {"system_admin", "admin", "org_admin", "probenverwalter", "incident_leader", "recorder"}
 
 
@@ -144,6 +146,11 @@ def can_view_fahrtenbuch(user) -> bool:
 def is_objekt_verwalter(user) -> bool:
     """True if user can manage Objekte (org_admin, objekt_verwalter, or system_admin)."""
     return has_role(user, "objekt_verwalter")
+
+
+def is_kontakt_verwalter(user) -> bool:
+    """True if user can manage central contacts."""
+    return has_role(user, "kontakt_verwalter")
 
 
 def can_edit_proben(user) -> bool:
