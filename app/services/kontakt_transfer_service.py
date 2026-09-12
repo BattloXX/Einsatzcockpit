@@ -3,11 +3,12 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 from typing import Any
 
 from sqlalchemy.orm import Session, selectinload
 
-from app.models.kontakt import Kontakt
+from app.models.kontakt import Kontakt, KontaktImportVorschau
 from app.models.objekt import Objekt, ObjektKontakt
 from app.services import kontakt_service
 
@@ -62,6 +63,56 @@ def preview_import(db: Session, org_id: int, rows: list[dict[str, Any]]) -> list
             preview.append({"status": "dublette" if duplicates else "neu", "row": row,
                             "kandidaten": [candidate.id for candidate in duplicates]})
     return preview
+
+
+def save_preview(
+    db: Session, org_id: int, user_id: int, preview: list[dict[str, Any]],
+) -> KontaktImportVorschau:
+    entry = KontaktImportVorschau(org_id=org_id, user_id=user_id, zeilen_json=json.dumps(preview))
+    db.add(entry)
+    db.commit()
+    return entry
+
+
+def load_preview(
+    db: Session, org_id: int, user_id: int, preview_id: int,
+) -> tuple[KontaktImportVorschau, list[dict[str, Any]]]:
+    entry = db.query(KontaktImportVorschau).filter(
+        KontaktImportVorschau.id == preview_id, KontaktImportVorschau.org_id == org_id,
+        KontaktImportVorschau.user_id == user_id,
+    ).first()
+    if entry is None:
+        raise LookupError("Importvorschau nicht gefunden")
+    return entry, json.loads(entry.zeilen_json)
+
+
+def apply_preview(db: Session, org_id: int, user_id: int, preview_id: int) -> int:
+    entry, preview = load_preview(db, org_id, user_id, preview_id)
+    fields = ("typ", "anzeigename", "vorname", "nachname", "funktion", "organisation", "email", "erreichbarkeit", "notizen")
+    changed = 0
+    for item in preview:
+        row = item["row"]
+        data = {field: row[field] for field in fields if field in row}
+        data.setdefault("typ", "person")
+        if item["status"] == "neu":
+            kontakt_service.create_kontakt(db, data, [], [], org_id=org_id, user_id=user_id)
+            changed += 1
+        elif item["status"] == "geaendert":
+            kontakt = db.query(Kontakt).filter(Kontakt.id == item["kontakt_id"], Kontakt.org_id == org_id).first()
+            if kontakt is not None:
+                phones = [
+                    {"nummer": phone.nummer, "label": phone.label, "bevorzugt": phone.bevorzugt,
+                     "sms_eignung": phone.sms_eignung}
+                    for phone in kontakt.telefone
+                ]
+                categories = [assignment.kategorie.name for assignment in kontakt.kategorien]
+                kontakt_service.update_kontakt(
+                    db, kontakt.id, data, phones, categories, version=kontakt.version, org_id=org_id, user_id=user_id,
+                )
+                changed += 1
+    db.delete(entry)
+    db.commit()
+    return changed
 
 
 def _kontakte(db: Session, org_id: int) -> list[Kontakt]:

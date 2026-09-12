@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session
 
@@ -200,6 +200,44 @@ def export_xlsx(db: Session = Depends(get_db), user: User = Depends(require_role
     return Response(build_export(db, _org_id(user)),
                     media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     headers={"Content-Disposition": "attachment; filename=kontakte.xlsx"})
+
+
+@router.post("/import/vorschau")
+async def import_vorschau(datei: UploadFile = File(...), db: Session = Depends(get_db),
+                          user: User = Depends(require_role(*_SCHREIB_ROLLEN)),
+                          _guard: None = Depends(require_kontakte_enabled)):
+    from app.services.kontakt_transfer_service import parse_import, preview_import, save_preview
+    try:
+        rows = parse_import(await datei.read(), datei.filename or "")
+        preview = preview_import(db, _org_id(user), rows)
+    except ValueError as exc:
+        return RedirectResponse(f"/kontakte?import_error={exc}", status_code=303)
+    entry = save_preview(db, _org_id(user), user.id, preview)
+    return RedirectResponse(f"/kontakte/import/{entry.id}", status_code=303)
+
+
+@router.get("/import/{preview_id}", response_class=HTMLResponse)
+def import_anzeigen(preview_id: int, request: Request, db: Session = Depends(get_db),
+                    user: User = Depends(require_role(*_SCHREIB_ROLLEN)),
+                    _guard: None = Depends(require_kontakte_enabled)):
+    from app.services.kontakt_transfer_service import load_preview
+    try:
+        _entry, preview = load_preview(db, _org_id(user), user.id, preview_id)
+    except LookupError:
+        raise HTTPException(404, "Importvorschau nicht gefunden") from None
+    return templates.TemplateResponse(request, "kontakte/import_vorschau.html", {"user": user, "preview": preview, "preview_id": preview_id})
+
+
+@router.post("/import/{preview_id}/uebernehmen")
+def import_uebernehmen(preview_id: int, db: Session = Depends(get_db),
+                       user: User = Depends(require_role(*_SCHREIB_ROLLEN)),
+                       _guard: None = Depends(require_kontakte_enabled)):
+    from app.services.kontakt_transfer_service import apply_preview
+    try:
+        changed = apply_preview(db, _org_id(user), user.id, preview_id)
+    except LookupError:
+        raise HTTPException(404, "Importvorschau nicht gefunden") from None
+    return RedirectResponse(f"/kontakte?imported={changed}", status_code=303)
 
 
 @router.get("/{kontakt_id}", response_class=HTMLResponse)
