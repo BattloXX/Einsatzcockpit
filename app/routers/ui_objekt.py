@@ -30,6 +30,7 @@ from app.core.audit import write_audit
 from app.core.permissions import is_objekt_verwalter, require_role
 from app.core.templating import templates
 from app.db import get_db
+from app.models.kontakt import Kontakt, ObjektKontaktFreigabe
 from app.models.objekt import (
     AUSWAHL_DOKUMENTART,
     AUSWAHL_KONTAKTART,
@@ -56,6 +57,7 @@ from app.models.objekt import (
     ObjektZusatzadresse,
 )
 from app.models.user import User
+from app.services import kontakt_service
 from app.services.objekt_service import (
     aktualisiere_felder,
     berechne_vollstaendigkeit,
@@ -1579,51 +1581,178 @@ def kontakte_partial(
     )
 
 
-@router.post("/{objekt_id}/kontakte/neu", response_class=HTMLResponse)
-def kontakt_neu(
+def _kontakt_art(db: Session, org_id: int, art: str) -> str:
+    return art if art in lade_auswahl(db, org_id, AUSWAHL_KONTAKTART) else "sonstig"
+
+
+def _objekt_org_id(objekt: Objekt) -> int:
+    if objekt.org_id is None:
+        raise HTTPException(status_code=400, detail="Objekt hat keine Organisation")
+    return objekt.org_id
+
+
+def _kontakt_zuordnen(
+    db: Session, objekt: Objekt, zentraler_kontakt: Kontakt, art: str, user_id: int | None
+) -> ObjektKontakt:
+    """Legt eine Objekt-Zuordnung an; zentrale Felder bleiben bewusst leer."""
+    if zentraler_kontakt.org_id != objekt.org_id:
+        raise HTTPException(status_code=404, detail="Kontakt nicht gefunden")
+    vorhanden = (
+        db.query(ObjektKontakt)
+        .filter(
+            ObjektKontakt.objekt_id == objekt.id,
+            ObjektKontakt.kontakt_id == zentraler_kontakt.id,
+            ObjektKontakt.art == art,
+        )
+        .first()
+    )
+    if vorhanden is not None:
+        raise HTTPException(status_code=400, detail="Kontakt ist bereits mit dieser Art zugeordnet")
+    kontakt = ObjektKontakt(
+        org_id=objekt.org_id,
+        objekt_id=objekt.id,
+        kontakt_id=zentraler_kontakt.id,
+        art=art,
+        name="",
+        sort=max((k.sort for k in objekt.kontakte), default=0) + 1,
+    )
+    db.add(kontakt)
+    write_objekt_change(
+        db, objekt.id, objekt.org_id, "kontakte", "kontakt_zugeordnet",
+        before=None, after=zentraler_kontakt.anzeigename, user_id=user_id,
+    )
+    return kontakt
+
+
+def _kontakte_response(request: Request, db: Session, user: User, objekt: Objekt):
+    db.commit()
+    db.refresh(objekt)
+    return templates.TemplateResponse(
+        request, "objekt/_kontakte.html", _detail_context(request, db, user, objekt)
+    )
+
+
+@router.get("/{objekt_id}/kontakte/suche", response_class=HTMLResponse)
+def kontakte_suche(
+    objekt_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*_LESE_ROLLEN)),
+    _guard: None = Depends(require_objekt_enabled),
+    q: str = "",
+):
+    objekt = _objekt_or_404(db, objekt_id, user)
+    kontakte, _total = kontakt_service.list_kontakte(db, q=q)
+    return templates.TemplateResponse(request, "objekt/_kontakte_suche.html", {
+        "objekt": objekt, "kontakte": kontakte, "q": q,
+        "kontakt_arten": lade_auswahl(db, objekt.org_id, AUSWAHL_KONTAKTART),
+        "request": request, "ist_verwalter": is_objekt_verwalter(user),
+    })
+
+
+@router.post("/{objekt_id}/kontakte/zuordnen", response_class=HTMLResponse)
+def kontakt_zuordnen(
+    objekt_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("objekt_verwalter")),
+    _guard: None = Depends(require_objekt_enabled),
+    kontakt_id: int = Form(...),
+    art: str = Form("sonstig"),
+):
+    objekt = _objekt_or_404(db, objekt_id, user)
+    org_id = _objekt_org_id(objekt)
+    zentraler_kontakt = (
+        db.query(Kontakt).filter(Kontakt.id == kontakt_id, Kontakt.org_id == org_id).first()
+    )
+    if zentraler_kontakt is None:
+        raise HTTPException(status_code=404, detail="Kontakt nicht gefunden")
+    _kontakt_zuordnen(db, objekt, zentraler_kontakt, _kontakt_art(db, org_id, art), user.id)
+    return _kontakte_response(request, db, user, objekt)
+
+
+@router.post("/{objekt_id}/kontakte/anlegen", response_class=HTMLResponse)
+def kontakt_anlegen_und_zuordnen(
     objekt_id: int,
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_role("objekt_verwalter")),
     _guard: None = Depends(require_objekt_enabled),
     art: str = Form("sonstig"),
-    name: str = Form(...),
-    telefon_nummer: list[str] = Form(default=[]),
+    typ: str = Form("person"),
+    anzeigename: str = Form(""),
+    vorname: str = Form(""),
+    nachname: str = Form(""),
+    funktion: str = Form(""),
+    organisation: str = Form(""),
+    nummer: list[str] = Form(default=[]),
     telefon_label: list[str] = Form(default=[]),
-    telefon_sms: list[str] = Form(default=[]),
+    bevorzugt: list[str] = Form(default=[]),
+    sms_eignung: list[str] = Form(default=[]),
     email: str = Form(""),
     erreichbarkeit: str = Form(""),
-    benachrichtigung_mail: str = Form(""),
+    notizen: str = Form(""),
 ):
     objekt = _objekt_or_404(db, objekt_id, user)
-    if not name.strip():
-        raise HTTPException(status_code=400, detail="Name ist erforderlich")
-    if art not in lade_auswahl(db, objekt.org_id, AUSWAHL_KONTAKTART):
-        art = "sonstig"
-    max_sort = max([k.sort for k in objekt.kontakte], default=0)
+    org_id = _objekt_org_id(objekt)
+    telefone = [
+        {
+            "nummer": wert,
+            "label": telefon_label[index] if index < len(telefon_label) else "",
+            "bevorzugt": str(index) in set(bevorzugt),
+            "sms_eignung": str(index) in set(sms_eignung),
+        }
+        for index, wert in enumerate(nummer)
+    ]
     try:
-        telefone_json = telefone_aus_form(telefon_nummer, telefon_label, telefon_sms)
+        zentraler_kontakt = kontakt_service.create_kontakt(
+            db,
+            {"typ": typ, "anzeigename": anzeigename, "vorname": vorname, "nachname": nachname,
+             "funktion": funktion, "organisation": organisation, "email": email,
+             "erreichbarkeit": erreichbarkeit, "notizen": notizen},
+            telefone, [], org_id=org_id, user_id=user.id,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    kontakt = ObjektKontakt(
-        org_id=objekt.org_id,
-        objekt_id=objekt.id,
-        art=art,
-        name=name.strip(),
-        telefone_json=telefone_json,
-        email=email.strip() or None,
-        erreichbarkeit=erreichbarkeit.strip() or None,
-        benachrichtigung_mail=benachrichtigung_mail in ("1", "true", "on"),
-        sort=max_sort + 1,
-    )
-    db.add(kontakt)
-    write_objekt_change(db, objekt.id, objekt.org_id, "kontakte", "kontakt_neu",
-                        before=None, after=kontakt.name, user_id=user.id)
-    db.commit()
-    db.refresh(objekt)
-    return templates.TemplateResponse(
-        request, "objekt/_kontakte.html", _detail_context(request, db, user, objekt)
-    )
+    _kontakt_zuordnen(db, objekt, zentraler_kontakt, _kontakt_art(db, org_id, art), user.id)
+    return _kontakte_response(request, db, user, objekt)
+
+
+@router.post("/{objekt_id}/kontakte/{kontakt_id}/zuordnung", response_class=HTMLResponse)
+def kontakt_zuordnung_speichern(
+    objekt_id: int, kontakt_id: int, request: Request, db: Session = Depends(get_db),
+    user: User = Depends(require_role("objekt_verwalter")),
+    _guard: None = Depends(require_objekt_enabled), art: str = Form("sonstig"),
+    sort: int = Form(0), erreichbarkeit: str = Form(""),
+    freigabe_sms: list[str] = Form(default=[]), freigabe_mail: list[str] = Form(default=[]),
+):
+    objekt = _objekt_or_404(db, objekt_id, user)
+    org_id = _objekt_org_id(objekt)
+    kontakt = db.query(ObjektKontakt).filter(
+        ObjektKontakt.id == kontakt_id, ObjektKontakt.objekt_id == objekt.id
+    ).first()
+    if kontakt is None or kontakt.kontakt_id is None or kontakt.zentraler_kontakt is None:
+        raise HTTPException(status_code=400, detail="Nur zentrale Kontaktzuordnungen sind hier bearbeitbar")
+    kontakt.art = _kontakt_art(db, org_id, art)
+    kontakt.sort = max(sort, 0)
+    kontakt.erreichbarkeit = erreichbarkeit.strip() or None
+    erlaubte_sms = {tel.nummer_normalisiert for tel in kontakt.zentraler_kontakt.telefone if tel.nummer_normalisiert}
+    erlaubte_mail = {(kontakt.zentraler_kontakt.email or "").strip().casefold()} - {""}
+    gewuenscht = {("sms", wert) for wert in freigabe_sms if wert in erlaubte_sms}
+    gewuenscht |= {("mail", wert.casefold()) for wert in freigabe_mail if wert.casefold() in erlaubte_mail}
+    vorhandene = {(f.kanal, f.ziel_wert): f for f in kontakt.freigaben}
+    for schluessel, freigabe in vorhandene.items():
+        if schluessel[0] in ("sms", "mail"):
+            freigabe.aktiv = schluessel in gewuenscht
+    for kanal, ziel_wert in gewuenscht:
+        if (kanal, ziel_wert) not in vorhandene:
+            db.add(ObjektKontaktFreigabe(
+                org_id=objekt.org_id, objekt_kontakt_id=kontakt.id, kanal=kanal,
+                ziel_wert=ziel_wert, aktiv=True,
+            ))
+    write_objekt_change(db, objekt.id, objekt.org_id, "kontakte", "kontakt_zuordnung_bearbeitet",
+                        before=None, after=kontakt.zentraler_kontakt.anzeigename, user_id=user.id)
+    return _kontakte_response(request, db, user, objekt)
 
 
 @router.post("/{objekt_id}/kontakte/{kontakt_id}", response_class=HTMLResponse)
@@ -1651,6 +1780,11 @@ def kontakt_speichern(
     )
     if kontakt is None:
         raise HTTPException(status_code=404, detail="Kontakt nicht gefunden")
+    if kontakt.kontakt_id is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="Zentrale Kontaktdaten koennen nur im Kontakte-Modul bearbeitet werden",
+        )
     if art not in lade_auswahl(db, objekt.org_id, AUSWAHL_KONTAKTART):
         art = "sonstig"
     try:
