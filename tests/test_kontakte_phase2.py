@@ -154,6 +154,7 @@ def test_rolle_suche_kategorie_idempotent_und_tenant_isolation(client):
                 nummer=["00 43 664 123456"],
                 telefon_label=["Mobil"],
                 kategorien="Gemeinsam",
+                duplikate_bestaetigt="1" if name == "Org A Zweitkontakt" else "",
             ),
             follow_redirects=False,
         ).status_code == 303

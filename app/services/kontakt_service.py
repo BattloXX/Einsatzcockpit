@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import and_, func, or_
@@ -12,16 +14,25 @@ from app.models.kontakt import (
     KONTAKT_TYP_PERSON,
     KONTAKT_TYP_STELLE,
     Kontakt,
+    KontaktAnhang,
+    KontaktExterneReferenz,
     KontaktKategorie,
     KontaktKategorieZuordnung,
     KontaktTelefon,
 )
+from app.models.objekt import ObjektKontakt, ObjektKontaktBenachrichtigung
 
 PRO_SEITE = 50
 
 
 class KontaktKonflikt(Exception):
     """Das Formular basiert auf einer nicht mehr aktuellen Kontaktversion."""
+
+
+@dataclass
+class KontaktMergeErgebnis:
+    kontakt: Kontakt
+    freigabe_konflikte: list[str]
 
 
 def _mit_details(query):
@@ -220,3 +231,106 @@ def find_duplicate_candidates(
         .order_by(Kontakt.anzeigename, Kontakt.id)
         .all()
     )
+
+
+def merge_kontakte(
+    db: Session, quelle_id: int, ziel_id: int, feldwahl: dict[str, str], *, user_id: int | None
+) -> KontaktMergeErgebnis:
+    """Fuehrt zwei Kontakte derselben Organisation verlustfrei zusammen."""
+    if quelle_id == ziel_id:
+        raise ValueError("Quelle und Ziel muessen verschieden sein")
+    quelle = get_kontakt(db, quelle_id, include_archiviert=True)
+    ziel = get_kontakt(db, ziel_id, include_archiviert=True)
+    if quelle is None or ziel is None:
+        raise LookupError("Kontakt nicht gefunden")
+    if quelle.archiviert or ziel.archiviert:
+        raise ValueError("Archivierte Kontakte koennen nicht zusammengefuehrt werden")
+    if quelle.org_id != ziel.org_id:
+        raise ValueError("Kontakte gehoeren nicht zur selben Organisation")
+
+    for feld in (
+        "typ", "anzeigename", "vorname", "nachname", "funktion", "organisation",
+        "email", "erreichbarkeit", "notizen",
+    ):
+        if feldwahl.get(feld) == "quelle":
+            setattr(ziel, feld, getattr(quelle, feld))
+
+    nummern = {telefon.nummer_normalisiert for telefon in ziel.telefone}
+    next_sort = max((telefon.sort for telefon in ziel.telefone), default=-1) + 1
+    for telefon in list(quelle.telefone):
+        if telefon.nummer_normalisiert in nummern:
+            db.delete(telefon)
+        else:
+            telefon.kontakt_id, telefon.sort = ziel.id, next_sort
+            next_sort += 1
+            nummern.add(telefon.nummer_normalisiert)
+    kategorien = {zuordnung.kategorie_id for zuordnung in ziel.kategorien}
+    for zuordnung in list(quelle.kategorien):
+        if zuordnung.kategorie_id in kategorien:
+            db.delete(zuordnung)
+        else:
+            zuordnung.kontakt_id = ziel.id
+            kategorien.add(zuordnung.kategorie_id)
+    for anhang in db.query(KontaktAnhang).filter(KontaktAnhang.kontakt_id == quelle.id).all():
+        anhang.kontakt_id = ziel.id
+    refs = {
+        (ref.quelle, ref.quelle_kontext, ref.extern_id)
+        for ref in db.query(KontaktExterneReferenz).filter(KontaktExterneReferenz.kontakt_id == ziel.id).all()
+    }
+    for ref in db.query(KontaktExterneReferenz).filter(KontaktExterneReferenz.kontakt_id == quelle.id).all():
+        key = (ref.quelle, ref.quelle_kontext, ref.extern_id)
+        if key in refs:
+            db.delete(ref)
+        else:
+            ref.kontakt_id = ziel.id
+            refs.add(key)
+
+    konflikte: list[str] = []
+    for objekt_zuordnung in db.query(ObjektKontakt).filter(ObjektKontakt.kontakt_id == quelle.id).all():
+        gleich = db.query(ObjektKontakt).filter(
+            ObjektKontakt.kontakt_id == ziel.id,
+            ObjektKontakt.objekt_id == objekt_zuordnung.objekt_id,
+            ObjektKontakt.art == objekt_zuordnung.art,
+        ).first()
+        if gleich is None:
+            objekt_zuordnung.kontakt_id = ziel.id
+            continue
+        for freigabe in list(objekt_zuordnung.freigaben):
+            vorhanden = next((ziel_freigabe for ziel_freigabe in gleich.freigaben
+                              if ziel_freigabe.kanal == freigabe.kanal
+                              and ziel_freigabe.ziel_wert == freigabe.ziel_wert), None)
+            if vorhanden is None:
+                freigabe.objekt_kontakt_id = gleich.id
+            else:
+                if vorhanden.aktiv != freigabe.aktiv:
+                    vorhanden.aktiv = False
+                    konflikte.append(
+                        f"Objektkontakt {gleich.id}: {freigabe.kanal} {freigabe.ziel_wert} "
+                        "wurde wegen widerspruechlicher Freigaben deaktiviert."
+                    )
+                db.delete(freigabe)
+        db.flush()
+        # Nach dem Umhaengen nicht die im Python-Objekt noch alte Sammlung beim
+        # delete-orphan-Cascade auswerten lassen.
+        db.expire(objekt_zuordnung, ["freigaben"])
+        for benachrichtigung in (
+            db.query(ObjektKontaktBenachrichtigung)
+            .filter(
+                ObjektKontaktBenachrichtigung.org_id == objekt_zuordnung.org_id,
+                ObjektKontaktBenachrichtigung.objekt_kontakt_id == objekt_zuordnung.id,
+            )
+            .all()
+        ):
+            benachrichtigung.objekt_kontakt_id = gleich.id
+        db.delete(objekt_zuordnung)
+
+    hinweis = f"Zusammengefuehrt nach Kontakt #{ziel.id} am {datetime.now(UTC):%Y-%m-%d %H:%M UTC}."
+    quelle.notizen = f"{quelle.notizen.rstrip()}\n{hinweis}" if quelle.notizen else hinweis
+    quelle.archiviert, quelle.aktiv, quelle.aktualisiert_von_id = True, False, user_id
+    quelle.version += 1
+    ziel.aktualisiert_von_id = user_id
+    ziel.version += 1
+    db.commit()
+    kontakt = get_kontakt(db, ziel.id, include_archiviert=True)
+    assert kontakt is not None
+    return KontaktMergeErgebnis(kontakt=kontakt, freigabe_konflikte=konflikte)
