@@ -93,7 +93,13 @@ def _zentralen_bma_kontakt_sync(
         KontaktExterneReferenz.quelle_kontext == satz.extern_id,
         KontaktExterneReferenz.extern_id == extern_id,
     ).first()
-    kontakt = referenz.kontakt if referenz is not None else zuordnung.zentraler_kontakt
+    if referenz is None:
+        referenz = next((item for item in db.new if isinstance(item, KontaktExterneReferenz)
+                         and item.org_id == zuordnung.org_id and item.quelle == _BMA_KONTAKT_QUELLE
+                         and item.quelle_kontext == satz.extern_id and item.extern_id == extern_id), None)
+    kontakt = referenz.kontakt if referenz is not None else (
+        db.get(Kontakt, zuordnung.kontakt_id) if zuordnung.kontakt_id else zuordnung.zentraler_kontakt
+    )
     telefon_daten = [
         {"nummer": eintrag["nummer"], "label": eintrag.get("label"), "sort": index}
         for index, roh in enumerate(daten.get("telefone") or [])

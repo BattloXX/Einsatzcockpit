@@ -40,7 +40,7 @@ def parse_import(content: bytes, filename: str) -> list[dict[str, Any]]:
 
 def preview_import(db: Session, org_id: int, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Classify rows without changing data; all candidate queries stay in-org."""
-    preview = []
+    preview: list[dict[str, Any]] = []
     for row in rows:
         name = row.get("anzeigename", "").strip()
         if not name:
@@ -88,7 +88,10 @@ def load_preview(
 
 def apply_preview(db: Session, org_id: int, user_id: int, preview_id: int) -> int:
     entry, preview = load_preview(db, org_id, user_id, preview_id)
-    fields = ("typ", "anzeigename", "vorname", "nachname", "funktion", "organisation", "email", "erreichbarkeit", "notizen")
+    fields = (
+        "typ", "anzeigename", "vorname", "nachname", "funktion", "organisation", "email",
+        "erreichbarkeit", "notizen",
+    )
     changed = 0
     for item in preview:
         row = item["row"]
