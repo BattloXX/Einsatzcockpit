@@ -35,7 +35,10 @@ def export_xlsx(db: Session, org_id: int) -> bytes:
     kontakte = _kontakte(db, org_id)
     sheet = wb.active
     sheet.title = "Kontakte"
-    sheet.append(["version", "id", "typ", "anzeigename", "vorname", "nachname", "funktion", "organisation", "email", "erreichbarkeit", "notizen"])
+    sheet.append([
+        "version", "id", "typ", "anzeigename", "vorname", "nachname", "funktion",
+        "organisation", "email", "erreichbarkeit", "notizen",
+    ])
     for k in kontakte:
         sheet.append([FORMAT_VERSION, k.id, k.typ, k.anzeigename, k.vorname, k.nachname, k.funktion,
                       k.organisation, k.email, k.erreichbarkeit, k.notizen])
@@ -57,7 +60,8 @@ def export_xlsx(db: Session, org_id: int) -> bytes:
     for ws in wb.worksheets:
         ws.freeze_panes = "A2"
         for column in ws.columns:
-            ws.column_dimensions[column[0].column_letter].width = min(max(len(str(c.value or "")) for c in column) + 2, 48)
+            width = min(max(len(str(cell.value or "")) for cell in column) + 2, 48)
+            ws.column_dimensions[column[0].column_letter].width = width
     out = io.BytesIO()
     wb.save(out)
     return out.getvalue()
