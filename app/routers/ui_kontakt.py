@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
-from app.core.permissions import require_role
+from app.core.permissions import can_send_manual_sms, require_role
 from app.core.templating import templates
 from app.db import get_db
-from app.models.kontakt import KONTAKT_TYP_PERSON
+from app.models.kontakt import KONTAKT_TYP_PERSON, Kontakt, KontaktTelefon
+from app.models.sms import SmsLog
 from app.models.user import User
 from app.services import kontakt_service
 
@@ -193,14 +195,85 @@ def detail(
 ):
     if kontakt_service.get_kontakt(db, kontakt_id) is None:
         raise HTTPException(status_code=404, detail="Kontakt nicht gefunden")
+    sms_gateway_available = False
+    if can_send_manual_sms(user):
+        from app.services.sms_service import sms_available
+        sms_gateway_available = sms_available(_org_id(user), db)
     if request.headers.get("HX-Request") == "true":
         return templates.TemplateResponse(
             request, "kontakte/_detail.html", {
                 "kontakt": kontakt_service.get_kontakt(db, kontakt_id), "user": user,
-                "merge_konflikte": merge_konflikt or [],
+                "merge_konflikte": merge_konflikt or [], "sms_gateway_available": sms_gateway_available,
             }
         )
-    return _seite(request, db, user, selected_id=kontakt_id, merge_konflikte=merge_konflikt)
+    response = _seite(request, db, user, selected_id=kontakt_id, merge_konflikte=merge_konflikt)
+    response.context["sms_gateway_available"] = sms_gateway_available
+    return response
+
+
+@router.post("/{kontakt_id}/sms")
+async def sms_an_kontakt_senden(
+    kontakt_id: int,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    telefon_id: int = Form(...),
+    text: str = Form(""),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*_LESE_ROLLEN)),
+    _guard: None = Depends(require_kontakte_enabled),
+):
+    """Queues one gateway SMS to one explicitly selected contact number."""
+    if not can_send_manual_sms(user):
+        raise HTTPException(status_code=403, detail="Keine Berechtigung zum SMS-Versand")
+    org_id = _org_id(user)
+    kontakt = db.query(Kontakt).filter(Kontakt.id == kontakt_id, Kontakt.org_id == org_id).first()
+    telefon = (
+        db.query(KontaktTelefon)
+        .filter(
+            KontaktTelefon.id == telefon_id,
+            KontaktTelefon.kontakt_id == kontakt_id,
+            KontaktTelefon.org_id == org_id,
+        )
+        .first()
+    )
+    if kontakt is None or telefon is None:
+        raise HTTPException(status_code=404, detail="Kontakt oder Telefonnummer nicht gefunden")
+    if telefon.sms_eignung is False:
+        raise HTTPException(status_code=400, detail="Diese Telefonnummer ist nicht SMS-faehig")
+    text = text.strip()
+    if not text:
+        return RedirectResponse(f"/kontakte/{kontakt_id}?sms_error=empty", status_code=303)
+    from app.services.sms_service import sms_available
+    if not sms_available(org_id, db):
+        return RedirectResponse(f"/kontakte/{kontakt_id}?sms_error=no_provider", status_code=303)
+    if not telefon.nummer_normalisiert:
+        return RedirectResponse(f"/kontakte/{kontakt_id}?sms_error=no_recipient", status_code=303)
+    log_entry = SmsLog(
+        org_id=org_id,
+        sent_at=datetime.now(UTC).replace(tzinfo=None),
+        completed_at=None,
+        source="manual",
+        alarm_type_code=None,
+        text=text,
+        recipient_count=1,
+        success_count=0,
+        provider=None,
+        triggered_by_user_id=user.id,
+    )
+    db.add(log_entry)
+    db.flush()
+    db.commit()
+    from app.services.sms_dispatch_service import dispatch_manual_sms
+    background_tasks.add_task(
+        dispatch_manual_sms,
+        org_id,
+        log_entry.id,
+        text,
+        {telefon.nummer_normalisiert: (kontakt.anzeigename, None, "kontakt", kontakt.id)},
+        user.id,
+        "kontakt",
+    )
+    return RedirectResponse(f"/kontakte/{kontakt_id}?sms_started={log_entry.id}", status_code=303)
 
 
 @router.post("/", response_class=HTMLResponse)
