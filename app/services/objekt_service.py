@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 # Kompatibler Re-Export: bma_sync.py und die Tests importieren telefon_normalisiert
 # weiterhin von hier, die Implementierung liegt seit dem Refactoring in app/core/telefon.py.
 from app.core.telefon import telefon_normalisiert  # noqa: F401
+from app.models.kontakt import ObjektKontaktFreigabe
 from app.models.objekt import (
     AUSWAHL_DOKUMENTART,
     AUSWAHL_KONTAKTART,
@@ -215,6 +216,55 @@ def _kopiere_kindzeile(quelle: Any, ziel_cls: type, *, objekt_id: int, org_id: i
     return ziel_cls(**kwargs)
 
 
+def _kontakt_identitaet(kontakt: ObjektKontakt) -> tuple[object, ...]:
+    """Stabile Identitaet einer Kontaktzuordnung fuer Arbeitskopie-Merges.
+
+    Nicht migrierte, manuell gepflegte Altzeilen sind absichtlich nie gleich: Bis
+    deren UI-Cutover bleibt fuer sie das bisherige Delete-and-recreate-Verhalten.
+    """
+    if kontakt.kontakt_id is not None:
+        return ("zentral", kontakt.kontakt_id)
+    if kontakt.extern_quelle and kontakt.extern_id:
+        return ("extern", kontakt.extern_quelle, kontakt.extern_id)
+    return ("manuell", id(kontakt))
+
+
+def _kopiere_kontakt_freigaben(
+    db: Session, quelle: ObjektKontakt, *, objekt_kontakt_id: int, org_id: int | None
+) -> None:
+    for freigabe in quelle.freigaben:
+        db.add(ObjektKontaktFreigabe(
+            org_id=org_id,
+            objekt_kontakt_id=objekt_kontakt_id,
+            kanal=freigabe.kanal,
+            ziel_wert=freigabe.ziel_wert,
+            aktiv=freigabe.aktiv,
+        ))
+
+
+def _gleiche_kontakt_freigaben(
+    db: Session, basis: ObjektKontakt, kopie: ObjektKontakt
+) -> None:
+    """Gleicht Freigaben einer stabil erhaltenen Kontaktzuordnung ab."""
+    basis_nach_ziel = {(f.kanal, f.ziel_wert): f for f in basis.freigaben}
+    kopie_nach_ziel = {(f.kanal, f.ziel_wert): f for f in kopie.freigaben}
+    for schluessel, freigabe in basis_nach_ziel.items():
+        vorlage = kopie_nach_ziel.get(schluessel)
+        if vorlage is None:
+            db.delete(freigabe)
+        else:
+            freigabe.aktiv = vorlage.aktiv
+    for schluessel, vorlage in kopie_nach_ziel.items():
+        if schluessel not in basis_nach_ziel:
+            db.add(ObjektKontaktFreigabe(
+                org_id=basis.org_id,
+                objekt_kontakt_id=basis.id,
+                kanal=vorlage.kanal,
+                ziel_wert=vorlage.ziel_wert,
+                aktiv=vorlage.aktiv,
+            ))
+
+
 def erstelle_arbeitskopie(db: Session, objekt: Objekt, user_id: int | None) -> Objekt:
     """Legt eine Arbeitskopie eines freigegebenen Objekts an (tiefe Kopie aller
     Stammdaten + Kinddaten: BMA, Zusatzadressen, Gefahren, Merkmale, Kontakte, Wohnanlage,
@@ -261,6 +311,9 @@ def erstelle_arbeitskopie(db: Session, objekt: Objekt, user_id: int | None) -> O
         db.add(neuer_kontakt)
         db.flush()
         kontakt_map[kontakt.id] = neuer_kontakt.id
+        _kopiere_kontakt_freigaben(
+            db, kontakt, objekt_kontakt_id=neuer_kontakt.id, org_id=kopie.org_id
+        )
 
     if objekt.wohnanlage is not None:
         neue_wohnanlage = _kopiere_kindzeile(
@@ -348,22 +401,63 @@ def _ersetze_kinddaten(db: Session, basis: Objekt, kopie: Objekt, *, user_id: in
         db.delete(basis.wohnanlage)
         db.flush()
 
-    # Kontakte
+    # Kontakte: zentral verknuepfte und importierte Zuordnungen werden anhand ihrer
+    # Identitaet in-place erhalten. Damit bleibt das Versandprotokoll am selben FK.
     vorher = len(basis.kontakte)
-    for alter_kontakt in list(basis.kontakte):
-        db.delete(alter_kontakt)
-    # DELETE muss vor dem INSERT durchsein, sonst kollidieren gleiche Import-IDs
-    # mit uq_objekt_kontakt_extern (dieselbe Absicherung wie bei uq_objekt_merkmal).
+    basis_kontakte = list(basis.kontakte)
+    kopie_kontakte = list(kopie.kontakte)
+    basis_nach_identitaet: dict[tuple[object, ...], list[ObjektKontakt]] = {}
+    for kontakt in basis_kontakte:
+        basis_nach_identitaet.setdefault(_kontakt_identitaet(kontakt), []).append(kontakt)
+
+    paare: list[tuple[ObjektKontakt, ObjektKontakt]] = []
+    neue_vorlagen: list[ObjektKontakt] = []
+    verwendete_basis_ids: set[int] = set()
+    for kontakt_vorlage in kopie_kontakte:
+        treffer = basis_nach_identitaet.get(_kontakt_identitaet(kontakt_vorlage), [])
+        basis_kontakt = next((k for k in treffer if k.id not in verwendete_basis_ids), None)
+        if basis_kontakt is None:
+            neue_vorlagen.append(kontakt_vorlage)
+        else:
+            verwendete_basis_ids.add(basis_kontakt.id)
+            paare.append((basis_kontakt, kontakt_vorlage))
+
+    # Erst nicht mehr vorhandene Zuordnungen entfernen. Der FK der Freigaben hat
+    # ondelete=CASCADE; das Flush bewahrt zudem die Import-Unique-Constraint-Reihenfolge.
+    for kontakt in basis_kontakte:
+        if kontakt.id not in verwendete_basis_ids:
+            db.delete(kontakt)
     db.flush()
+
     kontakt_map: dict[int, int] = {}
-    for kontakt_vorlage in kopie.kontakte:
-        neuer_kontakt = _kopiere_kindzeile(kontakt_vorlage, ObjektKontakt, objekt_id=basis.id, org_id=basis.org_id)
+    mutable_felder = (
+        "art", "name", "telefone_json", "email", "erreichbarkeit",
+        "benachrichtigung_mail", "sort", "kontakt_id", "extern_quelle", "extern_id",
+    )
+    for basis_kontakt, kontakt_vorlage in paare:
+        for feld in mutable_felder:
+            setattr(basis_kontakt, feld, getattr(kontakt_vorlage, feld))
+        _gleiche_kontakt_freigaben(db, basis_kontakt, kontakt_vorlage)
+        kontakt_map[kontakt_vorlage.id] = basis_kontakt.id
+    db.flush()
+    for kontakt_vorlage in neue_vorlagen:
+        neuer_kontakt = _kopiere_kindzeile(
+            kontakt_vorlage, ObjektKontakt, objekt_id=basis.id, org_id=basis.org_id
+        )
         db.add(neuer_kontakt)
         db.flush()
+        _kopiere_kontakt_freigaben(
+            db, kontakt_vorlage, objekt_kontakt_id=neuer_kontakt.id, org_id=basis.org_id
+        )
         kontakt_map[kontakt_vorlage.id] = neuer_kontakt.id
     if vorher or kontakt_map:
-        write_objekt_change(db, basis.id, basis.org_id, "kontakte", "anzahl",
-                            before=vorher, after=len(kontakt_map), user_id=user_id)
+        write_objekt_change(
+            db, basis.id, basis.org_id, "kontakte", "abgleich",
+            before=vorher,
+            after=f"{len(kontakt_map)}; {len(paare)} erhalten/{len(neue_vorlagen)} neu/"
+                  f"{vorher - len(paare)} entfernt",
+            user_id=user_id,
+        )
 
     # Wohnanlage neu anlegen (nach den Kontakten - Remap der Hausverwaltung)
     hat_wohnanlage = kopie.wohnanlage is not None

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, date, datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     BigInteger,
@@ -30,6 +31,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.tenant import TenantScoped
 from app.db import Base
+
+if TYPE_CHECKING:
+    from app.models.kontakt import Kontakt, ObjektKontaktFreigabe
 
 # Status-Workflow: Entwurf → Freigegeben ⇄ In Ueberarbeitung → Archiviert
 #
@@ -556,6 +560,12 @@ class ObjektKontakt(TenantScoped, Base):
     extern_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     objekt: Mapped[Objekt] = relationship(back_populates="kontakte")
+    zentraler_kontakt: Mapped[Kontakt | None] = relationship(
+        "Kontakt", foreign_keys=[kontakt_id]
+    )
+    freigaben: Mapped[list[ObjektKontaktFreigabe]] = relationship(
+        "ObjektKontaktFreigabe", cascade="all, delete-orphan"
+    )
 
     @property
     def telefone_eintraege(self) -> list[dict]:

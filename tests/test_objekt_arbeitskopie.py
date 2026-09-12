@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import sessionmaker
 
+
 # BigInteger → INTEGER für SQLite-Testumgebung
 @compiles(BigInteger, "sqlite")
 def _bigint_sqlite(element, compiler, **kw):
@@ -20,6 +21,8 @@ def _bigint_sqlite(element, compiler, **kw):
 
 from app.core.tenant import set_tenant_context
 from app.db import Base
+from app.models.incident import Incident
+from app.models.kontakt import Kontakt, ObjektKontaktFreigabe
 from app.models.master import FireDept
 from app.models.objekt import (
     OBJEKT_STATUS_ENTWURF,
@@ -34,6 +37,7 @@ from app.models.objekt import (
     ObjektGefahr,
     ObjektKartenObjekt,
     ObjektKontakt,
+    ObjektKontaktBenachrichtigung,
     ObjektMerkmal,
     ObjektWohnanlage,
     ObjektZusatzadresse,
@@ -225,6 +229,128 @@ def test_uebernimm_arbeitskopie_remappt_wohnanlage_kontakt(db, org):
     assert aktualisiert.wohnanlage is not None
     hv_kontakt = next(k for k in aktualisiert.kontakte if k.art == "hausverwaltung")
     assert aktualisiert.wohnanlage.hausverwaltung_kontakt_id == hv_kontakt.id
+
+
+def _zentraler_kontakt_mit_freigabe(db, basis, org_id):
+    zentral = Kontakt(org_id=org_id, anzeigename="Zentrale Ansprechpartnerin")
+    db.add(zentral)
+    db.flush()
+    zuordnung = ObjektKontakt(
+        org_id=org_id, objekt_id=basis.id, kontakt_id=zentral.id,
+        art="betreiber", name="Alter Snapshot", erreichbarkeit="Büro", sort=4,
+    )
+    db.add(zuordnung)
+    db.flush()
+    db.add(ObjektKontaktFreigabe(
+        org_id=org_id, objekt_kontakt_id=zuordnung.id, kanal="sms",
+        ziel_wert="+43660123", aktiv=True,
+    ))
+    incident = Incident(primary_org_id=org_id, alarm_type_code="B2")
+    db.add(incident)
+    db.flush()
+    protokoll = ObjektKontaktBenachrichtigung(
+        org_id=org_id, incident_id=incident.id, objekt_id=basis.id,
+        objekt_kontakt_id=zuordnung.id, kanal="sms", empfaenger="+43660123",
+    )
+    db.add(protokoll)
+    db.commit()
+    return zentral, zuordnung, protokoll
+
+
+def test_uebernahme_ohne_kontaktaenderung_erhaelt_id_historie_und_freigabe(db, org):
+    basis = _volles_objekt(db, org.id)
+    _, zuordnung, protokoll = _zentraler_kontakt_mit_freigabe(db, basis, org.id)
+    zuordnung_id, protokoll_id = zuordnung.id, protokoll.id
+
+    kopie = erstelle_arbeitskopie(db, basis, user_id=None)
+    db.commit()
+    kopie_zuordnung = next(k for k in kopie.kontakte if k.kontakt_id is not None)
+    assert [(f.kanal, f.ziel_wert, f.aktiv) for f in kopie_zuordnung.freigaben] == [
+        ("sms", "+43660123", True)
+    ]
+
+    aktualisiert = uebernimm_arbeitskopie(db, kopie, user_id=None)
+    db.commit()
+    erhalten = db.query(ObjektKontakt).filter(ObjektKontakt.id == zuordnung_id).one()
+    assert erhalten.objekt_id == aktualisiert.id
+    assert db.get(ObjektKontaktBenachrichtigung, protokoll_id).objekt_kontakt_id == zuordnung_id
+    assert [(f.kanal, f.ziel_wert, f.aktiv) for f in erhalten.freigaben] == [
+        ("sms", "+43660123", True)
+    ]
+
+
+def test_uebernahme_kontaktbearbeitung_erhaelt_id_und_historie(db, org):
+    basis = _volles_objekt(db, org.id)
+    _, zuordnung, protokoll = _zentraler_kontakt_mit_freigabe(db, basis, org.id)
+    zuordnung_id, protokoll_id = zuordnung.id, protokoll.id
+    kopie = erstelle_arbeitskopie(db, basis, user_id=None)
+    db.commit()
+    entwurf = next(k for k in kopie.kontakte if k.kontakt_id is not None)
+    entwurf.art, entwurf.sort, entwurf.erreichbarkeit = "schluesseltraeger", 9, "24/7"
+
+    uebernimm_arbeitskopie(db, kopie, user_id=None)
+    db.commit()
+    erhalten = db.query(ObjektKontakt).filter(ObjektKontakt.id == zuordnung_id).one()
+    assert (erhalten.art, erhalten.sort, erhalten.erreichbarkeit) == ("schluesseltraeger", 9, "24/7")
+    assert db.get(ObjektKontaktBenachrichtigung, protokoll_id).objekt_kontakt_id == zuordnung_id
+
+
+def test_uebernahme_kontakt_hinzufuegen_und_entfernen_gleicht_freigaben_ab(db, org):
+    basis = _volles_objekt(db, org.id)
+    zentral_alt, alt, _ = _zentraler_kontakt_mit_freigabe(db, basis, org.id)
+    alt_id = alt.id
+    kopie = erstelle_arbeitskopie(db, basis, user_id=None)
+    db.commit()
+    entwurf_alt = next(k for k in kopie.kontakte if k.kontakt_id == zentral_alt.id)
+    db.delete(entwurf_alt)
+    db.commit()  # entspricht dem abgeschlossenen Bearbeitungsschritt vor Uebernahme
+    zentral_neu = Kontakt(org_id=org.id, anzeigename="Neue Ansprechpartnerin")
+    db.add(zentral_neu)
+    db.flush()
+    neu = ObjektKontakt(
+        org_id=org.id, objekt_id=kopie.id, kontakt_id=zentral_neu.id,
+        art="betreiber", name="Neuer Snapshot",
+    )
+    db.add(neu)
+    db.flush()
+    db.add(ObjektKontaktFreigabe(
+        org_id=org.id, objekt_kontakt_id=neu.id, kanal="mail",
+        ziel_wert="neu@example.at", aktiv=True,
+    ))
+    db.commit()
+
+    aktualisiert = uebernimm_arbeitskopie(db, kopie, user_id=None)
+    db.commit()
+    assert db.get(ObjektKontakt, alt_id) is None
+    assert db.query(ObjektKontaktFreigabe).filter(
+        ObjektKontaktFreigabe.objekt_kontakt_id == alt_id
+    ).count() == 0
+    neuer = next(k for k in aktualisiert.kontakte if k.kontakt_id == zentral_neu.id)
+    assert neuer.id != alt_id
+    assert [(f.kanal, f.ziel_wert, f.aktiv) for f in neuer.freigaben] == [
+        ("mail", "neu@example.at", True)
+    ]
+
+
+def test_verwerfen_kontaktentwurf_laesst_basis_und_zentralen_kontakt_unveraendert(db, org):
+    basis = _volles_objekt(db, org.id)
+    zentral, zuordnung, protokoll = _zentraler_kontakt_mit_freigabe(db, basis, org.id)
+    vorher = (zuordnung.id, [(f.kanal, f.ziel_wert, f.aktiv) for f in zuordnung.freigaben], protokoll.id)
+    zentrale_anzahl = db.query(Kontakt).count()
+    kopie = erstelle_arbeitskopie(db, basis, user_id=None)
+    db.commit()
+    entwurf = next(k for k in kopie.kontakte if k.kontakt_id == zentral.id)
+    entwurf.freigaben[0].aktiv = False
+    db.delete(entwurf)
+    db.add(ObjektKontakt(org_id=org.id, objekt_id=kopie.id, name="Nur Entwurf", art="sonstig"))
+    db.commit()
+
+    verwirf_arbeitskopie(db, kopie, user_id=None)
+    db.commit()
+    erhalten = db.get(ObjektKontakt, vorher[0])
+    assert [(f.kanal, f.ziel_wert, f.aktiv) for f in erhalten.freigaben] == vorher[1]
+    assert db.get(ObjektKontaktBenachrichtigung, vorher[2]).objekt_kontakt_id == vorher[0]
+    assert db.query(Kontakt).count() == zentrale_anzahl
 
 
 def test_uebernimm_arbeitskopie_mit_importkontakten_verletzt_unique_nicht(db, org):
