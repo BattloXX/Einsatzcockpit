@@ -36,40 +36,6 @@ from app.models.objekt import (
 )
 
 
-def telefone_aus_form(nummern: list[str], labels: list[str], sms_indizes: list[str]) -> str | None:
-    """Validiert und serialisiert die wiederholbaren Telefonzeilen."""
-    if len(nummern) != len(labels):
-        raise ValueError("Telefonnummern und Bezeichnungen sind unvollstaendig")
-    if len(nummern) > 20:
-        raise ValueError("Hoechstens 20 Telefonnummern sind erlaubt")
-    markiert: set[int] = set()
-    for roh in sms_indizes:
-        if not str(roh).isdigit():
-            continue
-        index = int(roh)
-        if 0 <= index < len(nummern):
-            markiert.add(index)
-    eintraege = []
-    for index, (nummer_roh, label_roh) in enumerate(zip(nummern, labels, strict=True)):
-        nummer, label = nummer_roh.strip(), label_roh.strip()
-        if len(nummer) > 30 or len(label) > 40:
-            raise ValueError("Telefonnummer oder Bezeichnung ist zu lang")
-        if nummer:
-            eintraege.append({"nummer": nummer, "label": label or None, "sms": index in markiert})
-    return json.dumps(eintraege, ensure_ascii=False) if eintraege else None
-
-
-def telefone_zu_json(telefone_raw: str) -> str | None:
-    """Serialisiert eine kommagetrennte Telefonliste zu JSON (ObjektKontakt.telefone_json).
-
-    Verschoben aus ui_objekt.py::_telefone_to_json (2026-07-26), damit der
-    BMA-Webplattform-Import (app/services/bma_import/bma_sync.py) dieselbe
-    Funktion nutzt wie das manuelle Kontaktformular.
-    """
-    nummern = [t.strip() for t in telefone_raw.replace(";", ",").split(",") if t.strip()]
-    return telefone_aus_form(nummern, [""] * len(nummern), [])
-
-
 def objekt_system_enabled(db: Session) -> bool:
     """Systemweiter Objekt-Flag aus SystemSettings. Fehlender Key → False."""
     from app.models.master import SystemSettings
@@ -219,14 +185,14 @@ def _kopiere_kindzeile(quelle: Any, ziel_cls: type, *, objekt_id: int, org_id: i
 def _kontakt_identitaet(kontakt: ObjektKontakt) -> tuple[object, ...]:
     """Stabile Identitaet einer Kontaktzuordnung fuer Arbeitskopie-Merges.
 
-    Nicht migrierte, manuell gepflegte Altzeilen sind absichtlich nie gleich: Bis
-    deren UI-Cutover bleibt fuer sie das bisherige Delete-and-recreate-Verhalten.
+    Jede Zuordnung muss auf einen zentralen Kontakt zeigen. Externe Identitaeten
+    bleiben fuer importierte Zuordnungen der stabile Fallback.
     """
     if kontakt.kontakt_id is not None:
         return ("zentral", kontakt.kontakt_id)
     if kontakt.extern_quelle and kontakt.extern_id:
         return ("extern", kontakt.extern_quelle, kontakt.extern_id)
-    return ("manuell", id(kontakt))
+    raise ValueError(f"Objektkontakt {kontakt.id} hat keinen zentralen Kontakt")
 
 
 def _kopiere_kontakt_freigaben(
@@ -430,10 +396,7 @@ def _ersetze_kinddaten(db: Session, basis: Objekt, kopie: Objekt, *, user_id: in
     db.flush()
 
     kontakt_map: dict[int, int] = {}
-    mutable_felder = (
-        "art", "name", "telefone_json", "email", "erreichbarkeit",
-        "benachrichtigung_mail", "sort", "kontakt_id", "extern_quelle", "extern_id",
-    )
+    mutable_felder = ("art", "erreichbarkeit", "sort", "kontakt_id", "extern_quelle", "extern_id")
     for basis_kontakt, kontakt_vorlage in paare:
         for feld in mutable_felder:
             setattr(basis_kontakt, feld, getattr(kontakt_vorlage, feld))

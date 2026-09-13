@@ -3,6 +3,7 @@
 Der Dump-basierte Lauf nutzt standardmaessig Einsatz 351. CI setzt
 ``E2E_INCIDENT_ID`` auf die ID des synthetisch geseedeten Einsatzes.
 """
+
 from __future__ import annotations
 
 import json
@@ -96,7 +97,6 @@ def test_board_bleibt_bei_updates_und_reconnect_montiert(
 
     kanban = page.locator("#kanban")
     kanban.evaluate("el => { el.scrollLeft = Math.min(180, el.scrollWidth - el.clientWidth); }")
-    scroll_left = kanban.evaluate("el => el.scrollLeft")
     card = page.locator(".card[data-uid]").first
     card.locator(".card__title").first.click()
     expect(page.locator("#cardDetailModal")).to_have_js_property("open", True)
@@ -105,6 +105,10 @@ def test_board_bleibt_bei_updates_und_reconnect_montiert(
     expect(draft_field).to_be_visible()
     draft_field.fill(draft)
     draft_field.evaluate("el => { el.dataset.e2eDraft = '1'; el.focus(); }")
+    # Das Oeffnen der Karte kann den Fokus sichtbar halten und damit die
+    # horizontale Scrollposition legitim anpassen. Geschuetzt wird der
+    # anschliessend vorbereitete Arbeitszustand gegen Live-Resyncs.
+    scroll_left = kanban.evaluate("el => el.scrollLeft")
 
     for event_type in ("lis_sync", "dibos_sync", "objektgefahren"):
         _publish({"type": event_type, "reload_board": True})
@@ -205,9 +209,7 @@ def test_hintergrund_tab_und_viewports(angemeldete_seite: Page, base_url: str) -
     assert _load_id(page) == load_id
 
 
-def test_header_actions_follow_mannschaft_und_bleiben_mobil_erreichbar(
-    angemeldete_seite: Page, base_url: str
-) -> None:
+def test_header_actions_follow_mannschaft_und_bleiben_mobil_erreichbar(angemeldete_seite: Page, base_url: str) -> None:
     page = angemeldete_seite
     page.set_viewport_size({"width": 1920, "height": 1080})
     _board(page, base_url)
@@ -365,14 +367,12 @@ def test_person_can_move_repeatedly_between_rescued_columns_without_duplicates(
     dialog.locator('select[name="column_kind"]').select_option("rescued")
     dialog.get_by_role("button", name="Anlegen").click()
 
-    second_column = first.locator(".kanban-col").filter(
-        has=first.locator(".kanban-col__title", has_text=title)
-    )
+    second_column = first.locator(".kanban-col").filter(has=first.locator(".kanban-col__title", has_text=title))
     expect(second_column).to_be_visible(timeout=10_000)
     second_column_id = second_column.get_attribute("data-col-id")
-    first_column = first.locator(
-        '.kanban-col:has([title="Gerettete Person erfassen"])'
-    ).filter(has_not_text=title).first
+    first_column = (
+        first.locator('.kanban-col:has([title="Gerettete Person erfassen"])').filter(has_not_text=title).first
+    )
     first_column_id = first_column.get_attribute("data-col-id")
     assert first_column_id and second_column_id
 
@@ -425,9 +425,7 @@ def test_person_can_move_repeatedly_between_rescued_columns_without_duplicates(
     for target_column_id in (first_column_id, second_column_id, first_column_id, second_column_id):
         _move_card(first, "person", person_uid, column_id=target_column_id)
         for page in (first, second):
-            target_card = page.locator(
-                f"#zone-{target_column_id} .card[data-kind='person']", has_text=person_name
-            )
+            target_card = page.locator(f"#zone-{target_column_id} .card[data-kind='person']", has_text=person_name)
             expect(target_card).to_have_count(1, timeout=10_000)
             expect(page.locator('.card[data-kind="person"]', has_text=person_name)).to_have_count(1, timeout=10_000)
 
@@ -447,9 +445,7 @@ def test_person_can_move_repeatedly_between_rescued_columns_without_duplicates(
     assert response.status == 204
 
 
-def test_mobile_lane_selector_lists_each_custom_column_separately(
-    angemeldete_seite: Page, base_url: str
-) -> None:
+def test_mobile_lane_selector_lists_each_custom_column_separately(angemeldete_seite: Page, base_url: str) -> None:
     """Zusatzspalten aller Kinds bleiben mobil einzeln statt gruppiert sichtbar."""
     page = angemeldete_seite
     _board(page, base_url)
@@ -461,9 +457,7 @@ def test_mobile_lane_selector_lists_each_custom_column_separately(
         dialog.locator('input[name="title"]').fill(title)
         dialog.locator('select[name="column_kind"]').select_option(kind)
         dialog.get_by_role("button", name="Anlegen").click()
-        column = page.locator(".kanban-col").filter(
-            has=page.locator(".kanban-col__title", has_text=title)
-        )
+        column = page.locator(".kanban-col").filter(has=page.locator(".kanban-col__title", has_text=title))
         expect(column).to_be_visible(timeout=10_000)
         column_id = column.get_attribute("data-col-id")
         assert column_id
@@ -499,9 +493,7 @@ def test_mobile_lane_selector_lists_each_custom_column_separately(
         assert response.status == 204
 
 
-def test_mobile_root_scrolling_bottom_nav_and_contextual_fab(
-    angemeldete_seite: Page, base_url: str
-) -> None:
+def test_mobile_root_scrolling_bottom_nav_and_contextual_fab(angemeldete_seite: Page, base_url: str) -> None:
     """Root-Scroll bleibt fuer PTR frei; FAB delegiert nur auf dem Board."""
     page = angemeldete_seite
     page.set_viewport_size({"width": 390, "height": 844})
@@ -529,11 +521,16 @@ def test_mobile_root_scrolling_bottom_nav_and_contextual_fab(
     vehicle_column = page.locator('.kanban-col:has([title="Einheit zum Einsatz hinzufügen"])').first
     expect(task_column).to_be_visible()
     expect(vehicle_column).to_be_visible()
-    task_column.evaluate("el => { document.querySelectorAll('.kanban-col').forEach(col => col.removeAttribute('data-lane-active')); el.setAttribute('data-lane-active', ''); }")
+    set_active_lane = (
+        "el => { document.querySelectorAll('.kanban-col').forEach("
+        "col => col.removeAttribute('data-lane-active')); "
+        "el.setAttribute('data-lane-active', ''); }"
+    )
+    task_column.evaluate(set_active_lane)
     page.locator(".bottom-nav__fab").click()
     expect(page.locator("#quickAddTaskDialog")).to_have_js_property("open", True)
     page.locator("#quickAddTaskDialog").evaluate("dialog => dialog.close()")
-    vehicle_column.evaluate("el => { document.querySelectorAll('.kanban-col').forEach(col => col.removeAttribute('data-lane-active')); el.setAttribute('data-lane-active', ''); }")
+    vehicle_column.evaluate(set_active_lane)
     page.locator(".bottom-nav__fab").click()
     expect(page.locator("#vehicleWizard")).to_be_visible()
 
@@ -601,12 +598,8 @@ def test_fahrzeug_zuordnung_und_loesen_aktualisiert_beide_sessions(
     # Reproduce Sortable's former optimistic invalid drop: it moved the DOM
     # node into a non-person lane although the server has no such person state.
     # Both sessions must end with precisely one card in the rescued column.
-    invalid_zone = first.locator(
-        '.kanban-col:has([title="Auftrag anlegen"]) .kanban-col__body.sortable-zone'
-    ).first
-    invalid_column_id = invalid_zone.evaluate(
-        "el => el.closest('.kanban-col').dataset.colId"
-    )
+    invalid_zone = first.locator('.kanban-col:has([title="Auftrag anlegen"]) .kanban-col__body.sortable-zone').first
+    invalid_column_id = invalid_zone.evaluate("el => el.closest('.kanban-col').dataset.colId")
     assert invalid_column_id
     first.evaluate(
         "({personId, zoneId}) => document.getElementById(zoneId).appendChild(document.getElementById(personId))",
@@ -614,8 +607,12 @@ def test_fahrzeug_zuordnung_und_loesen_aktualisiert_beide_sessions(
     )
     _move_card(first, "person", person_uid, column_id=invalid_column_id)
     for page in (first, second):
-        expect(page.locator(f"#zone-{person_column_id} .card[data-kind='person']", has_text=person_name)).to_have_count(1, timeout=10_000)
-        expect(page.locator(f"#zone-{invalid_column_id} .card[data-kind='person']", has_text=person_name)).to_have_count(0, timeout=10_000)
+        expect(page.locator(f"#zone-{person_column_id} .card[data-kind='person']", has_text=person_name)).to_have_count(
+            1, timeout=10_000
+        )
+        expect(
+            page.locator(f"#zone-{invalid_column_id} .card[data-kind='person']", has_text=person_name)
+        ).to_have_count(0, timeout=10_000)
 
     _move_card(first, "person", person_uid, vehicle_id=vehicle_id)
 
@@ -627,8 +624,12 @@ def test_fahrzeug_zuordnung_und_loesen_aktualisiert_beide_sessions(
     # Detach direction: person must reappear in "Gerettete Personen" for the other
     # session and vanish from the vehicle card, without duplicating anywhere.
     _move_card(
-        first, "person", person_uid, column_id=person_column_id,
-        detach_vehicle="true", source_vehicle_id=vehicle_id,
+        first,
+        "person",
+        person_uid,
+        column_id=person_column_id,
+        detach_vehicle="true",
+        source_vehicle_id=vehicle_id,
     )
     expect(own_vehicle.locator(".assigned-person", has_text=person_name)).not_to_be_visible(timeout=10_000)
     expect(other_vehicle.locator(".assigned-person", has_text=person_name)).not_to_be_visible(timeout=10_000)
@@ -668,9 +669,7 @@ def test_fahrzeug_zuordnung_und_loesen_aktualisiert_beide_sessions(
         assert f'id="{card_id}"' not in source_html
         assert title in vehicle_html
 
-        _move_card(
-            first, kind, uid, column_id=column_id, detach_vehicle="true", source_vehicle_id=vehicle_id
-        )
+        _move_card(first, kind, uid, column_id=column_id, detach_vehicle="true", source_vehicle_id=vehicle_id)
         expect(own_vehicle.locator(assigned_class, has_text=title)).not_to_be_visible(timeout=10_000)
         expect(other_vehicle.locator(assigned_class, has_text=title)).not_to_be_visible(timeout=10_000)
         source_html = first.evaluate(
@@ -714,9 +713,7 @@ def test_wizard_formulare_zeigen_neue_karten_ohne_reload(angemeldete_seite: Page
     assert loads == []
 
 
-def test_neue_fahrzeugkarte_weist_auftrag_und_meldung_ohne_reload_zu(
-    angemeldete_seite: Page, base_url: str
-) -> None:
+def test_neue_fahrzeugkarte_weist_auftrag_und_meldung_ohne_reload_zu(angemeldete_seite: Page, base_url: str) -> None:
     """Die OOB-Auswahlen enthalten ein eben per Wizard angelegtes Fahrzeug sofort."""
     page = angemeldete_seite
     _board(page, base_url)
@@ -766,13 +763,9 @@ def test_gleiche_karte_mit_entwurf_zeigt_aktualisieren_hinweis(
     draft_field = first.locator("#taskEditForm textarea[name=detail]")
     draft_field.fill(draft)
 
-    status_chip = second.locator(
-        f"#task-card-{task_id} button[aria-label^='Auftragsstatus:']"
-    )
+    status_chip = second.locator(f"#task-card-{task_id} button[aria-label^='Auftragsstatus:']")
     status_chip.click()
-    second.locator(f"#task-card-{task_id}").get_by_role(
-        "menuitem", name="Status auf In Arbeit setzen"
-    ).click()
+    second.locator(f"#task-card-{task_id}").get_by_role("menuitem", name="Status auf In Arbeit setzen").click()
     expect(first.locator("#cardDetailRefreshNotice")).to_be_visible(timeout=10_000)
     expect(draft_field).to_have_value(draft)
     first.locator("#cardDetailRefreshNotice").get_by_role("button", name="Aktualisieren").click()

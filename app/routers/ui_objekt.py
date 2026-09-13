@@ -8,6 +8,7 @@ Rollen:
 - Schreiben: objekt_verwalter (org_admin/system_admin implizit)
 - Kataloge/Loeschen: org_admin
 """
+
 from __future__ import annotations
 
 from datetime import date, datetime
@@ -69,7 +70,6 @@ from app.services.objekt_service import (
     naechste_nummer,
     nur_produktiv,
     status_uebergang_erlaubt,
-    telefone_aus_form,
     uebernimm_arbeitskopie,
     verwirf_arbeitskopie,
     write_objekt_change,
@@ -87,12 +87,17 @@ router = APIRouter(prefix="/objekte", tags=["objekt"])
 
 # Alle Rollen der Org duerfen lesen (require_role laesst admin/org_admin immer durch)
 _LESE_ROLLEN = (
-    "readonly", "recorder", "breathing_supervisor", "incident_leader",
-    "fahrtenbuch_admin", "objekt_verwalter",
+    "readonly",
+    "recorder",
+    "breathing_supervisor",
+    "incident_leader",
+    "fahrtenbuch_admin",
+    "objekt_verwalter",
 )
 
 
 # ── Guard ──────────────────────────────────────────────────────────────────────
+
 
 def require_objekt_enabled(request: Request) -> None:
     """Guard-Dependency: HTTP 404 wenn Objekt-Modul nicht effektiv aktiv (System+Org)."""
@@ -162,6 +167,7 @@ async def _geocode_objekt(objekt_id: int, strasse: str | None, hausnummer: str |
         geo = await geocode_address(strasse, hausnummer, ort)
     except Exception:
         import logging as _logging
+
         _logging.getLogger("einsatzleiter.geocoding").exception(
             "Background-Geocoding fuer Objekt %d fehlgeschlagen", objekt_id
         )
@@ -179,6 +185,7 @@ async def _geocode_objekt(objekt_id: int, strasse: str | None, hausnummer: str |
             db.commit()
     except Exception:
         import logging as _logging
+
         _logging.getLogger("einsatzleiter.geocoding").exception(
             "Background-Geocoding DB-Speicherung fuer Objekt %d fehlgeschlagen", objekt_id
         )
@@ -187,6 +194,7 @@ async def _geocode_objekt(objekt_id: int, strasse: str | None, hausnummer: str |
 
 
 # ── Objektliste ────────────────────────────────────────────────────────────────
+
 
 @router.get("/", response_class=HTMLResponse)
 def objekt_liste(
@@ -209,8 +217,7 @@ def objekt_liste(
     merkmal_id = int(merkmal) if merkmal.strip().isdigit() else None
 
     query = nur_produktiv(
-        db.query(Objekt)
-        .options(
+        db.query(Objekt).options(
             selectinload(Objekt.bma),
             selectinload(Objekt.kategorie),
             selectinload(Objekt.merkmale),
@@ -241,9 +248,7 @@ def objekt_liste(
         query = query.filter(Objekt.revision_datum.isnot(None), Objekt.revision_datum <= date.today())
     if merkmal_id:
         query = query.filter(
-            Objekt.id.in_(
-                db.query(ObjektMerkmal.objekt_id).filter(ObjektMerkmal.merkmal_id == merkmal_id)
-            )
+            Objekt.id.in_(db.query(ObjektMerkmal.objekt_id).filter(ObjektMerkmal.merkmal_id == merkmal_id))
         )
 
     objekte = query.order_by(Objekt.nummer).all()
@@ -265,23 +270,28 @@ def objekt_liste(
         .all()
     )
 
-    return templates.TemplateResponse(request, "objekt/liste.html", {
-        "user": user,
-        "rows": rows,
-        "kategorien": _kategorien(db),
-        "merkmal_katalog": merkmal_katalog,
-        "status_labels": OBJEKT_STATUS_LABELS,
-        "filter_q": q,
-        "filter_status": status,
-        "filter_kategorie": kategorie_id,
-        "filter_revision": revision,
-        "filter_merkmal": merkmal_id,
-        "ist_verwalter": verwalter,
-        "heute": date.today(),
-    })
+    return templates.TemplateResponse(
+        request,
+        "objekt/liste.html",
+        {
+            "user": user,
+            "rows": rows,
+            "kategorien": _kategorien(db),
+            "merkmal_katalog": merkmal_katalog,
+            "status_labels": OBJEKT_STATUS_LABELS,
+            "filter_q": q,
+            "filter_status": status,
+            "filter_kategorie": kategorie_id,
+            "filter_revision": revision,
+            "filter_merkmal": merkmal_id,
+            "ist_verwalter": verwalter,
+            "heute": date.today(),
+        },
+    )
 
 
 # ── Neues Objekt ───────────────────────────────────────────────────────────────
+
 
 @router.get("/neu", response_class=HTMLResponse)
 def objekt_neu_form(
@@ -290,10 +300,14 @@ def objekt_neu_form(
     user: User = Depends(require_role("objekt_verwalter")),
     _guard: None = Depends(require_objekt_enabled),
 ):
-    return templates.TemplateResponse(request, "objekt/formular.html", {
-        "user": user,
-        "kategorien": _kategorien(db),
-    })
+    return templates.TemplateResponse(
+        request,
+        "objekt/formular.html",
+        {
+            "user": user,
+            "kategorien": _kategorien(db),
+        },
+    )
 
 
 @router.post("/neu")
@@ -339,24 +353,30 @@ def objekt_neu(
     )
     db.add(objekt)
     db.flush()
-    write_objekt_change(db, objekt.id, user.org_id, "stammdaten", "angelegt",
-                        before=None, after=objekt.name, user_id=user.id)
-    write_audit(db, "objekt.created", org_id=user.org_id, user_id=user.id,
-                entity_type="objekt", entity_id=objekt.id,
-                payload={"name": objekt.name, "nummer": objekt.nummer})
+    write_objekt_change(
+        db, objekt.id, user.org_id, "stammdaten", "angelegt", before=None, after=objekt.name, user_id=user.id
+    )
+    write_audit(
+        db,
+        "objekt.created",
+        org_id=user.org_id,
+        user_id=user.id,
+        entity_type="objekt",
+        entity_id=objekt.id,
+        payload={"name": objekt.name, "nummer": objekt.nummer},
+    )
     db.commit()
 
     # Nur geocoden, wenn keine validierten Koordinaten uebernommen wurden.
     if (strasse.strip() or ort.strip()) and objekt.lat is None:
-        background_tasks.add_task(
-            _geocode_objekt, objekt.id, objekt.strasse, objekt.hausnummer, objekt.ort
-        )
+        background_tasks.add_task(_geocode_objekt, objekt.id, objekt.strasse, objekt.hausnummer, objekt.ort)
 
     return RedirectResponse(url=f"/objekte/{objekt.id}", status_code=303)
 
 
 # ── OSM-Adresssuche (interaktive Validierung bei der Objekt-Anlage) ─────────────
 # WICHTIG: vor den /{objekt_id}-Routen registriert (statischer Pfad).
+
 
 @router.get("/adress-suche")
 async def objekt_adress_suche(
@@ -389,15 +409,14 @@ def gefahrgut_lookup(
         "gefahrnummer": (treffer or {}).get("gefahrnummer"),
         "klassifizierungscode": (treffer or {}).get("klassifizierungscode"),
         "verpackungsgruppe": (treffer or {}).get("verpackungsgruppe"),
-        "links": generierte_links(
-            un, (treffer or {}).get("stoffname"), (treffer or {}).get("gefahrnummer")
-        ),
+        "links": generierte_links(un, (treffer or {}).get("stoffname"), (treffer or {}).get("gefahrnummer")),
     }
 
 
 # ── Katalog-Admin: Kategorien (org_admin) ──────────────────────────────────────
 # WICHTIG: vor den /{objekt_id}-Routen registriert, sonst faengt der
 # int-Pfadparameter "kataloge" ab (422 statt Katalogseite).
+
 
 @router.get("/kataloge", response_class=HTMLResponse)
 def kataloge(
@@ -407,6 +426,7 @@ def kataloge(
     _guard: None = Depends(require_objekt_enabled),
 ):
     from sqlalchemy import func
+
     verwendung: dict[int, int] = {
         kid: cnt
         for kid, cnt in (
@@ -433,65 +453,55 @@ def kataloge(
     # Pflegbare Auswahllisten (Kontaktarten/Dokumentarten/Piktogramme) je Typ,
     # inkl. Verwendungszaehlern (Referenz per String-Code, nicht FK).
     auswahl: dict[str, list[ObjektAuswahl]] = {typ: [] for typ in _AUSWAHL_TYPEN}
-    for eintrag in (
-        db.query(ObjektAuswahl)
-        .order_by(ObjektAuswahl.typ, ObjektAuswahl.sort, ObjektAuswahl.name)
-        .all()
-    ):
+    for eintrag in db.query(ObjektAuswahl).order_by(ObjektAuswahl.typ, ObjektAuswahl.sort, ObjektAuswahl.name).all():
         auswahl.setdefault(eintrag.typ, []).append(eintrag)
     auswahl_verwendung: dict[str, dict[str, int]] = {
         AUSWAHL_KONTAKTART: {
-            code: cnt for code, cnt in
-            db.query(ObjektKontakt.art, func.count(ObjektKontakt.id))
-            .group_by(ObjektKontakt.art).all()
+            code: cnt
+            for code, cnt in db.query(ObjektKontakt.art, func.count(ObjektKontakt.id)).group_by(ObjektKontakt.art).all()
         },
         AUSWAHL_DOKUMENTART: {
-            code: cnt for code, cnt in
-            db.query(ObjektDokumentSeite.dokumentart, func.count(ObjektDokumentSeite.id))
+            code: cnt
+            for code, cnt in db.query(ObjektDokumentSeite.dokumentart, func.count(ObjektDokumentSeite.id))
             .filter(ObjektDokumentSeite.dokumentart.isnot(None))
-            .group_by(ObjektDokumentSeite.dokumentart).all()
+            .group_by(ObjektDokumentSeite.dokumentart)
+            .all()
         },
         AUSWAHL_PIKTOGRAMM: {
-            code: cnt for code, cnt in
-            db.query(GefahrenKatalog.piktogramm_typ, func.count(GefahrenKatalog.id))
-            .group_by(GefahrenKatalog.piktogramm_typ).all()
+            code: cnt
+            for code, cnt in db.query(GefahrenKatalog.piktogramm_typ, func.count(GefahrenKatalog.id))
+            .group_by(GefahrenKatalog.piktogramm_typ)
+            .all()
         },
     }
 
-    return templates.TemplateResponse(request, "objekt/kataloge.html", {
-        "user": user,
-        "kategorien": _kategorien(db, nur_aktive=False),
-        "verwendung": verwendung,
-        "gefahren": (
-            db.query(GefahrenKatalog)
-            .order_by(GefahrenKatalog.sort, GefahrenKatalog.name)
-            .all()
-        ),
-        "gefahren_verwendung": gefahren_verwendung,
-        "gefahr_piktogramme": lade_auswahl(db, user.org_id, AUSWAHL_PIKTOGRAMM),
-        "merkmale": (
-            db.query(MerkmalKatalog)
-            .order_by(MerkmalKatalog.sort, MerkmalKatalog.name)
-            .all()
-        ),
-        "merkmal_verwendung": merkmal_verwendung,
-        "auswahl": auswahl,
-        "auswahl_verwendung": auswahl_verwendung,
-        "auswahl_typen": _AUSWAHL_TYPEN,
-        "auswahl_labels": _AUSWAHL_LABELS,
-        "symbole": (
-            db.query(ObjektSymbol)
-            .order_by(ObjektSymbol.sort, ObjektSymbol.name)
-            .all()
-        ),
-        "symbol_verwendung": {
-            typ: cnt for typ, cnt in
-            db.query(ObjektKartenObjekt.typ, func.count(ObjektKartenObjekt.id))
-            .group_by(ObjektKartenObjekt.typ).all()
+    return templates.TemplateResponse(
+        request,
+        "objekt/kataloge.html",
+        {
+            "user": user,
+            "kategorien": _kategorien(db, nur_aktive=False),
+            "verwendung": verwendung,
+            "gefahren": (db.query(GefahrenKatalog).order_by(GefahrenKatalog.sort, GefahrenKatalog.name).all()),
+            "gefahren_verwendung": gefahren_verwendung,
+            "gefahr_piktogramme": lade_auswahl(db, user.org_id, AUSWAHL_PIKTOGRAMM),
+            "merkmale": (db.query(MerkmalKatalog).order_by(MerkmalKatalog.sort, MerkmalKatalog.name).all()),
+            "merkmal_verwendung": merkmal_verwendung,
+            "auswahl": auswahl,
+            "auswahl_verwendung": auswahl_verwendung,
+            "auswahl_typen": _AUSWAHL_TYPEN,
+            "auswahl_labels": _AUSWAHL_LABELS,
+            "symbole": (db.query(ObjektSymbol).order_by(ObjektSymbol.sort, ObjektSymbol.name).all()),
+            "symbol_verwendung": {
+                typ: cnt
+                for typ, cnt in db.query(ObjektKartenObjekt.typ, func.count(ObjektKartenObjekt.id))
+                .group_by(ObjektKartenObjekt.typ)
+                .all()
+            },
+            "symbol_stile": SYMBOL_STILE,
+            "aktiver_tab": request.query_params.get("tab", "kategorien"),
         },
-        "symbol_stile": SYMBOL_STILE,
-        "aktiver_tab": request.query_params.get("tab", "kategorien"),
-    })
+    )
 
 
 @router.get("/karten-symbole.json")
@@ -503,6 +513,7 @@ def karten_symbole_json(
 ):
     """Org-Symbolkatalog fuer das client-seitige Rendering (objekt_karte.js)."""
     from app.services.objekt_symbol_service import symbol_katalog_json
+
     return {"symbole": symbol_katalog_json(db, user.org_id)}
 
 
@@ -567,6 +578,7 @@ def kategorie_loeschen(
 
 # ── Objekt-Detail ──────────────────────────────────────────────────────────────
 
+
 def _detail_context(request: Request, db: Session, user: User, objekt: Objekt) -> dict:
     from sqlalchemy import func as _func
 
@@ -587,9 +599,8 @@ def _detail_context(request: Request, db: Session, user: User, objekt: Objekt) -
         arbeitskopie = hole_arbeitskopie(db, objekt)
 
     from app.models.bma_import import BmaImportSatz
-    bma_import_satz = (
-        db.query(BmaImportSatz).filter(BmaImportSatz.objekt_id == produktiv_objekt_id).first()
-    )
+
+    bma_import_satz = db.query(BmaImportSatz).filter(BmaImportSatz.objekt_id == produktiv_objekt_id).first()
 
     return {
         "user": user,
@@ -628,6 +639,7 @@ def _detail_context(request: Request, db: Session, user: User, objekt: Objekt) -
 # und mit 422 (ungueltiger Integer "dokument-upload") abgelehnt, statt hier
 # anzukommen.
 
+
 @router.get("/dokument-upload", response_class=HTMLResponse)
 def dokument_upload_form(
     request: Request,
@@ -636,17 +648,25 @@ def dokument_upload_form(
     _guard: None = Depends(require_objekt_enabled),
 ):
     from app.services.objekt_ki_service import ki_klassifikation_enabled
-    return templates.TemplateResponse(request, "objekt/dokument_upload.html", {
-        "user": user,
-        "ki_enabled": ki_klassifikation_enabled(user.org_id, db),
-    })
+
+    return templates.TemplateResponse(
+        request,
+        "objekt/dokument_upload.html",
+        {
+            "user": user,
+            "ki_enabled": ki_klassifikation_enabled(user.org_id, db),
+        },
+    )
 
 
 @router.post("/dokument-upload", response_class=HTMLResponse)
 async def dokumente_upload_verarbeiten(
-    request: Request, background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db), user: User = Depends(require_role("objekt_verwalter")),
-    _guard: None = Depends(require_objekt_enabled), dateien: list[UploadFile] = File(...),
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("objekt_verwalter")),
+    _guard: None = Depends(require_objekt_enabled),
+    dateien: list[UploadFile] = File(...),
 ):
     from app.config import settings
     from app.services.bma_import.bma_pdf_parser import ist_bma_datenblatt, parse_datenblatt_pdf
@@ -671,8 +691,10 @@ async def dokumente_upload_verarbeiten(
         data = await datei.read()
         if not data or len(data) > settings.OBJEKT_PDF_MAX_BYTES or _detect_mime(data) != "application/pdf":
             meldung = (
-                "Leere Datei" if not data
-                else "Datei ist zu groß" if len(data) > settings.OBJEKT_PDF_MAX_BYTES
+                "Leere Datei"
+                if not data
+                else "Datei ist zu groß"
+                if len(data) > settings.OBJEKT_PDF_MAX_BYTES
                 else "Nur PDF-Dateien sind erlaubt"
             )
             ergebnisse.append({"dateiname": name, "ok": False, "meldung": meldung})
@@ -681,11 +703,13 @@ async def dokumente_upload_verarbeiten(
         try:
             parsed = parse_datenblatt_pdf(data) if datenblatt else None
             if not datenblatt and not ki_enabled:
-                ergebnisse.append({
-                    "dateiname": name,
-                    "ok": False,
-                    "meldung": "Für diese Datei wird die KI-Klassifikation benötigt.",
-                })
+                ergebnisse.append(
+                    {
+                        "dateiname": name,
+                        "ok": False,
+                        "meldung": "Für diese Datei wird die KI-Klassifikation benötigt.",
+                    }
+                )
                 continue
             identitaet = None if datenblatt else await identifiziere_objekt(data, name, org_id)
             await datei.seek(0)
@@ -700,11 +724,13 @@ async def dokumente_upload_verarbeiten(
                     objekt = db.get(Objekt, satz.objekt_id) if satz.objekt_id else None
                     if objekt is None:
                         # Reguläres Verlassen committet absichtlich den offenen Importsatz.
-                        ergebnisse.append({
-                            "dateiname": name,
-                            "ok": True,
-                            "meldung": "Manuelle Zuordnung in der BMA-Queue erforderlich",
-                        })
+                        ergebnisse.append(
+                            {
+                                "dateiname": name,
+                                "ok": True,
+                                "meldung": "Manuelle Zuordnung in der BMA-Queue erforderlich",
+                            }
+                        )
                         continue
                     quelle = "bma_datenblatt"
                 else:
@@ -718,24 +744,52 @@ async def dokumente_upload_verarbeiten(
                     quelle = identitaet.get("quelle")
                 dokument = await store_dokument_upload(datei, objekt, user, db)
                 objekt_id, dokument_id = objekt.id, dokument.id
-                write_objekt_change(db, objekt_id, objekt.org_id, "dokumente", "dokument_upload",
-                                    before=None, after="1 Datei (Upload ohne Objekt-Auswahl)", user_id=user.id)
-                write_audit(db, "objekt.dokument_uploaded", org_id=org_id, user_id=user.id,
-                            entity_type="objekt", entity_id=objekt_id,
-                            payload={
-                                "anzahl": 1,
-                                "neu_erstellt": neu,
-                                "quelle": quelle,
-                            })
-                nacharbeiten.append((dokument_id, objekt_id, ki_enabled and not datenblatt,
-                                     objekt.strasse if neu else None,
-                                     objekt.hausnummer if neu else None,
-                                     objekt.ort if neu else None))
-                ergebnisse.append({"dateiname": name, "ok": True, "meldung": status,
-                                   "objekt_id": objekt_id, "dokument_id": dokument_id})
+                write_objekt_change(
+                    db,
+                    objekt_id,
+                    objekt.org_id,
+                    "dokumente",
+                    "dokument_upload",
+                    before=None,
+                    after="1 Datei (Upload ohne Objekt-Auswahl)",
+                    user_id=user.id,
+                )
+                write_audit(
+                    db,
+                    "objekt.dokument_uploaded",
+                    org_id=org_id,
+                    user_id=user.id,
+                    entity_type="objekt",
+                    entity_id=objekt_id,
+                    payload={
+                        "anzahl": 1,
+                        "neu_erstellt": neu,
+                        "quelle": quelle,
+                    },
+                )
+                nacharbeiten.append(
+                    (
+                        dokument_id,
+                        objekt_id,
+                        ki_enabled and not datenblatt,
+                        objekt.strasse if neu else None,
+                        objekt.hausnummer if neu else None,
+                        objekt.ort if neu else None,
+                    )
+                )
+                ergebnisse.append(
+                    {
+                        "dateiname": name,
+                        "ok": True,
+                        "meldung": status,
+                        "objekt_id": objekt_id,
+                        "dokument_id": dokument_id,
+                    }
+                )
         except (HTTPException, ValueError) as exc:
-            ergebnisse.append({"dateiname": name, "ok": False,
-                               "meldung": str(exc.detail if isinstance(exc, HTTPException) else exc)})
+            ergebnisse.append(
+                {"dateiname": name, "ok": False, "meldung": str(exc.detail if isinstance(exc, HTTPException) else exc)}
+            )
     db.commit()
     for dokument_id, objekt_id, analyse, strasse, hausnummer, ort in nacharbeiten:
         background_tasks.add_task(verarbeite_dokument, dokument_id)
@@ -743,16 +797,23 @@ async def dokumente_upload_verarbeiten(
             background_tasks.add_task(analysiere_unklassifizierte_seiten, objekt_id)
         if strasse or ort:
             background_tasks.add_task(_geocode_objekt, objekt_id, strasse, hausnummer, ort)
-    return templates.TemplateResponse(request, "objekt/dokument_upload.html", {
-        "user": user, "ki_enabled": ki_enabled, "ergebnisse": ergebnisse,
-        "bma_queue_relevant": bma_queue_relevant,
-    })
+    return templates.TemplateResponse(
+        request,
+        "objekt/dokument_upload.html",
+        {
+            "user": user,
+            "ki_enabled": ki_enabled,
+            "ergebnisse": ergebnisse,
+            "bma_queue_relevant": bma_queue_relevant,
+        },
+    )
 
 
 # ── Globales Aenderungsprotokoll (alle Objekte) ─────────────────────────────
 # WICHTIG: muss VOR "/{objekt_id}" registriert sein (siehe Begruendung beim
 # Brandschutzplan-Upload oben) - sonst wuerde "/objekte/changelog" faelschlich
 # von "/{objekt_id}" abgefangen und mit 422 (ungueltiger Integer "changelog") abgelehnt.
+
 
 @router.get("/changelog", response_class=HTMLResponse)
 def objekt_changelog(
@@ -765,12 +826,7 @@ def objekt_changelog(
     zu protokoll_partial() (nur ein einzelnes Objekt). Nuetzlich z.B. um nach einem
     BMA-Datenblatt-Mehrfach-Upload (mehrere Objekte auf einmal) auf einen Blick zu
     sehen, was sich ueberall veraendert hat, ohne jedes Objekt einzeln zu oeffnen."""
-    changes = (
-        db.query(ObjektChange)
-        .order_by(ObjektChange.erstellt_am.desc(), ObjektChange.id.desc())
-        .limit(200)
-        .all()
-    )
+    changes = db.query(ObjektChange).order_by(ObjektChange.erstellt_am.desc(), ObjektChange.id.desc()).limit(200).all()
     objekt_ids = {c.objekt_id for c in changes}
     user_ids = {c.user_id for c in changes if c.user_id}
     objekte: dict[int, Objekt] = {}
@@ -781,12 +837,16 @@ def objekt_changelog(
     if user_ids:
         for u in db.query(User).filter(User.id.in_(user_ids)).all():
             benutzer[u.id] = u
-    return templates.TemplateResponse(request, "objekt/changelog.html", {
-        "user": user,
-        "changes": changes,
-        "objekte": objekte,
-        "benutzer": benutzer,
-    })
+    return templates.TemplateResponse(
+        request,
+        "objekt/changelog.html",
+        {
+            "user": user,
+            "changes": changes,
+            "objekte": objekte,
+            "benutzer": benutzer,
+        },
+    )
 
 
 @router.get("/{objekt_id}", response_class=HTMLResponse)
@@ -814,6 +874,7 @@ def objekt_detail(
 
 # ── Abschnitt: Stammdaten (HTMX-Inline-Edit) ──────────────────────────────────
 
+
 @router.get("/{objekt_id}/stammdaten", response_class=HTMLResponse)
 def stammdaten_partial(
     objekt_id: int,
@@ -823,9 +884,7 @@ def stammdaten_partial(
     _guard: None = Depends(require_objekt_enabled),
 ):
     objekt = _objekt_or_404(db, objekt_id, user)
-    return templates.TemplateResponse(
-        request, "objekt/_stammdaten.html", _detail_context(request, db, user, objekt)
-    )
+    return templates.TemplateResponse(request, "objekt/_stammdaten.html", _detail_context(request, db, user, objekt))
 
 
 @router.get("/{objekt_id}/stammdaten/bearbeiten", response_class=HTMLResponse)
@@ -890,16 +949,13 @@ def stammdaten_speichern(
 
     # Adresse geaendert und keine manuellen Koordinaten → neu geocodieren
     if (objekt.strasse, objekt.hausnummer, objekt.ort) != adresse_vorher and objekt.lat is None:
-        background_tasks.add_task(
-            _geocode_objekt, objekt.id, objekt.strasse, objekt.hausnummer, objekt.ort
-        )
+        background_tasks.add_task(_geocode_objekt, objekt.id, objekt.strasse, objekt.hausnummer, objekt.ort)
 
-    return templates.TemplateResponse(
-        request, "objekt/_stammdaten.html", _detail_context(request, db, user, objekt)
-    )
+    return templates.TemplateResponse(request, "objekt/_stammdaten.html", _detail_context(request, db, user, objekt))
 
 
 # ── Abschnitt: BMA & Schluessel ────────────────────────────────────────────────
+
 
 @router.get("/{objekt_id}/bma", response_class=HTMLResponse)
 def bma_partial(
@@ -910,9 +966,7 @@ def bma_partial(
     _guard: None = Depends(require_objekt_enabled),
 ):
     objekt = _objekt_or_404(db, objekt_id, user)
-    return templates.TemplateResponse(
-        request, "objekt/_bma.html", _detail_context(request, db, user, objekt)
-    )
+    return templates.TemplateResponse(request, "objekt/_bma.html", _detail_context(request, db, user, objekt))
 
 
 @router.get("/{objekt_id}/bma/bearbeiten", response_class=HTMLResponse)
@@ -924,9 +978,7 @@ def bma_form(
     _guard: None = Depends(require_objekt_enabled),
 ):
     objekt = _objekt_or_404(db, objekt_id, user)
-    return templates.TemplateResponse(
-        request, "objekt/_bma_form.html", _detail_context(request, db, user, objekt)
-    )
+    return templates.TemplateResponse(request, "objekt/_bma_form.html", _detail_context(request, db, user, objekt))
 
 
 @router.post("/{objekt_id}/bma", response_class=HTMLResponse)
@@ -954,20 +1006,34 @@ def bma_speichern(
     if not bma_vorhanden:
         # BMA-Block entfernen
         if objekt.bma is not None:
-            write_objekt_change(db, objekt.id, objekt.org_id, "bma", "bma_entfernt",
-                                before=objekt.bma.bma_nummer, after=None, user_id=user.id)
+            write_objekt_change(
+                db,
+                objekt.id,
+                objekt.org_id,
+                "bma",
+                "bma_entfernt",
+                before=objekt.bma.bma_nummer,
+                after=None,
+                user_id=user.id,
+            )
             db.delete(objekt.bma)
             objekt.bma = None
             db.commit()
-        return templates.TemplateResponse(
-            request, "objekt/_bma.html", _detail_context(request, db, user, objekt)
-        )
+        return templates.TemplateResponse(request, "objekt/_bma.html", _detail_context(request, db, user, objekt))
 
     if objekt.bma is None:
         objekt.bma = ObjektBMA(org_id=objekt.org_id, objekt_id=objekt.id)
         db.add(objekt.bma)
-        write_objekt_change(db, objekt.id, objekt.org_id, "bma", "bma_angelegt",
-                            before=None, after=bma_nummer.strip() or "-", user_id=user.id)
+        write_objekt_change(
+            db,
+            objekt.id,
+            objekt.org_id,
+            "bma",
+            "bma_angelegt",
+            before=None,
+            after=bma_nummer.strip() or "-",
+            user_id=user.id,
+        )
 
     bma = objekt.bma
     daten = {
@@ -987,16 +1053,14 @@ def bma_speichern(
         alt = getattr(bma, feld)
         if alt != neu:
             setattr(bma, feld, neu)
-            write_objekt_change(db, objekt.id, objekt.org_id, "bma", feld,
-                                before=alt, after=neu, user_id=user.id)
+            write_objekt_change(db, objekt.id, objekt.org_id, "bma", feld, before=alt, after=neu, user_id=user.id)
     db.commit()
 
-    return templates.TemplateResponse(
-        request, "objekt/_bma.html", _detail_context(request, db, user, objekt)
-    )
+    return templates.TemplateResponse(request, "objekt/_bma.html", _detail_context(request, db, user, objekt))
 
 
 # ── Abschnitt: Zusatzadressen ──────────────────────────────────────────────────
+
 
 @router.get("/{objekt_id}/zusatzadressen", response_class=HTMLResponse)
 def zusatzadressen_partial(
@@ -1040,8 +1104,16 @@ def zusatzadresse_neu(
         sort=max_sort + 1,
     )
     db.add(adresse)
-    write_objekt_change(db, objekt.id, objekt.org_id, "stammdaten", "zusatzadresse_neu",
-                        before=None, after=adresse.bezeichnung, user_id=user.id)
+    write_objekt_change(
+        db,
+        objekt.id,
+        objekt.org_id,
+        "stammdaten",
+        "zusatzadresse_neu",
+        before=None,
+        after=adresse.bezeichnung,
+        user_id=user.id,
+    )
     db.commit()
     db.refresh(objekt)
     return templates.TemplateResponse(
@@ -1066,8 +1138,16 @@ def zusatzadresse_loeschen(
     )
     if adresse is None:
         raise HTTPException(status_code=404, detail="Zusatzadresse nicht gefunden")
-    write_objekt_change(db, objekt.id, objekt.org_id, "stammdaten", "zusatzadresse_geloescht",
-                        before=adresse.bezeichnung, after=None, user_id=user.id)
+    write_objekt_change(
+        db,
+        objekt.id,
+        objekt.org_id,
+        "stammdaten",
+        "zusatzadresse_geloescht",
+        before=adresse.bezeichnung,
+        after=None,
+        user_id=user.id,
+    )
     db.delete(adresse)
     db.commit()
     db.refresh(objekt)
@@ -1077,6 +1157,7 @@ def zusatzadresse_loeschen(
 
 
 # ── Abschnitt: Protokoll ───────────────────────────────────────────────────────
+
 
 @router.get("/{objekt_id}/protokoll", response_class=HTMLResponse)
 def protokoll_partial(
@@ -1107,6 +1188,7 @@ def protokoll_partial(
 
 # ── Status-Workflow ────────────────────────────────────────────────────────────
 
+
 @router.post("/{objekt_id}/status")
 def status_wechseln(
     objekt_id: int,
@@ -1125,7 +1207,7 @@ def status_wechseln(
         raise HTTPException(
             status_code=400,
             detail="Arbeitskopien haben keinen eigenen Status - ueber 'Freigeben' bzw. "
-                   "'Verwerfen' der Ueberarbeitung steuern",
+            "'Verwerfen' der Ueberarbeitung steuern",
         )
     if neuer_status not in OBJEKT_STATUS_LABELS:
         raise HTTPException(status_code=400, detail="Unbekannter Status")
@@ -1133,21 +1215,29 @@ def status_wechseln(
         raise HTTPException(
             status_code=400,
             detail=f"Statuswechsel {OBJEKT_STATUS_LABELS[objekt.status]} → "
-                   f"{OBJEKT_STATUS_LABELS[neuer_status]} nicht erlaubt",
+            f"{OBJEKT_STATUS_LABELS[neuer_status]} nicht erlaubt",
         )
     alt = objekt.status
     objekt.status = neuer_status
     objekt.aktualisiert_von_id = user.id
-    write_objekt_change(db, objekt.id, objekt.org_id, "status", "status",
-                        before=alt, after=neuer_status, user_id=user.id)
-    write_audit(db, "objekt.status_changed", org_id=user.org_id, user_id=user.id,
-                entity_type="objekt", entity_id=objekt.id,
-                payload={"von": alt, "nach": neuer_status})
+    write_objekt_change(
+        db, objekt.id, objekt.org_id, "status", "status", before=alt, after=neuer_status, user_id=user.id
+    )
+    write_audit(
+        db,
+        "objekt.status_changed",
+        org_id=user.org_id,
+        user_id=user.id,
+        entity_type="objekt",
+        entity_id=objekt.id,
+        payload={"von": alt, "nach": neuer_status},
+    )
     db.commit()
     return RedirectResponse(url=f"/objekte/{objekt.id}", status_code=303)
 
 
 # ── Arbeitskopie-Workflow (Ueberarbeiten / Uebernehmen / Verwerfen) ────────────
+
 
 @router.post("/{objekt_id}/ueberarbeiten")
 def objekt_ueberarbeiten(
@@ -1165,9 +1255,15 @@ def objekt_ueberarbeiten(
         kopie = erstelle_arbeitskopie(db, objekt, user.id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    write_audit(db, "objekt.arbeitskopie_erstellt", org_id=user.org_id, user_id=user.id,
-                entity_type="objekt", entity_id=objekt.id,
-                payload={"kopie_id": kopie.id})
+    write_audit(
+        db,
+        "objekt.arbeitskopie_erstellt",
+        org_id=user.org_id,
+        user_id=user.id,
+        entity_type="objekt",
+        entity_id=objekt.id,
+        payload={"kopie_id": kopie.id},
+    )
     db.commit()
     return RedirectResponse(url=f"/objekte/{objekt.id}", status_code=303)
 
@@ -1190,8 +1286,15 @@ def objekt_arbeitskopie_uebernehmen(
         uebernimm_arbeitskopie(db, kopie, user.id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    write_audit(db, "objekt.arbeitskopie_uebernommen", org_id=user.org_id, user_id=user.id,
-                entity_type="objekt", entity_id=basis.id, payload={})
+    write_audit(
+        db,
+        "objekt.arbeitskopie_uebernommen",
+        org_id=user.org_id,
+        user_id=user.id,
+        entity_type="objekt",
+        entity_id=basis.id,
+        payload={},
+    )
     db.commit()
     return RedirectResponse(url=f"/objekte/{basis.id}", status_code=303)
 
@@ -1214,13 +1317,21 @@ def objekt_arbeitskopie_verwerfen(
         verwirf_arbeitskopie(db, kopie, user.id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    write_audit(db, "objekt.arbeitskopie_verworfen", org_id=user.org_id, user_id=user.id,
-                entity_type="objekt", entity_id=basis.id, payload={})
+    write_audit(
+        db,
+        "objekt.arbeitskopie_verworfen",
+        org_id=user.org_id,
+        user_id=user.id,
+        entity_type="objekt",
+        entity_id=basis.id,
+        payload={},
+    )
     db.commit()
     return RedirectResponse(url=f"/objekte/{basis.id}", status_code=303)
 
 
 # ── Objekt loeschen (org_admin/system_admin) ───────────────────────────────────
+
 
 def _loesche_objekt(db: Session, objekt: Objekt, user: User) -> list[Path]:
     """Loescht ein Objekt vollstaendig: erst alle Dokumente ueber den Service
@@ -1241,22 +1352,29 @@ def _loesche_objekt(db: Session, objekt: Objekt, user: User) -> list[Path]:
         # die Basis sauber zurueck auf 'freigegeben'. Arbeitskopien haben keine eigenen
         # Dokumente (out of scope, siehe objekt.py), der Dokumente-Pfad unten entfaellt.
         verwirf_arbeitskopie(db, objekt, user.id)
-        write_audit(db, "objekt.arbeitskopie_geloescht", org_id=objekt.org_id, user_id=user.id,
-                    entity_type="objekt", entity_id=objekt.id,
-                    payload={"basis_objekt_id": objekt.entwurf_von_id})
+        write_audit(
+            db,
+            "objekt.arbeitskopie_geloescht",
+            org_id=objekt.org_id,
+            user_id=user.id,
+            entity_type="objekt",
+            entity_id=objekt.id,
+            payload={"basis_objekt_id": objekt.entwurf_von_id},
+        )
         return []
 
-    dokumente = (
-        db.query(ObjektDokument)
-        .filter(ObjektDokument.objekt_id == objekt.id)
-        .all()
-    )
+    dokumente = db.query(ObjektDokument).filter(ObjektDokument.objekt_id == objekt.id).all()
     verzeichnisse = [delete_dokument(dokument, db) for dokument in dokumente]
 
-    write_audit(db, "objekt.deleted", org_id=objekt.org_id, user_id=user.id,
-                entity_type="objekt", entity_id=objekt.id,
-                payload={"name": objekt.name, "nummer": objekt.nummer,
-                         "dokumente_geloescht": len(dokumente)})
+    write_audit(
+        db,
+        "objekt.deleted",
+        org_id=objekt.org_id,
+        user_id=user.id,
+        entity_type="objekt",
+        entity_id=objekt.id,
+        payload={"name": objekt.name, "nummer": objekt.nummer, "dokumente_geloescht": len(dokumente)},
+    )
     db.delete(objekt)
     return verzeichnisse
 
@@ -1309,11 +1427,19 @@ def objekte_bulk_freigeben(
         alt = objekt.status
         objekt.status = OBJEKT_STATUS_FREIGEGEBEN
         objekt.aktualisiert_von_id = user.id
-        write_objekt_change(db, objekt.id, objekt.org_id, "status", "status",
-                            before=alt, after=objekt.status, user_id=user.id)
+        write_objekt_change(
+            db, objekt.id, objekt.org_id, "status", "status", before=alt, after=objekt.status, user_id=user.id
+        )
         anzahl += 1
-    write_audit(db, "objekt.bulk_freigegeben", org_id=user.org_id, user_id=user.id,
-                entity_type="objekt", entity_id=None, payload={"anzahl": anzahl, "angefragt": len(ids)})
+    write_audit(
+        db,
+        "objekt.bulk_freigegeben",
+        org_id=user.org_id,
+        user_id=user.id,
+        entity_type="objekt",
+        entity_id=None,
+        payload={"anzahl": anzahl, "angefragt": len(ids)},
+    )
     db.commit()
     return RedirectResponse(url="/objekte/", status_code=303)
 
@@ -1338,6 +1464,7 @@ def objekt_loeschen(
 
 
 # ── Abschnitt: Gefahren ────────────────────────────────────────────────────────
+
 
 def _gefahren_katalog(db: Session) -> list[GefahrenKatalog]:
     return (
@@ -1379,6 +1506,7 @@ def gefahr_neu(
     link_url: list[str] = Form(default=[]),
 ):
     from app.services.objekt_service import links_aus_form
+
     objekt = _objekt_or_404(db, objekt_id, user)
     katalog = db.query(GefahrenKatalog).filter(GefahrenKatalog.id == gefahr_id).first()
     if katalog is None:
@@ -1397,8 +1525,9 @@ def gefahr_neu(
         sort=max_sort + 1,
     )
     db.add(eintrag)
-    write_objekt_change(db, objekt.id, objekt.org_id, "gefahren", "gefahr_neu",
-                        before=None, after=katalog.name, user_id=user.id)
+    write_objekt_change(
+        db, objekt.id, objekt.org_id, "gefahren", "gefahr_neu", before=None, after=katalog.name, user_id=user.id
+    )
     db.commit()
     db.refresh(objekt)
     ctx = _detail_context(request, db, user, objekt)
@@ -1423,11 +1552,10 @@ def gefahr_edit(
     link_url: list[str] = Form(default=[]),
 ):
     from app.services.objekt_service import links_aus_form
+
     objekt = _objekt_or_404(db, objekt_id, user)
     eintrag = (
-        db.query(ObjektGefahr)
-        .filter(ObjektGefahr.id == gefahr_eintrag_id, ObjektGefahr.objekt_id == objekt.id)
-        .first()
+        db.query(ObjektGefahr).filter(ObjektGefahr.id == gefahr_eintrag_id, ObjektGefahr.objekt_id == objekt.id).first()
     )
     if eintrag is None:
         raise HTTPException(status_code=404, detail="Gefahren-Eintrag nicht gefunden")
@@ -1437,9 +1565,16 @@ def gefahr_edit(
     eintrag.gefahrklasse = gefahrklasse.strip() or None
     eintrag.gefahrnummer = gefahrnummer.strip() or None
     eintrag.links_json = links_aus_form(link_label, link_url)
-    write_objekt_change(db, objekt.id, objekt.org_id, "gefahren", "gefahr_bearbeitet",
-                        before=None, after=eintrag.gefahr.name if eintrag.gefahr else None,
-                        user_id=user.id)
+    write_objekt_change(
+        db,
+        objekt.id,
+        objekt.org_id,
+        "gefahren",
+        "gefahr_bearbeitet",
+        before=None,
+        after=eintrag.gefahr.name if eintrag.gefahr else None,
+        user_id=user.id,
+    )
     db.commit()
     db.refresh(objekt)
     ctx = _detail_context(request, db, user, objekt)
@@ -1458,15 +1593,20 @@ def gefahr_loeschen(
 ):
     objekt = _objekt_or_404(db, objekt_id, user)
     eintrag = (
-        db.query(ObjektGefahr)
-        .filter(ObjektGefahr.id == gefahr_eintrag_id, ObjektGefahr.objekt_id == objekt.id)
-        .first()
+        db.query(ObjektGefahr).filter(ObjektGefahr.id == gefahr_eintrag_id, ObjektGefahr.objekt_id == objekt.id).first()
     )
     if eintrag is None:
         raise HTTPException(status_code=404, detail="Gefahren-Eintrag nicht gefunden")
-    write_objekt_change(db, objekt.id, objekt.org_id, "gefahren", "gefahr_geloescht",
-                        before=eintrag.gefahr.name if eintrag.gefahr else str(eintrag.gefahr_id),
-                        after=None, user_id=user.id)
+    write_objekt_change(
+        db,
+        objekt.id,
+        objekt.org_id,
+        "gefahren",
+        "gefahr_geloescht",
+        before=eintrag.gefahr.name if eintrag.gefahr else str(eintrag.gefahr_id),
+        after=None,
+        user_id=user.id,
+    )
     db.delete(eintrag)
     db.commit()
     db.refresh(objekt)
@@ -1476,6 +1616,7 @@ def gefahr_loeschen(
 
 
 # ── Abschnitt: Merkmale ────────────────────────────────────────────────────────
+
 
 def _merkmal_katalog(db: Session) -> list[MerkmalKatalog]:
     return (
@@ -1517,14 +1658,17 @@ def merkmal_zuordnen(
         raise HTTPException(status_code=404, detail="Merkmal nicht im Katalog")
     bereits = any(m.merkmal_id == merkmal_id for m in objekt.merkmale)
     if not bereits:
-        db.add(ObjektMerkmal(
-            org_id=objekt.org_id,
-            objekt_id=objekt.id,
-            merkmal_id=merkmal_id,
-            hinweis=hinweis.strip() or None,
-        ))
-        write_objekt_change(db, objekt.id, objekt.org_id, "merkmale", "merkmal_neu",
-                            before=None, after=katalog.name, user_id=user.id)
+        db.add(
+            ObjektMerkmal(
+                org_id=objekt.org_id,
+                objekt_id=objekt.id,
+                merkmal_id=merkmal_id,
+                hinweis=hinweis.strip() or None,
+            )
+        )
+        write_objekt_change(
+            db, objekt.id, objekt.org_id, "merkmale", "merkmal_neu", before=None, after=katalog.name, user_id=user.id
+        )
         db.commit()
         db.refresh(objekt)
     ctx = _detail_context(request, db, user, objekt)
@@ -1544,15 +1688,20 @@ def merkmal_entfernen(
 ):
     objekt = _objekt_or_404(db, objekt_id, user)
     zuordnung = (
-        db.query(ObjektMerkmal)
-        .filter(ObjektMerkmal.id == zuordnung_id, ObjektMerkmal.objekt_id == objekt.id)
-        .first()
+        db.query(ObjektMerkmal).filter(ObjektMerkmal.id == zuordnung_id, ObjektMerkmal.objekt_id == objekt.id).first()
     )
     if zuordnung is None:
         raise HTTPException(status_code=404, detail="Merkmal-Zuordnung nicht gefunden")
-    write_objekt_change(db, objekt.id, objekt.org_id, "merkmale", "merkmal_entfernt",
-                        before=zuordnung.merkmal.name if zuordnung.merkmal else str(zuordnung.merkmal_id),
-                        after=None, user_id=user.id)
+    write_objekt_change(
+        db,
+        objekt.id,
+        objekt.org_id,
+        "merkmale",
+        "merkmal_entfernt",
+        before=zuordnung.merkmal.name if zuordnung.merkmal else str(zuordnung.merkmal_id),
+        after=None,
+        user_id=user.id,
+    )
     db.delete(zuordnung)
     db.commit()
     db.refresh(objekt)
@@ -1576,9 +1725,7 @@ def kontakte_partial(
     _guard: None = Depends(require_objekt_enabled),
 ):
     objekt = _objekt_or_404(db, objekt_id, user)
-    return templates.TemplateResponse(
-        request, "objekt/_kontakte.html", _detail_context(request, db, user, objekt)
-    )
+    return templates.TemplateResponse(request, "objekt/_kontakte.html", _detail_context(request, db, user, objekt))
 
 
 def _kontakt_art(db: Session, org_id: int, art: str) -> str:
@@ -1613,13 +1760,22 @@ def _kontakt_zuordnen(
         objekt_id=objekt.id,
         kontakt_id=zentraler_kontakt.id,
         art=art,
-        name="",
         sort=max((k.sort for k in objekt.kontakte), default=0) + 1,
     )
     db.add(kontakt)
+    db.flush()
+    from app.services.kontakt_sync_service import mapping_payload, record_change
+
+    record_change(db, _objekt_org_id(objekt), "zuordnung", kontakt.id, "upsert", mapping_payload(kontakt))
     write_objekt_change(
-        db, objekt.id, objekt.org_id, "kontakte", "kontakt_zugeordnet",
-        before=None, after=zentraler_kontakt.anzeigename, user_id=user_id,
+        db,
+        objekt.id,
+        objekt.org_id,
+        "kontakte",
+        "kontakt_zugeordnet",
+        before=None,
+        after=zentraler_kontakt.anzeigename,
+        user_id=user_id,
     )
     return kontakt
 
@@ -1627,9 +1783,7 @@ def _kontakt_zuordnen(
 def _kontakte_response(request: Request, db: Session, user: User, objekt: Objekt):
     db.commit()
     db.refresh(objekt)
-    return templates.TemplateResponse(
-        request, "objekt/_kontakte.html", _detail_context(request, db, user, objekt)
-    )
+    return templates.TemplateResponse(request, "objekt/_kontakte.html", _detail_context(request, db, user, objekt))
 
 
 @router.get("/{objekt_id}/kontakte/suche", response_class=HTMLResponse)
@@ -1643,11 +1797,18 @@ def kontakte_suche(
 ):
     objekt = _objekt_or_404(db, objekt_id, user)
     kontakte, _total = kontakt_service.list_kontakte(db, q=q)
-    return templates.TemplateResponse(request, "objekt/_kontakte_suche.html", {
-        "objekt": objekt, "kontakte": kontakte, "q": q,
-        "kontakt_arten": lade_auswahl(db, objekt.org_id, AUSWAHL_KONTAKTART),
-        "request": request, "ist_verwalter": is_objekt_verwalter(user),
-    })
+    return templates.TemplateResponse(
+        request,
+        "objekt/_kontakte_suche.html",
+        {
+            "objekt": objekt,
+            "kontakte": kontakte,
+            "q": q,
+            "kontakt_arten": lade_auswahl(db, objekt.org_id, AUSWAHL_KONTAKTART),
+            "request": request,
+            "ist_verwalter": is_objekt_verwalter(user),
+        },
+    )
 
 
 @router.post("/{objekt_id}/kontakte/zuordnen", response_class=HTMLResponse)
@@ -1662,9 +1823,7 @@ def kontakt_zuordnen(
 ):
     objekt = _objekt_or_404(db, objekt_id, user)
     org_id = _objekt_org_id(objekt)
-    zentraler_kontakt = (
-        db.query(Kontakt).filter(Kontakt.id == kontakt_id, Kontakt.org_id == org_id).first()
-    )
+    zentraler_kontakt = db.query(Kontakt).filter(Kontakt.id == kontakt_id, Kontakt.org_id == org_id).first()
     if zentraler_kontakt is None:
         raise HTTPException(status_code=404, detail="Kontakt nicht gefunden")
     _kontakt_zuordnen(db, objekt, zentraler_kontakt, _kontakt_art(db, org_id, art), user.id)
@@ -1707,10 +1866,21 @@ def kontakt_anlegen_und_zuordnen(
     try:
         zentraler_kontakt = kontakt_service.create_kontakt(
             db,
-            {"typ": typ, "anzeigename": anzeigename, "vorname": vorname, "nachname": nachname,
-             "funktion": funktion, "organisation": organisation, "email": email,
-             "erreichbarkeit": erreichbarkeit, "notizen": notizen},
-            telefone, [], org_id=org_id, user_id=user.id,
+            {
+                "typ": typ,
+                "anzeigename": anzeigename,
+                "vorname": vorname,
+                "nachname": nachname,
+                "funktion": funktion,
+                "organisation": organisation,
+                "email": email,
+                "erreichbarkeit": erreichbarkeit,
+                "notizen": notizen,
+            },
+            telefone,
+            [],
+            org_id=org_id,
+            user_id=user.id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -1720,17 +1890,23 @@ def kontakt_anlegen_und_zuordnen(
 
 @router.post("/{objekt_id}/kontakte/{kontakt_id}/zuordnung", response_class=HTMLResponse)
 def kontakt_zuordnung_speichern(
-    objekt_id: int, kontakt_id: int, request: Request, db: Session = Depends(get_db),
+    objekt_id: int,
+    kontakt_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
     user: User = Depends(require_role("objekt_verwalter")),
-    _guard: None = Depends(require_objekt_enabled), art: str = Form("sonstig"),
-    sort: int = Form(0), erreichbarkeit: str = Form(""),
-    freigabe_sms: list[str] = Form(default=[]), freigabe_mail: list[str] = Form(default=[]),
+    _guard: None = Depends(require_objekt_enabled),
+    art: str = Form("sonstig"),
+    sort: int = Form(0),
+    erreichbarkeit: str = Form(""),
+    freigabe_sms: list[str] = Form(default=[]),
+    freigabe_mail: list[str] = Form(default=[]),
 ):
     objekt = _objekt_or_404(db, objekt_id, user)
     org_id = _objekt_org_id(objekt)
-    kontakt = db.query(ObjektKontakt).filter(
-        ObjektKontakt.id == kontakt_id, ObjektKontakt.objekt_id == objekt.id
-    ).first()
+    kontakt = (
+        db.query(ObjektKontakt).filter(ObjektKontakt.id == kontakt_id, ObjektKontakt.objekt_id == objekt.id).first()
+    )
     if kontakt is None or kontakt.kontakt_id is None or kontakt.zentraler_kontakt is None:
         raise HTTPException(status_code=400, detail="Nur zentrale Kontaktzuordnungen sind hier bearbeitbar")
     kontakt.art = _kontakt_art(db, org_id, art)
@@ -1746,71 +1922,29 @@ def kontakt_zuordnung_speichern(
             freigabe.aktiv = schluessel in gewuenscht
     for kanal, ziel_wert in gewuenscht:
         if (kanal, ziel_wert) not in vorhandene:
-            db.add(ObjektKontaktFreigabe(
-                org_id=objekt.org_id, objekt_kontakt_id=kontakt.id, kanal=kanal,
-                ziel_wert=ziel_wert, aktiv=True,
-            ))
-    write_objekt_change(db, objekt.id, objekt.org_id, "kontakte", "kontakt_zuordnung_bearbeitet",
-                        before=None, after=kontakt.zentraler_kontakt.anzeigename, user_id=user.id)
+            db.add(
+                ObjektKontaktFreigabe(
+                    org_id=objekt.org_id,
+                    objekt_kontakt_id=kontakt.id,
+                    kanal=kanal,
+                    ziel_wert=ziel_wert,
+                    aktiv=True,
+                )
+            )
+    write_objekt_change(
+        db,
+        objekt.id,
+        objekt.org_id,
+        "kontakte",
+        "kontakt_zuordnung_bearbeitet",
+        before=None,
+        after=kontakt.zentraler_kontakt.anzeigename,
+        user_id=user.id,
+    )
+    from app.services.kontakt_sync_service import mapping_payload, record_change
+
+    record_change(db, org_id, "zuordnung", kontakt.id, "upsert", mapping_payload(kontakt))
     return _kontakte_response(request, db, user, objekt)
-
-
-@router.post("/{objekt_id}/kontakte/{kontakt_id}", response_class=HTMLResponse)
-def kontakt_speichern(
-    objekt_id: int,
-    kontakt_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_role("objekt_verwalter")),
-    _guard: None = Depends(require_objekt_enabled),
-    art: str = Form("sonstig"),
-    name: str = Form(...),
-    telefon_nummer: list[str] = Form(default=[]),
-    telefon_label: list[str] = Form(default=[]),
-    telefon_sms: list[str] = Form(default=[]),
-    email: str = Form(""),
-    erreichbarkeit: str = Form(""),
-    benachrichtigung_mail: str = Form(""),
-):
-    objekt = _objekt_or_404(db, objekt_id, user)
-    kontakt = (
-        db.query(ObjektKontakt)
-        .filter(ObjektKontakt.id == kontakt_id, ObjektKontakt.objekt_id == objekt.id)
-        .first()
-    )
-    if kontakt is None:
-        raise HTTPException(status_code=404, detail="Kontakt nicht gefunden")
-    if kontakt.kontakt_id is not None:
-        raise HTTPException(
-            status_code=400,
-            detail="Zentrale Kontaktdaten koennen nur im Kontakte-Modul bearbeitet werden",
-        )
-    if art not in lade_auswahl(db, objekt.org_id, AUSWAHL_KONTAKTART):
-        art = "sonstig"
-    try:
-        telefone_json = telefone_aus_form(telefon_nummer, telefon_label, telefon_sms)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    daten = {
-        "art": art,
-        "name": name.strip(),
-        "telefone_json": telefone_json,
-        "email": email.strip() or None,
-        "erreichbarkeit": erreichbarkeit.strip() or None,
-        "benachrichtigung_mail": benachrichtigung_mail in ("1", "true", "on"),
-    }
-    for feld, neu in daten.items():
-        alt = getattr(kontakt, feld)
-        if alt != neu:
-            setattr(kontakt, feld, neu)
-            write_objekt_change(db, objekt.id, objekt.org_id, "kontakte",
-                                f"kontakt_{kontakt.name}_{feld}",
-                                before=alt, after=neu, user_id=user.id)
-    db.commit()
-    db.refresh(objekt)
-    return templates.TemplateResponse(
-        request, "objekt/_kontakte.html", _detail_context(request, db, user, objekt)
-    )
 
 
 @router.get("/{objekt_id}/benachrichtigung", response_class=HTMLResponse)
@@ -1823,9 +1957,7 @@ def benachrichtigung_partial(
 ):
     objekt = _objekt_or_404(db, objekt_id, user)
     ctx = _benachrichtigung_context(request, db, user, objekt)
-    return templates.TemplateResponse(
-        request, "objekt/_benachrichtigung.html", ctx
-    )
+    return templates.TemplateResponse(request, "objekt/_benachrichtigung.html", ctx)
 
 
 @router.post("/{objekt_id}/benachrichtigung", response_class=HTMLResponse)
@@ -1856,7 +1988,8 @@ def benachrichtigung_speichern(
     db.commit()
     db.refresh(objekt)
     return templates.TemplateResponse(
-        request, "objekt/_benachrichtigung.html",
+        request,
+        "objekt/_benachrichtigung.html",
         _benachrichtigung_context(request, db, user, objekt),
     )
 
@@ -1883,12 +2016,8 @@ def _benachrichtigung_context(request: Request, db: Session, user: User, objekt:
         "kontakt": "Max Mustermann",
         "leitstellennummer": "f26001234",
     }
-    ctx["benachrichtigung_vorschau_betreff"] = render_template(
-        loese_betreff(objekt, org_settings), beispiel
-    )
-    ctx["benachrichtigung_vorschau_text"] = render_template(
-        loese_template(objekt, org_settings), beispiel
-    )
+    ctx["benachrichtigung_vorschau_betreff"] = render_template(loese_betreff(objekt, org_settings), beispiel)
+    ctx["benachrichtigung_vorschau_text"] = render_template(loese_template(objekt, org_settings), beispiel)
     return ctx
 
 
@@ -1903,24 +2032,32 @@ def kontakt_loeschen(
 ):
     objekt = _objekt_or_404(db, objekt_id, user)
     kontakt = (
-        db.query(ObjektKontakt)
-        .filter(ObjektKontakt.id == kontakt_id, ObjektKontakt.objekt_id == objekt.id)
-        .first()
+        db.query(ObjektKontakt).filter(ObjektKontakt.id == kontakt_id, ObjektKontakt.objekt_id == objekt.id).first()
     )
     if kontakt is None:
         raise HTTPException(status_code=404, detail="Kontakt nicht gefunden")
-    write_objekt_change(db, objekt.id, objekt.org_id, "kontakte", "kontakt_geloescht",
-                        before=kontakt.name, after=None, user_id=user.id)
+    write_objekt_change(
+        db,
+        objekt.id,
+        objekt.org_id,
+        "kontakte",
+        "kontakt_geloescht",
+        before=kontakt.zentraler_kontakt.anzeigename if kontakt.zentraler_kontakt else "",
+        after=None,
+        user_id=user.id,
+    )
+    from app.services.kontakt_sync_service import record_change
+
+    record_change(db, _objekt_org_id(objekt), "zuordnung", kontakt.id, "tombstone")
     # ist_offener_vorschlag() vergleicht importierte Kontakte bei jedem Abgleich live.
     db.delete(kontakt)
     db.commit()
     db.refresh(objekt)
-    return templates.TemplateResponse(
-        request, "objekt/_kontakte.html", _detail_context(request, db, user, objekt)
-    )
+    return templates.TemplateResponse(request, "objekt/_kontakte.html", _detail_context(request, db, user, objekt))
 
 
 # ── Abschnitt: Wohnanlage ──────────────────────────────────────────────────────
+
 
 @router.get("/{objekt_id}/wohnanlage", response_class=HTMLResponse)
 def wohnanlage_partial(
@@ -1931,9 +2068,7 @@ def wohnanlage_partial(
     _guard: None = Depends(require_objekt_enabled),
 ):
     objekt = _objekt_or_404(db, objekt_id, user)
-    return templates.TemplateResponse(
-        request, "objekt/_wohnanlage.html", _detail_context(request, db, user, objekt)
-    )
+    return templates.TemplateResponse(request, "objekt/_wohnanlage.html", _detail_context(request, db, user, objekt))
 
 
 @router.get("/{objekt_id}/wohnanlage/bearbeiten", response_class=HTMLResponse)
@@ -1968,8 +2103,16 @@ def wohnanlage_speichern(
 
     if not wohnanlage_vorhanden:
         if objekt.wohnanlage is not None:
-            write_objekt_change(db, objekt.id, objekt.org_id, "stammdaten", "wohnanlage_entfernt",
-                                before="Wohnanlagen-Block", after=None, user_id=user.id)
+            write_objekt_change(
+                db,
+                objekt.id,
+                objekt.org_id,
+                "stammdaten",
+                "wohnanlage_entfernt",
+                before="Wohnanlagen-Block",
+                after=None,
+                user_id=user.id,
+            )
             db.delete(objekt.wohnanlage)
             objekt.wohnanlage = None
             db.commit()
@@ -1980,8 +2123,16 @@ def wohnanlage_speichern(
     if objekt.wohnanlage is None:
         objekt.wohnanlage = ObjektWohnanlage(org_id=objekt.org_id, objekt_id=objekt.id)
         db.add(objekt.wohnanlage)
-        write_objekt_change(db, objekt.id, objekt.org_id, "stammdaten", "wohnanlage_angelegt",
-                            before=None, after="Wohnanlagen-Block", user_id=user.id)
+        write_objekt_change(
+            db,
+            objekt.id,
+            objekt.org_id,
+            "stammdaten",
+            "wohnanlage_angelegt",
+            before=None,
+            after="Wohnanlagen-Block",
+            user_id=user.id,
+        )
 
     kontakt_id = int(hausverwaltung_kontakt_id) if hausverwaltung_kontakt_id.strip() else None
     if kontakt_id is not None:
@@ -2001,16 +2152,16 @@ def wohnanlage_speichern(
         alt = getattr(wa, feld)
         if alt != neu:
             setattr(wa, feld, neu)
-            write_objekt_change(db, objekt.id, objekt.org_id, "stammdaten",
-                                f"wohnanlage_{feld}", before=alt, after=neu, user_id=user.id)
+            write_objekt_change(
+                db, objekt.id, objekt.org_id, "stammdaten", f"wohnanlage_{feld}", before=alt, after=neu, user_id=user.id
+            )
     db.commit()
     db.refresh(objekt)
-    return templates.TemplateResponse(
-        request, "objekt/_wohnanlage.html", _detail_context(request, db, user, objekt)
-    )
+    return templates.TemplateResponse(request, "objekt/_wohnanlage.html", _detail_context(request, db, user, objekt))
 
 
 # ── Katalog-Admin: Gefahren + Merkmale (org_admin) ─────────────────────────────
+
 
 @router.post("/kataloge/gefahren/neu")
 def katalog_gefahr_neu(
@@ -2025,6 +2176,7 @@ def katalog_gefahr_neu(
     link_url: list[str] = Form(default=[]),
 ):
     from app.services.objekt_service import links_aus_form
+
     if not name.strip():
         raise HTTPException(status_code=400, detail="Name ist erforderlich")
     if piktogramm_typ not in lade_auswahl(db, user.org_id, AUSWAHL_PIKTOGRAMM):
@@ -2032,10 +2184,16 @@ def katalog_gefahr_neu(
     existiert = db.query(GefahrenKatalog).filter(GefahrenKatalog.name == name.strip()).first()
     if existiert:
         return RedirectResponse(url="/objekte/kataloge?error=exists&tab=gefahren", status_code=303)
-    db.add(GefahrenKatalog(org_id=user.org_id, name=name.strip(),
-                           piktogramm_typ=piktogramm_typ,
-                           links_json=links_aus_form(link_label, link_url),
-                           sort=sort, aktiv=True))
+    db.add(
+        GefahrenKatalog(
+            org_id=user.org_id,
+            name=name.strip(),
+            piktogramm_typ=piktogramm_typ,
+            links_json=links_aus_form(link_label, link_url),
+            sort=sort,
+            aktiv=True,
+        )
+    )
     db.commit()
     return RedirectResponse(url="/objekte/kataloge?saved=1&tab=gefahren", status_code=303)
 
@@ -2055,6 +2213,7 @@ def katalog_gefahr_edit(
     link_url: list[str] = Form(default=[]),
 ):
     from app.services.objekt_service import links_aus_form
+
     eintrag = db.query(GefahrenKatalog).filter(GefahrenKatalog.id == gefahr_id).first()
     if eintrag is None:
         raise HTTPException(status_code=404, detail="Gefahr nicht gefunden")
@@ -2103,8 +2262,11 @@ def katalog_merkmal_neu(
     existiert = db.query(MerkmalKatalog).filter(MerkmalKatalog.name == name.strip()).first()
     if existiert:
         return RedirectResponse(url="/objekte/kataloge?error=exists&tab=merkmale", status_code=303)
-    db.add(MerkmalKatalog(org_id=user.org_id, code=None, name=name.strip(),
-                          icon=icon.strip() or None, sort=sort, aktiv=True))
+    db.add(
+        MerkmalKatalog(
+            org_id=user.org_id, code=None, name=name.strip(), icon=icon.strip() or None, sort=sort, aktiv=True
+        )
+    )
     db.commit()
     return RedirectResponse(url="/objekte/kataloge?saved=1&tab=merkmale", status_code=303)
 
@@ -2153,9 +2315,11 @@ def katalog_merkmal_loeschen(
 
 # ── Kataloge: pflegbare Auswahllisten (Kontaktarten/Dokumentarten/Piktogramme) ──
 
+
 def _slug_code(name: str) -> str:
     """Erzeugt einen stabilen Code aus einem Anzeigenamen (a-z0-9_)."""
     import re
+
     slug = re.sub(r"[^a-z0-9]+", "_", name.strip().lower()).strip("_")
     return slug[:40] or "eintrag"
 
@@ -2165,11 +2329,9 @@ def _auswahl_in_use(db: Session, typ: str, code: str) -> bool:
     if typ == AUSWAHL_KONTAKTART:
         return db.query(ObjektKontakt).filter(ObjektKontakt.art == code).first() is not None
     if typ == AUSWAHL_DOKUMENTART:
-        return db.query(ObjektDokumentSeite).filter(
-            ObjektDokumentSeite.dokumentart == code).first() is not None
+        return db.query(ObjektDokumentSeite).filter(ObjektDokumentSeite.dokumentart == code).first() is not None
     if typ == AUSWAHL_PIKTOGRAMM:
-        return db.query(GefahrenKatalog).filter(
-            GefahrenKatalog.piktogramm_typ == code).first() is not None
+        return db.query(GefahrenKatalog).filter(GefahrenKatalog.piktogramm_typ == code).first() is not None
     return False
 
 
@@ -2196,17 +2358,21 @@ def auswahl_neu(
     basis = _slug_code(name)
     code = basis
     n = 2
-    while (
-        db.query(ObjektAuswahl)
-        .filter(ObjektAuswahl.typ == typ, ObjektAuswahl.code == code)
-        .first()
-    ):
+    while db.query(ObjektAuswahl).filter(ObjektAuswahl.typ == typ, ObjektAuswahl.code == code).first():
         code = f"{basis[:37]}_{n}"
         n += 1
-    db.add(ObjektAuswahl(
-        org_id=user.org_id, typ=typ, code=code, name=name.strip(),
-        icon=icon.strip() or None, sort=sort, aktiv=True, system=False,
-    ))
+    db.add(
+        ObjektAuswahl(
+            org_id=user.org_id,
+            typ=typ,
+            code=code,
+            name=name.strip(),
+            icon=icon.strip() or None,
+            sort=sort,
+            aktiv=True,
+            system=False,
+        )
+    )
     db.commit()
     return _auswahl_redirect(typ, "saved=1")
 
@@ -2226,11 +2392,7 @@ def auswahl_edit(
 ):
     if typ not in _AUSWAHL_TYPEN:
         raise HTTPException(status_code=404, detail="Unbekannte Auswahlliste")
-    eintrag = (
-        db.query(ObjektAuswahl)
-        .filter(ObjektAuswahl.id == eintrag_id, ObjektAuswahl.typ == typ)
-        .first()
-    )
+    eintrag = db.query(ObjektAuswahl).filter(ObjektAuswahl.id == eintrag_id, ObjektAuswahl.typ == typ).first()
     if eintrag is None:
         raise HTTPException(status_code=404, detail="Eintrag nicht gefunden")
     # Code bleibt stabil (Referenz); nur Label/Icon/Sortierung/Status aenderbar.
@@ -2254,11 +2416,7 @@ def auswahl_loeschen(
 ):
     if typ not in _AUSWAHL_TYPEN:
         raise HTTPException(status_code=404, detail="Unbekannte Auswahlliste")
-    eintrag = (
-        db.query(ObjektAuswahl)
-        .filter(ObjektAuswahl.id == eintrag_id, ObjektAuswahl.typ == typ)
-        .first()
-    )
+    eintrag = db.query(ObjektAuswahl).filter(ObjektAuswahl.id == eintrag_id, ObjektAuswahl.typ == typ).first()
     if eintrag is None:
         raise HTTPException(status_code=404, detail="Eintrag nicht gefunden")
     if eintrag.system:
@@ -2272,16 +2430,20 @@ def auswahl_loeschen(
 
 # ── Kataloge: Karten-Symbole (mit Bild-Upload) ─────────────────────────────────
 
+
 def _symbol_redirect(status: str) -> RedirectResponse:
     return RedirectResponse(url=f"/objekte/kataloge?{status}&tab=symbole", status_code=303)
 
 
 async def _symbol_bild_speichern(
-    db: Session, symbol: ObjektSymbol, bild: UploadFile | None,
+    db: Session,
+    symbol: ObjektSymbol,
+    bild: UploadFile | None,
 ) -> str | None:
     """Speichert ein hochgeladenes Symbolbild und setzt bild_pfad. Gibt eine Fehlermeldung
     zurueck (oder None bei Erfolg / kein Upload)."""
     from app.services.objekt_symbol_service import store_symbol_bild
+
     if bild is None or not bild.filename or symbol.org_id is None:
         return None
     daten = await bild.read()
@@ -2308,6 +2470,7 @@ async def symbol_neu(
     bild: UploadFile | None = File(None),
 ):
     from app.services.objekt_symbol_service import stil_gueltig
+
     if not name.strip():
         raise HTTPException(status_code=400, detail="Name ist erforderlich")
     if not stil_gueltig(stil):
@@ -2319,8 +2482,14 @@ async def symbol_neu(
         code = f"{basis[:37]}_{n}"
         n += 1
     symbol = ObjektSymbol(
-        org_id=user.org_id, code=code, name=name.strip(), stil=stil,
-        text=(text.strip()[:12] or None), sort=sort, aktiv=True, system=False,
+        org_id=user.org_id,
+        code=code,
+        name=name.strip(),
+        stil=stil,
+        text=(text.strip()[:12] or None),
+        sort=sort,
+        aktiv=True,
+        system=False,
     )
     db.add(symbol)
     db.flush()  # ID fuer den Bild-Dateinamen
@@ -2350,6 +2519,7 @@ async def symbol_edit(
     bild: UploadFile | None = File(None),
 ):
     from app.services.objekt_symbol_service import delete_symbol_bild, stil_gueltig
+
     symbol = db.query(ObjektSymbol).filter(ObjektSymbol.id == symbol_id).first()
     if symbol is None:
         raise HTTPException(status_code=404, detail="Symbol nicht gefunden")
@@ -2384,6 +2554,7 @@ def symbol_loeschen(
     _guard: None = Depends(require_objekt_enabled),
 ):
     from app.services.objekt_symbol_service import delete_symbol_bild
+
     symbol = db.query(ObjektSymbol).filter(ObjektSymbol.id == symbol_id).first()
     if symbol is None:
         raise HTTPException(status_code=404, detail="Symbol nicht gefunden")
@@ -2400,8 +2571,10 @@ def symbol_loeschen(
 
 # ── Abschnitt: Lagekarte (PR4) ─────────────────────────────────────────────────
 
+
 def _karten_objekt_dict(k: ObjektKartenObjekt) -> dict:
     from app.models.objekt import parse_karten_geometry
+
     return {
         "id": k.id,
         "typ": k.typ,
@@ -2421,6 +2594,7 @@ def karte_editor(
     _guard: None = Depends(require_objekt_enabled),
 ):
     from app.services.objekt_symbol_service import lade_symbol_labels
+
     objekt = _objekt_or_404(db, objekt_id, user)
     ctx = _detail_context(request, db, user, objekt)
     ctx["symbol_typen"] = lade_symbol_labels(db, objekt.org_id)
@@ -2455,6 +2629,7 @@ def karte_tab_partial(
     Wird lazy bei Tab-Aktivierung geladen (siehe detail.html).
     """
     from app.services.objekt_symbol_service import lade_symbol_labels
+
     objekt = _objekt_or_404(db, objekt_id, user)
     ctx = _detail_context(request, db, user, objekt)
     ctx["symbol_typen"] = lade_symbol_labels(db, objekt.org_id)
@@ -2477,8 +2652,7 @@ def karten_objekte_json(
         .all()
     )
     return {
-        "objekt": {"id": objekt.id, "lat": objekt.lat, "lng": objekt.lng,
-                   "name": objekt.name},
+        "objekt": {"id": objekt.id, "lat": objekt.lat, "lng": objekt.lng, "name": objekt.name},
         "eintraege": [_karten_objekt_dict(k) for k in eintraege],
     }
 
@@ -2502,9 +2676,7 @@ async def objekt_hydranten(
 
     objekt = _objekt_or_404(db, objekt_id, user)
     org_settings = db.query(OrgSettings).filter(OrgSettings.org_id == objekt.org_id).first()
-    enabled = settings.HYDRANT_ENABLED and (
-        org_settings is None or org_settings.hydrant_layer_enabled
-    )
+    enabled = settings.HYDRANT_ENABLED and (org_settings is None or org_settings.hydrant_layer_enabled)
     osm: list = []
     if enabled and objekt.lat is not None and objekt.lng is not None:
         osm = await fetch_osm_hydranten(objekt.lat, objekt.lng)
@@ -2531,6 +2703,7 @@ async def karten_objekt_neu(
     import json as _json
 
     from app.models.objekt import OBJEKT_SYMBOL_TYPEN
+
     objekt = _objekt_or_404(db, objekt_id, user)
     daten = await request.json()
     typ = str(daten.get("typ", ""))
@@ -2542,11 +2715,7 @@ async def karten_objekt_neu(
     if geometry is None and (lat is None or lng is None):
         raise HTTPException(status_code=400, detail="lat/lng oder geometry erforderlich")
 
-    max_sort = (
-        db.query(ObjektKartenObjekt)
-        .filter(ObjektKartenObjekt.objekt_id == objekt.id)
-        .count()
-    )
+    max_sort = db.query(ObjektKartenObjekt).filter(ObjektKartenObjekt.objekt_id == objekt.id).count()
     eintrag = ObjektKartenObjekt(
         org_id=objekt.org_id,
         objekt_id=objekt.id,
@@ -2558,8 +2727,7 @@ async def karten_objekt_neu(
         sort=max_sort + 1,
     )
     db.add(eintrag)
-    write_objekt_change(db, objekt.id, objekt.org_id, "karte", "symbol_neu",
-                        before=None, after=typ, user_id=user.id)
+    write_objekt_change(db, objekt.id, objekt.org_id, "karte", "symbol_neu", before=None, after=typ, user_id=user.id)
     db.commit()
     return _karten_objekt_dict(eintrag)
 
@@ -2574,6 +2742,7 @@ async def karten_objekt_update(
     _guard: None = Depends(require_objekt_enabled),
 ):
     import json as _json
+
     objekt = _objekt_or_404(db, objekt_id, user)
     eintrag = (
         db.query(ObjektKartenObjekt)
@@ -2591,7 +2760,7 @@ async def karten_objekt_update(
         geometry = daten["geometry"]
         eintrag.geometry_json = _json.dumps(geometry, ensure_ascii=False) if geometry else None
     if "label" in daten:
-        eintrag.label = (str(daten["label"] or "").strip() or None)
+        eintrag.label = str(daten["label"] or "").strip() or None
     db.commit()
     return _karten_objekt_dict(eintrag)
 
@@ -2613,8 +2782,9 @@ def karten_objekt_loeschen(
     )
     if eintrag is None:
         raise HTTPException(status_code=404, detail="Kartenobjekt nicht gefunden")
-    write_objekt_change(db, objekt.id, objekt.org_id, "karte", "symbol_geloescht",
-                        before=eintrag.typ, after=None, user_id=user.id)
+    write_objekt_change(
+        db, objekt.id, objekt.org_id, "karte", "symbol_geloescht", before=eintrag.typ, after=None, user_id=user.id
+    )
     db.delete(eintrag)
     db.commit()
     return {"ok": True}
@@ -2650,9 +2820,11 @@ def _panel_context(request: Request, db: Session, user: User, incident_id: int) 
 
     verknuepfungen = (
         db.query(ObjektEinsatz)
-        .options(selectinload(ObjektEinsatz.objekt).selectinload(Objekt.gefahren),
-                 selectinload(ObjektEinsatz.objekt).selectinload(Objekt.bma),
-                 selectinload(ObjektEinsatz.objekt).selectinload(Objekt.kontakte))
+        .options(
+            selectinload(ObjektEinsatz.objekt).selectinload(Objekt.gefahren),
+            selectinload(ObjektEinsatz.objekt).selectinload(Objekt.bma),
+            selectinload(ObjektEinsatz.objekt).selectinload(Objekt.kontakte),
+        )
         .filter(ObjektEinsatz.incident_id == incident_id, ObjektEinsatz.org_id == panel_org_id)
         .order_by(ObjektEinsatz.status, ObjektEinsatz.erstellt_am)
         .all()
@@ -2666,23 +2838,30 @@ def _panel_context(request: Request, db: Session, user: User, incident_id: int) 
         .all()
     )
     kandidaten = [o for o in kandidaten if o.id not in verknuepfte_ids]
-    benachrichtigungen = {
-        objekt_id: {"gesendet": gesendet or 0, "fehler": fehler or 0}
-        for objekt_id, gesendet, fehler in db.query(
-            ObjektKontaktBenachrichtigung.objekt_id,
-            func.sum(case((ObjektKontaktBenachrichtigung.status == OBJEKT_INFO_GESENDET, 1), else_=0)),
-            func.sum(case((ObjektKontaktBenachrichtigung.status == OBJEKT_INFO_FEHLER, 1), else_=0)),
-        ).filter(
-            ObjektKontaktBenachrichtigung.org_id == panel_org_id,
-            ObjektKontaktBenachrichtigung.incident_id == incident_id,
-            ObjektKontaktBenachrichtigung.objekt_id.in_(verknuepfte_ids),
-        ).group_by(ObjektKontaktBenachrichtigung.objekt_id).all()
-    } if verknuepfte_ids else {}
+    benachrichtigungen = (
+        {
+            objekt_id: {"gesendet": gesendet or 0, "fehler": fehler or 0}
+            for objekt_id, gesendet, fehler in db.query(
+                ObjektKontaktBenachrichtigung.objekt_id,
+                func.sum(case((ObjektKontaktBenachrichtigung.status == OBJEKT_INFO_GESENDET, 1), else_=0)),
+                func.sum(case((ObjektKontaktBenachrichtigung.status == OBJEKT_INFO_FEHLER, 1), else_=0)),
+            )
+            .filter(
+                ObjektKontaktBenachrichtigung.org_id == panel_org_id,
+                ObjektKontaktBenachrichtigung.incident_id == incident_id,
+                ObjektKontaktBenachrichtigung.objekt_id.in_(verknuepfte_ids),
+            )
+            .group_by(ObjektKontaktBenachrichtigung.objekt_id)
+            .all()
+        }
+        if verknuepfte_ids
+        else {}
+    )
     hat_empfaenger = {
         v.objekt_id: any(
-            (k.benachrichtigung_mail and bool((k.email or "").strip())) or bool(k.sms_nummern)
+            any(freigabe.aktiv for freigabe in k.freigaben)
             for k in (v.objekt.kontakte if v.objekt else [])
-            if k.org_id == panel_org_id
+            if k.org_id == panel_org_id and k.kontakt_id is not None
         )
         for v in verknuepfungen
     }
@@ -2690,6 +2869,7 @@ def _panel_context(request: Request, db: Session, user: User, incident_id: int) 
         # Vorschläge nach Entfernung zum Einsatzort sortieren statt nach Objekt-Nr. —
         # bei der manuellen Verknüpfung sind die nächstgelegenen Objekte am relevantesten.
         from app.services.hydrant_service import _haversine_m
+
         inc_lat, inc_lng = incident.lat, incident.lng
 
         def _distanz(o: Objekt) -> float:
@@ -2706,9 +2886,7 @@ def _panel_context(request: Request, db: Session, user: User, incident_id: int) 
         "kandidaten": kandidaten,
         "benachrichtigungen": benachrichtigungen,
         "hat_empfaenger": hat_empfaenger,
-        "darf_verknuepfen": is_objekt_verwalter(user) or any(
-            r.code in ("incident_leader",) for r in user.roles
-        ),
+        "darf_verknuepfen": is_objekt_verwalter(user) or any(r.code in ("incident_leader",) for r in user.roles),
         "gefahr_piktogramme": lade_auswahl(db, user.org_id, AUSWAHL_PIKTOGRAMM),
         "gefahr_links": gefahr_links,
     }
@@ -2733,7 +2911,8 @@ def einsatz_panel(
     view: str = "",
 ):
     return templates.TemplateResponse(
-        request, _panel_template(view),
+        request,
+        _panel_template(view),
         _panel_context(request, db, user, incident_id),
     )
 
@@ -2760,35 +2939,46 @@ async def einsatz_manuell_verknuepfen(
         .first()
     )
     if not existiert:
-        db.add(ObjektEinsatz(
-            org_id=objekt.org_id,
-            objekt_id=objekt.id,
+        db.add(
+            ObjektEinsatz(
+                org_id=objekt.org_id,
+                objekt_id=objekt.id,
+                incident_id=incident_id,
+                quelle="manuell",
+                status=OBJEKT_EINSATZ_BESTAETIGT,
+                bestaetigt_von_id=user.id,
+            )
+        )
+        write_audit(
+            db,
+            "objekt.einsatz_verknuepft",
+            org_id=user.org_id,
+            user_id=user.id,
+            entity_type="objekt",
+            entity_id=objekt.id,
             incident_id=incident_id,
-            quelle="manuell",
-            status=OBJEKT_EINSATZ_BESTAETIGT,
-            bestaetigt_von_id=user.id,
-        ))
-        write_audit(db, "objekt.einsatz_verknuepft", org_id=user.org_id, user_id=user.id,
-                    entity_type="objekt", entity_id=objekt.id,
-                    incident_id=incident_id, payload={"quelle": "manuell"})
+            payload={"quelle": "manuell"},
+        )
         # Objektgefahren als Board-Meldungen (idempotent) + Board neu laden
         incident = db.get(Incident, incident_id)
         if incident is not None:
             erzeuge_gefahren_meldungen(db, incident, objekt)
         db.commit()
         from app.services.objekt_kontakt_notify import dispatch_objekt_einsatzinfo
-        background_tasks.add_task(
-            dispatch_objekt_einsatzinfo, incident_id, triggered_by_user_id=user.id
-        )
+
+        background_tasks.add_task(dispatch_objekt_einsatzinfo, incident_id, triggered_by_user_id=user.id)
         from app.services.print_dispatcher import autoprint_incident_updated_background
+
         background_tasks.add_task(autoprint_incident_updated_background, incident_id)
         try:
             from app.services.broadcast import manager
+
             await manager.broadcast(incident_id, {"type": "objektgefahren"})
         except Exception:
             pass
     return templates.TemplateResponse(
-        request, _panel_template(view),
+        request,
+        _panel_template(view),
         _panel_context(request, db, user, incident_id),
     )
 
@@ -2816,11 +3006,19 @@ def einsatz_match_bestaetigen(
     if verknuepfung.status != OBJEKT_EINSATZ_BESTAETIGT:
         verknuepfung.status = OBJEKT_EINSATZ_BESTAETIGT
         verknuepfung.bestaetigt_von_id = user.id
-        write_audit(db, "objekt.einsatz_bestaetigt", org_id=user.org_id, user_id=user.id,
-                    entity_type="objekt", entity_id=verknuepfung.objekt_id,
-                    incident_id=incident_id, payload={"quelle": verknuepfung.quelle})
+        write_audit(
+            db,
+            "objekt.einsatz_bestaetigt",
+            org_id=user.org_id,
+            user_id=user.id,
+            entity_type="objekt",
+            entity_id=verknuepfung.objekt_id,
+            incident_id=incident_id,
+            payload={"quelle": verknuepfung.quelle},
+        )
         db.commit()
         from app.services.objekt_kontakt_notify import dispatch_objekt_einsatzinfo
+
         background_tasks.add_task(
             dispatch_objekt_einsatzinfo,
             incident_id,
@@ -2828,9 +3026,11 @@ def einsatz_match_bestaetigen(
             triggered_by_user_id=user.id,
         )
         from app.services.print_dispatcher import autoprint_incident_updated_background
+
         background_tasks.add_task(autoprint_incident_updated_background, incident_id)
     return templates.TemplateResponse(
-        request, _panel_template(view),
+        request,
+        _panel_template(view),
         _panel_context(request, db, user, incident_id),
     )
 
@@ -2852,25 +3052,35 @@ def einsatz_kontakte_benachrichtigen(
     from app.models.objekt import OBJEKT_EINSATZ_BESTAETIGT, ObjektEinsatz
     from app.services.objekt_kontakt_notify import dispatch_objekt_einsatzinfo
 
-    verknuepfung = db.query(ObjektEinsatz).filter(
-        ObjektEinsatz.id == verknuepfung_id,
-        ObjektEinsatz.incident_id == incident_id,
-        ObjektEinsatz.status == OBJEKT_EINSATZ_BESTAETIGT,
-    ).first()
+    verknuepfung = (
+        db.query(ObjektEinsatz)
+        .filter(
+            ObjektEinsatz.id == verknuepfung_id,
+            ObjektEinsatz.incident_id == incident_id,
+            ObjektEinsatz.status == OBJEKT_EINSATZ_BESTAETIGT,
+        )
+        .first()
+    )
     if verknuepfung is None:
         raise HTTPException(status_code=404, detail="Verknuepfung nicht gefunden")
     write_audit(
-        db, "objekt.kontakt_info_manuell", org_id=user.org_id, user_id=user.id,
-        incident_id=incident_id, entity_type="objekt", entity_id=verknuepfung.objekt_id,
+        db,
+        "objekt.kontakt_info_manuell",
+        org_id=user.org_id,
+        user_id=user.id,
+        incident_id=incident_id,
+        entity_type="objekt",
+        entity_id=verknuepfung.objekt_id,
     )
     db.commit()
     background_tasks.add_task(
-        dispatch_objekt_einsatzinfo, incident_id,
-        objekt_ids=[verknuepfung.objekt_id], force=True, triggered_by_user_id=user.id,
+        dispatch_objekt_einsatzinfo,
+        incident_id,
+        objekt_ids=[verknuepfung.objekt_id],
+        force=True,
+        triggered_by_user_id=user.id,
     )
-    return templates.TemplateResponse(
-        request, _panel_template(view), _panel_context(request, db, user, incident_id)
-    )
+    return templates.TemplateResponse(request, _panel_template(view), _panel_context(request, db, user, incident_id))
 
 
 @router.post("/einsatz-panel/{incident_id}/{verknuepfung_id}/loesen", response_class=HTMLResponse)
@@ -2893,9 +3103,16 @@ async def einsatz_match_loesen(
     )
     if verknuepfung is None:
         raise HTTPException(status_code=404, detail="Verknuepfung nicht gefunden")
-    write_audit(db, "objekt.einsatz_geloest", org_id=user.org_id, user_id=user.id,
-                entity_type="objekt", entity_id=verknuepfung.objekt_id,
-                incident_id=incident_id, payload={"quelle": verknuepfung.quelle})
+    write_audit(
+        db,
+        "objekt.einsatz_geloest",
+        org_id=user.org_id,
+        user_id=user.id,
+        entity_type="objekt",
+        entity_id=verknuepfung.objekt_id,
+        incident_id=incident_id,
+        payload={"quelle": verknuepfung.quelle},
+    )
     # Zugehoerige Objektgefahren-Meldungen mit entfernen
     objekt = db.get(Objekt, verknuepfung.objekt_id)
     entfernt = entferne_gefahren_meldungen(db, incident_id, objekt) if objekt else 0
@@ -2904,16 +3121,19 @@ async def einsatz_match_loesen(
     if entfernt:
         try:
             from app.services.broadcast import manager
+
             await manager.broadcast(incident_id, {"type": "objektgefahren"})
         except Exception:
             pass
     return templates.TemplateResponse(
-        request, _panel_template(view),
+        request,
+        _panel_template(view),
         _panel_context(request, db, user, incident_id),
     )
 
 
 # ── PR5: Einsatzhistorie am Objekt ─────────────────────────────────────────────
+
 
 @router.get("/{objekt_id}/einsaetze", response_class=HTMLResponse)
 def einsaetze_partial(
@@ -2950,17 +3170,18 @@ def einsaetze_partial(
 
 # ── PR5: Mobile Einsatzansicht ─────────────────────────────────────────────────
 
+
 def _dok_zaehler(db: Session, objekt_id: int) -> dict[str, int]:
     """Seitenzahl je Dokumentart (fuer die Dokument-Kacheln der Einsatzansicht)."""
     from sqlalchemy import func as _func
 
     from app.models.objekt import ObjektDokumentSeite
+
     return {
         code: cnt
         for code, cnt in (
             db.query(ObjektDokumentSeite.dokumentart, _func.count(ObjektDokumentSeite.id))
-            .filter(ObjektDokumentSeite.objekt_id == objekt_id,
-                    ObjektDokumentSeite.dokumentart.isnot(None))
+            .filter(ObjektDokumentSeite.objekt_id == objekt_id, ObjektDokumentSeite.dokumentart.isnot(None))
             .group_by(ObjektDokumentSeite.dokumentart)
             .all()
         )
@@ -2973,10 +3194,9 @@ def _dok_gesamt(db: Session, objekt_id: int) -> int:
     from sqlalchemy import func as _func
 
     from app.models.objekt import ObjektDokumentSeite
+
     return (
-        db.query(_func.count(ObjektDokumentSeite.id))
-        .filter(ObjektDokumentSeite.objekt_id == objekt_id)
-        .scalar()
+        db.query(_func.count(ObjektDokumentSeite.id)).filter(ObjektDokumentSeite.objekt_id == objekt_id).scalar()
     ) or 0
 
 
@@ -3040,8 +3260,10 @@ def einsatzansicht(
 
 # ── PR7: Druck (Objektblatt + Mappe) ───────────────────────────────────────────
 
+
 def _org_fuer_user(db: Session, user: User):
     from app.models.master import FireDept
+
     if user.org_id is None:
         return None
     return db.query(FireDept).filter(FireDept.id == user.org_id).first()
@@ -3063,13 +3285,18 @@ def objektblatt_pdf(
 
     objekt = _objekt_or_404(db, objekt_id, user)
     pdf = objektblatt_mit_anhang(
-        objekt, _org_fuer_user(db, user), db, str(request.base_url),
-        mit_anhang=bool(anhang), mit_hinweisen=bool(hinweise),
+        objekt,
+        _org_fuer_user(db, user),
+        db,
+        str(request.base_url),
+        mit_anhang=bool(anhang),
+        mit_hinweisen=bool(hinweise),
     )
     # inline: Browser-PDF-Viewer zeigt direkt an (Speichern dort weiterhin moeglich)
     name = f"{objekt.anzeige_nummer}_Objektblatt.pdf"
     return Response(
-        content=pdf, media_type="application/pdf",
+        content=pdf,
+        media_type="application/pdf",
         headers={"Content-Disposition": f'inline; filename="{name}"'},
     )
 
@@ -3096,10 +3323,14 @@ def objekte_mappe_drucken(
 
     objekte = [_objekt_or_404(db, oid, user) for oid in ids]
     pdf = sammelmappe(
-        objekte, _org_fuer_user(db, user), db, str(request.base_url),
+        objekte,
+        _org_fuer_user(db, user),
+        db,
+        str(request.base_url),
         mit_anhang=bool(mit_anhang),
     )
     return Response(
-        content=pdf, media_type="application/pdf",
+        content=pdf,
+        media_type="application/pdf",
         headers={"Content-Disposition": 'inline; filename="Objektmappe.pdf"'},
     )

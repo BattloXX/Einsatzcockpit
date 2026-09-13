@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.core.audit import write_audit
-from app.core.permissions import require_role
+from app.core.permissions import require_manual_sms_sender, require_role
 from app.core.templating import templates
 from app.db import get_db
 from app.models.master import AlarmType, Member, OrgSettings
@@ -735,7 +735,7 @@ async def sms_send_execute(
     text: str = Form(...),
     target_type: str = Form("group"),  # "group" | "member" | "adhoc"
     db: Session = Depends(get_db),
-    _=Depends(require_role("admin")),
+    _=Depends(require_manual_sms_sender),
 ):
     """Sendet eine manuelle SMS an Gruppen, Mitglieder oder Ad-hoc-Nummer."""
     user = request.state.user

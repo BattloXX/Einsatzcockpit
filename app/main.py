@@ -1,4 +1,5 @@
 """FastAPI application – Einsatzcockpit (Multi-Org) v2.0.0."""
+
 import asyncio
 import logging
 import secrets as _secrets
@@ -23,6 +24,7 @@ from app.models.incident import Incident, IncidentToken
 from app.models.major_incident import LageToken, MajorIncident, MajorIncidentStatus
 from app.models.user import DeviceToken, Role, User
 from app.routers import (
+    api_kontakt_sync,
     api_live,
     api_messaging,
     api_v1,
@@ -140,7 +142,9 @@ def _install_ws_quiet_exception_handler() -> None:
                 exc = None
         name = type(exc).__name__ if exc is not None else ""
         if (ConnectionClosed is not None and isinstance(exc, ConnectionClosed)) or name in (
-            "ConnectionClosedError", "ConnectionClosedOK", "ConnectionClosed",
+            "ConnectionClosedError",
+            "ConnectionClosedOK",
+            "ConnectionClosed",
         ):
             logger.debug("WebSocket getrennt (keepalive/close): %s", exc)
             return
@@ -156,6 +160,7 @@ def _install_ws_quiet_exception_handler() -> None:
             loop_.default_exception_handler(context)
 
     loop.set_exception_handler(_handler)
+
 
 # In-Memory-Log-Buffer so früh wie möglich registrieren, damit auch Startup-Logs erfasst werden
 from app import log_buffer as _log_buffer  # noqa: E402
@@ -190,6 +195,7 @@ async def lifespan(app: FastAPI):
     # (Python-Semantik von `import a.b`) -- das kollidiert mit dem weiter unten
     # modulweiten `app = FastAPI(...)` (mypy: "Incompatible import of 'app'").
     import app.models as _app_models  # noqa: F401 – importiert alle Modell-Module in die Registry
+
     configure_mappers()
 
     # Benigne WebSocket-Trennungen dämpfen (siehe _install_ws_quiet_exception_handler).
@@ -198,6 +204,7 @@ async def lifespan(app: FastAPI):
     # Redis Pub/Sub-Bus für worker-übergreifende WS-Zustellung starten (No-Op ohne
     # REDIS_URL). Nach dem Router-Import, damit alle Bus-Handler registriert sind.
     from app.services import ws_bus
+
     await ws_bus.start()
 
     # Bootstrap admin on first start
@@ -206,82 +213,101 @@ async def lifespan(app: FastAPI):
     # Separate Wetter-DB (Zeitreihe lokaler Stationen) initialisieren, falls konfiguriert.
     try:
         from app.db_weather import init_weather_db
+
         init_weather_db()
     except Exception as exc:  # Wetter ist unkritisch – Start nie blockieren.
         logger.warning("Wetter-DB-Init übersprungen: %s", exc)
 
     # Background-Loop für 48h-Auto-Close-Lifecycle
     from app.services.autoclose import autoclose_loop
+
     autoclose_task = asyncio.create_task(autoclose_loop())
 
     # Background-Watchdog für AS-Warnungen (alle 5 Sekunden)
     from app.services.breathing_service import _breathing_watchdog_loop
+
     watchdog_task = asyncio.create_task(_breathing_watchdog_loop())
 
     # Background-Loop für fällige Meldungen (alle 30 Sekunden)
     from app.services.task_reminder import task_reminder_loop
+
     reminder_task = asyncio.create_task(task_reminder_loop())
 
     # Passiver Backstop für gealterte, nicht-terminale Druckaufträge.
     from app.services.print_watchdog import print_job_watchdog_loop
+
     print_watchdog_task = asyncio.create_task(print_job_watchdog_loop())
 
     # Background-Loop für überfällige GSL-Lagemeldungen (SKKM-Regelkreis)
     from app.services.gsl_lagemeldung_reminder import gsl_lagemeldung_reminder_loop
+
     lagemeldung_task = asyncio.create_task(gsl_lagemeldung_reminder_loop())
 
     # Background-Loop für automatische Geräteverleih-Erinnerungs-SMS
     from app.services.verleih_erinnerung import verleih_erinnerung_loop
+
     verleih_task = asyncio.create_task(verleih_erinnerung_loop())
 
     # Tägliche Vorbereitungs-Erinnerungen für bevorstehende Proben.
     from app.services.probe_erinnerung import probe_erinnerung_loop
+
     probe_erinnerung_task = asyncio.create_task(probe_erinnerung_loop())
 
     # Background-Loop für Wetterstations-Zeitreihen-Retention (täglich 03:30)
     from app.services.weather_retention import weather_retention_loop
+
     weather_retention_task = asyncio.create_task(weather_retention_loop())
 
     from app.services.ai_log_retention import ai_log_retention_loop
+
     ai_log_retention_task = asyncio.create_task(ai_log_retention_loop())
 
     from app.services.sms_log_retention import sms_log_retention_loop
+
     sms_log_retention_task = asyncio.create_task(sms_log_retention_loop())
 
     # Background-Loop für GPS-Positionshistorie-Retention (täglich 03:45)
     from app.services.vehicle_position_retention import vehicle_position_retention_loop
+
     vehicle_position_retention_task = asyncio.create_task(vehicle_position_retention_loop())
 
     # Background-Loop für Wetterwarnungen (alle 5 Minuten je Org)
     from app.services.weather_alert_loop import weather_alert_loop
+
     weather_alert_task = asyncio.create_task(weather_alert_loop())
 
     # Background-Loop für die Dienstüberwachung (Gateways/Alarm, alle 60 s je Org)
     from app.services.dienst_monitor_loop import dienst_monitor_loop
+
     dienst_monitor_task = asyncio.create_task(dienst_monitor_loop())
 
     # Background-Loop für kontinuierliches Pegel-Polling (alle 10 Minuten je Org,
     # unabhängig von Seitenaufrufen – vermeidet Lücken im 24-h-Verlauf)
     from app.services.abfluss_poll_loop import abfluss_poll_loop
+
     abfluss_poll_task = asyncio.create_task(abfluss_poll_loop())
 
     # Background-Loop für die LIS/IPR-Anbindung (Poll-Intervall je Org konfigurierbar)
     from app.services.lis.lis_loop import lis_poll_loop
+
     lis_task = asyncio.create_task(lis_poll_loop())
 
     # Background-Loop für die Löschfrist von LIS-Rohdaten-Aufzeichnungen (täglich 04:00,
     # DSGVO — enthalten Personenbezug, siehe lis_capture.py)
     from app.services.lis.lis_capture import lis_capture_retention_loop
+
     lis_capture_retention_task = asyncio.create_task(lis_capture_retention_loop())
 
     # Background-Loop für die DIBOS-EventHub-Auto-Erkennung (leichter Poll je Org,
     # startet bei eigenem Einsatz automatisch ein Voll-Tracing, siehe dibos_loop.py)
     from app.services.dibos.dibos_loop import dibos_poll_loop
+
     dibos_task = asyncio.create_task(dibos_poll_loop())
 
     # Background-Loop für die Löschfrist von DIBOS-Rohdaten-Aufzeichnungen (täglich 04:05,
     # DSGVO — enthalten Personenbezug, siehe dibos_capture.py)
     from app.services.dibos.dibos_capture import dibos_trace_retention_loop
+
     dibos_trace_retention_task = asyncio.create_task(dibos_trace_retention_loop())
 
     # Background-Loops für den BMA-Webplattform-Import (Landeswarnzentrale Vorarlberg):
@@ -289,22 +315,28 @@ async def lifespan(app: FastAPI):
 
     # Background-Loop für den täglichen Gefahrgut-Datensatz-Sync (Nachschlagewerke, 03:00)
     from app.services.nachschlagewerk_sync import nachschlagewerk_sync_loop
+
     nachschlagewerk_sync_task = asyncio.create_task(nachschlagewerk_sync_loop())
 
     # Background-Loop für geplante Org-Backups (Push ans je Org konfigurierte Ziel)
     from app.services.org_backup_loop import org_backup_loop
+
     org_backup_task = asyncio.create_task(org_backup_loop())
     from app.services.mailing_dispatch_loop import mailing_dispatch_loop
+
     mailing_dispatch_task = asyncio.create_task(mailing_dispatch_loop())
     from app.services.api_message_dispatch_loop import api_message_dispatch_loop
+
     api_message_dispatch_task = asyncio.create_task(api_message_dispatch_loop())
     from app.services.mailing_schedule_loop import mailing_schedule_loop
+
     mailing_schedule_task = asyncio.create_task(mailing_schedule_loop())
 
     try:
         yield
     finally:
         from app.services import ws_bus
+
         await ws_bus.stop()
         autoclose_task.cancel()
         watchdog_task.cancel()
@@ -329,18 +361,33 @@ async def lifespan(app: FastAPI):
         mailing_dispatch_task.cancel()
         api_message_dispatch_task.cancel()
         mailing_schedule_task.cancel()
-        for t in (autoclose_task, watchdog_task, reminder_task, print_watchdog_task,
-                  lagemeldung_task, verleih_task,
-                  probe_erinnerung_task,
-                  weather_retention_task, ai_log_retention_task, vehicle_position_retention_task, weather_alert_task,
-                  dienst_monitor_task,
-                  abfluss_poll_task, lis_task, lis_capture_retention_task,
-                  dibos_task, dibos_trace_retention_task,
-                  nachschlagewerk_sync_task, org_backup_task, mailing_dispatch_task,
-                  api_message_dispatch_task, mailing_schedule_task):
+        for t in (
+            autoclose_task,
+            watchdog_task,
+            reminder_task,
+            print_watchdog_task,
+            lagemeldung_task,
+            verleih_task,
+            probe_erinnerung_task,
+            weather_retention_task,
+            ai_log_retention_task,
+            vehicle_position_retention_task,
+            weather_alert_task,
+            dienst_monitor_task,
+            abfluss_poll_task,
+            lis_task,
+            lis_capture_retention_task,
+            dibos_task,
+            dibos_trace_retention_task,
+            nachschlagewerk_sync_task,
+            org_backup_task,
+            mailing_dispatch_task,
+            api_message_dispatch_task,
+            mailing_schedule_task,
+        ):
             try:
                 await t
-            except (asyncio.CancelledError, Exception):
+            except asyncio.CancelledError, Exception:
                 pass
 
 
@@ -350,6 +397,7 @@ def _bootstrap_admin() -> None:
     try:
         from app.models.user import User as U
         from app.seed_data import _upsert_roles
+
         _upsert_roles(db)  # always sync role labels (e.g. Schriftführer → Bearbeiter)
         db.commit()
 
@@ -357,6 +405,7 @@ def _bootstrap_admin() -> None:
         if existing:
             return
         from app.seed_data import seed
+
         seed(db)
         from app.cli import create_admin
 
@@ -431,6 +480,7 @@ async def api_redoc(request: Request, _=Depends(_require_system_admin)):
 
 class _QrUser:
     """Wraps a User for QR-Code sessions, exposing only the recorder role."""
+
     def __init__(self, user, recorder_role):
         self._user = user
         self.roles = [recorder_role] if recorder_role else []
@@ -469,7 +519,7 @@ async def session_middleware(request: Request, call_next):
     request.state.device_token_id = None
     request.state.accounts = []
     _refresh_user_id: int | None = None  # set for non-QR sessions to trigger cookie refresh
-    _refresh_remember: bool = False      # "Login merken" – längeres, gleitendes Fenster
+    _refresh_remember: bool = False  # "Login merken" – längeres, gleitendes Fenster
 
     # Native-App-Erkennung (server-seitig statt client-seitig): index.html der
     # Android-App haengt ?native=1 an ihre erste Navigation zu einsatzcockpit.com
@@ -486,8 +536,9 @@ async def session_middleware(request: Request, call_next):
     if token:
         session_data = unsign_session(token)
         if session_data:
-            (user_id, is_qr, qr_incident_id, is_device, display_name,
-             qr_lage_id, is_remember, device_token_id) = session_data
+            (user_id, is_qr, qr_incident_id, is_device, display_name, qr_lage_id, is_remember, device_token_id) = (
+                session_data
+            )
             db = SessionLocal()
             set_tenant_context(db, None)
             try:
@@ -495,11 +546,15 @@ async def session_middleware(request: Request, call_next):
                 if user and is_qr:
                     if qr_lage_id is not None:
                         # Lage QR session: valid while Lage is active and token not revoked.
-                        db_token = db.query(LageToken).filter(
-                            LageToken.lage_id == qr_lage_id,
-                            LageToken.issued_by_user_id == user_id,
-                            LageToken.revoked_at.is_(None),
-                        ).first()
+                        db_token = (
+                            db.query(LageToken)
+                            .filter(
+                                LageToken.lage_id == qr_lage_id,
+                                LageToken.issued_by_user_id == user_id,
+                                LageToken.revoked_at.is_(None),
+                            )
+                            .first()
+                        )
                         lage = db.get(MajorIncident, qr_lage_id) if db_token else None
                         if not db_token or not lage or lage.status != MajorIncidentStatus.active:
                             user = None
@@ -508,11 +563,15 @@ async def session_middleware(request: Request, call_next):
                             user = _QrUser(user, recorder)  # type: ignore[assignment]
                     elif qr_incident_id is not None:
                         # Incident QR session: valid while incident is open and token not revoked.
-                        db_token = db.query(IncidentToken).filter(  # type: ignore[assignment]
-                            IncidentToken.incident_id == qr_incident_id,
-                            IncidentToken.issued_by_user_id == user_id,
-                            IncidentToken.revoked_at.is_(None),
-                        ).first()
+                        db_token = (
+                            db.query(IncidentToken)
+                            .filter(  # type: ignore[assignment]
+                                IncidentToken.incident_id == qr_incident_id,
+                                IncidentToken.issued_by_user_id == user_id,
+                                IncidentToken.revoked_at.is_(None),
+                            )
+                            .first()
+                        )
                         inc = db.get(Incident, qr_incident_id) if db_token else None
                         if not db_token or not inc or inc.status != "active":
                             user = None  # Incident closed or token revoked → logged out
@@ -530,16 +589,26 @@ async def session_middleware(request: Request, call_next):
                     # grobkoernige Pruefung "hat noch irgendein aktives
                     # Geraet" zurueck.
                     if device_token_id is not None:
-                        device_ok = db.query(DeviceToken).filter(
-                            DeviceToken.id == device_token_id,
-                            DeviceToken.user_id == user_id,
-                            DeviceToken.revoked_at.is_(None),
-                        ).first() is not None
+                        device_ok = (
+                            db.query(DeviceToken)
+                            .filter(
+                                DeviceToken.id == device_token_id,
+                                DeviceToken.user_id == user_id,
+                                DeviceToken.revoked_at.is_(None),
+                            )
+                            .first()
+                            is not None
+                        )
                     else:
-                        device_ok = db.query(DeviceToken).filter(
-                            DeviceToken.user_id == user_id,
-                            DeviceToken.revoked_at.is_(None),
-                        ).first() is not None
+                        device_ok = (
+                            db.query(DeviceToken)
+                            .filter(
+                                DeviceToken.user_id == user_id,
+                                DeviceToken.revoked_at.is_(None),
+                            )
+                            .first()
+                            is not None
+                        )
                     if not device_ok:
                         user = None
                     else:
@@ -587,17 +656,26 @@ async def session_middleware(request: Request, call_next):
                 db = SessionLocal()
                 set_tenant_context(db, None)
                 try:
-                    request.state.user = db.query(User).filter(
-                        User.id == nt_result[1], User.active == True,  # noqa: E712
-                    ).first()
+                    request.state.user = (
+                        db.query(User)
+                        .filter(
+                            User.id == nt_result[1],
+                            User.active == True,  # noqa: E712
+                        )
+                        .first()
+                    )
                 except Exception:
                     logger.exception("session_middleware: nt-Token User-Lookup fehlgeschlagen")
                 finally:
                     db.close()
 
     _bereinigte_accounts = []
-    if (request.state.user is not None and not request.state.is_device
-            and request.state.qr_incident_id is None and request.state.qr_lage_id is None):
+    if (
+        request.state.user is not None
+        and not request.state.is_device
+        and request.state.qr_incident_id is None
+        and request.state.qr_lage_id is None
+    ):
         cookie_accounts = load_accounts(request.cookies.get(ACCOUNTS_COOKIE))
         account_ids = [account["u"] for account in cookie_accounts]
         if account_ids:
@@ -617,12 +695,14 @@ async def session_middleware(request: Request, call_next):
                     if locked_until and locked_until > now:
                         continue
                     _bereinigte_accounts.append(account)
-                    request.state.accounts.append({
-                        "user_id": account_user.id,
-                        "display_name": account_user.display_name,
-                        "org_name": account_user.org.name if account_user.org else "Keine Organisation",
-                        "is_active_account": account_user.id == request.state.user.id,
-                    })
+                    request.state.accounts.append(
+                        {
+                            "user_id": account_user.id,
+                            "display_name": account_user.display_name,
+                            "org_name": account_user.org.name if account_user.org else "Keine Organisation",
+                            "is_active_account": account_user.id == request.state.user.id,
+                        }
+                    )
             except Exception:
                 logger.exception("session_middleware: Kontoliste konnte nicht validiert werden")
                 request.state.accounts = []
@@ -631,16 +711,20 @@ async def session_middleware(request: Request, call_next):
                 db.close()
         if _refresh_user_id is not None:
             _bereinigte_accounts = add_account(
-                _bereinigte_accounts, _refresh_user_id, _refresh_remember,
+                _bereinigte_accounts,
+                _refresh_user_id,
+                _refresh_remember,
             )
             if not any(account["is_active_account"] for account in request.state.accounts):
                 active_user = request.state.user
-                request.state.accounts.append({
-                    "user_id": active_user.id,
-                    "display_name": active_user.display_name,
-                    "org_name": active_user.org.name if active_user.org else "Keine Organisation",
-                    "is_active_account": True,
-                })
+                request.state.accounts.append(
+                    {
+                        "user_id": active_user.id,
+                        "display_name": active_user.display_name,
+                        "org_name": active_user.org.name if active_user.org else "Keine Organisation",
+                        "is_active_account": True,
+                    }
+                )
             request.state.accounts.sort(key=lambda account: not account["is_active_account"])
 
     try:
@@ -651,12 +735,15 @@ async def session_middleware(request: Request, call_next):
     # Sliding-Window-Refresh, ABER nicht auf /logout: dort löscht der Handler das
     # Session-Cookie – ein Refresh würde es sofort wieder setzen und das Abmelden
     # damit wirkungslos machen.
-    if (_refresh_user_id is not None and request.state.user is not None
-            and request.url.path not in {"/logout", "/logout/alle", "/login", "/benutzer/wechseln"}):
+    if (
+        _refresh_user_id is not None
+        and request.state.user is not None
+        and request.url.path not in {"/logout", "/logout/alle", "/login", "/benutzer/wechseln"}
+    ):
         from app.core.security import sign_session as _sign
+
         _cookie_max_age = (
-            settings.SESSION_REMEMBER_MAX_AGE_SECONDS if _refresh_remember
-            else settings.SESSION_MAX_AGE_SECONDS
+            settings.SESSION_REMEMBER_MAX_AGE_SECONDS if _refresh_remember else settings.SESSION_MAX_AGE_SECONDS
         )
         response.set_cookie(
             "session",
@@ -670,8 +757,11 @@ async def session_middleware(request: Request, call_next):
 
     if _native_query and not request.cookies.get("ec_native"):
         response.set_cookie(
-            "ec_native", "1",
-            httponly=True, secure=settings.COOKIE_SECURE, samesite="lax",
+            "ec_native",
+            "1",
+            httponly=True,
+            secure=settings.COOKIE_SECURE,
+            samesite="lax",
             max_age=400 * 24 * 3600,  # ~400 Tage (Chrome-Maximum) — lange, aber nicht sicherheitskritisch
         )
 
@@ -681,6 +771,7 @@ async def session_middleware(request: Request, call_next):
 # CORS für lagekarte.info GeoJSON-Endpoint
 try:
     from fastapi.middleware.cors import CORSMiddleware
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,
@@ -695,6 +786,7 @@ except Exception:
 # Security headers middleware (Phase 7)
 try:
     from app.middleware.security_headers import SecurityHeadersMiddleware
+
     app.add_middleware(SecurityHeadersMiddleware)
 except ImportError:  # falls Modul noch nicht vorhanden
     pass
@@ -702,6 +794,7 @@ except ImportError:  # falls Modul noch nicht vorhanden
 # CSRF (Phase 7)
 try:
     from app.middleware.csrf import CSRFMiddleware
+
     app.add_middleware(CSRFMiddleware)
 except ImportError:
     pass
@@ -741,6 +834,7 @@ if limiter is not None:
 if settings.TRUST_PROXY_HEADERS:
     try:
         from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+
         _proxy_ips = [ip.strip() for ip in settings.TRUSTED_PROXY_IPS.split(",") if ip.strip()]
         app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=_proxy_ips or "127.0.0.1")
     except ImportError:
@@ -760,6 +854,7 @@ app.include_router(ui_password_reset.router)
 app.include_router(ui_pin_login.router)
 app.include_router(ui_account_switch.router)
 app.include_router(api_v1.router)
+app.include_router(api_kontakt_sync.router)
 app.include_router(api_messaging.router)
 app.include_router(api_weather.router)
 app.include_router(device_api.router)
@@ -831,9 +926,9 @@ app.include_router(ui_atemschutz_pruefung_admin.router)
 # Emoji + Titel je Status fuer die HTML-Fehlerseite (errors/fehler.html)
 _ERROR_META = {
     400: ("⚠️", "Ungültige Anfrage"),
-    401: ("\U0001F510", "Anmeldung erforderlich"),
+    401: ("\U0001f510", "Anmeldung erforderlich"),
     403: ("⛔", "Kein Zugriff"),
-    404: ("\U0001F50D", "Nicht gefunden"),
+    404: ("\U0001f50d", "Nicht gefunden"),
     410: ("⌛", "Nicht mehr verfügbar"),
     429: ("⏳", "Zu viele Anfragen"),
     500: ("⚠️", "Interner Fehler"),
@@ -843,6 +938,7 @@ _ERROR_META = {
 def _login_redirect(request: Request) -> RedirectResponse:
     """Leitet nicht angemeldete Browser-Nutzer zum Login (mit Rücksprung-Ziel)."""
     from urllib.parse import quote
+
     path = request.url.path
     if request.url.query:
         path += "?" + request.url.query
@@ -851,11 +947,12 @@ def _login_redirect(request: Request) -> RedirectResponse:
 
 def _render_error_page(request: Request, status: int, detail, *, authenticated: bool):
     from app.core.templating import templates
+
     emoji, title = _ERROR_META.get(status, ("⚠️", "Fehler"))
     return templates.TemplateResponse(
-        request, "errors/fehler.html",
-        {"status": status, "title": title, "emoji": emoji,
-         "detail": detail or title, "authenticated": authenticated},
+        request,
+        "errors/fehler.html",
+        {"status": status, "title": title, "emoji": emoji, "detail": detail or title, "authenticated": authenticated},
         status_code=status,
     )
 
@@ -882,16 +979,14 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     if wants_html:
         if exc.status_code in (401, 403) and user is None:
             return _login_redirect(request)
-        return _render_error_page(request, exc.status_code, exc.detail,
-                                  authenticated=user is not None)
+        return _render_error_page(request, exc.status_code, exc.detail, authenticated=user is not None)
 
     # Nicht-HTML (API/Fetch/Tests): bisheriges Verhalten; .json/API bleiben JSON
     if exc.status_code == 401 and not is_api:
         return RedirectResponse("/login", status_code=302)
     if exc.status_code == 403:
         _body_style = (
-            "display:flex;flex-direction:column;align-items:center;"
-            "justify-content:center;min-height:100vh;gap:1rem"
+            "display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:1rem"
         )
         return HTMLResponse(
             f"""<!doctype html><html lang="de"><head><meta charset="utf-8">
@@ -911,12 +1006,14 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 @app.get("/sw.js", include_in_schema=False)
 async def service_worker():
     from fastapi.responses import FileResponse
+
     return FileResponse("app/static/sw.js", media_type="application/javascript")
 
 
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():
     from app.core.templating import templates
+
     img_version = templates.env.globals.get("IMG_VERSION", "1")
     return RedirectResponse(f"/static/img/favicon.ico?v={img_version}")
 
@@ -925,6 +1022,7 @@ async def favicon():
 async def health():
     """Unauthentifizierter Verfügbarkeits-Check für externes Monitoring (z. B. Uptime Kuma)."""
     from sqlalchemy import text
+
     db = SessionLocal()
     try:
         db.execute(text("SELECT 1"))

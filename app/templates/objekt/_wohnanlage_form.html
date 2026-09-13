@@ -34,7 +34,7 @@
         <select name="hausverwaltung_kontakt_id" class="form-input">
           <option value="">– keine –</option>
           {% for k in objekt.kontakte %}
-          <option value="{{ k.id }}" {% if wa and wa.hausverwaltung_kontakt_id == k.id %}selected{% endif %}>{{ k.name }} ({{ kontakt_arten.get(k.art, k.art) }})</option>
+          <option value="{{ k.id }}" {% if wa and wa.hausverwaltung_kontakt_id == k.id %}selected{% endif %}>{{ k.zentraler_kontakt.anzeigename if k.zentraler_kontakt else 'Unvollständige Zuordnung' }} ({{ kontakt_arten.get(k.art, k.art) }})</option>
           {% endfor %}
         </select>
       </div>
