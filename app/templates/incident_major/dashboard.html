@@ -259,11 +259,7 @@
   var sites   = {{ map_sites_json | safe }};
   var sectors = {{ sectors_json | safe }};
   var map = L.map('lage-map', { preferCanvas: true });
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap',
-    subdomains: 'abc',
-    maxZoom: 19,
-  }).addTo(map);
+  window.EinsatzcockpitMapConfig.addOsmTileLayer(map);
 
   var sectionPane = map.createPane('sectionPane');
   sectionPane.style.zIndex = 350;

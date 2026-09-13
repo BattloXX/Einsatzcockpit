@@ -7,7 +7,7 @@ Setzt restriktive Default-Header für alle HTTP-Antworten:
   damit der In-App-Media-Viewer PDFs/Videos im <iframe> einbetten kann; ist
   TRUSTED_FRAME_ANCESTORS konfiguriert, wird X-Frame-Options global nicht gesetzt,
   siehe unten)
-- Referrer-Policy: same-origin
+- Referrer-Policy: strict-origin-when-cross-origin
 - Permissions-Policy
 - Strict-Transport-Security (nur bei HTTPS)
 
@@ -22,7 +22,7 @@ from app.config import settings
 
 _CSP_BASE = (
     "default-src 'self'; "
-    "img-src 'self' data: blob: https://tile.openstreetmap.org https://*.tile.openstreetmap.org "
+    "img-src 'self' data: blob: https://tile.openstreetmap.org "
     "https://*.rainviewer.com https://*.wien.gv.at; "
     "media-src 'self' blob:; "
     "style-src 'self' 'unsafe-inline'; "
@@ -48,7 +48,7 @@ _CSP_ALARM_INFOSCREEN_BASE = _CSP_BASE.replace(
 # (Fonts sind lokal, siehe fonts.css)
 _CSP_INFOSCREEN_BASE = (
     "default-src 'self'; "
-    "img-src 'self' data: blob: https://tile.openstreetmap.org https://*.tile.openstreetmap.org; "
+    "img-src 'self' data: blob: https://tile.openstreetmap.org; "
     "style-src 'self' 'unsafe-inline'; "
     "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com; "
     "font-src 'self' data:; "
@@ -136,7 +136,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # CSP überschreibt frame-ancestors → eigener X-Frame-Options als Fallback
         response.headers.setdefault("Content-Security-Policy", csp)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
-        response.headers.setdefault("Referrer-Policy", "same-origin")
+        response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
         response.headers.setdefault(
             "Permissions-Policy",
             "geolocation=(), microphone=(self), camera=(self), payment=()",

@@ -146,15 +146,11 @@
     setTimeout(function () { if (karteLade) { karteLade.hidden = true; } }, 8000);
     var karte = L.map(opts.elementId, { zoomControl: true });
 
-    var osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19, attribution: "&copy; OpenStreetMap"
-    });
+    var osm = window.EinsatzcockpitMapConfig.addOsmTileLayer(karte);
     var ortho = L.tileLayer(
       "https://mapsneu.wien.gv.at/basemap/bmaporthofoto30cm/normal/google3857/{z}/{y}/{x}.jpeg",
       { maxZoom: 20, attribution: "Datenquelle: basemap.at" }
     );
-    osm.addTo(karte);
-
     var hatEinsatzortKoordinate = opts.incidentLat != null && opts.incidentLng != null;
     if (hatEinsatzortKoordinate) {
       karte.setView([opts.incidentLat, opts.incidentLng], 16);

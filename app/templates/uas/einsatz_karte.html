@@ -109,12 +109,11 @@
 
 <link rel="stylesheet" href="/static/css/leaflet.min.css">
 <script src="/static/js/leaflet.min.js"></script>
+<script src="/static/js/map-config.js?v={{ ASSET_VERSION }}"></script>
 <script>
 (function(){
   var map = L.map('uas-map').setView([{{ inc_lat }}, {{ inc_lng }}], 15);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; OpenStreetMap'
-  }).addTo(map);
+  window.EinsatzcockpitMapConfig.addOsmTileLayer(map);
 
   var objekte = {{ objekte_json | safe }};
 

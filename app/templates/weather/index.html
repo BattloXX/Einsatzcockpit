@@ -184,6 +184,7 @@
 {% block scripts %}
 {% if lat is not none and lng is not none %}
 <script src="/static/js/leaflet.min.js"></script>
+<script src="/static/js/map-config.js?v={{ ASSET_VERSION }}"></script>
 <script>
 (function () {
   'use strict';
@@ -192,10 +193,7 @@
 
   // ── Leaflet-Karte ───────────────────────────────────────────────────────────
   var map = L.map('wetter-map', { zoomSnap: 0.5 }).setView([LAT, LNG], 10);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    maxZoom: 18,
-  }).addTo(map);
+  window.EinsatzcockpitMapConfig.addOsmTileLayer(map, { maxZoom: 18 });
 
   L.circleMarker([LAT, LNG], {
     radius: 8, fillColor: '#3b82f6', fillOpacity: 0.85,

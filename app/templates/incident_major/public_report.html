@@ -212,6 +212,7 @@
 </main>
 
 <script src="/static/js/leaflet.min.js"></script>
+<script src="/static/js/map-config.js"></script>
 <script>
 document.querySelector('form[action^="/melden/"]').addEventListener('submit', function() {
   var lat = document.getElementById('gps-lat');
@@ -252,9 +253,7 @@ function initReportMap() {
     shadowUrl: '/static/img/leaflet/marker-shadow.png',
   });
   reportMap = L.map('report-map', { zoomControl: true }).setView(ORG_CENTER, ORG_ZOOM);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap', subdomains: 'abc', maxZoom: 19,
-  }).addTo(reportMap);
+  window.EinsatzcockpitMapConfig.addOsmTileLayer(reportMap);
   reportMap.on('click', function(e) { setReportMarker(e.latlng.lat, e.latlng.lng, true); });
   setTimeout(function() { reportMap.invalidateSize(); }, 200);
 

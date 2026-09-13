@@ -10,6 +10,8 @@ from __future__ import annotations
 import logging
 from collections import OrderedDict
 
+from app.core.map_config import OSM_TILE_URL
+
 logger = logging.getLogger("einsatzleiter.staticmap")
 
 # OSM-Tile-Nutzungsrichtlinie verlangt einen aussagekräftigen User-Agent (kein Default-Client).
@@ -42,7 +44,7 @@ def render_incident_map_png(
     width, height = size
     m = StaticMap(
         width, height,
-        url_template="https://a.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        url_template=OSM_TILE_URL,
         headers={"User-Agent": _USER_AGENT},
     )
     m.add_marker(CircleMarker((lng, lat), _MARKER_COLOR, 14))
@@ -78,7 +80,7 @@ def render_route_map_png(
     width, height = size
     m = StaticMap(
         width, height,
-        url_template="https://a.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        url_template=OSM_TILE_URL,
         headers={"User-Agent": _USER_AGENT},
         padding_x=30, padding_y=30,
     )

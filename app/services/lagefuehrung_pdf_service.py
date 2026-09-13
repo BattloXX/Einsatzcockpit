@@ -13,6 +13,7 @@ import logging
 
 from sqlalchemy.orm import Session
 
+from app.core.map_config import OSM_TILE_URL
 from app.core.templating import templates
 from app.core.timezones import format_local_datetime
 from app.models.incident import Incident, IncidentVehicle
@@ -69,7 +70,7 @@ def render_lagefuehrung_map_png(
 
         karte = StaticMap(
             size[0], size[1],
-            url_template="https://a.tile.openstreetmap.org/{z}/{x}/{y}.png",
+            url_template=OSM_TILE_URL,
             headers={"User-Agent": "Einsatzcockpit (Lagebericht-Druck)"},
         )
         karte.add_marker(CircleMarker((incident.lng, incident.lat), "#d42225", 16))

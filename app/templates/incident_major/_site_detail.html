@@ -111,9 +111,7 @@
         shadowUrl: '/static/img/leaflet/marker-shadow.png',
       });
       var m = L.map(el, { zoomControl: true }).setView([_lat, _lng], 17);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap', subdomains: 'abc', maxZoom: 19,
-      }).addTo(m);
+      window.EinsatzcockpitMapConfig.addOsmTileLayer(m);
       L.marker([_lat, _lng]).addTo(m);
       el._m = m;
       setTimeout(function() { m.invalidateSize(); }, 100);

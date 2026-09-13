@@ -605,10 +605,7 @@
 
   var map = L.map('karte-map', { preferCanvas: true, zoomControl: true });
   window._karteMap = map;  // expose for geolocation
-  // subdomains: 'abc' PFLICHT — ohne Option → Leaflet nutzt keinen Subdomain-Ersatz → HTTP 503
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap', subdomains: 'abc', maxZoom: 19,
-  }).addTo(map);
+  window.EinsatzcockpitMapConfig.addOsmTileLayer(map);
 
   // Wetter-Layer-Control (🌧 Toggle-Button, oben links)
   if (typeof WeatherLayer !== 'undefined') {
@@ -1142,9 +1139,7 @@
             shadowUrl: '/static/img/leaflet/marker-shadow.png',
           });
           var m = L.map(el, { zoomControl: true }).setView([lat, lng], 17);
-          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap', subdomains: 'abc', maxZoom: 19,
-          }).addTo(m);
+          window.EinsatzcockpitMapConfig.addOsmTileLayer(m);
           L.marker([lat, lng]).addTo(m);
           el._m = m;
           setTimeout(function() { m.invalidateSize(); }, 200);

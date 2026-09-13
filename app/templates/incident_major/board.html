@@ -681,10 +681,7 @@ window.openMeldungDialog = function() {
   if (!_meldungPinMap) {
     _meldungPinMap = L.map('meldung-pin-map', { zoomControl: true })
                       .setView([{{ org_lat }}, {{ org_lng }}], 13);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© <a href="https://www.openstreetmap.org/copyright" style="color:#9ca3af">OSM</a>',
-      maxZoom: 19,
-    }).addTo(_meldungPinMap);
+    window.EinsatzcockpitMapConfig.addOsmTileLayer(_meldungPinMap);
     _meldungPinMap.on('click', function(e) {
       var lat = e.latlng.lat.toFixed(6), lng = e.latlng.lng.toFixed(6);
       document.getElementById('meldung-lat').value = lat;
