@@ -1,5 +1,5 @@
-<dialog id="kontaktModal" class="modal"{% if error %} open{% endif %}>
-  <form id="kontakt-form" method="post" action="{% if form_data and form_data.id %}/kontakte/{{ form_data.id }}{% else %}/kontakte/{% endif %}">
+<dialog id="kontaktModal" class="modal"{% if error or (form_data and form_data.is_new) %} open{% endif %}>
+  <form id="kontakt-form" class="modal__content" method="post" action="{% if form_data and form_data.id %}/kontakte/{{ form_data.id }}{% else %}/kontakte/{% endif %}">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <input type="hidden" name="version" value="{{ form_data.version if form_data and form_data.version is defined else (selected.version if selected else 0) }}">
     <div class="modal__header"><h2>{% if form_data and form_data.id or selected %}Kontakt bearbeiten{% else %}Neuer Kontakt{% endif %}</h2><button class="btn btn--ghost" type="button" data-ec-action="close-dialog" data-ec-dialog="kontaktModal">&times;</button></div>

@@ -327,6 +327,28 @@ def import_ergebnis(
     )
 
 
+@router.get("/neu", response_class=HTMLResponse)
+def neu_formular(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*_SCHREIB_ROLLEN)),
+    _guard: None = Depends(require_kontakte_enabled),
+):
+    """Liefert einen leeren Dialog fuer die Neuanlage statt des Detailformulars."""
+    return templates.TemplateResponse(
+        request,
+        "kontakte/_form.html",
+        {
+            "user": user,
+            "selected": None,
+            "form_data": {"is_new": True},
+            "kategorien": kontakt_service.list_kategorien(db),
+            "duplicate_candidates": [],
+            "error": None,
+        },
+    )
+
+
 @router.get("/{kontakt_id}", response_class=HTMLResponse)
 def detail(
     request: Request,

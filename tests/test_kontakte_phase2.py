@@ -69,6 +69,18 @@ def _post_data(**werte):
     return werte
 
 
+def test_neu_dialog_ist_leer_und_verwendet_den_anlage_endpoint(client):
+    user = _setup_user("kontakte_neu_dialog", "kontakt_verwalter")
+    _login(client, user.username)
+
+    response = client.get("/kontakte/neu")
+
+    assert response.status_code == 200
+    assert '<dialog id="kontaktModal" class="modal" open>' in response.text
+    assert 'action="/kontakte/"' in response.text
+    assert "Kontakt bearbeiten" not in response.text
+
+
 def test_crud_multitelefon_kategorien_und_konflikt(client):
     user = _setup_user("kontakte_crud", "kontakt_verwalter")
     _login(client, user.username)
