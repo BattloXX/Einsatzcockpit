@@ -51,6 +51,17 @@ def get_kontakt(db: Session, kontakt_id: int, *, include_archiviert: bool = Fals
     return query.first()
 
 
+def list_objektzuordnungen(db: Session, kontakt_id: int) -> list[ObjektKontakt]:
+    """Liefert alle Objektrollen eines zentralen Kontakts mit Objektbeziehung."""
+    return (
+        db.query(ObjektKontakt)
+        .options(selectinload(ObjektKontakt.objekt))
+        .filter(ObjektKontakt.kontakt_id == kontakt_id)
+        .order_by(ObjektKontakt.objekt_id, ObjektKontakt.sort, ObjektKontakt.id)
+        .all()
+    )
+
+
 def _werte(kontakt: Kontakt, daten: dict[str, Any], user_id: int | None) -> None:
     for feld in (
         "typ",

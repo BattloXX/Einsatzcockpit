@@ -13,6 +13,7 @@ from app.core.permissions import can_send_manual_sms, require_role
 from app.core.templating import templates
 from app.db import get_db
 from app.models.kontakt import KONTAKT_TYP_PERSON, Kontakt, KontaktTelefon
+from app.models.objekt import Objekt, ObjektKontakt
 from app.models.sms import SmsLog
 from app.models.user import User
 from app.services import kontakt_service
@@ -121,6 +122,10 @@ def _seite(
             "error": error,
             "duplicate_candidates": duplicate_candidates or [],
             "merge_konflikte": merge_konflikte or [],
+            "objektzuordnungen": kontakt_service.list_objektzuordnungen(db, selected.id) if selected else [],
+            "objekte_fuer_zuordnung": (
+                db.query(Objekt).filter(Objekt.entwurf_von_id.is_(None)).order_by(Objekt.name).all() if selected else []
+            ),
         },
     )
 
@@ -387,11 +392,39 @@ def detail(
                 "user": user,
                 "merge_konflikte": merge_konflikt or [],
                 "sms_gateway_available": sms_gateway_available,
+                "objektzuordnungen": kontakt_service.list_objektzuordnungen(db, kontakt_id),
+                "objekte_fuer_zuordnung": (
+                    db.query(Objekt).filter(Objekt.entwurf_von_id.is_(None)).order_by(Objekt.name).all()
+                ),
             },
         )
     response = _seite(request, db, user, selected_id=kontakt_id, merge_konflikte=merge_konflikt)
     response.context["sms_gateway_available"] = sms_gateway_available
     return response
+
+
+@router.post("/{kontakt_id}/objekte/zuordnen")
+def objekt_zuordnen(
+    kontakt_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*_SCHREIB_ROLLEN)),
+    _guard: None = Depends(require_kontakte_enabled),
+    objekt_id: int = Form(...),
+    art: str = Form("sonstig"),
+):
+    """Ordnet einen zentralen Kontakt direkt aus dessen Detailansicht einem Objekt zu."""
+    org_id = _org_id(user)
+    kontakt = db.query(Kontakt).filter(Kontakt.id == kontakt_id, Kontakt.org_id == org_id).first()
+    objekt = db.query(Objekt).filter(Objekt.id == objekt_id, Objekt.org_id == org_id).first()
+    if kontakt is None or objekt is None:
+        raise HTTPException(status_code=404, detail="Kontakt oder Objekt nicht gefunden")
+    if db.query(ObjektKontakt).filter_by(objekt_id=objekt_id, kontakt_id=kontakt_id, art=art).first():
+        return RedirectResponse(f"/kontakte/{kontakt_id}?objekt_error=duplicate", status_code=303)
+    sort = max((zuordnung.sort for zuordnung in objekt.kontakte), default=0) + 1
+    db.add(ObjektKontakt(org_id=org_id, objekt_id=objekt_id, kontakt_id=kontakt_id, art=art, sort=sort))
+    db.commit()
+    return RedirectResponse(f"/kontakte/{kontakt_id}", status_code=303)
 
 
 @router.post("/{kontakt_id}/sms")
