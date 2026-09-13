@@ -105,6 +105,16 @@
       </div>
     </form>
 
+    {% set _kontakte_sys_on = sys_settings.get('kontakte_module_enabled') == 'true' %}
+    <form method="post" action="/admin/settings/system/kontakte-toggle" style="margin-top:1.25rem;border-top:1px solid var(--border);padding-top:1rem">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      {% if org %}<input type="hidden" name="org_id" value="{{ org.id }}">{% endif %}
+      <div class="form-group" style="display:flex;align-items:flex-start;gap:1.5rem;flex-wrap:wrap">
+        <div style="flex:1;min-width:260px"><label style="font-weight:600">👥 Zentrale Kontaktverwaltung</label><p class="form-hint" style="margin-top:.25rem">Organisationweite Kontakte mit Zuordnungen zu Objekten, Import, Export und SMS-Aktionen. Zweistufig schaltbar: zuerst systemweit, dann je Organisation.</p></div>
+        <div style="display:flex;align-items:center;gap:.75rem"><label class="toggle-label" style="display:flex;align-items:center;gap:.5rem;cursor:pointer"><input type="checkbox" name="enabled_raw" value="1" {% if _kontakte_sys_on %}checked{% endif %} onchange="this.form.submit()"><span>Systemweit aktivieren</span></label><span class="badge {% if _kontakte_sys_on %}badge--success{% else %}badge--muted{% endif %}">{% if _kontakte_sys_on %}AN{% else %}AUS{% endif %}</span></div>
+      </div>
+    </form>
+
     {% set _gateway_sys_on = sys_settings.get('gateway_module_enabled') == 'true' %}
     {% set _mailing_sys_on = sys_settings.get('mailing_module_enabled') == 'true' %}
     <form method="post" action="/admin/settings/system/mailing-toggle" style="margin-top:1.25rem;border-top:1px solid var(--border);padding-top:1rem">
@@ -582,6 +592,20 @@
           {% if not lagefuehrung_sys_enabled %}
           <strong style="color:var(--text-muted)">&mdash; Systemweit deaktiviert (Systemadmin erforderlich).</strong>
           {% endif %}
+        </small>
+      </div>
+
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">👥 Kontaktverwaltung</h3>
+      {% set _kontakte_org_on = (org_settings.kontakte_module_enabled) if org_settings else false %}
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:.5rem;{% if not kontakte_sys_enabled %}opacity:.5;cursor:not-allowed{% endif %}">
+          <input type="checkbox" name="kontakte_module_enabled_raw" value="1"
+                 {% if _kontakte_org_on %}checked{% endif %}
+                 {% if not kontakte_sys_enabled %}disabled title="Systemweit deaktiviert – bitte System-Admin kontaktieren"{% endif %}>
+          Kontaktverwaltung für diese Organisation aktivieren
+        </label>
+        <small class="form-hint">Schaltet zentrale Kontakte, Import/Export, Dublettenprüfung und Objektzuordnungen frei. Pflege über „Kontaktverwalter“, „Objektverwalter“ oder Org-Admin.
+          {% if not kontakte_sys_enabled %}<strong style="color:var(--text-muted)">&mdash; Systemweit deaktiviert (Systemadmin erforderlich).</strong>{% endif %}
         </small>
       </div>
 
