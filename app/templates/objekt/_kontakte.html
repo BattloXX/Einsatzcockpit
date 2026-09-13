@@ -13,5 +13,5 @@
     </section>
     {% else %}<p class="text-muted">Keine Kontakte erfasst.</p>{% endfor %}
   </div>
-  {% if ist_verwalter %}<button type="button" class="btn btn--primary" @click="hinzufuegen = !hinzufuegen">+ Kontakt zuordnen</button><div x-show="hinzufuegen" x-cloak><input class="form-input" type="search" placeholder="Kontakt suchen" hx-get="/objekte/{{ objekt.id }}/kontakte/suche" hx-trigger="keyup changed delay:300ms" hx-target="#objekt-kontakt-suche"><div id="objekt-kontakt-suche"></div></div>{% endif %}
+  {% if ist_verwalter %}<button type="button" class="btn btn--primary" @click="hinzufuegen = !hinzufuegen">+ Kontakt zuordnen</button><div x-show="hinzufuegen" x-cloak><input class="form-input" type="search" name="q" placeholder="Kontakt suchen" hx-get="/objekte/{{ objekt.id }}/kontakte/suche" hx-trigger="keyup changed delay:300ms" hx-target="#objekt-kontakt-suche"><div id="objekt-kontakt-suche"></div></div>{% endif %}
 </div>
