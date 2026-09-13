@@ -155,7 +155,9 @@ def test_board_screenshot_walkthrough(angemeldete_seite: Page, base_url: str) ->
     _screenshot(page, "done-group-collapsed.png")
     done_toggle.click()
     expect(done_toggle).to_have_attribute("aria-expanded", "true")
-    expect(page.locator('.card[data-kind="task"]', has_text="Wasserversorgung dokumentieren")).to_be_visible()
+    expect(
+        page.locator('.card[data-kind="task"]', has_text="Wasserversorgung dokumentieren").first
+    ).to_be_visible()
     _screenshot(page, "done-group-expanded.png")
 
     sidebar = page.locator("#sidebar")

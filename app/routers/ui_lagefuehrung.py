@@ -392,6 +392,7 @@ async def lagefuehrung_objekte(
     if not getattr(request.state, "objekt_enabled", False):
         return JSONResponse([])
 
+    from app.models.kontakt import Kontakt
     from app.models.objekt import (
         GEFAHR_PIKTOGRAMME,
         OBJEKT_EINSATZ_BESTAETIGT,
@@ -399,6 +400,7 @@ async def lagefuehrung_objekte(
         Objekt,
         ObjektEinsatz,
         ObjektGefahr,
+        ObjektKontakt,
         parse_karten_geometry,
     )
 
@@ -406,7 +408,10 @@ async def lagefuehrung_objekte(
         db.query(ObjektEinsatz)
         .options(
             selectinload(ObjektEinsatz.objekt).selectinload(Objekt.gefahren).selectinload(ObjektGefahr.gefahr),
-            selectinload(ObjektEinsatz.objekt).selectinload(Objekt.kontakte),
+            selectinload(ObjektEinsatz.objekt)
+            .selectinload(Objekt.kontakte)
+            .selectinload(ObjektKontakt.zentraler_kontakt)
+            .selectinload(Kontakt.telefone),
             selectinload(ObjektEinsatz.objekt).selectinload(Objekt.karten_objekte),
             selectinload(ObjektEinsatz.objekt).selectinload(Objekt.bma),
         )
@@ -432,10 +437,16 @@ async def lagefuehrung_objekte(
                 "name": name, "piktogramm": piktogramm,
                 "un_nummer": g.un_nummer, "stoffname": g.stoffname,
             })
-        kontakte = [{
-            "art": k.art, "name": k.name,
-            "telefone": k.telefone, "erreichbarkeit": k.erreichbarkeit,
-        } for k in o.kontakte]
+        kontakte = [
+            {
+                "art": kontakt.art,
+                "name": kontakt.zentraler_kontakt.anzeigename,
+                "telefone": [telefon.nummer for telefon in kontakt.zentraler_kontakt.telefone],
+                "erreichbarkeit": kontakt.erreichbarkeit,
+            }
+            for kontakt in o.kontakte
+            if kontakt.zentraler_kontakt is not None
+        ]
         # Hinterlegte Geometrien (Zufahrten, Sammelplaetze, ...) aus der
         # Objekt-Lagekarte (objekt_karten_objekt) — Punkte via lat/lng, Linien/
         # Flaechen via geometry_json, s. objekt_karte.js fuer das Analogon.

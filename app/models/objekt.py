@@ -537,20 +537,12 @@ class ObjektKontakt(TenantScoped, Base):
     objekt_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("objekt.id", ondelete="CASCADE"), nullable=False
     )
-    # Phase Kontakte 1: optionaler Verweis auf den zentralen Kontakt; die
-    # bestehenden Snapshot-Felder bleiben bis zur spaeteren Datenmigration aktiv.
-    kontakt_id: Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("kontakt.id", ondelete="SET NULL"), nullable=True
+    kontakt_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("kontakt.id", ondelete="RESTRICT"), nullable=False
     )
     # Art: brandschutzbeauftragter / betreiber / hausverwaltung / schluesseltraeger / sonstig
     art: Mapped[str] = mapped_column(String(50), nullable=False, default="sonstig")
-    name: Mapped[str] = mapped_column(String(150), nullable=False)
-    # JSON-Liste aus {nummer, label, sms}; alte String-Listen bleiben lesbar.
-    telefone_json: Mapped[str | None] = mapped_column(Text, nullable=True)
-    email: Mapped[str | None] = mapped_column(String(200), nullable=True)
     erreichbarkeit: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    # Einsatzinfo per E-Mail; SMS-Freigaben liegen je Nummer in telefone_json.
-    benachrichtigung_mail: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     sort: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # Externe Identitaet (siehe app/services/bma_import/): NULL = haendisch gepflegt,
     # wird vom Import NIE angefasst. Gesetzt (z. B. extern_quelle="dibos_bma",
@@ -566,45 +558,6 @@ class ObjektKontakt(TenantScoped, Base):
     freigaben: Mapped[list[ObjektKontaktFreigabe]] = relationship(
         "ObjektKontaktFreigabe", cascade="all, delete-orphan"
     )
-
-    @property
-    def telefone_eintraege(self) -> list[dict]:
-        import json as _json
-        if not self.telefone_json:
-            return []
-        try:
-            werte = _json.loads(self.telefone_json)
-        except (ValueError, TypeError):
-            return []
-        if not isinstance(werte, list):
-            return []
-        ergebnis = []
-        for wert in werte:
-            if isinstance(wert, str):
-                eintrag = legacy_telefon_eintrag(wert)
-            elif isinstance(wert, dict):
-                nummer = str(wert.get("nummer") or "").strip()
-                if not nummer:
-                    continue
-                label = str(wert.get("label") or "").strip() or None
-                eintrag = {"nummer": nummer, "label": label, "sms": wert.get("sms") is True}
-            else:
-                continue
-            if eintrag["nummer"]:
-                ergebnis.append(eintrag)
-        return ergebnis
-
-    @property
-    def telefone(self) -> list[str]:
-        return [
-            f'{e["label"]}: {e["nummer"]}' if e["label"] else e["nummer"]
-            for e in self.telefone_eintraege
-        ]
-
-    @property
-    def sms_nummern(self) -> list[str]:
-        return [e["nummer"] for e in self.telefone_eintraege if e["sms"]]
-
 
 class ObjektWohnanlage(TenantScoped, Base):
     """Wohnanlagen-Zusatzdaten (1:1 optional)."""

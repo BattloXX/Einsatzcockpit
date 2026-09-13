@@ -9,6 +9,7 @@ import pytest
 from app.core.security import hash_password
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
+from app.models.kontakt import Kontakt
 from app.models.master import FireDept, OrgSettings, SystemSettings
 from app.models.objekt import (
     AUSWAHL_KONTAKTART,
@@ -256,7 +257,12 @@ def test_auswahl_crud_und_guards(client):
     set_tenant_context(db, org_id)
     try:
         obj = db.query(Objekt).filter(Objekt.nummer == 5002).first()
-        db.add(ObjektKontakt(org_id=org_id, objekt_id=obj.id, art="wach_dienst", name="Herr X"))
+        kontakt = Kontakt(org_id=org_id, anzeigename="Herr X")
+        db.add(kontakt)
+        db.flush()
+        db.add(ObjektKontakt(
+            org_id=org_id, objekt_id=obj.id, art="wach_dienst", kontakt_id=kontakt.id
+        ))
         db.commit()
     finally:
         db.close()

@@ -44,7 +44,9 @@ def test_kontakte_tabellen_und_tenant_scoping():
     objekt_a = Objekt(org_id=org_a.id, nummer=1, name="Objekt A", status="entwurf")
     db.add_all([kontakt_a, kontakt_b, objekt_a])
     db.flush()
-    objekt_kontakt = ObjektKontakt(org_id=org_a.id, objekt_id=objekt_a.id, art="sonstig", name="Alt")
+    objekt_kontakt = ObjektKontakt(
+        org_id=org_a.id, objekt_id=objekt_a.id, art="sonstig", kontakt_id=kontakt_a.id
+    )
     db.add(objekt_kontakt)
     db.flush()
 
@@ -84,9 +86,6 @@ def test_kontakte_tabellen_und_tenant_scoping():
     assert db.query(ObjektKontaktFreigabe).count() == 0
 
     set_tenant_context(db, org_a.id)
-    assert db.query(ObjektKontakt).one().kontakt_id is None
-    db.query(ObjektKontakt).one().kontakt_id = kontakt_a.id
-    db.commit()
     assert db.query(ObjektKontakt).one().kontakt_id == kontakt_a.id
     db.close()
     Base.metadata.drop_all(bind=engine)

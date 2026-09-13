@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 
 import pytest
 from sqlalchemy import BigInteger, create_engine
@@ -18,7 +17,7 @@ def _bigint_sqlite(element, compiler, **kw):
 from app.core.tenant import set_tenant_context
 from app.db import Base
 from app.models.incident import Incident
-from app.models.kontakt import Kontakt, ObjektKontaktFreigabe
+from app.models.kontakt import Kontakt, KontaktTelefon, ObjektKontaktFreigabe
 from app.models.master import FireDept, OrgSettings
 from app.models.objekt import (
     Objekt,
@@ -35,7 +34,6 @@ from app.services.objekt_kontakt_notify import (
     sammle_ziele,
     stichwort_erlaubt,
 )
-from app.services.objekt_service import telefon_normalisiert, telefone_aus_form
 from app.services.sms_dispatch_service import render_template
 
 
@@ -57,11 +55,14 @@ def versand(monkeypatch):
     )
     db.add(objekt)
     db.flush()
+    zentral = Kontakt(org_id=org.id, anzeigename="Frau Kontakt", email="kontakt@example.at")
+    zentral.telefone.append(
+        KontaktTelefon(org_id=org.id, nummer="+43 660 111", sms_eignung=True)
+    )
+    db.add(zentral)
+    db.flush()
     kontakt = ObjektKontakt(
-        org_id=org.id, objekt_id=objekt.id, name="Frau Kontakt", art="betreiber",
-        email="kontakt@example.at", telefone_json=json.dumps([
-            {"nummer": "+43660111", "label": None, "sms": True}
-        ]), benachrichtigung_mail=True,
+        org_id=org.id, objekt_id=objekt.id, kontakt_id=zentral.id, art="betreiber"
     )
     incident = Incident(
         primary_org_id=org.id, alarm_type_code="B2", is_exercise=False,
@@ -73,7 +74,17 @@ def versand(monkeypatch):
         org_id=org.id, objekt_id=objekt.id, incident_id=incident.id,
         quelle="manuell", status="bestaetigt",
     )
-    db.add(link)
+    db.add_all([
+        link,
+        ObjektKontaktFreigabe(
+            org_id=org.id, objekt_kontakt_id=kontakt.id, kanal="mail",
+            ziel_wert="kontakt@example.at", aktiv=True,
+        ),
+        ObjektKontaktFreigabe(
+            org_id=org.id, objekt_kontakt_id=kontakt.id, kanal="sms",
+            ziel_wert="+43660111", aktiv=True,
+        ),
+    ])
     db.commit()
 
     import app.services.objekt_kontakt_notify as notify
@@ -102,33 +113,9 @@ def _run(incident_id, **kw):
     return asyncio.run(dispatch_objekt_einsatzinfo(incident_id, **kw))
 
 
-@pytest.mark.parametrize("raw, erwartet", [
-    ('["Mobil beruflich: +43 664 1"]', [{"nummer": "+43 664 1", "label": "Mobil beruflich", "sms": False}]),
-    ('[{"nummer":"+431","label":"Büro","sms":true}]', [{"nummer": "+431", "label": "Büro", "sms": True}]),
-    ('["Notruf: 24/7", {"nummer":"2"}]', [{"nummer": "Notruf: 24/7", "label": None, "sms": False}, {"nummer": "2", "label": None, "sms": False}]),
-    ('{kaputt', []),
-])
-def test_telefone_eintraege_legacy_und_v2(raw, erwartet):
-    kontakt = ObjektKontakt(telefone_json=raw)
-    assert kontakt.telefone_eintraege == erwartet
-    assert kontakt.telefone == [f'{e["label"]}: {e["nummer"]}' if e["label"] else e["nummer"] for e in erwartet]
-
-
-@pytest.mark.parametrize("wert", ["Notruf: 24/7", "Stock: 2. OG", "Firma: Zentrale: +43 555 123", "Telefon: DW 123"])
-def test_unbekannte_legacy_praefixe_bleiben_unzerlegt(wert):
-    assert ObjektKontakt(telefone_json=json.dumps([wert])).telefone_eintraege[0]["nummer"] == wert
-
-
-def test_telefon_normalisiert_und_formularindizes():
-    assert telefon_normalisiert("+43 664 88162932") == telefon_normalisiert("0043-664/881 629 32")
-    assert telefon_normalisiert("+43 664 1") != telefon_normalisiert("+43 664 88162932")
-    wert = telefone_aus_form(["", "+431", "+432"], ["", "A", "B"], ["1", "-1", "x", "99", "1"])
-    assert json.loads(wert) == [
-        {"nummer": "+431", "label": "A", "sms": True},
-        {"nummer": "+432", "label": "B", "sms": False},
-    ]
-    with pytest.raises(ValueError):
-        telefone_aus_form(["1"], [], [])
+def test_telefon_normalisierung_liegt_am_zentralen_kontakt():
+    telefon = KontaktTelefon(org_id=1, nummer="0043-664/881 629 32")
+    assert telefon.nummer_normalisiert == "+4366488162932"
 
 
 def test_01_unbekannter_platzhalter_ist_leer():
@@ -151,8 +138,8 @@ def test_02_vorlagen_kaskade(versand):
 
 def test_03_deaktiviert_ohne_log(versand):
     db, _, _, _, kontakt, incident, _, mails, sms, _ = versand
-    kontakt.benachrichtigung_mail = False
-    kontakt.telefone_json = None
+    for freigabe in kontakt.freigaben:
+        freigabe.aktiv = False
     db.commit()
     assert _run(incident.id)["gesendet"] == 0
     assert not mails and not sms and db.query(ObjektKontaktBenachrichtigung).count() == 0
@@ -191,19 +178,24 @@ def test_06_stichwortfilter_case_und_leerzeichen(versand):
 
 def test_07_ungueltige_mail_ohne_mail_log(versand):
     db, _, _, _, kontakt, incident, _, mails, _, _ = versand
-    kontakt.email = "ungueltig"
-    kontakt.telefone_json = None
+    for freigabe in kontakt.freigaben:
+        freigabe.aktiv = False
     db.commit()
     _run(incident.id)
     assert not mails and db.query(ObjektKontaktBenachrichtigung).count() == 0
 
 
 def test_08_sms_freigabe_je_nummer(versand):
-    _, _, _, _, kontakt, *_ = versand
-    kontakt.telefone_json = json.dumps([
-        {"nummer": "+43 660 111", "label": "Privat", "sms": False},
-        {"nummer": "0043-660/999", "label": "Mobil", "sms": True},
-    ])
+    db, org, _, _, kontakt, *_ = versand
+    kontakt.zentraler_kontakt.telefone.append(
+        KontaktTelefon(org_id=org.id, nummer="0043-660/999", sms_eignung=True)
+    )
+    for freigabe in kontakt.freigaben:
+        freigabe.aktiv = freigabe.kanal == "mail"
+    db.add(ObjektKontaktFreigabe(
+        org_id=org.id, objekt_kontakt_id=kontakt.id, kanal="sms", ziel_wert="+43660999", aktiv=True
+    ))
+    db.commit()
     assert [(kanal, ziel) for _, kanal, ziel in sammle_ziele(kontakt.objekt)] == [
         ("mail", "kontakt@example.at"), ("sms", "+43660999")
     ]
@@ -215,6 +207,8 @@ def test_sammle_ziele_nutzt_freigaben_nur_fuer_zentrale_kontakte(versand):
     db.add(zentral)
     db.flush()
     kontakt.kontakt_id = zentral.id
+    for freigabe in kontakt.freigaben:
+        freigabe.aktiv = False
     db.add_all([
         ObjektKontaktFreigabe(
             org_id=org.id, objekt_kontakt_id=kontakt.id, kanal="sms",
@@ -225,17 +219,9 @@ def test_sammle_ziele_nutzt_freigaben_nur_fuer_zentrale_kontakte(versand):
             ziel_wert="alt@example.at", aktiv=False,
         ),
     ])
-    legacy = ObjektKontakt(
-        org_id=org.id, objekt_id=objekt.id, name="Legacy", art="sonstig",
-        email="legacy@example.at", benachrichtigung_mail=True,
-        telefone_json=json.dumps([{"nummer": "+43660123", "label": None, "sms": True}]),
-    )
-    db.add(legacy)
     db.commit()
-    assert [(k.name, kanal, ziel) for k, kanal, ziel in sammle_ziele(objekt)] == [
-        ("Frau Kontakt", "sms", "+43660999"),
-        ("Legacy", "mail", "legacy@example.at"),
-        ("Legacy", "sms", "+43660123"),
+    assert [(k.zentraler_kontakt.anzeigename, kanal, ziel) for k, kanal, ziel in sammle_ziele(objekt)] == [
+        ("Zentral gepflegt", "sms", "+43660999"),
     ]
 
 
@@ -245,11 +231,8 @@ def test_versand_protokoll_bevorzugt_zentralen_anzeigenamen(versand):
     db.add(zentral)
     db.flush()
     kontakt.kontakt_id = zentral.id
-    kontakt.benachrichtigung_mail = False
-    db.add(ObjektKontaktFreigabe(
-        org_id=org.id, objekt_kontakt_id=kontakt.id, kanal="sms",
-        ziel_wert="+43660111", aktiv=True,
-    ))
+    for freigabe in kontakt.freigaben:
+        freigabe.aktiv = freigabe.kanal == "sms"
     db.commit()
     assert _run(incident.id)["gesendet"] == 1
     assert sms and not mails
@@ -264,12 +247,8 @@ def test_idempotenz_bleibt_nach_noop_arbeitskopie_erhalten(versand):
     db.add(zentral)
     db.flush()
     kontakt.kontakt_id = zentral.id
-    kontakt.benachrichtigung_mail = False
-    kontakt.telefone_json = None
-    db.add(ObjektKontaktFreigabe(
-        org_id=org.id, objekt_kontakt_id=kontakt.id, kanal="sms",
-        ziel_wert="+43660111", aktiv=True,
-    ))
+    for freigabe in kontakt.freigaben:
+        freigabe.aktiv = freigabe.kanal == "sms"
     db.commit()
     kontakt_id = kontakt.id
     assert _run(incident.id)["gesendet"] == 1
@@ -300,7 +279,8 @@ def test_09_10_mail_sms_und_log(versand):
 
 def test_11_idempotenz(versand):
     db, _, _, _, kontakt, incident, _, mails, sms, _ = versand
-    kontakt.telefone_json = None
+    for freigabe in kontakt.freigaben:
+        freigabe.aktiv = freigabe.kanal == "mail"
     db.commit()
     _run(incident.id)
     _run(incident.id)
@@ -310,7 +290,8 @@ def test_11_idempotenz(versand):
 
 def test_12_retry_verwendet_dieselbe_zeile(versand, monkeypatch):
     db, _, _, _, kontakt, incident, _, mails, _, notify = versand
-    kontakt.telefone_json = None
+    for freigabe in kontakt.freigaben:
+        freigabe.aktiv = freigabe.kanal == "mail"
     db.commit()
 
     async def kaputt(*args, **kwargs):
@@ -340,12 +321,15 @@ def test_13_sms_nicht_verfuegbar_mail_laeuft(versand, monkeypatch):
 
 
 def test_zwei_freigegebene_nummern_und_idempotenz_je_empfaenger(versand):
-    db, _, _, _, kontakt, incident, _, mails, sms, _ = versand
-    kontakt.benachrichtigung_mail = False
-    kontakt.telefone_json = json.dumps([
-        {"nummer": "+43 660 111", "label": "A", "sms": True},
-        {"nummer": "0043-660/222", "label": "B", "sms": True},
-    ])
+    db, org, _, _, kontakt, incident, _, mails, sms, _ = versand
+    for freigabe in kontakt.freigaben:
+        freigabe.aktiv = freigabe.kanal == "sms"
+    kontakt.zentraler_kontakt.telefone.append(
+        KontaktTelefon(org_id=org.id, nummer="0043-660/222", sms_eignung=True)
+    )
+    db.add(ObjektKontaktFreigabe(
+        org_id=org.id, objekt_kontakt_id=kontakt.id, kanal="sms", ziel_wert="+43660222", aktiv=True
+    ))
     db.commit()
     assert _run(incident.id)["gesendet"] == 2
     assert _run(incident.id)["gesendet"] == 0
@@ -371,12 +355,13 @@ def test_15_arbeitskopie_erhaelt_alle_felder(versand):
     objekt.kontakt_info_stichworte = "B2"
     objekt.kontakt_info_betreff = "Betreff"
     objekt.kontakt_info_template = "Text"
-    kontakt.telefone_json = json.dumps([{"nummer": "+43123", "label": None, "sms": True}])
     db.commit()
     kopie = erstelle_arbeitskopie(db, objekt, None)
     db.commit()
-    assert kopie.kontakte[0].benachrichtigung_mail
-    assert kopie.kontakte[0].sms_nummern == ["+43123"]
+    assert kopie.kontakte[0].kontakt_id == kontakt.kontakt_id
+    assert {(f.kanal, f.ziel_wert) for f in kopie.kontakte[0].freigaben} == {
+        ("mail", "kontakt@example.at"), ("sms", "+43660111")
+    }
     objekt = uebernimm_arbeitskopie(db, kopie, None)
     db.commit()
     assert objekt.kontakt_info_uebung
@@ -384,11 +369,8 @@ def test_15_arbeitskopie_erhaelt_alle_felder(versand):
 
 
 def test_16_bma_felder_enthalten_keine_telefone(versand):
-    _, _, _, _, kontakt, *_ = versand
     from app.services.bma_import.bma_sync import _kontakt_felder
-    for feld, wert in _kontakt_felder({"name": "Neu", "telefone": ["1"], "email": "n@e.at"}).items():
-        setattr(kontakt, feld, wert)
-    assert kontakt.benachrichtigung_mail and kontakt.sms_nummern
+    assert _kontakt_felder({"name": "Neu", "telefone": ["1"], "email": "n@e.at"}) == {"art": "sonstig"}
 
 
 def test_17_benachrichtigungsrouten_und_berechtigungen(client):

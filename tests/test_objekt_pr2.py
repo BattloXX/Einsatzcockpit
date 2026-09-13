@@ -1,6 +1,5 @@
 """Objektverwaltung PR 2: Kataloge, Gefahren, Merkmale, Kontakte, Wohnanlage, Erinnerung."""
 from datetime import date, timedelta
-import json
 
 import pytest
 from sqlalchemy import BigInteger, create_engine
@@ -16,6 +15,7 @@ def _bigint_sqlite(element, compiler, **kw):
 from app.core.tenant import set_tenant_context
 from app.db import Base
 from app.models.master import FireDept
+from app.models.kontakt import Kontakt, KontaktTelefon
 from app.models.objekt import (
     OBJEKT_STATUS_ARCHIVIERT,
     OBJEKT_STATUS_FREIGEGEBEN,
@@ -55,27 +55,17 @@ def test_pr2_models_importable_from_package():
 
 
 def test_kontakt_telefone_roundtrip():
-    k = ObjektKontakt(objekt_id=1, art="betreiber", name="Test",
-                      telefone_json='["+43 5574 123", "+43 664 456"]')
-    assert k.telefone == ["+43 5574 123", "+43 664 456"]
-    k2 = ObjektKontakt(objekt_id=1, art="betreiber", name="Leer", telefone_json=None)
-    assert k2.telefone == []
-    k3 = ObjektKontakt(objekt_id=1, art="betreiber", name="Kaputt", telefone_json="{ungueltig")
-    assert k3.telefone == []
+    kontakt = Kontakt(org_id=1, anzeigename="Test")
+    kontakt.telefone.extend([
+        KontaktTelefon(org_id=1, nummer="+43 5574 123"),
+        KontaktTelefon(org_id=1, nummer="+43 664 456"),
+    ])
+    assert [telefon.nummer for telefon in kontakt.telefone] == ["+43 5574 123", "+43 664 456"]
 
 
-def test_telefone_to_json_parser():
-    from app.services.objekt_service import telefone_zu_json
-    assert json.loads(telefone_zu_json("+43 5574 123, +43 664 456")) == [
-        {"nummer": "+43 5574 123", "label": None, "sms": False},
-        {"nummer": "+43 664 456", "label": None, "sms": False},
-    ]
-    assert json.loads(telefone_zu_json("+43 5574 123; +43 664 456")) == [
-        {"nummer": "+43 5574 123", "label": None, "sms": False},
-        {"nummer": "+43 664 456", "label": None, "sms": False},
-    ]
-    assert telefone_zu_json("   ") is None
-    assert telefone_zu_json("") is None
+def test_telefon_normalisierung_am_zentralen_modell():
+    telefon = KontaktTelefon(org_id=1, nummer="0043-5574/123")
+    assert telefon.nummer_normalisiert == "+435574123"
 
 
 # ── In-Memory-DB ──────────────────────────────────────────────────────────────
@@ -170,8 +160,13 @@ def test_vollstaendigkeit_mit_kontakten_und_gefahren(pr2_db):
 def test_wohnanlage_block(pr2_db):
     db, org_a_id, _, objekt_id = pr2_db
     set_tenant_context(db, org_a_id)
-    kontakt = ObjektKontakt(org_id=org_a_id, objekt_id=objekt_id, art="hausverwaltung",
-                            name="HV Muster", telefone_json='["+43 5574 999"]')
+    zentral = Kontakt(org_id=org_a_id, anzeigename="HV Muster")
+    zentral.telefone.append(KontaktTelefon(org_id=org_a_id, nummer="+43 5574 999"))
+    db.add(zentral)
+    db.flush()
+    kontakt = ObjektKontakt(
+        org_id=org_a_id, objekt_id=objekt_id, art="hausverwaltung", kontakt_id=zentral.id
+    )
     db.add(kontakt)
     db.flush()
     db.add(ObjektWohnanlage(org_id=org_a_id, objekt_id=objekt_id, wohneinheiten=24,
@@ -180,7 +175,7 @@ def test_wohnanlage_block(pr2_db):
     objekt = db.get(Objekt, objekt_id)
     assert objekt.wohnanlage is not None
     assert objekt.wohnanlage.wohneinheiten == 24
-    assert objekt.wohnanlage.hausverwaltung_kontakt.name == "HV Muster"
+    assert objekt.wohnanlage.hausverwaltung_kontakt.zentraler_kontakt.anzeigename == "HV Muster"
 
 
 # ── Revisions-Erinnerung ──────────────────────────────────────────────────────

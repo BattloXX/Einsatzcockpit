@@ -70,7 +70,6 @@ from app.services.objekt_service import (
     naechste_nummer,
     nur_produktiv,
     status_uebergang_erlaubt,
-    telefone_aus_form,
     uebernimm_arbeitskopie,
     verwirf_arbeitskopie,
     write_objekt_change,
@@ -1761,7 +1760,6 @@ def _kontakt_zuordnen(
         objekt_id=objekt.id,
         kontakt_id=zentraler_kontakt.id,
         art=art,
-        name="",
         sort=max((k.sort for k in objekt.kontakte), default=0) + 1,
     )
     db.add(kontakt)
@@ -1949,67 +1947,6 @@ def kontakt_zuordnung_speichern(
     return _kontakte_response(request, db, user, objekt)
 
 
-@router.post("/{objekt_id}/kontakte/{kontakt_id}", response_class=HTMLResponse)
-def kontakt_speichern(
-    objekt_id: int,
-    kontakt_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_role("objekt_verwalter")),
-    _guard: None = Depends(require_objekt_enabled),
-    art: str = Form("sonstig"),
-    name: str = Form(...),
-    telefon_nummer: list[str] = Form(default=[]),
-    telefon_label: list[str] = Form(default=[]),
-    telefon_sms: list[str] = Form(default=[]),
-    email: str = Form(""),
-    erreichbarkeit: str = Form(""),
-    benachrichtigung_mail: str = Form(""),
-):
-    objekt = _objekt_or_404(db, objekt_id, user)
-    kontakt = (
-        db.query(ObjektKontakt).filter(ObjektKontakt.id == kontakt_id, ObjektKontakt.objekt_id == objekt.id).first()
-    )
-    if kontakt is None:
-        raise HTTPException(status_code=404, detail="Kontakt nicht gefunden")
-    if kontakt.kontakt_id is not None:
-        raise HTTPException(
-            status_code=400,
-            detail="Zentrale Kontaktdaten koennen nur im Kontakte-Modul bearbeitet werden",
-        )
-    if art not in lade_auswahl(db, objekt.org_id, AUSWAHL_KONTAKTART):
-        art = "sonstig"
-    try:
-        telefone_json = telefone_aus_form(telefon_nummer, telefon_label, telefon_sms)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    daten = {
-        "art": art,
-        "name": name.strip(),
-        "telefone_json": telefone_json,
-        "email": email.strip() or None,
-        "erreichbarkeit": erreichbarkeit.strip() or None,
-        "benachrichtigung_mail": benachrichtigung_mail in ("1", "true", "on"),
-    }
-    for feld, neu in daten.items():
-        alt = getattr(kontakt, feld)
-        if alt != neu:
-            setattr(kontakt, feld, neu)
-            write_objekt_change(
-                db,
-                objekt.id,
-                objekt.org_id,
-                "kontakte",
-                f"kontakt_{kontakt.name}_{feld}",
-                before=alt,
-                after=neu,
-                user_id=user.id,
-            )
-    db.commit()
-    db.refresh(objekt)
-    return templates.TemplateResponse(request, "objekt/_kontakte.html", _detail_context(request, db, user, objekt))
-
-
 @router.get("/{objekt_id}/benachrichtigung", response_class=HTMLResponse)
 def benachrichtigung_partial(
     objekt_id: int,
@@ -2100,7 +2037,14 @@ def kontakt_loeschen(
     if kontakt is None:
         raise HTTPException(status_code=404, detail="Kontakt nicht gefunden")
     write_objekt_change(
-        db, objekt.id, objekt.org_id, "kontakte", "kontakt_geloescht", before=kontakt.name, after=None, user_id=user.id
+        db,
+        objekt.id,
+        objekt.org_id,
+        "kontakte",
+        "kontakt_geloescht",
+        before=kontakt.zentraler_kontakt.anzeigename if kontakt.zentraler_kontakt else "",
+        after=None,
+        user_id=user.id,
     )
     from app.services.kontakt_sync_service import record_change
 
@@ -2915,9 +2859,9 @@ def _panel_context(request: Request, db: Session, user: User, incident_id: int) 
     )
     hat_empfaenger = {
         v.objekt_id: any(
-            (k.benachrichtigung_mail and bool((k.email or "").strip())) or bool(k.sms_nummern)
+            any(freigabe.aktiv for freigabe in k.freigaben)
             for k in (v.objekt.kontakte if v.objekt else [])
-            if k.org_id == panel_org_id
+            if k.org_id == panel_org_id and k.kontakt_id is not None
         )
         for v in verknuepfungen
     }

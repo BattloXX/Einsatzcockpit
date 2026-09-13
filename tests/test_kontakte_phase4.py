@@ -117,8 +117,12 @@ def _objekt_mit_zuordnungen(db, org_id: int, quelle_id: int, ziel_id: int, *, ar
     objekt = Objekt(org_id=org_id, nummer=800000 + quelle_id, name="Merge-Objekt", status=OBJEKT_STATUS_FREIGEGEBEN)
     db.add(objekt)
     db.flush()
-    quelle = ObjektKontakt(org_id=org_id, objekt_id=objekt.id, kontakt_id=quelle_id, art=art_quelle, name="Quelle")
-    ziel = ObjektKontakt(org_id=org_id, objekt_id=objekt.id, kontakt_id=ziel_id, art=art_ziel, name="Ziel")
+    quelle = ObjektKontakt(
+        org_id=org_id, objekt_id=objekt.id, kontakt_id=quelle_id, art=art_quelle
+    )
+    ziel = ObjektKontakt(
+        org_id=org_id, objekt_id=objekt.id, kontakt_id=ziel_id, art=art_ziel
+    )
     db.add_all((quelle, ziel))
     db.flush()
     return objekt, quelle, ziel

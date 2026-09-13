@@ -269,7 +269,7 @@ def test_xlsx_roundtrip_uebernimmt_telefone_und_objektzuordnungen(client):
         objekt = Objekt(org_id=user.org_id, nummer=981234, name="Roundtrip Objekt")
         db.add(objekt)
         db.flush()
-        db.add(ObjektKontakt(org_id=user.org_id, objekt_id=objekt.id, kontakt_id=kontakt.id, name=kontakt.anzeigename))
+        db.add(ObjektKontakt(org_id=user.org_id, objekt_id=objekt.id, kontakt_id=kontakt.id))
         db.commit()
         rows = parse_import(export_xlsx(db, user.org_id), "kontakte.xlsx")
         row = next(row for row in rows if row["id"] == str(kontakt.id))

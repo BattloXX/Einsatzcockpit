@@ -16,7 +16,7 @@ from app.models.bma_import import (
     BmaImportSatz,
     OrgBmaImportConfig,
 )
-from app.models.kontakt import Kontakt, KontaktExterneReferenz, KontaktTelefon
+from app.models.kontakt import Kontakt, KontaktExterneReferenz, KontaktTelefon, telefon_normalisiert
 from app.models.objekt import (
     AUSWAHL_KONTAKTART,
     OBJEKT_STATUS_ARCHIVIERT,
@@ -31,7 +31,7 @@ from app.models.objekt import (
 )
 from app.services.bma_import.bma_pdf_parser import namens_slug
 from app.services.objekt_plan_upload_service import erstelle_objekt_aus_identitaet, finde_passendes_objekt
-from app.services.objekt_service import aktualisiere_felder, telefon_normalisiert, write_objekt_change
+from app.services.objekt_service import aktualisiere_felder, write_objekt_change
 
 _BMA_ALARMPERSON_CODE = "bma_alarmperson"
 _BMA_ALARMPERSON_NAME = "BMA Alarmperson"
@@ -72,8 +72,6 @@ def _stelle_kontaktart_sicher(db: Session, org_id: int) -> None:
 def _kontakt_felder(kontakt: dict) -> dict:
     return {
         "art": kontakt.get("art") or "sonstig",
-        "name": (kontakt.get("name") or "").strip()[:150],
-        "email": kontakt.get("email") or None,
     }
 
 
@@ -120,7 +118,10 @@ def _zentralen_bma_kontakt_sync(
         kontakt.version += 1
     kontakt.telefone[:] = [
         KontaktTelefon(
-            org_id=zuordnung.org_id, nummer=eintrag["nummer"], label=eintrag["label"],
+            org_id=zuordnung.org_id,
+            nummer=eintrag["nummer"],
+            nummer_normalisiert=telefon_normalisiert(eintrag["nummer"]),
+            label=eintrag["label"],
             sort=eintrag["sort"], bevorzugt=index == 0, sms_eignung=None,
         )
         for index, eintrag in enumerate(telefon_daten)
@@ -131,6 +132,7 @@ def _zentralen_bma_kontakt_sync(
             quelle_kontext=satz.extern_id, extern_id=extern_id,
         ))
     zuordnung.kontakt_id = kontakt.id
+    db.flush()
     return kontakt
 
 
@@ -139,27 +141,6 @@ def _telefon_daten(eintrag) -> dict:
         return {"nummer": str(eintrag.get("nummer") or "").strip(),
                 "label": str(eintrag.get("label") or "").strip() or None, "sms": False}
     return legacy_telefon_eintrag(str(eintrag))
-
-
-def _telefone_zusammenfuehren(alt_json: str | None, neue_telefone: list) -> str | None:
-    alt = ObjektKontakt(telefone_json=alt_json).telefone_eintraege
-    freigegeben = {telefon_normalisiert(e["nummer"]) for e in alt if e["sms"]}
-    bereits_uebernommen: set[str] = set()
-    neu = []
-    for roh in neue_telefone:
-        eintrag = _telefon_daten(roh)
-        if not eintrag["nummer"]:
-            continue
-        schluessel = telefon_normalisiert(eintrag["nummer"])
-        eintrag["sms"] = schluessel in freigegeben and schluessel not in bereits_uebernommen
-        if eintrag["sms"]:
-            bereits_uebernommen.add(schluessel)
-        neu.append(eintrag)
-    return json.dumps(neu, ensure_ascii=False) if neu else None
-
-
-def _mail_key(wert: str | None) -> str:
-    return (wert or "").strip().casefold()
 
 
 def _kontakt_praefix(satz: BmaImportSatz) -> str:
@@ -202,7 +183,8 @@ def _adoptionskandidaten(objekt: Objekt,
     for kontakt in objekt.kontakte:
         if kontakt.extern_quelle is not None and kontakt.extern_id not in bestehende:
             continue  # gehoert einem fremden Datenblatt - unantastbar
-        kandidaten.setdefault(_personen_schluessel(kontakt.art, kontakt.name), kontakt)
+        name = kontakt.zentraler_kontakt.anzeigename if kontakt.zentraler_kontakt else ""
+        kandidaten.setdefault(_personen_schluessel(kontakt.art, name), kontakt)
     return kandidaten
 
 
@@ -255,7 +237,7 @@ def _sync_kontakte(db: Session, satz: BmaImportSatz, objekt: Objekt,
         felder = _kontakt_felder(daten)
         kontakt = bestehende.get(extern_id)
         if kontakt is None:
-            kandidat = adoptierbar.get(_personen_schluessel(felder["art"], felder["name"]))
+            kandidat = adoptierbar.get(_personen_schluessel(felder["art"], daten.get("name")))
             if kandidat is not None and id(kandidat) not in vergeben:
                 kontakt = kandidat
                 vergeben.add(id(kontakt))
@@ -271,9 +253,19 @@ def _sync_kontakte(db: Session, satz: BmaImportSatz, objekt: Objekt,
                 # sort bleibt bewusst stehen: die Reihenfolge der Kontaktkarten ist
                 # haendische Pflege, die der Import nicht umsortieren soll.
         if kontakt is None:
+            zentraler_kontakt = Kontakt(
+                org_id=objekt.org_id,
+                typ="person",
+                anzeigename=(daten.get("name") or "").strip(),
+                email=(daten.get("email") or "").strip() or None,
+                erstellt_von_id=user_id,
+                aktualisiert_von_id=user_id,
+            )
+            db.add(zentraler_kontakt)
+            db.flush()
             kontakt = ObjektKontakt(org_id=objekt.org_id, extern_quelle="dibos_bma",
                                     extern_id=extern_id, sort=naechster_sort,
-                                    telefone_json=_telefone_zusammenfuehren(None, daten.get("telefone") or []),
+                                    kontakt_id=zentraler_kontakt.id,
                                     **felder)
             # An die geladene Collection haengen statt db.add(): SessionLocal laeuft mit
             # autoflush=False (app/db.py:63) und ein Mehrfach-Upload teilt sich EINE
@@ -287,31 +279,21 @@ def _sync_kontakte(db: Session, satz: BmaImportSatz, objekt: Objekt,
             geaendert = True
         # Central data is owned by the source identity; the association itself
         # retains its old PK and BMA external identity for idempotent imports.
-        _zentralen_bma_kontakt_sync(db, satz, kontakt, daten, user_id)
-        alte_sms_schluessel = {telefon_normalisiert(n) for n in kontakt.sms_nummern}
-        neues_json = _telefone_zusammenfuehren(
-            kontakt.telefone_json, daten.get("telefone") or [],
-        )
-        neue_sms_schluessel = {
-            telefon_normalisiert(n) for n in ObjektKontakt(telefone_json=neues_json).sms_nummern
-        }
-        if alte_sms_schluessel - neue_sms_schluessel:
-            write_objekt_change(db, objekt.id, objekt.org_id, "kontakte", "sms_freigabe",
-                                before="freigegeben", after="entzogen", user_id=user_id)
-        if kontakt.telefone_json != neues_json:
-            kontakt.telefone_json = neues_json
+        zentraler_kontakt = _zentralen_bma_kontakt_sync(db, satz, kontakt, daten, user_id)
+        if kontakt.art != felder["art"]:
+            kontakt.art = felder["art"]
             geaendert = True
-        if _mail_key(kontakt.email) != _mail_key(felder["email"]):
-            if kontakt.benachrichtigung_mail:
-                write_objekt_change(db, objekt.id, objekt.org_id, "kontakte", "mail_freigabe",
-                                    before="freigegeben", after="entzogen", user_id=user_id)
-            kontakt.benachrichtigung_mail = False
-        for feld, wert in felder.items():
-            # erreichbarkeit steht bewusst NICHT in _kontakt_felder: das Datenblatt
-            # kennt das Feld nicht, die Handpflege darf es behalten.
-            if getattr(kontakt, feld) != wert:
-                setattr(kontakt, feld, wert)
-                geaendert = True
+        erlaubte_sms = {
+            telefon.nummer_normalisiert
+            for telefon in zentraler_kontakt.telefone
+            if telefon.nummer_normalisiert
+        }
+        erlaubte_mail = {(zentraler_kontakt.email or "").strip().casefold()} - {""}
+        for freigabe in kontakt.freigaben:
+            if freigabe.kanal == "sms" and freigabe.ziel_wert not in erlaubte_sms:
+                freigabe.aktiv = False
+            elif freigabe.kanal == "mail" and freigabe.ziel_wert not in erlaubte_mail:
+                freigabe.aktiv = False
     for extern_id, kontakt in list(bestehende.items()):
         if extern_id not in gesehen:
             # remove() statt db.delete(): delete-orphan (models/objekt.py:216) loescht
