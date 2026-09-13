@@ -98,7 +98,10 @@ def _seite(
 ):
     kategorie_id = int(kategorie) if kategorie.isdigit() else None
     kontakte, total = kontakt_service.list_kontakte(db, q=q, typ=typ, kategorie_id=kategorie_id, page=page)
-    selected = kontakt_service.get_kontakt(db, selected_id) if selected_id else (kontakte[0] if kontakte else None)
+    # Die Startansicht ist bewusst eine Übersicht. Erst eine explizite Auswahl
+    # öffnet den Detailbereich und verhindert, dass ein einzelner Kontakt die
+    # große Liste optisch dominiert.
+    selected = kontakt_service.get_kontakt(db, selected_id) if selected_id else None
     return templates.TemplateResponse(
         request,
         "kontakte/liste.html",
@@ -245,6 +248,16 @@ def vorlage_xlsx(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename=kontakte-vorlage{suffix}.xlsx"},
     )
+
+
+@router.get("/import", response_class=HTMLResponse)
+def import_startseite(
+    request: Request,
+    user: User = Depends(require_role(*_SCHREIB_ROLLEN)),
+    _guard: None = Depends(require_kontakte_enabled),
+):
+    """Eigene, ruhige Startseite fuer den Kontaktimport."""
+    return templates.TemplateResponse(request, "kontakte/import.html", {"user": user})
 
 
 @router.post("/import/vorschau")

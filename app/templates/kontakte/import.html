@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Kontakte importieren{% endblock %}
+{% block head_extra %}<style>.kontakte-page{max-width:1280px;margin:0 auto;padding:1rem 1rem 3rem}.kontakte-header{display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:.75rem}.kontakte-header h1{font-size:1.6rem;font-weight:700;margin:0}.kontakte-header__sub{margin:.2rem 0 0;color:var(--text-muted);font-size:.85rem}.kontakte-header__actions,.kontakte-import{display:flex;gap:.75rem;flex-wrap:wrap}.kontakte-card,.kontakte-import{background:var(--surface-low);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-card)}.kontakte-import{align-items:end;padding:1rem}.kontakte-import label{display:grid;gap:.3rem;font-size:.68rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--text-muted)}</style>{% endblock %}
+{% block content %}
+<main class="kontakte-page">
+  <header class="kontakte-header"><div><h1>Kontakte importieren</h1><p class="kontakte-header__sub">Datei prüfen und Änderungen erst nach der Vorschau übernehmen.</p></div><div class="kontakte-header__actions"><a class="btn btn--ghost btn--sm" href="/kontakte">← Kontakte</a></div></header>
+  <section class="kontakte-card" style="max-width:760px;padding:1.25rem">
+    <h2 style="margin:0 0:.5rem;font-size:1.1rem">CSV oder XLSX hochladen</h2><p class="text-muted" style="margin:0 0:1rem">Dubletten und ungültige Zeilen werden in der Vorschau ausgewiesen und nicht automatisch gespeichert.</p>
+    <form method="post" action="/kontakte/import/vorschau" enctype="multipart/form-data" class="kontakte-import" style="margin:0"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><label>Importdatei<input type="file" name="datei" accept=".csv,.xlsx" required></label><button class="btn btn--primary">Vorschau erstellen</button></form>
+    <p class="text-muted" style="font-size:.82rem;margin:1rem 0 0"><a href="/kontakte/vorlage.xlsx">Leere XLSX-Vorlage</a> · <a href="/kontakte/vorlage.xlsx?beispiel=1">XLSX-Beispiel</a> · <a href="/kontakte/vorlage.csv">CSV-Vorlage</a></p>
+  </section>
+</main>
+{% endblock %}

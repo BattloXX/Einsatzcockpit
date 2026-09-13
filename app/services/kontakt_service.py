@@ -22,7 +22,9 @@ from app.models.kontakt import (
 )
 from app.models.objekt import ObjektKontakt, ObjektKontaktBenachrichtigung
 
-PRO_SEITE = 50
+# Die Verwaltung ist eine kompakte Stammdatenliste; eine typische Organisation
+# soll ihren gesamten Bestand ohne seitenweisen Wechsel überblicken können.
+PRO_SEITE = 200
 
 
 class KontaktKonflikt(Exception):
