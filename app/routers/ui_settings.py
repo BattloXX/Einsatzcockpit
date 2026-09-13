@@ -181,6 +181,7 @@ def _settings_context(request, db, user, org_id, **extra) -> dict:
         "uas_sys_enabled": uas_system_enabled(db),
         "breathing_sys_enabled": breathing_system_enabled(db),
         "objekt_sys_enabled": objekt_system_enabled(db),
+        "kontakte_sys_enabled": sys_settings.get("kontakte_module_enabled") == "true",
         "nachschlagewerke_sys_enabled": nachschlagewerke_system_enabled(db),
         "foerderstrecke_sys_enabled": foerderstrecke_system_enabled(db),
         "gateway_sys_enabled": _gateway_system_enabled(db),
@@ -238,6 +239,7 @@ async def save_org_settings(
     uas_module_enabled_raw: str = Form(""),
     atemschutz_ueberwachung_modul_aktiv_raw: str = Form(""),
     objekt_module_enabled_raw: str = Form(""),
+    kontakte_module_enabled_raw: str = Form(""),
     nachschlagewerke_module_enabled_raw: str = Form(""),
     foerderstrecke_module_enabled_raw: str = Form(""),
     probenplanung_modul_aktiv_raw: str = Form(""),
@@ -524,6 +526,24 @@ async def save_org_settings(
         org_s.objekt_ki_klassifikation_enabled = objekt_ki_klassifikation_raw in ("1", "true", "on")
         org_s.objekt_kontakt_info_betreff = objekt_kontakt_info_betreff_raw.strip() or None
         org_s.objekt_kontakt_info_template = objekt_kontakt_info_template_raw.strip() or None
+
+    # Zentrale Kontakte: zweistufig wie die anderen optionalen Module schalten.
+    kontakte_system = db.query(SystemSettings).filter(SystemSettings.key == "kontakte_module_enabled").first()
+    if kontakte_system and kontakte_system.value == "true":
+        old_kontakte = org_s.kontakte_module_enabled
+        new_kontakte = kontakte_module_enabled_raw in ("1", "true", "on")
+        org_s.kontakte_module_enabled = new_kontakte
+        if old_kontakte != new_kontakte:
+            from app.core.audit import write_audit
+
+            write_audit(
+                db,
+                "kontakte.org_toggle",
+                org_id=effective_org_id,
+                user_id=user.id,
+                payload={"alt": old_kontakte, "neu": new_kontakte},
+                ip=request.client.host if request.client else None,
+            )
 
     # Nachschlagewerke: Org-Toggle — nur änderbar wenn System-Flag aktiv.
     from app.services.nachschlagewerk_service import nachschlagewerke_system_enabled
@@ -1967,6 +1987,46 @@ def toggle_breathing_system(
     )
     db.commit()
 
+    org_suffix = f"&org_id={request.query_params.get('org_id', '')}" if request.query_params.get("org_id") else ""
+    return RedirectResponse(f"/admin/settings?saved=1{org_suffix}", status_code=303)
+
+
+@router.post("/settings/system/kontakte-toggle")
+def toggle_kontakte_system(
+    request: Request,
+    db=Depends(get_db),
+    user: User = Depends(require_system_admin),
+    enabled_raw: str = Form(""),
+):
+    """Schaltet die zentrale Kontaktverwaltung systemweit frei oder aus."""
+    new_value = "true" if enabled_raw in ("1", "true", "on") else "false"
+    row = db.query(SystemSettings).filter(SystemSettings.key == "kontakte_module_enabled").first()
+    old_value = row.value if row else "false"
+    from datetime import UTC, datetime
+
+    if row is None:
+        row = SystemSettings(
+            key="kontakte_module_enabled",
+            value=new_value,
+            updated_at=datetime.now(UTC),
+            updated_by_user_id=user.id,
+        )
+        db.add(row)
+    else:
+        row.value = new_value
+        row.updated_at = datetime.now(UTC)
+        row.updated_by_user_id = user.id
+
+    from app.core.audit import write_audit
+
+    write_audit(
+        db,
+        "kontakte.system_toggle",
+        user_id=user.id,
+        payload={"alt": old_value, "neu": new_value},
+        ip=request.client.host if request.client else None,
+    )
+    db.commit()
     org_suffix = f"&org_id={request.query_params.get('org_id', '')}" if request.query_params.get("org_id") else ""
     return RedirectResponse(f"/admin/settings?saved=1{org_suffix}", status_code=303)
 

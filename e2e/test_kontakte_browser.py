@@ -15,6 +15,9 @@ def test_kontakt_anlegen_suchen_und_mobil_telefonieren(
     """Deckt Desktop-Formular/Live-Suche sowie mobile Tel-/SMS-Aktionen ab."""
     page = angemeldete_seite
     page.goto(f"{base_url}/?org=1")
+    expect(page.get_by_role("link", name="👥 Kontakte")).to_be_visible()
+    page.get_by_role("button", name="📦 Module ▾").click()
+    expect(page.get_by_role("link", name="👥 Kontakte").last).to_be_visible()
     page.goto(f"{base_url}/kontakte/")
     expect(page.get_by_role("heading", name="Kontaktverwaltung")).to_be_visible()
 
