@@ -153,6 +153,8 @@ _TENANT_TABLE_NAMES: frozenset[str] = frozenset({
     # Zentrale Kontakte (TenantScoped via Mixin)
     "kontakt",
     "kontakt_telefon",
+    "kontakt_import_vorschau",
+    "kontakt_sync_aenderung",
     "kontakt_kategorie",
     "kontakt_kategorie_zuordnung",
     "kontakt_anhang",

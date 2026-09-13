@@ -29,12 +29,10 @@ from app.models.objekt import (
 )
 from app.services.mail_service import (
     _build_message,
-    _looks_like_email,
     _org_smtp_cfg,
     deliver,
     get_smtp_cfg,
 )
-from app.services.objekt_service import telefon_normalisiert
 from app.services.sms_dispatch_service import render_template
 from app.services.sms_service import resolve_sms_config, send_sms, sms_available
 
@@ -86,25 +84,17 @@ def stichwort_erlaubt(objekt: Objekt, alarm_type_code: str | None) -> bool:
 def sammle_ziele(objekt: Objekt) -> list[tuple[ObjektKontakt, str, str]]:
     ziele: list[tuple[ObjektKontakt, str, str]] = []
     for kontakt in objekt.kontakte:
-        if kontakt.kontakt_id is not None:
-            for freigabe in kontakt.freigaben:
-                if freigabe.aktiv:
-                    ziele.append((kontakt, freigabe.kanal, freigabe.ziel_wert))
+        if kontakt.kontakt_id is None or kontakt.zentraler_kontakt is None:
+            logger.warning("Objektkontakt %s ohne zentralen Kontakt ignoriert", kontakt.id)
             continue
-        email = (kontakt.email or "").strip()
-        if kontakt.benachrichtigung_mail and _looks_like_email(email):
-            ziele.append((kontakt, "mail", email.casefold()))
-        for nummer in kontakt.sms_nummern:
-            normalisiert = telefon_normalisiert(nummer)
-            if normalisiert:
-                ziele.append((kontakt, "sms", normalisiert))
+        for freigabe in kontakt.freigaben:
+            if freigabe.aktiv:
+                ziele.append((kontakt, freigabe.kanal, freigabe.ziel_wert))
     return ziele
 
 
 def _kontakt_anzeigename(kontakt: ObjektKontakt) -> str:
-    if kontakt.kontakt_id is not None and kontakt.zentraler_kontakt is not None:
-        return kontakt.zentraler_kontakt.anzeigename or kontakt.name or ""
-    return kontakt.name or ""
+    return kontakt.zentraler_kontakt.anzeigename if kontakt.zentraler_kontakt else ""
 
 
 def baue_kontext(db, incident: Incident, objekt: Objekt, kontakt: ObjektKontakt, org: FireDept) -> dict:

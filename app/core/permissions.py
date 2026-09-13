@@ -153,6 +153,25 @@ def is_kontakt_verwalter(user) -> bool:
     return has_role(user, "kontakt_verwalter")
 
 
+def can_send_manual_sms(user) -> bool:
+    """True if a user may start a manual SMS dispatch.
+
+    This is deliberately independent of the admin router so a future
+    dedicated sender role has one shared authorization point.
+    """
+    return has_role(user, "admin")
+
+
+def require_manual_sms_sender(request: Request):
+    """FastAPI dependency for manually triggered SMS sends."""
+    user = getattr(request.state, "user", None)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Nicht angemeldet")
+    if not can_send_manual_sms(user):
+        raise HTTPException(status_code=403, detail="Keine Berechtigung zum SMS-Versand")
+    return user
+
+
 def can_edit_proben(user) -> bool:
     """True fuer alle Rollen, die Proben fachlich bearbeiten duerfen."""
     return bool(user and ({r.code for r in user.roles} & PROBEN_EDIT_ROLES))

@@ -7,6 +7,7 @@ import pytest
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.incident import Incident, Message
+from app.models.kontakt import Kontakt
 from app.models.master import FireDept, Member
 from app.models.objekt import Objekt, ObjektKontakt, ObjektSymbol
 from app.services.org_export_service import export_org
@@ -28,7 +29,10 @@ def quelle_und_medien():
         obj = Objekt(org_id=a.id, nummer=f"O-{tag}", name=f"Haus {tag}")
         db.add(obj)
         db.flush()
-        db.add(ObjektKontakt(org_id=a.id, objekt_id=obj.id, name=f"Kontakt {tag}"))
+        kontakt = Kontakt(org_id=a.id, anzeigename=f"Kontakt {tag}")
+        db.add(kontakt)
+        db.flush()
+        db.add(ObjektKontakt(org_id=a.id, objekt_id=obj.id, kontakt_id=kontakt.id))
 
         inc = Incident(primary_org_id=a.id, status="active", alarm_type_code="B1")
         db.add(inc)

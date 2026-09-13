@@ -128,6 +128,10 @@ class SmsLogRecipient(Base):
     member_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("member.id", ondelete="SET NULL"), nullable=True
     )
+    # Herkunft fuer Empfaenger, die keine Mitglieder sind (z.B. zentrale Kontakte).
+    # Ohne FK, damit das Versandprotokoll auch nach einer Archivierung erhalten bleibt.
+    source_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    source_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     phone_number: Mapped[str] = mapped_column(String(30), nullable=False)
     name: Mapped[str | None] = mapped_column(String(300), nullable=True)
     success: Mapped[bool] = mapped_column(Boolean, nullable=False)

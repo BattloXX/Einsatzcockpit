@@ -11,10 +11,10 @@ from sqlalchemy.orm import sessionmaker
 from app.core.tenant import set_tenant_context
 from app.db import Base
 from app.models.bma_import import BmaImportSatz, OrgBmaImportConfig
+from app.models.kontakt import Kontakt, KontaktExterneReferenz, KontaktTelefon, ObjektKontaktFreigabe
 from app.models.master import FireDept
 from app.models.objekt import OBJEKT_STATUS_ENTWURF, Objekt, ObjektBMA, ObjektKontakt
 from app.services.bma_import.bma_sync import _sync_kontakte, verarbeite_pdf_anlage
-from app.services.bma_import.bma_sync import _telefone_zusammenfuehren
 
 
 @compiles(BigInteger, "sqlite")
@@ -56,11 +56,29 @@ def _kontakt(extern_id, name="Max Muster", telefone=None):
             "telefone": telefone or ["+43 555 123"]}
 
 
+def _zuordnung(session, org, objekt, *, name="Max Muster", telefone=None, email=None, **werte):
+    zentral = Kontakt(org_id=org.id, typ="person", anzeigename=name, email=email)
+    session.add(zentral)
+    session.flush()
+    zentral.telefone[:] = [
+        KontaktTelefon(org_id=org.id, nummer=nummer, sort=index)
+        for index, nummer in enumerate(telefone or [])
+    ]
+    zuordnung = ObjektKontakt(
+        org_id=org.id,
+        objekt_id=objekt.id,
+        kontakt_id=zentral.id,
+        **werte,
+    )
+    return zuordnung
+
+
 def test_import_adoptiert_haendisch_gepflegten_kontakt_statt_zu_duplizieren(db):
     session, org = db
     objekt = _objekt(session, org)
-    hand = ObjektKontakt(org_id=org.id, objekt_id=objekt.id, art="bma_alarmperson",
-                         name="Max Muster", erreichbarkeit="Mo-Fr 8-17", sort=1)
+    hand = _zuordnung(
+        session, org, objekt, art="bma_alarmperson", erreichbarkeit="Mo-Fr 8-17", sort=1
+    )
     objekt.kontakte.append(hand)
     session.flush()
     hand_id = hand.id
@@ -72,14 +90,27 @@ def test_import_adoptiert_haendisch_gepflegten_kontakt_statt_zu_duplizieren(db):
     assert hand.id == hand_id
     assert hand.extern_quelle == "dibos_bma"
     assert hand.erreichbarkeit == "Mo-Fr 8-17"
-    assert hand.telefone == ["+43 555 123"]
+    assert [telefon.nummer for telefon in hand.zentraler_kontakt.telefone] == ["+43 555 123"]
+    assert hand.kontakt_id is not None
+    zentral = session.get(Kontakt, hand.kontakt_id)
+    assert zentral is not None and zentral.anzeigename == "Max Muster"
+    referenz = session.query(KontaktExterneReferenz).filter_by(kontakt_id=zentral.id).one()
+    assert (referenz.quelle, referenz.quelle_kontext, referenz.extern_id) == (
+        "dibos_bma", "pdf:1332", "pdf:1332:bma_alarmperson:max-muster",
+    )
 
 
 def test_adoption_matcht_ueber_namensnormalisierung(db):
     session, org = db
     objekt = _objekt(session, org)
-    hand = ObjektKontakt(org_id=org.id, objekt_id=objekt.id, art="bma_alarmperson",
-                         name="Andreas B\u00f6hler", sort=1)
+    hand = _zuordnung(
+        session,
+        org,
+        objekt,
+        name="Andreas B\u00f6hler",
+        art="bma_alarmperson",
+        sort=1,
+    )
     objekt.kontakte.append(hand)
     session.flush()
     hand_id = hand.id
@@ -106,6 +137,8 @@ def test_gleiches_datenblatt_zweimal_in_einer_session_legt_jeden_kontakt_einmal_
     verarbeite_pdf_anlage(session, org.id, config, anlage, kontakte, user)
 
     assert session.query(ObjektKontakt).filter(ObjektKontakt.objekt_id == objekt.id).count() == len(kontakte)
+    assert session.query(Kontakt).filter(Kontakt.org_id == org.id).count() == len(kontakte)
+    assert session.query(KontaktExterneReferenz).filter(KontaktExterneReferenz.org_id == org.id).count() == len(kontakte)
 
 
 def test_zwei_datenblaetter_am_selben_objekt_bleiben_disjunkt(db):
@@ -124,10 +157,16 @@ def test_zwei_datenblaetter_am_selben_objekt_bleiben_disjunkt(db):
 def test_verschobener_kollisionszaehler_rekeyt_zeile_statt_sie_zu_ersetzen(db):
     session, org = db
     objekt = _objekt(session, org)
-    alt = ObjektKontakt(org_id=org.id, objekt_id=objekt.id, art="bma_alarmperson",
-                        name="Max Muster", extern_quelle="dibos_bma",
-                        extern_id="pdf:1332:bma_alarmperson:max-muster#2",
-                        erreichbarkeit="nachts", sort=1)
+    alt = _zuordnung(
+        session,
+        org,
+        objekt,
+        art="bma_alarmperson",
+        extern_quelle="dibos_bma",
+        extern_id="pdf:1332:bma_alarmperson:max-muster#2",
+        erreichbarkeit="nachts",
+        sort=1,
+    )
     objekt.kontakte.append(alt)
     session.flush()
     alt_id = alt.id
@@ -144,9 +183,15 @@ def test_verschobener_kollisionszaehler_rekeyt_zeile_statt_sie_zu_ersetzen(db):
 def test_geaenderter_name_mit_neuem_slug_ersetzt_die_zeile(db):
     session, org = db
     objekt = _objekt(session, org)
-    alt = ObjektKontakt(org_id=org.id, objekt_id=objekt.id, art="bma_alarmperson",
-                        name="Max Muster", extern_quelle="dibos_bma",
-                        extern_id="pdf:1332:bma_alarmperson:max-muster", sort=1)
+    alt = _zuordnung(
+        session,
+        org,
+        objekt,
+        art="bma_alarmperson",
+        extern_quelle="dibos_bma",
+        extern_id="pdf:1332:bma_alarmperson:max-muster",
+        sort=1,
+    )
     objekt.kontakte.append(alt)
     session.flush()
     alt_id = alt.id
@@ -156,7 +201,7 @@ def test_geaenderter_name_mit_neuem_slug_ersetzt_die_zeile(db):
 
     assert len(objekt.kontakte) == 1
     assert objekt.kontakte[0].id != alt_id
-    assert objekt.kontakte[0].name == "Maximilian Muster"
+    assert objekt.kontakte[0].zentraler_kontakt.anzeigename == "Maximilian Muster"
 
 
 def test_doppelte_extern_id_in_einer_kontaktliste_legt_nur_eine_zeile_an(db):
@@ -168,15 +213,21 @@ def test_doppelte_extern_id_in_einer_kontaktliste_legt_nur_eine_zeile_an(db):
                     [_kontakt(extern_id), _kontakt(extern_id, telefone=["+43 555 999"])], None)
 
     assert len(objekt.kontakte) == 1
-    assert objekt.kontakte[0].telefone == ["+43 555 999"]
+    assert [telefon.nummer for telefon in objekt.kontakte[0].zentraler_kontakt.telefone] == ["+43 555 999"]
 
 
 def test_kontakt_der_aus_dem_datenblatt_verschwindet_wird_entfernt(db):
     session, org = db
     objekt = _objekt(session, org)
-    kontakt = ObjektKontakt(org_id=org.id, objekt_id=objekt.id, art="bma_alarmperson",
-                            name="Max Muster", extern_quelle="dibos_bma",
-                            extern_id="pdf:1332:bma_alarmperson:max-muster", sort=1)
+    kontakt = _zuordnung(
+        session,
+        org,
+        objekt,
+        art="bma_alarmperson",
+        extern_quelle="dibos_bma",
+        extern_id="pdf:1332:bma_alarmperson:max-muster",
+        sort=1,
+    )
     objekt.kontakte.append(kontakt)
     session.flush()
     kontakt_id = kontakt.id
@@ -185,19 +236,6 @@ def test_kontakt_der_aus_dem_datenblatt_verschwindet_wird_entfernt(db):
 
     assert objekt.kontakte == []
     assert session.get(ObjektKontakt, kontakt_id) is None
-
-
-def test_telefon_merge_erhaelt_nur_unveraenderte_freigabe():
-    alt = json.dumps([
-        {"nummer": "+43 664 1", "label": "Alt", "sms": True},
-        {"nummer": "+43 664 2", "label": None, "sms": False},
-    ])
-    neu = json.loads(_telefone_zusammenfuehren(alt, [
-        {"nummer": "0043-664/1", "label": "Neu"},
-        {"nummer": "+43 664 3", "label": "Neu"},
-    ]))
-    assert [e["sms"] for e in neu] == [True, False]
-    assert _telefone_zusammenfuehren(alt, []) is None
 
 
 def _mit_freigabe(nummer, label=None):
@@ -209,38 +247,52 @@ def test_freigabe_ueberlebt_adoption_bei_unveraenderter_nummer(db):
     """Der Adoptionspfad ist der Massenfall - hier darf die Freigabe NICHT verlorengehen."""
     session, org = db
     objekt = _objekt(session, org)
-    hand = ObjektKontakt(org_id=org.id, objekt_id=objekt.id, art="bma_alarmperson",
-                         name="Max Muster", telefone_json=_mit_freigabe("+43 555 123"),
-                         benachrichtigung_mail=True, email="max@example.at", sort=1)
+    hand = _zuordnung(
+        session,
+        org,
+        objekt,
+        art="bma_alarmperson",
+        telefone=["+43 555 123"],
+        email="max@example.at",
+        sort=1,
+    )
     objekt.kontakte.append(hand)
     session.flush()
+    session.add(ObjektKontaktFreigabe(org_id=org.id, objekt_kontakt_id=hand.id, kanal="sms", ziel_wert="+43555123", aktiv=True))
+    session.add(ObjektKontaktFreigabe(org_id=org.id, objekt_kontakt_id=hand.id, kanal="mail", ziel_wert="max@example.at", aktiv=True))
 
     _sync_kontakte(session, _satz(session, org, objekt), objekt,
                    [{"extern_id": "pdf:1332:bma_alarmperson:max-muster", "name": "Max Muster",
                      "art": "bma_alarmperson", "email": "max@example.at",
                      "telefone": [{"label": "Mobil beruflich", "nummer": "0043-555/123"}]}], None)
 
-    assert hand.sms_nummern == ["0043-555/123"]
-    assert hand.benachrichtigung_mail is True
+    assert {(f.kanal, f.ziel_wert) for f in hand.freigaben if f.aktiv} == {("sms", "+43555123"), ("mail", "max@example.at")}
 
 
 def test_freigabe_verfaellt_bei_adoption_mit_geaenderter_nummer(db):
     """Eine geaenderte Rufnummer wurde nie freigegeben - die SMS darf nicht dorthin gehen."""
     session, org = db
     objekt = _objekt(session, org)
-    hand = ObjektKontakt(org_id=org.id, objekt_id=objekt.id, art="bma_alarmperson",
-                         name="Max Muster", telefone_json=_mit_freigabe("+43 555 123"),
-                         benachrichtigung_mail=True, email="alt@example.at", sort=1)
+    hand = _zuordnung(
+        session,
+        org,
+        objekt,
+        art="bma_alarmperson",
+        telefone=["+43 555 123"],
+        email="alt@example.at",
+        sort=1,
+    )
     objekt.kontakte.append(hand)
     session.flush()
+    session.add(ObjektKontaktFreigabe(org_id=org.id, objekt_kontakt_id=hand.id, kanal="sms", ziel_wert="+43555123", aktiv=True))
+    session.add(ObjektKontaktFreigabe(org_id=org.id, objekt_kontakt_id=hand.id, kanal="mail", ziel_wert="alt@example.at", aktiv=True))
 
     _sync_kontakte(session, _satz(session, org, objekt), objekt,
                    [{"extern_id": "pdf:1332:bma_alarmperson:max-muster", "name": "Max Muster",
                      "art": "bma_alarmperson", "email": "neu@example.at",
                      "telefone": [{"label": "Mobil beruflich", "nummer": "+43 555 999"}]}], None)
 
-    assert hand.sms_nummern == []
-    assert hand.benachrichtigung_mail is False
+    assert not [f for f in hand.freigaben if f.aktiv]
 
 
 def test_freigabe_ueberlebt_erneuten_import_bei_exaktem_treffer(db):
@@ -253,28 +305,56 @@ def test_freigabe_ueberlebt_erneuten_import_bei_exaktem_treffer(db):
 
     _sync_kontakte(session, satz, objekt, daten, None)
     kontakt = objekt.kontakte[0]
-    assert kontakt.sms_nummern == []          # Import gibt nie von sich aus frei
-    kontakt.telefone_json = _mit_freigabe("+43 555 123", "Pager")
+    assert not kontakt.freigaben  # Import gibt nie von sich aus frei
+    sms_ziel = kontakt.zentraler_kontakt.telefone[0].nummer_normalisiert
+    session.add(
+        ObjektKontaktFreigabe(
+            org_id=org.id,
+            objekt_kontakt_id=kontakt.id,
+            kanal="sms",
+            ziel_wert=sms_ziel,
+            aktiv=True,
+        )
+    )
     session.flush()
 
     _sync_kontakte(session, satz, objekt, daten, None)
-    assert objekt.kontakte[0].sms_nummern == ["+43 555 123"]
+    session.expire(kontakt, ["freigaben"])
+    assert [(f.kanal, f.ziel_wert) for f in objekt.kontakte[0].freigaben if f.aktiv] == [
+        ("sms", sms_ziel)
+    ]
 
 
 def test_freigabe_verfaellt_wenn_nummer_aus_datenblatt_verschwindet(db):
     session, org = db
     objekt = _objekt(session, org)
     satz = _satz(session, org, objekt)
-    kontakt = ObjektKontakt(org_id=org.id, objekt_id=objekt.id, art="bma_alarmperson",
-                            name="Max Muster", extern_quelle="dibos_bma",
-                            extern_id="pdf:1332:bma_alarmperson:max-muster",
-                            telefone_json=_mit_freigabe("+43 555 123"), sort=1)
+    kontakt = _zuordnung(
+        session,
+        org,
+        objekt,
+        art="bma_alarmperson",
+        extern_quelle="dibos_bma",
+        extern_id="pdf:1332:bma_alarmperson:max-muster",
+        telefone=["+43 555 123"],
+        sort=1,
+    )
     objekt.kontakte.append(kontakt)
     session.flush()
+    session.add(
+        ObjektKontaktFreigabe(
+            org_id=org.id,
+            objekt_kontakt_id=kontakt.id,
+            kanal="sms",
+            ziel_wert=kontakt.zentraler_kontakt.telefone[0].nummer_normalisiert,
+            aktiv=True,
+        )
+    )
 
     _sync_kontakte(session, satz, objekt, [
         {"extern_id": "pdf:1332:bma_alarmperson:max-muster", "name": "Max Muster",
          "art": "bma_alarmperson", "telefone": [{"label": None, "nummer": "+43 555 777"}]}], None)
 
-    assert kontakt.sms_nummern == []
-    assert kontakt.telefone == ["+43 555 777"]
+    session.expire(kontakt, ["freigaben"])
+    assert not [freigabe for freigabe in kontakt.freigaben if freigabe.aktiv]
+    assert [telefon.nummer for telefon in kontakt.zentraler_kontakt.telefone] == ["+43 555 777"]

@@ -106,9 +106,8 @@ def test_suche_zuordnung_und_doppel_guard(client):
     try:
         zuordnung = _zuordnung(db, objekt_id)
         assert (zuordnung.kontakt_id, zuordnung.art, zuordnung.sort) == (zentral.id, "sonstig", 1)
-        assert zuordnung.name == ""
-        assert zuordnung.telefone_json is None and zuordnung.email is None
-        assert not zuordnung.benachrichtigung_mail
+        assert zuordnung.zentraler_kontakt.anzeigename == "Suchbarer Zentraler"
+        assert zuordnung.freigaben == []
     finally:
         db.close()
 
@@ -174,38 +173,28 @@ def test_zuordnung_bearbeiten_freigaben_und_whitelist(client):
         db.close()
 
 
-def test_legacy_fallback_und_migrierte_sperre(client):
+def test_nur_zentrale_zuordnungen_sind_bearbeitbar(client):
     org_id, objekt_id = _setup("p3c_legacy", 93004)
     zentral = _zentral(org_id)
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
-        legacy = ObjektKontakt(org_id=org_id, objekt_id=objekt_id, art="sonstig", name="Alt")
-        db.add(legacy)
+        zuordnung = ObjektKontakt(
+            org_id=org_id, objekt_id=objekt_id, kontakt_id=zentral.id, art="sonstig"
+        )
+        db.add(zuordnung)
         db.commit()
-        legacy_id = legacy.id
+        zuordnung_id = zuordnung.id
     finally:
         db.close()
     csrf = _login(client, "p3c_legacy")
-    url = f"/objekte/{objekt_id}/kontakte/{legacy_id}"
-    daten = {"_csrf": csrf, "art": "betreiber", "name": "Alt Neu", "telefon_nummer": ["+431"],
-             "telefon_label": ["Büro"], "telefon_sms": ["0"], "email": "alt@example.at",
-             "benachrichtigung_mail": "1"}
-    assert client.post(url, data=daten).status_code == 200
+    url = f"/objekte/{objekt_id}/kontakte/{zuordnung_id}/zuordnung"
+    assert client.post(url, data={"_csrf": csrf, "art": "betreiber", "sort": "2"}).status_code == 200
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
-        legacy = db.get(ObjektKontakt, legacy_id)
-        assert legacy.name == "Alt Neu" and legacy.email == "alt@example.at" and legacy.benachrichtigung_mail
-        legacy.kontakt_id = zentral.id
-        db.commit()
-    finally:
-        db.close()
-    assert client.post(url, data={**daten, "name": "Unerlaubt"}).status_code == 400
-    db = SessionLocal()
-    set_tenant_context(db, None)
-    try:
-        assert db.get(ObjektKontakt, legacy_id).name == "Alt Neu"
+        gespeichert = db.get(ObjektKontakt, zuordnung_id)
+        assert (gespeichert.kontakt_id, gespeichert.art, gespeichert.sort) == (zentral.id, "betreiber", 2)
     finally:
         db.close()
 

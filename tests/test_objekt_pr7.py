@@ -14,6 +14,7 @@ def _bigint_sqlite(element, compiler, **kw):
 
 from app.core.tenant import set_tenant_context
 from app.db import Base
+from app.models.kontakt import Kontakt, KontaktTelefon
 from app.models.master import FireDept
 from app.models.objekt import (
     OBJEKT_STATUS_FREIGEGEBEN,
@@ -61,9 +62,13 @@ def pr7_env(tmp_path, monkeypatch):
     db.flush()
     db.add(ObjektGefahr(org_id=org.id, objekt_id=objekt.id, gefahr_id=gefahr.id,
                         un_nummer="1173", detail="Ethylacetat"))
-    db.add(ObjektKontakt(org_id=org.id, objekt_id=objekt.id, art="brandschutzbeauftragter",
-                         name="Fischnaller Stephan",
-                         telefone_json='["+43 5574 6756-310"]'))
+    kontakt = Kontakt(org_id=org.id, anzeigename="Fischnaller Stephan")
+    kontakt.telefone.append(KontaktTelefon(org_id=org.id, nummer="+43 5574 6756-310"))
+    db.add(kontakt)
+    db.flush()
+    db.add(ObjektKontakt(
+        org_id=org.id, objekt_id=objekt.id, art="brandschutzbeauftragter", kontakt_id=kontakt.id
+    ))
     db.commit()
 
     import app.db as app_db

@@ -95,8 +95,16 @@ def _volles_objekt(db, org_id: int) -> Objekt:
     db.add(ObjektZusatzadresse(org_id=org_id, objekt_id=objekt.id, bezeichnung="Stiege 2"))
     db.add(ObjektGefahr(org_id=org_id, objekt_id=objekt.id, gefahr_id=gefahr_katalog.id, detail="Lager"))
     db.add(ObjektMerkmal(org_id=org_id, objekt_id=objekt.id, merkmal_id=merkmal_katalog.id))
-    kontakt1 = ObjektKontakt(org_id=org_id, objekt_id=objekt.id, art="betreiber", name="Betreiber AG")
-    kontakt2 = ObjektKontakt(org_id=org_id, objekt_id=objekt.id, art="hausverwaltung", name="Hausverwaltung GmbH")
+    zentral1 = Kontakt(org_id=org_id, anzeigename="Betreiber AG")
+    zentral2 = Kontakt(org_id=org_id, anzeigename="Hausverwaltung GmbH")
+    db.add_all([zentral1, zentral2])
+    db.flush()
+    kontakt1 = ObjektKontakt(
+        org_id=org_id, objekt_id=objekt.id, art="betreiber", kontakt_id=zentral1.id
+    )
+    kontakt2 = ObjektKontakt(
+        org_id=org_id, objekt_id=objekt.id, art="hausverwaltung", kontakt_id=zentral2.id
+    )
     db.add_all([kontakt1, kontakt2])
     db.add(ObjektKartenObjekt(org_id=org_id, objekt_id=objekt.id, typ="fsd", lat=47.4, lng=9.75))
     db.flush()
@@ -191,7 +199,12 @@ def test_uebernimm_arbeitskopie_schreibt_auf_stabile_basis_id(db, org):
 
     kopie.name = "Werk 2 (saniert)"
     kopie.bma.bma_nummer = "2099"
-    db.add(ObjektKontakt(org_id=org.id, objekt_id=kopie.id, art="sonstig", name="Neuer Kontakt"))
+    zentral_neu = Kontakt(org_id=org.id, anzeigename="Neuer Kontakt")
+    db.add(zentral_neu)
+    db.flush()
+    db.add(ObjektKontakt(
+        org_id=org.id, objekt_id=kopie.id, art="sonstig", kontakt_id=zentral_neu.id
+    ))
     db.commit()
     db.refresh(kopie)
 
@@ -237,7 +250,7 @@ def _zentraler_kontakt_mit_freigabe(db, basis, org_id):
     db.flush()
     zuordnung = ObjektKontakt(
         org_id=org_id, objekt_id=basis.id, kontakt_id=zentral.id,
-        art="betreiber", name="Alter Snapshot", erreichbarkeit="Büro", sort=4,
+        art="betreiber", erreichbarkeit="Büro", sort=4,
     )
     db.add(zuordnung)
     db.flush()
@@ -264,7 +277,7 @@ def test_uebernahme_ohne_kontaktaenderung_erhaelt_id_historie_und_freigabe(db, o
 
     kopie = erstelle_arbeitskopie(db, basis, user_id=None)
     db.commit()
-    kopie_zuordnung = next(k for k in kopie.kontakte if k.kontakt_id is not None)
+    kopie_zuordnung = next(k for k in kopie.kontakte if k.kontakt_id == zuordnung.kontakt_id)
     assert [(f.kanal, f.ziel_wert, f.aktiv) for f in kopie_zuordnung.freigaben] == [
         ("sms", "+43660123", True)
     ]
@@ -285,7 +298,7 @@ def test_uebernahme_kontaktbearbeitung_erhaelt_id_und_historie(db, org):
     zuordnung_id, protokoll_id = zuordnung.id, protokoll.id
     kopie = erstelle_arbeitskopie(db, basis, user_id=None)
     db.commit()
-    entwurf = next(k for k in kopie.kontakte if k.kontakt_id is not None)
+    entwurf = next(k for k in kopie.kontakte if k.kontakt_id == zuordnung.kontakt_id)
     entwurf.art, entwurf.sort, entwurf.erreichbarkeit = "schluesseltraeger", 9, "24/7"
 
     uebernimm_arbeitskopie(db, kopie, user_id=None)
@@ -309,7 +322,7 @@ def test_uebernahme_kontakt_hinzufuegen_und_entfernen_gleicht_freigaben_ab(db, o
     db.flush()
     neu = ObjektKontakt(
         org_id=org.id, objekt_id=kopie.id, kontakt_id=zentral_neu.id,
-        art="betreiber", name="Neuer Snapshot",
+        art="betreiber",
     )
     db.add(neu)
     db.flush()
@@ -342,7 +355,12 @@ def test_verwerfen_kontaktentwurf_laesst_basis_und_zentralen_kontakt_unveraender
     entwurf = next(k for k in kopie.kontakte if k.kontakt_id == zentral.id)
     entwurf.freigaben[0].aktiv = False
     db.delete(entwurf)
-    db.add(ObjektKontakt(org_id=org.id, objekt_id=kopie.id, name="Nur Entwurf", art="sonstig"))
+    zentral_entwurf = Kontakt(org_id=org.id, anzeigename="Nur Entwurf")
+    db.add(zentral_entwurf)
+    db.flush()
+    db.add(ObjektKontakt(
+        org_id=org.id, objekt_id=kopie.id, kontakt_id=zentral_entwurf.id, art="sonstig"
+    ))
     db.commit()
 
     verwirf_arbeitskopie(db, kopie, user_id=None)
@@ -350,7 +368,10 @@ def test_verwerfen_kontaktentwurf_laesst_basis_und_zentralen_kontakt_unveraender
     erhalten = db.get(ObjektKontakt, vorher[0])
     assert [(f.kanal, f.ziel_wert, f.aktiv) for f in erhalten.freigaben] == vorher[1]
     assert db.get(ObjektKontaktBenachrichtigung, vorher[2]).objekt_kontakt_id == vorher[0]
-    assert db.query(Kontakt).count() == zentrale_anzahl
+    # Zentrale Kontakte sind nicht Eigentum eines Objektentwurfs und bleiben deshalb
+    # auch dann bestehen, wenn dessen einzige Zuordnung verworfen wird.
+    assert db.query(Kontakt).count() == zentrale_anzahl + 1
+    assert db.get(Kontakt, zentral_entwurf.id).anzeigename == "Nur Entwurf"
 
 
 def test_uebernimm_arbeitskopie_mit_importkontakten_verletzt_unique_nicht(db, org):

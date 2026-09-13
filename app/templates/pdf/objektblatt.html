@@ -90,12 +90,12 @@
 {% if objekt.kontakte %}
 <h2>📞 Kontakte</h2>
 <table class="daten">
-  {% for k in objekt.kontakte %}
+  {% for k in objekt.kontakte if k.zentraler_kontakt %}
   <tr>
     <td class="k">{{ kontakt_arten.get(k.art, k.art) }}</td>
-    <td><b>{{ k.name }}</b>
-      {% if k.telefone %} · {{ k.telefone|join(' · ') }}{% endif %}
-      {% if k.email %} · {{ k.email }}{% endif %}
+    <td><b>{{ k.zentraler_kontakt.anzeigename }}</b>
+      {% if k.zentraler_kontakt.telefone %} · {{ k.zentraler_kontakt.telefone|map(attribute='nummer')|join(' · ') }}{% endif %}
+      {% if k.zentraler_kontakt.email %} · {{ k.zentraler_kontakt.email }}{% endif %}
       {% if k.erreichbarkeit %}<br><span style="font-size:8pt;color:#555;">{{ k.erreichbarkeit }}</span>{% endif %}
     </td>
   </tr>
@@ -119,7 +119,7 @@
   {% if wa.wohneinheiten is not none %}<tr><td class="k">Wohneinheiten</td><td>{{ wa.wohneinheiten }}</td></tr>{% endif %}
   {% if wa.geschosse is not none %}<tr><td class="k">Geschosse</td><td>{{ wa.geschosse }}</td></tr>{% endif %}
   {% if wa.stiegen is not none %}<tr><td class="k">Stiegen</td><td>{{ wa.stiegen }}</td></tr>{% endif %}
-  {% if wa.hausverwaltung_kontakt %}<tr><td class="k">Hausverwaltung</td><td>{{ wa.hausverwaltung_kontakt.name }}</td></tr>{% endif %}
+  {% if wa.hausverwaltung_kontakt and wa.hausverwaltung_kontakt.zentraler_kontakt %}<tr><td class="k">Hausverwaltung</td><td>{{ wa.hausverwaltung_kontakt.zentraler_kontakt.anzeigename }}</td></tr>{% endif %}
   {% if mit_hinweisen and wa.hinweise %}<tr><td class="k">Hinweise</td><td>{{ wa.hinweise }}</td></tr>{% endif %}
 </table>
 {% endif %}

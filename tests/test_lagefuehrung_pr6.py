@@ -10,6 +10,7 @@ from app.core.security import hash_password
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.incident import Incident, IncidentColumn
+from app.models.kontakt import Kontakt, KontaktTelefon
 from app.models.master import OrgSettings, SystemSettings
 from app.models.objekt import (
     OBJEKT_EINSATZ_BESTAETIGT,
@@ -106,8 +107,13 @@ def test_objekte_json_enthaelt_gefahren_kontakte_informationen():
         db.flush()
         db.add(ObjektGefahr(org_id=ORG_ID, objekt_id=objekt.id, gefahr_id=gefahr_katalog.id,
                              un_nummer="1234", stoffname="Testgefahrgut"))
-        db.add(ObjektKontakt(org_id=ORG_ID, objekt_id=objekt.id, art="betreiber",
-                              name="Max Mustermann", telefone_json='["+43 664 1234567"]'))
+        kontakt = Kontakt(org_id=ORG_ID, anzeigename="Max Mustermann")
+        kontakt.telefone.append(KontaktTelefon(org_id=ORG_ID, nummer="+43 664 1234567"))
+        db.add(kontakt)
+        db.flush()
+        db.add(ObjektKontakt(
+            org_id=ORG_ID, objekt_id=objekt.id, art="betreiber", kontakt_id=kontakt.id
+        ))
         db.add(ObjektEinsatz(org_id=ORG_ID, objekt_id=objekt.id, incident_id=incident_id,
                               quelle="manuell", status=OBJEKT_EINSATZ_BESTAETIGT))
         db.commit()

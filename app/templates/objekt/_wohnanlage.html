@@ -15,7 +15,7 @@
     <dt>Stiegen</dt><dd>{{ wa.stiegen if wa.stiegen is not none else '–' }}</dd>
     <dt>Hausverwaltung</dt>
     <dd>
-      {% if wa.hausverwaltung_kontakt %}{{ wa.hausverwaltung_kontakt.name }}{% else %}<span class="text-muted">–</span>{% endif %}
+      {% if wa.hausverwaltung_kontakt and wa.hausverwaltung_kontakt.zentraler_kontakt %}{{ wa.hausverwaltung_kontakt.zentraler_kontakt.anzeigename }}{% else %}<span class="text-muted">–</span>{% endif %}
     </dd>
     <dt>Hinweise</dt><dd style="white-space:pre-wrap;">{{ wa.hinweise or '–' }}</dd>
   </dl>

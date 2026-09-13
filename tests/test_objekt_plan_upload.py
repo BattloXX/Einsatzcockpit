@@ -25,6 +25,7 @@ def _bigint_sqlite(element, compiler, **kw):
 
 from app.core.tenant import set_tenant_context
 from app.db import Base
+from app.models.kontakt import Kontakt
 from app.models.master import FireDept
 from app.models.objekt import OBJEKT_STATUS_ENTWURF, GefahrenKatalog, Objekt, ObjektBMA
 from app.services.objekt_plan_upload_service import (
@@ -565,8 +566,13 @@ def test_datenblatt_upload_adoptiert_haendischen_kontakt(client, plan_upload_set
         db.add(objekt)
         db.flush()
         db.add(ObjektBMA(org_id=org_id, objekt_id=objekt.id, bma_nummer=bma_nummer))
-        db.add(ObjektKontakt(org_id=org_id, objekt_id=objekt.id, art="bma_alarmperson",
-                             name="Max Muster", erreichbarkeit="Mo-Fr 8-17", sort=1))
+        zentral = Kontakt(org_id=org_id, anzeigename="Max Muster")
+        db.add(zentral)
+        db.flush()
+        db.add(ObjektKontakt(
+            org_id=org_id, objekt_id=objekt.id, art="bma_alarmperson",
+            kontakt_id=zentral.id, erreichbarkeit="Mo-Fr 8-17", sort=1,
+        ))
         db.commit()
         objekt_id = objekt.id
     finally:
@@ -640,7 +646,7 @@ def test_bma_vorschlag_uebernehmen_fuegt_fehlenden_kontakt_ein(client, plan_uplo
             ObjektKontakt.extern_id == kontakt_extern_id,
         ).one_or_none()
         assert kontakt is not None
-        assert kontakt.name == "Max Muster"
+        assert kontakt.zentraler_kontakt.anzeigename == "Max Muster"
         assert db.get(BmaImportSatz, satz_id).bestaetigt_hash == "neu"
     finally:
         db.close()
