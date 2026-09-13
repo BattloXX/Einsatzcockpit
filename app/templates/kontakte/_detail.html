@@ -2,14 +2,14 @@
 <div class="kontakt-detail-inner">
   {% if merge_konflikte %}<div class="alert alert--warn"><strong>Freigabe-Konflikt nach Zusammenfuehren</strong>{% for konflikt in merge_konflikte %}<p>{{ konflikt }}</p>{% endfor %}</div>{% endif %}
   <a class="kontakt-back" href="/kontakte">&larr; Liste</a>
-  <div class="kontakt-detail-heading"><div><h2>{{ kontakt.anzeigename }}</h2><p>{{ kontakt.funktion or '' }}{% if kontakt.funktion and kontakt.organisation %} - {% endif %}{{ kontakt.organisation or '' }}</p></div><span class="badge-pill">{{ 'Person' if kontakt.typ == 'person' else 'Stelle' }}</span></div>
-  <div class="kontakt-badges">{% for zuordnung in kontakt.kategorien %}<span class="badge-pill">{{ zuordnung.kategorie.name }}</span>{% endfor %}</div>
+  <div class="kontakt-detail-heading"><div><h2>{{ kontakt.anzeigename }}</h2><p>{{ kontakt.funktion or '' }}{% if kontakt.funktion and kontakt.organisation %} - {% endif %}{{ kontakt.organisation or '' }}</p></div><span class="kontakt-type kontakt-type--{{ kontakt.typ }}">{{ 'Person' if kontakt.typ == 'person' else 'Stelle' }}</span></div>
+  {% if kontakt.kategorien %}<div class="kontakt-detail-meta">{% for zuordnung in kontakt.kategorien %}<span class="kontakt-pill">{{ zuordnung.kategorie.name }}</span>{% endfor %}</div>{% endif %}
   {% if request.query_params.get('sms_started') %}<div class="alert alert--success">SMS-Versand wurde gestartet.</div>{% endif %}
   {% if request.query_params.get('sms_error') == 'empty' %}<div class="alert alert--error">Nachrichtentext darf nicht leer sein.</div>{% endif %}
   {% if request.query_params.get('sms_error') == 'no_provider' %}<div class="alert alert--error">SMS-Versand derzeit nicht verfuegbar.</div>{% endif %}
   {% if request.query_params.get('sms_error') == 'no_recipient' %}<div class="alert alert--error">Die Telefonnummer ist nicht gueltig.</div>{% endif %}
   {% if kontakt.telefone %}
-  <h3>Telefon</h3>
+  <section class="kontakt-section"><h3>Telefon</h3>
   {% for telefon in kontakt.telefone %}
   <div class="kontakt-phone-row">
     <span>{{ telefon.label or 'Telefon' }}: {{ telefon.nummer }}{% if telefon.bevorzugt %} (Primär){% endif %}{% if telefon.sms_eignung %} (SMS-fähig){% endif %}</span>
@@ -21,11 +21,11 @@
       {% endif %}
     </span>
   </div>
-  {% endfor %}
+  {% endfor %}</section>
   {% endif %}
-  {% if kontakt.email %}<h3>E-Mail</h3><p>{{ kontakt.email }}</p>{% endif %}
-  {% if kontakt.erreichbarkeit %}<h3>Erreichbarkeit</h3><p>{{ kontakt.erreichbarkeit }}</p>{% endif %}
-  {% if kontakt.notizen %}<h3>Notizen</h3><p>{{ kontakt.notizen }}</p>{% endif %}
+  {% if kontakt.email %}<section class="kontakt-section"><h3>E-Mail</h3><p>{{ kontakt.email }}</p></section>{% endif %}
+  {% if kontakt.erreichbarkeit %}<section class="kontakt-section"><h3>Erreichbarkeit</h3><p>{{ kontakt.erreichbarkeit }}</p></section>{% endif %}
+  {% if kontakt.notizen %}<section class="kontakt-section"><h3>Notizen</h3><p>{{ kontakt.notizen }}</p></section>{% endif %}
   {% if user and user.roles|selectattr('code', 'in', ['kontakt_verwalter', 'objekt_verwalter', 'admin', 'org_admin', 'system_admin'])|list %}
   <div class="kontakt-actions"><button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="kontaktModal">Bearbeiten</button><a class="btn btn--ghost" href="/kontakte/{{ kontakt.id }}/zusammenfuehren">Zusammenfuehren</a><form method="post" action="/kontakte/{{ kontakt.id }}/archivieren" onsubmit="return confirm('Kontakt archivieren?')"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><button class="btn btn--danger">Archivieren</button></form></div>
   {% endif %}

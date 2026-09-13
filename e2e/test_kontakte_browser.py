@@ -16,12 +16,12 @@ def test_kontakt_anlegen_suchen_und_mobil_telefonieren(
     page = angemeldete_seite
     page.goto(f"{base_url}/?org=1")
     page.goto(f"{base_url}/kontakte/")
-    expect(page.get_by_role("heading", name="Kontakte")).to_be_visible()
+    expect(page.get_by_role("heading", name="Kontaktverwaltung")).to_be_visible()
 
     suffix = uuid4().hex[:8]
     name = f"E2E Kontakt {suffix}"
     number = f"+43664{uuid4().int % 10_000_000:07d}"
-    page.get_by_role("button", name="+ Neuer Kontakt").click()
+    page.get_by_role("button", name="+ Kontakt anlegen").click()
     modal = page.locator("#kontaktModal")
     expect(modal).to_be_visible()
     modal.locator('input[name="anzeigename"]').fill(name)
