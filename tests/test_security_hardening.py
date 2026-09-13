@@ -208,9 +208,17 @@ def test_statistik_infoscreen_csp_erlaubt_tailwind_und_kartenkacheln(monkeypatch
     h = _security_headers_for("/infoscreen/statistik/tok")
     csp = h["content-security-policy"]
     assert "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com" in csp
-    assert "https://tile.openstreetmap.org https://*.tile.openstreetmap.org" in csp
+    assert "https://tile.openstreetmap.org" in csp
+    assert "https://*.tile.openstreetmap.org" not in csp
     assert "frame-ancestors 'self'" in csp
     assert h["x-frame-options"] == "SAMEORIGIN"
+
+
+def test_referrer_policy_sends_the_origin_to_osm_tiles(monkeypatch):
+    from app.config import settings
+    monkeypatch.setattr(settings, "TRUSTED_FRAME_ANCESTORS", "")
+    h = _security_headers_for("/infoscreen/statistik/tok")
+    assert h["referrer-policy"] == "strict-origin-when-cross-origin"
 
 
 def test_default_route_csp_ohne_konfiguration_bleibt_streng(monkeypatch):

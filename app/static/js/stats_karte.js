@@ -85,7 +85,7 @@
     if (mapElement && mapDataElement && window.L) {
       var markers = JSON.parse(mapDataElement.textContent || "[]");
       activeMap = L.map(mapElement).setView([47.5, 14.5], 7);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {attribution: "&copy; OpenStreetMap"}).addTo(activeMap);
+      window.EinsatzcockpitMapConfig.addOsmTileLayer(activeMap);
       var group = L.featureGroup();
       markers.forEach(function (item) {
         var color = (item.category === "B" || item.category === "F") ? "#d42225" : (item.category === "T" ? "#1877f2" : "#687386");

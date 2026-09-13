@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ org.name }} – Alarm-Infoscreen</title>
   <link rel="stylesheet" href="/static/css/leaflet.min.css">
+  <script src="/static/js/map-config.js"></script>
   <link rel="stylesheet" href="/static/css/app.css">
   <style>
     :root {
@@ -491,7 +492,7 @@
       zoomControl: false, dragging: false, scrollWheelZoom: false, doubleClickZoom: false,
       boxZoom: false, keyboard: false, touchZoom: false, attributionControl: false
     });
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(gslMap);
+    window.EinsatzcockpitMapConfig.addOsmTileLayer(gslMap);
     gslMap.setView([47.4652, 9.7503], 13);
     var bounds = gslSektorenRefresh(g.sektoren).concat(gslMarkerRefresh(g.sites));
     if (bounds.length) { gslMap.fitBounds(bounds, { padding: [60, 60], maxZoom: 16 }); }
@@ -772,7 +773,7 @@
       zoomControl: false, dragging: false, scrollWheelZoom: false,
       doubleClickZoom: false, boxZoom: false, keyboard: false, touchZoom: false, attributionControl: false
     });
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(karte);
+    window.EinsatzcockpitMapConfig.addOsmTileLayer(karte);
 
     var bounds = [];
     var anker = null;

@@ -5,17 +5,9 @@
  * Setzt den Leaflet-Icon-Pfad auf /static/img/leaflet/.
  *
  * ── OSM-Tile-Server-Regel ───────────────────────────────────────────────────
- * IMMER die Subdomain-Variante verwenden:
- *   URL:       'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
- *   Option:    subdomains: 'abc'
- *
- * NIEMALS die direkte URL ohne {s} verwenden:
- *   ✗  'https://tile.openstreetmap.org/{z}/{x}/{y}.png'   → HTTP 503
- *
- * Begründung: tile.openstreetmap.org ist nur für Tests. Die drei Subdomains
- * a/b/c (a.tile.…, b.tile.…, c.tile.…) verteilen die Last und entsprechen
- * der OSM-Nutzungsrichtlinie für Produktionsanwendungen. Fehlt `subdomains`,
- * sendet Leaflet alle Requests an einen einzigen Host → 503-Fehler.
+ * Standardkarten werden ausschließlich über die zentrale Konfiguration mit
+ * https://tile.openstreetmap.org/{z}/{x}/{y}.png eingebunden. Diese URL und die
+ * sichtbare Attribution entsprechen der aktuellen OSM Tile Usage Policy.
  * ───────────────────────────────────────────────────────────────────────────
  *
  * Verwendung:
@@ -67,11 +59,7 @@ function initMapPicker(opts) {
 
   const map = L.map(container, { zoomControl: true }).setView([initLat, initLng], 15);
 
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>-Mitwirkende',
-    subdomains: 'abc',
-    maxZoom: 19,
-  }).addTo(map);
+  window.EinsatzcockpitMapConfig.addOsmTileLayer(map, { maxZoom: 19 });
 
   const marker = L.marker([initLat, initLng], { draggable: true }).addTo(map);
 

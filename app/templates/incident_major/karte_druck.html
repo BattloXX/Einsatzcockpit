@@ -92,6 +92,7 @@
 </div>{# /print-content #}
 
 <script src="/static/js/leaflet.min.js"></script>
+<script src="/static/js/map-config.js"></script>
 <script>
 (function () {
   var minLat = {{ min_lat }}, minLng = {{ min_lng }};
@@ -107,14 +108,10 @@
 
   var map = L.map('karte-map', {
     zoomControl: false,
-    attributionControl: false,
     zoomSnap: 0,
   });
 
-  var tiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    subdomains: 'abc', maxZoom: 19,
-    attribution: '© OpenStreetMap',
-  }).addTo(map);
+  var tiles = window.EinsatzcockpitMapConfig.addOsmTileLayer(map);
 
   // ── Abschnitte ────────────────────────────────────────────────────────────
   var SECTORS = {{ sectors_json | safe }};

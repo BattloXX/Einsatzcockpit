@@ -109,6 +109,7 @@
 </div>{# /print-content #}
 
 <script src="/static/js/leaflet.min.js"></script>
+<script src="/static/js/map-config.js"></script>
 <script>
 (function () {
   var apiBase = "{{ api_base }}";
@@ -126,11 +127,10 @@
     shadowUrl: '/static/img/leaflet/marker-shadow.png',
   });
 
-  var map = L.map('karte-map', { zoomControl: false, attributionControl: false, zoomSnap: 0 });
-  var tileUrl = {{ baselayer | tojson }} === 'ortho'
-    ? 'https://mapsneu.wien.gv.at/basemap/bmaporthofoto30cm/normal/google3857/{z}/{y}/{x}.jpeg'
-    : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-  var tiles = L.tileLayer(tileUrl, { subdomains: 'abc', maxZoom: 20, attribution: '' }).addTo(map);
+  var map = L.map('karte-map', { zoomControl: false, zoomSnap: 0 });
+  var tiles = {{ baselayer | tojson }} === 'ortho'
+    ? L.tileLayer('https://mapsneu.wien.gv.at/basemap/bmaporthofoto30cm/normal/google3857/{z}/{y}/{x}.jpeg', { maxZoom: 20, attribution: 'Datenquelle: basemap.at' }).addTo(map)
+    : window.EinsatzcockpitMapConfig.addOsmTileLayer(map, { maxZoom: 20 });
 
   function escapeHtml(s) {
     return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {

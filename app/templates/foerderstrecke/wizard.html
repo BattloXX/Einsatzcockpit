@@ -709,8 +709,7 @@ function foerderPlaner() {
       });
       const karte = L.map(el).setView([47.47, 9.75], 13);
       this.karte = karte;
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-        {maxZoom:19, attribution:"© OpenStreetMap"}).addTo(karte);
+      window.EinsatzcockpitMapConfig.addOsmTileLayer(karte);
       karte.pm.addControls({position:"topleft", drawPolyline:true, drawMarker:false,
         drawCircle:false, drawRectangle:false, drawPolygon:false, drawCircleMarker:false,
         drawText:false, editMode:true, dragMode:false, cutPolygon:false, removalMode:true});

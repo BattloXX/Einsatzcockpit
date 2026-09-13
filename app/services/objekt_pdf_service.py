@@ -19,6 +19,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
+from app.core.map_config import OSM_TILE_URL
 from app.core.templating import templates
 from app.models.master import FireDept
 from app.models.objekt import (
@@ -45,7 +46,7 @@ def render_objekt_map_png(objekt: Objekt, *, size: tuple[int, int] = (640, 400))
 
         karte = StaticMap(
             size[0], size[1],
-            url_template="https://a.tile.openstreetmap.org/{z}/{x}/{y}.png",
+            url_template=OSM_TILE_URL,
             headers={"User-Agent": "Einsatzcockpit (Objektblatt-Druck)"},
         )
         karte.add_marker(CircleMarker((objekt.lng, objekt.lat), "#d42225", 16))

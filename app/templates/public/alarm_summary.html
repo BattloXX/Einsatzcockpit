@@ -79,6 +79,7 @@
   {% if has_coords %}
   <link rel="stylesheet" href="/static/css/leaflet.min.css">
   <script src="/static/js/leaflet.min.js"></script>
+  <script src="/static/js/map-config.js"></script>
   <script src="/static/js/objekt_karte.js"></script>
   <script>
   (function () {
@@ -86,8 +87,7 @@
     if (!el || typeof L === "undefined") { return; }
     var lat = parseFloat(el.dataset.lat), lng = parseFloat(el.dataset.lng);
     var karte = L.map(el, { zoomControl: true }).setView([lat, lng], 17);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-      { maxZoom: 19, attribution: "&copy; OpenStreetMap" }).addTo(karte);
+    window.EinsatzcockpitMapConfig.addOsmTileLayer(karte);
     L.marker([lat, lng], {
       icon: L.divIcon({ html: '<div class="einsatz-marker">🚨</div>',
         className: "einsatz-marker-divicon", iconSize: null, iconAnchor: [16, 32] }),

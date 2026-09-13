@@ -72,9 +72,7 @@
     var startZoom = initLat !== null ? 17 : 14;
 
     _map = L.map('cmPinMap').setView([startLat, startLng], startZoom);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap', subdomains: 'abc', maxZoom: 19,
-    }).addTo(_map);
+    window.EinsatzcockpitMapConfig.addOsmTileLayer(_map);
 
     if (initLat !== null) {
       _marker = L.marker([initLat, initLng], {draggable: true}).addTo(_map);

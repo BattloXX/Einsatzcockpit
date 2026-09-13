@@ -193,6 +193,7 @@
 
 {% if marker.lat and marker.lng %}
 <script src="/static/js/leaflet.min.js"></script>
+<script src="/static/js/map-config.js"></script>
 <script>
 (function() {
   var lat = {{ marker.lat }}, lng = {{ marker.lng }};
@@ -202,12 +203,9 @@
     iconRetinaUrl: '/static/img/leaflet/marker-icon-2x.png',
     shadowUrl: '/static/img/leaflet/marker-shadow.png',
   });
-  var map = L.map('printMap', { zoomControl: false, attributionControl: false })
+  var map = L.map('printMap', { zoomControl: false })
              .setView([lat, lng], 18);
-  var tiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    subdomains: 'abc', maxZoom: 19,
-    attribution: '© OpenStreetMap'
-  }).addTo(map);
+  var tiles = window.EinsatzcockpitMapConfig.addOsmTileLayer(map);
   L.marker([lat, lng]).addTo(map);
   setTimeout(function() { map.invalidateSize(); }, 50);
   setTimeout(function() { map.invalidateSize(); }, 300);

@@ -346,6 +346,7 @@
 
 {% if has_maps %}
 <script src="/static/js/leaflet.min.js"></script>
+<script src="/static/js/map-config.js"></script>
 {% endif %}
 <script>
 (function() {
@@ -371,10 +372,8 @@
   mapEls.forEach(function(el) {
     var lat = parseFloat(el.dataset.lat);
     var lng = parseFloat(el.dataset.lng);
-    var m = L.map(el, { zoomControl: false, attributionControl: false }).setView([lat, lng], 18);
-    var tl = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      subdomains: 'abc', maxZoom: 19
-    }).addTo(m);
+    var m = L.map(el, { zoomControl: false }).setView([lat, lng], 18);
+    var tl = window.EinsatzcockpitMapConfig.addOsmTileLayer(m);
     L.marker([lat, lng]).addTo(m);
     setTimeout(function() { m.invalidateSize(); }, 50);
     maps.push(m);

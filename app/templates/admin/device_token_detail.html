@@ -73,11 +73,7 @@
   var ts  = "{% if dt.last_location_at %}{{ (dt.last_location_at|local).strftime('%d.%m.%Y %H:%M:%S') }}{% else %}unbekannt{% endif %}";
 
   var map = L.map('deviceMap').setView([lat, lng], 15);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap',
-    subdomains: 'abc',
-    maxZoom: 19,
-  }).addTo(map);
+  window.EinsatzcockpitMapConfig.addOsmTileLayer(map);
 
   var marker = L.marker([lat, lng]).addTo(map);
   marker.bindPopup(

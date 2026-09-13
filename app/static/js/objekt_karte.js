@@ -106,10 +106,7 @@
 
   window.initObjektKarte = function (opts) {
     var karte = L.map(opts.elementId, { zoomControl: true });
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
-      attribution: "&copy; OpenStreetMap"
-    }).addTo(karte);
+    window.EinsatzcockpitMapConfig.addOsmTileLayer(karte);
 
     var layerById = {};
     var aktiverTyp = null;

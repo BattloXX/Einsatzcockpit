@@ -68,10 +68,7 @@
   if (el && typeof L !== "undefined") {
     var karte = L.map(el, { zoomControl: true }).setView([47.4652, 9.7503], 13);
     WS.map = karte;
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>-Mitwirkende',
-      subdomains: "abc", maxZoom: 19,
-    }).addTo(karte);
+    window.EinsatzcockpitMapConfig.addOsmTileLayer(karte);
     setTimeout(function () { karte.invalidateSize(); }, 150);
     setTimeout(function () { karte.invalidateSize(); }, 600);
     window.addEventListener("resize", function () { karte.invalidateSize(); });

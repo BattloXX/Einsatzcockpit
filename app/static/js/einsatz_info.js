@@ -25,10 +25,7 @@
   var objektIds = (el.dataset.objektIds || "").split(",").filter(Boolean);
 
   var karte = L.map(el, { zoomControl: true });
-  var tileLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19,
-    attribution: "&copy; OpenStreetMap"
-  }).addTo(karte);
+  var tileLayer = window.EinsatzcockpitMapConfig.addOsmTileLayer(karte);
   // Karte liegt in einem Grid/Sticky-Container → nach dem Layout neu vermessen.
   setTimeout(function () { karte.invalidateSize(); }, 200);
   window.addEventListener("resize", function () { karte.invalidateSize(); });
