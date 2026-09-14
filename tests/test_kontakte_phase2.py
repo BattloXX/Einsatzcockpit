@@ -8,9 +8,10 @@ from openpyxl import load_workbook
 from PIL import Image
 
 from app.core.security import hash_password
+from app.core.telefon import telefon_normalisiert
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
-from app.models.kontakt import Kontakt, KontaktKategorie
+from app.models.kontakt import Kontakt, KontaktKategorie, ObjektKontaktFreigabe
 from app.models.master import FireDept, OrgSettings, SystemSettings
 from app.models.objekt import Objekt, ObjektKontakt
 from app.models.user import Role, User, UserRole
@@ -369,7 +370,18 @@ def test_xlsx_roundtrip_uebernimmt_telefone_und_objektzuordnungen(client):
         objekt = Objekt(org_id=user.org_id, nummer=981234, name="Roundtrip Objekt")
         db.add(objekt)
         db.flush()
-        db.add(ObjektKontakt(org_id=user.org_id, objekt_id=objekt.id, kontakt_id=kontakt.id))
+        zuordnung = ObjektKontakt(org_id=user.org_id, objekt_id=objekt.id, kontakt_id=kontakt.id)
+        db.add(zuordnung)
+        db.flush()
+        db.add(
+            ObjektKontaktFreigabe(
+                org_id=user.org_id,
+                objekt_kontakt_id=zuordnung.id,
+                kanal="sms",
+                ziel_wert=telefon_normalisiert(kontakt.telefone[0].nummer),
+                aktiv=True,
+            )
+        )
         db.commit()
         rows = parse_import(export_xlsx(db, user.org_id), "kontakte.xlsx")
         row = next(row for row in rows if row["id"] == str(kontakt.id))
@@ -384,6 +396,76 @@ def test_xlsx_roundtrip_uebernimmt_telefone_und_objektzuordnungen(client):
         db.expire_all()
         assert db.get(Kontakt, kontakt.id).telefone[0].label == "Mobil"
         assert db.query(ObjektKontakt).filter_by(objekt_id=objekt.id, kontakt_id=kontakt.id).one().art == "betreiber"
+        assert db.query(ObjektKontaktFreigabe).filter_by(objekt_kontakt_id=zuordnung.id).count() == 1
+    finally:
+        db.close()
+
+
+def test_nummernaenderung_wirkt_an_beiden_objekten_ohne_freigabe_wanderung():
+    nummer_a = "+43 664 111 222"
+    nummer_b = "+43 664 333 444"
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        kontakt = kontakt_service.create_kontakt(
+            db,
+            {"typ": "person", "anzeigename": "Gemeinsamer Kontakt"},
+            [{"nummer": nummer_a}],
+            [],
+            org_id=1,
+            user_id=None,
+        )
+        objekte = [
+            Objekt(org_id=1, nummer=981235, name="Nummernaenderung Objekt 1"),
+            Objekt(org_id=1, nummer=981236, name="Nummernaenderung Objekt 2"),
+        ]
+        db.add_all(objekte)
+        db.flush()
+        zuordnungen = [
+            ObjektKontakt(org_id=1, objekt_id=objekt.id, kontakt_id=kontakt.id)
+            for objekt in objekte
+        ]
+        db.add_all(zuordnungen)
+        db.flush()
+        db.add_all(
+            ObjektKontaktFreigabe(
+                org_id=1,
+                objekt_kontakt_id=zuordnung.id,
+                kanal="sms",
+                ziel_wert=telefon_normalisiert(nummer_a),
+                aktiv=True,
+            )
+            for zuordnung in zuordnungen
+        )
+        db.commit()
+
+        kontakt_service.update_kontakt(
+            db,
+            kontakt.id,
+            {"typ": "person", "anzeigename": "Gemeinsamer Kontakt"},
+            [{"nummer": nummer_b}],
+            [],
+            version=kontakt.version,
+            org_id=1,
+            user_id=None,
+        )
+        db.expire_all()
+
+        aktualisierte_zuordnungen = (
+            db.query(ObjektKontakt).filter(ObjektKontakt.id.in_([item.id for item in zuordnungen])).all()
+        )
+        freigaben = (
+            db.query(ObjektKontaktFreigabe)
+            .filter(ObjektKontaktFreigabe.objekt_kontakt_id.in_([item.id for item in zuordnungen]))
+            .all()
+        )
+        assert len(aktualisierte_zuordnungen) == 2
+        assert all(
+            zuordnung.zentraler_kontakt.telefone[0].nummer_normalisiert == telefon_normalisiert(nummer_b)
+            for zuordnung in aktualisierte_zuordnungen
+        )
+        assert len(freigaben) == 2
+        assert all(freigabe.ziel_wert == telefon_normalisiert(nummer_a) for freigabe in freigaben)
     finally:
         db.close()
 
