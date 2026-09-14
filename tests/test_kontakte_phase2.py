@@ -90,7 +90,16 @@ def test_bearbeiten_dialog_verwendet_update_endpoint_und_vorhandene_daten(client
     csrf = client.cookies.get("ec_csrf")
     erstellt = client.post(
         "/kontakte/",
-        data={"_csrf": csrf, "typ": "person", "anzeigename": "Vorhandener Kontakt", "vorname": "Vorhanden"},
+        data={
+            "_csrf": csrf,
+            "typ": "person",
+            "anzeigename": "Vorhandener Kontakt",
+            "vorname": "Vorhanden",
+            "nummer": ["+43 664 111", "+43 664 222"],
+            "telefon_label": ["Mobil", "Dienst"],
+            "bevorzugt": ["0"],
+            "sms_eignung": ["1"],
+        },
         follow_redirects=False,
     )
     assert erstellt.status_code == 303
@@ -102,6 +111,9 @@ def test_bearbeiten_dialog_verwendet_update_endpoint_und_vorhandene_daten(client
     assert f'action="/kontakte/{kontakt_id}"' in response.text
     assert 'value="Vorhandener Kontakt"' in response.text
     assert 'value="Vorhanden"' in response.text
+    assert "+43 664 111" in response.text
+    assert "+43 664 222" in response.text
+    assert "Mobil" in response.text and "Dienst" in response.text
     aktualisiert = client.post(
         f"/kontakte/{kontakt_id}",
         data={"_csrf": csrf, "version": "0", "typ": "person", "anzeigename": "Aktualisierter Kontakt"},

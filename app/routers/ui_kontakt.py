@@ -118,6 +118,40 @@ def _telefone(
     ]
 
 
+def _bearbeitungsdaten(db: Session, kontakt: Kontakt) -> dict[str, object]:
+    """Liest den vollständigen, speicherbaren Stand für den Bearbeitungsdialog."""
+
+    def textwert(wert: object) -> str:
+        if wert is None or str(wert).strip().casefold() in {"none", "null"}:
+            return ""
+        return str(wert)
+
+    telefone = (
+        db.query(KontaktTelefon)
+        .filter(KontaktTelefon.kontakt_id == kontakt.id)
+        .order_by(KontaktTelefon.sort, KontaktTelefon.id)
+        .all()
+    )
+    return {
+        "id": kontakt.id,
+        "version": kontakt.version,
+        "typ": kontakt.typ,
+        "anzeigename": textwert(kontakt.anzeigename),
+        "vorname": textwert(kontakt.vorname),
+        "nachname": textwert(kontakt.nachname),
+        "funktion": textwert(kontakt.funktion),
+        "organisation": textwert(kontakt.organisation),
+        "email": textwert(kontakt.email),
+        "erreichbarkeit": textwert(kontakt.erreichbarkeit),
+        "notizen": textwert(kontakt.notizen),
+        "nummer": [telefon.nummer for telefon in telefone],
+        "telefon_label": [textwert(telefon.label) for telefon in telefone],
+        "bevorzugt": [str(index) for index, telefon in enumerate(telefone) if telefon.bevorzugt],
+        "sms_eignung": [str(index) for index, telefon in enumerate(telefone) if telefon.sms_eignung],
+        "kategorien": ", ".join(zuordnung.kategorie.name for zuordnung in kontakt.kategorien),
+    }
+
+
 def _seite(
     request: Request,
     db: Session,
@@ -421,7 +455,7 @@ def bearbeiten_formular(
         {
             "user": user,
             "selected": kontakt,
-            "form_data": None,
+            "form_data": _bearbeitungsdaten(db, kontakt),
             "kategorien": kontakt_service.list_kategorien(db),
             "duplicate_candidates": [],
             "error": None,
