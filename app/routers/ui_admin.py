@@ -438,7 +438,7 @@ async def audit_log(request: Request, db: Session = Depends(get_db),
 @router.get("", response_class=HTMLResponse)
 @router.get("/", response_class=HTMLResponse)
 async def admin_index(request: Request, db: Session = Depends(get_db),
-                      _=Depends(require_role("admin", "org_admin", "system_admin"))):
+                      _=Depends(require_role("admin", "org_admin", "system_admin", "fahrtenbuch_admin"))):
     from app.core.permissions import has_role
     from app.core.queries import visible_incidents_q
     from app.models.incident import Incident

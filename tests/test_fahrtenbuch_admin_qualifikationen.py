@@ -29,6 +29,23 @@ def _fahrtenbuch_admin(db, username: str, org_id: int) -> User:
     return user
 
 
+def test_fahrtenbuch_admin_sieht_admin_dashboard_und_nur_quali_relevante_sidebar(client):
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        _fahrtenbuch_admin(db, "fb_quali_navigation", 1)
+        db.commit()
+    finally:
+        db.close()
+
+    _login(client, "fb_quali_navigation")
+    assert client.get("/admin").status_code == 200
+    members_page = client.get("/admin/mitglieder")
+    assert members_page.status_code == 200
+    assert "Qualifikationen" in members_page.text
+    assert "/admin/benutzer" not in members_page.text
+
+
 def test_fahrtenbuch_admin_darf_quali_crud_und_eigene_zuweisung_aber_keine_member_mutation(client):
     db = SessionLocal()
     set_tenant_context(db, None)

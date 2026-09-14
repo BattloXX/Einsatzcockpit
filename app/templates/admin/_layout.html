@@ -2,6 +2,7 @@
 {% from "_tooltip.html" import tip %}
 {% set user_role_codes = (user.roles|map(attribute='code')|list) if user else [] %}
 {% set is_sysadmin = 'system_admin' in user_role_codes %}
+{% set is_full_admin = 'admin' in user_role_codes or 'org_admin' in user_role_codes or 'system_admin' in user_role_codes %}
 
 {# Aktive Gruppe anhand des aktuellen Pfades bestimmen #}
 {% set _p = request.url.path %}
@@ -226,6 +227,20 @@
           <span class="admin-nav__icon">📖</span>Hilfe
         </a>
 
+        {% if not is_full_admin %}
+        <a href="/admin/mitglieder"
+           class="admin-nav__item {% if '/admin/mitglieder' in request.url.path %}is-active{% endif %}"
+           {{ tip('Mannschaftsliste mit Qualifikationen') }}>
+          <span class="admin-nav__icon">👥</span>Mitglieder
+        </a>
+        <a href="/admin/qualifikationen"
+           class="admin-nav__item {% if '/admin/qualifikationen' in request.url.path %}is-active{% endif %}"
+           {{ tip('AGT, GK, MA u.a. — Codes für Mitglieder') }}>
+          <span class="admin-nav__icon">🎖️</span>Qualifikationen
+        </a>
+        {% endif %}
+
+        {% if is_full_admin %}
         <!-- ── Stammdaten ────────────────────────────────────────────── -->
         <button class="admin-nav__group-hdr" type="button" @click="toggle('stammdaten')"
                 :class="isMobile() && 'is-mobile-static'" :tabindex="isMobile() ? -1 : 0">
@@ -498,6 +513,7 @@
             {% endif %}
           </div>
         </div>
+        {% endif %}
 
         <div class="admin-nav__empty" x-show="noResults" x-cloak>Keine Treffer</div>
 
