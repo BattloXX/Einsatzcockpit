@@ -84,6 +84,39 @@ def test_neu_dialog_ist_leer_und_verwendet_den_anlage_endpoint(client):
     assert "Kontakt bearbeiten" not in response.text
 
 
+def test_bearbeiten_dialog_verwendet_update_endpoint_und_vorhandene_daten(client):
+    user = _setup_user("kontakte_bearbeiten_dialog", "kontakt_verwalter")
+    _login(client, user.username)
+    csrf = client.cookies.get("ec_csrf")
+    erstellt = client.post(
+        "/kontakte/",
+        data={"_csrf": csrf, "typ": "person", "anzeigename": "Vorhandener Kontakt", "vorname": "Vorhanden"},
+        follow_redirects=False,
+    )
+    assert erstellt.status_code == 303
+    kontakt_id = int(erstellt.headers["location"].rsplit("/", 1)[1])
+
+    response = client.get(f"/kontakte/{kontakt_id}/bearbeiten")
+
+    assert response.status_code == 200
+    assert f'action="/kontakte/{kontakt_id}"' in response.text
+    assert 'value="Vorhandener Kontakt"' in response.text
+    assert 'value="Vorhanden"' in response.text
+    aktualisiert = client.post(
+        f"/kontakte/{kontakt_id}",
+        data={"_csrf": csrf, "version": "0", "typ": "person", "anzeigename": "Aktualisierter Kontakt"},
+        follow_redirects=False,
+    )
+    assert aktualisiert.status_code == 303
+    db = SessionLocal()
+    set_tenant_context(db, user.org_id)
+    try:
+        assert db.query(Kontakt).filter_by(anzeigename="Aktualisierter Kontakt").count() == 1
+        assert db.query(Kontakt).filter_by(anzeigename="Vorhandener Kontakt").count() == 0
+    finally:
+        db.close()
+
+
 def test_profilbild_wird_klein_gespeichert_und_ausgeliefert(client, tmp_path, monkeypatch):
     user = _setup_user("kontakte_profilbild", "kontakt_verwalter")
     _login(client, user.username)
