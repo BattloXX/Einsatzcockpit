@@ -1,6 +1,6 @@
 {% for kontakt in kontakte %}
 <a class="kontakt-row {% if selected and selected.id == kontakt.id %}is-selected{% endif %}" href="/kontakte/{{ kontakt.id }}" hx-get="/kontakte/{{ kontakt.id }}" hx-target="#kontakt-detail" hx-swap="innerHTML" hx-push-url="true">
-  <span class="kontakt-avatar">{{ kontakt.anzeigename[:2]|upper }}</span>
+  {% if kontakt.bild_pfad %}<img class="kontakt-avatar kontakt-avatar--image" src="/kontakte/{{ kontakt.id }}/profilbild" alt="" loading="lazy">{% else %}<span class="kontakt-avatar">{{ kontakt.anzeigename[:2]|upper }}</span>{% endif %}
   <span class="kontakt-row__main"><strong>{{ kontakt.anzeigename }}</strong><small>{{ kontakt.organisation or kontakt.funktion or 'Ohne Zusatzangabe' }}</small></span>
   <span class="kontakt-type kontakt-type--{{ kontakt.typ }}">{{ 'Person' if kontakt.typ == 'person' else 'Stelle' }}</span>
 </a>

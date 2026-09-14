@@ -5,6 +5,7 @@ from __future__ import annotations
 from io import BytesIO
 
 from openpyxl import load_workbook
+from PIL import Image
 
 from app.core.security import hash_password
 from app.core.tenant import set_tenant_context
@@ -79,6 +80,46 @@ def test_neu_dialog_ist_leer_und_verwendet_den_anlage_endpoint(client):
     assert '<dialog id="kontaktModal" class="modal" open>' in response.text
     assert 'action="/kontakte/"' in response.text
     assert "Kontakt bearbeiten" not in response.text
+
+
+def test_profilbild_wird_klein_gespeichert_und_ausgeliefert(client, tmp_path, monkeypatch):
+    user = _setup_user("kontakte_profilbild", "kontakt_verwalter")
+    _login(client, user.username)
+    monkeypatch.setattr("app.routers.ui_kontakt._BILD_DIR", tmp_path)
+
+    source = BytesIO()
+    Image.new("RGB", (1600, 900), "red").save(source, "PNG")
+    response = client.post(
+        "/kontakte/",
+        data={
+            "_csrf": client.cookies.get("ec_csrf"),
+            "typ": "person",
+            "anzeigename": "Bild Kontakt",
+        },
+        files={"profilbild": ("portrait.png", source.getvalue(), "image/png")},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    kontakt_id = int(response.headers["location"].rsplit("/", 1)[1])
+    db = SessionLocal()
+    set_tenant_context(db, 1)
+    try:
+        kontakt = kontakt_service.get_kontakt(db, kontakt_id)
+        assert kontakt is not None and kontakt.bild_pfad
+        datei = tmp_path / kontakt.bild_pfad
+        assert datei.is_file()
+        with Image.open(datei) as bild:
+            assert bild.format == "JPEG"
+            assert max(bild.size) <= 192
+    finally:
+        db.close()
+
+    bild_response = client.get(f"/kontakte/{kontakt_id}/profilbild")
+    assert bild_response.status_code == 200
+    assert bild_response.headers["content-type"] == "image/jpeg"
+    assert f'src="/kontakte/{kontakt_id}/profilbild"' in client.get("/kontakte").text
+    assert f'src="/kontakte/{kontakt_id}/profilbild"' in client.get(f"/kontakte/{kontakt_id}").text
 
 
 def test_crud_multitelefon_kategorien_und_konflikt(client):
