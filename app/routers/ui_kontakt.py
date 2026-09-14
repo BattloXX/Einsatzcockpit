@@ -720,9 +720,9 @@ def zusammenfuehren(
         raise HTTPException(status_code=404, detail="Kontakt nicht gefunden") from None
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    url = f"/kontakte/{ergebnis.kontakt.id}"
-    if ergebnis.freigabe_konflikte:
-        url = f"{url}?{urlencode([('merge_konflikt', konflikt) for konflikt in ergebnis.freigabe_konflikte])}"
+    query_params = [("quelle_archiviert", str(quelle_id))]
+    query_params.extend(("merge_konflikt", konflikt) for konflikt in ergebnis.freigabe_konflikte)
+    url = f"/kontakte/{ergebnis.kontakt.id}?{urlencode(query_params)}"
     return RedirectResponse(url, status_code=303)
 
 

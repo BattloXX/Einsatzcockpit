@@ -423,6 +423,7 @@ def test_merge_lehnt_fremde_org_ab_und_feldwahl_ist_pro_feld_unabhaengig(client)
         follow_redirects=False,
     )
     assert response.status_code == 303
+    assert "quelle_archiviert" in response.headers["location"]
     db = SessionLocal()
     set_tenant_context(db, user.org_id)
     try:
@@ -430,5 +431,7 @@ def test_merge_lehnt_fremde_org_ab_und_feldwahl_ist_pro_feld_unabhaengig(client)
         assert nachher is not None
         assert nachher.organisation == "Quelle Organisation"
         assert nachher.funktion == "Ziel Funktion"
+        archiviert = kontakt_service.get_kontakt(db, quelle.id, include_archiviert=True)
+        assert archiviert is not None and archiviert.archiviert and not archiviert.aktiv
     finally:
         db.close()
