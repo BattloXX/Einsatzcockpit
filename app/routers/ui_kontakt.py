@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import io
+import logging
+import uuid
 from datetime import UTC, datetime
+from pathlib import Path
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.core.permissions import can_send_manual_sms, require_role
 from app.core.templating import templates
 from app.db import get_db
@@ -19,6 +24,10 @@ from app.models.user import User
 from app.services import kontakt_service
 
 router = APIRouter(prefix="/kontakte", tags=["kontakte"])
+logger = logging.getLogger("einsatzleiter.kontakte")
+_BILD_DIR = Path(settings.MEDIA_STORAGE_DIR).parent / "kontaktbilder"
+_BILD_MAX_BYTES = 3 * 1024 * 1024
+_BILD_SIZE = 192
 _LESE_ROLLEN = (
     "readonly",
     "recorder",
@@ -65,6 +74,33 @@ def _org_id(user: User) -> int:
     if user.org_id is None:
         raise HTTPException(status_code=400, detail="Keine Organisation ausgewaehlt")
     return user.org_id
+
+
+async def _speichere_profilbild(kontakt: Kontakt, bild: UploadFile | None) -> str | None:
+    """Speichert ein quadratisches, platzsparendes JPEG-Profilbild (max. 192 px)."""
+    if bild is None or not bild.filename:
+        return None
+    data = await bild.read(_BILD_MAX_BYTES + 1)
+    if len(data) > _BILD_MAX_BYTES:
+        return "Profilbild ist zu groß (maximal 3 MB)."
+    if not (bild.content_type or "").startswith("image/"):
+        return "Profilbild muss eine Bilddatei sein."
+    try:
+        from PIL import Image, ImageOps
+
+        image = ImageOps.exif_transpose(Image.open(io.BytesIO(data))).convert("RGB")
+        image.thumbnail((_BILD_SIZE, _BILD_SIZE), Image.Resampling.LANCZOS)
+        _BILD_DIR.mkdir(parents=True, exist_ok=True)
+        filename = f"{kontakt.org_id}_{kontakt.id}_{uuid.uuid4().hex[:10]}.jpg"
+        image.save(_BILD_DIR / filename, "JPEG", quality=78, optimize=True)
+        old = _BILD_DIR / Path(kontakt.bild_pfad).name if kontakt.bild_pfad else None
+        kontakt.bild_pfad = filename
+        if old and old.exists():
+            old.unlink(missing_ok=True)
+    except Exception:
+        logger.exception("Profilbild für Kontakt %s konnte nicht gespeichert werden", kontakt.id)
+        return "Profilbild konnte nicht verarbeitet werden."
+    return None
 
 
 def _telefone(
@@ -367,6 +403,50 @@ def neu_formular(
     )
 
 
+@router.get("/{kontakt_id}/bearbeiten", response_class=HTMLResponse)
+def bearbeiten_formular(
+    request: Request,
+    kontakt_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*_SCHREIB_ROLLEN)),
+    _guard: None = Depends(require_kontakte_enabled),
+):
+    """Liefert den Bearbeitungsdialog mit den bereits gespeicherten Werten."""
+    kontakt = kontakt_service.get_kontakt(db, kontakt_id)
+    if kontakt is None:
+        raise HTTPException(status_code=404, detail="Kontakt nicht gefunden")
+    return templates.TemplateResponse(
+        request,
+        "kontakte/_form.html",
+        {
+            "user": user,
+            "selected": kontakt,
+            "form_data": None,
+            "kategorien": kontakt_service.list_kategorien(db),
+            "duplicate_candidates": [],
+            "error": None,
+        },
+    )
+
+
+@router.get("/{kontakt_id}/profilbild")
+def profilbild(
+    kontakt_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*_LESE_ROLLEN)),
+    _guard: None = Depends(require_kontakte_enabled),
+):
+    kontakt = kontakt_service.get_kontakt(db, kontakt_id)
+    path = _BILD_DIR / Path(kontakt.bild_pfad).name if kontakt and kontakt.bild_pfad else None
+    if path is None or not path.is_file():
+        raise HTTPException(status_code=404, detail="Profilbild nicht gefunden")
+    return FileResponse(
+        path,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "private, max-age=86400"},
+    )
+
+
 @router.get("/{kontakt_id}", response_class=HTMLResponse)
 def detail(
     request: Request,
@@ -495,7 +575,7 @@ async def sms_an_kontakt_senden(
 
 
 @router.post("/", response_class=HTMLResponse)
-def create(
+async def create(
     request: Request,
     typ: str = Form(KONTAKT_TYP_PERSON),
     anzeigename: str = Form(""),
@@ -512,6 +592,7 @@ def create(
     sms_eignung: list[str] = Form([]),
     kategorien: str = Form(""),
     duplikate_bestaetigt: str = Form(""),
+    profilbild: UploadFile | None = File(None),
     db: Session = Depends(get_db),
     user: User = Depends(require_role(*_SCHREIB_ROLLEN)),
     _guard: None = Depends(require_kontakte_enabled),
@@ -557,6 +638,10 @@ def create(
             form_data=form_data,
             error=str(exc),
         )
+    if fehler := await _speichere_profilbild(kontakt, profilbild):
+        db.commit()
+        return _seite(request, db, user, selected_id=kontakt.id, error=fehler)
+    db.commit()
     return RedirectResponse(f"/kontakte/{kontakt.id}", status_code=303)
 
 
@@ -642,7 +727,7 @@ def zusammenfuehren(
 
 
 @router.post("/{kontakt_id}", response_class=HTMLResponse)
-def update(
+async def update(
     request: Request,
     kontakt_id: int,
     version: int = Form(...),
@@ -660,6 +745,7 @@ def update(
     bevorzugt: list[str] = Form([]),
     sms_eignung: list[str] = Form([]),
     kategorien: str = Form(""),
+    profilbild: UploadFile | None = File(None),
     db: Session = Depends(get_db),
     user: User = Depends(require_role(*_SCHREIB_ROLLEN)),
     _guard: None = Depends(require_kontakte_enabled),
@@ -676,7 +762,7 @@ def update(
         "id": kontakt_id,
     }
     try:
-        kontakt_service.update_kontakt(
+        kontakt = kontakt_service.update_kontakt(
             db,
             kontakt_id,
             daten,
@@ -699,6 +785,10 @@ def update(
         raise HTTPException(status_code=404, detail="Kontakt nicht gefunden")
     except ValueError as exc:
         return _seite(request, db, user, selected_id=kontakt_id, form_data=form_data, error=str(exc))
+    if fehler := await _speichere_profilbild(kontakt, profilbild):
+        db.commit()
+        return _seite(request, db, user, selected_id=kontakt_id, form_data=form_data, error=fehler)
+    db.commit()
     return RedirectResponse(f"/kontakte/{kontakt_id}", status_code=303)
 
 
