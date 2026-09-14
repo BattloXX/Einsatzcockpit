@@ -30,11 +30,61 @@ from app.models.mailing import (
 )
 from app.models.user import ApiKey
 from app.models.api_message import ApiMessage, ApiMessageRecipient
+from app.models.kontakt import Kontakt
 from app.models.sms import SmsGroup
 from app.core.crypto import encrypt_secret
-from app.core.security import sign_mailing_track_token, sign_mailing_webhook_org
+from app.core.security import generate_api_key, sign_mailing_track_token, sign_mailing_webhook_org
+from app.services import kontakt_service
 
 ORG_A = 1  # FF Wolfurt (seeded)
+
+
+def test_kontakt_sync_api_key_zeigt_keine_fremden_snapshot_oder_delta_kontakte(client):
+    org_b_id = _setup_zwei_orgs()
+    raw_key = generate_api_key()
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        db.add(ApiKey(key_hash=hash_api_key(raw_key), label="Kontakt-Sync Isolation", org_id=ORG_A))
+        kontakt_b = kontakt_service.create_kontakt(
+            db,
+            {"typ": "person", "anzeigename": "Geheimer Kontakt Org B"},
+            [],
+            [],
+            org_id=org_b_id,
+            user_id=None,
+        )
+        kontakt_b_id = kontakt_b.id
+    finally:
+        db.close()
+
+    headers = {"X-API-Key": raw_key}
+    snapshot = client.get("/api/v1/kontakte/sync", headers=headers)
+    assert snapshot.status_code == 200
+    snapshot_payload = snapshot.json()
+    assert all(item["id"] != kontakt_b_id for item in snapshot_payload["contacts"])
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        kontakt_b = db.get(Kontakt, kontakt_b_id)
+        assert kontakt_b is not None
+        kontakt_service.update_kontakt(
+            db,
+            kontakt_b_id,
+            {"typ": "person", "anzeigename": "Geheimer Kontakt Org B aktualisiert"},
+            [],
+            [],
+            version=kontakt_b.version,
+            org_id=org_b_id,
+            user_id=None,
+        )
+    finally:
+        db.close()
+
+    delta = client.get(f"/api/v1/kontakte/sync?cursor={snapshot_payload['cursor']}", headers=headers)
+    assert delta.status_code == 200
+    assert all(item["id"] != kontakt_b_id for item in delta.json()["changes"])
 
 
 def test_fahrtenbuch_autocomplete_token_zeigt_keine_fremden_mitglieder(client):
