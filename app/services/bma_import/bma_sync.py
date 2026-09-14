@@ -30,6 +30,8 @@ from app.models.objekt import (
     legacy_telefon_eintrag,
 )
 from app.services.bma_import.bma_pdf_parser import namens_slug
+from app.services.kontakt_service import bereinigter_text
+from app.services.kontakt_sync_service import contact_payload, mapping_payload, record_change
 from app.services.objekt_plan_upload_service import erstelle_objekt_aus_identitaet, finde_passendes_objekt
 from app.services.objekt_service import aktualisiere_felder, write_objekt_change
 
@@ -103,17 +105,18 @@ def _zentralen_bma_kontakt_sync(
         for index, roh in enumerate(daten.get("telefone") or [])
         if (eintrag := _telefon_daten(roh))["nummer"]
     ]
+    anzeigename = bereinigter_text(daten.get("name")) or ""
     if kontakt is None:
         kontakt = Kontakt(
-            org_id=zuordnung.org_id, typ="person", anzeigename=(daten.get("name") or "").strip(),
-            email=(daten.get("email") or "").strip() or None,
+            org_id=zuordnung.org_id, typ="person", anzeigename=anzeigename,
+            email=bereinigter_text(daten.get("email")),
             erstellt_von_id=user_id, aktualisiert_von_id=user_id,
         )
         db.add(kontakt)
         db.flush()
     else:
-        kontakt.anzeigename = (daten.get("name") or "").strip()
-        kontakt.email = (daten.get("email") or "").strip() or None
+        kontakt.anzeigename = anzeigename
+        kontakt.email = bereinigter_text(daten.get("email"))
         kontakt.aktualisiert_von_id = user_id
         kontakt.version += 1
     kontakt.telefone[:] = [
@@ -133,6 +136,8 @@ def _zentralen_bma_kontakt_sync(
         ))
     zuordnung.kontakt_id = kontakt.id
     db.flush()
+    assert zuordnung.org_id is not None
+    record_change(db, zuordnung.org_id, "kontakt", kontakt.id, "upsert", contact_payload(kontakt))
     return kontakt
 
 
@@ -218,6 +223,7 @@ def ist_offener_vorschlag(satz: BmaImportSatz, objekt: Objekt | None) -> bool:
 
 def _sync_kontakte(db: Session, satz: BmaImportSatz, objekt: Objekt,
                     kontakte: list[dict], user_id: int | None) -> bool:
+    assert objekt.org_id is not None
     praefix = _kontakt_praefix(satz)
     bestehende = {
         k.extern_id: k
@@ -231,7 +237,7 @@ def _sync_kontakte(db: Session, satz: BmaImportSatz, objekt: Objekt,
     naechster_sort = max((k.sort for k in objekt.kontakte), default=0) + 1
     for daten in kontakte:
         extern_id = daten.get("extern_id")
-        if not extern_id or not (daten.get("name") or "").strip():
+        if not extern_id or not bereinigter_text(daten.get("name")):
             continue
         gesehen.add(extern_id)
         felder = _kontakt_felder(daten)
@@ -256,8 +262,8 @@ def _sync_kontakte(db: Session, satz: BmaImportSatz, objekt: Objekt,
             zentraler_kontakt = Kontakt(
                 org_id=objekt.org_id,
                 typ="person",
-                anzeigename=(daten.get("name") or "").strip(),
-                email=(daten.get("email") or "").strip() or None,
+                anzeigename=bereinigter_text(daten.get("name")),
+                email=bereinigter_text(daten.get("email")),
                 erstellt_von_id=user_id,
                 aktualisiert_von_id=user_id,
             )
@@ -274,6 +280,8 @@ def _sync_kontakte(db: Session, satz: BmaImportSatz, objekt: Objekt,
             # unveraendert - der zweite Durchlauf saehe einen veralteten Stand und legte
             # jeden Kontakt ein zweites Mal an.
             objekt.kontakte.append(kontakt)
+            db.flush()
+            record_change(db, objekt.org_id, "zuordnung", kontakt.id, "upsert", mapping_payload(kontakt))
             bestehende[extern_id] = kontakt  # doppelte extern_id in EINER Liste -> Update
             naechster_sort += 1
             geaendert = True
@@ -291,15 +299,26 @@ def _sync_kontakte(db: Session, satz: BmaImportSatz, objekt: Objekt,
         erlaubte_mail = {(zentraler_kontakt.email or "").strip().casefold()} - {""}
         for freigabe in kontakt.freigaben:
             if freigabe.kanal == "sms" and freigabe.ziel_wert not in erlaubte_sms:
-                freigabe.aktiv = False
+                if freigabe.aktiv:
+                    freigabe.aktiv = False
+                    write_objekt_change(
+                        db, objekt.id, objekt.org_id, "kontakte", "sms_freigabe",
+                        before="freigegeben", after="entzogen", user_id=user_id,
+                    )
             elif freigabe.kanal == "mail" and freigabe.ziel_wert not in erlaubte_mail:
-                freigabe.aktiv = False
+                if freigabe.aktiv:
+                    freigabe.aktiv = False
+                    write_objekt_change(
+                        db, objekt.id, objekt.org_id, "kontakte", "mail_freigabe",
+                        before="freigegeben", after="entzogen", user_id=user_id,
+                    )
     for extern_id, kontakt in list(bestehende.items()):
         if extern_id not in gesehen:
             # remove() statt db.delete(): delete-orphan (models/objekt.py:216) loescht
             # die Zeile beim Flush UND haelt objekt.kontakte in-memory korrekt - dasselbe
             # Argument wie beim append() oben, nur andersherum.
             objekt.kontakte.remove(kontakt)
+            record_change(db, objekt.org_id, "zuordnung", kontakt.id, "tombstone")
             geaendert = True
     if geaendert:
         # Schreiben, bevor die naechste Datei desselben Requests dieselbe Collection
