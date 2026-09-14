@@ -592,6 +592,8 @@ async def create(
     sms_eignung: list[str] = Form([]),
     kategorien: str = Form(""),
     duplikate_bestaetigt: str = Form(""),
+    merge_kandidat_id: int = Form(0),
+    merge_nach_anlage: str = Form(""),
     profilbild: UploadFile | None = File(None),
     db: Session = Depends(get_db),
     user: User = Depends(require_role(*_SCHREIB_ROLLEN)),
@@ -609,7 +611,7 @@ async def create(
     kandidaten = kontakt_service.find_duplicate_candidates(
         db, anzeigename=anzeigename, organisation=organisation, email=email, telefone=nummer
     )
-    if kandidaten and duplikate_bestaetigt != "1":
+    if kandidaten and duplikate_bestaetigt != "1" and merge_nach_anlage != "1":
         return _seite(
             request,
             db,
@@ -621,6 +623,18 @@ async def create(
             ),
             duplicate_candidates=kandidaten,
         )
+    merge_kandidat = None
+    if merge_nach_anlage == "1":
+        merge_kandidat = next((kandidat for kandidat in kandidaten if kandidat.id == merge_kandidat_id), None)
+        if merge_kandidat is None:
+            return _seite(
+                request,
+                db,
+                user,
+                form_data=form_data,
+                error="Das gewählte Merge-Ziel ist nicht mehr aktiv oder kein passender Duplikatvorschlag.",
+                duplicate_candidates=kandidaten,
+            )
     try:
         kontakt = kontakt_service.create_kontakt(
             db,
@@ -642,6 +656,8 @@ async def create(
         db.commit()
         return _seite(request, db, user, selected_id=kontakt.id, error=fehler)
     db.commit()
+    if merge_kandidat is not None:
+        return RedirectResponse(f"/kontakte/{kontakt.id}/zusammenfuehren?ziel={merge_kandidat.id}", status_code=303)
     return RedirectResponse(f"/kontakte/{kontakt.id}", status_code=303)
 
 
@@ -672,6 +688,8 @@ def zusammenfuehren_form(
         raise HTTPException(status_code=404, detail="Kontakt nicht gefunden")
     kontakte, _ = kontakt_service.list_kontakte(db, q="", page=1)
     ziel_kontakt = kontakt_service.get_kontakt(db, ziel) if ziel else None
+    if ziel and (ziel_kontakt is None or not ziel_kontakt.aktiv or ziel_kontakt.org_id != quelle.org_id):
+        raise HTTPException(status_code=404, detail="Aktiver Zielkontakt nicht gefunden")
     return templates.TemplateResponse(
         request,
         "kontakte/zusammenfuehren.html",

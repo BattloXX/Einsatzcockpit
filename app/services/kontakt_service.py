@@ -63,6 +63,12 @@ def list_objektzuordnungen(db: Session, kontakt_id: int) -> list[ObjektKontakt]:
 
 
 def _werte(kontakt: Kontakt, daten: dict[str, Any], user_id: int | None) -> None:
+    def bereinigter_text(wert: Any) -> str | None:
+        if not isinstance(wert, str):
+            return wert
+        wert = wert.strip()
+        return None if not wert or wert.casefold() in {"none", "null"} else wert
+
     for feld in (
         "typ",
         "anzeigename",
@@ -75,8 +81,8 @@ def _werte(kontakt: Kontakt, daten: dict[str, Any], user_id: int | None) -> None
         "notizen",
     ):
         if feld in daten:
-            wert = daten[feld]
-            setattr(kontakt, feld, wert.strip() if isinstance(wert, str) else wert)
+            wert = bereinigter_text(daten[feld])
+            setattr(kontakt, feld, KONTAKT_TYP_PERSON if feld == "typ" and wert is None else wert)
     if kontakt.typ not in (KONTAKT_TYP_PERSON, KONTAKT_TYP_STELLE):
         raise ValueError("Ungueltiger Kontakttyp")
     if not kontakt.anzeigename:
@@ -249,7 +255,7 @@ def find_duplicate_candidates(
     return (
         _mit_details(db.query(Kontakt))
         .outerjoin(KontaktTelefon)
-        .filter(Kontakt.archiviert.is_(False), or_(*filters))
+        .filter(Kontakt.archiviert.is_(False), Kontakt.aktiv.is_(True), or_(*filters))
         .distinct()
         .order_by(Kontakt.anzeigename, Kontakt.id)
         .all()
@@ -266,8 +272,8 @@ def merge_kontakte(
     ziel = get_kontakt(db, ziel_id, include_archiviert=True)
     if quelle is None or ziel is None:
         raise LookupError("Kontakt nicht gefunden")
-    if quelle.archiviert or ziel.archiviert:
-        raise ValueError("Archivierte Kontakte koennen nicht zusammengefuehrt werden")
+    if quelle.archiviert or ziel.archiviert or not quelle.aktiv or not ziel.aktiv:
+        raise ValueError("Nur aktive, nicht archivierte Kontakte koennen zusammengefuehrt werden")
     if quelle.org_id != ziel.org_id:
         raise ValueError("Kontakte gehoeren nicht zur selben Organisation")
 
