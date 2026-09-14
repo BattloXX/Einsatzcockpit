@@ -229,7 +229,7 @@ def test_kontaktwerte_entfernen_none_und_bilden_anzeigenamen_aus_namen():
     assert kontakt.notizen is None
 
 
-def test_duplikat_merge_waehlt_nur_aktive_kontakte_voraus(client):
+def test_duplikatvorschlag_waehlt_nur_aktive_kontakte_und_legt_nichts_automatisch_an(client):
     user = _setup_user("p4_duplikat_merge")
     assert user.org_id is not None
     ziel = _kontakt(user.org_id, "Aktives Merge-Ziel", email="merge@example.at")
@@ -244,22 +244,29 @@ def test_duplikat_merge_waehlt_nur_aktive_kontakte_voraus(client):
 
     csrf = _login(client, user.username)
     daten = {"_csrf": csrf, "typ": "person", "anzeigename": "Neuer Kontakt", "email": "merge@example.at"}
-    warnung = client.post("/kontakte/", data=daten)
-    assert 'name="merge_kandidat_id"' in warnung.text
-    vorschlaege = warnung.text.split('name="merge_kandidat_id"', 1)[1].split("</select>", 1)[0]
+    vorschlaege = client.get("/kontakte/duplikatcheck", params={"email": "merge@example.at"}).text
     assert "Aktives Merge-Ziel" in vorschlaege
     assert "Inaktives Merge-Ziel" not in vorschlaege
 
+    db = SessionLocal()
+    set_tenant_context(db, user.org_id)
+    try:
+        vorher = db.query(Kontakt).count()
+    finally:
+        db.close()
     response = client.post(
         "/kontakte/",
         data={**daten, "merge_kandidat_id": str(ziel.id), "merge_nach_anlage": "1"},
         follow_redirects=False,
     )
-    assert response.status_code == 303
-    assert response.headers["location"].endswith(f"/zusammenfuehren?ziel={ziel.id}")
-    vergleich = client.get(response.headers["location"])
-    assert vergleich.status_code == 200
-    assert "Ziel: Aktives Merge-Ziel" in vergleich.text
+    assert response.status_code == 200
+    assert "Moegliche doppelte Kontakte gefunden" in response.text
+    db = SessionLocal()
+    set_tenant_context(db, user.org_id)
+    try:
+        assert db.query(Kontakt).count() == vorher
+    finally:
+        db.close()
 
 
 def test_merge_vereinigt_telefone_kategorien_anhaenge_und_referenzen():
