@@ -62,13 +62,15 @@ def list_objektzuordnungen(db: Session, kontakt_id: int) -> list[ObjektKontakt]:
     )
 
 
-def _werte(kontakt: Kontakt, daten: dict[str, Any], user_id: int | None) -> None:
-    def bereinigter_text(wert: Any) -> str | None:
-        if not isinstance(wert, str):
-            return wert
-        wert = wert.strip()
-        return None if not wert or wert.casefold() in {"none", "null"} else wert
+def bereinigter_text(wert: Any) -> str | None:
+    """Normalisiert leere und tabellarische Nullwerte zu ``None``."""
+    if not isinstance(wert, str):
+        return wert
+    wert = wert.strip()
+    return None if not wert or wert.casefold() in {"none", "null"} else wert
 
+
+def _werte(kontakt: Kontakt, daten: dict[str, Any], user_id: int | None) -> None:
     for feld in (
         "typ",
         "anzeigename",

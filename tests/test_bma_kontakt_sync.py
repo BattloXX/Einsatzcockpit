@@ -13,7 +13,7 @@ from app.db import Base
 from app.models.bma_import import BmaImportSatz, OrgBmaImportConfig
 from app.models.kontakt import Kontakt, KontaktExterneReferenz, KontaktTelefon, ObjektKontaktFreigabe
 from app.models.master import FireDept
-from app.models.objekt import OBJEKT_STATUS_ENTWURF, Objekt, ObjektBMA, ObjektKontakt
+from app.models.objekt import OBJEKT_STATUS_ENTWURF, Objekt, ObjektBMA, ObjektChange, ObjektKontakt
 from app.services.bma_import.bma_sync import _sync_kontakte, verarbeite_pdf_anlage
 
 
@@ -216,6 +216,22 @@ def test_doppelte_extern_id_in_einer_kontaktliste_legt_nur_eine_zeile_an(db):
     assert [telefon.nummer for telefon in objekt.kontakte[0].zentraler_kontakt.telefone] == ["+43 555 999"]
 
 
+def test_literal_none_als_name_wird_nicht_als_kontakt_importiert(db):
+    session, org = db
+    objekt = _objekt(session, org)
+
+    _sync_kontakte(
+        session,
+        _satz(session, org, objekt),
+        objekt,
+        [_kontakt("pdf:1332:bma_alarmperson:none", name="None")],
+        None,
+    )
+
+    assert objekt.kontakte == []
+    assert not session.query(Kontakt).filter(Kontakt.anzeigename == "None").count()
+
+
 def test_kontakt_der_aus_dem_datenblatt_verschwindet_wird_entfernt(db):
     session, org = db
     objekt = _objekt(session, org)
@@ -358,3 +374,46 @@ def test_freigabe_verfaellt_wenn_nummer_aus_datenblatt_verschwindet(db):
     session.expire(kontakt, ["freigaben"])
     assert not [freigabe for freigabe in kontakt.freigaben if freigabe.aktiv]
     assert [telefon.nummer for telefon in kontakt.zentraler_kontakt.telefone] == ["+43 555 777"]
+
+
+def test_freigabe_entzug_wird_im_objektprotokoll_festgehalten(db):
+    session, org = db
+    objekt = _objekt(session, org)
+    satz = _satz(session, org, objekt)
+    kontakt = _zuordnung(
+        session,
+        org,
+        objekt,
+        art="bma_alarmperson",
+        extern_quelle="dibos_bma",
+        extern_id="pdf:1332:bma_alarmperson:max-muster",
+        telefone=["+43 555 123"],
+        sort=1,
+    )
+    objekt.kontakte.append(kontakt)
+    session.flush()
+    session.add(
+        ObjektKontaktFreigabe(
+            org_id=org.id,
+            objekt_kontakt_id=kontakt.id,
+            kanal="sms",
+            ziel_wert=kontakt.zentraler_kontakt.telefone[0].nummer_normalisiert,
+            aktiv=True,
+        )
+    )
+    session.flush()
+    session.expire(kontakt, ["freigaben"])
+    assert len(kontakt.freigaben) == 1
+
+    _sync_kontakte(
+        session,
+        satz,
+        objekt,
+        [_kontakt("pdf:1332:bma_alarmperson:max-muster", telefone=["+43 555 999"])],
+        None,
+    )
+    session.flush()
+
+    assert session.query(ObjektChange).filter_by(
+        objekt_id=objekt.id, bereich="kontakte", feld="sms_freigabe"
+    ).count() == 1
