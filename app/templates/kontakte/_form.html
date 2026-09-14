@@ -9,8 +9,8 @@
         {% if selected and selected.bild_pfad %}<img id="profilbild-vorschau" class="kontakt-profilbild-upload__preview" src="/kontakte/{{ selected.id }}/profilbild" alt="Aktuelles Profilbild von {{ selected.anzeigename }}">{% else %}<span id="profilbild-vorschau-platzhalter" class="kontakt-profilbild-upload__fallback">{{ (selected.anzeigename[:2] if selected else 'K')|upper }}</span><img id="profilbild-vorschau" class="kontakt-profilbild-upload__preview" alt="Vorschau des neuen Profilbilds" hidden>{% endif %}
         <div class="kontakt-profilbild-upload__control"><label class="form-label" for="profilbild">Profilbild{% if selected and selected.bild_pfad %} ersetzen{% endif %}</label><input class="form-input" id="profilbild" type="file" name="profilbild" accept="image/jpeg,image/png,image/webp" aria-describedby="profilbild-hinweis" onchange="var preview=document.getElementById('profilbild-vorschau');var fallback=document.getElementById('profilbild-vorschau-platzhalter');if(this.files&&this.files[0]){preview.src=URL.createObjectURL(this.files[0]);preview.hidden=false;if(fallback){fallback.hidden=true;}}"><small id="profilbild-hinweis" class="text-muted">Datei auswählen – wird beim Speichern automatisch auf maximal 192 × 192 Pixel als JPEG gespeichert.</small></div>
       </div>
-      <div class="form-grid"><div class="form-group"><label class="form-label">Vorname</label><input class="form-input" name="vorname" value="{{ form_data.vorname if form_data else (selected.vorname if selected else '') }}"></div><div class="form-group"><label class="form-label">Nachname</label><input class="form-input" name="nachname" value="{{ form_data.nachname if form_data else (selected.nachname if selected else '') }}"></div></div>
-      <div class="form-group"><label class="form-label">Anzeigename</label><input class="form-input" name="anzeigename" required value="{{ form_data.anzeigename if form_data else (selected.anzeigename if selected else '') }}"{% if not selected and not (form_data and form_data.id) %} hx-get="/kontakte/duplikatcheck" hx-trigger="keyup changed delay:500ms" hx-target="#kontakt-duplikate" hx-include="#kontakt-form"{% endif %}></div>
+      <div class="form-grid"><div class="form-group"><label class="form-label" for="kontakt-vorname">Vorname</label><input class="form-input" id="kontakt-vorname" name="vorname" value="{{ form_data.vorname if form_data else (selected.vorname if selected else '') }}"></div><div class="form-group"><label class="form-label" for="kontakt-nachname">Nachname</label><input class="form-input" id="kontakt-nachname" name="nachname" value="{{ form_data.nachname if form_data else (selected.nachname if selected else '') }}"></div></div>
+      <div class="form-group"><label class="form-label" for="kontakt-anzeigename">Anzeigename</label><input class="form-input" id="kontakt-anzeigename" name="anzeigename" value="{{ form_data.anzeigename if form_data else (selected.anzeigename if selected else '') }}"{% if not selected and not (form_data and form_data.id) %} hx-get="/kontakte/duplikatcheck" hx-trigger="keyup changed delay:500ms" hx-target="#kontakt-duplikate" hx-include="#kontakt-form"{% endif %}><small class="text-muted">Wird aus Vor- und Nachname vorgeschlagen; eine manuelle Eingabe bleibt erhalten.</small></div>
       <div class="form-grid"><div class="form-group"><label class="form-label">Organisation</label><input class="form-input" name="organisation" value="{{ form_data.organisation if form_data else (selected.organisation if selected else '') }}"{% if not selected and not (form_data and form_data.id) %} hx-get="/kontakte/duplikatcheck" hx-trigger="keyup changed delay:500ms" hx-target="#kontakt-duplikate" hx-include="#kontakt-form"{% endif %}></div><div class="form-group"><label class="form-label">Funktion</label><input class="form-input" name="funktion" value="{{ form_data.funktion if form_data else (selected.funktion if selected else '') }}"></div></div>
       <div class="form-group"><label class="form-label">E-Mail</label><input class="form-input" type="email" name="email" value="{{ form_data.email if form_data else (selected.email if selected else '') }}"{% if not selected and not (form_data and form_data.id) %} hx-get="/kontakte/duplikatcheck" hx-trigger="keyup changed delay:500ms" hx-target="#kontakt-duplikate" hx-include="#kontakt-form"{% endif %}></div>
       {% if not selected and not (form_data and form_data.id) %}<div id="kontakt-duplikate">{% if duplicate_candidates %}{% set kandidaten = duplicate_candidates %}{% include "kontakte/_duplikate.html" %}{% endif %}</div>{% endif %}
@@ -29,6 +29,29 @@
         <button type="button" class="btn btn--ghost btn--xs" @click="addTelefon()">+ Nummer</button>
       </div>
       <div class="form-group"><label class="form-label">Erreichbarkeit</label><input class="form-input" name="erreichbarkeit" value="{{ form_data.erreichbarkeit if form_data else (selected.erreichbarkeit if selected else '') }}"></div><div class="form-group"><label class="form-label">Notizen</label><textarea class="form-input" name="notizen">{{ form_data.notizen if form_data else (selected.notizen if selected else '') }}</textarea></div>
-    </div><div class="modal__footer"><button class="btn btn--ghost" type="button" data-ec-action="close-dialog" data-ec-dialog="kontaktModal">Abbrechen</button>{% if duplicate_candidates %}<button class="btn btn--danger" type="submit" name="duplikate_bestaetigt" value="1">Trotzdem anlegen</button>{% else %}<button class="btn btn--primary" type="submit">Speichern</button>{% endif %}</div>
+    </div><div class="modal__footer"><button class="btn btn--ghost" type="button" data-ec-action="close-dialog" data-ec-dialog="kontaktModal">Abbrechen</button>{% if duplicate_candidates %}<button class="btn btn--ghost" type="submit" name="duplikate_bestaetigt" value="1">Trotzdem anlegen</button><button class="btn btn--primary" type="submit" name="merge_nach_anlage" value="1">Anlegen und zusammenführen</button>{% else %}<button class="btn btn--primary" type="submit">Speichern</button>{% endif %}</div>
   </form>
 </dialog>
+<script>
+(() => {
+  const vorname = document.getElementById('kontakt-vorname');
+  const nachname = document.getElementById('kontakt-nachname');
+  const anzeigename = document.getElementById('kontakt-anzeigename');
+  if (!vorname || !nachname || !anzeigename) return;
+  const istPlatzhalter = (wert) => ['none', 'null'].includes(wert.trim().toLowerCase());
+  if (!anzeigename.value.trim() || istPlatzhalter(anzeigename.value)) {
+    anzeigename.value = '';
+    anzeigename.dataset.manuell = '0';
+  } else {
+    anzeigename.dataset.manuell = '1';
+  }
+  const vorschlagen = () => {
+    if (anzeigename.dataset.manuell === '1') return;
+    anzeigename.value = [vorname.value, nachname.value].map((wert) => wert.trim()).filter(Boolean).join(' ');
+  };
+  vorname.addEventListener('input', vorschlagen);
+  nachname.addEventListener('input', vorschlagen);
+  anzeigename.addEventListener('input', () => { anzeigename.dataset.manuell = anzeigename.value.trim() ? '1' : '0'; });
+  vorschlagen();
+})();
+</script>
