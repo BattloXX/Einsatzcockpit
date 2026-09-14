@@ -79,6 +79,8 @@ def test_neu_dialog_ist_leer_und_verwendet_den_anlage_endpoint(client):
     assert response.status_code == 200
     assert '<dialog id="kontaktModal" class="modal" open>' in response.text
     assert 'action="/kontakte/"' in response.text
+    assert 'enctype="multipart/form-data"' in response.text
+    assert 'name="profilbild"' in response.text
     assert "Kontakt bearbeiten" not in response.text
 
 
