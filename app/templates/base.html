@@ -217,7 +217,7 @@
           <a href="{% if request.state.is_native_app %}https://localhost/?native_logout=1{% else %}/logout{% endif %}">🚪 Abmelden</a>
         </div>
       </div>
-      {% if is_admin %}
+      {% if is_admin or 'fahrtenbuch_admin' in user_roles %}
       <a href="/admin" class="topnav__admin-link {% if '/admin' in request.url.path %}active{% endif %}">⚙ Verwaltung</a>
       {% endif %}
       <button type="button" class="btn btn--ghost btn--sm pwa-install-btn" style="display:none"
@@ -314,7 +314,7 @@
       <span class="bottom-nav__fab-label">Einsatz</span>
     </button>
     {% endif %}
-    {% if is_admin %}
+    {% if is_admin or 'fahrtenbuch_admin' in user_roles %}
     <a href="/admin" class="bottom-nav__item {% if '/admin' in _p %}bottom-nav__item--active{% endif %}"
        {% if '/admin' in _p %}aria-current="page"{% endif %}>
       <span class="bottom-nav__icon">⚙</span>
