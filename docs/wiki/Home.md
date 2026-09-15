@@ -33,6 +33,7 @@ Eine Python-Webapp (FastAPI + HTMX + WebSocket), die ein bisheriges Single-File-
 - Mail-Versand je Organisation: eigener SMTP-Server und/oder Office 365 / Microsoft Graph, mit automatischer Fallback-Kette
 - Mailing-Kampagnen je Organisation: Vorlagen, statische/dynamische Empfängerlisten, Resend-Versand, Webhook-Tracking und Sperrliste
 - Digitales Fahrtenbuch mit QR-/Token-Erfassung, Korrektur- und Storno-Workflow
+- Zentrale, organisationsweite Kontaktverwaltung: einmalige Pflege, Mehrfachzuordnung zu Objekten, Dublettenerkennung & Zusammenführen, CSV/XLSX-Import mit Vorschau, objektbezogene Einsatzinfo-Freigabe (SMS/Mail je Kanal), Offline-Sync-API
 - Geräteverleih für Großschadenslagen (Artikel, Stücklisten, Barcode-Scan, SMS)
 - Organisationsbezogene Datensicherung als Download oder geplanter Push mit tenant-gescoptem Restore
 - Lokale Wetterstation mit Push-Ingest, eigener Zeitreihen-Datenbank und Szenario-Analyse
@@ -98,6 +99,7 @@ unter [Server-Voraussetzungen](Installation-Server-Voraussetzungen).
 | [Mailing-Kampagnen](Anwender-Mailing-Kampagnen) | Vorlagen verwenden, Empfängerlisten aufbauen, Kampagnen planen/senden und Zustellung auswerten |
 | [Fahrtenbuch](Anwender-Fahrtenbuch) | Fahrt erfassen: Fahrzeug, Maschinist, km/BH, Seilwinde, Token/QR-Zugang |
 | [Objekte](Anwender-Objekte) | Objektdaten pflegen, PDF-Unterlagen klassifizieren, Einsatzansicht, Objektblatt-Druck |
+| [Kontaktverwaltung](Anwender-Kontaktverwaltung) | Zentrale Kontakte anlegen, Objekten zuordnen, Dubletten & Zusammenführen, Einsatzinfo-Freigabe, Import/Export |
 | [Nachschlagewerke](Anwender-Nachschlagewerke) | Gefahrgut nach UN-Nummer/Stoffname, Rettungsdatenblätter, Evakuierungsradius & Ausbreitung — offlinefähig |
 | [Förderstrecken-Planer](Anwender-Foerderstrecken-Planer) | Löschwasserförderung lange Wegstrecke: Q-Berechnung, Druckprofil mit Hochpunkt-Prüfung, Maschinisten-Sollwerte, Material, PDF & Zettel-Link |
 | [Probenplan](Anwender-Probenplan) | Jahresplanung, Vorbereitung, Teilnehmerappell, Nachbereitung, Übungseinsatz und öffentlicher Kalender |
@@ -128,6 +130,7 @@ unter [Server-Voraussetzungen](Installation-Server-Voraussetzungen).
 | [Push mit Firebase Cloud Messaging](Administration-Push-FCM) | Globale FCM-Konfiguration für Push-Nachrichten an die native Android-App |
 | [Datensicherung (Org, Self-Service)](Administration-Org-Datensicherung) | Eigene Org-Daten als Archiv herunterladen oder geplant an ein eigenes Ziel senden (SFTP/FTP/rclone); Restore in neue Org (Sysadmin) |
 | [Objektverwaltung](Administration-Objektverwaltung) | Modul aktivieren (System+Org), Rolle Objektverwalter, Kataloge, Alarm-Matching, Alarm-Infoscreen, KI-Klassifizierung |
+| [Kontaktverwaltung](Administration-Kontaktverwaltung) | Modul aktivieren (System+Org), Rollen, Kategorien, Einsatzinfo-Freigabe, BMA-Import-Verhalten, Offline-Sync-API |
 | [Nachschlagewerke](Administration-Nachschlagewerke) | Modul aktivieren (System+Org), Gefahrgut-Datenquelle (BAM/ADR), Rettungskarten-URL, Offline-Funktion |
 | [Print & Alarm Gateway](Administration-Print-Alarm-Gateway) | Modul aktivieren (System+Org), Gateways koppeln, Drucker & Discovery, Druckregeln (Automatikdruck), manueller Druck |
 | [Förderstrecken-Planer](Administration-Foerderstrecken-Planer) | Modul aktivieren (System+Org), Pumpen/Schläuche mit Kennlinien (Vorlagen TS 1600/TS 1200), Kalibrierung über Übungsmessungen, PDF & Maschinisten-Token |

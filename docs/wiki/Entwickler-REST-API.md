@@ -310,6 +310,71 @@ Standardmäßig gelten `20/minute`, höchstens 200 Empfänger pro Auftrag, 500 S
 2.000 Mail-Empfänger je Organisation und 24 Stunden. Die Umgebungsvariablen sind in
 [Nachrichten-API administrieren](Administration-Nachrichten-API) beschrieben.
 
+### GET /api/v1/kontakte/sync — Kontakte offline synchronisieren
+
+Snapshot+Delta-Kontrakt für externe/mobile Clients auf den zentralen Kontaktbestand einer
+Organisation (siehe [Administration: Kontaktverwaltung](Administration-Kontaktverwaltung#offline-sync-fur-externe-clients)).
+Erfordert nur einen gültigen, org-gebundenen API-Key — keinen speziellen Scope.
+
+**Query-Parameter:**
+
+| Parameter | Typ | Pflicht | Beschreibung |
+|---|---|---|---|
+| `cursor` | integer | nein | Fehlt er: liefert einen Snapshot. Gesetzt: liefert ein Delta ab diesem Änderungs-Cursor. |
+| `page_after` | integer | nein | Nur im Snapshot-Modus: Kontakt-ID, ab der weitergelesen wird (Pagination) |
+| `limit` | integer | nein | 1–500, Standard 100 |
+
+**Snapshot-Antwort** (`GET /api/v1/kontakte/sync`):
+
+```json
+{
+  "schema_version": 1,
+  "mode": "snapshot",
+  "cursor": 482,
+  "next_page": null,
+  "contacts": [
+    {
+      "id": 12, "typ": "person", "anzeigename": "Max Muster",
+      "vorname": "Max", "nachname": "Muster", "funktion": "Hausverwaltung",
+      "organisation": "Muster GmbH", "email": "max@example.com",
+      "erreichbarkeit": null, "notizen": null,
+      "aktiv": true, "archiviert": false, "version": 3,
+      "telefone": [
+        {"id": 5, "nummer": "0664 1234567", "label": "Mobil", "sort": 0,
+         "bevorzugt": true, "sms_eignung": true}
+      ]
+    }
+  ],
+  "mappings": [
+    {"id": 7, "kontakt_id": 12, "objekt_id": 3, "rolle": "hausverwaltung",
+     "sort": 0, "erreichbarkeit": null}
+  ]
+}
+```
+
+`mappings` wird nur auf der ersten Seite (`page_after=0`) mitgeliefert. Ist `next_page`
+gesetzt, gibt es weitere Kontakte — nächster Aufruf mit `page_after=<next_page>`.
+
+**Delta-Antwort** (`GET /api/v1/kontakte/sync?cursor=482`):
+
+```json
+{
+  "schema_version": 1,
+  "mode": "delta",
+  "cursor": 501,
+  "has_more": false,
+  "changes": [
+    {"cursor": 495, "entity": "kontakt", "id": 12, "operation": "upsert", "payload": {"...": "..."}},
+    {"cursor": 501, "entity": "zuordnung", "id": 12, "operation": "tombstone", "payload": null}
+  ]
+}
+```
+
+`entity` ist `kontakt` oder `zuordnung`, `operation` ist `upsert` oder `tombstone`
+(Löschung/Entfernung). Bei `has_more: true` erneut mit `cursor=<zurückgegebener cursor>`
+abrufen, bis `has_more: false`. Der Client soll den zuletzt erhaltenen `cursor` persistieren
+und bei jedem weiteren Sync als Ausgangspunkt verwenden.
+
 ## Stufen-Normalisierung
 
 Die API normalisiert `Stufe` automatisch: `f3` → `F3`, `T3` bleibt `T3`.
