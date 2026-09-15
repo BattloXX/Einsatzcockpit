@@ -6,20 +6,21 @@
 {% endwith %}
 
 {% if fahrzeug.erfasst_km %}
-<div class="form-group" x-data="{ km: {{ form_daten.get('km_stand_neu') or 'null' }}, aktuell: {{ fahrzeug.km_aktuell }} }">
+{% set km_aktuell_wert = km_referenz if km_referenz is defined and km_referenz is not none else fahrzeug.km_aktuell %}
+<div class="form-group" x-data="{ km: {{ form_daten.get('km_stand_neu') or 'null' }}, aktuell: {{ km_aktuell_wert }} }">
   <div class="fab-stat__top">
     <label class="form-label" for="km_stand_neu" style="margin:0;">km-Stand *</label>
-    <span class="fab-stat__badge">Letzter: {{ fahrzeug.km_aktuell }} km</span>
+    <span class="fab-stat__badge">Letzter: {{ km_aktuell_wert }} km</span>
   </div>
   <input type="number" name="km_stand_neu" id="km_stand_neu"
          class="form-control fab-stat__input" inputmode="numeric" required
          x-model.number="km"
-         min="{{ fahrzeug.km_aktuell }}" step="1"
-         placeholder="{{ fahrzeug.km_aktuell }}"
-         hx-post="/fahrtenbuch/hx/zaehler-check"
+         min="{{ km_aktuell_wert }}" step="1"
+         placeholder="{{ km_aktuell_wert }}"
+         hx-post="{% if fahrt %}/verwaltung/fahrten/hx/zaehler-check{% else %}/fahrtenbuch/hx/zaehler-check{% endif %}"
          hx-target="#km-check"
          hx-trigger="blur, input delay:400ms"
-         hx-vals='js:{art:"km",fahrzeug_id:"{{ fahrzeug.id }}",wert:document.getElementById("km_stand_neu").value}'>
+         hx-vals='js:{art:"km",fahrzeug_id:"{{ fahrzeug.id }}",wert:document.getElementById("km_stand_neu").value{% if fahrt %},fahrt_id:"{{ fahrt.id }}"{% endif %}}'>
   <div x-show="km !== null && km > aktuell"
        style="margin-top:.3rem;font-size:.85rem;color:var(--text-muted);">
     Delta: <strong x-text="(km - aktuell) + ' km'"></strong>
@@ -39,19 +40,20 @@
 {% endif %}
 
 {% if fahrzeug.erfasst_betriebsstunden %}
-<div class="form-group" x-data="{ bh: {{ form_daten.get('betriebsstunden_neu') or 'null' }}, aktuell: {{ fahrzeug.betriebsstunden_aktuell }} }">
+{% set bh_aktuell_wert = bh_referenz if bh_referenz is defined and bh_referenz is not none else fahrzeug.betriebsstunden_aktuell %}
+<div class="form-group" x-data="{ bh: {{ form_daten.get('betriebsstunden_neu') or 'null' }}, aktuell: {{ bh_aktuell_wert }} }">
   <label class="form-label" for="betriebsstunden_neu">
-    Betriebsstunden-Stand (aktuell: {{ fahrzeug.betriebsstunden_aktuell }} h)
+    Betriebsstunden-Stand (aktuell: {{ bh_aktuell_wert }} h)
   </label>
   <input type="number" name="betriebsstunden_neu" id="betriebsstunden_neu"
          class="form-control form-control--lg" inputmode="decimal" step="0.1"
          x-model.number="bh"
-         min="{{ fahrzeug.betriebsstunden_aktuell }}"
-         placeholder="{{ fahrzeug.betriebsstunden_aktuell }}"
-         hx-post="/fahrtenbuch/hx/zaehler-check"
+         min="{{ bh_aktuell_wert }}"
+         placeholder="{{ bh_aktuell_wert }}"
+         hx-post="{% if fahrt %}/verwaltung/fahrten/hx/zaehler-check{% else %}/fahrtenbuch/hx/zaehler-check{% endif %}"
          hx-target="#bh-check"
          hx-trigger="blur, input delay:400ms"
-         hx-vals='js:{art:"bh",fahrzeug_id:"{{ fahrzeug.id }}",wert:document.getElementById("betriebsstunden_neu").value}'>
+         hx-vals='js:{art:"bh",fahrzeug_id:"{{ fahrzeug.id }}",wert:document.getElementById("betriebsstunden_neu").value{% if fahrt %},fahrt_id:"{{ fahrt.id }}"{% endif %}}'>
   <div x-show="bh !== null && bh > aktuell"
        style="margin-top:.3rem;font-size:.85rem;color:var(--text-muted);">
     Delta: <strong x-text="(Math.round((bh - aktuell) * 10) / 10) + ' h'"></strong>
@@ -77,21 +79,22 @@
 {% endif %}
 
 {% if fahrzeug.seilwinde_abfrage %}
+{% set sw_aktuell_wert = sw_referenz if sw_referenz is defined and sw_referenz is not none else fahrzeug.seilwinde_bh_aktuell %}
 <fieldset class="fab-subcard" style="margin-top:0;">
   <legend class="fab-subcard__title" style="padding:0;">Seilwinde</legend>
-  <div class="form-group" x-data="{ sw: {{ form_daten.get('seilwinde_bh_neu') or 'null' }}, aktuell: {{ fahrzeug.seilwinde_bh_aktuell }} }">
+  <div class="form-group" x-data="{ sw: {{ form_daten.get('seilwinde_bh_neu') or 'null' }}, aktuell: {{ sw_aktuell_wert }} }">
     <label class="form-label" for="seilwinde_bh_neu">
-      Seilwinde BH-Stand (aktuell: {{ fahrzeug.seilwinde_bh_aktuell }} h)
+      Seilwinde BH-Stand (aktuell: {{ sw_aktuell_wert }} h)
     </label>
     <input type="number" name="seilwinde_bh_neu" id="seilwinde_bh_neu"
            class="form-control" inputmode="decimal" step="0.1"
            x-model.number="sw"
-           min="{{ fahrzeug.seilwinde_bh_aktuell }}"
-           placeholder="{{ fahrzeug.seilwinde_bh_aktuell }}"
-           hx-post="/fahrtenbuch/hx/zaehler-check"
+           min="{{ sw_aktuell_wert }}"
+           placeholder="{{ sw_aktuell_wert }}"
+           hx-post="{% if fahrt %}/verwaltung/fahrten/hx/zaehler-check{% else %}/fahrtenbuch/hx/zaehler-check{% endif %}"
            hx-target="#sw-check"
            hx-trigger="blur, input delay:400ms"
-           hx-vals='js:{art:"seilwinde_bh",fahrzeug_id:"{{ fahrzeug.id }}",wert:document.getElementById("seilwinde_bh_neu").value}'>
+           hx-vals='js:{art:"seilwinde_bh",fahrzeug_id:"{{ fahrzeug.id }}",wert:document.getElementById("seilwinde_bh_neu").value{% if fahrt %},fahrt_id:"{{ fahrt.id }}"{% endif %}}'>
     <div x-show="sw !== null && sw > aktuell"
          style="margin-top:.3rem;font-size:.85rem;color:var(--text-muted);">
       Delta: <strong x-text="(Math.round((sw - aktuell) * 10) / 10) + ' h'"></strong>
