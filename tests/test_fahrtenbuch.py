@@ -761,6 +761,7 @@ def _korrektur_postdaten(csrf, fahrzeug, zweck, **extra):
         "zweck_id": str(zweck.id),
         "zeitpunkt": "2025-02-03T04:05",
         "doppelfahrt_bestaetigt": "on",
+        "km_warnung_bestaetigt": "on",
     }
     daten.update(extra)
     return daten
@@ -815,6 +816,113 @@ def test_korrektur_erlaubt_niedrigeren_km_stand_und_berechnet_zaehler_neu(
     assert neue_fahrt and neue_fahrt.km_stand_neu == 1050
     db_session.refresh(korrektur_fahrzeug)
     assert korrektur_fahrzeug.km_aktuell == spaetere_fahrt.km_stand_neu
+
+
+def test_korrektur_alter_fahrt_akzeptiert_km_unter_aktuellem_flottenstand(
+    client, db_session, org, zweck,
+):
+    korrektur_fahrzeug = VehicleMaster(
+        dept_id=org.id, code="KORR-ALT", name="Korrekturfahrzeug", type="Test",
+        km_aktuell=20103, erfasst_km=True, warn_schwelle_km=50,
+    )
+    db_session.add(korrektur_fahrzeug)
+    db_session.flush()
+    original = Fahrt(
+        org_id=org.id, zeitpunkt=datetime.now(UTC) - timedelta(hours=3),
+        fahrzeug_id=korrektur_fahrzeug.id, maschinist_name="Korrektur Maschinist",
+        km_stand_neu=20050, zweck_id=zweck.id, fahrttyp=zweck.kategorie,
+    )
+    spaetere_fahrt = Fahrt(
+        org_id=org.id, zeitpunkt=datetime.now(UTC) - timedelta(hours=1),
+        fahrzeug_id=korrektur_fahrzeug.id, maschinist_name="Spätere Fahrt",
+        km_stand_neu=20103, zweck_id=zweck.id, fahrttyp=zweck.kategorie,
+    )
+    db_session.add_all([original, spaetere_fahrt])
+    db_session.commit()
+    _login(client, db_session, org, "fb_korrektur_alte_fahrt", role_code="fahrtenbuch_admin")
+
+    response = client.post(
+        f"/verwaltung/fahrten/{original.id}/korrektur",
+        data=_korrektur_postdaten(
+            client.cookies.get("ec_csrf"), korrektur_fahrzeug, zweck, km_stand_neu="20064",
+        ),
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+
+
+def test_korrektur_alter_fahrt_lehnt_km_unter_vorheriger_fahrt_ab(
+    client, db_session, org, zweck,
+):
+    korrektur_fahrzeug = VehicleMaster(
+        dept_id=org.id, code="KORR-VOR", name="Korrekturfahrzeug", type="Test",
+        km_aktuell=20103, erfasst_km=True, warn_schwelle_km=50,
+    )
+    db_session.add(korrektur_fahrzeug)
+    db_session.flush()
+    vorherige_fahrt = Fahrt(
+        org_id=org.id, zeitpunkt=datetime.now(UTC) - timedelta(hours=4),
+        fahrzeug_id=korrektur_fahrzeug.id, maschinist_name="Frühere Fahrt",
+        km_stand_neu=20000, zweck_id=zweck.id, fahrttyp=zweck.kategorie,
+    )
+    original = Fahrt(
+        org_id=org.id, zeitpunkt=datetime.now(UTC) - timedelta(hours=3),
+        fahrzeug_id=korrektur_fahrzeug.id, maschinist_name="Korrektur Maschinist",
+        km_stand_neu=20050, zweck_id=zweck.id, fahrttyp=zweck.kategorie,
+    )
+    spaetere_fahrt = Fahrt(
+        org_id=org.id, zeitpunkt=datetime.now(UTC) - timedelta(hours=1),
+        fahrzeug_id=korrektur_fahrzeug.id, maschinist_name="Spätere Fahrt",
+        km_stand_neu=20103, zweck_id=zweck.id, fahrttyp=zweck.kategorie,
+    )
+    db_session.add_all([vorherige_fahrt, original, spaetere_fahrt])
+    db_session.commit()
+    _login(client, db_session, org, "fb_korrektur_vorherige_fahrt", role_code="fahrtenbuch_admin")
+
+    response = client.post(
+        f"/verwaltung/fahrten/{original.id}/korrektur",
+        data=_korrektur_postdaten(
+            client.cookies.get("ec_csrf"), korrektur_fahrzeug, zweck, km_stand_neu="19999",
+        ),
+    )
+
+    assert response.status_code == 200
+    assert "Zählerstand kann nicht sinken" in response.text
+
+
+def test_korrekturformular_zeigt_zaehlerstand_der_vorherigen_fahrt(
+    client, db_session, org, zweck,
+):
+    korrektur_fahrzeug = VehicleMaster(
+        dept_id=org.id, code="KORR-GET", name="Korrekturfahrzeug", type="Test",
+        km_aktuell=20103, erfasst_km=True,
+    )
+    db_session.add(korrektur_fahrzeug)
+    db_session.flush()
+    vorherige_fahrt = Fahrt(
+        org_id=org.id, zeitpunkt=datetime.now(UTC) - timedelta(hours=4),
+        fahrzeug_id=korrektur_fahrzeug.id, maschinist_name="Frühere Fahrt",
+        km_stand_neu=20050, zweck_id=zweck.id, fahrttyp=zweck.kategorie,
+    )
+    original = Fahrt(
+        org_id=org.id, zeitpunkt=datetime.now(UTC) - timedelta(hours=3),
+        fahrzeug_id=korrektur_fahrzeug.id, maschinist_name="Korrektur Maschinist",
+        km_stand_neu=20075, zweck_id=zweck.id, fahrttyp=zweck.kategorie,
+    )
+    spaetere_fahrt = Fahrt(
+        org_id=org.id, zeitpunkt=datetime.now(UTC) - timedelta(hours=1),
+        fahrzeug_id=korrektur_fahrzeug.id, maschinist_name="Spätere Fahrt",
+        km_stand_neu=20103, zweck_id=zweck.id, fahrttyp=zweck.kategorie,
+    )
+    db_session.add_all([vorherige_fahrt, original, spaetere_fahrt])
+    db_session.commit()
+    _login(client, db_session, org, "fb_korrektur_formular", role_code="fahrtenbuch_admin")
+
+    response = client.get(f"/verwaltung/fahrten/{original.id}/korrektur")
+
+    assert response.status_code == 200
+    assert "Letzter: 20050 km" in response.text
 
 
 def test_korrektur_km_pflicht_bleibt_erhalten(client, db_session, org, fahrzeug, zweck):

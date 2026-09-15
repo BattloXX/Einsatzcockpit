@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import secrets
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
@@ -33,6 +34,8 @@ from app.services.excel_export_service import exportiere_fahrten, exportiere_fah
 from app.services.fahrtenbuch_service import (
     korrigiere_fahrt,
     pruefe_doppelfahrt,
+    pruefe_zaehler,
+    referenz_zaehlerstand,
     stammdaten_korrektur_zaehler,
     storniere_fahrt,
 )
@@ -300,7 +303,7 @@ async def fahrten_export(
 
 @router.get("/verwaltung/fahrten/hx/fahrzeug-felder", response_class=HTMLResponse)
 async def hx_fahrzeug_felder_korrektur(
-    request: Request, fahrzeug_id: int = 0, db: Session = Depends(get_db),
+    request: Request, fahrzeug_id: int = 0, fahrt_id: int = 0, db: Session = Depends(get_db),
 ):
     _user, org_id, _org = _fb_admin(request, db)
     fahrzeug = (
@@ -311,11 +314,35 @@ async def hx_fahrzeug_felder_korrektur(
     )
     if not fahrzeug:
         return HTMLResponse("")
+    fahrt = None
+    km_referenz = bh_referenz = sw_referenz = None
+    if fahrt_id:
+        fahrt = (
+            db.query(Fahrt)
+            .filter(Fahrt.id == fahrt_id, Fahrt.org_id == org_id)
+            .execution_options(include_all_tenants=True)
+            .first()
+        )
+        if fahrt:
+            if fahrzeug.erfasst_km:
+                km_referenz = referenz_zaehlerstand(
+                    fahrzeug, "km", fahrt.zeitpunkt, db, ausser_fahrt_id=fahrt.id,
+                )
+            if fahrzeug.erfasst_betriebsstunden:
+                bh_referenz = referenz_zaehlerstand(
+                    fahrzeug, "bh", fahrt.zeitpunkt, db, ausser_fahrt_id=fahrt.id,
+                )
+            if fahrzeug.seilwinde_abfrage:
+                sw_referenz = referenz_zaehlerstand(
+                    fahrzeug, "seilwinde_bh", fahrt.zeitpunkt, db, ausser_fahrt_id=fahrt.id,
+                )
     return templates.TemplateResponse(request, "fahrtenbuch/_fahrzeug_felder.html", {
         "fahrzeug": fahrzeug,
         "personen": _personen_fuer_client(_aktive_personen(org_id, db)),
         "form_daten": {},
         "fehler": None,
+        "fahrt": fahrt,
+        "km_referenz": km_referenz, "bh_referenz": bh_referenz, "sw_referenz": sw_referenz,
     })
 
 
@@ -357,6 +384,47 @@ async def hx_zweck_felder_korrektur(
         "personen": _personen_fuer_client(_aktive_personen(org_id, db)),
         "gk_personen": _personen_fuer_client(gk_members),
         "form_daten": {"incident_id": incident_id},
+    })
+
+
+@router.post("/verwaltung/fahrten/hx/zaehler-check", response_class=HTMLResponse)
+async def hx_zaehler_check_korrektur(
+    request: Request,
+    fahrt_id: int = Form(0),
+    fahrzeug_id: int = Form(0),
+    art: str = Form("km"),
+    wert: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    _user, org_id, _org = _fb_admin(request, db)
+    if not wert.strip():
+        return HTMLResponse("")
+    original = (
+        db.query(Fahrt)
+        .filter(Fahrt.id == fahrt_id, Fahrt.org_id == org_id)
+        .execution_options(include_all_tenants=True)
+        .first()
+    )
+    fahrzeug = (
+        db.query(VehicleMaster)
+        .filter(VehicleMaster.id == fahrzeug_id, VehicleMaster.dept_id == org_id)
+        .execution_options(include_all_tenants=True)
+        .first()
+    )
+    if not original or not fahrzeug:
+        return HTMLResponse("")
+    try:
+        val = Decimal(wert) if art != "km" else int(wert)
+        referenz = referenz_zaehlerstand(fahrzeug, art, original.zeitpunkt, db, ausser_fahrt_id=original.id)
+        erg = pruefe_zaehler(fahrzeug, art, val, referenz=referenz)
+    except HTTPException as exc:
+        return templates.TemplateResponse(request, "fahrtenbuch/_zaehler_check.html", {
+            "fehler": exc.detail, "art": art,
+        })
+    except Exception:
+        return HTMLResponse("")
+    return templates.TemplateResponse(request, "fahrtenbuch/_zaehler_check.html", {
+        "erg": erg, "art": art,
     })
 
 
@@ -554,6 +622,16 @@ async def _render_korrektur(
             "nicht_statistikrelevant": "on" if fahrt.nicht_statistikrelevant else "",
         }
     fahrzeug = next((item for item in fahrzeuge if item.id == int(form_daten.get("fahrzeug_id") or 0)), None)
+    km_referenz = bh_referenz = sw_referenz = None
+    if fahrzeug:
+        if fahrzeug.erfasst_km:
+            km_referenz = referenz_zaehlerstand(fahrzeug, "km", fahrt.zeitpunkt, db, ausser_fahrt_id=fahrt.id)
+        if fahrzeug.erfasst_betriebsstunden:
+            bh_referenz = referenz_zaehlerstand(fahrzeug, "bh", fahrt.zeitpunkt, db, ausser_fahrt_id=fahrt.id)
+        if fahrzeug.seilwinde_abfrage:
+            sw_referenz = referenz_zaehlerstand(
+                fahrzeug, "seilwinde_bh", fahrt.zeitpunkt, db, ausser_fahrt_id=fahrt.id,
+            )
     zweck = next((item for item in zwecke if item.id == int(form_daten.get("zweck_id") or 0)), None)
     incident_id = form_daten.get("incident_id")
     try:
@@ -573,6 +651,7 @@ async def _render_korrektur(
         "gk_personen": _personen_fuer_client(gk_members),
         "doppelfahrt_warnung": pruefe_doppelfahrt(fahrzeug, db) if fahrzeug else False,
         "fehler": fehler, "form_daten": form_daten,
+        "km_referenz": km_referenz, "bh_referenz": bh_referenz, "sw_referenz": sw_referenz,
         **_sysadmin_org_context(request, user, org, db),
     })
 

@@ -52,22 +52,30 @@ def pruefe_zaehler(
     fahrzeug: VehicleMaster,
     art: str,
     neuer_wert: Decimal | int,
+    referenz: Decimal | int | None = None,
 ) -> ZaehlerErgebnis:
     """Prüft einen Zählerstand auf Plausibilität.
 
     art: 'km' | 'bh' | 'seilwinde_bh'
     Raises HTTPException(422) wenn neuer_wert < aktuell.
     """
+    aktuell: Decimal | int
     if art == "km":
-        aktuell = int(fahrzeug.km_aktuell or 0)
+        aktuell = int(referenz) if referenz is not None else int(fahrzeug.km_aktuell or 0)
         schwelle = int(fahrzeug.warn_schwelle_km or 50)
         neu = int(neuer_wert)
     elif art == "bh":
-        aktuell = Decimal(str(fahrzeug.betriebsstunden_aktuell or 0))  # type: ignore[assignment]
+        aktuell = (
+            Decimal(str(referenz)) if referenz is not None
+            else Decimal(str(fahrzeug.betriebsstunden_aktuell or 0))
+        )  # type: ignore[assignment]
         schwelle = Decimal(str(fahrzeug.warn_schwelle_bh or 10))  # type: ignore[assignment]
         neu = Decimal(str(neuer_wert))  # type: ignore[assignment]
     elif art == "seilwinde_bh":
-        aktuell = Decimal(str(fahrzeug.seilwinde_bh_aktuell or 0))  # type: ignore[assignment]
+        aktuell = (
+            Decimal(str(referenz)) if referenz is not None
+            else Decimal(str(fahrzeug.seilwinde_bh_aktuell or 0))
+        )  # type: ignore[assignment]
         schwelle = _SEILWINDE_SCHWELLE_DEFAULT  # type: ignore[assignment]
         neu = Decimal(str(neuer_wert))  # type: ignore[assignment]
     else:
@@ -137,6 +145,46 @@ def recompute_zaehlerstand(fahrzeug: VehicleMaster, art: str, db: Session) -> No
             fahrzeug.seilwinde_bh_aktuell = Decimal(str(result))
 
 
+def referenz_zaehlerstand(
+    fahrzeug: VehicleMaster,
+    art: str,
+    vor_zeitpunkt: datetime,
+    db: Session,
+    *,
+    ausser_fahrt_id: int | None = None,
+) -> Decimal | int:
+    """Liefert den Zählerstand der letzten aktiven Fahrt vor einem Zeitpunkt.
+
+    Für Korrekturen älterer Fahrten muss die Plausibilitätsprüfung gegen den
+    Stand zum Zeitpunkt der Fahrt laufen, nicht gegen den aktuellen (späteren)
+    Flotten-Zählerstand – sonst schlägt jede Korrektur einer nicht-neuesten
+    Fahrt fälschlich als "Zählerstand kann nicht sinken" fehl.
+    """
+    spalte = {
+        "km": Fahrt.km_stand_neu,
+        "bh": Fahrt.betriebsstunden_neu,
+        "seilwinde_bh": Fahrt.seilwinde_bh_neu,
+    }[art]
+    q = (
+        db.query(spalte)
+        .filter(
+            Fahrt.fahrzeug_id == fahrzeug.id,
+            Fahrt.status == FahrtStatus.aktiv,
+            Fahrt.zeitpunkt < vor_zeitpunkt,
+            spalte.isnot(None),
+        )
+        .execution_options(include_all_tenants=True)
+        .order_by(Fahrt.zeitpunkt.desc())
+    )
+    if ausser_fahrt_id is not None:
+        q = q.filter(Fahrt.id != ausser_fahrt_id)
+    ergebnis = q.first()
+    wert = ergebnis[0] if ergebnis else None
+    if art == "km":
+        return int(wert) if wert is not None else 0
+    return Decimal(str(wert)) if wert is not None else Decimal("0")
+
+
 def erstelle_fahrt(daten: dict[str, Any], db: Session) -> Fahrt:
     """Validiert und speichert eine neue Fahrt. Aktualisiert Zählerstände atomar."""
     ist_korrektur = bool(daten.get("ist_korrektur"))
@@ -173,25 +221,22 @@ def erstelle_fahrt(daten: dict[str, Any], db: Session) -> Fahrt:
         # Bei km-erfassenden Fahrzeugen ist der km-Stand Pflicht.
         if daten.get("km_stand_neu") is None:
             raise HTTPException(status_code=422, detail="km_pflicht")
-        if not ist_korrektur:
-            erg = pruefe_zaehler(fahrzeug, "km", daten["km_stand_neu"])
-            if erg.warnung and not daten.get("km_warnung_bestaetigt"):
-                raise HTTPException(status_code=422, detail="km_warnung_nicht_bestaetigt")
-            km_delta = int(erg.delta)
+        erg = pruefe_zaehler(fahrzeug, "km", daten["km_stand_neu"], referenz=daten.get("km_referenz"))
+        if erg.warnung and not daten.get("km_warnung_bestaetigt"):
+            raise HTTPException(status_code=422, detail="km_warnung_nicht_bestaetigt")
+        km_delta = int(erg.delta)
 
     if fahrzeug.erfasst_betriebsstunden and daten.get("betriebsstunden_neu") is not None:
-        if not ist_korrektur:
-            erg = pruefe_zaehler(fahrzeug, "bh", daten["betriebsstunden_neu"])
-            if erg.warnung and not daten.get("bh_warnung_bestaetigt"):
-                raise HTTPException(status_code=422, detail="bh_warnung_nicht_bestaetigt")
-            bh_delta = Decimal(str(erg.delta))
+        erg = pruefe_zaehler(fahrzeug, "bh", daten["betriebsstunden_neu"], referenz=daten.get("bh_referenz"))
+        if erg.warnung and not daten.get("bh_warnung_bestaetigt"):
+            raise HTTPException(status_code=422, detail="bh_warnung_nicht_bestaetigt")
+        bh_delta = Decimal(str(erg.delta))
 
     if fahrzeug.seilwinde_abfrage and daten.get("seilwinde_bh_neu") is not None:
-        if not ist_korrektur:
-            erg = pruefe_zaehler(fahrzeug, "seilwinde_bh", daten["seilwinde_bh_neu"])
-            if erg.warnung and not daten.get("seilwinde_warnung_bestaetigt"):
-                raise HTTPException(status_code=422, detail="seilwinde_warnung_nicht_bestaetigt")
-            sw_delta = Decimal(str(erg.delta))
+        erg = pruefe_zaehler(fahrzeug, "seilwinde_bh", daten["seilwinde_bh_neu"], referenz=daten.get("sw_referenz"))
+        if erg.warnung and not daten.get("seilwinde_warnung_bestaetigt"):
+            raise HTTPException(status_code=422, detail="seilwinde_warnung_nicht_bestaetigt")
+        sw_delta = Decimal(str(erg.delta))
 
     # Personen-Snapshots bei vorhandener Mitglieds-ID immer kanonisch schreiben.
     rollen = (
@@ -309,6 +354,26 @@ def korrigiere_fahrt(original: Fahrt, neue_daten: dict[str, Any], user_id: int, 
     neue_daten["erfasst_via"] = original.erfasst_via
     neue_daten["token_label"] = original.token_label
     neue_daten["ist_korrektur"] = True
+
+    korrektur_fahrzeug = (
+        db.query(VehicleMaster)
+        .filter(VehicleMaster.id == neue_daten["fahrzeug_id"])
+        .execution_options(include_all_tenants=True)
+        .first()
+    )
+    if korrektur_fahrzeug:
+        if korrektur_fahrzeug.erfasst_km:
+            neue_daten["km_referenz"] = referenz_zaehlerstand(
+                korrektur_fahrzeug, "km", original.zeitpunkt, db, ausser_fahrt_id=original.id,
+            )
+        if korrektur_fahrzeug.erfasst_betriebsstunden:
+            neue_daten["bh_referenz"] = referenz_zaehlerstand(
+                korrektur_fahrzeug, "bh", original.zeitpunkt, db, ausser_fahrt_id=original.id,
+            )
+        if korrektur_fahrzeug.seilwinde_abfrage:
+            neue_daten["sw_referenz"] = referenz_zaehlerstand(
+                korrektur_fahrzeug, "seilwinde_bh", original.zeitpunkt, db, ausser_fahrt_id=original.id,
+            )
 
     neue_fahrt = erstelle_fahrt(neue_daten, db)
     neue_fahrt.original_fahrt_id = original.id
