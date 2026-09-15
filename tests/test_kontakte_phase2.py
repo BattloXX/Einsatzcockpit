@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import re
 from io import BytesIO
 
 from openpyxl import Workbook, load_workbook
@@ -128,6 +130,89 @@ def test_bearbeiten_dialog_verwendet_update_endpoint_und_vorhandene_daten(client
         assert db.query(Kontakt).filter_by(anzeigename="Vorhandener Kontakt").count() == 0
     finally:
         db.close()
+
+
+def test_bearbeiten_dialog_liefert_telefone_als_json_insel(client):
+    user = _setup_user("kontakte_telefon_json_insel", "kontakt_verwalter")
+    _login(client, user.username)
+    erstellt = client.post(
+        "/kontakte/",
+        data={
+            "_csrf": client.cookies.get("ec_csrf"),
+            "typ": "person",
+            "anzeigename": "JSON Telefon",
+            "nummer": ["+43 664 1234567"],
+            "telefon_label": ["Mobil"],
+        },
+        follow_redirects=False,
+    )
+    kontakt_id = int(erstellt.headers["location"].rsplit("/", 1)[1])
+
+    response = client.get(f"/kontakte/{kontakt_id}/bearbeiten")
+
+    assert response.status_code == 200
+    match = re.search(
+        r'<script type="application/json" id="kontakt-telefone-daten">(.*?)</script>', response.text
+    )
+    assert match is not None
+    assert json.loads(match.group(1)) == [
+        {"label": "Mobil", "nummer": "+43 664 1234567", "bevorzugt": False, "sms": False, "smsManuell": True}
+    ]
+
+
+def test_bearbeiten_redisplay_normalisiert_none_nach_versionskonflikt(client):
+    user = _setup_user("kontakte_redisplay_none", "kontakt_verwalter")
+    _login(client, user.username)
+    erstellt = client.post(
+        "/kontakte/",
+        data={"_csrf": client.cookies.get("ec_csrf"), "typ": "person", "anzeigename": "Konflikt Kontakt"},
+        follow_redirects=False,
+    )
+    kontakt_id = int(erstellt.headers["location"].rsplit("/", 1)[1])
+
+    response = client.post(
+        f"/kontakte/{kontakt_id}",
+        data={
+            "_csrf": client.cookies.get("ec_csrf"),
+            "version": "999",
+            "typ": "person",
+            "anzeigename": "Konflikt Kontakt",
+            "vorname": "None",
+        },
+    )
+
+    assert response.status_code == 200
+    assert 'value="None"' not in response.text
+
+
+def test_kontakt_detail_trennt_objektrolle_optisch(client):
+    user = _setup_user("kontakte_objektrolle_badge", "kontakt_verwalter")
+    _login(client, user.username)
+    erstellt = client.post(
+        "/kontakte/",
+        data={"_csrf": client.cookies.get("ec_csrf"), "typ": "person", "anzeigename": "Objekt Kontakt"},
+        follow_redirects=False,
+    )
+    kontakt_id = int(erstellt.headers["location"].rsplit("/", 1)[1])
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        objekt = Objekt(org_id=user.org_id, nummer=999901, name="Holzbau Berchtold")
+        db.add(objekt)
+        db.flush()
+        db.add(ObjektKontakt(org_id=user.org_id, objekt_id=objekt.id, kontakt_id=kontakt_id, art="sonstig"))
+        db.commit()
+        objekt_nummer = objekt.anzeige_nummer
+    finally:
+        db.close()
+
+    response = client.get(f"/kontakte/{kontakt_id}")
+
+    assert response.status_code == 200
+    assert (
+        f'<strong>{objekt_nummer} · Holzbau Berchtold</strong> '
+        '<span class="badge-pill badge-pill--gray">Sonstig</span>'
+    ) in response.text
 
 
 def test_profilbild_wird_klein_gespeichert_und_ausgeliefert(client, tmp_path, monkeypatch):

@@ -22,6 +22,7 @@ from app.models.objekt import Objekt, ObjektKontakt
 from app.models.sms import SmsLog
 from app.models.user import User
 from app.services import kontakt_service
+from app.services.kontakt_service import bereinigter_text
 
 router = APIRouter(prefix="/kontakte", tags=["kontakte"])
 logger = logging.getLogger("einsatzleiter.kontakte")
@@ -59,14 +60,14 @@ def _form_daten(
 ) -> dict[str, str]:
     return {
         "typ": typ,
-        "anzeigename": anzeigename,
-        "vorname": vorname,
-        "nachname": nachname,
-        "funktion": funktion,
-        "organisation": organisation,
-        "email": email,
-        "erreichbarkeit": erreichbarkeit,
-        "notizen": notizen,
+        "anzeigename": bereinigter_text(anzeigename) or "",
+        "vorname": bereinigter_text(vorname) or "",
+        "nachname": bereinigter_text(nachname) or "",
+        "funktion": bereinigter_text(funktion) or "",
+        "organisation": bereinigter_text(organisation) or "",
+        "email": bereinigter_text(email) or "",
+        "erreichbarkeit": bereinigter_text(erreichbarkeit) or "",
+        "notizen": bereinigter_text(notizen) or "",
     }
 
 
@@ -116,6 +117,45 @@ def _telefone(
         }
         for index, value in enumerate(nummer)
     ]
+
+
+def _telefone_fuer_formular(
+    form_data: dict[str, object] | None, selected: Kontakt | None
+) -> list[dict[str, object]]:
+    """Bereitet Telefone fuer die JSON-Insel im Kontaktformular vor."""
+    if form_data and form_data.get("nummer"):
+        nummern = form_data["nummer"]
+        labels = form_data.get("telefon_label", [])
+        bevorzugt_werte = form_data.get("bevorzugt", [])
+        sms_eignung_werte = form_data.get("sms_eignung", [])
+        assert isinstance(nummern, list)
+        assert isinstance(labels, list)
+        assert isinstance(bevorzugt_werte, list)
+        assert isinstance(sms_eignung_werte, list)
+        bevorzugt = set(bevorzugt_werte)
+        sms_eignung = set(sms_eignung_werte)
+        return [
+            {
+                "label": labels[index] if index < len(labels) else "",
+                "nummer": nummer,
+                "bevorzugt": str(index) in bevorzugt,
+                "sms": str(index) in sms_eignung,
+                "smsManuell": False,
+            }
+            for index, nummer in enumerate(nummern)
+        ]
+    if selected and selected.telefone:
+        return [
+            {
+                "label": telefon.label or "",
+                "nummer": telefon.nummer,
+                "bevorzugt": bool(telefon.bevorzugt),
+                "sms": bool(telefon.sms_eignung),
+                "smsManuell": True,
+            }
+            for telefon in selected.telefone
+        ]
+    return [{"label": "", "nummer": "", "bevorzugt": False, "sms": False, "smsManuell": False}]
 
 
 def _bearbeitungsdaten(db: Session, kontakt: Kontakt) -> dict[str, object]:
@@ -189,6 +229,7 @@ def _seite(
             "total": total,
             "pro_seite": kontakt_service.PRO_SEITE,
             "form_data": form_data,
+            "telefone_liste": _telefone_fuer_formular(form_data, selected),
             "error": error,
             "duplicate_candidates": duplicate_candidates or [],
             "merge_konflikte": merge_konflikte or [],
@@ -430,6 +471,7 @@ def neu_formular(
             "user": user,
             "selected": None,
             "form_data": {"is_new": True},
+            "telefone_liste": _telefone_fuer_formular({"is_new": True}, None),
             "kategorien": kontakt_service.list_kategorien(db),
             "duplicate_candidates": [],
             "error": None,
@@ -449,13 +491,17 @@ def bearbeiten_formular(
     kontakt = kontakt_service.get_kontakt(db, kontakt_id)
     if kontakt is None:
         raise HTTPException(status_code=404, detail="Kontakt nicht gefunden")
+    form_data = _bearbeitungsdaten(db, kontakt)
     return templates.TemplateResponse(
         request,
         "kontakte/_form.html",
         {
             "user": user,
             "selected": kontakt,
-            "form_data": _bearbeitungsdaten(db, kontakt),
+            "form_data": form_data,
+            # Beim normalen Bearbeiten stammen die Telefonnummern aus dem Kontakt;
+            # ``form_data`` enthält sie nur für die übrigen Formularfelder.
+            "telefone_liste": _telefone_fuer_formular(None, kontakt),
             "kategorien": kontakt_service.list_kategorien(db),
             "duplicate_candidates": [],
             "error": None,
