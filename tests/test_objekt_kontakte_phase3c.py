@@ -126,6 +126,25 @@ def test_bma_kontakt_ohne_telefon_zeigt_admin_warnung_und_mit_telefon_nicht(clie
         db.close()
 
 
+def test_kontakt_zuordnung_verlinkt_zentralen_kontakt(client):
+    org_id, objekt_id = _setup("p3c_kontakt_link", 93009, ("readonly",))
+    zentral = _zentral(org_id, "Verlinkter zentraler Kontakt")
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        db.add(ObjektKontakt(
+            org_id=org_id, objekt_id=objekt_id, kontakt_id=zentral.id, art="sonstig"
+        ))
+        db.commit()
+    finally:
+        db.close()
+
+    _login(client, "p3c_kontakt_link")
+    response = client.get(f"/objekte/{objekt_id}/kontakte")
+    assert response.status_code == 200
+    assert f'href="/kontakte/{zentral.id}"' in response.text
+
+
 def test_suche_zuordnung_und_doppel_guard(client):
     org_id, objekt_id = _setup("p3c_suche", 93001)
     zentral = _zentral(org_id, "Suchbarer Zentraler")
