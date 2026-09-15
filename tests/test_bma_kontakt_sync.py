@@ -100,6 +100,22 @@ def test_import_adoptiert_haendisch_gepflegten_kontakt_statt_zu_duplizieren(db):
     )
 
 
+def test_importierte_mobilnummer_wird_automatisch_fuer_sms_freigegeben(db):
+    session, org = db
+    objekt = _objekt(session, org)
+
+    _sync_kontakte(
+        session,
+        _satz(session, org, objekt),
+        objekt,
+        [_kontakt("pdf:1332:bma_alarmperson:max-muster", telefone=["0043 650 123456"])],
+        None,
+    )
+
+    telefon = objekt.kontakte[0].zentraler_kontakt.telefone[0]
+    assert telefon.sms_eignung is True
+
+
 def test_adoption_matcht_ueber_namensnormalisierung(db):
     session, org = db
     objekt = _objekt(session, org)

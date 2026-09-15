@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from io import BytesIO
 
-from openpyxl import load_workbook
+from openpyxl import Workbook, load_workbook
 from PIL import Image
 
 from app.core.security import hash_password
@@ -397,6 +397,40 @@ def test_xlsx_roundtrip_uebernimmt_telefone_und_objektzuordnungen(client):
         assert db.get(Kontakt, kontakt.id).telefone[0].label == "Mobil"
         assert db.query(ObjektKontakt).filter_by(objekt_id=objekt.id, kontakt_id=kontakt.id).one().art == "betreiber"
         assert db.query(ObjektKontaktFreigabe).filter_by(objekt_kontakt_id=zuordnung.id).count() == 1
+    finally:
+        db.close()
+
+
+def test_xlsx_import_erkennt_mobilnummer_ohne_sms_spalte():
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        kontakt = kontakt_service.create_kontakt(
+            db,
+            {"typ": "person", "anzeigename": "XLSX Mobil", "funktion": "Alt"},
+            [],
+            [],
+            org_id=1,
+            user_id=None,
+        )
+        workbook = Workbook()
+        kontakte = workbook.active
+        kontakte.title = "Kontakte"
+        kontakte.append(["id", "anzeigename", "typ", "funktion"])
+        kontakte.append([str(kontakt.id), "XLSX Mobil", "person", "Neu"])
+        telefone = workbook.create_sheet("Telefonnummern")
+        telefone.append(["kontakt_id", "nummer", "label", "bevorzugt"])
+        telefone.append([str(kontakt.id), "+43 664 123456", "Mobil", "0"])
+        content = BytesIO()
+        workbook.save(content)
+
+        rows = parse_import(content.getvalue(), "kontakte.xlsx")
+        assert "sms_eignung" not in rows[0]["_telefone"][0]
+        preview = preview_import(db, 1, rows)
+        entry = save_preview(db, 1, 1, preview)
+        assert apply_preview(db, 1, 1, entry.id) == 1
+        db.expire_all()
+        assert db.get(Kontakt, kontakt.id).telefone[0].sms_eignung is True
     finally:
         db.close()
 

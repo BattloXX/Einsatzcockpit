@@ -9,7 +9,7 @@ from typing import Any
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.telefon import telefon_normalisiert
+from app.core.telefon import ist_oesterreichische_mobilnummer, telefon_normalisiert
 from app.models.kontakt import (
     KONTAKT_TYP_PERSON,
     KONTAKT_TYP_STELLE,
@@ -124,7 +124,11 @@ def _telefone_sync(kontakt: Kontakt, telefone: list[dict[str, Any]], org_id: int
             label=str(zeile.get("label") or "").strip() or None,
             sort=index,
             bevorzugt=bool(zeile.get("bevorzugt")),
-            sms_eignung=bool(zeile.get("sms_eignung")) if zeile.get("sms_eignung") is not None else None,
+            sms_eignung=(
+                bool(zeile.get("sms_eignung"))
+                if zeile.get("sms_eignung") is not None
+                else ist_oesterreichische_mobilnummer(zeile.get("nummer")) or None
+            ),
         )
         for index, zeile in enumerate(zeilen)
     ]
