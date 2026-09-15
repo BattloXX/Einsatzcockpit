@@ -98,16 +98,20 @@ schreibt Kontakte über denselben zentralen Kontaktbestand, nicht in eine separa
 
 ## Offline-Sync für externe Clients
 
-`GET /api/v1/kontakte/sync` liefert externen/mobilen Clients (z. B. einer nativen App) den
-Kontaktbestand einer Organisation als **versioniertes Snapshot+Delta-Modell** —
-authentifiziert per `X-API-Key` (siehe [API-Keys verwalten](Administration-API-Keys-verwalten)).
-Der Endpunkt verlangt keinen speziellen Scope, nur einen aktiven, org-gebundenen Key.
+`GET /api/v1/kontakte/sync` liefert externen Drittsystemen den Kontaktbestand einer
+Organisation als **versioniertes Snapshot+Delta-Modell** — authentifiziert per `X-API-Key`
+(siehe [API-Keys verwalten](Administration-API-Keys-verwalten)). Der Endpunkt verlangt keinen
+speziellen Scope, nur einen aktiven, org-gebundenen Key. Die native Android-App verwendet
+stattdessen `GET /api/v1/device/kontakte/sync` mit ihrer bestehenden Session oder einem
+Device-Bearer-Token; Format und Query-Parameter sind identisch.
 
 - **Erster Abruf** (kein `cursor`): liefert einen paginierten **Snapshot** aller Kontakte
   (`contacts`, inkl. Telefonnummern) sowie — nur auf der ersten Seite (`page_after=0`) —
   alle **Objekt-Zuordnungen** (`mappings`). Bei mehr Ergebnissen als `limit` liefert
   `next_page` die ID, mit der die nächste Seite (`page_after`) abzufragen ist. Die Antwort
-  enthält einen `cursor`-Wert, ab dem anschließend Delta-Abrufe möglich sind.
+  enthält einen `cursor`-Wert, ab dem anschließend Delta-Abrufe möglich sind. `org_id`
+  kennzeichnet die Organisation und erlaubt dem Client, einen versehentlich wiederverwendeten
+  Cursor einer anderen Organisation zu erkennen.
 - **Folgeabrufe** (mit `?cursor=<wert>`): liefern nur noch die **Änderungen** seit diesem
   Cursor (`changes`, je Eintrag `entity`, `id`, `operation` — `upsert` oder `tombstone` —
   und `payload`), ohne den kompletten Bestand erneut zu übertragen. `has_more=true`

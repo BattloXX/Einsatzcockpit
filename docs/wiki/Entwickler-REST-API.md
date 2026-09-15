@@ -315,6 +315,9 @@ Standardmäßig gelten `20/minute`, höchstens 200 Empfänger pro Auftrag, 500 S
 Snapshot+Delta-Kontrakt für externe/mobile Clients auf den zentralen Kontaktbestand einer
 Organisation (siehe [Administration: Kontaktverwaltung](Administration-Kontaktverwaltung#offline-sync-fur-externe-clients)).
 Erfordert nur einen gültigen, org-gebundenen API-Key — keinen speziellen Scope.
+Für die native Android-App steht bei gleichem Antwortformat und gleichen Query-Parametern
+`GET /api/v1/device/kontakte/sync` bereit. Dieser Endpoint authentifiziert über die bestehende
+Session oder einen Device-Bearer-Token; der X-API-Key-Endpoint bleibt für Drittsysteme bestimmt.
 
 **Query-Parameter:**
 
@@ -330,6 +333,7 @@ Erfordert nur einen gültigen, org-gebundenen API-Key — keinen speziellen Scop
 {
   "schema_version": 1,
   "mode": "snapshot",
+  "org_id": 1,
   "cursor": 482,
   "next_page": null,
   "contacts": [
@@ -361,6 +365,7 @@ gesetzt, gibt es weitere Kontakte — nächster Aufruf mit `page_after=<next_pag
 {
   "schema_version": 1,
   "mode": "delta",
+  "org_id": 1,
   "cursor": 501,
   "has_more": false,
   "changes": [

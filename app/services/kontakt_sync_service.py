@@ -90,6 +90,7 @@ def snapshot(db: Session, org_id: int, after: int, limit: int) -> dict[str, Any]
     return {
         "schema_version": SCHEMA_VERSION,
         "mode": "snapshot",
+        "org_id": org_id,
         "cursor": max_cursor[0] if max_cursor else 0,
         "next_page": contacts[-1].id if has_more and contacts else None,
         "contacts": [contact_payload(contact) for contact in contacts],
@@ -123,6 +124,7 @@ def delta(db: Session, org_id: int, cursor: int, limit: int) -> dict[str, Any]:
     return {
         "schema_version": SCHEMA_VERSION,
         "mode": "delta",
+        "org_id": org_id,
         "cursor": next_cursor,
         "has_more": has_more,
         "changes": events,

@@ -7,19 +7,32 @@ import logging
 from datetime import UTC, datetime
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
+from app.core.dependencies import _set_module_states
 from app.core.security import hash_api_key, sign_native_link_token
 from app.db import get_db
 from app.models.user import DeviceToken, FcmDeliveryLog, FcmToken, User
 from app.services import push_service
 from app.services.einsatz_live_service import build_live_state
 from app.services.gsl_live_service import build_gsl_live_state
+from app.services.kontakt_sync_service import delta as kontakt_delta
+from app.services.kontakt_sync_service import snapshot as kontakt_snapshot
 
 router = APIRouter(prefix="/api/v1/device", tags=["device"])
 log = logging.getLogger(__name__)
+
+_KONTAKT_LESE_ROLLEN = (
+    "readonly",
+    "recorder",
+    "breathing_supervisor",
+    "incident_leader",
+    "fahrtenbuch_admin",
+    "objekt_verwalter",
+    "kontakt_verwalter",
+)
 
 
 def _resolve_user_via_bearer_token(request: Request, db: Session) -> User | None:
@@ -51,6 +64,47 @@ def _get_device_token(user_id: int, db: Session) -> DeviceToken | None:
         .order_by(DeviceToken.created_at.desc())
         .first()
     )
+
+
+def _can_read_kontakte(user: User) -> bool:
+    """Role check equivalent to require_role(), for an already authenticated user."""
+    role_codes = {role.code for role in user.roles}
+    return bool(role_codes & (set(_KONTAKT_LESE_ROLLEN) | {"system_admin", "admin", "org_admin"}))
+
+
+@router.get("/kontakte/sync")
+def sync_kontakte(
+    request: Request,
+    cursor: int | None = Query(None, ge=0),
+    page_after: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
+    db: Session = Depends(get_db),
+):
+    """Synchronizes central contacts for the authenticated native-app user."""
+    user = getattr(request.state, "user", None)
+    bearer_authenticated = False
+    if not user:
+        user = _resolve_user_via_bearer_token(request, db)
+        bearer_authenticated = user is not None
+    if not user:
+        raise HTTPException(status_code=401, detail="Nicht eingeloggt")
+    if not _can_read_kontakte(user):
+        raise HTTPException(status_code=403, detail="Keine Berechtigung")
+    if user.org_id is None:
+        raise HTTPException(status_code=400, detail="Keine Organisation ausgewaehlt")
+
+    # Device routes do not run the UI module-state setup. Reuse its effective
+    # system-flag AND org-flag calculation for the authenticated user's org.
+    _set_module_states(request, user.org_id, db)
+    if not getattr(request.state, "kontakte_enabled", False):
+        raise HTTPException(status_code=404, detail="Nicht gefunden")
+
+    if bearer_authenticated:
+        db.commit()
+
+    if cursor is None:
+        return kontakt_snapshot(db, user.org_id, page_after, limit)
+    return kontakt_delta(db, user.org_id, cursor, limit)
 
 
 # ── FCM-Token ─────────────────────────────────────────────────────────────────
