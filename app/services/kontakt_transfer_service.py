@@ -218,7 +218,9 @@ def _phones(rows: object) -> list[dict[str, Any]]:
             "nummer": row.get("nummer", ""),
             "label": row.get("label", ""),
             "bevorzugt": _bool(row.get("bevorzugt")),
-            "sms_eignung": _bool(row.get("sms_eignung")),
+            # Fehlende Spalte ist keine explizite SMS-Entscheidung: Der zentrale
+            # Kontaktservice darf dann eine österreichische Mobilnummer erkennen.
+            "sms_eignung": _bool(row["sms_eignung"]) if "sms_eignung" in row else None,
         }
         for row in rows
         if isinstance(row, dict) and row.get("nummer")

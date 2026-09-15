@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from sqlalchemy.orm import Session
 
 from app.core.audit import write_audit
+from app.core.telefon import ist_oesterreichische_mobilnummer
 from app.models.bma_import import (
     BMA_SATZ_AKTIV,
     BMA_ZUORDNUNG_AUTO,
@@ -125,7 +126,8 @@ def _zentralen_bma_kontakt_sync(
             nummer=eintrag["nummer"],
             nummer_normalisiert=telefon_normalisiert(eintrag["nummer"]),
             label=eintrag["label"],
-            sort=eintrag["sort"], bevorzugt=index == 0, sms_eignung=None,
+            sort=eintrag["sort"], bevorzugt=index == 0,
+            sms_eignung=ist_oesterreichische_mobilnummer(eintrag["nummer"]) or None,
         )
         for index, eintrag in enumerate(telefon_daten)
     ]

@@ -23,6 +23,25 @@ def telefon_normalisiert(wert: str | None) -> str:
     return "+" + kompakt[2:] if kompakt.startswith("00") else kompakt
 
 
+def ist_oesterreichische_mobilnummer(wert: str | None) -> bool:
+    """Erkennt österreichische Mobilvorwahlen in nationaler und E.164-Schreibweise.
+
+    Reale Kontaktdaten aus BMA- und Excel-Importen verwenden sowohl ``0...``
+    als auch ``+43...``; deshalb werden beide Formate bewusst unterstützt.
+    """
+    normalisiert = telefon_normalisiert(wert)
+    if normalisiert.startswith("+43"):
+        vorwahl_text = normalisiert[3:6]
+    elif normalisiert.startswith("0"):
+        vorwahl_text = normalisiert[1:4]
+    else:
+        return False
+    if not vorwahl_text.isdigit():
+        return False
+    vorwahl = int(vorwahl_text)
+    return vorwahl in {650, 651, 652, 653, 655, 657} or 659 <= vorwahl <= 661 or 663 <= vorwahl <= 699
+
+
 def telefon_e164(wert: str | None) -> str | None:
     """Normalisiert und prüft strikt E.164 (+ und 8 bis 15 Ziffern)."""
     if not wert:
