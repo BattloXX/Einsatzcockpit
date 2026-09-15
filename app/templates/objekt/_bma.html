@@ -13,6 +13,7 @@
     {{ bma_import_satz.zuletzt_gesehen_am.strftime('%d.%m.%Y') if bma_import_satz.zuletzt_gesehen_am else '–' }}.
     {% if ist_verwalter %}<a href="/objekte/bma-import">Offene Vorschläge ansehen</a>{% endif %}
   </p>
+  {% if ist_verwalter %}{% set bma_telefon_fehlt = namespace(wert=false) %}{% for k in objekt.kontakte if k.extern_quelle == 'dibos_bma' and not k.zentraler_kontakt.telefone %}{% set bma_telefon_fehlt.wert = true %}{% endfor %}{% if bma_telefon_fehlt.wert %}<p class="text-muted" style="font-size:.8rem;margin:-4px 0 12px 0"><span class="badge-pill badge-pill--red" title="Keine Telefonnummer hinterlegt – beim BMA-Import eventuell verloren gegangen. BMA-Datenblatt-PDF erneut hochladen, um die Nummer neu zu synchronisieren.">Telefonnummer fehlt</span> BMA-Datenblatt-PDF erneut hochladen, um fehlende Nummern neu zu synchronisieren.</p>{% endif %}{% endif %}
   {% endif %}
   {% if objekt.bma %}
   {% set bma = objekt.bma %}

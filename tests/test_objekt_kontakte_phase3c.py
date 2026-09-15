@@ -6,7 +6,7 @@ import pytest
 from app.core.security import hash_password
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
-from app.models.kontakt import Kontakt, ObjektKontaktFreigabe
+from app.models.kontakt import Kontakt, KontaktTelefon, ObjektKontaktFreigabe
 from app.models.master import FireDept, OrgSettings, SystemSettings
 from app.models.objekt import OBJEKT_STATUS_FREIGEGEBEN, Objekt, ObjektKontakt
 from app.models.user import Role, User, UserRole
@@ -89,6 +89,41 @@ def _zentral(org_id: int, name: str = "Zentral Kontakt", nummer: str = "+4366411
 def _zuordnung(db, objekt_id: int) -> ObjektKontakt:
     zuordnung = db.query(ObjektKontakt).filter(ObjektKontakt.objekt_id == objekt_id).one()
     return zuordnung
+
+
+def test_bma_kontakt_ohne_telefon_zeigt_admin_warnung_und_mit_telefon_nicht(client):
+    org_id, objekt_id = _setup("p3c_bma_telefonwarnung", 93000)
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        kontakt = Kontakt(org_id=org_id, anzeigename="BMA Kontakt ohne Nummer")
+        db.add(kontakt)
+        db.flush()
+        db.add(ObjektKontakt(
+            org_id=org_id,
+            objekt_id=objekt_id,
+            kontakt_id=kontakt.id,
+            art="bma_alarmperson",
+            extern_quelle="dibos_bma",
+            extern_id="pdf:93000:bma_alarmperson:ohne-nummer",
+        ))
+        db.commit()
+
+        _login(client, "p3c_bma_telefonwarnung")
+        response = client.get(f"/objekte/{objekt_id}/kontakte")
+        assert response.status_code == 200
+        assert "BMA-Datenblatt-PDF erneut hochladen" in response.text
+        assert "badge-pill--red" in response.text
+
+        db.add(KontaktTelefon(org_id=org_id, kontakt_id=kontakt.id, nummer="+43664111222"))
+        db.commit()
+
+        response = client.get(f"/objekte/{objekt_id}/kontakte")
+        assert response.status_code == 200
+        assert "BMA-Datenblatt-PDF erneut hochladen" not in response.text
+        assert "badge-pill--red" not in response.text
+    finally:
+        db.close()
 
 
 def test_suche_zuordnung_und_doppel_guard(client):

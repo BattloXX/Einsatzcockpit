@@ -4,7 +4,7 @@
     {% for k in objekt.kontakte if k.zentraler_kontakt %}
     <section class="objekt-kontakt" x-data="{ edit: false }">
       <div class="objekt-kontakt__kopf">
-        <div><span class="badge-pill badge-pill--gray">{{ kontakt_arten.get(k.art, k.art) }}</span> <strong>{{ k.zentraler_kontakt.anzeigename }}</strong></div>
+        <div><span class="badge-pill badge-pill--gray">{{ kontakt_arten.get(k.art, k.art) }}</span> <strong>{{ k.zentraler_kontakt.anzeigename }}</strong>{% if ist_verwalter and k.extern_quelle == 'dibos_bma' and not k.zentraler_kontakt.telefone %} <span class="badge-pill badge-pill--red" title="Keine Telefonnummer hinterlegt – beim BMA-Import eventuell verloren gegangen. BMA-Datenblatt-PDF erneut hochladen, um die Nummer neu zu synchronisieren.">Telefonnummer fehlt</span>{% endif %}</div>
         {% if ist_verwalter %}<div class="objekt-kontakt__aktionen"><button type="button" class="btn btn--ghost btn--xs" @click="edit = !edit">Zuordnung bearbeiten</button><form hx-post="/objekte/{{ objekt.id }}/kontakte/{{ k.id }}/loeschen" hx-target="#abschnitt-kontakte" hx-swap="innerHTML"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><button class="btn btn--danger btn--xs">Entfernen</button></form></div>{% endif %}
       </div>
       {% if k.erreichbarkeit %}<div class="text-muted">Erreichbarkeit an diesem Objekt: {{ k.erreichbarkeit }}</div>{% endif %}
