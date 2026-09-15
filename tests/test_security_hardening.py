@@ -208,8 +208,11 @@ def test_statistik_infoscreen_csp_erlaubt_tailwind_und_kartenkacheln(monkeypatch
     h = _security_headers_for("/infoscreen/statistik/tok")
     csp = h["content-security-policy"]
     assert "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com" in csp
-    assert "https://tile.openstreetmap.org" in csp
+    # Kartenkacheln laufen seit dem same-origin-Tile-Proxy (app/routers/ui_map_tiles.py)
+    # ueber 'self' statt einer externen OSM-Domain in der CSP.
+    assert "https://tile.openstreetmap.org" not in csp
     assert "https://*.tile.openstreetmap.org" not in csp
+    assert "img-src 'self'" in csp
     assert "frame-ancestors 'self'" in csp
     assert h["x-frame-options"] == "SAMEORIGIN"
 

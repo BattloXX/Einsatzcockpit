@@ -22,7 +22,7 @@ from app.config import settings
 
 _CSP_BASE = (
     "default-src 'self'; "
-    "img-src 'self' data: blob: https://tile.openstreetmap.org "
+    "img-src 'self' data: blob: "
     "https://*.rainviewer.com https://*.wien.gv.at; "
     "media-src 'self' blob:; "
     "style-src 'self' 'unsafe-inline'; "
@@ -48,7 +48,7 @@ _CSP_ALARM_INFOSCREEN_BASE = _CSP_BASE.replace(
 # (Fonts sind lokal, siehe fonts.css)
 _CSP_INFOSCREEN_BASE = (
     "default-src 'self'; "
-    "img-src 'self' data: blob: https://tile.openstreetmap.org; "
+    "img-src 'self' data: blob:; "
     "style-src 'self' 'unsafe-inline'; "
     "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com; "
     "font-src 'self' data:; "
