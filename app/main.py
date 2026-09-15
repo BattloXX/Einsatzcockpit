@@ -71,6 +71,7 @@ from app.routers import (
     ui_lis,
     ui_mailing,
     ui_major_incident,
+    ui_map_tiles,
     ui_media,
     ui_medienverwaltung,
     ui_nachschlagewerke,
@@ -865,6 +866,7 @@ app.include_router(teams_bot.router)
 app.include_router(ws.router)
 app.include_router(ui_incident.router)
 app.include_router(ui_lagefuehrung.router)
+app.include_router(ui_map_tiles.router)
 app.include_router(ui_invitation.router)
 app.include_router(ui_backup.router)
 app.include_router(ui_db_backup.router)

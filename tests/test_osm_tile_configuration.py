@@ -27,9 +27,9 @@ def test_no_legacy_osm_subdomain_urls_or_options_remain():
     assert not matches, "Veraltete OSM-Tile-Konfiguration gefunden:\n" + "\n".join(matches)
 
 
-def test_osm_browser_config_uses_canonical_url_and_attribution():
+def test_osm_browser_config_uses_same_origin_proxy_and_attribution():
     content = (ROOT / "app/static/js/map-config.js").read_text()
-    assert 'https://tile.openstreetmap.org/{z}/{x}/{y}.png' in content
+    assert '"/karten/osm-tile/{z}/{x}/{y}.png"' in content
     assert 'https://www.openstreetmap.org/copyright' in content
     assert "OpenStreetMap contributors" in content
     assert "tileerror" in content

@@ -10,12 +10,10 @@ from __future__ import annotations
 import logging
 from collections import OrderedDict
 
-from app.core.map_config import OSM_TILE_URL
+from app.core.map_config import OSM_TILE_URL, OSM_TILE_USER_AGENT
 
 logger = logging.getLogger("einsatzleiter.staticmap")
 
-# OSM-Tile-Nutzungsrichtlinie verlangt einen aussagekräftigen User-Agent (kein Default-Client).
-_USER_AGENT = "Einsatzcockpit/1.0 (+https://einsatzcockpit.com)"
 _MARKER_COLOR = "#d42225"  # Marken-Rot
 _RENDER_CACHE: OrderedDict[tuple[float, float, int, tuple[int, int]], bytes] = OrderedDict()
 _RENDER_CACHE_MAXSIZE = 128
@@ -45,7 +43,7 @@ def render_incident_map_png(
     m = StaticMap(
         width, height,
         url_template=OSM_TILE_URL,
-        headers={"User-Agent": _USER_AGENT},
+        headers={"User-Agent": OSM_TILE_USER_AGENT},
     )
     m.add_marker(CircleMarker((lng, lat), _MARKER_COLOR, 14))
     image = m.render(zoom=zoom, center=(lng, lat))
@@ -81,7 +79,7 @@ def render_route_map_png(
     m = StaticMap(
         width, height,
         url_template=OSM_TILE_URL,
-        headers={"User-Agent": _USER_AGENT},
+        headers={"User-Agent": OSM_TILE_USER_AGENT},
         padding_x=30, padding_y=30,
     )
     if route and len(route) >= 2:
