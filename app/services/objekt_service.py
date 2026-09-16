@@ -88,6 +88,9 @@ def write_objekt_change(
     before: Any,
     after: Any,
     user_id: int | None = None,
+    quelle: str = "intern",
+    pflegeauftrag_id: int | None = None,
+    kontakt_id: int | None = None,
 ) -> None:
     """Haengt einen feldgenauen Change-Eintrag an (Caller committet)."""
     db.add(ObjektChange(
@@ -98,6 +101,9 @@ def write_objekt_change(
         feld=feld,
         before_json=json.dumps(before, ensure_ascii=False, default=str) if before is not None else None,
         after_json=json.dumps(after, ensure_ascii=False, default=str) if after is not None else None,
+        quelle=quelle,
+        pflegeauftrag_id=pflegeauftrag_id,
+        kontakt_id=kontakt_id,
         erstellt_am=datetime.now(UTC),
     ))
 
@@ -108,6 +114,9 @@ def aktualisiere_felder(
     daten: dict[str, Any],
     bereich: str,
     user_id: int | None = None,
+    quelle: str = "intern",
+    pflegeauftrag_id: int | None = None,
+    kontakt_id: int | None = None,
 ) -> list[str]:
     """Setzt Felder am Objekt und protokolliert jede tatsaechliche Aenderung.
 
@@ -121,7 +130,8 @@ def aktualisiere_felder(
         setattr(objekt, feld, neu)
         write_objekt_change(
             db, objekt.id, objekt.org_id, bereich, feld,
-            before=alt, after=neu, user_id=user_id,
+            before=alt, after=neu, user_id=user_id, quelle=quelle,
+            pflegeauftrag_id=pflegeauftrag_id, kontakt_id=kontakt_id,
         )
         geaendert.append(feld)
     if geaendert:

@@ -65,6 +65,46 @@ OBJEKT_STATUS_UEBERGAENGE: dict[str, set[str]] = {
     OBJEKT_STATUS_ARCHIVIERT: {OBJEKT_STATUS_UEBERARBEITUNG},
 }
 
+PFLEGEAUFTRAG_STATUS_EINGELADEN = "eingeladen"
+PFLEGEAUFTRAG_STATUS_IN_BEARBEITUNG = "in_bearbeitung"
+PFLEGEAUFTRAG_STATUS_EINGEREICHT = "eingereicht"
+PFLEGEAUFTRAG_STATUS_NACHARBEIT = "nacharbeit"
+PFLEGEAUFTRAG_STATUS_FREIGEGEBEN = "freigegeben"
+PFLEGEAUFTRAG_STATUS_VERWORFEN = "verworfen"
+PFLEGEAUFTRAG_STATUS_ABGELAUFEN = "abgelaufen"
+PFLEGEAUFTRAG_STATUS_WIDERRUFEN = "widerrufen"
+
+PFLEGEAUFTRAG_STATUS_LABELS = {
+    PFLEGEAUFTRAG_STATUS_EINGELADEN: "Eingeladen",
+    PFLEGEAUFTRAG_STATUS_IN_BEARBEITUNG: "In Bearbeitung",
+    PFLEGEAUFTRAG_STATUS_EINGEREICHT: "Eingereicht",
+    PFLEGEAUFTRAG_STATUS_NACHARBEIT: "Nacharbeit",
+    PFLEGEAUFTRAG_STATUS_FREIGEGEBEN: "Freigegeben",
+    PFLEGEAUFTRAG_STATUS_VERWORFEN: "Verworfen",
+    PFLEGEAUFTRAG_STATUS_ABGELAUFEN: "Abgelaufen",
+    PFLEGEAUFTRAG_STATUS_WIDERRUFEN: "Widerrufen",
+}
+
+# Erlaubte Uebergaenge eines Pflegeauftrags. FREIGEGEBEN/VERWORFEN/ABGELAUFEN/WIDERRUFEN
+# sind terminal (keine ausgehenden Kanten).
+PFLEGEAUFTRAG_STATUS_UEBERGAENGE: dict[str, set[str]] = {
+    PFLEGEAUFTRAG_STATUS_EINGELADEN: {
+        PFLEGEAUFTRAG_STATUS_IN_BEARBEITUNG, PFLEGEAUFTRAG_STATUS_WIDERRUFEN, PFLEGEAUFTRAG_STATUS_ABGELAUFEN,
+    },
+    PFLEGEAUFTRAG_STATUS_IN_BEARBEITUNG: {
+        PFLEGEAUFTRAG_STATUS_EINGEREICHT, PFLEGEAUFTRAG_STATUS_WIDERRUFEN, PFLEGEAUFTRAG_STATUS_ABGELAUFEN,
+    },
+    PFLEGEAUFTRAG_STATUS_EINGEREICHT: {
+        PFLEGEAUFTRAG_STATUS_FREIGEGEBEN, PFLEGEAUFTRAG_STATUS_NACHARBEIT, PFLEGEAUFTRAG_STATUS_VERWORFEN,
+    },
+    PFLEGEAUFTRAG_STATUS_NACHARBEIT: {PFLEGEAUFTRAG_STATUS_IN_BEARBEITUNG, PFLEGEAUFTRAG_STATUS_EINGEREICHT},
+}
+
+# Erlaubte Bereiche fuer den Scope eines Pflegeauftrags (bereiche_json ist eine Teilmenge).
+PFLEGEAUFTRAG_BEREICHE = (
+    "stammdaten", "adresse", "zufahrt", "bma", "gefahren", "kontakte", "dokumente",
+)
+
 # Stammdaten-Felder, die beim Erstellen einer Arbeitskopie und beim Uebernehmen (Merge)
 # kopiert werden - bewusst eine explizite Liste statt __table__.columns, damit id, nummer,
 # org_id, status, entwurf_von_id, erstellt_*/aktualisiert_* NICHT versehentlich mitwandern.
@@ -197,6 +237,22 @@ class Objekt(TenantScoped, Base):
     revision_datum: Mapped[date | None] = mapped_column(Date, nullable=True)
     # Sent-Marker fuer Revisions-Erinnerung (Muster verleih_erinnerung)
     revision_erinnert_am: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # Metadaten der letzten (externen) Datenbestaetigung - kein Arbeitskopie-Inhalt,
+    # daher NICHT in OBJEKT_KOPIERBARE_FELDER.
+    letzte_bestaetigung_am: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    letzte_bestaetigung_kontakt_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("kontakt.id", ondelete="SET NULL"), nullable=True
+    )
+    # use_alter: objekt_pflegeauftrag.objekt_id zeigt zurueck auf objekt.id - zirkulaerer
+    # FK zwischen den beiden Tabellen, ohne use_alter scheitert CREATE TABLE.
+    letzte_bestaetigung_pflegeauftrag_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey(
+            "objekt_pflegeauftrag.id", ondelete="SET NULL",
+            use_alter=True, name="fk_objekt_letzte_bestaetigung_auftrag",
+        ),
+        nullable=True,
+    )
     erstellt_am: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     aktualisiert_am: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
@@ -954,4 +1010,135 @@ class ObjektChange(TenantScoped, Base):
     feld: Mapped[str] = mapped_column(String(100), nullable=False)
     before_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     after_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Herkunft: intern / extern_pflegeauftrag / import / system
+    quelle: Mapped[str] = mapped_column(String(20), nullable=False, default="intern")
+    pflegeauftrag_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("objekt_pflegeauftrag.id", ondelete="SET NULL"), nullable=True
+    )
+    kontakt_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("kontakt.id", ondelete="SET NULL"), nullable=True
+    )
     erstellt_am: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+
+class ObjektPflegeauftrag(TenantScoped, Base):
+    """Externer Auftrag zur Bestaetigung/Pflege eines Objekts durch einen zentralen Kontakt.
+
+    Arbeitskopie wird lazy angelegt: erst bei der ersten tatsaechlichen externen
+    Feldaenderung (siehe objekt_pflege_service.hole_oder_erstelle_arbeitskopie_fuer_auftrag),
+    nicht schon beim Erstellen der Einladung. Solange nur bestaetigt wird, bleibt
+    arbeitskopie_id NULL.
+    """
+    __tablename__ = "objekt_pflegeauftrag"
+    __table_args__ = (Index("ix_objekt_pflegeauftrag_org_objekt_status", "org_id", "objekt_id", "status"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    # org_id via TenantScoped
+    objekt_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("objekt.id", ondelete="CASCADE"), nullable=False
+    )
+    kontakt_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("kontakt.id", ondelete="RESTRICT"), nullable=False
+    )
+    arbeitskopie_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("objekt.id", ondelete="SET NULL"), nullable=True
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default=PFLEGEAUFTRAG_STATUS_EINGELADEN)
+    bereiche_json: Mapped[str] = mapped_column(Text, nullable=False)
+    auftrag_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    erstellt_am: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    erstellt_von_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+    gesendet_am: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    gueltig_bis: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    erster_zugriff_am: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    letzter_zugriff_am: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    abgeschlossen_am: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    freigegeben_am: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    freigegeben_von_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+    verworfen_am: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    verworfen_von_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+    widerrufen_am: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    widerrufen_von_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+    nacharbeit_am: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Freitext der Nacharbeit-Anforderung (im urspruenglichen Feldkatalog des Auftrags
+    # nicht explizit genannt, aber fuer "Intern Text eingeben" bei Nacharbeit notwendig).
+    nacharbeit_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    erinnerung_1_am: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    erinnerung_2_am: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    # Zwei FKs auf dieselbe Tabelle objekt -> foreign_keys explizit angeben.
+    objekt: Mapped[Objekt] = relationship(foreign_keys=[objekt_id])
+    arbeitskopie: Mapped[Objekt | None] = relationship(foreign_keys=[arbeitskopie_id])
+
+
+class ObjektPflegeAbschnitt(TenantScoped, Base):
+    """Bestaetigungsstatus je Bereich eines Pflegeauftrags."""
+    __tablename__ = "objekt_pflege_abschnitt"
+    __table_args__ = (UniqueConstraint("pflegeauftrag_id", "bereich", name="uq_objekt_pflege_abschnitt"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    # org_id via TenantScoped
+    pflegeauftrag_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("objekt_pflegeauftrag.id", ondelete="CASCADE"), nullable=False
+    )
+    bereich: Mapped[str] = mapped_column(String(30), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="offen")
+    bestaetigt_am: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    geaendert_am: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class ObjektPflegeEreignis(TenantScoped, Base):
+    """Audit-Timeline eines Pflegeauftrags."""
+    __tablename__ = "objekt_pflege_ereignis"
+    __table_args__ = (
+        Index("ix_objekt_pflege_ereignis_org_auftrag_ts", "org_id", "pflegeauftrag_id", "erstellt_am"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    # org_id via TenantScoped
+    pflegeauftrag_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("objekt_pflegeauftrag.id", ondelete="CASCADE"), nullable=False
+    )
+    typ: Mapped[str] = mapped_column(String(30), nullable=False)
+    text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    erstellt_am: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+    kontakt_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("kontakt.id", ondelete="SET NULL"), nullable=True
+    )
+    metadaten_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class KontaktAenderungsvorschlag(TenantScoped, Base):
+    """Änderungsvorschlag an einem zentralen Kontakt aus einem Pflegeauftrag - nie
+    direkte Mutation von Kontakt, siehe kontakt_service.update_kontakt(expected_version=...).
+    """
+    __tablename__ = "kontakt_aenderungsvorschlag"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    # org_id via TenantScoped
+    pflegeauftrag_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("objekt_pflegeauftrag.id", ondelete="CASCADE"), nullable=False
+    )
+    kontakt_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("kontakt.id", ondelete="CASCADE"), nullable=False
+    )
+    basis_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    diff_json: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="offen")
+    erstellt_am: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    geprueft_am: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    geprueft_von_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
