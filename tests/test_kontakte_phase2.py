@@ -435,7 +435,7 @@ def test_kontakt_export_ist_org_gebunden_und_enthaelt_alle_xlsx_blaetter(client)
     xlsx_response = client.get("/kontakte/export.xlsx")
     assert xlsx_response.status_code == 200
     workbook = load_workbook(BytesIO(xlsx_response.content), read_only=True)
-    assert workbook.sheetnames == ["Kontakte", "Telefonnummern", "Objektzuordnungen", "Anleitung"]
+    assert workbook.sheetnames == ["Kontakte", "Objektzuordnungen", "Anleitung"]
 
 
 def test_import_vorschau_uebernimmt_telefon_und_liefert_ergebnis_csv(client):
@@ -497,10 +497,11 @@ def test_xlsx_roundtrip_uebernimmt_telefone_und_objektzuordnungen(client):
         db.commit()
         rows = parse_import(export_xlsx(db, user.org_id), "kontakte.xlsx")
         row = next(row for row in rows if row["id"] == str(kontakt.id))
-        assert row["_telefone"][0]["nummer"] == kontakt.telefone[0].nummer
+        assert row["telefon_1"] == kontakt.telefone[0].nummer
+        assert row["telefon_1_bezeichnung"] == (kontakt.telefone[0].label or "")
         assert row["_zuordnungen"][0]["objekt_id"] == str(objekt.id)
         row["funktion"] = "Aktualisiert"
-        row["_telefone"][0]["label"] = "Mobil"
+        row["telefon_1_bezeichnung"] = "Mobil"
         row["_zuordnungen"][0]["rolle"] = "betreiber"
         preview = preview_import(db, user.org_id, rows)
         entry = save_preview(db, user.org_id, user.id, preview)
@@ -528,21 +529,47 @@ def test_xlsx_import_erkennt_mobilnummer_ohne_sms_spalte():
         workbook = Workbook()
         kontakte = workbook.active
         kontakte.title = "Kontakte"
-        kontakte.append(["id", "anzeigename", "typ", "funktion"])
-        kontakte.append([str(kontakt.id), "XLSX Mobil", "person", "Neu"])
-        telefone = workbook.create_sheet("Telefonnummern")
-        telefone.append(["kontakt_id", "nummer", "label", "bevorzugt"])
-        telefone.append([str(kontakt.id), "+43 664 123456", "Mobil", "0"])
+        kontakte.append(["id", "anzeigename", "typ", "funktion", "telefon_1", "telefon_1_bezeichnung", "telefon_1_bevorzugt"])
+        kontakte.append([str(kontakt.id), "XLSX Mobil", "person", "Neu", "+43 664 123456", "Mobil", "0"])
         content = BytesIO()
         workbook.save(content)
 
         rows = parse_import(content.getvalue(), "kontakte.xlsx")
-        assert "sms_eignung" not in rows[0]["_telefone"][0]
+        assert "telefon_1_sms" not in rows[0]
         preview = preview_import(db, 1, rows)
         entry = save_preview(db, 1, 1, preview)
         assert apply_preview(db, 1, 1, entry.id) == 1
         db.expire_all()
         assert db.get(Kontakt, kontakt.id).telefone[0].sms_eignung is True
+    finally:
+        db.close()
+
+
+def test_csv_import_legt_neuen_kontakt_mit_telefon_ohne_id_an(client):
+    user = _setup_user("kontakte_import_neu_telefon", "kontakt_verwalter")
+    _login(client, user.username)
+    csrf = client.cookies.get("ec_csrf")
+    csv_data = (
+        "version;id;typ;anzeigename;telefon_1;telefon_1_bezeichnung;telefon_1_bevorzugt;telefon_1_sms\n"
+        "2;;person;Neuer Import Kontakt;+43 664 987654;Mobil;1;\n"
+    )
+    response = client.post(
+        "/kontakte/import/vorschau",
+        data={"_csrf": csrf},
+        files={"datei": ("kontakte.csv", csv_data, "text/csv")},
+        follow_redirects=False,
+    )
+    assert response.status_code == 303
+    preview_url = response.headers["location"]
+    assert client.post(f"{preview_url}/uebernehmen", data={"_csrf": csrf}, follow_redirects=False).status_code == 303
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        kontakt = db.query(Kontakt).filter_by(org_id=user.org_id, anzeigename="Neuer Import Kontakt").one()
+        assert [(phone.nummer, phone.label, phone.bevorzugt, phone.sms_eignung) for phone in kontakt.telefone] == [
+            ("+43 664 987654", "Mobil", True, True)
+        ]
     finally:
         db.close()
 

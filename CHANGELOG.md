@@ -12,6 +12,7 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 
 | Version | Datum | Highlights |
 |---------|-------|------------|
+| **Unveröffentlicht** | 2026-09-16 | **Kontaktverwaltung**: Kontaktimport und -export auf ein flaches CSV-/XLSX-Format mit bis zu drei Telefonnummern direkt je Kontaktzeile umgestellt |
 | **Unveröffentlicht** | 2026-09-16 | **Wiki**: Cloudflare-Turnstile-Setup für das Kontaktformular dokumentiert |
 | **Unveröffentlicht** | 2026-09-15 | **Karten**: OSM-Kacheln über einen Same-Origin-Proxy ausgeliefert; **Kontaktverwaltung**: österreichische Mobilnummern werden automatisch als SMS-fähig erkannt, BMA-Kontakte ohne Telefonnummer sichtbar gewarnt und der Bearbeiten-Dialog sicher escaped; Objekt-Kontakt-Zuordnung überarbeitet, Android-Sync-Endpoint für Geräte- und Sitzungsanmeldung ergänzt; **Fahrtenbuch**: km-Stand bei Korrekturen gegen den Fahrtzeitpunkt geprüft |
 | **Unveröffentlicht** | 2026-09-14 | **Kontaktverwaltung**: Profilbilder und Bild-Upload ergänzt, Dubletten sowie leere Werte bereinigt, Bearbeiten und Dublettenanlage korrigiert und BMA-Import angebunden; **Fahrtenbuch**: Administration für Fahrtenbuch-Administratoren in der Navigation freigeschaltet |

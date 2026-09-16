@@ -1,4 +1,4 @@
-"""Export helpers for the central contacts interchange format (v1)."""
+"""Export helpers for the central contacts interchange format (v2)."""
 
 from __future__ import annotations
 
@@ -13,7 +13,33 @@ from app.models.kontakt import Kontakt, KontaktImportVorschau
 from app.models.objekt import Objekt, ObjektKontakt
 from app.services import kontakt_service
 
-FORMAT_VERSION = "1"
+FORMAT_VERSION = "2"
+
+CONTACT_HEADERS = [
+    "version",
+    "id",
+    "typ",
+    "anzeigename",
+    "vorname",
+    "nachname",
+    "funktion",
+    "organisation",
+    "email",
+    "erreichbarkeit",
+    "notizen",
+    "telefon_1",
+    "telefon_1_bezeichnung",
+    "telefon_1_bevorzugt",
+    "telefon_1_sms",
+    "telefon_2",
+    "telefon_2_bezeichnung",
+    "telefon_2_bevorzugt",
+    "telefon_2_sms",
+    "telefon_3",
+    "telefon_3_bezeichnung",
+    "telefon_3_bevorzugt",
+    "telefon_3_sms",
+]
 
 
 def _text(value: object) -> str:
@@ -25,7 +51,7 @@ def _bool(value: object) -> bool:
 
 
 def parse_import(content: bytes, filename: str) -> list[dict[str, Any]]:
-    """Read the v1 CSV or XLSX contact sheet into normalized import rows."""
+    """Read the v2 CSV or XLSX contact sheet into normalized import rows."""
     if filename.lower().endswith(".csv"):
         text = content.decode("utf-8-sig")
         rows = list(csv.DictReader(io.StringIO(text), delimiter=";"))
@@ -42,18 +68,15 @@ def parse_import(content: bytes, filename: str) -> list[dict[str, Any]]:
         headers = [str(value or "").strip() for value in values[0]]
         rows = [dict(zip(headers, values_, strict=False)) for values_ in values[1:]]
         by_id: dict[str, dict[str, Any]] = {_text(row.get("id")): row for row in rows if _text(row.get("id"))}
-        for sheet_name, key in (("Telefonnummern", "_telefone"), ("Objektzuordnungen", "_zuordnungen")):
-            if sheet_name not in workbook.sheetnames:
-                continue
-            sheet_values = list(workbook[sheet_name].values)
-            if not sheet_values:
-                continue
-            sheet_headers = [_text(value) for value in sheet_values[0]]
-            for values_ in sheet_values[1:]:
-                related = dict(zip(sheet_headers, values_, strict=False))
-                parent = by_id.get(_text(related.get("kontakt_id")))
-                if parent is not None:
-                    parent.setdefault(key, []).append(related)
+        if "Objektzuordnungen" in workbook.sheetnames:
+            sheet_values = list(workbook["Objektzuordnungen"].values)
+            if sheet_values:
+                sheet_headers = [_text(value) for value in sheet_values[0]]
+                for values_ in sheet_values[1:]:
+                    related = dict(zip(sheet_headers, values_, strict=False))
+                    parent = by_id.get(_text(related.get("kontakt_id")))
+                    if parent is not None:
+                        parent.setdefault("_zuordnungen", []).append(related)
     else:
         raise ValueError("Bitte eine CSV- oder XLSX-Datei hochladen")
     if len(rows) > 1000:
@@ -165,7 +188,7 @@ def apply_preview(db: Session, org_id: int, user_id: int, preview_id: int) -> in
         row = item["row"]
         data = {field: row[field] for field in fields if field in row}
         data.setdefault("typ", "person")
-        phones = _phones(row.get("_telefone", []))
+        phones = _phones(row)
         if item["status"] == "neu":
             kontakt = kontakt_service.create_kontakt(db, data, phones, [], org_id=org_id, user_id=user_id)
             changed += 1
@@ -210,21 +233,25 @@ def apply_preview(db: Session, org_id: int, user_id: int, preview_id: int) -> in
     return changed
 
 
-def _phones(rows: object) -> list[dict[str, Any]]:
-    if not isinstance(rows, list):
-        return []
-    return [
-        {
-            "nummer": row.get("nummer", ""),
-            "label": row.get("label", ""),
-            "bevorzugt": _bool(row.get("bevorzugt")),
-            # Fehlende Spalte ist keine explizite SMS-Entscheidung: Der zentrale
-            # Kontaktservice darf dann eine österreichische Mobilnummer erkennen.
-            "sms_eignung": _bool(row["sms_eignung"]) if "sms_eignung" in row else None,
-        }
-        for row in rows
-        if isinstance(row, dict) and row.get("nummer")
-    ]
+def _phones(row: dict[str, Any]) -> list[dict[str, Any]]:
+    phones: list[dict[str, Any]] = []
+    for number in range(1, 4):
+        prefix = f"telefon_{number}"
+        nummer = _text(row.get(prefix))
+        if not nummer:
+            continue
+        sms = row.get(f"{prefix}_sms")
+        phones.append(
+            {
+                "nummer": nummer,
+                "label": _text(row.get(f"{prefix}_bezeichnung")),
+                "bevorzugt": _bool(row.get(f"{prefix}_bevorzugt")),
+                # Eine leere oder fehlende Spalte ist keine explizite SMS-Entscheidung:
+                # Der zentrale Kontaktservice darf dann österreichische Mobilnummern erkennen.
+                "sms_eignung": _bool(sms) if _text(sms) else None,
+            }
+        )
+    return phones
 
 
 def _apply_mappings(db: Session, org_id: int, kontakt: Kontakt, rows: object) -> list[str]:
@@ -288,30 +315,39 @@ def _kontakte(db: Session, org_id: int) -> list[Kontakt]:
     )
 
 
+def _contact_values(kontakt: Kontakt) -> list[Any]:
+    values: list[Any] = [
+        FORMAT_VERSION,
+        kontakt.id,
+        kontakt.typ,
+        kontakt.anzeigename,
+        kontakt.vorname,
+        kontakt.nachname,
+        kontakt.funktion,
+        kontakt.organisation,
+        kontakt.email,
+        kontakt.erreichbarkeit,
+        kontakt.notizen,
+    ]
+    for phone in sorted(kontakt.telefone, key=lambda item: (item.sort, item.id))[:3]:
+        values.extend([phone.nummer, phone.label, phone.bevorzugt, phone.sms_eignung])
+    values.extend([""] * (len(CONTACT_HEADERS) - len(values)))
+    return values
+
+
 def export_csv(db: Session, org_id: int) -> bytes:
     out = io.StringIO(newline="")
     writer = csv.writer(out, delimiter=";")
-    writer.writerow(["version", "id", "typ", "anzeigename", "organisation", "funktion", "email", "erreichbarkeit"])
+    writer.writerow(CONTACT_HEADERS)
     for kontakt in _kontakte(db, org_id):
-        writer.writerow(
-            [
-                FORMAT_VERSION,
-                kontakt.id,
-                kontakt.typ,
-                kontakt.anzeigename,
-                kontakt.organisation or "",
-                kontakt.funktion or "",
-                kontakt.email or "",
-                kontakt.erreichbarkeit or "",
-            ]
-        )
+        writer.writerow(_contact_values(kontakt))
     return out.getvalue().encode("utf-8-sig")
 
 
 def export_template_csv(beispiel: bool = False) -> bytes:
     out = io.StringIO(newline="")
     writer = csv.writer(out, delimiter=";")
-    writer.writerow(["version", "id", "typ", "anzeigename", "organisation", "funktion", "email", "erreichbarkeit"])
+    writer.writerow(CONTACT_HEADERS)
     if beispiel:
         writer.writerow(
             [
@@ -319,10 +355,24 @@ def export_template_csv(beispiel: bool = False) -> bytes:
                 "",
                 "person",
                 "Max Mustermann",
-                "Muster GmbH",
+                "Max",
+                "Mustermann",
                 "Bereitschaft",
+                "Muster GmbH",
                 "max@example.test",
                 "tagsueber",
+                "",
+                "+43 664 1234567",
+                "Mobil",
+                "1",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
             ]
         )
     return out.getvalue().encode("utf-8-sig")
@@ -335,42 +385,9 @@ def export_xlsx(db: Session, org_id: int) -> bytes:
     kontakte = _kontakte(db, org_id)
     sheet = wb.active
     sheet.title = "Kontakte"
-    sheet.append(
-        [
-            "version",
-            "id",
-            "typ",
-            "anzeigename",
-            "vorname",
-            "nachname",
-            "funktion",
-            "organisation",
-            "email",
-            "erreichbarkeit",
-            "notizen",
-        ]
-    )
+    sheet.append(CONTACT_HEADERS)
     for k in kontakte:
-        sheet.append(
-            [
-                FORMAT_VERSION,
-                k.id,
-                k.typ,
-                k.anzeigename,
-                k.vorname,
-                k.nachname,
-                k.funktion,
-                k.organisation,
-                k.email,
-                k.erreichbarkeit,
-                k.notizen,
-            ]
-        )
-    phones = wb.create_sheet("Telefonnummern")
-    phones.append(["kontakt_id", "nummer", "label", "sort", "bevorzugt", "sms_eignung"])
-    for k in kontakte:
-        for p in k.telefone:
-            phones.append([k.id, p.nummer, p.label, p.sort, p.bevorzugt, p.sms_eignung])
+        sheet.append(_contact_values(k))
     mappings = wb.create_sheet("Objektzuordnungen")
     mappings.append(["kontakt_id", "objekt_id", "objekt", "rolle", "sort", "erreichbarkeit"])
     for row, objekt_name in (
@@ -383,7 +400,11 @@ def export_xlsx(db: Session, org_id: int) -> bytes:
         mappings.append([row.kontakt_id, row.objekt_id, objekt_name, row.art, row.sort, row.erreichbarkeit])
     guide = wb.create_sheet("Anleitung")
     guide.append(["Format", f"Kontakt-Import/Export v{FORMAT_VERSION}"])
-    guide.append(["Hinweis", "IDs nur zum Aktualisieren vorhandener Kontakte verwenden."])
+    guide.append(["Hinweis", "IDs sind optional; leere IDs legen neue Kontakte an."])
+    guide.append(["Hinweis", "Telefonnummern stehen direkt in den Spalten telefon_1 bis telefon_3."])
+    guide.append(
+        ["Hinweis", "Es werden nur die ersten 3 Telefonnummern exportiert; weitere bitte ueber Bearbeiten ergaenzen."]
+    )
     guide.append(["Hinweis", "Freigaben werden nicht exportiert und nie durch einen Import uebernommen."])
     for ws in wb.worksheets:
         ws.freeze_panes = "A2"
@@ -401,28 +422,20 @@ def export_template_xlsx(beispiel: bool = False) -> bytes:
     wb = Workbook()
     kontakte = wb.active
     kontakte.title = "Kontakte"
-    kontakte.append(
-        [
-            "version",
-            "id",
-            "typ",
-            "anzeigename",
-            "vorname",
-            "nachname",
-            "funktion",
-            "organisation",
-            "email",
-            "erreichbarkeit",
-            "notizen",
-        ]
-    )
-    phones = wb.create_sheet("Telefonnummern")
-    phones.append(["kontakt_id", "nummer", "label", "sort", "bevorzugt", "sms_eignung"])
+    kontakte.append(CONTACT_HEADERS)
     mappings = wb.create_sheet("Objektzuordnungen")
     mappings.append(["kontakt_id", "objekt_id", "objekt", "rolle", "sort", "erreichbarkeit"])
     guide = wb.create_sheet("Anleitung")
     guide.append(["Format", f"Kontakt-Import/Export v{FORMAT_VERSION}"])
     guide.append(["Ablauf", "Exportieren, bearbeiten, Vorschau pruefen, dann explizit uebernehmen."])
+    guide.append(["Hinweis", "IDs sind optional; leere IDs legen neue Kontakte an."])
+    guide.append(
+        [
+            "Hinweis",
+            "Telefonnummern stehen direkt in den Spalten telefon_1 bis telefon_3; "
+            "weitere bitte ueber Bearbeiten ergaenzen.",
+        ]
+    )
     guide.append(
         [
             "Sicherheit",
@@ -443,9 +456,20 @@ def export_template_xlsx(beispiel: bool = False) -> bytes:
                 "max@example.test",
                 "tagsueber",
                 "",
+                "+43 664 1234567",
+                "Mobil",
+                True,
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
             ]
         )
-        phones.append(["", "+43 664 1234567", "Mobil", 0, True, True])
     for sheet in wb.worksheets:
         sheet.freeze_panes = "A2"
     out = io.BytesIO()
