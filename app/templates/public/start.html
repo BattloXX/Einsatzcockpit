@@ -89,7 +89,9 @@
       aus der Praxis. Melden Sie sich an oder nehmen Sie Kontakt auf.</p>
     <div class="pub-cta__actions">
       <a class="pub-btn pub-btn--primary pub-btn--lg" href="{{ public_login_url }}">Zum Login</a>
+      {% if not TEST_SYSTEM %}
       <a class="pub-btn pub-btn--outline pub-btn--lg" href="/ueber-das-projekt#kontakt">Kontakt aufnehmen</a>
+      {% endif %}
     </div>
   </div>
 </section>

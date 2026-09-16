@@ -83,6 +83,7 @@ def public_context(request: Request, active_nav: str | None, **extra) -> dict:
     ctx = {
         "user": getattr(request.state, "user", None),
         "active_nav": active_nav,
+        "TEST_SYSTEM": settings.TEST_SYSTEM,
         "year": datetime.now(UTC).year,
         "public_nav": pc.NAV,
         "status_map": pc.STATUS,
@@ -179,6 +180,8 @@ async def contact_submit(
     website: str = Form(""),  # Honeypot – muss leer bleiben
     turnstile_token: str = Form("", alias="cf-turnstile-response"),
 ):
+    if settings.TEST_SYSTEM:
+        raise HTTPException(404)
     # Das Kontaktformular lebt auf /ueber-das-projekt#kontakt – dorthin zurück.
     ok = "/ueber-das-projekt?kontakt=ok#kontakt"
     fehler = "/ueber-das-projekt?kontakt=fehler#kontakt"
