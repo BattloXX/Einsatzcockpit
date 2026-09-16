@@ -861,6 +861,7 @@ def build_sync_manifest(db: Session, org_id: int) -> dict:
     """
     from app.models.objekt import (
         OBJEKT_STATUS_FREIGEGEBEN,
+        ObjektDokument,
         ObjektDokumentSeite,
     )
 
@@ -876,7 +877,11 @@ def build_sync_manifest(db: Session, org_id: int) -> dict:
     if objekt_ids:
         seiten = (
             db.query(ObjektDokumentSeite)
-            .filter(ObjektDokumentSeite.objekt_id.in_(objekt_ids))
+            .join(ObjektDokument, ObjektDokumentSeite.dokument_id == ObjektDokument.id)
+            .filter(
+                ObjektDokumentSeite.objekt_id.in_(objekt_ids),
+                ObjektDokument.ist_aktuelle_version.is_(True),
+            )
             .order_by(ObjektDokumentSeite.dokument_id, ObjektDokumentSeite.seiten_nr)
             .execution_options(include_all_tenants=True)
             .all()

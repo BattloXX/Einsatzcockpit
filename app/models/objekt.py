@@ -640,7 +640,13 @@ class ObjektWohnanlage(TenantScoped, Base):
 
 
 class ObjektDokument(TenantScoped, Base):
-    """Hochgeladenes Original-PDF; wird im Hintergrund in Seiten zerlegt."""
+    """Hochgeladenes Original-PDF; wird im Hintergrund in Seiten zerlegt.
+
+    Jede Version ist eine volle Zeile und verweist via dokument_gruppe_id auf die
+    Genesis-Zeile; ist_aktuelle_version markiert die produktive Version. Bestehende
+    Zeilen sind Einzelversionen (dokument_gruppe_id=NULL, versionsnummer=1,
+    ist_aktuelle_version=True, freigabe_status="freigegeben").
+    """
     __tablename__ = "objekt_dokument"
     __table_args__ = (Index("ix_objekt_dokument_org_objekt", "org_id", "objekt_id"),)
 
@@ -664,6 +670,20 @@ class ObjektDokument(TenantScoped, Base):
         BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
     )
     hochgeladen_am: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    # Self-FK: gesetzt -> diese Zeile ist eine spaetere Version der Genesis-Zeile.
+    dokument_gruppe_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("objekt_dokument.id", ondelete="SET NULL"), nullable=True
+    )
+    versionsnummer: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    freigabe_status: Mapped[str] = mapped_column(String(20), nullable=False, default="freigegeben")
+    ist_aktuelle_version: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    pflegeauftrag_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("objekt_pflegeauftrag.id", ondelete="SET NULL"), nullable=True
+    )
+    freigegeben_am: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    freigegeben_von_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
 
     objekt: Mapped[Objekt] = relationship()
     seiten: Mapped[list[ObjektDokumentSeite]] = relationship(

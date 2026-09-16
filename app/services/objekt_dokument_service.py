@@ -64,6 +64,25 @@ def absolute_pfad(relativ: str) -> Path:
     return _storage_root() / relativ.replace("\\", "/")
 
 
+def hole_dokument_gruppe(db: Session, dokument: ObjektDokument) -> list[ObjektDokument]:
+    """Alle Versionen desselben logischen Dokuments, nach versionsnummer sortiert."""
+    genesis_id = dokument.dokument_gruppe_id or dokument.id
+    return (
+        db.query(ObjektDokument)
+        .filter(
+            (ObjektDokument.id == genesis_id) | (ObjektDokument.dokument_gruppe_id == genesis_id)
+        )
+        .order_by(ObjektDokument.versionsnummer)
+        .all()
+    )
+
+
+def naechste_versionsnummer(db: Session, dokument: ObjektDokument) -> int:
+    """Naechste freie Versionsnummer innerhalb der Dokumentgruppe."""
+    gruppe = hole_dokument_gruppe(db, dokument)
+    return max((d.versionsnummer for d in gruppe), default=0) + 1
+
+
 def _detect_mime(data: bytes) -> str | None:
     """Magic-Byte-MIME (nie Client-Header) — Muster media_service."""
     try:
@@ -384,6 +403,7 @@ def reindex_objekt(objekt_id: int, ocr_func: OcrFunc | None = None) -> int:
     set_tenant_context(db, None)
     n = 0
     try:
+        # Versionshistorie absichtlich mit reindizieren; alte Direktlinks bleiben nutzbar.
         seiten = (
             db.query(ObjektDokumentSeite)
             .filter(ObjektDokumentSeite.objekt_id == objekt_id)

@@ -66,7 +66,11 @@ def _galerie_context(
 
     seiten_query = (
         db.query(ObjektDokumentSeite)
-        .filter(ObjektDokumentSeite.objekt_id == objekt.id)
+        .join(ObjektDokument, ObjektDokumentSeite.dokument_id == ObjektDokument.id)
+        .filter(
+            ObjektDokumentSeite.objekt_id == objekt.id,
+            ObjektDokument.ist_aktuelle_version.is_(True),
+        )
         .order_by(ObjektDokumentSeite.dokument_id, ObjektDokumentSeite.seiten_nr)
     )
     if art == "unklassifiziert":
@@ -88,7 +92,11 @@ def _galerie_context(
         code: cnt
         for code, cnt in (
             db.query(ObjektDokumentSeite.dokumentart, func.count(ObjektDokumentSeite.id))
-            .filter(ObjektDokumentSeite.objekt_id == objekt.id)
+            .join(ObjektDokument, ObjektDokumentSeite.dokument_id == ObjektDokument.id)
+            .filter(
+                ObjektDokumentSeite.objekt_id == objekt.id,
+                ObjektDokument.ist_aktuelle_version.is_(True),
+            )
             .group_by(ObjektDokumentSeite.dokumentart)
             .all()
         )
@@ -96,21 +104,30 @@ def _galerie_context(
     }
     gesamt = (
         db.query(func.count(ObjektDokumentSeite.id))
-        .filter(ObjektDokumentSeite.objekt_id == objekt.id)
+        .join(ObjektDokument, ObjektDokumentSeite.dokument_id == ObjektDokument.id)
+        .filter(
+            ObjektDokumentSeite.objekt_id == objekt.id,
+            ObjektDokument.ist_aktuelle_version.is_(True),
+        )
         .scalar()
     ) or 0
     unklassifiziert = (
         db.query(func.count(ObjektDokumentSeite.id))
+        .join(ObjektDokument, ObjektDokumentSeite.dokument_id == ObjektDokument.id)
         .filter(
             ObjektDokumentSeite.objekt_id == objekt.id,
             ObjektDokumentSeite.dokumentart.is_(None),
+            ObjektDokument.ist_aktuelle_version.is_(True),
         )
         .scalar()
     ) or 0
 
     dokumente = (
         db.query(ObjektDokument)
-        .filter(ObjektDokument.objekt_id == objekt.id)
+        .filter(
+            ObjektDokument.objekt_id == objekt.id,
+            ObjektDokument.ist_aktuelle_version.is_(True),
+        )
         .order_by(ObjektDokument.hochgeladen_am.desc())
         .all()
     )
@@ -122,9 +139,11 @@ def _galerie_context(
     ki_vorschlaege = (
         db.query(ObjektSeiteKiVorschlag)
         .join(ObjektDokumentSeite, ObjektSeiteKiVorschlag.seite_id == ObjektDokumentSeite.id)
+        .join(ObjektDokument, ObjektDokumentSeite.dokument_id == ObjektDokument.id)
         .filter(
             ObjektDokumentSeite.objekt_id == objekt.id,
             ObjektSeiteKiVorschlag.status == KI_VORSCHLAG_OFFEN,
+            ObjektDokument.ist_aktuelle_version.is_(True),
         )
         .order_by(ObjektSeiteKiVorschlag.id)
         .all()
@@ -426,7 +445,11 @@ def dokumente_sammel_pdf(
     objekt = _objekt_or_404(db, objekt_id, user)
     seiten_query = (
         db.query(ObjektDokumentSeite)
-        .filter(ObjektDokumentSeite.objekt_id == objekt.id)
+        .join(ObjektDokument, ObjektDokumentSeite.dokument_id == ObjektDokument.id)
+        .filter(
+            ObjektDokumentSeite.objekt_id == objekt.id,
+            ObjektDokument.ist_aktuelle_version.is_(True),
+        )
         .order_by(ObjektDokumentSeite.dokument_id, ObjektDokumentSeite.seiten_nr)
     )
     if art:
