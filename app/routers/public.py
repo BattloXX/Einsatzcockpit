@@ -183,14 +183,18 @@ async def contact_submit(
     ok = "/ueber-das-projekt?kontakt=ok#kontakt"
     fehler = "/ueber-das-projekt?kontakt=fehler#kontakt"
     if website.strip():
+        logger.info("Kontaktformular: Honeypot ausgelöst")
         return RedirectResponse(ok, status_code=303)
     if _URL_IM_NAMEN.search(name):
+        logger.info("Kontaktformular: URL im Namensfeld erkannt")
         return RedirectResponse(ok, status_code=303)
     if not name.strip() or not email.strip() or not message.strip():
+        logger.info("Kontaktformular: Pflichtfeld fehlt")
         return RedirectResponse(fehler, status_code=303)
     if settings.TURNSTILE_SECRET_KEY and not await _verify_turnstile(
         turnstile_token, _remote_ip(request),
     ):
+        logger.info("Kontaktformular: Turnstile-Verifikation fehlgeschlagen")
         return RedirectResponse(fehler, status_code=303)
     try:
         await send_contact_message(
