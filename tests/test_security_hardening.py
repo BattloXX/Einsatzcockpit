@@ -237,6 +237,24 @@ def test_default_route_csp_ohne_konfiguration_bleibt_streng(monkeypatch):
     assert h["x-frame-options"] == "DENY"
 
 
+def test_turnstile_csp_nur_bei_konfiguriertem_site_key(monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "TRUSTED_FRAME_ANCESTORS", "")
+    monkeypatch.setattr(settings, "TURNSTILE_SITE_KEY", "")
+    csp_ohne_turnstile = _security_headers_for("/ueber-das-projekt")["content-security-policy"]
+    assert "https://challenges.cloudflare.com" not in csp_ohne_turnstile
+
+    monkeypatch.setattr(settings, "TURNSTILE_SITE_KEY", "test-site-key")
+    csp_mit_turnstile = _security_headers_for("/ueber-das-projekt")["content-security-policy"]
+    assert "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com" in csp_mit_turnstile
+    assert (
+        "connect-src 'self' ws: wss: https://nominatim.openstreetmap.org "
+        "https://api.rainviewer.com https://challenges.cloudflare.com"
+    ) in csp_mit_turnstile
+    assert "frame-src 'self' https://embed.windy.com https://challenges.cloudflare.com" in csp_mit_turnstile
+
+
 def test_trusted_frame_ancestors_erlaubt_alle_routen(monkeypatch):
     """Sind TRUSTED_FRAME_ANCESTORS konfiguriert, ist JEDE Route (nicht nur
     Fahrtenbuch) auf diesen externen Origins einbettbar: CSP frame-ancestors

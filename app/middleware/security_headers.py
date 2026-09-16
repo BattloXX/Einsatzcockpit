@@ -60,6 +60,28 @@ _CSP_INFOSCREEN_BASE = (
 )
 
 
+def _csp_with_turnstile(csp_base: str) -> str:
+    """Ergänzt die Quellen, die das konfigurierte Turnstile-Widget benötigt."""
+    if not settings.TURNSTILE_SITE_KEY:
+        return csp_base
+    # Nur bei aktivem Turnstile erweitern, damit die CSP ungenutzter Installationen eng bleibt.
+    return (
+        csp_base
+        .replace(
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval';",
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://challenges.cloudflare.com;",
+        )
+        .replace(
+            "connect-src 'self' ws: wss: https://nominatim.openstreetmap.org https://api.rainviewer.com;",
+            "connect-src 'self' ws: wss: https://nominatim.openstreetmap.org https://api.rainviewer.com https://challenges.cloudflare.com;",
+        )
+        .replace(
+            "frame-src 'self' https://embed.windy.com;",
+            "frame-src 'self' https://embed.windy.com https://challenges.cloudflare.com;",
+        )
+    )
+
+
 def _is_embeddable_route(path: str) -> bool:
     """Routen, deren Antworten in einem same-origin <iframe> dargestellt werden."""
     if path.endswith("/qr/print"):
@@ -126,6 +148,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         else:
             csp_base = _CSP_BASE
             self_allowed = False
+
+        if not infoscreen:
+            csp_base = _csp_with_turnstile(csp_base)
 
         csp = csp_base + "; " + _frame_ancestors_directive(
             self_allowed=self_allowed,
