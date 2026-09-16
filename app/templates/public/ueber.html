@@ -61,5 +61,7 @@
   </div>
 </section>
 
+{% if not TEST_SYSTEM %}
 {% include "public/_pub_contact.html" %}
+{% endif %}
 {% endblock %}

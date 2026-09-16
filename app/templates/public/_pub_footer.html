@@ -14,7 +14,9 @@
         <a href="{{ public_github_url }}" target="_blank" rel="noopener">GitHub</a>
         <a href="/impressum">Impressum</a>
         <a href="/datenschutz">Datenschutz</a>
+        {% if not TEST_SYSTEM %}
         <a href="/ueber-das-projekt#kontakt">Kontakt</a>
+        {% endif %}
       </div>
     </div>
     <div class="pub-footer__bar">

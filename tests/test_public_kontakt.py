@@ -19,6 +19,34 @@ def _post_kontakt(client, **daten):
     return client.post("/kontakt", data=formular, follow_redirects=False)
 
 
+def test_kontaktformular_ist_im_testsystem_nicht_verfuegbar(client, monkeypatch):
+    monkeypatch.setattr(settings, "TEST_SYSTEM", True)
+
+    response = client.get("/ueber-das-projekt")
+
+    assert response.status_code == 200
+    assert 'action="/kontakt"' not in response.text
+    assert 'id="kontakt"' not in response.text
+
+
+def test_kontaktformular_ist_ausserhalb_des_testsystems_verfuegbar(client, monkeypatch):
+    monkeypatch.setattr(settings, "TEST_SYSTEM", False)
+
+    response = client.get("/ueber-das-projekt")
+
+    assert response.status_code == 200
+    assert 'action="/kontakt"' in response.text
+    assert 'id="kontakt"' in response.text
+
+
+def test_kontakt_submit_wird_im_testsystem_abgelehnt(client, monkeypatch):
+    monkeypatch.setattr(settings, "TEST_SYSTEM", True)
+
+    response = _post_kontakt(client)
+
+    assert response.status_code == 404
+
+
 def test_honeypot_wird_still_verworfen(client, monkeypatch):
     senden = AsyncMock()
     monkeypatch.setattr("app.routers.public.send_contact_message", senden)
