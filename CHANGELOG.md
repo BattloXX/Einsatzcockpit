@@ -2,75 +2,6 @@
 
 Die Versionshistorie wird reverse-chronologisch geführt.
 
-2026.09.06 (2026-09-06): Datenbank-Dumps werden beim Erstellen und Wiederherstellen
-robuster verarbeitet und sind damit wieder zuverlässig für den Restore verwendbar.
-
-2026.09.06 (2026-09-06): Probeplan-Detailseite mit durchgängigem Kopfbereich,
-Meta-Grid, Accordion-Checkliste, Widget-Spalte, mobiler Segmented-Navigation und
-Sticky-Bottom-Bar. Bestehendes Dark Theme und Autosave bleiben erhalten.
-
-2026.09.06 (2026-09-06): Jahresplan mit Hero-Karte für die nächste Vollprobe,
-KPI-Zeile, Fortschrittsbalken pro Termin und mobiler Karten-Ansicht statt Tabelle.
-
-2026.09.06 (2026-09-06): Probeplan UX Phase 1 konsolidiert die Navigation:
-bei aktivem Modul ersetzt Probeplan den Teilnahme-Eintrag für alle Angemeldeten.
-Die Konfiguration liegt jetzt in der Verwaltung mit Sidebar und bestehenden Tabs.
-Pfadwechsel (Breaking Change für Bookmarks): `/probenplanung/verwaltung/*` wird
-zu `/admin/probenplanung/*`; die drei bisherigen Übersichtsseiten leiten per 307 weiter.
-
-2026.09.06 (2026-09-06): Probenplanung – Formulare zeigten weiße Browser-
-Standardfelder statt des dunklen App-Designs, weil 17 Templates die vorhandenen
-`.form-input`/`.form-select`/`.form-group`-Klassen nicht oder nur teilweise nutzten;
-Beschriftungen standen neben statt über dem Feld. Zusätzlich ragte der Sticky-Header
-der Checkliste im Vorbereitung-Tab auf schmalen Bildschirmen 8px über den Rand hinaus
-(negative Margin ohne passende Gegenstelle, da `.main-content` kein Padding hat).
-Beides behoben und per Playwright bei 320/390/820px nachgewiesen (33 vormals weiße
-Felder auf 0, kein horizontaler Überlauf mehr). Drei Regressionstests ergänzt.
-
-2026.09.06 (2026-09-06): Fehlende oder defekte Kalender-Abhängigkeiten blockieren
-nicht mehr den App-Start. Nur der ICS-Feed liefert HTTP 503 mit Installationshinweis;
-der Fehler wird geloggt. Weitere Start-Blocker durch Excel-, QR-, KI-, SSO- und CRDT-Pakete
-werden ebenfalls erst beim Feature-Aufruf geladen und dort abgefangen. Die
-Update-Anleitung betont das Nachinstallieren von Abhängigkeiten nach manuellem `git pull`.
-
-2026.09.06 (2026-09-06): Probenplanung Phase 11 ergänzt öffentliche Leseansicht
-und ICS-Abos mit gemeinsamer Feld-Positivliste, expliziter Organisationsbindung und
-widerrufbaren, nur gehasht gespeicherten Links. Ort und Info benötigen eine eigene
-Freigabe; Entwürfe und archivierte Proben bleiben unsichtbar. Kalender behalten
-stabile UIDs und erhalten Änderungen sowie Absagen. Öffentliche Auslieferung muss
-separat aktiviert werden; Antworten werden nicht gecacht.
-
-2026.09.06 (2026-09-06): Der systemweite Probenplanung-Schalter behält beim
-Umschalten den ausgewählten Organisationskontext bei und verwendet nun dieselbe
-responsive Darstellung wie die übrigen Modulschalter.
-
-2026.09.06 (2026-09-06): Probenplanung Phase 10 ergänzt die strukturierte
-Nachbereitung mit Erkenntnissen und Maßnahmen, einen abgesicherten Abschlussworkflow
-sowie die Startseiten-Kachel für die nächste Vollprobe mit aggregiertem Fortschritt und
-überfälligen Vorbereitungspunkten.
-
-2026.09.06 (2026-09-06): Probenplanung Phase 8 ergänzt die schnelle,
-tablet-taugliche Teilnehmererfassung für alle aktiven Mitglieder mit Statusübersicht,
-clientseitigen Filtern, optionalen Ankunfts-/Abgangszeiten und Bemerkungen. Der neue
-Teilnahmestatus hält die von Einsatzansicht, PDF- und XLSX-Export verwendeten Altfelder
-`ausgerueckt` und `entschuldigt` weiterhin konsistent; nicht erfasste Mitglieder bleiben
-streng von unentschuldigten getrennt.
-
-2026.09.06 (2026-09-06): Probenplanung Phase 7 ergänzt Skizzen auf
-JPG-/PNG-Hintergründen im bestehenden Konva-Editor sowie Dokumentablage mit Metadaten.
-Uploads verwenden Magic-Byte-Prüfung, geschützte organisationsgebundene Auslieferung,
-Thumbnails und die bestehende Speicherquota.
-
-2026.09.06 (2026-09-06): Probenplanung Phase 6 macht das Modul mit Jahresplan,
-Monatskalender, kombinierbaren HTMX-Filtern und der gegliederten Probe-Detailansicht
-sichtbar. Termine lassen sich duplizieren und wochentagsgleich als Entwürfe in ein
-anderes Jahr übernehmen; die bisherigen `/termine`-GET-Seiten leiten bei aktivem Modul
-auf die entsprechenden Probenplanungsseiten um. Phase 5 ergänzt die tablet-taugliche
-Checklisten-UI mit Autosave, sichtbarem Speicherstatus, gezielten HTMX-Swaps,
-live aktualisiertem Fortschritt und punktweisem Optimistic Locking samt aktuellem
-Item-Partial bei Konflikten. Individuelle Punkte und begründetes „nicht relevant“
-sind ebenfalls enthalten.
-
 > **Achtung beim Update auf die kommende Version:** Übungseinsätze lösen ab sofort
 > serverseitig **keine** produktiven externen Aktionen mehr aus. Betroffen sind Web-Push/FCM,
 > der Alarmton der PWA, die Alarmansicht des Infoscreens, Nachbar-Einladungen, das
@@ -81,6 +12,16 @@ sind ebenfalls enthalten.
 
 | Version | Datum | Highlights |
 |---------|-------|------------|
+| **Unveröffentlicht** | 2026-09-16 | **Wiki**: Cloudflare-Turnstile-Setup für das Kontaktformular dokumentiert |
+| **Unveröffentlicht** | 2026-09-15 | **Karten**: OSM-Kacheln über einen Same-Origin-Proxy ausgeliefert; **Kontaktverwaltung**: österreichische Mobilnummern werden automatisch als SMS-fähig erkannt, BMA-Kontakte ohne Telefonnummer sichtbar gewarnt und der Bearbeiten-Dialog sicher escaped; Objekt-Kontakt-Zuordnung überarbeitet, Android-Sync-Endpoint für Geräte- und Sitzungsanmeldung ergänzt; **Fahrtenbuch**: km-Stand bei Korrekturen gegen den Fahrtzeitpunkt geprüft |
+| **Unveröffentlicht** | 2026-09-14 | **Kontaktverwaltung**: Profilbilder und Bild-Upload ergänzt, Dubletten sowie leere Werte bereinigt, Bearbeiten und Dublettenanlage korrigiert und BMA-Import angebunden; **Fahrtenbuch**: Administration für Fahrtenbuch-Administratoren in der Navigation freigeschaltet |
+| **Unveröffentlicht** | 2026-09-13 | **Kontaktverwaltung**: zentralen Kontakt-Cutover mit Modulfreigabe, Navigation, Importübersicht und Objektverknüpfungen abgeschlossen; **Karten**: OSM-Kacheln richtlinienkonform eingebunden |
+| **Unveröffentlicht** | 2026-09-12 | **Kontaktverwaltung**: zentrales Kontaktmodul um Objektkontakt-Migration, Dublettenprüfung und Zusammenführen, Telefon-/SMS-Aktionen, BMA-Abgleich sowie XLSX-/CSV-Export und abgesicherte Import-Pipeline einschließlich Offline-Sync-Vertrag erweitert |
+| **Unveröffentlicht** | 2026-09-11 | **Kontaktverwaltung**: Fundament für ein zentrales, mandantenfähiges Kontaktmodul mit Rollen- und Modulfreigabe geschaffen; **Verwaltung**: Qualifikations-Button und Vorauswahl bestehender Qualifikationen korrigiert |
+| **Unveröffentlicht** | 2026-09-10 | **Einsatzboard**: mobile Scroll- und Pull-to-Refresh-Bedienung, kontextabhängige Aktionen, kompakte Pill-Buttons und repariertes Personen-Drag-and-Drop; **Druck/SMS**: Druckervorgaben als Fallback und SMS-Gateway-Recovery ohne falsche Entwarnung; **Fahrtenbuch**: Korrekturworkflow an die Fahrt-Erfassung angeglichen |
+| **Unveröffentlicht** | 2026-09-09 | **Einsatzboard**: Live-Updates und Drag-and-Drop für Personen, Fahrzeuge und Karten nachgebessert, damit Zuordnungen, Status und Header ohne Reload konsistent bleiben; mobile und Tablet-Darstellung weiter verdichtet |
+| **Unveröffentlicht** | 2026-09-08 | **Einsatzboard-Redesign**: Header, Lane-Header sowie Aufgaben-, Meldungs-, Personen- und Fahrzeugkarten vereinfacht, Erledigt-Gruppen und Sidebar überarbeitet, Mobile-/Tablet-Menüs ergänzt und Inline-CSS/-JavaScript ausgelagert |
+| **Unveröffentlicht** | 2026-09-07 | **Live-Updates im Einsatz- und GSL-Board**: Einheiten, Personen, Aufträge, Meldungen, Fahrzeugstatus, Ampel-Pillen, Fahrzeug-Checkliste sowie Dispatch-Zähler aktualisieren sich ohne Reload |
 | **2026.09.06** | 2026-09-06 | **Probenplanung**: vollständiger Jahresplan für Übungen und Veranstaltungen mit versionierten Checklisten, Vorbereitung, Teilnehmerappell, Nachbereitung, Druck, geschützter Dokumentablage und optionalem öffentlichem ICS-Kalender; sichere Probe-zu-Übungseinsatz-Brücke mit bewusster Daten-/Medienübernahme, Doppelanlage-Schutz, Statussync und Teilnehmerübernahme; Exercise-Guard unterdrückt externe Aktionen für Übungen standardmäßig kanalweise; responsive Detail- und Jahresansicht sowie konsolidierte Navigation und Verwaltung; optionale Zusatzabhängigkeiten blockieren den App-Start nicht mehr; **Backup**: Datenbank-Dumps wieder zuverlässig wiederherstellbar |
 | **2026.09.02** | 2026-09-02 | **Maschinisten-Matrix**: Jahresauswertung Mitglied × Fahrzeug (Übung/Einsatz) in der Fahrtenbuch-Statistik, als XLSX und als einseitiger farbiger A3-Querformat-Druck (lokal und über den Stationsdrucker); Maschinisten-Stufen M1–M4 im Qualifikationskatalog, pflegbar auch durch Fahrtenbuch-Administratoren; Fahrzeuge zusammenführen jetzt jederzeit über die Ressourcen-Verwaltung statt nur bei erkannten Dubletten; **Uptime-Kuma-SMS-Gateway**: synchroner `POST /api/v1/sms/send` mit Scope-Authentifizierung, Limits, Versandstatus, SMS-Protokoll und Audit |
 | **2026.09.01** | 2026-09-01 | **Nachrichten-API**: persistenter externer SMS- und E-Mail-Versand mit API-Key-Scopes, Idempotenz, Empfängerstatus, Limits, Mail-Retry, SMS-Protokoll und Audit |
