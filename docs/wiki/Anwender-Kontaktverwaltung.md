@@ -106,6 +106,14 @@ herunterladen. Ein Roundtrip Export → Bearbeiten in Excel → Re-Import ist da
 ohne bestehende Einsatzinfo-Freigaben zu verlieren (die bleiben unverändert bestehen, auch
 wenn sich z. B. die Telefonnummer nicht geändert hat).
 
+Kontakt-Stammdaten und Telefonnummern liegen dabei gemeinsam in einer flachen CSV bzw. im
+Blatt **Kontakte** der XLSX-Datei. Pro Kontakt stehen bis zu drei Telefonnummern direkt in
+derselben Zeile: `telefon_1`, `telefon_1_bezeichnung`, `telefon_1_bevorzugt` und
+`telefon_1_sms` (entsprechend bis `telefon_3`). Die `id` ist optional; mit leerer `id`
+wird ein neuer Kontakt angelegt. Weitere Telefonnummern können nach dem Import über die
+normale Bearbeiten-Maske ergänzt werden. Objektzuordnungen bleiben nur in XLSX als eigenes
+Blatt erhalten.
+
 **Export** (`Kontakte → Export`) liefert alle aktiven Kontakte deiner Organisation als CSV
 oder XLSX.
 
