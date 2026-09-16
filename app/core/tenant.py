@@ -150,6 +150,10 @@ _TENANT_TABLE_NAMES: frozenset[str] = frozenset({
     "infoscreen_url",
     "objekt_seite_ki_vorschlag",
     "objekt_stammdaten_vorschlag",
+    "objekt_pflegeauftrag",
+    "objekt_pflege_abschnitt",
+    "objekt_pflege_ereignis",
+    "kontakt_aenderungsvorschlag",
     # Zentrale Kontakte (TenantScoped via Mixin)
     "kontakt",
     "kontakt_telefon",
