@@ -64,6 +64,7 @@ unter [Server-Voraussetzungen](Installation-Server-Voraussetzungen).
 | [Systemd-Service](Installation-Systemd-Service) | Dienst einrichten, starten, Logs |
 | [NGINX-Reverse-Proxy](Installation-NGINX-Reverse-Proxy) | CloudPanel-Vhost, WebSocket-Upgrade, TLS |
 | [Erst-Setup](Installation-Erst-Setup) | Admin-User, API-Key, Stammdaten prüfen |
+| [Cloudflare Turnstile](Installation-Cloudflare-Turnstile) | Optionalen Spam-Schutz für das öffentliche Kontaktformular einrichten |
 | [Backups](Installation-Backups) | Datenbank-Dumps, Audit-Log-Sicherung |
 | [Backup & Disaster-Recovery](Betrieb-Backup-und-Disaster-Recovery) | Automatische Dumps, getestete Restore-Probe, DR-Runbook (RPO/RTO) |
 | [Updates](Installation-Updates) | git pull / In-App ZIP-Update, Migrationen, Neustart |
