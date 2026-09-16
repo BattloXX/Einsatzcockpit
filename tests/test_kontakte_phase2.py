@@ -185,6 +185,33 @@ def test_bearbeiten_redisplay_normalisiert_none_nach_versionskonflikt(client):
     assert 'value="None"' not in response.text
 
 
+def test_detail_vollaufruf_oeffnet_keinen_dialog_und_rendert_none_nicht(client):
+    user = _setup_user("kontakte_detail_reload", "kontakt_verwalter")
+    db = SessionLocal()
+    set_tenant_context(db, user.org_id)
+    try:
+        kontakt = kontakt_service.create_kontakt(
+            db,
+            {"typ": "person", "anzeigename": "Fischnaller"},
+            [],
+            [],
+            org_id=user.org_id,
+            user_id=None,
+        )
+        kontakt_id = kontakt.id
+    finally:
+        db.close()
+    _login(client, user.username)
+
+    response = client.get(f"/kontakte/{kontakt_id}")
+
+    assert response.status_code == 200
+    assert '<dialog id="kontaktModal" class="modal">' in response.text
+    assert '<dialog id="kontaktModal" class="modal" open>' not in response.text
+    assert 'value="None"' not in response.text
+    assert '>None</textarea>' not in response.text
+
+
 def test_kontakt_detail_trennt_objektrolle_optisch(client):
     user = _setup_user("kontakte_objektrolle_badge", "kontakt_verwalter")
     _login(client, user.username)
