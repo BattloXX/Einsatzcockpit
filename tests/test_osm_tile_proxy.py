@@ -24,7 +24,7 @@ def test_valid_tile_is_fetched_with_osm_headers_and_returned(client):
     ui_map_tiles._tile_cache.clear()
     context_manager, upstream_client = _mock_osm_client()
     with patch("app.routers.ui_map_tiles.httpx.AsyncClient", return_value=context_manager):
-        response = client.get("/karten/osm-tile/1/1/0.png")
+        response = client.get("/karten/osm-tile/1/1/0")
 
     assert response.status_code == 200
     assert response.content == b"png-data"
@@ -37,17 +37,17 @@ def test_valid_tile_is_fetched_with_osm_headers_and_returned(client):
 
 
 def test_invalid_tile_coordinates_are_rejected(client):
-    assert client.get("/karten/osm-tile/-1/0/0.png").status_code in {400, 404}
-    assert client.get("/karten/osm-tile/2/4/0.png").status_code == 400
-    assert client.get("/karten/osm-tile/2/0/4.png").status_code == 400
+    assert client.get("/karten/osm-tile/-1/0/0").status_code in {400, 404}
+    assert client.get("/karten/osm-tile/2/4/0").status_code == 400
+    assert client.get("/karten/osm-tile/2/0/4").status_code == 400
 
 
 def test_second_request_for_same_tile_uses_memory_cache(client):
     ui_map_tiles._tile_cache.clear()
     context_manager, upstream_client = _mock_osm_client()
     with patch("app.routers.ui_map_tiles.httpx.AsyncClient", return_value=context_manager):
-        assert client.get("/karten/osm-tile/1/1/0.png").status_code == 200
-        assert client.get("/karten/osm-tile/1/1/0.png").status_code == 200
+        assert client.get("/karten/osm-tile/1/1/0").status_code == 200
+        assert client.get("/karten/osm-tile/1/1/0").status_code == 200
 
     assert upstream_client.get.await_count == 1
 
@@ -57,6 +57,6 @@ def test_osm_fetch_failure_returns_bad_gateway(client):
     context_manager, upstream_client = _mock_osm_client()
     upstream_client.get.side_effect = httpx.TimeoutException("timeout")
     with patch("app.routers.ui_map_tiles.httpx.AsyncClient", return_value=context_manager):
-        response = client.get("/karten/osm-tile/1/1/0.png")
+        response = client.get("/karten/osm-tile/1/1/0")
 
     assert response.status_code == 502

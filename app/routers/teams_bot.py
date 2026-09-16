@@ -78,7 +78,7 @@ def alarm_summary(token: str, request: Request, db: Session = Depends(get_db)):
             f"https://maps.google.com/?q={incident.lat},{incident.lng}"
             if incident.lat is not None and incident.lng is not None else None
         ),
-        "map_png_url": f"/api/v1/teams/map/{token}.png",
+        "map_png_url": f"/api/v1/teams/map/{token}",
     })
 
 
@@ -153,7 +153,7 @@ def alarm_objekt(token: str, db: Session = Depends(get_db)):
 
 # ── Kartenbild (No-Login, wird von Teams-Servern per URL geladen) ───────────────
 
-@router.get("/api/v1/teams/map/{token}.png")
+@router.get("/api/v1/teams/map/{token}")
 async def alarm_map_png(token: str, db: Session = Depends(get_db)):
     _tok, incident = _resolve_alarm_token(db, token, zweck="bild")
     if incident.lat is None or incident.lng is None:
@@ -176,7 +176,7 @@ async def alarm_map_png(token: str, db: Session = Depends(get_db)):
 
 # ── Schadensfoto (No-Login, wird von Teams-Servern per URL geladen) ─────────────
 
-@router.get("/api/v1/teams/fahrt-foto/{media_id}.jpg")
+@router.get("/api/v1/teams/fahrt-foto/{media_id}")
 async def fahrt_foto_jpg(media_id: int, sig: str = "", db: Session = Depends(get_db)):
     """Liefert ein Schadensfoto für die Teams-Adaptive-Card (siehe schaden_service.py::
     _foto_urls). Auth-Muster wie alarm_map_png() oben: signierter Query-Token statt

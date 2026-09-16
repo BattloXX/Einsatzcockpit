@@ -66,7 +66,7 @@ def unsubscribe_post(token: str, db: Session = Depends(get_db)):
     return _unsubscribe(token, db)
 
 
-@router.get("/mailing/t/{token}.png")
+@router.get("/mailing/t/{token}")
 def pixel(token: str, db: Session = Depends(get_db)):
     item = _item(db, token)
     if item:

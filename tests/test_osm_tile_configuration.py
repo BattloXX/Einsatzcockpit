@@ -29,7 +29,7 @@ def test_no_legacy_osm_subdomain_urls_or_options_remain():
 
 def test_osm_browser_config_uses_same_origin_proxy_and_attribution():
     content = (ROOT / "app/static/js/map-config.js").read_text()
-    assert '"/karten/osm-tile/{z}/{x}/{y}.png"' in content
+    assert '"/karten/osm-tile/{z}/{x}/{y}"' in content
     assert 'https://www.openstreetmap.org/copyright' in content
     assert "OpenStreetMap contributors" in content
     assert "tileerror" in content

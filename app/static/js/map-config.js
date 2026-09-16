@@ -2,7 +2,7 @@
   "use strict";
 
   var config = window.EinsatzcockpitMapConfig = window.EinsatzcockpitMapConfig || {};
-  config.osmTileUrl = "/karten/osm-tile/{z}/{x}/{y}.png";
+  config.osmTileUrl = "/karten/osm-tile/{z}/{x}/{y}";
   config.osmAttribution = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>';
   config.osmMaxZoom = 19;
 

@@ -219,12 +219,12 @@ def test_foto_urls_signiert_bei_https_public_base_url(monkeypatch, db_session, o
 
     urls = _foto_urls(fahrt_mit_schaden)
     assert len(urls) == 1
-    assert urls[0].startswith(f"https://ec.example.at/api/v1/teams/fahrt-foto/{media.id}.jpg?sig=")
+    assert urls[0].startswith(f"https://ec.example.at/api/v1/teams/fahrt-foto/{media.id}?sig=")
     sig = urls[0].split("sig=")[1]
     assert unsign_fahrt_foto_token(sig) == (media.id, org.id)
 
 
-# ── Öffentliche No-Login-Route: /api/v1/teams/fahrt-foto/{id}.jpg ────────────
+# ── Öffentliche No-Login-Route: /api/v1/teams/fahrt-foto/{id} ────────────────
 
 @pytest.mark.asyncio
 async def test_public_foto_route_liefert_bild_mit_gueltiger_signatur(
@@ -240,13 +240,13 @@ async def test_public_foto_route_liefert_bild_mit_gueltiger_signatur(
     db_session.commit()
 
     sig = sign_fahrt_foto_token(media.id, org.id)
-    r = client.get(f"/api/v1/teams/fahrt-foto/{media.id}.jpg?sig={sig}")
+    r = client.get(f"/api/v1/teams/fahrt-foto/{media.id}?sig={sig}")
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("image/jpeg")
 
 
 def test_public_foto_route_lehnt_ungueltige_signatur_ab(client: TestClient):
-    r = client.get("/api/v1/teams/fahrt-foto/99999.jpg?sig=unsinn")
+    r = client.get("/api/v1/teams/fahrt-foto/99999?sig=unsinn")
     assert r.status_code == 403
 
 
@@ -266,7 +266,7 @@ async def test_public_foto_route_lehnt_falsche_media_id_ab(
     db_session.commit()
 
     sig = sign_fahrt_foto_token(media.id, org.id)
-    r = client.get(f"/api/v1/teams/fahrt-foto/{media.id + 1}.jpg?sig={sig}")
+    r = client.get(f"/api/v1/teams/fahrt-foto/{media.id + 1}?sig={sig}")
     assert r.status_code == 403
 
 

@@ -55,7 +55,7 @@ def _validate_coordinates(z: int, x: int, y: int) -> None:
         raise HTTPException(status_code=400, detail="Ungueltige Kartenkachel-Koordinaten.")
 
 
-@router.get("/karten/osm-tile/{z}/{x}/{y}.png", include_in_schema=False)
+@router.get("/karten/osm-tile/{z}/{x}/{y}", include_in_schema=False)
 async def osm_tile(z: int, x: int, y: int) -> Response:
     """Liefert eine gecachte OSM-PNG-Kachel ueber die eigene Origin aus."""
     _validate_coordinates(z, x, y)

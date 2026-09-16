@@ -136,7 +136,7 @@ class TeamsCardPost(Base):
 
 class AlarmToken(Base):
     """Anonymer Read-Only-Token für die öffentliche No-Login-Alarmübersicht
-    (`/alarm/{token}`) und das Kartenbild (`/api/v1/teams/map/{token}.png`).
+    (`/alarm/{token}`) und das Kartenbild (`/api/v1/teams/map/{token}`).
 
     Muster: LagekarteToken — sha256-Hash, ein Token je Einsatz, automatisch erzeugt in
     create_incident() und zeitlich begrenzt. Bewusst getrennt von IncidentToken

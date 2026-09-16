@@ -36,7 +36,7 @@ def _token_aendern(token_id, **werte):
 def test_kartenbild_bleibt_nach_abschluss_erreichbar(client, monkeypatch):
     plain, _ = _einsatz_anlegen()
     monkeypatch.setattr("app.services.staticmap_service.render_incident_map_png", lambda *a, **k: b"png")
-    antwort = client.get(f"/api/v1/teams/map/{plain}.png")
+    antwort = client.get(f"/api/v1/teams/map/{plain}")
     assert antwort.status_code == 200
     assert antwort.headers["cache-control"] == "public, max-age=86400"
 
@@ -56,17 +56,17 @@ def test_kartenbild_bleibt_nach_31_tagen_erreichbar(client, monkeypatch):
     plain, token_id = _einsatz_anlegen()
     _token_aendern(token_id, created_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=31))
     monkeypatch.setattr("app.services.staticmap_service.render_incident_map_png", lambda *a, **k: b"png")
-    assert client.get(f"/api/v1/teams/map/{plain}.png").status_code == 200
+    assert client.get(f"/api/v1/teams/map/{plain}").status_code == 200
 
 
 def test_kartenbild_ist_nach_ablauf_von_expires_at_gesperrt(client):
     plain, token_id = _einsatz_anlegen()
     _token_aendern(token_id, expires_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(seconds=1))
-    assert client.get(f"/api/v1/teams/map/{plain}.png").status_code == 404
+    assert client.get(f"/api/v1/teams/map/{plain}").status_code == 404
 
 
 def test_manuell_widerrufener_token_ist_ueberall_gesperrt(client):
     plain, token_id = _einsatz_anlegen()
     _token_aendern(token_id, revoked_at=datetime.now(UTC).replace(tzinfo=None))
     assert client.get(f"/alarm/{plain}").status_code == 404
-    assert client.get(f"/api/v1/teams/map/{plain}.png").status_code == 404
+    assert client.get(f"/api/v1/teams/map/{plain}").status_code == 404

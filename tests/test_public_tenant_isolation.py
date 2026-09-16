@@ -229,7 +229,7 @@ def test_mailing_tracking_token_cannot_mutate_other_org(client):
         db.commit()
         iid = item.id
         forged = sign_mailing_track_token(iid, ORG_A)
-        assert client.get(f"/mailing/t/{forged}.png").status_code == 200
+        assert client.get(f"/mailing/t/{forged}").status_code == 200
         assert client.get(f"/mailing/c/{forged}?u=https%3A%2F%2Fexample.at", follow_redirects=False).status_code == 302
         assert client.post(f"/mailing/u/{forged}").status_code == 200
         db.expire_all()

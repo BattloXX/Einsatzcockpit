@@ -136,7 +136,7 @@ async def token_generieren(request: Request, db: Session = Depends(get_db), user
     return RedirectResponse("/admin/atemschutz-pruefung/token?saved=1", status_code=303)
 
 
-@router.get("/admin/atemschutz-pruefung/token/qr.png")
+@router.get("/admin/atemschutz-pruefung/token/qr")
 async def token_qr(request: Request, db: Session = Depends(get_db), user=Depends(_require_admin)):
     org = db.query(OrgSettings).filter(OrgSettings.org_id == user.org_id).first()
     if not org or not org.atemschutz_pruef_token:

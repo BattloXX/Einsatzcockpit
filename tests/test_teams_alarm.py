@@ -173,7 +173,7 @@ def test_build_incident_message_card_includes_all_bausteine_by_default():
     assert "Bundesstraße 1" in text
     assert "Verkehrsunfall" in text
     images = _images(card)
-    assert images[0]["url"] == "https://example.com/api/v1/teams/map/tok_abc123.png"
+    assert images[0]["url"] == "https://example.com/api/v1/teams/map/tok_abc123"
 
     action_titles = [a["title"] for a in _adaptive_content(card)["actions"]]
     assert any("Google Maps" in t for t in action_titles)

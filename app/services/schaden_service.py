@@ -67,7 +67,7 @@ def _foto_urls(fahrt: Fahrt) -> list[str]:
     from app.core.security import sign_fahrt_foto_token
 
     return [
-        f"{base}/api/v1/teams/fahrt-foto/{m.id}.jpg?sig={sign_fahrt_foto_token(m.id, fahrt.org_id)}"
+        f"{base}/api/v1/teams/fahrt-foto/{m.id}?sig={sign_fahrt_foto_token(m.id, fahrt.org_id)}"
         for m in fahrt.medien
     ]
 

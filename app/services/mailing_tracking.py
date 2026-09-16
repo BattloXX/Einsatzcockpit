@@ -22,7 +22,7 @@ def rewrite_links(
             html,
         )
     if track_opens:
-        pixel = f'<img src="/mailing/t/{token}.png" width="1" height="1" alt="" style="display:none">'
+        pixel = f'<img src="/mailing/t/{token}" width="1" height="1" alt="" style="display:none">'
         html = (
             re.sub(r"</body\s*>", pixel + "</body>", html, count=1, flags=re.I)
             if re.search(r"</body\s*>", html, re.I)

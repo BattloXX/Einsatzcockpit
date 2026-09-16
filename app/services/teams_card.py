@@ -63,7 +63,7 @@ def build_incident_message_card(
     if cfg.include_map and has_coords and incident.alarm_token:
         body.append({
             "type": "Image",
-            "url": f"{base_url}/api/v1/teams/map/{incident.alarm_token}.png",
+            "url": f"{base_url}/api/v1/teams/map/{incident.alarm_token}",
             "size": "Stretch",
         })
 

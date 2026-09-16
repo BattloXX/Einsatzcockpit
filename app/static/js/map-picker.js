@@ -6,7 +6,7 @@
  *
  * ── OSM-Tile-Server-Regel ───────────────────────────────────────────────────
  * Standardkarten werden ausschließlich über die zentrale Konfiguration mit
- * /karten/osm-tile/{z}/{x}/{y}.png eingebunden. Diese URL und die
+ * /karten/osm-tile/{z}/{x}/{y} eingebunden. Diese URL und die
  * sichtbare Attribution entsprechen der aktuellen OSM Tile Usage Policy.
  * ───────────────────────────────────────────────────────────────────────────
  *
