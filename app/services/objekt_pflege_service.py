@@ -47,6 +47,14 @@ _TERMINALE_STATUS = {
     PFLEGEAUFTRAG_STATUS_WIDERRUFEN,
 }
 
+STAMMDATEN_BEREICHE_FELDER: dict[str, tuple[str, ...]] = {
+    "stammdaten": ("informationen",),
+    "adresse": ("strasse", "hausnummer", "plz", "ort"),
+    "zufahrt": ("anfahrtsweg",),
+}
+BEREICHE_MIT_EDITFORMULAR = frozenset(STAMMDATEN_BEREICHE_FELDER) | {"kontakte", "dokumente"}
+BEREICHE_NUR_BESTAETIGUNG = frozenset({"bma", "gefahren"})
+
 
 def erzeuge_pflegeauftrag_token() -> tuple[str, str]:
     """Gibt (raw_token, token_hash) zurueck; raw_token nie persistieren."""
@@ -75,6 +83,64 @@ def bereiche_liste(auftrag: ObjektPflegeauftrag) -> list[str]:
     except (ValueError, TypeError):
         return []
     return [wert for wert in werte if isinstance(wert, str)]
+
+
+def hole_oder_erstelle_abschnitt(
+    db: Session, auftrag: ObjektPflegeauftrag, bereich: str,
+) -> ObjektPflegeAbschnitt:
+    """Laedt einen Abschnitt und legt ihn defensiv an, falls er fehlt."""
+    abschnitt = (
+        db.query(ObjektPflegeAbschnitt)
+        .execution_options(include_all_tenants=True)
+        .filter(
+            ObjektPflegeAbschnitt.pflegeauftrag_id == auftrag.id,
+            ObjektPflegeAbschnitt.org_id == auftrag.org_id,
+            ObjektPflegeAbschnitt.bereich == bereich,
+        )
+        .first()
+    )
+    if abschnitt is None:
+        abschnitt = ObjektPflegeAbschnitt(
+            org_id=auftrag.org_id, pflegeauftrag_id=auftrag.id, bereich=bereich,
+        )
+        db.add(abschnitt)
+    return abschnitt
+
+
+def bestaetige_abschnitt(db: Session, auftrag: ObjektPflegeauftrag, bereich: str, *, kontakt_id: int) -> None:
+    """Markiert einen Bereich als bestaetigt und protokolliert dies."""
+    abschnitt = hole_oder_erstelle_abschnitt(db, auftrag, bereich)
+    abschnitt.status = "bestaetigt"
+    abschnitt.bestaetigt_am = datetime.now(UTC)
+    db.add(ObjektPflegeEreignis(
+        org_id=auftrag.org_id, pflegeauftrag_id=auftrag.id, typ="abschnitt_bestaetigt",
+        kontakt_id=kontakt_id, text=f"Bereich {bereich} bestaetigt",
+    ))
+
+
+def markiere_abschnitt_geaendert(db: Session, auftrag: ObjektPflegeauftrag, bereich: str) -> None:
+    """Markiert einen Bereich nach einer tatsaechlichen Aenderung."""
+    abschnitt = hole_oder_erstelle_abschnitt(db, auftrag, bereich)
+    abschnitt.status = "geaendert"
+    abschnitt.geaendert_am = datetime.now(UTC)
+
+
+def alle_pflichtbereiche_bearbeitet(db: Session, auftrag: ObjektPflegeauftrag) -> bool:
+    """Prueft, ob alle beauftragten Bereiche abgeschlossen bearbeitet wurden."""
+    bereiche = bereiche_liste(auftrag)
+    if not bereiche:
+        return True
+    abschnitte = (
+        db.query(ObjektPflegeAbschnitt)
+        .execution_options(include_all_tenants=True)
+        .filter(
+            ObjektPflegeAbschnitt.pflegeauftrag_id == auftrag.id,
+            ObjektPflegeAbschnitt.org_id == auftrag.org_id,
+        )
+        .all()
+    )
+    status = {abschnitt.bereich: abschnitt.status for abschnitt in abschnitte}
+    return all(status.get(bereich, "offen") != "offen" for bereich in bereiche)
 
 
 def rotiere_pflegeauftrag_token(db: Session, auftrag: ObjektPflegeauftrag) -> str:

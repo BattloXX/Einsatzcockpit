@@ -1,0 +1,123 @@
+{% extends "objektpflege/_layout.html" %}
+{% block content %}
+<div class="progress">{{ bearbeitet_anzahl }} von {{ bereiche|length }} Bereichen bearbeitet</div>
+<h1 style="font-size:1.35rem">{{ objekt.name }} prüfen</h1>
+
+{% for bereich in bereiche %}
+{% set a = abschnitte.get(bereich) %}
+<details>
+  <summary>{{ bereich|capitalize }} <span class="badge">{{ a.status if a else "offen" }}</span></summary>
+  <div class="muted" style="margin-top:12px">
+    {% if bereich == "stammdaten" %}
+      {{ live_objekt.informationen or "Keine Objektinformationen hinterlegt." }}
+    {% elif bereich == "adresse" %}
+      {{ live_objekt.strasse or "" }} {{ live_objekt.hausnummer or "" }}, {{ live_objekt.plz or "" }} {{ live_objekt.ort or "" }}
+    {% elif bereich == "zufahrt" %}
+      {{ live_objekt.anfahrtsweg or "Kein Anfahrtsweg hinterlegt." }}
+    {% elif bereich == "kontakte" %}
+      {{ kontakt.anzeigename }}{% if kontakt.funktion %} · {{ kontakt.funktion }}{% endif %}
+    {% elif bereich == "dokumente" %}
+      {% for d in dokumente %}
+      <div style="margin-bottom:10px">
+        📄 {{ d.dateiname_original }}
+        <form method="post" action="/objektpflege/{{ token }}/dokumente/{{ d.id }}/version" enctype="multipart/form-data">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          <input type="file" name="datei" accept="application/pdf" required>
+          <button>Neue Version hochladen</button>
+        </form>
+        <form method="post" action="/objektpflege/{{ token }}/dokumente/{{ d.id }}/ungueltig-melden">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          <button class="secondary">Als nicht mehr gültig melden</button>
+        </form>
+      </div>
+      {% endfor %}
+      <form class="upload-form" method="post" action="/objektpflege/{{ token }}/dokumente/neu" enctype="multipart/form-data">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <label>Neues Dokument hinzufügen</label>
+        <input type="file" name="datei" accept="application/pdf" required>
+        <button>Dokument hochladen</button>
+        <div class="upload-progress"><i></i></div>
+      </form>
+    {% elif bereich == "bma" %}
+      BMA-Angaben können in diesem Schritt bestätigt werden.
+    {% elif bereich == "gefahren" %}
+      Gefahrenangaben können in diesem Schritt bestätigt werden.
+    {% endif %}
+  </div>
+  <div class="actions">
+    <form method="post" action="/objektpflege/{{ token }}/bereich/{{ bereich }}/bestaetigen">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <button>Angaben sind aktuell</button>
+    </form>
+    {% if bereich in editierbar and bereich != "dokumente" %}
+    <div x-data="{edit:false}">
+      <button type="button" class="secondary" @click="edit=!edit">Bearbeiten</button>
+      <form x-show="edit" method="post" action="/objektpflege/{{ token }}/bereich/{{ bereich }}/aendern" class="draft-form">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        {% if bereich == "stammdaten" %}
+          <label>Informationen</label>
+          <textarea name="informationen">{{ live_objekt.informationen or "" }}</textarea>
+        {% elif bereich == "adresse" %}
+          {% for f in ["strasse", "hausnummer", "plz", "ort"] %}
+          <label>{{ f|capitalize }}</label>
+          <input name="{{ f }}" value="{{ live_objekt|attr(f) or '' }}">
+          {% endfor %}
+        {% elif bereich == "zufahrt" %}
+          <label>Anfahrtsweg</label>
+          <textarea name="anfahrtsweg">{{ live_objekt.anfahrtsweg or "" }}</textarea>
+        {% elif bereich == "kontakte" %}
+          {% for f in ["funktion", "email", "erreichbarkeit", "notizen"] %}
+          <label>{{ f|capitalize }}</label>
+          {% if f in ["erreichbarkeit", "notizen"] %}
+          <textarea name="{{ f }}">{{ kontakt|attr(f) or "" }}</textarea>
+          {% else %}
+          <input name="{{ f }}" value="{{ kontakt|attr(f) or '' }}">
+          {% endif %}
+          {% endfor %}
+        {% endif %}
+        <button>Änderung melden</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+</details>
+{% endfor %}
+
+<form class="bottom" method="post" action="/objektpflege/{{ token }}/einreichen">
+  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+  <label><input type="checkbox" name="bestaetigung" value="1" required style="width:auto"> Angaben vollständig geprüft</label>
+  <button {% if not vollstaendig %}disabled{% endif %}>Einreichen</button>
+</form>
+
+<script>
+  const key = 'objektpflege_draft_{{ token }}';
+
+  function saveDraft() {
+    let d = {};
+    document.querySelectorAll('.draft-form input,.draft-form textarea').forEach(e => d[e.name] = e.value);
+    localStorage.setItem(key, JSON.stringify(d));
+  }
+
+  function restoreDraft() {
+    let d = JSON.parse(localStorage.getItem(key) || '{}');
+    document.querySelectorAll('.draft-form input,.draft-form textarea').forEach(e => {
+      if (d[e.name] !== undefined) e.value = d[e.name];
+    });
+  }
+
+  restoreDraft();
+  setInterval(saveDraft, 3000);
+  addEventListener('beforeunload', saveDraft);
+
+  document.querySelectorAll('.upload-form').forEach(f => f.addEventListener('submit', e => {
+    e.preventDefault();
+    let x = new XMLHttpRequest(), bar = f.querySelector('i');
+    x.open('POST', f.action);
+    x.upload.onprogress = e => { if (e.lengthComputable) bar.style.width = (100 * e.loaded / e.total) + '%'; };
+    x.onload = () => location.href = '{{ request.url.path }}';
+    x.send(new FormData(f));
+  }));
+
+  document.querySelector('.bottom').addEventListener('submit', () => localStorage.removeItem(key));
+</script>
+{% endblock %}
