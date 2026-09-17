@@ -1,0 +1,127 @@
+"""HTTP-Integrationstests fuer den loginfreien Objektpflege-Link."""
+from datetime import UTC, datetime, timedelta
+
+from app.core.tenant import set_tenant_context
+from app.db import SessionLocal
+from app.models.kontakt import Kontakt
+from app.models.master import FireDept
+from app.models.objekt import (
+    OBJEKT_STATUS_FREIGEGEBEN,
+    KontaktAenderungsvorschlag,
+    Objekt,
+    ObjektChange,
+    ObjektKontakt,
+    ObjektPflegeauftrag,
+)
+from app.services.objekt_pflege_service import erstelle_pflegeauftrag
+
+
+def _auftrag(name="Externe Pflege Test", bereiche=None):
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        org = db.query(FireDept).first()
+        objekt = Objekt(org_id=org.id, nummer=99001, name=name, informationen="Produktiver Stand",
+                        status=OBJEKT_STATUS_FREIGEGEBEN)
+        # SQLite-Testdaten enthalten einen organisationsweiten Nummern-Unique-Index.
+        objekt.nummer = int(datetime.now(UTC).timestamp() * 1000000) % 1000000000
+        kontakt = Kontakt(org_id=org.id, anzeigename="Zentrale Kontaktperson", email="pflege@example.test",
+                          funktion="Brandschutz")
+        db.add_all([objekt, kontakt])
+        db.flush()
+        db.add(ObjektKontakt(org_id=org.id, objekt_id=objekt.id, kontakt_id=kontakt.id))
+        db.flush()
+        auftrag, token = erstelle_pflegeauftrag(
+            db, objekt, kontakt, ersteller_id=None,
+            bereiche=bereiche or ["stammdaten", "kontakte", "bma"],
+        )
+        db.commit()
+        return auftrag.id, objekt.id, kontakt.id, token
+    finally:
+        db.close()
+
+
+def _csrf(client, token):
+    client.get(f"/objektpflege/{token}")
+    return client.cookies.get("ec_csrf")
+
+
+def test_landing_marks_first_access_and_invalid_and_expired_links(client):
+    auftrag_id, objekt_id, _, token = _auftrag()
+    response = client.get(f"/objektpflege/{token}")
+    assert response.status_code == 200
+    assert "Externe Pflege Test" in response.text
+    assert client.get("/objektpflege/garbage-token").status_code == 404
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        auftrag = db.get(ObjektPflegeauftrag, auftrag_id)
+        assert auftrag.erster_zugriff_am is not None
+        assert auftrag.status == "in_bearbeitung"
+        auftrag.gueltig_bis = datetime.now(UTC) - timedelta(days=1)
+        db.commit()
+    finally:
+        db.close()
+    assert "Link abgelaufen" in client.get(f"/objektpflege/{token}").text
+
+
+def test_widerrufen_and_submission_require_complete_sections(client):
+    auftrag_id, _, _, token = _auftrag("Widerrufen", ["stammdaten"])
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        db.get(ObjektPflegeauftrag, auftrag_id).status = "widerrufen"
+        db.commit()
+    finally:
+        db.close()
+    assert "Zugang wurde widerrufen" in client.get(f"/objektpflege/{token}").text
+
+    auftrag_id, _, _, token = _auftrag("Einreichen", ["stammdaten", "bma"])
+    csrf = _csrf(client, token)
+    response = client.post(
+        f"/objektpflege/{token}/einreichen", data={"_csrf": csrf, "bestaetigung": "1"},
+    )
+    assert response.status_code == 400
+    for bereich in ("stammdaten", "bma"):
+        response = client.post(f"/objektpflege/{token}/bereich/{bereich}/bestaetigen", data={"_csrf": csrf})
+        assert response.status_code == 200
+    response = client.post(f"/objektpflege/{token}/einreichen", data={"_csrf": csrf, "bestaetigung": "1"})
+    assert response.status_code == 200
+    assert "Prüfung eingereicht" in client.get(f"/objektpflege/{token}").text
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        assert db.get(ObjektPflegeauftrag, auftrag_id).status == "eingereicht"
+    finally:
+        db.close()
+
+
+def test_external_edits_create_copy_and_contact_proposal_without_mutating_source(client):
+    auftrag_id, objekt_id, kontakt_id, token = _auftrag("Änderungsobjekt", ["stammdaten", "kontakte"])
+    csrf = _csrf(client, token)
+    response = client.post(f"/objektpflege/{token}/bereich/stammdaten/aendern", data={
+        "_csrf": csrf, "informationen": "Externer Vorschlag",
+    }, follow_redirects=False)
+    assert response.status_code == 303
+    response = client.post(f"/objektpflege/{token}/bereich/kontakte/aendern", data={
+        "_csrf": csrf, "funktion": "Neue Funktion",
+    }, follow_redirects=False)
+    assert response.status_code == 303
+    assert client.post(f"/objektpflege/{token}/bereich/bma/aendern", data={"_csrf": csrf}).status_code == 400
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        auftrag = db.get(ObjektPflegeauftrag, auftrag_id)
+        produktiv = db.get(Objekt, objekt_id)
+        kopie = db.get(Objekt, auftrag.arbeitskopie_id)
+        assert kopie.informationen == "Externer Vorschlag"
+        assert produktiv.informationen == "Produktiver Stand"
+        change = db.query(ObjektChange).filter(ObjektChange.objekt_id == kopie.id).first()
+        assert change.quelle == "extern_pflegeauftrag" and change.pflegeauftrag_id == auftrag_id
+        vorschlag = db.query(KontaktAenderungsvorschlag).filter_by(pflegeauftrag_id=auftrag_id).first()
+        assert vorschlag.status == "offen" and "Neue Funktion" in vorschlag.diff_json
+        assert db.get(Kontakt, kontakt_id).funktion == "Brandschutz"
+    finally:
+        db.close()

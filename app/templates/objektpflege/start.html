@@ -1,0 +1,12 @@
+{% extends "objektpflege/_layout.html" %}
+{% block content %}
+<section class="card">
+  <h1>Objektpflege</h1>
+  <p>{{ objekt.name }}</p>
+  <p class="muted">{{ objekt.strasse or "" }} {{ objekt.hausnummer or "" }}, {{ objekt.plz or "" }} {{ objekt.ort or "" }}</p>
+  <p>Guten Tag {{ kontakt.anzeigename }}.</p>
+  <p class="muted">Bitte prüfen Sie die hinterlegten Angaben. Änderungen werden erst nach einer internen Prüfung aktiv. Kein Login erforderlich.</p>
+  <p class="muted">Link gültig bis {{ auftrag.gueltig_bis.date() }}.</p>
+  <a class="button" href="/objektpflege/{{ token }}/pruefen">Prüfung starten</a>
+</section>
+{% endblock %}

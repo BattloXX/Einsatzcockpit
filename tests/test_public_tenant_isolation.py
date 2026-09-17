@@ -15,7 +15,15 @@ from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.incident import Incident
 from app.models.master import FireDept, Member, OrgSettings, VehicleMaster
-from app.models.objekt import AlarmInfoscreenToken, Objekt, ObjektEinsatz, ObjektKartenObjekt
+from app.models.objekt import (
+    AlarmInfoscreenToken,
+    OBJEKT_STATUS_FREIGEGEBEN,
+    Objekt,
+    ObjektEinsatz,
+    ObjektKartenObjekt,
+    ObjektKontakt,
+    ObjektPflegeauftrag,
+)
 from app.models.teams_bot import AlarmToken
 from app.models.stats import StatistikDashboardToken
 from app.models.wasserstelle import Wasserstelle
@@ -35,8 +43,44 @@ from app.models.sms import SmsGroup
 from app.core.crypto import encrypt_secret
 from app.core.security import generate_api_key, sign_mailing_track_token, sign_mailing_webhook_org
 from app.services import kontakt_service
+from app.services.objekt_pflege_service import erstelle_pflegeauftrag
 
 ORG_A = 1  # FF Wolfurt (seeded)
+
+
+def test_objektpflege_token_isoliert_objekt_und_manipulierte_fremd_fk(client):
+    """Token A darf weder Objekt B anzeigen noch einer fremden FK folgen."""
+    org_b = _setup_zwei_orgs()
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        objekte = []
+        for org_id, name in ((ORG_A, "Pflege Objekt A"), (org_b, "GEHEIM Pflege Objekt B")):
+            objekt = Objekt(org_id=org_id, nummer=777, name=name, status=OBJEKT_STATUS_FREIGEGEBEN)
+            kontakt = Kontakt(org_id=org_id, anzeigename=f"Kontakt {org_id}", email=f"pflege{org_id}@test.invalid")
+            db.add_all([objekt, kontakt])
+            db.flush()
+            db.add(ObjektKontakt(org_id=org_id, objekt_id=objekt.id, kontakt_id=kontakt.id))
+            db.flush()
+            objekte.append((objekt, kontakt))
+        auftrag, token = erstelle_pflegeauftrag(
+            db, objekte[0][0], objekte[0][1], ersteller_id=None, bereiche=["stammdaten"],
+        )
+        db.commit()
+        auftrag_id, objekt_b_id = auftrag.id, objekte[1][0].id
+    finally:
+        db.close()
+    response = client.get(f"/objektpflege/{token}")
+    assert response.status_code == 200
+    assert "Pflege Objekt A" in response.text and "GEHEIM Pflege Objekt B" not in response.text
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        db.get(ObjektPflegeauftrag, auftrag_id).objekt_id = objekt_b_id
+        db.commit()
+    finally:
+        db.close()
+    assert client.get(f"/objektpflege/{token}").status_code == 404
 
 
 def test_kontakt_sync_api_key_zeigt_keine_fremden_snapshot_oder_delta_kontakte(client):

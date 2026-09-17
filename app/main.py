@@ -35,6 +35,7 @@ from app.routers import (
     lagekarte_api,
     mailing_webhook,
     monitoring_api,
+    objektpflege_public,
     public,
     public_mailing_tracking,
     sso,
@@ -899,6 +900,7 @@ app.include_router(ui_profile.router)
 app.include_router(ui_weather.router)
 app.include_router(ui_termin.router)
 app.include_router(ui_probenplanung_public.public_router)
+app.include_router(objektpflege_public.public_router)
 app.include_router(ui_probenplanung.router)
 app.include_router(ui_probenplanung_admin.router)
 app.include_router(ui_probenplanung_admin.legacy_router)

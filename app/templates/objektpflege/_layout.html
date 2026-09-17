@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Objektpflege - {{ org_name }}</title>
+<script defer src="/static/js/alpine.min.js"></script>
+<style>
+  :root {
+    --bg:#0b1326; --surface:#131b2e; --surface-2:#171f33; --surface-3:#222a3d;
+    --text:#dae2fd; --text-muted:#7a87a8; --border:#2e3347;
+    --red:#d42225; --red-dark:#a5161a; --red-light:#e8403f;
+    --green:#18a957; --yellow:#f2b02e;
+    --radius-sm:.375rem; --radius-md:.5rem; --radius-lg:.75rem; --radius-full:9999px;
+    --shadow-card:0 1px 2px rgba(0,0,0,.4); --shadow-modal:0 10px 40px rgba(0,0,0,.6);
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    margin: 0; padding-bottom: 90px;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 5;
+    display: flex; align-items: center; gap: 10px;
+    height: 56px; padding: 0 16px;
+    background: var(--surface-2); border-bottom: 1px solid var(--border);
+  }
+  .topbar strong { font-size: .95rem; }
+  .topbar small { color: var(--text-muted); margin-left: auto; }
+  main { max-width: 540px; margin: 0 auto; padding: 20px 16px; }
+  .card, details {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); box-shadow: var(--shadow-card);
+    padding: 16px; margin-bottom: 14px;
+  }
+  summary { cursor: pointer; font-weight: 700; }
+  label { display: block; font-size: .75rem; color: var(--text-muted); margin: 12px 0 5px; }
+  input, textarea {
+    width: 100%; padding: 10px; border-radius: var(--radius-md);
+    border: 1px solid var(--border); background: var(--surface-3); color: var(--text);
+    font: inherit;
+  }
+  textarea { min-height: 90px; }
+  button, .button {
+    display: inline-block; border: 0; border-radius: var(--radius-md); padding: 10px 13px;
+    background: var(--red); color: #fff; font: inherit; font-weight: 700;
+    text-decoration: none; cursor: pointer;
+  }
+  .secondary { background: var(--surface-3); border: 1px solid var(--border); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  .muted { color: var(--text-muted); font-size: .86rem; }
+  .badge {
+    font-size: .7rem; border: 1px solid var(--border); border-radius: var(--radius-full);
+    padding: 3px 7px; color: var(--yellow);
+  }
+  .progress, .bottom {
+    position: sticky; background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: var(--radius-md); padding: 10px; z-index: 3;
+  }
+  .progress { top: 66px; margin-bottom: 14px; }
+  .bottom { bottom: 10px; margin-top: 18px; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+  .upload-progress { height: 5px; background: var(--border); border-radius: 9px; margin-top: 8px; }
+  .upload-progress i { display: block; height: 100%; background: var(--green); width: 0; border-radius: 9px; }
+  @media (min-width: 480px) { main { padding-top: 24px; } }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <span>🛡️</span>
+  <strong>{{ org_name }}</strong>
+  <small>Objektpflege</small>
+</header>
+<main>{% block content %}{% endblock %}</main>
+</body>
+</html>
