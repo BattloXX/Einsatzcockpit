@@ -1549,6 +1549,15 @@ def objekt_arbeitskopie_uebernehmen(
     kopie = hole_arbeitskopie(db, basis)
     if kopie is None:
         raise HTTPException(status_code=400, detail="Keine offene Arbeitskopie vorhanden")
+    auftrag = hole_offenen_pflegeauftrag(db, basis)
+    if auftrag is not None and auftrag.arbeitskopie_id == kopie.id:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Diese Arbeitskopie gehört zu einem laufenden externen Pflegeauftrag — "
+                "bitte über die Prüfseite abschließen."
+            ),
+        )
     try:
         uebernimm_arbeitskopie(db, kopie, user.id)
     except ValueError as exc:
@@ -1580,6 +1589,15 @@ def objekt_arbeitskopie_verwerfen(
     kopie = hole_arbeitskopie(db, basis)
     if kopie is None:
         raise HTTPException(status_code=400, detail="Keine offene Arbeitskopie vorhanden")
+    auftrag = hole_offenen_pflegeauftrag(db, basis)
+    if auftrag is not None and auftrag.arbeitskopie_id == kopie.id:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Diese Arbeitskopie gehört zu einem laufenden externen Pflegeauftrag — "
+                "bitte über die Prüfseite abschließen."
+            ),
+        )
     try:
         verwirf_arbeitskopie(db, kopie, user.id)
     except ValueError as exc:

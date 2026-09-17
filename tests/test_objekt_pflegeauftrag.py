@@ -18,6 +18,7 @@ from app.db import Base
 from app.models.kontakt import Kontakt
 from app.models.master import FireDept
 from app.models.objekt import (
+    OBJEKT_STATUS_ARCHIVIERT,
     OBJEKT_STATUS_FREIGEGEBEN,
     PFLEGEAUFTRAG_STATUS_FREIGEGEBEN,
     PFLEGEAUFTRAG_STATUS_IN_BEARBEITUNG,
@@ -36,7 +37,7 @@ from app.services.objekt_pflege_service import (
     verwirf_pflegeauftrag_aenderungen,
     wende_externe_feldaenderungen_an,
 )
-from app.services.objekt_service import aktualisiere_felder, erstelle_arbeitskopie
+from app.services.objekt_service import aktualisiere_felder, erstelle_arbeitskopie, uebernimm_arbeitskopie
 
 
 @pytest.fixture()
@@ -112,6 +113,14 @@ def test_auftrag_validiert_kontakt_kopie_und_offenen_auftrag(db):
         erstelle_pflegeauftrag(db, objekt, kontakt, ersteller_id=None, bereiche=["stammdaten"])
 
 
+def test_archiviertes_objekt_kann_keinen_pflegeauftrag_erhalten(db):
+    _, objekt, kontakt = _daten(db)
+    objekt.status = OBJEKT_STATUS_ARCHIVIERT
+
+    with pytest.raises(ValueError, match="Archivierte Objekte"):
+        erstelle_pflegeauftrag(db, objekt, kontakt, ersteller_id=None, bereiche=["stammdaten"])
+
+
 def test_arbeitskopie_und_verwerfen_erhaelt_interne_aenderung(db):
     _, objekt, kontakt = _daten(db)
     auftrag, _ = erstelle_pflegeauftrag(db, objekt, kontakt, ersteller_id=None, bereiche=["stammdaten"])
@@ -135,3 +144,30 @@ def test_reine_externe_kopie_wird_verworfen(db):
     verwirf_pflegeauftrag_aenderungen(db, auftrag, user_id=None)
     db.flush()
     assert db.get(Objekt, kopie.id) is None
+
+
+def test_extern_uebernommene_arbeitskopie_erzeugt_spaeter_neue_kopie(db):
+    """Die Router-Sperre verhindert diesen inkonsistenten Altpfad vor dem Merge.
+
+    Der niedrigschwellige Service bleibt bewusst unveraendert: Nach dem direkten Merge
+    einer externen Kopie ist ihre gespeicherte ID tot und ein Folgezugriff erstellt eine
+    neue Arbeitskopie des nun produktiven Stands.
+    """
+    _, objekt, kontakt = _daten(db)
+    auftrag, _ = erstelle_pflegeauftrag(db, objekt, kontakt, ersteller_id=None, bereiche=["stammdaten"])
+    kopie = hole_oder_erstelle_arbeitskopie_fuer_auftrag(db, auftrag)
+    wende_externe_feldaenderungen_an(db, auftrag, kopie, {"name": "Extern"}, kontakt_id=kontakt.id)
+    db.flush()
+
+    uebernimm_arbeitskopie(db, kopie, user_id=1)
+    db.flush()
+    alte_kopie_id = kopie.id
+    assert db.get(Objekt, alte_kopie_id) is None
+    assert objekt.name == "Extern"
+
+    neue_kopie = hole_oder_erstelle_arbeitskopie_fuer_auftrag(db, auftrag)
+    assert neue_kopie is not kopie
+    # SQLite darf die gerade freigewordene Primärschlüssel-ID wiederverwenden.
+    assert neue_kopie.id == alte_kopie_id
+    assert auftrag.arbeitskopie_id == neue_kopie.id
+    assert neue_kopie.name == "Extern"
