@@ -179,7 +179,9 @@ def update_kontakt(
     from app.services.kontakt_sync_service import contact_payload, record_change
 
     record_change(db, org_id, "kontakt", kontakt.id, "upsert", contact_payload(kontakt))
-    db.commit()
+    # Der Aufrufer steuert die Transaktion. Das ist insbesondere fuer gebuendelte
+    # Freigaben aus einem Objekt-Pflegeauftrag notwendig.
+    db.flush()
     return get_kontakt(db, kontakt.id, include_archiviert=True)  # type: ignore[return-value]
 
 

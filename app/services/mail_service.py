@@ -370,6 +370,42 @@ einer internen Prüfung und Freigabe aktiv.</p>
     await deliver(db, org_id, msg, smtp_cfg)
 
 
+async def send_pflegeauftrag_nacharbeit(
+    *, to: str, kontakt_name: str, objekt_name: str, link: str, text: str,
+    gueltig_bis_text: str, db=None, org_id: int | None = None,
+) -> None:
+    """Versendet die Bitte um Nacharbeit zu einem Objekt-Pflegeauftrag."""
+    smtp_cfg = _org_smtp_cfg(db, org_id) or get_smtp_cfg(db)
+    subject = f"Bitte ergänzen Sie die Angaben – {objekt_name}"
+    body_txt = (
+        f"Hallo {kontakt_name},\n\n"
+        f"wir haben Ihre Rückmeldung zum Objekt \"{objekt_name}\" geprüft und benötigen "
+        f"noch eine Ergänzung oder Korrektur:\n\n{text}\n\n"
+        f"Öffnen Sie dazu bitte erneut den folgenden Link. Dafür ist kein Login erforderlich; "
+        f"der Link funktioniert genauso wie bisher und ist bis {gueltig_bis_text} gültig.\n\n{link}\n\n"
+        f"Mit freundlichen Grüßen\nEinsatzcockpit"
+    )
+    safe_name = html.escape(kontakt_name)
+    safe_objekt = html.escape(objekt_name)
+    safe_link = html.escape(link, quote=True)
+    safe_text = html.escape(text)
+    body_html = f'''<!doctype html>
+<html lang="de"><body style="font-family: Arial, sans-serif; max-width: 540px; margin: 0 auto;">
+<p>Hallo <strong>{safe_name}</strong>,</p>
+<p>wir haben Ihre Rückmeldung zum Objekt <strong>{safe_objekt}</strong> geprüft und benötigen
+noch eine Ergänzung oder Korrektur:</p>
+<p style="white-space:pre-wrap;border-left:3px solid #d42225;padding-left:12px;">{safe_text}</p>
+<p>Öffnen Sie dazu bitte erneut den folgenden Link. Dafür ist <strong>kein Login erforderlich</strong>;
+der Link funktioniert genauso wie bisher und ist bis <strong>{html.escape(gueltig_bis_text)}</strong> gültig.</p>
+<p style="text-align:center;"><a href="{safe_link}" style="background:#d42225;color:#fff;padding:10px 18px;
+border-radius:6px;text-decoration:none;display:inline-block;">Angaben ergänzen</a></p>
+<p style="font-size:0.85rem;color:#666;">URL: <code>{safe_link}</code></p>
+</body></html>'''
+    msg = _build_message(to=to, subject=subject, body_txt=body_txt,
+                         body_html=body_html, smtp_cfg=smtp_cfg)
+    await deliver(db, org_id, msg, smtp_cfg)
+
+
 CONTACT_RECIPIENT = "johannes@battlogg.org"
 
 

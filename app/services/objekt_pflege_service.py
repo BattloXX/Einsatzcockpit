@@ -26,17 +26,21 @@ from app.models.objekt import (
     PFLEGEAUFTRAG_STATUS_UEBERGAENGE,
     PFLEGEAUFTRAG_STATUS_VERWORFEN,
     PFLEGEAUFTRAG_STATUS_WIDERRUFEN,
+    KontaktAenderungsvorschlag,
     Objekt,
     ObjektChange,
+    ObjektDokument,
     ObjektKontakt,
     ObjektPflegeAbschnitt,
     ObjektPflegeauftrag,
     ObjektPflegeEreignis,
 )
+from app.services import kontakt_service
 from app.services.objekt_service import (
     aktualisiere_felder,
     erstelle_arbeitskopie,
     hole_arbeitskopie,
+    uebernimm_arbeitskopie,
     verwirf_arbeitskopie,
 )
 
@@ -411,3 +415,279 @@ def verwirf_pflegeauftrag_aenderungen(
             revert_daten[feld] = json.loads(externe[0].before_json) if externe[0].before_json else None
     if revert_daten:
         aktualisiere_felder(db, kopie, revert_daten, bereich="stammdaten", user_id=user_id)
+
+
+def hole_offene_kontakt_vorschlaege(
+    db: Session, auftrag: ObjektPflegeauftrag,
+) -> list[KontaktAenderungsvorschlag]:
+    """Offene Kontakt-Aenderungsvorschlaege dieses Pflegeauftrags."""
+    return (
+        db.query(KontaktAenderungsvorschlag)
+        .filter(
+            KontaktAenderungsvorschlag.org_id == auftrag.org_id,
+            KontaktAenderungsvorschlag.pflegeauftrag_id == auftrag.id,
+            KontaktAenderungsvorschlag.status == "offen",
+        )
+        .order_by(KontaktAenderungsvorschlag.erstellt_am, KontaktAenderungsvorschlag.id)
+        .all()
+    )
+
+
+def hole_wartende_dokumentversionen(db: Session, auftrag: ObjektPflegeauftrag) -> list[ObjektDokument]:
+    """Vom Auftrag hochgeladene Dokumentversionen, die noch auf Freigabe warten
+    (ist_aktuelle_version=False, freigabe_status='wartet_freigabe', pflegeauftrag_id=auftrag.id)."""
+    return (
+        db.query(ObjektDokument)
+        .filter(
+            ObjektDokument.org_id == auftrag.org_id,
+            ObjektDokument.pflegeauftrag_id == auftrag.id,
+            ObjektDokument.ist_aktuelle_version.is_(False),
+            ObjektDokument.freigabe_status == "wartet_freigabe",
+        )
+        .order_by(ObjektDokument.hochgeladen_am, ObjektDokument.id)
+        .all()
+    )
+
+
+def _ereignis_dokument_id(ereignis: ObjektPflegeEreignis) -> int | None:
+    try:
+        metadaten = json.loads(ereignis.metadaten_json or "{}")
+        dokument_id = metadaten.get("dokument_id")
+        return int(dokument_id) if dokument_id is not None else None
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+
+
+def hole_dokument_ungueltig_meldungen(
+    db: Session, auftrag: ObjektPflegeauftrag,
+) -> list[ObjektPflegeEreignis]:
+    """Ereignisse dieses Auftrags mit typ='dokument_ungueltig_gemeldet', die noch nicht
+    entschieden wurden (kein spaeteres 'dokument_ungueltig_entschieden'-Ereignis mit
+    derselben dokument_id in metadaten_json existiert)."""
+    ereignisse = (
+        db.query(ObjektPflegeEreignis)
+        .filter(
+            ObjektPflegeEreignis.org_id == auftrag.org_id,
+            ObjektPflegeEreignis.pflegeauftrag_id == auftrag.id,
+            ObjektPflegeEreignis.typ.in_(("dokument_ungueltig_gemeldet", "dokument_ungueltig_entschieden")),
+        )
+        .order_by(ObjektPflegeEreignis.erstellt_am, ObjektPflegeEreignis.id)
+        .all()
+    )
+    entschieden = {
+        dokument_id for ereignis in ereignisse
+        if ereignis.typ == "dokument_ungueltig_entschieden"
+        if (dokument_id := _ereignis_dokument_id(ereignis)) is not None
+    }
+    return [
+        ereignis for ereignis in ereignisse
+        if ereignis.typ == "dokument_ungueltig_gemeldet"
+        and _ereignis_dokument_id(ereignis) not in entschieden
+    ]
+
+
+def berechne_stammdaten_diff(db: Session, auftrag: ObjektPflegeauftrag) -> list[dict]:
+    """Feldgenauer Diff der externen Stammdaten-Aenderungen dieses Auftrags."""
+    if auftrag.arbeitskopie_id is None:
+        return []
+    kopie = db.get(Objekt, auftrag.arbeitskopie_id)
+    if kopie is None:
+        return []
+    aenderungen = (
+        db.query(ObjektChange)
+        .filter(
+            ObjektChange.org_id == auftrag.org_id,
+            ObjektChange.objekt_id == kopie.id,
+            ObjektChange.quelle == "extern_pflegeauftrag",
+        )
+        .order_by(ObjektChange.erstellt_am, ObjektChange.id)
+        .all()
+    )
+    result = []
+    for feld in OBJEKT_KOPIERBARE_FELDER:
+        aenderung = next((eintrag for eintrag in aenderungen if eintrag.feld == feld), None)
+        if aenderung is not None:
+            result.append({
+                "feld": feld,
+                "vorher": json.loads(aenderung.before_json) if aenderung.before_json else None,
+                "jetzt": getattr(kopie, feld),
+            })
+    return result
+
+
+def freigabe_transaktion(
+    db: Session,
+    auftrag: ObjektPflegeauftrag,
+    *,
+    user_id: int,
+    kontakt_vorschlag_freigeben: set[int],
+    kontakt_vorschlag_verwerfen: set[int],
+    dokument_freigeben: set[int],
+    dokument_verwerfen: set[int],
+    dokument_archivieren: set[int],
+    revision_intervall_tage: int = 365,
+) -> Objekt:
+    """Fuehrt die komplette Freigabe in EINER Transaktion durch."""
+    if auftrag.status != PFLEGEAUFTRAG_STATUS_EINGEREICHT:
+        raise ValueError("Nur eingereichte Pflegeauftraege koennen freigegeben werden")
+    offene_kontakte = hole_offene_kontakt_vorschlaege(db, auftrag)
+    wartende_dokumente = hole_wartende_dokumentversionen(db, auftrag)
+    offene_meldungen = hole_dokument_ungueltig_meldungen(db, auftrag)
+    offene_kontakt_ids = {vorschlag.id for vorschlag in offene_kontakte}
+    wartende_dokument_ids = {dokument.id for dokument in wartende_dokumente}
+    offene_meldung_ids = {_ereignis_dokument_id(meldung) for meldung in offene_meldungen}
+    if auftrag.org_id is None:
+        raise ValueError("Pflegeauftrag ohne Organisation")
+
+    if (
+        kontakt_vorschlag_freigeben & kontakt_vorschlag_verwerfen
+        or kontakt_vorschlag_freigeben | kontakt_vorschlag_verwerfen != offene_kontakt_ids
+    ):
+        raise ValueError("Es liegen unentschiedene Kontaktvorschlaege vor")
+    if (
+        dokument_freigeben & dokument_verwerfen
+        or dokument_freigeben | dokument_verwerfen != wartende_dokument_ids
+    ):
+        raise ValueError("Es liegen unentschiedene Dokumentversionen vor")
+    if not dokument_archivieren <= offene_meldung_ids:
+        raise ValueError("Ein zu archivierendes Dokument wurde nicht als ungueltig gemeldet")
+    if revision_intervall_tage < 1:
+        raise ValueError("Das Revisionsintervall muss mindestens einen Tag betragen")
+
+    kontakt_diffs: dict[int, dict[str, Any]] = {}
+    for vorschlag in offene_kontakte:
+        if vorschlag.id not in kontakt_vorschlag_freigeben:
+            continue
+        try:
+            diff = json.loads(vorschlag.diff_json)
+            if not isinstance(diff, dict) or any(
+                feld not in {"funktion", "email", "erreichbarkeit", "notizen"}
+                or not isinstance(eintrag, dict) or "neu" not in eintrag
+                for feld, eintrag in diff.items()
+            ):
+                raise ValueError
+        except (TypeError, ValueError, json.JSONDecodeError) as exc:
+            raise ValueError("Kontaktvorschlag enthaelt keinen gueltigen Diff") from exc
+        if kontakt_service.get_kontakt(db, vorschlag.kontakt_id, include_archiviert=True) is None:
+            raise ValueError("Kontakt des Vorschlags nicht gefunden")
+        kontakt_diffs[vorschlag.id] = diff
+
+    if auftrag.arbeitskopie_id is not None:
+        kopie = db.get(Objekt, auftrag.arbeitskopie_id)
+        if kopie is None:
+            raise ValueError("Arbeitskopie nicht gefunden")
+        objekt = uebernimm_arbeitskopie(db, kopie, user_id)
+    else:
+        objekt = auftrag.objekt
+
+    jetzt = datetime.now(UTC)
+    for vorschlag in offene_kontakte:
+        if vorschlag.id in kontakt_vorschlag_freigeben:
+            diff = kontakt_diffs[vorschlag.id]
+            daten = {feld: eintrag["neu"] for feld, eintrag in diff.items()}
+            kontakt = kontakt_service.get_kontakt(db, vorschlag.kontakt_id, include_archiviert=True)
+            assert kontakt is not None
+            telefone = [
+                {
+                    "nummer": telefon.nummer,
+                    "label": telefon.label,
+                    "bevorzugt": telefon.bevorzugt,
+                    "sms_eignung": telefon.sms_eignung,
+                }
+                for telefon in kontakt.telefone
+            ]
+            kategorien = [zuordnung.kategorie.name for zuordnung in kontakt.kategorien]
+            kontakt_service.update_kontakt(
+                db, vorschlag.kontakt_id, daten, telefone, kategorien,
+                version=vorschlag.basis_version, org_id=auftrag.org_id, user_id=user_id,
+            )
+            vorschlag.status = "uebernommen"
+        else:
+            vorschlag.status = "verworfen"
+        vorschlag.geprueft_am = jetzt
+        vorschlag.geprueft_von_id = user_id
+
+    dokumente = {dokument.id: dokument for dokument in wartende_dokumente}
+    for dokument_id in dokument_freigeben:
+        dokument = dokumente[dokument_id]
+        if dokument.dokument_gruppe_id is not None:
+            genesis_id = dokument.dokument_gruppe_id
+            bisherige = (
+                db.query(ObjektDokument)
+                .filter(
+                    ObjektDokument.org_id == auftrag.org_id,
+                    (ObjektDokument.id == genesis_id) | (ObjektDokument.dokument_gruppe_id == genesis_id),
+                    ObjektDokument.ist_aktuelle_version.is_(True),
+                )
+                .first()
+            )
+            if bisherige is not None:
+                bisherige.ist_aktuelle_version = False
+                bisherige.freigabe_status = "archiviert"
+        dokument.ist_aktuelle_version = True
+        dokument.freigabe_status = "freigegeben"
+        dokument.freigegeben_am = jetzt
+        dokument.freigegeben_von_id = user_id
+    for dokument_id in dokument_verwerfen:
+        dokumente[dokument_id].freigabe_status = "verworfen"
+
+    for dokument_id in dokument_archivieren:
+        archiv_dokument = (
+            db.query(ObjektDokument)
+            .filter(ObjektDokument.id == dokument_id, ObjektDokument.org_id == auftrag.org_id)
+            .first()
+        )
+        if archiv_dokument is None:
+            raise ValueError("Zu archivierendes Dokument nicht gefunden")
+        if not archiv_dokument.ist_aktuelle_version:
+            raise ValueError("Zu archivierendes Dokument ist nicht die aktuelle Version")
+        archiv_dokument.ist_aktuelle_version = False
+        archiv_dokument.freigabe_status = "archiviert"
+        db.add(ObjektPflegeEreignis(
+            org_id=auftrag.org_id,
+            pflegeauftrag_id=auftrag.id,
+            typ="dokument_archiviert",
+            text=f"{archiv_dokument.dateiname_original} archiviert",
+            user_id=user_id,
+            metadaten_json=json.dumps({"dokument_id": archiv_dokument.id}),
+        ))
+        db.add(ObjektPflegeEreignis(
+            org_id=auftrag.org_id,
+            pflegeauftrag_id=auftrag.id,
+            typ="dokument_ungueltig_entschieden",
+            text=f"{archiv_dokument.dateiname_original} als ungueltig entschieden",
+            user_id=user_id,
+            metadaten_json=json.dumps({"dokument_id": archiv_dokument.id}),
+        ))
+
+    objekt.letzte_bestaetigung_am = jetzt
+    objekt.letzte_bestaetigung_kontakt_id = auftrag.kontakt_id
+    objekt.letzte_bestaetigung_pflegeauftrag_id = auftrag.id
+    objekt.revision_datum = date.today() + timedelta(days=revision_intervall_tage)
+    pflegeauftrag_status_wechsel(db, auftrag, PFLEGEAUFTRAG_STATUS_FREIGEGEBEN, user_id=user_id)
+    return objekt
+
+
+def verwerfen_transaktion(db: Session, auftrag: ObjektPflegeauftrag, *, user_id: int) -> None:
+    """Verwirft den gesamten Pflegeauftrag und alle noch offenen Nebenentscheidungen."""
+    if auftrag.status != PFLEGEAUFTRAG_STATUS_EINGEREICHT:
+        raise ValueError("Nur eingereichte Pflegeauftraege koennen verworfen werden")
+    verwirf_pflegeauftrag_aenderungen(db, auftrag, user_id=user_id)
+    jetzt = datetime.now(UTC)
+    for vorschlag in hole_offene_kontakt_vorschlaege(db, auftrag):
+        vorschlag.status = "verworfen"
+        vorschlag.geprueft_am = jetzt
+        vorschlag.geprueft_von_id = user_id
+    for dokument in hole_wartende_dokumentversionen(db, auftrag):
+        dokument.freigabe_status = "verworfen"
+    pflegeauftrag_status_wechsel(db, auftrag, PFLEGEAUFTRAG_STATUS_VERWORFEN, user_id=user_id)
+
+
+def nacharbeit_anfordern(db: Session, auftrag: ObjektPflegeauftrag, *, user_id: int, text: str) -> str:
+    """Fordert Nacharbeit an, rotiert den Token und gibt dessen Rohwert zurueck."""
+    if auftrag.status != PFLEGEAUFTRAG_STATUS_EINGEREICHT:
+        raise ValueError("Nur eingereichte Pflegeauftraege koennen Nacharbeit erhalten")
+    auftrag.nacharbeit_text = text
+    raw = rotiere_pflegeauftrag_token(db, auftrag)
+    pflegeauftrag_status_wechsel(db, auftrag, PFLEGEAUFTRAG_STATUS_NACHARBEIT, user_id=user_id)
+    return raw

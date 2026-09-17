@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div style="max-width:1100px;margin:0 auto;padding:16px;">
+  <div class="card" style="padding:16px;">
+    <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;">
+      <div>
+        <h2 style="margin:0 0 6px;">Datenpflege prüfen</h2>
+        <div><strong>{{ objekt.name }}</strong> · Objekt-Nr. {{ objekt.nummer }}</div>
+      </div>
+      <div>
+        <span class="badge-pill badge-pill--amber">Prüfstatus: {{ pflegeauftrag_status_labels[auftrag.status] }}</span>
+        <a class="btn btn--ghost btn--xs" href="/objekte/{{ objekt.id }}?tab=datenpflege">Zurück zu Datenpflege</a>
+      </div>
+    </div>
+  </div>
+
+  <form method="post" action="/objekte/{{ objekt.id }}/pflegeauftrag/{{ auftrag.id }}/review/freigeben"
+        onsubmit="return confirm('Änderungen jetzt freigeben und produktiv setzen?')">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+
+    <div class="card" style="padding:16px;margin-top:16px;">
+      <h3 style="margin-top:0;">Stammdaten-Diff</h3>
+      {% if stammdaten_diff %}
+      <dl class="objekt-dl">
+        {% for eintrag in stammdaten_diff %}
+        <dt>{{ eintrag.feld }}</dt>
+        <dd>
+          <span class="badge-pill badge-pill--amber">↔ Geändert</span>
+          <span class="objekt-protokoll__old">{{ eintrag.vorher if eintrag.vorher is not none else '–' }}</span>
+          →
+          <span class="objekt-protokoll__new">{{ eintrag.jetzt if eintrag.jetzt is not none else '–' }}</span>
+        </dd>
+        {% endfor %}
+      </dl>
+      {% else %}
+      <p class="text-muted" style="margin:0;">Keine Stammdaten-Änderungen vorgeschlagen.</p>
+      {% endif %}
+    </div>
+
+    <div class="card" style="padding:16px;margin-top:16px;">
+      <h3 style="margin-top:0;">Kontaktvorschläge</h3>
+      {% if kontakt_vorschlaege %}
+      {% for eintrag in kontakt_vorschlaege %}
+      <div class="objekt-protokoll__row" style="padding:12px 0;">
+        <strong>{{ eintrag.kontakt.anzeigename if eintrag.kontakt else 'Kontakt nicht gefunden' }}</strong>
+        <div class="objekt-protokoll__change" style="margin-top:6px;">
+          {% for feld, diff in eintrag.diff.items() %}
+          <div><strong>{{ feld }}</strong>: <span class="objekt-protokoll__old">{{ diff.alt if diff.alt is not none else '–' }}</span> → <span class="objekt-protokoll__new">{{ diff.neu if diff.neu is not none else '–' }}</span></div>
+          {% endfor %}
+        </div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;">
+          <label class="checkbox-label"><input id="kontakt-freigeben-{{ eintrag.vorschlag.id }}" type="checkbox" name="kontakt_freigeben" value="{{ eintrag.vorschlag.id }}" data-opposite="kontakt-verwerfen-{{ eintrag.vorschlag.id }}" onchange="if (this.checked) document.getElementById(this.dataset.opposite).checked = false"> ✓ Übernehmen</label>
+          <label class="checkbox-label"><input id="kontakt-verwerfen-{{ eintrag.vorschlag.id }}" type="checkbox" name="kontakt_verwerfen" value="{{ eintrag.vorschlag.id }}" data-opposite="kontakt-freigeben-{{ eintrag.vorschlag.id }}" onchange="if (this.checked) document.getElementById(this.dataset.opposite).checked = false"> ✕ Verwerfen</label>
+        </div>
+        <p class="text-muted" style="margin:6px 0 0;font-size:.9rem;">Bitte genau eine Entscheidung treffen.</p>
+      </div>
+      {% endfor %}
+      {% else %}
+      <p class="text-muted" style="margin:0;">Keine offenen Kontaktvorschläge vorhanden.</p>
+      {% endif %}
+    </div>
+
+    <div class="card" style="padding:16px;margin-top:16px;">
+      <h3 style="margin-top:0;">Dokumentvergleich</h3>
+      {% if dokumente_wartend %}
+      {% for eintrag in dokumente_wartend %}
+      {% set dokument = eintrag.dokument %}
+      <div class="objekt-protokoll__row" style="padding:12px 0;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;">
+          <div>
+            <strong>Bisherige Version</strong>
+            {% if eintrag.bisherig %}
+            <div>Version {{ eintrag.bisherig.versionsnummer }} · {{ eintrag.bisherig.dateiname_original }}</div>
+            <div class="text-muted">Hochgeladen: {{ eintrag.bisherig.hochgeladen_am|local_datetime }}</div>
+            <div class="text-muted">Hochgeladen von: {{ eintrag.bisherig_hochgeladen_von.username if eintrag.bisherig_hochgeladen_von else 'Extern oder unbekannt' }}</div>
+            {% else %}
+            <div class="text-muted">Kein bisheriges Dokument (neu hinzugefügt).</div>
+            {% endif %}
+          </div>
+          <div>
+            <strong>Neue Version <span class="badge-pill badge-pill--amber">↑ Vorgeschlagen</span></strong>
+            <div>Version {{ dokument.versionsnummer }} · {{ dokument.dateiname_original }}</div>
+            <div class="text-muted">Hochgeladen: {{ dokument.hochgeladen_am|local_datetime }}</div>
+            <div class="text-muted">Hochgeladen von: {{ eintrag.hochgeladen_von.username if eintrag.hochgeladen_von else 'Extern oder unbekannt' }}</div>
+            <a href="/objekt-medien/dokument/{{ dokument.id }}/original" target="_blank">Neue Datei ansehen</a>
+          </div>
+        </div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;">
+          <label class="checkbox-label"><input id="dokument-freigeben-{{ dokument.id }}" type="checkbox" name="dokument_freigeben" value="{{ dokument.id }}" data-opposite="dokument-verwerfen-{{ dokument.id }}" onchange="if (this.checked) document.getElementById(this.dataset.opposite).checked = false"> ✓ Freigeben</label>
+          <label class="checkbox-label"><input id="dokument-verwerfen-{{ dokument.id }}" type="checkbox" name="dokument_verwerfen" value="{{ dokument.id }}" data-opposite="dokument-freigeben-{{ dokument.id }}" onchange="if (this.checked) document.getElementById(this.dataset.opposite).checked = false"> ✕ Verwerfen</label>
+        </div>
+        <p class="text-muted" style="margin:6px 0 0;font-size:.9rem;">Bitte genau eine Entscheidung treffen.</p>
+      </div>
+      {% endfor %}
+      {% else %}
+      <p class="text-muted" style="margin:0;">Keine Dokumentversionen warten auf Freigabe.</p>
+      {% endif %}
+    </div>
+
+    <div class="card" style="padding:16px;margin-top:16px;">
+      <h3 style="margin-top:0;">Als ungültig gemeldete Dokumente</h3>
+      {% if ungueltig_meldungen %}
+      {% for eintrag in ungueltig_meldungen %}
+      <div class="objekt-protokoll__row" style="padding:12px 0;">
+        <strong>{{ eintrag.dokument.dateiname_original if eintrag.dokument else 'Dokument nicht gefunden' }}</strong>
+        <div class="text-muted">{{ eintrag.meldung.text or 'Als nicht mehr gültig gemeldet.' }}</div>
+        {% if eintrag.dokument %}
+        <label class="checkbox-label" style="display:inline-block;margin-top:8px;"><input type="checkbox" name="dokument_archivieren" value="{{ eintrag.dokument.id }}"> ⓘ Dokument jetzt archivieren</label>
+        {% endif %}
+      </div>
+      {% endfor %}
+      {% else %}
+      <p class="text-muted" style="margin:0;">Keine ungültig gemeldeten Dokumente vorhanden.</p>
+      {% endif %}
+    </div>
+
+    <div class="card" style="padding:16px;margin-top:16px;">
+      <h3 style="margin-top:0;">Freigabe</h3>
+      <div class="form-group" style="max-width:250px;">
+        <label class="form-label" for="revision_intervall_tage">Nächste Prüfung in Tagen</label>
+        <input class="form-input" id="revision_intervall_tage" type="number" name="revision_intervall_tage" value="365" min="1">
+      </div>
+      <button class="btn btn--primary">✓ Änderungen freigeben</button>
+    </div>
+  </form>
+
+  <div class="card" style="padding:16px;margin-top:16px;">
+    <h3 style="margin-top:0;">Nacharbeit / Aktionen</h3>
+    <form method="post" action="/objekte/{{ objekt.id }}/pflegeauftrag/{{ auftrag.id }}/review/nacharbeit">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <div class="form-group">
+        <label class="form-label" for="nacharbeit_text">Nacharbeit anfordern</label>
+        <textarea class="form-input" id="nacharbeit_text" name="text" rows="4" required></textarea>
+      </div>
+      <button class="btn btn--ghost">Nacharbeit anfordern</button>
+    </form>
+    <form method="post" action="/objekte/{{ objekt.id }}/pflegeauftrag/{{ auftrag.id }}/review/verwerfen" style="margin-top:12px;" onsubmit="return confirm('Alle Änderungen dieses Pflegeauftrags wirklich verwerfen?')">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <button class="btn btn--danger">✕ Änderungen verwerfen</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

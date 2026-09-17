@@ -78,6 +78,7 @@ from app.routers import (
     ui_nachschlagewerke,
     ui_objekt,
     ui_objekt_dokumente,
+    ui_objekt_pflege_review,
     ui_org_backup,
     ui_org_mail,
     ui_password_reset,
@@ -909,6 +910,7 @@ app.include_router(ui_bma_import.router)
 app.include_router(ui_einsatz_import.router)
 app.include_router(ui_objekt.router)
 app.include_router(ui_objekt_dokumente.router)
+app.include_router(ui_objekt_pflege_review.router)
 app.include_router(ui_kontakt.router)
 app.include_router(ui_nachschlagewerke.router)
 app.include_router(ui_nachschlagewerke.cache_router)
