@@ -16,6 +16,7 @@ from app.core.security import hash_api_key
 from app.models.kontakt import Kontakt
 from app.models.objekt import (
     OBJEKT_KOPIERBARE_FELDER,
+    OBJEKT_STATUS_ARCHIVIERT,
     PFLEGEAUFTRAG_BEREICHE,
     PFLEGEAUFTRAG_STATUS_ABGELAUFEN,
     PFLEGEAUFTRAG_STATUS_EINGELADEN,
@@ -245,6 +246,8 @@ def erstelle_pflegeauftrag(
         is not None
     ):
         raise ValueError("Das Objekt hat bereits einen offenen Pflegeauftrag")
+    if objekt.status == OBJEKT_STATUS_ARCHIVIERT:
+        raise ValueError("Archivierte Objekte können nicht zur externen Pflege eingeladen werden")
     if any(bereich not in PFLEGEAUFTRAG_BEREICHE for bereich in bereiche):
         raise ValueError("Der Pflegeauftrag enthaelt einen ungueltigen Bereich")
 
@@ -528,8 +531,16 @@ def freigabe_transaktion(
     revision_intervall_tage: int = 365,
 ) -> Objekt:
     """Fuehrt die komplette Freigabe in EINER Transaktion durch."""
+    auftrag = (
+        db.query(ObjektPflegeauftrag)
+        .filter(ObjektPflegeauftrag.id == auftrag.id)
+        .with_for_update()
+        .one()
+    )
     if auftrag.status != PFLEGEAUFTRAG_STATUS_EINGEREICHT:
         raise ValueError("Nur eingereichte Pflegeauftraege koennen freigegeben werden")
+    if auftrag.objekt.status == OBJEKT_STATUS_ARCHIVIERT:
+        raise ValueError("Das Objekt wurde zwischenzeitlich archiviert — Freigabe nicht möglich")
     offene_kontakte = hole_offene_kontakt_vorschlaege(db, auftrag)
     wartende_dokumente = hole_wartende_dokumentversionen(db, auftrag)
     offene_meldungen = hole_dokument_ungueltig_meldungen(db, auftrag)
@@ -670,6 +681,12 @@ def freigabe_transaktion(
 
 def verwerfen_transaktion(db: Session, auftrag: ObjektPflegeauftrag, *, user_id: int) -> None:
     """Verwirft den gesamten Pflegeauftrag und alle noch offenen Nebenentscheidungen."""
+    auftrag = (
+        db.query(ObjektPflegeauftrag)
+        .filter(ObjektPflegeauftrag.id == auftrag.id)
+        .with_for_update()
+        .one()
+    )
     if auftrag.status != PFLEGEAUFTRAG_STATUS_EINGEREICHT:
         raise ValueError("Nur eingereichte Pflegeauftraege koennen verworfen werden")
     verwirf_pflegeauftrag_aenderungen(db, auftrag, user_id=user_id)

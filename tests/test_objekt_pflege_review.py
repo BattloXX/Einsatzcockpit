@@ -11,6 +11,7 @@ from app.db import Base
 from app.models.kontakt import Kontakt
 from app.models.master import FireDept
 from app.models.objekt import (
+    OBJEKT_STATUS_ARCHIVIERT,
     OBJEKT_STATUS_FREIGEGEBEN,
     KontaktAenderungsvorschlag,
     Objekt,
@@ -100,6 +101,51 @@ def test_freigabe_uebernimmt_kopie_kontakt_und_dokumente(db):
     assert objekt.letzte_bestaetigung_kontakt_id == kontakt.id
     assert objekt.letzte_bestaetigung_pflegeauftrag_id == auftrag.id
     assert auftrag.status == "freigegeben"
+
+
+def test_doppelte_freigabe_wird_nach_statuswechsel_abgewiesen(db):
+    _, objekt, kontakt = _daten(db)
+    auftrag, _ = erstelle_pflegeauftrag(db, objekt, kontakt, ersteller_id=None, bereiche=["stammdaten"])
+    auftrag.status = "eingereicht"
+
+    freigabe_transaktion(
+        db, auftrag, user_id=7, kontakt_vorschlag_freigeben=set(),
+        kontakt_vorschlag_verwerfen=set(), dokument_freigeben=set(), dokument_verwerfen=set(),
+        dokument_archivieren=set(),
+    )
+    db.commit()
+    freigegeben_am = auftrag.freigegeben_am
+    revision_datum = objekt.revision_datum
+
+    with pytest.raises(ValueError, match="Nur eingereichte"):
+        freigabe_transaktion(
+            db, auftrag, user_id=8, kontakt_vorschlag_freigeben=set(),
+            kontakt_vorschlag_verwerfen=set(), dokument_freigeben=set(), dokument_verwerfen=set(),
+            dokument_archivieren=set(),
+        )
+
+    assert auftrag.status == "freigegeben"
+    assert auftrag.freigegeben_am == freigegeben_am
+    assert objekt.revision_datum == revision_datum
+
+
+def test_freigabe_eines_zwischenzeitlich_archivierten_objekts_mutiert_nichts(db):
+    _, objekt, kontakt = _daten(db)
+    auftrag, _ = erstelle_pflegeauftrag(db, objekt, kontakt, ersteller_id=None, bereiche=["stammdaten"])
+    auftrag.status = "eingereicht"
+    objekt.status = OBJEKT_STATUS_ARCHIVIERT
+    db.commit()
+
+    with pytest.raises(ValueError, match="zwischenzeitlich archiviert"):
+        freigabe_transaktion(
+            db, auftrag, user_id=7, kontakt_vorschlag_freigeben=set(),
+            kontakt_vorschlag_verwerfen=set(), dokument_freigeben=set(), dokument_verwerfen=set(),
+            dokument_archivieren=set(),
+        )
+
+    assert auftrag.status == "eingereicht"
+    assert objekt.letzte_bestaetigung_am is None
+    assert objekt.revision_datum is None
 
 
 def test_unvollstaendige_freigabe_mutiert_nichts(db):

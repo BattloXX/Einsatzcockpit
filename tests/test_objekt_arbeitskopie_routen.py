@@ -10,9 +10,14 @@ import pytest
 from app.core.security import hash_password
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
+from app.models.kontakt import Kontakt
 from app.models.master import FireDept, OrgSettings, SystemSettings
-from app.models.objekt import OBJEKT_STATUS_FREIGEGEBEN, Objekt
+from app.models.objekt import OBJEKT_STATUS_FREIGEGEBEN, Objekt, ObjektKontakt, ObjektPflegeauftrag
 from app.models.user import Role, User, UserRole
+from app.services.objekt_pflege_service import (
+    erstelle_pflegeauftrag,
+    hole_oder_erstelle_arbeitskopie_fuer_auftrag,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -138,6 +143,51 @@ def test_verwerfen_stellt_produktive_version_wieder_her(client):
         objekt = db.query(Objekt).filter(Objekt.id == obj_id).first()
         assert objekt.status == OBJEKT_STATUS_FREIGEGEBEN
         assert db.query(Objekt).filter(Objekt.entwurf_von_id == obj_id).first() is None
+    finally:
+        db.close()
+
+
+@pytest.mark.parametrize("aktion", ("uebernehmen", "verwerfen"))
+def test_externe_arbeitskopie_kann_nicht_ueber_den_allgemeinen_weg_abgeschlossen_werden(client, aktion):
+    nummer = 8810 if aktion == "uebernehmen" else 8811
+    _, obj_id = _setup_objekt(f"ak_pflege_guard_{aktion}", nummer=nummer)
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        objekt = db.get(Objekt, obj_id)
+        kontakt = Kontakt(
+            org_id=objekt.org_id,
+            anzeigename="Externer Kontakt",
+            email=f"{aktion}@example.test",
+        )
+        db.add(kontakt)
+        db.flush()
+        db.add(ObjektKontakt(org_id=objekt.org_id, objekt_id=objekt.id, kontakt_id=kontakt.id, art="betreiber"))
+        db.flush()
+        auftrag, _ = erstelle_pflegeauftrag(
+            db, objekt, kontakt, ersteller_id=None, bereiche=["stammdaten"],
+        )
+        kopie = hole_oder_erstelle_arbeitskopie_fuer_auftrag(db, auftrag)
+        db.commit()
+        kopie_id = kopie.id
+        auftrag_id = auftrag.id
+    finally:
+        db.close()
+
+    _login(client, f"ak_pflege_guard_{aktion}", "Test1234!")
+    response = client.post(
+        f"/objekte/{obj_id}/{aktion}",
+        data={"_csrf": _csrf(client)},
+    )
+    assert response.status_code == 400
+    assert "laufenden externen Pflegeauftrag" in response.text
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        assert db.get(Objekt, kopie_id) is not None
+        assert db.get(ObjektPflegeauftrag, auftrag_id).arbeitskopie_id == kopie_id
     finally:
         db.close()
 
