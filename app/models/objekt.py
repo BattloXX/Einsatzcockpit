@@ -1098,6 +1098,7 @@ class ObjektPflegeauftrag(TenantScoped, Base):
     # Zwei FKs auf dieselbe Tabelle objekt -> foreign_keys explizit angeben.
     objekt: Mapped[Objekt] = relationship(foreign_keys=[objekt_id])
     arbeitskopie: Mapped[Objekt | None] = relationship(foreign_keys=[arbeitskopie_id])
+    kontakt: Mapped[Kontakt] = relationship(foreign_keys=[kontakt_id])
 
 
 class ObjektPflegeAbschnitt(TenantScoped, Base):

@@ -11,7 +11,7 @@ Rollen:
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 from fastapi import (
@@ -27,9 +27,11 @@ from fastapi import (
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session, selectinload
 
+from app.config import settings
 from app.core.audit import write_audit
 from app.core.permissions import is_objekt_verwalter, require_role
 from app.core.templating import templates
+from app.core.timezones import format_local_datetime
 from app.db import get_db
 from app.models.kontakt import Kontakt, ObjektKontaktFreigabe
 from app.models.objekt import (
@@ -40,6 +42,9 @@ from app.models.objekt import (
     OBJEKT_STATUS_FREIGEGEBEN,
     OBJEKT_STATUS_LABELS,
     OBJEKT_STATUS_UEBERARBEITUNG,
+    PFLEGEAUFTRAG_BEREICHE,
+    PFLEGEAUFTRAG_STATUS_LABELS,
+    PFLEGEAUFTRAG_STATUS_WIDERRUFEN,
     SYMBOL_STILE,
     GefahrenKatalog,
     MerkmalKatalog,
@@ -53,12 +58,27 @@ from app.models.objekt import (
     ObjektKategorie,
     ObjektKontakt,
     ObjektMerkmal,
+    ObjektPflegeAbschnitt,
+    ObjektPflegeauftrag,
+    ObjektPflegeEreignis,
     ObjektSymbol,
     ObjektWohnanlage,
     ObjektZusatzadresse,
 )
 from app.models.user import User
 from app.services import kontakt_service
+from app.services.mail_service import send_pflegeauftrag_einladung
+from app.services.objekt_pflege_service import (
+    _TERMINALE_STATUS,
+    AKTUALITAET_LABELS,
+    _ereignis,
+    ermittle_objekt_aktualitaet,
+    erstelle_pflegeauftrag,
+    hole_offenen_pflegeauftrag,
+    pflegeauftrag_status_wechsel,
+    rotiere_pflegeauftrag_token,
+    verlaengere_pflegeauftrag,
+)
 from app.services.objekt_service import (
     aktualisiere_felder,
     berechne_vollstaendigkeit,
@@ -81,6 +101,15 @@ _AUSWAHL_LABELS = {
     AUSWAHL_KONTAKTART: "Kontaktarten",
     AUSWAHL_DOKUMENTART: "Dokumentarten",
     AUSWAHL_PIKTOGRAMM: "Gefahren-Piktogramme",
+}
+_PFLEGEAUFTRAG_BEREICHE_LABELS = {
+    "stammdaten": "Stammdaten",
+    "adresse": "Adresse und Zufahrt",
+    "zufahrt": "Zufahrt",
+    "bma": "BMA und Schlüssel",
+    "gefahren": "Gefahren",
+    "kontakte": "Kontakte",
+    "dokumente": "Dokumente",
 }
 
 router = APIRouter(prefix="/objekte", tags=["objekt"])
@@ -207,6 +236,7 @@ def objekt_liste(
     kategorie: str = "",
     revision: str = "",
     merkmal: str = "",
+    datenqualitaet: str = "",
 ):
     from sqlalchemy import ColumnElement, or_
 
@@ -221,7 +251,7 @@ def objekt_liste(
             selectinload(Objekt.bma),
             selectinload(Objekt.kategorie),
             selectinload(Objekt.merkmale),
-            selectinload(Objekt.kontakte),
+            selectinload(Objekt.kontakte).selectinload(ObjektKontakt.zentraler_kontakt),
             selectinload(Objekt.gefahren),
         )
     )
@@ -253,15 +283,34 @@ def objekt_liste(
 
     objekte = query.order_by(Objekt.nummer).all()
 
+    offene_auftraege_by_objekt = {
+        auftrag.objekt_id: auftrag
+        for auftrag in (
+            db.query(ObjektPflegeauftrag)
+            .filter(
+                ObjektPflegeauftrag.objekt_id.in_([objekt.id for objekt in objekte]),
+                ObjektPflegeauftrag.status.notin_(_TERMINALE_STATUS),
+            )
+            .all()
+        )
+    } if objekte else {}
+
     rows = [
         {
             "objekt": o,
             "vollstaendigkeit": berechne_vollstaendigkeit(
                 o, kontakt_count=len(o.kontakte), gefahren_count=len(o.gefahren)
             ),
+            "aktualitaet": ermittle_objekt_aktualitaet(
+                o,
+                offener_auftrag=offene_auftraege_by_objekt.get(o.id),
+                hat_email_kontakt=any(k.zentraler_kontakt and k.zentraler_kontakt.email for k in o.kontakte),
+            ),
         }
         for o in objekte
     ]
+    if datenqualitaet:
+        rows = [row for row in rows if row["aktualitaet"] == datenqualitaet]
 
     merkmal_katalog = (
         db.query(MerkmalKatalog)
@@ -284,6 +333,8 @@ def objekt_liste(
             "filter_kategorie": kategorie_id,
             "filter_revision": revision,
             "filter_merkmal": merkmal_id,
+            "filter_datenqualitaet": datenqualitaet,
+            "aktualitaet_labels": AKTUALITAET_LABELS,
             "ist_verwalter": verwalter,
             "heute": date.today(),
         },
@@ -589,6 +640,8 @@ def _detail_context(request: Request, db: Session, user: User, objekt: Objekt) -
     # ist dann die Kopie) muss ueber entwurf_von_id auf die Basis-id gezaehlt werden,
     # sonst zeigt der Dokumente-Tab faelschlich 0 Dokumente waehrend der Ueberarbeitung.
     produktiv_objekt_id = objekt.entwurf_von_id or objekt.id
+    produktiv_objekt = objekt if objekt.entwurf_von_id is None else db.get(Objekt, produktiv_objekt_id)
+    offener_pflegeauftrag = hole_offenen_pflegeauftrag(db, produktiv_objekt) if produktiv_objekt else None
     dokument_count = (
         db.query(_func.count(ObjektDokumentSeite.id))
         .filter(ObjektDokumentSeite.objekt_id == produktiv_objekt_id)
@@ -622,6 +675,16 @@ def _detail_context(request: Request, db: Session, user: User, objekt: Objekt) -
         ),
         "fehlende_kartensymbole": fehlende_kartensymbole(objekt),
         "ist_verwalter": is_objekt_verwalter(user),
+        "aktualitaet": ermittle_objekt_aktualitaet(
+            produktiv_objekt or objekt,
+            offener_auftrag=offener_pflegeauftrag,
+            hat_email_kontakt=bool(
+                produktiv_objekt and any(
+                    kontakt.zentraler_kontakt and kontakt.zentraler_kontakt.email
+                    for kontakt in produktiv_objekt.kontakte
+                )
+            ),
+        ),
     }
 
 
@@ -847,6 +910,210 @@ def objekt_changelog(
             "benutzer": benutzer,
         },
     )
+
+
+def _datenpflege_context(request: Request, db: Session, user: User, objekt: Objekt) -> dict:
+    offener_auftrag = hole_offenen_pflegeauftrag(db, objekt)
+    abschnitte = []
+    ereignisse = []
+    benutzer: dict[int, User] = {}
+    ereignis_kontakte: dict[int, Kontakt] = {}
+    if offener_auftrag is not None:
+        abschnitte = (
+            db.query(ObjektPflegeAbschnitt)
+            .filter(ObjektPflegeAbschnitt.pflegeauftrag_id == offener_auftrag.id)
+            .order_by(ObjektPflegeAbschnitt.id)
+            .all()
+        )
+        ereignisse = (
+            db.query(ObjektPflegeEreignis)
+            .filter(ObjektPflegeEreignis.pflegeauftrag_id == offener_auftrag.id)
+            .order_by(ObjektPflegeEreignis.erstellt_am.desc())
+            .limit(20)
+            .all()
+        )
+        user_ids = {ereignis.user_id for ereignis in ereignisse if ereignis.user_id}
+        if user_ids:
+            benutzer = {eintrag.id: eintrag for eintrag in db.query(User).filter(User.id.in_(user_ids)).all()}
+        kontakt_ids = {ereignis.kontakt_id for ereignis in ereignisse if ereignis.kontakt_id}
+        if kontakt_ids:
+            ereignis_kontakte = {
+                eintrag.id: eintrag for eintrag in db.query(Kontakt).filter(Kontakt.id.in_(kontakt_ids)).all()
+            }
+    zuordenbare_kontakte = (
+        db.query(ObjektKontakt)
+        .join(Kontakt, ObjektKontakt.kontakt_id == Kontakt.id)
+        .filter(ObjektKontakt.objekt_id == objekt.id, Kontakt.email.isnot(None), Kontakt.email != "")
+        .order_by(ObjektKontakt.sort, Kontakt.anzeigename)
+        .all()
+    )
+    letzte_bestaetigung_kontakt = (
+        db.query(Kontakt).filter(Kontakt.id == objekt.letzte_bestaetigung_kontakt_id).first()
+        if objekt.letzte_bestaetigung_kontakt_id else None
+    )
+    resttage = None
+    if offener_auftrag is not None:
+        gueltig_bis = offener_auftrag.gueltig_bis
+        if gueltig_bis.tzinfo is None:
+            gueltig_bis = gueltig_bis.replace(tzinfo=UTC)
+        resttage = (gueltig_bis - datetime.now(UTC)).days
+    return {
+        "request": request,
+        "user": user,
+        "objekt": objekt,
+        "produktiv_objekt_id": objekt.id,
+        "offener_auftrag": offener_auftrag,
+        "abschnitte": abschnitte,
+        "ereignisse": ereignisse,
+        "benutzer": benutzer,
+        "ereignis_kontakte": ereignis_kontakte,
+        "zuordenbare_kontakte": zuordenbare_kontakte,
+        "bereiche_optionen": PFLEGEAUFTRAG_BEREICHE,
+        "bereiche_labels": _PFLEGEAUFTRAG_BEREICHE_LABELS,
+        "pflegeauftrag_status_labels": PFLEGEAUFTRAG_STATUS_LABELS,
+        "letzte_bestaetigung_kontakt": letzte_bestaetigung_kontakt,
+        "resttage": resttage,
+        "aktualitaet": ermittle_objekt_aktualitaet(
+            objekt,
+            offener_auftrag=offener_auftrag,
+            hat_email_kontakt=bool(zuordenbare_kontakte),
+        ),
+        "aktualitaet_labels": AKTUALITAET_LABELS,
+        "ist_verwalter": is_objekt_verwalter(user),
+    }
+
+
+def _datenpflege_response(request: Request, db: Session, user: User, objekt: Objekt):
+    return templates.TemplateResponse(
+        request, "objekt/_datenpflege.html", _datenpflege_context(request, db, user, objekt)
+    )
+
+
+@router.get("/{objekt_id}/datenpflege", response_class=HTMLResponse)
+def datenpflege_partial(
+    objekt_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*_LESE_ROLLEN)),
+    _guard: None = Depends(require_objekt_enabled),
+):
+    return _datenpflege_response(request, db, user, _objekt_or_404(db, objekt_id, user))
+
+
+@router.post("/{objekt_id}/pflegeauftrag/einladen", response_class=HTMLResponse)
+async def pflegeauftrag_einladen(
+    objekt_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("objekt_verwalter")),
+    _guard: None = Depends(require_objekt_enabled),
+    kontakt_id: int = Form(...),
+    gueltig_tage: int = Form(60),
+    bereiche: list[str] = Form(...),
+    auftrag_text: str = Form(""),
+):
+    objekt = _objekt_or_404(db, objekt_id, user)
+    kontakt = db.query(Kontakt).filter(Kontakt.id == kontakt_id, Kontakt.org_id == objekt.org_id).first()
+    if kontakt is None:
+        raise HTTPException(status_code=404, detail="Kontakt nicht gefunden")
+    if not kontakt.email:
+        raise HTTPException(status_code=400, detail="Der Kontakt hat keine E-Mail-Adresse")
+    try:
+        auftrag, raw_token = erstelle_pflegeauftrag(
+            db, objekt, kontakt, ersteller_id=user.id, bereiche=bereiche,
+            auftrag_text=auftrag_text or None, gueltig_tage=gueltig_tage,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    link = f"{settings.effective_public_base_url.rstrip('/')}/objektpflege/{raw_token}"
+    await send_pflegeauftrag_einladung(
+        to=kontakt.email,
+        kontakt_name=kontakt.anzeigename,
+        objekt_name=objekt.name,
+        link=link,
+        gueltig_bis_text=format_local_datetime(auftrag.gueltig_bis, user.org),
+        auftrag_text=auftrag_text or None,
+        db=db,
+        org_id=user.org_id,
+    )
+    auftrag.gesendet_am = datetime.now(UTC)
+    _ereignis(db, auftrag, "mail_gesendet", user_id=user.id)
+    write_audit(
+        db, "objekt.pflegeauftrag_erstellt", org_id=user.org_id, user_id=user.id,
+        entity_type="objekt", entity_id=objekt.id,
+        payload={"pflegeauftrag_id": auftrag.id, "kontakt_id": kontakt.id},
+    )
+    db.commit()
+    return _datenpflege_response(request, db, user, objekt)
+
+
+def _pflegeauftrag_or_404(db: Session, objekt: Objekt, auftrag_id: int) -> ObjektPflegeauftrag:
+    auftrag = db.query(ObjektPflegeauftrag).filter(ObjektPflegeauftrag.id == auftrag_id).first()
+    if auftrag is None or auftrag.objekt_id != objekt.id:
+        raise HTTPException(status_code=404, detail="Pflegeauftrag nicht gefunden")
+    return auftrag
+
+
+@router.post("/{objekt_id}/pflegeauftrag/{auftrag_id}/erneut-senden", response_class=HTMLResponse)
+async def pflegeauftrag_erneut_senden(
+    objekt_id: int, auftrag_id: int, request: Request, db: Session = Depends(get_db),
+    user: User = Depends(require_role("objekt_verwalter")), _guard: None = Depends(require_objekt_enabled),
+):
+    objekt = _objekt_or_404(db, objekt_id, user)
+    auftrag = _pflegeauftrag_or_404(db, objekt, auftrag_id)
+    if not auftrag.kontakt.email:
+        raise HTTPException(status_code=400, detail="Der Kontakt hat keine E-Mail-Adresse")
+    raw_token = rotiere_pflegeauftrag_token(db, auftrag)
+    link = f"{settings.effective_public_base_url.rstrip('/')}/objektpflege/{raw_token}"
+    await send_pflegeauftrag_einladung(
+        to=auftrag.kontakt.email, kontakt_name=auftrag.kontakt.anzeigename, objekt_name=objekt.name,
+        link=link, gueltig_bis_text=format_local_datetime(auftrag.gueltig_bis, user.org),
+        auftrag_text=auftrag.auftrag_text, db=db, org_id=user.org_id,
+    )
+    auftrag.gesendet_am = datetime.now(UTC)
+    _ereignis(db, auftrag, "mail_gesendet", user_id=user.id)
+    write_audit(
+        db, "objekt.pflegeauftrag_link_erneut_gesendet", org_id=user.org_id, user_id=user.id,
+        entity_type="objekt", entity_id=objekt.id, payload={"pflegeauftrag_id": auftrag.id},
+    )
+    db.commit()
+    return _datenpflege_response(request, db, user, objekt)
+
+
+@router.post("/{objekt_id}/pflegeauftrag/{auftrag_id}/verlaengern", response_class=HTMLResponse)
+def pflegeauftrag_verlaengern(
+    objekt_id: int, auftrag_id: int, request: Request, db: Session = Depends(get_db),
+    user: User = Depends(require_role("objekt_verwalter")), _guard: None = Depends(require_objekt_enabled),
+    zusatz_tage: int = Form(30),
+):
+    objekt = _objekt_or_404(db, objekt_id, user)
+    auftrag = _pflegeauftrag_or_404(db, objekt, auftrag_id)
+    verlaengere_pflegeauftrag(db, auftrag, zusatz_tage)
+    write_audit(
+        db, "objekt.pflegeauftrag_verlaengert", org_id=user.org_id, user_id=user.id,
+        entity_type="objekt", entity_id=objekt.id, payload={"pflegeauftrag_id": auftrag.id, "tage": zusatz_tage},
+    )
+    db.commit()
+    return _datenpflege_response(request, db, user, objekt)
+
+
+@router.post("/{objekt_id}/pflegeauftrag/{auftrag_id}/widerrufen", response_class=HTMLResponse)
+def pflegeauftrag_widerrufen(
+    objekt_id: int, auftrag_id: int, request: Request, db: Session = Depends(get_db),
+    user: User = Depends(require_role("objekt_verwalter")), _guard: None = Depends(require_objekt_enabled),
+):
+    objekt = _objekt_or_404(db, objekt_id, user)
+    auftrag = _pflegeauftrag_or_404(db, objekt, auftrag_id)
+    try:
+        pflegeauftrag_status_wechsel(db, auftrag, PFLEGEAUFTRAG_STATUS_WIDERRUFEN, user_id=user.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    write_audit(
+        db, "objekt.pflegeauftrag_widerrufen", org_id=user.org_id, user_id=user.id,
+        entity_type="objekt", entity_id=objekt.id, payload={"pflegeauftrag_id": auftrag.id},
+    )
+    db.commit()
+    return _datenpflege_response(request, db, user, objekt)
 
 
 @router.get("/{objekt_id}", response_class=HTMLResponse)

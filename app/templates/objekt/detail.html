@@ -3,7 +3,7 @@
 {% block content %}
 <div class="page-content"
      x-data="{ tab: (new URLSearchParams(window.location.search).get('tab')) || 'uebersicht' }"
-     x-init="$nextTick(() => { if (tab === 'dokumente') $dispatch('objekt-tab-dokumente'); if (tab === 'karte') $dispatch('objekt-tab-karte'); })">
+     x-init="$nextTick(() => { if (tab === 'dokumente') $dispatch('objekt-tab-dokumente'); if (tab === 'karte') $dispatch('objekt-tab-karte'); if (tab === 'datenpflege') $dispatch('objekt-tab-datenpflege'); })">
   <div class="page-header">
     <div>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
@@ -106,6 +106,9 @@
     <button type="button" class="objekt-tabs__btn" :class="{ 'is-active': tab === 'dokumente' }"
             @click="tab = 'dokumente'; $dispatch('objekt-tab-dokumente')">📄 Dokumente{% if dokument_count %}
       <span class="objekt-tabs__badge">{{ dokument_count }}</span>{% endif %}</button>
+    <button type="button" class="objekt-tabs__btn" :class="{ 'is-active': tab === 'datenpflege' }"
+            @click="tab = 'datenpflege'; $dispatch('objekt-tab-datenpflege')">🔄 Datenpflege{% if aktualitaet != 'aktuell' %}
+      <span class="objekt-tabs__badge {% if aktualitaet == 'ueberfaellig' %}badge-pill--red{% else %}badge-pill--amber{% endif %}">!</span>{% endif %}</button>
   </nav>
 
   <!-- Tab: Übersicht (bisheriger Abschnitts-Stack ohne Lagekarte/Dokumente) -->
@@ -195,6 +198,14 @@
     <section id="abschnitt-dokumente" hx-get="/objekte/{{ produktiv_objekt_id }}/dokumente"
              hx-trigger="objekt-tab-dokumente from:body once" hx-swap="innerHTML">
       <div class="card" style="padding:16px;"><span class="text-muted">Lade Dokumente …</span></div>
+    </section>
+  </div>
+
+  <!-- Tab: Datenpflege (lazy bei erster Aktivierung geladen) -->
+  <div x-show="tab === 'datenpflege'" x-cloak>
+    <section id="abschnitt-datenpflege" hx-get="/objekte/{{ produktiv_objekt_id }}/datenpflege"
+             hx-trigger="objekt-tab-datenpflege from:body once" hx-swap="innerHTML">
+      <div class="card" style="padding:16px;"><span class="text-muted">Lade Datenpflege …</span></div>
     </section>
   </div>
 </div>

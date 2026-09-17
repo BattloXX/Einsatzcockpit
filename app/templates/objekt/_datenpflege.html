@@ -1,0 +1,79 @@
+<div class="card" style="padding:16px;">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+    <div>
+      <h3 style="margin:0 0 6px;">🔄 Datenpflege</h3>
+      {% if aktualitaet == 'ueberfaellig' %}<span class="badge-pill badge-pill--red">{{ aktualitaet_labels[aktualitaet] }}</span>
+      {% elif aktualitaet in ('bald_faellig', 'freigabe_erforderlich', 'pruefung_laeuft') %}<span class="badge-pill badge-pill--amber">{{ aktualitaet_labels[aktualitaet] }}</span>
+      {% elif aktualitaet == 'aktuell' %}<span class="badge-pill badge-pill--green">{{ aktualitaet_labels[aktualitaet] }}</span>
+      {% else %}<span class="badge-pill badge-pill--gray">{{ aktualitaet_labels[aktualitaet] }}</span>{% endif %}
+    </div>
+    <div class="text-muted" style="font-size:.9rem;">
+      {% if objekt.letzte_bestaetigung_am %}Zuletzt bestätigt: {{ objekt.letzte_bestaetigung_am|local_datetime }}{% if letzte_bestaetigung_kontakt %} durch {{ letzte_bestaetigung_kontakt.anzeigename }}{% endif %}<br>{% endif %}
+      {% if objekt.revision_datum %}Nächste Prüfung: {{ objekt.revision_datum.strftime('%d.%m.%Y') }}{% endif %}
+    </div>
+  </div>
+
+  {% if offener_auftrag %}
+  <div class="card" style="padding:12px;margin-top:14px;">
+    <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start;">
+      <div>
+        <strong>Aktiver Pflegeauftrag</strong>
+        <span class="badge-pill badge-pill--amber">{{ pflegeauftrag_status_labels[offener_auftrag.status] }}</span>
+        <div class="text-muted" style="margin-top:5px;">{{ offener_auftrag.kontakt.anzeigename }} · {{ offener_auftrag.kontakt.email }}</div>
+      </div>
+      <div class="text-muted" style="font-size:.9rem;">
+        Gültig bis {{ offener_auftrag.gueltig_bis|local_datetime }}{% if resttage is not none %} (noch {{ resttage }} Tage){% endif %}<br>
+        {% if offener_auftrag.erster_zugriff_am %}Erster Zugriff: {{ offener_auftrag.erster_zugriff_am|local_datetime }}{% endif %}
+        {% if offener_auftrag.letzter_zugriff_am %}<br>Letzter Zugriff: {{ offener_auftrag.letzter_zugriff_am|local_datetime }}{% endif %}
+      </div>
+    </div>
+    <p class="text-muted" style="margin:10px 0 0;">{{ abschnitte|selectattr('status', 'ne', 'offen')|list|length }} von {{ abschnitte|length }} Bereichen bestätigt oder geändert.</p>
+    {% if ist_verwalter %}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center;">
+      <form hx-post="/objekte/{{ produktiv_objekt_id }}/pflegeauftrag/{{ offener_auftrag.id }}/erneut-senden" hx-target="#abschnitt-datenpflege" hx-swap="innerHTML">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <button class="btn btn--ghost btn--xs">Link erneut senden</button>
+      </form>
+      <form hx-post="/objekte/{{ produktiv_objekt_id }}/pflegeauftrag/{{ offener_auftrag.id }}/verlaengern" hx-target="#abschnitt-datenpflege" hx-swap="innerHTML" style="display:flex;gap:5px;align-items:center;">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <input class="form-control form-control--sm" type="number" name="zusatz_tage" value="30" min="1" style="width:70px;">
+        <button class="btn btn--ghost btn--xs">Verlängern</button>
+      </form>
+      <form hx-post="/objekte/{{ produktiv_objekt_id }}/pflegeauftrag/{{ offener_auftrag.id }}/widerrufen" hx-target="#abschnitt-datenpflege" hx-swap="innerHTML" onsubmit="return confirm('Pflegeauftrag wirklich widerrufen? Der Link wird sofort ungültig.')">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <button class="btn btn--danger btn--xs">Widerrufen</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+  {% elif ist_verwalter %}
+  <div x-data="{ einladen: false }" style="margin-top:14px;">
+    <button type="button" class="btn btn--primary" @click="einladen = !einladen">Datenprüfung anfordern</button>
+    <div x-show="einladen" x-cloak style="margin-top:12px;">
+      {% if zuordenbare_kontakte %}
+      <form hx-post="/objekte/{{ produktiv_objekt_id }}/pflegeauftrag/einladen" hx-target="#abschnitt-datenpflege" hx-swap="innerHTML">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <div class="form-group"><label class="form-label">Ansprechpartner</label><select class="form-input" name="kontakt_id">{% for zuordnung in zuordenbare_kontakte %}<option value="{{ zuordnung.kontakt_id }}">{{ zuordnung.zentraler_kontakt.anzeigename }} · {{ zuordnung.zentraler_kontakt.email }}</option>{% endfor %}</select></div>
+        <div class="form-group"><label class="form-label">Gültigkeit in Tagen</label><input class="form-input" type="number" name="gueltig_tage" value="60" min="1"></div>
+        <div class="form-group"><span class="form-label">Zu prüfende Bereiche</span><div style="display:flex;gap:10px;flex-wrap:wrap;">{% for bereich in bereiche_optionen %}<label class="checkbox-label"><input type="checkbox" name="bereiche" value="{{ bereich }}" checked> {{ bereiche_labels[bereich] }}</label>{% endfor %}</div></div>
+        <div class="form-group"><label class="form-label">Nachricht (optional)</label><textarea class="form-input" name="auftrag_text" rows="3"></textarea></div>
+        <button class="btn btn--primary">Einladung senden</button>
+      </form>
+      {% else %}
+      <p class="text-muted">Kein zugeordneter Kontakt mit E-Mail-Adresse — zuerst einen Kontakt mit E-Mail-Adresse im <a href="/objekte/{{ produktiv_objekt_id }}?tab=uebersicht#abschnitt-kontakte">Kontakte-Abschnitt</a> zuordnen.</p>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div style="margin-top:18px;">
+    <h4 style="margin:0 0 8px;">Verlauf</h4>
+    {% if ereignisse %}
+    <div class="objekt-protokoll">
+      {% for ereignis in ereignisse %}
+      <div class="objekt-protokoll__row"><div class="objekt-protokoll__meta"><span>{{ ereignis.erstellt_am|local_datetime }}</span><span class="text-muted">{% if ereignis.user_id %}{{ benutzer.get(ereignis.user_id).username if benutzer.get(ereignis.user_id) else 'System' }}{% elif ereignis.kontakt_id %}{{ ereignis_kontakte.get(ereignis.kontakt_id).anzeigename if ereignis_kontakte.get(ereignis.kontakt_id) else 'Externer Kontakt' }}{% else %}System{% endif %}</span><span class="badge-pill badge-pill--gray">{{ ereignis.typ }}</span></div>{% if ereignis.text %}<div class="objekt-protokoll__change">{{ ereignis.text }}</div>{% endif %}</div>
+      {% endfor %}
+    </div>
+    {% else %}<p class="text-muted" style="margin:0;">Noch keine Ereignisse vorhanden.</p>{% endif %}
+  </div>
+</div>
