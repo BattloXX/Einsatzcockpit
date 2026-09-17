@@ -317,6 +317,59 @@ kannst du diese Mail ignorieren. Dein Passwort bleibt unverändert.</p>
     await deliver(db, org_id, msg, smtp_cfg)
 
 
+async def send_pflegeauftrag_einladung(
+    *, to: str, kontakt_name: str, objekt_name: str, link: str, gueltig_bis_text: str,
+    auftrag_text: str | None = None, db=None, org_id: int | None = None,
+) -> None:
+    smtp_cfg = _org_smtp_cfg(db, org_id) or get_smtp_cfg(db)
+    subject = f"Bitte um Prüfung der Objektdaten – {objekt_name}"
+    hinweis_txt = f"\nNachricht der Feuerwehr:\n\"{auftrag_text}\"\n" if auftrag_text else ""
+    body_txt = (
+        f"Hallo {kontakt_name},\n\n"
+        f"bitte prüfen Sie die bei uns hinterlegten Daten zum Objekt \"{objekt_name}\". "
+        f"Ihre Rückmeldung hilft uns, die Einsatzinformationen aktuell zu halten.\n\n"
+        f"Öffnen Sie dazu den folgenden Link und bestätigen oder ergänzen Sie die Angaben. "
+        f"Dafür ist kein Login erforderlich.\n\n"
+        f"{link}\n\n"
+        f"Der Link ist bis {gueltig_bis_text} gültig. Änderungen werden erst nach "
+        f"einer internen Prüfung und Freigabe aktiv."
+        f"{hinweis_txt}\n"
+        f"Mit freundlichen Grüßen\n"
+        f"Einsatzcockpit"
+    )
+    safe_name = html.escape(kontakt_name)
+    safe_objekt = html.escape(objekt_name)
+    safe_link = html.escape(link, quote=True)
+    safe_hinweis = html.escape(auftrag_text) if auftrag_text else ""
+    hinweis_html = (
+        f'<p style="white-space:pre-wrap;border-left:3px solid #d42225;padding-left:12px;">'
+        f'<strong>Nachricht der Feuerwehr:</strong><br>{safe_hinweis}</p>'
+        if auftrag_text else ""
+    )
+    body_html = f"""<!doctype html>
+<html lang="de"><body style="font-family: Arial, sans-serif; max-width: 540px; margin: 0 auto;">
+<p>Hallo <strong>{safe_name}</strong>,</p>
+<p>bitte prüfen Sie die bei uns hinterlegten Daten zum Objekt <strong>{safe_objekt}</strong>.
+Ihre Rückmeldung hilft uns, die Einsatzinformationen aktuell zu halten.</p>
+<p>Öffnen Sie dazu den folgenden Link und bestätigen oder ergänzen Sie die Angaben.
+Dafür ist <strong>kein Login erforderlich</strong>.</p>
+<p style="text-align:center;">
+  <a href="{safe_link}" style="background:#d42225;color:#fff;padding:10px 18px;
+     border-radius:6px;text-decoration:none;display:inline-block;">
+     Objektdaten prüfen
+  </a>
+</p>
+<p>Der Link ist bis <strong>{gueltig_bis_text}</strong> gültig. Änderungen werden erst nach
+einer internen Prüfung und Freigabe aktiv.</p>
+{hinweis_html}
+<p style="font-size:0.85rem;color:#666;">URL: <code>{safe_link}</code></p>
+</body></html>
+"""
+    msg = _build_message(to=to, subject=subject, body_txt=body_txt,
+                         body_html=body_html, smtp_cfg=smtp_cfg)
+    await deliver(db, org_id, msg, smtp_cfg)
+
+
 CONTACT_RECIPIENT = "johannes@battlogg.org"
 
 

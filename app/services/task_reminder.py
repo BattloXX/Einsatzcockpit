@@ -19,6 +19,7 @@ logger = logging.getLogger("einsatzleiter.task_reminder")
 
 # Datum des letzten Objekt-Revisions-Checks (einmal taeglich, im 30s-Loop)
 _letzter_revision_check: date | None = None
+_letzter_pflegeauftrag_check: date | None = None
 
 
 def _check_due_messages_sync(db) -> list[dict]:
@@ -161,6 +162,116 @@ async def _check_objekt_revisionen() -> None:
             logger.exception("task_reminder: Objekt-Revisions-Broadcast fehlgeschlagen")
 
 
+async def _check_pflegeauftrag_erinnerungen() -> None:
+    """Einmal taeglich: offene Pflegeauftraege per Mail erinnern."""
+    global _letzter_pflegeauftrag_check
+    heute = datetime.now(UTC).date()
+    if _letzter_pflegeauftrag_check == heute:
+        return
+    _letzter_pflegeauftrag_check = heute
+
+    from app.models.objekt import (
+        PFLEGEAUFTRAG_STATUS_EINGELADEN,
+        PFLEGEAUFTRAG_STATUS_IN_BEARBEITUNG,
+        PFLEGEAUFTRAG_STATUS_NACHARBEIT,
+        ObjektPflegeauftrag,
+    )
+    from app.services.objekt_pflege_service import (
+        _TERMINALE_STATUS,
+        _ereignis,
+        rotiere_pflegeauftrag_token,
+    )
+
+    def _pruefe() -> list[dict]:
+        db = SessionLocal()
+        set_tenant_context(db, None)
+        try:
+            now = datetime.now(UTC)
+            erinnerungen: list[dict] = []
+            auftraege = (
+                db.query(ObjektPflegeauftrag)
+                .execution_options(include_all_tenants=True)
+                .filter(ObjektPflegeauftrag.status.notin_(_TERMINALE_STATUS))
+                .all()
+            )
+            for auftrag in auftraege:
+                if auftrag.status not in {
+                    PFLEGEAUFTRAG_STATUS_EINGELADEN,
+                    PFLEGEAUFTRAG_STATUS_IN_BEARBEITUNG,
+                    PFLEGEAUFTRAG_STATUS_NACHARBEIT,
+                }:
+                    continue
+                gueltig_bis = auftrag.gueltig_bis
+                if gueltig_bis.tzinfo is None:
+                    gueltig_bis = gueltig_bis.replace(tzinfo=UTC)
+                erstellt_am = auftrag.erstellt_am
+                if erstellt_am.tzinfo is None:
+                    erstellt_am = erstellt_am.replace(tzinfo=UTC)
+                erinnerung_text = None
+                if auftrag.erinnerung_1_am is None and (now - erstellt_am).days >= 30:
+                    auftrag.erinnerung_1_am = now
+                    erinnerung_text = "Erinnerung 1 (Tag 30)"
+                elif auftrag.erinnerung_2_am is None and (gueltig_bis - now).days <= 7:
+                    auftrag.erinnerung_2_am = now
+                    erinnerung_text = "Erinnerung 2 (7 Tage vor Ablauf)"
+                if erinnerung_text is None:
+                    continue
+                _ereignis(db, auftrag, "erinnerung", text=erinnerung_text)
+                raw_token = rotiere_pflegeauftrag_token(db, auftrag)
+                kontakt = auftrag.kontakt
+                objekt = auftrag.objekt
+                erinnerungen.append({
+                    "auftrag_id": auftrag.id,
+                    "org_id": auftrag.org_id,
+                    "to": kontakt.email,
+                    "kontakt_name": kontakt.anzeigename,
+                    "objekt_name": objekt.name,
+                    "raw_token": raw_token,
+                    "gueltig_bis": auftrag.gueltig_bis,
+                    "auftrag_text": auftrag.auftrag_text,
+                })
+            if erinnerungen:
+                db.commit()
+            return erinnerungen
+        finally:
+            db.close()
+
+    erinnerungen = await asyncio.to_thread(_pruefe)
+    for item in erinnerungen:
+        if not item["to"]:
+            continue
+        try:
+            from app.config import settings
+            from app.core.timezones import format_local_datetime
+            from app.models.master import FireDept
+            from app.services.mail_service import send_pflegeauftrag_einladung
+
+            # Eigene Session bewusst offen ueber den deliver()-Aufruf hinweg (statt wie
+            # bei der reinen FireDept-Lookup vorher zu schliessen), da send_pflegeauftrag_
+            # einladung() db= braucht, um org-eigene SMTP/O365/Resend-Konfiguration statt
+            # nur des globalen Fallbacks zu beruecksichtigen (Muster: pflegeauftrag_einladen
+            # in ui_objekt.py, das ebenfalls db=db an send_pflegeauftrag_einladung gibt).
+            reminder_db = SessionLocal()
+            set_tenant_context(reminder_db, None)
+            try:
+                org = await asyncio.to_thread(reminder_db.get, FireDept, item["org_id"])
+                link = f"{settings.effective_public_base_url.rstrip('/')}/objektpflege/{item['raw_token']}"
+                await send_pflegeauftrag_einladung(
+                    to=item["to"],
+                    kontakt_name=item["kontakt_name"],
+                    objekt_name=item["objekt_name"],
+                    link=link,
+                    gueltig_bis_text=format_local_datetime(item["gueltig_bis"], org),
+                    auftrag_text=item["auftrag_text"],
+                    db=reminder_db,
+                    org_id=item["org_id"],
+                )
+            finally:
+                reminder_db.close()
+        except Exception:
+            logger.exception("task_reminder: Pflegeauftrag-Erinnerung fehlgeschlagen")
+
+
 def _check_due_in_new_session() -> list[dict]:
     """DB-Arbeit für den Threadpool (Audit B2): Session lebt komplett im Worker-Thread."""
     db = SessionLocal()
@@ -182,6 +293,7 @@ async def task_reminder_loop() -> None:
                 for item in due:
                     await _notify_due(item)
                 await _check_objekt_revisionen()
+                await _check_pflegeauftrag_erinnerungen()
         except asyncio.CancelledError:
             logger.info("task_reminder_loop beendet")
             break

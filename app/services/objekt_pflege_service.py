@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import secrets
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -40,11 +40,98 @@ from app.services.objekt_service import (
     verwirf_arbeitskopie,
 )
 
+_TERMINALE_STATUS = {
+    PFLEGEAUFTRAG_STATUS_FREIGEGEBEN,
+    PFLEGEAUFTRAG_STATUS_VERWORFEN,
+    PFLEGEAUFTRAG_STATUS_ABGELAUFEN,
+    PFLEGEAUFTRAG_STATUS_WIDERRUFEN,
+}
+
 
 def erzeuge_pflegeauftrag_token() -> tuple[str, str]:
     """Gibt (raw_token, token_hash) zurueck; raw_token nie persistieren."""
     raw = secrets.token_urlsafe(32)
     return raw, hash_api_key(raw)
+
+
+def hole_offenen_pflegeauftrag(db: Session, objekt: Objekt) -> ObjektPflegeauftrag | None:
+    """Der aktuell nicht-terminale Pflegeauftrag eines Objekts, falls vorhanden."""
+    return (
+        db.query(ObjektPflegeauftrag)
+        .filter(
+            ObjektPflegeauftrag.objekt_id == objekt.id,
+            ObjektPflegeauftrag.status.notin_(_TERMINALE_STATUS),
+        )
+        .first()
+    )
+
+
+def bereiche_liste(auftrag: ObjektPflegeauftrag) -> list[str]:
+    """bereiche_json als Liste, robust gegen leere/kaputte Werte."""
+    if not auftrag.bereiche_json:
+        return []
+    try:
+        werte = json.loads(auftrag.bereiche_json)
+    except (ValueError, TypeError):
+        return []
+    return [wert for wert in werte if isinstance(wert, str)]
+
+
+def rotiere_pflegeauftrag_token(db: Session, auftrag: ObjektPflegeauftrag) -> str:
+    """Erzeugt einen neuen Roh-Token fuer 'Link erneut senden' und ersetzt den Hash.
+    Der alte Link wird damit sofort ungueltig. Gibt den neuen Roh-Token zurueck
+    (nur fuer den sofortigen Mailversand verwenden, nie persistieren). Caller committet."""
+    raw, token_hash = erzeuge_pflegeauftrag_token()
+    auftrag.token_hash = token_hash
+    return raw
+
+
+def verlaengere_pflegeauftrag(db: Session, auftrag: ObjektPflegeauftrag, zusatz_tage: int) -> None:
+    """Verlaengert die Gueltigkeit um zusatz_tage (ab jetzt, nicht ab altem gueltig_bis,
+    damit 'Gueltigkeit verlaengern' auf einem bereits abgelaufenen Auftrag sinnvoll bleibt).
+    Caller committet."""
+    auftrag.gueltig_bis = datetime.now(UTC) + timedelta(days=zusatz_tage)
+    _ereignis(db, auftrag, "verlaengert", text=f"Um {zusatz_tage} Tage verlaengert")
+
+
+ERMITTELT_AKTUALITAET_KEIN_KONTAKT = "kein_kontakt"
+ERMITTELT_AKTUALITAET_FREIGABE_ERFORDERLICH = "freigabe_erforderlich"
+ERMITTELT_AKTUALITAET_PRUEFUNG_LAEUFT = "pruefung_laeuft"
+ERMITTELT_AKTUALITAET_UEBERFAELLIG = "ueberfaellig"
+ERMITTELT_AKTUALITAET_BALD_FAELLIG = "bald_faellig"
+ERMITTELT_AKTUALITAET_AKTUELL = "aktuell"
+
+AKTUALITAET_LABELS = {
+    ERMITTELT_AKTUALITAET_KEIN_KONTAKT: "Kein Ansprechpartner",
+    ERMITTELT_AKTUALITAET_FREIGABE_ERFORDERLICH: "Freigabe erforderlich",
+    ERMITTELT_AKTUALITAET_PRUEFUNG_LAEUFT: "Prüfung läuft",
+    ERMITTELT_AKTUALITAET_UEBERFAELLIG: "Prüfung überfällig",
+    ERMITTELT_AKTUALITAET_BALD_FAELLIG: "Prüfung bald fällig",
+    ERMITTELT_AKTUALITAET_AKTUELL: "Aktuell",
+}
+
+
+def ermittle_objekt_aktualitaet(
+    objekt: Objekt, *, offener_auftrag: ObjektPflegeauftrag | None, hat_email_kontakt: bool,
+) -> str:
+    """Datenqualitaetsstatus fuer die Objektliste/Detailseite. Prioritaet (hoechste zuerst):
+    freigabe_erforderlich > pruefung_laeuft > ueberfaellig > bald_faellig > aktuell.
+    kein_kontakt wird nur zurueckgegeben, wenn KEIN offener Auftrag laeuft (sonst waere ein
+    laufender Auftrag trotzdem sichtbar/aussagekraeftiger als 'kein Kontakt')."""
+    if offener_auftrag is not None:
+        if offener_auftrag.status == PFLEGEAUFTRAG_STATUS_EINGEREICHT:
+            return ERMITTELT_AKTUALITAET_FREIGABE_ERFORDERLICH
+        return ERMITTELT_AKTUALITAET_PRUEFUNG_LAEUFT
+    if not hat_email_kontakt:
+        return ERMITTELT_AKTUALITAET_KEIN_KONTAKT
+    if objekt.revision_datum is None:
+        return ERMITTELT_AKTUALITAET_AKTUELL
+    heute = date.today()
+    if objekt.revision_datum <= heute:
+        return ERMITTELT_AKTUALITAET_UEBERFAELLIG
+    if (objekt.revision_datum - heute).days <= 30:
+        return ERMITTELT_AKTUALITAET_BALD_FAELLIG
+    return ERMITTELT_AKTUALITAET_AKTUELL
 
 
 def erstelle_pflegeauftrag(
