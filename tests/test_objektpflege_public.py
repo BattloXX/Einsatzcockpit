@@ -1,6 +1,8 @@
 """HTTP-Integrationstests fuer den loginfreien Objektpflege-Link."""
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
+from app.config import settings
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.kontakt import Kontakt
@@ -10,6 +12,7 @@ from app.models.objekt import (
     KontaktAenderungsvorschlag,
     Objekt,
     ObjektChange,
+    ObjektDokument,
     ObjektKontakt,
     ObjektPflegeauftrag,
 )
@@ -101,7 +104,7 @@ def test_external_edits_create_copy_and_contact_proposal_without_mutating_source
     auftrag_id, objekt_id, kontakt_id, token = _auftrag("Änderungsobjekt", ["stammdaten", "kontakte"])
     csrf = _csrf(client, token)
     response = client.post(f"/objektpflege/{token}/bereich/stammdaten/aendern", data={
-        "_csrf": csrf, "informationen": "Externer Vorschlag",
+        "_csrf": csrf, "name": "Neuer Objektname", "vulgoname": "Alias", "informationen": "Externer Vorschlag",
     }, follow_redirects=False)
     assert response.status_code == 303
     response = client.post(f"/objektpflege/{token}/bereich/kontakte/aendern", data={
@@ -117,6 +120,7 @@ def test_external_edits_create_copy_and_contact_proposal_without_mutating_source
         produktiv = db.get(Objekt, objekt_id)
         kopie = db.get(Objekt, auftrag.arbeitskopie_id)
         assert kopie.informationen == "Externer Vorschlag"
+        assert kopie.name == "Neuer Objektname" and kopie.vulgoname == "Alias"
         assert produktiv.informationen == "Produktiver Stand"
         change = db.query(ObjektChange).filter(ObjektChange.objekt_id == kopie.id).first()
         assert change.quelle == "extern_pflegeauftrag" and change.pflegeauftrag_id == auftrag_id
@@ -125,3 +129,34 @@ def test_external_edits_create_copy_and_contact_proposal_without_mutating_source
         assert db.get(Kontakt, kontakt_id).funktion == "Brandschutz"
     finally:
         db.close()
+
+
+def test_guest_can_open_only_current_document_in_scoped_viewer(client, tmp_path, monkeypatch):
+    _, objekt_id, _, token = _auftrag("Dokumentansicht", ["dokumente"])
+    monkeypatch.setattr(settings, "OBJEKT_MEDIA_DIR", str(tmp_path))
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        objekt = db.get(Objekt, objekt_id)
+        dokument = ObjektDokument(
+            org_id=objekt.org_id, objekt_id=objekt.id, dateiname_original="einsatzplan.pdf",
+            pfad="test/einsatzplan.pdf", mime="application/pdf", groesse_bytes=12, seitenzahl=1,
+        )
+        db.add(dokument)
+        db.commit()
+        dokument_id = dokument.id
+    finally:
+        db.close()
+    datei = Path(settings.OBJEKT_MEDIA_DIR) / "test" / "einsatzplan.pdf"
+    datei.parent.mkdir(parents=True)
+    datei.write_bytes(b"%PDF-test\n")
+
+    viewer = client.get(f"/objektpflege/{token}/dokumente/{dokument_id}/anzeigen")
+    assert viewer.status_code == 200
+    assert "einsatzplan.pdf" in viewer.text
+    assert f"/objektpflege/{token}/dokumente/{dokument_id}/datei" in viewer.text
+    response = client.get(f"/objektpflege/{token}/dokumente/{dokument_id}/datei")
+    assert response.status_code == 200
+    assert response.content == b"%PDF-test\n"
+    assert "inline" in response.headers["content-disposition"]
+    assert client.get(f"/objektpflege/{token}/dokumente/{dokument_id + 999999}/anzeigen").status_code == 404

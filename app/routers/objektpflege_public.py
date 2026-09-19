@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 from starlette.templating import Jinja2Templates
 
@@ -27,6 +27,7 @@ from app.models.objekt import (
     ObjektPflegeEreignis,
 )
 from app.services.objekt_dokument_service import (
+    absolute_pfad,
     naechste_versionsnummer,
     store_dokument_upload,
     verarbeite_dokument,
@@ -209,6 +210,41 @@ def _dokument_oder_404(db: Session, auftrag: ObjektPflegeauftrag, dokument_id: i
     if dokument is None:
         raise HTTPException(404, "Nicht gefunden")
     return objekt, dokument
+
+
+@public_router.get("/objektpflege/{token}/dokumente/{dokument_id}/anzeigen", response_class=HTMLResponse)
+def dokument_anzeigen(token: str, dokument_id: int, request: Request, db: Session = Depends(get_db)):
+    """Open one in-scope document in the guest portal without exposing a media URL."""
+    auftrag = _aktive_aktion(db, token)
+    if "dokumente" not in bereiche_liste(auftrag):
+        raise HTTPException(404, "Nicht gefunden")
+    _, dokument = _dokument_oder_404(db, auftrag, dokument_id)
+    if not dokument.ist_aktuelle_version:
+        raise HTTPException(404, "Nicht gefunden")
+    return public_templates.TemplateResponse(request, "objektpflege/dokument_viewer.html", {
+        "auftrag": auftrag, "dokument": dokument, "token": token, "org_name": _org_name(db, auftrag),
+    }, headers=_PUBLIC_HEADERS)
+
+
+@public_router.get("/objektpflege/{token}/dokumente/{dokument_id}/datei")
+def dokument_datei(token: str, dokument_id: int, db: Session = Depends(get_db)):
+    """Serve only the requested document, inline and only while the token is valid."""
+    auftrag = _aktive_aktion(db, token)
+    if "dokumente" not in bereiche_liste(auftrag):
+        raise HTTPException(404, "Nicht gefunden")
+    _, dokument = _dokument_oder_404(db, auftrag, dokument_id)
+    if not dokument.ist_aktuelle_version:
+        raise HTTPException(404, "Nicht gefunden")
+    pfad = absolute_pfad(dokument.pfad)
+    if not pfad.exists():
+        raise HTTPException(404, "Datei nicht gefunden")
+    return FileResponse(
+        pfad,
+        media_type=dokument.mime or "application/pdf",
+        filename=dokument.dateiname_original,
+        content_disposition_type="inline",
+        headers=_PUBLIC_HEADERS,
+    )
 
 
 async def _speichere_dokument(datei: UploadFile, db: Session, auftrag: ObjektPflegeauftrag,

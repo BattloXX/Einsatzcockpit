@@ -53,7 +53,7 @@ _TERMINALE_STATUS = {
 }
 
 STAMMDATEN_BEREICHE_FELDER: dict[str, tuple[str, ...]] = {
-    "stammdaten": ("informationen",),
+    "stammdaten": ("name", "vulgoname", "informationen"),
     "adresse": ("strasse", "hausnummer", "plz", "ort"),
     "zufahrt": ("anfahrtsweg",),
 }

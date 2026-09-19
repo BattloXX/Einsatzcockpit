@@ -50,6 +50,11 @@
   .secondary { background: var(--surface-3); border: 1px solid var(--border); }
   button:disabled { opacity: .45; cursor: not-allowed; }
   .muted { color: var(--text-muted); font-size: .86rem; }
+  .pflege-daten { display:grid; grid-template-columns:minmax(105px,.7fr) 2fr; gap:7px 12px; margin:12px 0 0; }
+  .pflege-daten dt { color:var(--text-muted); }
+  .pflege-daten dd { margin:0; color:var(--text); white-space:pre-wrap; }
+  .pflege-gefahr { padding:9px 0; border-bottom:1px solid var(--border); }
+  .pflege-gefahr:last-child { border-bottom:0; }
   .badge {
     font-size: .7rem; border: 1px solid var(--border); border-radius: var(--radius-full);
     padding: 3px 7px; color: var(--yellow);
