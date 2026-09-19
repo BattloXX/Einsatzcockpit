@@ -205,6 +205,24 @@
     openUrl(a.href);
   }, true);
 
+  // Die native Kontaktansicht verwendet die synchronisierte Room-Datenbank.
+  // Im Flugmodus darf der Menüpunkt deshalb nicht in die Remote-WebView
+  // navigieren: dort kann Chromium keine Seite laden, obwohl die Kontakte
+  // lokal vorhanden sind. Online bleibt die vollständige Webverwaltung die
+  // gewohnte Zielseite.
+  document.addEventListener('click', async function (ev) {
+    if (!_isNative() || navigator.onLine !== false) return;
+    const a = ev.target.closest && ev.target.closest('a[href]');
+    if (!a) return;
+    let path;
+    try { path = new URL(a.href, window.location.href).pathname; } catch (_) { return; }
+    if (path !== '/kontakte') return;
+    const plugin = window.Capacitor?.Plugins?.DeviceKeepalive;
+    if (!plugin || typeof plugin.openOfflineKontakte !== 'function') return;
+    ev.preventDefault();
+    try { await plugin.openOfflineKontakte(); } catch (_) { window.location.href = a.href; }
+  }, true);
+
   // Beim expliziten Abmelden darf weder der alte Geräte-Token noch der
   // Live-Foreground-Service beim nächsten App-Start automatisch weiterlaufen.
   document.addEventListener('click', async function (ev) {

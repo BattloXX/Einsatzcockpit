@@ -1,6 +1,7 @@
 """Objektverwaltung PR 9: Offline-Sync-Manifest (Android-Precaching)."""
 import pytest
 from types import SimpleNamespace
+from pathlib import Path
 from fastapi import HTTPException
 from sqlalchemy import BigInteger, create_engine
 from sqlalchemy.ext.compiler import compiles
@@ -104,6 +105,15 @@ def test_manifest_versionsindikator(sync_db):
     manifest = build_sync_manifest(db, org_a_id)
     assert manifest["version"] == 1
     assert manifest["objekte"][0]["aktualisiert_am"] is not None
+
+
+def test_android_sync_includes_objekt_overview():
+    source = (
+        Path(__file__).resolve().parent.parent / "app" / "static" / "js" / "objekt_offline_sync.js"
+    ).read_text(encoding="utf-8")
+
+    assert 'soll.add("/objekte/")' in source
+    assert "START_VERZOEGERUNG_MS" not in source
 
 
 def test_pr9_endpoint_registriert():

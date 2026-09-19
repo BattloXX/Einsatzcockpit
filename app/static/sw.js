@@ -2,7 +2,7 @@
 // Cache-Namen bei jedem Deploy mit spürbaren JS/CSS-Änderungen erhöhen (v1 -> v2 -> ...):
 // der activate-Handler löscht dann automatisch alle Caches mit altem Namen, statt dass
 // veraltete Board-Skripte unbegrenzt im Cache liegen bleiben ("F5 nötig nach Update").
-const CACHE = 'ec-v13';
+const CACHE = 'ec-v14';
 const BOARD_CACHE = 'ec-board-v2';
 // Objektverwaltung: Offline-Precache der Android-App (objekt_offline_sync.js
 // befuellt ihn; hier nur lesen/ergaenzen — App-Updates loeschen ihn nicht)
@@ -202,6 +202,32 @@ self.addEventListener('fetch', e => {
             });
           }
           return caches.match('/') || new Response('Offline', { status: 503 });
+        })
+    );
+    return;
+  }
+
+  // Die Objektübersicht wird auf Android gezielt vorab synchronisiert; beide
+  // Übersichten aktualisiert außerdem jeder normale Online-Aufruf. Ohne diese
+  // Regel fiel eine spätere Navigation im Funkloch durch, weil der generische
+  // Netzwerkpfad HTML-Antworten nicht speichert.
+  if (url.pathname === '/objekte/' || url.pathname === '/kontakte') {
+    e.respondWith(
+      fetch(e.request)
+        .then(async res => {
+          if (res.ok) {
+            const cache = await caches.open(OBJEKT_CACHE);
+            await cache.put(e.request, res.clone());
+          }
+          return res;
+        })
+        .catch(async () => {
+          const cached = await caches.match(e.request, { cacheName: OBJEKT_CACHE });
+          if (cached) return cached;
+          return new Response('Offline', {
+            status: 503,
+            headers: { 'Content-Type': 'text/plain', 'X-Offline': '1' },
+          });
         })
     );
     return;

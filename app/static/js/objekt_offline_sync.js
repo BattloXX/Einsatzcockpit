@@ -9,7 +9,7 @@
  * Im Desktop-/Mobil-Browser laeuft KEIN Voll-Precaching (Datenvolumen!) —
  * dort cacht der SW nur besuchte Seiten (network-first, Bestandsverhalten).
  *
- * Sync-Zeitpunkte: 90 s nach App-Start, danach alle 6 h; Delta ueber die
+ * Sync-Zeitpunkte: direkt nach App-Start, danach alle 6 h; Delta ueber die
  * URL-Menge (Seiten-Dateien sind unveraenderlich, UUID-Pfade). Entfernte
  * Seiten/Objekte werden aus dem Cache geraeumt.
  */
@@ -18,7 +18,6 @@
 
   var CACHE_NAME = "ec-objekt-v1";
   var SYNC_INTERVALL_MS = 6 * 60 * 60 * 1000; // 6 h
-  var START_VERZOEGERUNG_MS = 90 * 1000;
   var LS_KEY = "ec_objekt_sync_zuletzt";
 
   function inAndroidApp() {
@@ -42,6 +41,10 @@
     var manifest = await antwort.json();
 
     var soll = new Set();
+    // Die Übersicht ist der Einstieg aus der Android-Navigation. Sie muss
+    // genauso im Cache liegen wie die einzelnen Einsatzansichten, sonst
+    // scheitert bereits /objekte/ bevor ein Objekt geöffnet werden kann.
+    soll.add("/objekte/");
     (manifest.objekte || []).forEach(function (o) {
       soll.add(o.einsatz_url);
       (o.seiten || []).forEach(function (s) {
@@ -77,10 +80,14 @@
   }
 
   function planen() {
+    // Der erste erfolgreiche Login ist der einzige verlässliche Zeitpunkt,
+    // bevor das Gerät ins Funkloch fährt. Die frühere 90-s-Wartezeit ließ
+    // genau diesen Fall ohne Objektübersicht und Einsatzdaten zurück.
+    synchronisieren().catch(function () {});
     setTimeout(function lauf() {
       synchronisieren().catch(function () {});
       setTimeout(lauf, SYNC_INTERVALL_MS);
-    }, START_VERZOEGERUNG_MS);
+    }, SYNC_INTERVALL_MS);
   }
 
   if (inAndroidApp()) { planen(); }
