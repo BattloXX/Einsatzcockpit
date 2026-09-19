@@ -1,12 +1,17 @@
 {% extends "objektpflege/_layout.html" %}
 {% block content %}
 <a class="button secondary" href="/objektpflege/{{ token }}/pruefen">← Zur Prüfung</a>
-<h1 style="font-size:1.2rem;margin:18px 0 6px">{{ dokument.dateiname_original }}</h1>
+<h1>{{ dokument.dateiname_original }}</h1>
 <p class="muted">Dokumentansicht im geschützten Gastzugang</p>
 {% if dokument.mime == 'application/pdf' %}
-<iframe title="{{ dokument.dateiname_original }}" src="/objektpflege/{{ token }}/dokumente/{{ dokument.id }}/datei" style="width:100%;height:72vh;border:1px solid var(--border);border-radius:var(--radius-md);background:#fff"></iframe>
+<section class="card pflege-viewer">
+  <iframe class="pflege-viewer__frame" title="{{ dokument.dateiname_original }}" src="/objektpflege/{{ token }}/dokumente/{{ dokument.id }}/datei">
+    Ihr Browser unterstützt keine eingebettete PDF-Ansicht.
+  </iframe>
+  <p class="muted">Falls die Vorschau nicht erscheint, öffnen Sie das Dokument in einem neuen Tab.</p>
+</section>
 {% else %}
 <p class="card">Für diesen Dateityp steht keine Vorschau bereit. Sie können die Datei im Browser öffnen.</p>
 {% endif %}
-<p><a class="button" href="/objektpflege/{{ token }}/dokumente/{{ dokument.id }}/datei" target="_blank" rel="noopener">In neuem Tab öffnen</a></p>
+<p class="actions"><a class="button" href="/objektpflege/{{ token }}/dokumente/{{ dokument.id }}/datei" target="_blank" rel="noopener">In neuem Tab öffnen</a></p>
 {% endblock %}

@@ -237,6 +237,16 @@ def test_default_route_csp_ohne_konfiguration_bleibt_streng(monkeypatch):
     assert h["x-frame-options"] == "DENY"
 
 
+def test_objektpflege_dokument_darf_im_eigenen_viewer_gerahmt_werden(monkeypatch):
+    """Token-geschuetzte PDFs werden im Gastportal same-origin eingebettet."""
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "TRUSTED_FRAME_ANCESTORS", "")
+    h = _security_headers_for("/objektpflege/geheimer-token/dokumente/42/datei")
+    assert "frame-ancestors 'self'" in h["content-security-policy"]
+    assert h["x-frame-options"] == "SAMEORIGIN"
+
+
 def test_turnstile_csp_nur_bei_konfiguriertem_site_key(monkeypatch):
     from app.config import settings
 

@@ -3,80 +3,44 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Objektpflege - {{ org_name }}</title>
+<title>Objektpflege – {{ org_name }}</title>
 <script defer src="/static/js/alpine.min.js"></script>
 <style>
-  :root {
-    --bg:#0b1326; --surface:#131b2e; --surface-2:#171f33; --surface-3:#222a3d;
-    --text:#dae2fd; --text-muted:#7a87a8; --border:#2e3347;
-    --red:#d42225; --red-dark:#a5161a; --red-light:#e8403f;
-    --green:#18a957; --yellow:#f2b02e;
-    --radius-sm:.375rem; --radius-md:.5rem; --radius-lg:.75rem; --radius-full:9999px;
-    --shadow-card:0 1px 2px rgba(0,0,0,.4); --shadow-modal:0 10px 40px rgba(0,0,0,.6);
-  }
-  *, *::before, *::after { box-sizing: border-box; }
-  body {
-    margin: 0; padding-bottom: 90px;
-    background: var(--bg); color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  }
-  .topbar {
-    position: sticky; top: 0; z-index: 5;
-    display: flex; align-items: center; gap: 10px;
-    height: 56px; padding: 0 16px;
-    background: var(--surface-2); border-bottom: 1px solid var(--border);
-  }
-  .topbar strong { font-size: .95rem; }
-  .topbar small { color: var(--text-muted); margin-left: auto; }
-  main { max-width: 540px; margin: 0 auto; padding: 20px 16px; }
-  .card, details {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius-lg); box-shadow: var(--shadow-card);
-    padding: 16px; margin-bottom: 14px;
-  }
-  summary { cursor: pointer; font-weight: 700; }
-  label { display: block; font-size: .75rem; color: var(--text-muted); margin: 12px 0 5px; }
-  input, textarea {
-    width: 100%; padding: 10px; border-radius: var(--radius-md);
-    border: 1px solid var(--border); background: var(--surface-3); color: var(--text);
-    font: inherit;
-  }
-  textarea { min-height: 90px; }
-  button, .button {
-    display: inline-block; border: 0; border-radius: var(--radius-md); padding: 10px 13px;
-    background: var(--red); color: #fff; font: inherit; font-weight: 700;
-    text-decoration: none; cursor: pointer;
-  }
-  .secondary { background: var(--surface-3); border: 1px solid var(--border); }
-  button:disabled { opacity: .45; cursor: not-allowed; }
-  .muted { color: var(--text-muted); font-size: .86rem; }
-  .pflege-daten { display:grid; grid-template-columns:minmax(105px,.7fr) 2fr; gap:7px 12px; margin:12px 0 0; }
-  .pflege-daten dt { color:var(--text-muted); }
-  .pflege-daten dd { margin:0; color:var(--text); white-space:pre-wrap; }
-  .pflege-gefahr { padding:9px 0; border-bottom:1px solid var(--border); }
-  .pflege-gefahr:last-child { border-bottom:0; }
-  .badge {
-    font-size: .7rem; border: 1px solid var(--border); border-radius: var(--radius-full);
-    padding: 3px 7px; color: var(--yellow);
-  }
-  .progress, .bottom {
-    position: sticky; background: var(--surface-2); border: 1px solid var(--border);
-    border-radius: var(--radius-md); padding: 10px; z-index: 3;
-  }
-  .progress { top: 66px; margin-bottom: 14px; }
-  .bottom { bottom: 10px; margin-top: 18px; }
-  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
-  .upload-progress { height: 5px; background: var(--border); border-radius: 9px; margin-top: 8px; }
-  .upload-progress i { display: block; height: 100%; background: var(--green); width: 0; border-radius: 9px; }
-  @media (min-width: 480px) { main { padding-top: 24px; } }
+  /* Eigenstaendiger, token-geschuetzter Gastzugang. Die Gestaltung folgt dem
+     Fahrtenbuch, ohne dessen angemeldetes Basislayout nachzuladen. */
+  :root { --bg:#0b1326; --surface-low:#101a2f; --surface-mid:#162037; --surface-high:#202b43; --surface-highest:#2a3854; --text:#dae2fd; --text-muted:#9aa7c2; --border:#33425f; --red:#d42225; --red-light:#f15a58; --green:#20b86a; --yellow:#f3b341; --radius-md:.5rem; --radius-lg:.75rem; --shadow-card:0 8px 24px rgba(0,0,0,.2); --gutter:1rem; }
+  *, *::before, *::after { box-sizing:border-box; }
+  body { min-height:100vh; margin:0; padding-bottom:max(2rem, env(safe-area-inset-bottom)); background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+  .pflege-page { max-width:720px; margin:0 auto; padding:1.25rem 1rem 6rem; }
+  .pflege-header { margin-bottom:1.5rem; }.pflege-header__top { display:flex; align-items:flex-start; gap:1rem; }.pflege-header__brand { display:flex; align-items:center; gap:.875rem; min-width:0; }
+  .pflege-header__logo { width:auto; max-width:84px; max-height:52px; object-fit:contain; flex-shrink:0; }
+  .pflege-header__eyebrow { overflow:hidden; color:var(--red-light); font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.72rem; font-weight:700; letter-spacing:.07em; text-overflow:ellipsis; text-transform:uppercase; white-space:nowrap; }
+  .pflege-header__title { margin:2px 0 0; font-size:1.5rem; font-weight:700; line-height:1.2; }.pflege-header__sub { margin:.625rem 0 0; color:var(--text-muted); font-size:.88rem; line-height:1.5; }
+  h1 { font-size:1.45rem; line-height:1.22; margin:1.25rem 0 .5rem; } h2 { font-size:1.05rem; line-height:1.3; margin:0; } h3 { font-size:.95rem; margin:0 0 .45rem; } p { line-height:1.5; }
+  .card, details { --pflege-accent:var(--red); margin:0 0 var(--gutter); padding:1.1rem 1rem; background:var(--surface-mid); border:1px solid var(--border); border-left:4px solid var(--pflege-accent); border-radius:var(--radius-lg); box-shadow:var(--shadow-card); }
+  .card:nth-of-type(3n+1), details:nth-of-type(3n+1) { --pflege-accent:var(--green); } summary { cursor:pointer; font-weight:700; } summary::marker { color:var(--red-light); }
+  label { display:block; margin:1rem 0 .35rem; color:var(--text-muted); font-size:.78rem; font-weight:600; }
+  input, textarea { width:100%; min-height:46px; padding:.75rem .8rem; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface-low); color:var(--text); font:inherit; }
+  input:focus, textarea:focus { border-color:var(--red-light); outline:2px solid rgba(241,90,88,.22); outline-offset:1px; } textarea { min-height:100px; resize:vertical; }
+  button, .button { display:inline-flex; align-items:center; justify-content:center; min-height:44px; padding:.65rem .9rem; border:1px solid var(--red); border-radius:var(--radius-md); background:var(--red); color:#fff; font:inherit; font-weight:700; text-decoration:none; cursor:pointer; }
+  button:hover, .button:hover { background:#b81d22; }.secondary { border-color:var(--border); background:var(--surface-high); color:var(--text); }.secondary:hover { background:var(--surface-highest); } button:disabled { opacity:.45; cursor:not-allowed; }
+  .muted { color:var(--text-muted); font-size:.88rem; }.pflege-daten { display:grid; grid-template-columns:minmax(105px,.7fr) 2fr; gap:.55rem .8rem; margin:.9rem 0 0; }.pflege-daten dt { color:var(--text-muted); font-size:.88rem; }.pflege-daten dd { margin:0; white-space:pre-wrap; }
+  .pflege-gefahr { padding:.75rem 0; border-bottom:1px solid var(--border); }.pflege-gefahr:last-child { border-bottom:0; }.badge { display:inline-block; padding:.2rem .5rem; border:1px solid var(--border); border-radius:999px; color:var(--yellow); font-size:.7rem; font-weight:700; }
+  .progress, .bottom { position:sticky; z-index:3; background:var(--surface-low); border:1px solid var(--border); border-radius:var(--radius-lg); box-shadow:var(--shadow-card); padding:.85rem 1rem; }.progress { top:.75rem; margin-bottom:var(--gutter); }.bottom { bottom:.75rem; margin-top:1.25rem; }.actions { display:flex; flex-wrap:wrap; gap:.55rem; margin-top:1rem; }
+  .upload-progress { height:5px; margin-top:.6rem; overflow:hidden; background:var(--surface-highest); border-radius:999px; }.upload-progress i { display:block; width:0; height:100%; background:var(--green); border-radius:999px; }.pflege-viewer { --pflege-accent:var(--green); }.pflege-viewer__frame { display:block; width:100%; height:min(72vh,900px); border:1px solid var(--border); border-radius:var(--radius-md); background:#fff; }
+  @media (min-width:720px) { .pflege-page { padding-top:1.75rem; } }
 </style>
 </head>
 <body>
-<header class="topbar">
-  <span>🛡️</span>
-  <strong>{{ org_name }}</strong>
-  <small>Objektpflege</small>
-</header>
-<main>{% block content %}{% endblock %}</main>
+<main class="pflege-page">
+  <header class="pflege-header">
+    <div class="pflege-header__top"><div class="pflege-header__brand">
+      <img class="pflege-header__logo" src="{% if org and org.logo_path %}{{ org.logo_path }}{% else %}/static/img/logo_einsatzcockpit.png{% endif %}" alt="{{ org_name }}" onerror="this.onerror=null;this.src='/static/img/logo_einsatzcockpit.png'">
+      <div style="min-width:0"><div class="pflege-header__eyebrow">{{ org_name }}</div><div class="pflege-header__title">Objektpflege</div></div>
+    </div></div>
+    <p class="pflege-header__sub">Geschützter Gastzugang zur Prüfung und Aktualisierung Ihrer Einsatzdaten.</p>
+  </header>
+  {% block content %}{% endblock %}
+</main>
 </body>
 </html>

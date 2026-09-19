@@ -76,9 +76,12 @@ def _kontakt(db: Session, auftrag: ObjektPflegeauftrag) -> Kontakt:
     return kontakt
 
 
-def _org_name(db: Session, auftrag: ObjektPflegeauftrag) -> str:
-    org = (db.query(FireDept).execution_options(include_all_tenants=True)
-           .filter(FireDept.id == auftrag.org_id).first())
+def _org(db: Session, auftrag: ObjektPflegeauftrag) -> FireDept | None:
+    return (db.query(FireDept).execution_options(include_all_tenants=True)
+            .filter(FireDept.id == auftrag.org_id).first())
+
+
+def _org_name(org: FireDept | None) -> str:
     return org.name if org else "Einsatzcockpit"
 
 
@@ -89,8 +92,9 @@ def _status_response(request: Request, db: Session, auftrag: ObjektPflegeauftrag
         headline, text = "Diese Prüfung ist bereits abgeschlossen", "Es sind keine weiteren Eingaben möglich."
     else:
         headline, text = "Link abgelaufen", "Dieser Link ist nicht mehr gültig."
+    org = _org(db, auftrag)
     return public_templates.TemplateResponse(request, "objektpflege/status.html", {
-        "headline": headline, "text": text, "org_name": _org_name(db, auftrag),
+        "headline": headline, "text": text, "org": org, "org_name": _org_name(org),
     }, headers=_PUBLIC_HEADERS)
 
 
@@ -101,9 +105,10 @@ def _redirect(token: str) -> RedirectResponse:
 @public_router.get("/objektpflege/{token}", response_class=HTMLResponse)
 def start(token: str, request: Request, db: Session = Depends(get_db)):
     auftrag = _auftrag_oder_404(db, token)
+    org = _org(db, auftrag)
     if auftrag.status == PFLEGEAUFTRAG_STATUS_EINGEREICHT:
         return public_templates.TemplateResponse(request, "objektpflege/abgeschlossen.html", {
-            "org_name": _org_name(db, auftrag),
+            "org": org, "org_name": _org_name(org),
         }, headers=_PUBLIC_HEADERS)
     if not pflegeauftrag_token_gueltig(auftrag):
         return _status_response(request, db, auftrag)
@@ -112,13 +117,14 @@ def start(token: str, request: Request, db: Session = Depends(get_db)):
     objekt, kontakt = _objekt(db, auftrag), _kontakt(db, auftrag)
     return public_templates.TemplateResponse(request, "objektpflege/start.html", {
         "objekt": objekt, "kontakt": kontakt, "auftrag": auftrag, "token": token,
-        "org_name": _org_name(db, auftrag),
+        "org": org, "org_name": _org_name(org),
     }, headers=_PUBLIC_HEADERS)
 
 
 @public_router.get("/objektpflege/{token}/pruefen", response_class=HTMLResponse)
 def pruefen(token: str, request: Request, db: Session = Depends(get_db)):
     auftrag = _auftrag_oder_404(db, token)
+    org = _org(db, auftrag)
     if auftrag.status == PFLEGEAUFTRAG_STATUS_EINGEREICHT:
         return RedirectResponse(f"/objektpflege/{token}", status_code=303, headers=_PUBLIC_HEADERS)
     if not pflegeauftrag_token_gueltig(auftrag):
@@ -148,7 +154,8 @@ def pruefen(token: str, request: Request, db: Session = Depends(get_db)):
         "token": token, "bereiche": bereiche, "abschnitte": abschnitte_by_bereich,
         "dokumente": dokumente, "editierbar": BEREICHE_MIT_EDITFORMULAR,
         "bearbeitet_anzahl": bearbeitet_anzahl,
-        "vollstaendig": alle_pflichtbereiche_bearbeitet(db, auftrag), "org_name": _org_name(db, auftrag),
+        "vollstaendig": alle_pflichtbereiche_bearbeitet(db, auftrag),
+        "org": org, "org_name": _org_name(org),
     }, headers=_PUBLIC_HEADERS)
 
 
@@ -221,8 +228,10 @@ def dokument_anzeigen(token: str, dokument_id: int, request: Request, db: Sessio
     _, dokument = _dokument_oder_404(db, auftrag, dokument_id)
     if not dokument.ist_aktuelle_version:
         raise HTTPException(404, "Nicht gefunden")
+    org = _org(db, auftrag)
     return public_templates.TemplateResponse(request, "objektpflege/dokument_viewer.html", {
-        "auftrag": auftrag, "dokument": dokument, "token": token, "org_name": _org_name(db, auftrag),
+        "auftrag": auftrag, "dokument": dokument, "token": token,
+        "org": org, "org_name": _org_name(org),
     }, headers=_PUBLIC_HEADERS)
 
 
