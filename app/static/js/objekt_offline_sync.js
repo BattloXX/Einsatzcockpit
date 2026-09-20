@@ -54,10 +54,20 @@
     try {
       antwort = await fetch("/api/objekte/sync", { credentials: "same-origin" });
     } catch (e) {
+      cacheStatus(0, 0, "Objekt-Sync fehlgeschlagen: Netzwerk nicht erreichbar");
       return false; // offline — naechster Lauf versucht es erneut
     }
-    if (!antwort.ok) { return false; } // nicht eingeloggt / Modul aus
-    var manifest = await antwort.json();
+    if (!antwort.ok) {
+      cacheStatus(0, 0, "Objekt-Sync fehlgeschlagen: Server antwortet mit HTTP " + antwort.status);
+      return false; // nicht eingeloggt / Modul aus
+    }
+    var manifest;
+    try {
+      manifest = await antwort.json();
+    } catch (e) {
+      cacheStatus(0, 0, "Objekt-Sync fehlgeschlagen: Sync-Antwort ist ungültig");
+      return false;
+    }
     var objektListe = manifest.objekte || [];
     cacheStatus(0, objektListe.length, "Objektdaten werden für die Offline-Nutzung vorbereitet …");
     var kontaktPfade = await kontaktUrls();
@@ -90,6 +100,7 @@
 
     // Fehlende Dateien nachladen (sequentiell, um Netz/Server zu schonen)
     var urls = Array.from(soll);
+    var failedDownloads = 0;
     for (var j = 0; j < urls.length; j++) {
       var url = urls[j];
       var istDynamischeSeite = /^\/objekte\/\d+(\/einsatz)?$/.test(url)
@@ -99,7 +110,8 @@
       try {
         var res = await fetch(url, { credentials: "same-origin" });
         if (res.ok) { await cache.put(url, res); }
-      } catch (e) { /* einzelner Fehler stoppt den Sync nicht */ }
+        else { failedDownloads++; }
+      } catch (e) { failedDownloads++; /* einzelner Fehler stoppt den Sync nicht */ }
     }
 
     var cachedObjects = 0;
@@ -112,7 +124,8 @@
     cacheStatus(
       cachedObjects,
       objektListe.length,
-      "Objekte aktualisiert: " + cachedObjects + "/" + objektListe.length + " offline verfügbar",
+      "Objekte aktualisiert: " + cachedObjects + "/" + objektListe.length + " offline verfügbar"
+        + (failedDownloads ? " · " + failedDownloads + " Dateien konnten nicht geladen werden" : ""),
     );
 
     try { localStorage.setItem(LS_KEY, String(Date.now())); } catch (e) { /* egal */ }
