@@ -116,6 +116,8 @@ def test_android_sync_includes_objekt_overview():
 
     assert 'soll.add("/objekte/")' in source
     assert "o.detail_url" in source
+    assert 'fetch("/kontakte/offline-sync"' in source
+    assert "kontaktPfade.forEach" in source
     assert "^\\/objekte\\/\\d+(\\/einsatz)?$" in source
     assert "START_VERZOEGERUNG_MS" not in source
 

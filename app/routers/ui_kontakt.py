@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Resp
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.core.permissions import can_send_manual_sms, require_role
+from app.core.permissions import can_send_manual_sms, require_role, require_role_or_device
 from app.core.templating import templates
 from app.db import get_db
 from app.models.kontakt import KONTAKT_TYP_PERSON, Kontakt, KontaktTelefon
@@ -283,6 +283,29 @@ def liste_partial(
             "pro_seite": kontakt_service.PRO_SEITE,
         },
     )
+
+
+@router.get("/offline-sync")
+def offline_sync_manifest(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role_or_device(*_LESE_ROLLEN)),
+    _guard: None = Depends(require_kontakte_enabled),
+):
+    """Alle Kontaktseiten, die die Android-PWA fuer Offlinezugriff vorlaedt."""
+    org_id = _org_id(user)
+    kontakte = (
+        db.query(Kontakt)
+        .filter(Kontakt.org_id == org_id, Kontakt.archiviert.is_(False))
+        .order_by(Kontakt.anzeigename, Kontakt.id)
+        .all()
+    )
+    urls = ["/kontakte"]
+    for kontakt in kontakte:
+        urls.append(f"/kontakte/{kontakt.id}")
+        if kontakt.bild_pfad:
+            urls.append(f"/kontakte/{kontakt.id}/profilbild")
+    return {"version": 1, "urls": urls}
 
 
 @router.get("/duplikatcheck", response_class=HTMLResponse)

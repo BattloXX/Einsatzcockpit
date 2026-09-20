@@ -29,6 +29,18 @@
     }
   }
 
+  async function kontaktUrls() {
+    try {
+      var antwort = await fetch("/kontakte/offline-sync", { credentials: "same-origin" });
+      if (!antwort.ok) { return []; }
+      var manifest = await antwort.json();
+      return Array.isArray(manifest.urls) ? manifest.urls : [];
+    } catch (e) {
+      // Das Kontakte-Modul kann deaktiviert sein; der Objekt-Sync bleibt davon unabhaengig.
+      return [];
+    }
+  }
+
   async function synchronisieren() {
     if (!("caches" in window)) { return false; }
     var antwort;
@@ -39,6 +51,7 @@
     }
     if (!antwort.ok) { return false; } // nicht eingeloggt / Modul aus
     var manifest = await antwort.json();
+    var kontaktPfade = await kontaktUrls();
 
     var soll = new Set();
     // Die Übersicht ist der Einstieg aus der Android-Navigation. Sie muss
@@ -54,6 +67,7 @@
         (s.urls || []).forEach(function (u) { soll.add(u); });
       });
     });
+    kontaktPfade.forEach(function (pfad) { soll.add(pfad); });
 
     var cache = await caches.open(CACHE_NAME);
 
@@ -69,9 +83,10 @@
     var urls = Array.from(soll);
     for (var j = 0; j < urls.length; j++) {
       var url = urls[j];
-      var istObjektSeite = /^\/objekte\/\d+(\/einsatz)?$/.test(url);
-      // HTML-Ansichten immer aktualisieren (Daten aendern sich), Dateien nur wenn fehlend.
-      if (!istObjektSeite && vorhandenPfade.has(url)) { continue; }
+      var istDynamischeSeite = /^\/objekte\/\d+(\/einsatz)?$/.test(url)
+        || url === "/kontakte" || /^\/kontakte\/\d+(\/profilbild)?$/.test(url);
+      // HTML-Ansichten und Kontaktbilder immer aktualisieren, Dateien nur wenn fehlend.
+      if (!istDynamischeSeite && vorhandenPfade.has(url)) { continue; }
       try {
         var res = await fetch(url, { credentials: "same-origin" });
         if (res.ok) { await cache.put(url, res); }
