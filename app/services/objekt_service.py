@@ -853,8 +853,9 @@ def pruefe_revision_erinnerungen(db: Session) -> list[dict]:
 def build_sync_manifest(db: Session, org_id: int) -> dict:
     """Offline-Sync-Manifest fuer die Android-App (PR9).
 
-    Nur FREIGEGEBENE Objekte; je Objekt die Einsatzansicht-URL, aktualisiert_am
-    als Versionsindikator und alle Seiten-Dateien (Thumb/Bild/Einzel-PDF).
+    Nur FREIGEGEBENE Objekte; je Objekt die Verwaltungs- und Einsatzansicht,
+    aktualisiert_am als Versionsindikator und alle Seiten-Dateien
+    (Thumb/Bild/Einzel-PDF).
     Seiten-Dateien sind unveraenderlich (UUID-Pfade) — ein Eintrag verschwindet
     nur, wenn die Seite geloescht wurde; der Client kann daher rein ueber die
     ID-Menge synchronisieren.
@@ -899,13 +900,14 @@ def build_sync_manifest(db: Session, org_id: int) -> dict:
             seiten_by_objekt.setdefault(s.objekt_id, []).append(eintrag)
 
     return {
-        "version": 1,
+        "version": 2,
         "objekte": [
             {
                 "objekt_id": o.id,
                 "nummer": o.anzeige_nummer,
                 "name": o.name,
                 "aktualisiert_am": o.aktualisiert_am.isoformat() if o.aktualisiert_am else None,
+                "detail_url": f"/objekte/{o.id}",
                 "einsatz_url": f"/objekte/{o.id}/einsatz",
                 "seiten": seiten_by_objekt.get(o.id, []),
             }

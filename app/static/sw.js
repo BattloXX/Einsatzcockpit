@@ -2,7 +2,7 @@
 // Cache-Namen bei jedem Deploy mit spürbaren JS/CSS-Änderungen erhöhen (v1 -> v2 -> ...):
 // der activate-Handler löscht dann automatisch alle Caches mit altem Namen, statt dass
 // veraltete Board-Skripte unbegrenzt im Cache liegen bleiben ("F5 nötig nach Update").
-const CACHE = 'ec-v14';
+const CACHE = 'ec-v15';
 const BOARD_CACHE = 'ec-board-v2';
 // Objektverwaltung: Offline-Precache der Android-App (objekt_offline_sync.js
 // befuellt ihn; hier nur lesen/ergaenzen — App-Updates loeschen ihn nicht)
@@ -173,9 +173,10 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // Board pages (/einsatz/<id>[/info]) und Objekt-Einsatzansichten (/objekte/<id>/einsatz)
+  // Board pages (/einsatz/<id>[/info]) sowie Objekt-Verwaltungs- und
+  // Einsatzansichten (/objekte/<id>[/einsatz])
   // — network-first, cache last successful response (Objektinfo im Fahrzeug bei Funkloch)
-  if (/^\/einsatz\/\d+(\/info)?$/.test(url.pathname) || /^\/objekte\/\d+\/einsatz$/.test(url.pathname)) {
+  if (/^\/einsatz\/\d+(\/info)?$/.test(url.pathname) || /^\/objekte\/\d+(\/einsatz)?$/.test(url.pathname)) {
     e.respondWith(
       fetch(e.request)
         .then(res => {
@@ -211,7 +212,7 @@ self.addEventListener('fetch', e => {
   // Übersichten aktualisiert außerdem jeder normale Online-Aufruf. Ohne diese
   // Regel fiel eine spätere Navigation im Funkloch durch, weil der generische
   // Netzwerkpfad HTML-Antworten nicht speichert.
-  if (url.pathname === '/objekte/' || url.pathname === '/kontakte') {
+  if (url.pathname === '/objekte/' || url.pathname === '/kontakte' || /^\/kontakte\/\d+$/.test(url.pathname)) {
     e.respondWith(
       fetch(e.request)
         .then(async res => {

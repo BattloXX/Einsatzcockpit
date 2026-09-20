@@ -2,7 +2,7 @@
  *
  * Laeuft NUR in der Android-App (Capacitor-WebView, window.Capacitor vorhanden):
  * laedt periodisch das Sync-Manifest (/api/objekte/sync) und legt Einsatz-
- * ansichten, Thumbnails, Hi-Res-Seiten und Einzel-PDFs aller freigegebenen
+ * ansichten, Verwaltungsansichten, Thumbnails, Hi-Res-Seiten und Einzel-PDFs aller freigegebenen
  * Objekte in den Cache 'ec-objekt-v1'. Der Service Worker (sw.js) bedient
  * /objekt-medien/* und /objekte/<id>/einsatz offline daraus.
  *
@@ -46,6 +46,9 @@
     // scheitert bereits /objekte/ bevor ein Objekt geöffnet werden kann.
     soll.add("/objekte/");
     (manifest.objekte || []).forEach(function (o) {
+      // Die Listenansicht verlinkt auf die Verwaltungsansicht (/objekte/<id>),
+      // die Einsatzansicht wird ebenfalls fuer die Einsatzvorbereitung gehalten.
+      if (o.detail_url) { soll.add(o.detail_url); }
       soll.add(o.einsatz_url);
       (o.seiten || []).forEach(function (s) {
         (s.urls || []).forEach(function (u) { soll.add(u); });
@@ -66,9 +69,9 @@
     var urls = Array.from(soll);
     for (var j = 0; j < urls.length; j++) {
       var url = urls[j];
-      var istEinsatzSeite = /^\/objekte\/\d+\/einsatz$/.test(url);
-      // Einsatzansichten immer aktualisieren (HTML aendert sich), Dateien nur wenn fehlend
-      if (!istEinsatzSeite && vorhandenPfade.has(url)) { continue; }
+      var istObjektSeite = /^\/objekte\/\d+(\/einsatz)?$/.test(url);
+      // HTML-Ansichten immer aktualisieren (Daten aendern sich), Dateien nur wenn fehlend.
+      if (!istObjektSeite && vorhandenPfade.has(url)) { continue; }
       try {
         var res = await fetch(url, { credentials: "same-origin" });
         if (res.ok) { await cache.put(url, res); }

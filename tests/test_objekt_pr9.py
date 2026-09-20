@@ -74,6 +74,8 @@ def test_manifest_nur_freigegebene(sync_db):
     manifest = build_sync_manifest(db, org_a_id)
     namen = [o["name"] for o in manifest["objekte"]]
     assert namen == ["Freigegeben"]
+    assert manifest["version"] == 2
+    assert manifest["objekte"][0]["detail_url"] == f"/objekte/{frei_id}"
     assert manifest["objekte"][0]["einsatz_url"] == f"/objekte/{frei_id}/einsatz"
 
 
@@ -103,7 +105,7 @@ def test_manifest_org_isolation(sync_db):
 def test_manifest_versionsindikator(sync_db):
     db, org_a_id, _, _ = sync_db
     manifest = build_sync_manifest(db, org_a_id)
-    assert manifest["version"] == 1
+    assert manifest["version"] == 2
     assert manifest["objekte"][0]["aktualisiert_am"] is not None
 
 
@@ -113,6 +115,8 @@ def test_android_sync_includes_objekt_overview():
     ).read_text(encoding="utf-8")
 
     assert 'soll.add("/objekte/")' in source
+    assert "o.detail_url" in source
+    assert "^\\/objekte\\/\\d+(\\/einsatz)?$" in source
     assert "START_VERZOEGERUNG_MS" not in source
 
 
