@@ -29,6 +29,12 @@
     }
   }
 
+  function cacheStatus(cached, total, activity) {
+    var plugin = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.DeviceKeepalive;
+    if (!plugin || typeof plugin.reportObjectCacheStatus !== "function") { return; }
+    plugin.reportObjectCacheStatus({ cached: cached, total: total, activity: activity }).catch(function () {});
+  }
+
   async function kontaktUrls() {
     try {
       var antwort = await fetch("/kontakte/offline-sync", { credentials: "same-origin" });
@@ -43,6 +49,7 @@
 
   async function synchronisieren() {
     if (!("caches" in window)) { return false; }
+    cacheStatus(0, 0, "Objektcache wird auf Aktualisierungen geprüft …");
     var antwort;
     try {
       antwort = await fetch("/api/objekte/sync", { credentials: "same-origin" });
@@ -51,6 +58,8 @@
     }
     if (!antwort.ok) { return false; } // nicht eingeloggt / Modul aus
     var manifest = await antwort.json();
+    var objektListe = manifest.objekte || [];
+    cacheStatus(0, objektListe.length, "Objektdaten werden für die Offline-Nutzung vorbereitet …");
     var kontaktPfade = await kontaktUrls();
 
     var soll = new Set();
@@ -58,7 +67,7 @@
     // genauso im Cache liegen wie die einzelnen Einsatzansichten, sonst
     // scheitert bereits /objekte/ bevor ein Objekt geöffnet werden kann.
     soll.add("/objekte/");
-    (manifest.objekte || []).forEach(function (o) {
+    objektListe.forEach(function (o) {
       // Die Listenansicht verlinkt auf die Verwaltungsansicht (/objekte/<id>),
       // die Einsatzansicht wird ebenfalls fuer die Einsatzvorbereitung gehalten.
       if (o.detail_url) { soll.add(o.detail_url); }
@@ -92,6 +101,19 @@
         if (res.ok) { await cache.put(url, res); }
       } catch (e) { /* einzelner Fehler stoppt den Sync nicht */ }
     }
+
+    var cachedObjects = 0;
+    for (var k = 0; k < objektListe.length; k++) {
+      var objekt = objektListe[k];
+      var detailReady = !objekt.detail_url || await cache.match(objekt.detail_url);
+      var einsatzReady = await cache.match(objekt.einsatz_url);
+      if (detailReady && einsatzReady) { cachedObjects++; }
+    }
+    cacheStatus(
+      cachedObjects,
+      objektListe.length,
+      "Objekte aktualisiert: " + cachedObjects + "/" + objektListe.length + " offline verfügbar",
+    );
 
     try { localStorage.setItem(LS_KEY, String(Date.now())); } catch (e) { /* egal */ }
     return true;

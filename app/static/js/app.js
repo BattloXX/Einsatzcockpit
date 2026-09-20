@@ -109,6 +109,10 @@ document.addEventListener('alpine:init', () => {
     },
 
     addToast(msg, type = 'info') {
+      // Ein Funkloch kann mehrere HTMX-Anfragen gleichzeitig scheitern lassen.
+      // Gleichlautende Hinweise werden deshalb zusammengefasst, statt den
+      // Bildschirm mit identischen Offline-Meldungen zu überdecken.
+      if (this.toasts.some(toast => toast.msg === msg && toast.type === type)) return;
       const id = Date.now();
       this.toasts.push({ id, msg, type });
       setTimeout(() => this.removeToast(id), 6000);
