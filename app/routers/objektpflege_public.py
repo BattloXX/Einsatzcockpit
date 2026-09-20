@@ -195,6 +195,10 @@ async def bereich_aendern(token: str, bereich: str, request: Request, db: Sessio
             neu, alt = str(form.get(feld, "")), getattr(kontakt, feld) or ""
             if neu != alt:
                 diff[feld] = {"alt": alt, "neu": neu}
+        telefon_neu = str(form.get("telefon", "")).strip()
+        telefon_alt = kontakt.telefone[0].nummer if kontakt.telefone else ""
+        if telefon_neu != telefon_alt:
+            diff["telefon"] = {"alt": telefon_alt, "neu": telefon_neu}
         if diff:
             db.add(KontaktAenderungsvorschlag(org_id=auftrag.org_id, pflegeauftrag_id=auftrag.id,
                    kontakt_id=kontakt.id, basis_version=kontakt.version,
@@ -219,20 +223,25 @@ def _dokument_oder_404(db: Session, auftrag: ObjektPflegeauftrag, dokument_id: i
     return objekt, dokument
 
 
-@public_router.get("/objektpflege/{token}/dokumente/{dokument_id}/anzeigen", response_class=HTMLResponse)
-def dokument_anzeigen(token: str, dokument_id: int, request: Request, db: Session = Depends(get_db)):
-    """Open one in-scope document in the guest portal without exposing a media URL."""
+@public_router.get("/objektpflege/{token}/dokumente/{dokument_id}/anzeigen")
+def dokument_anzeigen(token: str, dokument_id: int, db: Session = Depends(get_db)):
+    """Open a token-scoped document in the browser's native PDF viewer.
+
+    Android WebView/Chrome can reject a PDF iframe when an upstream proxy adds
+    restrictive frame headers. A top-level PDF response is not frameable and
+    therefore works consistently while retaining the same token authorization.
+    """
     auftrag = _aktive_aktion(db, token)
     if "dokumente" not in bereiche_liste(auftrag):
         raise HTTPException(404, "Nicht gefunden")
     _, dokument = _dokument_oder_404(db, auftrag, dokument_id)
     if not dokument.ist_aktuelle_version:
         raise HTTPException(404, "Nicht gefunden")
-    org = _org(db, auftrag)
-    return public_templates.TemplateResponse(request, "objektpflege/dokument_viewer.html", {
-        "auftrag": auftrag, "dokument": dokument, "token": token,
-        "org": org, "org_name": _org_name(org),
-    }, headers=_PUBLIC_HEADERS)
+    return RedirectResponse(
+        f"/objektpflege/{token}/dokumente/{dokument.id}/datei",
+        status_code=303,
+        headers=_PUBLIC_HEADERS,
+    )
 
 
 @public_router.get("/objektpflege/{token}/dokumente/{dokument_id}/datei")

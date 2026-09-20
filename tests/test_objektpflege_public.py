@@ -108,7 +108,7 @@ def test_external_edits_create_copy_and_contact_proposal_without_mutating_source
     }, follow_redirects=False)
     assert response.status_code == 303
     response = client.post(f"/objektpflege/{token}/bereich/kontakte/aendern", data={
-        "_csrf": csrf, "funktion": "Neue Funktion",
+        "_csrf": csrf, "funktion": "Neue Funktion", "telefon": "+43 555 1234",
     }, follow_redirects=False)
     assert response.status_code == 303
     assert client.post(f"/objektpflege/{token}/bereich/bma/aendern", data={"_csrf": csrf}).status_code == 400
@@ -126,12 +126,13 @@ def test_external_edits_create_copy_and_contact_proposal_without_mutating_source
         assert change.quelle == "extern_pflegeauftrag" and change.pflegeauftrag_id == auftrag_id
         vorschlag = db.query(KontaktAenderungsvorschlag).filter_by(pflegeauftrag_id=auftrag_id).first()
         assert vorschlag.status == "offen" and "Neue Funktion" in vorschlag.diff_json
+        assert "+43 555 1234" in vorschlag.diff_json
         assert db.get(Kontakt, kontakt_id).funktion == "Brandschutz"
     finally:
         db.close()
 
 
-def test_guest_can_open_only_current_document_in_scoped_viewer(client, tmp_path, monkeypatch):
+def test_guest_can_open_only_current_document_in_native_viewer(client, tmp_path, monkeypatch):
     _, objekt_id, _, token = _auftrag("Dokumentansicht", ["dokumente"])
     monkeypatch.setattr(settings, "OBJEKT_MEDIA_DIR", str(tmp_path))
     db = SessionLocal()
@@ -151,12 +152,17 @@ def test_guest_can_open_only_current_document_in_scoped_viewer(client, tmp_path,
     datei.parent.mkdir(parents=True)
     datei.write_bytes(b"%PDF-test\n")
 
-    viewer = client.get(f"/objektpflege/{token}/dokumente/{dokument_id}/anzeigen")
-    assert viewer.status_code == 200
-    assert "einsatzplan.pdf" in viewer.text
-    assert f"/objektpflege/{token}/dokumente/{dokument_id}/datei" in viewer.text
+    viewer = client.get(
+        f"/objektpflege/{token}/dokumente/{dokument_id}/anzeigen",
+        follow_redirects=False,
+    )
+    assert viewer.status_code == 303
+    assert viewer.headers["location"] == f"/objektpflege/{token}/dokumente/{dokument_id}/datei"
     response = client.get(f"/objektpflege/{token}/dokumente/{dokument_id}/datei")
     assert response.status_code == 200
     assert response.content == b"%PDF-test\n"
     assert "inline" in response.headers["content-disposition"]
-    assert client.get(f"/objektpflege/{token}/dokumente/{dokument_id + 999999}/anzeigen").status_code == 404
+    assert client.get(
+        f"/objektpflege/{token}/dokumente/{dokument_id + 999999}/anzeigen",
+        follow_redirects=False,
+    ).status_code == 404

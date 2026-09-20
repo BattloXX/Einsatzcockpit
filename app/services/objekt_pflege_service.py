@@ -572,7 +572,7 @@ def freigabe_transaktion(
         try:
             diff = json.loads(vorschlag.diff_json)
             if not isinstance(diff, dict) or any(
-                feld not in {"funktion", "email", "erreichbarkeit", "notizen"}
+                feld not in {"funktion", "email", "erreichbarkeit", "notizen", "telefon"}
                 or not isinstance(eintrag, dict) or "neu" not in eintrag
                 for feld, eintrag in diff.items()
             ):
@@ -595,7 +595,7 @@ def freigabe_transaktion(
     for vorschlag in offene_kontakte:
         if vorschlag.id in kontakt_vorschlag_freigeben:
             diff = kontakt_diffs[vorschlag.id]
-            daten = {feld: eintrag["neu"] for feld, eintrag in diff.items()}
+            daten = {feld: eintrag["neu"] for feld, eintrag in diff.items() if feld != "telefon"}
             kontakt = kontakt_service.get_kontakt(db, vorschlag.kontakt_id, include_archiviert=True)
             assert kontakt is not None
             telefone = [
@@ -607,6 +607,14 @@ def freigabe_transaktion(
                 }
                 for telefon in kontakt.telefone
             ]
+            if "telefon" in diff:
+                telefon_neu = diff["telefon"]["neu"].strip()
+                if telefone and telefon_neu:
+                    telefone[0]["nummer"] = telefon_neu
+                elif telefone:
+                    telefone.pop(0)
+                elif telefon_neu:
+                    telefone.append({"nummer": telefon_neu, "label": "Telefon", "bevorzugt": True})
             kategorien = [zuordnung.kategorie.name for zuordnung in kontakt.kategorien]
             kontakt_service.update_kontakt(
                 db, vorschlag.kontakt_id, daten, telefone, kategorien,

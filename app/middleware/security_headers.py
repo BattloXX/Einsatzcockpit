@@ -3,9 +3,8 @@
 Setzt restriktive Default-Header für alle HTTP-Antworten:
 - Content-Security-Policy (Self + Data-URLs für QR-PNGs; HTMX/Alpine sind self-hosted)
 - X-Content-Type-Options: nosniff
-- X-Frame-Options: DENY (Ausnahmen: QR-Print, Medien-Dateien und tokengebundene
-  Objektpflege-Dokumente → SAMEORIGIN, damit die jeweiligen Viewer PDFs/Videos
-  im <iframe> einbetten können; ist
+- X-Frame-Options: DENY (Ausnahmen: QR-Print und Medien-Dateien → SAMEORIGIN,
+  damit die jeweiligen Viewer PDFs/Videos im <iframe> einbetten können; ist
   TRUSTED_FRAME_ANCESTORS konfiguriert, wird X-Frame-Options global nicht gesetzt,
   siehe unten)
 - Referrer-Policy: strict-origin-when-cross-origin
@@ -89,11 +88,6 @@ def _is_embeddable_route(path: str) -> bool:
         return True
     # In-App-Media-Viewer (Lightbox) bindet PDFs/Videos per <iframe>/<video> ein
     if "/medien/" in path and "/datei/" in path:
-        return True
-    # Der geschuetzte Objektpflege-Gastzugang zeigt freigegebene PDFs im
-    # eigenen Dokument-Viewer. Die Datei bleibt token-gebunden; nur die
-    # Einbettung durch dieselbe Origin wird hier erlaubt.
-    if path.startswith("/objektpflege/") and "/dokumente/" in path and path.endswith("/datei"):
         return True
     return False
 

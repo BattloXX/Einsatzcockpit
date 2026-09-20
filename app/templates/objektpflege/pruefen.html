@@ -5,7 +5,7 @@
 
 {% for bereich in bereiche %}
 {% set a = abschnitte.get(bereich) %}
-<details>
+<details class="pflege-section{% if bereich == 'dokumente' %} pflege-section--dokumente{% endif %}">
   <summary>{{ bereich|capitalize }} <span class="badge">{{ a.status if a else "offen" }}</span></summary>
   <div class="muted" style="margin-top:12px">
     {% if bereich == "stammdaten" %}
@@ -21,28 +21,39 @@
       <strong>Anfahrt / Zufahrt</strong><br>{{ live_objekt.anfahrtsweg or "Kein Anfahrtsweg hinterlegt." }}
       {% if live_objekt.zusatzadressen %}<dl class="pflege-daten"><dt>Weitere Zugänge</dt><dd>{% for z in live_objekt.zusatzadressen %}{{ z.bezeichnung }}{% if z.strasse %}: {{ z.strasse }} {{ z.hausnummer or '' }}, {{ z.plz or '' }} {{ z.ort or '' }}{% endif %}{% if not loop.last %}<br>{% endif %}{% endfor %}</dd></dl>{% endif %}
     {% elif bereich == "kontakte" %}
-      {{ kontakt.anzeigename }}{% if kontakt.funktion %} · {{ kontakt.funktion }}{% endif %}
+      <dl class="pflege-daten">
+        <dt>Name</dt><dd>{{ kontakt.anzeigename }}</dd>
+        <dt>Funktion</dt><dd>{{ kontakt.funktion or '–' }}</dd>
+        <dt>E-Mail</dt><dd>{% if kontakt.email %}<a href="mailto:{{ kontakt.email }}">{{ kontakt.email }}</a>{% else %}–{% endif %}</dd>
+        <dt>Telefon</dt><dd>{% for telefon in kontakt.telefone %}{% if not loop.first %}<br>{% endif %}<a href="tel:{{ telefon.nummer }}">{{ telefon.nummer }}</a>{% if telefon.label %} · {{ telefon.label }}{% endif %}{% else %}–{% endfor %}</dd>
+        <dt>Erreichbarkeit</dt><dd>{{ kontakt.erreichbarkeit or '–' }}</dd>
+      </dl>
+      <p class="pflege-hinweis">Bitte melden Sie Änderungen der Kontaktangaben zusätzlich an die zuständige RFL-Stelle, damit die Alarmierungsdaten dort ebenfalls aktuell bleiben.</p>
     {% elif bereich == "dokumente" %}
       {% for d in dokumente %}
-      <div style="margin-bottom:10px">
-        <strong>📄 {{ d.dateiname_original }}</strong>
-        <div class="muted">{{ '%.1f'|format(d.groesse_bytes / 1048576) }} MB · {{ d.seitenzahl or '–' }} Seiten · Stand: {{ d.hochgeladen_am.strftime('%d.%m.%Y') if d.hochgeladen_am else '–' }}</div>
-        <a class="button secondary" href="/objektpflege/{{ token }}/dokumente/{{ d.id }}/anzeigen">Dokument öffnen</a>
-        <form method="post" action="/objektpflege/{{ token }}/dokumente/{{ d.id }}/version" enctype="multipart/form-data">
+      <article class="pflege-document">
+        <div class="pflege-document__meta">
+          <span class="pflege-document__icon">PDF</span>
+          <div><strong>{{ d.dateiname_original }}</strong><div class="muted">{{ '%.1f'|format(d.groesse_bytes / 1048576) }} MB · {{ d.seitenzahl or '–' }} Seiten · Stand: {{ d.hochgeladen_am.strftime('%d.%m.%Y') if d.hochgeladen_am else '–' }}</div></div>
+        </div>
+        <div class="pflege-document__actions">
+          <a class="button secondary" href="/objektpflege/{{ token }}/dokumente/{{ d.id }}/anzeigen">PDF anzeigen</a>
+        </div>
+        <form class="pflege-document__upload" method="post" action="/objektpflege/{{ token }}/dokumente/{{ d.id }}/version" enctype="multipart/form-data">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-          <input type="file" name="datei" accept="application/pdf" required>
-          <button>Neue Version hochladen</button>
+          <label class="file-picker"><span>Datei auswählen</span><input type="file" name="datei" accept="application/pdf" required></label>
+          <button class="secondary">Neue Version hochladen</button>
         </form>
-        <form method="post" action="/objektpflege/{{ token }}/dokumente/{{ d.id }}/ungueltig-melden">
+        <form class="pflege-document__invalidate" method="post" action="/objektpflege/{{ token }}/dokumente/{{ d.id }}/ungueltig-melden">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-          <button class="secondary">Als nicht mehr gültig melden</button>
+          <button>Als nicht mehr gültig melden</button>
         </form>
-      </div>
+      </article>
       {% endfor %}
-      <form class="upload-form" method="post" action="/objektpflege/{{ token }}/dokumente/neu" enctype="multipart/form-data">
+      <form class="upload-form pflege-document__new" method="post" action="/objektpflege/{{ token }}/dokumente/neu" enctype="multipart/form-data">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-        <label>Neues Dokument hinzufügen</label>
-        <input type="file" name="datei" accept="application/pdf" required>
+        <strong>Weiteres Dokument hinzufügen</strong>
+        <label class="file-picker"><span>PDF auswählen</span><input type="file" name="datei" accept="application/pdf" required></label>
         <button>Dokument hochladen</button>
         <div class="upload-progress"><i></i></div>
       </form>
@@ -85,6 +96,8 @@
           <label>Anfahrtsweg</label>
           <textarea name="anfahrtsweg">{{ live_objekt.anfahrtsweg or "" }}</textarea>
         {% elif bereich == "kontakte" %}
+          <label>Telefon (primär)</label>
+          <input name="telefon" value="{{ kontakt.telefone[0].nummer if kontakt.telefone else '' }}" inputmode="tel">
           {% for f in ["funktion", "email", "erreichbarkeit", "notizen"] %}
           <label>{{ f|capitalize }}</label>
           {% if f in ["erreichbarkeit", "notizen"] %}
@@ -135,6 +148,11 @@
     x.upload.onprogress = e => { if (e.lengthComputable) bar.style.width = (100 * e.loaded / e.total) + '%'; };
     x.onload = () => location.href = '{{ request.url.path }}';
     x.send(new FormData(f));
+  }));
+
+  document.querySelectorAll('.file-picker input').forEach(input => input.addEventListener('change', () => {
+    const label = input.closest('.file-picker').querySelector('span');
+    label.textContent = input.files[0] ? input.files[0].name : 'Datei auswählen';
   }));
 
   document.querySelector('.bottom').addEventListener('submit', () => localStorage.removeItem(key));
