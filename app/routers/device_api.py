@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.core.dependencies import _set_module_states
 from app.core.security import hash_api_key, sign_native_link_token
 from app.db import get_db
+from app.models.master import VehicleMaster
 from app.models.user import DeviceToken, FcmDeliveryLog, FcmToken, User
 from app.services import push_service
 from app.services.einsatz_live_service import build_live_state
@@ -302,6 +303,51 @@ async def update_location(request: Request, background_tasks: BackgroundTasks, d
 
 
 # ── Dienst-Status ─────────────────────────────────────────────────────────────
+
+@router.get("/vehicles")
+def get_vehicles(request: Request, db: Session = Depends(get_db)):
+    """Liefert die für das Fahrtenbuch verfügbaren Fahrzeuge des Geräts."""
+    user = getattr(request.state, "user", None)
+    bearer_authenticated = False
+    if not user:
+        user = _resolve_user_via_bearer_token(request, db)
+        bearer_authenticated = user is not None
+    if not user:
+        raise HTTPException(status_code=401, detail="Nicht eingeloggt")
+
+    if bearer_authenticated:
+        db.commit()
+
+    vehicles = (
+        db.query(VehicleMaster)
+        .filter(
+            VehicleMaster.dept_id == user.org_id,
+            VehicleMaster.active == True,  # noqa: E712
+            VehicleMaster.deleted == False,  # noqa: E712
+            VehicleMaster.is_adhoc == False,  # noqa: E712
+            VehicleMaster.is_external == False,  # noqa: E712
+        )
+        .execution_options(include_all_tenants=True)
+        .order_by(VehicleMaster.display_order)
+        .all()
+    )
+    device_token = _get_device_token(user.id, db)
+    device_vehicle = None
+    if device_token and device_token.vehicle_master_id:
+        device_vehicle = (
+            db.query(VehicleMaster)
+            .filter(VehicleMaster.id == device_token.vehicle_master_id)
+            .execution_options(include_all_tenants=True)
+            .first()
+        )
+
+    def vehicle_data(vehicle: VehicleMaster) -> dict[str, int | str | None]:
+        return {"id": vehicle.id, "code": vehicle.code, "name": vehicle.name}
+
+    return JSONResponse({
+        "device_vehicle": vehicle_data(device_vehicle) if device_vehicle else None,
+        "vehicles": [vehicle_data(vehicle) for vehicle in vehicles],
+    })
 
 @router.post("/duty")
 async def set_duty(request: Request, db: Session = Depends(get_db)):

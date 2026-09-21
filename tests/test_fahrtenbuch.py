@@ -2,17 +2,19 @@
 
 from __future__ import annotations
 
+import re
 import pytest
 from decimal import Decimal
 from datetime import UTC, datetime, timedelta
 from fastapi.testclient import TestClient
 from fastapi import HTTPException
 
+from app.core.security import hash_api_key, hash_password, sign_session
 from app.core.tenant import set_tenant_context
 from app.models.fahrtenbuch import Fahrt, FahrtErfassungsweg, FahrtKategorie, FahrtStatus, Fahrtzweck, Zielort
 from app.models.incident import Incident
 from app.models.master import Member, OrgSettings, VehicleMaster
-from app.models.user import Role, User, UserRole
+from app.models.user import DeviceToken, Role, User, UserRole
 from app.services.fahrtenbuch_service import (
     berechne_bericht_daten,
     erstelle_fahrt,
@@ -380,6 +382,88 @@ def test_token_route_ungueltig(client: TestClient):
 def test_fahrtenbuch_erfassung_ohne_login(client: TestClient):
     response = client.get("/fahrtenbuch/neu", follow_redirects=False)
     assert response.status_code == 302
+
+
+def _create_device_user(db_session, org, username: str, vehicle_id: int | None) -> tuple[User, DeviceToken]:
+    user = User(
+        username=username,
+        password_hash=hash_password("Test1234!"),
+        display_name=username,
+        org_id=org.id,
+        active=True,
+        is_device=True,
+    )
+    db_session.add(user)
+    db_session.flush()
+    token = DeviceToken(
+        user_id=user.id,
+        token_hash=hash_api_key(f"raw-{username}"),
+        label=f"Geraet {username}",
+        vehicle_master_id=vehicle_id,
+    )
+    db_session.add(token)
+    db_session.commit()
+    return user, token
+
+
+def test_fahrtenbuch_neu_device_vehicle_overrides_query_parameter(client, db_session, org, fahrzeug):
+    other_vehicle = VehicleMaster(
+        dept_id=org.id, code="QUERY-FZ", name="Query Fahrzeug", type="Test", display_order=100
+    )
+    db_session.add(other_vehicle)
+    db_session.flush()
+    user, token = _create_device_user(db_session, org, "fb_device_priority", fahrzeug.id)
+    client.cookies.set("session", sign_session(user.id, device=True, device_token_id=token.id))
+
+    response = client.get(f"/fahrtenbuch/neu?fahrzeug={other_vehicle.id}")
+
+    assert response.status_code == 200
+    assert re.search(rf'value="{fahrzeug.id}"\s+selected', response.text)
+    assert not re.search(rf'value="{other_vehicle.id}"\s+selected', response.text)
+
+
+def test_fahrtenbuch_neu_query_parameter_is_fallback_without_device_binding(client, db_session, org, fahrzeug):
+    user, token = _create_device_user(db_session, org, "fb_device_no_vehicle", None)
+    client.cookies.set("session", sign_session(user.id, device=True, device_token_id=token.id))
+
+    response = client.get(f"/fahrtenbuch/neu?fahrzeug={fahrzeug.id}")
+
+    assert response.status_code == 200
+    assert re.search(rf'value="{fahrzeug.id}"\s+selected', response.text)
+
+
+def test_device_vehicles_returns_device_vehicle_and_own_org_vehicles(client, db_session, org, fahrzeug):
+    user, token = _create_device_user(db_session, org, "fb_device_vehicles", fahrzeug.id)
+    client.cookies.set("session", sign_session(user.id, device=True, device_token_id=token.id))
+
+    response = client.get("/api/v1/device/vehicles")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["device_vehicle"] == {
+        "id": fahrzeug.id, "code": fahrzeug.code, "name": fahrzeug.name,
+    }
+    assert {"id", "code", "name"} == set(data["vehicles"][0])
+    assert fahrzeug.id in [vehicle["id"] for vehicle in data["vehicles"]]
+
+
+def test_device_vehicles_excludes_other_org_vehicles(client, db_session, org, fahrzeug):
+    from app.models.master import FireDept
+
+    foreign_org = FireDept(slug="fb-device-foreign", name="Device Foreign Org")
+    db_session.add(foreign_org)
+    db_session.flush()
+    foreign_vehicle = VehicleMaster(
+        dept_id=foreign_org.id, code="FOREIGN-FZ", name="Foreign Fahrzeug", type="Test"
+    )
+    db_session.add(foreign_vehicle)
+    user, token = _create_device_user(db_session, org, "fb_device_isolation", fahrzeug.id)
+    client.cookies.set("session", sign_session(user.id, device=True, device_token_id=token.id))
+
+    response = client.get("/api/v1/device/vehicles")
+
+    assert response.status_code == 200
+    assert foreign_vehicle.id not in [vehicle["id"] for vehicle in response.json()["vehicles"]]
 
 
 def test_verwaltung_ohne_login(client: TestClient):

@@ -95,8 +95,8 @@ async def fahrtenbuch_neu(
     if not user:
         return RedirectResponse("/login", status_code=302)
     preset = fahrzeug
-    # Gerätesession: Fahrzeug des Geräts vorauswählen wenn kein expliziter Parameter
-    if preset is None and getattr(request.state, "is_device", False):
+    # Gerätesession: Das gebundene Fahrzeug hat Vorrang vor einem URL-Parameter.
+    if getattr(request.state, "is_device", False):
         from app.models.user import DeviceToken
         dev = (
             db.query(DeviceToken)
