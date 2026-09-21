@@ -17,9 +17,9 @@ def test_static_assets_use_exact_versioned_cache_key_before_network():
     assert static_branch[:network_fetch].count("ignoreSearch") == 0
 
 
-def test_static_cache_version_is_v16():
+def test_static_cache_version_is_v17():
     source = SW_PATH.read_text(encoding="utf-8")
-    assert "const CACHE = 'ec-v16';" in source
+    assert "const CACHE = 'ec-v17';" in source
 
 
 def test_objekt_and_kontakt_pages_are_cached_for_offline_navigation():
