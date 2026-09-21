@@ -19,6 +19,7 @@ from app.models.master import FireDept
 from app.models.objekt import (
     OBJEKT_STATUS_ENTWURF,
     OBJEKT_STATUS_FREIGEGEBEN,
+    OBJEKT_STATUS_UEBERARBEITUNG,
     Objekt,
     ObjektDokument,
     ObjektDokumentSeite,
@@ -69,7 +70,7 @@ def sync_db():
     Base.metadata.drop_all(bind=engine)
 
 
-def test_manifest_nur_freigegebene(sync_db):
+def test_manifest_enthaelt_einsatzrelevante_produktive_objekte(sync_db):
     db, org_a_id, _, frei_id = sync_db
     manifest = build_sync_manifest(db, org_a_id)
     namen = [o["name"] for o in manifest["objekte"]]
@@ -77,6 +78,17 @@ def test_manifest_nur_freigegebene(sync_db):
     assert manifest["version"] == 2
     assert manifest["objekte"][0]["detail_url"] == f"/objekte/{frei_id}"
     assert manifest["objekte"][0]["einsatz_url"] == f"/objekte/{frei_id}/einsatz"
+
+
+def test_manifest_enthaelt_objekt_in_ueberarbeitung(sync_db):
+    db, org_a_id, _, frei_id = sync_db
+    objekt = db.get(Objekt, frei_id)
+    objekt.status = OBJEKT_STATUS_UEBERARBEITUNG
+    db.commit()
+
+    manifest = build_sync_manifest(db, org_a_id)
+
+    assert [o["objekt_id"] for o in manifest["objekte"]] == [frei_id]
 
 
 def test_manifest_seiten_urls(sync_db):

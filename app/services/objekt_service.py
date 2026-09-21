@@ -853,7 +853,7 @@ def pruefe_revision_erinnerungen(db: Session) -> list[dict]:
 def build_sync_manifest(db: Session, org_id: int) -> dict:
     """Offline-Sync-Manifest fuer die Android-App (PR9).
 
-    Nur FREIGEGEBENE Objekte; je Objekt die Verwaltungs- und Einsatzansicht,
+    Freigegebene und in Überarbeitung befindliche produktive Objekte; je Objekt die Verwaltungs- und Einsatzansicht,
     aktualisiert_am als Versionsindikator und alle Seiten-Dateien
     (Thumb/Bild/Einzel-PDF).
     Seiten-Dateien sind unveraenderlich (UUID-Pfade) — ein Eintrag verschwindet
@@ -862,13 +862,20 @@ def build_sync_manifest(db: Session, org_id: int) -> dict:
     """
     from app.models.objekt import (
         OBJEKT_STATUS_FREIGEGEBEN,
+        OBJEKT_STATUS_UEBERARBEITUNG,
         ObjektDokument,
         ObjektDokumentSeite,
     )
 
     objekte = (
         nur_produktiv(db.query(Objekt))
-        .filter(Objekt.org_id == org_id, Objekt.status == OBJEKT_STATUS_FREIGEGEBEN)
+        # Eine Arbeitskopie ist durch nur_produktiv() ausgeschlossen. Das
+        # produktive Original bleibt während einer Überarbeitung aber für
+        # Einsatz-Matching und Einsatzansicht gültig und muss offline bleiben.
+        .filter(
+            Objekt.org_id == org_id,
+            Objekt.status.in_((OBJEKT_STATUS_FREIGEGEBEN, OBJEKT_STATUS_UEBERARBEITUNG)),
+        )
         .order_by(Objekt.nummer)
         .execution_options(include_all_tenants=True)
         .all()

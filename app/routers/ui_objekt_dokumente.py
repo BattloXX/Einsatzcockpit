@@ -1030,7 +1030,8 @@ def objekte_sync_manifest(
     """Manifest fuer das Offline-Precaching (Android-App/PWA).
 
     Session-Auth wie alle UI-Routen (die Capacitor-App teilt die WebView-Session).
-    Nur freigegebene Objekte der eigenen Org; Dateien sind unveraenderlich
+    Freigegebene und in Überarbeitung befindliche produktive Objekte der eigenen Org;
+    Dateien sind unveraenderlich
     (UUID-Pfade), Delta ergibt sich aus der ID-Menge + aktualisiert_am.
     """
     from app.services.objekt_service import build_sync_manifest
