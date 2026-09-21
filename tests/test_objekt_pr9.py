@@ -91,6 +91,17 @@ def test_manifest_enthaelt_objekt_in_ueberarbeitung(sync_db):
     assert [o["objekt_id"] for o in manifest["objekte"]] == [frei_id]
 
 
+def test_manifest_entwurf_nur_fuer_persoenlichen_verwalter(sync_db):
+    db, org_a_id, _, frei_id = sync_db
+
+    standard_manifest = build_sync_manifest(db, org_a_id)
+    verwalter_manifest = build_sync_manifest(db, org_a_id, include_drafts=True)
+
+    assert [o["objekt_id"] for o in standard_manifest["objekte"]] == [frei_id]
+    assert [o["name"] for o in verwalter_manifest["objekte"]] == ["Freigegeben", "Entwurf"]
+    assert verwalter_manifest["diagnostics"]["include_drafts"] is True
+
+
 def test_manifest_seiten_urls(sync_db):
     db, org_a_id, _, _ = sync_db
     manifest = build_sync_manifest(db, org_a_id)

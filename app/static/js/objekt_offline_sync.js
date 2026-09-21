@@ -85,8 +85,20 @@
       cacheStatus(0, 0, "Objekt-Sync fehlgeschlagen: Sync-Antwort ist ungültig");
       return false;
     }
-    var objektListe = manifest.objekte || [];
-    cacheStatus(0, objektListe.length, "Objektdaten werden für die Offline-Nutzung vorbereitet …");
+    var objektListe = Array.isArray(manifest.objekte) ? manifest.objekte : [];
+    var diagnose = manifest.diagnostics || {};
+    var statusZaehler = diagnose.productive_by_status || {};
+    var statusInfo = Object.keys(statusZaehler).sort().map(function (status) {
+      return status + ": " + statusZaehler[status];
+    }).join(" · ");
+    var auswahlInfo = diagnose.included_statuses
+      ? " (Status: " + diagnose.included_statuses.join(", ") + ")"
+      : "";
+    var manifestInfo = objektListe.length
+      ? "Objektmanifest: " + objektListe.length + " Objekte ausgewählt" + auswahlInfo
+      : "Objektmanifest enthält keine auswählbaren Objekte" + (statusInfo ? " · Vorhanden: " + statusInfo : "");
+    cacheStatus(0, objektListe.length, manifestInfo);
+    cacheStatus(0, objektListe.length, "Objektdaten werden für die Offline-Nutzung vorbereitet … · " + manifestInfo);
     var kontaktPfade = await kontaktUrls();
 
     var soll = new Set();

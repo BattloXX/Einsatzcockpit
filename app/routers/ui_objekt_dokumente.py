@@ -13,7 +13,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.audit import write_audit
-from app.core.permissions import require_role, require_role_or_device
+from app.core.permissions import is_objekt_verwalter, require_role, require_role_or_device
 from app.core.templating import templates
 from app.db import get_db
 from app.models.objekt import (
@@ -1030,11 +1030,13 @@ def objekte_sync_manifest(
     """Manifest fuer das Offline-Precaching (Android-App/PWA).
 
     Session-Auth wie alle UI-Routen (die Capacitor-App teilt die WebView-Session).
-    Freigegebene und in Überarbeitung befindliche produktive Objekte der eigenen Org;
+    Geräte erhalten ausschließlich einsatzrelevante produktive Objekte. Persönliche
+    Objektverwalter erhalten zusätzlich die Entwürfe, die sie auch in der Verwaltung sehen.
     Dateien sind unveraenderlich
     (UUID-Pfade), Delta ergibt sich aus der ID-Menge + aktualisiert_am.
     """
     from app.services.objekt_service import build_sync_manifest
     if user.org_id is None:
         raise HTTPException(status_code=404, detail="Keine Organisation")
-    return build_sync_manifest(db, user.org_id)
+    include_drafts = not user.is_device and is_objekt_verwalter(user)
+    return build_sync_manifest(db, user.org_id, include_drafts=include_drafts)

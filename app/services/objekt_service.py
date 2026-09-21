@@ -6,6 +6,7 @@ UND Org-Flag (OrgSettings.objekt_module_enabled == True) — Muster UAS-Modul.
 from __future__ import annotations
 
 import json
+from collections import Counter
 from datetime import UTC, datetime
 from typing import Any
 
@@ -850,10 +851,12 @@ def pruefe_revision_erinnerungen(db: Session) -> list[dict]:
     return faellig
 
 
-def build_sync_manifest(db: Session, org_id: int) -> dict:
+def build_sync_manifest(db: Session, org_id: int, *, include_drafts: bool = False) -> dict:
     """Offline-Sync-Manifest fuer die Android-App (PR9).
 
-    Freigegebene und in Überarbeitung befindliche produktive Objekte; je Objekt die Verwaltungs- und Einsatzansicht,
+    Freigegebene und in Überarbeitung befindliche produktive Objekte; bei einem
+    persönlichen Objektverwalter zusätzlich dessen sichtbare Entwürfe. Je Objekt
+    enthält das Manifest Verwaltungs- und Einsatzansicht,
     aktualisiert_am als Versionsindikator und alle Seiten-Dateien
     (Thumb/Bild/Einzel-PDF).
     Seiten-Dateien sind unveraenderlich (UUID-Pfade) — ein Eintrag verschwindet
@@ -867,19 +870,19 @@ def build_sync_manifest(db: Session, org_id: int) -> dict:
         ObjektDokumentSeite,
     )
 
-    objekte = (
+    erlaubte_status = [OBJEKT_STATUS_FREIGEGEBEN, OBJEKT_STATUS_UEBERARBEITUNG]
+    if include_drafts:
+        erlaubte_status.append(OBJEKT_STATUS_ENTWURF)
+
+    alle_produktiven = (
         nur_produktiv(db.query(Objekt))
-        # Eine Arbeitskopie ist durch nur_produktiv() ausgeschlossen. Das
-        # produktive Original bleibt während einer Überarbeitung aber für
-        # Einsatz-Matching und Einsatzansicht gültig und muss offline bleiben.
-        .filter(
-            Objekt.org_id == org_id,
-            Objekt.status.in_((OBJEKT_STATUS_FREIGEGEBEN, OBJEKT_STATUS_UEBERARBEITUNG)),
-        )
+        .filter(Objekt.org_id == org_id)
         .order_by(Objekt.nummer)
         .execution_options(include_all_tenants=True)
         .all()
     )
+    status_zaehler = Counter(objekt.status for objekt in alle_produktiven)
+    objekte = [objekt for objekt in alle_produktiven if objekt.status in erlaubte_status]
     objekt_ids = [o.id for o in objekte]
     seiten_by_objekt: dict[int, list] = {}
     if objekt_ids:
@@ -908,6 +911,11 @@ def build_sync_manifest(db: Session, org_id: int) -> dict:
 
     return {
         "version": 2,
+        "diagnostics": {
+            "include_drafts": include_drafts,
+            "included_statuses": erlaubte_status,
+            "productive_by_status": dict(sorted(status_zaehler.items())),
+        },
         "objekte": [
             {
                 "objekt_id": o.id,
