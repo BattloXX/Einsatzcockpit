@@ -94,9 +94,12 @@
     var auswahlInfo = diagnose.included_statuses
       ? " (Status: " + diagnose.included_statuses.join(", ") + ")"
       : "";
+    var orgInfo = diagnose.org_id ? " · Org: " + diagnose.org_id : "";
+    var loginInfo = diagnose.login_type ? " · Login: " + diagnose.login_type : "";
     var manifestInfo = objektListe.length
-      ? "Objektmanifest: " + objektListe.length + " Objekte ausgewählt" + auswahlInfo
-      : "Objektmanifest enthält keine auswählbaren Objekte" + (statusInfo ? " · Vorhanden: " + statusInfo : "");
+      ? "Objektmanifest: " + objektListe.length + " Objekte ausgewählt" + auswahlInfo + orgInfo + loginInfo
+      : "Objektmanifest enthält keine auswählbaren Objekte" + orgInfo + loginInfo
+        + (statusInfo ? " · Vorhanden: " + statusInfo : "");
     cacheStatus(0, objektListe.length, manifestInfo);
     cacheStatus(0, objektListe.length, "Objektdaten werden für die Offline-Nutzung vorbereitet … · " + manifestInfo);
     var kontaktPfade = await kontaktUrls();

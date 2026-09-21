@@ -100,6 +100,8 @@ def test_manifest_entwurf_nur_fuer_persoenlichen_verwalter(sync_db):
     assert [o["objekt_id"] for o in standard_manifest["objekte"]] == [frei_id]
     assert [o["name"] for o in verwalter_manifest["objekte"]] == ["Freigegeben", "Entwurf"]
     assert verwalter_manifest["diagnostics"]["include_drafts"] is True
+    assert verwalter_manifest["diagnostics"]["org_id"] == org_a_id
+    assert verwalter_manifest["diagnostics"]["selected_count"] == 2
 
 
 def test_manifest_seiten_urls(sync_db):

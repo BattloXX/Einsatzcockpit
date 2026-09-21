@@ -1038,5 +1038,10 @@ def objekte_sync_manifest(
     from app.services.objekt_service import build_sync_manifest
     if user.org_id is None:
         raise HTTPException(status_code=404, detail="Keine Organisation")
-    include_drafts = not user.is_device and is_objekt_verwalter(user)
-    return build_sync_manifest(db, user.org_id, include_drafts=include_drafts)
+    is_device = bool(user.is_device)
+    include_drafts = not is_device and is_objekt_verwalter(user)
+    manifest = build_sync_manifest(db, user.org_id, include_drafts=include_drafts)
+    # Nur für die eigene App-Session sichtbar: liefert die fehlende
+    # End-to-End-Diagnose bei einem technisch erfolgreichen, aber leeren Sync.
+    manifest["diagnostics"]["login_type"] = "geraet" if is_device else "benutzer"
+    return manifest

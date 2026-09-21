@@ -912,9 +912,11 @@ def build_sync_manifest(db: Session, org_id: int, *, include_drafts: bool = Fals
     return {
         "version": 2,
         "diagnostics": {
+            "org_id": org_id,
             "include_drafts": include_drafts,
             "included_statuses": erlaubte_status,
             "productive_by_status": dict(sorted(status_zaehler.items())),
+            "selected_count": len(objekte),
         },
         "objekte": [
             {
