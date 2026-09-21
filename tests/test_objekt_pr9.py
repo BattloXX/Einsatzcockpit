@@ -142,9 +142,18 @@ def test_android_sync_includes_objekt_overview():
 
     assert 'soll.add("/objekte/")' in source
     assert "o.detail_url" in source
+    for fragment in (
+        "stammdaten", "gefahren", "bma", "merkmale", "kontakte",
+        "benachrichtigung", "wohnanlage", "zusatzadressen", "einsaetze", "protokoll",
+    ):
+        assert f'"{fragment}"' in source
     assert 'fetch("/kontakte/offline-sync"' in source
     assert "kontaktPfade.forEach" in source
-    assert "^\\/objekte\\/\\d+(\\/einsatz)?$" in source
+    fragment_regex = (
+        "^\\/objekte\\/\\d+(\\/(einsatz|stammdaten|gefahren|bma|merkmale|kontakte|"
+        "benachrichtigung|wohnanlage|zusatzadressen|einsaetze|protokoll))?$"
+    )
+    assert fragment_regex in source
     assert "START_VERZOEGERUNG_MS" not in source
 
 

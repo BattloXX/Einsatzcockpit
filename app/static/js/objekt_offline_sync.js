@@ -19,6 +19,10 @@
   var CACHE_NAME = "ec-objekt-v1";
   var SYNC_INTERVALL_MS = 6 * 60 * 60 * 1000; // 6 h
   var LS_KEY = "ec_objekt_sync_zuletzt";
+  var DETAIL_FRAGMENTE = [
+    "stammdaten", "gefahren", "bma", "merkmale", "kontakte",
+    "benachrichtigung", "wohnanlage", "zusatzadressen", "einsaetze", "protokoll",
+  ];
 
   function inAndroidApp() {
     try {
@@ -120,7 +124,12 @@
     objektListe.forEach(function (o) {
       // Die Listenansicht verlinkt auf die Verwaltungsansicht (/objekte/<id>),
       // die Einsatzansicht wird ebenfalls fuer die Einsatzvorbereitung gehalten.
-      if (o.detail_url) { soll.add(o.detail_url); }
+      if (o.detail_url) {
+        soll.add(o.detail_url);
+        DETAIL_FRAGMENTE.forEach(function (fragment) {
+          soll.add(o.detail_url + "/" + fragment);
+        });
+      }
       soll.add(o.einsatz_url);
       (o.seiten || []).forEach(function (s) {
         (s.urls || []).forEach(function (u) { soll.add(u); });
@@ -143,7 +152,7 @@
     var failedDownloads = 0;
     for (var j = 0; j < urls.length; j++) {
       var url = urls[j];
-      var istDynamischeSeite = /^\/objekte\/\d+(\/einsatz)?$/.test(url)
+      var istDynamischeSeite = /^\/objekte\/\d+(\/(einsatz|stammdaten|gefahren|bma|merkmale|kontakte|benachrichtigung|wohnanlage|zusatzadressen|einsaetze|protokoll))?$/.test(url)
         || url === "/kontakte" || /^\/kontakte\/\d+(\/profilbild)?$/.test(url);
       // HTML-Ansichten und Kontaktbilder immer aktualisieren, Dateien nur wenn fehlend.
       if (!istDynamischeSeite && vorhandenPfade.has(url)) { continue; }

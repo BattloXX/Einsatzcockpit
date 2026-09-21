@@ -208,6 +208,30 @@ self.addEventListener('fetch', e => {
     return;
   }
 
+  // Objekt-Detailfragmente — network-first, bei Funkloch aus dem Android-Precache.
+  // Kein Offline-Banner: Die Antworten werden von HTMX in bestehende Seiten eingesetzt.
+  if (/^\/objekte\/\d+\/(stammdaten|gefahren|bma|merkmale|kontakte|benachrichtigung|wohnanlage|zusatzadressen|einsaetze|protokoll)$/.test(url.pathname)) {
+    e.respondWith(
+      fetch(e.request)
+        .then(async res => {
+          if (res.ok) {
+            const cache = await caches.open(OBJEKT_CACHE);
+            await cache.put(e.request, res.clone());
+          }
+          return res;
+        })
+        .catch(async () => {
+          const cached = await caches.match(e.request, { cacheName: OBJEKT_CACHE });
+          if (cached) return cached;
+          return new Response('Offline', {
+            status: 503,
+            headers: { 'Content-Type': 'text/plain', 'X-Offline': '1' },
+          });
+        })
+    );
+    return;
+  }
+
   // Die Objektübersicht wird auf Android gezielt vorab synchronisiert; beide
   // Übersichten aktualisiert außerdem jeder normale Online-Aufruf. Ohne diese
   // Regel fiel eine spätere Navigation im Funkloch durch, weil der generische

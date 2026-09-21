@@ -1,6 +1,6 @@
 """Strukturtests fuer versionierte Static-Asset-Keys im Service Worker."""
-from pathlib import Path
 
+from pathlib import Path
 
 SW_PATH = Path(__file__).resolve().parent.parent / "app" / "static" / "sw.js"
 
@@ -30,3 +30,14 @@ def test_objekt_and_kontakt_pages_are_cached_for_offline_navigation():
     assert "^\\/objekte\\/\\d+(\\/einsatz)?$" in source
     assert "await cache.put(e.request, res.clone());" in source
     assert "caches.match(e.request, { cacheName: OBJEKT_CACHE })" in source
+
+
+def test_objekt_detail_fragments_are_cached_for_offline_htmx_requests():
+    source = SW_PATH.read_text(encoding="utf-8")
+
+    fragment_regex = (
+        "^\\/objekte\\/\\d+\\/(stammdaten|gefahren|bma|merkmale|kontakte|"
+        "benachrichtigung|wohnanlage|zusatzadressen|einsaetze|protokoll)$"
+    )
+    assert fragment_regex in source
+    assert "Kein Offline-Banner" in source
