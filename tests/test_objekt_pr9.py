@@ -1,18 +1,15 @@
 """Objektverwaltung PR 9: Offline-Sync-Manifest (Android-Precaching)."""
-import pytest
-from types import SimpleNamespace
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
 from fastapi import HTTPException
 from sqlalchemy import BigInteger, create_engine
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import sessionmaker
+from starlette.requests import Request
 
-# BigInteger → INTEGER für SQLite-Testumgebung
-@compiles(BigInteger, "sqlite")
-def _bigint_sqlite(element, compiler, **kw):
-    return "INTEGER"
-
-
+from app.core.permissions import require_role_or_device
 from app.core.tenant import set_tenant_context
 from app.db import Base
 from app.models.master import FireDept
@@ -25,8 +22,12 @@ from app.models.objekt import (
     ObjektDokumentSeite,
 )
 from app.services.objekt_service import build_sync_manifest
-from app.core.permissions import require_role_or_device
-from starlette.requests import Request
+
+
+# BigInteger → INTEGER für SQLite-Testumgebung
+@compiles(BigInteger, "sqlite")
+def _bigint_sqlite(element, compiler, **kw):
+    return "INTEGER"
 
 
 @pytest.fixture(scope="module")
@@ -145,6 +146,18 @@ def test_android_sync_includes_objekt_overview():
     assert "kontaktPfade.forEach" in source
     assert "^\\/objekte\\/\\d+(\\/einsatz)?$" in source
     assert "START_VERZOEGERUNG_MS" not in source
+
+
+def test_android_sync_reports_status_via_headless_webview_bridge_before_capacitor():
+    source = (
+        Path(__file__).resolve().parent.parent / "app" / "static" / "js" / "objekt_offline_sync.js"
+    ).read_text(encoding="utf-8")
+
+    assert "window.ObjektSyncNative || window.ObjektCacheClearNative" in source
+    assert "nativeSync.reportStatus(cached, total, activity)" in source
+    assert source.index("nativeSync.reportStatus(cached, total, activity)") < source.index(
+        "plugin.reportObjectCacheStatus"
+    )
 
 
 def test_pr9_endpoint_registriert():

@@ -30,6 +30,14 @@
   }
 
   function cacheStatus(cached, total, activity) {
+    // Der WorkManager-Sync läuft in einer rohen Android-WebView ohne
+    // Capacitor-Bridge. Er stellt diese Schnittstelle direkt bereit, damit die
+    // Diagnose auch dann in "Über die App" ankommt.
+    var nativeSync = window.ObjektSyncNative || window.ObjektCacheClearNative;
+    if (nativeSync && typeof nativeSync.reportStatus === "function") {
+      nativeSync.reportStatus(cached, total, activity);
+      return;
+    }
     var plugin = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.DeviceKeepalive;
     if (!plugin || typeof plugin.reportObjectCacheStatus !== "function") { return; }
     plugin.reportObjectCacheStatus({ cached: cached, total: total, activity: activity }).catch(function () {});
