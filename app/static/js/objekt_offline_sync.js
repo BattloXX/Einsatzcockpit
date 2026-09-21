@@ -35,6 +35,19 @@
     plugin.reportObjectCacheStatus({ cached: cached, total: total, activity: activity }).catch(function () {});
   }
 
+  async function syncIstAktiv() {
+    var plugin = window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.DeviceKeepalive;
+    // Ältere App-Versionen kennen die Einstellung noch nicht und behalten ihr
+    // bisheriges Verhalten. Die neue Android-App liefert die Präferenz nativ.
+    if (!plugin || typeof plugin.getObjectSyncSettings !== "function") { return true; }
+    try {
+      var settings = await plugin.getObjectSyncSettings();
+      return settings.enabled === true && settings.clearing !== true;
+    } catch (e) {
+      return false;
+    }
+  }
+
   async function kontaktUrls() {
     try {
       var antwort = await fetch("/kontakte/offline-sync", { credentials: "same-origin" });
@@ -48,6 +61,10 @@
   }
 
   async function synchronisieren() {
+    if (!await syncIstAktiv()) {
+      cacheStatus(0, 0, "Objekt-Sync ist deaktiviert");
+      return true;
+    }
     if (!("caches" in window)) { return false; }
     cacheStatus(0, 0, "Objektcache wird auf Aktualisierungen geprüft …");
     var antwort;
@@ -147,4 +164,15 @@
 
   // Manuell ausloesbar (z. B. aus den Einstellungen): window.objektOfflineSync()
   window.objektOfflineSync = synchronisieren;
+  window.objektOfflineCacheLeeren = async function () {
+    if (!("caches" in window)) { return false; }
+    try {
+      await caches.delete(CACHE_NAME);
+      try { localStorage.removeItem(LS_KEY); } catch (e) { /* egal */ }
+      cacheStatus(0, 0, "Objektcache wurde gelöscht");
+      return true;
+    } catch (e) {
+      return false;
+    }
+  };
 })();
