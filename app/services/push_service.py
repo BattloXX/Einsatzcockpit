@@ -95,8 +95,9 @@ def send_fcm(
     db: Session | None = None,
     push_log_id: int | None = None,
     delivery: FcmDeliveryLog | None = None,
+    wake_only: bool = False,
 ) -> tuple[bool, str | None]:
-    """Sendet Wake- und Display-Nachricht an ein FCM-Geraet."""
+    """Sendet eine Wake- und optional eine Display-Nachricht an ein FCM-Geraet."""
     app = _get_fcm_app(cfg)
     if app is None:
         return False, "fcm_not_configured"
@@ -150,6 +151,16 @@ def send_fcm(
         token=fcm_token_row.token,
     )
     wake_ok, wake_error, token_invalid = _send(wake_message, "wake")
+
+    if wake_only:
+        if delivery is not None:
+            delivery.success = wake_ok
+            delivery.error_code = wake_error if not wake_ok else None
+            delivery.error_detail = (
+                f"Wake-Nachricht fehlgeschlagen ({wake_error or 'unknown'})"
+                if not wake_ok else None
+            )
+        return wake_ok, wake_error
 
     display_ok = False
     display_error: str | None = "unregistered_pruned" if token_invalid else None
@@ -330,7 +341,8 @@ def _notify_fcm_users(db: Session, user_ids: set[int], title: str, body: str,
                       url: str | None, cfg: dict | None = None,
                       channel_id: str | None = None,
                       push_log_id: int | None = None,
-                      commit_delivery_log: bool = True) -> int:
+                      commit_delivery_log: bool = True,
+                      wake_only: bool = False) -> int:
     """Sendet FCM an alle registrierten Tokens der angegebenen User-IDs.
 
     ``commit_delivery_log`` committet die Delivery-Zeilen VOR dem Versand, damit die
@@ -404,6 +416,7 @@ def _notify_fcm_users(db: Session, user_ids: set[int], title: str, body: str,
             db=db,
             push_log_id=push_log_id,
             delivery=delivery,
+            wake_only=wake_only,
         )
         success_count += int(ok)
     db.flush()
@@ -420,6 +433,7 @@ def _notify_fcm_logged(
     channel_id: str | None,
     push_log_id: int,
     commit_delivery_log: bool = True,
+    wake_only: bool = False,
 ) -> int:
     """Ruft den FCM-Fan-out mit PushLog-Verknuepfung auf."""
     try:
@@ -433,10 +447,11 @@ def _notify_fcm_logged(
             channel_id,
             push_log_id=push_log_id,
             commit_delivery_log=commit_delivery_log,
+            wake_only=wake_only,
         )
     except TypeError as exc:
         # Bestehende Erweiterungs-/Test-Doubles ohne das neue optionale Argument.
-        if "push_log_id" not in str(exc):
+        if "push_log_id" not in str(exc) and "wake_only" not in str(exc):
             raise
         return _notify_fcm_users(db, user_ids, title, body, url, cfg, channel_id)
 
@@ -491,6 +506,34 @@ def notify_org(db: Session, org_id: int, title: str, body: str,
         db, org_user_ids, title, body, url, cfg, channel_id, push_log.id
     )
     return wp_count + fcm_extra
+
+
+def notify_org_fcm_wake_only(
+    db: Session,
+    org_id: int,
+    title: str,
+    body: str,
+    url: str | None = None,
+    source: str = "system",
+    channel_id: str | None = None,
+) -> int:
+    """Weckt nur native FCM-Geraete einer Organisation, ohne Web-/Display-Push."""
+    from app.models.user import User as _User
+
+    cfg = _push_cfg(db)
+    push_log = _log_push(db, title, body, url, source, None, org_id=org_id)
+    org_user_ids = {row[0] for row in db.query(_User.id).filter(_User.org_id == org_id).all()}
+    return _notify_fcm_logged(
+        db,
+        org_user_ids,
+        title,
+        body,
+        url,
+        cfg,
+        channel_id,
+        push_log.id,
+        wake_only=True,
+    )
 
 
 def notify_org_web(db: Session, org_id: int, title: str, body: str,

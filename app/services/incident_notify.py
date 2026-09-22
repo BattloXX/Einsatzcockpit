@@ -101,6 +101,67 @@ async def _send_incident_push(
     await asyncio.to_thread(_run)
 
 
+async def _send_incident_wake_only(
+    incident_id: int,
+    org_id: int | None,
+    title: str,
+    body: str,
+    url: str,
+    triggered_by_user_id: int | None,
+) -> None:
+    """Weckt Android-Geraete fuer einen stillen Uebungseinsatz-Statusabgleich."""
+    from app.core.audit import write_audit
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+    from app.models.user import FcmToken, User
+    from app.services.push_service import notify_org_fcm_wake_only
+
+    if org_id is None:
+        return
+
+    def _run() -> None:
+        push_db = SessionLocal()
+        set_tenant_context(push_db, None)
+        try:
+            user_ids = push_db.query(User.id).filter(User.org_id == org_id)
+            recipient_count = push_db.query(FcmToken).filter(FcmToken.user_id.in_(user_ids)).count()
+            sent_count = notify_org_fcm_wake_only(
+                push_db,
+                org_id,
+                title,
+                body,
+                url,
+                source="einsatz_wake",
+                channel_id="einsatz_alarm",
+            )
+            write_audit(
+                push_db,
+                "push.einsatz_wake_sent",
+                org_id=org_id,
+                user_id=triggered_by_user_id,
+                incident_id=incident_id,
+                payload={
+                    "sent_count": sent_count,
+                    "recipient_count": recipient_count,
+                    "channel_id": "einsatz_alarm",
+                },
+            )
+            push_db.commit()
+            if sent_count == 0 and recipient_count > 0:
+                logger.warning(
+                    "Kein stiller FCM-Wake zugestellt (Einsatz %s, Empfaenger=%s)",
+                    incident_id,
+                    recipient_count,
+                )
+        except Exception:
+            push_db.rollback()
+            logger.exception("Stiller FCM-Wake fehlgeschlagen (Einsatz %s)", incident_id)
+        finally:
+            push_db.close()
+
+    await asyncio.to_thread(_run)
+
+
 def _combined_address(incident: Incident) -> str:
     """Baut den `{adresse}`-Platzhalter-String — gleiches Format wie bisher in api_v1.py."""
     return (
@@ -193,6 +254,20 @@ async def notify_incident_created(
         if not darf_extern(
             "push", is_exercise=incident.is_exercise, org_id=org_id, db=db
         ):
+            if incident.is_exercise:
+                try:
+                    await _send_incident_wake_only(
+                        incident.id,
+                        org_id,
+                        push_title,
+                        push_body,
+                        resolved_push_url,
+                        triggered_by_user_id,
+                    )
+                except Exception:
+                    logger.exception(
+                        "Stiller FCM-Wake fehlgeschlagen (Einsatz %s)", incident.id
+                    )
             return
         try:
             await _send_incident_push(

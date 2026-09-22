@@ -195,6 +195,27 @@ def test_alarm_sends_wake_and_display_with_one_delivery(monkeypatch):
         db.close()
 
 
+def test_wake_only_sends_no_display_and_marks_delivery_success(monkeypatch):
+    sent = []
+    _fake_messaging(monkeypatch, sent.append)
+    db, user, _token, push_log = _fcm_rows("wake-only")
+    try:
+        count = push_service._notify_fcm_users(
+            db, {user.id}, "[ÜBUNG] Alarm", "Test", "/einsatz/42", {},
+            channel_id="einsatz_alarm", push_log_id=push_log.id, wake_only=True,
+        )
+        db.commit()
+
+        assert count == 1
+        assert len(sent) == 1
+        assert sent[0].data["silent"] == "1"
+        assert not hasattr(sent[0], "notification")
+        delivery = db.query(FcmDeliveryLog).filter_by(push_log_id=push_log.id).one()
+        assert delivery.success is True
+    finally:
+        db.close()
+
+
 def test_delivery_is_committed_before_first_fcm_send(monkeypatch):
     observed_delivery_ids = []
 
