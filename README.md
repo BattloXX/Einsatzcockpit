@@ -27,6 +27,7 @@ Eine vollwertige Webapp, die Einsatzleitern und Schriftführern eine strukturier
 - Vollständiges Audit-Log — jede Änderung wird protokolliert (Zeitreise-Funktion)
 - Multi-Tenancy — mehrere Organisationen auf einer Instanz, row-level isoliert
 - Offline-fähige PWA — eingeschränkte Nutzung auch ohne Netzverbindung
+- Native Android-App — eigenständiger Client mit echtem Offline-Datenbestand für Objekte & Kontakte, Live-Einsatzstatus und Homescreen-Widgets
 
 ## Features
 
@@ -43,10 +44,11 @@ Eine vollwertige Webapp, die Einsatzleitern und Schriftführern eine strukturier
 | **Wetter & lokale Stationen** | Nowcast, Warnungen, Radar und optionale Meteobridge-Anbindung |
 | **UAS / Drohne** | BOS-Drohnendokumentation gemäß RL-UAS LFV Vorarlberg 2024 |
 | **PWA & mobile Nutzung** | Offline-Betrieb, Push-Benachrichtigungen und QR-Schnellzugriff |
+| **Native Android-App** | Sideload-APK mit zuverlässigem Push, Live-Einsatzstatus, Homescreen-Widgets und echtem Offline-Datenbestand für Objekte & Kontakte |
 | **Probenplan** | Jahresplanung für Übungen und Veranstaltungen mit Checklisten, Appell, Nachbereitung, Übungseinsatz und optionalem öffentlichem Kalender |
 | **KI-Assistent** | Optionale Auftragsvorschläge, Lagebilder und Priorisierung per Anthropic Claude |
 
-→ [Vollständige Feature-Liste im Wiki](docs/wiki/Home.md#kernfunktionen)
+→ [Vollständige Feature-Liste im Wiki](docs/wiki/Home.md#kernfunktionen) · [Native Android-App im Wiki](docs/wiki/Anwender-Native-Android-App.md) · [Android-App-Repository](https://github.com/BattloXX/Einsatzcockpit-Android)
 
 ## Tech-Stack
 

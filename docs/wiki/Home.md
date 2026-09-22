@@ -38,6 +38,7 @@ Eine Python-Webapp (FastAPI + HTMX + WebSocket), die ein bisheriges Single-File-
 - Organisationsbezogene Datensicherung als Download oder geplanter Push mit tenant-gescoptem Restore
 - Lokale Wetterstation mit Push-Ingest, eigener Zeitreihen-Datenbank und Szenario-Analyse
 - PWA für Offline-Betrieb, Web-Push-Benachrichtigungen
+- Native Android-App (Sideload-APK): zuverlässige Push-Benachrichtigungen, Live-Einsatzstatus, Homescreen-Widgets und echter Offline-Datenbestand für Objekte & Kontakte
 - QR-Code-Schnellzugriff für zustoßende Einsatzkräfte
 - KI-Assistent (Auftragsvorschläge, Lagebild, Auto-Priorisierung) via Anthropic Claude — opt-in
 - Datenbank-Backup & Disaster-Recovery: automatisierte Dumps beider DBs + Medien, wöchentlich getestete Restore-Probe, Off-Site-Upload (SFTP/SCP/rsync/FTPS/rclone), DR-Runbook
@@ -86,6 +87,7 @@ unter [Server-Voraussetzungen](Installation-Server-Voraussetzungen).
 | [Übungsmodus](Anwender-Uebungsmodus) | Was ist anders, Statistik-Ausschluss |
 | [QR-Code Schnellzugriff](Anwender-QR-Code-Schnellzugriff) | Zweites Gerät per Scan einbinden |
 | [Mobile Nutzung / PWA](Anwender-Mobile-Nutzung-PWA) | Installieren, Offline-Verhalten, Homescreen-Widgets |
+| [Native Android-App](Anwender-Native-Android-App) | Sideload-APK, Anmeldung, Live-Einsatzstatus, Widgets, Offline-Datenbestand für Objekte & Kontakte |
 | [Push-Benachrichtigungen](Anwender-Push-Benachrichtigungen) | Aktivieren auf Handy und PC |
 | [Lageführung](Anwender-Lagefuehrung) | Einsatzbezogene Lagekarte: Auto-Layer, taktische Zeichen, Multi-User, Chronologie/Replay, Druck & PDF-Lagebericht |
 | [Lagekarte.info](Anwender-Lagekarte) | Adresse & Koordinaten, Live-Fahrzeuge auf lagekarte.info |
