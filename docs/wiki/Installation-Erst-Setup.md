@@ -50,7 +50,7 @@ python -m app.seed_data
 
 ## Ersten Login testen
 
-1. Browser öffnen: `https://einsatzleiter.feuerwehr-wolfurt.at/login`
+1. Browser öffnen: `https://einsatzcockpit.com/login`
 2. Benutzername: `admin`, Passwort: aus `.env`
 3. Nach Login: Startseite mit leerer Einsatzliste
 

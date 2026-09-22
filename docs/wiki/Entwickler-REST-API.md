@@ -104,7 +104,7 @@ Intern werden alle Zeitpunkte als UTC gespeichert.
   "url": "/einsatz/42",
   "created": true,
   "board_token": "InVzZXJfaWQiOiAxfQ.abc123...",
-  "board_url": "https://einsatzleiter.example.at/qr-login?incident_id=42&token=..."
+  "board_url": "https://einsatzcockpit.com/qr-login?incident_id=42&token=..."
 }
 ```
 
@@ -388,7 +388,7 @@ Die API normalisiert `Stufe` automatisch: `f3` → `F3`, `T3` bleibt `T3`.
 
 ```bash
 # Einsatz anlegen:
-curl -X POST https://einsatzleiter.feuerwehr-wolfurt.at/api/v1/einsatz \
+curl -X POST https://einsatzcockpit.com/api/v1/einsatz \
   -H "X-API-Key: ec_xxxx" \
   -H "Content-Type: application/json" \
   -d '{
@@ -405,7 +405,7 @@ curl -X POST https://einsatzleiter.feuerwehr-wolfurt.at/api/v1/einsatz \
   }'
 
 # Aktive Einsätze:
-curl https://einsatzleiter.feuerwehr-wolfurt.at/api/v1/einsatz/active \
+curl https://einsatzcockpit.com/api/v1/einsatz/active \
   -H "X-API-Key: ec_xxxx"
 
 # Rate-Limit-Header in der Response:

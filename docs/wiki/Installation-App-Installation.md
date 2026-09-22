@@ -44,7 +44,7 @@ DATABASE_URL=mysql+pymysql://einsatzleiter:PASSWORT@127.0.0.1:3306/einsatzleiter
 SECRET_KEY=hier-einen-langen-zufaelligen-string-eintragen
 
 # Öffentliche URL der App (für QR-Codes und Web-Push):
-APP_BASE_URL=https://einsatzleiter.feuerwehr-wolfurt.at
+APP_BASE_URL=https://einsatzcockpit.com
 
 # VAPID-Keys für Web-Push (Generierung siehe unten):
 VAPID_PRIVATE_KEY=

@@ -94,7 +94,7 @@ dessen Kurzzeichen als zweite Zeile an (z. B. „RLF").
 
 ## Installation auf iOS (Safari)
 
-1. App in **Safari** öffnen (`https://einsatzleiter.feuerwehr-wolfurt.at`)
+1. App in **Safari** öffnen (`https://einsatzcockpit.com`)
 2. Teilen-Symbol (Rechteck mit Pfeil nach oben) → **Zum Homescreen**
 3. Name bestätigen → **Hinzufügen**
 
