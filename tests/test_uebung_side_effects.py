@@ -115,24 +115,29 @@ def _set_case(settings, incident, flag: str, is_exercise: bool, opt_in: bool) ->
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("is_exercise", "opt_in", "expected"),
-    [(True, False, 0), (True, True, 1), (False, False, 1)],
+    ("is_exercise", "opt_in", "expected_alarm", "expected_wake"),
+    [(True, False, 0, 1), (True, True, 1, 0), (False, False, 1, 0)],
 )
 async def test_initial_push_aufrufstelle(
-    guard_db, monkeypatch, is_exercise, opt_in, expected
+    guard_db, monkeypatch, is_exercise, opt_in, expected_alarm, expected_wake
 ):
     db, settings, incident = guard_db
     _set_case(settings, incident, "uebung_push_erlaubt", is_exercise, opt_in)
     db.commit()
-    calls = []
+    alarm_calls = []
+    wake_calls = []
 
     async def fake_push(*args, **kwargs):
-        calls.append((args, kwargs))
+        alarm_calls.append((args, kwargs))
+
+    async def fake_wake(*args, **kwargs):
+        wake_calls.append((args, kwargs))
 
     async def noop(*args, **kwargs):
         return None
 
     monkeypatch.setattr(incident_notify, "_send_incident_push", fake_push)
+    monkeypatch.setattr(incident_notify, "_send_incident_wake_only", fake_wake)
     monkeypatch.setattr("app.services.sms_dispatch_service.dispatch_einsatzinfo", noop)
     monkeypatch.setattr("app.services.teams_alarm_service.post_incident_card", noop)
     monkeypatch.setattr(
@@ -148,7 +153,8 @@ async def test_initial_push_aufrufstelle(
     await incident_notify.notify_incident_created(
         db, incident, org_id=settings.org_id, background_tasks=None
     )
-    assert len(calls) == expected
+    assert len(alarm_calls) == expected_alarm
+    assert len(wake_calls) == expected_wake
 
 
 @pytest.mark.parametrize(
