@@ -13,6 +13,10 @@ Das Fahrtenbuch erfasst jede Ausfahrt eines Fahrzeugs digital — Maschinist, Ki
 
 **Menü → Fahrtenbuch → Neue Fahrt** oder direkt `/fahrtenbuch/neu`.
 
+> In der nativen Android-App führt auch das Homescreen-Widget „Fahrt erfassen" direkt
+> hierher — siehe [Widgets auf dem Homescreen](Anwender-Mobile-Nutzung-PWA#widgets-auf-dem-homescreen)
+> für die Details zur automatischen Fahrzeugauswahl.
+
 ### Schritt 1 – Fahrzeug wählen
 
 Dropdown mit allen aktiven, eigenen Fahrzeugen der Organisation (keine Ad-hoc- oder Fremdfahrzeuge).
