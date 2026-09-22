@@ -5,7 +5,7 @@
 ## Verbindung
 
 ```
-wss://einsatzleiter.feuerwehr-wolfurt.at/ws/incident/{incident_id}
+wss://einsatzcockpit.com/ws/incident/{incident_id}
 ```
 
 Die Verbindung erfordert eine aktive Session (Session-Cookie). Ohne Login wird die Verbindung abgelehnt.

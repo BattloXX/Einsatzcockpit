@@ -4,7 +4,7 @@
 
 ## Login
 
-URL: `https://einsatzleiter.feuerwehr-wolfurt.at/login`
+URL: `https://einsatzcockpit.com/login`
 
 Benutzername und Passwort eingeben → **Anmelden**.
 

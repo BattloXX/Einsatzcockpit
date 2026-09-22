@@ -59,7 +59,7 @@ python -m app.cli create-api-key --label "Test-Key" --expires "2026-12-31"
 
 ```http
 POST /api/v1/einsatz HTTP/1.1
-Host: einsatzleiter.feuerwehr-wolfurt.at
+Host: einsatzcockpit.com
 X-API-Key: ec_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 Content-Type: application/json
 

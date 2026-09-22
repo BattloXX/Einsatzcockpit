@@ -14,7 +14,7 @@ Push-Benachrichtigungen werden direkt auf dem Gerät angezeigt, auch wenn die Ap
 
 ### Schritt 1: App öffnen und einloggen
 
-`https://einsatzleiter.feuerwehr-wolfurt.at/login`
+`https://einsatzcockpit.com/login`
 
 ### Schritt 2: Benachrichtigungen aktivieren
 

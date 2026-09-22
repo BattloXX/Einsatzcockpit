@@ -11,7 +11,7 @@ und WebSocket-Konfiguration gleich; der Upstream ist ebenfalls `127.0.0.1:8092`.
 
 1. **CloudPanel** → **Sites** → **Add Site**
 2. Typ: **Reverse Proxy**
-3. Domain: `einsatzleiter.feuerwehr-wolfurt.at` (deine Domain)
+3. Domain: `einsatzcockpit.com` (deine Domain)
 4. Upstream: `http://127.0.0.1:8092`
 5. **Add Site** klicken
 
@@ -23,7 +23,7 @@ und WebSocket-Konfiguration gleich; der Upstream ist ebenfalls `127.0.0.1:8092`.
 Oder bearbeite direkt:
 
 ```bash
-sudo nano /etc/nginx/sites-enabled/einsatzleiter.feuerwehr-wolfurt.at.conf
+sudo nano /etc/nginx/sites-enabled/einsatzcockpit.com.conf
 ```
 
 Minimale Konfiguration mit WebSocket-Support:
@@ -31,16 +31,16 @@ Minimale Konfiguration mit WebSocket-Support:
 ```nginx
 server {
     listen 80;
-    server_name einsatzleiter.feuerwehr-wolfurt.at;
+    server_name einsatzcockpit.com;
     return 301 https://$host$request_uri;
 }
 
 server {
     listen 443 ssl http2;
-    server_name einsatzleiter.feuerwehr-wolfurt.at;
+    server_name einsatzcockpit.com;
 
-    ssl_certificate     /etc/nginx/ssl-certificates/einsatzleiter.crt;
-    ssl_certificate_key /etc/nginx/ssl-certificates/einsatzleiter.key;
+    ssl_certificate     /etc/nginx/ssl-certificates/einsatzcockpit.crt;
+    ssl_certificate_key /etc/nginx/ssl-certificates/einsatzcockpit.key;
 
     # Statische Dateien direkt ausliefern (schneller als Proxy):
     location /static/ {
@@ -91,13 +91,13 @@ sudo systemctl reload nginx
 ## Verbindung testen
 
 ```bash
-curl -I https://einsatzleiter.feuerwehr-wolfurt.at/
+curl -I https://einsatzcockpit.com/
 # Erwartete Antwort: HTTP/2 200 oder 302 zum Login
 ```
 
 WebSocket-Test (benötigt `websocat`):
 ```bash
-websocat wss://einsatzleiter.feuerwehr-wolfurt.at/ws/incident/1
+websocat wss://einsatzcockpit.com/ws/incident/1
 ```
 
 ---
