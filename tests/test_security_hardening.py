@@ -298,9 +298,95 @@ def test_csrf_cookie_samesite_lax_bei_direkter_navigation(monkeypatch):
     from app.middleware import csrf
     monkeypatch.setattr(settings, "TRUSTED_FRAME_ANCESTORS", "https://feuerwehr.wolfurt.at")
     monkeypatch.setattr(settings, "COOKIE_SECURE", True)
-    attrs = csrf._csrf_cookie_attrs(sec_fetch_dest="document")
+    attrs = csrf._csrf_cookie_attrs(path="/fahrtenbuch/neu", sec_fetch_dest="document")
     assert "SameSite=Lax" in attrs
     assert "SameSite=None" not in attrs
+
+
+def test_csrf_cookie_samesite_none_fuer_oeffentliches_fahrtenbuch_ohne_fetch_metadata(monkeypatch):
+    """Die ohnehin öffentlich einbettbaren Fahrtenbuch-Routen dürfen nicht
+    von optionalen Fetch-Metadata-Headern abhängen."""
+    from app.config import settings
+    from app.middleware import csrf
+
+    monkeypatch.setattr(settings, "TRUSTED_FRAME_ANCESTORS", "")
+    monkeypatch.setattr(settings, "COOKIE_SECURE", True)
+    for path in ("/f/abc123", "/fahrtenbuch", "/fahrtenbuch/hx/zaehler-check"):
+        for sec_fetch_dest in (None, "document"):
+            attrs = csrf._csrf_cookie_attrs(path, sec_fetch_dest)
+            assert "SameSite=None" in attrs
+            assert "Secure" in attrs
+            assert "Partitioned" in attrs
+
+
+def test_csrf_cookie_samesite_lax_fuer_interne_route_ohne_iframe_fetch_metadata(monkeypatch):
+    from app.config import settings
+    from app.middleware import csrf
+
+    monkeypatch.setattr(settings, "TRUSTED_FRAME_ANCESTORS", "https://feuerwehr.wolfurt.at")
+    monkeypatch.setattr(settings, "COOKIE_SECURE", True)
+    for path in ("/fahrtenbuch/neu", "/login"):
+        for sec_fetch_dest in (None, "document"):
+            attrs = csrf._csrf_cookie_attrs(path, sec_fetch_dest)
+            assert "SameSite=Lax" in attrs
+            assert "SameSite=None" not in attrs
+        assert "SameSite=None" in csrf._csrf_cookie_attrs(path, "iframe")
+
+
+def test_oeffentliches_fahrtenbuch_post_ohne_fetch_metadata_akzeptiert_csrf_cookie(client, setup_db, monkeypatch):
+    """Regression: Ein eingebettetes Multipart-Formular kann auch ohne
+    Sec-Fetch-Dest den beim Laden gesetzten Double-Submit-Token posten."""
+    import re
+
+    from app.config import settings
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+    from app.models.fahrtenbuch import FahrtKategorie, Fahrtzweck
+    from app.models.master import FireDept, OrgSettings, VehicleMaster
+
+    monkeypatch.setattr(settings, "TRUSTED_FRAME_ANCESTORS", "")
+    monkeypatch.setattr(settings, "COOKIE_SECURE", True)
+    token = "csrf-iframe-regression-token"
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        org = db.query(FireDept).first()
+        assert org is not None
+        org_settings = db.query(OrgSettings).filter(OrgSettings.org_id == org.id).first()
+        if not org_settings:
+            org_settings = OrgSettings(org_id=org.id)
+            db.add(org_settings)
+        org_settings.fahrtenbuch_modul_aktiv = True
+        org_settings.fahrtenbuch_token = token
+        vehicle = VehicleMaster(
+            dept_id=org.id, code="CSRF-IFRAME", name="CSRF Iframe", type="Test", display_order=999,
+        )
+        purpose = Fahrtzweck(org_id=org.id, name="CSRF Iframe", kategorie=FahrtKategorie.uebung)
+        db.add_all((vehicle, purpose))
+        db.commit()
+        vehicle_id, purpose_id = vehicle.id, purpose.id
+    finally:
+        db.close()
+
+    loaded = client.get(f"/f/{token}")
+    assert loaded.status_code == 200
+    assert "SameSite=None" in loaded.headers["set-cookie"]
+    csrf_token = re.search(r'name="_csrf" value="([^"]+)"', loaded.text).group(1)
+
+    response = client.post(
+        "/fahrtenbuch",
+        data={
+            "_csrf": csrf_token,
+            "t": token,
+            "fahrzeug_id": str(vehicle_id),
+            "zweck_id": str(purpose_id),
+            "maschinist_name": "Iframe Test",
+        },
+        files={"schaden_fotos": ("", b"", "application/octet-stream")},
+        headers={"Cookie": f"ec_csrf={csrf_token}"},
+    )
+    assert response.status_code == 200
+    assert "CSRF-Token fehlt oder ungültig" not in response.text
 
 
 def test_oeffentliches_fahrtenbuch_von_jeder_origin_einbettbar(monkeypatch):

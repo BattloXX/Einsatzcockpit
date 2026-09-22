@@ -51,17 +51,29 @@ def _allowed_origin_host() -> str | None:
         return None
 
 
-def _csrf_cookie_attrs(sec_fetch_dest: str | None = None) -> str:
+def _csrf_cookie_attrs(path: str = "", sec_fetch_dest: str | None = None) -> str:
     """SameSite/Secure-Attribute des CSRF-Cookies.
 
-    Nur eine tatsächlich als Iframe geladene Anfrage erhält bei aktivierter
-    Einbettung und HTTPS ``SameSite=None; Secure; Partitioned``. Direkte
-    Navigationen und Anfragen ohne ``Sec-Fetch-Dest: iframe`` bleiben beim
-    strengeren ``SameSite=Lax``. TRUSTED_FRAME_ANCESTORS ist dabei weiterhin
-    der app-weite Master-Schalter für die Einbettung.
+    Die absichtlich öffentlich einbettbaren Fahrtenbuch-Routen erhalten bei
+    HTTPS immer ``SameSite=None; Secure; Partitioned``: Fetch-Metadata-Header
+    sind bei Iframes nicht in allen Browsern und WebViews verlässlich vorhanden.
+    Für alle anderen Routen bleibt die bisherige zusätzliche Absicherung:
+    ``SameSite=None`` nur für eine als Iframe erkannte Anfrage bei aktivierter
+    Einbettung.
     """
     embedding = bool((settings.TRUSTED_FRAME_ANCESTORS or "").strip())
-    if embedding and settings.COOKIE_SECURE and sec_fetch_dest == "iframe":
+    # Deckungsgleich mit _is_public_fahrtenbuch_route() in security_headers.py —
+    # sonst bleiben HTMX-Sub-Routen des eingebetteten Formulars (z. B. der
+    # Zähler-Check beim Absenden) trotz frame-ancestors '*' am fragilen
+    # Sec-Fetch-Dest-Pfad hängen.
+    public_fahrtenbuch_embed = (
+        path == "/fahrtenbuch"
+        or path.startswith("/f/")
+        or path.startswith("/fahrtenbuch/hx/")
+    )
+    if settings.COOKIE_SECURE and (
+        public_fahrtenbuch_embed or (embedding and sec_fetch_dest == "iframe")
+    ):
         return "; SameSite=None; Secure; Partitioned"
     return "; SameSite=Lax" + ("; Secure" if settings.COOKIE_SECURE else "")
 
@@ -148,7 +160,7 @@ class CSRFMiddleware:
                     )
                     await resp(scope, receive, send)
                     return
-                await self._call_with_cookie(scope, receive, send, new_token, sec_fetch_dest)
+                await self._call_with_cookie(scope, receive, send, new_token, path, sec_fetch_dest)
                 return
 
             # Fallback: Body buffern, damit wir das _csrf-Formfeld parsen UND
@@ -257,14 +269,14 @@ class CSRFMiddleware:
                     return {"type": "http.request", "body": raw_body, "more_body": False}
                 return {"type": "http.disconnect"}
 
-            await self._call_with_cookie(scope, replay_receive, send, new_token, sec_fetch_dest)
+            await self._call_with_cookie(scope, replay_receive, send, new_token, path, sec_fetch_dest)
             return
 
         # Safe oder exempt → einfach durchreichen
-        await self._call_with_cookie(scope, receive, send, new_token, sec_fetch_dest)
+        await self._call_with_cookie(scope, receive, send, new_token, path, sec_fetch_dest)
 
     async def _call_with_cookie(
-        self, scope, receive, send, new_token: str | None, sec_fetch_dest: str | None,
+        self, scope, receive, send, new_token: str | None, path: str, sec_fetch_dest: str | None,
     ):
         if not new_token:
             await self.app(scope, receive, send)
@@ -272,7 +284,7 @@ class CSRFMiddleware:
 
         cookie_value = (
             f"{CSRF_COOKIE}={new_token}; Path=/; Max-Age=2592000"
-            + _csrf_cookie_attrs(sec_fetch_dest)
+            + _csrf_cookie_attrs(path, sec_fetch_dest)
         )
 
         async def send_wrapper(message):
