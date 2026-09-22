@@ -202,4 +202,4 @@ Aktuell: **2026.09.19** · → [Vollständige Versionshistorie](CHANGELOG.md)
 
 ## Lizenz
 
-**GNU Lesser General Public License v2.1 (LGPL-2.1)** — Freiwillige Feuerwehr Wolfurt.
+**GNU Lesser General Public License v2.1 (LGPL-2.1)** — Johannes Battlogg.
