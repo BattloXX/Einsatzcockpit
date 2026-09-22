@@ -62,6 +62,36 @@ Einsatzdauer (Chronometer), auch wenn die App gerade nicht geöffnet ist.
 - **Deaktivieren:** In der App unter dem Live-Status-Schalter ausschalten, oder beim Abmelden
   — die Dauerbenachrichtigung und der Hintergrunddienst werden dann sofort beendet.
 
+## Widgets auf dem Homescreen
+
+Die native Android-App bietet vier Homescreen-Widgets für den Direktzugriff, ohne die App
+erst zu öffnen (wie bei jeder Android-App per langem Druck auf den Homescreen → **Widgets**
+hinzufügen):
+
+| Widget | Zeigt | Öffnet |
+|--------|-------|--------|
+| **Kontakte** | Fixer Shortcut | Kontaktliste |
+| **Objekte** | Fixer Shortcut | Objektliste |
+| **Einsatzstatus** | Laufenden Einsatz (Stichwort, Adresse, Phase) oder „Kein aktiver Einsatz"; in der großen Darstellung zusätzlich eine Kartenvorschau | Laufenden Einsatz bzw. die Startseite |
+| **Fahrt erfassen** | „Fahrt erfassen", optional das Fahrzeug-Kurzzeichen als zweite Zeile | Das [Fahrtenbuch-Erfassungsformular](Anwender-Fahrtenbuch) |
+
+Alle Widgets nutzen die bestehende Anmeldung der App — kein separater Login nötig.
+
+### Fahrt erfassen: welches Fahrzeug wird vorausgewählt?
+
+Beim Hinzufügen des Widgets „Fahrt erfassen" lässt sich optional ein Fahrzeug fest
+hinterlegen. Welches Fahrzeug beim Öffnen tatsächlich vorausgewählt ist, folgt dieser
+Reihenfolge:
+
+1. **Geräte-Login-Fahrzeug** — ist dieses Gerät per QR/PIN fest mit einem Fahrzeug
+   verknüpft (z. B. ein fest verbautes Fahrzeug-Tablet), gewinnt immer dieses Fahrzeug.
+2. **Widget-Konfiguration** — nur wenn das Gerät selbst keinem Fahrzeug zugeordnet ist.
+3. **Manuelle Auswahl** — ist auch im Widget kein Fahrzeug hinterlegt, erscheint die
+   normale Fahrzeugauswahl im Formular.
+
+Ist ein Fahrzeug per Geräte-Login oder Widget-Konfiguration bekannt, zeigt das Widget
+dessen Kurzzeichen als zweite Zeile an (z. B. „RLF").
+
 ## Installation auf iOS (Safari)
 
 1. App in **Safari** öffnen (`https://einsatzleiter.feuerwehr-wolfurt.at`)
@@ -84,7 +114,7 @@ Alternativ erscheint Chrome automatisch ein "Installieren"-Banner.
 
 ## Offline-Verhalten
 
-Die PWA cached folgende Inhalte für Offline-Nutzung:
+Die PWA (Browser bzw. installierte Web-App) cached folgende Inhalte für Offline-Nutzung:
 - Login-Seite (Kein Zugriff ohne vorherigen Login möglich)
 - CSS, JavaScript, Icons (App lädt schneller)
 - Zuletzt geöffneter Einsatz (read-only)
@@ -93,6 +123,28 @@ Die PWA cached folgende Inhalte für Offline-Nutzung:
 - Änderungen speichern (werden in Queue gepuffert)
 - Neue Einsätze sehen
 - Echtzeit-Sync
+
+### Offline-Funktionen der nativen Android-App
+
+Die native Android-App geht darüber hinaus deutlich weiter und hält ganze Datenbestände
+aktiv im Hintergrund aktuell — gedacht für den Klassiker „Fahrzeug im Funkloch":
+
+- **Objekte offline:** Freigegebene Objekte (Stammdaten, Gefahren, BMA/Schlüssel, Pläne,
+  PDFs) werden alle 6 Stunden automatisch heruntergeladen und bleiben auch ohne
+  Netzverbindung vollständig abrufbar, inklusive der Detailseiten-Unterabschnitte.
+- **Kontakte offline:** Alle Kontakte (Telefonnummern, E-Mail, Objektzuordnungen)
+  synchronisieren in eine eigene, von der Web-Ansicht unabhängige Datenbank auf dem
+  Gerät — erreichbar über einen eigenen App-Shortcut „Kontakte offline" (langes Drücken
+  auf das App-Icon), inklusive Live-Suche, Direktanruf und SMS auch ganz ohne Netz.
+- **Offline-Start:** Die App erkennt einen fehlenden Netzzugang beim Start und springt
+  direkt zur zuletzt zwischengespeicherten Startseite, statt an einer
+  netzwerkabhängigen Anmelde-Weiterleitung hängen zu bleiben.
+- **Einsatz-Vorladen:** Wird ein neuer Einsatz per Push gemeldet, lädt die App die
+  Einsatzseite im Hintergrund einmal still vor, damit sie offline aktuell verfügbar
+  ist, auch wenn man sie nach dem Alarm nicht sofort öffnet.
+
+Beide Offline-Bestände (Objekte, Kontakte) laufen unabhängig von einer geöffneten App —
+der Abgleich passiert automatisch im Hintergrund, auch auf einem reinen SMS-Gateway-Gerät.
 
 ## Offline-Queue (ausstehende Aktionen)
 

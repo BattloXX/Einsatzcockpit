@@ -85,7 +85,7 @@ unter [Server-Voraussetzungen](Installation-Server-Voraussetzungen).
 | [Archiv und PDF-Export](Anwender-Archiv-und-PDF-Export) | Abschließen, Bericht drucken |
 | [Übungsmodus](Anwender-Uebungsmodus) | Was ist anders, Statistik-Ausschluss |
 | [QR-Code Schnellzugriff](Anwender-QR-Code-Schnellzugriff) | Zweites Gerät per Scan einbinden |
-| [Mobile Nutzung / PWA](Anwender-Mobile-Nutzung-PWA) | Installieren, Offline-Verhalten |
+| [Mobile Nutzung / PWA](Anwender-Mobile-Nutzung-PWA) | Installieren, Offline-Verhalten, Homescreen-Widgets |
 | [Push-Benachrichtigungen](Anwender-Push-Benachrichtigungen) | Aktivieren auf Handy und PC |
 | [Lageführung](Anwender-Lagefuehrung) | Einsatzbezogene Lagekarte: Auto-Layer, taktische Zeichen, Multi-User, Chronologie/Replay, Druck & PDF-Lagebericht |
 | [Lagekarte.info](Anwender-Lagekarte) | Adresse & Koordinaten, Live-Fahrzeuge auf lagekarte.info |
