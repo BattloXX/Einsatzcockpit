@@ -146,3 +146,19 @@ def test_freigeben_mit_offenem_kontaktvorschlag_ohne_entscheidung_gibt_400(clien
         assert db.get(ObjektPflegeauftrag, auftrag_id).status == "eingereicht"
     finally:
         db.close()
+
+
+def test_review_zeigt_kontaktnotiz_oder_fallback(client):
+    obj_id, auftrag_id = _setup_eingereicht("review_notiz_user", nummer=8904)
+    _login(client, "review_notiz_user", "Test1234!")
+    response = client.get(f"/objekte/{obj_id}/pflegeauftrag/{auftrag_id}/review")
+    assert "Keine Notiz hinterlegt." in response.text
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        db.get(ObjektPflegeauftrag, auftrag_id).kontakt_notiz = "Bitte BMA prüfen"
+        db.commit()
+    finally:
+        db.close()
+    response = client.get(f"/objekte/{obj_id}/pflegeauftrag/{auftrag_id}/review")
+    assert "Bitte BMA prüfen" in response.text

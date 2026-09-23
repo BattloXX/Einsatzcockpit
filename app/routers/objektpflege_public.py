@@ -17,14 +17,22 @@ from app.db import get_db
 from app.models.kontakt import Kontakt
 from app.models.master import FireDept
 from app.models.objekt import (
+    KONTAKT_ARTEN,
     PFLEGEAUFTRAG_STATUS_EINGEREICHT,
     PFLEGEAUFTRAG_STATUS_WIDERRUFEN,
+    GefahrenKatalog,
     KontaktAenderungsvorschlag,
+    MerkmalKatalog,
     Objekt,
+    ObjektBMA,
     ObjektDokument,
+    ObjektGefahr,
+    ObjektKontakt,
+    ObjektMerkmal,
     ObjektPflegeAbschnitt,
     ObjektPflegeauftrag,
     ObjektPflegeEreignis,
+    ObjektWohnanlage,
 )
 from app.services.objekt_dokument_service import (
     absolute_pfad,
@@ -138,12 +146,53 @@ def pruefen(token: str, request: Request, db: Session = Depends(get_db)):
     abschnitte = (db.query(ObjektPflegeAbschnitt).execution_options(include_all_tenants=True)
                   .filter(ObjektPflegeAbschnitt.pflegeauftrag_id == auftrag.id,
                           ObjektPflegeAbschnitt.org_id == auftrag.org_id).all())
+    bereiche = bereiche_liste(auftrag)
     dokumente = []
-    if "dokumente" in bereiche_liste(auftrag):
+    if "dokumente" in bereiche:
         dokumente = (db.query(ObjektDokument).execution_options(include_all_tenants=True)
                      .filter(ObjektDokument.objekt_id == objekt.id, ObjektDokument.org_id == auftrag.org_id,
                              ObjektDokument.ist_aktuelle_version.is_(True)).all())
-    bereiche = bereiche_liste(auftrag)
+    merkmale = []
+    wohnanlage = None
+    hausverwaltung_name = None
+    if "stammdaten" in bereiche:
+        merkmale_roh = (db.query(ObjektMerkmal, MerkmalKatalog).execution_options(include_all_tenants=True)
+                         .join(MerkmalKatalog, ObjektMerkmal.merkmal_id == MerkmalKatalog.id)
+                         .filter(ObjektMerkmal.objekt_id == objekt.id, ObjektMerkmal.org_id == auftrag.org_id,
+                                 MerkmalKatalog.org_id == auftrag.org_id).all())
+        merkmale = [
+            {
+                "name": f"{merkmal.icon} {merkmal.name}".strip() if merkmal.icon else merkmal.name,
+                "hinweis": zuordnung.hinweis,
+            }
+            for zuordnung, merkmal in merkmale_roh
+        ]
+        wohnanlage = (db.query(ObjektWohnanlage).execution_options(include_all_tenants=True)
+                      .filter(ObjektWohnanlage.objekt_id == objekt.id,
+                              ObjektWohnanlage.org_id == auftrag.org_id).first())
+        if wohnanlage and wohnanlage.hausverwaltung_kontakt_id:
+            hausverwaltung_name = (db.query(Kontakt.anzeigename).execution_options(include_all_tenants=True)
+                                   .join(ObjektKontakt, ObjektKontakt.kontakt_id == Kontakt.id)
+                                   .filter(ObjektKontakt.id == wohnanlage.hausverwaltung_kontakt_id,
+                                           ObjektKontakt.objekt_id == objekt.id,
+                                           ObjektKontakt.org_id == auftrag.org_id,
+                                           Kontakt.org_id == auftrag.org_id).scalar())
+    weitere_kontakte = []
+    if "kontakte" in bereiche:
+        weitere_kontakte = (db.query(ObjektKontakt, Kontakt).execution_options(include_all_tenants=True)
+                            .join(Kontakt, ObjektKontakt.kontakt_id == Kontakt.id)
+                            .filter(ObjektKontakt.objekt_id == objekt.id,
+                                    ObjektKontakt.org_id == auftrag.org_id,
+                                    ObjektKontakt.kontakt_id != auftrag.kontakt_id,
+                                    Kontakt.org_id == auftrag.org_id)
+                            .order_by(ObjektKontakt.sort, ObjektKontakt.id).all())
+    bma = (db.query(ObjektBMA).execution_options(include_all_tenants=True)
+           .filter(ObjektBMA.objekt_id == objekt.id, ObjektBMA.org_id == auftrag.org_id).first())
+    gefahren = (db.query(ObjektGefahr).execution_options(include_all_tenants=True)
+                .join(GefahrenKatalog, ObjektGefahr.gefahr_id == GefahrenKatalog.id)
+                .filter(ObjektGefahr.objekt_id == objekt.id, ObjektGefahr.org_id == auftrag.org_id,
+                        GefahrenKatalog.org_id == auftrag.org_id)
+                .order_by(ObjektGefahr.sort, ObjektGefahr.id).all())
     abschnitte_by_bereich = {a.bereich: a for a in abschnitte}
     bearbeitet_anzahl = sum(
         1 for bereich in bereiche
@@ -153,6 +202,9 @@ def pruefen(token: str, request: Request, db: Session = Depends(get_db)):
         "auftrag": auftrag, "objekt": objekt, "live_objekt": live_objekt, "kontakt": kontakt,
         "token": token, "bereiche": bereiche, "abschnitte": abschnitte_by_bereich,
         "dokumente": dokumente, "editierbar": BEREICHE_MIT_EDITFORMULAR,
+        "merkmale": merkmale, "wohnanlage": wohnanlage, "hausverwaltung_name": hausverwaltung_name,
+        "weitere_kontakte": weitere_kontakte, "kontakt_arten": KONTAKT_ARTEN,
+        "bma": bma, "gefahren": gefahren,
         "bearbeitet_anzahl": bearbeitet_anzahl,
         "vollstaendig": alle_pflichtbereiche_bearbeitet(db, auftrag),
         "org": org, "org_name": _org_name(org),
@@ -324,10 +376,14 @@ def dokument_ungueltig(token: str, dokument_id: int, db: Session = Depends(get_d
 
 
 @public_router.post("/objektpflege/{token}/einreichen")
-def einreichen(token: str, bestaetigung: str = Form(...), db: Session = Depends(get_db)):
+def einreichen(token: str, bestaetigung: str = Form(...), kontakt_notiz: str = Form(""), db: Session = Depends(get_db)):
     auftrag = _aktive_aktion(db, token)
     if not bestaetigung or not alle_pflichtbereiche_bearbeitet(db, auftrag):
         raise HTTPException(400, "Bitte bearbeiten Sie alle Bereiche und bestätigen Sie die Vollständigkeit")
+    notiz = kontakt_notiz.strip()
+    if len(notiz) > 5000:
+        raise HTTPException(400, "Die Notiz ist zu lang (max. 5000 Zeichen)")
+    auftrag.kontakt_notiz = notiz or None
     pflegeauftrag_status_wechsel(db, auftrag, PFLEGEAUFTRAG_STATUS_EINGEREICHT)
     db.commit()
     return RedirectResponse(f"/objektpflege/{token}", status_code=303, headers=_PUBLIC_HEADERS)
