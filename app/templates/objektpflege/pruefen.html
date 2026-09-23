@@ -5,7 +5,7 @@
 
 {% for bereich in bereiche %}
 {% set a = abschnitte.get(bereich) %}
-<details class="pflege-section{% if bereich == 'dokumente' %} pflege-section--dokumente{% endif %}">
+<details class="pflege-section{% if bereich == 'dokumente' %} pflege-section--dokumente{% endif %}" style="--pflege-accent:{{ 'var(--green)' if a and a.status in ('bestaetigt', 'geaendert') else 'var(--red)' }}">
   <summary>{{ bereich|capitalize }} <span class="badge">{{ a.status if a else "offen" }}</span></summary>
   <div class="muted" style="margin-top:12px">
     {% if bereich == "stammdaten" %}
