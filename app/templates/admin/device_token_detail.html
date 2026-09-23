@@ -27,6 +27,7 @@
         <tr><td style="padding:4px 0;color:var(--color-text-muted);width:40%">Bezeichnung</td><td><strong>{{ dt.label }}</strong></td></tr>
         <tr><td style="padding:4px 0;color:var(--color-text-muted)">Login-User</td><td>{{ dt.user.username if dt.user else '–' }}</td></tr>
         <tr><td style="padding:4px 0;color:var(--color-text-muted)">Fahrzeug</td><td>{{ dt.vehicle.display_label if dt.vehicle else '–' }}</td></tr>
+        <tr><td style="padding:4px 0;color:var(--color-text-muted)">App-Version</td><td>{{ dt.app_version or '–' }}</td></tr>
         <tr><td style="padding:4px 0;color:var(--color-text-muted)">Rollen</td><td>{{ dt.user.roles|map(attribute='label')|join(', ') if dt.user else '–' }}</td></tr>
         <tr><td style="padding:4px 0;color:var(--color-text-muted)">Erstellt</td><td>{{ (dt.created_at|local).strftime('%d.%m.%Y %H:%M') }}</td></tr>
         <tr><td style="padding:4px 0;color:var(--color-text-muted)">Zuletzt genutzt</td>
