@@ -51,8 +51,8 @@ def _satz(db, org, objekt, extern_id="pdf:1332"):
     return satz
 
 
-def _kontakt(extern_id, name="Max Muster", telefone=None):
-    return {"extern_id": extern_id, "name": name, "art": "bma_alarmperson",
+def _kontakt(extern_id, name="Max Muster", telefone=None, art="bma_alarmperson"):
+    return {"extern_id": extern_id, "name": name, "art": art,
             "telefone": telefone or ["+43 555 123"]}
 
 
@@ -155,6 +155,34 @@ def test_gleiches_datenblatt_zweimal_in_einer_session_legt_jeden_kontakt_einmal_
     assert session.query(ObjektKontakt).filter(ObjektKontakt.objekt_id == objekt.id).count() == len(kontakte)
     assert session.query(Kontakt).filter(Kontakt.org_id == org.id).count() == len(kontakte)
     assert session.query(KontaktExterneReferenz).filter(KontaktExterneReferenz.org_id == org.id).count() == len(kontakte)
+
+
+def test_gleiche_person_in_zwei_bma_rollen_teilt_zentralen_kontakt(db):
+    session, org = db
+    objekt = _objekt(session, org)
+
+    _sync_kontakte(session, _satz(session, org, objekt), objekt, [
+        _kontakt("pdf:1332:brandschutzbeauftragter:juergen-kampl", "Jürgen Kampl",
+                  art="brandschutzbeauftragter"),
+        _kontakt("pdf:1332:bma_alarmperson:juergen-kampl", "Jürgen Kampl"),
+    ], None)
+
+    assert len(objekt.kontakte) == 2
+    assert session.query(Kontakt).filter(Kontakt.org_id == org.id).count() == 1
+    assert {kontakt.kontakt_id for kontakt in objekt.kontakte} == {objekt.kontakte[0].kontakt_id}
+
+
+def test_bma_import_setzt_vor_und_nachname_des_zentralen_kontakts(db):
+    session, org = db
+    objekt = _objekt(session, org)
+
+    _sync_kontakte(session, _satz(session, org, objekt), objekt,
+                    [_kontakt("pdf:1332:bma_alarmperson:juergen-kampl", "Jürgen Kampl")], None)
+
+    kontakt = objekt.kontakte[0].zentraler_kontakt
+    assert kontakt.anzeigename == "Jürgen Kampl"
+    assert kontakt.vorname == "Jürgen"
+    assert kontakt.nachname == "Kampl"
 
 
 def test_zwei_datenblaetter_am_selben_objekt_bleiben_disjunkt(db):
