@@ -30,7 +30,7 @@ from app.models.objekt import (
     ObjektKontakt,
     legacy_telefon_eintrag,
 )
-from app.services.bma_import.bma_pdf_parser import namens_slug
+from app.services.bma_import.bma_pdf_parser import namens_slug, splitte_vor_nachname
 from app.services.kontakt_service import bereinigter_text
 from app.services.kontakt_sync_service import contact_payload, mapping_payload, record_change
 from app.services.objekt_plan_upload_service import erstelle_objekt_aus_identitaet, finde_passendes_objekt
@@ -107,9 +107,11 @@ def _zentralen_bma_kontakt_sync(
         if (eintrag := _telefon_daten(roh))["nummer"]
     ]
     anzeigename = bereinigter_text(daten.get("name")) or ""
+    vorname, nachname = splitte_vor_nachname(anzeigename)
     if kontakt is None:
         kontakt = Kontakt(
             org_id=zuordnung.org_id, typ="person", anzeigename=anzeigename,
+            vorname=vorname, nachname=nachname,
             email=bereinigter_text(daten.get("email")),
             erstellt_von_id=user_id, aktualisiert_von_id=user_id,
         )
@@ -117,6 +119,8 @@ def _zentralen_bma_kontakt_sync(
         db.flush()
     else:
         kontakt.anzeigename = anzeigename
+        kontakt.vorname = vorname
+        kontakt.nachname = nachname
         kontakt.email = bereinigter_text(daten.get("email"))
         kontakt.aktualisiert_von_id = user_id
         kontakt.version += 1
@@ -233,6 +237,7 @@ def _sync_kontakte(db: Session, satz: BmaImportSatz, objekt: Objekt,
         if k.extern_id is not None and _gehoert_zu_satz(k, praefix)
     }
     adoptierbar = _adoptionskandidaten(objekt, bestehende)
+    kontakte_je_name: dict[str, Kontakt] = {}
     vergeben: set[int] = set()  # bereits zugeordnete Zeilen - jede Zeile nur EINMAL
     gesehen: set[str] = set()
     geaendert = False
@@ -261,16 +266,18 @@ def _sync_kontakte(db: Session, satz: BmaImportSatz, objekt: Objekt,
                 # sort bleibt bewusst stehen: die Reihenfolge der Kontaktkarten ist
                 # haendische Pflege, die der Import nicht umsortieren soll.
         if kontakt is None:
-            zentraler_kontakt = Kontakt(
-                org_id=objekt.org_id,
-                typ="person",
-                anzeigename=bereinigter_text(daten.get("name")),
-                email=bereinigter_text(daten.get("email")),
-                erstellt_von_id=user_id,
-                aktualisiert_von_id=user_id,
-            )
-            db.add(zentraler_kontakt)
-            db.flush()
+            zentraler_kontakt = kontakte_je_name.get(namens_slug(daten.get("name") or ""))
+            if zentraler_kontakt is None:
+                zentraler_kontakt = Kontakt(
+                    org_id=objekt.org_id,
+                    typ="person",
+                    anzeigename=bereinigter_text(daten.get("name")),
+                    email=bereinigter_text(daten.get("email")),
+                    erstellt_von_id=user_id,
+                    aktualisiert_von_id=user_id,
+                )
+                db.add(zentraler_kontakt)
+                db.flush()
             kontakt = ObjektKontakt(org_id=objekt.org_id, extern_quelle="dibos_bma",
                                     extern_id=extern_id, sort=naechster_sort,
                                     kontakt_id=zentraler_kontakt.id,
@@ -290,6 +297,7 @@ def _sync_kontakte(db: Session, satz: BmaImportSatz, objekt: Objekt,
         # Central data is owned by the source identity; the association itself
         # retains its old PK and BMA external identity for idempotent imports.
         zentraler_kontakt = _zentralen_bma_kontakt_sync(db, satz, kontakt, daten, user_id)
+        kontakte_je_name.setdefault(namens_slug(daten.get("name") or ""), zentraler_kontakt)
         if kontakt.art != felder["art"]:
             kontakt.art = felder["art"]
             geaendert = True

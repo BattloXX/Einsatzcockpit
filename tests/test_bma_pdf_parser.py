@@ -9,7 +9,9 @@ nötig). Reihenfolge/Leerzeichen-Eigenheiten je Zeile (z.B. "Aufschaltung
 RFL:Ja" ohne Leerzeichen, "Telefon Beruf: +43" MIT Leerzeichen) sind exakt
 wie im echten Extrakt belassen, nicht künstlich vereinheitlicht.
 """
-from app.services.bma_import.bma_pdf_parser import parse_datenblatt_text
+import pytest
+
+from app.services.bma_import.bma_pdf_parser import parse_datenblatt_text, splitte_vor_nachname
 
 ECHTES_DATENBLATT = """BMA 1238
 Böhler Fenster Wolfurt
@@ -46,6 +48,16 @@ EMail Privat: d.stepanyan@armenischer-kv.at Pager: FW Schwarzach 16
 
 Datenblatt zuletzt aktualisiert: 23.07.2026
 Datenblatt zuletzt geprüft:"""
+
+
+@pytest.mark.parametrize(("name", "erwartet"), [
+    ("Jürgen Kampl", ("Jürgen", "Kampl")),
+    ("Anna Maria Muster", ("Anna Maria", "Muster")),
+    ("Madonna", (None, "Madonna")),
+    ("   ", (None, None)),
+])
+def test_splittet_vor_und_nachname(name, erwartet):
+    assert splitte_vor_nachname(name) == erwartet
 
 
 def test_parst_anlage_stammdaten():

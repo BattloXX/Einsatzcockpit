@@ -108,6 +108,15 @@ def namens_slug(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name).strip("-")[:60] or "unbenannt"
 
 
+def splitte_vor_nachname(name: str) -> tuple[str | None, str | None]:
+    teile = name.split()
+    if not teile:
+        return None, None
+    if len(teile) == 1:
+        return None, teile[0]
+    return " ".join(teile[:-1]), teile[-1]
+
+
 def baue_kontakt_extern_id(anlage_extern_id: str, art: str, name: str) -> str:
     return f"{anlage_extern_id}:{art}:{namens_slug(name)}"
 
