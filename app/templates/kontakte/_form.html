@@ -49,7 +49,7 @@
   }
   const vorschlagen = () => {
     if (anzeigename.dataset.manuell === '1') return;
-    anzeigename.value = [vorname.value, nachname.value].map((wert) => wert.trim()).filter(Boolean).join(' ');
+    anzeigename.value = [nachname.value, vorname.value].map((wert) => wert.trim()).filter(Boolean).join(' ');
   };
   vorname.addEventListener('input', vorschlagen);
   nachname.addEventListener('input', vorschlagen);

@@ -88,7 +88,7 @@ def _werte(kontakt: Kontakt, daten: dict[str, Any], user_id: int | None) -> None
     if kontakt.typ not in (KONTAKT_TYP_PERSON, KONTAKT_TYP_STELLE):
         raise ValueError("Ungueltiger Kontakttyp")
     if not kontakt.anzeigename:
-        kontakt.anzeigename = " ".join(x for x in (kontakt.vorname, kontakt.nachname) if x).strip()
+        kontakt.anzeigename = " ".join(x for x in (kontakt.nachname, kontakt.vorname) if x).strip()
     if not kontakt.anzeigename:
         raise ValueError("Bitte einen Anzeigenamen eingeben")
     kontakt.aktualisiert_von_id = user_id
