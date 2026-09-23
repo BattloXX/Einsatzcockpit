@@ -15,6 +15,27 @@
         <dt>Koordinaten</dt><dd>{{ live_objekt.lat if live_objekt.lat is not none else '–' }}, {{ live_objekt.lng if live_objekt.lng is not none else '–' }}</dd>
         <dt>Nächste Prüfung</dt><dd>{{ live_objekt.revision_datum.strftime('%d.%m.%Y') if live_objekt.revision_datum else 'Nicht festgelegt' }}</dd>
       </dl>
+      {% if merkmale or wohnanlage %}
+      <dl class="pflege-daten">
+        {% if merkmale %}
+        <dt>Merkmale</dt>
+        <dd>
+          {% for merkmal in merkmale %}
+          {{ merkmal.name }}{% if merkmal.hinweis %} · {{ merkmal.hinweis }}{% endif %}{% if not loop.last %}<br>{% endif %}
+          {% endfor %}
+        </dd>
+        {% endif %}
+        {% if wohnanlage %}
+        <dt>Wohneinheiten</dt><dd>{{ wohnanlage.wohneinheiten if wohnanlage.wohneinheiten is not none else '–' }}</dd>
+        <dt>Geschosse</dt><dd>{{ wohnanlage.geschosse if wohnanlage.geschosse is not none else '–' }}</dd>
+        <dt>Stiegen</dt><dd>{{ wohnanlage.stiegen if wohnanlage.stiegen is not none else '–' }}</dd>
+        {% if hausverwaltung_name %}
+        <dt>Hausverwaltung</dt><dd>{{ hausverwaltung_name }}</dd>
+        {% endif %}
+        <dt>Hinweise Wohnanlage</dt><dd>{{ wohnanlage.hinweise or '–' }}</dd>
+        {% endif %}
+      </dl>
+      {% endif %}
     {% elif bereich == "adresse" %}
       {{ live_objekt.strasse or "" }} {{ live_objekt.hausnummer or "" }}, {{ live_objekt.plz or "" }} {{ live_objekt.ort or "" }}
     {% elif bereich == "zufahrt" %}
@@ -28,6 +49,17 @@
         <dt>Telefon</dt><dd>{% for telefon in kontakt.telefone %}{% if not loop.first %}<br>{% endif %}<a href="tel:{{ telefon.nummer }}">{{ telefon.nummer }}</a>{% if telefon.label %} · {{ telefon.label }}{% endif %}{% else %}–{% endfor %}</dd>
         <dt>Erreichbarkeit</dt><dd>{{ kontakt.erreichbarkeit or '–' }}</dd>
       </dl>
+      {% if weitere_kontakte %}
+      <dl class="pflege-daten">
+        <dt>Weitere Objektkontakte</dt>
+        <dd>
+          {% for objekt_kontakt, weiterer_kontakt in weitere_kontakte %}
+          <strong>{{ weiterer_kontakt.anzeigename }}</strong> · {{ kontakt_arten.get(objekt_kontakt.art, objekt_kontakt.art) }}{% if objekt_kontakt.erreichbarkeit %} · {{ objekt_kontakt.erreichbarkeit }}{% endif %}{% if not loop.last %}<br>{% endif %}
+          {% endfor %}
+        </dd>
+      </dl>
+      <p class="pflege-hinweis">Fehlt jemand oder ist ein Eintrag veraltet? Bitte im Notizfeld unten vermerken.</p>
+      {% endif %}
       <p class="pflege-hinweis">Bitte melden Sie Änderungen der Kontaktangaben zusätzlich an die zuständige RFL-Stelle, damit die Alarmierungsdaten dort ebenfalls aktuell bleiben.</p>
     {% elif bereich == "dokumente" %}
       {% for d in dokumente %}
@@ -58,16 +90,38 @@
         <div class="upload-progress"><i></i></div>
       </form>
     {% elif bereich == "bma" %}
-      {% set bma = objekt.bma %}
-      {% if bma %}<dl class="pflege-daten">
+      {% if bma %}
+      <dl class="pflege-daten">
         <dt>BMA / RFL</dt><dd>{{ bma.bma_nummer or '–' }}{% if bma.rfl_nummer %} · RFL {{ bma.rfl_nummer }}{% endif %}</dd>
         <dt>BMZ / FBF</dt><dd>{{ bma.bmz_standort or '–' }}<br>{{ bma.fbf_standort or '–' }}</dd>
         <dt>Laufkarten</dt><dd>{{ bma.laufkarten_ablageort or '–' }}</dd>
         <dt>Übertragung</dt><dd>{{ bma.uebertragungseinrichtung or '–' }}</dd>
         <dt>Schlüsselsafe</dt><dd>{% if bma.schluesselsafe_vorhanden %}{{ bma.schluesselsafe_standort or 'Standort nicht hinterlegt' }}{% if bma.schluesselsafe_inhalt %} · {{ bma.schluesselsafe_inhalt }}{% endif %}{% else %}Nicht vorhanden{% endif %}</dd>
-      </dl>{% else %}Keine Brandmeldeanlage hinterlegt.{% endif %}
+        <dt>Benachrichtigung SMS</dt><dd>{{ bma.benachrichtigung_sms or '–' }}</dd>
+        <dt>Benachrichtigung E-Mail</dt><dd>{{ bma.benachrichtigung_email or '–' }}</dd>
+      </dl>
+      {% else %}Keine Brandmeldeanlage hinterlegt.{% endif %}
     {% elif bereich == "gefahren" %}
-      {% if objekt.gefahren %}{% for g in objekt.gefahren %}<div class="pflege-gefahr"><strong>{{ g.gefahr.name if g.gefahr else 'Gefahr' }}</strong>{% if g.un_nummer %} · UN {{ g.un_nummer }}{% endif %}{% if g.stoffname %} · {{ g.stoffname }}{% endif %}<br>{{ g.detail or 'Kein zusätzlicher Hinweis hinterlegt.' }}</div>{% endfor %}{% else %}Keine Gefahren hinterlegt.{% endif %}
+      {% if gefahren %}{% for g in gefahren %}
+      <div class="pflege-gefahr">
+        <strong>{{ g.gefahr.name if g.gefahr else 'Gefahr' }}</strong>{% if g.un_nummer %} · UN {{ g.un_nummer }}{% endif %}{% if g.stoffname %} · {{ g.stoffname }}{% endif %}
+        <br>{{ g.detail or 'Kein zusätzlicher Hinweis hinterlegt.' }}
+        <dl class="pflege-daten">
+          <dt>Gefahrklasse</dt><dd>{{ g.gefahrklasse or '–' }}</dd>
+          <dt>Kemler-Zahl</dt><dd>{{ g.gefahrnummer or '–' }}</dd>
+          {% if g.links %}
+          <dt>Links</dt>
+          <dd>
+            {% for link in g.links %}
+            {% if link.url and (link.url.startswith('http://') or link.url.startswith('https://')) %}
+            <a href="{{ link.url }}">{{ link.label or link.url }}</a>{% if not loop.last %}<br>{% endif %}
+            {% endif %}
+            {% endfor %}
+          </dd>
+          {% endif %}
+        </dl>
+      </div>
+      {% endfor %}{% else %}Keine Gefahren hinterlegt.{% endif %}
     {% endif %}
   </div>
   <div class="actions">
@@ -117,6 +171,9 @@
 
 <form class="bottom" method="post" action="/objektpflege/{{ token }}/einreichen">
   <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+  <label for="kontakt_notiz">Anmerkungen an die Feuerwehr (optional)</label>
+  <textarea name="kontakt_notiz" id="kontakt_notiz" rows="4" maxlength="5000">{{ auftrag.kontakt_notiz or "" }}</textarea>
+  <p class="pflege-hinweis">z. B. Korrekturen zu Brandmeldeanlage, Gefahren oder weiteren Ansprechpartnern, die oben nicht bearbeitet werden können.</p>
   <label><input type="checkbox" name="bestaetigung" value="1" required style="width:auto"> Angaben vollständig geprüft</label>
   <button {% if not vollstaendig %}disabled{% endif %}>Einreichen</button>
 </form>
@@ -126,13 +183,13 @@
 
   function saveDraft() {
     let d = {};
-    document.querySelectorAll('.draft-form input,.draft-form textarea').forEach(e => d[e.name] = e.value);
+    document.querySelectorAll('.draft-form input,.draft-form textarea,.bottom textarea').forEach(e => d[e.name] = e.value);
     localStorage.setItem(key, JSON.stringify(d));
   }
 
   function restoreDraft() {
     let d = JSON.parse(localStorage.getItem(key) || '{}');
-    document.querySelectorAll('.draft-form input,.draft-form textarea').forEach(e => {
+    document.querySelectorAll('.draft-form input,.draft-form textarea,.bottom textarea').forEach(e => {
       if (d[e.name] !== undefined) e.value = d[e.name];
     });
   }

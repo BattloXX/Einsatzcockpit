@@ -22,7 +22,9 @@ from app.models.objekt import (
     ObjektEinsatz,
     ObjektKartenObjekt,
     ObjektKontakt,
+    ObjektMerkmal,
     ObjektPflegeauftrag,
+    MerkmalKatalog,
 )
 from app.models.teams_bot import AlarmToken
 from app.models.stats import StatistikDashboardToken
@@ -81,6 +83,36 @@ def test_objektpflege_token_isoliert_objekt_und_manipulierte_fremd_fk(client):
     finally:
         db.close()
     assert client.get(f"/objektpflege/{token}").status_code == 404
+
+
+def test_objektpflege_pruefen_zeigt_keine_manipulierten_fremden_kontakte_oder_merkmale(client):
+    """Die Positivlisten der Pruefseite begrenzen auch nachtraeglich manipulierte FKs."""
+    org_b = _setup_zwei_orgs()
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        objekt = Objekt(org_id=ORG_A, nummer=778, name="Pflege Objekt A", status=OBJEKT_STATUS_FREIGEGEBEN)
+        kontakt = Kontakt(org_id=ORG_A, anzeigename="Kontakt A", email="a@example.test")
+        fremder_kontakt = Kontakt(org_id=org_b, anzeigename="GEHEIM Fremdkontakt")
+        fremdes_merkmal = MerkmalKatalog(org_id=org_b, name="GEHEIM Fremdmerkmal")
+        db.add_all([objekt, kontakt, fremder_kontakt, fremdes_merkmal])
+        db.flush()
+        db.add(ObjektKontakt(org_id=ORG_A, objekt_id=objekt.id, kontakt_id=kontakt.id))
+        db.flush()
+        auftrag, token = erstelle_pflegeauftrag(
+            db, objekt, kontakt, ersteller_id=None, bereiche=["stammdaten", "kontakte"],
+        )
+        db.add_all([
+            ObjektKontakt(org_id=org_b, objekt_id=objekt.id, kontakt_id=fremder_kontakt.id),
+            ObjektMerkmal(org_id=org_b, objekt_id=objekt.id, merkmal_id=fremdes_merkmal.id),
+        ])
+        db.commit()
+    finally:
+        db.close()
+    response = client.get(f"/objektpflege/{token}/pruefen")
+    assert response.status_code == 200
+    assert "GEHEIM Fremdkontakt" not in response.text
+    assert "GEHEIM Fremdmerkmal" not in response.text
 
 
 def test_kontakt_sync_api_key_zeigt_keine_fremden_snapshot_oder_delta_kontakte(client):

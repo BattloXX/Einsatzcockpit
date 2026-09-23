@@ -10,11 +10,17 @@ from app.models.master import FireDept
 from app.models.objekt import (
     OBJEKT_STATUS_FREIGEGEBEN,
     KontaktAenderungsvorschlag,
+    GefahrenKatalog,
     Objekt,
+    ObjektBMA,
     ObjektChange,
     ObjektDokument,
+    ObjektGefahr,
     ObjektKontakt,
+    ObjektMerkmal,
     ObjektPflegeauftrag,
+    ObjektWohnanlage,
+    MerkmalKatalog,
 )
 from app.services.objekt_pflege_service import erstelle_pflegeauftrag
 
@@ -95,7 +101,9 @@ def test_widerrufen_and_submission_require_complete_sections(client):
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
-        assert db.get(ObjektPflegeauftrag, auftrag_id).status == "eingereicht"
+        auftrag = db.get(ObjektPflegeauftrag, auftrag_id)
+        assert auftrag.status == "eingereicht"
+        assert auftrag.kontakt_notiz is None
     finally:
         db.close()
 
@@ -166,3 +174,75 @@ def test_guest_can_open_only_current_document_in_native_viewer(client, tmp_path,
         f"/objektpflege/{token}/dokumente/{dokument_id + 999999}/anzeigen",
         follow_redirects=False,
     ).status_code == 404
+
+
+def test_einreichen_speichert_beschnittene_notiz_und_lehnt_zu_lange_ab(client):
+    auftrag_id, _, _, token = _auftrag("Notiz", ["stammdaten"])
+    csrf = _csrf(client, token)
+    assert client.post(f"/objektpflege/{token}/bereich/stammdaten/bestaetigen", data={"_csrf": csrf}).status_code == 200
+    response = client.post(
+        f"/objektpflege/{token}/einreichen",
+        data={"_csrf": csrf, "bestaetigung": "1", "kontakt_notiz": "  Bitte prüfen.  "},
+    )
+    assert response.status_code == 200
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        auftrag = db.get(ObjektPflegeauftrag, auftrag_id)
+        assert auftrag.status == "eingereicht"
+        assert auftrag.kontakt_notiz == "Bitte prüfen."
+    finally:
+        db.close()
+
+    auftrag_id, _, _, token = _auftrag("Lange Notiz", ["stammdaten"])
+    csrf = _csrf(client, token)
+    assert client.post(f"/objektpflege/{token}/bereich/stammdaten/bestaetigen", data={"_csrf": csrf}).status_code == 200
+    response = client.post(
+        f"/objektpflege/{token}/einreichen",
+        data={"_csrf": csrf, "bestaetigung": "1", "kontakt_notiz": "x" * 5001},
+    )
+    assert response.status_code == 400
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        assert db.get(ObjektPflegeauftrag, auftrag_id).status != "eingereicht"
+    finally:
+        db.close()
+
+
+def test_pruefen_zeigt_zusaetzliche_lesedaten(client):
+    _, objekt_id, _, token = _auftrag("Zusatzdaten", ["stammdaten", "kontakte", "bma", "gefahren"])
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        objekt = db.get(Objekt, objekt_id)
+        merkmal = MerkmalKatalog(org_id=objekt.org_id, name="Tiefgarage", icon="P")
+        weiterer = Kontakt(org_id=objekt.org_id, anzeigename="Weitere Person")
+        gefahr = GefahrenKatalog(org_id=objekt.org_id, name="Chemie")
+        db.add_all([merkmal, weiterer, gefahr])
+        db.flush()
+        weiterer_objektkontakt = ObjektKontakt(
+            org_id=objekt.org_id, objekt_id=objekt.id, kontakt_id=weiterer.id,
+            art="betreiber", erreichbarkeit="tagsüber",
+        )
+        db.add_all([
+            ObjektMerkmal(org_id=objekt.org_id, objekt_id=objekt.id, merkmal_id=merkmal.id, hinweis="Garage"),
+            weiterer_objektkontakt,
+            ObjektBMA(org_id=objekt.org_id, objekt_id=objekt.id, benachrichtigung_sms="SMS-Kreis",
+                      benachrichtigung_email="bma@example.test"),
+            ObjektGefahr(org_id=objekt.org_id, objekt_id=objekt.id, gefahr_id=gefahr.id,
+                         gefahrklasse="3", gefahrnummer="33",
+                         links_json='[{"label":"Datenblatt","url":"https://example.test/datenblatt"}]'),
+        ])
+        db.flush()
+        db.add(ObjektWohnanlage(
+            org_id=objekt.org_id, objekt_id=objekt.id, wohneinheiten=12, geschosse=4, stiegen=2,
+            hausverwaltung_kontakt_id=weiterer_objektkontakt.id, hinweise="Innenhof",
+        ))
+        db.commit()
+    finally:
+        db.close()
+    response = client.get(f"/objektpflege/{token}/pruefen")
+    assert response.status_code == 200
+    for text in ("Tiefgarage", "Innenhof", "Weitere Person", "SMS-Kreis", "Gefahrklasse", "Datenblatt"):
+        assert text in response.text

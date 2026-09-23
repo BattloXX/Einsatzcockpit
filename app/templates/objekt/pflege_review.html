@@ -15,6 +15,15 @@
     </div>
   </div>
 
+  <div class="card" style="padding:16px;margin-top:16px;">
+    <h3 style="margin-top:0;">Notiz des Kontakts</h3>
+    {% if auftrag.kontakt_notiz %}
+    <div style="white-space:pre-wrap;">{{ auftrag.kontakt_notiz }}</div>
+    {% else %}
+    <p class="text-muted" style="margin:0;">Keine Notiz hinterlegt.</p>
+    {% endif %}
+  </div>
+
   <form method="post" action="/objekte/{{ objekt.id }}/pflegeauftrag/{{ auftrag.id }}/review/freigeben"
         onsubmit="return confirm('Änderungen jetzt freigeben und produktiv setzen?')">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">

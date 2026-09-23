@@ -1092,6 +1092,7 @@ class ObjektPflegeauftrag(TenantScoped, Base):
     # Freitext der Nacharbeit-Anforderung (im urspruenglichen Feldkatalog des Auftrags
     # nicht explizit genannt, aber fuer "Intern Text eingeben" bei Nacharbeit notwendig).
     nacharbeit_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    kontakt_notiz: Mapped[str | None] = mapped_column(Text, nullable=True)
     erinnerung_1_am: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     erinnerung_2_am: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
