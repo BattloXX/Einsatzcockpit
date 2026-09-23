@@ -75,6 +75,36 @@ def test_landing_marks_first_access_and_invalid_and_expired_links(client):
     assert "Link abgelaufen" in client.get(f"/objektpflege/{token}").text
 
 
+def test_portal_uses_configured_org_logo(client):
+    _, objekt_id, _, token = _auftrag()
+    logo_path = "/static/img/logo-trans.png"
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        objekt = db.get(Objekt, objekt_id)
+        org_id = objekt.org_id
+        org = db.get(FireDept, objekt.org_id)
+        original_logo_path = org.logo_path
+        org.logo_path = logo_path
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.get(f"/objektpflege/{token}")
+
+    assert response.status_code == 200
+    assert f'img class="pflege-header__logo" src="{logo_path}"' in response.text
+    assert client.get(logo_path).status_code == 200
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        db.get(FireDept, org_id).logo_path = original_logo_path
+        db.commit()
+    finally:
+        db.close()
+
+
 def test_widerrufen_and_submission_require_complete_sections(client):
     auftrag_id, _, _, token = _auftrag("Widerrufen", ["stammdaten"])
     db = SessionLocal()
