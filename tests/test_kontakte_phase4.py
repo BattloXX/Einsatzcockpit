@@ -220,7 +220,7 @@ def test_kontaktwerte_entfernen_none_und_bilden_anzeigenamen_aus_namen():
         email="",
         notizen="None",
     )
-    assert kontakt.anzeigename == "Anna Muster"
+    assert kontakt.anzeigename == "Muster Anna"
     assert kontakt.vorname == "Anna"
     assert kontakt.nachname == "Muster"
     assert kontakt.funktion is None
