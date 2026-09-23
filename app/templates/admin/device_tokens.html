@@ -125,6 +125,7 @@
           <th>Rollen</th>
           {% if is_sysadmin %}<th>Organisation</th>{% endif %}
           <th>Fahrzeug</th>
+          <th style="width:130px;">App-Version</th>
           <th style="width:130px;">Erstellt</th>
           <th style="width:130px;">Zuletzt genutzt</th>
           <th style="width:90px;">Status</th>
@@ -166,6 +167,9 @@
               <button type="submit" class="btn btn--ghost btn--xs"
                       title="Fahrzeugzuordnung speichern">✓</button>
             </form>
+          </td>
+          <td style="white-space:nowrap;font-size:.85rem;color:var(--color-text-muted);">
+            {{ dt.app_version or '–' }}
           </td>
           <td style="white-space:nowrap;font-size:.85rem;color:var(--color-text-muted);">
             {{ (dt.created_at|local).strftime('%d.%m.%Y') }}

@@ -125,6 +125,9 @@ async def register_fcm_token(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="token fehlt")
 
     device_token = _get_device_token(user.id, db)
+    app_version = data.get("app_version")
+    if device_token and isinstance(app_version, str) and (app_version := app_version.strip()):
+        device_token.app_version = app_version
     push_service.upsert_fcm_token(
         db,
         user_id=user.id,
@@ -371,7 +374,11 @@ async def set_duty(request: Request, db: Session = Depends(get_db)):
 
 
 @router.get("/duty-state")
-def get_duty_state(request: Request, db: Session = Depends(get_db)):
+def get_duty_state(
+    request: Request,
+    app_version: str | None = None,
+    db: Session = Depends(get_db),
+):
     """Gibt zurück, ob für das Gerät aktuell ein aktiver Einsatz vorliegt.
 
     Die App nutzt diesen Endpoint, um Standort-Tracking automatisch zu steuern.
@@ -384,10 +391,12 @@ def get_duty_state(request: Request, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=401, detail="Nicht eingeloggt")
 
-    if bearer_authenticated:
+    device_token = _get_device_token(user.id, db)
+    if device_token and app_version and (app_version := app_version.strip()):
+        device_token.app_version = app_version
+    if bearer_authenticated or app_version:
         db.commit()
 
-    device_token = _get_device_token(user.id, db)
     server_time = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     if not device_token:
         return JSONResponse({

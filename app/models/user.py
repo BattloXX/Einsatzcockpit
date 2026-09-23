@@ -159,6 +159,7 @@ class DeviceToken(Base):
     )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    app_version: Mapped[str | None] = mapped_column(String(30), nullable=True)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # Standort-Tracking (A2)
     last_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
