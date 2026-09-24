@@ -18,9 +18,10 @@ from app.models.master import VehicleMaster
 from app.models.user import DeviceToken, FcmDeliveryLog, FcmToken, User
 from app.services import push_service
 from app.services.einsatz_live_service import build_live_state
-from app.services.gsl_live_service import build_gsl_live_state
+from app.services.gsl_live_service import build_gsl_live_state, build_my_lage_queue
 from app.services.kontakt_sync_service import delta as kontakt_delta
 from app.services.kontakt_sync_service import snapshot as kontakt_snapshot
+from app.services.resource_service import STATUS_IM_EINSATZ
 
 router = APIRouter(prefix="/api/v1/device", tags=["device"])
 log = logging.getLogger(__name__)
@@ -262,7 +263,7 @@ async def update_location(request: Request, background_tasks: BackgroundTasks, d
             .join(LageEinheit, LageEinheit.lage_id == MajorIncident.id)
             .filter(
                 LageEinheit.vehicle_id == device_token.vehicle_master_id,
-                LageEinheit.status == "eingesetzt",
+                LageEinheit.status == STATUS_IM_EINSATZ,
                 MajorIncident.status == MajorIncidentStatus.active,
             )
             .first()
@@ -408,6 +409,7 @@ def get_duty_state(
             "incident": None,
             "lage_count": 0,
             "lage": None,
+            "my_lage_queue": None,
         })
 
     # Prüfen ob dem Fahrzeug ein aktiver Einsatz zugewiesen ist
@@ -429,12 +431,13 @@ def get_duty_state(
                 LageEinheit, LageEinheit.lage_id == MajorIncident.id
             ).filter(
                 LageEinheit.vehicle_id == device_token.vehicle_master_id,
-                LageEinheit.status == "eingesetzt",
+                LageEinheit.status == STATUS_IM_EINSATZ,
                 MajorIncident.status == MajorIncidentStatus.active,
             ).first() is not None
 
     live_incident, incident_count = build_live_state(db, user, device_token)
     live_lage, lage_count = build_gsl_live_state(db, user)
+    my_lage_queue = build_my_lage_queue(db, device_token)
     return JSONResponse({
         "duty_active": device_token.duty_active,
         "incident_active": incident_active,
@@ -444,6 +447,7 @@ def get_duty_state(
         "incident": live_incident,
         "lage_count": lage_count,
         "lage": live_lage,
+        "my_lage_queue": my_lage_queue,
     })
 
 

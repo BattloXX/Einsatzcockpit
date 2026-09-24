@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from sqlalchemy import or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.queries import visible_incidents_q
 from app.models.incident import Incident, IncidentOrg, IncidentVehicle
@@ -14,6 +14,25 @@ PHASES = (
     {"phase": "einsatzstelle", "phase_label": "Am Einsatzort"},
     {"phase": "abschluss", "phase_label": "Einsatzbereit"},
 )
+
+
+def _linked_objekt_summary(db: Session, incident_id: int) -> dict | None:
+    """Bestätigte Objekt-Verknüpfung für den Widget-Payload (nicht: Vorschläge)."""
+    from app.models.objekt import OBJEKT_EINSATZ_BESTAETIGT, ObjektEinsatz
+
+    link = (
+        db.query(ObjektEinsatz)
+        .options(selectinload(ObjektEinsatz.objekt))
+        .filter(
+            ObjektEinsatz.incident_id == incident_id,
+            ObjektEinsatz.status == OBJEKT_EINSATZ_BESTAETIGT,
+        )
+        .order_by(ObjektEinsatz.erstellt_am)
+        .first()
+    )
+    if not link:
+        return None
+    return {"id": link.objekt.id, "name": link.objekt.name, "url": f"/objekte/{link.objekt.id}"}
 
 
 def _derive_phase(db: Session, incident: Incident, device_token) -> tuple[int, str]:
@@ -92,6 +111,15 @@ def build_incident_live_payload(
         "url": f"/einsatz/{incident.id}",
         "alarm_type_code": incident.alarm_type_code,
         "address": _combined_address(incident),
+        "lat": incident.lat,
+        "lng": incident.lng,
+        "gmaps_url": (
+            f"https://maps.google.com/?q={incident.lat},{incident.lng}"
+            if incident.lat is not None and incident.lng is not None
+            else None
+        ),
+        "meldung": incident.report_text or incident.reason or None,
+        "objekt": _linked_objekt_summary(db, incident.id),
         "started_at": incident.started_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "is_exercise": incident.is_exercise,
         "phase": phase["phase"],
