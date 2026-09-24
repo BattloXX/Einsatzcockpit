@@ -270,6 +270,78 @@
   let _periodicGpsInterval = null;
   let _lastSentLat = null;
   let _lastSentLng = null;
+  const _LOCATION_PERMISSION_PRIMED_KEY = 'el_location_permission_primed';
+
+  function _locationWatcherOptions() {
+    return {
+      backgroundMessage: 'Standort wird im Einsatz übermittelt.',
+      backgroundTitle: 'Einsatzcockpit',
+      requestPermissions: true,
+      stale: false,
+      distanceFilter: _effectiveDistanceFilter(),
+    };
+  }
+
+  function _showLocationPermissionToast(message) {
+    const appEl = document.querySelector('[x-data="appState()"]');
+    if (appEl && window.Alpine) Alpine.$data(appEl).addToast(message, 'warn');
+  }
+
+  function _handleLocationPermissionError(err, activeIncident) {
+    if (!err || err.code !== 'NOT_AUTHORIZED') return;
+    _showLocationPermissionToast(activeIncident
+      ? 'Einsatz aktiv, aber der Standort kann ohne Standort-Berechtigung nicht übermittelt werden.'
+      : 'Standort-Berechtigung fehlt. Standort-Tracking im Einsatz funktioniert ohne sie nicht.');
+  }
+
+  function _primeLocationPermission() {
+    if (localStorage.getItem(_LOCATION_PERMISSION_PRIMED_KEY) || _isTracking) return;
+
+    try {
+      const { BackgroundGeolocation } = window.Capacitor.Plugins;
+      if (!BackgroundGeolocation) {
+        localStorage.setItem(_LOCATION_PERMISSION_PRIMED_KEY, '1');
+        return;
+      }
+
+      let watcherId = null;
+      let firstCallbackReceived = false;
+      let watcherRemoved = false;
+
+      function removeWatcherAndMarkPrimed() {
+        if (watcherRemoved || watcherId === null) return;
+        watcherRemoved = true;
+        try {
+          Promise.resolve(BackgroundGeolocation.removeWatcher({ id: watcherId }))
+            .catch(() => {})
+            .finally(() => localStorage.setItem(_LOCATION_PERMISSION_PRIMED_KEY, '1'));
+        } catch (_) {
+          localStorage.setItem(_LOCATION_PERMISSION_PRIMED_KEY, '1');
+        }
+      }
+
+      BackgroundGeolocation.addWatcher(
+        _locationWatcherOptions(),
+        function callback(_loc, err) {
+          if (firstCallbackReceived) return;
+          firstCallbackReceived = true;
+          _handleLocationPermissionError(err, false);
+          removeWatcherAndMarkPrimed();
+        },
+      ).then((id) => {
+        watcherId = id;
+        if (firstCallbackReceived) removeWatcherAndMarkPrimed();
+      }).catch((err) => {
+        if (firstCallbackReceived) return;
+        firstCallbackReceived = true;
+        _handleLocationPermissionError(err, false);
+        localStorage.setItem(_LOCATION_PERMISSION_PRIMED_KEY, '1');
+      });
+    } catch (err) {
+      _handleLocationPermissionError(err, false);
+      localStorage.setItem(_LOCATION_PERMISSION_PRIMED_KEY, '1');
+    }
+  }
 
   // Haversine-Distanz in Metern zwischen zwei GPS-Punkten
   function _gpsDistance(lat1, lng1, lat2, lng2) {
@@ -305,20 +377,18 @@
 
     try {
       const { BackgroundGeolocation } = window.Capacitor.Plugins;
-      if (!BackgroundGeolocation) { _isTracking = false; return; }
+      if (!BackgroundGeolocation) { _isTracking = false; keepAwake(false); return; }
       BackgroundGeolocation.addWatcher(
-        {
-          backgroundMessage: 'Standort wird im Einsatz übermittelt.',
-          backgroundTitle: 'Einsatzcockpit',
-          requestPermissions: true,
-          stale: false,
-          distanceFilter: _effectiveDistanceFilter(),
-        },
+        _locationWatcherOptions(),
         function callback(loc, err) {
           if (err) return;
           _sendLocation(loc.latitude, loc.longitude, loc.accuracy);
         },
-      ).then((id) => { _locationWatch = id; });
+      ).then((id) => { _locationWatch = id; }).catch((err) => {
+        _isTracking = false;
+        keepAwake(false);
+        _handleLocationPermissionError(err, true);
+      });
 
       // Periodischer Fallback: aktuelle Position holen und senden wenn verändert
       if (!_periodicGpsInterval) {
@@ -333,6 +403,7 @@
       }
     } catch (e) {
       _isTracking = false;
+      keepAwake(false);
       console.warn('[ELNative] BackgroundGeolocation Fehler:', e);
     }
   }
@@ -441,11 +512,12 @@
   // über einen Client-Check hier. FCM/Battery/Duty-Poll bleiben best-effort:
   // schlagen sie fehl, heilt der 60s-Poll das von selbst, sobald die Bruecke
   // (falls je) verfuegbar wird.
-  function _init() {
+  async function _init() {
     if (_isNative()) {
       _registerFcmToken();
       _initBattery();
-      _pollDutyState();
+      await _pollDutyState();
+      _primeLocationPermission();
     }
 
     // Duty-Status-Poll starten (No-Op wenn nicht nativ)

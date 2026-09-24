@@ -11,8 +11,8 @@ def _sw_source() -> str:
 
 def test_live_notification_payload_handling():
     src = _sw_source()
-    # Cache-Version wurde mit dem Offline-Objekt-/Kontakte-Update erhöht.
-    assert "const CACHE = 'ec-v17';" in src
+    # Cache-Version wird bei jeder JS/CSS-Aenderung erhöht.
+    assert "const CACHE = 'ec-v18';" in src
     assert "einsatz_live" in src
     assert "einsatz_live_end" in src
     assert "gsl_live" in src
