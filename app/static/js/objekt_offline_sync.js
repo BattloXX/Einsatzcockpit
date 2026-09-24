@@ -72,6 +72,12 @@
     }
   }
 
+  async function objektIstImCache(cache, objekt) {
+    var detailReady = !objekt.detail_url || await cache.match(objekt.detail_url);
+    var einsatzReady = await cache.match(objekt.einsatz_url);
+    return detailReady && einsatzReady;
+  }
+
   async function synchronisieren() {
     if (!await syncIstAktiv()) {
       cacheStatus(0, 0, "Objekt-Sync ist deaktiviert");
@@ -121,19 +127,29 @@
     // genauso im Cache liegen wie die einzelnen Einsatzansichten, sonst
     // scheitert bereits /objekte/ bevor ein Objekt geöffnet werden kann.
     soll.add("/objekte/");
+    var objektPfade = [];
     objektListe.forEach(function (o) {
+      var pfade = [];
       // Die Listenansicht verlinkt auf die Verwaltungsansicht (/objekte/<id>),
       // die Einsatzansicht wird ebenfalls fuer die Einsatzvorbereitung gehalten.
       if (o.detail_url) {
         soll.add(o.detail_url);
+        pfade.push(o.detail_url);
         DETAIL_FRAGMENTE.forEach(function (fragment) {
-          soll.add(o.detail_url + "/" + fragment);
+          var fragmentPfad = o.detail_url + "/" + fragment;
+          soll.add(fragmentPfad);
+          pfade.push(fragmentPfad);
         });
       }
       soll.add(o.einsatz_url);
+      pfade.push(o.einsatz_url);
       (o.seiten || []).forEach(function (s) {
-        (s.urls || []).forEach(function (u) { soll.add(u); });
+        (s.urls || []).forEach(function (u) {
+          soll.add(u);
+          pfade.push(u);
+        });
       });
+      objektPfade.push(pfade);
     });
     kontaktPfade.forEach(function (pfad) { soll.add(pfad); });
 
@@ -149,26 +165,64 @@
 
     // Fehlende Dateien nachladen (sequentiell, um Netz/Server zu schonen)
     var urls = Array.from(soll);
+    var objektEnden = {};
+    objektPfade.forEach(function (pfade, objektIndex) {
+      var urlIndex = -1;
+      pfade.forEach(function (pfad) {
+        urlIndex = Math.max(urlIndex, urls.indexOf(pfad));
+      });
+      if (urlIndex < 0) { return; }
+      if (!objektEnden[urlIndex]) { objektEnden[urlIndex] = []; }
+      objektEnden[urlIndex].push(objektIndex);
+    });
+    var objektImCache = [];
+    var cachedObjects = 0;
+    for (var k = 0; k < objektListe.length; k++) {
+      objektImCache[k] = await objektIstImCache(cache, objektListe[k]);
+      if (objektImCache[k]) { cachedObjects++; }
+    }
+    cacheStatus(
+      cachedObjects,
+      objektListe.length,
+      "Objekte werden synchronisiert … " + cachedObjects + "/" + objektListe.length + " offline verfügbar",
+    );
     var failedDownloads = 0;
     for (var j = 0; j < urls.length; j++) {
       var url = urls[j];
       var istDynamischeSeite = /^\/objekte\/\d+(\/(einsatz|stammdaten|gefahren|bma|merkmale|kontakte|benachrichtigung|wohnanlage|zusatzadressen|einsaetze|protokoll))?$/.test(url)
         || url === "/kontakte" || /^\/kontakte\/\d+(\/profilbild)?$/.test(url);
       // HTML-Ansichten und Kontaktbilder immer aktualisieren, Dateien nur wenn fehlend.
-      if (!istDynamischeSeite && vorhandenPfade.has(url)) { continue; }
-      try {
-        var res = await fetch(url, { credentials: "same-origin" });
-        if (res.ok) { await cache.put(url, res); }
-        else { failedDownloads++; }
-      } catch (e) { failedDownloads++; /* einzelner Fehler stoppt den Sync nicht */ }
+      if (istDynamischeSeite || !vorhandenPfade.has(url)) {
+        try {
+          var res = await fetch(url, { credentials: "same-origin" });
+          if (res.ok) { await cache.put(url, res); }
+          else { failedDownloads++; }
+        } catch (e) { failedDownloads++; /* einzelner Fehler stoppt den Sync nicht */ }
+      }
+
+      // Nach jedem Objekt den echten Cache-Stand melden. Wird die kurzlebige
+      // WorkManager-WebView beendet, bleibt so der letzte Zwischenstand sichtbar.
+      var fertigeObjekte = objektEnden[j];
+      if (fertigeObjekte) {
+        for (var l = 0; l < fertigeObjekte.length; l++) {
+          var objektIndex = fertigeObjekte[l];
+          if (!objektImCache[objektIndex]
+              && await objektIstImCache(cache, objektListe[objektIndex])) {
+            objektImCache[objektIndex] = true;
+            cachedObjects++;
+          }
+        }
+        cacheStatus(
+          cachedObjects,
+          objektListe.length,
+          "Objekte werden synchronisiert … " + cachedObjects + "/" + objektListe.length + " offline verfügbar",
+        );
+      }
     }
 
-    var cachedObjects = 0;
-    for (var k = 0; k < objektListe.length; k++) {
-      var objekt = objektListe[k];
-      var detailReady = !objekt.detail_url || await cache.match(objekt.detail_url);
-      var einsatzReady = await cache.match(objekt.einsatz_url);
-      if (detailReady && einsatzReady) { cachedObjects++; }
+    cachedObjects = 0;
+    for (var m = 0; m < objektListe.length; m++) {
+      if (await objektIstImCache(cache, objektListe[m])) { cachedObjects++; }
     }
     cacheStatus(
       cachedObjects,
