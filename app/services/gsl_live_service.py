@@ -111,6 +111,7 @@ def build_my_lage_queue(db: Session, device_token) -> dict | None:
         "lage_id": lage.id,
         "lage_name": lage.name,
         "lage_url": f"/lage/{lage.id}",
+        "is_exercise": lage.is_exercise,
         "current": _site_payload(current),
         "upcoming": [_site_payload(site) for site in upcoming],
         "remaining_count": max(0, len(sites) - 1 - len(upcoming)),
