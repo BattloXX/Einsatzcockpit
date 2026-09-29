@@ -12,6 +12,7 @@ from app.config import settings
 from app.core.security import hash_password, verify_password
 from app.core.templating import templates
 from app.db import get_db
+from app.models.mcp import MCPOAuthToken
 from app.models.user import User
 
 logger = logging.getLogger("einsatzleiter.profile")
@@ -33,11 +34,18 @@ async def profile_page(request: Request, db: Session = Depends(get_db)):
     if not user:
         return RedirectResponse("/login", status_code=302)
     db_user = db.get(User, user.id)
+    connections = (
+        db.query(MCPOAuthToken.client_id)
+        .filter(MCPOAuthToken.user_id == user.id, MCPOAuthToken.revoked_at.is_(None))
+        .distinct()
+        .all()
+    )
     return templates.TemplateResponse(request, "profile/index.html", {
         "profile_user": db_user,
         "avatar_url": _avatar_url(db_user),  # type: ignore[arg-type]
         "saved": request.query_params.get("saved"),
         "error": request.query_params.get("error"),
+        "mcp_connections": [row[0] for row in connections],
     })
 
 
@@ -67,6 +75,23 @@ async def profile_update(
         if conflict:
             return RedirectResponse("/profil?error=email_taken", status_code=302)
         db_user.email = new_email
+    db.commit()
+    return RedirectResponse("/profil?saved=1", status_code=302)
+
+
+@router.post("/profil/mcp/{client_id}/trennen")
+async def profile_disconnect_mcp(request: Request, client_id: str, db: Session = Depends(get_db)):
+    user = getattr(request.state, "user", None)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    from datetime import UTC, datetime
+    now = datetime.now(UTC)
+    for token in db.query(MCPOAuthToken).filter(
+        MCPOAuthToken.user_id == user.id,
+        MCPOAuthToken.client_id == client_id,
+        MCPOAuthToken.revoked_at.is_(None),
+    ):
+        token.revoked_at = now
     db.commit()
     return RedirectResponse("/profil?saved=1", status_code=302)
 

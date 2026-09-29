@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}KI-Anwendung verbinden{% endblock %}
+{% block content %}
+<div style="max-width:420px;margin:3rem auto" class="card"><div class="card-body">
+  <h1>KI-Anwendung verbinden</h1>
+  <p>Claude darf auf deine Organisation zugreifen. Deine Rechte bleiben unverändert.</p>
+  {% if error %}<div class="alert alert--error">{{ error }}</div>{% endif %}
+  <form method="post" action="/mcp/anmelden">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <input type="hidden" name="vorgang" value="{{ vorgang }}">
+    <div class="form-group"><label>Benutzername</label><input class="form-control" name="username" autocomplete="username" required></div>
+    <div class="form-group"><label>Passwort</label><input class="form-control" type="password" name="password" autocomplete="current-password" required></div>
+    <button class="btn btn--primary" type="submit">Verbinden</button>
+  </form>
+</div></div>
+{% endblock %}
