@@ -18,7 +18,6 @@ from app.core.permissions import (
 )
 from app.core.templating import templates
 from app.core.tenant import set_tenant_context
-from app.core.timezones import local_date_to_utc
 from app.db import get_db
 from app.models.fahrtenbuch import Fahrt, FahrtKategorie, FahrtStatus, Fahrtzweck, Zielort
 from app.models.master import (
@@ -31,6 +30,7 @@ from app.models.master import (
 )
 from app.routers.ui_fahrtenbuch import _aktive_personen, _lade_einsaetze, _personen_fuer_client
 from app.services.excel_export_service import exportiere_fahrten, exportiere_fahrzeug_links
+from app.services.fahrtenbuch_query_service import gefilterte_fahrten_query
 from app.services.fahrtenbuch_service import (
     korrigiere_fahrt,
     pruefe_doppelfahrt,
@@ -179,36 +179,11 @@ async def fahrten_liste(
     seite: int = 1,
 ):
     user, org_id, org = _fb_view(request, db)
-    q = (
-        db.query(Fahrt)
-        .filter(Fahrt.org_id == org_id)
-        .execution_options(include_all_tenants=True)
-        .options(joinedload(Fahrt.fahrzeug), joinedload(Fahrt.zweck), joinedload(Fahrt.zielort))
+    q = gefilterte_fahrten_query(
+        db, org_id, org, von=von, bis=bis, fahrzeug_id=fahrzeug_id,
+        fahrttyp=fahrttyp, zweck_id=zweck_id, status=status,
+        nur_statistikrelevant=nur_statistikrelevant,
     )
-    if status and status != "alle":
-        try:
-            q = q.filter(Fahrt.status == FahrtStatus(status))
-        except ValueError:
-            pass
-    if von:
-        dt = local_date_to_utc(von, org=org)
-        if dt:
-            q = q.filter(Fahrt.zeitpunkt >= dt)
-    if bis:
-        dt = local_date_to_utc(bis, end=True, org=org)
-        if dt:
-            q = q.filter(Fahrt.zeitpunkt <= dt)
-    if fahrzeug_id:
-        q = q.filter(Fahrt.fahrzeug_id == fahrzeug_id)
-    if fahrttyp:
-        try:
-            q = q.filter(Fahrt.fahrttyp == FahrtKategorie(fahrttyp))
-        except ValueError:
-            pass
-    if zweck_id:
-        q = q.filter(Fahrt.zweck_id == zweck_id)
-    if nur_statistikrelevant:
-        q = q.filter(Fahrt.nicht_statistikrelevant == False)  # noqa: E712
 
     gesamt = q.count()
     pro_seite = 50
@@ -255,39 +230,11 @@ async def fahrten_export(
     nur_statistikrelevant: bool = False,
 ):
     user, org_id, org = _fb_view(request, db)
-    q = (
-        db.query(Fahrt)
-        .filter(Fahrt.org_id == org_id)
-        .execution_options(include_all_tenants=True)
-        .options(
-            joinedload(Fahrt.fahrzeug), joinedload(Fahrt.zweck),
-            joinedload(Fahrt.zielort), joinedload(Fahrt.incident),
-        )
+    q = gefilterte_fahrten_query(
+        db, org_id, org, von=von, bis=bis, fahrzeug_id=fahrzeug_id,
+        fahrttyp=fahrttyp, zweck_id=zweck_id, status=status,
+        nur_statistikrelevant=nur_statistikrelevant, mit_incident=True,
     )
-    if status and status != "alle":
-        try:
-            q = q.filter(Fahrt.status == FahrtStatus(status))
-        except ValueError:
-            pass
-    if von:
-        dt = local_date_to_utc(von, org=org)
-        if dt:
-            q = q.filter(Fahrt.zeitpunkt >= dt)
-    if bis:
-        dt = local_date_to_utc(bis, end=True, org=org)
-        if dt:
-            q = q.filter(Fahrt.zeitpunkt <= dt)
-    if fahrzeug_id:
-        q = q.filter(Fahrt.fahrzeug_id == fahrzeug_id)
-    if fahrttyp:
-        try:
-            q = q.filter(Fahrt.fahrttyp == FahrtKategorie(fahrttyp))
-        except ValueError:
-            pass
-    if zweck_id:
-        q = q.filter(Fahrt.zweck_id == zweck_id)
-    if nur_statistikrelevant:
-        q = q.filter(Fahrt.nicht_statistikrelevant == False)  # noqa: E712
 
     fahrten = q.order_by(Fahrt.zeitpunkt.desc()).all()
     org_name = (org.name if org else str(org_id)).replace(" ", "_")
