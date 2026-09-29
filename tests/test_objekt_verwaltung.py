@@ -15,6 +15,8 @@ from app.models.objekt import (
     AUSWAHL_KONTAKTART,
     AUSWAHL_PIKTOGRAMM,
     OBJEKT_STATUS_FREIGEGEBEN,
+    GefahrenKatalog,
+    MerkmalKatalog,
     Objekt,
     ObjektAuswahl,
     ObjektKontakt,
@@ -124,6 +126,68 @@ def test_liste_filter_mit_numerischer_kategorie_und_merkmal(client):
 
     r = client.get("/objekte/?kategorie=999999&merkmal=999999")
     assert r.status_code == 200, r.text[:500]
+
+
+def test_schreibrouten_nach_service_extraktion(client):
+    org_id, obj_id = _setup_objekt("verw_service_routen", nummer=4722)
+    _login(client, "verw_service_routen", "Test1234!")
+    csrf = client.cookies.get("ec_csrf")
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        gefahr = GefahrenKatalog(org_id=org_id, name="Service-Gefahr", aktiv=True)
+        merkmal = MerkmalKatalog(org_id=org_id, name="Service-Merkmal", aktiv=True)
+        db.add_all([gefahr, merkmal])
+        db.commit()
+        gefahr_id, merkmal_id = gefahr.id, merkmal.id
+    finally:
+        db.close()
+
+    assert client.post(
+        f"/objekte/{obj_id}/bma", data={"_csrf": csrf, "bma_vorhanden": "1", "bma_nummer": "BMA-47"},
+    ).status_code == 200
+    assert client.post(
+        f"/objekte/{obj_id}/gefahren/neu", data={"_csrf": csrf, "gefahr_id": gefahr_id, "detail": "Test"},
+    ).status_code == 200
+    assert client.post(
+        f"/objekte/{obj_id}/merkmale/neu", data={"_csrf": csrf, "merkmal_id": merkmal_id},
+    ).status_code == 200
+    assert client.post(
+        f"/objekte/{obj_id}/merkmale/neu", data={"_csrf": csrf, "merkmal_id": merkmal_id},
+    ).status_code == 200
+    assert client.post(
+        f"/objekte/{obj_id}/zusatzadressen/neu", data={"_csrf": csrf, "bezeichnung": "Zufahrt"},
+    ).status_code == 200
+    assert client.post(
+        f"/objekte/{obj_id}/wohnanlage",
+        data={"_csrf": csrf, "wohnanlage_vorhanden": "1", "wohneinheiten": "12"},
+    ).status_code == 200
+
+    db = SessionLocal()
+    set_tenant_context(db, org_id)
+    try:
+        objekt = db.get(Objekt, obj_id)
+        assert objekt.bma.bma_nummer == "BMA-47"
+        assert len(objekt.gefahren) == 1
+        assert len(objekt.merkmale) == 1
+        assert objekt.zusatzadressen[0].bezeichnung == "Zufahrt"
+        assert objekt.wohnanlage.wohneinheiten == 12
+    finally:
+        db.close()
+
+
+def test_objekt_neu_service_route_und_validierungsfehler(client):
+    _setup_objekt("verw_service_neu", nummer=4723)
+    _login(client, "verw_service_neu", "Test1234!")
+    csrf = client.cookies.get("ec_csrf")
+    fehler = client.post("/objekte/neu", data={"_csrf": csrf, "name": " "})
+    assert fehler.status_code == 400
+    assert fehler.json()["detail"] == "Name ist erforderlich"
+    erstellt = client.post(
+        "/objekte/neu", data={"_csrf": csrf, "name": "Service-Neuanlage", "vulgoname": "Neu", "ort": "Wien"},
+        follow_redirects=False,
+    )
+    assert erstellt.status_code == 303
 
 
 def test_karte_tab_editierbar_fuer_verwalter(client):
