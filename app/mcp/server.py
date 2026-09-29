@@ -23,6 +23,7 @@ from app.core.security import hash_api_key
 from app.db import SessionLocal
 from app.mcp.context import MCPPermissionError, load_live_context
 from app.mcp.registry import TOOLS
+from app.mcp.tools import fahrtenbuch as _fahrtenbuch  # noqa: F401 - registriert Fahrtenbuch-Tools
 from app.mcp.tools import whoami as _whoami  # noqa: F401 - registriert Beispiel-Tool
 from app.models.mcp import MCPOAuthClient, MCPOAuthCode, MCPOAuthToken
 
@@ -252,8 +253,62 @@ class EinsatzcockpitOAuthProvider(OAuthAuthorizationServerProvider[Authorization
 
 
 provider = EinsatzcockpitOAuthProvider()
+
+
+def _live_context_for_tool(name: str):
+    from mcp.server.auth.middleware.auth_context import get_access_token
+
+    token = get_access_token()
+    if not token or not token.subject or not token.claims:
+        raise MCPPermissionError("Nicht angemeldet.")
+    definition = TOOLS[name]
+    db = SessionLocal()
+    try:
+        context = load_live_context(db, int(token.subject), int(token.claims["org_id"]), definition.required_roles)
+        if definition.module_check and not definition.module_check(context.org_id, db):
+            raise MCPPermissionError("Das Modul für dieses Werkzeug ist für diese Organisation nicht aktiviert.")
+        return definition, context
+    except Exception:
+        db.close()
+        raise
+
+
+async def _call_registered_tool(name: str, **arguments) -> dict[str, object]:
+    definition, context = _live_context_for_tool(name)
+    try:
+        return await definition.handler(context, **arguments)
+    finally:
+        context.db.close()
+
+
+class EinsatzcockpitMCPServer(MCPServer):
+    async def list_tools(self):
+        """Blendet Werkzeuge aus, deren Live-Rechte oder Modul fehlen."""
+        tools = await super().list_tools()
+        from mcp.server.auth.middleware.auth_context import get_access_token
+
+        token = get_access_token()
+        if not token or not token.subject or not token.claims:
+            return []
+        db = SessionLocal()
+        try:
+            visible = set()
+            for name, definition in TOOLS.items():
+                try:
+                    context = load_live_context(
+                        db, int(token.subject), int(token.claims["org_id"]), definition.required_roles
+                    )
+                    if not definition.module_check or definition.module_check(context.org_id, db):
+                        visible.add(name)
+                except MCPPermissionError:
+                    continue
+            return [tool for tool in tools if tool.name in visible]
+        finally:
+            db.close()
+
+
 _base = settings.effective_public_base_url.rstrip("/")
-server = MCPServer(
+server = EinsatzcockpitMCPServer(
     "Einsatzcockpit",
     auth_server_provider=provider,
     auth=AuthSettings(
@@ -271,20 +326,44 @@ server = MCPServer(
 
 @server.tool(name="mcp_whoami", description="Zeigt den aktuell verbundenen Einsatzcockpit-Benutzer.")
 async def whoami(ctx: Context) -> dict[str, object]:
-    from mcp.server.auth.middleware.auth_context import get_access_token
+    return await _call_registered_tool("mcp_whoami")
 
-    token = get_access_token()
-    if not token or not token.subject or not token.claims:
-        raise MCPPermissionError("Nicht angemeldet.")
-    db = SessionLocal()
-    try:
-        definition = TOOLS["mcp_whoami"]
-        live_context = load_live_context(db, int(token.subject), int(token.claims["org_id"]), definition.required_roles)
-        if definition.module_check and not definition.module_check(live_context.org_id, db):
-            raise MCPPermissionError("Das für dieses Werkzeug nötige Modul ist nicht aktiviert.")
-        return await definition.handler(live_context)
-    finally:
-        db.close()
+
+@server.tool(
+    name="fahrtenbuch_stammdaten",
+    description="Liest sichere Fahrtenbuch-Stammdaten der eigenen Organisation.",
+)
+async def fahrtenbuch_stammdaten(ctx: Context) -> dict[str, object]:
+    return await _call_registered_tool("fahrtenbuch_stammdaten")
+
+
+@server.tool(name="fahrtenbuch_fahrten", description="Listet Fahrten der eigenen Organisation.")
+async def fahrtenbuch_fahrten(
+    von: str = "", bis: str = "", fahrzeug_id: int = 0, kategorie: str = "", zweck_id: int = 0,
+    status: str = "aktiv", fahrer: str = "", nur_statistikrelevant: bool = False, limit: int = 50,
+    seite: int = 1, ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "fahrtenbuch_fahrten", von=von, bis=bis, fahrzeug_id=fahrzeug_id, kategorie=kategorie,
+        zweck_id=zweck_id, status=status, fahrer=fahrer, nur_statistikrelevant=nur_statistikrelevant,
+        limit=limit, seite=seite,
+    )
+
+
+@server.tool(name="fahrtenbuch_fahrt", description="Liest eine Fahrt samt Korrekturkette.")
+async def fahrtenbuch_fahrt(fahrt_id: int, ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("fahrtenbuch_fahrt", fahrt_id=fahrt_id)
+
+
+@server.tool(name="fahrtenbuch_auswertung", description="Wertet aktive, statistikrelevante Fahrten aus.")
+async def fahrtenbuch_auswertung(
+    von: str = "", bis: str = "", gruppierung: str = "fahrzeug", fahrzeug_id: int = 0,
+    kategorie: str = "", zweck_id: int = 0, ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "fahrtenbuch_auswertung", von=von, bis=bis, gruppierung=gruppierung,
+        fahrzeug_id=fahrzeug_id, kategorie=kategorie, zweck_id=zweck_id,
+    )
 
 
 def application():

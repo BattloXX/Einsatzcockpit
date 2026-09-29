@@ -10,7 +10,7 @@ class ToolDefinition:
     description: str
     required_roles: tuple[str, ...]
     module_check: Callable[[int, Any], bool] | None
-    handler: Callable[[Any], Awaitable[dict[str, object]]]
+    handler: Callable[..., Awaitable[dict[str, object]]]
 
 
 TOOLS: dict[str, ToolDefinition] = {}
@@ -24,8 +24,8 @@ def register_tool(
     module_check: Callable[[int, Any], bool] | None = None,
 ):
     def decorator(
-        handler: Callable[[Any], Awaitable[dict[str, object]]],
-    ) -> Callable[[Any], Awaitable[dict[str, object]]]:
+        handler: Callable[..., Awaitable[dict[str, object]]],
+    ) -> Callable[..., Awaitable[dict[str, object]]]:
         TOOLS[name] = ToolDefinition(name, description, required_roles, module_check, handler)
         return handler
 
