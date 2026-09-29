@@ -26,8 +26,10 @@ from app.models.objekt import (
 from app.models.user import User
 from app.routers.ui_objekt import _LESE_ROLLEN, _objekt_or_404, require_objekt_enabled
 from app.services.objekt_dokument_service import (
+    ObjektDokumentFehler,
     absolute_pfad,
     delete_dokument,
+    klassifiziere_seiten,
     raeume_dokument_verzeichnis_auf,
     reindex_objekt,
     sammel_pdf,
@@ -330,33 +332,20 @@ def seiten_bulk_klassifizieren(
         raise HTTPException(status_code=400, detail="Ungueltige Seiten-Auswahl") from None
     if not ids:
         raise HTTPException(status_code=400, detail="Keine Seiten ausgewaehlt")
-    dokumentarten = lade_auswahl(db, objekt.org_id, AUSWAHL_DOKUMENTART)
-    if dokumentart and dokumentart not in dokumentarten:
-        raise HTTPException(status_code=400, detail="Unbekannte Dokumentart")
-
     seiten = (
         db.query(ObjektDokumentSeite)
         .filter(ObjektDokumentSeite.id.in_(ids), ObjektDokumentSeite.objekt_id == objekt.id)
         .all()
     )
-    stand_datum = datetime.strptime(stand, "%Y-%m-%d").date() if stand.strip() else None
-    jetzt = datetime.now(UTC)
-    for seite in seiten:
-        if dokumentart:
-            seite.dokumentart = dokumentart
-        if titel.strip():
-            seite.titel = titel.strip()[:200]
-        if melderlinien.strip():
-            seite.melderlinien = melderlinien.strip()[:100]
-        if stand_datum:
-            seite.stand = stand_datum
-        seite.bei_einsatz_drucken = bool(bei_einsatz_drucken)
-        seite.klassifiziert_von_id = user.id
-        seite.klassifiziert_am = jetzt
-    art_label = dokumentarten.get(dokumentart, dokumentart or "unveraendert")
-    write_objekt_change(db, objekt.id, objekt.org_id, "dokumente", "seiten_klassifiziert",
-                        before=None, after=f"{len(seiten)} Seite(n) → {art_label}",
-                        user_id=user.id)
+    try:
+        klassifiziere_seiten(
+            db, seiten,
+            {"dokumentart": dokumentart, "titel": titel, "melderlinien": melderlinien,
+             "stand": stand, "bei_einsatz_drucken": bei_einsatz_drucken},
+            user.id,
+        )
+    except ObjektDokumentFehler as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
     db.commit()
 
     return templates.TemplateResponse(
