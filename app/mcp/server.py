@@ -24,6 +24,7 @@ from app.db import SessionLocal
 from app.mcp.context import MCPPermissionError, load_live_context
 from app.mcp.registry import TOOLS
 from app.mcp.tools import fahrtenbuch as _fahrtenbuch  # noqa: F401 - registriert Fahrtenbuch-Tools
+from app.mcp.tools import objekt as _objekt  # noqa: F401 - registriert Objekt-Tools
 from app.mcp.tools import whoami as _whoami  # noqa: F401 - registriert Beispiel-Tool
 from app.models.mcp import MCPOAuthClient, MCPOAuthCode, MCPOAuthToken
 
@@ -255,13 +256,13 @@ class EinsatzcockpitOAuthProvider(OAuthAuthorizationServerProvider[Authorization
 provider = EinsatzcockpitOAuthProvider()
 
 
-def _live_context_for_tool(name: str):
+def _live_context_for_tool(tool_name: str):
     from mcp.server.auth.middleware.auth_context import get_access_token
 
     token = get_access_token()
     if not token or not token.subject or not token.claims:
         raise MCPPermissionError("Nicht angemeldet.")
-    definition = TOOLS[name]
+    definition = TOOLS[tool_name]
     db = SessionLocal()
     try:
         context = load_live_context(db, int(token.subject), int(token.claims["org_id"]), definition.required_roles)
@@ -273,8 +274,8 @@ def _live_context_for_tool(name: str):
         raise
 
 
-async def _call_registered_tool(name: str, **arguments) -> dict[str, object]:
-    definition, context = _live_context_for_tool(name)
+async def _call_registered_tool(tool_name: str, **arguments) -> dict[str, object]:
+    definition, context = _live_context_for_tool(tool_name)
     try:
         return await definition.handler(context, **arguments)
     finally:
@@ -312,8 +313,8 @@ server = EinsatzcockpitMCPServer(
     "Einsatzcockpit",
     auth_server_provider=provider,
     auth=AuthSettings(
-    issuer_url=cast(AnyHttpUrl, _base),
-    resource_server_url=cast(AnyHttpUrl, _base + "/mcp"),
+        issuer_url=cast(AnyHttpUrl, _base),
+        resource_server_url=cast(AnyHttpUrl, _base + "/mcp"),
         validate_token_resource=True,
         client_registration_options=ClientRegistrationOptions(
             enabled=True, valid_scopes=["mcp"], default_scopes=["mcp"]
@@ -339,14 +340,30 @@ async def fahrtenbuch_stammdaten(ctx: Context) -> dict[str, object]:
 
 @server.tool(name="fahrtenbuch_fahrten", description="Listet Fahrten der eigenen Organisation.")
 async def fahrtenbuch_fahrten(
-    von: str = "", bis: str = "", fahrzeug_id: int = 0, kategorie: str = "", zweck_id: int = 0,
-    status: str = "aktiv", fahrer: str = "", nur_statistikrelevant: bool = False, limit: int = 50,
-    seite: int = 1, ctx: Context | None = None,
+    von: str = "",
+    bis: str = "",
+    fahrzeug_id: int = 0,
+    kategorie: str = "",
+    zweck_id: int = 0,
+    status: str = "aktiv",
+    fahrer: str = "",
+    nur_statistikrelevant: bool = False,
+    limit: int = 50,
+    seite: int = 1,
+    ctx: Context | None = None,
 ) -> dict[str, object]:
     return await _call_registered_tool(
-        "fahrtenbuch_fahrten", von=von, bis=bis, fahrzeug_id=fahrzeug_id, kategorie=kategorie,
-        zweck_id=zweck_id, status=status, fahrer=fahrer, nur_statistikrelevant=nur_statistikrelevant,
-        limit=limit, seite=seite,
+        "fahrtenbuch_fahrten",
+        von=von,
+        bis=bis,
+        fahrzeug_id=fahrzeug_id,
+        kategorie=kategorie,
+        zweck_id=zweck_id,
+        status=status,
+        fahrer=fahrer,
+        nur_statistikrelevant=nur_statistikrelevant,
+        limit=limit,
+        seite=seite,
     )
 
 
@@ -357,12 +374,139 @@ async def fahrtenbuch_fahrt(fahrt_id: int, ctx: Context | None = None) -> dict[s
 
 @server.tool(name="fahrtenbuch_auswertung", description="Wertet aktive, statistikrelevante Fahrten aus.")
 async def fahrtenbuch_auswertung(
-    von: str = "", bis: str = "", gruppierung: str = "fahrzeug", fahrzeug_id: int = 0,
-    kategorie: str = "", zweck_id: int = 0, ctx: Context | None = None,
+    von: str = "",
+    bis: str = "",
+    gruppierung: str = "fahrzeug",
+    fahrzeug_id: int = 0,
+    kategorie: str = "",
+    zweck_id: int = 0,
+    ctx: Context | None = None,
 ) -> dict[str, object]:
     return await _call_registered_tool(
-        "fahrtenbuch_auswertung", von=von, bis=bis, gruppierung=gruppierung,
-        fahrzeug_id=fahrzeug_id, kategorie=kategorie, zweck_id=zweck_id,
+        "fahrtenbuch_auswertung",
+        von=von,
+        bis=bis,
+        gruppierung=gruppierung,
+        fahrzeug_id=fahrzeug_id,
+        kategorie=kategorie,
+        zweck_id=zweck_id,
+    )
+
+
+@server.tool(name="objekt_kataloge", description="Liest gueltige Objekt-Katalogwerte.")
+async def objekt_kataloge(ctx: Context) -> dict[str, object]:
+    return await _call_registered_tool("objekt_kataloge")
+
+
+@server.tool(name="objekt_suchen", description="Sucht Objekte der eigenen Organisation.")
+async def objekt_suchen(
+    q: str = "", status: str = "", limit: int = 25, ctx: Context | None = None
+) -> dict[str, object]:
+    return await _call_registered_tool("objekt_suchen", q=q, status=status, limit=limit)
+
+
+@server.tool(name="objekt_lesen", description="Liest ein Objekt ohne Kontakt-Klartextdaten.")
+async def objekt_lesen(objekt_id: int, ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("objekt_lesen", objekt_id=objekt_id)
+
+
+@server.tool(name="kontakt_suchen", description="Sucht zentrale Kontakte ohne Telefon oder E-Mail.")
+async def kontakt_suchen(q: str = "", limit: int = 25, ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("kontakt_suchen", q=q, limit=limit)
+
+
+@server.tool(name="objekt_duplikate_pruefen", description="Prueft moegliche Objekt-Dubletten.")
+async def objekt_duplikate_pruefen(
+    name: str = "",
+    strasse: str = "",
+    hausnummer: str = "",
+    plz: str = "",
+    ort: str = "",
+    bma_nummer: str = "",
+    rfl_nummer: str = "",
+    ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "objekt_duplikate_pruefen",
+        name=name,
+        strasse=strasse,
+        hausnummer=hausnummer,
+        plz=plz,
+        ort=ort,
+        bma_nummer=bma_nummer,
+        rfl_nummer=rfl_nummer,
+    )
+
+
+@server.tool(name="kontakt_duplikate_pruefen", description="Prueft moegliche Kontakt-Dubletten.")
+async def kontakt_duplikate_pruefen(
+    anzeigename: str,
+    organisation: str = "",
+    email: str = "",
+    telefone: list[str] | None = None,
+    ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "kontakt_duplikate_pruefen", anzeigename=anzeigename, organisation=organisation, email=email, telefone=telefone
+    )
+
+
+@server.tool(name="objekt_anlegen", description="Legt ausschliesslich einen Objekt-Entwurf an.")
+async def objekt_anlegen(
+    stammdaten: dict,
+    bma: dict | None = None,
+    gefahren: list[dict] | None = None,
+    merkmale: list[dict] | None = None,
+    zusatzadressen: list[dict] | None = None,
+    kontakte: list[dict] | None = None,
+    duplikat_bestaetigt: bool = False,
+    ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "objekt_anlegen",
+        stammdaten=stammdaten,
+        bma=bma,
+        gefahren=gefahren,
+        merkmale=merkmale,
+        zusatzadressen=zusatzadressen,
+        kontakte=kontakte,
+        duplikat_bestaetigt=duplikat_bestaetigt,
+    )
+
+
+@server.tool(
+    name="objekt_aktualisieren",
+    description="Aktualisiert einen Objektentwurf oder eine Arbeitskopie ohne Freigabe.",
+)
+async def objekt_aktualisieren(
+    objekt_id: int,
+    stammdaten: dict | None = None,
+    bma: dict | None = None,
+    gefahren_hinzufuegen: list[dict] | None = None,
+    gefahren_entfernen: list[int | dict] | None = None,
+    merkmale_hinzufuegen: list[dict] | None = None,
+    merkmale_entfernen: list[int | dict] | None = None,
+    zusatzadressen_hinzufuegen: list[dict] | None = None,
+    zusatzadressen_entfernen: list[int | dict] | None = None,
+    kontakte_hinzufuegen: list[dict] | None = None,
+    kontakte_entfernen: list[int | dict] | None = None,
+    duplikat_bestaetigt: bool = False,
+    ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "objekt_aktualisieren",
+        objekt_id=objekt_id,
+        stammdaten=stammdaten,
+        bma=bma,
+        gefahren_hinzufuegen=gefahren_hinzufuegen,
+        gefahren_entfernen=gefahren_entfernen,
+        merkmale_hinzufuegen=merkmale_hinzufuegen,
+        merkmale_entfernen=merkmale_entfernen,
+        zusatzadressen_hinzufuegen=zusatzadressen_hinzufuegen,
+        zusatzadressen_entfernen=zusatzadressen_entfernen,
+        kontakte_hinzufuegen=kontakte_hinzufuegen,
+        kontakte_entfernen=kontakte_entfernen,
+        duplikat_bestaetigt=duplikat_bestaetigt,
     )
 
 

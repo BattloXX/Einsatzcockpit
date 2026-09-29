@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 from pathlib import Path
+from typing import cast
 
 from fastapi import (
     APIRouter,
@@ -50,7 +51,6 @@ from app.models.objekt import (
     MerkmalKatalog,
     Objekt,
     ObjektAuswahl,
-    ObjektBMA,
     ObjektChange,
     ObjektDokumentSeite,
     ObjektGefahr,
@@ -62,11 +62,10 @@ from app.models.objekt import (
     ObjektPflegeauftrag,
     ObjektPflegeEreignis,
     ObjektSymbol,
-    ObjektWohnanlage,
-    ObjektZusatzadresse,
 )
 from app.models.user import User
 from app.services import kontakt_service
+from app.services import objekt_pflege_schreiben_service as objekt_schreiben
 from app.services.mail_service import send_pflegeauftrag_einladung
 from app.services.objekt_pflege_service import (
     _TERMINALE_STATUS,
@@ -87,7 +86,6 @@ from app.services.objekt_service import (
     gefahr_links,
     hole_arbeitskopie,
     lade_auswahl,
-    naechste_nummer,
     nur_produktiv,
     status_uebergang_erlaubt,
     uebernimm_arbeitskopie,
@@ -238,8 +236,6 @@ def objekt_liste(
     merkmal: str = "",
     datenqualitaet: str = "",
 ):
-    from sqlalchemy import ColumnElement, or_
-
     # <select>-Formular sendet bei "Alle" ein leeres value="" statt den Parameter
     # wegzulassen - int|None wuerde das nicht als None behandeln, sondern einen
     # 422 werfen (Vorfall: Filtern in der Objektverwaltung schlug fehl).
@@ -259,17 +255,7 @@ def objekt_liste(
     verwalter = is_objekt_verwalter(user)
     if not verwalter:
         query = query.filter(Objekt.status != OBJEKT_STATUS_ENTWURF)
-    if q.strip():
-        term = f"%{q.strip()}%"
-        filters: list[ColumnElement[bool]] = [
-            Objekt.name.like(term),
-            Objekt.vulgoname.like(term),
-            Objekt.strasse.like(term),
-            Objekt.ort.like(term),
-        ]
-        if q.strip().isdigit():
-            filters.append(Objekt.nummer == int(q.strip()))
-        query = query.filter(or_(*filters))
+    query = objekt_schreiben.filtere_objekte_nach_text(query, q)
     if status:
         query = query.filter(Objekt.status == status)
     if kategorie_id:
@@ -378,48 +364,18 @@ def objekt_neu(
     lat: str = Form(""),
     lng: str = Form(""),
 ):
-    if not name.strip():
-        raise HTTPException(status_code=400, detail="Name ist erforderlich")
-
-    # Koordinaten aus der OSM-Adressvalidierung (falls der Nutzer einen Treffer
-    # uebernommen hat) — dann kein Hintergrund-Geocoding noetig.
-    validiert_lat = float(lat) if lat.strip() else None
-    validiert_lng = float(lng) if lng.strip() else None
-
-    objekt = Objekt(
-        org_id=user.org_id,
-        nummer=naechste_nummer(db, user.org_id),  # type: ignore[arg-type]
-        name=name.strip(),
-        vulgoname=vulgoname.strip() or None,
-        kategorie_id=int(kategorie_id) if kategorie_id.strip() else None,
-        strasse=strasse.strip() or None,
-        hausnummer=hausnummer.strip() or None,
-        plz=plz.strip() or None,
-        ort=ort.strip() or None,
-        lat=validiert_lat,
-        lng=validiert_lng,
-        status=OBJEKT_STATUS_ENTWURF,
-        erstellt_von_id=user.id,
-        aktualisiert_von_id=user.id,
-    )
-    db.add(objekt)
-    db.flush()
-    write_objekt_change(
-        db, objekt.id, user.org_id, "stammdaten", "angelegt", before=None, after=objekt.name, user_id=user.id
-    )
-    write_audit(
-        db,
-        "objekt.created",
-        org_id=user.org_id,
-        user_id=user.id,
-        entity_type="objekt",
-        entity_id=objekt.id,
-        payload={"name": objekt.name, "nummer": objekt.nummer},
-    )
+    try:
+        objekt, geocodieren = objekt_schreiben.erstelle_objekt(
+            db, org_id=cast(int, user.org_id), user_id=user.id, name=name, vulgoname=vulgoname,
+            kategorie_id=kategorie_id, strasse=strasse, hausnummer=hausnummer, plz=plz,
+            ort=ort, lat=lat, lng=lng,
+        )
+    except objekt_schreiben.ObjektFehler as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     db.commit()
 
     # Nur geocoden, wenn keine validierten Koordinaten uebernommen wurden.
-    if (strasse.strip() or ort.strip()) and objekt.lat is None:
+    if geocodieren:
         background_tasks.add_task(_geocode_objekt, objekt.id, objekt.strasse, objekt.hausnummer, objekt.ort)
 
     return RedirectResponse(url=f"/objekte/{objekt.id}", status_code=303)
@@ -1269,40 +1225,6 @@ def bma_speichern(
     benachrichtigung_email: str = Form(""),
 ):
     objekt = _objekt_or_404(db, objekt_id, user)
-
-    if not bma_vorhanden:
-        # BMA-Block entfernen
-        if objekt.bma is not None:
-            write_objekt_change(
-                db,
-                objekt.id,
-                objekt.org_id,
-                "bma",
-                "bma_entfernt",
-                before=objekt.bma.bma_nummer,
-                after=None,
-                user_id=user.id,
-            )
-            db.delete(objekt.bma)
-            objekt.bma = None
-            db.commit()
-        return templates.TemplateResponse(request, "objekt/_bma.html", _detail_context(request, db, user, objekt))
-
-    if objekt.bma is None:
-        objekt.bma = ObjektBMA(org_id=objekt.org_id, objekt_id=objekt.id)
-        db.add(objekt.bma)
-        write_objekt_change(
-            db,
-            objekt.id,
-            objekt.org_id,
-            "bma",
-            "bma_angelegt",
-            before=None,
-            after=bma_nummer.strip() or "-",
-            user_id=user.id,
-        )
-
-    bma = objekt.bma
     daten = {
         "bma_nummer": bma_nummer.strip() or None,
         "rfl_nummer": rfl_nummer.strip() or None,
@@ -1316,11 +1238,7 @@ def bma_speichern(
         "benachrichtigung_sms": benachrichtigung_sms.strip() or None,
         "benachrichtigung_email": benachrichtigung_email.strip() or None,
     }
-    for feld, neu in daten.items():
-        alt = getattr(bma, feld)
-        if alt != neu:
-            setattr(bma, feld, neu)
-            write_objekt_change(db, objekt.id, objekt.org_id, "bma", feld, before=alt, after=neu, user_id=user.id)
+    objekt_schreiben.bma_speichern(db, objekt, user_id=user.id, vorhanden=bool(bma_vorhanden), daten=daten)
     db.commit()
 
     return templates.TemplateResponse(request, "objekt/_bma.html", _detail_context(request, db, user, objekt))
@@ -1357,30 +1275,13 @@ def zusatzadresse_neu(
     ort: str = Form(""),
 ):
     objekt = _objekt_or_404(db, objekt_id, user)
-    if not bezeichnung.strip():
-        raise HTTPException(status_code=400, detail="Bezeichnung ist erforderlich")
-    max_sort = max([z.sort for z in objekt.zusatzadressen], default=0)
-    adresse = ObjektZusatzadresse(
-        org_id=objekt.org_id,
-        objekt_id=objekt.id,
-        bezeichnung=bezeichnung.strip(),
-        strasse=strasse.strip() or None,
-        hausnummer=hausnummer.strip() or None,
-        plz=plz.strip() or None,
-        ort=ort.strip() or None,
-        sort=max_sort + 1,
-    )
-    db.add(adresse)
-    write_objekt_change(
-        db,
-        objekt.id,
-        objekt.org_id,
-        "stammdaten",
-        "zusatzadresse_neu",
-        before=None,
-        after=adresse.bezeichnung,
-        user_id=user.id,
-    )
+    try:
+        objekt_schreiben.zusatzadresse_anlegen(
+            db, objekt, user_id=user.id, bezeichnung=bezeichnung, strasse=strasse,
+            hausnummer=hausnummer, plz=plz, ort=ort,
+        )
+    except objekt_schreiben.ObjektFehler as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     db.commit()
     db.refresh(objekt)
     return templates.TemplateResponse(
@@ -1398,24 +1299,10 @@ def zusatzadresse_loeschen(
     _guard: None = Depends(require_objekt_enabled),
 ):
     objekt = _objekt_or_404(db, objekt_id, user)
-    adresse = (
-        db.query(ObjektZusatzadresse)
-        .filter(ObjektZusatzadresse.id == adresse_id, ObjektZusatzadresse.objekt_id == objekt.id)
-        .first()
-    )
-    if adresse is None:
-        raise HTTPException(status_code=404, detail="Zusatzadresse nicht gefunden")
-    write_objekt_change(
-        db,
-        objekt.id,
-        objekt.org_id,
-        "stammdaten",
-        "zusatzadresse_geloescht",
-        before=adresse.bezeichnung,
-        after=None,
-        user_id=user.id,
-    )
-    db.delete(adresse)
+    try:
+        objekt_schreiben.zusatzadresse_entfernen(db, objekt, adresse_id, user_id=user.id)
+    except objekt_schreiben.ObjektFehler as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     db.commit()
     db.refresh(objekt)
     return templates.TemplateResponse(
@@ -1790,29 +1677,15 @@ def gefahr_neu(
     link_label: list[str] = Form(default=[]),
     link_url: list[str] = Form(default=[]),
 ):
-    from app.services.objekt_service import links_aus_form
-
     objekt = _objekt_or_404(db, objekt_id, user)
-    katalog = db.query(GefahrenKatalog).filter(GefahrenKatalog.id == gefahr_id).first()
-    if katalog is None:
-        raise HTTPException(status_code=404, detail="Gefahr nicht im Katalog")
-    max_sort = max([g.sort for g in objekt.gefahren], default=0)
-    eintrag = ObjektGefahr(
-        org_id=objekt.org_id,
-        objekt_id=objekt.id,
-        gefahr_id=gefahr_id,
-        un_nummer=un_nummer.strip() or None,
-        detail=detail.strip() or None,
-        stoffname=stoffname.strip() or None,
-        gefahrklasse=gefahrklasse.strip() or None,
-        gefahrnummer=gefahrnummer.strip() or None,
-        links_json=links_aus_form(link_label, link_url),
-        sort=max_sort + 1,
-    )
-    db.add(eintrag)
-    write_objekt_change(
-        db, objekt.id, objekt.org_id, "gefahren", "gefahr_neu", before=None, after=katalog.name, user_id=user.id
-    )
+    try:
+        objekt_schreiben.gefahr_anlegen(
+            db, objekt, user_id=user.id, gefahr_id=gefahr_id, un_nummer=un_nummer,
+            detail=detail, stoffname=stoffname, gefahrklasse=gefahrklasse,
+            gefahrnummer=gefahrnummer, link_label=link_label, link_url=link_url,
+        )
+    except objekt_schreiben.ObjektFehler as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     db.commit()
     db.refresh(objekt)
     ctx = _detail_context(request, db, user, objekt)
@@ -1836,30 +1709,19 @@ def gefahr_edit(
     link_label: list[str] = Form(default=[]),
     link_url: list[str] = Form(default=[]),
 ):
-    from app.services.objekt_service import links_aus_form
-
     objekt = _objekt_or_404(db, objekt_id, user)
-    eintrag = (
-        db.query(ObjektGefahr).filter(ObjektGefahr.id == gefahr_eintrag_id, ObjektGefahr.objekt_id == objekt.id).first()
-    )
-    if eintrag is None:
-        raise HTTPException(status_code=404, detail="Gefahren-Eintrag nicht gefunden")
-    eintrag.un_nummer = un_nummer.strip() or None
-    eintrag.detail = detail.strip() or None
-    eintrag.stoffname = stoffname.strip() or None
-    eintrag.gefahrklasse = gefahrklasse.strip() or None
-    eintrag.gefahrnummer = gefahrnummer.strip() or None
-    eintrag.links_json = links_aus_form(link_label, link_url)
-    write_objekt_change(
-        db,
-        objekt.id,
-        objekt.org_id,
-        "gefahren",
-        "gefahr_bearbeitet",
-        before=None,
-        after=eintrag.gefahr.name if eintrag.gefahr else None,
-        user_id=user.id,
-    )
+    try:
+        objekt_schreiben.gefahr_aendern(
+            db, objekt, gefahr_eintrag_id, user_id=user.id,
+            daten={
+                "un_nummer": un_nummer.strip() or None, "detail": detail.strip() or None,
+                "stoffname": stoffname.strip() or None, "gefahrklasse": gefahrklasse.strip() or None,
+                "gefahrnummer": gefahrnummer.strip() or None,
+                "links_json": objekt_schreiben.links_aus_form(link_label, link_url),
+            },
+        )
+    except objekt_schreiben.ObjektFehler as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     db.commit()
     db.refresh(objekt)
     ctx = _detail_context(request, db, user, objekt)
@@ -1877,22 +1739,10 @@ def gefahr_loeschen(
     _guard: None = Depends(require_objekt_enabled),
 ):
     objekt = _objekt_or_404(db, objekt_id, user)
-    eintrag = (
-        db.query(ObjektGefahr).filter(ObjektGefahr.id == gefahr_eintrag_id, ObjektGefahr.objekt_id == objekt.id).first()
-    )
-    if eintrag is None:
-        raise HTTPException(status_code=404, detail="Gefahren-Eintrag nicht gefunden")
-    write_objekt_change(
-        db,
-        objekt.id,
-        objekt.org_id,
-        "gefahren",
-        "gefahr_geloescht",
-        before=eintrag.gefahr.name if eintrag.gefahr else str(eintrag.gefahr_id),
-        after=None,
-        user_id=user.id,
-    )
-    db.delete(eintrag)
+    try:
+        objekt_schreiben.gefahr_entfernen(db, objekt, gefahr_eintrag_id, user_id=user.id)
+    except objekt_schreiben.ObjektFehler as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     db.commit()
     db.refresh(objekt)
     ctx = _detail_context(request, db, user, objekt)
@@ -1938,22 +1788,13 @@ def merkmal_zuordnen(
     hinweis: str = Form(""),
 ):
     objekt = _objekt_or_404(db, objekt_id, user)
-    katalog = db.query(MerkmalKatalog).filter(MerkmalKatalog.id == merkmal_id).first()
-    if katalog is None:
-        raise HTTPException(status_code=404, detail="Merkmal nicht im Katalog")
-    bereits = any(m.merkmal_id == merkmal_id for m in objekt.merkmale)
-    if not bereits:
-        db.add(
-            ObjektMerkmal(
-                org_id=objekt.org_id,
-                objekt_id=objekt.id,
-                merkmal_id=merkmal_id,
-                hinweis=hinweis.strip() or None,
-            )
+    try:
+        zuordnung = objekt_schreiben.merkmal_zuordnen(
+            db, objekt, user_id=user.id, merkmal_id=merkmal_id, hinweis=hinweis,
         )
-        write_objekt_change(
-            db, objekt.id, objekt.org_id, "merkmale", "merkmal_neu", before=None, after=katalog.name, user_id=user.id
-        )
+    except objekt_schreiben.ObjektFehler as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    if zuordnung is not None:
         db.commit()
         db.refresh(objekt)
     ctx = _detail_context(request, db, user, objekt)
@@ -1972,22 +1813,10 @@ def merkmal_entfernen(
     _guard: None = Depends(require_objekt_enabled),
 ):
     objekt = _objekt_or_404(db, objekt_id, user)
-    zuordnung = (
-        db.query(ObjektMerkmal).filter(ObjektMerkmal.id == zuordnung_id, ObjektMerkmal.objekt_id == objekt.id).first()
-    )
-    if zuordnung is None:
-        raise HTTPException(status_code=404, detail="Merkmal-Zuordnung nicht gefunden")
-    write_objekt_change(
-        db,
-        objekt.id,
-        objekt.org_id,
-        "merkmale",
-        "merkmal_entfernt",
-        before=zuordnung.merkmal.name if zuordnung.merkmal else str(zuordnung.merkmal_id),
-        after=None,
-        user_id=user.id,
-    )
-    db.delete(zuordnung)
+    try:
+        objekt_schreiben.merkmal_entfernen(db, objekt, zuordnung_id, user_id=user.id)
+    except objekt_schreiben.ObjektFehler as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     db.commit()
     db.refresh(objekt)
     ctx = _detail_context(request, db, user, objekt)
@@ -2026,43 +1855,10 @@ def _objekt_org_id(objekt: Objekt) -> int:
 def _kontakt_zuordnen(
     db: Session, objekt: Objekt, zentraler_kontakt: Kontakt, art: str, user_id: int | None
 ) -> ObjektKontakt:
-    """Legt eine Objekt-Zuordnung an; zentrale Felder bleiben bewusst leer."""
-    if zentraler_kontakt.org_id != objekt.org_id:
-        raise HTTPException(status_code=404, detail="Kontakt nicht gefunden")
-    vorhanden = (
-        db.query(ObjektKontakt)
-        .filter(
-            ObjektKontakt.objekt_id == objekt.id,
-            ObjektKontakt.kontakt_id == zentraler_kontakt.id,
-            ObjektKontakt.art == art,
-        )
-        .first()
-    )
-    if vorhanden is not None:
-        raise HTTPException(status_code=400, detail="Kontakt ist bereits mit dieser Art zugeordnet")
-    kontakt = ObjektKontakt(
-        org_id=objekt.org_id,
-        objekt_id=objekt.id,
-        kontakt_id=zentraler_kontakt.id,
-        art=art,
-        sort=max((k.sort for k in objekt.kontakte), default=0) + 1,
-    )
-    db.add(kontakt)
-    db.flush()
-    from app.services.kontakt_sync_service import mapping_payload, record_change
-
-    record_change(db, _objekt_org_id(objekt), "zuordnung", kontakt.id, "upsert", mapping_payload(kontakt))
-    write_objekt_change(
-        db,
-        objekt.id,
-        objekt.org_id,
-        "kontakte",
-        "kontakt_zugeordnet",
-        before=None,
-        after=zentraler_kontakt.anzeigename,
-        user_id=user_id,
-    )
-    return kontakt
+    try:
+        return objekt_schreiben.kontakt_zuordnen(db, objekt, zentraler_kontakt, art=art, user_id=user_id)
+    except objekt_schreiben.ObjektFehler as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
 
 def _kontakte_response(request: Request, db: Session, user: User, objekt: Objekt):
@@ -2166,6 +1962,7 @@ def kontakt_anlegen_und_zuordnen(
             [],
             org_id=org_id,
             user_id=user.id,
+            commit=False,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -2385,47 +2182,12 @@ def wohnanlage_speichern(
     hinweise: str = Form(""),
 ):
     objekt = _objekt_or_404(db, objekt_id, user)
-
-    if not wohnanlage_vorhanden:
-        if objekt.wohnanlage is not None:
-            write_objekt_change(
-                db,
-                objekt.id,
-                objekt.org_id,
-                "stammdaten",
-                "wohnanlage_entfernt",
-                before="Wohnanlagen-Block",
-                after=None,
-                user_id=user.id,
-            )
-            db.delete(objekt.wohnanlage)
-            objekt.wohnanlage = None
-            db.commit()
-        return templates.TemplateResponse(
-            request, "objekt/_wohnanlage.html", _detail_context(request, db, user, objekt)
-        )
-
-    if objekt.wohnanlage is None:
-        objekt.wohnanlage = ObjektWohnanlage(org_id=objekt.org_id, objekt_id=objekt.id)
-        db.add(objekt.wohnanlage)
-        write_objekt_change(
-            db,
-            objekt.id,
-            objekt.org_id,
-            "stammdaten",
-            "wohnanlage_angelegt",
-            before=None,
-            after="Wohnanlagen-Block",
-            user_id=user.id,
-        )
-
     kontakt_id = int(hausverwaltung_kontakt_id) if hausverwaltung_kontakt_id.strip() else None
     if kontakt_id is not None:
         gueltig = any(k.id == kontakt_id for k in objekt.kontakte)
         if not gueltig:
             kontakt_id = None
 
-    wa = objekt.wohnanlage
     daten = {
         "wohneinheiten": int(wohneinheiten) if wohneinheiten.strip() else None,
         "geschosse": int(geschosse) if geschosse.strip() else None,
@@ -2433,13 +2195,9 @@ def wohnanlage_speichern(
         "hausverwaltung_kontakt_id": kontakt_id,
         "hinweise": hinweise.strip() or None,
     }
-    for feld, neu in daten.items():
-        alt = getattr(wa, feld)
-        if alt != neu:
-            setattr(wa, feld, neu)
-            write_objekt_change(
-                db, objekt.id, objekt.org_id, "stammdaten", f"wohnanlage_{feld}", before=alt, after=neu, user_id=user.id
-            )
+    objekt_schreiben.wohnanlage_speichern(
+        db, objekt, user_id=user.id, vorhanden=bool(wohnanlage_vorhanden), daten=daten,
+    )
     db.commit()
     db.refresh(objekt)
     return templates.TemplateResponse(request, "objekt/_wohnanlage.html", _detail_context(request, db, user, objekt))

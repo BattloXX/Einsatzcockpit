@@ -142,6 +142,7 @@ def create_kontakt(
     *,
     org_id: int,
     user_id: int | None,
+    commit: bool = True,
 ) -> Kontakt:
     kontakt = Kontakt(org_id=org_id, erstellt_von_id=user_id, aktualisiert_von_id=user_id)
     _werte(kontakt, daten, user_id)
@@ -152,7 +153,10 @@ def create_kontakt(
     from app.services.kontakt_sync_service import contact_payload, record_change
 
     record_change(db, org_id, "kontakt", kontakt.id, "upsert", contact_payload(kontakt))
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
     return get_kontakt(db, kontakt.id, include_archiviert=True)  # type: ignore[return-value]
 
 
