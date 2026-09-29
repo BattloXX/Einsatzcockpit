@@ -3,6 +3,7 @@
 import re
 import shutil
 import tempfile
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
@@ -188,6 +189,7 @@ def _settings_context(request, db, user, org_id, **extra) -> dict:
         "mailing_sys_enabled": mailing_system_enabled(db),
         "lagefuehrung_sys_enabled": lagefuehrung_system_enabled(db),
         "probenplanung_sys_enabled": probenplanung_system_enabled(db),
+        "mcp_sys_enabled": sys_settings.get("mcp_module_enabled") == "true",
         "timezones": common_timezones(),
         "default_timezone": app_settings.DEFAULT_TIMEZONE,
         "weather_stations": weather_stations,
@@ -237,6 +239,7 @@ async def save_org_settings(
     gsl_lagemeldung_sofort_raw: str = Form(""),
     gsl_lagemeldung_auto_auftrag_raw: str = Form(""),
     uas_module_enabled_raw: str = Form(""),
+    mcp_modul_aktiv_raw: str = Form(""),
     atemschutz_ueberwachung_modul_aktiv_raw: str = Form(""),
     objekt_module_enabled_raw: str = Form(""),
     kontakte_module_enabled_raw: str = Form(""),
@@ -407,6 +410,10 @@ async def save_org_settings(
                 payload={"alt": old_uas, "neu": new_uas},
                 ip=request.client.host if request.client else None,
             )
+
+    mcp_system = db.query(SystemSettings).filter(SystemSettings.key == "mcp_module_enabled").first()
+    if mcp_system and mcp_system.value == "true":
+        org_s.mcp_modul_aktiv = mcp_modul_aktiv_raw in ("1", "true", "on")
 
     # Atemschutzueberwachung: Org-Toggle nur bei aktivem System-Flag aendern.
     from app.services.breathing_service import breathing_system_enabled
@@ -1802,6 +1809,25 @@ def toggle_uas_system(
 
     org_suffix = f"&org_id={request.query_params.get('org_id', '')}" if request.query_params.get("org_id") else ""
     return RedirectResponse(f"/admin/settings?saved=1{org_suffix}", status_code=303)
+
+
+@router.post("/settings/system/mcp-toggle")
+def toggle_mcp_system(
+    request: Request,
+    db=Depends(get_db),
+    user: User = Depends(require_system_admin),
+    enabled_raw: str = Form(""),
+):
+    enabled = enabled_raw in ("1", "true", "on")
+    row = db.query(SystemSettings).filter(SystemSettings.key == "mcp_module_enabled").first()
+    if row is None:
+        row = SystemSettings(key="mcp_module_enabled", value="false")
+        db.add(row)
+    row.value = "true" if enabled else "false"
+    row.updated_at = datetime.now(UTC)
+    row.updated_by_user_id = user.id
+    db.commit()
+    return RedirectResponse("/admin/settings?saved=1", status_code=303)
 
 
 @router.post("/settings/system/foerderstrecke-toggle")

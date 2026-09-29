@@ -122,6 +122,7 @@ from app.models.master import (  # noqa: F401 -- imports register ORM models in 
     TaskSuggestionAlarm,
     VehicleMaster,
 )
+from app.models.mcp import MCPOAuthClient, MCPOAuthCode, MCPOAuthToken
 from app.models.media_annotation import MediaAnnotation, MediaAnnotationVersion
 from app.models.nachschlagewerk import RettungsdatenblattCache, RettungskartenKatalog
 from app.models.objekt import (
@@ -415,4 +416,7 @@ __all__ = [
     "LagefuehrungEvent",
     "LagefuehrungBerechtigung",
     "LagefuehrungSnapshot",
+    "MCPOAuthClient",
+    "MCPOAuthCode",
+    "MCPOAuthToken",
 ]

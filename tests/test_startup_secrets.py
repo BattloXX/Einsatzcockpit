@@ -38,7 +38,7 @@ def test_dummy_password_hash_is_valid_bcrypt_and_cached():
 def test_login_nonexistent_user_still_runs_bcrypt_compare(client, setup_db):
     """SEC-10: auch bei nicht existierendem User muss ein bcrypt-Vergleich laufen
     (Timing-Angleichung gegen Enumeration)."""
-    with patch("app.routers.auth.verify_password", wraps=__import__(
+    with patch("app.services.auth_service.verify_password", wraps=__import__(
         "app.core.security", fromlist=["verify_password"]
     ).verify_password) as mock_verify:
         client.get("/login")

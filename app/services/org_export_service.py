@@ -53,6 +53,7 @@ _EPHEMERAL_TABLES = frozenset({
     "push_subscription", "push_log", "incident_token", "alarm_token",
     "lage_token", "lagekarte_token", "weather_dashboard_token",
     "alarm_infoscreen_token", "api_key", "sms_gateway_token",
+    "mcp_oauth_client", "mcp_oauth_code", "mcp_oauth_token",
 })
 
 EXCLUDE_TABLES = _GLOBAL_TABLES | _EPHEMERAL_TABLES

@@ -427,6 +427,8 @@ class OrgSettings(Base):
     # UAS-Modul: je Org aktivierbar, aber nur wenn System-Flag (SystemSettings key
     # "uas_module_enabled") ebenfalls "true" ist → effektiv = System AND Org.
     uas_module_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # MCP/verbundene KI-Anwendungen: standardmaessig explizit aus.
+    mcp_modul_aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     # Atemschutzueberwachung: bestehendes Modul bleibt bei Einfuehrung des
     # Org-Toggles standardmaessig aktiv; effektiv zusaetzlich systemweit gated.

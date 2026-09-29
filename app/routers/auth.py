@@ -1,5 +1,4 @@
-import secrets
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Form, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -15,30 +14,22 @@ from app.core.security import (
     sign_session,
     unsign_pin_access_token,
     unsign_qr_token,
-    verify_password,
     verify_pin,
 )
 from app.core.templating import templates
 from app.db import get_db
 from app.models.incident import Incident, IncidentToken
 from app.models.user import DeviceToken, User
+from app.services.auth_service import authenticate_user
 
 router = APIRouter()
 
-# SEC-10: Timing-Seitenkanal (Enumeration) — für nicht existierende/inaktive
-# User kehrte login() bislang VOR dem bcrypt-Vergleich zurück, während
-# existierende User bcrypt (~100ms) durchlaufen. Ein Dummy-Hash gleicher
-# Kostenstufe gleicht die Antwortzeit an. Lazy statt Modul-Import-Zeit, damit
-# hash_password() (bcrypt) nicht bei jedem App-Start unnötig läuft.
-_dummy_password_hash: str | None = None
-
 
 def _get_dummy_password_hash() -> str:
-    global _dummy_password_hash
-    if _dummy_password_hash is None:
-        from app.core.security import hash_password
-        _dummy_password_hash = hash_password(secrets.token_urlsafe(32))
-    return _dummy_password_hash
+    """Kompatibilitaets-Export fuer bestehende Security-Regressionstests."""
+    from app.services.auth_service import _dummy_hash
+
+    return _dummy_hash()
 
 
 def _set_session_cookie(response: Response, token: str, max_age: int | None = None) -> None:
@@ -86,75 +77,14 @@ async def login(
     - Ab `LOGIN_MAX_FAILED` wird der Account `LOGIN_LOCKOUT_MINUTES` lang gesperrt.
     - Während Lockout wird IMMER der gleiche generische Fehler gezeigt (kein Enumerations-Leak).
     """
-    now = datetime.now(UTC)
-    generic_error = "Benutzername oder Passwort falsch"
-
-    user = db.query(User).filter(User.username == username).first()
-    if not user or not user.active:
-        # SEC-10: bcrypt-Dummy-Vergleich durchlaufen, damit die Antwortzeit
-        # nicht von der Antwortzeit bei existierendem User unterscheidbar ist
-        # (verhindert Username-Enumeration über Timing).
-        verify_password(password, _get_dummy_password_hash())
+    user, error = authenticate_user(db, username, password, request.client.host if request.client else None)
+    if error == "enforce_sso":
+        return RedirectResponse("/login?error=enforce_sso", status_code=302)
+    if not user:
         return templates.TemplateResponse(
-            request, "login.html", {"error": generic_error, "next": next, "fcm_token": fcm_token},
+            request, "login.html", {"error": error, "next": next, "fcm_token": fcm_token},
             status_code=401,
         )
-
-    # F-05: enforce_sso — prüft auth_provider, nicht password_hash
-    # Gilt für alle SSO-User (auth_provider=="entra"), auch wenn nachträglich Passwort gesetzt.
-    # Break-Glass: lokale Accounts (auth_provider=="local") mit Passwort bleiben immer loginbar.
-    if user.org_id and getattr(user, "auth_provider", "local") == "entra":
-        from app.models.sso import OrgSsoConfig
-        sso_cfg = db.query(OrgSsoConfig).filter(
-            OrgSsoConfig.org_id == user.org_id,
-            OrgSsoConfig.enabled == True,  # noqa: E712
-            OrgSsoConfig.enforce_sso == True,  # noqa: E712
-        ).first()
-        if sso_cfg:
-            return RedirectResponse("/login?error=enforce_sso", status_code=302)
-
-    # Lockout-Status prüfen
-    if user.locked_until:
-        locked_until = user.locked_until
-        if locked_until.tzinfo is None:
-            locked_until = locked_until.replace(tzinfo=UTC)
-        if locked_until > now:
-            write_audit(db, "auth.login.locked", user_id=user.id,
-                        ip=request.client.host if request.client else None)
-            db.commit()
-            return templates.TemplateResponse(
-                request, "login.html",
-                {"error": "Account ist aktuell gesperrt. Bitte später erneut versuchen.",
-                 "next": next, "fcm_token": fcm_token},
-                status_code=401,
-            )
-        # Lockout abgelaufen – zurücksetzen
-        user.locked_until = None
-        user.failed_login_count = 0
-
-    if not user.password_hash or not verify_password(password, user.password_hash):
-        user.failed_login_count = (user.failed_login_count or 0) + 1
-        if user.failed_login_count >= settings.LOGIN_MAX_FAILED:
-            user.locked_until = now + timedelta(minutes=settings.LOGIN_LOCKOUT_MINUTES)
-            write_audit(db, "auth.login.lockout_triggered", user_id=user.id,
-                        ip=request.client.host if request.client else None,
-                        payload={"failed_count": user.failed_login_count})
-        else:
-            write_audit(db, "auth.login.failed", user_id=user.id,
-                        ip=request.client.host if request.client else None,
-                        payload={"failed_count": user.failed_login_count})
-        db.commit()
-        return templates.TemplateResponse(
-            request, "login.html", {"error": generic_error, "next": next, "fcm_token": fcm_token},
-            status_code=401,
-        )
-
-    # Erfolg
-    user.last_login_at = now
-    user.failed_login_count = 0
-    user.locked_until = None
-    write_audit(db, "auth.login", user_id=user.id,
-                ip=request.client.host if request.client else None)
     if fcm_token:
         from app.services.push_service import upsert_fcm_token
         upsert_fcm_token(db, user_id=user.id, token=fcm_token)

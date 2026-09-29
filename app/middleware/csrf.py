@@ -39,6 +39,8 @@ SAFE_METHODS = {"GET", "HEAD", "OPTIONS", "TRACE"}
 EXEMPT_PREFIXES = (
     "/ws/", "/api/v1/", "/api/lagekarte/", "/static/", "/push/", "/mailing/webhook/resend/", "/mailing/u/",
 )
+# MCP-OAuth-Endpunkte (Bearer/PKCE, kein Browser-Cookie): nur exakte Pfade, kein Praefix.
+_EXEMPT_EXACT = frozenset({"/mcp", "/token", "/register", "/revoke"})
 # Cookie-authentifizierte API-Endpunkte innerhalb von /api/v1/ (SEC-8) — kein
 # Token-Exempt-Freifahrtschein, sondern Origin-Check (siehe Docstring oben).
 _ORIGIN_CHECK_PREFIXES = ("/api/v1/device/",)
@@ -122,7 +124,7 @@ class CSRFMiddleware:
         # auch ohne JavaScript.
         scope.setdefault("state", {})["csrf_token"] = existing_token
 
-        is_exempt = any(path.startswith(prefix) for prefix in EXEMPT_PREFIXES)
+        is_exempt = path in _EXEMPT_EXACT or any(path.startswith(prefix) for prefix in EXEMPT_PREFIXES)
         needs_check = method not in SAFE_METHODS and not is_exempt
 
         if (

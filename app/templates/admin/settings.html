@@ -76,6 +76,13 @@
       {% endif %}
     </form>
 
+    {% set _mcp_sys_on = sys_settings.get('mcp_module_enabled') == 'true' %}
+    <form method="post" action="/admin/settings/system/mcp-toggle" style="margin-top:1.25rem;border-top:1px solid var(--border);padding-top:1rem">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <label style="display:flex;align-items:center;gap:.5rem"><input type="checkbox" name="enabled_raw" value="1" {% if _mcp_sys_on %}checked{% endif %} onchange="this.form.submit()"> KI-Anwendungen (MCP) systemweit aktivieren</label>
+      <small class="form-hint">Erlaubt Organisationen, verbundene KI-Anwendungen einzuschalten.</small>
+    </form>
+
     {% set _objekt_sys_on = sys_settings.get('objekt_module_enabled') == 'true' %}
     <form method="post" action="/admin/settings/system/objekt-toggle" style="margin-top:1.25rem;border-top:1px solid var(--border);padding-top:1rem">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
@@ -510,6 +517,14 @@
           <strong style="color:var(--text-muted)">&mdash; Systemweit deaktiviert (Systemadmin erforderlich).</strong>
           {% endif %}
         </small>
+      </div>
+
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">Verbundene KI-Anwendungen</h3>
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:.5rem{% if not mcp_sys_enabled %};opacity:.5{% endif %}">
+          <input type="checkbox" name="mcp_modul_aktiv_raw" value="1" {% if org_settings and org_settings.mcp_modul_aktiv %}checked{% endif %} {% if not mcp_sys_enabled %}disabled{% endif %}>
+          MCP für diese Organisation aktivieren
+        </label>
       </div>
 
       <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">🫁 Atemschutzüberwachung</h3>

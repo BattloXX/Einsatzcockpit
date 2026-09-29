@@ -5,14 +5,20 @@ import logging
 import secrets as _secrets
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from typing import cast
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from mcp.server.auth.middleware.auth_context import AuthContextMiddleware
+from mcp.server.auth.middleware.bearer_auth import BearerAuthBackend
+from mcp.server.auth.provider import ProviderTokenVerifier
+from pydantic import AnyHttpUrl
 from sqlalchemy.exc import IntegrityError
 from starlette.exceptions import HTTPException as _StarletteHTTPException
+from starlette.middleware.authentication import AuthenticationMiddleware
 
 from app.config import settings, validate_startup_secrets
 from app.core.dependencies import _resolve_current_org
@@ -20,6 +26,9 @@ from app.core.multi_account import ACCOUNTS_COOKIE, add_account, load_accounts, 
 from app.core.security import unsign_native_link_token, unsign_session
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
+from app.mcp import router as mcp_router
+from app.mcp.server import application as mcp_application
+from app.mcp.server import provider as mcp_provider
 from app.models.incident import Incident, IncidentToken
 from app.models.major_incident import LageToken, MajorIncident, MajorIncidentStatus
 from app.models.user import DeviceToken, Role, User
@@ -201,6 +210,20 @@ async def lifespan(app: FastAPI):
 
     configure_mappers()
 
+    # StreamableHTTPSessionManager ist bewusst nur einmal startbar. Der
+    # globale FastAPI-App-Objekt wird bei TestClient jedoch mehrfach durch
+    # seinen Lifespan gefahren. Deshalb wird pro Lifespan ein frisches
+    # Streamable-HTTP-Sub-App gebaut und nur der /mcp-Handler ausgetauscht;
+    # die statischen OAuth-Discovery-Routen bleiben dabei unveraendert.
+    from app.mcp.server import application as build_mcp_application
+    from app.mcp.server import server as mcp_server
+
+    runtime_mcp_routes = build_mcp_application().routes
+    runtime_mcp_route = next(route for route in runtime_mcp_routes if getattr(route, "path", None) == "/mcp")
+    app.state.mcp_streamable_route.app = runtime_mcp_route.app
+    mcp_session_context = mcp_server.session_manager.run()
+    await mcp_session_context.__aenter__()
+
     # Benigne WebSocket-Trennungen dämpfen (siehe _install_ws_quiet_exception_handler).
     _install_ws_quiet_exception_handler()
 
@@ -338,6 +361,7 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        await mcp_session_context.__aexit__(None, None, None)
         from app.services import ws_bus
 
         await ws_bus.stop()
@@ -457,8 +481,28 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Die vom SDK erwarteten Auth-Middleware liegen auf der Haupt-App, weil die
+# SDK-Routen fuer Discovery vor dem Static-Mount in deren Router uebernommen werden.
+app.add_middleware(AuthContextMiddleware)
+app.add_middleware(
+    AuthenticationMiddleware,
+    backend=BearerAuthBackend(
+        ProviderTokenVerifier(mcp_provider),
+        resource_server_url=cast(AnyHttpUrl, settings.effective_public_base_url.rstrip("/") + "/mcp"),
+    ),
+)
+
 # Static files
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
+# MCP registriert die OAuth-Metadaten vor dem Static-Mount fuer /.well-known.
+_mcp_routes = mcp_application().routes
+for _mcp_route in _mcp_routes:
+    _mcp_endpoint = getattr(_mcp_route, "endpoint", None)
+    if _mcp_endpoint is not None and not hasattr(_mcp_endpoint, "__name__"):
+        # SlowAPI erwartet bei gerouteten ASGI-Middleware-Objekten einen Namen.
+        setattr(_mcp_endpoint, "__name__", "mcp_sdk_endpoint")
+app.router.routes.extend(_mcp_routes)
+app.state.mcp_streamable_route = next(route for route in _mcp_routes if getattr(route, "path", None) == "/mcp")
 app.mount("/.well-known", StaticFiles(directory="app/static/.well-known"), name="well-known")
 
 
@@ -849,6 +893,7 @@ if settings.TRUST_PROXY_HEADERS:
 
 # Routers
 app.include_router(auth.router)
+app.include_router(mcp_router.router)
 app.include_router(sso.router)
 app.include_router(public.router)
 app.include_router(public_mailing_tracking.router)
