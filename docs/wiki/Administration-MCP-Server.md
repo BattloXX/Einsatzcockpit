@@ -35,7 +35,9 @@ Poppler ist weiterhin für Seitenvorschauen von übergebenen PDFs notwendig. Tes
 - Die MCP-Anmeldung verwendet Benutzername und Passwort, den vorhandenen Login-Lockout und das eigene Rate-Limit. Ein reines SSO-Konto kann sich hier nicht anmelden.
 - Geräte-Benutzer sind ausgeschlossen. Alle Tool-Abfragen bleiben auf die Organisation des Tokens beschränkt; sensible Klartextfelder werden nicht ausgegeben.
 
-Schreibvorgänge erzeugen Audit-Einträge mit `objekt.mcp_*`, etwa `objekt.mcp_angelegt`, `objekt.mcp_aktualisiert` und `objekt.mcp_dokument_übergeben`.
+Schreibvorgänge erzeugen Audit-Einträge mit `objekt.mcp_*` beziehungsweise `kontakt.mcp_*`, etwa `objekt.mcp_angelegt`, `objekt.mcp_aktualisiert`, `objekt.mcp_dokument_übergeben`, `kontakt.mcp_angelegt` und `kontakt.mcp_aktualisiert`.
+
+Zentrale Kontakte dürfen per MCP angelegt, aktualisiert, archiviert und zusammengeführt werden. Das Archivieren eines Kontakts mit Objektzuordnungen erfordert `bestaetigt=true`; das Zusammenführen erfordert dies immer. SMS- und Mail-Freigaben je Objektkontakt sowie der SMS-Versand bleiben ausschließlich im Einsatzcockpit. Kontakt-Import und -Export stehen ebenfalls nur in der Oberfläche zur Verfügung.
 
 ## Verbindungen trennen und Fehlersuche
 
