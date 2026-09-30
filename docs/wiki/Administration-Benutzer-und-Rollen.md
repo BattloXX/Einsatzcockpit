@@ -2,6 +2,8 @@
 
 ← [Zurück zur Startseite](Home)
 
+Die Rollen `objekt_verwalter` und `fahrtenbuch_admin` steuern auch die sichtbaren Werkzeuge des [MCP-Servers](Administration-MCP-Server); Org-Admin und Admin sind jeweils ebenfalls berechtigt.
+
 ## Benutzer verwalten
 
 **Admin** → **Benutzer**

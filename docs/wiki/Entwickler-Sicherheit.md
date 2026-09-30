@@ -2,6 +2,8 @@
 
 ← [Zurück zur Startseite](Home)
 
+Die MCP-spezifischen OAuth-, PKCE- und Live-Berechtigungsregeln beschreibt [MCP-Server erweitern](Entwickler-MCP-Erweiterung).
+
 ## Authentifizierung und Session
 
 - Passwörter: **bcrypt** (12 Runden)
