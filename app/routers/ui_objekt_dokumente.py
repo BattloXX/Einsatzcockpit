@@ -26,13 +26,18 @@ from app.models.objekt import (
 from app.models.user import User
 from app.routers.ui_objekt import _LESE_ROLLEN, _objekt_or_404, require_objekt_enabled
 from app.services.objekt_dokument_service import (
+    ObjektDokumentFehler,
     absolute_pfad,
     delete_dokument,
+    gebe_dokument_frei,
+    hole_wartende_dokumente,
+    klassifiziere_seiten,
     raeume_dokument_verzeichnis_auf,
     reindex_objekt,
     sammel_pdf,
     store_dokument_upload,
     verarbeite_dokument,
+    verwirf_wartendes_dokument,
 )
 from app.services.objekt_service import STANDARD_MERKMALE, lade_auswahl, write_objekt_change
 
@@ -160,6 +165,14 @@ def _galerie_context(
         .all()
     )
 
+    ist_verwalter = is_objekt_verwalter(user)
+    wartende_dokumente = hole_wartende_dokumente(db, objekt) if ist_verwalter else []
+    hochladende_ids = {d.hochgeladen_von_id for d in wartende_dokumente if d.hochgeladen_von_id}
+    hochladende = {
+        hochladender.id: hochladender
+        for hochladender in db.query(User).filter(User.id.in_(hochladende_ids)).all()
+    } if hochladende_ids else {}
+
     return {
         "ki_vorschlaege": ki_vorschlaege,
         "stammdaten_vorschlaege": stammdaten_vorschlaege,
@@ -177,7 +190,9 @@ def _galerie_context(
         "filter_art": art,
         "filter_suche": suche,
         "in_verarbeitung": in_verarbeitung,
-        "ist_verwalter": is_objekt_verwalter(user),
+        "ist_verwalter": ist_verwalter,
+        "wartende_dokumente": wartende_dokumente,
+        "wartende_hochladende": hochladende,
     }
 
 
@@ -283,8 +298,11 @@ def dokumente_suche_json(
     like = f"%{term}%"
     seiten = (
         db.query(ObjektDokumentSeite)
+        .join(ObjektDokument, ObjektDokumentSeite.dokument_id == ObjektDokument.id)
         .filter(
             ObjektDokumentSeite.objekt_id == objekt.id,
+            ObjektDokumentSeite.org_id == objekt.org_id,
+            ObjektDokument.ist_aktuelle_version.is_(True),
             or_(
                 ObjektDokumentSeite.titel.like(like),
                 ObjektDokumentSeite.melderlinien.like(like),
@@ -330,33 +348,20 @@ def seiten_bulk_klassifizieren(
         raise HTTPException(status_code=400, detail="Ungueltige Seiten-Auswahl") from None
     if not ids:
         raise HTTPException(status_code=400, detail="Keine Seiten ausgewaehlt")
-    dokumentarten = lade_auswahl(db, objekt.org_id, AUSWAHL_DOKUMENTART)
-    if dokumentart and dokumentart not in dokumentarten:
-        raise HTTPException(status_code=400, detail="Unbekannte Dokumentart")
-
     seiten = (
         db.query(ObjektDokumentSeite)
         .filter(ObjektDokumentSeite.id.in_(ids), ObjektDokumentSeite.objekt_id == objekt.id)
         .all()
     )
-    stand_datum = datetime.strptime(stand, "%Y-%m-%d").date() if stand.strip() else None
-    jetzt = datetime.now(UTC)
-    for seite in seiten:
-        if dokumentart:
-            seite.dokumentart = dokumentart
-        if titel.strip():
-            seite.titel = titel.strip()[:200]
-        if melderlinien.strip():
-            seite.melderlinien = melderlinien.strip()[:100]
-        if stand_datum:
-            seite.stand = stand_datum
-        seite.bei_einsatz_drucken = bool(bei_einsatz_drucken)
-        seite.klassifiziert_von_id = user.id
-        seite.klassifiziert_am = jetzt
-    art_label = dokumentarten.get(dokumentart, dokumentart or "unveraendert")
-    write_objekt_change(db, objekt.id, objekt.org_id, "dokumente", "seiten_klassifiziert",
-                        before=None, after=f"{len(seiten)} Seite(n) → {art_label}",
-                        user_id=user.id)
+    try:
+        klassifiziere_seiten(
+            db, seiten,
+            {"dokumentart": dokumentart, "titel": titel, "melderlinien": melderlinien,
+             "stand": stand, "bei_einsatz_drucken": bei_einsatz_drucken},
+            user.id,
+        )
+    except ObjektDokumentFehler as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
     db.commit()
 
     return templates.TemplateResponse(
@@ -427,6 +432,83 @@ def dokument_loeschen(
     return templates.TemplateResponse(
         request, "objekt/_dokumente.html",
         _galerie_context(request, db, user, objekt),
+    )
+
+
+@router.post("/objekte/{objekt_id}/dokumente/wartend/{dokument_id}/freigeben", response_class=HTMLResponse)
+def wartendes_dokument_freigeben(
+    objekt_id: int,
+    dokument_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("objekt_verwalter")),
+    _guard: None = Depends(require_objekt_enabled),
+):
+    """Gibt eine durch die KI-Verbindung uebergebene Dokumentversion frei."""
+    objekt = _objekt_or_404(db, objekt_id, user)
+    dokument = (
+        db.query(ObjektDokument)
+        .filter(
+            ObjektDokument.id == dokument_id,
+            ObjektDokument.org_id == objekt.org_id,
+            ObjektDokument.objekt_id == objekt.id,
+            ObjektDokument.freigabe_status == "wartet_freigabe",
+            ObjektDokument.pflegeauftrag_id.is_(None),
+        )
+        .first()
+    )
+    if dokument is None:
+        raise HTTPException(status_code=404, detail="Wartendes Dokument nicht gefunden")
+    try:
+        gebe_dokument_frei(db, dokument, user.id)
+    except ObjektDokumentFehler as exc:
+        raise HTTPException(status_code=400, detail=exc.detail) from exc
+    write_audit(db, "objekt.dokument_freigegeben", org_id=objekt.org_id, user_id=user.id,
+                entity_type="objekt", entity_id=objekt.id,
+                payload={"dokument_id": dokument.id, "dateiname": dokument.dateiname_original})
+    db.commit()
+    return templates.TemplateResponse(
+        request, "objekt/_dokumente.html", _galerie_context(request, db, user, objekt)
+    )
+
+
+@router.post("/objekte/{objekt_id}/dokumente/wartend/{dokument_id}/verwerfen", response_class=HTMLResponse)
+def wartendes_dokument_verwerfen(
+    objekt_id: int,
+    dokument_id: int,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("objekt_verwalter")),
+    _guard: None = Depends(require_objekt_enabled),
+):
+    """Verwirft eine wartende KI-Dokumentversion und gibt ihren Speicher frei."""
+    objekt = _objekt_or_404(db, objekt_id, user)
+    dokument = (
+        db.query(ObjektDokument)
+        .filter(
+            ObjektDokument.id == dokument_id,
+            ObjektDokument.org_id == objekt.org_id,
+            ObjektDokument.objekt_id == objekt.id,
+            ObjektDokument.freigabe_status == "wartet_freigabe",
+            ObjektDokument.pflegeauftrag_id.is_(None),
+        )
+        .first()
+    )
+    if dokument is None:
+        raise HTTPException(status_code=404, detail="Wartendes Dokument nicht gefunden")
+    verzeichnis = absolute_pfad(dokument.pfad).parent
+    try:
+        verwirf_wartendes_dokument(db, dokument, user.id, aufraeumen=False)
+    except ObjektDokumentFehler as exc:
+        raise HTTPException(status_code=400, detail=exc.detail) from exc
+    write_audit(db, "objekt.dokument_verworfen", org_id=objekt.org_id, user_id=user.id,
+                entity_type="objekt", entity_id=objekt.id,
+                payload={"dokument_id": dokument.id, "dateiname": dokument.dateiname_original})
+    db.commit()
+    background_tasks.add_task(raeume_dokument_verzeichnis_auf, verzeichnis)
+    return templates.TemplateResponse(
+        request, "objekt/_dokumente.html", _galerie_context(request, db, user, objekt)
     )
 
 
