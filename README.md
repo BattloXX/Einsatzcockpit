@@ -39,7 +39,7 @@ Eine vollwertige Webapp, die Einsatzleitern und Schriftführern eine strukturier
 | **Atemschutzüberwachung** | Rückzugsdruckberechnung, Zeitmessung und Warnungen |
 | **Alarm-Integrationen** | REST-API, LIS/IPR, externer SMS-/E-Mail-Versand, Teams sowie Print & Alarm Gateway |
 | **Objekt- & Nachschlagewerke** | Einsatzunterlagen, Alarm-Matching, OCR-Suche, Gefahrgut und Rettungsdatenblätter |
-| **MCP-Server** | OAuth-gesicherte KI-Anbindung für Objektentwürfe, fertig analysierte PDFs und lesende Fahrtenbuch-Auswertungen |
+| **MCP-Server** | OAuth-gesicherte KI-Anbindung für Objektentwürfe und Arbeitskopien, zentrale Kontaktpflege, fertig analysierte PDFs und lesende Fahrtenbuch-Auswertungen |
 | **Multi-Org-Support** | Mehrere Feuerwehren, gemeinsame Einsätze und strikt isolierte Stammdaten |
 | **Archiv & Berichte** | Audit-Log, Zeitreise, Statistik und PDF-Exporte |
 | **Wetter & lokale Stationen** | Nowcast, Warnungen, Radar und optionale Meteobridge-Anbindung |
