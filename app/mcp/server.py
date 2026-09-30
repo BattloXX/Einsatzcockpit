@@ -1,5 +1,6 @@
 """DB-gestuetzter OAuth-Provider und Streamable-HTTP-MCP-Server."""
 
+import logging
 import secrets
 from datetime import UTC, datetime, timedelta
 from typing import cast
@@ -252,6 +253,7 @@ class EinsatzcockpitOAuthProvider(OAuthAuthorizationServerProvider[Authorization
             db.close()
 
 
+logger = logging.getLogger(__name__)
 provider = EinsatzcockpitOAuthProvider()
 
 
@@ -274,9 +276,20 @@ def _live_context_for_tool(tool_name: str):
 
 
 async def _call_registered_tool(tool_name: str, **arguments) -> dict[str, object]:
-    definition, context = _live_context_for_tool(tool_name)
+    from mcp.server.mcpserver.exceptions import ToolError
+
+    try:
+        definition, context = _live_context_for_tool(tool_name)
+    except MCPPermissionError as exc:
+        raise ToolError(str(exc)) from exc
     try:
         return await definition.handler(context, **arguments)
+    except (ValueError, MCPPermissionError) as exc:
+        # Nur fachliche Meldungen an den Client geben; das SDK maskiert sonst jede Ausnahme.
+        raise ToolError(str(exc)) from exc
+    except Exception:
+        logger.exception("MCP-Tool %s ist fehlgeschlagen", tool_name)
+        raise
     finally:
         context.db.close()
 
@@ -531,7 +544,14 @@ async def kontakt_zusammenfuehren(
     )
 
 
-@server.tool(name="objekt_anlegen", description="Legt ausschliesslich einen Objekt-Entwurf an.")
+@server.tool(
+    name="objekt_anlegen",
+    description=(
+        "Legt ausschliesslich einen Objekt-Entwurf an. Kontakte: kontakte=[{art, kontakt_id} oder "
+        "{art, neu:{anzeigename|vorname+nachname, organisation, funktion, email, telefone:[{nummer,label}]}} "
+        "oder flach {art, vorname, nachname, telefon, mobil, email}]; art aus objekt_kataloge (Kontaktarten)."
+    ),
+)
 async def objekt_anlegen(
     stammdaten: dict,
     bma: dict | None = None,
@@ -558,7 +578,12 @@ async def objekt_anlegen(
 
 @server.tool(
     name="objekt_aktualisieren",
-    description="Aktualisiert einen Objektentwurf oder eine Arbeitskopie ohne Freigabe.",
+    description=(
+        "Aktualisiert einen Objektentwurf oder eine Arbeitskopie ohne Freigabe. kontakte_hinzufuegen: wie "
+        "kontakte bei objekt_anlegen. kontakte_entfernen: [zuordnung_id] oder [{kontakt_id, art?}] (IDs aus "
+        "objekt_lesen, bei Arbeitskopie mit arbeitskopie=true). kontakte_aendern: "
+        "[{zuordnung_id, art?, sort?, erreichbarkeit?}]. Benoetigt das Kontakte-Modul."
+    ),
 )
 async def objekt_aktualisieren(
     objekt_id: int,

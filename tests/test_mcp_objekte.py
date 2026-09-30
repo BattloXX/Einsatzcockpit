@@ -493,3 +493,37 @@ def test_neue_stammdaten_wohnanlage_und_kontakt_ergebnis(client):
         assert all(k.freigaben == [] for k in objekt.kontakte)
     finally:
         db.close()
+
+
+def test_flache_kontakte_und_entfernen_per_kontakt_id_an_arbeitskopie(client):
+    seed = _seed("obj-flach", {"admin": "objekt_verwalter"})
+    token = _token(client, seed, "admin")
+    aktualisiert = _rufe(
+        client,
+        token,
+        "objekt_aktualisieren",
+        objekt_id=seed["objekt_id"],
+        kontakte_hinzufuegen=[
+            {"art": "betreiber", "vorname": "Flach", "nachname": "Kontakt", "mobil": "+43 660 1234567"}
+        ],
+    )
+    assert "__fehler__" not in aktualisiert
+    hinzugefuegt = aktualisiert["kontakte_hinzugefuegt"][0]
+    lesen = _rufe(client, token, "objekt_lesen", objekt_id=seed["objekt_id"], arbeitskopie=True)
+    assert any(k["kontakt_id"] == hinzugefuegt["kontakt_id"] for k in lesen["kontakte"])
+    entfernt = _rufe(
+        client,
+        token,
+        "objekt_aktualisieren",
+        objekt_id=seed["objekt_id"],
+        kontakte_entfernen=[{"kontakt_id": hinzugefuegt["kontakt_id"]}],
+    )
+    assert "__fehler__" not in entfernt
+    unbekannt = _rufe(
+        client,
+        token,
+        "objekt_aktualisieren",
+        objekt_id=seed["objekt_id"],
+        kontakte_hinzufuegen=[{"art": "betreiber", "vorname": "X", "quatsch": 1}],
+    )
+    assert "__fehler__" in unbekannt and "Erlaubt" in unbekannt["__fehler__"]
