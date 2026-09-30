@@ -5,6 +5,9 @@ from __future__ import annotations
 import asyncio
 import base64
 import binascii
+import threading
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from app.config import settings
@@ -15,7 +18,12 @@ from app.mcp.context import MCPContext
 from app.mcp.registry import register_tool
 from app.models.objekt import OBJEKT_STATUS_ARCHIVIERT, Objekt, ObjektDokument, ObjektDokumentSeite
 from app.models.user import User
-from app.services.mcp_upload_service import effektives_limit, erstelle_upload
+from app.services.mcp_upload_service import (
+    MCPUploadFehler,
+    effektives_limit,
+    erstelle_upload,
+    lade_upload_fuer_uebergabe,
+)
 from app.services.objekt_dokument_service import (
     klassifiziere_seiten,
     store_dokument_bytes,
@@ -58,8 +66,30 @@ def _decode_inhalt(inhalt_base64: str) -> bytes:
     return data
 
 
+def _ki_klassifizierung_starten(objekt_id: int) -> None:
+    """Startet den asynchronen KI-Fallback ausserhalb des MCP-Requests."""
+    def laufen() -> None:
+        from app.services.objekt_ki_service import analysiere_unklassifizierte_seiten
+
+        try:
+            asyncio.run(analysiere_unklassifizierte_seiten(objekt_id))
+        except Exception:
+            # Der KI-Fallback erzeugt nur Vorschlaege; eine fehlgeschlagene
+            # Hintergrundanalyse darf die bereits erfolgreiche Uebergabe nicht aendern.
+            return
+
+    threading.Thread(target=laufen, name=f"mcp-ki-klassifizierung-{objekt_id}", daemon=True).start()
+
+
 def _uebergabe_sync(
-    org_id: int, user_id: int, objekt_id: int, dateiname: str, data: bytes, seiten: list[dict], ersetzt: int | None
+    org_id: int,
+    user_id: int,
+    objekt_id: int,
+    dateiname: str,
+    data: bytes | None,
+    upload_id: str | None,
+    seiten: list[dict] | None,
+    ersetzt: int | None,
 ) -> dict[str, object]:
     """pypdf/Poppler laufen in einem Worker mit eigener Session und Tenant-Kontext."""
     db = SessionLocal()
@@ -67,8 +97,23 @@ def _uebergabe_sync(
     try:
         objekt = _basis_objekt(db, org_id, objekt_id)
         user = db.get(User, user_id)
+        upload_pfad: Path | None = None
+        if upload_id is not None:
+            upload = lade_upload_fuer_uebergabe(db, org_id, user_id, upload_id)
+            if upload.objekt_id != objekt.id:
+                raise MCPUploadFehler("Upload gehoert nicht zu diesem Objekt.", 403)
+            assert upload.pfad is not None
+            upload_pfad = Path(settings.OBJEKT_MEDIA_DIR) / upload.pfad
+            try:
+                data = upload_pfad.read_bytes()
+            except OSError as exc:
+                raise MCPUploadFehler("Upload-Datei nicht gefunden.", 404) from exc
+        assert data is not None
         dokument = store_dokument_bytes(data, dateiname, objekt, user, db, ersetzt_dokument_id=ersetzt)
-        verarbeite_dokument_mit_analyse(dokument.id, seiten, db=db, user_id=user_id)
+        unklassifizierte_seiten: list[int] = []
+        verarbeite_dokument_mit_analyse(
+            dokument.id, seiten, db=db, user_id=user_id, unklassifizierte_seiten=unklassifizierte_seiten
+        )
         write_objekt_change(
             db,
             objekt.id,
@@ -89,7 +134,17 @@ def _uebergabe_sync(
             entity_id=dokument.id,
             payload={"objekt_id": objekt.id},
         )
+        if upload_id is not None:
+            upload.uebergeben_am = datetime.now(UTC).replace(tzinfo=None)
         db.commit()
+        if upload_pfad is not None:
+            upload_pfad.unlink(missing_ok=True)
+        klassifizierung_quelle = "server" if unklassifizierte_seiten else "client"
+        if unklassifizierte_seiten:
+            from app.services.objekt_ki_service import ki_klassifikation_enabled
+
+            if ki_klassifikation_enabled(org_id, db):
+                _ki_klassifizierung_starten(objekt.id)
         return {
             "dokument_id": dokument.id,
             "seitenzahl": dokument.seitenzahl,
@@ -99,6 +154,8 @@ def _uebergabe_sync(
             "hinweis": "Bei Entwurf sofort aktiv."
             if objekt.status == "entwurf"
             else "wartet auf Freigabe im Einsatzcockpit (Objekt > Dokumente)",
+            "klassifizierung_quelle": klassifizierung_quelle,
+            "unklassifizierte_seiten": unklassifizierte_seiten,
         }
     except Exception:
         db.rollback()
@@ -109,7 +166,15 @@ def _uebergabe_sync(
 
 @register_tool(
     name="objekt_dokument_uebergeben",
-    description="Uebergibt ein fertig analysiertes PDF an ein Objekt.",
+    description=(
+        "Uebergibt ein PDF an ein Objekt. Genau eines von inhalt_base64 oder upload_id angeben. "
+        "Fuer grosse Dateien zuerst objekt_dokument_upload_vorbereiten aufrufen, die Datei mit dem dort "
+        "gelieferten curl-Beispiel hochladen und danach upload_id uebergeben. seiten ist optional und hat "
+        "das Format [{\"nr\":1,\"dokumentart\":\"bma_datenblatt\",\"titel\":null}]; optional pro Seite: "
+        "volltext, melderlinien, stand (YYYY-MM-DD), bei_einsatz_drucken. Fehlende Seiten werden serverseitig "
+        "zur KI-Vorschlagsklassifizierung vorgemerkt. Korrekturen erfolgen mit "
+        "objekt_dokument_seiten_klassifizieren."
+    ),
     required_roles=("objekt_verwalter",),
     module_check=objekt_modul_aktiv,
 )
@@ -117,13 +182,24 @@ async def objekt_dokument_uebergeben(
     context: MCPContext,
     objekt_id: int,
     dateiname: str,
-    inhalt_base64: str,
-    seiten: list[dict],
+    inhalt_base64: str | None = None,
+    upload_id: str | None = None,
+    seiten: list[dict] | None = None,
     ersetzt_dokument_id: int | None = None,
 ) -> dict[str, object]:
-    data = _decode_inhalt(inhalt_base64)
+    if (inhalt_base64 is None) == (upload_id is None):
+        raise ValueError("Genau eines von inhalt_base64 oder upload_id ist erforderlich.")
+    data = _decode_inhalt(inhalt_base64) if inhalt_base64 is not None else None
     return await asyncio.to_thread(
-        _uebergabe_sync, context.org_id, context.user.id, objekt_id, dateiname, data, seiten, ersetzt_dokument_id
+        _uebergabe_sync,
+        context.org_id,
+        context.user.id,
+        objekt_id,
+        dateiname,
+        data,
+        upload_id,
+        seiten,
+        ersetzt_dokument_id,
     )
 
 

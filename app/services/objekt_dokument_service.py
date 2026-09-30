@@ -454,18 +454,37 @@ def verarbeite_dokument(
 
 
 def _analyse_seiten_validieren(
-    db: Session, dokument: ObjektDokument, seiten: list[dict], user_id: int | None,
-) -> list[dict]:
+    db: Session, dokument: ObjektDokument, seiten: list[dict] | None, user_id: int | None,
+) -> tuple[list[dict], list[int]]:
     """Validiert die von einem externen Client fertig gelieferte Seitenanalyse."""
-    if len(seiten) != dokument.seitenzahl:
+    seiten = seiten or []
+    if len(seiten) > dokument.seitenzahl:
         raise ObjektDokumentFehler(
-            f"Seitenanalyse hat {len(seiten)} Seiten, das PDF aber {dokument.seitenzahl}",
+            f"PDF hat {dokument.seitenzahl} Seiten, seiten[] hat {len(seiten)}",
         )
     dokumentarten = lade_auswahl(db, dokument.org_id, AUSWAHL_DOKUMENTART)
-    validiert: list[dict] = []
-    for nummer, daten in enumerate(seiten, start=1):
+    zugeordnet: dict[int, dict] = {}
+    ohne_nummer: list[dict] = []
+    for position, daten in enumerate(seiten, start=1):
         if not isinstance(daten, dict):
-            raise ObjektDokumentFehler(f"Seitenanalyse fuer Seite {nummer} ist ungueltig")
+            raise ObjektDokumentFehler(f"Seitenanalyse an Position {position} ist ungueltig")
+        nummer = daten.get("nr")
+        if nummer is None:
+            ohne_nummer.append(daten)
+            continue
+        if not isinstance(nummer, int) or isinstance(nummer, bool):
+            raise ObjektDokumentFehler(f"Seitennummer an Position {position} ist ungueltig")
+        if not 1 <= nummer <= dokument.seitenzahl:
+            raise ObjektDokumentFehler(f"Seitennummer {nummer} liegt ausserhalb des PDFs")
+        if nummer in zugeordnet:
+            raise ObjektDokumentFehler(f"Seitennummer {nummer} wurde mehrfach angegeben")
+        zugeordnet[nummer] = daten
+
+    freie_nummern = (nummer for nummer in range(1, dokument.seitenzahl + 1) if nummer not in zugeordnet)
+    for daten in ohne_nummer:
+        zugeordnet[next(freie_nummern)] = daten
+
+    def validiere(nummer: int, daten: dict) -> dict:
         dokumentart = str(daten.get("dokumentart") or "").strip()
         if dokumentart and dokumentart not in dokumentarten:
             raise ObjektDokumentFehler(f"Unbekannte Dokumentart auf Seite {nummer}: {dokumentart}")
@@ -475,7 +494,7 @@ def _analyse_seiten_validieren(
                 stand = datetime.strptime(str(stand), "%Y-%m-%d").date()
             except ValueError as exc:
                 raise ObjektDokumentFehler(f"Ungueltiger Stand auf Seite {nummer} (YYYY-MM-DD erwartet)") from exc
-        validiert.append({
+        return {
             "volltext": _normalisiere_text(str(daten.get("volltext") or "")) or None,
             "dokumentart": dokumentart or None,
             "titel": str(daten.get("titel") or "").strip()[:200] or None,
@@ -483,17 +502,24 @@ def _analyse_seiten_validieren(
             "stand": stand,
             "bei_einsatz_drucken": bool(daten.get("bei_einsatz_drucken", False)),
             "user_id": user_id,
-        })
-    return validiert
+        }
+
+    fehlende_nummern = [nummer for nummer in range(1, dokument.seitenzahl + 1) if nummer not in zugeordnet]
+    leer = {"dokumentart": None, "titel": None, "volltext": None, "melderlinien": None,
+            "stand": None, "bei_einsatz_drucken": False, "user_id": user_id}
+    validiert = [validiere(nummer, zugeordnet[nummer]) if nummer in zugeordnet else dict(leer)
+                 for nummer in range(1, dokument.seitenzahl + 1)]
+    return validiert, fehlende_nummern
 
 
 def verarbeite_dokument_mit_analyse(
     dokument_id: int,
-    seiten: list[dict],
+    seiten: list[dict] | None,
     *,
     db: Session | None = None,
     user_id: int | None = None,
     render_func: RenderFunc | None = None,
+    unklassifizierte_seiten: list[int] | None = None,
 ) -> ObjektDokument:
     """Bereitet ein bereits analysiertes PDF synchron auf, ohne OCR oder KI.
 
@@ -513,7 +539,9 @@ def verarbeite_dokument_mit_analyse(
         dokument = db.get(ObjektDokument, dokument_id)
         if dokument is None:
             raise ObjektDokumentFehler("Dokument nicht gefunden", 404)
-        analysen = _analyse_seiten_validieren(db, dokument, seiten, user_id)
+        analysen, fehlende_nummern = _analyse_seiten_validieren(db, dokument, seiten, user_id)
+        if unklassifizierte_seiten is not None:
+            unklassifizierte_seiten.extend(fehlende_nummern)
         original = absolute_pfad(dokument.pfad)
         verzeichnis = original.parent
         if not original.exists():
