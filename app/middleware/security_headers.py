@@ -158,6 +158,13 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             any_origin=public_fahrtenbuch,
         )
 
+        # Routen koennen zusaetzliche form-action-Ziele anfordern (MCP-Login: Chrome prueft
+        # form-action auch gegen den Redirect auf die Client-Callback-URL, z. B. claude.ai).
+        extra_form_action = response.headers.get("x-ec-form-action-extra")
+        if extra_form_action is not None:
+            del response.headers["x-ec-form-action-extra"]
+            csp = csp.replace("form-action 'self'", f"form-action 'self' {extra_form_action}", 1)
+
         # CSP überschreibt frame-ancestors → eigener X-Frame-Options als Fallback
         response.headers.setdefault("Content-Security-Policy", csp)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
