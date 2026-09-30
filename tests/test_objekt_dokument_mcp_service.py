@@ -117,7 +117,7 @@ def test_fertig_analysiertes_pdf_ist_sofort_durchsuchbar_ohne_ocr_oder_ki(mcp_db
 
 @pytest.mark.parametrize(
     ("data", "seiten"),
-    [(b"", _analyse()), (b"kein pdf", _analyse()), (_pdf(), _analyse(1))],
+    [(b"", _analyse()), (b"kein pdf", _analyse()), (_pdf(), _analyse(3))],
     ids=("leer", "kein-pdf", "seitenzahl"),
 )
 def test_ungueltige_uebergaben_hinterlassen_keine_dokumente(mcp_db, data, seiten):

@@ -621,12 +621,23 @@ async def objekt_aktualisieren(
     )
 
 
-@server.tool(name="objekt_dokument_uebergeben", description="Uebergibt ein fertig analysiertes PDF an ein Objekt.")
+@server.tool(
+    name="objekt_dokument_uebergeben",
+    description=(
+        "Uebergibt ein PDF an ein Objekt. Genau eines von inhalt_base64 oder upload_id angeben. "
+        "Fuer upload_id zuerst objekt_dokument_upload_vorbereiten aufrufen, dann die Datei mit dessen curl-Beispiel "
+        "hochladen. seiten ist optional: [{\"nr\":1,\"dokumentart\":\"bma_datenblatt\",\"titel\":null}]; "
+        "optional sind volltext, melderlinien, stand (YYYY-MM-DD), bei_einsatz_drucken. Fehlende Seiten werden "
+        "serverseitig zur KI-Vorschlagsklassifizierung vorgemerkt. Korrekturen erfolgen ueber "
+        "objekt_dokument_seiten_klassifizieren."
+    ),
+)
 async def objekt_dokument_uebergeben(
     objekt_id: int,
     dateiname: str,
-    inhalt_base64: str,
-    seiten: list[dict],
+    inhalt_base64: str | None = None,
+    upload_id: str | None = None,
+    seiten: list[dict] | None = None,
     ersetzt_dokument_id: int | None = None,
     ctx: Context | None = None,
 ) -> dict[str, object]:
@@ -635,6 +646,7 @@ async def objekt_dokument_uebergeben(
         objekt_id=objekt_id,
         dateiname=dateiname,
         inhalt_base64=inhalt_base64,
+        upload_id=upload_id,
         seiten=seiten,
         ersetzt_dokument_id=ersetzt_dokument_id,
     )

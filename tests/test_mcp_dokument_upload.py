@@ -2,10 +2,12 @@
 from datetime import timedelta
 from hashlib import sha256
 from io import BytesIO
+from pathlib import Path
 from urllib.parse import urlsplit
 
 from pypdf import PdfWriter
 
+from app.config import settings
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.mcp import MCPUpload
@@ -106,3 +108,69 @@ def test_mcp_upload_tool_visibility_arbeitskopie_and_purge(client):
     finally:
         db.close()
     assert purge_alte_uploads() == 1
+
+
+def test_mcp_upload_wird_uebergeben_und_nicht_wiederverwendet(client):
+    seed = _seed("mcp-upload-uebergabe", {"admin": "objekt_verwalter", "anderer": "objekt_verwalter"})
+    vorbereitet = _vorbereitet(client, seed)
+    response = client.post(
+        urlsplit(vorbereitet["upload_url"]).path,
+        headers={"Authorization": f"Bearer {vorbereitet['upload_token']}"},
+        files={"datei": ("plan.pdf", _pdf(), "application/pdf")},
+    )
+    assert response.status_code == 200
+
+    ergebnis = _rufe(
+        client,
+        _token(client, seed, "admin"),
+        "objekt_dokument_uebergeben",
+        objekt_id=seed["objekt_id"],
+        dateiname="plan.pdf",
+        upload_id=vorbereitet["upload_id"],
+        seiten=[{"nr": 1, "dokumentart": ""}],
+    )
+    assert ergebnis["klassifizierung_quelle"] == "client"
+    assert ergebnis["unklassifizierte_seiten"] == []
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        row = db.query(MCPUpload).filter_by(upload_id=vorbereitet["upload_id"]).one()
+        assert row.uebergeben_am is not None
+        assert not (Path(settings.OBJEKT_MEDIA_DIR) / row.pfad).exists()
+    finally:
+        db.close()
+    assert "__fehler__" in _rufe(
+        client,
+        _token(client, seed, "admin"),
+        "objekt_dokument_uebergeben",
+        objekt_id=seed["objekt_id"],
+        dateiname="plan.pdf",
+        upload_id=vorbereitet["upload_id"],
+    )
+
+
+def test_mcp_upload_uebergabe_prueft_eingabe_und_benutzer(client):
+    seed = _seed("mcp-upload-uebergabe-fehler", {"admin": "objekt_verwalter", "anderer": "objekt_verwalter"})
+    token = _token(client, seed, "admin")
+    assert "__fehler__" in _rufe(
+        client, token, "objekt_dokument_uebergeben", objekt_id=seed["objekt_id"], dateiname="plan.pdf", seiten=[]
+    )
+    assert "__fehler__" in _rufe(
+        client, token, "objekt_dokument_uebergeben", objekt_id=seed["objekt_id"], dateiname="plan.pdf",
+        inhalt_base64="", upload_id="beides", seiten=[]
+    )
+    vorbereitet = _vorbereitet(client, seed)
+    response = client.post(
+        urlsplit(vorbereitet["upload_url"]).path,
+        headers={"Authorization": f"Bearer {vorbereitet['upload_token']}"},
+        files={"datei": ("plan.pdf", _pdf(), "application/pdf")},
+    )
+    assert response.status_code == 200
+    assert "__fehler__" in _rufe(
+        client,
+        _token(client, seed, "anderer"),
+        "objekt_dokument_uebergeben",
+        objekt_id=seed["objekt_id"],
+        dateiname="plan.pdf",
+        upload_id=vorbereitet["upload_id"],
+    )

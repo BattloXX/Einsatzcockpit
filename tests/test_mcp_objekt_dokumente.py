@@ -127,7 +127,7 @@ def test_validierung_cross_org_klassifizierung_und_groessenlimit(client, monkeyp
         objekt_id=a["objekt_id"],
         dateiname="x.pdf",
         inhalt_base64=_pdf(),
-        seiten=[{}],
+        seiten=[{}, {}, {}],
     )
     monkeypatch.setattr(settings, "MCP_MAX_UPLOAD_BYTES", 5)
     assert "__fehler__" in _rufe(
@@ -178,6 +178,29 @@ def test_weder_ocr_noch_ki_werden_aufgerufen_und_text_ist_sofort_da(client, monk
         db.close()
 
 
+def test_unvollstaendige_seiten_werden_zu_ki_fallback_und_nr_zuordnung(client, monkeypatch):
+    seed = _seed("doc-teilseiten", {"u": "objekt_verwalter"})
+    token = _token(client, seed, "u")
+    gestartet: list[int] = []
+    monkeypatch.setattr("app.services.objekt_ki_service.ki_klassifikation_enabled", lambda *_: True)
+    monkeypatch.setattr("app.mcp.tools.objekt_dokumente._ki_klassifizierung_starten", gestartet.append)
+    result = _rufe(
+        client, token, "objekt_dokument_uebergeben", objekt_id=seed["objekt_id"], dateiname="plan.pdf",
+        inhalt_base64=_pdf(), seiten=[{"nr": 2, "dokumentart": "", "titel": "Zweite"}],
+    )
+    assert result["klassifizierung_quelle"] == "server"
+    assert result["unklassifizierte_seiten"] == [1]
+    assert gestartet == [seed["objekt_id"]]
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        dokument = db.get(ObjektDokument, result["dokument_id"])
+        seiten = sorted(dokument.seiten, key=lambda seite: seite.seiten_nr)
+        assert seiten[0].dokumentart is None and seiten[1].titel == "Zweite"
+    finally:
+        db.close()
+
+
 def test_arbeitskopie_id_wird_auf_basis_objekt_abgebildet_und_neue_version(client):
     seed = _seed("doc-kopie", {"u": "objekt_verwalter"})
     token = _token(client, seed, "u")
@@ -222,7 +245,7 @@ def test_fehler_hinterlassen_keine_dokumente_und_klassifizieren_aendert_freigabe
 
     vorher = anzahl()
     assert "__fehler__" in _rufe(client, token, "objekt_dokument_uebergeben", objekt_id=seed["objekt_id"],
-                                 dateiname="x.pdf", inhalt_base64=_pdf(3), seiten=_analyse())
+                                 dateiname="x.pdf", inhalt_base64=_pdf(), seiten=_analyse("") + [{}])
     assert "__fehler__" in _rufe(client, token, "objekt_dokument_uebergeben", objekt_id=seed["objekt_id"],
                                  dateiname="x.pdf", inhalt_base64=_pdf(),
                                  seiten=[{"volltext": "a", "dokumentart": "gibt_es_nicht"}, {"volltext": "b"}])
