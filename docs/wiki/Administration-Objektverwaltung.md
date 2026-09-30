@@ -5,6 +5,8 @@ Alarm-Infoscreen, KI-Klassifizierung und Serverkonfiguration.
 
 Anwender-Doku: [Objekte](Anwender-Objekte)
 
+KI-Anbindungen über den MCP-Server und deren Freigabegrenzen beschreibt [MCP-Server](Administration-MCP-Server).
+
 ## Modul aktivieren (zweistufig, wie UAS)
 
 Das Modul ist **zweistufig schaltbar** — beide Schalter müssen an sein:

@@ -2,6 +2,8 @@
 
 ← [Zurück zur Startseite](Home)
 
+Der OAuth-gesicherte MCP-Server, seine Tool-Registry und der Live-Kontext sind in [MCP-Server erweitern](Entwickler-MCP-Erweiterung) beschrieben.
+
 ## Schichten-Übersicht
 
 ```

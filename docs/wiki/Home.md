@@ -102,6 +102,7 @@ unter [Server-Voraussetzungen](Installation-Server-Voraussetzungen).
 | [Mailing-Kampagnen](Anwender-Mailing-Kampagnen) | Vorlagen verwenden, Empfängerlisten aufbauen, Kampagnen planen/senden und Zustellung auswerten |
 | [Fahrtenbuch](Anwender-Fahrtenbuch) | Fahrt erfassen: Fahrzeug, Maschinist, km/BH, Seilwinde, Token/QR-Zugang |
 | [Objekte](Anwender-Objekte) | Objektdaten pflegen, PDF-Unterlagen klassifizieren, Einsatzansicht, Objektblatt-Druck |
+| [MCP-Assistent](Anwender-MCP-Assistent) | KI-Anwendung sicher verbinden, Objektunterlagen übergeben und Fahrten auswerten |
 | [Externe Objektpflege](Anwender-Objektpflege) | Zentrale Kontakte ohne Login zur Objektprüfung einladen und Einreichungen prüfen |
 | [Kontaktverwaltung](Anwender-Kontaktverwaltung) | Zentrale Kontakte anlegen, Objekten zuordnen, Dubletten & Zusammenführen, Einsatzinfo-Freigabe, Import/Export |
 | [Nachschlagewerke](Anwender-Nachschlagewerke) | Gefahrgut nach UN-Nummer/Stoffname, Rettungsdatenblätter, Evakuierungsradius & Ausbreitung — offlinefähig |
@@ -127,6 +128,7 @@ unter [Server-Voraussetzungen](Installation-Server-Voraussetzungen).
 | [Mailing-Modul](Administration-Mailing-Modul) | Modul aktivieren (System+Org), Rollen, dediziertes Resend, Webhook, Sperrliste, API-Import und Berichte |
 | [Lokale Wetterstation](Administration-Wetterstation) | Davis/Meteobridge-Anbindung: Station anlegen, Push-Token, Meteobridge-URL, Datenbankarchitektur |
 | [Fahrtenbuch](Administration-Fahrtenbuch) | Fahrzeuge konfigurieren, Zwecke/Zielorte, Token/QR, Schadensmeldung, Fahrten-Verwaltung |
+| [MCP-Server](Administration-MCP-Server) | KI-Anwendungen aktivieren, OAuth, Proxy und Sicherheit konfigurieren |
 | [LIS/IPR-Anbindung](Administration-LIS-Anbindung) | Leitstellensystem konfigurieren, Einsatz-/Fahrzeugabgleich, Diagnose-Aufzeichnung |
 | [SMS-Einsatzinfo & Empfang](Administration-SMS-Einsatzinfo) | Alarm-SMS-Verteiler, manueller Versand, Weiterleitungsregeln für eingehende SMS |
 | [Teams-Alarmierung](Administration-Teams-Alarmierung) | Webhook-Basis-Modus einrichten, optionale Bot-Erweiterung für Zusage/Absage |
@@ -145,6 +147,7 @@ unter [Server-Voraussetzungen](Installation-Server-Voraussetzungen).
 |-------|-------------|
 | [Architektur](Entwickler-Architektur) | Module, Schichten, Datenfluss, Multi-Tenancy |
 | [Sicherheit](Entwickler-Sicherheit) | Authentifizierung, CSRF, Tenant-Isolation, Medien und Rate-Limiting |
+| [MCP-Erweiterung](Entwickler-MCP-Erweiterung) | OAuth-Server, Tool-Registry, Live-Kontext und Testmuster |
 | [Datenmodell](Entwickler-Datenmodell) | Tabellen, Beziehungen, Multi-Tenancy-Schema |
 | [REST-API](Entwickler-REST-API) | Endpoints, Payload-Validierung, Rate-Limiting, curl-Beispiele |
 | [WebSocket-Events](Entwickler-WebSocket-Events) | Event-Typen, Pub/Sub |

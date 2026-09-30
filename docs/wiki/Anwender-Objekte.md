@@ -9,6 +9,8 @@ Melderpläne/Laufkarten, Ansprechpartner, Anfahrt.
 > (siehe [Administration → Objektverwaltung](Administration-Objektverwaltung)).
 > Einstieg: **Dokumentation → 🏢 Objekte** in der Hauptnavigation.
 
+Objekte und fertig analysierte PDFs können auch über eine KI-Anwendung vorbereitet werden; Ablauf und Freigabegrenzen stehen beim [MCP-Assistenten](Anwender-MCP-Assistent).
+
 ## Objektliste
 
 `/objekte` zeigt alle Objekte deiner Organisation:

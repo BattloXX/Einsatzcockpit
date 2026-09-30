@@ -2,6 +2,8 @@
 
 ← [Zurück zur Startseite](Home)
 
+Die rein lesende KI-Auswertung des Fahrtenbuchs wird über den [MCP-Server](Administration-MCP-Server) aktiviert und ist nur für Fahrtenbuch-Administratoren verfügbar.
+
 > URL-Bereich: `/admin/fahrtenbuch/` und `/verwaltung/fahrten/`  
 > Zugänglich für: `org_admin`, `admin`
 

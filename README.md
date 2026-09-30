@@ -39,6 +39,7 @@ Eine vollwertige Webapp, die Einsatzleitern und Schriftführern eine strukturier
 | **Atemschutzüberwachung** | Rückzugsdruckberechnung, Zeitmessung und Warnungen |
 | **Alarm-Integrationen** | REST-API, LIS/IPR, externer SMS-/E-Mail-Versand, Teams sowie Print & Alarm Gateway |
 | **Objekt- & Nachschlagewerke** | Einsatzunterlagen, Alarm-Matching, OCR-Suche, Gefahrgut und Rettungsdatenblätter |
+| **MCP-Server** | OAuth-gesicherte KI-Anbindung für Objektentwürfe, fertig analysierte PDFs und lesende Fahrtenbuch-Auswertungen |
 | **Multi-Org-Support** | Mehrere Feuerwehren, gemeinsame Einsätze und strikt isolierte Stammdaten |
 | **Archiv & Berichte** | Audit-Log, Zeitreise, Statistik und PDF-Exporte |
 | **Wetter & lokale Stationen** | Nowcast, Warnungen, Radar und optionale Meteobridge-Anbindung |
@@ -95,6 +96,8 @@ Die vollständige, kommentierte Referenz ist [`.env.example`](.env.example).
 
 > **Vor jedem Produktivstart setzen:** `SECRET_KEY`, `FERNET_KEY`, `DATABASE_URL` und `COOKIE_SECURE=true`; bei mehr als einem Worker zusätzlich `REDIS_URL`. Die Startup-Validierung bricht bei unsicherer Konfiguration ab. Siehe [Installation-Troubleshooting](docs/wiki/Installation-Troubleshooting.md).
 
+Für den optionalen MCP-Server ist eine öffentliche HTTPS-URL als `PUBLIC_BASE_URL` erforderlich. Aktivierung, Limits und Proxy-Vorgaben: [MCP-Server](docs/wiki/Administration-MCP-Server.md).
+
 ## Datenbank-Migrationen
 
 ```bash
@@ -138,6 +141,8 @@ Das Wiki ist die kanonische Quelle für Installation, Bedienung, Administration,
 | [Administration](docs/wiki/Administration-Einstellungen.md) | Organisations- und Systemeinstellungen |
 | [Architektur](docs/wiki/Entwickler-Architektur.md) | Schichten, Module, Datenflüsse und Multi-Tenancy |
 | [REST-API](docs/wiki/Entwickler-REST-API.md) | Endpunkte, Payloads und externe Alarmierung |
+| [MCP-Server](docs/wiki/Administration-MCP-Server.md) | KI-Anwendungen, OAuth, Aktivierung und Betrieb |
+| [MCP-Erweiterung](docs/wiki/Entwickler-MCP-Erweiterung.md) | Tools, Live-Rechte und Testmuster |
 | [Backup & Disaster-Recovery](docs/wiki/Betrieb-Backup-und-Disaster-Recovery.md) | Sicherungen, Restore-Probe, RPO und RTO |
 | [Fehlerbehebung](docs/wiki/Installation-Troubleshooting.md) | Häufige Installations- und Betriebsfehler |
 
@@ -159,6 +164,7 @@ Das Projekt besitzt eine umfangreiche Test-Suite; der aktuelle Status ist im [CI
 - Double-Submit-CSRF-Schutz und Rate-Limits pro IP beziehungsweise API-Key
 - Row-Level-Tenant-Isolation mit zusätzlichen Zugriffskontrollen für gemeinsame Einsätze
 - Geschützte Medienauslieferung mit MIME-Prüfung und UUID-Dateinamen
+- MCP mit öffentlichen PKCE-Clients, gehashten Tokens und Live-Prüfung von Rollen und Modulstatus
 
 → [Sicherheitsarchitektur und Betriebsanforderungen](docs/wiki/Entwickler-Sicherheit.md)
 
@@ -170,6 +176,8 @@ curl https://einsatzleiter.example.at/api/v1/einsatz/active \
 ```
 
 Authentifizierung, Payloads, Validierungsregeln, Rate-Limits und weitere Beispiele: [REST-API im Wiki](docs/wiki/Entwickler-REST-API.md).
+
+Der MCP-Endpunkt ist getrennt von der REST-API und wird unter `/mcp` per OAuth verbunden: [MCP-Server im Wiki](docs/wiki/Administration-MCP-Server.md).
 
 ## Rollen und Organisationen
 

@@ -1,5 +1,7 @@
 # NGINX Reverse-Proxy (CloudPanel)
 
+Bei aktivem MCP-Server braucht `/mcp` deaktiviertes Proxy-Buffering und lange Timeouts; auch OAuth-Discovery und OAuth-Endpunkte müssen durchgereicht werden. Details: [MCP-Server](Administration-MCP-Server).
+
 ← [Zurück zur Startseite](Home)
 
 Diese Seite beschreibt den bestehenden CloudPanel-Weg. Einen vollständigen,
