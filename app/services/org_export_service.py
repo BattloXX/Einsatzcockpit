@@ -201,18 +201,18 @@ def collect_ids(db: Session, org_id: int, areas: set[str] | None = None) -> dict
         pk = _single_pk(table)
         if pk is None:
             continue  # zusammengesetzter PK -> als Blatt behandelt
-        ids = set(db.execute(select(pk).where(table.c[col] == org_id)).scalars())
+        ids: set[object] = set(db.execute(select(pk).where(table.c[col] == org_id)).scalars())
         collected[tname] = ids
 
     # Incident zusaetzlich ueber Kollaboration (incident_org)
     inc = md.tables.get("incident")
     io = md.tables.get("incident_org")
     if inc is not None and io is not None and _root_erlaubt("incident", areas):
-        extra = db.execute(
+        extra: set[object] = set(db.execute(
             select(inc.c.id).where(
                 inc.c.id.in_(select(io.c.incident_id).where(io.c.org_id == org_id))
             )
-        ).scalars()
+        ).scalars())
         collected.setdefault("incident", set()).update(extra)
 
     # 2. Closure ueber Kindtabellen (Single-PK, keine Org-Spalte, nicht EXCLUDE)
