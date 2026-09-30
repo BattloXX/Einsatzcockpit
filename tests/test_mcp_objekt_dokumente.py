@@ -151,8 +151,6 @@ def _analyse(text: str = "Plantext") -> list[dict]:
 def test_weder_ocr_noch_ki_werden_aufgerufen_und_text_ist_sofort_da(client, monkeypatch):
     from unittest.mock import AsyncMock, Mock
 
-    from app.models.objekt import ObjektDokumentSeite
-
     ocr, ki, vision = Mock(), AsyncMock(), AsyncMock()
     monkeypatch.setattr("app.services.objekt_dokument_service._ocr_tesseract", ocr)
     monkeypatch.setattr("app.services.objekt_ki_service.analysiere_unklassifizierte_seiten", ki)
