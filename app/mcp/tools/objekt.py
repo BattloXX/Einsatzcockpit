@@ -122,15 +122,6 @@ def _objekt_kandidat(objekt: Objekt) -> dict[str, object]:
     }
 
 
-def _kontakt_kandidat(kontakt: Kontakt) -> dict[str, object]:
-    return {
-        "id": kontakt.id,
-        "anzeigename": kontakt.anzeigename,
-        "organisation": kontakt.organisation,
-        "funktion": kontakt.funktion,
-    }
-
-
 def _geocoding_starten(objekt_id: int, strasse: str | None, hausnummer: str | None, ort: str | None) -> None:
     if not (strasse or ort):
         return
@@ -263,18 +254,6 @@ async def objekt_lesen(context: MCPContext, objekt_id: int, arbeitskopie: bool =
 
 
 @register_tool(
-    name="kontakt_suchen",
-    description="Sucht zentrale Kontakte ohne Telefon oder E-Mail.",
-    required_roles=("objekt_verwalter",),
-    module_check=lambda org_id, db: objekt_modul_aktiv(org_id, db) and kontakte_modul_aktiv(org_id, db),
-)
-async def kontakt_suchen(context: MCPContext, q: str = "", limit: int = 25) -> dict[str, object]:
-    _limit(limit)
-    kontakte, _ = kontakt_service.list_kontakte(context.db, q=q)
-    return {"kontakte": [_kontakt_kandidat(k) for k in kontakte[:limit]]}
-
-
-@register_tool(
     name="objekt_duplikate_pruefen",
     description="Prueft moegliche Objekt-Dubletten vor der Anlage.",
     required_roles=("objekt_verwalter",),
@@ -317,21 +296,6 @@ async def objekt_duplikate_pruefen(
     if exakt and exakt not in kandidaten:
         kandidaten.insert(0, exakt)
     return {"duplikate_gefunden": bool(kandidaten), "kandidaten": [_objekt_kandidat(o) for o in kandidaten]}
-
-
-@register_tool(
-    name="kontakt_duplikate_pruefen",
-    description="Prueft moegliche Kontakt-Dubletten.",
-    required_roles=("objekt_verwalter",),
-    module_check=lambda org_id, db: objekt_modul_aktiv(org_id, db) and kontakte_modul_aktiv(org_id, db),
-)
-async def kontakt_duplikate_pruefen(
-    context: MCPContext, anzeigename: str, organisation: str = "", email: str = "", telefone: list[str] | None = None
-) -> dict[str, object]:
-    kandidaten = kontakt_service.find_duplicate_candidates(
-        context.db, anzeigename=anzeigename, organisation=organisation, email=email, telefone=telefone or []
-    )
-    return {"duplikate_gefunden": bool(kandidaten), "kandidaten": [_kontakt_kandidat(k) for k in kandidaten]}
 
 
 def _kontakte_anlegen(
