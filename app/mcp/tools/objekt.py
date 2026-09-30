@@ -298,12 +298,45 @@ async def objekt_duplikate_pruefen(
     return {"duplikate_gefunden": bool(kandidaten), "kandidaten": [_objekt_kandidat(o) for o in kandidaten]}
 
 
+_KONTAKT_NEU_FELDER = (
+    "typ", "anzeigename", "vorname", "nachname", "funktion", "organisation", "email", "erreichbarkeit", "notizen",
+)
+_KONTAKT_TELEFON_SCHLUESSEL = (("telefon", "Telefon"), ("mobil", "Mobil"), ("handy", "Mobil"))
+
+
+def _kontakt_eintrag_normalisieren(eintrag: Any) -> Any:
+    """Erlaubt neben {art, neu: {...}} auch flache Kontakte (art, vorname, nachname, mobil, telefon, email)."""
+    if not isinstance(eintrag, dict) or eintrag.get("kontakt_id") or isinstance(eintrag.get("neu"), dict):
+        return eintrag
+    flach = {k: v for k, v in eintrag.items() if k != "art"}
+    if not flach:
+        return eintrag
+    unbekannt = set(flach) - set(_KONTAKT_NEU_FELDER) - {"telefone", "duplikat_bestaetigt"} - {
+        k for k, _ in _KONTAKT_TELEFON_SCHLUESSEL
+    }
+    if unbekannt:
+        raise ValueError(
+            "Unbekannte Kontaktfelder: " + ", ".join(sorted(unbekannt))
+            + ". Erlaubt: art, kontakt_id oder neu{anzeigename|vorname+nachname, organisation, funktion, email, "
+            "telefone[{nummer,label}]} bzw. flach vorname, nachname, telefon, mobil, email."
+        )
+    daten = {k: flach[k] for k in _KONTAKT_NEU_FELDER if flach.get(k)}
+    if not daten.get("anzeigename"):
+        daten["anzeigename"] = " ".join(x for x in (daten.get("vorname"), daten.get("nachname")) if x)
+    telefone = list(flach.get("telefone") or [])
+    for schluessel, label in _KONTAKT_TELEFON_SCHLUESSEL:
+        if flach.get(schluessel):
+            telefone.append({"nummer": str(flach[schluessel]), "label": label})
+    daten["telefone"] = telefone
+    return {k: v for k, v in eintrag.items() if k in ("art", "erreichbarkeit")} | {"neu": daten}
+
+
 def _kontakte_anlegen(
     context: MCPContext, objekt: Objekt, kontakte: list[dict[str, Any]], bestaetigt: bool
 ) -> tuple[list[str], list[ObjektKontakt]]:
     hinweise = []
     zuordnungen = []
-    for eintrag in kontakte:
+    for eintrag in (_kontakt_eintrag_normalisieren(x) for x in kontakte):
         if not isinstance(eintrag, dict) or not eintrag.get("art"):
             raise ValueError("Jeder Kontakt braucht eine Kontaktart.")
         if eintrag.get("kontakt_id"):
@@ -321,6 +354,10 @@ def _kontakte_anlegen(
                 )
         elif isinstance(eintrag.get("neu"), dict):
             daten = eintrag["neu"]
+            if not str(daten.get("anzeigename") or "").strip():
+                daten = daten | {
+                    "anzeigename": " ".join(x for x in (daten.get("vorname"), daten.get("nachname")) if x)
+                }
             name = str(daten.get("anzeigename") or "").strip()
             if not name:
                 raise ValueError("Ein neuer Kontakt braucht einen Anzeigenamen.")
@@ -340,7 +377,7 @@ def _kontakte_anlegen(
                 )
             kontakt = kontakt_service.create_kontakt(
                 context.db,
-                daten,
+                {"typ": "person"} | {k: v for k, v in daten.items() if k in _KONTAKT_NEU_FELDER and v is not None},
                 [x if isinstance(x, dict) else {"nummer": x} for x in telefone],
                 [],
                 org_id=context.org_id,
@@ -595,7 +632,19 @@ async def objekt_aktualisieren(
             )
             geaenderte_felder.append({"feld": "kontakte", "vorher": geaendert.id, "nachher": geaendert.id})
         for eintrag in kontakte_entfernen or []:
-            ident = _entfern_id(eintrag, "Kontakt")
+            if isinstance(eintrag, dict) and isinstance(eintrag.get("kontakt_id"), int) and "id" not in eintrag:
+                treffer = [
+                    k for k in objekt.kontakte
+                    if k.kontakt_id == eintrag["kontakt_id"] and (not eintrag.get("art") or k.art == eintrag["art"])
+                ]
+                if len(treffer) != 1:
+                    raise ValueError(
+                        "Kontakt ist diesem Objekt nicht (eindeutig) zugeordnet; bitte zuordnung_id aus objekt_lesen "
+                        "verwenden (bei Arbeitskopie mit arbeitskopie=true)."
+                    )
+                ident = treffer[0].id
+            else:
+                ident = _entfern_id(eintrag, "Kontakt")
             kontakt_zuordnung_entfernen(db, objekt, ident, user_id=context.user.id, quelle="mcp")
             geaenderte_felder.append({"feld": "kontakte", "vorher": ident, "nachher": None})
         if wohnanlage is not None:
