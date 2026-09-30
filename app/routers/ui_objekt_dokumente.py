@@ -285,8 +285,11 @@ def dokumente_suche_json(
     like = f"%{term}%"
     seiten = (
         db.query(ObjektDokumentSeite)
+        .join(ObjektDokument, ObjektDokumentSeite.dokument_id == ObjektDokument.id)
         .filter(
             ObjektDokumentSeite.objekt_id == objekt.id,
+            ObjektDokumentSeite.org_id == objekt.org_id,
+            ObjektDokument.ist_aktuelle_version.is_(True),
             or_(
                 ObjektDokumentSeite.titel.like(like),
                 ObjektDokumentSeite.melderlinien.like(like),

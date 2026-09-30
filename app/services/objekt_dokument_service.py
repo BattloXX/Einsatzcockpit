@@ -23,6 +23,7 @@ import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from fastapi import HTTPException, UploadFile
 from sqlalchemy.orm import Session
@@ -193,14 +194,17 @@ def store_dokument_bytes(
     dokument_uuid = uuid.uuid4().hex
     dest_dir = _dokument_dir(org_id, objekt.id, dokument_uuid)
     original = dest_dir / "original.pdf"
-    original.write_bytes(data)
-
+    reserved = False
     try:
+        original.write_bytes(data)
         reserve_storage(db, org_id, len(data))
+        reserved = True
     except HTTPException as exc:
-        original.unlink(missing_ok=True)
         raeume_dokument_verzeichnis_auf(dest_dir)
         raise ObjektDokumentFehler(str(exc.detail), exc.status_code) from exc
+    except OSError as exc:
+        raeume_dokument_verzeichnis_auf(dest_dir)
+        raise ObjektDokumentFehler("PDF konnte nicht gespeichert werden") from exc
 
     sofort_freigeben = objekt.status == "entwurf"
     gruppe_id = None
@@ -209,29 +213,37 @@ def store_dokument_bytes(
         gruppe_id = vorgaenger.dokument_gruppe_id or vorgaenger.id
         versionsnummer = naechste_versionsnummer(db, vorgaenger)
 
-    dokument = ObjektDokument(
-        org_id=org_id,
-        objekt_id=objekt.id,
-        dateiname_original=(dateiname or "dokument.pdf")[:255],
-        pfad=f"{org_id}/{objekt.id}/{dokument_uuid}/original.pdf",
-        mime="application/pdf",
-        groesse_bytes=len(data),
-        belegt_bytes=len(data),
-        seitenzahl=seitenzahl,
-        status=DOKUMENT_STATUS_NEU,
-        hochgeladen_von_id=user.id if user else None,
-        hochgeladen_am=datetime.now(UTC),
-        dokument_gruppe_id=gruppe_id,
-        versionsnummer=versionsnummer,
-        freigabe_status="freigegeben" if sofort_freigeben else "wartet_freigabe",
-        ist_aktuelle_version=sofort_freigeben,
-        pflegeauftrag_id=None,
-        freigegeben_am=datetime.now(UTC) if sofort_freigeben else None,
-        freigegeben_von_id=user.id if sofort_freigeben and user else None,
-    )
-    db.add(dokument)
-    db.flush()
-    return dokument
+    try:
+        dokument = ObjektDokument(
+            org_id=org_id,
+            objekt_id=objekt.id,
+            dateiname_original=(dateiname or "dokument.pdf")[:255],
+            pfad=f"{org_id}/{objekt.id}/{dokument_uuid}/original.pdf",
+            mime="application/pdf",
+            groesse_bytes=len(data),
+            belegt_bytes=len(data),
+            seitenzahl=seitenzahl,
+            status=DOKUMENT_STATUS_NEU,
+            hochgeladen_von_id=user.id if user else None,
+            hochgeladen_am=datetime.now(UTC),
+            dokument_gruppe_id=gruppe_id,
+            versionsnummer=versionsnummer,
+            freigabe_status="freigegeben" if sofort_freigeben else "wartet_freigabe",
+            ist_aktuelle_version=sofort_freigeben,
+            pflegeauftrag_id=None,
+            freigegeben_am=datetime.now(UTC) if sofort_freigeben else None,
+            freigegeben_von_id=user.id if sofort_freigeben and user else None,
+        )
+        db.add(dokument)
+        db.flush()
+        return dokument
+    except Exception:
+        # Der Aufrufer bekommt nie eine halb gespeicherte Datei oder eine hängende
+        # Quota-Reservierung. Die Session selbst bleibt dabei beim Aufrufer.
+        if reserved:
+            release_storage(db, org_id, len(data))
+        raeume_dokument_verzeichnis_auf(dest_dir)
+        raise
 
 
 def _render_page_png_poppler(pdf_path: Path, seiten_nr: int, dpi: int) -> bytes | None:
@@ -372,10 +384,10 @@ def verarbeite_dokument(
                 bild_pfad_rel = f"{dokument.pfad.rsplit('/', 1)[0]}/seite_{i:04d}.png"
 
                 try:
-                    img: object = Image.open(io.BytesIO(png))
+                    img: Any = Image.open(io.BytesIO(png))
                     img.thumbnail((settings.MEDIA_THUMB_SIZE, settings.MEDIA_THUMB_SIZE * 2))
                     if img.mode not in ("RGB", "L"):
-                        img = img.convert("RGB")  # type: ignore[assignment]
+                        img = img.convert("RGB")
                     thumb = dest_dir / f"seite_{i:04d}_thumb.jpg"
                     img.save(thumb, "JPEG", quality=80)
                     neu_belegt += thumb.stat().st_size
@@ -514,7 +526,10 @@ def verarbeite_dokument_mit_analyse(
             raise ObjektDokumentFehler("PDF-Seitenzahl hat sich seit dem Upload geaendert")
         dokument.status = DOKUMENT_STATUS_VERARBEITUNG
         db.flush()
-        db.query(ObjektDokumentSeite).filter(ObjektDokumentSeite.dokument_id == dokument.id).delete()
+        for alte_seite in db.query(ObjektDokumentSeite).filter(
+            ObjektDokumentSeite.dokument_id == dokument.id
+        ).all():
+            db.delete(alte_seite)
         neu_belegt = 0
         jetzt = datetime.now(UTC)
         for i, (page, analyse) in enumerate(zip(reader.pages, analysen), start=1):
@@ -533,12 +548,12 @@ def verarbeite_dokument_mit_analyse(
                 neu_belegt += len(png)
                 bild_pfad_rel = f"{dokument.pfad.rsplit('/', 1)[0]}/seite_{i:04d}.png"
                 try:
-                    img = Image.open(io.BytesIO(png))
-                    img.thumbnail((settings.MEDIA_THUMB_SIZE, settings.MEDIA_THUMB_SIZE * 2))  # type: ignore[attr-defined]
-                    if img.mode not in ("RGB", "L"):  # type: ignore[attr-defined]
-                        img = img.convert("RGB")  # type: ignore[attr-defined]
+                    img: Any = Image.open(io.BytesIO(png))
+                    img.thumbnail((settings.MEDIA_THUMB_SIZE, settings.MEDIA_THUMB_SIZE * 2))
+                    if img.mode not in ("RGB", "L"):
+                        img = img.convert("RGB")
                     thumb = verzeichnis / f"seite_{i:04d}_thumb.jpg"
-                    img.save(thumb, "JPEG", quality=80)  # type: ignore[attr-defined]
+                    img.save(thumb, "JPEG", quality=80)
                     neu_belegt += thumb.stat().st_size
                     thumb_pfad_rel = f"{dokument.pfad.rsplit('/', 1)[0]}/seite_{i:04d}_thumb.jpg"
                 except Exception:
@@ -786,7 +801,10 @@ def verwirf_wartendes_dokument(db: Session, dokument: ObjektDokument, user_id: i
     verzeichnis = absolute_pfad(dokument.pfad).parent
     if dokument.org_id is not None and dokument.belegt_bytes:
         release_storage(db, dokument.org_id, dokument.belegt_bytes)
-    db.query(ObjektDokumentSeite).filter(ObjektDokumentSeite.dokument_id == dokument.id).delete()
+    for seite in db.query(ObjektDokumentSeite).filter(
+        ObjektDokumentSeite.dokument_id == dokument.id
+    ).all():
+        db.delete(seite)
     dokument.belegt_bytes = 0
     dokument.freigabe_status = "verworfen"
     dokument.ist_aktuelle_version = False
