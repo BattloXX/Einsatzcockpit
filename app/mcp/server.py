@@ -15,6 +15,7 @@ from mcp.server.auth.provider import (
 )
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, RevocationOptions
 from mcp.server.mcpserver import Context, MCPServer
+from mcp.server.transport_security import TransportSecuritySettings
 from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 from pydantic import AnyHttpUrl, AnyUrl
 
@@ -547,4 +548,12 @@ async def objekt_dokument_seiten_klassifizieren(
 
 
 def application():
-    return server.streamable_http_app(streamable_http_path="/mcp", stateless_http=True)
+    # Das SDK aktiviert den DNS-Rebinding-Schutz automatisch nur fuer localhost und
+    # wuerde jeden anderen Host-Header (z. B. hinter nginx) mit 421 abweisen. Der
+    # Schutz zielt auf unauthentifizierte lokale Server; dieser Endpunkt ist oeffentlich
+    # und verlangt ein Bearer-Token mit Live-Rechtepruefung, daher bewusst aus.
+    return server.streamable_http_app(
+        streamable_http_path="/mcp",
+        stateless_http=True,
+        transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
+    )
