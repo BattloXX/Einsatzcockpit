@@ -790,7 +790,13 @@ def gebe_dokument_frei(db: Session, dokument: ObjektDokument, user_id: int) -> N
     )
 
 
-def verwirf_wartendes_dokument(db: Session, dokument: ObjektDokument, user_id: int) -> None:
+def verwirf_wartendes_dokument(
+    db: Session,
+    dokument: ObjektDokument,
+    user_id: int,
+    *,
+    aufraeumen: bool = True,
+) -> None:
     """Verwirft eine wartende Version und gibt deren Speicher sofort frei.
 
     Die Zeile bleibt als nachvollziehbarer Freigabestatus erhalten; Seiten und
@@ -814,4 +820,5 @@ def verwirf_wartendes_dokument(db: Session, dokument: ObjektDokument, user_id: i
         before=None, after=dokument.dateiname_original, user_id=user_id,
     )
     db.flush()
-    raeume_dokument_verzeichnis_auf(verzeichnis)
+    if aufraeumen:
+        raeume_dokument_verzeichnis_auf(verzeichnis)

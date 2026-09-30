@@ -29,12 +29,15 @@ from app.services.objekt_dokument_service import (
     ObjektDokumentFehler,
     absolute_pfad,
     delete_dokument,
+    gebe_dokument_frei,
+    hole_wartende_dokumente,
     klassifiziere_seiten,
     raeume_dokument_verzeichnis_auf,
     reindex_objekt,
     sammel_pdf,
     store_dokument_upload,
     verarbeite_dokument,
+    verwirf_wartendes_dokument,
 )
 from app.services.objekt_service import STANDARD_MERKMALE, lade_auswahl, write_objekt_change
 
@@ -162,6 +165,14 @@ def _galerie_context(
         .all()
     )
 
+    ist_verwalter = is_objekt_verwalter(user)
+    wartende_dokumente = hole_wartende_dokumente(db, objekt) if ist_verwalter else []
+    hochladende_ids = {d.hochgeladen_von_id for d in wartende_dokumente if d.hochgeladen_von_id}
+    hochladende = {
+        hochladender.id: hochladender
+        for hochladender in db.query(User).filter(User.id.in_(hochladende_ids)).all()
+    } if hochladende_ids else {}
+
     return {
         "ki_vorschlaege": ki_vorschlaege,
         "stammdaten_vorschlaege": stammdaten_vorschlaege,
@@ -179,7 +190,9 @@ def _galerie_context(
         "filter_art": art,
         "filter_suche": suche,
         "in_verarbeitung": in_verarbeitung,
-        "ist_verwalter": is_objekt_verwalter(user),
+        "ist_verwalter": ist_verwalter,
+        "wartende_dokumente": wartende_dokumente,
+        "wartende_hochladende": hochladende,
     }
 
 
@@ -419,6 +432,83 @@ def dokument_loeschen(
     return templates.TemplateResponse(
         request, "objekt/_dokumente.html",
         _galerie_context(request, db, user, objekt),
+    )
+
+
+@router.post("/objekte/{objekt_id}/dokumente/wartend/{dokument_id}/freigeben", response_class=HTMLResponse)
+def wartendes_dokument_freigeben(
+    objekt_id: int,
+    dokument_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("objekt_verwalter")),
+    _guard: None = Depends(require_objekt_enabled),
+):
+    """Gibt eine durch die KI-Verbindung uebergebene Dokumentversion frei."""
+    objekt = _objekt_or_404(db, objekt_id, user)
+    dokument = (
+        db.query(ObjektDokument)
+        .filter(
+            ObjektDokument.id == dokument_id,
+            ObjektDokument.org_id == objekt.org_id,
+            ObjektDokument.objekt_id == objekt.id,
+            ObjektDokument.freigabe_status == "wartet_freigabe",
+            ObjektDokument.pflegeauftrag_id.is_(None),
+        )
+        .first()
+    )
+    if dokument is None:
+        raise HTTPException(status_code=404, detail="Wartendes Dokument nicht gefunden")
+    try:
+        gebe_dokument_frei(db, dokument, user.id)
+    except ObjektDokumentFehler as exc:
+        raise HTTPException(status_code=400, detail=exc.detail) from exc
+    write_audit(db, "objekt.dokument_freigegeben", org_id=objekt.org_id, user_id=user.id,
+                entity_type="objekt", entity_id=objekt.id,
+                payload={"dokument_id": dokument.id, "dateiname": dokument.dateiname_original})
+    db.commit()
+    return templates.TemplateResponse(
+        request, "objekt/_dokumente.html", _galerie_context(request, db, user, objekt)
+    )
+
+
+@router.post("/objekte/{objekt_id}/dokumente/wartend/{dokument_id}/verwerfen", response_class=HTMLResponse)
+def wartendes_dokument_verwerfen(
+    objekt_id: int,
+    dokument_id: int,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("objekt_verwalter")),
+    _guard: None = Depends(require_objekt_enabled),
+):
+    """Verwirft eine wartende KI-Dokumentversion und gibt ihren Speicher frei."""
+    objekt = _objekt_or_404(db, objekt_id, user)
+    dokument = (
+        db.query(ObjektDokument)
+        .filter(
+            ObjektDokument.id == dokument_id,
+            ObjektDokument.org_id == objekt.org_id,
+            ObjektDokument.objekt_id == objekt.id,
+            ObjektDokument.freigabe_status == "wartet_freigabe",
+            ObjektDokument.pflegeauftrag_id.is_(None),
+        )
+        .first()
+    )
+    if dokument is None:
+        raise HTTPException(status_code=404, detail="Wartendes Dokument nicht gefunden")
+    verzeichnis = absolute_pfad(dokument.pfad).parent
+    try:
+        verwirf_wartendes_dokument(db, dokument, user.id, aufraeumen=False)
+    except ObjektDokumentFehler as exc:
+        raise HTTPException(status_code=400, detail=exc.detail) from exc
+    write_audit(db, "objekt.dokument_verworfen", org_id=objekt.org_id, user_id=user.id,
+                entity_type="objekt", entity_id=objekt.id,
+                payload={"dokument_id": dokument.id, "dateiname": dokument.dateiname_original})
+    db.commit()
+    background_tasks.add_task(raeume_dokument_verzeichnis_auf, verzeichnis)
+    return templates.TemplateResponse(
+        request, "objekt/_dokumente.html", _galerie_context(request, db, user, objekt)
     )
 
 

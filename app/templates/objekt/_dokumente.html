@@ -12,7 +12,7 @@
       {% endif %}
       {% if gesamt > 0 %}
       <button type="button" class="btn btn--ghost btn--xs"
-              onclick="ecpgPrint({document_type:'objekt_sammel', objekt_id:{{ objekt.id }}, artifact_ref:'einsatzdruck', title:'Einsatzdruck-Mappe', localUrl:'/objekte/{{ objekt.id }}/dokumente/sammel-pdf?nur_einsatzdruck=1'})">📄 „Bei Einsatz drucken"-Mappe</button>
+              onclick="ecpgPrint({document_type:'objekt_sammel', objekt_id:{{ objekt.id }}, artifact_ref:'einsatzdruck', title:'Einsatzdruck-Mappe', localUrl:'/objekte/{{ objekt.id }}/dokumente/sammel-pdf?nur_einsatzdruck=1'})">📄 "Bei Einsatz drucken"-Mappe</button>
       {% endif %}
     </div>
   </div>
@@ -130,6 +130,50 @@
   <div class="alert alert--error">
     {% for f in upload_fehler %}<div>{{ f }}</div>{% endfor %}
   </div>
+  {% endif %}
+
+  {% if ist_verwalter and wartende_dokumente %}
+  <section class="card" style="padding:12px;margin-bottom:14px;border-left:4px solid #f59e0b;">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+      <strong>⏳ Wartende Dokumente (aus KI-Verbindung) <span class="badge-pill badge-pill--amber">{{ wartende_dokumente|length }}</span></strong>
+      <span class="text-muted" style="font-size:.85em;">Erst nach Freigabe in der Dokumentgalerie sichtbar</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      {% for d in wartende_dokumente %}
+      <article style="border:1px solid var(--border);border-radius:8px;padding:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">
+          <div style="min-width:0;">
+            <strong>{{ d.dateiname_original }}</strong>
+            <div class="text-muted" style="font-size:.85em;margin-top:2px;">
+              Version {{ d.versionsnummer }} · {% if d.dokument_gruppe_id %}ersetzt Version {{ d.versionsnummer - 1 }}{% else %}neues Dokument{% endif %} · {{ d.seitenzahl }} Seite(n)
+            </div>
+            <div class="text-muted" style="font-size:.85em;">Hochgeladen von {{ wartende_hochladende.get(d.hochgeladen_von_id).display_name if wartende_hochladende.get(d.hochgeladen_von_id) else 'KI-Verbindung' }} am {{ d.hochgeladen_am|local_datetime }}</div>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <form hx-post="/objekte/{{ objekt.id }}/dokumente/wartend/{{ d.id }}/freigeben" hx-target="#abschnitt-dokumente" hx-swap="innerHTML" style="display:inline;">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              <button type="submit" class="btn btn--primary btn--xs">✓ Freigeben</button>
+            </form>
+            <form hx-post="/objekte/{{ objekt.id }}/dokumente/wartend/{{ d.id }}/verwerfen" hx-target="#abschnitt-dokumente" hx-swap="innerHTML" hx-confirm="Dokument '{{ d.dateiname_original }}' wirklich verwerfen? Die Datei und alle Seiten werden entfernt." style="display:inline;">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              <button type="submit" class="btn btn--danger btn--xs">Verwerfen</button>
+            </form>
+          </div>
+        </div>
+        {% if d.seiten %}
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+          {% for s in d.seiten %}
+          <div style="display:flex;gap:6px;align-items:flex-start;max-width:250px;min-width:160px;">
+            {% if s.thumb_pfad %}<img src="/objekt-medien/seite/{{ s.id }}/thumb?r={{ s.rotation }}" alt="Vorschau Seite {{ s.seiten_nr }}" loading="lazy" style="width:44px;border-radius:4px;background:#fff;">{% endif %}
+            <div style="font-size:.85em;min-width:0;">S. {{ s.seiten_nr }} · <strong>{{ dokumentarten.get(s.dokumentart, 'Unklassifiziert') }}</strong>{% if s.titel %}<div class="text-muted">{{ s.titel }}</div>{% endif %}</div>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </article>
+      {% endfor %}
+    </div>
+  </section>
   {% endif %}
 
   {% if ist_verwalter %}
