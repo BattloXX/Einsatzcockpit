@@ -30,7 +30,10 @@ OBJEKT_TOOLS = {
     "objekt_kataloge", "objekt_suchen", "objekt_lesen", "objekt_duplikate_pruefen", "objekt_anlegen",
     "objekt_aktualisieren",
 }
-KONTAKT_TOOLS = {"kontakt_suchen", "kontakt_duplikate_pruefen"}
+KONTAKT_TOOLS = {
+    "kontakt_suchen", "kontakt_duplikate_pruefen", "kontakt_lesen", "kontakt_kategorien", "kontakt_anlegen",
+    "kontakt_aktualisieren", "kontakt_archivieren", "kontakt_zusammenfuehren",
+}
 
 
 def _seed(slug: str, rollen: dict[str, str], *, objekt: bool = True, kontakte: bool = True) -> dict:
@@ -133,6 +136,16 @@ def test_rollenmatrix_live_und_tools_list(client, rolle, erlaubt):
     else:
         assert not any(name in listed for name in OBJEKT_TOOLS)
         assert "__fehler__" in _rufe(client, token, "objekt_suchen")
+
+
+def test_kontakt_rollenmatrix_und_tools_list(client):
+    for rolle, erlaubt in (("kontakt_verwalter", True), ("objekt_verwalter", True), ("readonly", False)):
+        seed = _seed(f"kontakt-rolle-{rolle}", {rolle: rolle})
+        token = _token(client, seed, rolle)
+        listed = _mcp(client, token, "tools/list", {}, 1).text
+        assert all(name in listed for name in KONTAKT_TOOLS) is erlaubt
+        if rolle == "kontakt_verwalter":
+            assert not any(name in listed for name in OBJEKT_TOOLS)
 
 
 def test_module_aus_cross_org_und_privacy(client):

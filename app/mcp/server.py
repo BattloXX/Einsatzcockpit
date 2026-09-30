@@ -24,6 +24,7 @@ from app.db import SessionLocal
 from app.mcp.context import MCPPermissionError, load_live_context
 from app.mcp.registry import TOOLS
 from app.mcp.tools import fahrtenbuch as _fahrtenbuch  # noqa: F401 - registriert Fahrtenbuch-Tools
+from app.mcp.tools import kontakt as _kontakt  # noqa: F401 - registriert Kontakt-Tools
 from app.mcp.tools import objekt as _objekt  # noqa: F401 - registriert Objekt-Tools
 from app.mcp.tools import objekt_dokumente as _objekt_dokumente  # noqa: F401 - registriert Dokument-Tools
 from app.mcp.tools import whoami as _whoami  # noqa: F401 - registriert Beispiel-Tool
@@ -410,9 +411,18 @@ async def objekt_lesen(
     return await _call_registered_tool("objekt_lesen", objekt_id=objekt_id, arbeitskopie=arbeitskopie)
 
 
-@server.tool(name="kontakt_suchen", description="Sucht zentrale Kontakte ohne Telefon oder E-Mail.")
-async def kontakt_suchen(q: str = "", limit: int = 25, ctx: Context | None = None) -> dict[str, object]:
-    return await _call_registered_tool("kontakt_suchen", q=q, limit=limit)
+@server.tool(name="kontakt_suchen", description="Sucht zentrale Kontakte der eigenen Organisation.")
+async def kontakt_suchen(
+    q: str = "",
+    typ: str = "all",
+    kategorie: int | None = None,
+    limit: int = 25,
+    seite: int = 1,
+    ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "kontakt_suchen", q=q, typ=typ, kategorie=kategorie, limit=limit, seite=seite
+    )
 
 
 @server.tool(name="objekt_duplikate_pruefen", description="Prueft moegliche Objekt-Dubletten.")
@@ -438,7 +448,7 @@ async def objekt_duplikate_pruefen(
     )
 
 
-@server.tool(name="kontakt_duplikate_pruefen", description="Prueft moegliche Kontakt-Dubletten.")
+@server.tool(name="kontakt_duplikate_pruefen", description="Prüft mögliche Kontakt-Dubletten.")
 async def kontakt_duplikate_pruefen(
     anzeigename: str,
     organisation: str = "",
@@ -448,6 +458,76 @@ async def kontakt_duplikate_pruefen(
 ) -> dict[str, object]:
     return await _call_registered_tool(
         "kontakt_duplikate_pruefen", anzeigename=anzeigename, organisation=organisation, email=email, telefone=telefone
+    )
+
+
+@server.tool(name="kontakt_lesen", description="Liest einen zentralen Kontakt mit seinen Objektzuordnungen.")
+async def kontakt_lesen(kontakt_id: int, ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("kontakt_lesen", kontakt_id=kontakt_id)
+
+
+@server.tool(name="kontakt_kategorien", description="Listet die Kontaktkategorien der eigenen Organisation.")
+async def kontakt_kategorien(ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("kontakt_kategorien")
+
+
+@server.tool(name="kontakt_anlegen", description="Legt einen zentralen Kontakt nach Dublettenprüfung an.")
+async def kontakt_anlegen(
+    felder: dict,
+    telefone: list[dict] | None = None,
+    kategorien: list[str] | None = None,
+    duplikat_bestaetigt: bool = False,
+    ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "kontakt_anlegen",
+        felder=felder,
+        telefone=telefone,
+        kategorien=kategorien,
+        duplikat_bestaetigt=duplikat_bestaetigt,
+    )
+
+
+@server.tool(name="kontakt_aktualisieren", description="Aktualisiert einen zentralen Kontakt mit Versionsschutz.")
+async def kontakt_aktualisieren(
+    kontakt_id: int,
+    version: int,
+    felder: dict | None = None,
+    telefone: list[dict] | None = None,
+    kategorien: list[str] | None = None,
+    ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "kontakt_aktualisieren",
+        kontakt_id=kontakt_id,
+        version=version,
+        felder=felder,
+        telefone=telefone,
+        kategorien=kategorien,
+    )
+
+
+@server.tool(name="kontakt_archivieren", description="Archiviert einen zentralen Kontakt.")
+async def kontakt_archivieren(
+    kontakt_id: int, bestaetigt: bool = False, ctx: Context | None = None
+) -> dict[str, object]:
+    return await _call_registered_tool("kontakt_archivieren", kontakt_id=kontakt_id, bestaetigt=bestaetigt)
+
+
+@server.tool(name="kontakt_zusammenfuehren", description="Führt zwei zentrale Kontakte zusammen.")
+async def kontakt_zusammenfuehren(
+    quelle_id: int,
+    ziel_id: int,
+    feldwahl: dict[str, str] | None = None,
+    bestaetigt: bool = False,
+    ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "kontakt_zusammenfuehren",
+        quelle_id=quelle_id,
+        ziel_id=ziel_id,
+        feldwahl=feldwahl,
+        bestaetigt=bestaetigt,
     )
 
 
