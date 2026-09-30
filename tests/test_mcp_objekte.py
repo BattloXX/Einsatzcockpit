@@ -20,6 +20,7 @@ from app.models.objekt import (
     ObjektGefahr,
     ObjektKontakt,
     ObjektMerkmal,
+    ObjektWohnanlage,
     ObjektZusatzadresse,
 )
 from app.models.user import AuditLog, Role, User, UserRole
@@ -178,7 +179,6 @@ def test_anlegen_entwurf_audit_und_duplikate(client):
     finally:
         db.close()
 
-
 def test_anlegen_atomisch_neuer_kontakt_ohne_freigabe_und_kontakt_dublette(client):
     seed = _seed("obj-atom", {"admin": "objekt_verwalter"})
     token = _token(client, seed, "admin")
@@ -312,6 +312,8 @@ def test_aktualisieren_entwurf_archiv_cross_org_kinder_und_kontakte(client):
         entwurf_id, archiv_id, gefahr_id, merkmal_id = entwurf.id, archiv.id, gefahr.id, merkmal.id
     finally:
         db.close()
+
+
     direkt = _rufe(client, token, "objekt_aktualisieren", objekt_id=entwurf_id, stammdaten={"name": "Direkt"})
     assert direkt["objekt_id"] == entwurf_id
     assert "__fehler__" in _rufe(
@@ -351,5 +353,130 @@ def test_aktualisieren_entwurf_archiv_cross_org_kinder_und_kontakte(client):
         assert db.query(ObjektKontakt).filter_by(id=ids[3]).first() is None
         assert db.get(Kontakt, seed["kontakt_id"]) is not None
         assert db.get(Objekt, entwurf_id).status == "entwurf"
+    finally:
+        db.close()
+
+
+def test_kontaktzuordnungen_lesen_aendern_arbeitskopie_und_wohnanlage(client):
+    seed = _seed("obj-kontakt-pflege", {"admin": "objekt_verwalter"})
+    token = _token(client, seed, "admin")
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        basis = db.get(Objekt, seed["objekt_id"])
+        zuordnung = ObjektKontakt(
+            org_id=seed["org_id"], objekt_id=basis.id, kontakt_id=seed["kontakt_id"], art="betreiber", sort=4,
+            erreichbarkeit="Portier",
+        )
+        db.add(zuordnung)
+        db.flush()
+        db.add(ObjektWohnanlage(org_id=seed["org_id"], objekt_id=basis.id, hausverwaltung_kontakt_id=zuordnung.id))
+        db.commit()
+        zuordnung_id = zuordnung.id
+    finally:
+        db.close()
+    gelesen = _rufe(client, token, "objekt_lesen", objekt_id=seed["objekt_id"])
+    kontakt = gelesen["kontakte"][0]
+    assert kontakt == {
+        "zuordnung_id": zuordnung_id,
+        "kontakt_id": seed["kontakt_id"],
+        "anzeigename": "Max Muster",
+        "funktion": None,
+        "art": "betreiber",
+        "sort": 4,
+        "erreichbarkeit": "Portier",
+        "freigaben_anzahl": 0,
+    }
+    assert "Arbeitskopie" not in str(gelesen["hinweis"])
+    result = _rufe(
+        client, token, "objekt_aktualisieren", objekt_id=seed["objekt_id"], stammdaten={"vulgoname": "Kopie"}
+    )
+    kopie_id = result["objekt_id"]
+    assert kopie_id != seed["objekt_id"]
+    basis = _rufe(client, token, "objekt_lesen", objekt_id=seed["objekt_id"])
+    assert basis["arbeitskopie_id"] == kopie_id and "Arbeitskopie" in basis["hinweis"]
+    kopie = _rufe(client, token, "objekt_lesen", objekt_id=seed["objekt_id"], arbeitskopie=True)
+    kopie_zuordnung_id = kopie["kontakte"][0]["zuordnung_id"]
+    assert kopie["id"] == kopie_id
+    geaendert = _rufe(
+        client,
+        token,
+        "objekt_aktualisieren",
+        objekt_id=seed["objekt_id"],
+        kontakte_aendern=[{"zuordnung_id": kopie_zuordnung_id, "art": "hausverwaltung", "sort": 9, "erreichbarkeit": "24h"}],
+    )
+    assert geaendert["objekt_id"] == kopie_id
+    kopie = _rufe(client, token, "objekt_lesen", objekt_id=seed["objekt_id"], arbeitskopie=True)
+    assert kopie["kontakte"][0]["art"] == "hausverwaltung"
+    assert "__fehler__" in _rufe(
+        client, token, "objekt_aktualisieren", objekt_id=seed["objekt_id"],
+        kontakte_aendern=[{"zuordnung_id": kopie_zuordnung_id, "art": "ungueltig"}],
+    )
+    assert "__fehler__" in _rufe(
+        client, token, "objekt_aktualisieren", objekt_id=seed["objekt_id"],
+        kontakte_entfernen=[kopie_zuordnung_id],
+    )
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        kopie = db.get(Objekt, kopie_id)
+        assert kopie.kontakte[0].freigaben == []
+        assert kopie.wohnanlage.hausverwaltung_kontakt_id == kopie_zuordnung_id
+    finally:
+        db.close()
+
+
+def test_neue_stammdaten_wohnanlage_und_kontakt_ergebnis(client):
+    seed = _seed("obj-neue-felder", {"admin": "objekt_verwalter"})
+    token = _token(client, seed, "admin")
+    erstellt = _rufe(
+        client,
+        token,
+        "objekt_anlegen",
+        stammdaten={
+            "name": "Neue Felder",
+            "ort": "Wien",
+            "informationen": "Sprinkler im Keller",
+            "anfahrtsweg": "Tor Nord",
+            "revision_datum": "2026-10-01",
+        },
+        kontakte=[{"art": "betreiber", "kontakt_id": seed["kontakt_id"], "erreichbarkeit": "Leitwarte"}],
+    )
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        objekt = db.get(Objekt, erstellt["objekt_id"])
+        assert objekt.informationen == "Sprinkler im Keller"
+        assert objekt.anfahrtsweg == "Tor Nord"
+        assert objekt.revision_datum.isoformat() == "2026-10-01"
+        zuordnung_id = objekt.kontakte[0].id
+    finally:
+        db.close()
+    direkt = _rufe(
+        client,
+        token,
+        "objekt_aktualisieren",
+        objekt_id=erstellt["objekt_id"],
+        kontakte_aendern=[{"zuordnung_id": zuordnung_id, "sort": 3, "erreichbarkeit": "Tagsueber"}],
+    )
+    assert direkt["objekt_id"] == erstellt["objekt_id"]
+    aktualisiert = _rufe(
+        client,
+        token,
+        "objekt_aktualisieren",
+        objekt_id=erstellt["objekt_id"],
+        stammdaten={"informationen": "Aktualisiert", "revision_datum": "2026-11-01"},
+        wohnanlage={"wohneinheiten": 12, "hausverwaltung_kontakt_id": zuordnung_id},
+        kontakte_hinzufuegen=[{"art": "hausverwaltung", "kontakt_id": seed["kontakt_id"]}],
+    )
+    assert aktualisiert["kontakte_hinzugefuegt"][0]["zuordnung_id"]
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        objekt = db.get(Objekt, aktualisiert["objekt_id"])
+        assert objekt.informationen == "Aktualisiert" and objekt.revision_datum.isoformat() == "2026-11-01"
+        assert objekt.wohnanlage.wohneinheiten == 12
+        assert objekt.wohnanlage.hausverwaltung_kontakt_id == zuordnung_id
+        assert all(k.freigaben == [] for k in objekt.kontakte)
     finally:
         db.close()

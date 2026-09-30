@@ -404,8 +404,10 @@ async def objekt_suchen(
 
 
 @server.tool(name="objekt_lesen", description="Liest ein Objekt ohne Kontakt-Klartextdaten.")
-async def objekt_lesen(objekt_id: int, ctx: Context | None = None) -> dict[str, object]:
-    return await _call_registered_tool("objekt_lesen", objekt_id=objekt_id)
+async def objekt_lesen(
+    objekt_id: int, arbeitskopie: bool = False, ctx: Context | None = None
+) -> dict[str, object]:
+    return await _call_registered_tool("objekt_lesen", objekt_id=objekt_id, arbeitskopie=arbeitskopie)
 
 
 @server.tool(name="kontakt_suchen", description="Sucht zentrale Kontakte ohne Telefon oder E-Mail.")
@@ -457,6 +459,7 @@ async def objekt_anlegen(
     merkmale: list[dict] | None = None,
     zusatzadressen: list[dict] | None = None,
     kontakte: list[dict] | None = None,
+    wohnanlage: dict | None = None,
     duplikat_bestaetigt: bool = False,
     ctx: Context | None = None,
 ) -> dict[str, object]:
@@ -468,6 +471,7 @@ async def objekt_anlegen(
         merkmale=merkmale,
         zusatzadressen=zusatzadressen,
         kontakte=kontakte,
+        wohnanlage=wohnanlage,
         duplikat_bestaetigt=duplikat_bestaetigt,
     )
 
@@ -488,6 +492,8 @@ async def objekt_aktualisieren(
     zusatzadressen_entfernen: list[int | dict] | None = None,
     kontakte_hinzufuegen: list[dict] | None = None,
     kontakte_entfernen: list[int | dict] | None = None,
+    kontakte_aendern: list[dict] | None = None,
+    wohnanlage: dict | None = None,
     duplikat_bestaetigt: bool = False,
     ctx: Context | None = None,
 ) -> dict[str, object]:
@@ -504,6 +510,8 @@ async def objekt_aktualisieren(
         zusatzadressen_entfernen=zusatzadressen_entfernen,
         kontakte_hinzufuegen=kontakte_hinzufuegen,
         kontakte_entfernen=kontakte_entfernen,
+        kontakte_aendern=kontakte_aendern,
+        wohnanlage=wohnanlage,
         duplikat_bestaetigt=duplikat_bestaetigt,
     )
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
 from sqlalchemy import ColumnElement, or_
@@ -64,6 +65,9 @@ def erstelle_objekt(
     ort: str = "",
     lat: str | float | None = None,
     lng: str | float | None = None,
+    informationen: str = "",
+    anfahrtsweg: str = "",
+    revision_datum: date | None = None,
     quelle: str = "intern",
 ) -> tuple[Objekt, bool]:
     if not name.strip():
@@ -98,6 +102,9 @@ def erstelle_objekt(
                     ort=_text(ort),
                     lat=validiert_lat,
                     lng=validiert_lng,
+                    informationen=_text(informationen),
+                    anfahrtsweg=_text(anfahrtsweg),
+                    revision_datum=revision_datum,
                     status=OBJEKT_STATUS_ENTWURF,
                     erstellt_von_id=user_id,
                     aktualisiert_von_id=user_id,
@@ -328,13 +335,23 @@ def merkmal_entfernen(
 
 
 def kontakt_zuordnen(
-    db: Session, objekt: Objekt, zentraler_kontakt: Kontakt, *, art: str, user_id: int | None, quelle: str = "intern"
+    db: Session,
+    objekt: Objekt,
+    zentraler_kontakt: Kontakt,
+    *,
+    art: str,
+    erreichbarkeit: str | None = None,
+    user_id: int | None,
+    quelle: str = "intern",
 ) -> ObjektKontakt:
     if zentraler_kontakt.org_id != objekt.org_id:
         raise ObjektNichtGefundenFehler("Kontakt nicht gefunden")
     if objekt.org_id is None:
         raise ObjektValidierungsFehler("Objekt hat keine Organisation")
-    art = art if art in lade_auswahl(db, objekt.org_id, AUSWAHL_KONTAKTART) else "sonstig"
+    if art not in lade_auswahl(db, objekt.org_id, AUSWAHL_KONTAKTART):
+        raise ObjektValidierungsFehler("Ungültige Kontaktart")
+    if erreichbarkeit is not None and (not isinstance(erreichbarkeit, str) or len(erreichbarkeit) > 200):
+        raise ObjektValidierungsFehler("Erreichbarkeit darf maximal 200 Zeichen lang sein")
     if (
         db.query(ObjektKontakt)
         .filter(
@@ -351,6 +368,7 @@ def kontakt_zuordnen(
         objekt_id=objekt.id,
         kontakt_id=zentraler_kontakt.id,
         art=art,
+        erreichbarkeit=erreichbarkeit.strip() if erreichbarkeit else None,
         sort=max((k.sort for k in objekt.kontakte), default=0) + 1,
     )
     db.add(kontakt)
@@ -372,6 +390,50 @@ def kontakt_zuordnen(
     return kontakt
 
 
+def kontakt_zuordnung_aendern(
+    db: Session,
+    objekt: Objekt,
+    zuordnung_id: int,
+    *,
+    art: str | None = None,
+    sort: int | None = None,
+    erreichbarkeit: str | None = None,
+    user_id: int | None,
+    quelle: str = "intern",
+) -> ObjektKontakt:
+    """Ändert Metadaten einer Objekt-Kontakt-Zuordnung ohne deren Freigaben anzufassen."""
+    zuordnung = (
+        db.query(ObjektKontakt)
+        .filter(ObjektKontakt.id == zuordnung_id, ObjektKontakt.objekt_id == objekt.id)
+        .first()
+    )
+    if zuordnung is None:
+        raise ObjektNichtGefundenFehler("Kontakt-Zuordnung nicht gefunden")
+    if objekt.org_id is None:
+        raise ObjektValidierungsFehler("Objekt hat keine Organisation")
+    if art is not None:
+        if art not in lade_auswahl(db, objekt.org_id, AUSWAHL_KONTAKTART):
+            raise ObjektValidierungsFehler("Ungültige Kontaktart")
+        zuordnung.art = art
+    if sort is not None:
+        if isinstance(sort, bool) or not isinstance(sort, int):
+            raise ObjektValidierungsFehler("Sortierung muss eine ganze Zahl sein")
+        zuordnung.sort = sort
+    if erreichbarkeit is not None:
+        if not isinstance(erreichbarkeit, str) or len(erreichbarkeit) > 200:
+            raise ObjektValidierungsFehler("Erreichbarkeit darf maximal 200 Zeichen lang sein")
+        zuordnung.erreichbarkeit = erreichbarkeit.strip() or None
+    db.flush()
+    from app.services.kontakt_sync_service import mapping_payload, record_change
+
+    record_change(db, objekt.org_id, "zuordnung", zuordnung.id, "upsert", mapping_payload(zuordnung))
+    write_objekt_change(
+        db, objekt.id, objekt.org_id, "kontakte", "kontakt_zuordnung_bearbeitet",
+        None, str(zuordnung.id), user_id, quelle,
+    )
+    return zuordnung
+
+
 def kontakt_zuordnung_entfernen(
     db: Session, objekt: Objekt, zuordnung_id: int, *, user_id: int | None, quelle: str = "intern"
 ) -> None:
@@ -385,6 +447,18 @@ def kontakt_zuordnung_entfernen(
         raise ObjektNichtGefundenFehler("Kontakt-Zuordnung nicht gefunden")
     if objekt.org_id is None:
         raise ObjektValidierungsFehler("Objekt hat keine Organisation")
+    if (
+        db.query(ObjektWohnanlage)
+        .filter(
+            ObjektWohnanlage.org_id == objekt.org_id,
+            ObjektWohnanlage.hausverwaltung_kontakt_id == zuordnung.id,
+        )
+        .first()
+        is not None
+    ):
+        raise ObjektValidierungsFehler(
+            "Kontakt-Zuordnung ist als Hausverwaltung der Wohnanlage referenziert und kann nicht entfernt werden"
+        )
     name = zuordnung.zentraler_kontakt.anzeigename if zuordnung.zentraler_kontakt else str(zuordnung.kontakt_id)
     from app.services.kontakt_sync_service import record_change
 
