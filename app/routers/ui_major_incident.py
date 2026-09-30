@@ -7,6 +7,7 @@ import logging
 import random
 import secrets
 from datetime import UTC, datetime, timedelta
+from typing import cast
 from urllib.parse import urlencode
 
 from fastapi import (
@@ -2121,7 +2122,7 @@ def lage_dashboard(
           "site": s.bezeichnung, "category": None} for e, s in site_logs_raw]
         + [{"kind": "journal", "ts": e.ts, "text": e.text,
             "site": None, "category": e.category} for e in journal_logs_raw],
-        key=lambda x: x["ts"],
+        key=lambda x: cast(datetime, x["ts"]),
         reverse=True,
     )[:40]
 

@@ -473,6 +473,7 @@ def kataloge(
             .filter(ObjektDokumentSeite.dokumentart.isnot(None))
             .group_by(ObjektDokumentSeite.dokumentart)
             .all()
+            if code is not None
         },
         AUSWAHL_PIKTOGRAMM: {
             code: cnt
