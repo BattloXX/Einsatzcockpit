@@ -11,7 +11,6 @@ from mcp.server.auth.provider import (
     AuthorizationParams,
     OAuthAuthorizationServerProvider,
     RefreshToken,
-    RegistrationError,
 )
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, RevocationOptions
 from mcp.server.mcpserver import Context, MCPServer
@@ -53,16 +52,13 @@ class EinsatzcockpitOAuthProvider(OAuthAuthorizationServerProvider[Authorization
             db.close()
 
     async def register_client(self, client_info: OAuthClientInformationFull) -> None:
-        # DCR ist absichtlich auf Public Clients begrenzt. Das SDK mintet bei
-        # fehlendem Auth-Method-Feld sonst client_secret_post; dieses Geheimnis
-        # wird hier weder gespeichert noch nachträglich zu "none" umgedeutet.
-        if client_info.token_endpoint_auth_method != "none":
-            raise RegistrationError(
-                error="invalid_client_metadata",
-                error_description=(
-                    "Nur öffentliche PKCE-Clients mit token_endpoint_auth_method=none werden unterstützt."
-                ),
-            )
+        # DCR liefert ausschliesslich oeffentliche PKCE-Clients. Das SDK mintet bei
+        # fehlendem oder client_secret_*-Verfahren ein Geheimnis; das wird hier weder
+        # gespeichert noch ausgegeben: der Client wird als "none" registriert (die
+        # Antwort spiegelt das), Sicherheit kommt aus PKCE S256 + Login + Redirect-URI.
+        client_info.token_endpoint_auth_method = "none"
+        client_info.client_secret = None
+        client_info.client_secret_expires_at = None
         db = SessionLocal()
         try:
             db.add(
@@ -547,13 +543,42 @@ async def objekt_dokument_seiten_klassifizieren(
     return await _call_registered_tool("objekt_dokument_seiten_klassifizieren", dokument_id=dokument_id, seiten=seiten)
 
 
+def _metadata_route_mit_public_clients(routes: list) -> None:
+    """Ergaenzt "none" in den Auth-Methoden der Authorization-Server-Metadaten.
+
+    Das SDK bewirbt fest nur client_secret_*; Clients, die sich an den Metadaten
+    orientieren, wuerden sich sonst als vertrauliche Clients registrieren wollen.
+    """
+    from mcp.server.auth.handlers.metadata import MetadataHandler
+    from mcp.server.auth.routes import build_metadata, cors_middleware
+    from starlette.routing import Route
+
+    metadata = build_metadata(
+        cast(AnyHttpUrl, _base),
+        None,
+        ClientRegistrationOptions(enabled=True, valid_scopes=["mcp"], default_scopes=["mcp"]),
+        RevocationOptions(enabled=True),
+    )
+    metadata.token_endpoint_auth_methods_supported = ["none"]
+    metadata.revocation_endpoint_auth_methods_supported = ["none"]
+    for index, route in enumerate(routes):
+        if getattr(route, "path", None) == "/.well-known/oauth-authorization-server":
+            routes[index] = Route(
+                "/.well-known/oauth-authorization-server",
+                endpoint=cors_middleware(MetadataHandler(metadata).handle, ["GET", "OPTIONS"]),
+                methods=["GET", "OPTIONS"],
+            )
+
+
 def application():
     # Das SDK aktiviert den DNS-Rebinding-Schutz automatisch nur fuer localhost und
     # wuerde jeden anderen Host-Header (z. B. hinter nginx) mit 421 abweisen. Der
     # Schutz zielt auf unauthentifizierte lokale Server; dieser Endpunkt ist oeffentlich
     # und verlangt ein Bearer-Token mit Live-Rechtepruefung, daher bewusst aus.
-    return server.streamable_http_app(
+    app = server.streamable_http_app(
         streamable_http_path="/mcp",
         stateless_http=True,
         transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
     )
+    _metadata_route_mit_public_clients(app.routes)
+    return app

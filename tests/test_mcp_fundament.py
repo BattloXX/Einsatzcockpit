@@ -43,15 +43,11 @@ def _pkce() -> tuple[str, str]:
     return verifier, challenge
 
 
-def _oauth_tokens(client, user) -> dict:
-    registration = client.post(
-        "/register",
-        json={
-            "client_name": "pytest public client",
-            "redirect_uris": ["http://localhost/callback"],
-            "token_endpoint_auth_method": "none",
-        },
-    )
+def _oauth_tokens(client, user, auth_method: str | None = "none") -> dict:
+    payload = {"client_name": "pytest public client", "redirect_uris": ["http://localhost/callback"]}
+    if auth_method is not None:
+        payload["token_endpoint_auth_method"] = auth_method
+    registration = client.post("/register", json=payload)
     assert registration.status_code == 201
     registered = registration.json()
     verifier, challenge = _pkce()
@@ -117,8 +113,13 @@ def test_mcp_full_public_dcr_pkce_flow_and_refresh_rotation(client):
         "/register",
         json={"client_name": "secret client", "redirect_uris": ["http://localhost/callback"]},
     )
-    assert confidential.status_code == 400
-    assert "öffentliche PKCE-Clients" in confidential.text
+    # Clients ohne/mit client_secret-Verfahren werden als oeffentliche PKCE-Clients registriert
+    assert confidential.status_code == 201
+    assert confidential.json()["token_endpoint_auth_method"] == "none"
+    assert not confidential.json().get("client_secret")
+    metadata = client.get("/.well-known/oauth-authorization-server").json()
+    assert metadata["token_endpoint_auth_methods_supported"] == ["none"]
+    assert metadata["code_challenge_methods_supported"] == ["S256"]
     tokens = _oauth_tokens(client, _enable_mcp())
     initialized = _mcp(
         client,
@@ -149,3 +150,13 @@ def test_mcp_full_public_dcr_pkce_flow_and_refresh_rotation(client):
             "refresh_token": tokens["refresh_token"],
         },
     ).status_code == 400
+
+
+def test_client_ohne_auth_verfahren_durchlaeuft_flow_als_public_client(client):
+    """claude.ai registriert evtl. ohne token_endpoint_auth_method (SDK-Default client_secret_post)."""
+    for methode in (None, "client_secret_post"):
+        tokens = _oauth_tokens(
+            client, _enable_mcp(username=f"dcr_{methode}", slug=f"dcr-{methode}"), auth_method=methode
+        )
+        listed = _mcp(client, tokens["access_token"], "tools/list", {}, 2)
+        assert listed.status_code == 200 and "mcp_whoami" in listed.text
