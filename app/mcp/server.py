@@ -25,6 +25,7 @@ from app.mcp.context import MCPPermissionError, load_live_context
 from app.mcp.registry import TOOLS
 from app.mcp.tools import fahrtenbuch as _fahrtenbuch  # noqa: F401 - registriert Fahrtenbuch-Tools
 from app.mcp.tools import objekt as _objekt  # noqa: F401 - registriert Objekt-Tools
+from app.mcp.tools import objekt_dokumente as _objekt_dokumente  # noqa: F401 - registriert Dokument-Tools
 from app.mcp.tools import whoami as _whoami  # noqa: F401 - registriert Beispiel-Tool
 from app.models.mcp import MCPOAuthClient, MCPOAuthCode, MCPOAuthToken
 
@@ -508,6 +509,41 @@ async def objekt_aktualisieren(
         kontakte_entfernen=kontakte_entfernen,
         duplikat_bestaetigt=duplikat_bestaetigt,
     )
+
+
+@server.tool(name="objekt_dokument_uebergeben", description="Uebergibt ein fertig analysiertes PDF an ein Objekt.")
+async def objekt_dokument_uebergeben(
+    objekt_id: int,
+    dateiname: str,
+    inhalt_base64: str,
+    seiten: list[dict],
+    ersetzt_dokument_id: int | None = None,
+    ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "objekt_dokument_uebergeben",
+        objekt_id=objekt_id,
+        dateiname=dateiname,
+        inhalt_base64=inhalt_base64,
+        seiten=seiten,
+        ersetzt_dokument_id=ersetzt_dokument_id,
+    )
+
+
+@server.tool(name="objekt_dokumente_auflisten", description="Listet Dokumente und Seiten eines Objekts.")
+async def objekt_dokumente_auflisten(objekt_id: int, ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("objekt_dokumente_auflisten", objekt_id=objekt_id)
+
+
+@server.tool(
+    name="objekt_dokument_seiten_klassifizieren", description="Korrigiert die Klassifizierung von Dokumentseiten."
+)
+async def objekt_dokument_seiten_klassifizieren(
+    dokument_id: int,
+    seiten: list[dict],
+    ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool("objekt_dokument_seiten_klassifizieren", dokument_id=dokument_id, seiten=seiten)
 
 
 def application():

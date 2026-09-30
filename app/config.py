@@ -10,12 +10,12 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = "mysql+pymysql://einsatzleiter:pw@127.0.0.1:3306/einsatzleiter"
     SECRET_KEY: str = SECRET_KEY_PLACEHOLDER
-    SESSION_MAX_AGE_SECONDS: int = 86400    # 24 Stunden (normaler Benutzer)
+    SESSION_MAX_AGE_SECONDS: int = 86400  # 24 Stunden (normaler Benutzer)
     SESSION_INACTIVITY_SECONDS: int = 28800  # 8 Stunden Inaktivitäts-Timeout
     # "Login merken": längeres, gleitendes Fenster. Solange der Nutzer mindestens
     # alle 7 Tage aktiv ist, bleibt er bis zur absoluten Obergrenze (30 Tage) eingeloggt.
-    SESSION_REMEMBER_INACTIVITY_SECONDS: int = 604800   # 7 Tage Inaktivität (gleitend)
-    SESSION_REMEMBER_MAX_AGE_SECONDS: int = 2592000     # 30 Tage absolute Obergrenze
+    SESSION_REMEMBER_INACTIVITY_SECONDS: int = 604800  # 7 Tage Inaktivität (gleitend)
+    SESSION_REMEMBER_MAX_AGE_SECONDS: int = 2592000  # 30 Tage absolute Obergrenze
 
     APP_HOST: str = "0.0.0.0"
     APP_PORT: int = 8092
@@ -125,26 +125,29 @@ class Settings(BaseSettings):
     MAILING_ATTACHMENT_MAX_BYTES: int = 10 * 1024 * 1024
     MAILING_ATTACHMENT_MAX_TOTAL_BYTES: int = 20 * 1024 * 1024
     MAILING_ATTACHMENT_MAX_COUNT: int = 5
-    MAX_UPLOAD_BYTES_IMAGE: int = 10 * 1024 * 1024   # 10 MB
-    MAX_UPLOAD_BYTES_PDF:   int = 20 * 1024 * 1024   # 20 MB
-    MAX_UPLOAD_BYTES_VIDEO: int = 50 * 1024 * 1024   # 50 MB
-    MEDIA_IMAGE_MAX_WIDTH:  int = 1920
+    MAX_UPLOAD_BYTES_IMAGE: int = 10 * 1024 * 1024  # 10 MB
+    MAX_UPLOAD_BYTES_PDF: int = 20 * 1024 * 1024  # 20 MB
+    MAX_UPLOAD_BYTES_VIDEO: int = 50 * 1024 * 1024  # 50 MB
+    MEDIA_IMAGE_MAX_WIDTH: int = 1920
     MEDIA_IMAGE_MAX_HEIGHT: int = 1080
     MEDIA_THUMB_SIZE: int = 240
     MEDIA_VIDEO_MAX_HEIGHT: int = 720
-    FFMPEG_BIN: str = "ffmpeg"   # ggf. absoluter Pfad ueber ENV
+    FFMPEG_BIN: str = "ffmpeg"  # ggf. absoluter Pfad ueber ENV
 
     # Objektverwaltung: Dokumenten-Pipeline (PDF-Zerlegung + Rasterung)
     OBJEKT_MEDIA_DIR: str = "app_storage/objekt_media"
     OBJEKT_PDF_MAX_BYTES: int = 100 * 1024 * 1024  # 100 MB je Datei
-    OBJEKT_PDF_MAX_SEITEN: int = 300               # Seiten je Datei
-    OBJEKT_SEITE_RENDER_DPI: int = 150             # Hi-Res-Rasterung (pdf2image/Poppler)
-    OBJEKT_SYMBOL_MAX_BYTES: int = 512 * 1024      # 512 KB je hochgeladenem Symbolbild (SVG/PNG)
+    OBJEKT_PDF_MAX_SEITEN: int = 300  # Seiten je Datei
+    OBJEKT_SEITE_RENDER_DPI: int = 150  # Hi-Res-Rasterung (pdf2image/Poppler)
+    OBJEKT_SYMBOL_MAX_BYTES: int = 512 * 1024  # 512 KB je hochgeladenem Symbolbild (SVG/PNG)
     # Volltext-Indexierung der Dokumentseiten (Suche nach Raum/Melderlinie/…)
-    OBJEKT_OCR_ENABLED: bool = True                # OCR-Fallback fuer Scan-PDFs (Tesseract)
-    OBJEKT_OCR_MIN_CHARS: int = 20                 # unter dieser Textlaenge → OCR versuchen
-    OBJEKT_OCR_LANG: str = "deu+eng"               # Tesseract-Sprachpakete
-    OBJEKT_VOLLTEXT_MAX_CHARS: int = 100_000        # Kappung je Seite
+    OBJEKT_OCR_ENABLED: bool = True  # OCR-Fallback fuer Scan-PDFs (Tesseract)
+    OBJEKT_OCR_MIN_CHARS: int = 20  # unter dieser Textlaenge → OCR versuchen
+    OBJEKT_OCR_LANG: str = "deu+eng"  # Tesseract-Sprachpakete
+    OBJEKT_VOLLTEXT_MAX_CHARS: int = 100_000  # Kappung je Seite
+    # MCP-PDFs werden vor dem Dekodieren begrenzt; dieses Limit gilt fuer die
+    # dekodierten Bytes und ist absichtlich strenger als das allgemeine PDF-Limit.
+    MCP_MAX_UPLOAD_BYTES: int = 8 * 1024 * 1024
 
     # Nachschlagewerke (Gefahrgut-Suche, Rettungsdatenblaetter, Karten-Overlays).
     # Sync-Downloads landen hier (persistent, ausserhalb des read-only Repo-app/data);
@@ -178,17 +181,17 @@ class Settings(BaseSettings):
     AI_LOG_RETENTION_DAYS: int = 60
 
     # Rate-Limits
-    LOGIN_RATELIMIT: str = "10/minute"          # POST /login – IP-basiert
-    MCP_LOGIN_RATELIMIT: str = "5/15minutes"    # POST /mcp/anmelden – IP-basiert
-    API_ALARM_RATELIMIT: str = "60/minute"      # POST /api/v1/einsatz – Key-basiert
+    LOGIN_RATELIMIT: str = "10/minute"  # POST /login – IP-basiert
+    MCP_LOGIN_RATELIMIT: str = "5/15minutes"  # POST /mcp/anmelden – IP-basiert
+    API_ALARM_RATELIMIT: str = "60/minute"  # POST /api/v1/einsatz – Key-basiert
     API_MESSAGE_RATELIMIT: str = "20/minute"
     API_MESSAGE_MAX_RECIPIENTS: int = 200
     API_SMS_SYNC_MAX_RECIPIENTS: int = 20
     API_SMS_DAILY_LIMIT: int = 500
     API_MAIL_DAILY_LIMIT: int = 2000
     API_MESSAGE_MAX_BODY_CHARS: int = 10_000
-    UPLOAD_RATELIMIT: str = "20/minute"         # Medien-Uploads – IP-basiert
-    CONTACT_RATELIMIT: str = "5/hour"            # POST /kontakt – IP-basiert
+    UPLOAD_RATELIMIT: str = "20/minute"  # Medien-Uploads – IP-basiert
+    CONTACT_RATELIMIT: str = "5/hour"  # POST /kontakt – IP-basiert
 
     # Lagekarte.info GeoJSON-Endpoint
     LAGEKARTE_CORS_ORIGINS: str = "https://www.lagekarte.info,https://lagekarte.info"
@@ -204,18 +207,18 @@ class Settings(BaseSettings):
     PHOTON_TIMEOUT_SECONDS: float = 4.0
     PHOTON_CACHE_TTL_SECONDS: int = 300
     PHOTON_SUGGEST_LIMIT: int = 8
-    DEFAULT_INCIDENT_CITY: str = "Wolfurt"   # Fallback wenn Home-Org kein city hat
+    DEFAULT_INCIDENT_CITY: str = "Wolfurt"  # Fallback wenn Home-Org kein city hat
 
     # Hydranten / Löschwasser (OpenStreetMap / OSMHydrant, via Overpass server-seitig geproxyt)
     HYDRANT_ENABLED: bool = True
     HYDRANT_OVERPASS_URL: str = "https://overpass-api.de/api/interpreter"
-    HYDRANT_RADIUS_M: int = 300               # Suchradius um den Einsatzort (Standard)
+    HYDRANT_RADIUS_M: int = 300  # Suchradius um den Einsatzort (Standard)
     HYDRANT_RADIUS_EINSATZINFO_M: int = 2000  # Erweiterter Radius für die Einsatzinfo-Karte
-    HYDRANT_RADIUS_INFOSCREEN_M: int = 800    # OSM-Umkreis für den Wandmonitor
+    HYDRANT_RADIUS_INFOSCREEN_M: int = 800  # OSM-Umkreis für den Wandmonitor
     HYDRANT_TIMEOUT_SECONDS: float = 8.0
-    HYDRANT_CACHE_TTL_SECONDS: int = 3600     # In-Memory-Cache je gerundeter Koordinate
-    HYDRANT_MAX: int = 40                     # max. zurückgegebene Entnahmestellen (Standard)
-    HYDRANT_MAX_EINSATZINFO: int = 120        # max. Entnahmestellen im 2-km-Radius (Liste lädt nach)
+    HYDRANT_CACHE_TTL_SECONDS: int = 3600  # In-Memory-Cache je gerundeter Koordinate
+    HYDRANT_MAX: int = 40  # max. zurückgegebene Entnahmestellen (Standard)
+    HYDRANT_MAX_EINSATZINFO: int = 120  # max. Entnahmestellen im 2-km-Radius (Liste lädt nach)
     HYDRANT_USER_AGENT: str = "Einsatzcockpit/1.0 (+https://einsatzcockpit.com)"
     # Eigene Wasserstellen-Stammdaten haben Vorrang; OSM-Hydranten näher als dieser
     # Wert an einer eigenen Wasserstelle werden ausgeblendet (kein Doppelbild).
@@ -224,17 +227,17 @@ class Settings(BaseSettings):
     # ── Höhen-Service (Förderstrecken-Planer, PR 3) ──────────────────────────
     # Primär: Open-Meteo Elevation API (frei, batch-fähig). Höhenservice Österreich
     # (geoland.at) als optionale, präzisere Primärquelle konfigurierbar; leer = nur Open-Meteo.
-    HOEHEN_AT_URL: str = ""                    # z. B. geoland.at-Höhenabfrage; leer = deaktiviert
+    HOEHEN_AT_URL: str = ""  # z. B. geoland.at-Höhenabfrage; leer = deaktiviert
     HOEHEN_OPENMETEO_URL: str = "https://api.open-meteo.com/v1/elevation"
     HOEHEN_TIMEOUT_SECONDS: float = 8.0
-    HOEHEN_BATCH_MAX: int = 100               # max. Punkte je HTTP-Abfrage
-    HOEHEN_CACHE_TTL_SECONDS: int = 86400      # In-Memory-Cache (Höhen ändern sich nicht)
+    HOEHEN_BATCH_MAX: int = 100  # max. Punkte je HTTP-Abfrage
+    HOEHEN_CACHE_TTL_SECONDS: int = 86400  # In-Memory-Cache (Höhen ändern sich nicht)
     HOEHEN_USER_AGENT: str = "Einsatzcockpit/1.0 (+https://einsatzcockpit.com)"
     # Straßen-Routing für den Förderstrecken-Planer (Start→Ende der Förderleitung entlang
     # der Straße). OSRM-Instanz (öffentlicher Demo-Server als Default; für Produktion eigene
     # Instanz konfigurieren). Leer = Routing deaktiviert (nur manuelles Zeichnen).
     ROUTING_OSRM_URL: str = "https://router.project-osrm.org"
-    ROUTING_PROFILE: str = "driving"           # OSRM-Profil (driving/walking/cycling)
+    ROUTING_PROFILE: str = "driving"  # OSRM-Profil (driving/walking/cycling)
     ROUTING_TIMEOUT_SECONDS: float = 8.0
     ROUTING_USER_AGENT: str = "Einsatzcockpit/1.0 (+https://einsatzcockpit.com)"
     # Vereinfachung der Routen-Geometrie (Douglas-Peucker) in Metern: weniger Stützpunkte
@@ -251,9 +254,9 @@ class Settings(BaseSettings):
     WEATHER_NOWCAST_RESOURCE: str = "nowcast-v1-15min-1km"
     WEATHER_NWP_RESOURCE: str = "nwp-v1-1h-2500m"
     WEATHER_STATION_RESOURCE: str = "tawes-v1-10min"
-    WEATHER_CACHE_TTL_NOWCAST: int = 300     # 5 min
-    WEATHER_CACHE_TTL_NWP: int = 1800        # 30 min
-    WEATHER_CACHE_TTL_WARN: int = 300        # 5 min
+    WEATHER_CACHE_TTL_NOWCAST: int = 300  # 5 min
+    WEATHER_CACHE_TTL_NWP: int = 1800  # 30 min
+    WEATHER_CACHE_TTL_WARN: int = 300  # 5 min
     WEATHER_HTTP_TIMEOUT: int = 8
     WEATHER_RADIUS_KM: int = 15
     WEATHER_FALLBACK_OPENMETEO: bool = True
@@ -292,17 +295,17 @@ class Settings(BaseSettings):
     WEATHER_INGEST_MIN_INTERVAL_S: int = 60
 
     # Wetterwarnungen – automatischer Versand per Mail / Teams
-    WEATHER_ALERTS_ENABLED: bool = True      # globaler Kill-Switch
-    WEATHER_ALERT_INTERVAL_S: int = 300      # Loop-Intervall (5 min)
+    WEATHER_ALERTS_ENABLED: bool = True  # globaler Kill-Switch
+    WEATHER_ALERT_INTERVAL_S: int = 300  # Loop-Intervall (5 min)
     DIENST_MONITOR_ENABLED: bool = True
     DIENST_MONITOR_INTERVAL_S: int = 60
     BODENSEE_TEMP_FETCH_ENABLED: bool = False  # optionaler externer Adapter (nicht aktiv)
-    BODENSEE_TEMP_SOURCE_URL: str = ""       # URL für externen Temperatur-Adapter
+    BODENSEE_TEMP_SOURCE_URL: str = ""  # URL für externen Temperatur-Adapter
 
     # Pegelmessstationen – kontinuierliches Polling unabhängig von Seitenaufrufen
     # (ohne diesen Loop entstehen Lücken im 24-h-Verlauf, wenn niemand die Wetterseite öffnet)
     ABFLUSS_POLL_ENABLED: bool = True
-    ABFLUSS_POLL_INTERVAL_S: int = 600       # Loop-Intervall (10 min, = abfluss_service._FETCH_TTL_S)
+    ABFLUSS_POLL_INTERVAL_S: int = 600  # Loop-Intervall (10 min, = abfluss_service._FETCH_TTL_S)
 
     # Datenbank-Backup + Restore-Probe (app/services/backup_service.py, app.cli backup)
     # Zielverzeichnis der Dumps (persistent, ausserhalb des Repos; im DR-Runbook
@@ -329,11 +332,11 @@ class Settings(BaseSettings):
     #  - rclone: Catch-all fuer S3/WebDAV/Backblaze/Google Drive u.v.m. (rclone-Remote).
     BACKUP_REMOTE_PROTOCOL: str = "sftp"
     BACKUP_REMOTE_HOST: str = ""
-    BACKUP_REMOTE_PORT: int = 0              # 0 = Protokoll-Standard (22/21)
+    BACKUP_REMOTE_PORT: int = 0  # 0 = Protokoll-Standard (22/21)
     BACKUP_REMOTE_USER: str = ""
-    BACKUP_REMOTE_PASSWORD: str = ""         # nur FTP/FTPS (SSH nutzt Key)
-    BACKUP_REMOTE_KEY: str = ""              # Pfad zum privaten SSH-Key (sftp/scp/rsync)
-    BACKUP_REMOTE_PATH: str = ""             # Zielverzeichnis auf der Gegenstelle
+    BACKUP_REMOTE_PASSWORD: str = ""  # nur FTP/FTPS (SSH nutzt Key)
+    BACKUP_REMOTE_KEY: str = ""  # Pfad zum privaten SSH-Key (sftp/scp/rsync)
+    BACKUP_REMOTE_PATH: str = ""  # Zielverzeichnis auf der Gegenstelle
     # SSH-Hostkey-Pruefung: accept-new (TOFU, Standard) | yes (strikt, known_hosts noetig) | no
     BACKUP_REMOTE_SSH_STRICT: str = "accept-new"
     # rclone: Remote-Name inkl. Doppelpunkt, z. B. "offsite:" oder "s3:bucket".
@@ -350,7 +353,7 @@ class Settings(BaseSettings):
     # org_backup_loop.py). Globaler Kill-Switch; je Org zusaetzlich in org_backup_config.
     ORG_BACKUP_ENABLED: bool = True
     # Groessenlimit je Org-Export-Archiv (Schutz vor Ueberlast; 0 = unbegrenzt).
-    ORG_BACKUP_MAX_BYTES: int = 2 * 1024 * 1024 * 1024   # 2 GB
+    ORG_BACKUP_MAX_BYTES: int = 2 * 1024 * 1024 * 1024  # 2 GB
     # Loop-Intervall (Sekunden), in dem faellige Org-Backups geprueft werden.
     ORG_BACKUP_LOOP_INTERVAL_S: int = 900
 
@@ -365,17 +368,17 @@ class Settings(BaseSettings):
     # Stichworte mit AlarmType.triggers_major_incident=True (z. B. T9) — an
     # Sturmtagen koennen mehrere echte Einsaetze mit gleichem Stichwort binnen
     # Minuten auflaufen, siehe app/services/incident_service.py::create_incident().
-    INCIDENT_DUPLICATE_GUARD_ENABLED: bool = True    # globaler Kill-Switch
-    INCIDENT_DUPLICATE_GUARD_WINDOW_S: int = 90      # "fast zeitgleich"
+    INCIDENT_DUPLICATE_GUARD_ENABLED: bool = True  # globaler Kill-Switch
+    INCIDENT_DUPLICATE_GUARD_WINDOW_S: int = 90  # "fast zeitgleich"
 
     # LIS/IPR-Anbindung (Intergraph Leitstelleninformationssystem)
-    LIS_ENABLED: bool = True         # globaler Kill-Switch
-    LIS_POLL_INTERVAL_S: int = 30    # Loop-Intervall
+    LIS_ENABLED: bool = True  # globaler Kill-Switch
+    LIS_POLL_INTERVAL_S: int = 30  # Loop-Intervall
 
     # DIBOS EventHub / Elvis-Anbindung (Landeswarnzentrale Vorarlberg) - reines
     # Tracing/Diagnose-Feature, siehe app/services/dibos/
-    DIBOS_TRACE_ENABLED: bool = True   # globaler Kill-Switch für den Auto-Erkennungs-Loop
-    DIBOS_POLL_INTERVAL_S: int = 5     # Loop-Intervall (leichter Poll auf GetCurrentEvents)
+    DIBOS_TRACE_ENABLED: bool = True  # globaler Kill-Switch für den Auto-Erkennungs-Loop
+    DIBOS_POLL_INTERVAL_S: int = 5  # Loop-Intervall (leichter Poll auf GetCurrentEvents)
 
     # BMA-Webplattform-Import (Landeswarnzentrale Vorarlberg) - siehe app/services/bma_import/.
     # Taeglicher Lauf (Europe/Vienna), Muster: NACHSCHLAGEWERK_SYNC_ENABLED/nachschlagewerk_sync.py.
@@ -385,13 +388,13 @@ class Settings(BaseSettings):
     SSO_ENABLED: bool = True
     MS_LOGIN_BASE_URL: str = "https://login.microsoftonline.com"
     SSO_HTTP_TIMEOUT: int = 10
-    SSO_FLOW_MAX_AGE: int = 600   # 10 min für state/nonce/PKCE-Cookie
+    SSO_FLOW_MAX_AGE: int = 600  # 10 min für state/nonce/PKCE-Cookie
     SSO_JWKS_CACHE_TTL: int = 3600
     SSO_SCOPES: str = "openid profile email User.Read"
 
     # Mail-Versand je Org: Office 365 / Microsoft Graph (App-only, Client-Credentials),
     # mit SMTP (org-eigen oder global) als automatischem Fallback (mail_service.deliver()).
-    O365_MAIL_ENABLED: bool = True    # globaler Kill-Switch, analog LIS_ENABLED/SSO_ENABLED
+    O365_MAIL_ENABLED: bool = True  # globaler Kill-Switch, analog LIS_ENABLED/SSO_ENABLED
     O365_MAIL_HTTP_TIMEOUT: int = 15
     O365_MAIL_TOKEN_MARGIN_S: int = 60  # Sicherheitsmarge vor Token-Ablauf im Cache
 
@@ -438,6 +441,6 @@ def validate_startup_secrets() -> list[str]:
             "FERNET_KEY ist nicht gesetzt – der Datenverschlüsselungs-Key wird sonst aus "
             "SECRET_KEY abgeleitet (SHA256), wodurch eine SECRET_KEY-Rotation gespeicherte "
             "SSO-Client-Secrets/KI-API-Keys unentschlüsselbar macht. Generieren: "
-            "python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+            'python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"'
         )
     return errors
