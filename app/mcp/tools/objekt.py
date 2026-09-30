@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+from datetime import date
 from typing import Any
 
 from sqlalchemy.orm import selectinload
@@ -38,10 +39,12 @@ from app.services.objekt_pflege_schreiben_service import (
     gefahr_anlegen,
     gefahr_entfernen,
     kontakt_zuordnen,
+    kontakt_zuordnung_aendern,
     kontakt_zuordnung_entfernen,
     merkmal_entfernen,
     merkmal_zuordnen,
     suche_objekte,
+    wohnanlage_speichern,
     zusatzadresse_anlegen,
     zusatzadresse_entfernen,
 )
@@ -75,6 +78,38 @@ def kontakte_modul_aktiv(org_id: int, db: Any) -> bool:
 def _limit(limit: int) -> None:
     if not 1 <= limit <= MAX_LIMIT:
         raise ValueError("limit muss zwischen 1 und 50 liegen.")
+
+
+def _stammdaten_normalisieren(stammdaten: dict[str, Any]) -> dict[str, Any]:
+    """Konvertiert das MCP-ISO-Datum für das Date-Feld der Datenbank."""
+    daten = dict(stammdaten)
+    revision_datum = daten.get("revision_datum")
+    if revision_datum is not None and revision_datum != "":
+        if not isinstance(revision_datum, str):
+            raise ValueError("revision_datum muss ein ISO-Datum sein.")
+        try:
+            daten["revision_datum"] = date.fromisoformat(revision_datum)
+        except ValueError as exc:
+            raise ValueError("revision_datum muss ein ISO-Datum sein.") from exc
+    elif revision_datum == "":
+        daten["revision_datum"] = None
+    return daten
+
+
+def _wohnanlage_speichern_mcp(
+    objekt: Objekt, wohnanlage: dict[str, Any], *, context: MCPContext
+) -> None:
+    vorhanden = bool(wohnanlage.get("vorhanden", True))
+    daten = {key: value for key, value in wohnanlage.items() if key != "vorhanden"}
+    erlaubte = {"wohneinheiten", "geschosse", "stiegen", "hausverwaltung_kontakt_id", "hinweise"}
+    if set(daten) - erlaubte:
+        raise ValueError("Unbekannte Wohnanlagen-Felder: " + ", ".join(sorted(set(daten) - erlaubte)))
+    hausverwaltung_id = daten.get("hausverwaltung_kontakt_id")
+    if hausverwaltung_id is not None and not any(k.id == hausverwaltung_id for k in objekt.kontakte):
+        raise ValueError("Hausverwaltung muss eine Kontakt-Zuordnung dieses Objekts sein.")
+    wohnanlage_speichern(
+        context.db, objekt, user_id=context.user.id, vorhanden=vorhanden, daten=daten, quelle="mcp"
+    )
 
 
 def _objekt_kandidat(objekt: Objekt) -> dict[str, object]:
@@ -162,31 +197,67 @@ async def objekt_suchen(context: MCPContext, q: str = "", status: str = "", limi
     required_roles=("objekt_verwalter",),
     module_check=objekt_modul_aktiv,
 )
-async def objekt_lesen(context: MCPContext, objekt_id: int) -> dict[str, object]:
+async def objekt_lesen(context: MCPContext, objekt_id: int, arbeitskopie: bool = False) -> dict[str, object]:
     objekt = (
         context.db.query(Objekt)
-        .options(selectinload(Objekt.bma), selectinload(Objekt.kontakte).selectinload(ObjektKontakt.zentraler_kontakt))
+        .options(
+            selectinload(Objekt.bma),
+            selectinload(Objekt.kontakte).selectinload(ObjektKontakt.zentraler_kontakt),
+            selectinload(Objekt.gefahren),
+            selectinload(Objekt.merkmale),
+            selectinload(Objekt.zusatzadressen),
+        )
         .filter(Objekt.id == objekt_id, Objekt.org_id == context.org_id)
         .first()
     )
     if objekt is None:
         raise ValueError("Objekt nicht gefunden.")
-    arbeitskopie = context.db.query(Objekt).filter(Objekt.entwurf_von_id == objekt.id).first()
+    gefundene_arbeitskopie = context.db.query(Objekt).filter(Objekt.entwurf_von_id == objekt.id).first()
+    basis_objekt_id = objekt.entwurf_von_id
+    if arbeitskopie and gefundene_arbeitskopie is not None:
+        basis_objekt_id = objekt.id
+        objekt = (
+            context.db.query(Objekt)
+            .options(
+                selectinload(Objekt.bma),
+                selectinload(Objekt.kontakte).selectinload(ObjektKontakt.zentraler_kontakt),
+                selectinload(Objekt.gefahren), selectinload(Objekt.merkmale), selectinload(Objekt.zusatzadressen),
+            )
+            .filter(Objekt.id == gefundene_arbeitskopie.id, Objekt.org_id == context.org_id)
+            .one()
+        )
     return _objekt_kandidat(objekt) | {
+        "basis_objekt_id": basis_objekt_id,
         "vulgoname": objekt.vulgoname,
         "adresse": {"strasse": objekt.strasse, "hausnummer": objekt.hausnummer, "plz": objekt.plz, "ort": objekt.ort},
         "bma": {"bma_nummer": objekt.bma.bma_nummer, "rfl_nummer": objekt.bma.rfl_nummer} if objekt.bma else None,
         "kontakte": [
             {
-                "id": k.kontakt_id,
+                "zuordnung_id": k.id,
+                "kontakt_id": k.kontakt_id,
                 "anzeigename": k.zentraler_kontakt.anzeigename if k.zentraler_kontakt else None,
                 "funktion": k.zentraler_kontakt.funktion if k.zentraler_kontakt else None,
                 "art": k.art,
+                "sort": k.sort,
+                "erreichbarkeit": k.erreichbarkeit,
+                "freigaben_anzahl": len(k.freigaben),
             }
             for k in objekt.kontakte
         ],
-        "hat_arbeitskopie": bool(arbeitskopie),
-        "offener_pflegeauftrag": bool(hole_offenen_pflegeauftrag(context.db, arbeitskopie or objekt)),
+        "gefahren": [{"id": g.id, "gefahr_id": g.gefahr_id, "sort": g.sort} for g in objekt.gefahren],
+        "merkmale": [{"id": m.id, "merkmal_id": m.merkmal_id, "hinweis": m.hinweis} for m in objekt.merkmale],
+        "zusatzadressen": [
+            {"id": z.id, "bezeichnung": z.bezeichnung, "strasse": z.strasse, "hausnummer": z.hausnummer,
+             "plz": z.plz, "ort": z.ort, "sort": z.sort}
+            for z in objekt.zusatzadressen
+        ],
+        "arbeitskopie_id": gefundene_arbeitskopie.id if gefundene_arbeitskopie else None,
+        "hat_arbeitskopie": bool(gefundene_arbeitskopie),
+        "hinweis": (
+            f"Arbeitskopie vorhanden (ID {gefundene_arbeitskopie.id}); mit arbeitskopie=true deren Kinder lesen."
+            if gefundene_arbeitskopie and not arbeitskopie else None
+        ),
+        "offener_pflegeauftrag": bool(hole_offenen_pflegeauftrag(context.db, gefundene_arbeitskopie or objekt)),
         "ui_link": f"{settings.effective_public_base_url.rstrip('/')}/objekte/{objekt.id}",
     }
 
@@ -265,8 +336,9 @@ async def kontakt_duplikate_pruefen(
 
 def _kontakte_anlegen(
     context: MCPContext, objekt: Objekt, kontakte: list[dict[str, Any]], bestaetigt: bool
-) -> list[str]:
+) -> tuple[list[str], list[ObjektKontakt]]:
     hinweise = []
+    zuordnungen = []
     for eintrag in kontakte:
         if not isinstance(eintrag, dict) or not eintrag.get("art"):
             raise ValueError("Jeder Kontakt braucht eine Kontaktart.")
@@ -313,12 +385,21 @@ def _kontakte_anlegen(
             )
         else:
             raise ValueError("Kontakt braucht kontakt_id oder neu.")
+        erreichbarkeit = eintrag.get("erreichbarkeit")
+        if erreichbarkeit is not None:
+            if not isinstance(erreichbarkeit, str) or len(erreichbarkeit) > 200:
+                raise ValueError("Erreichbarkeit darf maximal 200 Zeichen lang sein.")
         zuordnung = kontakt_zuordnen(
-            context.db, objekt, kontakt, art=str(eintrag["art"]), user_id=context.user.id, quelle="mcp"
+            context.db,
+            objekt,
+            kontakt,
+            art=str(eintrag["art"]),
+            erreichbarkeit=erreichbarkeit,
+            user_id=context.user.id,
+            quelle="mcp",
         )
-        if eintrag.get("erreichbarkeit"):
-            zuordnung.erreichbarkeit = str(eintrag["erreichbarkeit"])
-    return hinweise
+        zuordnungen.append(zuordnung)
+    return hinweise, zuordnungen
 
 
 @register_tool(
@@ -335,15 +416,18 @@ async def objekt_anlegen(
     merkmale: list[dict[str, Any]] | None = None,
     zusatzadressen: list[dict[str, Any]] | None = None,
     kontakte: list[dict[str, Any]] | None = None,
+    wohnanlage: dict[str, Any] | None = None,
     duplikat_bestaetigt: bool = False,
 ) -> dict[str, object]:
     if not isinstance(stammdaten, dict):
         raise ValueError("stammdaten muss ein Objekt sein.")
     erlaubte_stammdaten = {
         "name", "vulgoname", "kategorie_id", "strasse", "hausnummer", "plz", "ort", "lat", "lng",
+        "informationen", "anfahrtsweg", "revision_datum",
     }
     if set(stammdaten) - erlaubte_stammdaten:
         raise ValueError("Unbekannte Stammdaten-Felder: " + ", ".join(sorted(set(stammdaten) - erlaubte_stammdaten)))
+    stammdaten = _stammdaten_normalisieren(stammdaten)
     identitaet = {key: stammdaten.get(key, "") for key in ("name", "strasse", "hausnummer", "ort")}
     if bma:
         identitaet["bma_nummer"] = bma.get("bma_nummer") or bma.get("rfl_nummer") or ""
@@ -373,7 +457,11 @@ async def objekt_anlegen(
             if not isinstance(adresse, dict):
                 raise ValueError("Jede Zusatzadresse muss ein Objekt sein.")
             zusatzadresse_anlegen(context.db, objekt, user_id=context.user.id, quelle="mcp", **adresse)
-        hinweise = _kontakte_anlegen(context, objekt, kontakte or [], duplikat_bestaetigt)
+        hinweise, _ = _kontakte_anlegen(context, objekt, kontakte or [], duplikat_bestaetigt)
+        if wohnanlage is not None:
+            if not isinstance(wohnanlage, dict):
+                raise ValueError("wohnanlage muss ein Objekt sein.")
+            _wohnanlage_speichern_mcp(objekt, wohnanlage, context=context)
         write_audit(
             context.db,
             "objekt.mcp_angelegt",
@@ -428,6 +516,8 @@ async def objekt_aktualisieren(
     zusatzadressen_entfernen: list[int | dict[str, Any]] | None = None,
     kontakte_hinzufuegen: list[dict[str, Any]] | None = None,
     kontakte_entfernen: list[int | dict[str, Any]] | None = None,
+    kontakte_aendern: list[dict[str, Any]] | None = None,
+    wohnanlage: dict[str, Any] | None = None,
     duplikat_bestaetigt: bool = False,
 ) -> dict[str, object]:
     """Aendert ausschliesslich den Entwurf bzw. die Arbeitskopie eines Objekts."""
@@ -441,16 +531,19 @@ async def objekt_aktualisieren(
         raise ValueError("Objekt nicht gefunden.")
     if basis.status == OBJEKT_STATUS_ARCHIVIERT:
         raise ValueError("Archivierte Objekte koennen nicht aktualisiert werden.")
-    kontakt_operation = bool((kontakte_hinzufuegen or []) or (kontakte_entfernen or []))
+    kontakt_operation = bool((kontakte_hinzufuegen or []) or (kontakte_entfernen or []) or (kontakte_aendern or []))
     if kontakt_operation and not kontakte_modul_aktiv(context.org_id, db):
         raise ValueError("Kontakte-Modul ist nicht aktiv; Kontaktzuordnungen koennen nicht bearbeitet werden.")
 
     erlaubte_stammdaten = {
         "name", "vulgoname", "kategorie_id", "strasse", "hausnummer", "plz", "ort", "lat", "lng",
+        "informationen", "anfahrtsweg", "revision_datum",
     }
     if stammdaten is not None and (not isinstance(stammdaten, dict) or set(stammdaten) - erlaubte_stammdaten):
         unbekannt = set(stammdaten or {}) - erlaubte_stammdaten
         raise ValueError("Unbekannte Stammdaten-Felder: " + ", ".join(sorted(unbekannt)))
+    if stammdaten is not None:
+        stammdaten = _stammdaten_normalisieren(stammdaten)
 
     try:
         if basis.status == OBJEKT_STATUS_FREIGEGEBEN:
@@ -523,13 +616,28 @@ async def objekt_aktualisieren(
             ident = _entfern_id(eintrag, "Zusatzadress")
             zusatzadresse_entfernen(db, objekt, ident, user_id=context.user.id, quelle="mcp")
             geaenderte_felder.append({"feld": "zusatzadressen", "vorher": ident, "nachher": None})
-        hinweise = _kontakte_anlegen(context, objekt, kontakte_hinzufuegen or [], duplikat_bestaetigt)
-        for eintrag in kontakte_hinzufuegen or []:
-            geaenderte_felder.append({"feld": "kontakte", "vorher": None, "nachher": "zugeordnet"})
+        hinweise, neue_zuordnungen = _kontakte_anlegen(context, objekt, kontakte_hinzufuegen or [], duplikat_bestaetigt)
+        for zuordnung in neue_zuordnungen:
+            geaenderte_felder.append({"feld": "kontakte", "vorher": None, "nachher": zuordnung.id})
+        for eintrag in kontakte_aendern or []:
+            if not isinstance(eintrag, dict) or not isinstance(eintrag.get("zuordnung_id"), int):
+                raise ValueError("Jede Kontakt-Aenderung braucht zuordnung_id.")
+            erlaubte = {"zuordnung_id", "art", "sort", "erreichbarkeit"}
+            if set(eintrag) - erlaubte:
+                raise ValueError("Unbekannte Kontakt-Aenderungsfelder: " + ", ".join(sorted(set(eintrag) - erlaubte)))
+            geaendert = kontakt_zuordnung_aendern(
+                db, objekt, eintrag["zuordnung_id"], art=eintrag.get("art"), sort=eintrag.get("sort"),
+                erreichbarkeit=eintrag.get("erreichbarkeit"), user_id=context.user.id, quelle="mcp",
+            )
+            geaenderte_felder.append({"feld": "kontakte", "vorher": geaendert.id, "nachher": geaendert.id})
         for eintrag in kontakte_entfernen or []:
             ident = _entfern_id(eintrag, "Kontakt")
             kontakt_zuordnung_entfernen(db, objekt, ident, user_id=context.user.id, quelle="mcp")
             geaenderte_felder.append({"feld": "kontakte", "vorher": ident, "nachher": None})
+        if wohnanlage is not None:
+            if not isinstance(wohnanlage, dict):
+                raise ValueError("wohnanlage muss ein Objekt sein.")
+            _wohnanlage_speichern_mcp(objekt, wohnanlage, context=context)
         write_audit(db, "objekt.mcp_aktualisiert", org_id=context.org_id, user_id=context.user.id,
                     entity_type="objekt", entity_id=objekt.id, payload={"basis_objekt_id": basis.id})
         db.commit()
@@ -544,5 +652,6 @@ async def objekt_aktualisieren(
         "geaenderte_felder": geaenderte_felder,
         "ui_link": f"{settings.effective_public_base_url.rstrip('/')}/objekte/{objekt.id}",
         "hinweise": hinweise,
+        "kontakte_hinzugefuegt": [{"zuordnung_id": z.id, "kontakt_id": z.kontakt_id} for z in neue_zuordnungen],
         "hinweis": "Aenderungen liegen als Arbeitskopie vor - bitte im Einsatzcockpit pruefen und freigeben.",
     }
