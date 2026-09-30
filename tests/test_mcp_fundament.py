@@ -65,7 +65,11 @@ def _oauth_tokens(client, user, auth_method: str | None = "none") -> dict:
         follow_redirects=False,
     )
     flow = parse_qs(urlsplit(authorize.headers["location"]).query)["vorgang"][0]
-    assert client.get(authorize.headers["location"]).status_code == 200
+    seite = client.get(authorize.headers["location"])
+    assert seite.status_code == 200
+    # Chrome prueft form-action auch gegen den Redirect auf die Client-Callback-URL
+    assert "form-action 'self' http://localhost;" in seite.headers["content-security-policy"] + ";"
+    assert "x-ec-form-action-extra" not in seite.headers
     csrf = client.cookies["ec_csrf"]
     login = client.post(
         "/mcp/anmelden",
