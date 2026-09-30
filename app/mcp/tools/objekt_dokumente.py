@@ -15,6 +15,7 @@ from app.mcp.context import MCPContext
 from app.mcp.registry import register_tool
 from app.models.objekt import OBJEKT_STATUS_ARCHIVIERT, Objekt, ObjektDokument, ObjektDokumentSeite
 from app.models.user import User
+from app.services.mcp_upload_service import effektives_limit, erstelle_upload
 from app.services.objekt_dokument_service import (
     klassifiziere_seiten,
     store_dokument_bytes,
@@ -124,6 +125,43 @@ async def objekt_dokument_uebergeben(
     return await asyncio.to_thread(
         _uebergabe_sync, context.org_id, context.user.id, objekt_id, dateiname, data, seiten, ersetzt_dokument_id
     )
+
+
+@register_tool(
+    name="objekt_dokument_upload_vorbereiten",
+    description="Bereitet einen kurzlebigen Bearer-Upload fuer ein Objekt-PDF vor.",
+    required_roles=("objekt_verwalter",),
+    module_check=objekt_modul_aktiv,
+)
+async def objekt_dokument_upload_vorbereiten(
+    context: MCPContext, objekt_id: int, dateiname: str, groesse_bytes: int | None = None
+) -> dict[str, object]:
+    objekt = _basis_objekt(context.db, context.org_id, objekt_id)
+    limit = effektives_limit(context.db)
+    if groesse_bytes is not None and groesse_bytes > limit:
+        raise ValueError(f"Datei zu gross (max. {limit} Bytes).")
+    row, token = erstelle_upload(
+        context.db, context.user, context.org_id, objekt.id, dateiname, groesse_bytes
+    )
+    write_audit(
+        context.db,
+        "objekt.mcp_upload_vorbereitet",
+        org_id=context.org_id,
+        user_id=context.user.id,
+        entity_type="objekt",
+        entity_id=objekt.id,
+        payload={"upload_id": row.upload_id, "dateiname": row.dateiname},
+    )
+    context.db.commit()
+    url = f"{settings.effective_public_base_url.rstrip('/')}/api/mcp/uploads/{row.upload_id}"
+    return {
+        "upload_id": row.upload_id,
+        "upload_url": url,
+        "upload_token": token,
+        "gueltig_bis": row.expires_at.isoformat() + "Z",
+        "max_bytes": limit,
+        "curl_beispiel": f'curl -X POST -H "Authorization: Bearer {token}" -F "datei=@<pfad>" {url}',
+    }
 
 
 @register_tool(

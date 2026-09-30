@@ -37,7 +37,8 @@ SAFE_METHODS = {"GET", "HEAD", "OPTIONS", "TRACE"}
 # automatisiert ohne Browser-Kontext und damit ohne CSRF-Cookie/-Token. Der
 # signierte Token im Pfad selbst authentifiziert die Aktion.
 EXEMPT_PREFIXES = (
-    "/ws/", "/api/v1/", "/api/lagekarte/", "/static/", "/push/", "/mailing/webhook/resend/", "/mailing/u/",
+    "/ws/", "/api/v1/", "/api/lagekarte/", "/api/mcp/uploads/", "/static/", "/push/",
+    "/mailing/webhook/resend/", "/mailing/u/",
 )
 # MCP-OAuth-Endpunkte (Bearer/PKCE, kein Browser-Cookie): nur exakte Pfade, kein Praefix.
 _EXEMPT_EXACT = frozenset({"/mcp", "/token", "/register", "/revoke"})

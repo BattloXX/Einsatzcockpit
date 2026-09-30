@@ -28,7 +28,7 @@ from tests.test_mcp_fundament import _mcp, _oauth_tokens
 
 OBJEKT_TOOLS = {
     "objekt_kataloge", "objekt_suchen", "objekt_lesen", "objekt_duplikate_pruefen", "objekt_anlegen",
-    "objekt_aktualisieren",
+    "objekt_aktualisieren", "objekt_dokument_upload_vorbereiten",
 }
 KONTAKT_TOOLS = {
     "kontakt_suchen", "kontakt_duplikate_pruefen", "kontakt_lesen", "kontakt_kategorien", "kontakt_anlegen",
