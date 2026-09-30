@@ -148,6 +148,10 @@ class Settings(BaseSettings):
     # MCP-PDFs werden vor dem Dekodieren begrenzt; dieses Limit gilt fuer die
     # dekodierten Bytes und ist absichtlich strenger als das allgemeine PDF-Limit.
     MCP_MAX_UPLOAD_BYTES: int = 8 * 1024 * 1024
+    MCP_UPLOAD_MAX_BYTES: int = 50 * 1024 * 1024
+    MCP_UPLOAD_TOKEN_MINUTEN: int = 15
+    MCP_UPLOAD_RETENTION_STUNDEN: int = 24
+    MCP_UPLOAD_RATELIMIT: str = "20/minute"
 
     # Nachschlagewerke (Gefahrgut-Suche, Rettungsdatenblaetter, Karten-Overlays).
     # Sync-Downloads landen hier (persistent, ausserhalb des read-only Repo-app/data);

@@ -48,3 +48,25 @@ class MCPOAuthToken(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     family_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+
+
+class MCPUpload(Base):
+    """Kurzlebiger, Bearer-authentifizierter Zwischenspeicher fuer MCP-PDFs."""
+
+    __tablename__ = "mcp_upload"
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    upload_id: Mapped[str] = mapped_column(String(32), unique=True, nullable=False, index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    org_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("fire_dept.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
+    objekt_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("objekt.id", ondelete="CASCADE"), nullable=False)
+    dateiname: Mapped[str] = mapped_column(String(255), nullable=False)
+    erwartete_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    hochgeladen_am: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    pfad: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    groesse_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    seitenzahl: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    uebergeben_am: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), nullable=False)

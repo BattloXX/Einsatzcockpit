@@ -640,6 +640,21 @@ async def objekt_dokument_uebergeben(
     )
 
 
+@server.tool(
+    name="objekt_dokument_upload_vorbereiten",
+    description="Bereitet einen kurzlebigen Bearer-Upload fuer ein Objekt-PDF vor.",
+)
+async def objekt_dokument_upload_vorbereiten(
+    objekt_id: int, dateiname: str, groesse_bytes: int | None = None, ctx: Context | None = None
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "objekt_dokument_upload_vorbereiten",
+        objekt_id=objekt_id,
+        dateiname=dateiname,
+        groesse_bytes=groesse_bytes,
+    )
+
+
 @server.tool(name="objekt_dokumente_auflisten", description="Listet Dokumente und Seiten eines Objekts.")
 async def objekt_dokumente_auflisten(objekt_id: int, ctx: Context | None = None) -> dict[str, object]:
     return await _call_registered_tool("objekt_dokumente_auflisten", objekt_id=objekt_id)

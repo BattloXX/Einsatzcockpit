@@ -47,6 +47,33 @@ from app.core.security import generate_api_key, sign_mailing_track_token, sign_m
 from app.services import kontakt_service
 from app.services.objekt_pflege_service import erstelle_pflegeauftrag
 
+
+def test_mcp_upload_token_kann_keinen_fremden_upload_oeffnen(client):
+    """Der anonyme Upload-Endpunkt bindet Bearer-Token an exakt seine Upload-Zeile."""
+    from app.models.mcp import MCPUpload
+
+    org_b_id = _setup_zwei_orgs()
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        upload_a = MCPUpload(
+            upload_id="a" * 32, token_hash=hash_api_key("upload-token-a"), org_id=ORG_A,
+            user_id=1, objekt_id=1, dateiname="a.pdf", expires_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(minutes=5),
+        )
+        upload_b = MCPUpload(
+            upload_id="b" * 32, token_hash=hash_api_key("upload-token-b"), org_id=org_b_id,
+            user_id=1, objekt_id=1, dateiname="b.pdf", expires_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(minutes=5),
+        )
+        db.add_all([upload_a, upload_b])
+        db.commit()
+    finally:
+        db.close()
+    response = client.post(
+        f"/api/mcp/uploads/{'b' * 32}", headers={"Authorization": "Bearer upload-token-a"},
+        files={"datei": ("x.pdf", b"%PDF-1.4\n%%EOF")},
+    )
+    assert response.status_code == 401
+
 ORG_A = 1  # FF Wolfurt (seeded)
 
 

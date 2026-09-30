@@ -27,6 +27,7 @@ from app.core.security import unsign_native_link_token, unsign_session
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.mcp import router as mcp_router
+from app.mcp import upload_router as mcp_upload_router
 from app.mcp.server import application as mcp_application
 from app.mcp.server import provider as mcp_provider
 from app.models.incident import Incident, IncidentToken
@@ -288,6 +289,10 @@ async def lifespan(app: FastAPI):
 
     ai_log_retention_task = asyncio.create_task(ai_log_retention_loop())
 
+    from app.services.mcp_upload_service import mcp_upload_retention_loop
+
+    mcp_upload_retention_task = asyncio.create_task(mcp_upload_retention_loop())
+
     from app.services.sms_log_retention import sms_log_retention_loop
 
     sms_log_retention_task = asyncio.create_task(sms_log_retention_loop())
@@ -374,6 +379,7 @@ async def lifespan(app: FastAPI):
         probe_erinnerung_task.cancel()
         weather_retention_task.cancel()
         ai_log_retention_task.cancel()
+        mcp_upload_retention_task.cancel()
         sms_log_retention_task.cancel()
         vehicle_position_retention_task.cancel()
         weather_alert_task.cancel()
@@ -398,6 +404,7 @@ async def lifespan(app: FastAPI):
             probe_erinnerung_task,
             weather_retention_task,
             ai_log_retention_task,
+            mcp_upload_retention_task,
             vehicle_position_retention_task,
             weather_alert_task,
             dienst_monitor_task,
@@ -894,6 +901,7 @@ if settings.TRUST_PROXY_HEADERS:
 # Routers
 app.include_router(auth.router)
 app.include_router(mcp_router.router)
+app.include_router(mcp_upload_router.router)
 app.include_router(sso.router)
 app.include_router(public.router)
 app.include_router(public_mailing_tracking.router)
