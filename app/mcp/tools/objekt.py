@@ -332,11 +332,16 @@ def _kontakt_eintrag_normalisieren(eintrag: Any) -> Any:
 
 
 def _kontakte_anlegen(
-    context: MCPContext, objekt: Objekt, kontakte: list[dict[str, Any]], bestaetigt: bool
+    context: MCPContext,
+    objekt: Objekt,
+    kontakte: list[dict[str, Any]],
+    bestaetigt: bool,
+    feldname: str,
 ) -> tuple[list[str], list[ObjektKontakt]]:
     hinweise = []
     zuordnungen = []
-    for eintrag in (_kontakt_eintrag_normalisieren(x) for x in kontakte):
+    for index, roh_eintrag in enumerate(kontakte, start=1):
+        eintrag = _kontakt_eintrag_normalisieren(roh_eintrag)
         if not isinstance(eintrag, dict) or not eintrag.get("art"):
             raise ValueError("Jeder Kontakt braucht eine Kontaktart.")
         if eintrag.get("kontakt_id"):
@@ -371,9 +376,13 @@ def _kontakte_anlegen(
                 telefone=nummern,
             )
             if duplikate and not bestaetigt:
+                kandidaten = ", ".join(
+                    f"{kandidat.id} {kandidat.anzeigename} ({kandidat.organisation or '-'})"
+                    for kandidat in duplikate
+                )
                 raise ValueError(
-                    "Kontakt-Dublette gefunden. Bitte duplikat_bestaetigt=true setzen. Kandidaten: "
-                    + ", ".join(str(x.id) for x in duplikate)
+                    f'Neuer Kontakt "{name}" ({feldname}[{index}]) ist moegliche Dublette von: {kandidaten}. '
+                    "Mit duplikat_bestaetigt=true trotzdem anlegen oder vorhandene kontakt_id verwenden."
                 )
             kontakt = kontakt_service.create_kontakt(
                 context.db,
@@ -458,7 +467,7 @@ async def objekt_anlegen(
             if not isinstance(adresse, dict):
                 raise ValueError("Jede Zusatzadresse muss ein Objekt sein.")
             zusatzadresse_anlegen(context.db, objekt, user_id=context.user.id, quelle="mcp", **adresse)
-        hinweise, _ = _kontakte_anlegen(context, objekt, kontakte or [], duplikat_bestaetigt)
+        hinweise, _ = _kontakte_anlegen(context, objekt, kontakte or [], duplikat_bestaetigt, "kontakte")
         if wohnanlage is not None:
             if not isinstance(wohnanlage, dict):
                 raise ValueError("wohnanlage muss ein Objekt sein.")
@@ -498,6 +507,53 @@ def _entfern_id(eintrag: int | dict[str, Any], bezeichnung: str) -> int:
     raise ValueError(f"Jeder zu entfernende {bezeichnung}-Eintrag braucht eine ID.")
 
 
+def _basis_objekt_auflosen(db: Any, org_id: int, objekt_id: int) -> Objekt | None:
+    """Löst auch die ID einer Arbeitskopie auf ihr Basisobjekt auf."""
+    objekt = db.query(Objekt).filter(Objekt.id == objekt_id, Objekt.org_id == org_id).first()
+    if objekt is None:
+        return None
+    if objekt.entwurf_von_id is None:
+        return objekt
+    return (
+        db.query(Objekt)
+        .filter(Objekt.id == objekt.entwurf_von_id, Objekt.org_id == org_id, Objekt.entwurf_von_id.is_(None))
+        .first()
+    )
+
+
+def _kontakt_zuordnung_id_auflosen(
+    db: Any, objekt: Objekt, basis: Objekt, eintrag: int | dict[str, Any]
+) -> int:
+    """Nimmt auch eine Zuordnungs-ID aus dem Basisobjekt fuer dessen Arbeitskopie an."""
+    ident = _entfern_id(eintrag, "Kontakt")
+    if db.query(ObjektKontakt).filter(ObjektKontakt.id == ident, ObjektKontakt.objekt_id == objekt.id).first():
+        return ident
+    if objekt.entwurf_von_id is None:
+        return ident
+    basis_zuordnung = (
+        db.query(ObjektKontakt)
+        .filter(ObjektKontakt.id == ident, ObjektKontakt.objekt_id == basis.id)
+        .first()
+    )
+    if basis_zuordnung is None:
+        return ident
+    treffer = (
+        db.query(ObjektKontakt)
+        .filter(
+            ObjektKontakt.objekt_id == objekt.id,
+            ObjektKontakt.kontakt_id == basis_zuordnung.kontakt_id,
+            ObjektKontakt.art == basis_zuordnung.art,
+        )
+        .all()
+    )
+    if len(treffer) != 1:
+        raise ValueError(
+            "Kontakt-Zuordnung aus dem Basisobjekt ist in der Arbeitskopie nicht eindeutig vorhanden; "
+            "bitte zuordnung_id aus objekt_lesen mit arbeitskopie=true verwenden."
+        )
+    return treffer[0].id
+
+
 @register_tool(
     name="objekt_aktualisieren",
     description="Aktualisiert einen Objektentwurf oder legt fuer ein freigegebenes Objekt eine Arbeitskopie an.",
@@ -523,11 +579,7 @@ async def objekt_aktualisieren(
 ) -> dict[str, object]:
     """Aendert ausschliesslich den Entwurf bzw. die Arbeitskopie eines Objekts."""
     db = context.db
-    basis = (
-        db.query(Objekt)
-        .filter(Objekt.id == objekt_id, Objekt.org_id == context.org_id, Objekt.entwurf_von_id.is_(None))
-        .first()
-    )
+    basis = _basis_objekt_auflosen(db, context.org_id, objekt_id)
     if basis is None:
         raise ValueError("Objekt nicht gefunden.")
     if basis.status == OBJEKT_STATUS_ARCHIVIERT:
@@ -617,7 +669,9 @@ async def objekt_aktualisieren(
             ident = _entfern_id(eintrag, "Zusatzadress")
             zusatzadresse_entfernen(db, objekt, ident, user_id=context.user.id, quelle="mcp")
             geaenderte_felder.append({"feld": "zusatzadressen", "vorher": ident, "nachher": None})
-        hinweise, neue_zuordnungen = _kontakte_anlegen(context, objekt, kontakte_hinzufuegen or [], duplikat_bestaetigt)
+        hinweise, neue_zuordnungen = _kontakte_anlegen(
+            context, objekt, kontakte_hinzufuegen or [], duplikat_bestaetigt, "kontakte_hinzufuegen"
+        )
         for zuordnung in neue_zuordnungen:
             geaenderte_felder.append({"feld": "kontakte", "vorher": None, "nachher": zuordnung.id})
         for eintrag in kontakte_aendern or []:
@@ -644,7 +698,7 @@ async def objekt_aktualisieren(
                     )
                 ident = treffer[0].id
             else:
-                ident = _entfern_id(eintrag, "Kontakt")
+                ident = _kontakt_zuordnung_id_auflosen(db, objekt, basis, eintrag)
             kontakt_zuordnung_entfernen(db, objekt, ident, user_id=context.user.id, quelle="mcp")
             geaenderte_felder.append({"feld": "kontakte", "vorher": ident, "nachher": None})
         if wohnanlage is not None:

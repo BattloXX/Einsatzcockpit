@@ -180,7 +180,12 @@ async def kontakt_kategorien(context: MCPContext) -> dict[str, object]:
 
 @register_tool(
     name="kontakt_anlegen",
-    description="Legt einen zentralen Kontakt nach Dublettenprüfung an.",
+    description=(
+        "Legt einen zentralen Kontakt an: felder={typ: person|stelle, anzeigename oder vorname+nachname, "
+        "organisation?, funktion?, email?, erreichbarkeit?, notizen?}; telefone=[{nummer, label?, sort?, "
+        "bevorzugt?, sms_eignung?}]. Moegliche Dubletten oder ungueltige Eingaben werden als ToolError gemeldet; "
+        "mit duplikat_bestaetigt=true eine bekannte Dublette trotzdem anlegen."
+    ),
     required_roles=KONTAKT_ROLLEN,
     module_check=kontakte_modul_aktiv,
 )
