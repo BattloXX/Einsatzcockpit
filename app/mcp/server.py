@@ -484,7 +484,15 @@ async def kontakt_kategorien(ctx: Context | None = None) -> dict[str, object]:
     return await _call_registered_tool("kontakt_kategorien")
 
 
-@server.tool(name="kontakt_anlegen", description="Legt einen zentralen Kontakt nach Dublettenprüfung an.")
+@server.tool(
+    name="kontakt_anlegen",
+    description=(
+        "Legt einen zentralen Kontakt an: felder={typ: person|stelle, anzeigename oder vorname+nachname, "
+        "organisation?, funktion?, email?, erreichbarkeit?, notizen?}; telefone=[{nummer, label?, sort?, "
+        "bevorzugt?, sms_eignung?}]. Moegliche Dubletten oder ungueltige Eingaben werden als ToolError gemeldet; "
+        "mit duplikat_bestaetigt=true eine bekannte Dublette trotzdem anlegen."
+    ),
+)
 async def kontakt_anlegen(
     felder: dict,
     telefone: list[dict] | None = None,
@@ -549,7 +557,9 @@ async def kontakt_zusammenfuehren(
     description=(
         "Legt ausschliesslich einen Objekt-Entwurf an. Kontakte: kontakte=[{art, kontakt_id} oder "
         "{art, neu:{anzeigename|vorname+nachname, organisation, funktion, email, telefone:[{nummer,label}]}} "
-        "oder flach {art, vorname, nachname, telefon, mobil, email}]; art aus objekt_kataloge (Kontaktarten)."
+        "oder flach {art, vorname, nachname, telefon, mobil, email}]; art aus objekt_kataloge (Kontaktarten). "
+        "Moegliche Kontakt-Dubletten oder ungueltige Kontaktfelder werden als ToolError gemeldet; mit "
+        "duplikat_bestaetigt=true bekannte Dubletten trotzdem anlegen."
     ),
 )
 async def objekt_anlegen(
@@ -579,10 +589,15 @@ async def objekt_anlegen(
 @server.tool(
     name="objekt_aktualisieren",
     description=(
-        "Aktualisiert einen Objektentwurf oder eine Arbeitskopie ohne Freigabe. kontakte_hinzufuegen: wie "
-        "kontakte bei objekt_anlegen. kontakte_entfernen: [zuordnung_id] oder [{kontakt_id, art?}] (IDs aus "
-        "objekt_lesen, bei Arbeitskopie mit arbeitskopie=true). kontakte_aendern: "
-        "[{zuordnung_id, art?, sort?, erreichbarkeit?}]. Benoetigt das Kontakte-Modul."
+        "Aktualisiert einen Objektentwurf oder eine Arbeitskopie ohne Freigabe; objekt_id darf die Basis- oder "
+        "Arbeitskopie-ID sein. kontakte_hinzufuegen: wie "
+        "kontakte bei objekt_anlegen ({art, kontakt_id}, {art, neu:{anzeigename|vorname+nachname, organisation, "
+        "funktion, email, telefone:[{nummer,label}]}}, oder flach {art, vorname, nachname, telefon, mobil, email}). "
+        "kontakte_entfernen: [zuordnung_id] oder [{kontakt_id, art?}] (IDs aus objekt_lesen, bei Arbeitskopie mit "
+        "arbeitskopie=true; Basis-Zuordnungs-IDs werden aufgeloest). kontakte_aendern: "
+        "[{zuordnung_id, art?, sort?, erreichbarkeit?}]. Moegliche "
+        "Kontakt-Dubletten oder ungueltige Kontaktfelder werden als ToolError gemeldet; mit "
+        "duplikat_bestaetigt=true bekannte Dubletten trotzdem anlegen. Benoetigt das Kontakte-Modul."
     ),
 )
 async def objekt_aktualisieren(

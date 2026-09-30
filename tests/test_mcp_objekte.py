@@ -527,3 +527,87 @@ def test_flache_kontakte_und_entfernen_per_kontakt_id_an_arbeitskopie(client):
         kontakte_hinzufuegen=[{"art": "betreiber", "vorname": "X", "quatsch": 1}],
     )
     assert "__fehler__" in unbekannt and "Erlaubt" in unbekannt["__fehler__"]
+
+
+def test_arbeitskopie_id_und_basis_kontaktzuordnung_werden_aufgeloest(client):
+    seed = _seed("obj-arbeitskopie-id-kontakt", {"admin": "objekt_verwalter"})
+    token = _token(client, seed, "admin")
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        zweiter_kontakt = Kontakt(
+            org_id=seed["org_id"],
+            typ="person",
+            anzeigename="Arbeitskopie Zweiter Kontakt",
+            organisation="Arbeitskopie Testorganisation",
+        )
+        db.add(zweiter_kontakt)
+        db.flush()
+        erste_zuordnung = ObjektKontakt(
+            org_id=seed["org_id"],
+            objekt_id=seed["objekt_id"],
+            kontakt_id=seed["kontakt_id"],
+            art="betreiber",
+        )
+        zweite_zuordnung = ObjektKontakt(
+            org_id=seed["org_id"],
+            objekt_id=seed["objekt_id"],
+            kontakt_id=zweiter_kontakt.id,
+            art="hausverwaltung",
+        )
+        db.add_all([erste_zuordnung, zweite_zuordnung])
+        db.commit()
+        erste_zuordnung_id = erste_zuordnung.id
+        zweiter_kontakt_id = zweiter_kontakt.id
+        zweite_zuordnung_id = zweite_zuordnung.id
+    finally:
+        db.close()
+
+    arbeitskopie = _rufe(
+        client, token, "objekt_aktualisieren", objekt_id=seed["objekt_id"], stammdaten={"vulgoname": "Kopie"}
+    )
+    arbeitskopie_id = arbeitskopie["objekt_id"]
+    entfernt_per_kontakt = _rufe(
+        client,
+        token,
+        "objekt_aktualisieren",
+        objekt_id=arbeitskopie_id,
+        kontakte_entfernen=[{"kontakt_id": zweiter_kontakt_id}],
+    )
+    assert entfernt_per_kontakt["objekt_id"] == arbeitskopie_id
+    assert entfernt_per_kontakt["basis_objekt_id"] == seed["objekt_id"]
+    entfernt_per_basis_zuordnung = _rufe(
+        client,
+        token,
+        "objekt_aktualisieren",
+        objekt_id=arbeitskopie_id,
+        kontakte_entfernen=[erste_zuordnung_id],
+    )
+    assert "__fehler__" not in entfernt_per_basis_zuordnung
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        assert db.query(ObjektKontakt).filter_by(objekt_id=arbeitskopie_id).count() == 0
+        assert db.query(ObjektKontakt).filter_by(objekt_id=seed["objekt_id"]).count() == 2
+        assert db.get(ObjektKontakt, zweite_zuordnung_id) is not None
+    finally:
+        db.close()
+
+
+def test_kontakt_dublette_benennt_neuen_und_vorhandenen_kontakt(client):
+    seed = _seed("obj-kontakt-dublette-hinweis", {"admin": "objekt_verwalter"})
+    token = _token(client, seed, "admin")
+    result = _rufe(
+        client,
+        token,
+        "objekt_aktualisieren",
+        objekt_id=seed["objekt_id"],
+        kontakte_hinzufuegen=[
+            {"art": "betreiber", "vorname": "Max", "nachname": "Muster", "email": "max@example.test"}
+        ],
+    )
+    assert "__fehler__" in result
+    fehlertext = json.loads(result["__fehler__"])[0]["text"]
+    assert f'Neuer Kontakt "Max Muster" (kontakte_hinzufuegen[1])' in fehlertext
+    assert f"{seed['kontakt_id']} Max Muster (Muster GmbH)" in fehlertext
+    assert "duplikat_bestaetigt=true" in fehlertext
