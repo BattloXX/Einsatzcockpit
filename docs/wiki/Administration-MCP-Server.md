@@ -20,12 +20,26 @@ Für `/mcp` ist Streaming erforderlich: `proxy_buffering off` sowie ausreichend 
 | Wert | Standard | Zweck |
 |------|----------|-------|
 | `MCP_LOGIN_RATELIMIT` | `5/15minutes` | IP-basiertes Limit für `POST /mcp/anmelden` |
-| `MCP_MAX_UPLOAD_BYTES` | 8 MB | Maximale dekodierte PDF-Größe bei MCP-Dokumenten |
+| `MCP_MAX_UPLOAD_BYTES` | 8 MB | Maximale dekodierte PDF-Größe bei Übergabe als Base64 |
+| `MCP_UPLOAD_MAX_BYTES` | 50 MB | Maximale PDF-Größe beim Upload per Upload-Link (zusätzlich begrenzt durch `objekt_pdf_max_bytes`) |
+| `MCP_UPLOAD_TOKEN_MINUTEN` | 15 | Gültigkeit eines Upload-Tokens |
+| `MCP_UPLOAD_RETENTION_STUNDEN` | 24 | Nicht übergebene Uploads werden danach automatisch gelöscht |
+| `MCP_UPLOAD_RATELIMIT` | `20/minute` | Limit für `POST /api/mcp/uploads/{upload_id}` |
 | Access-Token | 1 Stunde | Gültigkeit des Zugriffstokens |
 | Refresh-Token | 30 Tage | Gültigkeit des Erneuerungstokens |
 | Autorisierungscode | 5 Minuten | Gültigkeit des Login-Vorgangs |
 
-Poppler ist weiterhin für Seitenvorschauen von übergebenen PDFs notwendig. Tesseract wird für MCP-Dokumente nicht benötigt: Text und Klassifizierung werden fertig übergeben, daher startet das Einsatzcockpit weder OCR noch KI-Analyse.
+### Dokument-Upload per curl
+
+Große PDFs übergibt der KI-Client nicht als Base64, sondern zweistufig: `objekt_dokument_upload_vorbereiten` liefert `upload_id`, `upload_url`, einen einmaligen `upload_token` und ein fertiges curl-Beispiel; der Rechner des Benutzers lädt die Datei mit `curl -X POST -H "Authorization: Bearer <token>" -F "datei=@<pfad>" <upload_url>` hoch, danach übergibt `objekt_dokument_uebergeben(upload_id=...)` das PDF. Der Endpunkt `POST /api/mcp/uploads/{upload_id}` braucht keine Sitzung; er ist ausschließlich über das Upload-Token geschützt (nur Hash gespeichert, einmalig nutzbar, an Organisation, Benutzer und Objekt gebunden, 15 Minuten gültig, nur PDF).
+
+Voraussetzungen im Betrieb:
+
+- `/api/mcp/uploads/` muss von außen erreichbar sein und darf nicht hinter Basic-Auth oder einem Login-Gateway liegen.
+- Der Reverse-Proxy muss dort Bodys bis mindestens 50 MB zulassen (`client_max_body_size 55m`). Beide Vorlagen unter `deploy/` enthalten den passenden `location`-Block.
+- Ein periodischer Job löscht nicht übergebene Uploads nach 24 Stunden samt Datei (Ablage unter `OBJEKT_MEDIA_DIR/_mcp_uploads/`).
+
+Poppler ist weiterhin für Seitenvorschauen von übergebenen PDFs notwendig. Tesseract wird für MCP-Dokumente nicht benötigt: Text und Klassifizierung werden fertig übergeben, daher startet das Einsatzcockpit weder OCR noch KI-Analyse. Nur wenn `seiten[]` fehlt oder unvollständig ist, wird für die fehlenden Seiten – sofern die KI-Klassifizierung der Organisation aktiv ist – ein KI-Vorschlag erzeugt; die Antwort weist das als `klassifizierung_quelle: "server"` aus.
 
 ## Sicherheitsmodell
 

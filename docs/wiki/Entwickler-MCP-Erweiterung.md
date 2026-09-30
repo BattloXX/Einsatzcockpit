@@ -19,7 +19,7 @@ Die MCP-Implementierung liegt in `app/mcp/`: `server.py` stellt den OAuth-Provid
 |---------|-----------|------------------------|
 | Allgemein | `mcp_whoami` | `readonly` |
 | Objekte | `objekt_kataloge`, `objekt_suchen`, `objekt_lesen`, `objekt_duplikate_pruefen`, `objekt_anlegen`, `objekt_aktualisieren` | `objekt_verwalter`, Objekt-Modul |
-| Objekt-Dokumente | `objekt_dokument_uebergeben`, `objekt_dokumente_auflisten`, `objekt_dokument_seiten_klassifizieren` | `objekt_verwalter`, Objekt-Modul |
+| Objekt-Dokumente | `objekt_dokument_upload_vorbereiten`, `objekt_dokument_uebergeben`, `objekt_dokumente_auflisten`, `objekt_dokument_seiten_klassifizieren` | `objekt_verwalter`, Objekt-Modul |
 | Kontakte | `kontakt_suchen`, `kontakt_duplikate_pruefen`, `kontakt_lesen`, `kontakt_kategorien`, `kontakt_anlegen`, `kontakt_aktualisieren`, `kontakt_archivieren`, `kontakt_zusammenfuehren` | `kontakt_verwalter` oder `objekt_verwalter`, Kontakte-Modul |
 | Fahrtenbuch | `fahrtenbuch_stammdaten`, `fahrtenbuch_fahrten`, `fahrtenbuch_fahrt`, `fahrtenbuch_auswertung` | `fahrtenbuch_admin`, Fahrtenbuch-Modul |
 
@@ -46,3 +46,6 @@ Vor dem Merge prüfen:
 - Kontaktmodul-Check, Rollenmatrix für `kontakt_verwalter` und `objekt_verwalter`, Versionskonflikt, Dubletten- und Bestätigungsfälle testen. Sicherstellen, dass kein Kontakt-Werkzeug `ObjektKontaktFreigabe` setzt oder SMS versendet.
 - OAuth-Discovery bleibt vor `/.well-known`-Static-Mount; der Lifespan-Test bleibt grün.
 - Anwender- und Administrationsdokumentation benennt nur tatsächlich angebotene Werkzeuge.
+- Upload-Endpunkt: `POST /api/mcp/uploads/{upload_id}` (`app/mcp/upload_router.py`, Service `app/services/mcp_upload_service.py`, Tabelle `mcp_upload`) ist bewusst öffentlich und nur über das gehashte, einmalige Upload-Token geschützt; er ist von der CSRF-Prüfung ausgenommen und scopet ausschließlich über die Zeile des Tokens (Organisation, Benutzer, Objekt). Neue öffentliche Routen brauchen einen Cross-Org-Test (`tests/test_public_tenant_isolation.py`).
+- `objekt_dokument_uebergeben` nimmt genau eines von `inhalt_base64` oder `upload_id`. Ist `seiten[]` vollständig, läuft keine KI; fehlende Seiten werden ohne Dokumentart angelegt und (bei aktiver KI-Klassifizierung) nur als Vorschläge nachgezogen. Antwortfeld `klassifizierung_quelle` ist `client` oder `server`.
+- `objekt_aktualisieren` löst die ID einer Arbeitskopie auf das Basisobjekt auf und bildet Zuordnungs-IDs der Basis beim Entfernen auf die Arbeitskopie ab; fachliche Fehler müssen als `ValueError` bzw. `ToolError` auftreten, sonst maskiert das SDK die Meldung.

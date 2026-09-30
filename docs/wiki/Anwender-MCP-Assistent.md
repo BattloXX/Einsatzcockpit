@@ -24,13 +24,16 @@ Die verfügbaren Werkzeuge sind:
 - `kontakt_suchen`, `kontakt_duplikate_pruefen`, `kontakt_lesen` und `kontakt_kategorien`: suchen, prüfen und lesen zentrale Kontakte sowie Kategorien. `kontakt_lesen` enthält Telefone, E-Mail, Kategorien, Versionsnummer und Objektzuordnungen.
 - `kontakt_anlegen`, `kontakt_aktualisieren`, `kontakt_archivieren` und `kontakt_zusammenfuehren`: pflegen zentrale Kontakte. Die Aktualisierung verlangt die aktuelle `version`; bei einem Konflikt Kontakt neu laden. Archivieren bei Objektzuordnungen und jedes Zusammenführen verlangen `bestaetigt=true`.
 - `objekt_anlegen` und `objekt_aktualisieren`: legen Entwürfe an oder bearbeiten Entwürfe beziehungsweise Arbeitskopien. Sie können die Objekt-Stammdaten `informationen`, `anfahrtsweg` und `revision_datum` sowie optionale Wohnanlagen-Daten (`wohneinheiten`, `geschosse`, `stiegen`, `hausverwaltung_kontakt_id`, `hinweise`) pflegen. Mit `kontakte_aendern` ändern sie Art, Sortierung oder Erreichbarkeit einer Objektkontakt-Zuordnung.
-- `objekt_dokument_uebergeben`, `objekt_dokumente_auflisten` und `objekt_dokument_seiten_klassifizieren`: übergeben, listen und klassifizieren Objekt-PDFs.
+- `objekt_dokument_upload_vorbereiten`: erzeugt einen einmaligen Upload-Link (15 Minuten gültig) samt curl-Beispiel, damit große PDFs nicht als Base64 im Tool-Aufruf stehen müssen.
+- `objekt_dokument_uebergeben`, `objekt_dokumente_auflisten` und `objekt_dokument_seiten_klassifizieren`: übergeben, listen und klassifizieren Objekt-PDFs. Übergabe entweder mit `upload_id` (nach dem curl-Upload) oder – für kleine Dateien – mit `inhalt_base64`. `seiten` hat das Format `[{"nr":1,"dokumentart":"bma_datenblatt","titel":null}]`; die Klassifizierung des Clients wird unverändert übernommen.
 
 ## Kontrollierter Ablauf
 
 MCP kann nie ein Objekt oder Dokument freigeben. Neue Objekte bleiben Entwürfe; bei freigegebenen Objekten entsteht eine Arbeitskopie. Neue Dokumente an einem freigegebenen Objekt warten auf Freigabe im Einsatzcockpit. Prüfe und gib dort bewusst frei. Zentrale Kontakte können per MCP gepflegt werden; beim Aktualisieren schützt die Versionsnummer vor dem Überschreiben zwischenzeitlicher Änderungen. SMS- und Mail-Freigaben, SMS-Versand sowie Kontakt-Import und -Export bleiben dabei aus und stehen nur im Einsatzcockpit zur Verfügung.
 
 Bei "fertig übergebenen" Plänen analysiert Claude das PDF vor der Übergabe: Volltext und Seitenklassifizierung werden mitgeliefert. Das Einsatzcockpit macht danach kein OCR und keine KI-Analyse, erzeugt aber weiterhin technisch die Seitenvorschauen.
+
+Große PDFs laufen zweistufig: Claude ruft `objekt_dokument_upload_vorbereiten` auf, lädt die Datei mit dem gelieferten `curl`-Befehl von deinem Rechner hoch und übergibt sie danach mit `upload_id` und der fertigen Seitenklassifizierung. Voraussetzung ist, dass Claude auf deinem Rechner Befehle ausführen darf und dein Einsatzcockpit von dort erreichbar ist. Wenn du Kontakte zu einem Objekt hinzufügst, die schon fast identisch existieren, nennt die Fehlermeldung den neuen Kontakt und die Kandidaten mit Namen; dann entweder die vorhandene `kontakt_id` verwenden oder `duplikat_bestaetigt=true` setzen. Für `objekt_aktualisieren` genügt die ID des Objekts oder seiner Arbeitskopie.
 
 Beispiele:
 
@@ -51,9 +54,13 @@ Lies Objekt 123 einschließlich Arbeitskopie, hänge Kontakt 45 als Hausverwaltu
 ```
 
 ```text
+Lade das PDF ~/Downloads/bma-datenblatt.pdf über den Upload-Link ins Objekt 123, klassifiziere jede Seite und übergib es an die Arbeitskopie.
+```
+
+```text
 Werte alle aktiven, statistikrelevanten Fahrten 2026 pro Fahrzeug aus.
 ```
 
 ## Grenzen und Datenschutz
 
-PDFs werden nur als Base64 im Tool-Aufruf übergeben; das dekodierte Limit beträgt standardmäßig 8 MB. Es gibt keinen Upload-Link. Kontakt-Import und -Export, SMS- und Mail-Freigaben je Objektkontakt sowie SMS-Versand sind keine MCP-Werkzeuge. Fahrtenbuchdaten enthalten Fahrernamen; Fahrtenbuch-Admins sehen diese und übermitteln sie bei einer Abfrage an die verwendete KI-Anwendung. Beachte deshalb die Datenschutz- und Freigaberegeln deiner Organisation.
+PDFs werden entweder als Base64 im Tool-Aufruf (dekodiert bis 8 MB) oder über einen einmaligen Upload-Link (bis 50 MB, 15 Minuten gültig, an Benutzer und Objekt gebunden) übergeben; nicht übergebene Uploads werden nach 24 Stunden gelöscht. Kontakt-Import und -Export, SMS- und Mail-Freigaben je Objektkontakt sowie SMS-Versand sind keine MCP-Werkzeuge. Fahrtenbuchdaten enthalten Fahrernamen; Fahrtenbuch-Admins sehen diese und übermitteln sie bei einer Abfrage an die verwendete KI-Anwendung. Beachte deshalb die Datenschutz- und Freigaberegeln deiner Organisation.
