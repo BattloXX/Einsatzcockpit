@@ -6,10 +6,19 @@ import pytest
 from app.core.security import hash_api_key, hash_password, sign_session
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
-from app.models.incident import Incident, IncidentColumn, IncidentVehicle
+from app.models.incident import Incident, IncidentColumn, IncidentOrg, IncidentVehicle
+from app.models.major_incident import (
+    EinheitSiteDispatch,
+    IncidentSite,
+    LageEinheit,
+    MajorIncident,
+    MajorIncidentStatus,
+    SitePhase,
+)
 from app.models.master import FireDept, VehicleMaster
 from app.models.user import DeviceToken, User
 from app.services.einsatz_live_service import build_live_state
+from app.services.resource_service import STATUS_IM_EINSATZ
 
 
 def _create_device(*, with_vehicle: bool = True, duty_active: bool = False):
@@ -52,7 +61,9 @@ def _create_device(*, with_vehicle: bool = True, duty_active: bool = False):
         db.close()
 
 
-def _create_incident(org_id: int, *, started_at: datetime, code: str = "B2") -> int:
+def _create_incident(
+    org_id: int, *, started_at: datetime, code: str = "B2", is_exercise: bool = False
+) -> int:
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
@@ -64,7 +75,7 @@ def _create_incident(org_id: int, *, started_at: datetime, code: str = "B2") -> 
             address_street="Hauptstrasse",
             address_no="5",
             address_city="Musterstadt",
-            is_exercise=False,
+            is_exercise=is_exercise,
         )
         db.add(incident)
         db.commit()
@@ -106,6 +117,80 @@ def _authenticate(client, user_id: int, device_id: int) -> None:
     client.cookies.set(
         "session", sign_session(user_id, device=True, device_token_id=device_id)
     )
+
+
+def _bearer_duty_state(client, raw_token: str) -> dict:
+    """Native App polling uses its DeviceToken and deliberately no session cookie."""
+    client.cookies.clear()
+    response = client.get(
+        "/api/v1/device/duty-state",
+        headers={"Authorization": f"Bearer {raw_token}"},
+    )
+    assert response.status_code == 200
+    return response.json()
+
+
+def _add_collaborating_org(incident_id: int, org_id: int) -> None:
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        db.add(IncidentOrg(incident_id=incident_id, org_id=org_id, role="collaborator"))
+        db.commit()
+    finally:
+        db.close()
+
+
+def _create_lage(org_id: int, *, is_exercise: bool) -> int:
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        lage = MajorIncident(
+            org_id=org_id,
+            name="Live Lage",
+            status=MajorIncidentStatus.active,
+            is_exercise=is_exercise,
+            started_at=datetime(2026, 8, 3, 11, 0),
+        )
+        db.add(lage)
+        db.commit()
+        return lage.id
+    finally:
+        db.close()
+
+
+def _assign_vehicle_to_lage(lage_id: int, org_id: int, vehicle_id: int) -> int:
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        einheit = LageEinheit(
+            lage_id=lage_id,
+            vehicle_id=vehicle_id,
+            label="Live Fahrzeug",
+            status=STATUS_IM_EINSATZ,
+        )
+        db.add(einheit)
+        db.flush()
+        site = IncidentSite(
+            major_incident_id=lage_id,
+            org_id=org_id,
+            bezeichnung="Abschnitt Nord",
+            einsatzgrund="Wasser im Keller",
+            strasse="Dorfplatz",
+            hausnr="1",
+            ort="Musterstadt",
+            phase=SitePhase.in_arbeit,
+        )
+        db.add(site)
+        db.flush()
+        db.add(EinheitSiteDispatch(
+            einheit_id=einheit.id,
+            site_id=site.id,
+            dispatched_at=datetime(2026, 8, 3, 11, 5),
+        ))
+        db.commit()
+        return site.id
+    finally:
+        db.close()
 
 
 def test_live_state_ohne_org_kontext_bricht_hart_ab():
@@ -273,6 +358,97 @@ def test_duty_state_akzeptiert_bearer_device_token(client, setup_db):
         assert db.get(DeviceToken, device_id).last_used_at is not None
     finally:
         db.close()
+
+
+@pytest.mark.parametrize("with_vehicle", [False, True], ids=["unbound", "vehicle_bound"])
+@pytest.mark.parametrize(
+    ("is_exercise", "is_collaboration"),
+    [
+        pytest.param(False, False, id="own_incident"),
+        pytest.param(True, False, id="own_exercise"),
+        pytest.param(False, True, id="collaboration_incident"),
+    ],
+)
+def test_bearer_duty_state_liefert_sichtbare_einsaetze_ohne_session_cookie(
+    client, setup_db, with_vehicle, is_exercise, is_collaboration
+):
+    _, _, own_org_id, vehicle_id, raw_token = _create_device(with_vehicle=with_vehicle)
+    incident_org_id = own_org_id
+    if is_collaboration:
+        _, _, incident_org_id, _, _ = _create_device()
+    incident_id = _create_incident(
+        incident_org_id,
+        started_at=datetime(2026, 8, 3, 11, 0),
+        is_exercise=is_exercise,
+    )
+    if is_collaboration:
+        _add_collaborating_org(incident_id, own_org_id)
+    if vehicle_id:
+        _add_vehicle(incident_id, own_org_id, "Einsatz übernommen", vehicle_id)
+
+    data = _bearer_duty_state(client, raw_token)
+
+    assert data["incident_count"] == 1
+    assert data["incident"]["id"] == incident_id
+    assert data["incident"]["is_exercise"] is is_exercise
+    assert data["incident_active"] is with_vehicle
+    assert data["should_track"] is with_vehicle
+
+
+@pytest.mark.parametrize("with_vehicle", [False, True], ids=["unbound", "vehicle_bound"])
+@pytest.mark.parametrize("is_exercise", [False, True], ids=["normal", "exercise"])
+def test_bearer_duty_state_liefert_aktive_lage_ohne_fahrzeugzuordnung(
+    client, setup_db, with_vehicle, is_exercise
+):
+    _, _, org_id, _, raw_token = _create_device(with_vehicle=with_vehicle)
+    lage_id = _create_lage(org_id, is_exercise=is_exercise)
+
+    data = _bearer_duty_state(client, raw_token)
+
+    assert data["lage_count"] == 1
+    assert data["lage"] == {
+        "id": lage_id,
+        "url": f"/lage/{lage_id}",
+        "name": "Live Lage",
+        "is_exercise": is_exercise,
+        "started_at": "2026-08-03T11:00:00Z",
+        "counts": {"neu": 0, "in_arbeit": 0, "erledigt": 0, "gesamt": 0},
+    }
+    assert data["my_lage_queue"] is None
+    assert data["incident_active"] is False
+
+
+def test_bearer_duty_state_liefert_uebungs_lagewarteschlange_fuer_zugeordnetes_fahrzeug(
+    client, setup_db
+):
+    _, _, org_id, vehicle_id, raw_token = _create_device(with_vehicle=True)
+    assert vehicle_id is not None
+    lage_id = _create_lage(org_id, is_exercise=True)
+    site_id = _assign_vehicle_to_lage(lage_id, org_id, vehicle_id)
+
+    data = _bearer_duty_state(client, raw_token)
+
+    assert data["incident_active"] is True
+    assert data["should_track"] is True
+    assert data["my_lage_queue"] == {
+        "lage_id": lage_id,
+        "lage_name": "Live Lage",
+        "lage_url": f"/lage/{lage_id}",
+        "is_exercise": True,
+        "current": {
+            "id": site_id,
+            "bezeichnung": "Abschnitt Nord",
+            "meldung": "Wasser im Keller",
+            "address": "Dorfplatz 1, Musterstadt",
+            "lat": None,
+            "lng": None,
+            "gmaps_url": None,
+            "priority": None,
+            "phase": "in_arbeit",
+        },
+        "upcoming": [],
+        "remaining_count": 0,
+    }
 
 
 def test_duty_state_lehnt_widerrufenen_bearer_ab(client, setup_db):
