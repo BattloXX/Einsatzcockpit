@@ -21,8 +21,9 @@ from app.services import ws_bus
 
 @pytest.fixture
 def fake_redis(monkeypatch):
+    import fakeredis
     import fakeredis.aioredis as far
-    server = far.FakeServer()
+    server = fakeredis.FakeServer()
 
     def _from_url(url, **kw):  # noqa: ARG001
         return far.FakeRedis(server=server, decode_responses=True)
