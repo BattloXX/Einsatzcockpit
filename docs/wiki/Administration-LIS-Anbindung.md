@@ -82,4 +82,4 @@ Für die Fehlersuche bei der Erstanbindung gibt es unter `/admin/lis` einen Butt
 
 ---
 
-**Verwandt:** [Einsatz starten](Anwender-Einsatz-starten) · [Stammdaten pflegen](Administration-Stammdaten-pflegen)
+**Verwandt:** [DIBOS-/Elvis-Anbindung](Administration-DIBOS-Elvis-Anbindung) · [Einsatz starten](Anwender-Einsatz-starten) · [Stammdaten pflegen](Administration-Stammdaten-pflegen)
