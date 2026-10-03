@@ -70,12 +70,10 @@
       {% endif %}
       {% endfor %}
       {% for p in vehicle.assigned_persons %}
-      {% if p.status == 'gefunden' %}
-      <div class="assigned-person" data-uid="{{ p.id }}" data-kind="person" title="Person">
+      <div class="assigned-person person-status-{{ p.status or 'gefunden' }}" data-uid="{{ p.id }}" data-kind="person" title="Person"{% if p.status in ('abtransportiert', 'verstorben') %} style="opacity:.65;"{% endif %}>
         <span style="font-size:.65rem;opacity:.65;">👤</span>
         <span>{{ p.name or p.person_group or 'Person' }}{% if p.location %} · {{ p.location }}{% endif %}</span>
       </div>
-      {% endif %}
       {% endfor %}
     </div>
   </div>
