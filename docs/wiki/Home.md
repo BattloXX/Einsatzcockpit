@@ -130,6 +130,7 @@ unter [Server-Voraussetzungen](Installation-Server-Voraussetzungen).
 | [Fahrtenbuch](Administration-Fahrtenbuch) | Fahrzeuge konfigurieren, Zwecke/Zielorte, Token/QR, Schadensmeldung, Fahrten-Verwaltung |
 | [MCP-Server](Administration-MCP-Server) | KI-Anwendungen aktivieren, OAuth, Proxy und Sicherheit konfigurieren |
 | [LIS/IPR-Anbindung](Administration-LIS-Anbindung) | Leitstellensystem konfigurieren, Einsatz-/Fahrzeugabgleich, Diagnose-Aufzeichnung |
+| [DIBOS-/Elvis-Anbindung](Administration-DIBOS-Elvis-Anbindung) | EventHub der Landeswarnzentrale: Einsätze anlegen/anreichern, Wachenstatus, Zu-/Absagen, Auto-Schließen, Diagnose, Protokoll-Referenz |
 | [SMS-Einsatzinfo & Empfang](Administration-SMS-Einsatzinfo) | Alarm-SMS-Verteiler, manueller Versand, Weiterleitungsregeln für eingehende SMS |
 | [Teams-Alarmierung](Administration-Teams-Alarmierung) | Webhook-Basis-Modus einrichten, optionale Bot-Erweiterung für Zusage/Absage |
 | [WordPress-Berichte](Administration-WordPress-Berichte) | Beim Einsatzabschluss automatisch einen Beitragsentwurf im Wehr-Blog anlegen, Alarmarten- und Fahrzeug-Zuordnung |
