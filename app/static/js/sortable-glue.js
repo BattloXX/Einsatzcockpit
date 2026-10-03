@@ -69,8 +69,29 @@
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: body.toString(),
       credentials: 'same-origin',
+    }).then(function (response) {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response;
     }).catch(function (err) {
       console.warn('[sortable-glue] postMove fehlgeschlagen:', err);
+      const reloadColumn = function (columnId) {
+        const zone = columnId != null && document.getElementById('zone-' + columnId);
+        if (!zone || !window.htmx) return;
+        htmx.ajax('GET', `/einsatz/${incidentId}/spalte/${columnId}/inhalt`, { target: zone, swap: 'innerHTML' });
+      };
+      const reloadVehicle = function (vehicleId) {
+        const el = vehicleId != null && document.getElementById('vehicle-card-' + vehicleId);
+        if (!el || !window.htmx) return;
+        htmx.ajax('GET', `/einsatz/${incidentId}/karte/vehicle/${vehicleId}`, { target: el, swap: 'outerHTML' });
+      };
+      reloadColumn(payload.column_id);
+      if (payload.source_column_id != null && payload.source_column_id !== payload.column_id) {
+        reloadColumn(payload.source_column_id);
+      }
+      reloadVehicle(payload.vehicle_id);
+      reloadVehicle(payload.source_vehicle_id);
+      const appEl = document.querySelector('[x-data="appState()"]');
+      if (appEl && window.Alpine) Alpine.$data(appEl).addToast('Verschieben fehlgeschlagen', 'warn');
     });
   }
 
@@ -132,6 +153,8 @@
           if (!vehicleId) return;
           if (kind === 'vehicle') return; // Fahrzeug auf Fahrzeug ergibt keinen Sinn
           const payload = { kind, uid, vehicle_id: vehicleId, position };
+          const sourceColumnId = evt.from.closest('[data-col-id]')?.dataset.colId;
+          if (sourceColumnId) payload.source_column_id = sourceColumnId;
           if (evt.from.classList.contains('sortable-zone--vehicle')) {
             payload.source_vehicle_id = evt.from.dataset.vehicleId;
           }
@@ -153,6 +176,8 @@
         // einer Spalten-Karte, die mit einer Einheit verbunden ist, bleibt die Verbindung
         // erhalten (Server löscht die vehicle_id dann nicht).
         const payload = { kind, uid, column_id: toColumnId, position, zone_order: zoneOrder };
+        const sourceColumnId = evt.from.closest('[data-col-id]')?.dataset.colId;
+        if (sourceColumnId) payload.source_column_id = sourceColumnId;
         if (evt.from.classList.contains('sortable-zone--vehicle')) {
           payload.detach_vehicle = '1';
           payload.source_vehicle_id = evt.from.dataset.vehicleId;

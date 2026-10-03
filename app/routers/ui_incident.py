@@ -73,6 +73,7 @@ from app.services.incident_service import (
     combined_verlauf,
     create_incident,
     delete_section_column,
+    heal_orphaned_persons,
     list_commander_candidates,
     list_el_candidates,
     list_section_leader_candidates,
@@ -81,6 +82,7 @@ from app.services.incident_service import (
     prepend_card,
     reopen_incident,
     reorder_columns,
+    resolve_person_vehicle,
     set_commander,
     set_message_status,
     set_task_status,
@@ -712,6 +714,8 @@ async def incident_board(incident_id: int, request: Request, db: Session = Depen
     user = getattr(request.state, "user", None)
     if not user:
         return RedirectResponse("/login", status_code=302)
+    if heal_orphaned_persons(db, incident_id):
+        db.commit()
     incident = _load_board_incident(incident_id, db)
     if not incident:
         raise HTTPException(404, "Einsatz nicht gefunden")
@@ -859,6 +863,8 @@ def board_card_fragment(
     entity = db.get(model, uid)
     if not entity or entity.incident_id != incident_id:
         return Response("Nicht gefunden", status_code=404)
+    if heal_orphaned_persons(db, incident_id):
+        db.commit()
     incident = _load_board_incident(incident_id, db)
     if not incident:
         return Response("Nicht gefunden", status_code=404)
@@ -896,6 +902,8 @@ def board_column_content_fragment(
     col = db.get(IncidentColumn, column_id)
     if not col or col.incident_id != incident_id:
         return Response("Nicht gefunden", status_code=404)
+    if heal_orphaned_persons(db, incident_id):
+        db.commit()
     incident = _load_board_incident(incident_id, db)
     if not incident:
         return Response("Nicht gefunden", status_code=404)
@@ -2318,6 +2326,8 @@ async def create_person(
         rescued_col = next((c for c in incident.columns if c.column_kind == "rescued"), None)
     if not rescued_col:
         return Response("Keine Personen-Spalte vorhanden", status_code=400)
+    if vehicle_id is not None and not resolve_person_vehicle(db, incident_id, vehicle_id):
+        return Response("Ungültige Einheit", status_code=400)
     person = RescuedPerson(
         incident_id=incident_id,
         gender=gender, person_group=person_group,
@@ -2911,7 +2921,12 @@ async def update_person_endpoint(
     person.age_range = age_range.strip() or None
     person.name = name.strip() or None
     person.location = location.strip() or None
-    person.vehicle_id = vehicle_id or None
+    if vehicle_id is not None:
+        vehicle = resolve_person_vehicle(db, incident_id, vehicle_id)
+        if vehicle is not None:
+            person.vehicle_id = vehicle.id
+    else:
+        person.vehicle_id = None
     from app.core.audit import write_incident_change
     write_incident_change(
         db, incident_id, "person.updated", "person", person.id,
@@ -3392,13 +3407,23 @@ async def move_card_endpoint(
         getattr(_entity_before, "unit_status", None) if kind == "vehicle" and _entry else None
     )
 
-    move_card(
+    moved = move_card(
         db, incident_id, kind, uid,
         column_id=column_id, position=position,
         vehicle_id=vehicle_id,
         user_id=request.state.user.id,
         detach_vehicle=detach_vehicle,
     )
+    if kind == "person" and not moved:
+        # The client has already changed its DOM.  Broadcast the affected zones
+        # before returning the conflict so all clients can resynchronise them.
+        await manager.broadcast(incident_id, {
+            "type": "card_moved", "kind": kind, "uid": uid,
+            "column_id": source_column_id, "source_column_id": source_column_id,
+            "dropped_column_id": column_id,
+            "vehicle_uid": None, "source_vehicle_uid": source_vehicle_uid,
+        })
+        return Response("Verschieben abgelehnt", status_code=409)
     if kind == "vehicle":
         moved_vehicle = db.get(IncidentVehicle, uid)
         if moved_vehicle:

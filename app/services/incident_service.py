@@ -36,6 +36,75 @@ from app.models.user import User
 logger = logging.getLogger("einsatzleiter.incident")
 
 
+def resolve_person_vehicle(
+    db: Session, incident_id: int, vehicle_id: int | None,
+) -> IncidentVehicle | None:
+    """Return a usable vehicle for a person in this incident only."""
+    if vehicle_id is None:
+        return None
+    vehicle = db.get(IncidentVehicle, vehicle_id)
+    if (
+        vehicle is None
+        or vehicle.incident_id != incident_id
+        or vehicle.removed_at is not None
+    ):
+        return None
+    return vehicle
+
+
+def heal_orphaned_persons(db: Session, incident_id: int) -> int:
+    """Return persons with stale vehicle links to a rescued board column.
+
+    The query is deliberately scoped to one incident: the tenant listener only
+    applies to SELECTs, so a bulk update would be unsafe here.
+    """
+    rescued_column = (
+        db.query(IncidentColumn)
+        .filter(
+            IncidentColumn.incident_id == incident_id,
+            IncidentColumn.column_kind == "rescued",
+        )
+        .order_by(IncidentColumn.display_order, IncidentColumn.id)
+        .first()
+    )
+    if not rescued_column:
+        return 0
+
+    healed = 0
+    for person in (
+        db.query(RescuedPerson)
+        .filter(RescuedPerson.incident_id == incident_id)
+        .all()
+    ):
+        vehicle_valid = (
+            person.vehicle_id is None
+            or resolve_person_vehicle(db, incident_id, person.vehicle_id) is not None
+        )
+        column_valid = (
+            person.column is not None
+            and person.column.incident_id == incident_id
+            and person.column.column_kind == "rescued"
+        )
+        # A valid vehicle link is already a visible board representation; its
+        # historical column is irrelevant until the person is detached again.
+        if vehicle_valid and person.vehicle_id is not None:
+            continue
+        if vehicle_valid and column_valid:
+            continue
+        before = {"column_id": person.column_id, "vehicle_id": person.vehicle_id}
+        person.vehicle_id = None
+        person.column_id = rescued_column.id
+        write_incident_change(
+            db, incident_id, "person.healed", "rescued_person", person.id,
+            before=before,
+            after={"column_id": person.column_id, "vehicle_id": None},
+        )
+        healed += 1
+    if healed:
+        db.flush()
+    return healed
+
+
 def _now() -> datetime:
     return datetime.now(UTC)
 
@@ -1185,7 +1254,7 @@ def move_card(
     vehicle_id: int | None = None,
     user_id: int | None = None,
     detach_vehicle: bool = False,
-) -> None:
+) -> bool:
     """Generic card move for DnD. kind: 'vehicle'|'task'|'message'.
 
     detach_vehicle: True nur, wenn die Karte aus einer Fahrzeug-Zone heraus auf eine Spalte
@@ -1195,11 +1264,11 @@ def move_card(
     """
     if kind == "vehicle":
         vehicle = db.get(IncidentVehicle, uid)
-        if not vehicle:
-            return
+        if not vehicle or vehicle.incident_id != incident_id:
+            return False
         col = db.get(IncidentColumn, column_id)
-        if not col:
-            return
+        if not col or col.incident_id != incident_id:
+            return False
         before = {"column_id": vehicle.column_id, "display_order": vehicle.display_order,
                   "unit_status": vehicle.unit_status}
         # Reorder other vehicles in target column
@@ -1228,17 +1297,18 @@ def move_card(
                                    "unit_status": vehicle.unit_status},
             user_id=user_id,
         )
+        return True
 
     elif kind == "task":
         task = db.get(Task, uid)
-        if not task:
-            return
+        if not task or task.incident_id != incident_id:
+            return False
         before = {"column_id": task.column_id, "vehicle_id": task.vehicle_id, "display_order": task.display_order}
         if vehicle_id:
             # Drop on a vehicle
             v = db.get(IncidentVehicle, vehicle_id)
             if not v:
-                return
+                return False
             task.vehicle_id = vehicle_id
             task.column_id = None
             db.flush()
@@ -1251,6 +1321,7 @@ def move_card(
                 from app.services.push_service import notify_vehicle
                 notify_vehicle(db, v.vehicle_master_id, "📋 Neuer Auftrag", task.title,
                                url=f"/einsatz/{incident_id}?open_task={uid}")
+            return True
         elif column_id:
             # Drop on a column — reorder siblings first
             siblings = (
@@ -1278,17 +1349,18 @@ def move_card(
                                       "vehicle_id": task.vehicle_id},
                 user_id=user_id,
             )
+            return True
 
     elif kind == "message":
         from app.models.incident import Message as Msg
         msg = db.get(Msg, uid)
-        if not msg:
-            return
+        if not msg or msg.incident_id != incident_id:
+            return False
         before = {"display_order": msg.display_order, "vehicle_id": msg.vehicle_id, "column_id": msg.column_id}
         if vehicle_id:
             v = db.get(IncidentVehicle, vehicle_id)
             if not v:
-                return
+                return False
             msg.vehicle_id = vehicle_id
             msg.column_id = None
             db.flush()
@@ -1301,6 +1373,7 @@ def move_card(
                 from app.services.push_service import notify_vehicle
                 notify_vehicle(db, v.vehicle_master_id, "📩 Neue Meldung", msg.title,
                                url=f"/einsatz/{incident_id}?open_msg={uid}")
+            return True
         elif column_id:
             # Drop on a column — reorder siblings first
             siblings = (
@@ -1328,28 +1401,30 @@ def move_card(
                 after={"column_id": column_id, "display_order": position, "vehicle_id": msg.vehicle_id},
                 user_id=user_id,
             )
+            return True
 
     elif kind == "person":
         from app.models.incident import RescuedPerson
         person = db.get(RescuedPerson, uid)
-        if not person:
-            return
+        if not person or person.incident_id != incident_id:
+            return False
         before = {"column_id": person.column_id, "vehicle_id": person.vehicle_id}
         if vehicle_id:
-            v = db.get(IncidentVehicle, vehicle_id)
+            v = resolve_person_vehicle(db, incident_id, vehicle_id)
             if not v:
-                return
-            person.vehicle_id = vehicle_id
+                return False
+            person.vehicle_id = v.id
             db.flush()
             write_incident_change(
                 db, incident_id, "person.assigned", "rescued_person", uid,
                 before=before, after={"vehicle_id": vehicle_id},
                 user_id=user_id,
             )
+            return True
         else:
             col = db.get(IncidentColumn, column_id) if column_id else None
             if not col or col.incident_id != incident_id or col.column_kind != "rescued":
-                return
+                return False
             person.vehicle_id = None
             person.column_id = col.id
             db.flush()
@@ -1358,6 +1433,8 @@ def move_card(
                 before=before, after={"column_id": col.id, "vehicle_id": None},
                 user_id=user_id,
             )
+            return True
+    return False
 
 
 def enrich_history(changes, db, incident_id: int) -> list[dict]:

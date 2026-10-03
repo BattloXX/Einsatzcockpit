@@ -66,8 +66,8 @@
       <select name="vehicle_id" class="form-select">
         <option value="">– keine –</option>
         {% for v in incident.vehicles %}
-        {% if v.removed_at is none %}
-        <option value="{{ v.id }}" {% if person.vehicle_id == v.id %}selected{% endif %}>{{ v.vehicle_master.display_label }} ({{ v.vehicle_master.dept.name }})</option>
+        {% if v.removed_at is none or person.vehicle_id == v.id %}
+        <option value="{{ v.id }}" {% if person.vehicle_id == v.id %}selected{% endif %}>{{ v.vehicle_master.display_label }} ({{ v.vehicle_master.dept.name }}){% if v.removed_at is not none %} (entfernt){% endif %}</option>
         {% endif %}
         {% endfor %}
       </select>
