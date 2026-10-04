@@ -117,6 +117,7 @@ unter [Server-Voraussetzungen](Installation-Server-Voraussetzungen).
 | [Einstellungen](Administration-Einstellungen) | Org-Stammdaten, Logo, Auto-Schließen, Wetter-Opt-out |
 | [Organisationen verwalten](Administration-Organisations-verwalten) | Multi-Org: anlegen, Seed-Profile, Einladungen, System-Konsole |
 | [API-Keys verwalten](Administration-API-Keys-verwalten) | Anlegen, Rotieren, Sperren |
+| [Einsatz-Feed](Administration-Einsatz-Feed) | Einsätze für externe Systeme per Pull bereitstellen, Scopes und Sicherheit |
 | [Nachrichten-API](Administration-Nachrichten-API) | Externen SMS-/E-Mail-Versand, Scopes, Limits und Statusabfrage einrichten |
 | [Audit-Log und Zeitreise](Administration-Audit-Log-und-Zeitreise) | Historie nachvollziehen, Stand rekonstruieren |
 | [Systemstatus & Überwachung](Administration-Dienstueberwachung) | Dienstüberwachung, Benachrichtigungen (Mail/Teams/SMS), Uptime-Token und Health-Endpunkte für Uptime Kuma |
@@ -150,6 +151,7 @@ unter [Server-Voraussetzungen](Installation-Server-Voraussetzungen).
 | [Sicherheit](Entwickler-Sicherheit) | Authentifizierung, CSRF, Tenant-Isolation, Medien und Rate-Limiting |
 | [MCP-Erweiterung](Entwickler-MCP-Erweiterung) | OAuth-Server, Tool-Registry, Live-Kontext und Testmuster |
 | [Datenmodell](Entwickler-Datenmodell) | Tabellen, Beziehungen, Multi-Tenancy-Schema |
+| [Einsatz-Feed-Schema](Entwickler-Einsatz-Feed) | Pull-Endpunkte, Felder, ETag und `feed_rev` |
 | [REST-API](Entwickler-REST-API) | Endpoints, Payload-Validierung, Rate-Limiting, curl-Beispiele |
 | [WebSocket-Events](Entwickler-WebSocket-Events) | Event-Typen, Pub/Sub |
 | [Lokale Entwicklung](Entwickler-Lokale-Entwicklung) | uvicorn, Docker-Compose für DB, CSS-Build |

@@ -142,6 +142,8 @@ Das Wiki ist die kanonische Quelle für Installation, Bedienung, Administration,
 | [Architektur](docs/wiki/Entwickler-Architektur.md) | Schichten, Module, Datenflüsse und Multi-Tenancy |
 | [REST-API](docs/wiki/Entwickler-REST-API.md) | Endpunkte, Payloads und externe Alarmierung |
 | [MCP-Server](docs/wiki/Administration-MCP-Server.md) | KI-Anwendungen, OAuth, Aktivierung und Betrieb |
+| [Einsatz-Feed](docs/wiki/Administration-Einsatz-Feed.md) | Lesende Pull-Schnittstelle für externe Systeme |
+| [Einsatz-Feed-Schema](docs/wiki/Entwickler-Einsatz-Feed.md) | Endpunkte, Felder, ETag und Änderungserkennung |
 | [MCP-Erweiterung](docs/wiki/Entwickler-MCP-Erweiterung.md) | Tools, Live-Rechte und Testmuster |
 | [Backup & Disaster-Recovery](docs/wiki/Betrieb-Backup-und-Disaster-Recovery.md) | Sicherungen, Restore-Probe, RPO und RTO |
 | [Fehlerbehebung](docs/wiki/Installation-Troubleshooting.md) | Häufige Installations- und Betriebsfehler |
