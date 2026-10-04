@@ -2,7 +2,7 @@
   <option value="">– keine –</option>
   {% for v in incident.vehicles %}
   {% if v.removed_at is none %}
-  <option value="{{ v.id }}">{{ v.vehicle_master.display_label }}</option>
+  <option value="{{ v.id }}">{{ v.master.display_label }}</option>
   {% endif %}
   {% endfor %}
 </select>
@@ -10,7 +10,7 @@
   <option value="">– keine –</option>
   {% for v in incident.vehicles %}
   {% if v.removed_at is none %}
-  <option value="{{ v.id }}">{{ v.vehicle_master.display_label }}</option>
+  <option value="{{ v.id }}">{{ v.master.display_label }}</option>
   {% endif %}
   {% endfor %}
 </select>
@@ -18,7 +18,7 @@
   <option value="">– keine –</option>
   {% for v in incident.vehicles %}
   {% if v.removed_at is none %}
-  <option value="{{ v.id }}">{{ v.vehicle_master.display_label }} ({{ v.vehicle_master.dept.name }})</option>
+  <option value="{{ v.id }}">{{ v.master.display_label }} ({{ v.master.dept.name }})</option>
   {% endif %}
   {% endfor %}
 </select>

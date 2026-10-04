@@ -2,7 +2,7 @@
   <div>
     <h3 class="modal__title">Auftrag bearbeiten</h3>
     <p class="modal__subtitle">
-      Spalte: {% if task.vehicle %}{{ task.vehicle.vehicle_master.display_label }}{% elif task.column %}{{ task.column.title }}{% else %}–{% endif %}
+      Spalte: {% if task.vehicle %}{{ task.vehicle.master.display_label }}{% elif task.column %}{{ task.column.title }}{% else %}–{% endif %}
       · angelegt/geändert: {{ task.created_at|local_datetime }}
     </p>
   </div>
@@ -72,7 +72,7 @@
           {% for v in incident.vehicles %}
           {% if v.removed_at is none %}
           <option value="{{ v.id }}" {% if task.vehicle_id == v.id %}selected{% endif %}>
-            {{ v.vehicle_master.display_label }} – {{ v.vehicle_master.dept.name }}
+            {{ v.master.display_label }} – {{ v.master.dept.name }}
           </option>
           {% endif %}
           {% endfor %}

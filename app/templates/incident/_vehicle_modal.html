@@ -1,11 +1,11 @@
-<div class="modal__header" style="border-left: 6px solid {{ vehicle.vehicle_master.dept.color }};">
+<div class="modal__header" style="border-left: 6px solid {{ vehicle.master.dept.color }};">
   <div>
     <h3 class="modal__title">
-      {{ vehicle.vehicle_master.display_label }}
-      {% if vehicle.vehicle_master.is_external %}<span style="font-size:.6rem;padding:1px 5px;border-radius:3px;background:rgba(251,191,36,.2);color:#fbbf24;border:1px solid rgba(251,191,36,.3);margin-left:5px;vertical-align:middle;">FREMD</span>{% endif %}
-      – {{ vehicle.vehicle_master.org_display_name }}
+      {{ vehicle.master.display_label }}
+      {% if vehicle.master.is_external %}<span style="font-size:.6rem;padding:1px 5px;border-radius:3px;background:rgba(251,191,36,.2);color:#fbbf24;border:1px solid rgba(251,191,36,.3);margin-left:5px;vertical-align:middle;">FREMD</span>{% endif %}
+      – {{ vehicle.master.org_display_name }}
     </h3>
-    <p class="modal__subtitle">Standort: {{ vehicle.column.title }} · {{ vehicle.vehicle_master.type }}</p>
+    <p class="modal__subtitle">Standort: {{ vehicle.column.title }} · {{ vehicle.master.type }}</p>
   </div>
   <button aria-label="Schließen" type="button" data-ec-action="close-dialog" data-ec-dialog="cardDetailModal" class="modal__close">×</button>
 </div>
@@ -16,9 +16,9 @@
   <div class="detail-section">
     <div class="detail-kv">
       <span class="detail-kv__label">Einheit</span>
-      <span class="detail-kv__value">{{ vehicle.vehicle_master.display_label }} · {{ vehicle.vehicle_master.org_display_name }}</span>
+      <span class="detail-kv__value">{{ vehicle.master.display_label }} · {{ vehicle.master.org_display_name }}</span>
     </div>
-    {% if vehicle.vehicle_master.is_external %}
+    {% if vehicle.master.is_external %}
     <div class="detail-kv">
       <span class="detail-kv__label">Typ</span>
       <span class="detail-kv__value" style="color:#fbbf24;">Fremdorganisation</span>
@@ -26,11 +26,11 @@
     {% endif %}
     <div class="detail-kv">
       <span class="detail-kv__label">Typ</span>
-      <span class="detail-kv__value">{{ vehicle.vehicle_master.type }}</span>
+      <span class="detail-kv__value">{{ vehicle.master.type }}</span>
     </div>
     <div class="detail-kv">
       <span class="detail-kv__label">BOS</span>
-      <span class="detail-kv__value">{{ vehicle.vehicle_master.effective_bos }}</span>
+      <span class="detail-kv__value">{{ vehicle.master.effective_bos }}</span>
     </div>
     <div class="detail-kv">
       <span class="detail-kv__label">Abschnitt</span>

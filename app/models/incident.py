@@ -287,6 +287,37 @@ class IncidentVehicle(Base):
     )
 
     @property
+    def master(self) -> VehicleMaster | None:
+        """Fahrzeugstamm fuer die Anzeige, auch bei Fahrzeugen einer Partner-Org.
+
+        Der Tenant-Filter laedt VehicleMaster nur fuer die eigene Org, daher ist
+        ``vehicle_master`` bei Partner-/Fremdfahrzeugen None. Hier wird der Stamm
+        nur zur Anzeige ohne Tenant-Filter nachgeladen (Zugriff auf den Einsatz
+        wird an anderer Stelle geprueft).
+        """
+        if self.vehicle_master is not None:
+            return self.vehicle_master
+        cached = self.__dict__.get("_master_fremd")
+        if cached is not None:
+            return cached
+        from sqlalchemy.orm import joinedload, object_session
+
+        session = object_session(self)
+        if session is None or self.vehicle_master_id is None:
+            return None
+        from app.models.master import VehicleMaster as _VehicleMaster
+
+        master = (
+            session.query(_VehicleMaster)
+            .options(joinedload(_VehicleMaster.dept))
+            .filter(_VehicleMaster.id == self.vehicle_master_id)
+            .execution_options(include_all_tenants=True)
+            .first()
+        )
+        self.__dict__["_master_fremd"] = master
+        return master
+
+    @property
     def open_task_count(self) -> int:
         return sum(1 for t in self.assigned_tasks if not t.is_done and not t.is_cancelled)
 

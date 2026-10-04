@@ -1,6 +1,6 @@
 <div class="card card--vehicle" id="vehicle-card-{{ vehicle.id }}"{% if oob %} hx-swap-oob="true"{% endif %}
      data-uid="{{ vehicle.id }}" data-kind="vehicle"
-     style="--org-color: {{ vehicle.vehicle_master.dept.color }}; cursor: pointer;"
+     style="--org-color: {{ vehicle.master.dept.color }}; cursor: pointer;"
      hx-get="/einsatz/{{ incident.id }}/fahrzeug/{{ vehicle.id }}/detail"
      hx-target="#cardDetailBody"
      hx-swap="innerHTML"
@@ -8,15 +8,15 @@
      hx-on::after-swap="document.getElementById('cardDetailModal').showModal()">
   <div class="card__body">
     <div class="card__title card__title--vehicle">
-      {% if vehicle.vehicle_master.taktisches_zeichen %}
-      <img class="card__vehicle-icon" src="/static/tz/symbole/{{ vehicle.vehicle_master.taktisches_zeichen }}.svg" alt="" title="{{ vehicle.vehicle_master.type }}">
+      {% if vehicle.master.taktisches_zeichen %}
+      <img class="card__vehicle-icon" src="/static/tz/symbole/{{ vehicle.master.taktisches_zeichen }}.svg" alt="" title="{{ vehicle.master.type }}">
       {% else %}
-      <span class="card__vehicle-icon card__vehicle-icon--dot" title="{{ vehicle.vehicle_master.type }}"></span>
+      <span class="card__vehicle-icon card__vehicle-icon--dot" title="{{ vehicle.master.type }}"></span>
       {% endif %}
-      <span>{{ vehicle.vehicle_master.display_label }}</span>
-      {% if vehicle.vehicle_master.is_external %}<span style="font-size:.58rem;padding:1px 4px;border-radius:3px;background:rgba(251,191,36,.2);color:#fbbf24;border:1px solid rgba(251,191,36,.3);margin-left:3px;vertical-align:middle;">FREMD</span>{% endif %}
-      <span class="card__org">{{ vehicle.vehicle_master.org_display_name }}</span>
-      {% set bos = vehicle.vehicle_master.effective_bos %}
+      <span>{{ vehicle.master.display_label }}</span>
+      {% if vehicle.master.is_external %}<span style="font-size:.58rem;padding:1px 4px;border-radius:3px;background:rgba(251,191,36,.2);color:#fbbf24;border:1px solid rgba(251,191,36,.3);margin-left:3px;vertical-align:middle;">FREMD</span>{% endif %}
+      <span class="card__org">{{ vehicle.master.org_display_name }}</span>
+      {% set bos = vehicle.master.effective_bos %}
       {% if bos and bos != 'Feuerwehr' %}
       <span class="badge" style="font-size:.65rem; padding:1px 5px; border-radius:3px; background:rgba(255,255,255,.12); margin-left:4px;">{{ bos }}</span>
       {% endif %}
