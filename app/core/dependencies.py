@@ -6,10 +6,11 @@ TenantScoped-Listener automatisch filtert.
 """
 from __future__ import annotations
 
-from datetime import UTC, datetime
+import ipaddress
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
-from fastapi import Depends, Header, HTTPException
+from fastapi import Depends, Header, HTTPException, Request
 from sqlalchemy.orm import Session
 from starlette.requests import HTTPConnection
 
@@ -20,15 +21,21 @@ from app.db import get_db
 from app.models.user import ApiKey
 
 
+def _authenticated_api_key(x_api_key: str, db: Session) -> ApiKey:
+    """Lädt einen aktiven API-Key ohne Seiteneffekt für spezialisierte Dependencies."""
+    key_hash = hash_api_key(x_api_key)
+    api_key = db.query(ApiKey).filter(ApiKey.key_hash == key_hash).first()
+    if not api_key or not api_key.is_active:
+        raise HTTPException(status_code=401, detail="Ungültiger oder gesperrter API-Key")
+    return api_key
+
+
 def get_api_key(
     x_api_key: str = Header(..., alias="X-API-Key"),
     db: Session = Depends(get_db),
 ) -> ApiKey:
     """Authentifiziert einen aktiven API-Key, ohne bestehende Routen einzuschränken."""
-    key_hash = hash_api_key(x_api_key)
-    api_key = db.query(ApiKey).filter(ApiKey.key_hash == key_hash).first()
-    if not api_key or not api_key.is_active:
-        raise HTTPException(status_code=401, detail="Ungültiger oder gesperrter API-Key")
+    api_key = _authenticated_api_key(x_api_key, db)
     api_key.last_used_at = datetime.now(UTC)
     return api_key
 
@@ -42,6 +49,59 @@ def require_scope(*scopes: str):
         if not any(api_key.has_scope(scope) for scope in scopes):
             raise HTTPException(status_code=403, detail="API-Key hat nicht den nötigen Scope")
         set_tenant_context(db, api_key.org_id)
+        return api_key
+
+    return dependency
+
+
+def _touch_feed_api_key(db: Session, api_key: ApiKey) -> None:
+    """Speichert den letzten Feed-Zugriff höchstens einmal pro Minute."""
+    now = datetime.now(UTC)
+    last_used_at = api_key.last_used_at
+    if last_used_at is not None:
+        if last_used_at.tzinfo is None:
+            last_used_at = last_used_at.replace(tzinfo=UTC)
+        if now - last_used_at < timedelta(seconds=60):
+            return
+    api_key.last_used_at = now
+    db.commit()
+
+
+def require_feed_scope(*scopes: str):
+    """Prüft Feed-Scopes, optionale CIDR-Allowlist und setzt den Tenant-Kontext."""
+    def dependency(
+        request: Request,
+        x_api_key: str = Header(..., alias="X-API-Key"),
+        db: Session = Depends(get_db),
+    ) -> ApiKey:
+        api_key = _authenticated_api_key(x_api_key, db)
+        if not any(api_key.has_scope(scope) for scope in scopes):
+            raise HTTPException(status_code=403, detail="API-Key hat nicht den nötigen Feed-Scope")
+
+        if api_key.ip_allowlist:
+            client_ip = request.client.host if request.client else ""
+            try:
+                erlaubt = any(
+                    ipaddress.ip_address(client_ip) in ipaddress.ip_network(cidr, strict=False)
+                    for cidr in api_key.ip_allowlist.split(",")
+                    if cidr.strip()
+                )
+            except ValueError:
+                erlaubt = False
+            if not erlaubt:
+                write_audit(
+                    db,
+                    "api.feed.denied",
+                    org_id=api_key.org_id,
+                    api_key_id=api_key.id,
+                    payload={"reason": "ip_allowlist", "client_ip": client_ip},
+                    ip=client_ip or None,
+                )
+                db.commit()
+                raise HTTPException(status_code=403, detail="IP-Adresse ist für diesen API-Key nicht freigegeben")
+
+        set_tenant_context(db, api_key.org_id)
+        _touch_feed_api_key(db, api_key)
         return api_key
 
     return dependency

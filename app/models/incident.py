@@ -3,14 +3,14 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
 
 if TYPE_CHECKING:
     from app.models.master import Member, VehicleMaster
-    from app.models.objekt import ObjektGefahr
+    from app.models.objekt import ObjektEinsatz, ObjektGefahr
     from app.models.user import User
 
 # Fixed column codes (always present)
@@ -55,6 +55,7 @@ class Incident(Base):
         UniqueConstraint(
             "primary_org_id", "lis_operation_number", name="uq_incident_org_lis_operation_number"
         ),
+        Index("ix_incident_primary_org_status_started_at", "primary_org_id", "status", "started_at"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
@@ -62,6 +63,7 @@ class Incident(Base):
     nummer: Mapped[int | None] = mapped_column(Integer, nullable=True)
     alarm_type_code: Mapped[str] = mapped_column(String(10), nullable=False, default="T1")
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+    feed_rev: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
     started_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     closed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     taken_over_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -169,6 +171,7 @@ class Incident(Base):
     collaborating_orgs: Mapped[list[IncidentOrg]] = relationship(
         back_populates="incident", cascade="all, delete-orphan"
     )
+    objekt_links: Mapped[list[ObjektEinsatz]] = relationship("ObjektEinsatz")
     comm_log: Mapped[list[IncidentCommLog]] = relationship(
         back_populates="incident", order_by="IncidentCommLog.ts.desc()", cascade="all, delete-orphan"
     )

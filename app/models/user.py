@@ -103,6 +103,7 @@ class ApiKey(Base):
         String(200), nullable=False, default="einsatz:write,mailing:import",
         server_default="einsatz:write,mailing:import",
     )
+    ip_allowlist: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     def has_scope(self, name: str) -> bool:
         return name in {scope.strip() for scope in self.scopes.split(",") if scope.strip()}
@@ -111,7 +112,10 @@ class ApiKey(Base):
     def is_active(self) -> bool:
         if self.revoked_at:
             return False
-        if self.expires_at and self.expires_at < datetime.now(UTC):
+        expires_at = self.expires_at
+        if expires_at and expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=UTC)
+        if expires_at and expires_at < datetime.now(UTC):
             return False
         return True
 
