@@ -55,6 +55,38 @@ def _parse_limit(value: str) -> int:
     return limit
 
 
+def _parse_include(value: str | None, api_key: ApiKey) -> frozenset[str]:
+    includes = frozenset(item.strip() for item in (value or "").split(",") if item.strip())
+    allowed = {"kraefte", "wachen", "board", "objekt"}
+    unknown = sorted(includes - allowed)
+    if unknown:
+        raise HTTPException(status_code=422, detail=f"Unbekannter include-Wert: {unknown[0]}")
+    required_scopes = {
+        "kraefte": "einsatz:read:kraefte", "wachen": "einsatz:read:kraefte",
+        "board": "einsatz:read:board",
+    }
+    for include in sorted(includes):
+        scope = required_scopes.get(include)
+        if scope is not None and not api_key.has_scope(scope):
+            raise HTTPException(status_code=403, detail=f"Fehlender Scope: {scope}")
+    return includes
+
+
+def _include_options(include: frozenset[str]):
+    options = [
+        selectinload(Incident.vehicles),
+        selectinload(Incident.objekt_links).selectinload(ObjektEinsatz.objekt),
+    ]
+    if "wachen" in include:
+        options.append(selectinload(Incident.wache_status_entries))
+    if "board" in include:
+        options.extend([
+            selectinload(Incident.columns), selectinload(Incident.tasks),
+            selectinload(Incident.messages),
+        ])
+    return options
+
+
 def _filtered_incidents(
     db: Session, api_key: ApiKey, *, status: str, since: datetime | None,
     include_exercises: bool,
@@ -70,7 +102,8 @@ def _filtered_incidents(
 
 
 def _etag(rows, *, route: str, status: str, since: datetime | None, limit: int | None,
-          include_exercises: bool, scopes: str, incident_id: int | None = None) -> str:
+          include_exercises: bool, scopes: str, include: frozenset[str] = frozenset(),
+          incident_id: int | None = None) -> str:
     source = {
         "schema_version": 1,
         "route": route,
@@ -80,6 +113,7 @@ def _etag(rows, *, route: str, status: str, since: datetime | None, limit: int |
         "limit": limit,
         "include_exercises": include_exercises,
         "scopes": sorted(scope for scope in scopes.split(",") if scope),
+        "include": sorted(include),
         "incidents": [(row.id, row.feed_rev, row.status) for row in rows],
     }
     return sha256(json.dumps(source, separators=(",", ":"), sort_keys=True).encode()).hexdigest()[:32]
@@ -107,6 +141,7 @@ def list_einsaetze(
     status: str = Query("active"),
     since: str | None = Query(None),
     limit: str = Query("50"),
+    include: str | None = Query(None),
     include_exercises: bool = Query(False),
     db: Session = Depends(get_db),
     api_key: ApiKey = Depends(require_feed_scope("einsatz:read")),
@@ -115,6 +150,7 @@ def list_einsaetze(
         raise HTTPException(status_code=422, detail="status muss active, closed oder all sein")
     parsed_since = _parse_since(since)
     parsed_limit = _parse_limit(limit)
+    parsed_include = _parse_include(include, api_key)
     query = _filtered_incidents(
         db, api_key, status=status, since=parsed_since, include_exercises=include_exercises,
     )
@@ -122,18 +158,17 @@ def list_einsaetze(
         Incident.started_at.desc(), Incident.id.desc()
     ).limit(parsed_limit).all()
     etag = _etag(rev_rows, route="list", status=status, since=parsed_since, limit=parsed_limit,
-                 include_exercises=include_exercises, scopes=api_key.scopes)
+                 include_exercises=include_exercises, scopes=api_key.scopes, include=parsed_include)
     if _not_modified(request, etag):
         return _feed_response(request, etag, None)
-    incidents = query.options(
-        selectinload(Incident.vehicles),
-        selectinload(Incident.objekt_links).selectinload(ObjektEinsatz.objekt),
-    ).order_by(Incident.started_at.desc(), Incident.id.desc()).limit(parsed_limit).all()
+    incidents = query.options(*_include_options(parsed_include)).order_by(
+        Incident.started_at.desc(), Incident.id.desc()
+    ).limit(parsed_limit).all()
     org = db.get(FireDept, api_key.org_id)
     assert org is not None
     payload = FeedEinsatzListe(
         server_time=_utc_iso(datetime.now(UTC)),
-        einsaetze=[build_feed_einsatz_basis(incident, org) for incident in incidents],
+        einsaetze=[build_feed_einsatz_basis(incident, org, parsed_include) for incident in incidents],
     ).model_dump()
     return _feed_response(request, etag, payload)
 
@@ -144,9 +179,11 @@ def get_einsatz(
     incident_id: int,
     request: Request,
     include_exercises: bool = Query(False),
+    include: str | None = Query(None),
     db: Session = Depends(get_db),
     api_key: ApiKey = Depends(require_feed_scope("einsatz:read")),
 ):
+    parsed_include = _parse_include(include, api_key)
     query = _filtered_incidents(
         db, api_key, status="all", since=None, include_exercises=include_exercises,
     ).filter(Incident.id == incident_id)
@@ -154,16 +191,14 @@ def get_einsatz(
     if not rev_rows:
         raise HTTPException(status_code=404, detail="Einsatz nicht gefunden")
     etag = _etag(rev_rows, route="detail", status="all", since=None, limit=None,
-                 include_exercises=include_exercises, scopes=api_key.scopes, incident_id=incident_id)
+                 include_exercises=include_exercises, scopes=api_key.scopes, include=parsed_include,
+                 incident_id=incident_id)
     if _not_modified(request, etag):
         return _feed_response(request, etag, None)
-    incident = query.options(
-        selectinload(Incident.vehicles),
-        selectinload(Incident.objekt_links).selectinload(ObjektEinsatz.objekt),
-    ).one()
+    incident = query.options(*_include_options(parsed_include)).one()
     org = db.get(FireDept, api_key.org_id)
     assert org is not None
-    return _feed_response(request, etag, build_feed_einsatz_basis(incident, org).model_dump())
+    return _feed_response(request, etag, build_feed_einsatz_basis(incident, org, parsed_include).model_dump())
 
 
 @router.get("/head")

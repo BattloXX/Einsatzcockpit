@@ -4,10 +4,11 @@ from __future__ import annotations
 from sqlalchemy import event, inspect, update
 from sqlalchemy.orm import Session
 
-from app.models.incident import Incident, IncidentVehicle, IncidentWacheStatus, Message, Task
+from app.models.incident import Incident, IncidentColumn, IncidentVehicle, IncidentWacheStatus, Message, Task
 from app.models.objekt import ObjektEinsatz
 
-_CHILD_TYPES = (IncidentVehicle, IncidentWacheStatus, Task, Message, ObjektEinsatz)
+# VehicleMaster-/Stammdaten-Umbenennungen bumpen bewusst nicht; sie haben keine incident_id.
+_CHILD_TYPES = (IncidentColumn, IncidentVehicle, IncidentWacheStatus, Task, Message, ObjektEinsatz)
 
 
 def _incident_ids(session: Session) -> set[int]:

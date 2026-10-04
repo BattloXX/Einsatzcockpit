@@ -8,7 +8,7 @@ import pytest
 from app.core.security import generate_api_key, hash_api_key
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
-from app.models.incident import Incident, IncidentOrg, IncidentWacheStatus, Message, Task
+from app.models.incident import Incident, IncidentColumn, IncidentOrg, IncidentWacheStatus, Message, Task
 from app.models.master import FireDept
 from app.models.objekt import ObjektEinsatz
 from app.models.user import ApiKey
@@ -81,10 +81,12 @@ def _home_org_id() -> int:
 
 def test_feed_list_detail_head_and_etag(client):
     org_id = _home_org_id()
-    incident_id = _incident(org_id, started_at=datetime(2099, 10, 4, 9, 0, tzinfo=UTC))
+    started_at = datetime.now(UTC) - timedelta(minutes=5)
+    incident_id = _incident(org_id, started_at=started_at)
     headers = {"X-API-Key": _key(org_id)}
 
-    listing = client.get("/api/v1/feed/einsaetze?since=2099-10-04T10:00:00%2B01:00", headers=headers)
+    since = (started_at - timedelta(minutes=1)).isoformat().replace("+00:00", "Z")
+    listing = client.get(f"/api/v1/feed/einsaetze?since={since}", headers=headers)
     assert listing.status_code == 200
     assert listing.headers["Cache-Control"] == "private, no-cache"
     assert "X-API-Key" in listing.headers["Vary"]
@@ -98,7 +100,7 @@ def test_feed_list_detail_head_and_etag(client):
     assert body["server_time"].endswith("Z")
 
     etag = listing.headers["ETag"]
-    path = "/api/v1/feed/einsaetze?since=2099-10-04T10:00:00%2B01:00"
+    path = f"/api/v1/feed/einsaetze?since={since}"
     conditional = client.get(path, headers={**headers, "If-None-Match": f'W/{etag}, "other"'})
     assert conditional.headers["ETag"] == etag
     assert conditional.status_code == 304
@@ -130,11 +132,11 @@ def test_feed_scope_exercises_and_cross_org_visibility(client):
         db.close()
     incident_a = _incident(org_a)
     exercise = _incident(org_a, exercise=True)
-    key_b = {"X-API-Key": _key(org_b_id)}
+    key_b = {"X-API-Key": _key(org_b_id, "einsatz:read,einsatz:read:kraefte")}
     key_a = {"X-API-Key": _key(org_a)}
     assert client.get("/api/v1/feed/einsaetze", headers={"X-API-Key": _key(org_a, "")}).status_code == 403
-    assert client.get(f"/api/v1/feed/einsaetze/{incident_a}", headers=key_b).status_code == 404
-    visible_b = client.get("/api/v1/feed/einsaetze", headers=key_b).json()["einsaetze"]
+    assert client.get(f"/api/v1/feed/einsaetze/{incident_a}?include=kraefte", headers=key_b).status_code == 404
+    visible_b = client.get("/api/v1/feed/einsaetze?include=kraefte", headers=key_b).json()["einsaetze"]
     default_a = client.get("/api/v1/feed/einsaetze", headers=key_a).json()["einsaetze"]
     with_exercises = client.get(
         "/api/v1/feed/einsaetze?include_exercises=true", headers=key_a,
@@ -153,7 +155,7 @@ def test_feed_scope_exercises_and_cross_org_visibility(client):
     assert client.get(f"/api/v1/feed/einsaetze/{incident_a}", headers=key_b).status_code == 200
 
 
-@pytest.mark.parametrize("kind", ["incident", "wache", "task", "message"])
+@pytest.mark.parametrize("kind", ["incident", "column", "wache", "task", "message"])
 def test_feed_revision_hook_bumps_once_per_flush(kind):
     org_id = _home_org_id()
     incident_id = _incident(org_id)
@@ -165,6 +167,8 @@ def test_feed_revision_hook_bumps_once_per_flush(kind):
         initial = incident.feed_rev
         if kind == "incident":
             incident.address_city = "Anderer Ort"
+        elif kind == "column":
+            db.add(IncidentColumn(incident_id=incident_id, code="feed", title="Feed"))
         elif kind == "wache":
             db.add(IncidentWacheStatus(incident_id=incident_id, wache_unid=f"w-{incident_id}", status="alarmiert"))
         elif kind == "task":
