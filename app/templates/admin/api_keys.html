@@ -15,11 +15,22 @@
         <label><input type="checkbox" name="scopes" value="sms:send"> SMS senden</label>
         <label><input type="checkbox" name="scopes" value="mail:send"> E-Mail senden</label>
       </fieldset>
+      <fieldset style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;border:0;padding:0;margin:0;">
+        <legend>Einsatz-Feed lesen</legend>
+        <label title="Stichwort, Status, Zeiten, Adresse, Koordinaten, bestätigtes Objekt und Anzahl Kräfte."><input type="checkbox" name="scopes" value="einsatz:read"> Basisdaten</label>
+        <label title="Fahrzeugkennungen, Fahrzeugstatus, Wachenstatus und Zeiten pro Einheit."><input type="checkbox" name="scopes" value="einsatz:read:kraefte"> Kräfte</label>
+        <label title="Nur Titel, Ampel/Status und Zeiten von Aufgaben und Meldungen."><input type="checkbox" name="scopes" value="einsatz:read:board"> Board</label>
+      </fieldset>
+      <input type="text" name="ip_allowlist" placeholder="IP-Allowlist (CIDR, kommagetrennt)" class="form-input">
       <button type="submit" class="btn btn--primary">+ API-Key erstellen</button>
     </form>
     <a href="/api/docs" target="_blank" class="btn btn--ghost btn--sm">API-Dokumentation →</a>
   </div>
 </div>
+
+{% if error %}
+<div class="alert alert--error">{{ error }}</div>
+{% endif %}
 
 {% if new_key %}
 <div class="alert alert--success">
@@ -30,12 +41,13 @@
 {% endif %}
 
 <table class="table">
-  <thead><tr><th>Bezeichnung</th><th>Scopes</th><th>Erstellt</th><th>Zuletzt genutzt</th><th>Ablauf</th><th>Status</th><th></th></tr></thead>
+  <thead><tr><th>Bezeichnung</th><th>Scopes</th><th>IP-Allowlist</th><th>Erstellt</th><th>Zuletzt genutzt</th><th>Ablauf</th><th>Status</th><th></th></tr></thead>
   <tbody>
     {% for k in keys %}
     <tr>
       <td>{{ k.label }}</td>
       <td><code>{{ k.scopes }}</code></td>
+      <td><code>{{ k.ip_allowlist or '–' }}</code></td>
       <td>{{ (k.created_at|local).strftime('%d.%m.%Y') }}</td>
       <td>{{ k.last_used_at|local_datetime if k.last_used_at else '–' }}</td>
       <td>{{ (k.expires_at|local).strftime('%d.%m.%Y') if k.expires_at else '∞' }}</td>

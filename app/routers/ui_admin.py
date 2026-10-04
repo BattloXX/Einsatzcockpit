@@ -1,4 +1,5 @@
 """Admin-UI: Stammdaten, User, Rollen, API-Keys."""
+import ipaddress
 import logging
 import re
 from datetime import UTC, datetime
@@ -316,24 +317,46 @@ async def api_keys(request: Request, db: Session = Depends(get_db),
 
 @router.post("/api-keys/neu")
 async def create_api_key(
-    request: Request, label: str = Form(...),
+    request: Request, label: str = Form(...), ip_allowlist: str = Form(""),
     db: Session = Depends(get_db), _=Depends(require_role("admin")),
 ):
     form = await request.form()
-    erlaubte_scopes = {"einsatz:write", "mailing:import", "sms:send", "mail:send"}
-    scopes = [scope for scope in form.getlist("scopes") if scope in erlaubte_scopes]
-    raw = generate_api_key()
+    erlaubte_scopes = {
+        "einsatz:write", "mailing:import", "sms:send", "mail:send",
+        "einsatz:read", "einsatz:read:kraefte", "einsatz:read:board",
+    }
+    angeforderte_scopes = form.getlist("scopes")
+    unbekannte_scopes = set(angeforderte_scopes) - erlaubte_scopes
     user = request.state.user
+    if unbekannte_scopes:
+        keys = _org_filter(db.query(ApiKey), user, ApiKey.org_id).order_by(ApiKey.created_at.desc()).all()
+        return templates.TemplateResponse(request, "admin/api_keys.html", {
+            "user": user, "keys": keys, "new_key": None,
+            "error": "Unbekannte API-Key-Berechtigung.",
+        }, status_code=400)
+    try:
+        netze = [ipaddress.ip_network(wert.strip(), strict=False) for wert in ip_allowlist.split(",") if wert.strip()]
+    except ValueError:
+        keys = _org_filter(db.query(ApiKey), user, ApiKey.org_id).order_by(ApiKey.created_at.desc()).all()
+        return templates.TemplateResponse(request, "admin/api_keys.html", {
+            "user": user, "keys": keys, "new_key": None,
+            "error": "IP-Allowlist enthält ein ungültiges CIDR-Netz.",
+        }, status_code=400)
+    scopes = [scope for scope in angeforderte_scopes if scope in erlaubte_scopes]
+    normalisierte_allowlist = ",".join(str(netz) for netz in netze) or None
+    raw = generate_api_key()
     key = ApiKey(
         key_hash=hash_api_key(raw),
         label=label,
         org_id=user.org_id,
         created_by_user_id=user.id,
         scopes=",".join(scopes),
+        ip_allowlist=normalisierte_allowlist,
     )
     db.add(key)
     write_audit(db, "admin.api_key.created", user_id=user.id,
-                payload={"label": label, "org_id": user.org_id, "scopes": scopes})
+                payload={"label": label, "org_id": user.org_id, "scopes": scopes,
+                         "ip_allowlist": normalisierte_allowlist})
     db.commit()
     keys = _org_filter(db.query(ApiKey), user, ApiKey.org_id).order_by(ApiKey.created_at.desc()).all()
     return templates.TemplateResponse(request, "admin/api_keys.html", {

@@ -189,6 +189,7 @@ class Settings(BaseSettings):
     MCP_LOGIN_RATELIMIT: str = "5/15minutes"  # POST /mcp/anmelden – IP-basiert
     API_ALARM_RATELIMIT: str = "60/minute"  # POST /api/v1/einsatz – Key-basiert
     API_MESSAGE_RATELIMIT: str = "20/minute"
+    FEED_RATELIMIT: str = "120/minute"  # Einsatz-Feed – Key-basiert
     API_MESSAGE_MAX_RECIPIENTS: int = 200
     API_SMS_SYNC_MAX_RECIPIENTS: int = 20
     API_SMS_DAILY_LIMIT: int = 500
