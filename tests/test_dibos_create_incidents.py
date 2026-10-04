@@ -10,6 +10,7 @@ zurückgesetzt, und primary_org_id+lis_operation_number ist inzwischen ein
 echter DB-Unique-Constraint (siehe models/incident.py) — dieselbe Begründung
 wie in test_incident_duplicate_guard.py.
 """
+import asyncio
 import uuid
 from datetime import UTC, datetime
 
@@ -196,6 +197,7 @@ async def test_geschlossenes_event_loest_wordpress_bericht_aus(org_id, monkeypat
         org_id, [_event("f-closed-report-004", closed="2026-07-26T11:00:00")],
         create_incidents=True,
     )
+    await asyncio.gather(*dibos_enrich._background_tasks)
 
     db = _session(org_id)
     try:
@@ -206,6 +208,63 @@ async def test_geschlossenes_event_loest_wordpress_bericht_aus(org_id, monkeypat
         assert calls == [incident.id]
     finally:
         db.close()
+
+
+def test_neuer_incident_wird_vor_kommentar_sync_committet_und_benachrichtigt(org_id, monkeypatch):
+    event = _event("f-order-005")
+    scheduled = []
+
+    def fake_schedule(coro, loop):
+        coro.close()
+        scheduled.append(True)
+
+    def check_comments(db, seen_org_id, incident, comments):
+        other = _session(org_id)
+        try:
+            visible = other.get(Incident, incident.id)
+            assert visible is not None
+            assert visible.lis_operation_number == "f-order-005"
+        finally:
+            other.close()
+        assert seen_org_id == org_id
+        assert scheduled == [True]
+        return False
+
+    monkeypatch.setattr(dibos_enrich.asyncio, "run_coroutine_threadsafe", fake_schedule)
+    monkeypatch.setattr(dibos_enrich, "_sync_dibos_comments", check_comments)
+
+    result = dibos_enrich.enrich_events_for_org(
+        org_id, [event], create_incidents=True, loop=object(),
+    )
+
+    assert result["created_ids"]
+
+
+@pytest.mark.asyncio
+async def test_enrich_and_broadcast_does_not_await_autoprint(monkeypatch):
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    def fake_enrich(*args, **kwargs):
+        return {
+            "changed_ids": [], "rsvp_changed_ids": [], "closed_ids": [],
+            "objekt_match_ids": [], "created_ids": [123], "ok": True,
+        }
+
+    async def blocking_autoprint(incident_id):
+        started.set()
+        await release.wait()
+
+    monkeypatch.setattr(dibos_enrich, "enrich_events_for_org", fake_enrich)
+    monkeypatch.setattr(
+        "app.services.print_dispatcher.autoprint_incident_background", blocking_autoprint,
+    )
+
+    assert await dibos_enrich.enrich_and_broadcast(org_id=1, raw_events=[]) is True
+    await started.wait()
+    assert any(not task.done() for task in dibos_enrich._background_tasks)
+    release.set()
+    await asyncio.gather(*dibos_enrich._background_tasks)
 
 
 def test_create_incidents_false_legt_nichts_an(org_id):

@@ -163,7 +163,7 @@ def test_einsaetze_page_loads_empty_when_no_dibos_data():
     dibos_*-Feldern an, was die "leer"-Erwartung hier sonst je nach Testreihenfolge
     brechen würde (dieselbe Klasse Cross-File-Kollision wie bei den Objekt-BMA-
     Tests, siehe test_dibos_enrich.py-Kommentar dort)."""
-    system_admin_id = _setup_system_admin("dibos_einsaetze_empty_user")
+    _setup_system_admin("dibos_einsaetze_empty_user")
 
     db = SessionLocal()
     set_tenant_context(db, None)
@@ -197,7 +197,6 @@ def test_einsaetze_page_lists_incident_with_dibos_fields():
     from datetime import UTC, datetime
 
     from app.core.tenant import set_tenant_context as _stc
-    from app.models.incident import Incident
     from app.models.lis import LisSyncedObject
     from app.services.incident_service import create_incident
 

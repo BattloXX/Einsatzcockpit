@@ -15,13 +15,9 @@ Anbindung, sobald diese abgeschaltet wird) legt DIBOS für ein Event ohne
 zuordenbaren Einsatz selbst einen neuen an — Matching über die Leitstellennummer
 (eventNumber), analog zu lis_sync.py::_get_or_link_incident(). Beide Opt-ins
 sind unabhängig voneinander aktivierbar. Läuft nur, wenn eine Org das explizit
-aktiviert hat — UNABHÄNGIG von einer laufenden Voll-Aufzeichnung
-(auto_trace_on_event): der leichte Erkennungs-Loop (dibos_loop.py::_check_org())
-ruft enrich_and_broadcast() direkt auf einem einfachen GetCurrentEvents-Poll
-auf, ohne Rohdaten aufzuzeichnen — spart Speicherlast, wenn nur die Anreicherung
-gewünscht ist. Läuft zusätzlich eine Voll-Aufzeichnung, übernimmt deren eigener
-Poll-Zyklus (dibos_capture.py::_capture_once()) die Anreicherung, damit
-GetCurrentEvents nicht doppelt abgefragt wird. Fahrzeug-Status
+aktiviert hat, und ausschließlich aus dem Poll-Loop (dibos_loop.py::_check_org())
+— auch während einer laufenden Voll-Aufzeichnung (auto_trace_on_event), die
+selbst rein lesend ist. Fahrzeug-Status
 (S4/S5) wird bewusst NICHT hier gespiegelt — das liefert für Orgs mit LIS/IPR-
 Anbindung bereits lis_sync._sync_vehicle_status() aus einer autoritativen
 Quelle; ein zweiter, DIBOS-basierter Schreiber auf dieselben Felder würde nur
@@ -627,6 +623,7 @@ def enrich_events_for_org(
     changed_ids: list[int] = []
     rsvp_changed_ids: list[int] = []
     created_ids: list[int] = []
+    ok = False
     closed_ids: list[int] = []
     objekt_match_ids: list[int] = []
     try:
@@ -645,6 +642,21 @@ def enrich_events_for_org(
             changed |= _enrich_address(incident, event.get("location") or {})
             changed |= _enrich_caller(incident, event.get("callers") or [])
             changed |= _enrich_metadata(incident, event)
+            if just_created and not event.get("closed"):
+                # Sofort committen + alarmieren: SMS/Teams/Push brauchen nur die
+                # Felder oben (Stichwort, Adresse, Meldung) und dürfen nicht auf
+                # Kommentar-Import (eine Query je Kommentar), Wachenstatus,
+                # BMA-Objekt-Matching und Zu-/Absagen warten. Diese laufen danach
+                # auf dem bereits committeten Einsatz weiter.
+                # ID vor dem Commit sichern: expire_on_commit invalidiert auch `incident`
+                # und `org`; spätere Zugriffe werden bei Bedarf automatisch nachgeladen.
+                incident_id = incident.id
+                db.commit()
+                created_ids.append(incident_id)
+                if loop is not None:
+                    asyncio.run_coroutine_threadsafe(
+                        _notify_new_dibos_incident(incident_id, org_id), loop
+                    )
             changed |= _sync_dibos_comments(db, org_id, incident, event.get("comments") or [])
             if raw_units is not None and isinstance(event_number, str):
                 changed |= _sync_wache_status(
@@ -659,34 +671,26 @@ def enrich_events_for_org(
             changed |= rsvp_changed
             if rsvp_changed:
                 rsvp_changed_ids.append(incident.id)
-            if just_created:
-                if event.get("closed"):
-                    # Das Event war bei Anlage bereits abgeschlossen (z.B. Poll unmittelbar
-                    # vor Ende eingetroffen) — zur Dokumentation anlegen, aber KEINE
-                    # Alarmierung mehr auslösen, direkt schließen (Muster: lis_sync.py).
-                    from app.services.incident_service import close_incident
-                    close_incident(db, incident, user_id=None, auto_closed_by_lis=True)
-                    db.flush()
-                    closed_ids.append(incident.id)
-                    logger.info(
-                        "Einsatz %s aus bereits beendetem DIBOS-Event %s angelegt (Org %s) — "
-                        "keine Alarmierung, direkt geschlossen",
-                        incident.id, event.get("eventNumber"), org_id,
-                    )
-                else:
-                    created_ids.append(incident.id)
+            if just_created and event.get("closed"):
+                # Das Event war bei Anlage bereits abgeschlossen (z.B. Poll unmittelbar
+                # vor Ende eingetroffen) — zur Dokumentation anlegen, aber KEINE
+                # Alarmierung mehr auslösen, direkt schließen (Muster: lis_sync.py).
+                from app.services.incident_service import close_incident
+                close_incident(db, incident, user_id=None, auto_closed_by_lis=True)
+                db.flush()
+                closed_ids.append(incident.id)
+                logger.info(
+                    "Einsatz %s aus bereits beendetem DIBOS-Event %s angelegt (Org %s) — "
+                    "keine Alarmierung, direkt geschlossen",
+                    incident.id, event.get("eventNumber"), org_id,
+                )
             if changed:
                 db.flush()
                 changed_ids.append(incident.id)
             if just_created and not event.get("closed"):
-                # ID vor dem Commit sichern: expire_on_commit invalidiert auch `incident`
-                # und `org`; spätere Zugriffe werden bei Bedarf automatisch nachgeladen.
-                incident_id = incident.id
+                # Folgearbeit (Kommentare, Objekt, Zu-/Absagen) des bereits oben
+                # committeten neuen Einsatzes sichern.
                 db.commit()
-                if loop is not None:
-                    asyncio.run_coroutine_threadsafe(
-                        _notify_new_dibos_incident(incident_id, org_id), loop
-                    )
         for event in parse_events(raw_public_events or []):
             if not event.get("closed"):
                 continue
@@ -704,6 +708,7 @@ def enrich_events_for_org(
                 incident.id, event.get("eventNumber"), org_id,
             )
         db.commit()
+        ok = True
     except Exception:
         db.rollback()
         logger.exception("DIBOS-Einsatzanreicherung für Org %s fehlgeschlagen", org_id)
@@ -715,6 +720,9 @@ def enrich_events_for_org(
         "created_ids": created_ids,
         "closed_ids": closed_ids,
         "objekt_match_ids": objekt_match_ids,
+        # False nach Rollback: der Poll-Loop merkt sich den Datenstand dann NICHT
+        # als verarbeitet und versucht es im nächsten Zyklus erneut.
+        "ok": ok,
     }
 
 
@@ -726,17 +734,18 @@ async def enrich_and_broadcast(
     raw_units: list[dict] | None = None,
     wache_unid: str | None = None,
     create_incidents: bool = False,
-) -> None:
+) -> bool:
     """Reichert an (in einem Thread, da synchron/DB-blockierend) und broadcastet
     pro tatsächlich geänderten Einsatz — Fehler dürfen den aufrufenden Poll nie
-    abbrechen. Gemeinsamer Einstiegspunkt für BEIDE DIBOS-Aufrufer:
-    dibos_capture.py::_capture_once() (während einer laufenden Voll-Aufzeichnung)
-    UND dibos_loop.py::_check_org() (leichter Poll, KEINE Voll-Aufzeichnung nötig
-    — reduziert die Speicherlast, da keine Rohdaten auf Platte geschrieben werden).
+    abbrechen. Einziger Aufrufer ist dibos_loop.py::_check_org() (der Diagnose-
+    Trace in dibos_capture.py schreibt bewusst nichts). Gibt True zurück, wenn der
+    Durchlauf ohne Rollback durchlief.
 
     create_incidents=True (Org-Opt-in) legt zusätzlich neue Einsätze an. Sobald
-    ein neuer Einsatz vollständig angereichert und committet ist, plant der
-    Worker-Thread seine Benachrichtigung auf diesem Event-Loop ein.
+    ein neuer Einsatz mit seinen Stammdaten committet ist (VOR Kommentaren,
+    Objekt-Matching, Zu-/Absagen), plant der Worker-Thread seine Benachrichtigung
+    auf diesem Event-Loop ein. Autodruck, Objekt-Einsatzinfo und WordPress-Bericht
+    laufen als Hintergrund-Tasks, damit sie den nächsten Poll nicht verzögern.
 
     Drei Broadcast-/Benachrichtigungs-Typen: "dibos_sync" (voller Board-Reload)
     für jeden geänderten Einsatz, "rsvp:changed" (nur Zu-/Absage-Widget neu
@@ -752,24 +761,20 @@ async def enrich_and_broadcast(
         )
     except Exception:
         logger.exception("DIBOS-Einsatzanreicherung fehlgeschlagen (Org %s)", org_id)
-        return
+        return False
     changed_ids = result.get("changed_ids") or []
     rsvp_changed_ids = result.get("rsvp_changed_ids") or []
     closed_ids = result.get("closed_ids") or []
     objekt_match_ids = result.get("objekt_match_ids") or []
     created_ids = result.get("created_ids") or []
+    from app.services.objekt_kontakt_notify import dispatch_objekt_einsatzinfo
+    from app.services.print_dispatcher import autoprint_incident_background
     for incident_id in created_ids:
-        try:
-            from app.services.print_dispatcher import autoprint_incident_background
-            await autoprint_incident_background(incident_id)
-        except Exception:
-            logger.exception("DIBOS-Auto-Druck fehlgeschlagen (Einsatz %s)", incident_id)
+        _start_background(autoprint_incident_background(incident_id), "DIBOS-Auto-Druck", incident_id)
     for incident_id in objekt_match_ids:
-        try:
-            from app.services.objekt_kontakt_notify import dispatch_objekt_einsatzinfo
-            await dispatch_objekt_einsatzinfo(incident_id)
-        except Exception:
-            logger.exception("DIBOS-Objekt-Einsatzinfo fehlgeschlagen (Einsatz %s)", incident_id)
+        _start_background(
+            dispatch_objekt_einsatzinfo(incident_id), "DIBOS-Objekt-Einsatzinfo", incident_id
+        )
     from app.services.broadcast import manager
     if closed_ids:
         from app.core.tenant import set_tenant_context
@@ -783,14 +788,9 @@ async def enrich_and_broadcast(
                 incident = db.get(Incident, incident_id)
                 if incident is None:
                     continue
-                try:
-                    from app.services.wordpress_report_service import post_incident_report
-                    await post_incident_report(db, incident)
-                except Exception:
-                    logger.exception(
-                        "DIBOS-Auto-Close: WordPress-Bericht fehlgeschlagen (Einsatz %s)",
-                        incident.id,
-                    )
+                _start_background(
+                    _post_incident_report(incident_id), "DIBOS-Auto-Close: WordPress-Bericht", incident_id
+                )
                 try:
                     await manager.broadcast(incident_id, {"type": "incident_closed"})
                 except Exception:
@@ -800,8 +800,9 @@ async def enrich_and_broadcast(
                     )
         finally:
             db.close()
+    ok = bool(result.get("ok"))
     if not changed_ids and not rsvp_changed_ids:
-        return
+        return ok
     for incident_id in changed_ids:
         try:
             await manager.broadcast(incident_id, {"type": "dibos_sync"})
@@ -812,3 +813,43 @@ async def enrich_and_broadcast(
             await manager.broadcast(incident_id, {"type": "rsvp:changed"})
         except Exception:
             logger.exception("DIBOS-RSVP-Broadcast für Einsatz %s fehlgeschlagen", incident_id)
+    return ok
+
+
+# Starke Referenzen auf laufende Hintergrund-Tasks — asyncio hält Tasks nur
+# schwach, ohne diese Menge könnte ein Task mitten im Lauf eingesammelt werden.
+_background_tasks: set[asyncio.Task] = set()
+
+
+def _start_background(coro, label: str, incident_id: int) -> None:
+    """Startet langsame Folgearbeit (Druck, Mail/SMS an Objektkontakte, WordPress)
+    entkoppelt vom Poll-Loop; Fehler werden nur geloggt."""
+    task = asyncio.create_task(coro)
+    _background_tasks.add(task)
+
+    def _done(finished: asyncio.Task) -> None:
+        _background_tasks.discard(finished)
+        if not finished.cancelled() and finished.exception() is not None:
+            logger.error(
+                "%s fehlgeschlagen (Einsatz %s)", label, incident_id, exc_info=finished.exception(),
+            )
+
+    task.add_done_callback(_done)
+
+
+async def _post_incident_report(incident_id: int) -> None:
+    """WordPress-Bericht als Hintergrund-Task — mit eigener Session, da die des
+    Aufrufers beim Start des Tasks bereits geschlossen sein kann."""
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+    from app.models.incident import Incident
+    from app.services.wordpress_report_service import post_incident_report
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        incident = db.get(Incident, incident_id)
+        if incident is not None:
+            await post_incident_report(db, incident)
+    finally:
+        db.close()
