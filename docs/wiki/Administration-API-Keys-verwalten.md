@@ -26,6 +26,8 @@ Liste aller Keys mit:
 | Label | Beschreibung wofür der Key ist |
 | Ablaufdatum | Optional, für zeitlich begrenzte Keys |
 
+| IP-Allowlist | Optional, CIDR-Netze kommagetrennt; andere Absender-Adressen werden beim Einsatz-Feed abgelehnt |
+
 Nach dem Erstellen wird der Key **einmalig im Klartext angezeigt**. Sofort kopieren!
 
 ## Scopes (Berechtigungen)
@@ -38,6 +40,9 @@ Beim Anlegen wird festgelegt, welche API-Funktionen ein Key verwenden darf:
 | `mailing:import` | Empfänger in Mailinglisten importieren |
 | `sms:send` | SMS über die Nachrichten-API versenden |
 | `mail:send` | E-Mails über die Nachrichten-API versenden |
+| `einsatz:read` | Einsatz-Feed lesen: Basisdaten (siehe [Einsatz-Feed](Administration-Einsatz-Feed)) |
+| `einsatz:read:kraefte` | Einsatz-Feed: zusätzlich Fahrzeuge und Wachenstatus |
+| `einsatz:read:board` | Einsatz-Feed: zusätzlich Aufgaben und Meldungen (nur Titel, Status, Zeiten) |
 
 Vergeben Sie nur die tatsächlich benötigten Scopes. Bestehende Keys behalten durch die
 Migration ausschließlich ihre bisherigen Berechtigungen `einsatz:write,mailing:import` und
