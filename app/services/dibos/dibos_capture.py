@@ -10,9 +10,9 @@ Dateizugriff sieht, was gerade über die Leitung läuft — genau die Anforderun
 "ein Tracing, das bei einem Einsatz mitliest".
 
 Rein lesender Vorgang: Es werden KEINE Einsätze/Fahrzeuge/Meldungen in der DB
-angelegt oder verändert. Ein parallel laufender Auto-Erkennungs-Loop
-(dibos_loop.py) ist daher unproblematisch — dieser erkennt nur einen eigenen
-Einsatz und startet ggf. diese Aufzeichnung, schreibt selbst aber ebenfalls nichts.
+angelegt oder verändert. Das macht ausschließlich der parallel weiterlaufende
+Poll-Loop (dibos_loop.py), der auch diese Aufzeichnung bei einem eigenen Einsatz
+startet (auto_trace_on_event).
 
 ACHTUNG Datenschutz: Die aufgezeichneten Rohdaten enthalten personenbezogene Daten
 (Anrufer Name/Telefon je Einsatz). Deshalb:
@@ -28,6 +28,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import shutil
 import zipfile
 from datetime import UTC, datetime, timedelta
@@ -56,6 +57,21 @@ TRACE_ROOT = Path("app_storage/dibos_trace")
 # realistische Payloads, ohne die Aufzeichnung unbegrenzt wachsen zu lassen.
 _MAX_CAPTURED_BYTES = 2_000_000
 
+# Ein automatisch gestarteter Trace lief im Mitschnitt vom 04.10.2026 nach
+# Einsatzende noch 80 min mit leeren GetCurrentEvents-Antworten weiter (~120 MB
+# ohne Informationsgewinn). Nach dieser Leerlaufzeit wird ein Lauf beendet —
+# aber nur, wenn er vorher überhaupt einen eigenen Einsatz gesehen hat (ein
+# manuell gestarteter Trace ohne Einsatz läuft seine volle Dauer).
+_STOP_AFTER_EMPTY_MINUTES = 10
+
+# WS-Security-Passwort im aufgezeichneten Request-Umschlag maskieren — Trace-
+# Dateien werden zur Diagnose weitergegeben (Fund im Mitschnitt vom 04.10.2026:
+# jede *_request.xml enthielt das Servicekonto-Passwort im Klartext).
+_PASSWORD_RE = re.compile(
+    rb"(<(?:[A-Za-z_][\w.-]*:)?Password(?:\s[^>]*)?>).*?(</(?:[A-Za-z_][\w.-]*:)?Password\s*>)",
+    re.DOTALL,
+)
+
 # Aufzeichnungen enthalten personenbezogene Daten (Anrufer) — nach dieser Frist
 # automatisch löschen (siehe purge_old_traces()).
 TRACE_RETENTION_DAYS = 7
@@ -83,24 +99,10 @@ class ExchangeRecorder:
     Von der Netzwerklogik entkoppelt und daher ohne echten DIBOS-Zugang testbar.
     """
 
-    def __init__(
-        self, out_dir: Path, org_id: int, run_id: str,
-        enrich_incidents: bool = False, create_incidents: bool = False,
-        wache_unid: str | None = None,
-    ):
+    def __init__(self, out_dir: Path, org_id: int, run_id: str):
         self.out_dir = out_dir
         self.org_id = org_id
         self.run_id = run_id
-        # Org-Opt-in (OrgDibosConfig.enrich_incidents): reichert während dieses
-        # Traces laufend bestehende, aktive Einsätze mit DIBOS-Zusatzinfos an
-        # (siehe dibos_enrich.py + _capture_once()). Default False — ändert
-        # nichts am reinen Tracing-Verhalten bestehender Aufrufer/Tests.
-        self.enrich_incidents = enrich_incidents
-        # Org-Opt-in (OrgDibosConfig.create_incidents): legt während dieses Traces
-        # zusätzlich neue Einsätze für nicht zuordenbare Events an (siehe
-        # dibos_enrich.py). Default False, unabhängig von enrich_incidents.
-        self.create_incidents = create_incidents
-        self.wache_unid = wache_unid
         self.seq = 0
         self.exchanges: list[dict] = []
         self.latest: dict = {"updated_at": None}
@@ -112,7 +114,7 @@ class ExchangeRecorder:
         req_path = self.out_dir / f"{self.seq:04d}_{stamp}_{operation}_request.xml"
         resp_path = self.out_dir / f"{self.seq:04d}_{stamp}_{operation}_response.json"
 
-        req_path.write_bytes(request_bytes)
+        req_path.write_bytes(_PASSWORD_RE.sub(rb"\1***\2", request_bytes))
         truncated = len(response_bytes) > _MAX_CAPTURED_BYTES
         resp_path.write_bytes(response_bytes[:_MAX_CAPTURED_BYTES] if truncated else response_bytes)
 
@@ -185,24 +187,23 @@ def _bundle_trace_into_zip(out_dir: Path, run_id: str) -> Path | None:
     return zip_path
 
 
-async def _capture_once(client: DibosClient, recorder: ExchangeRecorder) -> None:
+async def _capture_once(client: DibosClient, recorder: ExchangeRecorder) -> list[dict]:
     """Ein einzelner Poll-Zyklus über alle einsatzrelevanten Lese-Endpunkte.
+    Gibt das GetCurrentEvents-Ergebnis zurück (leer bei Fehler), damit
+    capture_traffic() einen Lauf nach Einsatzende vorzeitig beenden kann.
 
     Jeder Aufruf einzeln try/except, damit ein einzelner fehlender Endpunkt (z.B.
     GetElvisNotification) den restlichen Poll-Zyklus nicht verhindert. client.*
     ruft intern on_exchange=recorder.record für uns auf — hier wird nur noch der
     Live-Snapshot am Ende des Zyklus geschrieben.
 
-    Läuft dieser Trace mit enrich_incidents=True (Org-Opt-in), wird nach einem
-    erfolgreichen GetCurrentEvents zusätzlich dibos_enrich.enrich_and_broadcast()
-    aufgerufen — läuft für die GESAMTE Trace-Dauer (also i.d.R. den ganzen
-    Einsatz) mit. Ohne laufenden Trace übernimmt derselbe Aufruf aus dem
-    leichten Erkennungs-Loop (dibos_loop.py::_check_org()) die Anreicherung —
-    siehe dort und den Modul-Docstring von dibos_enrich.py.
+    Bewusst rein lesend: Einsatzanlage/-anreicherung macht AUSSCHLIESSLICH
+    dibos_loop.py — auch während ein Trace läuft. Früher übernahm der Trace die
+    Anreicherung und der Loop pausierte; dann bestimmte die (langsamere) Trace-
+    Kadenz, wie schnell ein zweiter Einsatz erkannt wurde, und die Anlage wartete
+    auf alle fünf Requests dieses Zyklus (Mitschnitt 04.10.2026).
     """
     events: list[dict] = []
-    public_events: list[dict] = []
-    units: list[dict] = []
     for coro_factory, label in (
         (client.get_current_events, "GetCurrentEvents"),
         (client.get_public_events, "GetPublicEvents"),
@@ -223,20 +224,8 @@ async def _capture_once(client: DibosClient, recorder: ExchangeRecorder) -> None
             continue
         if label == "GetCurrentEvents":
             events = result
-        elif label == "GetPublicEvents":
-            public_events = result
-        elif label == "GetCurrentUnits":
-            units = result
-    if (events or public_events) and (recorder.enrich_incidents or recorder.create_incidents):
-        from app.services.dibos.dibos_enrich import enrich_and_broadcast
-        await enrich_and_broadcast(
-            recorder.org_id, events,
-            raw_public_events=public_events,
-            raw_units=units if recorder.enrich_incidents else None,
-            wache_unid=recorder.wache_unid,
-            create_incidents=recorder.create_incidents,
-        )
     recorder.write_latest()
+    return events
 
 
 async def capture_traffic(
@@ -249,13 +238,27 @@ async def capture_traffic(
     Austausch über recorder.record() auf (via client._on_exchange)."""
     stop_at = datetime.now(UTC) + timedelta(minutes=duration_minutes)
     finished = False
+    saw_events = False
+    empty_since: datetime | None = None
     try:
         while True:
-            await _capture_once(client, recorder)
+            events = await _capture_once(client, recorder)
+            if events:
+                saw_events = True
+                empty_since = None
+            elif saw_events and empty_since is None:
+                empty_since = datetime.now(UTC)
 
             # Zwischenstand sichern, damit ein laufender Trace im Admin-UI sichtbar
             # ist, bevor die volle Dauer abgelaufen ist.
             recorder.write_summary(duration_minutes=int(duration_minutes), finished=False)
+
+            if empty_since and datetime.now(UTC) - empty_since >= timedelta(minutes=_STOP_AFTER_EMPTY_MINUTES):
+                logger.info(
+                    "DIBOS-Trace (Org %s) beendet: seit %d min kein eigener Einsatz mehr aktiv",
+                    recorder.org_id, _STOP_AFTER_EMPTY_MINUTES,
+                )
+                break
 
             remaining = (stop_at - datetime.now(UTC)).total_seconds()
             if remaining <= 0:
@@ -336,18 +339,12 @@ async def start_trace_for_org(org_id: int, duration_minutes: float = 120) -> str
         gateway_password = decrypt_secret(config.gateway_password_enc)
         service_user = config.service_user
         service_password = decrypt_secret(config.service_password_enc)
-        enrich_incidents = config.enrich_incidents
-        create_incidents = config.create_incidents
-        wache_unid = config.wache_unid
     finally:
         db.close()
 
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     out_dir = trace_run_dir(org_id, run_id)
-    recorder = ExchangeRecorder(
-        out_dir, org_id, run_id, enrich_incidents=enrich_incidents,
-        create_incidents=create_incidents, wache_unid=wache_unid,
-    )
+    recorder = ExchangeRecorder(out_dir, org_id, run_id)
     client = DibosClient(
         base_url, gateway_user, gateway_password, service_user, service_password,
         host=host, ag=ag, on_exchange=recorder.record,

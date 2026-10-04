@@ -29,7 +29,7 @@ from tests.conftest import TestingSession
 ORG_ID = 1  # FF Wolfurt (Home-Org, siehe seed_data.FIRE_DEPTS)
 
 
-def _session() -> "TestingSession":
+def _session() -> TestingSession:
     db = TestingSession()
     set_tenant_context(db, ORG_ID)
     return db

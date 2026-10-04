@@ -186,28 +186,27 @@ def test_capture_once_continues_after_one_endpoint_fails(tmp_path):
     assert len(recorder.exchanges) == 4
 
 
-def test_capture_once_enriches_public_events_when_current_events_empty(tmp_path, monkeypatch):
+def test_capture_once_only_records_public_events_when_current_events_empty(tmp_path):
     public_events = [{"eventNumber": "f26007481", "closed": "2026-08-25T11:23:45"}]
-    recorder = ExchangeRecorder(
-        tmp_path, org_id=1, run_id="run-public-close", enrich_incidents=True
-    )
+    recorder = ExchangeRecorder(tmp_path, org_id=1, run_id="run-public-close")
     client = _FakeDibosClient([], public_events=public_events, on_exchange=recorder.record)
-    calls = []
 
-    async def fake_enrich_and_broadcast(org_id, raw_events, **kwargs):
-        calls.append((org_id, raw_events, kwargs))
+    assert asyncio.run(_capture_once(client, recorder)) == []
 
-    import app.services.dibos.dibos_enrich as dibos_enrich
-    monkeypatch.setattr(dibos_enrich, "enrich_and_broadcast", fake_enrich_and_broadcast)
+    assert recorder.latest["public_events"][0]["eventNumber"] == "f26007481"
 
-    asyncio.run(_capture_once(client, recorder))
 
-    assert calls == [(1, [], {
-        "raw_public_events": public_events,
-        "raw_units": [],
-        "wache_unid": None,
-        "create_incidents": False,
-    })]
+@pytest.mark.parametrize("request_bytes", [
+    b"<o:Password>secret</o:Password>",
+    b'<soap:Password type="text">secret</soap:Password>',
+])
+def test_exchange_recorder_masks_password_in_request_file(tmp_path, request_bytes):
+    recorder = ExchangeRecorder(tmp_path, org_id=1, run_id="run-password")
+    recorder.record("http://x/svc", "GetCurrentEvents", request_bytes, b"[]")
+
+    content = (tmp_path / recorder.exchanges[0]["request_file"]).read_bytes()
+    assert b"secret" not in content
+    assert b"***" in content
 
 
 # ── Retention: alte Läufe löschen, laufende nie ─────────────────────────────
@@ -310,6 +309,35 @@ def test_capture_traffic_bundles_into_zip_when_time_runs_out_and_closes_client(t
     data = json.loads((out_dir / "summary.json").read_text(encoding="utf-8"))
     assert data["finished"] is True
     assert (out_dir / "latest.json").is_file()
+
+
+def test_capture_traffic_stops_after_empty_period_only_after_events_seen(tmp_path, monkeypatch):
+    import app.services.dibos.dibos_capture as mod
+    monkeypatch.setattr(mod, "_STOP_AFTER_EMPTY_MINUTES", 0)
+
+    class _EventThenEmptyClient(_FakeDibosClient):
+        async def get_current_events(self):
+            self.calls.append("get_current_events")
+            events = [_SAMPLE_EVENT] if self.calls.count("get_current_events") == 1 else []
+            self._fire("GetCurrentEvents", events)
+            return events
+
+    recorder = ExchangeRecorder(tmp_path, org_id=1, run_id="run-empty-stop")
+    client = _EventThenEmptyClient(on_exchange=recorder.record)
+    asyncio.run(capture_traffic(client, recorder, duration_minutes=1, poll_interval_seconds=0.001))
+
+    assert client.calls.count("get_current_events") == 2
+
+
+def test_capture_traffic_without_events_runs_full_configured_duration(tmp_path, monkeypatch):
+    import app.services.dibos.dibos_capture as mod
+    monkeypatch.setattr(mod, "_STOP_AFTER_EMPTY_MINUTES", 0)
+
+    recorder = ExchangeRecorder(tmp_path, org_id=1, run_id="run-never-seen")
+    client = _FakeDibosClient(on_exchange=recorder.record)
+    asyncio.run(capture_traffic(client, recorder, duration_minutes=0.001, poll_interval_seconds=0.01))
+
+    assert client.calls.count("get_current_events") >= 2
 
 
 def test_capture_traffic_bundles_into_zip_on_cancel(tmp_path):
