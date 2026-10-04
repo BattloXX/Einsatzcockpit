@@ -67,7 +67,7 @@
         <option value="">– keine –</option>
         {% for v in incident.vehicles %}
         {% if v.removed_at is none or person.vehicle_id == v.id %}
-        <option value="{{ v.id }}" {% if person.vehicle_id == v.id %}selected{% endif %}>{{ v.vehicle_master.display_label }} ({{ v.vehicle_master.dept.name }}){% if v.removed_at is not none %} (entfernt){% endif %}</option>
+        <option value="{{ v.id }}" {% if person.vehicle_id == v.id %}selected{% endif %}>{{ v.master.display_label }} ({{ v.master.dept.name }}){% if v.removed_at is not none %} (entfernt){% endif %}</option>
         {% endif %}
         {% endfor %}
       </select>
@@ -80,7 +80,7 @@
     {% if person.age_range %}<div class="detail-kv"><span class="detail-kv__label">Alter</span><span>{{ person.age_range }}</span></div>{% endif %}
     {% if person.name %}<div class="detail-kv"><span class="detail-kv__label">Name</span><span>{{ person.name }}</span></div>{% endif %}
     {% if person.location %}<div class="detail-kv"><span class="detail-kv__label">Ort</span><span>{{ person.location }}</span></div>{% endif %}
-    {% if person.vehicle_id %}<div class="detail-kv"><span class="detail-kv__label">Einheit</span><span>{{ person.vehicle.vehicle_master.display_label if person.vehicle else '–' }}</span></div>{% endif %}
+    {% if person.vehicle_id %}<div class="detail-kv"><span class="detail-kv__label">Einheit</span><span>{{ person.vehicle.master.display_label if person.vehicle else '–' }}</span></div>{% endif %}
   </div>
   {% endif %}
 

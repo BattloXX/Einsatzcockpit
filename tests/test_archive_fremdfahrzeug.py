@@ -29,3 +29,27 @@ def test_archiv_detail_mit_fahrzeug_fremder_org(client, setup_db):
     response = client.get(f"/archiv/{incident_id}")
     assert response.status_code == 200
     assert "Partner FF" in response.text
+
+
+def test_board_mit_fahrzeug_fremder_org(client, setup_db):
+    username, _ = _make_user_and_incident("board_fremd", "admin")
+    db = TestingSession()
+    set_tenant_context(db, None)
+    try:
+        partner = FireDept(slug="partner-ff-board", name="Partner FF Board", short_code="PFB")
+        db.add(partner)
+        db.flush()
+        incident, _ = create_incident(db, "T2", is_exercise=True, primary_org_id=1)
+        column = db.query(IncidentColumn).filter(IncidentColumn.incident_id == incident.id).first()
+        vehicle = VehicleMaster(dept_id=partner.id, code="RLF", name="RLF Partner", type="RLF")
+        db.add(vehicle)
+        db.flush()
+        db.add(IncidentVehicle(incident_id=incident.id, column_id=column.id, vehicle_master_id=vehicle.id))
+        db.commit()
+        incident_id = incident.id
+    finally:
+        db.close()
+    _login(client, username)
+    response = client.get(f"/einsatz/{incident_id}")
+    assert response.status_code == 200
+    assert "RLF" in response.text
