@@ -87,7 +87,7 @@
     {% for v in incident.vehicles %}
     <div class="vehicle-row">
       <span class="vehicle-main"><span class="vehicle-code">{{ v.vehicle_master.display_label }}</span>
-      <span class="vehicle-dept">{{ v.vehicle_master.dept.name }}</span></span>
+      <span class="vehicle-dept">{{ v.vehicle_master.dept.name if v.vehicle_master and v.vehicle_master.dept else '–' }}</span></span>
       {% set fahrt = fahrten.get(v.vehicle_master_id) %}
       {% set board_gk = v.commander.full_name if v.commander else v.commander_name %}
       <span class="vehicle-detail"><strong>GK:</strong> {{ board_gk or (fahrt.gruppenkommandant if fahrt else None) or '–' }}</span>

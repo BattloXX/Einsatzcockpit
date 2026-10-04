@@ -160,7 +160,7 @@
   {% set board_gk = v.commander.full_name if v.commander else v.commander_name %}
   <tr>
     <td>{{ v.vehicle_master.display_label }}</td>
-    <td>{{ v.vehicle_master.dept.name }}</td>
+    <td>{{ v.vehicle_master.dept.name if v.vehicle_master and v.vehicle_master.dept else '–' }}</td>
     <td>{{ v.column.title if v.column else '–' }}</td>
     <td>{{ fahrt.fahrer|join(' / ') if fahrt else '–' }}</td>
     <td>{{ board_gk or (fahrt.gruppenkommandant if fahrt else None) or '–' }}</td>

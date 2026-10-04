@@ -9,7 +9,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import func, or_, text
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.core.permissions import can_access_incident, has_role, same_org_or_system_admin
 from app.core.templating import templates
@@ -42,7 +42,7 @@ def _load_archive_incident(incident_id: int, db: Session) -> Incident | None:
 
     Vermeidet N+1 beim Rendern der Archiv-Detailseite und des PDF-Exports.
     """
-    return (
+    incident = (
         db.query(Incident)
         .options(
             selectinload(Incident.collaborating_orgs),
@@ -59,6 +59,19 @@ def _load_archive_incident(incident_id: int, db: Session) -> Incident | None:
         .filter(Incident.id == incident_id)
         .first()
     )
+    if incident is not None and incident.vehicles:
+        # Der Tenant-Filter laedt VehicleMaster nur fuer die eigene Org. Fahrzeuge
+        # einer Partner-Org oder externe Fahrzeuge blieben sonst None und wuerden
+        # die Detailseite/den PDF-Export abstuerzen lassen (nur Anzeigedaten).
+        (
+            db.query(IncidentVehicle)
+            .options(joinedload(IncidentVehicle.vehicle_master).joinedload(VehicleMaster.dept))
+            .filter(IncidentVehicle.incident_id == incident.id)
+            .populate_existing()
+            .execution_options(include_all_tenants=True)
+            .all()
+        )
+    return incident
 
 
 def _deny_access(user, incident) -> HTTPException:
