@@ -34,6 +34,7 @@ from app.models.incident import Incident, IncidentToken
 from app.models.major_incident import LageToken, MajorIncident, MajorIncidentStatus
 from app.models.user import DeviceToken, Role, User
 from app.routers import (
+    api_feed,
     api_kontakt_sync,
     api_live,
     api_messaging,
@@ -914,6 +915,7 @@ app.include_router(api_kontakt_sync.router)
 app.include_router(api_messaging.router)
 app.include_router(api_weather.router)
 app.include_router(device_api.router)
+app.include_router(api_feed.router)
 app.include_router(api_live.router)
 app.include_router(gateway_api.router)
 app.include_router(lagekarte_api.router)

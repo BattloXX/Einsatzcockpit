@@ -68,9 +68,11 @@ class Base(DeclarativeBase):
 
 
 # Tenant-Filter-Listener global registrieren (einmalig beim Modul-Import)
+from app.core.feed_rev import register_feed_rev_listener  # noqa: E402
 from app.core.tenant import register_tenant_listener  # noqa: E402
 
 register_tenant_listener()
+register_feed_rev_listener()
 
 
 def get_db():

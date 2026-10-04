@@ -527,6 +527,31 @@ def test_nachrichten_api_isoliert_gruppen_listen_und_jobs(client, monkeypatch):
         db.close()
 
 
+def test_feed_api_key_sieht_keinen_fremden_einsatz(client):
+    """Ein Feed-Key ist ebenso strikt an seine Organisation gebunden wie Public-Tokens."""
+    org_b_id = _setup_zwei_orgs()
+    raw_key = generate_api_key()
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        db.add(ApiKey(
+            key_hash=hash_api_key(raw_key), label="Feed Isolation", org_id=ORG_A,
+            scopes="einsatz:read",
+        ))
+        foreign_incident = db.query(Incident).filter(Incident.primary_org_id == org_b_id).first()
+        assert foreign_incident is not None
+        foreign_id = foreign_incident.id
+        db.commit()
+    finally:
+        db.close()
+
+    headers = {"X-API-Key": raw_key}
+    assert client.get(f"/api/v1/feed/einsaetze/{foreign_id}", headers=headers).status_code == 404
+    assert foreign_id not in {
+        item["id"] for item in client.get("/api/v1/feed/einsaetze", headers=headers).json()["einsaetze"]
+    }
+
+
 RAW_TOKEN_A = "iso-test-infoscreen-token-org-a"
 RAW_TOKEN_B = "iso-test-infoscreen-token-org-b"
 FAB_TOKEN_A = "iso-test-fahrtenbuch-a"
