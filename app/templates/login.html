@@ -114,18 +114,22 @@
       </div>
 
       <script>
+        // Rücksprung-Ziel (nur interne Pfade; der Server prüft es beim SSO-Login erneut)
+        var ssoNext = {{ (next or '')|tojson }};
+        if (ssoNext.charAt(0) !== '/' || ssoNext.charAt(1) === '/') ssoNext = '';
+        var ssoNextQs = ssoNext ? 'next=' + encodeURIComponent(ssoNext) : '';
         document.addEventListener('sso-go', async function() {
           var inp = document.getElementById('sso-email');
           var val = (inp ? inp.value : '').trim();
           if (!val) return;
           // Direkter Slug-Einstieg (kein @)
           if (val.indexOf('@') === -1) {
-            window.location.href = '/sso/' + encodeURIComponent(val) + '/login';
+            window.location.href = '/sso/' + encodeURIComponent(val) + '/login' + (ssoNextQs ? '?' + ssoNextQs : '');
             return;
           }
           // E-Mail → Discovery
           try {
-            var hint = '?login_hint=' + encodeURIComponent(val);
+            var hint = '?login_hint=' + encodeURIComponent(val) + (ssoNextQs ? '&' + ssoNextQs : '');
             var resp = await fetch('/sso/discover?email=' + encodeURIComponent(val));
             var data = await resp.json();
             if (data.found && data.redirect) {
