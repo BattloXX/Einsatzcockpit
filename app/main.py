@@ -998,12 +998,9 @@ _ERROR_META = {
 
 def _login_redirect(request: Request) -> RedirectResponse:
     """Leitet nicht angemeldete Browser-Nutzer zum Login (mit Rücksprung-Ziel)."""
-    from urllib.parse import quote
+    from app.core.redirects import login_redirect
 
-    path = request.url.path
-    if request.url.query:
-        path += "?" + request.url.query
-    return RedirectResponse(f"/login?next={quote(path, safe='')}", status_code=302)
+    return login_redirect(request)
 
 
 def _render_error_page(request: Request, status: int, detail, *, authenticated: bool):

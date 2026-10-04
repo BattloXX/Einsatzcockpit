@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.config import settings
 from app.core.permissions import can_access_incident, has_role, require_role
 from app.core.queries import visible_incidents_q
+from app.core.redirects import login_redirect
 from app.core.resilience import run_side_effect
 from app.core.security import (
     get_author_name,
@@ -713,7 +714,7 @@ async def incident_board(incident_id: int, request: Request, db: Session = Depen
     from fastapi import HTTPException
     user = getattr(request.state, "user", None)
     if not user:
-        return RedirectResponse("/login", status_code=302)
+        return login_redirect(request)
     if heal_orphaned_persons(db, incident_id):
         db.commit()
     incident = _load_board_incident(incident_id, db)
@@ -1041,7 +1042,7 @@ def incident_info(incident_id: int, request: Request, db: Session = Depends(get_
     Dokumenten), Ausrückordnung und nächsten Hydranten. Prominenter Absprung ins Board."""
     user = getattr(request.state, "user", None)
     if not user:
-        return RedirectResponse("/login", status_code=302)
+        return login_redirect(request)
     incident = _incident_or_404(incident_id, db)
     if not can_access_incident(user, incident):
         raise HTTPException(403, "Kein Zugriff auf diesen Einsatz")
