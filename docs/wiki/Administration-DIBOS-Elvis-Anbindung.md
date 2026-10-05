@@ -20,15 +20,16 @@ Einsatzcockpit kann sich an den **DIBOS EventHub** der Landeswarnzentrale Vorarl
 6. [Einsatz anlegen und Zuordnung](#einsatz-anlegen-und-zuordnung)
 7. [Anreicherung im Detail](#anreicherung-im-detail)
 8. [Wachenstatus](#wachenstatus)
-9. [Zu-/Absagen der Mannschaft](#zu-absagen-der-mannschaft)
-10. [Automatisches Schließen](#automatisches-schließen)
-11. [Benachrichtigungen und Live-Aktualisierung](#benachrichtigungen-und-live-aktualisierung)
-12. [Einsatz-Infos-Seite](#einsatz-infos-seite)
-13. [Diagnose-Aufzeichnung (nur System-Admin)](#diagnose-aufzeichnung-nur-system-admin)
-14. [Dienstüberwachung](#dienstüberwachung)
-15. [Datenschutz und Sicherheit](#datenschutz-und-sicherheit)
-16. [Fehlerbehebung](#fehlerbehebung)
-17. [Technische Referenz](#technische-referenz)
+9. [Fahrzeuge im LIS-Ausfall (Fallback)](#fahrzeuge-im-lis-ausfall-fallback)
+10. [Zu-/Absagen der Mannschaft](#zu-absagen-der-mannschaft)
+11. [Automatisches Schließen](#automatisches-schließen)
+12. [Benachrichtigungen und Live-Aktualisierung](#benachrichtigungen-und-live-aktualisierung)
+13. [Einsatz-Infos-Seite](#einsatz-infos-seite)
+14. [Diagnose-Aufzeichnung (nur System-Admin)](#diagnose-aufzeichnung-nur-system-admin)
+15. [Dienstüberwachung](#dienstüberwachung)
+16. [Datenschutz und Sicherheit](#datenschutz-und-sicherheit)
+17. [Fehlerbehebung](#fehlerbehebung)
+18. [Technische Referenz](#technische-referenz)
 
 ---
 
@@ -112,6 +113,7 @@ Unter **Admin → DIBOS / Elvis-Anbindung** (`/admin/dibos`) für die eigene Org
 | Auto-Trace-Dauer (Min.) | 120 (Minimum 5) | Höchstdauer dieser automatischen Aufzeichnung. Sie endet früher, wenn 10 min lang kein eigener Einsatz mehr aktiv ist |
 | Einsätze anreichern | aus | Siehe [Betriebsmodi](#betriebsmodi-die-drei-schalter) |
 | Einsätze anlegen | aus | Siehe [Betriebsmodi](#betriebsmodi-die-drei-schalter) |
+| Externe DIBOS-Einheiten übernehmen | aus | Legt fremde Einheiten eines Einsatzes (andere Dienststelle, z. B. Polizei, Nachbarwehr) als schreibgeschützte Platzhalter an — nur im [LIS-Ausfall-Fallback](#fahrzeuge-im-lis-ausfall-fallback) |
 | Gateway-/Service-Benutzer und -Passwort | — | Passwörter werden Fernet-verschlüsselt gespeichert und nur ersetzt, wenn im Formular neu eingegeben |
 
 Die Anbindung gilt erst als **vollständig konfiguriert**, wenn Basis-URL, Gateway-Benutzer + -Passwort sowie Service-Benutzer + -Passwort gesetzt sind. Ist das nicht der Fall, überspringt der Hintergrund-Dienst die Organisation.
@@ -258,9 +260,16 @@ Liefert DIBOS eine `bmaNo`, wird versucht, den Einsatz mit einem Objekt zu verkn
 
 Entsteht ein neuer Link, wird anschließend die Objekt-Einsatzinfo an die Kontakte des Objekts versandt (sofern dort konfiguriert).
 
+### Geocoding und Objekt-Matching nach der Anlage
+
+Für jeden **von DIBOS neu angelegten** (nicht bereits beendeten) Einsatz läuft nach Anlage und Alarmierung im Hintergrund dasselbe wie bei LIS-Neuanlagen:
+
+1. **Adress-Geocoding**, nur wenn DIBOS keine Koordinaten geliefert hat und Straße oder Ort bekannt sind.
+2. **Vollständiges Objekt-Matching** (`match_incident_background`, alle Stufen inkl. Adresse und Lage) — vorher wurden DIBOS-Einsätze nur über die BMA-Nummer verknüpft, ein Einsatz ohne BMA bekam nie ein Objekt. Ein bereits über die BMA-Nummer entstandener Link wird dabei nicht doppelt angelegt.
+
 ### Was bewusst nicht übernommen wird
 
-- **Fahrzeugstatus (S1–S8):** schreibt für LIS-Orgs bereits `lis_sync` aus einer autoritativen Quelle; ein zweiter Schreiber würde widersprüchliche Zeitstempel riskieren. DIBOS wird für Fahrzeuge nur gelesen/aufgezeichnet (`statusTimes` im Live-Snapshot), aber nicht in die Einsatz-Fahrzeuge gespiegelt.
+- **Fahrzeugstatus und -position, solange LIS liefert:** LIS ist dann die autoritative Quelle; ein zweiter Schreiber würde widersprüchliche Zeitstempel riskieren. Fällt LIS für einen Einsatz aus, übernimmt DIBOS — siehe [Fahrzeuge im LIS-Ausfall](#fahrzeuge-im-lis-ausfall-fallback).
 - **Funkgeräte** (`GetCurrentRadios`) und **`GetElvisNotification`**: werden nur in der Diagnose-Aufzeichnung abgerufen, nicht weiterverarbeitet.
 
 ---
@@ -280,6 +289,38 @@ Mit **Einsätze anreichern** wird aus `GetCurrentUnits` der Status der eigenen W
 - Es werden nur die im echten DIBOS-Katalog **bestätigten** Statuswerte übernommen; unbekannte Werte werden übersprungen (Debug-Log), nicht geraten.
 - Ändert sich der Status nicht, passiert nichts (idempotent). Jede Änderung erscheint im Einsatz-Verlauf als `wache.status_set`, mit dem DIBOS-Zeitstempel.
 - Anders als bei Fahrzeugen gibt es für die Wache keinen anderen Schreiber (LIS kennt kein Pendant) — daher wird sie hier gepflegt.
+
+---
+
+## Fahrzeuge im LIS-Ausfall (Fallback)
+
+Fahrzeugstatus, Fahrzeugpositionen und fremde Einheiten pflegt normalerweise die [LIS/IPR-Anbindung](Administration-LIS-Anbindung). DIBOS liefert dieselben Daten (Status mit Zeitstempeln, Positionen bereits in WGS84) und springt **pro Einsatz** ein, wenn LIS dafür keine Daten liefert. Voraussetzung ist der Schalter **Einsätze anreichern** (nur dann wird `GetCurrentUnits` abgefragt).
+
+### Wann der Fallback greift
+
+LIS gilt für einen Einsatz als liefernd (`lis_health.lis_delivers_for`), wenn **alle drei** Bedingungen erfüllt sind — sonst übernimmt DIBOS:
+
+| Bedingung | Prüfung |
+|---|---|
+| LIS ist für die Org eingerichtet | `OrgLisConfig` aktiviert und vollständig konfiguriert |
+| LIS-Abruf funktioniert | Letzter erfolgreicher `ActiveParticipation`-Abruf höchstens `max(3 × LIS-Poll-Intervall, 120 s)` her. Nach einem Serverneustart gilt eine Schonfrist von 120 s als „liefernd", damit nicht beide gleichzeitig schreiben |
+| LIS kennt den Einsatz | `incident.lis_operation_id` gesetzt |
+
+Ein einzelner fehlgeschlagener LIS-Zyklus schaltet noch nicht um — erst wenn der letzte Erfolg älter als die Frist ist. Das Ein- und Ausschalten wird je Einsatz einmal im Log vermerkt (`DIBOS-Fallback für Org …, Einsatz … aktiv/deaktiviert`). Typische Auslöser: LIS-Server nicht erreichbar, Zugangsdaten abgelaufen, Org ohne LIS, oder DIBOS hat den Einsatz angelegt, bevor LIS ihn verknüpft hat (die ersten Sekunden eines Einsatzes).
+
+### Zuordnung der Fahrzeuge
+
+Die **DIBOS-unid ist dieselbe Kennung wie die LIS-ReferenceId** (z. B. `rlf_wolfu`). Es gibt daher nur **ein** Feld in den Fahrzeug-Stammdaten: **Leitstellen-Kennung (LIS-ReferenceId / DIBOS-unid)** (`VehicleMaster.lis_reference_id`, siehe [Stammdaten pflegen](Administration-Stammdaten-pflegen)). Fahrzeuge ohne Kennung bekommen weder aus LIS noch aus DIBOS einen Status.
+
+### Was übernommen wird
+
+| Daten | Quelle | Regel |
+|---|---|---|
+| **Fahrzeugstatus** | `GetCurrentUnits` (eigene Einheiten mit passender `eventNumber`) und `unitList[]` des Events | Identisch zu LIS: nur `S4` → „Einsatz übernommen", `S5` → „Am Einsatzort"; alle anderen Werte ignoriert. Erscheint ein Fahrzeug erstmals mit S4/S5, wird es in der Spalte **Aktiv** auf dem Board angelegt. Einheiten vom Typ `wache` laufen über den [Wachenstatus](#wachenstatus) |
+| **Fahrzeugposition** | `latitude`/`longitude` aus `GetCurrentUnits` (WGS84) | Gespeichert in der gemeinsamen Positionshistorie mit `source = "dibos"`. **Übersprungen**, wenn die Position der Koordinate einer Wache entspricht (stehende Fahrzeuge melden fix die Wachen-Koordinate), wenn sie sich seit der letzten gespeicherten Position nicht geändert hat, oder wenn die letzte Position manuell auf der Lagekarte gesetzt wurde |
+| **Fremde Einheiten** | `unitList[]`-Einträge mit anderer Dienststelle (`lev3`) als das Event | Nur mit Schalter **Externe DIBOS-Einheiten übernehmen**: Platzhalter-Fahrzeug (`is_external`), Schlüssel `lis_reference_id` — LIS und DIBOS teilen sich denselben Platzhalter |
+
+Nach einer Statusänderung sendet Einsatzcockpit `dibos_sync` an das Board und einen Live-Push (`reason = "unit_status"`), wie LIS.
 
 ---
 
@@ -320,6 +361,13 @@ Anschließend (bei geschlossenem Einsatz):
 
 - ein **WordPress-Bericht** wird als Hintergrund-Task ausgelöst, sofern konfiguriert (siehe [WordPress-Berichte](Administration-WordPress-Berichte)) — er hält den Poll nicht auf
 - das WebSocket-Event `incident_closed` wird gesendet
+- ein **Live-Push** (`reason = "closed"`) beendet die Live-Benachrichtigung auf den Geräten — wie beim LIS-Auto-Close
+
+### Sperre und Wiedereröffnung (wie LIS)
+
+- Ein Einsatz mit **`lis_auto_close_locked`** wird nie automatisch geschlossen — weder von LIS noch von DIBOS, nur noch manuell.
+- Taucht ein Event, dessen Einsatz automatisch geschlossen wurde (`closed_via_lis_auto`), wieder **offen** in `GetCurrentEvents` auf, wird der Einsatz **wiedereröffnet und gesperrt** — aber **nur, wenn LIS für diesen Einsatz nicht liefert** ([Fallback-Bedingung](#wann-der-fallback-greift)). Liefert LIS, ist es für Abschluss und Wiedereröffnung maßgeblich: LIS schließt, sobald die eigene Beteiligung endet, während das DIBOS-Event oft noch offen ist — ein Reopen durch DIBOS würde den Einsatz sonst wieder öffnen und dauerhaft sperren.
+- Ein **manuell** geschlossener Einsatz wird nie wiedereröffnet und auch nicht mehr angereichert.
 
 Voraussetzungen und Grenzen:
 
@@ -423,6 +471,9 @@ Die Proben werden sowohl vom leichten Poll als auch von der Voll-Aufzeichnung ge
 | Falsches Stichwort (`T1`) | `tycod` leer oder unbekannt → Fallback `T1`; in der Diagnose-Aufzeichnung den echten Code prüfen |
 | Einsatzort/Melder nicht ergänzt | Felder waren schon befüllt — vorhandene Werte werden nie überschrieben |
 | Meldungen fehlen | Kommentar ist `isInternal`, ohne Text/`id`, oder wurde schon importiert |
+| Fahrzeugstatus aus DIBOS fehlt | LIS liefert für den Einsatz (dann ist LIS zuständig); *Einsätze anreichern* aus; Fahrzeug ohne Leitstellen-Kennung (`lis_reference_id` = DIBOS-unid); Status nicht S4/S5. Log nach `DIBOS-Fallback … aktiv` durchsuchen |
+| Fahrzeugposition aus DIBOS fehlt | Fahrzeug steht an der Wache (Wachen-Koordinate wird bewusst ignoriert); Position unverändert; letzte Position wurde manuell gesetzt |
+| Einsatz wurde nach Auto-Close wieder geöffnet und schließt nicht mehr | Erwartet bei Wiedereröffnung: danach ist er gesperrt (`lis_auto_close_locked`) und nur noch manuell zu schließen |
 | Wachenstatus bleibt leer | *Einsätze anreichern* aus; Wache-UNID passt nicht; Status unbekannt (nur AL, UEB, S2, S4, S5); Einsatz nicht `active` |
 | Zu-/Absagen erscheinen als Freitext | Keine syBOS-ID am Mitglied hinterlegt (Mitglieder-Excel-Import) |
 | Zusage „10 Min" wird nicht als Zeit gezeigt | Erwartetes Verhalten — nur „kommt" vs. „kommt nicht" |
@@ -520,13 +571,15 @@ Langsame Folgearbeit (Autodruck, Objekt-Einsatzinfo, WordPress-Bericht) startet 
 
 | Tabelle / Feld | Zweck |
 |---|---|
-| `org_dibos_config` | Konfiguration je Org (1:1): `enabled`, `base_url`, `host`, `ag`, `wache_unid`, `poll_interval_seconds`, `auto_trace_on_event`, `auto_trace_duration_minutes`, `enrich_incidents`, `create_incidents`, `gateway_user`, `gateway_password_enc`, `service_user`, `service_password_enc` |
+| `org_dibos_config` | Konfiguration je Org (1:1): `enabled`, `base_url`, `host`, `ag`, `wache_unid`, `poll_interval_seconds`, `auto_trace_on_event`, `auto_trace_duration_minutes`, `enrich_incidents`, `create_incidents`, `sync_external_units` (Migration `0254`), `gateway_user`, `gateway_password_enc`, `service_user`, `service_password_enc` |
 | `incident.lis_operation_number` | Leitstellennummer; eindeutig je Org (`uq_incident_org_lis_operation_number`) |
 | `incident.dibos_tycod`, `dibos_diagnose`, `dibos_bma_no`, `dibos_event_comment` | DIBOS-Zusatzfelder |
 | `incident_wache_status` | Wachenstatus je Einsatz und `wache_unid` (Status, Rohtext, Zeitpunkt) |
 | `lis_synced_object` (`obj_type="dibos_comment"`) | Deduplizierung importierter Kommentare |
 | `teilnahme.dibos_response_id`, `rsvp_source="dibos"` | Zu-/Absagen; Unique je `org_id` + `dibos_response_id` |
 | `member.sybos_id` | Zuordnung der Rückmeldung zum Mitglied |
+| `vehicle_master.lis_reference_id` | Leitstellen-Kennung des Fahrzeugs — LIS-ReferenceId **und** DIBOS-unid (gleicher Wert) |
+| `vehicle_position.source = "dibos"` | Fahrzeugpositionen aus dem DIBOS-Fallback |
 
 ### Code-Übersicht
 
@@ -536,12 +589,13 @@ Langsame Folgearbeit (Autodruck, Objekt-Einsatzinfo, WordPress-Bericht) startet 
 | `app/services/dibos/dibos_loop.py` | Globaler Hintergrund-Poll (fester Takt), Org-Auswahl, persistente Clients, Fast Path, bedarfsgesteuerte Folgeabfragen, Fingerabdruck-Skip, Auto-Trace-Start |
 | `app/services/dibos/dibos_enrich.py` | Einsatzanlage (Commit + Alarmierung vor der Folgearbeit), Anreicherung, Wache, Zu-/Absagen, Schließen, Broadcasts, Hintergrund-Tasks |
 | `app/services/dibos/dibos_capture.py` | Diagnose-Aufzeichnung (rein lesend), Passwort-Maskierung, Früh-Ende, Live-Snapshot, Aufbewahrung |
-| `app/services/dibos/dibos_mapping.py` | Zuordnung der bestätigten Wachenstatus |
+| `app/services/dibos/dibos_mapping.py` | Zuordnung der bestätigten Wachenstatus und Fahrzeugstatus (S4/S5) |
+| `app/services/lis/lis_health.py` | LIS-Lieferstatus je Org (In-Memory) und `lis_delivers_for()` für den Fallback |
 | `app/models/dibos.py` | `OrgDibosConfig` |
 | `app/routers/ui_dibos.py` | Admin-UI (`/admin/dibos`, `/admin/dibos/einsaetze`, Test, Trace-Routen) |
 | `app/services/lis/lis_mapping.py`, `lis_matching.py` | Gemeinsam genutzt: Stichwort-Zuordnung, Einsatz-Matching |
 
-Tests: `tests/test_dibos_client.py`, `test_dibos_loop.py`, `test_dibos_enrich.py`, `test_dibos_create_incidents.py`, `test_dibos_wache_status.py`, `test_dibos_capture.py`, `test_dibos_admin_routes.py`.
+Tests: `tests/test_dibos_client.py`, `test_dibos_loop.py`, `test_dibos_enrich.py`, `test_dibos_create_incidents.py`, `test_dibos_wache_status.py`, `test_dibos_capture.py`, `test_dibos_admin_routes.py`, `test_dibos_fallback.py`, `test_lis_health.py`.
 
 ### Admin-Routen
 

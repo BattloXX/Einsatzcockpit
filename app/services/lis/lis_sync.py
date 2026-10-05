@@ -1022,6 +1022,8 @@ async def sync_organization(db: Session, org: FireDept, config: OrgLisConfig) ->
         password = decrypt_secret(config.password_enc)
     except Exception:
         logger.exception("LIS-Passwort für Org %s konnte nicht entschlüsselt werden", org.id)
+        from app.services.lis.lis_health import mark_lis_failed
+        mark_lis_failed(org.id)
         return
 
     client = LisClient(
@@ -1035,6 +1037,8 @@ async def sync_organization(db: Session, org: FireDept, config: OrgLisConfig) ->
         await client.select_operation(config.organization_id)
     except LisClientError:
         logger.exception("LIS SelectOperation für Org %s fehlgeschlagen", org.id)
+        from app.services.lis.lis_health import mark_lis_failed
+        mark_lis_failed(org.id)
         return
 
     root_org_map: dict[str, str] = {}
@@ -1075,7 +1079,12 @@ async def sync_organization(db: Session, org: FireDept, config: OrgLisConfig) ->
             start_index += count
     except LisClientError:
         logger.exception("LIS-Abfrage (ActiveParticipation) für Org %s fehlgeschlagen", org.id)
+        from app.services.lis.lis_health import mark_lis_failed
+        mark_lis_failed(org.id)
         return
+
+    from app.services.lis.lis_health import mark_lis_ok
+    mark_lis_ok(org.id)
 
     for op in operations:
         try:

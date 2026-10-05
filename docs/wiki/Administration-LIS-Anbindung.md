@@ -54,10 +54,16 @@ Der Loop läuft serverweit; einzelne Organisationen werden über den Schalter **
 - **Einsätze und Übungseinsätze anlegen/verknüpfen** — existiert bereits ein über die API angelegter Einsatz mit passendem Stichwort/Adresse/Zeitpunkt, wird verknüpft statt dupliziert. Übungseinsätze werden anhand des LIS-Einsatztyps (`Schulung`, `Übung`, `Training`, `Probe`) erkannt und auch in Einsatzcockpit als Übungseinsatz markiert (gelb/schwarzer Banner, keine Statistik-Zählung)
 - **Leitstellen-Nummer als führende Kennung** — wird überall angezeigt, wo sonst die interne Einsatz-ID stünde (Alarm-Kopfzeile, Archiv, Verlauf, PDF-Export)
 - **Anrufer/Melder** — Name und Telefonnummer, sofern vom Alarmierungssystem/LIS mitgeliefert; nur Anzeige, keine weitere Verarbeitung
-- **Fahrzeugstatus (S1–S6) und -position** — sofern das Fahrzeug über `lis_reference_id` in den Stammdaten zugeordnet ist (siehe [Stammdaten pflegen](Administration-Stammdaten-pflegen)); Positionen landen in derselben Historie wie App-GPS-Daten
+- **Fahrzeugstatus (S1–S6) und -position** — sofern das Fahrzeug über `lis_reference_id` in den Stammdaten zugeordnet ist (siehe [Stammdaten pflegen](Administration-Stammdaten-pflegen)); Positionen landen in derselben Historie wie App-GPS-Daten. Die Kennung ist dieselbe wie die DIBOS-unid — das Feld heißt in den Stammdaten deshalb **Leitstellen-Kennung (LIS-ReferenceId / DIBOS-unid)**
 - **Meldungen sowie Zu-/Absagen der Mannschaft** aus den LIS-Aufträgen des Einsatzes
 - **Dokumente/Bilder**, die der Leitstelle zum Einsatz angehängt wurden
 - **Automatisches Schließen** — verschwindet die Operation aus der aktiven Liste des LIS (weil sie dort abgeschlossen wurde), schließt Einsatzcockpit den verknüpften Einsatz automatisch mit (inkl. Widerruf von QR-/Lagekarte-Tokens, wie beim manuellen Abschließen)
+
+---
+
+## DIBOS als Fallback
+
+Läuft parallel die [DIBOS-/Elvis-Anbindung](Administration-DIBOS-Elvis-Anbindung) mit *Einsätze anreichern*, übernimmt DIBOS **Fahrzeugstatus, Fahrzeugpositionen und (optional) fremde Einheiten** für jeden Einsatz, für den LIS keine Daten liefert: LIS nicht eingerichtet, letzter erfolgreicher LIS-Abruf älter als `max(3 × Poll-Intervall, 120 s)`, oder der Einsatz ist (noch) nicht mit einer LIS-Operation verknüpft. Solange LIS liefert, bleibt LIS die einzige Quelle für diese Daten — auch für Abschluss und Wiedereröffnung. Details: [Fahrzeuge im LIS-Ausfall](Administration-DIBOS-Elvis-Anbindung#fahrzeuge-im-lis-ausfall-fallback).
 
 ---
 

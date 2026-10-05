@@ -190,6 +190,7 @@ async def dibos_settings_save(
     auto_trace_duration_minutes: int = Form(120),
     enrich_incidents: str = Form(""),
     create_incidents: str = Form(""),
+    sync_external_units: str = Form(""),
     gateway_user: str = Form(""),
     gateway_password: str = Form(""),
     gateway_secret_changed: str = Form(""),   # "1" = neues Gateway-Passwort vorhanden
@@ -215,6 +216,7 @@ async def dibos_settings_save(
     cfg.auto_trace_duration_minutes = max(5, auto_trace_duration_minutes or 120)
     cfg.enrich_incidents = enrich_incidents == "1"
     cfg.create_incidents = create_incidents == "1"
+    cfg.sync_external_units = sync_external_units == "1"
     cfg.gateway_user = gateway_user.strip() or None
     cfg.service_user = service_user.strip() or None
     cfg.updated_at = datetime.now(UTC)
