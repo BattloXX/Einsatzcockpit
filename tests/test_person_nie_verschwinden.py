@@ -53,6 +53,7 @@ def scene():
     removed.removed_at = vehicle.created_at
     yield SimpleNamespace(
         db=db, incident=incident, other=other, rescued=rescued, rescued_two=rescued_two,
+        other_rescued=other_rescued,
         vehicle=vehicle, removed=removed, other_vehicle=other_vehicle,
     )
     db.close()
@@ -98,7 +99,54 @@ def test_person_move_between_vehicle_and_rescued_column_is_visible_once(scene):
     assert move_card(scene.db, scene.incident.id, "person", person.id, vehicle_id=scene.vehicle.id)
     assert move_card(scene.db, scene.incident.id, "person", person.id, column_id=scene.rescued_two.id)
     scene.db.refresh(person)
-    assert (person.column_id, person.vehicle_id) == (scene.rescued_two.id, None)
+    assert (person.column_id, person.vehicle_id) == (scene.rescued_two.id, scene.vehicle.id)
+
+    html = templates.env.get_template("incident/_kanban_col.html").render(
+        incident=scene.incident, col=scene.rescued_two, can_edit=False,
+        lage_sprueche=[], section_leader_candidates=[], oob=False,
+    )
+    assert html.count(f'id="person-card-{person.id}"') == 1
+
+
+def test_assigned_person_renders_in_column_and_vehicle_chip(scene):
+    person = RescuedPerson(
+        incident_id=scene.incident.id, column_id=scene.rescued.id,
+        vehicle_id=scene.vehicle.id, name="Sichtbar",
+    )
+    scene.db.add(person)
+    scene.db.flush()
+
+    column_html = templates.env.get_template("incident/_kanban_col.html").render(
+        incident=scene.incident, col=scene.rescued, can_edit=False,
+        lage_sprueche=[], section_leader_candidates=[], oob=False,
+    )
+    vehicle_html = templates.env.get_template("incident/_vehicle_card.html").render(
+        incident=scene.incident, vehicle=scene.vehicle, can_edit=False,
+    )
+
+    assert f'id="person-card-{person.id}"' in column_html
+    assert f'data-uid="{person.id}" data-kind="person"' in vehicle_html
+    assert ui_incident._column_card_count(scene.incident, scene.rescued) == 2
+
+
+def test_person_column_move_detaches_only_when_requested(scene):
+    person = RescuedPerson(
+        incident_id=scene.incident.id, column_id=scene.rescued.id,
+        vehicle_id=scene.vehicle.id, name="Zuordnung",
+    )
+    scene.db.add(person)
+    scene.db.flush()
+
+    assert move_card(scene.db, scene.incident.id, "person", person.id, column_id=scene.rescued_two.id)
+    scene.db.refresh(person)
+    assert person.vehicle_id == scene.vehicle.id
+
+    assert move_card(
+        scene.db, scene.incident.id, "person", person.id,
+        column_id=scene.rescued.id, detach_vehicle=True,
+    )
+    scene.db.refresh(person)
+    assert (person.column_id, person.vehicle_id) == (scene.rescued.id, None)
 
 
 def test_heal_orphaned_persons_repairs_only_current_incident(scene):
@@ -116,8 +164,31 @@ def test_heal_orphaned_persons_repairs_only_current_incident(scene):
     assert heal_orphaned_persons(scene.db, scene.incident.id) == 1
     scene.db.refresh(orphan)
     scene.db.refresh(untouched)
-    assert (orphan.vehicle_id, orphan.column_id) == (None, scene.rescued.id)
+    assert (orphan.vehicle_id, orphan.column_id) == (None, scene.rescued_two.id)
     assert untouched.vehicle_id == scene.other_vehicle.id
+
+
+def test_heal_orphaned_persons_keeps_valid_vehicle_when_repairing_column(scene):
+    invalid_column_person = RescuedPerson(
+        incident_id=scene.incident.id, column_id=scene.other_rescued.id,
+        vehicle_id=scene.vehicle.id, name="Spalte reparieren",
+    )
+    invalid_vehicle_person = RescuedPerson(
+        incident_id=scene.incident.id, column_id=scene.rescued_two.id,
+        vehicle_id=scene.removed.id, name="Fahrzeug reparieren",
+    )
+    scene.db.add_all([invalid_column_person, invalid_vehicle_person])
+    scene.db.flush()
+
+    assert heal_orphaned_persons(scene.db, scene.incident.id) == 2
+    scene.db.refresh(invalid_column_person)
+    scene.db.refresh(invalid_vehicle_person)
+    assert (invalid_column_person.column_id, invalid_column_person.vehicle_id) == (
+        scene.rescued.id, scene.vehicle.id,
+    )
+    assert (invalid_vehicle_person.column_id, invalid_vehicle_person.vehicle_id) == (
+        scene.rescued_two.id, None,
+    )
 
 
 def test_person_modal_keeps_removed_current_vehicle_selectable(scene):
@@ -162,3 +233,9 @@ def test_sortable_resyncs_after_failed_move():
     assert "Verschieben fehlgeschlagen" in text
     assert "/inhalt" in text
     assert "EinsatzBoard" not in text
+
+
+def test_sortable_clones_person_cards_for_vehicle_assignment():
+    text = open("app/static/js/sortable-glue.js", encoding="utf-8").read()
+    assert "return 'clone'" in text
+    assert "dragEl?.dataset.kind === 'person'" in text

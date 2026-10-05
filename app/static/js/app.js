@@ -675,7 +675,13 @@ function incidentBoard(incidentId, alarm, startedAt) {
         case 'person_updated':
           this._swapCard(incidentId, ev.kind, ev.uid);
           this._refreshOpenModal(incidentId, ev.kind, ev.uid);
+          if (ev.type === 'person_updated' && ev.column_id != null) {
+            this._swapColumnBody(incidentId, ev.column_id);
+          }
           if (ev.vehicle_uid != null) this._swapCard(incidentId, 'vehicle', ev.vehicle_uid);
+          if (ev.source_vehicle_uid != null && ev.source_vehicle_uid !== ev.vehicle_uid) {
+            this._swapCard(incidentId, 'vehicle', ev.source_vehicle_uid);
+          }
           break;
         case 'task_updated':
         case 'message_updated':
