@@ -18,6 +18,7 @@ import pytest
 
 from app.core.tenant import set_tenant_context
 from app.models.incident import Incident
+from app.models.incident import IncidentAlarmJob
 from app.models.master import AlarmType, FireDept
 from app.services.dibos import dibos_enrich
 from app.services.incident_service import create_incident
@@ -84,6 +85,19 @@ def test_event_ohne_passenden_incident_legt_neuen_an(org_id):
         assert incident.alarm_type_code == "T2"
         assert incident.address_street == "Teststrasse"
         assert incident.status == "active"
+    finally:
+        db.close()
+
+
+def test_fast_path_enqueues_alarm_jobs_in_same_commit(org_id):
+    result = dibos_enrich.enrich_events_for_org(
+        org_id, [_event(f"f-outbox-{uuid.uuid4().hex[:8]}")], create_incidents=True,
+    )
+    incident_id = result["created_ids"][0]
+    db = _session(org_id)
+    try:
+        jobs = db.query(IncidentAlarmJob).filter_by(incident_id=incident_id).all()
+        assert {job.channel for job in jobs} == {"sms", "push", "teams"}
     finally:
         db.close()
 

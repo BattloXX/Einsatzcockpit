@@ -67,6 +67,7 @@ def pruefe_dienste(db: Session, org_id: int, now: datetime | None = None) -> lis
     from app.core.timezones import format_local_datetime
     from app.models.dibos import OrgDibosConfig
     from app.models.gateway import Gateway
+    from app.models.incident import IncidentAlarmJob
     from app.models.master import FireDept
     from app.models.user import SmsGatewayToken
     from app.routers.ws import connected_gateway_token_ids
@@ -223,7 +224,37 @@ def pruefe_dienste(db: Session, org_id: int, now: datetime | None = None) -> lis
             dibos_state, dibos_detail = "ok", "DIBOS-Poll erfolgreich."
         dibos_teile = (DienstTeil("dibos", "DIBOS-Poll", dibos_state, dibos_detail),)
         dibos = DienstCheck("alarm_dibos", aggregiere(dibos_teile), dibos_detail, True, dibos_teile)
-    return [print_check, sms_check, serial, dibos]
+
+    jobs = db.query(IncidentAlarmJob).filter(IncidentAlarmJob.org_id == org_id).execution_options(
+        include_all_tenants=True
+    ).all()
+    open_jobs = [job for job in jobs if job.status in ("pending", "retry", "sending")]
+    open_with_created = [(job, _naive_utc(job.created_at)) for job in open_jobs]
+    haengend = [
+        job for job, created_at in open_with_created
+        if created_at is not None and created_at < jetzt - timedelta(minutes=2)
+    ]
+    failed_with_finished = [(job, _naive_utc(job.finished_at)) for job in jobs if job.status == "failed"]
+    fehlgeschlagen = [
+        job for job, finished_at in failed_with_finished
+        if finished_at is not None and finished_at >= jetzt - timedelta(hours=24)
+    ]
+    if haengend or fehlgeschlagen:
+        oldest = min((created_at for _, created_at in open_with_created if created_at is not None), default=jetzt)
+        age = int((jetzt - oldest).total_seconds())
+        detail = f"{len(haengend)} Alarmierungsauftraege seit ueber 2 Minuten offen (aeltester {age} s)"
+        if fehlgeschlagen:
+            channels = ", ".join(sorted({job.channel for job in fehlgeschlagen}))
+            detail += f"; {len(fehlgeschlagen)} fehlgeschlagen in 24 h ({channels})."
+        else:
+            detail += "."
+        outbox_state = "down"
+    else:
+        outbox_state = "ok"
+        detail = f"Keine haengenden Alarmierungsauftraege ({len(open_jobs)} offen)."
+    outbox_teile = (DienstTeil("alarm_outbox", "Alarm-Outbox", outbox_state, detail),)
+    outbox = DienstCheck("alarm_outbox", outbox_state, detail, True, outbox_teile)
+    return [print_check, sms_check, serial, dibos, outbox]
 
 
 def entscheide(

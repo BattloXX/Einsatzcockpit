@@ -311,7 +311,7 @@ def test_post_incident_card_skips_exercise_when_not_configured(monkeypatch):
 
     async def fake_webhook(*a, **kw):
         calls.append(1)
-        return True
+        return True, False, None
     monkeypatch.setattr(teams_alarm_service, "_post_via_webhook", fake_webhook)
 
     db = _session()
@@ -335,7 +335,7 @@ def test_post_incident_card_uses_webhook_when_no_bot_binding(monkeypatch):
 
     async def fake_webhook(webhook_url, incident, cfg, *, base_url, org):
         calls.append(webhook_url)
-        return True
+        return True, False, None
     monkeypatch.setattr(teams_alarm_service, "_post_via_webhook", fake_webhook)
 
     db = _session()
@@ -363,7 +363,7 @@ def test_post_incident_card_bot_binding_falls_back_to_webhook(monkeypatch):
 
     async def fake_webhook(*a, **kw):
         webhook_calls.append(1)
-        return True
+        return True, False, None
 
     monkeypatch.setattr("app.services.teams_bot_service.post_incident_card_via_bot", fake_bot)
     monkeypatch.setattr(teams_alarm_service, "_post_via_webhook", fake_webhook)
@@ -396,7 +396,7 @@ def test_post_incident_card_skips_alarm_type_with_teams_alarm_disabled(monkeypat
 
     async def fake_webhook(*a, **kw):
         calls.append(1)
-        return True
+        return True, False, None
     monkeypatch.setattr(teams_alarm_service, "_post_via_webhook", fake_webhook)
 
     db = _session()
@@ -431,7 +431,7 @@ def test_post_incident_card_refreshes_stale_coords_before_building_card(monkeypa
     async def fake_webhook(webhook_url, incident, cfg, *, base_url, org):
         captured["lat"] = incident.lat
         captured["lng"] = incident.lng
-        return True
+        return True, False, None
     monkeypatch.setattr(teams_alarm_service, "_post_via_webhook", fake_webhook)
 
     db = _session()
@@ -494,43 +494,56 @@ def test_post_via_webhook_posts_message_card(monkeypatch):
     captured = {}
 
     class _MockAsyncClient:
-        def __init__(self, *a, **kw):
-            pass
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *a):
-            return False
-
         async def post(self, url, json=None):
             captured["url"] = url
             captured["json"] = json
             return httpx.Response(200, request=httpx.Request("POST", url))
 
-    monkeypatch.setattr(httpx, "AsyncClient", _MockAsyncClient)
+    monkeypatch.setattr(teams_alarm_service, "_teams_http_client", lambda: _MockAsyncClient())
 
     incident = _incident()
     cfg = _cfg()
 
     import asyncio
-    ok = asyncio.run(teams_alarm_service._post_via_webhook(
+    result = asyncio.run(teams_alarm_service._post_via_webhook(
         "https://outlook.office.com/webhook/x", incident, cfg,
         base_url="https://example.com", org=None,
     ))
-    assert ok is True
+    assert result == (True, False, None)
     assert captured["url"] == "https://outlook.office.com/webhook/x"
     assert captured["json"]["type"] == "message"
     assert captured["json"]["attachments"][0]["contentType"] == "application/vnd.microsoft.card.adaptive"
 
 
-def test_post_via_webhook_rejects_non_https_url():
+def test_post_via_webhook_rejects_non_https_url(monkeypatch):
     incident = _incident()
     cfg = _cfg()
 
     import asyncio
-    ok = asyncio.run(teams_alarm_service._post_via_webhook(
+    monkeypatch.setattr(teams_alarm_service, "_teams_http_client", lambda: pytest.fail("HTTP call"))
+    result = asyncio.run(teams_alarm_service._post_via_webhook(
         "http://insecure.example/webhook", incident, cfg,
         base_url="https://example.com", org=None,
     ))
-    assert ok is False
+    assert result == (False, False, "ungueltige Webhook-URL")
+
+
+@pytest.mark.parametrize(
+    ("response", "expected"),
+    [
+        (httpx.Response(503, request=httpx.Request("POST", "https://example.test")), (False, True, "HTTP 503")),
+        (httpx.Response(400, request=httpx.Request("POST", "https://example.test")), (False, False, "HTTP 400")),
+        (httpx.ConnectTimeout("timeout"), (False, True, "timeout")),
+    ],
+)
+def test_post_payload_classifies_retryability(monkeypatch, response, expected):
+    class Client:
+        async def post(self, *args, **kwargs):
+            if isinstance(response, Exception):
+                raise response
+            return response
+
+    monkeypatch.setattr(teams_alarm_service, "_teams_http_client", lambda: Client())
+    import asyncio
+
+    assert asyncio.run(teams_alarm_service._post_payload("https://example.test", {}, log_label="test")) == expected

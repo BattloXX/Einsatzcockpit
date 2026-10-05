@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import os
 import secrets as _secrets
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -112,6 +113,7 @@ from app.routers import (
     ui_weather,
     ws,
 )
+from app.services.leader_lock import LeaderLock
 
 logger = logging.getLogger("einsatzleiter")
 
@@ -182,6 +184,48 @@ from app import log_buffer as _log_buffer  # noqa: E402
 _log_buffer.setup()
 
 
+def _start_background_loops() -> list[asyncio.Task]:
+    """Startet alle Hintergrund-Loops; läuft nur im Worker mit dem Leader-Lock."""
+    from app.services.abfluss_poll_loop import abfluss_poll_loop
+    from app.services.ai_log_retention import ai_log_retention_loop
+    from app.services.alarm_outbox import alarm_outbox_loop
+    from app.services.api_message_dispatch_loop import api_message_dispatch_loop
+    from app.services.autoclose import autoclose_loop
+    from app.services.breathing_service import _breathing_watchdog_loop
+    from app.services.dibos.dibos_capture import dibos_trace_retention_loop
+    from app.services.dibos.dibos_loop import dibos_poll_loop
+    from app.services.dienst_monitor_loop import dienst_monitor_loop
+    from app.services.gsl_lagemeldung_reminder import gsl_lagemeldung_reminder_loop
+    from app.services.lis.lis_capture import lis_capture_retention_loop
+    from app.services.lis.lis_loop import lis_poll_loop
+    from app.services.mailing_dispatch_loop import mailing_dispatch_loop
+    from app.services.mailing_schedule_loop import mailing_schedule_loop
+    from app.services.mcp_upload_service import mcp_upload_retention_loop
+    from app.services.nachschlagewerk_sync import nachschlagewerk_sync_loop
+    from app.services.org_backup_loop import org_backup_loop
+    from app.services.print_watchdog import print_job_watchdog_loop
+    from app.services.probe_erinnerung import probe_erinnerung_loop
+    from app.services.sms_dispatch_service import einsatzinfo_nachversand_loop
+    from app.services.sms_log_retention import sms_log_retention_loop
+    from app.services.task_reminder import task_reminder_loop
+    from app.services.vehicle_position_retention import vehicle_position_retention_loop
+    from app.services.verleih_erinnerung import verleih_erinnerung_loop
+    from app.services.weather_alert_loop import weather_alert_loop
+    from app.services.weather_retention import weather_retention_loop
+
+    loops = (
+        autoclose_loop(), _breathing_watchdog_loop(), task_reminder_loop(), print_job_watchdog_loop(),
+        gsl_lagemeldung_reminder_loop(), verleih_erinnerung_loop(), probe_erinnerung_loop(),
+        weather_retention_loop(), ai_log_retention_loop(), mcp_upload_retention_loop(),
+        sms_log_retention_loop(), einsatzinfo_nachversand_loop(), alarm_outbox_loop(),
+        vehicle_position_retention_loop(), weather_alert_loop(), dienst_monitor_loop(), abfluss_poll_loop(),
+        lis_poll_loop(), lis_capture_retention_loop(), dibos_poll_loop(), dibos_trace_retention_loop(),
+        nachschlagewerk_sync_loop(), org_backup_loop(), mailing_dispatch_loop(),
+        api_message_dispatch_loop(), mailing_schedule_loop(),
+    )
+    return [asyncio.create_task(loop) for loop in loops]
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup-Validierung der kritischen Konfiguration
@@ -246,127 +290,37 @@ async def lifespan(app: FastAPI):
     except Exception as exc:  # Wetter ist unkritisch – Start nie blockieren.
         logger.warning("Wetter-DB-Init übersprungen: %s", exc)
 
-    # Background-Loop für 48h-Auto-Close-Lifecycle
-    from app.services.autoclose import autoclose_loop
+    # Hintergrund-Loops laufen nur in einem Worker (Datei-Lock je Host). Sonst pollt
+    # jeder Gunicorn-Worker DIBOS/LIS und sendet SMS/Teams-Nachversand doppelt.
+    leader = LeaderLock(settings.LEADER_LOCK_PATH)
+    background_tasks: list[asyncio.Task] = []
+    leader_watcher: asyncio.Task | None = None
+    try:
+        acquired = leader.try_acquire()
+    except Exception:
+        # Fail open: ein Worker ohne Alarm-Loops wäre schlimmer als doppelte Loops.
+        logger.warning("Leader-Lock nicht verfuegbar, Hintergrund-Loops starten trotzdem", exc_info=True)
+        acquired = True
+    if acquired:
+        background_tasks.extend(_start_background_loops())
+        logger.info("Hintergrund-Loops aktiv in PID %s", os.getpid())
+    else:
+        logger.info("Hintergrund-Loops laufen in einem anderen Worker (PID %s wartet)", os.getpid())
 
-    autoclose_task = asyncio.create_task(autoclose_loop())
+        async def _wait_for_leadership() -> None:
+            while True:
+                await asyncio.sleep(15)
+                try:
+                    if not leader.try_acquire():
+                        continue
+                except Exception:
+                    logger.warning("Leader-Lock-Uebernahme fehlgeschlagen", exc_info=True)
+                    continue
+                background_tasks.extend(_start_background_loops())
+                logger.info("Hintergrund-Loops uebernommen in PID %s", os.getpid())
+                return
 
-    # Background-Watchdog für AS-Warnungen (alle 5 Sekunden)
-    from app.services.breathing_service import _breathing_watchdog_loop
-
-    watchdog_task = asyncio.create_task(_breathing_watchdog_loop())
-
-    # Background-Loop für fällige Meldungen (alle 30 Sekunden)
-    from app.services.task_reminder import task_reminder_loop
-
-    reminder_task = asyncio.create_task(task_reminder_loop())
-
-    # Passiver Backstop für gealterte, nicht-terminale Druckaufträge.
-    from app.services.print_watchdog import print_job_watchdog_loop
-
-    print_watchdog_task = asyncio.create_task(print_job_watchdog_loop())
-
-    # Background-Loop für überfällige GSL-Lagemeldungen (SKKM-Regelkreis)
-    from app.services.gsl_lagemeldung_reminder import gsl_lagemeldung_reminder_loop
-
-    lagemeldung_task = asyncio.create_task(gsl_lagemeldung_reminder_loop())
-
-    # Background-Loop für automatische Geräteverleih-Erinnerungs-SMS
-    from app.services.verleih_erinnerung import verleih_erinnerung_loop
-
-    verleih_task = asyncio.create_task(verleih_erinnerung_loop())
-
-    # Tägliche Vorbereitungs-Erinnerungen für bevorstehende Proben.
-    from app.services.probe_erinnerung import probe_erinnerung_loop
-
-    probe_erinnerung_task = asyncio.create_task(probe_erinnerung_loop())
-
-    # Background-Loop für Wetterstations-Zeitreihen-Retention (täglich 03:30)
-    from app.services.weather_retention import weather_retention_loop
-
-    weather_retention_task = asyncio.create_task(weather_retention_loop())
-
-    from app.services.ai_log_retention import ai_log_retention_loop
-
-    ai_log_retention_task = asyncio.create_task(ai_log_retention_loop())
-
-    from app.services.mcp_upload_service import mcp_upload_retention_loop
-
-    mcp_upload_retention_task = asyncio.create_task(mcp_upload_retention_loop())
-
-    from app.services.sms_log_retention import sms_log_retention_loop
-
-    sms_log_retention_task = asyncio.create_task(sms_log_retention_loop())
-
-    from app.services.sms_dispatch_service import einsatzinfo_nachversand_loop
-
-    einsatzinfo_nachversand_task = asyncio.create_task(einsatzinfo_nachversand_loop())
-
-    # Background-Loop für GPS-Positionshistorie-Retention (täglich 03:45)
-    from app.services.vehicle_position_retention import vehicle_position_retention_loop
-
-    vehicle_position_retention_task = asyncio.create_task(vehicle_position_retention_loop())
-
-    # Background-Loop für Wetterwarnungen (alle 5 Minuten je Org)
-    from app.services.weather_alert_loop import weather_alert_loop
-
-    weather_alert_task = asyncio.create_task(weather_alert_loop())
-
-    # Background-Loop für die Dienstüberwachung (Gateways/Alarm, alle 60 s je Org)
-    from app.services.dienst_monitor_loop import dienst_monitor_loop
-
-    dienst_monitor_task = asyncio.create_task(dienst_monitor_loop())
-
-    # Background-Loop für kontinuierliches Pegel-Polling (alle 10 Minuten je Org,
-    # unabhängig von Seitenaufrufen – vermeidet Lücken im 24-h-Verlauf)
-    from app.services.abfluss_poll_loop import abfluss_poll_loop
-
-    abfluss_poll_task = asyncio.create_task(abfluss_poll_loop())
-
-    # Background-Loop für die LIS/IPR-Anbindung (Poll-Intervall je Org konfigurierbar)
-    from app.services.lis.lis_loop import lis_poll_loop
-
-    lis_task = asyncio.create_task(lis_poll_loop())
-
-    # Background-Loop für die Löschfrist von LIS-Rohdaten-Aufzeichnungen (täglich 04:00,
-    # DSGVO — enthalten Personenbezug, siehe lis_capture.py)
-    from app.services.lis.lis_capture import lis_capture_retention_loop
-
-    lis_capture_retention_task = asyncio.create_task(lis_capture_retention_loop())
-
-    # Background-Loop für die DIBOS-EventHub-Auto-Erkennung (leichter Poll je Org,
-    # startet bei eigenem Einsatz automatisch ein Voll-Tracing, siehe dibos_loop.py)
-    from app.services.dibos.dibos_loop import dibos_poll_loop
-
-    dibos_task = asyncio.create_task(dibos_poll_loop())
-
-    # Background-Loop für die Löschfrist von DIBOS-Rohdaten-Aufzeichnungen (täglich 04:05,
-    # DSGVO — enthalten Personenbezug, siehe dibos_capture.py)
-    from app.services.dibos.dibos_capture import dibos_trace_retention_loop
-
-    dibos_trace_retention_task = asyncio.create_task(dibos_trace_retention_loop())
-
-    # Background-Loops für den BMA-Webplattform-Import (Landeswarnzentrale Vorarlberg):
-    # täglicher Sync (Uhrzeit je Org konfigurierbar) + Keepalive-Ping fürs Session-Cookie
-
-    # Background-Loop für den täglichen Gefahrgut-Datensatz-Sync (Nachschlagewerke, 03:00)
-    from app.services.nachschlagewerk_sync import nachschlagewerk_sync_loop
-
-    nachschlagewerk_sync_task = asyncio.create_task(nachschlagewerk_sync_loop())
-
-    # Background-Loop für geplante Org-Backups (Push ans je Org konfigurierte Ziel)
-    from app.services.org_backup_loop import org_backup_loop
-
-    org_backup_task = asyncio.create_task(org_backup_loop())
-    from app.services.mailing_dispatch_loop import mailing_dispatch_loop
-
-    mailing_dispatch_task = asyncio.create_task(mailing_dispatch_loop())
-    from app.services.api_message_dispatch_loop import api_message_dispatch_loop
-
-    api_message_dispatch_task = asyncio.create_task(api_message_dispatch_loop())
-    from app.services.mailing_schedule_loop import mailing_schedule_loop
-
-    mailing_schedule_task = asyncio.create_task(mailing_schedule_loop())
+        leader_watcher = asyncio.create_task(_wait_for_leadership())
 
     try:
         yield
@@ -375,62 +329,22 @@ async def lifespan(app: FastAPI):
         from app.services import ws_bus
 
         await ws_bus.stop()
-        autoclose_task.cancel()
-        watchdog_task.cancel()
-        reminder_task.cancel()
-        print_watchdog_task.cancel()
-        lagemeldung_task.cancel()
-        verleih_task.cancel()
-        probe_erinnerung_task.cancel()
-        weather_retention_task.cancel()
-        ai_log_retention_task.cancel()
-        mcp_upload_retention_task.cancel()
-        sms_log_retention_task.cancel()
-        einsatzinfo_nachversand_task.cancel()
-        vehicle_position_retention_task.cancel()
-        weather_alert_task.cancel()
-        dienst_monitor_task.cancel()
-        abfluss_poll_task.cancel()
-        lis_task.cancel()
-        lis_capture_retention_task.cancel()
-        dibos_task.cancel()
-        dibos_trace_retention_task.cancel()
-        nachschlagewerk_sync_task.cancel()
-        org_backup_task.cancel()
-        mailing_dispatch_task.cancel()
-        api_message_dispatch_task.cancel()
-        mailing_schedule_task.cancel()
-        for t in (
-            autoclose_task,
-            watchdog_task,
-            reminder_task,
-            print_watchdog_task,
-            lagemeldung_task,
-            verleih_task,
-            probe_erinnerung_task,
-            weather_retention_task,
-            ai_log_retention_task,
-            mcp_upload_retention_task,
-            sms_log_retention_task,
-            einsatzinfo_nachversand_task,
-            vehicle_position_retention_task,
-            weather_alert_task,
-            dienst_monitor_task,
-            abfluss_poll_task,
-            lis_task,
-            lis_capture_retention_task,
-            dibos_task,
-            dibos_trace_retention_task,
-            nachschlagewerk_sync_task,
-            org_backup_task,
-            mailing_dispatch_task,
-            api_message_dispatch_task,
-            mailing_schedule_task,
-        ):
+        from app.services.teams_alarm_service import aclose_teams_client
+
+        await aclose_teams_client()
+        if leader_watcher is not None:
+            leader_watcher.cancel()
+        for t in background_tasks:
+            t.cancel()
+        for t in [*background_tasks, *([leader_watcher] if leader_watcher else [])]:
             try:
                 await t
             except asyncio.CancelledError, Exception:
                 pass
+        try:
+            leader.release()
+        except Exception:
+            logger.warning("Leader-Lock konnte nicht freigegeben werden", exc_info=True)
 
 
 def _bootstrap_admin() -> None:

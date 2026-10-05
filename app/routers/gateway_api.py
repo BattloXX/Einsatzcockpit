@@ -95,6 +95,16 @@ async def ingest_alarm(
         parsed=data.get("parsed"),
         parse_status=parse_status,
     )
+    if created and ingest.einsatz_id:
+        from app.models.incident import Incident
+        from app.services.alarm_outbox import enqueue_incident_alarm
+
+        incident = db.get(Incident, ingest.einsatz_id)
+        if incident is not None:
+            enqueue_incident_alarm(
+                db, incident, org_id=gateway.org_id, source="gateway",
+                push_url=f"/einsatz/{incident.id}", base_url=str(request.base_url),
+            )
     db.commit()
 
     if created:

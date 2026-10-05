@@ -3,11 +3,13 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 from app.core.security import generate_api_key, hash_api_key
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.incident import Incident
+from app.models.incident import IncidentAlarmJob
 from app.models.master import FireDept
 from app.models.user import ApiKey
 
@@ -86,6 +88,63 @@ def test_create_incident_success(client, api_key, monkeypatch):
     assert r2.json()["id"] == incident_id
     assert notify_calls == [incident_id]
 
+
+def test_api_create_enqueues_alarm_jobs(client, api_key, monkeypatch):
+    async def no_process(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr("app.services.alarm_outbox.process_incident_alarm", no_process)
+    payload = dict(PAYLOAD, Key=f"outbox-{uuid.uuid4().hex}", Strasse=f"Outbox-{uuid.uuid4().hex}")
+    response = client.post("/api/v1/einsatz", json=payload, headers={"X-API-Key": api_key})
+    assert response.status_code == 200
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        jobs = db.query(IncidentAlarmJob).filter_by(incident_id=response.json()["id"]).all()
+        assert {job.channel for job in jobs} == {"sms", "push", "teams"}
+    finally:
+        db.close()
+
+
+def test_create_incident_key_race_returns_existing(client, api_key, monkeypatch):
+    import app.routers.api_v1 as api_v1
+
+    winner_id = None
+    process_calls = []
+
+    def race_create(db, **kwargs):
+        nonlocal winner_id
+        winner_db = SessionLocal()
+        set_tenant_context(winner_db, None)
+        try:
+            winner = Incident(
+                primary_org_id=kwargs["primary_org_id"], external_key="race-1",
+                alarm_type_code="T1", status="active",
+            )
+            winner_db.add(winner)
+            winner_db.commit()
+            winner_id = winner.id
+        finally:
+            winner_db.close()
+        raise IntegrityError("x", {}, Exception("dup"))
+
+    async def no_process(*args, **kwargs):
+        process_calls.append(args)
+
+    monkeypatch.setattr(api_v1, "create_incident", race_create)
+    monkeypatch.setattr("app.services.alarm_outbox.process_incident_alarm", no_process)
+    payload = dict(PAYLOAD, Key="race-1", Strasse=f"Race-{uuid.uuid4().hex}")
+    response = client.post("/api/v1/einsatz", json=payload, headers={"X-API-Key": api_key})
+    assert response.status_code == 200
+    assert response.json()["created"] is False
+    assert response.json()["id"] == winner_id
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        assert db.query(Incident).filter_by(external_key="race-1").count() == 1
+    finally:
+        db.close()
+    assert process_calls == []
 
 def test_create_incident_stores_caller_info(client, api_key):
     """Name/Telefon aus dem Alarm-Webhook landen auf caller_name/caller_phone —

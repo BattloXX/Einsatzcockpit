@@ -11,6 +11,7 @@ erreichbar.
 |--------|---------|
 | Print-Gateway | Jedes gekoppelte Gateway wird einzeln geprüft. Es muss sich innerhalb seines Health-Intervalls über `last_seen_at` gemeldet haben. Als Toleranz gelten mindestens 180 Sekunden beziehungsweise das Dreifache des konfigurierten Intervalls. |
 | SMS-Gateway | Jeder aktive Gateway-Token wird einzeln geprüft. Eine bestehende Verbindung oder ein Heartbeat innerhalb der letzten zehn Minuten gilt als erreichbar. Eine konfigurierte EUS-Anbindung ist ein zusätzliches, funktionierendes Teil, wird aber nicht aktiv auf Erreichbarkeit geprüft. |
+| Alarm-Outbox | Meldet eine Störung, wenn ein Alarmierungsjob länger als zwei Minuten offen ist oder innerhalb der letzten 24 Stunden fehlgeschlagen ist. |
 | Alarm seriell (W&T) | Jede konfigurierte W&T-Verbindung wird einzeln geprüft. Das zugehörige Gateway muss über `last_seen_at` frisch sein und die serielle Verbindung als verbunden melden. |
 | Alarm DIBOS | Der einzelne DIBOS-Poll muss erfolgreich sein und innerhalb des erwarteten Poll-Intervalls stattgefunden haben. |
 

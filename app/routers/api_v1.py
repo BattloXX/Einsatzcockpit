@@ -544,12 +544,7 @@ async def create_incident_api(
 ):
     org = db.get(FireDept, api_key.org_id) if api_key.org_id else None
 
-    # Idempotency check (org-scoped: two orgs may use the same external key)
-    existing = db.query(Incident).filter(
-        Incident.primary_org_id == api_key.org_id,
-        Incident.external_key == payload.Key,
-    ).first()
-    if existing:
+    def _existing_response(existing: Incident):
         write_audit(db, "api.incident.duplicate", api_key_id=api_key.id,
                     incident_id=existing.id, ip=request.client.host if request.client else None)
         board_token, board_url = _get_or_create_board_token(
@@ -557,13 +552,18 @@ async def create_incident_api(
         )
         db.commit()
         return {
-            "id": existing.id,
-            "external_key": existing.external_key,
-            "url": f"/einsatz/{existing.id}",
-            "created": False,
-            "board_token": board_token,
-            "board_url": board_url,
+            "id": existing.id, "external_key": existing.external_key,
+            "url": f"/einsatz/{existing.id}", "created": False,
+            "board_token": board_token, "board_url": board_url,
         }
+
+    # Idempotency check (org-scoped: two orgs may use the same external key)
+    existing = db.query(Incident).filter(
+        Incident.primary_org_id == api_key.org_id,
+        Incident.external_key == payload.Key,
+    ).first()
+    if existing:
+        return _existing_response(existing)
 
     # Map Stufe to alarm type code
     stufe_raw = (payload.Stufe or "T1").lower().strip()
@@ -644,25 +644,36 @@ async def create_incident_api(
             "board_url": board_url,
         }
 
-    incident, created_fresh = create_incident(
-        db,
-        alarm_type_code=alarm_type_code,
-        started_at=started_at,
-        external_key=payload.Key,
-        nummer=payload.Nummer,
-        is_exercise=payload.Uebung,
-        address_street=payload.Strasse,
-        address_no=payload.HausNr,
-        address_city=payload.Ort,
-        report_text=payload.Meldung,
-        reason=payload.Einsatzgrund,
-        caller_name=payload.Name,
-        caller_phone=payload.Telefon,
-        primary_org_id=api_key.org_id,
-        api_key_id=api_key.id,
-        ip=request.client.host if request.client else None,
-        reject_near_duplicates=True,
-    )
+    try:
+        incident, created_fresh = create_incident(
+            db,
+            alarm_type_code=alarm_type_code,
+            started_at=started_at,
+            external_key=payload.Key,
+            nummer=payload.Nummer,
+            is_exercise=payload.Uebung,
+            address_street=payload.Strasse,
+            address_no=payload.HausNr,
+            address_city=payload.Ort,
+            report_text=payload.Meldung,
+            reason=payload.Einsatzgrund,
+            caller_name=payload.Name,
+            caller_phone=payload.Telefon,
+            primary_org_id=api_key.org_id,
+            api_key_id=api_key.id,
+            ip=request.client.host if request.client else None,
+            reject_near_duplicates=True,
+        )
+    except IntegrityError:
+        # MariaDB REPEATABLE READ behaelt nach einem Savepoint denselben Snapshot;
+        # nur ein voller Rollback macht den parallel committeten Gewinner sichtbar.
+        db.rollback()
+        winner = db.query(Incident).filter(
+            Incident.primary_org_id == api_key.org_id, Incident.external_key == payload.Key,
+        ).first()
+        if winner is None:
+            raise
+        return _existing_response(winner)
 
     if created_fresh and payload.Leitstellennummer:
         # Nummer am neuen Einsatz vormerken, damit ein später eintreffender LIS/DIBOS-
@@ -735,6 +746,15 @@ async def create_incident_api(
         _org_s = db.query(_OrgSettings).filter(_OrgSettings.org_id == api_key.org_id).first()
         if _org_s and _org_s.default_access_pin_hash:
             incident.access_pin_hash = _org_s.default_access_pin_hash
+
+    # Die Outbox liegt in derselben Transaktion wie der Einsatz und ueberlebt damit
+    # einen Prozessabbruch direkt nach diesem Commit.
+    from app.services.alarm_outbox import enqueue_incident_alarm
+    enqueue_incident_alarm(
+        db, incident, org_id=api_key.org_id, source="api",
+        triggered_by_user_id=api_key.created_by_user_id,
+        base_url=str(request.base_url), push_url=f"/einsatz/{incident.id}",
+    )
 
     # ── Einsatz ist jetzt gespeichert ────────────────────────────────────────
     db.commit()

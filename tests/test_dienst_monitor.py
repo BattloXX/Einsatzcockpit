@@ -9,6 +9,45 @@ from app.models.dienst_monitor import DienstStatus
 from app.services.dienst_monitor_service import DienstCheck, dienst_zustand, entscheide
 
 
+@pytest.mark.parametrize(
+    ("status", "created_delta", "finished_delta", "state", "fragment"),
+    [
+        (None, None, None, "ok", "Keine haengenden"),
+        ("pending", timedelta(minutes=5), None, "down", "aeltester"),
+        ("failed", None, timedelta(hours=1), "down", "teams"),
+        ("failed", None, timedelta(hours=30), "ok", "Keine haengenden"),
+    ],
+)
+def test_alarm_outbox_monitor(status, created_delta, finished_delta, state, fragment):
+    from app.db import SessionLocal
+    from app.models.incident import Incident, IncidentAlarmJob
+    from app.services.dienst_monitor_service import pruefe_dienste
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    now = datetime.now(UTC).replace(tzinfo=None)
+    try:
+        # Die Test-DB ist sessionweit geteilt: Jobs anderer Tests der Org 1 entfernen.
+        for job in db.query(IncidentAlarmJob).filter(IncidentAlarmJob.org_id == 1).all():
+            db.delete(job)
+        db.commit()
+        if status:
+            incident = Incident(alarm_type_code="B2", primary_org_id=1, status="active")
+            db.add(incident)
+            db.flush()
+            db.add(IncidentAlarmJob(
+                org_id=1, incident_id=incident.id, channel="teams", status=status,
+                next_attempt_at=now, created_at=now - created_delta if created_delta else now,
+                finished_at=now - finished_delta if finished_delta else None, context={},
+            ))
+            db.commit()
+        check = next(check for check in pruefe_dienste(db, 1, now) if check.key == "alarm_outbox")
+        assert check.state == state
+        assert fragment in check.detail
+    finally:
+        db.close()
+
+
 def row(**werte):
     basis = dict(org_id=1, key="print_gateway", state="unknown", fail_cycles=0, ok_cycles=0)
     basis.update(werte)

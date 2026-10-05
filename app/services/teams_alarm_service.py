@@ -33,6 +33,25 @@ logger = logging.getLogger("einsatzleiter.teams_alarm")
 class TeamsDispatchResult:
     sent: bool
     reason: str | None = None
+    retryable: bool = False
+
+
+_teams_client = None
+
+
+def _teams_http_client():
+    global _teams_client
+    import httpx
+    if _teams_client is None:
+        _teams_client = httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=5.0))
+    return _teams_client
+
+
+async def aclose_teams_client() -> None:
+    global _teams_client
+    if _teams_client is not None:
+        await _teams_client.aclose()
+        _teams_client = None
 
 
 def _card_base_url(base_url: str) -> str:
@@ -55,25 +74,28 @@ def _card_base_url(base_url: str) -> str:
     return resolved
 
 
-async def _post_payload(webhook_url: str, payload: dict, *, log_label: str) -> bool:
+async def _post_payload(webhook_url: str, payload: dict, *, log_label: str) -> tuple[bool, bool, str | None]:
     import httpx
 
     if not webhook_url or not webhook_url.startswith("https://"):
         logger.warning("Teams-Alarmierung: Webhook-URL ungültig oder leer (%s)", log_label)
-        return False
+        return False, False, "ungueltige Webhook-URL"
 
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(webhook_url, json=payload)
-        resp.raise_for_status()
-        return True
+        resp = await _teams_http_client().post(webhook_url, json=payload)
+        if resp.status_code >= 400:
+            return False, resp.status_code == 429 or resp.status_code >= 500, f"HTTP {resp.status_code}"
+        return True, False, None
+    except (httpx.TimeoutException, httpx.TransportError) as exc:
+        logger.error("Teams-Alarmierung: Webhook-Fehler (%s): %s", log_label, exc)
+        return False, True, str(exc) or type(exc).__name__
     except Exception as exc:
         logger.error("Teams-Alarmierung: Webhook-Fehler (%s): %s", log_label, exc)
-        return False
+        return False, False, str(exc) or type(exc).__name__
 
 
 async def _post_via_webhook(webhook_url: str, incident: Incident, cfg: TeamsAlarmConfig,
-                             *, base_url: str, org: FireDept | None) -> bool:
+                             *, base_url: str, org: FireDept | None) -> tuple[bool, bool, str | None]:
     payload = build_incident_message_card(incident, cfg, base_url=base_url, org=org)
     return await _post_payload(webhook_url, payload, log_label=f"Einsatz {incident.id}")
 
@@ -199,7 +221,7 @@ async def post_incident_card(db: Session, incident: Incident, *, base_url: str) 
             reason, incident.id, incident.primary_org_id, incident.alarm_type_code, incident.is_exercise,
         )
         return TeamsDispatchResult(False, reason)
-    sent = await _post_via_webhook(webhook_url, incident, cfg, base_url=base_url, org=org)
+    sent, retryable, failure_reason = await _post_via_webhook(webhook_url, incident, cfg, base_url=base_url, org=org)
     if sent and major_incident_id is not None:
         _record_card_post(db, incident, target=target, conversation_id=webhook_url, major_incident_id=major_incident_id)
     if sent:
@@ -208,12 +230,12 @@ async def post_incident_card(db: Session, incident: Incident, *, base_url: str) 
             incident.id, incident.primary_org_id, incident.alarm_type_code, incident.is_exercise,
         )
         return TeamsDispatchResult(True)
-    reason = "Webhook-Versandfehler"
+    reason = failure_reason or "Webhook-Versandfehler"
     logger.warning(
         "Teams-Alarmierung uebersprungen: %s (Einsatz %s, Org %s, stichwort=%s, is_exercise=%s)",
         reason, incident.id, incident.primary_org_id, incident.alarm_type_code, incident.is_exercise,
     )
-    return TeamsDispatchResult(False, reason)
+    return TeamsDispatchResult(False, reason, retryable)
 
 
 def _record_card_post(

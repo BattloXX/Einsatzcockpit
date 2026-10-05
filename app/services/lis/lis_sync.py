@@ -960,9 +960,14 @@ async def sync_operation(
             )
             return None
 
-        # Zeitkritische Alarmierung vor Geocoding und Objekt-Matching ausführen.
+        # Die Outbox liegt in derselben Transaktion wie die LIS-Neuanlage.
         from app.config import settings
+        from app.services.alarm_outbox import enqueue_incident_alarm
         from app.services.incident_notify import notify_incident_created
+        enqueue_incident_alarm(
+            db, incident, org_id=org.id, source="lis",
+            base_url=settings.effective_public_base_url,
+        )
         await notify_incident_created(
             db, incident, org_id=org.id,
             base_url=settings.effective_public_base_url,
