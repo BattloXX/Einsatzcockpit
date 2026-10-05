@@ -378,7 +378,7 @@ class Settings(BaseSettings):
 
     # LIS/IPR-Anbindung (Intergraph Leitstelleninformationssystem)
     LIS_ENABLED: bool = True  # globaler Kill-Switch
-    LIS_POLL_INTERVAL_S: int = 30  # Loop-Intervall
+    LIS_POLL_INTERVAL_S: int = 30  # Kompatibilitätswert; LIS nutzt Intervall je Organisation
 
     # DIBOS EventHub / Elvis-Anbindung (Landeswarnzentrale Vorarlberg) - reines
     # Tracing/Diagnose-Feature, siehe app/services/dibos/

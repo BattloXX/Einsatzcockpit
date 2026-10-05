@@ -40,6 +40,22 @@ engine = create_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
 TestingSession = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
+@pytest.fixture(autouse=True)
+def reset_lis_in_memory_state():
+    """LIS-Poll-Zustand darf nicht zwischen einzelnen Tests weiterleben."""
+    from app.services.lis import lis_loop, lis_sync
+
+    lis_sync._tasks_retry_after.clear()
+    lis_sync._released_vehicle_misses.clear()
+    lis_loop._org_clients.clear()
+    lis_loop._last_started_at.clear()
+    yield
+    lis_sync._tasks_retry_after.clear()
+    lis_sync._released_vehicle_misses.clear()
+    lis_loop._org_clients.clear()
+    lis_loop._last_started_at.clear()
+
+
 def flatten_routes(routes):
     """Rekursiv abflachen: ab Starlette >=1.x (fastapi >=0.139) wrapped `include_router()`
     Sub-Router in einen `_IncludedRouter` statt sie wie zuvor flach in `app.routes` zu haengen

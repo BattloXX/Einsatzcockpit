@@ -24,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import zipfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -38,6 +39,11 @@ CAPTURE_ROOT = Path("app_storage/lis_capture")
 # (v.a. DownloadDocument-Antworten mit Bilddaten) — nur die ersten Bytes,
 # fürs Nachschärfen der Feldnamen reicht die Struktur, nicht der Volltext.
 _MAX_CAPTURED_BYTES = 200_000
+_STOP_AFTER_EMPTY_MINUTES = 10
+_PASSWORD_RE = re.compile(
+    rb"(<(?:[A-Za-z_][\w.-]*:)?password(?:\s[^>]*)?>).*?(</(?:[A-Za-z_][\w.-]*:)?password\s*>)",
+    re.DOTALL | re.IGNORECASE,
+)
 
 # Aufzeichnungen enthalten personenbezogene Daten (Anrufer, Mannschaft) —
 # nach dieser Frist automatisch löschen (siehe purge_old_captures()).
@@ -62,6 +68,7 @@ class ExchangeRecorder:
         self.run_id = run_id
         self.seq = 0
         self.exchanges: list[dict] = []
+        self.saw_operation = False
         self.out_dir.mkdir(parents=True, exist_ok=True)
 
     def record(self, url: str, soap_action: str, request_bytes: bytes, response_bytes: bytes) -> None:
@@ -71,7 +78,7 @@ class ExchangeRecorder:
         req_path = self.out_dir / f"{self.seq:04d}_{stamp}_{op_name}_request.xml"
         resp_path = self.out_dir / f"{self.seq:04d}_{stamp}_{op_name}_response.bin"
 
-        req_path.write_bytes(request_bytes)
+        req_path.write_bytes(_PASSWORD_RE.sub(rb"\1***\2", request_bytes))
         truncated = len(response_bytes) > _MAX_CAPTURED_BYTES
         resp_path.write_bytes(response_bytes[:_MAX_CAPTURED_BYTES] if truncated else response_bytes)
 
@@ -127,7 +134,7 @@ def _bundle_capture_into_zip(out_dir: Path, run_id: str) -> Path | None:
     return zip_path
 
 
-async def _capture_once(client: LisClient, recorder: ExchangeRecorder, organization_id: str) -> None:
+async def _capture_once(client: LisClient, recorder: ExchangeRecorder, organization_id: str) -> bool:
     """Ein einzelner Poll-Zyklus: aktive Operationen + je Operation Tasks/Units/
     Dokumente. Deckt dieselben Endpunkte ab wie der reguläre Sync (lis_sync.py)
     — so entstehen echte Beispieldaten für alle fürs Mapping relevanten Objekte.
@@ -143,7 +150,13 @@ async def _capture_once(client: LisClient, recorder: ExchangeRecorder, organizat
         logger.exception("LIS-Capture: GetOperationsInRange fehlgeschlagen (Org %s)", recorder.org_id)
         operations = []
 
+    has_open_operation = False
+    if operations:
+        recorder.saw_operation = True
     for op in operations:
+        status_label = (((op.get("OperationStatus") or {}).get("StatusType") or {}).get("Label"))
+        if not op.get("EndTime") and not (isinstance(status_label, str) and status_label.casefold() == "geschlossen"):
+            has_open_operation = True
         op_id = op.get("Id")
         if not op_id:
             continue
@@ -159,6 +172,7 @@ async def _capture_once(client: LisClient, recorder: ExchangeRecorder, organizat
                     "LIS-Capture: %s für Operation %s fehlgeschlagen (Org %s)",
                     label, op_id, recorder.org_id,
                 )
+    return has_open_operation
 
 
 async def capture_traffic(
@@ -173,9 +187,21 @@ async def capture_traffic(
     Aufrufer verdrahtet)."""
     stop_at = datetime.now(UTC) + timedelta(minutes=duration_minutes)
     finished = False
+    no_open_since: datetime | None = None
     try:
         while True:
-            await _capture_once(client, recorder, organization_id)
+            has_open_operation = await _capture_once(client, recorder, organization_id)
+            if has_open_operation:
+                no_open_since = None
+            elif recorder.saw_operation:
+                no_open_since = no_open_since or datetime.now(UTC)
+                if datetime.now(UTC) - no_open_since >= timedelta(minutes=_STOP_AFTER_EMPTY_MINUTES):
+                    logger.info(
+                        "LIS-Capture (Org %s) nach %s Minuten ohne offene Operation beendet",
+                        recorder.org_id, _STOP_AFTER_EMPTY_MINUTES,
+                    )
+                    finished = True
+                    break
 
             # Zwischenstand sichern, damit ein laufender Capture-Lauf im Admin-UI
             # sichtbar ist, bevor die volle Dauer abgelaufen ist.
@@ -201,6 +227,9 @@ async def capture_traffic(
             "LIS-Capture (Org %s) beendet: %d Exchanges in %s",
             recorder.org_id, len(recorder.exchanges), recorder.out_dir,
         )
+        close = getattr(client, "aclose", None)
+        if close is not None:
+            await close()
     return recorder.out_dir
 
 

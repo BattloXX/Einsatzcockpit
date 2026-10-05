@@ -1,6 +1,7 @@
 """Tests für den LIS-SOAP-Client: MTOM/XOP-Parsing (kein Netzwerkzugriff nötig)."""
 import asyncio
 import gzip
+import xml.etree.ElementTree as ET
 
 from app.services.lis.lis_client import (
     LisClient,
@@ -10,7 +11,6 @@ from app.services.lis.lis_client import (
     _result_dict,
     _result_list,
 )
-import xml.etree.ElementTree as ET
 
 
 def _build_mtom_response(payload: bytes, gzip_compressed: bool = True) -> tuple[str, bytes]:
@@ -26,7 +26,7 @@ def _build_mtom_response(payload: bytes, gzip_compressed: bool = True) -> tuple[
         f"--{boundary}\r\n"
         "Content-Type: application/octet-stream\r\n"
         "Content-Transfer-Encoding: binary\r\n\r\n"
-    ).encode("utf-8") + body_bytes + f"\r\n--{boundary}--\r\n".encode("utf-8")
+    ).encode() + body_bytes + f"\r\n--{boundary}--\r\n".encode()
     return content_type, body
 
 
