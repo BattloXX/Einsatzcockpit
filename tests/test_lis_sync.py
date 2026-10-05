@@ -4,19 +4,20 @@ Fahrzeugstatus (S4/S5), Fahrzeugposition (LocationX/LocationY) und
 _close_incidents_missing_from_lis (Auto-Close, wenn eine Operation in LIS
 nicht mehr aktiv ist)."""
 import asyncio
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from app.core.tenant import set_tenant_context
-from app.models.incident import Incident, IncidentColumn, IncidentVehicle, Message, Task
+from app.models.incident import Incident, IncidentColumn, IncidentLog, IncidentVehicle, Message, Task
 from app.models.major_incident import IncidentSite, MajorIncident, VehiclePosition
 from app.models.master import FireDept, VehicleMaster
 from app.services.lis import lis_sync
+from app.services.lis.lis_client import LisClientError
 from tests.conftest import TestingSession
 
 ORG_ID = 1  # FF Wolfurt
 
 
-def _session() -> "TestingSession":
+def _session() -> TestingSession:
     db = TestingSession()
     set_tenant_context(db, ORG_ID)
     return db
@@ -197,6 +198,20 @@ def test_parse_operation_marks_ended_operation_as_closed(setup_db):
         # .NET-Default-Datum zählt nicht als beendet
         default = lis_sync._parse_operation({**base, "EndTime": "0001-01-01T00:00:00"}, org)
         assert default["is_closed"] is False
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_parse_operation_marks_closed_status_without_end_time_as_closed(setup_db):
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+        base = {"Id": "op-status", "BeginTime": "2026-07-05T21:22:40", "Type": {"Code": "f2"}}
+        closed = {**base, "OperationStatus": {"StatusType": {"Label": "Geschlossen"}}}
+        open_ = {**base, "OperationStatus": {"StatusType": {"Label": "Uebernommen"}}}
+        assert lis_sync._parse_operation(closed, org)["is_closed"] is True
+        assert lis_sync._parse_operation(open_, org)["is_closed"] is False
     finally:
         db.rollback()
         db.close()
@@ -1247,6 +1262,293 @@ def test_sync_documents_never_uses_guid_as_title(monkeypatch):
         assert "Dokument: BMA_Datenblatt_1384" in titles
         # Der namenlose Treffer bekommt einen lesbaren Fallback
         assert any(t.startswith("Dokument: LIS-Dokument") for t in titles)
+    finally:
+        db.rollback()
+        db.close()
+
+
+class _FakeOrganizationClient:
+    def __init__(self, operations):
+        self.operations = operations
+        self.calls = []
+        self.session_context_ready = False
+        self.root_org_map = None
+        self.closed = False
+
+    async def select_operation(self, organization_id, operation_id=None):
+        self.calls.append(("select", operation_id))
+
+    async def get_root_organizations(self):
+        self.calls.append(("roots", None))
+        return []
+
+    async def get_operations_in_range(self, *args, **kwargs):
+        self.calls.append(("operations", None))
+        return self.operations
+
+    async def get_tasks(self, operation_id):
+        self.calls.append(("tasks", operation_id))
+        return []
+
+    async def get_operation_units(self, organization_id, operation_id):
+        self.calls.append(("units", operation_id))
+        return []
+
+    async def get_documents_by_operation_id(self, operation_id):
+        return []
+
+    async def aclose(self):
+        self.closed = True
+
+
+def _configured_lis_config():
+    from app.models.lis import OrgLisConfig
+    return OrgLisConfig(
+        org_id=ORG_ID, enabled=True, base_url="https://lis.invalid", site="LIS",
+        username="test-user", password_enc="not-used", organization_id="org-guid",
+    )
+
+
+def _closed_raw_operation(operation_id="closed-op"):
+    return {
+        "Id": operation_id, "Number": "f-test-closed", "Description": "Test", "BeginTime": "2026-07-05T21:22:40",
+        "EndTime": "2026-07-05T21:33:50", "Address": {}, "Type": {"Code": "f2"},
+    }
+
+
+def test_sync_organization_closes_closed_active_participation_without_detail_calls(monkeypatch):
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+        incident, _ = lis_sync._get_or_link_incident(db, org, _parsed(lis_operation_id="closed-op"))
+        incident.lis_auto_close_locked = False
+        db.commit()
+        client = _FakeOrganizationClient([_closed_raw_operation()])
+
+        async def no_report(*args, **kwargs):
+            pass
+
+        monkeypatch.setattr("app.core.crypto.decrypt_secret", lambda value: "secret")
+        monkeypatch.setattr("app.services.wordpress_report_service.post_incident_report", no_report)
+        asyncio.run(lis_sync.sync_organization(db, org, _configured_lis_config(), client=client))
+        db.refresh(incident)
+        assert incident.status == "closed"
+        assert ("tasks", "closed-op") not in client.calls
+        assert ("units", "closed-op") not in client.calls
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_sync_organization_keeps_locked_incident_open_when_operation_closed(monkeypatch):
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+        incident, _ = lis_sync._get_or_link_incident(db, org, _parsed(lis_operation_id="closed-op"))
+        incident.lis_auto_close_locked = True
+        monkeypatch.setattr("app.core.crypto.decrypt_secret", lambda value: "secret")
+        monkeypatch.setattr("app.services.wordpress_report_service.post_incident_report", lambda *args, **kwargs: None)
+        client = _FakeOrganizationClient([_closed_raw_operation()])
+        asyncio.run(lis_sync.sync_organization(db, org, _configured_lis_config(), client=client))
+        assert incident.status == "active"
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_sync_organization_reuses_passed_client_session_context(monkeypatch):
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+        client = _FakeOrganizationClient([])
+        monkeypatch.setattr("app.core.crypto.decrypt_secret", lambda value: "secret")
+        config = _configured_lis_config()
+        asyncio.run(lis_sync.sync_organization(db, org, config, client=client))
+        asyncio.run(lis_sync.sync_organization(db, org, config, client=client))
+        assert client.calls.count(("select", None)) == 1
+        assert client.calls.count(("roots", None)) == 1
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_sync_organization_closes_owned_client_after_operations_error(monkeypatch):
+    class FailingClient(_FakeOrganizationClient):
+        async def get_operations_in_range(self, *args, **kwargs):
+            raise RuntimeError("placeholder failure")
+
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+        client = FailingClient([])
+        monkeypatch.setattr("app.core.crypto.decrypt_secret", lambda value: "secret")
+        monkeypatch.setattr(lis_sync, "LisClient", lambda *args, **kwargs: client)
+        try:
+            asyncio.run(lis_sync.sync_organization(db, org, _configured_lis_config()))
+        except RuntimeError:
+            pass
+        assert client.closed is True
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_load_tasks_nre_opens_and_expires_circuit_breaker():
+    class Client:
+        def __init__(self, error):
+            self.calls, self.error = [], error
+
+        async def select_operation(self, *args, **kwargs):
+            self.calls.append("select")
+
+        async def get_tasks(self, *args):
+            self.calls.append("tasks")
+            if self.error:
+                raise LisClientError(self.error)
+            return []
+
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+        config = _configured_lis_config()
+        client = Client("NullReferenceException")
+        asyncio.run(lis_sync._load_tasks(org, config, client, "op"))
+        asyncio.run(lis_sync._load_tasks(org, config, client, "op"))
+        assert client.calls == ["select", "tasks"]
+        lis_sync._tasks_retry_after[ORG_ID] = datetime.now(UTC) - timedelta(seconds=1)
+        asyncio.run(lis_sync._load_tasks(org, config, client, "op"))
+        assert client.calls == ["select", "tasks", "select", "tasks"]
+        lis_sync._tasks_retry_after.clear()
+        other = Client("Other fault")
+        asyncio.run(lis_sync._load_tasks(org, config, other, "op"))
+        assert ORG_ID not in lis_sync._tasks_retry_after
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_released_vehicle_requires_two_misses_and_preserves_column():
+    db = _session()
+    try:
+        incident, _, vehicle = _make_incident_with_vehicle(db, ORG_ID)
+        vehicle.lis_operation_unit_id, vehicle.unit_status = "unit-1", "Am Einsatzort"
+        db.flush()
+        column_id = vehicle.column_id
+        assert lis_sync._sync_released_vehicles(db, incident, [{"Id": "other"}]) is False
+        assert vehicle.unit_status == "Am Einsatzort"
+        assert lis_sync._sync_released_vehicles(db, incident, [{"Id": "other"}]) is True
+        assert vehicle.unit_status == "Einsatzbereit"
+        assert vehicle.column_id == column_id
+        db.flush()
+        assert db.query(IncidentLog).filter(IncidentLog.incident_id == incident.id).count() == 1
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_released_vehicle_reappearing_s4_is_taken_over_again():
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+        incident, _, vehicle = _make_incident_with_vehicle(db, ORG_ID, "release-ref")
+        vehicle.lis_operation_unit_id, vehicle.unit_status = "unit-1", "Einsatzbereit"
+        unit = {
+            "Id": "unit-1", "ReferenceId": "release-ref", "UnitType": {"Type": "Vehicle"},
+            "OperationUnitStatusType": {"Label": "S4"},
+        }
+        lis_sync._sync_vehicle_status(db, org, incident, [unit])
+        assert vehicle.unit_status == "Einsatz übernommen"
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_sync_operation_does_not_release_for_empty_failed_or_closed_units(monkeypatch):
+    class UnitsClient(_FakeLisClientNoTasks):
+        def __init__(self, units):
+            self.units = units
+
+        async def get_operation_units(self, organization_id, operation_id):
+            if isinstance(self.units, Exception):
+                raise self.units
+            return self.units
+
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+        monkeypatch.setattr("app.services.incident_notify.notify_incident_created", lambda *args, **kwargs: None)
+        config = _configured_lis_config()
+        for suffix, units, closed in (
+            ("empty", [], False),
+            ("failed", LisClientError("placeholder"), False),
+            ("closed", [{"Id": "other"}], True),
+        ):
+            incident, _, vehicle = _make_incident_with_vehicle(db, ORG_ID, f"release-{suffix}")
+            vehicle.lis_operation_unit_id, vehicle.unit_status = "unit-1", "Am Einsatzort"
+            incident.lis_operation_id = f"release-{suffix}"
+            db.flush()
+            op = _closed_raw_operation(f"release-{suffix}") if closed else _notify_raw_op(f"release-{suffix}")
+            asyncio.run(lis_sync.sync_operation(db, org, config, UnitsClient(units), op))
+            assert vehicle.unit_status == "Am Einsatzort"
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_device_with_own_reference_creates_incident_vehicle_but_foreign_device_does_not():
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+        incident, _, _ = _make_incident_with_vehicle(db, ORG_ID, "ordinary-vehicle")
+        device_master = VehicleMaster(dept_id=ORG_ID, code="Device", name="Device", lis_reference_id="device-own")
+        db.add(device_master)
+        db.add(IncidentColumn(
+            incident_id=incident.id, code="active", title="Aktiv", column_kind="vehicles",
+        ))
+        db.flush()
+        before = db.query(IncidentVehicle).filter(IncidentVehicle.incident_id == incident.id).count()
+        own = {
+            "Id": "device-unit", "ReferenceId": "device-own", "UnitType": {"Type": "Device"},
+            "OperationUnitStatusType": {"Label": "S4"},
+        }
+        foreign = {
+            "Id": "foreign-device", "ReferenceId": "device-foreign", "UnitType": {"Type": "Device"},
+            "OperationUnitStatusType": {"Label": "S4"},
+        }
+        lis_sync._sync_vehicle_status(db, org, incident, [own], sync_external_units=True)
+        lis_sync._sync_vehicle_status(db, org, incident, [foreign], sync_external_units=True)
+        assert db.query(IncidentVehicle).filter(IncidentVehicle.incident_id == incident.id).count() == before + 1
+        assert db.query(VehicleMaster).filter(
+            VehicleMaster.dept_id == ORG_ID, VehicleMaster.lis_reference_id == "device-foreign",
+        ).first() is None
+        assert device_master is not None
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_vehicle_location_deduplicates_with_and_without_major_incident():
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+        incident, master, _ = _make_incident_with_vehicle(db, ORG_ID, "location-dedup")
+        lis_sync._sync_vehicle_status(db, org, incident, [_s5_unit("location-dedup")])
+        lis_sync._sync_vehicle_status(db, org, incident, [_s5_unit("location-dedup")])
+        lis_sync._sync_vehicle_status(db, org, incident, [_s5_unit("location-dedup", location_x="105309")])
+        assert db.query(VehiclePosition).filter(VehiclePosition.vehicle_id == master.id).count() == 2
+        lage = MajorIncident(org_id=ORG_ID, name="Testlage")
+        db.add(lage)
+        db.flush()
+        db.add(IncidentSite(
+            major_incident_id=lage.id, org_id=ORG_ID, bezeichnung="Test", incident_id=incident.id,
+        ))
+        db.flush()
+        lis_sync._sync_vehicle_status(db, org, incident, [_s5_unit("location-dedup", location_x="105310")])
+        lis_sync._sync_vehicle_status(db, org, incident, [_s5_unit("location-dedup", location_x="105310")])
+        lis_sync._sync_vehicle_status(db, org, incident, [_s5_unit("location-dedup", location_x="105311")])
+        assert db.query(VehiclePosition).filter(
+            VehiclePosition.vehicle_id == master.id, VehiclePosition.incident_id == lage.id,
+        ).count() == 2
     finally:
         db.rollback()
         db.close()

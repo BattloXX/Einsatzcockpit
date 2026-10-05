@@ -30,7 +30,7 @@ Unter **Admin → LIS / Leitstellenanbindung** (`/admin/lis`) für die eigene Or
 | Organisation-ID (LIS-GUID) | Eindeutige Kennung der eigenen Feuerwehr im LIS |
 | Site | Standardwert `LIS`, nur ändern wenn von der Leitstelle vorgegeben |
 | Benutzername / Passwort | Zugangsdaten der SOAP-Schnittstelle; Passwort wird Fernet-verschlüsselt gespeichert |
-| Poll-Intervall (Sek.) | **Nur für das Diagnose-Aufzeichnungstool** (Schritt 3) — der reguläre Hintergrund-Abgleich läuft global über `LIS_POLL_INTERVAL_S` (siehe unten), nicht pro Org |
+| Poll-Intervall (Sek.) | Intervall des regulären Abgleichs für diese Organisation (mindestens 10 Sekunden); gilt auch für das Diagnose-Aufzeichnungstool |
 
 Mit **Verbindung testen** prüft Einsatzcockpit Login + Abfrage der aktiven Einsätze, ohne etwas zu speichern — die Anzahl gefundener aktiver Einsätze wird zurückgemeldet.
 
@@ -42,7 +42,7 @@ System-Admins sehen zusätzlich eine Org-Auswahl, um die Anbindung für jede Org
 
 ```dotenv
 LIS_ENABLED=true          # Globaler Kill-Switch für den Hintergrund-Poll-Loop
-LIS_POLL_INTERVAL_S=30    # Poll-Intervall in Sekunden, gilt für alle Orgs
+LIS_POLL_INTERVAL_S=30    # Kompatibilitätswert; die effektiven Intervalle kommen je Org aus Schritt 1
 ```
 
 Der Loop läuft serverweit; einzelne Organisationen werden über den Schalter **Aktiviert** in Schritt 1 ein-/ausgeschlossen. Ein Fehler bei einer Org (z.B. falsches Passwort) blockiert nie den Zyklus für andere Organisationen.
@@ -54,10 +54,11 @@ Der Loop läuft serverweit; einzelne Organisationen werden über den Schalter **
 - **Einsätze und Übungseinsätze anlegen/verknüpfen** — existiert bereits ein über die API angelegter Einsatz mit passendem Stichwort/Adresse/Zeitpunkt, wird verknüpft statt dupliziert. Übungseinsätze werden anhand des LIS-Einsatztyps (`Schulung`, `Übung`, `Training`, `Probe`) erkannt und auch in Einsatzcockpit als Übungseinsatz markiert (gelb/schwarzer Banner, keine Statistik-Zählung)
 - **Leitstellen-Nummer als führende Kennung** — wird überall angezeigt, wo sonst die interne Einsatz-ID stünde (Alarm-Kopfzeile, Archiv, Verlauf, PDF-Export)
 - **Anrufer/Melder** — Name und Telefonnummer, sofern vom Alarmierungssystem/LIS mitgeliefert; nur Anzeige, keine weitere Verarbeitung
-- **Fahrzeugstatus (S1–S6) und -position** — sofern das Fahrzeug über `lis_reference_id` in den Stammdaten zugeordnet ist (siehe [Stammdaten pflegen](Administration-Stammdaten-pflegen)); Positionen landen in derselben Historie wie App-GPS-Daten. Die Kennung ist dieselbe wie die DIBOS-unid — das Feld heißt in den Stammdaten deshalb **Leitstellen-Kennung (LIS-ReferenceId / DIBOS-unid)**
+- **Fahrzeugstatus (S1–S6) und -position** — sofern das Fahrzeug über `lis_reference_id` in den Stammdaten zugeordnet ist (siehe [Stammdaten pflegen](Administration-Stammdaten-pflegen)); dies gilt auch für zugeordnete Geräte wie ein EL-Handfunkgerät. Positionen landen in derselben Historie wie App-GPS-Daten. Die Kennung ist dieselbe wie die DIBOS-unid — das Feld heißt in den Stammdaten deshalb **Leitstellen-Kennung (LIS-ReferenceId / DIBOS-unid)**
 - **Meldungen sowie Zu-/Absagen der Mannschaft** aus den LIS-Aufträgen des Einsatzes
 - **Dokumente/Bilder**, die der Leitstelle zum Einsatz angehängt wurden
-- **Automatisches Schließen** — verschwindet die Operation aus der aktiven Liste des LIS (weil sie dort abgeschlossen wurde), schließt Einsatzcockpit den verknüpften Einsatz automatisch mit (inkl. Widerruf von QR-/Lagekarte-Tokens, wie beim manuellen Abschließen)
+- **Automatisches Schließen** — eine `EndTime`, der Status "Geschlossen" oder das Verschwinden aus der aktiven Liste schließen den verknüpften Einsatz automatisch mit (inkl. Widerruf von QR-/Lagekarte-Tokens, wie beim manuellen Abschließen)
+- **Fahrzeug-Abzug** — fehlt eine zuvor gemeldete Unit in zwei aufeinanderfolgenden nichtleeren LIS-Unit-Listen, setzt Einsatzcockpit ihr Fahrzeug auf "Einsatzbereit"; die Karte bleibt dabei in ihrer Spalte.
 
 ---
 
@@ -72,6 +73,7 @@ Läuft parallel die [DIBOS-/Elvis-Anbindung](Administration-DIBOS-Elvis-Anbindun
 Für die Fehlersuche bei der Erstanbindung gibt es unter `/admin/lis` einen Button **Rohdaten aufzeichnen**: Er zeichnet den kompletten SOAP-Datenverkehr mit der Leitstelle für eine wählbare Dauer auf (Standard 120 Min., abbrechbar). Beim Beenden — egal ob Zeit abgelaufen oder **Abbrechen** geklickt — werden alle aufgezeichneten Rohdaten automatisch zu einer einzigen ZIP-Datei gebündelt.
 
 - Aufzeichnungen werden **7 Tage** aufbewahrt und danach automatisch gelöscht
+- Login-Passwörter werden in aufgezeichneten Requests maskiert. Ein automatisch gestarteter Capture beendet sich nach zehn Minuten ohne offene Operation, sobald zuvor ein Einsatz gesehen wurde.
 - Es gibt bewusst **keine Download-Route über HTTP** — die ZIP-Dateien liegen nur lokal auf dem Server (Datenschutz: Aufzeichnungen können personenbezogene Daten aus echten Einsätzen enthalten)
 - Empfehlung: Aufzeichnung starten, während in LIS gezielt ein Testeinsatz mit Meldung/Auftrag/Fahrzeugstatus bearbeitet wird — das liefert die aussagekräftigsten Daten für die Fehlersuche
 

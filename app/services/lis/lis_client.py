@@ -174,6 +174,17 @@ class LisClient:
         # request_bytes, response_bytes) aufgerufen — siehe lis_capture.py.
         # Rein lesend/beobachtend, hat keinen Einfluss auf den normalen Ablauf.
         self._on_exchange = on_exchange
+        self._http_client: httpx.AsyncClient | None = None
+        # Nach einem Login muss der Kontext der neuen Server-Session erneut
+        # gesetzt werden; der Sync nutzt diese Markierung für SelectOperation
+        # und die Root-Organisationen.
+        self.session_context_ready = False
+        self.root_org_map: dict[str, str] | None = None
+
+    async def aclose(self) -> None:
+        if self._http_client is not None:
+            await self._http_client.aclose()
+            self._http_client = None
 
     # ── Login / Session ────────────────────────────────────────────────────
     async def login(self) -> None:
@@ -201,6 +212,8 @@ class LisClient:
             self._logged_in = False
             raise LisAuthError(f"LIS-Login fehlgeschlagen: {exc}") from exc
         self._logged_in = True
+        self.session_context_ready = False
+        self.root_org_map = None
 
         login_result = _result_dict(root, "LoginResult") or {}
         user = login_result.get("User") or {}
@@ -367,8 +380,9 @@ class LisClient:
             "Accept-Encoding": "gzip, deflate",
         }
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                resp = await client.post(url, content=envelope.encode("utf-8"), headers=headers)
+            if self._http_client is None:
+                self._http_client = httpx.AsyncClient(timeout=self.timeout)
+            resp = await self._http_client.post(url, content=envelope.encode("utf-8"), headers=headers)
         except httpx.HTTPError as exc:
             raise LisClientError(f"Transportfehler bei {url}: {exc}") from exc
 
@@ -389,6 +403,8 @@ class LisClient:
                 logger.info("LIS-Session abgelaufen, re-login und Retry")
                 self._logged_in = False
                 self.session_id = str(uuid.uuid4())
+                self.session_context_ready = False
+                self.root_org_map = None
                 await self.login()
                 return await self._post(url, soap_action, body_xml, retry_on_auth=False)
             raise LisClientError(f"LIS SOAP Fault: {fault}")
@@ -574,8 +590,9 @@ class LisClient:
         }
         url = f"{self.base_url}/CoreService.svc/streamExtension"
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
-                resp = await client.post(url, content=envelope.encode("utf-8"), headers=headers)
+            if self._http_client is None:
+                self._http_client = httpx.AsyncClient(timeout=self.timeout)
+            resp = await self._http_client.post(url, content=envelope.encode("utf-8"), headers=headers)
         except httpx.HTTPError as exc:
             raise LisClientError(f"Transportfehler bei Dokument-Download: {exc}") from exc
 

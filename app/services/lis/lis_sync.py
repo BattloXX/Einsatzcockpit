@@ -38,6 +38,8 @@ logger = logging.getLogger("einsatzleiter.lis.sync")
 
 _BACKFILL_INTERVAL = timedelta(hours=24)
 _autoprint_tasks: set[asyncio.Task] = set()
+_tasks_retry_after: dict[int, datetime] = {}
+_released_vehicle_misses: dict[int, int] = {}
 
 
 def _starte_autoprint(incident_id: int) -> None:
@@ -140,6 +142,8 @@ def _parse_operation(op: dict, org: FireDept | None) -> dict:
     started_raw = op.get("BeginTime") or op.get("CreationTime")
     lat, lng = _parse_operation_coords(op, address)
     ended_at = _parse_operation_datetime(op.get("EndTime"), org)
+    status_label = _op_field(op, "OperationStatus", "StatusType", "Label")
+    is_closed_status = isinstance(status_label, str) and status_label.casefold() == "geschlossen"
     return {
         "lis_operation_id": op.get("Id"),
         "lis_operation_number": op.get("Number"),
@@ -156,7 +160,7 @@ def _parse_operation(op: dict, org: FireDept | None) -> dict:
         # EndTime gesetzt → Operation in LIS bereits beendet (z.B. Backfill historischer
         # Einsätze oder zwischen zwei Polls geschlossen). Steuert, ob noch alarmiert wird.
         "ended_at": ended_at,
-        "is_closed": ended_at is not None,
+        "is_closed": ended_at is not None or is_closed_status,
     }
 
 
@@ -311,15 +315,15 @@ def _sync_vehicle_status(
     changed = False
 
     for unit in units:
-        # GetOperationUnits liefert neben Fahrzeugen auch teilnehmende Personen
-        # (UnitType.Type == "Operational" — deren RSVP läuft separat über
-        # _sync_person_responses()/GetTasks) und Geräte (UnitType.Type == "Device").
-        # Nur Fahrzeuge sollen als IncidentVehicle erscheinen.
-        if _op_field(unit, "UnitType", "Type") != "Vehicle":
-            continue
-
         ref_id = unit.get("ReferenceId")
         if not ref_id:
+            continue
+
+        unit_type = _op_field(unit, "UnitType", "Type")
+        # Operational-Units (Personen/Wachen) bleiben außerhalb des Boards. Geräte
+        # werden nur übernommen, wenn sie explizit einem eigenen Fahrzeug zugeordnet sind
+        # (z.B. EL-Handfunkgerät mit lis_reference_id).
+        if unit_type not in ("Vehicle", "Device"):
             continue
 
         vehicle_master = (
@@ -327,7 +331,7 @@ def _sync_vehicle_status(
             .filter(VehicleMaster.dept_id == org.id, VehicleMaster.lis_reference_id == ref_id)
             .first()
         )
-        if not vehicle_master and sync_external_units:
+        if not vehicle_master and sync_external_units and unit_type == "Vehicle":
             # Fremde Organisation (z.B. Nachbarwehr, Rotes Kreuz) ohne eigene
             # lis_reference_id-Zuordnung — als externen Platzhalter übernehmen statt
             # zu verwerfen (siehe OrgLisConfig.sync_external_units).
@@ -397,6 +401,42 @@ def _sync_vehicle_status(
 
         _sync_vehicle_location(db, org, incident, vehicle_master, unit, lage_id)
 
+    return changed
+
+
+def _sync_released_vehicles(db: Session, incident, units: list[dict]) -> bool:
+    """Setzt verschwundene LIS-Units nach zwei Polls auf Einsatzbereit."""
+    unit_ids = {str(unit.get("Id")) for unit in units if unit.get("Id") is not None}
+    changed = False
+    vehicles = (
+        db.query(IncidentVehicle)
+        .filter(
+            IncidentVehicle.incident_id == incident.id,
+            IncidentVehicle.removed_at.is_(None),
+            IncidentVehicle.lis_operation_unit_id.isnot(None),
+            IncidentVehicle.unit_status != "Einsatzbereit",
+        )
+        .all()
+    )
+    for vehicle in vehicles:
+        if str(vehicle.lis_operation_unit_id) in unit_ids:
+            _released_vehicle_misses.pop(vehicle.id, None)
+            continue
+        misses = _released_vehicle_misses.get(vehicle.id, 0) + 1
+        _released_vehicle_misses[vehicle.id] = misses
+        if misses < 2:
+            continue
+        set_unit_status(db, vehicle, "Einsatzbereit")
+        name = vehicle.vehicle_master.code if vehicle.vehicle_master else f"Fahrzeug {vehicle.id}"
+        db.add(IncidentLog(
+            incident_id=incident.id,
+            text=f"LIS: {name} aus Einsatz entlassen – Status Einsatzbereit",
+            author_name="LIS",
+            level="info",
+            entity_type="lis_unit",
+        ))
+        _released_vehicle_misses.pop(vehicle.id, None)
+        changed = True
     return changed
 
 
@@ -502,20 +542,29 @@ def _sync_vehicle_location(
     if not coords:
         return
 
-    if lage_id is not None:
-        letzte = (
-            db.query(VehiclePosition.source)
-            .filter(
-                VehiclePosition.incident_id == lage_id,
-                VehiclePosition.vehicle_id == vehicle_master.id,
-            )
-            .order_by(VehiclePosition.received_at.desc())
-            .first()
+    # Letzte Position desselben Fahrzeugs im selben Kontext (Lage bzw. ohne Lage) —
+    # für die manual-Sperre (nur Lage) und gegen Duplikate bei unveränderter Position.
+    letzte = (
+        db.query(VehiclePosition)
+        .filter(
+            VehiclePosition.org_id == org.id,
+            VehiclePosition.vehicle_id == vehicle_master.id,
+            VehiclePosition.incident_id == lage_id if lage_id is not None
+            else VehiclePosition.incident_id.is_(None),
         )
-        if letzte and letzte[0] == "manual":
-            return
+        .order_by(VehiclePosition.received_at.desc())
+        .first()
+    )
+    if lage_id is not None and letzte and letzte.source == "manual":
+        return
 
     lat, lon = coords
+    if (
+        letzte and letzte.source == "lis"
+        and round(letzte.lat, 6) == round(lat, 6)
+        and round(letzte.lon, 6) == round(lon, 6)
+    ):
+        return
     now = datetime.now(UTC)
     db.add(VehiclePosition(
         incident_id=lage_id,
@@ -766,9 +815,8 @@ async def _sync_documents(db: Session, org: FireDept, incident, client: LisClien
 async def _close_incidents_missing_from_lis(
     db: Session, org: FireDept, active_operation_ids: set[str],
 ) -> None:
-    """GetOperationsInRange liefert keinen eigenen Status-/Closed-Flag pro
-    Operation — das einzige verfügbare Signal für "in LIS abgeschlossen" ist,
-    dass die Operation nicht mehr im ActiveParticipation-Ergebnis auftaucht.
+    """Eine Operation gilt bei EndTime bzw. Status "Geschlossen" oder, falls
+    sie aus ActiveParticipation verschwindet, als in LIS abgeschlossen.
     Schließt daher alle noch aktiven, über LIS angelegten/verknüpften Einsätze
     dieser Org, deren lis_operation_id nicht mehr in der aktuellen aktiven Menge
     ist (siehe sync_organization())."""
@@ -811,6 +859,38 @@ async def _close_incidents_missing_from_lis(
         )
 
 
+# ── LIS-Tasks laden (mit Circuit-Breaker gegen den bekannten Server-Bug) ────
+_TASKS_BREAKER_PAUSE = timedelta(minutes=15)
+
+
+async def _load_tasks(org: FireDept, config: OrgLisConfig, client: LisClient, operation_id: str) -> list[dict]:
+    """Bekannter, server-seitiger LIS-Bug: GetTasks NREt in SessionData.get_OrganizationId()
+    -- sieben unabhaengige Live-Experimente haben bestaetigt, dass dies NICHT durch eine
+    Aenderung an unserem Request behebbar ist (Trace 04.10.2026: 664 von 664 Calls). Nach
+    einer solchen NRE wird GetTasks samt vorgeschaltetem SelectOperation je Org fuer
+    _TASKS_BREAKER_PAUSE uebersprungen; gewarnt wird nur beim Oeffnen des Breakers."""
+    retry_after = _tasks_retry_after.get(org.id)
+    if retry_after and retry_after > datetime.now(UTC):
+        logger.debug("LIS-Tasks für Org %s bis %s wegen Server-Bug übersprungen", org.id, retry_after)
+        return []
+    assert config.organization_id
+    try:
+        # Experiment 2 (2026-07-05): SelectOperation mit der KONKRETEN operationId
+        # unmittelbar vor GetTasks (siehe select_operation()-Docstring in lis_client.py).
+        await client.select_operation(config.organization_id, operation_id=operation_id)
+        return await client.get_tasks(operation_id)
+    except LisClientError as e:
+        if "nullreferenceexception" in str(e).casefold():
+            _tasks_retry_after[org.id] = datetime.now(UTC) + _TASKS_BREAKER_PAUSE
+            logger.warning(
+                "LIS-Tasks für Org %s fehlgeschlagen (bekannter Server-Bug, NullReferenceException) — "
+                "werden 15 Minuten übersprungen", org.id,
+            )
+        else:
+            logger.warning("LIS-Tasks für Operation %s (Org %s) fehlgeschlagen: %s", operation_id, org.id, e)
+        return []
+
+
 # ── Ein Operation-Objekt vollständig verarbeiten ─────────────────────────────
 async def sync_operation(
     db: Session, org: FireDept, config: OrgLisConfig, client: LisClient, op: dict,
@@ -824,29 +904,16 @@ async def sync_operation(
 
     incident, created = _get_or_link_incident(db, org, parsed)
 
-    try:
-        # Experiment 2 (2026-07-05, nach Fehlschlag von Experiment 1 im Live-Test):
-        # SelectOperation zusätzlich mit der KONKRETEN operationId unmittelbar vor
-        # GetTasks aufrufen (bisher nur einmal pro Sync-Zyklus mit operationId=nil in
-        # sync_organization()). Siehe select_operation()-Docstring in lis_client.py.
-        await client.select_operation(config.organization_id, operation_id=parsed["lis_operation_id"])
-        tasks = await client.get_tasks(parsed["lis_operation_id"])
-    except LisClientError as e:
-        # Bekannter, server-seitiger LIS-Bug (SessionData.get_OrganizationId() NREt bei
-        # GetTasks) -- sieben unabhaengige Live-Experimente haben bestaetigt, dass dies
-        # NICHT durch eine Aenderung an unserem Request behebbar ist (siehe
-        # docs/lis-integration bzw. Projekt-Notizen). Nur eine kurze Warnung statt
-        # vollem Traceback bei jedem ~30s-Poll-Zyklus, um das Log nicht zuzumuellen.
-        logger.warning(
-            "LIS-Tasks für Operation %s (Org %s) fehlgeschlagen (bekannter Server-Bug, "
-            "nicht clientseitig behebbar): %s", parsed["lis_operation_id"], org.id, e,
-        )
-        tasks = []
+    if parsed["is_closed"] and not created:
+        return None
+
+    tasks = await _load_tasks(org, config, client, parsed["lis_operation_id"])
 
     messages_changed = _sync_messages(db, org, incident, tasks)
     tasks_changed = _sync_tasks(db, org, incident, tasks)
     responses_changed = _sync_person_responses(db, org, incident, tasks)
 
+    units_loaded = True
     try:
         units = await client.get_operation_units(config.organization_id, parsed["lis_operation_id"])
     except LisClientError:
@@ -854,11 +921,14 @@ async def sync_operation(
             "LIS-Einheiten für Operation %s (Org %s) fehlgeschlagen", parsed["lis_operation_id"], org.id,
         )
         units = []
+        units_loaded = False
     vehicles_changed = _sync_vehicle_status(
         db, org, incident, units,
         sync_external_units=config.sync_external_units,
         root_org_map=root_org_map,
     )
+    if units_loaded and units and not parsed["is_closed"]:
+        vehicles_changed = _sync_released_vehicles(db, incident, units) or vehicles_changed
 
     documents_changed = await _sync_documents(db, org, incident, client, parsed["lis_operation_id"])
 
@@ -1010,7 +1080,9 @@ async def _maybe_backfill(db: Session, org: FireDept, config: OrgLisConfig, clie
 
 
 # ── Eine Organisation vollständig synchronisieren ────────────────────────────
-async def sync_organization(db: Session, org: FireDept, config: OrgLisConfig) -> None:
+async def sync_organization(
+    db: Session, org: FireDept, config: OrgLisConfig, client: LisClient | None = None,
+) -> None:
     if not config.enabled or not config.is_fully_configured:
         return
     # is_fully_configured garantiert bereits, dass diese Felder gesetzt sind - hier nur
@@ -1026,21 +1098,25 @@ async def sync_organization(db: Session, org: FireDept, config: OrgLisConfig) ->
         mark_lis_failed(org.id)
         return
 
-    client = LisClient(
-        config.base_url, config.site, config.username, password,
-        project_id=config.project_id, password_is_hash=config.password_is_hash,
-        organization_id=config.organization_id,
-    )
+    owns_client = client is None
+    if client is None:
+        client = LisClient(
+            config.base_url, config.site, config.username, password,
+            project_id=config.project_id, password_is_hash=config.password_is_hash,
+            organization_id=config.organization_id,
+        )
     try:
-        # Muss vor jedem GetTasks einmal aufgerufen werden, sonst NullReferenceException
-        # auf dem LIS-Server (siehe select_operation()-Docstring in lis_client.py).
-        await client.select_operation(config.organization_id)
-    except LisClientError:
-        logger.exception("LIS SelectOperation für Org %s fehlgeschlagen", org.id)
-        from app.services.lis.lis_health import mark_lis_failed
-        mark_lis_failed(org.id)
-        return
+        await _sync_organization_with_client(db, org, config, client)
+    finally:
+        # Persistente Clients (lis_loop.py) schließt der Loop selbst.
+        if owns_client:
+            await client.aclose()
 
+
+async def _load_root_org_map(org: FireDept, client: LisClient) -> dict[str, str]:
+    """Einmal pro LIS-Session (am Client gecacht, Reset bei Re-Login)."""
+    if client.root_org_map is not None:
+        return client.root_org_map
     root_org_map: dict[str, str] = {}
     try:
         # Experiment 3 (2026-07-05, nach Fehlschlag von Experiment 1+2 im Live-Test):
@@ -1061,6 +1137,28 @@ async def sync_organization(db: Session, org: FireDept, config: OrgLisConfig) ->
                 root_org_map[str(oid)] = str(oname)
     except LisClientError:
         logger.exception("LIS GetRootOrganizations für Org %s fehlgeschlagen", org.id)
+    client.root_org_map = root_org_map
+    return root_org_map
+
+
+async def _sync_organization_with_client(
+    db: Session, org: FireDept, config: OrgLisConfig, client: LisClient,
+) -> None:
+    assert config.organization_id
+    try:
+        # Einmal pro LIS-Session (nicht pro Zyklus): muss vor GetTasks gelaufen sein,
+        # sonst NullReferenceException (siehe select_operation()-Docstring in lis_client.py).
+        # login() setzt session_context_ready bei jeder neuen Session zurück.
+        if not client.session_context_ready:
+            await client.select_operation(config.organization_id)
+            client.session_context_ready = True
+    except LisClientError:
+        logger.exception("LIS SelectOperation für Org %s fehlgeschlagen", org.id)
+        from app.services.lis.lis_health import mark_lis_failed
+        mark_lis_failed(org.id)
+        return
+
+    root_org_map = await _load_root_org_map(org, client)
 
     operations: list[dict] = []
     start_index = 0
@@ -1101,7 +1199,7 @@ async def sync_organization(db: Session, org: FireDept, config: OrgLisConfig) ->
             )
 
     active_operation_ids = {
-        op_id for op in operations if (op_id := op.get("Id"))
+        op_id for op in operations if (op_id := op.get("Id")) and not _parse_operation(op, org)["is_closed"]
     }
     await _close_incidents_missing_from_lis(db, org, active_operation_ids)
 

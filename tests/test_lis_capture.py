@@ -16,7 +16,6 @@ from app.services.lis.lis_capture import (
     ExchangeRecorder,
     _bundle_capture_into_zip,
     _capture_once,
-    _current_run_id,
     capture_run_dir,
     capture_traffic,
     purge_old_captures,
@@ -38,10 +37,12 @@ class _FakeLisClient:
                 "http://fake.example/OperationService.svc",
                 f"http://services.intergraph.com/Emea/Pr/2011/03/OperationService/{action}",
                 b"<fake-request/>",
-                f"<fake-response op='{action}'/>".encode("utf-8"),
+                f"<fake-response op='{action}'/>".encode(),
             )
 
-    async def get_operations_in_range(self, organization_id, operation_filter="ActiveParticipation", count=50, start_index=0):
+    async def get_operations_in_range(
+        self, organization_id, operation_filter="ActiveParticipation", count=50, start_index=0,
+    ):
         self.calls.append("get_operations_in_range")
         self._fire("GetOperationsInRange")
         return self._operations
@@ -100,6 +101,17 @@ def test_exchange_recorder_truncates_large_responses(tmp_path, monkeypatch):
     assert recorder.exchanges[0]["truncated"] is True
     resp_file = tmp_path / recorder.exchanges[0]["response_file"]
     assert resp_file.stat().st_size == 10
+
+
+def test_exchange_recorder_masks_login_password_on_disk(tmp_path):
+    recorder = ExchangeRecorder(tmp_path, org_id=1, run_id="run-password")
+    secret = b"password-equivalent-hash"
+    recorder.record(
+        "http://x/svc", ".../Login", b"<password>" + secret + b"</password>", b"<resp/>",
+    )
+    request = (tmp_path / recorder.exchanges[0]["request_file"]).read_bytes()
+    assert b"<password>***</password>" in request
+    assert secret not in request
 
 
 # ── _capture_once: ein Poll-Zyklus, deterministisch (keine Zeitabhängigkeit) ──
@@ -275,3 +287,53 @@ def test_capture_traffic_bundles_into_zip_on_cancel(tmp_path):
         p for p in tmp_path.iterdir() if p.is_file() and p.suffix != ".zip" and p.name != "summary.json"
     ]
     assert remaining_raw == []
+
+
+def test_capture_traffic_auto_stops_after_seen_operation_becomes_closed(tmp_path, monkeypatch):
+    import app.services.lis.lis_capture as mod
+
+    recorder = ExchangeRecorder(tmp_path, org_id=1, run_id="run-auto-stop")
+    client = _FakeLisClient([], on_exchange=recorder.record)
+    client.closed = False
+
+    async def close():
+        client.closed = True
+
+    client.aclose = close
+    outcomes = iter([True, False])
+
+    async def fake_capture_once(*args):
+        outcome = next(outcomes)
+        if outcome:
+            recorder.saw_operation = True
+        return outcome
+
+    async def no_sleep(*args):
+        pass
+
+    monkeypatch.setattr(mod, "_capture_once", fake_capture_once)
+    monkeypatch.setattr(mod, "_STOP_AFTER_EMPTY_MINUTES", 0)
+    monkeypatch.setattr(mod.asyncio, "sleep", no_sleep)
+    asyncio.run(capture_traffic(client, recorder, "org-guid", duration_minutes=120, poll_interval_seconds=60))
+    data = json.loads((tmp_path / "summary.json").read_text(encoding="utf-8"))
+    assert data["finished"] is True
+    assert client.closed is True
+
+
+def test_capture_traffic_without_operation_runs_until_duration(tmp_path, monkeypatch):
+    import app.services.lis.lis_capture as mod
+
+    recorder = ExchangeRecorder(tmp_path, org_id=1, run_id="run-manual")
+    client = _FakeLisClient([], on_exchange=recorder.record)
+    client.closed = False
+
+    async def close():
+        client.closed = True
+
+    client.aclose = close
+    monkeypatch.setattr(mod, "_STOP_AFTER_EMPTY_MINUTES", 0)
+    asyncio.run(capture_traffic(client, recorder, "org-guid", duration_minutes=0, poll_interval_seconds=60))
+    data = json.loads((tmp_path / "summary.json").read_text(encoding="utf-8"))
+    assert data["finished"] is True
+    assert client.calls == ["get_operations_in_range"]
+    assert client.closed is True
