@@ -220,7 +220,7 @@ def _column_card_count(incident: Incident, col: IncidentColumn) -> int:
         len([m for m in incident.messages if m.column_id == col.id]),
         len([
             p for p in incident.rescued_persons
-            if p.column_id == col.id and p.vehicle_id is None
+            if p.column_id == col.id
         ]) if col.column_kind == "rescued" else 0,
     ))
 
@@ -923,7 +923,7 @@ def board_column_content_fragment(
     col_tasks = [t for t in incident.tasks if t.column_id == col.id]
     col_messages = [m for m in incident.messages if m.column_id == col.id]
     col_persons = (
-        [p for p in incident.rescued_persons if p.column_id == col.id and p.vehicle_id is None]
+        [p for p in incident.rescued_persons if p.column_id == col.id]
         if col.column_kind == "rescued" else []
     )
     col_count = _column_card_count(incident, col)
@@ -2910,6 +2910,7 @@ async def update_person_endpoint(
     person = db.get(RescuedPerson, person_id)
     if not person or person.incident_id != incident_id:
         return Response(status_code=404)
+    old_vehicle_id = person.vehicle_id
     before = {
         "gender": person.gender, "person_group": person.person_group,
         "age_range": person.age_range, "name": person.name,
@@ -2940,7 +2941,11 @@ async def update_person_endpoint(
         user_id=request.state.user.id,
     )
     db.commit()
-    await manager.broadcast(incident_id, {"type": "person_updated", "kind": "person", "uid": person.id})
+    await manager.broadcast(incident_id, {
+        "type": "person_updated", "kind": "person", "uid": person.id,
+        "column_id": person.column_id, "vehicle_uid": person.vehicle_id,
+        "source_vehicle_uid": old_vehicle_id,
+    })
     incident = _incident_or_404(incident_id, db)
     can_edit = has_role(request.state.user, "incident_leader", "admin", "recorder")
     can_note = has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
@@ -3398,11 +3403,11 @@ async def move_card_endpoint(
     source_vehicle_uid = None
     if _entry:
         _entity_before = db.get(_entry[0], uid)
-        if _entity_before and kind == "person":
+        if _entity_before:
             source_column_id = _entity_before.column_id
-        elif _entity_before:
-            source_column_id = _entity_before.column_id
-        if _entity_before and source_vehicle_id == getattr(_entity_before, "vehicle_id", None):
+        if kind == "person" and _entity_before:
+            source_vehicle_uid = _entity_before.vehicle_id
+        elif _entity_before and source_vehicle_id == getattr(_entity_before, "vehicle_id", None):
             source_vehicle_uid = source_vehicle_id
     vehicle_status_before = (
         getattr(_entity_before, "unit_status", None) if kind == "vehicle" and _entry else None
@@ -3444,10 +3449,7 @@ async def move_card_endpoint(
     if _entry:
         _entity_after = db.get(_entry[0], uid)
         if _entity_after is not None:
-            if kind == "person":
-                target_column_id = _entity_after.column_id
-            else:
-                target_column_id = _entity_after.column_id
+            target_column_id = _entity_after.column_id
             if kind in {"task", "message", "person"}:
                 vehicle_uid = _entity_after.vehicle_id
     await manager.broadcast(incident_id, {

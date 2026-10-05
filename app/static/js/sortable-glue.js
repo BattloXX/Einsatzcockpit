@@ -159,6 +159,15 @@
             payload.source_vehicle_id = evt.from.dataset.vehicleId;
           }
           postMove(incidentId, payload);
+          // A person card is cloned when it is assigned to a vehicle, so its
+          // original remains in the rescued column. Remove whichever clone
+          // Sortable placed in this vehicle zone; the broadcast re-renders the
+          // vehicle card with the assigned-person chip.
+          if (kind === 'person' && evt.pullMode === 'clone') {
+            const dropped = toZone.contains(evt.item) ? evt.item
+              : (evt.clone && toZone.contains(evt.clone) ? evt.clone : null);
+            if (dropped) dropped.remove();
+          }
           return;
         }
 
@@ -166,8 +175,23 @@
         const toColumnId = toZone.closest('[data-col-id]')?.dataset.colId;
         if (!toColumnId) return;
 
-        // Alle Karten in der Ziel-Zone in aktueller DOM-Reihenfolge sammeln
-        const zoneCards = Array.from(toZone.querySelectorAll('[data-kind][data-uid]'));
+        // A vehicle person chip was dropped onto a column that already contains
+        // the person's real card. Remove the chip before creating the order.
+        if (kind === 'person' && evt.from.classList.contains('sortable-zone--vehicle')) {
+          const dropped = toZone.contains(evt.item) ? evt.item
+            : (evt.clone && toZone.contains(evt.clone) ? evt.clone : null);
+          if (dropped && dropped.classList.contains('assigned-person')) dropped.remove();
+        }
+
+        // Alle Karten in der Ziel-Zone in aktueller DOM-Reihenfolge sammeln.
+        // Chips are not cards; de-duplicate defensively if a transient clone remains.
+        const seenCards = new Set();
+        const zoneCards = Array.from(toZone.querySelectorAll('.card[data-kind][data-uid]')).filter(function (item) {
+          const key = item.dataset.kind + ':' + item.dataset.uid;
+          if (seenCards.has(key)) return false;
+          seenCards.add(key);
+          return true;
+        });
         const zoneOrder = JSON.stringify(
           zoneCards.map(c => ({ kind: c.dataset.kind, id: parseInt(c.dataset.uid, 10) }))
         );
@@ -215,9 +239,16 @@
     //    fallbackTolerance können DnD auf einer oder beiden Plattformen brechen.
     const commonOpts = {
       group: {
-        name: 'kanban', pull: true,
-        // Personen existieren entweder in einer Gerettete-Personen-Spalte oder in einer
-        // Fahrzeugkarte. Sortable darf sie deshalb nie in andere Lanes legen.
+        name: 'kanban',
+        pull(to, from, dragEl, evt) {
+          if (dragEl?.dataset.kind === 'person'
+              && !from.el.classList.contains('sortable-zone--vehicle')
+              && to.el.classList.contains('sortable-zone--vehicle')) {
+            return 'clone';
+          }
+          return true;
+        },
+        // Personen-Karten bleiben immer in der Spalte; aufs Fahrzeug wird nur ein Klon gezogen.
         put(to, from, dragged) {
           if (dragged?.dataset.kind !== 'person') return true;
           return to.el.classList.contains('sortable-zone--vehicle')

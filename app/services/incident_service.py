@@ -53,7 +53,7 @@ def resolve_person_vehicle(
 
 
 def heal_orphaned_persons(db: Session, incident_id: int) -> int:
-    """Return persons with stale vehicle links to a rescued board column.
+    """Repair stale person vehicle links and rescued board columns independently.
 
     The query is deliberately scoped to one incident: the tenant listener only
     applies to SELECTs, so a bulk update would be unsafe here.
@@ -85,19 +85,17 @@ def heal_orphaned_persons(db: Session, incident_id: int) -> int:
             and person.column.incident_id == incident_id
             and person.column.column_kind == "rescued"
         )
-        # A valid vehicle link is already a visible board representation; its
-        # historical column is irrelevant until the person is detached again.
-        if vehicle_valid and person.vehicle_id is not None:
-            continue
         if vehicle_valid and column_valid:
             continue
         before = {"column_id": person.column_id, "vehicle_id": person.vehicle_id}
-        person.vehicle_id = None
-        person.column_id = rescued_column.id
+        if not column_valid:
+            person.column_id = rescued_column.id
+        if not vehicle_valid:
+            person.vehicle_id = None
         write_incident_change(
             db, incident_id, "person.healed", "rescued_person", person.id,
             before=before,
-            after={"column_id": person.column_id, "vehicle_id": None},
+            after={"column_id": person.column_id, "vehicle_id": person.vehicle_id},
         )
         healed += 1
     if healed:
@@ -1255,7 +1253,7 @@ def move_card(
     user_id: int | None = None,
     detach_vehicle: bool = False,
 ) -> bool:
-    """Generic card move for DnD. kind: 'vehicle'|'task'|'message'.
+    """Generic card move for DnD. kind: 'vehicle'|'task'|'message'|'person'.
 
     detach_vehicle: True nur, wenn die Karte aus einer Fahrzeug-Zone heraus auf eine Spalte
     gezogen wurde (bewusstes Lösen der Einheiten-Zuordnung). Beim reinen Umsortieren einer
@@ -1425,12 +1423,14 @@ def move_card(
             col = db.get(IncidentColumn, column_id) if column_id else None
             if not col or col.incident_id != incident_id or col.column_kind != "rescued":
                 return False
-            person.vehicle_id = None
+            if detach_vehicle:
+                person.vehicle_id = None
             person.column_id = col.id
             db.flush()
             write_incident_change(
                 db, incident_id, "person.moved", "rescued_person", uid,
-                before=before, after={"column_id": col.id, "vehicle_id": None},
+                before=before,
+                after={"column_id": col.id, "vehicle_id": person.vehicle_id},
                 user_id=user_id,
             )
             return True
