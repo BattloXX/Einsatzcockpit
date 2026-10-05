@@ -42,6 +42,21 @@ def map_stichwort(lis_type_code: str | None) -> str:
 
 # ── Übungserkennung (Operation.Type.Type Freitext) ────────────────────────────
 _EXERCISE_KEYWORDS = ("schulung", "übung", "uebung", "training", "probe")
+# "probe" nur als eigenes Wort bzw. "Probealarm"/"Probeeinsatz" — sonst träfe
+# "Proben..." (z.B. Probenraum) ebenfalls.
+_EXERCISE_WORD_START_RE = re.compile(
+    r"\b(?:schulung|übung|uebung|training)\w*|\bprobe(?:alarm|einsatz)?\b",
+    re.IGNORECASE,
+)
+
+
+def is_exercise_label(label: str | None) -> bool:
+    """Erkennt Übungsbegriffe nur am Anfang eines Wortes.
+
+    Das erfasst etwa ``Probealarm`` und ``Übungseinsatz``, aber nicht
+    ``Erprobung`` oder ``Probenraum``.
+    """
+    return bool(label and _EXERCISE_WORD_START_RE.search(label))
 
 
 def is_exercise_operation(type_obj: dict | None) -> bool:
@@ -55,8 +70,7 @@ def is_exercise_operation(type_obj: dict | None) -> bool:
     """
     if not type_obj:
         return False
-    label = (type_obj.get("Type") or "").strip().lower()
-    return any(keyword in label for keyword in _EXERCISE_KEYWORDS)
+    return is_exercise_label(type_obj.get("Type"))
 
 
 # ── Fahrzeugstatus (S4/S5 → interne UNIT_STATUS_VALUES) ───────────────────────

@@ -34,6 +34,6 @@ async def post_incident_card_via_bot(
     `{binding.service_url}v3/conversations/{binding.conversation_id}/activities`)."""
     logger.warning(
         "Teams-Bot-Versand noch nicht implementiert (Einsatz %s, Org %s, Ziel %s) — "
-        "kein Fallback ausgelöst, bitte Webhook-URL zusätzlich konfigurieren",
+        "Versand fällt auf die Webhook-URL zurück (falls konfiguriert)",
         incident.id, incident.primary_org_id, binding.target,
     )

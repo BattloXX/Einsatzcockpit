@@ -4,6 +4,7 @@ Fahrzeugstatus (S4/S5), Fahrzeugposition (LocationX/LocationY) und
 _close_incidents_missing_from_lis (Auto-Close, wenn eine Operation in LIS
 nicht mehr aktiv ist)."""
 import asyncio
+import logging
 from datetime import UTC, datetime, timedelta
 
 from app.core.tenant import set_tenant_context
@@ -106,6 +107,35 @@ def test_lis_first_creates_incident_as_exercise_when_flagged():
 
         assert created is True
         assert incident.is_exercise is True
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_lis_link_logs_exercise_mismatch_without_changing_incident(caplog):
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+        incident = Incident(
+            primary_org_id=ORG_ID, alarm_type_code="T4", status="active",
+            lis_operation_number="f26099901", is_exercise=True,
+        )
+        db.add(incident)
+        db.flush()
+
+        with caplog.at_level(logging.WARNING, logger="einsatzleiter.lis_sync"):
+            linked, created = lis_sync._get_or_link_incident(
+                db, org, _parsed(
+                    lis_operation_id="lis-op-uebung-mismatch", lis_operation_number="f26099901",
+                    is_exercise=False,
+                ),
+            )
+
+        assert created is False
+        assert linked.is_exercise is True
+        assert "LIS-Uebungsstatus weicht" in caplog.text
+        assert "incident_is_exercise=True" in caplog.text
+        assert "lis_is_exercise=False" in caplog.text
     finally:
         db.rollback()
         db.close()

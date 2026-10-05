@@ -51,6 +51,7 @@ logger = logging.getLogger("einsatzleiter.dibos.enrich")
 
 _RSVP_DELAYED_RE = re.compile(r"^\d+\s*min\.?$", re.IGNORECASE)
 _fallback_active: set[tuple[int, int]] = set()
+_alarm_scheduled: set[int] = set()
 
 
 def _map_dibos_rsvp_status(status: str | None) -> str | None:
@@ -107,14 +108,15 @@ def _parse_dibos_datetime(value: str | None, org) -> datetime | None:
 
 
 def _is_exercise_event(event: dict) -> bool:
-    """Erkennt einen Übungs-/Schulungseinsatz anhand von DIBOS-Freitextfeldern.
+    """Erkennt einen Übungs-/Schulungseinsatz anhand der DIBOS-Einsatzart.
 
     DIBOS hat kein eigenes Übungs-Flag (anders als der Freitext in
-    Operation.Type.Type bei LIS) — Keyword-Check auf tycodDescription/diagnose,
-    dieselbe Wortliste wie lis_mapping.py::is_exercise_operation()."""
-    from app.services.lis.lis_mapping import _EXERCISE_KEYWORDS
-    text = f"{event.get('tycodDescription') or ''} {event.get('diagnose') or ''}".strip().lower()
-    return any(keyword in text for keyword in _EXERCISE_KEYWORDS)
+    Operation.Type.Type bei LIS). Ausschließlich ``tycodDescription`` wird
+    ausgewertet: Diagnose/Meldung kann bei einem Realeinsatz beliebigen
+    Freitext einschließlich Übungsbegriffen enthalten.
+    """
+    from app.services.lis.lis_mapping import is_exercise_label
+    return is_exercise_label(event.get("tycodDescription"))
 
 
 def _get_or_create_incident_for_event(db: Session, org, org_id: int, event: dict):
@@ -693,8 +695,9 @@ async def _notify_new_dibos_incident(incident_id: int, org_id: int) -> None:
         incident = db.get(Incident, incident_id)
         if incident is None:
             return
-        try:
-            await broadcast_org(org_id, {
+        async def _broadcast() -> None:
+            logger.info("DIBOS-Board-Broadcast gestartet (Einsatz %s)", incident.id)
+            await asyncio.wait_for(broadcast_org(org_id, {
                 "type": "incident_created",
                 "incident_id": incident.id,
                 "alarm": incident.alarm_type_code,
@@ -705,14 +708,17 @@ async def _notify_new_dibos_incident(incident_id: int, org_id: int) -> None:
                 "is_exercise": incident.is_exercise,
                 "url": f"/einsatz/{incident.id}/info",
                 "title": f"Neuer Einsatz aus DIBOS: {incident.alarm_type_code}",
-            })
-        except Exception:
-            logger.exception("DIBOS-Board-Broadcast für neuen Einsatz %s fehlgeschlagen", incident.id)
+            }), timeout=5)
+            logger.info("DIBOS-Board-Broadcast abgeschlossen (Einsatz %s)", incident.id)
+
+        _start_background(_broadcast(), "DIBOS-Board-Broadcast", incident.id)
         try:
+            logger.info("DIBOS-Alarmierung wird gestartet (Einsatz %s)", incident.id)
             await notify_incident_created(
                 db, incident, org_id=org_id,
                 base_url=settings.effective_public_base_url,
                 background_tasks=None,
+                source="dibos",
             )
         except Exception:
             logger.exception(
@@ -771,8 +777,9 @@ def enrich_events_for_org(
     Anreicherungs-Durchlauf ab (Rollback + Log), nie den DIBOS-Poll selbst.
 
     Neue Einsätze werden nach vollständiger Anreicherung sofort committet. Ihre
-    Benachrichtigung wird per ``run_coroutine_threadsafe`` auf dem übergebenen
-    Haupt-Event-Loop eingeplant; die Coroutine verwendet eine eigene DB-Session.
+    Benachrichtigung wird per ``loop.call_soon_threadsafe`` + ``_start_background``
+    (starke Task-Referenz) auf dem übergebenen Haupt-Event-Loop eingeplant; die
+    Coroutine verwendet eine eigene DB-Session.
     """
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
@@ -842,9 +849,27 @@ def enrich_events_for_org(
                 db.commit()
                 created_ids.append(incident_id)
                 if loop is not None:
-                    asyncio.run_coroutine_threadsafe(
-                        _notify_new_dibos_incident(incident_id, org_id), loop
-                    )
+                    # Über _start_background (starke Referenz in _background_tasks)
+                    # statt nacktem run_coroutine_threadsafe: dessen verworfenes
+                    # Future hielt den Task nicht fest — asyncio referenziert Tasks
+                    # nur schwach, der GC konnte die Alarmierung (SMS/Teams) mitten
+                    # im Lauf still einsammeln (Vorfall 2026-10-05, Einsatz 388).
+                    _alarm_scheduled.add(incident_id)
+                    notify_coro = _notify_new_dibos_incident(incident_id, org_id)
+                    try:
+                        loop.call_soon_threadsafe(
+                            _start_background,
+                            notify_coro,
+                            "DIBOS-Alarmierung",
+                            incident_id,
+                        )
+                    except RuntimeError:
+                        notify_coro.close()
+                        _alarm_scheduled.discard(incident_id)
+                        logger.exception(
+                            "DIBOS-Alarmierung konnte nicht eingeplant werden (Einsatz %s)",
+                            incident_id,
+                        )
             changed |= _sync_dibos_comments(db, org_id, incident, event.get("comments") or [])
             if raw_units is not None and isinstance(event_number, str):
                 changed |= _sync_wache_status(
@@ -969,6 +994,18 @@ async def enrich_and_broadcast(
     objekt_match_ids = result.get("objekt_match_ids") or []
     created_ids = result.get("created_ids") or []
     created_match_ids = result.get("created_match_ids") or []
+    for incident_id in created_ids:
+        if incident_id not in _alarm_scheduled:
+            logger.warning(
+                "DIBOS-Alarmierung für Einsatz %s war nicht eingeplant und wird nachgeholt",
+                incident_id,
+            )
+            _alarm_scheduled.add(incident_id)
+            _start_background(
+                _notify_new_dibos_incident(incident_id, org_id),
+                "DIBOS-Alarmierung",
+                incident_id,
+            )
     from app.services.objekt_kontakt_notify import dispatch_objekt_einsatzinfo
     from app.services.print_dispatcher import autoprint_incident_background
     for incident_id in created_ids:

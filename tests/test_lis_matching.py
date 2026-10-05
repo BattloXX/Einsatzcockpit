@@ -98,6 +98,10 @@ def test_is_exercise_operation_false_for_normal_type():
     assert lis_mapping.is_exercise_operation({"Type": "t3 - mittlerer technischer Einsatz"}) is False
 
 
+def test_is_exercise_operation_does_not_match_erprobung():
+    assert lis_mapping.is_exercise_operation({"Type": "Erprobung einer Anlage"}) is False
+
+
 def test_is_exercise_operation_false_when_missing():
     assert lis_mapping.is_exercise_operation(None) is False
     assert lis_mapping.is_exercise_operation({}) is False

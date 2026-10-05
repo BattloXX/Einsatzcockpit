@@ -234,6 +234,12 @@ def _get_or_link_incident(db: Session, org: FireDept, parsed: dict):
         lis_operation_number=parsed["lis_operation_number"],
     )
     if match:
+        if match.is_exercise != parsed["is_exercise"]:
+            logger.warning(
+                "LIS-Uebungsstatus weicht von vorhandenem Einsatz ab "
+                "(LIS-Operation %s, Einsatz %s, incident_is_exercise=%s, lis_is_exercise=%s)",
+                parsed["lis_operation_id"], match.id, match.is_exercise, parsed["is_exercise"],
+            )
         match.lis_operation_id = parsed["lis_operation_id"]
         match.lis_operation_number = parsed["lis_operation_number"]
         db.flush()
@@ -1023,6 +1029,20 @@ async def sync_operation(
                     "LIS-Capture automatisch NICHT gestartet für Einsatz %s (Org %s): %s",
                     incident.id, org.id, exc,
                 )
+    elif not parsed.get("is_closed"):
+        from app.config import settings
+        from app.services.incident_notify import incident_needs_alarm_backfill, notify_incident_created
+
+        if incident_needs_alarm_backfill(db, incident):
+            logger.warning("Alarmierung fuer Einsatz %s nachgeholt (Quelle lis_verknuepfung)", incident.id)
+            await notify_incident_created(
+                db,
+                incident,
+                org_id=org.id,
+                base_url=settings.effective_public_base_url,
+                background_tasks=None,
+                source="lis_verknuepfung",
+            )
 
     if vehicles_changed and not created:
         # Der Live-Push liest in einer eigenen Worker-Session; daher muessen die

@@ -1,8 +1,13 @@
 """Tests für die REST-API (Einsatz anlegen)."""
+import uuid
+from datetime import UTC, datetime, timedelta
+
 import pytest
+
+from app.core.security import generate_api_key, hash_api_key
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
-from app.core.security import generate_api_key, hash_api_key
+from app.models.incident import Incident
 from app.models.master import FireDept
 from app.models.user import ApiKey
 
@@ -13,7 +18,12 @@ def api_key(setup_db):
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
-        org = db.query(FireDept).filter(FireDept.is_home_org == True).first()  # noqa: E712
+        org = FireDept(
+            slug=f"api-test-{uuid.uuid4().hex[:8]}", name="API-Test-Org",
+            color="#123456", bos="Feuerwehr",
+        )
+        db.add(org)
+        db.flush()
         key = ApiKey(key_hash=hash_api_key(raw), label="Test", org_id=org.id)
         db.add(key)
         db.commit()
@@ -56,7 +66,12 @@ def test_create_incident_success(client, api_key, monkeypatch):
     monkeypatch.setattr(
         "app.services.incident_notify.notify_incident_created", fake_notify,
     )
-    r = client.post("/api/v1/einsatz", json=PAYLOAD, headers={"X-API-Key": api_key})
+    payload = dict(
+        PAYLOAD,
+        Key=f"test-key-{uuid.uuid4().hex}",
+        Strasse=f"Teststrasse-{uuid.uuid4().hex}",
+    )
+    r = client.post("/api/v1/einsatz", json=payload, headers={"X-API-Key": api_key})
     assert r.status_code == 200
     data = r.json()
     assert data["created"] is True
@@ -65,7 +80,7 @@ def test_create_incident_success(client, api_key, monkeypatch):
     assert notify_calls == [incident_id]
 
     # Idempotency: same Key again → created=False
-    r2 = client.post("/api/v1/einsatz", json=PAYLOAD, headers={"X-API-Key": api_key})
+    r2 = client.post("/api/v1/einsatz", json=payload, headers={"X-API-Key": api_key})
     assert r2.status_code == 200
     assert r2.json()["created"] is False
     assert r2.json()["id"] == incident_id
@@ -153,7 +168,6 @@ def test_fast_zeitgleicher_alarm_mit_anderem_key_wird_nicht_doppelt_angelegt(
     # (anderer Key) wird nicht als eigener Einsatz gefuehrt.
     assert r2.json()["external_key"] == "dup-guard-key-1"
 
-    from app.models.incident import Incident
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
@@ -260,3 +274,45 @@ def test_leitstellennummer_links_existing_dibos_incident_ohne_duplikat(client, l
         assert anzahl == 1
     finally:
         db.close()
+
+
+@pytest.mark.parametrize(
+    ("started_at", "alarm_started", "expected_calls"),
+    [
+        (None, False, 1),
+        (None, True, 0),
+        (datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=16), False, 0),
+    ],
+)
+def test_lis_link_backfills_only_fresh_unalarmed_incident(
+    client, leitstellennummer_api_key, monkeypatch, started_at, alarm_started, expected_calls,
+):
+    """EUS-Link alarmiert nur frische Einsätze ohne Start-Marker nach."""
+    api_key, org_id = leitstellennummer_api_key
+    calls = []
+
+    async def fake_notify(db, incident, **kwargs):
+        calls.append((incident.id, kwargs["source"]))
+
+    monkeypatch.setattr("app.services.incident_notify.notify_incident_created", fake_notify)
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        incident = Incident(
+            alarm_type_code="T1", status="active", primary_org_id=org_id,
+            lis_operation_number=f"backfill-{org_id}", started_at=started_at,
+        )
+        db.add(incident)
+        db.flush()
+        incident_id = incident.id
+        if alarm_started:
+            from app.core.audit import write_audit
+            write_audit(db, "incident.alarm_started", incident_id=incident.id)
+        db.commit()
+    finally:
+        db.close()
+
+    payload = dict(PAYLOAD, Key=f"backfill-key-{org_id}", Leitstellennummer=f"backfill-{org_id}")
+    response = client.post("/api/v1/einsatz", json=payload, headers={"X-API-Key": api_key})
+    assert response.status_code == 200
+    assert calls == ([(incident_id, "api_lis_verknuepfung")] if expected_calls else [])

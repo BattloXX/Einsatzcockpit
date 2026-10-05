@@ -109,15 +109,17 @@ async def ingest_alarm(
         from app.models.incident import Incident
         inc = db.get(Incident, ingest.einsatz_id)
         if inc is not None:
-            from app.services.incident_notify import notify_incident_created
-            await notify_incident_created(
-                db, inc,
-                org_id=gateway.org_id,
-                triggered_by_user_id=None,
-                push_url=f"/einsatz/{inc.id}",
-                base_url=str(request.base_url),
-                background_tasks=background_tasks,
-            )
+            from app.services.incident_notify import incident_alarm_started, notify_incident_created
+            if not incident_alarm_started(db, inc.id):
+                await notify_incident_created(
+                    db, inc,
+                    org_id=gateway.org_id,
+                    triggered_by_user_id=None,
+                    push_url=f"/einsatz/{inc.id}",
+                    base_url=str(request.base_url),
+                    background_tasks=background_tasks,
+                    source="gateway",
+                )
             try:
                 from app.services.broadcast import broadcast_org
                 from app.services.exercise_guard import darf_extern
