@@ -13,6 +13,7 @@ DIENST_LABELS = {
     "sms_gateway": "SMS-Gateway",
     "alarm_seriell": "Alarm seriell (W&T)",
     "alarm_dibos": "Alarm DIBOS",
+    "alarm_outbox": "Alarm-Outbox",
 }
 
 

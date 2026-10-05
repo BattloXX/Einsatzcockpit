@@ -88,6 +88,7 @@ def guard_db(monkeypatch):
     Base.metadata.create_all(engine)
     factory = sessionmaker(bind=engine)
     monkeypatch.setattr("app.db.SessionLocal", factory)
+    monkeypatch.setattr("app.services.alarm_outbox.SessionLocal", factory)
     db = factory()
     set_tenant_context(db, None)
     org = FireDept(slug="exercise-integration", name="Exercise Integration")

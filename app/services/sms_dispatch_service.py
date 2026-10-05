@@ -7,10 +7,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
+
+from sqlalchemy import and_, or_
 
 from app.config import settings
 
@@ -36,6 +38,10 @@ SMS_CONCURRENCY_PER_GATEWAY = 7
 EINSATZINFO_NACHVERSAND_FENSTER = timedelta(minutes=60)
 _einsatzinfo_nachversand_locks: dict[int, asyncio.Lock] = {}
 
+
+def _einsatzinfo_lease_until(now: datetime, recipient_count: int) -> datetime:
+    return now + timedelta(minutes=3, seconds=20 * recipient_count)
+
 # Standardvorlage fuer Einsatzinfo-SMS (Platzhalter in geschweiften Klammern)
 _DEFAULT_TEMPLATE = "Einsatz {stichwort}: {adresse}. {meldung} {link}"
 
@@ -49,6 +55,7 @@ class EinsatzinfoDispatchResult:
     sent: bool
     reason: str | None = None
     recipient_count: int = 0
+    handed_off: bool = False
 
 
 def default_einsatzinfo_template() -> str:
@@ -144,7 +151,7 @@ class SmsSendResult:
 
 async def send_bulk_detailed(
     org_id: int,
-    jobs: list[tuple[str, str]],
+    jobs: Sequence[tuple[str, str] | tuple[str, str, str]],
     ctx=None,
     on_result: Callable[[SmsSendResult], Awaitable[None]] | None = None,
 ) -> list[SmsSendResult]:
@@ -180,21 +187,23 @@ async def send_bulk_detailed(
     }
     progress_lock = asyncio.Lock()
 
-    async def _send(index: int, to: str, text: str) -> SmsSendResult:
+    async def _send(index: int, job) -> SmsSendResult:
+        to, text = job[:2]
+        job_id = job[2] if len(job) > 2 else None
         gateway_id = gateway_ids[index % len(gateway_ids)] if gateway_ids else None
         async with semaphores[gateway_id]:
             delivery = None
             try:
                 if gateway_id is None:
-                    delivery = await send_sms(org_id, to, text, ctx=ctx)
+                    kwargs = {"ctx": ctx}
+                    if job_id is not None:
+                        kwargs["job_id"] = job_id
+                    delivery = await send_sms(org_id, to, text, **kwargs)
                 else:
-                    delivery = await send_sms(
-                        org_id,
-                        to,
-                        text,
-                        ctx=ctx,
-                        preferred_gateway_token_id=gateway_id,
-                    )
+                    kwargs = {"ctx": ctx, "preferred_gateway_token_id": gateway_id}
+                    if job_id is not None:
+                        kwargs["job_id"] = job_id
+                    delivery = await send_sms(org_id, to, text, **kwargs)
             except Exception as exc:
                 logger.warning("SMS-Versand fehlgeschlagen an %s: %s", to[-4:] + "****", exc)
             gateway_token_id = getattr(delivery, "gateway_token_id", None)
@@ -215,7 +224,7 @@ async def send_bulk_detailed(
             return result
 
     return list(await asyncio.gather(*(
-        _send(index, to, text) for index, (to, text) in enumerate(jobs)
+        _send(index, job) for index, job in enumerate(jobs)
     )))
 
 
@@ -259,7 +268,7 @@ def _markiere_abgelaufene_einsatzinfo(db: Session, org_id: int, now: datetime) -
             SmsLog.source == "alarm",
             SmsLog.sent_at <= now - EINSATZINFO_NACHVERSAND_FENSTER,
             SmsLogRecipient.success.is_(False),
-            SmsLogRecipient.provider == "ausstehend",
+            SmsLogRecipient.provider.in_(("ausstehend", "sendet")),
         )
         .all()
     )
@@ -315,7 +324,10 @@ async def retry_pending_einsatzinfo(org_id: int) -> int:
                     SmsLog.source == "alarm",
                     SmsLog.sent_at > now - EINSATZINFO_NACHVERSAND_FENSTER,
                     SmsLogRecipient.success.is_(False),
-                    SmsLogRecipient.provider == "ausstehend",
+                    or_(
+                        SmsLogRecipient.provider == "ausstehend",
+                        and_(SmsLogRecipient.provider == "sendet", SmsLogRecipient.lease_until < now),
+                    ),
                 )
                 .all()
             )
@@ -328,6 +340,10 @@ async def retry_pending_einsatzinfo(org_id: int) -> int:
                 if log_entry is None:
                     continue
                 by_phone = {recipient.phone_number: recipient for recipient in recipients}
+                for recipient in recipients:
+                    recipient.provider = "sendet"
+                    recipient.lease_until = _einsatzinfo_lease_until(now, len(recipients))
+                db.commit()
 
                 async def _record(result: SmsSendResult) -> None:
                     recipient = by_phone[result.phone_number]
@@ -336,12 +352,16 @@ async def retry_pending_einsatzinfo(org_id: int) -> int:
                         recipient.provider = result.provider
                         recipient.gateway_label = result.gateway_label
                         recipient.sent_at = result.sent_at
+                        recipient.lease_until = None
                         log_entry.success_count += 1
                     db.commit()
 
                 results = await _send_bulk_with_progress(
                     org_id,
-                    [(recipient.phone_number, "[Nachgesendet] " + log_entry.text) for recipient in recipients],
+                    [
+                        (recipient.phone_number, "[Nachgesendet] " + log_entry.text, f"alarm-{recipient.id}")
+                        for recipient in recipients
+                    ],
                     sms_ctx,
                     _record,
                 )
@@ -353,7 +373,10 @@ async def retry_pending_einsatzinfo(org_id: int) -> int:
                         author_name="System",
                         text=f"Alarmierung SMS nachgesendet an {successful}",
                     ))
-                if not any(not recipient.success and recipient.provider == "ausstehend" for recipient in recipients):
+                if not any(
+                    not recipient.success and recipient.provider in ("ausstehend", "sendet")
+                    for recipient in recipients
+                ):
                     log_entry.completed_at = datetime.now(UTC).replace(tzinfo=None)
                 log_entry.provider = ",".join(sorted(sms_ctx.providers_used)) or "wartet_gateway"
                 db.commit()
@@ -554,6 +577,18 @@ async def dispatch_einsatzinfo(
             )
             return EinsatzinfoDispatchResult(False, reason)
 
+        # Der Outbox-Worker darf nach einem Crash keinen zweiten Alarm anlegen.
+        if incident_id is not None:
+            existing = db.query(SmsLog).filter(
+                SmsLog.org_id == org_id,
+                SmsLog.incident_id == incident_id,
+                SmsLog.source == "alarm",
+            ).first()
+            if existing is not None:
+                return EinsatzinfoDispatchResult(
+                    True, "bereits uebergeben", existing.recipient_count, handed_off=True
+                )
+
         # Vor Versand protokollieren; Zwischen-Commits machen den Fortschritt sichtbar.
         jobs = [(phone, text) for phone in recipients]
         log_entry = SmsLog(
@@ -597,7 +632,7 @@ async def dispatch_einsatzinfo(
                 incident_id, org_id, len(jobs),
             )
             return EinsatzinfoDispatchResult(
-                False, f"wartet auf SMS-Gateway (Nachversand bis {deadline})", len(jobs)
+                False, f"wartet auf SMS-Gateway (Nachversand bis {deadline})", len(jobs), handed_off=True
             )
 
         sms_ctx = resolve_sms_config(org_id, db)
@@ -606,6 +641,7 @@ async def dispatch_einsatzinfo(
         # und schickt dieselben Empfaenger so nicht doppelt an.
         for recipient in pending_recipients.values():
             recipient.provider = "sendet"
+            recipient.lease_until = _einsatzinfo_lease_until(now.replace(tzinfo=None), len(pending_recipients))
         db.commit()
 
         async def _record(result: SmsSendResult) -> None:
@@ -616,16 +652,24 @@ async def dispatch_einsatzinfo(
                 recipient.provider = result.provider
                 recipient.gateway_label = result.gateway_label
                 log_entry.success_count += 1
+                recipient.lease_until = None
             else:
                 recipient.provider = "ausstehend"
+                recipient.lease_until = None
             db.commit()
 
         try:
-            results = await _send_bulk_with_progress(org_id, jobs, sms_ctx, _record)
+            results = await _send_bulk_with_progress(
+                org_id,
+                [(phone, text, f"alarm-{pending_recipients[phone].id}") for phone, text in jobs],
+                sms_ctx,
+                _record,
+            )
         finally:
             for recipient in pending_recipients.values():
                 if not recipient.success and recipient.provider == "sendet":
                     recipient.provider = "ausstehend"
+                    recipient.lease_until = None
             db.commit()
         total = len(results)
         success = sum(result.success for result in results)
@@ -651,13 +695,13 @@ async def dispatch_einsatzinfo(
             incident_id, org_id, alarm_type_code, is_exercise, total, success,
         )
         if success:
-            return EinsatzinfoDispatchResult(True, recipient_count=success)
+            return EinsatzinfoDispatchResult(True, recipient_count=success, handed_off=True)
         reason = "wartet auf SMS-Gateway (Nachversand innerhalb von 60 min)"
         logger.warning(
             "Einsatzinfo-SMS uebersprungen: %s (Einsatz %s, org_id=%d, stichwort=%s, is_exercise=%s)",
             reason, incident_id, org_id, alarm_type_code, is_exercise,
         )
-        return EinsatzinfoDispatchResult(False, reason)
+        return EinsatzinfoDispatchResult(False, reason, total, handed_off=True)
     except Exception:
         logger.exception(
             "Fehler beim Einsatzinfo-SMS-Versand (org_id=%d, stichwort=%s)",

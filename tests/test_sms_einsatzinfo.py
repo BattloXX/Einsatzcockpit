@@ -95,7 +95,7 @@ async def test_nachversand_sendet_offene_empfaenger_nur_einmal(monkeypatch):
     async def fake_send(_org_id, jobs, ctx=None, on_result=None):
         jobs_seen.append(jobs)
         results = [svc.SmsSendResult(phone, True, datetime.now(UTC).replace(tzinfo=None), "gateway")
-                   for phone, _ in jobs]
+                   for phone, *_ in jobs]
         for result in results:
             await on_result(result)
         return results
@@ -106,7 +106,10 @@ async def test_nachversand_sendet_offene_empfaenger_nur_einmal(monkeypatch):
     monkeypatch.setattr(svc, "send_bulk_detailed", fake_send)
     await asyncio.gather(svc.retry_pending_einsatzinfo(1), svc.retry_pending_einsatzinfo(1))
 
-    assert jobs_seen == [[("+43660123456", "[Nachgesendet] Einsatz B2")]]
+    assert len(jobs_seen) == 1
+    phone, text, job_id = jobs_seen[0][0]
+    assert (phone, text) == ("+43660123456", "[Nachgesendet] Einsatz B2")
+    assert job_id.startswith("alarm-") and job_id.removeprefix("alarm-").isdigit()
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
@@ -397,10 +400,10 @@ async def test_dispatch_exercise_sends_when_configured():
     sent_texts: list[str] = []
 
     async def fake_send_bulk(org_id, jobs, ctx=None):
-        for _, text in jobs:
+        for _, text, _job_id in jobs:
             sent_texts.append(text)
         return [SimpleNamespace(phone_number=phone, success=True, sent_at=MagicMock())
-                for phone, _ in jobs]
+                for phone, *_ in jobs]
 
     with patch("app.routers.ws.is_sms_gateway_connected", return_value=True), \
          patch("app.services.sms_dispatch_service.SessionLocal", return_value=mock_db), \
@@ -455,9 +458,9 @@ async def test_dispatch_renders_leitstellennummer():
     sent_texts: list[str] = []
 
     async def fake_send_bulk(org_id, jobs, ctx=None):
-        sent_texts.extend(text for _, text in jobs)
+        sent_texts.extend(text for _, text, _job_id in jobs)
         return [SimpleNamespace(phone_number=phone, success=True, sent_at=MagicMock())
-                for phone, _ in jobs]
+            for phone, *_ in jobs]
 
     with patch("app.routers.ws.is_sms_gateway_connected", return_value=True), \
          patch("app.services.sms_dispatch_service.SessionLocal", return_value=mock_db), \

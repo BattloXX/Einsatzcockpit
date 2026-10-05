@@ -82,6 +82,7 @@ async def send_sms(
     org_id: int, to: str, text: str, timeout: float = 15.0,
     ctx: SmsContext | None = None,
     preferred_gateway_token_id: int | None = None,
+    job_id: str | None = None,
 ) -> SmsDeliveryResult:
     from app.routers.ws import dispatch_sms
     ctx = ctx or resolve_sms_config(org_id)
@@ -93,11 +94,11 @@ async def send_sms(
         try:
             if provider == "gateway":
                 if preferred_gateway_token_id is None:
-                    result = await dispatch_sms(org_id, str(uuid.uuid4()), to, text, timeout=timeout)
+                    result = await dispatch_sms(org_id, job_id or str(uuid.uuid4()), to, text, timeout=timeout)
                 else:
                     result = await dispatch_sms(
                         org_id,
-                        str(uuid.uuid4()),
+                        job_id or str(uuid.uuid4()),
                         to,
                         text,
                         timeout=timeout,

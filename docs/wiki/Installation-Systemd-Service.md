@@ -28,7 +28,7 @@ WorkingDirectory=/home/clp-einsatz/htdocs/einsatzleiter
 EnvironmentFile=/home/clp-einsatz/htdocs/einsatzleiter/.env
 ExecStart=/home/clp-einsatz/htdocs/einsatzleiter/.venv/bin/gunicorn \
     -k uvicorn.workers.UvicornWorker \
-    -w 2 \
+    -w 1 \
     --bind 127.0.0.1:8092 \
     app.main:app
 ```
@@ -74,14 +74,12 @@ sudo systemctl stop einsatzleiter
 
 ## Anzahl Worker anpassen
 
-Empfehlung: **`-w 2`** (Standard-Template) auf einem Einzelserver mit NGINX `ip_hash`.  
-Formel allgemein: `2 × CPU-Kerne`. Wert in `/etc/systemd/system/einsatzleiter.service` anpassen → `daemon-reload` → `restart`.
+Empfehlung: **`-w 1`**. SMS-Gateway-Sockets gehören jeweils genau einem Gunicorn-Worker;
+der SMS-Versand sieht auch mit Redis nur die Gateways seines eigenen Workers. Alarm-SMS
+funktionieren deshalb zuverlässig nur mit einem Worker.
 
-> **Hinweis WebSockets:** Mit mehreren Workern müssen WebSocket-Verbindungen per NGINX `ip_hash`
-> (Sticky Sessions) immer zum selben Worker geleitet werden – sonst kommen Live-Updates (Board,
-> Lagekarte) nicht bei allen Clients an. Wenn NGINX nicht auf `ip_hash` gestellt werden kann:
-> `-w 1` verwenden. Die Render-Performance bleibt trotzdem gut, da GET-Endpoints den
-> anyio-Threadpool (bis zu 40 parallele Threads) nutzen.
+Hintergrund-Loops wie DIBOS, LIS, Alarm-Outbox und SMS-Nachversand werden über den Leader-Lock
+`LEADER_LOCK_PATH` (Standard `app_storage/background-leader.lock`) nur in einem Worker gestartet.
 
 ---
 

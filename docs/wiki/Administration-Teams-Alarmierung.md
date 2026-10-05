@@ -135,3 +135,13 @@ Namensliste. Auf Mobilgeräten wird dieser Bereich der Kopfzeile grundsätzlich 
 ---
 
 **Verwandt:** [Einsatz starten](Anwender-Einsatz-starten) · [SMS-Einsatzinfo, manueller Versand & SMS-Empfang](Administration-SMS-Einsatzinfo)
+
+## Alarm-Outbox und Wiederholungen
+
+Jeder neue Einsatz aus DIBOS, REST/EUS, LIS, Gateway oder UI erhält drei persistente Jobs
+(SMS, Push, Teams) in `incident_alarm_job`; wo möglich werden sie zusammen mit dem Einsatz
+committet. Der Hintergrund-Loop prüft alle 5 Sekunden und setzt offene Jobs nach einem Neustart
+fort. Ein Job im Status `sending` wird nach Ablauf seiner fünfminütigen Lease erneut übernommen.
+
+Teams wird nach 5 s, 20 s, 60 s, 5 min und 15 min wiederholt. HTTP-4xx-Fehler außer 429 werden
+nicht wiederholt und als `failed` markiert. F30 und unterdrückte Übungen bleiben `suppressed`.

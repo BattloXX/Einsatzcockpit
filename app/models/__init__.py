@@ -41,6 +41,7 @@ from app.models.gateway import (
 from app.models.hoehen_cache import HoehenCache
 from app.models.incident import (
     Incident,
+    IncidentAlarmJob,  # noqa: F401
     IncidentChange,
     IncidentColumn,
     IncidentLog,

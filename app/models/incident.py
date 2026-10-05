@@ -3,7 +3,19 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    BigInteger,
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -184,6 +196,30 @@ class Incident(Base):
     lagefuehrung_fuehrer: Mapped[User | None] = relationship(
         "User", foreign_keys=[lagefuehrung_fuehrer_user_id], lazy="joined"
     )
+
+
+class IncidentAlarmJob(Base):
+    """Persistenter, idempotenter Versandauftrag der Einsatzalarmierung."""
+    __tablename__ = "incident_alarm_job"
+    __table_args__ = (
+        UniqueConstraint("incident_id", "channel", name="uq_incident_alarm_job_incident_channel"),
+        Index("ix_incident_alarm_job_due", "org_id", "status", "next_attempt_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    org_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
+    incident_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("incident.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    channel: Mapped[str] = mapped_column(String(16), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    next_attempt_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    context: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class IncidentOrg(Base):

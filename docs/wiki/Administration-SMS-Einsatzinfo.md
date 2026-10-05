@@ -44,6 +44,16 @@ Standard-Vorlage: `Einsatz {stichwort}: {adresse}. {meldung} {link}`. Unbekannte
 
 Der Versand läuft als Hintergrund-Task nach Einsatzanlage (egal ob über die API/Alarmierungssystem oder LIS) und protokolliert jeden Versand im SMS-Log (sichtbar unter **SMS senden**).
 
+## Alarm-Outbox und Nachversand
+
+Für jeden Einsatz werden persistente Jobs für SMS, Push und Teams in `incident_alarm_job` angelegt,
+wo möglich zusammen mit dem Einsatz committet. Ein Loop alle 5 Sekunden setzt offene Jobs nach einem
+Neustart fort; eine abgelaufene fünfminütige `sending`-Lease wird übernommen. Der SMS-Job gilt als
+erledigt, sobald das SMS-Log mit persistenten Empfängern angelegt ist. Die Empfänger werden weiter
+bis zu 60 Minuten nachgesendet. Ein in `sendet` hängen gebliebener Empfänger wird nach seiner Lease
+(3 Minuten plus 20 Sekunden je Empfänger) freigegeben. Push wird nach 10 s und 60 s wiederholt.
+F30 und unterdrückte Übungen bleiben `suppressed`.
+
 ### Nachversand bei kurz getrenntem Gateway
 
 Ist beim Alarm kein SMS-Gateway per WebSocket verbunden oder trennt es sich während des Versands, bleiben die betroffenen Empfänger im SMS-Log ausstehend. Sobald sich wieder ein Gateway verbindet, wird nur an diese Empfänger nachgesendet; die SMS beginnt dabei mit `[Nachgesendet] `. Das Nachsendefenster endet 60 Minuten nach der Alarmierung. Danach werden offene Empfänger als verworfen protokolliert und im Einsatzprotokoll vermerkt. Ein frischer Gateway-Heartbeat allein bedeutet nicht, dass gerade versendet werden kann; dafür muss die WebSocket-Verbindung bestehen.

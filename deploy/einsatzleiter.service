@@ -11,20 +11,17 @@ WorkingDirectory=/home/clp-einsatz/htdocs/einsatzleiter
 EnvironmentFile=/home/clp-einsatz/htdocs/einsatzleiter/.env
 ExecStart=/home/clp-einsatz/htdocs/einsatzleiter/.venv/bin/gunicorn \
     -k uvicorn.workers.UvicornWorker \
-    -w 2 \
+    -w 1 \
     --bind 127.0.0.1:8092 \
     --timeout 120 \
     --keep-alive 5 \
     --access-logfile - \
     --error-logfile - \
     app.main:app
-# Worker-Hinweis: Mit -w 2+ MUSS REDIS_URL in der .env gesetzt sein (Redis Pub/Sub-
-# Bus, app/services/ws_bus.py), damit Live-Broadcasts UND Gateway-Druckaufträge
-# worker-übergreifend zugestellt werden. NGINX ip_hash (Sticky Sessions) pinnt jede
-# WS-Verbindung auf einen Worker, löst aber NICHT den Fall, dass ein Druck-Request
-# auf einem anderen Worker landet als der Gateway-Socket. Ohne Redis: -w 1 verwenden.
-# Empfohlene Formel: -w (2 × CPU-Kerne). Die DB-Pool-Größe (pool_size=10/max_overflow=20
-# in db.py) deckt 2 Worker mit je ~40 anyio-Threads problemlos ab.
+# Worker-Hinweis: SMS-Gateway-Sockets leben pro Gunicorn-Worker. Der SMS-Versand sieht
+# auch mit Redis nur die Gateways des eigenen Workers; Alarm-SMS brauchen daher -w 1.
+# Hintergrund-Loops (DIBOS, LIS, Alarm-Outbox, SMS-Nachversand) laufen via Leader-Lock
+# nur in einem Worker (LEADER_LOCK_PATH, Standard app_storage/background-leader.lock).
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal

@@ -61,43 +61,33 @@ async def test_incident_notify_writes_alarm_start_and_finish_audits(setup_db, mo
 
 
 @pytest.mark.asyncio
-async def test_incident_notify_logs_exercise_skip_and_incident_log(monkeypatch, caplog):
+async def test_incident_notify_logs_exercise_skip_and_incident_log(setup_db, monkeypatch, caplog):
     from app.models.incident import IncidentLog
     from app.services import incident_notify
 
-    class LogDb:
-        def __init__(self):
-            self.entries = []
-
-        def add(self, entry):
-            self.entries.append(entry)
-
-        def commit(self):
-            pass
-
-        def rollback(self):
-            pass
-
-    db = LogDb()
-    incident = _incident()
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    incident = Incident(alarm_type_code="B2", address_city="Testort", is_exercise=True, primary_org_id=1, status="active")
+    db.add(incident)
+    db.commit()
     monkeypatch.setattr("app.services.exercise_guard.darf_extern", lambda *args, **kwargs: False)
-    monkeypatch.setattr(incident_notify, "_send_incident_wake_only", lambda *args, **kwargs: None)
+    async def no_wake(*args, **kwargs):
+        return None
 
-    with caplog.at_level(logging.INFO, logger="einsatzleiter.incident_notify"):
+    monkeypatch.setattr(incident_notify, "_send_incident_wake_only", no_wake)
+
+    with caplog.at_level(logging.INFO, logger="einsatzleiter.alarm_outbox"):
         await notify_incident_created(db, incident, org_id=1, base_url="https://example.test")
-
-    entries = [entry for entry in db.entries if isinstance(entry, IncidentLog)]
-    assert [(entry.level, entry.text) for entry in entries] == [
-        ("warning", "Alarmierung SMS übersprungen: Uebung unterdrueckt"),
-        ("warning", "Alarmierung Teams übersprungen: Uebung unterdrueckt"),
-    ]
-    assert "Einsatzinfo-SMS uebersprungen" in caplog.text
-    assert "Teams-Alarmierung uebersprungen" in caplog.text
+    db.expire_all()
+    texts = [entry.text for entry in db.query(IncidentLog).filter(IncidentLog.incident_id == incident.id).all()]
+    assert "Alarmierung SMS uebersprungen: Uebung unterdrueckt" in texts
+    assert "Alarmierung Teams uebersprungen: Uebung unterdrueckt" in texts
+    db.close()
 
 
 @pytest.mark.parametrize("mit_background_tasks", [False, True])
 @pytest.mark.asyncio
-async def test_incident_channels_run_concurrently(monkeypatch, mit_background_tasks):
+async def test_incident_channels_run_concurrently(setup_db, monkeypatch, mit_background_tasks):
     gestartet: list[str] = []
 
     async def langsam(name, *args, **kwargs):
@@ -119,20 +109,21 @@ async def test_incident_channels_run_concurrently(monkeypatch, mit_background_ta
     background_tasks = BackgroundTasks() if mit_background_tasks else None
 
     start = perf_counter()
-    await notify_incident_created(
-        Mock(), _incident(), org_id=1, base_url="https://example.test",
-        background_tasks=background_tasks,
-    )
+    db = SessionLocal(); set_tenant_context(db, None)
+    incident = Incident(alarm_type_code="B2", address_city="Testort", primary_org_id=1, status="active")
+    db.add(incident); db.commit()
+    await notify_incident_created(db, incident, org_id=1, base_url="https://example.test", background_tasks=background_tasks)
     if background_tasks is not None:
         await background_tasks()
     dauer = perf_counter() - start
 
     assert set(gestartet) == {"sms", "push", "teams"}
     assert dauer < 0.2
+    db.close()
 
 
 @pytest.mark.asyncio
-async def test_incident_channel_error_does_not_stop_others(monkeypatch, caplog):
+async def test_incident_channel_error_does_not_stop_others(setup_db, monkeypatch, caplog):
     beendet: list[str] = []
 
     async def sms_fehler(*args, **kwargs):
@@ -153,18 +144,23 @@ async def test_incident_channel_error_does_not_stop_others(monkeypatch, caplog):
         lambda *args, **kwargs: erfolgreich("teams"),
     )
 
-    with caplog.at_level(logging.ERROR, logger="einsatzleiter.incident_notify"):
-        await notify_incident_created(
-            Mock(), _incident(), org_id=1, base_url="https://example.test",
-            background_tasks=None,
-        )
+    db = SessionLocal(); set_tenant_context(db, None)
+    incident = Incident(alarm_type_code="B2", address_city="Testort", primary_org_id=1, status="active")
+    db.add(incident); db.commit()
+    with caplog.at_level(logging.ERROR, logger="einsatzleiter.alarm_outbox"):
+        await notify_incident_created(db, incident, org_id=1, base_url="https://example.test", background_tasks=None)
 
     assert set(beendet) == {"push", "teams"}
-    assert "Einsatzinfo-SMS fehlgeschlagen (Einsatz 42)" in caplog.text
+    from app.models.incident import IncidentAlarmJob
+    db.expire_all()
+    sms_job = db.query(IncidentAlarmJob).filter_by(incident_id=incident.id, channel="sms").one()
+    assert sms_job.status == "retry" and "kaputt" in sms_job.last_error
+    assert str(sms_job.id) in caplog.text
+    db.close()
 
 
 @pytest.mark.asyncio
-async def test_new_incident_uses_alarm_channel(monkeypatch):
+async def test_new_incident_uses_alarm_channel(setup_db, monkeypatch):
     sent = {}
 
     def fake_notify_org(*args, **kwargs):
@@ -180,13 +176,13 @@ async def test_new_incident_uses_alarm_channel(monkeypatch):
         "app.services.teams_alarm_service.post_incident_card",
         Mock(),
     )
-    incident = _incident()
-
-    await notify_incident_created(
-        Mock(), incident, org_id=1, background_tasks=None,
-    )
+    db = SessionLocal(); set_tenant_context(db, None)
+    incident = Incident(alarm_type_code="B2", address_city="Testort", primary_org_id=1, status="active")
+    db.add(incident); db.commit()
+    await notify_incident_created(db, incident, org_id=1, background_tasks=None)
 
     assert sent["channel_id"] == "einsatz_alarm"
+    db.close()
 
 
 def test_notify_user_does_not_use_alarm_channel(monkeypatch):
@@ -353,12 +349,11 @@ def test_notify_vehicle_committet_die_transaktion_des_aufrufers_nicht(monkeypatc
         db.close()
 
 
-def test_f30_wird_nie_alarmiert(monkeypatch):
+@pytest.mark.asyncio
+async def test_f30_wird_nie_alarmiert(setup_db, monkeypatch):
     """User-Vorgabe 2026-10-05: F30 (Proberuf) nie alarmieren - weder SMS noch Push noch Teams."""
-    import asyncio
-    from types import SimpleNamespace
-
     from app.services import incident_notify
+    from app.models.incident import IncidentLog
 
     calls = []
 
@@ -369,22 +364,12 @@ def test_f30_wird_nie_alarmiert(monkeypatch):
     monkeypatch.setattr(incident_notify, "_send_incident_push", fake)
     monkeypatch.setattr("app.services.teams_alarm_service.post_incident_card", fake)
 
-    class FakeDb:
-        def __init__(self):
-            self.added = []
-
-        def add(self, obj):
-            self.added.append(obj)
-
-        def commit(self):
-            pass
-
-        def rollback(self):
-            pass
-
-    db = FakeDb()
-    incident = SimpleNamespace(id=999, alarm_type_code="F30", is_exercise=False, status="active")
-    asyncio.run(incident_notify.notify_incident_created(db, incident, org_id=1, base_url="https://x"))
+    db = SessionLocal(); set_tenant_context(db, None)
+    incident = Incident(alarm_type_code="F30", is_exercise=False, primary_org_id=1, status="active")
+    db.add(incident); db.commit()
+    await incident_notify.notify_incident_created(db, incident, org_id=1, base_url="https://x")
     assert calls == []
-    assert any("keine Alarmierung" in getattr(o, "text", "") for o in db.added)
+    db.expire_all()
+    assert db.query(IncidentLog).filter(IncidentLog.incident_id == incident.id).one().text == "F30 – keine Alarmierung (SMS/Push/Teams)"
     assert incident_notify.incident_needs_alarm_backfill(db, incident) is False
+    db.close()

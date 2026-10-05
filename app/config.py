@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     APP_HOST: str = "0.0.0.0"
     APP_PORT: int = 8092
     APP_BASE_URL: str = "http://localhost:8092"
+    LEADER_LOCK_PATH: str = "app_storage/background-leader.lock"
     PUBLIC_BASE_URL: str = ""  # Für Mail-Links; leer = falls leer APP_BASE_URL verwenden
     # Teams rendert das Kartenbild beim Scrollen durch die Kanalhistorie erneut.
     ALARM_MAP_TTL_DAYS: int = 365

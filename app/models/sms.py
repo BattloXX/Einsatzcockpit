@@ -143,6 +143,7 @@ class SmsLogRecipient(Base):
     sent_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     provider: Mapped[str | None] = mapped_column(String(20), nullable=True)
     gateway_label: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     sms_log: Mapped[SmsLog] = relationship(back_populates="recipients")
     member: Mapped[Member | None] = relationship(lazy="joined")

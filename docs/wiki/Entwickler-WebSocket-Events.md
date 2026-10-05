@@ -156,4 +156,7 @@ Nach Reconnect: Vollständiger Reload des Board-Inhalts (`hx-get` auf den Board-
 Bei mehreren Gunicorn-Workern halten verschiedene Worker verschiedene WebSocket-Verbindungen. Wenn Worker A eine Änderung macht, muss Worker B die Verbindungen von Worker A nicht kennen.
 
 **Lösung für Produktion:** Redis Pub/Sub als gemeinsamen Message-Bus nutzen.  
-**Einfachste Lösung für Einzelserver:** `-w 1` (ein Worker, kein verteilter State nötig).
+**Empfehlung für Einzelserver:** `-w 1`. SMS-Gateway-Sockets leben pro Worker, und der
+SMS-Versand sieht auch mit Redis nur die Gateways seines eigenen Workers; Alarm-SMS benötigen
+deshalb einen Worker. DIBOS, LIS, Alarm-Outbox und SMS-Nachversand werden über den Leader-Lock
+(`LEADER_LOCK_PATH`, Standard `app_storage/background-leader.lock`) nur einmal gestartet.

@@ -52,7 +52,6 @@ logger = logging.getLogger("einsatzleiter.dibos.enrich")
 
 _RSVP_DELAYED_RE = re.compile(r"^\d+\s*min\.?$", re.IGNORECASE)
 _fallback_active: set[tuple[int, int]] = set()
-_alarm_scheduled: set[int] = set()
 _ignored_f30_probe_numbers: set[str] = set()
 _ignored_f30_probe_order: deque[str] = deque()
 _IGNORED_F30_PROBE_LOG_CAP = 1_000
@@ -874,6 +873,12 @@ def enrich_events_for_org(
                 # ID vor dem Commit sichern: expire_on_commit invalidiert auch `incident`
                 # und `org`; spätere Zugriffe werden bei Bedarf automatisch nachgeladen.
                 incident_id = incident.id
+                from app.config import settings
+                from app.services.alarm_outbox import enqueue_incident_alarm
+                enqueue_incident_alarm(
+                    db, incident, org_id=org_id, source="dibos",
+                    base_url=settings.effective_public_base_url,
+                )
                 db.commit()
                 created_ids.append(incident_id)
                 if loop is not None:
@@ -882,7 +887,6 @@ def enrich_events_for_org(
                     # Future hielt den Task nicht fest — asyncio referenziert Tasks
                     # nur schwach, der GC konnte die Alarmierung (SMS/Teams) mitten
                     # im Lauf still einsammeln (Vorfall 2026-10-05, Einsatz 388).
-                    _alarm_scheduled.add(incident_id)
                     notify_coro = _notify_new_dibos_incident(incident_id, org_id)
                     try:
                         loop.call_soon_threadsafe(
@@ -893,7 +897,6 @@ def enrich_events_for_org(
                         )
                     except RuntimeError:
                         notify_coro.close()
-                        _alarm_scheduled.discard(incident_id)
                         logger.exception(
                             "DIBOS-Alarmierung konnte nicht eingeplant werden (Einsatz %s)",
                             incident_id,
@@ -1026,12 +1029,20 @@ async def enrich_and_broadcast(
     created_ids = result.get("created_ids") or []
     created_match_ids = result.get("created_match_ids") or []
     for incident_id in created_ids:
-        if incident_id not in _alarm_scheduled:
+        from app.core.tenant import set_tenant_context
+        from app.db import SessionLocal
+        from app.services.incident_notify import incident_alarm_started
+        db = SessionLocal()
+        set_tenant_context(db, None)
+        try:
+            scheduled = incident_alarm_started(db, incident_id)
+        finally:
+            db.close()
+        if not scheduled:
             logger.warning(
                 "DIBOS-Alarmierung für Einsatz %s war nicht eingeplant und wird nachgeholt",
                 incident_id,
             )
-            _alarm_scheduled.add(incident_id)
             _start_background(
                 _notify_new_dibos_incident(incident_id, org_id),
                 "DIBOS-Alarmierung",
