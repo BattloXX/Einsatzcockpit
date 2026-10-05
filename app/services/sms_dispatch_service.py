@@ -42,6 +42,13 @@ _DEFAULT_TEMPLATE = "Einsatz {stichwort}: {adresse}. {meldung} {link}"
 _DEFAULT_GSL_ALARM_TEXT = "Grossschadenslage! Alle Mitglieder ruecken sofort ins Geraetehaus ein."
 
 
+@dataclass(frozen=True)
+class EinsatzinfoDispatchResult:
+    sent: bool
+    reason: str | None = None
+    recipient_count: int = 0
+
+
 def default_einsatzinfo_template() -> str:
     """Gibt die systemweite Standard-Vorlage fuer Einsatzinfo-SMS zurueck."""
     return _DEFAULT_TEMPLATE
@@ -315,7 +322,8 @@ async def dispatch_einsatzinfo(
     triggered_by_user_id: int | None = None,
     link: str = "",
     leitstellennummer: str | None = None,
-) -> None:
+    incident_id: int | None = None,
+) -> EinsatzinfoDispatchResult:
     """Versendet automatische Einsatzinfo-SMS nach Alarmeingang.
 
     Wird als BackgroundTask nach dem Einsatz-Commit aufgerufen.
@@ -329,8 +337,13 @@ async def dispatch_einsatzinfo(
     """
     from app.services.sms_service import resolve_sms_config, sms_available
     if not sms_available(org_id):
-        logger.debug("Kein SMS-Provider verfuegbar (org_id=%d) - Einsatzinfo-SMS uebersprungen", org_id)
-        return
+        reason = "kein SMS-Provider verfuegbar"
+        log = logger.info if is_exercise else logger.warning
+        log(
+            "Einsatzinfo-SMS uebersprungen: %s (Einsatz %s, org_id=%d, stichwort=%s, is_exercise=%s)",
+            reason, incident_id, org_id, alarm_type_code, is_exercise,
+        )
+        return EinsatzinfoDispatchResult(False, reason)
 
     db = SessionLocal()
     set_tenant_context(db, None)  # system-level: alle Orgs sichtbar fuer Subqueries
@@ -339,17 +352,21 @@ async def dispatch_einsatzinfo(
         # Org-Einstellungen laden
         org_settings = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
         if not org_settings or not org_settings.einsatzinfo_sms_enabled:
-            logger.debug(
-                "Einsatzinfo-SMS deaktiviert (org_id=%d) — uebersprungen", org_id
+            reason = "deaktiviert"
+            logger.info(
+                "Einsatzinfo-SMS uebersprungen: %s (Einsatz %s, org_id=%d, stichwort=%s, is_exercise=%s)",
+                reason, incident_id, org_id, alarm_type_code, is_exercise,
             )
-            return
+            return EinsatzinfoDispatchResult(False, reason)
 
         from app.services.exercise_guard import darf_extern
         if not darf_extern("sms", is_exercise=is_exercise, org_id=org_id, db=db):
-            logger.debug(
-                "Einsatzinfo-SMS bei Uebung unterdrueckt (org_id=%d) — uebersprungen", org_id
+            reason = "Uebung unterdrueckt"
+            logger.info(
+                "Einsatzinfo-SMS uebersprungen: %s (Einsatz %s, org_id=%d, stichwort=%s, is_exercise=%s)",
+                reason, incident_id, org_id, alarm_type_code, is_exercise,
             )
-            return
+            return EinsatzinfoDispatchResult(False, reason)
 
         # AlarmType fuer Stichwort-Override und ID-Lookup
         alarm_type = (
@@ -396,11 +413,13 @@ async def dispatch_einsatzinfo(
         # Empfaenger sammeln (inkl. Gruppen-Expansion, Dedup, Telefonnummer-Filter)
         recipients = collect_einsatzinfo_recipients(db, org_id, alarm_type_id)
         if not recipients:
-            logger.debug(
-                "Keine SMS-Empfaenger konfiguriert (org_id=%d, stichwort=%s)",
-                org_id, alarm_type_code,
+            reason = "keine Empfaenger konfiguriert"
+            log = logger.info if is_exercise else logger.warning
+            log(
+                "Einsatzinfo-SMS uebersprungen: %s (Einsatz %s, org_id=%d, stichwort=%s, is_exercise=%s)",
+                reason, incident_id, org_id, alarm_type_code, is_exercise,
             )
-            return
+            return EinsatzinfoDispatchResult(False, reason)
 
         # Vor Versand protokollieren; Zwischen-Commits machen den Fortschritt sichtbar.
         jobs = [(phone, text) for phone in recipients]
@@ -456,9 +475,17 @@ async def dispatch_einsatzinfo(
         db.commit()
 
         logger.info(
-            "Einsatzinfo-SMS gesendet (org_id=%d, stichwort=%s, gesamt=%d, erfolgreich=%d)",
-            org_id, alarm_type_code, total, success,
+            "Einsatzinfo-SMS gesendet (Einsatz %s, org_id=%d, stichwort=%s, is_exercise=%s, gesamt=%d, erfolgreich=%d)",
+            incident_id, org_id, alarm_type_code, is_exercise, total, success,
         )
+        if success:
+            return EinsatzinfoDispatchResult(True, recipient_count=success)
+        reason = "Versand an alle Empfaenger fehlgeschlagen"
+        logger.warning(
+            "Einsatzinfo-SMS uebersprungen: %s (Einsatz %s, org_id=%d, stichwort=%s, is_exercise=%s)",
+            reason, incident_id, org_id, alarm_type_code, is_exercise,
+        )
+        return EinsatzinfoDispatchResult(False, reason)
     except Exception:
         logger.exception(
             "Fehler beim Einsatzinfo-SMS-Versand (org_id=%d, stichwort=%s)",
@@ -475,6 +502,7 @@ async def dispatch_einsatzinfo(
                     db.commit()
         except Exception:
             pass
+        return EinsatzinfoDispatchResult(False, "Versandfehler")
     finally:
         db.close()
 

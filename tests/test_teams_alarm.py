@@ -354,7 +354,7 @@ def test_post_incident_card_uses_webhook_when_no_bot_binding(monkeypatch):
         db.close()
 
 
-def test_post_incident_card_prefers_bot_when_binding_exists(monkeypatch):
+def test_post_incident_card_bot_binding_falls_back_to_webhook(monkeypatch):
     bot_calls = []
     webhook_calls = []
 
@@ -384,7 +384,8 @@ def test_post_incident_card_prefers_bot_when_binding_exists(monkeypatch):
         import asyncio
         asyncio.run(teams_alarm_service.post_incident_card(db, incident, base_url="https://example.com"))
         assert bot_calls == [1]
-        assert webhook_calls == []  # Bot bevorzugt, Webhook nicht zusaetzlich aufgerufen
+        # Bot-Versand ist noch ein Platzhalter -> Webhook als Fallback, sonst ginge nichts raus
+        assert webhook_calls == [1]
     finally:
         db.rollback()
         db.close()

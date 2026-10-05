@@ -234,6 +234,12 @@ def _get_or_link_incident(db: Session, org: FireDept, parsed: dict):
         lis_operation_number=parsed["lis_operation_number"],
     )
     if match:
+        if match.is_exercise != parsed["is_exercise"]:
+            logger.warning(
+                "LIS-Uebungsstatus weicht von vorhandenem Einsatz ab "
+                "(LIS-Operation %s, Einsatz %s, incident_is_exercise=%s, lis_is_exercise=%s)",
+                parsed["lis_operation_id"], match.id, match.is_exercise, parsed["is_exercise"],
+            )
         match.lis_operation_id = parsed["lis_operation_id"]
         match.lis_operation_number = parsed["lis_operation_number"]
         db.flush()

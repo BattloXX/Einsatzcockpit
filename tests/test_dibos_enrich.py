@@ -85,6 +85,27 @@ def _event(
     }
 
 
+def test_is_exercise_event_uses_only_dibos_einsatzart():
+    event = _event(990)
+    event["diagnose"] = "Schulung und Probe laufen parallel"
+    assert dibos_enrich._is_exercise_event(event) is False
+
+
+def test_is_exercise_event_recognizes_exercise_einsatzart_word_start():
+    event = _event(991)
+    event["tycodDescription"] = "Übungseinsatz"
+    assert dibos_enrich._is_exercise_event(event) is True
+
+    event["tycodDescription"] = "Probealarm"
+    assert dibos_enrich._is_exercise_event(event) is True
+
+
+def test_is_exercise_event_does_not_match_erprobung():
+    event = _event(992)
+    event["tycodDescription"] = "Erprobung einer Brandmeldeanlage"
+    assert dibos_enrich._is_exercise_event(event) is False
+
+
 def _person_response(
     response_id: int, person: str, status: str, change_date: str,
     *, id_sybos: str | None = None, department: str = "fw_wolfu",

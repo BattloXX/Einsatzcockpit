@@ -21,7 +21,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
-from app.models.incident import Incident
+from app.models.incident import Incident, IncidentLog
 
 logger = logging.getLogger("einsatzleiter.incident_notify")
 
@@ -231,24 +231,38 @@ async def notify_incident_created(
         sms_args = (
             org_id, incident.alarm_type_code, address, incident.address_city,
             incident.report_text, incident.reason, incident.is_exercise,
-            triggered_by_user_id, info_link, incident.lis_operation_number,
+            triggered_by_user_id, info_link, incident.lis_operation_number, incident.id,
         )
     else:
         sms_args = None  # Einsatzinfo-SMS ist org-gebunden — ohne Org kein Versand
 
     teams_args = (db, incident) if base_url else None
 
-    async def _sms_senden() -> None:
+    async def _sms_senden():
         if sms_args is None:
-            return
+            reason = "keine Organisation zugeordnet"
+            logger.warning(
+                "Einsatzinfo-SMS uebersprungen: %s (Einsatz %s, stichwort=%s, is_exercise=%s)",
+                reason, incident.id, incident.alarm_type_code, incident.is_exercise,
+            )
+            return False, reason, 0
         if not darf_extern(
             "sms", is_exercise=incident.is_exercise, org_id=org_id, db=db
         ):
-            return
+            reason = "Uebung unterdrueckt"
+            logger.info(
+                "Einsatzinfo-SMS uebersprungen: %s (Einsatz %s, stichwort=%s, is_exercise=%s)",
+                reason, incident.id, incident.alarm_type_code, incident.is_exercise,
+            )
+            return False, reason, 0
         try:
-            await dispatch_einsatzinfo(*sms_args)
+            result = await dispatch_einsatzinfo(*sms_args)
+            if result is None:  # Kompatibilität mit bestehenden Erweiterungen/Tests.
+                return True, None, 0
+            return result.sent, result.reason, result.recipient_count
         except Exception:
             logger.exception("Einsatzinfo-SMS fehlgeschlagen (Einsatz %s)", incident.id)
+            return False, "Versandfehler", 0
 
     async def _push_senden() -> None:
         if not darf_extern(
@@ -282,26 +296,69 @@ async def notify_incident_created(
         except Exception:
             logger.exception("Push-Benachrichtigung fehlgeschlagen (Einsatz %s)", incident.id)
 
-    async def _teams_senden() -> None:
+    async def _teams_senden():
         if teams_args is None:
-            return
+            reason = "keine Base-URL verfügbar"
+            logger.warning(
+                "Teams-Alarmierung uebersprungen: %s (Einsatz %s, stichwort=%s, is_exercise=%s)",
+                reason, incident.id, incident.alarm_type_code, incident.is_exercise,
+            )
+            return False, reason
         if not darf_extern(
             "teams", is_exercise=incident.is_exercise, org_id=org_id, db=db
         ):
-            return
+            reason = "Uebung unterdrueckt"
+            logger.info(
+                "Teams-Alarmierung uebersprungen: %s (Einsatz %s, stichwort=%s, is_exercise=%s)",
+                reason, incident.id, incident.alarm_type_code, incident.is_exercise,
+            )
+            return False, reason
         assert base_url is not None  # teams_args ist nur mit base_url gesetzt
         try:
-            await post_incident_card(*teams_args, base_url=base_url)
+            result = await post_incident_card(*teams_args, base_url=base_url)
+            if result is None:  # Kompatibilität mit bestehenden Erweiterungen/Tests.
+                return True, None
+            return result.sent, result.reason
         except Exception:
             logger.exception("Teams-Alarmierung fehlgeschlagen (Einsatz %s)", incident.id)
+            return False, "Versandfehler"
 
     async def _notify_fanout() -> None:
-        await asyncio.gather(
+        results = await asyncio.gather(
             _sms_senden(),
             _push_senden(),
             _teams_senden(),
             return_exceptions=True,
         )
+        sms_result, _, teams_result = results
+        if not isinstance(sms_result, BaseException):
+            sms_sent, sms_reason, sms_recipients = sms_result
+            sms_text = (
+                f"Alarmierung SMS: gesendet an {sms_recipients}"
+                if sms_sent else f"Alarmierung SMS übersprungen: {sms_reason}"
+            )
+            db.add(IncidentLog(
+                incident_id=incident.id,
+                author_name="System",
+                level="info" if sms_sent else "warning",
+                text=sms_text,
+            ))
+        if not isinstance(teams_result, BaseException):
+            teams_sent, teams_reason = teams_result
+            teams_text = "Alarmierung Teams: gesendet" if teams_sent else (
+                f"Alarmierung Teams übersprungen: {teams_reason}"
+            )
+            db.add(IncidentLog(
+                incident_id=incident.id,
+                author_name="System",
+                level="info" if teams_sent else "warning",
+                text=teams_text,
+            ))
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.exception("Alarmierungsprotokoll fehlgeschlagen (Einsatz %s)", incident.id)
 
     if background_tasks is not None:
         background_tasks.add_task(_notify_fanout)

@@ -214,9 +214,12 @@ def test_neuer_incident_wird_vor_kommentar_sync_committet_und_benachrichtigt(org
     event = _event("f-order-005")
     scheduled = []
 
-    def fake_schedule(coro, loop):
-        coro.close()
-        scheduled.append(True)
+    class FakeLoop:
+        def call_soon_threadsafe(self, callback, coro, label, incident_id):
+            assert callback is dibos_enrich._start_background
+            assert label == "DIBOS-Alarmierung"
+            coro.close()
+            scheduled.append(True)
 
     def check_comments(db, seen_org_id, incident, comments):
         other = _session(org_id)
@@ -230,14 +233,43 @@ def test_neuer_incident_wird_vor_kommentar_sync_committet_und_benachrichtigt(org
         assert scheduled == [True]
         return False
 
-    monkeypatch.setattr(dibos_enrich.asyncio, "run_coroutine_threadsafe", fake_schedule)
     monkeypatch.setattr(dibos_enrich, "_sync_dibos_comments", check_comments)
 
     result = dibos_enrich.enrich_events_for_org(
-        org_id, [event], create_incidents=True, loop=object(),
+        org_id, [event], create_incidents=True, loop=FakeLoop(),
     )
 
     assert result["created_ids"]
+
+
+@pytest.mark.asyncio
+async def test_dibos_alarmierung_task_wird_stark_referenziert(org_id, monkeypatch):
+    """Vorfall 2026-10-05 (Einsatz 388): Die Alarmierung lief per nacktem
+    run_coroutine_threadsafe ohne gehaltene Referenz - asyncio haelt Tasks nur
+    schwach, der GC konnte SMS/Teams mitten im Lauf still abbrechen. Der Task
+    muss bis zum Ende in _background_tasks gehalten werden."""
+    release = asyncio.Event()
+    started = asyncio.Event()
+    notified = []
+
+    async def blocking_notify(incident_id, seen_org_id):
+        started.set()
+        await release.wait()
+        notified.append(incident_id)
+
+    monkeypatch.setattr(dibos_enrich, "_notify_new_dibos_incident", blocking_notify)
+    loop = asyncio.get_running_loop()
+    result = await asyncio.to_thread(
+        dibos_enrich.enrich_events_for_org,
+        org_id, [_event("f-strongref-006")], create_incidents=True, loop=loop,
+    )
+    await asyncio.wait_for(started.wait(), timeout=5)
+    assert any(not task.done() for task in dibos_enrich._background_tasks)
+    import gc
+    gc.collect()
+    release.set()
+    await asyncio.gather(*dibos_enrich._background_tasks)
+    assert notified == result["created_ids"]
 
 
 @pytest.mark.asyncio

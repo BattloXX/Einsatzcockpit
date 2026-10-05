@@ -14,6 +14,7 @@ den Webhook-Pfad.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -26,6 +27,12 @@ from app.services.sms_dispatch_service import _DEFAULT_GSL_ALARM_TEXT
 from app.services.teams_card import build_gsl_alarm_card, build_incident_message_card
 
 logger = logging.getLogger("einsatzleiter.teams_alarm")
+
+
+@dataclass(frozen=True)
+class TeamsDispatchResult:
+    sent: bool
+    reason: str | None = None
 
 
 def _card_base_url(base_url: str) -> str:
@@ -71,12 +78,17 @@ async def _post_via_webhook(webhook_url: str, incident: Incident, cfg: TeamsAlar
     return await _post_payload(webhook_url, payload, log_label=f"Einsatz {incident.id}")
 
 
-async def post_incident_card(db: Session, incident: Incident, *, base_url: str) -> None:
+async def post_incident_card(db: Session, incident: Incident, *, base_url: str) -> TeamsDispatchResult:
     """Postet die Alarmkarte für einen (neu angelegten) Einsatz — Bot bevorzugt, sonst
     Webhook-Fallback. No-op, wenn die Teams-Alarmierung für die Org deaktiviert ist oder
     kein Ziel konfiguriert ist. Fehler werden nur geloggt (best effort)."""
     if not incident.primary_org_id:
-        return
+        reason = "keine Organisation zugeordnet"
+        logger.warning(
+            "Teams-Alarmierung uebersprungen: %s (Einsatz %s, stichwort=%s, is_exercise=%s)",
+            reason, incident.id, incident.alarm_type_code, incident.is_exercise,
+        )
+        return TeamsDispatchResult(False, reason)
 
     cfg = (
         db.query(TeamsAlarmConfig)
@@ -84,7 +96,12 @@ async def post_incident_card(db: Session, incident: Incident, *, base_url: str) 
         .first()
     )
     if not cfg or not cfg.enabled:
-        return
+        reason = "deaktiviert oder nicht konfiguriert"
+        logger.info(
+            "Teams-Alarmierung uebersprungen: %s (Einsatz %s, stichwort=%s, is_exercise=%s)",
+            reason, incident.id, incident.alarm_type_code, incident.is_exercise,
+        )
+        return TeamsDispatchResult(False, reason)
     from app.services.exercise_guard import darf_extern
     if not darf_extern(
         "teams",
@@ -92,12 +109,22 @@ async def post_incident_card(db: Session, incident: Incident, *, base_url: str) 
         org_id=incident.primary_org_id,
         db=db,
     ):
-        return
+        reason = "Uebung unterdrueckt"
+        logger.info(
+            "Teams-Alarmierung uebersprungen: %s (Einsatz %s, stichwort=%s, is_exercise=%s)",
+            reason, incident.id, incident.alarm_type_code, incident.is_exercise,
+        )
+        return TeamsDispatchResult(False, reason)
 
     from app.services.alarm_service import get_alarm_type_by_code
     alarm_type = get_alarm_type_by_code(db, incident.primary_org_id, incident.alarm_type_code)
     if alarm_type and not alarm_type.teams_alarm_enabled:
-        return
+        reason = "fuer Alarmstichwort deaktiviert"
+        logger.info(
+            "Teams-Alarmierung uebersprungen: %s (Einsatz %s, stichwort=%s, is_exercise=%s)",
+            reason, incident.id, incident.alarm_type_code, incident.is_exercise,
+        )
+        return TeamsDispatchResult(False, reason)
 
     # Großschadenslage: nur EINE Karte für die ganze Lage, nicht eine je zugeordnetem
     # Einsatz (Org-Opt-in, siehe TeamsAlarmConfig.suppress_card_in_major_incident).
@@ -118,10 +145,11 @@ async def post_incident_card(db: Session, incident: Incident, *, base_url: str) 
             )
             if bereits_gesendet is not None:
                 logger.info(
-                    "Teams-Alarmierung: Karte für Lage %s bereits gesendet — Einsatz %s übersprungen",
-                    major_incident_id, incident.id,
+                    "Teams-Alarmierung uebersprungen: Karte fuer Lage %s bereits gesendet "
+                    "(Einsatz %s, stichwort=%s, is_exercise=%s)",
+                    major_incident_id, incident.id, incident.alarm_type_code, incident.is_exercise,
                 )
-                return
+                return TeamsDispatchResult(False, "Karte fuer Lage bereits gesendet")
 
     # Koordinaten werden ggf. von einem parallel laufenden Background-Task (Geocoding,
     # eigene DB-Session) NACH dem Laden dieses `incident`-Objekts gesetzt — ohne Refresh
@@ -153,23 +181,39 @@ async def post_incident_card(db: Session, incident: Incident, *, base_url: str) 
                 "Teams-Alarmierung: Bot-Versand fehlgeschlagen (Einsatz %s, Org %s)",
                 incident.id, incident.primary_org_id,
             )
+            return TeamsDispatchResult(False, "Bot-Versandfehler")
         # KEIN _record_card_post() hier: post_incident_card_via_bot() ist aktuell nur ein
         # Platzhalter (siehe teams_bot_service.py-Docstring), der nie wirklich versendet —
         # ein Protokolleintrag würde eine tatsächlich verschickte Karte vortäuschen. Sobald
         # der echte Bot-Versand implementiert ist, muss er hier ebenfalls protokollieren
         # (analog zum Webhook-Pfad unten), sonst greift die Lage-Sperre für den Bot-Pfad nie.
-        return
+        # Bis dahin fällt der Versand auf den Webhook zurück (sofern konfiguriert), damit
+        # eine Bot-Kanalbindung die Alarmierung nicht stillschweigend schluckt.
 
     webhook_url = cfg.webhook_url_uebung if target == "uebung" else cfg.webhook_url_alarm
     if not webhook_url:
-        logger.debug(
-            "Teams-Alarmierung: kein Webhook für Ziel '%s' konfiguriert (Org %s) — übersprungen",
-            target, incident.primary_org_id,
+        reason = f"kein Webhook fuer Ziel '{target}' konfiguriert"
+        log = logger.info if incident.is_exercise else logger.warning
+        log(
+            "Teams-Alarmierung uebersprungen: %s (Einsatz %s, Org %s, stichwort=%s, is_exercise=%s)",
+            reason, incident.id, incident.primary_org_id, incident.alarm_type_code, incident.is_exercise,
         )
-        return
+        return TeamsDispatchResult(False, reason)
     sent = await _post_via_webhook(webhook_url, incident, cfg, base_url=base_url, org=org)
     if sent and major_incident_id is not None:
         _record_card_post(db, incident, target=target, conversation_id=webhook_url, major_incident_id=major_incident_id)
+    if sent:
+        logger.info(
+            "Teams-Alarmierung gesendet (Einsatz %s, Org %s, stichwort=%s, is_exercise=%s)",
+            incident.id, incident.primary_org_id, incident.alarm_type_code, incident.is_exercise,
+        )
+        return TeamsDispatchResult(True)
+    reason = "Webhook-Versandfehler"
+    logger.warning(
+        "Teams-Alarmierung uebersprungen: %s (Einsatz %s, Org %s, stichwort=%s, is_exercise=%s)",
+        reason, incident.id, incident.primary_org_id, incident.alarm_type_code, incident.is_exercise,
+    )
+    return TeamsDispatchResult(False, reason)
 
 
 def _record_card_post(

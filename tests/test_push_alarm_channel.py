@@ -26,6 +26,41 @@ def _incident() -> Incident:
     )
 
 
+@pytest.mark.asyncio
+async def test_incident_notify_logs_exercise_skip_and_incident_log(monkeypatch, caplog):
+    from app.models.incident import IncidentLog
+    from app.services import incident_notify
+
+    class LogDb:
+        def __init__(self):
+            self.entries = []
+
+        def add(self, entry):
+            self.entries.append(entry)
+
+        def commit(self):
+            pass
+
+        def rollback(self):
+            pass
+
+    db = LogDb()
+    incident = _incident()
+    monkeypatch.setattr("app.services.exercise_guard.darf_extern", lambda *args, **kwargs: False)
+    monkeypatch.setattr(incident_notify, "_send_incident_wake_only", lambda *args, **kwargs: None)
+
+    with caplog.at_level(logging.INFO, logger="einsatzleiter.incident_notify"):
+        await notify_incident_created(db, incident, org_id=1, base_url="https://example.test")
+
+    entries = [entry for entry in db.entries if isinstance(entry, IncidentLog)]
+    assert [(entry.level, entry.text) for entry in entries] == [
+        ("warning", "Alarmierung SMS übersprungen: Uebung unterdrueckt"),
+        ("warning", "Alarmierung Teams übersprungen: Uebung unterdrueckt"),
+    ]
+    assert "Einsatzinfo-SMS uebersprungen" in caplog.text
+    assert "Teams-Alarmierung uebersprungen" in caplog.text
+
+
 @pytest.mark.parametrize("mit_background_tasks", [False, True])
 @pytest.mark.asyncio
 async def test_incident_channels_run_concurrently(monkeypatch, mit_background_tasks):
