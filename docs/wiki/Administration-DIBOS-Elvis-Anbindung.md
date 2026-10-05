@@ -37,31 +37,36 @@ Einsatzcockpit kann sich an den **DIBOS EventHub** der Landeswarnzentrale Vorarl
 ```
  Landeswarnzentrale                       Einsatzcockpit
 ┌──────────────────────┐   HTTPS/JSON   ┌────────────────────────────────────────────┐
-│ DIBOS EventHub       │◄───────────────│ dibos_poll_loop  (alle DIBOS_POLL_INTERVAL_S)│
-│  Main/GetCurrent...  │  SOAP-Umschlag │   pro aktivierter Org:                      │
+│ DIBOS EventHub       │◄───────────────│ dibos_poll_loop (Takt DIBOS_POLL_INTERVAL_S)│
+│  Main/GetCurrent...  │  SOAP-Umschlag │   pro aktivierter Org, ein Client je Org:   │
 │  Main/GetPublicEvents│  + Basic-Auth  │   1) GetCurrentEvents                       │
-│  Main/GetCurrentUnits│                │   2) GetCurrentUnits   (nur Anreicherung)   │
-│  Elvis/GetElvis...   │                │   3) GetPublicEvents   (Anreicherung/Anlage)│
-└──────────────────────┘                │        │                                    │
-                                        │        ▼                                    │
-                                        │  dibos_enrich.enrich_and_broadcast          │
-                                        │   anlegen · anreichern · Wache · Zu-/Absagen│
-                                        │   · schließen · Objekt-Match                │
+│  Main/GetCurrentUnits│                │   2) neue Leitstellennummer? → Fast Path:   │
+│  Elvis/GetElvis...   │                │      sofort anlegen + alarmieren            │
+└──────────────────────┘                │   3) parallel, nur bei Bedarf:              │
+                                        │      GetCurrentUnits  (Einsatz aktiv)       │
+                                        │      GetPublicEvents  (Einsatz fehlt)       │
+                                        │   4) Anreicherung, falls Daten geändert     │
                                         │        │                                    │
                                         │        ▼                                    │
-                                        │  Broadcast (WebSocket) · SMS/Teams/Push ·   │
-                                        │  Autodruck · Objekt-Einsatzinfo             │
+                                        │  dibos_enrich.enrich_and_broadcast          │
+                                        │   anlegen → commit → SMS/Teams/Push         │
+                                        │   → Meldungen · Wache · Objekt · Zu-/Absagen│
+                                        │   → schließen                               │
+                                        │        │                                    │
+                                        │        ▼                                    │
+                                        │  Broadcast (WebSocket) · Hintergrund-Tasks: │
+                                        │  Autodruck · Objekt-Einsatzinfo · WordPress │
                                         └────────────────────────────────────────────┘
 ```
 
-Zwei Betriebsarten teilen sich dieselbe Anreicherungslogik:
+Zwei Betriebsarten mit klar getrennten Aufgaben:
 
 | Betriebsart | Auslöser | Zweck |
 |---|---|---|
-| **Leichter Poll** (`dibos_loop.py`) | Läuft dauerhaft im Hintergrund, global alle `DIBOS_POLL_INTERVAL_S` Sekunden | Produktivbetrieb: Einsätze erkennen, anlegen, anreichern. Schreibt keine Rohdaten auf Platte |
-| **Voll-Aufzeichnung (Trace)** (`dibos_capture.py`) | Automatisch bei einem eigenen Einsatz (`auto_trace_on_event`) oder manuell durch System-Admin | Diagnose: zeichnet alle Rohantworten auf und führt dabei dieselbe Anreicherung durch |
+| **Leichter Poll** (`dibos_loop.py`) | Läuft dauerhaft im Hintergrund, global im festen Takt `DIBOS_POLL_INTERVAL_S` | Produktivbetrieb: Einsätze erkennen, anlegen, anreichern, schließen. **Einzige** Stelle, die in die DB schreibt. Schreibt keine Rohdaten auf Platte |
+| **Voll-Aufzeichnung (Trace)** (`dibos_capture.py`) | Automatisch bei einem eigenen Einsatz (`auto_trace_on_event`) oder manuell durch System-Admin | Reine Diagnose: zeichnet alle Rohantworten auf, ändert **nichts** in der DB |
 
-Läuft für eine Organisation gerade ein Trace, überlässt der leichte Poll das Abfragen dem Trace (sonst würde `GetCurrentEvents` doppelt abgefragt).
+Der leichte Poll läuft auch während eines Traces unverändert weiter. Bis Oktober 2026 pausierte er während eines Traces und überließ dem Trace die Anreicherung. Ein zweiter Einsatz wurde dann nur im langsameren Trace-Takt erkannt (im Mitschnitt ~20 s), und die Anlage wartete auf alle fünf Abfragen des Zyklus. `GetCurrentEvents` wird in dieser Zeit bewusst doppelt abgefragt (Antwort ~6 KB).
 
 Verwandt: Die **BMA-Nummer** aus DIBOS wird für das Objekt-Matching genutzt (siehe [Objektverwaltung](Administration-Objektverwaltung)). Der separate BMA-Webplattform-Import (Kontakte) ist ein eigenes Modul und nicht Teil dieser Seite.
 
@@ -102,9 +107,9 @@ Unter **Admin → DIBOS / Elvis-Anbindung** (`/admin/dibos`) für die eigene Org
 | Host | `einsatzcockpit` | Kennung, die als Parameter bei `GetElvisNotification` mitgesendet wird |
 | Agentur (`ag`) | `FW` | Agentur-Filter für `GetPublicEvents` (regionale Einsätze) |
 | Wache-UNID | leer | Kennung der eigenen Wache für den [Wachenstatus](#wachenstatus). Leer = alle zum Einsatz gemeldeten Wachen werden übernommen |
-| Poll-Intervall (Sek.) | 5 (Minimum 5) | **Nur für die Voll-Aufzeichnung** und die [Dienstüberwachung](#dienstüberwachung). Der reguläre Hintergrund-Poll läuft global über `DIBOS_POLL_INTERVAL_S` |
+| Poll-Intervall (Sek.) | 5 (Minimum 5) | **Nur für die Voll-Aufzeichnung** und die [Dienstüberwachung](#dienstüberwachung). Der reguläre Hintergrund-Poll läuft global über `DIBOS_POLL_INTERVAL_S` und bestimmt allein, wie schnell ein Einsatz erkannt wird |
 | Auto-Trace bei Einsatz | ein | Startet bei einem eigenen aktiven Einsatz automatisch eine Voll-Aufzeichnung |
-| Auto-Trace-Dauer (Min.) | 120 (Minimum 5) | Dauer dieser automatischen Aufzeichnung |
+| Auto-Trace-Dauer (Min.) | 120 (Minimum 5) | Höchstdauer dieser automatischen Aufzeichnung. Sie endet früher, wenn 10 min lang kein eigener Einsatz mehr aktiv ist |
 | Einsätze anreichern | aus | Siehe [Betriebsmodi](#betriebsmodi-die-drei-schalter) |
 | Einsätze anlegen | aus | Siehe [Betriebsmodi](#betriebsmodi-die-drei-schalter) |
 | Gateway-/Service-Benutzer und -Passwort | — | Passwörter werden Fernet-verschlüsselt gespeichert und nur ersetzt, wenn im Formular neu eingegeben |
@@ -120,7 +125,10 @@ DIBOS_TRACE_ENABLED=true     # Globaler Kill-Switch für den gesamten DIBOS-Hint
 DIBOS_POLL_INTERVAL_S=5      # Poll-Intervall in Sekunden, gilt für alle Orgs
 ```
 
-Der Loop läuft serverweit; einzelne Organisationen werden über den Schalter **Aktiviert** ein-/ausgeschlossen. Ein Fehler bei einer Organisation (z. B. falsches Passwort) blockiert nie den Zyklus für andere Organisationen. Der Loop wartet zuerst ein Intervall und fragt erst dann ab.
+Der Loop läuft serverweit; einzelne Organisationen werden über den Schalter **Aktiviert** ein-/ausgeschlossen. Ein Fehler bei einer Organisation (z. B. falsches Passwort) blockiert nie den Zyklus für andere Organisationen.
+
+- **Erster Poll sofort** nach dem Serverstart, danach im **festen Takt** (Start-zu-Start): Die Arbeitszeit eines Zyklus wird vom Intervall abgezogen und verlängert das Erkennungsfenster nicht. Dauert ein Zyklus länger als das Intervall, folgt der nächste ohne Pause.
+- Da `GetCurrentEvents` ohne Einsatz nur `[]` liefert und `GetPublicEvents` im Leerlauf nicht mehr abgefragt wird, ist ein kurzes Intervall (5 s) für die Leitstelle unkritisch.
 
 ### Schritt 3 — Betriebsmodus wählen und testen
 
@@ -139,10 +147,10 @@ Der Hintergrund-Poll wird für eine Organisation nur aktiv, wenn **mindestens ei
 | Schalter | Was zusätzlich abgefragt wird | Was Einsatzcockpit tut |
 |---|---|---|
 | **Auto-Trace bei Einsatz** | — | Sobald `GetCurrentEvents` nicht leer ist, startet eine Voll-Aufzeichnung (Rohdaten auf Platte, Live-Ansicht für System-Admin). Standardmäßig **an** |
-| **Einsätze anreichern** | `GetCurrentUnits`, `GetPublicEvents` | Reichert bereits bestehende, **aktive** Einsätze an; pflegt Wachenstatus, Zu-/Absagen, Objekt-Match; schließt beendete Einsätze |
-| **Einsätze anlegen** | `GetPublicEvents` | Legt für ein Event ohne zuordenbaren Einsatz selbst einen neuen an (inkl. Alarmierung/Benachrichtigung) und führt danach dieselbe Anreicherung wie oben durch (ohne Wachenstatus, siehe unten) |
+| **Einsätze anreichern** | `GetCurrentUnits` (solange ein eigener Einsatz aktiv ist), `GetPublicEvents` (nur zum Schließen, siehe [Automatisches Schließen](#automatisches-schließen)) | Reichert bereits bestehende, **aktive** Einsätze an; pflegt Wachenstatus, Zu-/Absagen, Objekt-Match; schließt beendete Einsätze |
+| **Einsätze anlegen** | `GetPublicEvents` (nur zum Schließen) | Legt für ein Event ohne zuordenbaren Einsatz selbst einen neuen an (inkl. Alarmierung/Benachrichtigung) und führt danach dieselbe Anreicherung wie oben durch (ohne Wachenstatus, siehe unten) |
 
-> **Hinweis zu Auto-Trace:** Der Schalter ist standardmäßig an. Eine Voll-Aufzeichnung schreibt Rohdaten mit Anruferdaten auf den Server (7 Tage Aufbewahrung, siehe [Datenschutz](#datenschutz-und-sicherheit)). Orgs, die nur anreichern/anlegen wollen, sollten **Auto-Trace ausschalten** — der leichte Poll braucht keine Aufzeichnung. Läuft das Event nach Ablauf der Trace-Dauer weiter, startet der Loop beim nächsten Poll erneut eine Aufzeichnung.
+> **Hinweis zu Auto-Trace:** Der Schalter ist standardmäßig an. Eine Voll-Aufzeichnung schreibt Rohdaten mit Anruferdaten auf den Server (7 Tage Aufbewahrung, siehe [Datenschutz](#datenschutz-und-sicherheit)); in 2 h Einsatz kommen rund 190 MB zusammen. Orgs, die nur anreichern/anlegen wollen, sollten **Auto-Trace ausschalten** — der leichte Poll braucht keine Aufzeichnung. Ein automatischer Trace endet 10 min nach dem letzten eigenen Einsatz bzw. nach der eingestellten Dauer. Läuft das Event danach noch, startet der Loop beim nächsten Poll erneut eine Aufzeichnung.
 
 **Wachenstatus:** `GetCurrentUnits` wird nur mit **Einsätze anreichern** abgefragt und ausgewertet. Mit ausschließlich *Einsätze anlegen* wird der Wachenstatus nicht gepflegt.
 
@@ -150,15 +158,23 @@ Der Hintergrund-Poll wird für eine Organisation nur aktiv, wenn **mindestens ei
 
 ## Was bei jedem Poll passiert
 
-Pro aktivierter, vollständig konfigurierter Organisation (leichter Poll):
+Pro aktivierter, vollständig konfigurierter Organisation (leichter Poll). Der Ablauf ist darauf ausgelegt, dass ein **neuer Einsatz so früh wie möglich angelegt und alarmiert** wird:
 
-1. `GetCurrentEvents` — eigene aktive Einsätze. Schlägt das fehl, wird der Fehler für die [Dienstüberwachung](#dienstüberwachung) protokolliert und der Zyklus für diese Org beendet.
-2. Mit *anreichern*: `GetCurrentUnits` (Fehler werden geloggt, der Zyklus läuft weiter).
-3. Mit *anreichern* oder *anlegen*: `GetPublicEvents?qty=15&ag=<ag>` — die zuletzt 15 regionalen Einsätze der Agentur (Fehler werden geloggt).
-4. Ist `events` oder `public_events` nicht leer und *anreichern* oder *anlegen* aktiv: Anreicherung (`enrich_and_broadcast`).
-5. Ist `events` nicht leer und *Auto-Trace* aktiv: Voll-Aufzeichnung starten.
+1. **`GetCurrentEvents`** — eigene aktive Einsätze. Schlägt das fehl, wird der Fehler für die [Dienstüberwachung](#dienstüberwachung) protokolliert, der Client der Org verworfen (im nächsten Poll neu aufgebaut) und der Zyklus für diese Org beendet.
+2. **Fast Path:** Enthält die Antwort eine Leitstellennummer, die im vorherigen Poll nicht dabei war, und ist *anreichern* oder *anlegen* aktiv, läuft die Anreicherung (`enrich_and_broadcast`) **sofort** — nur mit den Daten aus `GetCurrentEvents`, ohne auf weitere Abfragen zu warten. Damit wird der Einsatz angelegt und alarmiert.
+3. **Folgeabfragen, parallel** (Fehler werden je Abfrage geloggt, der Zyklus läuft weiter):
+   - `GetCurrentUnits` — nur mit *anreichern* **und** wenn mindestens ein eigener Einsatz aktiv ist.
+   - `GetPublicEvents?qty=15&ag=<ag>` — nur, wenn ein **aktiver Einsatz** der Org eine Leitstellennummer hat, die **nicht** (mehr) in `GetCurrentEvents` steht. Beim ersten Verschwinden sofort, danach höchstens alle 60 s.
+4. **Anreicherung** mit `GetCurrentEvents` + Units + PublicEvents — **übersprungen**, wenn
+   - sich gegenüber dem letzten erfolgreichen Durchlauf nichts geändert hat (Fingerabdruck über alle drei Antworten), oder
+   - der Fast Path in diesem Zyklus schon lief und keine Folgeabfrage etwas geholt hat.
+   
+   Schlägt eine Anreicherung fehl (Rollback), wird der Datenstand nicht als verarbeitet gemerkt und im nächsten Poll erneut versucht.
+5. Ist `events` nicht leer, *Auto-Trace* aktiv und noch keine Aufzeichnung aktiv: Voll-Aufzeichnung starten.
 
 Die Anreicherung läuft in einem Worker-Thread mit eigener DB-Session. Ein Fehler dort wird geloggt und löst einen Rollback aus, bricht aber nie den Poll ab.
+
+**Größenordnung (Mitschnitt Einsatz f26008764, 04.10.2026, 2 h):** `GetCurrentEvents` ~6 KB mit Einsatz bzw. `[]` ohne, `GetCurrentUnits` ~32 KB, `GetCurrentRadios` ~25 KB, `GetElvisNotification` `[]`, **`GetPublicEvents` ~490 KB** (88 % des gesamten Datenvolumens — 15 landesweite Events inkl. vollständigem Meldungsprotokoll). Nur 40 von 108 `GetCurrentEvents`-Antworten mit Einsatz enthielten überhaupt eine Änderung.
 
 ---
 
@@ -201,7 +217,7 @@ Neuen Einsatz anlegen
 | Übung | Schlüsselwortprüfung in `tycodDescription` + `diagnose` (`schulung`, `übung`, `uebung`, `training`, `probe`) — DIBOS hat kein eigenes Übungs-Flag |
 | Leitstellennummer | `eventNumber` |
 
-**Race-Schutz:** Lösen zwei gleichzeitige Polls (leichter Poll und Trace) das Anlegen aus, verhindert der Unique-Constraint `uq_incident_org_lis_operation_number` den Doppelanlage; der zweite Poll übernimmt den bereits angelegten Einsatz.
+**Race-Schutz:** Legen zwei Wege gleichzeitig denselben Einsatz an (z. B. DIBOS und LIS-Sync oder Alarm-Webhook mit derselben Leitstellennummer), verhindert der Unique-Constraint `uq_incident_org_lis_operation_number` die Doppelanlage; der zweite Weg übernimmt den bereits angelegten Einsatz.
 
 **Bereits beendete Events:** Ist ein Event bei der Anlage schon abgeschlossen (`closed` gesetzt), wird der Einsatz zur Dokumentation angelegt und **sofort geschlossen — ohne Alarmierung**.
 
@@ -292,15 +308,24 @@ Quelle der Rückmeldung wird als `dibos` vermerkt. Nach Änderungen sendet Einsa
 
 Einsätze, die in DIBOS beendet wurden, werden in Einsatzcockpit automatisch geschlossen. Grundlage ist `GetPublicEvents`: ist dort ein Event mit gesetztem `closed` und passender Leitstellennummer vorhanden, wird der aktive Einsatz geschlossen (wie beim manuellen Abschluss, inkl. Widerruf von QR-/Lagekarte-Tokens).
 
-Anschließend:
+**Wann `GetPublicEvents` abgefragt wird:** Ein beendetes Event verschwindet aus `GetCurrentEvents`. Im Mitschnitt geschah das im selben Poll-Zyklus, in dem es in `GetPublicEvents` mit `closed` auftauchte. Deshalb wird `GetPublicEvents` nur abgefragt, wenn ein **aktiver Einsatz der Org** eine Leitstellennummer hat, die **nicht** in der aktuellen `GetCurrentEvents`-Antwort steht:
 
-- ein **WordPress-Bericht** wird ausgelöst, sofern konfiguriert (siehe [WordPress-Berichte](Administration-WordPress-Berichte))
+| Situation | Abfrage |
+|---|---|
+| Kein aktiver Einsatz mit Leitstellennummer, oder alle stehen in `GetCurrentEvents` | keine |
+| Eine Nummer ist seit dem letzten Poll verschwunden | sofort |
+| Eine Nummer fehlt weiterhin (z. B. LIS-Einsatz ohne DIBOS-Pendant, Event nicht mehr unter den letzten 15) | höchstens alle 60 s |
+
+Anschließend (bei geschlossenem Einsatz):
+
+- ein **WordPress-Bericht** wird als Hintergrund-Task ausgelöst, sofern konfiguriert (siehe [WordPress-Berichte](Administration-WordPress-Berichte)) — er hält den Poll nicht auf
 - das WebSocket-Event `incident_closed` wird gesendet
 
 Voraussetzungen und Grenzen:
 
-- Die Prüfung läuft nur mit *Einsätze anreichern* **oder** *Einsätze anlegen* (nur dann wird `GetPublicEvents` abgefragt).
-- Es werden nur die **zuletzt 15** Einsätze der Agentur abgefragt (`qty=15`). Ein Einsatz, der dort nicht mehr auftaucht, wird nicht automatisch geschlossen — dann manuell schließen oder die Auto-Schließen-Funktion der Einsätze nutzen.
+- Die Prüfung läuft nur mit *Einsätze anreichern* **oder** *Einsätze anlegen*.
+- `GetPublicEvents` liefert nur die **zuletzt 15** Einsätze der Agentur **landesweit** (`qty=15`, alle Feuerwehren mit `ag=FW`). Ein Einsatz, der dort nicht mehr auftaucht (z. B. bei vielen Einsätzen gleichzeitig im Land), wird nicht automatisch geschlossen — dann manuell schließen oder die Auto-Schließen-Funktion der Einsätze nutzen.
+- Fällt ein Event nur kurz aus `GetCurrentEvents` heraus (Aussetzer), passiert nichts, solange es in `GetPublicEvents` nicht als `closed` steht.
 
 ---
 
@@ -308,11 +333,17 @@ Voraussetzungen und Grenzen:
 
 ### Neuer Einsatz aus DIBOS
 
-Sobald ein neu angelegter Einsatz vollständig angereichert und **committet** ist, geschieht in dieser Reihenfolge:
+Ein neuer Einsatz wird **committet, sobald seine Stammdaten stehen** (Stichwort, Adresse, Koordinaten, Melder, Einsatzcode, BMA-Nr., Kommentar) — also **vor** Meldungsprotokoll, Wachenstatus, BMA-Objekt-Matching und Zu-/Absagen. Dann geschieht:
 
 1. **Board-Broadcast** `incident_created` an die Organisation (Alarm-Hinweis im Browser; Übungseinsätze je nach Exercise-Guard ohne Alarm, Titel „Neuer Einsatz aus DIBOS: …")
 2. **Einsatzinfo-Benachrichtigung** (SMS, Teams, Push, …) wie bei jedem anderen Alarmweg
-3. **Autodruck** (Druckregeln) — bewusst erst nach der Benachrichtigung, damit langsame Hintergrundarbeit den Alarm nicht verzögert
+
+Beide laufen auf dem Haupt-Event-Loop, **während** der Worker-Thread die restliche Anreicherung (Meldungen, Objekt, Zu-/Absagen) erledigt und erneut committet. Danach folgen als **Hintergrund-Tasks**, die den Poll nicht blockieren:
+
+3. **Autodruck** (Druckregeln)
+4. **Objekt-Einsatzinfo**, falls über die BMA-Nummer ein neues Objekt verknüpft wurde
+
+Zusammen mit dem [Fast Path](#was-bei-jedem-poll-passiert) liegen zwischen der `GetCurrentEvents`-Antwort und dem Auslösen der Benachrichtigung nur noch das Matching und das Anlegen — keine weitere DIBOS-Abfrage, kein Kommentar-Import, kein Objekt-Matching.
 
 ### Aktualisierungen bestehender Einsätze
 
@@ -342,12 +373,15 @@ Unter `/admin/dibos` (Bereich „Diagnose", nur `system_admin`):
 - **Live-Ansicht** (`/admin/dibos/trace/{run_id}/live`): geparster Zwischenstand der Operationen `GetCurrentEvents`, `GetPublicEvents`, `GetCurrentUnits`, `GetCurrentRadios` (`latest.json`)
 - Pro Poll-Zyklus werden alle fünf Leseendpunkte abgefragt (`GetCurrentEvents`, `GetPublicEvents`, `GetCurrentUnits`, `GetCurrentRadios`, `GetElvisNotification`); jeder Endpunkt einzeln abgesichert, ein Ausfall stoppt den Zyklus nicht
 
-Ablage: `app_storage/dibos_trace/<org_id>/<run_id>/`. Pro Austausch eine Request-XML und eine Response-JSON; Antworten über 2 MB werden abgeschnitten und nicht live geparst. Beim Beenden — egal ob Zeit abgelaufen oder abgebrochen — werden die Rohdateien zu `<run_id>.zip` gebündelt; `summary.json` (Austauschliste) und `latest.json` bleiben lesbar daneben liegen.
+Ablage: `app_storage/dibos_trace/<org_id>/<run_id>/` (`run_id` = Startzeit in UTC, z. B. `20261004T181233Z`). Pro Austausch eine Request-XML und eine Response-JSON, Dateiname `<seq>_<HHMMSS UTC>_<Operation>_request.xml` bzw. `_response.json`. Antworten über 2 MB werden abgeschnitten und nicht live geparst. Beim Beenden — egal ob Zeit abgelaufen, früh beendet oder abgebrochen — werden die Rohdateien zu `<run_id>.zip` gebündelt; `summary.json` (Austauschliste) und `latest.json` bleiben lesbar daneben liegen.
 
+- **Passwort maskiert:** Im gespeicherten Request steht `<o:Password>***</o:Password>` statt des Servicekonto-Passworts. Aufzeichnungen von vor Oktober 2026 enthalten es noch im Klartext; vor einer Weitergabe prüfen bzw. das Passwort rotieren.
+- **Zeitstempel:** Dateinamen und `run_id` sind UTC, die Zeitfelder in den JSON-Antworten (`created`, `dispatched`, …) dagegen Ortszeit ohne Zonenangabe.
+- **Früh beendet:** Hat die Aufzeichnung einen eigenen Einsatz gesehen und liefert `GetCurrentEvents` danach 10 min lang nichts mehr, endet sie vorzeitig. Eine manuell gestartete Aufzeichnung ohne Einsatz läuft die volle Dauer.
 - Aufzeichnungen werden **7 Tage** aufbewahrt und danach automatisch gelöscht (täglicher Lauf um 04:05 Uhr Wiener Zeit, zusätzlich beim Start einer neuen Aufzeichnung). Eine laufende Aufzeichnung wird nie automatisch gelöscht
 - Es gibt bewusst **keine Download-Route über HTTP** — die ZIP-Dateien liegen nur lokal auf dem Server
 - Pro Organisation läuft höchstens eine Aufzeichnung gleichzeitig
-- Die Aufzeichnung ist rein lesend, führt aber (wenn *anreichern*/*anlegen* aktiv sind) dieselbe Anreicherung aus wie der leichte Poll
+- Die Aufzeichnung ist **rein lesend** und legt nichts an, reichert nichts an, schließt nichts — das macht ausschließlich der parallel weiterlaufende leichte Poll. Sie hat einen eigenen Client und eigenen Takt (*Poll-Intervall* der Org)
 
 ---
 
@@ -370,6 +404,8 @@ Die Proben werden sowohl vom leichten Poll als auch von der Voll-Aufzeichnung ge
 - **Rein lesend:** Einsatzcockpit sendet keinerlei Alarmierung, Status oder Rückmeldung an DIBOS.
 - **Zugangsdaten:** Beide Passwörter werden mit `FERNET_KEY` verschlüsselt (`*_password_enc`). Das Formular ersetzt ein Passwort nur, wenn es neu eingegeben wurde.
 - **Audit-Log** (siehe [Audit-Log und Zeitreise](Administration-Audit-Log-und-Zeitreise)): `dibos.config.updated`, `dibos.config.gateway_credentials_rotated`, `dibos.config.service_credentials_rotated`, `dibos.config.test`.
+- **Passwort in Aufzeichnungen:** Das WS-Security-Passwort wird vor dem Schreiben der Request-Dateien maskiert. Ältere Aufzeichnungen (vor Oktober 2026) enthalten es im Klartext.
+- **Zugangsdaten im Speicher:** Der leichte Poll hält pro Org einen Client offen (Session-Cookie). Er erkennt Änderungen an den Zugangsdaten über einen Hash-Fingerabdruck und baut den Client dann neu auf; Klartext-Passwörter liegen nur im Client selbst.
 - **Personenbezug:** Rohdaten enthalten Anrufer (Name/Telefon) und Personenrückmeldungen. Aufzeichnungen sind deshalb auf `system_admin` beschränkt, ohne HTTP-Download und nach 7 Tagen automatisch gelöscht. Übernommene Anrufer-/Meldedaten liegen im Einsatz und unterliegen dessen Aufbewahrung.
 - **Mandantentrennung:** Konfiguration ist je Org (1:1); der Loop läuft ohne Tenant-Filter und scoped deshalb jede Abfrage explizit über die Org-ID / Leitstellennummer. Org-Admins sehen und ändern nur die eigene Konfiguration (Prüfung `same_org_or_system_admin`).
 
@@ -390,9 +426,11 @@ Die Proben werden sowohl vom leichten Poll als auch von der Voll-Aufzeichnung ge
 | Wachenstatus bleibt leer | *Einsätze anreichern* aus; Wache-UNID passt nicht; Status unbekannt (nur AL, UEB, S2, S4, S5); Einsatz nicht `active` |
 | Zu-/Absagen erscheinen als Freitext | Keine syBOS-ID am Mitglied hinterlegt (Mitglieder-Excel-Import) |
 | Zusage „10 Min" wird nicht als Zeit gezeigt | Erwartetes Verhalten — nur „kommt" vs. „kommt nicht" |
-| Einsatz schließt nicht automatisch | Einsatz nicht mehr unter den letzten 15 in `GetPublicEvents`; weder *anreichern* noch *anlegen* aktiv |
+| Einsatz schließt nicht automatisch | Einsatz nicht mehr unter den letzten 15 in `GetPublicEvents`; weder *anreichern* noch *anlegen* aktiv; Einsatz hat keine Leitstellennummer (dann wird `GetPublicEvents` für ihn nie abgefragt) |
+| Schließen dauert bis zu 60 s | Die Nummer fehlte schon im vorherigen Poll in `GetCurrentEvents`, das Event war aber noch nicht `closed` — danach wird nur noch alle 60 s nachgesehen |
+| Wachenstatus erscheint erst kurz nach dem Alarm | Erwartet: Der Fast Path legt an und alarmiert nur mit `GetCurrentEvents`; der Wachenstatus aus `GetCurrentUnits` folgt im zweiten Durchlauf desselben Zyklus |
 | Systemstatus „DIBOS down" | Letzter Poll fehlgeschlagen oder zu lange her — Netz/Zugangsdaten prüfen; bei Neustart des Servers kurz „unbekannt" möglich |
-| Rohdatenordner wächst | Auto-Trace läuft bei jedem Einsatz; ausschalten, wenn nicht benötigt (7-Tage-Löschung greift automatisch) |
+| Rohdatenordner wächst | Auto-Trace läuft bei jedem Einsatz (~190 MB je 2 h); ausschalten, wenn nicht benötigt (7-Tage-Löschung greift automatisch) |
 
 ---
 
@@ -402,38 +440,81 @@ Die Proben werden sowohl vom leichten Poll als auch von der Voll-Aufzeichnung ge
 
 Alle Aufrufe sind `POST` mit einem minimalen SOAP-1.1-Umschlag (`Content-Type: text/xml; charset=utf-8`, `Accept: text/plain`); die **Antwort ist JSON**. Der Umschlag trägt im Header ein WS-Security-`UsernameToken` mit dem Servicekonto; zusätzlich wird HTTP Basic mit dem Gateway-Konto gesendet. Namespace des Benutzerkontextes: `https://dibos.lwz-vorarlberg.at/LWZ_EventHub/`.
 
-**Session-Handshake:** Der erste Request ohne Session-Cookie liefert regelmäßig `401` und setzt dabei ein Cookie. Der Client wiederholt deshalb einmal mit demselben Cookie-Jar; nur ein weiteres `401` gilt als Auth-Fehler (`DibosAuthError`). Der Client ist daher **zustandsbehaftet** (ein Client pro Org und Poll-Session, nicht parallel teilen), anders als `LisClient`.
+**Session-Handshake:** Der erste Request ohne Session-Cookie liefert regelmäßig `401` und setzt dabei ein Cookie. Der Client wiederholt deshalb einmal mit demselben Cookie-Jar; nur ein weiteres `401` gilt als Auth-Fehler (`DibosAuthError`). Der Client ist daher **zustandsbehaftet**, anders als `LisClient`:
 
-| Operation | Pfad | Parameter | Liefert | Genutzt für |
-|---|---|---|---|---|
-| `GetCurrentEvents` | `Main/GetCurrentEvents` | — | Eigene aktive Einsätze der Org | Erkennen, Anlegen, Anreichern, Verbindungstest, Monitoring |
-| `GetPublicEvents` | `Main/GetPublicEvents` | `qty` (15), `ag` | Regionale Einsätze der Agentur | Abschluss-Erkennung, Anlage |
-| `GetCurrentUnits` | `Main/GetCurrentUnits` | — | Einheiten/Wachen mit Status | Wachenstatus (Anreicherung); Statuszeiten im Live-Snapshot |
-| `GetCurrentRadios` | `Main/GetCurrentRadios` | — | Funkgeräte | nur Diagnose |
-| `GetElvisNotification` | `Elvis/GetElvisNotification` | `serviceUser`, `host` | Elvis-Hinweise | nur Diagnose |
+| Nutzer | Client-Lebensdauer |
+|---|---|
+| Leichter Poll | **Ein persistenter Client pro Org** über alle Polls (`dibos_loop._org_clients`). Neu aufgebaut bei geänderten Verbindungsdaten (Hash-Fingerabdruck über URL, Host, `ag`, beide Konten), nach einem Fehler bei `GetCurrentEvents` und wenn die Org nicht mehr pollt. Beim Beenden des Loops werden alle Clients geschlossen. Vorher entstand pro Poll ein neuer Client — also bei **jedem** Poll 401 + Wiederholung + neuer TLS-Handshake |
+| Voll-Aufzeichnung | Ein eigener Client für die Dauer der Aufzeichnung |
+| Verbindungstest | Ein Client je Test |
+
+Clients werden nie parallel geteilt; innerhalb eines Polls laufen `GetCurrentUnits` und `GetPublicEvents` gleichzeitig über denselben Client (httpx-Verbindungspool, gemeinsamer Cookie-Jar).
+
+| Operation | Pfad | Parameter | Liefert | Größe (Mitschnitt) | Leichter Poll fragt ab … | Genutzt für |
+|---|---|---|---|---|---|---|
+| `GetCurrentEvents` | `Main/GetCurrentEvents` | — | Eigene aktive Einsätze der Org; `[]` ohne Einsatz | ~6 KB je Einsatz | jeden Poll | Erkennen, Anlegen (Fast Path), Anreichern, Verbindungstest, Monitoring |
+| `GetPublicEvents` | `Main/GetPublicEvents` | `qty` (15), `ag` | Die 15 neuesten Einsätze der Agentur **landesweit** (alle `lev3`), offen und geschlossen, je Event mit vollem Meldungsprotokoll | **~490 KB** | nur wenn ein aktiver Einsatz in `GetCurrentEvents` fehlt (sofort, dann ≤ 1×/60 s) | Abschluss-Erkennung |
+| `GetCurrentUnits` | `Main/GetCurrentUnits` | — | Einheiten/Wachen der **eigenen** Org (`lev3`) mit Status | ~32 KB | mit *anreichern*, solange ein eigener Einsatz aktiv ist | Wachenstatus; Statuszeiten im Live-Snapshot |
+| `GetCurrentRadios` | `Main/GetCurrentRadios` | — | Funkgeräte der Org (ISSI, Alias, Gesprächsgruppe, Position) | ~25 KB | nie | nur Diagnose |
+| `GetElvisNotification` | `Elvis/GetElvisNotification` | `serviceUser`, `host` | Elvis-Hinweise (im Mitschnitt immer `[]`) | 2 B | nie | nur Diagnose |
 
 Timeout je Request: 20 s. Nur Leseoperationen sind implementiert.
+
+### Beobachtetes Verhalten der Schnittstelle
+
+Aus dem Mitschnitt zu Einsatz f26008764 (04.10.2026, 2 h, 350 Zyklen à 5 Abfragen) — nicht dokumentiert, nur beobachtet:
+
+| Beobachtung | Folge für die Implementierung |
+|---|---|
+| Ein eigener Einsatz steht in `GetCurrentEvents`, bis er geschlossen wird, und verschwindet im selben Zyklus, in dem er in `GetPublicEvents` mit `closed` erscheint | Verschwinden aus `GetCurrentEvents` ist der Auslöser, `GetPublicEvents` zu prüfen |
+| Das Event stand spätestens 5 s nach `dispatched` (17 s nach `created`) in `GetCurrentEvents` — die Aufzeichnung startete erst danach, der genaue erste Zeitpunkt ist unbekannt | Erkennungszeit ≈ Poll-Intervall; der Fast Path vermeidet zusätzliche Wartezeit |
+| `rowVersion` ändert sich bei jeder Änderung am Event (auch bei Zu-/Absagen); nur 40 von 108 Antworten mit Einsatz unterschieden sich | Unveränderte Antworten werden per Fingerabdruck übersprungen |
+| `personResponseList` springt zeitweise von 3 Einträgen auf 0 und zurück | Eine leere Liste wird **nie** als Löschung interpretiert (nur Upsert) |
+| `comments` wächst stark (Einsatzbeginn: 12 → 21 Einträge in 20 s); in `GetPublicEvents` sind Kommentare 80 % der Bytes; `messageType` 6 (intern, ~95 %), 0 und 3 (sichtbar), 5 (intern) | Nur `isInternal = false` wird übernommen |
+| Ein geschlossenes Event fiel einmal kurz aus `GetPublicEvents` heraus und erschien im nächsten Abruf wieder | Fehlende Events nie als „geschlossen" werten |
+| Zeitfelder (`created`, `dispatched`, `closed`, `statusTime`, …) sind Ortszeit ohne Zonenangabe | Werden als Org-Zeitzone interpretiert und nach UTC umgerechnet |
 
 ### Wichtige Event-Felder (`GetCurrentEvents` / `GetPublicEvents`)
 
 | Feld | Bedeutung |
 |---|---|
-| `eventNumber` | Leitstellennummer (stabiler Schlüssel) |
-| `ag` | Agentur |
-| `tycod`, `subTycod`, `tycodDescription` | Einsatzcode, Untercode, Klartext |
-| `diagnose`, `eventComment` | Diagnose, Freitextkommentar |
+| `eventNumber` | Leitstellennummer (stabiler Schlüssel), z. B. `f26008764` |
+| `id`, `eid` | Interne DIBOS-IDs (nicht verwendet) |
+| `ag`, `lev3`, `dgroup` | Agentur (`FW`), Dienststelle (z. B. `F_WOLFU`), Gruppe (z. B. `F_BR`) |
+| `tycod`, `subTycod`, `tycodDescription` | Einsatzcode, Untercode, Klartext (z. B. `f2` / „kleiner Brandeinsatz") |
+| `diagnose`, `eventComment`, `eventCommentInternal` | Diagnose, Freitextkommentar, interner Kommentar (nicht verwendet) |
 | `bmaNo` | BMA-Nummer |
-| `status`, `statusText`, `statusTime` | Gesamtstatus |
+| `status`, `statusText`, `statusTime` | Gesamtstatus, beobachtet: `1` AL, `3` S4, `4` S5, `9` S2, `12` CLOSED |
 | `created`, `dispatched`, `closed` | Zeitstempel (naive Werte = Org-Lokalzeit, Bruchteilssekunden variabler Länge) |
 | `locationCity/-District/-CityPart/-Street/-StreetNo/-ZipCode/-Object`, `locationLongitude/-Latitude` | Einsatzort |
-| `callerList[]` | `callerName`, `callerNumber` |
-| `targetList[]` | `target`, `targetType`, `targetCount`, `description` |
+| `destination*`, `patient*` | Transportziel / Patientendaten (bei Feuerwehr-Events leer, nicht verwendet) |
+| `callerList[]` | `callerName`, `callerNumber`, `callAccepted`, … |
+| `targetList[]` | `target`, `targetType` (beobachtet: `POCSAG`, `EMAIL ALARM`, `ALARMTEXT`, `SMS-GRUPPE`, `EMAIL BERUF`, `REMOTEC_1/2`, `SIRENE_F`, `TEL. MOBIL BERUF`), `targetCount`, `description` |
 | `comments[]` | `id`, `comment`, `isInternal`, `messageType`, `creationDate`, `creationPerson` |
-| `personResponseList[]` | `id`, `person`, `status`, `responseTime`, `department`, `departmentSybos`, `idSybos`, `idDibos`, `changeDate` |
+| `personResponseList[]` | `id`, `person`, `function`, `status`, `responseTime`, `department`, `departmentSybos`, `idSybos`, `idDibos`, `changeDate` |
+| `unitList[]` | Am Einsatz beteiligte Einheiten (gleiche Felder wie `GetCurrentUnits`; nicht verwendet) |
+| `documentList[]` | Dokumente (im Mitschnitt leer, nicht verwendet) |
+| `rowVersion`, `changeDate` | Versionsstempel des Events |
 
 ### Wichtige Unit-Felder (`GetCurrentUnits`)
 
-`unid`, `unidRfl`, `unitType` (z. B. `wache`), `currentStatusText`, `currentStatusTime`, `longitude`, `latitude`, `eventNumber`, `station`, `ag` sowie die Statuszeiten `al`, `s1`–`s8`, `ueb`, `eta`.
+`unid`, `unidRfl`, `unitType`, `currentStatus`, `currentStatusText`, `currentStatusTime`, `currentStatusTerminal`, `longitude`, `latitude`, `eventNumber`, `station`, `ag`, `lev3` sowie die Statuszeiten `al`, `s1`–`s8`, `ueb`, `eta`.
+
+- Beobachtete `unitType`: `wache`, `tlf`, `kdof`, `lf-b`, `rlf`, `mtf`, `tmb`, `vf`, `hfunk`.
+- Beobachtete Status (`currentStatus` / `currentStatusText`): `1` AL, `2` UEB, `3` S4, `4` S5, `9` S2, `13` LOGGEDOFF, `42` S0. Für die Wache übernommen werden nur AL, UEB, S2, S4, S5 (siehe [Wachenstatus](#wachenstatus)); S0 und LOGGEDOFF werden übersprungen.
+
+### Zustand des leichten Polls (In-Memory, `dibos_loop.py`)
+
+| Variable | Inhalt | Zweck |
+|---|---|---|
+| `_org_clients` | `org_id → (Fingerabdruck, DibosClient)` | Persistenter Client je Org |
+| `_previous_event_numbers` | Leitstellennummern des letzten Polls | Fast Path (neu) und sofortige `GetPublicEvents`-Abfrage (verschwunden) |
+| `_last_public_events_at` | Zeitpunkt des letzten `GetPublicEvents` | 60-s-Drossel (`_PUBLIC_EVENTS_MIN_INTERVAL_S`) |
+| `_last_enrich_fingerprint` | SHA-256 über Events + Units + PublicEvents des letzten erfolgreichen Durchlaufs | Unveränderte Daten überspringen |
+
+Der Zustand geht bei einem Neustart verloren. Der erste Poll danach behandelt alle laufenden Einsätze als „neu" — das kostet nur einen zusätzlichen, idempotenten Anreicherungslauf. `enrich_and_broadcast` gibt `True` zurück, wenn der Durchlauf ohne Rollback endete. Nur dann wird der Fingerabdruck gespeichert.
+
+Langsame Folgearbeit (Autodruck, Objekt-Einsatzinfo, WordPress-Bericht) startet `dibos_enrich._start_background` als `asyncio`-Task. Starke Referenzen liegen in `_background_tasks`, Fehler werden im Done-Callback geloggt.
 
 ### Datenmodell
 
@@ -452,9 +533,9 @@ Timeout je Request: 20 s. Nur Leseoperationen sind implementiert.
 | Datei | Aufgabe |
 |---|---|
 | `app/services/dibos/dibos_client.py` | HTTP-/SOAP-Client, Parser `parse_events`/`parse_units`/`parse_radios` |
-| `app/services/dibos/dibos_loop.py` | Globaler Hintergrund-Poll, Org-Auswahl, Auto-Trace-Start |
-| `app/services/dibos/dibos_enrich.py` | Einsatzanlage, Anreicherung, Wache, Zu-/Absagen, Schließen, Broadcasts |
-| `app/services/dibos/dibos_capture.py` | Diagnose-Aufzeichnung, Live-Snapshot, Aufbewahrung |
+| `app/services/dibos/dibos_loop.py` | Globaler Hintergrund-Poll (fester Takt), Org-Auswahl, persistente Clients, Fast Path, bedarfsgesteuerte Folgeabfragen, Fingerabdruck-Skip, Auto-Trace-Start |
+| `app/services/dibos/dibos_enrich.py` | Einsatzanlage (Commit + Alarmierung vor der Folgearbeit), Anreicherung, Wache, Zu-/Absagen, Schließen, Broadcasts, Hintergrund-Tasks |
+| `app/services/dibos/dibos_capture.py` | Diagnose-Aufzeichnung (rein lesend), Passwort-Maskierung, Früh-Ende, Live-Snapshot, Aufbewahrung |
 | `app/services/dibos/dibos_mapping.py` | Zuordnung der bestätigten Wachenstatus |
 | `app/models/dibos.py` | `OrgDibosConfig` |
 | `app/routers/ui_dibos.py` | Admin-UI (`/admin/dibos`, `/admin/dibos/einsaetze`, Test, Trace-Routen) |
