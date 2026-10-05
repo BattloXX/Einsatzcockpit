@@ -298,6 +298,10 @@ async def lifespan(app: FastAPI):
 
     sms_log_retention_task = asyncio.create_task(sms_log_retention_loop())
 
+    from app.services.sms_dispatch_service import einsatzinfo_nachversand_loop
+
+    einsatzinfo_nachversand_task = asyncio.create_task(einsatzinfo_nachversand_loop())
+
     # Background-Loop für GPS-Positionshistorie-Retention (täglich 03:45)
     from app.services.vehicle_position_retention import vehicle_position_retention_loop
 
@@ -382,6 +386,7 @@ async def lifespan(app: FastAPI):
         ai_log_retention_task.cancel()
         mcp_upload_retention_task.cancel()
         sms_log_retention_task.cancel()
+        einsatzinfo_nachversand_task.cancel()
         vehicle_position_retention_task.cancel()
         weather_alert_task.cancel()
         dienst_monitor_task.cancel()
@@ -406,6 +411,8 @@ async def lifespan(app: FastAPI):
             weather_retention_task,
             ai_log_retention_task,
             mcp_upload_retention_task,
+            sms_log_retention_task,
+            einsatzinfo_nachversand_task,
             vehicle_position_retention_task,
             weather_alert_task,
             dienst_monitor_task,

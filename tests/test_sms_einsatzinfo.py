@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import os
+import asyncio
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -63,6 +65,90 @@ def test_default_template_has_placeholders():
     assert "{stichwort}" in tpl
     assert "{adresse}" in tpl or "{meldung}" in tpl
     assert "{leitstellennummer}" not in tpl
+
+
+@pytest.mark.asyncio
+async def test_nachversand_sendet_offene_empfaenger_nur_einmal(monkeypatch):
+    """Gleichzeitiger Connect- und Loop-Trigger duerfen nicht doppelt senden."""
+    from app.db import SessionLocal
+    from app.core.tenant import set_tenant_context
+    from app.models.sms import SmsLog, SmsLogRecipient
+    from app.services import sms_dispatch_service as svc
+    from app.services.sms_service import SmsContext
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        now = datetime.now(UTC).replace(tzinfo=None)
+        log = SmsLog(org_id=1, sent_at=now, source="alarm", alarm_type_code="B2",
+                     text="Einsatz B2", recipient_count=1, success_count=0)
+        db.add(log); db.flush()
+        log_id = log.id
+        db.add(SmsLogRecipient(sms_log_id=log_id, phone_number="+43660123456", name="Test",
+                               success=False, sent_at=now, provider="ausstehend"))
+        db.commit()
+    finally:
+        db.close()
+
+    jobs_seen: list[list[tuple[str, str]]] = []
+
+    async def fake_send(_org_id, jobs, ctx=None, on_result=None):
+        jobs_seen.append(jobs)
+        results = [svc.SmsSendResult(phone, True, datetime.now(UTC).replace(tzinfo=None), "gateway")
+                   for phone, _ in jobs]
+        for result in results:
+            await on_result(result)
+        return results
+
+    monkeypatch.setattr("app.services.sms_service.sms_available", lambda *_args: True)
+    monkeypatch.setattr("app.services.sms_service.resolve_sms_config",
+                        lambda *_args: SmsContext(1, ["gateway"], None))
+    monkeypatch.setattr(svc, "send_bulk_detailed", fake_send)
+    await asyncio.gather(svc.retry_pending_einsatzinfo(1), svc.retry_pending_einsatzinfo(1))
+
+    assert jobs_seen == [[("+43660123456", "[Nachgesendet] Einsatz B2")]]
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        db.delete(db.get(SmsLog, log_id))
+        db.commit()
+    finally:
+        db.close()
+
+
+@pytest.mark.asyncio
+async def test_nachversand_verwirft_abgelaufene_empfaenger(monkeypatch):
+    from app.db import SessionLocal
+    from app.core.tenant import set_tenant_context
+    from app.models.sms import SmsLog, SmsLogRecipient
+    from app.services import sms_dispatch_service as svc
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        old = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=61)
+        log = SmsLog(org_id=1, sent_at=old, source="alarm", alarm_type_code="B2",
+                     text="Einsatz B2", recipient_count=1, success_count=0)
+        db.add(log); db.flush()
+        log_id = log.id
+        db.add(SmsLogRecipient(sms_log_id=log_id, phone_number="+43660123457", name="Alt",
+                               success=False, sent_at=old, provider="ausstehend"))
+        db.commit()
+    finally:
+        db.close()
+
+    monkeypatch.setattr("app.services.sms_service.sms_available", lambda *_args: False)
+    assert await svc.retry_pending_einsatzinfo(1) == 0
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        recipient = db.query(SmsLogRecipient).filter(SmsLogRecipient.sms_log_id == log_id).one()
+        assert recipient.provider == "verworfen"
+        assert db.get(SmsLog, log_id).completed_at is not None
+        db.delete(db.get(SmsLog, log_id))
+        db.commit()
+    finally:
+        db.close()
 
 
 # ── collect_einsatzinfo_recipients ─────────────────────────────────────────────
@@ -258,11 +344,11 @@ async def test_dispatch_skips_exercise_when_not_configured():
 
 
 @pytest.mark.asyncio
-async def test_dispatch_skips_no_gateway():
-    """Kein Versand wenn kein Gateway verbunden."""
+async def test_dispatch_sends_nothing_without_gateway():
+    """Ohne Gateway wird kein unmittelbarer Versand gestartet."""
     from app.services import sms_dispatch_service as svc
 
-    # Kein Gateway → fruehzeitiger Ausstieg, SessionLocal wird nicht aufgerufen
+    # Die Empfaenger werden inzwischen fuer den Nachversand persistent vorbereitet.
     with patch("app.routers.ws.is_sms_gateway_connected", return_value=False), \
          patch("app.services.sms_dispatch_service.send_bulk_detailed", new_callable=AsyncMock) as mock_send, \
          patch("app.services.sms_dispatch_service.SessionLocal") as mock_session:
@@ -273,7 +359,7 @@ async def test_dispatch_skips_no_gateway():
             is_exercise=False,
         )
         mock_send.assert_not_called()
-        mock_session.assert_not_called()
+        mock_session.assert_called_once()
 
 
 @pytest.mark.asyncio

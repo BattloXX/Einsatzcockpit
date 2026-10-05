@@ -501,6 +501,49 @@ def test_check_org_fast_path_enriches_before_units_and_public(monkeypatch):
     assert order.index("enrich") < order.index("public")
 
 
+def test_check_org_ignores_f30_proberuf_for_fast_path_public_and_trace(monkeypatch):
+    db = _session()
+    try:
+        config_id = _make_config(db, enrich_incidents=True).id
+    finally:
+        db.close()
+    _close_active_incidents()
+    db = _session()
+    try:
+        incident, _ = create_incident(db, "F30", primary_org_id=ORG_ID)
+        incident.lis_operation_number = "f30-probe-loop-1"
+        db.commit()
+    finally:
+        db.close()
+    calls = []
+    started = []
+    event = {
+        "eventNumber": "f30-probe-loop-1", "tycod": "f30", "tycodDescription": "Probealarm F30",
+    }
+    monkeypatch.setattr(
+        dibos_client, "DibosClient",
+        lambda *args, **kwargs: _RecordingClient([event], calls=calls),
+    )
+    monkeypatch.setattr(dibos_capture, "is_trace_running", lambda org_id: False)
+
+    async def fake_start(*args, **kwargs):
+        started.append(True)
+
+    async def fake_enrich(*args, **kwargs):
+        calls.append("enrich")
+        return True
+
+    monkeypatch.setattr(dibos_capture, "start_trace_for_org", fake_start)
+    import app.services.dibos.dibos_enrich as dibos_enrich
+    monkeypatch.setattr(dibos_enrich, "enrich_and_broadcast", fake_enrich)
+
+    asyncio.run(dibos_loop._check_org(ORG_ID, config_id))
+
+    assert "enrich" not in calls
+    assert "public" not in calls
+    assert started == []
+
+
 def test_check_org_fetches_public_events_only_for_missing_active_incident(monkeypatch):
     db = _session()
     try:

@@ -153,6 +153,26 @@ def test_enrich_finds_incident_by_stable_event_number():
     assert result["changed_ids"] == [incident_id]
 
 
+def test_f30_proberuf_veraendert_bestehenden_incident_nicht():
+    event = _event(993)
+    event["tycod"] = "f30"
+    event["tycodDescription"] = "Probealarm F30"
+    db = _session()
+    incident_id = _make_incident_id(db, lis_operation_number=event["eventNumber"])
+    db.close()
+
+    result = dibos_enrich.enrich_events_for_org(ORG_ID, [event])
+
+    assert result["changed_ids"] == []
+    check_db = _session()
+    try:
+        incident = check_db.get(Incident, incident_id)
+        assert incident.address_street is None
+        assert incident.dibos_tycod is None
+    finally:
+        check_db.close()
+
+
 def test_enrich_fills_missing_address_without_overwriting_existing():
     event = _event(2)
     db = _session()

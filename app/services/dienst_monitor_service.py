@@ -122,8 +122,10 @@ def pruefe_dienste(db: Session, org_id: int, now: datetime | None = None) -> lis
         for token in tokens:
             heartbeat = _naive_utc(token.last_heartbeat_at)
             frisch = heartbeat is not None and jetzt - heartbeat <= timedelta(minutes=10)
-            if token.id in connected or frisch:
-                state, detail = "ok", "Verbunden oder Heartbeat innerhalb der letzten 10 Minuten."
+            if token.id in connected:
+                state, detail = "ok", "WebSocket verbunden; SMS-Versand ist sofort moeglich."
+            elif frisch:
+                state, detail = "ok", "Nur Heartbeat innerhalb der letzten 10 Minuten; aktuell nicht verbunden."
             elif heartbeat is None:
                 state, detail = "unknown", "Noch nie einen Heartbeat gesendet."
             else:
@@ -140,7 +142,11 @@ def pruefe_dienste(db: Session, org_id: int, now: datetime | None = None) -> lis
             sms_detail = (
                 "EUS ist konfiguriert (Erreichbarkeit nicht aktiv geprueft)."
                 if eus
-                else "SMS-Gateway ist verbunden oder hat kuerzlich einen Heartbeat gesendet."
+                else (
+                    "Mindestens ein SMS-Gateway ist per WebSocket verbunden; SMS-Versand ist moeglich."
+                    if connected
+                    else "Nur frische SMS-Gateway-Heartbeats; aktuell ist kein Gateway verbunden."
+                )
             )
         elif sms_state == "unknown":
             sms_detail = "Die vorhandenen SMS-Gateways haben noch nie einen Heartbeat gesendet."

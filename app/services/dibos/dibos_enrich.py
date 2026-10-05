@@ -40,6 +40,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+from collections import deque
 from datetime import UTC, datetime
 
 from sqlalchemy.exc import IntegrityError
@@ -52,6 +53,9 @@ logger = logging.getLogger("einsatzleiter.dibos.enrich")
 _RSVP_DELAYED_RE = re.compile(r"^\d+\s*min\.?$", re.IGNORECASE)
 _fallback_active: set[tuple[int, int]] = set()
 _alarm_scheduled: set[int] = set()
+_ignored_f30_probe_numbers: set[str] = set()
+_ignored_f30_probe_order: deque[str] = deque()
+_IGNORED_F30_PROBE_LOG_CAP = 1_000
 
 
 def _map_dibos_rsvp_status(status: str | None) -> str | None:
@@ -117,6 +121,27 @@ def _is_exercise_event(event: dict) -> bool:
     """
     from app.services.lis.lis_mapping import is_exercise_label
     return is_exercise_label(event.get("tycodDescription"))
+
+
+def is_ignored_f30_probe_call(event: dict) -> bool:
+    """DIBOS-Events mit Stichwort F30 (Proberufe) werden immer ignoriert —
+    User-Vorgabe 2026-10-05: "F30 nie alarmieren, egal ob Übung oder Einsatz"."""
+    from app.services.lis.lis_mapping import map_stichwort
+    return map_stichwort(event.get("tycod")) == "F30"
+
+
+def log_ignored_f30_probe_call(event_number: object) -> None:
+    """Loggt jede ignorierte Leitstellennummer einmal, mit begrenztem Speicher."""
+    if not event_number:
+        return
+    number = str(event_number)
+    if number in _ignored_f30_probe_numbers:
+        return
+    if len(_ignored_f30_probe_order) >= _IGNORED_F30_PROBE_LOG_CAP:
+        _ignored_f30_probe_numbers.discard(_ignored_f30_probe_order.popleft())
+    _ignored_f30_probe_order.append(number)
+    _ignored_f30_probe_numbers.add(number)
+    logger.info("DIBOS-Proberuf F30 %s ignoriert", number)
 
 
 def _get_or_create_incident_for_event(db: Session, org, org_id: int, event: dict):
@@ -800,6 +825,9 @@ def enrich_events_for_org(
         from app.models.dibos import OrgDibosConfig
         dibos_config = db.query(OrgDibosConfig).filter(OrgDibosConfig.org_id == org_id).first()
         for event in parse_events(raw_events):
+            if is_ignored_f30_probe_call(event):
+                log_ignored_f30_probe_call(event.get("eventNumber"))
+                continue
             event_number = event.get("eventNumber")
             incident = _find_active_incident_by_event_number(db, org_id, event_number)
             if not incident and event_number:
@@ -913,6 +941,9 @@ def enrich_events_for_org(
                 db.commit()
                 created_match_ids.append(incident.id)
         for event in parse_events(raw_public_events or []):
+            if is_ignored_f30_probe_call(event):
+                log_ignored_f30_probe_call(event.get("eventNumber"))
+                continue
             if not event.get("closed"):
                 continue
             incident = _find_active_incident_by_event_number(
