@@ -17,13 +17,39 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
 from app.models.incident import Incident, IncidentLog
 
 logger = logging.getLogger("einsatzleiter.incident_notify")
+
+
+def incident_alarm_started(db: Session, incident_id: int) -> bool:
+    """Liefert, ob die Alarmierung für einen Einsatz bereits eingeplant wurde."""
+    from app.models.user import AuditLog
+
+    return (
+        db.query(AuditLog.id)
+        .filter(
+            AuditLog.action == "incident.alarm_started",
+            AuditLog.incident_id == incident_id,
+        )
+        .first()
+        is not None
+    )
+
+
+def incident_needs_alarm_backfill(db: Session, incident: Incident) -> bool:
+    """Prüft, ob ein frisch verknüpfter aktiver Einsatz noch nicht alarmiert wurde."""
+    started_at = incident.started_at
+    if started_at is None or incident.status != "active":
+        return False
+    if started_at.tzinfo is not None:
+        started_at = started_at.astimezone(UTC).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None)
+    return now - started_at <= timedelta(minutes=15) and not incident_alarm_started(db, incident.id)
 
 
 async def _send_incident_push(
@@ -179,6 +205,7 @@ async def notify_incident_created(
     push_url: str | None = None,
     base_url: str | None = None,
     background_tasks=None,
+    source: str | None = None,
 ) -> None:
     """Loest SMS-Einsatzinfo + Web-Push + Teams-Alarmierung fuer einen neu angelegten
     Einsatz aus.
@@ -198,6 +225,25 @@ async def notify_incident_created(
     from app.services.exercise_guard import darf_extern
     from app.services.sms_dispatch_service import dispatch_einsatzinfo
     from app.services.teams_alarm_service import post_incident_card
+
+    logger.info(
+        "Alarmierung gestartet (Einsatz %s, Quelle %s)", incident.id, source or "unbekannt"
+    )
+    try:
+        from app.core.audit import write_audit
+
+        write_audit(
+            db,
+            "incident.alarm_started",
+            org_id=org_id,
+            user_id=triggered_by_user_id,
+            incident_id=incident.id,
+            payload={"source": source},
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("Alarmierungsstart konnte nicht protokolliert werden (Einsatz %s)", incident.id)
 
     address = _combined_address(incident)
     exercise_prefix = "[ÜBUNG] " if incident.is_exercise else ""
@@ -264,7 +310,7 @@ async def notify_incident_created(
             logger.exception("Einsatzinfo-SMS fehlgeschlagen (Einsatz %s)", incident.id)
             return False, "Versandfehler", 0
 
-    async def _push_senden() -> None:
+    async def _push_senden() -> tuple[bool, str | None]:
         if not darf_extern(
             "push", is_exercise=incident.is_exercise, org_id=org_id, db=db
         ):
@@ -282,7 +328,7 @@ async def notify_incident_created(
                     logger.exception(
                         "Stiller FCM-Wake fehlgeschlagen (Einsatz %s)", incident.id
                     )
-            return
+            return True, "Uebung unterdrueckt"
         try:
             await _send_incident_push(
                 incident.id,
@@ -293,8 +339,10 @@ async def notify_incident_created(
                 live_extra,
                 triggered_by_user_id,
             )
+            return True, None
         except Exception:
             logger.exception("Push-Benachrichtigung fehlgeschlagen (Einsatz %s)", incident.id)
+            return False, "Versandfehler"
 
     async def _teams_senden():
         if teams_args is None:
@@ -330,7 +378,7 @@ async def notify_incident_created(
             _teams_senden(),
             return_exceptions=True,
         )
-        sms_result, _, teams_result = results
+        sms_result, push_result, teams_result = results
         if not isinstance(sms_result, BaseException):
             sms_sent, sms_reason, sms_recipients = sms_result
             sms_text = (
@@ -355,7 +403,24 @@ async def notify_incident_created(
                 text=teams_text,
             ))
         try:
+            from app.core.audit import write_audit
+
+            sms_payload = _alarm_result_payload(sms_result)
+            push_payload = _alarm_result_payload(push_result)
+            teams_payload = _alarm_result_payload(teams_result)
+            write_audit(
+                db,
+                "incident.alarm_finished",
+                org_id=org_id,
+                user_id=triggered_by_user_id,
+                incident_id=incident.id,
+                payload={"sms": sms_payload, "push": push_payload, "teams": teams_payload},
+            )
             db.commit()
+            logger.info(
+                "Alarmierung abgeschlossen (Einsatz %s): sms=%s, push=%s, teams=%s",
+                incident.id, sms_payload, push_payload, teams_payload,
+            )
         except Exception:
             db.rollback()
             logger.exception("Alarmierungsprotokoll fehlgeschlagen (Einsatz %s)", incident.id)
@@ -366,3 +431,19 @@ async def notify_incident_created(
 
     # Kein Request-Kontext (LIS-Poll-Loop) — direkt ausfuehren statt background_tasks
     await _notify_fanout()
+
+
+def _alarm_result_payload(result) -> dict:
+    """Normalisiert Fanout-Ergebnisse für den Audit-Eintrag."""
+    if isinstance(result, BaseException):
+        return {"ok": False, "reason": type(result).__name__}
+    if result is None:
+        return {"ok": True}
+    if isinstance(result, tuple):
+        payload = {"ok": bool(result[0])}
+        if len(result) > 1 and result[1]:
+            payload["reason"] = result[1]
+        if len(result) > 2:
+            payload["recipient_count"] = result[2]
+        return payload
+    return {"ok": True}

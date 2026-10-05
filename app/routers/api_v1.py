@@ -7,6 +7,7 @@ die Org als Kollaborator beteiligt ist.
 
 Antworten sind JSON; Fehler folgen FastAPI-Konvention mit `detail`-Feld.
 """
+import logging
 from datetime import UTC, datetime
 from hashlib import sha256
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -35,6 +36,29 @@ from app.services.incident_service import create_incident
 from app.services.push_service import notify_org
 
 router = APIRouter(prefix="/api/v1", tags=["Einsätze"])
+logger = logging.getLogger("einsatzleiter.api")
+
+
+async def _backfill_linked_incident_alarm(
+    db: Session, incident: Incident, *, api_key: ApiKey, request: Request,
+    background_tasks: BackgroundTasks, source: str,
+) -> None:
+    """Alarmiert einen frisch verknüpften, zuvor nicht alarmierten Einsatz."""
+    from app.services.incident_notify import incident_needs_alarm_backfill, notify_incident_created
+
+    if not incident_needs_alarm_backfill(db, incident):
+        return
+    logger.warning("Alarmierung fuer Einsatz %s nachgeholt (Quelle %s)", incident.id, source)
+    await notify_incident_created(
+        db,
+        incident,
+        org_id=api_key.org_id,
+        triggered_by_user_id=api_key.created_by_user_id,
+        push_url=f"/einsatz/{incident.id}",
+        base_url=str(request.base_url),
+        background_tasks=background_tasks,
+        source=source,
+    )
 
 
 def _create_neighbor_invitations_api(
@@ -607,9 +631,13 @@ async def create_incident_api(
             db, linked_from_lis.id, api_key.created_by_user_id, str(request.base_url)
         )
         db.commit()
+        await _backfill_linked_incident_alarm(
+            db, linked_from_lis, api_key=api_key, request=request,
+            background_tasks=background_tasks, source="api_lis_verknuepfung",
+        )
         return {
             "id": linked_from_lis.id,
-            "external_key": linked_from_lis.external_key,
+            "external_key": payload.Key,
             "url": f"/einsatz/{linked_from_lis.id}",
             "created": False,
             "board_token": board_token,
@@ -669,9 +697,13 @@ async def create_incident_api(
                     db, winner.id, api_key.created_by_user_id, str(request.base_url)
                 )
                 db.commit()
+                await _backfill_linked_incident_alarm(
+                    db, winner, api_key=api_key, request=request,
+                    background_tasks=background_tasks, source="api_lis_race_verknuepfung",
+                )
                 return {
                     "id": winner.id,
-                    "external_key": winner.external_key,
+                    "external_key": payload.Key,
                     "url": f"/einsatz/{winner.id}",
                     "created": False,
                     "board_token": board_token,
@@ -690,7 +722,7 @@ async def create_incident_api(
         db.commit()
         return {
             "id": incident.id,
-            "external_key": incident.external_key,
+            "external_key": incident.external_key or payload.Key,
             "url": f"/einsatz/{incident.id}",
             "created": False,
             "board_token": board_token,
@@ -764,6 +796,7 @@ async def create_incident_api(
         push_url=push_url,
         base_url=str(request.base_url),
         background_tasks=background_tasks,
+        source="api",
     )
 
     # Geocoding in Background – kein Warten auf Nominatim (≥1,1 s)

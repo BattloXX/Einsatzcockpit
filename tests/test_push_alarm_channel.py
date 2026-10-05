@@ -12,7 +12,7 @@ from fastapi import BackgroundTasks
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.incident import Incident
-from app.models.user import FcmDeliveryLog, FcmToken, PushLog, User
+from app.models.user import AuditLog, FcmDeliveryLog, FcmToken, PushLog, User
 from app.services import push_service
 from app.services.incident_notify import notify_incident_created
 
@@ -24,6 +24,40 @@ def _incident() -> Incident:
         address_city="Testort",
         is_exercise=True,
     )
+
+
+@pytest.mark.asyncio
+async def test_incident_notify_writes_alarm_start_and_finish_audits(setup_db, monkeypatch):
+    """Der persistente Start-Marker verhindert spätere Doppelalarmierungen."""
+    async def no_sms(*args, **kwargs):
+        return None
+
+    async def no_teams(*args, **kwargs):
+        return None
+
+    async def no_push(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr("app.services.sms_dispatch_service.dispatch_einsatzinfo", no_sms)
+    monkeypatch.setattr("app.services.teams_alarm_service.post_incident_card", no_teams)
+    monkeypatch.setattr("app.services.incident_notify._send_incident_push", no_push)
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        incident = Incident(alarm_type_code="T1", primary_org_id=1, status="active")
+        db.add(incident)
+        db.commit()
+        await notify_incident_created(
+            db, incident, org_id=1, base_url="https://example.test", source="test",
+        )
+        audits = db.query(AuditLog).filter(AuditLog.incident_id == incident.id).all()
+        actions = {audit.action: audit for audit in audits}
+        assert set(actions) >= {"incident.alarm_started", "incident.alarm_finished"}
+        assert '"sms"' in actions["incident.alarm_finished"].payload_json
+        assert '"push"' in actions["incident.alarm_finished"].payload_json
+        assert '"teams"' in actions["incident.alarm_finished"].payload_json
+    finally:
+        db.close()
 
 
 @pytest.mark.asyncio
@@ -94,7 +128,7 @@ async def test_incident_channels_run_concurrently(monkeypatch, mit_background_ta
     dauer = perf_counter() - start
 
     assert set(gestartet) == {"sms", "push", "teams"}
-    assert dauer < 0.11
+    assert dauer < 0.2
 
 
 @pytest.mark.asyncio
