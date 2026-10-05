@@ -240,6 +240,20 @@ def test_einsatzleiter_optional_gespeichert(db_session, org, fahrzeug, zweck):
     assert fahrt.einsatzleiter_name == "Eva Einsatzleiterin"
 
 
+@pytest.mark.parametrize("rolle", ["gruppenkommandant", "einsatzleiter"])
+def test_fuehrungsrolle_mit_member_id_wird_gespeichert(db_session, org, fahrzeug, zweck, rolle):
+    member = Member(org_id=org.id, lastname="Fuehrung", firstname=rolle, active=True)
+    db_session.add(member)
+    db_session.flush()
+    daten = _basis_daten(org.id, fahrzeug.id, zweck.id)
+    daten[f"{rolle}_member_id"] = member.id
+
+    fahrt = erstelle_fahrt(daten, db_session)
+
+    assert getattr(fahrt, f"{rolle}_member_id") == member.id
+    assert getattr(fahrt, f"{rolle}_name") == f"Fuehrung {rolle}"
+
+
 def test_einsatzleiter_darf_leer_bleiben(db_session, org, fahrzeug, zweck):
     """Auch bei aktivierter Abfrage bleibt der Einsatzleiter optional (kein Zwang)."""
     fahrzeug.einsatzleiter_abfrage = True
@@ -566,8 +580,25 @@ def test_zweck_felder_zeigt_fuehrungsrollen_auswahl_bei_gk_und_zweck_flag(client
     db_session.commit()
     r = client.get(f"/fahrtenbuch/hx/zweck-felder?zweck_id={z.id}")
     assert r.status_code == 200
-    assert 'id="fuehrung_name"' in r.text
-    assert "einsatzleiter_name" in r.text
+    assert 'id="fuehrung-trigger"' in r.text
+    assert "personSelectFlyout" in r.text
+    assert "rolle + &#39;_member_id&#39;" in r.text
+    assert "Gruppenkommandant auswählen" in r.text
+    assert "Einsatzleiter auswählen" in r.text
+
+
+def test_zweck_felder_gk_picker_enthält_auch_mitglied_ohne_gk_qualifikation(client: TestClient, db_session, org):
+    _login(client, db_session, org, "gk_alle_mitglieder_tester")
+    member = Member(org_id=org.id, lastname="Ohne", firstname="GK", active=True)
+    z = Fahrtzweck(org_id=org.id, name="GK fuer alle", kategorie=FahrtKategorie.uebung, verlangt_gruppenkommandant=True)
+    db_session.add_all([member, z])
+    db_session.commit()
+
+    r = client.get(f"/fahrtenbuch/hx/zweck-felder?zweck_id={z.id}")
+
+    assert r.status_code == 200
+    assert 'id="gruppenkommandant-trigger"' in r.text
+    assert "Ohne GK" in r.text
 
 
 def test_zweck_felder_zeigt_einsaetze_der_letzten_drei_tage(client: TestClient, db_session, org):
@@ -1191,8 +1222,8 @@ def test_zweck_felder_zeigt_fuehrungsrollen_auswahl_bei_gk_und_fahrzeug_flag(
     db_session.commit()
     r = client.get(f"/fahrtenbuch/hx/zweck-felder?zweck_id={z.id}&fahrzeug_id={fahrzeug.id}")
     assert r.status_code == 200
-    assert 'id="fuehrung_name"' in r.text
-    assert "einsatzleiter_name" in r.text
+    assert 'id="fuehrung-trigger"' in r.text
+    assert "personSelectFlyout" in r.text
 
 
 def test_zweck_felder_sonstige_zeigt_freitext(client: TestClient, db_session, org):

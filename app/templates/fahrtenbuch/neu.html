@@ -402,11 +402,6 @@ function maschinistAutocomplete(prefix, initialName, initialId) {
     }
   };
 }
-function fuehrungAutocomplete() {
-  const autocomplete = maschinistAutocomplete('fuehrung');
-  autocomplete.rolle = 'gruppenkommandant';
-  return autocomplete;
-}
 document.addEventListener('pointerdown', function(e) {
   const item = e.target.closest('.autocomplete-item');
   if (!item) return;
@@ -490,6 +485,13 @@ document.body.addEventListener('htmx:afterSwap', function(ev) {
     const draft = loadDraft();
     if (!draft) return;
     let applied = false;
+    const fuehrung = root.querySelector('[data-fuehrung-rollen]');
+    if (fuehrung && (draft.einsatzleiter_member_id || draft.einsatzleiter_name)) {
+      const state = window.Alpine && Alpine.$data(fuehrung);
+      if (state) state.rolle = 'einsatzleiter';
+      fuehrung.querySelector('input[name$="_member_id"]')?.setAttribute('name', 'einsatzleiter_member_id');
+      fuehrung.querySelector('input[name$="_name"]')?.setAttribute('name', 'einsatzleiter_name');
+    }
     root.querySelectorAll('[name]').forEach((el) => {
       const name = el.name;
       if (SKIP_FIELDS.has(name) || !(name in draft)) return;

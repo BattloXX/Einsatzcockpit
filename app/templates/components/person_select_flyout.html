@@ -1,17 +1,21 @@
 {# Wiederverwendbare, ID-basierte Personenauswahl.
    Erwartet: person_field, person_label, person_title, person_required,
-   person_name, person_id, person_placeholder und personen. #}
+   person_name, person_id, person_placeholder und personen.
+   Optional: person_field_expr, person_title_expr (Alpine-Ausdruck, wird beim
+   Oeffnen ausgewertet) und person_show_label. #}
 <div class="person-select" data-required="{{ 'true' if person_required else 'false' }}" x-data='personSelectFlyout({
        title: {{ person_title|tojson }},
        people: {{ personen|tojson }},
        initialName: {{ person_name|tojson }},
        initialId: {{ person_id|tojson }}
      })' @keydown.escape.window="close()">
+  {% if person_show_label|default(true) %}
   <label class="form-label" for="{{ person_field }}-trigger">{{ person_label }}{% if person_required %} *{% endif %}</label>
-  <input type="hidden" name="{{ person_field }}_member_id" :value="memberId">
-  <input type="hidden" name="{{ person_field }}_name" :value="selectedName">
+  {% endif %}
+  <input type="hidden"{% if person_field_expr|default('') %} :name="{{ person_field_expr }}"{% else %} name="{{ person_field }}_member_id"{% endif %} :value="memberId">
+  <input type="hidden"{% if person_field_expr|default('') %} :name="{{ person_field_expr.replace('_member_id', '_name') }}"{% else %} name="{{ person_field }}_name"{% endif %} :value="selectedName">
   <button type="button" id="{{ person_field }}-trigger" class="person-select__trigger"
-          @click="openFlyout()" :aria-expanded="open.toString()" aria-haspopup="dialog">
+          @click="{% if person_title_expr|default('') %}title = {{ person_title_expr }}; {% endif %}openFlyout()" :aria-expanded="open.toString()" aria-haspopup="dialog">
     <span aria-hidden="true">&#128100;</span>
     <strong x-text='selectedName || {{ person_placeholder|tojson }}'></strong>
     <span class="person-select__chevron" aria-hidden="true">&#8250;</span>

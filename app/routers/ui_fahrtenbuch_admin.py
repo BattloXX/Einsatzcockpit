@@ -22,10 +22,7 @@ from app.db import get_db
 from app.models.fahrtenbuch import Fahrt, FahrtKategorie, FahrtStatus, Fahrtzweck, Zielort
 from app.models.master import (
     FireDept,
-    Member,
-    MemberQualification,
     OrgSettings,
-    Qualification,
     VehicleMaster,
 )
 from app.routers.ui_fahrtenbuch import _aktive_personen, _lade_einsaetze, _personen_fuer_client
@@ -147,23 +144,6 @@ def _sysadmin_org_context(request: Request, user, org, db: Session) -> dict:
         # Query-Fragment zum Weiterreichen der gewählten Org an Links/Formulare.
         "org_q": f"?org={org.id}" if sysadmin else "",
     }
-
-
-def _gk_members(org_id: int, db: Session) -> list[Member]:
-    return (
-        db.query(Member)
-        .join(MemberQualification, MemberQualification.member_id == Member.id)
-        .join(Qualification, Qualification.id == MemberQualification.qualification_id)
-        .filter(
-            Member.active == True,  # noqa: E712
-            Member.org_id == org_id,
-            Qualification.is_gruppenkommandant == True,  # noqa: E712
-        )
-        .execution_options(include_all_tenants=True)
-        .order_by(Member.lastname, Member.firstname)
-        .distinct()
-        .all()
-    )
 
 
 # ── Verwaltungsliste ──────────────────────────────────────────────────────────
@@ -321,15 +301,13 @@ async def hx_zweck_felder_korrektur(
         _lade_einsaetze(org_id, db, tage=92, ensure_id=ensure_id)
         if zweck and zweck.kategorie == FahrtKategorie.einsatz else []
     )
-    gk_members = _gk_members(org_id, db) if zweck and zweck.verlangt_gruppenkommandant else []
+    personen = _personen_fuer_client(_aktive_personen(org_id, db))
     return templates.TemplateResponse(request, "fahrtenbuch/_zweck_felder.html", {
         "zweck": zweck,
         "fahrzeug": fahrzeug,
         "incidents": incidents,
         "incidents_listbox": True,
-        "gk_members": gk_members,
-        "personen": _personen_fuer_client(_aktive_personen(org_id, db)),
-        "gk_personen": _personen_fuer_client(gk_members),
+        "personen": personen,
         "form_daten": {"incident_id": incident_id},
     })
 
@@ -589,13 +567,12 @@ async def _render_korrektur(
         _lade_einsaetze(org_id, db, tage=92, ensure_id=ensure_id)
         if zweck and zweck.kategorie == FahrtKategorie.einsatz else []
     )
-    gk_members = _gk_members(org_id, db) if zweck and zweck.verlangt_gruppenkommandant else []
+    personen = _personen_fuer_client(_aktive_personen(org_id, db))
     return templates.TemplateResponse(request, "fahrtenbuch/verwaltung/korrektur.html", {
         "user": user, "fahrt": fahrt, "fahrzeuge": fahrzeuge, "zwecke": zwecke, "zielorte": zielorte,
         "fahrzeug": fahrzeug, "zweck": zweck, "incidents": incidents,
-        "incidents_listbox": True, "gk_members": gk_members,
-        "personen": _personen_fuer_client(_aktive_personen(org_id, db)),
-        "gk_personen": _personen_fuer_client(gk_members),
+        "incidents_listbox": True,
+        "personen": personen,
         "doppelfahrt_warnung": pruefe_doppelfahrt(fahrzeug, db) if fahrzeug else False,
         "fehler": fehler, "form_daten": form_daten,
         "km_referenz": km_referenz, "bh_referenz": bh_referenz, "sw_referenz": sw_referenz,
