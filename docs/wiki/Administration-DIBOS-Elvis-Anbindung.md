@@ -184,6 +184,8 @@ Die Anreicherung läuft in einem Worker-Thread mit eigener DB-Session. Ein Fehle
 
 Gilt je Event aus `GetCurrentEvents`. Der Schlüssel ist die **Leitstellennummer** (`eventNumber`, z. B. `f26006436`), gespeichert in `Incident.lis_operation_number` — dieselbe Kennung wie bei LIS und der API-Variante `Leitstellennummer` (siehe [REST-API](Entwickler-REST-API)). Dadurch entstehen keine Dubletten, wenn derselbe Einsatz über mehrere Wege eintrifft.
 
+**F30 (Proberufe)** wird immer ignoriert – egal ob als Übung oder Einsatz gekennzeichnet: kein Einsatz, keine Anreicherung, keine Alarmierung. F30-Einsätze aus anderen Quellen (API, Pager, LIS) werden zwar angelegt, aber nie per SMS/Push/Teams alarmiert.
+
 ```
 Event aus GetCurrentEvents
         │

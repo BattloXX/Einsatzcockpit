@@ -56,12 +56,12 @@ def _event(
     event_number: str, *, tycod: str = "t2", closed: str | None = None,
     street: str = "Teststrasse", street_no: str = "5", city: str = "Wolfurt",
     lat: float = 47.5, lng: float = 9.7, created: str = "2026-07-26T10:00:00",
-    comment: str = "Testmeldung",
+    comment: str = "Testmeldung", tycod_description: str = "Technischer Einsatz",
 ) -> dict:
     """Baut ein rohes DIBOS-Event (Schema aus dibos_client.py::parse_events()'s
     Eingabeformat, VOR dem Parsen) mit den fürs Matching relevanten Feldern."""
     return {
-        "eventNumber": event_number, "tycod": tycod, "tycodDescription": "Technischer Einsatz",
+        "eventNumber": event_number, "tycod": tycod, "tycodDescription": tycod_description,
         "diagnose": "", "eventComment": comment, "bmaNo": None,
         "created": created, "dispatched": created, "closed": closed,
         "callerList": [], "targetList": [], "comments": [], "personResponseList": [],
@@ -86,6 +86,31 @@ def test_event_ohne_passenden_incident_legt_neuen_an(org_id):
         assert incident.status == "active"
     finally:
         db.close()
+
+
+def test_f30_uebung_wird_nicht_als_incident_angelegt(org_id):
+    event = _event("f30-probe-001", tycod="f30", tycod_description="Probealarm F30")
+
+    result = dibos_enrich.enrich_events_for_org(org_id, [event], create_incidents=True)
+
+    assert result["created_ids"] == []
+
+
+def test_f30_ohne_uebungskennzeichen_wird_ebenfalls_ignoriert(org_id):
+    """User-Vorgabe 2026-10-05: F30 nie alarmieren, egal ob Uebung oder Einsatz."""
+    event = _event("f30-real-002", tycod="f30", tycod_description="Brandmeldealarm")
+
+    result = dibos_enrich.enrich_events_for_org(org_id, [event], create_incidents=True)
+
+    assert result["created_ids"] == []
+
+
+def test_andere_uebung_wird_weiterhin_als_incident_angelegt(org_id):
+    event = _event("t2-uebung-003", tycod="t2", tycod_description="Technische Uebung")
+
+    result = dibos_enrich.enrich_events_for_org(org_id, [event], create_incidents=True)
+
+    assert len(result["created_ids"]) == 1
 
 
 @pytest.mark.asyncio

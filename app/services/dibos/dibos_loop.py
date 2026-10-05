@@ -160,7 +160,9 @@ async def _run_all_orgs() -> None:
             logger.exception("dibos_poll_loop: Org %s fehlgeschlagen", org_id)
 
 
-async def _has_missing_active_incidents(org_id: int, event_numbers: set[str]) -> bool:
+async def _has_missing_active_incidents(
+    org_id: int, event_numbers: set[str], ignored_event_numbers: set[str] | None = None,
+) -> bool:
     """True, wenn ein aktiver Einsatz der Org eine Leitstellennummer hat, die
     nicht (mehr) in GetCurrentEvents steht — nur dann lohnt GetPublicEvents, um
     ein "closed" für das Auto-Schließen zu finden."""
@@ -180,7 +182,11 @@ async def _has_missing_active_incidents(org_id: int, event_numbers: set[str]) ->
                 )
                 .all()
             )
-            return any(number not in event_numbers for (number,) in rows)
+            ignored_numbers = ignored_event_numbers or set()
+            return any(
+                number not in event_numbers and number not in ignored_numbers
+                for (number,) in rows
+            )
         finally:
             db.close()
 
@@ -257,8 +263,17 @@ async def _check_org(org_id: int, config_id: int) -> None:
         await _close_org_client(org_id)
         return
 
-    from app.services.dibos.dibos_enrich import enrich_and_broadcast
+    from app.services.dibos.dibos_enrich import (
+        enrich_and_broadcast,
+        is_ignored_f30_probe_call,
+        log_ignored_f30_probe_call,
+    )
 
+    ignored_events = [event for event in events if is_ignored_f30_probe_call(event)]
+    events = [event for event in events if not is_ignored_f30_probe_call(event)]
+    for event in ignored_events:
+        log_ignored_f30_probe_call(event.get("eventNumber"))
+    ignored_numbers = {str(event["eventNumber"]) for event in ignored_events if event.get("eventNumber")}
     numbers = {str(e["eventNumber"]) for e in events if e.get("eventNumber")}
     previous_numbers = _previous_event_numbers.get(org_id, set())
     new_numbers = numbers - previous_numbers
@@ -276,7 +291,7 @@ async def _check_org(org_id: int, config_id: int) -> None:
         )
 
     need_public = (enrich_incidents or create_incidents) and await _has_missing_active_incidents(
-        org_id, numbers,
+        org_id, numbers, ignored_numbers,
     )
     public_due = need_public and (
         bool(disappeared_numbers)

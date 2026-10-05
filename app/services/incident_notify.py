@@ -25,6 +25,9 @@ from app.models.incident import Incident, IncidentLog
 
 logger = logging.getLogger("einsatzleiter.incident_notify")
 
+# Stichwoerter, fuer die nie SMS/Push/Teams ausgeloest werden (F30 = Proberuf).
+NIE_ALARMIEREN_STICHWORTE = frozenset({"F30"})
+
 
 def incident_alarm_started(db: Session, incident_id: int) -> bool:
     """Liefert, ob die Alarmierung für einen Einsatz bereits eingeplant wurde."""
@@ -43,6 +46,8 @@ def incident_alarm_started(db: Session, incident_id: int) -> bool:
 
 def incident_needs_alarm_backfill(db: Session, incident: Incident) -> bool:
     """Prüft, ob ein frisch verknüpfter aktiver Einsatz noch nicht alarmiert wurde."""
+    if (incident.alarm_type_code or "").upper() in NIE_ALARMIEREN_STICHWORTE:
+        return False
     started_at = incident.started_at
     if started_at is None or incident.status != "active":
         return False
@@ -225,6 +230,26 @@ async def notify_incident_created(
     from app.services.exercise_guard import darf_extern
     from app.services.sms_dispatch_service import dispatch_einsatzinfo
     from app.services.teams_alarm_service import post_incident_card
+
+    if (incident.alarm_type_code or "").upper() in NIE_ALARMIEREN_STICHWORTE:
+        # User-Vorgabe 2026-10-05: F30 (Proberufe) nie alarmieren, egal ob Übung
+        # oder Einsatz und unabhängig von der Quelle (API, Pager, LIS, UI).
+        logger.info(
+            "Alarmierung unterdrueckt: Stichwort %s wird nie alarmiert (Einsatz %s, Quelle %s)",
+            incident.alarm_type_code, incident.id, source or "unbekannt",
+        )
+        try:
+            db.add(IncidentLog(
+                incident_id=incident.id,
+                author_name="System",
+                level="info",
+                text=f"{incident.alarm_type_code} – keine Alarmierung (SMS/Push/Teams)",
+            ))
+            db.commit()
+        except Exception:
+            db.rollback()
+            logger.exception("Alarmierungsprotokoll fehlgeschlagen (Einsatz %s)", incident.id)
+        return
 
     logger.info(
         "Alarmierung gestartet (Einsatz %s, Quelle %s)", incident.id, source or "unbekannt"

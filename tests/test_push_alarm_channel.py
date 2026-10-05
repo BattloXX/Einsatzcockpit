@@ -351,3 +351,40 @@ def test_notify_vehicle_committet_die_transaktion_des_aufrufers_nicht(monkeypatc
     finally:
         db.rollback()
         db.close()
+
+
+def test_f30_wird_nie_alarmiert(monkeypatch):
+    """User-Vorgabe 2026-10-05: F30 (Proberuf) nie alarmieren - weder SMS noch Push noch Teams."""
+    import asyncio
+    from types import SimpleNamespace
+
+    from app.services import incident_notify
+
+    calls = []
+
+    async def fake(*a, **kw):
+        calls.append(1)
+
+    monkeypatch.setattr("app.services.sms_dispatch_service.dispatch_einsatzinfo", fake)
+    monkeypatch.setattr(incident_notify, "_send_incident_push", fake)
+    monkeypatch.setattr("app.services.teams_alarm_service.post_incident_card", fake)
+
+    class FakeDb:
+        def __init__(self):
+            self.added = []
+
+        def add(self, obj):
+            self.added.append(obj)
+
+        def commit(self):
+            pass
+
+        def rollback(self):
+            pass
+
+    db = FakeDb()
+    incident = SimpleNamespace(id=999, alarm_type_code="F30", is_exercise=False, status="active")
+    asyncio.run(incident_notify.notify_incident_created(db, incident, org_id=1, base_url="https://x"))
+    assert calls == []
+    assert any("keine Alarmierung" in getattr(o, "text", "") for o in db.added)
+    assert incident_notify.incident_needs_alarm_backfill(db, incident) is False
