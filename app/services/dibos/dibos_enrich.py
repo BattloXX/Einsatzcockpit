@@ -50,6 +50,7 @@ from app.services.dibos.dibos_client import parse_events
 logger = logging.getLogger("einsatzleiter.dibos.enrich")
 
 _RSVP_DELAYED_RE = re.compile(r"^\d+\s*min\.?$", re.IGNORECASE)
+_fallback_active: set[tuple[int, int]] = set()
 
 
 def _map_dibos_rsvp_status(status: str | None) -> str | None:
@@ -248,6 +249,138 @@ def _sync_wache_status(
             wache_name=unit.get("unidRfl"), status_text_raw=raw_status, status_at=status_at,
         )
         changed |= entry is not None
+    return changed
+
+
+def _lis_delivers(db: Session, org_id: int, incident) -> bool:
+    from app.services.lis.lis_health import lis_delivers_for
+    return lis_delivers_for(db, org_id, incident)
+
+
+def _get_or_create_external_dibos_vehicle(db: Session, org, unit: dict):
+    """Externer Platzhalter für eine fremde DIBOS-Einheit. Die DIBOS-unid ist
+    dieselbe Kennung wie die LIS-ReferenceId — Schlüssel ist daher lis_reference_id
+    + is_external, sodass LIS (lis_sync._get_or_create_external_vehicle) und DIBOS
+    denselben Platzhalter teilen statt zwei anzulegen. lis_auto_created markiert ihn
+    als automatisch erzeugte Leitstellen-Einheit (Admin-UI read-only)."""
+    from app.models.master import VehicleMaster
+    unid = unit.get("unid")
+    if not unid:
+        return None
+    vehicle = db.query(VehicleMaster).filter(
+        VehicleMaster.dept_id == org.id, VehicleMaster.lis_reference_id == unid,
+        VehicleMaster.is_external.is_(True), VehicleMaster.deleted.is_(False),
+    ).first()
+    if vehicle:
+        return vehicle
+    name = str(unit.get("unidRfl") or unid)
+    lev3 = str(unit.get("lev3") or "")
+    prefix = name.split()[0] if name else lev3
+    vehicle = VehicleMaster(
+        dept_id=org.id, code=name[:30], name=name[:150], type="", is_external=True,
+        lis_auto_created=True, lis_reference_id=str(unid)[:60],
+        adhoc_org_name=(prefix or "Fremde Organisation (DIBOS)")[:150],
+        adhoc_org_short=prefix[:3] or None, active=True,
+        display_order=db.query(VehicleMaster).filter(VehicleMaster.dept_id == org.id).count(),
+    )
+    db.add(vehicle)
+    db.flush()
+    logger.info("Externes DIBOS-Fahrzeug %r als VehicleMaster %s angelegt", unid, vehicle.id)
+    return vehicle
+
+
+def _sync_dibos_vehicle_location(
+    db: Session, org, incident, vehicle, unit: dict, station_coords: set[tuple[float, float]],
+) -> None:
+    from app.models.major_incident import VehiclePosition
+    from app.services.major_incident_service import incident_major_incident_id
+    raw_lat, raw_lon = unit.get("latitude"), unit.get("longitude")
+    if raw_lat is None or raw_lon is None:
+        return
+    try:
+        lat, lon = float(raw_lat), float(raw_lon)
+    except (TypeError, ValueError):
+        return
+    if (round(lat, 5), round(lon, 5)) in station_coords:
+        return
+    lage_id = incident_major_incident_id(db, incident.id)
+    letzte = db.query(VehiclePosition).filter(
+        VehiclePosition.incident_id == lage_id, VehiclePosition.vehicle_id == vehicle.id,
+    ).order_by(VehiclePosition.received_at.desc()).first()
+    if letzte and letzte.source == "manual":
+        return
+    if letzte and round(letzte.lat, 5) == round(lat, 5) and round(letzte.lon, 5) == round(lon, 5):
+        return
+    now = datetime.now(UTC)
+    db.add(VehiclePosition(incident_id=lage_id, org_id=org.id, vehicle_id=vehicle.id,
+                           lat=lat, lon=lon, source="dibos", recorded_at=now, received_at=now))
+    db.flush()
+
+
+def _sync_dibos_vehicle_status(
+    db: Session, org, incident, event: dict, raw_units: list[dict], sync_external_units: bool,
+) -> bool:
+    """Schreibt nur im LIS-Ausfall-Fallback; sonst bliebe LIS nicht autoritativ."""
+    from app.models.incident import IncidentColumn, IncidentVehicle
+    from app.models.master import VehicleMaster
+    from app.services.dibos.dibos_mapping import map_dibos_unit_status
+    from app.services.incident_service import _next_display_order, append_card, set_unit_status
+    from app.services.lis.lis_health import lis_delivers_for
+
+    key = (org.id, incident.id)
+    fallback = not lis_delivers_for(db, org.id, incident)
+    if fallback != (key in _fallback_active):
+        logger.info("DIBOS-Fallback für Org %s, Einsatz %s %s", org.id, incident.id,
+                    "aktiv" if fallback else "deaktiviert")
+        if fallback:
+            _fallback_active.add(key)
+        else:
+            _fallback_active.discard(key)
+    if not fallback:
+        return False
+    own_lev3 = event.get("lev3") or next((u.get("lev3") for u in event.get("units") or [] if u.get("lev3")), None)
+    event_units = {u.get("unid"): u for u in event.get("units") or [] if u.get("unid")}
+    units = [
+        {**event_units.get(u.get("unid"), {}), **u}
+        for u in raw_units if u.get("eventNumber") == event.get("eventNumber")
+    ] + (event.get("units") or [])
+    station_coords = {
+        (round(float(u["latitude"]), 5), round(float(u["longitude"]), 5)) for u in raw_units
+        if u.get("unitType") == "wache" and u.get("latitude") is not None and u.get("longitude") is not None
+    }
+    changed = False
+    seen: set[str] = set()
+    for unit in units:
+        unid = unit.get("unid")
+        if not unid or unid in seen or unit.get("unitType") == "wache":
+            continue
+        seen.add(unid)
+        external = bool(own_lev3 and unit.get("lev3") and unit.get("lev3") != own_lev3)
+        vehicle = db.query(VehicleMaster).filter(
+            # DIBOS-unid == LIS-ReferenceId (dasselbe Feld, in der Admin-UI gepflegt)
+            VehicleMaster.dept_id == org.id, VehicleMaster.lis_reference_id == unid,
+            VehicleMaster.deleted.is_(False),
+        ).first()
+        if not vehicle and external and sync_external_units:
+            vehicle = _get_or_create_external_dibos_vehicle(db, org, unit)
+        if not vehicle:
+            continue
+        status = map_dibos_unit_status(unit.get("currentStatusText"))
+        iv = db.query(IncidentVehicle).filter(IncidentVehicle.incident_id == incident.id,
+            IncidentVehicle.vehicle_master_id == vehicle.id, IncidentVehicle.removed_at.is_(None)).first()
+        if not iv and status:
+            col = db.query(IncidentColumn).filter_by(incident_id=incident.id, code="active").first()
+            if col:
+                iv = IncidentVehicle(incident_id=incident.id, column_id=col.id, vehicle_master_id=vehicle.id,
+                    display_order=_next_display_order(db, incident.id, col.id), unit_status=status)
+                db.add(iv)
+                db.flush()
+                append_card(db, col.id, "vehicle", iv.id)
+                changed = True
+        elif iv and status and iv.unit_status != status:
+            set_unit_status(db, iv, status)
+            changed = True
+        _sync_dibos_vehicle_location(db, org, incident, vehicle, unit, station_coords)
     return changed
 
 
@@ -590,6 +723,33 @@ async def _notify_new_dibos_incident(incident_id: int, org_id: int) -> None:
         db.close()
 
 
+async def _geocode_and_match_dibos_incident(incident_id: int, org_id: int) -> None:
+    """Folgearbeit erst nach dem Anlage-Commit: BMA kann bereits einen Link
+    erzeugt haben; match_incident_background dedupliziert diesen Objekt-Link."""
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+    from app.models.incident import Incident
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        incident = db.get(Incident, incident_id)
+        if incident is None or incident.status == "closed":
+            return
+        if incident.lat is None and incident.lng is None and (incident.address_street or incident.address_city):
+            from app.services.geocoding import geocode_address
+            geo = await geocode_address(incident.address_street, incident.address_no, incident.address_city)
+            if geo:
+                incident.lat, incident.lng = geo.lat, geo.lng
+                db.commit()
+        from app.services.objekt_matching_service import match_incident_background
+        await match_incident_background(incident_id)
+    except Exception:
+        db.rollback()
+        logger.exception("Geocoding/Objekt-Matching nach DIBOS-Anlage fehlgeschlagen (Einsatz %s)", incident_id)
+    finally:
+        db.close()
+
+
 def enrich_events_for_org(
     org_id: int,
     raw_events: list[dict],
@@ -621,22 +781,50 @@ def enrich_events_for_org(
     db = SessionLocal()
     set_tenant_context(db, None)
     changed_ids: list[int] = []
+    vehicle_changed_ids: list[int] = []
     rsvp_changed_ids: list[int] = []
     created_ids: list[int] = []
     ok = False
     closed_ids: list[int] = []
     objekt_match_ids: list[int] = []
+    created_match_ids: list[int] = []
     try:
         org = db.get(FireDept, org_id)
+        from app.models.dibos import OrgDibosConfig
+        dibos_config = db.query(OrgDibosConfig).filter(OrgDibosConfig.org_id == org_id).first()
         for event in parse_events(raw_events):
             event_number = event.get("eventNumber")
             incident = _find_active_incident_by_event_number(db, org_id, event_number)
+            if not incident and event_number:
+                # Auch geschlossene Treffer laden: ein erneut aktives Event kann
+                # genau den vorherigen DIBOS-Auto-Close wieder aufheben.
+                from app.models.incident import Incident
+                incident = db.query(Incident).filter(
+                    Incident.primary_org_id == org_id,
+                    Incident.lis_operation_number == event_number,
+                ).first()
             just_created = False
             if not incident and create_incidents:
                 result = _get_or_create_incident_for_event(db, org, org_id, event)
                 if result is not None:
                     incident, just_created = result
             if not incident:
+                continue
+            if (
+                incident.status == "closed" and incident.closed_via_lis_auto
+                and not incident.lis_auto_close_locked and not event.get("closed")
+                and not _lis_delivers(db, org_id, incident)
+            ):
+                # Nur im LIS-Ausfall: Liefert LIS, ist es für Abschluss/Wiedereröffnung
+                # autoritativ. LIS schließt, sobald die eigene Beteiligung endet, während
+                # das DIBOS-Event oft noch offen ist — ein Reopen hier würde den Einsatz
+                # dann wieder öffnen und dauerhaft sperren (nur noch manueller Abschluss).
+                from app.services.incident_service import reopen_incident
+                reopen_incident(db, incident, user_id=None)
+                incident.lis_auto_close_locked = True
+                db.flush()
+                logger.info("Einsatz %s durch wieder aktives DIBOS-Event wiedereröffnet und gesperrt", incident.id)
+            if incident.status == "closed":
                 continue
             changed = False
             changed |= _enrich_address(incident, event.get("location") or {})
@@ -662,6 +850,13 @@ def enrich_events_for_org(
                 changed |= _sync_wache_status(
                     db, org, incident, event_number, raw_units, wache_unid
                 )
+                vehicle_changed = _sync_dibos_vehicle_status(
+                    db, org, incident, event, raw_units,
+                    bool(dibos_config and dibos_config.sync_external_units),
+                )
+                changed |= vehicle_changed
+                if vehicle_changed:
+                    vehicle_changed_ids.append(incident.id)
             if event.get("bmaNo"):
                 objekt_match = _match_objekt_by_dibos_bma(db, incident)
                 changed |= objekt_match
@@ -691,6 +886,7 @@ def enrich_events_for_org(
                 # Folgearbeit (Kommentare, Objekt, Zu-/Absagen) des bereits oben
                 # committeten neuen Einsatzes sichern.
                 db.commit()
+                created_match_ids.append(incident.id)
         for event in parse_events(raw_public_events or []):
             if not event.get("closed"):
                 continue
@@ -698,6 +894,8 @@ def enrich_events_for_org(
                 db, org_id, event.get("eventNumber")
             )
             if incident is None:
+                continue
+            if incident.lis_auto_close_locked:
                 continue
             from app.services.incident_service import close_incident
             close_incident(db, incident, user_id=None, auto_closed_by_lis=True)
@@ -716,10 +914,12 @@ def enrich_events_for_org(
         db.close()
     return {
         "changed_ids": changed_ids,
+        "vehicle_changed_ids": vehicle_changed_ids,
         "rsvp_changed_ids": rsvp_changed_ids,
         "created_ids": created_ids,
         "closed_ids": closed_ids,
         "objekt_match_ids": objekt_match_ids,
+        "created_match_ids": created_match_ids,
         # False nach Rollback: der Poll-Loop merkt sich den Datenstand dann NICHT
         # als verarbeitet und versucht es im nächsten Zyklus erneut.
         "ok": ok,
@@ -763,14 +963,21 @@ async def enrich_and_broadcast(
         logger.exception("DIBOS-Einsatzanreicherung fehlgeschlagen (Org %s)", org_id)
         return False
     changed_ids = result.get("changed_ids") or []
+    vehicle_changed_ids = result.get("vehicle_changed_ids") or []
     rsvp_changed_ids = result.get("rsvp_changed_ids") or []
     closed_ids = result.get("closed_ids") or []
     objekt_match_ids = result.get("objekt_match_ids") or []
     created_ids = result.get("created_ids") or []
+    created_match_ids = result.get("created_match_ids") or []
     from app.services.objekt_kontakt_notify import dispatch_objekt_einsatzinfo
     from app.services.print_dispatcher import autoprint_incident_background
     for incident_id in created_ids:
         _start_background(autoprint_incident_background(incident_id), "DIBOS-Auto-Druck", incident_id)
+    for incident_id in created_match_ids:
+        _start_background(
+            _geocode_and_match_dibos_incident(incident_id, org_id),
+            "DIBOS-Geocoding/Objekt-Matching", incident_id,
+        )
     for incident_id in objekt_match_ids:
         _start_background(
             dispatch_objekt_einsatzinfo(incident_id), "DIBOS-Objekt-Einsatzinfo", incident_id
@@ -798,6 +1005,13 @@ async def enrich_and_broadcast(
                         "DIBOS-Auto-Close: Broadcast fehlgeschlagen (Einsatz %s)",
                         incident.id,
                     )
+                try:
+                    from app.services.incident_live_notify import notify_incident_live
+                    await notify_incident_live(
+                        db, incident, org_id=org_id, reason="closed", background_tasks=None,
+                    )
+                except Exception:
+                    logger.exception("DIBOS-Auto-Close: Live-Push fehlgeschlagen (Einsatz %s)", incident_id)
         finally:
             db.close()
     ok = bool(result.get("ok"))
@@ -808,6 +1022,24 @@ async def enrich_and_broadcast(
             await manager.broadcast(incident_id, {"type": "dibos_sync"})
         except Exception:
             logger.exception("DIBOS-Broadcast für Einsatz %s fehlgeschlagen", incident_id)
+    for incident_id in vehicle_changed_ids:
+        # Der Live-Push liest in eigener Session, daher erst nach dem Worker-Commit.
+        from app.core.tenant import set_tenant_context
+        from app.db import SessionLocal
+        from app.models.incident import Incident
+        from app.services.incident_live_notify import notify_incident_live
+        live_db = SessionLocal()
+        set_tenant_context(live_db, None)
+        try:
+            incident = live_db.get(Incident, incident_id)
+            if incident:
+                await notify_incident_live(
+                    live_db, incident, org_id=org_id, reason="unit_status", background_tasks=None,
+                )
+        except Exception:
+            logger.exception("DIBOS-Live-Push (Fahrzeugstatus) fehlgeschlagen (Einsatz %s)", incident_id)
+        finally:
+            live_db.close()
     for incident_id in rsvp_changed_ids:
         try:
             await manager.broadcast(incident_id, {"type": "rsvp:changed"})

@@ -59,6 +59,9 @@ class OrgDibosConfig(Base):
     # abgeschaltet wird — bis dahin koennen beide parallel laufen.
     create_incidents: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
+    # Fremde DIBOS-Einheiten nur auf ausdruecklichen Wunsch als Platzhalter anlegen.
+    sync_external_units: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
     # Zugangsdaten: zwei getrennte Konten (siehe dibos_client.py)
     # 1) Gateway-Konto (HTTP-Basic, vom Betreiber vergeben, unabhängig von der Org)
     gateway_user: Mapped[str | None] = mapped_column(String(100), nullable=True)

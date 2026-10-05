@@ -222,8 +222,10 @@ def parse_events(events: list[dict]) -> list[dict]:
         targets = e.get("targetList") or []
         comments = e.get("comments") or []
         person_responses = e.get("personResponseList") or []
+        units = e.get("unitList") or []
         parsed.append({
             "eventNumber": e.get("eventNumber"),
+            "lev3": e.get("lev3"),
             "ag": e.get("ag"),
             "tycodDescription": e.get("tycodDescription"),
             "eventComment": e.get("eventComment"),
@@ -295,6 +297,13 @@ def parse_events(events: list[dict]) -> list[dict]:
                     "changeDate": p.get("changeDate"),
                 }
                 for p in person_responses if isinstance(p, dict)
+            ],
+            "units": [
+                {key: u.get(key) for key in (
+                    "unid", "unidRfl", "lev3", "unitType", "currentStatusText",
+                    "currentStatusTime", "longitude", "latitude",
+                )}
+                for u in units if isinstance(u, dict)
             ],
         })
     return parsed
