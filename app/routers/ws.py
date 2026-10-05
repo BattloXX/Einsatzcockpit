@@ -37,6 +37,9 @@ router = APIRouter()
 _sms_gateways: dict[int, list[tuple[int, WebSocket]]] = defaultdict(list)
 # job_id → asyncio.Future für sms.result-Rückmeldung
 _sms_pending: dict[str, asyncio.Future] = {}
+# asyncio behaelt Tasks nur schwach; diese Referenzen verhindern, dass ein
+# Nachversand zwischen Gateway-Connect und Abschluss eingesammelt wird.
+_sms_nachversand_tasks: set[asyncio.Task] = set()
 
 # ── Print & Alarm Gateway (ECPG) Registry ──────────────────────────────────────
 # org_id → (gateway_id, WebSocket)-Paare aktiver Gateway-Verbindungen.
@@ -326,6 +329,21 @@ def _sms_receive_enabled(org_id: int) -> bool:
         db.close()
 
 
+def _start_sms_nachversand(org_id: int) -> None:
+    """Startet den Nachversand nach einer neuen Gateway-Verbindung."""
+    from app.services.sms_dispatch_service import retry_pending_einsatzinfo
+
+    task = asyncio.create_task(retry_pending_einsatzinfo(org_id))
+    _sms_nachversand_tasks.add(task)
+
+    def _done(finished: asyncio.Task) -> None:
+        _sms_nachversand_tasks.discard(finished)
+        if not finished.cancelled() and finished.exception() is not None:
+            logger.error("SMS-Nachversand fehlgeschlagen (org_id=%s)", org_id, exc_info=finished.exception())
+
+    task.add_done_callback(_done)
+
+
 @router.websocket("/ws/sms-gateway")
 async def sms_gateway_ws(websocket: WebSocket):
     """WebSocket-Kanal für den SMS-Gateway-Docker-Container.
@@ -348,6 +366,7 @@ async def sms_gateway_ws(websocket: WebSocket):
         "SMS-Gateway verbunden (org_id=%s, token_id=%s, aktive=%d)",
         org_id, token_id, len(_sms_gateways[org_id]),
     )
+    _start_sms_nachversand(org_id)
 
     # Teilt der App mit, ob SMS-Empfang für diese Org aktiv ist – nur dann fordert
     # die App RECEIVE_SMS an und registriert ihren Empfangs-Receiver.

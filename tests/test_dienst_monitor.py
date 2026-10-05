@@ -221,6 +221,12 @@ def test_sms_gateway_aggregation_teilweise_down_und_ok(monkeypatch):
         db.commit()
         check = next(c for c in pruefe_dienste(db, org_id, now) if c.key == "sms_gateway")
         assert check.state == "ok"
+        assert "aktuell ist kein Gateway verbunden" in check.detail
+
+        monkeypatch.setattr("app.routers.ws.connected_gateway_token_ids", lambda _org_id: {tokens[0].id})
+        check = next(c for c in pruefe_dienste(db, org_id, now) if c.key == "sms_gateway")
+        assert "WebSocket verbunden" in check.detail
+        assert "sofort moeglich" in next(t for t in check.teile if t.name == "Wache").detail
     finally:
         db.query(SmsGatewayToken).filter(
             SmsGatewayToken.org_id == org_id, SmsGatewayToken.token_hash.in_(hashes)

@@ -9,7 +9,7 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 from app.config import settings
@@ -33,6 +33,8 @@ logger = logging.getLogger("einsatzleiter.sms_dispatch")
 
 # Pro Gateway duerfen nur wenige Jobs gleichzeitig auf das gekoppelte Handy treffen.
 SMS_CONCURRENCY_PER_GATEWAY = 7
+EINSATZINFO_NACHVERSAND_FENSTER = timedelta(minutes=60)
+_einsatzinfo_nachversand_locks: dict[int, asyncio.Lock] = {}
 
 # Standardvorlage fuer Einsatzinfo-SMS (Platzhalter in geschweiften Klammern)
 _DEFAULT_TEMPLATE = "Einsatz {stichwort}: {adresse}. {meldung} {link}"
@@ -240,6 +242,146 @@ async def _send_bulk_with_progress(org_id: int, jobs, ctx, on_result):
         return results
 
 
+def _nachversand_lock(org_id: int) -> asyncio.Lock:
+    """Serieller Nachversand je Organisation innerhalb dieses App-Workers."""
+    return _einsatzinfo_nachversand_locks.setdefault(org_id, asyncio.Lock())
+
+
+def _markiere_abgelaufene_einsatzinfo(db: Session, org_id: int, now: datetime) -> int:
+    """Verwirft offene Alarm-SMS nach dem garantierten 60-Minuten-Fenster."""
+    from app.models.incident import IncidentLog
+
+    pending = (
+        db.query(SmsLogRecipient)
+        .join(SmsLog)
+        .filter(
+            SmsLog.org_id == org_id,
+            SmsLog.source == "alarm",
+            SmsLog.sent_at <= now - EINSATZINFO_NACHVERSAND_FENSTER,
+            SmsLogRecipient.success.is_(False),
+            SmsLogRecipient.provider == "ausstehend",
+        )
+        .all()
+    )
+    by_log: dict[int, list[SmsLogRecipient]] = {}
+    for recipient in pending:
+        by_log.setdefault(recipient.sms_log_id, []).append(recipient)
+    for log_id, recipients in by_log.items():
+        log_entry = db.get(SmsLog, log_id)
+        if log_entry is None:
+            continue
+        for recipient in recipients:
+            recipient.provider = "verworfen"
+        log_entry.completed_at = now
+        logger.warning(
+            "Einsatzinfo-SMS nach 60 min verworfen (log_id=%s, org_id=%s, empfaenger=%s)",
+            log_entry.id, org_id, len(recipients),
+        )
+        if log_entry.incident_id is not None:
+            db.add(IncidentLog(
+                incident_id=log_entry.incident_id,
+                author_name="System",
+                level="warning",
+                text=f"Alarmierung SMS: {len(recipients)} Empfaenger nach 60 min verworfen (kein Gateway)",
+            ))
+    return len(pending)
+
+
+async def retry_pending_einsatzinfo(org_id: int) -> int:
+    """Sendet persistierte, noch offene Einsatzinfo-SMS einmal nach.
+
+    Ein fehlgeschlagener Versuch bleibt bis zum Ablauf des Fensters offen. Der
+    Lock verhindert doppelte Sendungen, wenn Connect-Trigger und Perioden-Loop
+    gleichzeitig eintreffen.
+    """
+    from app.models.incident import IncidentLog
+    from app.services.sms_service import resolve_sms_config, sms_available
+
+    async with _nachversand_lock(org_id):
+        db = SessionLocal()
+        set_tenant_context(db, None)
+        try:
+            now = datetime.now(UTC).replace(tzinfo=None)
+            _markiere_abgelaufene_einsatzinfo(db, org_id, now)
+            db.commit()
+            if not sms_available(org_id, db):
+                return 0
+            sms_ctx = resolve_sms_config(org_id, db)
+            pending = (
+                db.query(SmsLogRecipient)
+                .join(SmsLog)
+                .filter(
+                    SmsLog.org_id == org_id,
+                    SmsLog.source == "alarm",
+                    SmsLog.sent_at > now - EINSATZINFO_NACHVERSAND_FENSTER,
+                    SmsLogRecipient.success.is_(False),
+                    SmsLogRecipient.provider == "ausstehend",
+                )
+                .all()
+            )
+            by_log: dict[int, list[SmsLogRecipient]] = {}
+            for recipient in pending:
+                by_log.setdefault(recipient.sms_log_id, []).append(recipient)
+            sent_count = 0
+            for log_id, recipients in by_log.items():
+                log_entry = db.get(SmsLog, log_id)
+                if log_entry is None:
+                    continue
+                by_phone = {recipient.phone_number: recipient for recipient in recipients}
+
+                async def _record(result: SmsSendResult) -> None:
+                    recipient = by_phone[result.phone_number]
+                    if result.success:
+                        recipient.success = True
+                        recipient.provider = result.provider
+                        recipient.gateway_label = result.gateway_label
+                        recipient.sent_at = result.sent_at
+                        log_entry.success_count += 1
+                    db.commit()
+
+                results = await _send_bulk_with_progress(
+                    org_id,
+                    [(recipient.phone_number, "[Nachgesendet] " + log_entry.text) for recipient in recipients],
+                    sms_ctx,
+                    _record,
+                )
+                successful = sum(result.success for result in results)
+                sent_count += successful
+                if successful and log_entry.incident_id is not None:
+                    db.add(IncidentLog(
+                        incident_id=log_entry.incident_id,
+                        author_name="System",
+                        text=f"Alarmierung SMS nachgesendet an {successful}",
+                    ))
+                if not any(not recipient.success and recipient.provider == "ausstehend" for recipient in recipients):
+                    log_entry.completed_at = datetime.now(UTC).replace(tzinfo=None)
+                log_entry.provider = ",".join(sorted(sms_ctx.providers_used)) or "wartet_gateway"
+                db.commit()
+            return sent_count
+        except Exception:
+            db.rollback()
+            logger.exception("Einsatzinfo-SMS-Nachversand fehlgeschlagen (org_id=%s)", org_id)
+            return 0
+        finally:
+            db.close()
+
+
+async def einsatzinfo_nachversand_loop() -> None:
+    """Prueft alle Organisationen alle 30 Sekunden, auch nach App-Neustarts."""
+    from app.models.master import FireDept
+
+    while True:
+        db = SessionLocal()
+        set_tenant_context(db, None)
+        try:
+            org_ids = [row[0] for row in db.query(FireDept.id).all()]
+        finally:
+            db.close()
+        for org_id in org_ids:
+            await retry_pending_einsatzinfo(org_id)
+        await asyncio.sleep(30)
+
+
 async def dispatch_manual_sms(
     org_id: int,
     log_id: int,
@@ -336,19 +478,10 @@ async def dispatch_einsatzinfo(
       - Keine Empfaenger konfiguriert
     """
     from app.services.sms_service import resolve_sms_config, sms_available
-    if not sms_available(org_id):
-        reason = "kein SMS-Provider verfuegbar"
-        log = logger.info if is_exercise else logger.warning
-        log(
-            "Einsatzinfo-SMS uebersprungen: %s (Einsatz %s, org_id=%d, stichwort=%s, is_exercise=%s)",
-            reason, incident_id, org_id, alarm_type_code, is_exercise,
-        )
-        return EinsatzinfoDispatchResult(False, reason)
 
     db = SessionLocal()
     set_tenant_context(db, None)  # system-level: alle Orgs sichtbar fuer Subqueries
     try:
-        sms_ctx = resolve_sms_config(org_id, db)
         # Org-Einstellungen laden
         org_settings = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
         if not org_settings or not org_settings.einsatzinfo_sms_enabled:
@@ -433,34 +566,73 @@ async def dispatch_einsatzinfo(
             recipient_count=len(jobs),
             success_count=0,
             provider=None,
+            incident_id=incident_id,
             triggered_by_user_id=triggered_by_user_id,
         )
         db.add(log_entry)
         db.flush()
+        pending_recipients: dict[str, SmsLogRecipient] = {}
+        for phone, member in recipients.items():
+            recipient = SmsLogRecipient(
+                sms_log_id=log_entry.id,
+                member_id=member.id,
+                phone_number=phone,
+                name=member.full_name,
+                success=False,
+                # sent_at bleibt aus Kompatibilitaetsgruenden NOT NULL; bei
+                # "ausstehend" ist es der Zeitpunkt der Alarmierung, nicht ein Versand.
+                sent_at=now.replace(tzinfo=None),
+                provider="ausstehend",
+            )
+            pending_recipients[phone] = recipient
+            db.add(recipient)
+        db.commit()
+
+        if not sms_available(org_id, db):
+            log_entry.provider = "wartet_gateway"
+            db.commit()
+            deadline = (now + EINSATZINFO_NACHVERSAND_FENSTER).strftime("%H:%M")
+            logger.warning(
+                "Einsatzinfo-SMS wartet auf Gateway (Einsatz %s, org_id=%d, empfaenger=%d)",
+                incident_id, org_id, len(jobs),
+            )
+            return EinsatzinfoDispatchResult(
+                False, f"wartet auf SMS-Gateway (Nachversand bis {deadline})", len(jobs)
+            )
+
+        sms_ctx = resolve_sms_config(org_id, db)
+        # Waehrend des Erstversands als "sendet" markieren: ein parallel per
+        # Gateway-Connect/Loop gestarteter Nachversand greift nur "ausstehend"
+        # und schickt dieselben Empfaenger so nicht doppelt an.
+        for recipient in pending_recipients.values():
+            recipient.provider = "sendet"
         db.commit()
 
         async def _record(result: SmsSendResult) -> None:
-            member = recipients[result.phone_number]
-            db.add(SmsLogRecipient(
-                sms_log_id=log_entry.id,
-                member_id=member.id,
-                phone_number=result.phone_number,
-                name=member.full_name,
-                success=result.success,
-                sent_at=result.sent_at,
-                provider=result.provider,
-                gateway_label=result.gateway_label,
-            ))
+            recipient = pending_recipients[result.phone_number]
             if result.success:
+                recipient.success = True
+                recipient.sent_at = result.sent_at
+                recipient.provider = result.provider
+                recipient.gateway_label = result.gateway_label
                 log_entry.success_count += 1
+            else:
+                recipient.provider = "ausstehend"
             db.commit()
 
-        results = await _send_bulk_with_progress(org_id, jobs, sms_ctx, _record)
+        try:
+            results = await _send_bulk_with_progress(org_id, jobs, sms_ctx, _record)
+        finally:
+            for recipient in pending_recipients.values():
+                if not recipient.success and recipient.provider == "sendet":
+                    recipient.provider = "ausstehend"
+            db.commit()
         total = len(results)
         success = sum(result.success for result in results)
         log_entry.success_count = success
         log_entry.provider = ",".join(sorted(sms_ctx.providers_used)) or None
-        log_entry.completed_at = datetime.now(UTC).replace(tzinfo=None)
+        if success == total:
+            log_entry.completed_at = datetime.now(UTC).replace(tzinfo=None)
         write_audit(
             db, "sms.einsatzinfo_sent",
             org_id=org_id,
@@ -480,7 +652,7 @@ async def dispatch_einsatzinfo(
         )
         if success:
             return EinsatzinfoDispatchResult(True, recipient_count=success)
-        reason = "Versand an alle Empfaenger fehlgeschlagen"
+        reason = "wartet auf SMS-Gateway (Nachversand innerhalb von 60 min)"
         logger.warning(
             "Einsatzinfo-SMS uebersprungen: %s (Einsatz %s, org_id=%d, stichwort=%s, is_exercise=%s)",
             reason, incident_id, org_id, alarm_type_code, is_exercise,
@@ -498,7 +670,15 @@ async def dispatch_einsatzinfo(
                     SmsLog.id == log_entry.id, SmsLog.org_id == org_id
                 ).first()
                 if failed_log is not None:
-                    failed_log.completed_at = datetime.now(UTC).replace(tzinfo=None)
+                    pending = db.query(SmsLogRecipient).filter(
+                        SmsLogRecipient.sms_log_id == failed_log.id,
+                        SmsLogRecipient.success.is_(False),
+                        SmsLogRecipient.provider == "ausstehend",
+                    ).first()
+                    if pending is None:
+                        failed_log.completed_at = datetime.now(UTC).replace(tzinfo=None)
+                    else:
+                        failed_log.provider = "wartet_gateway"
                     db.commit()
         except Exception:
             pass

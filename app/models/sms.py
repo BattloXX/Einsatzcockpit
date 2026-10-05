@@ -100,6 +100,11 @@ class SmsLog(TenantScoped, Base):
     recipient_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     success_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     provider: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # Nur bei automatischen Einsatzinfo-SMS gesetzt. Erlaubt Nachversand und
+    # Verwerfen auch nach einem Neustart dem urspruenglichen Einsatz zuzuordnen.
+    incident_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("incident.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     triggered_by_user_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
     )

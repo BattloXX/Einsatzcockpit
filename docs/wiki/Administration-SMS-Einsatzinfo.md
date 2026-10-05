@@ -44,6 +44,10 @@ Standard-Vorlage: `Einsatz {stichwort}: {adresse}. {meldung} {link}`. Unbekannte
 
 Der Versand läuft als Hintergrund-Task nach Einsatzanlage (egal ob über die API/Alarmierungssystem oder LIS) und protokolliert jeden Versand im SMS-Log (sichtbar unter **SMS senden**).
 
+### Nachversand bei kurz getrenntem Gateway
+
+Ist beim Alarm kein SMS-Gateway per WebSocket verbunden oder trennt es sich während des Versands, bleiben die betroffenen Empfänger im SMS-Log ausstehend. Sobald sich wieder ein Gateway verbindet, wird nur an diese Empfänger nachgesendet; die SMS beginnt dabei mit `[Nachgesendet] `. Das Nachsendefenster endet 60 Minuten nach der Alarmierung. Danach werden offene Empfänger als verworfen protokolliert und im Einsatzprotokoll vermerkt. Ein frischer Gateway-Heartbeat allein bedeutet nicht, dass gerade versendet werden kann; dafür muss die WebSocket-Verbindung bestehen.
+
 Für Großschadenslagen gibt es zusätzlich einen eigenen GSL-Sonderalarm. Er wird unabhängig von der stichwortbezogenen Einsatzinfo über das Feature-Flag `gsl_alarm_enabled` aktiviert und verwendet den Basis-Verteiler.
 
 ---
