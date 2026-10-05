@@ -14,7 +14,7 @@ from app.core.timezones import local_input_to_utc
 from app.db import get_db
 from app.models.fahrtenbuch import FahrtErfassungsweg, FahrtKategorie, Fahrtzweck, Zielort
 from app.models.incident import Incident
-from app.models.master import FireDept, Member, MemberQualification, OrgSettings, Qualification, VehicleMaster
+from app.models.master import FireDept, Member, OrgSettings, VehicleMaster
 from app.services.fahrtenbuch_service import (
     erstelle_fahrt,
     fahrtenbuch_person_name,
@@ -300,30 +300,13 @@ async def hx_zweck_felder(
         if zweck and zweck.kategorie == FahrtKategorie.einsatz and org_id else []
     )
 
-    gk_members = []
-    if zweck and zweck.verlangt_gruppenkommandant and org_id:
-        gk_members = (
-            db.query(Member)
-            .join(MemberQualification, MemberQualification.member_id == Member.id)
-            .join(Qualification, Qualification.id == MemberQualification.qualification_id)
-            .filter(
-                Member.active == True,  # noqa: E712
-                Member.org_id == org_id,
-                Qualification.is_gruppenkommandant == True,  # noqa: E712
-            )
-            .execution_options(include_all_tenants=True)
-            .order_by(Member.lastname, Member.firstname)
-            .distinct()
-            .all()
-        )
+    personen = _personen_fuer_client(_aktive_personen(org_id, db)) if org_id else []
 
     return templates.TemplateResponse(request, "fahrtenbuch/_zweck_felder.html", {
         "zweck": zweck,
         "fahrzeug": fahrzeug,
         "incidents": incidents,
-        "gk_members": gk_members,
-        "personen": _personen_fuer_client(_aktive_personen(org_id, db)) if org_id else [],
-        "gk_personen": _personen_fuer_client(gk_members),
+        "personen": personen,
         "form_daten": {},
     })
 

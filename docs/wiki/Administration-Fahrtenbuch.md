@@ -85,7 +85,7 @@ Zwecke bestimmen, welche Zusatzfelder im Erfassungsformular erscheinen und in we
 | **Kategorie** | ✓ | `Einsatz` / `Übung` / `Sonstige` — steuert Statistik-Zuordnung |
 | **Reihenfolge** | | Sortierziffer (kleiner = weiter oben) |
 | **Ausbildner erforderlich** | | Zeigt Ausbildner-Autocomplete im Formular |
-| **GK erforderlich** | | Fragt eine Führungsrolle per Autocomplete ab; wenn die optionale Einsatzleiter-Abfrage am Zweck oder Fahrzeug aktiv ist, kann zwischen Gruppenkommandant und Einsatzleiter gewählt werden |
+| **GK erforderlich** | | Fragt eine Führungsrolle über die Personenauswahl ab. Alle aktiven Mitglieder sind auswählbar; wenn die optionale Einsatzleiter-Abfrage am Zweck oder Fahrzeug aktiv ist, kann zwischen Gruppenkommandant und Einsatzleiter gewählt werden |
 
 > **Kategorie „Einsatz"**: Zusätzlich erscheint eine Auswahl der letzten Einsätze (48-h-Fenster), damit die Fahrt direkt mit einem laufenden Einsatz verknüpft werden kann.
 

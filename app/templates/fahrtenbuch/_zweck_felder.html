@@ -54,8 +54,11 @@
 
 {% set beide_fuehrungsrollen = zweck.verlangt_gruppenkommandant and (zweck.optional_einsatzleiter or (fahrzeug and fahrzeug.einsatzleiter_abfrage)) %}
 {% if beide_fuehrungsrollen %}
-<div class="form-group" x-data="fuehrungAutocomplete()">
-  <label class="form-label" for="fuehrung_name" x-text="rolle === 'gruppenkommandant' ? 'Gruppenkommandant *' : 'Einsatzleiter *'">Gruppenkommandant *</label>
+{% set fuehrung_rolle = 'einsatzleiter' if form_daten.get('einsatzleiter_member_id') or form_daten.get('einsatzleiter_name') else 'gruppenkommandant' %}
+{% set fuehrung_name = form_daten.get('einsatzleiter_name', '') if fuehrung_rolle == 'einsatzleiter' else form_daten.get('gruppenkommandant_name', '') %}
+{% set fuehrung_id = form_daten.get('einsatzleiter_member_id', '') if fuehrung_rolle == 'einsatzleiter' else form_daten.get('gruppenkommandant_member_id', '') %}
+<div class="form-group" data-fuehrung-rollen x-data="{ rolle: '{{ fuehrung_rolle }}' }">
+  <label class="form-label" for="fuehrung-trigger" x-text="rolle === 'gruppenkommandant' ? 'Gruppenkommandant *' : 'Einsatzleiter *'">Gruppenkommandant *</label>
   <div style="display:flex;gap:4px;margin-bottom:.5rem;">
     <label class="teiln-status-lbl teiln-status-lbl--teilg">
       <input type="radio" value="gruppenkommandant" x-model="rolle"
@@ -68,29 +71,13 @@
       Einsatzleiter
     </label>
   </div>
-  <input type="hidden"
-         :name="rolle === 'gruppenkommandant' ? 'gruppenkommandant_member_id' : 'einsatzleiter_member_id'"
-         :value="memberId">
-  <div style="position:relative;">
-    <input type="text" id="fuehrung_name"
-           :name="rolle === 'gruppenkommandant' ? 'gruppenkommandant_name' : 'einsatzleiter_name'"
-           class="form-control form-control--lg"
-           placeholder="Name tippen…" required autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false"
-           x-model="query"
-           hx-get="/fahrtenbuch/hx/maschinist"
-           hx-target="#fuehrung-suggestions"
-           hx-trigger="input changed delay:200ms"
-           hx-vals='js:{q:this.value,t:window.FAB_TOKEN||""}'
-           :class="warn ? 'fb-input-warn' : ''"
-           @focus="open=true" @blur="setTimeout(()=>open=false,150)" @input="open=true">
-    <div id="fuehrung-suggestions" x-show="open" style="position:absolute;z-index:50;width:100%;background:var(--surface-mid);border:1px solid var(--border);border-radius:.4rem;"></div>
-  </div>
-  <p class="fb-name-warn" x-show="warn" x-cloak>&#9888; Name nicht in der Mannschaftsliste – bitte den passenden Namen aus der Vorschlagsliste auswählen.</p>
-  <p style="font-size:.78rem;color:var(--text-muted);margin:.3rem 0 0;">Rolle auswählen, Anfangsbuchstaben eingeben und den richtigen Namen aus der Liste auswählen.</p>
+  {% with person_field='fuehrung', person_label='', person_title=('Einsatzleiter auswählen' if fuehrung_rolle == 'einsatzleiter' else 'Gruppenkommandant auswählen'), person_title_expr="rolle === 'gruppenkommandant' ? 'Gruppenkommandant auswählen' : 'Einsatzleiter auswählen'", person_field_expr="rolle + '_member_id'", person_show_label=false, person_required=true, person_name=fuehrung_name, person_id=fuehrung_id, person_placeholder='Person auswählen', personen=personen %}
+    {% include "components/person_select_flyout.html" %}
+  {% endwith %}
 </div>
 {% else %}
 {% if zweck.verlangt_gruppenkommandant %}
-{% with person_field='gruppenkommandant', person_label='Gruppenkommandant', person_title='Gruppenkommandant auswählen', person_required=true, person_name=form_daten.get('gruppenkommandant_name', ''), person_id=form_daten.get('gruppenkommandant_member_id', ''), person_placeholder='Gruppenkommandant auswählen', personen=gk_personen %}
+{% with person_field='gruppenkommandant', person_label='Gruppenkommandant', person_title='Gruppenkommandant auswählen', person_required=true, person_name=form_daten.get('gruppenkommandant_name', ''), person_id=form_daten.get('gruppenkommandant_member_id', ''), person_placeholder='Gruppenkommandant auswählen', personen=personen %}
   {% include "components/person_select_flyout.html" %}
 {% endwith %}
 {% endif %}

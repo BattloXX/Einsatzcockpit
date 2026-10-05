@@ -71,8 +71,8 @@ Je nach gewähltem Zweck erscheinen zusätzliche Pflichtfelder:
 |------|------|-------------|
 | **Einsatz-Verknüpfung** | Zweck = Einsatz | Auswahl eines der letzten 20 Einsätze (48-h-Fenster) |
 | **Ausbildner** | Zweck erfordert Ausbildner | Autocomplete |
-| **Gruppenkommandant** | Zweck erfordert GK | Autocomplete |
-| **Einsatzleiter** | Zweck erfordert GK und die Einsatzleiter-Abfrage ist aktiv | Erscheint gemeinsam mit dem Gruppenkommandanten als auswählbare Führungsrolle |
+| **Gruppenkommandant** | Zweck erfordert GK | Personenauswahl mit allen aktiven Mitgliedern |
+| **Einsatzleiter** | Zweck erfordert GK und die Einsatzleiter-Abfrage ist aktiv | Erscheint gemeinsam mit dem Gruppenkommandanten als auswählbare Führungsrolle; die Personenauswahl enthält alle aktiven Mitglieder |
 
 ### Schritt 6 – Optionale Felder
 
