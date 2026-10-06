@@ -113,6 +113,11 @@
   <hr style="border:none; border-top:1px solid var(--border-color, #374151); margin:16px 0 8px;">
   <p class="form-label" style="margin-bottom:8px;">MEDIEN</p>
   <div id="msgMediaSection">
+    {% if errors is defined and errors %}
+    <div style="color:var(--color-danger,#dc2626); margin-bottom:8px; font-size:13px;">
+      {% for e in errors %}<div>⚠ {{ e }}</div>{% endfor %}
+    </div>
+    {% endif %}
     {% if msg.media %}
     {% set imgs = msg.media|selectattr('kind', 'equalto', 'image')|list %}
     <div x-data="{

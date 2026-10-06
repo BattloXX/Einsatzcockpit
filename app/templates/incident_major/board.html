@@ -323,7 +323,7 @@
       <h3 class="modal__title">Einsatzstelle anlegen</h3>
       <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">×</button>
     </div>
-    <form hx-post="/lage/{{ lage.id }}/stellen/neu" hx-swap="none"
+    <form hx-post="/lage/{{ lage.id }}/stellen/neu" hx-swap="none" data-no-error-toast
           hx-on::after-request="if(event.detail.successful){ this.closest('dialog').close(); this.reset(); } else { alert('Fehler beim Anlegen: ' + (event.detail.xhr.responseText || 'unbekannter Fehler')); }">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div class="modal__body">

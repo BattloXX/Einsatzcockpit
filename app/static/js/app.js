@@ -1034,6 +1034,14 @@ function _showConnToast(msg) {
 
 document.addEventListener('htmx:responseError', (e) => {
   const xhr = e.detail.xhr;
+  const elt = e.detail.elt;
+  const trigger = elt && elt.getAttribute && (elt.getAttribute('hx-trigger') || elt.getAttribute('data-hx-trigger'));
+  const verb = (e.detail.requestConfig && e.detail.requestConfig.verb || 'get').toLowerCase();
+  if (!xhr || xhr.getResponseHeader('HX-Redirect') ||
+      (elt && elt.closest && elt.closest('[data-no-error-toast]')) ||
+      (verb === 'get' && trigger && /\b(?:every|load)\b/.test(trigger))) {
+    return;
+  }
   if (xhr && xhr.status === 403) {
     let msg = 'Diese Aktion ist nicht erlaubt.';
     try { msg = JSON.parse(xhr.responseText).detail || msg; } catch {}
@@ -1042,7 +1050,36 @@ document.addEventListener('htmx:responseError', (e) => {
   } else if (xhr && (xhr.status === 503 || xhr.status === 0) && xhr.getResponseHeader && xhr.getResponseHeader('X-Offline') === '1') {
     _showConnToast('Aktion erfordert Verbindung — du bist offline.');
     e.preventDefault();
+  } else if (xhr && xhr.status === 401) {
+    _showConnToast('Sitzung abgelaufen – bitte neu anmelden.');
+    window.setTimeout(() => { location.href = '/login'; }, 2000);
+  } else if (xhr && xhr.status >= 400) {
+    let detail = `HTTP ${xhr.status}`;
+    try {
+      const response = JSON.parse(xhr.responseText);
+      if (typeof response.detail === 'string') detail = response.detail;
+      else if (Array.isArray(response.detail)) detail = 'Eingabe ungültig';
+    } catch {
+      const text = (xhr.responseText || '').trim();
+      if (text && !text.startsWith('<')) detail = text.slice(0, 120);
+    }
+    const action = ['post', 'put', 'patch', 'delete'].includes(verb) ? 'Speichern' : 'Laden';
+    _showConnToast(`${action} fehlgeschlagen: ${detail}`);
   }
+});
+
+document.addEventListener('htmx:afterRequest', (e) => {
+  const xhr = e.detail.xhr;
+  const encodedErrors = xhr && xhr.getResponseHeader && xhr.getResponseHeader('X-Upload-Errors');
+  if (!encodedErrors) return;
+  try {
+    const errors = JSON.parse(decodeURIComponent(encodedErrors));
+    if (Array.isArray(errors)) {
+      errors.forEach((error) => {
+        if (typeof error === 'string') _showConnToast(`Upload fehlgeschlagen: ${error}`);
+      });
+    }
+  } catch {}
 });
 
 // Echter Netzabriss/Timeout während des Sendens (kein HTTP-Response, daher

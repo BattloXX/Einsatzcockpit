@@ -86,6 +86,11 @@
 
   <div id="personMediaSection" style="margin-top:16px;">
     <p class="form-label" style="margin-bottom:6px;">FOTOS / DOKUMENTE</p>
+    {% if errors is defined and errors %}
+    <div style="color:var(--color-danger,#dc2626); margin-bottom:8px; font-size:13px;">
+      {% for e in errors %}<div>⚠ {{ e }}</div>{% endfor %}
+    </div>
+    {% endif %}
     {% if person.media %}
     {% set imgs = person.media|selectattr('kind', 'equalto', 'image')|list %}
     <div x-data="{

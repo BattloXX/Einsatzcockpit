@@ -31,6 +31,7 @@ from app.mcp import router as mcp_router
 from app.mcp import upload_router as mcp_upload_router
 from app.mcp.server import application as mcp_application
 from app.mcp.server import provider as mcp_provider
+from app.middleware.write_failure_log import WriteFailureLogMiddleware
 from app.models.incident import Incident, IncidentToken
 from app.models.major_incident import LageToken, MajorIncident, MajorIncidentStatus
 from app.models.user import DeviceToken, Role, User
@@ -818,6 +819,11 @@ if settings.TRUST_PROXY_HEADERS:
             "ProxyHeadersMiddleware nicht verfügbar — Rate-Limits arbeiten mit Proxy-IP. "
             "Setze TRUST_PROXY_HEADERS=false wenn kein Reverse-Proxy vorgelagert ist."
         )
+
+# Schreibfehler-Protokollierung muss äußerste Middleware sein: Starlette führt
+# zuletzt registrierte Middleware zuerst aus, daher ist request.state.user nach
+# der Session-Middleware beim Auswerten der Antwort verfügbar.
+app.add_middleware(WriteFailureLogMiddleware)
 
 
 # Routers

@@ -15,6 +15,7 @@ Org-Check, damit Multi-Tenant-Isolation gewahrt bleibt.
 """
 from __future__ import annotations
 
+import asyncio
 import io
 import logging
 import shutil
@@ -324,7 +325,7 @@ async def store_upload(
     warnings: list[str] = []
 
     if kind == "image":
-        main_p, thumb_p, w, h, out_mime = _process_image(raw, dest_dir)
+        main_p, thumb_p, w, h, out_mime = await asyncio.to_thread(_process_image, raw, dest_dir)
         stored_bytes = main_p.stat().st_size
         _reserve(db, org_id, stored_bytes)
         media = TaskMedia(
@@ -338,7 +339,9 @@ async def store_upload(
             width=w, height=h,
         )
     elif kind == "pdf":
-        main_p, thumb_p, pages = _process_pdf(raw, dest_dir, file.filename or "document.pdf")  # type: ignore[assignment]
+        main_p, thumb_p, pages = await asyncio.to_thread(  # type: ignore[assignment]
+            _process_pdf, raw, dest_dir, file.filename or "document.pdf",  # type: ignore[arg-type]
+        )
         stored_bytes = main_p.stat().st_size
         _reserve(db, org_id, stored_bytes)
         media = TaskMedia(
@@ -352,7 +355,9 @@ async def store_upload(
             pages=pages,
         )
     else:  # video
-        main_p, thumb_p, w, h, dur = _process_video(raw, dest_dir)  # type: ignore[assignment]
+        main_p, thumb_p, w, h, dur = await asyncio.to_thread(  # type: ignore[arg-type,assignment]
+            _process_video, raw, dest_dir,  # type: ignore[arg-type]
+        )
         stored_bytes = main_p.stat().st_size
         _reserve(db, org_id, stored_bytes)
         media = TaskMedia(
@@ -399,7 +404,7 @@ async def store_upload_for_message(
     dest_dir = _entity_dir(message.incident_id, "msg", message.id, org_id)
     storage_root = _storage_root().resolve()
     if kind == "image":
-        main_p, thumb_p, w, h, out_mime = _process_image(raw, dest_dir)
+        main_p, thumb_p, w, h, out_mime = await asyncio.to_thread(_process_image, raw, dest_dir)
         stored_bytes = main_p.stat().st_size
         _reserve(db, org_id, stored_bytes)
         media = MessageMedia(
@@ -411,7 +416,9 @@ async def store_upload_for_message(
             mime_type=out_mime, bytes=stored_bytes, width=w, height=h,
         )
     elif kind == "pdf":
-        main_p, thumb_p, pages = _process_pdf(raw, dest_dir, file.filename or "document.pdf")  # type: ignore[assignment]
+        main_p, thumb_p, pages = await asyncio.to_thread(  # type: ignore[assignment]
+            _process_pdf, raw, dest_dir, file.filename or "document.pdf",  # type: ignore[arg-type]
+        )
         stored_bytes = main_p.stat().st_size
         _reserve(db, org_id, stored_bytes)
         media = MessageMedia(
@@ -423,7 +430,9 @@ async def store_upload_for_message(
             mime_type="application/pdf", bytes=stored_bytes, pages=pages,
         )
     else:
-        main_p, thumb_p, w, h, dur = _process_video(raw, dest_dir)  # type: ignore[assignment]
+        main_p, thumb_p, w, h, dur = await asyncio.to_thread(  # type: ignore[arg-type,assignment]
+            _process_video, raw, dest_dir,  # type: ignore[arg-type]
+        )
         stored_bytes = main_p.stat().st_size
         _reserve(db, org_id, stored_bytes)
         media = MessageMedia(
@@ -465,7 +474,7 @@ async def store_upload_for_person(
     dest_dir = _entity_dir(person.incident_id, "person", person.id, org_id)
     storage_root = _storage_root().resolve()
     if kind == "image":
-        main_p, thumb_p, w, h, out_mime = _process_image(raw, dest_dir)
+        main_p, thumb_p, w, h, out_mime = await asyncio.to_thread(_process_image, raw, dest_dir)
         stored_bytes = main_p.stat().st_size
         _reserve(db, org_id, stored_bytes)
         media = PersonMedia(
@@ -477,7 +486,9 @@ async def store_upload_for_person(
             mime_type=out_mime, bytes=stored_bytes, width=w, height=h,
         )
     elif kind == "pdf":
-        main_p, thumb_p, pages = _process_pdf(raw, dest_dir, file.filename or "document.pdf")  # type: ignore[assignment]
+        main_p, thumb_p, pages = await asyncio.to_thread(  # type: ignore[assignment]
+            _process_pdf, raw, dest_dir, file.filename or "document.pdf",  # type: ignore[arg-type]
+        )
         stored_bytes = main_p.stat().st_size
         _reserve(db, org_id, stored_bytes)
         media = PersonMedia(
@@ -489,7 +500,9 @@ async def store_upload_for_person(
             mime_type="application/pdf", bytes=stored_bytes, pages=pages,
         )
     else:
-        main_p, thumb_p, w, h, dur = _process_video(raw, dest_dir)  # type: ignore[assignment]
+        main_p, thumb_p, w, h, dur = await asyncio.to_thread(  # type: ignore[arg-type,assignment]
+            _process_video, raw, dest_dir,  # type: ignore[arg-type]
+        )
         stored_bytes = main_p.stat().st_size
         _reserve(db, org_id, stored_bytes)
         media = PersonMedia(
@@ -603,7 +616,7 @@ async def store_upload_for_uas_medien(
     original_filename = file.filename or "upload"
 
     if kind == "image":
-        main_p, thumb_p, w, h, out_mime = _process_image(raw, dest_dir)
+        main_p, thumb_p, w, h, out_mime = await asyncio.to_thread(_process_image, raw, dest_dir)
         stored_bytes = main_p.stat().st_size
         _reserve(db, org_id, stored_bytes)
         medientyp = "foto"
@@ -611,7 +624,7 @@ async def store_upload_for_uas_medien(
         tpath = str(thumb_p.resolve().relative_to(storage_root)).replace("\\", "/")
         width, height, duration_s = w, h, None
     elif kind == "pdf":
-        main_p, _, pages = _process_pdf(raw, dest_dir, original_filename)
+        main_p, _, pages = await asyncio.to_thread(_process_pdf, raw, dest_dir, original_filename)
         stored_bytes = main_p.stat().st_size
         _reserve(db, org_id, stored_bytes)
         out_mime = "application/pdf"
@@ -620,7 +633,9 @@ async def store_upload_for_uas_medien(
         tpath = None
         width, height, duration_s = None, None, None
     else:  # video
-        main_p, thumb_p, w, h, dur = _process_video(raw, dest_dir)  # type: ignore[assignment]
+        main_p, thumb_p, w, h, dur = await asyncio.to_thread(  # type: ignore[arg-type,assignment]
+            _process_video, raw, dest_dir,  # type: ignore[arg-type]
+        )
         stored_bytes = main_p.stat().st_size
         _reserve(db, org_id, stored_bytes)
         out_mime = "video/mp4"
@@ -719,7 +734,7 @@ async def store_upload_for_schaden_foto(
 
     dest_dir = _fahrt_dir(org_id, fahrt_id)
     storage_root = _storage_root().resolve()
-    main_p, thumb_p, width, height, out_mime = _process_image(raw, dest_dir)
+    main_p, thumb_p, width, height, out_mime = await asyncio.to_thread(_process_image, raw, dest_dir)
     stored_bytes = main_p.stat().st_size
     _reserve(db, org_id, stored_bytes)
 
