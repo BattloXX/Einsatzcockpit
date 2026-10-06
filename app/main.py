@@ -9,6 +9,8 @@ from datetime import UTC, datetime
 from typing import cast
 
 from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -940,6 +942,24 @@ def _render_error_page(request: Request, status: int, detail, *, authenticated: 
         {"status": status, "title": title, "emoji": emoji, "detail": detail or title, "authenticated": authenticated},
         status_code=status,
     )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Protokolliert abgelehnte Formulareingaben (422) mit Feld und Fehlertyp, ohne
+    Eingabewerte. Bisher stand im Log nur der Statuscode (Vorfall 2026-10-05:
+    9x 422 auf POST /einsatz/387/meldung vom Tablet, Ursache nicht nachvollziehbar)."""
+    fehler = [
+        f"{'.'.join(str(teil) for teil in fehler.get('loc', ()))}:{fehler.get('type')}"
+        for fehler in exc.errors()
+    ]
+    user = getattr(request.state, "user", None)
+    logger.warning(
+        "Eingabe abgelehnt (422): methode=%s pfad=%s user_id=%s content_type=%s fehler=%s",
+        request.method, request.url.path, getattr(user, "id", None),
+        request.headers.get("content-type", "").split(";")[0], fehler,
+    )
+    return await request_validation_exception_handler(request, exc)
 
 
 @app.exception_handler(HTTPException)
