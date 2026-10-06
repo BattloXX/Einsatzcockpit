@@ -2336,7 +2336,10 @@ async def create_person(
     status: str = Form("gefunden"),
     note: str = Form(""),
     db: Session = Depends(get_db),
-    _=Depends(require_role("incident_leader", "admin")),
+    # recorder wie bei Bearbeiten/Status/Löschen einer Person: das Board zeigt
+    # Bearbeitern (can_edit) den Anlegen-Dialog, die Route lehnte sie aber mit 403 ab
+    # (Vorfall 2026-10-06, Tablet: 20x 403 auf POST /einsatz/465/person).
+    _=Depends(require_role("incident_leader", "admin", "recorder")),
 ):
     if status not in PERSON_STATUS_VALUES:
         status = "gefunden"

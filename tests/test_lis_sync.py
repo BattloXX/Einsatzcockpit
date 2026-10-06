@@ -957,6 +957,53 @@ class _FakeLisClientNoTasks:
         return []
 
 
+def test_sync_operation_neuanlage_mit_echter_outbox_committet(monkeypatch):
+    """Vorfall 2026-10-06 (Schulungseinsatz t_f30024): sync_operation() enqueued die
+    Alarm-Outbox und ruft danach notify_incident_created() auf, das erneut enqueued.
+    Ohne Mock muss der Commit gelingen und jeder Kanal genau einmal angelegt sein."""
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+        from app.models.incident import IncidentAlarmJob
+        from app.models.lis import OrgLisConfig
+        config = OrgLisConfig(org_id=ORG_ID, organization_id="org-guid")
+
+        processed = []
+
+        async def fake_process(incident_id):
+            processed.append(incident_id)
+
+        monkeypatch.setattr("app.services.alarm_outbox.process_incident_alarm", fake_process)
+
+        raw_op = {
+            "Id": "lis-op-outbox-test",
+            "Number": "t_f900002",
+            "Name": "Schulungseinsatz",
+            "Description": "starke Rauchentwicklung",
+            "BeginTime": "2026-10-06T20:00:00",
+            "Address": {"Street": "An der Hammerschmiede", "Housenumber": "3", "Community": "Wolfurt"},
+            "Type": {"Code": "t_f3", "Type": "Schulungseinsatz (ohne RFL) - Feuerwehr"},
+        }
+
+        asyncio.run(
+            lis_sync.sync_operation(db, org, config, _FakeLisClientNoTasks(), raw_op)
+        )
+        db.commit()
+
+        incident = db.query(Incident).filter(Incident.lis_operation_id == "lis-op-outbox-test").one()
+        assert incident.is_exercise is True
+        channels = sorted(
+            channel for (channel,) in db.query(IncidentAlarmJob.channel).filter(
+                IncidentAlarmJob.incident_id == incident.id
+            ).all()
+        )
+        assert channels == ["push", "sms", "teams"]
+        assert processed == [incident.id]
+    finally:
+        db.rollback()
+        db.close()
+
+
 def test_sync_operation_new_incident_triggers_notify(monkeypatch):
     """Bisher loeste der LIS-Sync bei automatischer Neuanlage weder SMS noch Push
     aus (kein Request-Kontext -> kein BackgroundTasks). sync_operation() muss jetzt

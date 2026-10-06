@@ -43,6 +43,15 @@ def enqueue_incident_alarm(
             IncidentAlarmJob.incident_id == incident.id
         ).all()
     }
+    # SessionLocal laeuft mit autoflush=False: noch nicht geflushte Jobs aus einem
+    # frueheren Aufruf in derselben Transaktion sieht die Query oben nicht. Ohne
+    # diese Pruefung legte die LIS-Neuanlage (lis_sync: enqueue + notify_incident_created)
+    # jeden Kanal doppelt an, der Commit scheiterte an uq_incident_alarm_job_incident_channel
+    # und der neue Einsatz wurde bei jedem Poll zurueckgerollt (Vorfall 2026-10-06).
+    existing |= {
+        obj.channel for obj in db.new
+        if isinstance(obj, IncidentAlarmJob) and obj.incident_id == incident.id
+    }
     suppressed = (incident.alarm_type_code or "").upper() in NIE_ALARMIEREN_STICHWORTE
     now = _now()
     context = {

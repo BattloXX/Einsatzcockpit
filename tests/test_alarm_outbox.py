@@ -308,3 +308,24 @@ def test_sms_lease_scales_with_bulk_size():
 
     now = datetime.now(UTC).replace(tzinfo=None)
     assert _einsatzinfo_lease_until(now, 10) >= now + timedelta(minutes=3, seconds=200)
+
+
+def test_enqueue_zweimal_ohne_flush_legt_keine_duplikate_an(setup_db):
+    """Vorfall 2026-10-06: lis_sync ruft enqueue_incident_alarm und danach
+    notify_incident_created (das erneut enqueued) in derselben Transaktion auf.
+    Wegen autoflush=False sah der zweite Aufruf die Jobs des ersten nicht, der
+    Commit scheiterte an uq_incident_alarm_job_incident_channel und die
+    LIS-Neuanlage wurde bei jedem Poll zurueckgerollt."""
+    db, incident = _db_incident()
+    try:
+        enqueue_incident_alarm(db, incident, org_id=1, source="lis", base_url="https://example.test")
+        enqueue_incident_alarm(db, incident, org_id=1, source="lis", base_url="https://example.test")
+        db.commit()
+        channels = sorted(
+            channel for (channel,) in db.query(IncidentAlarmJob.channel).filter(
+                IncidentAlarmJob.incident_id == incident.id
+            ).all()
+        )
+        assert channels == ["push", "sms", "teams"]
+    finally:
+        db.close()
