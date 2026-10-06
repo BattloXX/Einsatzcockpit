@@ -167,10 +167,13 @@ async def _capture_once(client: LisClient, recorder: ExchangeRecorder, organizat
         ):
             try:
                 await coro_factory()
-            except LisClientError:
-                logger.exception(
-                    "LIS-Capture: %s für Operation %s fehlgeschlagen (Org %s)",
-                    label, op_id, recorder.org_id,
+            except LisClientError as e:
+                # Der Server-Bug bei GetTasks (NullReferenceException in
+                # SessionData.get_OrganizationId) ist bekannt und nicht clientseitig
+                # behebbar (siehe lis_sync.py): kurze Warnung statt Traceback je Zyklus.
+                logger.warning(
+                    "LIS-Capture: %s für Operation %s fehlgeschlagen (Org %s): %s",
+                    label, op_id, recorder.org_id, str(e).splitlines()[0] if str(e) else e,
                 )
     return has_open_operation
 
