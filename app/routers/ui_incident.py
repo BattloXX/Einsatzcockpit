@@ -2,9 +2,11 @@
 import base64
 import hashlib
 import io
+import json
 import logging
 from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import quote
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -2234,6 +2236,7 @@ async def create_message(
     )
     db.commit()
     # Optional: Dateien direkt beim Anlegen anhängen
+    errors: list[str] = []
     if files:
         from fastapi import HTTPException as _HE
 
@@ -2243,8 +2246,21 @@ async def create_message(
                 continue
             try:
                 await store_upload_for_message(f, msg, request.state.user, db, org_id=request.state.user.org_id)
-            except _HE:
-                pass
+            except _HE as exc:
+                errors.append(str(exc.detail))
+                _log.warning(
+                    "Upload abgelehnt: incident_id=%s entitaet=message id=%s dateiname=%r content_type=%r "
+                    "user_id=%s status=%s detail=%s",
+                    incident_id, msg.id, f.filename, f.content_type, request.state.user.id,
+                    exc.status_code, exc.detail,
+                )
+            except Exception as exc:  # noqa: BLE001
+                errors.append(f"{f.filename}: Upload fehlgeschlagen")
+                _log.exception(
+                    "Upload fehlgeschlagen: incident_id=%s entitaet=message id=%s dateiname=%r content_type=%r "
+                    "user_id=%s status=%s detail=%s",
+                    incident_id, msg.id, f.filename, f.content_type, request.state.user.id, 500, exc,
+                )
         db.commit()
     await manager.broadcast(incident_id, {
         "type": "message_created", "column_id": msg.column_id, "vehicle_uid": msg.vehicle_id,
@@ -2252,11 +2268,14 @@ async def create_message(
     board_incident = _load_board_incident(incident_id, db)
     assert board_incident is not None
     col = next(c for c in board_incident.columns if c.id == msg.column_id)
+    headers = {"HX-Retarget": f"#zone-{msg.column_id}", "HX-Reswap": "afterbegin"}
+    if errors:
+        headers["X-Upload-Errors"] = quote(json.dumps(errors, ensure_ascii=False))
     return templates.TemplateResponse(request, "incident/_created_card_fragment.html", {
         "msg": next(m for m in board_incident.messages if m.id == msg.id), "incident": board_incident,
         "can_edit": True, "card_template": "incident/_message_card.html", "col": col,
         "col_count": _column_card_count(board_incident, col),
-    }, headers={"HX-Retarget": f"#zone-{msg.column_id}", "HX-Reswap": "afterbegin"})
+    }, headers=headers)
 
 
 @router.post("/einsatz/{incident_id}/meldung/{msg_id}/erledigt")
@@ -3208,28 +3227,43 @@ async def upload_task_media(
 
     from app.services.media_service import store_upload
     errors: list[str] = []
+    uploaded = False
     for f in files:
         if not f.filename:
             continue
         try:
             await store_upload(f, task, request.state.user, db, org_id=request.state.user.org_id)
+            uploaded = True
         except _HE as exc:
             errors.append(str(exc.detail))
+            _log.warning(
+                "Upload abgelehnt: incident_id=%s entitaet=task id=%s dateiname=%r content_type=%r "
+                "user_id=%s status=%s detail=%s",
+                incident_id, task.id, f.filename, f.content_type, request.state.user.id,
+                exc.status_code, exc.detail,
+            )
         except Exception as exc:  # noqa: BLE001
-            errors.append(f"{f.filename}: {exc}")
+            errors.append(f"{f.filename}: Upload fehlgeschlagen")
+            _log.exception(
+                "Upload fehlgeschlagen: incident_id=%s entitaet=task id=%s dateiname=%r content_type=%r "
+                "user_id=%s status=%s detail=%s",
+                incident_id, task.id, f.filename, f.content_type, request.state.user.id, 500, exc,
+            )
     db.commit()
     db.refresh(task, ["media"])
     incident = _incident_or_404(incident_id, db)
-    await manager.broadcast(incident_id, {
-        "type": "task_updated", "task_id": task_id, "kind": "task", "uid": task.id,
-        "column_id": task.column_id,
-    })
+    if uploaded:
+        await manager.broadcast(incident_id, {
+            "type": "task_updated", "task_id": task_id, "kind": "task", "uid": task.id,
+            "column_id": task.column_id,
+        })
     can_edit = has_role(request.state.user, "incident_leader", "admin", "recorder")
     can_note = has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
+    headers = {"X-Upload-Errors": quote(json.dumps(errors, ensure_ascii=False))} if errors else None
     return templates.TemplateResponse(request, "incident/_task_media.html", {
         "user": request.state.user, "task": task, "incident": incident,
         "can_edit": can_edit, "can_note": can_note, "errors": errors,
-    })
+    }, headers=headers)
 
 
 @router.post("/einsatz/{incident_id}/aufgabe/{task_id}/medien/{media_id}/loeschen", response_class=HTMLResponse)
@@ -3280,23 +3314,44 @@ async def upload_message_media(
     from fastapi import HTTPException as _HE
 
     from app.services.media_service import store_upload_for_message
+    errors: list[str] = []
+    uploaded = False
     for f in files:
         if not f.filename:
             continue
         try:
             await store_upload_for_message(f, msg, request.state.user, db, org_id=request.state.user.org_id)
-        except _HE:
-            pass
+            uploaded = True
+        except _HE as exc:
+            errors.append(str(exc.detail))
+            _log.warning(
+                "Upload abgelehnt: incident_id=%s entitaet=message id=%s dateiname=%r content_type=%r "
+                "user_id=%s status=%s detail=%s",
+                incident_id, msg.id, f.filename, f.content_type, request.state.user.id,
+                exc.status_code, exc.detail,
+            )
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"{f.filename}: Upload fehlgeschlagen")
+            _log.exception(
+                "Upload fehlgeschlagen: incident_id=%s entitaet=message id=%s dateiname=%r content_type=%r "
+                "user_id=%s status=%s detail=%s",
+                incident_id, msg.id, f.filename, f.content_type, request.state.user.id, 500, exc,
+            )
     db.commit()
     db.refresh(msg, ["media"])
     incident = _incident_or_404(incident_id, db)
+    if uploaded:
+        await manager.broadcast(incident_id, {
+            "type": "message_updated", "kind": "message", "uid": msg.id, "column_id": msg.column_id,
+        })
     can_edit = has_role(request.state.user, "incident_leader", "admin", "recorder")
     can_note = has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
     entity_logs = _entity_logs(db, incident_id, "message", message_id)
+    headers = {"X-Upload-Errors": quote(json.dumps(errors, ensure_ascii=False))} if errors else None
     return templates.TemplateResponse(request, "incident/_message_modal.html", {
         "user": request.state.user, "incident": incident, "msg": msg, "can_edit": can_edit, "can_note": can_note,
-        "entity_logs": entity_logs,
-    })
+        "entity_logs": entity_logs, "errors": errors,
+    }, headers=headers)
 
 
 @router.post("/einsatz/{incident_id}/meldung/{message_id}/medien/{media_id}/loeschen", response_class=HTMLResponse)
@@ -3338,23 +3393,45 @@ async def upload_person_media(
     from fastapi import HTTPException as _HE
 
     from app.services.media_service import store_upload_for_person
+    errors: list[str] = []
+    uploaded = False
     for f in files:
         if not f.filename:
             continue
         try:
             await store_upload_for_person(f, person, request.state.user, db, org_id=request.state.user.org_id)
-        except _HE:
-            pass
+            uploaded = True
+        except _HE as exc:
+            errors.append(str(exc.detail))
+            _log.warning(
+                "Upload abgelehnt: incident_id=%s entitaet=person id=%s dateiname=%r content_type=%r "
+                "user_id=%s status=%s detail=%s",
+                incident_id, person.id, f.filename, f.content_type, request.state.user.id,
+                exc.status_code, exc.detail,
+            )
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"{f.filename}: Upload fehlgeschlagen")
+            _log.exception(
+                "Upload fehlgeschlagen: incident_id=%s entitaet=person id=%s dateiname=%r content_type=%r "
+                "user_id=%s status=%s detail=%s",
+                incident_id, person.id, f.filename, f.content_type, request.state.user.id, 500, exc,
+            )
     db.commit()
     db.refresh(person, ["media"])
     incident = _incident_or_404(incident_id, db)
+    if uploaded:
+        await manager.broadcast(incident_id, {
+            "type": "person_updated", "kind": "person", "uid": person.id,
+            "column_id": person.column_id, "vehicle_uid": person.vehicle_id,
+        })
     can_edit = has_role(request.state.user, "incident_leader", "admin", "recorder")
     can_note = has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
     person_logs = _entity_logs(db, incident_id, "person", person_id)
+    headers = {"X-Upload-Errors": quote(json.dumps(errors, ensure_ascii=False))} if errors else None
     return templates.TemplateResponse(request, "incident/_person_modal.html", {
         "user": request.state.user, "incident": incident, "person": person, "can_edit": can_edit, "can_note": can_note,
-        "entity_logs": person_logs,
-    })
+        "entity_logs": person_logs, "errors": errors,
+    }, headers=headers)
 
 
 @router.post("/einsatz/{incident_id}/person/{person_id}/medien/{media_id}/loeschen", response_class=HTMLResponse)

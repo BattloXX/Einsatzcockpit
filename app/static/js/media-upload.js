@@ -71,6 +71,16 @@
     }, 500);
   }
 
+  /* ── Rückmeldung für Upload-Fehler ───────────────────────────── */
+  function showUploadToast(message) {
+    const appEl = document.querySelector('[x-data="appState()"]');
+    if (appEl && window.Alpine) {
+      Alpine.$data(appEl).addToast(message, 'warn');
+    } else if (!appEl) {
+      alert(message);
+    }
+  }
+
   /* ── CSRF-Token aus Cookie ────────────────────────────────────── */
   function readCsrf() {
     const cookies = (document.cookie || '').split(/;\s*/);
@@ -83,7 +93,7 @@
   }
 
   /* ── Kern-Upload via XHR ─────────────────────────────────────── */
-  function uploadForm(formEl, files) {
+  function uploadForm(formEl, files, inputEl) {
     const action = formEl.getAttribute('hx-post') || formEl.action;
     const targetSel = formEl.getAttribute('hx-target');
     const swapMode  = formEl.getAttribute('hx-swap') || 'innerHTML';
@@ -97,6 +107,7 @@
     for (const f of files) fd.append(inputName, f);
 
     const xhr = new XMLHttpRequest();
+    xhr.timeout = 180000;
 
     xhr.upload.onprogress = function (e) {
       if (!e.lengthComputable) return;
@@ -107,6 +118,44 @@
 
     xhr.onload = function () {
       progressDone();
+
+      const redirect = xhr.getResponseHeader('HX-Redirect');
+      if (redirect) {
+        location.href = redirect;
+        return;
+      }
+      if (xhr.status === 401) {
+        showUploadToast('Sitzung abgelaufen – bitte neu anmelden.');
+        location.href = '/login';
+        return;
+      }
+      if (xhr.status === 503 && xhr.getResponseHeader('X-Offline') === '1') {
+        showUploadToast('Upload erfordert Verbindung – du bist offline.');
+        return;
+      }
+      if (xhr.status < 200 || xhr.status >= 300) {
+        let detail = xhr.status === 413 ? 'Datei zu groß' : String(xhr.status);
+        try {
+          const response = JSON.parse(xhr.responseText);
+          if (response && typeof response.detail === 'string') detail = response.detail;
+        } catch (e) {
+          // Für nicht-JSON-Fehler bleibt der Statuscode sichtbar.
+        }
+        showUploadToast('Upload fehlgeschlagen: ' + detail);
+        return;
+      }
+
+      try {
+        const errors = JSON.parse(decodeURIComponent(xhr.getResponseHeader('X-Upload-Errors') || '[]'));
+        if (Array.isArray(errors)) {
+          for (const error of errors) {
+            if (typeof error === 'string') showUploadToast('Upload fehlgeschlagen: ' + error);
+          }
+        }
+      } catch (e) {
+        // Ein fehlerhafter optionaler Header darf den erfolgreichen Upload nicht stören.
+      }
+
       if (!targetSel || swapMode === 'none') return;
       const target = document.querySelector(targetSel);
       if (!target) return;
@@ -120,8 +169,14 @@
       }
     };
 
-    xhr.onerror = xhr.onabort = function () {
+    xhr.onerror = function () {
       progressDone();
+      showUploadToast('Upload fehlgeschlagen – keine Verbindung.');
+    };
+    xhr.onabort = progressDone;
+    xhr.ontimeout = function () {
+      progressDone();
+      showUploadToast('Upload abgebrochen (Zeitüberschreitung) – bitte erneut versuchen.');
     };
 
     xhr.open('POST', action, true);
@@ -130,6 +185,7 @@
     const csrf = readCsrf();
     if (csrf) xhr.setRequestHeader('X-CSRF-Token', csrf);
 
+    if (inputEl) inputEl.value = '';
     xhr.send(fd);
   }
 
@@ -154,47 +210,22 @@
 
     progressShow(3, 'Komprimiere…');
 
-    const out = [];
-    for (const f of files) {
-      if (f.type && f.type.startsWith('image/') && f.size > IMAGE_MAX_BYTES) {
-        try {
-          let compressed = await compressImage(f, IMAGE_MAX_DIM, IMAGE_QUALITY);
-          if (compressed.size > IMAGE_MAX_BYTES) {
-            compressed = await compressImage(f, 1920, 0.75);
-          }
-          out.push(compressed);
-        } catch (e) {
-          console.warn('image compression failed, sending original', e);
-          out.push(f);
-        }
-      } else {
-        out.push(f);
-      }
-    }
+    const out = await compressUploadFiles(files);
 
     const form = inputEl.closest('form');
     if (!form) return;
-    uploadForm(form, out);
+    uploadForm(form, out, inputEl);
   };
 
-  // Kamera-Schnellupload (ohne komprimieren, direktes Foto)
+  // Kamera-Schnellupload mit derselben Bildaufbereitung wie der normale Upload.
   window.quickCameraUpload = async function (inputEl) {
     const files = Array.from(inputEl.files || []);
     if (!files.length) return;
     progressShow(5, 'Lade hoch…');
     const form = inputEl.closest('form');
     if (!form) return;
-    // Bilder trotzdem komprimieren falls nötig.
-    const out = [];
-    for (const f of files) {
-      if (f.type && f.type.startsWith('image/') && f.size > IMAGE_MAX_BYTES) {
-        try { out.push(await compressImage(f, IMAGE_MAX_DIM, IMAGE_QUALITY)); }
-        catch (e) { out.push(f); }
-      } else {
-        out.push(f);
-      }
-    }
-    uploadForm(form, out);
+    const out = await compressUploadFiles(files);
+    uploadForm(form, out, inputEl);
   };
 
   // Komprimiert Bilder im File-Input in-place (via DataTransfer), OHNE selbst zu submiten.
@@ -203,24 +234,37 @@
     const files = Array.from(inputEl.files || []);
     if (!files.length) return;
     const dt = new DataTransfer();
-    for (const f of files) {
-      if (f.type && f.type.startsWith('image/') && f.size > IMAGE_MAX_BYTES) {
-        try {
-          let compressed = await compressImage(f, IMAGE_MAX_DIM, IMAGE_QUALITY);
-          if (compressed.size > IMAGE_MAX_BYTES) {
-            compressed = await compressImage(f, 1920, 0.75);
-          }
-          dt.items.add(compressed);
-        } catch (e) {
-          console.warn('Komprimierung fehlgeschlagen, Original wird gesendet', e);
-          dt.items.add(f);
-        }
-      } else {
-        dt.items.add(f);
-      }
-    }
+    for (const f of await compressUploadFiles(files)) dt.items.add(f);
     inputEl.files = dt.files;
   };
+
+  function isCompressibleImage(file) {
+    return file.type && file.type.startsWith('image/') &&
+      file.type !== 'image/gif' && file.type !== 'image/svg+xml';
+  }
+
+  async function compressUploadFiles(files) {
+    const out = [];
+    for (const file of files) {
+      if (!isCompressibleImage(file)) {
+        out.push(file);
+        continue;
+      }
+      try {
+        let result = await compressImage(file, IMAGE_MAX_DIM, IMAGE_QUALITY);
+        if (result.size >= file.size && file.size <= IMAGE_MAX_BYTES) result = file;
+        if (result.size > IMAGE_MAX_BYTES) {
+          const retry = await compressImage(file, 1920, 0.75);
+          if (retry.size < file.size || file.size > IMAGE_MAX_BYTES) result = retry;
+        }
+        out.push(result);
+      } catch (e) {
+        console.warn('Komprimierung fehlgeschlagen, Original wird gesendet', e);
+        out.push(file);
+      }
+    }
+    return out;
+  }
 
   async function compressImage(file, maxDim, quality) {
     const bitmap = await createImageBitmap(file);

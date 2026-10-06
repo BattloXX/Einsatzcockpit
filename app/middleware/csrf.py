@@ -22,10 +22,13 @@ bei Cross-Origin-Requests einen Origin-Header, der bei Fremd-Origin abgelehnt wi
 native HTTP-Clients senden i. d. R. keinen Origin-Header und bleiben unberührt.
 """
 import hmac
+import logging
 import secrets
 from urllib.parse import parse_qs, urlsplit
 
 from app.config import settings
+
+logger = logging.getLogger("einsatzleiter.csrf")
 
 CSRF_COOKIE = "ec_csrf"
 CSRF_HEADER = "X-CSRF-Token"
@@ -98,6 +101,15 @@ def _constant_time_eq(a: str, b: str) -> bool:
     return hmac.compare_digest(a.encode("utf-8"), b.encode("utf-8"))
 
 
+def _log_rejection(path: str, method: str, reason: str, had_cookie: bool,
+                   created_cookie: bool, sec_fetch_site: str | None) -> None:
+    """Protokolliert CSRF-Ablehnungen ohne schutzwürdige Tokenwerte."""
+    logger.warning(
+        "CSRF-Ablehnung: pfad=%s methode=%s grund=%s csrf_cookie_vorhanden=%s neu_erzeugt=%s sec_fetch_site=%s",
+        path, method, reason, had_cookie, created_cookie, sec_fetch_site,
+    )
+
+
 class CSRFMiddleware:
     def __init__(self, app):
         self.app = app
@@ -112,9 +124,11 @@ class CSRFMiddleware:
         headers = {k.decode("latin-1").lower(): v.decode("latin-1")
                    for k, v in scope.get("headers", [])}
         sec_fetch_dest = headers.get("sec-fetch-dest")
+        sec_fetch_site = headers.get("sec-fetch-site")
 
         cookies = _parse_cookie(headers.get("cookie", ""))
         existing_token = cookies.get(CSRF_COOKIE)
+        had_cookie = bool(existing_token)
         new_token: str | None = None
         if not existing_token:
             new_token = secrets.token_urlsafe(32)
@@ -139,6 +153,7 @@ class CSRFMiddleware:
                 origin_host = urlsplit(origin).netloc
                 if not allowed_host or origin_host != allowed_host:
                     from starlette.responses import JSONResponse
+                    _log_rejection(path, method, "Ungültiger Origin", had_cookie, bool(new_token), sec_fetch_site)
                     resp = JSONResponse(
                         {"detail": "Ungültiger Origin"}, status_code=403,
                     )
@@ -157,6 +172,10 @@ class CSRFMiddleware:
             if header_token:
                 if not _constant_time_eq(header_token, existing_token):
                     from starlette.responses import JSONResponse
+                    _log_rejection(
+                        path, method, "Header-Token passt nicht", had_cookie,
+                        bool(new_token), sec_fetch_site,
+                    )
                     resp = JSONResponse(
                         {"detail": "CSRF-Token fehlt oder ungültig"},
                         status_code=403,
@@ -231,6 +250,8 @@ class CSRFMiddleware:
                     pass
 
             if not submitted or not _constant_time_eq(submitted, existing_token):
+                reason = "Formular-Token fehlt" if not submitted else "Formular-Token passt nicht"
+                _log_rejection(path, method, reason, had_cookie, bool(new_token), sec_fetch_site)
                 is_api = path.startswith("/api/") or path.endswith(".json")
                 wants_html = "text/html" in headers.get("accept", "") and not is_api
                 if wants_html:

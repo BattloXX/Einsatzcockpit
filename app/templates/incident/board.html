@@ -24,6 +24,7 @@
         <div id="wetter-panel" class="weather-popover__panel" role="dialog" aria-label="Wetter"
              hx-get="/einsatz/{{ incident.id }}/wetter/panel"
              hx-trigger="load, every 300s, retry-wetter" hx-swap="innerHTML"
+             data-no-error-toast
              hx-on::response-error="wetterPanelError(this)" hx-on::send-error="wetterPanelError(this)"
              x-init="$nextTick(() => { if (window.htmx) htmx.process($el); })">
           <button type="button" class="weather-popover__close" aria-label="Wetter schließen" @click="weatherOpen=false">×</button>

@@ -70,6 +70,17 @@ def test_ohne_token_403(client):
     assert r.status_code == 403
 
 
+def test_ohne_token_wird_ohne_tokenwert_protokolliert(client, caplog):
+    token = _csrf_cookie(client)
+    caplog.clear()
+    r = client.post(PROBE, data={"x": "1"})
+
+    assert r.status_code == 403
+    assert "CSRF-Ablehnung" in caplog.text
+    assert "Formular-Token fehlt" in caplog.text
+    assert token not in caplog.text
+
+
 def test_formfeld_fehler_als_html_fuer_browser(client):
     _csrf_cookie(client)
     r = client.post(PROBE, headers={"Accept": "text/html"}, data={"_csrf": "falsch"})
