@@ -380,7 +380,7 @@ def get_duty_state(
     app_version: str | None = None,
     db: Session = Depends(get_db),
 ):
-    """Gibt zurück, ob für das Gerät aktuell ein aktiver Einsatz vorliegt.
+    """Gibt Geräte-Tracking und sichtbare Live-Einsatz-/Lagezustände zurück.
 
     Die App nutzt diesen Endpoint, um Standort-Tracking automatisch zu steuern.
     """
@@ -400,15 +400,17 @@ def get_duty_state(
 
     server_time = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     if not device_token:
+        live_incident, incident_count = build_live_state(db, user, None)
+        live_lage, lage_count = build_gsl_live_state(db, user)
         return JSONResponse({
             "duty_active": False,
             "incident_active": False,
             "should_track": False,
             "server_time": server_time,
-            "incident_count": 0,
-            "incident": None,
-            "lage_count": 0,
-            "lage": None,
+            "incident_count": incident_count,
+            "incident": live_incident,
+            "lage_count": lage_count,
+            "lage": live_lage,
             "my_lage_queue": None,
         })
 

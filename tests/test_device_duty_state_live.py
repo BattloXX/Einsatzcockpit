@@ -343,6 +343,72 @@ def test_ohne_device_token_bleibt_antwortform_vollstaendig(client, setup_db):
     assert data["server_time"].endswith("Z")
 
 
+def test_session_user_ohne_device_token_sieht_org_einsatz(client, setup_db):
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    suffix = uuid4().hex[:10]
+    try:
+        org = FireDept(slug=f"live-no-device-{suffix}", name="Ohne Geraet")
+        db.add(org)
+        db.flush()
+        user = User(
+            username=f"live-no-device-{suffix}",
+            password_hash=hash_password("Test1234!"),
+            display_name="Ohne Geraet",
+            active=True,
+            org_id=org.id,
+        )
+        db.add(user)
+        db.commit()
+        user_id = user.id
+        org_id = org.id
+    finally:
+        db.close()
+    incident_id = _create_incident(org_id, started_at=datetime(2026, 8, 3, 11, 0))
+    client.cookies.set("session", sign_session(user_id))
+
+    data = client.get("/api/v1/device/duty-state").json()
+
+    assert data["duty_active"] is False
+    assert data["incident_active"] is False
+    assert data["should_track"] is False
+    assert data["incident_count"] == 1
+    assert data["incident"]["id"] == incident_id
+
+
+def test_session_user_ohne_device_token_sieht_fremden_einsatz_nicht(client, setup_db):
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    suffix = uuid4().hex[:10]
+    try:
+        org = FireDept(slug=f"live-no-device-{suffix}", name="Ohne Geraet")
+        db.add(org)
+        db.flush()
+        user = User(
+            username=f"live-no-device-{suffix}",
+            password_hash=hash_password("Test1234!"),
+            display_name="Ohne Geraet",
+            active=True,
+            org_id=org.id,
+        )
+        db.add(user)
+        db.commit()
+        user_id = user.id
+    finally:
+        db.close()
+    _, _, foreign_org_id, _, _ = _create_device()
+    _create_incident(foreign_org_id, started_at=datetime(2026, 8, 3, 11, 0))
+    client.cookies.set("session", sign_session(user_id))
+
+    data = client.get("/api/v1/device/duty-state").json()
+
+    assert data["duty_active"] is False
+    assert data["incident_active"] is False
+    assert data["should_track"] is False
+    assert data["incident_count"] == 0
+    assert data["incident"] is None
+
+
 def test_duty_state_akzeptiert_bearer_device_token(client, setup_db):
     _, device_id, _, _, raw_token = _create_device(duty_active=True)
 
