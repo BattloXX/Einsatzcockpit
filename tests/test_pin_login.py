@@ -13,6 +13,7 @@ from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.login_pin import LoginPin
 from app.models.user import DeviceToken, Role, User, UserRole
+from app.services.sms_service import SmsDeliveryResult
 
 ORG_ID = 1  # FF Wolfurt (seeded)
 
@@ -89,7 +90,7 @@ def test_pin_login_versendet_sms_und_erzeugt_pin(client):
     csrf = _csrf(client)
     with patch("app.routers.ws.is_sms_gateway_connected", return_value=True), \
          patch("app.services.sms_service.send_sms", new_callable=AsyncMock) as mock_send:
-        mock_send.return_value = True
+        mock_send.return_value = SmsDeliveryResult(success=True, provider="gateway")
         r = client.post("/pin-login", data={"phone": "+436601110002", "_csrf": csrf}, follow_redirects=False)
     assert r.status_code == 303
     mock_send.assert_awaited_once()
@@ -101,6 +102,51 @@ def test_pin_login_versendet_sms_und_erzeugt_pin(client):
         assert pins[0].used_at is None
     finally:
         db.close()
+
+
+def test_pin_login_nationale_nummer_im_profil_passt_zu_internationaler_eingabe(client, caplog):
+    """Vorfall 2026-10-07: Profil "0664 …", Eingabe "+43 664 …" (Platzhalter des
+    Formulars) fand keinen Benutzer, die PIN-SMS wurde still nicht verschickt."""
+    _make_user("pinlogin_national", phone="0660 1110007")
+    csrf = _csrf(client)
+    with patch("app.routers.ws.is_sms_gateway_connected", return_value=True), \
+         patch("app.services.sms_service.send_sms", new_callable=AsyncMock) as mock_send:
+        mock_send.return_value = SmsDeliveryResult(success=True, provider="gateway")
+        r = client.post("/pin-login", data={"phone": "+43 660 1110007", "_csrf": csrf}, follow_redirects=False)
+    assert r.status_code == 303
+    mock_send.assert_awaited_once()
+    # "+" muss kodiert sein, sonst wird es beim Lesen der Code-Seite zum Leerzeichen.
+    assert "phone=%2B436601110007" in r.headers["location"]
+
+
+def test_pin_login_redirect_nummer_funktioniert_im_code_schritt(client):
+    """Ende-zu-Ende: Nummer aus dem Redirect wird im Code-Schritt wieder gefunden."""
+    uid = _make_user("pinlogin_roundtrip", phone="0660 1110008")
+    csrf = _csrf(client)
+    with patch("app.routers.ws.is_sms_gateway_connected", return_value=True), \
+         patch("app.services.sms_service.send_sms", new_callable=AsyncMock) as mock_send:
+        mock_send.return_value = SmsDeliveryResult(success=True, provider="gateway")
+        r = client.post("/pin-login", data={"phone": "+43 660 1110008", "_csrf": csrf}, follow_redirects=False)
+    seite = client.get(r.headers["location"])
+    assert 'value="+436601110008"' in seite.text
+    _erzeuge_pin_fuer(uid, "424242")
+    csrf = _csrf(client)
+    import re
+    phone_feld = re.search(r'name="phone" value="([^"]*)"', seite.text).group(1)
+    r2 = client.post("/pin-login/code", data={
+        "phone": phone_feld, "pin": "424242", "_csrf": csrf,
+    }, follow_redirects=False)
+    assert r2.status_code == 302
+
+
+def test_pin_login_ohne_benutzer_loggt_grund(client, caplog):
+    import logging
+    caplog.set_level(logging.INFO, logger="einsatzleiter.pin_login")
+    csrf = _csrf(client)
+    client.post("/pin-login", data={"phone": "+436609999999", "_csrf": csrf}, follow_redirects=False)
+    meldungen = [r.getMessage() for r in caplog.records]
+    assert any("kein aktiver Benutzer" in m for m in meldungen)
+    assert not any("6609999999" in m for m in meldungen)
 
 
 # ── SMS-PIN-Login: Bestaetigen (/pin-login/code) ─────────────────────────────
