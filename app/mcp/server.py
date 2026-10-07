@@ -31,6 +31,7 @@ from app.mcp.tools import kontakt as _kontakt  # noqa: F401 - registriert Kontak
 from app.mcp.tools import objekt as _objekt  # noqa: F401 - registriert Objekt-Tools
 from app.mcp.tools import objekt_dokumente as _objekt_dokumente  # noqa: F401 - registriert Dokument-Tools
 from app.mcp.tools import organisation as _organisation  # noqa: F401 - registriert Organisations-Tool
+from app.mcp.tools import wasserstelle as _wasserstelle  # noqa: F401 - registriert Wasserstellen-Tools
 from app.mcp.tools import whoami as _whoami  # noqa: F401 - registriert Beispiel-Tool
 from app.models.mcp import MCPOAuthClient, MCPOAuthCode, MCPOAuthToken
 
@@ -366,6 +367,85 @@ async def organisation_lesen(logo_als_bild: bool = True, ctx: Context | None = N
 
 
 @server.tool(
+    name="wasserstellen_suchen",
+    description=(
+        "Sucht Wasserstellen der eigenen Organisation. Typ-Codes: ueberflur, unterflur, saugstelle, "
+        "loeschteich, loeschbehaelter, brunnen, relais, sonstige. Status: bereit, wartung, defekt "
+        "(defekt = deaktiviert und nicht auf der Einsatzkarte). Löschen per MCP ist nicht möglich."
+    ),
+)
+async def wasserstellen_suchen(
+    q: str = "", typ: str = "", status: str = "", nur_aktive: bool = False,
+    lat: float | None = None, lng: float | None = None, radius_m: int | None = None,
+    limit: int = 50, seite: int = 1, ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "wasserstellen_suchen", q=q, typ=typ, status=status, nur_aktive=nur_aktive, lat=lat, lng=lng,
+        radius_m=radius_m, limit=limit, seite=seite,
+    )
+
+
+@server.tool(
+    name="wasserstelle_lesen",
+    description=(
+        "Liest eine Wasserstelle. Typ-Codes: ueberflur, unterflur, saugstelle, loeschteich, "
+        "loeschbehaelter, brunnen, relais, sonstige; Status: bereit, wartung, defekt (deaktiviert). "
+        "Löschen per MCP ist nicht möglich."
+    ),
+)
+async def wasserstelle_lesen(wasserstelle_id: int, ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("wasserstelle_lesen", wasserstelle_id=wasserstelle_id)
+
+
+@server.tool(
+    name="wasserstelle_anlegen",
+    description=(
+        "Legt eine Wasserstelle an und prüft Dubletten. Typ-Codes: ueberflur, unterflur, saugstelle, "
+        "loeschteich, loeschbehaelter, brunnen, relais, sonstige. Status: bereit, wartung, defekt "
+        "(deaktiviert). Löschen per MCP ist nicht möglich."
+    ),
+)
+async def wasserstelle_anlegen(
+    bezeichnung: str, typ: str, lat: float | None, lng: float | None, hinweis: str = "",
+    ergiebigkeit_l_min: int | None = None, status: str = "bereit", duplikat_bestaetigt: bool = False,
+    ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "wasserstelle_anlegen", bezeichnung=bezeichnung, typ=typ, lat=lat, lng=lng, hinweis=hinweis,
+        ergiebigkeit_l_min=ergiebigkeit_l_min, status=status, duplikat_bestaetigt=duplikat_bestaetigt,
+    )
+
+
+@server.tool(
+    name="wasserstelle_aktualisieren",
+    description=(
+        "Aktualisiert nur felder mit erlaubten Schlüsseln: bezeichnung, typ, lat, lng, hinweis, "
+        "ergiebigkeit_l_min, status. Typ-Codes: ueberflur, unterflur, saugstelle, loeschteich, "
+        "loeschbehaelter, brunnen, relais, sonstige. Status: bereit, wartung, defekt (deaktiviert). "
+        "Löschen per MCP ist nicht möglich."
+    ),
+)
+async def wasserstelle_aktualisieren(
+    wasserstelle_id: int, felder: dict, ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool("wasserstelle_aktualisieren", wasserstelle_id=wasserstelle_id, felder=felder)
+
+
+@server.tool(
+    name="wasserstelle_deaktivieren",
+    description=(
+        "Setzt Status defekt (deaktiviert, nicht auf der Einsatzkarte). Typ-Codes: ueberflur, unterflur, "
+        "saugstelle, loeschteich, loeschbehaelter, brunnen, relais, sonstige; Status: bereit, wartung, defekt. "
+        "Löschen per MCP ist nicht möglich."
+    ),
+)
+async def wasserstelle_deaktivieren(
+    wasserstelle_id: int, grund: str = "", ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool("wasserstelle_deaktivieren", wasserstelle_id=wasserstelle_id, grund=grund)
+
+
+@server.tool(
     name="fahrtenbuch_stammdaten",
     description="Liest sichere Fahrtenbuch-Stammdaten der eigenen Organisation.",
 )
@@ -440,7 +520,13 @@ async def objekt_suchen(
     return await _call_registered_tool("objekt_suchen", q=q, status=status, limit=limit)
 
 
-@server.tool(name="objekt_lesen", description="Liest ein Objekt ohne Kontakt-Klartextdaten.")
+@server.tool(
+    name="objekt_lesen",
+    description=(
+        "Liefert Stammdaten inkl. informationen (allgemeiner Hinweistext) und anfahrtsweg, BMA, Gefahren mit "
+        "Details, Merkmale mit Hinweis, Zusatzadressen, Wohnanlage und Kontakt-Zuordnungen ohne Kontakt-Klartext."
+    ),
+)
 async def objekt_lesen(
     objekt_id: int, arbeitskopie: bool = False, ctx: Context | None = None
 ) -> dict[str, object]:
@@ -578,7 +664,12 @@ async def kontakt_zusammenfuehren(
 @server.tool(
     name="objekt_anlegen",
     description=(
-        "Legt ausschliesslich einen Objekt-Entwurf an. Kontakte: kontakte=[{art, kontakt_id} oder "
+        "Legt ausschliesslich einen Objekt-Entwurf an. Stammdaten: name, vulgoname, kategorie_id, strasse, "
+        "hausnummer, plz, ort, lat, lng, informationen (allgemeiner Hinweistext), anfahrtsweg, revision_datum "
+        "(YYYY-MM-DD). merkmale=[{merkmal_id, hinweis?}]; gefahren=[{gefahr_id, un_nummer?, stoffname?, "
+        "gefahrklasse?, gefahrnummer?, detail?}]; bma: Felder wie objekt_lesen.bma; wohnanlage={vorhanden?, "
+        "wohneinheiten, geschosse, stiegen, hausverwaltung_kontakt_id, hinweise}. Kontakte: "
+        "kontakte=[{art, kontakt_id} oder "
         "{art, neu:{anzeigename|vorname+nachname, organisation, funktion, email, telefone:[{nummer,label}]}} "
         "oder flach {art, vorname, nachname, telefon, mobil, email}]; art aus objekt_kataloge (Kontaktarten). "
         "Moegliche Kontakt-Dubletten oder ungueltige Kontaktfelder werden als ToolError gemeldet; mit "
@@ -613,7 +704,13 @@ async def objekt_anlegen(
     name="objekt_aktualisieren",
     description=(
         "Aktualisiert einen Objektentwurf oder eine Arbeitskopie ohne Freigabe; objekt_id darf die Basis- oder "
-        "Arbeitskopie-ID sein. kontakte_hinzufuegen: wie "
+        "Arbeitskopie-ID sein. Stammdaten: name, vulgoname, kategorie_id, strasse, hausnummer, plz, ort, lat, "
+        "lng, informationen (allgemeiner Hinweistext), anfahrtsweg, revision_datum (YYYY-MM-DD). "
+        "merkmale_hinzufuegen=[{merkmal_id, hinweis?}], merkmale_aendern=[{id, hinweis}]; "
+        "gefahren_hinzufuegen=[{gefahr_id, un_nummer?, stoffname?, gefahrklasse?, gefahrnummer?, detail?}], "
+        "gefahren_aendern=[{id, un_nummer?, stoffname?, gefahrklasse?, gefahrnummer?, detail?, links?:[{label,url}]}]. "
+        "bma: Felder wie objekt_lesen.bma, vorhanden=false entfernt sie; wohnanlage={vorhanden?, wohneinheiten, "
+        "geschosse, stiegen, hausverwaltung_kontakt_id, hinweise}. kontakte_hinzufuegen: wie "
         "kontakte bei objekt_anlegen ({art, kontakt_id}, {art, neu:{anzeigename|vorname+nachname, organisation, "
         "funktion, email, telefone:[{nummer,label}]}}, oder flach {art, vorname, nachname, telefon, mobil, email}). "
         "kontakte_entfernen: [zuordnung_id] oder [{kontakt_id, art?}] (IDs aus objekt_lesen, bei Arbeitskopie mit "
@@ -629,8 +726,10 @@ async def objekt_aktualisieren(
     bma: dict | None = None,
     gefahren_hinzufuegen: list[dict] | None = None,
     gefahren_entfernen: list[int | dict] | None = None,
+    gefahren_aendern: list[dict] | None = None,
     merkmale_hinzufuegen: list[dict] | None = None,
     merkmale_entfernen: list[int | dict] | None = None,
+    merkmale_aendern: list[dict] | None = None,
     zusatzadressen_hinzufuegen: list[dict] | None = None,
     zusatzadressen_entfernen: list[int | dict] | None = None,
     kontakte_hinzufuegen: list[dict] | None = None,
@@ -647,8 +746,10 @@ async def objekt_aktualisieren(
         bma=bma,
         gefahren_hinzufuegen=gefahren_hinzufuegen,
         gefahren_entfernen=gefahren_entfernen,
+        gefahren_aendern=gefahren_aendern,
         merkmale_hinzufuegen=merkmale_hinzufuegen,
         merkmale_entfernen=merkmale_entfernen,
+        merkmale_aendern=merkmale_aendern,
         zusatzadressen_hinzufuegen=zusatzadressen_hinzufuegen,
         zusatzadressen_entfernen=zusatzadressen_entfernen,
         kontakte_hinzufuegen=kontakte_hinzufuegen,

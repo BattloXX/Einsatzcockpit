@@ -15,14 +15,116 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.audit import write_audit
 from app.models.wasserstelle import (
     WASSERSTELLE_ICON_KAT,
+    WASSERSTELLE_STATUS,
     WASSERSTELLE_TYPEN,
     Wasserstelle,
 )
 from app.services.hydrant_service import _haversine_m, _richtung
 
 logger = logging.getLogger(__name__)
+
+
+class WasserstelleFehler(ValueError):
+    """Fachlicher Fehler beim Pflegen einer Wasserstelle."""
+
+
+_ERLAUBTE_FELDER = {
+    "bezeichnung", "typ", "lat", "lng", "hinweis", "ergiebigkeit_l_min", "status",
+}
+
+
+def status_aktiv(status: str) -> tuple[str, bool]:
+    """Leitet das operative aktiv-Flag ab; nur defekte Stellen sind inaktiv."""
+    return status, status != "defekt"
+
+
+def _normalisiere_daten(daten: dict, *, create: bool = False) -> dict:
+    unbekannt = set(daten) - _ERLAUBTE_FELDER
+    if unbekannt:
+        raise WasserstelleFehler("Unbekannte Wasserstellen-Felder: " + ", ".join(sorted(unbekannt)))
+    out: dict = {}
+    for feld, wert in daten.items():
+        if feld == "bezeichnung":
+            if not isinstance(wert, str) or not (bezeichnung := wert.strip()):
+                raise WasserstelleFehler("Bezeichnung darf nicht leer sein.")
+            if len(bezeichnung) > 250:
+                raise WasserstelleFehler("Bezeichnung darf maximal 250 Zeichen haben.")
+            out[feld] = bezeichnung
+        elif feld == "typ":
+            if wert not in WASSERSTELLE_TYPEN:
+                raise WasserstelleFehler("Ungültiger Wasserstellen-Typ.")
+            out[feld] = wert
+        elif feld == "status":
+            if wert not in WASSERSTELLE_STATUS:
+                raise WasserstelleFehler("Ungültiger Wasserstellen-Status.")
+            out[feld] = wert
+        elif feld in {"lat", "lng"}:
+            if wert is not None and (isinstance(wert, bool) or not isinstance(wert, (int, float))):
+                raise WasserstelleFehler(f"{feld} muss eine Zahl oder None sein.")
+            if wert is not None:
+                wert = float(wert)
+                minimum, maximum = (-90, 90) if feld == "lat" else (-180, 180)
+                if not minimum <= wert <= maximum:
+                    raise WasserstelleFehler(f"{feld} liegt außerhalb des gültigen Bereichs.")
+            out[feld] = wert
+        elif feld == "ergiebigkeit_l_min":
+            if wert is not None and (isinstance(wert, bool) or not isinstance(wert, int) or wert < 0):
+                raise WasserstelleFehler("ergiebigkeit_l_min muss eine ganze Zahl >= 0 oder None sein.")
+            out[feld] = wert
+        elif feld == "hinweis":
+            if wert is not None and not isinstance(wert, str):
+                raise WasserstelleFehler("hinweis muss ein Text oder None sein.")
+            out[feld] = wert.strip() or None if wert is not None else None
+    if create:
+        for feld in ("bezeichnung", "typ"):
+            if feld not in out:
+                raise WasserstelleFehler(f"{feld} ist erforderlich.")
+    return out
+
+
+def erstelle_wasserstelle(
+    db: Session, *, org_id: int, user_id: int | None, daten: dict,
+    quelle: str = "manuell", audit_aktion: str = "wasserstelle.created",
+) -> Wasserstelle:
+    """Erstellt eine strikt validierte Wasserstelle samt Audit-Eintrag."""
+    werte = _normalisiere_daten(daten, create=True)
+    status = werte.get("status", "bereit")
+    status, aktiv = status_aktiv(status)
+    w = Wasserstelle(
+        org_id=org_id, bezeichnung=werte["bezeichnung"], typ=werte["typ"],
+        lat=werte.get("lat"), lng=werte.get("lng"), hinweis=werte.get("hinweis"),
+        ergiebigkeit_l_min=werte.get("ergiebigkeit_l_min"), status=status, aktiv=aktiv,
+        quelle=quelle, erstellt_von_id=user_id, aktualisiert_von_id=user_id,
+    )
+    db.add(w)
+    db.flush()
+    write_audit(db, audit_aktion, org_id=org_id, user_id=user_id, entity_type="wasserstelle",
+                entity_id=w.id, payload={"bezeichnung": w.bezeichnung, "typ": w.typ})
+    return w
+
+
+def aktualisiere_wasserstelle(
+    db: Session, w: Wasserstelle, *, user_id: int | None, daten: dict,
+    audit_aktion: str = "wasserstelle.updated",
+) -> list[dict]:
+    """Aktualisiert nur übergebene Felder und gibt tatsächlich geänderte zurück."""
+    werte = _normalisiere_daten(daten)
+    geaendert: list[dict] = []
+    for feld, nachher in werte.items():
+        vorher = getattr(w, feld)
+        if vorher != nachher:
+            setattr(w, feld, nachher)
+            geaendert.append({"feld": feld, "vorher": vorher, "nachher": nachher})
+    if "status" in werte:
+        w.status, w.aktiv = status_aktiv(w.status)
+    w.aktualisiert_von_id = user_id
+    db.flush()
+    write_audit(db, audit_aktion, org_id=w.org_id, user_id=user_id, entity_type="wasserstelle",
+                entity_id=w.id, payload={"bezeichnung": w.bezeichnung, "typ": w.typ})
+    return geaendert
 
 # ── MGI EPSG:31281 → WGS84 ──────────────────────────────────────────────────────
 # Expliziter PROJ-String (zuverlässiger als EPSG:31281, falls die lokale proj-DB

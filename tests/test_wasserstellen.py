@@ -198,3 +198,55 @@ def test_admin_seite_rendert(client):
     assert 'id="ws-map"' in r.text            # Karte eingebunden
     assert "Render Hydrant" in r.text          # Registry-Zeile gerendert
     assert "wasserstellen_admin.js" in r.text  # Karten-JS geladen
+
+
+def test_admin_formular_normalisiert_unbekannte_werte_und_ungueltige_koordinaten(client):
+    s = SessionLocal()
+    set_tenant_context(s, None)
+    try:
+        org = s.query(FireDept).first()
+        user = User(username="wss_form_admin", password_hash=hash_password("Test1234!"),
+                    display_name="WSS Formular Admin", org_id=org.id, active=True)
+        s.add(user)
+        s.flush()
+        s.add(UserRole(user_id=user.id, role_id=_rolle(s, "org_admin").id))
+        s.commit()
+        org_id = org.id
+    finally:
+        s.close()
+
+    client.get("/login")
+    csrf = client.cookies.get("ec_csrf")
+    client.post("/login", data={"username": "wss_form_admin", "password": "Test1234!", "_csrf": csrf},
+                follow_redirects=False)
+    neu = client.post("/admin/wasserstellen/neu", data={
+        "bezeichnung": "Formular Neu", "typ": "historisch", "status": "unbekannt",
+        "lat": "95", "lng": "keine-zahl", "_csrf": csrf,
+    }, follow_redirects=False)
+    assert neu.status_code == 303
+    s = SessionLocal()
+    set_tenant_context(s, None)
+    try:
+        wasserstelle = s.query(Wasserstelle).filter_by(org_id=org_id, bezeichnung="Formular Neu").one()
+        assert (wasserstelle.typ, wasserstelle.status, wasserstelle.lat, wasserstelle.lng) == (
+            "sonstige", "bereit", None, None
+        )
+        wasserstelle_id = wasserstelle.id
+    finally:
+        s.close()
+    bearbeiten = client.post(f"/admin/wasserstellen/{wasserstelle_id}/bearbeiten", data={
+        "bezeichnung": "Formular Bearbeitet", "typ": "nicht-mehr-gelten", "status": "falsch",
+        "lat": "91", "lng": "181", "_csrf": csrf,
+    }, follow_redirects=False)
+    assert bearbeiten.status_code == 303
+    s = SessionLocal()
+    set_tenant_context(s, None)
+    try:
+        wasserstelle = s.get(Wasserstelle, wasserstelle_id)
+        assert (
+            wasserstelle.bezeichnung, wasserstelle.typ, wasserstelle.status, wasserstelle.lat, wasserstelle.lng
+        ) == (
+            "Formular Bearbeitet", "sonstige", "bereit", None, None,
+        )
+    finally:
+        s.close()

@@ -1,6 +1,7 @@
 """HTTP-Regressionen fuer MCP-Objekte und Kontakte."""
 
 import json
+from datetime import date
 
 import pytest
 
@@ -18,6 +19,7 @@ from app.models.objekt import (
     ObjektBMA,
     ObjektChange,
     ObjektGefahr,
+    ObjektKategorie,
     ObjektKontakt,
     ObjektMerkmal,
     ObjektWohnanlage,
@@ -400,14 +402,14 @@ def test_kontaktzuordnungen_lesen_aendern_arbeitskopie_und_wohnanlage(client):
         "erreichbarkeit": "Portier",
         "freigaben_anzahl": 0,
     }
-    assert "Arbeitskopie" not in str(gelesen["hinweis"])
+    assert "Arbeitskopie" not in str(gelesen["arbeitskopie_hinweis"])
     result = _rufe(
         client, token, "objekt_aktualisieren", objekt_id=seed["objekt_id"], stammdaten={"vulgoname": "Kopie"}
     )
     kopie_id = result["objekt_id"]
     assert kopie_id != seed["objekt_id"]
     basis = _rufe(client, token, "objekt_lesen", objekt_id=seed["objekt_id"])
-    assert basis["arbeitskopie_id"] == kopie_id and "Arbeitskopie" in basis["hinweis"]
+    assert basis["arbeitskopie_id"] == kopie_id and "Arbeitskopie" in basis["arbeitskopie_hinweis"]
     kopie = _rufe(client, token, "objekt_lesen", objekt_id=seed["objekt_id"], arbeitskopie=True)
     kopie_zuordnung_id = kopie["kontakte"][0]["zuordnung_id"]
     assert kopie["id"] == kopie_id
@@ -416,7 +418,9 @@ def test_kontaktzuordnungen_lesen_aendern_arbeitskopie_und_wohnanlage(client):
         token,
         "objekt_aktualisieren",
         objekt_id=seed["objekt_id"],
-        kontakte_aendern=[{"zuordnung_id": kopie_zuordnung_id, "art": "hausverwaltung", "sort": 9, "erreichbarkeit": "24h"}],
+        kontakte_aendern=[
+            {"zuordnung_id": kopie_zuordnung_id, "art": "hausverwaltung", "sort": 9, "erreichbarkeit": "24h"}
+        ],
     )
     assert geaendert["objekt_id"] == kopie_id
     kopie = _rufe(client, token, "objekt_lesen", objekt_id=seed["objekt_id"], arbeitskopie=True)
@@ -608,6 +612,213 @@ def test_kontakt_dublette_benennt_neuen_und_vorhandenen_kontakt(client):
     )
     assert "__fehler__" in result
     fehlertext = json.loads(result["__fehler__"])[0]["text"]
-    assert f'Neuer Kontakt "Max Muster" (kontakte_hinzufuegen[1])' in fehlertext
+    assert 'Neuer Kontakt "Max Muster" (kontakte_hinzufuegen[1])' in fehlertext
     assert f"{seed['kontakt_id']} Max Muster (Muster GmbH)" in fehlertext
     assert "duplikat_bestaetigt=true" in fehlertext
+
+
+def test_lesen_liefert_erweiterte_objekt_und_kinddaten_ohne_benachrichtigungen(client):
+    seed = _seed("obj-lesen-erweitert", {"admin": "objekt_verwalter"})
+    token = _token(client, seed, "admin")
+    assert _rufe(client, token, "objekt_lesen", objekt_id=seed["objekt_id"])["wohnanlage"] is None
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        objekt = db.get(Objekt, seed["objekt_id"])
+        kategorie = ObjektKategorie(org_id=seed["org_id"], name="Industrie")
+        gefahr = GefahrenKatalog(org_id=seed["org_id"], name="Chemie")
+        merkmal = MerkmalKatalog(org_id=seed["org_id"], name="Schluesselbox")
+        db.add_all([kategorie, gefahr, merkmal])
+        db.flush()
+        objekt.kategorie_id = kategorie.id
+        objekt.informationen = "Zutritt ueber Portier"
+        objekt.anfahrtsweg = "Nordtor verwenden"
+        objekt.revision_datum = date(2026, 10, 1)
+        objekt.lat, objekt.lng = 48.2082, 16.3738
+        objekt.bma.bmz_standort = "Foyer"
+        objekt.bma.fbf_standort = "Eingang"
+        objekt.bma.laufkarten_ablageort = "BMZ"
+        objekt.bma.uebertragungseinrichtung = "UE-1"
+        objekt.bma.schluesselsafe_vorhanden = True
+        objekt.bma.schluesselsafe_standort = "Tor"
+        objekt.bma.schluesselsafe_inhalt = "Generalschluessel"
+        objekt.bma.benachrichtigung_sms = "+436641234"
+        objekt.bma.benachrichtigung_email = "alarm@example.test"
+        db.add_all([
+            ObjektGefahr(
+                org_id=seed["org_id"], objekt_id=objekt.id, gefahr_id=gefahr.id,
+                un_nummer="1203", stoffname="Benzin", links_json='[{"label":"SDB","url":"https://example.test/sdb"}]',
+            ),
+            ObjektMerkmal(org_id=seed["org_id"], objekt_id=objekt.id, merkmal_id=merkmal.id, hinweis="Beim Tor"),
+            ObjektWohnanlage(
+                org_id=seed["org_id"], objekt_id=objekt.id, wohneinheiten=24, geschosse=6, stiegen=2,
+                hinweise="Feuerwehrzufahrt freihalten",
+            ),
+        ])
+        db.commit()
+    finally:
+        db.close()
+
+    gelesen = _rufe(client, token, "objekt_lesen", objekt_id=seed["objekt_id"])
+    felder = ("informationen", "anfahrtsweg", "revision_datum", "kategorie", "lat", "lng")
+    assert {key: gelesen[key] for key in felder} == {
+        "informationen": "Zutritt ueber Portier", "anfahrtsweg": "Nordtor verwenden", "revision_datum": "2026-10-01",
+        "kategorie": "Industrie", "lat": 48.2082, "lng": 16.3738,
+    }
+    assert gelesen["bma"] == {
+        "bma_nummer": "BMA-1", "rfl_nummer": "RFL-1", "bmz_standort": "Foyer", "fbf_standort": "Eingang",
+        "laufkarten_ablageort": "BMZ", "uebertragungseinrichtung": "UE-1", "schluesselsafe_vorhanden": True,
+        "schluesselsafe_standort": "Tor", "schluesselsafe_inhalt": "Generalschluessel",
+        "benachrichtigung_sms_gesetzt": True, "benachrichtigung_email_gesetzt": True,
+    }
+    assert gelesen["gefahren"][0]["name"] == "Chemie"
+    assert gelesen["gefahren"][0]["un_nummer"] == "1203"
+    assert gelesen["gefahren"][0]["stoffname"] == "Benzin"
+    assert gelesen["gefahren"][0]["links"] == [{"label": "SDB", "url": "https://example.test/sdb"}]
+    assert gelesen["merkmale"][0]["name"] == "Schluesselbox"
+    assert gelesen["merkmale"][0]["hinweis"] == "Beim Tor"
+    assert gelesen["wohnanlage"] == {
+        "wohneinheiten": 24, "geschosse": 6, "stiegen": 2, "hausverwaltung_kontakt_id": None,
+        "hinweise": "Feuerwehrzufahrt freihalten",
+    }
+
+
+def test_informationen_werden_in_arbeitskopie_aktualisiert(client):
+    seed = _seed("obj-informationen-kopie", {"admin": "objekt_verwalter"})
+    token = _token(client, seed, "admin")
+    aktualisiert = _rufe(
+        client, token, "objekt_aktualisieren", objekt_id=seed["objekt_id"],
+        stammdaten={"informationen": "Schluessel beim Portier"},
+    )
+    basis = _rufe(client, token, "objekt_lesen", objekt_id=seed["objekt_id"])
+    kopie = _rufe(client, token, "objekt_lesen", objekt_id=seed["objekt_id"], arbeitskopie=True)
+    assert aktualisiert["objekt_id"] == kopie["id"] != seed["objekt_id"]
+    assert kopie["informationen"] == "Schluessel beim Portier"
+    assert basis["informationen"] is None
+    assert basis["arbeitskopie_hinweis"]
+
+
+def test_merkmale_aendern_auf_entwurf_und_basis_id_der_arbeitskopie(client):
+    seed = _seed("obj-merkmale-aendern", {"admin": "objekt_verwalter"})
+    token = _token(client, seed, "admin")
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        katalog = MerkmalKatalog(org_id=seed["org_id"], name="FSD")
+        entwurf = Objekt(org_id=seed["org_id"], nummer=2, name="Entwurf", status="entwurf")
+        db.add_all([katalog, entwurf])
+        db.flush()
+        basis_merkmal = ObjektMerkmal(
+            org_id=seed["org_id"], objekt_id=seed["objekt_id"], merkmal_id=katalog.id, hinweis="Basis"
+        )
+        entwurf_merkmal = ObjektMerkmal(
+            org_id=seed["org_id"], objekt_id=entwurf.id, merkmal_id=katalog.id, hinweis="Alt"
+        )
+        db.add_all([basis_merkmal, entwurf_merkmal])
+        db.commit()
+        entwurf_id, entwurf_merkmal_id, basis_merkmal_id = entwurf.id, entwurf_merkmal.id, basis_merkmal.id
+    finally:
+        db.close()
+    _rufe(
+        client, token, "objekt_aktualisieren", objekt_id=entwurf_id,
+        merkmale_aendern=[{"id": entwurf_merkmal_id, "hinweis": "Neu"}],
+    )
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        assert db.get(ObjektMerkmal, entwurf_merkmal_id).hinweis == "Neu"
+        assert db.query(ObjektChange).filter_by(objekt_id=entwurf_id, feld="merkmal_hinweis").count() == 1
+    finally:
+        db.close()
+    kopie_result = _rufe(
+        client, token, "objekt_aktualisieren", objekt_id=seed["objekt_id"],
+        merkmale_aendern=[{"id": basis_merkmal_id, "hinweis": "Nur Kopie"}],
+    )
+    assert _rufe(client, token, "objekt_lesen", objekt_id=seed["objekt_id"])["merkmale"][0]["hinweis"] == "Basis"
+    kopie = _rufe(client, token, "objekt_lesen", objekt_id=seed["objekt_id"], arbeitskopie=True)
+    assert kopie["merkmale"][0]["hinweis"] == "Nur Kopie"
+    assert kopie_result["objekt_id"] != seed["objekt_id"]
+    assert "__fehler__" in _rufe(
+        client, token, "objekt_aktualisieren", objekt_id=entwurf_id, merkmale_aendern=[{"id": 999999}]
+    )
+    assert "__fehler__" in _rufe(
+        client, token, "objekt_aktualisieren", objekt_id=entwurf_id,
+        merkmale_aendern=[{"id": entwurf_merkmal_id, "unbekannt": "x"}],
+    )
+
+
+def test_merkmale_hinzufuegen_aktualisiert_bestehenden_hinweis_ohne_dublette(client):
+    seed = _seed("obj-merkmale-hinzufuegen", {"admin": "objekt_verwalter"})
+    token = _token(client, seed, "admin")
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        objekt = Objekt(org_id=seed["org_id"], nummer=2, name="Entwurf", status="entwurf")
+        merkmal = MerkmalKatalog(org_id=seed["org_id"], name="Tiefgarage")
+        db.add_all([objekt, merkmal])
+        db.flush()
+        db.add(ObjektMerkmal(org_id=seed["org_id"], objekt_id=objekt.id, merkmal_id=merkmal.id, hinweis="Alt"))
+        db.commit()
+        objekt_id, merkmal_id = objekt.id, merkmal.id
+    finally:
+        db.close()
+    _rufe(
+        client, token, "objekt_aktualisieren", objekt_id=objekt_id,
+        merkmale_hinzufuegen=[{"merkmal_id": merkmal_id, "hinweis": "Neu"}],
+    )
+    wiederholt = _rufe(
+        client, token, "objekt_aktualisieren", objekt_id=objekt_id, merkmale_hinzufuegen=[{"merkmal_id": merkmal_id}]
+    )
+    gelesen = _rufe(client, token, "objekt_lesen", objekt_id=objekt_id)
+    assert len(gelesen["merkmale"]) == 1 and gelesen["merkmale"][0]["hinweis"] == "Neu"
+    assert wiederholt["hinweise"] == [f"Merkmal {merkmal_id} ist bereits zugeordnet."]
+
+
+def test_gefahren_aendern_teilupdates_links_und_basis_ids(client):
+    seed = _seed("obj-gefahren-aendern", {"admin": "objekt_verwalter"})
+    other = _seed("obj-gefahren-aendern-fremd", {"admin": "objekt_verwalter"})
+    token = _token(client, seed, "admin")
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        katalog = GefahrenKatalog(org_id=seed["org_id"], name="Gas")
+        db.add(katalog)
+        db.flush()
+        gefahr = ObjektGefahr(
+            org_id=seed["org_id"], objekt_id=seed["objekt_id"], gefahr_id=katalog.id,
+            un_nummer="1971", stoffname="Alt", detail="Detail",
+        )
+        fremde_katalog = GefahrenKatalog(org_id=other["org_id"], name="Fremd")
+        db.add_all([gefahr, fremde_katalog])
+        db.flush()
+        fremde_gefahr = ObjektGefahr(
+            org_id=other["org_id"], objekt_id=other["objekt_id"], gefahr_id=fremde_katalog.id,
+        )
+        db.add(fremde_gefahr)
+        db.commit()
+        gefahr_id, fremde_gefahr_id = gefahr.id, fremde_gefahr.id
+    finally:
+        db.close()
+    _rufe(
+        client, token, "objekt_aktualisieren", objekt_id=seed["objekt_id"],
+        gefahren_aendern=[{"id": gefahr_id, "stoffname": "Erdgas", "links": [{"label": "SDB", "url": "https://example.test/sdb"}]}],
+    )
+    kopie = _rufe(client, token, "objekt_lesen", objekt_id=seed["objekt_id"], arbeitskopie=True)
+    assert kopie["gefahren"][0]["un_nummer"] == "1971"
+    assert kopie["gefahren"][0]["stoffname"] == "Erdgas"
+    assert kopie["gefahren"][0]["links"] == [{"label": "SDB", "url": "https://example.test/sdb"}]
+    assert _rufe(client, token, "objekt_lesen", objekt_id=seed["objekt_id"])["gefahren"][0]["stoffname"] == "Alt"
+    _rufe(
+        client, token, "objekt_aktualisieren", objekt_id=seed["objekt_id"],
+        gefahren_aendern=[{"id": gefahr_id, "stoffname": "", "un_nummer": ""}],
+    )
+    kopie = _rufe(client, token, "objekt_lesen", objekt_id=seed["objekt_id"], arbeitskopie=True)
+    assert kopie["gefahren"][0]["stoffname"] is None and kopie["gefahren"][0]["un_nummer"] is None
+    for aenderung in (
+        [{"id": gefahr_id, "unbekannt": "x"}],
+        [{"id": 999999, "stoffname": "Nein"}],
+        [{"id": fremde_gefahr_id, "stoffname": "Nein"}],
+    ):
+        assert "__fehler__" in _rufe(
+            client, token, "objekt_aktualisieren", objekt_id=seed["objekt_id"], gefahren_aendern=aenderung
+        )
