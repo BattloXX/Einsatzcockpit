@@ -59,6 +59,7 @@ from app.models.master import (
     TaskSuggestionAlarm,
     VehicleMaster,
 )
+from app.models.road_closure import IncidentRoute
 from app.models.user import Role, User, UserRole
 from app.services.ai_service import is_enabled as ai_is_enabled
 from app.services.alarm_service import get_alarm_type_by_code
@@ -95,6 +96,8 @@ from app.services.incident_service import (
     update_task,
 )
 from app.services.incident_service import card_journal as get_card_journal
+from app.services.road_closure_flags import strassensperren_effective_enabled
+from app.services.road_closure_incident_service import route_payload
 
 router = APIRouter()
 _log = logging.getLogger(__name__)
@@ -1089,7 +1092,53 @@ def incident_info(incident_id: int, request: Request, db: Session = Depends(get_
         "objekt_verknuepfungen": objekt_verknuepfungen,
         "objekt_enabled": objekt_enabled,
         "gmaps_url": gmaps_url,
+        "route_neu_allowed": has_role(user, "objekt_verwalter", "incident_leader", "org_admin", "admin"),
     })
+
+
+@router.get("/einsatz/{incident_id}/route.json")
+def incident_route_json(incident_id: int, request: Request, db: Session = Depends(get_db)):
+    """Sperrenbezogene Anfahrtsdaten der Organisation des angemeldeten Benutzers."""
+    user = getattr(request.state, "user", None)
+    if not user:
+        raise HTTPException(401, "Nicht angemeldet")
+    incident = _incident_or_404(incident_id, db)
+    if not can_access_incident(user, incident):
+        raise HTTPException(403, "Kein Zugriff auf diesen Einsatz")
+    if not strassensperren_effective_enabled(user.org_id, db):
+        return {"status": "disabled"}
+    # route_payload erzeugt keine Zeile: Der periodische Route-Loop ist allein
+    # fuer Berechnung und initiales Anlegen verantwortlich.
+    return route_payload(db, incident, user.org_id)
+
+
+@router.post("/einsatz/{incident_id}/route/neu")
+def incident_route_neu(incident_id: int, request: Request, db: Session = Depends(get_db)):
+    """Markiert die Organisationsroute fuer die erneute Berechnung im Loop."""
+    user = getattr(request.state, "user", None)
+    if not user:
+        raise HTTPException(401, "Nicht angemeldet")
+    incident = _incident_or_404(incident_id, db)
+    if not can_access_incident(user, incident):
+        raise HTTPException(403, "Kein Zugriff auf diesen Einsatz")
+    if not has_role(user, "objekt_verwalter", "incident_leader", "org_admin", "admin"):
+        raise HTTPException(403, "Keine Berechtigung")
+    if not strassensperren_effective_enabled(user.org_id, db):
+        return {"ok": True}
+    route = (
+        db.query(IncidentRoute)
+        .execution_options(include_all_tenants=True)
+        .filter(IncidentRoute.incident_id == incident.id, IncidentRoute.org_id == user.org_id)
+        .first()
+    )
+    if route is None:
+        db.add(IncidentRoute(org_id=user.org_id, incident_id=incident.id, status="pending"))
+    else:
+        route.stale = True
+        route.attempts = 0
+        route.next_attempt_at = None
+    db.commit()
+    return {"ok": True}
 
 
 @router.get("/einsatz/{incident_id}/hydranten.json")

@@ -156,6 +156,9 @@ document.addEventListener('alpine:init', () => {
             const matchEv = new CustomEvent('objekt-match', { detail: ev, bubbles: true });
             document.body.dispatchEvent(matchEv);
           }
+          if (ev.type === 'incident_route_updated') {
+            document.body.dispatchEvent(new CustomEvent('incident-route-updated', { detail: ev, bubbles: true }));
+          }
           if (ev.type === 'einsatz_live') {
             const liveEv = new CustomEvent('einsatz-live', { detail: ev, bubbles: true });
             document.body.dispatchEvent(liveEv);
@@ -749,6 +752,7 @@ function incidentBoard(incidentId, alarm, startedAt) {
         // oder von der Lagefuehrungs-Komponente verarbeitet. Hier bleiben sie
         // explizit bekannt, damit sie keinen allgemeinen Fragment-Resync ausloesen.
         case 'incident_closed':
+        case 'incident_route_updated':
         case 'autoclose_warning':
         case 'autoclose_dismissed':
         case 'rsvp:changed':

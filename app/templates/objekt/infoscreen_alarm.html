@@ -46,6 +46,8 @@
 
     /* Alarm */
     .is-alarm { flex: 1; display: grid; grid-template-rows: auto 1fr; min-height: 0; }
+    /* Mit Anfahrts-Warnbox: Kopf, Warnbox (kompakt), Inhalt */
+    .is-alarm:has(> .is-route-warn) { grid-template-rows: auto auto 1fr; }
     .is-alarm__kopf { background: var(--is-red); display: flex; justify-content: space-between;
                       align-items: center; gap: 24px; padding: 10px 24px; }
     .is-alarm__stichzeile { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
@@ -72,6 +74,11 @@
     .is-alarm__body { display: grid; gap: 14px; padding: 14px 20px; min-height: 0; }
     .is-alarm__body--mit-objekt { grid-template-columns: 1fr 1.5fr 1fr; }
     .is-alarm__body--ohne-objekt { grid-template-columns: 2fr 1fr; }
+    .is-route-warn { margin: 12px 20px 0; padding: 13px 18px; border: 3px solid #ef6c00; border-radius: 10px;
+                     background: rgba(239,108,0,.18); color: #fff; font-size: clamp(1.05rem, 1.45vw, 1.55rem); font-weight: 600; }
+    .is-route-warn--route { border-color: #ff5252; background: rgba(211,47,47,.22); }
+    .is-route-warn__title { font-size: 1.2em; font-weight: 900; margin-bottom: 5px; }
+    .is-route-warn__line { margin-top: 3px; }
     .is-col { display: flex; flex-direction: column; gap: 14px; min-height: 0; }
     .is-panel { border: 1px solid var(--is-line); border-radius: 12px; background: var(--is-surface);
                 padding: 16px; overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
@@ -656,6 +663,7 @@
     var o = daten.objekt;
     var hatObjekt = !!o;
     var fahrzeuge = daten.fahrzeuge || [];
+    var route = inc.route;
     var leitstelle = document.getElementById("is-leitstelle");
     if (leitstelle) {
       leitstelle.textContent = inc.leitstelle_nr ? "Leitstelle " + inc.leitstelle_nr : "";
@@ -677,6 +685,7 @@
       '<div class="is-alarm__timer"><div class="cap">Einsatzzeit</div>' +
       '<div class="val" id="is-einsatzzeit">00:00</div></div>' +
       "</div>" +
+      routeWarnHtml(route) +
       '<div class="is-alarm__body ' + (hatObjekt ? "is-alarm__body--mit-objekt" : "is-alarm__body--ohne-objekt") + '">';
 
     // ── Links: Objekt & Gefahren + BMA/Schlüssel ──
@@ -745,6 +754,27 @@
     baueKarte(daten);
   }
 
+  function routeWarnHtml(route) {
+    if (!route || !route.closures || !route.closures.length) { return ""; }
+    var betroffen = route.closures.some(function (c) { return c.relevance === "route"; });
+    var html = '<div class="is-route-warn' + (betroffen ? " is-route-warn--route" : "") + '">';
+    html += '<div class="is-route-warn__title">' + (betroffen ? "⚠️ ANFAHRT BEEINTRÄCHTIGT" : "⚠️ SPERRE AM EINSATZORT") + "</div>";
+    route.closures.forEach(function (c) {
+      html += '<div class="is-route-warn__line">' + esc(c.title || "Straßensperre") + " – " + esc(c.restriction_label || c.restriction_type || "") +
+        (c.geometry_status === "needs_review" ? " · Geometrie ungeprüft" : "") + (c.relevance === "destination" ? " · am Einsatzort" : "") + "</div>";
+    });
+    if (route.alternative_status === "ok") {
+      var streets = (route.alternative_streets || []).slice(0, 6);
+      html += '<div class="is-route-warn__line">Alternative Anfahrt: ' + esc(streets.join(" → ") + ((route.alternative_streets || []).length > 6 ? " …" : "")) + "</div>";
+      var km = Math.max(0, Number(route.detour_distance_m) || 0) / 1000;
+      var min = Math.max(1, Math.ceil(Math.max(0, Number(route.detour_duration_s) || 0) / 60));
+      html += '<div class="is-route-warn__line">Mehrweg: +' + km.toLocaleString("de-AT", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " km · ca. +" + min + " min</div>";
+    } else if (route.alternative_status === "unavailable") {
+      html += '<div class="is-route-warn__line">Keine Umfahrung gefunden – Lage vor Ort prüfen.</div>';
+    }
+    return html + "</div>";
+  }
+
   function fitUmAnker(karte, anker, punkte, opts) {
     if (!anker) { return false; }
     var dLat = 0, dLng = 0;
@@ -783,6 +813,30 @@
       anker = [lat, lng];
     } else {
       karte.setView([47.4652, 9.7503], 14);
+    }
+
+    var route = inc.route;
+    if (route && route.closures && route.closures.length) {
+      if (route.route) {
+        var routeLayer = L.geoJSON(route.route, { style: { color: "#1e88e5", weight: 5, opacity: .8, dashArray: route.status === "affected" ? "10 8" : null }, interactive: false }).addTo(karte);
+        if (routeLayer.getBounds().isValid()) { bounds.push(routeLayer.getBounds().getSouthWest(), routeLayer.getBounds().getNorthEast()); }
+      }
+      if (route.alternative_route) {
+        var altLayer = L.geoJSON(route.alternative_route, { style: { color: "#2e7d32", weight: 6, opacity: .9 }, interactive: false }).addTo(karte);
+        if (altLayer.getBounds().isValid()) { bounds.push(altLayer.getBounds().getSouthWest(), altLayer.getBounds().getNorthEast()); }
+      }
+      route.closures.forEach(function (closure) {
+        if (!closure.geometry) { return; }
+        var closureLayer = L.geoJSON(closure.geometry, {
+          style: { color: "#d32f2f", weight: 7, fillOpacity: .3 }, interactive: false,
+          pointToLayer: function (feature, latlng) { return L.circleMarker(latlng, { radius: 8, color: "#d32f2f", weight: 3, fillColor: "#d32f2f", fillOpacity: .8 }); }
+        }).addTo(karte);
+        if (closureLayer.getBounds().isValid()) { bounds.push(closureLayer.getBounds().getSouthWest(), closureLayer.getBounds().getNorthEast()); }
+      });
+      if (route.start && route.start.lat != null && route.start.lng != null) {
+        L.marker([route.start.lat, route.start.lng], { icon: L.divIcon({ html: "<div>🚒</div>", className: "route-start-divicon", iconSize: null, iconAnchor: [10, 10] }), interactive: false }).addTo(karte);
+        bounds.push([route.start.lat, route.start.lng]);
+      }
     }
 
     // Objekt-Symbole (FSD, BMZ, Zugänge, Gefahren-Dreiecke, …)
@@ -903,7 +957,7 @@
         var ev = JSON.parse(e.data);
         if ((ev.type === "incident_created" && ev.alarm_erlaubt !== false) || ev.type === "objekt_match" ||
             ev.type === "incident_closed" || ev.type === "gsl_changed" ||
-            ev.type === "vehicle_status" || ev.type === "vehicles_changed") {
+            ev.type === "vehicle_status" || ev.type === "vehicles_changed" || ev.type === "incident_route_updated") {
           letzterModus = null; // Neuaufbau erzwingen
           aktualisieren();
         }
