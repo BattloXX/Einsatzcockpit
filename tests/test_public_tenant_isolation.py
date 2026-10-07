@@ -14,7 +14,7 @@ from app.core.security import hash_api_key
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.incident import Incident
-from app.models.master import FireDept, Member, OrgSettings, VehicleMaster
+from app.models.master import FireDept, Member, OrgSettings, SystemSettings, VehicleMaster
 from app.models.objekt import (
     AlarmInfoscreenToken,
     OBJEKT_STATUS_FREIGEGEBEN,
@@ -41,6 +41,7 @@ from app.models.mailing import (
 from app.models.user import ApiKey
 from app.models.api_message import ApiMessage, ApiMessageRecipient
 from app.models.kontakt import Kontakt
+from app.models.road_closure import RoadClosure, RoadClosureShare
 from app.models.sms import SmsGroup
 from app.core.crypto import encrypt_secret
 from app.core.security import generate_api_key, sign_mailing_track_token, sign_mailing_webhook_org
@@ -989,3 +990,47 @@ def test_probenplan_und_ics_token_isolieren_org_und_fremde_verknuepfungen(client
     for suffix in ("", ".ics"):
         r = client.get(f"/p/probenplan/{tokens[ORG_A]}{suffix}")
         assert "Public-Org-A" in r.text and "GEHEIM-Org-B" not in r.text
+
+
+def test_strassensperren_infoscreen_token_scoped_auf_eigene_und_geteilte_sperren(client):
+    """Der Token von Org A darf Org B nur bei expliziter Freigabe sehen."""
+    org_b_id = _setup_zwei_orgs()
+    now = datetime.now(UTC).replace(tzinfo=None)
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        system = db.get(SystemSettings, "strassensperren_module_enabled")
+        if system is None:
+            db.add(SystemSettings(key="strassensperren_module_enabled", value="true"))
+        else:
+            system.value = "true"
+        for org_id in (ORG_A, org_b_id):
+            settings = db.query(OrgSettings).filter_by(org_id=org_id).first()
+            if settings is None:
+                settings = OrgSettings(org_id=org_id)
+                db.add(settings)
+            settings.strassensperren_modul_aktiv = True
+        own = RoadClosure(org_id=ORG_A, title="Sperre Org A sichtbar", valid_from=now, restriction_type="closed",
+                          geometry_geojson='{"type":"Point","coordinates":[9.7,47.5]}')
+        hidden = RoadClosure(org_id=org_b_id, title="Sperre Org B geheim", valid_from=now, restriction_type="closed",
+                             geometry_geojson='{"type":"Point","coordinates":[9.8,47.6]}')
+        shared = RoadClosure(org_id=org_b_id, title="Sperre Org B geteilt", valid_from=now, restriction_type="closed",
+                             geometry_geojson='{"type":"Point","coordinates":[9.9,47.7]}')
+        db.add_all([own, hidden, shared])
+        db.flush()
+        db.add(RoadClosureShare(road_closure_id=shared.id, org_id=ORG_A))
+        db.commit()
+        hidden_id = hidden.id
+        shared_id = shared.id
+    finally:
+        db.close()
+
+    html = client.get(f"/infoscreen/strassensperren/{RAW_TOKEN_A}")
+    assert html.status_code == 200
+    assert "Sperre Org A sichtbar" in html.text
+    assert "Sperre Org B geteilt" in html.text
+    assert "Sperre Org B geheim" not in html.text
+    payload = client.get(f"/infoscreen/strassensperren/{RAW_TOKEN_A}/karte.json").json()
+    ids = {feature["properties"]["id"] for feature in payload["features"]}
+    assert shared_id in ids
+    assert hidden_id not in ids

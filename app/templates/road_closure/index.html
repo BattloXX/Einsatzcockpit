@@ -8,7 +8,7 @@
 {% endblock %}
 {% block content %}
 <section class="sperren-page">
-  <header class="sperren-header"><div><h1 class="sperren-title">Straßensperren</h1><p class="sperren-sub">{{ active_count }} aktiv · {{ planned_count }} geplant</p></div>{% if can_edit %}<a class="btn btn--primary" href="/strassensperren/neu">+ Sperre anlegen</a>{% endif %}</header>
+  <header class="sperren-header"><div><h1 class="sperren-title">Straßensperren</h1><p class="sperren-sub">{{ active_count }} aktiv · {{ planned_count }} geplant</p></div><div style="display:flex;gap:8px;"> <a class="btn btn--ghost" href="/strassensperren/status">Statusansicht</a>{% if can_edit %}<a class="btn btn--primary" href="/strassensperren/neu">+ Sperre anlegen</a>{% endif %}</div></header>
   <form id="sperren-filter" class="sperren-filter" hx-get="/strassensperren/liste" hx-target="#sperren-liste" hx-push-url="true">
     <div class="sperren-filter__group"><span class="sperren-filter__label">Status</span><div class="sperren-filter__chips">{% for value,label in [('current','Aktuell'),('active','Aktiv'),('planned','Geplant'),('all','Alle')] %}<button class="btn btn--ghost btn--sm{% if filters.status == value %} is-active{% endif %}" name="status" value="{{ value }}" type="submit">{{ label }}</button>{% endfor %}</div></div>
     <div class="sperren-filter__group"><span class="sperren-filter__label">Zeitraum</span><div class="sperren-filter__chips">{% for value,label in [('','Alle'),('heute','Heute'),('7tage','7 Tage')] %}<button class="btn btn--ghost btn--sm{% if filters.zeitraum == value %} is-active{% endif %}" name="zeitraum" value="{{ value }}" type="submit">{{ label }}</button>{% endfor %}</div></div>
