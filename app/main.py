@@ -104,6 +104,7 @@ from app.routers import (
     ui_probenplanung_public,
     ui_profile,
     ui_push,
+    ui_road_closure,
     ui_settings,
     ui_sms,
     ui_sso,
@@ -898,6 +899,7 @@ app.include_router(ui_objekt.router)
 app.include_router(ui_objekt_dokumente.router)
 app.include_router(ui_objekt_pflege_review.router)
 app.include_router(ui_kontakt.router)
+app.include_router(ui_road_closure.router)
 app.include_router(ui_nachschlagewerke.router)
 app.include_router(ui_nachschlagewerke.cache_router)
 app.include_router(ui_wasserstelle.router)

@@ -1,0 +1,23 @@
+<style>
+.sperren-title{margin:0;font-size:1.6rem;font-weight:700;line-height:1.2}
+.sperren-sub{margin:.25rem 0 0;color:var(--text-muted);font-size:.9rem}
+.sperren-list{display:flex;flex-direction:column}
+.sperren-row{display:flex;gap:.75rem;align-items:flex-start;justify-content:space-between;padding:.75rem .9rem;border-bottom:1px solid var(--border);color:inherit;text-decoration:none;transition:background .12s}
+.sperren-row:last-child{border-bottom:0}
+.sperren-row:hover{background:rgba(255,255,255,.04)}
+.sperren-row--muted{opacity:.52}
+.sperren-row__main{min-width:0;flex:1;display:flex;flex-direction:column;gap:2px}
+.sperren-row__main strong{font-size:.95rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sperren-row__main small{display:block;color:var(--text-muted);font-size:.78rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sperren-row__meta{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex:0 0 auto}
+.sperren-pill,.sperren-type,.sperren-review,.sperren-missing{display:inline-flex;align-items:center;padding:2px 9px;border-radius:999px;border:1px solid transparent;font:700 .66rem 'JetBrains Mono',monospace;letter-spacing:.03em;text-transform:uppercase;white-space:nowrap}
+.sperren-pill{background:var(--surface-high);border-color:var(--border);color:var(--text-muted)}
+.sperren-pill--active{background:rgba(34,197,94,.15);border-color:rgba(34,197,94,.35);color:#86efac}
+.sperren-type--red{background:rgba(239,68,68,.18);border-color:rgba(239,68,68,.4);color:#fca5a5}
+.sperren-type--orange{background:rgba(249,115,22,.18);border-color:rgba(249,115,22,.4);color:#fdba74}
+.sperren-type--yellow{background:rgba(234,179,8,.18);border-color:rgba(234,179,8,.4);color:#fde047}
+.sperren-type--grey{background:var(--surface-high);border-color:var(--border);color:var(--text-muted)}
+.sperren-review{background:rgba(234,179,8,.23);border-color:rgba(234,179,8,.55);color:#fde047}
+.sperren-missing{background:var(--surface-high);color:var(--text-muted)}
+@media(max-width:480px){.sperren-row{flex-direction:column}.sperren-row__meta{flex-direction:row;flex-wrap:wrap;align-items:flex-start}}
+</style>

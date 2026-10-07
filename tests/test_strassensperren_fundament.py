@@ -149,6 +149,12 @@ def test_system_toggle_requires_system_admin_and_org_form_is_gated(client):
         settings = db.query(OrgSettings).filter_by(org_id=org_id).first() or OrgSettings(org_id=org_id)
         db.add(settings)
         settings.strassensperren_modul_aktiv = False
+        # Andere Tests lassen das System-Flag ggf. an – hier explizit aus.
+        flag = db.query(SystemSettings).filter_by(key="strassensperren_module_enabled").first()
+        if flag is None:
+            flag = SystemSettings(key="strassensperren_module_enabled", value="false")
+            db.add(flag)
+        flag.value = "false"
         db.commit()
     finally:
         db.close()
