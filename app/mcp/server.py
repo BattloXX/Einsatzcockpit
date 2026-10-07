@@ -456,6 +456,94 @@ async def strassensperre_lesen(road_closure_id: int, ctx: Context | None = None)
     return await _call_registered_tool("strassensperre_lesen", road_closure_id=road_closure_id)
 
 
+@server.tool(
+    name="strassensperre_anlegen",
+    description="Legt eine Straßensperre an; eine harte Löschung per MCP ist nicht möglich.",
+)
+async def strassensperre_anlegen(
+    title: str,
+    valid_from: str,
+    restriction_type: str,
+    street: str = "",
+    from_text: str = "",
+    to_text: str = "",
+    valid_until: str = "",
+    description: str = "",
+    direction: str = "",
+    priority: str = "normal",
+    max_weight_t: float | None = None,
+    max_height_m: float | None = None,
+    max_width_m: float | None = None,
+    max_length_m: float | None = None,
+    source: str = "",
+    source_url: str = "",
+    geometry_geojson: dict | str | None = None,
+    visible_for_org_ids: list[int] | None = None,
+    duplikat_bestaetigt: bool = False,
+    ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "strassensperre_anlegen",
+        title=title,
+        valid_from=valid_from,
+        restriction_type=restriction_type,
+        street=street,
+        from_text=from_text,
+        to_text=to_text,
+        valid_until=valid_until,
+        description=description,
+        direction=direction,
+        priority=priority,
+        max_weight_t=max_weight_t,
+        max_height_m=max_height_m,
+        max_width_m=max_width_m,
+        max_length_m=max_length_m,
+        source=source,
+        source_url=source_url,
+        geometry_geojson=geometry_geojson,
+        visible_for_org_ids=visible_for_org_ids,
+        duplikat_bestaetigt=duplikat_bestaetigt,
+    )
+
+
+@server.tool(
+    name="strassensperre_aktualisieren",
+    description="Aktualisiert eine eigene Sperre; geometry_geojson setzt geometry_status auf ok. Kein MCP-Löschen.",
+)
+async def strassensperre_aktualisieren(
+    road_closure_id: int,
+    felder: dict,
+    version: int | None = None,
+    ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "strassensperre_aktualisieren",
+        road_closure_id=road_closure_id,
+        felder=felder,
+        version=version,
+    )
+
+
+@server.tool(
+    name="strassensperre_deaktivieren",
+    description="Deaktiviert eine eigene Sperre. Eine harte Löschung per MCP ist nicht möglich.",
+)
+async def strassensperre_deaktivieren(
+    road_closure_id: int, grund: str, ctx: Context | None = None
+) -> dict[str, object]:
+    return await _call_registered_tool("strassensperre_deaktivieren", road_closure_id=road_closure_id, grund=grund)
+
+
+@server.tool(
+    name="strassensperre_reaktivieren",
+    description="Reaktiviert eine eigene Sperre. Eine harte Löschung per MCP ist nicht möglich.",
+)
+async def strassensperre_reaktivieren(
+    road_closure_id: int, ctx: Context | None = None
+) -> dict[str, object]:
+    return await _call_registered_tool("strassensperre_reaktivieren", road_closure_id=road_closure_id)
+
+
 @server.tool(name="strassensperren_suchen", description="Sucht sichtbare Straßensperren nach Worten in Titel, Straße, Beschreibung und Abschnitt; status wie bei strassensperren_liste.")  # noqa: E501
 async def strassensperren_suchen(suchtext: str, status: str = "all", von: str = "", bis: str = "", limit: int = 20, ctx: Context | None = None) -> dict[str, object]:  # noqa: E501
     return await _call_registered_tool("strassensperren_suchen", suchtext=suchtext, status=status, von=von, bis=bis, limit=limit)  # noqa: E501

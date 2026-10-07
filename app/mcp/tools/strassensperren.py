@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from app.core.timezones import format_local_iso, local_date_to_utc, local_input_to_utc
@@ -14,7 +14,13 @@ from app.models.incident import Incident, IncidentOrg
 from app.models.master import FireDept
 from app.models.road_closure import CLOSURE_STATUS, RESTRICTION_TYPES, RoadClosure, RoadClosureShare
 from app.models.user import User
-from app.services import einsatz_routing, road_closure_geo_service, road_closure_incident_service, road_closure_service
+from app.services import (
+    einsatz_routing,
+    road_closure_geo_service,
+    road_closure_incident_service,
+    road_closure_section_service,
+    road_closure_service,
+)
 from app.services.einsatz_routing import RoutingError
 from app.services.road_closure_flags import strassensperren_effective_enabled
 
@@ -99,6 +105,46 @@ def _date(value: str, *, end: bool, org: FireDept | None) -> datetime | None:
     return parsed
 
 
+def _datetime_input(value: str, org: FireDept | None, field: str) -> datetime:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field} ist erforderlich.")
+    try:
+        parsed = datetime.fromisoformat(value.strip())
+    except ValueError as exc:
+        raise ValueError(f"{field} muss ein ISO-8601-Zeitpunkt sein.") from exc
+    if parsed.tzinfo is not None:
+        return parsed.astimezone(UTC).replace(tzinfo=None)
+    converted = local_input_to_utc(value, org)
+    if converted is None:
+        raise ValueError(f"{field} muss ein ISO-8601-Zeitpunkt sein.")
+    return converted
+
+
+def _geometry(value: dict | str | None) -> dict | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except json.JSONDecodeError as exc:
+            raise ValueError("geometry_geojson muss gültiges GeoJSON sein.") from exc
+    if not isinstance(value, dict):
+        raise ValueError("geometry_geojson muss ein GeoJSON-Objekt oder JSON-String sein.")
+    return value
+
+
+def _writable_closure(context: MCPContext, road_closure_id: int) -> RoadClosure:
+    try:
+        return road_closure_service.get_closure_for_org(context.db, context.org_id, road_closure_id, writable=True)
+    except ValueError as exc:
+        raise ValueError("Straßensperre nicht gefunden oder nicht änderbar.") from exc
+
+
+def _duplicate_dict(closure: RoadClosure, org_id: int, db: Any) -> dict[str, object]:
+    result = _closure_dict(closure, org_id, db=db)
+    return {key: result[key] for key in ("id", "title", "street", "from_text", "to_text", "valid_from", "valid_until")}
+
+
 def _summary(items: list[dict[str, object]]) -> str:
     if not items:
         return "Keine passenden Straßensperren gefunden."
@@ -153,6 +199,246 @@ async def strassensperre_lesen(context: MCPContext, road_closure_id: int) -> dic
     closure = road_closure_service.get_closure_for_org(context.db, context.org_id, road_closure_id, writable=False)
     result = _closure_dict(closure, context.org_id, voll=True, db=context.db)
     return result | {"zusammenfassung": _summary([result])}
+
+
+@register_tool(
+    name="strassensperre_anlegen",
+    description=(
+        "Legt eine Straßensperre der eigenen Organisation an. Eine harte Löschung per MCP ist nicht möglich."
+    ),
+    required_roles=("objekt_verwalter",),
+    module_check=strassensperren_effective_enabled,
+)
+async def strassensperre_anlegen(
+    context: MCPContext,
+    title: str,
+    valid_from: str,
+    restriction_type: str,
+    street: str = "",
+    from_text: str = "",
+    to_text: str = "",
+    valid_until: str = "",
+    description: str = "",
+    direction: str = "",
+    priority: str = "normal",
+    max_weight_t: float | None = None,
+    max_height_m: float | None = None,
+    max_width_m: float | None = None,
+    max_length_m: float | None = None,
+    source: str = "",
+    source_url: str = "",
+    geometry_geojson: dict | str | None = None,
+    visible_for_org_ids: list[int] | None = None,
+    duplikat_bestaetigt: bool = False,
+) -> dict[str, object]:
+    try:
+        org = _org(context)
+        geometry = _geometry(geometry_geojson)
+        starts = _datetime_input(valid_from, org, "valid_from")
+        ends = _datetime_input(valid_until, org, "valid_until") if valid_until else None
+        if not street.strip() and geometry is None:
+            raise ValueError("Mindestens Straße oder Geometrie ist erforderlich.")
+        duplicates = road_closure_service.find_duplicates(
+            context.db,
+            context.org_id,
+            street=street,
+            from_text=from_text,
+            to_text=to_text,
+            valid_from=starts,
+            valid_until=ends,
+            geometry=geometry,
+        )
+        if duplicates and not duplikat_bestaetigt:
+            candidates = [_duplicate_dict(item, context.org_id, context.db) for item in duplicates]
+            return {
+                "status": "possible_duplicate",
+                "existing_road_closure_id": duplicates[0].id,
+                "kandidaten": candidates,
+                "zusammenfassung": (
+                    f"Mögliche Dublette: {duplicates[0].title} - mit strassensperre_aktualisieren ändern "
+                    "oder mit duplikat_bestaetigt=true trotzdem anlegen."
+                ),
+            }
+        hints: list[str] = []
+        geometry_status = "ok" if geometry is not None else "missing"
+        if geometry is None and street.strip() and (from_text.strip() or to_text.strip()):
+            try:
+                section = await road_closure_section_service.section_from_address(
+                    street, from_text, to_text, getattr(org, "city", None)
+                )
+                geometry = section["geometry"]
+                geometry_status = "needs_review"
+                hint = section.get("hinweis") or "Bitte Abschnitt auf der Karte prüfen und ggf. korrigieren."
+                hints.append(str(hint))
+            except ValueError as exc:
+                hints.append(str(exc))
+        data = {
+            "title": title,
+            "street": street,
+            "from_text": from_text,
+            "to_text": to_text,
+            "valid_from": starts,
+            "valid_until": ends,
+            "restriction_type": restriction_type,
+            "description": description,
+            "direction": direction or None,
+            "priority": priority,
+            "max_weight_t": max_weight_t,
+            "max_height_m": max_height_m,
+            "max_width_m": max_width_m,
+            "max_length_m": max_length_m,
+            "source": source,
+            "source_url": source_url,
+            "geometry_geojson": geometry,
+            "geometry_status": geometry_status,
+        }
+        closure = road_closure_service.create_closure(
+            context.db,
+            context.org_id,
+            context.user.id,
+            data,
+            source="mcp",
+            mcp_tool="strassensperre_anlegen",
+        )
+        if visible_for_org_ids is not None:
+            road_closure_service.set_shares(
+                context.db,
+                closure,
+                visible_for_org_ids,
+                context.user.id,
+                source="mcp",
+                mcp_tool="strassensperre_anlegen",
+            )
+        if restriction_type == "closed" and geometry_status != "ok":
+            hints.append(
+                "Die Sperre wird als Warnung angezeigt, aber erst nach Prüfung der Geometrie in der "
+                "Web-Oberfläche beim Umfahrungs-Routing berücksichtigt."
+            )
+        context.db.commit()
+        result = _closure_dict(closure, context.org_id, voll=True, db=context.db)
+        return {
+            "status": "created",
+            "strassensperre": result,
+            "hinweise": hints,
+            "zusammenfassung": f"Straßensperre {closure.title} wurde angelegt.",
+        }
+    except Exception:
+        context.db.rollback()
+        raise
+
+
+@register_tool(
+    name="strassensperre_aktualisieren",
+    description=(
+        "Aktualisiert angegebene Felder einer eigenen Straßensperre. geometry_geojson setzt den "
+        "Geometriestatus bewusst auf ok. Eine harte Löschung per MCP ist nicht möglich."
+    ),
+    required_roles=("objekt_verwalter",),
+    module_check=strassensperren_effective_enabled,
+)
+async def strassensperre_aktualisieren(
+    context: MCPContext, road_closure_id: int, felder: dict, version: int | None = None
+) -> dict[str, object]:
+    try:
+        allowed = road_closure_service.EDITABLE_FIELDS - {"geometry_status"} | {"visible_for_org_ids"}
+        unknown = set(felder) - allowed
+        if unknown:
+            raise ValueError("Unbekannte Felder: " + ", ".join(sorted(unknown)) + ".")
+        closure = _writable_closure(context, road_closure_id)
+        if version is not None and version != closure.version:
+            raise ValueError(
+                f"Die Sperre wurde inzwischen geändert. Aktuelle Version: {closure.version}. Bitte laden Sie sie neu."
+            )
+        org = _org(context)
+        changes = dict(felder)
+        shares = changes.pop("visible_for_org_ids", None)
+        for field in ("valid_from", "valid_until"):
+            if field in changes:
+                value = changes[field]
+                changes[field] = None if field == "valid_until" and not value else _datetime_input(value, org, field)
+        if "geometry_geojson" in changes:
+            changes["geometry_geojson"] = _geometry(changes["geometry_geojson"])
+            changes["geometry_status"] = "ok" if changes["geometry_geojson"] is not None else "missing"
+        changed = road_closure_service.update_closure(
+            context.db,
+            closure,
+            context.user.id,
+            changes,
+            expected_version=version,
+            source="mcp",
+            mcp_tool="strassensperre_aktualisieren",
+        )
+        if shares is not None:
+            if not isinstance(shares, list) or not all(isinstance(item, int) for item in shares):
+                raise ValueError("visible_for_org_ids muss eine Liste von Organisations-IDs sein.")
+            added, removed = road_closure_service.set_shares(
+                context.db,
+                closure,
+                shares,
+                context.user.id,
+                source="mcp",
+                mcp_tool="strassensperre_aktualisieren",
+            )
+            if added or removed:
+                changed.append({"feld": "visible_for_org_ids", "vorher": removed, "nachher": added})
+        context.db.commit()
+        return {
+            "strassensperre": _closure_dict(closure, context.org_id, voll=True, db=context.db),
+            "geaenderte_felder": changed,
+            "zusammenfassung": f"Straßensperre {closure.title} wurde aktualisiert.",
+        }
+    except Exception:
+        context.db.rollback()
+        raise
+
+
+@register_tool(
+    name="strassensperre_deaktivieren",
+    description="Deaktiviert eine eigene Straßensperre. Eine harte Löschung per MCP ist nicht möglich.",
+    required_roles=("objekt_verwalter",),
+    module_check=strassensperren_effective_enabled,
+)
+async def strassensperre_deaktivieren(
+    context: MCPContext, road_closure_id: int, grund: str
+) -> dict[str, object]:
+    try:
+        if not grund.strip():
+            raise ValueError("grund ist erforderlich.")
+        closure = _writable_closure(context, road_closure_id)
+        road_closure_service.deactivate_closure(
+            context.db, closure, context.user.id, grund.strip(), source="mcp", mcp_tool="strassensperre_deaktivieren"
+        )
+        context.db.commit()
+        return {
+            "strassensperre": _closure_dict(closure, context.org_id, voll=True, db=context.db),
+            "hinweis": "Mit strassensperre_reaktivieren rückgängig machbar.",
+            "zusammenfassung": f"Straßensperre {closure.title} wurde deaktiviert.",
+        }
+    except Exception:
+        context.db.rollback()
+        raise
+
+
+@register_tool(
+    name="strassensperre_reaktivieren",
+    description="Reaktiviert eine eigene deaktivierte Straßensperre. Eine harte Löschung per MCP ist nicht möglich.",
+    required_roles=("objekt_verwalter",),
+    module_check=strassensperren_effective_enabled,
+)
+async def strassensperre_reaktivieren(context: MCPContext, road_closure_id: int) -> dict[str, object]:
+    try:
+        closure = _writable_closure(context, road_closure_id)
+        road_closure_service.reactivate_closure(
+            context.db, closure, context.user.id, source="mcp", mcp_tool="strassensperre_reaktivieren"
+        )
+        context.db.commit()
+        return {
+            "strassensperre": _closure_dict(closure, context.org_id, voll=True, db=context.db),
+            "zusammenfassung": f"Straßensperre {closure.title} wurde reaktiviert.",
+        }
+    except Exception:
+        context.db.rollback()
+        raise
 
 
 @register_tool(

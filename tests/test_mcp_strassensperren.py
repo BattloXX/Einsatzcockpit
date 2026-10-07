@@ -10,7 +10,9 @@ from app.db import SessionLocal
 from app.mcp.registry import TOOLS
 from app.models.incident import Incident
 from app.models.master import FireDept, OrgSettings, SystemSettings
-from app.models.road_closure import IncidentRoadClosure, IncidentRoute, RoadClosureShare
+from app.models.invitation import OrgPartner
+from app.models.road_closure import IncidentRoadClosure, IncidentRoute, RoadClosure, RoadClosureChange, RoadClosureShare
+from app.models.user import AuditLog
 from app.services import road_closure_service
 from app.services.einsatz_routing import RouteResponse, RouteResult, RoutingError
 from tests.test_mcp_objekte import _mcp, _seed, _token
@@ -50,8 +52,8 @@ def _db():
     return db
 
 
-def _bereit(slug: str) -> dict:
-    seed = _seed(slug, {"admin": "org_admin"})
+def _bereit(slug: str, users: dict[str, str] | None = None) -> dict:
+    seed = _seed(slug, users or {"admin": "org_admin"})
     db = _db()
     try:
         org = db.get(FireDept, seed["org_id"])
@@ -299,3 +301,161 @@ def test_incident_route_wird_ohne_provider_gelesen(client, monkeypatch):
         db.close()
     assert _rufe(client, token, "einsatz_anfahrtsroute_pruefen", incident_id=incident_id)["routing_status"] == "ok"
     assert provider.calls == 0
+
+
+def test_mcp_sperre_anlegen_zeiten_audit_und_validierung(client):
+    seed = _bereit("mcp-sperre-schreiben", {"obj": "objekt_verwalter"})
+    token = _token(client, seed, "obj")
+    first = _rufe(
+        client,
+        token,
+        "strassensperre_anlegen",
+        title="MCP Sommer",
+        valid_from="2026-07-01T10:00",
+        restriction_type="closed",
+        street="Hauptstraße",
+        geometry_geojson=ROUTE,
+    )
+    assert first["status"] == "created" and first["strassensperre"]["geometry_status"] == "ok"
+    second = _rufe(
+        client,
+        token,
+        "strassensperre_anlegen",
+        title="MCP Winter",
+        valid_from="2026-12-01T10:00:00+01:00",
+        restriction_type="partial",
+        street="Nebenstraße",
+        geometry_geojson=ROUTE,
+    )
+    db = _db()
+    try:
+        summer = db.get(RoadClosure, first["strassensperre"]["id"])
+        winter = db.get(RoadClosure, second["strassensperre"]["id"])
+        assert summer.valid_from == datetime(2026, 7, 1, 8) and winter.valid_from == datetime(2026, 12, 1, 9)
+        change = db.query(RoadClosureChange).filter_by(road_closure_id=summer.id, action="created").one()
+        assert change.source == "mcp" and change.mcp_tool == "strassensperre_anlegen"
+        assert db.query(AuditLog).filter_by(action="road_closure.created", entity_id=summer.id).count() == 1
+        before = db.query(RoadClosure).filter_by(org_id=seed["org_id"]).count()
+    finally:
+        db.close()
+    for arguments in (
+        {"valid_until": "2026-06-01T10:00"},
+        {"restriction_type": "unbekannt"},
+        {"max_height_m": 12},
+        {"geometry_geojson": "{"},
+        {"street": "", "geometry_geojson": None},
+    ):
+        data = {"title": "Ungültig", "valid_from": "2026-07-01T10:00", "restriction_type": "closed", "street": "X"}
+        data.update(arguments)
+        assert "__fehler__" in _rufe(client, token, "strassensperre_anlegen", **data)
+    db = _db()
+    try:
+        assert db.query(RoadClosure).filter_by(org_id=seed["org_id"]).count() == before
+    finally:
+        db.close()
+
+
+def test_mcp_sperre_abschnitt_dublette_freigabe_und_update(client, monkeypatch):
+    seed = _bereit("mcp-sperre-write-a", {"obj": "objekt_verwalter"})
+    partner = _bereit("mcp-sperre-write-b")
+    token = _token(client, seed, "obj")
+    async def section(*args):
+        return {"geometry": ROUTE, "hinweis": "Bitte prüfen."}
+
+    monkeypatch.setattr("app.mcp.tools.strassensperren.road_closure_section_service.section_from_address", section)
+    created = _rufe(
+        client, token, "strassensperre_anlegen", title="Abschnitt", valid_from="2026-07-01T10:00",
+        restriction_type="closed", street="Abschnittstraße", from_text="1", to_text="5"
+    )
+    closure_id = created["strassensperre"]["id"]
+    assert created["strassensperre"]["geometry_status"] == "needs_review" and created["hinweise"]
+    duplicate = _rufe(
+        client, token, "strassensperre_anlegen", title="Abschnitt", valid_from="2026-07-01T10:00",
+        restriction_type="closed", street="Abschnittstraße", from_text="1", to_text="5"
+    )
+    assert duplicate["status"] == "possible_duplicate"
+    confirmed = _rufe(
+        client,
+        token,
+        "strassensperre_anlegen",
+        title="Abschnitt bestätigt",
+        valid_from="2026-07-01T10:00",
+        restriction_type="closed",
+        street="Abschnittstraße",
+        from_text="1",
+        to_text="5",
+        duplikat_bestaetigt=True,
+    )
+    assert confirmed["status"] == "created"
+    failed_section_title = "Ohne Geometrie"
+    async def no_section(*args):
+        raise ValueError("Abschnitt nicht gefunden.")
+
+    monkeypatch.setattr("app.mcp.tools.strassensperren.road_closure_section_service.section_from_address", no_section)
+    missing = _rufe(
+        client, token, "strassensperre_anlegen", title=failed_section_title, valid_from="2026-08-01T10:00",
+        restriction_type="closed", street="Fehlstraße", from_text="1"
+    )
+    assert missing["strassensperre"]["geometry_status"] == "missing" and missing["hinweise"]
+    rejected_share = _rufe(
+        client, token, "strassensperre_anlegen", title="Nichtpartner", valid_from="2026-09-01T10:00",
+        restriction_type="closed", street="Freigabestraße", visible_for_org_ids=[partner["org_id"]]
+    )
+    assert "__fehler__" in rejected_share
+    db = _db()
+    try:
+        assert db.query(RoadClosure).filter_by(title="Nichtpartner").count() == 0
+        db.add(OrgPartner(org_id=seed["org_id"], partner_org_id=partner["org_id"]))
+        db.commit()
+    finally:
+        db.close()
+    updated = _rufe(
+        client, token, "strassensperre_aktualisieren", road_closure_id=closure_id,
+        felder={"valid_until": "2026-07-02T10:00", "visible_for_org_ids": [partner["org_id"]]}, version=1
+    )
+    assert updated["geaenderte_felder"] and updated["strassensperre"]["version"] == 3
+    db = _db()
+    try:
+        assert db.get(RoadClosureShare, (closure_id, partner["org_id"])) is not None
+    finally:
+        db.close()
+    assert "__fehler__" in _rufe(
+        client, token, "strassensperre_aktualisieren", road_closure_id=closure_id, felder={"nein": 1}
+    )
+    assert "__fehler__" in _rufe(
+        client, token, "strassensperre_aktualisieren", road_closure_id=closure_id, felder={}, version=1
+    )
+    foreign_id = _sperre(partner["org_id"], "Fremde", ROUTE)
+    db = _db()
+    try:
+        db.add(RoadClosureShare(road_closure_id=foreign_id, org_id=seed["org_id"]))
+        db.commit()
+    finally:
+        db.close()
+    assert "nicht änderbar" in _rufe(
+        client, token, "strassensperre_aktualisieren", road_closure_id=foreign_id, felder={}
+    )["__fehler__"]
+
+
+def test_mcp_sperre_deaktivieren_und_rechte(client):
+    seed = _bereit("mcp-sperre-deactivate", {"obj": "objekt_verwalter", "read": "readonly"})
+    token = _token(client, seed, "obj")
+    closure_id = _sperre(seed["org_id"], "MCP deaktivieren", ROUTE)
+    assert "__fehler__" in _rufe(client, token, "strassensperre_deaktivieren", road_closure_id=closure_id, grund="")
+    disabled = _rufe(client, token, "strassensperre_deaktivieren", road_closure_id=closure_id, grund="Freigabe")
+    assert disabled["strassensperre"]["status"] == "cancelled"
+    assert "__fehler__" in _rufe(client, token, "strassensperre_deaktivieren", road_closure_id=closure_id, grund="Nochmal")
+    assert _rufe(client, token, "strassensperre_reaktivieren", road_closure_id=closure_id)["strassensperre"]["status"] != "cancelled"
+    assert "strassensperre_loeschen" not in TOOLS
+    readonly = _token(client, seed, "read")
+    listed = _mcp(client, readonly, "tools/list", {}, 94).text
+    assert "strassensperre_anlegen" not in listed and "strassensperren_liste" in listed
+    assert "__fehler__" in _rufe(
+        client,
+        readonly,
+        "strassensperre_anlegen",
+        title="Unzulässig",
+        valid_from="2026-07-01T10:00",
+        restriction_type="closed",
+        street="Hauptstraße",
+    )
