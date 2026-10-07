@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import binascii
+import hashlib
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
@@ -18,6 +19,7 @@ from app.mcp.context import MCPContext
 from app.mcp.registry import register_tool
 from app.models.objekt import OBJEKT_STATUS_ARCHIVIERT, Objekt, ObjektDokument, ObjektDokumentSeite
 from app.models.user import User
+from app.services.mcp_download_service import erstelle_download_token, loese_datei
 from app.services.mcp_upload_service import (
     MCPUploadFehler,
     effektives_limit,
@@ -64,6 +66,19 @@ def _decode_inhalt(inhalt_base64: str) -> bytes:
     if len(data) > settings.MCP_MAX_UPLOAD_BYTES:
         raise ValueError(f"Datei zu gross (MCP-Limit {settings.MCP_MAX_UPLOAD_BYTES} Bytes).")
     return data
+
+
+def _datei_hash_und_inhalt(pfad: Path, inline: bool) -> tuple[int, str, bytes | None]:
+    """Liest fuer den Hash in Stuecken; Inline-Inhalt nur innerhalb des Limits."""
+    groesse = pfad.stat().st_size
+    inhalt = bytearray() if inline and groesse <= settings.MCP_DOWNLOAD_INLINE_MAX_BYTES else None
+    digest = hashlib.sha256()
+    with pfad.open("rb") as datei:
+        while chunk := datei.read(1024 * 1024):
+            digest.update(chunk)
+            if inhalt is not None:
+                inhalt.extend(chunk)
+    return groesse, digest.hexdigest(), bytes(inhalt) if inhalt is not None else None
 
 
 def _ki_klassifizierung_starten(objekt_id: int) -> None:
@@ -240,6 +255,63 @@ async def objekt_dokument_upload_vorbereiten(
     }
 
 
+_DOWNLOAD_BESCHREIBUNG = (
+    "Liefert einen kurzlebigen Download-Link fuer ein Objektdokument. dokument_id kommt aus "
+    "objekt_dokumente_auflisten; optional seite fuer eine Einzelseite. Der Link ist ca. 15 Minuten "
+    "gueltig und im Browser klickbar. inline=True nur fuer kleine Dateien verwenden."
+)
+
+
+@register_tool(
+    name="objekt_dokument_herunterladen",
+    description=_DOWNLOAD_BESCHREIBUNG,
+    required_roles=("objekt_verwalter",),
+    module_check=objekt_modul_aktiv,
+)
+async def objekt_dokument_herunterladen(
+    context: MCPContext, dokument_id: int, seite: int | None = None, inline: bool = False
+) -> dict[str, object]:
+    dokument, pfad, dateiname, mime = loese_datei(context.db, context.org_id, dokument_id, seite)
+    groesse, sha256, inhalt = await asyncio.to_thread(_datei_hash_und_inhalt, pfad, inline)
+    token, gueltig_bis = erstelle_download_token(context.org_id, context.user.id, dokument.id, seite)
+    url = f"{settings.effective_public_base_url.rstrip('/')}/api/mcp/downloads/{token}"
+    write_audit(
+        context.db,
+        "objekt.mcp_download_vorbereitet",
+        org_id=context.org_id,
+        user_id=context.user.id,
+        entity_type="objekt_dokument",
+        entity_id=dokument.id,
+        payload={"objekt_id": dokument.objekt_id, "seite": seite},
+    )
+    context.db.commit()
+    ergebnis: dict[str, object] = {
+        "dokument_id": dokument.id,
+        "objekt_id": dokument.objekt_id,
+        "dateiname": dateiname,
+        "versionsnummer": dokument.versionsnummer,
+        "ist_aktuelle_version": dokument.ist_aktuelle_version,
+        "freigabe_status": dokument.freigabe_status,
+        "seitenzahl": dokument.seitenzahl,
+        "seite": seite,
+        "mime": mime,
+        "groesse_bytes": groesse,
+        "sha256": sha256,
+        "download_url": url,
+        "gueltig_bis": gueltig_bis.isoformat() + "Z",
+        "curl_beispiel": f'curl -o "{dateiname}" "{url}"',
+    }
+    if inline:
+        if inhalt is not None:
+            ergebnis["inhalt_base64"] = base64.b64encode(inhalt).decode("ascii")
+        else:
+            ergebnis["hinweis"] = (
+                f"Datei zu gross fuer inline ({groesse} Bytes, max. {settings.MCP_DOWNLOAD_INLINE_MAX_BYTES}), "
+                "bitte download_url verwenden."
+            )
+    return ergebnis
+
+
 @register_tool(
     name="objekt_dokumente_auflisten",
     description="Listet Dokumente und Seiten eines Objekts.",
@@ -264,6 +336,8 @@ async def objekt_dokumente_auflisten(context: MCPContext, objekt_id: int) -> dic
                 "freigabe_status": d.freigabe_status,
                 "ist_aktuelle_version": d.ist_aktuelle_version,
                 "seitenzahl": d.seitenzahl,
+                "groesse_bytes": d.groesse_bytes,
+                "mime": d.mime,
                 "seiten": [{"nr": s.seiten_nr, "dokumentart": s.dokumentart, "titel": s.titel} for s in d.seiten],
             }
             for d in dokumente

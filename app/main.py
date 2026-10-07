@@ -29,6 +29,7 @@ from app.core.multi_account import ACCOUNTS_COOKIE, add_account, load_accounts, 
 from app.core.security import unsign_native_link_token, unsign_session
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
+from app.mcp import download_router as mcp_download_router
 from app.mcp import router as mcp_router
 from app.mcp import upload_router as mcp_upload_router
 from app.mcp.server import application as mcp_application
@@ -832,6 +833,7 @@ app.add_middleware(WriteFailureLogMiddleware)
 app.include_router(auth.router)
 app.include_router(mcp_router.router)
 app.include_router(mcp_upload_router.router)
+app.include_router(mcp_download_router.router)
 app.include_router(sso.router)
 app.include_router(public.router)
 app.include_router(public_mailing_tracking.router)

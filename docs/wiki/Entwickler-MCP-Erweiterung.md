@@ -17,9 +17,9 @@ Die MCP-Implementierung liegt in `app/mcp/`: `server.py` stellt den OAuth-Provid
 
 | Bereich | Werkzeuge | Rollen und Modul-Check |
 |---------|-----------|------------------------|
-| Allgemein | `mcp_whoami` | `readonly` |
+| Allgemein | `mcp_whoami`, `organisation_lesen` | `readonly` |
 | Objekte | `objekt_kataloge`, `objekt_suchen`, `objekt_lesen`, `objekt_duplikate_pruefen`, `objekt_anlegen`, `objekt_aktualisieren` | `objekt_verwalter`, Objekt-Modul |
-| Objekt-Dokumente | `objekt_dokument_upload_vorbereiten`, `objekt_dokument_uebergeben`, `objekt_dokumente_auflisten`, `objekt_dokument_seiten_klassifizieren` | `objekt_verwalter`, Objekt-Modul |
+| Objekt-Dokumente | `objekt_dokument_upload_vorbereiten`, `objekt_dokument_uebergeben`, `objekt_dokumente_auflisten`, `objekt_dokument_seiten_klassifizieren`, `objekt_dokument_herunterladen` | `objekt_verwalter`, Objekt-Modul |
 | Kontakte | `kontakt_suchen`, `kontakt_duplikate_pruefen`, `kontakt_lesen`, `kontakt_kategorien`, `kontakt_anlegen`, `kontakt_aktualisieren`, `kontakt_archivieren`, `kontakt_zusammenfuehren` | `kontakt_verwalter` oder `objekt_verwalter`, Kontakte-Modul |
 | Fahrtenbuch | `fahrtenbuch_stammdaten`, `fahrtenbuch_fahrten`, `fahrtenbuch_fahrt`, `fahrtenbuch_auswertung` | `fahrtenbuch_admin`, Fahrtenbuch-Modul |
 
