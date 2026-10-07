@@ -29,6 +29,8 @@ FAHRTENBUCH_ADMIN_ROLES = {"system_admin", "admin", "org_admin", "fahrtenbuch_ad
 # Roles that can manage Objekte (anlegen, bearbeiten, freigeben, Dokumente, Lagekarte)
 OBJEKT_VERWALTER_ROLES = {"system_admin", "admin", "org_admin", "objekt_verwalter"}
 KONTAKT_VERWALTER_ROLES = {"system_admin", "admin", "org_admin", "objekt_verwalter", "kontakt_verwalter"}
+# Straßensperren pflegt, wer Objekte verwalten darf (keine eigene Rolle).
+STRASSENSPERREN_VERWALTER_ROLES = OBJEKT_VERWALTER_ROLES
 PROBEN_EDIT_ROLES = {"system_admin", "admin", "org_admin", "probenverwalter", "incident_leader", "recorder"}
 
 
@@ -151,6 +153,11 @@ def is_objekt_verwalter(user) -> bool:
 def is_kontakt_verwalter(user) -> bool:
     """True if user can manage central contacts."""
     return has_role(user, "kontakt_verwalter")
+
+
+def is_strassensperren_verwalter(user) -> bool:
+    """True if user can manage road closures (same rights as Objektverwaltung)."""
+    return has_role(user, "objekt_verwalter")
 
 
 def can_send_manual_sms(user) -> bool:

@@ -188,6 +188,22 @@
     </form>
 
     {% set _probenplanung_sys_on = sys_settings.get('probenplanung_module_enabled') == 'true' %}
+    {% set _strassensperren_sys_on = sys_settings.get('strassensperren_module_enabled') == 'true' %}
+    <form method="post" action="/admin/settings/system/strassensperren-toggle" style="margin-top:1.25rem;border-top:1px solid var(--border);padding-top:1rem">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      {% if org %}<input type="hidden" name="org_id" value="{{ org.id }}">{% endif %}
+      <div class="form-group" style="display:flex;align-items:flex-start;gap:1.5rem;flex-wrap:wrap">
+        <div style="flex:1;min-width:260px">
+          <label style="font-weight:600">Straßensperren &amp; Anfahrtsrouting</label>
+          <p class="form-hint" style="margin-top:.25rem">Straßensperren erfassen und Anfahrtsrouten für Einsätze berechnen.</p>
+        </div>
+        <label class="toggle-label" style="display:flex;align-items:center;gap:.5rem;cursor:pointer">
+          <input type="checkbox" name="enabled_raw" value="1" {% if _strassensperren_sys_on %}checked{% endif %} onchange="this.form.submit()">
+          <span>Systemweit aktivieren</span>
+        </label>
+      </div>
+    </form>
+
     <form method="post" action="/admin/settings/system/probenplanung-toggle" style="margin-top:1.25rem;border-top:1px solid var(--border);padding-top:1rem">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       {% if org %}<input type="hidden" name="org_id" value="{{ org.id }}">{% endif %}
@@ -571,6 +587,21 @@
         </label>
         <small class="form-hint">Schaltet Probearten und die Probenplanung für diese Organisation frei.</small>
       </div>
+
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">Straßensperren &amp; Anfahrtsrouting</h3>
+      {% set _strassensperren_org_on = (org_settings.strassensperren_modul_aktiv) if org_settings else false %}
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:.5rem;{% if not strassensperren_sys_enabled %}opacity:.5;cursor:not-allowed{% endif %}">
+          <input type="checkbox" name="strassensperren_modul_aktiv_raw" value="1" {% if _strassensperren_org_on %}checked{% endif %} {% if not strassensperren_sys_enabled %}disabled title="Systemweit deaktiviert - bitte System-Admin kontaktieren"{% endif %}>
+          Straßensperren &amp; Anfahrtsrouting für diese Organisation aktivieren
+        </label>
+      </div>
+      <div class="form-grid">
+        <div class="form-group"><label>Start-Breitengrad (lat)</label><input type="number" name="routing_start_lat" step="0.000001" min="-90" max="90" value="{{ org_settings.routing_start_lat if org_settings and org_settings.routing_start_lat is not none else '' }}" class="form-control"></div>
+        <div class="form-group"><label>Start-Längengrad (lng)</label><input type="number" name="routing_start_lng" step="0.000001" min="-180" max="180" value="{{ org_settings.routing_start_lng if org_settings and org_settings.routing_start_lng is not none else '' }}" class="form-control"></div>
+        <div class="form-group"><label>Bezeichnung Startpunkt</label><input type="text" name="routing_start_label" maxlength="200" value="{{ org_settings.routing_start_label if org_settings and org_settings.routing_start_label else '' }}" class="form-control"></div>
+      </div>
+      <small class="form-hint">Koordinate der Fahrzeugausfahrt; Start für die automatische Anfahrtsroute</small>
 
       <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">&#x1F6B0; Förderstrecken-Planer</h3>
       {% set _foerderstrecke_org_on = (org_settings.foerderstrecke_module_enabled) if org_settings else false %}

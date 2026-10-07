@@ -447,6 +447,12 @@ class OrgSettings(Base):
     foerderstrecke_module_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False)
     probenplanung_modul_aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Straßensperren & Anfahrtsrouting: effektiv nur mit System-Flag aktiv.
+    strassensperren_modul_aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Fahrzeugausfahrt für die automatische Anfahrtsroute.
+    routing_start_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    routing_start_lng: Mapped[float | None] = mapped_column(Float, nullable=True)
+    routing_start_label: Mapped[str | None] = mapped_column(String(200), nullable=True)
     probenplanung_public_aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     uebung_push_erlaubt: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     uebung_ws_alarm_erlaubt: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
