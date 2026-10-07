@@ -202,6 +202,7 @@ def _start_background_loops() -> list[asyncio.Task]:
     from app.services.dibos.dibos_loop import dibos_poll_loop
     from app.services.dienst_monitor_loop import dienst_monitor_loop
     from app.services.gsl_lagemeldung_reminder import gsl_lagemeldung_reminder_loop
+    from app.services.incident_route_loop import incident_route_loop
     from app.services.lis.lis_capture import lis_capture_retention_loop
     from app.services.lis.lis_loop import lis_poll_loop
     from app.services.mailing_dispatch_loop import mailing_dispatch_loop
@@ -228,6 +229,7 @@ def _start_background_loops() -> list[asyncio.Task]:
         lis_poll_loop(), lis_capture_retention_loop(), dibos_poll_loop(), dibos_trace_retention_loop(),
         nachschlagewerk_sync_loop(), org_backup_loop(), mailing_dispatch_loop(),
         api_message_dispatch_loop(), mailing_schedule_loop(),
+        incident_route_loop(),
     )
     return [asyncio.create_task(loop) for loop in loops]
 
