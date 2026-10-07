@@ -164,6 +164,7 @@ def _settings_context(request, db, user, org_id, **extra) -> dict:
     from app.services.nachschlagewerk_service import nachschlagewerke_system_enabled
     from app.services.objekt_service import objekt_system_enabled
     from app.services.probenplanung_service import probenplanung_system_enabled
+    from app.services.road_closure_flags import strassensperren_system_enabled
     from app.services.uas_service import uas_system_enabled
 
     weather_stations = (
@@ -189,6 +190,7 @@ def _settings_context(request, db, user, org_id, **extra) -> dict:
         "mailing_sys_enabled": mailing_system_enabled(db),
         "lagefuehrung_sys_enabled": lagefuehrung_system_enabled(db),
         "probenplanung_sys_enabled": probenplanung_system_enabled(db),
+        "strassensperren_sys_enabled": strassensperren_system_enabled(db),
         "mcp_sys_enabled": sys_settings.get("mcp_module_enabled") == "true",
         "timezones": common_timezones(),
         "default_timezone": app_settings.DEFAULT_TIMEZONE,
@@ -246,6 +248,10 @@ async def save_org_settings(
     nachschlagewerke_module_enabled_raw: str = Form(""),
     foerderstrecke_module_enabled_raw: str = Form(""),
     probenplanung_modul_aktiv_raw: str = Form(""),
+    strassensperren_modul_aktiv_raw: str = Form(""),
+    routing_start_lat: str = Form(""),
+    routing_start_lng: str = Form(""),
+    routing_start_label: str = Form(""),
     uebung_push_erlaubt_raw: str = Form(""),
     uebung_ws_alarm_erlaubt_raw: str = Form(""),
     uebung_nachbar_einladung_erlaubt_raw: str = Form(""),
@@ -308,6 +314,15 @@ async def save_org_settings(
             org.fallback_lng = float(fallback_lng) if fallback_lng.strip() else None
         except ValueError:
             pass
+
+    def parse_coordinate(value: str, minimum: float, maximum: float) -> tuple[bool, float | None]:
+        if not value.strip():
+            return True, None
+        try:
+            result = float(value)
+        except ValueError:
+            return False, None
+        return (True, result) if minimum <= result <= maximum else (False, None)
 
     # Logo-Upload
     logo_path = None
@@ -491,6 +506,33 @@ async def save_org_settings(
                 payload={"alt": old_proben, "neu": new_proben},
                 ip=request.client.host if request.client else None,
             )
+
+    from app.services.road_closure_flags import strassensperren_system_enabled
+
+    if strassensperren_system_enabled(db):
+        old_strassensperren = org_s.strassensperren_modul_aktiv
+        new_strassensperren = strassensperren_modul_aktiv_raw in ("1", "true", "on")
+        org_s.strassensperren_modul_aktiv = new_strassensperren
+        if old_strassensperren != new_strassensperren:
+            from app.core.audit import write_audit
+
+            write_audit(
+                db,
+                "strassensperren.org_toggle",
+                org_id=effective_org_id,
+                user_id=user.id,
+                payload={"alt": old_strassensperren, "neu": new_strassensperren},
+                ip=request.client.host if request.client else None,
+            )
+
+    if org_s:
+        valid_lat, parsed_lat = parse_coordinate(routing_start_lat, -90, 90)
+        valid_lng, parsed_lng = parse_coordinate(routing_start_lng, -180, 180)
+        if valid_lat:
+            org_s.routing_start_lat = parsed_lat
+        if valid_lng:
+            org_s.routing_start_lng = parsed_lng
+        org_s.routing_start_label = routing_start_label.strip()[:200] or None
 
     org_s.uebung_push_erlaubt = uebung_push_erlaubt_raw in ("1", "true", "on")
     org_s.uebung_ws_alarm_erlaubt = uebung_ws_alarm_erlaubt_raw in ("1", "true", "on")
@@ -1904,6 +1946,39 @@ def toggle_probenplanung_system(
     write_audit(
         db,
         "probenplanung.system_toggle",
+        user_id=user.id,
+        payload={"alt": old, "neu": value},
+        ip=request.client.host if request.client else None,
+    )
+    db.commit()
+    org_suffix = f"&org_id={org_id}" if org_id else ""
+    return RedirectResponse(f"/admin/settings?saved=1{org_suffix}", status_code=303)
+
+
+@router.post("/settings/system/strassensperren-toggle")
+def toggle_strassensperren_system(
+    request: Request,
+    db=Depends(get_db),
+    user: User = Depends(require_system_admin),
+    enabled_raw: str = Form(""),
+    org_id: int | None = Form(None),
+):
+    from app.core.audit import write_audit
+
+    key = "strassensperren_module_enabled"
+    value = "true" if enabled_raw in ("1", "true", "on") else "false"
+    row = db.query(SystemSettings).filter(SystemSettings.key == key).first()
+    old = row.value if row else "false"
+    if row is None:
+        row = SystemSettings(key=key, value=value, updated_at=datetime.now(UTC), updated_by_user_id=user.id)
+        db.add(row)
+    else:
+        row.value = value
+        row.updated_at = datetime.now(UTC)
+        row.updated_by_user_id = user.id
+    write_audit(
+        db,
+        "strassensperren.system_toggle",
         user_id=user.id,
         payload={"alt": old, "neu": value},
         ip=request.client.host if request.client else None,

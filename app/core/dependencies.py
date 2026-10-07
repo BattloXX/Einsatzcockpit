@@ -113,7 +113,7 @@ def require_feed_scope(*scopes: str):
 _SYSTEM_FLAG_KEYS = ("uas_module_enabled", "objekt_module_enabled", "kontakte_module_enabled",
                      "gateway_module_enabled", "lagefuehrung_modul_aktiv",
                      "nachschlagewerke_module_enabled", "foerderstrecke_module_enabled",
-                     "mailing_module_enabled", "probenplanung_module_enabled")
+                     "mailing_module_enabled", "probenplanung_module_enabled", "strassensperren_module_enabled")
 
 
 def _set_module_states(request: HTTPConnection, org_id: int | None, db: Session) -> None:
@@ -157,6 +157,9 @@ def _set_module_states(request: HTTPConnection, org_id: int | None, db: Session)
         request.state.probenplanung_enabled = bool(
             "probenplanung_module_enabled" in sys_on
             and org_s and org_s.probenplanung_modul_aktiv)
+        request.state.strassensperren_enabled = bool(
+            "strassensperren_module_enabled" in sys_on
+            and org_s and org_s.strassensperren_modul_aktiv)
         # Atemschutz fehlt bewusst in der Bulk-Abfrage: fehlender System-Key
         # bedeutet hier im Gegensatz zu allen obigen Modulen "aktiv".
         from app.services.breathing_service import breathing_effective_enabled
@@ -192,6 +195,7 @@ def _resolve_current_org(
     request.state.foerderstrecke_enabled = False
     request.state.mailing_module_enabled = False
     request.state.probenplanung_enabled = False
+    request.state.strassensperren_enabled = False
     request.state.breathing_module_enabled = True
 
     user = getattr(request.state, "user", None)

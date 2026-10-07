@@ -173,6 +173,7 @@ from app.models.probenplanung import (  # noqa: F401 -- registriert ORM-Modelle
     ProbeNachbereitung,
     ProbePublicToken,
 )
+from app.models.road_closure import IncidentRoadClosure, IncidentRoute, RoadClosure, RoadClosureChange, RoadClosureShare
 from app.models.sms import (
     SmsEinsatzinfoRecipient,
     SmsForwardRule,
@@ -421,4 +422,9 @@ __all__ = [
     "MCPOAuthCode",
     "MCPOAuthToken",
     "MCPUpload",
+    "RoadClosure",
+    "RoadClosureShare",
+    "RoadClosureChange",
+    "IncidentRoute",
+    "IncidentRoadClosure",
 ]
