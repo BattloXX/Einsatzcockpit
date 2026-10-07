@@ -5,8 +5,10 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from math import cos, radians
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -19,6 +21,19 @@ from app.services.broadcast import broadcast_org, manager
 from app.services.einsatz_routing import RoutingError
 
 logger = logging.getLogger("einsatzleiter.einsatz_route")
+
+
+@dataclass
+class _Evaluation:
+    """Reine Routing-Auswertung, die Live- und Einsatzrouten gemeinsam verwenden."""
+
+    primary: einsatz_routing.RouteResult
+    closures: list[RoadClosure]
+    relevance: list[Any]
+    closure_by_id: dict[int, RoadClosure]
+    alternative: einsatz_routing.RouteResult | None
+    alternative_status: str
+    fingerprint: str
 
 
 def _now() -> datetime:
@@ -106,6 +121,94 @@ def _error_text(error: BaseException) -> str:
     return str(error)[:500]
 
 
+async def _evaluate(
+    db: Session,
+    org_id: int,
+    start: tuple[float, float],
+    dest: tuple[float, float],
+    provider: einsatz_routing.RoutingProvider,
+    now: datetime,
+) -> _Evaluation:
+    """Berechnet Relevanz und Umfahrung ohne Persistenz."""
+    response = await asyncio.wait_for(
+        provider.calculate_route(start, dest, alternatives=False),
+        timeout=settings.EINSATZ_ROUTING_TIMEOUT_SECONDS + 1,
+    )
+    primary = response.primary
+    closures, fingerprint = relevant_closures(db, org_id, primary.geometry, dest, now)
+    geometries = {closure.id: json.loads(closure.geometry_geojson) for closure in closures if closure.geometry_geojson}
+    relevance = road_closure_geo_service.classify(primary.geometry, dest, list(geometries.items()))
+    by_id = {closure.id: closure for closure in closures}
+    route_items = [item for item in relevance if item.relevance == "route"]
+    alternative = None
+    alternative_status = "none"
+    avoid = [
+        by_id[item.closure_id]
+        for item in route_items
+        if by_id[item.closure_id].restriction_type == "closed" and by_id[item.closure_id].geometry_status == "ok"
+    ]
+    if avoid:
+        try:
+            if provider.supports_avoid_polygons:
+                alternate = await asyncio.wait_for(
+                    provider.calculate_route(
+                        start,
+                        dest,
+                        avoid_polygons=[road_closure_geo_service.avoid_polygon(geometries[row.id]) for row in avoid],
+                        alternatives=False,
+                    ),
+                    timeout=settings.EINSATZ_ROUTING_TIMEOUT_SECONDS + 1,
+                )
+            else:
+                alternate = await asyncio.wait_for(
+                    provider.calculate_route(start, dest, alternatives=True),
+                    timeout=settings.EINSATZ_ROUTING_TIMEOUT_SECONDS + 1,
+                )
+            alternative = einsatz_routing.choose_alternative(alternate, [geometries[row.id] for row in avoid])
+            alternative_status = "ok" if alternative else "unavailable"
+        except RoutingError, TimeoutError:
+            alternative_status = "unavailable"
+    return _Evaluation(primary, closures, relevance, by_id, alternative, alternative_status, fingerprint)
+
+
+async def evaluate_route(
+    db: Session,
+    org_id: int,
+    start: tuple[float, float],
+    dest: tuple[float, float],
+    provider: einsatz_routing.RoutingProvider,
+) -> dict[str, Any]:
+    """Berechnet eine Anfahrt ohne Persistenz für Live-Abfragen."""
+    evaluation = await _evaluate(db, org_id, start, dest, provider, _now())
+    primary, alternative = evaluation.primary, evaluation.alternative
+    closure_data = [
+        {
+            "id": item.closure_id,
+            "title": evaluation.closure_by_id[item.closure_id].title,
+            "restriction_type": evaluation.closure_by_id[item.closure_id].restriction_type,
+            "restriction_label": evaluation.closure_by_id[item.closure_id].restriction_label,
+            "relevance": item.relevance,
+            "distance_to_route_m": item.distance_to_route_m,
+            "distance_to_destination_m": item.distance_to_destination_m,
+            "geometry_status": evaluation.closure_by_id[item.closure_id].geometry_status,
+        }
+        for item in evaluation.relevance
+        if item.relevance in {"route", "destination"}
+    ]
+    return {
+        "status": "affected" if any(item.relevance == "route" for item in evaluation.relevance) else "ok",
+        "distance_m": primary.distance_m,
+        "duration_s": primary.duration_s,
+        "closures": closure_data,
+        "alternative_status": evaluation.alternative_status,
+        "alternative_distance_m": alternative.distance_m if alternative else None,
+        "alternative_duration_s": alternative.duration_s if alternative else None,
+        "alternative_streets": alternative.street_names if alternative else [],
+        "detour_distance_m": alternative.distance_m - primary.distance_m if alternative else None,
+        "detour_duration_s": alternative.duration_s - primary.duration_s if alternative else None,
+    }
+
+
 async def compute_incident_route(
     db: Session, route_row: IncidentRoute, *, provider=None, now: datetime | None = None
 ) -> IncidentRoute:
@@ -162,10 +265,7 @@ async def compute_incident_route(
         return route_row
     route_row.routing_provider = provider.name
     try:
-        response = await asyncio.wait_for(
-            provider.calculate_route(start, destination, alternatives=False),
-            timeout=settings.EINSATZ_ROUTING_TIMEOUT_SECONDS + 1,
-        )
+        evaluation = await _evaluate(db, route_row.org_id, start, destination, provider, now)
     except (RoutingError, TimeoutError) as error:
         route_row.status = "error"
         route_row.routing_error = _error_text(error) or "Der Routingdienst hat nicht rechtzeitig geantwortet."
@@ -176,16 +276,13 @@ async def compute_incident_route(
         db.flush()
         return route_row
 
-    primary = response.primary
+    primary = evaluation.primary
     route_row.route_geojson = json.dumps(primary.geometry, ensure_ascii=False)
     route_row.route_distance_m = primary.distance_m
     route_row.route_duration_s = primary.duration_s
-    closures, route_row.closure_fingerprint = relevant_closures(
-        db, route_row.org_id, primary.geometry, destination, now
-    )
-    geometries = {closure.id: json.loads(closure.geometry_geojson) for closure in closures if closure.geometry_geojson}
-    relevance = road_closure_geo_service.classify(primary.geometry, destination, list(geometries.items()))
-    closure_by_id = {closure.id: closure for closure in closures}
+    route_row.closure_fingerprint = evaluation.fingerprint
+    relevance = evaluation.relevance
+    closure_by_id = evaluation.closure_by_id
     _clear_associations(db, route_row)
     for item in relevance:
         closure = closure_by_id[item.closure_id]
@@ -208,46 +305,17 @@ async def compute_incident_route(
     route_row.status = "affected" if route_closures else "ok"
     if route_closures:
         logger.info("incident_route.closure_detected", extra={"incident_id": incident.id, "count": len(route_closures)})
-    avoid_closures = [
-        closure_by_id[item.closure_id]
-        for item in route_closures
-        if closure_by_id[item.closure_id].restriction_type == "closed"
-        and closure_by_id[item.closure_id].geometry_status == "ok"
-    ]
     _clear_alternative(route_row)
-    route_row.alternative_status = "none"
-    if avoid_closures:
-        closed_geometries = [geometries[closure.id] for closure in avoid_closures]
-        try:
-            if provider.supports_avoid_polygons:
-                alt_response = await asyncio.wait_for(
-                    provider.calculate_route(
-                        start,
-                        destination,
-                        avoid_polygons=[road_closure_geo_service.avoid_polygon(geom) for geom in closed_geometries],
-                        alternatives=False,
-                    ),
-                    timeout=settings.EINSATZ_ROUTING_TIMEOUT_SECONDS + 1,
-                )
-            else:
-                alt_response = await asyncio.wait_for(
-                    provider.calculate_route(start, destination, alternatives=True),
-                    timeout=settings.EINSATZ_ROUTING_TIMEOUT_SECONDS + 1,
-                )
-            alternative = einsatz_routing.choose_alternative(alt_response, closed_geometries)
-            if alternative is None:
-                route_row.alternative_status = "unavailable"
-            else:
-                route_row.alternative_status = "ok"
-                route_row.alternative_route_geojson = json.dumps(alternative.geometry, ensure_ascii=False)
-                route_row.alternative_distance_m = alternative.distance_m
-                route_row.alternative_duration_s = alternative.duration_s
-                route_row.alternative_streets_json = json.dumps(alternative.street_names, ensure_ascii=False)
-                route_row.detour_distance_m = alternative.distance_m - primary.distance_m
-                route_row.detour_duration_s = alternative.duration_s - primary.duration_s
-                logger.info("incident_route.alternative_found", extra={"incident_id": incident.id})
-        except (RoutingError, TimeoutError):
-            route_row.alternative_status = "unavailable"
+    route_row.alternative_status = evaluation.alternative_status
+    alternative = evaluation.alternative
+    if alternative:
+        route_row.alternative_route_geojson = json.dumps(alternative.geometry, ensure_ascii=False)
+        route_row.alternative_distance_m = alternative.distance_m
+        route_row.alternative_duration_s = alternative.duration_s
+        route_row.alternative_streets_json = json.dumps(alternative.street_names, ensure_ascii=False)
+        route_row.detour_distance_m = alternative.distance_m - primary.distance_m
+        route_row.detour_duration_s = alternative.duration_s - primary.duration_s
+        logger.info("incident_route.alternative_found", extra={"incident_id": incident.id})
     route_row.calculated_at = now
     route_row.attempts = 0
     route_row.next_attempt_at = None

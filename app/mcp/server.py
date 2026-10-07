@@ -31,6 +31,7 @@ from app.mcp.tools import kontakt as _kontakt  # noqa: F401 - registriert Kontak
 from app.mcp.tools import objekt as _objekt  # noqa: F401 - registriert Objekt-Tools
 from app.mcp.tools import objekt_dokumente as _objekt_dokumente  # noqa: F401 - registriert Dokument-Tools
 from app.mcp.tools import organisation as _organisation  # noqa: F401 - registriert Organisations-Tool
+from app.mcp.tools import strassensperren as _strassensperren  # noqa: F401 - registriert Strassensperren-Tools
 from app.mcp.tools import wasserstelle as _wasserstelle  # noqa: F401 - registriert Wasserstellen-Tools
 from app.mcp.tools import whoami as _whoami  # noqa: F401 - registriert Beispiel-Tool
 from app.models.mcp import MCPOAuthClient, MCPOAuthCode, MCPOAuthToken
@@ -443,6 +444,129 @@ async def wasserstelle_deaktivieren(
     wasserstelle_id: int, grund: str = "", ctx: Context | None = None,
 ) -> dict[str, object]:
     return await _call_registered_tool("wasserstelle_deaktivieren", wasserstelle_id=wasserstelle_id, grund=grund)
+
+
+@server.tool(name="strassensperren_liste", description="Listet sichtbare Straßensperren. status: current, active, planned, expired, cancelled oder all; limit 1 bis 200.")  # noqa: E501
+async def strassensperren_liste(status: str = "current", von: str = "", bis: str = "", strasse: str = "", restriction_type: str = "", nur_eigene: bool = False, limit: int = 50, ctx: Context | None = None) -> dict[str, object]:  # noqa: E501
+    return await _call_registered_tool("strassensperren_liste", status=status, von=von, bis=bis, strasse=strasse, restriction_type=restriction_type, nur_eigene=nur_eigene, limit=limit)  # noqa: E501
+
+
+@server.tool(name="strassensperre_lesen", description="Liest alle Details einer sichtbaren Straßensperre.")
+async def strassensperre_lesen(road_closure_id: int, ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("strassensperre_lesen", road_closure_id=road_closure_id)
+
+
+@server.tool(
+    name="strassensperre_anlegen",
+    description="Legt eine Straßensperre an; eine harte Löschung per MCP ist nicht möglich.",
+)
+async def strassensperre_anlegen(
+    title: str,
+    valid_from: str,
+    restriction_type: str,
+    street: str = "",
+    from_text: str = "",
+    to_text: str = "",
+    valid_until: str = "",
+    description: str = "",
+    direction: str = "",
+    priority: str = "normal",
+    max_weight_t: float | None = None,
+    max_height_m: float | None = None,
+    max_width_m: float | None = None,
+    max_length_m: float | None = None,
+    source: str = "",
+    source_url: str = "",
+    geometry_geojson: dict | str | None = None,
+    visible_for_org_ids: list[int] | None = None,
+    duplikat_bestaetigt: bool = False,
+    ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "strassensperre_anlegen",
+        title=title,
+        valid_from=valid_from,
+        restriction_type=restriction_type,
+        street=street,
+        from_text=from_text,
+        to_text=to_text,
+        valid_until=valid_until,
+        description=description,
+        direction=direction,
+        priority=priority,
+        max_weight_t=max_weight_t,
+        max_height_m=max_height_m,
+        max_width_m=max_width_m,
+        max_length_m=max_length_m,
+        source=source,
+        source_url=source_url,
+        geometry_geojson=geometry_geojson,
+        visible_for_org_ids=visible_for_org_ids,
+        duplikat_bestaetigt=duplikat_bestaetigt,
+    )
+
+
+@server.tool(
+    name="strassensperre_aktualisieren",
+    description="Aktualisiert eine eigene Sperre; geometry_geojson setzt geometry_status auf ok. Kein MCP-Löschen.",
+)
+async def strassensperre_aktualisieren(
+    road_closure_id: int,
+    felder: dict,
+    version: int | None = None,
+    ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "strassensperre_aktualisieren",
+        road_closure_id=road_closure_id,
+        felder=felder,
+        version=version,
+    )
+
+
+@server.tool(
+    name="strassensperre_deaktivieren",
+    description="Deaktiviert eine eigene Sperre. Eine harte Löschung per MCP ist nicht möglich.",
+)
+async def strassensperre_deaktivieren(
+    road_closure_id: int, grund: str, ctx: Context | None = None
+) -> dict[str, object]:
+    return await _call_registered_tool("strassensperre_deaktivieren", road_closure_id=road_closure_id, grund=grund)
+
+
+@server.tool(
+    name="strassensperre_reaktivieren",
+    description="Reaktiviert eine eigene Sperre. Eine harte Löschung per MCP ist nicht möglich.",
+)
+async def strassensperre_reaktivieren(
+    road_closure_id: int, ctx: Context | None = None
+) -> dict[str, object]:
+    return await _call_registered_tool("strassensperre_reaktivieren", road_closure_id=road_closure_id)
+
+
+@server.tool(name="strassensperren_suchen", description="Sucht sichtbare Straßensperren nach Worten in Titel, Straße, Beschreibung und Abschnitt; status wie bei strassensperren_liste.")  # noqa: E501
+async def strassensperren_suchen(suchtext: str, status: str = "all", von: str = "", bis: str = "", limit: int = 20, ctx: Context | None = None) -> dict[str, object]:  # noqa: E501
+    return await _call_registered_tool("strassensperren_suchen", suchtext=suchtext, status=status, von=von, bis=bis, limit=limit)  # noqa: E501
+
+
+@server.tool(name="strassensperren_im_gebiet", description="Findet sichtbare Sperren im Radius; radius_m 50 bis 20000, status: current, active, planned, expired, cancelled oder all.")  # noqa: E501
+async def strassensperren_im_gebiet(lat: float, lng: float, radius_m: int = 2000, status: str = "current", ctx: Context | None = None) -> dict[str, object]:  # noqa: E501
+    return await _call_registered_tool("strassensperren_im_gebiet", lat=lat, lng=lng, radius_m=radius_m, status=status)
+
+
+@server.tool(name="einsatz_strassensperren", description="Liest die gespeicherten Sperren einer sichtbaren Einsatz-Anfahrt.")  # noqa: E501
+async def einsatz_strassensperren(incident_id: int, ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("einsatz_strassensperren", incident_id=incident_id)
+
+
+@server.tool(name="einsatz_anfahrtsroute_pruefen", description="Prüft die gespeicherte Einsatzroute oder berechnet live mit incident_id oder lat und lng; Fahrzeugprofile werden noch nicht berücksichtigt.")  # noqa: E501
+async def einsatz_anfahrtsroute_pruefen(incident_id: int | None = None, lat: float | None = None, lng: float | None = None, vehicle_id: int | None = None, ctx: Context | None = None) -> dict[str, object]:  # noqa: E501
+    return await _call_registered_tool("einsatz_anfahrtsroute_pruefen", incident_id=incident_id, lat=lat, lng=lng, vehicle_id=vehicle_id)  # noqa: E501
+
+
+@server.tool(name="strassensperren_entlang_route", description="Berechnet sichtbare Sperren entlang einer freien Start-Ziel-Route; Fahrzeugprofile werden noch nicht berücksichtigt.")  # noqa: E501
+async def strassensperren_entlang_route(start_lat: float, start_lng: float, ziel_lat: float, ziel_lng: float, vehicle_id: int | None = None, ctx: Context | None = None) -> dict[str, object]:  # noqa: E501
+    return await _call_registered_tool("strassensperren_entlang_route", start_lat=start_lat, start_lng=start_lng, ziel_lat=ziel_lat, ziel_lng=ziel_lng, vehicle_id=vehicle_id)  # noqa: E501
 
 
 @server.tool(

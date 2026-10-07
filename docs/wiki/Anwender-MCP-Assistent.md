@@ -16,6 +16,8 @@ Beim Verbinden öffnet sich die Einsatzcockpit-Anmeldung. Melde dich mit deinem 
 | `kontakt_verwalter`, `org_admin`, `admin` | Zentrale Kontakte |
 | `fahrtenbuch_admin`, `org_admin`, `admin` | Fahrtenbuch-Auswertung |
 | `org_admin`, `admin` | Wasserstellen |
+| Alle Benutzer mit aktivem Straßensperren-Modul | Straßensperren lesen und Anfahrten prüfen |
+| `objekt_verwalter`, `org_admin`, `admin` | Straßensperren anlegen und pflegen |
 
 Die verfügbaren Werkzeuge sind:
 
@@ -27,6 +29,8 @@ Die verfügbaren Werkzeuge sind:
 - `kontakt_anlegen`, `kontakt_aktualisieren`, `kontakt_archivieren` und `kontakt_zusammenfuehren`: pflegen zentrale Kontakte. Die Aktualisierung verlangt die aktuelle `version`; bei einem Konflikt Kontakt neu laden. Archivieren bei Objektzuordnungen und jedes Zusammenführen verlangen `bestaetigt=true`.
 - `objekt_anlegen` und `objekt_aktualisieren`: legen Entwürfe an oder bearbeiten Entwürfe beziehungsweise Arbeitskopien. Sie können die Objekt-Stammdaten `informationen`, `anfahrtsweg` und `revision_datum` sowie optionale Wohnanlagen-Daten (`wohneinheiten`, `geschosse`, `stiegen`, `hausverwaltung_kontakt_id`, `hinweise`) pflegen. Mit `kontakte_aendern` ändern sie Art, Sortierung oder Erreichbarkeit einer Objektkontakt-Zuordnung. Den Hinweis an einem Merkmal ändert `merkmale_aendern` (`[{id, hinweis}]`); wird ein bereits zugeordnetes Merkmal über `merkmale_hinzufuegen` mit `hinweis` übergeben, wird der Hinweis übernommen. Gefahren-Details (`un_nummer`, `stoffname`, `gefahrklasse`, `gefahrnummer`, `detail`, `links`) ändert `gefahren_aendern` (`[{id, …}]`, nur die übergebenen Felder).
 - `wasserstellen_suchen`, `wasserstelle_lesen`, `wasserstelle_anlegen`, `wasserstelle_aktualisieren` und `wasserstelle_deaktivieren` (nur `org_admin`): suchen Wasserstellen (Text, Typ, Status, optional im Umkreis um `lat`/`lng`), legen sie mit Dublettenprüfung an (gleiche Bezeichnung oder gleicher Typ innerhalb 15 m; sonst `duplikat_bestaetigt=true`) und ändern einzelne Felder. Deaktivieren setzt den Status `defekt` – die Stelle erscheint dann nicht mehr auf Einsatzkarte und Einsatzinfo; ein optionaler Grund wird datiert an den Hinweis angehängt. Reaktivieren über `wasserstelle_aktualisieren` mit `status: bereit`. Löschen ist per MCP nicht möglich.
+- `strassensperren_liste`, `strassensperre_lesen`, `strassensperren_suchen`, `strassensperren_im_gebiet`, `einsatz_strassensperren`, `einsatz_anfahrtsroute_pruefen` und `strassensperren_entlang_route`: lesen sichtbare Sperren und prüfen gespeicherte oder live berechnete Anfahrten.
+- `strassensperre_anlegen`, `strassensperre_aktualisieren`, `strassensperre_deaktivieren` und `strassensperre_reaktivieren` (Objektverwaltung): pflegen eigene Sperren. Bei einer möglichen Dublette liefert das Anlegen `possible_duplicate`; vorhandene Sperre aktualisieren oder bewusst mit `duplikat_bestaetigt=true` anlegen. Löschen ist per MCP nicht möglich.
 - `objekt_dokument_upload_vorbereiten`: erzeugt einen einmaligen Upload-Link (15 Minuten gültig) samt curl-Beispiel, damit große PDFs nicht als Base64 im Tool-Aufruf stehen müssen.
 - `objekt_dokument_uebergeben`, `objekt_dokumente_auflisten` und `objekt_dokument_seiten_klassifizieren`: übergeben, listen und klassifizieren Objekt-PDFs. Übergabe entweder mit `upload_id` (nach dem curl-Upload) oder – für kleine Dateien – mit `inhalt_base64`. `seiten` hat das Format `[{"nr":1,"dokumentart":"bma_datenblatt","titel":null}]`; die Klassifizierung des Clients wird unverändert übernommen.
 - `objekt_dokument_herunterladen`: holt das Original-PDF eines Objektdokuments (jede Version, optional mit `seite` nur eine Einzelseite). Liefert einen 15 Minuten gültigen Download-Link, den du auch im Browser öffnen kannst, samt curl-Beispiel; mit `inline=true` kommt eine kleine Datei (bis 8 MB) zusätzlich direkt als Base64. Die `dokument_id` liefert `objekt_dokumente_auflisten` (dort jetzt auch mit Dateigröße).
@@ -63,6 +67,14 @@ Lade das PDF ~/Downloads/bma-datenblatt.pdf über den Upload-Link ins Objekt 123
 
 ```text
 Werte alle aktiven, statistikrelevanten Fahrten 2026 pro Fahrzeug aus.
+```
+
+```text
+Trage morgen von 07:00 bis 18:00 eine Vollsperre der Bregenzer Straße zwischen Hausnummer 12 und 38 ein.
+```
+
+```text
+Gibt es für Einsatz 2026-471 Probleme bei der Anfahrt?
 ```
 
 ## Grenzen und Datenschutz
