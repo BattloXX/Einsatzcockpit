@@ -25,6 +25,10 @@ Für `/mcp` ist Streaming erforderlich: `proxy_buffering off` sowie ausreichend 
 | `MCP_UPLOAD_TOKEN_MINUTEN` | 15 | Gültigkeit eines Upload-Tokens |
 | `MCP_UPLOAD_RETENTION_STUNDEN` | 24 | Nicht übergebene Uploads werden danach automatisch gelöscht |
 | `MCP_UPLOAD_RATELIMIT` | `20/minute` | Limit für `POST /api/mcp/uploads/{upload_id}` |
+| `MCP_DOWNLOAD_TOKEN_MINUTEN` | 15 | Gültigkeit eines Download-Links für Objektdokumente |
+| `MCP_DOWNLOAD_INLINE_MAX_BYTES` | 8 MB | Bis zu dieser Größe liefert `objekt_dokument_herunterladen(inline=true)` das PDF zusätzlich als Base64 |
+| `MCP_DOWNLOAD_RATELIMIT` | `30/minute` | Limit für `GET /api/mcp/downloads/{token}` |
+| `MCP_LOGO_INLINE_MAX_BYTES` | 2 MB | Bis zu dieser Größe liefert `organisation_lesen` das Organisationslogo als Bild |
 | Access-Token | 1 Stunde | Gültigkeit des Zugriffstokens |
 | Refresh-Token | 30 Tage | Gültigkeit des Erneuerungstokens |
 | Autorisierungscode | 5 Minuten | Gültigkeit des Login-Vorgangs |
@@ -58,3 +62,8 @@ Zentrale Kontakte dürfen per MCP angelegt, aktualisiert, archiviert und zusamme
 Benutzer sehen verbundene Clients im **Profil** und können sie dort einzeln trennen. Das widerruft die zugehörige Token-Familie; die KI-Anwendung muss sich danach erneut anmelden.
 
 Bei Problemen zuerst prüfen: HTTPS und `PUBLIC_BASE_URL`, die beiden MCP-Flags, das passende Fachmodul und die Rolle des Benutzers. Bei Discovery- oder Verbindungsfehlern Proxy-Logs auf nicht durchgereichte `/.well-known`- bzw. OAuth-Routen und auf Buffering bei `/mcp` kontrollieren. Bei fehlenden Werkzeugen sind meist Rolle oder Fachmodul die Ursache. Bei PDF-Fehlern Base64, das 8-MB-Limit, PDF-Gültigkeit, Seitenzahl und die Poppler-Installation prüfen.
+
+### Dokument-Download
+
+`objekt_dokument_herunterladen` liefert für ein Objektdokument (jede Version, auch wartende Dokumente und archivierte Objekte; optional nur eine Einzelseite) einen signierten Link `GET /api/mcp/downloads/{token}`. Der Link braucht keine Sitzung, ist 15 Minuten gültig und im Browser klickbar. Beim Abruf werden Benutzer, Rolle `objekt_verwalter`, MCP- und Objekt-Modul erneut geprüft – ein Rechteentzug wirkt also sofort, auch auf schon ausgegebene Links. Die Antwort ist `Cache-Control: no-store`. Das Ausstellen eines Links wird als `objekt.mcp_download_vorbereitet` im Audit-Log festgehalten. Für den Pfad ist im Reverse-Proxy keine Sonderkonfiguration nötig.
+

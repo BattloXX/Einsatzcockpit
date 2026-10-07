@@ -153,6 +153,10 @@ class Settings(BaseSettings):
     MCP_UPLOAD_TOKEN_MINUTEN: int = 15
     MCP_UPLOAD_RETENTION_STUNDEN: int = 24
     MCP_UPLOAD_RATELIMIT: str = "20/minute"
+    MCP_DOWNLOAD_TOKEN_MINUTEN: int = 15
+    MCP_DOWNLOAD_INLINE_MAX_BYTES: int = 8 * 1024 * 1024
+    MCP_DOWNLOAD_RATELIMIT: str = "30/minute"
+    MCP_LOGO_INLINE_MAX_BYTES: int = 2 * 1024 * 1024
 
     # Nachschlagewerke (Gefahrgut-Suche, Rettungsdatenblaetter, Karten-Overlays).
     # Sync-Downloads landen hier (persistent, ausserhalb des read-only Repo-app/data);

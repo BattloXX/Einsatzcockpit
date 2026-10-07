@@ -1,5 +1,6 @@
 """DB-gestuetzter OAuth-Provider und Streamable-HTTP-MCP-Server."""
 
+import json
 import logging
 import secrets
 from datetime import UTC, datetime, timedelta
@@ -17,6 +18,7 @@ from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions, Re
 from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
+from mcp_types import ContentBlock, ImageContent, TextContent
 from pydantic import AnyHttpUrl, AnyUrl
 
 from app.config import settings
@@ -28,6 +30,7 @@ from app.mcp.tools import fahrtenbuch as _fahrtenbuch  # noqa: F401 - registrier
 from app.mcp.tools import kontakt as _kontakt  # noqa: F401 - registriert Kontakt-Tools
 from app.mcp.tools import objekt as _objekt  # noqa: F401 - registriert Objekt-Tools
 from app.mcp.tools import objekt_dokumente as _objekt_dokumente  # noqa: F401 - registriert Dokument-Tools
+from app.mcp.tools import organisation as _organisation  # noqa: F401 - registriert Organisations-Tool
 from app.mcp.tools import whoami as _whoami  # noqa: F401 - registriert Beispiel-Tool
 from app.models.mcp import MCPOAuthClient, MCPOAuthCode, MCPOAuthToken
 
@@ -340,6 +343,26 @@ server = EinsatzcockpitMCPServer(
 @server.tool(name="mcp_whoami", description="Zeigt den aktuell verbundenen Einsatzcockpit-Benutzer.")
 async def whoami(ctx: Context) -> dict[str, object]:
     return await _call_registered_tool("mcp_whoami")
+
+
+@server.tool(
+    name="organisation_lesen",
+    description="Liest Stammdaten und Logo der eigenen Organisation (z. B. fuer Briefkoepfe oder Berichte).",
+)
+async def organisation_lesen(logo_als_bild: bool = True, ctx: Context | None = None) -> list[ContentBlock]:
+    ergebnis = await _call_registered_tool("organisation_lesen", logo_als_bild=logo_als_bild)
+    logo = ergebnis["logo"]
+    assert isinstance(logo, dict)
+    inhalt_base64 = logo.pop("inhalt_base64", None)
+    inhalt: list[ContentBlock] = [
+        TextContent(type="text", text=json.dumps(ergebnis, ensure_ascii=False, indent=2))
+    ]
+    if inhalt_base64 is not None:
+        assert isinstance(inhalt_base64, str)
+        mime = logo["mime"]
+        assert isinstance(mime, str)
+        inhalt.append(ImageContent(type="image", data=inhalt_base64, mime_type=mime))
+    return inhalt
 
 
 @server.tool(
@@ -679,6 +702,22 @@ async def objekt_dokument_upload_vorbereiten(
         objekt_id=objekt_id,
         dateiname=dateiname,
         groesse_bytes=groesse_bytes,
+    )
+
+
+@server.tool(
+    name="objekt_dokument_herunterladen",
+    description=(
+        "Liefert einen kurzlebigen Download-Link fuer ein Objektdokument. dokument_id kommt aus "
+        "objekt_dokumente_auflisten; optional seite fuer eine Einzelseite. Der Link ist ca. 15 Minuten "
+        "gueltig und im Browser klickbar. inline=True nur fuer kleine Dateien verwenden."
+    ),
+)
+async def objekt_dokument_herunterladen(
+    dokument_id: int, seite: int | None = None, inline: bool = False, ctx: Context | None = None
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "objekt_dokument_herunterladen", dokument_id=dokument_id, seite=seite, inline=inline
     )
 
 

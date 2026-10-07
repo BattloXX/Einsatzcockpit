@@ -19,6 +19,7 @@ Beim Verbinden öffnet sich die Einsatzcockpit-Anmeldung. Melde dich mit deinem 
 Die verfügbaren Werkzeuge sind:
 
 - `mcp_whoami`: zeigt Benutzer, Organisation und Rollen.
+- `organisation_lesen`: liefert Stammdaten der eigenen Organisation (Name, Kürzel, Kontakt, Adresse, Farben, Fußzeile) und das Logo direkt als Bild, damit Claude es z. B. für Briefköpfe oder Berichte verwenden kann. SVG-Logos kommen als Quelltext, ohne eigenes Logo das Standardlogo.
 - `fahrtenbuch_stammdaten`, `fahrtenbuch_fahrten`, `fahrtenbuch_fahrt` und `fahrtenbuch_auswertung`: lesen Stammdaten, Fahrten, Korrekturkette und Auswertungen.
 - `objekt_kataloge`, `objekt_suchen`, `objekt_lesen` und `objekt_duplikate_pruefen`: lesen Objektwerte und prüfen Dubletten. `objekt_lesen` liefert Zuordnungs-IDs für Kontakte, Gefahren, Merkmale und Zusatzadressen; mit `arbeitskopie=true` liest es die Kinder einer vorhandenen Arbeitskopie.
 - `kontakt_suchen`, `kontakt_duplikate_pruefen`, `kontakt_lesen` und `kontakt_kategorien`: suchen, prüfen und lesen zentrale Kontakte sowie Kategorien. `kontakt_lesen` enthält Telefone, E-Mail, Kategorien, Versionsnummer und Objektzuordnungen.
@@ -26,6 +27,7 @@ Die verfügbaren Werkzeuge sind:
 - `objekt_anlegen` und `objekt_aktualisieren`: legen Entwürfe an oder bearbeiten Entwürfe beziehungsweise Arbeitskopien. Sie können die Objekt-Stammdaten `informationen`, `anfahrtsweg` und `revision_datum` sowie optionale Wohnanlagen-Daten (`wohneinheiten`, `geschosse`, `stiegen`, `hausverwaltung_kontakt_id`, `hinweise`) pflegen. Mit `kontakte_aendern` ändern sie Art, Sortierung oder Erreichbarkeit einer Objektkontakt-Zuordnung.
 - `objekt_dokument_upload_vorbereiten`: erzeugt einen einmaligen Upload-Link (15 Minuten gültig) samt curl-Beispiel, damit große PDFs nicht als Base64 im Tool-Aufruf stehen müssen.
 - `objekt_dokument_uebergeben`, `objekt_dokumente_auflisten` und `objekt_dokument_seiten_klassifizieren`: übergeben, listen und klassifizieren Objekt-PDFs. Übergabe entweder mit `upload_id` (nach dem curl-Upload) oder – für kleine Dateien – mit `inhalt_base64`. `seiten` hat das Format `[{"nr":1,"dokumentart":"bma_datenblatt","titel":null}]`; die Klassifizierung des Clients wird unverändert übernommen.
+- `objekt_dokument_herunterladen`: holt das Original-PDF eines Objektdokuments (jede Version, optional mit `seite` nur eine Einzelseite). Liefert einen 15 Minuten gültigen Download-Link, den du auch im Browser öffnen kannst, samt curl-Beispiel; mit `inline=true` kommt eine kleine Datei (bis 8 MB) zusätzlich direkt als Base64. Die `dokument_id` liefert `objekt_dokumente_auflisten` (dort jetzt auch mit Dateigröße).
 
 ## Kontrollierter Ablauf
 
