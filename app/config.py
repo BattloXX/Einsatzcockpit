@@ -253,6 +253,15 @@ class Settings(BaseSettings):
     # Vereinfachung der Routen-Geometrie (Douglas-Peucker) in Metern: weniger Stützpunkte
     # → die Förderleitung lässt sich mit wenigen Griffen verschieben (0 = keine Vereinfachung).
     ROUTING_SIMPLIFY_TOLERANCE_M: float = 25.0
+
+    # Routing für die Einsatz-Anfahrt. Opt-in, da Einsatzkoordinaten an einen externen
+    # Routingdienst übermittelt werden; unterstützt ORS-Sperrflächen oder OSRM.
+    EINSATZ_ROUTING_ENABLED: bool = False
+    EINSATZ_ROUTING_PROVIDER: str = "ors"  # "ors" (openrouteservice, Sperrflächen) | "osrm"
+    EINSATZ_ROUTING_API_URL: str = ""  # leer: ORS-Standard bzw. ROUTING_OSRM_URL
+    EINSATZ_ROUTING_API_KEY: str = ""
+    EINSATZ_ROUTING_PROFILE: str = ""  # leer: ORS driving-car, OSRM driving
+    EINSATZ_ROUTING_TIMEOUT_SECONDS: float = 5.0
     # Gefahren der Nachbarobjekte im Umkreis des Einsatzobjekts (Einsatzinfo-Karte)
     NACHBAR_GEFAHR_RADIUS_M: int = 400
 
