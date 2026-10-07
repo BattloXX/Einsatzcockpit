@@ -102,6 +102,7 @@ unter [Server-Voraussetzungen](Installation-Server-Voraussetzungen).
 | [Mailing-Kampagnen](Anwender-Mailing-Kampagnen) | Vorlagen verwenden, Empfängerlisten aufbauen, Kampagnen planen/senden und Zustellung auswerten |
 | [Fahrtenbuch](Anwender-Fahrtenbuch) | Fahrt erfassen: Fahrzeug, Maschinist, km/BH, Seilwinde, Token/QR-Zugang |
 | [Objekte](Anwender-Objekte) | Objektdaten pflegen, PDF-Unterlagen klassifizieren, Einsatzansicht, Objektblatt-Druck |
+| [Straßensperren & Anfahrtsrouting](Anwender-Strassensperren) | Sperren mit Karte pflegen, Status sehen und Anfahrt im Einsatz prüfen |
 | [MCP-Assistent](Anwender-MCP-Assistent) | KI-Anwendung sicher verbinden, Objektunterlagen übergeben und Fahrten auswerten |
 | [Externe Objektpflege](Anwender-Objektpflege) | Zentrale Kontakte ohne Login zur Objektprüfung einladen und Einreichungen prüfen |
 | [Kontaktverwaltung](Anwender-Kontaktverwaltung) | Zentrale Kontakte anlegen, Objekten zuordnen, Dubletten & Zusammenführen, Einsatzinfo-Freigabe, Import/Export |
@@ -138,6 +139,7 @@ unter [Server-Voraussetzungen](Installation-Server-Voraussetzungen).
 | [Push mit Firebase Cloud Messaging](Administration-Push-FCM) | Globale FCM-Konfiguration für Push-Nachrichten an die native Android-App |
 | [Datensicherung (Org, Self-Service)](Administration-Org-Datensicherung) | Eigene Org-Daten als Archiv herunterladen oder geplant an ein eigenes Ziel senden (SFTP/FTP/rclone); Restore in neue Org (Sysadmin) |
 | [Objektverwaltung](Administration-Objektverwaltung) | Modul aktivieren (System+Org), Rolle Objektverwalter, Kataloge, Alarm-Matching, Alarm-Infoscreen, KI-Klassifizierung |
+| [Straßensperren & Anfahrtsrouting](Administration-Strassensperren) | Modul, Rechte, Routing-Startpunkt und Routingdienst konfigurieren |
 | [Externe Objektpflege](Administration-Objektpflege) | Berechtigungen, Einladungslinks, Erinnerungen und extern sichtbarer Umfang |
 | [Kontaktverwaltung](Administration-Kontaktverwaltung) | Modul aktivieren (System+Org), Rollen, Kategorien, Einsatzinfo-Freigabe, BMA-Import-Verhalten, Offline-Sync-API |
 | [Nachschlagewerke](Administration-Nachschlagewerke) | Modul aktivieren (System+Org), Gefahrgut-Datenquelle (BAM/ADR), Rettungskarten-URL, Offline-Funktion |
@@ -150,6 +152,7 @@ unter [Server-Voraussetzungen](Installation-Server-Voraussetzungen).
 | [Architektur](Entwickler-Architektur) | Module, Schichten, Datenfluss, Multi-Tenancy |
 | [Sicherheit](Entwickler-Sicherheit) | Authentifizierung, CSRF, Tenant-Isolation, Medien und Rate-Limiting |
 | [MCP-Erweiterung](Entwickler-MCP-Erweiterung) | OAuth-Server, Tool-Registry, Live-Kontext und Testmuster |
+| [Straßensperren & Anfahrtsrouting](Entwickler-Strassensperren) | Architektur, Geometrie, Routing-Provider und Tests |
 | [Datenmodell](Entwickler-Datenmodell) | Tabellen, Beziehungen, Multi-Tenancy-Schema |
 | [Einsatz-Feed-Schema](Entwickler-Einsatz-Feed) | Pull-Endpunkte, Felder, ETag und `feed_rev` |
 | [REST-API](Entwickler-REST-API) | Endpoints, Payload-Validierung, Rate-Limiting, curl-Beispiele |

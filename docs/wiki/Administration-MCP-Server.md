@@ -13,6 +13,8 @@ MCP ist zweistufig aktiviert:
 
 Zusatzlich gilt das jeweilige Fachmodul: Objekt-Werkzeuge brauchen die aktivierte Objektverwaltung, Kontakt-Werkzeuge das Kontakte-Modul und Fahrtenbuch-Werkzeuge das aktivierte Fahrtenbuch. Deaktivierte Werkzeuge werden nicht angeboten.
 
+Ist das Straßensperren-Modul aktiviert, erhalten alle Benutzer die lesenden Tools `strassensperren_liste`, `strassensperre_lesen`, `strassensperren_suchen`, `strassensperren_im_gebiet`, `einsatz_strassensperren`, `einsatz_anfahrtsroute_pruefen` und `strassensperren_entlang_route`. `objekt_verwalter` erhalten zusätzlich `strassensperre_anlegen`, `strassensperre_aktualisieren`, `strassensperre_deaktivieren` und `strassensperre_reaktivieren`; Löschen ist per MCP nicht verfügbar. Das Anlegen kann `possible_duplicate` zurückgeben. Dann eine vorhandene Sperre aktualisieren oder mit `duplikat_bestaetigt=true` ausdrücklich fortsetzen.
+
 ## Reverse-Proxy und Konfiguration
 
 Für `/mcp` ist Streaming erforderlich: `proxy_buffering off` sowie ausreichend hohe `proxy_read_timeout`- und `proxy_send_timeout`-Werte setzen. Das mitgelieferte [`deploy/nginx-snippet.conf`](../../deploy/nginx-snippet.conf) enthält die `/mcp`-Konfiguration. Die OAuth-Discovery und OAuth-Endpunkte dürfen nicht umgeleitet, geblockt oder von einem Login-Gateway abgefangen werden: `/.well-known/oauth-*`, `/authorize`, `/token`, `/register` und `/revoke` müssen die App erreichen.
@@ -66,4 +68,3 @@ Bei Problemen zuerst prüfen: HTTPS und `PUBLIC_BASE_URL`, die beiden MCP-Flags,
 ### Dokument-Download
 
 `objekt_dokument_herunterladen` liefert für ein Objektdokument (jede Version, auch wartende Dokumente und archivierte Objekte; optional nur eine Einzelseite) einen signierten Link `GET /api/mcp/downloads/{token}`. Der Link braucht keine Sitzung, ist 15 Minuten gültig und im Browser klickbar. Beim Abruf werden Benutzer, Rolle `objekt_verwalter`, MCP- und Objekt-Modul erneut geprüft – ein Rechteentzug wirkt also sofort, auch auf schon ausgegebene Links. Die Antwort ist `Cache-Control: no-store`. Das Ausstellen eines Links wird als `objekt.mcp_download_vorbereitet` im Audit-Log festgehalten. Für den Pfad ist im Reverse-Proxy keine Sonderkonfiguration nötig.
-

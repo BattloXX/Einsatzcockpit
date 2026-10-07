@@ -23,6 +23,8 @@ Die MCP-Implementierung liegt in `app/mcp/`: `server.py` stellt den OAuth-Provid
 | Kontakte | `kontakt_suchen`, `kontakt_duplikate_pruefen`, `kontakt_lesen`, `kontakt_kategorien`, `kontakt_anlegen`, `kontakt_aktualisieren`, `kontakt_archivieren`, `kontakt_zusammenfuehren` | `kontakt_verwalter` oder `objekt_verwalter`, Kontakte-Modul |
 | Fahrtenbuch | `fahrtenbuch_stammdaten`, `fahrtenbuch_fahrten`, `fahrtenbuch_fahrt`, `fahrtenbuch_auswertung` | `fahrtenbuch_admin`, Fahrtenbuch-Modul |
 | Wasserstellen | `wasserstellen_suchen`, `wasserstelle_lesen`, `wasserstelle_anlegen`, `wasserstelle_aktualisieren`, `wasserstelle_deaktivieren` | `org_admin` (wie Admin-UI), kein Modul |
+| Straßensperren | `strassensperren_liste`, `strassensperre_lesen`, `strassensperren_suchen`, `strassensperren_im_gebiet`, `einsatz_strassensperren`, `einsatz_anfahrtsroute_pruefen`, `strassensperren_entlang_route` | `readonly`, Straßensperren-Modul |
+| Straßensperren pflegen | `strassensperre_anlegen`, `strassensperre_aktualisieren`, `strassensperre_deaktivieren`, `strassensperre_reaktivieren` | `objekt_verwalter`, Straßensperren-Modul; kein Löschen |
 
 `required_roles` wird mit `has_role(user, *required_roles)` geprüft: Bei mehreren Rollen genügt eine davon. `system_admin`, `admin` und `org_admin` bestehen die Prüfung ebenfalls. Kontakt-Werkzeuge prüfen ausschließlich das Kontakte-Modul; sie dürfen nicht an das Objekt-Modul gekoppelt werden.
 
