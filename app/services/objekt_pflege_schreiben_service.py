@@ -311,6 +311,31 @@ def merkmal_zuordnen(
     return zuordnung
 
 
+def merkmal_aendern(
+    db: Session,
+    objekt: Objekt,
+    zuordnung_id: int,
+    *,
+    user_id: int | None,
+    hinweis: str | None,
+    quelle: str = "intern",
+) -> ObjektMerkmal:
+    zuordnung = (
+        db.query(ObjektMerkmal).filter(ObjektMerkmal.id == zuordnung_id, ObjektMerkmal.objekt_id == objekt.id).first()
+    )
+    if zuordnung is None:
+        raise ObjektNichtGefundenFehler("Merkmal-Zuordnung nicht gefunden")
+    neu = _text(hinweis or "")
+    alt = zuordnung.hinweis
+    if alt != neu:
+        zuordnung.hinweis = neu
+        write_objekt_change(
+            db, objekt.id, objekt.org_id, "merkmale", "merkmal_hinweis", alt, neu, user_id, quelle
+        )
+        db.flush()
+    return zuordnung
+
+
 def merkmal_entfernen(
     db: Session, objekt: Objekt, zuordnung_id: int, *, user_id: int | None, quelle: str = "intern"
 ) -> None:

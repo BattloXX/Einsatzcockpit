@@ -22,6 +22,7 @@ Die MCP-Implementierung liegt in `app/mcp/`: `server.py` stellt den OAuth-Provid
 | Objekt-Dokumente | `objekt_dokument_upload_vorbereiten`, `objekt_dokument_uebergeben`, `objekt_dokumente_auflisten`, `objekt_dokument_seiten_klassifizieren`, `objekt_dokument_herunterladen` | `objekt_verwalter`, Objekt-Modul |
 | Kontakte | `kontakt_suchen`, `kontakt_duplikate_pruefen`, `kontakt_lesen`, `kontakt_kategorien`, `kontakt_anlegen`, `kontakt_aktualisieren`, `kontakt_archivieren`, `kontakt_zusammenfuehren` | `kontakt_verwalter` oder `objekt_verwalter`, Kontakte-Modul |
 | Fahrtenbuch | `fahrtenbuch_stammdaten`, `fahrtenbuch_fahrten`, `fahrtenbuch_fahrt`, `fahrtenbuch_auswertung` | `fahrtenbuch_admin`, Fahrtenbuch-Modul |
+| Wasserstellen | `wasserstellen_suchen`, `wasserstelle_lesen`, `wasserstelle_anlegen`, `wasserstelle_aktualisieren`, `wasserstelle_deaktivieren` | `org_admin` (wie Admin-UI), kein Modul |
 
 `required_roles` wird mit `has_role(user, *required_roles)` geprüft: Bei mehreren Rollen genügt eine davon. `system_admin`, `admin` und `org_admin` bestehen die Prüfung ebenfalls. Kontakt-Werkzeuge prüfen ausschließlich das Kontakte-Modul; sie dürfen nicht an das Objekt-Modul gekoppelt werden.
 
@@ -31,7 +32,8 @@ Die MCP-Implementierung liegt in `app/mcp/`: `server.py` stellt den OAuth-Provid
 - Keine Freigabe auslösen und außerhalb einer erfolgreichen Transaktion nichts committen. Bei mehreren Änderungen atomar arbeiten und bei Fehlern rollbacken.
 - Objekt-Änderungen mit `quelle="mcp"` markieren und einen passenden `objekt.mcp_*`-Audit-Eintrag schreiben; Kontaktänderungen über `kontakt_service` ausführen und mit `kontakt.mcp_*` auditieren.
 - Nur sichere Ausgabefelder zurückgeben: keine Token, Zugangsdaten oder unnötigen Kontakt-Klartext. Objekt-Werkzeuge dürfen keine Kontaktstammdaten oder Freigaben nebenbei ändern.
-- `objekt_lesen` muss für veränderbare Objektkinder deren IDs liefern. Bei vorhandener Arbeitskopie liefert es deren ID; `arbeitskopie=true` liest deren Kinder. `objekt_aktualisieren` bearbeitet Kontaktzuordnungen ausschließlich über `kontakte_aendern` mit `zuordnung_id` und ändert keine Kontaktstammdaten.
+- `objekt_lesen` muss für veränderbare Objektkinder deren IDs liefern. Bei vorhandener Arbeitskopie liefert es deren ID; `arbeitskopie=true` liest deren Kinder. `objekt_aktualisieren` bearbeitet Kontaktzuordnungen ausschließlich über `kontakte_aendern` mit `zuordnung_id` und ändert keine Kontaktstammdaten. Lesen und Schreiben bleiben symmetrisch: Jedes Feld, das `objekt_anlegen`/`objekt_aktualisieren` annimmt, liefert `objekt_lesen` mit gleichem Namen (Ausnahme: BMA-SMS/-Mail nur als `*_gesetzt`). Kinder ändern über `merkmale_aendern`/`gefahren_aendern`/`kontakte_aendern`; IDs der Basis werden auf die Arbeitskopie aufgelöst.
+- Wasserstellen-Werkzeuge nutzen `erstelle_wasserstelle`/`aktualisiere_wasserstelle` aus `wasserstelle_service` (gleiche Validierung wie die Admin-UI) und auditieren mit `wasserstelle.mcp_*`; Löschen bleibt der Admin-UI vorbehalten.
 - Kontakt-Werkzeuge dürfen Kontaktstammdaten ändern. `kontakt_aktualisieren` braucht die aktuelle Version; `kontakt_archivieren` bei Objektzuordnungen und `kontakt_zusammenfuehren` benötigen `bestaetigt=true`. SMS- und Mail-Freigaben je Objektkontakt, SMS-Versand sowie Kontakt-Import und -Export sind nicht per MCP umzusetzen.
 
 ## Tests und Checkliste

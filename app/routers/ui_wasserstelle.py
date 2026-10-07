@@ -17,8 +17,12 @@ from app.db import get_db
 from app.models.user import User
 from app.models.wasserstelle import WASSERSTELLE_STATUS, WASSERSTELLE_TYPEN, Wasserstelle
 from app.services.wasserstelle_service import (
+    WasserstelleFehler,
+    aktualisiere_wasserstelle,
+    erstelle_wasserstelle,
     importiere_eintraege,
     parse_wasserstellen_csv,
+    status_aktiv,
 )
 
 router = APIRouter(prefix="/admin/wasserstellen", tags=["wasserstelle"])
@@ -27,18 +31,13 @@ _ERLAUBTE_TYPEN = set(WASSERSTELLE_TYPEN.keys())
 _ERLAUBTE_STATUS = set(WASSERSTELLE_STATUS.keys())
 
 
-def _status_aktiv(status: str) -> tuple[str, bool]:
-    """Normalisiert den Status und leitet das operative aktiv-Flag ab (defekt = inaktiv)."""
-    status = status if status in _ERLAUBTE_STATUS else "bereit"
-    return status, status != "defekt"
-
-
-def _koord(roh: str) -> float | None:
+def _koord(roh: str, minimum: float, maximum: float) -> float | None:
     roh = (roh or "").strip().replace(",", ".")
     if not roh:
         return None
     try:
-        return float(roh)
+        wert = float(roh)
+        return wert if minimum <= wert <= maximum else None
     except ValueError:
         return None
 
@@ -130,30 +129,25 @@ def wasserstelle_neu(
     ergiebigkeit_l_min: str = Form(""),
     status: str = Form("bereit"),
 ):
+    if user.org_id is None:
+        raise HTTPException(403, "Keine Organisation zugeordnet")
     if not bezeichnung.strip():
         raise HTTPException(400, "Bezeichnung ist erforderlich")
     if typ not in _ERLAUBTE_TYPEN:
         typ = "sonstige"
-    status, aktiv = _status_aktiv(status)
-    w = Wasserstelle(
-        org_id=user.org_id,
-        bezeichnung=bezeichnung.strip()[:250],
-        typ=typ,
-        lat=_koord(lat),
-        lng=_koord(lng),
-        hinweis=hinweis.strip() or None,
-        ergiebigkeit_l_min=int(ergiebigkeit_l_min) if ergiebigkeit_l_min.strip().isdigit() else None,
-        quelle="manuell",
-        status=status,
-        aktiv=aktiv,
-        erstellt_von_id=user.id,
-        aktualisiert_von_id=user.id,
-    )
-    db.add(w)
-    db.flush()
-    write_audit(db, "wasserstelle.created", org_id=user.org_id, user_id=user.id,
-                entity_type="wasserstelle", entity_id=w.id,
-                payload={"bezeichnung": w.bezeichnung, "typ": w.typ})
+    status = status if status in _ERLAUBTE_STATUS else "bereit"
+    status, _ = status_aktiv(status)
+    try:
+        erstelle_wasserstelle(
+            db, org_id=user.org_id, user_id=user.id,
+            daten={"bezeichnung": bezeichnung.strip()[:250], "typ": typ,
+                   "lat": _koord(lat, -90, 90), "lng": _koord(lng, -180, 180),
+                   "hinweis": hinweis, "ergiebigkeit_l_min": (
+                       int(ergiebigkeit_l_min) if ergiebigkeit_l_min.strip().isdigit() else None
+                   ), "status": status},
+        )
+    except WasserstelleFehler as exc:
+        raise HTTPException(400, str(exc)) from exc
     db.commit()
     return RedirectResponse("/admin/wasserstellen", status_code=303)
 
@@ -174,22 +168,26 @@ def wasserstelle_bearbeiten(
     ergiebigkeit_l_min: str = Form(""),
     status: str = Form("bereit"),
 ):
+    if user.org_id is None:
+        raise HTTPException(403, "Keine Organisation zugeordnet")
     w = db.get(Wasserstelle, wid)
     if not w or w.org_id != user.org_id:
         raise HTTPException(404, "Wasserstelle nicht gefunden")
     if typ not in _ERLAUBTE_TYPEN:
         typ = "sonstige"
-    w.bezeichnung = bezeichnung.strip()[:250] or w.bezeichnung
-    w.typ = typ
-    w.lat = _koord(lat)
-    w.lng = _koord(lng)
-    w.hinweis = hinweis.strip() or None
-    w.ergiebigkeit_l_min = int(ergiebigkeit_l_min) if ergiebigkeit_l_min.strip().isdigit() else None
-    w.status, w.aktiv = _status_aktiv(status)
-    w.aktualisiert_von_id = user.id
-    write_audit(db, "wasserstelle.updated", org_id=user.org_id, user_id=user.id,
-                entity_type="wasserstelle", entity_id=w.id,
-                payload={"bezeichnung": w.bezeichnung})
+    status = status if status in _ERLAUBTE_STATUS else "bereit"
+    status, _ = status_aktiv(status)
+    try:
+        aktualisiere_wasserstelle(
+            db, w, user_id=user.id,
+            daten={"bezeichnung": bezeichnung.strip()[:250] or w.bezeichnung, "typ": typ,
+                   "lat": _koord(lat, -90, 90), "lng": _koord(lng, -180, 180), "hinweis": hinweis,
+                   "ergiebigkeit_l_min": (
+                       int(ergiebigkeit_l_min) if ergiebigkeit_l_min.strip().isdigit() else None
+                   ), "status": status},
+        )
+    except WasserstelleFehler as exc:
+        raise HTTPException(400, str(exc)) from exc
     db.commit()
     return RedirectResponse("/admin/wasserstellen", status_code=303)
 

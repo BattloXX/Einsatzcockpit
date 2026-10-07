@@ -28,19 +28,23 @@ from app.models.objekt import (
     MerkmalKatalog,
     Objekt,
     ObjektBMA,
+    ObjektGefahr,
     ObjektKategorie,
     ObjektKontakt,
+    ObjektMerkmal,
 )
 from app.services import kontakt_service
 from app.services.objekt_pflege_schreiben_service import (
     ObjektFehler,
     bma_speichern,
     erstelle_objekt,
+    gefahr_aendern,
     gefahr_anlegen,
     gefahr_entfernen,
     kontakt_zuordnen,
     kontakt_zuordnung_aendern,
     kontakt_zuordnung_entfernen,
+    merkmal_aendern,
     merkmal_entfernen,
     merkmal_zuordnen,
     suche_objekte,
@@ -55,6 +59,7 @@ from app.services.objekt_service import (
     erstelle_arbeitskopie,
     hole_arbeitskopie,
     lade_auswahl,
+    links_aus_form,
     objekt_effective_enabled,
 )
 
@@ -184,7 +189,10 @@ async def objekt_suchen(context: MCPContext, q: str = "", status: str = "", limi
 
 @register_tool(
     name="objekt_lesen",
-    description="Liest ein Objekt ohne Telefon- oder E-Mail-Klartext.",
+    description=(
+        "Liefert Stammdaten inkl. informationen (allgemeiner Hinweistext) und anfahrtsweg, BMA, Gefahren mit "
+        "Details, Merkmale mit Hinweis, Zusatzadressen, Wohnanlage und Kontakt-Zuordnungen ohne Kontakt-Klartext."
+    ),
     required_roles=("objekt_verwalter",),
     module_check=objekt_modul_aktiv,
 )
@@ -197,6 +205,7 @@ async def objekt_lesen(context: MCPContext, objekt_id: int, arbeitskopie: bool =
             selectinload(Objekt.gefahren),
             selectinload(Objekt.merkmale),
             selectinload(Objekt.zusatzadressen),
+            selectinload(Objekt.wohnanlage),
         )
         .filter(Objekt.id == objekt_id, Objekt.org_id == context.org_id)
         .first()
@@ -212,7 +221,10 @@ async def objekt_lesen(context: MCPContext, objekt_id: int, arbeitskopie: bool =
             .options(
                 selectinload(Objekt.bma),
                 selectinload(Objekt.kontakte).selectinload(ObjektKontakt.zentraler_kontakt),
-                selectinload(Objekt.gefahren), selectinload(Objekt.merkmale), selectinload(Objekt.zusatzadressen),
+                selectinload(Objekt.gefahren),
+                selectinload(Objekt.merkmale),
+                selectinload(Objekt.zusatzadressen),
+                selectinload(Objekt.wohnanlage),
             )
             .filter(Objekt.id == gefundene_arbeitskopie.id, Objekt.org_id == context.org_id)
             .one()
@@ -220,8 +232,27 @@ async def objekt_lesen(context: MCPContext, objekt_id: int, arbeitskopie: bool =
     return _objekt_kandidat(objekt) | {
         "basis_objekt_id": basis_objekt_id,
         "vulgoname": objekt.vulgoname,
+        "kategorie_id": objekt.kategorie_id,
+        "kategorie": objekt.kategorie.name if objekt.kategorie else None,
+        "lat": objekt.lat,
+        "lng": objekt.lng,
+        "informationen": objekt.informationen,
+        "anfahrtsweg": objekt.anfahrtsweg,
+        "revision_datum": objekt.revision_datum.isoformat() if objekt.revision_datum else None,
         "adresse": {"strasse": objekt.strasse, "hausnummer": objekt.hausnummer, "plz": objekt.plz, "ort": objekt.ort},
-        "bma": {"bma_nummer": objekt.bma.bma_nummer, "rfl_nummer": objekt.bma.rfl_nummer} if objekt.bma else None,
+        "bma": (
+            {
+                column.name: getattr(objekt.bma, column.name)
+                for column in ObjektBMA.__table__.columns
+                if column.name not in {"id", "org_id", "objekt_id", "benachrichtigung_sms", "benachrichtigung_email"}
+            }
+            | {
+                "benachrichtigung_sms_gesetzt": bool(objekt.bma.benachrichtigung_sms),
+                "benachrichtigung_email_gesetzt": bool(objekt.bma.benachrichtigung_email),
+            }
+            if objekt.bma
+            else None
+        ),
         "kontakte": [
             {
                 "zuordnung_id": k.id,
@@ -235,16 +266,49 @@ async def objekt_lesen(context: MCPContext, objekt_id: int, arbeitskopie: bool =
             }
             for k in objekt.kontakte
         ],
-        "gefahren": [{"id": g.id, "gefahr_id": g.gefahr_id, "sort": g.sort} for g in objekt.gefahren],
-        "merkmale": [{"id": m.id, "merkmal_id": m.merkmal_id, "hinweis": m.hinweis} for m in objekt.merkmale],
+        "gefahren": [
+            {
+                "id": g.id,
+                "gefahr_id": g.gefahr_id,
+                "name": g.gefahr.name if g.gefahr else None,
+                "un_nummer": g.un_nummer,
+                "stoffname": g.stoffname,
+                "gefahrklasse": g.gefahrklasse,
+                "gefahrnummer": g.gefahrnummer,
+                "detail": g.detail,
+                "links": g.links,
+                "sort": g.sort,
+            }
+            for g in objekt.gefahren
+        ],
+        "merkmale": [
+            {
+                "id": m.id,
+                "merkmal_id": m.merkmal_id,
+                "name": m.merkmal.name if m.merkmal else None,
+                "hinweis": m.hinweis,
+            }
+            for m in objekt.merkmale
+        ],
         "zusatzadressen": [
             {"id": z.id, "bezeichnung": z.bezeichnung, "strasse": z.strasse, "hausnummer": z.hausnummer,
              "plz": z.plz, "ort": z.ort, "sort": z.sort}
             for z in objekt.zusatzadressen
         ],
+        "wohnanlage": (
+            {
+                "wohneinheiten": objekt.wohnanlage.wohneinheiten,
+                "geschosse": objekt.wohnanlage.geschosse,
+                "stiegen": objekt.wohnanlage.stiegen,
+                "hausverwaltung_kontakt_id": objekt.wohnanlage.hausverwaltung_kontakt_id,
+                "hinweise": objekt.wohnanlage.hinweise,
+            }
+            if objekt.wohnanlage
+            else None
+        ),
         "arbeitskopie_id": gefundene_arbeitskopie.id if gefundene_arbeitskopie else None,
         "hat_arbeitskopie": bool(gefundene_arbeitskopie),
-        "hinweis": (
+        "arbeitskopie_hinweis": (
             f"Arbeitskopie vorhanden (ID {gefundene_arbeitskopie.id}); mit arbeitskopie=true deren Kinder lesen."
             if gefundene_arbeitskopie and not arbeitskopie else None
         ),
@@ -462,6 +526,9 @@ async def objekt_anlegen(
         for merkmal in merkmale or []:
             if not isinstance(merkmal, dict) or not merkmal.get("merkmal_id"):
                 raise ValueError("Jedes Merkmal braucht merkmal_id.")
+            unbekannt = set(merkmal) - {"merkmal_id", "hinweis"}
+            if unbekannt:
+                raise ValueError("Unbekannte Merkmal-Felder: " + ", ".join(sorted(unbekannt)))
             merkmal_zuordnen(context.db, objekt, user_id=context.user.id, quelle="mcp", **merkmal)
         for adresse in zusatzadressen or []:
             if not isinstance(adresse, dict):
@@ -554,6 +621,92 @@ def _kontakt_zuordnung_id_auflosen(
     return treffer[0].id
 
 
+def _merkmal_zuordnung_id_auflosen(db: Any, objekt: Objekt, basis: Objekt, ident: int) -> int:
+    """Nimmt auch eine Merkmal-ID aus dem Basisobjekt fuer dessen Arbeitskopie an."""
+    if db.query(ObjektMerkmal).filter(ObjektMerkmal.id == ident, ObjektMerkmal.objekt_id == objekt.id).first():
+        return ident
+    if objekt.entwurf_von_id is None:
+        return ident
+    basis_zuordnung = (
+        db.query(ObjektMerkmal).filter(ObjektMerkmal.id == ident, ObjektMerkmal.objekt_id == basis.id).first()
+    )
+    if basis_zuordnung is not None:
+        treffer = (
+            db.query(ObjektMerkmal)
+            .filter(
+                ObjektMerkmal.objekt_id == objekt.id,
+                ObjektMerkmal.merkmal_id == basis_zuordnung.merkmal_id,
+            )
+            .all()
+        )
+        if len(treffer) == 1:
+            return treffer[0].id
+    raise ValueError(
+        "Merkmal-Zuordnung aus dem Basisobjekt ist in der Arbeitskopie nicht eindeutig vorhanden; "
+        "bitte id aus objekt_lesen mit arbeitskopie=true verwenden."
+    )
+
+
+def _gefahr_zuordnung_id_auflosen(db: Any, objekt: Objekt, basis: Objekt, ident: int) -> int:
+    """Nimmt auch eine Gefahren-ID aus dem Basisobjekt fuer dessen Arbeitskopie an."""
+    if db.query(ObjektGefahr).filter(ObjektGefahr.id == ident, ObjektGefahr.objekt_id == objekt.id).first():
+        return ident
+    if objekt.entwurf_von_id is None:
+        return ident
+    basis_gefahr = db.query(ObjektGefahr).filter(ObjektGefahr.id == ident, ObjektGefahr.objekt_id == basis.id).first()
+    if basis_gefahr is not None:
+        treffer = (
+            db.query(ObjektGefahr)
+            .filter(
+                ObjektGefahr.objekt_id == objekt.id,
+                ObjektGefahr.gefahr_id == basis_gefahr.gefahr_id,
+                ObjektGefahr.sort == basis_gefahr.sort,
+            )
+            .all()
+        )
+        if len(treffer) == 1:
+            return treffer[0].id
+    raise ValueError(
+        "Gefahren-Eintrag aus dem Basisobjekt ist in der Arbeitskopie nicht eindeutig vorhanden; "
+        "bitte id aus objekt_lesen mit arbeitskopie=true verwenden."
+    )
+
+
+def _gefahr_aenderungsdaten(eintrag: dict[str, Any]) -> tuple[int, dict[str, Any], dict[str, Any]]:
+    erlaubte = {"id", "un_nummer", "stoffname", "gefahrklasse", "gefahrnummer", "detail", "links"}
+    unbekannt = set(eintrag) - erlaubte
+    if unbekannt:
+        raise ValueError("Unbekannte Gefahren-Aenderungsfelder: " + ", ".join(sorted(unbekannt)))
+    ident = eintrag.get("id")
+    if not isinstance(ident, int):
+        raise ValueError("Jede Gefahren-Aenderung braucht eine ID.")
+    daten: dict[str, Any] = {}
+    berichtswerte: dict[str, Any] = {}
+    for feld in ("un_nummer", "stoffname", "gefahrklasse", "gefahrnummer", "detail"):
+        if feld not in eintrag:
+            continue
+        wert = eintrag[feld]
+        if not isinstance(wert, str):
+            raise ValueError(f"{feld} muss ein String sein.")
+        daten[feld] = wert.strip() or None
+        berichtswerte[feld] = daten[feld]
+    if "links" in eintrag:
+        links = eintrag["links"]
+        if not isinstance(links, list) or any(not isinstance(link, dict) for link in links):
+            raise ValueError("links muss eine Liste von Objekten sein.")
+        for link in links:
+            unbekannt_link = set(link) - {"label", "url"}
+            if unbekannt_link:
+                raise ValueError("Unbekannte Gefahren-Link-Felder: " + ", ".join(sorted(unbekannt_link)))
+            if not isinstance(link.get("label", ""), str) or not isinstance(link.get("url", ""), str):
+                raise ValueError("label und url muessen Strings sein.")
+        daten["links_json"] = links_aus_form(
+            [link.get("label", "") for link in links], [link.get("url", "") for link in links]
+        )
+        berichtswerte["links"] = links
+    return ident, daten, berichtswerte
+
+
 @register_tool(
     name="objekt_aktualisieren",
     description="Aktualisiert einen Objektentwurf oder legt fuer ein freigegebenes Objekt eine Arbeitskopie an.",
@@ -567,8 +720,10 @@ async def objekt_aktualisieren(
     bma: dict[str, Any] | None = None,
     gefahren_hinzufuegen: list[dict[str, Any]] | None = None,
     gefahren_entfernen: list[int | dict[str, Any]] | None = None,
+    gefahren_aendern: list[dict[str, Any]] | None = None,
     merkmale_hinzufuegen: list[dict[str, Any]] | None = None,
     merkmale_entfernen: list[int | dict[str, Any]] | None = None,
+    merkmale_aendern: list[dict[str, Any]] | None = None,
     zusatzadressen_hinzufuegen: list[dict[str, Any]] | None = None,
     zusatzadressen_entfernen: list[int | dict[str, Any]] | None = None,
     kontakte_hinzufuegen: list[dict[str, Any]] | None = None,
@@ -601,6 +756,10 @@ async def objekt_aktualisieren(
     try:
         if basis.status == OBJEKT_STATUS_FREIGEGEBEN:
             objekt = erstelle_arbeitskopie(db, basis, context.user.id)
+            # Die Kindzeilen der Arbeitskopie werden mit expliziter objekt_id angelegt.
+            # Fuer nachfolgende Aenderungen im selben MCP-Aufruf muessen sie bereits
+            # abfragbar sein, damit Basis-IDs auf ihre Kopien aufgeloest werden koennen.
+            db.flush()
         elif basis.status == OBJEKT_STATUS_UEBERARBEITUNG:
             arbeitskopie = hole_arbeitskopie(db, basis)
             if arbeitskopie is None:
@@ -618,6 +777,7 @@ async def objekt_aktualisieren(
             )
 
         geaenderte_felder: list[dict[str, object]] = []
+        hinweise: list[str] = []
         if stammdaten:
             vorher = {feld: getattr(objekt, feld) for feld in stammdaten}
             for feld in aktualisiere_felder(db, objekt, stammdaten, "stammdaten", context.user.id, "mcp"):
@@ -650,9 +810,56 @@ async def objekt_aktualisieren(
             ident = _entfern_id(eintrag, "Gefahren")
             gefahr_entfernen(db, objekt, ident, user_id=context.user.id, quelle="mcp")
             geaenderte_felder.append({"feld": "gefahren", "vorher": ident, "nachher": None})
+        for eintrag in gefahren_aendern or []:
+            if not isinstance(eintrag, dict):
+                raise ValueError("Jede Gefahren-Aenderung muss ein Objekt sein.")
+            ident, daten, berichtswerte = _gefahr_aenderungsdaten(eintrag)
+            ident = _gefahr_zuordnung_id_auflosen(db, objekt, basis, ident)
+            vorher_eintrag = (
+                db.query(ObjektGefahr).filter(ObjektGefahr.id == ident, ObjektGefahr.objekt_id == objekt.id).first()
+            )
+            if vorher_eintrag is None:
+                raise ValueError("Gefahren-Eintrag nicht gefunden.")
+            vorher = {
+                feld: vorher_eintrag.links if feld == "links" else getattr(vorher_eintrag, feld)
+                for feld in berichtswerte
+            }
+            geaenderte_gefahr = gefahr_aendern(
+                db, objekt, ident, user_id=context.user.id, daten=daten, quelle="mcp"
+            )
+            for feld, alt in vorher.items():
+                nachher_wert: Any = (
+                    geaenderte_gefahr.links if feld == "links" else getattr(geaenderte_gefahr, feld)
+                )
+                if alt != nachher_wert:
+                    geaenderte_felder.append(
+                        {"feld": f"gefahren.{feld}", "vorher": alt, "nachher": nachher_wert}
+                    )
         for merkmal in merkmale_hinzufuegen or []:
             if not isinstance(merkmal, dict) or not merkmal.get("merkmal_id"):
                 raise ValueError("Jedes Merkmal braucht merkmal_id.")
+            unbekannt = set(merkmal) - {"merkmal_id", "hinweis"}
+            if unbekannt:
+                raise ValueError("Unbekannte Merkmal-Felder: " + ", ".join(sorted(unbekannt)))
+            vorhandenes_merkmal = (
+                db.query(ObjektMerkmal)
+                .filter(ObjektMerkmal.objekt_id == objekt.id, ObjektMerkmal.merkmal_id == merkmal["merkmal_id"])
+                .first()
+            )
+            if vorhandenes_merkmal is not None:
+                if "hinweis" in merkmal:
+                    alt = vorhandenes_merkmal.hinweis
+                    geaendertes_merkmal = merkmal_aendern(
+                        db, objekt, vorhandenes_merkmal.id, user_id=context.user.id,
+                        hinweis=merkmal["hinweis"], quelle="mcp"
+                    )
+                    if alt != geaendertes_merkmal.hinweis:
+                        geaenderte_felder.append(
+                            {"feld": "merkmale.hinweis", "vorher": alt, "nachher": geaendertes_merkmal.hinweis}
+                        )
+                else:
+                    hinweise.append(f"Merkmal {merkmal['merkmal_id']} ist bereits zugeordnet.")
+                continue
             neues_merkmal = merkmal_zuordnen(db, objekt, user_id=context.user.id, quelle="mcp", **merkmal)
             if neues_merkmal is not None:
                 geaenderte_felder.append({"feld": "merkmale", "vorher": None, "nachher": neues_merkmal.id})
@@ -660,6 +867,32 @@ async def objekt_aktualisieren(
             ident = _entfern_id(eintrag, "Merkmal")
             merkmal_entfernen(db, objekt, ident, user_id=context.user.id, quelle="mcp")
             geaenderte_felder.append({"feld": "merkmale", "vorher": ident, "nachher": None})
+        for eintrag in merkmale_aendern or []:
+            if not isinstance(eintrag, dict):
+                raise ValueError("Jede Merkmal-Aenderung muss ein Objekt sein.")
+            unbekannt = set(eintrag) - {"id", "hinweis"}
+            if unbekannt:
+                raise ValueError("Unbekannte Merkmal-Aenderungsfelder: " + ", ".join(sorted(unbekannt)))
+            if not isinstance(eintrag.get("id"), int):
+                raise ValueError("Jede Merkmal-Aenderung braucht eine ID.")
+            ident = _merkmal_zuordnung_id_auflosen(db, objekt, basis, eintrag["id"])
+            vorher_merkmal = (
+                db.query(ObjektMerkmal).filter(ObjektMerkmal.id == ident, ObjektMerkmal.objekt_id == objekt.id).first()
+            )
+            if vorher_merkmal is None:
+                raise ValueError("Merkmal-Zuordnung nicht gefunden.")
+            vorher_hinweis = vorher_merkmal.hinweis
+            geaendertes_merkmal = merkmal_aendern(
+                db, objekt, ident, user_id=context.user.id, hinweis=eintrag.get("hinweis"), quelle="mcp"
+            )
+            if vorher_hinweis != geaendertes_merkmal.hinweis:
+                geaenderte_felder.append(
+                    {
+                        "feld": "merkmale.hinweis",
+                        "vorher": vorher_hinweis,
+                        "nachher": geaendertes_merkmal.hinweis,
+                    }
+                )
         for adresse in zusatzadressen_hinzufuegen or []:
             if not isinstance(adresse, dict):
                 raise ValueError("Jede Zusatzadresse muss ein Objekt sein.")
@@ -669,9 +902,10 @@ async def objekt_aktualisieren(
             ident = _entfern_id(eintrag, "Zusatzadress")
             zusatzadresse_entfernen(db, objekt, ident, user_id=context.user.id, quelle="mcp")
             geaenderte_felder.append({"feld": "zusatzadressen", "vorher": ident, "nachher": None})
-        hinweise, neue_zuordnungen = _kontakte_anlegen(
+        kontakt_hinweise, neue_zuordnungen = _kontakte_anlegen(
             context, objekt, kontakte_hinzufuegen or [], duplikat_bestaetigt, "kontakte_hinzufuegen"
         )
+        hinweise.extend(kontakt_hinweise)
         for zuordnung in neue_zuordnungen:
             geaenderte_felder.append({"feld": "kontakte", "vorher": None, "nachher": zuordnung.id})
         for eintrag in kontakte_aendern or []:
@@ -680,11 +914,17 @@ async def objekt_aktualisieren(
             erlaubte = {"zuordnung_id", "art", "sort", "erreichbarkeit"}
             if set(eintrag) - erlaubte:
                 raise ValueError("Unbekannte Kontakt-Aenderungsfelder: " + ", ".join(sorted(set(eintrag) - erlaubte)))
-            geaendert = kontakt_zuordnung_aendern(
+            geaenderte_kontaktzuordnung = kontakt_zuordnung_aendern(
                 db, objekt, eintrag["zuordnung_id"], art=eintrag.get("art"), sort=eintrag.get("sort"),
                 erreichbarkeit=eintrag.get("erreichbarkeit"), user_id=context.user.id, quelle="mcp",
             )
-            geaenderte_felder.append({"feld": "kontakte", "vorher": geaendert.id, "nachher": geaendert.id})
+            geaenderte_felder.append(
+                {
+                    "feld": "kontakte",
+                    "vorher": geaenderte_kontaktzuordnung.id,
+                    "nachher": geaenderte_kontaktzuordnung.id,
+                }
+            )
         for eintrag in kontakte_entfernen or []:
             if isinstance(eintrag, dict) and isinstance(eintrag.get("kontakt_id"), int) and "id" not in eintrag:
                 treffer = [
