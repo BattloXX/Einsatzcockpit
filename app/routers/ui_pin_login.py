@@ -20,6 +20,7 @@ from __future__ import annotations
 import hashlib
 import logging
 from datetime import UTC, datetime, timedelta
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -30,7 +31,7 @@ from app.core.audit import write_audit
 from app.core.multi_account import ACCOUNTS_COOKIE, add_account, load_accounts, set_accounts_cookie
 from app.core.rate_limit import limiter as _limiter
 from app.core.security import generate_numeric_pin, sign_session
-from app.core.telefon import telefon_kompakt
+from app.core.telefon import telefon_identitaet_at, telefon_kompakt
 from app.core.templating import templates
 from app.db import get_db
 from app.models.login_pin import LOGIN_PIN_TTL_MINUTES, LoginPin
@@ -46,11 +47,27 @@ def _hash_pin(raw: str) -> str:
 
 def _find_user_by_phone(db: Session, phone_norm: str) -> User | None:
     """Lineare Suche über alle aktiven User mit Telefonnummer — kein Index auf
-    normalisierte Nummern nötig, Org-Nutzerzahlen sind klein (Feuerwehren)."""
-    if not phone_norm:
+    normalisierte Nummern nötig, Org-Nutzerzahlen sind klein (Feuerwehren).
+
+    Verglichen wird über telefon_identitaet_at, nicht über die kompakte Schreibweise:
+    "0664…" im Profil und "+43 664…" im Formular (dessen Platzhalter) waren bisher
+    verschiedene Nummern, die PIN-SMS wurde dann still nicht verschickt
+    (Vorfall 2026-10-07)."""
+    schluessel = telefon_identitaet_at(phone_norm)
+    if not schluessel:
         return None
     users = db.query(User).filter(User.active == True, User.phone.isnot(None)).all()  # noqa: E712
-    return next((u for u in users if telefon_kompakt(u.phone) == phone_norm), None)
+    treffer = [u for u in users if telefon_identitaet_at(u.phone) == schluessel]
+    if len(treffer) > 1:
+        logger.warning(
+            "PIN-Login: Nummer %s ist mehreren aktiven Benutzern zugeordnet (user_ids=%s), nehme den ersten",
+            _maskiert(schluessel), [u.id for u in treffer],
+        )
+    return treffer[0] if treffer else None
+
+
+def _maskiert(nummer: str) -> str:
+    return nummer[:-4] + "****" if len(nummer) >= 5 else "****"
 
 
 def _set_session_cookie(response: Response, token: str, max_age: int | None = None) -> None:
@@ -81,19 +98,29 @@ async def pin_login_submit(
     # Immer zur Code-Eingabe weiterleiten — unabhängig davon, ob die Nummer
     # registriert ist (kein Enumerations-Leak, Muster ui_password_reset.py).
     add_query = "&add=1" if add else ""
+    # quote(): ein rohes "+" im Query-String wird beim Lesen zum Leerzeichen, die
+    # Nummer passte im zweiten Schritt dann nicht mehr zur angeforderten PIN.
     redirect = RedirectResponse(
-        f"/pin-login/code?phone={phone_norm}{add_query}", status_code=303,
+        f"/pin-login/code?phone={quote(phone_norm)}{add_query}", status_code=303,
     )
     if not phone_norm:
         return redirect
 
     match = _find_user_by_phone(db, phone_norm)
     if not match or not match.org_id or not match.phone:
+        # Neutrale Antwort an den Client (Enumerations-Schutz), aber im Log sichtbar.
+        logger.info(
+            "PIN-Login: keine PIN versendet, kein aktiver Benutzer mit Organisation zur Nummer %s",
+            _maskiert(telefon_identitaet_at(phone_norm)),
+        )
         return redirect
 
     from app.services.sms_service import sms_available
     if not sms_available(match.org_id, db):
-        logger.debug("PIN-Login: SMS-Versand nicht verfuegbar (org_id=%s)", match.org_id)
+        logger.warning(
+            "PIN-Login: keine PIN versendet, SMS-Versand nicht verfuegbar (user_id=%s, org_id=%s)",
+            match.id, match.org_id,
+        )
         return redirect
 
     # Alte offene PINs dieses Users entwerten (nur die zuletzt erzeugte gilt).
@@ -115,9 +142,16 @@ async def pin_login_submit(
     from app.services.sms_service import send_sms
     text = f"Ihr {settings.APP_NAME}-Anmelde-PIN: {pin} (gültig {LOGIN_PIN_TTL_MINUTES} Minuten)"
     try:
-        await send_sms(match.org_id, match.phone, text)
+        result = await send_sms(match.org_id, match.phone, text)
     except Exception:
         logger.exception("PIN-SMS-Versand fehlgeschlagen (user_id=%s)", match.id)
+    else:
+        if result.success:
+            logger.info("PIN-SMS versendet (user_id=%s, provider=%s)", match.id, result.provider)
+        else:
+            logger.warning(
+                "PIN-SMS-Versand fehlgeschlagen (user_id=%s, letzter provider=%s)", match.id, result.provider,
+            )
 
     return redirect
 

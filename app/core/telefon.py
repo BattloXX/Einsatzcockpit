@@ -23,6 +23,19 @@ def telefon_normalisiert(wert: str | None) -> str:
     return "+" + kompakt[2:] if kompakt.startswith("00") else kompakt
 
 
+def telefon_identitaet_at(wert: str | None) -> str:
+    """Vergleichsschluessel fuer Rufnummern mit oesterreichischer Vorwahl als Standard.
+
+    ``0664 1234567``, ``+43 664 1234567`` und ``0043 664 1234567`` ergeben denselben
+    Schluessel ``+436641234567``. Nationale Nummern (fuehrende ``0``) werden als
+    oesterreichisch gewertet; andere Formate bleiben wie ``telefon_normalisiert``.
+    """
+    normalisiert = telefon_normalisiert(wert)
+    if normalisiert.startswith("0"):
+        return "+43" + normalisiert[1:]
+    return normalisiert
+
+
 def ist_oesterreichische_mobilnummer(wert: str | None) -> bool:
     """Erkennt österreichische Mobilvorwahlen in nationaler und E.164-Schreibweise.
 
