@@ -10,6 +10,11 @@
    wie das mobile Menu (z-index 200) hinausragen koennen. */
 .ei-map-wrap { position: sticky; top: 12px; z-index: 0; }
 #einsatz-info-karte { height: calc(100vh - 190px); min-height: 440px; width: 100%; background: var(--surface); }
+.anfahrt-hinweis { margin: 0 0 10px; padding: 12px 14px; border: 2px solid #d32f2f; border-radius: 9px; background: rgba(211,47,47,.12); }
+.anfahrt-hinweis--warn { border-color: #ef6c00; background: rgba(239,108,0,.12); }
+.anfahrt-hinweis__titel { font-weight: 800; margin-bottom: 6px; }
+.anfahrt-hinweis__zeile, .anfahrt-hinweis__zusatz { margin-top: 4px; font-size: .9rem; }
+.anfahrt-hinweis__neu { margin-top: 8px; padding: 0; border: 0; background: none; color: var(--primary, #1e88e5); text-decoration: underline; cursor: pointer; font: inherit; }
 .ei-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .ei-side .card { margin-bottom: 0; }
 /* .card setzt global overflow:hidden (Rundung der Ecken) - das schneidet das
@@ -103,6 +108,7 @@ html.ei-druck-vorbereitung #einsatz-info-karte { height: 58mm !important; min-he
   }
   .hydrant-liste__dist, .hydrant-liste__text { color: #111 !important; }
   .leaflet-control-attribution { color: #333 !important; background: rgba(255,255,255,.7) !important; }
+  .anfahrt-hinweis { break-inside: avoid; page-break-inside: avoid; color: #111 !important; background: #fff4f4 !important; }
   /* Weitere Komponenten mit eigenem (dunklem) Theme-Hintergrund, die nicht ueber
      ".card" laufen und sonst ebenfalls dunkel drucken wuerden. */
   .badge-pill { background: #eee !important; border-color: #999 !important; color: #111 !important; }
@@ -192,12 +198,14 @@ html.ei-druck-vorbereitung #einsatz-info-karte { height: 58mm !important; min-he
   <div class="ei-grid">
     <!-- Linke Spalte: große Lagekarte -->
     <div class="ei-map-wrap">
+      <div id="anfahrt-hinweis" class="anfahrt-hinweis" hidden></div>
       <div class="card" style="padding:0;overflow:hidden;">
         <div id="einsatz-info-karte"
              data-incident-id="{{ incident.id }}"
              data-lat="{% if incident.lat is not none %}{{ incident.lat }}{% endif %}"
              data-lng="{% if incident.lng is not none %}{{ incident.lng }}{% endif %}"
-             data-objekt-ids="{{ bestaetigte_ids }}"></div>
+             data-objekt-ids="{{ bestaetigte_ids }}"
+             data-route-neu="{% if route_neu_allowed %}1{% else %}0{% endif %}"></div>
       </div>
     </div>
 

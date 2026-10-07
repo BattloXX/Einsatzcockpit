@@ -48,6 +48,10 @@ def db(setup_db, monkeypatch):
         session.add(SystemSettings(key="strassensperren_module_enabled", value="true"))
     else:
         flag.value = "true"
+    # Andere Tests hinterlassen aktive Einsätze in Orgs mit aktivem Modul: für deterministische
+    # Zählungen hier das Modul in allen bestehenden Orgs abschalten (Tests setzen es selbst wieder).
+    for row in session.query(OrgSettings).filter(OrgSettings.strassensperren_modul_aktiv.is_(True)).all():
+        row.strassensperren_modul_aktiv = False
     session.commit()
     try:
         yield session

@@ -332,6 +332,8 @@ def infoscreen_daten(
     )
 
     if incident is not None:
+        from app.services.road_closure_flags import strassensperren_effective_enabled
+        from app.services.road_closure_incident_service import route_payload
         adresse = " ".join(
             t for t in [incident.address_street, incident.address_no] if t
         )
@@ -462,6 +464,10 @@ def infoscreen_daten(
                 "gesamtstatus_label": GESAMTSTATUS_LABEL[gesamtstatus],
             },
         })
+        # Der Infoscreen ist anonym: ausschließlich die Token-Organisation darf
+        # ihre Route und eingefrorenen Sperren-Snapshots sehen.
+        if strassensperren_effective_enabled(org.id, db):
+            daten["incident"]["route"] = route_payload(db, incident, org.id)
 
         # Verknuepftes Objekt (bestaetigt bevorzugt, sonst erster Vorschlag)
         verknuepfung = (

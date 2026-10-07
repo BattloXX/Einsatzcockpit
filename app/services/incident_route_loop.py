@@ -146,10 +146,13 @@ def claim_due_routes(db: Session, now: datetime | None = None, limit: int = 3) -
         db.query(IncidentRoute)
         .execution_options(include_all_tenants=True)
         .join(Incident, Incident.id == IncidentRoute.incident_id)
+        .join(OrgSettings, OrgSettings.org_id == IncidentRoute.org_id)
         .filter(
             due,
             or_(IncidentRoute.lease_until.is_(None), IncidentRoute.lease_until < now),
             Incident.status == "active",
+            # Modul in der Org abgeschaltet: keine weiteren Routing-Anfragen mehr.
+            OrgSettings.strassensperren_modul_aktiv.is_(True),
         )
         .limit(limit)
         .all()

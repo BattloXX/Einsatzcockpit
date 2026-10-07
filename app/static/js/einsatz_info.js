@@ -93,14 +93,16 @@
   // als sanfter Fallback, wenn es sonst nichts zum Zentrieren gibt.
   var objektBounds = [];
   var hydrantBounds = [];
+  var routeBounds = [];
   var zentrumFallback = null;
 
   function fit(instant) {
     var animate = !instant;
-    if (objektBounds.length > 1) {
-      karte.fitBounds(objektBounds, { padding: [45, 45], maxZoom: 18, animate: animate });
-    } else if (objektBounds.length === 1) {
-      karte.setView(objektBounds[0], 18, { animate: animate });
+    var alleBounds = objektBounds.concat(routeBounds);
+    if (alleBounds.length > 1) {
+      karte.fitBounds(alleBounds, { padding: [45, 45], maxZoom: 18, animate: animate });
+    } else if (alleBounds.length === 1) {
+      karte.setView(alleBounds[0], 18, { animate: animate });
     } else if (zentrumFallback) {
       karte.setView(zentrumFallback, 17, { animate: animate });
     } else if (hydrantBounds.length) {
@@ -124,6 +126,100 @@
     objektBounds.push([incLat, incLng]);
   }
   fit();
+
+  /* ── Anfahrt und relevante Straßensperren ── */
+  var routeLayer = L.layerGroup().addTo(karte);
+  var routeReloadVersuche = 0;
+  function routeText(parent, text, klasse) {
+    var zeile = document.createElement("div");
+    if (klasse) { zeile.className = klasse; }
+    zeile.textContent = text;
+    parent.appendChild(zeile);
+  }
+  function zeichneRoute(payload) {
+    routeLayer.clearLayers();
+    routeBounds = [];
+    var box = document.getElementById("anfahrt-hinweis");
+    if (!box) { return; }
+    box.hidden = true;
+    box.replaceChildren();
+    var closures = payload && payload.closures || [];
+    if (payload && payload.status === "error") {
+      box.className = "anfahrt-hinweis anfahrt-hinweis--neutral";
+      routeText(box, "Anfahrtsroute derzeit nicht verfügbar", "text-muted");
+      box.hidden = false;
+      return;
+    }
+    if (!closures.length) {
+      return;
+    }
+    if (payload.route) {
+      var route = L.geoJSON(payload.route, { style: { color: "#1e88e5", weight: 5, opacity: .8, dashArray: payload.status === "affected" ? "10 8" : null } }).addTo(routeLayer);
+      if (route.getBounds().isValid()) { routeBounds.push.apply(routeBounds, [route.getBounds().getSouthWest(), route.getBounds().getNorthEast()]); }
+    }
+    if (payload.alternative_route) {
+      var alternative = L.geoJSON(payload.alternative_route, { style: { color: "#2e7d32", weight: 6, opacity: .9 } }).addTo(routeLayer);
+      if (alternative.getBounds().isValid()) { routeBounds.push.apply(routeBounds, [alternative.getBounds().getSouthWest(), alternative.getBounds().getNorthEast()]); }
+    }
+    closures.forEach(function (closure) {
+      if (!closure.geometry) { return; }
+      var popup = "<strong>" + escapeHtml(closure.title || "Straßensperre") + "</strong><br>" + escapeHtml(closure.restriction_label || closure.restriction_type || "") + (closure.geometry_status === "needs_review" ? "<br>Geometrie prüfen" : "");
+      var layer = L.geoJSON(closure.geometry, {
+        style: { color: "#d32f2f", weight: 7, fillOpacity: .3 },
+        pointToLayer: function (feature, latlng) { return L.circleMarker(latlng, { radius: 8, color: "#d32f2f", weight: 3, fillColor: "#d32f2f", fillOpacity: .8 }); }
+      }).addTo(routeLayer);
+      layer.bindPopup(popup);
+      if (layer.getBounds && layer.getBounds().isValid()) { routeBounds.push.apply(routeBounds, [layer.getBounds().getSouthWest(), layer.getBounds().getNorthEast()]); }
+    });
+    if (payload.start && payload.start.lat != null && payload.start.lng != null) {
+      L.marker([payload.start.lat, payload.start.lng], { icon: L.divIcon({ html: "<div>🚒</div>", className: "route-start-divicon", iconSize: null, iconAnchor: [10, 10] }) }).addTo(routeLayer).bindTooltip(payload.start.label || "Startpunkt");
+      routeBounds.push([payload.start.lat, payload.start.lng]);
+    }
+    var routeBetroffen = closures.some(function (c) { return c.relevance === "route"; });
+    box.className = "anfahrt-hinweis" + (routeBetroffen ? "" : " anfahrt-hinweis--warn");
+    routeText(box, routeBetroffen ? "⚠️ ANFAHRT BEEINTRÄCHTIGT" : "⚠️ SPERRE AM EINSATZORT", "anfahrt-hinweis__titel");
+    closures.forEach(function (c) {
+      routeText(box, (c.title || "Straßensperre") + " – " + (c.restriction_label || c.restriction_type || "") +
+        (c.geometry_status === "needs_review" ? " · Geometrie ungeprüft" : "") +
+        (c.relevance === "destination" ? " · am Einsatzort" : ""), "anfahrt-hinweis__zeile");
+    });
+    if (payload.alternative_status === "ok") {
+      var streets = (payload.alternative_streets || []).slice(0, 6);
+      routeText(box, "Alternative Anfahrt: " + streets.join(" → ") + ((payload.alternative_streets || []).length > 6 ? " …" : ""), "anfahrt-hinweis__zusatz");
+      var km = Math.max(0, Number(payload.detour_distance_m) || 0) / 1000;
+      var min = Math.max(1, Math.ceil(Math.max(0, Number(payload.detour_duration_s) || 0) / 60));
+      routeText(box, "Mehrweg: +" + km.toLocaleString("de-AT", { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + " km · ca. +" + min + " min", "anfahrt-hinweis__zusatz");
+    } else if (payload.alternative_status === "unavailable") {
+      routeText(box, "Keine Umfahrung gefunden – Lage vor Ort prüfen.", "anfahrt-hinweis__zusatz");
+    }
+    if (el.dataset.routeNeu === "1") {
+      var neu = document.createElement("button");
+      neu.type = "button"; neu.className = "anfahrt-hinweis__neu"; neu.textContent = "Route neu berechnen";
+      neu.addEventListener("click", function () {
+        fetch("/einsatz/" + incidentId + "/route/neu", { method: "POST" }).then(function () {
+          neu.textContent = "wird neu berechnet …";
+          routeReloadVersuche = 0;
+          ladeRoute();
+        });
+      });
+      box.appendChild(neu);
+    }
+    box.hidden = false;
+    fit();
+  }
+  function ladeRoute() {
+    fetch("/einsatz/" + incidentId + "/route.json")
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (payload) {
+        if (!payload) { return; }
+        zeichneRoute(payload);
+        if (payload.status === "pending" && routeReloadVersuche++ < 12) { setTimeout(ladeRoute, 10000); }
+      }).catch(function () {});
+  }
+  document.body.addEventListener("incident-route-updated", function (event) {
+    if (event.detail && Number(event.detail.incident_id) === Number(incidentId)) { routeReloadVersuche = 0; ladeRoute(); }
+  });
+  ladeRoute();
 
   /* ── Objekt-Symbole der bestätigten Objekte ── */
   objektIds.forEach(function (oid) {
