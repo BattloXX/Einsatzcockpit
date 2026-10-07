@@ -1,0 +1,10 @@
+{% if closures %}
+<div class="sperren-list">
+{% for closure in closures %}{% set state = closure_status(closure) %}
+<a class="sperren-row{% if state in ['expired', 'cancelled'] %} sperren-row--muted{% endif %}" href="/strassensperren/{{ closure.id }}">
+  <div class="sperren-row__main"><strong>{{ closure.title }}</strong><small>{{ closure.street or 'Ohne Straße' }}{% if closure.from_text or closure.to_text %}: {{ closure.from_text or '?' }} – {{ closure.to_text or '?' }}{% endif %}</small><small>{{ closure.valid_from|local_datetime }} – {% if closure.valid_until %}{{ closure.valid_until|local_datetime }}{% else %}unbefristet{% endif %}</small>{% if closure.org_id != user.org_id %}<small>geteilt von {{ org_names.get(closure.org_id, '') }}</small>{% endif %}</div>
+  <div class="sperren-row__meta"><span class="sperren-type sperren-type--{{ color(closure) }}">{{ closure.restriction_label }}</span><span class="sperren-pill{% if state == 'active' %} sperren-pill--active{% endif %}">{{ status_labels[state] }}</span>{% if closure.geometry_status == 'needs_review' %}<span class="sperren-review">Geometrie prüfen</span>{% elif closure.geometry_status == 'missing' %}<span class="sperren-missing">Keine Geometrie</span>{% endif %}</div>
+</a>
+{% endfor %}
+</div>
+{% else %}<p class="sperren-empty">Keine Straßensperren gefunden.</p>{% endif %}

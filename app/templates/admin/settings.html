@@ -597,11 +597,12 @@
         </label>
       </div>
       <div class="form-grid">
-        <div class="form-group"><label>Start-Breitengrad (lat)</label><input type="number" name="routing_start_lat" step="0.000001" min="-90" max="90" value="{{ org_settings.routing_start_lat if org_settings and org_settings.routing_start_lat is not none else '' }}" class="form-control"></div>
-        <div class="form-group"><label>Start-Längengrad (lng)</label><input type="number" name="routing_start_lng" step="0.000001" min="-180" max="180" value="{{ org_settings.routing_start_lng if org_settings and org_settings.routing_start_lng is not none else '' }}" class="form-control"></div>
+        <div class="form-group"><label>Start-Breitengrad (lat)</label><input type="number" id="settingsRoutingStartLat" name="routing_start_lat" step="0.000001" min="-90" max="90" value="{{ org_settings.routing_start_lat if org_settings and org_settings.routing_start_lat is not none else '' }}" class="form-control"></div>
+        <div class="form-group"><label>Start-Längengrad (lng)</label><input type="number" id="settingsRoutingStartLng" name="routing_start_lng" step="0.000001" min="-180" max="180" value="{{ org_settings.routing_start_lng if org_settings and org_settings.routing_start_lng is not none else '' }}" class="form-control"></div>
         <div class="form-group"><label>Bezeichnung Startpunkt</label><input type="text" name="routing_start_label" maxlength="200" value="{{ org_settings.routing_start_label if org_settings and org_settings.routing_start_label else '' }}" class="form-control"></div>
       </div>
       <small class="form-hint">Koordinate der Fahrzeugausfahrt; Start für die automatische Anfahrtsroute</small>
+      <div id="settingsRoutingStartPicker" style="height:260px;margin-top:.75rem;border-radius:var(--radius-lg);overflow:hidden"></div>
 
       <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">&#x1F6B0; Förderstrecken-Planer</h3>
       {% set _foerderstrecke_org_on = (org_settings.foerderstrecke_module_enabled) if org_settings else false %}
@@ -883,6 +884,16 @@ if (document.getElementById('settingsMapPicker')) {
     lngInputId: 'settingsFallbackLng',
     defaultLat: 47.4664,
     defaultLng: 9.7416,
+  });
+}
+
+if (document.getElementById('settingsRoutingStartPicker')) {
+  initMapPicker({
+    containerId: 'settingsRoutingStartPicker',
+    latInputId: 'settingsRoutingStartLat',
+    lngInputId: 'settingsRoutingStartLng',
+    defaultLat: {{ org.fallback_lat or 47.4664 }},
+    defaultLng: {{ org.fallback_lng or 9.7416 }},
   });
 }
 </script>

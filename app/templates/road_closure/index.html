@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Straßensperren{% endblock %}
+{% block head_extra %}
+{% include "road_closure/_styles.html" %}
+<style>
+.sperren-page{max-width:1280px;margin:0 auto;padding:1rem 1rem 3rem}.sperren-header{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:.75rem}.sperren-header h1{margin:0;font-size:1.6rem}.sperren-header__sub{margin:.2rem 0 0;color:var(--text-muted);font-size:.85rem}.sperren-filter,.sperren-card{background:var(--surface-low);border:1px solid var(--border);border-radius:var(--radius-lg);box-shadow:var(--shadow-card)}.sperren-filter{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.75rem;padding:1rem;margin-bottom:.75rem}.sperren-filter__group{display:grid;gap:.3rem}.sperren-filter__label{font-size:.68rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--text-muted)}.sperren-filter__chips{display:flex;gap:.35rem;flex-wrap:wrap}.sperren-filter__chips .btn.is-active{background:var(--surface-high);border-color:var(--red-light);color:var(--text)}.sperren-layout{display:grid;grid-template-columns:minmax(0,55%) minmax(280px,45%);gap:var(--gutter);align-items:start}.sperren-karte{height:300px}.sperren-list-card{overflow:hidden}.sperren-empty{padding:1.5rem;color:var(--text-muted);text-align:center}@media(max-width:760px){.sperren-filter{grid-template-columns:1fr 1fr}.sperren-layout{grid-template-columns:1fr}.sperren-karte{height:300px}}@media(max-width:480px){.sperren-filter{grid-template-columns:1fr}}
+</style>
+{% endblock %}
+{% block content %}
+<section class="sperren-page">
+  <header class="sperren-header"><div><h1 class="sperren-title">Straßensperren</h1><p class="sperren-sub">{{ active_count }} aktiv · {{ planned_count }} geplant</p></div>{% if can_edit %}<a class="btn btn--primary" href="/strassensperren/neu">+ Sperre anlegen</a>{% endif %}</header>
+  <form id="sperren-filter" class="sperren-filter" hx-get="/strassensperren/liste" hx-target="#sperren-liste" hx-push-url="true">
+    <div class="sperren-filter__group"><span class="sperren-filter__label">Status</span><div class="sperren-filter__chips">{% for value,label in [('current','Aktuell'),('active','Aktiv'),('planned','Geplant'),('all','Alle')] %}<button class="btn btn--ghost btn--sm{% if filters.status == value %} is-active{% endif %}" name="status" value="{{ value }}" type="submit">{{ label }}</button>{% endfor %}</div></div>
+    <div class="sperren-filter__group"><span class="sperren-filter__label">Zeitraum</span><div class="sperren-filter__chips">{% for value,label in [('','Alle'),('heute','Heute'),('7tage','7 Tage')] %}<button class="btn btn--ghost btn--sm{% if filters.zeitraum == value %} is-active{% endif %}" name="zeitraum" value="{{ value }}" type="submit">{{ label }}</button>{% endfor %}</div></div>
+    <div class="sperren-filter__group"><span class="sperren-filter__label">Bereich</span><div class="sperren-filter__chips">{% for value,label in [('all','Alle'),('own','Eigene'),('shared','Nachbarn')] %}<button class="btn btn--ghost btn--sm{% if filters.scope == value %} is-active{% endif %}" name="scope" value="{{ value }}" type="submit">{{ label }}</button>{% endfor %}</div></div>
+    <div class="sperren-filter__group"><label class="form-label" for="sperren-typ">Typ</label><select class="form-select" id="sperren-typ" name="restriction_type" onchange="this.form.requestSubmit()"><option value="">Alle Typen</option>{% for key,label in restriction_types.items() %}<option value="{{ key }}"{% if filters.restriction_type == key %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+    <div class="sperren-filter__group"><label class="form-label" for="sperren-suche">Suche</label><input class="form-input" id="sperren-suche" name="q" value="{{ filters.q }}" hx-get="/strassensperren/liste" hx-trigger="keyup changed delay:300ms" hx-target="#sperren-liste" hx-include="#sperren-filter"></div>
+  </form>
+  <div class="sperren-layout"><div id="sperren-karte" class="sperren-card sperren-karte" data-geojson-url="/strassensperren/karte.json?{{ request.url.query }}" data-center-lat="{{ user.org.fallback_lat or 47.4664 }}" data-center-lng="{{ user.org.fallback_lng or 9.7416 }}"></div><div id="sperren-liste" class="sperren-card sperren-list-card">{% include "road_closure/_liste.html" %}</div></div>
+</section>
+{% endblock %}
+{% block scripts %}
+<link rel="stylesheet" href="/static/css/leaflet.min.css">
+<script src="/static/js/leaflet.min.js"></script>
+<script src="/static/js/road_closure_map.js?v={{ ASSET_VERSION }}"></script>
+{% endblock %}

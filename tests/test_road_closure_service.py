@@ -109,7 +109,7 @@ def test_create_update_and_audit(db, orgs):
     assert closure.geometry_status == "ok"
     assert closure.bbox_min_lat == pytest.approx(47.47)
     assert db.query(RoadClosureChange).filter_by(road_closure_id=closure.id, action="created").count() == 1
-    created_audit = db.query(AuditLog).filter_by(action="road_closure.created").one()
+    created_audit = db.query(AuditLog).filter_by(action="road_closure.created", entity_id=closure.id).one()
     assert json.loads(created_audit.payload_json)["title"] == closure.title
 
     changed = service.update_closure(
@@ -124,7 +124,7 @@ def test_create_update_and_audit(db, orgs):
     assert closure.geometry_status == "missing"
     assert closure.version == 2
     assert db.query(RoadClosureChange).filter_by(road_closure_id=closure.id, field="geometry_status").count() == 1
-    updated_audit = db.query(AuditLog).filter_by(action="road_closure.updated").one()
+    updated_audit = db.query(AuditLog).filter_by(action="road_closure.updated", entity_id=closure.id).one()
     assert "geometry_status" in json.loads(updated_audit.payload_json)["felder"]
 
     assert service.update_closure(db, closure, None, {}, expected_version=2) == []
@@ -157,7 +157,7 @@ def test_deactivate_reactivate_delete_and_visibility(db, orgs):
     with pytest.raises(ValueError):
         service.deactivate_closure(db, closure, None, "Doppelt")
     assert (
-        json.loads(db.query(AuditLog).filter_by(action="road_closure.deactivated").one().payload_json)["grund"]
+        json.loads(db.query(AuditLog).filter_by(action="road_closure.deactivated", entity_id=closure.id).one().payload_json)["grund"]
         == "Baustelle"
     )
     service.reactivate_closure(db, closure, None)
@@ -173,10 +173,11 @@ def test_deactivate_reactivate_delete_and_visibility(db, orgs):
     assert closure in service.list_closures(db, org_a.id, scope="own")
     assert closure in service.list_closures(db, org_b.id, scope="shared")
 
+    closure_id = closure.id
     service.delete_closure(db, closure, None)
     db.flush()
-    assert db.get(RoadClosure, closure.id) is None
-    deleted = db.query(AuditLog).filter_by(action="road_closure.deleted").one()
+    assert db.get(RoadClosure, closure_id) is None
+    deleted = db.query(AuditLog).filter_by(action="road_closure.deleted", entity_id=closure_id).one()
     assert json.loads(deleted.payload_json)["title"] == "Bregenzer Sperre"
 
 
