@@ -13,6 +13,8 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import write_audit
 from app.models.incident import Incident
+from app.models.invitation import OrgPartner
+from app.models.master import FireDept
 from app.models.road_closure import (
     DIRECTIONS,
     GEOMETRY_STATUS,
@@ -335,6 +337,70 @@ def delete_closure(db: Session, closure: RoadClosure, user_id: int | None) -> No
     db.delete(closure)
 
 
+def partner_orgs_for(db: Session, org_id: int) -> list[FireDept]:
+    return (
+        db.query(FireDept)
+        .join(OrgPartner, OrgPartner.partner_org_id == FireDept.id)
+        .filter(
+            OrgPartner.org_id == org_id,
+            FireDept.is_active.is_(True),
+            FireDept.deleted_at.is_(None),
+        )
+        .order_by(FireDept.name)
+        .all()
+    )
+
+
+def shared_org_ids(db: Session, closure: RoadClosure) -> list[int]:
+    return sorted(
+        row[0]
+        for row in db.query(RoadClosureShare.org_id)
+        .filter(RoadClosureShare.road_closure_id == closure.id)
+        .all()
+    )
+
+
+def set_shares(
+    db: Session,
+    closure: RoadClosure,
+    org_ids: list[int],
+    user_id: int | None,
+    *,
+    source: str = "ui",
+    mcp_tool: str | None = None,
+) -> tuple[list[int], list[int]]:
+    owner_org_id = closure.org_id
+    if owner_org_id is None:
+        raise ValueError("Straßensperre ohne Besitzer-Organisation.")
+    requested = {org_id for org_id in org_ids if org_id != owner_org_id}
+    allowed = {org.id for org in partner_orgs_for(db, owner_org_id)}
+    if not requested.issubset(allowed):
+        raise ValueError("Freigabe nur an Partner-Organisationen möglich.")
+
+    before = shared_org_ids(db, closure)
+    before_set = set(before)
+    added = sorted(requested - before_set)
+    removed = sorted(before_set - requested)
+    if not added and not removed:
+        return [], []
+
+    for org_id in added:
+        db.add(RoadClosureShare(road_closure_id=closure.id, org_id=org_id))
+    db.flush()
+    mark_routes_stale_for_closure(db, closure, extra_org_ids=removed)
+    for org_id in removed:
+        share = db.get(RoadClosureShare, (closure.id, org_id))
+        if share is not None:
+            db.delete(share)
+
+    after = sorted(requested)
+    closure.updated_by_user_id = user_id
+    closure.version += 1
+    _change(db, closure, "shared", user_id, source, mcp_tool, "freigaben", before, after)
+    _audit(db, "road_closure.shared", closure, user_id, hinzugefuegt=added, entfernt=removed)
+    return added, removed
+
+
 def visible_closures_q(db: Session, org_id: int):
     shares = select(RoadClosureShare.road_closure_id).where(RoadClosureShare.org_id == org_id)
     return (
@@ -503,9 +569,11 @@ def find_duplicates(
     return result
 
 
-def mark_routes_stale_for_closure(db: Session, closure: RoadClosure) -> None:
+def mark_routes_stale_for_closure(
+    db: Session, closure: RoadClosure, *, extra_org_ids: list[int] | None = None
+) -> None:
     shared_org_ids = db.query(RoadClosureShare.org_id).filter(RoadClosureShare.road_closure_id == closure.id).all()
-    org_ids = [closure.org_id] + [row[0] for row in shared_org_ids]
+    org_ids = [closure.org_id] + [row[0] for row in shared_org_ids] + (extra_org_ids or [])
     rows = (
         db.query(IncidentRoute, Incident)
         .join(Incident, Incident.id == IncidentRoute.incident_id)
