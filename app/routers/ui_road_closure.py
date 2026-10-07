@@ -209,7 +209,12 @@ def _save_data(org, values: dict):
     }
 
 
-def _edit_page(request, user, closure=None, form_data=None, error=None, status_code=200):
+def _edit_page(request, db, user, closure=None, form_data=None, error=None, status_code=200):
+    shared_ids = (
+        form_data.get("freigabe_org_ids", [])
+        if form_data is not None
+        else (road_closure_service.shared_org_ids(db, closure) if closure is not None else [])
+    )
     return templates.TemplateResponse(
         request,
         "road_closure/edit.html",
@@ -221,6 +226,8 @@ def _edit_page(request, user, closure=None, form_data=None, error=None, status_c
             "restriction_types": RESTRICTION_TYPES,
             "directions": DIRECTIONS,
             "priorities": PRIORITIES,
+            "partner_orgs": road_closure_service.partner_orgs_for(db, _org(user).id),
+            "shared_org_ids": {int(org_id) for org_id in shared_ids},
         },
         status_code=status_code,
     )
@@ -358,10 +365,11 @@ async def abschnitt_aus_adresse(
 @router.get("/neu", response_class=HTMLResponse)
 def neu(
     request: Request,
+    db: Session = Depends(get_db),
     user: User = Depends(require_role("objekt_verwalter")),
     _guard: None = Depends(require_strassensperren_enabled),
 ):
-    return _edit_page(request, user)
+    return _edit_page(request, db, user)
 
 
 @router.post("/neu")
@@ -385,6 +393,7 @@ def neu_speichern(
     source_url: str = Form(""),
     geometry_geojson: str = Form(""),
     geometry_checked: str | None = Form(None),
+    freigabe_org_ids: list[int] = Form([]),
     db: Session = Depends(get_db),
     user: User = Depends(require_role("objekt_verwalter")),
     _guard: None = Depends(require_strassensperren_enabled),
@@ -392,10 +401,11 @@ def neu_speichern(
     values = _form_data(**locals())
     try:
         closure = road_closure_service.create_closure(db, _org(user).id, user.id, _save_data(_org(user), values))
+        road_closure_service.set_shares(db, closure, freigabe_org_ids, user.id)
         db.commit()
     except ValueError as exc:
         db.rollback()
-        return _edit_page(request, user, form_data=values, error=str(exc), status_code=422)
+        return _edit_page(request, db, user, form_data=values, error=str(exc), status_code=422)
     return RedirectResponse(f"/strassensperren/{closure.id}", status_code=303)
 
 
@@ -424,6 +434,13 @@ def detail(
 ):
     closure = _closure_or_404(db, user, closure_id, writable=False)
     owner_org = db.get(FireDept, closure.org_id) if closure.org_id != user.org_id else None
+    shared_org_names = []
+    if closure.org_id == user.org_id:
+        shared_org_names = [
+            org.name
+            for org in road_closure_service.partner_orgs_for(db, closure.org_id)
+            if org.id in road_closure_service.shared_org_ids(db, closure)
+        ]
     changes = (
         db.query(RoadClosureChange)
         .filter(RoadClosureChange.road_closure_id == closure.id)
@@ -446,6 +463,7 @@ def detail(
             "can_edit": has_role(user, "objekt_verwalter"),
             "can_delete": has_role(user, "org_admin"),
             "owner_org_name": owner_org.name if owner_org is not None else None,
+            "shared_org_names": shared_org_names,
         },
     )
 
@@ -458,7 +476,7 @@ def bearbeiten(
     user: User = Depends(require_role("objekt_verwalter")),
     _guard: None = Depends(require_strassensperren_enabled),
 ):
-    return _edit_page(request, user, _closure_or_404(db, user, closure_id, writable=True))
+    return _edit_page(request, db, user, _closure_or_404(db, user, closure_id, writable=True))
 
 
 @router.post("/{closure_id}/bearbeiten")
@@ -484,6 +502,7 @@ def bearbeiten_speichern(
     source_url: str = Form(""),
     geometry_geojson: str = Form(""),
     geometry_checked: str | None = Form(None),
+    freigabe_org_ids: list[int] = Form([]),
     db: Session = Depends(get_db),
     user: User = Depends(require_role("objekt_verwalter")),
     _guard: None = Depends(require_strassensperren_enabled),
@@ -494,10 +513,11 @@ def bearbeiten_speichern(
         road_closure_service.update_closure(
             db, closure, user.id, _save_data(_org(user), values), expected_version=version
         )
+        road_closure_service.set_shares(db, closure, freigabe_org_ids, user.id)
         db.commit()
     except ValueError as exc:
         db.rollback()
-        return _edit_page(request, user, closure, values, str(exc), 422)
+        return _edit_page(request, db, user, closure, values, str(exc), 422)
     return RedirectResponse(f"/strassensperren/{closure_id}", status_code=303)
 
 
