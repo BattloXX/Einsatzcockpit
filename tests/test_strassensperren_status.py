@@ -26,7 +26,16 @@ def test_statusansicht_zeigt_nur_aktuelle_sperren(client):
     _login(client, user)
     response = client.get("/strassensperren/status")
     assert response.status_code == 200
-    assert "1 aktiv" in response.text
+    # Andere Tests legen ebenfalls Sperren in Org 1 an: Zähler gegen die DB prüfen statt fix "1".
+    from app.services import road_closure_service
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        aktiv = len(road_closure_service.list_closures(db, 1, status="active"))
+    finally:
+        db.close()
+    assert f"{aktiv} aktiv" in response.text
     assert "Aktuelle Status-Sperre" in response.text
     assert "Abgelaufene Status-Sperre" not in response.text
 
@@ -43,7 +52,7 @@ def test_oeffentlicher_infoscreen_und_karte_pruefen_token_und_modul(client):
         title="Oeffentliche aktive Sperre",
         geometry_geojson='{"type":"Point","coordinates":[9.7,47.5]}',
     )
-    _closure(
+    expired = _closure(
         title="Oeffentlich abgelaufen",
         valid_from=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=2),
         valid_until=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=1),
@@ -57,8 +66,9 @@ def test_oeffentlicher_infoscreen_und_karte_pruefen_token_und_modul(client):
     assert client.get("/infoscreen/strassensperren/unknown").status_code == 401
     assert client.get("/infoscreen/strassensperren/status-disabled").status_code == 401
     payload = client.get("/infoscreen/strassensperren/status-public/karte.json").json()
-    assert [item["properties"]["id"] for item in payload["features"]] == [current.id]
-    assert "url" not in payload["features"][0]["properties"]
+    ids = [item["properties"]["id"] for item in payload["features"]]
+    assert current.id in ids and expired.id not in ids
+    assert all("url" not in item["properties"] for item in payload["features"])
 
     disabled = _setup_user("readonly", enabled=False)
     assert disabled.org_id == 1
