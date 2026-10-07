@@ -125,6 +125,7 @@
             {% if token_urls.get(t.id) %}
             <code style="font-size:.8em;">{{ token_urls[t.id] }}</code>
             <button type="button" class="btn btn--ghost btn--xs" onclick="navigator.clipboard.writeText('{{ token_urls[t.id] }}')">Kopieren</button>
+            {% if strassensperren_aktiv %}<br><code style="font-size:.8em;">{{ strassensperren_urls[t.id] }}</code>{% endif %}
             {% else %}
             <span class="text-muted">nur einmalig bei Erstellung sichtbar — bei Verlust neu ausstellen</span>
             {% endif %}

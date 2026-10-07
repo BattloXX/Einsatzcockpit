@@ -111,7 +111,7 @@ def _color(closure) -> str:
     return "yellow"
 
 
-def _feature(closure, user: User) -> dict | None:
+def _feature(closure, *, viewer_org_id: int | None = None, public: bool = False) -> dict | None:
     """Build the map representation shared by the collection and detail endpoints."""
     if not closure.geometry_geojson:
         return None
@@ -124,7 +124,7 @@ def _feature(closure, user: User) -> dict | None:
         return value.isoformat() + "Z" if value else None
 
     state = road_closure_service.compute_status(closure)
-    return {
+    feature = {
         "type": "Feature",
         "geometry": geometry,
         "properties": {
@@ -143,10 +143,21 @@ def _feature(closure, user: User) -> dict | None:
             "description": closure.description,
             "source": closure.source,
             "geometry_status": closure.geometry_status,
-            "own": closure.org_id == user.org_id,
-            "url": f"/strassensperren/{closure.id}",
+            "own": closure.org_id == viewer_org_id,
         },
     }
+    if not public:
+        feature["properties"]["url"] = f"/strassensperren/{closure.id}"
+    return feature
+
+
+def _status_data(db: Session, org_id: int):
+    """Aktuelle Sperren und Kennzahlen fuer die Vollbild-Statusansicht."""
+    closures = road_closure_service.list_closures(db, org_id, status="current")
+    closures.sort(key=lambda closure: (road_closure_service.compute_status(closure) != "active", closure.valid_from))
+    active = sum(road_closure_service.compute_status(closure) == "active" for closure in closures)
+    planned = sum(road_closure_service.compute_status(closure) == "planned" for closure in closures)
+    return closures, active, planned
 
 
 def _form_data(**values):
@@ -290,8 +301,35 @@ def karte(
     restriction_type: str = "",
 ):
     items, _ = _closures(db, user, status, zeitraum, scope, q, restriction_type)
-    features = [feature for item in items if (feature := _feature(item, user)) is not None]
+    features = [
+        feature for item in items if (feature := _feature(item, viewer_org_id=user.org_id)) is not None
+    ]
     return JSONResponse({"type": "FeatureCollection", "features": features})
+
+
+@router.get("/status", response_class=HTMLResponse)
+def statusansicht(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*_LESE_ROLLEN)),
+    _guard: None = Depends(require_strassensperren_enabled),
+):
+    closures, active, planned = _status_data(db, _org(user).id)
+    return templates.TemplateResponse(
+        request,
+        "road_closure/status.html",
+        {
+            "user": user,
+            "org": _org(user),
+            "closures": closures,
+            "active_count": active,
+            "planned_count": planned,
+            "color": _color,
+            "closure_status": road_closure_service.compute_status,
+            "public": False,
+            "geojson_url": "/strassensperren/karte.json?status=current",
+        },
+    )
 
 
 @router.post("/abschnitt")
@@ -370,7 +408,7 @@ def geometrie(
     _guard: None = Depends(require_strassensperren_enabled),
 ):
     closure = _closure_or_404(db, user, closure_id, writable=False)
-    feature = _feature(closure, user)
+    feature = _feature(closure, viewer_org_id=user.org_id)
     if feature is None:
         raise HTTPException(status_code=404, detail="Keine Geometrie vorhanden")
     return JSONResponse(feature)

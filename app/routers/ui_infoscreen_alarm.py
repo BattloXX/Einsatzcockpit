@@ -714,6 +714,7 @@ def verwaltung(
 ):
     from app.core.crypto import decrypt_secret
     from app.models.objekt import InfoscreenUrl
+    from app.services.road_closure_flags import strassensperren_effective_enabled
 
     tokens = (
         db.query(AlarmInfoscreenToken)
@@ -728,10 +729,13 @@ def verwaltung(
     basis_url = str(request.base_url).rstrip("/")
     # Dauerhaft anzeigbare Monitor-URL aus dem verschluesselten Token (nur org_admin)
     token_urls: dict[int, str] = {}
+    strassensperren_urls: dict[int, str] = {}
     for t in tokens:
         if t.token_enc:
             try:
-                token_urls[t.id] = f"{basis_url}/infoscreen/alarm/{decrypt_secret(t.token_enc)}"
+                klartext_token = decrypt_secret(t.token_enc)
+                token_urls[t.id] = f"{basis_url}/infoscreen/alarm/{klartext_token}"
+                strassensperren_urls[t.id] = f"{basis_url}/infoscreen/strassensperren/{klartext_token}"
             except Exception:
                 pass
     settings_row = _org_settings(db, user.org_id) if user.org_id else None
@@ -740,10 +744,12 @@ def verwaltung(
         "tokens": tokens,
         "urls": urls,
         "token_urls": token_urls,
+        "strassensperren_urls": strassensperren_urls,
         "einstellungen": settings_row,
         "idle_modi": IDLE_MODI,
         "neuer_token": request.query_params.get("neuer_token"),
         "basis_url": basis_url,
+        "strassensperren_aktiv": strassensperren_effective_enabled(user.org_id, db),
     })
 
 

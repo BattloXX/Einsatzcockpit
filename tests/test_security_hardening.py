@@ -202,6 +202,14 @@ def test_alarm_infoscreen_csp_erlaubt_https_iframes(monkeypatch):
     assert h["x-frame-options"] == "SAMEORIGIN"
 
 
+def test_strassensperren_infoscreen_csp_erlaubt_same_origin_iframe(monkeypatch):
+    from app.config import settings
+    monkeypatch.setattr(settings, "TRUSTED_FRAME_ANCESTORS", "")
+    h = _security_headers_for("/infoscreen/strassensperren/tok")
+    assert "frame-ancestors 'self'" in h["content-security-policy"]
+    assert h["x-frame-options"] == "SAMEORIGIN"
+
+
 def test_statistik_infoscreen_csp_erlaubt_tailwind_und_kartenkacheln(monkeypatch):
     from app.config import settings
     monkeypatch.setattr(settings, "TRUSTED_FRAME_ANCESTORS", "")

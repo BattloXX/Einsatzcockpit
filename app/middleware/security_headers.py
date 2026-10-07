@@ -133,7 +133,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         embeddable = _is_embeddable_route(path)
         public_fahrtenbuch = _is_public_fahrtenbuch_route(path)
         infoscreen = path.startswith("/wetter/infoscreen/") or path.startswith("/infoscreen/statistik/")
-        alarm_infoscreen = path.startswith("/infoscreen/alarm/")
+        alarm_infoscreen = path.startswith("/infoscreen/alarm/") or path.startswith("/infoscreen/strassensperren/")
         trusted = _trusted_frame_ancestors()
 
         if infoscreen:
