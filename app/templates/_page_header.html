@@ -1,0 +1,8 @@
+{# sub may contain caller-supplied safe markup. #}
+{% macro page_header(title, back_href=None, back_label="Zurück", sub=None) %}
+<header class="page-header ec-page-header">
+  {% if back_href %}<a class="btn btn--ghost btn--sm ec-back" href="{{ back_href }}" aria-label="{{ back_label }}">&larr; <span class="ec-back__label">{{ back_label }}</span></a>{% endif %}
+  <div><h1>{{ title }}</h1>{% if sub %}<p class="page-header__sub">{{ sub }}</p>{% endif %}</div>
+  <div class="page-header__actions">{% if caller is defined %}{{ caller() }}{% endif %}</div>
+</header>
+{% endmacro %}

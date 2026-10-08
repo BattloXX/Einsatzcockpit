@@ -90,6 +90,7 @@
     {% if request.state.kontakte_enabled %}
     <a href="/kontakte" class="module-btn"><span class="module-btn__icon">👥</span><span class="module-btn__label">Kontakte</span></a>
     {% endif %}
+    {% if show_strassensperren %}<a href="/strassensperren" class="module-btn"><span class="module-btn__icon">🚧</span><span class="module-btn__label">Straßensperren</span>{% if sperren_kennzahlen %}<span class="module-btn__badge{% if sperren_kennzahlen.aktiv > 0 %} module-btn__badge--active{% endif %}">{{ sperren_kennzahlen.aktiv }} aktiv · {{ sperren_kennzahlen.geplant }} geplant</span>{% endif %}</a>{% endif %}
     {% if is_as_pruefung %}
     <a href="/atemschutz-pruefung" class="module-btn"><span class="module-btn__icon">🫁</span><span class="module-btn__label">Atemschutzprüfung</span></a>
     {% endif %}

@@ -74,14 +74,19 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 
+  var restoreSearch = false;
+  document.body.addEventListener('htmx:beforeRequest', function () {
+    restoreSearch = document.activeElement && document.activeElement.id === 'sperren-suche';
+  });
   document.body.addEventListener('htmx:afterSwap', function (event) {
-    if (!event.target || event.target.id !== 'sperren-liste') return;
+    if (!event.target || event.target.id !== 'sperren-inhalt') return;
     var container = document.getElementById('sperren-karte');
-    var form = document.getElementById('sperren-filter');
-    if (!container || !form || !container._sperrenMap) return;
-    var params = new URLSearchParams(new FormData(form));
-    var requestParams = event.detail && event.detail.requestConfig && event.detail.requestConfig.parameters;
-    if (requestParams) Object.keys(requestParams).forEach(function (key) { params.set(key, requestParams[key]); });
-    container._sperrenMap.reload('/strassensperren/karte.json?' + params.toString());
+    var marker = document.getElementById('sperren-geojson');
+    if (container && marker && container._sperrenMap) container._sperrenMap.reload(marker.getAttribute('data-url'));
+    if (restoreSearch) {
+      var search = document.getElementById('sperren-suche');
+      if (search) { search.focus(); search.setSelectionRange(search.value.length, search.value.length); }
+      restoreSearch = false;
+    }
   });
 })();

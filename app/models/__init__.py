@@ -55,10 +55,15 @@ from app.models.incident import (
 from app.models.invitation import OrgInvitation, OrgPartner
 from app.models.kontakt import (
     Kontakt,
+    KontaktAdresse,
     KontaktAnhang,
+    KontaktEmail,
     KontaktExterneReferenz,
+    KontaktImportBatch,
     KontaktKategorie,
     KontaktKategorieZuordnung,
+    KontaktOrganisation,
+    KontaktOrganisationFunktion,
     KontaktTelefon,
     ObjektKontaktFreigabe,
 )

@@ -4,6 +4,7 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 
 ## Unreleased
 
+- **Straßensperren**: Navigation, kombinierbare Filter mit Merken der Auswahl, Statusansicht und Konsolen-Kachel ergänzt.
 - **Straßensperren**: Zusatzdaten (Ort, Aktenzeichen, Behörde, Ausnahmen), Geometriequalität,
   Dokumentmodell und MCP-Kataloge mit Alias-Normalisierung ergänzt (Migration 0258).
 - **Straßensperren**: Abschnitt wird im OSM-Straßennetz der Gemeinde ermittelt (Kreuzungen, Hausnummern,

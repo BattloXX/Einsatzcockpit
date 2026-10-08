@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
@@ -24,8 +24,11 @@ class Kontakt(TenantScoped, Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     typ: Mapped[str] = mapped_column(String(20), nullable=False, default=KONTAKT_TYP_PERSON)
     anzeigename: Mapped[str] = mapped_column(String(150), nullable=False)
+    anrede: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    titel_vor: Mapped[str | None] = mapped_column(String(50), nullable=True)
     vorname: Mapped[str | None] = mapped_column(String(100), nullable=True)
     nachname: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    titel_nach: Mapped[str | None] = mapped_column(String(50), nullable=True)
     funktion: Mapped[str | None] = mapped_column(String(150), nullable=True)
     organisation: Mapped[str | None] = mapped_column(String(200), nullable=True)
     email: Mapped[str | None] = mapped_column(String(200), nullable=True)
@@ -33,6 +36,12 @@ class Kontakt(TenantScoped, Base):
     notizen: Mapped[str | None] = mapped_column(Text, nullable=True)
     bild_pfad: Mapped[str | None] = mapped_column(String(500), nullable=True)
     aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    gueltig_ab: Mapped[date | None] = mapped_column(nullable=True)
+    gueltig_bis: Mapped[date | None] = mapped_column(nullable=True)
+    zuletzt_geprueft: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    datenquelle: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    externe_quelle_id: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    aktualisiert_ueber: Mapped[str | None] = mapped_column(String(20), nullable=True)
     archiviert: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     erstellt_am: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
@@ -56,6 +65,15 @@ class Kontakt(TenantScoped, Base):
     externe_referenzen: Mapped[list[KontaktExterneReferenz]] = relationship(
         back_populates="kontakt", cascade="all, delete-orphan"
     )
+    email_adressen: Mapped[list[KontaktEmail]] = relationship(
+        back_populates="kontakt", cascade="all, delete-orphan", order_by="KontaktEmail.sortierung"
+    )
+    adressen: Mapped[list[KontaktAdresse]] = relationship(
+        back_populates="kontakt", cascade="all, delete-orphan", order_by="KontaktAdresse.id"
+    )
+    organisations_funktionen: Mapped[list[KontaktOrganisationFunktion]] = relationship(
+        back_populates="kontakt", foreign_keys="KontaktOrganisationFunktion.kontakt_id", cascade="all, delete-orphan"
+    )
 
 
 class KontaktTelefon(TenantScoped, Base):
@@ -72,6 +90,10 @@ class KontaktTelefon(TenantScoped, Base):
     sort: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     bevorzugt: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     sms_eignung: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    typ: Mapped[str] = mapped_column(String(20), nullable=False, default="sonstige")
+    verwendung: Mapped[str] = mapped_column(String(20), nullable=False, default="dienst")
+    whatsapp_eignung: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     kontakt: Mapped[Kontakt] = relationship(back_populates="telefone")
 
@@ -79,6 +101,75 @@ class KontaktTelefon(TenantScoped, Base):
     def _normalisiere_nummer(self, _key: str, nummer: str) -> str:
         self.nummer_normalisiert = telefon_normalisiert(nummer)
         return nummer
+
+
+class KontaktEmail(TenantScoped, Base):
+    __tablename__ = "kontakt_email"
+    __table_args__ = (Index("ix_kontakt_email_org_kontakt", "org_id", "kontakt_id"),)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    kontakt_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("kontakt.id", ondelete="CASCADE"), nullable=False)
+    email: Mapped[str] = mapped_column(String(200), nullable=False)
+    typ: Mapped[str] = mapped_column(String(20), nullable=False, default="sonstige")
+    label: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    bevorzugt: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    sortierung: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    kontakt: Mapped[Kontakt] = relationship(back_populates="email_adressen")
+
+
+class KontaktOrganisation(TenantScoped, Base):
+    __tablename__ = "kontakt_organisation"
+    __table_args__ = (Index("ix_kontakt_organisation_org_name", "org_id", "name"),)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    kurzname: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    organisationstyp: Mapped[str] = mapped_column(String(30), nullable=False, default="Sonstige")
+    uebergeordnete_organisation_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("kontakt_organisation.id", ondelete="SET NULL"))
+    externe_id: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    quellenreferenz: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    website: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    notizen: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class KontaktAdresse(TenantScoped, Base):
+    __tablename__ = "kontakt_adresse"
+    __table_args__ = (Index("ix_kontakt_adresse_org_kontakt", "org_id", "kontakt_id"),)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    kontakt_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("kontakt.id", ondelete="CASCADE"))
+    organisation_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("kontakt_organisation.id", ondelete="SET NULL"))
+    typ: Mapped[str] = mapped_column(String(20), nullable=False, default="sonstige")
+    strasse: Mapped[str | None] = mapped_column(String(200))
+    hausnummer: Mapped[str | None] = mapped_column(String(30))
+    adresszusatz: Mapped[str | None] = mapped_column(String(200))
+    plz: Mapped[str | None] = mapped_column(String(20))
+    ort: Mapped[str | None] = mapped_column(String(100))
+    bundesland: Mapped[str | None] = mapped_column(String(100))
+    land: Mapped[str | None] = mapped_column(String(2))
+    latitude: Mapped[str | None] = mapped_column(String(30))
+    longitude: Mapped[str | None] = mapped_column(String(30))
+    bevorzugt: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    kontakt: Mapped[Kontakt | None] = relationship(back_populates="adressen")
+
+
+class KontaktOrganisationFunktion(TenantScoped, Base):
+    __tablename__ = "kontakt_organisation_funktion"
+    __table_args__ = (Index("ix_kontakt_org_funktion_kontakt", "org_id", "kontakt_id"),)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    kontakt_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("kontakt.id", ondelete="CASCADE"), nullable=False)
+    organisation_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("kontakt_organisation.id", ondelete="CASCADE"), nullable=False)
+    funktion: Mapped[str] = mapped_column(String(150), nullable=False)
+    funktionskategorie: Mapped[str | None] = mapped_column(String(100))
+    ist_hauptfunktion: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    prioritaet: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    gueltig_ab: Mapped[date | None] = mapped_column(nullable=True)
+    gueltig_bis: Mapped[date | None] = mapped_column(nullable=True)
+    aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    vertretung_kontakt_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("kontakt.id", ondelete="SET NULL"))
+    erreichbarkeit: Mapped[str | None] = mapped_column(Text)
+    bemerkung: Mapped[str | None] = mapped_column(Text)
+    kontakt: Mapped[Kontakt] = relationship(back_populates="organisations_funktionen", foreign_keys=[kontakt_id])
 
 
 class KontaktImportVorschau(TenantScoped, Base):
@@ -91,6 +182,21 @@ class KontaktImportVorschau(TenantScoped, Base):
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
     zeilen_json: Mapped[str] = mapped_column(Text, nullable=False)
     ergebnis_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    erstellt_am: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+
+class KontaktImportBatch(TenantScoped, Base):
+    """Auditable result of a confirmed structured import."""
+
+    __tablename__ = "kontakt_import_batch"
+    __table_args__ = (UniqueConstraint("org_id", "idempotency_key", name="uq_kontakt_import_batch_idempotency"),)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id", ondelete="SET NULL"))
+    quelle: Mapped[str] = mapped_column(String(100), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="completed")
+    idempotency_key: Mapped[str | None] = mapped_column(String(150))
+    request_json: Mapped[str] = mapped_column(Text, nullable=False)
+    ergebnis_json: Mapped[str] = mapped_column(Text, nullable=False)
     erstellt_am: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
 

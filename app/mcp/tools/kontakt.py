@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from app.core.audit import write_audit
 from app.mcp.context import MCPContext
 from app.mcp.registry import register_tool
-from app.models.kontakt import KONTAKT_TYP_PERSON, KONTAKT_TYP_STELLE, Kontakt
+from app.models.kontakt import (
+    KONTAKT_TYP_PERSON, KONTAKT_TYP_STELLE, Kontakt, KontaktImportBatch,
+    KontaktImportVorschau, KontaktOrganisation, KontaktOrganisationFunktion,
+)
 from app.models.master import OrgSettings, SystemSettings
 from app.services import kontakt_service
+from app.services import kontakt_mcp_import_service as structured_import
 
 MAX_LIMIT = 50
 KONTAKT_ROLLEN = ("kontakt_verwalter", "objekt_verwalter")
@@ -111,6 +116,13 @@ async def kontakt_suchen(
     kategorie: int | None = None,
     limit: int = 25,
     seite: int = 1,
+    organisation_id: int | None = None,
+    funktion: str = "",
+    quelle: str = "",
+    externe_id: str = "",
+    aktiv: bool | None = None,
+    aktualisiert_seit: str = "",
+    vollstaendig: bool = False,
 ) -> dict[str, object]:
     _limit(limit)
     if seite < 1:
@@ -121,7 +133,25 @@ async def kontakt_suchen(
         context.db, q=q, typ=typ, kategorie_id=kategorie, page=seite
     )
     # Der Service verwendet seine UI-Seitengroesse. MCP begrenzt die sichtbare Antwort zusaetzlich.
-    return {"kontakte": [_kandidat(kontakt) for kontakt in kontakte[:limit]], "gesamt": gesamt, "seite": seite}
+    # The legacy service deliberately remains the broad, backwards-compatible
+    # search. Structured filters are narrowed afterwards until the list query is
+    # migrated to the same relations.
+    if any((organisation_id, funktion, quelle, externe_id, aktiv is not None, aktualisiert_seit)):
+        query = context.db.query(Kontakt).filter(Kontakt.archiviert.is_(False))
+        if aktiv is not None: query = query.filter(Kontakt.aktiv == aktiv)
+        if organisation_id or funktion:
+            query = query.join(KontaktOrganisationFunktion)
+            if organisation_id: query = query.filter(KontaktOrganisationFunktion.organisation_id == organisation_id)
+            if funktion: query = query.filter(KontaktOrganisationFunktion.funktion.ilike(f"%{funktion}%"))
+        if quelle or externe_id:
+            from app.models.kontakt import KontaktExterneReferenz
+            query = query.join(KontaktExterneReferenz)
+            if quelle: query = query.filter(KontaktExterneReferenz.quelle == quelle)
+            if externe_id: query = query.filter(KontaktExterneReferenz.extern_id == externe_id)
+        if aktualisiert_seit: query = query.filter(Kontakt.aktualisiert_am >= aktualisiert_seit)
+        kontakte, gesamt = query.order_by(Kontakt.anzeigename, Kontakt.id).limit(limit).all(), query.count()
+    result = [structured_import.kontakt_payload(kontakt) if vollstaendig else _kandidat(kontakt) for kontakt in kontakte[:limit]]
+    return {"kontakte": result, "gesamt": gesamt, "seite": seite}
 
 
 @register_tool(
@@ -150,7 +180,7 @@ async def kontakt_lesen(context: MCPContext, kontakt_id: int) -> dict[str, objec
     if kontakt is None:
         raise ValueError("Kontakt nicht gefunden.")
     zuordnungen = kontakt_service.list_objektzuordnungen(context.db, kontakt.id)
-    return _kandidat(kontakt) | _kontakt_daten(kontakt) | {
+    return _kandidat(kontakt) | _kontakt_daten(kontakt) | structured_import.kontakt_payload(kontakt) | {
         "version": kontakt.version,
         "objektzuordnungen": [
             {
@@ -305,3 +335,136 @@ async def kontakt_zusammenfuehren(
         "version": ergebnis.kontakt.version,
         "freigabe_konflikte": ergebnis.freigabe_konflikte,
     }
+
+
+@register_tool(
+    name="kontakt_organisation_upsert",
+    description="Legt eine Organisation an oder aktualisiert sie über externe_id bzw. Namen.",
+    required_roles=KONTAKT_ROLLEN, module_check=kontakte_modul_aktiv,
+)
+async def kontakt_organisation_upsert(context: MCPContext, organisation: dict[str, Any]) -> dict[str, object]:
+    item = structured_import.upsert_organisation(context.db, context.org_id, organisation)
+    context.db.commit()
+    return {"organisations_id": item.id, "name": item.name, "aktiv": item.aktiv}
+
+
+@register_tool(
+    name="kontakt_organisation_suchen",
+    description="Sucht Organisationen einschließlich übergeordneter Organisation und Ansprechpartnern.",
+    required_roles=KONTAKT_ROLLEN, module_check=kontakte_modul_aktiv,
+)
+async def kontakt_organisation_suchen(context: MCPContext, q: str = "", limit: int = 25) -> dict[str, object]:
+    _limit(limit)
+    query = context.db.query(KontaktOrganisation).filter(KontaktOrganisation.org_id == context.org_id)
+    if q.strip(): query = query.filter(KontaktOrganisation.name.ilike(f"%{q.strip()}%"))
+    organisationen = query.order_by(KontaktOrganisation.name).limit(limit).all()
+    return {"organisationen": [{"id": item.id, "name": item.name, "kurzname": item.kurzname, "typ": item.organisationstyp, "uebergeordnete_organisation_id": item.uebergeordnete_organisation_id, "aktiv": item.aktiv, "ansprechpartner": [{"kontakt_id": mapping.kontakt_id, "funktion": mapping.funktion} for mapping in context.db.query(KontaktOrganisationFunktion).filter_by(organisation_id=item.id, aktiv=True).all()]} for item in organisationen]}
+
+
+@register_tool(
+    name="kontakt_funktion_zuordnen",
+    description="Ordnet einem bestehenden Kontakt eine Funktion in einer Organisation zu oder aktualisiert sie.",
+    required_roles=KONTAKT_ROLLEN, module_check=kontakte_modul_aktiv,
+)
+async def kontakt_funktion_zuordnen(
+    context: MCPContext, kontakt_id: int, organisation: dict[str, Any], funktion: dict[str, Any]
+) -> dict[str, object]:
+    kontakt = kontakt_service.get_kontakt(context.db, kontakt_id)
+    if kontakt is None: raise ValueError("Kontakt nicht gefunden.")
+    org = structured_import.upsert_organisation(context.db, context.org_id, organisation)
+    payload = {"organisationen": [{**funktion, "organisation_id": org.id}]}
+    structured_import._sync_relations(context.db, kontakt, payload, context.org_id, False)
+    kontakt.version += 1
+    context.db.commit()
+    return structured_import.kontakt_payload(kontakt)
+
+
+@register_tool(
+    name="kontakt_bulk_upsert",
+    description="Validiert und führt strukturierte Kontakt-Upserts aus. dry_run=true schreibt nicht; produktive Aufrufe benötigen bestaetigt=true.",
+    required_roles=KONTAKT_ROLLEN, module_check=kontakte_modul_aktiv,
+)
+async def kontakt_bulk_upsert(
+    context: MCPContext, kontakte: list[dict[str, Any]], modus: str = "merge", dry_run: bool = True,
+    idempotency_key: str = "", bestaetigt: bool = False, quelle: str = "MCP",
+) -> dict[str, object]:
+    if len(kontakte) > structured_import.MAX_BATCH: raise ValueError("Hoechstens 250 Kontakte pro Aufruf")
+    if not dry_run and not bestaetigt: raise ValueError("Produktive Massenänderungen benötigen bestaetigt=true oder kontakt_import_ausfuehren.")
+    results: list[dict[str, object]] = []
+    for row in kontakte:
+        status, kontakt, candidates = structured_import.upsert_contact(
+            context.db, context.org_id, context.user.id, row, quelle=quelle, modus=modus
+        )
+        results.append({"status": status, "kontakt_id": kontakt.id if kontakt else None, "kandidaten": candidates})
+    if dry_run:
+        context.db.rollback()
+    else:
+        context.db.commit()
+    return {"dry_run": dry_run, "idempotency_key": idempotency_key or None, "ergebnisse": results}
+
+
+@register_tool(
+    name="kontakt_import_vorschau",
+    description="Erstellt ohne Datenänderung eine persistierte Vorschau eines strukturierten Kontaktimports.",
+    required_roles=KONTAKT_ROLLEN, module_check=kontakte_modul_aktiv,
+)
+async def kontakt_import_vorschau(
+    context: MCPContext, quelle: str, kontakte: list[dict[str, Any]], quellendatum: str = "",
+    importmodus: str = "merge", organisationen: list[dict[str, Any]] | None = None, optionen: dict[str, Any] | None = None,
+) -> dict[str, object]:
+    if len(kontakte) > structured_import.MAX_BATCH: raise ValueError("Hoechstens 250 Kontakte pro Vorschau")
+    results: list[dict[str, object]] = []
+    for row in kontakte:
+        match, candidates = structured_import.find_match(context.db, context.org_id, row, quelle)
+        if candidates:
+            status = "DUPLICATE_CANDIDATE"
+        elif match is None:
+            status = "NEW" if importmodus != "update_only" else "UNCHANGED"
+        else:
+            status = "UPDATE" if importmodus != "create_only" else "UNCHANGED"
+        results.append({"status": status, "kontakt_id": match.id if match else None, "version": match.version if match else None, "kandidaten": candidates})
+    request = {"quelle": quelle, "quellendatum": quellendatum, "modus": importmodus, "kontakte": kontakte, "organisationen": organisationen or [], "optionen": optionen or {}}
+    preview = KontaktImportVorschau(org_id=context.org_id, user_id=context.user.id, zeilen_json=json.dumps(request), ergebnis_json=json.dumps(results))
+    context.db.add(preview); context.db.commit()
+    return {"preview_id": preview.id, "ergebnisse": results, "neue_kontakte": sum(x["status"] == "NEW" for x in results), "aktualisierungen": sum(x["status"] == "UPDATE" for x in results), "dublettenkandidaten": [x for x in results if x["status"] == "DUPLICATE_CANDIDATE"]}
+
+
+@register_tool(
+    name="kontakt_import_ausfuehren",
+    description="Führt ausschließlich eine zuvor erzeugte, bestätigte Importvorschau aus und protokolliert den Batch.",
+    required_roles=KONTAKT_ROLLEN, module_check=kontakte_modul_aktiv,
+)
+async def kontakt_import_ausfuehren(
+    context: MCPContext, preview_id: int, bestaetigte_konfliktentscheidungen: dict[str, Any] | None = None,
+    idempotency_key: str = "",
+) -> dict[str, object]:
+    preview = context.db.query(KontaktImportVorschau).filter_by(id=preview_id, org_id=context.org_id, user_id=context.user.id).first()
+    if preview is None: raise ValueError("Importvorschau nicht gefunden.")
+    if idempotency_key:
+        old = context.db.query(KontaktImportBatch).filter_by(org_id=context.org_id, idempotency_key=idempotency_key).first()
+        if old: return {"batch_id": old.id, "erfolg": old.status == "completed", **json.loads(old.ergebnis_json)}
+    request, planned = json.loads(preview.zeilen_json), json.loads(preview.ergebnis_json or "[]")
+    results: list[dict[str, object]] = []
+    for index, row in enumerate(request["kontakte"]):
+        plan = planned[index]
+        if plan["status"] == "DUPLICATE_CANDIDATE":
+            results.append({"status": "SKIPPED", "reason": "Dublettenentscheidung erforderlich"}); continue
+        match, _candidates = structured_import.find_match(context.db, context.org_id, row, request["quelle"])
+        if plan.get("kontakt_id") and (match is None or match.id != plan["kontakt_id"] or match.version != plan.get("version")):
+            results.append({"status": "CONFLICT", "reason": "Datensatz wurde nach der Vorschau verändert"}); continue
+        status, kontakt, candidates = structured_import.upsert_contact(context.db, context.org_id, context.user.id, row, quelle=request["quelle"], modus=request["modus"])
+        results.append({"status": status, "kontakt_id": kontakt.id if kontakt else None, "kandidaten": candidates})
+    summary = {"angelegt": sum(x["status"] == "NEW" for x in results), "aktualisiert": sum(x["status"] == "UPDATE" for x in results), "uebersprungen": sum(x["status"] in {"SKIPPED", "UNCHANGED"} for x in results), "fehler": sum(x["status"] in {"CONFLICT", "DUPLICATE_CANDIDATE"} for x in results), "ergebnisse": results}
+    batch = KontaktImportBatch(org_id=context.org_id, user_id=context.user.id, quelle=request["quelle"], idempotency_key=idempotency_key or None, request_json=preview.zeilen_json, ergebnis_json=json.dumps(summary))
+    context.db.add(batch); context.db.commit()
+    return {"batch_id": batch.id, "erfolg": summary["fehler"] == 0, **summary}
+
+
+@register_tool(
+    name="kontakt_import_status", description="Liest den revisionssicheren Ergebnisstand eines Kontaktimport-Batches.",
+    required_roles=KONTAKT_ROLLEN, module_check=kontakte_modul_aktiv,
+)
+async def kontakt_import_status(context: MCPContext, batch_id: int) -> dict[str, object]:
+    batch = context.db.query(KontaktImportBatch).filter_by(id=batch_id, org_id=context.org_id).first()
+    if batch is None: raise ValueError("Import-Batch nicht gefunden.")
+    return {"batch_id": batch.id, "status": batch.status, "quelle": batch.quelle, **json.loads(batch.ergebnis_json)}
