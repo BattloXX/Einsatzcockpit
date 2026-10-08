@@ -213,6 +213,7 @@ def _start_background_loops() -> list[asyncio.Task]:
     from app.services.org_backup_loop import org_backup_loop
     from app.services.print_watchdog import print_job_watchdog_loop
     from app.services.probe_erinnerung import probe_erinnerung_loop
+    from app.services.road_closure_notification_loop import road_closure_notification_loop
     from app.services.sms_dispatch_service import einsatzinfo_nachversand_loop
     from app.services.sms_log_retention import sms_log_retention_loop
     from app.services.task_reminder import task_reminder_loop
@@ -225,7 +226,7 @@ def _start_background_loops() -> list[asyncio.Task]:
         autoclose_loop(), _breathing_watchdog_loop(), task_reminder_loop(), print_job_watchdog_loop(),
         gsl_lagemeldung_reminder_loop(), verleih_erinnerung_loop(), probe_erinnerung_loop(),
         weather_retention_loop(), ai_log_retention_loop(), mcp_upload_retention_loop(),
-        sms_log_retention_loop(), einsatzinfo_nachversand_loop(), alarm_outbox_loop(),
+        sms_log_retention_loop(), einsatzinfo_nachversand_loop(), alarm_outbox_loop(), road_closure_notification_loop(),
         vehicle_position_retention_loop(), weather_alert_loop(), dienst_monitor_loop(), abfluss_poll_loop(),
         lis_poll_loop(), lis_capture_retention_loop(), dibos_poll_loop(), dibos_trace_retention_loop(),
         nachschlagewerk_sync_loop(), org_backup_loop(), mailing_dispatch_loop(),

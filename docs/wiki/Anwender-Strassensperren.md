@@ -74,3 +74,7 @@ Die Anzeige aktualisiert sich live. Mit **„Route neu berechnen“** kann die g
 ## Öffentlicher Link (Einzelansicht)
 
 Verwalter können auf der Detailseite einen öffentlichen Link erzeugen und bei Bedarf widerrufen. Er zeigt nur die Sperre ohne Anmeldung; der optionale Ablauf gilt bis zum Ende des gewählten Tages. Das Feld **Grund (öffentlich sichtbar)** wird dort ebenfalls angezeigt, während die interne Beschreibung privat bleibt.
+
+## Microsoft Teams
+
+Verwalter können für einzelne Sperren die Meldung an Microsoft Teams aktivieren und bei Bedarf sofort manuell senden. Die Detailseite zeigt Versandstatus und erlaubt das erneute Senden fehlgeschlagener Meldungen.

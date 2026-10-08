@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 from types import SimpleNamespace
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -19,6 +21,9 @@ from app.routers.ui_road_closure import _feature, _infoscreen_payload, _org_name
 from app.services.road_closure_flags import strassensperren_effective_enabled
 from app.services.road_closure_public_service import public_closure_dict, public_closures_q
 from app.services.road_closure_token_service import TokenUngueltig, resolve, resolve_detail
+from app.services.staticmap_service import render_road_closure_map_png
+
+logger = logging.getLogger("einsatzleiter.road_closure_public")
 
 router = APIRouter(tags=["strassensperren-infoscreen"])
 
@@ -191,3 +196,22 @@ def public_geometry(token: str, request: Request, db: Session = Depends(get_db))
     feature = {"type": "Feature", "geometry": data.pop("geometry"), "properties": data}
     payload = {"type": "FeatureCollection", "features": [feature] if feature["geometry"] else []}
     return _public_headers(JSONResponse(payload))
+
+
+@router.get("/oeffentlich/strassensperre/{token}/karte.png")
+@(_limiter.limit(settings.STRASSENSPERREN_PUBLIC_RATELIMIT) if _limiter else lambda f: f)
+async def public_map_png(token: str, request: Request, db: Session = Depends(get_db)):
+    try:
+        _access, org, closure, _beendet = resolve_detail(db, token)
+        geometry = public_closure_dict(closure, org).get("geometry")
+        if not geometry:
+            raise TokenUngueltig()
+        png = await asyncio.to_thread(render_road_closure_map_png, geometry)
+    except TokenUngueltig:
+        return Response(status_code=404)
+    except Exception:
+        logger.warning("Could not render public road closure map", exc_info=True)
+        return Response(status_code=404)
+    return Response(png, media_type="image/png", headers={
+        "Cache-Control": "public, max-age=300", "X-Robots-Tag": "noindex",
+    })

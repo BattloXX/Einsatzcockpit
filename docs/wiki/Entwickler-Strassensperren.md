@@ -37,3 +37,7 @@ Die 30-m-Überlappung verhindert Fehlalarme durch quer zur Route liegende Straß
 `IncidentRoute` enthält Status, Lease, Retry-Zähler, Fingerprint, Normal- und Alternativroute. Der Worker verwendet einen 30-Sekunden-Lease, verarbeitet bis zu drei fällige Routen und versucht Fehler nach 30 und 120 Sekunden erneut, maximal dreimal.
 
 Der wichtigste Regressionstest ist `tests/test_incident_route_loop.py`: Ist Routing nicht erreichbar, müssen Einsatzanlage und Alarm-Jobs dennoch sofort weiterlaufen.
+
+## Teams-Outbox und Ereignisse
+
+`road_closure_notification` ist eine persistente Outbox. Erzeugung, Änderung, Aufhebung, Ersetzung und Reaktivierung enqueuen im selben DB-Commit; der Worker beansprucht Zeilen mit Lease und sendet sie mit Retry und Deduplizierung.

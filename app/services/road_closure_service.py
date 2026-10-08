@@ -64,6 +64,7 @@ EDITABLE_FIELDS = {
     "geometry_meta_json",
     "source",
     "source_url",
+    "teams_melden",
 }
 _MEASURES = {"max_weight_t": 60, "max_height_m": 10, "max_width_m": 10, "max_length_m": 50}
 RESTRICTION_TYPE_ALIASES: dict[str, str] = {
@@ -327,6 +328,11 @@ def create_closure(
     source: str = "ui",
     mcp_tool: str | None = None,
 ) -> RoadClosure:
+    if "teams_melden" not in data:
+        from app.models.road_closure import RoadClosureTeamsConfig
+        config = db.query(RoadClosureTeamsConfig).filter(RoadClosureTeamsConfig.org_id == org_id).first()
+        data = dict(data)
+        data["teams_melden"] = bool(config and config.standard_melden)
     values = validate_closure_data(data, partial=False)
     closure = RoadClosure(
         org_id=org_id,
@@ -349,6 +355,8 @@ def create_closure(
     )
     _audit(db, "road_closure.created", closure, user_id)
     mark_routes_stale_for_closure(db, closure)
+    from app.services.road_closure_notify_service import enqueue
+    enqueue(db, closure, "neu", source="mcp" if source == "mcp" else "ui", user_id=user_id)
     logger.info("road_closure.created", extra={"closure_id": closure.id, "org_id": org_id})
     return closure
 
@@ -385,6 +393,10 @@ def update_closure(
             felder=[item["feld"] for item in changed],
         )
         mark_routes_stale_for_closure(db, closure)
+        from app.services.road_closure_notify_service import enqueue, ereignis_aus_changes
+        event = ereignis_aus_changes(changed, now=_now())
+        if event:
+            enqueue(db, closure, event, source="mcp" if source == "mcp" else "ui", user_id=user_id)
         logger.info("road_closure.updated", extra={"closure_id": closure.id, "org_id": closure.org_id})
     return changed
 
@@ -440,6 +452,8 @@ def deactivate_closure(
     )
     _audit(db, "road_closure.deactivated", closure, user_id, grund=reason)
     mark_routes_stale_for_closure(db, closure)
+    from app.services.road_closure_notify_service import enqueue
+    enqueue(db, closure, "aufgehoben", source="mcp" if source == "mcp" else "ui", user_id=user_id)
 
 
 def supersede_closure(
@@ -459,6 +473,8 @@ def supersede_closure(
     _change(db, old, "superseded", user_id, source, mcp_tool, after={"ersetzt_durch": new.id})
     _change(db, new, "supersedes", user_id, source, mcp_tool, after={"ersetzt": old.id})
     _audit(db, "road_closure.superseded", old, user_id, ersetzt_durch=new.id)
+    from app.services.road_closure_notify_service import enqueue
+    enqueue(db, old, "ersetzt", source="mcp" if source == "mcp" else "ui", user_id=user_id)
 
 
 def reactivate_closure(
@@ -477,6 +493,8 @@ def reactivate_closure(
     _change(db, closure, "reactivated", user_id, source, mcp_tool, before=before)
     _audit(db, "road_closure.reactivated", closure, user_id)
     mark_routes_stale_for_closure(db, closure)
+    from app.services.road_closure_notify_service import enqueue
+    enqueue(db, closure, "reaktiviert", source="mcp" if source == "mcp" else "ui", user_id=user_id)
 
 
 def delete_closure(db: Session, closure: RoadClosure, user_id: int | None) -> None:
