@@ -212,6 +212,30 @@ def test_detail_vollaufruf_oeffnet_keinen_dialog_und_rendert_none_nicht(client):
     assert '>None</textarea>' not in response.text
 
 
+def test_detail_zeigt_strukturierte_kontaktinformationen(client):
+    user = _setup_user("kontakte_struktur_detail", "kontakt_verwalter")
+    db = SessionLocal()
+    set_tenant_context(db, user.org_id)
+    try:
+        from app.services.kontakt_mcp_import_service import upsert_contact
+
+        _status, kontakt, _ = upsert_contact(
+            db, user.org_id, user.id,
+            {"typ": "person", "anzeigename": "Bachmann Philipp", "telefone": [{"nummer": "+43 664 6255910", "typ": "mobil", "verwendung": "beruf"}], "email_adressen": [{"email": "philipp.bachmann@lwz-vorarlberg.at", "typ": "beruf", "bevorzugt": True}], "organisationen": [{"name": "Rettungsabteilung Bregenz", "funktion": "Kommandant", "ist_hauptfunktion": True}], "adressen": [{"typ": "dienst", "strasse": "Hauptstraße", "hausnummer": "1", "plz": "6900", "ort": "Bregenz"}]},
+            quelle="LWZ Vorarlberg", quellendokument="Wolfurt.pdf", quellendatum="2026-10-08",
+        )
+        db.commit()
+        assert kontakt is not None
+        kontakt_id = kontakt.id
+    finally:
+        db.close()
+    _login(client, user.username)
+    response = client.get(f"/kontakte/{kontakt_id}")
+    assert response.status_code == 200
+    for value in ("philipp.bachmann@lwz-vorarlberg.at", "Rettungsabteilung Bregenz", "Kommandant", "Hauptstraße", "LWZ Vorarlberg", "Wolfurt.pdf"):
+        assert value in response.text
+
+
 def test_kontakt_detail_trennt_objektrolle_optisch(client):
     user = _setup_user("kontakte_objektrolle_badge", "kontakt_verwalter")
     _login(client, user.username)

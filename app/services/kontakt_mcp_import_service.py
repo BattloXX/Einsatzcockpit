@@ -6,7 +6,7 @@ older clients, and it never clears data for an omitted field.
 """
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 from sqlalchemy import func, or_
@@ -33,6 +33,7 @@ def _details(query):
     return query.options(
         selectinload(Kontakt.telefone), selectinload(Kontakt.email_adressen),
         selectinload(Kontakt.adressen), selectinload(Kontakt.organisations_funktionen),
+        selectinload(Kontakt.organisations_funktionen).selectinload(KontaktOrganisationFunktion.organisation),
         selectinload(Kontakt.externe_referenzen),
     )
 
@@ -46,11 +47,12 @@ def kontakt_payload(kontakt: Kontakt) -> dict[str, Any]:
         "aktiv": kontakt.aktiv, "gueltig_ab": str(kontakt.gueltig_ab or "") or None,
         "gueltig_bis": str(kontakt.gueltig_bis or "") or None,
         "datenquelle": kontakt.datenquelle, "externe_quelle_id": kontakt.externe_quelle_id,
+        "quellendokument": kontakt.quellendokument, "quellendatum": str(kontakt.quellendatum or "") or None,
         "aktualisiert_am": kontakt.aktualisiert_am.isoformat() if kontakt.aktualisiert_am else None,
         "telefone": [{"id": p.id, "nummer": p.nummer, "nummer_normalisiert": p.nummer_normalisiert, "typ": p.typ, "verwendung": p.verwendung, "label": p.label, "bevorzugt": p.bevorzugt, "sms_eignung": p.sms_eignung, "whatsapp_eignung": p.whatsapp_eignung, "aktiv": p.aktiv, "sortierung": p.sort} for p in kontakt.telefone],
         "email_adressen": [{"id": e.id, "email": e.email, "typ": e.typ, "label": e.label, "bevorzugt": e.bevorzugt, "aktiv": e.aktiv, "sortierung": e.sortierung} for e in kontakt.email_adressen],
         "adressen": [{key: getattr(a, key) for key in ("id", "typ", "strasse", "hausnummer", "adresszusatz", "plz", "ort", "bundesland", "land", "latitude", "longitude", "organisation_id", "bevorzugt", "aktiv")} for a in kontakt.adressen],
-        "organisationen": [{"zuordnung_id": f.id, "organisation_id": f.organisation_id, "funktion": f.funktion, "funktionskategorie": f.funktionskategorie, "ist_hauptfunktion": f.ist_hauptfunktion, "prioritaet": f.prioritaet, "aktiv": f.aktiv, "erreichbarkeit": f.erreichbarkeit, "bemerkung": f.bemerkung} for f in kontakt.organisations_funktionen],
+        "organisationen": [{"zuordnung_id": f.id, "organisation_id": f.organisation_id, "name": f.organisation.name if f.organisation else None, "kurzname": f.organisation.kurzname if f.organisation else None, "funktion": f.funktion, "funktionskategorie": f.funktionskategorie, "ist_hauptfunktion": f.ist_hauptfunktion, "prioritaet": f.prioritaet, "aktiv": f.aktiv, "erreichbarkeit": f.erreichbarkeit, "vertretung_kontakt_id": f.vertretung_kontakt_id, "bemerkung": f.bemerkung} for f in kontakt.organisations_funktionen],
         "quellen": [{"quelle": r.quelle, "namespace": r.quelle_kontext, "externe_id": r.extern_id} for r in kontakt.externe_referenzen],
     }
 
@@ -58,13 +60,17 @@ def kontakt_payload(kontakt: Kontakt) -> dict[str, Any]:
 def find_match(db: Session, org_id: int, row: dict[str, Any], quelle: str | None) -> tuple[Kontakt | None, list[int]]:
     """Return a safe exact match and separate ambiguous candidate ids."""
     source_id = _text(row.get("externe_id") or row.get("externe_quelle_id"))
+    requested_type = _text(row.get("typ"))
     if quelle and source_id:
         ref = db.query(KontaktExterneReferenz).filter_by(org_id=org_id, quelle=quelle, extern_id=source_id).first()
         if ref:
-            return _details(db.query(Kontakt)).filter(Kontakt.id == ref.kontakt_id).first(), []
+            match = _details(db.query(Kontakt)).filter(Kontakt.id == ref.kontakt_id).first()
+            if match and (not requested_type or match.typ == requested_type):
+                return match, []
+            return None, [ref.kontakt_id]
     if str(row.get("id") or "").isdigit():
         existing = _details(db.query(Kontakt)).filter_by(org_id=org_id, id=int(row["id"])).first()
-        if existing:
+        if existing and (not requested_type or existing.typ == requested_type):
             return existing, []
     terms = []
     for email in row.get("email_adressen") or []:
@@ -80,7 +86,12 @@ def find_match(db: Session, org_id: int, row: dict[str, Any], quelle: str | None
     candidates = []
     if terms:
         candidates = _details(db.query(Kontakt)).outerjoin(KontaktEmail).outerjoin(KontaktTelefon).filter(Kontakt.org_id == org_id, Kontakt.archiviert.is_(False), or_(*terms)).distinct().all()
-    if len(candidates) == 1:
+    candidates = [candidate for candidate in candidates if not requested_type or candidate.typ == requested_type]
+    # Shared switchboard numbers and functional mailboxes are not identities.
+    # Without an external ID, only an exact name corroborates a communication
+    # match; otherwise callers must explicitly resolve the candidate.
+    name = _text(row.get("anzeigename"))
+    if len(candidates) == 1 and name and candidates[0].anzeigename.casefold() == name.casefold():
         return candidates[0], []
     return None, [candidate.id for candidate in candidates]
 
@@ -138,9 +149,13 @@ def _sync_relations(db: Session, kontakt: Kontakt, row: dict[str, Any], org_id: 
     if "adressen" in row:
         if replace:
             for item in list(kontakt.adressen): db.delete(item)
+        existing_addresses = {
+            (item.typ, item.strasse, item.hausnummer, item.plz, item.ort): item for item in kontakt.adressen
+        }
         for value in row["adressen"] or []:
             if not isinstance(value, dict): continue
-            item = KontaktAdresse(org_id=org_id, kontakt_id=kontakt.id)
+            key = (value.get("typ", "sonstige"), value.get("strasse"), value.get("hausnummer"), value.get("plz"), value.get("ort"))
+            item = existing_addresses.pop(key, None) or KontaktAdresse(org_id=org_id, kontakt_id=kontakt.id)
             for field in ("typ", "strasse", "hausnummer", "adresszusatz", "plz", "ort", "bundesland", "land", "latitude", "longitude", "organisation_id", "bevorzugt", "aktiv"):
                 if field in value: setattr(item, field, value[field])
             db.add(item)
@@ -157,7 +172,7 @@ def _sync_relations(db: Session, kontakt: Kontakt, row: dict[str, Any], org_id: 
                 if field in value and value[field] is not None: setattr(present, field, value[field])
 
 
-def upsert_contact(db: Session, org_id: int, user_id: int | None, row: dict[str, Any], *, quelle: str | None, modus: str = "merge") -> tuple[str, Kontakt | None, list[int]]:
+def upsert_contact(db: Session, org_id: int, user_id: int | None, row: dict[str, Any], *, quelle: str | None, modus: str = "merge", quellendokument: str | None = None, quellendatum: str | None = None) -> tuple[str, Kontakt | None, list[int]]:
     if modus not in VALID_MODES: raise ValueError("Unbekannter Importmodus")
     existing, candidates = find_match(db, org_id, row, quelle)
     if candidates: return "DUPLICATE_CANDIDATE", None, candidates
@@ -172,6 +187,18 @@ def upsert_contact(db: Session, org_id: int, user_id: int | None, row: dict[str,
         if field not in row or row[field] is None: continue
         if getattr(kontakt, field) != row[field]:
             setattr(kontakt, field, row[field]); changed = True
+    if quelle and not kontakt.datenquelle:
+        kontakt.datenquelle = quelle
+        changed = True
+    if quellendokument and not kontakt.quellendokument:
+        kontakt.quellendokument = quellendokument
+        changed = True
+    if quellendatum and not kontakt.quellendatum:
+        try:
+            kontakt.quellendatum = date.fromisoformat(quellendatum)
+            changed = True
+        except ValueError:
+            raise ValueError("quellendatum muss ISO-8601 (YYYY-MM-DD) sein") from None
     if not kontakt.anzeigename:
         kontakt.anzeigename = " ".join(x for x in (kontakt.nachname, kontakt.vorname) if x) or "Unbenannter Kontakt"
     db.flush()

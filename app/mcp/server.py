@@ -874,8 +874,8 @@ async def kontakt_bulk_upsert(kontakte: list[dict], modus: str = "merge", dry_ru
 
 
 @server.tool(name="kontakt_import_vorschau", description="Erstellt eine schreibfreie Kontaktimport-Vorschau.")
-async def kontakt_import_vorschau(quelle: str, kontakte: list[dict], quellendatum: str = "", importmodus: str = "merge", organisationen: list[dict] | None = None, optionen: dict | None = None, ctx: Context | None = None) -> dict[str, object]:
-    return await _call_registered_tool("kontakt_import_vorschau", quelle=quelle, kontakte=kontakte, quellendatum=quellendatum, importmodus=importmodus, organisationen=organisationen, optionen=optionen)
+async def kontakt_import_vorschau(quelle: str, kontakte: list[dict], quellendatum: str = "", quellendokument: str = "", importmodus: str = "merge", organisationen: list[dict] | None = None, optionen: dict | None = None, ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("kontakt_import_vorschau", quelle=quelle, kontakte=kontakte, quellendatum=quellendatum, quellendokument=quellendokument, importmodus=importmodus, organisationen=organisationen, optionen=optionen)
 
 
 @server.tool(name="kontakt_import_ausfuehren", description="Führt eine bestätigte Kontaktimport-Vorschau aus.")

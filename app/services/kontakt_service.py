@@ -19,6 +19,9 @@ from app.models.kontakt import (
     KontaktKategorie,
     KontaktKategorieZuordnung,
     KontaktTelefon,
+    KontaktAdresse,
+    KontaktEmail,
+    KontaktOrganisationFunktion,
 )
 from app.models.objekt import ObjektKontakt, ObjektKontaktBenachrichtigung
 
@@ -40,6 +43,9 @@ class KontaktMergeErgebnis:
 def _mit_details(query):
     return query.options(
         selectinload(Kontakt.telefone),
+        selectinload(Kontakt.email_adressen),
+        selectinload(Kontakt.adressen),
+        selectinload(Kontakt.organisations_funktionen).selectinload(KontaktOrganisationFunktion.organisation),
         selectinload(Kontakt.kategorien).selectinload(KontaktKategorieZuordnung.kategorie),
     )
 

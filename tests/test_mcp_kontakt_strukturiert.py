@@ -13,7 +13,7 @@ def test_structured_preview_execute_and_second_import_updates_same_contact(clien
         "organisationen": [{"name": "Bauhof Wolfurt", "funktion": "Ansprechpartner"}, {"name": "AMT - Wasserversorgung Wolfurt", "funktion": "Leiter Wasserwerk"}],
         "adressen": [{"typ": "dienst", "strasse": "Schulstraße", "hausnummer": "1", "plz": "6922", "ort": "Wolfurt", "land": "AT"}],
     }
-    preview = _rufe(client, token, "kontakt_import_vorschau", quelle="LWZ Vorarlberg", kontakte=[contact])
+    preview = _rufe(client, token, "kontakt_import_vorschau", quelle="LWZ Vorarlberg", quellendokument="Gemeinde Wolfurt Zustaendigkeiten.pdf", quellendatum="2026-10-08", kontakte=[contact])
     assert preview["neue_kontakte"] == 1
     run = _rufe(client, token, "kontakt_import_ausfuehren", preview_id=preview["preview_id"], idempotency_key="wolfurt-first")
     assert run["erfolg"] and run["angelegt"] == 1
@@ -21,7 +21,20 @@ def test_structured_preview_execute_and_second_import_updates_same_contact(clien
     detail = _rufe(client, token, "kontakt_lesen", kontakt_id=created_id)
     assert len(detail["email_adressen"]) == 1
     assert len(detail["organisationen"]) == 2
+    assert detail["organisationen"][0]["name"]
+    assert detail["datenquelle"] == "LWZ Vorarlberg"
+    assert detail["quellendokument"] == "Gemeinde Wolfurt Zustaendigkeiten.pdf"
     preview2 = _rufe(client, token, "kontakt_import_vorschau", quelle="LWZ Vorarlberg", kontakte=[contact])
     assert preview2["aktualisierungen"] == 1
     run2 = _rufe(client, token, "kontakt_import_ausfuehren", preview_id=preview2["preview_id"], idempotency_key="wolfurt-second")
     assert run2["erfolg"] and run2["ergebnisse"][0]["kontakt_id"] == created_id
+
+
+def test_shared_number_never_matches_person_and_stelle(client):
+    seed = _seed("kontakt-typ-safe", {"admin": "kontakt_verwalter"})
+    token = _token(client, seed, "admin")
+    person = {"typ": "person", "anzeigename": "Benjamin Wieser", "telefone": [{"nummer": "+43 664 1234567"}]}
+    assert _rufe(client, token, "kontakt_bulk_upsert", kontakte=[person], dry_run=False, bestaetigt=True)["ergebnisse"][0]["status"] == "NEW"
+    stelle = {"typ": "stelle", "anzeigename": "Bauhof Wolfurt", "telefone": [{"nummer": "+43 664 1234567"}]}
+    preview = _rufe(client, token, "kontakt_import_vorschau", quelle="LWZ Vorarlberg", kontakte=[stelle])
+    assert preview["ergebnisse"][0]["status"] == "NEW"
