@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import json
 import logging
 import uuid
 from datetime import UTC, datetime
@@ -172,6 +173,7 @@ def _bearbeitungsdaten(db: Session, kontakt: Kontakt) -> dict[str, object]:
         .order_by(KontaktTelefon.sort, KontaktTelefon.id)
         .all()
     )
+    from app.services.kontakt_mcp_import_service import kontakt_payload
     return {
         "id": kontakt.id,
         "version": kontakt.version,
@@ -189,6 +191,7 @@ def _bearbeitungsdaten(db: Session, kontakt: Kontakt) -> dict[str, object]:
         "bevorzugt": [str(index) for index, telefon in enumerate(telefone) if telefon.bevorzugt],
         "sms_eignung": [str(index) for index, telefon in enumerate(telefone) if telefon.sms_eignung],
         "kategorien": ", ".join(zuordnung.kategorie.name for zuordnung in kontakt.kategorien),
+        "strukturierte_daten": json.dumps(kontakt_payload(kontakt), ensure_ascii=False, indent=2),
     }
 
 
@@ -850,6 +853,7 @@ async def update(
     bevorzugt: list[str] = Form([]),
     sms_eignung: list[str] = Form([]),
     kategorien: str = Form(""),
+    strukturierte_daten: str = Form(""),
     profilbild: UploadFile | None = File(None),
     db: Session = Depends(get_db),
     user: User = Depends(require_role(*_SCHREIB_ROLLEN)),
@@ -877,6 +881,25 @@ async def update(
             org_id=_org_id(user),
             user_id=user.id,
         )
+        if strukturierte_daten.strip():
+            try:
+                struktur = json.loads(strukturierte_daten)
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"Strukturierte Kontaktdaten sind kein gültiges JSON (Zeile {exc.lineno}).") from None
+            if not isinstance(struktur, dict):
+                raise ValueError("Strukturierte Kontaktdaten müssen ein JSON-Objekt sein.")
+            struktur["id"] = kontakt_id
+            struktur["typ"] = typ
+            # The form sends the complete visible collections. replace_selected
+            # therefore makes explicit removals possible without touching object
+            # assignments or unrelated contact fields.
+            from app.services.kontakt_mcp_import_service import upsert_contact
+            _status, structured_contact, candidates = upsert_contact(
+                db, _org_id(user), user.id, struktur, quelle=None, modus="replace_selected"
+            )
+            if candidates or structured_contact is None:
+                raise ValueError("Strukturierte Daten konnten nicht eindeutig dem Kontakt zugeordnet werden.")
+            kontakt = structured_contact
     except kontakt_service.KontaktKonflikt:
         return _seite(
             request,

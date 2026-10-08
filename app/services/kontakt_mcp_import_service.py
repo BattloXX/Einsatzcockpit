@@ -160,16 +160,22 @@ def _sync_relations(db: Session, kontakt: Kontakt, row: dict[str, Any], org_id: 
                 if field in value: setattr(item, field, value[field])
             db.add(item)
     if "organisationen" in row:
+        seen_functions: set[tuple[int, str]] = set()
         for value in row["organisationen"] or []:
             if not isinstance(value, dict): continue
             organisation = upsert_organisation(db, org_id, value) if not value.get("organisation_id") else db.get(KontaktOrganisation, value["organisation_id"])
             if organisation is None or not _text(value.get("funktion")): continue
+            seen_functions.add((organisation.id, value["funktion"]))
             present = next((f for f in kontakt.organisations_funktionen if f.organisation_id == organisation.id and f.funktion == value["funktion"]), None)
             if present is None:
                 present = KontaktOrganisationFunktion(org_id=org_id, kontakt_id=kontakt.id, organisation_id=organisation.id, funktion=value["funktion"])
                 db.add(present)
             for field in ("funktionskategorie", "ist_hauptfunktion", "prioritaet", "aktiv", "erreichbarkeit", "bemerkung"):
                 if field in value and value[field] is not None: setattr(present, field, value[field])
+        if replace:
+            for item in list(kontakt.organisations_funktionen):
+                if (item.organisation_id, item.funktion) not in seen_functions:
+                    db.delete(item)
 
 
 def upsert_contact(db: Session, org_id: int, user_id: int | None, row: dict[str, Any], *, quelle: str | None, modus: str = "merge", quellendokument: str | None = None, quellendatum: str | None = None) -> tuple[str, Kontakt | None, list[int]]:

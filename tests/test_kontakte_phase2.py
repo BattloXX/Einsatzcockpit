@@ -117,6 +117,8 @@ def test_bearbeiten_dialog_verwendet_update_endpoint_und_vorhandene_daten(client
     assert "+43 664 111" in response.text
     assert "+43 664 222" in response.text
     assert "Mobil" in response.text and "Dienst" in response.text
+    assert 'name="strukturierte_daten"' in response.text
+    assert "email_adressen" in response.text
     aktualisiert = client.post(
         f"/kontakte/{kontakt_id}",
         data={"_csrf": csrf, "version": "0", "typ": "person", "anzeigename": "Aktualisierter Kontakt"},
