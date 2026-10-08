@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+import json
 import math
 import re
 
+from sqlalchemy.orm import Session
+
+from app.models.master import OrgSettings
 from app.services.geocoding import geocode_address
+from app.services.osm_street_service import fetch_street_network, search_center
+from app.services.road_closure_section_resolver import SectionResult, parse_endpoint, resolve
 from app.services.routing_service import strassen_route
 
 _HOUSE_NUMBER = re.compile(r"\b(\d+[A-Za-z]?)\b")
@@ -71,3 +77,44 @@ async def section_from_address(
     if route_length > direct_length * 3 + 200:
         hint = "Route weicht stark ab – bitte Abschnitt einzeichnen"
     return {"geometry": geometry, "geometry_status": "needs_review", "hinweis": hint}
+
+
+async def resolve_section(
+    db: Session, org, street: str, from_text: str | None, to_text: str | None, city: str | None = None
+) -> SectionResult:
+    """OSM-first; der bisherige Hausnummern/OSRM-Weg bleibt ein sicherer Fallback."""
+    settings = db.query(OrgSettings).filter(OrgSettings.org_id == org.id).first()
+    center = await search_center(org, settings, city)
+    network = await fetch_street_network(street, *center, city=city or getattr(org, "city", None)) if center else None
+    from_ep, to_ep = parse_endpoint(from_text, street), parse_endpoint(to_text, street)
+    house_points = {}
+    for endpoint in (from_ep, to_ep):
+        if endpoint.kind == "house":
+            point = await geocode_address(street, endpoint.value, city or getattr(org, "city", None))
+            if point is not None:
+                house_points[endpoint.value] = (point.lat, point.lng)
+    if network is not None:
+        result = resolve(network, street, from_ep, to_ep, house_points)
+        if result.geometry is not None:
+            return result
+        problem = "Straße nicht in OSM gefunden"
+        fallback_hint = "Straße nicht in OSM gefunden – Näherung über Hausnummern"
+    else:
+        problem = (
+            "OSM-Straßennetz derzeit nicht erreichbar – später mit strassensperre_geometrie_ermitteln "
+            "oder „Abschnitt aus Adresse ermitteln“ erneut versuchen"
+        )
+        fallback_hint = "OSM-Straßennetz nicht erreichbar – Näherung über Hausnummern"
+    try:
+        fallback = await section_from_address(street, from_text, to_text, city or getattr(org, "city", None))
+    except ValueError as exc:
+        return SectionResult(hinweise=[problem, str(exc)])
+    return SectionResult(
+        geometry=fallback["geometry"], quality="niedrig", geometry_status="needs_review",
+        hinweise=[fallback_hint],
+    )
+
+
+def section_meta(result: SectionResult, methode: str) -> str:
+    return json.dumps({"methode": methode, "osm_name": result.osm_name, "endpoints": result.endpoints,
+                       "mehrdeutigkeiten": result.mehrdeutigkeiten, "quality": result.quality}, ensure_ascii=False)

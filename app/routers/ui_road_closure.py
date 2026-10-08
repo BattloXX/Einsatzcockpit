@@ -9,25 +9,25 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
-from app.core.permissions import has_role, require_role
+from app.core.permissions import STRASSENSPERREN_LESE_ROLLEN, has_role, require_role
 from app.core.templating import templates
 from app.core.timezones import local_date_to_utc, local_input_to_utc, org_tz
 from app.db import get_db
 from app.models.master import FireDept
-from app.models.road_closure import CLOSURE_STATUS, DIRECTIONS, PRIORITIES, RESTRICTION_TYPES, RoadClosureChange
+from app.models.road_closure import (
+    CLOSURE_STATUS,
+    DIRECTIONS,
+    GEOMETRY_QUALITY,
+    PRIORITIES,
+    RESTRICTION_TYPES,
+    RoadClosureChange,
+)
 from app.models.user import User
 from app.services import road_closure_service
-from app.services.road_closure_section_service import section_from_address
+from app.services.road_closure_section_service import resolve_section
 
 router = APIRouter(prefix="/strassensperren", tags=["strassensperren"])
-_LESE_ROLLEN = (
-    "readonly",
-    "recorder",
-    "breathing_supervisor",
-    "incident_leader",
-    "fahrtenbuch_admin",
-    "objekt_verwalter",
-)
+_LESE_ROLLEN = STRASSENSPERREN_LESE_ROLLEN
 
 
 def require_strassensperren_enabled(request: Request) -> None:
@@ -72,7 +72,9 @@ def _filters(status: str, zeitraum: str, scope: str, q: str, restriction_type: s
     )
 
 
-def _closures(db: Session, user: User, status: str, zeitraum: str, scope: str, q: str, restriction_type: str):
+def _closures(
+    db: Session, user: User, status: str, zeitraum: str, scope: str, q: str, restriction_type: str, geometrie: str
+):
     selected_status, von, bis, selected_scope, text, selected_type = _filters(
         status, zeitraum, scope, q, restriction_type, _org(user)
     )
@@ -85,6 +87,7 @@ def _closures(db: Session, user: User, status: str, zeitraum: str, scope: str, q
         text=text,
         restriction_type=selected_type or None,
         scope=selected_scope,
+        geometrie=geometrie if geometrie in {"", "pruefen", "ok", "fehlt"} else "",
     )
     return items, {
         "status": status if status in {"current", "active", "planned", "all"} else "current",
@@ -92,6 +95,7 @@ def _closures(db: Session, user: User, status: str, zeitraum: str, scope: str, q
         "scope": selected_scope,
         "q": text,
         "restriction_type": selected_type,
+        "geometrie": geometrie if geometrie in {"", "pruefen", "ok", "fehlt"} else "",
     }
 
 
@@ -185,6 +189,15 @@ def _save_data(org, values: dict):
     if valid_until_raw and valid_until is None:
         raise ValueError("Ungültiges Ende.")
     geometry = values.get("geometry_geojson") or None
+    quality = values.get("geometry_quality") if values.get("geometry_quality") in GEOMETRY_QUALITY else None
+    meta = values.get("geometry_meta_json") or None
+    if meta:
+        try:
+            if len(meta) >= 20000:
+                raise ValueError
+            json.loads(meta)
+        except (ValueError, json.JSONDecodeError):
+            meta = None
     return {
         "title": values.get("title", ""),
         "description": text("description"),
@@ -208,6 +221,8 @@ def _save_data(org, values: dict):
         "geometry_status": "ok"
         if geometry and values.get("geometry_checked")
         else ("needs_review" if geometry else "missing"),
+        "geometry_quality": quality,
+        "geometry_meta_json": meta,
         "source": text("source"),
         "source_url": text("source_url"),
     }
@@ -248,10 +263,16 @@ def index(
     scope: str = "all",
     q: str = "",
     restriction_type: str = "",
+    geometrie: str = "",
 ):
-    items, filters = _closures(db, user, status, zeitraum, scope, q, restriction_type)
+    items, filters = _closures(db, user, status, zeitraum, scope, q, restriction_type, geometrie)
     active = len(road_closure_service.list_closures(db, _org(user).id, status="active"))
     planned = len(road_closure_service.list_closures(db, _org(user).id, status="planned"))
+    ungeprueft = len(
+        road_closure_service.list_closures(
+            db, _org(user).id, status="current", scope="own", geometrie="pruefen"
+        )
+    )
     return templates.TemplateResponse(
         request,
         "road_closure/index.html",
@@ -262,6 +283,7 @@ def index(
             "restriction_types": RESTRICTION_TYPES,
             "active_count": active,
             "planned_count": planned,
+            "ungeprueft_count": ungeprueft,
             "status_labels": CLOSURE_STATUS,
             "color": _color,
             "closure_status": road_closure_service.compute_status,
@@ -282,8 +304,9 @@ def liste(
     scope: str = "all",
     q: str = "",
     restriction_type: str = "",
+    geometrie: str = "",
 ):
-    items, filters = _closures(db, user, status, zeitraum, scope, q, restriction_type)
+    items, filters = _closures(db, user, status, zeitraum, scope, q, restriction_type, geometrie)
     return templates.TemplateResponse(
         request,
         "road_closure/_liste.html",
@@ -310,8 +333,9 @@ def karte(
     scope: str = "all",
     q: str = "",
     restriction_type: str = "",
+    geometrie: str = "",
 ):
-    items, _ = _closures(db, user, status, zeitraum, scope, q, restriction_type)
+    items, _ = _closures(db, user, status, zeitraum, scope, q, restriction_type, geometrie)
     features = [
         feature for item in items if (feature := _feature(item, viewer_org_id=user.org_id)) is not None
     ]
@@ -346,6 +370,7 @@ def statusansicht(
 @router.post("/abschnitt")
 async def abschnitt_aus_adresse(
     request: Request,
+    db: Session = Depends(get_db),
     user: User = Depends(require_role("objekt_verwalter")),
     _guard: None = Depends(require_strassensperren_enabled),
 ):
@@ -355,15 +380,16 @@ async def abschnitt_aus_adresse(
     except (json.JSONDecodeError, UnicodeDecodeError):
         raise HTTPException(status_code=422, detail={"fehler": "Ungültige Anfrage."}) from None
     try:
-        result = await section_from_address(
-            str(data.get("street") or "").strip(),
-            str(data.get("from_text") or "").strip() or None,
-            str(data.get("to_text") or "").strip() or None,
-            _org(user).city,
+        result = await resolve_section(
+            db, _org(user), str(data.get("street") or "").strip(),
+            str(data.get("from_text") or "").strip() or None, str(data.get("to_text") or "").strip() or None,
+            str(data.get("city") or "").strip() or _org(user).city,
         )
     except ValueError as exc:
         return JSONResponse({"fehler": str(exc)}, status_code=422)
-    return JSONResponse(result)
+    if result.geometry is None:
+        return JSONResponse({"fehler": "; ".join(result.hinweise)}, status_code=422)
+    return JSONResponse(result.to_dict())
 
 
 @router.get("/neu", response_class=HTMLResponse)
@@ -400,6 +426,8 @@ def neu_speichern(
     source: str = Form(""),
     source_url: str = Form(""),
     geometry_geojson: str = Form(""),
+    geometry_quality: str = Form(""),
+    geometry_meta_json: str = Form(""),
     geometry_checked: str | None = Form(None),
     freigabe_org_ids: list[int] = Form([]),
     db: Session = Depends(get_db),
@@ -468,12 +496,31 @@ def detail(
             "status_labels": CLOSURE_STATUS,
             "color": _color(closure),
             "directions": DIRECTIONS,
+            "geometry_quality_labels": GEOMETRY_QUALITY,
             "can_edit": has_role(user, "objekt_verwalter"),
             "can_delete": has_role(user, "org_admin"),
             "owner_org_name": owner_org.name if owner_org is not None else None,
             "shared_org_names": shared_org_names,
         },
     )
+
+
+@router.post("/{closure_id}/geometrie-bestaetigen")
+def geometrie_bestaetigen(
+    closure_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("objekt_verwalter")),
+    _guard: None = Depends(require_strassensperren_enabled),
+):
+    closure = _closure_or_404(db, user, closure_id, writable=True)
+    try:
+        road_closure_service.confirm_geometry(db, closure, user.id, source="ui")
+        db.commit()
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(422, str(exc)) from exc
+    return RedirectResponse(f"/strassensperren/{closure.id}", status_code=303)
 
 
 @router.get("/{closure_id}/bearbeiten", response_class=HTMLResponse)
@@ -513,6 +560,8 @@ def bearbeiten_speichern(
     source: str = Form(""),
     source_url: str = Form(""),
     geometry_geojson: str = Form(""),
+    geometry_quality: str = Form(""),
+    geometry_meta_json: str = Form(""),
     geometry_checked: str | None = Form(None),
     freigabe_org_ids: list[int] = Form([]),
     db: Session = Depends(get_db),

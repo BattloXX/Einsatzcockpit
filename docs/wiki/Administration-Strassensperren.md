@@ -49,3 +49,15 @@ Prüfe die Logger `einsatzleiter.einsatz_route`, `einsatzleiter.einsatz_routing`
 | `disabled` | Einsatz nicht aktiv oder Routing nicht verfügbar/aktiviert |
 
 Nach Fehlern erfolgen höchstens drei Versuche: nach 30 Sekunden, dann nach 120 Sekunden; danach keine automatische Wiederholung. Kontrolliere außerdem System-/Org-Schalter, Startpunkt, Dienst-URL, API-Key und Timeout.
+
+## OSM-Abschnittsermittlung
+
+Die Abschnittsermittlung fragt das OSM-Straßennetz über Overpass ab – zuerst im Gemeindegebiet (Feld *Ort* der Sperre bzw. Ort der Organisation), sonst im Umkreis.
+
+| Variable | Standard | Bedeutung |
+|----------|----------|-----------|
+| `STRASSEN_OVERPASS_URL` | `https://overpass-api.de/api/interpreter` | Overpass-Endpunkt |
+| `STRASSEN_OVERPASS_TIMEOUT_SECONDS` | `20` | Timeout je Anfrage; bei Überlast (429/502/503/504, Timeout) wird einmal wiederholt |
+| `STRASSEN_SUCHRADIUS_M` | `6000` | Umkreis um Ort/Organisation, falls das Gemeindegebiet nichts liefert |
+
+Die öffentliche Overpass-Instanz ist zeitweise überlastet. Fällt sie aus, wird eine Näherung über Hausnummern versucht (Qualität *niedrig*). Die Ermittlung läuft nur beim Anlegen/Bearbeiten, nie im Alarmpfad.

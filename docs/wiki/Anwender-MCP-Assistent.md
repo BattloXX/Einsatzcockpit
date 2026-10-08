@@ -1,5 +1,8 @@
 # MCP-Assistent
 
+Für Straßensperren stehen zusätzlich `strassensperre_geometrie_ermitteln` (OSM-Vorschlag, optional übernehmen)
+und `strassensperre_geometrie_bestaetigen` (Freigabe für die Umfahrung) zur Verfügung.
+
 Mit dem MCP-Server kann eine KI-Anwendung nach deiner Anmeldung gezielt mit Daten deiner Organisation arbeiten. Die Anwendung sieht nur die Werkzeuge, für die dein Konto aktuell berechtigt ist.
 
 ## Verbinden und anmelden

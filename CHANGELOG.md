@@ -6,6 +6,11 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 
 - **Straßensperren**: Zusatzdaten (Ort, Aktenzeichen, Behörde, Ausnahmen), Geometriequalität,
   Dokumentmodell und MCP-Kataloge mit Alias-Normalisierung ergänzt (Migration 0258).
+- **Straßensperren**: Abschnitt wird im OSM-Straßennetz der Gemeinde ermittelt (Kreuzungen, Hausnummern,
+  ganze Straße inkl. Abzweigungen) und mit Qualität bewertet; eindeutige Abschnitte werden sofort bei der
+  Umfahrung berücksichtigt, andere über „Geometrie bestätigen“ bzw. die MCP-Tools
+  `strassensperre_geometrie_ermitteln`/`strassensperre_geometrie_bestaetigen`. MCP-Leserechte jetzt auch für
+  Objektverwalter.
 
 > **Achtung beim Update auf 2026.10.06:** Die Datenbank-Migrationen 0249–0256 müssen mit
 > `alembic upgrade head` eingespielt werden. Die Anwendung läuft jetzt mit genau einem Worker

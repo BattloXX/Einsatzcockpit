@@ -31,6 +31,15 @@ OBJEKT_VERWALTER_ROLES = {"system_admin", "admin", "org_admin", "objekt_verwalte
 KONTAKT_VERWALTER_ROLES = {"system_admin", "admin", "org_admin", "objekt_verwalter", "kontakt_verwalter"}
 # Straßensperren pflegt, wer Objekte verwalten darf (keine eigene Rolle).
 STRASSENSPERREN_VERWALTER_ROLES = OBJEKT_VERWALTER_ROLES
+# Lesen: alle Einsatzrollen inkl. Objektverwaltung (die sonst nur schreiben, aber nicht lesen duerfte).
+STRASSENSPERREN_LESE_ROLLEN = (
+    "readonly",
+    "recorder",
+    "breathing_supervisor",
+    "incident_leader",
+    "fahrtenbuch_admin",
+    "objekt_verwalter",
+)
 PROBEN_EDIT_ROLES = {"system_admin", "admin", "org_admin", "probenverwalter", "incident_leader", "recorder"}
 
 

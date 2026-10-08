@@ -7,6 +7,7 @@ import re
 from datetime import UTC, datetime
 from typing import Any
 
+from app.core.permissions import STRASSENSPERREN_LESE_ROLLEN
 from app.core.timezones import format_local_iso, local_date_to_utc, local_input_to_utc
 from app.mcp.context import MCPContext
 from app.mcp.registry import register_tool
@@ -170,7 +171,7 @@ def _summary(items: list[dict[str, object]]) -> str:
 @register_tool(
     name="strassensperren_liste",
     description="Listet sichtbare Straßensperren.",
-    required_roles=("readonly",),
+    required_roles=STRASSENSPERREN_LESE_ROLLEN,
     module_check=strassensperren_effective_enabled,
 )
 async def strassensperren_liste(
@@ -182,6 +183,7 @@ async def strassensperren_liste(
     restriction_type: str = "",
     nur_eigene: bool = False,
     limit: int = 50,
+    geometrie: str = "",
 ) -> dict[str, object]:
     if status not in {"current", "active", "planned", "expired", "cancelled", "all"}:
         raise ValueError("status muss current, active, planned, expired, cancelled oder all sein.")
@@ -199,6 +201,7 @@ async def strassensperren_liste(
         restriction_type=restriction_type or None,
         scope="own" if nur_eigene else "all",
         limit=limit,
+        geometrie=geometrie,
     )
     items = [_closure_dict(row, context.org_id, db=context.db) for row in rows]
     return {"count": len(items), "items": items, "zusammenfassung": _summary(items)}
@@ -207,7 +210,7 @@ async def strassensperren_liste(
 @register_tool(
     name="strassensperre_lesen",
     description="Liest eine sichtbare Straßensperre.",
-    required_roles=("readonly",),
+    required_roles=STRASSENSPERREN_LESE_ROLLEN,
     module_check=strassensperren_effective_enabled,
 )
 async def strassensperre_lesen(context: MCPContext, road_closure_id: int) -> dict[str, object]:
@@ -219,7 +222,7 @@ async def strassensperre_lesen(context: MCPContext, road_closure_id: int) -> dic
 @register_tool(
     name="strassensperren_kataloge",
     description="Liefert erlaubte Werte und deutschsprachige Bezeichnungen für Straßensperren.",
-    required_roles=("readonly",),
+    required_roles=STRASSENSPERREN_LESE_ROLLEN,
     module_check=strassensperren_effective_enabled,
 )
 async def strassensperren_kataloge(context: MCPContext) -> dict[str, object]:
@@ -308,17 +311,16 @@ async def strassensperre_anlegen(
             }
         hints: list[str] = []
         geometry_status = "ok" if geometry is not None else "missing"
-        if geometry is None and street.strip() and (from_text.strip() or to_text.strip()):
-            try:
-                section = await road_closure_section_service.section_from_address(
-                    street, from_text, to_text, city.strip() or getattr(org, "city", None)
-                )
-                geometry = section["geometry"]
-                geometry_status = "needs_review"
-                hint = section.get("hinweis") or "Bitte Abschnitt auf der Karte prüfen und ggf. korrigieren."
-                hints.append(str(hint))
-            except ValueError as exc:
-                hints.append(str(exc))
+        geometry_quality: str | None = "manuell" if geometry is not None else None
+        geometry_meta: str | None = None
+        section = None
+        if geometry is None and street.strip():
+            section = await road_closure_section_service.resolve_section(
+                context.db, org, street, from_text, to_text, city.strip() or getattr(org, "city", None)
+            )
+            geometry, geometry_status, geometry_quality = section.geometry, section.geometry_status, section.quality
+            geometry_meta = road_closure_section_service.section_meta(section, "osm")
+            hints.extend(section.hinweise)
         data = {
             "title": title,
             "street": street,
@@ -342,6 +344,8 @@ async def strassensperre_anlegen(
             "source_url": source_url,
             "geometry_geojson": geometry,
             "geometry_status": geometry_status,
+            "geometry_quality": geometry_quality,
+            "geometry_meta_json": geometry_meta,
         }
         closure = road_closure_service.create_closure(
             context.db,
@@ -362,8 +366,8 @@ async def strassensperre_anlegen(
             )
         if closure.restriction_type == "closed" and geometry_status != "ok":
             hints.append(
-                "Die Sperre wird als Warnung angezeigt, aber erst nach Prüfung der Geometrie in der "
-                "Web-Oberfläche beim Umfahrungs-Routing berücksichtigt."
+                "Wird als Warnung angezeigt, aber erst nach strassensperre_geometrie_bestaetigen (oder Prüfung in "
+                "der Web-Oberfläche) bei der Umfahrung berücksichtigt."
             )
         context.db.commit()
         result = _closure_dict(closure, context.org_id, voll=True, db=context.db)
@@ -371,6 +375,15 @@ async def strassensperre_anlegen(
             "status": "created",
             "strassensperre": result,
             "hinweise": hints,
+            "geometrie": {
+                "qualitaet": closure.geometry_quality,
+                "geometry_status": closure.geometry_status,
+                "osm_strassenname": section.osm_name if section else None,
+                "laenge_m": section.length_m if section else None,
+                "endpunkte": section.endpoints if section else [],
+                "mehrdeutigkeiten": section.mehrdeutigkeiten if section else [],
+                "wird_umfahren": closure.restriction_type == "closed" and closure.geometry_status == "ok",
+            },
             "zusammenfassung": f"Straßensperre {closure.title} wurde angelegt.",
         }
     except Exception:
@@ -412,6 +425,7 @@ async def strassensperre_aktualisieren(
         if "geometry_geojson" in changes:
             changes["geometry_geojson"] = _geometry(changes["geometry_geojson"])
             changes["geometry_status"] = "ok" if changes["geometry_geojson"] is not None else "missing"
+            changes["geometry_quality"] = "manuell" if changes["geometry_geojson"] is not None else None
         changed = road_closure_service.update_closure(
             context.db,
             closure,
@@ -440,6 +454,68 @@ async def strassensperre_aktualisieren(
             "geaenderte_felder": changed,
             "zusammenfassung": f"Straßensperre {closure.title} wurde aktualisiert.",
         }
+    except Exception:
+        context.db.rollback()
+        raise
+
+
+@register_tool(
+    name="strassensperre_geometrie_ermitteln",
+    description="Ermittelt einen OSM-Straßenabschnitt; hoch kann anschließend bestätigt werden.",
+    required_roles=("objekt_verwalter",), module_check=strassensperren_effective_enabled,
+)
+async def strassensperre_geometrie_ermitteln(
+    context: MCPContext, road_closure_id: int | None = None, street: str = "", von: str = "", bis: str = "",
+    city: str = "", uebernehmen: bool = False,
+) -> dict[str, object]:
+    try:
+        closure = _writable_closure(context, road_closure_id) if road_closure_id is not None else None
+        if uebernehmen and closure is None:
+            raise ValueError("uebernehmen erfordert road_closure_id.")
+        street = street or (closure.street if closure else "") or ""
+        von = von or (closure.from_text if closure else "") or ""
+        bis = bis or (closure.to_text if closure else "") or ""
+        city = city or (closure.city if closure else "") or ""
+        if not street.strip():
+            raise ValueError("street ist erforderlich.")
+        result = await road_closure_section_service.resolve_section(context.db, _org(context), street, von, bis, city)
+        if uebernehmen:
+            assert closure is not None
+            if result.geometry is None:
+                raise ValueError("Keine Geometrie ermittelt.")
+            road_closure_service.update_closure(context.db, closure, context.user.id, {
+                "geometry_geojson": result.geometry, "geometry_status": result.geometry_status,
+                "geometry_quality": result.quality,
+                "geometry_meta_json": road_closure_section_service.section_meta(result, "osm"),
+            }, source="mcp", mcp_tool="strassensperre_geometrie_ermitteln")
+            context.db.commit()
+        return {"geometry_geojson": result.geometry, "qualitaet": result.quality,
+                "geometry_status_vorschlag": result.geometry_status, "osm_strassenname": result.osm_name,
+                "laenge_m": result.length_m, "endpunkte": result.endpoints,
+                "mehrdeutigkeiten": result.mehrdeutigkeiten, "hinweise": result.hinweise,
+                "zusammenfassung": "Abschnitt ermittelt." if result.geometry else "Kein Abschnitt ermittelt."}
+    except Exception:
+        context.db.rollback()
+        raise
+
+
+@register_tool(
+    name="strassensperre_geometrie_bestaetigen",
+    description="Bestätigt eine ermittelte Geometrie für die Umfahrungsberechnung.",
+    required_roles=("objekt_verwalter",), module_check=strassensperren_effective_enabled,
+)
+async def strassensperre_geometrie_bestaetigen(
+    context: MCPContext, road_closure_id: int, geometry_geojson: dict | str | None = None, version: int | None = None,
+) -> dict[str, object]:
+    try:
+        closure = _writable_closure(context, road_closure_id)
+        road_closure_service.confirm_geometry(
+            context.db, closure, context.user.id, _geometry(geometry_geojson), version,
+            source="mcp", mcp_tool="strassensperre_geometrie_bestaetigen"
+        )
+        context.db.commit()
+        return {"strassensperre": _closure_dict(closure, context.org_id, voll=True, db=context.db),
+                "zusammenfassung": "Geometrie bestätigt."}
     except Exception:
         context.db.rollback()
         raise
@@ -497,7 +573,7 @@ async def strassensperre_reaktivieren(context: MCPContext, road_closure_id: int)
 @register_tool(
     name="strassensperren_suchen",
     description="Sucht sichtbare Straßensperren unscharf.",
-    required_roles=("readonly",),
+    required_roles=STRASSENSPERREN_LESE_ROLLEN,
     module_check=strassensperren_effective_enabled,
 )
 async def strassensperren_suchen(
@@ -533,7 +609,7 @@ async def strassensperren_suchen(
 @register_tool(
     name="strassensperren_im_gebiet",
     description="Findet sichtbare Sperren nahe eines Punktes.",
-    required_roles=("readonly",),
+    required_roles=STRASSENSPERREN_LESE_ROLLEN,
     module_check=strassensperren_effective_enabled,
 )
 async def strassensperren_im_gebiet(
@@ -603,7 +679,7 @@ def _route_answer(payload: dict[str, Any]) -> dict[str, object]:
 @register_tool(
     name="einsatz_strassensperren",
     description="Liest gespeicherte Sperren einer Einsatzroute.",
-    required_roles=("readonly",),
+    required_roles=STRASSENSPERREN_LESE_ROLLEN,
     module_check=strassensperren_effective_enabled,
 )
 async def einsatz_strassensperren(context: MCPContext, incident_id: int) -> dict[str, object]:
@@ -637,7 +713,7 @@ async def _live(context: MCPContext, start: tuple[float, float], destination: tu
 @register_tool(
     name="einsatz_anfahrtsroute_pruefen",
     description="Prüft eine Einsatz-Anfahrt oder berechnet sie live.",
-    required_roles=("readonly",),
+    required_roles=STRASSENSPERREN_LESE_ROLLEN,
     module_check=strassensperren_effective_enabled,
 )
 async def einsatz_anfahrtsroute_pruefen(
@@ -667,7 +743,7 @@ async def einsatz_anfahrtsroute_pruefen(
 @register_tool(
     name="strassensperren_entlang_route",
     description="Berechnet live Sperren entlang einer freien Route.",
-    required_roles=("readonly",),
+    required_roles=STRASSENSPERREN_LESE_ROLLEN,
     module_check=strassensperren_effective_enabled,
 )
 async def strassensperren_entlang_route(
