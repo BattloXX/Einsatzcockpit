@@ -31,6 +31,12 @@ CLOSURE_STATUS: dict[str, str] = {
     "cancelled": "Deaktiviert",
 }
 DIRECTIONS: dict[str, str] = {"both": "Beide Richtungen", "forward": "Hinrichtung", "backward": "Gegenrichtung"}
+GEOMETRY_QUALITY: dict[str, str] = {
+    "hoch": "Hoch (automatisch, eindeutig)",
+    "mittel": "Mittel (automatisch, plausibel)",
+    "niedrig": "Niedrig (automatisch, unsicher)",
+    "manuell": "Manuell geprüft",
+}
 
 
 def _utcnow() -> datetime:
@@ -44,6 +50,10 @@ class RoadClosure(TenantScoped, Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    city: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    reference_number: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    exceptions: Mapped[str | None] = mapped_column(Text, nullable=True)
+    authority: Mapped[str | None] = mapped_column(String(200), nullable=True)
     street: Mapped[str | None] = mapped_column(String(200), nullable=True)
     from_text: Mapped[str | None] = mapped_column(String(200), nullable=True)
     to_text: Mapped[str | None] = mapped_column(String(200), nullable=True)
@@ -60,6 +70,11 @@ class RoadClosure(TenantScoped, Base):
     max_length_m: Mapped[float | None] = mapped_column(Float, nullable=True)
     geometry_geojson: Mapped[str | None] = mapped_column(Text, nullable=True)
     geometry_status: Mapped[str] = mapped_column(String(20), nullable=False, default="missing")
+    geometry_quality: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    geometry_meta_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    superseded_by_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("road_closure.id", ondelete="SET NULL"), nullable=True
+    )
     bbox_min_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     bbox_min_lng: Mapped[float | None] = mapped_column(Float, nullable=True)
     bbox_max_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -117,6 +132,26 @@ class RoadClosureChange(TenantScoped, Base):
     source: Mapped[str] = mapped_column(String(10), nullable=False, default="ui")
     mcp_tool: Mapped[str | None] = mapped_column(String(80), nullable=True)
     user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_utcnow)
+
+
+class RoadClosureDocument(TenantScoped, Base):
+    __tablename__ = "road_closure_document"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    road_closure_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("road_closure.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    storage_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    page_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    extracted_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source: Mapped[str] = mapped_column(String(10), nullable=False, default="ui")
+    uploaded_by_user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_utcnow)
 
 

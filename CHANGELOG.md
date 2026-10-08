@@ -2,6 +2,11 @@
 
 Die Versionshistorie wird reverse-chronologisch geführt.
 
+## Unreleased
+
+- **Straßensperren**: Zusatzdaten (Ort, Aktenzeichen, Behörde, Ausnahmen), Geometriequalität,
+  Dokumentmodell und MCP-Kataloge mit Alias-Normalisierung ergänzt (Migration 0258).
+
 > **Achtung beim Update auf 2026.10.06:** Die Datenbank-Migrationen 0249–0256 müssen mit
 > `alembic upgrade head` eingespielt werden. Die Anwendung läuft jetzt mit genau einem Worker
 > (`-w 1`, siehe `deploy/einsatzleiter.service` bzw. Docker), weil SMS-Gateway-Verbindungen und

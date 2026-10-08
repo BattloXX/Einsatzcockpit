@@ -4,7 +4,7 @@ import json
 import logging
 import secrets
 from datetime import UTC, datetime, timedelta
-from typing import cast
+from typing import Literal, cast
 from urllib.parse import urlencode
 
 from mcp.server.auth.provider import (
@@ -446,8 +446,15 @@ async def wasserstelle_deaktivieren(
     return await _call_registered_tool("wasserstelle_deaktivieren", wasserstelle_id=wasserstelle_id, grund=grund)
 
 
-@server.tool(name="strassensperren_liste", description="Listet sichtbare Straßensperren. status: current, active, planned, expired, cancelled oder all; limit 1 bis 200.")  # noqa: E501
-async def strassensperren_liste(status: str = "current", von: str = "", bis: str = "", strasse: str = "", restriction_type: str = "", nur_eigene: bool = False, limit: int = 50, ctx: Context | None = None) -> dict[str, object]:  # noqa: E501
+RestrictionTypeLiteral = Literal["closed", "partial", "construction", "one_way", "weight_limit", "height_limit", "width_limit", "residents_only", "difficult_passage", "other", ""]  # noqa: E501
+RestrictionTypeValueLiteral = Literal["closed", "partial", "construction", "one_way", "weight_limit", "height_limit", "width_limit", "residents_only", "difficult_passage", "other"]  # noqa: E501
+PriorityLiteral = Literal["low", "normal", "high", "critical"]
+DirectionLiteral = Literal["both", "forward", "backward", ""]
+ClosureStatusLiteral = Literal["current", "active", "planned", "expired", "cancelled", "all"]
+
+
+@server.tool(name="strassensperren_liste", description="Listet sichtbare Straßensperren. Einschränkungstypen: closed (Vollsperre), partial (Teilsperre), construction (Baustelle), one_way (Einbahn), weight_limit (Gewicht), height_limit (Höhe), width_limit (Breite), residents_only (Anrainer), difficult_passage (erschwert), other (sonstige).")  # noqa: E501
+async def strassensperren_liste(status: ClosureStatusLiteral = "current", von: str = "", bis: str = "", strasse: str = "", restriction_type: RestrictionTypeLiteral = "", nur_eigene: bool = False, limit: int = 50, ctx: Context | None = None) -> dict[str, object]:  # noqa: E501
     return await _call_registered_tool("strassensperren_liste", status=status, von=von, bis=bis, strasse=strasse, restriction_type=restriction_type, nur_eigene=nur_eigene, limit=limit)  # noqa: E501
 
 
@@ -457,26 +464,38 @@ async def strassensperre_lesen(road_closure_id: int, ctx: Context | None = None)
 
 
 @server.tool(
+    name="strassensperren_kataloge",
+    description="Liefert erlaubte Werte, Labels und Aliase für Straßensperren.",
+)
+async def strassensperren_kataloge(ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("strassensperren_kataloge")
+
+
+@server.tool(
     name="strassensperre_anlegen",
     description="Legt eine Straßensperre an; eine harte Löschung per MCP ist nicht möglich.",
 )
 async def strassensperre_anlegen(
     title: str,
     valid_from: str,
-    restriction_type: str,
+    restriction_type: RestrictionTypeValueLiteral,
     street: str = "",
     from_text: str = "",
     to_text: str = "",
     valid_until: str = "",
     description: str = "",
-    direction: str = "",
-    priority: str = "normal",
+    direction: DirectionLiteral = "",
+    priority: PriorityLiteral = "normal",
     max_weight_t: float | None = None,
     max_height_m: float | None = None,
     max_width_m: float | None = None,
     max_length_m: float | None = None,
     source: str = "",
     source_url: str = "",
+    city: str = "",
+    reference_number: str = "",
+    exceptions: str = "",
+    authority: str = "",
     geometry_geojson: dict | str | None = None,
     visible_for_org_ids: list[int] | None = None,
     duplikat_bestaetigt: bool = False,
@@ -500,6 +519,10 @@ async def strassensperre_anlegen(
         max_length_m=max_length_m,
         source=source,
         source_url=source_url,
+        city=city,
+        reference_number=reference_number,
+        exceptions=exceptions,
+        authority=authority,
         geometry_geojson=geometry_geojson,
         visible_for_org_ids=visible_for_org_ids,
         duplikat_bestaetigt=duplikat_bestaetigt,
