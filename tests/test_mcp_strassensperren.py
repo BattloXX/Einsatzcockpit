@@ -373,7 +373,7 @@ def test_mcp_sperre_abschnitt_dublette_freigabe_und_update(client, monkeypatch):
         client, token, "strassensperre_anlegen", title="Abschnitt", valid_from="2026-07-01T10:00",
         restriction_type="closed", street="Abschnittstraße", from_text="1", to_text="5"
     )
-    assert duplicate["status"] == "possible_duplicate"
+    assert duplicate["status"] == "possible_update"
     confirmed = _rufe(
         client,
         token,

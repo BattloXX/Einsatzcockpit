@@ -54,6 +54,26 @@ def _iso(value: datetime | None, org: FireDept | None) -> str | None:
     return format_local_iso(value, org) or None
 
 
+def _related_dict(related, org: FireDept | None) -> dict[str, object]:
+    closure = related.closure
+    return {
+        "id": closure.id,
+        "title": closure.title,
+        "street": closure.street,
+        "from_text": closure.from_text,
+        "to_text": closure.to_text,
+        "valid_from": _iso(closure.valid_from, org),
+        "valid_until": _iso(closure.valid_until, org),
+        "reference_number": closure.reference_number,
+        "beziehung": related.beziehung,
+        "gruende": related.gruende,
+        "vorgeschlagene_aenderung": {
+            field: _iso(value, org) if isinstance(value, datetime) else value
+            for field, value in related.vorgeschlagene_aenderung.items()
+        },
+    }
+
+
 def _closure_dict(closure: RoadClosure, org_id: int, *, voll: bool = False, db: Any = None) -> dict[str, object]:
     org = db.get(FireDept, org_id) if db is not None else None
     own = closure.org_id == org_id
@@ -421,16 +441,18 @@ async def strassensperre_entwurf_aus_pdf(
         try:
             starts = _datetime_input(str(draft["valid_from"]), org, "valid_from") if draft.get("valid_from") else None
             ends = _datetime_input(str(draft["valid_until"]), org, "valid_until") if draft.get("valid_until") else None
-            duplicates = road_closure_service.find_duplicates(
+            matches = road_closure_service.find_related(
                 context.db,
                 context.org_id,
                 street=streets[0],
+                reference_number=str(draft.get("reference_number") or ""),
                 from_text=None,
                 to_text=None,
                 valid_from=starts or datetime.now(UTC).replace(tzinfo=None),
                 valid_until=ends,
+                geometry=None,
             )
-            related = [_duplicate_dict(item, context.org_id, context.db) for item in duplicates]
+            related = [_related_dict(item, org) for item in matches]
         except Exception:
             related = []
     return result | {
@@ -505,6 +527,8 @@ async def strassensperre_anlegen(
     geometry_geojson: dict | str | None = None,
     visible_for_org_ids: list[int] | None = None,
     duplikat_bestaetigt: bool = False,
+    als_neu_bestaetigt: bool = False,
+    ersetzt_road_closure_id: int | None = None,
 ) -> dict[str, object]:
     try:
         org = _org(context)
@@ -513,27 +537,35 @@ async def strassensperre_anlegen(
         ends = _datetime_input(valid_until, org, "valid_until") if valid_until else None
         if not street.strip() and geometry is None:
             raise ValueError("Mindestens Straße oder Geometrie ist erforderlich.")
-        duplicates = road_closure_service.find_duplicates(
+        related = road_closure_service.find_related(
             context.db,
             context.org_id,
             street=street,
+            reference_number=reference_number,
             from_text=from_text,
             to_text=to_text,
             valid_from=starts,
             valid_until=ends,
             geometry=geometry,
+            title=title,
+            description=description,
         )
-        if duplicates and not duplikat_bestaetigt:
-            candidates = [_duplicate_dict(item, context.org_id, context.db) for item in duplicates]
+        if related and not (als_neu_bestaetigt or duplikat_bestaetigt) and ersetzt_road_closure_id is None:
+            candidates = [_related_dict(item, org) for item in related]
+            first = related[0].closure
+            relation = related[0].beziehung.replace("aenderung", "Änderung").replace("verlaengerung", "Verlängerung")
             return {
-                "status": "possible_duplicate",
-                "existing_road_closure_id": duplicates[0].id,
+                "status": "possible_update",
+                "existing_road_closure_id": first.id,
                 "kandidaten": candidates,
                 "zusammenfassung": (
-                    f"Mögliche Dublette: {duplicates[0].title} - mit strassensperre_aktualisieren ändern "
-                    "oder mit duplikat_bestaetigt=true trotzdem anlegen."
+                    f"Wahrscheinlich {relation} von #{first.id} ({first.title}) - mit "
+                    f"strassensperre_aktualisieren(road_closure_id={first.id}, felder=...) übernehmen, mit "
+                    f"ersetzt_road_closure_id={first.id} als neue Verordnung anlegen oder mit "
+                    "als_neu_bestaetigt=true trotzdem neu anlegen."
                 ),
             }
+        old = _writable_closure(context, ersetzt_road_closure_id) if ersetzt_road_closure_id is not None else None
         hints: list[str] = []
         geometry_status = "ok" if geometry is not None else "missing"
         geometry_quality: str | None = "manuell" if geometry is not None else None
@@ -589,6 +621,15 @@ async def strassensperre_anlegen(
                 source="mcp",
                 mcp_tool="strassensperre_anlegen",
             )
+        if old is not None:
+            road_closure_service.supersede_closure(
+                context.db,
+                old,
+                closure,
+                context.user.id,
+                "mcp",
+                mcp_tool="strassensperre_anlegen",
+            )
         if closure.restriction_type == "closed" and geometry_status != "ok":
             hints.append(
                 "Wird als Warnung angezeigt, aber erst nach strassensperre_geometrie_bestaetigen (oder Prüfung in "
@@ -606,7 +647,7 @@ async def strassensperre_anlegen(
             )
         except Exception:
             validation = {"status": "unbekannt"}
-        return {
+        response: dict[str, object] = {
             "status": "created",
             "strassensperre": result,
             "hinweise": hints,
@@ -622,6 +663,9 @@ async def strassensperre_anlegen(
             "adressvalidierung": validation,
             "zusammenfassung": f"Straßensperre {closure.title} wurde angelegt.",
         }
+        if old is not None:
+            response["ersetzt"] = old.id
+        return response
     except Exception:
         context.db.rollback()
         raise

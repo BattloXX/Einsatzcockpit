@@ -16,6 +16,10 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 - **Straßensperren**: behördliche Verordnungen als PDF anhängen (UI und MCP, auch für Partnerwehren lesbar);
   `strassensperre_entwurf_aus_pdf` liefert Textauszug und einen Felder-Entwurf (Zeitraum, Aktenzeichen,
   Behörde, Einschränkung, Ausnahmen, Straßen).
+- **Straßensperren**: Verlängerungen, Änderungen und neue Verordnungen werden beim Anlegen erkannt (gleicher
+  Abschnitt, anschließender Zeitraum bis 14 Tage, gleiches Aktenzeichen). Statt einer Dublette wird die
+  Aktualisierung mit fertigen Feldern angeboten oder die alte Sperre nachvollziehbar ersetzt
+  (MCP `possible_update`, `ersetzt_road_closure_id`, `als_neu_bestaetigt`).
 
 > **Achtung beim Update auf 2026.10.06:** Die Datenbank-Migrationen 0249–0256 müssen mit
 > `alembic upgrade head` eingespielt werden. Die Anwendung läuft jetzt mit genau einem Worker

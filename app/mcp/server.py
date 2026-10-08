@@ -489,7 +489,9 @@ async def strassensperren_kataloge(ctx: Context | None = None) -> dict[str, obje
 
 @server.tool(
     name="strassensperre_anlegen",
-    description="Legt eine Straßensperre an; eine harte Löschung per MCP ist nicht möglich.",
+    description=(
+        "Legt eine Sperre an oder schlägt bei Änderungen eine bestehende Sperre zum Aktualisieren oder Ersetzen vor."
+    ),
 )
 async def strassensperre_anlegen(
     title: str,
@@ -515,6 +517,8 @@ async def strassensperre_anlegen(
     geometry_geojson: dict | str | None = None,
     visible_for_org_ids: list[int] | None = None,
     duplikat_bestaetigt: bool = False,
+    als_neu_bestaetigt: bool = False,
+    ersetzt_road_closure_id: int | None = None,
     ctx: Context | None = None,
 ) -> dict[str, object]:
     return await _call_registered_tool(
@@ -542,6 +546,8 @@ async def strassensperre_anlegen(
         geometry_geojson=geometry_geojson,
         visible_for_org_ids=visible_for_org_ids,
         duplikat_bestaetigt=duplikat_bestaetigt,
+        als_neu_bestaetigt=als_neu_bestaetigt,
+        ersetzt_road_closure_id=ersetzt_road_closure_id,
     )
 
 

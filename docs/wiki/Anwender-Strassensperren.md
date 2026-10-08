@@ -44,6 +44,10 @@ Ist der OSM-Dienst gerade überlastet, wird – wenn möglich – eine Näherung
 
 Eine nicht mehr geltende Sperre wird mit Grund **deaktiviert**, nicht gelöscht; sie kann wieder reaktiviert werden. Eigene Sperren können an als Partner hinterlegte Nachbarwehren freigegeben werden. Diese sehen die Freigabe, dürfen sie aber nicht ändern.
 
+### Verlängerungen und neue Verordnungen
+
+Beim Anlegen erkennt Einsatzcockpit wahrscheinliche Verlängerungen oder Änderungen desselben Straßenabschnitts. Das Formular bietet dann an, die bestehende Sperre mit dem vorgeschlagenen Ende zu bearbeiten, die neue Verordnung als Ersatz anzulegen oder die neue Sperre bewusst zusätzlich anzulegen. Ein Ersatz deaktiviert die ältere Sperre und verlinkt beide Einträge nachvollziehbar miteinander.
+
 ### Zusatzangaben aus der Verordnung
 
 Neben Straße und Zeitraum können **Ort**, **Aktenzeichen**, **Behörde** und **Ausnahmen** (z. B. „Anrainer frei“) erfasst werden. Der Ort hilft bei der Suche der Straße, wenn die Sperre in einer Nachbargemeinde liegt.

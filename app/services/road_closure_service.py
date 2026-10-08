@@ -5,7 +5,8 @@ from __future__ import annotations
 import json
 import logging
 import re
-from datetime import UTC, datetime
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import or_, select
@@ -28,6 +29,15 @@ from app.models.road_closure import (
 from app.services import road_closure_geo_service as geo
 
 logger = logging.getLogger("einsatzleiter.road_closure")
+
+
+@dataclass
+class RelatedClosure:
+    closure: RoadClosure
+    beziehung: str
+    gruende: list[str]
+    vorgeschlagene_aenderung: dict
+    score: int
 EDITABLE_FIELDS = {
     "title",
     "description",
@@ -429,6 +439,25 @@ def deactivate_closure(
     mark_routes_stale_for_closure(db, closure)
 
 
+def supersede_closure(
+    db: Session,
+    old: RoadClosure,
+    new: RoadClosure,
+    user_id: int | None,
+    source: str,
+    mcp_tool: str | None = None,
+) -> None:
+    if old.org_id != new.org_id:
+        raise ValueError("Die zu ersetzende Sperre gehört nicht zur eigenen Organisation.")
+    if old.cancelled_at is not None:
+        raise ValueError("Die zu ersetzende Sperre ist bereits deaktiviert.")
+    old.superseded_by_id = new.id
+    deactivate_closure(db, old, user_id, f"Ersetzt durch Sperre #{new.id}", source=source, mcp_tool=mcp_tool)
+    _change(db, old, "superseded", user_id, source, mcp_tool, after={"ersetzt_durch": new.id})
+    _change(db, new, "supersedes", user_id, source, mcp_tool, after={"ersetzt": old.id})
+    _audit(db, "road_closure.superseded", old, user_id, ersetzt_durch=new.id)
+
+
 def reactivate_closure(
     db: Session,
     closure: RoadClosure,
@@ -655,44 +684,118 @@ def find_duplicates(
     geometry: dict | None = None,
     exclude_id: int | None = None,
 ) -> list[RoadClosure]:
-    q = (
-        db.query(RoadClosure)
-        .execution_options(include_all_tenants=True)
-        .filter(
-            RoadClosure.org_id == org_id,
-            RoadClosure.cancelled_at.is_(None),
-            or_(RoadClosure.valid_until.is_(None), RoadClosure.valid_until >= valid_from),
+    return [
+        related.closure
+        for related in find_related(
+            db,
+            org_id,
+            street=street,
+            reference_number=None,
+            valid_from=valid_from,
+            valid_until=valid_until,
+            geometry=geometry,
+            from_text=from_text,
+            to_text=to_text,
+            exclude_id=exclude_id,
         )
+        if related.beziehung in {"dublette", "aenderung", "verlaengerung"}
+        and (related.closure.valid_until is None or related.closure.valid_until >= valid_from)
+        and (valid_until is None or related.closure.valid_from <= valid_until)
+    ]
+
+
+def find_related(
+    db: Session,
+    org_id: int,
+    *,
+    street: str | None,
+    reference_number: str | None,
+    valid_from: datetime,
+    valid_until: datetime | None,
+    geometry: dict | None,
+    from_text: str | None = None,
+    to_text: str | None = None,
+    title: str | None = None,
+    description: str | None = None,
+    exclude_id: int | None = None,
+) -> list[RelatedClosure]:
+    q = db.query(RoadClosure).execution_options(include_all_tenants=True).filter(
+        RoadClosure.org_id == org_id,
+        RoadClosure.cancelled_at.is_(None),
     )
-    if valid_until is not None:
-        q = q.filter(RoadClosure.valid_from <= valid_until)
     if exclude_id:
         q = q.filter(RoadClosure.id != exclude_id)
-    result = []
+    new_street = _normal(street)
+    new_reference = _normal(reference_number)
+    new_from, new_to = _normal(from_text), _normal(to_text)
+    keyword_text = _normal(f"{title or ''} {description or ''}")
+    amendment_words = r"verlaengerung|verlängerung|änderung|aenderung|abänderung|neufassung|ersetzt"
+    has_keyword = bool(re.search(amendment_words, keyword_text))
+    related: list[RelatedClosure] = []
     for item in q.all():
-        if _normal(item.street) != _normal(street):
-            continue
-        endpoints = (_normal(item.from_text) == _normal(from_text) and _normal(item.to_text) == _normal(to_text)) or (
-            not _normal(item.from_text)
-            and not _normal(item.to_text)
-            and not _normal(from_text)
-            and not _normal(to_text)
+        reasons: list[str] = []
+        score = 0
+        same_reference = bool(new_reference and new_reference == _normal(item.reference_number))
+        same_street = bool(new_street and new_street == _normal(item.street))
+        endpoints = (new_from == _normal(item.from_text) and new_to == _normal(item.to_text)) or (
+            not new_from and not new_to and not _normal(item.from_text) and not _normal(item.to_text)
         )
         close = False
         if geometry is not None and item.geometry_geojson:
-            min_lat, min_lng, max_lat, max_lng = geo.bbox(geometry)
-            transformer = geo._projector((min_lng + max_lng) / 2, (min_lat + max_lat) / 2)
-            close = (
-                geo.to_metric(geometry, transformer).distance(
+            try:
+                min_lat, min_lng, max_lat, max_lng = geo.bbox(geometry)
+                transformer = geo._projector((min_lng + max_lng) / 2, (min_lat + max_lat) / 2)
+                close = geo.to_metric(geometry, transformer).distance(
                     geo.to_metric(json.loads(item.geometry_geojson), transformer)
-                )
-                <= 50
-            )
-        if endpoints:
-            result.append(item)
-        elif close:
-            result.append(item)
-    return result
+                ) <= 50
+            except (TypeError, ValueError, json.JSONDecodeError):
+                close = False
+        same_place = same_street and (close or endpoints)
+        overlap = item.valid_until is None or item.valid_until >= valid_from
+        if valid_until is not None and item.valid_from > valid_until:
+            overlap = False
+        adjacent = item.valid_until is not None and timedelta() <= valid_from - item.valid_until <= timedelta(days=14)
+        time_related = overlap or adjacent or item.valid_until is None
+        if same_reference:
+            score += 50
+            reasons.append("Gleiches Aktenzeichen")
+        if same_place and time_related:
+            score += 30
+            reasons.append("Gleicher Straßenabschnitt")
+            if overlap:
+                reasons.append("Überlappender Zeitraum")
+            elif adjacent:
+                reasons.append("Anschließender Zeitraum")
+            else:
+                reasons.append("Bestehende Sperre ist unbefristet")
+        if has_keyword:
+            score += 10
+            reasons.append("Hinweis auf Verlängerung oder Änderung")
+        if not same_reference and not (same_place and time_related):
+            continue
+        if same_reference and not same_place:
+            relation = "ersatz"
+        elif abs((item.valid_from - valid_from).total_seconds()) <= 3600 and (
+            (item.valid_until is None and valid_until is None)
+            or (item.valid_until is not None and valid_until is not None
+                and abs((item.valid_until - valid_until).total_seconds()) <= 3600)
+        ):
+            relation = "dublette"
+        elif same_place and (item.valid_until is not None and valid_from <= item.valid_until + timedelta(days=14)) and (
+            valid_until is None or valid_until > item.valid_until
+        ):
+            relation = "verlaengerung"
+        else:
+            relation = "aenderung"
+        suggestion: dict = {}
+        if valid_until != item.valid_until:
+            suggestion["valid_until"] = valid_until
+        if relation == "aenderung" and valid_from != item.valid_from:
+            suggestion["valid_from"] = valid_from
+        if reference_number and reference_number != item.reference_number:
+            suggestion["reference_number"] = reference_number
+        related.append(RelatedClosure(item, relation, reasons, suggestion, score))
+    return sorted(related, key=lambda item: item.score, reverse=True)
 
 
 def mark_routes_stale_for_closure(
