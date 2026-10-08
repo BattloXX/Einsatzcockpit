@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime, timedelta
+from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -22,10 +23,12 @@ from app.models.road_closure import (
     PRIORITIES,
     RESTRICTION_TYPES,
     RoadClosureChange,
+    RoadClosureDocument,
 )
 from app.models.user import User
 from app.services import road_closure_service
 from app.services.address_autocomplete import suggest_addresses
+from app.services.road_closure_document_service import absolute_path, delete_document, store_document
 from app.services.road_closure_section_service import resolve_section, validate_address
 
 router = APIRouter(prefix="/strassensperren", tags=["strassensperren"])
@@ -519,6 +522,9 @@ def detail(
         if closure.org_id == user.org_id
         else []
     )
+    documents = db.query(RoadClosureDocument).execution_options(include_all_tenants=True).filter(
+        RoadClosureDocument.road_closure_id == closure.id
+    ).order_by(RoadClosureDocument.created_at.desc()).all()
     return templates.TemplateResponse(
         request,
         "road_closure/detail.html",
@@ -526,6 +532,8 @@ def detail(
             "user": user,
             "closure": closure,
             "changes": changes,
+            "documents": documents,
+            "fehler": request.query_params.get("fehler", ""),
             "status": road_closure_service.compute_status(closure),
             "status_labels": CLOSURE_STATUS,
             "color": _color(closure),
@@ -537,6 +545,59 @@ def detail(
             "shared_org_names": shared_org_names,
         },
     )
+
+
+@router.get("/{closure_id}/dokumente/{document_id}")
+def dokument_anzeigen(
+    closure_id: int, document_id: int, db: Session = Depends(get_db),
+    user: User = Depends(require_role(*_LESE_ROLLEN)), _guard: None = Depends(require_strassensperren_enabled),
+):
+    closure = _closure_or_404(db, user, closure_id, writable=False)
+    document = db.query(RoadClosureDocument).execution_options(include_all_tenants=True).filter(
+        RoadClosureDocument.id == document_id, RoadClosureDocument.road_closure_id == closure.id
+    ).first()
+    if document is None:
+        raise HTTPException(404, "Nicht gefunden")
+    try:
+        path = absolute_path(document)
+    except ValueError as exc:
+        raise HTTPException(404, "Nicht gefunden") from exc
+    if not path.is_file():
+        raise HTTPException(404, "Nicht gefunden")
+    return FileResponse(
+        path, media_type="application/pdf", filename=document.filename, content_disposition_type="inline"
+    )
+
+
+@router.post("/{closure_id}/dokumente")
+async def dokument_hochladen(
+    closure_id: int, datei: UploadFile = File(...), db: Session = Depends(get_db),
+    user: User = Depends(require_role("objekt_verwalter")), _guard: None = Depends(require_strassensperren_enabled),
+):
+    closure = _closure_or_404(db, user, closure_id, writable=True)
+    try:
+        store_document(db, closure, await datei.read(), datei.filename or "verordnung.pdf", user.id, "ui")
+        db.commit()
+    except ValueError as exc:
+        db.rollback()
+        return RedirectResponse(f"/strassensperren/{closure.id}?fehler={quote(str(exc))}", status_code=303)
+    return RedirectResponse(f"/strassensperren/{closure.id}", status_code=303)
+
+
+@router.post("/{closure_id}/dokumente/{document_id}/loeschen")
+def dokument_loeschen(
+    closure_id: int, document_id: int, db: Session = Depends(get_db),
+    user: User = Depends(require_role("objekt_verwalter")), _guard: None = Depends(require_strassensperren_enabled),
+):
+    closure = _closure_or_404(db, user, closure_id, writable=True)
+    document = db.query(RoadClosureDocument).execution_options(include_all_tenants=True).filter(
+        RoadClosureDocument.id == document_id, RoadClosureDocument.road_closure_id == closure.id
+    ).first()
+    if document is None:
+        raise HTTPException(404, "Nicht gefunden")
+    delete_document(db, closure, document, user.id, "ui")
+    db.commit()
+    return RedirectResponse(f"/strassensperren/{closure.id}", status_code=303)
 
 
 @router.post("/{closure_id}/geometrie-bestaetigen")

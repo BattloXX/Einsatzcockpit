@@ -114,7 +114,7 @@ def _uebergabe_sync(
         user = db.get(User, user_id)
         upload_pfad: Path | None = None
         if upload_id is not None:
-            upload = lade_upload_fuer_uebergabe(db, org_id, user_id, upload_id)
+            upload = lade_upload_fuer_uebergabe(db, org_id, user_id, upload_id, zweck="objekt")
             assert upload.objekt_id is not None
             if upload.objekt_id != objekt.id:
                 raise MCPUploadFehler("Upload gehoert nicht zu diesem Objekt.", 403)

@@ -2,15 +2,22 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
+from app.config import settings
+from app.core.audit import write_audit
 from app.core.permissions import STRASSENSPERREN_LESE_ROLLEN
+from app.core.tenant import set_tenant_context
 from app.core.timezones import format_local_iso, local_date_to_utc, local_input_to_utc
+from app.db import SessionLocal
 from app.mcp.context import MCPContext
 from app.mcp.registry import register_tool
+from app.mcp.tools.objekt_dokumente import _decode_inhalt
 from app.models.incident import Incident, IncidentOrg
 from app.models.master import FireDept
 from app.models.road_closure import (
@@ -21,6 +28,7 @@ from app.models.road_closure import (
     PRIORITIES,
     RESTRICTION_TYPES,
     RoadClosure,
+    RoadClosureDocument,
     RoadClosureShare,
 )
 from app.models.user import User
@@ -32,6 +40,9 @@ from app.services import (
     road_closure_service,
 )
 from app.services.einsatz_routing import RoutingError
+from app.services.mcp_download_service import erstelle_download_token
+from app.services.mcp_upload_service import effektives_limit, erstelle_upload, lade_upload_fuer_uebergabe
+from app.services.road_closure_document_service import entwurf_aus_text, extract_text, store_document
 from app.services.road_closure_flags import strassensperren_effective_enabled
 
 
@@ -216,7 +227,221 @@ async def strassensperren_liste(
 async def strassensperre_lesen(context: MCPContext, road_closure_id: int) -> dict[str, object]:
     closure = road_closure_service.get_closure_for_org(context.db, context.org_id, road_closure_id, writable=False)
     result = _closure_dict(closure, context.org_id, voll=True, db=context.db)
-    return result | {"zusammenfassung": _summary([result])}
+    # Sichtbarkeit (eigen oder freigegeben) ist über get_closure_for_org geprüft; Dokumente gehören der Besitzer-Org.
+    documents = (
+        context.db.query(RoadClosureDocument)
+        .execution_options(include_all_tenants=True)
+        .filter(RoadClosureDocument.road_closure_id == closure.id)
+        .order_by(RoadClosureDocument.created_at.desc())
+        .all()
+    )
+    base_url = settings.effective_public_base_url.rstrip("/")
+    document_items = []
+    for document in documents:
+        token, expires = erstelle_download_token(
+            context.org_id, context.user.id, document.id, None, art="strassensperre"
+        )
+        document_items.append(
+            {
+                "id": document.id,
+                "dateiname": document.filename,
+                "seiten": document.page_count,
+                "groesse_bytes": document.size_bytes,
+                "hochgeladen_am": _iso(document.created_at, _org(context)),
+                "download_url": f"{base_url}/api/mcp/downloads/{token}",
+                "gueltig_bis": expires.isoformat() + "Z",
+            }
+        )
+    return result | {"dokumente": document_items, "zusammenfassung": _summary([result])}
+
+
+def _document_sync(
+    org_id: int,
+    user_id: int,
+    closure_id: int | None,
+    filename: str,
+    data: bytes | None,
+    upload_id: str | None,
+    purpose: str,
+) -> dict[str, object]:
+    """PDF lesen und optional anhängen; pypdf läuft in einem Worker mit eigener Session."""
+    db = SessionLocal()
+    set_tenant_context(db, org_id)
+    upload_path: Path | None = None
+    try:
+        closure = None
+        if closure_id is not None:
+            closure = road_closure_service.get_closure_for_org(db, org_id, closure_id, writable=True)
+        if upload_id:
+            upload = lade_upload_fuer_uebergabe(db, org_id, user_id, upload_id, zweck=purpose)
+            if closure is not None and upload.road_closure_id != closure.id:
+                raise ValueError("Upload gehört nicht zu dieser Straßensperre.")
+            upload_path = Path(settings.OBJEKT_MEDIA_DIR) / str(upload.pfad)
+            data = upload_path.read_bytes()
+            upload.uebergeben_am = datetime.now(UTC).replace(tzinfo=None)
+        if data is None:
+            raise ValueError("Keine PDF-Daten erhalten.")
+        if closure is not None:
+            document = store_document(db, closure, data, filename, user_id, "mcp")
+            pages, text = document.page_count or 0, document.extracted_text or ""
+        else:
+            if not data.startswith(b"%PDF"):
+                raise ValueError("Nur PDF-Dateien erlaubt.")
+            pages, text = extract_text(data)
+            document = None
+        db.commit()
+        if upload_path is not None:
+            upload_path.unlink(missing_ok=True)
+        response: dict[str, object] = {
+            "seiten": pages,
+            "textauszug": text[:4000],
+            "entwurf": entwurf_aus_text(text),
+        }
+        if document is not None:
+            response["dokument_id"] = document.id
+        return response
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+@register_tool(
+    name="strassensperre_dokument_upload_vorbereiten",
+    description=(
+        "Bereitet einen kurzlebigen PDF-Upload für eine Verordnung vor. Mit road_closure_id zum Anhängen "
+        "(danach strassensperre_dokument_uebergeben), ohne für einen Entwurf (strassensperre_entwurf_aus_pdf)."
+    ),
+    required_roles=("objekt_verwalter",),
+    module_check=strassensperren_effective_enabled,
+)
+async def strassensperre_dokument_upload_vorbereiten(
+    context: MCPContext,
+    road_closure_id: int | None = None,
+    dateiname: str = "verordnung.pdf",
+    groesse_bytes: int | None = None,
+) -> dict[str, object]:
+    if road_closure_id is not None:
+        _writable_closure(context, road_closure_id)
+    purpose = "strassensperre" if road_closure_id is not None else "entwurf"
+    limit = effektives_limit(context.db)
+    row, token = erstelle_upload(
+        context.db,
+        context.user,
+        context.org_id,
+        None,
+        dateiname,
+        groesse_bytes,
+        road_closure_id=road_closure_id,
+        zweck=purpose,
+    )
+    write_audit(
+        context.db,
+        "road_closure.mcp_upload_vorbereitet",
+        org_id=context.org_id,
+        user_id=context.user.id,
+        entity_type="road_closure",
+        entity_id=road_closure_id,
+        payload={"upload_id": row.upload_id, "zweck": purpose},
+    )
+    context.db.commit()
+    url = f"{settings.effective_public_base_url.rstrip('/')}/api/mcp/uploads/{row.upload_id}"
+    return {
+        "upload_id": row.upload_id,
+        "upload_url": url,
+        "upload_token": token,
+        "gueltig_bis": row.expires_at.isoformat() + "Z",
+        "max_bytes": limit,
+        "curl_beispiel": f'curl -X POST -H "Authorization: Bearer {token}" -F "datei=@<pfad>" {url}',
+    }
+
+
+@register_tool(
+    name="strassensperre_dokument_uebergeben",
+    description=(
+        "Hängt eine PDF-Verordnung an eine eigene Straßensperre an. Genau eines von inhalt_base64 oder upload_id. "
+        "Liefert Textauszug und einen ungeprüften Felder-Entwurf."
+    ),
+    required_roles=("objekt_verwalter",),
+    module_check=strassensperren_effective_enabled,
+)
+async def strassensperre_dokument_uebergeben(
+    context: MCPContext,
+    road_closure_id: int,
+    dateiname: str,
+    inhalt_base64: str | None = None,
+    upload_id: str | None = None,
+) -> dict[str, object]:
+    if (inhalt_base64 is None) == (upload_id is None):
+        raise ValueError("Genau eines von inhalt_base64 oder upload_id ist erforderlich.")
+    data = _decode_inhalt(inhalt_base64) if inhalt_base64 is not None else None
+    result = await asyncio.to_thread(
+        _document_sync, context.org_id, context.user.id, road_closure_id, dateiname, data, upload_id, "strassensperre"
+    )
+    return result | {"zusammenfassung": "Verordnung wurde an die Straßensperre angehängt."}
+
+
+@register_tool(
+    name="strassensperre_entwurf_aus_pdf",
+    description=(
+        "Liest eine PDF-Verordnung, ohne etwas zu speichern, und liefert Textauszug, Felder-Entwurf, "
+        "Geometrievorschlag und ähnliche bestehende Sperren. Danach Felder prüfen, strassensperre_anlegen "
+        "und strassensperre_dokument_uebergeben aufrufen."
+    ),
+    required_roles=("objekt_verwalter",),
+    module_check=strassensperren_effective_enabled,
+)
+async def strassensperre_entwurf_aus_pdf(
+    context: MCPContext,
+    inhalt_base64: str | None = None,
+    upload_id: str | None = None,
+    city: str = "",
+) -> dict[str, object]:
+    if (inhalt_base64 is None) == (upload_id is None):
+        raise ValueError("Genau eines von inhalt_base64 oder upload_id ist erforderlich.")
+    data = _decode_inhalt(inhalt_base64) if inhalt_base64 is not None else None
+    result = await asyncio.to_thread(
+        _document_sync, context.org_id, context.user.id, None, "verordnung.pdf", data, upload_id, "entwurf"
+    )
+    draft = result["entwurf"]
+    assert isinstance(draft, dict)
+    streets = [str(item) for item in draft.get("strassen") or []]
+    org = _org(context)
+    geometry = None
+    related: list[dict[str, object]] = []
+    if streets:
+        try:
+            section = await road_closure_section_service.resolve_section(
+                context.db, org, streets[0], "", "", city or getattr(org, "city", None)
+            )
+            geometry = section.to_dict()
+        except Exception:
+            geometry = None
+        try:
+            starts = _datetime_input(str(draft["valid_from"]), org, "valid_from") if draft.get("valid_from") else None
+            ends = _datetime_input(str(draft["valid_until"]), org, "valid_until") if draft.get("valid_until") else None
+            duplicates = road_closure_service.find_duplicates(
+                context.db,
+                context.org_id,
+                street=streets[0],
+                from_text=None,
+                to_text=None,
+                valid_from=starts or datetime.now(UTC).replace(tzinfo=None),
+                valid_until=ends,
+            )
+            related = [_duplicate_dict(item, context.org_id, context.db) for item in duplicates]
+        except Exception:
+            related = []
+    return result | {
+        "geometrie_vorschlag": geometry,
+        "verwandte_sperren": related,
+        "hinweise": [draft.get("hinweis")],
+        "zusammenfassung": (
+            "Entwurf erstellt. Felder prüfen, dann strassensperre_anlegen und anschließend "
+            "strassensperre_dokument_uebergeben verwenden."
+        ),
+    }
 
 
 @register_tool(

@@ -1,8 +1,5 @@
 # MCP-Assistent
 
-Für Straßensperren stehen zusätzlich `strassensperre_geometrie_ermitteln` (OSM-Vorschlag, optional übernehmen)
-und `strassensperre_geometrie_bestaetigen` (Freigabe für die Umfahrung) zur Verfügung.
-
 Mit dem MCP-Server kann eine KI-Anwendung nach deiner Anmeldung gezielt mit Daten deiner Organisation arbeiten. Die Anwendung sieht nur die Werkzeuge, für die dein Konto aktuell berechtigt ist.
 
 ## Verbinden und anmelden
@@ -34,6 +31,8 @@ Die verfügbaren Werkzeuge sind:
 - `wasserstellen_suchen`, `wasserstelle_lesen`, `wasserstelle_anlegen`, `wasserstelle_aktualisieren` und `wasserstelle_deaktivieren` (nur `org_admin`): suchen Wasserstellen (Text, Typ, Status, optional im Umkreis um `lat`/`lng`), legen sie mit Dublettenprüfung an (gleiche Bezeichnung oder gleicher Typ innerhalb 15 m; sonst `duplikat_bestaetigt=true`) und ändern einzelne Felder. Deaktivieren setzt den Status `defekt` – die Stelle erscheint dann nicht mehr auf Einsatzkarte und Einsatzinfo; ein optionaler Grund wird datiert an den Hinweis angehängt. Reaktivieren über `wasserstelle_aktualisieren` mit `status: bereit`. Löschen ist per MCP nicht möglich.
 - `strassensperren_liste`, `strassensperre_lesen`, `strassensperren_kataloge`, `strassensperren_suchen`, `strassensperren_im_gebiet`, `einsatz_strassensperren`, `einsatz_anfahrtsroute_pruefen` und `strassensperren_entlang_route`: lesen sichtbare Sperren und prüfen gespeicherte oder live berechnete Anfahrten. `strassensperren_kataloge` zeigt Enum-Werte, Labels und Aliase.
 - `strassensperre_anlegen`, `strassensperre_aktualisieren`, `strassensperre_deaktivieren` und `strassensperre_reaktivieren` (Objektverwaltung): pflegen eigene Sperren. Bei einer möglichen Dublette liefert das Anlegen `possible_duplicate`; vorhandene Sperre aktualisieren oder bewusst mit `duplikat_bestaetigt=true` anlegen. Die Antworten enthalten bei Anlage und Adressänderungen `adressvalidierung` aus der OSM-Prüfung. Löschen ist per MCP nicht möglich.
+- `strassensperre_geometrie_ermitteln` (OSM-Abschnitt vorschlagen, optional übernehmen) und `strassensperre_geometrie_bestaetigen` (Freigabe für die Umfahrung, Objektverwaltung).
+- `strassensperre_entwurf_aus_pdf` (liest eine Verordnung ohne zu speichern und schlägt Felder vor), `strassensperre_dokument_upload_vorbereiten` und `strassensperre_dokument_uebergeben` (PDF an die Sperre anhängen; Objektverwaltung). Typischer Ablauf: Entwurf aus PDF → prüfen → anlegen → PDF anhängen.
 - `objekt_dokument_upload_vorbereiten`: erzeugt einen einmaligen Upload-Link (15 Minuten gültig) samt curl-Beispiel, damit große PDFs nicht als Base64 im Tool-Aufruf stehen müssen.
 - `objekt_dokument_uebergeben`, `objekt_dokumente_auflisten` und `objekt_dokument_seiten_klassifizieren`: übergeben, listen und klassifizieren Objekt-PDFs. Übergabe entweder mit `upload_id` (nach dem curl-Upload) oder – für kleine Dateien – mit `inhalt_base64`. `seiten` hat das Format `[{"nr":1,"dokumentart":"bma_datenblatt","titel":null}]`; die Klassifizierung des Clients wird unverändert übernommen.
 - `objekt_dokument_herunterladen`: holt das Original-PDF eines Objektdokuments (jede Version, optional mit `seite` nur eine Einzelseite). Liefert einen 15 Minuten gültigen Download-Link, den du auch im Browser öffnen kannst, samt curl-Beispiel; mit `inline=true` kommt eine kleine Datei (bis 8 MB) zusätzlich direkt als Base64. Die `dokument_id` liefert `objekt_dokumente_auflisten` (dort jetzt auch mit Dateigröße).

@@ -464,6 +464,21 @@ async def strassensperre_lesen(road_closure_id: int, ctx: Context | None = None)
     return await _call_registered_tool("strassensperre_lesen", road_closure_id=road_closure_id)
 
 
+@server.tool(name="strassensperre_dokument_upload_vorbereiten", description="Bereitet einen kurzlebigen PDF-Upload für eine Verordnung vor; mit road_closure_id zum Anhängen, ohne für strassensperre_entwurf_aus_pdf.")  # noqa: E501
+async def strassensperre_dokument_upload_vorbereiten(road_closure_id: int | None = None, dateiname: str = "verordnung.pdf", groesse_bytes: int | None = None, ctx: Context | None = None) -> dict[str, object]:  # noqa: E501
+    return await _call_registered_tool("strassensperre_dokument_upload_vorbereiten", road_closure_id=road_closure_id, dateiname=dateiname, groesse_bytes=groesse_bytes)  # noqa: E501
+
+
+@server.tool(name="strassensperre_dokument_uebergeben", description="Hängt eine PDF-Verordnung an eine eigene Straßensperre an (inhalt_base64 oder upload_id) und liefert Textauszug und Felder-Entwurf.")  # noqa: E501
+async def strassensperre_dokument_uebergeben(road_closure_id: int, dateiname: str, inhalt_base64: str | None = None, upload_id: str | None = None, ctx: Context | None = None) -> dict[str, object]:  # noqa: E501
+    return await _call_registered_tool("strassensperre_dokument_uebergeben", road_closure_id=road_closure_id, dateiname=dateiname, inhalt_base64=inhalt_base64, upload_id=upload_id)  # noqa: E501
+
+
+@server.tool(name="strassensperre_entwurf_aus_pdf", description="Liest eine PDF-Verordnung ohne Speichern: Textauszug, Felder-Entwurf, Geometrievorschlag, ähnliche Sperren. Danach strassensperre_anlegen und strassensperre_dokument_uebergeben.")  # noqa: E501
+async def strassensperre_entwurf_aus_pdf(inhalt_base64: str | None = None, upload_id: str | None = None, city: str = "", ctx: Context | None = None) -> dict[str, object]:  # noqa: E501
+    return await _call_registered_tool("strassensperre_entwurf_aus_pdf", inhalt_base64=inhalt_base64, upload_id=upload_id, city=city)  # noqa: E501
+
+
 @server.tool(
     name="strassensperren_kataloge",
     description="Liefert erlaubte Werte, Labels und Aliase für Straßensperren.",
