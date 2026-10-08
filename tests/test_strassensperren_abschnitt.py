@@ -68,19 +68,28 @@ def test_abschnitt_endpoint_rollenschutz_und_fehler(client, monkeypatch):
     manager = _setup_user("objekt_verwalter")
     _login(client, manager)
 
-    async def success(street, from_text, to_text, city):
-        return {"geometry": {"type": "Point", "coordinates": [9.7, 47.5]}, "geometry_status": "needs_review", "hinweis": "Prüfen"}
+    async def success(*args, **kwargs):
+        from app.services.road_closure_section_resolver import SectionResult
 
-    monkeypatch.setattr(ui_road_closure, "section_from_address", success)
+        return SectionResult(
+            geometry={"type": "LineString", "coordinates": [[9.7, 47.5], [9.71, 47.51]]},
+            quality="mittel",
+            geometry_status="needs_review",
+            hinweise=["Prüfen"],
+        )
+
+    monkeypatch.setattr(ui_road_closure, "resolve_section", success)
     headers = {"X-CSRF-Token": client.cookies.get("ec_csrf")}
     response = client.post("/strassensperren/abschnitt", json={"street": "Hauptstraße", "from_text": "12"}, headers=headers)
     assert response.status_code == 200
     assert response.json()["geometry_status"] == "needs_review"
 
-    async def failure(street, from_text, to_text, city):
-        raise ValueError("Adresse nicht gefunden – bitte Abschnitt auf der Karte einzeichnen.")
+    async def failure(*args, **kwargs):
+        from app.services.road_closure_section_resolver import SectionResult
 
-    monkeypatch.setattr(ui_road_closure, "section_from_address", failure)
+        return SectionResult(hinweise=["Adresse nicht gefunden – bitte Abschnitt auf der Karte einzeichnen."])
+
+    monkeypatch.setattr(ui_road_closure, "resolve_section", failure)
     assert client.post("/strassensperren/abschnitt", json={}, headers=headers).status_code == 422
 
 

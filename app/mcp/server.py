@@ -451,11 +451,12 @@ RestrictionTypeValueLiteral = Literal["closed", "partial", "construction", "one_
 PriorityLiteral = Literal["low", "normal", "high", "critical"]
 DirectionLiteral = Literal["both", "forward", "backward", ""]
 ClosureStatusLiteral = Literal["current", "active", "planned", "expired", "cancelled", "all"]
+GeometryFilterLiteral = Literal["", "pruefen", "ok", "fehlt"]
 
 
 @server.tool(name="strassensperren_liste", description="Listet sichtbare Straßensperren. Einschränkungstypen: closed (Vollsperre), partial (Teilsperre), construction (Baustelle), one_way (Einbahn), weight_limit (Gewicht), height_limit (Höhe), width_limit (Breite), residents_only (Anrainer), difficult_passage (erschwert), other (sonstige).")  # noqa: E501
-async def strassensperren_liste(status: ClosureStatusLiteral = "current", von: str = "", bis: str = "", strasse: str = "", restriction_type: RestrictionTypeLiteral = "", nur_eigene: bool = False, limit: int = 50, ctx: Context | None = None) -> dict[str, object]:  # noqa: E501
-    return await _call_registered_tool("strassensperren_liste", status=status, von=von, bis=bis, strasse=strasse, restriction_type=restriction_type, nur_eigene=nur_eigene, limit=limit)  # noqa: E501
+async def strassensperren_liste(status: ClosureStatusLiteral = "current", von: str = "", bis: str = "", strasse: str = "", restriction_type: RestrictionTypeLiteral = "", nur_eigene: bool = False, limit: int = 50, geometrie: GeometryFilterLiteral = "", ctx: Context | None = None) -> dict[str, object]:  # noqa: E501
+    return await _call_registered_tool("strassensperren_liste", status=status, von=von, bis=bis, strasse=strasse, restriction_type=restriction_type, nur_eigene=nur_eigene, limit=limit, geometrie=geometrie)  # noqa: E501
 
 
 @server.tool(name="strassensperre_lesen", description="Liest alle Details einer sichtbaren Straßensperre.")
@@ -545,6 +546,20 @@ async def strassensperre_aktualisieren(
         felder=felder,
         version=version,
     )
+
+
+@server.tool(
+    name="strassensperre_geometrie_ermitteln", description="Ermittelt einen OSM-Abschnitt zur Prüfung und Übernahme."
+)
+async def strassensperre_geometrie_ermitteln(road_closure_id: int | None = None, street: str = "", von: str = "", bis: str = "", city: str = "", uebernehmen: bool = False, ctx: Context | None = None) -> dict[str, object]:  # noqa: E501
+    return await _call_registered_tool("strassensperre_geometrie_ermitteln", road_closure_id=road_closure_id, street=street, von=von, bis=bis, city=city, uebernehmen=uebernehmen)  # noqa: E501
+
+
+@server.tool(
+    name="strassensperre_geometrie_bestaetigen", description="Bestätigt eine Geometrie für die Umfahrungsberechnung."
+)
+async def strassensperre_geometrie_bestaetigen(road_closure_id: int, geometry_geojson: dict | str | None = None, version: int | None = None, ctx: Context | None = None) -> dict[str, object]:  # noqa: E501
+    return await _call_registered_tool("strassensperre_geometrie_bestaetigen", road_closure_id=road_closure_id, geometry_geojson=geometry_geojson, version=version)  # noqa: E501
 
 
 @server.tool(

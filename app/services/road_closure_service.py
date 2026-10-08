@@ -189,6 +189,18 @@ def validate_closure_data(
         raise ValueError("Ungültige Priorität.")
     if values.get("direction") is not None and values["direction"] not in DIRECTIONS:
         raise ValueError("Ungültige Fahrtrichtung.")
+    if values.get("geometry_quality") is not None and values["geometry_quality"] not in {
+        "hoch", "mittel", "niedrig", "manuell"
+    }:
+        raise ValueError("Ungültige Geometriequalität.")
+    meta = values.get("geometry_meta_json")
+    if meta is not None:
+        if not isinstance(meta, str) or len(meta) >= 20000:
+            raise ValueError("Ungültige Geometriemetadaten.")
+        try:
+            json.loads(meta)
+        except json.JSONDecodeError as exc:
+            raise ValueError("Ungültige Geometriemetadaten.") from exc
     string_limits = {"city": 120, "reference_number": 120, "authority": 200, "source": 200, "source_url": 1000}
     for field, maximum in string_limits.items():
         value = values.get(field)
@@ -364,6 +376,31 @@ def update_closure(
     return changed
 
 
+def confirm_geometry(
+    db: Session, closure: RoadClosure, user_id: int | None, geometry: dict | str | None = None,
+    expected_version: int | None = None, source: str = "ui", mcp_tool: str | None = None,
+) -> None:
+    if expected_version is not None and expected_version != closure.version:
+        raise ValueError("Die Sperre wurde inzwischen geändert. Bitte laden Sie sie neu.")
+    if geometry is not None:
+        closure.geometry_geojson = json.dumps(
+            geo.validate_geometry(geometry), ensure_ascii=False, separators=(",", ":")
+        )
+        closure.geometry_quality = "manuell"
+        _set_bbox(closure)
+    if not closure.geometry_geojson:
+        raise ValueError(
+            "Keine Geometrie vorhanden – zuerst strassensperre_geometrie_ermitteln oder geometry_geojson übergeben."
+        )
+    before = {"geometry_status": closure.geometry_status, "geometry_quality": closure.geometry_quality}
+    closure.geometry_status = "ok"
+    closure.updated_by_user_id, closure.version = user_id, closure.version + 1
+    _change(db, closure, "geometry_confirmed", user_id, source, mcp_tool, before=before,
+            after={"geometry_status": "ok", "geometry_quality": closure.geometry_quality})
+    _audit(db, "road_closure.geometry_confirmed", closure, user_id)
+    mark_routes_stale_for_closure(db, closure)
+
+
 def deactivate_closure(
     db: Session,
     closure: RoadClosure,
@@ -509,6 +546,7 @@ def list_closures(
     scope: str = "all",
     limit: int | None = None,
     now: datetime | None = None,
+    geometrie: str | None = None,
 ) -> list[RoadClosure]:
     if status not in {None, "active", "planned", "expired", "cancelled", "current"} or scope not in {
         "all",
@@ -563,6 +601,14 @@ def list_closures(
         )
     if restriction_type:
         q = q.filter(RoadClosure.restriction_type == restriction_type)
+    if geometrie == "pruefen":
+        q = q.filter(RoadClosure.geometry_status == "needs_review")
+    elif geometrie == "ok":
+        q = q.filter(RoadClosure.geometry_status == "ok")
+    elif geometrie == "fehlt":
+        q = q.filter(RoadClosure.geometry_status == "missing")
+    elif geometrie not in {None, ""}:
+        raise ValueError("Ungültiger Geometriefilter.")
     q = q.order_by(RoadClosure.valid_from)
     return q.limit(limit).all() if limit else q.all()
 

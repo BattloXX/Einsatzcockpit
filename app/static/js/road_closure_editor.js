@@ -7,6 +7,8 @@
     if (!container || typeof L === 'undefined' || container._sperrenEditor) return;
     var input = document.querySelector('input[name="geometry_geojson"]');
     var checked = document.querySelector('input[name="geometry_checked"]');
+    var quality = document.querySelector('input[name="geometry_quality"]');
+    var meta = document.querySelector('input[name="geometry_meta_json"]');
     var hint = document.getElementById('abschnitt-hinweis');
     if (!input) return;
     var map = L.map(container).setView([47.4664, 9.7416], 13);
@@ -26,6 +28,8 @@
     function save(markChecked) {
       input.value = geometryLayer ? JSON.stringify(geometryLayer.toGeoJSON().geometry) : '';
       if (markChecked && checked) checked.checked = true;
+      if (markChecked && quality) quality.value = 'manuell';
+      if (markChecked && meta) meta.value = '';
     }
     function useLayer(layer, markChecked) {
       clearLayer();
@@ -68,14 +72,20 @@
           street: (document.getElementById('strasse') || {}).value || '',
           from_text: (document.getElementById('von') || {}).value || '',
           to_text: (document.getElementById('bis') || {}).value || ''
+          ,city: (document.getElementById('city') || {}).value || ''
         })
       }).then(function (response) {
         return response.json().then(function (data) { return { ok: response.ok, data: data }; });
       }).then(function (result) {
         if (!result.ok) { setHint(result.data.fehler || 'Abschnitt konnte nicht ermittelt werden.'); return; }
         showGeometry(result.data.geometry, false);
-        if (checked) checked.checked = false;
-        setHint(result.data.hinweis || 'Bitte Abschnitt auf der Karte prüfen und ggf. korrigieren.');
+        if (checked) checked.checked = result.data.quality === 'hoch';
+        if (quality) quality.value = result.data.quality || '';
+        if (meta) meta.value = JSON.stringify({ methode: 'osm', osm_name: result.data.osm_name,
+          endpoints: result.data.endpoints || [], mehrdeutigkeiten: result.data.mehrdeutigkeiten || [], quality: result.data.quality });
+        var notes = ['Qualität: ' + (result.data.quality || 'niedrig')].concat(result.data.hinweise || []);
+        (result.data.mehrdeutigkeiten || []).forEach(function (item) { notes.push('Mehrdeutigkeit: ' + item.text); });
+        setHint(notes.join('\n'));
       }).catch(function () { setHint('Abschnitt konnte nicht ermittelt werden.'); }).finally(function () {
         button.disabled = false;
         button.textContent = original;

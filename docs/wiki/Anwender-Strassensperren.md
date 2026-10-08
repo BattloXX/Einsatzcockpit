@@ -19,7 +19,21 @@ Der Status wird aus Zeitraum und Deaktivierung bestimmt: **geplant**, **aktiv**,
 
 Objektverwalter legen eine Sperre über **+ Sperre anlegen** an. Erfasse zumindest Straße oder eine Geometrie, optional Straße, Abschnitt *von/bis*, Fahrtrichtung, Zeitraum in der Ortszeit der Organisation, Einschränkungstyp, Priorität, Beschreibung, Quelle und Maße für Gewicht, Höhe, Breite oder Länge.
 
-Auf der Karte kann die Lage als Punkt, Linie oder Fläche gezeichnet werden. **Abschnitt aus Adresse ermitteln** schlägt für Straße und Abschnitt eine Geometrie vor. Dieser Vorschlag trägt immer den Status **„Geometrie prüfen“**: Karte kontrollieren, bei Bedarf korrigieren und mit der Checkbox **„Geometrie geprüft“** bestätigen. Erst eine geprüfte Geometrie kann bei einer Vollsperre für eine Umfahrung verwendet werden.
+Auf der Karte kann die Lage als Punkt, Linie oder Fläche gezeichnet werden. Selbst gezeichnete Geometrie gilt als geprüft (Qualität **manuell**).
+
+### Abschnitt automatisch ermitteln & Qualität
+
+**Abschnitt aus Adresse ermitteln** sucht die Straße im OpenStreetMap-Straßennetz der Gemeinde (Feld **Ort**, sonst der Ort der Organisation) und schneidet den Abschnitt zu. *Von* und *Bis* dürfen eine Querstraße („Kreuzung Kellaweg“, „Einmündung L 190“, „ab Schulstraße“) oder eine Hausnummer („Nr. 12“, „12a“) sein. Bleiben beide leer, wird die ganze Straße samt Abzweigungen übernommen.
+
+| Qualität | Bedeutung | Umfahrung |
+|----------|-----------|-----------|
+| **hoch** | Straße eindeutig gefunden, beide Enden eindeutig – oder eine ganze, zusammenhängende Straße bis 1,5 km | sofort berücksichtigt |
+| **mittel** | plausibel, aber z. B. nur ein Ende gefunden, Kreuzung mehrdeutig oder lange ganze Straße | erst nach Bestätigung |
+| **niedrig** | Näherung ohne OSM-Netz (nur über Hausnummern) oder unsicherer Straßenname | erst nach Bestätigung |
+
+Mehrdeutigkeiten (z. B. eine gleichnamige Straße in der Nachbargemeinde) werden unter der Karte angezeigt. Nicht eindeutige Sperren tragen das Kennzeichen **„Geometrie prüfen“**: Karte kontrollieren, bei Bedarf korrigieren und mit der Checkbox **„Geometrie geprüft“** speichern oder auf der Detailseite **„Geometrie bestätigen“** drücken. Erst dann wird eine solche Vollsperre bei der Umfahrung verwendet. Die Übersicht zählt die Sperren mit ungeprüfter Geometrie und filtert sie über **„Geometrie prüfen“**.
+
+Ist der OSM-Dienst gerade überlastet, wird – wenn möglich – eine Näherung über Hausnummern erstellt; sonst die Ermittlung später erneut auslösen.
 
 Eine nicht mehr geltende Sperre wird mit Grund **deaktiviert**, nicht gelöscht; sie kann wieder reaktiviert werden. Eigene Sperren können an als Partner hinterlegte Nachbarwehren freigegeben werden. Diese sehen die Freigabe, dürfen sie aber nicht ändern.
 

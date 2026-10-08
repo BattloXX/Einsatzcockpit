@@ -84,7 +84,7 @@ def test_mcp_schema_enum_kataloge_und_neue_felder(client) -> None:
     assert "__fehler__" in blocked
     db = _db()
     try:
-        assert db.get(RoadClosure, sperre["id"]).geometry_quality is None
+        assert db.get(RoadClosure, sperre["id"]).geometry_quality == "manuell"
     finally:
         db.close()
 

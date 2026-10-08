@@ -1,5 +1,8 @@
 # MCP-Server (Administration)
 
+Die Straßensperren-Werkzeuge umfassen auch `strassensperre_geometrie_ermitteln` und
+`strassensperre_geometrie_bestaetigen` für den Workflow Ermitteln, Prüfen und Bestätigen.
+
 Der MCP-Server verbindet freigegebene KI-Anwendungen mit Einsatzcockpit. Er stellt je nach Rolle Werkzeuge für Objektpflege, Objekt-Dokumente und das Fahrtenbuch bereit. Die Verbindung verwendet OAuth; sie ist keine REST-API und kein Ersatz für die Freigabe im Einsatzcockpit.
 
 ## Voraussetzungen und Aktivierung

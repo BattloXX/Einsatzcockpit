@@ -230,6 +230,9 @@ class Settings(BaseSettings):
     HYDRANT_MAX: int = 40  # max. zurückgegebene Entnahmestellen (Standard)
     HYDRANT_MAX_EINSATZINFO: int = 120  # max. Entnahmestellen im 2-km-Radius (Liste lädt nach)
     HYDRANT_USER_AGENT: str = "Einsatzcockpit/1.0 (+https://einsatzcockpit.com)"
+    STRASSEN_OVERPASS_URL: str = "https://overpass-api.de/api/interpreter"
+    STRASSEN_OVERPASS_TIMEOUT_SECONDS: float = 20.0
+    STRASSEN_SUCHRADIUS_M: int = 6000
     # Eigene Wasserstellen-Stammdaten haben Vorrang; OSM-Hydranten näher als dieser
     # Wert an einer eigenen Wasserstelle werden ausgeblendet (kein Doppelbild).
     WASSERSTELLE_OSM_DEDUPE_M: int = 25

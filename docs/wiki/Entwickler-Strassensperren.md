@@ -1,5 +1,11 @@
 # Straßensperren & Anfahrtsrouting (Entwicklung)
 
+## Abschnittsresolver
+
+`osm_street_service` lädt und cached das OSM-Straßennetz. Der reine
+`road_closure_section_resolver` schneidet daraus den Abschnitt zwischen Kreuzungen oder Hausnummern; der dünne
+Service-Entry-Point nutzt bei Netzausfall weiterhin die bisherige Hausnummern-/OSRM-Näherung.
+
 ## Architektur
 
 Zentrale Regel: Routing ist ausschließlich Zusatzinformation. Der Alarmpfad wird **nie** angefasst. `incident_route_loop` entdeckt aktive Einsätze selbst und legt je Einsatz/Organisation eine Route an. Der Leader-Loop markiert sie bei geänderten Einsatzkoordinaten, Routing-Startpunkt oder Fingerprint sichtbarer aktiver Sperren erneut als veraltet.
