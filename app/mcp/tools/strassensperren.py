@@ -12,7 +12,16 @@ from app.mcp.context import MCPContext
 from app.mcp.registry import register_tool
 from app.models.incident import Incident, IncidentOrg
 from app.models.master import FireDept
-from app.models.road_closure import CLOSURE_STATUS, RESTRICTION_TYPES, RoadClosure, RoadClosureShare
+from app.models.road_closure import (
+    CLOSURE_STATUS,
+    DIRECTIONS,
+    GEOMETRY_QUALITY,
+    GEOMETRY_STATUS,
+    PRIORITIES,
+    RESTRICTION_TYPES,
+    RoadClosure,
+    RoadClosureShare,
+)
 from app.models.user import User
 from app.services import (
     einsatz_routing,
@@ -40,6 +49,10 @@ def _closure_dict(closure: RoadClosure, org_id: int, *, voll: bool = False, db: 
         "id": closure.id,
         "title": closure.title,
         "street": closure.street,
+        "city": closure.city,
+        "reference_number": closure.reference_number,
+        "exceptions": closure.exceptions,
+        "authority": closure.authority,
         "from_text": closure.from_text,
         "to_text": closure.to_text,
         "restriction_type": closure.restriction_type,
@@ -50,6 +63,8 @@ def _closure_dict(closure: RoadClosure, org_id: int, *, voll: bool = False, db: 
         "valid_from": _iso(closure.valid_from, org),
         "valid_until": _iso(closure.valid_until, org),
         "geometry_status": closure.geometry_status,
+        "geometry_quality": closure.geometry_quality,
+        "superseded_by_id": closure.superseded_by_id,
         "eigene": own,
         "besitzer_org": None
         if own or db is None
@@ -170,8 +185,8 @@ async def strassensperren_liste(
 ) -> dict[str, object]:
     if status not in {"current", "active", "planned", "expired", "cancelled", "all"}:
         raise ValueError("status muss current, active, planned, expired, cancelled oder all sein.")
-    if restriction_type and restriction_type not in RESTRICTION_TYPES:
-        raise ValueError("Ungültiger Einschränkungstyp.")
+    if restriction_type:
+        restriction_type = road_closure_service.normalize_restriction_type(restriction_type)
     _limit(limit)
     org = _org(context)
     rows = road_closure_service.list_closures(
@@ -202,6 +217,34 @@ async def strassensperre_lesen(context: MCPContext, road_closure_id: int) -> dic
 
 
 @register_tool(
+    name="strassensperren_kataloge",
+    description="Liefert erlaubte Werte und deutschsprachige Bezeichnungen für Straßensperren.",
+    required_roles=("readonly",),
+    module_check=strassensperren_effective_enabled,
+)
+async def strassensperren_kataloge(context: MCPContext) -> dict[str, object]:
+    def items(values: dict[str, str], aliases: dict[str, str] | None = None) -> list[dict[str, object]]:
+        return [
+            {
+                "wert": key,
+                "label": label,
+                "aliase": sorted(alias for alias, target in (aliases or {}).items() if target == key),
+            }
+            for key, label in values.items()
+        ]
+
+    return {
+        "restriction_types": items(RESTRICTION_TYPES, road_closure_service.RESTRICTION_TYPE_ALIASES),
+        "prioritaeten": items(PRIORITIES, road_closure_service.PRIORITY_ALIASES),
+        "richtungen": items(DIRECTIONS, road_closure_service.DIRECTION_ALIASES),
+        "geometry_status": items(GEOMETRY_STATUS),
+        "geometry_quality": items(GEOMETRY_QUALITY),
+        "status": items(CLOSURE_STATUS),
+        "zusammenfassung": "Kataloge für Einschränkungstypen, Prioritäten, Richtungen und Geometrie.",
+    }
+
+
+@register_tool(
     name="strassensperre_anlegen",
     description=(
         "Legt eine Straßensperre der eigenen Organisation an. Eine harte Löschung per MCP ist nicht möglich."
@@ -227,6 +270,10 @@ async def strassensperre_anlegen(
     max_length_m: float | None = None,
     source: str = "",
     source_url: str = "",
+    city: str = "",
+    reference_number: str = "",
+    exceptions: str = "",
+    authority: str = "",
     geometry_geojson: dict | str | None = None,
     visible_for_org_ids: list[int] | None = None,
     duplikat_bestaetigt: bool = False,
@@ -264,7 +311,7 @@ async def strassensperre_anlegen(
         if geometry is None and street.strip() and (from_text.strip() or to_text.strip()):
             try:
                 section = await road_closure_section_service.section_from_address(
-                    street, from_text, to_text, getattr(org, "city", None)
+                    street, from_text, to_text, city.strip() or getattr(org, "city", None)
                 )
                 geometry = section["geometry"]
                 geometry_status = "needs_review"
@@ -281,6 +328,10 @@ async def strassensperre_anlegen(
             "valid_until": ends,
             "restriction_type": restriction_type,
             "description": description,
+            "city": city,
+            "reference_number": reference_number,
+            "exceptions": exceptions,
+            "authority": authority,
             "direction": direction or None,
             "priority": priority,
             "max_weight_t": max_weight_t,
@@ -309,7 +360,7 @@ async def strassensperre_anlegen(
                 source="mcp",
                 mcp_tool="strassensperre_anlegen",
             )
-        if restriction_type == "closed" and geometry_status != "ok":
+        if closure.restriction_type == "closed" and geometry_status != "ok":
             hints.append(
                 "Die Sperre wird als Warnung angezeigt, aber erst nach Prüfung der Geometrie in der "
                 "Web-Oberfläche beim Umfahrungs-Routing berücksichtigt."
@@ -340,7 +391,9 @@ async def strassensperre_aktualisieren(
     context: MCPContext, road_closure_id: int, felder: dict, version: int | None = None
 ) -> dict[str, object]:
     try:
-        allowed = road_closure_service.EDITABLE_FIELDS - {"geometry_status"} | {"visible_for_org_ids"}
+        allowed = road_closure_service.EDITABLE_FIELDS - {
+            "geometry_status", "geometry_quality", "geometry_meta_json"
+        } | {"visible_for_org_ids"}
         unknown = set(felder) - allowed
         if unknown:
             raise ValueError("Unbekannte Felder: " + ", ".join(sorted(unknown)) + ".")

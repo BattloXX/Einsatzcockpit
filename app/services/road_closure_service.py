@@ -31,6 +31,10 @@ logger = logging.getLogger("einsatzleiter.road_closure")
 EDITABLE_FIELDS = {
     "title",
     "description",
+    "city",
+    "reference_number",
+    "exceptions",
+    "authority",
     "street",
     "from_text",
     "to_text",
@@ -45,10 +49,69 @@ EDITABLE_FIELDS = {
     "max_length_m",
     "geometry_geojson",
     "geometry_status",
+    "geometry_quality",
+    "geometry_meta_json",
     "source",
     "source_url",
 }
 _MEASURES = {"max_weight_t": 60, "max_height_m": 10, "max_width_m": 10, "max_length_m": 50}
+RESTRICTION_TYPE_ALIASES: dict[str, str] = {
+    "full": "closed", "vollsperre": "closed", "voll": "closed", "gesperrt": "closed", "sperre": "closed",
+    "closure": "closed", "road_closed": "closed", "teilsperre": "partial", "halbseitig": "partial",
+    "halbseitige sperre": "partial", "partial_closure": "partial", "lane_closed": "partial",
+    "baustelle": "construction", "bau": "construction", "roadworks": "construction", "einbahn": "one_way",
+    "einbahnregelung": "one_way", "oneway": "one_way", "gewicht": "weight_limit",
+    "gewichtsbeschrankung": "weight_limit", "tonnage": "weight_limit", "hohe": "height_limit",
+    "hoehe": "height_limit", "hohenbeschrankung": "height_limit", "breite": "width_limit",
+    "breitenbeschrankung": "width_limit", "anrainer": "residents_only", "anrainerverkehr": "residents_only",
+    "residents": "residents_only", "erschwert": "difficult_passage", "erschwerte durchfahrt": "difficult_passage",
+    "sonstige": "other", "sonstiges": "other",
+}
+PRIORITY_ALIASES: dict[str, str] = {"niedrig": "low", "normal": "normal", "hoch": "high", "kritisch": "critical"}
+DIRECTION_ALIASES: dict[str, str] = {
+    "beide": "both", "beide richtungen": "both", "both_directions": "both", "hinrichtung": "forward",
+    "vorwarts": "forward", "gegenrichtung": "backward", "ruckwarts": "backward",
+}
+
+
+def _alias_key(value: str) -> str:
+    return value.strip().casefold().replace("ä", "a").replace("ö", "o").replace("ü", "u").replace("ß", "ss")
+
+
+def _allowed(values: dict[str, str]) -> str:
+    return ", ".join(f"{key} ({label})" for key, label in values.items())
+
+
+def normalize_restriction_type(value: str) -> str:
+    key = _alias_key(value) if isinstance(value, str) else ""
+    aliases = RESTRICTION_TYPE_ALIASES | {_alias_key(k): k for k in RESTRICTION_TYPES} | {
+        _alias_key(label): key for key, label in RESTRICTION_TYPES.items()
+    }
+    if key in aliases:
+        return aliases[key]
+    raise ValueError(f"Unbekannter restriction_type '{value}'. Zulässig: {_allowed(RESTRICTION_TYPES)}.")
+
+
+def normalize_priority(value: str) -> str:
+    key = _alias_key(value) if isinstance(value, str) else ""
+    aliases = PRIORITY_ALIASES | {_alias_key(k): k for k in PRIORITIES} | {
+        _alias_key(label): key for key, label in PRIORITIES.items()
+    }
+    if key in aliases:
+        return aliases[key]
+    raise ValueError(f"Unbekannte priority '{value}'. Zulässig: {_allowed(PRIORITIES)}.")
+
+
+def normalize_direction(value: str | None) -> str | None:
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
+    key = _alias_key(value) if isinstance(value, str) else ""
+    aliases = DIRECTION_ALIASES | {_alias_key(k): k for k in DIRECTIONS} | {
+        _alias_key(label): key for key, label in DIRECTIONS.items()
+    }
+    if key in aliases:
+        return aliases[key]
+    raise ValueError(f"Unbekannte direction '{value}'. Zulässig: {_allowed(DIRECTIONS)}.")
 
 
 def _now() -> datetime:
@@ -97,6 +160,13 @@ def validate_closure_data(
         raise ValueError(f"Unbekanntes Feld: {sorted(unknown)[0]}.")
     if partial and existing is None:
         raise ValueError("Teilaktualisierung benötigt eine bestehende Sperre.")
+    data = dict(data)
+    if "restriction_type" in data:
+        data["restriction_type"] = normalize_restriction_type(data["restriction_type"])
+    if "priority" in data and data["priority"] is not None:
+        data["priority"] = normalize_priority(data["priority"])
+    if "direction" in data:
+        data["direction"] = normalize_direction(data["direction"])
     values = _merged(data, existing)
     if not partial or "title" in data:
         title = values.get("title")
@@ -119,6 +189,16 @@ def validate_closure_data(
         raise ValueError("Ungültige Priorität.")
     if values.get("direction") is not None and values["direction"] not in DIRECTIONS:
         raise ValueError("Ungültige Fahrtrichtung.")
+    string_limits = {"city": 120, "reference_number": 120, "authority": 200, "source": 200, "source_url": 1000}
+    for field, maximum in string_limits.items():
+        value = values.get(field)
+        if value is not None and (not isinstance(value, str) or len(value.strip()) > maximum):
+            raise ValueError(f"Ungültiger Wert für {field}.")
+        if isinstance(value, str):
+            values[field] = value.strip() or None
+    for field in ("description", "exceptions", "from_text", "to_text"):
+        if isinstance(values.get(field), str):
+            values[field] = values[field].strip() or None
     for field, maximum in _MEASURES.items():
         value = values.get(field)
         if value is not None and (

@@ -59,7 +59,13 @@ class MCPUpload(Base):
     token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     org_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("fire_dept.id", ondelete="CASCADE"), nullable=False)
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
-    objekt_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("objekt.id", ondelete="CASCADE"), nullable=False)
+    objekt_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("objekt.id", ondelete="CASCADE"), nullable=True
+    )
+    road_closure_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("road_closure.id", ondelete="CASCADE"), nullable=True
+    )
+    zweck: Mapped[str] = mapped_column(String(20), nullable=False, default="objekt")
     dateiname: Mapped[str] = mapped_column(String(255), nullable=False)
     erwartete_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
