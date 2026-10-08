@@ -371,6 +371,16 @@ async def strassensperre_anlegen(
             )
         context.db.commit()
         result = _closure_dict(closure, context.org_id, voll=True, db=context.db)
+        try:
+            validation = (
+                road_closure_section_service.validation_from_section(section, street)
+                if section is not None
+                else await road_closure_section_service.validate_address(
+                    context.db, org, street, from_text, to_text, city.strip() or getattr(org, "city", None)
+                )
+            )
+        except Exception:
+            validation = {"status": "unbekannt"}
         return {
             "status": "created",
             "strassensperre": result,
@@ -384,6 +394,7 @@ async def strassensperre_anlegen(
                 "mehrdeutigkeiten": section.mehrdeutigkeiten if section else [],
                 "wird_umfahren": closure.restriction_type == "closed" and closure.geometry_status == "ok",
             },
+            "adressvalidierung": validation,
             "zusammenfassung": f"Straßensperre {closure.title} wurde angelegt.",
         }
     except Exception:
@@ -449,11 +460,25 @@ async def strassensperre_aktualisieren(
             if added or removed:
                 changed.append({"feld": "visible_for_org_ids", "vorher": removed, "nachher": added})
         context.db.commit()
-        return {
+        result: dict[str, object] = {
             "strassensperre": _closure_dict(closure, context.org_id, voll=True, db=context.db),
             "geaenderte_felder": changed,
             "zusammenfassung": f"Straßensperre {closure.title} wurde aktualisiert.",
         }
+        changed_fields = {item["feld"] for item in changed}
+        if {"street", "from_text", "to_text", "city"} & changed_fields:
+            try:
+                result["adressvalidierung"] = await road_closure_section_service.validate_address(
+                    context.db,
+                    org,
+                    closure.street or "",
+                    closure.from_text or "",
+                    closure.to_text or "",
+                    closure.city or getattr(org, "city", None),
+                )
+            except Exception:
+                result["adressvalidierung"] = {"status": "unbekannt"}
+        return result
     except Exception:
         context.db.rollback()
         raise

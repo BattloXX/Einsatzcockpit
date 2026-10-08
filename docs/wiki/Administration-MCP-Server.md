@@ -16,7 +16,7 @@ MCP ist zweistufig aktiviert:
 
 Zusatzlich gilt das jeweilige Fachmodul: Objekt-Werkzeuge brauchen die aktivierte Objektverwaltung, Kontakt-Werkzeuge das Kontakte-Modul und Fahrtenbuch-Werkzeuge das aktivierte Fahrtenbuch. Deaktivierte Werkzeuge werden nicht angeboten.
 
-Ist das Straßensperren-Modul aktiviert, erhalten alle Benutzer die lesenden Tools `strassensperren_liste`, `strassensperre_lesen`, `strassensperren_kataloge`, `strassensperren_suchen`, `strassensperren_im_gebiet`, `einsatz_strassensperren`, `einsatz_anfahrtsroute_pruefen` und `strassensperren_entlang_route`. `objekt_verwalter` erhalten zusätzlich `strassensperre_anlegen`, `strassensperre_aktualisieren`, `strassensperre_deaktivieren` und `strassensperre_reaktivieren`; Löschen ist per MCP nicht verfügbar. Das Anlegen kann `possible_duplicate` zurückgeben. Dann eine vorhandene Sperre aktualisieren oder mit `duplikat_bestaetigt=true` ausdrücklich fortsetzen.
+Ist das Straßensperren-Modul aktiviert, erhalten alle Benutzer die lesenden Tools `strassensperren_liste`, `strassensperre_lesen`, `strassensperren_kataloge`, `strassensperren_suchen`, `strassensperren_im_gebiet`, `einsatz_strassensperren`, `einsatz_anfahrtsroute_pruefen` und `strassensperren_entlang_route`. `objekt_verwalter` erhalten zusätzlich `strassensperre_anlegen`, `strassensperre_aktualisieren`, `strassensperre_deaktivieren` und `strassensperre_reaktivieren`; Löschen ist per MCP nicht verfügbar. Das Anlegen kann `possible_duplicate` zurückgeben. Dann eine vorhandene Sperre aktualisieren oder mit `duplikat_bestaetigt=true` ausdrücklich fortsetzen. Anlegen und relevante Adressänderungen liefern zusätzlich `adressvalidierung` mit dem OSM-Prüfstatus.
 
 ## Reverse-Proxy und Konfiguration
 
