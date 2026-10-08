@@ -24,7 +24,8 @@
     if (area) html += '<br>' + escapeHtml(area);
     html += '<br>Gültigkeit: ' + escapeHtml(localDate(properties.valid_from));
     if (properties.valid_until) html += ' – ' + escapeHtml(localDate(properties.valid_until));
-    if (properties.description) html += '<br>Grund: ' + escapeHtml(properties.description);
+    if (properties.reason) html += '<br>Grund: ' + escapeHtml(properties.reason);
+    else if (properties.description) html += '<br>' + escapeHtml(properties.description);
     if (properties.source) html += '<br>Quelle: ' + escapeHtml(properties.source);
     if (properties.geometry_status === 'needs_review') html += '<br><em>Geometrie prüfen</em>';
     if (properties.url) html += '<br><a href="' + escapeHtml(properties.url) + '">Details</a>';

@@ -61,3 +61,6 @@ Die Abschnittsermittlung fragt das OSM-Straßennetz über Overpass ab – zuerst
 | `STRASSEN_SUCHRADIUS_M` | `6000` | Umkreis um Ort/Organisation, falls das Gemeindegebiet nichts liefert |
 
 Die öffentliche Overpass-Instanz ist zeitweise überlastet. Fällt sie aus, wird eine Näherung über Hausnummern versucht (Qualität *niedrig*). Die Ermittlung läuft nur beim Anlegen/Bearbeiten, nie im Alarmpfad.
+## Öffentliche Tokens
+
+Einzelansichten verwenden Tokens mit dem Präfix `rcd_` (Status `rcs_`, Infoscreen `rci_`). Tokens können widerrufen werden und optional ablaufen. Öffentlich sind nur freigegebene Felder der Sperre; `PUBLIC_BASE_URL` bestimmt die Basis der erzeugten Links.

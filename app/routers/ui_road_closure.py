@@ -23,11 +23,12 @@ from app.models.road_closure import (
     PRIORITIES,
     RESTRICTION_TYPES,
     RoadClosure,
+    RoadClosureAccessToken,
     RoadClosureChange,
     RoadClosureDocument,
 )
 from app.models.user import User
-from app.services import road_closure_service, road_closure_stats_service
+from app.services import road_closure_service, road_closure_stats_service, road_closure_token_service
 from app.services.address_autocomplete import suggest_addresses
 from app.services.road_closure_document_service import absolute_path, delete_document, store_document
 from app.services.road_closure_section_service import resolve_section, validate_address
@@ -281,6 +282,7 @@ def _save_data(org, values: dict):
     return {
         "title": values.get("title", ""),
         "description": text("description"),
+        "reason": text("reason"),
         "city": text("city"),
         "reference_number": text("reference_number"),
         "exceptions": text("exceptions"),
@@ -538,6 +540,7 @@ def neu_speichern(
     request: Request,
     title: str = Form(""),
     description: str = Form(""),
+    reason: str = Form(""),
     city: str = Form(""),
     reference_number: str = Form(""),
     exceptions: str = Form(""),
@@ -644,6 +647,16 @@ def detail(
     supersedes = db.query(RoadClosure).execution_options(include_all_tenants=True).filter(
         RoadClosure.superseded_by_id == closure.id
     ).first()
+    freigabe_link = None
+    if closure.org_id == user.org_id and has_role(user, "objekt_verwalter"):
+        token = road_closure_token_service.active_detail_token(db, closure)
+        raw = road_closure_token_service.token_plain(token) if token else None
+        if token and raw:
+            freigabe_link = {
+                "url": road_closure_token_service.public_url(raw, "detail"),
+                "expires_at": token.expires_at, "created_at": token.created_at,
+                "id": token.id, "last_used_at": token.last_used_at,
+            }
     return templates.TemplateResponse(
         request,
         "road_closure/detail.html",
@@ -665,8 +678,50 @@ def detail(
             "superseded_by": superseded_by,
             "supersedes": supersedes,
             "back_query": _filter_query(_cookie_filters(request, user)),
+            "freigabe_link": freigabe_link,
         },
     )
+
+
+@router.post("/{closure_id}/freigabelink")
+def freigabelink_erzeugen(
+    closure_id: int, gueltig_bis: str = Form(""), db: Session = Depends(get_db),
+    user: User = Depends(require_role("objekt_verwalter")),
+    _guard: None = Depends(require_strassensperren_enabled),
+):
+    closure = _closure_or_404(db, user, closure_id, writable=True)
+    expires_at = local_date_to_utc(gueltig_bis, end=True, org=_org(user)) if gueltig_bis else None
+    if gueltig_bis and expires_at is None:
+        raise HTTPException(422, "Ungültiges Ablaufdatum")
+    if expires_at:
+        active = road_closure_token_service.active_detail_token(db, closure)
+        if active:
+            road_closure_token_service.revoke_token(db, active, user.id)
+        road_closure_token_service.create_token(
+            db, closure.org_id, "detail", user.id, road_closure_id=closure.id, expires_at=expires_at
+        )
+    else:
+        road_closure_token_service.get_or_create_detail_token(db, closure, user.id)
+    db.commit()
+    return RedirectResponse(f"/strassensperren/{closure.id}?freigabe=1#freigabelink", status_code=303)
+
+
+@router.post("/{closure_id}/freigabelink/{token_id}/widerrufen")
+def freigabelink_widerrufen(
+    closure_id: int, token_id: int, db: Session = Depends(get_db),
+    user: User = Depends(require_role("objekt_verwalter")),
+    _guard: None = Depends(require_strassensperren_enabled),
+):
+    closure = _closure_or_404(db, user, closure_id, writable=True)
+    token = db.query(RoadClosureAccessToken).execution_options(include_all_tenants=True).filter(
+        RoadClosureAccessToken.id == token_id, RoadClosureAccessToken.road_closure_id == closure.id,
+        RoadClosureAccessToken.org_id == closure.org_id,
+    ).first()
+    if token is None:
+        raise HTTPException(404, "Nicht gefunden")
+    road_closure_token_service.revoke_token(db, token, user.id)
+    db.commit()
+    return RedirectResponse(f"/strassensperren/{closure.id}#freigabelink", status_code=303)
 
 
 @router.get("/{closure_id}/dokumente/{document_id}")
@@ -777,6 +832,7 @@ def bearbeiten_speichern(
     version: int = Form(...),
     title: str = Form(""),
     description: str = Form(""),
+    reason: str = Form(""),
     city: str = Form(""),
     reference_number: str = Form(""),
     exceptions: str = Form(""),

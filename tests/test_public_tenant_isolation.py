@@ -1034,3 +1034,41 @@ def test_strassensperren_infoscreen_token_scoped_auf_eigene_und_geteilte_sperren
     ids = {feature["properties"]["id"] for feature in payload["features"]}
     assert shared_id in ids
     assert hidden_id not in ids
+
+
+def test_strassensperre_detail_token_zeigt_keine_sperre_von_org_b(client):
+    """Öffentlicher Einzel-Link: Token von Org A darf nie eine Sperre von Org B ausliefern."""
+    from app.models.road_closure import RoadClosureAccessToken
+    from app.services import road_closure_token_service
+
+    org_b_id = _setup_zwei_orgs()
+    now = datetime.now(UTC).replace(tzinfo=None)
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        system = db.get(SystemSettings, "strassensperren_module_enabled")
+        if system is None:
+            db.add(SystemSettings(key="strassensperren_module_enabled", value="true"))
+        else:
+            system.value = "true"
+        for org_id in (ORG_A, org_b_id):
+            settings = db.query(OrgSettings).filter_by(org_id=org_id).first()
+            if settings is None:
+                settings = OrgSettings(org_id=org_id)
+                db.add(settings)
+            settings.strassensperren_modul_aktiv = True
+        own = RoadClosure(org_id=ORG_A, title="Link Org A", valid_from=now, restriction_type="closed")
+        foreign = RoadClosure(org_id=org_b_id, title="GEHEIM-Org-B-Link", valid_from=now, restriction_type="closed")
+        db.add_all([own, foreign])
+        db.flush()
+        token, raw = road_closure_token_service.create_token(db, ORG_A, "detail", None, road_closure_id=own.id)
+        db.flush()
+        db.get(RoadClosureAccessToken, token.id).road_closure_id = foreign.id
+        db.commit()
+    finally:
+        db.close()
+
+    for suffix in ("", "/geometrie.json"):
+        response = client.get(f"/oeffentlich/strassensperre/{raw}{suffix}")
+        assert response.status_code == 404
+        assert "GEHEIM-Org-B-Link" not in response.text

@@ -182,9 +182,12 @@ from app.models.road_closure import (
     IncidentRoadClosure,
     IncidentRoute,
     RoadClosure,
+    RoadClosureAccessToken,
     RoadClosureChange,
     RoadClosureDocument,
+    RoadClosureNotification,
     RoadClosureShare,
+    RoadClosureTeamsConfig,
 )
 from app.models.sms import (
     SmsEinsatzinfoRecipient,
@@ -443,6 +446,9 @@ __all__ = [
     "RoadClosureShare",
     "RoadClosureChange",
     "RoadClosureDocument",
+    "RoadClosureAccessToken",
+    "RoadClosureTeamsConfig",
+    "RoadClosureNotification",
     "IncidentRoute",
     "IncidentRoadClosure",
 ]

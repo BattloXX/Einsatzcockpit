@@ -37,6 +37,7 @@ GEOMETRY_QUALITY: dict[str, str] = {
     "niedrig": "Niedrig (automatisch, unsicher)",
     "manuell": "Manuell geprüft",
 }
+ACCESS_TOKEN_ARTEN: dict[str, str] = {"status": "Statusseite", "infoscreen": "Infoscreen", "detail": "Einzelansicht"}
 
 
 def _utcnow() -> datetime:
@@ -50,6 +51,8 @@ class RoadClosure(TenantScoped, Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reason: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    teams_melden: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     city: Mapped[str | None] = mapped_column(String(120), nullable=True)
     reference_number: Mapped[str | None] = mapped_column(String(120), nullable=True)
     exceptions: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -153,6 +156,69 @@ class RoadClosureDocument(TenantScoped, Base):
         BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_utcnow)
+
+
+class RoadClosureAccessToken(TenantScoped, Base):
+    __tablename__ = "road_closure_access_token"
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    art: Mapped[str] = mapped_column(String(12), nullable=False)
+    road_closure_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("road_closure.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    label: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    token_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
+    berechtigungen_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_utcnow)
+
+
+class RoadClosureTeamsConfig(TenantScoped, Base):
+    __tablename__ = "road_closure_teams_config"
+    __table_args__ = (UniqueConstraint("org_id"),)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    webhook_url_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
+    auto_neu: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    auto_aenderung: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    auto_aufhebung: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    standard_melden: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    include_map: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    updated_by_user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+
+
+class RoadClosureNotification(TenantScoped, Base):
+    __tablename__ = "road_closure_notification"
+    __table_args__ = (
+        UniqueConstraint("road_closure_id", "dedup_key"),
+        Index("ix_road_closure_notification_due", "org_id", "status", "next_attempt_at"),
+    )
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    road_closure_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("road_closure.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    ereignis: Mapped[str] = mapped_column(String(30), nullable=False)
+    dedup_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    status: Mapped[str] = mapped_column(String(12), nullable=False, default="pending")
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_error: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    payload_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    source: Mapped[str] = mapped_column(String(10), nullable=False, default="ui")
+    triggered_by_user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_utcnow)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class IncidentRoute(TenantScoped, Base):

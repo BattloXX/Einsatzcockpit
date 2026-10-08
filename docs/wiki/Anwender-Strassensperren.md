@@ -67,3 +67,6 @@ Der MCP-Assistent kennt alle erlaubten Werte über `strassensperren_kataloge`. E
 Wenn Routing aktiviert und ein Startpunkt konfiguriert ist, prüft das System aktive Einsätze im Hintergrund. Bei einer relevanten Sperre erscheint in Einsatzinfo und Alarm-Infoscreen die Warnbox **„ANFAHRT BEEINTRÄCHTIGT“** mit betroffener Sperre, möglicher Umfahrung und Mehrweg. Ohne relevante Sperre ändert sich die Einsatzansicht nicht.
 
 Die Anzeige aktualisiert sich live. Mit **„Route neu berechnen“** kann die gespeicherte Prüfung erneut angestoßen werden. Die reguläre Alarmierung und Einsatzanlage bleiben davon unabhängig.
+## Öffentlicher Link (Einzelansicht)
+
+Verwalter können auf der Detailseite einen öffentlichen Link erzeugen und bei Bedarf widerrufen. Er zeigt nur die Sperre ohne Anmeldung; der optionale Ablauf gilt bis zum Ende des gewählten Tages. Das Feld **Grund (öffentlich sichtbar)** wird dort ebenfalls angezeigt, während die interne Beschreibung privat bleibt.
