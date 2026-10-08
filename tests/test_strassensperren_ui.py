@@ -59,7 +59,10 @@ def _login(client, user: User) -> None:
 
 
 def _payload(client, **more):
-    values = {"_csrf": client.cookies.get("ec_csrf"), "title": "B 1 gesperrt", "street": "Hauptstraße", "valid_from": "2026-07-01T10:00", "restriction_type": "closed"}
+    # Eindeutige Straße je Aufruf: sonst meldet die Verlängerungs-/Dublettenerkennung in der gemeinsamen
+    # Test-DB eine mögliche bestehende Sperre (409).
+    street = f"Hauptstraße {uuid4().hex[:8]}"
+    values = {"_csrf": client.cookies.get("ec_csrf"), "title": "B 1 gesperrt", "street": street, "valid_from": "2026-07-01T10:00", "restriction_type": "closed"}
     values.update(more)
     return values
 

@@ -22,6 +22,7 @@ from app.models.road_closure import (
     GEOMETRY_QUALITY,
     PRIORITIES,
     RESTRICTION_TYPES,
+    RoadClosure,
     RoadClosureChange,
     RoadClosureDocument,
 )
@@ -233,7 +234,7 @@ def _save_data(org, values: dict):
     }
 
 
-def _edit_page(request, db, user, closure=None, form_data=None, error=None, status_code=200):
+def _edit_page(request, db, user, closure=None, form_data=None, error=None, status_code=200, related=None):
     shared_ids = (
         form_data.get("freigabe_org_ids", [])
         if form_data is not None
@@ -253,6 +254,7 @@ def _edit_page(request, db, user, closure=None, form_data=None, error=None, stat
             "partner_orgs": road_closure_service.partner_orgs_for(db, _org(user).id),
             "shared_org_ids": {int(org_id) for org_id in shared_ids},
             "org_city": _org(user).city or "",
+            "related": related or [],
         },
         status_code=status_code,
     )
@@ -467,14 +469,35 @@ def neu_speichern(
     geometry_meta_json: str = Form(""),
     geometry_checked: str | None = Form(None),
     freigabe_org_ids: list[int] = Form([]),
+    als_neu_bestaetigt: str | None = Form(None),
+    ersetzt_id: int | None = Form(None),
     db: Session = Depends(get_db),
     user: User = Depends(require_role("objekt_verwalter")),
     _guard: None = Depends(require_strassensperren_enabled),
 ):
     values = _form_data(**locals())
     try:
-        closure = road_closure_service.create_closure(db, _org(user).id, user.id, _save_data(_org(user), values))
+        data = road_closure_service.validate_closure_data(_save_data(_org(user), values), partial=False)
+        related = road_closure_service.find_related(
+            db,
+            _org(user).id,
+            street=data["street"],
+            reference_number=data["reference_number"],
+            valid_from=data["valid_from"],
+            valid_until=data["valid_until"],
+            geometry=json.loads(data["geometry_geojson"]) if data["geometry_geojson"] else None,
+            from_text=data["from_text"],
+            to_text=data["to_text"],
+            title=data["title"],
+            description=data["description"],
+        )
+        if related and not als_neu_bestaetigt and ersetzt_id is None:
+            return _edit_page(request, db, user, form_data=values, status_code=409, related=related)
+        old = _closure_or_404(db, user, ersetzt_id, writable=True) if ersetzt_id is not None else None
+        closure = road_closure_service.create_closure(db, _org(user).id, user.id, data)
         road_closure_service.set_shares(db, closure, freigabe_org_ids, user.id)
+        if old is not None:
+            road_closure_service.supersede_closure(db, old, closure, user.id, "ui")
         db.commit()
     except ValueError as exc:
         db.rollback()
@@ -525,6 +548,10 @@ def detail(
     documents = db.query(RoadClosureDocument).execution_options(include_all_tenants=True).filter(
         RoadClosureDocument.road_closure_id == closure.id
     ).order_by(RoadClosureDocument.created_at.desc()).all()
+    superseded_by = db.get(RoadClosure, closure.superseded_by_id) if closure.superseded_by_id else None
+    supersedes = db.query(RoadClosure).execution_options(include_all_tenants=True).filter(
+        RoadClosure.superseded_by_id == closure.id
+    ).first()
     return templates.TemplateResponse(
         request,
         "road_closure/detail.html",
@@ -543,6 +570,8 @@ def detail(
             "can_delete": has_role(user, "org_admin"),
             "owner_org_name": owner_org.name if owner_org is not None else None,
             "shared_org_names": shared_org_names,
+            "superseded_by": superseded_by,
+            "supersedes": supersedes,
         },
     )
 
@@ -626,7 +655,26 @@ def bearbeiten(
     user: User = Depends(require_role("objekt_verwalter")),
     _guard: None = Depends(require_strassensperren_enabled),
 ):
-    return _edit_page(request, db, user, _closure_or_404(db, user, closure_id, writable=True))
+    closure = _closure_or_404(db, user, closure_id, writable=True)
+    if not request.query_params.get("valid_until") and request.query_params.get("reference_number") is None:
+        return _edit_page(request, db, user, closure)
+    # Vorbelegung aus einer erkannten Verlängerung: übrige Felder und Freigaben unverändert übernehmen.
+    values = {
+        field: getattr(closure, field)
+        for field in road_closure_service.EDITABLE_FIELDS | {"version", "geometry_status"}
+    }
+    values["freigabe_org_ids"] = list(road_closure_service.shared_org_ids(db, closure))
+    valid_until = request.query_params.get("valid_until")
+    if valid_until:
+        try:
+            if local_input_to_utc(valid_until, _org(user)) is not None:
+                values["valid_until"] = valid_until
+        except ValueError:
+            pass
+    reference_number = request.query_params.get("reference_number")
+    if reference_number is not None and len(reference_number.strip()) <= 120:
+        values["reference_number"] = reference_number.strip()
+    return _edit_page(request, db, user, closure, values)
 
 
 @router.post("/{closure_id}/bearbeiten")
