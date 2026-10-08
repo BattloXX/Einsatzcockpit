@@ -19,6 +19,13 @@ Der Status wird aus Zeitraum und Deaktivierung bestimmt: **geplant**, **aktiv**,
 
 Objektverwalter legen eine Sperre über **+ Sperre anlegen** an. Erfasse zumindest Straße oder eine Geometrie, optional Straße, Abschnitt *von/bis*, Fahrtrichtung, Zeitraum in der Ortszeit der Organisation, Einschränkungstyp, Priorität, Beschreibung, Quelle und Maße für Gewicht, Höhe, Breite oder Länge.
 
+### Adressprüfung
+
+Straße sowie *Von* und *Bis* bieten Vorschläge aus Photon. Während der Eingabe prüft Einsatzcockpit die
+Straße und Kreuzungen gegen OpenStreetMap. Abweichende OSM-Schreibweisen können direkt übernommen werden;
+bei einer nicht gefundenen Straße zeigen Vorschläge mögliche Alternativen. Ist OpenStreetMap nicht erreichbar,
+kann die Sperre weiterhin gespeichert werden und die Prüfung später wiederholt werden.
+
 Auf der Karte kann die Lage als Punkt, Linie oder Fläche gezeichnet werden. Selbst gezeichnete Geometrie gilt als geprüft (Qualität **manuell**).
 
 ### Abschnitt automatisch ermitteln & Qualität

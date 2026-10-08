@@ -9,8 +9,9 @@ import re
 from sqlalchemy.orm import Session
 
 from app.models.master import OrgSettings
+from app.services.address_autocomplete import suggest_addresses
 from app.services.geocoding import geocode_address
-from app.services.osm_street_service import fetch_street_network, search_center
+from app.services.osm_street_service import fetch_street_network, normalize_street_name, search_center
 from app.services.road_closure_section_resolver import SectionResult, parse_endpoint, resolve
 from app.services.routing_service import strassen_route
 
@@ -83,9 +84,6 @@ async def resolve_section(
     db: Session, org, street: str, from_text: str | None, to_text: str | None, city: str | None = None
 ) -> SectionResult:
     """OSM-first; der bisherige Hausnummern/OSRM-Weg bleibt ein sicherer Fallback."""
-    settings = db.query(OrgSettings).filter(OrgSettings.org_id == org.id).first()
-    center = await search_center(org, settings, city)
-    network = await fetch_street_network(street, *center, city=city or getattr(org, "city", None)) if center else None
     from_ep, to_ep = parse_endpoint(from_text, street), parse_endpoint(to_text, street)
     house_points = {}
     for endpoint in (from_ep, to_ep):
@@ -93,8 +91,9 @@ async def resolve_section(
             point = await geocode_address(street, endpoint.value, city or getattr(org, "city", None))
             if point is not None:
                 house_points[endpoint.value] = (point.lat, point.lng)
+    result, network = await _resolve_osm_section(db, org, street, from_ep, to_ep, city, house_points)
     if network is not None:
-        result = resolve(network, street, from_ep, to_ep, house_points)
+        assert result is not None
         if result.geometry is not None:
             return result
         problem = "Straße nicht in OSM gefunden"
@@ -108,11 +107,82 @@ async def resolve_section(
     try:
         fallback = await section_from_address(street, from_text, to_text, city or getattr(org, "city", None))
     except ValueError as exc:
-        return SectionResult(hinweise=[problem, str(exc)])
+        return SectionResult(hinweise=[problem, str(exc)], osm_erreichbar=network is not None)
     return SectionResult(
         geometry=fallback["geometry"], quality="niedrig", geometry_status="needs_review",
-        hinweise=[fallback_hint],
+        hinweise=[fallback_hint], osm_erreichbar=network is not None,
     )
+
+
+async def _resolve_osm_section(db, org, street, from_ep, to_ep, city, house_points):
+    """Gemeinsamer OSM-Teil für Geometrieauflösung und Adressprüfung."""
+    settings = db.query(OrgSettings).filter(OrgSettings.org_id == org.id).first()
+    resolved_city = city or getattr(org, "city", None)
+    center = await search_center(org, settings, resolved_city)
+    network = await fetch_street_network(street, *center, city=resolved_city) if center else None
+    return (resolve(network, street, from_ep, to_ep, house_points), network) if network is not None else (None, None)
+
+
+def validation_from_section(result: SectionResult, street: str) -> dict:
+    """Macht ein Resolver-Ergebnis als fehlertolerante Adressvalidierung verfügbar."""
+    exact = bool(result.osm_name and normalize_street_name(result.osm_name) == normalize_street_name(street))
+    status = "ok" if exact else ("abweichend" if result.osm_name else "nicht_gefunden")
+    if not result.osm_erreichbar:
+        status = "unbekannt"
+    endpoints = {item.get("rolle"): item for item in result.endpoints}
+
+    def endpoint(role: str) -> dict:
+        item = endpoints.get(role, {})
+        text = item.get("text", "")
+        method = item.get("methode", "nicht_geprueft" if text else "")
+        is_house = parse_endpoint(text, street).kind == "house"
+        if is_house:
+            method = "nicht_geprueft"
+        found = None if not text or method == "nicht_geprueft" else method != "nicht_gefunden"
+        return {"text": text, "gefunden": found, "methode": method}
+
+    return {
+        "status": status,
+        "osm_name": result.osm_name,
+        "laenge_m": result.length_m,
+        "vorschlaege": [],
+        "von": endpoint("von"),
+        "bis": endpoint("bis"),
+        "qualitaet": result.quality,
+    }
+
+
+async def validate_address(
+    db, org, street: str, from_text: str | None, to_text: str | None, city: str | None = None
+) -> dict:
+    """Prüft Straße und Kreuzungen ausschließlich gegen das OSM-Straßennetz."""
+    from_ep, to_ep = parse_endpoint(from_text, street), parse_endpoint(to_text, street)
+    if not (street or "").strip():
+        return {
+            "status": "keine_strasse", "osm_name": None, "laenge_m": None, "vorschlaege": [],
+            "von": {"text": from_ep.raw, "gefunden": None, "methode": ""},
+            "bis": {"text": to_ep.raw, "gefunden": None, "methode": ""}, "qualitaet": None,
+        }
+    result, network = await _resolve_osm_section(db, org, street, from_ep, to_ep, city, {})
+    if network is None:
+        return {
+            "status": "unbekannt", "osm_name": None, "laenge_m": None, "vorschlaege": [],
+            "von": {"text": from_ep.raw, "gefunden": None, "methode": ""},
+            "bis": {"text": to_ep.raw, "gefunden": None, "methode": ""}, "qualitaet": None,
+        }
+    assert result is not None
+    data = validation_from_section(result, street)
+    if data["status"] == "abweichend":
+        target = normalize_street_name(street)
+        names = (way.name for way in network.ways if target in normalize_street_name(way.name))
+        data["vorschlaege"] = list(dict.fromkeys(names))[:5]
+    elif data["status"] == "nicht_gefunden":
+        suggestions = await suggest_addresses(
+            db, q=street, field="street", city=city or getattr(org, "city", None), street=None,
+            org_id=org.id, limit=5,
+        )
+        data["vorschlaege"] = list(dict.fromkeys(item.street or item.label for item in suggestions))[:5]
+    return data
 
 
 def section_meta(result: SectionResult, methode: str) -> str:

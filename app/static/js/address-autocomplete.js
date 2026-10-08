@@ -26,6 +26,7 @@
     var onSelect   = opts.onSelect   || function () {};
     var minChars   = opts.minChars   !== undefined ? opts.minChars   : 1;
     var debounceMs = opts.debounceMs !== undefined ? opts.debounceMs : 250;
+    var url        = opts.url        || '/adresse/vorschlaege';
 
     var input = document.getElementById(inputId);
     if (!input || input.dataset.acBound) return;
@@ -206,7 +207,7 @@
         var params = new URLSearchParams({ q: q, field: field });
         if (city)   params.set('city', city);
         if (street) params.set('street', street);
-        fetch('/adresse/vorschlaege?' + params.toString(), {
+        fetch(url + '?' + params.toString(), {
           credentials: 'same-origin',
         })
           .then(function (r) { return r.ok ? r.json() : { items: [] }; })

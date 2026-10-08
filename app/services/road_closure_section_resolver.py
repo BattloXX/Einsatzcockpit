@@ -31,6 +31,7 @@ class SectionResult:
     endpoints: list[dict] = field(default_factory=list)
     mehrdeutigkeiten: list[dict] = field(default_factory=list)
     hinweise: list[str] = field(default_factory=list)
+    osm_erreichbar: bool = True
 
     def to_dict(self) -> dict:
         return {

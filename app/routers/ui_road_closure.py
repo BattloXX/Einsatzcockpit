@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.core.permissions import STRASSENSPERREN_LESE_ROLLEN, has_role, require_role
 from app.core.templating import templates
 from app.core.timezones import local_date_to_utc, local_input_to_utc, org_tz
@@ -24,7 +25,8 @@ from app.models.road_closure import (
 )
 from app.models.user import User
 from app.services import road_closure_service
-from app.services.road_closure_section_service import resolve_section
+from app.services.address_autocomplete import suggest_addresses
+from app.services.road_closure_section_service import resolve_section, validate_address
 
 router = APIRouter(prefix="/strassensperren", tags=["strassensperren"])
 _LESE_ROLLEN = STRASSENSPERREN_LESE_ROLLEN
@@ -247,6 +249,7 @@ def _edit_page(request, db, user, closure=None, form_data=None, error=None, stat
             "priorities": PRIORITIES,
             "partner_orgs": road_closure_service.partner_orgs_for(db, _org(user).id),
             "shared_org_ids": {int(org_id) for org_id in shared_ids},
+            "org_city": _org(user).city or "",
         },
         status_code=status_code,
     )
@@ -390,6 +393,37 @@ async def abschnitt_aus_adresse(
     if result.geometry is None:
         return JSONResponse({"fehler": "; ".join(result.hinweise)}, status_code=422)
     return JSONResponse(result.to_dict())
+
+
+@router.get("/adresse/vorschlaege")
+async def address_suggestions(
+    db: Session = Depends(get_db), user: User = Depends(require_role("objekt_verwalter")),
+    _guard: None = Depends(require_strassensperren_enabled), q: str = "", field: str = "street",
+    city: str = "", street: str = "",
+):
+    if field not in {"street", "house"} or not q.strip():
+        return JSONResponse({"items": []})
+    items = await suggest_addresses(
+        db, q=q.strip(), field=field, city=city.strip() or _org(user).city, street=street.strip() or None,
+        org_id=user.org_id, limit=settings.PHOTON_SUGGEST_LIMIT,
+    )
+    from dataclasses import asdict
+    return JSONResponse({"items": [asdict(item) for item in items]})
+
+
+@router.post("/adresse/pruefen")
+async def address_validate(
+    request: Request, db: Session = Depends(get_db), user: User = Depends(require_role("objekt_verwalter")),
+    _guard: None = Depends(require_strassensperren_enabled),
+):
+    try:
+        data = await request.json()
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        raise HTTPException(status_code=422, detail={"fehler": "Ungültige Anfrage."}) from None
+    return JSONResponse(await validate_address(
+        db, _org(user), str(data.get("street") or "").strip(), str(data.get("from_text") or "").strip(),
+        str(data.get("to_text") or "").strip(), str(data.get("city") or "").strip() or _org(user).city,
+    ))
 
 
 @router.get("/neu", response_class=HTMLResponse)
