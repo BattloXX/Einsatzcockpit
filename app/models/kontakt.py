@@ -40,6 +40,8 @@ class Kontakt(TenantScoped, Base):
     gueltig_bis: Mapped[date | None] = mapped_column(nullable=True)
     zuletzt_geprueft: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     datenquelle: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    quellendokument: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    quellendatum: Mapped[date | None] = mapped_column(nullable=True)
     externe_quelle_id: Mapped[str | None] = mapped_column(String(150), nullable=True)
     aktualisiert_ueber: Mapped[str | None] = mapped_column(String(20), nullable=True)
     archiviert: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -170,6 +172,7 @@ class KontaktOrganisationFunktion(TenantScoped, Base):
     erreichbarkeit: Mapped[str | None] = mapped_column(Text)
     bemerkung: Mapped[str | None] = mapped_column(Text)
     kontakt: Mapped[Kontakt] = relationship(back_populates="organisations_funktionen", foreign_keys=[kontakt_id])
+    organisation: Mapped[KontaktOrganisation] = relationship(foreign_keys=[organisation_id])
 
 
 class KontaktImportVorschau(TenantScoped, Base):

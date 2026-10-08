@@ -410,7 +410,7 @@ async def kontakt_bulk_upsert(
 )
 async def kontakt_import_vorschau(
     context: MCPContext, quelle: str, kontakte: list[dict[str, Any]], quellendatum: str = "",
-    importmodus: str = "merge", organisationen: list[dict[str, Any]] | None = None, optionen: dict[str, Any] | None = None,
+    quellendokument: str = "", importmodus: str = "merge", organisationen: list[dict[str, Any]] | None = None, optionen: dict[str, Any] | None = None,
 ) -> dict[str, object]:
     if len(kontakte) > structured_import.MAX_BATCH: raise ValueError("Hoechstens 250 Kontakte pro Vorschau")
     results: list[dict[str, object]] = []
@@ -423,7 +423,7 @@ async def kontakt_import_vorschau(
         else:
             status = "UPDATE" if importmodus != "create_only" else "UNCHANGED"
         results.append({"status": status, "kontakt_id": match.id if match else None, "version": match.version if match else None, "kandidaten": candidates})
-    request = {"quelle": quelle, "quellendatum": quellendatum, "modus": importmodus, "kontakte": kontakte, "organisationen": organisationen or [], "optionen": optionen or {}}
+    request = {"quelle": quelle, "quellendokument": quellendokument, "quellendatum": quellendatum, "modus": importmodus, "kontakte": kontakte, "organisationen": organisationen or [], "optionen": optionen or {}}
     preview = KontaktImportVorschau(org_id=context.org_id, user_id=context.user.id, zeilen_json=json.dumps(request), ergebnis_json=json.dumps(results))
     context.db.add(preview); context.db.commit()
     return {"preview_id": preview.id, "ergebnisse": results, "neue_kontakte": sum(x["status"] == "NEW" for x in results), "aktualisierungen": sum(x["status"] == "UPDATE" for x in results), "dublettenkandidaten": [x for x in results if x["status"] == "DUPLICATE_CANDIDATE"]}
@@ -452,7 +452,7 @@ async def kontakt_import_ausfuehren(
         match, _candidates = structured_import.find_match(context.db, context.org_id, row, request["quelle"])
         if plan.get("kontakt_id") and (match is None or match.id != plan["kontakt_id"] or match.version != plan.get("version")):
             results.append({"status": "CONFLICT", "reason": "Datensatz wurde nach der Vorschau verändert"}); continue
-        status, kontakt, candidates = structured_import.upsert_contact(context.db, context.org_id, context.user.id, row, quelle=request["quelle"], modus=request["modus"])
+        status, kontakt, candidates = structured_import.upsert_contact(context.db, context.org_id, context.user.id, row, quelle=request["quelle"], modus=request["modus"], quellendokument=request.get("quellendokument"), quellendatum=request.get("quellendatum"))
         results.append({"status": status, "kontakt_id": kontakt.id if kontakt else None, "kandidaten": candidates})
     summary = {"angelegt": sum(x["status"] == "NEW" for x in results), "aktualisiert": sum(x["status"] == "UPDATE" for x in results), "uebersprungen": sum(x["status"] in {"SKIPPED", "UNCHANGED"} for x in results), "fehler": sum(x["status"] in {"CONFLICT", "DUPLICATE_CANDIDATE"} for x in results), "ergebnisse": results}
     batch = KontaktImportBatch(org_id=context.org_id, user_id=context.user.id, quelle=request["quelle"], idempotency_key=idempotency_key or None, request_json=preview.zeilen_json, ergebnis_json=json.dumps(summary))
