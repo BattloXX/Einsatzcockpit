@@ -8,10 +8,15 @@ from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.core.permissions import STRASSENSPERREN_LESE_ROLLEN
 from app.mcp.context import MCPPermissionError, load_live_context
 from app.models.objekt import ObjektDokument, ObjektDokumentSeite
+from app.models.road_closure import RoadClosure, RoadClosureDocument
+from app.services import road_closure_service
 from app.services.objekt_dokument_service import absolute_pfad
 from app.services.objekt_service import objekt_effective_enabled
+from app.services.road_closure_document_service import absolute_path as road_closure_document_path
+from app.services.road_closure_flags import strassensperren_effective_enabled
 
 _signer = URLSafeTimedSerializer(settings.SECRET_KEY, salt="mcp-download")
 
@@ -24,10 +29,10 @@ class MCPDownloadFehler(ValueError):
 
 
 def erstelle_download_token(
-    org_id: int, user_id: int, dokument_id: int, seite: int | None
+    org_id: int, user_id: int, dokument_id: int, seite: int | None, art: str = "objekt"
 ) -> tuple[str, datetime]:
     gueltig_bis = datetime.now(UTC).replace(tzinfo=None) + timedelta(minutes=settings.MCP_DOWNLOAD_TOKEN_MINUTEN)
-    token = _signer.dumps({"o": org_id, "u": user_id, "d": dokument_id, "s": seite})
+    token = _signer.dumps({"o": org_id, "u": user_id, "d": dokument_id, "s": seite, "a": art})
     return token, gueltig_bis
 
 
@@ -79,11 +84,32 @@ def lade_download(db: Session, token: str) -> tuple[Path, str, str]:
         user_id = int(daten["u"])
         dokument_id = int(daten["d"])
         seite = daten["s"]
+        art = daten.get("a", "objekt")
         if seite is not None:
             seite = int(seite)
     except (KeyError, TypeError, ValueError) as exc:
         raise MCPDownloadFehler("Download nicht gefunden.", 404) from exc
 
+    if art == "strassensperre":
+        try:
+            load_live_context(db, user_id, org_id, STRASSENSPERREN_LESE_ROLLEN)
+        except MCPPermissionError as exc:
+            raise MCPDownloadFehler(str(exc), 403) from exc
+        if not strassensperren_effective_enabled(org_id, db):
+            raise MCPDownloadFehler("Das Strassensperrenmodul ist fuer diese Organisation nicht aktiviert.", 403)
+        document = db.query(RoadClosureDocument).execution_options(include_all_tenants=True).filter(
+            RoadClosureDocument.id == dokument_id
+        ).first()
+        if document is None or road_closure_service.visible_closures_q(db, org_id).filter(
+            RoadClosure.id == document.road_closure_id
+        ).first() is None:
+            raise MCPDownloadFehler("Dokument nicht gefunden.", 404)
+        path = road_closure_document_path(document)
+        if not path.is_file():
+            raise MCPDownloadFehler("Datei fehlt.", 404)
+        return path, document.filename, "application/pdf"
+    if art != "objekt":
+        raise MCPDownloadFehler("Download nicht gefunden.", 404)
     try:
         load_live_context(db, user_id, org_id, ("objekt_verwalter",))
     except MCPPermissionError as exc:

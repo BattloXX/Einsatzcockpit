@@ -48,6 +48,10 @@ Eine nicht mehr geltende Sperre wird mit Grund **deaktiviert**, nicht gelöscht;
 
 Neben Straße und Zeitraum können **Ort**, **Aktenzeichen**, **Behörde** und **Ausnahmen** (z. B. „Anrainer frei“) erfasst werden. Der Ort hilft bei der Suche der Straße, wenn die Sperre in einer Nachbargemeinde liegt.
 
+### Verordnung als PDF
+
+Im Detail einer Sperre kann die offizielle Verordnung als PDF hochgeladen und von berechtigten Partnerorganisationen geöffnet werden. Der MCP-Workflow lautet: PDF → `strassensperre_entwurf_aus_pdf` → Felder prüfen → `strassensperre_anlegen` → `strassensperre_dokument_uebergeben`.
+
 Der MCP-Assistent kennt alle erlaubten Werte über `strassensperren_kataloge`. Einschränkungstypen akzeptieren in der Oberfläche und im Service auch gebräuchliche Aliase, etwa `vollsperre` für `closed`, `teilsperre` für `partial` oder `hoehe` für `height_limit`.
 
 ## Im Einsatz

@@ -4,8 +4,6 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 
 ## Unreleased
 
-- **Straßensperren**: Photon-Adressvorschläge und live OSM-Adressprüfung in Formular und MCP ergänzt.
-
 - **Straßensperren**: Zusatzdaten (Ort, Aktenzeichen, Behörde, Ausnahmen), Geometriequalität,
   Dokumentmodell und MCP-Kataloge mit Alias-Normalisierung ergänzt (Migration 0258).
 - **Straßensperren**: Abschnitt wird im OSM-Straßennetz der Gemeinde ermittelt (Kreuzungen, Hausnummern,
@@ -13,6 +11,11 @@ Die Versionshistorie wird reverse-chronologisch geführt.
   Umfahrung berücksichtigt, andere über „Geometrie bestätigen“ bzw. die MCP-Tools
   `strassensperre_geometrie_ermitteln`/`strassensperre_geometrie_bestaetigen`. MCP-Leserechte jetzt auch für
   Objektverwalter.
+- **Straßensperren**: Adressvorschläge (Photon) und Live-Prüfung von Straße/Von/Bis gegen OSM im Formular wie
+  bei der Einsatzanlage; MCP-Antworten enthalten `adressvalidierung`.
+- **Straßensperren**: behördliche Verordnungen als PDF anhängen (UI und MCP, auch für Partnerwehren lesbar);
+  `strassensperre_entwurf_aus_pdf` liefert Textauszug und einen Felder-Entwurf (Zeitraum, Aktenzeichen,
+  Behörde, Einschränkung, Ausnahmen, Straßen).
 
 > **Achtung beim Update auf 2026.10.06:** Die Datenbank-Migrationen 0249–0256 müssen mit
 > `alembic upgrade head` eingespielt werden. Die Anwendung läuft jetzt mit genau einem Worker

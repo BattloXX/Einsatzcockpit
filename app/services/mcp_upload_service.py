@@ -53,7 +53,8 @@ def _upload_pfad(org_id: int, upload_id: str) -> tuple[Path, str]:
 
 
 def erstelle_upload(
-    db: Session, user: User, org_id: int, objekt_id: int, dateiname: str, groesse: int | None
+    db: Session, user: User, org_id: int, objekt_id: int | None, dateiname: str, groesse: int | None,
+    *, road_closure_id: int | None = None, zweck: str = "objekt"
 ) -> tuple[MCPUpload, str]:
     if groesse is not None and (not isinstance(groesse, int) or groesse < 0):
         raise MCPUploadFehler("groesse_bytes muss eine nicht-negative Ganzzahl sein.")
@@ -63,7 +64,8 @@ def erstelle_upload(
     token = secrets.token_urlsafe(32)
     row = MCPUpload(
         upload_id=secrets.token_hex(16), token_hash=hash_api_key(token), org_id=org_id,
-        user_id=user.id, objekt_id=objekt_id, dateiname=(dateiname or "dokument.pdf")[:255],
+        user_id=user.id, objekt_id=objekt_id, road_closure_id=road_closure_id, zweck=zweck,
+        dateiname=(dateiname or "dokument.pdf")[:255],
         erwartete_bytes=groesse, expires_at=_now() + timedelta(minutes=settings.MCP_UPLOAD_TOKEN_MINUTEN),
     )
     db.add(row)
@@ -120,12 +122,16 @@ def speichere_upload(db: Session, upload_id: str, token: str, stream: BinaryIO) 
         raise
 
 
-def lade_upload_fuer_uebergabe(db: Session, org_id: int, user_id: int, upload_id: str) -> MCPUpload:
+def lade_upload_fuer_uebergabe(
+    db: Session, org_id: int, user_id: int, upload_id: str, zweck: str | None = None
+) -> MCPUpload:
     row = db.query(MCPUpload).filter(
         MCPUpload.upload_id == upload_id, MCPUpload.org_id == org_id, MCPUpload.user_id == user_id
     ).first()
     if row is None:
         raise MCPUploadFehler("Upload nicht gefunden.", 404)
+    if zweck is not None and row.zweck != zweck:
+        raise MCPUploadFehler("Upload gehört zu einem anderen Zweck.", 403)
     if row.expires_at < _now():
         raise MCPUploadFehler("Upload ist abgelaufen.", 410)
     if row.hochgeladen_am is None or not row.pfad:
