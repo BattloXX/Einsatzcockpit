@@ -27,6 +27,25 @@ DEFAULTS = {
 }
 
 
+def normalize_berechtigungen(art: str, values: dict | None) -> dict:
+    """Return the small, explicit permission set used by status screens."""
+    if art not in {"status", "infoscreen"}:
+        return dict(DEFAULTS | (values or {}))
+    values = values or {}
+    result: dict[str, bool | int] = {key: bool(values.get(key, DEFAULTS[key])) for key in (
+        "zeige_geplante", "zeige_karte", "zeige_einschraenkungen", "zeige_grund",
+    )}
+    def number(key: str, low: int, high: int) -> int:
+        try:
+            value = int(values.get(key, DEFAULTS[key]))
+        except (TypeError, ValueError):
+            value = DEFAULTS[key]
+        return max(low, min(high, value))
+    result["refresh_sec"] = number("refresh_sec", 30, 600)
+    result["rotation_sec"] = number("rotation_sec", 0, 600) if art == "infoscreen" else 0
+    return result
+
+
 class TokenUngueltig(Exception):
     pass
 
@@ -65,7 +84,7 @@ def create_token(
         label=label,
         token_hash=hash_api_key(raw),
         token_enc=encrypt_secret(raw),
-        berechtigungen_json=json.dumps(DEFAULTS | (berechtigungen or {})),
+        berechtigungen_json=json.dumps(normalize_berechtigungen(art, berechtigungen)),
         expires_at=expires_at,
         created_by_user_id=user_id,
         created_at=_now(),

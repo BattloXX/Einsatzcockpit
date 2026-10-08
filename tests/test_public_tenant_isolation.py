@@ -10,6 +10,8 @@ Cross-Org-Fall ergänzen (siehe CLAUDE.md, Abschnitt Tenant-Scoping).
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from app.core.security import hash_api_key
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
@@ -1072,3 +1074,47 @@ def test_strassensperre_detail_token_zeigt_keine_sperre_von_org_b(client):
         response = client.get(f"/oeffentlich/strassensperre/{raw}{suffix}")
         assert response.status_code == 404
         assert "GEHEIM-Org-B-Link" not in response.text
+
+
+@pytest.mark.parametrize("art", ["status", "infoscreen"])
+def test_strassensperren_status_und_infoscreen_token_zeigen_nie_org_b(client, art):
+    """Status-/Infoscreen-Token von Org A: weder eigene noch für A freigegebene Sperren von Org B."""
+    from app.models.invitation import OrgPartner
+    from app.services import road_closure_token_service
+
+    org_b_id = _setup_zwei_orgs()
+    now = datetime.now(UTC).replace(tzinfo=None)
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        system = db.get(SystemSettings, "strassensperren_module_enabled")
+        if system is None:
+            db.add(SystemSettings(key="strassensperren_module_enabled", value="true"))
+        else:
+            system.value = "true"
+        for org_id in (ORG_A, org_b_id):
+            settings = db.query(OrgSettings).filter_by(org_id=org_id).first()
+            if settings is None:
+                settings = OrgSettings(org_id=org_id)
+                db.add(settings)
+            settings.strassensperren_modul_aktiv = True
+        if not db.query(OrgPartner).filter_by(org_id=org_b_id, partner_org_id=ORG_A).first():
+            db.add(OrgPartner(org_id=org_b_id, partner_org_id=ORG_A))
+        own = RoadClosure(org_id=ORG_A, title=f"Status A {art}", valid_from=now, restriction_type="closed")
+        hidden = RoadClosure(org_id=org_b_id, title="GEHEIM-B-Status", valid_from=now, restriction_type="closed")
+        shared = RoadClosure(org_id=org_b_id, title="GEHEIM-B-Geteilt", valid_from=now, restriction_type="closed")
+        db.add_all([own, hidden, shared])
+        db.flush()
+        db.add(RoadClosureShare(road_closure_id=shared.id, org_id=ORG_A))
+        _token, raw = road_closure_token_service.create_token(db, ORG_A, art, None)
+        db.commit()
+    finally:
+        db.close()
+
+    base = f"/oeffentlich/strassensperren/{raw}" if art == "status" else f"/infoscreen/strassensperren/{raw}"
+    for url in (base, base + "/daten"):
+        response = client.get(url)
+        assert response.status_code == 200
+        assert f"Status A {art}" in response.text
+        assert "GEHEIM-B-Status" not in response.text
+        assert "GEHEIM-B-Geteilt" not in response.text

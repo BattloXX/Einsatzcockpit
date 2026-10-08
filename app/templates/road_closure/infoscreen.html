@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+{% if external %}<meta name="robots" content="noindex, nofollow">{% endif %}
+<title>Straßensperren – {{ org.name }}</title>
+<link rel="stylesheet" href="/static/css/fonts.css?v={{ ASSET_VERSION }}">
+<link rel="stylesheet" href="/static/css/leaflet.min.css?v={{ ASSET_VERSION }}">
+<style>
+/* Farben und Typografie wie infoscreen/statistik.html */
+:root{--bg:#0b1326;--surface:#171f33;--low:#131b2e;--text:#dae2fd;--muted:#bcc7de;--line:#2d3650;--primary:#ffb3ac;--tertiary:#adc6ff}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font-family:"Hanken Grotesk",system-ui,sans-serif}
+body.infoscreen{height:100vh;overflow:hidden}
+.rc{min-height:100vh;display:flex;flex-direction:column;padding:clamp(10px,1.4vw,28px);gap:clamp(10px,1vw,18px)}
+body.infoscreen .rc{height:100vh}
+.head{flex:none;min-height:clamp(72px,10.7vh,116px);display:flex;align-items:center;justify-content:space-between;gap:20px;padding:12px 22px;background:var(--surface);border:1px solid var(--line);border-radius:12px}
+.brand{display:flex;align-items:center;gap:16px;min-width:0}
+.brand img{max-height:62px;max-width:140px;object-fit:contain}
+.org,.kpi span,.stand,.footer,.tag{font-family:"JetBrains Mono",monospace}
+.org{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--primary)}
+h1{font-size:clamp(22px,2.4vw,40px);margin:2px 0;font-weight:800}
+.toolbar{display:flex;gap:10px;flex-wrap:wrap}
+.button{color:var(--text);background:var(--low);border:1px solid var(--line);border-radius:8px;padding:8px 14px;text-decoration:none;font:inherit;cursor:pointer}
+.button--primary{background:var(--primary);color:#3b0907;border-color:var(--primary);font-weight:700}
+.zeit{text-align:right}
+.clock{font-size:clamp(30px,4vw,62px);font-weight:800;line-height:1}
+.stand{font-size:12px;color:var(--muted)}
+.kpis{flex:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:clamp(8px,.8vw,14px)}
+.kpi,.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px}
+.kpi{padding:clamp(10px,1vw,18px) clamp(12px,1.2vw,22px)}
+.kpi strong{display:block;font-size:clamp(28px,3vw,48px);line-height:1;font-weight:800}
+.kpi span{font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.content{flex:1;min-height:0;display:grid;grid-template-columns:1.6fr 1fr;gap:clamp(8px,.8vw,14px)}
+.panel{min-height:0;padding:12px;display:flex;flex-direction:column}
+.map{flex:1;min-height:260px;border-radius:8px;overflow:hidden}
+.list{flex:1;min-height:0;overflow:auto}
+.section-title{font-size:clamp(16px,1.2vw,20px);margin:6px 0 8px;color:var(--tertiary)}
+.card{border-left:6px solid #9e9e9e;padding:10px 14px;margin-bottom:8px;background:var(--low);border-radius:6px}
+.card h3{margin:0;font-size:clamp(16px,1.15vw,20px)}
+.card--gross h3{font-size:clamp(24px,2.2vw,40px)}
+.card--gross .meta{font-size:clamp(16px,1.3vw,24px)}
+.meta{margin-top:4px;color:var(--muted);font-size:clamp(13px,.85vw,15px)}
+.meta--art{color:var(--text);font-weight:700}
+.tag{margin-top:4px;font-size:11px;color:var(--tertiary)}
+.empty{padding:40px;text-align:center;color:var(--muted);font-size:clamp(18px,1.4vw,26px)}
+.footer{flex:none;display:flex;gap:12px;align-items:center;font-size:12px;color:var(--muted)}
+.bar{height:5px;background:var(--primary);flex:1;border-radius:4px;transform-origin:left;transition:transform 1s linear}
+.is-offline .bar{background:#f57c00}
+/* Rotation */
+.view-map .list-panel,.view-map .kpis{display:none}
+.view-map .content{grid-template-columns:1fr}
+.view-detail .kpis{display:none}
+.view-detail .content{grid-template-columns:1fr 1.2fr}
+@media(max-width:1280px){.content{grid-template-columns:1.2fr 1fr}}
+@media(max-width:760px){
+  body.infoscreen{height:auto;overflow:auto}
+  body.infoscreen .rc{height:auto}
+  .head{flex-wrap:wrap;align-items:flex-start}
+  .zeit{text-align:left}
+  .kpis{grid-template-columns:repeat(2,1fr)}
+  .content,.view-detail .content{display:flex;flex-direction:column}
+  .map-panel{height:45vh;flex:none}
+  .list{overflow:visible}
+}
+</style>
+</head>
+<body class="{{ modus }}">
+<main class="rc" id="road-closure-screen" data-url="{{ daten_url }}" data-modus="{{ modus }}" data-lat="{{ org.fallback_lat or '' }}" data-lng="{{ org.fallback_lng or '' }}">
+  <header class="head">
+    <div class="brand">
+      <img src="{{ org.logo_path or '/static/img/logo_einsatzcockpit.png' }}" alt="">
+      <div><div class="org">{{ org.name }}</div><h1>Straßensperren</h1></div>
+    </div>
+    <div class="toolbar">
+      {% if modus == 'status' and external %}
+      <a class="button button--primary" href="/login?next=/strassensperren">Weitere Straßensperren anzeigen</a>
+      {% elif modus == 'status' %}
+      <a class="button" href="/strassensperren{% if filter_query %}?{{ filter_query }}{% endif %}">&larr; Übersicht</a>
+      <button class="button" type="button" id="fullscreen">Vollbild</button>
+      {% endif %}
+    </div>
+    <div class="zeit"><div class="clock" id="clock">--:--</div><div class="stand" id="stand">Stand –</div></div>
+  </header>
+  <section class="kpis" id="kpis" aria-label="Kennzahlen">
+    <div class="kpi"><strong>{{ daten.kennzahlen.aktiv }}</strong><span>Aktiv</span></div>
+    {% if daten.zeige_geplante %}<div class="kpi"><strong>{{ daten.kennzahlen.geplant }}</strong><span>Geplant</span></div>{% endif %}
+    <div class="kpi"><strong>{{ daten.kennzahlen.vollsperren_aktiv }}</strong><span>Vollsperren aktiv</span></div>
+    <div class="kpi"><strong>{{ daten.kennzahlen.beginnt_heute }}</strong><span>Beginnt heute</span></div>
+    <div class="kpi"><strong>{{ daten.kennzahlen.endet_in_7_tagen }}</strong><span>Endet ≤ 7 Tage</span></div>
+  </section>
+  <section class="content">
+    <article class="panel map-panel"{% if not zeige_karte %} hidden{% endif %}><div id="map" class="map"></div></article>
+    <article class="panel list-panel"><div class="list" id="list" aria-live="polite"></div></article>
+  </section>
+  <footer class="footer"><span id="connection">Automatische Aktualisierung</span><span id="countdown"></span><div class="bar" id="bar"></div></footer>
+</main>
+<script type="application/json" id="sperren-daten">{{ daten|tojson }}</script>
+<script src="/static/js/map-config.js?v={{ ASSET_VERSION }}"></script>
+<script src="/static/js/leaflet.min.js?v={{ ASSET_VERSION }}"></script>
+<script src="/static/js/road_closure_infoscreen.js?v={{ ASSET_VERSION }}"></script>
+</body>
+</html>

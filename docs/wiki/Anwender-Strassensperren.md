@@ -62,6 +62,10 @@ Der MCP-Assistent kennt alle erlaubten Werte über `strassensperren_kataloge`. E
 
 Über „Zurück“ gelangt man von der Übersicht zur Konsole und aus Details wieder zu der gefilterten Übersicht. Die Filtergruppen lassen sich kombinieren; aktive Filter werden angezeigt und können mit „Zurücksetzen“ entfernt werden. Die Auswahl wird für den nächsten Aufruf der Übersicht gemerkt. Bei aktivem Modul zeigt die Konsole außerdem eine Kachel mit den aktuellen und geplanten Straßensperren.
 
+### Statusseite und Infoscreen
+
+Die Statusansicht und der Infoscreen zeigen aktuelle sowie geplante Sperren mit Karte und Kennzahlen. Sie aktualisieren ihre Daten ohne Seitenneuladen. Externe Links zeigen ausschließlich eigene, nicht stornierte Sperren; Partnerfreigaben bleiben intern.
+
 ## Im Einsatz
 
 Wenn Routing aktiviert und ein Startpunkt konfiguriert ist, prüft das System aktive Einsätze im Hintergrund. Bei einer relevanten Sperre erscheint in Einsatzinfo und Alarm-Infoscreen die Warnbox **„ANFAHRT BEEINTRÄCHTIGT“** mit betroffener Sperre, möglicher Umfahrung und Mehrweg. Ohne relevante Sperre ändert sich die Einsatzansicht nicht.

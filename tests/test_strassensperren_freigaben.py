@@ -421,3 +421,12 @@ def test_grund_wird_gespeichert_und_angezeigt(client) -> None:
 )
 def test_safe_next(ziel, erwartet) -> None:
     assert _safe_next(ziel) == erwartet
+
+
+def test_abschnitt_ohne_platzhalter() -> None:
+    from app.services.road_closure_public_service import abschnitt
+
+    assert abschnitt(RoadClosure(street="Achstraße")) == "Achstraße"
+    assert abschnitt(RoadClosure(street="Achstraße", from_text="Nr. 3")) == "Achstraße: Nr. 3"
+    assert abschnitt(RoadClosure(street="Achstraße", from_text="Nr. 3", to_text="Nr. 9")) == "Achstraße: Nr. 3 – Nr. 9"
+    assert abschnitt(RoadClosure(street=None)) is None

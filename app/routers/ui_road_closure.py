@@ -31,6 +31,7 @@ from app.models.user import User
 from app.services import road_closure_service, road_closure_stats_service, road_closure_token_service
 from app.services.address_autocomplete import suggest_addresses
 from app.services.road_closure_document_service import absolute_path, delete_document, store_document
+from app.services.road_closure_public_service import public_closure_dict
 from app.services.road_closure_section_service import resolve_section, validate_address
 
 router = APIRouter(prefix="/strassensperren", tags=["strassensperren"])
@@ -245,6 +246,34 @@ def _status_data(db: Session, org_id: int):
     return closures, active, planned
 
 
+def _infoscreen_payload(
+    db: Session, org, closures, *, scope: str, refresh_sec: int = 60, rotation_sec: int = 0,
+    permissions: dict | None = None, owner_names: dict[int, str] | None = None,
+) -> dict:
+    """The deliberately whitelisted data contract for all status displays."""
+    permissions = permissions or {}
+    show_planned = permissions.get("zeige_geplante", True)
+    items = []
+    for closure in closures:
+        item = public_closure_dict(closure, org)
+        if not show_planned and item["status"] == "planned":
+            continue
+        if not permissions.get("zeige_grund", True):
+            item.pop("reason", None)
+        if not permissions.get("zeige_einschraenkungen", True):
+            item.pop("einschraenkungen", None)
+            item.pop("exceptions", None)
+        item["nachbar"] = (owner_names or {}).get(closure.org_id) if closure.org_id != org.id else None
+        items.append(item)
+    metrics = road_closure_stats_service.kennzahlen(db, org, scope=scope)
+    if not show_planned:
+        metrics["geplant"] = 0
+    return {
+        "stand": datetime.now(UTC).replace(tzinfo=None).isoformat() + "Z", "kennzahlen": metrics,
+        "sperren": items, "refresh_sec": refresh_sec, "rotation_sec": rotation_sec, "zeige_geplante": show_planned,
+    }
+
+
 def _form_data(**values):
     return {key: (value.strip() if isinstance(value, str) else value) for key, value in values.items()}
 
@@ -448,25 +477,66 @@ def statusansicht(
     restriction_type: str = "", geometrie: str = "", von: str = "", bis: str = "",
 ):
     closures, filters = _closures(db, user, status, zeitraum, scope, q, restriction_type, geometrie, von, bis)
-    active = sum(road_closure_service.compute_status(closure) == "active" for closure in closures)
-    planned = sum(road_closure_service.compute_status(closure) == "planned" for closure in closures)
+    data = _infoscreen_payload(db, _org(user), closures, scope="all", owner_names=_org_names(db, closures))
     return templates.TemplateResponse(
         request,
-        "road_closure/status.html",
+        "road_closure/infoscreen.html",
         {
             "user": user,
             "org": _org(user),
-            "closures": closures,
-            "active_count": active,
-            "planned_count": planned,
-            "color": _color,
-            "closure_status": road_closure_service.compute_status,
-            "public": False,
-            "geojson_url": "/strassensperren/karte.json?" + _filter_query(filters),
+            "modus": "status", "external": False, "daten": data,
+            "daten_url": "/strassensperren/status/daten?" + _filter_query(filters), "zeige_karte": True,
             "filter_query": _filter_query(filters),
             "ungeprueft_count": road_closure_stats_service.kennzahlen(db, _org(user))["geometrie_pruefen"],
         },
     )
+
+
+@router.get("/status/daten")
+def status_daten(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*_LESE_ROLLEN)),
+    _guard: None = Depends(require_strassensperren_enabled),
+    status: str = "current", zeitraum: str = "", scope: str = "all", q: str = "",
+    restriction_type: str = "", geometrie: str = "", von: str = "", bis: str = "",
+):
+    closures, _ = _closures(db, user, status, zeitraum, scope, q, restriction_type, geometrie, von, bis)
+    payload = _infoscreen_payload(db, _org(user), closures, scope="all", owner_names=_org_names(db, closures))
+    return JSONResponse(payload)
+
+
+def _intern_infoscreen_daten(db: Session, user: User) -> dict:
+    closures = road_closure_service.list_closures(db, _org(user).id, status="current", scope="all")
+    return _infoscreen_payload(db, _org(user), closures, scope="all", owner_names=_org_names(db, closures))
+
+
+@router.get("/infoscreen", response_class=HTMLResponse)
+def infoscreen_intern(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*_LESE_ROLLEN)),
+    _guard: None = Depends(require_strassensperren_enabled),
+):
+    return templates.TemplateResponse(
+        request,
+        "road_closure/infoscreen.html",
+        {
+            "user": user, "org": _org(user), "modus": "infoscreen", "external": False,
+            "daten": _intern_infoscreen_daten(db, user), "daten_url": "/strassensperren/infoscreen/daten",
+            "zeige_karte": True, "filter_query": "",
+        },
+    )
+
+
+@router.get("/infoscreen/daten")
+def infoscreen_intern_daten(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*_LESE_ROLLEN)),
+    _guard: None = Depends(require_strassensperren_enabled),
+):
+    return JSONResponse(_intern_infoscreen_daten(db, user))
 
 
 @router.post("/abschnitt")

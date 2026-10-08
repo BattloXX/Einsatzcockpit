@@ -1,0 +1,71 @@
+{% extends "admin/_layout.html" %}
+{% from "admin/_breadcrumb.html" import breadcrumb %}
+{% block title %}Straßensperren – Externe Zugänge{% endblock %}
+{% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Straßensperren-Infoscreen'}]) }}{% endblock %}
+{% block admin_content %}
+{% include "admin/_infoscreen_tabs.html" %}
+<div class="page-header"><div><h1>Straßensperren – Externe Zugänge</h1><p class="page-header__sub">Statusseite und Infoscreen ohne Anmeldung. Öffentlich sichtbar sind nur eigene aktuelle Sperren ohne interne Beschreibung, Quelle und Dokumente.</p></div></div>
+
+<section class="card mb-4">
+  <div class="card-header"><h2>Neuer Zugang</h2></div>
+  <div class="card-body">
+    <form method="post" action="/admin/settings/strassensperren-infoscreen/neu" class="rc-token-form">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label" for="rc-art">Art</label>
+          <select class="form-select" id="rc-art" name="art"><option value="status">Statusseite (Smartphone, Tablet, Browser)</option><option value="infoscreen">Infoscreen (Wandmonitor, Vollbild)</option></select></div>
+        <div class="form-group"><label class="form-label" for="rc-label">Bezeichnung</label><input class="form-input" id="rc-label" name="label" maxlength="120" placeholder="z. B. Gemeindeamt Foyer"></div>
+        <div class="form-group"><label class="form-label" for="rc-expires">Gültig bis (optional)</label><input class="form-input" id="rc-expires" type="date" name="expires"></div>
+        <div class="form-group"><label class="form-label" for="rc-refresh">Aktualisierung (Sekunden)</label><input class="form-input" id="rc-refresh" type="number" name="refresh_sec" min="30" max="600" value="60"></div>
+        <div class="form-group"><label class="form-label" for="rc-rotation">Rotation (Sekunden, nur Infoscreen, 0 = aus)</label><input class="form-input" id="rc-rotation" type="number" name="rotation_sec" min="0" max="600" value="0"></div>
+      </div>
+      <div class="rc-checks">
+        <label><input type="checkbox" name="zeige_geplante" value="1" checked> Geplante Sperren anzeigen</label>
+        <label><input type="checkbox" name="zeige_karte" value="1" checked> Karte anzeigen</label>
+        <label><input type="checkbox" name="zeige_einschraenkungen" value="1" checked> Einschränkungen und Ausnahmen anzeigen</label>
+        <label><input type="checkbox" name="zeige_grund" value="1" checked> Grund anzeigen</label>
+      </div>
+      <button class="btn btn--primary" type="submit">Zugang erstellen</button>
+    </form>
+  </div>
+</section>
+
+<section class="card mb-4">
+  <div class="card-header"><h2>Bestehende Zugänge</h2></div>
+  <div class="card-body">
+    {% if not tokens %}<p class="text-muted">Noch keine externen Zugänge.</p>{% endif %}
+    {% for row in tokens %}
+    <article class="rc-token{% if row.state != 'aktiv' %} rc-token--inaktiv{% endif %}">
+      <div class="rc-token__head">
+        <strong>{{ row.token.label or 'Ohne Bezeichnung' }}</strong>
+        <span class="badge">{{ 'Infoscreen' if row.token.art == 'infoscreen' else 'Statusseite' }}</span>
+        <span class="badge{% if row.state == 'aktiv' %} badge--success{% else %} badge--muted{% endif %}">{{ row.state|capitalize }}</span>
+      </div>
+      <p class="rc-token__meta">Erstellt {{ row.token.created_at|local_datetime }}{% if row.token.expires_at %} · gültig bis {{ row.token.expires_at|local_datetime }}{% endif %}{% if row.token.last_used_at %} · zuletzt genutzt {{ row.token.last_used_at|local_datetime }}{% endif %}{% if row.token.art == 'infoscreen' and row.berechtigungen.get('rotation_sec') %} · Rotation {{ row.berechtigungen.get('rotation_sec') }} s{% endif %}</p>
+      {% if row.state == 'aktiv' and row.url %}
+      <div class="rc-token__url">
+        <input class="form-input" id="rc-url-{{ row.token.id }}" readonly value="{{ row.url }}" onclick="this.select()">
+        <button class="btn btn--ghost btn--sm" type="button" onclick="(function(i,b){i.select();if(navigator.clipboard){navigator.clipboard.writeText(i.value)}else{document.execCommand('copy')}b.textContent='Kopiert'})(document.getElementById('rc-url-{{ row.token.id }}'),this)">Kopieren</button>
+        <a class="btn btn--ghost btn--sm" href="{{ row.url }}" target="_blank" rel="noopener">Öffnen</a>
+        {% if row.qr %}<img class="rc-token__qr" src="{{ row.qr }}" alt="QR-Code">{% endif %}
+      </div>
+      <form method="post" action="/admin/settings/strassensperren-infoscreen/{{ row.token.id }}/widerrufen" onsubmit="return confirm('Zugang wirklich widerrufen?')">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <button class="btn btn--danger btn--sm" type="submit">Widerrufen</button>
+      </form>
+      {% endif %}
+    </article>
+    {% endfor %}
+  </div>
+</section>
+<style>
+.rc-checks{display:flex;flex-wrap:wrap;gap:.5rem 1.25rem;margin:.75rem 0 1rem}
+.rc-token{border:1px solid var(--border);border-radius:var(--radius-lg,10px);padding:.8rem 1rem;margin-bottom:.75rem}
+.rc-token--inaktiv{opacity:.6}
+.rc-token__head{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+.rc-token__meta{font-size:.82rem;color:var(--text-muted);margin:.35rem 0}
+.rc-token__url{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin:.4rem 0 .6rem}
+.rc-token__url .form-input{flex:1;min-width:240px;font-family:var(--font-mono,monospace);font-size:.8rem}
+.rc-token__qr{width:96px;height:96px;background:#fff;border-radius:4px}
+</style>
+{% endblock %}
