@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime, timedelta
-from urllib.parse import quote
+from datetime import UTC, date, datetime, timedelta
+from urllib.parse import parse_qs, quote, urlencode
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
@@ -27,7 +27,7 @@ from app.models.road_closure import (
     RoadClosureDocument,
 )
 from app.models.user import User
-from app.services import road_closure_service
+from app.services import road_closure_service, road_closure_stats_service
 from app.services.address_autocomplete import suggest_addresses
 from app.services.road_closure_document_service import absolute_path, delete_document, store_document
 from app.services.road_closure_section_service import resolve_section, validate_address
@@ -54,24 +54,35 @@ def _closure_or_404(db: Session, user: User, closure_id: int, *, writable: bool)
         raise HTTPException(status_code=404, detail="Nicht gefunden") from exc
 
 
-def _filters(status: str, zeitraum: str, scope: str, q: str, restriction_type: str, org):
+def _filters(status: str, zeitraum: str, scope: str, q: str, restriction_type: str, org, von: str = "", bis: str = ""):
     if status not in {"current", "active", "planned", "all"}:
         status = "current"
     if scope not in {"all", "own", "shared"}:
         scope = "all"
-    if zeitraum not in {"", "heute", "7tage"}:
+    if zeitraum not in {"", "heute", "7tage", "30tage", "eigen"}:
         zeitraum = ""
-    von = bis = None
-    if zeitraum:
+    date_von: datetime | None = None
+    date_bis: datetime | None = None
+    if zeitraum in {"heute", "7tage", "30tage"}:
         # local_date_to_utc deliberately receives org: DB uses naive UTC.
         local_now = datetime.now(UTC).astimezone(org_tz(org))
         start = local_now.date()
-        end = start + timedelta(days=6 if zeitraum == "7tage" else 0)
-        von, bis = local_date_to_utc(start.isoformat(), org=org), local_date_to_utc(end.isoformat(), end=True, org=org)
+        end = start + timedelta(days=29 if zeitraum == "30tage" else (6 if zeitraum == "7tage" else 0))
+        date_von = local_date_to_utc(start.isoformat(), org=org)
+        date_bis = local_date_to_utc(end.isoformat(), end=True, org=org)
+    elif zeitraum == "eigen":
+        try:
+            date_von = local_date_to_utc(date.fromisoformat(von).isoformat(), org=org) if von else None
+        except ValueError:
+            date_von = None
+        try:
+            date_bis = local_date_to_utc(date.fromisoformat(bis).isoformat(), org=org, end=True) if bis else None
+        except ValueError:
+            date_bis = None
     return (
         (None if status == "all" else status),
-        von,
-        bis,
+        date_von,
+        date_bis,
         scope,
         q.strip(),
         restriction_type if restriction_type in RESTRICTION_TYPES else "",
@@ -79,17 +90,18 @@ def _filters(status: str, zeitraum: str, scope: str, q: str, restriction_type: s
 
 
 def _closures(
-    db: Session, user: User, status: str, zeitraum: str, scope: str, q: str, restriction_type: str, geometrie: str
+    db: Session, user: User, status: str, zeitraum: str, scope: str, q: str, restriction_type: str, geometrie: str,
+    von: str = "", bis: str = "",
 ):
-    selected_status, von, bis, selected_scope, text, selected_type = _filters(
-        status, zeitraum, scope, q, restriction_type, _org(user)
+    selected_status, filter_von, filter_bis, selected_scope, text, selected_type = _filters(
+        status, zeitraum, scope, q, restriction_type, _org(user), von, bis
     )
     items = road_closure_service.list_closures(
         db,
         _org(user).id,
         status=selected_status,
-        von=von,
-        bis=bis,
+        von=filter_von,
+        bis=filter_bis,
         text=text,
         restriction_type=selected_type or None,
         scope=selected_scope,
@@ -97,11 +109,73 @@ def _closures(
     )
     return items, {
         "status": status if status in {"current", "active", "planned", "all"} else "current",
-        "zeitraum": zeitraum,
+        "zeitraum": zeitraum if zeitraum in {"", "heute", "7tage", "30tage", "eigen"} else "",
         "scope": selected_scope,
         "q": text,
         "restriction_type": selected_type,
         "geometrie": geometrie if geometrie in {"", "pruefen", "ok", "fehlt"} else "",
+        "von": von if zeitraum == "eigen" else "",
+        "bis": bis if zeitraum == "eigen" else "",
+    }
+
+
+def _filter_query(filters: dict, drop: str | None = None) -> str:
+    values = {key: value for key, value in filters.items() if key != drop}
+    if drop == "zeitraum":
+        values.pop("von", None)
+        values.pop("bis", None)
+    defaults = {
+        "status": "current", "zeitraum": "", "scope": "all", "q": "",
+        "restriction_type": "", "geometrie": "", "von": "", "bis": "",
+    }
+    return urlencode({key: value for key, value in values.items() if value != defaults.get(key, "")})
+
+
+_FILTER_LABELS = {
+    "status": {"active": "Aktiv", "planned": "Geplant", "all": "Alle Status"},
+    "zeitraum": {"heute": "Heute", "7tage": "7 Tage", "30tage": "30 Tage", "eigen": "Eigener Zeitraum"},
+    "scope": {"own": "Eigene", "shared": "Nachbarn"},
+    "geometrie": {"pruefen": "Geometrie prüfen", "ok": "Geometrie geprüft", "fehlt": "Geometrie fehlt"},
+}
+
+
+def _active_filters(filters: dict) -> list[dict[str, str]]:
+    """Pills for non-default filters; each link removes exactly that filter."""
+    pills = []
+    for key in ("status", "zeitraum", "scope", "geometrie", "restriction_type", "q"):
+        value = filters.get(key) or ""
+        if key == "status" and value == "current" or key == "scope" and value == "all" or not value:
+            continue
+        if key == "restriction_type":
+            label = RESTRICTION_TYPES.get(value, value)
+        elif key == "q":
+            label = f"Suche: {value}"
+        else:
+            label = _FILTER_LABELS[key].get(value, value)
+        rest = _filter_query(filters, drop=key)
+        # Empty query would restore the remembered cookie filters, so reset explicitly.
+        pills.append({"label": label, "href": "/strassensperren?" + (rest or "reset=1")})
+    return pills
+
+
+def _cookie_filters(request: Request, user: User) -> dict:
+    raw = request.cookies.get("sperren_filter", "")
+    values = {key: values[-1] for key, values in parse_qs(raw).items()}
+    # Normalize without querying: _filters performs all validation used by routes.
+    selected, _, _, scope, text, kind = _filters(
+        values.get("status", "current"), values.get("zeitraum", ""), values.get("scope", "all"),
+        values.get("q", ""), values.get("restriction_type", ""), _org(user),
+        values.get("von", ""), values.get("bis", ""),
+    )
+    valid_periods = {"", "heute", "7tage", "30tage", "eigen"}
+    valid_geometry = {"", "pruefen", "ok", "fehlt"}
+    period = values.get("zeitraum", "")
+    geometry = values.get("geometrie", "")
+    return {
+        "status": selected or "all", "zeitraum": period if period in valid_periods else "",
+        "scope": scope, "q": text, "restriction_type": kind,
+        "geometrie": geometry if geometry in valid_geometry else "",
+        "von": values.get("von", ""), "bis": values.get("bis", ""),
     }
 
 
@@ -255,6 +329,7 @@ def _edit_page(request, db, user, closure=None, form_data=None, error=None, stat
             "shared_org_ids": {int(org_id) for org_id in shared_ids},
             "org_city": _org(user).city or "",
             "related": related or [],
+            "back_query": _filter_query(_cookie_filters(request, user)),
         },
         status_code=status_code,
     )
@@ -272,33 +347,40 @@ def index(
     q: str = "",
     restriction_type: str = "",
     geometrie: str = "",
+    von: str = "",
+    bis: str = "",
 ):
-    items, filters = _closures(db, user, status, zeitraum, scope, q, restriction_type, geometrie)
-    active = len(road_closure_service.list_closures(db, _org(user).id, status="active"))
-    planned = len(road_closure_service.list_closures(db, _org(user).id, status="planned"))
-    ungeprueft = len(
-        road_closure_service.list_closures(
-            db, _org(user).id, status="current", scope="own", geometrie="pruefen"
+    if request.query_params.get("reset") == "1":
+        status, zeitraum, scope, q, restriction_type, geometrie, von, bis = "current", "", "all", "", "", "", "", ""
+    elif not request.query_params:
+        stored = _cookie_filters(request, user)
+        status, zeitraum, scope, q, restriction_type, geometrie, von, bis = (
+            stored[key] for key in ("status", "zeitraum", "scope", "q", "restriction_type", "geometrie", "von", "bis")
         )
-    )
-    return templates.TemplateResponse(
+    items, filters = _closures(db, user, status, zeitraum, scope, q, restriction_type, geometrie, von, bis)
+    filter_query = _filter_query(filters)
+    metrics = road_closure_stats_service.kennzahlen(db, _org(user), scope="all")
+    context = {
+        "user": user, "closures": items, "filters": filters, "filter_query": filter_query,
+        "restriction_types": RESTRICTION_TYPES, "active_count": metrics["aktiv"], "planned_count": metrics["geplant"],
+        "ungeprueft_count": metrics["geometrie_pruefen"], "status_labels": CLOSURE_STATUS, "color": _color,
+        "closure_status": road_closure_service.compute_status, "can_edit": has_role(user, "objekt_verwalter"),
+        "org_names": _org_names(db, items), "active_filters": _active_filters(filters),
+        "oob": request.headers.get("HX-Request") == "true" and request.headers.get("HX-Boosted") != "true",
+    }
+    template = "road_closure/_inhalt.html" if context["oob"] else "road_closure/index.html"
+    response = templates.TemplateResponse(
         request,
-        "road_closure/index.html",
-        {
-            "user": user,
-            "closures": items,
-            "filters": filters,
-            "restriction_types": RESTRICTION_TYPES,
-            "active_count": active,
-            "planned_count": planned,
-            "ungeprueft_count": ungeprueft,
-            "status_labels": CLOSURE_STATUS,
-            "color": _color,
-            "closure_status": road_closure_service.compute_status,
-            "can_edit": has_role(user, "objekt_verwalter"),
-            "org_names": _org_names(db, items),
-        },
+        template, context,
     )
+    if request.query_params.get("reset") == "1":
+        response.delete_cookie("sperren_filter", path="/strassensperren")
+    else:
+        response.set_cookie(
+            "sperren_filter", filter_query, httponly=True, secure=settings.COOKIE_SECURE,
+            samesite="lax", path="/strassensperren", max_age=30 * 86400,
+        )
+    return response
 
 
 @router.get("/liste", response_class=HTMLResponse)
@@ -313,8 +395,10 @@ def liste(
     q: str = "",
     restriction_type: str = "",
     geometrie: str = "",
+    von: str = "",
+    bis: str = "",
 ):
-    items, filters = _closures(db, user, status, zeitraum, scope, q, restriction_type, geometrie)
+    items, filters = _closures(db, user, status, zeitraum, scope, q, restriction_type, geometrie, von, bis)
     return templates.TemplateResponse(
         request,
         "road_closure/_liste.html",
@@ -342,8 +426,10 @@ def karte(
     q: str = "",
     restriction_type: str = "",
     geometrie: str = "",
+    von: str = "",
+    bis: str = "",
 ):
-    items, _ = _closures(db, user, status, zeitraum, scope, q, restriction_type, geometrie)
+    items, _ = _closures(db, user, status, zeitraum, scope, q, restriction_type, geometrie, von, bis)
     features = [
         feature for item in items if (feature := _feature(item, viewer_org_id=user.org_id)) is not None
     ]
@@ -356,8 +442,12 @@ def statusansicht(
     db: Session = Depends(get_db),
     user: User = Depends(require_role(*_LESE_ROLLEN)),
     _guard: None = Depends(require_strassensperren_enabled),
+    status: str = "current", zeitraum: str = "", scope: str = "all", q: str = "",
+    restriction_type: str = "", geometrie: str = "", von: str = "", bis: str = "",
 ):
-    closures, active, planned = _status_data(db, _org(user).id)
+    closures, filters = _closures(db, user, status, zeitraum, scope, q, restriction_type, geometrie, von, bis)
+    active = sum(road_closure_service.compute_status(closure) == "active" for closure in closures)
+    planned = sum(road_closure_service.compute_status(closure) == "planned" for closure in closures)
     return templates.TemplateResponse(
         request,
         "road_closure/status.html",
@@ -370,7 +460,9 @@ def statusansicht(
             "color": _color,
             "closure_status": road_closure_service.compute_status,
             "public": False,
-            "geojson_url": "/strassensperren/karte.json?status=current",
+            "geojson_url": "/strassensperren/karte.json?" + _filter_query(filters),
+            "filter_query": _filter_query(filters),
+            "ungeprueft_count": road_closure_stats_service.kennzahlen(db, _org(user))["geometrie_pruefen"],
         },
     )
 
@@ -572,6 +664,7 @@ def detail(
             "shared_org_names": shared_org_names,
             "superseded_by": superseded_by,
             "supersedes": supersedes,
+            "back_query": _filter_query(_cookie_filters(request, user)),
         },
     )
 

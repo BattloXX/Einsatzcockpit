@@ -14,7 +14,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, selectinload
 
 from app.config import settings
-from app.core.permissions import can_access_incident, has_role, require_role
+from app.core.permissions import STRASSENSPERREN_LESE_ROLLEN, can_access_incident, has_role, require_role
 from app.core.queries import visible_incidents_q
 from app.core.redirects import login_redirect
 from app.core.resilience import run_side_effect
@@ -360,6 +360,16 @@ def index(request: Request, db: Session = Depends(get_db)):
     )
     alarm_types = db.query(AlarmType).order_by(AlarmType.code).all()
     org = getattr(user, "org", None)
+    show_strassensperren = bool(
+        getattr(request.state, "strassensperren_enabled", False) and has_role(user, *STRASSENSPERREN_LESE_ROLLEN)
+    )
+    sperren_kennzahlen = None
+    if show_strassensperren and org is not None:
+        try:
+            from app.services.road_closure_stats_service import kennzahlen
+            sperren_kennzahlen = kennzahlen(db, org, scope="all")
+        except Exception:
+            _log.warning("Straßensperren-Kennzahlen konnten nicht geladen werden", exc_info=True)
     default_city = (org.city if org and org.city else settings.DEFAULT_INCIDENT_CITY)
     return templates.TemplateResponse(request, "index.html", {
         "user": user,
@@ -367,6 +377,8 @@ def index(request: Request, db: Session = Depends(get_db)):
         "active_major_incidents": active_major_payloads,
         "alarm_types": alarm_types,
         "default_city": default_city,
+        "show_strassensperren": show_strassensperren,
+        "sperren_kennzahlen": sperren_kennzahlen,
     })
 
 

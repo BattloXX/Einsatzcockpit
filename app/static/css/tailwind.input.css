@@ -3032,3 +3032,24 @@ button.htmx-request,
   body:has(.bottom-nav) .probe-detail-bottom { bottom: calc(74px + env(safe-area-inset-bottom,0px)); }
   .probe-checklist-command .btn { white-space: normal; }
 }
+
+/* Gemeinsamer Seitenkopf mit Zurück-Link und kompakte Filter-Chips (Straßensperren). */
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+.ec-page-header { justify-content: flex-start; gap: .75rem; flex-wrap: wrap; }
+.ec-page-header .page-header__actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+.ec-back { flex: none; }
+.ec-chip-toggle { display: inline-flex; }
+.ec-chip-toggle__label { display: inline-flex; align-items: center; min-height: 32px; padding: .3rem .7rem;
+  border: 1px solid var(--border); border-radius: 999px; cursor: pointer; font-size: .8rem; white-space: nowrap;
+  background: var(--surface-low); color: var(--text); }
+.ec-chip-toggle input:checked + span { background: var(--red); color: #fff; border-color: var(--red); font-weight: 700; }
+.ec-chip-toggle input:checked + span::before { content: "\2713\00a0"; }
+.ec-chip-toggle input:focus-visible + span { outline: 2px solid var(--red-light); outline-offset: 2px; }
+.module-btn__badge { margin-top: 4px; padding: 2px 8px; background: var(--surface-high); border-radius: 999px;
+  font-size: .72rem; color: var(--text-muted); }
+.module-btn__badge--active { color: var(--red-light); font-weight: 700; }
+@media (max-width:760px) {
+  .ec-page-header { position: sticky; top: 0; z-index: 20; background: var(--surface); }
+  .ec-chip-toggle__label { min-height: 40px; }
+}
