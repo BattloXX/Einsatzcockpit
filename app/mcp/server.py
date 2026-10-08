@@ -723,10 +723,19 @@ async def kontakt_suchen(
     kategorie: int | None = None,
     limit: int = 25,
     seite: int = 1,
+    organisation_id: int | None = None,
+    funktion: str = "",
+    quelle: str = "",
+    externe_id: str = "",
+    aktiv: bool | None = None,
+    aktualisiert_seit: str = "",
+    vollstaendig: bool = False,
     ctx: Context | None = None,
 ) -> dict[str, object]:
     return await _call_registered_tool(
-        "kontakt_suchen", q=q, typ=typ, kategorie=kategorie, limit=limit, seite=seite
+        "kontakt_suchen", q=q, typ=typ, kategorie=kategorie, limit=limit, seite=seite,
+        organisation_id=organisation_id, funktion=funktion, quelle=quelle, externe_id=externe_id,
+        aktiv=aktiv, aktualisiert_seit=aktualisiert_seit, vollstaendig=vollstaendig,
     )
 
 
@@ -842,6 +851,41 @@ async def kontakt_zusammenfuehren(
         feldwahl=feldwahl,
         bestaetigt=bestaetigt,
     )
+
+
+@server.tool(name="kontakt_organisation_suchen", description="Sucht Organisationen und Ansprechpartner.")
+async def kontakt_organisation_suchen(q: str = "", limit: int = 25, ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("kontakt_organisation_suchen", q=q, limit=limit)
+
+
+@server.tool(name="kontakt_organisation_upsert", description="Legt eine Organisation an oder aktualisiert sie.")
+async def kontakt_organisation_upsert(organisation: dict, ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("kontakt_organisation_upsert", organisation=organisation)
+
+
+@server.tool(name="kontakt_funktion_zuordnen", description="Ordnet einen Kontakt einer Organisationsfunktion zu.")
+async def kontakt_funktion_zuordnen(kontakt_id: int, organisation: dict, funktion: dict, ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("kontakt_funktion_zuordnen", kontakt_id=kontakt_id, organisation=organisation, funktion=funktion)
+
+
+@server.tool(name="kontakt_bulk_upsert", description="Validiert oder führt strukturierte Kontakt-Massenänderungen aus.")
+async def kontakt_bulk_upsert(kontakte: list[dict], modus: str = "merge", dry_run: bool = True, idempotency_key: str = "", bestaetigt: bool = False, quelle: str = "MCP", ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("kontakt_bulk_upsert", kontakte=kontakte, modus=modus, dry_run=dry_run, idempotency_key=idempotency_key, bestaetigt=bestaetigt, quelle=quelle)
+
+
+@server.tool(name="kontakt_import_vorschau", description="Erstellt eine schreibfreie Kontaktimport-Vorschau.")
+async def kontakt_import_vorschau(quelle: str, kontakte: list[dict], quellendatum: str = "", importmodus: str = "merge", organisationen: list[dict] | None = None, optionen: dict | None = None, ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("kontakt_import_vorschau", quelle=quelle, kontakte=kontakte, quellendatum=quellendatum, importmodus=importmodus, organisationen=organisationen, optionen=optionen)
+
+
+@server.tool(name="kontakt_import_ausfuehren", description="Führt eine bestätigte Kontaktimport-Vorschau aus.")
+async def kontakt_import_ausfuehren(preview_id: int, bestaetigte_konfliktentscheidungen: dict | None = None, idempotency_key: str = "", ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("kontakt_import_ausfuehren", preview_id=preview_id, bestaetigte_konfliktentscheidungen=bestaetigte_konfliktentscheidungen, idempotency_key=idempotency_key)
+
+
+@server.tool(name="kontakt_import_status", description="Liest den Status eines Kontaktimport-Batches.")
+async def kontakt_import_status(batch_id: int, ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("kontakt_import_status", batch_id=batch_id)
 
 
 @server.tool(
