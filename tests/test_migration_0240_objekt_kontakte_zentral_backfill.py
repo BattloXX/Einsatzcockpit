@@ -8,10 +8,6 @@ from pathlib import Path
 import sqlalchemy as sa
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from sqlalchemy.orm import sessionmaker
-
-from app.core.tenant import set_tenant_context
-from app.services import kontakt_service
 
 _PFAD = Path(__file__).resolve().parents[1] / "alembic" / "versions" / "0240_objekt_kontakte_zentral_backfill.py"
 
@@ -115,17 +111,16 @@ def test_objekt_kontakte_werden_idempotent_zentral_migriert_und_sind_lesbar(tmp_
         assert conn.execute(sa.text("SELECT count(*) FROM kontakt_telefon")).scalar() == 2
         assert conn.execute(sa.text("SELECT count(*) FROM objekt_kontakt_freigabe")).scalar() == 2
 
-        Session = sessionmaker(bind=conn)
-        db = Session()
-        set_tenant_context(db, 1)
-        try:
-            kontakt_id = verknuepfungen[0][1]
-            kontakt = kontakt_service.get_kontakt(db, kontakt_id)
-            assert kontakt is not None
-            assert kontakt.anzeigename == "Anna Beispiel"
-            assert [telefon.nummer_normalisiert for telefon in kontakt.telefone] == ["+43664123456"]
-        finally:
-            db.close()
+        kontakt_id = verknuepfungen[0][1]
+        kontakt = conn.execute(
+            sa.text("SELECT anzeigename FROM kontakt WHERE id = :kontakt_id"), {"kontakt_id": kontakt_id}
+        ).scalar_one()
+        assert kontakt == "Anna Beispiel"
+        kontakt_telefone = conn.execute(
+            sa.text("SELECT nummer_normalisiert FROM kontakt_telefon WHERE kontakt_id = :kontakt_id"),
+            {"kontakt_id": kontakt_id},
+        ).scalars().all()
+        assert kontakt_telefone == ["+43664123456"]
 
 
 def test_backfill_leerer_tisch_ist_noop(tmp_path):

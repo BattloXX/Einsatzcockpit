@@ -126,7 +126,9 @@ class KontaktOrganisation(TenantScoped, Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     kurzname: Mapped[str | None] = mapped_column(String(100), nullable=True)
     organisationstyp: Mapped[str] = mapped_column(String(30), nullable=False, default="Sonstige")
-    uebergeordnete_organisation_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("kontakt_organisation.id", ondelete="SET NULL"))
+    uebergeordnete_organisation_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("kontakt_organisation.id", ondelete="SET NULL")
+    )
     externe_id: Mapped[str | None] = mapped_column(String(150), nullable=True)
     quellenreferenz: Mapped[str | None] = mapped_column(String(100), nullable=True)
     website: Mapped[str | None] = mapped_column(String(300), nullable=True)
@@ -139,7 +141,9 @@ class KontaktAdresse(TenantScoped, Base):
     __table_args__ = (Index("ix_kontakt_adresse_org_kontakt", "org_id", "kontakt_id"),)
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     kontakt_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("kontakt.id", ondelete="CASCADE"))
-    organisation_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("kontakt_organisation.id", ondelete="SET NULL"))
+    organisation_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("kontakt_organisation.id", ondelete="SET NULL")
+    )
     typ: Mapped[str] = mapped_column(String(20), nullable=False, default="sonstige")
     strasse: Mapped[str | None] = mapped_column(String(200))
     hausnummer: Mapped[str | None] = mapped_column(String(30))
@@ -160,7 +164,9 @@ class KontaktOrganisationFunktion(TenantScoped, Base):
     __table_args__ = (Index("ix_kontakt_org_funktion_kontakt", "org_id", "kontakt_id"),)
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     kontakt_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("kontakt.id", ondelete="CASCADE"), nullable=False)
-    organisation_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("kontakt_organisation.id", ondelete="CASCADE"), nullable=False)
+    organisation_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("kontakt_organisation.id", ondelete="CASCADE"), nullable=False
+    )
     funktion: Mapped[str] = mapped_column(String(150), nullable=False)
     funktionskategorie: Mapped[str | None] = mapped_column(String(100))
     ist_hauptfunktion: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

@@ -18,10 +18,8 @@ from app.models.kontakt import (
     KontaktExterneReferenz,
     KontaktKategorie,
     KontaktKategorieZuordnung,
-    KontaktTelefon,
-    KontaktAdresse,
-    KontaktEmail,
     KontaktOrganisationFunktion,
+    KontaktTelefon,
 )
 from app.models.objekt import ObjektKontakt, ObjektKontaktBenachrichtigung
 
