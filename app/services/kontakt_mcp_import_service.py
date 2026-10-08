@@ -251,6 +251,7 @@ def _sync_relations(db: Session, kontakt: Kontakt, row: dict[str, Any], org_id: 
                     setattr(address_item, field, address_value[field])
             db.add(address_item)
     if "organisationen" in row:
+        seen_functions: set[tuple[int, str]] = set()
         for organisation_value in row["organisationen"] or []:
             if not isinstance(organisation_value, dict):
                 continue
@@ -261,6 +262,7 @@ def _sync_relations(db: Session, kontakt: Kontakt, row: dict[str, Any], org_id: 
             funktion = _text(organisation_value.get("funktion"))
             if organisation is None or not funktion:
                 continue
+            seen_functions.add((organisation.id, funktion))
             present = next(
                 (
                     function for function in kontakt.organisations_funktionen
@@ -278,6 +280,10 @@ def _sync_relations(db: Session, kontakt: Kontakt, row: dict[str, Any], org_id: 
             ):
                 if field in organisation_value and organisation_value[field] is not None:
                     setattr(present, field, organisation_value[field])
+        if replace:
+            for item in list(kontakt.organisations_funktionen):
+                if (item.organisation_id, item.funktion) not in seen_functions:
+                    db.delete(item)
 
 
 def upsert_contact(
