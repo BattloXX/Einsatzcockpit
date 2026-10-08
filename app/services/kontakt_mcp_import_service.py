@@ -11,11 +11,17 @@ from typing import Any
 
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.core.telefon import telefon_normalisiert
 from app.models.kontakt import (
-    Kontakt, KontaktAdresse, KontaktEmail, KontaktExterneReferenz,
-    KontaktOrganisation, KontaktOrganisationFunktion, KontaktTelefon,
+    Kontakt,
+    KontaktAdresse,
+    KontaktEmail,
+    KontaktExterneReferenz,
+    KontaktOrganisation,
+    KontaktOrganisationFunktion,
+    KontaktTelefon,
 )
 
 MAX_BATCH = 250
@@ -40,29 +46,79 @@ def _details(query):
 
 def kontakt_payload(kontakt: Kontakt) -> dict[str, Any]:
     return {
-        "id": kontakt.id, "version": kontakt.version, "typ": kontakt.typ,
-        "anzeigename": kontakt.anzeigename, "anrede": kontakt.anrede,
-        "titel_vor": kontakt.titel_vor, "vorname": kontakt.vorname,
-        "nachname": kontakt.nachname, "titel_nach": kontakt.titel_nach,
-        "aktiv": kontakt.aktiv, "gueltig_ab": str(kontakt.gueltig_ab or "") or None,
+        "id": kontakt.id,
+        "version": kontakt.version,
+        "typ": kontakt.typ,
+        "anzeigename": kontakt.anzeigename,
+        "anrede": kontakt.anrede,
+        "titel_vor": kontakt.titel_vor,
+        "vorname": kontakt.vorname,
+        "nachname": kontakt.nachname,
+        "titel_nach": kontakt.titel_nach,
+        "aktiv": kontakt.aktiv,
+        "gueltig_ab": str(kontakt.gueltig_ab or "") or None,
         "gueltig_bis": str(kontakt.gueltig_bis or "") or None,
-        "datenquelle": kontakt.datenquelle, "externe_quelle_id": kontakt.externe_quelle_id,
-        "quellendokument": kontakt.quellendokument, "quellendatum": str(kontakt.quellendatum or "") or None,
+        "datenquelle": kontakt.datenquelle,
+        "externe_quelle_id": kontakt.externe_quelle_id,
+        "quellendokument": kontakt.quellendokument,
+        "quellendatum": str(kontakt.quellendatum or "") or None,
         "aktualisiert_am": kontakt.aktualisiert_am.isoformat() if kontakt.aktualisiert_am else None,
-        "telefone": [{"id": p.id, "nummer": p.nummer, "nummer_normalisiert": p.nummer_normalisiert, "typ": p.typ, "verwendung": p.verwendung, "label": p.label, "bevorzugt": p.bevorzugt, "sms_eignung": p.sms_eignung, "whatsapp_eignung": p.whatsapp_eignung, "aktiv": p.aktiv, "sortierung": p.sort} for p in kontakt.telefone],
-        "email_adressen": [{"id": e.id, "email": e.email, "typ": e.typ, "label": e.label, "bevorzugt": e.bevorzugt, "aktiv": e.aktiv, "sortierung": e.sortierung} for e in kontakt.email_adressen],
-        "adressen": [{key: getattr(a, key) for key in ("id", "typ", "strasse", "hausnummer", "adresszusatz", "plz", "ort", "bundesland", "land", "latitude", "longitude", "organisation_id", "bevorzugt", "aktiv")} for a in kontakt.adressen],
-        "organisationen": [{"zuordnung_id": f.id, "organisation_id": f.organisation_id, "name": f.organisation.name if f.organisation else None, "kurzname": f.organisation.kurzname if f.organisation else None, "funktion": f.funktion, "funktionskategorie": f.funktionskategorie, "ist_hauptfunktion": f.ist_hauptfunktion, "prioritaet": f.prioritaet, "aktiv": f.aktiv, "erreichbarkeit": f.erreichbarkeit, "vertretung_kontakt_id": f.vertretung_kontakt_id, "bemerkung": f.bemerkung} for f in kontakt.organisations_funktionen],
-        "quellen": [{"quelle": r.quelle, "namespace": r.quelle_kontext, "externe_id": r.extern_id} for r in kontakt.externe_referenzen],
+        "telefone": [
+            {
+                "id": phone.id, "nummer": phone.nummer, "nummer_normalisiert": phone.nummer_normalisiert,
+                "typ": phone.typ, "verwendung": phone.verwendung, "label": phone.label,
+                "bevorzugt": phone.bevorzugt, "sms_eignung": phone.sms_eignung,
+                "whatsapp_eignung": phone.whatsapp_eignung, "aktiv": phone.aktiv, "sortierung": phone.sort,
+            }
+            for phone in kontakt.telefone
+        ],
+        "email_adressen": [
+            {
+                "id": email_address.id, "email": email_address.email, "typ": email_address.typ,
+                "label": email_address.label, "bevorzugt": email_address.bevorzugt,
+                "aktiv": email_address.aktiv, "sortierung": email_address.sortierung,
+            }
+            for email_address in kontakt.email_adressen
+        ],
+        "adressen": [
+            {
+                key: getattr(address, key)
+                for key in (
+                    "id", "typ", "strasse", "hausnummer", "adresszusatz", "plz", "ort", "bundesland",
+                    "land", "latitude", "longitude", "organisation_id", "bevorzugt", "aktiv",
+                )
+            }
+            for address in kontakt.adressen
+        ],
+        "organisationen": [
+            {
+                "zuordnung_id": function.id, "organisation_id": function.organisation_id,
+                "name": function.organisation.name if function.organisation else None,
+                "kurzname": function.organisation.kurzname if function.organisation else None,
+                "funktion": function.funktion, "funktionskategorie": function.funktionskategorie,
+                "ist_hauptfunktion": function.ist_hauptfunktion, "prioritaet": function.prioritaet,
+                "aktiv": function.aktiv, "erreichbarkeit": function.erreichbarkeit,
+                "vertretung_kontakt_id": function.vertretung_kontakt_id, "bemerkung": function.bemerkung,
+            }
+            for function in kontakt.organisations_funktionen
+        ],
+        "quellen": [
+            {"quelle": reference.quelle, "namespace": reference.quelle_kontext, "externe_id": reference.extern_id}
+            for reference in kontakt.externe_referenzen
+        ],
     }
 
 
-def find_match(db: Session, org_id: int, row: dict[str, Any], quelle: str | None) -> tuple[Kontakt | None, list[int]]:
+def find_match(
+    db: Session, org_id: int, row: dict[str, Any], quelle: str | None
+) -> tuple[Kontakt | None, list[int]]:
     """Return a safe exact match and separate ambiguous candidate ids."""
     source_id = _text(row.get("externe_id") or row.get("externe_quelle_id"))
     requested_type = _text(row.get("typ"))
     if quelle and source_id:
-        ref = db.query(KontaktExterneReferenz).filter_by(org_id=org_id, quelle=quelle, extern_id=source_id).first()
+        ref = db.query(KontaktExterneReferenz).filter_by(
+            org_id=org_id, quelle=quelle, extern_id=source_id
+        ).first()
         if ref:
             match = _details(db.query(Kontakt)).filter(Kontakt.id == ref.kontakt_id).first()
             if match and (not requested_type or match.typ == requested_type):
@@ -72,20 +128,28 @@ def find_match(db: Session, org_id: int, row: dict[str, Any], quelle: str | None
         existing = _details(db.query(Kontakt)).filter_by(org_id=org_id, id=int(row["id"])).first()
         if existing and (not requested_type or existing.typ == requested_type):
             return existing, []
-    terms = []
-    for email in row.get("email_adressen") or []:
-        value = _text(email.get("email") if isinstance(email, dict) else email)
-        if value:
-            terms.append(func.lower(KontaktEmail.email) == value.lower())
-    if _text(row.get("email")):
-        terms.append(func.lower(Kontakt.email) == _text(row["email"]).lower())
-    for phone in row.get("telefone") or []:
-        value = _text(phone.get("nummer") if isinstance(phone, dict) else phone)
-        if value:
-            terms.append(KontaktTelefon.nummer_normalisiert == telefon_normalisiert(value))
+    terms: list[ColumnElement[bool]] = []
+    for email_value in row.get("email_adressen") or []:
+        email = _text(email_value.get("email") if isinstance(email_value, dict) else email_value)
+        if email:
+            terms.append(func.lower(KontaktEmail.email) == email.lower())
+    legacy_email = _text(row.get("email"))
+    if legacy_email:
+        terms.append(func.lower(Kontakt.email) == legacy_email.lower())
+    for phone_value in row.get("telefone") or []:
+        phone = _text(phone_value.get("nummer") if isinstance(phone_value, dict) else phone_value)
+        if phone:
+            terms.append(KontaktTelefon.nummer_normalisiert == telefon_normalisiert(phone))
     candidates = []
     if terms:
-        candidates = _details(db.query(Kontakt)).outerjoin(KontaktEmail).outerjoin(KontaktTelefon).filter(Kontakt.org_id == org_id, Kontakt.archiviert.is_(False), or_(*terms)).distinct().all()
+        candidates = (
+            _details(db.query(Kontakt))
+            .outerjoin(KontaktEmail)
+            .outerjoin(KontaktTelefon)
+            .filter(Kontakt.org_id == org_id, Kontakt.archiviert.is_(False), or_(*terms))
+            .distinct()
+            .all()
+        )
     candidates = [candidate for candidate in candidates if not requested_type or candidate.typ == requested_type]
     # Shared switchboard numbers and functional mailboxes are not identities.
     # Without an external ID, only an exact name corroborates a communication
@@ -107,7 +171,9 @@ def upsert_organisation(db: Session, org_id: int, data: dict[str, Any]) -> Konta
     if organisation is None:
         organisation = KontaktOrganisation(org_id=org_id, name=name)
         db.add(organisation)
-    for field in ("name", "kurzname", "organisationstyp", "externe_id", "quellenreferenz", "website", "notizen", "aktiv"):
+    for field in (
+        "name", "kurzname", "organisationstyp", "externe_id", "quellenreferenz", "website", "notizen", "aktiv"
+    ):
         if field in data and data[field] is not None:
             setattr(organisation, field, data[field])
     db.flush()
@@ -116,77 +182,141 @@ def upsert_organisation(db: Session, org_id: int, data: dict[str, Any]) -> Konta
 
 def _sync_relations(db: Session, kontakt: Kontakt, row: dict[str, Any], org_id: int, replace: bool) -> None:
     if "email_adressen" in row:
-        existing = {item.email.lower(): item for item in kontakt.email_adressen}
-        for pos, value in enumerate(row["email_adressen"] or []):
-            if not isinstance(value, dict) or not _text(value.get("email")):
+        existing_emails = {email.email.lower(): email for email in kontakt.email_adressen}
+        for pos, email_value in enumerate(row["email_adressen"] or []):
+            if not isinstance(email_value, dict):
                 continue
-            email = _text(value["email"])
-            item = existing.pop(email.lower(), None)
-            if item is None:
-                item = KontaktEmail(org_id=org_id, kontakt_id=kontakt.id, email=email)
-                db.add(item)
+            email = _text(email_value.get("email"))
+            if not email:
+                continue
+            email_item = existing_emails.pop(email.lower(), None)
+            if email_item is None:
+                email_item = KontaktEmail(org_id=org_id, kontakt_id=kontakt.id, email=email)
+                db.add(email_item)
             for field in ("typ", "label", "bevorzugt", "aktiv"):
-                if field in value and value[field] is not None:
-                    setattr(item, field, value[field])
-            item.sortierung = int(value.get("sortierung", pos))
+                if field in email_value and email_value[field] is not None:
+                    setattr(email_item, field, email_value[field])
+            sortierung = email_value.get("sortierung", pos)
+            email_item.sortierung = int(sortierung) if sortierung is not None else pos
         if replace:
-            for item in existing.values(): db.delete(item)
+            for email_item in existing_emails.values():
+                db.delete(email_item)
     if "telefone" in row:
-        existing = {item.nummer_normalisiert: item for item in kontakt.telefone}
-        for pos, value in enumerate(row["telefone"] or []):
-            if not isinstance(value, dict) or not _text(value.get("nummer")):
+        existing_phones = {phone.nummer_normalisiert: phone for phone in kontakt.telefone}
+        for pos, phone_value in enumerate(row["telefone"] or []):
+            if not isinstance(phone_value, dict):
                 continue
-            normalized = telefon_normalisiert(_text(value["nummer"]))
-            item = existing.pop(normalized, None)
-            if item is None:
-                item = KontaktTelefon(org_id=org_id, kontakt_id=kontakt.id, nummer=_text(value["nummer"]))
-                db.add(item)
-            for field in ("nummer", "typ", "verwendung", "label", "bevorzugt", "sms_eignung", "whatsapp_eignung", "aktiv"):
-                if field in value and value[field] is not None: setattr(item, field, value[field])
-            item.sort = int(value.get("sortierung", value.get("sort", pos)))
+            number = _text(phone_value.get("nummer"))
+            if not number:
+                continue
+            normalized = telefon_normalisiert(number)
+            phone_item = existing_phones.pop(normalized, None)
+            if phone_item is None:
+                phone_item = KontaktTelefon(org_id=org_id, kontakt_id=kontakt.id, nummer=number)
+                db.add(phone_item)
+            for field in (
+                "nummer", "typ", "verwendung", "label", "bevorzugt", "sms_eignung", "whatsapp_eignung", "aktiv"
+            ):
+                if field in phone_value and phone_value[field] is not None:
+                    setattr(phone_item, field, phone_value[field])
+            sortierung = phone_value.get("sortierung", phone_value.get("sort", pos))
+            phone_item.sort = int(sortierung) if sortierung is not None else pos
         if replace:
-            for item in existing.values(): db.delete(item)
+            for phone_item in existing_phones.values():
+                db.delete(phone_item)
     if "adressen" in row:
         if replace:
-            for item in list(kontakt.adressen): db.delete(item)
+            for address_item in list(kontakt.adressen):
+                db.delete(address_item)
         existing_addresses = {
-            (item.typ, item.strasse, item.hausnummer, item.plz, item.ort): item for item in kontakt.adressen
+            (address.typ, address.strasse, address.hausnummer, address.plz, address.ort): address
+            for address in kontakt.adressen
         }
-        for value in row["adressen"] or []:
-            if not isinstance(value, dict): continue
-            key = (value.get("typ", "sonstige"), value.get("strasse"), value.get("hausnummer"), value.get("plz"), value.get("ort"))
-            item = existing_addresses.pop(key, None) or KontaktAdresse(org_id=org_id, kontakt_id=kontakt.id)
-            for field in ("typ", "strasse", "hausnummer", "adresszusatz", "plz", "ort", "bundesland", "land", "latitude", "longitude", "organisation_id", "bevorzugt", "aktiv"):
-                if field in value: setattr(item, field, value[field])
-            db.add(item)
+        for address_value in row["adressen"] or []:
+            if not isinstance(address_value, dict):
+                continue
+            key = (
+                address_value.get("typ", "sonstige"), address_value.get("strasse"),
+                address_value.get("hausnummer"), address_value.get("plz"), address_value.get("ort"),
+            )
+            if key in existing_addresses:
+                address_item = existing_addresses.pop(key)
+            else:
+                address_item = KontaktAdresse(org_id=org_id, kontakt_id=kontakt.id)
+            for field in (
+                "typ", "strasse", "hausnummer", "adresszusatz", "plz", "ort", "bundesland", "land",
+                "latitude", "longitude", "organisation_id", "bevorzugt", "aktiv",
+            ):
+                if field in address_value:
+                    setattr(address_item, field, address_value[field])
+            db.add(address_item)
     if "organisationen" in row:
-        for value in row["organisationen"] or []:
-            if not isinstance(value, dict): continue
-            organisation = upsert_organisation(db, org_id, value) if not value.get("organisation_id") else db.get(KontaktOrganisation, value["organisation_id"])
-            if organisation is None or not _text(value.get("funktion")): continue
-            present = next((f for f in kontakt.organisations_funktionen if f.organisation_id == organisation.id and f.funktion == value["funktion"]), None)
+        for organisation_value in row["organisationen"] or []:
+            if not isinstance(organisation_value, dict):
+                continue
+            if organisation_value.get("organisation_id"):
+                organisation = db.get(KontaktOrganisation, organisation_value["organisation_id"])
+            else:
+                organisation = upsert_organisation(db, org_id, organisation_value)
+            funktion = _text(organisation_value.get("funktion"))
+            if organisation is None or not funktion:
+                continue
+            present = next(
+                (
+                    function for function in kontakt.organisations_funktionen
+                    if function.organisation_id == organisation.id and function.funktion == funktion
+                ),
+                None,
+            )
             if present is None:
-                present = KontaktOrganisationFunktion(org_id=org_id, kontakt_id=kontakt.id, organisation_id=organisation.id, funktion=value["funktion"])
+                present = KontaktOrganisationFunktion(
+                    org_id=org_id, kontakt_id=kontakt.id, organisation_id=organisation.id, funktion=funktion
+                )
                 db.add(present)
-            for field in ("funktionskategorie", "ist_hauptfunktion", "prioritaet", "aktiv", "erreichbarkeit", "bemerkung"):
-                if field in value and value[field] is not None: setattr(present, field, value[field])
+            for field in (
+                "funktionskategorie", "ist_hauptfunktion", "prioritaet", "aktiv", "erreichbarkeit", "bemerkung"
+            ):
+                if field in organisation_value and organisation_value[field] is not None:
+                    setattr(present, field, organisation_value[field])
 
 
-def upsert_contact(db: Session, org_id: int, user_id: int | None, row: dict[str, Any], *, quelle: str | None, modus: str = "merge", quellendokument: str | None = None, quellendatum: str | None = None) -> tuple[str, Kontakt | None, list[int]]:
-    if modus not in VALID_MODES: raise ValueError("Unbekannter Importmodus")
+def upsert_contact(
+    db: Session,
+    org_id: int,
+    user_id: int | None,
+    row: dict[str, Any],
+    *,
+    quelle: str | None,
+    modus: str = "merge",
+    quellendokument: str | None = None,
+    quellendatum: str | None = None,
+) -> tuple[str, Kontakt | None, list[int]]:
+    if modus not in VALID_MODES:
+        raise ValueError("Unbekannter Importmodus")
     existing, candidates = find_match(db, org_id, row, quelle)
-    if candidates: return "DUPLICATE_CANDIDATE", None, candidates
-    if existing is None and modus == "update_only": return "UNCHANGED", None, []
-    if existing is not None and modus == "create_only": return "UNCHANGED", existing, []
+    if candidates:
+        return "DUPLICATE_CANDIDATE", None, candidates
+    if existing is None and modus == "update_only":
+        return "UNCHANGED", None, []
+    if existing is not None and modus == "create_only":
+        return "UNCHANGED", existing, []
     created = existing is None
-    kontakt = existing or Kontakt(org_id=org_id, erstellt_von_id=user_id, aktualisiert_von_id=user_id, anzeigename="")
-    if created: db.add(kontakt)
-    scalar = ("typ", "anzeigename", "anrede", "titel_vor", "vorname", "nachname", "titel_nach", "funktion", "organisation", "email", "erreichbarkeit", "notizen", "aktiv", "datenquelle", "externe_quelle_id")
+    kontakt = existing or Kontakt(
+        org_id=org_id, erstellt_von_id=user_id, aktualisiert_von_id=user_id, anzeigename=""
+    )
+    if created:
+        db.add(kontakt)
+    scalar = (
+        "typ", "anzeigename", "anrede", "titel_vor", "vorname", "nachname", "titel_nach", "funktion",
+        "organisation", "email", "erreichbarkeit", "notizen", "aktiv", "datenquelle", "externe_quelle_id",
+    )
     changed = created
     for field in scalar:
-        if field not in row or row[field] is None: continue
+        if field not in row or row[field] is None:
+            continue
         if getattr(kontakt, field) != row[field]:
-            setattr(kontakt, field, row[field]); changed = True
+            setattr(kontakt, field, row[field])
+            changed = True
     if quelle and not kontakt.datenquelle:
         kontakt.datenquelle = quelle
         changed = True
@@ -205,10 +335,18 @@ def upsert_contact(db: Session, org_id: int, user_id: int | None, row: dict[str,
     _sync_relations(db, kontakt, row, org_id, modus == "replace_selected")
     if quelle and _text(row.get("externe_id") or row.get("externe_quelle_id")):
         external_id = _text(row.get("externe_id") or row.get("externe_quelle_id"))
-        ref = db.query(KontaktExterneReferenz).filter_by(org_id=org_id, quelle=quelle, extern_id=external_id).first()
-        if ref is None: db.add(KontaktExterneReferenz(org_id=org_id, kontakt_id=kontakt.id, quelle=quelle, extern_id=external_id))
+        ref = db.query(KontaktExterneReferenz).filter_by(
+            org_id=org_id, quelle=quelle, extern_id=external_id
+        ).first()
+        if ref is None:
+            db.add(
+                KontaktExterneReferenz(
+                    org_id=org_id, kontakt_id=kontakt.id, quelle=quelle, extern_id=external_id
+                )
+            )
     if not created and changed:
-        kontakt.version += 1; kontakt.aktualisiert_von_id = user_id
+        kontakt.version += 1
+        kontakt.aktualisiert_von_id = user_id
     kontakt.aktualisiert_ueber = "MCP"
     kontakt.aktualisiert_am = datetime.now(UTC)
     db.flush()
