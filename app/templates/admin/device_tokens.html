@@ -124,6 +124,7 @@
           <th>Bezeichnung</th>
           <th>Rollen</th>
           {% if is_sysadmin %}<th>Organisation</th>{% endif %}
+          <th>GSL-Profil</th>
           <th>Fahrzeug</th>
           <th style="width:130px;">App-Version</th>
           <th style="width:130px;">Erstellt</th>
@@ -152,6 +153,20 @@
           {% if is_sysadmin %}
           <td>{{ dt.user.org.name if dt.user and dt.user.org else '—' }}</td>
           {% endif %}
+          <td>
+            <form method="post" action="/admin/geraete-login/{{ dt.id }}/gsl-profil"
+                  style="display:flex;align-items:center;gap:4px;">
+              <select name="gsl_profil" class="form-input" style="padding:3px 6px;font-size:.82rem;min-width:120px;">
+                <option value="" {% if dt.gsl_profil is none %}selected{% endif %}>– bisherig –</option>
+                <option value="einheit" {% if dt.gsl_profil == 'einheit' %}selected{% endif %}>Einheit</option>
+                <option value="fuehrung" {% if dt.gsl_profil == 'fuehrung' %}selected{% endif %}>Führung</option>
+              </select>
+              <button type="submit" class="btn btn--ghost btn--xs" title="GSL-Profil speichern">✓</button>
+            </form>
+            {% if dt.gsl_profil is none and dt.vehicle_master_id %}
+            <small class="text-muted">Für den GSL-Einheitenmodus auf ‚Einheit' stellen</small>
+            {% endif %}
+          </td>
           <td>
             <form method="post" action="/admin/geraete-login/{{ dt.id }}/fahrzeug"
                   style="display:flex;align-items:center;gap:4px;">
@@ -434,7 +449,8 @@
         {% if vehicles %}
         <div class="form-group">
           <label class="form-label">Fahrzeug</label>
-          <select name="vehicle_master_id" class="form-input"
+          <select name="vehicle_master_id" class="form-input" id="deviceVehicleInput"
+                  onchange="updateGslProfilDefault()"
                   {{ tip('Push-Nachrichten bei Aufträgen/Meldungen gehen nur an dieses Gerät') }}>
             <option value="">– kein Fahrzeug –</option>
             {% for v in vehicles %}
@@ -443,6 +459,13 @@
           </select>
         </div>
         {% endif %}
+        <div class="form-group">
+          <label class="form-label">GSL-Profil</label>
+          <select name="gsl_profil" class="form-input" id="gslProfilInput">
+            <option value="einheit">Einheit – Einheitenmodus, Gesamtansicht nur lesend</option>
+            <option value="fuehrung" selected>Führung – volle GSL-Rechte laut Rollen</option>
+          </select>
+        </div>
       </div>
 
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px;">
@@ -503,6 +526,12 @@ function updateDeviceTypeUi() {
   if (unitLabel) unitLabel.style.borderColor = selected === 'unit' ? activeBorder : defaultBorder;
   if (gwLabel) gwLabel.style.borderColor = isSmsGwOnly ? activeBorder : defaultBorder;
   if (combinedLabel) combinedLabel.style.borderColor = isCombined ? activeBorder : defaultBorder;
+}
+
+function updateGslProfilDefault() {
+  const vehicle = document.getElementById('deviceVehicleInput');
+  const profil = document.getElementById('gslProfilInput');
+  if (vehicle && profil) profil.value = vehicle.value ? 'einheit' : 'fuehrung';
 }
 
 // Initial state

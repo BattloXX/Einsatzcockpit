@@ -25,6 +25,25 @@ _qr_signer = URLSafeSerializer(settings.SECRET_KEY, salt="qr-token")
 _lage_qr_signer = URLSafeSerializer(settings.SECRET_KEY, salt="lage-qr-token")
 
 
+def pruefe_geraete_session(db, user_id: int, is_device: bool, device_token_id: int | None):
+    """Liefert das aktive Geraetetoken einer Device-Session, sonst ``None``.
+
+    Alte Cookies ohne Tokenbindung bleiben gueltig, solange der Benutzer noch
+    irgendein aktives Geraet besitzt.
+    """
+    if not is_device:
+        return None
+    from app.models.user import DeviceToken
+
+    query = db.query(DeviceToken).filter(
+        DeviceToken.user_id == user_id,
+        DeviceToken.revoked_at.is_(None),
+    )
+    if device_token_id is not None:
+        query = query.filter(DeviceToken.id == device_token_id)
+    return query.first()
+
+
 def hash_password(plain: str) -> str:
     import bcrypt
     return bcrypt.hashpw(plain.encode(), bcrypt.gensalt(rounds=12)).decode()

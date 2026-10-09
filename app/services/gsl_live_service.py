@@ -52,7 +52,48 @@ def build_my_lage_queue(db: Session, device_token) -> dict | None:
     None, wenn kein Fahrzeug zugeordnet oder das Fahrzeug keiner aktiven
     Großschadenslage als LageEinheit zugeordnet ist.
     """
-    if not device_token or not device_token.vehicle_master_id:
+    if not device_token:
+        return None
+
+    if device_token.gsl_profil == "einheit":
+        from app.models.user import User
+        from app.services.einheit_service import auftraege_fuer_einheit, kontext_fuer_geraet
+
+        user = device_token.user or db.get(User, device_token.user_id)
+        if user is None:
+            return None
+        ctx = kontext_fuer_geraet(db, user, device_token)
+        if ctx is None:
+            return None
+        kategorien = auftraege_fuer_einheit(db, ctx)["kategorien"]
+        aktuell = kategorien["aktuell"]
+        weitere = kategorien["weitere"]
+        if aktuell is None:
+            if not weitere:
+                return None
+            aktuell, weitere = weitere[0], weitere[1:]
+
+        def _einheit_site_payload(auftrag: dict) -> dict:
+            return {
+                "id": auftrag["site_id"], "bezeichnung": auftrag["bezeichnung"],
+                "meldung": auftrag["einsatzgrund"], "address": auftrag["adresse"],
+                "lat": auftrag["lat"], "lng": auftrag["lng"],
+                "gmaps_url": auftrag["gmaps_url"], "priority": auftrag["priority"],
+                "phase": auftrag["phase"], "dispatch_id": auftrag["dispatch_id"],
+                "auftrag": auftrag["auftrag"], "einheit_status": auftrag["einheit_status"],
+                "einheit_url": f"/einheit/auftrag/{auftrag['dispatch_id']}",
+            }
+
+        upcoming = weitere[:GSL_QUEUE_MAX_UPCOMING]
+        return {
+            "lage_id": ctx.lage.id, "lage_name": ctx.lage.name, "lage_url": "/einheit",
+            "einheit_url": "/einheit", "is_exercise": ctx.lage.is_exercise,
+            "current": _einheit_site_payload(aktuell),
+            "upcoming": [_einheit_site_payload(auftrag) for auftrag in upcoming],
+            "remaining_count": max(0, len(weitere) - len(upcoming)),
+        }
+
+    if not device_token.vehicle_master_id:
         return None
 
     from app.models.major_incident import EinheitSiteDispatch, LageEinheit
