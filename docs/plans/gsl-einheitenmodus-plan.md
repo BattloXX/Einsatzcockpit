@@ -495,7 +495,7 @@ Alle 11 Verwendungen von `withdrawn_at.is_(None)` werden geprüft und bewusst en
 #### Stellvertretende Erfassung für Einheiten ohne Tablet (E2)
 
 - `setze_einheit_status()`, `add_site_log()`, `anforderung_erstellen()` usw. bekommen den Parameter
-  `quelle: Literal["tablet", "funk", "mcp"]`. Bei `funk` ist der Akteur ein Führungs-/Funker-Benutzer
+  `quelle: Literal["tablet", "funk", "mcp", "simulation"]`. Bei `funk` ist der Akteur ein Führungs-/Funker-Benutzer
   (`require_role("incident_leader","admin","org_admin","recorder")`), `EinheitKontext.device_token` ist `None`.
   Gleiche Statusmatrix, gleiche Logzeilen – Text-Suffix „(per Funk)“, `author_name` = Funker,
   Audit-Payload `quelle`.
