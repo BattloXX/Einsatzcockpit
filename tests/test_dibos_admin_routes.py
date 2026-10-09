@@ -247,7 +247,7 @@ def test_einsaetze_page_reachable_by_org_admin_not_only_system_admin():
                     display_name="Nur Org-Admin", org_id=ORG_ID, active=True)
         db.add(user)
         db.flush()
-        db.add(UserRole(user_id=user.id, role_id=_rolle(db, "org_admin").id))
+        db.add(UserRole(user_id=user.id, role_id=_rolle(db, "admin").id))
         db.commit()
     finally:
         db.close()
@@ -273,7 +273,7 @@ def test_org_admin_without_system_admin_cannot_reach_trace_routes():
                     display_name="Nur Org-Admin", org_id=ORG_ID, active=True)
         db.add(user)
         db.flush()
-        db.add(UserRole(user_id=user.id, role_id=_rolle(db, "org_admin").id))
+        db.add(UserRole(user_id=user.id, role_id=_rolle(db, "admin").id))
         db.commit()
     finally:
         db.close()

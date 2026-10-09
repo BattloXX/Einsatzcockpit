@@ -8,6 +8,8 @@ ROLES = {
     "admin": 100,               # backward-compat alias for org_admin
     "org_admin": 100,           # full access within their organisation
     "fahrtenbuch_admin": 80,    # Fahrtenbuch-Verwaltung der eigenen Org (ohne Benutzerverwaltung)
+    "mailing_admin": 80,
+    "mailing_sender": 30,
     "incident_leader": 70,
     "objekt_verwalter": 60,     # Objektverwaltung: Objekte pflegen/freigeben, Dokumente, Lagekarte
     "kontakt_verwalter": 60,    # Zentrale Kontakte pflegen
@@ -142,6 +144,73 @@ def is_system_admin(user) -> bool:
     if user is None:
         return False
     return "system_admin" in {r.code for r in user.roles}
+
+
+def manageable_role_codes(actor, role_codes: set[str]) -> set[str]:
+    """Return the role codes ``actor`` may assign or revoke.
+
+    Role management is deliberately based on the role hierarchy, not on what a
+    browser happened to render.  ``system_admin`` is special: it is never
+    delegable by an organisation administrator.
+    """
+    actor_codes = {r.code for r in actor.roles}
+    if "system_admin" in actor_codes:
+        return set(role_codes)
+    highest = max((ROLES.get(code, -1) for code in actor_codes), default=-1)
+    return {
+        code for code in role_codes
+        if code != "system_admin" and (
+            code in actor_codes or (code in ROLES and ROLES[code] <= highest)
+        )
+    }
+
+
+def authorize_user_mutation(db, actor, target, action: str) -> None:
+    """Enforce the central guard for an administrator acting on a user.
+
+    A denial is committed immediately so it cannot disappear when the caller
+    raises its 403 response.  Call this before changing the target.
+    """
+    from app.core.audit import write_audit
+
+    denied_reason = None
+    if not same_org_or_system_admin(actor, target.org_id):
+        denied_reason = "other_org"
+    elif not is_system_admin(actor) and is_system_admin(target):
+        denied_reason = "target_system_admin"
+    if denied_reason:
+        write_audit(
+            db, "admin.user.mutation_denied", org_id=target.org_id,
+            user_id=actor.id, entity_type="user", entity_id=target.id,
+            payload={"action": action, "reason": denied_reason},
+        )
+        db.commit()
+        raise HTTPException(status_code=403, detail="Keine Berechtigung")
+
+
+def permitted_submitted_roles(db, actor, submitted_codes: list[str], *, action: str,
+                              target=None) -> set[str]:
+    """Filter a submitted role list and audit attempted privilege escalation.
+
+    Callers merge this result with roles the actor may not manage.  This makes
+    crafted forms incapable of silently stripping protected roles.
+    """
+    from app.models.user import Role
+
+    available = {row[0] for row in db.query(Role.code).all()}
+    submitted = set(submitted_codes) & available
+    allowed = manageable_role_codes(actor, available)
+    denied = submitted - allowed
+    if denied:
+        from app.core.audit import write_audit
+        write_audit(
+            db, "admin.user.role_change_denied",
+            org_id=target.org_id if target is not None else actor.org_id,
+            user_id=actor.id, entity_type="user" if target is not None else None,
+            entity_id=target.id if target is not None else None,
+            payload={"action": action, "role_codes": sorted(denied)},
+        )
+    return submitted & allowed
 
 
 def is_fahrtenbuch_admin(user) -> bool:

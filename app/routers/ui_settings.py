@@ -1675,7 +1675,7 @@ async def create_organisation(
 
     db.commit()
 
-    # Ersten org_admin einladen
+    # Ersten Organisations-Administrator einladen
     if admin_email:
         await _invite_org_admin(request, db, org, admin_email.strip(), admin_name.strip())
 
@@ -1683,7 +1683,7 @@ async def create_organisation(
 
 
 async def _invite_org_admin(request: Request, db, org: FireDept, email: str, display_name: str) -> None:
-    """Legt einen org_admin-User an und sendet einen Passwort-Set-Link."""
+    """Legt einen Organisations-Administrator an und sendet einen Passwort-Set-Link."""
     import hashlib
     import secrets as sec
     from datetime import UTC, datetime, timedelta
@@ -1710,9 +1710,9 @@ async def _invite_org_admin(request: Request, db, org: FireDept, email: str, dis
     db.add(new_user)
     db.flush()
 
-    org_admin_role = db.query(Role).filter(Role.code == "org_admin").first()
-    if org_admin_role:
-        db.add(UserRole(user_id=new_user.id, role_id=org_admin_role.id))
+    admin_role = db.query(Role).filter(Role.code == "admin").first()
+    if admin_role:
+        db.add(UserRole(user_id=new_user.id, role_id=admin_role.id))
     db.flush()
 
     raw_token = sec.token_urlsafe(32)

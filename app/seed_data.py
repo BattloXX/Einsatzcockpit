@@ -22,8 +22,7 @@ from app.models.user import Role
 
 ROLES = [
     {"code": "system_admin",         "label": "Systemadministrator (organisationsübergreifend)"},
-    {"code": "admin",                "label": "Administrator (Organisations-Admin)"},
-    {"code": "org_admin",            "label": "Organisations-Administrator"},
+    {"code": "admin",                "label": "Organisations-Administrator"},
     {"code": "fahrtenbuch_admin",    "label": "Fahrtenbuch-Administrator"},
     {"code": "mailing_admin",        "label": "Mailing-Administrator"},
     {"code": "mailing_sender",       "label": "Mailing-Versand"},
