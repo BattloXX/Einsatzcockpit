@@ -40,6 +40,10 @@
 .einheit-zeile{display:flex;justify-content:space-between;gap:.75rem;padding:.35rem 0;border-bottom:1px solid var(--border);}
 .einheit-zeile:last-child{border-bottom:0;}
 .einheit-objekt{display:flex;flex-direction:column;align-items:flex-start;width:100%;margin-top:.35rem;}
+.einheit-einsatzkarte{margin:.85rem 0;border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden;background:var(--surface);}
+.einheit-einsatzkarte__kopf{display:flex;justify-content:space-between;align-items:center;gap:.75rem;padding:.6rem .75rem;font-size:.9rem;}
+.einheit-einsatzkarte__kopf a{color:#93c5fd;font-size:.82rem;text-decoration:none;white-space:nowrap;}
+.einheit-einsatzkarte__karte{height:220px;z-index:0;}
 
 .einheit-liste summary{cursor:pointer;padding:.6rem 0;font-weight:700;}
 .einheit-liste__eintrag{display:flex;justify-content:space-between;width:100%;min-height:48px;padding:.5rem .25rem;border-bottom:1px solid var(--border);text-align:left;color:var(--text);}
@@ -69,9 +73,21 @@
 .einheit-textarea{min-height:200px;font-size:1.05rem;}
 
 @media (max-width:760px){
+  .fab-page{padding:1rem .75rem calc(5.5rem + env(safe-area-inset-bottom));}
   .einheit-meta{justify-content:flex-start;}
-  .fab-header__top{flex-direction:column;}
+  .fab-header__top{flex-direction:column;gap:.75rem;}
+  .fab-header__brand{width:100%;align-items:flex-start;}
+  .fab-header__brand > div{min-width:0;}
+  .fab-header__eyebrow{white-space:normal;overflow-wrap:anywhere;}
+  .fab-header__title,.fab-card__title{overflow-wrap:anywhere;}
+  .fab-card__head{align-items:flex-start;margin-bottom:.75rem;}
+  .fab-card__head .einheit-chip{margin-left:auto;flex-shrink:0;}
+  .einheit-umschalter{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;}
+  .einheit-umschalter a{justify-content:center;padding:.55rem .45rem;text-align:center;}
+  .einheit-umschalter__klassisch{grid-column:1 / -1;}
   .einheit-actions-row{grid-template-columns:1fr;}
-  .einheit-umschalter__klassisch{margin-left:0;}
+  .einheit-einsatzkarte__karte{height:190px;}
+  .einheit-zeile{align-items:flex-start;}
+  .einheit-zeile > :last-child{flex-shrink:0;}
 }
 </style>

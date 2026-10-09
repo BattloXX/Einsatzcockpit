@@ -4,6 +4,8 @@
 {% block head_extra %}
 {% include "_fab_styles.html" %}
 {% include "einheit/_einheit_styles.html" %}
+<link rel="stylesheet" href="/static/css/leaflet.min.css?v={{ ASSET_VERSION }}">
+<script src="/static/js/leaflet.min.js?v={{ ASSET_VERSION }}" defer></script>
 <script type="module" src="/static/js/einheit_modus.js?v={{ ASSET_VERSION }}"></script>
 {% endblock %}
 
@@ -195,6 +197,13 @@
                   x-text="prioLabel(detail?.stelle?.priority)"></span>
           </div>
           <div class="einheit-address" x-text="detail?.stelle?.adresse"></div>
+          <section class="einheit-einsatzkarte" x-show="hatKoordinaten" x-cloak>
+            <div class="einheit-einsatzkarte__kopf">
+              <strong>📍 Einsatzort</strong>
+              <a :href="osmUrl" target="_blank" rel="noopener">In OSM öffnen ↗</a>
+            </div>
+            <div class="einheit-einsatzkarte__karte" x-ref="einsatzKarte"></div>
+          </section>
           <p class="einheit-sub" x-show="detail?.stelle?.lat"
              x-text="detail?.stelle?.lat + ', ' + detail?.stelle?.lng"></p>
           <p x-text="detail?.stelle?.einsatzgrund"></p>

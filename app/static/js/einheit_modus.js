@@ -57,10 +57,20 @@ function registriere() {
     entwurfHinweis: false, auftragGeaendert: false, hinweisBanner: "", neuIds: [], etag: null,
     ws: null, wsTimer: null, wsVersuche: 0, pollTimer: null, retryTimer: null, lastLoad: 0, outbox: null,
     gezeigteHinweise: new Set(), geladenAb: new Date().toISOString(),
+    karte: null, kartenMarker: null,
 
     // Abgeleitete Anzeigezustände.
     get naechster() { return this.weitere[0] || null; },
     get schreibbar() { return Boolean(config.schreibbar); },
+    get hatKoordinaten() {
+      return Number.isFinite(Number(this.detail?.stelle?.lat)) && Number.isFinite(Number(this.detail?.stelle?.lng));
+    },
+    get osmUrl() {
+      const stelle = this.detail?.stelle;
+      return this.hatKoordinaten
+        ? `https://www.openstreetmap.org/?mlat=${stelle.lat}&mlon=${stelle.lng}&zoom=17`
+        : "#";
+    },
     get outboxText() {
       const anzahl = this.outboxListe.length;
       const fehler = this.outboxListe.filter((item) => ["fehler", "konflikt"].includes(item.status)).length;
@@ -202,6 +212,7 @@ function registriere() {
         this.detail = await response.json();
         this.detail.offline = ausCache;
         this.auftragGeaendert = Boolean(versionVorher && versionVorher !== this.detail.auftrag.version);
+        this.karteAktualisieren();
         if (push) {
           const query = this.simulation ? `?sim=${this.simEinheitId}` : "";
           history.pushState({}, "", `/einheit/auftrag/${id}${query}`);
@@ -212,6 +223,7 @@ function registriere() {
           .find((item) => item?.dispatch_id === id);
         if (auftrag && this.detail?.auftrag?.dispatch_id !== id) {
           this.detail = { auftrag, stelle: auftrag, offline: true };
+          this.karteAktualisieren();
         } else if (this.detail) {
           this.detail.offline = true;
         }
@@ -225,6 +237,29 @@ function registriere() {
       this.detail = null;
       const query = this.simulation ? `?sim=${this.simEinheitId}` : "";
       history.pushState({}, "", `/einheit${query}`);
+    },
+    karteAktualisieren() {
+      if (!this.hatKoordinaten) return;
+      if (typeof window.L === "undefined") {
+        window.addEventListener("load", () => this.karteAktualisieren(), { once: true });
+        return;
+      }
+      const stelle = this.detail.stelle;
+      const latlng = [Number(stelle.lat), Number(stelle.lng)];
+      this.$nextTick(() => {
+        const element = this.$refs.einsatzKarte;
+        if (!element) return;
+        if (!this.karte) {
+          this.karte = window.L.map(element, { zoomControl: true, attributionControl: true });
+          window.EinsatzcockpitMapConfig?.addOsmTileLayer(this.karte);
+        }
+        this.karte.setView(latlng, 17);
+        if (this.kartenMarker) this.kartenMarker.remove();
+        this.kartenMarker = window.L.circleMarker(latlng, {
+          radius: 9, color: "#fff", weight: 2, fillColor: "#b71921", fillOpacity: 1,
+        }).addTo(this.karte);
+        requestAnimationFrame(() => this.karte.invalidateSize());
+      });
     },
 
     // Erfassen von Status, Meldung und Foto.

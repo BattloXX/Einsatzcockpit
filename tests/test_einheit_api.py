@@ -184,6 +184,7 @@ def test_detail_und_fremde_auftraege(client, setup_db):
         r.json()["andere_einheiten"][0]["einheit_status_label"] == "Zugewiesen"
         and r.json()["chronik"][0]["kind_label"] == "Notiz"
     )
+    assert r.json()["stelle"]["lat"] == 47 and r.json()["stelle"]["lng"] == 9
     assert (
         client.get(f"/einheit/api/auftrag/{x['d2']}").status_code
         == client.get(f"/einheit/api/auftrag/{x['fd']}").status_code

@@ -25,6 +25,8 @@ def test_einheit_geraet_mit_kontext(client, setup_db):
     response = client.get("/einheit")
     assert response.status_code == 200
     assert 'einheit_modus.js' in response.text
+    assert 'leaflet.min.js' in response.text
+    assert 'Einsatzort' in response.text
     assert f'data-lage-id="{data["lage"]}"' in response.text
     assert f'data-einheit-id="{data["e1"]}"' in response.text
     # Alpine-Konfiguration ist im Attribut HTML-escaped (doppelte Anführungszeichen).
@@ -94,7 +96,7 @@ def test_einheit_template_und_javascript_sind_lesbar():
     root = Path(__file__).parents[1]
     javascript = (root / "app/static/js/einheit_modus.js").read_text()
     template = (root / "app/templates/einheit/einheit.html").read_text()
-    for token in ("unterbrechen", "naechsterVersuchIn", "popstate", "massnahmen"):
+    for token in ("unterbrechen", "naechsterVersuchIn", "popstate", "massnahmen", "karteAktualisieren"):
         assert token in javascript
     assert max(map(len, javascript.splitlines())) <= 160
     assert max(map(len, template.splitlines())) <= 200
