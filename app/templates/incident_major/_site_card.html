@@ -35,7 +35,17 @@
       <span>{{ site.created_at|local_time }}</span>
       {% set active_res = site.resources|selectattr('released_at', 'none')|list %}
       {% set counts = dispatch_counts_by_site.get(site.id) if dispatch_counts_by_site is defined else (dispatch_counts if dispatch_counts is defined else none) %}
-      {% if counts %}
+      {% set ec = einheiten_chips_by_site.get(site.id) if einheiten_chips_by_site is defined else (einheiten_chips if einheiten_chips is defined else none) %}
+      {% if ec and ec.chips %}
+        {% for chip in ec.chips[:4] %}
+        <span class="site-card__einheit-chip site-card__einheit-chip--{{ chip.farbe }}{% if chip.beendet %} site-card__einheit-chip--beendet{% endif %}">
+          {{ chip.label }} · {{ chip.label_status }}
+        </span>
+        {% endfor %}
+        {% if ec.chips|length > 4 %}
+        <span class="site-card__einheit-more">+{{ ec.chips|length - 4 }}</span>
+        {% endif %}
+      {% elif counts %}
         {% if counts.vor_ort > 0 %}
         <span title="Vor Ort">🚒 {{ counts.vor_ort }}</span>
         {% elif active_res %}
@@ -69,6 +79,17 @@
       </span>
       {% endif %}
     </div>
+
+    {% if ec and ec.alle_fertig and site.phase.value not in ['erledigt', 'abgebrochen'] %}
+    <div class="site-card__hint">
+      <span class="site-card__hint--done">✅ Einheiten fertig – abschließen?</span>
+    </div>
+    {% endif %}
+    {% if ec and ec.ohne_rueckmeldung_min is not none %}
+    <div class="site-card__hint">
+      <span class="site-card__hint--overdue">⏱ keine Rückmeldung seit {{ ec.ohne_rueckmeldung_min }} min</span>
+    </div>
+    {% endif %}
 
     {# ── Lagemeldungs-Timer-Chip (SKKM-Regelkreis) ─────────────────────── #}
     {% if site.naechste_lagemeldung_at %}

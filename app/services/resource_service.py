@@ -9,10 +9,12 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import and_, case, func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.models.major_incident import (
     EINHEIT_STATUS_AKTIV,
+    EINHEIT_STATUS_COLOR,
+    EINHEIT_STATUS_LABEL,
     EinheitSiteDispatch,
     GslStaffAssignment,
     IncidentSite,
@@ -599,6 +601,98 @@ def get_dispatch_counts_for_sites(
     return counts
 
 
+def get_einheiten_chips_for_sites(
+    db: Session,
+    sites: list[IncidentSite],
+    *,
+    org_settings: Any | None = None,
+    jetzt: datetime | None = None,
+) -> dict[int, dict[str, Any]]:
+    """Liefert die Einheiten-Chips und Rückmeldungswarnungen je Einsatzstelle.
+
+    Die Einheiten werden mit den Dispositionen geladen, damit das Board nicht pro
+    Karte weitere Queries auslöst. DB-Zeitstempel sind naive UTC-Werte.
+    """
+    if not sites:
+        return {}
+
+    db.flush()
+    site_ids = [site.id for site in sites]
+    dispatches = (
+        db.query(EinheitSiteDispatch)
+        .options(joinedload(EinheitSiteDispatch.einheit))
+        .filter(
+            EinheitSiteDispatch.site_id.in_(site_ids),
+            EinheitSiteDispatch.withdrawn_at.is_(None),
+        )
+        .all()
+    )
+    by_site: dict[int, list[EinheitSiteDispatch]] = {site_id: [] for site_id in site_ids}
+    for dispatch in dispatches:
+        by_site.setdefault(dispatch.site_id, []).append(dispatch)
+
+    now = jetzt or datetime.now(UTC).replace(tzinfo=None)
+    if now.tzinfo is not None:
+        now = now.astimezone(UTC).replace(tzinfo=None)
+    from app.services import lagemeldung_service
+
+    result: dict[int, dict[str, Any]] = {}
+    for site in sites:
+        site_dispatches = by_site.get(site.id, [])
+        active = sorted(
+            (dispatch for dispatch in site_dispatches if dispatch.beendet_at is None),
+            key=lambda dispatch: (
+                dispatch.reihenfolge is None,
+                dispatch.reihenfolge or 0,
+                dispatch.dispatched_at,
+            ),
+        )
+        completed = sorted(
+            (dispatch for dispatch in site_dispatches if dispatch.beendet_at is not None),
+            key=lambda dispatch: dispatch.beendet_at or datetime.min,
+        )
+        chips = [
+            {
+                "einheit_id": dispatch.einheit_id,
+                "label": dispatch.einheit.label if dispatch.einheit else "Einheit",
+                "einheit_status": dispatch.einheit_status,
+                "label_status": EINHEIT_STATUS_LABEL.get(dispatch.einheit_status, dispatch.einheit_status),
+                "farbe": EINHEIT_STATUS_COLOR.get(dispatch.einheit_status, "muted"),
+                "beendet": dispatch.beendet_at is not None,
+            }
+            for dispatch in active + completed
+        ]
+
+        ohne_rueckmeldung_min: int | None = None
+        interval = lagemeldung_service.interval_minutes_for(site, org_settings)
+        if interval is not None:
+            overdue_minutes = []
+            for dispatch in active:
+                if dispatch.einheit_status not in EINHEIT_STATUS_AKTIV:
+                    continue
+                last_update = max(
+                    timestamp
+                    for timestamp in (
+                        dispatch.letzte_rueckmeldung_at,
+                        dispatch.status_at,
+                        dispatch.dispatched_at,
+                    )
+                    if timestamp is not None
+                )
+                minutes = int((now - last_update).total_seconds() // 60)
+                if minutes > interval:
+                    overdue_minutes.append(minutes)
+            if overdue_minutes:
+                ohne_rueckmeldung_min = max(overdue_minutes)
+
+        result[site.id] = {
+            "chips": chips,
+            "alle_fertig": bool(site_dispatches) and not active,
+            "ohne_rueckmeldung_min": ohne_rueckmeldung_min,
+        }
+    return result
+
+
 def move_to_pool(
     db: Session,
     einheit_id: int,
@@ -831,17 +925,25 @@ def kraefteuebersicht(db: Session, lage: MajorIncident) -> dict[str, Any]:
 
     einheit_ids = [e.id for e in einheiten]
     dispatched_sites_by_einheit: dict[int, list[EinheitSiteDispatch]] = {}
+    active_dispatched_sites_by_einheit: dict[int, list[EinheitSiteDispatch]] = {}
+    letzte_rueckmeldung_by_einheit: dict[int, datetime] = {}
     if einheit_ids:
         all_dispatches = (
             db.query(EinheitSiteDispatch)
             .filter(
                 EinheitSiteDispatch.einheit_id.in_(einheit_ids),
-                dispatch_aktiv_filter(),
+                EinheitSiteDispatch.withdrawn_at.is_(None),
             )
             .all()
         )
         for d in all_dispatches:
             dispatched_sites_by_einheit.setdefault(d.einheit_id, []).append(d)
+            if d.beendet_at is None:
+                active_dispatched_sites_by_einheit.setdefault(d.einheit_id, []).append(d)
+                if d.letzte_rueckmeldung_at is not None:
+                    previous = letzte_rueckmeldung_by_einheit.get(d.einheit_id)
+                    if previous is None or d.letzte_rueckmeldung_at > previous:
+                        letzte_rueckmeldung_by_einheit[d.einheit_id] = d.letzte_rueckmeldung_at
 
     return {
         "pool": pool,
@@ -854,4 +956,6 @@ def kraefteuebersicht(db: Session, lage: MajorIncident) -> dict[str, Any]:
         "reserve_count": len(pool),
         "im_einsatz_count": sum(1 for e in einheiten if e.status == STATUS_IM_EINSATZ),
         "dispatched_sites_by_einheit": dispatched_sites_by_einheit,
+        "active_dispatched_sites_by_einheit": active_dispatched_sites_by_einheit,
+        "letzte_rueckmeldung_by_einheit": letzte_rueckmeldung_by_einheit,
     }

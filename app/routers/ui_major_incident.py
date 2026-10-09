@@ -399,6 +399,10 @@ def lage_board(
     dispatch_counts_by_site = resource_service.get_dispatch_counts_for_sites(
         db, [site.id for site in lage.sites]
     )
+    org_settings = lagemeldung_service.org_settings_for(db, lage.org_id)
+    einheiten_chips_by_site = resource_service.get_einheiten_chips_for_sites(
+        db, lage.sites, org_settings=org_settings
+    )
 
     open_count = sum(
         len(sites_by_phase[p])
@@ -439,6 +443,7 @@ def lage_board(
         "lage": lage,
         "sites_by_phase": sites_by_phase,
         "dispatch_counts_by_site": dispatch_counts_by_site,
+        "einheiten_chips_by_site": einheiten_chips_by_site,
         "phase_order": PHASE_ORDER,
         "phase_labels": PHASE_LABELS,
         "prio_color": SITE_PRIORITY_COLOR,
@@ -801,6 +806,10 @@ def site_card_partial(
     sectors = sorted(lage.sectors, key=lambda s: s.id)
     sectors_by_id = {s.id: s for s in sectors}
     dispatch_counts = resource_service.get_dispatch_counts_for_site(db, site_id)
+    org_settings = lagemeldung_service.org_settings_for(db, lage.org_id)
+    einheiten_chips = resource_service.get_einheiten_chips_for_sites(
+        db, [site], org_settings=org_settings
+    )[site.id]
     return templates.TemplateResponse(request, "incident_major/_site_card.html", {
         "lage": lage,
         "site": site,
@@ -810,6 +819,7 @@ def site_card_partial(
         "sectors_by_id": sectors_by_id,
         "can_edit": _can_edit(user),
         "dispatch_counts": dispatch_counts,
+        "einheiten_chips": einheiten_chips,
     })
 
 
@@ -846,6 +856,10 @@ def phase_column_partial(
     dispatch_counts_by_site = resource_service.get_dispatch_counts_for_sites(
         db, [site.id for site in sites]
     )
+    org_settings = lagemeldung_service.org_settings_for(db, lage.org_id)
+    einheiten_chips_by_site = resource_service.get_einheiten_chips_for_sites(
+        db, sites, org_settings=org_settings
+    )
     return templates.TemplateResponse(request, "incident_major/_phase_col_body.html", {
         "lage": lage,
         "sites": sites,
@@ -853,6 +867,7 @@ def phase_column_partial(
         "prio_label": SITE_PRIORITY_LABEL,
         "sectors_by_id": sectors_by_id,
         "dispatch_counts_by_site": dispatch_counts_by_site,
+        "einheiten_chips_by_site": einheiten_chips_by_site,
         "can_edit": _can_edit(user),
     })
 
@@ -1007,6 +1022,10 @@ def _site_detail_html_with_oob(request: Request, db: Session, lage, site, user) 
     ).render(detail_ctx)
     sectors_by_id = {s.id: s for s in sectors}
     dispatch_counts = resource_service.get_dispatch_counts_for_site(db, site.id)
+    org_settings = lagemeldung_service.org_settings_for(db, lage.org_id)
+    einheiten_chips = resource_service.get_einheiten_chips_for_sites(
+        db, [site], org_settings=org_settings
+    )[site.id]
     card_ctx = {
         "request": request,
         "user": user,
@@ -1018,6 +1037,7 @@ def _site_detail_html_with_oob(request: Request, db: Session, lage, site, user) 
         "sectors_by_id": sectors_by_id,
         "can_edit": _can_edit(user),
         "dispatch_counts": dispatch_counts,
+        "einheiten_chips": einheiten_chips,
     }
     card_html = templates.env.get_template(
         "incident_major/_site_card.html"
@@ -4801,6 +4821,10 @@ def lage_ressourcen(
     sectors = sorted(lage.sectors, key=lambda s: s.sort_order)
     sites_by_id = {s.id: s for s in lage.sites}
     all_einheiten = [e for e in lage.einheiten if e.status != resource_service.STATUS_ABGERUECKT]
+    einheit_hat_tablet = {
+        einheit.id: einheit_service.hat_tablet(db, einheit)
+        for einheit in lage.einheiten
+    }
 
     return templates.TemplateResponse(request, "incident_major/ressourcen.html", {
         "user": user,
@@ -4812,6 +4836,8 @@ def lage_ressourcen(
         "extra_vehicles": extra_vehicles,
         "org_members": org_members,
         "resource_service": resource_service,
+        "einheit_hat_tablet": einheit_hat_tablet,
+        "is_admin": has_role(user, "admin"),
         "can_edit": _can_edit(user),
         "can_manage": _can_manage(user),
         "mi_features": _get_mi_features(db, lage.org_id),
@@ -4864,6 +4890,10 @@ def lage_ressourcen_kraefteuebersicht(
     sectors = sorted(lage.sectors, key=lambda s: s.sort_order)
     sites_by_id = {s.id: s for s in lage.sites}
     all_einheiten = [e for e in lage.einheiten if e.status != resource_service.STATUS_ABGERUECKT]
+    einheit_hat_tablet = {
+        einheit.id: einheit_service.hat_tablet(db, einheit)
+        for einheit in lage.einheiten
+    }
 
     return templates.TemplateResponse(request, "incident_major/_kraefteuebersicht.html", {
         "lage": lage,
@@ -4872,6 +4902,8 @@ def lage_ressourcen_kraefteuebersicht(
         "sites_by_id": sites_by_id,
         "all_einheiten": all_einheiten,
         "resource_service": resource_service,
+        "einheit_hat_tablet": einheit_hat_tablet,
+        "is_admin": has_role(user, "admin"),
         "can_edit": _can_edit(user),
     })
 
@@ -4892,7 +4924,7 @@ def lage_ressourcen_planung(
     sectors_by_id = {s.id: s for s in lage.sectors}
 
     resources_by_site: dict[int, dict] = {}
-    for einheit_id, dispatches in kue["dispatched_sites_by_einheit"].items():
+    for einheit_id, dispatches in kue["active_dispatched_sites_by_einheit"].items():
         einh = einheiten_by_id.get(einheit_id)
         if not einh:
             continue
