@@ -70,6 +70,7 @@ from app.routers import (
     ui_dibos,
     ui_dienst_monitor,
     ui_druck,
+    ui_einheit,
     ui_einsatz_import,
     ui_fahrtenbuch,
     ui_fahrtenbuch_admin,
@@ -845,6 +846,7 @@ app.include_router(ui_backup.router)
 app.include_router(ui_db_backup.router)
 app.include_router(ui_org_backup.router)
 app.include_router(ui_major_incident.router)
+app.include_router(ui_einheit.router)
 app.include_router(ui_gsl_staff.router)
 app.include_router(ui_lagedokument.router)
 app.include_router(ui_media.router)
@@ -955,6 +957,16 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 @app.exception_handler(HTTPException)
 @app.exception_handler(_StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
+    # Tablet-API des GSL-Einheitenmodus: strukturierte Fehler ({"code", "details"})
+    # unverändert als JSON, damit die Offline-Outbox sie auswerten kann (Plan 5.2).
+    if request.url.path.startswith("/einheit/api/"):
+        codes = {401: "nicht_angemeldet", 403: "verboten", 404: "nicht_gefunden"}
+        body = (
+            exc.detail if isinstance(exc.detail, dict)
+            else {"code": codes.get(exc.status_code, "fehler"), "detail": exc.detail}
+        )
+        return JSONResponse(body, status_code=exc.status_code, headers=getattr(exc, "headers", None))
+
     # HTMX requests: JSON detail for toast handler; for 401 also trigger full-page redirect
     if request.headers.get("HX-Request"):
         if exc.status_code == 401:
