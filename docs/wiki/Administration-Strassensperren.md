@@ -68,3 +68,7 @@ Einzelansichten verwenden Tokens mit dem Präfix `rcd_` (Status `rcs_`, Infoscre
 ## Externe Zugänge: Statusseite und Infoscreen
 
 Unter **Verwaltung → Infoscreens → Straßensperren** (`/admin/settings/strassensperren-infoscreen`) erstellen Organisationsadmins Statusseiten- (`rcs_`) und Infoscreen-Tokens (`rci_`). Je Zugang sind Ablauf, Aktualisierungsintervall, geplante Sperren, Karte, Einschränkungen, Grund und beim Infoscreen die Rotation konfigurierbar. Zugänge können jederzeit widerrufen werden. Die alte Alarmmonitor-URL bleibt ein interner Infoscreen und zeigt weiterhin Partnerfreigaben.
+
+## Teams-Webhook
+
+Ein Power-Automate-Workflow mit „Post to a channel when a webhook request is received“ stellt die Webhook-URL bereit. `PUBLIC_BASE_URL` muss gesetzt sein, damit Bild und Detail-Link erreichbar sind. Fehlgeschlagene Zustellungen werden mit wachsendem Abstand erneut versucht; gleiche automatische Ereignisse werden zusammengefasst.

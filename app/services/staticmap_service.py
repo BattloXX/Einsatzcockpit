@@ -7,6 +7,8 @@ nicht blockiert.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 from collections import OrderedDict
 
@@ -17,6 +19,7 @@ logger = logging.getLogger("einsatzleiter.staticmap")
 _MARKER_COLOR = "#d42225"  # Marken-Rot
 _RENDER_CACHE: OrderedDict[tuple[float, float, int, tuple[int, int]], bytes] = OrderedDict()
 _RENDER_CACHE_MAXSIZE = 128
+_ROAD_CLOSURE_RENDER_CACHE: OrderedDict[tuple[str, tuple[int, int]], bytes] = OrderedDict()
 
 
 def render_incident_map_png(
@@ -96,3 +99,46 @@ def render_route_map_png(
     buf = io.BytesIO()
     image.save(buf, format="PNG")
     return buf.getvalue()
+
+
+def render_road_closure_map_png(geometry: dict, *, size: tuple[int, int] = (800, 450)) -> bytes:
+    """Render a road-closure GeoJSON geometry, cached independently from incidents."""
+    key = (hashlib.sha1(json.dumps(geometry, sort_keys=True).encode()).hexdigest(), size)
+    if key in _ROAD_CLOSURE_RENDER_CACHE:
+        _ROAD_CLOSURE_RENDER_CACHE.move_to_end(key)
+        return _ROAD_CLOSURE_RENDER_CACHE[key]
+    import io
+
+    from staticmap import CircleMarker, Line, Polygon, StaticMap
+    width, height = size
+    m = StaticMap(width, height, url_template=OSM_TILE_URL, headers={"User-Agent": OSM_TILE_USER_AGENT})
+    typ = geometry.get("type")
+    coordinates: list = geometry.get("coordinates") or []
+    lines: list = []
+    if typ == "MultiLineString":
+        lines = coordinates
+    elif typ == "LineString":
+        lines = [coordinates]
+    for line in lines:
+        points = [(float(x), float(y)) for x, y in line]
+        m.add_line(Line(points, "#ffffff", 10))
+        m.add_line(Line(points, "#d32f2f", 6))
+    polygons: list = []
+    if typ == "Polygon":
+        polygons = coordinates
+    elif typ == "MultiPolygon":
+        polygons = [ring for polygon in coordinates for ring in polygon]
+    for ring in polygons:
+        m.add_polygon(Polygon([(float(x), float(y)) for x, y in ring], "#d32f2f55", "#d32f2f", 3))
+    if typ == "Point" and coordinates:
+        m.add_marker(CircleMarker((float(coordinates[0]), float(coordinates[1])), "#d32f2f", 14))
+        image = m.render(zoom=16, center=(float(coordinates[0]), float(coordinates[1])))
+    else:
+        image = m.render()
+    buf = io.BytesIO()
+    image.save(buf, format="PNG")
+    result = buf.getvalue()
+    _ROAD_CLOSURE_RENDER_CACHE[key] = result
+    if len(_ROAD_CLOSURE_RENDER_CACHE) > 64:
+        _ROAD_CLOSURE_RENDER_CACHE.popitem(last=False)
+    return result

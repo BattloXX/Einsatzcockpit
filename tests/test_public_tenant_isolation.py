@@ -1070,7 +1070,7 @@ def test_strassensperre_detail_token_zeigt_keine_sperre_von_org_b(client):
     finally:
         db.close()
 
-    for suffix in ("", "/geometrie.json"):
+    for suffix in ("", "/geometrie.json", "/karte.png"):
         response = client.get(f"/oeffentlich/strassensperre/{raw}{suffix}")
         assert response.status_code == 404
         assert "GEHEIM-Org-B-Link" not in response.text

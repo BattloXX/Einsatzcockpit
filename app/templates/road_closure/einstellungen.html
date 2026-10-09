@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% from "_page_header.html" import page_header %}
+{% block title %}Microsoft Teams – Straßensperren{% endblock %}
+{% block content %}
+<section class="sperren-teams">
+{% call page_header("Microsoft Teams", back_href="/strassensperren", back_label="Übersicht", sub="Neue und geänderte Straßensperren als Karte in einen Teams-Kanal melden") %}{% endcall %}
+{% if error %}<div class="alert alert--error">{{ error }}</div>{% endif %}
+{% if hinweis %}<div class="alert alert--success">{{ hinweis }}</div>{% endif %}
+<form method="post" action="/strassensperren/einstellungen" class="card sperren-teams__card">
+  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+  <label class="sperren-teams__check"><input type="checkbox" name="aktiv" value="1"{% if config and config.enabled %} checked{% endif %}> Teams-Meldungen aktiv</label>
+  <div class="form-group">
+    <label class="form-label" for="teams-url">Webhook-URL (Teams-Workflow „Bei Eingang einer Webhookanforderung in einem Kanal posten“)</label>
+    <input class="form-input" id="teams-url" type="password" name="webhook_url" autocomplete="off" placeholder="{% if webhook_host %}unverändert lassen{% else %}https://…{% endif %}">
+    <small class="sperren-hint">{% if webhook_host %}Hinterlegt: {{ webhook_host }} – die vollständige URL wird aus Sicherheitsgründen nicht angezeigt.{% else %}Noch keine Webhook-URL hinterlegt.{% endif %}</small>
+    {% if webhook_host %}<label class="sperren-teams__check"><input type="checkbox" name="webhook_entfernen" value="1"> Webhook-URL entfernen</label>{% endif %}
+  </div>
+  <fieldset class="sperren-teams__set"><legend>Automatisch melden</legend>
+    <label class="sperren-teams__check"><input type="checkbox" name="auto_neu" value="1"{% if not config or config.auto_neu %} checked{% endif %}> Neue Sperren</label>
+    <label class="sperren-teams__check"><input type="checkbox" name="auto_aenderung" value="1"{% if not config or config.auto_aenderung %} checked{% endif %}> Änderungen, Verlängerungen, vorzeitiges Ende</label>
+    <label class="sperren-teams__check"><input type="checkbox" name="auto_aufhebung" value="1"{% if not config or config.auto_aufhebung %} checked{% endif %}> Aufhebungen und Ersetzungen</label>
+  </fieldset>
+  <label class="sperren-teams__check"><input type="checkbox" name="standard_melden" value="1"{% if config and config.standard_melden %} checked{% endif %}> Neue Sperren standardmäßig „An Teams melden“</label>
+  <label class="sperren-teams__check"><input type="checkbox" name="include_map" value="1"{% if not config or config.include_map %} checked{% endif %}> Kartenausschnitt einbinden</label>
+  <div class="sperren-teams__actions"><button class="btn btn--primary" type="submit">Speichern</button></div>
+</form>
+{% if webhook_host %}
+<form method="post" action="/strassensperren/einstellungen/test" class="sperren-teams__test"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><button class="btn btn--ghost" type="submit">Testnachricht senden</button></form>
+{% endif %}
+<section class="card sperren-teams__card">
+  <h2>Letzte Benachrichtigungen</h2>
+  {% if notifications %}
+  <table class="sperren-teams__table"><thead><tr><th>Sperre</th><th>Ereignis</th><th>Status</th><th>Versuche</th><th>Zeit</th><th>Fehler</th></tr></thead><tbody>
+  {% for n in notifications %}<tr><td><a href="/strassensperren/{{ n.road_closure_id }}">{{ closure_titles.get(n.road_closure_id, '#' ~ n.road_closure_id) }}</a></td><td>{{ n.ereignis }}</td><td><span class="sperren-teams__status sperren-teams__status--{{ n.status }}">{{ n.status }}</span></td><td>{{ n.attempt_count }}</td><td>{{ (n.sent_at or n.created_at)|local_datetime }}</td><td>{{ n.last_error or '–' }}</td></tr>{% endfor %}
+  </tbody></table>
+  {% else %}<p class="sperren-hint">Noch keine Benachrichtigungen.</p>{% endif %}
+</section>
+</section>
+<style>
+.sperren-teams{max-width:960px;margin:0 auto;padding:1rem 1rem 3rem}
+.sperren-teams__card{padding:1rem 1.2rem;margin-bottom:1rem;display:grid;gap:.75rem}
+.sperren-teams__check{display:flex;gap:.5rem;align-items:center}
+.sperren-teams__set{border:1px solid var(--border);border-radius:8px;padding:.6rem .9rem;display:grid;gap:.4rem}
+.sperren-teams__test{margin:-.25rem 0 1rem}
+.sperren-teams__table{width:100%;border-collapse:collapse;font-size:.85rem}
+.sperren-teams__table th,.sperren-teams__table td{text-align:left;padding:.4rem .5rem;border-bottom:1px solid var(--border)}
+.sperren-teams__status--sent{color:var(--green,#22c55e)}.sperren-teams__status--failed{color:var(--red-light,#f87171)}
+@media(max-width:760px){.sperren-teams__table{display:block;overflow-x:auto}}
+</style>
+{% endblock %}

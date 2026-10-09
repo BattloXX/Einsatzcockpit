@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, date, datetime, timedelta
-from urllib.parse import parse_qs, quote, urlencode
+from urllib.parse import parse_qs, quote, urlencode, urlsplit
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.core.audit import write_audit
+from app.core.crypto import decrypt_secret, encrypt_secret
 from app.core.permissions import STRASSENSPERREN_LESE_ROLLEN, has_role, require_role
 from app.core.templating import templates
 from app.core.timezones import local_date_to_utc, local_input_to_utc, org_tz
@@ -26,6 +28,8 @@ from app.models.road_closure import (
     RoadClosureAccessToken,
     RoadClosureChange,
     RoadClosureDocument,
+    RoadClosureNotification,
+    RoadClosureTeamsConfig,
 )
 from app.models.user import User
 from app.services import road_closure_service, road_closure_stats_service, road_closure_token_service
@@ -336,10 +340,12 @@ def _save_data(org, values: dict):
         "geometry_meta_json": meta,
         "source": text("source"),
         "source_url": text("source_url"),
+        "teams_melden": bool(values.get("teams_melden")),
     }
 
 
 def _edit_page(request, db, user, closure=None, form_data=None, error=None, status_code=200, related=None):
+    teams_config = _teams_config(db, _org(user).id)
     shared_ids = (
         form_data.get("freigabe_org_ids", [])
         if form_data is not None
@@ -361,6 +367,8 @@ def _edit_page(request, db, user, closure=None, form_data=None, error=None, stat
             "org_city": _org(user).city or "",
             "related": related or [],
             "back_query": _filter_query(_cookie_filters(request, user)),
+            "teams_default": bool(teams_config and teams_config.standard_melden),
+            "teams_aktiv": bool(teams_config and teams_config.enabled and teams_config.webhook_url_enc),
         },
         status_code=status_code,
     )
@@ -633,6 +641,7 @@ def neu_speichern(
     geometry_quality: str = Form(""),
     geometry_meta_json: str = Form(""),
     geometry_checked: str | None = Form(None),
+    teams_melden: str | None = Form(None),
     freigabe_org_ids: list[int] = Form([]),
     als_neu_bestaetigt: str | None = Form(None),
     ersetzt_id: int | None = Form(None),
@@ -685,6 +694,91 @@ def geometrie(
     return JSONResponse(feature)
 
 
+def _teams_config(db, org_id: int):
+    return db.query(RoadClosureTeamsConfig).filter(RoadClosureTeamsConfig.org_id == org_id).first()
+
+
+@router.get("/einstellungen", response_class=HTMLResponse)
+def teams_einstellungen(request: Request, db: Session = Depends(get_db),
+                         user: User = Depends(require_role("objekt_verwalter", "org_admin")),
+                         _guard: None = Depends(require_strassensperren_enabled)):
+    config = _teams_config(db, _org(user).id)
+    notifications = db.query(RoadClosureNotification).filter(RoadClosureNotification.org_id == _org(user).id).order_by(
+        RoadClosureNotification.created_at.desc()).limit(20).all()
+    webhook_host = None
+    if config and config.webhook_url_enc:
+        try:
+            # Nur der Host wird angezeigt – Pfad und Signatur der Webhook-URL sind geheim.
+            webhook_host = urlsplit(decrypt_secret(config.webhook_url_enc)).hostname or "konfiguriert"
+        except Exception:
+            webhook_host = "konfiguriert (nicht lesbar)"
+    closure_titles = {
+        row.id: row.title for row in db.query(RoadClosure).filter(
+            RoadClosure.id.in_({item.road_closure_id for item in notifications})
+        ).all()
+    } if notifications else {}
+    return templates.TemplateResponse(request, "road_closure/einstellungen.html", {
+        "user": user, "config": config, "notifications": notifications, "webhook_host": webhook_host,
+        "closure_titles": closure_titles, "error": request.query_params.get("fehler"),
+        "hinweis": request.query_params.get("hinweis"),
+    })
+
+
+@router.post("/einstellungen")
+def teams_einstellungen_speichern(
+    request: Request, aktiv: str | None = Form(None), webhook_url: str = Form(""),
+    webhook_entfernen: str | None = Form(None), auto_neu: str | None = Form(None),
+    auto_aenderung: str | None = Form(None), auto_aufhebung: str | None = Form(None),
+    standard_melden: str | None = Form(None), include_map: str | None = Form(None),
+    db: Session = Depends(get_db), user: User = Depends(require_role("objekt_verwalter", "org_admin")),
+    _guard: None = Depends(require_strassensperren_enabled),
+):
+    url = webhook_url.strip()
+    if url and (not url.startswith("https://") or len(url) > 1000):
+        return RedirectResponse("/strassensperren/einstellungen?fehler=Ungültige+Webhook-URL", status_code=303)
+    config = _teams_config(db, _org(user).id) or RoadClosureTeamsConfig(org_id=_org(user).id)
+    changed = bool(url or webhook_entfernen)
+    config.enabled, config.auto_neu, config.auto_aenderung = bool(aktiv), bool(auto_neu), bool(auto_aenderung)
+    config.auto_aufhebung = bool(auto_aufhebung)
+    config.standard_melden, config.include_map = bool(standard_melden), bool(include_map)
+    if url:
+        config.webhook_url_enc = encrypt_secret(url)
+    elif webhook_entfernen:
+        config.webhook_url_enc = None
+    config.updated_at, config.updated_by_user_id = datetime.now(UTC).replace(tzinfo=None), user.id
+    db.add(config)
+    write_audit(db, "road_closure.teams_config_saved", org_id=_org(user).id, user_id=user.id,
+        payload={"webhook_geaendert": changed})
+    db.commit()
+    return RedirectResponse("/strassensperren/einstellungen?hinweis=Gespeichert", status_code=303)
+
+
+@router.post("/einstellungen/test")
+async def teams_testnachricht(
+    request: Request, db: Session = Depends(get_db),
+    user: User = Depends(require_role("objekt_verwalter", "org_admin")),
+    _guard: None = Depends(require_strassensperren_enabled),
+):
+    from app.services.road_closure_notify_service import build_test_card, send_payload
+
+    config = _teams_config(db, _org(user).id)
+    if not config or not config.webhook_url_enc:
+        return RedirectResponse("/strassensperren/einstellungen?fehler=" + quote("Keine Webhook-URL hinterlegt"),
+                                status_code=303)
+    try:
+        webhook = decrypt_secret(config.webhook_url_enc)
+    except Exception:
+        return RedirectResponse("/strassensperren/einstellungen?fehler=" + quote("Webhook-URL nicht lesbar"),
+                                status_code=303)
+    sent, _retryable, reason = await send_payload(webhook, build_test_card(_org(user).name))
+    if sent:
+        return RedirectResponse("/strassensperren/einstellungen?hinweis=" + quote("Testnachricht gesendet"),
+                                status_code=303)
+    return RedirectResponse(
+        "/strassensperren/einstellungen?fehler=" + quote(f"Testnachricht fehlgeschlagen: {reason}"), status_code=303
+    )
+
+
 @router.get("/{closure_id}", response_class=HTMLResponse)
 def detail(
     closure_id: int,
@@ -718,6 +812,14 @@ def detail(
         RoadClosure.superseded_by_id == closure.id
     ).first()
     freigabe_link = None
+    teams_config = _teams_config(db, closure.org_id) if closure.org_id == user.org_id else None
+    teams_notifications = (
+        db.query(RoadClosureNotification).filter(
+            RoadClosureNotification.org_id == closure.org_id,
+            RoadClosureNotification.road_closure_id == closure.id,
+        ).order_by(RoadClosureNotification.created_at.desc()).all()
+        if closure.org_id == user.org_id else []
+    )
     if closure.org_id == user.org_id and has_role(user, "objekt_verwalter"):
         token = road_closure_token_service.active_detail_token(db, closure)
         raw = road_closure_token_service.token_plain(token) if token else None
@@ -749,8 +851,37 @@ def detail(
             "supersedes": supersedes,
             "back_query": _filter_query(_cookie_filters(request, user)),
             "freigabe_link": freigabe_link,
+            "teams_config": teams_config,
+            "teams_notifications": teams_notifications,
         },
     )
+
+
+@router.post("/{closure_id}/teams-senden")
+def teams_senden(closure_id: int, request: Request, db: Session = Depends(get_db),
+                 user: User = Depends(require_role("objekt_verwalter")),
+                 _guard: None = Depends(require_strassensperren_enabled)):
+    closure = _closure_or_404(db, user, closure_id, writable=True)
+    from app.services.road_closure_notify_service import enqueue
+    enqueue(db, closure, "manuell", user_id=user.id, manuell=True)
+    db.commit()
+    return RedirectResponse(f"/strassensperren/{closure_id}", status_code=303)
+
+
+@router.post("/{closure_id}/teams/{notification_id}/erneut")
+def teams_erneut(closure_id: int, notification_id: int, request: Request, db: Session = Depends(get_db),
+                 user: User = Depends(require_role("objekt_verwalter")),
+                 _guard: None = Depends(require_strassensperren_enabled)):
+    closure = _closure_or_404(db, user, closure_id, writable=True)
+    notification = db.query(RoadClosureNotification).filter(RoadClosureNotification.id == notification_id,
+        RoadClosureNotification.org_id == closure.org_id, RoadClosureNotification.road_closure_id == closure.id).first()
+    if notification is None:
+        raise HTTPException(status_code=404, detail="Nicht gefunden")
+    notification.status = "retry"
+    notification.next_attempt_at = datetime.now(UTC).replace(tzinfo=None)
+    notification.lease_until = None
+    db.commit()
+    return RedirectResponse(f"/strassensperren/{closure_id}", status_code=303)
 
 
 @router.post("/{closure_id}/freigabelink")
@@ -925,6 +1056,7 @@ def bearbeiten_speichern(
     geometry_quality: str = Form(""),
     geometry_meta_json: str = Form(""),
     geometry_checked: str | None = Form(None),
+    teams_melden: str | None = Form(None),
     freigabe_org_ids: list[int] = Form([]),
     db: Session = Depends(get_db),
     user: User = Depends(require_role("objekt_verwalter")),
