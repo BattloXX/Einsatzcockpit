@@ -63,6 +63,25 @@
     display:flex; align-items:center; gap:5px; flex-wrap:wrap;
     margin-top:6px; font-size:.7rem; color:var(--text-muted);
   }
+  .site-card__einheit-chip {
+    max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    padding:1px 6px; border-radius:999px; font-size:.64rem; font-weight:700;
+  }
+  .site-card__einheit-chip--muted { background:rgba(148,163,184,.2); color:var(--text-muted); }
+  .site-card__einheit-chip--blue { background:rgba(59,130,246,.2); color:#93c5fd; }
+  .site-card__einheit-chip--orange { background:rgba(242,176,46,.2); color:var(--yellow); }
+  .site-card__einheit-chip--purple { background:rgba(168,85,247,.2); color:#d8b4fe; }
+  .site-card__einheit-chip--green { background:rgba(24,169,87,.2); color:var(--green); }
+  .site-card__einheit-chip--done { background:rgba(24,169,87,.16); color:var(--green); }
+  .site-card__einheit-chip--red { background:rgba(216,48,48,.2); color:var(--red-light); }
+  .site-card__einheit-chip--beendet { opacity:.55; }
+  .site-card__einheit-more { font-size:.64rem; font-weight:700; color:var(--text-muted); }
+  .site-card__hint { margin-top:6px; }
+  .site-card__hint span {
+    display:inline-flex; padding:2px 6px; border-radius:4px; font-size:.66rem; font-weight:700;
+  }
+  .site-card__hint--done { background:rgba(24,169,87,.16); color:var(--green); }
+  .site-card__hint--overdue { background:rgba(242,176,46,.2); color:var(--yellow); }
 
   /* ── Priorität als linker Farbbalken ────────────────────────────────────── */
   .site-card[data-prio="1"] { border-left: 3px solid var(--red); }
@@ -113,6 +132,7 @@
   /* ── Mobile Board ────────────────────────────────────────────────────────── */
   @media (max-width: 760px) {
     .lage-wrap { height: auto; overflow: visible; }
+    .site-card__einheit-chip { max-width:12rem; }
     .phase-board { flex: none; flex-direction: column; overflow-x: hidden;
       padding: 8px; align-items: stretch; gap: 0; }
     .phase-col { flex: none; width: 100%; display: none; max-height: none; }

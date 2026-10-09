@@ -1,11 +1,24 @@
 {# Kräfteübersicht-Partial – wird per HTMX-Poll und als SSR-Include gerendert #}
 
+<style>
+.dispatch-site-badge--muted { background:rgba(148,163,184,.2); color:var(--text-muted); }
+.dispatch-site-badge--blue { background:rgba(59,130,246,.2); color:#93c5fd; }
+.dispatch-site-badge--orange { background:rgba(242,176,46,.2); color:var(--yellow); }
+.dispatch-site-badge--purple { background:rgba(168,85,247,.2); color:#d8b4fe; }
+.dispatch-site-badge--green { background:rgba(24,169,87,.2); color:var(--green); }
+.dispatch-site-badge--done { background:rgba(24,169,87,.16); color:var(--green); }
+.dispatch-site-badge--red { background:rgba(216,48,48,.2); color:var(--red-light); }
+</style>
+
 {# ── Einheiten-Karte (Makro) ──────────────────────────────────────────────── #}
 {% macro einheit_card(e) %}
 {% set is_conflict = e.vehicle_id and e.vehicle_id in kue.conflict_vids %}
 <div class="einh-card{% if is_conflict %} einh-card--conflict{% endif %}">
   <div class="einh-card__top">
     <span class="einh-card__label" title="{{ e.label }}">{{ e.label }}</span>
+    <span title="{{ 'Tablet verfügbar' if einheit_hat_tablet.get(e.id) else 'Funk' }}">
+      {% if einheit_hat_tablet.get(e.id) %}📱{% else %}📻{% endif %}
+    </span>
     <span class="einh-card__type">
       {%- if e.resource_type == 'extern' -%}EXT
       {%- elif e.resource_type == 'material' -%}MAT
@@ -36,6 +49,12 @@
       <span style="opacity:.4;font-size:.72rem;">Kein Führer eingetragen</span>
     {% endif %}
   </div>
+  {% set letzte_rueckmeldung = kue.letzte_rueckmeldung_by_einheit.get(e.id) %}
+  {% if letzte_rueckmeldung %}
+  <div style="font-size:.7rem;color:var(--text-muted);margin-top:3px;">
+    letzte Rückmeldung {{ letzte_rueckmeldung|local_time }}
+  </div>
+  {% endif %}
   {# ── Mehrfach-Disposition: Badges ─────────────────────────────── #}
   {% if kue.dispatched_sites_by_einheit is defined %}
   {% set dispatches = kue.dispatched_sites_by_einheit.get(e.id, []) %}
@@ -45,14 +64,22 @@
     {% set s = sites_by_id.get(d.site_id) %}
     {% if s %}
     <a href="/lage/{{ lage.id }}?openSite={{ d.site_id }}"
-       class="dispatch-site-badge {% if d.vor_ort_at %}dispatch-site-badge--vor-ort{% else %}dispatch-site-badge--alarmed{% endif %}"
-       title="{% if d.vor_ort_at %}Vor Ort{% else %}Disponiert{% endif %}: {{ s.bezeichnung }}{% if s.ort %} · {{ s.ort }}{% endif %}">
-      {% if d.vor_ort_at %}🚒{% else %}↗{% endif %}
+       class="dispatch-site-badge dispatch-site-badge--{{ resource_service.EINHEIT_STATUS_COLOR.get(d.einheit_status, 'muted') }}"
+       title="{{ resource_service.EINHEIT_STATUS_LABEL.get(d.einheit_status, d.einheit_status) }}: {{ s.bezeichnung }}{% if s.ort %} · {{ s.ort }}{% endif %}">
       {{ s.bezeichnung[:18] }}{% if s.bezeichnung | length > 18 %}…{% endif %}
+      · {{ resource_service.EINHEIT_STATUS_LABEL.get(d.einheit_status, d.einheit_status) }}
     </a>
     {% endif %}
     {% endfor %}
   </div>
+  {% endif %}
+  {% if is_admin and dispatches %}
+  <a href="/einheit?sim={{ e.id }}"
+     target="_blank"
+     rel="noopener"
+     style="display:inline-block;margin-top:5px;font-size:.7rem;">
+    📱 Als Einheit ansehen
+  </a>
   {% endif %}
   {% endif %}
   {% if is_conflict %}
