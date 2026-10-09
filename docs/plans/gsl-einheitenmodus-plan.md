@@ -1,13 +1,15 @@
 # GSL-Einheitenmodus für Fahrzeug-Tablets – Implementierungsplan
 
 Stand: 2026-10-09 · Basis: `main` @ `a9bb2705` (Einsatzcockpit) und `main` (Einsatzcockpit-Android)
-Status: **Konzept, noch nicht umgesetzt** · Entscheidungen E1, E2, E4, E5 am 2026-10-09 getroffen (Abschnitt 13)
+Status: **Konzept, noch nicht umgesetzt** · Entscheidungen E1–E6 am 2026-10-09 getroffen (Abschnitt 13)
 
 > **Leitlinie:** Der Einheitsführer erkennt auf dem Tablet ohne Suchen sofort, welchen Einsatz
 > er bearbeiten soll, welche Informationen vorliegen und wie er Status, Lagemeldung oder Fotos
 > mit minimalem Aufwand an die Einsatzleitung übermittelt.
 > **Grundprinzip:** Die Einsatzleitung disponiert und koordiniert, die Einheit erhält Aufträge
-> und meldet Ergebnisse zurück. Der Einheitenstatus überschreibt nie den Status der Einsatzstelle.
+> und meldet Ergebnisse zurück. Der Einheitenstatus hebt die Einsatzstelle höchstens auf „in Arbeit“
+> (E3); Abschluss und Abbruch einer Einsatzstelle entscheidet ausschließlich die Führung.
+> Kritische Nachrichten gehen immer über Funk (E6).
 
 Legende in allen Tabellen:
 
@@ -44,7 +46,7 @@ Legende in allen Tabellen:
 | Element | Zweck heute | Bewertung |
 |---|---|---|
 | `MajorIncident` | Lage, `status` standby/active/closed, `is_exercise` | ✅ |
-| `IncidentSite` | Einsatzstelle: Adresse, `lat`/`lng`, `einsatzgrund` (Stichwort/Meldung), `phase` (`SitePhase`), `priority` (`SitePriority` 1–4), `sort_index`, `naechste_lagemeldung_at`, `incident_id` (→ Einsatz → `objekt_links`) | ✅ Gesamtstatus bleibt allein bei der Führung |
+| `IncidentSite` | Einsatzstelle: Adresse, `lat`/`lng`, `einsatzgrund` (Stichwort/Meldung), `phase` (`SitePhase`), `priority` (`SitePriority` 1–4), `sort_index`, `naechste_lagemeldung_at`, `incident_id` (→ Einsatz → `objekt_links`) | ✅ Phase: automatische Anhebung auf `in_arbeit` durch die Einheit (E3), alles andere bleibt Führungsentscheidung |
 | `LageEinheit` | **Einzige Ressourcen-Registry** (`resource_service.py`-Docstring). `vehicle_id` → `VehicleMaster`, `status` angefordert/bereitgestellt/im_einsatz/abgerueckt, `incident_site_id` (Zeiger auf aktuelle Vor-Ort-Stelle), `sector_id`, Führer-Historie `LageEinheitLeader` | ✅ Anker für „meine Einheit“ |
 | `EinheitSiteDispatch` | Mehrfach-Disposition Einheit↔Stelle: `dispatched_at`, `vor_ort_at`, `withdrawn_at`, `dispatched_by`, `author_name` | 🔧 **wird zum „Auftrag“** – fehlt: Auftragstext, Einheitenstatus, Reihenfolge, Version |
 | `SiteResourceAssignment` | Ältere freie Ressourcenzuordnung (vehicle/member/free_text) | ✅ unverändert, nicht für den Einheitenmodus verwenden |
@@ -185,7 +187,7 @@ eingebunden – keine dritte Kopie.
 | G7 | Lagemeldung/Maßnahme/Notiz durch Einheit | ✅ `SiteLogEntry` | 🔧 `einheit_id`, Service statt Router-Inline-Code |
 | G8 | Foto-Upload mit Kommentar, Galerie | ✅ Upload/Kompression | 🔧 `einheit_id`, `kommentar`, Broadcast; Video 🆕 (Phase 3) |
 | G9 | Unterstützung anfordern mit Rückmeldestatus | `CommLogEntry.is_request/handled` | 🔧 Art, Einheit, „in Bearbeitung“ |
-| G10 | Rückfragen/Anweisungen bidirektional, Quittierung | Funkjournal ohne Empfänger | 🔧 `CommLogEntry.einheit_id`, `antwort_auf_id`, `quittierung_erforderlich`, `quittiert_at` |
+| G10 | Rückfragen/Anweisungen bidirektional, Quittierung, kritische Nachrichten per Funk | Funkjournal ohne Empfänger | 🔧 `CommLogEntry.einheit_id`, `antwort_auf_id`, `quittierung_erforderlich`, `quittiert_at`, `kritisch`, `funk_uebermittelt_at` |
 | G11 | Push bei Neuzuteilung/Änderung | `notify_vehicle` vorhanden, nicht für GSL | 🔧 aufrufen nach Commit |
 | G12 | Lagemeldungs-Erinnerung an die Einheit | Reminder erzeugt nur Funkjournal-Eintrag | 🔧 zusätzlich Push/WS an disponierte Einheiten |
 | G13 | Offline-Outbox, Idempotenz, Konflikte | fehlt komplett | 🆕 IndexedDB-Outbox + `einheit_aktion`-Tabelle |
@@ -363,8 +365,10 @@ Neuer System-Kind `einheit` (passt in `String(16)`) für Statuswechsel der Einhe
 | `einheit_id` `Integer NULL FK` | Absender (direction `in`) bzw. Empfänger (direction `out`) |
 | `art` `String(24) NULL` | `rueckfrage`, `anweisung`, `antwort`, `unterstuetzung`, `gefahr`, `lagemeldung_angefordert`. NULL = klassischer Funkjournaleintrag |
 | `kategorie` `String(24) NULL` | nur bei `unterstuetzung`: `mannschaft`, `fahrzeug`, `material`, `spezialkraefte`, `sonstiges` |
-| `dringend` `Boolean NOT NULL DEFAULT 0` | dringende Unterstützung bzw. kritische Nachricht |
-| `quittierung_erforderlich` `Boolean NOT NULL DEFAULT 0` | Führung verlangt ausdrückliche Bestätigung |
+| `dringend` `Boolean NOT NULL DEFAULT 0` | dringende Unterstützung bzw. Gefahr von der Einheit |
+| `kritisch` `Boolean NOT NULL DEFAULT 0` | kritische Nachricht der Führung → muss per Funk übermittelt werden (E6) |
+| `funk_uebermittelt_at` `DateTime NULL`, `funk_uebermittelt_von` `String(120) NULL` | Funkübermittlung bestätigt (kritische Nachrichten, Funk-Einheiten, per Funk bestätigte Tablet-Meldungen) |
+| `quittierung_erforderlich` `Boolean NOT NULL DEFAULT 0` | Führung verlangt ausdrückliche Bestätigung am Tablet (bei `kritisch` immer gesetzt) |
 | `quittiert_at` `DateTime NULL`, `quittiert_von` `String(120) NULL` | Bestätigung durch die Einheit |
 | `antwort_auf_id` `Integer NULL FK comm_log_entry.id ON DELETE SET NULL` | Antwort auf Rückfrage |
 | `in_bearbeitung_at` `DateTime NULL` | Anforderungsstatus „in Bearbeitung“ |
@@ -443,7 +447,7 @@ Alle 11 Verwendungen von `withdrawn_at.is_(None)` werden geprüft und bewusst en
 | `app/services/funkjournal_service.py` | 🆕 (Extraktion) | `add_comm_entry(...)` (heute `funkjournal_add` Z. 2915 inkl. Spiegelung in `SiteLogEntry`), `toggle_handled(...)`, neu: `sende_an_einheit(...)` (Rückfrage/Anweisung/Lagemeldung anfordern), `anforderung_erstellen(...)`, `antwort_erstellen(...)`, `quittieren(...)`, `setze_in_bearbeitung(...)` |
 | `app/services/resource_service.py` | 🔧 | `dispatch_to_site(..., auftrag=None, reihenfolge=None)`; neu `aendere_auftrag(db, dispatch, *, auftrag, reihenfolge)` (erhöht `version`), `oeffne_auftrag_wieder(...)` (Führung setzt beendeten Auftrag zurück), `dispatch_aktiv_filter()`; `withdraw_from_site` erhöht `version` und setzt `geaendert_at` |
 | `app/services/gsl_live_service.py` | 🔧 | `build_my_lage_queue()` wird dünner Adapter auf `einheit_service.auftraege_fuer_einheit()`: `current` = aktueller oder nächster Auftrag, `upcoming` = die nächsten 2 nach Reihenfolge, Ausgabeformat unverändert plus additive Felder `einheit_url`, `auftrag`, `einheit_status`. `lage_url` zeigt für Einheit-Geräte auf `/einheit` (alte APKs öffnen damit automatisch den Einheitenmodus) |
-| `app/services/einheit_notify.py` | 🆕 | `notify_einheit(db, einheit, titel, text, url, *, kritisch=False)` → `push_service.notify_vehicle()` **nach Commit** als BackgroundTask (Muster `gsl_notify.py`). Ohne `vehicle_id` kein Push, nur WS |
+| `app/services/einheit_notify.py` | 🆕 | `notify_einheit(db, einheit, titel, text, url)` → `push_service.notify_vehicle()` **nach Commit** als BackgroundTask (Muster `gsl_notify.py`). Ohne `vehicle_id` kein Push, nur WS |
 | `app/services/gsl_lagemeldung_reminder.py` | 🔧 | bei neuem Auto-Auftrag zusätzlich `CommLogEntry(art="lagemeldung_angefordert", einheit_id=…)` je aktiver Disposition mit Tablet, Event `einheit:changed`, Push (Phase 2) |
 
 #### Statusübergänge (Einheit)
@@ -466,9 +470,24 @@ Alle 11 Verwendungen von `withdrawn_at.is_(None)` werden geprüft und bewusst en
   `letzte_rueckmeldung_at`, bei `vor_ort`/`in_arbeit` `lagemeldung_service.ensure_timer(site)`
   (gleich wie `site_einheit_vor_ort`). Bei `bestaetigt`, `abgeschlossen` und `nicht_durchfuehrbar`
   zusätzlich `LageJournalEntry(category="ressource")` über `resource_service._journal`.
-- **Der Status der Einsatzstelle (`IncidentSite.phase`) wird nie verändert.** Melden alle aktiven
-  Dispositionen einer Stelle `abgeschlossen`, zeigt die Board-Karte nur den Hinweis
-  „Alle Einheiten fertig – Stelle abschließen?“.
+- **Auswirkung auf den Status der Einsatzstelle (E3).** Meldet eine Einheit `vor_ort` oder `in_arbeit`
+  (vom Tablet, per Funk oder über MCP), wird `IncidentSite.phase` auf `in_arbeit` gesetzt – **nur
+  vorwärts** und nur aus `eingegangen`, `erkundung`, `bewertet` oder `disponiert`. Steht die Stelle bereits
+  auf `in_arbeit`, `erledigt` oder `abgebrochen`, passiert nichts. Damit gilt:
+  - Mehrere Einheiten an derselben Stelle stören sich nicht: die erste „Vor Ort“-Meldung hebt die Phase,
+    alle weiteren sind No-Ops.
+  - Ein offline erfasstes, verspätet eintreffendes „Vor Ort“ setzt eine inzwischen von der Führung
+    abgeschlossene Stelle **nicht** wieder auf „in Arbeit“.
+  - `abgeschlossen` und `nicht_durchfuehrbar` einer Einheit ändern die Phase nie. Abschluss und Abbruch
+    entscheidet weiterhin die Führung. Melden alle aktiven Dispositionen `abgeschlossen`, zeigt die
+    Board-Karte den Hinweis „Alle Einheiten fertig – Stelle abschließen?“.
+  - Die Anhebung läuft über dieselbe Logik wie der manuelle Phasenwechsel: die heute im Router liegende
+    Logik aus `site_phase_change` (`ui_major_incident.py:593`: `SiteLogEntry(kind="status")`, Audit
+    `major_incident.site.phase_changed`, `lagemeldung_service.ensure_timer`/`clear_timer`) wandert in
+    `major_incident_service.setze_site_phase(db, site, neue_phase, *, user_id, author_name, ausloeser)`.
+    Der Router und `einheit_service` rufen sie auf. Logzeile bei automatischer Anhebung:
+    „Phase: Disponiert → In Arbeit (TLF Wolfurt vor Ort)“. Nach dem Commit folgen wie bisher
+    `site_phase_changed` per WS und `notify_gsl_live(reason="counts")`.
 
 #### Stellvertretende Erfassung für Einheiten ohne Tablet (E2)
 
@@ -485,6 +504,23 @@ Alle 11 Verwendungen von `withdrawn_at.is_(None)` werden geprüft und bewusst en
 - Fallback auch für Einheiten **mit** Tablet (Tablet defekt, kein Netz): die Führung kann jederzeit
   stellvertretend erfassen. Konflikte mit später eintreffenden Tablet-Aktionen löst die Statusmatrix
   (idempotent bzw. Server-Reihenfolge); beide Einträge bleiben in der Chronik sichtbar.
+
+#### Kritische Nachrichten immer über Funk (E6)
+
+- **Führung → Einheit:** Eine Rückfrage oder Anweisung mit `kritisch=True` wird immer als
+  Funkauftrag angelegt: `CommLogEntry(direction="out", art=…, kritisch=True, channel="Funk", einheit_id=…)`
+  mit dem Zustand **„Funk ausstehend“**, bis der Funker `funk_uebermittelt_at`/`funk_uebermittelt_von`
+  setzt (Button „per Funk übermittelt“ – derselbe Mechanismus wie bei Funk-Einheiten, E2). Hat die Einheit
+  ein Tablet, erscheint die Nachricht dort **zusätzlich** als Banner mit Hinweis „wird per Funk übermittelt“.
+  Eine Quittierung am Tablet ersetzt die Funkübermittlung nicht; beide Zeitpunkte werden protokolliert.
+- **Offene kritische Funkaufträge** sind im Board-Kopf („📻 n kritisch – Funk ausstehend“), im Funkjournal
+  (oben angeheftet, rot) und auf der Board-Karte der Stelle sichtbar, bis sie als übermittelt markiert sind.
+- **Einheit → Führung:** Dringende Unterstützung und Gefahrmeldungen vom Tablet werden gespeichert und
+  angezeigt wie alle anderen Meldungen. Das Tablet zeigt nach dem Absenden aber immer den Hinweis
+  „⚠ Zusätzlich sofort über Funk melden!“. Kommt die Meldung per Funk an, verknüpft der Funker sie mit dem
+  Tablet-Eintrag (Button „auch per Funk erhalten“ → `funk_uebermittelt_at`), damit keine Doppelbearbeitung entsteht.
+- Push bleibt eine Ergänzung. Es gibt **keinen** eigenen Benachrichtigungskanal für kritische Nachrichten
+  und keinen DND-Bypass.
 
 ### 5.2 Tablet-API (`app/routers/ui_einheit.py`) 🆕
 
@@ -526,10 +562,12 @@ Bild-MIME/Größe über die bestehende `upload_site_media`-Prüfung, Speicherquo
 | 🆕 `POST …/stellen/{site}/einheit/{dispatch}/auftrag` | Auftragstext/Reihenfolge ändern → `aendere_auftrag`, Push „Auftrag geändert“ |
 | 🆕 `POST …/stellen/{site}/einheit/{dispatch}/wiedereroeffnen` | beendeten Auftrag zurücksetzen |
 | 🆕 `POST …/stellen/{site}/einheit/{dispatch}/status` | stellvertretender Statuswechsel „per Funk“ (`quelle="funk"`), Statusbuttons im Site-Detail |
-| 🆕 `POST …/stellen/{site}/einheit/{dispatch}/funk-zugestellt` | Auftrag/Rückfrage per Funk übermittelt (Funkjournal-Eintrag) |
+| 🆕 `POST …/stellen/{site}/einheit/{dispatch}/funk-zugestellt` | Auftrag per Funk übermittelt (Funkjournal-Eintrag) |
+| 🆕 `POST /lage/{id}/funkjournal/{e}/funk-uebermittelt` | kritische Nachricht bzw. Rückfrage per Funk übermittelt, oder Tablet-Meldung „auch per Funk erhalten“ (setzt `funk_uebermittelt_at`) |
 | `…/einheit-abziehen` (1162) | zusätzlich `einheit:changed` + Push „Auftrag zurückgezogen“ |
 | `…/log` (1267), `…/medien` (1554) | auf Services umstellen; Medien-Upload broadcastet künftig `site:card_changed` |
-| `/funkjournal` (2915) | auf Service umstellen; optional Empfänger-Einheit, `art`, `quittierung_erforderlich`; Broadcast `funkjournal:changed` |
+| `/funkjournal` (2915) | auf Service umstellen; optional Empfänger-Einheit, `art`, `kritisch` (→ Funkauftrag, E6); Broadcast `funkjournal:changed` |
+| `…/phase` (593) | Logik nach `major_incident_service.setze_site_phase` verschieben (gemeinsam mit der E3-Anhebung) |
 | 🆕 `POST /lage/{id}/funkjournal/{e}/in-bearbeitung` | Anforderung „in Bearbeitung“ (Einheit sieht Status) |
 | 🆕 `POST …/stellen/{site}/einheit/{dispatch}/lagemeldung-anfordern` | manuell Lagemeldung anfordern (Push + Banner) |
 | `ressourcen` / `kraefteuebersicht` (4672/4771) | Einheitenstatus, aktueller Auftrag, letzte Rückmeldung je Einheit |
@@ -612,7 +650,9 @@ Zweispaltig: links Informationen, rechts eine feste Aktionsleiste.
 - **Schnellaktionen (je 1 Tap bis zum Formular):** 📷 Foto, 📝 Lagemeldung, 🛠 Maßnahme, 🆘 Unterstützung,
   ⚠ Gefahr melden, 🧭 Navigation.
 - **Nachrichten:** Rückfragen und Anweisungen der Führung als Banner oben. Kritische Nachrichten
-  (`quittierung_erforderlich`) als nicht wegklickbares Banner mit „Verstanden“ (= quittieren) und „Antworten“.
+  (`kritisch`) als nicht wegklickbares rotes Banner mit dem Zusatz „📻 wird per Funk übermittelt“ sowie
+  „Verstanden“ (= quittieren) und „Antworten“. Nach dem Absenden einer dringenden Unterstützung oder
+  einer Gefahrmeldung: Hinweis „⚠ Zusätzlich sofort über Funk melden!“ (E6).
 
 ### 6.4 Formulare
 
@@ -670,7 +710,7 @@ IndexedDB `ec-einheit`, Stores: `outbox`, `entwuerfe`, `zustand_cache`.
 | `_site_detail.html` (Z. 310 ff.) | Dispositionsliste mit Einheitenstatus, Kennzeichnung 📱 Tablet / 📻 Funk, stellvertretende Statusbuttons für Funk-Einheiten, Zeitstempeln (zugewiesen/bestätigt/vor Ort/beendet), Auftragstext inline editierbar, Reihenfolge, Buttons „Rückfrage senden“, „Lagemeldung anfordern“, „Wiedereröffnen“; Chronik markiert Einheiten-Einträge |
 | `funkjournal.html` / `_funkjournal_rows.html` | Spalte Einheit, Art-Badge (Rückfrage/Anforderung/Gefahr/Antwort), Quittierstatus, Buttons „In Bearbeitung“/„Erledigt“, Filter „offene Anforderungen“; Antworten unter der Rückfrage eingerückt |
 | `ressourcen.html`, `_kraefteuebersicht.html` | Spalte aktueller Auftrag + Einheitenstatus + letzte Rückmeldung |
-| `board.html` Kopf (`_lage_kopf_oob.html`) | Zähler „🆘 n offene Anforderungen“ als Link auf den Funkjournal-Filter |
+| `board.html` Kopf (`_lage_kopf_oob.html`) | Zähler „🆘 n offene Anforderungen“ und „📻 n kritisch – Funk ausstehend“ als Links auf die Funkjournal-Filter |
 | `lage_board.js` | `einheit:changed` → Karte `site_id` neu laden (gleich wie `site:card_changed`) |
 | `_lage_layout.html` / `board.html` (Gesamtansicht auf Einheit-Tablets) | `can_edit`/`can_manage`/`can_note` = `False` → bestehende Bedingungen blenden Bearbeitungselemente aus; Kopfbutton „← Meine Einsätze“; eigene Stellen auf Board und Lagekarte hervorgehoben (Rahmen in Einheitenfarbe); Banner „Nur-Lese-Ansicht“ |
 
@@ -685,7 +725,7 @@ Die App ist ein Capacitor-Wrapper. Der Einheitenmodus läuft vollständig in der
 |---|---|---|---|
 | Widget-Link | 1 | ✅ ohne APK | Backend setzt `my_lage_queue.lage_url = "/einheit"` für Einheit-Geräte, `EcpWidgetSupport.renderGsl` öffnet damit den Einheitenmodus |
 | Widget-Inhalt | 2 | 🔧 | `GslQueueState.kt`/`GslSiteInfo`: additive Felder `einheit_url`, `auftrag`, `einheit_status` parsen; `renderGsl` zeigt Status-Chip und Auftrag; Klick auf eine Zeile öffnet `/einheit/auftrag/{id}` statt der Lage |
-| Push | 2 | ✅/🔧 | `notify_vehicle()` liefert FCM bereits mit `url`; `EinsatzPreloadWorker` lädt die Ziel-URL vor ✅. Neu: `data.kind = "einheit_auftrag"` → `EinsatzWidgetRefreshWorker` sofort anstoßen; für `kritisch` eigener Kanal `einheit_kritisch` (hohe Wichtigkeit, kein DND-Bypass – der bleibt dem Alarm vorbehalten) |
+| Push | 2 | ✅/🔧 | `notify_vehicle()` liefert FCM bereits mit `url`; `EinsatzPreloadWorker` lädt die Ziel-URL vor ✅. Neu: `data.kind = "einheit_auftrag"` → `EinsatzWidgetRefreshWorker` sofort anstoßen. Kein eigener Kanal für kritische Nachrichten – diese gehen immer per Funk (E6), Push ist nur Ergänzung |
 | Kamera | 1 | ✅ | WebView-Dateiauswahl mit `capture` (Capacitor `BridgeWebChromeClient`), `CAMERA`-Permission vorhanden. Auf dem Zielgerät verifizieren (siehe Tests) |
 | Diktat | 3 | 🆕 optional | `@capacitor-community/speech-recognition` + `RECORD_AUDIO`. Bis dahin Tastaturmikrofon |
 | Hintergrund-Sync der Outbox | 3 | 🆕 | `EinheitOutboxWorker` (WorkManager, periodisch 15 min + bei Netzrückkehr per `NetworkCallback`) lädt `/einheit?flush=1` in einer Headless-WebView (Muster `ObjektOfflineSyncWorker.kt`). Status meldet er über ein per `addJavascriptInterface` injiziertes Interface (Lehre aus Android-PR #43: **nicht** über Capacitor-Plugins, die im Headless-Kontext fehlen) in `OfflineCacheStatusStore` → sichtbar in „Über die App“ |
@@ -718,7 +758,7 @@ Einheit handeln. Neue Datei `app/mcp/tools/gsl.py` (Phase 3), `module_check` = G
 
 Regeln: dieselben Rollenkonstanten wie die Routen (keine eigene Rechte-Matrix); `org_id` aus `MCPContext`;
 jede Mutation mit `write_audit(…, payload={"via": "mcp", …})`; `author_name = f"{user.display_name} (MCP)"`;
-schreibende Tools ändern nie `IncidentSite.phase` oder `priority`. Zusätzlicher Test in
+schreibende Tools ändern `IncidentSite.phase` nur über die E3-Anhebung in `setze_einheit_status` und nie `priority`; kritische Nachrichten über MCP erzeugen ebenfalls einen Funkauftrag (E6). Zusätzlicher Test in
 `tests/test_mcp_*`-Muster: Cross-Org-Zugriff auf `einheit_id` → Fehler.
 
 ---
@@ -798,7 +838,11 @@ Browser-E2E nur auf ausdrückliche Anforderung (Projektregel).
   widerrufenes Token, zwei aktive Lagen.
 - Statusmatrix vollständig (erlaubt/verboten/idempotent), `unterbrechen`, Exklusivität des aktiven Auftrags,
   `incident_site_id`-Zeiger, Timer (`ensure_timer`) bei vor_ort/in_arbeit.
-- `IncidentSite.phase` bleibt bei allen Einheitenaktionen unverändert.
+- E3: `vor_ort`/`in_arbeit` hebt `phase` aus `eingegangen`/`erkundung`/`bewertet`/`disponiert` auf
+  `in_arbeit` (inkl. Logzeile, Audit, Timer, `site_phase_changed`); aus `in_arbeit`/`erledigt`/`abgebrochen`
+  keine Änderung; `abgeschlossen`/`nicht_durchfuehrbar`/`bestaetigt`/`anfahrt` ändern die Phase nie;
+  verspätetes Offline-„Vor Ort“ nach `erledigt` → Phase bleibt `erledigt`.
+- Regression: manueller Phasenwechsel über `…/phase` verhält sich nach der Extraktion identisch.
 - Kategorisierung und Sortierung (Reihenfolge > Priorität > Zeit).
 - `build_my_lage_queue` liefert für Bestandsdaten dasselbe Format wie vorher (Regression zu
   `tests/test_device_duty_state_live.py`, `tests/test_gsl_live.py`).
@@ -825,15 +869,15 @@ Browser-E2E nur auf ausdrückliche Anforderung (Projektregel).
 
 | # | Szenario | Testebene | Erwartung |
 |---|---|---|---|
-| S1 | Zwei Einheiten bearbeiten dieselbe Stelle | API | unabhängige `einheit_status`; Karte zeigt zwei Chips; Phase unverändert |
+| S1 | Zwei Einheiten bearbeiten dieselbe Stelle | API | unabhängige `einheit_status`; Karte zeigt zwei Chips; erste „Vor Ort“-Meldung hebt die Phase auf `in_arbeit`, die zweite ändert nichts |
 | S2 | Drei neue Einsätze nacheinander | API + WS-Mock | Zustand enthält 3 Aufträge in Reihenfolge; 3 `einheit:changed`; Widget-Queue current + 2 upcoming |
 | S3 | Auftrag ändert sich während offener Lagemeldung | API + JS-Unit | Meldung mit alter `auftrag_version` angenommen, `hinweis=auftrag_geaendert`; Entwurf bleibt (JS) |
 | S4 | Rückzug während Offline-Phase | API | Statusaktion → 409 `auftrag_zurueckgezogen`; Lagemeldung/Foto → 200 mit Rückzugsvermerk |
 | S5 | Foto-Upload bricht ab | API | zweiter Upload mit gleicher `client_uuid` → keine zweite `SiteMedia`, gleiche Antwort |
 | S6 | Neustart mit mehreren unsynchronisierten Aktionen | JS-Unit (10.5) + E2E | Outbox überlebt Reload, Reihenfolge bleibt erhalten, Status „ausstehend“ bis 2xx |
-| S7 | Einheit abgeschlossen, Stelle offen | API + Template | `abgeschlossen`, `phase` unverändert, Karte zeigt „Alle Einheiten fertig“ |
+| S7 | Einheit abgeschlossen, Stelle offen | API + Template | `abgeschlossen`, `phase` bleibt `in_arbeit`, Karte zeigt „Alle Einheiten fertig“ |
 | S8 | Fremdes Tablet manipuliert | API | 404/403, keine Datenänderung, kein Audit-Eintrag mit Erfolg |
-| S9 | Kritische Rückfrage + Quittierung | API | `quittierung_erforderlich` → Tablet-Zustand zeigt Pflichtbanner; Quittierung setzt `quittiert_at`; Führung sieht ✓ |
+| S9 | Kritische Rückfrage + Quittierung | API | `kritisch` → Funkauftrag „Funk ausstehend“ im Kopfzähler; Tablet zeigt Pflichtbanner mit Funkhinweis; Tablet-Quittierung setzt `quittiert_at`, der Funkauftrag bleibt offen bis „per Funk übermittelt“; Führung sieht beide Zeitpunkte |
 | S10 | Tablet wechselt Fahrzeug/Einheit mitten in der Lage | API | neuer Kontext sofort; Outbox-Altaktion → 409 `einheit_gewechselt` |
 
 ### 10.4 Offline / Mehrgeräte / E2E
@@ -934,7 +978,7 @@ Jedes Paket ist ein eigener PR mit grünem `ruff`/`mypy`/`pytest`. Abhängigkeit
 |---|---|---|
 | **P1-1** Datenmodell | Migration 0263, Modellfelder, `EinheitAktion`, `dispatch_aktiv_filter` inkl. Umstellung aller 11 Stellen, Labels/Farben | Migration läuft auf MariaDB in CI; alle bestehenden GSL-Tests grün; Backfill-Test |
 | **P1-2** Service-Extraktion (P1-1) | `site_log_service`, `speichere_site_foto`, `funkjournal_service.add_comm_entry`; Router auf Services umstellen; Broadcast nach Medien-Upload und Funkjournal | Kein Verhaltensunterschied in der Führungs-UI (bestehende Tests), neue Broadcasts getestet |
-| **P1-3** Einheiten-Kontext + Sicherheit (P1-1) | `einheit_service` (Kontext, Auftragsliste, Statusmaschine inkl. `quelle`), `require_einheit_geraet`, `einheit_geraet_nur_lesen` mit Allowlist (Gesamtansicht), WS-Widerrufsprüfung, `gsl_profil` in der Geräte-Admin-UI, `build_my_lage_queue` als Adapter | S1, S7, S8, S10 grün; Einheit-Gerät sieht die Gesamtansicht ohne Bearbeitungselemente und erhält 403 auf alle schreibenden Führungsrouten; Routen-Vollständigkeitstest grün; Widget-Format unverändert |
+| **P1-3** Einheiten-Kontext + Sicherheit (P1-1) | `einheit_service` (Kontext, Auftragsliste, Statusmaschine inkl. `quelle`), `major_incident_service.setze_site_phase` + E3-Anhebung, `require_einheit_geraet`, `einheit_geraet_nur_lesen` mit Allowlist (Gesamtansicht), WS-Widerrufsprüfung, `gsl_profil` in der Geräte-Admin-UI, `build_my_lage_queue` als Adapter | S1, S7, S8, S10 grün; Einheit-Gerät sieht die Gesamtansicht ohne Bearbeitungselemente und erhält 403 auf alle schreibenden Führungsrouten; Routen-Vollständigkeitstest grün; Widget-Format unverändert |
 | **P1-4** Tablet-UI (P1-2, P1-3) | `_fab_styles.html` aus dem Fahrtenbuch extrahieren, `ui_einheit.py`, `einheit.html` im Fahrtenbuch-Design, Umschalter Meine Einsätze/Gesamtansicht, JS-Testjob (10.5), `einheit_modus.js`, `einheit_outbox.js` (persistente Outbox mit manuellem und automatischem Retry, Idempotenz), Status/Lagemeldung/Maßnahme/Notiz/Foto, Startseiten-Redirect, SW-Regeln | S2–S6 auf API-Ebene und Outbox-Testfälle 1–10 grün; Fahrtenbuch optisch unverändert; offline erfasste Aktionen gehen bei Reload nicht verloren und werden nie als übermittelt angezeigt; Live-Update ohne Verlust offener Eingaben |
 | **P1-5** Führungsansicht (P1-3) | Chips auf Board-Karte, Dispositionsliste im Site-Detail mit Status, Auftragstext und 📱/📻-Kennzeichnung, stellvertretende Statuserfassung „per Funk“, Disponieren mit Auftragstext, `einheit:changed` in `lage_board.js`, Kräfteübersicht | Führung sieht Statuswechsel einer Einheit ohne Reload; „keine Rückmeldung seit“ erscheint nach Intervall; Funk-Einheiten lassen sich vollständig ohne Tablet führen |
 
@@ -944,11 +988,11 @@ Optional am Ende von Phase 1: E2E `e2e/test_einheit_modus.py` (auf Anforderung).
 
 | PR | Inhalt | Akzeptanzkriterien |
 |---|---|---|
-| **P2-1** Kommunikationsmodell (P1-2) | Migration 0264, `funkjournal_service` (Rückfrage, Anweisung, Antwort, Quittierung, Anforderung mit Status, Gefahr) | S9 grün; Anforderungsstatus eingegangen → in Bearbeitung → erledigt sichtbar am Tablet |
+| **P2-1** Kommunikationsmodell (P1-2) | Migration 0264, `funkjournal_service` (Rückfrage, Anweisung, Antwort, Quittierung, Anforderung mit Status, Gefahr, kritische Nachricht als Funkauftrag) | S9 grün; Anforderungsstatus eingegangen → in Bearbeitung → erledigt sichtbar am Tablet |
 | **P2-2** Tablet-Kommunikation (P1-4, P2-1) | Nachrichtenbanner, Pflichtquittierung, Antworten, Unterstützungs-Kacheln, Gefahr melden, Auftrag bestätigen als Primäraktion | max. 2 Taps von der Detailseite bis „Unterstützung gesendet“ |
 | **P2-3** Führung-Kommunikation (P2-1) | Funkjournal-Spalten/Filter, „Rückfrage senden“ (Tablet: Push/Banner, Funk-Einheit: „per Funk übermittelt“), „Lagemeldung anfordern“, Auftrag ändern/Reihenfolge, Kopfzähler offene Anforderungen | offene dringende Anforderung ist auf Board-Karte und im Kopf sichtbar |
 | **P2-4** Push + Erinnerungen (P2-1) | `einheit_notify` bei Neuzuteilung, Änderung, Rückzug, Rückfrage; Reminder-Loop benachrichtigt Einheiten; erweiterte Journal-Einträge | Push nur nach Commit; Reminder erzeugt keine Doppelbenachrichtigung (Dedup wie `auto_kind`) |
-| **P2-5** Android-Widget (P1-3) | `GslQueueState.kt`/`renderGsl`: Status, Auftrag, Deep-Links; FCM `kind=einheit_auftrag` → Widget-Refresh; Kanal `einheit_kritisch`; Release | CI-Build grün; Gerätetest Widget + Push |
+| **P2-5** Android-Widget (P1-3) | `GslQueueState.kt`/`renderGsl`: Status, Auftrag, Deep-Links; FCM `kind=einheit_auftrag` → Widget-Refresh; Release | CI-Build grün; Gerätetest Widget + Push |
 
 ### Phase 3 – Betriebssicherheit und Zusatzfunktionen
 
@@ -981,10 +1025,7 @@ Am 2026-10-09 getroffen:
 |---|---|---|---|
 | E1 | Dürfen Einheit-Tablets die gesamte Lage sehen? | **Ja**, Wechsel in die Gesamtansicht ist erlaubt – nur lesend | 3.1 (6), 6.6, 9.1, 9.2 (Allowlist), 10.2 |
 | E2 | Einheiten ohne Tablet | werden **über Funk zentral instruiert**; Führung/Funker erfasst stellvertretend | 3.1 (7), 5.1 „Stellvertretende Erfassung“, 5.3, 6.6, P1-5, P2-3 |
-| E3 | Hebt „Vor Ort“ der Einheit die Phase der Stelle? | Nein, nur Hinweis auf der Karte | 5.1 |
+| E3 | Ändert der Einheitenstatus den Status der Einsatzstelle? | **Ja:** `vor_ort`/`in_arbeit` hebt die Phase automatisch auf `in_arbeit` (nur vorwärts). Abschluss/Abbruch bleibt Führungsentscheidung | 5.1, 5.3, 8, 10.1, S1, S7 |
 | E4 | JS-Testinfrastruktur für die Outbox | **Vorschlag:** `node --test` + `fake-indexeddb`, Outbox als reine Logik mit injizierten Abhängigkeiten, vierter CI-Job `js` | 10.5, P1-4 |
 | E5 | Stitch-Mockup | **Nein** – bestehendes Fahrtenbuch-Design verwenden, `fab-*`-Styles in ein gemeinsames Partial auslagern | 1.10, 6.1, 6.2, P1-4 |
-| E6 | Kritische Nachrichten mit Alarmton/DND-Bypass? | Nein, eigener Kanal mit hoher Wichtigkeit; Alarmkanal bleibt Alarmierungen vorbehalten | 7 |
-
-E3 und E6 folgen der Empfehlung aus der ersten Fassung. Sie sind nicht ausdrücklich bestätigt und können
-bis zum Start des jeweiligen Pakets noch geändert werden.
+| E6 | Wie werden kritische Nachrichten übermittelt? | **Immer per Funk.** Kritische Nachrichten der Führung werden Funkaufträge („Funk ausstehend“ bis zur Bestätigung), Tablet und Push sind nur Ergänzung; das Tablet fordert bei dringenden Meldungen zur zusätzlichen Funkmeldung auf. Kein eigener Kanal, kein DND-Bypass | 4.1, 5.1, 5.3, 6.3, 6.6, 7, S9 |
