@@ -1,0 +1,662 @@
+"""JSON-API fuer den GSL-Einheitenmodus."""
+
+# ruff: noqa: E501
+from __future__ import annotations
+
+import hashlib
+import json
+import math
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
+from typing import Any, NoReturn
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, JSONResponse, Response
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from app.core.audit import write_audit
+from app.core.permissions import has_role
+from app.core.security import get_author_name
+from app.db import get_db
+from app.models.major_incident import (
+    EINHEIT_STATUS_LABEL,
+    SITE_LOG_KIND_LABEL,
+    CrossSiteMarker,
+    EinheitAktion,
+    EinheitSiteDispatch,
+    IncidentSite,
+    SiteLogEntry,
+    SiteMedia,
+    VehiclePosition,
+)
+from app.models.user import AuditLog, DeviceToken
+from app.services.broadcast import broadcast_lage
+from app.services.einheit_service import (
+    EinheitKonflikt,
+    EinheitKontext,
+    _auftragsdaten,
+    _iso_z,
+    auftraege_fuer_einheit,
+    auftrag_laden,
+    kontext_fuer_einheit,
+    kontext_fuer_geraet,
+    setze_einheit_status,
+)
+from app.services.gsl_live_notify import notify_gsl_live
+from app.services.lage_media_service import site_media_path, site_thumb_path, speichere_site_foto
+from app.services.site_log_service import add_site_log, format_lagemeldung, normalisiere_user_kind
+
+router = APIRouter(prefix="/einheit", tags=["einheit"])
+
+
+def _fehler(status: int, code: str, details: dict | None = None) -> NoReturn:
+    body: dict[str, Any] = {"code": code}
+    if details:
+        body["details"] = details
+    raise HTTPException(status_code=status, detail=body)
+
+
+def _antwort_exc(exc: HTTPException) -> JSONResponse:
+    return JSONResponse(exc.detail, status_code=exc.status_code)
+
+
+def einheit_kontext(request: Request, db: Session = Depends(get_db)) -> EinheitKontext:
+    """Loest Tablet- bzw. explizit erlaubte Admin-Simulationen auf."""
+    user = getattr(request.state, "user", None)
+    if user is None:
+        _fehler(403, "kein_einheitenkontext")
+    if getattr(request.state, "is_device", False):
+        token_id = getattr(request.state, "device_token_id", None)
+        query = db.query(DeviceToken).filter(DeviceToken.user_id == user.id, DeviceToken.revoked_at.is_(None))
+        token = (
+            query.filter(DeviceToken.id == token_id).first()
+            if token_id
+            else query.order_by(DeviceToken.created_at.desc()).first()
+        )
+        try:
+            lage_id = int(request.query_params["lage"]) if "lage" in request.query_params else None
+        except ValueError:
+            lage_id = None
+        ctx = kontext_fuer_geraet(db, user, token, lage_id) if token else None
+        if ctx is None:
+            _fehler(403, "kein_einheitenkontext")
+        return ctx
+
+    sim = request.headers.get("X-EC-Einheit-Sim") or request.query_params.get("sim")
+    if sim:
+        if (
+            getattr(request.state, "qr_incident_id", None) is not None
+            or getattr(request.state, "qr_lage_id", None) is not None
+        ):
+            _fehler(403, "kein_einheitenkontext")
+        if not has_role(user, "admin"):
+            write_audit(db, "gsl.einheit.simulation_abgelehnt", user_id=user.id, payload={"einheit_id": sim})
+            db.commit()
+            _fehler(403, "kein_einheitenkontext")
+        try:
+            einheit_id = int(sim)
+            ctx = kontext_fuer_einheit(db, user, einheit_id, quelle="simulation")
+        except ValueError, LookupError:
+            raise HTTPException(status_code=404)
+        heute = datetime.now(UTC).date()
+        schon = (
+            db.query(AuditLog.id)
+            .filter(
+                AuditLog.action == "gsl.einheit.simulation_gestartet",
+                AuditLog.user_id == user.id,
+                AuditLog.created_at >= datetime.combine(heute, datetime.min.time()),
+                AuditLog.created_at < datetime.combine(heute + timedelta(days=1), datetime.min.time()),
+            )
+            .first()
+        )
+        if not schon:
+            write_audit(db, "gsl.einheit.simulation_gestartet", user_id=user.id, payload={"einheit_id": einheit_id})
+            db.commit()
+        return ctx
+    _fehler(403, "kein_einheitenkontext")
+
+
+def _schreibbar(ctx: EinheitKontext) -> None:
+    if ctx.simulation and not ctx.lage.is_exercise:
+        _fehler(403, "simulation_nur_lesend")
+
+
+def _zeit(value: str | None) -> tuple[datetime | None, str | None]:
+    if not value:
+        return None, None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        _fehler(422, "erfasst_at_ungueltig")
+    parsed = parsed.astimezone(UTC).replace(tzinfo=None) if parsed.tzinfo else parsed
+    now = datetime.now(UTC).replace(tzinfo=None)
+    if parsed < now - timedelta(hours=24) or parsed > now + timedelta(minutes=5):
+        return now, "erfasst_at_korrigiert"
+    return parsed, None
+
+
+def fuehre_aktion_aus(
+    db: Session,
+    ctx: EinheitKontext,
+    *,
+    client_uuid: str,
+    aktion: str,
+    erfasst_at: datetime | None,
+    dispatch_id: int | None,
+    ausfuehren: Callable[[], dict],
+) -> tuple[dict, int]:
+    try:
+        UUID(client_uuid)
+    except ValueError, AttributeError, TypeError:
+        _fehler(422, "client_uuid_ungueltig")
+    vorhanden = db.query(EinheitAktion).filter(EinheitAktion.client_uuid == client_uuid).first()
+    if vorhanden:
+        gleich = vorhanden.device_token_id == (ctx.device_token.id if ctx.device_token else None)
+        if ctx.simulation:
+            gleich = vorhanden.quelle == ctx.quelle and vorhanden.einheit_id == ctx.einheit.id
+        if not gleich:
+            return {"code": "client_uuid_vergeben"}, 409
+        return json.loads(vorhanden.antwort_json or "{}"), 409 if vorhanden.ergebnis == "konflikt" else 200
+    try:
+        antwort = ausfuehren()
+        status, ergebnis = 200, "ok"
+    except EinheitKonflikt as exc:
+        antwort = {"code": exc.code}
+        if exc.details:
+            antwort["details"] = exc.details
+        status, ergebnis = 409, "konflikt"
+    row = EinheitAktion(
+        client_uuid=client_uuid,
+        org_id=ctx.org_id,
+        quelle=ctx.quelle,
+        device_token_id=ctx.device_token.id if ctx.device_token else None,
+        einheit_id=ctx.einheit.id,
+        dispatch_id=dispatch_id,
+        aktion=aktion,
+        ergebnis=ergebnis,
+        entity_type=antwort.get("entity_type"),
+        entity_id=antwort.get("entity_id"),
+        antwort_json=json.dumps(antwort, ensure_ascii=False),
+        erfasst_at=erfasst_at,
+        empfangen_at=datetime.now(UTC),
+    )
+    db.add(row)
+    try:
+        db.flush()
+        antwort["aktion_id"] = row.id
+        row.antwort_json = json.dumps(antwort, ensure_ascii=False)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        replay = db.query(EinheitAktion).filter(EinheitAktion.client_uuid == client_uuid).first()
+        if replay:
+            return json.loads(replay.antwort_json or "{}"), 409 if replay.ergebnis == "konflikt" else 200
+        raise
+    return antwort, status
+
+
+def _autor(request: Request, ctx: EinheitKontext) -> str | None:
+    if ctx.simulation:
+        return f"{request.state.user.display_name} (Simulation {ctx.einheit.label})"
+    return get_author_name(request)
+
+
+async def _senden(lage_id: int, site_id: int, einheit_id: int, dispatch_id: int, phase: str | None = None) -> None:
+    await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
+    await broadcast_lage(
+        lage_id, {"type": "einheit:changed", "einheit_id": einheit_id, "dispatch_id": dispatch_id, "site_id": site_id}
+    )
+    if phase:
+        await broadcast_lage(lage_id, {"type": "site_phase_changed", "site_id": site_id, "phase": phase})
+
+
+@router.get("/api/zustand")
+def zustand(request: Request, ctx: EinheitKontext = Depends(einheit_kontext), db: Session = Depends(get_db)):
+    data = auftraege_fuer_einheit(db, ctx)
+    data["simulation"] = ctx.simulation
+    data["schreibbar"] = not (ctx.simulation and not ctx.lage.is_exercise)
+    raw = json.dumps({k: v for k, v in data.items() if k != "server_time"}, sort_keys=True, default=str)
+    etag = hashlib.sha256(raw.encode()).hexdigest()
+    if request.headers.get("if-none-match", "").strip('"') == etag:
+        return Response(status_code=304, headers={"ETag": f'"{etag}"'})
+    data["etag"] = etag
+    return JSONResponse(data, headers={"ETag": f'"{etag}"'})
+
+
+@router.get("/api/auftrag/{dispatch_id}")
+def auftrag_detail(dispatch_id: int, ctx: EinheitKontext = Depends(einheit_kontext), db: Session = Depends(get_db)):
+    try:
+        dispatch = auftrag_laden(db, ctx, dispatch_id)
+    except LookupError:
+        raise HTTPException(status_code=404)
+    site = dispatch.site
+    out: dict[str, Any] = {
+        "auftrag": _auftragsdaten(dispatch),
+        "stelle": {
+            k: _auftragsdaten(dispatch)[k]
+            for k in ("site_id", "bezeichnung", "einsatzgrund", "adresse", "lat", "lng", "priority", "phase")
+        },
+    }
+    if dispatch.withdrawn_at is not None:
+        return out
+    other = (
+        db.query(EinheitSiteDispatch)
+        .filter(
+            EinheitSiteDispatch.site_id == site.id,
+            EinheitSiteDispatch.withdrawn_at.is_(None),
+            EinheitSiteDispatch.einheit_id != ctx.einheit.id,
+        )
+        .all()
+    )
+    out["andere_einheiten"] = [
+        {
+            "label": d.einheit.label,
+            "einheit_status": d.einheit_status,
+            "einheit_status_label": EINHEIT_STATUS_LABEL.get(d.einheit_status, d.einheit_status),
+        }
+        for d in other
+    ]
+    logs = (
+        db.query(SiteLogEntry)
+        .filter(SiteLogEntry.incident_site_id == site.id)
+        .order_by(SiteLogEntry.ts.desc())
+        .limit(50)
+        .all()
+    )
+    out["chronik"] = [
+        {
+            "ts": _iso_z(x.ts),
+            "kind": x.kind,
+            "kind_label": SITE_LOG_KIND_LABEL.get(x.kind, x.kind),
+            "text": x.text,
+            "author_name": x.author_name,
+            "eigene": x.einheit_id == ctx.einheit.id,
+        }
+        for x in logs
+    ]
+    media = (
+        db.query(SiteMedia).filter(SiteMedia.incident_site_id == site.id).order_by(SiteMedia.uploaded_at.desc()).all()
+    )
+    out["fotos"] = [
+        {
+            "id": x.id,
+            "thumb_url": f"/einheit/medien/thumb/{x.id}",
+            "url": f"/einheit/medien/{x.id}",
+            "kommentar": x.kommentar,
+            "author_name": x.author_name,
+            "uploaded_at": _iso_z(x.uploaded_at),
+        }
+        for x in media
+    ]
+    out["objekte"] = []
+    if site.incident_id:
+        from app.models.incident import Incident
+
+        incident = db.get(Incident, site.incident_id)
+        if incident:
+            out["objekte"] = [
+                {
+                    "id": link.objekt.id,
+                    "bezeichnung": link.objekt.name,
+                    "adresse": link.objekt.adresse_zeile,
+                    "status": link.status,  # bestaetigt | vorschlag
+                    "url": f"/objekte/{link.objekt.id}",
+                }
+                for link in incident.objekt_links
+            ]
+    out["gefahren"] = _gefahren(db, ctx, site)
+    out["strassensperren"] = _sperren(db, ctx, site)
+    out["navigation_hinweis"] = "Externe Navigation berücksichtigt keine ECP-Straßensperren."
+    return out
+
+
+def _gefahren(db: Session, ctx: EinheitKontext, site: IncidentSite) -> list[dict]:
+    if site.lat is None or site.lng is None:
+        return []
+    result = []
+    for marker in (
+        db.query(CrossSiteMarker)
+        .filter(CrossSiteMarker.major_incident_id == ctx.lage.id, CrossSiteMarker.status != "behoben")
+        .all()
+    ):
+        if marker.lat is None or marker.lng is None:
+            continue
+        abstand = math.hypot(
+            (marker.lat - site.lat) * 111_320, (marker.lng - site.lng) * 111_320 * math.cos(math.radians(site.lat))
+        )
+        if abstand <= 300:
+            result.append(
+                {
+                    "title": marker.title,
+                    "type_label": marker.type_label,
+                    "status_label": marker.status_label,
+                    "abstand_m": round(abstand),
+                }
+            )
+    return result
+
+
+def _sperren(db: Session, ctx: EinheitKontext, site: IncidentSite) -> list[dict]:
+    if site.lat is None or site.lng is None:
+        return []
+    try:
+        from app.services.road_closure_flags import strassensperren_effective_enabled
+
+        if not strassensperren_effective_enabled(ctx.org_id, db):
+            return []
+        from app.services.road_closure_incident_service import relevant_closures
+
+        rows, _ = relevant_closures(db, ctx.org_id, None, (site.lat, site.lng))
+        return [{"title": x.title, "restriction_label": x.restriction_label} for x in rows]
+    except Exception:
+        return []
+
+
+@router.post("/api/auftrag/{dispatch_id}/status")
+async def status(
+    dispatch_id: int, request: Request, ctx: EinheitKontext = Depends(einheit_kontext), db: Session = Depends(get_db)
+):
+    _schreibbar(ctx)
+    body = await request.json()
+    try:
+        dispatch = auftrag_laden(db, ctx, dispatch_id)
+    except LookupError:
+        raise HTTPException(status_code=404)
+    erfasst, hinweis = _zeit(body.get("erfasst_at"))
+
+    def run() -> dict:
+        result = setze_einheit_status(
+            db,
+            ctx,
+            dispatch,
+            body.get("status", ""),
+            user_id=request.state.user.id,
+            author_name=_autor(request, ctx),
+            grund=body.get("grund"),
+            unterbrechen=bool(body.get("unterbrechen")),
+            erfasst_at=erfasst,
+        )
+        answer = {
+            "ok": True,
+            "entity_id": dispatch.id,
+            "entity_type": "dispatch",
+            "server_time": _iso_z(datetime.now(UTC)),
+            "auftrag_version": dispatch.version,
+            **result,
+        }
+        if hinweis:
+            answer["hinweis"] = hinweis
+        return answer
+
+    try:
+        answer, code = fuehre_aktion_aus(
+            db,
+            ctx,
+            client_uuid=body.get("client_uuid"),
+            aktion="status",
+            erfasst_at=erfasst,
+            dispatch_id=dispatch.id,
+            ausfuehren=run,
+        )
+    except HTTPException as exc:
+        return _antwort_exc(exc)
+    if code == 200 and answer.get("ok"):
+        await _senden(
+            ctx.lage.id,
+            dispatch.site_id,
+            ctx.einheit.id,
+            dispatch.id,
+            dispatch.site.phase.value if answer.get("phase_geaendert") else None,
+        )
+        if answer.get("phase_geaendert"):
+            await notify_gsl_live(db, ctx.lage, org_id=ctx.lage.org_id, reason="counts")
+    return JSONResponse(answer, status_code=code)
+
+
+@router.post("/api/auftrag/{dispatch_id}/meldung")
+async def meldung(
+    dispatch_id: int, request: Request, ctx: EinheitKontext = Depends(einheit_kontext), db: Session = Depends(get_db)
+):
+    _schreibbar(ctx)
+    body = await request.json()
+    try:
+        dispatch = auftrag_laden(db, ctx, dispatch_id)
+    except LookupError:
+        raise HTTPException(status_code=404)
+    felder = body.get("felder") or {}
+    if not isinstance(felder, dict):
+        return JSONResponse({"code": "felder_ungueltig"}, status_code=400)
+    text = (body.get("text") or format_lagemeldung(felder)).strip()
+    if not text or len(text) > 4000:
+        return JSONResponse({"code": "text_ungueltig"}, status_code=400)
+    if dispatch.withdrawn_at is not None:
+        text += " (nach Rückzug eingegangen)"
+    erfasst, korr = _zeit(body.get("erfasst_at"))
+
+    def run() -> dict:
+        entry = add_site_log(
+            db,
+            dispatch.site,
+            normalisiere_user_kind(body.get("art", "")),
+            text,
+            user_id=request.state.user.id,
+            author_name=_autor(request, ctx),
+            einheit_id=ctx.einheit.id,
+            erfasst_at=erfasst,
+        )
+        dispatch.letzte_rueckmeldung_at = datetime.now(UTC)
+        write_audit(
+            db,
+            "gsl.einheit.meldung",
+            user_id=request.state.user.id,
+            payload={"dispatch_id": dispatch.id, "quelle": ctx.quelle},
+        )
+        hint = korr or (
+            "auftrag_geaendert"
+            if body.get("auftrag_version") is not None and body["auftrag_version"] != dispatch.version
+            else None
+        )
+        out = {
+            "ok": True,
+            "entity_id": entry.id,
+            "entity_type": "site_log",
+            "server_time": _iso_z(datetime.now(UTC)),
+            "auftrag_version": dispatch.version,
+        }
+        if hint:
+            out["hinweis"] = hint
+        return out
+
+    try:
+        answer, code = fuehre_aktion_aus(
+            db,
+            ctx,
+            client_uuid=body.get("client_uuid"),
+            aktion=body.get("art", "meldung"),
+            erfasst_at=erfasst,
+            dispatch_id=dispatch.id,
+            ausfuehren=run,
+        )
+    except HTTPException as exc:
+        return _antwort_exc(exc)
+    if code == 200 and answer.get("ok"):
+        await _senden(ctx.lage.id, dispatch.site_id, ctx.einheit.id, dispatch.id)
+        if body.get("art") == "lagemeldung":
+            await broadcast_lage(ctx.lage.id, {"type": "funkjournal:changed"})
+    return JSONResponse(answer, status_code=code)
+
+
+@router.post("/api/auftrag/{dispatch_id}/foto")
+async def foto(
+    dispatch_id: int,
+    request: Request,
+    file: UploadFile = File(...),
+    client_uuid: str = Form(...),
+    erfasst_at: str | None = Form(None),
+    kommentar: str | None = Form(None),
+    ctx: EinheitKontext = Depends(einheit_kontext),
+    db: Session = Depends(get_db),
+):
+    _schreibbar(ctx)
+    try:
+        dispatch = auftrag_laden(db, ctx, dispatch_id)
+    except LookupError:
+        raise HTTPException(status_code=404)
+    if kommentar and len(kommentar) > 500:
+        return JSONResponse({"code": "kommentar_ungueltig"}, status_code=400)
+    parsed, korr = _zeit(erfasst_at)
+
+    try:
+        UUID(client_uuid)
+    except ValueError, TypeError:
+        return JSONResponse({"code": "client_uuid_ungueltig"}, status_code=422)
+    existing = db.query(EinheitAktion).filter(EinheitAktion.client_uuid == client_uuid).first()
+    if existing:
+        same = existing.device_token_id == (ctx.device_token.id if ctx.device_token else None)
+        if ctx.simulation:
+            same = existing.quelle == ctx.quelle and existing.einheit_id == ctx.einheit.id
+        return JSONResponse(
+            json.loads(existing.antwort_json or "{}") if same else {"code": "client_uuid_vergeben"},
+            status_code=(409 if not same or existing.ergebnis == "konflikt" else 200),
+        )
+    media = await speichere_site_foto(
+        db,
+        dispatch.site,
+        file,
+        org_id=ctx.org_id,
+        user_id=request.state.user.id,
+        author_name=_autor(request, ctx),
+        einheit_id=ctx.einheit.id,
+        kommentar=kommentar,
+        erfasst_at=parsed,
+    )
+    if dispatch.withdrawn_at is not None:
+        # Die von speichere_site_foto erzeugte Chronikzeile markieren.
+        db.flush()
+        log = (
+            db.query(SiteLogEntry)
+            .filter(SiteLogEntry.incident_site_id == dispatch.site_id)
+            .order_by(SiteLogEntry.id.desc())
+            .first()
+        )
+        if log:
+            log.text += " (nach Rückzug eingegangen)"
+    dispatch.letzte_rueckmeldung_at = datetime.now(UTC)
+    action = EinheitAktion(
+        client_uuid=client_uuid,
+        org_id=ctx.org_id,
+        quelle=ctx.quelle,
+        device_token_id=ctx.device_token.id if ctx.device_token else None,
+        einheit_id=ctx.einheit.id,
+        dispatch_id=dispatch.id,
+        aktion="foto",
+        ergebnis="ok",
+        entity_type="site_media",
+        entity_id=media.id,
+        erfasst_at=parsed,
+        empfangen_at=datetime.now(UTC),
+    )
+    db.add(action)
+    db.flush()
+    answer = {
+        "ok": True,
+        "aktion_id": action.id,
+        "entity_id": media.id,
+        "entity_type": "site_media",
+        "server_time": _iso_z(datetime.now(UTC)),
+        "auftrag_version": dispatch.version,
+    }
+    if korr:
+        answer["hinweis"] = korr
+    action.antwort_json = json.dumps(answer, ensure_ascii=False)
+    write_audit(
+        db,
+        "gsl.einheit.foto",
+        user_id=request.state.user.id,
+        payload={"dispatch_id": dispatch.id, "quelle": ctx.quelle},
+    )
+    db.commit()
+    await _senden(ctx.lage.id, dispatch.site_id, ctx.einheit.id, dispatch.id)
+    return answer
+
+
+@router.get("/api/karte")
+def karte(ctx: EinheitKontext = Depends(einheit_kontext), db: Session = Depends(get_db)):
+    rows = (
+        db.query(EinheitSiteDispatch)
+        .join(IncidentSite)
+        .filter(
+            EinheitSiteDispatch.einheit_id == ctx.einheit.id,
+            IncidentSite.major_incident_id == ctx.lage.id,
+            EinheitSiteDispatch.withdrawn_at.is_(None),
+            IncidentSite.lat.is_not(None),
+            IncidentSite.lng.is_not(None),
+        )
+        .all()
+    )
+    features = [
+        {
+            "type": "Feature",
+            "geometry": {"type": "Point", "coordinates": [d.site.lng, d.site.lat]},
+            "properties": {
+                "dispatch_id": d.id,
+                "site_id": d.site_id,
+                "bezeichnung": d.site.bezeichnung,
+                "einheit_status": d.einheit_status,
+                "priority": d.site.priority.name if d.site.priority else None,
+                "reihenfolge": d.reihenfolge,
+                "aktuell": d.site_id == ctx.einheit.incident_site_id,
+            },
+        }
+        for d in rows
+    ]
+    if ctx.vehicle:
+        pos = (
+            db.query(VehiclePosition)
+            .filter(VehiclePosition.incident_id == ctx.lage.id, VehiclePosition.vehicle_id == ctx.vehicle.id)
+            .order_by(VehiclePosition.received_at.desc())
+            .first()
+        )
+        if pos:
+            features.append(
+                {
+                    "type": "Feature",
+                    "geometry": {"type": "Point", "coordinates": [pos.lon, pos.lat]},
+                    "properties": {"typ": "eigene_position"},
+                }
+            )
+    return {"type": "FeatureCollection", "features": features}
+
+
+def _medium(media_id: int, thumb: bool, ctx: EinheitKontext, db: Session):
+    media = db.get(SiteMedia, media_id)
+    if not media:
+        raise HTTPException(status_code=404)
+    allowed = (
+        db.query(EinheitSiteDispatch.id)
+        .join(IncidentSite)
+        .filter(
+            EinheitSiteDispatch.einheit_id == ctx.einheit.id,
+            EinheitSiteDispatch.site_id == media.incident_site_id,
+            IncidentSite.major_incident_id == ctx.lage.id,
+        )
+        .first()
+    )
+    if not allowed:
+        raise HTTPException(status_code=404)
+    path = site_thumb_path(media) if thumb and site_thumb_path(media).exists() else site_media_path(media)
+    if not path.exists():
+        raise HTTPException(status_code=404)
+    return FileResponse(str(path), media_type="image/jpeg", headers={"Cache-Control": "no-cache"})
+
+
+@router.get("/medien/{media_id}")
+def medium(media_id: int, ctx: EinheitKontext = Depends(einheit_kontext), db: Session = Depends(get_db)):
+    return _medium(media_id, False, ctx, db)
+
+
+@router.get("/medien/thumb/{media_id}")
+def medium_thumb(media_id: int, ctx: EinheitKontext = Depends(einheit_kontext), db: Session = Depends(get_db)):
+    return _medium(media_id, True, ctx, db)

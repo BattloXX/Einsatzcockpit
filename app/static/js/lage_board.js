@@ -181,9 +181,12 @@
           // site_updated/site:sector_changed aendern nie site.phase (site_edit()
           // aendert nur Bezeichnung/Adresse; die Abschnitts-Zuweisung haengt nicht
           // von der Phase ab) -- ein gezielter Karten-Swap genuegt, kein Reload.
+          // einheit:changed (Rueckmeldung einer Einheit im Einheitenmodus) traegt
+          // die site_id der betroffenen Stelle und aendert nur deren Karte.
           if (
             (msg.type === 'site:card_changed' || msg.type === 'site_prio_changed'
-              || msg.type === 'site_updated' || msg.type === 'site:sector_changed')
+              || msg.type === 'site_updated' || msg.type === 'site:sector_changed'
+              || msg.type === 'einheit:changed')
             && msg.site_id
           ) {
             refreshCard(msg.site_id);
