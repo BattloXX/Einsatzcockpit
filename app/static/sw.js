@@ -3,7 +3,7 @@
 // der activate-Handler löscht dann automatisch alle Caches mit altem Namen, statt dass
 // veraltete Board-Skripte unbegrenzt im Cache liegen bleiben ("F5 nötig nach Update").
 const CACHE = 'ec-v18';
-const BOARD_CACHE = 'ec-board-v2';
+const BOARD_CACHE = 'ec-board-v3';
 // Objektverwaltung: Offline-Precache der Android-App (objekt_offline_sync.js
 // befuellt ihn; hier nur lesen/ergaenzen — App-Updates loeschen ihn nicht)
 const OBJEKT_CACHE = 'ec-objekt-v1';
@@ -102,6 +102,31 @@ self.addEventListener('fetch', e => {
         })
       )
     );
+    return;
+  }
+
+  // Einheitenmodus: HTML und JSON bleiben nach einem erfolgreichen Aufruf
+  // lesbar. Die API-Antwort wird beim Fallback explizit als offline markiert.
+  if (/^\/einheit(?:\/auftrag\/\d+)?$/.test(url.pathname) || /^\/einheit\/api\/(zustand|auftrag\/\d+)$/.test(url.pathname)) {
+    e.respondWith(
+      fetch(e.request).then(async res => {
+        if (res.ok) await caches.open(BOARD_CACHE).then(cache => cache.put(e.request, res.clone()));
+        return res;
+      }).catch(async () => {
+        const cached = await caches.match(e.request, { cacheName: BOARD_CACHE });
+        if (!cached) return new Response('Offline', { status: 503, headers: { 'X-EC-Offline': '1' } });
+        const headers = new Headers(cached.headers); headers.set('X-EC-Offline', '1');
+        return new Response(await cached.blob(), { status: cached.status, statusText: cached.statusText, headers });
+      })
+    );
+    return;
+  }
+
+  if (/^\/einheit\/medien\/thumb\/\d+$/.test(url.pathname)) {
+    e.respondWith(caches.open(BOARD_CACHE).then(async cache => {
+      const cached = await cache.match(e.request); if (cached) return cached;
+      const res = await fetch(e.request); if (res.ok) await cache.put(e.request, res.clone()); return res;
+    }));
     return;
   }
 
