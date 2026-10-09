@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -13,7 +13,7 @@ from app.config import settings
 from app.core.audit import write_audit
 from app.core.permissions import STRASSENSPERREN_LESE_ROLLEN
 from app.core.tenant import set_tenant_context
-from app.core.timezones import format_local_iso, local_date_to_utc, local_input_to_utc
+from app.core.timezones import format_local_iso, local_date_to_utc, local_input_to_utc, org_tz
 from app.db import SessionLocal
 from app.mcp.context import MCPContext
 from app.mcp.registry import register_tool
@@ -29,15 +29,20 @@ from app.models.road_closure import (
     RESTRICTION_TYPES,
     RoadClosure,
     RoadClosureDocument,
+    RoadClosureNotification,
     RoadClosureShare,
+    RoadClosureTeamsConfig,
 )
 from app.models.user import User
 from app.services import (
     einsatz_routing,
     road_closure_geo_service,
     road_closure_incident_service,
+    road_closure_notify_service,
     road_closure_section_service,
     road_closure_service,
+    road_closure_stats_service,
+    road_closure_token_service,
 )
 from app.services.einsatz_routing import RoutingError
 from app.services.mcp_download_service import erstelle_download_token
@@ -85,6 +90,7 @@ def _closure_dict(closure: RoadClosure, org_id: int, *, voll: bool = False, db: 
         "reference_number": closure.reference_number,
         "exceptions": closure.exceptions,
         "authority": closure.authority,
+        "reason": closure.reason,
         "from_text": closure.from_text,
         "to_text": closure.to_text,
         "restriction_type": closure.restriction_type,
@@ -132,6 +138,7 @@ def _closure_dict(closure: RoadClosure, org_id: int, *, voll: bool = False, db: 
                 "version": closure.version,
                 "cancelled_at": _iso(closure.cancelled_at, org),
                 "cancel_reason": closure.cancel_reason,
+                "teams_melden": closure.teams_melden,
                 "ui_link": f"/strassensperren/{closure.id}",
             }
         )
@@ -201,7 +208,7 @@ def _summary(items: list[dict[str, object]]) -> str:
 
 @register_tool(
     name="strassensperren_liste",
-    description="Listet sichtbare Straßensperren.",
+    description="Listet sichtbare Straßensperren (road_closures_list).",
     required_roles=STRASSENSPERREN_LESE_ROLLEN,
     module_check=strassensperren_effective_enabled,
 )
@@ -215,6 +222,11 @@ async def strassensperren_liste(
     nur_eigene: bool = False,
     limit: int = 50,
     geometrie: str = "",
+    zeitraum: str = "",
+    bereich: str = "alle",
+    lat: float | None = None,
+    lng: float | None = None,
+    radius_m: float | None = None,
 ) -> dict[str, object]:
     if status not in {"current", "active", "planned", "expired", "cancelled", "all"}:
         raise ValueError("status muss current, active, planned, expired, cancelled oder all sein.")
@@ -222,31 +234,71 @@ async def strassensperren_liste(
         restriction_type = road_closure_service.normalize_restriction_type(restriction_type)
     _limit(limit)
     org = _org(context)
+    if zeitraum not in {"", "heute", "7tage", "30tage"}:
+        raise ValueError("zeitraum muss heute, 7tage oder 30tage sein.")
+    if bereich not in {"alle", "eigene", "nachbarn"}:
+        raise ValueError("bereich muss alle, eigene oder nachbarn sein.")
+    if (lat is None) != (lng is None) or (lat is None) != (radius_m is None):
+        raise ValueError("lat, lng und radius_m müssen gemeinsam angegeben werden.")
+    if radius_m is not None and not 50 <= radius_m <= 20000:
+        raise ValueError("radius_m muss zwischen 50 und 20000 liegen.")
+    if zeitraum:
+        local_now = datetime.now(UTC).astimezone(org_tz(org))
+        start = local_now.date()
+        days = {"heute": 0, "7tage": 6, "30tage": 29}[zeitraum]
+        von_value = local_date_to_utc(start.isoformat(), org=org)
+        bis_value = local_date_to_utc((start + timedelta(days=days)).isoformat(), end=True, org=org)
+    else:
+        von_value, bis_value = _date(von, end=False, org=org), _date(bis, end=True, org=org)
     rows = road_closure_service.list_closures(
         context.db,
         context.org_id,
         status=None if status == "all" else status,
-        von=_date(von, end=False, org=org),
-        bis=_date(bis, end=True, org=org),
+        von=von_value,
+        bis=bis_value,
         text=strasse or None,
         restriction_type=restriction_type or None,
-        scope="own" if nur_eigene else "all",
+        scope="own" if nur_eigene or bereich == "eigene" else ("shared" if bereich == "nachbarn" else "all"),
         limit=limit,
         geometrie=geometrie,
     )
+    if lat is not None and lng is not None and radius_m is not None:
+        rows = [
+            row for row in rows if row.geometry_geojson and road_closure_geo_service.distance_point_to_geometry_m(
+                lat, lng, json.loads(row.geometry_geojson)
+            ) <= radius_m
+        ]
     items = [_closure_dict(row, context.org_id, db=context.db) for row in rows]
     return {"count": len(items), "items": items, "zusammenfassung": _summary(items)}
 
 
 @register_tool(
     name="strassensperre_lesen",
-    description="Liest eine sichtbare Straßensperre.",
+    description="Liest eine sichtbare Straßensperre (road_closures_get).",
     required_roles=STRASSENSPERREN_LESE_ROLLEN,
     module_check=strassensperren_effective_enabled,
 )
 async def strassensperre_lesen(context: MCPContext, road_closure_id: int) -> dict[str, object]:
     closure = road_closure_service.get_closure_for_org(context.db, context.org_id, road_closure_id, writable=False)
     result = _closure_dict(closure, context.org_id, voll=True, db=context.db)
+    if closure.org_id == context.org_id:
+        active_token = road_closure_token_service.active_detail_token(context.db, closure)
+        result["freigabelink"] = {
+            "aktiv": active_token is not None,
+            "gueltig_bis": _iso(active_token.expires_at, _org(context)) if active_token else None,
+        }
+        notifications = (
+            context.db.query(RoadClosureNotification)
+            .filter(RoadClosureNotification.road_closure_id == closure.id)
+            .order_by(RoadClosureNotification.created_at.desc())
+            .limit(5)
+            .all()
+        )
+        result["teams_benachrichtigungen"] = [
+            {"ereignis": row.ereignis, "status": row.status, "versuche": row.attempt_count,
+             "zeit": _iso(row.created_at, _org(context)), "fehler": row.last_error}
+            for row in notifications
+        ]
     # Sichtbarkeit (eigen oder freigegeben) ist über get_closure_for_org geprüft; Dokumente gehören der Besitzer-Org.
     documents = (
         context.db.query(RoadClosureDocument)
@@ -490,14 +542,18 @@ async def strassensperren_kataloge(context: MCPContext) -> dict[str, object]:
         "geometry_status": items(GEOMETRY_STATUS),
         "geometry_quality": items(GEOMETRY_QUALITY),
         "status": items(CLOSURE_STATUS),
-        "zusammenfassung": "Kataloge für Einschränkungstypen, Prioritäten, Richtungen und Geometrie.",
+        "editierbare_felder": sorted(road_closure_service.EDITABLE_FIELDS | {"visible_for_org_ids"}),
+        "zusammenfassung": (
+            "Kataloge für Einschränkungstypen, Prioritäten, Richtungen, Geometrie und editierbare Felder."
+        ),
     }
 
 
 @register_tool(
     name="strassensperre_anlegen",
     description=(
-        "Legt eine Straßensperre der eigenen Organisation an. Eine harte Löschung per MCP ist nicht möglich."
+        "Legt eine Straßensperre der eigenen Organisation an (road_closures_create). "
+        "Eine harte Löschung per MCP ist nicht möglich."
     ),
     required_roles=("objekt_verwalter",),
     module_check=strassensperren_effective_enabled,
@@ -524,6 +580,8 @@ async def strassensperre_anlegen(
     reference_number: str = "",
     exceptions: str = "",
     authority: str = "",
+    reason: str = "",
+    teams_melden: bool | None = None,
     geometry_geojson: dict | str | None = None,
     visible_for_org_ids: list[int] | None = None,
     duplikat_bestaetigt: bool = False,
@@ -591,6 +649,7 @@ async def strassensperre_anlegen(
             "reference_number": reference_number,
             "exceptions": exceptions,
             "authority": authority,
+            "reason": reason,
             "direction": direction or None,
             "priority": priority,
             "max_weight_t": max_weight_t,
@@ -604,6 +663,8 @@ async def strassensperre_anlegen(
             "geometry_quality": geometry_quality,
             "geometry_meta_json": geometry_meta,
         }
+        if teams_melden is not None:
+            data["teams_melden"] = teams_melden
         closure = road_closure_service.create_closure(
             context.db,
             context.org_id,
@@ -674,7 +735,7 @@ async def strassensperre_anlegen(
 @register_tool(
     name="strassensperre_aktualisieren",
     description=(
-        "Aktualisiert angegebene Felder einer eigenen Straßensperre. geometry_geojson setzt den "
+        "Aktualisiert angegebene Felder einer eigenen Straßensperre (road_closures_update). geometry_geojson setzt den "
         "Geometriestatus bewusst auf ok. Eine harte Löschung per MCP ist nicht möglich."
     ),
     required_roles=("objekt_verwalter",),
@@ -865,6 +926,149 @@ async def strassensperre_reaktivieren(context: MCPContext, road_closure_id: int)
 
 
 @register_tool(
+    name="strassensperre_beenden",
+    description="Beendet eine eigene Straßensperre vorzeitig (road_closures_close).",
+    required_roles=("objekt_verwalter",),
+    module_check=strassensperren_effective_enabled,
+)
+async def strassensperre_beenden(
+    context: MCPContext, road_closure_id: int, grund: str, ende: str = ""
+) -> dict[str, object]:
+    try:
+        if not grund.strip():
+            raise ValueError("grund ist erforderlich.")
+        closure = _writable_closure(context, road_closure_id)
+        if closure.cancelled_at is not None:
+            raise ValueError("Eine deaktivierte Straßensperre kann nicht beendet werden.")
+        finish = _date(ende, end=True, org=_org(context)) if ende else datetime.now(UTC).replace(tzinfo=None)
+        assert finish is not None
+        if finish < closure.valid_from:
+            raise ValueError("ende darf nicht vor valid_from liegen.")
+        if closure.valid_until is not None and finish > closure.valid_until:
+            raise ValueError("Zum Verlängern strassensperre_aktualisieren verwenden.")
+        road_closure_service.update_closure(
+            context.db, closure, context.user.id, {"valid_until": finish}, expected_version=closure.version,
+            source="mcp", mcp_tool="strassensperre_beenden",
+        )
+        context.db.commit()
+        return {
+            "strassensperre": _closure_dict(closure, context.org_id, voll=True, db=context.db),
+            "grund": grund.strip(),
+            "hinweis": "Zum Aufheben ohne Zeitraum strassensperre_deaktivieren verwenden.",
+            "zusammenfassung": f"Straßensperre {closure.title} endet vorzeitig.",
+        }
+    except Exception:
+        context.db.rollback()
+        raise
+
+
+@register_tool(
+    name="strassensperre_teams_senden",
+    description="Stellt eine manuelle Teams-Meldung in die Warteschlange (road_closures_publish).",
+    required_roles=("objekt_verwalter",),
+    module_check=strassensperren_effective_enabled,
+)
+async def strassensperre_teams_senden(context: MCPContext, road_closure_id: int) -> dict[str, object]:
+    try:
+        closure = _writable_closure(context, road_closure_id)
+        config = (
+            context.db.query(RoadClosureTeamsConfig)
+            .filter(RoadClosureTeamsConfig.org_id == context.org_id)
+            .first()
+        )
+        if not config or not config.enabled or not config.webhook_url_enc:
+            raise ValueError("Teams-Meldungen sind für diese Organisation nicht eingerichtet.")
+        notification = road_closure_notify_service.enqueue(
+            context.db, closure, "manuell", manuell=True, source="mcp", user_id=context.user.id
+        )
+        if notification is None:
+            raise ValueError("Teams-Meldungen sind für diese Organisation nicht eingerichtet.")
+        context.db.commit()
+        return {
+            "benachrichtigung_id": notification.id,
+            "status": notification.status,
+            "ereignis": notification.ereignis,
+            "hinweis": (
+                "Versand erfolgt asynchron über die Teams-Warteschlange "
+                "(Status mit strassensperre_lesen prüfen)."
+            ),
+        }
+    except Exception:
+        context.db.rollback()
+        raise
+
+
+@register_tool(
+    name="strassensperre_freigabelink",
+    description="Verwaltet den öffentlichen Freigabelink einer eigenen Sperre (road_closures_share_link).",
+    required_roles=("objekt_verwalter",),
+    module_check=strassensperren_effective_enabled,
+)
+async def strassensperre_freigabelink(
+    context: MCPContext, road_closure_id: int, aktion: str = "abrufen", gueltig_bis: str = ""
+) -> dict[str, object]:
+    try:
+        if aktion not in {"abrufen", "erzeugen", "widerrufen"}:
+            raise ValueError("aktion muss abrufen, erzeugen oder widerrufen sein.")
+        closure = _writable_closure(context, road_closure_id)
+        if aktion == "erzeugen" and closure.cancelled_at is not None:
+            raise ValueError("Für eine deaktivierte Straßensperre kann kein Freigabelink erzeugt werden.")
+        expiry = local_date_to_utc(gueltig_bis, end=True, org=_org(context)) if gueltig_bis else None
+        if gueltig_bis and expiry is None:
+            raise ValueError("gueltig_bis muss YYYY-MM-DD sein.")
+        token = road_closure_token_service.active_detail_token(context.db, closure)
+        raw: str | None = None
+        if aktion == "erzeugen":
+            if expiry:
+                if token:
+                    road_closure_token_service.revoke_token(context.db, token, context.user.id)
+                assert closure.org_id is not None
+                token, raw = road_closure_token_service.create_token(
+                    context.db, closure.org_id, "detail", context.user.id, road_closure_id=closure.id, expires_at=expiry
+                )
+            else:
+                token, raw = road_closure_token_service.get_or_create_detail_token(context.db, closure, context.user.id)
+        elif aktion == "widerrufen":
+            if token is None:
+                raise ValueError("Kein aktiver Freigabelink vorhanden.")
+            road_closure_token_service.revoke_token(context.db, token, context.user.id)
+            token = None
+        elif token:
+            raw = road_closure_token_service.token_plain(token)
+        context.db.commit()
+        return {
+            "link": road_closure_token_service.public_url(raw, "detail") if raw else None,
+            "gueltig_bis": _iso(token.expires_at, _org(context)) if token else None,
+            "erstellt": _iso(token.created_at, _org(context)) if token else None,
+            "zuletzt_genutzt": _iso(token.last_used_at, _org(context)) if token else None,
+            "zusammenfassung": "Freigabelink verwaltet.",
+        }
+    except Exception:
+        context.db.rollback()
+        raise
+
+
+@register_tool(
+    name="strassensperren_kennzahlen",
+    description="Liefert Kennzahlen sichtbarer Straßensperren (road_closures_stats).",
+    required_roles=STRASSENSPERREN_LESE_ROLLEN,
+    module_check=strassensperren_effective_enabled,
+)
+async def strassensperren_kennzahlen(context: MCPContext, bereich: str = "alle") -> dict[str, object]:
+    if bereich not in {"alle", "oeffentlich"}:
+        raise ValueError("bereich muss alle oder oeffentlich sein.")
+    metrics = road_closure_stats_service.kennzahlen(
+        context.db, _org(context), scope="all" if bereich == "alle" else "public"
+    )
+    return metrics | {
+        "zusammenfassung": (
+            f"{metrics['aktiv']} aktiv, {metrics['geplant']} geplant, davon "
+            f"{metrics['vollsperren_aktiv']} Vollsperren aktiv."
+        )
+    }
+
+
+@register_tool(
     name="strassensperren_suchen",
     description="Sucht sichtbare Straßensperren unscharf.",
     required_roles=STRASSENSPERREN_LESE_ROLLEN,
@@ -972,7 +1176,7 @@ def _route_answer(payload: dict[str, Any]) -> dict[str, object]:
 
 @register_tool(
     name="einsatz_strassensperren",
-    description="Liest gespeicherte Sperren einer Einsatzroute.",
+    description="Liest gespeicherte Sperren einer Einsatzroute (road_closures_route_check).",
     required_roles=STRASSENSPERREN_LESE_ROLLEN,
     module_check=strassensperren_effective_enabled,
 )
@@ -1006,7 +1210,7 @@ async def _live(context: MCPContext, start: tuple[float, float], destination: tu
 
 @register_tool(
     name="einsatz_anfahrtsroute_pruefen",
-    description="Prüft eine Einsatz-Anfahrt oder berechnet sie live.",
+    description="Prüft eine Einsatz-Anfahrt oder berechnet sie live (road_closures_route_check).",
     required_roles=STRASSENSPERREN_LESE_ROLLEN,
     module_check=strassensperren_effective_enabled,
 )
@@ -1036,7 +1240,7 @@ async def einsatz_anfahrtsroute_pruefen(
 
 @register_tool(
     name="strassensperren_entlang_route",
-    description="Berechnet live Sperren entlang einer freien Route.",
+    description="Berechnet live Sperren entlang einer freien Route (road_closures_route_check).",
     required_roles=STRASSENSPERREN_LESE_ROLLEN,
     module_check=strassensperren_effective_enabled,
 )

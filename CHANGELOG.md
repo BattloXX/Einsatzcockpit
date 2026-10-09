@@ -4,6 +4,7 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 
 ## Unreleased
 
+- **Straßensperren**: MCP um vorzeitiges Beenden, Teams-Warteschlange, öffentliche Freigabelinks, Kennzahlen sowie Bereichs-, Zeit- und Radiusfilter erweitert.
 - **Straßensperren**: Microsoft-Teams-Webhook mit Adaptive Card, Kartenbild sowie persistenter Retry- und Duplikatschutz-Outbox ergänzt.
 - **Straßensperren**: Statusseite und Infoscreen mit externen Status-/Infoscreen-Tokens, Live-Aktualisierung und widerrufbaren Zugängen ergänzt.
 - **Straßensperren**: Öffentliche, widerrufbare Einzelansicht per Freigabelink (Token `rcd_`), öffentliches Feld „Grund“, Grundlage für Status-/Infoscreen-Tokens und Teams (Migration 0262); Login-Rücksprung gehärtet.
