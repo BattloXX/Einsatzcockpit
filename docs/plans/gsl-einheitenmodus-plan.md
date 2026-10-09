@@ -1,7 +1,7 @@
 # GSL-Einheitenmodus für Fahrzeug-Tablets – Implementierungsplan
 
 Stand: 2026-10-09 · Basis: `main` @ `a9bb2705` (Einsatzcockpit) und `main` (Einsatzcockpit-Android)
-Status: **Konzept, noch nicht umgesetzt** · Entscheidungen E1–E7 am 2026-10-09 getroffen (Abschnitt 13)
+Status: **Phase 1 umgesetzt (2026-10-09)**, Phase 2/3 offen · Entscheidungen E1–E7 am 2026-10-09 getroffen (Abschnitt 13) · Umsetzungsstand: Abschnitt 14
 
 > **Leitlinie:** Der Einheitsführer erkennt auf dem Tablet ohne Suchen sofort, welchen Einsatz
 > er bearbeiten soll, welche Informationen vorliegen und wie er Status, Lagemeldung oder Fotos
@@ -1080,3 +1080,34 @@ Am 2026-10-09 getroffen:
 | E3a | Stelle automatisch „erledigt“, wenn alle Einheiten fertig sind? | **Nein.** Die Board-Karte zeigt „Alle Einheiten fertig – Stelle abschließen?“, die Führung schließt ab | 5.1, S7 |
 | E6 | Wie werden kritische Nachrichten übermittelt? | **Immer per Funk.** Kritische Nachrichten der Führung werden Funkaufträge („Funk ausstehend“ bis zur Bestätigung), Tablet und Push sind nur Ergänzung; das Tablet fordert bei dringenden Meldungen zur zusätzlichen Funkmeldung auf. Kein eigener Kanal, kein DND-Bypass | 4.1, 5.1, 5.3, 6.3, 6.6, 7, S9 |
 | E7 | Einheitenmodus ohne Tablet ausprobieren? | **Admin-Simulation** je Einheit im Browser: Übungslage schreibend, Echtlage nur lesend, keine Pushs an echte Tablets, klar gekennzeichnet | 3.1 (8), 5.2a, 9.4a, 10.2, P1-4 |
+
+---
+
+## 14. Umsetzungsstand
+
+### Phase 1 – abgeschlossen am 2026-10-09
+
+| Paket | PR | Inhalt |
+|---|---|---|
+| P1-1 | #479 | Datenmodell, Migration 0263, `einheit_aktion`, `dispatch_aktiv_filter` |
+| P1-2 | #480 | Services `site_log_service`, `funkjournal_service`, `speichere_site_foto`; Broadcasts nach Foto/Funkjournal |
+| P1-3a | #481 | `einheit_service` (Kontext, Auftragsliste, Statusmaschine, E3), `setze_site_phase` |
+| P1-3b | #482, #484 | Gesamtansicht nur lesend (Allowlist), Geräte-Widerruf für WebSockets, `gsl_profil` im Admin, Widget-Adapter |
+| P1-4a | #485 | Tablet-API `/einheit/api/*` inkl. Idempotenz und Admin-Simulation (E7); JSON-Fehler unter `/einheit/api/` |
+| P1-4c | #486 | Offline-Outbox `einheit_outbox.js` + JS-Tests, CI-Job „JS-Tests (Outbox)“ |
+| P1-4b | #487 | Tablet-Oberfläche `/einheit`, Startseiten-Weiterleitung, Service Worker, `_fab_styles.html` |
+| P1-5a | #488 | Stellen-Detail der Führung: Einheitenstatus, Funk-Stellvertretung (E2), Auftrag bearbeiten, Wiedereröffnen, Sim-Link (P1-4d) |
+| P1-5b | #489 | Status-Chips auf Board-Karten, „Einheiten fertig“, „keine Rückmeldung seit“, Kräfteübersicht |
+
+Abweichungen vom Plan:
+
+- P1-4c wurde vor P1-4b umgesetzt, damit die Oberfläche direkt auf der Outbox aufbaut.
+- P1-4d (Simulations-Einstieg) ist in P1-5a/P1-5b enthalten.
+- `korrektur.html` des Fahrtenbuchs behält ihre eigene kompakte Style-Kopie: Das Bento-Grid des gemeinsamen Partials würde das Korrekturformular zerlegen.
+
+### Offen vor dem Echteinsatz
+
+- Gerätetest auf einem Android-Tablet: Kamera über `capture`, Upload im Funkloch, App-Neustart mit ausstehender Outbox, zwei Tablets im selben Fahrzeug, Widget-Klick auf `/einheit`.
+- Admin: bestehende Fahrzeug-Tablets auf `gsl_profil = "einheit"` umstellen. Altgeräte (`NULL`) behalten das bisherige Verhalten.
+- Phase 2 (Kommunikation, Push, Erinnerungen) und Phase 3 (Offline-Hintergrundsync, Navigation mit Sperren, MCP, Auswertung) laut Abschnitt 12.
+
