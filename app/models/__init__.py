@@ -94,6 +94,7 @@ from app.models.mailing import (  # noqa: F401 -- imports register ORM models in
 from app.models.major_incident import (
     CitizenReport,
     CommLogEntry,
+    EinheitAktion,
     IncidentSite,
     MajorIncident,
     MajorIncidentStatus,
@@ -324,6 +325,7 @@ __all__ = [
     "SiteLogEntry",
     "SiteMedia",
     "CommLogEntry",
+    "EinheitAktion",
     "CitizenReport",
     "VerleihArtikel",
     "VerleihStueckliste",

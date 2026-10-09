@@ -27,6 +27,7 @@ from app.models.major_incident import (
     SiteResourceAssignment,
 )
 from app.models.master import OrgSettings
+from app.services.resource_service import dispatch_aktiv_filter
 
 
 def org_settings_for(db: Session, org_id: int | None) -> OrgSettings | None:
@@ -86,7 +87,7 @@ def has_active_resource(site: IncidentSite, db: Session) -> bool:
         .filter(
             EinheitSiteDispatch.site_id == site.id,
             EinheitSiteDispatch.vor_ort_at.isnot(None),
-            EinheitSiteDispatch.withdrawn_at.is_(None),
+            dispatch_aktiv_filter(),
         )
         .first()
     )

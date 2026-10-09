@@ -170,6 +170,8 @@ class DeviceToken(Base):
     last_lng: Mapped[float | None] = mapped_column(Float, nullable=True)
     last_location_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     duty_active: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # einheit|fuehrung|NULL = Altbestand/bisheriges Verhalten
+    gsl_profil: Mapped[str | None] = mapped_column(String(12), nullable=True)
     # Pairing-PIN: kurzlebige, abtippbare Alternative zum QR-Code-Scan beim
     # Geräte-Login (z.B. wenn kein Kamerazugriff möglich ist). sha256-Hex wie
     # Gateway.pairing_code_hash — Einlösen ersetzt token_hash durch ein frisches

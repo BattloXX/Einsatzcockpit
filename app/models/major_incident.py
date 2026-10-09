@@ -19,6 +19,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from sqlalchemy.types import TypeDecorator
 
+from app.core.tenant import TenantScoped
 from app.db import Base
 
 # ── GSL Stab: SKKM-Besetzungsjournal ──────────────────────────────────────────
@@ -144,6 +145,36 @@ SITE_PRIORITY_LABEL = {
     SitePriority.aufschiebbar: "Aufschiebbar",
 }
 
+EINHEIT_STATUS_WERTE = (
+    "zugewiesen",
+    "bestaetigt",
+    "anfahrt",
+    "vor_ort",
+    "in_arbeit",
+    "abgeschlossen",
+    "nicht_durchfuehrbar",
+)
+EINHEIT_STATUS_LABEL = {
+    "zugewiesen": "Zugewiesen",
+    "bestaetigt": "Auftrag bestätigt",
+    "anfahrt": "Anfahrt",
+    "vor_ort": "Vor Ort",
+    "in_arbeit": "In Arbeit",
+    "abgeschlossen": "Auftrag abgeschlossen",
+    "nicht_durchfuehrbar": "Nicht durchführbar",
+}
+EINHEIT_STATUS_COLOR = {
+    "zugewiesen": "muted",
+    "bestaetigt": "blue",
+    "anfahrt": "orange",
+    "vor_ort": "purple",
+    "in_arbeit": "green",
+    "abgeschlossen": "done",
+    "nicht_durchfuehrbar": "red",
+}
+EINHEIT_STATUS_AKTIV = frozenset({"anfahrt", "vor_ort", "in_arbeit"})
+EINHEIT_STATUS_BEENDET = frozenset({"abgeschlossen", "nicht_durchfuehrbar"})
+
 SITE_PHASE_GROUP = {  # abgebrochen bewusst NICHT enthalten
     SitePhase.eingegangen: "neu",
     SitePhase.erkundung: "in_arbeit",
@@ -172,6 +203,7 @@ SITE_LOG_KIND_LABEL = {
     "note":        "Notiz",
     "lagemeldung": "Lagemeldung",
     "massnahmen":  "Maßnahmen",
+    "einheit":     "Einheit",
 }
 SITE_LOG_USER_KINDS = ["lagemeldung", "massnahmen", "note"]   # im Dropdown auswählbar (Reihenfolge)
 SITE_LOG_RESET_KINDS = {"lagemeldung"}                        # setzt den Lagemeldungs-Timer zurück
@@ -333,6 +365,9 @@ class SiteLogEntry(Base):
     user_id:          Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("user.id"), nullable=True)
     author_name:      Mapped[str | None] = mapped_column(String(120), nullable=True)
+    einheit_id:       Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("lage_einheit.id", ondelete="SET NULL"), nullable=True, index=True)
+    erfasst_at:       Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     kind:             Mapped[str] = mapped_column(String(16), default="note")
     text:             Mapped[str] = mapped_column(Text)
 
@@ -350,6 +385,10 @@ class SiteMedia(Base):
     uploaded_by:       Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("user.id"), nullable=True)
     author_name:       Mapped[str | None] = mapped_column(String(120), nullable=True)
+    einheit_id:        Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("lage_einheit.id", ondelete="SET NULL"), nullable=True, index=True)
+    kommentar:         Mapped[str | None] = mapped_column(String(500), nullable=True)
+    erfasst_at:        Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     bytes:             Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     org_id:            Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("fire_dept.id"), nullable=True, index=True)
@@ -473,6 +512,7 @@ class LageEinheitLeader(Base):
 class EinheitSiteDispatch(Base):
     """Mehrfach-Disposition: Einheit für eine Einsatzstelle disponiert oder vor Ort."""
     __tablename__ = "einheit_site_dispatch"
+    __table_args__ = (Index("ix_esd_einheit_aktiv", "einheit_id", "withdrawn_at", "beendet_at"),)
 
     id:             Mapped[int] = mapped_column(Integer, primary_key=True)
     einheit_id:     Mapped[int] = mapped_column(
@@ -480,6 +520,17 @@ class EinheitSiteDispatch(Base):
     site_id:        Mapped[int] = mapped_column(
         Integer, ForeignKey("incident_site.id", ondelete="CASCADE"), index=True)
     dispatched_at:  Mapped[datetime] = mapped_column(DateTime)
+    auftrag:        Mapped[str | None] = mapped_column(Text, nullable=True)
+    einheit_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="zugewiesen", server_default="zugewiesen")
+    status_at:      Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    bestaetigt_at:  Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    beendet_at:     Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    beendet_grund:  Mapped[str | None] = mapped_column(Text, nullable=True)
+    reihenfolge:    Mapped[int | None] = mapped_column(Integer, nullable=True)
+    version:        Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    geaendert_at:   Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    letzte_rueckmeldung_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     vor_ort_at:     Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     withdrawn_at:   Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     dispatched_by:  Mapped[int | None] = mapped_column(
@@ -490,6 +541,29 @@ class EinheitSiteDispatch(Base):
         foreign_keys=[site_id], overlaps="dispatched_einheiten")
     einheit: Mapped[LageEinheit] = relationship(
         foreign_keys=[einheit_id], back_populates="site_dispatches")
+
+
+class EinheitAktion(TenantScoped, Base):
+    """Idempotenz- und Geräteprotokoll für Aktionen im Einheitenmodus."""
+    __tablename__ = "einheit_aktion"
+
+    id:              Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    client_uuid:     Mapped[str] = mapped_column(String(36), unique=True, nullable=False)
+    device_token_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("device_token.id", ondelete="SET NULL"), nullable=True)
+    einheit_id:      Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("lage_einheit.id", ondelete="SET NULL"), nullable=True, index=True)
+    dispatch_id:     Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("einheit_site_dispatch.id", ondelete="SET NULL"), nullable=True)
+    aktion:          Mapped[str] = mapped_column(String(24), nullable=False)
+    quelle:          Mapped[str] = mapped_column(String(12), nullable=False, default="tablet")
+    ergebnis:        Mapped[str] = mapped_column(String(16), nullable=False)
+    entity_type:     Mapped[str | None] = mapped_column(String(32), nullable=True)
+    entity_id:       Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    antwort_json:    Mapped[str | None] = mapped_column(Text, nullable=True)
+    erfasst_at:      Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    empfangen_at:    Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC))
 
 
 # ── Lage-Journal ──────────────────────────────────────────────────────────────

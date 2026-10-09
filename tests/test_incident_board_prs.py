@@ -113,8 +113,8 @@ def test_bulk_dispatch_counts_are_grouped_by_site(db, org):
 
     counts = get_dispatch_counts_for_sites(db, [first.id, second.id])
 
-    assert counts[first.id] == {"alarmed": 1, "vor_ort": 1}
-    assert counts[second.id] == {"alarmed": 0, "vor_ort": 0}
+    assert counts[first.id] == {"alarmed": 1, "vor_ort": 1, "fertig": 0}
+    assert counts[second.id] == {"alarmed": 0, "vor_ort": 0, "fertig": 0}
 
 
 def test_gsl_select_fragments_are_oob_replacements():
