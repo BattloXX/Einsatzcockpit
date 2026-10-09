@@ -205,6 +205,8 @@ _TENANT_TABLE_NAMES: frozenset[str] = frozenset({
     # ein vergessener Aufruf wäre ein Cross-Tenant-IDOR ohne DB-seitigen Schutz.
     "major_incident",
     "incident_site",
+    # GSL-Einheitenmodus (TenantScoped via Mixin)
+    "einheit_aktion",
     # Lageführung-Modul (TenantScoped via Mixin)
     "lagefuehrung_feature",
     "lagefuehrung_event",

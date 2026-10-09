@@ -8,10 +8,11 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import case, func
+from sqlalchemy import and_, case, func
 from sqlalchemy.orm import Session
 
 from app.models.major_incident import (
+    EINHEIT_STATUS_AKTIV,
     EinheitSiteDispatch,
     GslStaffAssignment,
     IncidentSite,
@@ -57,6 +58,14 @@ RESOURCE_TYPE_LABEL = {
 # ── Hilfsfunktionen ───────────────────────────────────────────────────────────
 
 RESSOURCE_CATEGORIES = {"ressource", "ressource_fhr"}
+
+
+def dispatch_aktiv_filter():
+    """Disposition belegt die Einheit: nicht zurückgezogen und nicht beendet."""
+    return and_(
+        EinheitSiteDispatch.withdrawn_at.is_(None),
+        EinheitSiteDispatch.beendet_at.is_(None),
+    )
 
 
 def _journal(
@@ -149,7 +158,7 @@ def sync_units_sector_to_site(db: Session, site: IncidentSite) -> int:
         d.einheit_id for d in db.query(EinheitSiteDispatch)
         .filter(
             EinheitSiteDispatch.site_id == site.id,
-            EinheitSiteDispatch.withdrawn_at.is_(None),
+            dispatch_aktiv_filter(),
         )
         .all()
     }
@@ -237,19 +246,20 @@ def dispatch_to_site(
 ) -> EinheitSiteDispatch:
     """Disponiert eine Einheit für eine Einsatzstelle (vor_ort_at=NULL = alarmiert).
 
-    Fehler wenn bereits aktiv disponiert (nicht abgezogen).
+    Fehler wenn bereits aktiv disponiert (weder abgezogen noch beendet).
     """
     e = _get_einheit(db, einheit_id, lage_id)
     site = db.get(IncidentSite, site_id)
     if not site or site.major_incident_id != lage_id:
         raise ValueError("Einsatzstelle nicht gefunden")
+    db.flush()
 
     existing = (
         db.query(EinheitSiteDispatch)
         .filter(
             EinheitSiteDispatch.einheit_id == einheit_id,
             EinheitSiteDispatch.site_id == site_id,
-            EinheitSiteDispatch.withdrawn_at.is_(None),
+            dispatch_aktiv_filter(),
         )
         .first()
     )
@@ -261,6 +271,7 @@ def dispatch_to_site(
         einheit_id=einheit_id,
         site_id=site_id,
         dispatched_at=now,
+        status_at=now,
         dispatched_by=user_id,
         author_name=author_name,
     )
@@ -296,14 +307,15 @@ def set_vor_ort_at_site(
     site = db.get(IncidentSite, site_id)
     if not site or site.major_incident_id != lage_id:
         raise ValueError("Einsatzstelle nicht gefunden")
+    db.flush()
 
     conflict = (
         db.query(EinheitSiteDispatch)
         .filter(
             EinheitSiteDispatch.einheit_id == einheit_id,
             EinheitSiteDispatch.site_id != site_id,
-            EinheitSiteDispatch.vor_ort_at.isnot(None),
-            EinheitSiteDispatch.withdrawn_at.is_(None),
+            dispatch_aktiv_filter(),
+            EinheitSiteDispatch.einheit_status.in_(EINHEIT_STATUS_AKTIV),
         )
         .first()
     )
@@ -315,7 +327,7 @@ def set_vor_ort_at_site(
         .filter(
             EinheitSiteDispatch.einheit_id == einheit_id,
             EinheitSiteDispatch.site_id == site_id,
-            EinheitSiteDispatch.withdrawn_at.is_(None),
+            dispatch_aktiv_filter(),
         )
         .first()
     )
@@ -325,13 +337,18 @@ def set_vor_ort_at_site(
             einheit_id=einheit_id,
             site_id=site_id,
             dispatched_at=now_d,
+            status_at=now_d,
             dispatched_by=user_id,
             author_name=author_name,
         )
         db.add(dispatch)
         db.flush()
 
-    dispatch.vor_ort_at = datetime.now(UTC)
+    now = datetime.now(UTC)
+    dispatch.vor_ort_at = now
+    if dispatch.einheit_status != "in_arbeit":
+        dispatch.einheit_status = "vor_ort"
+    dispatch.status_at = now
     e.incident_site_id = site_id
     e.sector_id = site.sector_id
     if e.status == STATUS_BEREITGESTELLT:
@@ -355,13 +372,14 @@ def resolve_vor_ort_conflict(
 ) -> EinheitSiteDispatch:
     """Zieht Einheit von bisheriger Vor-Ort-Stelle ab und setzt Vor-Ort an new_site_id."""
     now = datetime.now(UTC)
+    db.flush()
     old_dispatches = (
         db.query(EinheitSiteDispatch)
         .filter(
             EinheitSiteDispatch.einheit_id == einheit_id,
-            EinheitSiteDispatch.vor_ort_at.isnot(None),
             EinheitSiteDispatch.site_id != new_site_id,
-            EinheitSiteDispatch.withdrawn_at.is_(None),
+            dispatch_aktiv_filter(),
+            EinheitSiteDispatch.einheit_status.in_(EINHEIT_STATUS_AKTIV),
         )
         .all()
     )
@@ -405,7 +423,10 @@ def withdraw_from_site(
     if not dispatch:
         raise ValueError("Keine aktive Disposition für diese Einsatzstelle")
 
-    dispatch.withdrawn_at = datetime.now(UTC)
+    now = datetime.now(UTC)
+    dispatch.withdrawn_at = now
+    dispatch.version += 1
+    dispatch.geaendert_at = now
     if e.incident_site_id == site_id:
         e.incident_site_id = None
 
@@ -419,13 +440,13 @@ def get_active_dispatches_for_site(
     db: Session,
     site_id: int,
 ) -> list[EinheitSiteDispatch]:
-    """Aktive (nicht abgezogene) Dispatches für eine Einsatzstelle."""
+    """Aktive (weder abgezogene noch beendete) Dispatches für eine Einsatzstelle."""
     db.flush()
     return (
         db.query(EinheitSiteDispatch)
         .filter(
             EinheitSiteDispatch.site_id == site_id,
-            EinheitSiteDispatch.withdrawn_at.is_(None),
+            dispatch_aktiv_filter(),
         )
         .order_by(EinheitSiteDispatch.dispatched_at)
         .all()
@@ -436,36 +457,46 @@ def get_dispatch_counts_for_site(
     db: Session,
     site_id: int,
 ) -> dict[str, int]:
-    """Zählt disponierte (vor_ort_at NULL) und vor-Ort (vor_ort_at gesetzt) Einheiten."""
-    dispatches = get_active_dispatches_for_site(db, site_id)
-    return {
-        "alarmed": sum(1 for d in dispatches if d.vor_ort_at is None),
-        "vor_ort": sum(1 for d in dispatches if d.vor_ort_at is not None),
-    }
+    """Liefert Alarm-, Vor-Ort- und Fertig-Zähler für eine Einsatzstelle."""
+    return get_dispatch_counts_for_sites(db, [site_id])[site_id]
 
 
 def get_dispatch_counts_for_sites(
     db: Session, site_ids: list[int]
 ) -> dict[int, dict[str, int]]:
-    """Liefert Alarm-/Vor-Ort-Zähler für mehrere Stellen in einer Abfrage."""
+    """Liefert Alarm-, Vor-Ort- und Fertig-Zähler für mehrere Stellen in einer Abfrage."""
     if not site_ids:
         return {}
+    db.flush()
     rows = (
         db.query(
             EinheitSiteDispatch.site_id,
-            func.sum(case((EinheitSiteDispatch.vor_ort_at.is_(None), 1), else_=0)).label("alarmed"),
-            func.sum(case((EinheitSiteDispatch.vor_ort_at.is_not(None), 1), else_=0)).label("vor_ort"),
+            func.sum(
+                case((and_(dispatch_aktiv_filter(), EinheitSiteDispatch.vor_ort_at.is_(None)), 1), else_=0)
+            ).label("alarmed"),
+            func.sum(
+                case((and_(dispatch_aktiv_filter(), EinheitSiteDispatch.vor_ort_at.is_not(None)), 1), else_=0)
+            ).label("vor_ort"),
+            func.sum(
+                case(
+                    (and_(EinheitSiteDispatch.withdrawn_at.is_(None), EinheitSiteDispatch.beendet_at.is_not(None)), 1),
+                    else_=0,
+                )
+            ).label("fertig"),
         )
         .filter(
             EinheitSiteDispatch.site_id.in_(site_ids),
-            EinheitSiteDispatch.withdrawn_at.is_(None),
         )
         .group_by(EinheitSiteDispatch.site_id)
         .all()
     )
-    counts = {site_id: {"alarmed": 0, "vor_ort": 0} for site_id in site_ids}
-    for site_id, alarmed, vor_ort in rows:
-        counts[site_id] = {"alarmed": int(alarmed or 0), "vor_ort": int(vor_ort or 0)}
+    counts = {site_id: {"alarmed": 0, "vor_ort": 0, "fertig": 0} for site_id in site_ids}
+    for site_id, alarmed, vor_ort, fertig in rows:
+        counts[site_id] = {
+            "alarmed": int(alarmed or 0),
+            "vor_ort": int(vor_ort or 0),
+            "fertig": int(fertig or 0),
+        }
     return counts
 
 
@@ -706,7 +737,7 @@ def kraefteuebersicht(db: Session, lage: MajorIncident) -> dict[str, Any]:
             db.query(EinheitSiteDispatch)
             .filter(
                 EinheitSiteDispatch.einheit_id.in_(einheit_ids),
-                EinheitSiteDispatch.withdrawn_at.is_(None),
+                dispatch_aktiv_filter(),
             )
             .all()
         )

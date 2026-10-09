@@ -56,7 +56,7 @@ def build_my_lage_queue(db: Session, device_token) -> dict | None:
         return None
 
     from app.models.major_incident import EinheitSiteDispatch, LageEinheit
-    from app.services.resource_service import STATUS_IM_EINSATZ
+    from app.services.resource_service import STATUS_IM_EINSATZ, dispatch_aktiv_filter
 
     einheit = (
         db.query(LageEinheit)
@@ -80,7 +80,7 @@ def build_my_lage_queue(db: Session, device_token) -> dict | None:
         .join(IncidentSite, IncidentSite.id == EinheitSiteDispatch.site_id)
         .filter(
             EinheitSiteDispatch.einheit_id == einheit.id,
-            EinheitSiteDispatch.withdrawn_at.is_(None),
+            dispatch_aktiv_filter(),
         )
         .order_by(EinheitSiteDispatch.dispatched_at)
         .all()
