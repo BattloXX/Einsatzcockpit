@@ -79,14 +79,15 @@ Helper: `app/core/timezones.py`; Jinja-Filter `local`, `local_time`, `local_date
 
 ---
 
-## Vor jedem Commit / Merge: alle drei CI-Checks
+## Vor jedem Commit / Merge: alle vier CI-Checks
 
-`.github/workflows/ci.yml` hat drei Jobs – pytest allein deckt nur einen ab:
+`.github/workflows/ci.yml` hat vier Jobs – pytest allein deckt nur einen ab:
 
 ```
 .venv/bin/python -m ruff check app/
 .venv/bin/python -m mypy app/ --ignore-missing-imports
 .venv/bin/python -m pytest -q
+npm run test:js # Offline-Outbox des Einheitenmodus; nötig bei Änderungen an app/static/js/einheit_*
 ```
 
 - Immer `.venv/bin/python`; es gibt kein `python` im PATH.
