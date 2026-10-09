@@ -1,7 +1,7 @@
 # GSL-Einheitenmodus für Fahrzeug-Tablets – Implementierungsplan
 
 Stand: 2026-10-09 · Basis: `main` @ `a9bb2705` (Einsatzcockpit) und `main` (Einsatzcockpit-Android)
-Status: **Konzept, noch nicht umgesetzt** · Entscheidungen E1–E6 am 2026-10-09 getroffen (Abschnitt 13)
+Status: **Konzept, noch nicht umgesetzt** · Entscheidungen E1–E7 am 2026-10-09 getroffen (Abschnitt 13)
 
 > **Leitlinie:** Der Einheitsführer erkennt auf dem Tablet ohne Suchen sofort, welchen Einsatz
 > er bearbeiten soll, welche Informationen vorliegen und wie er Status, Lagemeldung oder Fotos
@@ -229,6 +229,9 @@ eingebunden – keine dritte Kopie.
    werden von der Führung bzw. dem Funker **stellvertretend** über dieselben Services erfasst
    (`quelle="funk"`, 5.1). Es gibt also ein Datenmodell für Tablet- und Funk-Einheiten; die Führung sieht
    beide in derselben Darstellung.
+8. **Admin-Simulation (E7).** Admins können den Einheitenmodus für jede Einheit einer Lage im Browser
+   öffnen – dieselbe Oberfläche, dieselben Routen und Services, nur ein anderer Kontext-Resolver (5.2a).
+   In Übungslagen dürfen sie damit auch schreiben, in Echtlagen nur ansehen.
 
 ### 3.2 Komponentenübersicht
 
@@ -554,6 +557,39 @@ Fehlerfälle: `409 {code: auftrag_zurueckgezogen | aktiver_auftrag | einheit_gew
 `erfasst_at` maximal 24 h in der Vergangenheit und maximal 5 min in der Zukunft (sonst Serverzeit + Hinweis),
 Bild-MIME/Größe über die bestehende `upload_site_media`-Prüfung, Speicherquota (`reserve_storage`).
 
+### 5.2a Simulation des Einheitenmodus für Admins (E7) 🆕
+
+Zweck: Einheitenmodus vorführen, schulen und testen, ohne ein Tablet zu koppeln, und im Einsatz
+nachvollziehen, was ein bestimmtes Fahrzeug gerade auf seinem Tablet sieht.
+
+- **Einstieg:** Button „📱 Als Einheit ansehen“ je Einheit in der Ressourcenübersicht (`ressourcen.html`)
+  und in der Dispositionsliste im Site-Detail. Öffnet `/einheit?sim=<einheit_id>` in einem neuen Tab.
+- **Kontext:** `resolve_einheit_kontext()` erhält einen zweiten Weg `simulierter_kontext(db, user, einheit_id)`:
+  - nur für Benutzer mit `admin`/`org_admin` (bzw. `system_admin`), **nie** für Geräte-Benutzer
+    oder QR-Sessions;
+  - `LageEinheit` muss zu einer aktiven Lage der eigenen Org gehören (`lage.org_id == user.org_id`,
+    sonst 404);
+  - `EinheitKontext` bekommt `simulation=True` und `device_token=None`. Alle Leserechte sind dieselben wie
+    beim echten Tablet: der Admin sieht exakt die Sicht der Einheit, nicht mehr.
+- **Übertragung der Einheit-ID:** Die Hülle schreibt `sim` in den Alpine-Store, `einheit_modus.js`
+  hängt bei jedem API-Aufruf den Header `X-EC-Einheit-Sim: <id>` an. Es gibt kein Cookie und keine
+  Session-Umschaltung, der Admin bleibt im anderen Tab ganz normal angemeldet.
+- **Schreiben:**
+  - **Übungslage** (`MajorIncident.is_exercise`): alle Aktionen wie am Tablet erlaubt (Status inkl.
+    E3-Phasenanhebung, Meldungen, Fotos, Anforderungen, Quittierungen). Sie laufen mit `quelle="simulation"`,
+    `author_name = "<Admin> (Simulation <Einheit>)"` und Audit `gsl.einheit.*` mit `simulation=true`.
+  - **Echtlage:** nur lesend. Schreibende Endpunkte antworten `403 simulation_nur_lesend`, die UI blendet
+    die Aktionsleiste aus und zeigt „Echtlage – Simulation nur zur Ansicht“.
+- **Kennzeichnung:** dauerhaft sichtbares oranges Banner „SIMULATION – TLF Wolfurt · Admin: <Name>“ mit
+  „Simulation beenden“ (schließt den Tab bzw. führt zurück zur Ressourcenübersicht). In Chronik und Funkjournal
+  sind Simulationseinträge mit 🧪 markiert.
+- **Keine Nebenwirkungen nach außen:** Aktionen aus der Simulation lösen keinen Push an echte Tablets
+  des Fahrzeugs aus. WS-Events laufen normal, damit die Führungsansicht der Übung live mitläuft.
+- **Outbox:** eigene IndexedDB-Datenbank je simulierter Einheit (`ec-einheit-sim-<id>`), damit sich
+  mehrere Simulationen im selben Browser und echte Tablet-Daten nie vermischen. Die Offline-Funktion lässt sich
+  so auch im Browser vorführen (DevTools → offline).
+- **Audit:** `gsl.einheit.simulation_gestartet` beim ersten Laden je Einheit und Tag.
+
 ### 5.3 Führungsseitige Erweiterungen (`ui_major_incident.py`) 🔧
 
 | Route | Änderung |
@@ -817,6 +853,14 @@ Router-weite Dependency `einheit_geraet_nur_lesen` auf `ui_major_incident.router
   neuen Einträge über die bestehenden Tabellen ohne Zusatzarbeit; 🔧 `druck_bericht.html` um Einheitenstatus
   je Disposition ergänzen.
 
+### 9.4a Simulation (E7)
+
+- Nur Admin-Rollen, nie Geräte- oder QR-Sessions; Header `X-EC-Einheit-Sim` wird bei allen anderen
+  Benutzern ignoriert und protokolliert (`gsl.einheit.simulation_abgelehnt`).
+- Org-Prüfung über die Lage der Einheit; fremde `einheit_id` → 404.
+- Schreibzugriff nur in Übungslagen; jede Simulationsaktion ist in Chronik, Funkjournal, `einheit_aktion`
+  (`device_token_id = NULL`, `quelle = simulation`) und Audit eindeutig als Simulation erkennbar.
+
 ### 9.5 Mandantentrennung
 
 - Kontextauflösung filtert `lage.org_id == user.org_id`; `einheit_aktion` ist `TenantScoped`.
@@ -864,6 +908,11 @@ Browser-E2E nur auf ausdrückliche Anforderung (Projektregel).
 - Broadcasts: Statuswechsel → `site:card_changed` + `einheit:changed`; Medien-Upload → `site:card_changed` (neu).
 - Push: `notify_vehicle` wird nach Commit aufgerufen (Mock), bei Rollback nicht.
 - Startseite: Einheit-Gerät + aktive GSL → 302 `/einheit`; ohne GSL → unverändert; parallel aktiver Einzeleinsatz → unverändert.
+
+- Simulation (E7): `recorder`/`incident_leader` ohne Admin → 403; Geräte-User mit Sim-Header → Header
+  wird ignoriert; Einheit aus Org B → 404; Echtlage: GET 200, POST 403 `simulation_nur_lesend`;
+  Übungslage: POST 200 mit `quelle=simulation`, Autor-Suffix „(Simulation …)“, kein `notify_vehicle`-Aufruf;
+  die simulierte Sicht enthält exakt dieselben Aufträge wie der Zustand eines echten Tablets der Einheit.
 
 ### 10.3 Pflichtszenarien
 
@@ -979,7 +1028,7 @@ Jedes Paket ist ein eigener PR mit grünem `ruff`/`mypy`/`pytest`. Abhängigkeit
 | **P1-1** Datenmodell | Migration 0263, Modellfelder, `EinheitAktion`, `dispatch_aktiv_filter` inkl. Umstellung aller 11 Stellen, Labels/Farben | Migration läuft auf MariaDB in CI; alle bestehenden GSL-Tests grün; Backfill-Test |
 | **P1-2** Service-Extraktion (P1-1) | `site_log_service`, `speichere_site_foto`, `funkjournal_service.add_comm_entry`; Router auf Services umstellen; Broadcast nach Medien-Upload und Funkjournal | Kein Verhaltensunterschied in der Führungs-UI (bestehende Tests), neue Broadcasts getestet |
 | **P1-3** Einheiten-Kontext + Sicherheit (P1-1) | `einheit_service` (Kontext, Auftragsliste, Statusmaschine inkl. `quelle`), `major_incident_service.setze_site_phase` + E3-Anhebung, `require_einheit_geraet`, `einheit_geraet_nur_lesen` mit Allowlist (Gesamtansicht), WS-Widerrufsprüfung, `gsl_profil` in der Geräte-Admin-UI, `build_my_lage_queue` als Adapter | S1, S7, S8, S10 grün; Einheit-Gerät sieht die Gesamtansicht ohne Bearbeitungselemente und erhält 403 auf alle schreibenden Führungsrouten; Routen-Vollständigkeitstest grün; Widget-Format unverändert |
-| **P1-4** Tablet-UI (P1-2, P1-3) | `_fab_styles.html` aus dem Fahrtenbuch extrahieren, `ui_einheit.py`, `einheit.html` im Fahrtenbuch-Design, Umschalter Meine Einsätze/Gesamtansicht, JS-Testjob (10.5), `einheit_modus.js`, `einheit_outbox.js` (persistente Outbox mit manuellem und automatischem Retry, Idempotenz), Status/Lagemeldung/Maßnahme/Notiz/Foto, Startseiten-Redirect, SW-Regeln | S2–S6 auf API-Ebene und Outbox-Testfälle 1–10 grün; Fahrtenbuch optisch unverändert; offline erfasste Aktionen gehen bei Reload nicht verloren und werden nie als übermittelt angezeigt; Live-Update ohne Verlust offener Eingaben |
+| **P1-4** Tablet-UI (P1-2, P1-3) | Admin-Simulation (5.2a, Einstieg „Als Einheit ansehen“), `_fab_styles.html` aus dem Fahrtenbuch extrahieren, `ui_einheit.py`, `einheit.html` im Fahrtenbuch-Design, Umschalter Meine Einsätze/Gesamtansicht, JS-Testjob (10.5), `einheit_modus.js`, `einheit_outbox.js` (persistente Outbox mit manuellem und automatischem Retry, Idempotenz), Status/Lagemeldung/Maßnahme/Notiz/Foto, Startseiten-Redirect, SW-Regeln | S2–S6 auf API-Ebene und Outbox-Testfälle 1–10 grün; Simulationstests grün; der Einheitenmodus lässt sich in einer Übungslage vollständig per Simulation durchspielen; Fahrtenbuch optisch unverändert; offline erfasste Aktionen gehen bei Reload nicht verloren und werden nie als übermittelt angezeigt; Live-Update ohne Verlust offener Eingaben |
 | **P1-5** Führungsansicht (P1-3) | Chips auf Board-Karte, Dispositionsliste im Site-Detail mit Status, Auftragstext und 📱/📻-Kennzeichnung, stellvertretende Statuserfassung „per Funk“, Disponieren mit Auftragstext, `einheit:changed` in `lage_board.js`, Kräfteübersicht | Führung sieht Statuswechsel einer Einheit ohne Reload; „keine Rückmeldung seit“ erscheint nach Intervall; Funk-Einheiten lassen sich vollständig ohne Tablet führen |
 
 Optional am Ende von Phase 1: E2E `e2e/test_einheit_modus.py` (auf Anforderung).
@@ -1028,4 +1077,6 @@ Am 2026-10-09 getroffen:
 | E3 | Ändert der Einheitenstatus den Status der Einsatzstelle? | **Ja:** `vor_ort`/`in_arbeit` hebt die Phase automatisch auf `in_arbeit` (nur vorwärts). Abschluss/Abbruch bleibt Führungsentscheidung | 5.1, 5.3, 8, 10.1, S1, S7 |
 | E4 | JS-Testinfrastruktur für die Outbox | **Vorschlag:** `node --test` + `fake-indexeddb`, Outbox als reine Logik mit injizierten Abhängigkeiten, vierter CI-Job `js` | 10.5, P1-4 |
 | E5 | Stitch-Mockup | **Nein** – bestehendes Fahrtenbuch-Design verwenden, `fab-*`-Styles in ein gemeinsames Partial auslagern | 1.10, 6.1, 6.2, P1-4 |
+| E3a | Stelle automatisch „erledigt“, wenn alle Einheiten fertig sind? | **Nein.** Die Board-Karte zeigt „Alle Einheiten fertig – Stelle abschließen?“, die Führung schließt ab | 5.1, S7 |
 | E6 | Wie werden kritische Nachrichten übermittelt? | **Immer per Funk.** Kritische Nachrichten der Führung werden Funkaufträge („Funk ausstehend“ bis zur Bestätigung), Tablet und Push sind nur Ergänzung; das Tablet fordert bei dringenden Meldungen zur zusätzlichen Funkmeldung auf. Kein eigener Kanal, kein DND-Bypass | 4.1, 5.1, 5.3, 6.3, 6.6, 7, S9 |
+| E7 | Einheitenmodus ohne Tablet ausprobieren? | **Admin-Simulation** je Einheit im Browser: Übungslage schreibend, Echtlage nur lesend, keine Pushs an echte Tablets, klar gekennzeichnet | 3.1 (8), 5.2a, 9.4a, 10.2, P1-4 |
