@@ -80,6 +80,7 @@ from app.services import lagemeldung_service, resource_service
 from app.services.ai_service import is_enabled as ai_is_enabled
 from app.services.broadcast import broadcast_lage, manager
 from app.services.major_incident_service import (
+    PHASE_LABELS,
     close_lage,
     create_lage,
     create_site,
@@ -147,17 +148,6 @@ PHASE_ORDER = [
     SitePhase.in_arbeit,
     SitePhase.erledigt,
 ]
-
-PHASE_LABELS = {
-    SitePhase.eingegangen: "Eingegangen",
-    SitePhase.erkundung:   "Erkundung",
-    SitePhase.bewertet:    "Bewertet",
-    SitePhase.disponiert:  "Disponiert",
-    SitePhase.in_arbeit:   "In Arbeit",
-    SitePhase.erledigt:    "Erledigt",
-    SitePhase.abgebrochen: "Abgebrochen",
-}
-
 
 async def _apply_ai_prio(site: IncidentSite, db: Session, org_id: int | None = None) -> None:
     """Automatically suggest priority via AI. Never raises.
@@ -614,26 +604,11 @@ async def site_phase_change(
     old_phase = site.phase
     if old_phase == new_phase and site.sort_index == sort_index:
         return Response(status_code=204)
-
-    site.phase = new_phase
-    site.sort_index = sort_index
-
-    if old_phase != new_phase:
-        db.add(SiteLogEntry(
-            incident_site_id=site_id,
-            kind="status",
-            text=f"Phase: {PHASE_LABELS[old_phase]} → {PHASE_LABELS[new_phase]}",
-            user_id=user.id,
-            author_name=get_author_name(request),
-        ))
-        write_audit(db, "major_incident.site.phase_changed", user_id=user.id,
-                    payload={"lage_id": lage_id, "site_id": site_id,
-                             "from": old_phase.value, "to": new_phase.value})
-        # Lagemeldungs-Timer an Phase koppeln
-        if new_phase == SitePhase.in_arbeit:
-            lagemeldung_service.ensure_timer(site, db)
-        elif new_phase in (SitePhase.erledigt, SitePhase.abgebrochen):
-            lagemeldung_service.clear_timer(site, db)
+    from app.services.major_incident_service import setze_site_phase
+    setze_site_phase(
+        db, site, new_phase, user_id=user.id, author_name=get_author_name(request),
+        sort_index=sort_index,
+    )
     db.commit()
     await broadcast_lage(lage_id, {
         "type": "site_phase_changed",

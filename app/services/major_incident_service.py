@@ -20,6 +20,67 @@ from app.models.major_incident import (
     SitePhase,
 )
 
+PHASE_LABELS = {
+    SitePhase.eingegangen: "Eingegangen",
+    SitePhase.erkundung: "Erkundung",
+    SitePhase.bewertet: "Bewertet",
+    SitePhase.disponiert: "Disponiert",
+    SitePhase.in_arbeit: "In Arbeit",
+    SitePhase.erledigt: "Erledigt",
+    SitePhase.abgebrochen: "Abgebrochen",
+}
+
+
+def setze_site_phase(
+    db: Session,
+    site: IncidentSite,
+    neue_phase: SitePhase,
+    *,
+    user_id: int | None,
+    author_name: str | None,
+    ausloeser: str | None = None,
+    sort_index: int | None = None,
+) -> bool:
+    """Setzt die Phase einer Einsatzstelle samt Chronik und Folgewirkungen.
+
+    Der Aufrufer verantwortet Commit und Echtzeit-Broadcast.
+    """
+    alte_phase = site.phase
+    if sort_index is not None:
+        site.sort_index = sort_index
+    if alte_phase == neue_phase:
+        return False
+
+    site.phase = neue_phase
+    suffix = f" ({ausloeser})" if ausloeser else ""
+    from app.services.site_log_service import add_site_log
+    add_site_log(
+        db,
+        site,
+        "status",
+        f"Phase: {PHASE_LABELS[alte_phase]} → {PHASE_LABELS[neue_phase]}{suffix}",
+        user_id=user_id,
+        author_name=author_name,
+    )
+    from app.core.audit import write_audit
+    write_audit(
+        db,
+        "major_incident.site.phase_changed",
+        user_id=user_id,
+        payload={
+            "lage_id": site.major_incident_id,
+            "site_id": site.id,
+            "from": alte_phase.value,
+            "to": neue_phase.value,
+        },
+    )
+    from app.services import lagemeldung_service
+    if neue_phase == SitePhase.in_arbeit:
+        lagemeldung_service.ensure_timer(site, db)
+    elif neue_phase in (SitePhase.erledigt, SitePhase.abgebrochen):
+        lagemeldung_service.clear_timer(site, db)
+    return True
+
 
 def incident_major_incident_id(db: Session, incident_id: int) -> int | None:
     """Liefert die Lage-ID (Großschadenslage), falls dieser Einsatz dort als
