@@ -51,8 +51,6 @@ from app.models.major_incident import (
     JOURNAL_CATEGORY_COLOR,
     JOURNAL_TEMPLATES,
     SITE_LOG_KIND_LABEL,
-    SITE_LOG_RESET_KINDS,
-    SITE_LOG_USER_KINDS,
     SITE_PRIORITY_COLOR,
     SITE_PRIORITY_LABEL,
     STAFF_FUNCTION_LABEL,
@@ -1282,19 +1280,11 @@ async def site_log_add(
     if not site or site.major_incident_id != lage_id:
         raise HTTPException(status_code=404)
 
-    kind = art if art in SITE_LOG_USER_KINDS else "note"
-    db.add(SiteLogEntry(
-        incident_site_id=site_id,
-        kind=kind,
-        text=text.strip(),
-        user_id=user.id,
-        author_name=get_author_name(request),
-    ))
-
-    # Lagemeldung = Kontrolle im Führungskreislauf: Timer zurücksetzen + Auto-Auftrag schließen
+    from app.models.major_incident import SITE_LOG_RESET_KINDS
+    from app.services.site_log_service import add_site_log, normalisiere_user_kind
+    kind = normalisiere_user_kind(art)
+    add_site_log(db, site, kind, text, user_id=user.id, author_name=get_author_name(request))
     is_reset = kind in SITE_LOG_RESET_KINDS
-    if is_reset:
-        lagemeldung_service.register_lagemeldung(site, db)
     db.commit()
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
     if is_reset:
@@ -1568,23 +1558,15 @@ async def site_media_upload(
     if not site or site.major_incident_id != lage_id:
         raise HTTPException(status_code=404)
 
-    from app.services.lage_media_service import upload_site_media
-    media = await upload_site_media(
-        file, site_id,
+    from app.services.lage_media_service import speichere_site_foto
+    await speichere_site_foto(
+        db, site, file,
         org_id=lage.org_id,
         user_id=user.id,
         author_name=get_author_name(request),
-        db=db,
     )
-    db.add(media)
-    db.add(SiteLogEntry(
-        incident_site_id=site_id,
-        kind="media",
-        text=f"Foto hochgeladen: {media.original_filename}",
-        user_id=user.id,
-        author_name=get_author_name(request),
-    ))
     db.commit()
+    await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
     return Response(status_code=204)
 
 
@@ -2913,7 +2895,7 @@ def lage_funkjournal(
 
 
 @router.post("/lage/{lage_id}/funkjournal")
-def funkjournal_add(
+async def funkjournal_add(
     request: Request,
     lage_id: int,
     direction: str = Form(...),
@@ -2928,37 +2910,19 @@ def funkjournal_add(
     user = request.state.user
     lage = _lage_or_404(lage_id, db)
     _check_org_access(user, lage)
-    if direction not in ("in", "out", "int"):
-        raise HTTPException(status_code=400, detail="Ungültige Richtung")
-
-    site_id = related_site_id or None
-    db.add(CommLogEntry(
-        major_incident_id=lage_id,
-        direction=direction,
-        channel=channel.strip() or None,
-        partner=partner.strip() or None,
-        message=message.strip(),
-        is_request=is_request,
-        related_site_id=site_id,
-        user_id=user.id,
-        author_name=get_author_name(request),
-    ))
-    if site_id:
-        dir_label = {"in": "↓ Eingehend", "out": "↑ Ausgehend", "int": "↔ Intern"}.get(direction, direction)
-        parts = [f"Funkjournal ({dir_label})"]
-        if channel.strip():
-            parts.append(f"Kanal: {channel.strip()}")
-        if partner.strip():
-            parts.append(f"Von/An: {partner.strip()}")
-        parts.append(message.strip())
-        db.add(SiteLogEntry(
-            incident_site_id=site_id,
-            kind="note",
-            text=" – ".join(parts),
-            user_id=user.id,
-            author_name=get_author_name(request),
-        ))
+    from app.services.funkjournal_service import add_comm_entry
+    try:
+        add_comm_entry(
+            db, lage, direction=direction, channel=channel, partner=partner, message=message,
+            is_request=is_request, related_site_id=related_site_id or None,
+            user_id=user.id, author_name=get_author_name(request),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     db.commit()
+    await broadcast_lage(lage_id, {"type": "funkjournal:changed"})
+    if related_site_id:
+        await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": related_site_id})
     return Response(status_code=204)
 
 
@@ -2993,7 +2957,7 @@ def meldungen_qr(
 
 
 @router.post("/lage/{lage_id}/funkjournal/{entry_id}/erledigt")
-def funkjournal_handled(
+async def funkjournal_handled(
     request: Request,
     lage_id: int,
     entry_id: int,
@@ -3004,12 +2968,13 @@ def funkjournal_handled(
     lage = _lage_or_404(lage_id, db)
     _check_org_access(user, lage)
 
-    entry = db.get(CommLogEntry, entry_id)
-    if not entry or entry.major_incident_id != lage_id:
+    from app.services.funkjournal_service import toggle_handled
+    try:
+        toggle_handled(db, lage, entry_id)
+    except LookupError:
         raise HTTPException(status_code=404)
-
-    entry.handled = not entry.handled
     db.commit()
+    await broadcast_lage(lage_id, {"type": "funkjournal:changed"})
     return Response(status_code=204)
 
 
