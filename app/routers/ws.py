@@ -17,7 +17,7 @@ from datetime import UTC, datetime, timedelta
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.core.permissions import can_access_incident
-from app.core.security import hash_api_key, unsign_session
+from app.core.security import hash_api_key, pruefe_geraete_session, unsign_session
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.incident import Incident
@@ -102,11 +102,18 @@ def _resolve_user(websocket: WebSocket) -> User | None:
     session_data = unsign_session(token)
     if not session_data:
         return None
-    user_id, *_ = session_data
+    (
+        user_id, _is_qr, _qr_incident_id, is_device, _display_name,
+        _qr_lage_id, _is_remember, device_token_id,
+    ) = session_data
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
         user = db.query(User).filter(User.id == user_id, User.active == True).first()  # noqa: E712
+        if user is not None and is_device and not pruefe_geraete_session(
+            db, user_id, is_device, device_token_id,
+        ):
+            return None
         if user is not None:
             # Lazy-Loaded Beziehungen sicherstellen, bevor die Session zugeht
             _ = [r.code for r in user.roles]

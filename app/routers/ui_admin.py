@@ -3012,6 +3012,7 @@ async def create_device_token(
     role_codes: list[str] = Form([]),
     org_id: int | None = Form(None),
     vehicle_master_id: int | None = Form(None),
+    gsl_profil: str | None = Form(None),
     db: Session = Depends(get_db),
     _=Depends(require_role("admin")),
 ):
@@ -3109,8 +3110,11 @@ async def create_device_token(
         vm = db.get(VehicleMaster, vehicle_master_id)
         if vm and (has_role(current_user, "system_admin") or vm.dept_id == target_org_id):
             safe_vehicle_id = vm.id
+    if gsl_profil not in ("einheit", "fuehrung"):
+        gsl_profil = "einheit" if safe_vehicle_id else "fuehrung"
     dt = DeviceToken(label=label, token_hash=token_hash, user_id=device_user.id,
                      vehicle_master_id=safe_vehicle_id,
+                     gsl_profil=gsl_profil,
                      paired_gateway_token_id=gw.id if device_type == "unit+sms-gateway" else None)
     db.add(dt)
     db.flush()
@@ -3247,6 +3251,26 @@ async def revoke_gateway_token(
     write_audit(db, "admin.sms_gateway_token.revoked", user_id=request.state.user.id,
                 entity_type="sms_gateway_token", entity_id=token_id,
                 payload={"label": gw.label})
+    db.commit()
+    return RedirectResponse("/admin/geraete-login?saved=1", status_code=303)
+
+
+@router.post("/geraete-login/{token_id}/gsl-profil")
+async def assign_device_gsl_profil(
+    token_id: int,
+    request: Request,
+    gsl_profil: str = Form(""),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("admin")),
+):
+    dt = db.get(DeviceToken, token_id)
+    _assert_device_token_access(dt, request.state.user)
+    assert dt is not None
+    profil = gsl_profil if gsl_profil in ("einheit", "fuehrung") else None
+    dt.gsl_profil = profil
+    write_audit(db, "admin.device_token.gsl_profil", user_id=request.state.user.id,
+                entity_type="device_token", entity_id=token_id,
+                payload={"label": dt.label, "gsl_profil": profil})
     db.commit()
     return RedirectResponse("/admin/geraete-login?saved=1", status_code=303)
 
@@ -3437,6 +3461,7 @@ async def assign_device_vehicle(
                 entity_type="device_token", entity_id=token_id,
                 payload={"label": dt.label, "vehicle_master_id": safe_vehicle_id})
     db.commit()
+    return RedirectResponse("/admin/geraete-login?saved=1", status_code=303)
 
 
 # ── SMS-Gateway-Status ─────────────────────────────────────────────────────────

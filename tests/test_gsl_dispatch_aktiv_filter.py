@@ -159,6 +159,7 @@ def test_abziehen_erhoeht_version_und_setzt_aenderungszeitpunkt():
 def test_lagemeldung_und_live_warteschlange_ignorieren_beendete_disposition():
     class DeviceToken:
         vehicle_master_id = 987654
+        gsl_profil = None  # Altbestand: bisheriges Widget-Verhalten
 
     with _session() as db:
         lage = _make_lage(db)

@@ -26,7 +26,7 @@ from starlette.middleware.authentication import AuthenticationMiddleware
 from app.config import settings, validate_startup_secrets
 from app.core.dependencies import _resolve_current_org
 from app.core.multi_account import ACCOUNTS_COOKIE, add_account, load_accounts, set_accounts_cookie
-from app.core.security import unsign_native_link_token, unsign_session
+from app.core.security import pruefe_geraete_session, unsign_native_link_token, unsign_session
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.mcp import download_router as mcp_download_router
@@ -37,7 +37,7 @@ from app.mcp.server import provider as mcp_provider
 from app.middleware.write_failure_log import WriteFailureLogMiddleware
 from app.models.incident import Incident, IncidentToken
 from app.models.major_incident import LageToken, MajorIncident, MajorIncidentStatus
-from app.models.user import DeviceToken, Role, User
+from app.models.user import Role, User
 from app.routers import (
     api_feed,
     api_kontakt_sync,
@@ -574,28 +574,7 @@ async def session_middleware(request: Request, call_next):
                     # Token-Bezug (vor PR 6 ausgestellt) fallen auf die
                     # grobkoernige Pruefung "hat noch irgendein aktives
                     # Geraet" zurueck.
-                    if device_token_id is not None:
-                        device_ok = (
-                            db.query(DeviceToken)
-                            .filter(
-                                DeviceToken.id == device_token_id,
-                                DeviceToken.user_id == user_id,
-                                DeviceToken.revoked_at.is_(None),
-                            )
-                            .first()
-                            is not None
-                        )
-                    else:
-                        device_ok = (
-                            db.query(DeviceToken)
-                            .filter(
-                                DeviceToken.user_id == user_id,
-                                DeviceToken.revoked_at.is_(None),
-                            )
-                            .first()
-                            is not None
-                        )
-                    if not device_ok:
+                    if not pruefe_geraete_session(db, user_id, is_device, device_token_id):
                         user = None
                     else:
                         request.state.device_token_id = device_token_id
