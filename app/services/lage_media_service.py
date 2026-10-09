@@ -6,13 +6,14 @@ wie media_service._process_image (KONS-1) — keine eigene Kopie mehr."""
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models.major_incident import CrossMarkerMedia, LageJournalMedia, SiteMedia
+from app.models.major_incident import CrossMarkerMedia, IncidentSite, LageJournalMedia, SiteMedia
 from app.services.media_service import IMAGE_MIMES, _detect_mime, _process_image
 
 logger = logging.getLogger("einsatzleiter.lage_media")
@@ -52,6 +53,10 @@ async def upload_site_media(
     user_id: int | None = None,
     author_name: str | None = None,
     db=None,
+    *,
+    einheit_id: int | None = None,
+    kommentar: str | None = None,
+    erfasst_at: datetime | None = None,
 ) -> SiteMedia:
     """Verarbeitet das hochgeladene Bild und gibt ein (unflushed) SiteMedia-Objekt zurück."""
     data = await file.read()
@@ -83,9 +88,41 @@ async def upload_site_media(
         media_type="image",
         uploaded_by=user_id,
         author_name=author_name,
+        einheit_id=einheit_id,
+        kommentar=(kommentar or "").strip()[:500] or None,
+        erfasst_at=erfasst_at,
         bytes=stored_bytes,
         org_id=org_id,
     )
+
+
+async def speichere_site_foto(
+    db: Session,
+    site: IncidentSite,
+    file: UploadFile,
+    *,
+    org_id: int | None,
+    user_id: int | None,
+    author_name: str | None,
+    einheit_id: int | None = None,
+    kommentar: str | None = None,
+    erfasst_at: datetime | None = None,
+) -> SiteMedia:
+    """Speichert ein Foto samt Chronik-Eintrag; der Aufrufer committet."""
+    media = await upload_site_media(
+        file, site.id, org_id=org_id, user_id=user_id, author_name=author_name, db=db,
+        einheit_id=einheit_id, kommentar=kommentar, erfasst_at=erfasst_at,
+    )
+    db.add(media)
+    text = f"Foto hochgeladen: {media.original_filename}"
+    if media.kommentar:
+        text += f" – {media.kommentar}"
+    from app.services.site_log_service import add_site_log
+    add_site_log(
+        db, site, "media", text, user_id=user_id, author_name=author_name,
+        einheit_id=einheit_id, erfasst_at=erfasst_at,
+    )
+    return media
 
 
 def copy_citizen_photo_to_site(
