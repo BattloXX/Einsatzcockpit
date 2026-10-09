@@ -25,7 +25,16 @@
      x-data="einheitModus({{ einheit_config|tojson|forceescape }})"
      x-init="init()">
 
-  {% if kein_kontext %}
+  {% if simulation_fehler %}
+  <div class="fab-card">
+    <div class="fab-card__head">
+      <span class="fab-card__icon">&#x26A0;</span>
+      <h1 class="fab-card__title">Simulation nicht möglich</h1>
+    </div>
+    <p>{{ simulation_fehler }}</p>
+    <a class="btn btn--primary" href="/?klassisch=1">Normale Ansicht</a>
+  </div>
+  {% elif kein_kontext %}
   {# ── Kein Einheiten-Kontext ─────────────────────────────────────────── #}
   <div class="fab-card">
     <div class="fab-card__head">

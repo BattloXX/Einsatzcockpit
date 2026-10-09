@@ -352,6 +352,15 @@ def test_simulation_und_geraete_header(client, setup_db):
     assert (
         client.get("/einheit/api/zustand", headers=_h(client, **{"X-EC-Einheit-Sim": str(x["fe"])})).status_code == 404
     )
+    db = _db()
+    db.add(UserRole(user_id=x["admin"], role_id=db.query(Role).filter_by(code="system_admin").one().id))
+    db.commit()
+    db.close()
+    _als(client, sign_session(x["admin"]))
+    assert client.get(
+        "/einheit/api/zustand",
+        headers=_h(client, **{"X-EC-Einheit-Sim": str(x["fe"])}),
+    ).status_code == 200
     _device(client, x)
     assert (
         client.get("/einheit/api/zustand", headers={"X-EC-Einheit-Sim": str(x["fe"])}).json()["kopf"]["einheit_id"]
@@ -359,3 +368,18 @@ def test_simulation_und_geraete_header(client, setup_db):
     )
     _als(client, sign_session(x["admin"]))
     assert client.get("/einheit/api/zustand").json()["code"] == "kein_einheitenkontext"
+
+
+def test_simulation_api_akzeptiert_standby_lage(client, setup_db):
+    x = _daten()
+    db = _db()
+    db.get(MajorIncident, x["lage"]).status = MajorIncidentStatus.standby
+    db.commit()
+    db.close()
+    _als(client, sign_session(x["admin"]))
+    response = client.get(
+        "/einheit/api/zustand",
+        headers=_h(client, **{"X-EC-Einheit-Sim": str(x["e1"])}),
+    )
+    assert response.status_code == 200
+    assert response.json()["simulation"] is True
