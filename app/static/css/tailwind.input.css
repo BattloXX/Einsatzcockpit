@@ -744,9 +744,13 @@ dialog.modal--wide { max-width: 720px; }
 .modal--detail .modal__body { padding: 16px 20px; max-height: 72dvh; overflow-y: auto; }
 
 /* Media-Viewer-Lightbox */
+/* A closed <dialog> must remain hidden.  Setting display:flex on the base
+   selector overrides the browser's dialog:not([open]) { display:none } rule,
+   leaving the last viewed medium visible behind the incident board. */
 dialog.media-viewer { max-width: 95vw; width: 95vw; max-height: 95dvh; height: 95dvh;
                       padding: 0; border-radius: 10px; background: #111;
-                      color: #fff; display: flex; flex-direction: column; }
+                      color: #fff; }
+dialog.media-viewer[open] { display: flex; flex-direction: column; }
 .media-viewer__toolbar { display: flex; align-items: center; justify-content: space-between;
                          gap: 12px; padding: 10px 14px; background: rgba(0,0,0,.55);
                          border-bottom: 1px solid #2a2a2a; }
