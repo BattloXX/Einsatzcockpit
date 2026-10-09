@@ -47,6 +47,8 @@ from app.models.major_incident import (
     CROSS_MARKER_STATUS_LABEL,
     CROSS_MARKER_TYPE_ICON,
     CROSS_MARKER_TYPE_LABEL,
+    EINHEIT_STATUS_COLOR,
+    EINHEIT_STATUS_LABEL,
     JOURNAL_CATEGORIES,
     JOURNAL_CATEGORY_COLOR,
     JOURNAL_TEMPLATES,
@@ -76,10 +78,14 @@ from app.models.major_incident import (
 )
 from app.models.master import FireDept, Member, VehicleMaster
 from app.models.user import User
-from app.services import lagemeldung_service, resource_service
+from app.services import einheit_service, lagemeldung_service, resource_service
 from app.services.ai_service import is_enabled as ai_is_enabled
 from app.services.broadcast import broadcast_lage, manager
-from app.services.einheit_service import einheit_geraet_nur_lesen
+from app.services.einheit_service import (
+    ERLAUBTE_UEBERGAENGE,
+    EinheitKonflikt,
+    einheit_geraet_nur_lesen,
+)
 from app.services.major_incident_service import (
     PHASE_LABELS,
     close_lage,
@@ -719,13 +725,10 @@ def site_detail(
         key=lambda e: (e.incident_site_id is not None, e.label),
     )
 
-    site_dispatches = resource_service.get_active_dispatches_for_site(db, site_id)
-    already_dispatched_ids = [d.einheit_id for d in site_dispatches]
-
     log_user_ids = {e.user_id for e in site.log_entries if e.user_id}
     users_by_id = {u.id: u for u in db.query(User).filter(User.id.in_(log_user_ids)).all()} if log_user_ids else {}
 
-    return templates.TemplateResponse(request, "incident_major/_site_detail.html", {
+    context = {
         "user": user,
         "lage": lage,
         "site": site,
@@ -738,11 +741,11 @@ def site_detail(
         "now": datetime.now(UTC),
         "citizen_report": citizen_report,
         "available_einheiten": available_einheiten,
-        "site_dispatches": site_dispatches,
-        "already_dispatched_ids": already_dispatched_ids,
         "site_log_kind_label": SITE_LOG_KIND_LABEL,
         "users_by_id": users_by_id,
-    })
+    }
+    context.update(_site_dispatch_context(request, db, lage, site, user))
+    return templates.TemplateResponse(request, "incident_major/_site_detail.html", context)
 
 
 @router.get("/lage/{lage_id}/stellen/{site_id}/disponieren-select", response_class=HTMLResponse)
@@ -975,15 +978,14 @@ def _site_detail_html_with_oob(request: Request, db: Session, lage, site, user) 
     """Rendert _site_detail.html + OOB-Karte als kombinierten HTML-String.
     Der Aufrufer setzt HX-Retarget:#siteDetailContent + HX-Reswap:innerHTML.
     """
-    site_dispatches = resource_service.get_active_dispatches_for_site(db, site.id)
-    already_dispatched_ids = [d.einheit_id for d in site_dispatches]
+    detail_ctx = _site_dispatch_context(request, db, lage, site, user)
     available_einheiten = [
         e for e in lage.einheiten if e.status != resource_service.STATUS_ABGERUECKT
     ]
     sectors = sorted(lage.sectors, key=lambda s: s.id)
     log_user_ids = {e.user_id for e in site.log_entries if e.user_id}
     users_by_id = {u.id: u for u in db.query(User).filter(User.id.in_(log_user_ids)).all()} if log_user_ids else {}
-    detail_ctx = {
+    detail_ctx.update({
         "request": request,
         "user": user,
         "lage": lage,
@@ -991,8 +993,6 @@ def _site_detail_html_with_oob(request: Request, db: Session, lage, site, user) 
         "can_edit": _can_edit(user),
         "can_note": _can_note(user),
         "available_einheiten": available_einheiten,
-        "site_dispatches": site_dispatches,
-        "already_dispatched_ids": already_dispatched_ids,
         "site_log_kind_label": SITE_LOG_KIND_LABEL,
         "sectors": sectors,
         "phase_labels": PHASE_LABELS,
@@ -1001,7 +1001,7 @@ def _site_detail_html_with_oob(request: Request, db: Session, lage, site, user) 
         "citizen_report": None,
         "now": datetime.now(UTC),
         "users_by_id": users_by_id,
-    }
+    })
     detail_html = templates.env.get_template(
         "incident_major/_site_detail.html"
     ).render(detail_ctx)
@@ -1025,12 +1025,33 @@ def _site_detail_html_with_oob(request: Request, db: Session, lage, site, user) 
     oob = f'<div hx-swap-oob="outerHTML:[data-site-id=\'{site.id}\']">{card_html}</div>'
     return detail_html + oob
 
+
+def _site_dispatch_context(request: Request, db: Session, lage, site, user) -> dict:
+    """Gemeinsamer Kontext für die Dispatch-Anzeige im Stellen-Detail."""
+    active_dispatches = resource_service.get_active_dispatches_for_site(db, site.id)
+    site_dispatches = resource_service.get_dispatches_for_site_anzeige(db, site.id)
+    return {
+        "site_dispatches": site_dispatches,
+        "already_dispatched_ids": [d.einheit_id for d in active_dispatches],
+        "einheit_hat_tablet": {
+            d.einheit_id: einheit_service.hat_tablet(db, d.einheit)
+            for d in site_dispatches
+        },
+        "einheit_status_label": EINHEIT_STATUS_LABEL,
+        "einheit_status_color": EINHEIT_STATUS_COLOR,
+        "erlaubte_uebergaenge": ERLAUBTE_UEBERGAENGE,
+        "is_admin": has_role(user, "admin"),
+    }
+
+
 @router.post("/lage/{lage_id}/stellen/{site_id}/einheit-disponieren", response_class=HTMLResponse)
 async def site_einheit_disponieren(
     request: Request,
     lage_id: int,
     site_id: int,
     einheit_id: int = Form(...),
+    auftrag: str | None = Form(None),
+    reihenfolge: int | None = Form(None),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
 ):
@@ -1044,6 +1065,7 @@ async def site_einheit_disponieren(
     try:
         resource_service.dispatch_to_site(
             db, einheit_id, lage_id, site_id,
+            auftrag=auftrag, reihenfolge=reihenfolge,
             author_name=get_author_name(request), user_id=user.id,
         )
         einheit = db.get(LageEinheit, einheit_id)
@@ -1056,10 +1078,120 @@ async def site_einheit_disponieren(
         user_id=user.id,
         author_name=get_author_name(request),
     ))
+    write_audit(db, "gsl.auftrag.disponiert", user_id=user.id,
+                payload={"lage_id": lage_id, "site_id": site_id, "einheit_id": einheit_id})
     db.commit()
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
+    await broadcast_lage(lage_id, {"type": "einheit:changed", "einheit_id": einheit_id, "site_id": site_id})
     html = _site_detail_html_with_oob(request, db, lage, site, user)
     return HTMLResponse(content=html, headers={"HX-Retarget": "#siteDetailContent", "HX-Reswap": "innerHTML"})
+
+
+def _dispatch_fuer_stelle_oder_404(db: Session, dispatch_id: int, site_id: int):
+    dispatch = db.get(resource_service.EinheitSiteDispatch, dispatch_id)
+    if dispatch is None or dispatch.site_id != site_id:
+        raise HTTPException(status_code=404)
+    return dispatch
+
+
+@router.post("/lage/{lage_id}/stellen/{site_id}/einheit/{dispatch_id}/auftrag", response_class=HTMLResponse)
+async def site_einheit_auftrag_aendern(
+    request: Request, lage_id: int, site_id: int, dispatch_id: int,
+    auftrag: str | None = Form(None), reihenfolge: int | None = Form(None),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    site = db.get(IncidentSite, site_id)
+    if not site or site.major_incident_id != lage_id:
+        raise HTTPException(status_code=404)
+    dispatch = _dispatch_fuer_stelle_oder_404(db, dispatch_id, site_id)
+    try:
+        resource_service.aendere_auftrag(db, dispatch, auftrag=auftrag, reihenfolge=reihenfolge,
+                                          author_name=get_author_name(request), user_id=user.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    write_audit(db, "gsl.auftrag.geaendert", user_id=user.id,
+                payload={"lage_id": lage_id, "site_id": site_id, "dispatch_id": dispatch_id})
+    db.commit()
+    await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
+    await broadcast_lage(lage_id, {"type": "einheit:changed", "einheit_id": dispatch.einheit_id,
+                                   "dispatch_id": dispatch_id, "site_id": site_id})
+    return HTMLResponse(content=_site_detail_html_with_oob(request, db, lage, site, user),
+                        headers={"HX-Retarget": "#siteDetailContent", "HX-Reswap": "innerHTML"})
+
+
+@router.post("/lage/{lage_id}/stellen/{site_id}/einheit/{dispatch_id}/wiedereroeffnen", response_class=HTMLResponse)
+async def site_einheit_wiedereroeffnen(
+    request: Request, lage_id: int, site_id: int, dispatch_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    site = db.get(IncidentSite, site_id)
+    if not site or site.major_incident_id != lage_id:
+        raise HTTPException(status_code=404)
+    dispatch = _dispatch_fuer_stelle_oder_404(db, dispatch_id, site_id)
+    try:
+        resource_service.oeffne_auftrag_wieder(db, dispatch, author_name=get_author_name(request), user_id=user.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    write_audit(db, "gsl.auftrag.wiedereroeffnet", user_id=user.id,
+                payload={"lage_id": lage_id, "site_id": site_id, "dispatch_id": dispatch_id})
+    db.commit()
+    await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
+    await broadcast_lage(lage_id, {"type": "einheit:changed", "einheit_id": dispatch.einheit_id,
+                                   "dispatch_id": dispatch_id, "site_id": site_id})
+    return HTMLResponse(content=_site_detail_html_with_oob(request, db, lage, site, user),
+                        headers={"HX-Retarget": "#siteDetailContent", "HX-Reswap": "innerHTML"})
+
+
+@router.post("/lage/{lage_id}/stellen/{site_id}/einheit/{dispatch_id}/status", response_class=HTMLResponse)
+async def site_einheit_status_setzen(
+    request: Request, lage_id: int, site_id: int, dispatch_id: int,
+    status: str = Form(...), grund: str | None = Form(None), db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    site = db.get(IncidentSite, site_id)
+    if not site or site.major_incident_id != lage_id:
+        raise HTTPException(status_code=404)
+    dispatch = _dispatch_fuer_stelle_oder_404(db, dispatch_id, site_id)
+    try:
+        ctx = einheit_service.kontext_fuer_einheit(db, user, dispatch.einheit_id, quelle="funk")
+        result = einheit_service.setze_einheit_status(
+            db, ctx, dispatch, status, user_id=user.id, author_name=get_author_name(request),
+            grund=grund, unterbrechen=True,
+        )
+    except EinheitKonflikt as exc:
+        meldungen = {
+            "auftrag_zurueckgezogen": "Der Auftrag wurde bereits zurückgezogen.",
+            "ungueltiger_uebergang": "Dieser Statusübergang ist nicht erlaubt.",
+            "aktiver_auftrag": "Die Einheit hat bereits einen aktiven Auftrag.",
+        }
+        raise HTTPException(status_code=409, detail=meldungen.get(exc.code, "Status kann nicht gesetzt werden."))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    db.commit()
+    await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
+    await broadcast_lage(lage_id, {"type": "einheit:changed", "einheit_id": dispatch.einheit_id,
+                                   "dispatch_id": dispatch_id, "site_id": site_id})
+    if result["phase_geaendert"]:
+        await broadcast_lage(lage_id, {"type": "site_phase_changed", "site_id": site_id})
+        from app.services.gsl_live_notify import notify_gsl_live
+        await notify_gsl_live(db, lage, org_id=lage.org_id, reason="counts")
+    if result["unterbrochen_dispatch_id"]:
+        interrupted = db.get(resource_service.EinheitSiteDispatch, result["unterbrochen_dispatch_id"])
+        if interrupted:
+            await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": interrupted.site_id})
+    return HTMLResponse(content=_site_detail_html_with_oob(request, db, lage, site, user),
+                        headers={"HX-Retarget": "#siteDetailContent", "HX-Reswap": "innerHTML"})
 
 
 @router.post("/lage/{lage_id}/stellen/{site_id}/einheit-vor-ort", response_class=HTMLResponse)
@@ -1505,7 +1637,7 @@ async def site_pin_save(
             .filter(CitizenReport.site_id == site.id)
             .first()
         )
-    return templates.TemplateResponse(request, "incident_major/_site_detail.html", {
+    context = {
         "user": user,
         "lage": lage,
         "site": site,
@@ -1518,7 +1650,9 @@ async def site_pin_save(
         "sectors": sectors,
         "now": datetime.now(UTC),
         "citizen_report": citizen_report,
-    })
+    }
+    context.update(_site_dispatch_context(request, db, lage, site, user))
+    return templates.TemplateResponse(request, "incident_major/_site_detail.html", context)
 
 
 # ── Foto hochladen ───────────────────────────────────────────────────────────
