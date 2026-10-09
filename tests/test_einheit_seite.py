@@ -4,7 +4,7 @@ import importlib.util
 from pathlib import Path
 
 from app.core.security import sign_session
-from app.models.major_incident import MajorIncident
+from app.models.major_incident import MajorIncident, MajorIncidentStatus
 
 _spec = importlib.util.spec_from_file_location("einheit_api_testhilfe", Path(__file__).with_name("test_einheit_api.py"))
 assert _spec and _spec.loader
@@ -47,6 +47,42 @@ def test_simulation_und_normaler_redirect(client, setup_db):
     assert "SIMULATION" in client.get(f'/einheit?sim={data["e1"]}').text
     _als(client, sign_session(data["recorder"]))
     assert client.get("/einheit", follow_redirects=False).status_code == 302
+
+
+def test_simulation_akzeptiert_standby_und_aktive_lage(client, setup_db):
+    data = _daten()
+    _als(client, sign_session(data["admin"]))
+    assert client.get(f'/einheit?sim={data["e1"]}').status_code == 200
+    db = _db()
+    db.get(MajorIncident, data["lage"]).status = MajorIncidentStatus.standby
+    db.commit()
+    db.close()
+    response = client.get(f'/einheit?sim={data["e1"]}', follow_redirects=False)
+    assert response.status_code == 200
+    assert "SIMULATION" in response.text
+
+
+def test_simulation_fehler_zeigt_seite_statt_redirect(client, setup_db):
+    data = _daten()
+    _als(client, sign_session(data["admin"]))
+    response = client.get("/einheit?sim=999999", follow_redirects=False)
+    assert response.status_code == 404
+    assert "Einheit nicht gefunden" in response.text
+
+    _als(client, sign_session(data["recorder"]))
+    response = client.get(f'/einheit?sim={data["e1"]}', follow_redirects=False)
+    assert response.status_code == 403
+    assert "Simulation nicht möglich" in response.text
+    assert "Keine Berechtigung" in response.text
+
+    db = _db()
+    db.get(MajorIncident, data["lage"]).status = MajorIncidentStatus.closed
+    db.commit()
+    db.close()
+    _als(client, sign_session(data["admin"]))
+    response = client.get(f'/einheit?sim={data["e1"]}', follow_redirects=False)
+    assert response.status_code == 403
+    assert "Lage abgeschlossen" in response.text
 
 
 def test_fahrtenbuch_partial_gerendert(client, setup_db):

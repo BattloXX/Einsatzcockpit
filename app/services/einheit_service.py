@@ -129,6 +129,16 @@ class EinheitKonflikt(Exception):
         self.details = details
 
 
+class EinheitKontextFehler(LookupError):
+    """Aufloesbarer Fehler beim Oeffnen eines Einheiten-Kontexts."""
+
+    def __init__(self, status_code: int, code: str, nachricht: str) -> None:
+        super().__init__(nachricht)
+        self.status_code = status_code
+        self.code = code
+        self.nachricht = nachricht
+
+
 @dataclass(frozen=True)
 class EinheitKontext:
     device_token: DeviceToken | None
@@ -191,14 +201,18 @@ def kontext_fuer_einheit(
     """Löst den Kontext für stellvertretend erfasste Statusmeldungen auf."""
     einheit = db.get(LageEinheit, einheit_id)
     if einheit is None:
-        raise LookupError("Einheit nicht gefunden")
+        raise EinheitKontextFehler(404, "einheit_nicht_gefunden", "Einheit nicht gefunden")
     lage = db.get(MajorIncident, einheit.lage_id)
-    if (
-        lage is None
-        or lage.org_id != user.org_id
-        or lage.status != MajorIncidentStatus.active
-    ):
-        raise LookupError("Einheit nicht gefunden")
+    if lage is None:
+        raise EinheitKontextFehler(404, "einheit_nicht_gefunden", "Einheit nicht gefunden")
+    if lage.status == MajorIncidentStatus.closed:
+        raise EinheitKontextFehler(403, "lage_abgeschlossen", "Lage abgeschlossen")
+    if lage.org_id != user.org_id and not getattr(user, "is_system_admin", False):
+        raise EinheitKontextFehler(403, "keine_berechtigung", "Keine Berechtigung für diese Lage")
+    # In einer Standby-Lage können Einheiten bereits disponiert werden. Die
+    # Simulation darf deshalb jede noch nicht abgeschlossene Lage abbilden.
+    if quelle != "simulation" and lage.status != MajorIncidentStatus.active:
+        raise EinheitKontextFehler(404, "einheit_nicht_gefunden", "Einheit nicht gefunden")
     return EinheitKontext(
         device_token=None,
         vehicle=db.get(VehicleMaster, einheit.vehicle_id) if einheit.vehicle_id else None,

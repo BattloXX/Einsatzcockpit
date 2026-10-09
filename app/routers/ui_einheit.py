@@ -38,6 +38,7 @@ from app.services.broadcast import broadcast_lage
 from app.services.einheit_service import (
     EinheitKonflikt,
     EinheitKontext,
+    EinheitKontextFehler,
     _auftragsdaten,
     _iso_z,
     auftraege_fuer_einheit,
@@ -53,8 +54,29 @@ from app.services.site_log_service import add_site_log, format_lagemeldung, norm
 router = APIRouter(prefix="/einheit", tags=["einheit"])
 
 
+def _simulationskontext(request: Request, db: Session) -> EinheitKontext | None:
+    """Löst den Simulationskontext einmalig für HTML-Hülle und JSON-API auf."""
+    user = getattr(request.state, "user", None)
+    sim = request.headers.get("X-EC-Einheit-Sim") or request.query_params.get("sim")
+    if not sim:
+        return None
+    if user is None or (
+        getattr(request.state, "qr_incident_id", None) is not None
+        or getattr(request.state, "qr_lage_id", None) is not None
+    ):
+        raise EinheitKontextFehler(403, "kein_einheitenkontext", "Keine Berechtigung für die Simulation")
+    if not has_role(user, "admin"):
+        write_audit(db, "gsl.einheit.simulation_abgelehnt", user_id=user.id, payload={"einheit_id": sim})
+        db.commit()
+        raise EinheitKontextFehler(403, "kein_einheitenkontext", "Keine Berechtigung für die Simulation")
+    try:
+        return kontext_fuer_einheit(db, user, int(sim), quelle="simulation")
+    except ValueError as exc:
+        raise EinheitKontextFehler(404, "einheit_nicht_gefunden", "Einheit nicht gefunden") from exc
+
+
 def _optionaler_kontext(request: Request, db: Session) -> EinheitKontext | None:
-    """Wie die API-Dependency, aber fuer die HTML-Huelle ohne 403."""
+    """Löst den optionalen Geräte- oder Simulationskontext der HTML-Hülle auf."""
     user = getattr(request.state, "user", None)
     if user is None:
         return None
@@ -63,21 +85,28 @@ def _optionaler_kontext(request: Request, db: Session) -> EinheitKontext | None:
         query = db.query(DeviceToken).filter(DeviceToken.user_id == user.id, DeviceToken.revoked_at.is_(None))
         token = query.filter(DeviceToken.id == token_id).first() if token_id else query.order_by(DeviceToken.created_at.desc()).first()
         return kontext_fuer_geraet(db, user, token) if token else None
-    sim = request.query_params.get("sim")
-    if sim and has_role(user, "admin"):
-        try:
-            return kontext_fuer_einheit(db, user, int(sim), quelle="simulation")
-        except (ValueError, LookupError):
-            return None
-    return None
+    return _simulationskontext(request, db)
 
 
 def _einheit_seite(request: Request, db: Session, start_dispatch_id: int | None = None):
     user = getattr(request.state, "user", None)
     if user is None:
         return RedirectResponse("/login", status_code=302)
-    ctx = _optionaler_kontext(request, db)
+    simulation_fehler: EinheitKontextFehler | None = None
+    try:
+        ctx = _optionaler_kontext(request, db)
+    except EinheitKontextFehler as exc:
+        ctx = None
+        simulation_fehler = exc
     if ctx is None and not getattr(request.state, "is_device", False):
+        if simulation_fehler:
+            return templates.TemplateResponse(request, "einheit/einheit.html", {
+                "org": None, "lage_id": None, "einheit_id": None, "einheit_label": "Fahrzeug/Gerät",
+                "fahrzeug": "Fahrzeug/Gerät", "is_exercise": False, "simulation": False,
+                "sim_einheit_id": None, "schreibbar": False, "admin_name": "",
+                "start_dispatch_id": start_dispatch_id, "kein_kontext": False,
+                "simulation_fehler": simulation_fehler.nachricht,
+            }, status_code=simulation_fehler.status_code)
         return RedirectResponse("/", status_code=302)
     vehicle_label = "Fahrzeug/Gerät"
     if getattr(request.state, "is_device", False) and user:
@@ -86,8 +115,9 @@ def _einheit_seite(request: Request, db: Session, start_dispatch_id: int | None 
         if token and token.vehicle_master_id:
             vehicle_label = getattr(db.get(VehicleMaster, token.vehicle_master_id), "code", vehicle_label)
     org = None
-    if user and user.org_id:
-        org = db.query(FireDept).filter(FireDept.id == user.org_id).execution_options(include_all_tenants=True).first()
+    org_id = ctx.lage.org_id if ctx else getattr(user, "org_id", None)
+    if org_id:
+        org = db.query(FireDept).filter(FireDept.id == org_id).execution_options(include_all_tenants=True).first()
     return templates.TemplateResponse(request, "einheit/einheit.html", {
         "org": org, "lage_id": ctx.lage.id if ctx else None, "einheit_id": ctx.einheit.id if ctx else None,
         "einheit_label": ctx.einheit.label if ctx else vehicle_label,
@@ -96,7 +126,7 @@ def _einheit_seite(request: Request, db: Session, start_dispatch_id: int | None 
         "sim_einheit_id": ctx.einheit.id if ctx and ctx.simulation else None,
         "schreibbar": bool(ctx and not (ctx.simulation and not ctx.lage.is_exercise)),
         "admin_name": getattr(user, "display_name", "") if ctx and ctx.simulation else "",
-        "start_dispatch_id": start_dispatch_id, "kein_kontext": ctx is None,
+        "start_dispatch_id": start_dispatch_id, "kein_kontext": ctx is None, "simulation_fehler": None,
     })
 
 
@@ -145,20 +175,12 @@ def einheit_kontext(request: Request, db: Session = Depends(get_db)) -> EinheitK
 
     sim = request.headers.get("X-EC-Einheit-Sim") or request.query_params.get("sim")
     if sim:
-        if (
-            getattr(request.state, "qr_incident_id", None) is not None
-            or getattr(request.state, "qr_lage_id", None) is not None
-        ):
-            _fehler(403, "kein_einheitenkontext")
-        if not has_role(user, "admin"):
-            write_audit(db, "gsl.einheit.simulation_abgelehnt", user_id=user.id, payload={"einheit_id": sim})
-            db.commit()
-            _fehler(403, "kein_einheitenkontext")
         try:
-            einheit_id = int(sim)
-            ctx = kontext_fuer_einheit(db, user, einheit_id, quelle="simulation")
-        except ValueError, LookupError:
-            raise HTTPException(status_code=404)
+            ctx = _simulationskontext(request, db)
+            assert ctx is not None
+        except EinheitKontextFehler as exc:
+            _fehler(exc.status_code, exc.code)
+        einheit_id = ctx.einheit.id
         heute = datetime.now(UTC).date()
         schon = (
             db.query(AuditLog.id)
