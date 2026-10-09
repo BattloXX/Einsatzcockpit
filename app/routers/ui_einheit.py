@@ -12,13 +12,14 @@ from typing import Any, NoReturn
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.audit import write_audit
 from app.core.permissions import has_role
 from app.core.security import get_author_name
+from app.core.templating import templates
 from app.db import get_db
 from app.models.major_incident import (
     EINHEIT_STATUS_LABEL,
@@ -31,6 +32,7 @@ from app.models.major_incident import (
     SiteMedia,
     VehiclePosition,
 )
+from app.models.master import FireDept, VehicleMaster
 from app.models.user import AuditLog, DeviceToken
 from app.services.broadcast import broadcast_lage
 from app.services.einheit_service import (
@@ -49,6 +51,63 @@ from app.services.lage_media_service import site_media_path, site_thumb_path, sp
 from app.services.site_log_service import add_site_log, format_lagemeldung, normalisiere_user_kind
 
 router = APIRouter(prefix="/einheit", tags=["einheit"])
+
+
+def _optionaler_kontext(request: Request, db: Session) -> EinheitKontext | None:
+    """Wie die API-Dependency, aber fuer die HTML-Huelle ohne 403."""
+    user = getattr(request.state, "user", None)
+    if user is None:
+        return None
+    if getattr(request.state, "is_device", False):
+        token_id = getattr(request.state, "device_token_id", None)
+        query = db.query(DeviceToken).filter(DeviceToken.user_id == user.id, DeviceToken.revoked_at.is_(None))
+        token = query.filter(DeviceToken.id == token_id).first() if token_id else query.order_by(DeviceToken.created_at.desc()).first()
+        return kontext_fuer_geraet(db, user, token) if token else None
+    sim = request.query_params.get("sim")
+    if sim and has_role(user, "admin"):
+        try:
+            return kontext_fuer_einheit(db, user, int(sim), quelle="simulation")
+        except (ValueError, LookupError):
+            return None
+    return None
+
+
+def _einheit_seite(request: Request, db: Session, start_dispatch_id: int | None = None):
+    user = getattr(request.state, "user", None)
+    if user is None:
+        return RedirectResponse("/login", status_code=302)
+    ctx = _optionaler_kontext(request, db)
+    if ctx is None and not getattr(request.state, "is_device", False):
+        return RedirectResponse("/", status_code=302)
+    vehicle_label = "Fahrzeug/Gerät"
+    if getattr(request.state, "is_device", False) and user:
+        token_id = getattr(request.state, "device_token_id", None)
+        token = db.query(DeviceToken).filter(DeviceToken.id == token_id).first() if token_id else None
+        if token and token.vehicle_master_id:
+            vehicle_label = getattr(db.get(VehicleMaster, token.vehicle_master_id), "code", vehicle_label)
+    org = None
+    if user and user.org_id:
+        org = db.query(FireDept).filter(FireDept.id == user.org_id).execution_options(include_all_tenants=True).first()
+    return templates.TemplateResponse(request, "einheit/einheit.html", {
+        "org": org, "lage_id": ctx.lage.id if ctx else None, "einheit_id": ctx.einheit.id if ctx else None,
+        "einheit_label": ctx.einheit.label if ctx else vehicle_label,
+        "fahrzeug": (ctx.vehicle.code or ctx.vehicle.name) if ctx and ctx.vehicle else (ctx.einheit.label if ctx else vehicle_label),
+        "is_exercise": bool(ctx and ctx.lage.is_exercise), "simulation": bool(ctx and ctx.simulation),
+        "sim_einheit_id": ctx.einheit.id if ctx and ctx.simulation else None,
+        "schreibbar": bool(ctx and not (ctx.simulation and not ctx.lage.is_exercise)),
+        "admin_name": getattr(user, "display_name", "") if ctx and ctx.simulation else "",
+        "start_dispatch_id": start_dispatch_id, "kein_kontext": ctx is None,
+    })
+
+
+@router.get("", response_class=HTMLResponse)
+def einheit_seite(request: Request, db: Session = Depends(get_db)):
+    return _einheit_seite(request, db)
+
+
+@router.get("/auftrag/{dispatch_id}", response_class=HTMLResponse)
+def einheit_auftrag_seite(dispatch_id: int, request: Request, db: Session = Depends(get_db)):
+    return _einheit_seite(request, db, dispatch_id)
 
 
 def _fehler(status: int, code: str, details: dict | None = None) -> NoReturn:

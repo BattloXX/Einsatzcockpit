@@ -1,0 +1,77 @@
+<style>
+/* GSL-Einheitenmodus: Ergänzungen zum Fahrtenbuch-Layout (_fab_styles.html). */
+[x-cloak]{display:none !important;}
+
+.einheit-meta{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;justify-content:flex-end;font-size:.82rem;color:var(--text-muted);}
+.einheit-online{color:#35b56a;font-weight:700;}
+.einheit-offline{color:#f59e0b;font-weight:700;}
+.einheit-sub{font-size:.85rem;color:var(--text-muted);}
+
+.einheit-umschalter{display:flex;gap:.25rem;margin-top:.75rem;flex-wrap:wrap;}
+.einheit-umschalter a{padding:.55rem .9rem;min-height:44px;display:inline-flex;align-items:center;border:1px solid var(--border);border-radius:999px;color:var(--text);font-weight:600;}
+.einheit-umschalter a.is-active{background:var(--red);border-color:var(--red);color:#fff;}
+.einheit-umschalter__klassisch{margin-left:auto;}
+
+/* Chips: Priorität, Status, NEU, Outbox */
+.einheit-chip{display:inline-flex;align-items:center;border:1px solid var(--border);border-radius:999px;padding:.25rem .6rem;font-size:.75rem;font-weight:700;background:var(--surface);text-transform:none;}
+.einheit-chip--button{min-height:40px;cursor:pointer;}
+.einheit-chip--warn{border-color:#f59e0b;color:#fbbf24;}
+.einheit-chip--red{border-color:#d83030;color:#ff8b8b;}
+.einheit-chip--orange{border-color:#f59e0b;color:#fbbf24;}
+.einheit-chip--yellow{border-color:#d6b000;color:#f5df61;}
+.einheit-chip--muted{color:var(--text-muted);}
+.einheit-chip--status{border-color:var(--outline);}
+.einheit-chip--neu{background:#f59e0b;border-color:#f59e0b;color:#111;}
+
+/* Karten: Akzentfarbe je Priorität (SITE_PRIORITY_COLOR) */
+.einheit-card{cursor:pointer;}
+.einheit-card--aktuell{box-shadow:0 0 0 2px var(--red-light), var(--shadow-card);}
+.einheit-card--kompakt{padding:.8rem .9rem;}
+.einheit-card--neu{box-shadow:0 0 0 2px #f59e0b, var(--shadow-card);}
+.einheit-card__kopf{display:flex;justify-content:space-between;gap:.5rem;align-items:flex-start;}
+.einheit-card__fuss{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;margin-top:.6rem;}
+.einheit-prio--sofort{--fab-accent:#d83030;}
+.einheit-prio--dringend{--fab-accent:#f59e0b;}
+.einheit-prio--normal{--fab-accent:#d6b000;}
+.einheit-prio--aufschiebbar,.einheit-prio--keine{--fab-accent:var(--outline);}
+
+.einheit-address{font-size:1.1rem;font-weight:700;margin:.35rem 0;}
+.einheit-auftrag{background:var(--surface);border-left:3px solid var(--red-light);padding:.6rem .75rem;margin:.6rem 0;font-weight:600;white-space:pre-wrap;}
+.einheit-zeile{display:flex;justify-content:space-between;gap:.75rem;padding:.35rem 0;border-bottom:1px solid var(--border);}
+.einheit-zeile:last-child{border-bottom:0;}
+.einheit-objekt{display:flex;flex-direction:column;align-items:flex-start;width:100%;margin-top:.35rem;}
+
+.einheit-liste summary{cursor:pointer;padding:.6rem 0;font-weight:700;}
+.einheit-liste__eintrag{display:flex;justify-content:space-between;width:100%;min-height:48px;padding:.5rem .25rem;border-bottom:1px solid var(--border);text-align:left;color:var(--text);}
+
+/* Aktionen: große Touch-Flächen */
+.einheit-aktionen{display:flex;flex-direction:column;gap:.6rem;}
+.einheit-action{min-height:56px;width:100%;}
+.einheit-action--gefahr{border-color:#d83030;color:#ff8b8b;}
+.einheit-actions-row{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;}
+.einheit-actions-row .btn{min-height:52px;}
+.einheit-status-aktuell{display:flex;flex-direction:column;gap:.15rem;padding:.6rem .75rem;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface);}
+.einheit-status-pending{color:#f59e0b;font-weight:700;font-size:.85rem;}
+
+.einheit-warning{display:flex;justify-content:space-between;align-items:center;gap:.75rem;background:rgba(245,158,11,.12);border:1px solid #f59e0b;padding:.6rem .75rem;border-radius:var(--radius-sm);margin:.6rem 0;}
+
+.einheit-simulation{background:#a84f00;color:#fff;padding:.75rem 1rem;border-radius:var(--radius-md);margin-bottom:1rem;}
+.einheit-simulation__ende{color:#fff;text-decoration:underline;font-weight:700;}
+
+.einheit-log{padding:.45rem 0;border-bottom:1px solid var(--border);}
+.einheit-log--own{border-left:3px solid var(--red-light);padding-left:.6rem;}
+.einheit-log__text{white-space:pre-wrap;}
+.einheit-thumbs{display:flex;gap:.5rem;flex-wrap:wrap;}
+.einheit-thumbs img{width:96px;height:72px;object-fit:cover;border-radius:var(--radius-sm);}
+
+.einheit-flyout-body{padding:1rem;overflow:auto;display:flex;flex-direction:column;gap:.75rem;}
+.einheit-formular{display:flex;flex-direction:column;gap:.75rem;}
+.einheit-textarea{min-height:200px;font-size:1.05rem;}
+
+@media (max-width:760px){
+  .einheit-meta{justify-content:flex-start;}
+  .fab-header__top{flex-direction:column;}
+  .einheit-actions-row{grid-template-columns:1fr;}
+  .einheit-umschalter__klassisch{margin-left:0;}
+}
+</style>

@@ -326,6 +326,20 @@ def index(request: Request, db: Session = Depends(get_db)):
         # Nicht angemeldet → öffentliche Startseite (Ops-Room-Design, /funktionen etc.).
         from app.routers.public import render_start
         return render_start(request, kontakt=request.query_params.get("kontakt"))
+    # Einheiten-Tablets beginnen im auftragsorientierten Modus, solange nicht
+    # gleichzeitig ein klassischer Einzeleinsatz fuer ihr Fahrzeug aktiv ist.
+    if request.query_params.get("klassisch") is None:
+        from app.models.user import DeviceToken
+        from app.services.einheit_service import ist_einheit_geraet, kontext_fuer_geraet
+        if getattr(request.state, "is_device", False) and ist_einheit_geraet(request, db):
+            token_id = getattr(request.state, "device_token_id", None)
+            token = db.query(DeviceToken).filter(DeviceToken.id == token_id).first() if token_id else None
+            ctx = kontext_fuer_geraet(db, user, token) if token else None
+            if ctx and ctx.vehicle and not db.query(IncidentVehicle.id).join(Incident).filter(
+                IncidentVehicle.vehicle_master_id == ctx.vehicle.id,
+                IncidentVehicle.removed_at.is_(None), Incident.status == "active",
+            ).first():
+                return RedirectResponse("/einheit", status_code=302)
     active_major = (
         db.query(MajorIncident)
         .filter(
