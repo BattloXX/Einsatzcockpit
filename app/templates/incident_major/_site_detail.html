@@ -48,6 +48,23 @@
 }
 .res-badge--alarmed  { background: rgba(242,176,46,.2); color: var(--yellow); }
 .res-badge--onsite   { background: rgba(24,169,87,.2);  color: var(--green); }
+.res-badge--muted { background: rgba(148,163,184,.2); color: var(--text-muted); }
+.res-badge--blue { background: rgba(59,130,246,.2); color: #93c5fd; }
+.res-badge--orange { background: rgba(242,176,46,.2); color: var(--yellow); }
+.res-badge--purple { background: rgba(168,85,247,.2); color: #d8b4fe; }
+.res-badge--green { background: rgba(24,169,87,.2); color: var(--green); }
+.res-badge--done { background: rgba(24,169,87,.16); color: var(--green); }
+.res-badge--red { background: rgba(216,48,48,.2); color: var(--red-light); }
+.dispatch-meta { display:flex; gap:6px; flex-wrap:wrap; width:100%; color:var(--text-muted); font-size:.72rem; }
+.dispatch-actions { display:flex; gap:4px; flex-wrap:wrap; }
+.dispatch-details { width:100%; }
+.dispatch-details summary { cursor:pointer; color:var(--text-muted); font-size:.75rem; }
+@media (max-width:760px) {
+  .res-row { align-items:flex-start; }
+  .res-label { flex-basis:calc(100% - 7rem); }
+  .dispatch-actions { width:100%; }
+  .dispatch-actions .btn { flex:1; }
+}
 .res-label { flex: 1; font-weight: 600; }
 .res-time  { font-size: .7rem; color: var(--text-muted); white-space: nowrap; font-family: 'JetBrains Mono', monospace; }
 .media-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
@@ -309,17 +326,40 @@
 
     {# ── Disponierte LageEinheiten (Mehrfach-Dispatch-System) ──────── #}
     {% if site_dispatches is defined %}
+    {% if site_dispatches and site_dispatches|selectattr('beendet_at')|list|length == site_dispatches|length and site.phase.value not in ['erledigt', 'abgebrochen'] %}
+    <div style="margin-bottom:8px;padding:7px 9px;background:rgba(242,176,46,.1);border-left:3px solid var(--yellow);font-size:.8rem;">
+      Alle Einheiten fertig – Stelle abschließen?
+    </div>
+    {% endif %}
     {% for dispatch in site_dispatches %}
     {% set e = dispatch.einheit %}
     <div class="res-row">
-      <span class="res-badge {% if dispatch.vor_ort_at %}res-badge--onsite{% else %}res-badge--alarmed{% endif %}">
-        {%- if dispatch.vor_ort_at %}VOR ORT{%- else %}DISPONIERT{%- endif -%}
+      <span class="res-badge res-badge--{{ einheit_status_color[dispatch.einheit_status] }}">
+        {{ einheit_status_label[dispatch.einheit_status] }}
       </span>
-      <span class="res-label">{{ e.label }}</span>
-      <span class="res-time">{{ dispatch.dispatched_at|local_time }}</span>
+      <span class="res-label">
+        {{ e.label }}
+        {% if einheit_hat_tablet.get(e.id) %}📱{% else %}📻{% endif %}
+      </span>
+      <div class="dispatch-meta">
+        <span>Zugewiesen {{ dispatch.dispatched_at|local_time }}</span>
+        {% if dispatch.bestaetigt_at %}<span>Bestätigt {{ dispatch.bestaetigt_at|local_time }}</span>{% endif %}
+        {% if dispatch.vor_ort_at %}<span>Vor Ort {{ dispatch.vor_ort_at|local_time }}</span>{% endif %}
+        {% if dispatch.beendet_at %}<span>Beendet {{ dispatch.beendet_at|local_time }}</span>{% endif %}
+        {% if dispatch.letzte_rueckmeldung_at %}<span>Letzte Rückmeldung {{ dispatch.letzte_rueckmeldung_at|local_time }}</span>{% endif %}
+      </div>
+      {% if dispatch.auftrag %}
+      <div style="width:100%;font-size:.8rem;">{{ dispatch.auftrag }}</div>
+      {% endif %}
+      {% if dispatch.geaendert_at %}
+      <div class="res-time">geändert {{ dispatch.geaendert_at|local_time }}</div>
+      {% endif %}
+      {% if dispatch.beendet_grund %}
+      <div style="width:100%;font-size:.78rem;color:var(--text-muted);">Grund: {{ dispatch.beendet_grund }}</div>
+      {% endif %}
       {% if can_edit %}
-      <div style="display:flex;gap:4px;" onclick="event.stopPropagation()">
-        {% if not dispatch.vor_ort_at %}
+      <div class="dispatch-actions" onclick="event.stopPropagation()">
+        {% if not dispatch.vor_ort_at and not dispatch.beendet_at %}
         <div id="dispatch-confirm-wrap-{{ e.id }}">
           <form hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/einheit-vor-ort"
                 hx-target="#siteDetailContent"
@@ -329,13 +369,51 @@
           </form>
         </div>
         {% endif %}
+        {% if not dispatch.beendet_at %}
         <form hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/einheit-abziehen"
               hx-target="#siteDetailContent"
               hx-swap="innerHTML"
               hx-vals='{"_csrf":"{{ request.state.csrf_token }}","einheit_id":"{{ e.id }}"}'>
           <button type="submit" class="btn btn--xs btn--ghost">Abziehen</button>
         </form>
+        {% else %}
+        <form hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/einheit/{{ dispatch.id }}/wiedereroeffnen"
+              hx-target="#siteDetailContent"
+              hx-swap="innerHTML"
+              hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'>
+          <button type="submit" class="btn btn--xs btn--secondary">Wiedereröffnen</button>
+        </form>
+        {% endif %}
       </div>
+      <details class="dispatch-details">
+        <summary>Auftrag bearbeiten</summary>
+        <form hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/einheit/{{ dispatch.id }}/auftrag"
+              hx-target="#siteDetailContent"
+              hx-swap="innerHTML"
+              hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'>
+          <textarea name="auftrag" class="form-input" maxlength="2000" placeholder="Auftrag">{{ dispatch.auftrag or '' }}</textarea>
+          <input type="number" name="reihenfolge" class="form-input" min="1" value="{{ dispatch.reihenfolge or '' }}" placeholder="Reihenfolge">
+          <button type="submit" class="btn btn--xs btn--secondary">Speichern</button>
+        </form>
+      </details>
+      {% if not dispatch.beendet_at %}
+      <form style="width:100%;display:flex;gap:4px;flex-wrap:wrap;" hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/einheit/{{ dispatch.id }}/status"
+            hx-target="#siteDetailContent"
+            hx-swap="innerHTML"
+            hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'>
+        <select name="status" class="form-select form-select--sm" required onchange="this.form.querySelector('[name=grund]').required=this.value==='nicht_durchfuehrbar'">
+          <option value="">Status (per Funk)</option>
+          {% for next_status in erlaubte_uebergaenge[dispatch.einheit_status] %}
+          <option value="{{ next_status }}">{{ einheit_status_label[next_status] }}</option>
+          {% endfor %}
+        </select>
+        <input type="text" name="grund" class="form-input" placeholder="Grund bei nicht durchführbar">
+        <button type="submit" class="btn btn--xs btn--secondary">Setzen</button>
+      </form>
+      {% endif %}
+      {% endif %}
+      {% if is_admin %}
+      <a href="/einheit?sim={{ e.id }}" target="_blank" rel="noopener" class="res-time">📱 Als Einheit ansehen</a>
       {% endif %}
     </div>
     {% endfor %}
@@ -356,7 +434,7 @@
           hx-target="#siteDetailContent"
           hx-swap="innerHTML"
           hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'>
-      <div style="display:flex;gap:6px;align-items:center;">
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
         <select id="siteDisponierenEinheitSelect" name="einheit_id" class="form-select form-select--sm" style="flex:1;">
           {% for e in dispatchable %}
           <option value="{{ e.id }}"
@@ -367,6 +445,8 @@
         </select>
         <button type="submit" class="btn btn--secondary btn--sm">+ Disponieren</button>
       </div>
+      <textarea name="auftrag" class="form-input" maxlength="2000" placeholder="Auftrag (optional)" style="margin-top:6px;"></textarea>
+      <input type="number" name="reihenfolge" class="form-input" min="1" placeholder="Reihenfolge (optional)" style="margin-top:6px;">
     </form>
     {% else %}
     <div style="font-size:.75rem;color:var(--text-muted);margin-top:6px;font-style:italic;">Keine Einheiten verfügbar – in Ressourcenverwaltung hinzufügen.</div>

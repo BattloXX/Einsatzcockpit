@@ -21,6 +21,7 @@ from app.models.major_incident import (
     LageJournalEntry,
     MajorIncident,
     Sector,
+    SiteLogEntry,
 )
 
 # ── Status-Konstanten ─────────────────────────────────────────────────────────
@@ -241,6 +242,8 @@ def dispatch_to_site(
     lage_id: int,
     site_id: int,
     *,
+    auftrag: str | None = None,
+    reihenfolge: int | None = None,
     author_name: str | None = None,
     user_id: int | None = None,
 ) -> EinheitSiteDispatch:
@@ -266,6 +269,7 @@ def dispatch_to_site(
     if existing:
         raise ValueError(f"Einheit bereits für \"{site.bezeichnung}\" disponiert")
 
+    auftrag, reihenfolge = _validiere_auftragsdaten(auftrag, reihenfolge)
     now = datetime.now(UTC)
     dispatch = EinheitSiteDispatch(
         einheit_id=einheit_id,
@@ -274,6 +278,8 @@ def dispatch_to_site(
         status_at=now,
         dispatched_by=user_id,
         author_name=author_name,
+        auftrag=auftrag,
+        reihenfolge=reihenfolge,
     )
     db.add(dispatch)
     db.flush()
@@ -286,6 +292,72 @@ def dispatch_to_site(
              f'{e.label} → Einsatzstelle "{site.bezeichnung}" disponiert (DISPONIERT)',
              category="ressource", author_name=author_name, user_id=user_id)
     return dispatch
+
+
+def _validiere_auftragsdaten(
+    auftrag: str | None,
+    reihenfolge: int | None,
+) -> tuple[str | None, int | None]:
+    bereinigt = auftrag.strip() if auftrag else None
+    if bereinigt and len(bereinigt) > 2000:
+        raise ValueError("Auftrag darf höchstens 2000 Zeichen haben")
+    if reihenfolge is not None and reihenfolge < 1:
+        raise ValueError("Reihenfolge muss mindestens 1 sein")
+    return bereinigt, reihenfolge
+
+
+def aendere_auftrag(
+    db: Session,
+    dispatch: EinheitSiteDispatch,
+    *,
+    auftrag: str | None,
+    reihenfolge: int | None,
+    author_name: str | None,
+    user_id: int | None,
+) -> bool:
+    """Ändert Auftragsdaten ohne selbst zu committen."""
+    auftrag, reihenfolge = _validiere_auftragsdaten(auftrag, reihenfolge)
+    if dispatch.auftrag == auftrag and dispatch.reihenfolge == reihenfolge:
+        return False
+    now = datetime.now(UTC)
+    dispatch.auftrag = auftrag
+    dispatch.reihenfolge = reihenfolge
+    dispatch.version += 1
+    dispatch.geaendert_at = now
+    text = f"Auftrag geändert: {dispatch.einheit.label}"
+    db.add(SiteLogEntry(
+        incident_site_id=dispatch.site_id, kind="resource", text=text,
+        user_id=user_id, author_name=author_name,
+    ))
+    _journal(db, dispatch.einheit.lage_id, text, category="ressource",
+             author_name=author_name, user_id=user_id)
+    return True
+
+
+def oeffne_auftrag_wieder(
+    db: Session,
+    dispatch: EinheitSiteDispatch,
+    *,
+    author_name: str | None,
+    user_id: int | None,
+) -> None:
+    """Öffnet einen beendeten Auftrag ohne selbst zu committen wieder."""
+    if dispatch.beendet_at is None:
+        raise ValueError("Auftrag ist nicht beendet")
+    now = datetime.now(UTC)
+    dispatch.einheit_status = "zugewiesen"
+    dispatch.status_at = now
+    dispatch.beendet_at = None
+    dispatch.beendet_grund = None
+    dispatch.version += 1
+    dispatch.geaendert_at = now
+    text = f"Auftrag wiedereröffnet: {dispatch.einheit.label}"
+    db.add(SiteLogEntry(
+        incident_site_id=dispatch.site_id, kind="resource", text=text,
+        user_id=user_id, author_name=author_name,
+    ))
+    _journal(db, dispatch.einheit.lage_id, text, category="ressource",
+             author_name=author_name, user_id=user_id)
 
 
 def set_vor_ort_at_site(
@@ -451,6 +523,33 @@ def get_active_dispatches_for_site(
         .order_by(EinheitSiteDispatch.dispatched_at)
         .all()
     )
+
+
+def get_dispatches_for_site_anzeige(
+    db: Session,
+    site_id: int,
+) -> list[EinheitSiteDispatch]:
+    """Nicht zurückgezogene Dispatches: aktive (nach Reihenfolge, dann Zeit) vor beendeten."""
+    db.flush()
+    dispatches = (
+        db.query(EinheitSiteDispatch)
+        .filter(
+            EinheitSiteDispatch.site_id == site_id,
+            EinheitSiteDispatch.withdrawn_at.is_(None),
+        )
+        .all()
+    )
+    # Sortierung in Python: wenige Zeilen je Stelle, vermeidet datenbankspezifische
+    # NULL-Sortierung (SQLite vs. MariaDB).
+    aktive = sorted(
+        (d for d in dispatches if d.beendet_at is None),
+        key=lambda d: (d.reihenfolge is None, d.reihenfolge or 0, d.dispatched_at),
+    )
+    beendete = sorted(
+        (d for d in dispatches if d.beendet_at is not None),
+        key=lambda d: d.beendet_at or datetime.min,
+    )
+    return aktive + beendete
 
 
 def get_dispatch_counts_for_site(
