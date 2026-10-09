@@ -452,14 +452,21 @@ PriorityLiteral = Literal["low", "normal", "high", "critical"]
 DirectionLiteral = Literal["both", "forward", "backward", ""]
 ClosureStatusLiteral = Literal["current", "active", "planned", "expired", "cancelled", "all"]
 GeometryFilterLiteral = Literal["", "pruefen", "ok", "fehlt"]
+ClosurePeriodLiteral = Literal["", "heute", "7tage", "30tage"]
+ClosureScopeLiteral = Literal["alle", "eigene", "nachbarn"]
+ShareLinkActionLiteral = Literal["abrufen", "erzeugen", "widerrufen"]
+StatsScopeLiteral = Literal["alle", "oeffentlich"]
 
 
-@server.tool(name="strassensperren_liste", description="Listet sichtbare Straßensperren. Einschränkungstypen: closed (Vollsperre), partial (Teilsperre), construction (Baustelle), one_way (Einbahn), weight_limit (Gewicht), height_limit (Höhe), width_limit (Breite), residents_only (Anrainer), difficult_passage (erschwert), other (sonstige).")  # noqa: E501
-async def strassensperren_liste(status: ClosureStatusLiteral = "current", von: str = "", bis: str = "", strasse: str = "", restriction_type: RestrictionTypeLiteral = "", nur_eigene: bool = False, limit: int = 50, geometrie: GeometryFilterLiteral = "", ctx: Context | None = None) -> dict[str, object]:  # noqa: E501
-    return await _call_registered_tool("strassensperren_liste", status=status, von=von, bis=bis, strasse=strasse, restriction_type=restriction_type, nur_eigene=nur_eigene, limit=limit, geometrie=geometrie)  # noqa: E501
+@server.tool(name="strassensperren_liste", description="Listet sichtbare Straßensperren (road_closures_list). Einschränkungstypen: closed (Vollsperre), partial (Teilsperre), construction (Baustelle), one_way (Einbahn), weight_limit (Gewicht), height_limit (Höhe), width_limit (Breite), residents_only (Anrainer), difficult_passage (erschwert), other (sonstige).")  # noqa: E501
+async def strassensperren_liste(status: ClosureStatusLiteral = "current", von: str = "", bis: str = "", strasse: str = "", restriction_type: RestrictionTypeLiteral = "", nur_eigene: bool = False, limit: int = 50, geometrie: GeometryFilterLiteral = "", zeitraum: ClosurePeriodLiteral = "", bereich: ClosureScopeLiteral = "alle", lat: float | None = None, lng: float | None = None, radius_m: float | None = None, ctx: Context | None = None) -> dict[str, object]:  # noqa: E501
+    return await _call_registered_tool("strassensperren_liste", status=status, von=von, bis=bis, strasse=strasse, restriction_type=restriction_type, nur_eigene=nur_eigene, limit=limit, geometrie=geometrie, zeitraum=zeitraum, bereich=bereich, lat=lat, lng=lng, radius_m=radius_m)  # noqa: E501
 
 
-@server.tool(name="strassensperre_lesen", description="Liest alle Details einer sichtbaren Straßensperre.")
+@server.tool(
+    name="strassensperre_lesen",
+    description="Liest alle Details einer sichtbaren Straßensperre (road_closures_get).",
+)
 async def strassensperre_lesen(road_closure_id: int, ctx: Context | None = None) -> dict[str, object]:
     return await _call_registered_tool("strassensperre_lesen", road_closure_id=road_closure_id)
 
@@ -490,7 +497,8 @@ async def strassensperren_kataloge(ctx: Context | None = None) -> dict[str, obje
 @server.tool(
     name="strassensperre_anlegen",
     description=(
-        "Legt eine Sperre an oder schlägt bei Änderungen eine bestehende Sperre zum Aktualisieren oder Ersetzen vor."
+        "Legt eine Sperre an (road_closures_create) oder schlägt bei Änderungen eine bestehende Sperre "
+        "zum Aktualisieren oder Ersetzen vor."
     ),
 )
 async def strassensperre_anlegen(
@@ -514,6 +522,8 @@ async def strassensperre_anlegen(
     reference_number: str = "",
     exceptions: str = "",
     authority: str = "",
+    reason: str = "",
+    teams_melden: bool | None = None,
     geometry_geojson: dict | str | None = None,
     visible_for_org_ids: list[int] | None = None,
     duplikat_bestaetigt: bool = False,
@@ -543,6 +553,8 @@ async def strassensperre_anlegen(
         reference_number=reference_number,
         exceptions=exceptions,
         authority=authority,
+        reason=reason,
+        teams_melden=teams_melden,
         geometry_geojson=geometry_geojson,
         visible_for_org_ids=visible_for_org_ids,
         duplikat_bestaetigt=duplikat_bestaetigt,
@@ -553,7 +565,10 @@ async def strassensperre_anlegen(
 
 @server.tool(
     name="strassensperre_aktualisieren",
-    description="Aktualisiert eine eigene Sperre; geometry_geojson setzt geometry_status auf ok. Kein MCP-Löschen.",
+    description=(
+        "Aktualisiert eine eigene Sperre (road_closures_update); geometry_geojson setzt geometry_status auf ok. "
+        "Kein MCP-Löschen."
+    ),
 )
 async def strassensperre_aktualisieren(
     road_closure_id: int,
@@ -603,6 +618,37 @@ async def strassensperre_reaktivieren(
     return await _call_registered_tool("strassensperre_reaktivieren", road_closure_id=road_closure_id)
 
 
+@server.tool(name="strassensperre_beenden", description="Beendet eine eigene Sperre vorzeitig (road_closures_close).")
+async def strassensperre_beenden(road_closure_id: int, grund: str, ende: str = "", ctx: Context | None = None) -> dict[str, object]:  # noqa: E501
+    return await _call_registered_tool("strassensperre_beenden", road_closure_id=road_closure_id, grund=grund, ende=ende)  # noqa: E501
+
+
+@server.tool(
+    name="strassensperre_teams_senden",
+    description="Stellt eine Teams-Meldung in die Warteschlange (road_closures_publish).",
+)
+async def strassensperre_teams_senden(road_closure_id: int, ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("strassensperre_teams_senden", road_closure_id=road_closure_id)
+
+
+@server.tool(
+    name="strassensperre_freigabelink",
+    description="Verwaltet einen öffentlichen Freigabelink (road_closures_share_link).",
+)
+async def strassensperre_freigabelink(road_closure_id: int, aktion: ShareLinkActionLiteral = "abrufen", gueltig_bis: str = "", ctx: Context | None = None) -> dict[str, object]:  # noqa: E501
+    return await _call_registered_tool("strassensperre_freigabelink", road_closure_id=road_closure_id, aktion=aktion, gueltig_bis=gueltig_bis)  # noqa: E501
+
+
+@server.tool(
+    name="strassensperren_kennzahlen",
+    description="Liefert Kennzahlen sichtbarer Straßensperren (road_closures_stats).",
+)
+async def strassensperren_kennzahlen(
+    bereich: StatsScopeLiteral = "alle", ctx: Context | None = None
+) -> dict[str, object]:
+    return await _call_registered_tool("strassensperren_kennzahlen", bereich=bereich)
+
+
 @server.tool(name="strassensperren_suchen", description="Sucht sichtbare Straßensperren nach Worten in Titel, Straße, Beschreibung und Abschnitt; status wie bei strassensperren_liste.")  # noqa: E501
 async def strassensperren_suchen(suchtext: str, status: str = "all", von: str = "", bis: str = "", limit: int = 20, ctx: Context | None = None) -> dict[str, object]:  # noqa: E501
     return await _call_registered_tool("strassensperren_suchen", suchtext=suchtext, status=status, von=von, bis=bis, limit=limit)  # noqa: E501
@@ -613,17 +659,17 @@ async def strassensperren_im_gebiet(lat: float, lng: float, radius_m: int = 2000
     return await _call_registered_tool("strassensperren_im_gebiet", lat=lat, lng=lng, radius_m=radius_m, status=status)
 
 
-@server.tool(name="einsatz_strassensperren", description="Liest die gespeicherten Sperren einer sichtbaren Einsatz-Anfahrt.")  # noqa: E501
+@server.tool(name="einsatz_strassensperren", description="Liest die gespeicherten Sperren einer sichtbaren Einsatz-Anfahrt (road_closures_route_check).")  # noqa: E501
 async def einsatz_strassensperren(incident_id: int, ctx: Context | None = None) -> dict[str, object]:
     return await _call_registered_tool("einsatz_strassensperren", incident_id=incident_id)
 
 
-@server.tool(name="einsatz_anfahrtsroute_pruefen", description="Prüft die gespeicherte Einsatzroute oder berechnet live mit incident_id oder lat und lng; Fahrzeugprofile werden noch nicht berücksichtigt.")  # noqa: E501
+@server.tool(name="einsatz_anfahrtsroute_pruefen", description="Prüft die gespeicherte Einsatzroute oder berechnet live mit incident_id oder lat und lng (road_closures_route_check); Fahrzeugprofile werden noch nicht berücksichtigt.")  # noqa: E501
 async def einsatz_anfahrtsroute_pruefen(incident_id: int | None = None, lat: float | None = None, lng: float | None = None, vehicle_id: int | None = None, ctx: Context | None = None) -> dict[str, object]:  # noqa: E501
     return await _call_registered_tool("einsatz_anfahrtsroute_pruefen", incident_id=incident_id, lat=lat, lng=lng, vehicle_id=vehicle_id)  # noqa: E501
 
 
-@server.tool(name="strassensperren_entlang_route", description="Berechnet sichtbare Sperren entlang einer freien Start-Ziel-Route; Fahrzeugprofile werden noch nicht berücksichtigt.")  # noqa: E501
+@server.tool(name="strassensperren_entlang_route", description="Berechnet sichtbare Sperren entlang einer freien Start-Ziel-Route (road_closures_route_check); Fahrzeugprofile werden noch nicht berücksichtigt.")  # noqa: E501
 async def strassensperren_entlang_route(start_lat: float, start_lng: float, ziel_lat: float, ziel_lng: float, vehicle_id: int | None = None, ctx: Context | None = None) -> dict[str, object]:  # noqa: E501
     return await _call_registered_tool("strassensperren_entlang_route", start_lat=start_lat, start_lng=start_lng, ziel_lat=ziel_lat, ziel_lng=ziel_lng, vehicle_id=vehicle_id)  # noqa: E501
 

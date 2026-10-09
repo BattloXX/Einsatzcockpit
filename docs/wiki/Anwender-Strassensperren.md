@@ -58,6 +58,8 @@ Im Detail einer Sperre kann die offizielle Verordnung als PDF hochgeladen und vo
 
 Der MCP-Assistent kennt alle erlaubten Werte über `strassensperren_kataloge`. Einschränkungstypen akzeptieren in der Oberfläche und im Service auch gebräuchliche Aliase, etwa `vollsperre` für `closed`, `teilsperre` für `partial` oder `hoehe` für `height_limit`.
 
+Für MCP stehen zusätzlich `strassensperre_beenden` (`road_closures_close`), `strassensperre_teams_senden` (`road_closures_publish`), `strassensperre_freigabelink` (`road_closures_share_link`) und `strassensperren_kennzahlen` (`road_closures_stats`) zur Verfügung. Die Liste heißt auf Englisch `road_closures_list`, Details `road_closures_get`, Anlage `road_closures_create`, Aktualisierung `road_closures_update` und die Routenprüfung `road_closures_route_check`.
+
 ### Navigation und Filter
 
 Über „Zurück“ gelangt man von der Übersicht zur Konsole und aus Details wieder zu der gefilterten Übersicht. Die Filtergruppen lassen sich kombinieren; aktive Filter werden angezeigt und können mit „Zurücksetzen“ entfernt werden. Die Auswahl wird für den nächsten Aufruf der Übersicht gemerkt. Bei aktivem Modul zeigt die Konsole außerdem eine Kachel mit den aktuellen und geplanten Straßensperren.
