@@ -41,6 +41,7 @@ class RelatedClosure:
 EDITABLE_FIELDS = {
     "title",
     "description",
+    "reason",
     "city",
     "reference_number",
     "exceptions",
@@ -211,7 +212,9 @@ def validate_closure_data(
             json.loads(meta)
         except json.JSONDecodeError as exc:
             raise ValueError("Ungültige Geometriemetadaten.") from exc
-    string_limits = {"city": 120, "reference_number": 120, "authority": 200, "source": 200, "source_url": 1000}
+    string_limits = {
+        "reason": 300, "city": 120, "reference_number": 120, "authority": 200, "source": 200, "source_url": 1000,
+    }
     for field, maximum in string_limits.items():
         value = values.get(field)
         if value is not None and (not isinstance(value, str) or len(value.strip()) > maximum):

@@ -112,6 +112,9 @@ _TENANT_TABLE_NAMES: frozenset[str] = frozenset({
     "road_closure",
     "road_closure_change",
     "road_closure_document",
+    "road_closure_access_token",
+    "road_closure_teams_config",
+    "road_closure_notification",
     "incident_route",
     "incident_road_closure",
     # Teilnehmerlisten-Modul (TenantScoped via Mixin)

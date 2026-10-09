@@ -45,9 +45,12 @@ def _set_session_cookie(response: Response, token: str, max_age: int | None = No
 
 def _safe_next(next_url: str | None) -> str:
     """Nur interne Ziele als Rücksprung zulassen (Open-Redirect-Schutz)."""
-    if next_url and next_url.startswith("/") and not next_url.startswith("//"):
-        return next_url
-    return "/"
+    if not next_url or not next_url.startswith("/") or next_url.startswith("//"):
+        return "/"
+    # Browser behandeln "\\" wie "/" ("/\\evil.com" == "//evil.com"); Steuerzeichen werden teils entfernt.
+    if "\\" in next_url or any(ord(char) < 32 or ord(char) == 127 for char in next_url):
+        return "/"
+    return next_url
 
 
 @router.get("/login", response_class=HTMLResponse)

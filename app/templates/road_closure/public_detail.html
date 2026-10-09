@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>{{ data.title }} – Straßensperre</title>
+<link rel="stylesheet" href="/static/css/app.css?v={{ ASSET_VERSION }}">
+<link rel="stylesheet" href="/static/css/leaflet.min.css">
+<style>
+:root{--pd-bg:#0b1326;--pd-card:#171f33;--pd-border:#2a3550;--pd-text:#e6e9f2;--pd-muted:#9aa4bd;--pd-accent:#ffb3ac}
+body{margin:0;background:var(--pd-bg);color:var(--pd-text);font-family:"Hanken Grotesk",system-ui,sans-serif}
+.pd{max-width:960px;margin:0 auto;padding:16px 16px 40px}
+.pd-head{display:flex;align-items:center;gap:12px;padding:8px 0 16px;border-bottom:1px solid var(--pd-border)}
+.pd-head img{width:44px;height:44px;object-fit:contain}
+.pd-head__org{font-weight:700}.pd-head__sub{color:var(--pd-muted);font-size:.85rem}
+.pd-card{background:var(--pd-card);border:1px solid var(--pd-border);border-radius:14px;padding:18px;margin-top:16px}
+.pd-title{margin:0 0 8px;font-size:1.6rem;line-height:1.2}
+.pd-pills{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.pd-pill{padding:3px 10px;border-radius:999px;font-size:.78rem;font-weight:700;background:#2a3550}
+.pd-pill--red{background:#d32f2f;color:#fff}.pd-pill--orange{background:#f57c00;color:#fff}
+.pd-pill--yellow{background:#fbc02d;color:#1a1a1a}.pd-pill--grey{background:#4b5563;color:#fff}
+.pd-facts{display:grid;grid-template-columns:160px 1fr;gap:8px 16px;margin:0}
+.pd-facts dt{color:var(--pd-muted);font-size:.85rem}.pd-facts dd{margin:0}
+.pd-banner{background:#3b2a12;border-color:#f57c00}
+.pd-map{height:45vh;min-height:280px;padding:0;overflow:hidden}
+.pd-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+.pd-foot{margin-top:24px;color:var(--pd-muted);font-size:.8rem;text-align:center}
+@media(max-width:600px){.pd-facts{grid-template-columns:1fr}.pd-facts dt{margin-top:6px}.pd-title{font-size:1.3rem}}
+</style>
+</head>
+<body>
+<main class="pd">
+  <header class="pd-head">
+    <img src="{{ org_logo or '/static/img/logo_einsatzcockpit.png' }}" alt="">
+    <div><div class="pd-head__org">{{ org_name }}</div><div class="pd-head__sub">Straßensperre</div></div>
+  </header>
+  {% if beendet %}<div class="pd-card pd-banner" role="status">Diese Sperre ist beendet.</div>{% endif %}
+  <article class="pd-card">
+    <h1 class="pd-title">{{ data.title }}</h1>
+    <div class="pd-pills">
+      <span class="pd-pill pd-pill--{{ data.color }}">{{ data.restriction_label }}</span>
+      <span class="pd-pill">{{ data.status_label }}</span>
+    </div>
+    <dl class="pd-facts">
+      {% if data.abschnitt %}<dt>Abschnitt</dt><dd>{{ data.abschnitt }}</dd>{% endif %}
+      {% if data.city %}<dt>Ort</dt><dd>{{ data.city }}</dd>{% endif %}
+      <dt>Zeitraum</dt><dd>{{ data.valid_from_local }} – {{ data.valid_until_local or 'unbefristet' }}</dd>
+      {% if data.direction_label %}<dt>Richtung</dt><dd>{{ data.direction_label }}</dd>{% endif %}
+      {% if data.einschraenkungen %}<dt>Einschränkungen</dt><dd>{{ data.einschraenkungen|join(', ') }}</dd>{% endif %}
+      {% if data.reason %}<dt>Grund</dt><dd>{{ data.reason }}</dd>{% endif %}
+      {% if data.exceptions %}<dt>Ausnahmen</dt><dd>{{ data.exceptions }}</dd>{% endif %}
+      {% if data.authority %}<dt>Behörde</dt><dd>{{ data.authority }}</dd>{% endif %}
+      {% if data.reference_number %}<dt>Aktenzeichen</dt><dd>{{ data.reference_number }}</dd>{% endif %}
+    </dl>
+  </article>
+  {% if data.geometry %}<div id="sperren-karte" class="pd-card pd-map" data-geojson-url="/oeffentlich/strassensperre/{{ token }}/geometrie.json"></div>{% endif %}
+  <div class="pd-actions">
+    <a class="btn btn--primary" href="/login?next=/strassensperren">Weitere Straßensperren anzeigen</a>
+  </div>
+  <footer class="pd-foot">Bereitgestellt von {{ org_name }} über Einsatzcockpit</footer>
+</main>
+{% if data.geometry %}
+<script src="/static/js/map-config.js"></script>
+<script src="/static/js/leaflet.min.js"></script>
+<script src="/static/js/road_closure_map.js?v={{ ASSET_VERSION }}"></script>
+{% endif %}
+</body>
+</html>
