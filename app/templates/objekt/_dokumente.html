@@ -253,7 +253,31 @@
         <input type="hidden" name="suche" value="{{ filter_suche }}">
         <button type="submit" name="richtung" value="links" class="btn btn--ghost btn--xs" title="90° nach links drehen">↺</button>
         <button type="submit" name="richtung" value="rechts" class="btn btn--ghost btn--xs" title="90° nach rechts drehen">↻</button>
+        <button type="button" class="btn btn--ghost btn--xs" onclick="document.getElementById('seiteBearbeiten{{ s.id }}').showModal()">Bearbeiten</button>
       </form>
+      <dialog class="modal" id="seiteBearbeiten{{ s.id }}">
+        <div class="modal__content">
+          <div class="modal__header"><h3>Dokumentseite bearbeiten</h3>
+            <button type="button" class="modal__close" aria-label="Schließen" onclick="this.closest('dialog').close()">×</button></div>
+          <form hx-post="/objekte/{{ objekt.id }}/dokumente/seite/{{ s.id }}/bearbeiten"
+                hx-target="#abschnitt-dokumente" hx-swap="innerHTML">
+            <div class="modal__body">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              <input type="hidden" name="art" value="{{ filter_art }}">
+              <input type="hidden" name="suche" value="{{ filter_suche }}">
+              <div class="form-group"><label class="form-label">Dokumentart</label>
+                <select name="dokumentart" class="form-input"><option value="">- keine -</option>
+                  {% for code, label in dokumentarten.items() %}<option value="{{ code }}" {% if s.dokumentart == code %}selected{% endif %}>{{ label }}</option>{% endfor %}
+                </select></div>
+              <div class="form-group"><label class="form-label">Titel</label><input name="titel" class="form-input" maxlength="200" value="{{ s.titel or '' }}"></div>
+              <div class="form-group"><label class="form-label">Melderlinie(n)</label><input name="melderlinien" class="form-input" maxlength="100" value="{{ s.melderlinien or '' }}"></div>
+              <div class="form-group"><label class="form-label">Stand</label><input type="date" name="stand" class="form-input" value="{{ s.stand.isoformat() if s.stand else '' }}"></div>
+              <label class="checkbox-label"><input type="checkbox" name="bei_einsatz_drucken" value="1" {% if s.bei_einsatz_drucken %}checked{% endif %}> Bei Einsatz drucken</label>
+            </div>
+            <div class="modal__footer"><button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Abbrechen</button><button type="submit" class="btn btn--primary">Speichern</button></div>
+          </form>
+        </div>
+      </dialog>
       {% endif %}
       <div class="objekt-seite-kachel__info">
         <div style="font-weight:600;font-size:0.85em;">
@@ -302,9 +326,14 @@
         <label class="form-label">Stand</label>
         <input type="date" name="stand" class="form-input">
       </div>
-      <label class="checkbox-label" style="margin-bottom:6px;">
-        <input type="checkbox" name="bei_einsatz_drucken" value="1"> Bei Einsatz drucken
-      </label>
+      <div class="form-group" style="margin:0;">
+        <label class="form-label">Bei Einsatz drucken</label>
+        <select name="bei_einsatz_drucken" class="form-input">
+          <option value="">- unverändert -</option>
+          <option value="1">Ja</option>
+          <option value="0">Nein</option>
+        </select>
+      </div>
       <button type="submit" class="btn btn--primary">Zuweisen</button>
     </form>
   </div>

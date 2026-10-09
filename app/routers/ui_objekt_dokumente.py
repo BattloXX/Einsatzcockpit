@@ -28,6 +28,7 @@ from app.routers.ui_objekt import _LESE_ROLLEN, _objekt_or_404, require_objekt_e
 from app.services.objekt_dokument_service import (
     ObjektDokumentFehler,
     absolute_pfad,
+    bearbeite_seite,
     delete_dokument,
     gebe_dokument_frei,
     hole_wartende_dokumente,
@@ -357,13 +358,62 @@ def seiten_bulk_klassifizieren(
         klassifiziere_seiten(
             db, seiten,
             {"dokumentart": dokumentart, "titel": titel, "melderlinien": melderlinien,
-             "stand": stand, "bei_einsatz_drucken": bei_einsatz_drucken},
+             "stand": stand, **(
+                 {"bei_einsatz_drucken": bei_einsatz_drucken}
+                 if bei_einsatz_drucken else {}
+             )},
             user.id,
         )
     except ObjektDokumentFehler as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
     db.commit()
 
+    return templates.TemplateResponse(
+        request, "objekt/_dokumente.html",
+        _galerie_context(request, db, user, objekt, art=art, suche=suche),
+    )
+
+
+@router.post("/objekte/{objekt_id}/dokumente/seite/{seite_id}/bearbeiten", response_class=HTMLResponse)
+def seite_bearbeiten(
+    objekt_id: int,
+    seite_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("objekt_verwalter")),
+    _guard: None = Depends(require_objekt_enabled),
+    dokumentart: str = Form(""),
+    titel: str = Form(""),
+    melderlinien: str = Form(""),
+    stand: str = Form(""),
+    bei_einsatz_drucken: str = Form(""),
+    art: str = Form(""),
+    suche: str = Form(""),
+    viewer: str = Form(""),
+):
+    objekt = _objekt_or_404(db, objekt_id, user)
+    seite = (
+        db.query(ObjektDokumentSeite)
+        .filter(
+            ObjektDokumentSeite.id == seite_id,
+            ObjektDokumentSeite.org_id == objekt.org_id,
+            ObjektDokumentSeite.objekt_id == objekt.id,
+        )
+        .first()
+    )
+    if seite is None:
+        raise HTTPException(status_code=404, detail="Seite nicht gefunden")
+    try:
+        bearbeite_seite(db, seite, {
+            "dokumentart": dokumentart, "titel": titel, "melderlinien": melderlinien,
+            "stand": stand, "bei_einsatz_drucken": bei_einsatz_drucken,
+        }, user.id)
+    except ObjektDokumentFehler as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
+    db.commit()
+    if viewer:
+        ctx = _galerie_context(request, db, user, objekt, art=art, suche=suche)
+        return templates.TemplateResponse(request, "objekt/_viewer_info.html", ctx)
     return templates.TemplateResponse(
         request, "objekt/_dokumente.html",
         _galerie_context(request, db, user, objekt, art=art, suche=suche),

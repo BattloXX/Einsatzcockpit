@@ -25,8 +25,10 @@ from app.models.user import User
 from app.services.objekt_dokument_service import (
     ObjektDokumentFehler,
     absolute_pfad,
+    bearbeite_seite,
     gebe_dokument_frei,
     hole_wartende_dokumente,
+    klassifiziere_seiten,
     store_dokument_bytes,
     verarbeite_dokument_mit_analyse,
     verwirf_wartendes_dokument,
@@ -138,6 +140,43 @@ def test_ungueltige_dokumentart_und_renderfehler_raeumen_auf(mcp_db):
             verarbeite_dokument_mit_analyse(dokument.id, analyse, db=db, user_id=user.id, render_func=render)
         assert db.get(ObjektDokument, dokument.id) is None
         assert not pfad.exists()
+
+
+def test_bulk_ohne_einsatzdruck_erhaelt_flag_und_ja_nein_setzen_ihn(mcp_db):
+    db, _org, _fremde_org, user, entwurf, *_ = mcp_db
+    dokument = store_dokument_bytes(_pdf(1), "plan.pdf", entwurf, user, db)
+    verarbeite_dokument_mit_analyse(dokument.id, _analyse(1), db=db, user_id=user.id,
+                                    render_func=lambda *_: None)
+    seite = db.query(ObjektDokumentSeite).filter_by(dokument_id=dokument.id).one()
+    assert seite.bei_einsatz_drucken is True
+
+    klassifiziere_seiten(db, [seite], {"titel": "Nur neuer Titel"}, user.id)
+    assert seite.titel == "Nur neuer Titel"
+    assert seite.bei_einsatz_drucken is True
+    klassifiziere_seiten(db, [seite], {"bei_einsatz_drucken": "0"}, user.id)
+    assert seite.bei_einsatz_drucken is False
+    klassifiziere_seiten(db, [seite], {"bei_einsatz_drucken": "1"}, user.id)
+    assert seite.bei_einsatz_drucken is True
+
+
+def test_einzelbearbeitung_leert_felder_und_mcp_bool_bleibt_kompatibel(mcp_db):
+    db, _org, _fremde_org, user, entwurf, *_ = mcp_db
+    dokument = store_dokument_bytes(_pdf(1), "plan.pdf", entwurf, user, db)
+    verarbeite_dokument_mit_analyse(dokument.id, _analyse(1), db=db, user_id=user.id,
+                                    render_func=lambda *_: None)
+    seite = db.query(ObjektDokumentSeite).filter_by(dokument_id=dokument.id).one()
+    klassifiziere_seiten(db, [seite], {"bei_einsatz_drucken": True}, user.id)
+    assert seite.bei_einsatz_drucken is True
+
+    bearbeite_seite(db, seite, {
+        "dokumentart": "", "titel": "", "melderlinien": "", "stand": "",
+        "bei_einsatz_drucken": "",
+    }, user.id)
+    assert seite.dokumentart is None
+    assert seite.titel is None
+    assert seite.melderlinien is None
+    assert seite.stand is None
+    assert seite.bei_einsatz_drucken is False
 
 
 def test_upload_limit_und_quota_hinterlassen_weder_datei_noch_zeile(mcp_db, monkeypatch):

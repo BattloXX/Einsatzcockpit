@@ -179,7 +179,6 @@
     </div>
     <button type="button" class="objekt-viewer__nav objekt-viewer__nav--rechts" @click="weiter()" x-show="idx < seiten.length - 1 && zoom <= 1">›</button>
   </div>
-  <div class="objekt-viewer__caption text-muted" x-show="seiten.length > 0"
-       x-text="(infos[idx] || 'Seite ' + nummern[idx])"></div>
+  {% include "objekt/_viewer_info.html" %}
 </div>
 {% endblock %}

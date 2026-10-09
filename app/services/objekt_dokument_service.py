@@ -763,7 +763,13 @@ def klassifiziere_seiten(
             seite.melderlinien = melderlinien[:100]
         if stand:
             seite.stand = stand
-        seite.bei_einsatz_drucken = bool(daten.get("bei_einsatz_drucken", False))
+        # Fehlende Angabe bedeutet bei der Sammelbearbeitung bewusst
+        # "unveraendert". MCP uebergibt hier weiterhin bool bzw. "1".
+        if "bei_einsatz_drucken" in daten:
+            wert = daten["bei_einsatz_drucken"]
+            seite.bei_einsatz_drucken = (
+                wert is True or str(wert).strip().lower() in ("1", "true", "ja", "yes", "on")
+            )
         seite.klassifiziert_von_id = user_id
         seite.klassifiziert_am = jetzt
     art_label = dokumentarten.get(dokumentart, dokumentart or "unveraendert")
@@ -772,6 +778,43 @@ def klassifiziere_seiten(
         after=f"{len(seiten)} Seite(n) → {art_label}", user_id=user_id,
     )
     return len(seiten)
+
+
+def bearbeite_seite(
+    db: Session,
+    seite: ObjektDokumentSeite,
+    daten: dict,
+    user_id: int | None,
+) -> None:
+    """Ueberschreibt die manuell pflegbaren Klassifizierungsfelder einer Seite.
+
+    Anders als bei der Sammelklassifizierung leeren leere Formularfelder den
+    bisherigen Wert absichtlich.
+    """
+    dokumentart = str(daten.get("dokumentart") or "").strip()
+    dokumentarten = lade_auswahl(db, seite.org_id, AUSWAHL_DOKUMENTART)
+    if dokumentart and dokumentart not in dokumentarten:
+        raise ObjektDokumentFehler("Unbekannte Dokumentart")
+    stand_wert = str(daten.get("stand") or "").strip()
+    try:
+        stand = datetime.strptime(stand_wert, "%Y-%m-%d").date() if stand_wert else None
+    except ValueError as exc:
+        raise ObjektDokumentFehler("Ungueltiger Stand (YYYY-MM-DD erwartet)") from exc
+
+    seite.dokumentart = dokumentart or None
+    seite.titel = str(daten.get("titel") or "").strip()[:200] or None
+    seite.melderlinien = str(daten.get("melderlinien") or "").strip()[:100] or None
+    seite.stand = stand
+    wert = daten.get("bei_einsatz_drucken", False)
+    seite.bei_einsatz_drucken = (
+        wert is True or str(wert).strip().lower() in ("1", "true", "ja", "yes", "on")
+    )
+    seite.klassifiziert_von_id = user_id
+    seite.klassifiziert_am = datetime.now(UTC)
+    write_objekt_change(
+        db, seite.objekt_id, seite.org_id, "dokumente", "seite_bearbeitet",
+        before=None, after=f"Seite {seite.seiten_nr}", user_id=user_id,
+    )
 
 
 def hole_wartende_dokumente(db: Session, objekt: Objekt) -> list[ObjektDokument]:
