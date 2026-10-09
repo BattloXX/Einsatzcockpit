@@ -79,6 +79,7 @@ from app.models.user import User
 from app.services import lagemeldung_service, resource_service
 from app.services.ai_service import is_enabled as ai_is_enabled
 from app.services.broadcast import broadcast_lage, manager
+from app.services.einheit_service import einheit_geraet_nur_lesen
 from app.services.major_incident_service import (
     PHASE_LABELS,
     close_lage,
@@ -87,7 +88,7 @@ from app.services.major_incident_service import (
     get_active_lage,
 )
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(einheit_geraet_nur_lesen)])
 
 logger = logging.getLogger("einsatzleiter.major_incident")
 
@@ -220,14 +221,20 @@ async def _geocode_site(site: IncidentSite) -> None:
 
 
 def _can_edit(user) -> bool:
+    if getattr(user, "gsl_nur_lesen", False):
+        return False
     return has_role(user, "incident_leader", "admin", "org_admin", "recorder")
 
 
 def _can_note(user) -> bool:
+    if getattr(user, "gsl_nur_lesen", False):
+        return False
     return has_role(user, "incident_leader", "admin", "org_admin", "recorder", "readonly")
 
 
 def _can_manage(user) -> bool:
+    if getattr(user, "gsl_nur_lesen", False):
+        return False
     return has_role(user, "incident_leader", "admin", "org_admin")
 
 

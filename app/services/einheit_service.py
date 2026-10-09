@@ -5,9 +5,12 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal
 
+from fastapi import Depends, HTTPException
 from sqlalchemy.orm import Session
+from starlette.requests import HTTPConnection
 
 from app.core.audit import write_audit
+from app.db import get_db
 from app.models.major_incident import (
     EINHEIT_STATUS_AKTIV,
     EINHEIT_STATUS_BEENDET,
@@ -25,6 +28,86 @@ from app.services import resource_service
 from app.services.resource_service import STATUS_BEREITGESTELLT, STATUS_IM_EINSATZ, dispatch_aktiv_filter
 
 Quelle = Literal["tablet", "funk", "mcp", "simulation"]
+
+# Gesamtansicht (E1): Diese Routen zeigen den Einsatz, ohne eine Bedienung oder
+# Token-Ausgabe zu ermoeglichen. Die Namen sind bewusst an die Endpunktfunktionen
+# gebunden, damit neue Fuehrungsrouten standardmaessig gesperrt bleiben.
+EINHEIT_GESAMTANSICHT_ROUTEN = frozenset({
+    # Board und Einsatzstellen
+    "lage_overview", "lage_board", "lage_kopf_oob", "phase_column_partial",
+    "board_sector_filter_partial", "site_card_partial", "site_detail", "site_druck",
+    # Karte und Positionsdaten
+    "lage_karte", "lage_karte_sites", "lage_karte_sektoren", "lage_karte_cross_markers",
+    "vehicle_positions",
+    # Funkjournal und Stab (ausschliesslich lesende Ansichten)
+    "lage_funkjournal", "funkjournal_rows", "lage_stab", "stab_tafel",
+    "stab_journal", "stab_einsatzjournal",
+    # Einsatzjournal, Ressourcen und Dashboard
+    "lage_journal_entry_detail", "lage_journal_media_image", "lage_ressourcen",
+    "lage_ressourcen_journal", "lage_ressourcen_kraefteuebersicht",
+    "lage_ressourcen_planung", "lage_dashboard",
+    # Uebergreifende Meldungen und Medien
+    "cross_marker_board_col", "cross_marker_panel", "cross_marker_media_serve",
+    "lage_media_serve", "lage_media_thumb",
+    # Der Editor bleibt gesperrt; nur die unveraenderliche Druckansicht ist erlaubt.
+    "lagedokument_druck",
+})
+
+
+def ist_einheit_geraet(request: HTTPConnection, db: Session) -> bool:
+    """Prueft und cached pro HTTP-Request das Profil des aktiven Geraetetokens."""
+    if hasattr(request.state, "ist_einheit_geraet"):
+        return request.state.ist_einheit_geraet
+
+    user = getattr(request.state, "user", None)
+    if not getattr(request.state, "is_device", False) or user is None:
+        request.state.ist_einheit_geraet = False
+        return False
+
+    token_id = getattr(request.state, "device_token_id", None)
+    if token_id is not None:
+        device_token = (
+            db.query(DeviceToken)
+            .filter(
+                DeviceToken.id == token_id,
+                DeviceToken.user_id == user.id,
+                DeviceToken.revoked_at.is_(None),
+            )
+            .first()
+        )
+    else:
+        # Gleiches Legacy-Fallback-Verhalten wie device_api._get_device_token().
+        device_token = (
+            db.query(DeviceToken)
+            .filter(DeviceToken.user_id == user.id, DeviceToken.revoked_at.is_(None))
+            .order_by(DeviceToken.created_at.desc())
+            .first()
+        )
+    request.state.ist_einheit_geraet = bool(device_token and device_token.gsl_profil == "einheit")
+    return request.state.ist_einheit_geraet
+
+
+def einheit_geraet_nur_lesen(
+    request: HTTPConnection,
+    db: Session = Depends(get_db),
+) -> None:
+    """Sperrt Einheit-Tablets ausserhalb der bewusst kleinen Gesamtansicht-Readlist."""
+    # WebSockets passieren die HTTP-Middleware nicht und werden separat behandelt.
+    if request.scope["type"] == "websocket":
+        return
+    if getattr(request.state, "user", None) is None or not ist_einheit_geraet(request, db):
+        return
+
+    # FastAPI setzt endpoint vor der Aufloesung von Router-Dependencies. Der
+    # Route-Fallback dokumentiert und schuetzt gegen abweichende Starlette-Versionen.
+    endpoint = request.scope.get("endpoint") or getattr(request.scope.get("route"), "endpoint", None)
+    endpoint_name = getattr(endpoint, "__name__", None)
+    if request.scope.get("method") not in {"GET", "HEAD"} or endpoint_name not in EINHEIT_GESAMTANSICHT_ROUTEN:
+        raise HTTPException(status_code=403, detail="Im Einheitenmodus nur lesender Zugriff")
+
+    # Die Middleware laedt User-Objekte fuer jeden HTTP-Request neu; dieses
+    # transiente Attribut kann deshalb nicht in andere Requests ueberlaufen.
+    request.state.user.gsl_nur_lesen = True
 
 ERLAUBTE_UEBERGAENGE: dict[str, frozenset[str]] = {
     "zugewiesen": frozenset({"bestaetigt", "anfahrt", "vor_ort", "nicht_durchfuehrbar"}),

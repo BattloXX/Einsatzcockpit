@@ -52,6 +52,9 @@
     {% if lage.is_exercise %}
     <div class="exercise-topbar">&#x26A0; ÜBUNG / SIMULATION &#x26A0;</div>
     {% endif %}
+    {% if request.state.user and request.state.user.gsl_nur_lesen | default(false) %}
+    <div class="exercise-topbar">Nur-Lese-Ansicht (Einheitenmodus)</div>
+    {% endif %}
     <div class="lage-ctx-bar__head">
       <a href="/lage" class="btn btn--ghost btn--sm" title="Alle Lagen">&#x2190; Lagen</a>
       {# id-Wrapper: Refresh-Ziel fuer den lage_updated-OOB-Swap (_lage_kopf_oob.html) --
