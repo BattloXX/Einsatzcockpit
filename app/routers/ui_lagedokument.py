@@ -36,9 +36,10 @@ from app.core.permissions import has_role, require_role, same_org_or_system_admi
 from app.core.templating import templates
 from app.db import get_db
 from app.models.major_incident import LageDokument, MajorIncident
+from app.services.einheit_service import einheit_geraet_nur_lesen
 from app.services.lagedokument_collab import get_or_create_room, release_room_if_empty
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(einheit_geraet_nur_lesen)])
 logger = logging.getLogger("einsatzleiter.lagedokument")
 
 _EDIT_ROLLEN = ("incident_leader", "admin", "org_admin", "recorder")
@@ -89,7 +90,7 @@ async def lagedokument_view(
         "user": user,
         "lage": lage,
         "dokument": dokument,
-        "can_edit": has_role(user, *_EDIT_ROLLEN),
+        "can_edit": not getattr(user, "gsl_nur_lesen", False) and has_role(user, *_EDIT_ROLLEN),
         "gespeichert": bool(gespeichert),
         "mi_features": _get_mi_features(db, lage.org_id),
     })

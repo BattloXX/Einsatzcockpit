@@ -21,8 +21,9 @@ from app.models.major_incident import (
 from app.services import gsl_staff_service as svc
 from app.services import resource_service
 from app.services.broadcast import broadcast_lage
+from app.services.einheit_service import einheit_geraet_nur_lesen
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(einheit_geraet_nur_lesen)])
 
 
 def _lage_or_404(lage_id: int, db: Session) -> MajorIncident:
@@ -38,6 +39,8 @@ def _check_org(user, lage: MajorIncident):
 
 
 def _can_edit(user) -> bool:
+    if getattr(user, "gsl_nur_lesen", False):
+        return False
     return has_role(user, "incident_leader", "admin", "org_admin", "recorder")
 
 
