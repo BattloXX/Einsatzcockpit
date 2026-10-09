@@ -1,7 +1,7 @@
 # GSL-Einheitenmodus für Fahrzeug-Tablets – Implementierungsplan
 
 Stand: 2026-10-09 · Basis: `main` @ `a9bb2705` (Einsatzcockpit) und `main` (Einsatzcockpit-Android)
-Status: **Konzept, noch nicht umgesetzt**
+Status: **Konzept, noch nicht umgesetzt** · Entscheidungen E1, E2, E4, E5 am 2026-10-09 getroffen (Abschnitt 13)
 
 > **Leitlinie:** Der Einheitsführer erkennt auf dem Tablet ohne Suchen sofort, welchen Einsatz
 > er bearbeiten soll, welche Informationen vorliegen und wie er Status, Lagemeldung oder Fotos
@@ -33,7 +33,7 @@ Legende in allen Tabellen:
 10. [Tests](#10-tests)
 11. [Migration und Rückwärtskompatibilität](#11-migration)
 12. [Umsetzungsphasen und Arbeitspakete](#12-umsetzungsphasen)
-13. [Offene Entscheidungen](#13-offene-entscheidungen)
+13. [Entscheidungen](#13-entscheidungen)
 
 ---
 
@@ -152,10 +152,23 @@ Anforderung und muss im Einheitenmodus geschlossen werden (siehe 9.2).
 
 ### 1.10 Design
 
-Keine Stitch-Mockups für GSL im Repository gefunden (`docs/`, `app/templates/`). Vorhandene Design-Bausteine:
-`res-badge--onsite/--alarmed`, Prioritätsfarben `SITE_PRIORITY_COLOR`, Phasenfarben im Board,
-`_lage_layout.html`. Tablet-Ansicht orientiert sich an diesen Tokens; ein Stitch-Mockup kann vor
-Paket P1-4 nachgereicht werden (siehe 13).
+Kein Stitch-Mockup (Entscheidung E5). Grundlage ist das **bestehende Fahrtenbuch-Design** – die
+bereits für Tablets im Fahrzeug optimierte Erfassungsmaske:
+
+| Baustein | Ort | Verwendung im Einheitenmodus |
+|---|---|---|
+| `fab-page`, `fab-header` (Org-Logo, Eyebrow, Titel, Untertitel) | `app/templates/fahrtenbuch/neu.html` (Inline-`<style>`), Kopie in `fahrtenbuch/verwaltung/korrektur.html` | Kopf: Eyebrow = Lage, Titel = Fahrzeug |
+| `fab-grid` mit `fab-grid__main`/`__side` (ab 980 px 12-Spalten-Raster 8/4, darunter einspaltig) | `neu.html` | links aktueller Einsatz bzw. Detail, rechts weitere Aufträge bzw. Aktionsleiste (sticky) |
+| `fab-card` mit Akzentleiste `--fab-accent`, `fab-card__head/__icon/__title/__body`, `fab-subcard` | `neu.html` | Auftragskarten; Akzent = Priorität bzw. Einheitenstatus |
+| `fab-actions` (sticky Aktionsleiste unten, ab 980 px statisch) | `neu.html` | Primärbutton „nächster Status“ |
+| `form-control` mit `min-height:48px`, `btn--primary btn--lg` | `neu.html` | alle Eingaben |
+| `person-flyout` (Vollbild unter 600 px, große Trefferflächen) | `neu.html` | Flyouts für Lagemeldung, Unterstützung, Gefahr |
+| Entwurfs-Hinweis „Entwurf wiederherstellen / Verwerfen“ (`draft-hinweis`, `fahrt_draft_v1:*`) | `neu.html` Z. 108, 452 ff. | gleiches Muster für Meldungsentwürfe (Speicher: IndexedDB statt `localStorage`, siehe 6.5) |
+
+Ergänzend aus der GSL: Prioritätsfarben `SITE_PRIORITY_COLOR`, `res-badge--onsite/--alarmed`.
+Die `fab-*`-Styles liegen heute **doppelt inline** (`neu.html`, `korrektur.html`). Sie werden in ein gemeinsames
+Partial `app/templates/_fab_styles.html` ausgelagert (Paket P1-4) und von Fahrtenbuch und Einheitenmodus
+eingebunden – keine dritte Kopie.
 
 ---
 
@@ -176,7 +189,7 @@ Paket P1-4 nachgereicht werden (siehe 13).
 | G11 | Push bei Neuzuteilung/Änderung | `notify_vehicle` vorhanden, nicht für GSL | 🔧 aufrufen nach Commit |
 | G12 | Lagemeldungs-Erinnerung an die Einheit | Reminder erzeugt nur Funkjournal-Eintrag | 🔧 zusätzlich Push/WS an disponierte Einheiten |
 | G13 | Offline-Outbox, Idempotenz, Konflikte | fehlt komplett | 🆕 IndexedDB-Outbox + `einheit_aktion`-Tabelle |
-| G14 | Tablet darf nur eigene Stellen lesen/schreiben | Gerät mit Rolle sieht/ändert alles | 🆕 Geräteprofil „Einheit“ + Router-Sperre |
+| G14 | Tablet schreibt nur auf eigene Aufträge, Gesamtansicht nur lesend | Gerät mit Rolle sieht/ändert alles | 🆕 Geräteprofil „Einheit“ + Lese-Allowlist auf Führungsrouten |
 | G15 | Widerruf wirkt auch auf WebSocket | nicht geprüft | 🔧 `ws.py::_resolve_user` |
 | G16 | Führung sieht Einheitenstatus, neue Meldungen, offene Anforderungen, „keine Rückmeldung“ | nur Zähler disponiert/vor Ort | 🔧 Board-Karte, Site-Detail, Kräfteübersicht |
 | G17 | Navigation mit Sperrenhinweis | Maps-Link ✅, Sperren-Services ✅ | 🔧 Sperren am Ziel anzeigen (Phase 1), Route mit Sperren (Phase 3) |
@@ -207,6 +220,13 @@ Paket P1-4 nachgereicht werden (siehe 13).
 5. **Outbox im Web-Frontend (IndexedDB)**, weil die UI in der Capacitor-WebView läuft und dieselbe
    Seite auch im Browser funktionieren soll. Android ergänzt in Phase 3 nur das Hintergrund-Flushen
    über das bewährte Headless-WebView-Muster (`ObjektOfflineSyncWorker`).
+6. **Gesamtansicht nur lesend (E1).** Einheit-Tablets dürfen jederzeit in die bestehende Führungsansicht
+   (Board, Lagekarte, Einsatzstellen-Details, Funkjournal) wechseln – dort aber nichts ändern. Umgesetzt
+   über eine Lese-Allowlist auf den bestehenden Routen statt einer zweiten Gesamtansicht (9.2).
+7. **Einheiten ohne Tablet (E2)** werden über Funk zentral instruiert. Ihr Status und ihre Rückmeldungen
+   werden von der Führung bzw. dem Funker **stellvertretend** über dieselben Services erfasst
+   (`quelle="funk"`, 5.1). Es gibt also ein Datenmodell für Tablet- und Funk-Einheiten; die Führung sieht
+   beide in derselben Darstellung.
 
 ### 3.2 Komponentenübersicht
 
@@ -450,6 +470,22 @@ Alle 11 Verwendungen von `withdrawn_at.is_(None)` werden geprüft und bewusst en
   Dispositionen einer Stelle `abgeschlossen`, zeigt die Board-Karte nur den Hinweis
   „Alle Einheiten fertig – Stelle abschließen?“.
 
+#### Stellvertretende Erfassung für Einheiten ohne Tablet (E2)
+
+- `setze_einheit_status()`, `add_site_log()`, `anforderung_erstellen()` usw. bekommen den Parameter
+  `quelle: Literal["tablet", "funk", "mcp"]`. Bei `funk` ist der Akteur ein Führungs-/Funker-Benutzer
+  (`require_role("incident_leader","admin","org_admin","recorder")`), `EinheitKontext.device_token` ist `None`.
+  Gleiche Statusmatrix, gleiche Logzeilen – Text-Suffix „(per Funk)“, `author_name` = Funker,
+  Audit-Payload `quelle`.
+- `hat_tablet(einheit)` = es existiert ein aktives `DeviceToken` mit `vehicle_master_id == einheit.vehicle_id`
+  und `gsl_profil == "einheit"`. Steuert nur die Darstellung: ohne Tablet zeigt die Führungs-UI statt
+  „Push gesendet“ den Hinweis „📻 per Funk übermitteln“ mit Button „per Funk übermittelt“ – der schreibt
+  einen Funkjournal-Eintrag (`direction="out"`, `channel="Funk"`, `einheit_id`) und markiert Auftrag bzw.
+  Rückfrage als zugestellt. Kein Push, kein Tablet-Banner.
+- Fallback auch für Einheiten **mit** Tablet (Tablet defekt, kein Netz): die Führung kann jederzeit
+  stellvertretend erfassen. Konflikte mit später eintreffenden Tablet-Aktionen löst die Statusmatrix
+  (idempotent bzw. Server-Reihenfolge); beide Einträge bleiben in der Chronik sichtbar.
+
 ### 5.2 Tablet-API (`app/routers/ui_einheit.py`) 🆕
 
 Prefix `/einheit`, alle Routen mit `Depends(require_einheit_geraet)`. JSON-POSTs mit CSRF-Header
@@ -489,6 +525,8 @@ Bild-MIME/Größe über die bestehende `upload_site_media`-Prüfung, Speicherquo
 | `…/einheit-disponieren` (1048) | optionale Formularfelder `auftrag`, `reihenfolge`; nach Commit `notify_einheit("Neuer Auftrag", …)` + `einheit:changed` |
 | 🆕 `POST …/stellen/{site}/einheit/{dispatch}/auftrag` | Auftragstext/Reihenfolge ändern → `aendere_auftrag`, Push „Auftrag geändert“ |
 | 🆕 `POST …/stellen/{site}/einheit/{dispatch}/wiedereroeffnen` | beendeten Auftrag zurücksetzen |
+| 🆕 `POST …/stellen/{site}/einheit/{dispatch}/status` | stellvertretender Statuswechsel „per Funk“ (`quelle="funk"`), Statusbuttons im Site-Detail |
+| 🆕 `POST …/stellen/{site}/einheit/{dispatch}/funk-zugestellt` | Auftrag/Rückfrage per Funk übermittelt (Funkjournal-Eintrag) |
 | `…/einheit-abziehen` (1162) | zusätzlich `einheit:changed` + Push „Auftrag zurückgezogen“ |
 | `…/log` (1267), `…/medien` (1554) | auf Services umstellen; Medien-Upload broadcastet künftig `site:card_changed` |
 | `/funkjournal` (2915) | auf Service umstellen; optional Empfänger-Einheit, `art`, `quittierung_erforderlich`; Broadcast `funkjournal:changed` |
@@ -519,15 +557,21 @@ Alle neuen Führungsrouten: `require_role("incident_leader","admin","org_admin",
 | `app/templates/einheit/_auftrag_karte.html` 🆕 | Alpine-`<template>` für Auftragskarten |
 | `app/static/js/einheit_modus.js` 🆕 | Alpine-Store: Zustand laden, WS (`/ws/lage/{id}`, Filter auf `einheit:changed` mit eigener `einheit_id` sowie `site:card_changed` eigener Stellen), Ping/Reconnect, Polling-Fallback 30 s, ETag, Detailansicht, Entwurfsspeicher |
 | `app/static/js/einheit_outbox.js` 🆕 | IndexedDB-Outbox (siehe 6.5) |
-| `app/static/css/einheit.css` 🆕 (oder Tailwind-Utilities) | Tablet-Layout, große Touch-Flächen (≥ 56 px), Statusfarben |
+| `app/templates/_fab_styles.html` 🆕 (Extraktion) | gemeinsame `fab-*`-/`person-flyout`-Styles aus `fahrtenbuch/neu.html` und `verwaltung/korrektur.html`; beide Fahrtenbuch-Templates binden das Partial ein (Regression: Fahrtenbuch sieht unverändert aus) |
+| `app/templates/einheit/_einheit_styles.html` 🆕 | nur Ergänzungen: Status-Chips, Outbox-Anzeige, Akzentfarben je Priorität/Status, Touch-Flächen ≥ 56 px für Statusbuttons |
 | `app/static/sw.js` 🔧 | `/einheit`, `/einheit/auftrag/<id>` network-first in `BOARD_CACHE`; `/einheit/api/zustand` + `/einheit/api/auftrag/<id>` network-first mit Cache-Fallback (Antwort mit Header `X-EC-Offline: 1` kennzeichnen); `/einheit/medien/thumb/<id>` cache-first. Keine POSTs abfangen (die Outbox macht das) |
 
 ### 6.2 Übersicht „Meine Einsätze“ (Landscape 10–11″)
 
+Aufbau im Fahrtenbuch-Raster: `fab-header` (Eyebrow Lage, Titel Fahrzeug, rechts Online-/Sync-/Outbox-Status
+und Umschalter **Meine Einsätze | Gesamtansicht**), darunter `fab-grid` – `fab-grid__main` (8 Spalten) mit der
+`fab-card` des aktuellen Einsatzes, `fab-grid__side` (4 Spalten) mit den weiteren Aufträgen als kompakte
+`fab-card`s. Unter 980 px (Hochformat) einspaltig wie das Fahrtenbuch.
+
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ TLF Wolfurt · Hochwasser Rheintal 10/2026   ● Online  Sync 14:32   3 offen · 2 erledigt │
-│                                             ⏳ 2 ausstehend  [Liste|Karte]         │
+│                     ⏳ 2 ausstehend  [Liste|Karte]  [Meine Einsätze|Gesamtansicht]   │
 ├───────────────────────────────────────┬──────────────────────────────────────┤
 │ AKTUELLER EINSATZ                     │ WEITERE AUFTRÄGE                     │
 │ ┌───────────────────────────────────┐ │ ┌──────────────────────────────────┐ │
@@ -623,11 +667,12 @@ IndexedDB `ec-einheit`, Stores: `outbox`, `entwuerfe`, `zustand_cache`.
 | Ort | Erweiterung |
 |---|---|
 | `_site_card.html` | je disponierter Einheit ein farbiger Status-Chip (Kürzel + Status) statt nur „n alarmiert / n vor Ort“; 🆕-Badge „neue Lagemeldung“ (Einträge mit `einheit_id`, jünger als die letzte Ansicht → clientseitig über `localStorage` je Stelle); 📷-Zähler (bestehend) aktualisiert sich jetzt per Broadcast; 🆘-Chip bei offener Anforderung (rot bei `dringend`); ⏱-Chip „keine Rückmeldung seit n min“, wenn `letzte_rueckmeldung_at` älter als das Lagemeldungsintervall der Org (`interval_minutes_for`); Hinweis „Alle Einheiten fertig“ |
-| `_site_detail.html` (Z. 310 ff.) | Dispositionsliste mit Einheitenstatus, Zeitstempeln (zugewiesen/bestätigt/vor Ort/beendet), Auftragstext inline editierbar, Reihenfolge, Buttons „Rückfrage senden“, „Lagemeldung anfordern“, „Wiedereröffnen“; Chronik markiert Einheiten-Einträge |
+| `_site_detail.html` (Z. 310 ff.) | Dispositionsliste mit Einheitenstatus, Kennzeichnung 📱 Tablet / 📻 Funk, stellvertretende Statusbuttons für Funk-Einheiten, Zeitstempeln (zugewiesen/bestätigt/vor Ort/beendet), Auftragstext inline editierbar, Reihenfolge, Buttons „Rückfrage senden“, „Lagemeldung anfordern“, „Wiedereröffnen“; Chronik markiert Einheiten-Einträge |
 | `funkjournal.html` / `_funkjournal_rows.html` | Spalte Einheit, Art-Badge (Rückfrage/Anforderung/Gefahr/Antwort), Quittierstatus, Buttons „In Bearbeitung“/„Erledigt“, Filter „offene Anforderungen“; Antworten unter der Rückfrage eingerückt |
 | `ressourcen.html`, `_kraefteuebersicht.html` | Spalte aktueller Auftrag + Einheitenstatus + letzte Rückmeldung |
 | `board.html` Kopf (`_lage_kopf_oob.html`) | Zähler „🆘 n offene Anforderungen“ als Link auf den Funkjournal-Filter |
 | `lage_board.js` | `einheit:changed` → Karte `site_id` neu laden (gleich wie `site:card_changed`) |
+| `_lage_layout.html` / `board.html` (Gesamtansicht auf Einheit-Tablets) | `can_edit`/`can_manage`/`can_note` = `False` → bestehende Bedingungen blenden Bearbeitungselemente aus; Kopfbutton „← Meine Einsätze“; eigene Stellen auf Board und Lagekarte hervorgehoben (Rahmen in Einheitenfarbe); Banner „Nur-Lese-Ansicht“ |
 
 ---
 
@@ -683,19 +728,32 @@ schreibende Tools ändern nie `IncidentSite.phase` oder `priority`. Zusätzliche
 ### 9.1 Autorisierung im Einheitenmodus
 
 - Jeder Request löst `EinheitKontext` neu auf (3.3). Es gibt keinen Cache der Berechtigung.
-- Lesen: nur Stellen mit einer Disposition der eigenen Einheit (inkl. beendeter und zurückgezogener,
-  damit die Historie sichtbar bleibt; zurückgezogene nur mit Basisdaten und ohne neue Fotos fremder Einheiten).
-- Schreiben: nur auf eigene Dispositionen; Medienauslieferung nur für Medien dieser Stellen.
+- Lesen im Einheitenmodus (`/einheit/api/*`): Stellen mit einer Disposition der eigenen Einheit (inkl.
+  beendeter und zurückgezogener, damit die Historie sichtbar bleibt).
+- Lesen in der Gesamtansicht (E1): die ganze Lage über die bestehenden Führungsrouten, **nur lesend**
+  (9.2). Damit ist auch die Medienauslieferung `/lage-medien/{id}` lesend erlaubt.
+- Schreiben: ausschließlich über `/einheit/api/*` und nur auf eigene Dispositionen.
 - Nicht erlaubt (serverseitig, es gibt schlicht keine Route dafür): Phase/Priorität der Stelle ändern,
   disponieren, abziehen, Lage beenden, löschen, fremde Einheiten ändern, Reihenfolge ändern.
 
 ### 9.2 Bestehende Lücke schließen: Geräte mit Rollen im Führungsbereich 🔧
 
-Router-weite Dependency `deny_einheit_geraet` auf:
-`ui_major_incident.router`, `ui_gsl_staff`, `ui_lagedokument` (inkl. dessen WebSocket – Handshake-Prüfung analog).
-Ist `request.state.is_device` und das Gerät hat `gsl_profil == "einheit"` → `403` (HTML-Requests: Redirect
-auf `/einheit`). Die öffentlichen Routen `/melden/*` laufen ohne Benutzer und sind nicht betroffen.
-Geräte mit `fuehrung`/`NULL` behalten das bisherige Verhalten (KDO-Tablet der Einsatzleitung).
+Router-weite Dependency `einheit_geraet_nur_lesen` auf `ui_major_incident.router`, `ui_gsl_staff`,
+`ui_lagedokument`. Gilt nur, wenn `request.state.is_device` und `gsl_profil == "einheit"`:
+
+- **Allowlist statt Denylist.** `EINHEIT_GESAMTANSICHT_ROUTEN` (in `einheit_service.py`) listet die
+  erlaubten `GET`-Routen per Route-Name: Board `/lage/{id}`, Kopf, Phasen-Inhalt, Board-Karte,
+  Einsatzstellen-Detail, Druck einer Stelle, Lagekarte inkl. `karte-sites`/`-sektoren`/`-cross-markers`,
+  `fahrzeuge/positionen`, Funkjournal + Zeilen, Stab-Tafel/-Journal (lesend), Ressourcen/Kräfteübersicht,
+  Übergreifende Meldungen (Panel/Spalte), `/lage-medien/*`, Lagedokument-Druck.
+  Alles andere → `403`; insbesondere **jede** nicht-`GET`-Methode, Token-ausgebende Routen
+  (`/qr`, `/qr-login`, `/qr-pin`, `/meldungen/qr`, `/meldungen/token`), Bearbeitungsformulare
+  (`/bearbeiten`, `/lage/neu`) und der Lagedokument-Editor samt Collab-WebSocket.
+  Neue Führungsrouten sind damit für Einheit-Tablets automatisch gesperrt, bis sie bewusst freigegeben werden.
+- Templates erhalten `can_edit=can_manage=can_note=False` (zentral in `_can_edit()`/`_can_note()`/
+  `_can_manage()`, `ui_major_incident.py:234 ff.`), damit keine Bedienelemente erscheinen, die 403 liefern würden.
+- Die öffentlichen Routen `/melden/*` laufen ohne Benutzer und sind nicht betroffen.
+- Geräte mit `fuehrung`/`NULL` behalten das bisherige Verhalten (KDO-Tablet der Einsatzleitung).
 
 ### 9.3 Sessions, Widerruf, Gerätewechsel
 
@@ -731,8 +789,8 @@ Geräte mit `fuehrung`/`NULL` behalten das bisherige Verhalten (KDO-Tablet der E
 
 ## 10. Tests
 
-Nur die drei CI-Checks (`ruff`, `mypy`, `pytest`) sind Pflicht vor Merge. Browser-E2E nur auf
-ausdrückliche Anforderung (Projektregel).
+Pflicht vor Merge: `ruff`, `mypy`, `pytest` und ab P1-4 zusätzlich der neue JS-Job (10.5).
+Browser-E2E nur auf ausdrückliche Anforderung (Projektregel).
 
 ### 10.1 Unit/Service (`tests/test_einheit_service.py` 🆕)
 
@@ -750,7 +808,13 @@ ausdrückliche Anforderung (Projektregel).
 ### 10.2 Integration/API (`tests/test_einheit_api.py` 🆕, `tests/test_gsl_tenant_isolation.py` 🔧)
 
 - Fremdes Tablet greift auf nicht zugewiesene Stelle zu (GET/POST Status/Meldung/Foto/Medien) → 404.
-- Einheit-Gerät ruft `/lage/{id}`, `…/phase`, `…/prio`, `…/einheit-disponieren`, `/lage/{id}/beenden` → 403.
+- Einheit-Gerät: `GET /lage/{id}`, Stellen-Detail, Lagekarte → 200 ohne Bearbeitungselemente;
+  `…/phase`, `…/prio`, `…/einheit-disponieren`, `/lage/{id}/beenden`, `/lage/{id}/qr` → 403.
+- Vollständigkeitstest: iteriert über `app.routes` aller GSL-Router und prüft, dass jede Route für
+  Einheit-Geräte entweder in `EINHEIT_GESAMTANSICHT_ROUTEN` steht (und `GET` ist) oder 403 liefert.
+- Funk-Stellvertretung: Führung setzt Status einer Einheit ohne Tablet → gleiche Logzeile mit „(per Funk)“,
+  Audit `quelle=funk`; Benutzer mit nur `readonly` → 403; danach eintreffende Tablet-Aktion derselben
+  Einheit wird korrekt eingeordnet.
 - Führungs-Gerät (`gsl_profil=fuehrung`) behält den Zugriff (Regression).
 - Widerrufenes Token: HTTP 401, WS-Handshake wird abgelehnt (`tests/test_lage_ws_cleanup.py`-Muster).
 - Broadcasts: Statuswechsel → `site:card_changed` + `einheit:changed`; Medien-Upload → `site:card_changed` (neu).
@@ -766,7 +830,7 @@ ausdrückliche Anforderung (Projektregel).
 | S3 | Auftrag ändert sich während offener Lagemeldung | API + JS-Unit | Meldung mit alter `auftrag_version` angenommen, `hinweis=auftrag_geaendert`; Entwurf bleibt (JS) |
 | S4 | Rückzug während Offline-Phase | API | Statusaktion → 409 `auftrag_zurueckgezogen`; Lagemeldung/Foto → 200 mit Rückzugsvermerk |
 | S5 | Foto-Upload bricht ab | API | zweiter Upload mit gleicher `client_uuid` → keine zweite `SiteMedia`, gleiche Antwort |
-| S6 | Neustart mit mehreren unsynchronisierten Aktionen | JS-Unit (fake-indexeddb) + E2E | Outbox überlebt Reload, Reihenfolge bleibt erhalten, Status „ausstehend“ bis 2xx |
+| S6 | Neustart mit mehreren unsynchronisierten Aktionen | JS-Unit (10.5) + E2E | Outbox überlebt Reload, Reihenfolge bleibt erhalten, Status „ausstehend“ bis 2xx |
 | S7 | Einheit abgeschlossen, Stelle offen | API + Template | `abgeschlossen`, `phase` unverändert, Karte zeigt „Alle Einheiten fertig“ |
 | S8 | Fremdes Tablet manipuliert | API | 404/403, keine Datenänderung, kein Audit-Eintrag mit Erfolg |
 | S9 | Kritische Rückfrage + Quittierung | API | `quittierung_erforderlich` → Tablet-Zustand zeigt Pflichtbanner; Quittierung setzt `quittiert_at`; Führung sieht ✓ |
@@ -779,11 +843,57 @@ ausdrückliche Anforderung (Projektregel).
   Vor Ort → Board-Chip ändert sich → `context.set_offline(True)` → Lagemeldung + Foto → UI „ausstehend“
   → Reload → weiterhin ausstehend → online → „übermittelt“ → Board zeigt Meldung.
   Offene Eingabe bleibt bei WS-Update erhalten (analog `e2e/test_board_kein_reload.py`).
-- JS-Unit für Outbox mit `fake-indexeddb` (Node, ohne Browser), falls im Repo ein JS-Testlauf eingeführt
-  wird. Sonst über das E2E abgedeckt (13).
+- JS-Unit für die Outbox siehe 10.5.
 - Manuelle Gerätetests (Checkliste im PR): Kamera über `capture` auf dem Zieltablet, Upload im Funkloch
   (Flugmodus während des Uploads), App-Kill mit ausstehender Outbox, zwei Tablets im selben Fahrzeug,
   Widget-Klick öffnet `/einheit`, Push bei Neuzuteilung.
+
+### 10.5 JS-Tests für die Offline-Outbox (Vorschlag zu E4) 🆕
+
+Ziel: Die heikelste Logik (nichts geht verloren, nichts wird doppelt gesendet, nichts wird fälschlich als
+übermittelt angezeigt) wird bei jedem PR in Sekunden geprüft – ohne Browser und ohne Docker.
+
+**Werkzeuge – bewusst minimal:**
+
+| Baustein | Wahl | Begründung |
+|---|---|---|
+| Testrunner | eingebauter `node --test` (Node ≥ 20) | kein Framework, keine Konfiguration |
+| IndexedDB | `fake-indexeddb` (einzige neue devDependency) | echte IndexedDB-Semantik in Node; „Neustart“ = neue Outbox-Instanz auf derselben Fake-DB |
+| Netz | injizierte `fetch`-Funktion (Fake mit Skript: 200, 500, Timeout, 409, abgebrochener Upload) | deterministisch |
+| Zeit | injizierte `now()`/`sleep()` | Backoff ohne echte Wartezeit |
+
+**Code-Struktur, damit das testbar ist:** `app/static/js/einheit_outbox.js` wird als ES-Modul mit reiner
+Logik geschrieben – `createOutbox({ idb, fetch, now, sleep, uuid })` – ohne DOM-Zugriff. Die
+Verdrahtung mit `window.indexedDB`, `fetch`, `online`-Events und der Alpine-UI passiert in
+`einheit_modus.js` (Einbindung per `<script type="module">`, kein Build-Schritt; die App bleibt ohne Node
+deploybar wie heute).
+
+**Dateien:**
+
+- `package.json` 🔧: `"test:js": "node --test tests/js/"`, devDependency `fake-indexeddb`.
+- `tests/js/einheit_outbox.test.mjs` 🆕
+- `.github/workflows/ci.yml` 🔧: vierter Job `js` (`actions/setup-node` mit Node 20, `npm ci`,
+  `npm run test:js`, Laufzeit < 30 s).
+- `CLAUDE.md` 🔧: Abschnitt „Vor jedem Commit“ um `npm run test:js` ergänzen (nur nötig, wenn JS unter
+  `app/static/js/einheit_*` geändert wurde).
+
+**Testfälle:**
+
+1. Eintrag bleibt nach „Neustart“ (neue Instanz, gleiche DB) erhalten, Status `ausstehend`.
+2. Reihenfolge je Auftrag: Anfahrt → Vor Ort → In Arbeit werden strikt nacheinander gesendet, auch wenn
+   der erste Versuch fehlschlägt.
+3. Foto-Spur blockiert die Status-Spur nicht (großer Upload hängt, Statusmeldung geht trotzdem raus).
+4. Erfolg nur bei 2xx **mit** `aktion_id`; 200 ohne `aktion_id`, 204, Netzwerkfehler oder SW-Cache-Antwort
+   (`X-EC-Offline: 1`) gelten nicht als übermittelt.
+5. Retry nach Timeout verwendet dieselbe `client_uuid` (Idempotenz serverseitig).
+6. 409 `auftrag_zurueckgezogen` → `konflikt`, kein Auto-Retry, Inhalt bleibt lesbar.
+7. 409 `einheit_gewechselt` / 403 → `konflikt`, wird nie automatisch gelöscht.
+8. 4xx → `fehler` ohne Auto-Retry, manuelles „Erneut senden“ funktioniert; 5xx → Backoff 2/4/8 … 60 s.
+9. Abgebrochener Foto-Upload: Blob bleibt gespeichert, Neuversuch sendet vollständig erneut.
+10. Zähler „ausstehend/fehlgeschlagen“ stimmen in jedem Zustand.
+
+Der Browser-Teil (echte WebView, Service Worker, Reload) bleibt im E2E `e2e/test_einheit_modus.py`
+und in der manuellen Gerätecheckliste (10.4).
 
 ---
 
@@ -824,9 +934,9 @@ Jedes Paket ist ein eigener PR mit grünem `ruff`/`mypy`/`pytest`. Abhängigkeit
 |---|---|---|
 | **P1-1** Datenmodell | Migration 0263, Modellfelder, `EinheitAktion`, `dispatch_aktiv_filter` inkl. Umstellung aller 11 Stellen, Labels/Farben | Migration läuft auf MariaDB in CI; alle bestehenden GSL-Tests grün; Backfill-Test |
 | **P1-2** Service-Extraktion (P1-1) | `site_log_service`, `speichere_site_foto`, `funkjournal_service.add_comm_entry`; Router auf Services umstellen; Broadcast nach Medien-Upload und Funkjournal | Kein Verhaltensunterschied in der Führungs-UI (bestehende Tests), neue Broadcasts getestet |
-| **P1-3** Einheiten-Kontext + Sicherheit (P1-1) | `einheit_service` (Kontext, Auftragsliste, Statusmaschine), `require_einheit_geraet`, `deny_einheit_geraet`, WS-Widerrufsprüfung, `gsl_profil` in der Geräte-Admin-UI, `build_my_lage_queue` als Adapter | S1, S7, S8, S10 grün; Einheit-Gerät erhält 403 auf Führungsrouten; Widget-Format unverändert |
-| **P1-4** Tablet-UI (P1-2, P1-3) | `ui_einheit.py`, `einheit.html`, `einheit_modus.js`, `einheit_outbox.js` (persistente Outbox mit manuellem und automatischem Retry, Idempotenz), Status/Lagemeldung/Maßnahme/Notiz/Foto, Startseiten-Redirect, SW-Regeln | S2–S6 auf API-Ebene grün; offline erfasste Aktionen gehen bei Reload nicht verloren und werden nie als übermittelt angezeigt; Live-Update ohne Verlust offener Eingaben |
-| **P1-5** Führungsansicht (P1-3) | Chips auf Board-Karte, Dispositionsliste im Site-Detail mit Status und Auftragstext, Disponieren mit Auftragstext, `einheit:changed` in `lage_board.js`, Kräfteübersicht | Führung sieht Statuswechsel einer Einheit ohne Reload; „keine Rückmeldung seit“ erscheint nach Intervall |
+| **P1-3** Einheiten-Kontext + Sicherheit (P1-1) | `einheit_service` (Kontext, Auftragsliste, Statusmaschine inkl. `quelle`), `require_einheit_geraet`, `einheit_geraet_nur_lesen` mit Allowlist (Gesamtansicht), WS-Widerrufsprüfung, `gsl_profil` in der Geräte-Admin-UI, `build_my_lage_queue` als Adapter | S1, S7, S8, S10 grün; Einheit-Gerät sieht die Gesamtansicht ohne Bearbeitungselemente und erhält 403 auf alle schreibenden Führungsrouten; Routen-Vollständigkeitstest grün; Widget-Format unverändert |
+| **P1-4** Tablet-UI (P1-2, P1-3) | `_fab_styles.html` aus dem Fahrtenbuch extrahieren, `ui_einheit.py`, `einheit.html` im Fahrtenbuch-Design, Umschalter Meine Einsätze/Gesamtansicht, JS-Testjob (10.5), `einheit_modus.js`, `einheit_outbox.js` (persistente Outbox mit manuellem und automatischem Retry, Idempotenz), Status/Lagemeldung/Maßnahme/Notiz/Foto, Startseiten-Redirect, SW-Regeln | S2–S6 auf API-Ebene und Outbox-Testfälle 1–10 grün; Fahrtenbuch optisch unverändert; offline erfasste Aktionen gehen bei Reload nicht verloren und werden nie als übermittelt angezeigt; Live-Update ohne Verlust offener Eingaben |
+| **P1-5** Führungsansicht (P1-3) | Chips auf Board-Karte, Dispositionsliste im Site-Detail mit Status, Auftragstext und 📱/📻-Kennzeichnung, stellvertretende Statuserfassung „per Funk“, Disponieren mit Auftragstext, `einheit:changed` in `lage_board.js`, Kräfteübersicht | Führung sieht Statuswechsel einer Einheit ohne Reload; „keine Rückmeldung seit“ erscheint nach Intervall; Funk-Einheiten lassen sich vollständig ohne Tablet führen |
 
 Optional am Ende von Phase 1: E2E `e2e/test_einheit_modus.py` (auf Anforderung).
 
@@ -836,7 +946,7 @@ Optional am Ende von Phase 1: E2E `e2e/test_einheit_modus.py` (auf Anforderung).
 |---|---|---|
 | **P2-1** Kommunikationsmodell (P1-2) | Migration 0264, `funkjournal_service` (Rückfrage, Anweisung, Antwort, Quittierung, Anforderung mit Status, Gefahr) | S9 grün; Anforderungsstatus eingegangen → in Bearbeitung → erledigt sichtbar am Tablet |
 | **P2-2** Tablet-Kommunikation (P1-4, P2-1) | Nachrichtenbanner, Pflichtquittierung, Antworten, Unterstützungs-Kacheln, Gefahr melden, Auftrag bestätigen als Primäraktion | max. 2 Taps von der Detailseite bis „Unterstützung gesendet“ |
-| **P2-3** Führung-Kommunikation (P2-1) | Funkjournal-Spalten/Filter, „Rückfrage senden“, „Lagemeldung anfordern“, Auftrag ändern/Reihenfolge, Kopfzähler offene Anforderungen | offene dringende Anforderung ist auf Board-Karte und im Kopf sichtbar |
+| **P2-3** Führung-Kommunikation (P2-1) | Funkjournal-Spalten/Filter, „Rückfrage senden“ (Tablet: Push/Banner, Funk-Einheit: „per Funk übermittelt“), „Lagemeldung anfordern“, Auftrag ändern/Reihenfolge, Kopfzähler offene Anforderungen | offene dringende Anforderung ist auf Board-Karte und im Kopf sichtbar |
 | **P2-4** Push + Erinnerungen (P2-1) | `einheit_notify` bei Neuzuteilung, Änderung, Rückzug, Rückfrage; Reminder-Loop benachrichtigt Einheiten; erweiterte Journal-Einträge | Push nur nach Commit; Reminder erzeugt keine Doppelbenachrichtigung (Dedup wie `auto_kind`) |
 | **P2-5** Android-Widget (P1-3) | `GslQueueState.kt`/`renderGsl`: Status, Auftrag, Deep-Links; FCM `kind=einheit_auftrag` → Widget-Refresh; Kanal `einheit_kritisch`; Release | CI-Build grün; Gerätetest Widget + Push |
 
@@ -863,13 +973,18 @@ P3-2, P3-3 benötigen nur Phase 1; P3-4/P3-5 sind unabhängig.
 
 ---
 
-## 13. Offene Entscheidungen
+## 13. Entscheidungen
 
-| # | Frage | Empfehlung |
-|---|---|---|
-| E1 | Dürfen Einheit-Tablets die gesamte Lagekarte (alle Stellen, nur lesend) sehen? | Phase 1 nein (Anforderung „nur eigene“). Später Org-Einstellung `gsl_einheit_lagekarte_lesen` |
-| E2 | Einheitsführer ohne Tablet (eigenes Handy, externe Kräfte ohne `vehicle_id`) | später: Bindung einer `LageEinheit` an einen `LageToken`-QR-Zugang (bestehende QR-Session mit `lage_id`) – gleiche Routen, anderer Kontext-Resolver |
-| E3 | Soll „Vor Ort“ der Einheit die Phase einer Stelle von `disponiert` auf `in_arbeit` heben? | Nein (Anforderung). Nur Hinweis auf der Karte; ggf. später als Org-Option |
-| E4 | JS-Testinfrastruktur für die Outbox | `fake-indexeddb` + Node-Testlauf als Zusatzjob in `ci.yml` einführen oder ausschließlich E2E – vor P1-4 entscheiden |
-| E5 | Stitch-Mockup für die Tablet-Ansicht | vor P1-4 erstellen lassen; der Plan legt nur Layout und Interaktion fest |
-| E6 | Kritische Nachrichten mit Alarmton/DND-Bypass? | Nein, eigener Kanal mit hoher Wichtigkeit; Alarmkanal bleibt Alarmierungen vorbehalten |
+Am 2026-10-09 getroffen:
+
+| # | Frage | Entscheidung | Auswirkung im Plan |
+|---|---|---|---|
+| E1 | Dürfen Einheit-Tablets die gesamte Lage sehen? | **Ja**, Wechsel in die Gesamtansicht ist erlaubt – nur lesend | 3.1 (6), 6.6, 9.1, 9.2 (Allowlist), 10.2 |
+| E2 | Einheiten ohne Tablet | werden **über Funk zentral instruiert**; Führung/Funker erfasst stellvertretend | 3.1 (7), 5.1 „Stellvertretende Erfassung“, 5.3, 6.6, P1-5, P2-3 |
+| E3 | Hebt „Vor Ort“ der Einheit die Phase der Stelle? | Nein, nur Hinweis auf der Karte | 5.1 |
+| E4 | JS-Testinfrastruktur für die Outbox | **Vorschlag:** `node --test` + `fake-indexeddb`, Outbox als reine Logik mit injizierten Abhängigkeiten, vierter CI-Job `js` | 10.5, P1-4 |
+| E5 | Stitch-Mockup | **Nein** – bestehendes Fahrtenbuch-Design verwenden, `fab-*`-Styles in ein gemeinsames Partial auslagern | 1.10, 6.1, 6.2, P1-4 |
+| E6 | Kritische Nachrichten mit Alarmton/DND-Bypass? | Nein, eigener Kanal mit hoher Wichtigkeit; Alarmkanal bleibt Alarmierungen vorbehalten | 7 |
+
+E3 und E6 folgen der Empfehlung aus der ersten Fassung. Sie sind nicht ausdrücklich bestätigt und können
+bis zum Start des jeweiligen Pakets noch geändert werden.
