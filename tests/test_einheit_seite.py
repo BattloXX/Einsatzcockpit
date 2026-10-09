@@ -98,5 +98,7 @@ def test_einheit_template_und_javascript_sind_lesbar():
     template = (root / "app/templates/einheit/einheit.html").read_text()
     for token in ("unterbrechen", "naechsterVersuchIn", "popstate", "massnahmen", "karteAktualisieren"):
         assert token in javascript
+    assert 'class="einheit-umschalter__klassisch"' not in template
+    assert '&#8592; Meine Einsätze' not in template
     assert max(map(len, javascript.splitlines())) <= 160
     assert max(map(len, template.splitlines())) <= 200

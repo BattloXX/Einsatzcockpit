@@ -89,7 +89,6 @@
     <nav class="einheit-umschalter">
       <a href="#" class="is-active" @click.prevent="zurueck()">Meine Einsätze</a>
       <a href="/lage/{{ lage_id }}">Gesamtansicht</a>
-      <a href="/?klassisch=1" class="einheit-umschalter__klassisch">Normale Ansicht</a>
     </nav>
   </header>
 
@@ -183,7 +182,6 @@
 
   {# ── Detail ─────────────────────────────────────────────────────────── #}
   <section x-show="detail" x-cloak>
-    <button type="button" class="btn btn--ghost" @click="zurueck()">&#8592; Meine Einsätze</button>
     <div class="einheit-warning" x-show="detail?.offline">
       Offline – angezeigt wird der zuletzt geladene Stand.
     </div>
