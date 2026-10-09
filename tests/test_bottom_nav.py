@@ -76,7 +76,7 @@ def test_nicht_admin_sieht_archiv_aber_keinen_fab(client, role_code):
 
 
 def test_admin_sieht_verwaltung(client):
-    _login(client, _setup_user("org_admin"))
+    _login(client, _setup_user("admin"))
 
     response = client.get("/")
     nav = _bottom_nav(response.text)

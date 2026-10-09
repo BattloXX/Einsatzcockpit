@@ -60,7 +60,7 @@ def _setup_dashboard_user(
         )
         db.add(user)
         db.flush()
-        role = db.query(Role).filter(Role.code == "org_admin").one()
+        role = db.query(Role).filter(Role.code == "admin").one()
         db.add(UserRole(user_id=user.id, role_id=role.id))
 
         if active_incident:

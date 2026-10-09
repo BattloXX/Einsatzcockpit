@@ -409,7 +409,7 @@ def test_8_admin_dibos_settings_saves_sync_external_units(client):
     )
     db.add(user)
     db.flush()
-    db.add(UserRole(user_id=user.id, role_id=db.query(Role).filter_by(code="org_admin").one().id))
+    db.add(UserRole(user_id=user.id, role_id=db.query(Role).filter_by(code="admin").one().id))
     db.commit()
     db.close()
     client.get("/login")

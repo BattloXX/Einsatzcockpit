@@ -57,9 +57,10 @@
   </thead>
   <tbody>
     {% for u in users %}
+    {% set protected_system_admin = not is_sysadmin and 'system_admin' in (u.roles|map(attribute='code')|list) %}
     <tr>
       <td data-label="">
-        {% if u.id != user.id %}
+        {% if u.id != user.id and not protected_system_admin %}
         <input type="checkbox" name="user_ids" value="{{ u.id }}" class="user-bulk-cb">
         {% endif %}
       </td>
@@ -76,6 +77,9 @@
         {% if u.locked_until %}<br><span class="badge-pill badge-pill--red" {{ tip('Account ist temporär gesperrt') }}>Gesperrt</span>{% endif %}
       </td>
       <td data-label="Aktionen" style="display:flex; gap:4px; flex-wrap:wrap;">
+        {% if protected_system_admin %}
+        <span class="text-muted">Nur Systemadministrator</span>
+        {% else %}
         <button type="button" class="btn btn--ghost btn--xs"
                 data-user-id="{{ u.id }}"
                 data-user='{{ {
@@ -109,6 +113,7 @@
                 {{ tip('Account und alle zugehörigen Daten endgültig löschen') }}>
           Löschen
         </button>
+        {% endif %}
         {% endif %}
       </td>
     </tr>

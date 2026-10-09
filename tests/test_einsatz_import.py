@@ -86,7 +86,7 @@ def test_import_dedup_fahrzeug_matching_und_adhoc():
     set_tenant_context(db, None)
     try:
         org = _org(db)
-        user = _user(db, org.id, "org_admin")
+        user = _user(db, org.id, "admin")
         db.add(AlarmType(org_id=org.id, code="F3", category="F", label="Brand"))
         known = VehicleMaster(dept_id=org.id, code="RLF-A", name="RLF", active=True)
         db.add(known)
@@ -130,7 +130,7 @@ def test_reimport_fuehrt_adhoc_bei_schreibvarianten_mit_echtem_fahrzeug_zusammen
     set_tenant_context(db, None)
     try:
         org = _org(db, "fahrzeug-variante")
-        user = _user(db, org.id, "org_admin")
+        user = _user(db, org.id, "admin")
         db.commit()
         first_raw = _xlsx(FORMAT_A_HEADERS, [[
             "f-variante", "Brand", "07.01.2026 17:50:00", "07.01.2026 18:50:00",
@@ -169,7 +169,7 @@ def test_reimport_bereinigt_bestehende_incident_vehicle_duplikate_mit_kinddaten(
     set_tenant_context(db, None)
     try:
         org = _org(db, "fahrzeug-altduplikat")
-        user = _user(db, org.id, "org_admin")
+        user = _user(db, org.id, "admin")
         real = VehicleMaster(
             dept_id=org.id, code="TMB 27", name="TMB 27 - WOL Feuerwehr Wolfurt",
             active=True, is_adhoc=False,
@@ -240,7 +240,7 @@ def test_format_b_importiert_alle_statuszeiten():
     set_tenant_context(db, None)
     try:
         org = _org(db, "statuszeiten")
-        user = _user(db, org.id, "org_admin")
+        user = _user(db, org.id, "admin")
         db.commit()
         raw = _xlsx(FORMAT_B_HEADERS, [[
             "f-status", "07.01.2026 08:43:00", "07.01.2026 08:44:00",
@@ -269,7 +269,7 @@ def test_reimport_korrigiert_alle_statuszeiten():
     set_tenant_context(db, None)
     try:
         org = _org(db, "reimport")
-        user = _user(db, org.id, "org_admin")
+        user = _user(db, org.id, "admin")
         db.commit()
         first_raw = _xlsx(FORMAT_B_HEADERS, [[
             "f-reimport", "07.01.2026 08:00:00", "07.01.2026 08:01:00",
@@ -304,7 +304,7 @@ def test_reimport_ueberschreibt_manuell_geaenderte_adresse_nicht():
     set_tenant_context(db, None)
     try:
         org = _org(db, "reimport-adresse")
-        user = _user(db, org.id, "org_admin")
+        user = _user(db, org.id, "admin")
         db.commit()
         headers = FORMAT_B_HEADERS + ["Straße/Objekt"]
         raw = _xlsx(headers, [[
@@ -334,7 +334,7 @@ def test_format_a_nutzt_einsatzbereit_auch_als_ende():
     set_tenant_context(db, None)
     try:
         org = _org(db, "format-a-ende")
-        user = _user(db, org.id, "org_admin")
+        user = _user(db, org.id, "admin")
         db.commit()
         raw = _xlsx(FORMAT_A_HEADERS, [[
             "f-format-a", "Brand", "07.01.2026 17:50:00", "07.01.2026 18:50:00",
@@ -359,7 +359,7 @@ def test_import_nutzt_org_zeitzone_statt_fixem_wien_fallback():
     try:
         org = _org(db, "timezone")
         org.timezone = "Europe/London"
-        user = _user(db, org.id, "org_admin")
+        user = _user(db, org.id, "admin")
         db.commit()
         raw = _xlsx(FORMAT_B_HEADERS, [[
             "f-timezone", "07.07.2026 08:43:00", None, None, None, None,
@@ -382,7 +382,7 @@ def test_reimport_ersetzt_adhoc_fahrzeug_in_allen_fk_tabellen():
     set_tenant_context(db, None)
     try:
         org = _org(db, "adhoc-fks")
-        user = _user(db, org.id, "org_admin")
+        user = _user(db, org.id, "admin")
         alarm = AlarmType(org_id=org.id, code="T1", category="T", label="Technisch")
         adhoc = VehicleMaster(
             dept_id=org.id, code="RLF-A", name="RLF", active=True, is_adhoc=True
@@ -484,7 +484,7 @@ def test_import_page_nur_adminrollen(client):
     try:
         org = _org(db, "access")
         users = {role: _user(db, org.id, role).username
-                 for role in ("readonly", "admin", "org_admin", "system_admin")}
+                 for role in ("readonly", "admin", "system_admin")}
         db.commit()
     finally:
         db.close()
@@ -500,7 +500,7 @@ def test_delete_org_scope_systemadmin_und_uas_cleanup(client):
     set_tenant_context(db, None)
     try:
         own_org, foreign_org = _org(db, "delete-own"), _org(db, "delete-foreign")
-        admin = _user(db, own_org.id, "org_admin")
+        admin = _user(db, own_org.id, "admin")
         sysadmin = _user(db, None, "system_admin")
         own = Incident(primary_org_id=own_org.id, alarm_type_code="T1", status="closed")
         foreign = Incident(primary_org_id=foreign_org.id, alarm_type_code="T1", status="closed")

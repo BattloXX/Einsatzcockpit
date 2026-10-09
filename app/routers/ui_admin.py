@@ -11,7 +11,14 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.core.audit import write_audit
-from app.core.permissions import has_role, require_role, same_org_or_system_admin
+from app.core.permissions import (
+    authorize_user_mutation,
+    has_role,
+    manageable_role_codes,
+    permitted_submitted_roles,
+    require_role,
+    same_org_or_system_admin,
+)
 from app.core.security import generate_api_key, generate_sms_gateway_token, hash_api_key, hash_password
 from app.core.templating import templates
 from app.db import get_db
@@ -78,6 +85,26 @@ def _admin_check(request: Request):
     return user
 
 
+def _update_user_roles(db: Session, actor: User, target: User,
+                       submitted_codes: list[str], action: str) -> list[str]:
+    """Apply only roles the actor is allowed to manage.
+
+    Unmanageable existing roles are retained.  This is important even if a
+    future role is added above an organisation administrator's hierarchy.
+    """
+    allowed_submitted = permitted_submitted_roles(
+        db, actor, submitted_codes, action=action, target=target,
+    )
+    existing_codes = {role.code for role in target.roles}
+    all_roles = {role.code: role for role in db.query(Role).all()}
+    manageable = manageable_role_codes(actor, set(all_roles))
+    final_codes = (existing_codes - manageable) | allowed_submitted
+    db.query(UserRole).filter(UserRole.user_id == target.id).delete()
+    for code in final_codes:
+        db.add(UserRole(user_id=target.id, role_id=all_roles[code].id))
+    return sorted(final_codes)
+
+
 # ── Benutzer ──────────────────────────────────────────────────────────────────
 
 @router.get("/benutzer", response_class=HTMLResponse)
@@ -88,7 +115,8 @@ async def users_list(request: Request, db: Session = Depends(get_db),
     user = request.state.user
     is_sysadmin = has_role(user, "system_admin")
     users = _org_filter(db.query(User), user, User.org_id).filter(User.is_device == False).order_by(User.username).all()  # noqa: E712
-    roles = db.query(Role).all()
+    roles = [role for role in db.query(Role).all()
+             if role.code in manageable_role_codes(user, {r.code for r in db.query(Role).all()})]
     all_orgs = db.query(FireDept).order_by(FireDept.name).all() if is_sysadmin else []
     sso_cfg = db.query(OrgSsoConfig).filter(OrgSsoConfig.org_id == user.org_id).first() if user.org_id else None
     org_sso_enabled = (
@@ -147,13 +175,16 @@ async def create_user(
     )
     db.add(new_user)
     db.flush()
-    for code in role_codes:
+    assigned_codes = permitted_submitted_roles(
+        db, current_user, role_codes, action="create", target=new_user,
+    )
+    for code in assigned_codes:
         role = db.query(Role).filter(Role.code == code).first()
         if role:
             db.add(UserRole(user_id=new_user.id, role_id=role.id))
     write_audit(db, "admin.user.created", user_id=request.state.user.id,
                 entity_type="user", entity_id=new_user.id,
-                payload={"role_codes": role_codes})
+                payload={"role_codes": sorted(assigned_codes)})
     db.commit()
     app_url = app_settings.effective_public_base_url.rstrip("/")
     is_test = app_settings.TEST_SYSTEM
@@ -200,7 +231,8 @@ async def create_user(
         .order_by(User.username)
         .all()
     )
-    roles_list = db.query(Role).all()
+    roles_list = [role for role in db.query(Role).all()
+                  if role.code in manageable_role_codes(current_user, {r.code for r in db.query(Role).all()})]
     all_orgs = db.query(FireDept).order_by(FireDept.name).all() if is_sysadmin else []
     sso_cfg_cur = (
         db.query(OrgSsoConfig).filter(OrgSsoConfig.org_id == current_user.org_id).first()
@@ -225,8 +257,8 @@ async def delete_user(
     _=Depends(require_role("admin")),
 ):
     u = db.get(User, user_id)
-    if u and not same_org_or_system_admin(request.state.user, u.org_id):  # type: ignore[arg-type]
-        raise HTTPException(403, "Keine Berechtigung")
+    if u:
+        authorize_user_mutation(db, request.state.user, u, "deactivate")
     if u and u.id != request.state.user.id:
         u.active = False
         write_audit(db, "admin.user.deactivated", user_id=request.state.user.id,
@@ -274,8 +306,7 @@ async def hard_delete_user(
     u = db.get(User, user_id)
     if not u:
         return RedirectResponse("/admin/benutzer", status_code=303)
-    if not same_org_or_system_admin(request.state.user, u.org_id):  # type: ignore[arg-type]
-        raise HTTPException(403, "Keine Berechtigung")
+    authorize_user_mutation(db, request.state.user, u, "hard_delete")
     if u.id == request.state.user.id:
         return RedirectResponse("/admin/benutzer?error=self_delete", status_code=303)
     _hard_delete_user(db, u, request.state.user.id)
@@ -297,7 +328,9 @@ async def bulk_delete_users(
         u = db.get(User, uid)
         if not u:
             continue
-        if not same_org_or_system_admin(request.state.user, u.org_id):  # type: ignore[arg-type]
+        try:
+            authorize_user_mutation(db, request.state.user, u, "bulk_hard_delete")
+        except HTTPException:
             continue
         _hard_delete_user(db, u, acting_id)
     db.commit()
@@ -842,8 +875,7 @@ async def edit_user(
     u = db.get(User, user_id)
     if not u:
         return RedirectResponse("/admin/benutzer", status_code=303)
-    if not same_org_or_system_admin(current_user, u.org_id):  # type: ignore[arg-type]
-        raise HTTPException(403, "Keine Berechtigung")
+    authorize_user_mutation(db, current_user, u, "edit")
     email_clean = (email or "").strip().lower() or None
     if email_clean and email_clean != u.email:
         existing = db.query(User).filter(User.email == email_clean, User.id != user_id).first()
@@ -855,11 +887,7 @@ async def edit_user(
     u.phone = phone.strip() or None
     if has_role(current_user, "system_admin") and org_id is not None:
         u.org_id = org_id if org_id != 0 else None
-    db.query(UserRole).filter(UserRole.user_id == user_id).delete()
-    for code in role_codes:
-        role = db.query(Role).filter(Role.code == code).first()
-        if role:
-            db.add(UserRole(user_id=user_id, role_id=role.id))
+    _update_user_roles(db, current_user, u, role_codes, "edit")
     write_audit(db, "admin.user.edited", user_id=current_user.id,
                 entity_type="user", entity_id=user_id)
     db.commit()
@@ -881,10 +909,11 @@ async def send_user_reset_mail(
     from app.services.mail_service import send_password_reset
 
     u = db.get(User, user_id)
-    if not u or not u.email:
+    if not u:
         return RedirectResponse("/admin/benutzer?error=no_email", status_code=303)
-    if not same_org_or_system_admin(request.state.user, u.org_id):  # type: ignore[arg-type]
-        raise HTTPException(403, "Keine Berechtigung")
+    authorize_user_mutation(db, request.state.user, u, "reset_mail")
+    if not u.email:
+        return RedirectResponse("/admin/benutzer?error=no_email", status_code=303)
 
     # Alte Tokens entwerten
     now = datetime.now(UTC)
@@ -927,13 +956,8 @@ async def update_user_roles(
     u = db.get(User, user_id)
     if not u:
         return RedirectResponse("/admin/benutzer", status_code=303)
-    if not same_org_or_system_admin(request.state.user, u.org_id):  # type: ignore[arg-type]
-        raise HTTPException(403, "Keine Berechtigung")
-    db.query(UserRole).filter(UserRole.user_id == user_id).delete()
-    for code in role_codes:
-        role = db.query(Role).filter(Role.code == code).first()
-        if role:
-            db.add(UserRole(user_id=user_id, role_id=role.id))
+    authorize_user_mutation(db, request.state.user, u, "roles")
+    _update_user_roles(db, request.state.user, u, role_codes, "roles")
     write_audit(db, "admin.user.roles_updated", user_id=request.state.user.id,
                 entity_type="user", entity_id=user_id)
     db.commit()
@@ -949,8 +973,7 @@ async def reset_user_password(
     u = db.get(User, user_id)
     if not u:
         return RedirectResponse("/admin/benutzer", status_code=303)
-    if not same_org_or_system_admin(request.state.user, u.org_id):  # type: ignore[arg-type]
-        raise HTTPException(403, "Keine Berechtigung")
+    authorize_user_mutation(db, request.state.user, u, "password_reset")
     new_pw = sec.token_urlsafe(12)
     u.password_hash = hash_password(new_pw)
     write_audit(db, "admin.user.password_reset", user_id=request.state.user.id,
@@ -959,7 +982,8 @@ async def reset_user_password(
     acting = request.state.user
     is_sysadmin = has_role(acting, "system_admin")
     users = _org_filter(db.query(User), acting, User.org_id).order_by(User.username).all()
-    roles = db.query(Role).all()
+    roles = [role for role in db.query(Role).all()
+             if role.code in manageable_role_codes(acting, {r.code for r in db.query(Role).all()})]
     all_orgs = db.query(FireDept).order_by(FireDept.name).all() if is_sysadmin else []
     return templates.TemplateResponse(request, "admin/users.html", {
         "user": acting,
@@ -3074,14 +3098,10 @@ async def create_device_token(
                                           new_token_type="sms-gateway", base_url=base_url)
 
     # ── Einheit-Gerät (auch für den kombinierten Modus) ──────────────────────────
-    # Rollen: system_admin darf nur system_admin vergeben
-    is_sysadmin = has_role(current_user, "system_admin")
-    allowed_codes = (
-        {r.code for r in db.query(Role).all()}
-        if is_sysadmin
-        else {r.code for r in db.query(Role).all() if r.code != "system_admin"}
-    )
-    role_codes = [c for c in role_codes if c in allowed_codes]
+    # Rollen werden serverseitig erneut gegen die Hierarchie geprüft.
+    role_codes = sorted(permitted_submitted_roles(
+        db, current_user, role_codes, action="device_create",
+    ))
 
     # Eindeutigen Username generieren
     raw_token = _secrets.token_urlsafe(32)
@@ -3266,6 +3286,8 @@ async def assign_device_gsl_profil(
     dt = db.get(DeviceToken, token_id)
     _assert_device_token_access(dt, request.state.user)
     assert dt is not None
+    if dt.user:
+        authorize_user_mutation(db, request.state.user, dt.user, "device_gsl_profile")
     profil = gsl_profil if gsl_profil in ("einheit", "fuehrung") else None
     dt.gsl_profil = profil
     write_audit(db, "admin.device_token.gsl_profil", user_id=request.state.user.id,
@@ -3332,6 +3354,8 @@ async def delete_device_token(
     _assert_device_token_access(dt, request.state.user)
     assert dt is not None
     device_user = dt.user
+    if device_user:
+        authorize_user_mutation(db, request.state.user, device_user, "device_delete")
     write_audit(db, "admin.device_token.deleted", user_id=request.state.user.id,
                 entity_type="device_token", entity_id=token_id,
                 payload={"label": dt.label})
@@ -3380,6 +3404,8 @@ async def revoke_device_token(
     dt = db.get(DeviceToken, token_id)
     _assert_device_token_access(dt, request.state.user)
     assert dt is not None
+    if dt.user:
+        authorize_user_mutation(db, request.state.user, dt.user, "device_revoke")
     dt.revoked_at = datetime.now(UTC)
     if dt.user:
         dt.user.active = False
@@ -3400,6 +3426,8 @@ async def reactivate_device_token(
     dt = db.get(DeviceToken, token_id)
     _assert_device_token_access(dt, request.state.user)
     assert dt is not None
+    if dt.user:
+        authorize_user_mutation(db, request.state.user, dt.user, "device_reactivate")
     dt.revoked_at = None
     if dt.user:
         dt.user.active = True
@@ -3425,6 +3453,8 @@ async def regenerate_device_pairing_pin(
     _assert_device_token_access(dt, request.state.user)
     assert dt is not None
     current_user = request.state.user
+    if dt.user:
+        authorize_user_mutation(db, current_user, dt.user, "device_pin_regenerate")
 
     from app.services.device_login_service import erzeuge_pairing_pin
     new_pin = erzeuge_pairing_pin(db, dt)
@@ -3450,6 +3480,8 @@ async def assign_device_vehicle(
     _assert_device_token_access(dt, request.state.user)
     assert dt is not None
     current_user = request.state.user
+    if dt.user:
+        authorize_user_mutation(db, current_user, dt.user, "device_vehicle_assign")
     safe_vehicle_id: int | None = None
     if vehicle_master_id:
         vm = db.get(VehicleMaster, vehicle_master_id)
