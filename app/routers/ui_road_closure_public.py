@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -12,12 +13,12 @@ from app.config import settings
 from app.core.rate_limit import limiter as _limiter
 from app.core.templating import templates
 from app.db import get_db
+from app.models.master import FireDept
 from app.routers.ui_infoscreen_alarm import _token_org
-from app.routers.ui_road_closure import _color, _feature, _status_data
-from app.services import road_closure_service
+from app.routers.ui_road_closure import _feature, _infoscreen_payload, _org_names, _status_data
 from app.services.road_closure_flags import strassensperren_effective_enabled
-from app.services.road_closure_public_service import public_closure_dict
-from app.services.road_closure_token_service import TokenUngueltig, resolve_detail
+from app.services.road_closure_public_service import public_closure_dict, public_closures_q
+from app.services.road_closure_token_service import TokenUngueltig, resolve, resolve_detail
 
 router = APIRouter(tags=["strassensperren-infoscreen"])
 
@@ -46,31 +47,108 @@ def _screen_data(db: Session, token: str):
     return org, _status_data(db, org.id)
 
 
+def _token_screen_data(db: Session, raw: str, art: str) -> tuple[FireDept, dict, dict]:
+    """Status-/Infoscreen-Token prüfen; liefert ausschließlich öffentliche Sperren der Token-Org."""
+    access, org = resolve(db, raw, art)
+    try:
+        permissions = json.loads(access.berechtigungen_json or "{}")
+    except json.JSONDecodeError:
+        permissions = {}
+    closures = public_closures_q(db, org.id, include_planned=permissions.get("zeige_geplante", True)).all()
+    data = _infoscreen_payload(
+        db, org, closures, scope="public", refresh_sec=permissions.get("refresh_sec", 60),
+        rotation_sec=permissions.get("rotation_sec", 0), permissions=permissions,
+    )
+    return org, data, permissions
+
+
+def _legacy_screen_data(db: Session, token: str) -> tuple[FireDept, dict]:
+    """Alarmmonitor-Token (intern): alle aktuellen Sperren inkl. freigegebener Nachbarsperren."""
+    org, (closures, _active, _planned) = _screen_data(db, token)
+    return org, _infoscreen_payload(db, org, closures, scope="all", owner_names=_org_names(db, closures))
+
+
+def _invalid_html():
+    return _public_headers(HTMLResponse(_UNGUELTIG_HTML, status_code=404))
+
+
+def _invalid_json():
+    return _public_headers(JSONResponse({"detail": "Nicht gefunden"}, status_code=404))
+
+
+def _screen(request: Request, org: FireDept, data: dict, *, modus: str, daten_url: str, zeige_karte: bool):
+    return _public_headers(templates.TemplateResponse(
+        request,
+        "road_closure/infoscreen.html",
+        {
+            # Die |local*-Filter lesen user.org; ohne Login muss trotzdem die Org-Zeitzone gelten.
+            "user": SimpleNamespace(org=org), "org": org, "modus": modus, "external": True, "daten": data,
+            "daten_url": daten_url, "zeige_karte": zeige_karte, "filter_query": "",
+        },
+    ))
+
+
+@router.get("/oeffentlich/strassensperren/{token}", response_class=HTMLResponse)
+@(_limiter.limit(settings.STRASSENSPERREN_PUBLIC_RATELIMIT) if _limiter else lambda f: f)
+def public_status(token: str, request: Request, db: Session = Depends(get_db)):
+    try:
+        org, data, permissions = _token_screen_data(db, token, "status")
+    except TokenUngueltig:
+        return _invalid_html()
+    db.commit()  # last_used_at
+    return _screen(
+        request, org, data, modus="status", daten_url=f"/oeffentlich/strassensperren/{token}/daten",
+        zeige_karte=permissions.get("zeige_karte", True),
+    )
+
+
+@router.get("/oeffentlich/strassensperren/{token}/daten")
+@(_limiter.limit(settings.STRASSENSPERREN_PUBLIC_RATELIMIT) if _limiter else lambda f: f)
+def public_status_daten(token: str, request: Request, db: Session = Depends(get_db)):
+    try:
+        _org, data, _permissions = _token_screen_data(db, token, "status")
+    except TokenUngueltig:
+        return _invalid_json()
+    db.commit()
+    return _public_headers(JSONResponse(data))
+
+
 @router.get("/infoscreen/strassensperren/{token}", response_class=HTMLResponse)
 def infoscreen(token: str, request: Request, db: Session = Depends(get_db)):
+    daten_url = f"/infoscreen/strassensperren/{token}/daten"
+    if token.startswith("rci_"):
+        try:
+            org, data, permissions = _token_screen_data(db, token, "infoscreen")
+        except TokenUngueltig:
+            return _invalid_html()
+        db.commit()
+        return _screen(
+            request, org, data, modus="infoscreen", daten_url=daten_url,
+            zeige_karte=permissions.get("zeige_karte", True),
+        )
     try:
-        org, (closures, active, planned) = _screen_data(db, token)
+        org, data = _legacy_screen_data(db, token)
     except HTTPException as exc:
         # Dieser Token-Endpunkt ist bewusst anonym; ein ungültiger Token darf nicht
         # in den allgemeinen Login-Redirect der HTML-Fehlerbehandlung geraten.
         return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
-    return _public_headers(templates.TemplateResponse(
-        request,
-        "road_closure/status.html",
-        {
-            # Die lokalen Datumsfilter lesen die Org aus user.org; der Infoscreen
-            # hat keinen eingeloggten User, aber muss dennoch die Org-Zeitzone nutzen.
-            "user": SimpleNamespace(org=org),
-            "org": org,
-            "closures": closures,
-            "active_count": active,
-            "planned_count": planned,
-            "color": _color,
-            "closure_status": road_closure_service.compute_status,
-            "public": True,
-            "geojson_url": f"/infoscreen/strassensperren/{token}/karte.json",
-        },
-    ))
+    return _screen(request, org, data, modus="infoscreen", daten_url=daten_url, zeige_karte=True)
+
+
+@router.get("/infoscreen/strassensperren/{token}/daten")
+def infoscreen_daten(token: str, db: Session = Depends(get_db)):
+    if token.startswith("rci_"):
+        try:
+            _org, data, _permissions = _token_screen_data(db, token, "infoscreen")
+        except TokenUngueltig:
+            return _invalid_json()
+        db.commit()
+        return _public_headers(JSONResponse(data))
+    try:
+        _org, data = _legacy_screen_data(db, token)
+    except HTTPException as exc:
+        return _public_headers(JSONResponse({"detail": exc.detail}, status_code=exc.status_code))
+    return _public_headers(JSONResponse(data))
 
 
 @router.get("/infoscreen/strassensperren/{token}/karte.json")

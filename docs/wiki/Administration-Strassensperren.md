@@ -64,3 +64,7 @@ Die öffentliche Overpass-Instanz ist zeitweise überlastet. Fällt sie aus, wir
 ## Öffentliche Tokens
 
 Einzelansichten verwenden Tokens mit dem Präfix `rcd_` (Status `rcs_`, Infoscreen `rci_`). Tokens können widerrufen werden und optional ablaufen. Öffentlich sind nur freigegebene Felder der Sperre; `PUBLIC_BASE_URL` bestimmt die Basis der erzeugten Links.
+
+## Externe Zugänge: Statusseite und Infoscreen
+
+Unter **Verwaltung → Infoscreens → Straßensperren** (`/admin/settings/strassensperren-infoscreen`) erstellen Organisationsadmins Statusseiten- (`rcs_`) und Infoscreen-Tokens (`rci_`). Je Zugang sind Ablauf, Aktualisierungsintervall, geplante Sperren, Karte, Einschränkungen, Grund und beim Infoscreen die Rotation konfigurierbar. Zugänge können jederzeit widerrufen werden. Die alte Alarmmonitor-URL bleibt ein interner Infoscreen und zeigt weiterhin Partnerfreigaben.

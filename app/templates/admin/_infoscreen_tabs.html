@@ -1,7 +1,11 @@
 {% from "_tabnav.html" import subtabnav %}
 {% set _fp = request.url.path %}
-{{ subtabnav([
+{% set _tabs = [
   {'label': 'Alarm-Infoscreen', 'href': '/infoscreen-alarm/verwaltung', 'active': _fp.startswith('/infoscreen-alarm')},
   {'label': 'Wetter-Infoscreen', 'href': '/admin/settings/wetter/infoscreen', 'active': _fp.startswith('/admin/settings/wetter/infoscreen')},
   {'label': 'Statistik', 'href': '/admin/settings/statistik', 'active': _fp.startswith('/admin/settings/statistik')},
-]) }}
+] %}
+{% if request.state.strassensperren_enabled %}
+{% set _tabs = _tabs + [{'label': 'Straßensperren', 'href': '/admin/settings/strassensperren-infoscreen', 'active': _fp.startswith('/admin/settings/strassensperren-infoscreen')}] %}
+{% endif %}
+{{ subtabnav(_tabs) }}

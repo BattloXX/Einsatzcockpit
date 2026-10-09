@@ -35,7 +35,7 @@ def test_statusansicht_zeigt_nur_aktuelle_sperren(client):
         aktiv = len(road_closure_service.list_closures(db, 1, status="active"))
     finally:
         db.close()
-    assert f"{aktiv} aktiv" in response.text
+    assert f"<strong>{aktiv}</strong><span>Aktiv</span>" in response.text
     assert "Aktuelle Status-Sperre" in response.text
     assert "Abgelaufene Status-Sperre" not in response.text
 

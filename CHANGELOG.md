@@ -4,6 +4,7 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 
 ## Unreleased
 
+- **Straßensperren**: Statusseite und Infoscreen mit externen Status-/Infoscreen-Tokens, Live-Aktualisierung und widerrufbaren Zugängen ergänzt.
 - **Straßensperren**: Öffentliche, widerrufbare Einzelansicht per Freigabelink (Token `rcd_`), öffentliches Feld „Grund“, Grundlage für Status-/Infoscreen-Tokens und Teams (Migration 0262); Login-Rücksprung gehärtet.
 - **Straßensperren**: Navigation, kombinierbare Filter mit Merken der Auswahl, Statusansicht und Konsolen-Kachel ergänzt.
 - **Straßensperren**: Zusatzdaten (Ort, Aktenzeichen, Behörde, Ausnahmen), Geometriequalität,

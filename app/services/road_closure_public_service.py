@@ -50,6 +50,17 @@ def einsatzgebiet(org: FireDept, closure: RoadClosure) -> str:
     return f"{org.name} – {closure.city}" if closure.city and closure.city not in org.name else org.name
 
 
+def abschnitt(closure: RoadClosure) -> str | None:
+    """Straße mit Von/Bis, ohne Platzhalter für fehlende Endpunkte."""
+    if not closure.street:
+        return None
+    if closure.from_text and closure.to_text:
+        return f"{closure.street}: {closure.from_text} – {closure.to_text}"
+    if closure.from_text or closure.to_text:
+        return f"{closure.street}: {closure.from_text or closure.to_text}"
+    return closure.street
+
+
 def _iso(value: datetime | None) -> str | None:
     return value.isoformat() + "Z" if value else None
 
@@ -78,9 +89,7 @@ def public_closure_dict(closure: RoadClosure, org: FireDept, *, now: datetime | 
         "street": closure.street,
         "from_text": closure.from_text,
         "to_text": closure.to_text,
-        "abschnitt": f"{closure.street}: {closure.from_text or '?'} – {closure.to_text or '?'}"
-        if closure.street
-        else None,
+        "abschnitt": abschnitt(closure),
         "direction": closure.direction,
         "direction_label": DIRECTIONS.get(closure.direction or "", closure.direction),
         "restriction_type": closure.restriction_type,
