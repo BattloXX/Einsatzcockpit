@@ -197,7 +197,7 @@ def _channel_klasse() -> type:
 async def lagedokument_ws(websocket: WebSocket, lage_id: int):
     """Realtime-Sync-Kanal fuer ein Lagedokument. Nur fuer Bearbeiten-Rollen --
     Lesende (readonly) bekommen im Template gar keine Editor-/Yjs-Anbindung."""
-    from app.core.security import unsign_session
+    from app.core.security import pruefe_geraete_session, unsign_session
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
     from app.models.user import User
@@ -207,7 +207,10 @@ async def lagedokument_ws(websocket: WebSocket, lage_id: int):
     if not session_data:
         await websocket.close(code=WS_CLOSE_UNAUTHORIZED)
         return
-    user_id = session_data[0]
+    (
+        user_id, _is_qr, _qr_incident_id, is_device, _display_name,
+        _qr_lage_id, _is_remember, device_token_id,
+    ) = session_data
 
     db = SessionLocal()
     set_tenant_context(db, None)
@@ -215,6 +218,13 @@ async def lagedokument_ws(websocket: WebSocket, lage_id: int):
         user = db.query(User).filter(User.id == user_id, User.active == True).first()  # noqa: E712
         if user is None:
             await websocket.close(code=WS_CLOSE_UNAUTHORIZED)
+            return
+        device_token = pruefe_geraete_session(db, user_id, is_device, device_token_id)
+        if is_device and not device_token:
+            await websocket.close(code=WS_CLOSE_UNAUTHORIZED)
+            return
+        if device_token and device_token.gsl_profil == "einheit":
+            await websocket.close(code=WS_CLOSE_FORBIDDEN)
             return
         _ = [r.code for r in user.roles]  # vor Session-Ende laden
         if not has_role(user, *_EDIT_ROLLEN):
