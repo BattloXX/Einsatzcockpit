@@ -237,7 +237,8 @@ def _start_background_loops() -> list[asyncio.Task]:
         lis_poll_loop(), lis_capture_retention_loop(), dibos_poll_loop(), dibos_trace_retention_loop(),
         nachschlagewerk_sync_loop(), org_backup_loop(), mailing_dispatch_loop(),
         api_message_dispatch_loop(), mailing_schedule_loop(),
-        incident_route_loop(), resend_inbound_retention_loop(),
+        resend_inbound_retention_loop(),
+        incident_route_loop(),
     )
     return [asyncio.create_task(loop) for loop in loops]
 
