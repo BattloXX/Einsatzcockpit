@@ -58,6 +58,11 @@ def _darf_zugang_verwalten(request: Request, user) -> None:
         raise HTTPException(403, "Zugangsverwaltung nicht erlaubt")
 
 
+def _gk_name(db: Session, einheit) -> str | None:
+    leader = db.get(LageEinheitLeader, einheit.leader_assignment_id) if einheit.leader_assignment_id else None
+    return leader.display_name if leader else None
+
+
 def _zugang(request: Request, lage, einheit, db: Session, ergebnis=None):
     return templates.TemplateResponse(
         request,
@@ -66,11 +71,7 @@ def _zugang(request: Request, lage, einheit, db: Session, ergebnis=None):
             "lage": lage,
             "einheit": einheit,
             "zugang": gk_zugang_service.zugang_status(db, einheit),
-            "karte_gk_name": (
-                db.get(LageEinheitLeader, einheit.leader_assignment_id).display_name
-                if einheit.leader_assignment_id and db.get(LageEinheitLeader, einheit.leader_assignment_id)
-                else None
-            ),
+            "karte_gk_name": _gk_name(db, einheit),
             "ergebnis": ergebnis,
         },
     )
