@@ -10,6 +10,9 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = "mysql+pymysql://einsatzleiter:pw@127.0.0.1:3306/einsatzleiter"
     SECRET_KEY: str = SECRET_KEY_PLACEHOLDER
+    # Separater HMAC-Schlüssel für ableitbare GSL-Zugangstoken. Darf nie der
+    # SESSION/SECRET_KEY selbst sein, damit beide Schlüssel unabhängig rotieren.
+    GSL_ZUGANG_KEY: str = ""
     SESSION_MAX_AGE_SECONDS: int = 86400  # 24 Stunden (normaler Benutzer)
     SESSION_INACTIVITY_SECONDS: int = 28800  # 8 Stunden Inaktivitäts-Timeout
     # "Login merken": längeres, gleitendes Fenster. Solange der Nutzer mindestens

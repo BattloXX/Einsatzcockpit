@@ -92,7 +92,7 @@ def test_sms_erfolgreich_rotiert_und_protokolliert_ohne_token(sms, caplog):
         assert ziel == "+436641234567"
         token = _token(nachricht.split()[-1] if "#gkz_" in nachricht.split()[-1] else
                        next(w for w in nachricht.split() if "#gkz_" in w))
-        zugang = db.query(LageEinheitZugang).filter_by(einheit_id=einheit.id).one()
+        zugang = db.query(LageEinheitZugang).filter_by(einheit_id=einheit.id, typ="personal").one()
         assert service.token_pruefen(db, token).zustand == "ok"
         assert zugang.token_hash != token
         versand = db.query(LageEinheitZugangVersand).filter_by(zugang_id=zugang.id, kanal="sms").one()
@@ -114,7 +114,7 @@ def test_providerfehler_laesst_zuweisung_und_zugang_unberuehrt(sms, modus, statu
         assert ergebnis.status == status
         assert "gkz_" not in (ergebnis.fehler or "")
         assert einheit.leader_assignment_id == leader.id
-        zugang = db.query(LageEinheitZugang).filter_by(einheit_id=einheit.id).one()
+        zugang = db.query(LageEinheitZugang).filter_by(einheit_id=einheit.id, typ="personal").one()
         erster_hash = zugang.token_hash
         assert zugang.status == "aktiv" and erster_hash
         sms.modus["ergebnis"] = "ok"
@@ -146,7 +146,7 @@ def test_uebersprungen_ohne_bestehenden_zugang_legt_zeile_ohne_token_an(monkeypa
         _, lage, einheit, _ = _daten(db)
         db.commit()
         _senden(db, lage, einheit)
-        zugang = db.query(LageEinheitZugang).filter_by(einheit_id=einheit.id).one()
+        zugang = db.query(LageEinheitZugang).filter_by(einheit_id=einheit.id, typ="personal").one()
         assert zugang.token_hash is None and zugang.status == "kein_token"
 
 
@@ -188,7 +188,7 @@ def test_bestehender_link_verhindert_zweite_rotation(sms):
         db.commit()
         kopie = service.kopie_ausstellen(db, lage, einheit, user_id=None, modus="nachricht")
         link = next(w for w in kopie.text.split() if "#gkz_" in w)
-        zugang = db.query(LageEinheitZugang).filter_by(einheit_id=einheit.id).one()
+        zugang = db.query(LageEinheitZugang).filter_by(einheit_id=einheit.id, typ="personal").one()
         generation = zugang.generation
         zweite = service.kopie_ausstellen(db, lage, einheit, user_id=None, modus="link", bestehender_link=link)
         assert zweite.link == link == zweite.text and zweite.generation == generation
@@ -253,7 +253,7 @@ def test_status_listet_sitzungen_und_versandprotokoll(sms):
         _, lage, einheit, _ = _daten(db)
         db.commit()
         _senden(db, lage, einheit)
-        zugang = db.query(LageEinheitZugang).filter_by(einheit_id=einheit.id).one()
+        zugang = db.query(LageEinheitZugang).filter_by(einheit_id=einheit.id, typ="personal").one()
         service.sitzung_anlegen(db, zugang, user_agent="Android Chrome", ip="10.0.0.9", verifiziert=True)
         db.commit()
         status = service.zugang_status(db, einheit)

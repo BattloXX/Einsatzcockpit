@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import ipaddress
 import re
 import secrets
@@ -33,6 +36,7 @@ from app.services.exercise_guard import darf_extern
 from app.services.sms_service import send_sms, sms_available
 
 TOKEN_PREFIX = "gkz_"
+QR_TOKEN_PREFIX = "gkq_"
 COOKIE = "ec_gk"
 STANDARDNACHRICHT = """GSL {lage}
 Einheit: {einheit}
@@ -43,6 +47,29 @@ Gilt nur für deine Einheit in dieser Lage. Bitte nicht weitergeben."""
 
 def _now() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
+
+
+def zugang_schluessel() -> bytes:
+    """Liefert den unabhängigen HMAC-Schlüssel für ableitbare Zugangstoken."""
+    if settings.GSL_ZUGANG_KEY:
+        return settings.GSL_ZUGANG_KEY.encode()
+    if not (settings.DEBUG or settings.TEST_SYSTEM):
+        raise ValueError("GSL_ZUGANG_KEY muss in der Produktionsumgebung gesetzt sein")
+    return hmac.new(settings.SECRET_KEY.encode(), b"gsl-zugang-key-fallback", hashlib.sha256).digest()
+
+
+def token_ableiten(typ: str, zugang_id: int, generation: int) -> str:
+    """Leitet einen reproduzierbaren, nicht speicherbaren Zugangstoken ab."""
+    if typ not in {"personal", "qr"}:
+        raise ValueError("Unbekannter Zugangstyp")
+    digest = hmac.new(zugang_schluessel(), f"{typ}|{zugang_id}|{generation}".encode(), hashlib.sha256).digest()
+    prefix = TOKEN_PREFIX if typ == "personal" else QR_TOKEN_PREFIX
+    return prefix + base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
+
+
+def token_neu_berechnen(zugang: LageEinheitZugang) -> str:
+    """Berechnet den aktuellen Klartexttoken ausschließlich für SMS/Druck intern neu."""
+    return token_ableiten(zugang.typ, zugang.id, zugang.generation)
 
 
 def link_fuer(token: str) -> str:
@@ -189,7 +216,12 @@ def stelle_zugang_aus(
     if einheit.status == "abgerueckt":
         raise ValueError("Für abgerückte Einheiten kann kein Zugang ausgestellt werden")
     now = _now()
-    zugang = db.query(LageEinheitZugang).filter(LageEinheitZugang.einheit_id == einheit.id).with_for_update().first()
+    zugang = (
+        db.query(LageEinheitZugang)
+        .filter(LageEinheitZugang.einheit_id == einheit.id, LageEinheitZugang.typ == "personal")
+        .with_for_update()
+        .first()
+    )
     if zugang is None:
         try:
             with db.begin_nested():
@@ -197,6 +229,7 @@ def stelle_zugang_aus(
                     org_id=lage.org_id,
                     lage_id=lage.id,
                     einheit_id=einheit.id,
+                    typ="personal",
                     phone_version=leader.phone_version,
                     status="kein_token",
                     created_at=now,
@@ -206,13 +239,16 @@ def stelle_zugang_aus(
                 db.flush()
         except IntegrityError:
             zugang = (
-                db.query(LageEinheitZugang).filter(LageEinheitZugang.einheit_id == einheit.id).with_for_update().one()
+                db.query(LageEinheitZugang)
+                .filter(LageEinheitZugang.einheit_id == einheit.id, LageEinheitZugang.typ == "personal")
+                .with_for_update()
+                .one()
             )
     assert zugang is not None
-    raw = TOKEN_PREFIX + secrets.token_urlsafe(24)
     zugang.vorheriger_token_hash = zugang.token_hash or zugang.vorheriger_token_hash
-    zugang.token_hash = hash_api_key(raw)
     zugang.generation += 1
+    raw = token_ableiten("personal", zugang.id, zugang.generation)
+    zugang.token_hash = hash_api_key(raw)
     zugang.status = "aktiv"
     zugang.laeuft_ab_at = now + timedelta(hours=max(1, min(168, cfg.gk_zugang_gueltigkeit_stunden)))
     zugang.leader_id, zugang.phone_e164, zugang.phone_version = leader.id, leader.phone_e164, leader.phone_version
@@ -239,8 +275,15 @@ def stelle_zugang_aus(
     return NeuerZugang(link_fuer(raw), zugang.generation, zugang.laeuft_ab_at, zugang.id)
 
 
-def widerrufe(db: Session, einheit_id: int, *, grund: str, user_id: int | None = None) -> None:
-    zugang = db.query(LageEinheitZugang).filter(LageEinheitZugang.einheit_id == einheit_id).with_for_update().first()
+def widerrufe(
+    db: Session, einheit_id: int, *, grund: str, user_id: int | None = None, typ: str = "personal"
+) -> None:
+    zugang = (
+        db.query(LageEinheitZugang)
+        .filter(LageEinheitZugang.einheit_id == einheit_id, LageEinheitZugang.typ == typ)
+        .with_for_update()
+        .first()
+    )
     if not zugang:
         return
     now = _now()
@@ -276,20 +319,25 @@ def widerrufe(db: Session, einheit_id: int, *, grund: str, user_id: int | None =
 
 def widerrufe_alle_fuer_lage(db: Session, lage_id: int, grund: str) -> None:
     for row in db.query(LageEinheitZugang).filter(LageEinheitZugang.lage_id == lage_id).all():
-        widerrufe(db, row.einheit_id, grund=grund)
+        widerrufe(db, row.einheit_id, grund=grund, typ=row.typ)
 
 
 def widerrufe_alle_fuer_org(db: Session, org_id: int, grund: str = "manuell") -> int:
     """Widerruft alle Zugänge einer Organisation und gibt deren Anzahl zurück."""
     anzahl = 0
     for row in db.query(LageEinheitZugang).filter(LageEinheitZugang.org_id == org_id).all():
-        widerrufe(db, row.einheit_id, grund=grund)
+        widerrufe(db, row.einheit_id, grund=grund, typ=row.typ)
         anzahl += 1
     return anzahl
 
 
 def verlaengere(db: Session, einheit_id: int, user_id: int | None) -> LageEinheitZugang:
-    zugang = db.query(LageEinheitZugang).filter(LageEinheitZugang.einheit_id == einheit_id).with_for_update().first()
+    zugang = (
+        db.query(LageEinheitZugang)
+        .filter(LageEinheitZugang.einheit_id == einheit_id, LageEinheitZugang.typ == "personal")
+        .with_for_update()
+        .first()
+    )
     if not zugang:
         raise ValueError("Kein Zugang vorhanden")
     if zugang.org_id is None:
@@ -307,22 +355,32 @@ def verlaengere(db: Session, einheit_id: int, user_id: int | None) -> LageEinhei
     return zugang
 
 
-def token_pruefen(db: Session, token: str) -> TokenPruefung:
+def token_pruefen(db: Session, token: str, typ: str = "personal") -> TokenPruefung:
+    if typ not in {"personal", "qr"} or (token.startswith(QR_TOKEN_PREFIX) and typ != "qr"):
+        return TokenPruefung("unbekannt", None)
     set_tenant_context(db, None)
     zugang = (
         db.query(LageEinheitZugang)
         .execution_options(include_all_tenants=True)
-        .filter(LageEinheitZugang.token_hash == hash_api_key(token))
+        .filter(LageEinheitZugang.token_hash == hash_api_key(token), LageEinheitZugang.typ == typ)
         .first()
     )
     if not zugang:
         ersetzt = (
             db.query(LageEinheitZugang)
             .execution_options(include_all_tenants=True)
-            .filter(LageEinheitZugang.vorheriger_token_hash == hash_api_key(token))
+            .filter(LageEinheitZugang.vorheriger_token_hash == hash_api_key(token), LageEinheitZugang.typ == typ)
             .first()
         )
         return TokenPruefung("beendet", ersetzt) if ersetzt else TokenPruefung("unbekannt", None)
+    prefix = TOKEN_PREFIX if typ == "personal" else QR_TOKEN_PREFIX
+    # Alte Zufallstoken werden weiter ausschließlich über ihren gespeicherten
+    # Hash geprüft. Ein Token in der Länge des neuen HMAC-Formats muss dagegen
+    # auch mit dem aktuell konfigurierten Schlüssel ableitbar sein.
+    if token.startswith(prefix) and len(token) == len(prefix) + 43 and not hmac.compare_digest(
+        token, token_neu_berechnen(zugang)
+    ):
+        return TokenPruefung("unbekannt", None)
     if zugang.status != "aktiv" or not zugang.token_hash:
         return TokenPruefung("beendet", zugang)
     if not zugang.laeuft_ab_at or zugang.laeuft_ab_at <= _now():
@@ -365,6 +423,7 @@ def sitzung_anlegen(
         org_id=zugang.org_id,
         zugang_id=zugang.id,
         generation=zugang.generation,
+        typ=zugang.typ,
         session_hash=hash_api_key(raw),
         created_at=now,
         last_seen_at=now,
@@ -559,7 +618,11 @@ def _zugang_ohne_token(
     db: Session, lage: MajorIncident, einheit: LageEinheit, leader: LageEinheitLeader
 ) -> LageEinheitZugang:
     """Legt nur die FK-Basis für ein übersprungenes Protokoll an, ohne Tokenrotation."""
-    zugang = db.query(LageEinheitZugang).filter(LageEinheitZugang.einheit_id == einheit.id).first()
+    zugang = (
+        db.query(LageEinheitZugang)
+        .filter(LageEinheitZugang.einheit_id == einheit.id, LageEinheitZugang.typ == "personal")
+        .first()
+    )
     if zugang:
         return zugang
     now = _now()
@@ -567,6 +630,7 @@ def _zugang_ohne_token(
         org_id=lage.org_id,
         lage_id=lage.id,
         einheit_id=einheit.id,
+        typ="personal",
         leader_id=leader.id,
         phone_e164=leader.phone_e164,
         phone_version=leader.phone_version,
@@ -646,7 +710,11 @@ async def sende_zugangs_sms(
         raise ValueError("Gruppenkommandanten-Zugang ist für diese Organisation deaktiviert")
     if not leader or leader.end_at is not None or not leader.phone_e164:
         raise ValueError("Aktueller Gruppenkommandant benötigt eine gültige Telefonnummer")
-    zugang = db.query(LageEinheitZugang).filter(LageEinheitZugang.einheit_id == einheit.id).first()
+    zugang = (
+        db.query(LageEinheitZugang)
+        .filter(LageEinheitZugang.einheit_id == einheit.id, LageEinheitZugang.typ == "personal")
+        .first()
+    )
     if not sms_available(lage.org_id, db):
         zugang = zugang or _zugang_ohne_token(db, lage, einheit, leader)
         _versand(
@@ -868,7 +936,11 @@ def kopie_ausstellen(
     leader = db.get(LageEinheitLeader, einheit.leader_assignment_id) if einheit.leader_assignment_id else None
     if not cfg.gk_zugang_aktiv or not leader or not leader.phone_e164:
         raise ValueError("Aktueller Gruppenkommandant benötigt eine gültige Telefonnummer")
-    zugang = db.query(LageEinheitZugang).filter(LageEinheitZugang.einheit_id == einheit.id).first()
+    zugang = (
+        db.query(LageEinheitZugang)
+        .filter(LageEinheitZugang.einheit_id == einheit.id, LageEinheitZugang.typ == "personal")
+        .first()
+    )
     if zugang and not bestaetigt:
         active = _aktuelle_sitzung(db, zugang)
         if active:
@@ -916,7 +988,11 @@ def aufraeumen_haengende_versaende(db: Session) -> int:
 
 
 def zugang_status(db: Session, einheit: LageEinheit) -> dict:
-    zugang = db.query(LageEinheitZugang).filter(LageEinheitZugang.einheit_id == einheit.id).first()
+    zugang = (
+        db.query(LageEinheitZugang)
+        .filter(LageEinheitZugang.einheit_id == einheit.id, LageEinheitZugang.typ == "personal")
+        .first()
+    )
     leader = db.get(LageEinheitLeader, einheit.leader_assignment_id) if einheit.leader_assignment_id else None
     lage = db.get(MajorIncident, einheit.lage_id)
     if not lage or not org_einstellungen(db, lage.org_id).gk_zugang_aktiv:

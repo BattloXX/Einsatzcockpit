@@ -449,7 +449,10 @@ async def zugang_sitzung_beenden(
     session = db.get(gk_zugang_service.LageEinheitZugangSession, session_id)
     zugang = (
         db.query(gk_zugang_service.LageEinheitZugang)
-        .filter(gk_zugang_service.LageEinheitZugang.einheit_id == einheit.id)
+        .filter(
+            gk_zugang_service.LageEinheitZugang.einheit_id == einheit.id,
+            gk_zugang_service.LageEinheitZugang.typ == "personal",
+        )
         .first()
     )
     if not session or not zugang or session.zugang_id != zugang.id or session.org_id != lage.org_id:

@@ -68,7 +68,7 @@ def test_veralteter_auto_auftrag_wird_verworfen(monkeypatch, sms):
         asyncio.run(service.sende_auto_sms(auftrag))
         row = db.query(LageEinheitZugangVersand).filter_by(id=auftrag.versand_id).one()
         assert row.status == "verworfen" and not sms
-        assert db.query(LageEinheitZugang).filter_by(einheit_id=einheit.id).one().token_hash
+        assert db.query(LageEinheitZugang).filter_by(einheit_id=einheit.id, typ="personal").one().token_hash
 
 
 def test_setzen_mit_auto_aus_erzeugt_keinen_token():
@@ -78,4 +78,4 @@ def test_setzen_mit_auto_aus_erzeugt_keinen_token():
             db, lage, einheit, person_name="Andere Führung", telefon="+436651112233"
         )
         assert result.aenderung == "wechsel" and result.auto_sms is None
-        assert not db.query(LageEinheitZugang).filter_by(einheit_id=einheit.id).count()
+        assert not db.query(LageEinheitZugang).filter_by(einheit_id=einheit.id, typ="personal").count()
