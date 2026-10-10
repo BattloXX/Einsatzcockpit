@@ -6,6 +6,7 @@ import base64
 import hashlib
 import hmac
 import ipaddress
+import logging
 import re
 import secrets
 from dataclasses import dataclass
@@ -55,6 +56,9 @@ Einheitenansicht: {link}
 Dringende Meldungen und Kraefteanforderungen ueber Funk."""
 
 
+logger = logging.getLogger("einsatzleiter.gk_zugang")
+
+
 def _now() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
@@ -64,7 +68,9 @@ def zugang_schluessel() -> bytes:
     if settings.GSL_ZUGANG_KEY:
         return settings.GSL_ZUGANG_KEY.encode()
     if not (settings.DEBUG or settings.TEST_SYSTEM):
-        raise ValueError("GSL_ZUGANG_KEY muss in der Produktionsumgebung gesetzt sein")
+        # Verfügbarkeit vor Perfektion: ohne eigenen Schlüssel bleibt der Zugang nutzbar, der Schlüssel wird
+        # domänengetrennt aus SECRET_KEY abgeleitet. Eine SECRET_KEY-Rotation entwertet dann alle Links.
+        logger.warning("GSL_ZUGANG_KEY ist nicht gesetzt; Zugangslinks hängen am SECRET_KEY")
     return hmac.new(settings.SECRET_KEY.encode(), b"gsl-zugang-key-fallback", hashlib.sha256).digest()
 
 

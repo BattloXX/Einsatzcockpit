@@ -120,4 +120,4 @@ Unter **Einstellungen → Großschadenslage** steuert die Karte „Gruppenkomman
 | QR-Gültigkeit (Stunden) | 1–168, Standard 72. |
 | QR-PIN | Optional; die PIN wird nur der Einsatzleitung angezeigt, nie gedruckt. |
 
-**Serverkonfiguration:** `GSL_ZUGANG_KEY` (eigener, geheimer Schlüssel für die Ableitung der Zugangslinks, mindestens 32 Zeichen). Ein Wechsel des Schlüssels macht alle ausgegebenen Links ungültig. Ohne Wert gilt in Produktion ein Fehler beim Ausstellen.
+**Serverkonfiguration:** `GSL_ZUGANG_KEY` (eigener, geheimer Schlüssel für die Ableitung der Zugangslinks, empfohlen: `python -c "import secrets; print(secrets.token_urlsafe(48))"`). Ein Wechsel des Schlüssels macht alle ausgegebenen Links ungültig. Ohne Wert wird der Schlüssel aus `SECRET_KEY` abgeleitet (eine Warnung im Log weist darauf hin); dann entwertet eine `SECRET_KEY`-Rotation alle Links.
