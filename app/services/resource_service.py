@@ -108,6 +108,66 @@ def _get_einheit(db: Session, einheit_id: int, lage_id: int) -> LageEinheit:
     return e
 
 
+def journal_eintrag_manuell(
+    db: Session,
+    lage: MajorIncident,
+    einheit: LageEinheit,
+    *,
+    text: str,
+    site_id: int | None = None,
+    user_id: int,
+    author_name: str,
+) -> LageJournalEntry:
+    """Erfasst einen unveraenderbaren manuellen Ressourceneintrag."""
+    if einheit.lage_id != lage.id:
+        raise ValueError("Einheit nicht gefunden")
+    text = text.strip()
+    if not 1 <= len(text) <= 1000:
+        raise ValueError("Text muss zwischen 1 und 1000 Zeichen lang sein")
+    if site_id is not None:
+        site = db.get(IncidentSite, site_id)
+        if site is None or site.major_incident_id != lage.id:
+            raise ValueError("Einsatzstelle nicht gefunden")
+    entry = LageJournalEntry(
+        major_incident_id=lage.id, ts=datetime.now(UTC), category="ressource_manuell",
+        text=text, author_name=author_name, user_id=user_id, einheit_id=einheit.id,
+        site_id=site_id, ereignis_typ="manuell", quelle="manuell",
+    )
+    db.add(entry)
+    db.flush()
+    return entry
+
+
+def journal_eintrag_stornieren(
+    db: Session,
+    lage: MajorIncident,
+    einheit: LageEinheit,
+    entry_id: int,
+    *,
+    grund: str,
+    user_id: int,
+    author_name: str,
+) -> LageJournalEntry:
+    """Markiert einen Ressourceneintrag nachpruefbar als storniert."""
+    if einheit.lage_id != lage.id:
+        raise ValueError("Einheit nicht gefunden")
+    grund = grund.strip()
+    if not grund:
+        raise ValueError("Stornogrund erforderlich")
+    entry = db.get(LageJournalEntry, entry_id)
+    if (
+        entry is None or entry.major_incident_id != lage.id or entry.einheit_id != einheit.id
+        or not entry.category.startswith("ressource")
+    ):
+        raise ValueError("Journaleintrag nicht gefunden")
+    if entry.storniert_at is not None:
+        raise ValueError("Journaleintrag bereits storniert")
+    entry.storniert_at = datetime.now(UTC)
+    entry.storniert_von = author_name
+    entry.storno_grund = grund
+    return entry
+
+
 # ── Ressource anlegen ─────────────────────────────────────────────────────────
 
 def add_resource(
