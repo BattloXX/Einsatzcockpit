@@ -160,7 +160,8 @@ def add_resource(
 
     _journal(db, lage_id,
              f"Ressource hinzugefügt: {label} [{RESOURCE_TYPE_LABEL.get(resource_type, resource_type)}]",
-             category="ressource", author_name=author_name, user_id=user_id)
+             category="ressource", author_name=author_name, user_id=user_id,
+             einheit_id=e.id, ereignis_typ="angelegt", quelle="manuell")
     return e
 
 
@@ -223,7 +224,8 @@ def assign_to_sector(
 
     _journal(db, lage_id,
              f'{e.label} -> Abschnitt "{sector.name}" zugeordnet',
-             category="ressource", author_name=author_name, user_id=user_id)
+             category="ressource", author_name=author_name, user_id=user_id,
+             einheit_id=e.id, ereignis_typ="status", quelle="manuell")
     return e
 
 
@@ -311,7 +313,8 @@ def dispatch_to_site(
 
     _journal(db, lage_id,
              f'{e.label} → Einsatzstelle "{site.bezeichnung}" disponiert (DISPONIERT)',
-             category="ressource", author_name=author_name, user_id=user_id)
+             category="ressource", author_name=author_name, user_id=user_id,
+             einheit_id=e.id, site_id=site.id, ereignis_typ="disponiert", quelle="manuell")
     return dispatch
 
 
@@ -351,7 +354,8 @@ def aendere_auftrag(
         user_id=user_id, author_name=author_name,
     ))
     _journal(db, dispatch.einheit.lage_id, text, category="ressource",
-             author_name=author_name, user_id=user_id)
+             author_name=author_name, user_id=user_id, einheit_id=dispatch.einheit_id,
+             site_id=dispatch.site_id, ereignis_typ="status", quelle="manuell")
     return True
 
 
@@ -378,7 +382,8 @@ def oeffne_auftrag_wieder(
         user_id=user_id, author_name=author_name,
     ))
     _journal(db, dispatch.einheit.lage_id, text, category="ressource",
-             author_name=author_name, user_id=user_id)
+             author_name=author_name, user_id=user_id, einheit_id=dispatch.einheit_id,
+             site_id=dispatch.site_id, ereignis_typ="status", quelle="manuell")
 
 
 def set_vor_ort_at_site(
@@ -450,7 +455,8 @@ def set_vor_ort_at_site(
 
     _journal(db, lage_id,
              f'{e.label} → Einsatzstelle "{site.bezeichnung}" VOR ORT',
-             category="ressource", author_name=author_name, user_id=user_id)
+             category="ressource", author_name=author_name, user_id=user_id,
+             einheit_id=e.id, site_id=site.id, ereignis_typ="status", quelle="manuell")
     return dispatch, None
 
 
@@ -483,7 +489,9 @@ def resolve_vor_ort_conflict(
         if old_site:
             _journal(db, lage_id,
                      f'{e.label} von "{old_site.bezeichnung}" abgezogen (Verlegung)',
-                     category="ressource", author_name=author_name, user_id=user_id)
+                     category="ressource", author_name=author_name, user_id=user_id,
+                     einheit_id=e.id, site_id=old_site.id,
+                     ereignis_typ="zurueckgezogen", quelle="manuell")
     db.flush()
 
     dispatch, _ = set_vor_ort_at_site(
@@ -501,8 +509,11 @@ def withdraw_from_site(
     *,
     author_name: str | None = None,
     user_id: int | None = None,
+    grund: str | None = None,
 ) -> None:
     """Zieht Einheit von einer Einsatzstelle ab (withdrawn_at setzen)."""
+    if grund is not None and len(grund.strip()) > 500:
+        raise ValueError("Grund darf höchstens 500 Zeichen haben")
     e = _get_einheit(db, einheit_id, lage_id)
     dispatch = (
         db.query(EinheitSiteDispatch)
@@ -518,15 +529,21 @@ def withdraw_from_site(
 
     now = datetime.now(UTC)
     dispatch.withdrawn_at = now
+    dispatch.withdrawn_by = user_id
+    dispatch.withdrawn_author = author_name
+    dispatch.withdrawn_grund = (grund.strip() if grund else "") or None
     dispatch.version += 1
     dispatch.geaendert_at = now
     if e.incident_site_id == site_id:
         e.incident_site_id = None
 
     site = db.get(IncidentSite, site_id)
-    _journal(db, lage_id,
-             f'{e.label} von "{site.bezeichnung if site else site_id}" abgezogen',
-             category="ressource", author_name=author_name, user_id=user_id)
+    text = f'{e.label} von "{site.bezeichnung if site else site_id}" abgezogen'
+    if dispatch.withdrawn_grund:
+        text += f" – {dispatch.withdrawn_grund}"
+    _journal(db, lage_id, text, category="ressource", author_name=author_name,
+             user_id=user_id, einheit_id=e.id, site_id=site_id,
+             ereignis_typ="zurueckgezogen", quelle="manuell")
 
 
 def get_active_dispatches_for_site(
@@ -731,7 +748,8 @@ def move_to_pool(
     _journal(db, lage_id,
              f"{e.label} → Pool/Reserve zurückgeführt"
              + (f" (war Abschnitt {prev_sector})" if prev_sector else ""),
-             category="ressource", author_name=author_name, user_id=user_id)
+             category="ressource", author_name=author_name, user_id=user_id,
+             einheit_id=e.id, ereignis_typ="status", quelle="manuell")
     return e
 
 
@@ -768,7 +786,10 @@ def set_status(
     _journal(db, lage_id,
              f"{e.label}: Status {STATUS_LABEL.get(old_status, old_status)}"
              f" → {STATUS_LABEL.get(status, status)}",
-             category="ressource", author_name=author_name, user_id=user_id)
+             category="ressource", author_name=author_name, user_id=user_id,
+             einheit_id=e.id, site_id=e.incident_site_id,
+             ereignis_typ="abgerueckt" if status == STATUS_ABGERUECKT else "status",
+             quelle="manuell")
     return e
 
 

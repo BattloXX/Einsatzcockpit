@@ -1298,6 +1298,7 @@ async def site_einheit_abziehen(
     lage_id: int,
     site_id: int,
     einheit_id: int = Form(...),
+    grund: str | None = Form(None),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
 ):
@@ -1311,7 +1312,7 @@ async def site_einheit_abziehen(
     try:
         resource_service.withdraw_from_site(
             db, einheit_id, lage_id, site_id,
-            author_name=get_author_name(request), user_id=user.id,
+            author_name=get_author_name(request), user_id=user.id, grund=grund,
         )
         einheit = db.get(LageEinheit, einheit_id)
     except ValueError as exc:
@@ -2491,6 +2492,8 @@ def lage_journal_delete(
     entry = db.get(LageJournalEntry, entry_id)
     if not entry or entry.major_incident_id != lage_id:
         raise HTTPException(status_code=404)
+    if entry.category.startswith("ressource"):
+        raise HTTPException(status_code=409, detail="Ressourceneintraege koennen nur storniert werden")
     # Fotos einzeln vorher aufraeumen (Dateien + Quota-Freigabe + Annotation) --
     # die ORM-Kaskade wuerde die Zeilen zwar mitloeschen, aber weder Dateien
     # entfernen noch Quota freigeben (Bug, siehe Session 2026-07-12).
@@ -4983,7 +4986,7 @@ async def lage_einheit_create(
     if not actual_label:
         raise HTTPException(status_code=400, detail="Bezeichnung fehlt")
 
-    resource_service.add_resource(
+    einheit = resource_service.add_resource(
         db, lage_id, actual_label,
         resource_type=resource_type,
         vehicle_id=vehicle_id,
@@ -4995,7 +4998,7 @@ async def lage_einheit_create(
         user_id=user.id,
     )
     db.commit()
-    await broadcast_lage(lage_id, {"type": "ressource:changed"})
+    await broadcast_lage(lage_id, {"type": "ressource:changed", "einheit_id": einheit.id})
     # Nur noch per HTMX aufgerufen (ressourcen.html, hx-swap="none").
     return Response(status_code=204)
 
@@ -5066,7 +5069,7 @@ async def lage_einheit_status(
     except ValueError:
         raise HTTPException(status_code=400)
     db.commit()
-    await broadcast_lage(lage_id, {"type": "ressource:changed"})
+    await broadcast_lage(lage_id, {"type": "ressource:changed", "einheit_id": einheit_id})
     # Nur noch per HTMX (_kraefteuebersicht.html, hx-swap="none") aufgerufen --
     # der Container aktualisiert sich selbst ueber den ressource:changed-Broadcast/
     # -Trigger, ein Redirect-Body wird nirgends mehr benoetigt (GSL-Reload-Audit
@@ -5101,7 +5104,7 @@ async def lage_einheit_sektor(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     db.commit()
-    await broadcast_lage(lage_id, {"type": "ressource:changed"})
+    await broadcast_lage(lage_id, {"type": "ressource:changed", "einheit_id": einheit_id})
     # Nur noch per HTMX aufgerufen (siehe lage_einheit_status oben).
     return Response(status_code=204)
 
@@ -5133,7 +5136,7 @@ async def lage_einheit_einsatz(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     db.commit()
-    await broadcast_lage(lage_id, {"type": "ressource:changed"})
+    await broadcast_lage(lage_id, {"type": "ressource:changed", "einheit_id": einheit_id})
     return RedirectResponse(f"/lage/{lage_id}/ressourcen", status_code=303)
 
 
@@ -5154,7 +5157,7 @@ async def lage_einheit_pool(
         author_name=get_author_name(request), user_id=user.id,
     )
     db.commit()
-    await broadcast_lage(lage_id, {"type": "ressource:changed"})
+    await broadcast_lage(lage_id, {"type": "ressource:changed", "einheit_id": einheit_id})
     # Nur noch per HTMX aufgerufen (siehe lage_einheit_status oben).
     return Response(status_code=204)
 
@@ -5209,7 +5212,7 @@ async def lage_einheit_delete(
 
     db.delete(einheit)
     db.commit()
-    await broadcast_lage(lage_id, {"type": "ressource:changed"})
+    await broadcast_lage(lage_id, {"type": "ressource:changed", "einheit_id": einheit_id})
     # Nur noch per HTMX aufgerufen (siehe lage_einheit_status oben).
     return Response(status_code=204)
 

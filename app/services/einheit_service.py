@@ -335,6 +335,11 @@ def setze_einheit_status(
     if dispatch.withdrawn_at is not None:
         raise EinheitKonflikt("auftrag_zurueckgezogen")
     alter_status = dispatch.einheit_status
+    erster_einsatzbeginn = (
+        neuer_status in {"anfahrt", "vor_ort", "in_arbeit"}
+        and alter_status in {"zugewiesen", "bestaetigt"}
+        and dispatch.vor_ort_at is None
+    )
     if alter_status == neuer_status:
         return {
             "geaendert": False, "dispatch_id": dispatch.id,
@@ -417,10 +422,21 @@ def setze_einheit_status(
         user_id=user_id, author_name=author_name, einheit_id=ctx.einheit.id,
         erfasst_at=erfasst_at,
     )
+    journal_quelle = ctx.quelle if ctx.quelle in {"tablet", "funk", "mcp", "simulation"} else "system"
     if neuer_status in {"bestaetigt", "abgeschlossen", "nicht_durchfuehrbar"}:
         resource_service._journal(
             db, ctx.lage.id, f"{ctx.einheit.label}: {EINHEIT_STATUS_LABEL[neuer_status]}",
             category="ressource", author_name=author_name, user_id=user_id,
+            einheit_id=ctx.einheit.id, site_id=site.id,
+            ereignis_typ="uebernommen" if neuer_status == "bestaetigt" else "abgeschlossen",
+            quelle=journal_quelle,
+        )
+    if erster_einsatzbeginn:
+        resource_service._journal(
+            db, ctx.lage.id, f"{ctx.einheit.label}: Einsatz begonnen ({site.bezeichnung})",
+            category="ressource", author_name=author_name, user_id=user_id,
+            einheit_id=ctx.einheit.id, site_id=site.id, ereignis_typ="begonnen",
+            quelle=journal_quelle,
         )
 
     phase_geaendert = False
