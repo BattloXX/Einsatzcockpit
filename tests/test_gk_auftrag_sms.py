@@ -257,3 +257,26 @@ def test_einstellungen_speichern_und_validieren_auftragsvorlage(client, setup_db
         ), schlecht.status_code
     finally:
         db.close()
+
+
+def test_manueller_retry_sendet_bewusst_erneut_und_nur_bei_aktivem_auftrag(client, setup_db, monkeypatch):
+    versuche = []
+
+    async def senden(org_id, nummer, text, **kwargs):
+        versuche.append(text)
+        return SimpleNamespace(success=len(versuche) > 1, provider="test")
+
+    monkeypatch.setattr(gk_zugang_service, "send_sms", senden)
+    monkeypatch.setattr(gk_zugang_service, "sms_available", lambda org_id, db: True)
+    a = _aufbau()
+    _login(client, a.username)
+    pfad = f"/lage/{a.lage}/einheiten/{a.einheit}/zugang/auftrag-sms/erneut"
+    assert _post(client, pfad).status_code == 422  # noch kein Auftrag
+    _post(client, f"/lage/{a.lage}/stellen/{a.site}/einheit-disponieren", einheit_id=a.einheit, auftrag="X")
+    assert _versaende(a) == [("auftrag_neu", "fehlgeschlagen")]
+    karte = client.get(f"/lage/{a.lage}/einheiten/{a.einheit}/karte/zugang")
+    assert "Auftrags-SMS erneut senden" in karte.text
+    antwort = _post(client, pfad)
+    assert antwort.status_code == 200 and len(versuche) == 2
+    assert [s for _, s in _versaende(a)] == ["fehlgeschlagen", "gesendet"]
+    assert "Auftrags-SMS erneut senden" not in client.get(f"/lage/{a.lage}/einheiten/{a.einheit}/karte/zugang").text

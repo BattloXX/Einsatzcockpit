@@ -421,6 +421,41 @@ async def zugang_senden(
     return response
 
 
+@router.post("/zugang/auftrag-sms/erneut", response_class=HTMLResponse)
+async def zugang_auftrag_sms_erneut(
+    request: Request,
+    lage_id: int,
+    einheit_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_role(*_WRITE)),
+):
+    """Bewusster manueller Retry der Auftrags-SMS für den aktuell aktiven Auftrag."""
+    from app.models.major_incident import EinheitSiteDispatch
+
+    lage, einheit = _context(request, lage_id, einheit_id, db)
+    _darf_zugang_verwalten(request, request.state.user)
+    dispatch = (
+        db.query(EinheitSiteDispatch)
+        .filter(EinheitSiteDispatch.einheit_id == einheit.id, EinheitSiteDispatch.withdrawn_at.is_(None),
+                EinheitSiteDispatch.beendet_at.is_(None))
+        .order_by(EinheitSiteDispatch.id.desc())
+        .first()
+    )
+    if dispatch is None:
+        return HTMLResponse("Kein aktiver Auftrag für diese Einheit.", status_code=422)
+    auftrag = gk_zugang_service.plane_auftrag_sms(db, lage, einheit, dispatch, "neu", wiederholung=True)
+    db.commit()
+    if auftrag is None:
+        return HTMLResponse(
+            "Auftrags-SMS nicht möglich (Schalter, Telefonnummer oder Lage prüfen).", status_code=422
+        )
+    await gk_zugang_service.sende_auto_sms(auftrag)
+    await broadcast_lage(lage.id, {"type": "ressource:changed", "einheit_id": einheit.id})
+    response = _zugang(request, lage, einheit, db)
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 @router.post("/zugang/widerrufen", response_class=HTMLResponse)
 async def zugang_widerrufen(
     request: Request, lage_id: int, einheit_id: int, db: Session = Depends(get_db), _=Depends(require_role(*_WRITE))

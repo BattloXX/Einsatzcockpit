@@ -761,8 +761,13 @@ def _zugang_ohne_token(
 def plane_auftrag_sms(
     db: Session, lage: MajorIncident, einheit: LageEinheit, dispatch: EinheitSiteDispatch,
     ereignis: Literal["neu", "geaendert", "zurueckgezogen"],
+    *, wiederholung: bool = False,
 ) -> AutoSmsAuftrag | None:
-    """Plant eine Auftrags-SMS; Fehler und Duplikate berühren die Disposition nicht."""
+    """Plant eine Auftrags-SMS; Fehler und Duplikate berühren die Disposition nicht.
+
+    ``wiederholung`` erlaubt den bewussten manuellen Retry (eigener Idempotenzschlüssel);
+    normales erneutes Speichern erzeugt nie eine zweite SMS.
+    """
     cfg = org_einstellungen(db, lage.org_id)
     if not (cfg.gk_zugang_aktiv and cfg.gk_auto_sms_auftrag) or lage.status != "active" or (
         einheit.status == "abgerueckt"
@@ -772,6 +777,8 @@ def plane_auftrag_sms(
     if not leader or leader.end_at is not None or not leader.phone_e164:
         return None
     key = f"auftrag:{dispatch.id}:{dispatch.version}:{ereignis}:{leader.phone_version}"
+    if wiederholung:
+        key += f":w{int(_now().timestamp())}"
     if db.query(LageEinheitZugangVersand.id).filter(LageEinheitZugangVersand.auto_schluessel == key).first():
         return None
     try:
