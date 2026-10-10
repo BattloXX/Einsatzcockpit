@@ -142,7 +142,9 @@ export function createOutbox({
       eintrag = aktuell;
       let response;
       try {
-        const url = `/einheit/api/auftrag/${eintrag.dispatch_id}/${eintrag.typ}`;
+        const url = eintrag.typ.startsWith("ressource_")
+          ? `/einheit/api/ressource/${eintrag.typ.slice("ressource_".length)}`
+          : `/einheit/api/auftrag/${eintrag.dispatch_id}/${eintrag.typ}`;
         if (eintrag.typ === "foto") {
           const form = new FormData();
           form.append("file", eintrag.blob, eintrag.dateiname || "foto");
@@ -155,13 +157,19 @@ export function createOutbox({
           response = await fetch(url, {
             method: "POST",
             headers: { "Content-Type": "application/json", ...header() },
-            body: JSON.stringify({ client_uuid: eintrag.client_uuid, erfasst_at: eintrag.erfasst_at, auftrag_version: eintrag.auftrag_version, ...eintrag.payload }),
+            body: JSON.stringify({
+              client_uuid: eintrag.client_uuid, erfasst_at: eintrag.erfasst_at,
+              auftrag_version: eintrag.auftrag_version, ...eintrag.payload,
+            }),
             credentials: "same-origin",
           });
         }
       } catch (error) {
         const versuche = eintrag.versuche + 1;
-        await setze(eintrag, { status: "fehler_netz", versuche, letzter_fehler: error?.message || "netzwerkfehler", naechster_versuch_at: new Date(now().getTime() + rueckoff(versuche)).toISOString() });
+        await setze(eintrag, {
+          status: "fehler_netz", versuche, letzter_fehler: error?.message || "netzwerkfehler",
+          naechster_versuch_at: new Date(now().getTime() + rueckoff(versuche)).toISOString(),
+        });
         return "blockiert";
       }
       let antwort;
@@ -182,7 +190,10 @@ export function createOutbox({
       }
       if (response.status >= 500 || response.status === 408 || response.status === 429 || response.ok) {
         const versuche = eintrag.versuche + 1;
-        await setze(eintrag, { status: "fehler_netz", versuche, letzter_fehler: code, naechster_versuch_at: new Date(now().getTime() + rueckoff(versuche)).toISOString() });
+        await setze(eintrag, {
+          status: "fehler_netz", versuche, letzter_fehler: code,
+          naechster_versuch_at: new Date(now().getTime() + rueckoff(versuche)).toISOString(),
+        });
         return "blockiert";
       }
       await setze(eintrag, { status: "fehler", letzter_fehler: code, naechster_versuch_at: null });
@@ -250,10 +261,16 @@ export function createOutbox({
 
   return {
     async erfassen({ typ, dispatch_id, einheit_id, auftrag_version, payload = {}, blob = null, dateiname = null }) {
-      if (!new Set(["status", "meldung", "foto"]).has(typ)) throw new Error("ungueltiger_typ");
+      if (!new Set(["status", "meldung", "foto", "ressource_personal", "ressource_ausstattung"]).has(typ)) {
+        throw new Error("ungueltiger_typ");
+      }
       const alte = await lesen("meta", "seq");
       const seq = (alte || 0) + 1;
-      const eintrag = { client_uuid: uuid(), typ, dispatch_id, einheit_id, auftrag_version, payload, blob, dateiname, erfasst_at: now().toISOString(), seq, versuche: 0, status: "ausstehend", letzter_fehler: null, naechster_versuch_at: null };
+      const eintrag = {
+        client_uuid: uuid(), typ, dispatch_id, einheit_id, auftrag_version, payload, blob, dateiname,
+        erfasst_at: now().toISOString(), seq, versuche: 0, status: "ausstehend", letzter_fehler: null,
+        naechster_versuch_at: null,
+      };
       await mitStore(["outbox", "meta"], "readwrite", (tx) => { tx.objectStore("outbox").add(eintrag); tx.objectStore("meta").put(seq, "seq"); });
       melden();
       void flush();
@@ -262,11 +279,22 @@ export function createOutbox({
     async flush() { return flush(); },
     blockiereZugang,
     bereinigen,
-    async erneutSenden(client_uuid) { const eintrag = await lesen("outbox", client_uuid); if (eintrag) await setze(eintrag, { status: "ausstehend", naechster_versuch_at: null }); await flush(); },
+    async erneutSenden(client_uuid) {
+      const eintrag = await lesen("outbox", client_uuid);
+      if (eintrag) await setze(eintrag, { status: "ausstehend", naechster_versuch_at: null });
+      await flush();
+    },
     async verwerfen(client_uuid) { await mitStore(["outbox"], "readwrite", (tx) => tx.objectStore("outbox").delete(client_uuid)); melden(); },
     async liste() { return (await alle("outbox")).sort((a, b) => a.seq - b.seq).map(kopieOhneBlob); },
     async verlauf(limit = 200) { return (await alle("verlauf")).sort((a, b) => b.id - a.id).slice(0, limit); },
-    async zaehler() { const items = await alle("outbox"); return { ausstehend: items.filter((x) => x.status === "ausstehend" || x.status === "fehler_netz").length, fehler: items.filter((x) => x.status === "fehler").length, konflikt: items.filter((x) => x.status === "konflikt").length, gesamt: items.length }; },
+    async zaehler() {
+      const items = await alle("outbox");
+      return {
+        ausstehend: items.filter((x) => x.status === "ausstehend" || x.status === "fehler_netz").length,
+        fehler: items.filter((x) => x.status === "fehler").length,
+        konflikt: items.filter((x) => x.status === "konflikt").length, gesamt: items.length,
+      };
+    },
     onChange(cb) { listeners.add(cb); return () => listeners.delete(cb); },
     async entwurfSpeichern(key, data) { await speichern("entwuerfe", { key, data, saved_at: now().toISOString() }, key); },
     async entwurfLaden(key) { const entwurf = await lesen("entwuerfe", key); return entwurf?.data || entwurf; },
@@ -274,6 +302,11 @@ export function createOutbox({
     async zustandSpeichern(obj) { await speichern("zustand", obj, "aktuell"); },
     async zustandLaden() { return lesen("zustand", "aktuell"); },
     async zustandLeeren() { await mitStore(["zustand"], "readwrite", (tx) => tx.objectStore("zustand").clear()); },
-    async naechsterVersuchIn() { const zeit = now().getTime(); const werte = (await alle("outbox")).filter((x) => x.status === "fehler_netz" && x.naechster_versuch_at).map((x) => Math.max(0, zeitwert(x.naechster_versuch_at) - zeit)); return werte.length ? Math.min(...werte) : null; },
+    async naechsterVersuchIn() {
+      const zeit = now().getTime();
+      const werte = (await alle("outbox")).filter((x) => x.status === "fehler_netz" && x.naechster_versuch_at)
+        .map((x) => Math.max(0, zeitwert(x.naechster_versuch_at) - zeit));
+      return werte.length ? Math.min(...werte) : null;
+    },
   };
 }

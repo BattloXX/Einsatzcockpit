@@ -156,6 +156,54 @@
     </main>
 
     <aside class="fab-grid__side">
+      <section class="fab-card" x-show="kannRessourcePflegen" x-cloak>
+        <div class="fab-card__head">
+          <span class="fab-card__icon">&#x1F6E0;</span>
+          <h2 class="fab-card__title">Meine Einheit</h2>
+        </div>
+        <div class="einheit-formular" x-show="ressource.personal_modus === 'summe'">
+          <label>Gesamtstärke <input class="form-control" type="number" min="0" x-model.number="ressource.personal.gesamt"></label>
+          <label>Führung <input class="form-control" type="number" min="0" x-model.number="ressource.personal.fuehrung"></label>
+          <label>AGT <input class="form-control" type="number" min="0" x-model.number="ressource.personal.agt"></label>
+          <label>Sanitäter <input class="form-control" type="number" min="0" x-model.number="ressource.personal.sanitaeter"></label>
+          <button type="button" class="btn btn--primary" @click="personalSpeichern()">Personal speichern</button>
+        </div>
+        <div class="einheit-formular" x-show="ressource.personal_modus === 'liste'">
+          <template x-for="person in ressource.personal.personen || []" :key="person.id">
+            <div class="einheit-zeile">
+              <span x-text="person.name + ' · ' + person.funktion"></span>
+              <button type="button" class="btn btn--ghost btn--sm" @click="personEntfernen(person)">Entfernen</button>
+            </div>
+          </template>
+          <input class="form-control" x-model="neuePerson.name" placeholder="Name">
+          <select class="form-control" x-model="neuePerson.funktion">
+            <option value="mannschaft">Mannschaft</option><option value="fuehrung">Führung</option>
+            <option value="agt">AGT</option><option value="sanitaeter">Sanitäter</option>
+          </select>
+          <button type="button" class="btn btn--primary" @click="personHinzufuegen()">Person hinzufügen</button>
+        </div>
+        <hr>
+        <p class="fab-subcard__title">Ausstattung</p>
+        <template x-for="zeile in ressource.ausstattung || []" :key="zeile.id">
+          <div class="einheit-formular einheit-ressource-zeile">
+            <strong x-text="zeile.bezeichnung"></strong>
+            <input class="form-control" type="number" min="1" x-model.number="zeile.menge">
+            <select class="form-control" x-model="zeile.status">
+              <option value="einsatzbereit">Einsatzbereit</option><option value="eingeschraenkt">Eingeschränkt</option>
+              <option value="defekt">Defekt</option><option value="nicht_verfuegbar">Nicht verfügbar</option>
+            </select>
+            <div class="einheit-actions-row">
+              <button type="button" class="btn btn--ghost" @click="ausstattungSpeichern(zeile)">Speichern</button>
+              <button type="button" class="btn btn--ghost" @click="ausstattungEntfernen(zeile)">Entfernen</button>
+            </div>
+          </div>
+        </template>
+        <div class="einheit-formular">
+          <input class="form-control" x-model="neueAusstattung.bezeichnung" placeholder="Ausstattung hinzufügen">
+          <input class="form-control" type="number" min="1" x-model.number="neueAusstattung.menge" placeholder="Menge">
+          <button type="button" class="btn btn--primary" @click="ausstattungHinzufuegen()">Hinzufügen</button>
+        </div>
+      </section>
       <template x-for="(auftrag, index) in weitere" :key="auftrag.dispatch_id">
         <article class="fab-card einheit-card einheit-card--kompakt"
                  :class="['einheit-prio--' + (auftrag.priority || 'keine'),

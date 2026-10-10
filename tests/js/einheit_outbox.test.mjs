@@ -138,6 +138,19 @@ test("Zaehler und onChange reagieren auf Zustandsaenderungen", async () => {
   assert.deepEqual(await o.zaehler(), { ausstehend: 0, fehler: 1, konflikt: 0, gesamt: 1 }); assert.ok(aenderungen >= 2); abmelden();
 });
 
+test("Ressourcenpflege verwendet den eigenen JSON-Endpunkt", async () => {
+  const env = umgebung([ok(12)]); const o = createOutbox(env.basis);
+  await o.erfassen({
+    typ: "ressource_personal", einheit_id: 9,
+    payload: { operation: "setzen", gesamt: 4, fuehrung: 1 },
+  });
+  await warteAuf(() => env.anfragen.length === 1);
+  assert.equal(env.anfragen[0].url, "/einheit/api/ressource/personal");
+  const body = JSON.parse(env.anfragen[0].body);
+  assert.equal(body.gesamt, 4);
+  assert.ok(body.client_uuid);
+});
+
 test("Simulation-Header und getrennte Datenbanken", async () => {
   const env = umgebung([ok(1)]); const a = createOutbox({ ...env.basis, simEinheitId: 17, dbName: "a" }); const b = createOutbox({ ...env.basis, dbName: "b" });
   await eintrag(a); await warteAuf(() => env.anfragen.length === 1); assert.equal(env.anfragen[0].headers["X-EC-Einheit-Sim"], "17"); assert.equal((await b.liste()).length, 0);
