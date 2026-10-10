@@ -11,6 +11,7 @@ import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
+from typing import Literal
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -22,6 +23,7 @@ from app.core.telefon import telefon_anzeige, telefon_maske
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.major_incident import (
+    EinheitSiteDispatch,
     LageEinheit,
     LageEinheitLeader,
     LageEinheitZugang,
@@ -44,6 +46,13 @@ Einheit: {einheit}
 Du bist als Gruppenkommandant zugewiesen. Einsätze, Status, Lagemeldungen und Fotos:
 {link}
 Gilt nur für deine Einheit in dieser Lage. Bitte nicht weitergeben."""
+STANDARD_AUFTRAG_NACHRICHT = """ECP - {ereignis}
+GSL: {gsl}
+Einheit: {einheit}
+Einsatzstelle: {einsatzstelle}
+Auftrag: {auftrag}
+Einheitenansicht: {link}
+Dringende Meldungen und Kraefteanforderungen ueber Funk."""
 
 
 def _now() -> datetime:
@@ -82,6 +91,8 @@ class OrgEinstellungen:
     gk_zugang_aktiv: bool = False
     gk_zugang_auto_sms: bool = False
     gk_zugang_nachricht: str | None = None
+    gk_auto_sms_auftrag: bool = False
+    gk_auftrag_nachricht: str | None = None
     gk_zugang_gueltigkeit_stunden: int = 48
     gk_sitzung_stunden: int = 12
     gk_zugang_max_sitzungen: int = 2
@@ -126,6 +137,8 @@ class AutoSmsAuftrag:
     lage_id: int
     einheit_id: int
     org_id: int
+    text: str | None = None
+    ereignis: Literal["neu", "geaendert", "zurueckgezogen"] | None = None
 
     def __repr__(self) -> str:
         return (
@@ -607,6 +620,38 @@ def nachricht_rendern(
     return ("[UEBUNG] " if lage.is_exercise else "") + text
 
 
+def auftrag_nachricht_validieren(text: str) -> None:
+    keys = set(re.findall(r"\{([^{}]+)\}", text))
+    allowed = {"ereignis", "gsl", "einheit", "einsatzstelle", "auftrag", "link"}
+    if keys - allowed:
+        raise ValueError("Unbekannte Platzhalter in Nachricht")
+    if "{link}" not in text:
+        raise ValueError("{link} ist erforderlich")
+    if len(text) > 480:
+        raise ValueError("Nachricht darf höchstens 480 Zeichen haben")
+
+
+def auftrag_nachricht_rendern(
+    cfg: OrgEinstellungen, lage: MajorIncident, einheit: LageEinheit, dispatch: EinheitSiteDispatch,
+    ereignis: Literal["neu", "geaendert", "zurueckgezogen"], link: str,
+) -> str:
+    template = cfg.gk_auftrag_nachricht or STANDARD_AUFTRAG_NACHRICHT
+    auftrag_nachricht_validieren(template)
+    site = dispatch.site
+    ort = " ".join(filter(None, [
+        getattr(site, "strasse", None), getattr(site, "hausnr", None), getattr(site, "ort", None),
+    ]))
+    adresse = " ".join(filter(None, [_clean(getattr(site, "bezeichnung", ""), 55), _clean(ort, 65)]))
+    labels = {"neu": "Neuer Einsatzauftrag", "geaendert": "Auftrag geaendert",
+              "zurueckgezogen": "Auftrag zurueckgezogen"}
+    auftrag = _clean(dispatch.auftrag, 140)
+    if dispatch.auftrag and len(dispatch.auftrag.strip()) > 140:
+        auftrag = auftrag[:139] + "…"
+    text = template.format(ereignis=labels[ereignis], gsl=_clean(lage.name, 40), einheit=_clean(einheit.label, 30),
+                           einsatzstelle=adresse or "–", auftrag=auftrag or "–", link=link)
+    return ("[UEBUNG] " if lage.is_exercise else "") + text
+
+
 def sms_laenge(text: str) -> tuple[int, str, int]:
     gsm = set(
         "@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞ !\"#¤%&'()*+,-./0123456789:;<=>?¡"
@@ -711,6 +756,51 @@ def _zugang_ohne_token(
     db.add(zugang)
     db.flush()
     return zugang
+
+
+def plane_auftrag_sms(
+    db: Session, lage: MajorIncident, einheit: LageEinheit, dispatch: EinheitSiteDispatch,
+    ereignis: Literal["neu", "geaendert", "zurueckgezogen"],
+) -> AutoSmsAuftrag | None:
+    """Plant eine Auftrags-SMS; Fehler und Duplikate berühren die Disposition nicht."""
+    cfg = org_einstellungen(db, lage.org_id)
+    if not (cfg.gk_zugang_aktiv and cfg.gk_auto_sms_auftrag) or lage.status != "active" or (
+        einheit.status == "abgerueckt"
+    ):
+        return None
+    leader = db.get(LageEinheitLeader, einheit.leader_assignment_id) if einheit.leader_assignment_id else None
+    if not leader or leader.end_at is not None or not leader.phone_e164:
+        return None
+    key = f"auftrag:{dispatch.id}:{dispatch.version}:{ereignis}:{leader.phone_version}"
+    if db.query(LageEinheitZugangVersand.id).filter(LageEinheitZugangVersand.auto_schluessel == key).first():
+        return None
+    try:
+        with db.begin_nested():
+            zugang = _zugang_ohne_token(db, lage, einheit, leader)
+            # Vertrauenswürdig sind von der Führung eingetragene und vom GK bestätigte Nummern;
+            # ungeprüfte Selbsteingaben werden nie gespeichert (siehe gk_nummer_service).
+            now = _now()
+            token = token_neu_berechnen(zugang) if zugang.status == "aktiv" else ""
+            gueltig = bool(zugang.status == "aktiv" and zugang.laeuft_ab_at and zugang.laeuft_ab_at > now
+                           and zugang.leader_id == leader.id and zugang.phone_version == leader.phone_version
+                           and token and zugang.token_hash == hash_api_key(token))
+            neu = None if gueltig else stelle_zugang_aus(db, lage, einheit, user_id=None, grund="auftrag_sms")
+            if neu:
+                ausgestellter_zugang = db.get(LageEinheitZugang, neu.zugang_id)
+                assert ausgestellter_zugang is not None
+                zugang, link = ausgestellter_zugang, neu.link
+            else:
+                link = link_fuer(token)
+            assert zugang is not None
+            row = _versand(db, zugang, einheit, kanal="sms", ausloeser=f"auftrag_{ereignis}", user_id=None,
+                           status="geplant")
+            row.auto_schluessel = key
+            text = auftrag_nachricht_rendern(cfg, lage, einheit, dispatch, ereignis, link)
+            db.flush()
+            return AutoSmsAuftrag(zugang.id, row.id, link, leader.id, leader.phone_version, lage.id, einheit.id,
+                                  lage.org_id, text=text, ereignis=ereignis)
+    except IntegrityError:
+        return None
 
 
 def plane_auto_sms(
@@ -908,7 +998,8 @@ async def sende_auto_sms(auftrag: AutoSmsAuftrag) -> None:
         cfg = org_einstellungen(db, auftrag.org_id)
         valid = bool(
             lage and einheit and leader and zugang and token and lage.status == "active"
-            and cfg.gk_zugang_aktiv and cfg.gk_zugang_auto_sms
+            and cfg.gk_zugang_aktiv
+            and (cfg.gk_zugang_auto_sms if auftrag.ereignis is None else cfg.gk_auto_sms_auftrag)
             and einheit.leader_assignment_id == leader.id and leader.end_at is None
             and leader.phone_version == auftrag.phone_version and zugang.status == "aktiv"
             and leader.einheit_id == einheit.id and zugang.einheit_id == einheit.id
@@ -932,7 +1023,18 @@ async def sende_auto_sms(auftrag: AutoSmsAuftrag) -> None:
             row.status, row.fehler, row.abgeschlossen_at = "uebersprungen", "Übung: SMS unterdrückt", _now()
             db.commit()
             return
-        text = nachricht_rendern(cfg, lage, einheit, leader, auftrag.link)
+        if auftrag.ereignis is not None:
+            dispatch_id = str(row.auto_schluessel or "").split(":")[1]
+            dispatch = db.get(EinheitSiteDispatch, int(dispatch_id))
+            if not dispatch:
+                row.status, row.fehler, row.abgeschlossen_at = "verworfen", "Auftrag nicht mehr vorhanden", _now()
+                db.commit()
+                return
+            text = auftrag.text or auftrag_nachricht_rendern(
+                cfg, lage, einheit, dispatch, auftrag.ereignis, auftrag.link
+            )
+        else:
+            text = nachricht_rendern(cfg, lage, einheit, leader, auftrag.link)
         chars, _encoding, segments = sms_laenge(text)
         now, result = _now(), None
         try:
@@ -943,7 +1045,8 @@ async def sende_auto_sms(auftrag: AutoSmsAuftrag) -> None:
             success, status, error = False, "unklar", "Ergebnis unbekannt – bitte beim Gruppenkommandanten nachfragen"
         except Exception:
             success, status, error = False, "fehlgeschlagen", _kurzer_fehler(Exception())
-        log = SmsLog(org_id=auftrag.org_id, source="gk_zugang", text=schwaerze_link(text), recipient_count=1,
+        log = SmsLog(org_id=auftrag.org_id, source="gk_auftrag" if auftrag.ereignis else "gk_zugang",
+                     text=schwaerze_link(text), recipient_count=1,
                      success_count=1 if success else 0, provider=getattr(result, "provider", None), completed_at=now)
         log.recipients.append(SmsLogRecipient(phone_number=phone, name="Gruppenkommandant", success=success,
                                               sent_at=now, provider=getattr(result, "provider", None)))
@@ -952,7 +1055,8 @@ async def sende_auto_sms(auftrag: AutoSmsAuftrag) -> None:
             status, error, _mask_phone(phone), chars, segments, now)
         db.flush()
         row.sms_log_id = log.id
-        write_audit(db, "gsl.zugang.sms_auto", org_id=auftrag.org_id, user_id=None, entity_type="lage_einheit",
+        write_audit(db, "gsl.auftrag.sms_auto" if auftrag.ereignis else "gsl.zugang.sms_auto",
+                    org_id=auftrag.org_id, user_id=None, entity_type="lage_einheit",
                     entity_id=einheit.id, payload={"lage_id": lage.id, "einheit_id": einheit.id,
                                                      "generation": zugang.generation, "status": status})
         db.commit()

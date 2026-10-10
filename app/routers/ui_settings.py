@@ -25,7 +25,14 @@ from app.models.major_incident import LageEinheitZugang
 from app.models.master import BOS_VALUES, FireDept, OrgSettings, SeedTemplate, SystemSettings
 from app.models.user import User
 from app.models.wordpress_report import WordPressReportConfig
-from app.services.gk_zugang_service import STANDARDNACHRICHT, nachricht_validieren, widerrufe, widerrufe_alle_fuer_org
+from app.services.gk_zugang_service import (
+    STANDARD_AUFTRAG_NACHRICHT,
+    STANDARDNACHRICHT,
+    auftrag_nachricht_validieren,
+    nachricht_validieren,
+    widerrufe,
+    widerrufe_alle_fuer_org,
+)
 from app.services.seed_service import apply_seed_profile, copy_default_prompts, list_profiles
 from app.services.sms_service import sms_available
 from app.services.update_service import (
@@ -2652,6 +2659,7 @@ def gsl_einstellungen(
             "org_settings": org_settings,
             "org_flags": _org_flags_dict(org_settings),
             "gk_standardnachricht": STANDARDNACHRICHT,
+            "gk_auftrag_standardnachricht": STANDARD_AUFTRAG_NACHRICHT,
             "gk_base_url": app_settings.effective_public_base_url.rstrip("/"),
             "gk_sms_available": sms_available(org_id, db),
             "widerrufen_anzahl": request.query_params.get("zugaenge_widerrufen"),
@@ -2692,6 +2700,7 @@ async def gsl_einstellungen_save(
                 "org_settings": org_settings,
                 "org_flags": _org_flags_dict(org_settings),
                 "gk_standardnachricht": STANDARDNACHRICHT,
+                "gk_auftrag_standardnachricht": STANDARD_AUFTRAG_NACHRICHT,
                 "gk_base_url": app_settings.effective_public_base_url.rstrip("/"),
                 "gk_sms_available": sms_available(org_id, db),
                 "gk_error": gk_error,
@@ -2705,6 +2714,7 @@ async def gsl_einstellungen_save(
     gk_sitzung = _int_or_none("gk_sitzung_stunden")
     gk_max_sitzungen = _int_or_none("gk_zugang_max_sitzungen")
     gk_nachricht = str(form.get("gk_zugang_nachricht", "")).strip() or None
+    gk_auftrag_nachricht = str(form.get("gk_auftrag_nachricht", "")).strip() or None
     if gk_gueltigkeit is None or not 1 <= gk_gueltigkeit <= 168:
         return _settings_response(status_code=422, gk_error="Gültigkeit muss zwischen 1 und 168 Stunden liegen.")
     if gk_sitzung is None or not 1 <= gk_sitzung <= 72:
@@ -2725,12 +2735,19 @@ async def gsl_einstellungen_save(
             nachricht_validieren(gk_nachricht)
         except ValueError as exc:
             return _settings_response(status_code=422, gk_error=str(exc))
+    if gk_auftrag_nachricht:
+        try:
+            auftrag_nachricht_validieren(gk_auftrag_nachricht)
+        except ValueError as exc:
+            return _settings_response(status_code=422, gk_error=str(exc))
 
     gk_aenderungen = []
     gk_neu = {
         "gk_zugang_aktiv": _bool("gk_zugang_aktiv"),
         "gk_zugang_auto_sms": _bool("gk_zugang_auto_sms"),
         "gk_zugang_nachricht": gk_nachricht,
+        "gk_auto_sms_auftrag": _bool("gk_auto_sms_auftrag"),
+        "gk_auftrag_nachricht": gk_auftrag_nachricht,
         "gk_zugang_gueltigkeit_stunden": gk_gueltigkeit,
         "gk_sitzung_stunden": gk_sitzung,
         "gk_zugang_max_sitzungen": gk_max_sitzungen,

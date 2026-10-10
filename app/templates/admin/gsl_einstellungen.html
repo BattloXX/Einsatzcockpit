@@ -131,7 +131,7 @@
     <!-- ── Allgemein ──────────────────────────────────────────────────── -->
     <!-- ── Gruppenkommandanten-Zugang ─────────────────────────────────── -->
     <div class="card" style="margin-bottom:20px;" id="gk-zugang-einstellungen"
-         data-standard-nachricht='{{ gk_standardnachricht|tojson }}' data-base-url="{{ gk_base_url }}">
+         data-standard-nachricht='{{ gk_standardnachricht|tojson }}' data-auftrag-standard-nachricht='{{ gk_auftrag_standardnachricht|tojson }}' data-base-url="{{ gk_base_url }}">
       <div class="card__header" style="padding:12px 16px;border-bottom:1px solid var(--border);">
         <strong>Gruppenkommandanten-Zugang</strong>
         <span style="font-size:.78rem;color:var(--text-muted);margin-left:8px;">Zugang zum Einheitenmodus per SMS-Link</span>
@@ -160,6 +160,18 @@
             <span id="gk-sms-zaehler" style="font-size:.82rem;color:var(--text-muted);"></span>
           </div>
           <div id="gk-sms-warnung" class="alert alert--warn" style="display:none;margin-top:8px;"></div>
+        </div>
+        <div style="border-top:1px solid var(--border);padding-top:14px;">
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+            <input type="checkbox" name="gk_auto_sms_auftrag" value="1" {% if org_settings.gk_auto_sms_auftrag %}checked{% endif %} style="width:18px;height:18px;">
+            <span>Auftrags-SMS automatisch senden</span>
+          </label>
+          <span style="font-size:.78rem;color:var(--text-muted);display:block;margin:5px 0 10px;">Voraussetzung: bestätigte Mobilnummer des Gruppenkommandanten</span>
+          <label class="form-label" for="gk-auftrag-nachricht">Vorlage Auftrags-SMS</label>
+          <span style="font-size:.78rem;color:var(--text-muted);display:block;margin-bottom:6px;">Platzhalter: {ereignis}, {gsl}, {einheit}, {einsatzstelle}, {auftrag}, {link}</span>
+          <textarea id="gk-auftrag-nachricht" name="gk_auftrag_nachricht" class="form-input" rows="7" placeholder="{{ gk_auftrag_standardnachricht }}">{{ org_settings.gk_auftrag_nachricht or '' }}</textarea>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:7px;"><button type="button" class="btn btn--secondary" id="gk-auftrag-standard-wiederherstellen">Standard wiederherstellen</button><span id="gk-auftrag-sms-zaehler" style="font-size:.82rem;color:var(--text-muted);"></span></div>
+          <pre id="gk-auftrag-vorschau" class="form-input" style="white-space:pre-wrap;min-height:90px;margin-top:8px;"></pre>
         </div>
         <div class="form-group">
           <label class="form-label">Vorschau</label>
