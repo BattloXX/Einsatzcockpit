@@ -4,6 +4,11 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 
 ## Unreleased
 
+- **GSL**: „Einheit hinzufügen“ erfasst Funkruf, Status, Abschnitt, Bereitstellungsraum, Gruppenkommandant mit Telefon und Stärke in einem Vorgang.
+- **GSL**: QR-Zugang für Einheiten mit A4-Ausdruck (Token `gkq_`, optional mit PIN) und neuer Druckregel „GSL – Neue Einheit / QR-Einheitenzugang“; Zugangslinks sind jetzt aus `GSL_ZUGANG_KEY` ableitbar und müssen nicht neu ausgegeben werden (Migrationen 0268–0270).
+- **GSL**: Gruppenkommandant bestätigt seine Mobilnummer per SMS-Code; automatische Auftrags-SMS (neu, geändert, zurückgezogen) mit manuellem Retry; Push ans Fahrzeug-Tablet.
+- **GSL**: Einheitenansicht: „Auftrag erhalten“, „Jetzt synchronisieren“, kopierbare Konflikte, getrennte Offline-Ablage je Zugangsart.
+- **MCP**: `gsl_ressource_anlegen`, `gsl_einheit_disponieren`, `gsl_auftrag_aendern`, `gsl_auftrag_zurueckziehen`, `gsl_ressource_qr` (Status/Widerruf, nie Token/Link/PIN).
 - **GSL**: Ressourcenkarte mit Gruppenkommandant (Telefon, Stellvertreter), Journal, Personal, Ausstattung sowie Verbänden und Aufteilung (Migrationen 0265–0267).
 - **GSL**: Persönlicher, widerrufbarer Zugangslink für Gruppenkommandanten in den Einheitenmodus (Token `gkz_`, nur als Hash gespeichert, SMS manuell oder automatisch, Kopieren, optionale SMS-PIN, Notbremse; Migration 0266). Standardmäßig aus.
 - **GSL**: Gruppenkommandant kann – wenn erlaubt – Personal und Ausstattung der eigenen Einheit offlinefähig pflegen.

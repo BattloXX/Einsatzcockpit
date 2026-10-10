@@ -109,3 +109,36 @@ Im Tab **Zugang** erzeugt die GSL einen persönlichen Link, mit dem der GK den E
 5. Ist in den GSL-Einstellungen „Automatisch senden“ aktiv, geht der Link beim Zuweisen eines GK per SMS raus.
 
 Der GK sieht nur seine eigene Einheit und kann Status melden, Lagemeldungen und Fotos senden, Anforderungen stellen und – wenn die Organisation es erlaubt – Personal und Ausstattung seiner Einheit pflegen. Änderungen funktionieren auch offline und werden nachgesendet.
+
+
+---
+
+## Einheit schnell anlegen
+
+Über **+ Einheit** lässt sich eine Einheit in einem Vorgang erfassen: Typ, Fahrzeug bzw. Organisation, Bezeichnung, Funkrufname, Status, Abschnitt, Bereitstellungsraum, Gruppenkommandant mit Mobilnummer und Besatzungsstärke. Unter „Weitere Angaben“ stehen Stellvertreter, Führer/Unterführer/Mannschaft, AGT, Sanitäter und eine Bemerkung. Ausstattung wird danach in der Ressourcenkarte gepflegt. Ist die Nummer des Gruppenkommandanten eingetragen und der Zugang aktiv, geht – je nach Einstellung – automatisch eine SMS mit dem persönlichen Link raus.
+
+## QR-Zugang für Einheiten (Ausdruck)
+
+Im Tab **Zugang** gibt es zusätzlich zum persönlichen SMS-Link einen **QR-Zugang**, der auf DIN A4 ausgedruckt und der Einheit übergeben wird.
+
+- **Ausstellen / Anzeigen / Drucken**: „QR-Code ausstellen“, „QR anzeigen“ (nur auf Klick, wird nach 2 Minuten wieder ausgeblendet), „QR-Code drucken“ (Druckerauswahl). Erneutes Drucken ändert den Zugang nicht; „Neuen QR-Code“ macht den alten Ausdruck ungültig.
+- **Gültigkeit und PIN**: Standardmäßig 72 Stunden (einstellbar). Optional verlangt der QR-Zugang eine PIN; sie steht **nicht** auf dem Blatt, sondern wird nur der Einsatzleitung angezeigt und separat übergeben.
+- **Rechte**: Der QR-Zugang zeigt nur die eigene Einheit, erlaubt Status, Lagemeldungen und Fotos – keine Personal-/Ausstattungspflege.
+- **Widerruf** erfolgt manuell, beim Wechsel oder Entfernen des Gruppenkommandanten, beim Abrücken der Einheit, beim Lageende und über die Notbremse.
+- Auf dem Ausdruck steht: „Kräfteanforderungen und dringende Meldungen ausschließlich über Funk!“
+
+### Automatischer Ausdruck bei Neuanlage
+
+Unter **Gateway → Druckregeln** gibt es den Auslöser „GSL – Neue Einheit / QR-Einheitenzugang“ (Standard: keine Regel, also kein Autodruck). Nach dem Anlegen einer Einheit wird – bei aktiver Regel, passendem Echt-/Übungsfilter und aktiviertem QR-Zugang – genau ein A4-Auftrag erzeugt. Ein Druckfehler hat keine Auswirkung auf die Einheit; der Status steht in der Ressourcenkarte.
+
+## Mobilnummer durch den Gruppenkommandanten
+
+Fehlt dem Gruppenkommandanten die Nummer, erscheint in der Einheitenansicht ein nicht blockierender Hinweis. Der Gruppenkommandant gibt seine Mobilnummer ein und bestätigt sie mit einem SMS-Code. Erst danach wird sie gespeichert; die Führung sieht „Nummer bestätigt“. Bei einer Änderung wird der persönliche Zugang gesperrt und ein neuer an die bestätigte Nummer gesendet.
+
+## Automatische Auftrags-SMS
+
+Bei aktiviertem Schalter erhält der Gruppenkommandant eine SMS bei **neuem Auftrag**, **geändertem Auftragstext** und **Rückzug** – nicht bei Reihenfolgeänderung, Fotos oder Lagemeldungen. Die SMS enthält den Link zur Einheitenansicht und den Hinweis, dass dringende Meldungen und Kräfteanforderungen über Funk laufen. Eine SMS ist keine Lesebestätigung. Bei fehlgeschlagenem Versand gibt es in der Ressourcenkarte „Auftrags-SMS erneut senden“. Fahrzeug-Tablets mit Einheitenprofil erhalten zusätzlich eine Push-Benachrichtigung.
+
+## Einheitenansicht auf dem Smartphone/Tablet
+
+„Auftrag erhalten“ bestätigt den Auftrag. „Jetzt synchronisieren“ überträgt offline erfasste Meldungen; nicht übermittelbare Einträge lassen sich kopieren.
