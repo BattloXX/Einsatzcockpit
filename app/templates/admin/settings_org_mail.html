@@ -284,6 +284,14 @@
         <input type="hidden" id="secret_changed_resend" name="secret_changed" value="{{ '0' if resend_config and resend_config.api_key_enc else '1' }}">
         <p class="form-hint">Der API-Key wird Fernet-verschlüsselt gespeichert und nie angezeigt.</p>
       </div>
+      <div style="border-top:1px solid var(--color-border);padding-top:14px;display:grid;gap:10px">
+        <h3 style="margin:0">Posteingang über Resend</h3>
+        <label class="toggle-label"><input type="checkbox" name="inbound_enabled" value="1" {% if resend_config and resend_config.inbound_enabled %}checked{% endif %}> Posteingang aktiv</label>
+        <label>Webhook-URL <input class="form-input" readonly value="{{ inbound_webhook_url }}"></label>
+        <label>Webhook-Signing-Secret {% if resend_config and resend_config.inbound_webhook_secret_enc %}<span style="color:var(--color-success)">&#10003; gesetzt</span>{% endif %}<input type="password" name="inbound_webhook_secret" class="form-input" autocomplete="new-password" oninput="document.getElementById('inbound_secret_changed').value='1'"></label><input id="inbound_secret_changed" type="hidden" name="inbound_secret_changed" value="0">
+        <label>Aufbewahrung in Tagen <input type="number" name="inbound_retention_days" min="1" max="365" value="{{ resend_config.inbound_retention_days if resend_config else 90 }}"></label>
+        <p class="form-hint">Bei Resend Empfangsdomain und MX einrichten, Webhook <code>email.received</code> auf diese URL setzen. Der API-Key benötigt Empfangsrechte (Full Access).</p><a href="/admin/mail/eingang">Posteingang öffnen</a>
+      </div>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <button type="submit" class="btn btn--primary">Speichern</button>
         <input type="email" id="resend-test-recipient" placeholder="Test-Empfänger (optional)" class="form-input" style="max-width:260px">

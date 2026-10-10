@@ -163,7 +163,7 @@ from app.models.objekt import (
     ObjektZusatzadresse,
 )
 from app.models.org_backup import OrgBackupConfig
-from app.models.org_mail import OrgO365MailConfig, OrgResendConfig, OrgSmtpConfig
+from app.models.org_mail import OrgMailEingang, OrgO365MailConfig, OrgResendConfig, OrgSmtpConfig
 from app.models.org_sms import OrgSmsConfig
 from app.models.password_reset import PasswordResetToken
 from app.models.probenplanung import (  # noqa: F401 -- registriert ORM-Modelle
@@ -259,6 +259,7 @@ __all__ = [
     "OrgSmtpConfig",
     "OrgO365MailConfig",
     "OrgResendConfig",
+    "OrgMailEingang",
     "OrgSmsConfig",
     "OrgBackupConfig",
     "TeamsAlarmConfig",
