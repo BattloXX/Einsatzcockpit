@@ -4,6 +4,10 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 
 ## Unreleased
 
+- **GSL**: Ressourcenkarte mit Gruppenkommandant (Telefon, Stellvertreter), Journal, Personal, Ausstattung sowie Verbänden und Aufteilung (Migrationen 0265–0267).
+- **GSL**: Persönlicher, widerrufbarer Zugangslink für Gruppenkommandanten in den Einheitenmodus (Token `gkz_`, nur als Hash gespeichert, SMS manuell oder automatisch, Kopieren, optionale SMS-PIN, Notbremse; Migration 0266). Standardmäßig aus.
+- **GSL**: Gruppenkommandant kann – wenn erlaubt – Personal und Ausstattung der eigenen Einheit offlinefähig pflegen.
+- **MCP**: neun GSL-Ressourcen-Tools (`gsl_ressourcen_liste`, `gsl_ressource_details` u. a.); Zugangstoken und -links werden nie ausgegeben.
 - **Straßensperren**: MCP um vorzeitiges Beenden, Teams-Warteschlange, öffentliche Freigabelinks, Kennzahlen sowie Bereichs-, Zeit- und Radiusfilter erweitert.
 - **Straßensperren**: Microsoft-Teams-Webhook mit Adaptive Card, Kartenbild sowie persistenter Retry- und Duplikatschutz-Outbox ergänzt.
 - **Straßensperren**: Statusseite und Infoscreen mit externen Status-/Infoscreen-Tokens, Live-Aktualisierung und widerrufbaren Zugängen ergänzt.
