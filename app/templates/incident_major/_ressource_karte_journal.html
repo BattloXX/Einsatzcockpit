@@ -1,0 +1,18 @@
+<div class="ressource-karte__content">
+  <section class="res-section">
+    <div class="res-section__title">Journal</div>
+    <div class="res-journal__chips">
+      {% for key, label in [('alle', 'Alle'), ('status', 'Status'), ('einsaetze', 'Einsätze'), ('fuehrung', 'Führung'), ('meldungen', 'Meldungen'), ('manuell', 'Manuell')] %}
+      <button class="btn btn--xs btn--ghost{% if typen == key %} active{% endif %}" hx-get="/lage/{{ lage.id }}/einheiten/{{ einheit.id }}/karte/journal?typen={{ key }}{% if site_id %}&site_id={{ site_id }}{% endif %}" hx-target="#ressourceKarteBody" hx-swap="innerHTML">{{ label }}</button>{% endfor %}
+    </div>
+    {% if can_edit %}<form class="ressource-karte__form" hx-post="/lage/{{ lage.id }}/einheiten/{{ einheit.id }}/journal" hx-target="#ressourceKarteBody" data-dirty>
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><label for="journalText">Eintrag hinzufügen</label><textarea id="journalText" class="form-input" name="text" maxlength="1000" required></textarea><select class="form-input" name="site_id"><option value="">Kein Einsatz</option>{% for site in sites %}<option value="{{ site.id }}">{{ site.bezeichnung }}</option>{% endfor %}</select><button class="btn btn--xs btn--secondary">Hinzufügen</button><div id="journalFehler" role="alert"></div></form>{% endif %}
+  </section>
+  <section class="res-section res-journal">
+    {% for entry in entries %}<article class="res-journal__entry{% if entry.storniert %} is-storniert{% endif %}"><div class="res-journal__time">{{ entry.ts|local_datetime }}</div><div><strong>{{ {'status':'Status','disponiert':'Disposition','uebernommen':'Übernahme','begonnen':'Beginn','abgeschlossen':'Abschluss','zurueckgezogen':'Rückzug','gk_zugewiesen':'GK zugewiesen','gk_gewechselt':'GK gewechselt','gk_telefon':'GK Telefon','lagemeldung':'Lagemeldung','massnahmen':'Maßnahmen','meldung':'Meldung','medien':'Medien','manuell':'Manuell'}.get(entry.ereignis_typ, entry.ereignis_typ) }}</strong> · {{ entry.text }}
+      <div class="ressource-karte__meta">{{ entry.quelle or 'System' }}{% if entry.autor %} · {{ entry.autor }}{% endif %}{% if entry.site_id %} · <button class="btn btn--xs btn--ghost" hx-get="/lage/{{ lage.id }}/stellen/{{ entry.site_id }}" hx-target="#siteDetailContent" hx-swap="innerHTML" hx-on::after-swap="var d=document.getElementById('siteDetailModal');if(d&&!d.open)d.showModal()">Einsatz</button>{% endif %}</div>
+      {% if entry.storniert %}<div>Storniert: {{ entry.storno_grund or '–' }}</div>{% elif can_edit and entry.ref[0] == 'lage_journal' %}<form class="res-journal__storno" hx-post="/lage/{{ lage.id }}/einheiten/{{ einheit.id }}/journal/{{ entry.ref[1] }}/storno" hx-target="#ressourceKarteBody"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><input class="form-input" name="grund" required placeholder="Stornogrund"><button class="btn btn--xs btn--ghost">Stornieren</button></form>{% endif %}</div></article>
+    {% else %}<span class="ressource-karte__meta">Keine Einträge</span>{% endfor %}
+    {% if has_more %}<button class="btn btn--xs btn--ghost" hx-get="/lage/{{ lage.id }}/einheiten/{{ einheit.id }}/karte/journal?typen={{ typen }}{% if site_id %}&site_id={{ site_id }}{% endif %}&limit={{ limit }}&vor_ts={{ next_vor_ts }}" hx-target="#ressourceKarteBody" hx-swap="innerHTML">Ältere laden</button>{% endif %}
+  </section>
+</div>

@@ -102,6 +102,7 @@ class VehicleMaster(Base):
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     deleted: Mapped[bool] = mapped_column(Boolean, default=False)
     bos_override: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    funkrufname: Mapped[str | None] = mapped_column(String(40), nullable=True)
     is_adhoc: Mapped[bool] = mapped_column(Boolean, default=False)
     is_external: Mapped[bool] = mapped_column(Boolean, default=False)
     adhoc_org_name: Mapped[str | None] = mapped_column(String(150), nullable=True)

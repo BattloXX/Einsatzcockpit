@@ -1,0 +1,6 @@
+<form class="ressource-karte__form" hx-post="/lage/{{ lage.id }}/einheiten/{{ einheit.id }}/gruppenkommandant" hx-target="#ressourceKarteBody" data-dirty>
+  <div id="gkFehler" style="color:var(--red);"></div><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+  <label>Mitglied <select name="member_id" class="form-input"><option value="">Extern</option>{% for member in members %}<option value="{{ member.id }}">{{ member.full_name }}{% if member.ist_gruppenkommandant %} · GK{% endif %}</option>{% endfor %}</select></label>
+  <label>Externer Name <input class="form-input" name="person_name" maxlength="120"></label><label>Telefon <input class="form-input" name="telefon" placeholder="+43..." maxlength="40"></label><small>Wird in die normale internationale Form gebracht.</small>
+  <fieldset><legend>Art der Änderung</legend><label><input type="radio" name="modus" value="wechsel" checked> Wechsel</label><label><input type="radio" name="modus" value="korrektur"> Korrektur</label></fieldset><label>Notiz <input class="form-input" name="note" maxlength="500"></label><button class="btn btn--xs btn--primary">Speichern</button>
+</form>

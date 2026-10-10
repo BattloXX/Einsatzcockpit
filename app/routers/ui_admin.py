@@ -1069,6 +1069,7 @@ async def create_vehicle(
     lis_reference_id: str = Form(""),
     taktisches_zeichen: str = Form(""),
     kennzeichen: str = Form(""),
+    funkrufname: str = Form(""),
     db: Session = Depends(get_db), _=Depends(require_role("admin", "org_admin")),
 ):
     from app.core.permissions import has_role
@@ -1096,6 +1097,7 @@ async def create_vehicle(
         lis_reference_id=lis_reference_id.strip()[:60] or None,
         taktisches_zeichen=taktisches_zeichen.strip() or None,
         kennzeichen=kennzeichen.strip() or None,
+        funkrufname=funkrufname.strip()[:40] or None,
         display_order=max_order,
     )
     db.add(v)
@@ -1112,6 +1114,7 @@ async def create_external_resource(
     code: str = Form(...), name: str = Form(...), type: str = Form(""),
     bos_override: str = Form(""),
     kennzeichen: str = Form(""),
+    funkrufname: str = Form(""),
     db: Session = Depends(get_db), _=Depends(require_role("admin", "org_admin")),
 ):
     user = request.state.user
@@ -1130,6 +1133,7 @@ async def create_external_resource(
         adhoc_org_short=org_short.strip()[:3] or None,
         bos_override=bos_override or None,
         kennzeichen=kennzeichen.strip() or None,
+        funkrufname=funkrufname.strip()[:40] or None,
         active=True,
         display_order=max_order,
     )
@@ -1210,6 +1214,7 @@ async def edit_vehicle(
     lis_reference_id: str = Form(""),
     taktisches_zeichen: str = Form(""),
     kennzeichen: str = Form(""),
+    funkrufname: str = Form(""),
     db: Session = Depends(get_db), _=Depends(require_role("admin", "org_admin")),
 ):
     v = _vehicle_for_tenancy_check(db, vehicle_id)
@@ -1236,6 +1241,7 @@ async def edit_vehicle(
         v.lis_reference_id = lis_reference_id.strip()[:60] or None
         v.taktisches_zeichen = taktisches_zeichen.strip() or None
         v.kennzeichen = kennzeichen.strip() or None
+        v.funkrufname = funkrufname.strip()[:40] or None
         write_audit(db, "admin.vehicle.edited", user_id=request.state.user.id,
                     entity_type="vehicle_master", entity_id=vehicle_id)
         db.commit()
@@ -1249,6 +1255,7 @@ async def edit_external_resource(
     code: str = Form(...), name: str = Form(...), type: str = Form(""),
     bos_override: str = Form(""),
     kennzeichen: str = Form(""),
+    funkrufname: str = Form(""),
     db: Session = Depends(get_db), _=Depends(require_role("admin", "org_admin")),
 ):
     v = _vehicle_for_tenancy_check(db, vehicle_id)
@@ -1263,6 +1270,7 @@ async def edit_external_resource(
         v.adhoc_org_short = org_short.strip()[:3] or None
         v.bos_override = bos_override or None
         v.kennzeichen = kennzeichen.strip() or None
+        v.funkrufname = funkrufname.strip()[:40] or None
         write_audit(db, "admin.vehicle.edited_external", user_id=request.state.user.id,
                     entity_type="vehicle_master", entity_id=vehicle_id)
         db.commit()

@@ -453,6 +453,9 @@ class LageEinheit(Base):
     status:          Mapped[str] = mapped_column(String(16), default="bereitgestellt")
     is_from_org:     Mapped[bool] = mapped_column(Boolean, default=False)
     added_at:        Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    funkrufname:     Mapped[str | None] = mapped_column(String(40), nullable=True)
+    bereitstellungsraum: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    status_at:       Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # Ressourcentyp + Abschnittszuordnung (§3.1)
     resource_type:      Mapped[str] = mapped_column(String(12), default="fahrzeug")  # fahrzeug|extern|material
@@ -485,6 +488,7 @@ class LageEinheit(Base):
 class LageEinheitLeader(Base):
     """Einheitsführer-Historie je LageEinheit (Gruppenkommandant-Ebene)."""
     __tablename__ = "lage_einheit_leader"
+    __table_args__ = (Index("ix_lel_einheit_aktiv", "einheit_id", "rolle", "end_at"),)
 
     id:             Mapped[int] = mapped_column(Integer, primary_key=True)
     einheit_id:     Mapped[int] = mapped_column(
@@ -500,6 +504,13 @@ class LageEinheitLeader(Base):
     created_by:     Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
     created_at:     Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    rolle:          Mapped[str] = mapped_column(String(16), nullable=False, default="fuehrer", server_default="fuehrer")
+    phone:          Mapped[str | None] = mapped_column(String(30), nullable=True)
+    phone_e164:     Mapped[str | None] = mapped_column(String(20), nullable=True)
+    phone_version:  Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    ende_grund:     Mapped[str | None] = mapped_column(String(24), nullable=True)
+    ende_von:       Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
 
     predecessor: Mapped[LageEinheitLeader | None] = relationship(
         foreign_keys=[predecessor_id], remote_side="LageEinheitLeader.id")
@@ -536,6 +547,10 @@ class EinheitSiteDispatch(Base):
     dispatched_by:  Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
     author_name:    Mapped[str | None] = mapped_column(String(120), nullable=True)
+    withdrawn_by:   Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
+    withdrawn_author: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    withdrawn_grund: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     site:    Mapped[IncidentSite] = relationship(
         foreign_keys=[site_id], overlaps="dispatched_einheiten")
@@ -634,6 +649,15 @@ class LageJournalEntry(Base):
     author_name:       Mapped[str | None] = mapped_column(String(120), nullable=True)
     user_id:           Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("user.id"), nullable=True)
+    einheit_id:        Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("lage_einheit.id", ondelete="SET NULL"), nullable=True, index=True)
+    site_id:           Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("incident_site.id", ondelete="SET NULL"), nullable=True)
+    ereignis_typ:      Mapped[str | None] = mapped_column(String(24), nullable=True)
+    quelle:            Mapped[str | None] = mapped_column(String(12), nullable=True)
+    storniert_at:      Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    storniert_von:     Mapped[str | None] = mapped_column(String(120), nullable=True)
+    storno_grund:      Mapped[str | None] = mapped_column(String(300), nullable=True)
 
     @validates("body_html")
     def _sanitize_body_html(self, key, value):

@@ -1,0 +1,33 @@
+{% macro einsatz(auftrag, detail=false) %}
+<article class="res-einsatz{% if detail %} res-einsatz--aktuell{% endif %}" role="button" tabindex="0"
+  hx-get="/lage/{{ lage.id }}/stellen/{{ auftrag.site_id }}" hx-target="#siteDetailContent" hx-swap="innerHTML"
+  hx-on::after-swap="var d=document.getElementById('siteDetailModal');if(d&&!d.open)d.showModal()">
+  <div class="res-einsatz__head"><strong>{{ auftrag.einsatznummer }} · {{ auftrag.bezeichnung }}</strong>
+    {% if auftrag.prioritaet %}<span class="dispatch-site-badge dispatch-site-badge--{{ prio_color.get(auftrag.prioritaet, 'muted') }}">{{ auftrag.prioritaet }}</span>{% endif %}
+    <span class="dispatch-site-badge dispatch-site-badge--{{ einheit_status_color.get(auftrag.einheit_status, 'muted') }}">{{ einheit_status_label.get(auftrag.einheit_status, auftrag.einheit_status) }}</span></div>
+  {% if auftrag.adresse %}<div class="ressource-karte__meta">{{ auftrag.adresse }}</div>{% endif %}
+  <div>{{ auftrag.auftrag or 'Kein Auftragstext' }}</div>
+  {% if detail %}<dl class="res-einsatz__details"><dt>Zuweisung</dt><dd>{{ auftrag.dispatched_at|local_datetime }}</dd><dt>Übernahme</dt><dd>{{ auftrag.bestaetigt_at|local_datetime if auftrag.bestaetigt_at else '–' }}</dd><dt>Beginn</dt><dd>{{ auftrag.vor_ort_at|local_datetime if auftrag.vor_ort_at else '–' }}</dd><dt>Letzte Rückmeldung</dt><dd>{{ auftrag.letzte_rueckmeldung_at|local_datetime if auftrag.letzte_rueckmeldung_at else '–' }}</dd></dl>{% endif %}
+</article>
+{% endmacro %}
+<div class="ressource-karte__content">
+  <section class="res-section"><div class="res-section__title">Aktueller Einsatz</div>
+    {% if einsaetze.aktuell %}{{ einsatz(einsaetze.aktuell, true) }}{% else %}<span class="ressource-karte__meta">Kein aktueller Einsatz</span>{% endif %}
+  </section>
+  <section class="res-section"><div class="res-section__title">Weitere Aufträge</div>
+    {% for auftrag in einsaetze.weitere %}{{ einsatz(auftrag) }}{% else %}<span class="ressource-karte__meta">Keine weiteren Aufträge</span>{% endfor %}
+  </section>
+  <section class="res-section"><div class="res-section__title">Abgeschlossene</div>
+    {% for auftrag in einsaetze.abgeschlossen %}{{ einsatz(auftrag) }}
+      <div class="res-einsatz__extra"><span>Beginn: {{ auftrag.vor_ort_at|local_datetime if auftrag.vor_ort_at else '–' }}</span><span>Ende: {{ auftrag.beendet_at|local_datetime if auftrag.beendet_at else '–' }}</span>
+      {% if auftrag.dauer_sekunden is not none %}{% set dauer_h = auftrag.dauer_sekunden // 3600 %}{% set dauer_m = (auftrag.dauer_sekunden % 3600) // 60 %}<span>Dauer: {{ dauer_h }}:{{ '%02d'|format(dauer_m) }}</span>{% endif %}
+      <span>Abschlussmeldung: {{ auftrag.beendet_grund or (auftrag.letzte_lagemeldung.text if auftrag.letzte_lagemeldung else '–') }}</span>
+      {% if auftrag.massnahmen %}<span>Maßnahmen: {% for massnahme in auftrag.massnahmen %}{{ massnahme.text }}{% if not loop.last %}; {% endif %}{% endfor %}</span>{% endif %}</div>
+    {% else %}<span class="ressource-karte__meta">Keine abgeschlossenen Einsätze</span>{% endfor %}
+  </section>
+  <section class="res-section"><div class="res-section__title">Zurückgezogene</div>
+    {% for auftrag in einsaetze.zurueckgezogen %}{{ einsatz(auftrag) }}
+      <div class="res-einsatz__extra">Rückzug: {{ auftrag.withdrawn_at|local_datetime if auftrag.withdrawn_at else '–' }} · Grund: {{ auftrag.withdrawn_grund or 'ohne Angabe' }} · Person: {{ auftrag.withdrawn_author or '–' }}</div>
+    {% else %}<span class="ressource-karte__meta">Keine zurückgezogenen Einsätze</span>{% endfor %}
+  </section>
+</div>

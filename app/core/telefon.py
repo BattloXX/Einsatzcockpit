@@ -63,3 +63,32 @@ def telefon_e164(wert: str | None) -> str | None:
     if normalisiert and re.fullmatch(r"\+[0-9]{8,15}", normalisiert):
         return normalisiert
     return None
+
+
+def telefon_zu_e164_at(wert: str | None) -> str | None:
+    """Normalisiert österreichische nationale Nummern nach E.164."""
+    return telefon_e164(telefon_identitaet_at(wert))
+
+
+def telefon_anzeige(e164: str | None) -> str:
+    """Formatiert eine gültige E.164-Nummer für die Anzeige."""
+    nummer = telefon_e164(e164)
+    if not nummer:
+        return ""
+    ziffern = nummer[1:]
+    if nummer.startswith("+43") and len(ziffern) > 5:
+        return f"+43 {ziffern[2:5]} {ziffern[5:]}"
+    # Ohne Nummernplan-Bibliothek bleibt für andere Länder bewusst eine klare,
+    # verlustfreie Darstellung mit Landesvorwahl.
+    return f"+{ziffern[:2]} {ziffern[2:]}"
+
+
+def telefon_maske(e164: str | None) -> str:
+    """Zeigt nur die letzten vier Ziffern einer gültigen Nummer."""
+    nummer = telefon_e164(e164)
+    if not nummer:
+        return ""
+    ziffern = nummer[1:]
+    if nummer.startswith("+43") and len(ziffern) > 9:
+        return f"+43 {ziffern[2:5]} ***{ziffern[-4:]}"
+    return f"+{ziffern[:2]} ***{ziffern[-4:]}"

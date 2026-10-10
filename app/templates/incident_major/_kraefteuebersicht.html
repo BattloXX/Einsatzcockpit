@@ -13,7 +13,7 @@
 {# ── Einheiten-Karte (Makro) ──────────────────────────────────────────────── #}
 {% macro einheit_card(e) %}
 {% set is_conflict = e.vehicle_id and e.vehicle_id in kue.conflict_vids %}
-<div class="einh-card{% if is_conflict %} einh-card--conflict{% endif %}">
+<div class="einh-card{% if is_conflict %} einh-card--conflict{% endif %}"{% if can_view_karte %} data-einheit-id="{{ e.id }}"{% endif %}>
   <div class="einh-card__top">
     <span class="einh-card__label" title="{{ e.label }}">{{ e.label }}</span>
     <span title="{{ 'Tablet verfügbar' if einheit_hat_tablet.get(e.id) else 'Funk' }}">
