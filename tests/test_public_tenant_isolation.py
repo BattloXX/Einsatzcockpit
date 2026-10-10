@@ -46,7 +46,13 @@ from app.models.kontakt import Kontakt
 from app.models.road_closure import RoadClosure, RoadClosureShare
 from app.models.sms import SmsGroup
 from app.core.crypto import encrypt_secret
-from app.core.security import generate_api_key, sign_mailing_track_token, sign_mailing_webhook_org
+from app.core.security import (
+    generate_api_key,
+    sign_mail_inbound_webhook_org,
+    sign_mailing_track_token,
+    sign_mailing_webhook_org,
+)
+from app.models.org_mail import OrgMailEingang, OrgResendConfig
 from app.services import kontakt_service
 from app.services.objekt_pflege_service import erstelle_pflegeauftrag
 
@@ -426,6 +432,44 @@ def test_mailing_webhook_secret_and_org_token_are_both_required(client, monkeypa
         )
         db.expire_all()
         assert db.get(MailingQueueItem, item.id).status == "delivered"
+    finally:
+        db.close()
+
+
+def test_resend_inbound_webhook_token_cannot_write_to_foreign_org(client, monkeypatch):
+    """Der öffentliche Org-Token ist zusätzlich an genau das Org-Secret gebunden."""
+    import base64
+    import json
+
+    org_b_id = _setup_zwei_orgs()
+    secret_a, secret_b = b"inbound-a", b"inbound-b"
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        for org_id, secret in ((ORG_A, secret_a), (org_b_id, secret_b)):
+            cfg = db.query(OrgResendConfig).filter_by(org_id=org_id).first() or OrgResendConfig(org_id=org_id)
+            cfg.inbound_enabled = True
+            cfg.inbound_webhook_secret_enc = encrypt_secret("whsec_" + base64.b64encode(secret).decode())
+            db.add(cfg)
+        db.commit()
+    finally:
+        db.close()
+
+    async def no_background(*_args):
+        return None
+
+    monkeypatch.setattr("app.routers.mail_inbound_webhook.fetch_inbound_background", no_background)
+    body = json.dumps({"type": "email.received", "data": {"email_id": "foreign-inbound"}}).encode()
+    response = client.post(
+        f"/mail/webhook/resend-inbound/{sign_mail_inbound_webhook_org(org_b_id)}",
+        content=body,
+        headers=_svix(secret_a, body, "evt-inbound-cross"),
+    )
+    assert response.status_code == 401
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        assert db.query(OrgMailEingang).filter_by(org_id=org_b_id, resend_email_id="foreign-inbound").count() == 0
     finally:
         db.close()
 

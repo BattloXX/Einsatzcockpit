@@ -206,6 +206,7 @@ _TENANT_TABLE_NAMES: frozenset[str] = frozenset({
     "member_tag",
     "alarm_ingest",
     "print_rule",
+    "org_mail_eingang",
     # GSL/Großschadenslage (SEC-1 Defense-in-Depth-Backstop) — bisher nur durch
     # ~95 manuelle _check_org_access()-Aufrufe in ui_major_incident.py geschützt;
     # ein vergessener Aufruf wäre ein Cross-Tenant-IDOR ohne DB-seitigen Schutz.

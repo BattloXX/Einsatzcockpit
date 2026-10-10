@@ -177,6 +177,17 @@ def unsign_mailing_webhook_org(token: str) -> int | None:
     except (BadSignature, KeyError, TypeError):
         return None
 
+_mail_inbound_webhook_signer = URLSafeSerializer(settings.SECRET_KEY, salt="mail-inbound-webhook")
+
+def sign_mail_inbound_webhook_org(org_id: int) -> str:
+    return _mail_inbound_webhook_signer.dumps({"o": org_id})
+
+def unsign_mail_inbound_webhook_org(token: str) -> int | None:
+    try:
+        return _mail_inbound_webhook_signer.loads(token)["o"]
+    except (BadSignature, KeyError, TypeError):
+        return None
+
 
 # ── Native-App-Datei-Handoff: kurzlebiges, pfadgebundenes Auth-Token ───────────
 # Capacitor-Custom-Tabs (@capacitor/browser) teilen sich NICHT den Cookie-Jar

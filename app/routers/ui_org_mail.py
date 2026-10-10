@@ -9,19 +9,24 @@ für den Admin sichtbar sein soll.
 """
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
+from urllib.parse import quote
 
+import httpx
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
+from sqlalchemy import func
 
 from app.config import settings
 from app.core.audit import write_audit
 from app.core.crypto import encrypt_secret
 from app.core.permissions import is_system_admin, require_role, same_org_or_system_admin
+from app.core.security import sign_mail_inbound_webhook_org
 from app.core.templating import templates
 from app.db import get_db
 from app.models.master import FireDept
-from app.models.org_mail import OrgO365MailConfig, OrgResendConfig, OrgSmtpConfig
+from app.models.org_mail import OrgMailEingang, OrgO365MailConfig, OrgResendConfig, OrgSmtpConfig
 from app.models.user import User
 
 router = APIRouter(prefix="/admin")
@@ -106,6 +111,10 @@ def mail_settings_page(
         "all_orgs": all_orgs,
         "flash": request.query_params.get("flash"),
         "o365_globally_enabled": settings.O365_MAIL_ENABLED,
+        "inbound_webhook_url": (
+            (settings.effective_public_base_url or str(request.base_url)).rstrip("/")
+            + "/mail/webhook/resend-inbound/" + sign_mail_inbound_webhook_org(effective_org_id)
+        ) if effective_org_id else "",
     })
 
 
@@ -141,7 +150,6 @@ async def smtp_settings_save(
     from_addr_clean = from_addr.strip()
     if from_addr_clean and not _looks_like_email(from_addr_clean):
         return RedirectResponse("/admin/mail?flash=error_from_addr", status_code=302)
-
     cfg = _get_or_create_smtp_config(db, effective_org_id)
     cfg.enabled = enabled == "1"
     cfg.host = host.strip() or None
@@ -184,6 +192,10 @@ async def resend_settings_save(
     api_key: str = Form(""),
     secret_changed: str = Form(""),
     from_addr: str = Form(""),
+    inbound_enabled: str = Form(""),
+    inbound_webhook_secret: str = Form(""),
+    inbound_secret_changed: str = Form(""),
+    inbound_retention_days: int = Form(90),
 ):
     from app.services.mail_service import _looks_like_email
 
@@ -195,15 +207,21 @@ async def resend_settings_save(
     from_addr_clean = from_addr.strip()
     if from_addr_clean and not _looks_like_email(from_addr_clean):
         return RedirectResponse("/admin/mail?flash=error_from_addr", status_code=302)
+    if not 1 <= inbound_retention_days <= 365:
+        return RedirectResponse("/admin/mail?flash=error_retention", status_code=302)
 
     cfg = _get_or_create_resend_config(db, effective_org_id)
     cfg.enabled = enabled == "1"
     cfg.from_addr = from_addr_clean or None
+    cfg.inbound_enabled = inbound_enabled == "1"
+    cfg.inbound_retention_days = inbound_retention_days
     cfg.updated_at = datetime.now(UTC)
     if secret_changed == "1" and api_key.strip():
         cfg.api_key_enc = encrypt_secret(api_key.strip())
         write_audit(db, "org_mail.resend.credentials_rotated", org_id=effective_org_id,
                     user_id=user.id, ip=request.client.host if request.client else None)
+    if inbound_secret_changed == "1" and inbound_webhook_secret.strip():
+        cfg.inbound_webhook_secret_enc = encrypt_secret(inbound_webhook_secret.strip())
     write_audit(db, "org_mail.resend.updated", org_id=effective_org_id, user_id=user.id,
                 ip=request.client.host if request.client else None)
     db.commit()
@@ -422,3 +440,147 @@ async def resend_test(
                 ip=request.client.host if request.client else None)
     db.commit()
     return JSONResponse({"ok": False, "message": message})
+
+
+# ── Resend-Posteingang ───────────────────────────────────────────────────────
+def _eingang_org(user: User, requested: int | None) -> int:
+    org_id = _get_org_id(user, requested)
+    if not org_id or not same_org_or_system_admin(user, org_id):
+        raise HTTPException(status_code=404, detail="Nicht gefunden")
+    return org_id
+
+
+def _eingang_row(db, org_id: int, entry_id: int) -> OrgMailEingang:
+    row = db.query(OrgMailEingang).filter(OrgMailEingang.id == entry_id, OrgMailEingang.org_id == org_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Nicht gefunden")
+    return row
+
+
+@router.get("/mail/eingang", response_class=HTMLResponse)
+def eingang_list(request: Request, status: str = "", q: str = "", page: int = 1, org_id: int | None = None,
+                 db=Depends(get_db), user: User = Depends(require_role("org_admin", "admin"))):
+    oid = _eingang_org(user, org_id)
+    query = db.query(OrgMailEingang).filter(OrgMailEingang.org_id == oid)
+    if status in {"neu", "gelesen", "archiviert", "abruf_fehler"}:
+        query = query.filter(OrgMailEingang.status == status)
+    if q.strip():
+        term = f"%{q.strip()[:100]}%"
+        query = query.filter((OrgMailEingang.betreff.like(term)) | (OrgMailEingang.absender.like(term)))
+    page = max(1, page)
+    per_page = 25
+    total = query.with_entities(func.count(OrgMailEingang.id)).scalar() or 0
+    entries = query.order_by(OrgMailEingang.empfangen_at.desc()).offset((page - 1) * per_page).limit(per_page).all()
+    return templates.TemplateResponse(request, "admin/mail_eingang.html", {
+        "user": user, "entries": entries, "org_id": oid, "status": status, "q": q, "page": page,
+        "pages": max(1, (total + per_page - 1) // per_page),
+    })
+
+
+@router.get("/mail/eingang/{entry_id:int}", response_class=HTMLResponse)
+def eingang_detail(request: Request, entry_id: int, org_id: int | None = None, db=Depends(get_db),
+                   user: User = Depends(require_role("org_admin", "admin"))):
+    oid = _eingang_org(user, org_id)
+    row = _eingang_row(db, oid, entry_id)
+    if row.status == "neu":
+        row.status, row.gelesen_von, row.gelesen_at = "gelesen", user.id, datetime.now(UTC)
+        db.commit()
+    return templates.TemplateResponse(request, "admin/mail_eingang_detail.html", {
+        "user": user, "entry": row, "org_id": oid,
+        "attachments": _entry_attachments(row),
+    })
+
+
+def _entry_attachments(row: OrgMailEingang) -> list[dict]:
+    try:
+        value = json.loads(row.anhang_json or "[]")
+    except (TypeError, ValueError):
+        return []
+    return [item for item in value if isinstance(item, dict) and item.get("id")]
+
+
+@router.get("/mail/eingang/{entry_id:int}/html")
+def eingang_html(entry_id: int, org_id: int | None = None, db=Depends(get_db),
+                 user: User = Depends(require_role("org_admin", "admin"))):
+    from fastapi.responses import HTMLResponse
+    row = _eingang_row(db, _eingang_org(user, org_id), entry_id)
+    return HTMLResponse(row.html_body or "", headers={
+        "Content-Security-Policy": "default-src 'none'; img-src data:", "Cache-Control": "no-store",
+    })
+
+
+@router.get("/mail/eingang/{entry_id:int}/anhang/{attachment_id}")
+async def eingang_anhang(entry_id: int, attachment_id: str, org_id: int | None = None, db=Depends(get_db),
+                         user: User = Depends(require_role("org_admin", "admin"))):
+    """Proxy-Download: die signierte Provider-URL wird nie an den Browser gegeben."""
+    oid = _eingang_org(user, org_id)
+    row = _eingang_row(db, oid, entry_id)
+    cfg = db.query(OrgResendConfig).filter(OrgResendConfig.org_id == oid).first()
+    if not cfg or not cfg.api_key_enc:
+        raise HTTPException(status_code=404, detail="Anhang nicht gefunden")
+    try:
+        from app.core.crypto import decrypt_secret
+        from app.services.resend_inbound_service import (
+            MAX_ATTACHMENT_BYTES,
+            attachment_content_type,
+            get_resend_attachment,
+            safe_attachment_filename,
+        )
+        attachment = await get_resend_attachment(
+            decrypt_secret(cfg.api_key_enc), row.resend_email_id, attachment_id[:200]
+        )
+    except Exception:
+        attachment = None
+    if not attachment:
+        raise HTTPException(status_code=404, detail="Anhang nicht gefunden")
+    url = attachment["download_url"]
+    filename = safe_attachment_filename(attachment.get("filename"))
+    content_type = attachment_content_type(attachment.get("content_type"))
+
+    async def download():
+        try:
+            async with httpx.AsyncClient(timeout=settings.RESEND_HTTP_TIMEOUT) as client:
+                async with client.stream("GET", url) as response:
+                    if not response.is_success:
+                        return
+                    size = 0
+                    async for chunk in response.aiter_bytes():
+                        size += len(chunk)
+                        if size > MAX_ATTACHMENT_BYTES:
+                            return
+                        yield chunk
+        except Exception:
+            return
+
+    return StreamingResponse(download(), media_type=content_type, headers={
+        "Content-Disposition": "attachment; filename*=UTF-8''" + quote(filename, safe=""),
+        "X-Content-Type-Options": "nosniff", "Cache-Control": "no-store",
+    })
+
+
+@router.post("/mail/eingang/{entry_id:int}/{aktion}")
+async def eingang_aktion(request: Request, entry_id: int, aktion: str, org_id: int | None = Form(None),
+                         db=Depends(get_db), user: User = Depends(require_role("org_admin", "admin"))):
+    oid = _eingang_org(user, org_id)
+    row = _eingang_row(db, oid, entry_id)
+    if aktion == "loeschen":
+        write_audit(db, "org_mail.inbound.deleted", org_id=oid, user_id=user.id)
+        db.delete(row)
+    elif aktion == "archivieren":
+        row.status = "archiviert"
+        write_audit(db, "org_mail.inbound.archived", org_id=oid, user_id=user.id)
+    elif aktion == "gelesen":
+        row.status, row.gelesen_von, row.gelesen_at = "gelesen", user.id, datetime.now(UTC)
+        write_audit(db, "org_mail.inbound.read", org_id=oid, user_id=user.id)
+    elif aktion == "ungelesen":
+        row.status, row.gelesen_at, row.gelesen_von = "neu", None, None
+        write_audit(db, "org_mail.inbound.unread", org_id=oid, user_id=user.id)
+    elif aktion == "erneut-abrufen":
+        from app.services.resend_inbound_service import fetch_inbound_message
+        write_audit(db, "org_mail.inbound.refetched", org_id=oid, user_id=user.id)
+        await fetch_inbound_message(db, oid, row.id)
+        return RedirectResponse(f"/admin/mail/eingang/{entry_id}", status_code=303)
+    else:
+        raise HTTPException(status_code=404)
+    db.commit()
+    return RedirectResponse("/admin/mail/eingang", status_code=303)
