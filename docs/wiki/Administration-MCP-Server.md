@@ -28,6 +28,11 @@ Bei aktivem GSL-Ressourcenmodul (`mi_feature_ressourcen`) stehen folgende Werkze
 | `gsl_ressource_journal` | Ressourcenjournal lesen oder manuellen Eintrag erfassen | Lesen / Ändern |
 | `gsl_ressource_personal` | Personal lesen oder mit den vorhandenen Service-Aktionen pflegen | Lesen / Ändern |
 | `gsl_ressource_ausstattung` | Ausstattung lesen oder mit den vorhandenen Service-Aktionen pflegen | Lesen / Ändern |
+| `gsl_ressource_anlegen` | Neue Einheit samt optionalem GK, Personal und Autodruck anlegen | Ändern |
+| `gsl_einheit_disponieren` | Einheit zu einer Einsatzstelle disponieren | Ändern |
+| `gsl_auftrag_aendern` | Auftrag oder Reihenfolge einer Disposition ändern | Ändern |
+| `gsl_auftrag_zurueckziehen` | Einheit von einer Einsatzstelle abziehen | Ändern |
+| `gsl_ressource_qr` | QR-Zugangstatus lesen oder QR-Zugang widerrufen; keine Ausgabe von Token, Link oder PIN | Lesen / Ändern |
 
 MCP-Antworten enthalten niemals Zugangstoken, Links, Token-Hashes oder PINs. Der SMS-Versand liefert nur Versandstatus und -protokoll. Telefonnummern sind für reine Leser maskiert. Schreibvorgänge benötigen eine aktive Lage.
 

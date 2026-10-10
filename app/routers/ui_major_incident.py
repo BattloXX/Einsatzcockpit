@@ -99,29 +99,6 @@ router = APIRouter(dependencies=[Depends(einheit_geraet_nur_lesen)])
 logger = logging.getLogger("einsatzleiter.major_incident")
 
 
-def _plane_auftrag_sms_sicher(db: Session, lage, einheit, dispatch, ereignis: str):
-    """SMS-Planung ist Zusatzfunktion und darf die Disposition nie zurückrollen."""
-    try:
-        with db.begin_nested():
-            from app.services.gk_zugang_service import plane_auftrag_sms
-            return plane_auftrag_sms(db, lage, einheit, dispatch, ereignis)  # type: ignore[arg-type]
-    except Exception:
-        logger.exception("Auftrags-SMS konnte nicht geplant werden (lage=%s, dispatch=%s)", lage.id, dispatch.id)
-        return None
-
-
-def _push_tablet(background_tasks: BackgroundTasks, einheit, dispatch, ereignis: str) -> None:
-    """Tablet-Push nach dem Commit; unabhängig vom SMS-Schalter."""
-    from app.services.gsl_einheit_push import push_einheit_auftrag
-
-    if dispatch is not None and einheit is not None:
-        background_tasks.add_task(push_einheit_auftrag, einheit.id, dispatch.id, ereignis)
-
-
-async def _sende_auftrag_sms(auftrag) -> None:
-    from app.services.gk_zugang_service import sende_auto_sms
-    await sende_auto_sms(auftrag)
-
 # Pending phone verifications: verify_token → {pin, expires_at, ...}
 _pending_verifications: dict[str, dict] = {}
 
@@ -926,11 +903,10 @@ async def site_einheit_zuweisen(
         user_id=user.id,
         author_name=get_author_name(request),
     ))
-    auftrag_sms = _plane_auftrag_sms_sicher(db, lage, einheit, dispatch, "neu")
+    from app.services.gsl_auftrag_events import plane_benachrichtigungen, sende_nach_commit
+    benachrichtigung = plane_benachrichtigungen(db, lage, einheit, dispatch, "neu")
     db.commit()
-    if auftrag_sms:
-        background_tasks.add_task(_sende_auftrag_sms, auftrag_sms)
-    _push_tablet(background_tasks, einheit, dispatch, "neu")
+    background_tasks.add_task(sende_nach_commit, benachrichtigung)
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
     return Response(status_code=204)
 
@@ -978,11 +954,11 @@ async def site_einheit_freigeben(
     site = db.get(IncidentSite, site_id)
     if site and not lagemeldung_service.has_active_resource(site, db):
         lagemeldung_service.clear_timer(site, db)
-    auftrag_sms = _plane_auftrag_sms_sicher(db, lage, einheit, dispatch, "zurueckgezogen") if dispatch else None
+    from app.services.gsl_auftrag_events import plane_benachrichtigungen, sende_nach_commit
+    benachrichtigung = plane_benachrichtigungen(db, lage, einheit, dispatch, "zurueckgezogen") if dispatch else None
     db.commit()
-    if auftrag_sms:
-        background_tasks.add_task(_sende_auftrag_sms, auftrag_sms)
-    _push_tablet(background_tasks, einheit, dispatch, "zurueckgezogen")
+    if benachrichtigung:
+        background_tasks.add_task(sende_nach_commit, benachrichtigung)
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
     return Response(status_code=204)
 
@@ -1101,11 +1077,10 @@ async def site_einheit_disponieren(
     ))
     write_audit(db, "gsl.auftrag.disponiert", user_id=user.id,
                 payload={"lage_id": lage_id, "site_id": site_id, "einheit_id": einheit_id})
-    auftrag_sms = _plane_auftrag_sms_sicher(db, lage, einheit, dispatch, "neu")
+    from app.services.gsl_auftrag_events import plane_benachrichtigungen, sende_nach_commit
+    benachrichtigung = plane_benachrichtigungen(db, lage, einheit, dispatch, "neu")
     db.commit()
-    if auftrag_sms:
-        background_tasks.add_task(_sende_auftrag_sms, auftrag_sms)
-    _push_tablet(background_tasks, einheit, dispatch, "neu")
+    background_tasks.add_task(sende_nach_commit, benachrichtigung)
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
     await broadcast_lage(lage_id, {"type": "einheit:changed", "einheit_id": einheit_id, "site_id": site_id})
     html = _site_detail_html_with_oob(request, db, lage, site, user)
@@ -1142,15 +1117,14 @@ async def site_einheit_auftrag_aendern(
         raise HTTPException(status_code=400, detail=str(exc))
     write_audit(db, "gsl.auftrag.geaendert", user_id=user.id,
                 payload={"lage_id": lage_id, "site_id": site_id, "dispatch_id": dispatch_id})
-    auftrag_sms = (
-        _plane_auftrag_sms_sicher(db, lage, dispatch.einheit, dispatch, "geaendert")
+    from app.services.gsl_auftrag_events import plane_benachrichtigungen, sende_nach_commit
+    benachrichtigung = (
+        plane_benachrichtigungen(db, lage, dispatch.einheit, dispatch, "geaendert")
         if changed and alter_auftrag != dispatch.auftrag else None
     )
     db.commit()
-    if auftrag_sms:
-        background_tasks.add_task(_sende_auftrag_sms, auftrag_sms)
-    if changed and alter_auftrag != dispatch.auftrag:
-        _push_tablet(background_tasks, dispatch.einheit, dispatch, "geaendert")
+    if benachrichtigung:
+        background_tasks.add_task(sende_nach_commit, benachrichtigung)
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
     await broadcast_lage(lage_id, {"type": "einheit:changed", "einheit_id": dispatch.einheit_id,
                                    "dispatch_id": dispatch_id, "site_id": site_id})
@@ -1344,11 +1318,11 @@ async def site_einheit_abziehen(
     ))
     if not lagemeldung_service.has_active_resource(site, db):
         lagemeldung_service.clear_timer(site, db)
-    auftrag_sms = _plane_auftrag_sms_sicher(db, lage, einheit, dispatch, "zurueckgezogen") if dispatch else None
+    from app.services.gsl_auftrag_events import plane_benachrichtigungen, sende_nach_commit
+    benachrichtigung = plane_benachrichtigungen(db, lage, einheit, dispatch, "zurueckgezogen") if dispatch else None
     db.commit()
-    if auftrag_sms:
-        background_tasks.add_task(_sende_auftrag_sms, auftrag_sms)
-    _push_tablet(background_tasks, einheit, dispatch, "zurueckgezogen")
+    if benachrichtigung:
+        background_tasks.add_task(sende_nach_commit, benachrichtigung)
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
     html = _site_detail_html_with_oob(request, db, lage, site, user)
     return HTMLResponse(content=html, headers={"HX-Retarget": "#siteDetailContent", "HX-Reswap": "innerHTML"})

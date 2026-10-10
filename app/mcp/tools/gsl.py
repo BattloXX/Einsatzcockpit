@@ -9,10 +9,11 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+from app.core.audit import write_audit
 from app.core.permissions import has_role
 from app.mcp.context import MCPContext
 from app.mcp.registry import register_tool
-from app.models.major_incident import LageEinheit, MajorIncident
+from app.models.major_incident import EinheitSiteDispatch, IncidentSite, LageEinheit, MajorIncident, SiteLogEntry
 from app.services import gk_zugang_service, resource_service, ressource_karte_service, ressource_pflege_service
 from app.services.mi_feature_service import get_mi_features
 
@@ -95,6 +96,26 @@ def _zugang(db: Any, einheit: LageEinheit, can_edit: bool) -> dict[str, Any]:
     }
     result["telefon"] = status.get("nummer_anzeige") if can_edit else status.get("nummer_maske")
     return _json(result)
+
+
+def _audit(context: MCPContext, action: str, lage: MajorIncident, entity_id: int, **payload: Any) -> None:
+    write_audit(context.db, action, org_id=context.org_id, user_id=context.user.id,
+                entity_type="gsl_auftrag", entity_id=entity_id,
+                payload={"lage_id": lage.id, "via": "mcp", **payload})
+
+
+async def _broadcast(lage_id: int, site_id: int, einheit_id: int, dispatch_id: int | None = None) -> None:
+    from app.services.broadcast import broadcast_lage
+    await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
+    event: dict[str, Any] = {"type": "einheit:changed", "einheit_id": einheit_id, "site_id": site_id}
+    if dispatch_id is not None:
+        event["dispatch_id"] = dispatch_id
+    await broadcast_lage(lage_id, event)
+
+
+def _push_geplant(db: Any, einheit: LageEinheit) -> str:
+    from app.services.einheit_service import hat_tablet
+    return "geplant" if hat_tablet(db, einheit) else "übersprungen"
 
 
 def _personal(db: Any, einheit: LageEinheit) -> dict[str, Any]:
@@ -484,6 +505,165 @@ async def gsl_ressource_ausstattung(
                 "ausstattung": ressource_pflege_service.ausstattung_liste(context.db, einheit),
             }
         )
+    except Exception:
+        context.db.rollback()
+        raise
+
+
+@register_tool(
+    name="gsl_ressource_anlegen",
+    description="Legt eine GSL-Ressource über denselben Service wie die Weboberfläche an.",
+    required_roles=READ, module_check=_module_check,
+)
+async def gsl_ressource_anlegen(
+    context: MCPContext, lage_id: int, resource_type: str, label: str, vehicle_id: int | None = None,
+    org_name: str | None = None, bos: str | None = None, qty: int | None = None, unit: str | None = None,
+    funkrufname: str | None = None, status: str | None = None, sektor_id: int | None = None,
+    bereitstellungsraum: str | None = None, gk_name: str | None = None, gk_member_id: int | None = None,
+    gk_telefon: str | None = None, stv_name: str | None = None, personal_gesamt: int | None = None,
+    bemerkung: str | None = None,
+) -> dict[str, object]:
+    try:
+        lage = _lage(context, lage_id)
+        _edit(context, lage)
+        gk = ({"member_id": gk_member_id, "person_name": gk_name or "", "telefon": gk_telefon, "modus": "auto"}
+              if gk_member_id is not None or gk_name else None)
+        stv = {"person_name": stv_name, "modus": "auto"} if stv_name else None
+        personal = {"gesamt": personal_gesamt} if personal_gesamt is not None else None
+        result = resource_service.lege_einheit_an(
+            context.db, lage, resource_type=resource_type, label=label, vehicle_id=vehicle_id,
+            org_name=org_name, bos=bos, qty=qty, unit=unit, funkrufname=funkrufname, status=status,
+            sektor_id=sektor_id, bereitstellungsraum=bereitstellungsraum, gk=gk, stellvertreter=stv,
+            personal=personal, bemerkung=bemerkung, user_id=context.user.id, author_name=_author(context),
+        )
+        context.db.commit()
+        if result.auto_sms:
+            await gk_zugang_service.sende_auto_sms(result.auto_sms)
+        from app.services.print_dispatcher import autoprint_gsl_einheit_background
+        await autoprint_gsl_einheit_background(result.einheit.id)
+        qr = gk_zugang_service.zugang_status(context.db, result.einheit).get("qr", {})
+        return {"einheit_id": result.einheit.id, "label": result.einheit.label,
+                "gk_gesetzt": bool(result.gk_ergebnis),
+                "sms": "geplant" if result.auto_sms else "übersprungen",
+                "qr_druck": "angefordert" if qr.get("druck_status") != "nicht_angefordert" else "nicht_angefordert"}
+    except Exception:
+        context.db.rollback()
+        raise
+
+
+@register_tool(name="gsl_einheit_disponieren", description="Disponiert eine Einheit zu einer Einsatzstelle.",
+               required_roles=READ, module_check=_module_check)
+async def gsl_einheit_disponieren(context: MCPContext, lage_id: int, einheit_id: int, site_id: int,
+                                  auftrag: str | None = None, reihenfolge: int | None = None) -> dict[str, object]:
+    try:
+        lage = _lage(context, lage_id)
+        _edit(context, lage)
+        einheit = _einheit(context, lage, einheit_id)
+        site = context.db.get(IncidentSite, site_id)
+        if site is None or site.major_incident_id != lage.id:
+            raise ValueError("Einsatzstelle nicht gefunden")
+        dispatch = resource_service.dispatch_to_site(context.db, einheit_id, lage.id, site_id, auftrag=auftrag,
+            reihenfolge=reihenfolge, author_name=_author(context), user_id=context.user.id, quelle="mcp")
+        context.db.add(SiteLogEntry(
+            incident_site_id=site_id, kind="resource", text=f"Einheit disponiert: {einheit.label}",
+            user_id=context.user.id, author_name=_author(context),
+        ))
+        _audit(context, "gsl.auftrag.disponiert", lage, dispatch.id, site_id=site_id, einheit_id=einheit_id)
+        from app.services.gsl_auftrag_events import plane_benachrichtigungen, sende_nach_commit
+        notification = plane_benachrichtigungen(context.db, lage, einheit, dispatch, "neu")
+        context.db.commit()
+        await sende_nach_commit(notification)
+        await _broadcast(lage.id, site_id, einheit_id, dispatch.id)
+        return {"dispatch_id": dispatch.id, "sms": "geplant" if notification.sms else "übersprungen",
+                "push": _push_geplant(context.db, einheit)}
+    except Exception:
+        context.db.rollback()
+        raise
+
+
+@register_tool(name="gsl_auftrag_aendern", description="Ändert einen GSL-Auftrag.", required_roles=READ,
+               module_check=_module_check)
+async def gsl_auftrag_aendern(context: MCPContext, lage_id: int, dispatch_id: int, auftrag: str | None = None,
+                              reihenfolge: int | None = None) -> dict[str, object]:
+    try:
+        lage = _lage(context, lage_id)
+        _edit(context, lage)
+        dispatch = context.db.get(EinheitSiteDispatch, dispatch_id)
+        if dispatch is None or dispatch.einheit.lage_id != lage.id:
+            raise ValueError("Disposition nicht gefunden.")
+        old = dispatch.auftrag
+        changed = resource_service.aendere_auftrag(context.db, dispatch, auftrag=auftrag, reihenfolge=reihenfolge,
+            author_name=_author(context), user_id=context.user.id, quelle="mcp")
+        _audit(context, "gsl.auftrag.geaendert", lage, dispatch.id, site_id=dispatch.site_id)
+        from app.services.gsl_auftrag_events import plane_benachrichtigungen, sende_nach_commit
+        notification = (plane_benachrichtigungen(context.db, lage, dispatch.einheit, dispatch, "geaendert")
+                        if changed and old != dispatch.auftrag else None)
+        context.db.commit()
+        if notification:
+            await sende_nach_commit(notification)
+        await _broadcast(lage.id, dispatch.site_id, dispatch.einheit_id, dispatch.id)
+        return {"dispatch_id": dispatch.id, "geaendert": changed,
+                "sms": "geplant" if notification and notification.sms else "übersprungen",
+                "push": _push_geplant(context.db, dispatch.einheit) if notification else "übersprungen"}
+    except Exception:
+        context.db.rollback()
+        raise
+
+
+@register_tool(name="gsl_auftrag_zurueckziehen", description="Zieht eine Einheit von einer Einsatzstelle ab.",
+               required_roles=READ, module_check=_module_check)
+async def gsl_auftrag_zurueckziehen(context: MCPContext, lage_id: int, einheit_id: int, site_id: int,
+                                    grund: str | None = None) -> dict[str, object]:
+    try:
+        lage = _lage(context, lage_id)
+        _edit(context, lage)
+        einheit = _einheit(context, lage, einheit_id)
+        site = context.db.get(IncidentSite, site_id)
+        if site is None or site.major_incident_id != lage.id:
+            raise ValueError("Einsatzstelle nicht gefunden")
+        resource_service.withdraw_from_site(context.db, einheit_id, lage.id, site_id, author_name=_author(context),
+                                            user_id=context.user.id, grund=grund, quelle="mcp")
+        dispatch = (
+            context.db.query(EinheitSiteDispatch).filter_by(einheit_id=einheit_id, site_id=site_id)
+            .order_by(EinheitSiteDispatch.id.desc()).first()
+        )
+        assert dispatch is not None
+        context.db.add(SiteLogEntry(
+            incident_site_id=site_id, kind="resource", text=f"Einheit abgezogen: {einheit.label}",
+            user_id=context.user.id, author_name=_author(context),
+        ))
+        _audit(context, "gsl.auftrag.zurueckgezogen", lage, dispatch.id, site_id=site_id, einheit_id=einheit_id)
+        from app.services.gsl_auftrag_events import plane_benachrichtigungen, sende_nach_commit
+        notification = plane_benachrichtigungen(context.db, lage, einheit, dispatch, "zurueckgezogen")
+        context.db.commit()
+        await sende_nach_commit(notification)
+        await _broadcast(lage.id, site_id, einheit_id, dispatch.id)
+        return {"dispatch_id": dispatch.id, "sms": "geplant" if notification.sms else "übersprungen",
+                "push": _push_geplant(context.db, einheit)}
+    except Exception:
+        context.db.rollback()
+        raise
+
+
+@register_tool(name="gsl_ressource_qr",
+               description=("Liest oder widerruft QR-Zugangsdaten ohne Token, Link oder PIN; "
+                            "Klartext-Zugangsdaten dürfen MCP nie erreichen."),
+               required_roles=READ, module_check=_module_check)
+async def gsl_ressource_qr(context: MCPContext, lage_id: int, einheit_id: int, aktion: str) -> dict[str, object]:
+    try:
+        lage = _lage(context, lage_id)
+        einheit = _einheit(context, lage, einheit_id)
+        if aktion == "status":
+            qr = gk_zugang_service.zugang_status(context.db, einheit).get("qr", {})
+            fields = ("status", "laeuft_ab_at", "generation", "sitzung_aktiv", "qr_druck_at", "druck_status")
+            return _json({key: qr.get(key) for key in fields})
+        if aktion != "widerrufen":
+            raise ValueError("Aktion muss status oder widerrufen sein.")
+        _edit(context, lage)
+        gk_zugang_service.widerrufe(context.db, einheit.id, grund="mcp", user_id=context.user.id, typ="qr")
+        _audit(context, "gsl.zugang.qr_widerrufen", lage, einheit.id, einheit_id=einheit.id)
+        context.db.commit()
+        return {"status": "widerrufen"}
     except Exception:
         context.db.rollback()
         raise

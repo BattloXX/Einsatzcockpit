@@ -394,6 +394,47 @@ async def gsl_ressource_ausstattung(lage_id: int, einheit_id: int, aktion: str =
     return await _call_registered_tool("gsl_ressource_ausstattung", lage_id=lage_id, einheit_id=einheit_id, aktion=aktion, daten=daten)
 
 
+@server.tool(name="gsl_ressource_anlegen", description="Legt eine GSL-Ressource an.")
+async def gsl_ressource_anlegen(
+    lage_id: int, resource_type: str, label: str, vehicle_id: int | None = None, org_name: str | None = None,
+    bos: str | None = None, qty: int | None = None, unit: str | None = None, funkrufname: str | None = None,
+    status: str | None = None, sektor_id: int | None = None, bereitstellungsraum: str | None = None,
+    gk_name: str | None = None, gk_member_id: int | None = None, gk_telefon: str | None = None,
+    stv_name: str | None = None, personal_gesamt: int | None = None, bemerkung: str | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool("gsl_ressource_anlegen", lage_id=lage_id, resource_type=resource_type,
+        label=label, vehicle_id=vehicle_id, org_name=org_name, bos=bos, qty=qty, unit=unit,
+        funkrufname=funkrufname, status=status, sektor_id=sektor_id, bereitstellungsraum=bereitstellungsraum,
+        gk_name=gk_name, gk_member_id=gk_member_id, gk_telefon=gk_telefon, stv_name=stv_name,
+        personal_gesamt=personal_gesamt, bemerkung=bemerkung)
+
+
+@server.tool(name="gsl_einheit_disponieren", description="Disponiert eine Einheit zu einer Einsatzstelle.")
+async def gsl_einheit_disponieren(lage_id: int, einheit_id: int, site_id: int, auftrag: str | None = None,
+                                  reihenfolge: int | None = None) -> dict[str, object]:
+    return await _call_registered_tool("gsl_einheit_disponieren", lage_id=lage_id, einheit_id=einheit_id,
+                                       site_id=site_id, auftrag=auftrag, reihenfolge=reihenfolge)
+
+
+@server.tool(name="gsl_auftrag_aendern", description="Ändert einen GSL-Auftrag.")
+async def gsl_auftrag_aendern(lage_id: int, dispatch_id: int, auftrag: str | None = None,
+                              reihenfolge: int | None = None) -> dict[str, object]:
+    return await _call_registered_tool("gsl_auftrag_aendern", lage_id=lage_id, dispatch_id=dispatch_id,
+                                       auftrag=auftrag, reihenfolge=reihenfolge)
+
+
+@server.tool(name="gsl_auftrag_zurueckziehen", description="Zieht eine Einheit von einer Einsatzstelle ab.")
+async def gsl_auftrag_zurueckziehen(lage_id: int, einheit_id: int, site_id: int,
+                                    grund: str | None = None) -> dict[str, object]:
+    return await _call_registered_tool("gsl_auftrag_zurueckziehen", lage_id=lage_id, einheit_id=einheit_id,
+                                       site_id=site_id, grund=grund)
+
+
+@server.tool(name="gsl_ressource_qr", description="Liest oder widerruft QR-Zugang ohne Token, Link oder PIN.")
+async def gsl_ressource_qr(lage_id: int, einheit_id: int, aktion: str) -> dict[str, object]:
+    return await _call_registered_tool("gsl_ressource_qr", lage_id=lage_id, einheit_id=einheit_id, aktion=aktion)
+
+
 @server.tool(
     name="organisation_lesen",
     description="Liest Stammdaten und Logo der eigenen Organisation (z. B. fuer Briefkoepfe oder Berichte).",
