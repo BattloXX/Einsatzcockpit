@@ -16,8 +16,18 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.audit import write_audit
-from app.models.major_incident import PERSON_FUNKTIONEN, LageEinheit, LageEinheitPerson, MajorIncident
+from app.models.atemschutz_pruefung import AtemschutzGeraet
+from app.models.major_incident import (
+    AUSSTATTUNG_STATUS,
+    GSL_AUSSTATTUNG_KATALOG,
+    PERSON_FUNKTIONEN,
+    LageEinheit,
+    LageEinheitAusstattung,
+    LageEinheitPerson,
+    MajorIncident,
+)
 from app.models.master import Member
+from app.models.verleih import VerleihArtikel
 from app.services.resource_service import _journal
 
 
@@ -544,3 +554,412 @@ def kraefte_summen(db: Session, lage: MajorIncident) -> dict[str, int]:
         feld: sum(getattr(e, f"staerke_{feld}") or 0 for e in zaehlende)
         for feld in ("gesamt", "fuehrung", "agt", "sanitaeter")
     }
+
+
+# ── Ausstattung ──────────────────────────────────────────────────────────────
+
+_AUSSTATTUNG_FAEHIGKEITEN = {
+    "hochwasser",
+    "wasserrettung",
+    "hoehenrettung",
+    "gefahrstoff",
+    "faehigkeit_sonstige",
+}
+_AUSSTATTUNG_FREITEXT = {"sonstiges", "faehigkeit_sonstige"}
+_AUSSTATTUNG_STAMM_REF_TYPEN = {"atemschutz_geraet", "verleih_artikel", "vorlage_lage"}
+
+
+def _audit_ausstattung(
+    db: Session, lage: MajorIncident, einheit: LageEinheit, aktion: str, user_id: int | None
+) -> None:
+    write_audit(
+        db,
+        "gsl.ressource.ausstattung",
+        org_id=lage.org_id,
+        user_id=user_id,
+        entity_type="lage_einheit",
+        entity_id=einheit.id,
+        payload={"lage_id": lage.id, "einheit_id": einheit.id, "aktion": aktion},
+    )
+
+
+def _journal_ausstattung(
+    db: Session,
+    lage: MajorIncident,
+    einheit: LageEinheit,
+    text: str,
+    user_id: int | None,
+    author_name: str | None,
+) -> None:
+    _journal(
+        db,
+        lage.id,
+        text,
+        author_name=author_name,
+        user_id=user_id,
+        einheit_id=einheit.id,
+        ereignis_typ="ausstattung",
+        quelle="manuell",
+    )
+
+
+def _ausstattung_menge(wert: Any) -> int:
+    menge = _zahl(wert, "Menge")
+    if menge > 9999:
+        raise ValueError("Menge darf höchstens 9999 sein")
+    return menge
+
+
+def _ausstattung_text(wert: str | None, feld: str, laenge: int, *, erforderlich: bool = False) -> str | None:
+    if wert is None:
+        if erforderlich:
+            raise ValueError(f"{feld} ist erforderlich")
+        return None
+    if not isinstance(wert, str):
+        raise ValueError(f"{feld} muss Text sein")
+    text = wert.strip()
+    if erforderlich and not text:
+        raise ValueError(f"{feld} ist erforderlich")
+    if len(text) > laenge:
+        raise ValueError(f"{feld} darf höchstens {laenge} Zeichen haben")
+    return text or None
+
+
+def _ausstattung_kategorie(
+    kategorie: str, bezeichnung: str | None, ist_faehigkeit: bool | None
+) -> tuple[str, bool]:
+    if kategorie not in GSL_AUSSTATTUNG_KATALOG:
+        raise ValueError("Ungültige Ausstattungskategorie")
+    if kategorie in _AUSSTATTUNG_FREITEXT and not bezeichnung:
+        raise ValueError("Bezeichnung ist für diese Kategorie erforderlich")
+    if kategorie not in _AUSSTATTUNG_FREITEXT and bezeichnung not in {None, GSL_AUSSTATTUNG_KATALOG[kategorie]}:
+        raise ValueError("Freitext ist nur für Sonstiges oder Fähigkeit: Sonstige zulässig")
+    abgeleitet = kategorie in _AUSSTATTUNG_FAEHIGKEITEN
+    # Das Feld ist Teil der Service-Schnittstelle, wird aber nie aus Aufruferdaten
+    # übernommen: Fähigkeit oder Ausstattung ergibt sich ausschließlich aus dem Katalog.
+    del ist_faehigkeit
+    return GSL_AUSSTATTUNG_KATALOG[kategorie] if bezeichnung is None else bezeichnung, abgeleitet
+
+
+def _stammreferenz_pruefen(
+    db: Session,
+    lage: MajorIncident,
+    stamm_ref_typ: str | None,
+    stamm_ref_id: int | None,
+) -> None:
+    if stamm_ref_typ is None and stamm_ref_id is None:
+        return
+    if stamm_ref_typ not in _AUSSTATTUNG_STAMM_REF_TYPEN or stamm_ref_id is None:
+        raise ValueError("Ungültige Stammdatenreferenz")
+    if isinstance(stamm_ref_id, bool) or not isinstance(stamm_ref_id, int) or stamm_ref_id <= 0:
+        raise ValueError("Ungültige Stammdatenreferenz")
+    stamm: AtemschutzGeraet | VerleihArtikel | None
+    if stamm_ref_typ == "atemschutz_geraet":
+        stamm = db.get(AtemschutzGeraet, stamm_ref_id)
+    elif stamm_ref_typ == "verleih_artikel":
+        stamm = db.get(VerleihArtikel, stamm_ref_id)
+    else:
+        return
+    if not stamm or stamm.org_id != lage.org_id:
+        raise ValueError("Stammdatenreferenz gehört nicht zur Organisation der Lage")
+
+
+def _ausstattung_zeile(db: Session, lage: MajorIncident, einheit: LageEinheit, zeile_id: int) -> LageEinheitAusstattung:
+    zeile = db.get(LageEinheitAusstattung, zeile_id)
+    if not zeile or zeile.lage_id != lage.id or zeile.einheit_id != einheit.id:
+        raise ValueError("Ausstattung gehört nicht zur Einheit und Lage")
+    return zeile
+
+
+def ausstattung_hinzufuegen(
+    db: Session,
+    lage: MajorIncident,
+    einheit: LageEinheit,
+    *,
+    kategorie: str,
+    bezeichnung: str | None = None,
+    menge: int = 1,
+    status: str = "einsatzbereit",
+    bemerkung: str | None = None,
+    ist_faehigkeit: bool | None = None,
+    stamm_ref_typ: str | None = None,
+    stamm_ref_id: int | None = None,
+    user_id: int | None,
+    author_name: str | None,
+) -> LageEinheitAusstattung:
+    _check_einheit(lage, einheit)
+    bezeichnung = _ausstattung_text(bezeichnung, "Bezeichnung", 120)
+    bezeichnung, ist_faehigkeit = _ausstattung_kategorie(kategorie, bezeichnung, ist_faehigkeit)
+    menge = _ausstattung_menge(menge)
+    if status not in AUSSTATTUNG_STATUS:
+        raise ValueError("Ungültiger Ausstattungsstatus")
+    bemerkung = _ausstattung_text(bemerkung, "Bemerkung", 300)
+    _stammreferenz_pruefen(db, lage, stamm_ref_typ, stamm_ref_id)
+    zeile = LageEinheitAusstattung(
+        org_id=lage.org_id,
+        lage_id=lage.id,
+        einheit_id=einheit.id,
+        kategorie=kategorie,
+        bezeichnung=bezeichnung,
+        ist_faehigkeit=ist_faehigkeit,
+        menge=menge,
+        status=status,
+        bemerkung=bemerkung,
+        stamm_ref_typ=stamm_ref_typ,
+        stamm_ref_id=stamm_ref_id,
+        created_by=user_id,
+    )
+    db.add(zeile)
+    db.flush()
+    _journal_ausstattung(db, lage, einheit, f"Ausstattung hinzugefügt: {menge}x {bezeichnung}", user_id, author_name)
+    _audit_ausstattung(db, lage, einheit, "hinzufuegen", user_id)
+    return zeile
+
+
+def ausstattung_aendern(
+    db: Session,
+    lage: MajorIncident,
+    einheit: LageEinheit,
+    zeile_id: int,
+    *,
+    menge: int | None = None,
+    status: str | None = None,
+    bemerkung: str | None = None,
+    user_id: int | None,
+    author_name: str | None,
+) -> LageEinheitAusstattung:
+    _check_einheit(lage, einheit)
+    zeile = _ausstattung_zeile(db, lage, einheit, zeile_id)
+    if menge is not None:
+        menge = _ausstattung_menge(menge)
+    if status is not None and status not in AUSSTATTUNG_STATUS:
+        raise ValueError("Ungültiger Ausstattungsstatus")
+    if bemerkung is not None:
+        bemerkung = _ausstattung_text(bemerkung, "Bemerkung", 300)
+    aenderungen: list[str] = []
+    if menge is not None and menge != zeile.menge:
+        aenderungen.append(f"Menge {zeile.menge} -> {menge}")
+        zeile.menge = menge
+    if status is not None and status != zeile.status:
+        aenderungen.append(f"Status {zeile.status} -> {status}")
+        zeile.status = status
+    if bemerkung is not None and bemerkung != zeile.bemerkung:
+        aenderungen.append("Bemerkung geändert")
+        zeile.bemerkung = bemerkung
+    if not aenderungen:
+        return zeile
+    _journal_ausstattung(db, lage, einheit, f"{zeile.bezeichnung}: {', '.join(aenderungen)}", user_id, author_name)
+    _audit_ausstattung(db, lage, einheit, "aendern", user_id)
+    return zeile
+
+
+def ausstattung_entfernen(
+    db: Session,
+    lage: MajorIncident,
+    einheit: LageEinheit,
+    zeile_id: int,
+    *,
+    user_id: int | None,
+    author_name: str | None,
+) -> None:
+    _check_einheit(lage, einheit)
+    zeile = _ausstattung_zeile(db, lage, einheit, zeile_id)
+    text = f"Ausstattung entfernt: {zeile.menge}x {zeile.bezeichnung}"
+    db.delete(zeile)
+    _journal_ausstattung(db, lage, einheit, text, user_id, author_name)
+    _audit_ausstattung(db, lage, einheit, "entfernen", user_id)
+
+
+def vorlage_uebernehmen(
+    db: Session,
+    lage: MajorIncident,
+    einheit: LageEinheit,
+    *,
+    user_id: int | None,
+    author_name: str | None,
+) -> list[LageEinheitAusstattung]:
+    _check_einheit(lage, einheit)
+    if einheit.vehicle_id is None:
+        raise ValueError("Einheit hat kein Fahrzeug für eine Vorlagenübernahme")
+    # Router- und Test-Sessions können Autoflush deaktivieren; vorhandene,
+    # eben angelegte Positionen müssen die Übernahme dennoch sperren.
+    db.flush()
+    if db.query(LageEinheitAusstattung.id).filter_by(lage_id=lage.id, einheit_id=einheit.id).first():
+        raise ValueError("Einheit hat bereits Ausstattung")
+    vorlage = (
+        db.query(LageEinheit)
+        .join(MajorIncident, MajorIncident.id == LageEinheit.lage_id)
+        .filter(
+            LageEinheit.vehicle_id == einheit.vehicle_id,
+            LageEinheit.id != einheit.id,
+            MajorIncident.org_id == lage.org_id,
+            MajorIncident.id != lage.id,
+            MajorIncident.started_at < lage.started_at,
+        )
+        .order_by(MajorIncident.started_at.desc(), MajorIncident.id.desc(), LageEinheit.id.desc())
+        .first()
+    )
+    if not vorlage:
+        raise ValueError("Keine Ausstattungsvorlage aus einer früheren Lage gefunden")
+    vorlagen_zeilen = (
+        db.query(LageEinheitAusstattung)
+        .filter_by(lage_id=vorlage.lage_id, einheit_id=vorlage.id)
+        .order_by(LageEinheitAusstattung.id)
+        .all()
+    )
+    if not vorlagen_zeilen:
+        raise ValueError("Keine Ausstattungsvorlage aus einer früheren Lage gefunden")
+    kopien = [
+        LageEinheitAusstattung(
+            org_id=lage.org_id,
+            lage_id=lage.id,
+            einheit_id=einheit.id,
+            kategorie=zeile.kategorie,
+            bezeichnung=zeile.bezeichnung,
+            ist_faehigkeit=zeile.ist_faehigkeit,
+            menge=zeile.menge,
+            status="einsatzbereit",
+            bemerkung=zeile.bemerkung,
+            stamm_ref_typ="vorlage_lage",
+            stamm_ref_id=zeile.id,
+            created_by=user_id,
+        )
+        for zeile in vorlagen_zeilen
+    ]
+    db.add_all(kopien)
+    _journal_ausstattung(
+        db, lage, einheit, f"Ausstattung aus Vorlage übernommen: {len(kopien)} Position(en)", user_id, author_name
+    )
+    _audit_ausstattung(db, lage, einheit, "vorlage_uebernehmen", user_id)
+    return kopien
+
+
+def ausstattung_umbuchen(
+    db: Session,
+    lage: MajorIncident,
+    von_einheit: LageEinheit,
+    nach_einheit: LageEinheit,
+    zeile_id: int,
+    menge: int,
+    *,
+    user_id: int | None,
+    author_name: str | None,
+) -> None:
+    """Bucht Ausstattung beider Einheiten atomar innerhalb der Aufrufertransaktion."""
+    with db.begin_nested():
+        _ausstattung_umbuchen(
+            db, lage, von_einheit, nach_einheit, zeile_id, menge, user_id=user_id, author_name=author_name
+        )
+
+
+def _ausstattung_umbuchen(
+    db: Session,
+    lage: MajorIncident,
+    von_einheit: LageEinheit,
+    nach_einheit: LageEinheit,
+    zeile_id: int,
+    menge: int,
+    *,
+    user_id: int | None,
+    author_name: str | None,
+) -> None:
+    _check_einheit(lage, von_einheit)
+    _check_einheit(lage, nach_einheit)
+    if von_einheit.id == nach_einheit.id:
+        raise ValueError("Quelle und Ziel müssen verschieden sein")
+    menge = _ausstattung_menge(menge)
+    if menge <= 0:
+        raise ValueError("Menge muss größer als 0 sein")
+    gesperrt = (
+        db.query(LageEinheit)
+        .filter(LageEinheit.id.in_(sorted((von_einheit.id, nach_einheit.id))))
+        .order_by(LageEinheit.id)
+        .with_for_update()
+        .all()
+    )
+    if len(gesperrt) != 2 or any(e.lage_id != lage.id for e in gesperrt):
+        raise ValueError("Einheiten gehören nicht zur selben Lage")
+    einheiten = {e.id: e for e in gesperrt}
+    von, nach = einheiten[von_einheit.id], einheiten[nach_einheit.id]
+    zeile = (
+        db.query(LageEinheitAusstattung)
+        .filter_by(id=zeile_id, lage_id=lage.id, einheit_id=von.id)
+        .with_for_update()
+        .first()
+    )
+    if not zeile:
+        raise ValueError("Ausstattung gehört nicht zur Einheit und Lage")
+    if menge > zeile.menge:
+        raise ValueError("Nicht genügend Ausstattung für Umbuchung")
+    ziel = (
+        db.query(LageEinheitAusstattung)
+        .filter_by(lage_id=lage.id, einheit_id=nach.id, kategorie=zeile.kategorie, bezeichnung=zeile.bezeichnung, status=zeile.status)
+        .with_for_update()
+        .first()
+    )
+    umbuchung_id = str(uuid4())
+    if ziel:
+        ziel.menge += menge
+        ziel.umbuchung_id = umbuchung_id
+    else:
+        ziel = LageEinheitAusstattung(
+            org_id=lage.org_id,
+            lage_id=lage.id,
+            einheit_id=nach.id,
+            kategorie=zeile.kategorie,
+            bezeichnung=zeile.bezeichnung,
+            ist_faehigkeit=zeile.ist_faehigkeit,
+            menge=menge,
+            status=zeile.status,
+            bemerkung=zeile.bemerkung,
+            stamm_ref_typ=zeile.stamm_ref_typ,
+            stamm_ref_id=zeile.stamm_ref_id,
+            umbuchung_id=umbuchung_id,
+            created_by=user_id,
+        )
+        db.add(ziel)
+    if zeile.menge == menge:
+        db.delete(zeile)
+    else:
+        zeile.menge -= menge
+        zeile.umbuchung_id = umbuchung_id
+    _journal_ausstattung(db, lage, von, f"Umbuchung: -{menge} {zeile.bezeichnung} zu {nach.label}", user_id, author_name)
+    _journal_ausstattung(db, lage, nach, f"Umbuchung: +{menge} {zeile.bezeichnung} von {von.label}", user_id, author_name)
+    _audit_ausstattung(db, lage, von, "umbuchen", user_id)
+    _audit_ausstattung(db, lage, nach, "umbuchen", user_id)
+
+
+def ausstattung_liste(db: Session, einheit: LageEinheit) -> list[dict[str, Any]]:
+    """Liefert Ausstattung für die Darstellung, Fähigkeiten immer am Ende."""
+    zeilen = (
+        db.query(LageEinheitAusstattung)
+        .filter_by(lage_id=einheit.lage_id, einheit_id=einheit.id)
+        .order_by(LageEinheitAusstattung.ist_faehigkeit, LageEinheitAusstattung.bezeichnung, LageEinheitAusstattung.id)
+        .all()
+    )
+    return [
+        {
+            "id": zeile.id,
+            "kategorie": zeile.kategorie,
+            "bezeichnung": zeile.bezeichnung,
+            "ist_faehigkeit": zeile.ist_faehigkeit,
+            "menge": zeile.menge,
+            "status": zeile.status,
+            "bemerkung": zeile.bemerkung,
+            "stamm_ref_typ": zeile.stamm_ref_typ,
+            "stamm_ref_id": zeile.stamm_ref_id,
+        }
+        for zeile in zeilen
+    ]
+
+
+def ausstattung_warnungen(db: Session, einheit: LageEinheit) -> int:
+    return (
+        db.query(LageEinheitAusstattung)
+        .filter(
+            LageEinheitAusstattung.lage_id == einheit.lage_id,
+            LageEinheitAusstattung.einheit_id == einheit.id,
+            LageEinheitAusstattung.status.in_(("defekt", "eingeschraenkt")),
+        )
+        .count()
+    )
