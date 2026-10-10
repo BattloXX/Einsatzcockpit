@@ -1096,3 +1096,15 @@ GK-2.1 bis GK-2.6 gemergt. Der Schalter `gk_zugang_aktiv` bleibt standardmäßig
 
 - GK-3.1: Karte „Gruppenkommandanten-Zugang“ in `admin/gsl_einstellungen.html` (Schalter, Vorlage mit Live-Zähler und Vorschau, Limits, SMS-PIN, Ressourcenpflege, Notbremse). Ausschalten des Gesamtschalters widerruft alle Zugänge der Organisation.
 - GK-3.2: Automatischer Versand. `plane_auto_sms` legt Zugang und Outbox-Zeile (`auto_schluessel`) in der Transaktion der Zuweisung an, `sende_auto_sms` versendet nach dem Commit ohne Wiederholung. Die Aufräumschleife `gk_versand_aufraeum_loop` markiert hängende Einträge nach 2 Minuten als fehlgeschlagen.
+
+### Phase 4 – Personal, Ausstattung, Verbände (Branch `feat/gsl-gk-phase4`)
+
+- GK-4.1: Migration 0267 (`LageEinheitPerson` mit `aktiv_key`, `LageEinheitAusstattung`, `verband_id`, `aufgeteilt_von_id`, `personal_modus`).
+- GK-4.2/4.3: `ressource_pflege_service` (Summen-/Listenmodus, Verstärken, Ablösen, Umbuchen, Ausstattung samt Vorlage) und die Tabs Personal/Ausstattung.
+- GK-4.4: Verband bilden/auflösen/aufteilen (Service, Routen, Karten-Abschnitt, Verschachtelung in der Kräfteübersicht ohne Doppelzählung; Kinder eines Verbands sind nicht einzeln disponierbar).
+- GK-4.5: Der Gruppenkommandant pflegt über `/einheit/api/ressource/personal|ausstattung` ausschließlich die eigene Einheit (Org-Schalter `gk_zugang_ressource_pflegen`, Offline-Outbox, kein Umbuchen/Verband).
+
+### Phase 5 – Teilstand
+
+- GK-5.2: neun MCP-Tools in `app/mcp/tools/gsl.py`, gemeinsamer Feature-Check in `mi_feature_service`; GK-Cookie und GK-Token öffnen kein MCP (Tests).
+- GK-5.1 (Kommunikationsblock) ist **offen**: `CommLogEntry` hat noch kein `einheit_id`/`art`/`quittiert_at`; Voraussetzung ist P2-1 des Schwesterplans.
