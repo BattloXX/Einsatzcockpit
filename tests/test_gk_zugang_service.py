@@ -2,6 +2,7 @@
 
 from contextlib import contextmanager
 from datetime import timedelta
+from uuid import uuid4
 
 import pytest
 from sqlalchemy.exc import IntegrityError
@@ -29,7 +30,7 @@ def fresh_db(setup_db):
 
 
 def _daten(db, *, pin=False, maximum=2):
-    org = FireDept(slug=f"gk-zugang-{id(db)}", name="GK Zugang", color="#123456", bos="Feuerwehr")
+    org = FireDept(slug=f"gk-zugang-{uuid4().hex[:10]}", name="GK Zugang", color="#123456", bos="Feuerwehr")
     db.add(org)
     db.flush()
     db.add(OrgSettings(org_id=org.id, gk_zugang_aktiv=True, gk_zugang_sms_pin=pin, gk_zugang_max_sitzungen=maximum))
