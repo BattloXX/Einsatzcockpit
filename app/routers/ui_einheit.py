@@ -28,13 +28,15 @@ from app.models.major_incident import (
     EinheitAktion,
     EinheitSiteDispatch,
     IncidentSite,
+    LageEinheitAusstattung,
+    LageEinheitPerson,
     SiteLogEntry,
     SiteMedia,
     VehiclePosition,
 )
 from app.models.master import FireDept, VehicleMaster
 from app.models.user import AuditLog, DeviceToken
-from app.services import gk_zugang_service
+from app.services import gk_zugang_service, ressource_pflege_service
 from app.services.broadcast import broadcast_lage
 from app.services.einheit_service import (
     EinheitKonflikt,
@@ -364,12 +366,170 @@ def zustand(request: Request, ctx: EinheitKontext = Depends(einheit_kontext), db
     data = auftraege_fuer_einheit(db, ctx)
     data["simulation"] = ctx.simulation
     data["schreibbar"] = not (ctx.simulation and not ctx.lage.is_exercise)
+    data["kann_ressource_pflegen"] = (
+        data["schreibbar"]
+        and ctx.quelle == "zugang"
+        and gk_zugang_service.org_einstellungen(db, ctx.org_id).gk_zugang_ressource_pflegen
+    )
+    data["ressource"] = _ressourcen_daten(db, ctx)
     raw = json.dumps({k: v for k, v in data.items() if k != "server_time"}, sort_keys=True, default=str)
     etag = hashlib.sha256(raw.encode()).hexdigest()
     if request.headers.get("if-none-match", "").strip('"') == etag:
         return Response(status_code=304, headers={"ETag": f'"{etag}"'})
     data["etag"] = etag
     return JSONResponse(data, headers={"ETag": f'"{etag}"'})
+
+
+def _ressourcen_daten(db: Session, ctx: EinheitKontext) -> dict[str, Any]:
+    """Der GK erhält ausschließlich die Ressourcen seiner eigenen Einheit."""
+    personen = (
+        db.query(LageEinheitPerson)
+        .filter(
+            LageEinheitPerson.lage_id == ctx.lage.id,
+            LageEinheitPerson.einheit_id == ctx.einheit.id,
+            LageEinheitPerson.bis_at.is_(None),
+        )
+        .order_by(LageEinheitPerson.id)
+        .all()
+    )
+    ausstattung = (
+        db.query(LageEinheitAusstattung)
+        .filter(
+            LageEinheitAusstattung.lage_id == ctx.lage.id,
+            LageEinheitAusstattung.einheit_id == ctx.einheit.id,
+        )
+        .order_by(LageEinheitAusstattung.ist_faehigkeit, LageEinheitAusstattung.bezeichnung, LageEinheitAusstattung.id)
+        .all()
+    )
+    return {
+        "personal_modus": ctx.einheit.personal_modus,
+        "personal": {
+            "gesamt": ctx.einheit.staerke_gesamt or 0,
+            "fuehrung": ctx.einheit.staerke_fuehrung or 0,
+            "agt": ctx.einheit.staerke_agt or 0,
+            "sanitaeter": ctx.einheit.staerke_sanitaeter or 0,
+            "bemerkung": ctx.einheit.personal_bemerkung,
+            "personen": [
+                {
+                    "id": person.id,
+                    "name": person.name,
+                    "funktion": person.funktion,
+                    "qualifikationen": person.qualifikationen,
+                }
+                for person in personen
+            ],
+        },
+        "ausstattung": [
+            {
+                "id": zeile.id,
+                "kategorie": zeile.kategorie,
+                "bezeichnung": zeile.bezeichnung,
+                "menge": zeile.menge,
+                "status": zeile.status,
+                "bemerkung": zeile.bemerkung,
+            }
+            for zeile in ausstattung
+        ],
+    }
+
+
+@router.post("/api/ressource/personal")
+async def ressource_personal(
+    request: Request, ctx: EinheitKontext = Depends(einheit_kontext), db: Session = Depends(get_db)
+):
+    _schreibbar(ctx)
+    einheit_darf("ressource_personal", ctx, db)
+    body = await request.json()
+    operation = body.get("operation", body.get("aktion", "setzen"))
+    autor = _autor(request, ctx)
+
+    def run() -> dict[str, Any]:
+        try:
+            if operation == "setzen":
+                result = ressource_pflege_service.personal_setzen(
+                    db, ctx.lage, ctx.einheit,
+                    gesamt=body.get("gesamt"), fuehrung=body.get("fuehrung"), agt=body.get("agt"),
+                    sanitaeter=body.get("sanitaeter"), bemerkung=body.get("bemerkung"),
+                    user_id=None, author_name=autor,
+                )
+                return {"ok": True, "entity_type": "lage_einheit", "entity_id": ctx.einheit.id, **result}
+            if operation == "hinzufuegen":
+                person = ressource_pflege_service.person_hinzufuegen(
+                    db, ctx.lage, ctx.einheit,
+                    member_id=body.get("member_id"), name=body.get("name"), funktion=body.get("funktion", "mannschaft"),
+                    qualifikationen=body.get("qualifikationen"), bemerkung=body.get("bemerkung"),
+                    user_id=None, author_name=autor,
+                )
+                return {"ok": True, "entity_type": "lage_einheit_person", "entity_id": person.id}
+            if operation == "entfernen":
+                ressource_pflege_service.person_entfernen(
+                    db, ctx.lage, ctx.einheit, body.get("person_id"), grund=body.get("grund"),
+                    user_id=None, author_name=autor,
+                )
+                return {"ok": True, "entity_type": "lage_einheit_person"}
+        except ValueError as exc:
+            _fehler(422, "ressource_ungueltig", {"nachricht": str(exc)})
+        _fehler(404 if operation in {"umbuchen", "verstaerken", "vorlage"} else 422, "ressource_aktion_ungueltig")
+
+    try:
+        answer, code = fuehre_aktion_aus(
+            db, ctx, client_uuid=body.get("client_uuid"), aktion="ressource_personal", erfasst_at=None,
+            dispatch_id=None, ausfuehren=run,
+        )
+    except HTTPException as exc:
+        return _antwort_exc(exc)
+    if code == 200 and answer.get("ok"):
+        answer["ressource"] = _ressourcen_daten(db, ctx)
+        await broadcast_lage(ctx.lage.id, {"type": "ressource:changed", "einheit_id": ctx.einheit.id})
+    return JSONResponse(answer, status_code=code)
+
+
+@router.post("/api/ressource/ausstattung")
+async def ressource_ausstattung(
+    request: Request, ctx: EinheitKontext = Depends(einheit_kontext), db: Session = Depends(get_db)
+):
+    _schreibbar(ctx)
+    einheit_darf("ressource_ausstattung", ctx, db)
+    body = await request.json()
+    operation = body.get("operation", body.get("aktion", "hinzufuegen"))
+    autor = _autor(request, ctx)
+
+    def run() -> dict[str, Any]:
+        try:
+            if operation == "hinzufuegen":
+                zeile = ressource_pflege_service.ausstattung_hinzufuegen(
+                    db, ctx.lage, ctx.einheit,
+                    kategorie=body.get("kategorie", "sonstiges"), bezeichnung=body.get("bezeichnung"),
+                    menge=body.get("menge", 1), status=body.get("status", "einsatzbereit"),
+                    bemerkung=body.get("bemerkung"), user_id=None, author_name=autor,
+                )
+                return {"ok": True, "entity_type": "lage_einheit_ausstattung", "entity_id": zeile.id}
+            if operation == "aendern":
+                zeile = ressource_pflege_service.ausstattung_aendern(
+                    db, ctx.lage, ctx.einheit, body.get("zeile_id"), menge=body.get("menge"),
+                    status=body.get("status"), bemerkung=body.get("bemerkung"), user_id=None, author_name=autor,
+                )
+                return {"ok": True, "entity_type": "lage_einheit_ausstattung", "entity_id": zeile.id}
+            if operation == "entfernen":
+                ressource_pflege_service.ausstattung_entfernen(
+                    db, ctx.lage, ctx.einheit, body.get("zeile_id"), user_id=None, author_name=autor,
+                )
+                return {"ok": True, "entity_type": "lage_einheit_ausstattung"}
+        except ValueError as exc:
+            _fehler(422, "ressource_ungueltig", {"nachricht": str(exc)})
+        _fehler(404 if operation in {"umbuchen", "vorlage"} else 422, "ressource_aktion_ungueltig")
+
+    try:
+        answer, code = fuehre_aktion_aus(
+            db, ctx, client_uuid=body.get("client_uuid"), aktion="ressource_ausstattung", erfasst_at=None,
+            dispatch_id=None, ausfuehren=run,
+        )
+    except HTTPException as exc:
+        return _antwort_exc(exc)
+    if code == 200 and answer.get("ok"):
+        answer["ressource"] = _ressourcen_daten(db, ctx)
+        await broadcast_lage(ctx.lage.id, {"type": "ressource:changed", "einheit_id": ctx.einheit.id})
+    return JSONResponse(answer, status_code=code)
 
 
 @router.get("/api/auftrag/{dispatch_id}")

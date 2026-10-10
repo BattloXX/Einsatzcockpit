@@ -52,6 +52,7 @@ function registriere() {
     simEinheitId: config.sim_einheit_id,
     startDispatchId: config.start_dispatch_id,
     kopf: {}, aktuell: null, weitere: [], abgeschlossen: [], zurueckgezogen: [], detail: null,
+    kannRessourcePflegen: false, ressource: { personal: {}, ausstattung: [] }, neueAusstattung: {}, neuePerson: {},
     online: navigator.onLine, syncText: "", outboxOffen: false, outboxListe: [], verlauf: [],
     flyout: null, konfliktEintrag: null, meldungText: "", felder: {}, grund: "", fotoKommentar: "",
     entwurfHinweis: false, auftragGeaendert: false, hinweisBanner: "", neuIds: [], etag: null,
@@ -200,6 +201,8 @@ function registriere() {
       this.weitere = data.kategorien?.weitere || [];
       this.abgeschlossen = data.kategorien?.abgeschlossen || [];
       this.zurueckgezogen = data.kategorien?.zurueckgezogen || [];
+      this.kannRessourcePflegen = Boolean(data.kann_ressource_pflegen);
+      this.ressource = data.ressource || { personal: {}, ausstattung: [] };
       const neu = this.weitere.filter((item) => vorher.size && !vorher.has(item.dispatch_id)).map((item) => item.dispatch_id);
       if (neu.length) {
         this.neuIds.push(...neu);
@@ -336,6 +339,45 @@ function registriere() {
         });
       }
       this.flyout = null;
+    },
+
+    async personalSpeichern() {
+      const personal = this.ressource.personal || {};
+      await this.outbox.erfassen({
+        typ: "ressource_personal", einheit_id: this.einheitId,
+        payload: reineDaten({ operation: "setzen", gesamt: Number(personal.gesamt || 0),
+          fuehrung: Number(personal.fuehrung || 0), agt: Number(personal.agt || 0),
+          sanitaeter: Number(personal.sanitaeter || 0), bemerkung: personal.bemerkung || null }),
+      });
+    },
+    async personHinzufuegen() {
+      const person = this.neuePerson;
+      if (!person.name?.trim()) return;
+      await this.outbox.erfassen({ typ: "ressource_personal", einheit_id: this.einheitId,
+        payload: reineDaten({ operation: "hinzufuegen", name: person.name, funktion: person.funktion || "mannschaft",
+          qualifikationen: person.qualifikationen || null }) });
+      this.neuePerson = {};
+    },
+    async personEntfernen(person) {
+      await this.outbox.erfassen({ typ: "ressource_personal", einheit_id: this.einheitId,
+        payload: { operation: "entfernen", person_id: person.id } });
+    },
+    async ausstattungHinzufuegen() {
+      const neu = this.neueAusstattung;
+      if (!neu.bezeichnung?.trim()) return;
+      await this.outbox.erfassen({ typ: "ressource_ausstattung", einheit_id: this.einheitId,
+        payload: reineDaten({ operation: "hinzufuegen", kategorie: neu.kategorie || "sonstiges",
+          bezeichnung: neu.bezeichnung, menge: Number(neu.menge || 1), status: neu.status || "einsatzbereit" }) });
+      this.neueAusstattung = {};
+    },
+    async ausstattungSpeichern(zeile) {
+      await this.outbox.erfassen({ typ: "ressource_ausstattung", einheit_id: this.einheitId,
+        payload: reineDaten({ operation: "aendern", zeile_id: zeile.id, menge: Number(zeile.menge),
+          status: zeile.status, bemerkung: zeile.bemerkung || null }) });
+    },
+    async ausstattungEntfernen(zeile) {
+      await this.outbox.erfassen({ typ: "ressource_ausstattung", einheit_id: this.einheitId,
+        payload: { operation: "entfernen", zeile_id: zeile.id } });
     },
 
     // Outbox, Rückoff und Konfliktauflösung.

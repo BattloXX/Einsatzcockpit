@@ -22,6 +22,7 @@
     <span class="einh-card__type">
       {%- if e.resource_type == 'extern' -%}EXT
       {%- elif e.resource_type == 'material' -%}MAT
+      {%- elif e.resource_type == 'verband' -%}VBD
       {%- else -%}FZG{%- endif -%}
     </span>
     <span class="estatus estatus--{{ e.status }}">
@@ -49,6 +50,10 @@
       <span style="opacity:.4;font-size:.72rem;">Kein Führer eingetragen</span>
     {% endif %}
   </div>
+  {% if e.resource_type == 'verband' %}
+  {% set summen = kue.verband_summen_by_id.get(e.id, {}) %}
+  <div style="font-size:.7rem;color:var(--text-muted);margin-top:3px;">Verband · {{ summen.get('gesamt', 0) }} Personen</div>
+  {% endif %}
   {% set letzte_rueckmeldung = kue.letzte_rueckmeldung_by_einheit.get(e.id) %}
   {% if letzte_rueckmeldung %}
   <div style="font-size:.7rem;color:var(--text-muted);margin-top:3px;">
@@ -85,7 +90,7 @@
   {% if is_conflict %}
   <div style="font-size:.65rem;color:var(--red);font-weight:700;margin-top:3px;">⚠ Fahrzeug mehrfach eingeteilt</div>
   {% endif %}
-  {% if can_edit %}
+  {% if can_edit and not e.verband_id %}
   <div class="einh-card__actions">
     {# hx-swap="none" + expliziter after-request-Trigger statt Verlass auf den
        WS-Broadcast allein (ressource:changed) -- robuster gegen kurze
@@ -138,6 +143,10 @@
   </div>
   {% endif %}
 </div>
+{% if e.resource_type == 'verband' %}
+{% set kinder = kue.verband_kinder_by_id.get(e.id, []) %}
+{% if kinder %}<div class="einh-card__children">{% for kind in kinder %}{{ einheit_card(kind) }}{% endfor %}</div>{% endif %}
+{% endif %}
 {% endmacro %}
 
 {# ── Board ───────────────────────────────────────────────────────────────── #}
