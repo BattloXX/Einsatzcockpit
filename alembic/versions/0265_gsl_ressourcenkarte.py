@@ -69,10 +69,11 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index("ix_lage_journal_entry_einheit_id", table_name="lage_journal_entry")
     with op.batch_alter_table("lage_journal_entry") as batch_op:
         batch_op.drop_constraint("fk_lje_site_id", type_="foreignkey")
         batch_op.drop_constraint("fk_lje_einheit_id", type_="foreignkey")
+    op.drop_index("ix_lage_journal_entry_einheit_id", table_name="lage_journal_entry")
+    with op.batch_alter_table("lage_journal_entry") as batch_op:
         batch_op.drop_column("storno_grund")
         batch_op.drop_column("storniert_von")
         batch_op.drop_column("storniert_at")
