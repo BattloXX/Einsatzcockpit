@@ -254,9 +254,13 @@ def widerrufe_alle_fuer_lage(db: Session, lage_id: int, grund: str) -> None:
         widerrufe(db, row.einheit_id, grund=grund)
 
 
-def widerrufe_alle_fuer_org(db: Session, org_id: int) -> None:
+def widerrufe_alle_fuer_org(db: Session, org_id: int, grund: str = "manuell") -> int:
+    """Widerruft alle Zugänge einer Organisation und gibt deren Anzahl zurück."""
+    anzahl = 0
     for row in db.query(LageEinheitZugang).filter(LageEinheitZugang.org_id == org_id).all():
-        widerrufe(db, row.einheit_id, grund="manuell")
+        widerrufe(db, row.einheit_id, grund=grund)
+        anzahl += 1
+    return anzahl
 
 
 def verlaengere(db: Session, einheit_id: int, user_id: int | None) -> LageEinheitZugang:

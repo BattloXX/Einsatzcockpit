@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Reques
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app.config import settings as app_settings
+from app.core.audit import write_audit
 from app.core.permissions import (
     has_role,
     is_system_admin,
@@ -23,7 +24,9 @@ from app.db import get_db
 from app.models.master import BOS_VALUES, FireDept, OrgSettings, SeedTemplate, SystemSettings
 from app.models.user import User
 from app.models.wordpress_report import WordPressReportConfig
+from app.services.gk_zugang_service import STANDARDNACHRICHT, nachricht_validieren, widerrufe_alle_fuer_org
 from app.services.seed_service import apply_seed_profile, copy_default_prompts, list_profiles
+from app.services.sms_service import sms_available
 from app.services.update_service import (
     DEPLOYED_REF_KEY,
     GITHUB_TOKEN_KEY,
@@ -2647,6 +2650,10 @@ def gsl_einstellungen(
             "user": user,
             "org_settings": org_settings,
             "org_flags": _org_flags_dict(org_settings),
+            "gk_standardnachricht": STANDARDNACHRICHT,
+            "gk_base_url": app_settings.effective_public_base_url.rstrip("/"),
+            "gk_sms_available": sms_available(org_id, db),
+            "widerrufen_anzahl": request.query_params.get("zugaenge_widerrufen"),
         },
     )
 
@@ -2672,6 +2679,63 @@ async def gsl_einstellungen_save(
     def _int_or_none(key: str):
         v = str(form.get(key, "")).strip()
         return int(v) if v.isdigit() else None
+
+    def _settings_response(
+        *, status_code: int = 200, gk_error: str | None = None, gk_warning: str | None = None, saved: bool = False
+    ):
+        return templates.TemplateResponse(
+            request,
+            "admin/gsl_einstellungen.html",
+            {
+                "user": user,
+                "org_settings": org_settings,
+                "org_flags": _org_flags_dict(org_settings),
+                "gk_standardnachricht": STANDARDNACHRICHT,
+                "gk_base_url": app_settings.effective_public_base_url.rstrip("/"),
+                "gk_sms_available": sms_available(org_id, db),
+                "gk_error": gk_error,
+                "gk_warning": gk_warning,
+                "saved": saved,
+            },
+            status_code=status_code,
+        )
+
+    gk_gueltigkeit = _int_or_none("gk_zugang_gueltigkeit_stunden")
+    gk_sitzung = _int_or_none("gk_sitzung_stunden")
+    gk_max_sitzungen = _int_or_none("gk_zugang_max_sitzungen")
+    gk_nachricht = str(form.get("gk_zugang_nachricht", "")).strip() or None
+    if gk_gueltigkeit is None or not 1 <= gk_gueltigkeit <= 168:
+        return _settings_response(status_code=422, gk_error="Gültigkeit muss zwischen 1 und 168 Stunden liegen.")
+    if gk_sitzung is None or not 1 <= gk_sitzung <= 72:
+        return _settings_response(status_code=422, gk_error="Sitzungsdauer muss zwischen 1 und 72 Stunden liegen.")
+    if gk_max_sitzungen is None or not 1 <= gk_max_sitzungen <= 5:
+        return _settings_response(status_code=422, gk_error="Maximale Sitzungen müssen zwischen 1 und 5 liegen.")
+    if gk_sitzung > gk_gueltigkeit:
+        return _settings_response(
+            status_code=422, gk_error="Die Sitzungsdauer darf die Gültigkeit nicht überschreiten."
+        )
+    if gk_nachricht:
+        try:
+            nachricht_validieren(gk_nachricht)
+        except ValueError as exc:
+            return _settings_response(status_code=422, gk_error=str(exc))
+
+    gk_aenderungen = []
+    gk_neu = {
+        "gk_zugang_aktiv": _bool("gk_zugang_aktiv"),
+        "gk_zugang_auto_sms": _bool("gk_zugang_auto_sms"),
+        "gk_zugang_nachricht": gk_nachricht,
+        "gk_zugang_gueltigkeit_stunden": gk_gueltigkeit,
+        "gk_sitzung_stunden": gk_sitzung,
+        "gk_zugang_max_sitzungen": gk_max_sitzungen,
+        "gk_zugang_sms_pin": _bool("gk_zugang_sms_pin"),
+        "gk_zugang_ressource_pflegen": _bool("gk_zugang_ressource_pflegen"),
+    }
+    gk_war_aktiv = bool(org_settings.gk_zugang_aktiv)
+    for key, value in gk_neu.items():
+        if getattr(org_settings, key) != value:
+            gk_aenderungen.append(key)
+        setattr(org_settings, key, value)
 
     # Feature-Flags
     org_settings.mi_feature_stab = _bool("mi_feature_stab")
@@ -2704,18 +2768,46 @@ async def gsl_einstellungen_save(
     # Allgemein
     org_settings.mi_auto_adopt = _bool("mi_auto_adopt")
 
-    db.commit()
+    if gk_war_aktiv and not org_settings.gk_zugang_aktiv:
+        widerrufe_alle_fuer_org(db, org_id, grund="deaktiviert")
+    if gk_aenderungen:
+        write_audit(
+            db,
+            "gsl.zugang.einstellungen_geaendert",
+            org_id=org_id,
+            user_id=user.id,
+            payload={"felder": gk_aenderungen},
+            ip=request.client.host if request.client else None,
+        )
 
-    return templates.TemplateResponse(
-        request,
-        "admin/gsl_einstellungen.html",
-        {
-            "user": user,
-            "org_settings": org_settings,
-            "org_flags": _org_flags_dict(org_settings),
-            "saved": True,
-        },
+    db.commit()
+    warning = None
+    if org_settings.gk_zugang_aktiv and org_settings.gk_zugang_sms_pin and not sms_available(org_id, db):
+        warning = "SMS-Bestätigungscode ist aktiv, aber es ist kein SMS-Anbieter verbunden."
+    return _settings_response(gk_warning=warning, saved=True)
+
+
+@router.post("/gsl-einstellungen/zugaenge-widerrufen", response_class=HTMLResponse)
+def gsl_einstellungen_zugaenge_widerrufen(
+    request: Request,
+    db=Depends(get_db),
+    user: User = Depends(require_role("admin")),
+):
+    """Notbremse für sämtliche Gruppenkommandanten-Zugänge der eigenen Organisation."""
+    org_id = user.org_id
+    if not org_id:
+        raise HTTPException(403)
+    anzahl = widerrufe_alle_fuer_org(db, org_id, grund="manuell")
+    write_audit(
+        db,
+        "gsl.zugang.alle_widerrufen",
+        org_id=org_id,
+        user_id=user.id,
+        payload={"anzahl": anzahl},
+        ip=request.client.host if request.client else None,
     )
+    db.commit()
+    return RedirectResponse(f"/admin/gsl-einstellungen?zugaenge_widerrufen={anzahl}", status_code=303)
 
 
 # ── About ─────────────────────────────────────────────────────────────────────
