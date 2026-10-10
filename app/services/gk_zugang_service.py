@@ -17,6 +17,7 @@ from app.core.audit import write_audit
 from app.core.security import hash_api_key
 from app.core.telefon import telefon_anzeige, telefon_maske
 from app.core.tenant import set_tenant_context
+from app.db import SessionLocal
 from app.models.major_incident import (
     LageEinheit,
     LageEinheitLeader,
@@ -27,6 +28,7 @@ from app.models.major_incident import (
 )
 from app.models.master import OrgSettings
 from app.models.sms import SmsLog, SmsLogRecipient
+from app.services.broadcast import broadcast_lage
 from app.services.exercise_guard import darf_extern
 from app.services.sms_service import send_sms, sms_available
 
@@ -78,6 +80,29 @@ class NeuerZugang:
             "NeuerZugang("
             f"link={schwaerze_link(self.link)!r}, generation={self.generation}, "
             f"laeuft_ab_at={self.laeuft_ab_at!r}, zugang_id={self.zugang_id})"
+        )
+
+
+@dataclass(frozen=True)
+class AutoSmsAuftrag:
+    """Kurzlebiger Auftrag; der Klartext-Link darf nie die Datenbank erreichen."""
+
+    zugang_id: int
+    versand_id: int
+    link: str
+    leader_id: int
+    phone_version: int
+    lage_id: int
+    einheit_id: int
+    org_id: int
+
+    def __repr__(self) -> str:
+        return (
+            "AutoSmsAuftrag("
+            f"zugang_id={self.zugang_id}, versand_id={self.versand_id}, "
+            f"link={schwaerze_link(self.link)!r}, leader_id={self.leader_id}, "
+            f"phone_version={self.phone_version}, lage_id={self.lage_id}, "
+            f"einheit_id={self.einheit_id}, org_id={self.org_id})"
         )
 
 
@@ -554,6 +579,52 @@ def _zugang_ohne_token(
     return zugang
 
 
+def plane_auto_sms(
+    db: Session,
+    lage: MajorIncident,
+    einheit: LageEinheit,
+    leader: LageEinheitLeader,
+    aenderung: str,
+) -> AutoSmsAuftrag | None:
+    """Erzeugt Outbox und Zugang atomar, versendet aber bewusst noch nicht."""
+    cfg = org_einstellungen(db, lage.org_id)
+    if not (cfg.gk_zugang_aktiv and cfg.gk_zugang_auto_sms) or aenderung not in {"neu", "wechsel", "telefon"}:
+        return None
+    if not leader.phone_e164:
+        zugang = _zugang_ohne_token(db, lage, einheit, leader)
+        versand = _versand(
+            db, zugang, einheit, kanal="sms", ausloeser="auto", user_id=None,
+            status="uebersprungen", fehler="Keine Telefonnummer",
+        )
+        # A previously revoked access still names the former leader; this log is
+        # about the current assignment and must not alter its token state.
+        versand.leader_id = leader.id
+        return None
+    auto_schluessel = f"{leader.id}:{leader.phone_version}"
+    if db.query(LageEinheitZugangVersand.id).filter(
+        LageEinheitZugangVersand.auto_schluessel == auto_schluessel
+    ).first():
+        return None
+    try:
+        with db.begin_nested():
+            # The savepoint also rolls back the rotation if a concurrent writer won.
+            neu = stelle_zugang_aus(db, lage, einheit, user_id=None, grund="auto")
+            ausgestellter_zugang = db.get(LageEinheitZugang, neu.zugang_id)
+            assert ausgestellter_zugang is not None
+            versand = _versand(
+                db, ausgestellter_zugang, einheit, kanal="sms", ausloeser="auto", user_id=None, status="geplant"
+            )
+            versand.auto_schluessel = auto_schluessel
+            db.flush()
+            return AutoSmsAuftrag(
+                zugang_id=ausgestellter_zugang.id, versand_id=versand.id, link=neu.link,
+                leader_id=leader.id, phone_version=leader.phone_version,
+                lage_id=lage.id, einheit_id=einheit.id, org_id=lage.org_id,
+            )
+    except IntegrityError:
+        return None
+
+
 def _kurzer_fehler(exc: Exception | None) -> str:
     # Provider-Details can contain arbitrary data; deliberately do not persist them.
     return "SMS-Versand fehlgeschlagen" if exc else "SMS konnte nicht zugestellt werden"
@@ -672,6 +743,113 @@ async def sende_zugangs_sms(
     )
     db.commit()
     return VersandErgebnis(status, error, zugang.generation)
+
+
+async def sende_auto_sms(auftrag: AutoSmsAuftrag) -> None:
+    """Versendet einen bereits committeten Auto-Auftrag ohne Wiederholung."""
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        row = db.query(LageEinheitZugangVersand).filter(
+            LageEinheitZugangVersand.id == auftrag.versand_id,
+            LageEinheitZugangVersand.org_id == auftrag.org_id,
+        ).first()
+        if not row or row.status != "geplant":
+            return
+        lage = db.query(MajorIncident).filter(
+            MajorIncident.id == auftrag.lage_id, MajorIncident.org_id == auftrag.org_id
+        ).first()
+        einheit = db.query(LageEinheit).filter(
+            LageEinheit.id == auftrag.einheit_id, LageEinheit.lage_id == auftrag.lage_id
+        ).first()
+        leader = db.query(LageEinheitLeader).filter(LageEinheitLeader.id == auftrag.leader_id).first()
+        zugang = db.query(LageEinheitZugang).filter(
+            LageEinheitZugang.id == auftrag.zugang_id, LageEinheitZugang.org_id == auftrag.org_id
+        ).first()
+        token = _token_aus_link(auftrag.link)
+        cfg = org_einstellungen(db, auftrag.org_id)
+        valid = bool(
+            lage and einheit and leader and zugang and token and lage.status == "active"
+            and cfg.gk_zugang_aktiv and cfg.gk_zugang_auto_sms
+            and einheit.leader_assignment_id == leader.id and leader.end_at is None
+            and leader.phone_version == auftrag.phone_version and zugang.status == "aktiv"
+            and leader.einheit_id == einheit.id and zugang.einheit_id == einheit.id
+            and row.generation == zugang.generation
+            and zugang.token_hash == hash_api_key(token)
+        )
+        if not valid:
+            row.status, row.fehler, row.abgeschlossen_at = (
+                "verworfen", "Gruppenkommandant oder Nummer inzwischen geaendert", _now()
+            )
+            db.commit()
+            return
+        assert lage is not None and einheit is not None and leader is not None and zugang is not None
+        phone = leader.phone_e164
+        assert phone is not None
+        if not sms_available(auftrag.org_id, db):
+            row.status, row.fehler, row.abgeschlossen_at = "uebersprungen", "Kein SMS-Anbieter verbunden", _now()
+            db.commit()
+            return
+        if not darf_extern("sms", is_exercise=lage.is_exercise, org_id=auftrag.org_id, db=db):
+            row.status, row.fehler, row.abgeschlossen_at = "uebersprungen", "Übung: SMS unterdrückt", _now()
+            db.commit()
+            return
+        text = nachricht_rendern(cfg, lage, einheit, leader, auftrag.link)
+        chars, _encoding, segments = sms_laenge(text)
+        now, result = _now(), None
+        try:
+            result = await send_sms(auftrag.org_id, phone, text, timeout=15)
+            success = bool(getattr(result, "success", result is True))
+            status, error = ("gesendet", None) if success else ("fehlgeschlagen", _kurzer_fehler(None))
+        except TimeoutError:
+            success, status, error = False, "unklar", "Ergebnis unbekannt – bitte beim Gruppenkommandanten nachfragen"
+        except Exception:
+            success, status, error = False, "fehlgeschlagen", _kurzer_fehler(Exception())
+        log = SmsLog(org_id=auftrag.org_id, source="gk_zugang", text=schwaerze_link(text), recipient_count=1,
+                     success_count=1 if success else 0, provider=getattr(result, "provider", None), completed_at=now)
+        log.recipients.append(SmsLogRecipient(phone_number=phone, name="Gruppenkommandant", success=success,
+                                              sent_at=now, provider=getattr(result, "provider", None)))
+        db.add(log)
+        row.status, row.fehler, row.ziel_maske, row.zeichen, row.segmente, row.abgeschlossen_at = (
+            status, error, _mask_phone(phone), chars, segments, now)
+        db.flush()
+        row.sms_log_id = log.id
+        write_audit(db, "gsl.zugang.sms_auto", org_id=auftrag.org_id, user_id=None, entity_type="lage_einheit",
+                    entity_id=einheit.id, payload={"lage_id": lage.id, "einheit_id": einheit.id,
+                                                     "generation": zugang.generation, "status": status})
+        db.commit()
+    except Exception:
+        # Do not expose provider errors (they can contain recipient or message data).
+        try:
+            row = db.query(LageEinheitZugangVersand).filter(
+                LageEinheitZugangVersand.id == auftrag.versand_id, LageEinheitZugangVersand.org_id == auftrag.org_id
+            ).first()
+            if row and row.status == "geplant":
+                row.status, row.fehler, row.abgeschlossen_at = "fehlgeschlagen", "SMS-Versand fehlgeschlagen", _now()
+                db.commit()
+        except Exception:
+            db.rollback()
+    finally:
+        try:
+            await broadcast_lage(auftrag.lage_id, {"type": "ressource:changed", "einheit_id": auftrag.einheit_id})
+        finally:
+            db.close()
+
+
+async def gk_versand_aufraeum_loop() -> None:
+    """Markiert nach Prozessabbrüchen liegen gebliebene Auto-Outbox-Einträge."""
+    import asyncio
+
+    while True:
+        db = SessionLocal()
+        set_tenant_context(db, None)
+        try:
+            aufraeumen_haengende_versaende(db)
+        except Exception:
+            db.rollback()
+        finally:
+            db.close()
+        await asyncio.sleep(60)
 
 
 def kopie_ausstellen(

@@ -46,6 +46,10 @@
     </div>
   </div>
 
+  {% if z.letzter_versand and z.letzter_versand.status == "geplant" %}
+  <div class="ressource-zugang__toast" data-versand-status="geplant">SMS wird gesendet...</div>
+  {% endif %}
+
   {% if ergebnis %}
   <div class="ressource-zugang__toast{% if ergebnis.status != 'gesendet' %} ressource-zugang__toast--fehler{% endif %}" data-versand-status="{{ ergebnis.status }}">
     {% if ergebnis.status == "gesendet" %}SMS gesendet.
