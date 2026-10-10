@@ -163,3 +163,19 @@ def test_sitzung_einer_anderen_einheit_nicht_beendbar_und_fremde_org_404(client,
     assert client.post(_basis(lage_id, einheit_id) + "/zugang/sitzung/999999/beenden", data={"_csrf": token}).status_code == 404
     assert client.post(_basis(lage_id, andere_einheit) + "/zugang/widerrufen", data={"_csrf": token}).status_code in (403, 404)
     assert client.get(_basis(lage_id, andere_einheit) + "/karte/zugang").status_code in (403, 404)
+
+
+def test_zugang_verwaltung_ist_fuer_geraete_und_qr_sitzungen_gesperrt():
+    from types import SimpleNamespace
+
+    from app.routers.ui_ressourcenkarte import _zugang_erlaubt
+
+    user = SimpleNamespace(roles=[SimpleNamespace(code="recorder")], gsl_nur_lesen=False)
+    normal = SimpleNamespace(state=SimpleNamespace(is_device=False, qr_lage_id=None, qr_incident_id=None))
+    assert _zugang_erlaubt(normal, user) is True
+    for feld, wert in (("is_device", True), ("qr_lage_id", 5), ("qr_incident_id", 7)):
+        request = SimpleNamespace(state=SimpleNamespace(is_device=False, qr_lage_id=None, qr_incident_id=None))
+        setattr(request.state, feld, wert)
+        assert _zugang_erlaubt(request, user) is False
+    user.gsl_nur_lesen = True
+    assert _zugang_erlaubt(normal, user) is False
