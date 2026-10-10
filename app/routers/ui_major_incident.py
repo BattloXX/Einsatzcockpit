@@ -4927,6 +4927,7 @@ def lage_ressourcen_planung(
 async def lage_einheit_create(
     request: Request,
     lage_id: int,
+    background_tasks: BackgroundTasks,
     label: str = Form(""),
     vehicle_id: int | None = Form(None),
     resource_type: str = Form("fahrzeug"),
@@ -4934,6 +4935,22 @@ async def lage_einheit_create(
     bos: str = Form(""),
     qty: int | None = Form(None),
     unit: str = Form(""),
+    funkrufname: str = Form(""),
+    status: str | None = Form(None),
+    sektor_id: int | None = Form(None),
+    bereitstellungsraum: str = Form(""),
+    gk_member_id: int | None = Form(None),
+    gk_name: str = Form(""),
+    gk_telefon: str | None = Form(None),
+    stv_name: str = Form(""),
+    personal_gesamt: int | None = Form(None),
+    personal_fuehrung: int | None = Form(None),
+    personal_agt: int | None = Form(None),
+    personal_sanitaeter: int | None = Form(None),
+    personal_fuehrer: int | None = Form(None),
+    personal_unterfuehrer: int | None = Form(None),
+    personal_mannschaft: int | None = Form(None),
+    bemerkung: str | None = Form(None),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
 ):
@@ -4949,19 +4966,44 @@ async def lage_einheit_create(
     if not actual_label:
         raise HTTPException(status_code=400, detail="Bezeichnung fehlt")
 
-    einheit = resource_service.add_resource(
-        db, lage_id, actual_label,
-        resource_type=resource_type,
-        vehicle_id=vehicle_id,
-        org_name=org_name.strip() or None,
-        bos=bos.strip() or None,
-        qty=qty,
-        unit=unit.strip() or None,
-        author_name=get_author_name(request),
-        user_id=user.id,
-    )
+    gk = None
+    if gk_member_id is not None or gk_name.strip():
+        gk = {"member_id": gk_member_id, "person_name": gk_name, "telefon": gk_telefon, "modus": "auto"}
+    stellvertreter = {"person_name": stv_name, "modus": "auto"} if stv_name.strip() else None
+    personal = None
+    if any(wert is not None for wert in (
+        personal_gesamt, personal_fuehrung, personal_agt, personal_sanitaeter,
+        personal_fuehrer, personal_unterfuehrer, personal_mannschaft,
+    )):
+        fuehrung = personal_fuehrung
+        if fuehrung is None and any(wert is not None for wert in (personal_fuehrer, personal_unterfuehrer)):
+            fuehrung = (personal_fuehrer or 0) + (personal_unterfuehrer or 0)
+        gesamt = personal_gesamt
+        if gesamt is None and any(wert is not None for wert in (
+            personal_fuehrer, personal_unterfuehrer, personal_mannschaft,
+        )):
+            gesamt = (personal_fuehrer or 0) + (personal_unterfuehrer or 0) + (personal_mannschaft or 0)
+        personal = {
+            "gesamt": gesamt or 0, "fuehrung": fuehrung,
+            "agt": personal_agt, "sanitaeter": personal_sanitaeter,
+        }
+    try:
+        ergebnis = resource_service.lege_einheit_an(
+            db, lage, resource_type=resource_type, label=actual_label, vehicle_id=vehicle_id,
+            org_name=org_name.strip() or None, bos=bos.strip() or None, qty=qty,
+            unit=unit.strip() or None, funkrufname=funkrufname or None, status=status,
+            sektor_id=sektor_id, bereitstellungsraum=bereitstellungsraum or None,
+            gk=gk, stellvertreter=stellvertreter, personal=personal, bemerkung=bemerkung,
+            user_id=user.id, author_name=get_author_name(request) or "",
+        )
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc))
     db.commit()
-    await broadcast_lage(lage_id, {"type": "ressource:changed", "einheit_id": einheit.id})
+    if ergebnis.auto_sms:
+        from app.services.gk_zugang_service import sende_auto_sms
+        background_tasks.add_task(sende_auto_sms, ergebnis.auto_sms)
+    await broadcast_lage(lage_id, {"type": "ressource:changed", "einheit_id": ergebnis.einheit.id})
     # Nur noch per HTMX aufgerufen (ressourcen.html, hx-swap="none").
     return Response(status_code=204)
 
