@@ -627,6 +627,44 @@ def _setup_zwei_orgs() -> int:
         db.close()
 
 
+def test_gk_token_zeigt_nur_seine_org_daten(client):
+    """Ein GK-Token darf weder Namen noch Einheit einer fremden Org auflösen."""
+    from app.models.major_incident import LageEinheit, MajorIncident
+    from app.services import gk_zugang_service
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        org_a = FireDept(slug="gk-iso-a", name="GK Organisation A")
+        org_b = FireDept(slug="gk-iso-b", name="GK Organisation B")
+        db.add_all([org_a, org_b])
+        db.flush()
+        db.add_all([
+            OrgSettings(org_id=org_a.id, gk_zugang_aktiv=True),
+            OrgSettings(org_id=org_b.id, gk_zugang_aktiv=True),
+        ])
+        lage = MajorIncident(org_id=org_a.id, name="GK Lage A", status="active")
+        fremde_lage = MajorIncident(org_id=org_b.id, name="GEHEIME GK LAGE B", status="active")
+        db.add_all([lage, fremde_lage])
+        db.flush()
+        einheit = LageEinheit(lage_id=lage.id, label="GK Einheit A", status="bereitgestellt", resource_type="fahrzeug")
+        fremde_einheit = LageEinheit(lage_id=fremde_lage.id, label="GEHEIME GK EINHEIT B", status="bereitgestellt", resource_type="fahrzeug")
+        db.add_all([einheit, fremde_einheit])
+        db.flush()
+        from app.models.major_incident import LageEinheitLeader
+        leader = LageEinheitLeader(einheit_id=einheit.id, person_name="GK A", phone_e164="+436641234567", phone_version=1, start_at=gk_zugang_service._now(), rolle="fuehrer")
+        db.add(leader)
+        db.flush()
+        einheit.leader_assignment_id = leader.id
+        token = gk_zugang_service.stelle_zugang_aus(db, lage, einheit, user_id=None, grund="test").link.rsplit("#", 1)[1]
+        db.commit()
+    finally:
+        db.close()
+    csrf = client.get("/gk").cookies.get("ec_csrf")
+    response = client.post("/gk/pruefen", json={"token": token}, headers={"X-CSRF-Token": csrf})
+    assert response.json() == {"ok": True, "lage": "GK Lage A", "einheit": "GK Einheit A", "pin_noetig": False}
+
+
 # ── Alarm-Infoscreen (/infoscreen/alarm/{token}) ──────────────────────────────
 
 

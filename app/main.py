@@ -77,6 +77,7 @@ from app.routers import (
     ui_foerderstrecke,
     ui_foerderstrecke_admin,
     ui_gateway,
+    ui_gk_zugang,
     ui_gsl_staff,
     ui_hilfe,
     ui_incident,
@@ -848,6 +849,7 @@ app.include_router(ui_db_backup.router)
 app.include_router(ui_org_backup.router)
 app.include_router(ui_major_incident.router)
 app.include_router(ui_einheit.router)
+app.include_router(ui_gk_zugang.router)
 app.include_router(ui_ressourcenkarte.router)
 app.include_router(ui_gsl_staff.router)
 app.include_router(ui_lagedokument.router)
