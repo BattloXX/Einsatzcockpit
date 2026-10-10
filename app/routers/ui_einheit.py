@@ -11,14 +11,17 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, NoReturn
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
+from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.audit import write_audit
 from app.core.permissions import has_role
+from app.core.rate_limit import limiter as _limiter
 from app.core.security import get_author_name
+from app.core.telefon import telefon_maske
 from app.core.templating import templates
 from app.db import get_db
 from app.models.major_incident import (
@@ -29,6 +32,7 @@ from app.models.major_incident import (
     EinheitSiteDispatch,
     IncidentSite,
     LageEinheitAusstattung,
+    LageEinheitLeader,
     LageEinheitPerson,
     SiteLogEntry,
     SiteMedia,
@@ -36,7 +40,7 @@ from app.models.major_incident import (
 )
 from app.models.master import FireDept, VehicleMaster
 from app.models.user import AuditLog, DeviceToken
-from app.services import gk_zugang_service, ressource_pflege_service
+from app.services import gk_nummer_service, gk_zugang_service, ressource_pflege_service
 from app.services.broadcast import broadcast_lage
 from app.services.einheit_service import (
     EinheitKonflikt,
@@ -61,7 +65,16 @@ router = APIRouter(prefix="/einheit", tags=["einheit"])
 ZUGANG_AKTIONEN = frozenset({
     "status", "meldung", "foto", "anforderung", "antwort", "quittierung",
     "ressource_personal", "ressource_ausstattung",
+    "nummer",
 })
+
+
+class NummerAnfordernDaten(BaseModel):
+    telefon: str
+
+
+class NummerBestaetigenDaten(BaseModel):
+    code: str
 
 
 def _simulationskontext(request: Request, db: Session) -> EinheitKontext | None:
@@ -384,12 +397,52 @@ def zustand(request: Request, ctx: EinheitKontext = Depends(einheit_kontext), db
         and gk_zugang_service.org_einstellungen(db, ctx.org_id).gk_zugang_ressource_pflegen
     )
     data["ressource"] = _ressourcen_daten(db, ctx)
+    leader = db.get(LageEinheitLeader, ctx.einheit.leader_assignment_id) if ctx.einheit.leader_assignment_id else None
+    if leader and (leader.einheit_id != ctx.einheit.id or leader.end_at is not None):
+        leader = None
+    data["nummer"] = {
+        "hinweis": bool(ctx.quelle == "zugang" and (not leader or not leader.phone_verifiziert_at)),
+        "maske": telefon_maske(leader.phone_e164) if leader and leader.phone_e164 else None,
+        "verifiziert": bool(leader and leader.phone_verifiziert_at),
+    }
     raw = json.dumps({k: v for k, v in data.items() if k != "server_time"}, sort_keys=True, default=str)
     etag = hashlib.sha256(raw.encode()).hexdigest()
     if request.headers.get("if-none-match", "").strip('"') == etag:
-        return Response(status_code=304, headers={"ETag": f'"{etag}"'})
+        return Response(status_code=304, headers={"ETag": f'"{etag}"', "Cache-Control": "no-store"})
     data["etag"] = etag
-    return JSONResponse(data, headers={"ETag": f'"{etag}"'})
+    return JSONResponse(data, headers={"ETag": f'"{etag}"', "Cache-Control": "no-store"})
+
+
+@router.post("/api/nummer/anfordern")
+@(_limiter.limit("5/15minutes") if _limiter else lambda f: f)
+async def nummer_anfordern(request: Request, daten: NummerAnfordernDaten, ctx: EinheitKontext = Depends(einheit_kontext), db: Session = Depends(get_db)):
+    einheit_darf("nummer", ctx, db)
+    if ctx.quelle != "zugang":
+        _fehler(403, "zugang_aktion_nicht_erlaubt")
+    try:
+        result = await gk_nummer_service.starte_verifikation(db, ctx, daten.telefon)
+    except ValueError as exc:
+        status = 429 if "Zu viele" in str(exc) else 503 if "SMS" in str(exc) or "Anbieter" in str(exc) else 422
+        return JSONResponse({"ok": False, "meldung": str(exc)}, status_code=status, headers={"Cache-Control": "no-store"})
+    return JSONResponse({"ok": True, "maske": result.maske}, headers={"Cache-Control": "no-store"})
+
+
+@router.post("/api/nummer/bestaetigen")
+@(_limiter.limit("10/15minutes") if _limiter else lambda f: f)
+async def nummer_bestaetigen(request: Request, daten: NummerBestaetigenDaten, background_tasks: BackgroundTasks,
+                             ctx: EinheitKontext = Depends(einheit_kontext), db: Session = Depends(get_db)):
+    einheit_darf("nummer", ctx, db)
+    if ctx.quelle != "zugang":
+        _fehler(403, "zugang_aktion_nicht_erlaubt")
+    try:
+        result = gk_nummer_service.bestaetige_verifikation(db, ctx, daten.code)
+    except ValueError as exc:
+        status = 429 if "Zu viele" in str(exc) else 409 if "Führung" in str(exc) else 422
+        return JSONResponse({"ok": False, "meldung": str(exc)}, status_code=status, headers={"Cache-Control": "no-store"})
+    if result.auto_sms:
+        background_tasks.add_task(gk_zugang_service.sende_auto_sms, result.auto_sms)
+    return JSONResponse({"ok": True, "maske": result.maske, "sitzung_beendet": result.sitzung_beendet},
+                        headers={"Cache-Control": "no-store"})
 
 
 def _ressourcen_daten(db: Session, ctx: EinheitKontext) -> dict[str, Any]:

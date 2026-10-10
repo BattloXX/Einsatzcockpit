@@ -112,6 +112,27 @@
     <button type="button" class="btn btn--ghost btn--sm" @click="hinweisBanner = ''">OK</button>
   </div>
 
+  {% if gk_zugang %}
+  <section class="einheit-warning" x-show="nummerHinweis && !nummerGeschlossen" x-cloak>
+    <div><strong>Mobilnummer für Einsatzbenachrichtigungen hinterlegen</strong></div>
+    <p x-show="!nummerCodeGesendet">Die Nummer wird erst nach Bestätigung per SMS gespeichert.</p>
+    <label class="sr-only" for="gkNummer">Mobilnummer</label>
+    <input id="gkNummer" class="form-input" type="tel" inputmode="tel" autocomplete="tel"
+           x-model="nummerTelefon" x-show="!nummerCodeGesendet" placeholder="z. B. 0664 1234567">
+    <button type="button" class="btn btn--primary" style="min-height:44px" x-show="!nummerCodeGesendet"
+            @click="nummerAnfordern()">Code senden</button>
+    <template x-if="nummerCodeGesendet"><div>
+      <p x-text="'Code gesendet an ' + (nummerMaske || 'die Mobilnummer')"></p>
+      <label class="sr-only" for="gkCode">Bestätigungscode</label>
+      <input id="gkCode" class="form-input" type="text" inputmode="numeric" autocomplete="one-time-code"
+             x-model="nummerCode" placeholder="Bestätigungscode">
+      <button type="button" class="btn btn--primary" style="min-height:44px" @click="nummerBestaetigen()">Bestätigen</button>
+    </div></template>
+    <p x-show="nummerMeldung" x-text="nummerMeldung"></p>
+    <button type="button" class="btn btn--ghost btn--sm" @click="nummerGeschlossen = true">Schließen</button>
+  </section>
+  {% endif %}
+
   {# ── Übersicht ──────────────────────────────────────────────────────── #}
   <div class="fab-grid" x-show="!detail">
     <main class="fab-grid__main">

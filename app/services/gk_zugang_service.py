@@ -1140,6 +1140,7 @@ def zugang_status(db: Session, einheit: LageEinheit) -> dict:
         "sitzung_aktiv": bool(zugang and zugang.token_hash and _aktuelle_sitzung(db, zugang)),
         "nummer_anzeige": telefon_anzeige(leader.phone_e164) if leader and leader.phone_e164 else None,
         "nummer_maske": telefon_maske(leader.phone_e164) if leader and leader.phone_e164 else None,
+        "nummer_verifiziert_at": leader.phone_verifiziert_at if leader else None,
         "qr": {"status": qr_state, "laeuft_ab_at": qr.laeuft_ab_at if qr else None,
                "generation": qr.generation if qr else None, "pin_pflicht": bool(qr and qr.pin_pflicht),
                "sitzung_aktiv": bool(qr and qr.token_hash and _aktuelle_sitzung(db, qr)),

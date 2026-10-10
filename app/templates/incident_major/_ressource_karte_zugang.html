@@ -22,6 +22,10 @@
   <div class="res-section">
     <div class="res-section__title">Gruppenkommandant</div>
     <div>{{ karte_gk_name or "–" }}{% if z.nummer_anzeige %} · <a href="tel:{{ z.nummer_anzeige|replace(' ', '') }}">{{ z.nummer_anzeige }}</a>{% endif %}</div>
+    <div class="ressource-zugang__hint">
+      {% if z.nummer_verifiziert_at %}Nummer bestätigt am {{ z.nummer_verifiziert_at|local_datetime }}
+      {% else %}Nummer nicht bestätigt{% endif %}
+    </div>
     <div style="margin-top:6px;">
       <span class="ressource-zugang__dot ressource-zugang__dot--{{ z.zustand }}"></span>
       <strong data-zugang-status="{{ z.zustand }}">

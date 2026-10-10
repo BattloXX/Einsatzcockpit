@@ -637,6 +637,7 @@ class LageEinheitLeader(Base):
     phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
     phone_e164: Mapped[str | None] = mapped_column(String(20), nullable=True)
     phone_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    phone_verifiziert_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     ende_grund: Mapped[str | None] = mapped_column(String(24), nullable=True)
     ende_von: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
 
@@ -647,6 +648,29 @@ class LageEinheitLeader(Base):
     @property
     def display_name(self) -> str:
         return self.person_name or "–"
+
+
+class LageEinheitNummerVerifikation(TenantScoped, Base):
+    """Kurzlebiger, ausschließlich gehashter SMS-Nachweis des aktuellen GK."""
+
+    __tablename__ = "lage_einheit_nummer_verifikation"
+    __table_args__ = (Index("ix_lenv_einheit", "einheit_id"), Index("ix_lenv_leader", "leader_id"))
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    lage_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    einheit_id: Mapped[int] = mapped_column(Integer, ForeignKey("lage_einheit.id", ondelete="CASCADE"), nullable=False)
+    leader_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("lage_einheit_leader.id", ondelete="CASCADE"), nullable=False
+    )
+    phone_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    phone_e164_neu: Mapped[str] = mapped_column(String(20), nullable=False)
+    code_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    gueltig_bis: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    versuche: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    gesperrt_bis: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    zugang_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    verbraucht_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class EinheitSiteDispatch(Base):

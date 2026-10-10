@@ -1240,6 +1240,7 @@ def setze_gruppenkommandant(
         einheit.commander_label = name
         if old_phone_e164 != phone_e164:
             old.phone_version += 1
+            old.phone_verifiziert_at = None
             _journal(
                 db,
                 lage.id,
@@ -1358,6 +1359,7 @@ def setze_stellvertreter(
         old.note = note
         if old_phone_e164 != phone_e164:
             old.phone_version += 1
+            old.phone_verifiziert_at = None
             _journal(
                 db,
                 lage.id,
