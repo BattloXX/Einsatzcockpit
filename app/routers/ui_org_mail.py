@@ -22,10 +22,9 @@ from app.config import settings
 from app.core.audit import write_audit
 from app.core.crypto import encrypt_secret
 from app.core.permissions import is_system_admin, require_role, same_org_or_system_admin
-from app.core.security import sign_mail_inbound_webhook_org
 from app.core.templating import templates
 from app.db import get_db
-from app.models.master import FireDept, OrgSettings
+from app.models.master import FireDept, OrgSettings, SystemSettings
 from app.models.org_mail import OrgMailEingang, OrgO365MailConfig, OrgResendConfig, OrgSmtpConfig
 from app.models.user import User
 
@@ -145,10 +144,7 @@ def mail_settings_page(
         "all_orgs": all_orgs,
         "flash": request.query_params.get("flash"),
         "o365_globally_enabled": settings.O365_MAIL_ENABLED,
-        "inbound_webhook_url": (
-            (settings.effective_public_base_url or str(request.base_url)).rstrip("/")
-            + "/mail/webhook/resend-inbound/" + sign_mail_inbound_webhook_org(effective_org_id)
-        ) if effective_org_id else "",
+        "system_inbound_configured": bool(db.get(SystemSettings, "resend_inbound_webhook_secret")),
     })
 
 
@@ -590,11 +586,11 @@ async def eingang_anhang(entry_id: int, attachment_id: str, org_id: int | None =
     """Proxy-Download: die signierte Provider-URL wird nie an den Browser gegeben."""
     oid = _eingang_org(user, org_id)
     row = _eingang_row(db, oid, entry_id)
-    cfg = db.query(OrgResendConfig).filter(OrgResendConfig.org_id == oid).first()
-    if not cfg or not cfg.api_key_enc:
+    from app.services.resend_inbound_service import resend_api_key_fuer_org
+    api_key = resend_api_key_fuer_org(db, oid)
+    if not api_key:
         raise HTTPException(status_code=404, detail="Anhang nicht gefunden")
     try:
-        from app.core.crypto import decrypt_secret
         from app.services.resend_inbound_service import (
             MAX_ATTACHMENT_BYTES,
             attachment_content_type,
@@ -602,7 +598,7 @@ async def eingang_anhang(entry_id: int, attachment_id: str, org_id: int | None =
             safe_attachment_filename,
         )
         attachment = await get_resend_attachment(
-            decrypt_secret(cfg.api_key_enc), row.resend_email_id, attachment_id[:200]
+            api_key, row.resend_email_id, attachment_id[:200]
         )
     except Exception:
         attachment = None

@@ -59,6 +59,22 @@ def create_inbound_metadata(db: Session, org_id: int, data: dict) -> OrgMailEing
     return row
 
 
+def resend_api_key_fuer_org(db: Session, org_id: int) -> str | None:
+    """Liefert den Org-Schluessel, sonst den konfigurierten globalen Fallback."""
+    cfg = (db.query(OrgResendConfig).execution_options(include_all_tenants=True)
+           .filter(OrgResendConfig.org_id == org_id).first())
+    if cfg and cfg.api_key_enc:
+        try:
+            return decrypt_secret(cfg.api_key_enc)
+        except Exception:
+            logger.warning("Resend-Schluessel konnte nicht entschluesselt werden (org=%s)", org_id)
+            return None
+    from app.services.mail_service import get_resend_cfg
+
+    global_cfg = get_resend_cfg(db)
+    return str(global_cfg["api_key"]) if global_cfg and global_cfg.get("api_key") else None
+
+
 def _attachment_metadata(items: object) -> list[dict]:
     out = []
     for item in items if isinstance(items, list) else []:
@@ -72,12 +88,12 @@ async def fetch_inbound_message(db: Session, org_id: int, message_id: int) -> No
     """Lädt Mailinhalt nach dem Commit; Fehler werden bewusst nur generisch persistiert."""
     row = (db.query(OrgMailEingang).execution_options(include_all_tenants=True)
            .filter(OrgMailEingang.id == message_id, OrgMailEingang.org_id == org_id).first())
-    cfg = (db.query(OrgResendConfig).execution_options(include_all_tenants=True)
-           .filter(OrgResendConfig.org_id == org_id).first())
-    if not row or not cfg or not cfg.api_key_enc:
+    if not row:
         return
     try:
-        api_key = decrypt_secret(cfg.api_key_enc)
+        api_key = resend_api_key_fuer_org(db, org_id)
+        if not api_key:
+            raise RuntimeError("kein Resend-Schluessel")
         async with httpx.AsyncClient(timeout=settings.RESEND_HTTP_TIMEOUT) as client:
             response = await client.get(RESEND_RECEIVING_URL + row.resend_email_id,
                 headers={"Authorization": f"Bearer {api_key}"})

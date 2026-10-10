@@ -44,7 +44,7 @@ EXEMPT_PREFIXES = (
     "/mailing/webhook/resend/", "/mail/webhook/resend-inbound/", "/mailing/u/",
 )
 # MCP-OAuth-Endpunkte (Bearer/PKCE, kein Browser-Cookie): nur exakte Pfade, kein Praefix.
-_EXEMPT_EXACT = frozenset({"/mcp", "/token", "/register", "/revoke"})
+_EXEMPT_EXACT = frozenset({"/mcp", "/token", "/register", "/revoke", "/mail/webhook/resend-inbound"})
 # Cookie-authentifizierte API-Endpunkte innerhalb von /api/v1/ (SEC-8) — kein
 # Token-Exempt-Freifahrtschein, sondern Origin-Check (siehe Docstring oben).
 _ORIGIN_CHECK_PREFIXES = ("/api/v1/device/",)
