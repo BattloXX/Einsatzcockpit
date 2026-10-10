@@ -113,7 +113,7 @@
   </div>
 
   {% if gk_zugang %}
-  <section class="einheit-warning" x-show="nummerHinweis && !nummerGeschlossen" x-cloak>
+  <section class="einheit-warning einheit-warning--stack" x-show="nummerHinweis && !nummerGeschlossen" x-cloak>
     <div><strong>Mobilnummer für Einsatzbenachrichtigungen hinterlegen</strong></div>
     <p x-show="!nummerCodeGesendet">Die Nummer wird erst nach Bestätigung per SMS gespeichert.</p>
     <label class="sr-only" for="gkNummer">Mobilnummer</label>
