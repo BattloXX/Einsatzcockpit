@@ -5014,20 +5014,23 @@ async def lage_einheit_kommandant(
     _check_org_access(user, lage)
 
     name = commander_label.strip()
-    if name:
-        resource_service.rotate_einheit_leadership(
-            db, einheit_id, lage_id,
-            person_name=name,
-            created_by=user.id,
-            author_name=get_author_name(request),
-        )
-    else:
-        einheit = db.get(LageEinheit, einheit_id)
-        if not einheit or einheit.lage_id != lage_id:
-            raise HTTPException(status_code=404)
-        einheit.commander_label = None
+    einheit = db.get(LageEinheit, einheit_id)
+    if not einheit or einheit.lage_id != lage_id:
+        raise HTTPException(status_code=404)
+    try:
+        if name:
+            resource_service.setze_gruppenkommandant(
+                db, lage, einheit, person_name=name,
+                user_id=user.id, author_name=get_author_name(request),
+            )
+        else:
+            resource_service.entferne_gruppenkommandant(
+                db, lage, einheit, user_id=user.id, author_name=get_author_name(request),
+            )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     db.commit()
-    await broadcast_lage(lage_id, {"type": "ressource:changed"})
+    await broadcast_lage(lage_id, {"type": "ressource:changed", "einheit_id": einheit_id})
     return Response(status_code=204)
 
 
@@ -5173,14 +5176,18 @@ async def lage_einheit_fuehrer(
     if not name:
         raise HTTPException(status_code=400, detail="Name erforderlich")
 
-    resource_service.rotate_einheit_leadership(
-        db, einheit_id, lage_id,
-        person_name=name,
-        created_by=user.id,
-        author_name=get_author_name(request),
-    )
+    einheit = db.get(LageEinheit, einheit_id)
+    if not einheit or einheit.lage_id != lage_id:
+        raise HTTPException(status_code=404)
+    try:
+        resource_service.setze_gruppenkommandant(
+            db, lage, einheit, person_name=name,
+            user_id=user.id, author_name=get_author_name(request),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     db.commit()
-    await broadcast_lage(lage_id, {"type": "ressource:changed"})
+    await broadcast_lage(lage_id, {"type": "ressource:changed", "einheit_id": einheit_id})
     return RedirectResponse(f"/lage/{lage_id}/ressourcen", status_code=303)
 
 

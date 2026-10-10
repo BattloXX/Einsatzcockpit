@@ -5,12 +5,14 @@ Pool = sector_id IS NULL (Reserve im SKKM-Sinne).
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 from sqlalchemy import and_, case, func
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.telefon import telefon_maske, telefon_zu_e164_at
 from app.models.major_incident import (
     EINHEIT_STATUS_AKTIV,
     EINHEIT_STATUS_COLOR,
@@ -25,6 +27,7 @@ from app.models.major_incident import (
     Sector,
     SiteLogEntry,
 )
+from app.models.master import Member
 
 # ── Status-Konstanten ─────────────────────────────────────────────────────────
 
@@ -78,6 +81,11 @@ def _journal(
     category: str = "ressource",
     author_name: str | None = None,
     user_id: int | None = None,
+    *,
+    einheit_id: int | None = None,
+    site_id: int | None = None,
+    ereignis_typ: str | None = None,
+    quelle: str | None = None,
 ) -> None:
     db.add(LageJournalEntry(
         major_incident_id=lage_id,
@@ -86,6 +94,10 @@ def _journal(
         text=text,
         author_name=author_name,
         user_id=user_id,
+        einheit_id=einheit_id,
+        site_id=site_id,
+        ereignis_typ=ereignis_typ,
+        quelle=quelle,
     ))
 
 
@@ -760,7 +772,239 @@ def set_status(
     return e
 
 
-# ── Einheitsführer setzen / ablösen ──────────────────────────────────────────
+# ── Gruppenkommandant / Stellvertreter ───────────────────────────────────────
+
+
+@dataclass
+class GkErgebnis:
+    aenderung: Literal["keine", "korrektur", "wechsel", "neu", "telefon"]
+    leader: LageEinheitLeader | None
+    zugang_gesperrt: bool = False
+
+
+def _fuehrungseingabe(
+    db: Session,
+    lage: MajorIncident,
+    *,
+    member_id: int | None,
+    person_name: str | None,
+    telefon: str | None,
+) -> tuple[int | None, str, str | None, str | None]:
+    """Normalisiert eine Führungszuweisung, ohne Stammdaten zu ändern."""
+    name = (person_name or "").strip()[:120]
+    member: Member | None = None
+    if member_id is not None:
+        member = (
+            db.query(Member)
+            .filter(Member.id == member_id, Member.org_id == lage.org_id, Member.active.is_(True))
+            .first()
+        )
+        if not member:
+            raise ValueError("Mitglied nicht gefunden oder nicht aktiv")
+        name = member.full_name.strip()[:120]
+    if not member_id and not name:
+        raise ValueError("member_id oder person_name erforderlich")
+
+    # None bedeutet: beim Mitglied die hinterlegte Nummer vorbelegen. Ein leerer
+    # Formwert entfernt dagegen bewusst die Nummer der Lagezuweisung.
+    phone = (member.phone if telefon is None and member else telefon)
+    phone = phone.strip() if phone else None
+    phone_e164 = telefon_zu_e164_at(phone)
+    if phone and not phone_e164:
+        raise ValueError("Telefonnummer ungueltig")
+    return member_id, name, phone, phone_e164
+
+
+def _gleiche_person(
+    leader: LageEinheitLeader,
+    member_id: int | None,
+    person_name: str,
+) -> bool:
+    if member_id is not None:
+        return leader.member_id == member_id
+    return leader.member_id is None and (leader.person_name or "").casefold() == person_name.casefold()
+
+
+def setze_gruppenkommandant(
+    db: Session,
+    lage: MajorIncident,
+    einheit: LageEinheit,
+    *,
+    member_id: int | None = None,
+    person_name: str | None = None,
+    telefon: str | None = None,
+    modus: str = "auto",
+    note: str | None = None,
+    user_id: int | None = None,
+    author_name: str | None = None,
+    quelle: str = "manuell",
+) -> GkErgebnis:
+    """Setzt den Gruppenkommandanten mit Historie und idempotenter Erkennung."""
+    if einheit.lage_id != lage.id:
+        raise ValueError("Einheit nicht gefunden")
+    if modus not in {"auto", "wechsel", "korrektur"}:
+        raise ValueError("Ungueltiger Modus")
+
+    member_id, name, phone, phone_e164 = _fuehrungseingabe(
+        db, lage, member_id=member_id, person_name=person_name, telefon=telefon,
+    )
+    old = db.get(LageEinheitLeader, einheit.leader_assignment_id) if einheit.leader_assignment_id else None
+    if old and (old.end_at is not None or old.rolle != "fuehrer"):
+        old = None
+    same_person = old is not None and _gleiche_person(old, member_id, name)
+
+    if old and same_person and old.phone_e164 == phone_e164 and modus != "korrektur":
+        return GkErgebnis(aenderung="keine", leader=old)
+
+    now = datetime.now(UTC)
+    if old and (same_person or modus == "korrektur"):
+        old_phone_e164 = old.phone_e164
+        old.member_id = member_id
+        old.person_name = name
+        old.phone = phone
+        old.phone_e164 = phone_e164
+        old.note = note
+        einheit.commander_label = name
+        if old_phone_e164 != phone_e164:
+            old.phone_version += 1
+            _journal(
+                db, lage.id,
+                f"{einheit.label}: Telefonnummer geaendert: "
+                f"{telefon_maske(old_phone_e164) or 'keine'} -> {telefon_maske(phone_e164) or 'keine'}",
+                category="ressource_fhr", author_name=author_name, user_id=user_id,
+                einheit_id=einheit.id, ereignis_typ="gk_telefon", quelle=quelle,
+            )
+            # HOOK GK-2.1: Zugang widerrufen
+            return GkErgebnis(aenderung="telefon", leader=old)
+        return GkErgebnis(aenderung="korrektur", leader=old)
+
+    predecessor_id = old.id if old else None
+    if old:
+        old.end_at = now
+        old.ende_grund = "wechsel"
+        old.ende_von = user_id
+    new_leader = LageEinheitLeader(
+        einheit_id=einheit.id, member_id=member_id, person_name=name,
+        start_at=now, predecessor_id=predecessor_id, note=note,
+        created_by=user_id, created_at=now, rolle="fuehrer", phone=phone,
+        phone_e164=phone_e164, phone_version=1,
+    )
+    db.add(new_leader)
+    db.flush()
+    einheit.leader_assignment_id = new_leader.id
+    einheit.commander_label = name
+    if old:
+        text = f"{einheit.label}: Gruppenkommandant gewechselt: {old.display_name} -> {new_leader.display_name}"
+        ereignis_typ = "gk_gewechselt"
+        aenderung: Literal["wechsel", "neu"] = "wechsel"
+        # HOOK GK-2.1: Zugang widerrufen
+    else:
+        text = f"{einheit.label}: Gruppenkommandant zugewiesen: {new_leader.display_name}"
+        ereignis_typ = "gk_zugewiesen"
+        aenderung = "neu"
+    _journal(
+        db, lage.id, text, category="ressource_fhr", author_name=author_name,
+        user_id=user_id, einheit_id=einheit.id, ereignis_typ=ereignis_typ, quelle=quelle,
+    )
+    return GkErgebnis(aenderung=aenderung, leader=new_leader)
+
+
+def setze_stellvertreter(
+    db: Session,
+    lage: MajorIncident,
+    einheit: LageEinheit,
+    *,
+    member_id: int | None = None,
+    person_name: str | None = None,
+    telefon: str | None = None,
+    modus: str = "auto",
+    note: str | None = None,
+    user_id: int | None = None,
+    author_name: str | None = None,
+    quelle: str = "manuell",
+) -> GkErgebnis:
+    """Setzt oder korrigiert den aktiven Stellvertreter einer Einheit."""
+    if einheit.lage_id != lage.id:
+        raise ValueError("Einheit nicht gefunden")
+    if modus not in {"auto", "wechsel", "korrektur"}:
+        raise ValueError("Ungueltiger Modus")
+    member_id, name, phone, phone_e164 = _fuehrungseingabe(
+        db, lage, member_id=member_id, person_name=person_name, telefon=telefon,
+    )
+    old = (
+        db.query(LageEinheitLeader)
+        .filter(LageEinheitLeader.einheit_id == einheit.id,
+                LageEinheitLeader.rolle == "stellvertreter", LageEinheitLeader.end_at.is_(None))
+        .first()
+    )
+    same_person = old is not None and _gleiche_person(old, member_id, name)
+    if old and same_person and old.phone_e164 == phone_e164 and modus != "korrektur":
+        return GkErgebnis(aenderung="keine", leader=old)
+    now = datetime.now(UTC)
+    if old and (same_person or modus == "korrektur"):
+        old_phone_e164 = old.phone_e164
+        old.member_id = member_id
+        old.person_name = name
+        old.phone = phone
+        old.phone_e164 = phone_e164
+        old.note = note
+        if old_phone_e164 != phone_e164:
+            old.phone_version += 1
+            _journal(
+                db, lage.id,
+                f"{einheit.label}: Telefonnummer Stellvertreter geaendert: "
+                f"{telefon_maske(old_phone_e164) or 'keine'} -> {telefon_maske(phone_e164) or 'keine'}",
+                category="ressource_fhr", author_name=author_name, user_id=user_id,
+                einheit_id=einheit.id, ereignis_typ="gk_telefon", quelle=quelle,
+            )
+            return GkErgebnis(aenderung="telefon", leader=old)
+        return GkErgebnis(aenderung="korrektur", leader=old)
+    if old:
+        old.end_at = now
+        old.ende_grund = "wechsel"
+        old.ende_von = user_id
+    leader = LageEinheitLeader(
+        einheit_id=einheit.id, member_id=member_id, person_name=name, start_at=now,
+        predecessor_id=old.id if old else None, note=note, created_by=user_id,
+        created_at=now, rolle="stellvertreter", phone=phone, phone_e164=phone_e164,
+        phone_version=1,
+    )
+    db.add(leader)
+    db.flush()
+    _journal(
+        db, lage.id, f"{einheit.label}: Stellvertreter {'gewechselt' if old else 'zugewiesen'}: {leader.display_name}",
+        category="ressource_fhr", author_name=author_name, user_id=user_id,
+        einheit_id=einheit.id, ereignis_typ="gk_gewechselt" if old else "gk_zugewiesen", quelle=quelle,
+    )
+    return GkErgebnis(aenderung="wechsel" if old else "neu", leader=leader)
+
+
+def entferne_gruppenkommandant(
+    db: Session,
+    lage: MajorIncident,
+    einheit: LageEinheit,
+    *,
+    user_id: int | None,
+    author_name: str | None,
+) -> LageEinheitLeader | None:
+    """Beendet die aktuelle Gruppenkommandanten-Zuweisung."""
+    if einheit.lage_id != lage.id:
+        raise ValueError("Einheit nicht gefunden")
+    old = db.get(LageEinheitLeader, einheit.leader_assignment_id) if einheit.leader_assignment_id else None
+    if not old or old.end_at is not None:
+        return None
+    old.end_at = datetime.now(UTC)
+    old.ende_grund = "entfernt"
+    old.ende_von = user_id
+    einheit.leader_assignment_id = None
+    einheit.commander_label = None
+    _journal(
+        db, lage.id, f"{einheit.label}: Gruppenkommandant entfernt: {old.display_name}",
+        category="ressource_fhr", author_name=author_name, user_id=user_id,
+        einheit_id=einheit.id, ereignis_typ="gk_gewechselt", quelle="manuell",
+    )
+    return old
+
 
 def rotate_einheit_leadership(
     db: Session,
@@ -773,38 +1017,18 @@ def rotate_einheit_leadership(
     created_by: int | None = None,
     author_name: str | None = None,
 ) -> LageEinheitLeader:
-    if not member_id and not person_name:
-        raise ValueError("member_id oder person_name erforderlich")
-
-    e = _get_einheit(db, einheit_id, lage_id)
-    now = datetime.now(UTC)
-
-    # Aktuellen Führer beenden
-    if e.leader_assignment_id:
-        old = db.get(LageEinheitLeader, e.leader_assignment_id)
-        if old and old.end_at is None:
-            old.end_at = now
-
-    new_leader = LageEinheitLeader(
-        einheit_id=einheit_id,
-        member_id=member_id,
-        person_name=person_name,
-        start_at=now,
-        predecessor_id=e.leader_assignment_id,
-        note=note,
-        created_by=created_by,
-        created_at=now,
+    """Kompatibler Legacy-Wrapper für ältere Aufrufer."""
+    lage = db.get(MajorIncident, lage_id)
+    einheit = _get_einheit(db, einheit_id, lage_id)
+    if not lage:
+        raise ValueError("Lage nicht gefunden")
+    result = setze_gruppenkommandant(
+        db, lage, einheit, member_id=member_id, person_name=person_name, note=note,
+        user_id=created_by, author_name=author_name,
     )
-    db.add(new_leader)
-    db.flush()
-
-    e.leader_assignment_id = new_leader.id
-    e.commander_label = person_name or str(member_id)
-
-    _journal(db, lage_id,
-             f"{e.label}: Einheitsführer → {new_leader.display_name}",
-             category="ressource_fhr", author_name=author_name, user_id=created_by)
-    return new_leader
+    if not result.leader:
+        raise ValueError("Gruppenkommandant konnte nicht gesetzt werden")
+    return result.leader
 
 
 # ── EL / AbsLtr ablösen (GslStaffAssignment) ─────────────────────────────────
