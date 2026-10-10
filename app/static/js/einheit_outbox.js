@@ -8,11 +8,13 @@ export function createOutbox({
   csrfToken = () => "",
   simEinheitId = null,
   dbName = "ec-einheit",
+  onTerminal = () => {},
 }) {
   const listeners = new Set();
   const inBearbeitung = new Set();
   let dbPromise;
   let statusKette = Promise.resolve();
+  let terminal = false;
 
   function melden() {
     for (const listener of listeners) listener();
@@ -169,6 +171,11 @@ export function createOutbox({
         return "weiter";
       }
       const code = antwort?.code || `http_${response.status}`;
+      if (response.status === 401 && /^zugang_(widerrufen|abgelaufen|ungueltig)$/.test(code)) {
+        await blockiereZugang();
+        onTerminal(code);
+        return "blockiert";
+      }
       if (response.status === 409 || response.status === 403 || response.status === 404) {
         await setze(eintrag, { status: "konflikt", letzter_fehler: code, naechster_versuch_at: null });
         return "weiter";
@@ -208,11 +215,37 @@ export function createOutbox({
   }
 
   async function flush() {
+    if (terminal) return;
     // Fotos warten nie auf die Statusspur und umgekehrt nicht auf haengende Uploads.
     void fotoSpurFlushen();
     const lauf = statusKette.then(statusSpurenFlushen);
     statusKette = lauf.catch(() => undefined);
     return lauf;
+  }
+
+  async function blockiereZugang() {
+    terminal = true;
+    const eintraege = await alle("outbox");
+    await mitStore(["outbox"], "readwrite", (tx) => {
+      for (const eintrag of eintraege) {
+        if (eintrag.status === "ausstehend" || eintrag.status === "fehler_netz") {
+          tx.objectStore("outbox").put({ ...eintrag, status: "blockiert_zugang", letzter_fehler: "zugang_beendet", naechster_versuch_at: null });
+        }
+      }
+    });
+    melden();
+  }
+
+  async function bereinigen(alterStunden = 72) {
+    const grenze = now().getTime() - alterStunden * 60 * 60 * 1000;
+    const verlauf = await alle("verlauf");
+    const entwuerfe = await alle("entwuerfe");
+    await mitStore(["verlauf", "entwuerfe"], "readwrite", (tx) => {
+      for (const eintrag of verlauf) if (zeitwert(eintrag.server_bestaetigt_at) < grenze) tx.objectStore("verlauf").delete(eintrag.id);
+      for (const entwurf of entwuerfe) {
+        if (entwurf?.saved_at && zeitwert(entwurf.saved_at) < grenze) tx.objectStore("entwuerfe").delete(entwurf.key);
+      }
+    });
   }
 
   return {
@@ -226,18 +259,21 @@ export function createOutbox({
       void flush();
       return eintrag;
     },
-    flush,
+    async flush() { return flush(); },
+    blockiereZugang,
+    bereinigen,
     async erneutSenden(client_uuid) { const eintrag = await lesen("outbox", client_uuid); if (eintrag) await setze(eintrag, { status: "ausstehend", naechster_versuch_at: null }); await flush(); },
     async verwerfen(client_uuid) { await mitStore(["outbox"], "readwrite", (tx) => tx.objectStore("outbox").delete(client_uuid)); melden(); },
     async liste() { return (await alle("outbox")).sort((a, b) => a.seq - b.seq).map(kopieOhneBlob); },
     async verlauf(limit = 200) { return (await alle("verlauf")).sort((a, b) => b.id - a.id).slice(0, limit); },
     async zaehler() { const items = await alle("outbox"); return { ausstehend: items.filter((x) => x.status === "ausstehend" || x.status === "fehler_netz").length, fehler: items.filter((x) => x.status === "fehler").length, konflikt: items.filter((x) => x.status === "konflikt").length, gesamt: items.length }; },
     onChange(cb) { listeners.add(cb); return () => listeners.delete(cb); },
-    async entwurfSpeichern(key, data) { await speichern("entwuerfe", data, key); },
-    async entwurfLaden(key) { return lesen("entwuerfe", key); },
+    async entwurfSpeichern(key, data) { await speichern("entwuerfe", { key, data, saved_at: now().toISOString() }, key); },
+    async entwurfLaden(key) { const entwurf = await lesen("entwuerfe", key); return entwurf?.data || entwurf; },
     async entwurfLoeschen(key) { await mitStore(["entwuerfe"], "readwrite", (tx) => tx.objectStore("entwuerfe").delete(key)); },
     async zustandSpeichern(obj) { await speichern("zustand", obj, "aktuell"); },
     async zustandLaden() { return lesen("zustand", "aktuell"); },
+    async zustandLeeren() { await mitStore(["zustand"], "readwrite", (tx) => tx.objectStore("zustand").clear()); },
     async naechsterVersuchIn() { const zeit = now().getTime(); const werte = (await alle("outbox")).filter((x) => x.status === "fehler_netz" && x.naechster_versuch_at).map((x) => Math.max(0, zeitwert(x.naechster_versuch_at) - zeit)); return werte.length ? Math.min(...werte) : null; },
   };
 }

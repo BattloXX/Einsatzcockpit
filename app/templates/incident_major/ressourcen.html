@@ -303,6 +303,7 @@
 @media(max-width:760px) { .ressource-karte__sheet { width:100vw; }.ressource-karte__tabs { overflow-x:auto; }.ressource-karte__tabs .btn,.res-journal__chips .btn { min-height:48px; white-space:nowrap; }.ressource-karte__actions { position:sticky; bottom:0; padding:8px; background:var(--surface); }.res-journal__entry { grid-template-columns:1fr; }.res-journal__storno { flex-direction:column; }.res-journal__storno .btn { min-height:48px; } }
 </style>
 <script src="/static/js/ressourcen_karte.js"></script>
+<script src="/static/js/ressourcen_zugang.js"></script>
 {% if org_members %}
 <datalist id="cmdr-datalist">
   {% for m in org_members %}<option value="{{ m.full_name }}">{% endfor %}

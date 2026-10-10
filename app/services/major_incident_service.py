@@ -8,6 +8,7 @@ Regeln:
 - Auto-Adopt: Wenn OrgSettings.mi_auto_adopt und eine aktive Lage läuft,
   wird jeder eingehende Einsatz als IncidentSite gespiegelt.
 """
+
 import secrets
 from datetime import UTC, datetime
 
@@ -54,6 +55,7 @@ def setze_site_phase(
     site.phase = neue_phase
     suffix = f" ({ausloeser})" if ausloeser else ""
     from app.services.site_log_service import add_site_log
+
     add_site_log(
         db,
         site,
@@ -63,6 +65,7 @@ def setze_site_phase(
         author_name=author_name,
     )
     from app.core.audit import write_audit
+
     write_audit(
         db,
         "major_incident.site.phase_changed",
@@ -75,6 +78,7 @@ def setze_site_phase(
         },
     )
     from app.services import lagemeldung_service
+
     if neue_phase == SitePhase.in_arbeit:
         lagemeldung_service.ensure_timer(site, db)
     elif neue_phase in (SitePhase.erledigt, SitePhase.abgebrochen):
@@ -152,8 +156,11 @@ def close_lage(
     """Schließt die Lage manuell. Erlischt den Bürger-Token."""
     lage.status = MajorIncidentStatus.closed
     lage.ended_at = datetime.now(UTC)
-    lage.public_token = None            # Token erlischt beim Schließen
+    lage.public_token = None  # Token erlischt beim Schließen
     lage.public_token_expires_at = None
+    from app.services.gk_zugang_service import widerrufe_alle_fuer_lage
+
+    widerrufe_alle_fuer_lage(db, lage.id, "lage_ende")
     return lage
 
 
@@ -231,7 +238,9 @@ def handle_alarm_trigger(
     if lage is None:
         name = f"Lage {alarm_type_code} – {ort or 'unbekannt'} {datetime.now(UTC).strftime('%d.%m.%Y %H:%M')}"
         lage = create_lage(
-            db, org_id, name,
+            db,
+            org_id,
+            name,
             trigger="alarm_auto",
             is_exercise=is_exercise,
         )
@@ -250,7 +259,8 @@ def handle_alarm_trigger(
         return lage, existing_site, lage_created
 
     site = create_site(
-        db, lage,
+        db,
+        lage,
         bezeichnung=bezeichnung or einsatzgrund or f"{alarm_type_code} – {ort or 'unbekannt'}",
         source="api",
         external_key=external_key,
@@ -265,6 +275,7 @@ def handle_alarm_trigger(
         einsatzgrund=einsatzgrund,
     )
     from app.services.geo_service import auto_assign_section
+
     auto_assign_section(db, site)
     return lage, site, lage_created
 
@@ -300,7 +311,8 @@ def adopt_incident_as_site(
         return None
 
     site = create_site(
-        db, lage,
+        db,
+        lage,
         bezeichnung=einsatzgrund or f"{alarm_type_code} – {ort or 'unbekannt'}",
         source="api",
         external_key=external_key,
@@ -315,5 +327,6 @@ def adopt_incident_as_site(
         einsatzgrund=einsatzgrund,
     )
     from app.services.geo_service import auto_assign_section
+
     auto_assign_section(db, site)
     return site

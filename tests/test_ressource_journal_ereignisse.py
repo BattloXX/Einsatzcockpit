@@ -47,7 +47,7 @@ def _eintrag(db, typ):
 
 
 def _ctx(db, einheit, quelle="funk"):
-    return kontext_fuer_einheit(db, SimpleNamespace(org_id=1, is_system_admin=False), einheit.id, quelle=quelle)
+    return kontext_fuer_einheit(db, SimpleNamespace(id=1, org_id=1, is_system_admin=False), einheit.id, quelle=quelle)
 
 
 def test_angelegt_hat_einheitsbezug():

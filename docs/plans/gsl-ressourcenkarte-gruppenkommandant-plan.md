@@ -1068,3 +1068,22 @@ Unabhängig voneinander nutzbar: Phase 1 als Ganzes liefert bereits Wert (Karte,
 - Praxisprüfung der SMS-Länge mit dem eingesetzten Gateway (Segmentanzahl, Umlaute).
 - Abstimmung mit Schwesterplan-Phase 2 (P2-1: Kategorien der Anforderung, Migrationsnummer).
 - Betriebsdoku für die Führung (Wiki): „Wann neuen Link senden?“, „Was bedeutet Rotation?“.
+
+---
+
+## 17. Umsetzungsstand
+
+### Phase 1 – abgeschlossen am 2026-10-10 (PR #495)
+
+GK-1.1 bis GK-1.4: Migration 0265, `setze_gruppenkommandant`, Ressourcenjournal mit Einheitenbezug (inkl. Storno), `ressource_karte_service`, Drawer mit Tabs Übersicht / Einsätze / Journal.
+
+### Phase 2 – Gruppenkommandanten-Zugang (Branch `feat/gsl-gk-phase2`)
+
+GK-2.1 bis GK-2.5 umgesetzt, Gate GK-2.6 durchlaufen. Abweichungen vom Plan:
+
+- Die acht `OrgSettings`-Spalten (Plan 5.3) sind schon in **Migration 0266** enthalten, nicht erst in 0267. Phase 3 liefert nur noch Formular, Validierung und Auto-SMS.
+- `lage_einheit_zugang.vorheriger_token_hash` ergänzt: Nur damit kann ein rotierter Link die Meldung „beendet oder ersetzt“ statt „Link ungültig“ zeigen.
+- Widerruf wirkt auf offene WebSockets **spätestens beim nächsten Ping (25 s)**; ein Post-Commit-Broadcast `zugang:widerrufen` ist nicht umgesetzt (HTTP-Anfragen werden sofort abgewiesen).
+- `zugang_status()` liefert zusätzlich `sitzung_aktiv`; der Client fragt vor einer Rotation nach, wenn der Gruppenkommandant gerade angemeldet ist.
+- Die automatische SMS (`sende_auto_sms`) und der Auto-Pfad in `setze_gruppenkommandant` kommen mit GK-3.2.
+- Browser-Smoketest (Chromium): `/gk#<token>` → Fragment wird entfernt → Einlösung → `/einheit` mit Banner und Auftrag, WebSocket online.

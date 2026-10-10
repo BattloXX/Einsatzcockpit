@@ -1,0 +1,113 @@
+{% set basis = "/lage/%d/einheiten/%d"|format(lage.id, einheit.id) %}
+{% set z = zugang %}
+{% set sperre = z.zustand in ("deaktiviert", "keine_nummer") %}
+<section class="ressource-zugang" data-zugang-root data-basis="{{ basis }}" data-einheit-id="{{ einheit.id }}"
+         data-sitzung-aktiv="{{ 1 if z.sitzung_aktiv else 0 }}">
+  <style>
+    .ressource-zugang { display:flex; flex-direction:column; gap:12px; }
+    .ressource-zugang__dot { display:inline-block; width:10px; height:10px; border-radius:50%; background:var(--text-muted); margin-right:6px; }
+    .ressource-zugang__dot--aktiv { background:var(--green); }
+    .ressource-zugang__dot--laeuft_bald_ab { background:var(--yellow); }
+    .ressource-zugang__dot--abgelaufen, .ressource-zugang__dot--widerrufen { background:var(--red); }
+    .ressource-zugang__actions { display:flex; flex-wrap:wrap; gap:8px; }
+    .ressource-zugang__actions .btn { min-height:44px; }
+    .ressource-zugang__hint { font-size:.75rem; color:var(--text-muted); }
+    .ressource-zugang__toast { position:sticky; bottom:8px; padding:8px 12px; border-radius:8px; background:var(--surface-mid); border:1px solid var(--green); font-size:.85rem; }
+    .ressource-zugang__toast--fehler { border-color:var(--red); }
+    .ressource-zugang table { width:100%; font-size:.78rem; }
+    .ressource-zugang td, .ressource-zugang th { padding:3px 6px; text-align:left; }
+    @media (max-width: 760px) { .ressource-zugang__actions .btn { flex:1 1 100%; } }
+  </style>
+
+  <div class="res-section">
+    <div class="res-section__title">Gruppenkommandant</div>
+    <div>{{ karte_gk_name or "–" }}{% if z.nummer_anzeige %} · <a href="tel:{{ z.nummer_anzeige|replace(' ', '') }}">{{ z.nummer_anzeige }}</a>{% endif %}</div>
+    <div style="margin-top:6px;">
+      <span class="ressource-zugang__dot ressource-zugang__dot--{{ z.zustand }}"></span>
+      <strong data-zugang-status="{{ z.zustand }}">
+        {% if z.zustand == "deaktiviert" %}Zugang deaktiviert (GSL-Einstellungen)
+        {% elif z.zustand == "keine_nummer" %}Keine Telefonnummer – Zugang nicht möglich
+        {% elif z.zustand == "kein_zugang" %}Kein Zugang ausgegeben
+        {% elif z.zustand == "aktiv" %}Aktiv
+        {% elif z.zustand == "laeuft_bald_ab" %}Läuft bald ab
+        {% elif z.zustand == "abgelaufen" %}Abgelaufen
+        {% else %}Widerrufen{% if z.widerruf_grund %} ({{ z.widerruf_grund }}){% endif %}{% endif %}
+      </strong>
+      {% if z.laeuft_ab_at and z.zustand in ("aktiv", "laeuft_bald_ab", "abgelaufen") %}
+        <span class="ressource-zugang__hint">· gültig bis {{ z.laeuft_ab_at|local_datetime }}</span>
+      {% endif %}
+      {% if z.zustand == "widerrufen" and z.widerrufen_at %}
+        <span class="ressource-zugang__hint">· {{ z.widerrufen_at|local_datetime }}</span>
+      {% endif %}
+    </div>
+    <div class="ressource-zugang__hint" style="margin-top:4px;">
+      Sitzungen: {{ z.aktive_sitzungen|length }} aktiv
+      {% if z.letzte_aktivitaet_at %}· letzte Aktivität {{ z.letzte_aktivitaet_at|local_datetime }}{% endif %}
+    </div>
+  </div>
+
+  {% if ergebnis %}
+  <div class="ressource-zugang__toast{% if ergebnis.status != 'gesendet' %} ressource-zugang__toast--fehler{% endif %}" data-versand-status="{{ ergebnis.status }}">
+    {% if ergebnis.status == "gesendet" %}SMS gesendet.
+    {% elif ergebnis.status == "unklar" %}Ergebnis unbekannt – bitte beim Gruppenkommandanten nachfragen.
+    {% elif ergebnis.status == "uebersprungen" %}Nicht gesendet: {{ ergebnis.fehler }}. Der bisherige Link bleibt gültig; Nachricht kopieren ist möglich.
+    {% else %}SMS fehlgeschlagen{% if ergebnis.fehler %}: {{ ergebnis.fehler }}{% endif %}. Erneut senden oder Nachricht kopieren.{% endif %}
+  </div>
+  {% endif %}
+
+  <div class="ressource-zugang__actions">
+    <button type="button" class="btn btn--primary" data-zugang-aktion="sms" {% if sperre %}disabled{% endif %}>
+      {% if z.letzter_versand and z.letzter_versand.kanal == "sms" %}SMS erneut senden{% else %}SMS senden{% endif %}
+    </button>
+    <button type="button" class="btn btn--secondary" data-zugang-aktion="nachricht" {% if sperre %}disabled{% endif %}>Nachricht kopieren</button>
+    <button type="button" class="btn btn--secondary" data-zugang-aktion="link" {% if sperre %}disabled{% endif %}>Nur Link kopieren</button>
+  </div>
+  <div class="ressource-zugang__actions">
+    <button type="button" class="btn btn--ghost btn--xs"
+            hx-post="{{ basis }}/zugang/verlaengern" hx-target="#ressourceKarteBody" hx-swap="innerHTML"
+            {% if z.zustand not in ("aktiv", "laeuft_bald_ab", "abgelaufen") %}disabled{% endif %}>Zugang verlängern</button>
+    <button type="button" class="btn btn--ghost btn--xs" style="color:var(--red);"
+            hx-post="{{ basis }}/zugang/widerrufen" hx-target="#ressourceKarteBody" hx-swap="innerHTML"
+            hx-confirm="Zugang widerrufen? Der Link und alle Sitzungen werden sofort ungültig."
+            {% if z.zustand not in ("aktiv", "laeuft_bald_ab", "abgelaufen") %}disabled{% endif %}>Zugang widerrufen</button>
+  </div>
+  <div class="ressource-zugang__hint">
+    Ein neuer Link macht den zuletzt gesendeten Link und aktive Sitzungen sofort ungültig.
+    Der Link wird nicht gespeichert und kann nur über einen neuen Link erneut zugestellt werden.
+  </div>
+
+  {% if z.aktive_sitzungen %}
+  <div class="res-section">
+    <div class="res-section__title">Aktive Sitzungen</div>
+    <table>
+      {% for s in z.aktive_sitzungen %}
+      <tr data-sitzung-id="{{ s.id }}">
+        <td>{{ s.client_kurz or "Gerät" }}</td>
+        <td>zuletzt {{ s.last_seen_at|local_time }}</td>
+        <td><button type="button" class="btn btn--xs btn--ghost"
+                    hx-post="{{ basis }}/zugang/sitzung/{{ s.id }}/beenden" hx-target="#ressourceKarteBody" hx-swap="innerHTML">beenden</button></td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endif %}
+
+  <div class="res-section">
+    <div class="res-section__title">Versandprotokoll</div>
+    {% if z.versandprotokoll %}
+    <table>
+      <thead><tr><th>Zeit</th><th>Kanal</th><th>Auslöser</th><th>Status</th></tr></thead>
+      {% for v in z.versandprotokoll %}
+      <tr>
+        <td>{{ v.created_at|local_datetime }}</td>
+        <td>{{ {"sms": "SMS", "kopie_nachricht": "Nachricht kopiert", "kopie_link": "Link kopiert", "pin_sms": "PIN-SMS"}.get(v.kanal, v.kanal) }}{% if v.segmente %} ({{ v.segmente }}){% endif %}</td>
+        <td>{{ {"auto": "automatisch", "manuell": "manuell", "mcp": "MCP"}.get(v.ausloeser, v.ausloeser) }}</td>
+        <td>{{ v.status }}{% if v.fehler %}: {{ v.fehler }}{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% else %}
+    <div class="ressource-zugang__hint">Noch kein Versand.</div>
+    {% endif %}
+  </div>
+</section>

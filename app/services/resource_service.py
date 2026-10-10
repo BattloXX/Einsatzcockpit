@@ -246,6 +246,10 @@ def add_resource(
         ereignis_typ="angelegt",
         quelle="manuell",
     )
+    if status == STATUS_ABGERUECKT:
+        from app.services.gk_zugang_service import widerrufe
+
+        widerrufe(db, e.id, grund="abgerueckt", user_id=user_id)
     return e
 
 
@@ -1066,8 +1070,10 @@ def setze_gruppenkommandant(
                 ereignis_typ="gk_telefon",
                 quelle=quelle,
             )
-            # HOOK GK-2.1: Zugang widerrufen
-            return GkErgebnis(aenderung="telefon", leader=old)
+            from app.services.gk_zugang_service import widerrufe
+
+            widerrufe(db, einheit.id, grund="telefon", user_id=user_id)
+            return GkErgebnis(aenderung="telefon", leader=old, zugang_gesperrt=True)
         return GkErgebnis(aenderung="korrektur", leader=old)
 
     predecessor_id = old.id if old else None
@@ -1097,7 +1103,9 @@ def setze_gruppenkommandant(
         text = f"{einheit.label}: Gruppenkommandant gewechselt: {old.display_name} -> {new_leader.display_name}"
         ereignis_typ = "gk_gewechselt"
         aenderung: Literal["wechsel", "neu"] = "wechsel"
-        # HOOK GK-2.1: Zugang widerrufen
+        from app.services.gk_zugang_service import widerrufe
+
+        widerrufe(db, einheit.id, grund="wechsel", user_id=user_id)
     else:
         text = f"{einheit.label}: Gruppenkommandant zugewiesen: {new_leader.display_name}"
         ereignis_typ = "gk_zugewiesen"
@@ -1113,7 +1121,7 @@ def setze_gruppenkommandant(
         ereignis_typ=ereignis_typ,
         quelle=quelle,
     )
-    return GkErgebnis(aenderung=aenderung, leader=new_leader)
+    return GkErgebnis(aenderung=aenderung, leader=new_leader, zugang_gesperrt=old is not None)
 
 
 def setze_stellvertreter(
@@ -1242,6 +1250,9 @@ def entferne_gruppenkommandant(
         ereignis_typ="gk_gewechselt",
         quelle="manuell",
     )
+    from app.services.gk_zugang_service import widerrufe
+
+    widerrufe(db, einheit.id, grund="entfernt", user_id=user_id)
     return old
 
 
