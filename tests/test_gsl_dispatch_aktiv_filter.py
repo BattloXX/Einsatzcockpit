@@ -82,6 +82,18 @@ def test_beendete_disposition_zaehlt_nur_als_fertig():
         db.rollback()
 
 
+def test_set_status_setzt_status_at():
+    with _session() as db:
+        lage = _make_lage(db)
+        einheit = _make_einheit(db, lage.id)
+        assert einheit.status_at is None
+
+        rs.set_status(db, einheit.id, lage.id, rs.STATUS_IM_EINSATZ)
+
+        assert einheit.status_at is not None
+        db.rollback()
+
+
 def test_dispatch_erneut_nach_beendigung_aber_nicht_bei_aktiver_disposition():
     with _session() as db:
         lage = _make_lage(db)

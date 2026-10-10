@@ -60,7 +60,7 @@ RESOURCE_TYPE_LABEL = {
 
 # ── Hilfsfunktionen ───────────────────────────────────────────────────────────
 
-RESSOURCE_CATEGORIES = {"ressource", "ressource_fhr"}
+RESSOURCE_CATEGORIES = {"ressource", "ressource_fhr", "ressource_manuell"}
 
 
 def dispatch_aktiv_filter():
@@ -132,7 +132,13 @@ def add_resource(
         status=status,
         is_from_org=is_from_org,
         added_at=now,
+        status_at=now,
     )
+    if vehicle_id:
+        from app.models.master import VehicleMaster
+        vehicle = db.get(VehicleMaster, vehicle_id)
+        if vehicle:
+            e.funkrufname = vehicle.funkrufname
     if status == STATUS_ANGEFORDERT:
         e.requested_at = now
     else:
@@ -289,6 +295,7 @@ def dispatch_to_site(
     if e.status == STATUS_BEREITGESTELLT:
         e.status = STATUS_IM_EINSATZ
         e.committed_at = now
+        e.status_at = now
 
     _journal(db, lage_id,
              f'{e.label} → Einsatzstelle "{site.bezeichnung}" disponiert (DISPONIERT)',
@@ -707,6 +714,7 @@ def move_to_pool(
     e.incident_site_id = None
     if e.status == STATUS_IM_EINSATZ:
         e.status = STATUS_BEREITGESTELLT
+        e.status_at = datetime.now(UTC)
 
     _journal(db, lage_id,
              f"{e.label} → Pool/Reserve zurückgeführt"
@@ -732,10 +740,11 @@ def set_status(
     e = _get_einheit(db, einheit_id, lage_id)
     old_status = e.status
     e.status = status
+    e.status_at = datetime.now(UTC)
 
     ts_field = _STATUS_TIMESTAMP.get(status)
     if ts_field:
-        setattr(e, ts_field, datetime.now(UTC))
+        setattr(e, ts_field, e.status_at)
 
     # Auto-Abschnittszuweisung: wenn Einheit bereits einer Einsatzstelle mit Abschnitt zugeordnet ist
     if status == STATUS_IM_EINSATZ and not e.sector_id and e.incident_site_id:

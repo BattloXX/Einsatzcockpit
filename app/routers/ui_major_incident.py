@@ -357,6 +357,7 @@ async def lage_neu_create(
             is_from_org=True,
             resource_type="fahrzeug",
             status=resource_service.STATUS_BEREITGESTELLT,
+            funkrufname=_v.funkrufname,
         ))
     db.commit()
 
@@ -4797,6 +4798,7 @@ def lage_ressourcen(
                 is_from_org=True,
                 resource_type="fahrzeug",
                 status=resource_service.STATUS_BEREITGESTELLT,
+                funkrufname=v.funkrufname,
             ))
         if org_vehicles:
             db.commit()
