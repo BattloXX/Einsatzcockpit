@@ -1254,7 +1254,7 @@ def setze_gruppenkommandant(
             )
             from app.services.gk_zugang_service import widerrufe
 
-            widerrufe(db, einheit.id, grund="telefon", user_id=user_id)
+            widerrufe(db, einheit.id, grund="telefon", user_id=user_id, typ="personal")
             from app.services.gk_zugang_service import plane_auto_sms
             return GkErgebnis(aenderung="telefon", leader=old, zugang_gesperrt=True,
                               auto_sms=plane_auto_sms(db, lage, einheit, old, "telefon"))

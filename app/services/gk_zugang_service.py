@@ -38,6 +38,7 @@ from app.services.sms_service import send_sms, sms_available
 TOKEN_PREFIX = "gkz_"
 QR_TOKEN_PREFIX = "gkq_"
 COOKIE = "ec_gk"
+QR_COOKIE = "ec_qr"
 STANDARDNACHRICHT = """GSL {lage}
 Einheit: {einheit}
 Du bist als Gruppenkommandant zugewiesen. Einsätze, Status, Lagemeldungen und Fotos:
@@ -86,6 +87,9 @@ class OrgEinstellungen:
     gk_zugang_max_sitzungen: int = 2
     gk_zugang_sms_pin: bool = False
     gk_zugang_ressource_pflegen: bool = False
+    gk_qr_aktiv: bool = False
+    gk_qr_gueltigkeit_stunden: int = 72
+    gk_qr_pin: bool = False
 
 
 def org_einstellungen(db: Session, org_id: int) -> OrgEinstellungen:
@@ -172,8 +176,9 @@ class ZugangPrincipal:
     session: LageEinheitZugangSession
     einheit: LageEinheit
     lage: MajorIncident
-    leader: LageEinheitLeader
+    leader: LageEinheitLeader | None
     org_id: int
+    typ: str = "personal"
     fehlergrund: ZugangFehlergrund | None = None
 
 
@@ -275,17 +280,77 @@ def stelle_zugang_aus(
     return NeuerZugang(link_fuer(raw), zugang.generation, zugang.laeuft_ab_at, zugang.id)
 
 
-def widerrufe(
-    db: Session, einheit_id: int, *, grund: str, user_id: int | None = None, typ: str = "personal"
-) -> None:
-    zugang = (
-        db.query(LageEinheitZugang)
-        .filter(LageEinheitZugang.einheit_id == einheit_id, LageEinheitZugang.typ == typ)
-        .with_for_update()
-        .first()
-    )
-    if not zugang:
+def qr_pin_ableiten(zugang_id: int, generation: int) -> str:
+    """Deterministischer QR-PIN; er wird weder gespeichert noch protokolliert."""
+    digest = hmac.new(zugang_schluessel(), f"qrpin|{zugang_id}|{generation}".encode(), hashlib.sha256).digest()
+    return f"{int.from_bytes(digest[:8], 'big') % 1_000_000:06d}"
+
+
+def qr_pin_fuer_fuehrung(zugang: LageEinheitZugang) -> str | None:
+    """Gibt den QR-PIN ausschließlich für eine autorisierte Führungsansicht aus."""
+    return qr_pin_ableiten(zugang.id, zugang.generation) if zugang.typ == "qr" and zugang.pin_pflicht else None
+
+
+def stelle_qr_zugang_aus(
+    db: Session, lage: MajorIncident, einheit: LageEinheit, *, user_id: int | None, grund: str, neu: bool = False
+) -> NeuerZugang:
+    cfg = org_einstellungen(db, lage.org_id)
+    if not cfg.gk_qr_aktiv:
+        raise ValueError("QR-Zugang ist für diese Organisation deaktiviert")
+    if lage.status != "active":
+        raise ValueError("Zugang kann nur für eine aktive Lage ausgestellt werden")
+    if einheit.status == "abgerueckt":
+        raise ValueError("Für abgerückte Einheiten kann kein Zugang ausgestellt werden")
+    now = _now()
+    zugang = db.query(LageEinheitZugang).filter(
+        LageEinheitZugang.einheit_id == einheit.id, LageEinheitZugang.typ == "qr"
+    ).with_for_update().first()
+    if (zugang and not neu and zugang.status == "aktiv" and zugang.token_hash and zugang.laeuft_ab_at
+            and zugang.laeuft_ab_at > now):
+        return NeuerZugang(link_fuer(token_neu_berechnen(zugang)), zugang.generation, zugang.laeuft_ab_at, zugang.id)
+    if zugang is None:
+        try:
+            with db.begin_nested():
+                zugang = LageEinheitZugang(org_id=lage.org_id, lage_id=lage.id, einheit_id=einheit.id, typ="qr",
+                                            status="kein_token", created_at=now, updated_at=now)
+                db.add(zugang)
+                db.flush()
+        except IntegrityError:
+            zugang = db.query(LageEinheitZugang).filter(
+                LageEinheitZugang.einheit_id == einheit.id, LageEinheitZugang.typ == "qr"
+            ).with_for_update().one()
+    assert zugang is not None
+    zugang.vorheriger_token_hash = zugang.token_hash or zugang.vorheriger_token_hash
+    zugang.generation += 1
+    raw = token_ableiten("qr", zugang.id, zugang.generation)
+    zugang.token_hash = hash_api_key(raw)
+    zugang.status, zugang.laeuft_ab_at = "aktiv", now + timedelta(hours=max(1, min(168, cfg.gk_qr_gueltigkeit_stunden)))
+    zugang.pin_pflicht = cfg.gk_qr_pin
+    zugang.qr_pin_pflicht = cfg.gk_qr_pin
+    zugang.pin_hash = hash_api_key(qr_pin_ableiten(zugang.id, zugang.generation)) if cfg.gk_qr_pin else None
+    zugang.pin_gueltig_bis, zugang.pin_versuche, zugang.pin_gesperrt_bis = None, 0, None
+    zugang.widerruf_grund, zugang.widerrufen_at, zugang.widerrufen_von = None, None, None
+    zugang.ausgestellt_at, zugang.ausgestellt_von, zugang.updated_at = now, user_id, now
+    _revoke_sessions(db, zugang.id, "rotation", now)
+    write_audit(db, "gsl.zugang.qr_ausgestellt", org_id=lage.org_id, user_id=user_id,
+                entity_type="lage_einheit", entity_id=einheit.id,
+                payload={"lage_id": lage.id, "einheit_id": einheit.id, "generation": zugang.generation, "grund": grund})
+    _journal(db, lage, einheit, f"{einheit.label}: QR-Zugang ausgestellt", user_id)
+    return NeuerZugang(link_fuer(raw), zugang.generation, zugang.laeuft_ab_at, zugang.id)
+
+
+def widerrufe(db: Session, einheit_id: int, *, grund: str, user_id: int | None = None, typ: str | None = None) -> None:
+    rows = db.query(LageEinheitZugang).filter(LageEinheitZugang.einheit_id == einheit_id)
+    if typ is not None:
+        rows = rows.filter(LageEinheitZugang.typ == typ)
+    zugeaenge = rows.with_for_update().all()
+    if not zugeaenge:
         return
+    for zugang in zugeaenge:
+        _widerrufe_einen(db, zugang, grund, user_id)
+
+
+def _widerrufe_einen(db: Session, zugang: LageEinheitZugang, grund: str, user_id: int | None) -> None:
     now = _now()
     zugang.vorheriger_token_hash = zugang.token_hash or zugang.vorheriger_token_hash
     zugang.token_hash = None
@@ -297,24 +362,25 @@ def widerrufe(
     zugang.updated_at = now
     _revoke_sessions(db, zugang.id, grund, now)
     lage = db.get(MajorIncident, zugang.lage_id)
-    einheit = db.get(LageEinheit, einheit_id)
+    einheit = db.get(LageEinheit, zugang.einheit_id)
     write_audit(
         db,
         "gsl.zugang.widerrufen",
         org_id=zugang.org_id,
         user_id=user_id,
         entity_type="lage_einheit",
-        entity_id=einheit_id,
+        entity_id=zugang.einheit_id,
         payload={
             "lage_id": zugang.lage_id,
-            "einheit_id": einheit_id,
+            "einheit_id": zugang.einheit_id,
             "zugang_id": zugang.id,
             "generation": zugang.generation,
             "grund": grund,
         },
     )
     if lage and einheit:
-        _journal(db, lage, einheit, f"{einheit.label}: Gruppenkommandanten-Zugang widerrufen ({grund})", user_id)
+        name = "QR-Zugang" if zugang.typ == "qr" else "Gruppenkommandanten-Zugang"
+        _journal(db, lage, einheit, f"{einheit.label}: {name} widerrufen ({grund})", user_id)
 
 
 def widerrufe_alle_fuer_lage(db: Session, lage_id: int, grund: str) -> None:
@@ -436,7 +502,9 @@ def sitzung_anlegen(
     return raw, session
 
 
-def sitzung_pruefen_mit_grund(db: Session, cookie_wert: str) -> tuple[ZugangPrincipal | None, ZugangFehlergrund | None]:
+def sitzung_pruefen_mit_grund(
+    db: Session, cookie_wert: str, typ: str = "personal"
+) -> tuple[ZugangPrincipal | None, ZugangFehlergrund | None]:
     """Prüft eine GK-Sitzung und liefert bei Fehlern einen sicheren Grund.
 
     Bindungsänderungen (einschließlich einer geschlossenen Lage) werden als
@@ -448,7 +516,7 @@ def sitzung_pruefen_mit_grund(db: Session, cookie_wert: str) -> tuple[ZugangPrin
     session = (
         db.query(LageEinheitZugangSession)
         .execution_options(include_all_tenants=True)
-        .filter(LageEinheitZugangSession.session_hash == hash_api_key(cookie_wert))
+        .filter(LageEinheitZugangSession.session_hash == hash_api_key(cookie_wert), LageEinheitZugangSession.typ == typ)
         .first()
     )
     if not session:
@@ -471,18 +539,20 @@ def sitzung_pruefen_mit_grund(db: Session, cookie_wert: str) -> tuple[ZugangPrin
     einheit = db.get(LageEinheit, zugang.einheit_id)
     lage = db.get(MajorIncident, zugang.lage_id)
     leader = db.get(LageEinheitLeader, zugang.leader_id) if zugang.leader_id is not None else None
-    if not einheit or not lage or not leader:
+    if not einheit or not lage or (typ == "personal" and not leader):
         session.revoked_at, session.revoke_grund = now, "ungueltig"
         return None, ZugangFehlergrund.WIDERRUFEN
     invalid_binding = (
-        session.generation != zugang.generation
+        session.typ != typ
+        or zugang.typ != typ
+        or session.generation != zugang.generation
         or zugang.status != "aktiv"
         or not zugang.token_hash
-        or einheit.leader_assignment_id != zugang.leader_id
-        or leader.end_at is not None
-        or leader.phone_e164 != zugang.phone_e164
-        or leader.phone_version != zugang.phone_version
-        or not org_einstellungen(db, zugang.org_id).gk_zugang_aktiv
+        or (typ == "personal" and (einheit.leader_assignment_id != zugang.leader_id or leader is None
+            or leader.end_at is not None or leader.phone_e164 != zugang.phone_e164
+            or leader.phone_version != zugang.phone_version))
+        or (typ == "personal" and not org_einstellungen(db, zugang.org_id).gk_zugang_aktiv)
+        or (typ == "qr" and not org_einstellungen(db, zugang.org_id).gk_qr_aktiv)
         or lage.org_id != zugang.org_id
     )
     if invalid_binding:
@@ -499,12 +569,12 @@ def sitzung_pruefen_mit_grund(db: Session, cookie_wert: str) -> tuple[ZugangPrin
     if not zugang.letzte_aktivitaet_at or zugang.letzte_aktivitaet_at <= now - timedelta(minutes=1):
         zugang.letzte_aktivitaet_at = now
         session.last_seen_at = now
-    return ZugangPrincipal(zugang, session, einheit, lage, leader, zugang.org_id), None
+    return ZugangPrincipal(zugang, session, einheit, lage, leader, zugang.org_id, typ=typ), None
 
 
-def sitzung_pruefen(db: Session, cookie_wert: str) -> ZugangPrincipal | None:
+def sitzung_pruefen(db: Session, cookie_wert: str, typ: str = "personal") -> ZugangPrincipal | None:
     """Prüft eine GK-Sitzung und liefert nur den Principal für bestehende Aufrufer."""
-    principal, _ = sitzung_pruefen_mit_grund(db, cookie_wert)
+    principal, _ = sitzung_pruefen_mit_grund(db, cookie_wert, typ)
     return principal
 
 
@@ -1031,6 +1101,20 @@ def zugang_status(db: Session, einheit: LageEinheit) -> dict:
             k: getattr(v, k) for k in ("kanal", "status", "fehler", "zeichen", "segmente", "created_at", "ausloeser")
         }
 
+    qr = db.query(LageEinheitZugang).filter(
+        LageEinheitZugang.einheit_id == einheit.id, LageEinheitZugang.typ == "qr"
+    ).first()
+    qr_cfg = bool(lage and org_einstellungen(db, lage.org_id).gk_qr_aktiv)
+    if not qr_cfg:
+        qr_state = "deaktiviert"
+    elif not qr:
+        qr_state = "kein_zugang"
+    elif qr.status == "widerrufen":
+        qr_state = "widerrufen"
+    elif not qr.laeuft_ab_at or qr.laeuft_ab_at <= _now():
+        qr_state = "abgelaufen"
+    else:
+        qr_state = "aktiv"
     return {
         "zustand": state,
         "laeuft_ab_at": zugang.laeuft_ab_at if zugang else None,
@@ -1047,4 +1131,8 @@ def zugang_status(db: Session, einheit: LageEinheit) -> dict:
         "sitzung_aktiv": bool(zugang and zugang.token_hash and _aktuelle_sitzung(db, zugang)),
         "nummer_anzeige": telefon_anzeige(leader.phone_e164) if leader and leader.phone_e164 else None,
         "nummer_maske": telefon_maske(leader.phone_e164) if leader and leader.phone_e164 else None,
+        "qr": {"status": qr_state, "laeuft_ab_at": qr.laeuft_ab_at if qr else None,
+               "generation": qr.generation if qr else None, "pin_pflicht": bool(qr and qr.pin_pflicht),
+               "sitzung_aktiv": bool(qr and qr.token_hash and _aktuelle_sitzung(db, qr)),
+               "qr_druck_at": qr.qr_druck_at if qr else None},
     }

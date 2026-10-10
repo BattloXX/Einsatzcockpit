@@ -95,13 +95,14 @@ def _optionaler_kontext(request: Request, db: Session) -> EinheitKontext | None:
         return kontext_fuer_geraet(db, user, token) if token else None
     if user is not None and (request.headers.get("X-EC-Einheit-Sim") or request.query_params.get("sim")):
         return _simulationskontext(request, db)
-    cookie = request.cookies.get(gk_zugang_service.COOKIE)
-    if not cookie:
-        return None
-    principal, _ = gk_zugang_service.sitzung_pruefen_mit_grund(db, cookie)
-    if principal:
-        db.commit()
-        return kontext_fuer_zugang(db, principal)
+    for typ, cookie_name in (("personal", gk_zugang_service.COOKIE), ("qr", gk_zugang_service.QR_COOKIE)):
+        cookie = request.cookies.get(cookie_name)
+        if not cookie:
+            continue
+        principal, _ = gk_zugang_service.sitzung_pruefen_mit_grund(db, cookie, typ)
+        if principal:
+            db.commit()
+            return kontext_fuer_zugang(db, principal)
     db.rollback()
     return None
 
@@ -202,9 +203,10 @@ def einheit_kontext(request: Request, db: Session = Depends(get_db)) -> EinheitK
             db.commit()
         return ctx
     if user is None:
-        cookie = request.cookies.get(gk_zugang_service.COOKIE)
+        cookie = request.cookies.get(gk_zugang_service.COOKIE) or request.cookies.get(gk_zugang_service.QR_COOKIE)
+        typ = "personal" if request.cookies.get(gk_zugang_service.COOKIE) else "qr"
         if cookie:
-            principal, grund = gk_zugang_service.sitzung_pruefen_mit_grund(db, cookie)
+            principal, grund = gk_zugang_service.sitzung_pruefen_mit_grund(db, cookie, typ)
             if principal:
                 # Only the validator's activity timestamp is committed here;
                 # no endpoint mutation has run at this point.
@@ -235,9 +237,10 @@ def einheit_kontext(request: Request, db: Session = Depends(get_db)) -> EinheitK
             _fehler(403, "kein_einheitenkontext")
         return ctx
 
-    cookie = request.cookies.get(gk_zugang_service.COOKIE)
+    cookie = request.cookies.get(gk_zugang_service.COOKIE) or request.cookies.get(gk_zugang_service.QR_COOKIE)
+    typ = "personal" if request.cookies.get(gk_zugang_service.COOKIE) else "qr"
     if cookie:
-        principal, grund = gk_zugang_service.sitzung_pruefen_mit_grund(db, cookie)
+        principal, grund = gk_zugang_service.sitzung_pruefen_mit_grund(db, cookie, typ)
         if principal:
             db.commit()
             return kontext_fuer_zugang(db, principal)
@@ -261,6 +264,8 @@ def einheit_darf(aktion: str, ctx: EinheitKontext, db: Session) -> None:
     if ctx.quelle != "zugang":
         return
     if aktion not in ZUGANG_AKTIONEN:
+        _fehler(403, "zugang_aktion_nicht_erlaubt")
+    if ctx.zugang and ctx.zugang.typ == "qr" and aktion.startswith("ressource_"):
         _fehler(403, "zugang_aktion_nicht_erlaubt")
     if aktion.startswith("ressource_") and not gk_zugang_service.org_einstellungen(db, ctx.org_id).gk_zugang_ressource_pflegen:
         _fehler(403, "zugang_aktion_nicht_erlaubt")

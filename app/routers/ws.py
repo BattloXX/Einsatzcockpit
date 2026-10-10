@@ -26,7 +26,7 @@ from app.models.user import SmsGatewayToken, User
 from app.services import ws_bus
 from app.services.broadcast import EINHEIT_WS_OFFSET, LAGE_WS_OFFSET, ORG_WS_OFFSET, broadcast_org, manager
 from app.services.gk_zugang_service import COOKIE as GK_COOKIE
-from app.services.gk_zugang_service import sitzung_pruefen_mit_grund
+from app.services.gk_zugang_service import QR_COOKIE, sitzung_pruefen_mit_grund
 from app.services.sms_inbox_service import process_inbound_sms, record_inbound_sms
 
 logger = logging.getLogger("einsatzleiter.ws")
@@ -253,13 +253,14 @@ async def lage_ws(websocket: WebSocket, lage_id: int):
 
 def _resolve_gk_principal(websocket: WebSocket):
     """Prüft das GK-Cookie mit einer eigenen, tenantfreien DB-Session."""
-    cookie = websocket.cookies.get(GK_COOKIE)
+    cookie = websocket.cookies.get(GK_COOKIE) or websocket.cookies.get(QR_COOKIE)
     if not cookie:
         return None
+    typ = "personal" if websocket.cookies.get(GK_COOKIE) else "qr"
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
-        principal, _grund = sitzung_pruefen_mit_grund(db, cookie)
+        principal, _grund = sitzung_pruefen_mit_grund(db, cookie, typ)
         return principal
     finally:
         db.close()

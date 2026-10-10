@@ -156,6 +156,8 @@ class EinheitKontext:
 
     @property
     def akteur_name(self) -> str | None:
+        if self.quelle == "zugang" and self.zugang and self.zugang.typ == "qr":
+            return f"QR-Zugang {self.einheit.label}"
         if self.quelle == "zugang" and self.leader:
             return f"{self.leader.display_name} (GK {self.einheit.label})"
         return None

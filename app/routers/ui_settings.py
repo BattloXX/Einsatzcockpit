@@ -21,10 +21,11 @@ from app.core.permissions import (
 from app.core.templating import templates
 from app.core.timezones import common_timezones
 from app.db import get_db
+from app.models.major_incident import LageEinheitZugang
 from app.models.master import BOS_VALUES, FireDept, OrgSettings, SeedTemplate, SystemSettings
 from app.models.user import User
 from app.models.wordpress_report import WordPressReportConfig
-from app.services.gk_zugang_service import STANDARDNACHRICHT, nachricht_validieren, widerrufe_alle_fuer_org
+from app.services.gk_zugang_service import STANDARDNACHRICHT, nachricht_validieren, widerrufe, widerrufe_alle_fuer_org
 from app.services.seed_service import apply_seed_profile, copy_default_prompts, list_profiles
 from app.services.sms_service import sms_available
 from app.services.update_service import (
@@ -2730,8 +2731,12 @@ async def gsl_einstellungen_save(
         "gk_zugang_max_sitzungen": gk_max_sitzungen,
         "gk_zugang_sms_pin": _bool("gk_zugang_sms_pin"),
         "gk_zugang_ressource_pflegen": _bool("gk_zugang_ressource_pflegen"),
+        "gk_qr_aktiv": _bool("gk_qr_aktiv"),
+        "gk_qr_gueltigkeit_stunden": _int_or_none("gk_qr_gueltigkeit_stunden") or 72,
+        "gk_qr_pin": _bool("gk_qr_pin"),
     }
     gk_war_aktiv = bool(org_settings.gk_zugang_aktiv)
+    qr_war_aktiv = bool(org_settings.gk_qr_aktiv)
     for key, value in gk_neu.items():
         if getattr(org_settings, key) != value:
             gk_aenderungen.append(key)
@@ -2769,7 +2774,17 @@ async def gsl_einstellungen_save(
     org_settings.mi_auto_adopt = _bool("mi_auto_adopt")
 
     if gk_war_aktiv and not org_settings.gk_zugang_aktiv:
-        widerrufe_alle_fuer_org(db, org_id, grund="deaktiviert")
+        rows = db.query(LageEinheitZugang).filter(
+            LageEinheitZugang.org_id == org_id, LageEinheitZugang.typ == "personal"
+        ).all()
+        for row in rows:
+            widerrufe(db, row.einheit_id, grund="deaktiviert", typ="personal")
+    if qr_war_aktiv and not org_settings.gk_qr_aktiv:
+        rows = db.query(LageEinheitZugang).filter(
+            LageEinheitZugang.org_id == org_id, LageEinheitZugang.typ == "qr"
+        ).all()
+        for row in rows:
+            widerrufe(db, row.einheit_id, grund="deaktiviert", typ="qr")
     if gk_aenderungen:
         write_audit(
             db,
