@@ -6,7 +6,7 @@ from uuid import uuid4
 from app.core.security import hash_password
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
-from app.models.major_incident import LageEinheit, LageEinheitLeader, Sector, MajorIncident
+from app.models.major_incident import LageEinheit, LageEinheitLeader, MajorIncident, Sector
 from app.models.master import FireDept, Member
 from app.models.user import Role, User, UserRole
 
