@@ -1,7 +1,7 @@
 import { createOutbox } from "/static/js/einheit_outbox.js";
 
 const STATUS = {
-  zugewiesen: ["bestaetigt", "Auftrag bestätigen"],
+  zugewiesen: ["bestaetigt", "Auftrag erhalten"],
   bestaetigt: ["anfahrt", "Anfahrt"],
   anfahrt: ["vor_ort", "Vor Ort"],
   vor_ort: ["in_arbeit", "In Arbeit"],
@@ -460,6 +460,17 @@ function registriere() {
       await this.outboxAktualisieren();
     },
     async erneut(id) { await this.outbox.erneutSenden(id); },
+    // Nicht übermittelte Meldung als Text kopieren, damit nichts verloren geht (z. B. für Funk/Messenger).
+    async kopieren(item) {
+      const text = [item.typ, "Auftrag " + item.dispatch_id, this.zeit(item.erfasst_at), item.payload?.text || ""]
+        .filter(Boolean).join(" · ");
+      try {
+        await navigator.clipboard.writeText(text);
+        this.hinweisBanner = "Text kopiert.";
+      } catch {
+        window.prompt("Text markieren und kopieren:", text);
+      }
+    },
     verwerfen(id) {
       this.konfliktEintrag = this.outboxListe.find((item) => item.client_uuid === id) || null;
       this.flyout = "verwerfen_bestaetigen";
@@ -488,7 +499,7 @@ function registriere() {
       this.swCacheLeeren();
       const name = this.outbox ? this.outboxName() : null;
       if (name) indexedDB.deleteDatabase(name);
-      if ((window.EINHEIT_PRINCIPAL || "").startsWith("gk:")) {
+      if (/^(gk|qr):/.test(window.EINHEIT_PRINCIPAL || "")) {
         await fetch("/gk/abmelden", {
           method: "POST",
           headers: { "X-CSRF-Token": decodeURIComponent(cookie("ec_csrf")) },
@@ -502,6 +513,7 @@ function registriere() {
     outboxName() {
       if (this.simulation) return `ec-einheit-sim-${this.simEinheitId}`;
       if ((window.EINHEIT_PRINCIPAL || "").startsWith("gk:")) return `ec-einheit-gk-${this.einheitId}`;
+      if ((window.EINHEIT_PRINCIPAL || "").startsWith("qr:")) return `ec-einheit-qr-${this.einheitId}`;
       return "ec-einheit";
     },
 

@@ -9,7 +9,7 @@
 <script type="module" src="/static/js/einheit_modus.js?v={{ ASSET_VERSION }}"></script>
 <script>
   window.EINHEIT_WS_PATH = {{ ('/ws/einheit-zugang' if gk_zugang else '/ws/lage/' ~ lage_id)|tojson }};
-  window.EINHEIT_PRINCIPAL = {{ ('gk:' ~ einheit_id if gk_zugang else '')|tojson }};
+  window.EINHEIT_PRINCIPAL = {{ ((('qr:' if zugang_qr else 'gk:') ~ einheit_id) if gk_zugang else '')|tojson }};
 </script>
 {% endblock %}
 
@@ -477,7 +477,7 @@
         <button type="button" class="person-flyout__close" @click="outboxOffen = false">&times;</button>
       </header>
       <div class="einheit-flyout-body">
-        <button type="button" class="btn btn--primary einheit-action" :disabled="zugangBeendet" @click="flush()">Jetzt senden</button>
+        <button type="button" class="btn btn--primary einheit-action" :disabled="zugangBeendet" @click="flush()">Jetzt synchronisieren</button>
         <p class="einheit-sub" x-show="!outboxListe.length">Alle Einträge wurden übermittelt.</p>
         <template x-for="item in outboxListe" :key="item.client_uuid">
           <article class="fab-subcard">
@@ -488,6 +488,8 @@
             <div class="einheit-actions-row">
               <button type="button" class="btn btn--ghost" x-show="item.status !== 'ausstehend' && item.status !== 'blockiert_zugang'"
                       @click="erneut(item.client_uuid)">Erneut senden</button>
+              <button type="button" class="btn btn--ghost" x-show="['konflikt', 'fehler', 'blockiert_zugang'].includes(item.status)"
+                      @click="kopieren(item)">Kopieren</button>
               <button type="button" class="btn btn--ghost" @click="verwerfen(item.client_uuid)">Verwerfen</button>
             </div>
           </article>
