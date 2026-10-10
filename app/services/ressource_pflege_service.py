@@ -21,6 +21,8 @@ from app.models.major_incident import (
     AUSSTATTUNG_STATUS,
     GSL_AUSSTATTUNG_KATALOG,
     PERSON_FUNKTIONEN,
+    EinheitSiteDispatch,
+    IncidentSite,
     LageEinheit,
     LageEinheitAusstattung,
     LageEinheitPerson,
@@ -28,7 +30,7 @@ from app.models.major_incident import (
 )
 from app.models.master import Member
 from app.models.verleih import VerleihArtikel
-from app.services.resource_service import _journal
+from app.services.resource_service import _journal, dispatch_aktiv_filter
 
 
 def _now() -> datetime:
@@ -545,13 +547,15 @@ def _umbuchen(
 
 def kraefte_summen(db: Session, lage: MajorIncident) -> dict[str, int]:
     """Summiert nur eigenständige Einheiten; Verbände beziehen ihre Stärke aus Kindern."""
+    db.flush()
     einheiten = db.query(LageEinheit).filter(LageEinheit.lage_id == lage.id).all()
-    # Verbände speichern keine eigene Mannschaft: ihre Kinder sind die Quelle.
-    # Damit zählt ein Kind global genau einmal, unabhängig davon, ob es einem
-    # Verband zugeordnet ist.
-    zaehlende = [e for e in einheiten if e.resource_type != "verband"]
+    # Ein Verband zählt an Stelle seiner Kinder; freie Einheiten zählen selbst.
+    zaehlende = [e for e in einheiten if e.resource_type == "verband" or e.verband_id is None]
     return {
-        feld: sum(getattr(e, f"staerke_{feld}") or 0 for e in zaehlende)
+        feld: sum(
+            verband_summen(db, e)[feld] if e.resource_type == "verband" else getattr(e, f"staerke_{feld}") or 0
+            for e in zaehlende
+        )
         for feld in ("gesamt", "fuehrung", "agt", "sanitaeter")
     }
 
@@ -963,3 +967,305 @@ def ausstattung_warnungen(db: Session, einheit: LageEinheit) -> int:
         )
         .count()
     )
+
+
+# ── Verbände und Aufteilungen ────────────────────────────────────────────────
+
+
+def verband_kinder(db: Session, verband: LageEinheit) -> list[LageEinheit]:
+    """Liefert die unmittelbaren, stabil sortierten Mitglieder eines Verbands."""
+    return (
+        db.query(LageEinheit)
+        .filter(LageEinheit.verband_id == verband.id)
+        .order_by(LageEinheit.id)
+        .all()
+    )
+
+
+def ist_kind(einheit: LageEinheit) -> bool:
+    return einheit.verband_id is not None
+
+
+def _pflege_audit(db: Session, lage: MajorIncident, einheit: LageEinheit, aktion: str, user_id: int | None) -> None:
+    write_audit(
+        db,
+        f"gsl.ressource.{aktion}",
+        org_id=lage.org_id,
+        user_id=user_id,
+        entity_type="lage_einheit",
+        entity_id=einheit.id,
+        payload={"lage_id": lage.id, "einheit_id": einheit.id},
+    )
+
+
+def _pflege_journal(
+    db: Session,
+    lage: MajorIncident,
+    einheit: LageEinheit,
+    text: str,
+    *,
+    ereignis_typ: str,
+    user_id: int | None,
+    author_name: str | None,
+) -> None:
+    _journal(
+        db,
+        lage.id,
+        text,
+        author_name=author_name,
+        user_id=user_id,
+        einheit_id=einheit.id,
+        ereignis_typ=ereignis_typ,
+        quelle="manuell",
+    )
+
+
+def _verband_pruefen(einheit: LageEinheit) -> None:
+    if einheit.resource_type == "verband":
+        raise ValueError("Verbände können nicht aufgeteilt werden")
+    if ist_kind(einheit):
+        raise ValueError("Einheit ist Teil eines Verbands")
+
+
+def verband_bilden(
+    db: Session,
+    lage: MajorIncident,
+    *,
+    label: str,
+    einheit_ids: list[int],
+    user_id: int | None,
+    author_name: str | None,
+) -> LageEinheit:
+    """Fasst selbständige Einheiten zusammen, ohne ihre Aufträge umzuhängen."""
+    if not label or not label.strip() or len(label.strip()) > 120:
+        raise ValueError("Bezeichnung ist erforderlich und darf höchstens 120 Zeichen haben")
+    if len(set(einheit_ids)) < 2:
+        raise ValueError("Ein Verband benötigt mindestens zwei Einheiten")
+    with db.begin_nested():
+        kinder = (
+            db.query(LageEinheit)
+            .filter(LageEinheit.id.in_(set(einheit_ids)))
+            .order_by(LageEinheit.id)
+            .with_for_update()
+            .all()
+        )
+        if len(kinder) != len(set(einheit_ids)):
+            raise ValueError("Einheit nicht gefunden")
+        for kind in kinder:
+            _check_einheit(lage, kind)
+            if kind.status == "abgerueckt":
+                raise ValueError(f"Einheit {kind.label} ist abgerückt")
+            if kind.resource_type == "verband":
+                raise ValueError(f"Einheit {kind.label} ist selbst ein Verband")
+            if kind.verband_id is not None:
+                raise ValueError(f"Einheit {kind.label} ist bereits Teil eines Verbands")
+        aktive = (
+            db.query(EinheitSiteDispatch, LageEinheit.label, IncidentSite.bezeichnung)
+            .join(LageEinheit, LageEinheit.id == EinheitSiteDispatch.einheit_id)
+            .join(IncidentSite, IncidentSite.id == EinheitSiteDispatch.site_id)
+            .filter(EinheitSiteDispatch.einheit_id.in_([k.id for k in kinder]), dispatch_aktiv_filter())
+            .all()
+        )
+        stellen = {dispatch.site_id for dispatch, _, _ in aktive}
+        if len(stellen) > 1:
+            details = ", ".join(f"{name} -> {stelle}" for dispatch, name, stelle in aktive)
+            raise ValueError(f"Aktive Dispositionen müssen dieselbe Stelle haben: {details}")
+        sektor_ids = {kind.sector_id for kind in kinder}
+        verband = LageEinheit(
+            lage_id=lage.id,
+            label=label.strip(),
+            resource_type="verband",
+            status="im_einsatz" if any(k.status == "im_einsatz" for k in kinder) else "bereitgestellt",
+            sector_id=kinder[0].sector_id if len(sektor_ids) == 1 else None,
+            vehicle_id=None,
+            is_from_org=False,
+            personal_modus="summe",
+        )
+        db.add(verband)
+        db.flush()
+        for kind in kinder:
+            kind.verband_id = verband.id
+            _pflege_journal(
+                db, lage, kind, f"Teil von Verband {verband.label}", ereignis_typ="status", user_id=user_id, author_name=author_name
+            )
+        _pflege_journal(
+            db,
+            lage,
+            verband,
+            f"Verband {verband.label} gebildet aus {', '.join(k.label for k in kinder)}",
+            ereignis_typ="status",
+            user_id=user_id,
+            author_name=author_name,
+        )
+        _pflege_audit(db, lage, verband, "zusammenfassen", user_id)
+    return verband
+
+
+def verband_aufloesen(
+    db: Session, lage: MajorIncident, verband: LageEinheit, *, user_id: int | None, author_name: str | None
+) -> None:
+    _check_einheit(lage, verband)
+    if verband.resource_type != "verband":
+        raise ValueError("Einheit ist kein Verband")
+    with db.begin_nested():
+        db.query(LageEinheit).filter(LageEinheit.id == verband.id).with_for_update().one()
+        kinder = verband_kinder(db, verband)
+        for kind in kinder:
+            kind.verband_id = None
+            _pflege_journal(
+                db, lage, kind, f"Verband {verband.label} aufgelöst", ereignis_typ="status", user_id=user_id, author_name=author_name
+            )
+        verband.status, verband.released_at = "abgerueckt", _now()
+        aktiv = db.query(EinheitSiteDispatch.id).filter(EinheitSiteDispatch.einheit_id == verband.id, dispatch_aktiv_filter()).first()
+        hinweis = "; aktive Dispositionen bleiben unverändert" if aktiv else ""
+        _pflege_journal(
+            db, lage, verband, f"Verband {verband.label} aufgelöst{hinweis}", ereignis_typ="status", user_id=user_id, author_name=author_name
+        )
+        from app.services.gk_zugang_service import widerrufe
+
+        widerrufe(db, verband.id, grund="abgerueckt", user_id=user_id)
+        _pflege_audit(db, lage, verband, "verband_aufloesen", user_id)
+
+
+def verband_summen(db: Session, verband: LageEinheit) -> dict[str, Any]:
+    if verband.resource_type != "verband":
+        raise ValueError("Einheit ist kein Verband")
+    kinder = verband_kinder(db, verband)
+    summen: dict[str, Any] = {feld: 0 for feld in ("gesamt", "fuehrung", "agt", "sanitaeter")}
+    for kind in kinder:
+        if kind.personal_modus == "summe":
+            zahlen = _zahlen(kind)
+        else:
+            personen = _aktive_personen(db, kind)
+            zahlen = {
+                "gesamt": len(personen),
+                "fuehrung": sum(person.funktion == "fuehrung" for person in personen),
+                "agt": sum(
+                    person.funktion == "agt"
+                    or "AGT" in {x.strip().upper() for x in (person.qualifikationen or "").split(",")}
+                    for person in personen
+                ),
+                "sanitaeter": sum(
+                    person.funktion == "sanitaeter"
+                    or "SAN" in {x.strip().upper() for x in (person.qualifikationen or "").split(",")}
+                    for person in personen
+                ),
+            }
+        for feld in summen:
+            summen[feld] += zahlen[feld]
+    ausstattung: dict[tuple[str, str, str], int] = {}
+    if kinder:
+        for zeile in db.query(LageEinheitAusstattung).filter(LageEinheitAusstattung.einheit_id.in_([k.id for k in kinder])):
+            schluessel = (zeile.kategorie, zeile.bezeichnung, zeile.status)
+            ausstattung[schluessel] = ausstattung.get(schluessel, 0) + zeile.menge
+    summen["ausstattung"] = [
+        {"kategorie": kategorie, "bezeichnung": bezeichnung, "status": status, "menge": menge}
+        for (kategorie, bezeichnung, status), menge in sorted(ausstattung.items())
+    ]
+    return summen
+
+
+def einheit_aufteilen(
+    db: Session,
+    lage: MajorIncident,
+    einheit: LageEinheit,
+    teile: list[dict[str, Any]],
+    *,
+    user_id: int | None,
+    author_name: str | None,
+) -> list[LageEinheit]:
+    """Spaltet Personal und Ausstattung transaktional in neue, selbständige Einheiten auf."""
+    _check_einheit(lage, einheit)
+    _verband_pruefen(einheit)
+    if not teile:
+        raise ValueError("Mindestens ein Teil ist erforderlich")
+    with db.begin_nested():
+        mutter = db.query(LageEinheit).filter(LageEinheit.id == einheit.id).with_for_update().one()
+        _verband_pruefen(mutter)
+        neu: list[LageEinheit] = []
+        for teil in teile:
+            label = teil.get("label")
+            typ = teil.get("resource_type", mutter.resource_type)
+            if not isinstance(label, str) or not label.strip() or len(label.strip()) > 120:
+                raise ValueError("Bezeichnung jedes Teils ist erforderlich")
+            if typ not in {"fahrzeug", "extern", "material"}:
+                raise ValueError("Ungültiger Ressourcentyp für Teil")
+            ziel = LageEinheit(
+                lage_id=lage.id, label=label.strip(), resource_type=typ, vehicle_id=None,
+                aufgeteilt_von_id=mutter.id, org_name=mutter.org_name, bos=mutter.bos,
+                sector_id=mutter.sector_id, status="bereitgestellt", is_from_org=False,
+                personal_modus=mutter.personal_modus,
+            )
+            db.add(ziel)
+            neu.append(ziel)
+        db.flush()
+        if mutter.personal_modus == "summe":
+            mengen = [_zahl(teil.get("anzahl"), "Anzahl") for teil in teile]
+            if sum(mengen) > (mutter.staerke_gesamt or 0):
+                raise ValueError("Nicht genügend Personal für Aufteilung")
+            mutter.staerke_gesamt = (mutter.staerke_gesamt or 0) - sum(mengen)
+            for ziel, menge in zip(neu, mengen, strict=True):
+                ziel.staerke_gesamt = menge
+        else:
+            ids = [person_id for teil in teile for person_id in teil.get("person_ids", [])]
+            if len(ids) != len(set(ids)):
+                raise ValueError("Person darf nur einem Teil zugeordnet werden")
+            personen = (
+                db.query(LageEinheitPerson).filter(
+                    LageEinheitPerson.id.in_(ids), LageEinheitPerson.einheit_id == mutter.id,
+                    LageEinheitPerson.lage_id == lage.id, LageEinheitPerson.bis_at.is_(None)
+                ).with_for_update().all()
+            )
+            if len(personen) != len(ids):
+                raise ValueError("Person gehört nicht zur Quelleinheit")
+            by_id = {person.id: person for person in personen}
+            umbuchung_id = str(uuid4())
+            for ziel, teil in zip(neu, teile, strict=True):
+                for person_id in teil.get("person_ids", []):
+                    person = by_id[person_id]
+                    person.bis_at, person.aktiv_key = _now(), None
+                    _person_anlegen(db, lage, ziel, member_id=person.member_id, name=person.name, funktion=person.funktion,
+                                    qualifikationen=person.qualifikationen, herkunft="umbuchung", user_id=user_id, umbuchung_id=umbuchung_id)
+            _neu_berechnen(db, mutter)
+            for ziel in neu:
+                _neu_berechnen(db, ziel)
+        umbuchung_id = str(uuid4())
+        ausstattung_verschoben = False
+        for ziel, teil in zip(neu, teile, strict=True):
+            for pos in teil.get("ausstattung", []):
+                zeile_id, menge = pos.get("zeile_id"), _ausstattung_menge(pos.get("menge"))
+                quelle = db.query(LageEinheitAusstattung).filter_by(id=zeile_id, lage_id=lage.id, einheit_id=mutter.id).with_for_update().first()
+                if not quelle or menge <= 0 or menge > quelle.menge:
+                    raise ValueError("Nicht genügend Ausstattung für Aufteilung")
+                zielzeile = LageEinheitAusstattung(org_id=lage.org_id, lage_id=lage.id, einheit_id=ziel.id,
+                    kategorie=quelle.kategorie, bezeichnung=quelle.bezeichnung, ist_faehigkeit=quelle.ist_faehigkeit,
+                    menge=menge, status=quelle.status, bemerkung=quelle.bemerkung, stamm_ref_typ=quelle.stamm_ref_typ,
+                    stamm_ref_id=quelle.stamm_ref_id, umbuchung_id=umbuchung_id, created_by=user_id)
+                db.add(zielzeile)
+                ausstattung_verschoben = True
+                if menge == quelle.menge:
+                    db.delete(quelle)
+                else:
+                    quelle.menge -= menge
+                    quelle.umbuchung_id = umbuchung_id
+            for dispatch_id in teil.get("dispatches_kopieren", []):
+                dispatch = db.get(EinheitSiteDispatch, dispatch_id)
+                if not dispatch or dispatch.einheit_id != mutter.id or dispatch.withdrawn_at or dispatch.beendet_at:
+                    raise ValueError("Disposition gehört nicht zur Muttereinheit oder ist nicht aktiv")
+                from app.services.resource_service import dispatch_to_site
+
+                dispatch_to_site(db, ziel.id, lage.id, dispatch.site_id, auftrag=dispatch.auftrag,
+                                 reihenfolge=dispatch.reihenfolge, author_name=author_name, user_id=user_id)
+        _pflege_journal(db, lage, mutter, f"Aufteilung aus {mutter.label}: {', '.join(z.label for z in neu)}",
+                        ereignis_typ="personal", user_id=user_id, author_name=author_name)
+        for ziel in neu:
+            _pflege_journal(db, lage, ziel, f"Teil {ziel.label} abgespalten aus {mutter.label}",
+                            ereignis_typ="personal", user_id=user_id, author_name=author_name)
+        if ausstattung_verschoben:
+            _pflege_journal(db, lage, mutter, f"Ausstattung für Aufteilung aus {mutter.label} verschoben",
+                            ereignis_typ="ausstattung", user_id=user_id, author_name=author_name)
+            for ziel in neu:
+                _pflege_journal(db, lage, ziel, f"Ausstattung aus {mutter.label} übernommen",
+                                ereignis_typ="ausstattung", user_id=user_id, author_name=author_name)
+        _pflege_audit(db, lage, mutter, "aufteilen", user_id)
+    return neu

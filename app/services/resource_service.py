@@ -369,6 +369,10 @@ def dispatch_to_site(
     Fehler wenn bereits aktiv disponiert (weder abgezogen noch beendet).
     """
     e = _get_einheit(db, einheit_id, lage_id)
+    if e.verband_id is not None:
+        verband = db.get(LageEinheit, e.verband_id)
+        label = verband.label if verband else str(e.verband_id)
+        raise ValueError(f"Einheit gehoert zu Verband {label}; bitte den Verband disponieren")
     site = db.get(IncidentSite, site_id)
     if not site or site.major_incident_id != lage_id:
         raise ValueError("Einsatzstelle nicht gefunden")
