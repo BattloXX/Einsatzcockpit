@@ -108,6 +108,9 @@ _TENANT_TABLE_NAMES: frozenset[str] = frozenset({
     "sms_inbox",
     "api_message",
     "api_message_recipient",
+    "lage_einheit_zugang",
+    "lage_einheit_zugang_session",
+    "lage_einheit_zugang_versand",
     # Straßensperren und Anfahrtsrouting (TenantScoped via Mixin)
     "road_closure",
     "road_closure_change",

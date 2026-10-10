@@ -25,6 +25,7 @@ BOS_VALUES = ["Feuerwehr", "Rotes Kreuz", "Polizei", "Bauhof", "Privat"]
 
 class FireDept(Base):
     """Organisation / Feuerwehr. Dient gleichzeitig als vollständige multi-org Entität."""
+
     __tablename__ = "fire_dept"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
@@ -73,9 +74,7 @@ class AIRequestLog(Base):
     org_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("fire_dept.id", ondelete="SET NULL"), nullable=True, index=True
     )
-    user_id: Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
-    )
+    user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
     feature: Mapped[str] = mapped_column(String(50), nullable=False)
     model: Mapped[str] = mapped_column(String(100), nullable=False)
     input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -200,7 +199,9 @@ class Member(TenantScoped, Base):
 
     org: Mapped[FireDept | None] = relationship(back_populates="members", foreign_keys="Member.org_id")
     qualifications: Mapped[list[MemberQualification]] = relationship(
-        back_populates="member", lazy="joined", passive_deletes=True,
+        back_populates="member",
+        lazy="joined",
+        passive_deletes=True,
     )
 
     @property
@@ -325,9 +326,7 @@ class LageHint(TenantScoped, Base):
     text: Mapped[str] = mapped_column(String(500), nullable=False)
     display_order: Mapped[int] = mapped_column(Integer, default=0)
 
-    alarm_assignments: Mapped[list[LageHintAlarm]] = relationship(
-        back_populates="hint", cascade="all, delete-orphan"
-    )
+    alarm_assignments: Mapped[list[LageHintAlarm]] = relationship(back_populates="hint", cascade="all, delete-orphan")
 
 
 class LageHintAlarm(Base):
@@ -377,6 +376,7 @@ class DefaultMessageAlarm(Base):
 
 class OrgSettings(Base):
     """Organisations-spezifische Einstellungen (Logo, Farbe, KI-Modus, Quota etc.)."""
+
     __tablename__ = "org_settings"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -388,6 +388,16 @@ class OrgSettings(Base):
     footer_text: Mapped[str | None] = mapped_column(String(500), nullable=True)
     mi_auto_adopt: Mapped[bool] = mapped_column(Boolean, default=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+    # Gruppenkommandanten-Zugang (GSL)
+    gk_zugang_aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    gk_zugang_auto_sms: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    gk_zugang_nachricht: Mapped[str | None] = mapped_column(Text, nullable=True)
+    gk_zugang_gueltigkeit_stunden: Mapped[int] = mapped_column(Integer, nullable=False, default=48)
+    gk_sitzung_stunden: Mapped[int] = mapped_column(Integer, nullable=False, default=12)
+    gk_zugang_max_sitzungen: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
+    gk_zugang_sms_pin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    gk_zugang_ressource_pflegen: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     # KI-Konfiguration je Org
     # 'central' = Plattform-Key aus Server-Env; 'byok' = org-eigener Anthropic-Key
@@ -419,11 +429,11 @@ class OrgSettings(Base):
 
     # GSL-Lagemeldungs-Regelkreis (SKKM): Intervall der Lagemeldungs-Pflicht je Einsatz.
     # NULL beim Default-Intervall ⇒ gesamte Logik deaktiviert (kein Timer/Auftrag/Chip).
-    gsl_lagemeldung_interval_minutes:        Mapped[int | None] = mapped_column(Integer, nullable=True, default=60)
+    gsl_lagemeldung_interval_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True, default=60)
     # Eigenes (kürzeres) Intervall bei Priorität "Sofort"; NULL ⇒ Default-Intervall verwenden.
     gsl_lagemeldung_interval_sofort_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True, default=30)
     # Automatischen Funkjournal-Auftrag bei Überfälligkeit erstellen
-    gsl_lagemeldung_auto_auftrag:            Mapped[bool]       = mapped_column(Boolean, default=True)
+    gsl_lagemeldung_auto_auftrag: Mapped[bool] = mapped_column(Boolean, default=True)
 
     # UAS-Modul: je Org aktivierbar, aber nur wenn System-Flag (SystemSettings key
     # "uas_module_enabled") ebenfalls "true" ist → effektiv = System AND Org.
@@ -433,9 +443,7 @@ class OrgSettings(Base):
 
     # Atemschutzueberwachung: bestehendes Modul bleibt bei Einfuehrung des
     # Org-Toggles standardmaessig aktiv; effektiv zusaetzlich systemweit gated.
-    atemschutz_ueberwachung_modul_aktiv: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True
-    )
+    atemschutz_ueberwachung_modul_aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     # Objektverwaltung: je Org aktivierbar, effektiv = SystemSettings-Key
     # "objekt_module_enabled" == "true" AND dieser Wert (Muster UAS).
@@ -445,8 +453,7 @@ class OrgSettings(Base):
     kontakte_module_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # Förderstrecken-Planer: je Org aktivierbar, effektiv = SystemSettings-Key
     # "foerderstrecke_module_enabled" == "true" AND dieser Wert (Muster UAS).
-    foerderstrecke_module_enabled: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False)
+    foerderstrecke_module_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     probenplanung_modul_aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # Straßensperren & Anfahrtsrouting: effektiv nur mit System-Flag aktiv.
     strassensperren_modul_aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -464,8 +471,7 @@ class OrgSettings(Base):
     # Nachschlagewerke (Gefahrgut-Suche, Rettungsdatenblaetter, Karten-Overlays):
     # effektiv = SystemSettings-Key "nachschlagewerke_module_enabled" == "true"
     # AND dieser Wert (Muster UAS/Objekt/Gateway).
-    nachschlagewerke_module_enabled: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False)
+    nachschlagewerke_module_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # Geo-Fallback des Alarm-Matchings: max. Distanz Einsatz↔Objekt in Metern
     objekt_geo_match_radius_m: Mapped[int] = mapped_column(Integer, nullable=False, default=75)
     # Alarm-Infoscreen (Wandmonitor): Ruhezustand + Dauer der Alarmansicht
@@ -500,25 +506,25 @@ class OrgSettings(Base):
     dienst_monitor_wiederholung_min: Mapped[int] = mapped_column(Integer, nullable=False, default=60)
     # GSL-Feature-Flags je Org (effektiv = SystemSettings-Globalschalter AND dieser Wert).
     # Default True = Modul aktiv sofern global nicht deaktiviert.
-    mi_feature_stab:           Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    mi_feature_funkjournal:    Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    mi_feature_meldungen:      Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    mi_feature_sektoren:       Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    mi_feature_karte:          Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    mi_feature_zeitreise:      Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    mi_feature_ressourcen:     Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    mi_feature_uebergreifend:  Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    mi_feature_stab: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    mi_feature_funkjournal: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    mi_feature_meldungen: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    mi_feature_sektoren: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    mi_feature_karte: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    mi_feature_zeitreise: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    mi_feature_ressourcen: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    mi_feature_uebergreifend: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     mi_feature_geraeteverleih: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     # Geräteverleih-Konfiguration je Org
-    gsl_verleih_erinnerung_stunden:  Mapped[int | None] = mapped_column(Integer, nullable=True)
-    gsl_verleih_sms_ausleih_text:    Mapped[str | None] = mapped_column(Text, nullable=True)
+    gsl_verleih_erinnerung_stunden: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    gsl_verleih_sms_ausleih_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     gsl_verleih_sms_erinnerung_text: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Großschadenslage-Alarm: einmaliger SMS+Teams-Sonderhinweis bei Ausrufung einer neuen
     # Lage — unabhängig von der stichwortbezogenen Einsatzinfo (siehe gsl_notify.py)
     gsl_alarm_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    gsl_alarm_text:    Mapped[str | None] = mapped_column(Text, nullable=True)
+    gsl_alarm_text: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Pegel-/Abflusskonfiguration: JSON-Array [{hzbnr, name, beschreibung}]
     abfluss_stationen: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -569,27 +575,28 @@ class OrgSettings(Base):
     @property
     def abfluss_stationen_list(self) -> list[dict]:
         import json as _json
+
         if not self.abfluss_stationen:
             return []
         try:
             return _json.loads(self.abfluss_stationen)
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             return []
 
 
 class OrgStorageUsage(Base):
     """Laufende Speicher-Verbrauchszeile pro Organisation."""
+
     __tablename__ = "org_storage_usage"
 
-    org_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("fire_dept.id", ondelete="CASCADE"), primary_key=True
-    )
+    org_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("fire_dept.id", ondelete="CASCADE"), primary_key=True)
     used_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
 
 class SystemSettings(Base):
     """Systemweite Einstellungen als Key-Value-Store."""
+
     __tablename__ = "system_settings"
 
     key: Mapped[str] = mapped_column(String(100), primary_key=True)
@@ -600,6 +607,7 @@ class SystemSettings(Base):
 
 class AIPromptVersion(TenantScoped, Base):
     """Versionsverlauf der bearbeitbaren KI-Prompt-Teile (max. 10 je Prompt-Typ)."""
+
     __tablename__ = "ai_prompt_versions"
     __table_args__ = (UniqueConstraint("org_id", "prompt_key", "version", name="uq_ai_prompt_org_version"),)
 
@@ -617,6 +625,7 @@ class AIPromptVersion(TenantScoped, Base):
 
 class AlarmDispatchVehicle(Base):
     """Ausrückordnung: welche Fahrzeuge bei welchem Alarmtyp ausrücken (inkl. Reihenfolge)."""
+
     __tablename__ = "alarm_dispatch_vehicle"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
@@ -635,6 +644,7 @@ class AlarmDispatchVehicle(Base):
 
 class SeedTemplate(Base):
     """System-Vorlagen je Profil – system_admin pflegt; beim Org-Anlegen werden sie kopiert."""
+
     __tablename__ = "seed_template"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -644,5 +654,6 @@ class SeedTemplate(Base):
     type: Mapped[str] = mapped_column(String(30), nullable=False)
     data: Mapped[str] = mapped_column(Text, nullable=False)  # JSON object
     display_order: Mapped[int] = mapped_column(Integer, default=0)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC),
-                                                  onupdate=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+    )

@@ -24,50 +24,58 @@ from app.db import Base
 
 # ── GSL Stab: SKKM-Besetzungsjournal ──────────────────────────────────────────
 
+
 class GslStaffRole(Base):
     """SKKM-Stabsfunktionskatalog, systemweit + je Org erweiterbar."""
+
     __tablename__ = "gsl_staff_role"
 
-    id:               Mapped[int] = mapped_column(Integer, primary_key=True)
-    code:             Mapped[str] = mapped_column(String(20))
-    name:             Mapped[str] = mapped_column(String(80))
-    sort_order:       Mapped[int] = mapped_column(Integer, default=0)
-    is_required:      Mapped[bool] = mapped_column(Boolean, default=False)
-    allows_multiple:  Mapped[bool] = mapped_column(Boolean, default=False)
-    org_id:           Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    code: Mapped[str] = mapped_column(String(20))
+    name: Mapped[str] = mapped_column(String(80))
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    is_required: Mapped[bool] = mapped_column(Boolean, default=False)
+    allows_multiple: Mapped[bool] = mapped_column(Boolean, default=False)
+    org_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
 
     assignments: Mapped[list[GslStaffAssignment]] = relationship(back_populates="role")
 
 
 class GslStaffAssignment(Base):
     """Wer hat welche SKKM-Funktion von wann bis wann besetzt (inkl. Ablöse-Kette)."""
+
     __tablename__ = "gsl_staff_assignment"
 
-    id:             Mapped[int] = mapped_column(Integer, primary_key=True)
-    incident_id:    Mapped[int] = mapped_column(
-        Integer, ForeignKey("major_incident.id", ondelete="CASCADE"), index=True)
-    role_id:        Mapped[int] = mapped_column(Integer, ForeignKey("gsl_staff_role.id"))
-    org_id:         Mapped[int] = mapped_column(BigInteger, index=True)
-    member_id:      Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("member.id", ondelete="SET NULL"), nullable=True)
-    person_name:    Mapped[str | None] = mapped_column(String(120), nullable=True)
-    is_lead:        Mapped[bool] = mapped_column(Boolean, default=True)
-    start_at:       Mapped[datetime] = mapped_column(DateTime)
-    end_at:         Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    incident_id: Mapped[int] = mapped_column(Integer, ForeignKey("major_incident.id", ondelete="CASCADE"), index=True)
+    role_id: Mapped[int] = mapped_column(Integer, ForeignKey("gsl_staff_role.id"))
+    org_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    member_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("member.id", ondelete="SET NULL"), nullable=True
+    )
+    person_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    is_lead: Mapped[bool] = mapped_column(Boolean, default=True)
+    start_at: Mapped[datetime] = mapped_column(DateTime)
+    end_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     predecessor_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("gsl_staff_assignment.id", ondelete="SET NULL"), nullable=True)
-    sector_id:      Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("site_sector.id", ondelete="SET NULL"), nullable=True)
-    note:           Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_by:     Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
-    created_at:     Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+        Integer, ForeignKey("gsl_staff_assignment.id", ondelete="SET NULL"), nullable=True
+    )
+    sector_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("site_sector.id", ondelete="SET NULL"), nullable=True
+    )
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
-    role:           Mapped[GslStaffRole] = relationship(back_populates="assignments")
-    incident:       Mapped[MajorIncident] = relationship(
-        back_populates="gsl_staff", foreign_keys="GslStaffAssignment.incident_id")
-    predecessor:    Mapped[GslStaffAssignment | None] = relationship(
-        foreign_keys=[predecessor_id], remote_side="GslStaffAssignment.id")
+    role: Mapped[GslStaffRole] = relationship(back_populates="assignments")
+    incident: Mapped[MajorIncident] = relationship(
+        back_populates="gsl_staff", foreign_keys="GslStaffAssignment.incident_id"
+    )
+    predecessor: Mapped[GslStaffAssignment | None] = relationship(
+        foreign_keys=[predecessor_id], remote_side="GslStaffAssignment.id"
+    )
 
     @property
     def display_name(self) -> str:
@@ -81,6 +89,7 @@ class _SitePriorityColType(TypeDecorator):
     Enum type (which would try to store the string name and break MySQL strict
     mode).  Instead we store/read raw integers and convert in Python.
     """
+
     impl = Integer
     cache_ok = True
 
@@ -94,54 +103,54 @@ class _SitePriorityColType(TypeDecorator):
             return None
         try:
             return SitePriority(int(value))
-        except (ValueError, KeyError):
+        except ValueError, KeyError:
             return None
 
 
 class MajorIncidentStatus(enum.StrEnum):
     standby = "standby"
-    active  = "active"
-    closed  = "closed"    # nur manuell erreichbar
+    active = "active"
+    closed = "closed"  # nur manuell erreichbar
 
 
 class SitePhase(enum.StrEnum):
     eingegangen = "eingegangen"
-    erkundung   = "erkundung"
-    bewertet    = "bewertet"
-    disponiert  = "disponiert"
-    in_arbeit   = "in_arbeit"
-    erledigt    = "erledigt"
+    erkundung = "erkundung"
+    bewertet = "bewertet"
+    disponiert = "disponiert"
+    in_arbeit = "in_arbeit"
+    erledigt = "erledigt"
     abgebrochen = "abgebrochen"
 
 
 class SitePriority(int, enum.Enum):
-    sofort       = 1    # Gefahr Leib/Leben
-    dringend     = 2    # Orts-/Dammschutz, drohende Ausweitung
-    normal       = 3    # kritische Infrastruktur / Umwelt
-    aufschiebbar = 4    # reine Sachwerte
+    sofort = 1  # Gefahr Leib/Leben
+    dringend = 2  # Orts-/Dammschutz, drohende Ausweitung
+    normal = 3  # kritische Infrastruktur / Umwelt
+    aufschiebbar = 4  # reine Sachwerte
 
 
 class StaffFunction(enum.StrEnum):
-    lageleitung   = "lageleitung"
-    s1_personal   = "s1"
-    s2_lage       = "s2"
-    s3_einsatz    = "s3"
+    lageleitung = "lageleitung"
+    s1_personal = "s1"
+    s2_lage = "s2"
+    s3_einsatz = "s3"
     s4_versorgung = "s4"
-    s5_presse     = "s5"
-    s6_komm       = "s6"
+    s5_presse = "s5"
+    s6_komm = "s6"
 
 
 SITE_PRIORITY_COLOR = {
-    SitePriority.sofort:       "red",
-    SitePriority.dringend:     "orange",
-    SitePriority.normal:       "yellow",
+    SitePriority.sofort: "red",
+    SitePriority.dringend: "orange",
+    SitePriority.normal: "yellow",
     SitePriority.aufschiebbar: "muted",
 }
 
 SITE_PRIORITY_LABEL = {
-    SitePriority.sofort:       "Sofort",
-    SitePriority.dringend:     "Dringend",
-    SitePriority.normal:       "Normal",
+    SitePriority.sofort: "Sofort",
+    SitePriority.dringend: "Dringend",
+    SitePriority.normal: "Normal",
     SitePriority.aufschiebbar: "Aufschiebbar",
 }
 
@@ -186,13 +195,13 @@ SITE_PHASE_GROUP = {  # abgebrochen bewusst NICHT enthalten
 SITE_PHASE_GROUP_LABEL = {"neu": "neu", "in_arbeit": "in Arbeit", "erledigt": "erledigt"}
 
 STAFF_FUNCTION_LABEL = {
-    StaffFunction.lageleitung:   "Lageleitung",
-    StaffFunction.s1_personal:   "S1 – Personal",
-    StaffFunction.s2_lage:       "S2 – Lage",
-    StaffFunction.s3_einsatz:    "S3 – Einsatz",
+    StaffFunction.lageleitung: "Lageleitung",
+    StaffFunction.s1_personal: "S1 – Personal",
+    StaffFunction.s2_lage: "S2 – Lage",
+    StaffFunction.s3_einsatz: "S3 – Einsatz",
     StaffFunction.s4_versorgung: "S4 – Versorgung",
-    StaffFunction.s5_presse:     "S5 – Presse",
-    StaffFunction.s6_komm:       "S6 – Kommunikation",
+    StaffFunction.s5_presse: "S5 – Presse",
+    StaffFunction.s6_komm: "S6 – Kommunikation",
 }
 
 
@@ -200,13 +209,13 @@ STAFF_FUNCTION_LABEL = {
 # Benutzer-wählbare Eintragstypen im Site-Detail-Dropdown. status|prio|resource|
 # media bleiben System-Einträge und passen weiterhin in String(16).
 SITE_LOG_KIND_LABEL = {
-    "note":        "Notiz",
+    "note": "Notiz",
     "lagemeldung": "Lagemeldung",
-    "massnahmen":  "Maßnahmen",
-    "einheit":     "Einheit",
+    "massnahmen": "Maßnahmen",
+    "einheit": "Einheit",
 }
-SITE_LOG_USER_KINDS = ["lagemeldung", "massnahmen", "note"]   # im Dropdown auswählbar (Reihenfolge)
-SITE_LOG_RESET_KINDS = {"lagemeldung"}                        # setzt den Lagemeldungs-Timer zurück
+SITE_LOG_USER_KINDS = ["lagemeldung", "massnahmen", "note"]  # im Dropdown auswählbar (Reihenfolge)
+SITE_LOG_RESET_KINDS = {"lagemeldung"}  # setzt den Lagemeldungs-Timer zurück
 
 # auto_kind-Wert für automatisch erzeugte Funkjournal-Aufträge "Lagemeldung anfordern"
 AUTO_KIND_LAGEMELDUNG = "lagemeldung_faellig"
@@ -215,121 +224,122 @@ AUTO_KIND_LAGEMELDUNG = "lagemeldung_faellig"
 class MajorIncident(Base):
     __tablename__ = "major_incident"
 
-    id:            Mapped[int] = mapped_column(Integer, primary_key=True)
-    org_id:        Mapped[int] = mapped_column(BigInteger, ForeignKey("fire_dept.id"), index=True)
-    name:          Mapped[str] = mapped_column(String(160))
-    description:   Mapped[str | None] = mapped_column(Text, nullable=True)
-    status:        Mapped[MajorIncidentStatus] = mapped_column(
-                       Enum(MajorIncidentStatus), default=MajorIncidentStatus.active)
-    trigger:       Mapped[str] = mapped_column(String(20), default="manual")  # "manual"|"alarm_auto"
-    is_exercise:   Mapped[bool] = mapped_column(Boolean, default=False)
-    auto_adopt:    Mapped[bool] = mapped_column(Boolean, default=True)
-    public_token:  Mapped[str | None] = mapped_column(String(64), unique=True, index=True, nullable=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    org_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("fire_dept.id"), index=True)
+    name: Mapped[str] = mapped_column(String(160))
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[MajorIncidentStatus] = mapped_column(Enum(MajorIncidentStatus), default=MajorIncidentStatus.active)
+    trigger: Mapped[str] = mapped_column(String(20), default="manual")  # "manual"|"alarm_auto"
+    is_exercise: Mapped[bool] = mapped_column(Boolean, default=False)
+    auto_adopt: Mapped[bool] = mapped_column(Boolean, default=True)
+    public_token: Mapped[str | None] = mapped_column(String(64), unique=True, index=True, nullable=True)
     public_token_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     access_pin_hash: Mapped[str | None] = mapped_column(String(120), nullable=True)
-    started_at:    Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
-    ended_at:      Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    live_push_at:  Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    live_push_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     live_push_sig: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    started_by_user_id: Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("user.id"), nullable=True)
-    created_at:    Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
-    updated_at:    Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC),
-                                                    onupdate=lambda: datetime.now(UTC))
+    started_by_user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+    )
     leader_assignment_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("gsl_staff_assignment.id", ondelete="SET NULL"), nullable=True)
+        Integer, ForeignKey("gsl_staff_assignment.id", ondelete="SET NULL"), nullable=True
+    )
 
-    sites:          Mapped[list[IncidentSite]] = relationship(
-        back_populates="major_incident", cascade="all, delete-orphan")
-    sectors:        Mapped[list[Sector]] = relationship(cascade="all, delete-orphan")
-    staff:          Mapped[list[StaffAssignment]] = relationship(cascade="all, delete-orphan")
-    gsl_staff:      Mapped[list[GslStaffAssignment]] = relationship(
-        back_populates="incident", cascade="all, delete-orphan",
-        foreign_keys="GslStaffAssignment.incident_id")
-    comms:          Mapped[list[CommLogEntry]] = relationship(cascade="all, delete-orphan")
+    sites: Mapped[list[IncidentSite]] = relationship(back_populates="major_incident", cascade="all, delete-orphan")
+    sectors: Mapped[list[Sector]] = relationship(cascade="all, delete-orphan")
+    staff: Mapped[list[StaffAssignment]] = relationship(cascade="all, delete-orphan")
+    gsl_staff: Mapped[list[GslStaffAssignment]] = relationship(
+        back_populates="incident", cascade="all, delete-orphan", foreign_keys="GslStaffAssignment.incident_id"
+    )
+    comms: Mapped[list[CommLogEntry]] = relationship(cascade="all, delete-orphan")
     journal_entries: Mapped[list[LageJournalEntry]] = relationship(cascade="all, delete-orphan")
-    einheiten:      Mapped[list[LageEinheit]] = relationship(cascade="all, delete-orphan")
+    einheiten: Mapped[list[LageEinheit]] = relationship(cascade="all, delete-orphan")
     cross_site_markers: Mapped[list[CrossSiteMarker]] = relationship(cascade="all, delete-orphan")
 
 
 class Sector(Base):
     __tablename__ = "site_sector"
 
-    id:                Mapped[int] = mapped_column(Integer, primary_key=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
     major_incident_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("major_incident.id", ondelete="CASCADE"), index=True)
-    name:              Mapped[str] = mapped_column(String(80))
-    leader_label:      Mapped[str | None] = mapped_column(String(80), nullable=True)
-    color:             Mapped[str | None] = mapped_column(String(7), nullable=True)
-    geometry:          Mapped[str | None] = mapped_column(Text, nullable=True)     # GeoJSON Polygon
-    sort_order:        Mapped[int] = mapped_column(Integer, default=0)
+        Integer, ForeignKey("major_incident.id", ondelete="CASCADE"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(80))
+    leader_label: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    color: Mapped[str | None] = mapped_column(String(7), nullable=True)
+    geometry: Mapped[str | None] = mapped_column(Text, nullable=True)  # GeoJSON Polygon
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
     leader_assignment_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("gsl_staff_assignment.id", ondelete="SET NULL"), nullable=True)
+        Integer, ForeignKey("gsl_staff_assignment.id", ondelete="SET NULL"), nullable=True
+    )
 
 
 class StaffAssignment(Base):
     __tablename__ = "staff_assignment"
 
-    id:                Mapped[int] = mapped_column(Integer, primary_key=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
     major_incident_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("major_incident.id", ondelete="CASCADE"), index=True)
-    function:          Mapped[StaffFunction] = mapped_column(Enum(StaffFunction))
-    user_id:           Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("user.id"), nullable=True)
-    member_id:         Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("member.id"), nullable=True)
-    label:             Mapped[str | None] = mapped_column(String(120), nullable=True)
-    assigned_at:       Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
-    released_at:       Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+        Integer, ForeignKey("major_incident.id", ondelete="CASCADE"), index=True
+    )
+    function: Mapped[StaffFunction] = mapped_column(Enum(StaffFunction))
+    user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
+    member_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("member.id"), nullable=True)
+    label: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    assigned_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    released_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class IncidentSite(Base):
     __tablename__ = "incident_site"
 
-    id:                Mapped[int] = mapped_column(Integer, primary_key=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
     major_incident_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("major_incident.id", ondelete="CASCADE"), index=True)
-    org_id:            Mapped[int] = mapped_column(BigInteger, ForeignKey("fire_dept.id"), index=True)
-    sector_id:         Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("site_sector.id", ondelete="SET NULL"), nullable=True)
+        Integer, ForeignKey("major_incident.id", ondelete="CASCADE"), index=True
+    )
+    org_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("fire_dept.id"), index=True)
+    sector_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("site_sector.id", ondelete="SET NULL"), nullable=True
+    )
 
-    bezeichnung:  Mapped[str] = mapped_column(String(160))
+    bezeichnung: Mapped[str] = mapped_column(String(160))
     einsatzgrund: Mapped[str | None] = mapped_column(String(160), nullable=True)
-    ort:          Mapped[str | None] = mapped_column(String(120), nullable=True)
-    strasse:      Mapped[str | None] = mapped_column(String(120), nullable=True)
-    hausnr:       Mapped[str | None] = mapped_column(String(20), nullable=True)
-    lat:          Mapped[float | None] = mapped_column(Float, nullable=True)
-    lng:          Mapped[float | None] = mapped_column(Float, nullable=True)
+    ort: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    strasse: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    hausnr: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    lng: Mapped[float | None] = mapped_column(Float, nullable=True)
 
-    source:       Mapped[str] = mapped_column(String(12), default="manual")  # api|manual|buerger
+    source: Mapped[str] = mapped_column(String(12), default="manual")  # api|manual|buerger
     external_key: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True)
-    alarm_stufe:  Mapped[str | None] = mapped_column(String(8), nullable=True)
+    alarm_stufe: Mapped[str | None] = mapped_column(String(8), nullable=True)
 
-    phase:         Mapped[SitePhase] = mapped_column(
-        Enum(SitePhase), default=SitePhase.eingegangen, index=True)
-    priority:      Mapped[SitePriority | None] = mapped_column(_SitePriorityColType, nullable=True)
-    danger_score:  Mapped[int | None] = mapped_column(Integer, nullable=True)
+    phase: Mapped[SitePhase] = mapped_column(Enum(SitePhase), default=SitePhase.eingegangen, index=True)
+    priority: Mapped[SitePriority | None] = mapped_column(_SitePriorityColType, nullable=True)
+    danger_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
     urgency_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    sort_index:    Mapped[int] = mapped_column(Integer, default=0)
+    sort_index: Mapped[int] = mapped_column(Integer, default=0)
     section_assigned_mode: Mapped[str] = mapped_column(String(8), default="auto")  # auto|manual
 
-    incident_id:  Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("incident.id", ondelete="SET NULL"), nullable=True)
+    incident_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("incident.id", ondelete="SET NULL"), nullable=True
+    )
 
     # Zeitpunkt der nächsten fälligen Lagemeldung; NULL = keine Timer-Pflicht aktiv
     naechste_lagemeldung_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
 
-    created_at:   Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
-    updated_at:   Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC),
-                                                   onupdate=lambda: datetime.now(UTC))
-    created_by:   Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("user.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+    )
+    created_by: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
 
     major_incident: Mapped[MajorIncident] = relationship(back_populates="sites")
-    resources:   Mapped[list[SiteResourceAssignment]] = relationship(cascade="all, delete-orphan")
-    log_entries: Mapped[list[SiteLogEntry]] = relationship(
-        cascade="all, delete-orphan", order_by="SiteLogEntry.ts")
-    media:       Mapped[list[SiteMedia]] = relationship(cascade="all, delete-orphan")
+    resources: Mapped[list[SiteResourceAssignment]] = relationship(cascade="all, delete-orphan")
+    log_entries: Mapped[list[SiteLogEntry]] = relationship(cascade="all, delete-orphan", order_by="SiteLogEntry.ts")
+    media: Mapped[list[SiteMedia]] = relationship(cascade="all, delete-orphan")
     dispatched_einheiten: Mapped[list[EinheitSiteDispatch]] = relationship(
         "EinheitSiteDispatch",
         foreign_keys="[EinheitSiteDispatch.site_id]",
@@ -340,143 +350,153 @@ class IncidentSite(Base):
 class SiteResourceAssignment(Base):
     __tablename__ = "site_resource_assignment"
 
-    id:               Mapped[int] = mapped_column(Integer, primary_key=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
     incident_site_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("incident_site.id", ondelete="CASCADE"), index=True)
-    resource_type:    Mapped[str] = mapped_column(String(12))  # vehicle|member|free_text
-    vehicle_id:       Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("vehicle_master.id", ondelete="SET NULL"), nullable=True)
-    member_id:        Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("member.id", ondelete="SET NULL"), nullable=True)
-    label:            Mapped[str | None] = mapped_column(String(120), nullable=True)
-    assigned_at:      Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
-    committed_at:     Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    released_at:      Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+        Integer, ForeignKey("incident_site.id", ondelete="CASCADE"), index=True
+    )
+    resource_type: Mapped[str] = mapped_column(String(12))  # vehicle|member|free_text
+    vehicle_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("vehicle_master.id", ondelete="SET NULL"), nullable=True
+    )
+    member_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("member.id", ondelete="SET NULL"), nullable=True
+    )
+    label: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    assigned_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    committed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    released_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # No unique constraint — Mehrfachverplanung erlaubt, nur Warnung im UI
 
 
 class SiteLogEntry(Base):
     __tablename__ = "site_log_entry"
 
-    id:               Mapped[int] = mapped_column(Integer, primary_key=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
     incident_site_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("incident_site.id", ondelete="CASCADE"), index=True)
-    ts:               Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
-    user_id:          Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("user.id"), nullable=True)
-    author_name:      Mapped[str | None] = mapped_column(String(120), nullable=True)
-    einheit_id:       Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("lage_einheit.id", ondelete="SET NULL"), nullable=True, index=True)
-    erfasst_at:       Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    kind:             Mapped[str] = mapped_column(String(16), default="note")
-    text:             Mapped[str] = mapped_column(Text)
+        Integer, ForeignKey("incident_site.id", ondelete="CASCADE"), index=True
+    )
+    ts: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
+    author_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    einheit_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("lage_einheit.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    erfasst_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    kind: Mapped[str] = mapped_column(String(16), default="note")
+    text: Mapped[str] = mapped_column(Text)
 
 
 class SiteMedia(Base):
     __tablename__ = "site_media"
 
-    id:                Mapped[int] = mapped_column(Integer, primary_key=True)
-    incident_site_id:  Mapped[int] = mapped_column(
-        Integer, ForeignKey("incident_site.id", ondelete="CASCADE"), index=True)
-    stored_filename:   Mapped[str] = mapped_column(String(64))
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    incident_site_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("incident_site.id", ondelete="CASCADE"), index=True
+    )
+    stored_filename: Mapped[str] = mapped_column(String(64))
     original_filename: Mapped[str] = mapped_column(String(255))
-    media_type:        Mapped[str] = mapped_column(String(12))  # image|pdf|video
-    uploaded_at:       Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
-    uploaded_by:       Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("user.id"), nullable=True)
-    author_name:       Mapped[str | None] = mapped_column(String(120), nullable=True)
-    einheit_id:        Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("lage_einheit.id", ondelete="SET NULL"), nullable=True, index=True)
-    kommentar:         Mapped[str | None] = mapped_column(String(500), nullable=True)
-    erfasst_at:        Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    bytes:             Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
-    org_id:            Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("fire_dept.id"), nullable=True, index=True)
+    media_type: Mapped[str] = mapped_column(String(12))  # image|pdf|video
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    uploaded_by: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
+    author_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    einheit_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("lage_einheit.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    kommentar: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    erfasst_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    bytes: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    org_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("fire_dept.id"), nullable=True, index=True)
 
 
 class CommLogEntry(Base):
     __tablename__ = "comm_log_entry"
 
-    id:                Mapped[int] = mapped_column(Integer, primary_key=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
     major_incident_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("major_incident.id", ondelete="CASCADE"), index=True)
-    related_site_id:   Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("incident_site.id", ondelete="SET NULL"), nullable=True)
-    ts:                Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
-    direction:         Mapped[str] = mapped_column(String(4))   # in|out|int
-    channel:           Mapped[str | None] = mapped_column(String(40), nullable=True)
-    partner:           Mapped[str | None] = mapped_column(String(120), nullable=True)
-    message:           Mapped[str] = mapped_column(Text)
-    is_request:        Mapped[bool] = mapped_column(Boolean, default=False)
-    handled:           Mapped[bool] = mapped_column(Boolean, default=False)
+        Integer, ForeignKey("major_incident.id", ondelete="CASCADE"), index=True
+    )
+    related_site_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("incident_site.id", ondelete="SET NULL"), nullable=True
+    )
+    ts: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    direction: Mapped[str] = mapped_column(String(4))  # in|out|int
+    channel: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    partner: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    message: Mapped[str] = mapped_column(Text)
+    is_request: Mapped[bool] = mapped_column(Boolean, default=False)
+    handled: Mapped[bool] = mapped_column(Boolean, default=False)
     # Kennzeichnet automatisch erzeugte Einträge (z.B. "lagemeldung_faellig") für Dedup/Schließen
-    auto_kind:         Mapped[str | None] = mapped_column(String(24), nullable=True)
-    user_id:           Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("user.id"), nullable=True)
-    author_name:       Mapped[str | None] = mapped_column(String(120), nullable=True)
+    auto_kind: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
+    author_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
 
 class CitizenReport(Base):
     __tablename__ = "citizen_report"
 
-    id:                Mapped[int] = mapped_column(Integer, primary_key=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
     major_incident_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("major_incident.id", ondelete="CASCADE"), index=True)
-    reporter_name:     Mapped[str | None] = mapped_column(String(120), nullable=True)
-    reporter_contact:  Mapped[str | None] = mapped_column(String(120), nullable=True)
-    ort:               Mapped[str | None] = mapped_column(String(120), nullable=True)
-    strasse:           Mapped[str | None] = mapped_column(String(160), nullable=True)
-    lat:               Mapped[float | None] = mapped_column(Float, nullable=True)
-    lng:               Mapped[float | None] = mapped_column(Float, nullable=True)
-    description:       Mapped[str] = mapped_column(Text)
-    photo_filename:    Mapped[str | None] = mapped_column(String(64), nullable=True)
-    status:            Mapped[str] = mapped_column(String(10), default="new")  # new|accepted|rejected
-    phone_verified:    Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at:        Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
-    source_ip:         Mapped[str | None] = mapped_column(String(45), nullable=True)
-    site_id:           Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("incident_site.id", ondelete="SET NULL"), nullable=True)
+        Integer, ForeignKey("major_incident.id", ondelete="CASCADE"), index=True
+    )
+    reporter_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    reporter_contact: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    ort: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    strasse: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    lng: Mapped[float | None] = mapped_column(Float, nullable=True)
+    description: Mapped[str] = mapped_column(Text)
+    photo_filename: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    status: Mapped[str] = mapped_column(String(10), default="new")  # new|accepted|rejected
+    phone_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    source_ip: Mapped[str | None] = mapped_column(String(45), nullable=True)
+    site_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("incident_site.id", ondelete="SET NULL"), nullable=True
+    )
 
 
 class LageEinheit(Base):
     """Einheit (Fahrzeug/Gruppe/extern/Material) im Ressourcenpool einer Lage."""
+
     __tablename__ = "lage_einheit"
 
-    id:              Mapped[int] = mapped_column(Integer, primary_key=True)
-    lage_id:         Mapped[int] = mapped_column(
-        Integer, ForeignKey("major_incident.id", ondelete="CASCADE"), index=True)
-    vehicle_id:      Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("vehicle_master.id", ondelete="SET NULL"), nullable=True)
-    label:           Mapped[str] = mapped_column(String(120))
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    lage_id: Mapped[int] = mapped_column(Integer, ForeignKey("major_incident.id", ondelete="CASCADE"), index=True)
+    vehicle_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("vehicle_master.id", ondelete="SET NULL"), nullable=True
+    )
+    label: Mapped[str] = mapped_column(String(120))
     commander_label: Mapped[str | None] = mapped_column(String(120), nullable=True)
     # angefordert | bereitgestellt | im_einsatz | abgerueckt
-    status:          Mapped[str] = mapped_column(String(16), default="bereitgestellt")
-    is_from_org:     Mapped[bool] = mapped_column(Boolean, default=False)
-    added_at:        Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
-    funkrufname:     Mapped[str | None] = mapped_column(String(40), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), default="bereitgestellt")
+    is_from_org: Mapped[bool] = mapped_column(Boolean, default=False)
+    added_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    funkrufname: Mapped[str | None] = mapped_column(String(40), nullable=True)
     bereitstellungsraum: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    status_at:       Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    status_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # Ressourcentyp + Abschnittszuordnung (§3.1)
-    resource_type:      Mapped[str] = mapped_column(String(12), default="fahrzeug")  # fahrzeug|extern|material
-    sector_id:          Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("site_sector.id", ondelete="SET NULL"), nullable=True)
-    incident_site_id:   Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("incident_site.id", ondelete="SET NULL"), nullable=True)
-    org_name:           Mapped[str | None] = mapped_column(String(120), nullable=True)
-    bos:                Mapped[str | None] = mapped_column(String(20), nullable=True)
-    qty:                Mapped[int | None] = mapped_column(Integer, nullable=True)
-    unit:               Mapped[str | None] = mapped_column(String(20), nullable=True)
-    requested_at:       Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    arrived_at:         Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    committed_at:       Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    released_at:        Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    resource_type: Mapped[str] = mapped_column(String(12), default="fahrzeug")  # fahrzeug|extern|material
+    sector_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("site_sector.id", ondelete="SET NULL"), nullable=True
+    )
+    incident_site_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("incident_site.id", ondelete="SET NULL"), nullable=True
+    )
+    org_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    bos: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    qty: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    unit: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    requested_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    arrived_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    committed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    released_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     leader_assignment_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("lage_einheit_leader.id", ondelete="SET NULL"), nullable=True)
+        Integer, ForeignKey("lage_einheit_leader.id", ondelete="SET NULL"), nullable=True
+    )
 
-    sector:  Mapped[Sector | None] = relationship(foreign_keys=[sector_id])
-    leader:  Mapped[LageEinheitLeader | None] = relationship(
-        foreign_keys=[leader_assignment_id], lazy="joined")
+    sector: Mapped[Sector | None] = relationship(foreign_keys=[sector_id])
+    leader: Mapped[LageEinheitLeader | None] = relationship(foreign_keys=[leader_assignment_id], lazy="joined")
     site_dispatches: Mapped[list[EinheitSiteDispatch]] = relationship(
         "EinheitSiteDispatch",
         foreign_keys="[EinheitSiteDispatch.einheit_id]",
@@ -487,33 +507,36 @@ class LageEinheit(Base):
 
 class LageEinheitLeader(Base):
     """Einheitsführer-Historie je LageEinheit (Gruppenkommandant-Ebene)."""
+
     __tablename__ = "lage_einheit_leader"
     __table_args__ = (Index("ix_lel_einheit_aktiv", "einheit_id", "rolle", "end_at"),)
 
-    id:             Mapped[int] = mapped_column(Integer, primary_key=True)
-    einheit_id:     Mapped[int] = mapped_column(
-        Integer, ForeignKey("lage_einheit.id", ondelete="CASCADE"), index=True)
-    member_id:      Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("member.id", ondelete="SET NULL"), nullable=True)
-    person_name:    Mapped[str | None] = mapped_column(String(120), nullable=True)
-    start_at:       Mapped[datetime] = mapped_column(DateTime)
-    end_at:         Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    einheit_id: Mapped[int] = mapped_column(Integer, ForeignKey("lage_einheit.id", ondelete="CASCADE"), index=True)
+    member_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("member.id", ondelete="SET NULL"), nullable=True
+    )
+    person_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    start_at: Mapped[datetime] = mapped_column(DateTime)
+    end_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     predecessor_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("lage_einheit_leader.id", ondelete="SET NULL"), nullable=True)
-    note:           Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_by:     Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
-    created_at:     Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
-    rolle:          Mapped[str] = mapped_column(String(16), nullable=False, default="fuehrer", server_default="fuehrer")
-    phone:          Mapped[str | None] = mapped_column(String(30), nullable=True)
-    phone_e164:     Mapped[str | None] = mapped_column(String(20), nullable=True)
-    phone_version:  Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
-    ende_grund:     Mapped[str | None] = mapped_column(String(24), nullable=True)
-    ende_von:       Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
+        Integer, ForeignKey("lage_einheit_leader.id", ondelete="SET NULL"), nullable=True
+    )
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    rolle: Mapped[str] = mapped_column(String(16), nullable=False, default="fuehrer", server_default="fuehrer")
+    phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    phone_e164: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    phone_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    ende_grund: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    ende_von: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
 
     predecessor: Mapped[LageEinheitLeader | None] = relationship(
-        foreign_keys=[predecessor_id], remote_side="LageEinheitLeader.id")
+        foreign_keys=[predecessor_id], remote_side="LageEinheitLeader.id"
+    )
 
     @property
     def display_name(self) -> str:
@@ -522,81 +545,166 @@ class LageEinheitLeader(Base):
 
 class EinheitSiteDispatch(Base):
     """Mehrfach-Disposition: Einheit für eine Einsatzstelle disponiert oder vor Ort."""
+
     __tablename__ = "einheit_site_dispatch"
     __table_args__ = (Index("ix_esd_einheit_aktiv", "einheit_id", "withdrawn_at", "beendet_at"),)
 
-    id:             Mapped[int] = mapped_column(Integer, primary_key=True)
-    einheit_id:     Mapped[int] = mapped_column(
-        Integer, ForeignKey("lage_einheit.id", ondelete="CASCADE"), index=True)
-    site_id:        Mapped[int] = mapped_column(
-        Integer, ForeignKey("incident_site.id", ondelete="CASCADE"), index=True)
-    dispatched_at:  Mapped[datetime] = mapped_column(DateTime)
-    auftrag:        Mapped[str | None] = mapped_column(Text, nullable=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    einheit_id: Mapped[int] = mapped_column(Integer, ForeignKey("lage_einheit.id", ondelete="CASCADE"), index=True)
+    site_id: Mapped[int] = mapped_column(Integer, ForeignKey("incident_site.id", ondelete="CASCADE"), index=True)
+    dispatched_at: Mapped[datetime] = mapped_column(DateTime)
+    auftrag: Mapped[str | None] = mapped_column(Text, nullable=True)
     einheit_status: Mapped[str] = mapped_column(
-        String(20), nullable=False, default="zugewiesen", server_default="zugewiesen")
-    status_at:      Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    bestaetigt_at:  Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    beendet_at:     Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    beendet_grund:  Mapped[str | None] = mapped_column(Text, nullable=True)
-    reihenfolge:    Mapped[int | None] = mapped_column(Integer, nullable=True)
-    version:        Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
-    geaendert_at:   Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+        String(20), nullable=False, default="zugewiesen", server_default="zugewiesen"
+    )
+    status_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    bestaetigt_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    beendet_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    beendet_grund: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reihenfolge: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    geaendert_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     letzte_rueckmeldung_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    vor_ort_at:     Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    withdrawn_at:   Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    dispatched_by:  Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
-    author_name:    Mapped[str | None] = mapped_column(String(120), nullable=True)
-    withdrawn_by:   Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
+    vor_ort_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    withdrawn_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    dispatched_by: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+    author_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    withdrawn_by: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
     withdrawn_author: Mapped[str | None] = mapped_column(String(120), nullable=True)
     withdrawn_grund: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
-    site:    Mapped[IncidentSite] = relationship(
-        foreign_keys=[site_id], overlaps="dispatched_einheiten")
-    einheit: Mapped[LageEinheit] = relationship(
-        foreign_keys=[einheit_id], back_populates="site_dispatches")
+    site: Mapped[IncidentSite] = relationship(foreign_keys=[site_id], overlaps="dispatched_einheiten")
+    einheit: Mapped[LageEinheit] = relationship(foreign_keys=[einheit_id], back_populates="site_dispatches")
 
 
 class EinheitAktion(TenantScoped, Base):
     """Idempotenz- und Geräteprotokoll für Aktionen im Einheitenmodus."""
+
     __tablename__ = "einheit_aktion"
 
-    id:              Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    client_uuid:     Mapped[str] = mapped_column(String(36), unique=True, nullable=False)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    client_uuid: Mapped[str] = mapped_column(String(36), unique=True, nullable=False)
     device_token_id: Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("device_token.id", ondelete="SET NULL"), nullable=True)
-    einheit_id:      Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("lage_einheit.id", ondelete="SET NULL"), nullable=True, index=True)
-    dispatch_id:     Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("einheit_site_dispatch.id", ondelete="SET NULL"), nullable=True)
-    aktion:          Mapped[str] = mapped_column(String(24), nullable=False)
-    quelle:          Mapped[str] = mapped_column(String(12), nullable=False, default="tablet")
-    ergebnis:        Mapped[str] = mapped_column(String(16), nullable=False)
-    entity_type:     Mapped[str | None] = mapped_column(String(32), nullable=True)
-    entity_id:       Mapped[int | None] = mapped_column(BigInteger, nullable=True)
-    antwort_json:    Mapped[str | None] = mapped_column(Text, nullable=True)
-    erfasst_at:      Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    empfangen_at:    Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=lambda: datetime.now(UTC))
+        BigInteger, ForeignKey("device_token.id", ondelete="SET NULL"), nullable=True
+    )
+    zugang_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("lage_einheit_zugang.id", ondelete="SET NULL"), nullable=True
+    )
+    einheit_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("lage_einheit.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    dispatch_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("einheit_site_dispatch.id", ondelete="SET NULL"), nullable=True
+    )
+    aktion: Mapped[str] = mapped_column(String(24), nullable=False)
+    quelle: Mapped[str] = mapped_column(String(12), nullable=False, default="tablet")
+    ergebnis: Mapped[str] = mapped_column(String(16), nullable=False)
+    entity_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    entity_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    antwort_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    erfasst_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    empfangen_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+
+
+class LageEinheitZugang(TenantScoped, Base):
+    __tablename__ = "lage_einheit_zugang"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    lage_id: Mapped[int] = mapped_column(Integer, ForeignKey("major_incident.id", ondelete="CASCADE"), index=True)
+    einheit_id: Mapped[int] = mapped_column(Integer, ForeignKey("lage_einheit.id", ondelete="CASCADE"), unique=True)
+    leader_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("lage_einheit_leader.id", ondelete="SET NULL"), nullable=True
+    )
+    phone_e164: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    phone_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    token_hash: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
+    generation: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    status: Mapped[str] = mapped_column(String(12), nullable=False, default="kein_token")
+    widerruf_grund: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    widerrufen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    widerrufen_von: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+    ausgestellt_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    ausgestellt_von: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+    laeuft_ab_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    einloesungen: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    erste_einloesung_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    letzte_aktivitaet_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    pin_pflicht: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    pin_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    pin_gueltig_bis: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    pin_versuche: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    pin_gesperrt_bis: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+
+
+class LageEinheitZugangSession(TenantScoped, Base):
+    __tablename__ = "lage_einheit_zugang_session"
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    zugang_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("lage_einheit_zugang.id", ondelete="CASCADE"), index=True
+    )
+    generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    session_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    laeuft_ab_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    revoke_grund: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    client_kurz: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    ip_gruppe: Mapped[str | None] = mapped_column(String(45), nullable=True)
+    verifiziert_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class LageEinheitZugangVersand(TenantScoped, Base):
+    __tablename__ = "lage_einheit_zugang_versand"
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    zugang_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("lage_einheit_zugang.id", ondelete="CASCADE"), index=True
+    )
+    einheit_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    leader_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    kanal: Mapped[str] = mapped_column(String(24), nullable=False)
+    ausloeser: Mapped[str] = mapped_column(String(12), nullable=False)
+    user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    fehler: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    ziel_maske: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    sms_log_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("sms_log.id", ondelete="SET NULL"), nullable=True
+    )
+    zeichen: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    segmente: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    auto_schluessel: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    abgeschlossen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 # ── Lage-Journal ──────────────────────────────────────────────────────────────
 
 JOURNAL_CATEGORIES = {
     "entscheidung": "Entscheidung",
-    "anweisung":    "Anweisung/Auftrag",
-    "meldung":      "Meldung",
-    "lagemeldung":  "Lagemeldung (S2)",
-    "sonstiges":    "Sonstiges",
+    "anweisung": "Anweisung/Auftrag",
+    "meldung": "Meldung",
+    "lagemeldung": "Lagemeldung (S2)",
+    "sonstiges": "Sonstiges",
 }
 
 JOURNAL_CATEGORY_COLOR = {
     "entscheidung": "purple",
-    "anweisung":    "orange",
-    "meldung":      "blue",
-    "lagemeldung":  "green",
-    "sonstiges":    "muted",
+    "anweisung": "orange",
+    "meldung": "blue",
+    "lagemeldung": "green",
+    "sonstiges": "muted",
 }
 
 # Vorlagen je Kategorie (Betreff-Platzhalter + Body-Skelett für Quill)
@@ -636,28 +744,30 @@ JOURNAL_TEMPLATES: dict[str, dict] = {
 class LageJournalEntry(Base):
     __tablename__ = "lage_journal_entry"
 
-    id:                Mapped[int] = mapped_column(Integer, primary_key=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
     major_incident_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("major_incident.id", ondelete="CASCADE"), index=True)
-    ts:                Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
-    category:          Mapped[str] = mapped_column(String(20), default="sonstiges")
-    text:              Mapped[str] = mapped_column(Text)              # Betreff (Pflichtfeld)
-    body_html:         Mapped[str | None] = mapped_column(Text, nullable=True)  # Fließtext (sanitisiert)
-    partner_from:      Mapped[str | None] = mapped_column(String(120), nullable=True)  # Von (SKKM)
-    partner_to:        Mapped[str | None] = mapped_column(String(120), nullable=True)  # An (SKKM)
-    measure:           Mapped[str | None] = mapped_column(String(500), nullable=True)  # Veranlassung (SKKM)
-    author_name:       Mapped[str | None] = mapped_column(String(120), nullable=True)
-    user_id:           Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("user.id"), nullable=True)
-    einheit_id:        Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("lage_einheit.id", ondelete="SET NULL"), nullable=True, index=True)
-    site_id:           Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("incident_site.id", ondelete="SET NULL"), nullable=True)
-    ereignis_typ:      Mapped[str | None] = mapped_column(String(24), nullable=True)
-    quelle:            Mapped[str | None] = mapped_column(String(12), nullable=True)
-    storniert_at:      Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    storniert_von:     Mapped[str | None] = mapped_column(String(120), nullable=True)
-    storno_grund:      Mapped[str | None] = mapped_column(String(300), nullable=True)
+        Integer, ForeignKey("major_incident.id", ondelete="CASCADE"), index=True
+    )
+    ts: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    category: Mapped[str] = mapped_column(String(20), default="sonstiges")
+    text: Mapped[str] = mapped_column(Text)  # Betreff (Pflichtfeld)
+    body_html: Mapped[str | None] = mapped_column(Text, nullable=True)  # Fließtext (sanitisiert)
+    partner_from: Mapped[str | None] = mapped_column(String(120), nullable=True)  # Von (SKKM)
+    partner_to: Mapped[str | None] = mapped_column(String(120), nullable=True)  # An (SKKM)
+    measure: Mapped[str | None] = mapped_column(String(500), nullable=True)  # Veranlassung (SKKM)
+    author_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
+    einheit_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("lage_einheit.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    site_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("incident_site.id", ondelete="SET NULL"), nullable=True
+    )
+    ereignis_typ: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    quelle: Mapped[str | None] = mapped_column(String(12), nullable=True)
+    storniert_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    storniert_von: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    storno_grund: Mapped[str | None] = mapped_column(String(300), nullable=True)
 
     @validates("body_html")
     def _sanitize_body_html(self, key, value):
@@ -666,10 +776,13 @@ class LageJournalEntry(Base):
         # verhindert, dass ein zukünftiger vergessener sanitize_html()-Aufruf
         # zu Stored-XSS führt.
         from app.core.html_utils import sanitize_html
+
         return sanitize_html(value)
 
     media: Mapped[list[LageJournalMedia]] = relationship(
-        "LageJournalMedia", cascade="all, delete-orphan", lazy="select",
+        "LageJournalMedia",
+        cascade="all, delete-orphan",
+        lazy="select",
         foreign_keys="LageJournalMedia.journal_entry_id",
     )
 
@@ -677,18 +790,18 @@ class LageJournalEntry(Base):
 class LageJournalMedia(Base):
     __tablename__ = "lage_journal_media"
 
-    id:               Mapped[int] = mapped_column(Integer, primary_key=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
     journal_entry_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("lage_journal_entry.id", ondelete="CASCADE"), index=True)
-    stored_filename:  Mapped[str] = mapped_column(String(64))
+        Integer, ForeignKey("lage_journal_entry.id", ondelete="CASCADE"), index=True
+    )
+    stored_filename: Mapped[str] = mapped_column(String(64))
     original_filename: Mapped[str] = mapped_column(String(255))
-    media_type:       Mapped[str] = mapped_column(String(12))  # image
-    uploaded_at:      Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
-    uploaded_by:      Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
-    author_name:      Mapped[str | None] = mapped_column(String(120), nullable=True)
-    bytes:            Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
-    org_id:           Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("fire_dept.id"), nullable=True, index=True)
+    media_type: Mapped[str] = mapped_column(String(12))  # image
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    uploaded_by: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
+    author_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    bytes: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    org_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("fire_dept.id"), nullable=True, index=True)
 
 
 # ── Lagedokument: gemeinsam bearbeitbares Dokument (Word-Online-artig) ───────
@@ -703,119 +816,125 @@ class LageJournalMedia(Base):
 # Snapshot (Druck/Export/Fallback ohne JS); ydoc_state haelt den vollstaendigen
 # Yjs-CRDT-Stand fuer die Live-Kollaboration.
 
+
 class LageDokument(Base):
     __tablename__ = "lage_dokument"
 
-    id:                 Mapped[int] = mapped_column(Integer, primary_key=True)
-    major_incident_id:  Mapped[int] = mapped_column(
-        Integer, ForeignKey("major_incident.id", ondelete="CASCADE"), unique=True, index=True)
-    org_id:             Mapped[int] = mapped_column(BigInteger, ForeignKey("fire_dept.id"), index=True)
-    content_html:       Mapped[str | None] = mapped_column(Text, nullable=True)
-    ydoc_state:         Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
-    updated_at:         Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
-    updated_by_user_id: Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("user.id"), nullable=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    major_incident_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("major_incident.id", ondelete="CASCADE"), unique=True, index=True
+    )
+    org_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("fire_dept.id"), index=True)
+    content_html: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ydoc_state: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    updated_by_user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
 
     @validates("content_html")
     def _sanitize_content_html(self, key, value):
         # Gleicher Choke-Point wie LageJournalEntry.body_html (SEC-9): wird mit
         # |safe gerendert, Sanitisierung zentral am Modell statt pro Schreibpfad.
         from app.core.html_utils import sanitize_html
+
         return sanitize_html(value)
 
 
 # ── Lage-QR-Token (Schnellzugang per QR-Code) ────────────────────────────────
 
+
 class LageToken(Base):
     """QR-Code-Zugangstokens für Großschadenslagen – gültig solange Lage aktiv."""
+
     __tablename__ = "lage_token"
 
-    id:                 Mapped[int] = mapped_column(Integer, primary_key=True)
-    lage_id:            Mapped[int] = mapped_column(
-        Integer, ForeignKey("major_incident.id", ondelete="CASCADE"), index=True)
-    token_hash:         Mapped[str] = mapped_column(String(64), unique=True)
-    issued_by_user_id:  Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"))
-    revoked_at:         Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    created_at:         Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    lage_id: Mapped[int] = mapped_column(Integer, ForeignKey("major_incident.id", ondelete="CASCADE"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    issued_by_user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id"))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
 
 # ── Einsatzstellenübergreifende Meldungen ─────────────────────────────────────
 
 CROSS_MARKER_TYPE_LABEL: dict[str, str] = {
     "unterfuehrung_geflutet": "Überflutete Unterführung",
-    "strasse_ueberflutet":    "Überflutete Straße",
-    "hangrutschung":          "Hangrutschung",
-    "mure":                   "Murenabgang",
-    "baum_umgestuerzt":       "Umgestürzter Baum",
-    "vermurung_objekt":       "Vermurtes/überflutetes Objekt",
-    "damm_deich":             "Damm-/Deichgefährdung",
-    "bruecke_gesperrt":       "Brücke gesperrt",
-    "strasse_gesperrt":       "Straßensperre",
-    "stromausfall":           "Stromausfall (Bereich)",
-    "pegel_messpunkt":        "Pegel-/Messpunkt",
-    "gefahrenstoff":          "Gefahrstoff-/Umweltgefahr",
-    "verklausung":            "Verklausung",
-    "sonstiges":              "Sonstige Lageinfo",
+    "strasse_ueberflutet": "Überflutete Straße",
+    "hangrutschung": "Hangrutschung",
+    "mure": "Murenabgang",
+    "baum_umgestuerzt": "Umgestürzter Baum",
+    "vermurung_objekt": "Vermurtes/überflutetes Objekt",
+    "damm_deich": "Damm-/Deichgefährdung",
+    "bruecke_gesperrt": "Brücke gesperrt",
+    "strasse_gesperrt": "Straßensperre",
+    "stromausfall": "Stromausfall (Bereich)",
+    "pegel_messpunkt": "Pegel-/Messpunkt",
+    "gefahrenstoff": "Gefahrstoff-/Umweltgefahr",
+    "verklausung": "Verklausung",
+    "sonstiges": "Sonstige Lageinfo",
 }
 
 CROSS_MARKER_TYPE_ICON: dict[str, str] = {
     "unterfuehrung_geflutet": "🌊",
-    "strasse_ueberflutet":    "💧",
-    "hangrutschung":          "⛰️",
-    "mure":                   "🪨",
-    "baum_umgestuerzt":       "🌲",
-    "vermurung_objekt":       "🏚️",
-    "damm_deich":             "🧱",
-    "bruecke_gesperrt":       "🌉",
-    "strasse_gesperrt":       "🚧",
-    "stromausfall":           "⚡",
-    "pegel_messpunkt":        "📈",
-    "gefahrenstoff":          "☣️",
-    "verklausung":            "🪵",
-    "sonstiges":              "📍",
+    "strasse_ueberflutet": "💧",
+    "hangrutschung": "⛰️",
+    "mure": "🪨",
+    "baum_umgestuerzt": "🌲",
+    "vermurung_objekt": "🏚️",
+    "damm_deich": "🧱",
+    "bruecke_gesperrt": "🌉",
+    "strasse_gesperrt": "🚧",
+    "stromausfall": "⚡",
+    "pegel_messpunkt": "📈",
+    "gefahrenstoff": "☣️",
+    "verklausung": "🪵",
+    "sonstiges": "📍",
 }
 
 CROSS_MARKER_STATUS_LABEL: dict[str, str] = {
-    "unbestaetigt":   "Unbestätigt",
-    "aktiv":          "Aktiv / Gefahr",
+    "unbestaetigt": "Unbestätigt",
+    "aktiv": "Aktiv / Gefahr",
     "in_bearbeitung": "In Bearbeitung",
-    "beobachtung":    "An Dritte / Beobachtung",
-    "behoben":        "Behoben / Aufgehoben",
+    "beobachtung": "An Dritte / Beobachtung",
+    "behoben": "Behoben / Aufgehoben",
 }
 
 CROSS_MARKER_STATUS_COLOR: dict[str, str] = {
-    "unbestaetigt":   "#6b7280",
-    "aktiv":          "#ef4444",
+    "unbestaetigt": "#6b7280",
+    "aktiv": "#ef4444",
     "in_bearbeitung": "#f59e0b",
-    "beobachtung":    "#60a5fa",
-    "behoben":        "#22c55e",
+    "beobachtung": "#60a5fa",
+    "behoben": "#22c55e",
 }
 
 
 class CrossSiteMarker(Base):
     """Einsatzstellenübergreifende Meldung/Lageinfo."""
+
     __tablename__ = "cross_site_marker"
 
-    id:                Mapped[int] = mapped_column(Integer, primary_key=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
     major_incident_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("major_incident.id", ondelete="CASCADE"), index=True)
-    org_id:            Mapped[int | None] = mapped_column(BigInteger, ForeignKey("fire_dept.id"), nullable=True)
-    title:             Mapped[str] = mapped_column(String(160))
-    marker_type:       Mapped[str] = mapped_column(String(32), default="sonstiges")
-    status:            Mapped[str] = mapped_column(String(16), default="aktiv")
-    description:       Mapped[str | None] = mapped_column(Text, nullable=True)
-    ort:               Mapped[str | None] = mapped_column(String(120), nullable=True)
-    strasse:           Mapped[str | None] = mapped_column(String(160), nullable=True)
-    hausnr:            Mapped[str | None] = mapped_column(String(20),  nullable=True)
-    lat:               Mapped[float | None] = mapped_column(Float, nullable=True)
-    lng:               Mapped[float | None] = mapped_column(Float, nullable=True)
-    source:            Mapped[str] = mapped_column(String(12), default="manual")
-    sort_index:        Mapped[int] = mapped_column(Integer, default=0)
-    created_at:        Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
-    updated_at:        Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC),
-                                                        onupdate=lambda: datetime.now(UTC))
-    created_by:        Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
-    author_name:       Mapped[str | None] = mapped_column(String(120), nullable=True)
+        Integer, ForeignKey("major_incident.id", ondelete="CASCADE"), index=True
+    )
+    org_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("fire_dept.id"), nullable=True)
+    title: Mapped[str] = mapped_column(String(160))
+    marker_type: Mapped[str] = mapped_column(String(32), default="sonstiges")
+    status: Mapped[str] = mapped_column(String(16), default="aktiv")
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ort: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    strasse: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    hausnr: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    lng: Mapped[float | None] = mapped_column(Float, nullable=True)
+    source: Mapped[str] = mapped_column(String(12), default="manual")
+    sort_index: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
+    )
+    created_by: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
+    author_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
     @property
     def type_icon(self) -> str:
@@ -834,7 +953,8 @@ class CrossSiteMarker(Base):
         return CROSS_MARKER_STATUS_COLOR.get(self.status, "#6b7280")
 
     log_entries: Mapped[list[CrossMarkerLogEntry]] = relationship(
-        cascade="all, delete-orphan", order_by="CrossMarkerLogEntry.ts")
+        cascade="all, delete-orphan", order_by="CrossMarkerLogEntry.ts"
+    )
     media: Mapped[list[CrossMarkerMedia]] = relationship(cascade="all, delete-orphan")
 
     @property
@@ -849,59 +969,61 @@ class CrossSiteMarker(Base):
 
 class CrossMarkerLogEntry(Base):
     """Notizen / Statusmeldungen zu einer übergreifenden Meldung."""
+
     __tablename__ = "cross_marker_log_entry"
 
-    id:          Mapped[int] = mapped_column(Integer, primary_key=True)
-    marker_id:   Mapped[int] = mapped_column(
-        Integer, ForeignKey("cross_site_marker.id", ondelete="CASCADE"), index=True)
-    ts:          Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
-    user_id:     Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    marker_id: Mapped[int] = mapped_column(Integer, ForeignKey("cross_site_marker.id", ondelete="CASCADE"), index=True)
+    ts: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    user_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
     author_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
-    text:        Mapped[str] = mapped_column(Text)
+    text: Mapped[str] = mapped_column(Text)
 
 
 class CrossMarkerMedia(Base):
     """Bilder zu einer übergreifenden Meldung."""
+
     __tablename__ = "cross_marker_media"
 
-    id:                Mapped[int] = mapped_column(Integer, primary_key=True)
-    marker_id:         Mapped[int] = mapped_column(
-        Integer, ForeignKey("cross_site_marker.id", ondelete="CASCADE"), index=True)
-    stored_filename:   Mapped[str] = mapped_column(String(64))
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    marker_id: Mapped[int] = mapped_column(Integer, ForeignKey("cross_site_marker.id", ondelete="CASCADE"), index=True)
+    stored_filename: Mapped[str] = mapped_column(String(64))
     original_filename: Mapped[str] = mapped_column(String(255))
-    media_type:        Mapped[str] = mapped_column(String(12))  # image
-    uploaded_at:       Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
-    uploaded_by:       Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
-    author_name:       Mapped[str | None] = mapped_column(String(120), nullable=True)
-    bytes:             Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
-    org_id:            Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("fire_dept.id"), nullable=True, index=True)
+    media_type: Mapped[str] = mapped_column(String(12))  # image
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    uploaded_by: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("user.id"), nullable=True)
+    author_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    bytes: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    org_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("fire_dept.id"), nullable=True, index=True)
 
 
 # ── Fahrzeugpositions-Historie ─────────────────────────────────────────────────
 
+
 class VehiclePosition(Base):
     """GPS- oder manuell erfasste Fahrzeugpositionen (Positionshistorie)."""
+
     __tablename__ = "vehicle_position"
 
     __table_args__ = (
         # Composite-Index für die "letzte Position je Fahrzeug"-Query
         # (max(received_at) GROUP BY vehicle_id WHERE incident_id = X)
-        Index("ix_vehpos_incident_vehicle_received",
-              "incident_id", "vehicle_id", "received_at"),
+        Index("ix_vehpos_incident_vehicle_received", "incident_id", "vehicle_id", "received_at"),
     )
 
-    id:             Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    incident_id:    Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("major_incident.id", ondelete="SET NULL"), nullable=True, index=True)
-    org_id:         Mapped[int] = mapped_column(BigInteger, index=True)
-    vehicle_id:     Mapped[int | None] = mapped_column(
-        BigInteger, ForeignKey("vehicle_master.id", ondelete="SET NULL"), nullable=True, index=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    incident_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("major_incident.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    org_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    vehicle_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("vehicle_master.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     resource_label: Mapped[str | None] = mapped_column(String(120), nullable=True)
-    lat:            Mapped[float] = mapped_column(Float)
-    lon:            Mapped[float] = mapped_column(Float)
-    accuracy_m:     Mapped[float | None] = mapped_column(Float, nullable=True)
-    source:         Mapped[str] = mapped_column(String(8), default="gps")   # gps|manual
-    recorded_at:    Mapped[datetime] = mapped_column(DateTime)
-    received_at:    Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
-    reported_by:    Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    lat: Mapped[float] = mapped_column(Float)
+    lon: Mapped[float] = mapped_column(Float)
+    accuracy_m: Mapped[float | None] = mapped_column(Float, nullable=True)
+    source: Mapped[str] = mapped_column(String(8), default="gps")  # gps|manual
+    recorded_at: Mapped[datetime] = mapped_column(DateTime)
+    received_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+    reported_by: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
