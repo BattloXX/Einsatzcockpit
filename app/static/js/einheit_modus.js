@@ -130,7 +130,7 @@ function registriere() {
         fetch: window.fetch.bind(window),
         csrfToken: () => decodeURIComponent(cookie("ec_csrf")),
         simEinheitId: this.simulation ? this.simEinheitId : null,
-        dbName: this.simulation ? `ec-einheit-sim-${this.simEinheitId}` : (window.EINHEIT_PRINCIPAL || "") .startsWith("gk:") ? `ec-einheit-gk-${this.einheitId}` : "ec-einheit",
+        dbName: this.outboxName(),
         onTerminal: () => { void this.zugangBeenden(); },
       });
       await this.outbox.bereinigen();
@@ -401,7 +401,8 @@ function registriere() {
       await this.outbox.blockiereZugang();
       await this.outbox.zustandLeeren();
       await this.outboxAktualisieren();
-      this.hinweisBanner = `Zugang beendet - ${this.outboxListe.filter((item) => item.status === "blockiert_zugang").length} Meldungen nicht übermittelt. Bitte Einsatzleitung informieren.`;
+      const offen = this.outboxListe.filter((item) => item.status === "blockiert_zugang").length;
+      this.hinweisBanner = `Zugang beendet - ${offen} Meldungen nicht übermittelt. Bitte Einsatzleitung informieren.`;
       this.swCacheLeeren();
       clearTimeout(this.wsTimer);
       this.ws?.close();
@@ -409,15 +410,25 @@ function registriere() {
     async lokaleDatenLoeschen() {
       if (this.outboxListe.length && !confirm("Lokale Daten und nicht übermittelte Meldungen wirklich löschen?")) return;
       this.swCacheLeeren();
-      const name = this.outbox ? (this.simulation ? `ec-einheit-sim-${this.simEinheitId}` : (window.EINHEIT_PRINCIPAL || "").startsWith("gk:") ? `ec-einheit-gk-${this.einheitId}` : "ec-einheit") : null;
+      const name = this.outbox ? this.outboxName() : null;
       if (name) indexedDB.deleteDatabase(name);
       if ((window.EINHEIT_PRINCIPAL || "").startsWith("gk:")) {
-        await fetch("/gk/abmelden", { method: "POST", headers: { "X-CSRF-Token": decodeURIComponent(cookie("ec_csrf")) }, credentials: "same-origin" }).catch(() => {});
+        await fetch("/gk/abmelden", {
+          method: "POST",
+          headers: { "X-CSRF-Token": decodeURIComponent(cookie("ec_csrf")) },
+          credentials: "same-origin",
+        }).catch(() => {});
       }
       location.href = "/gk";
     },
 
     // Live-Synchronisation.
+    outboxName() {
+      if (this.simulation) return `ec-einheit-sim-${this.simEinheitId}`;
+      if ((window.EINHEIT_PRINCIPAL || "").startsWith("gk:")) return `ec-einheit-gk-${this.einheitId}`;
+      return "ec-einheit";
+    },
+
     verbinden() {
       if (this.zugangBeendet || !this.lageId || this.ws?.readyState === WebSocket.OPEN) return;
       const schema = location.protocol === "https:" ? "wss" : "ws";
