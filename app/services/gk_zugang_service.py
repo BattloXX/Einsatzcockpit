@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.core.audit import write_audit
 from app.core.security import hash_api_key
+from app.core.telefon import telefon_anzeige, telefon_maske
 from app.core.tenant import set_tenant_context
 from app.models.major_incident import (
     LageEinheit,
@@ -785,6 +786,7 @@ def zugang_status(db: Session, einheit: LageEinheit) -> dict:
         "letzte_aktivitaet_at": zugang.letzte_aktivitaet_at if zugang else None,
         "letzter_versand": send_data(sends[0]) if sends else None,
         "versandprotokoll": [send_data(s) for s in sends],
-        "nummer_anzeige": leader.phone_e164 if leader else None,
-        "nummer_maske": _mask_phone(leader.phone_e164) if leader and leader.phone_e164 else None,
+        "sitzung_aktiv": bool(zugang and zugang.token_hash and _aktuelle_sitzung(db, zugang)),
+        "nummer_anzeige": telefon_anzeige(leader.phone_e164) if leader and leader.phone_e164 else None,
+        "nummer_maske": telefon_maske(leader.phone_e164) if leader and leader.phone_e164 else None,
     }

@@ -17,6 +17,7 @@ from app.models.major_incident import (
     SITE_PRIORITY_COLOR,
     IncidentSite,
     LageEinheit,
+    LageEinheitLeader,
 )
 from app.models.master import Member
 from app.routers.ui_major_incident import _can_edit, _check_org_access, _get_mi_features, _lage_or_404, _nav_counts
@@ -42,14 +43,18 @@ def _context(request: Request, lage_id: int, einheit_id: int, db: Session):
     return lage, einheit
 
 
-def _darf_zugang_verwalten(request: Request, user) -> None:
-    if (
+def _zugang_erlaubt(request: Request, user) -> bool:
+    return not (
         not _can_edit(user)
         or getattr(request.state, "is_device", False)
         or getattr(request.state, "qr_lage_id", None) is not None
         or getattr(request.state, "qr_incident_id", None) is not None
         or getattr(user, "gsl_nur_lesen", False)
-    ):
+    )
+
+
+def _darf_zugang_verwalten(request: Request, user) -> None:
+    if not _zugang_erlaubt(request, user):
         raise HTTPException(403, "Zugangsverwaltung nicht erlaubt")
 
 
@@ -61,6 +66,11 @@ def _zugang(request: Request, lage, einheit, db: Session, ergebnis=None):
             "lage": lage,
             "einheit": einheit,
             "zugang": gk_zugang_service.zugang_status(db, einheit),
+            "karte_gk_name": (
+                db.get(LageEinheitLeader, einheit.leader_assignment_id).display_name
+                if einheit.leader_assignment_id and db.get(LageEinheitLeader, einheit.leader_assignment_id)
+                else None
+            ),
             "ergebnis": ergebnis,
         },
     )
@@ -190,6 +200,7 @@ def karte(
             "einheit": einheit,
             "karte": ressource_karte_service.karte(db, lage, einheit),
             "can_edit": _can_edit(request.state.user),
+            "can_zugang": _zugang_erlaubt(request, request.state.user),
             "mi_features": _get_mi_features(db, lage.org_id),
             **_nav_counts(lage_id, lage, db),
         },
