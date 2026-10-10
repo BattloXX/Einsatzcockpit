@@ -138,7 +138,7 @@
       </div>
       <div style="padding:16px;display:flex;flex-direction:column;gap:14px;">
         {% if gk_error %}<div class="alert alert--error">{{ gk_error }}</div>{% endif %}
-        {% if gk_warning %}<div class="alert alert--warning">{{ gk_warning }}</div>{% endif %}
+        {% if gk_warning %}<div class="alert alert--warn">{{ gk_warning }}</div>{% endif %}
         <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
           <input type="checkbox" name="gk_zugang_aktiv" value="1" {% if org_settings.gk_zugang_aktiv %}checked{% endif %}
                  style="width:18px;height:18px;">
@@ -159,7 +159,7 @@
             <button type="button" class="btn btn--secondary" id="gk-standard-wiederherstellen">Standard wiederherstellen</button>
             <span id="gk-sms-zaehler" style="font-size:.82rem;color:var(--text-muted);"></span>
           </div>
-          <div id="gk-sms-warnung" class="alert alert--warning" style="display:none;margin-top:8px;"></div>
+          <div id="gk-sms-warnung" class="alert alert--warn" style="display:none;margin-top:8px;"></div>
         </div>
         <div class="form-group">
           <label class="form-label">Vorschau</label>
