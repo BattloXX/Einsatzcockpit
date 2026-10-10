@@ -6,6 +6,7 @@ Pool = sector_id IS NULL (Reserve im SKKM-Sinne).
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal
@@ -13,6 +14,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from sqlalchemy import and_, case, func
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.audit import write_audit
 from app.core.telefon import telefon_maske, telefon_zu_e164_at
 from app.models.major_incident import (
     EINHEIT_STATUS_AKTIV,
@@ -28,7 +30,7 @@ from app.models.major_incident import (
     Sector,
     SiteLogEntry,
 )
-from app.models.master import Member
+from app.models.master import Member, VehicleMaster
 
 if TYPE_CHECKING:
     from app.services.gk_zugang_service import AutoSmsAuftrag
@@ -255,6 +257,177 @@ def add_resource(
 
         widerrufe(db, e.id, grund="abgerueckt", user_id=user_id)
     return e
+
+
+@dataclass
+class EinheitAnlegenErgebnis:
+    """Ergebnis der atomar vorbereiteten Einheitserfassung.
+
+    Die Funktion committet bewusst nicht. Der Aufrufer entscheidet damit ueber die
+    Transaktionsgrenze und kann bei einem Fehler alle angelegten Teilobjekte
+    zurueckrollen.
+    """
+
+    einheit: LageEinheit
+    gk_ergebnis: GkErgebnis | None
+    auto_sms: AutoSmsAuftrag | None
+    warnungen: list[str]
+
+
+def _eingabe_dict(wert: Mapping[str, Any] | None, name: str) -> dict[str, Any] | None:
+    if wert is None:
+        return None
+    if not isinstance(wert, Mapping):
+        raise ValueError(f"{name} muss ein Objekt sein")
+    return dict(wert)
+
+
+def lege_einheit_an(
+    db: Session,
+    lage: MajorIncident,
+    *,
+    resource_type: str,
+    label: str,
+    vehicle_id: int | None = None,
+    org_name: str | None = None,
+    bos: str | None = None,
+    qty: int | None = None,
+    unit: str | None = None,
+    funkrufname: str | None = None,
+    status: str | None = None,
+    sektor_id: int | None = None,
+    bereitstellungsraum: str | None = None,
+    gk: Mapping[str, Any] | None = None,
+    stellvertreter: Mapping[str, Any] | None = None,
+    personal: Mapping[str, Any] | None = None,
+    personen: Iterable[Mapping[str, Any]] | None = None,
+    ausstattung: Iterable[Mapping[str, Any]] | None = None,
+    bemerkung: str | None = None,
+    user_id: int,
+    author_name: str,
+) -> EinheitAnlegenErgebnis:
+    """Legt eine GSL-Einheit samt optionaler Stammdaten atomar im Caller-Commit an."""
+    from app.services import ressource_pflege_service
+
+    actual_label = label.strip()
+    if not actual_label:
+        raise ValueError("Bezeichnung fehlt")
+    if resource_type not in RESOURCE_TYPE_LABEL:
+        raise ValueError(f"Ungültiger resource_type: {resource_type}")
+    actual_status = status or STATUS_BEREITGESTELLT
+    if actual_status not in VALID_STATUSES:
+        raise ValueError(f"Ungültiger Status: {actual_status}")
+
+    vehicle: VehicleMaster | None = None
+    if vehicle_id is not None:
+        vehicle = db.get(VehicleMaster, vehicle_id)
+        if vehicle is None:
+            raise ValueError("Fahrzeug nicht gefunden")
+        if vehicle.dept_id != lage.org_id:
+            raise ValueError("Fahrzeug gehört nicht zur Organisation der Lage")
+        duplicate_vehicle = db.query(LageEinheit.id).filter(
+            LageEinheit.lage_id == lage.id,
+            LageEinheit.vehicle_id == vehicle_id,
+            LageEinheit.status != STATUS_ABGERUECKT,
+        ).first()
+        if duplicate_vehicle:
+            raise ValueError("Fahrzeug ist bereits in der Lage")
+
+    # Externe Kraefte und Material duerfen dieselbe Bezeichnung tragen, sofern
+    # sie nicht derselben Organisation und demselben Typ zugeordnet sind.
+    duplicate_label = db.query(LageEinheit.id).filter(
+        LageEinheit.lage_id == lage.id,
+        LageEinheit.resource_type == resource_type,
+        func.lower(LageEinheit.label) == actual_label.casefold(),
+        func.coalesce(LageEinheit.org_name, "") == (org_name or "").strip(),
+    ).first()
+    if duplicate_label:
+        raise ValueError("Einheit mit Bezeichnung, Typ und Organisation ist bereits in der Lage")
+
+    gk_daten = _eingabe_dict(gk, "GK")
+    stv_daten = _eingabe_dict(stellvertreter, "Stellvertreter")
+    personal_daten = _eingabe_dict(personal, "Personal")
+    personen_liste = list(personen or [])
+    ausstattung_liste = list(ausstattung or [])
+    if any(not isinstance(person, Mapping) for person in personen_liste):
+        raise ValueError("Personen müssen Objekte sein")
+    if any(not isinstance(zeile, Mapping) for zeile in ausstattung_liste):
+        raise ValueError("Ausstattung muss aus Objekten bestehen")
+
+    einheit = add_resource(
+        db, lage.id, actual_label, resource_type=resource_type, vehicle_id=vehicle_id,
+        org_name=(org_name or "").strip() or None, bos=(bos or "").strip() or None,
+        qty=qty, unit=(unit or "").strip() or None, status=actual_status,
+        author_name=author_name, user_id=user_id,
+    )
+    aktualisiere_einheit_stamm(
+        db, lage, einheit,
+        funkrufname=einheit.funkrufname if funkrufname is None else funkrufname,
+        org_name=org_name, bos=bos,
+        bereitstellungsraum=bereitstellungsraum, qty=qty, unit=unit,
+        user_id=user_id, author_name=author_name,
+    )
+    if sektor_id is not None:
+        assign_to_sector(db, einheit.id, lage.id, sektor_id, author_name=author_name, user_id=user_id)
+
+    gk_ergebnis: GkErgebnis | None = None
+    if gk_daten is not None:
+        gk_ergebnis = setze_gruppenkommandant(
+            db, lage, einheit, member_id=gk_daten.get("member_id"),
+            person_name=gk_daten.get("person_name"), telefon=gk_daten.get("telefon"),
+            modus=gk_daten.get("modus", "auto"), user_id=user_id, author_name=author_name,
+        )
+    if stv_daten is not None:
+        setze_stellvertreter(
+            db, lage, einheit, member_id=stv_daten.get("member_id"),
+            person_name=stv_daten.get("person_name"), telefon=stv_daten.get("telefon"),
+            modus=stv_daten.get("modus", "auto"), user_id=user_id, author_name=author_name,
+        )
+
+    if personen_liste:
+        ressource_pflege_service.modus_wechseln(
+            db, lage, einheit, "liste", user_id=user_id, author_name=author_name,
+        )
+        for person in personen_liste:
+            ressource_pflege_service.person_hinzufuegen(
+                db, lage, einheit, member_id=person.get("member_id"), name=person.get("name"),
+                funktion=person.get("funktion", "mannschaft"), qualifikationen=person.get("qualifikationen"),
+                herkunft=person.get("herkunft", "frei"), bemerkung=person.get("bemerkung"),
+                user_id=user_id, author_name=author_name,
+            )
+    elif personal_daten is not None:
+        ressource_pflege_service.personal_setzen(
+            db, lage, einheit, gesamt=personal_daten.get("gesamt", 0),
+            fuehrung=personal_daten.get("fuehrung"), agt=personal_daten.get("agt"),
+            sanitaeter=personal_daten.get("sanitaeter"),
+            bemerkung=personal_daten.get("bemerkung", bemerkung),
+            user_id=user_id, author_name=author_name,
+        )
+    elif bemerkung is not None:
+        # Bemerkungen zur Mannschaft nutzen dieselbe Validierung und Auditspur.
+        ressource_pflege_service.personal_setzen(
+            db, lage, einheit, gesamt=0, bemerkung=bemerkung,
+            user_id=user_id, author_name=author_name,
+        )
+
+    for zeile in ausstattung_liste:
+        ressource_pflege_service.ausstattung_hinzufuegen(
+            db, lage, einheit, kategorie=zeile.get("kategorie", ""),
+            bezeichnung=zeile.get("bezeichnung"), menge=zeile.get("menge", 1),
+            status=zeile.get("status", "einsatzbereit"), bemerkung=zeile.get("bemerkung"),
+            ist_faehigkeit=zeile.get("ist_faehigkeit"), stamm_ref_typ=zeile.get("stamm_ref_typ"),
+            stamm_ref_id=zeile.get("stamm_ref_id"), user_id=user_id, author_name=author_name,
+        )
+
+    write_audit(
+        db, "gsl.einheit.angelegt", org_id=lage.org_id, user_id=user_id,
+        entity_type="lage_einheit", entity_id=einheit.id,
+        payload={"lage_id": lage.id, "einheit_id": einheit.id, "resource_type": resource_type},
+    )
+    return EinheitAnlegenErgebnis(
+        einheit=einheit, gk_ergebnis=gk_ergebnis,
+        auto_sms=gk_ergebnis.auto_sms if gk_ergebnis else None, warnungen=[],
+    )
 
 
 # ── Zuordnung Abschnitt / Einsatzstelle / Pool ────────────────────────────────
@@ -1081,7 +1254,7 @@ def setze_gruppenkommandant(
             )
             from app.services.gk_zugang_service import widerrufe
 
-            widerrufe(db, einheit.id, grund="telefon", user_id=user_id)
+            widerrufe(db, einheit.id, grund="telefon", user_id=user_id, typ="personal")
             from app.services.gk_zugang_service import plane_auto_sms
             return GkErgebnis(aenderung="telefon", leader=old, zugang_gesperrt=True,
                               auto_sms=plane_auto_sms(db, lage, einheit, old, "telefon"))

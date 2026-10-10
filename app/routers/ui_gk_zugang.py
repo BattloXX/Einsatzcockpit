@@ -49,6 +49,10 @@ def _meldung(pruefung: gk_zugang_service.TokenPruefung) -> str:
     return "Link ungültig" if pruefung.zustand == "unbekannt" else _BEENDET
 
 
+def _typ(token: str) -> str:
+    return "qr" if token.startswith(gk_zugang_service.QR_TOKEN_PREFIX) else "personal"
+
+
 def _gebundene_daten(db: Session, zugang: LageEinheitZugang) -> tuple[MajorIncident, LageEinheit] | None:
     # Public routes have no tenant context. The token-derived org_id is therefore
     # an explicit part of every follow-up lookup.
@@ -76,7 +80,7 @@ async def gk_start(request: Request):
 @router.post("/gk/pruefen")
 @(_limiter.limit("10/15minutes") if _limiter else lambda f: f)
 async def gk_pruefen(request: Request, daten: TokenDaten, db: Session = Depends(get_db)):
-    pruefung = gk_zugang_service.token_pruefen(db, daten.token)
+    pruefung = gk_zugang_service.token_pruefen(db, daten.token, _typ(daten.token))
     if pruefung.zustand != "ok" or not pruefung.zugang:
         return _antwort({"ok": False, "meldung": _meldung(pruefung)}, 404)
     gebunden = _gebundene_daten(db, pruefung.zugang)
@@ -84,20 +88,27 @@ async def gk_pruefen(request: Request, daten: TokenDaten, db: Session = Depends(
         return _antwort({"ok": False, "meldung": _BEENDET}, 404)
     lage, einheit = gebunden
     return _antwort(
-        {"ok": True, "lage": lage.name, "einheit": einheit.label, "pin_noetig": pruefung.zugang.pin_pflicht}
+        {
+            "ok": True, "lage": lage.name, "einheit": einheit.label,
+            "pin_noetig": pruefung.zugang.pin_pflicht, "typ": pruefung.zugang.typ,
+        }
     )
 
 
 @router.post("/gk/pin")
 @(_limiter.limit("5/15minutes") if _limiter else lambda f: f)
 async def gk_pin(request: Request, daten: TokenDaten, db: Session = Depends(get_db)):
-    pruefung = gk_zugang_service.token_pruefen(db, daten.token)
+    typ = _typ(daten.token)
+    pruefung = gk_zugang_service.token_pruefen(db, daten.token, typ)
     zugang = pruefung.zugang
     if pruefung.zustand != "ok" or not zugang:
         return _antwort({"ok": False, "meldung": _meldung(pruefung)}, 404)
     if not zugang.pin_pflicht or not _gebundene_daten(db, zugang):
         return _antwort({"ok": False, "meldung": _BEENDET}, 404)
     now = _now()
+    if typ == "qr":
+        # QR-PIN ist auf dem Führungsweg bekannt; diese öffentliche Route löst nie SMS aus.
+        return _antwort({"ok": True, "pin_eingabe": True})
     anfragen = (
         db.query(LageEinheitZugangVersand)
         .filter(
@@ -167,7 +178,8 @@ async def gk_pin(request: Request, daten: TokenDaten, db: Session = Depends(get_
 @router.post("/gk/einloesen")
 @(_limiter.limit("10/15minutes") if _limiter else lambda f: f)
 async def gk_einloesen(request: Request, daten: EinloesenDaten, db: Session = Depends(get_db)):
-    pruefung = gk_zugang_service.token_pruefen(db, daten.token)
+    typ = _typ(daten.token)
+    pruefung = gk_zugang_service.token_pruefen(db, daten.token, typ)
     zugang = pruefung.zugang
     if pruefung.zustand != "ok" or not zugang or not _gebundene_daten(db, zugang):
         return _antwort({"ok": False, "meldung": _meldung(pruefung)}, 404)
@@ -176,8 +188,7 @@ async def gk_einloesen(request: Request, daten: EinloesenDaten, db: Session = De
         pin_ok = bool(
             daten.pin
             and zugang.pin_hash
-            and zugang.pin_gueltig_bis
-            and zugang.pin_gueltig_bis > now
+            and (typ == "qr" or (zugang.pin_gueltig_bis and zugang.pin_gueltig_bis > now))
             and (zugang.pin_gesperrt_bis is None or zugang.pin_gesperrt_bis <= now)
         )
         pin_ok = pin_ok and hash_api_key(daten.pin or "") == zugang.pin_hash
@@ -195,8 +206,9 @@ async def gk_einloesen(request: Request, daten: EinloesenDaten, db: Session = De
             )
             db.commit()
             return _antwort({"ok": False, "meldung": "Code ungültig oder abgelaufen."}, 403)
-        zugang.pin_hash = None
-        zugang.pin_gueltig_bis = None
+        if typ != "qr":
+            zugang.pin_hash = None
+            zugang.pin_gueltig_bis = None
         zugang.pin_versuche = 0
     raw, session = gk_zugang_service.sitzung_anlegen(
         db,
@@ -223,7 +235,7 @@ async def gk_einloesen(request: Request, daten: EinloesenDaten, db: Session = De
     db.commit()
     response = _antwort({"ok": True, "redirect": "/einheit"})
     response.set_cookie(
-        gk_zugang_service.COOKIE,
+        gk_zugang_service.QR_COOKIE if typ == "qr" else gk_zugang_service.COOKIE,
         raw,
         httponly=True,
         secure=settings.COOKIE_SECURE,
@@ -236,24 +248,26 @@ async def gk_einloesen(request: Request, daten: EinloesenDaten, db: Session = De
 
 @router.post("/gk/abmelden")
 async def gk_abmelden(request: Request, db: Session = Depends(get_db)):
-    cookie = request.cookies.get(gk_zugang_service.COOKIE)
-    if cookie:
-        principal = gk_zugang_service.sitzung_pruefen(db, cookie)
-        if principal:
-            principal.session.revoked_at, principal.session.revoke_grund = _now(), "abmeldung"
-            write_audit(
-                db,
-                "gsl.zugang.abgemeldet",
-                org_id=principal.org_id,
-                entity_type="lage_einheit",
-                entity_id=principal.einheit.id,
-                payload={
-                    "lage_id": principal.lage.id,
-                    "einheit_id": principal.einheit.id,
-                    "generation": principal.zugang.generation,
-                },
-            )
-            db.commit()
+    for typ, cookie_name in (("personal", gk_zugang_service.COOKIE), ("qr", gk_zugang_service.QR_COOKIE)):
+        cookie = request.cookies.get(cookie_name)
+        if cookie:
+            principal = gk_zugang_service.sitzung_pruefen(db, cookie, typ)
+            if principal:
+                principal.session.revoked_at, principal.session.revoke_grund = _now(), "abmeldung"
+                write_audit(
+                    db,
+                    "gsl.zugang.abgemeldet",
+                    org_id=principal.org_id,
+                    entity_type="lage_einheit",
+                    entity_id=principal.einheit.id,
+                    payload={
+                        "lage_id": principal.lage.id,
+                        "einheit_id": principal.einheit.id,
+                        "generation": principal.zugang.generation,
+                    },
+                )
+                db.commit()
     response = _antwort({"ok": True})
     response.delete_cookie(gk_zugang_service.COOKIE, path="/")
+    response.delete_cookie(gk_zugang_service.QR_COOKIE, path="/")
     return response

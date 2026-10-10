@@ -718,10 +718,12 @@ class EinheitAktion(TenantScoped, Base):
 
 class LageEinheitZugang(TenantScoped, Base):
     __tablename__ = "lage_einheit_zugang"
+    __table_args__ = (UniqueConstraint("einheit_id", "typ", name="uq_lage_einheit_zugang_einheit_typ"),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     lage_id: Mapped[int] = mapped_column(Integer, ForeignKey("major_incident.id", ondelete="CASCADE"), index=True)
-    einheit_id: Mapped[int] = mapped_column(Integer, ForeignKey("lage_einheit.id", ondelete="CASCADE"), unique=True)
+    einheit_id: Mapped[int] = mapped_column(Integer, ForeignKey("lage_einheit.id", ondelete="CASCADE"))
+    typ: Mapped[str] = mapped_column(String(10), nullable=False, default="personal")
     leader_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("lage_einheit_leader.id", ondelete="SET NULL"), nullable=True
     )
@@ -750,6 +752,9 @@ class LageEinheitZugang(TenantScoped, Base):
     pin_gueltig_bis: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     pin_versuche: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     pin_gesperrt_bis: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    qr_druck_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    qr_druck_job_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    qr_pin_pflicht: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
 
@@ -761,6 +766,7 @@ class LageEinheitZugangSession(TenantScoped, Base):
         BigInteger, ForeignKey("lage_einheit_zugang.id", ondelete="CASCADE"), index=True
     )
     generation: Mapped[int] = mapped_column(Integer, nullable=False)
+    typ: Mapped[str] = mapped_column(String(10), nullable=False, default="personal")
     session_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

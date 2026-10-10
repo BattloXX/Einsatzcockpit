@@ -95,13 +95,14 @@ def _optionaler_kontext(request: Request, db: Session) -> EinheitKontext | None:
         return kontext_fuer_geraet(db, user, token) if token else None
     if user is not None and (request.headers.get("X-EC-Einheit-Sim") or request.query_params.get("sim")):
         return _simulationskontext(request, db)
-    cookie = request.cookies.get(gk_zugang_service.COOKIE)
-    if not cookie:
-        return None
-    principal, _ = gk_zugang_service.sitzung_pruefen_mit_grund(db, cookie)
-    if principal:
-        db.commit()
-        return kontext_fuer_zugang(db, principal)
+    for typ, cookie_name in (("personal", gk_zugang_service.COOKIE), ("qr", gk_zugang_service.QR_COOKIE)):
+        cookie = request.cookies.get(cookie_name)
+        if not cookie:
+            continue
+        principal, _ = gk_zugang_service.sitzung_pruefen_mit_grund(db, cookie, typ)
+        if principal:
+            db.commit()
+            return kontext_fuer_zugang(db, principal)
     db.rollback()
     return None
 
@@ -146,6 +147,7 @@ def _einheit_seite(request: Request, db: Session, start_dispatch_id: int | None 
         "admin_name": getattr(user, "display_name", "") if ctx and ctx.simulation else "",
         "gk_zugang": bool(ctx and ctx.quelle == "zugang"),
         "gk_name": ctx.leader.display_name if ctx and ctx.leader else "",
+        "zugang_qr": bool(ctx and ctx.zugang and ctx.zugang.typ == "qr"),
         "start_dispatch_id": start_dispatch_id, "kein_kontext": ctx is None, "simulation_fehler": None,
     })
 
@@ -202,15 +204,19 @@ def einheit_kontext(request: Request, db: Session = Depends(get_db)) -> EinheitK
             db.commit()
         return ctx
     if user is None:
-        cookie = request.cookies.get(gk_zugang_service.COOKIE)
-        if cookie:
-            principal, grund = gk_zugang_service.sitzung_pruefen_mit_grund(db, cookie)
+        principal = None
+        grund = None
+        for typ, cookie in (("personal", request.cookies.get(gk_zugang_service.COOKIE)), ("qr", request.cookies.get(gk_zugang_service.QR_COOKIE))):
+            if not cookie:
+                continue
+            principal, grund = gk_zugang_service.sitzung_pruefen_mit_grund(db, cookie, typ)
             if principal:
                 # Only the validator's activity timestamp is committed here;
                 # no endpoint mutation has run at this point.
                 db.commit()
                 return kontext_fuer_zugang(db, principal)
             db.rollback()
+        if request.cookies.get(gk_zugang_service.COOKIE) or request.cookies.get(gk_zugang_service.QR_COOKIE):
             codes = {
                 ZugangFehlergrund.WIDERRUFEN: "zugang_widerrufen",
                 ZugangFehlergrund.ABGELAUFEN: "zugang_abgelaufen",
@@ -235,13 +241,17 @@ def einheit_kontext(request: Request, db: Session = Depends(get_db)) -> EinheitK
             _fehler(403, "kein_einheitenkontext")
         return ctx
 
-    cookie = request.cookies.get(gk_zugang_service.COOKIE)
-    if cookie:
-        principal, grund = gk_zugang_service.sitzung_pruefen_mit_grund(db, cookie)
+    principal = None
+    grund = None
+    for typ, cookie in (("personal", request.cookies.get(gk_zugang_service.COOKIE)), ("qr", request.cookies.get(gk_zugang_service.QR_COOKIE))):
+        if not cookie:
+            continue
+        principal, grund = gk_zugang_service.sitzung_pruefen_mit_grund(db, cookie, typ)
         if principal:
             db.commit()
             return kontext_fuer_zugang(db, principal)
         db.rollback()
+    if request.cookies.get(gk_zugang_service.COOKIE) or request.cookies.get(gk_zugang_service.QR_COOKIE):
         codes = {
             ZugangFehlergrund.WIDERRUFEN: "zugang_widerrufen",
             ZugangFehlergrund.ABGELAUFEN: "zugang_abgelaufen",
@@ -261,6 +271,8 @@ def einheit_darf(aktion: str, ctx: EinheitKontext, db: Session) -> None:
     if ctx.quelle != "zugang":
         return
     if aktion not in ZUGANG_AKTIONEN:
+        _fehler(403, "zugang_aktion_nicht_erlaubt")
+    if ctx.zugang and ctx.zugang.typ == "qr" and aktion.startswith("ressource_"):
         _fehler(403, "zugang_aktion_nicht_erlaubt")
     if aktion.startswith("ressource_") and not gk_zugang_service.org_einstellungen(db, ctx.org_id).gk_zugang_ressource_pflegen:
         _fehler(403, "zugang_aktion_nicht_erlaubt")

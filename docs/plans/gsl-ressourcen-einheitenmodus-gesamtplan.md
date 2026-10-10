@@ -183,3 +183,15 @@ Pflichtszenarien 1–17 des Gesamtauftrags sind den Phasen zugeordnet: 1, 2, 5 �
 | C | Nummer + Dispositions-SMS + Push | C1–C3 | B | Szenarien 6–9 grün |
 | D | Einheitenmodus-Politur | D1–D3 | B2 | Szenarien 11–13, 17 grün |
 | E | Verlegen/Teilen, MCP, Doku | E1–E3 | A–C | Szenarien 14–16 grün, Doku vollständig |
+
+## 16. Umsetzungsstand
+
+### Phase A + B – Schnellanlage, QR-Zugang, Druckregel (Branch `feat/gsl-gesamt-b`)
+
+- A1–A3: `resource_service.lege_einheit_an` (atomar, Audit `gsl.einheit.angelegt`, Duplikatschutz), Route `lage_einheit_create` delegiert; Dialog mit Funkruf, Status, Abschnitt, Bereitstellungsraum, GK + Mobilnummer, Besatzungsstärke und aufklappbaren Zusatzangaben.
+- B1: Migration 0268 (`typ` an Zugang und Sitzung, UNIQUE `(einheit_id, typ)`, `qr_*`, Org-Schalter `gk_qr_*`), ableitbarer HMAC-Token (`GSL_ZUGANG_KEY`, Präfix `gkz_`/`gkq_`); Altbestand-Zufallstokens bleiben gültig.
+- B2: `stelle_qr_zugang_aus` (idempotent, ohne Rotation bei Wiederverwendung), Cookie `ec_qr`, `/einheit` und WebSocket für QR; Ressourcenpflege für QR gesperrt; Widerruf bei GK-Wechsel, Abrücken, Lageende, Notbremse, manuell, Schalter.
+- B3: QR-Bereich im Zugang-Tab (Vorschau auf Klick, PIN nur für die Führung), A4-Dokument (`DOC_GSL_EINHEIT_QR`, PIN nie auf dem Blatt, Renderer prüft Org/Lage/Generation), manueller Druck.
+- B4: Druckregel `gsl_einheit_angelegt` (Standard: keine Regel), Autodruck nach Commit, Statusanzeige, Cookie-Reihenfolge `ec_gk`/`ec_qr`.
+- Browser-Smoketest (Chromium): `/gk#gkq_…` → Fragment entfernt → Einlösung (mit und ohne PIN) → `/einheit`. Dabei gefunden und behoben: Einlöseseite akzeptierte nur `#gkz_`, versteckte Elemente wurden durch `.btn` überschrieben.
+- Offen: Gerätetest auf echtem Smartphone, echter Drucker/Gateway, Layout des A4-Dokuments im Druck.

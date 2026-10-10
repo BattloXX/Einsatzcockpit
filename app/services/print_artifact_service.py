@@ -6,6 +6,8 @@ eine signierte URL (5 min gültig) und schickt es an CUPS.
 """
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from app.config import settings
 from app.core.security import sign_artifact_token, unsign_artifact_token
 from app.models.gateway import (
@@ -15,6 +17,7 @@ from app.models.gateway import (
     DOC_EINSATZINFO,
     DOC_FAHRTENBUCH_BERICHT,
     DOC_GSL_BERICHT,
+    DOC_GSL_EINHEIT_QR,
     DOC_GSL_JOURNAL,
     DOC_GSL_LAGEBLATT,
     DOC_LAGE_KARTE,
@@ -100,6 +103,8 @@ def render_job_pdf(db, job: PrintJob, base_url: str = "") -> bytes:
         return _render_qr_einsatz(db, job, base_url)
     if job.document_type == DOC_GSL_BERICHT:
         return _render_gsl_bericht(db, job, base_url)
+    if job.document_type == DOC_GSL_EINHEIT_QR:
+        return _render_gsl_einheit_qr(db, job, base_url)
     if job.document_type == DOC_FAHRTENBUCH_BERICHT:
         return _render_fahrtenbuch_bericht(db, job, base_url)
     if job.document_type == DOC_MASCHINISTEN_MATRIX:
@@ -632,6 +637,50 @@ def _render_qr_einsatz(db, job: PrintJob, base_url: str) -> bytes:
     logo_url = (org.logo_path if org and org.logo_path else None) or "/static/img/Logo-rot.png"
     html_str = _t.env.get_template("incident/qr_print.html").render(
         incident=incident, qr_img=img_datauri, qr_url=url, logo_url=logo_url,
+        base_url=base_url.rstrip("/"), user=SimpleNamespace(org=org),
+    )
+    return _html_to_pdf(html_str, base_url)
+
+
+def _render_gsl_einheit_qr(db, job: PrintJob, base_url: str) -> bytes:
+    """QR-Zugang einer Einheit drucken, ohne Token im Job zu speichern."""
+    from types import SimpleNamespace
+
+    from app.core.templating import templates as _t
+    from app.models.major_incident import LageEinheit, LageEinheitZugang, MajorIncident
+    from app.models.master import FireDept
+    from app.services.gk_zugang_service import link_fuer, token_neu_berechnen
+    from app.services.qr_service import generate_qr_datauri
+
+    if not job.gsl_id or not job.artifact_ref:
+        raise ArtifactError("QR-Zugang nicht mehr gültig – bitte neu drucken")
+    try:
+        einheit_id_text, generation_text = job.artifact_ref.split(":", 1)
+        einheit_id, generation = int(einheit_id_text), int(generation_text)
+    except (TypeError, ValueError):
+        raise ArtifactError("QR-Zugang nicht mehr gültig – bitte neu drucken") from None
+    lage = db.get(MajorIncident, job.gsl_id)
+    einheit = db.get(LageEinheit, einheit_id)
+    if lage is None or lage.org_id != job.org_id or einheit is None or einheit.lage_id != lage.id:
+        raise ArtifactError("QR-Zugang nicht mehr gültig – bitte neu drucken")
+    zugang = db.query(LageEinheitZugang).filter(
+        LageEinheitZugang.einheit_id == einheit.id,
+        LageEinheitZugang.lage_id == lage.id,
+        LageEinheitZugang.org_id == job.org_id,
+        LageEinheitZugang.typ == "qr",
+    ).first()
+    now = datetime.now(UTC).replace(tzinfo=None)
+    if (zugang is None or zugang.status != "aktiv" or not zugang.laeuft_ab_at
+            or zugang.laeuft_ab_at <= now or zugang.generation != generation):
+        raise ArtifactError("QR-Zugang nicht mehr gültig – bitte neu drucken")
+    link = link_fuer(token_neu_berechnen(zugang))
+    qr_img = generate_qr_datauri(link, druck=True, box_size=14)
+    if not qr_img:
+        raise ArtifactError("QR-Code konnte nicht erzeugt werden")
+    org = db.get(FireDept, lage.org_id)
+    logo_url = (org.logo_path if org and org.logo_path else None) or "/static/img/Logo-rot.png"
+    html_str = _t.env.get_template("gsl/einheit_qr_print.html").render(
+        lage=lage, einheit=einheit, zugang=zugang, qr_img=qr_img, logo_url=logo_url,
         base_url=base_url.rstrip("/"), user=SimpleNamespace(org=org),
     )
     return _html_to_pdf(html_str, base_url)

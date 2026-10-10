@@ -65,7 +65,7 @@
 
   {% if gk_zugang %}
   <div class="einheit-simulation">
-    <strong>Gruppenkommandant-Zugang - {{ gk_name }}</strong>
+    <strong>{% if zugang_qr %}QR-Zugang - {{ fahrzeug }}{% else %}Gruppenkommandant-Zugang - {{ gk_name }}{% endif %}</strong>
     <button type="button" class="btn btn--ghost btn--sm"
             @click="lokaleDatenLoeschen()">Abmelden</button>
   </div>

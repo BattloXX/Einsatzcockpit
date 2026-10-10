@@ -68,6 +68,7 @@ DOC_QR_EINSATZ = "qr_einsatz"            # QR-Druckseite eines Einsatzes (incide
 DOC_GSL_BERICHT = "gsl_bericht"          # GSL-Gesamtbericht/Einsatzjournal (gsl_id = lage_id)
 DOC_FAHRTENBUCH_BERICHT = "fahrtenbuch_bericht"  # Fahrtenbuch-Statistik-Bericht (artifact_ref = Filter-Query)
 DOC_MASCHINISTEN_MATRIX = "maschinisten_matrix"  # Jahresmatrix Maschinist x Fahrzeug
+DOC_GSL_EINHEIT_QR = "gsl_einheit_qr"  # QR-Zugang einer GSL-Einheit (gsl_id + "einheit:generation")
 # Hinweis: „mannschaft" wird über DOC_TEILNAHME (artifact_ref = "einsatz:<id>") abgedeckt.
 
 # Leaflet-Karten – am Stationsdrucker über Gateway-Headless-Chromium gerendert
@@ -101,6 +102,7 @@ DOCUMENT_TYPE_LABELS = {
     DOC_GSL_BERICHT: "GSL-Gesamtbericht",
     DOC_FAHRTENBUCH_BERICHT: "Fahrtenbuch-Bericht",
     DOC_MASCHINISTEN_MATRIX: "Maschinisten-Matrix",
+    DOC_GSL_EINHEIT_QR: "GSL – Einheiten-QR-Zugang",
     DOC_LAGE_KARTE: "Lagekarte",
     DOC_SITE_KARTE: "Stellen-Druck",
     DOC_CROSS_KARTE: "Meldungs-Druck",
@@ -135,6 +137,7 @@ TRIGGER_GSL_CREATED = "gsl_created"
 TRIGGER_GSL_LAGE_UPDATED = "gsl_lage_updated"
 TRIGGER_ALARM_SERIAL = "alarm_serial_received"
 TRIGGER_VERLEIH_CREATED = "verleih_created"
+TRIGGER_GSL_EINHEIT_ANGELEGT = "gsl_einheit_angelegt"
 TRIGGER_MANUAL_ONLY = "manual_only"
 
 TRIGGER_LABELS = {
@@ -144,6 +147,7 @@ TRIGGER_LABELS = {
     TRIGGER_GSL_LAGE_UPDATED: "GSL-Lage aktualisiert",
     TRIGGER_ALARM_SERIAL: "Serieller Alarm empfangen",
     TRIGGER_VERLEIH_CREATED: "Verleihschein angelegt",
+    TRIGGER_GSL_EINHEIT_ANGELEGT: "GSL – Neue Einheit / QR-Einheitenzugang",
     TRIGGER_MANUAL_ONLY: "Nur manuell",
 }
 
@@ -158,6 +162,7 @@ RULE_DOCUMENT_LABELS = {
     DOC_OBJEKTBLATT: DOCUMENT_TYPE_LABELS[DOC_OBJEKTBLATT],
     DOC_ALARM_ROHTEXT: DOCUMENT_TYPE_LABELS[DOC_ALARM_ROHTEXT],
     DOC_VERLEIH_SCHEIN: DOCUMENT_TYPE_LABELS[DOC_VERLEIH_SCHEIN],
+    DOC_GSL_EINHEIT_QR: DOCUMENT_TYPE_LABELS[DOC_GSL_EINHEIT_QR],
 }
 
 TRIGGER_DOCUMENT_TYPES = {
@@ -167,6 +172,7 @@ TRIGGER_DOCUMENT_TYPES = {
     TRIGGER_GSL_LAGE_UPDATED: frozenset({DOC_GSL_LAGEBLATT, DOC_GSL_BERICHT}),
     TRIGGER_ALARM_SERIAL: frozenset({DOC_ALARM_ROHTEXT}),
     TRIGGER_VERLEIH_CREATED: frozenset({DOC_VERLEIH_SCHEIN}),
+    TRIGGER_GSL_EINHEIT_ANGELEGT: frozenset({DOC_GSL_EINHEIT_QR}),
 }
 
 # Objekt-Elemente, die eine Druckregel bei zugeordnetem Objekt mitdrucken kann.

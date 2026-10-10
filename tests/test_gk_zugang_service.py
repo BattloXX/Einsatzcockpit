@@ -77,7 +77,7 @@ def test_ausstellung_speichert_nur_hash_und_rotation_invalidiert_sitzung():
         assert service.token_pruefen(db, token1).zustand == "beendet"
         assert service.token_pruefen(db, second.link.rsplit("#", 1)[1]).zustand == "ok"
         assert service.sitzung_pruefen(db, cookie) is None
-        assert db.query(LageEinheitZugang).filter_by(einheit_id=einheit.id).count() == 1
+        assert db.query(LageEinheitZugang).filter_by(einheit_id=einheit.id, typ="personal").count() == 1
         assert second.generation == first.generation + 1
 
 

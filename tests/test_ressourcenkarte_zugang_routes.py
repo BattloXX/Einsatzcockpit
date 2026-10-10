@@ -123,7 +123,7 @@ def test_aktive_sitzung_liefert_409(client, setup_db):
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
-        zugang = db.query(LageEinheitZugang).filter_by(einheit_id=einheit_id).one()
+        zugang = db.query(LageEinheitZugang).filter_by(einheit_id=einheit_id, typ="personal").one()
         service.sitzung_anlegen(db, zugang, user_agent="UA", ip="1.2.3.4", verifiziert=True)
         db.commit()
     finally:

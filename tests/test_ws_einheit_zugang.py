@@ -94,3 +94,25 @@ def test_lage_ws_lehnt_gk_cookie_ohne_benutzer_sitzung_ab(client):
         with client.websocket_connect(f"/ws/lage/{lage_id}"):
             pass
     assert error.value.code == 4401
+
+
+def test_gk_ws_faellt_von_abgelaufenem_personal_cookie_auf_qr_cookie_zurueck(client):
+    """Die Cookie-Reihenfolge darf einen gültigen QR-Zugang nicht verdecken."""
+    with _session() as db:
+        org, lage, einheit, _, personal = _ausgestellt(db)
+        db.query(gk_zugang_service.OrgSettings).filter_by(org_id=org.id).one().gk_qr_aktiv = True
+        qr = gk_zugang_service.stelle_qr_zugang_aus(db, lage, einheit, user_id=None, grund="test")
+        personal_cookie, personal_session = gk_zugang_service.sitzung_anlegen(
+            db, db.get(gk_zugang_service.LageEinheitZugang, personal.zugang_id),
+            user_agent=None, ip=None, verifiziert=True,
+        )
+        qr_cookie, _ = gk_zugang_service.sitzung_anlegen(
+            db, db.get(gk_zugang_service.LageEinheitZugang, qr.zugang_id), user_agent=None, ip=None, verifiziert=True
+        )
+        personal_session.revoked_at = gk_zugang_service._now()
+        db.commit()
+    client.cookies.set("ec_gk", personal_cookie)
+    client.cookies.set("ec_qr", qr_cookie)
+    with client.websocket_connect("/ws/einheit-zugang") as websocket:
+        websocket.send_text("ping")
+        assert websocket.receive_text() == "pong"

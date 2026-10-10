@@ -398,6 +398,9 @@ class OrgSettings(Base):
     gk_zugang_max_sitzungen: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
     gk_zugang_sms_pin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     gk_zugang_ressource_pflegen: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    gk_qr_aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    gk_qr_gueltigkeit_stunden: Mapped[int] = mapped_column(Integer, nullable=False, default=72)
+    gk_qr_pin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     # KI-Konfiguration je Org
     # 'central' = Plattform-Key aus Server-Env; 'byok' = org-eigener Anthropic-Key

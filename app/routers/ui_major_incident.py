@@ -4791,6 +4791,11 @@ def lage_ressourcen(
         einheit.id: einheit_service.hat_tablet(db, einheit)
         for einheit in lage.einheiten
     }
+    from app.services import gk_zugang_service
+    qr_druck_status = {
+        einheit.id: gk_zugang_service.zugang_status(db, einheit)["qr"]
+        for einheit in lage.einheiten
+    }
 
     return templates.TemplateResponse(request, "incident_major/ressourcen.html", {
         "user": user,
@@ -4801,8 +4806,17 @@ def lage_ressourcen(
         "all_einheiten": all_einheiten,
         "extra_vehicles": extra_vehicles,
         "org_members": org_members,
+        "resource_status_options": sorted(
+            resource_service.VALID_STATUSES,
+            key=lambda value: resource_service.STATUS_LABEL[value],
+        ),
+        "resource_member_data": [
+            {"id": member.id, "name": member.full_name, "telefon": member.phone or ""}
+            for member in org_members
+        ] if _can_edit(user) else [],
         "resource_service": resource_service,
         "einheit_hat_tablet": einheit_hat_tablet,
+        "qr_druck_status": qr_druck_status,
         "is_admin": has_role(user, "admin"),
         "can_edit": _can_edit(user),
         "can_view_karte": not getattr(user, "gsl_nur_lesen", False),
@@ -4861,6 +4875,11 @@ def lage_ressourcen_kraefteuebersicht(
         einheit.id: einheit_service.hat_tablet(db, einheit)
         for einheit in lage.einheiten
     }
+    from app.services import gk_zugang_service
+    qr_druck_status = {
+        einheit.id: gk_zugang_service.zugang_status(db, einheit)["qr"]
+        for einheit in lage.einheiten
+    }
 
     return templates.TemplateResponse(request, "incident_major/_kraefteuebersicht.html", {
         "lage": lage,
@@ -4870,6 +4889,7 @@ def lage_ressourcen_kraefteuebersicht(
         "all_einheiten": all_einheiten,
         "resource_service": resource_service,
         "einheit_hat_tablet": einheit_hat_tablet,
+        "qr_druck_status": qr_druck_status,
         "is_admin": has_role(user, "admin"),
         "can_edit": _can_edit(user),
         "can_view_karte": not getattr(user, "gsl_nur_lesen", False),
@@ -4927,6 +4947,7 @@ def lage_ressourcen_planung(
 async def lage_einheit_create(
     request: Request,
     lage_id: int,
+    background_tasks: BackgroundTasks,
     label: str = Form(""),
     vehicle_id: int | None = Form(None),
     resource_type: str = Form("fahrzeug"),
@@ -4934,6 +4955,22 @@ async def lage_einheit_create(
     bos: str = Form(""),
     qty: int | None = Form(None),
     unit: str = Form(""),
+    funkrufname: str = Form(""),
+    status: str | None = Form(None),
+    sektor_id: int | None = Form(None),
+    bereitstellungsraum: str = Form(""),
+    gk_member_id: int | None = Form(None),
+    gk_name: str = Form(""),
+    gk_telefon: str | None = Form(None),
+    stv_name: str = Form(""),
+    personal_gesamt: int | None = Form(None),
+    personal_fuehrung: int | None = Form(None),
+    personal_agt: int | None = Form(None),
+    personal_sanitaeter: int | None = Form(None),
+    personal_fuehrer: int | None = Form(None),
+    personal_unterfuehrer: int | None = Form(None),
+    personal_mannschaft: int | None = Form(None),
+    bemerkung: str | None = Form(None),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
 ):
@@ -4949,19 +4986,46 @@ async def lage_einheit_create(
     if not actual_label:
         raise HTTPException(status_code=400, detail="Bezeichnung fehlt")
 
-    einheit = resource_service.add_resource(
-        db, lage_id, actual_label,
-        resource_type=resource_type,
-        vehicle_id=vehicle_id,
-        org_name=org_name.strip() or None,
-        bos=bos.strip() or None,
-        qty=qty,
-        unit=unit.strip() or None,
-        author_name=get_author_name(request),
-        user_id=user.id,
-    )
+    gk = None
+    if gk_member_id is not None or gk_name.strip():
+        gk = {"member_id": gk_member_id, "person_name": gk_name, "telefon": gk_telefon, "modus": "auto"}
+    stellvertreter = {"person_name": stv_name, "modus": "auto"} if stv_name.strip() else None
+    personal = None
+    if any(wert is not None for wert in (
+        personal_gesamt, personal_fuehrung, personal_agt, personal_sanitaeter,
+        personal_fuehrer, personal_unterfuehrer, personal_mannschaft,
+    )):
+        fuehrung = personal_fuehrung
+        if fuehrung is None and any(wert is not None for wert in (personal_fuehrer, personal_unterfuehrer)):
+            fuehrung = (personal_fuehrer or 0) + (personal_unterfuehrer or 0)
+        gesamt = personal_gesamt
+        if gesamt is None and any(wert is not None for wert in (
+            personal_fuehrer, personal_unterfuehrer, personal_mannschaft,
+        )):
+            gesamt = (personal_fuehrer or 0) + (personal_unterfuehrer or 0) + (personal_mannschaft or 0)
+        personal = {
+            "gesamt": gesamt or 0, "fuehrung": fuehrung,
+            "agt": personal_agt, "sanitaeter": personal_sanitaeter,
+        }
+    try:
+        ergebnis = resource_service.lege_einheit_an(
+            db, lage, resource_type=resource_type, label=actual_label, vehicle_id=vehicle_id,
+            org_name=org_name.strip() or None, bos=bos.strip() or None, qty=qty,
+            unit=unit.strip() or None, funkrufname=funkrufname or None, status=status,
+            sektor_id=sektor_id, bereitstellungsraum=bereitstellungsraum or None,
+            gk=gk, stellvertreter=stellvertreter, personal=personal, bemerkung=bemerkung,
+            user_id=user.id, author_name=get_author_name(request) or "",
+        )
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc))
     db.commit()
-    await broadcast_lage(lage_id, {"type": "ressource:changed", "einheit_id": einheit.id})
+    from app.services.print_dispatcher import autoprint_gsl_einheit_background
+    background_tasks.add_task(autoprint_gsl_einheit_background, ergebnis.einheit.id)
+    if ergebnis.auto_sms:
+        from app.services.gk_zugang_service import sende_auto_sms
+        background_tasks.add_task(sende_auto_sms, ergebnis.auto_sms)
+    await broadcast_lage(lage_id, {"type": "ressource:changed", "einheit_id": ergebnis.einheit.id})
     # Nur noch per HTMX aufgerufen (ressourcen.html, hx-swap="none").
     return Response(status_code=204)
 
