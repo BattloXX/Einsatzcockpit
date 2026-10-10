@@ -7,6 +7,10 @@
 <link rel="stylesheet" href="/static/css/leaflet.min.css?v={{ ASSET_VERSION }}">
 <script src="/static/js/leaflet.min.js?v={{ ASSET_VERSION }}" defer></script>
 <script type="module" src="/static/js/einheit_modus.js?v={{ ASSET_VERSION }}"></script>
+<script>
+  window.EINHEIT_WS_PATH = {{ ('/ws/einheit-zugang' if gk_zugang else '/ws/lage/' ~ lage_id)|tojson }};
+  window.EINHEIT_PRINCIPAL = {{ ('gk:' ~ einheit_id if gk_zugang else '')|tojson }};
+</script>
 {% endblock %}
 
 {% block content %}
@@ -63,7 +67,7 @@
   <div class="einheit-simulation">
     <strong>Gruppenkommandant-Zugang - {{ gk_name }}</strong>
     <button type="button" class="btn btn--ghost btn--sm"
-            onclick="fetch('/gk/abmelden',{method:'POST',headers:{'X-CSRF-Token':'{{ request.state.csrf_token }}'}}).finally(()=>location.href='/gk')">Abmelden</button>
+            @click="lokaleDatenLoeschen()">Abmelden</button>
   </div>
   {% endif %}
 
@@ -104,6 +108,7 @@
 
   <div class="einheit-warning" x-show="hinweisBanner" x-cloak>
     <span x-text="hinweisBanner"></span>
+    <button type="button" class="btn btn--ghost btn--sm" x-show="zugangBeendet" @click="lokaleDatenLoeschen()">Lokale Daten löschen</button>
     <button type="button" class="btn btn--ghost btn--sm" @click="hinweisBanner = ''">OK</button>
   </div>
 
@@ -403,7 +408,7 @@
         <button type="button" class="person-flyout__close" @click="outboxOffen = false">&times;</button>
       </header>
       <div class="einheit-flyout-body">
-        <button type="button" class="btn btn--primary einheit-action" @click="flush()">Jetzt senden</button>
+        <button type="button" class="btn btn--primary einheit-action" :disabled="zugangBeendet" @click="flush()">Jetzt senden</button>
         <p class="einheit-sub" x-show="!outboxListe.length">Alle Einträge wurden übermittelt.</p>
         <template x-for="item in outboxListe" :key="item.client_uuid">
           <article class="fab-subcard">
@@ -412,7 +417,7 @@
             <textarea class="form-control" readonly x-show="item.payload?.text"
                       x-text="item.payload?.text"></textarea>
             <div class="einheit-actions-row">
-              <button type="button" class="btn btn--ghost" x-show="item.status !== 'ausstehend'"
+              <button type="button" class="btn btn--ghost" x-show="item.status !== 'ausstehend' && item.status !== 'blockiert_zugang'"
                       @click="erneut(item.client_uuid)">Erneut senden</button>
               <button type="button" class="btn btn--ghost" @click="verwerfen(item.client_uuid)">Verwerfen</button>
             </div>

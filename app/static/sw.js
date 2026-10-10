@@ -75,6 +75,17 @@ self.addEventListener('activate', e => {
   );
 });
 
+self.addEventListener('message', e => {
+  if (e.data?.type !== 'einheit-cache-leeren') return;
+  e.waitUntil(caches.open(BOARD_CACHE).then(async cache => {
+    const keys = await cache.keys();
+    await Promise.all(keys.filter(request => {
+      const path = new URL(request.url).pathname;
+      return path === '/einheit' || path.startsWith('/einheit/api/') || path.startsWith('/einheit/medien/');
+    }).map(request => cache.delete(request)));
+  }));
+});
+
 // STAB-3-Regression (2026-07-06): Ein per fetch() aus dem Service Worker
 // erneut abgesetzter Tile-Request setzt Sec-Fetch-Dest auf "empty" statt
 // "image" (wie beim nativen <img>-Laden) — OSMs Fastly-Edge behandelt das

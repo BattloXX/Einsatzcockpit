@@ -96,6 +96,24 @@ test("403 kein_einheitenkontext bleibt Konflikt ohne Auto-Retry", async () => {
   assert.equal(env.anfragen.length, 1); assert.equal((await o.liste())[0].status, "konflikt");
 });
 
+test("terminale Zugangssperre behaelt Eintraege und stoppt Flush", async () => {
+  let terminal = null;
+  const env = umgebung([antwort(401, { code: "zugang_widerrufen" })]);
+  const o = createOutbox({ ...env.basis, onTerminal: (code) => { terminal = code; } });
+  await eintrag(o); await warteAuf(async () => (await o.liste())[0]?.status === "blockiert_zugang");
+  await o.flush();
+  assert.equal(terminal, "zugang_widerrufen");
+  assert.equal(env.anfragen.length, 1);
+  assert.equal((await o.liste())[0].payload.status, "anfahrt");
+});
+
+test("Bereinigung entfernt nur alten Verlauf", async () => {
+  const env = umgebung([ok(1)]); const o = createOutbox(env.basis);
+  await eintrag(o); await warteAuf(async () => (await o.verlauf()).length === 1);
+  env.vor(73 * 60 * 60 * 1000); await o.bereinigen();
+  assert.equal((await o.verlauf()).length, 0);
+});
+
 test("422 braucht manuelles erneutes Senden; 503 staffelt Backoff", async () => {
   const env = umgebung([antwort(422, { code: "ungueltig" }), ok(2), antwort(503, {}), antwort(503, {}), antwort(503, {})]); const o = createOutbox(env.basis);
   const x = await eintrag(o); await warteAuf(async () => (await o.liste())[0]?.status === "fehler");

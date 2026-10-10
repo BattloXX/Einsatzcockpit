@@ -57,7 +57,7 @@ function registriere() {
     entwurfHinweis: false, auftragGeaendert: false, hinweisBanner: "", neuIds: [], etag: null,
     ws: null, wsTimer: null, wsVersuche: 0, pollTimer: null, retryTimer: null, lastLoad: 0, outbox: null,
     gezeigteHinweise: new Set(), geladenAb: new Date().toISOString(),
-    karte: null, kartenMarker: null,
+    karte: null, kartenMarker: null, zugangBeendet: false,
 
     // Abgeleitete Anzeigezustände.
     get naechster() { return this.weitere[0] || null; },
@@ -115,6 +115,7 @@ function registriere() {
       return Math.max(0, Math.ceil((new Date(item.naechster_versuch_at) - Date.now()) / 1000));
     },
     outboxStatus(item) {
+      if (item.status === "blockiert_zugang") return "Zugang beendet – nicht übermittelt";
       if (item.status === "konflikt") return this.konfliktText(item.letzter_fehler);
       if (item.status === "fehler") return `Fehler: ${item.letzter_fehler || "unbekannt"}`;
       if (item.status === "fehler_netz") return `↻ erneuter Versuch in ${this.retrySekunden(item)} s`;
@@ -129,8 +130,10 @@ function registriere() {
         fetch: window.fetch.bind(window),
         csrfToken: () => decodeURIComponent(cookie("ec_csrf")),
         simEinheitId: this.simulation ? this.simEinheitId : null,
-        dbName: this.simulation ? `ec-einheit-sim-${this.simEinheitId}` : "ec-einheit",
+        dbName: this.simulation ? `ec-einheit-sim-${this.simEinheitId}` : (window.EINHEIT_PRINCIPAL || "") .startsWith("gk:") ? `ec-einheit-gk-${this.einheitId}` : "ec-einheit",
+        onTerminal: () => { void this.zugangBeenden(); },
       });
+      await this.outbox.bereinigen();
       this.outbox.onChange(() => {
         void this.outboxAktualisieren();
         void this.laden(true);
@@ -138,13 +141,13 @@ function registriere() {
       window.addEventListener("popstate", () => { void this.navigiereZuPfad(); });
       window.addEventListener("online", () => {
         this.online = true;
-        void this.flush();
+        if (!this.zugangBeendet) void this.flush();
         this.verbinden();
       });
       window.addEventListener("offline", () => { this.online = false; });
       document.addEventListener("visibilitychange", () => {
         if (!document.hidden) {
-          void this.flush();
+          if (!this.zugangBeendet) void this.flush();
           void this.laden(true);
         }
       });
@@ -168,6 +171,10 @@ function registriere() {
         if (this.etag) headers["If-None-Match"] = this.etag;
         const response = await fetch("/einheit/api/zustand", { headers, credentials: "same-origin" });
         if (response.status === 304) return;
+        if (response.status === 401) {
+          const data = await response.json().catch(() => null);
+          if (/^zugang_(widerrufen|abgelaufen|ungueltig)$/.test(data?.code || "")) await this.zugangBeenden();
+        }
         if (!response.ok) throw new Error("netzwerk");
         // Antwort aus dem Service-Worker-Cache: wie offline behandeln, nicht als frisch anzeigen.
         if (response.headers.get("X-EC-Offline") === "1") throw new Error("offline");
@@ -372,6 +379,7 @@ function registriere() {
       });
     },
     async flush() {
+      if (this.zugangBeendet) return;
       await this.outbox.flush();
       await this.outboxAktualisieren();
     },
@@ -386,11 +394,35 @@ function registriere() {
       this.flyout = null;
     },
 
+    swCacheLeeren() { navigator.serviceWorker?.controller?.postMessage({ type: "einheit-cache-leeren" }); },
+    async zugangBeenden() {
+      if (this.zugangBeendet) return;
+      this.zugangBeendet = true;
+      await this.outbox.blockiereZugang();
+      await this.outbox.zustandLeeren();
+      await this.outboxAktualisieren();
+      this.hinweisBanner = `Zugang beendet - ${this.outboxListe.filter((item) => item.status === "blockiert_zugang").length} Meldungen nicht übermittelt. Bitte Einsatzleitung informieren.`;
+      this.swCacheLeeren();
+      clearTimeout(this.wsTimer);
+      this.ws?.close();
+    },
+    async lokaleDatenLoeschen() {
+      if (this.outboxListe.length && !confirm("Lokale Daten und nicht übermittelte Meldungen wirklich löschen?")) return;
+      this.swCacheLeeren();
+      const name = this.outbox ? (this.simulation ? `ec-einheit-sim-${this.simEinheitId}` : (window.EINHEIT_PRINCIPAL || "").startsWith("gk:") ? `ec-einheit-gk-${this.einheitId}` : "ec-einheit") : null;
+      if (name) indexedDB.deleteDatabase(name);
+      if ((window.EINHEIT_PRINCIPAL || "").startsWith("gk:")) {
+        await fetch("/gk/abmelden", { method: "POST", headers: { "X-CSRF-Token": decodeURIComponent(cookie("ec_csrf")) }, credentials: "same-origin" }).catch(() => {});
+      }
+      location.href = "/gk";
+    },
+
     // Live-Synchronisation.
     verbinden() {
-      if (!this.lageId || this.ws?.readyState === WebSocket.OPEN) return;
+      if (this.zugangBeendet || !this.lageId || this.ws?.readyState === WebSocket.OPEN) return;
       const schema = location.protocol === "https:" ? "wss" : "ws";
-      const ws = this.ws = new WebSocket(`${schema}://${location.host}/ws/lage/${this.lageId}`);
+      const path = window.EINHEIT_WS_PATH || `/ws/lage/${this.lageId}`;
+      const ws = this.ws = new WebSocket(`${schema}://${location.host}${path}`);
       ws.addEventListener("open", () => {
         this.online = true;
         this.wsVersuche = 0;
@@ -406,6 +438,7 @@ function registriere() {
         if (event.data === "pong") return;
         try {
           const nachricht = JSON.parse(event.data);
+          if (nachricht.type === "zugang:widerrufen") { void this.zugangBeenden(); return; }
           const betrifftEinheit = nachricht.type === "einheit:changed"
             && nachricht.einheit_id === this.einheitId;
           const betrifftStelle = ["site:card_changed", "site_phase_changed"].includes(nachricht.type)
@@ -420,6 +453,7 @@ function registriere() {
       });
       ws.addEventListener("close", () => {
         this.online = false;
+        if (this.zugangBeendet) return;
         clearTimeout(this.wsTimer);
         // Wiederverbinden mit wachsendem Abstand (1 s, 2 s, 4 s … max. 30 s).
         const warten = Math.min(30000, 1000 * (2 ** this.wsVersuche));

@@ -19,6 +19,8 @@ from app.services import ws_bus
 LAGE_WS_OFFSET = 10_000_000
 # Org-Kanäle für globale Org-Benachrichtigungen (neue Einsätze, Einladungen …)
 ORG_WS_OFFSET = 20_000_000
+# Einheitenkanäle für den isolierten Gruppenkommandanten-Zugang.
+EINHEIT_WS_OFFSET = 30_000_000
 # Sentinel-Key für broadcast_all über den Bus
 _ALL_KEY = -1
 # Sende-Timeout je Socket: haengende Clients werden getrennt statt gewartet
@@ -123,6 +125,16 @@ ws_bus.register(ws_bus.CH_WS, _bus_deliver)
 
 async def broadcast_lage(lage_id: int, event: dict) -> None:
     await manager.broadcast(LAGE_WS_OFFSET + lage_id, event)
+    # Der Zugang sieht ausschließlich Ereignisse seiner eigenen Einheit.  Diese
+    # Weiterleitung bleibt hier zentral, damit alle bestehenden Aufrufer sicher
+    # auf beiden Kanälen landen (auch über den Redis-Bus).
+    if event.get("type") == "einheit:changed" and event.get("einheit_id") is not None:
+        await broadcast_einheit(int(event["einheit_id"]), event)
+
+
+async def broadcast_einheit(einheit_id: int, event: dict) -> None:
+    """Sendet ein IDs-only-Ereignis an den Kanal einer Lageeinheit."""
+    await manager.broadcast(EINHEIT_WS_OFFSET + einheit_id, event)
 
 
 async def broadcast_org(org_id: int, event: dict) -> None:

@@ -24,7 +24,9 @@ from app.models.incident import Incident
 from app.models.major_incident import MajorIncident
 from app.models.user import SmsGatewayToken, User
 from app.services import ws_bus
-from app.services.broadcast import LAGE_WS_OFFSET, ORG_WS_OFFSET, broadcast_org, manager
+from app.services.broadcast import EINHEIT_WS_OFFSET, LAGE_WS_OFFSET, ORG_WS_OFFSET, broadcast_org, manager
+from app.services.gk_zugang_service import COOKIE as GK_COOKIE
+from app.services.gk_zugang_service import sitzung_pruefen_mit_grund
 from app.services.sms_inbox_service import process_inbound_sms, record_inbound_sms
 
 logger = logging.getLogger("einsatzleiter.ws")
@@ -243,6 +245,46 @@ async def lage_ws(websocket: WebSocket, lage_id: int):
             data = await websocket.receive_text()
             if data == "ping":
                 await websocket.send_text("pong")
+    except WebSocketDisconnect:
+        pass
+    finally:
+        await manager.disconnect(channel, websocket)
+
+
+def _resolve_gk_principal(websocket: WebSocket):
+    """Prüft das GK-Cookie mit einer eigenen, tenantfreien DB-Session."""
+    cookie = websocket.cookies.get(GK_COOKIE)
+    if not cookie:
+        return None
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        principal, _grund = sitzung_pruefen_mit_grund(db, cookie)
+        return principal
+    finally:
+        db.close()
+
+
+@router.websocket("/ws/einheit-zugang")
+async def einheit_zugang_ws(websocket: WebSocket):
+    """Minimaler, einheitengefilterter Echtzeitkanal für GK-Sitzungen."""
+    principal = _resolve_gk_principal(websocket)
+    if principal is None:
+        await websocket.close(code=WS_CLOSE_UNAUTHORIZED)
+        return
+    channel = EINHEIT_WS_OFFSET + principal.einheit.id
+    await manager.connect(channel, websocket)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            if data != "ping":
+                continue
+            # Kein Berechtigungs-Cache: jede 25-s-Prüfung öffnet eine frische DB-Session.
+            if _resolve_gk_principal(websocket) is None:
+                await websocket.send_json({"type": "zugang:widerrufen"})
+                await websocket.close(code=WS_CLOSE_UNAUTHORIZED)
+                return
+            await websocket.send_text("pong")
     except WebSocketDisconnect:
         pass
     finally:
