@@ -18,6 +18,8 @@ from app.models.major_incident import (
     EinheitSiteDispatch,
     IncidentSite,
     LageEinheit,
+    LageEinheitLeader,
+    LageEinheitZugang,
     MajorIncident,
     MajorIncidentStatus,
     SitePhase,
@@ -27,7 +29,7 @@ from app.models.user import DeviceToken
 from app.services import resource_service
 from app.services.resource_service import STATUS_BEREITGESTELLT, STATUS_IM_EINSATZ, dispatch_aktiv_filter
 
-Quelle = Literal["tablet", "funk", "mcp", "simulation"]
+Quelle = Literal["tablet", "funk", "mcp", "simulation", "zugang"]
 
 # Gesamtansicht (E1): Diese Routen zeigen den Einsatz, ohne eine Bedienung oder
 # Token-Ausgabe zu ermoeglichen. Die Namen sind bewusst an die Endpunktfunktionen
@@ -148,6 +150,23 @@ class EinheitKontext:
     org_id: int
     quelle: Quelle
     simulation: bool = False
+    zugang: LageEinheitZugang | None = None
+    leader: LageEinheitLeader | None = None
+    user_id: int | None = None
+
+    @property
+    def akteur_name(self) -> str | None:
+        if self.quelle == "zugang" and self.leader:
+            return f"{self.leader.display_name} (GK {self.einheit.label})"
+        return None
+
+    @property
+    def principal_key(self) -> str:
+        if self.device_token:
+            return f"d:{self.device_token.id}"
+        if self.zugang:
+            return f"z:{self.zugang.id}"
+        return f"s:{self.user_id}" if self.user_id is not None else "s:0"
 
 
 def _iso_z(wert: datetime | None) -> str | None:
@@ -192,6 +211,7 @@ def kontext_fuer_geraet(
         lage=lage,
         org_id=user.org_id,
         quelle="tablet",
+        user_id=user.id,
     )
 
 
@@ -221,6 +241,21 @@ def kontext_fuer_einheit(
         org_id=user.org_id,
         quelle=quelle,
         simulation=quelle == "simulation",
+        user_id=user.id,
+    )
+
+
+def kontext_fuer_zugang(db: Session, principal) -> EinheitKontext:
+    """Baut den strikt an die geprüfte GK-Sitzung gebundenen Kontext."""
+    return EinheitKontext(
+        device_token=None,
+        vehicle=db.get(VehicleMaster, principal.einheit.vehicle_id) if principal.einheit.vehicle_id else None,
+        einheit=principal.einheit,
+        lage=principal.lage,
+        org_id=principal.org_id,
+        quelle="zugang",
+        zugang=principal.zugang,
+        leader=principal.leader,
     )
 
 
@@ -459,6 +494,9 @@ def setze_einheit_status(
             "einheit_id": ctx.einheit.id, "von": alter_status, "nach": neuer_status,
             "quelle": ctx.quelle,
             "device_token_id": ctx.device_token.id if ctx.device_token else None,
+            "via": "zugang" if ctx.quelle == "zugang" else None,
+            "zugang_id": ctx.zugang.id if ctx.zugang else None,
+            "generation": ctx.zugang.generation if ctx.zugang else None,
             "erfasst_at": _iso_z(erfasst_at),
         },
     )

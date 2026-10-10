@@ -59,6 +59,14 @@
   </div>
   {% endif %}
 
+  {% if gk_zugang %}
+  <div class="einheit-simulation">
+    <strong>Gruppenkommandant-Zugang - {{ gk_name }}</strong>
+    <button type="button" class="btn btn--ghost btn--sm"
+            onclick="fetch('/gk/abmelden',{method:'POST',headers:{'X-CSRF-Token':'{{ request.state.csrf_token }}'}}).finally(()=>location.href='/gk')">Abmelden</button>
+  </div>
+  {% endif %}
+
   {# ── Kopf ───────────────────────────────────────────────────────────── #}
   <header class="fab-header">
     <div class="fab-header__top">
@@ -88,7 +96,9 @@
     </div>
     <nav class="einheit-umschalter">
       <a href="#" class="is-active" @click.prevent="zurueck()">Meine Einsätze</a>
+      {% if not gk_zugang %}
       <a href="/lage/{{ lage_id }}">Gesamtansicht</a>
+      {% endif %}
     </nav>
   </header>
 

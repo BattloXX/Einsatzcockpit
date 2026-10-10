@@ -323,6 +323,17 @@ def _entity_logs(db: Session, incident_id: int, entity_type: str, entity_id: int
 def index(request: Request, db: Session = Depends(get_db)):
     user = getattr(request.state, "user", None)
     if not user:
+        # A valid GK session is not a User principal. Send its homescreen entry
+        # directly to the strictly scoped unit mode instead of the public start.
+        from app.services import gk_zugang_service
+
+        cookie = request.cookies.get(gk_zugang_service.COOKIE)
+        if cookie:
+            principal, _ = gk_zugang_service.sitzung_pruefen_mit_grund(db, cookie)
+            if principal:
+                db.commit()
+                return RedirectResponse("/einheit", status_code=302)
+            db.rollback()
         # Nicht angemeldet → öffentliche Startseite (Ops-Room-Design, /funktionen etc.).
         from app.routers.public import render_start
         return render_start(request, kontakt=request.query_params.get("kontakt"))

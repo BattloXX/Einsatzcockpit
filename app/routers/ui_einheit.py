@@ -34,6 +34,7 @@ from app.models.major_incident import (
 )
 from app.models.master import FireDept, VehicleMaster
 from app.models.user import AuditLog, DeviceToken
+from app.services import gk_zugang_service
 from app.services.broadcast import broadcast_lage
 from app.services.einheit_service import (
     EinheitKonflikt,
@@ -45,13 +46,20 @@ from app.services.einheit_service import (
     auftrag_laden,
     kontext_fuer_einheit,
     kontext_fuer_geraet,
+    kontext_fuer_zugang,
     setze_einheit_status,
 )
+from app.services.gk_zugang_service import ZugangFehlergrund
 from app.services.gsl_live_notify import notify_gsl_live
 from app.services.lage_media_service import site_media_path, site_thumb_path, speichere_site_foto
 from app.services.site_log_service import add_site_log, format_lagemeldung, normalisiere_user_kind
 
 router = APIRouter(prefix="/einheit", tags=["einheit"])
+
+ZUGANG_AKTIONEN = frozenset({
+    "status", "meldung", "foto", "anforderung", "antwort", "quittierung",
+    "ressource_personal", "ressource_ausstattung",
+})
 
 
 def _simulationskontext(request: Request, db: Session) -> EinheitKontext | None:
@@ -78,26 +86,34 @@ def _simulationskontext(request: Request, db: Session) -> EinheitKontext | None:
 def _optionaler_kontext(request: Request, db: Session) -> EinheitKontext | None:
     """Löst den optionalen Geräte- oder Simulationskontext der HTML-Hülle auf."""
     user = getattr(request.state, "user", None)
-    if user is None:
-        return None
-    if getattr(request.state, "is_device", False):
+    if user is not None and getattr(request.state, "is_device", False):
         token_id = getattr(request.state, "device_token_id", None)
         query = db.query(DeviceToken).filter(DeviceToken.user_id == user.id, DeviceToken.revoked_at.is_(None))
         token = query.filter(DeviceToken.id == token_id).first() if token_id else query.order_by(DeviceToken.created_at.desc()).first()
         return kontext_fuer_geraet(db, user, token) if token else None
-    return _simulationskontext(request, db)
+    if user is not None and (request.headers.get("X-EC-Einheit-Sim") or request.query_params.get("sim")):
+        return _simulationskontext(request, db)
+    cookie = request.cookies.get(gk_zugang_service.COOKIE)
+    if not cookie:
+        return None
+    principal, _ = gk_zugang_service.sitzung_pruefen_mit_grund(db, cookie)
+    if principal:
+        db.commit()
+        return kontext_fuer_zugang(db, principal)
+    db.rollback()
+    return None
 
 
 def _einheit_seite(request: Request, db: Session, start_dispatch_id: int | None = None):
     user = getattr(request.state, "user", None)
-    if user is None:
-        return RedirectResponse("/login", status_code=302)
     simulation_fehler: EinheitKontextFehler | None = None
     try:
         ctx = _optionaler_kontext(request, db)
     except EinheitKontextFehler as exc:
         ctx = None
         simulation_fehler = exc
+    if ctx is None and user is None:
+        return RedirectResponse("/login", status_code=302)
     if ctx is None and not getattr(request.state, "is_device", False):
         if simulation_fehler:
             return templates.TemplateResponse(request, "einheit/einheit.html", {
@@ -126,6 +142,8 @@ def _einheit_seite(request: Request, db: Session, start_dispatch_id: int | None 
         "sim_einheit_id": ctx.einheit.id if ctx and ctx.simulation else None,
         "schreibbar": bool(ctx and not (ctx.simulation and not ctx.lage.is_exercise)),
         "admin_name": getattr(user, "display_name", "") if ctx and ctx.simulation else "",
+        "gk_zugang": bool(ctx and ctx.quelle == "zugang"),
+        "gk_name": ctx.leader.display_name if ctx and ctx.leader else "",
         "start_dispatch_id": start_dispatch_id, "kein_kontext": ctx is None, "simulation_fehler": None,
     })
 
@@ -154,27 +172,12 @@ def _antwort_exc(exc: HTTPException) -> JSONResponse:
 def einheit_kontext(request: Request, db: Session = Depends(get_db)) -> EinheitKontext:
     """Loest Tablet- bzw. explizit erlaubte Admin-Simulationen auf."""
     user = getattr(request.state, "user", None)
-    if user is None:
-        _fehler(403, "kein_einheitenkontext")
-    if getattr(request.state, "is_device", False):
-        token_id = getattr(request.state, "device_token_id", None)
-        query = db.query(DeviceToken).filter(DeviceToken.user_id == user.id, DeviceToken.revoked_at.is_(None))
-        token = (
-            query.filter(DeviceToken.id == token_id).first()
-            if token_id
-            else query.order_by(DeviceToken.created_at.desc()).first()
-        )
-        try:
-            lage_id = int(request.query_params["lage"]) if "lage" in request.query_params else None
-        except ValueError:
-            lage_id = None
-        ctx = kontext_fuer_geraet(db, user, token, lage_id) if token else None
-        if ctx is None:
-            _fehler(403, "kein_einheitenkontext")
-        return ctx
-
+    # Simulation deliberately precedes all other principals. An anonymous GK
+    # cookie cannot activate simulation because it has no admin user.
     sim = request.headers.get("X-EC-Einheit-Sim") or request.query_params.get("sim")
-    if sim:
+    if sim and not getattr(request.state, "is_device", False):
+        if user is None:
+            _fehler(403, "kein_einheitenkontext")
         try:
             ctx = _simulationskontext(request, db)
             assert ctx is not None
@@ -196,12 +199,69 @@ def einheit_kontext(request: Request, db: Session = Depends(get_db)) -> EinheitK
             write_audit(db, "gsl.einheit.simulation_gestartet", user_id=user.id, payload={"einheit_id": einheit_id})
             db.commit()
         return ctx
+    if user is None:
+        cookie = request.cookies.get(gk_zugang_service.COOKIE)
+        if cookie:
+            principal, grund = gk_zugang_service.sitzung_pruefen_mit_grund(db, cookie)
+            if principal:
+                # Only the validator's activity timestamp is committed here;
+                # no endpoint mutation has run at this point.
+                db.commit()
+                return kontext_fuer_zugang(db, principal)
+            db.rollback()
+            codes = {
+                ZugangFehlergrund.WIDERRUFEN: "zugang_widerrufen",
+                ZugangFehlergrund.ABGELAUFEN: "zugang_abgelaufen",
+                ZugangFehlergrund.UNGUELTIG: "zugang_ungueltig",
+            }
+            _fehler(401, codes.get(grund or ZugangFehlergrund.UNGUELTIG, "zugang_ungueltig"))
+        _fehler(403, "kein_einheitenkontext")
+    if getattr(request.state, "is_device", False):
+        token_id = getattr(request.state, "device_token_id", None)
+        query = db.query(DeviceToken).filter(DeviceToken.user_id == user.id, DeviceToken.revoked_at.is_(None))
+        token = (
+            query.filter(DeviceToken.id == token_id).first()
+            if token_id
+            else query.order_by(DeviceToken.created_at.desc()).first()
+        )
+        try:
+            lage_id = int(request.query_params["lage"]) if "lage" in request.query_params else None
+        except ValueError:
+            lage_id = None
+        ctx = kontext_fuer_geraet(db, user, token, lage_id) if token else None
+        if ctx is None:
+            _fehler(403, "kein_einheitenkontext")
+        return ctx
+
+    cookie = request.cookies.get(gk_zugang_service.COOKIE)
+    if cookie:
+        principal, grund = gk_zugang_service.sitzung_pruefen_mit_grund(db, cookie)
+        if principal:
+            db.commit()
+            return kontext_fuer_zugang(db, principal)
+        db.rollback()
+        codes = {
+            ZugangFehlergrund.WIDERRUFEN: "zugang_widerrufen",
+            ZugangFehlergrund.ABGELAUFEN: "zugang_abgelaufen",
+            ZugangFehlergrund.UNGUELTIG: "zugang_ungueltig",
+        }
+        _fehler(401, codes.get(grund or ZugangFehlergrund.UNGUELTIG, "zugang_ungueltig"))
+
     _fehler(403, "kein_einheitenkontext")
 
 
 def _schreibbar(ctx: EinheitKontext) -> None:
     if ctx.simulation and not ctx.lage.is_exercise:
         _fehler(403, "simulation_nur_lesend")
+
+
+def einheit_darf(aktion: str, ctx: EinheitKontext, db: Session) -> None:
+    if ctx.quelle != "zugang":
+        return
+    if aktion not in ZUGANG_AKTIONEN:
+        _fehler(403, "zugang_aktion_nicht_erlaubt")
+    if aktion.startswith("ressource_") and not gk_zugang_service.org_einstellungen(db, ctx.org_id).gk_zugang_ressource_pflegen:
+        _fehler(403, "zugang_aktion_nicht_erlaubt")
 
 
 def _zeit(value: str | None) -> tuple[datetime | None, str | None]:
@@ -234,7 +294,10 @@ def fuehre_aktion_aus(
         _fehler(422, "client_uuid_ungueltig")
     vorhanden = db.query(EinheitAktion).filter(EinheitAktion.client_uuid == client_uuid).first()
     if vorhanden:
-        gleich = vorhanden.device_token_id == (ctx.device_token.id if ctx.device_token else None)
+        gleich = (
+            vorhanden.device_token_id == (ctx.device_token.id if ctx.device_token else None)
+            and vorhanden.zugang_id == (ctx.zugang.id if ctx.zugang else None)
+        )
         if ctx.simulation:
             gleich = vorhanden.quelle == ctx.quelle and vorhanden.einheit_id == ctx.einheit.id
         if not gleich:
@@ -253,6 +316,7 @@ def fuehre_aktion_aus(
         org_id=ctx.org_id,
         quelle=ctx.quelle,
         device_token_id=ctx.device_token.id if ctx.device_token else None,
+        zugang_id=ctx.zugang.id if ctx.zugang else None,
         einheit_id=ctx.einheit.id,
         dispatch_id=dispatch_id,
         aktion=aktion,
@@ -279,6 +343,8 @@ def fuehre_aktion_aus(
 
 
 def _autor(request: Request, ctx: EinheitKontext) -> str | None:
+    if ctx.quelle == "zugang":
+        return ctx.akteur_name
     if ctx.simulation:
         return f"{request.state.user.display_name} (Simulation {ctx.einheit.label})"
     return get_author_name(request)
@@ -339,6 +405,10 @@ def auftrag_detail(dispatch_id: int, ctx: EinheitKontext = Depends(einheit_konte
         }
         for d in other
     ]
+    if ctx.quelle == "zugang":
+        # GK sees only their own dispatch; labels and status of other units are
+        # operationally sensitive and not needed to execute that dispatch.
+        out["andere_einheiten"] = []
     logs = (
         db.query(SiteLogEntry)
         .filter(SiteLogEntry.incident_site_id == site.id)
@@ -356,9 +426,16 @@ def auftrag_detail(dispatch_id: int, ctx: EinheitKontext = Depends(einheit_konte
             "eigene": x.einheit_id == ctx.einheit.id,
         }
         for x in logs
+        if ctx.quelle != "zugang" or x.einheit_id == ctx.einheit.id
     ]
     media = (
-        db.query(SiteMedia).filter(SiteMedia.incident_site_id == site.id).order_by(SiteMedia.uploaded_at.desc()).all()
+        db.query(SiteMedia)
+        .filter(
+            SiteMedia.incident_site_id == site.id,
+            *([SiteMedia.einheit_id == ctx.einheit.id] if ctx.quelle == "zugang" else []),
+        )
+        .order_by(SiteMedia.uploaded_at.desc())
+        .all()
     )
     out["fotos"] = [
         {
@@ -440,6 +517,7 @@ async def status(
     dispatch_id: int, request: Request, ctx: EinheitKontext = Depends(einheit_kontext), db: Session = Depends(get_db)
 ):
     _schreibbar(ctx)
+    einheit_darf("status", ctx, db)
     body = await request.json()
     try:
         dispatch = auftrag_laden(db, ctx, dispatch_id)
@@ -453,7 +531,7 @@ async def status(
             ctx,
             dispatch,
             body.get("status", ""),
-            user_id=request.state.user.id,
+            user_id=getattr(getattr(request.state, "user", None), "id", None),
             author_name=_autor(request, ctx),
             grund=body.get("grund"),
             unterbrechen=bool(body.get("unterbrechen")),
@@ -501,6 +579,7 @@ async def meldung(
     dispatch_id: int, request: Request, ctx: EinheitKontext = Depends(einheit_kontext), db: Session = Depends(get_db)
 ):
     _schreibbar(ctx)
+    einheit_darf("meldung", ctx, db)
     body = await request.json()
     try:
         dispatch = auftrag_laden(db, ctx, dispatch_id)
@@ -522,7 +601,7 @@ async def meldung(
             dispatch.site,
             normalisiere_user_kind(body.get("art", "")),
             text,
-            user_id=request.state.user.id,
+            user_id=getattr(getattr(request.state, "user", None), "id", None),
             author_name=_autor(request, ctx),
             einheit_id=ctx.einheit.id,
             erfasst_at=erfasst,
@@ -531,8 +610,13 @@ async def meldung(
         write_audit(
             db,
             "gsl.einheit.meldung",
-            user_id=request.state.user.id,
-            payload={"dispatch_id": dispatch.id, "quelle": ctx.quelle},
+            user_id=getattr(getattr(request.state, "user", None), "id", None),
+            payload={
+                "dispatch_id": dispatch.id, "quelle": ctx.quelle,
+                "via": "zugang" if ctx.quelle == "zugang" else None,
+                "zugang_id": ctx.zugang.id if ctx.zugang else None,
+                "generation": ctx.zugang.generation if ctx.zugang else None,
+            },
         )
         hint = korr or (
             "auftrag_geaendert"
@@ -581,6 +665,7 @@ async def foto(
     db: Session = Depends(get_db),
 ):
     _schreibbar(ctx)
+    einheit_darf("foto", ctx, db)
     try:
         dispatch = auftrag_laden(db, ctx, dispatch_id)
     except LookupError:
@@ -595,7 +680,10 @@ async def foto(
         return JSONResponse({"code": "client_uuid_ungueltig"}, status_code=422)
     existing = db.query(EinheitAktion).filter(EinheitAktion.client_uuid == client_uuid).first()
     if existing:
-        same = existing.device_token_id == (ctx.device_token.id if ctx.device_token else None)
+        same = (
+            existing.device_token_id == (ctx.device_token.id if ctx.device_token else None)
+            and existing.zugang_id == (ctx.zugang.id if ctx.zugang else None)
+        )
         if ctx.simulation:
             same = existing.quelle == ctx.quelle and existing.einheit_id == ctx.einheit.id
         return JSONResponse(
@@ -607,7 +695,7 @@ async def foto(
         dispatch.site,
         file,
         org_id=ctx.org_id,
-        user_id=request.state.user.id,
+        user_id=getattr(getattr(request.state, "user", None), "id", None),
         author_name=_autor(request, ctx),
         einheit_id=ctx.einheit.id,
         kommentar=kommentar,
@@ -630,6 +718,7 @@ async def foto(
         org_id=ctx.org_id,
         quelle=ctx.quelle,
         device_token_id=ctx.device_token.id if ctx.device_token else None,
+        zugang_id=ctx.zugang.id if ctx.zugang else None,
         einheit_id=ctx.einheit.id,
         dispatch_id=dispatch.id,
         aktion="foto",
@@ -655,8 +744,13 @@ async def foto(
     write_audit(
         db,
         "gsl.einheit.foto",
-        user_id=request.state.user.id,
-        payload={"dispatch_id": dispatch.id, "quelle": ctx.quelle},
+        user_id=getattr(getattr(request.state, "user", None), "id", None),
+        payload={
+            "dispatch_id": dispatch.id, "quelle": ctx.quelle,
+            "via": "zugang" if ctx.quelle == "zugang" else None,
+            "zugang_id": ctx.zugang.id if ctx.zugang else None,
+            "generation": ctx.zugang.generation if ctx.zugang else None,
+        },
     )
     db.commit()
     await _senden(ctx.lage.id, dispatch.site_id, ctx.einheit.id, dispatch.id)
