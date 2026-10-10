@@ -110,6 +110,14 @@ def _plane_auftrag_sms_sicher(db: Session, lage, einheit, dispatch, ereignis: st
         return None
 
 
+def _push_tablet(background_tasks: BackgroundTasks, einheit, dispatch, ereignis: str) -> None:
+    """Tablet-Push nach dem Commit; unabhängig vom SMS-Schalter."""
+    from app.services.gsl_einheit_push import push_einheit_auftrag
+
+    if dispatch is not None and einheit is not None:
+        background_tasks.add_task(push_einheit_auftrag, einheit.id, dispatch.id, ereignis)
+
+
 async def _sende_auftrag_sms(auftrag) -> None:
     from app.services.gk_zugang_service import sende_auto_sms
     await sende_auto_sms(auftrag)
@@ -922,6 +930,7 @@ async def site_einheit_zuweisen(
     db.commit()
     if auftrag_sms:
         background_tasks.add_task(_sende_auftrag_sms, auftrag_sms)
+    _push_tablet(background_tasks, einheit, dispatch, "neu")
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
     return Response(status_code=204)
 
@@ -973,6 +982,7 @@ async def site_einheit_freigeben(
     db.commit()
     if auftrag_sms:
         background_tasks.add_task(_sende_auftrag_sms, auftrag_sms)
+    _push_tablet(background_tasks, einheit, dispatch, "zurueckgezogen")
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
     return Response(status_code=204)
 
@@ -1095,6 +1105,7 @@ async def site_einheit_disponieren(
     db.commit()
     if auftrag_sms:
         background_tasks.add_task(_sende_auftrag_sms, auftrag_sms)
+    _push_tablet(background_tasks, einheit, dispatch, "neu")
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
     await broadcast_lage(lage_id, {"type": "einheit:changed", "einheit_id": einheit_id, "site_id": site_id})
     html = _site_detail_html_with_oob(request, db, lage, site, user)
@@ -1138,6 +1149,8 @@ async def site_einheit_auftrag_aendern(
     db.commit()
     if auftrag_sms:
         background_tasks.add_task(_sende_auftrag_sms, auftrag_sms)
+    if changed and alter_auftrag != dispatch.auftrag:
+        _push_tablet(background_tasks, dispatch.einheit, dispatch, "geaendert")
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
     await broadcast_lage(lage_id, {"type": "einheit:changed", "einheit_id": dispatch.einheit_id,
                                    "dispatch_id": dispatch_id, "site_id": site_id})
@@ -1335,6 +1348,7 @@ async def site_einheit_abziehen(
     db.commit()
     if auftrag_sms:
         background_tasks.add_task(_sende_auftrag_sms, auftrag_sms)
+    _push_tablet(background_tasks, einheit, dispatch, "zurueckgezogen")
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
     html = _site_detail_html_with_oob(request, db, lage, site, user)
     return HTMLResponse(content=html, headers={"HX-Retarget": "#siteDetailContent", "HX-Reswap": "innerHTML"})
