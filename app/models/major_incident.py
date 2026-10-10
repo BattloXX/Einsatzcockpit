@@ -622,6 +622,8 @@ class LageEinheitZugang(TenantScoped, Base):
     phone_e164: Mapped[str | None] = mapped_column(String(20), nullable=True)
     phone_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     token_hash: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
+    # Hash des zuletzt ersetzten/widerrufenen Tokens: nur fuer die Meldung "beendet oder ersetzt"
+    vorheriger_token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     generation: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     status: Mapped[str] = mapped_column(String(12), nullable=False, default="kein_token")
     widerruf_grund: Mapped[str | None] = mapped_column(String(24), nullable=True)

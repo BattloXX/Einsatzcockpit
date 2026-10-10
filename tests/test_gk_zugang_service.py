@@ -73,7 +73,7 @@ def test_ausstellung_speichert_nur_hash_und_rotation_invalidiert_sitzung():
         db.flush()
         second = service.stelle_zugang_aus(db, lage, einheit, user_id=None, grund="rotation")
         db.flush()
-        assert service.token_pruefen(db, token1).zustand == "unbekannt"
+        assert service.token_pruefen(db, token1).zustand == "beendet"
         assert service.token_pruefen(db, second.link.rsplit("#", 1)[1]).zustand == "ok"
         assert service.sitzung_pruefen(db, cookie) is None
         assert db.query(LageEinheitZugang).filter_by(einheit_id=einheit.id).count() == 1

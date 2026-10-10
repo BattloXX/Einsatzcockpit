@@ -25,6 +25,7 @@ def upgrade() -> None:
         sa.Column("phone_e164", sa.String(20)),
         sa.Column("phone_version", sa.Integer(), nullable=False),
         sa.Column("token_hash", sa.String(64), unique=True),
+        sa.Column("vorheriger_token_hash", sa.String(64), nullable=True, index=True),
         sa.Column("generation", sa.Integer(), nullable=False, server_default=sa.text("0")),
         sa.Column("status", sa.String(12), nullable=False, server_default=sa.text("'kein_token'")),
         sa.Column("widerruf_grund", sa.String(24)),

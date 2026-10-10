@@ -159,6 +159,7 @@ def stelle_zugang_aus(
             )
     assert zugang is not None
     raw = TOKEN_PREFIX + secrets.token_urlsafe(24)
+    zugang.vorheriger_token_hash = zugang.token_hash or zugang.vorheriger_token_hash
     zugang.token_hash = hash_api_key(raw)
     zugang.generation += 1
     zugang.status = "aktiv"
@@ -192,6 +193,7 @@ def widerrufe(db: Session, einheit_id: int, *, grund: str, user_id: int | None =
     if not zugang:
         return
     now = _now()
+    zugang.vorheriger_token_hash = zugang.token_hash or zugang.vorheriger_token_hash
     zugang.token_hash = None
     zugang.status = "widerrufen"
     zugang.widerruf_grund = grund
@@ -259,7 +261,13 @@ def token_pruefen(db: Session, token: str) -> TokenPruefung:
         .first()
     )
     if not zugang:
-        return TokenPruefung("unbekannt", None)
+        ersetzt = (
+            db.query(LageEinheitZugang)
+            .execution_options(include_all_tenants=True)
+            .filter(LageEinheitZugang.vorheriger_token_hash == hash_api_key(token))
+            .first()
+        )
+        return TokenPruefung("beendet", ersetzt) if ersetzt else TokenPruefung("unbekannt", None)
     if zugang.status != "aktiv" or not zugang.token_hash:
         return TokenPruefung("beendet", zugang)
     if not zugang.laeuft_ab_at or zugang.laeuft_ab_at <= _now():
