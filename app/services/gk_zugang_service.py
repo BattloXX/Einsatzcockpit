@@ -294,7 +294,8 @@ def sitzung_anlegen(
         .order_by(LageEinheitZugangSession.created_at)
         .all()
     )
-    for old in active[max(0, cfg.gk_zugang_max_sitzungen - 1) :]:
+    # Reserve one slot for the new session; revoke the oldest excess sessions.
+    for old in active[: max(0, len(active) - cfg.gk_zugang_max_sitzungen + 1)]:
         old.revoked_at, old.revoke_grund = now, "sitzungslimit"
     raw = secrets.token_urlsafe(32)
     session = LageEinheitZugangSession(
@@ -313,7 +314,15 @@ def sitzung_anlegen(
     return raw, session
 
 
-def sitzung_pruefen(db: Session, cookie_wert: str) -> ZugangPrincipal | None:
+def sitzung_pruefen_mit_grund(
+    db: Session, cookie_wert: str
+) -> tuple[ZugangPrincipal | None, ZugangFehlergrund | None]:
+    """Prüft eine GK-Sitzung und liefert bei Fehlern einen sicheren Grund.
+
+    Bindungsänderungen (einschließlich einer geschlossenen Lage) werden als
+    ``WIDERRUFEN`` behandelt; zeitliche Abläufe als ``ABGELAUFEN``. Ein
+    unbekanntes Cookie oder eine fehlende PIN-Verifikation ist ``UNGUELTIG``.
+    """
     set_tenant_context(db, None)
     now = _now()
     session = (
@@ -322,24 +331,29 @@ def sitzung_pruefen(db: Session, cookie_wert: str) -> ZugangPrincipal | None:
         .filter(LageEinheitZugangSession.session_hash == hash_api_key(cookie_wert))
         .first()
     )
-    if not session or session.revoked_at or session.laeuft_ab_at <= now:
-        return None
+    if not session:
+        return None, ZugangFehlergrund.UNGUELTIG
+    if session.revoked_at:
+        return None, ZugangFehlergrund.WIDERRUFEN
+    if session.laeuft_ab_at <= now:
+        return None, ZugangFehlergrund.ABGELAUFEN
     zugang = (
         db.query(LageEinheitZugang)
         .execution_options(include_all_tenants=True)
-        .filter(LageEinheitZugang.id == session.zugang_id, LageEinheitZugang.org_id == session.org_id)
+        .filter(LageEinheitZugang.id == session.zugang_id)
         .first()
     )
     if not zugang:
-        return None
-    if zugang.org_id is None:
-        return None
+        return None, ZugangFehlergrund.UNGUELTIG
+    if zugang.org_id is None or zugang.org_id != session.org_id:
+        session.revoked_at, session.revoke_grund = now, "ungueltig"
+        return None, ZugangFehlergrund.WIDERRUFEN
     einheit = db.get(LageEinheit, zugang.einheit_id)
     lage = db.get(MajorIncident, zugang.lage_id)
-    leader = db.get(LageEinheitLeader, zugang.leader_id)
+    leader = db.get(LageEinheitLeader, zugang.leader_id) if zugang.leader_id is not None else None
     if not einheit or not lage or not leader:
         session.revoked_at, session.revoke_grund = now, "ungueltig"
-        return None
+        return None, ZugangFehlergrund.WIDERRUFEN
     invalid_binding = (
         session.generation != zugang.generation
         or zugang.status != "aktiv"
@@ -353,20 +367,29 @@ def sitzung_pruefen(db: Session, cookie_wert: str) -> ZugangPrincipal | None:
     )
     if invalid_binding:
         session.revoked_at, session.revoke_grund = now, "ungueltig"
-        return None
+        return None, ZugangFehlergrund.WIDERRUFEN
+    if lage.status != "active":
+        # A closed Lage is explicitly revoked by close_lage(); retain the same
+        # externally visible reason if this validator observes it first.
+        return None, ZugangFehlergrund.WIDERRUFEN
     if (
         not zugang.laeuft_ab_at
         or zugang.laeuft_ab_at <= now
-        or lage.status != "active"
         or einheit.status not in {"bereitgestellt", "im_einsatz"}
     ):
-        return None
+        return None, ZugangFehlergrund.ABGELAUFEN
     if zugang.pin_pflicht and session.verifiziert_at is None:
-        return None
+        return None, ZugangFehlergrund.UNGUELTIG
     if not zugang.letzte_aktivitaet_at or zugang.letzte_aktivitaet_at <= now - timedelta(minutes=1):
         zugang.letzte_aktivitaet_at = now
         session.last_seen_at = now
-    return ZugangPrincipal(zugang, session, einheit, lage, leader, zugang.org_id)
+    return ZugangPrincipal(zugang, session, einheit, lage, leader, zugang.org_id), None
+
+
+def sitzung_pruefen(db: Session, cookie_wert: str) -> ZugangPrincipal | None:
+    """Prüft eine GK-Sitzung und liefert nur den Principal für bestehende Aufrufer."""
+    principal, _ = sitzung_pruefen_mit_grund(db, cookie_wert)
+    return principal
 
 
 def _clean(value: object, length: int) -> str:
@@ -401,7 +424,7 @@ def nachricht_rendern(
 def sms_laenge(text: str) -> tuple[int, str, int]:
     gsm = set(
         "@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞ !\"#¤%&'()*+,-./0123456789:;<=>?¡"
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà"
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüßà"
     )
     extended = set("€[]{}\\^~|")
     if all(char in gsm or char in extended for char in text):
