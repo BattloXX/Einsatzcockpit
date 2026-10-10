@@ -1,4 +1,8 @@
 <div class="ressource-karte__content">
+  <section class="res-section"><div class="res-section__title">Mannschaft und Ausstattung</div>
+    Mannschaft {{ einheit.staerke_gesamt or 0 }} ({{ einheit.staerke_fuehrung or 0 }} Führung / {{ einheit.staerke_agt or 0 }} AGT / {{ einheit.staerke_sanitaeter or 0 }} San)
+    {% if ausstattung_warnungen %}<span class="estatus estatus--red">{{ ausstattung_warnungen }} Ausstattung eingeschränkt/defekt</span>{% endif %}
+  </section>
   <section class="res-section"><div class="res-section__title">Allgemein</div>
     <dl class="ressource-karte__grid">
       <dt>Name</dt><dd>{{ karte.allgemein.label }}</dd><dt>Organisation</dt><dd>{{ karte.allgemein.org_name or '–' }}</dd><dt>Typ</dt><dd>{{ karte.allgemein.resource_type or '–' }}</dd><dt>Fahrzeug / Funkruf</dt><dd>{{ karte.allgemein.vehicle_name or karte.allgemein.vehicle_code or '–' }}{% if karte.allgemein.funkrufname %} · {{ karte.allgemein.funkrufname }}{% endif %}</dd><dt>Status</dt><dd>{{ karte.allgemein.status }}</dd><dt>Abschnitt</dt><dd>{{ karte.allgemein.sector or 'Pool' }}</dd><dt>Standort / Bereitstellungsraum</dt><dd>{{ karte.allgemein.standort or '–' }}</dd><dt>Bereitstellung</dt><dd>{{ karte.allgemein.bereitstellung_at|local_datetime if karte.allgemein.bereitstellung_at else '–' }}</dd><dt>Letzte Statusänderung</dt><dd>{{ karte.allgemein.status_at|local_datetime if karte.allgemein.status_at else '–' }}</dd>

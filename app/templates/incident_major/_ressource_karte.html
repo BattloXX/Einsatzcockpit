@@ -5,7 +5,7 @@
     <button type="button" class="btn btn--xs btn--ghost" data-karte-close aria-label="Schließen">✕</button>
   </header>
   <nav class="ressource-karte__tabs">
-    {% for tab, label in [('uebersicht', 'Übersicht'), ('einsaetze', 'Einsätze'), ('journal', 'Journal')] + ([('zugang', 'Zugang')] if can_zugang else []) %}
+    {% for tab, label in [('uebersicht', 'Übersicht'), ('einsaetze', 'Einsätze'), ('journal', 'Journal'), ('personal', 'Personal'), ('ausstattung', 'Ausstattung')] + ([('zugang', 'Zugang')] if can_zugang else []) %}
     <button class="btn btn--xs btn--ghost{% if tab == 'uebersicht' %} active{% endif %}" data-karte-tab="{{ tab }}" hx-get="/lage/{{ lage.id }}/einheiten/{{ einheit.id }}/karte/{{ tab }}" hx-target="#ressourceKarteBody" hx-swap="innerHTML">{{ label }}</button>
     {% endfor %}
   </nav>
