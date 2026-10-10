@@ -183,7 +183,7 @@
   <div class="dash-section" style="--dash-accent:var(--green);margin:0;max-width:780px;">
     <div class="dash-section__title">➕ Einheit hinzufügen</div>
     <form hx-post="/lage/{{ lage.id }}/einheiten" hx-swap="none" data-no-error-toast
-          hx-on::after-request="if(event.detail.successful){ this.reset(); htmx.trigger(document.body,'ressourceChanged'); } else { alert('Fehler beim Hinzufügen: ' + (event.detail.xhr.responseText || 'unbekannter Fehler')); }">
+          hx-on::after-request="resourceAddFinished(event, this)">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div class="res-add-grid">
         <div>
@@ -226,11 +226,26 @@
                  placeholder="z.B. RLF WOL, Baufirma Müller, …"
                  maxlength="120" autocomplete="off">
         </div>
-        <div>
-          <label class="form-label form-label--xs" style="visibility:hidden;">x</label>
-          <button type="submit" class="btn btn--secondary btn--sm" style="width:100%;">+ Hinzufügen</button>
-        </div>
+        <div><label class="form-label form-label--xs" for="res-funkrufname">Funkrufname</label><input id="res-funkrufname" type="text" name="funkrufname" class="form-input" maxlength="80"></div>
+        <div><label class="form-label form-label--xs" for="res-status">Status</label><select id="res-status" name="status" class="form-select form-select--sm">{% for value in resource_status_options %}<option value="{{ value }}"{% if value == resource_service.STATUS_BEREITGESTELLT %} selected{% endif %}>{{ resource_service.STATUS_LABEL[value] }}</option>{% endfor %}</select></div>
+        <div><label class="form-label form-label--xs" for="res-sektor">Abschnitt</label><select id="res-sektor" name="sektor_id" class="form-select form-select--sm"><option value="">— Kein Abschnitt —</option>{% for sector in sectors %}<option value="{{ sector.id }}">{{ sector.name }}</option>{% endfor %}</select></div>
+        <div><label class="form-label form-label--xs" for="res-bereitstellungsraum">Bereitstellungsraum</label><input id="res-bereitstellungsraum" type="text" name="bereitstellungsraum" class="form-input" maxlength="120"></div>
+        <div><label class="form-label form-label--xs" for="res-gk-member">Gruppenkommandant</label><select id="res-gk-member" name="gk_member_id" class="form-select form-select--sm" onchange="resGkMemberChanged(this.value)"><option value="">— Mitglied auswählen —</option>{% for member in org_members %}<option value="{{ member.id }}">{{ member.full_name }}</option>{% endfor %}</select></div>
+        <div><label class="form-label form-label--xs" for="res-gk-name">GK-Name (Freitext)</label><input id="res-gk-name" type="text" name="gk_name" class="form-input" maxlength="120"></div>
+        <div><label class="form-label form-label--xs" for="res-gk-telefon">Mobilnummer</label><input id="res-gk-telefon" type="tel" name="gk_telefon" class="form-input" placeholder="+436641234567" maxlength="32"><div class="res-add__hint">E.164, z.B. +436641234567</div></div>
+        <div><label class="form-label form-label--xs" for="res-personal-gesamt">Besatzungsstärke</label><input id="res-personal-gesamt" type="number" name="personal_gesamt" class="form-input" min="0"></div>
+        <div class="res-add__submit"><button type="submit" class="btn btn--secondary btn--sm">+ Hinzufügen</button></div>
+        <div class="res-add__notice span2">Ausstattung nach dem Anlegen in der Ressourcenkarte.</div>
       </div>
+      <details class="res-add__details"><summary>Weitere Angaben</summary><div class="res-add-grid res-add-grid--details">
+        <div><label class="form-label form-label--xs" for="res-stv-name">Stellvertreter-Name</label><input id="res-stv-name" type="text" name="stv_name" class="form-input" maxlength="120"></div>
+        <div><label class="form-label form-label--xs" for="res-personal-fuehrer">Führer</label><input id="res-personal-fuehrer" type="number" name="personal_fuehrer" class="form-input" min="0"></div>
+        <div><label class="form-label form-label--xs" for="res-personal-unterfuehrer">Unterführer</label><input id="res-personal-unterfuehrer" type="number" name="personal_unterfuehrer" class="form-input" min="0"></div>
+        <div><label class="form-label form-label--xs" for="res-personal-mannschaft">Mannschaft</label><input id="res-personal-mannschaft" type="number" name="personal_mannschaft" class="form-input" min="0"></div>
+        <div><label class="form-label form-label--xs" for="res-personal-agt">AGT</label><input id="res-personal-agt" type="number" name="personal_agt" class="form-input" min="0"></div>
+        <div><label class="form-label form-label--xs" for="res-personal-sanitaeter">Sanitäter</label><input id="res-personal-sanitaeter" type="number" name="personal_sanitaeter" class="form-input" min="0"></div>
+        <div class="span2"><label class="form-label form-label--xs" for="res-bemerkung">Bemerkung</label><textarea id="res-bemerkung" name="bemerkung" class="form-input" rows="2" maxlength="2000"></textarea></div>
+      </div></details>
     </form>
   </div>
 </div>
@@ -316,6 +331,21 @@ function resTypeChanged(v) {
   document.getElementById('ext-bos-row').style.display = v === 'extern'   ? '' : 'none';
   document.getElementById('mat-qty-row').style.display = v === 'material' ? '' : 'none';
   document.getElementById('mat-unit-row').style.display= v === 'material' ? '' : 'none';
+}
+
+var resourceMemberData = {{ resource_member_data|tojson }};
+
+function resGkMemberChanged(memberId) {
+  var member = resourceMemberData.find(function(item) { return String(item.id) === memberId; });
+  var telefon = document.getElementById('res-gk-telefon');
+  if (member && member.telefon && telefon) telefon.value = member.telefon;
+}
+
+function resourceAddFinished(event, form) {
+  if (event.detail.successful) { form.reset(); htmx.trigger(document.body, 'ressourceChanged'); return; }
+  var message = 'unbekannter Fehler';
+  try { message = JSON.parse(event.detail.xhr.responseText).detail || message; } catch (error) {}
+  alert('Fehler beim Hinzufügen: ' + message);
 }
 
 (function() {

@@ -4801,6 +4801,14 @@ def lage_ressourcen(
         "all_einheiten": all_einheiten,
         "extra_vehicles": extra_vehicles,
         "org_members": org_members,
+        "resource_status_options": sorted(
+            resource_service.VALID_STATUSES,
+            key=lambda value: resource_service.STATUS_LABEL[value],
+        ),
+        "resource_member_data": [
+            {"id": member.id, "name": member.full_name, "telefon": member.phone or ""}
+            for member in org_members
+        ] if _can_edit(user) else [],
         "resource_service": resource_service,
         "einheit_hat_tablet": einheit_hat_tablet,
         "is_admin": has_role(user, "admin"),
