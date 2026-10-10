@@ -1,7 +1,7 @@
 import { createOutbox } from "/static/js/einheit_outbox.js";
 
 const STATUS = {
-  zugewiesen: ["bestaetigt", "Auftrag bestätigen"],
+  zugewiesen: ["bestaetigt", "Auftrag erhalten"],
   bestaetigt: ["anfahrt", "Anfahrt"],
   anfahrt: ["vor_ort", "Vor Ort"],
   vor_ort: ["in_arbeit", "In Arbeit"],
@@ -59,6 +59,8 @@ function registriere() {
     ws: null, wsTimer: null, wsVersuche: 0, pollTimer: null, retryTimer: null, lastLoad: 0, outbox: null,
     gezeigteHinweise: new Set(), geladenAb: new Date().toISOString(),
     karte: null, kartenMarker: null, zugangBeendet: false,
+    nummerHinweis: false, nummerGeschlossen: false, nummerCodeGesendet: false,
+    nummerTelefon: "", nummerCode: "", nummerMaske: "", nummerMeldung: "",
 
     // Abgeleitete Anzeigezustände.
     get naechster() { return this.weitere[0] || null; },
@@ -99,6 +101,36 @@ function registriere() {
 
     // Hilfsfunktionen für API und Darstellung.
     headers() { return this.simulation ? { "X-EC-Einheit-Sim": String(this.simEinheitId) } : {}; },
+    async nummerAnfordern() {
+      this.nummerMeldung = "";
+      try {
+        const response = await fetch("/einheit/api/nummer/anfordern", {
+          method: "POST", credentials: "same-origin",
+          headers: { "Content-Type": "application/json", "X-CSRF-Token": decodeURIComponent(cookie("ec_csrf")) },
+          body: JSON.stringify({ telefon: this.nummerTelefon }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.meldung || "Code konnte nicht gesendet werden.");
+        this.nummerMaske = data.maske || "";
+        this.nummerCodeGesendet = true;
+        this.nummerMeldung = "Code gesendet.";
+      } catch (error) { this.nummerMeldung = error.message || "Code konnte nicht gesendet werden."; }
+    },
+    async nummerBestaetigen() {
+      this.nummerMeldung = "";
+      try {
+        const response = await fetch("/einheit/api/nummer/bestaetigen", {
+          method: "POST", credentials: "same-origin",
+          headers: { "Content-Type": "application/json", "X-CSRF-Token": decodeURIComponent(cookie("ec_csrf")) },
+          body: JSON.stringify({ code: this.nummerCode }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.meldung || "Bestätigung nicht möglich.");
+        this.nummerHinweis = false;
+        this.nummerMeldung = "Mobilnummer bestätigt.";
+        if (data.sitzung_beendet) await this.zugangBeenden();
+      } catch (error) { this.nummerMeldung = error.message || "Bestätigung nicht möglich."; }
+    },
     zeit(value) {
       return value ? new Intl.DateTimeFormat("de-AT", {
         hour: "2-digit", minute: "2-digit",
@@ -202,6 +234,8 @@ function registriere() {
       this.abgeschlossen = data.kategorien?.abgeschlossen || [];
       this.zurueckgezogen = data.kategorien?.zurueckgezogen || [];
       this.kannRessourcePflegen = Boolean(data.kann_ressource_pflegen);
+      this.nummerHinweis = Boolean(data.nummer?.hinweis);
+      if (data.nummer?.maske) this.nummerMaske = data.nummer.maske;
       this.ressource = data.ressource || { personal: {}, ausstattung: [] };
       const neu = this.weitere.filter((item) => vorher.size && !vorher.has(item.dispatch_id)).map((item) => item.dispatch_id);
       if (neu.length) {
@@ -426,6 +460,17 @@ function registriere() {
       await this.outboxAktualisieren();
     },
     async erneut(id) { await this.outbox.erneutSenden(id); },
+    // Nicht übermittelte Meldung als Text kopieren, damit nichts verloren geht (z. B. für Funk/Messenger).
+    async kopieren(item) {
+      const text = [item.typ, "Auftrag " + item.dispatch_id, this.zeit(item.erfasst_at), item.payload?.text || ""]
+        .filter(Boolean).join(" · ");
+      try {
+        await navigator.clipboard.writeText(text);
+        this.hinweisBanner = "Text kopiert.";
+      } catch {
+        window.prompt("Text markieren und kopieren:", text);
+      }
+    },
     verwerfen(id) {
       this.konfliktEintrag = this.outboxListe.find((item) => item.client_uuid === id) || null;
       this.flyout = "verwerfen_bestaetigen";
@@ -454,7 +499,7 @@ function registriere() {
       this.swCacheLeeren();
       const name = this.outbox ? this.outboxName() : null;
       if (name) indexedDB.deleteDatabase(name);
-      if ((window.EINHEIT_PRINCIPAL || "").startsWith("gk:")) {
+      if (/^(gk|qr):/.test(window.EINHEIT_PRINCIPAL || "")) {
         await fetch("/gk/abmelden", {
           method: "POST",
           headers: { "X-CSRF-Token": decodeURIComponent(cookie("ec_csrf")) },
@@ -468,6 +513,7 @@ function registriere() {
     outboxName() {
       if (this.simulation) return `ec-einheit-sim-${this.simEinheitId}`;
       if ((window.EINHEIT_PRINCIPAL || "").startsWith("gk:")) return `ec-einheit-gk-${this.einheitId}`;
+      if ((window.EINHEIT_PRINCIPAL || "").startsWith("qr:")) return `ec-einheit-qr-${this.einheitId}`;
       return "ec-einheit";
     },
 

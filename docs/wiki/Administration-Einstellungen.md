@@ -114,3 +114,10 @@ Unter **Einstellungen → Großschadenslage** steuert die Karte „Gruppenkomman
 | SMS-PIN | Optionaler zweiter Faktor beim Einlösen; Sperre nach Fehlversuchen. |
 | Ressourcen pflegen | Erlaubt dem GK, Personal und Ausstattung der eigenen Einheit zu ändern. |
 | Notbremse | Widerruft sofort alle Zugänge der Lage/Organisation. |
+
+| Auftrags-SMS automatisch | Sendet bei neuem/geändertem/zurückgezogenem Auftrag eine SMS an den Gruppenkommandanten (eigene Vorlage mit Platzhaltern `{ereignis}`, `{gsl}`, `{einheit}`, `{einsatzstelle}`, `{auftrag}`, `{link}`; `{link}` ist Pflicht). Voraussetzung: Zugang aktiv und Mobilnummer vorhanden. |
+| QR-Zugang aktiv | Erlaubt QR-Ausdrucke für Einheiten (Standard: aus). Ausschalten widerruft alle QR-Zugänge. |
+| QR-Gültigkeit (Stunden) | 1–168, Standard 72. |
+| QR-PIN | Optional; die PIN wird nur der Einsatzleitung angezeigt, nie gedruckt. |
+
+**Serverkonfiguration:** `GSL_ZUGANG_KEY` (eigener, geheimer Schlüssel für die Ableitung der Zugangslinks, empfohlen: `python -c "import secrets; print(secrets.token_urlsafe(48))"`). Ein Wechsel des Schlüssels macht alle ausgegebenen Links ungültig. Ohne Wert wird der Schlüssel aus `SECRET_KEY` abgeleitet (eine Warnung im Log weist darauf hin); dann entwertet eine `SECRET_KEY`-Rotation alle Links.

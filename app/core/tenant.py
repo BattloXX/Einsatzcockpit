@@ -111,6 +111,7 @@ _TENANT_TABLE_NAMES: frozenset[str] = frozenset({
     "lage_einheit_zugang",
     "lage_einheit_zugang_session",
     "lage_einheit_zugang_versand",
+    "lage_einheit_nummer_verifikation",
     "lage_einheit_person",
     "lage_einheit_ausstattung",
     # Straßensperren und Anfahrtsrouting (TenantScoped via Mixin)

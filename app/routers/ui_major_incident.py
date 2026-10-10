@@ -98,6 +98,7 @@ router = APIRouter(dependencies=[Depends(einheit_geraet_nur_lesen)])
 
 logger = logging.getLogger("einsatzleiter.major_incident")
 
+
 # Pending phone verifications: verify_token → {pin, expires_at, ...}
 _pending_verifications: dict[str, dict] = {}
 
@@ -876,6 +877,7 @@ async def site_einheit_zuweisen(
     lage_id: int,
     site_id: int,
     einheit_id: int = Form(...),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
 ):
@@ -887,7 +889,7 @@ async def site_einheit_zuweisen(
         raise HTTPException(status_code=404)
 
     try:
-        resource_service.dispatch_to_site(
+        dispatch = resource_service.dispatch_to_site(
             db, einheit_id, lage_id, site_id,
             author_name=get_author_name(request), user_id=user.id,
         )
@@ -901,7 +903,10 @@ async def site_einheit_zuweisen(
         user_id=user.id,
         author_name=get_author_name(request),
     ))
+    from app.services.gsl_auftrag_events import plane_benachrichtigungen, sende_nach_commit
+    benachrichtigung = plane_benachrichtigungen(db, lage, einheit, dispatch, "neu")
     db.commit()
+    background_tasks.add_task(sende_nach_commit, benachrichtigung)
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
     return Response(status_code=204)
 
@@ -912,12 +917,14 @@ async def site_einheit_freigeben(
     lage_id: int,
     site_id: int,
     einheit_id: int = Form(...),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
 ):
     user = request.state.user
     lage = _lage_or_404(lage_id, db)
     _check_org_access(user, lage)
+    dispatch = None
 
     try:
         resource_service.withdraw_from_site(
@@ -925,6 +932,9 @@ async def site_einheit_freigeben(
             author_name=get_author_name(request), user_id=user.id,
         )
         einheit = db.get(LageEinheit, einheit_id)
+        dispatch = db.query(resource_service.EinheitSiteDispatch).filter_by(
+            einheit_id=einheit_id, site_id=site_id
+        ).order_by(resource_service.EinheitSiteDispatch.id.desc()).first()
     except ValueError:
         # Fallback: kein Dispatch-Eintrag → altes move_to_pool Verhalten
         try:
@@ -944,7 +954,11 @@ async def site_einheit_freigeben(
     site = db.get(IncidentSite, site_id)
     if site and not lagemeldung_service.has_active_resource(site, db):
         lagemeldung_service.clear_timer(site, db)
+    from app.services.gsl_auftrag_events import plane_benachrichtigungen, sende_nach_commit
+    benachrichtigung = plane_benachrichtigungen(db, lage, einheit, dispatch, "zurueckgezogen") if dispatch else None
     db.commit()
+    if benachrichtigung:
+        background_tasks.add_task(sende_nach_commit, benachrichtigung)
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
     return Response(status_code=204)
 
@@ -1034,6 +1048,7 @@ async def site_einheit_disponieren(
     einheit_id: int = Form(...),
     auftrag: str | None = Form(None),
     reihenfolge: int | None = Form(None),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
 ):
@@ -1045,7 +1060,7 @@ async def site_einheit_disponieren(
         raise HTTPException(status_code=404)
 
     try:
-        resource_service.dispatch_to_site(
+        dispatch = resource_service.dispatch_to_site(
             db, einheit_id, lage_id, site_id,
             auftrag=auftrag, reihenfolge=reihenfolge,
             author_name=get_author_name(request), user_id=user.id,
@@ -1062,7 +1077,10 @@ async def site_einheit_disponieren(
     ))
     write_audit(db, "gsl.auftrag.disponiert", user_id=user.id,
                 payload={"lage_id": lage_id, "site_id": site_id, "einheit_id": einheit_id})
+    from app.services.gsl_auftrag_events import plane_benachrichtigungen, sende_nach_commit
+    benachrichtigung = plane_benachrichtigungen(db, lage, einheit, dispatch, "neu")
     db.commit()
+    background_tasks.add_task(sende_nach_commit, benachrichtigung)
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
     await broadcast_lage(lage_id, {"type": "einheit:changed", "einheit_id": einheit_id, "site_id": site_id})
     html = _site_detail_html_with_oob(request, db, lage, site, user)
@@ -1080,6 +1098,7 @@ def _dispatch_fuer_stelle_oder_404(db: Session, dispatch_id: int, site_id: int):
 async def site_einheit_auftrag_aendern(
     request: Request, lage_id: int, site_id: int, dispatch_id: int,
     auftrag: str | None = Form(None), reihenfolge: int | None = Form(None),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
 ):
@@ -1091,13 +1110,21 @@ async def site_einheit_auftrag_aendern(
         raise HTTPException(status_code=404)
     dispatch = _dispatch_fuer_stelle_oder_404(db, dispatch_id, site_id)
     try:
-        resource_service.aendere_auftrag(db, dispatch, auftrag=auftrag, reihenfolge=reihenfolge,
+        alter_auftrag = dispatch.auftrag
+        changed = resource_service.aendere_auftrag(db, dispatch, auftrag=auftrag, reihenfolge=reihenfolge,
                                           author_name=get_author_name(request), user_id=user.id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     write_audit(db, "gsl.auftrag.geaendert", user_id=user.id,
                 payload={"lage_id": lage_id, "site_id": site_id, "dispatch_id": dispatch_id})
+    from app.services.gsl_auftrag_events import plane_benachrichtigungen, sende_nach_commit
+    benachrichtigung = (
+        plane_benachrichtigungen(db, lage, dispatch.einheit, dispatch, "geaendert")
+        if changed and alter_auftrag != dispatch.auftrag else None
+    )
     db.commit()
+    if benachrichtigung:
+        background_tasks.add_task(sende_nach_commit, benachrichtigung)
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
     await broadcast_lage(lage_id, {"type": "einheit:changed", "einheit_id": dispatch.einheit_id,
                                    "dispatch_id": dispatch_id, "site_id": site_id})
@@ -1260,6 +1287,7 @@ async def site_einheit_abziehen(
     site_id: int,
     einheit_id: int = Form(...),
     grund: str | None = Form(None),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
 ):
@@ -1276,6 +1304,9 @@ async def site_einheit_abziehen(
             author_name=get_author_name(request), user_id=user.id, grund=grund,
         )
         einheit = db.get(LageEinheit, einheit_id)
+        dispatch = db.query(resource_service.EinheitSiteDispatch).filter_by(
+            einheit_id=einheit_id, site_id=site_id
+        ).order_by(resource_service.EinheitSiteDispatch.id.desc()).first()
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     db.add(SiteLogEntry(
@@ -1287,7 +1318,11 @@ async def site_einheit_abziehen(
     ))
     if not lagemeldung_service.has_active_resource(site, db):
         lagemeldung_service.clear_timer(site, db)
+    from app.services.gsl_auftrag_events import plane_benachrichtigungen, sende_nach_commit
+    benachrichtigung = plane_benachrichtigungen(db, lage, einheit, dispatch, "zurueckgezogen") if dispatch else None
     db.commit()
+    if benachrichtigung:
+        background_tasks.add_task(sende_nach_commit, benachrichtigung)
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
     html = _site_detail_html_with_oob(request, db, lage, site, user)
     return HTMLResponse(content=html, headers={"HX-Retarget": "#siteDetailContent", "HX-Reswap": "innerHTML"})

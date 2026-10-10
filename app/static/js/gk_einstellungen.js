@@ -50,4 +50,25 @@
     update();
   });
   update();
+
+  const orderInput = document.getElementById("gk-auftrag-nachricht");
+  const orderCounter = document.getElementById("gk-auftrag-sms-zaehler");
+  const orderPreview = document.getElementById("gk-auftrag-vorschau");
+  const orderRestore = document.getElementById("gk-auftrag-standard-wiederherstellen");
+  const orderStandard = JSON.parse(card.dataset.auftragStandardNachricht || '""');
+  if (orderInput && orderCounter && orderPreview && orderRestore) {
+    function updateOrder() {
+      const template = orderInput.value || orderStandard;
+      const text = template.replaceAll("{ereignis}", "Neuer Einsatzauftrag")
+        .replaceAll("{gsl}", "Hochwasser Rheintal").replaceAll("{einheit}", "RLF Wolfurt")
+        .replaceAll("{einsatzstelle}", "Rathausplatz 1, Wolfurt")
+        .replaceAll("{auftrag}", "Wasser abpumpen").replaceAll("{link}", link);
+      const result = smsLength(text);
+      orderCounter.textContent = `${result.characters} Zeichen - ${result.segments} SMS - ${result.encoding}`;
+      orderPreview.textContent = text;
+    }
+    orderInput.addEventListener("input", updateOrder);
+    orderRestore.addEventListener("click", () => { orderInput.value = orderStandard; updateOrder(); });
+    updateOrder();
+  }
 })();

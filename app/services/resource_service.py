@@ -536,6 +536,7 @@ def dispatch_to_site(
     reihenfolge: int | None = None,
     author_name: str | None = None,
     user_id: int | None = None,
+    quelle: str = "manuell",
 ) -> EinheitSiteDispatch:
     """Disponiert eine Einheit für eine Einsatzstelle (vor_ort_at=NULL = alarmiert).
 
@@ -593,7 +594,7 @@ def dispatch_to_site(
         einheit_id=e.id,
         site_id=site.id,
         ereignis_typ="disponiert",
-        quelle="manuell",
+        quelle=quelle,
     )
     return dispatch
 
@@ -618,6 +619,7 @@ def aendere_auftrag(
     reihenfolge: int | None,
     author_name: str | None,
     user_id: int | None,
+    quelle: str = "manuell",
 ) -> bool:
     """Ändert Auftragsdaten ohne selbst zu committen."""
     auftrag, reihenfolge = _validiere_auftragsdaten(auftrag, reihenfolge)
@@ -648,7 +650,7 @@ def aendere_auftrag(
         einheit_id=dispatch.einheit_id,
         site_id=dispatch.site_id,
         ereignis_typ="status",
-        quelle="manuell",
+        quelle=quelle,
     )
     return True
 
@@ -837,6 +839,7 @@ def withdraw_from_site(
     author_name: str | None = None,
     user_id: int | None = None,
     grund: str | None = None,
+    quelle: str = "manuell",
 ) -> None:
     """Zieht Einheit von einer Einsatzstelle ab (withdrawn_at setzen)."""
     if grund is not None and len(grund.strip()) > 500:
@@ -878,7 +881,7 @@ def withdraw_from_site(
         einheit_id=e.id,
         site_id=site_id,
         ereignis_typ="zurueckgezogen",
-        quelle="manuell",
+        quelle=quelle,
     )
 
 
@@ -1240,6 +1243,7 @@ def setze_gruppenkommandant(
         einheit.commander_label = name
         if old_phone_e164 != phone_e164:
             old.phone_version += 1
+            old.phone_verifiziert_at = None
             _journal(
                 db,
                 lage.id,
@@ -1358,6 +1362,7 @@ def setze_stellvertreter(
         old.note = note
         if old_phone_e164 != phone_e164:
             old.phone_version += 1
+            old.phone_verifiziert_at = None
             _journal(
                 db,
                 lage.id,

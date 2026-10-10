@@ -393,6 +393,8 @@ class OrgSettings(Base):
     gk_zugang_aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     gk_zugang_auto_sms: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     gk_zugang_nachricht: Mapped[str | None] = mapped_column(Text, nullable=True)
+    gk_auto_sms_auftrag: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    gk_auftrag_nachricht: Mapped[str | None] = mapped_column(Text, nullable=True)
     gk_zugang_gueltigkeit_stunden: Mapped[int] = mapped_column(Integer, nullable=False, default=48)
     gk_sitzung_stunden: Mapped[int] = mapped_column(Integer, nullable=False, default=12)
     gk_zugang_max_sitzungen: Mapped[int] = mapped_column(Integer, nullable=False, default=2)

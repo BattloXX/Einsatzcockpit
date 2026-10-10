@@ -195,3 +195,19 @@ Pflichtszenarien 1–17 des Gesamtauftrags sind den Phasen zugeordnet: 1, 2, 5 �
 - B4: Druckregel `gsl_einheit_angelegt` (Standard: keine Regel), Autodruck nach Commit, Statusanzeige, Cookie-Reihenfolge `ec_gk`/`ec_qr`.
 - Browser-Smoketest (Chromium): `/gk#gkq_…` → Fragment entfernt → Einlösung (mit und ohne PIN) → `/einheit`. Dabei gefunden und behoben: Einlöseseite akzeptierte nur `#gkz_`, versteckte Elemente wurden durch `.btn` überschrieben.
 - Offen: Gerätetest auf echtem Smartphone, echter Drucker/Gateway, Layout des A4-Dokuments im Druck.
+
+### Phase C – Nummernbestätigung, Auftrags-SMS, Tablet-Push (Branch `feat/gsl-gesamt-c`)
+
+- C1: Der Gruppenkommandant bestätigt seine Mobilnummer im Einheitenmodus (QR- oder persönliche Sitzung) per SMS-Code (Migration 0269, `gk_nummer_service`): E.164, 10 Minuten gültig, 5 Fehlversuche → 15 Minuten Sperre, 3 Codes je 10 Minuten, Race-Schutz gegen Führungswechsel/Nummernänderung, Widerruf des persönlichen Zugangs und Auto-SMS an die bestätigte Nummer; kein Klartext in Audit, Journal und SmsLog.
+- C2: Auftrags-SMS bei Neu-Disposition, wesentlicher Änderung (Auftragstext) und Rückzug (Migration 0270, Org-Schalter `gk_auto_sms_auftrag`, eigene Vorlage). Idempotenzschlüssel je Auftragsversion; ein bestehender gültiger Zugang wird nicht rotiert (ableitbarer Link), Altbestand-Zufallstokens werden einmalig neu ausgestellt. **Entscheidung:** Als vertrauenswürdig gelten von der Führung eingetragene und vom GK bestätigte Nummern; eine Selbsteingabe wird nie ungeprüft gespeichert. Manueller Retry in der Ressourcenkarte (Zugang-Tab).
+- C3: Push an das Fahrzeug-Tablet (nur Geräte mit `gsl_profil=einheit`, Übungsschutz `push`) nach dem Commit; ein Push ist keine Lesebestätigung.
+- Nicht umgesetzt: Auftrags-SMS beim Rückzug durch Verbandsauflösung; Zusammenlegen der Erstzugangs-SMS mit der Auftrags-SMS (beide enthalten denselben Link, getrennte Nachrichten).
+- Beim Review gefunden und behoben: QR-Sitzungen hatten keinen Leader (Nummernbestätigung wäre für QR immer gescheitert), SmsLog-`source` länger als die Spalte (MariaDB), Downgrade 0269 auf MariaDB, Layout des Hinweisbalkens auf dem Smartphone.
+
+### Phase D + E – Einheitenmodus-Politur, MCP, Doku
+
+- D1: „Auftrag erhalten“ (Status `bestaetigt`), „Jetzt synchronisieren“, Konflikte/Fehler kopierbar, getrennte Outbox `ec-einheit-qr-<id>`. D2/D3: Straßensperren-Hinweis, stellvertretende Funkerfassung und Simulation unverändert, durch die bestehenden Regressionstests (`test_einheit_*`, `test_gsl_*`) abgesichert.
+- E1: Verband/Aufteilung/Umbuchung sind durch die Tests aus Phase 4 abgedeckt (Mengen, Historie, Dispositionen, Doppelzählung); Zugangssicherheit: Nachfolger-Einheiten erhalten keinen Zugang, Verbands-Kinder bleiben nicht disponierbar.
+- E2: MCP `gsl_ressource_anlegen`, `gsl_einheit_disponieren`, `gsl_auftrag_aendern`, `gsl_auftrag_zurueckziehen`, `gsl_ressource_qr` (nur Status/Widerruf); gemeinsamer Helper `gsl_auftrag_events` für SMS und Push nach dem Commit.
+- E3: Wiki (Anwender, Administration, MCP), CHANGELOG. Die Traceability-Matrix in Abschnitt 3 ist **verdichtet**; die zeilengenaue Fassung beider Altpläne steht aus.
+- Offen: Tests auf echten Smartphones/Tablets, echter Drucker und SMS-Gateway, Layout des A4-Blatts im Druck, Rückzugs-SMS bei Verbandsauflösung, Zusammenlegen von Erst- und Auftrags-SMS.

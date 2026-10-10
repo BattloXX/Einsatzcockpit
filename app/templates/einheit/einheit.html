@@ -9,7 +9,7 @@
 <script type="module" src="/static/js/einheit_modus.js?v={{ ASSET_VERSION }}"></script>
 <script>
   window.EINHEIT_WS_PATH = {{ ('/ws/einheit-zugang' if gk_zugang else '/ws/lage/' ~ lage_id)|tojson }};
-  window.EINHEIT_PRINCIPAL = {{ ('gk:' ~ einheit_id if gk_zugang else '')|tojson }};
+  window.EINHEIT_PRINCIPAL = {{ ((('qr:' if zugang_qr else 'gk:') ~ einheit_id) if gk_zugang else '')|tojson }};
 </script>
 {% endblock %}
 
@@ -111,6 +111,27 @@
     <button type="button" class="btn btn--ghost btn--sm" x-show="zugangBeendet" @click="lokaleDatenLoeschen()">Lokale Daten löschen</button>
     <button type="button" class="btn btn--ghost btn--sm" @click="hinweisBanner = ''">OK</button>
   </div>
+
+  {% if gk_zugang %}
+  <section class="einheit-warning einheit-warning--stack" x-show="nummerHinweis && !nummerGeschlossen" x-cloak>
+    <div><strong>Mobilnummer für Einsatzbenachrichtigungen hinterlegen</strong></div>
+    <p x-show="!nummerCodeGesendet">Die Nummer wird erst nach Bestätigung per SMS gespeichert.</p>
+    <label class="sr-only" for="gkNummer">Mobilnummer</label>
+    <input id="gkNummer" class="form-input" type="tel" inputmode="tel" autocomplete="tel"
+           x-model="nummerTelefon" x-show="!nummerCodeGesendet" placeholder="z. B. 0664 1234567">
+    <button type="button" class="btn btn--primary" style="min-height:44px" x-show="!nummerCodeGesendet"
+            @click="nummerAnfordern()">Code senden</button>
+    <template x-if="nummerCodeGesendet"><div>
+      <p x-text="'Code gesendet an ' + (nummerMaske || 'die Mobilnummer')"></p>
+      <label class="sr-only" for="gkCode">Bestätigungscode</label>
+      <input id="gkCode" class="form-input" type="text" inputmode="numeric" autocomplete="one-time-code"
+             x-model="nummerCode" placeholder="Bestätigungscode">
+      <button type="button" class="btn btn--primary" style="min-height:44px" @click="nummerBestaetigen()">Bestätigen</button>
+    </div></template>
+    <p x-show="nummerMeldung" x-text="nummerMeldung"></p>
+    <button type="button" class="btn btn--ghost btn--sm" @click="nummerGeschlossen = true">Schließen</button>
+  </section>
+  {% endif %}
 
   {# ── Übersicht ──────────────────────────────────────────────────────── #}
   <div class="fab-grid" x-show="!detail">
@@ -456,7 +477,7 @@
         <button type="button" class="person-flyout__close" @click="outboxOffen = false">&times;</button>
       </header>
       <div class="einheit-flyout-body">
-        <button type="button" class="btn btn--primary einheit-action" :disabled="zugangBeendet" @click="flush()">Jetzt senden</button>
+        <button type="button" class="btn btn--primary einheit-action" :disabled="zugangBeendet" @click="flush()">Jetzt synchronisieren</button>
         <p class="einheit-sub" x-show="!outboxListe.length">Alle Einträge wurden übermittelt.</p>
         <template x-for="item in outboxListe" :key="item.client_uuid">
           <article class="fab-subcard">
@@ -467,6 +488,8 @@
             <div class="einheit-actions-row">
               <button type="button" class="btn btn--ghost" x-show="item.status !== 'ausstehend' && item.status !== 'blockiert_zugang'"
                       @click="erneut(item.client_uuid)">Erneut senden</button>
+              <button type="button" class="btn btn--ghost" x-show="['konflikt', 'fehler', 'blockiert_zugang'].includes(item.status)"
+                      @click="kopieren(item)">Kopieren</button>
               <button type="button" class="btn btn--ghost" @click="verwerfen(item.client_uuid)">Verwerfen</button>
             </div>
           </article>
