@@ -203,9 +203,11 @@ def einheit_kontext(request: Request, db: Session = Depends(get_db)) -> EinheitK
             db.commit()
         return ctx
     if user is None:
-        cookie = request.cookies.get(gk_zugang_service.COOKIE) or request.cookies.get(gk_zugang_service.QR_COOKIE)
-        typ = "personal" if request.cookies.get(gk_zugang_service.COOKIE) else "qr"
-        if cookie:
+        principal = None
+        grund = None
+        for typ, cookie in (("personal", request.cookies.get(gk_zugang_service.COOKIE)), ("qr", request.cookies.get(gk_zugang_service.QR_COOKIE))):
+            if not cookie:
+                continue
             principal, grund = gk_zugang_service.sitzung_pruefen_mit_grund(db, cookie, typ)
             if principal:
                 # Only the validator's activity timestamp is committed here;
@@ -213,6 +215,7 @@ def einheit_kontext(request: Request, db: Session = Depends(get_db)) -> EinheitK
                 db.commit()
                 return kontext_fuer_zugang(db, principal)
             db.rollback()
+        if request.cookies.get(gk_zugang_service.COOKIE) or request.cookies.get(gk_zugang_service.QR_COOKIE):
             codes = {
                 ZugangFehlergrund.WIDERRUFEN: "zugang_widerrufen",
                 ZugangFehlergrund.ABGELAUFEN: "zugang_abgelaufen",
@@ -237,14 +240,17 @@ def einheit_kontext(request: Request, db: Session = Depends(get_db)) -> EinheitK
             _fehler(403, "kein_einheitenkontext")
         return ctx
 
-    cookie = request.cookies.get(gk_zugang_service.COOKIE) or request.cookies.get(gk_zugang_service.QR_COOKIE)
-    typ = "personal" if request.cookies.get(gk_zugang_service.COOKIE) else "qr"
-    if cookie:
+    principal = None
+    grund = None
+    for typ, cookie in (("personal", request.cookies.get(gk_zugang_service.COOKIE)), ("qr", request.cookies.get(gk_zugang_service.QR_COOKIE))):
+        if not cookie:
+            continue
         principal, grund = gk_zugang_service.sitzung_pruefen_mit_grund(db, cookie, typ)
         if principal:
             db.commit()
             return kontext_fuer_zugang(db, principal)
         db.rollback()
+    if request.cookies.get(gk_zugang_service.COOKIE) or request.cookies.get(gk_zugang_service.QR_COOKIE):
         codes = {
             ZugangFehlergrund.WIDERRUFEN: "zugang_widerrufen",
             ZugangFehlergrund.ABGELAUFEN: "zugang_abgelaufen",

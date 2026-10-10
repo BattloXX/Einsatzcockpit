@@ -124,7 +124,7 @@
     </div>
     {% if qr.status == "deaktiviert" %}<div class="ressource-zugang__hint">QR-Zugang ist in den GSL-Einstellungen deaktiviert.</div>{% endif %}
     {% if qr.status in ("aktiv", "abgelaufen", "widerrufen") %}<div class="ressource-zugang__hint">Sitzungen: {% if qr.sitzung_aktiv %}aktiv{% else %}keine aktive Sitzung{% endif %}</div>{% endif %}
-    {% if qr_job %}<div class="ressource-zugang__hint">Druckstatus: {% if qr_job.status == "queued" %}in Warteschlange{% elif qr_job.status == "sent" %}übergeben{% elif qr_job.status == "done" %}gedruckt{% elif qr_job.status == "failed" %}fehlgeschlagen{% else %}{{ qr_job.status }}{% endif %}{% if qr.qr_druck_at %} · {{ qr.qr_druck_at|local_datetime }}{% endif %}</div>{% else %}<div class="ressource-zugang__hint">Druckstatus: nicht gedruckt</div>{% endif %}
+    <div class="ressource-zugang__hint">Druckstatus: {{ qr.druck_status|replace('_', ' ') }}{% if qr.qr_druck_at %} · {{ qr.qr_druck_at|local_datetime }}{% endif %}</div>
     <div class="ressource-zugang__actions">
       {% if qr.status == "kein_zugang" %}<button class="btn btn--primary" hx-post="{{ basis }}/zugang/qr/ausstellen" hx-target="#ressourceKarteBody" hx-swap="innerHTML">QR-Code ausstellen</button>{% endif %}
       {% if qr.status == "aktiv" %}

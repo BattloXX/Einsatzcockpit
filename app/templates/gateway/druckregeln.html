@@ -40,12 +40,13 @@
     {% if q.get('rule_created') %}<div class="gwx-alert gwx-alert--ok">Regel angelegt – jetzt konfigurieren.</div>{% endif %}
     {% if q.get('error') == 'rule_dup' %}<div class="gwx-alert gwx-alert--err">Regelname bereits vergeben.</div>{% endif %}
     {% if q.get('error') == 'rule_documents' %}<div class="gwx-alert gwx-alert--err">Die gewählten Dokumente passen nicht zum Auslöser.</div>{% endif %}
-    {% set test_art_labels = {'einsatz': 'Einsatz', 'gsl': 'Großschadenslage', 'verleih': 'Verleihschein', 'alarm': 'Alarm'} %}
+    {% set test_art_labels = {'einsatz': 'Einsatz', 'gsl': 'Großschadenslage', 'gsl_einheit': 'Einheit', 'verleih': 'Verleihschein', 'alarm': 'Alarm'} %}
     {% if q.get('test_ok') %}<div class="gwx-alert gwx-alert--ok">Testdruck ausgelöst: {{ q.get('test_ok') }} Auftrag/Aufträge für {{ test_art_labels.get(q.get('test_art'), q.get('test_art')) }} #{{ q.get('test_ref') }} an die Zieldrucker gesendet.</div>{% endif %}
     {% if q.get('test_err') == 'printer' %}<div class="gwx-alert gwx-alert--err">Testdruck: Der Regel ist kein Zieldrucker zugewiesen.</div>{% endif %}
     {% if q.get('test_err') == 'gateway' %}<div class="gwx-alert gwx-alert--err">Testdruck: Es ist kein gekoppeltes Gateway verfügbar.</div>{% endif %}
     {% if q.get('test_err') == 'einsatz' %}<div class="gwx-alert gwx-alert--err">Testdruck: Es gibt noch keinen Einsatz zum Testen.</div>{% endif %}
     {% if q.get('test_err') == 'gsl' %}<div class="gwx-alert gwx-alert--err">Testdruck: Es gibt noch keine Großschadenslage zum Testen.</div>{% endif %}
+    {% if q.get('test_err') == 'gsl_einheit' %}<div class="gwx-alert gwx-alert--err">Testdruck braucht eine vorhandene Einheit.</div>{% endif %}
     {% if q.get('test_err') == 'verleih' %}<div class="gwx-alert gwx-alert--err">Testdruck: Es gibt noch keinen Verleihschein zum Testen.</div>{% endif %}
     {% if q.get('test_err') == 'alarm' %}<div class="gwx-alert gwx-alert--err">Testdruck: Es gibt noch keinen seriellen Alarm zum Testen.</div>{% endif %}
     {% if q.get('test_err') == 'leer' %}<div class="gwx-alert gwx-alert--err">Testdruck: Für {{ test_art_labels.get(q.get('test_art'), q.get('test_art')) }} #{{ q.get('test_ref') }} entstanden keine Druckaufträge – prüfen Sie Dokumente und Objekt-Elemente der Regel, z. B. Objektblatt ohne verknüpftes Objekt.</div>{% endif %}
@@ -135,6 +136,7 @@
                     {% if key in ('einsatzinfo', 'objektblatt') %}{% set doc_trigger = "['einsatz_created', 'einsatz_updated'].includes(trigger)" %}
                     {% elif key in ('gsl_lageblatt', 'gsl_bericht') %}{% set doc_trigger = "['gsl_created', 'gsl_lage_updated'].includes(trigger)" %}
                     {% elif key == 'alarm_rohtext' %}{% set doc_trigger = "trigger === 'alarm_serial_received'" %}
+                    {% elif key == 'gsl_einheit_qr' %}{% set doc_trigger = "trigger === 'gsl_einheit_angelegt'" %}
                     {% else %}{% set doc_trigger = "trigger === 'verleih_created'" %}{% endif %}
                     <label class="gwx-check" x-show="{{ doc_trigger }}"><input type="checkbox" name="documents" value="{{ key }}" :disabled="!({{ doc_trigger }})"
                       {{ 'checked' if key in (r.documents or []) }}> {{ label }}</label>
@@ -205,15 +207,15 @@
                         <option value="nur_echt" {{ 'selected' if f.get('uebung') == 'nur_echt' }}>Nur Echteinsätze</option>
                         <option value="nur_uebung" {{ 'selected' if f.get('uebung') == 'nur_uebung' }}>Nur Übungen</option>
                       </select></div>
-                    <div class="gwx-field" x-show="trigger !== 'verleih_created'"><label class="gwx-label">Min. Alarmstufe</label>
+                    <div class="gwx-field" x-show="!['verleih_created', 'gsl_einheit_angelegt'].includes(trigger)"><label class="gwx-label">Min. Alarmstufe</label>
                       <input class="gwx-input gwx-input--mono" type="number" name="min_alarmstufe" value="{{ f.get('min_alarmstufe','') }}" placeholder="egal"></div>
-                    <div class="gwx-field" x-show="trigger !== 'verleih_created'"><label class="gwx-label">Stichwort enthält (Komma-getrennt)</label>
+                    <div class="gwx-field" x-show="!['verleih_created', 'gsl_einheit_angelegt'].includes(trigger)"><label class="gwx-label">Stichwort enthält (Komma-getrennt)</label>
                       <input class="gwx-input" type="text" name="stichwort" value="{{ (f.get('stichwort') or [])|join(', ') }}" placeholder="z. B. B, T, BMA"></div>
                     <div class="gwx-field"><label class="gwx-label">Nur ab</label>
                       <input class="gwx-input gwx-input--mono" type="time" name="zeit_von" value="{{ fenster.get('von','') }}"></div>
                     <div class="gwx-field"><label class="gwx-label">bis</label>
                       <input class="gwx-input gwx-input--mono" type="time" name="zeit_bis" value="{{ fenster.get('bis','') }}"></div>
-                    <div class="gwx-field" style="justify-content:end;" x-show="trigger !== 'verleih_created'">
+                    <div class="gwx-field" style="justify-content:end;" x-show="!['verleih_created', 'gsl_einheit_angelegt'].includes(trigger)">
                       <label class="gwx-check" style="border:none;background:none;padding:0;">
                         <input type="checkbox" name="nur_bma" value="1" {{ 'checked' if f.get('nur_bma') }}> Nur BMA-Alarme</label></div>
                   </div>

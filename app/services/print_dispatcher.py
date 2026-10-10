@@ -44,6 +44,7 @@ TRIGGER_TEST_BEZUG = {
     "gsl_created": "gsl",
     "gsl_lage_updated": "gsl",
     "verleih_created": "verleih",
+    "gsl_einheit_angelegt": "gsl_einheit",
     "alarm_serial_received": "alarm",
 }
 
@@ -479,7 +480,7 @@ def resolve_test_context(db: Session, rule) -> TestBezug | None:
     """Loest den juengsten zur Regel passenden Testbezug derselben Organisation auf."""
     from app.models.gateway import AlarmIngest
     from app.models.incident import Incident
-    from app.models.major_incident import MajorIncident
+    from app.models.major_incident import LageEinheit, MajorIncident
     from app.models.verleih import VerleihAusleihe
 
     art = TRIGGER_TEST_BEZUG.get(rule.trigger)
@@ -499,6 +500,14 @@ def resolve_test_context(db: Session, rule) -> TestBezug | None:
             .first()
         )
         return TestBezug(_gsl_context(lage), art, lage.id) if lage else None
+    if art == "gsl_einheit":
+        einheit = (db.query(LageEinheit).join(MajorIncident, LageEinheit.lage_id == MajorIncident.id)
+                   .filter(MajorIncident.org_id == rule.org_id).order_by(LageEinheit.id.desc()).first())
+        if einheit is None:
+            return None
+        lage = db.get(MajorIncident, einheit.lage_id)
+        return TestBezug({"gsl_id": einheit.lage_id, "einheit_id": einheit.id,
+                          "is_exercise": getattr(lage, "is_exercise", None)}, art, einheit.id)
     if art == "verleih":
         ausleihe = (
             db.query(VerleihAusleihe)
@@ -683,6 +692,53 @@ async def autoprint_verleih_background(ausleihe_id: int) -> None:
         db.close()
 
 
+async def autoprint_gsl_einheit_background(einheit_id: int) -> None:
+    """Best-effort-Regeldruck nach Anlage einer GSL-Einheit."""
+
+    from datetime import UTC, datetime
+
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+    from app.models.gateway import TRIGGER_GSL_EINHEIT_ANGELEGT
+    from app.models.major_incident import LageEinheit, LageEinheitZugang, MajorIncident
+    from app.services import gk_zugang_service
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        einheit = db.get(LageEinheit, einheit_id)
+        if einheit is None:
+            return
+        lage = db.get(MajorIncident, einheit.lage_id)
+        if lage is None or lage.org_id is None:
+            return
+        set_tenant_context(db, lage.org_id)
+        try:
+            qr = gk_zugang_service.stelle_qr_zugang_aus(db, lage, einheit, user_id=None,
+                                                         grund="autodruck", neu=False)
+        except ValueError:
+            logger.info("QR-Autodruck für Einheit %s übersprungen: QR-Zugang nicht aktiviert", einheit.id)
+            return
+        context = {"gsl_id": lage.id, "einheit_id": einheit.id, "qr_generation": qr.generation,
+                   "is_exercise": lage.is_exercise}
+        jobs = on_event(db, lage.org_id, TRIGGER_GSL_EINHEIT_ANGELEGT, context)
+        if jobs:
+            zugang = db.query(LageEinheitZugang).filter(LageEinheitZugang.id == qr.zugang_id).one()
+            if zugang.qr_druck_job_id is None:
+                zugang.qr_druck_job_id = jobs[0].id
+                zugang.qr_druck_at = datetime.now(UTC).replace(tzinfo=None)
+        db.commit()
+        for job in jobs:
+            try:
+                await dispatch_job(db, job)
+            except Exception as exc:  # pragma: no cover
+                logger.warning("QR-Auto-Druck Job %s nicht zustellbar: %s", job.id, exc)
+    except Exception as exc:  # pragma: no cover
+        logger.warning("QR-Auto-Druck fehlgeschlagen (Einheit %s): %s", einheit_id, exc)
+    finally:
+        db.close()
+
+
 def _resolve_objekt_ids(db: Session, context: dict) -> list[int]:
     """Objekt(e), auf die sich die Regel bezieht: explizit im Kontext oder – bei einem
     Einsatz – die dort bestätigt verknüpften Objekte (ObjektEinsatz)."""
@@ -741,6 +797,7 @@ def _jobs_for_rule(
     Objekt – je Objekt-Element-Seite × Zieldrucker (idempotent, außer bei source=manual)."""
     from app.models.gateway import (
         DOC_ALARM_ROHTEXT,
+        DOC_GSL_EINHEIT_QR,
         DOC_OBJEKT_DOKUMENT,
         DOC_OBJEKTBLATT,
         DOC_VERLEIH_SCHEIN,
@@ -785,6 +842,13 @@ def _jobs_for_rule(
             continue
         if document_type == DOC_VERLEIH_SCHEIN:
             continue  # braucht Vorgangs-Kontext → unten mit artifact_ref (ausleihe_id)
+        if document_type == DOC_GSL_EINHEIT_QR:
+            if not context.get("einheit_id") or context.get("qr_generation") is None:
+                continue
+            for printer_id in printer_ids:
+                _add(printer_id=printer_id, document_type=document_type,
+                     artifact_ref=f"{context['einheit_id']}:{context['qr_generation']}")
+            continue
         if document_type == DOC_ALARM_ROHTEXT:
             # Ohne AlarmIngest-Bezug wuerde _render_alarm_rohtext ein leeres Blatt
             # erzeugen. Der Schluessel fehlt bei jedem nicht-Alarm-Kontext (z.B.

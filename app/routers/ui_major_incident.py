@@ -4791,6 +4791,11 @@ def lage_ressourcen(
         einheit.id: einheit_service.hat_tablet(db, einheit)
         for einheit in lage.einheiten
     }
+    from app.services import gk_zugang_service
+    qr_druck_status = {
+        einheit.id: gk_zugang_service.zugang_status(db, einheit)["qr"]
+        for einheit in lage.einheiten
+    }
 
     return templates.TemplateResponse(request, "incident_major/ressourcen.html", {
         "user": user,
@@ -4811,6 +4816,7 @@ def lage_ressourcen(
         ] if _can_edit(user) else [],
         "resource_service": resource_service,
         "einheit_hat_tablet": einheit_hat_tablet,
+        "qr_druck_status": qr_druck_status,
         "is_admin": has_role(user, "admin"),
         "can_edit": _can_edit(user),
         "can_view_karte": not getattr(user, "gsl_nur_lesen", False),
@@ -4869,6 +4875,11 @@ def lage_ressourcen_kraefteuebersicht(
         einheit.id: einheit_service.hat_tablet(db, einheit)
         for einheit in lage.einheiten
     }
+    from app.services import gk_zugang_service
+    qr_druck_status = {
+        einheit.id: gk_zugang_service.zugang_status(db, einheit)["qr"]
+        for einheit in lage.einheiten
+    }
 
     return templates.TemplateResponse(request, "incident_major/_kraefteuebersicht.html", {
         "lage": lage,
@@ -4878,6 +4889,7 @@ def lage_ressourcen_kraefteuebersicht(
         "all_einheiten": all_einheiten,
         "resource_service": resource_service,
         "einheit_hat_tablet": einheit_hat_tablet,
+        "qr_druck_status": qr_druck_status,
         "is_admin": has_role(user, "admin"),
         "can_edit": _can_edit(user),
         "can_view_karte": not getattr(user, "gsl_nur_lesen", False),
@@ -5008,6 +5020,8 @@ async def lage_einheit_create(
         db.rollback()
         raise HTTPException(status_code=400, detail=str(exc))
     db.commit()
+    from app.services.print_dispatcher import autoprint_gsl_einheit_background
+    background_tasks.add_task(autoprint_gsl_einheit_background, ergebnis.einheit.id)
     if ergebnis.auto_sms:
         from app.services.gk_zugang_service import sende_auto_sms
         background_tasks.add_task(sende_auto_sms, ergebnis.auto_sms)

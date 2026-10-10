@@ -253,15 +253,17 @@ async def lage_ws(websocket: WebSocket, lage_id: int):
 
 def _resolve_gk_principal(websocket: WebSocket):
     """Prüft das GK-Cookie mit einer eigenen, tenantfreien DB-Session."""
-    cookie = websocket.cookies.get(GK_COOKIE) or websocket.cookies.get(QR_COOKIE)
-    if not cookie:
-        return None
-    typ = "personal" if websocket.cookies.get(GK_COOKIE) else "qr"
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
-        principal, _grund = sitzung_pruefen_mit_grund(db, cookie, typ)
-        return principal
+        for typ, cookie in (("personal", websocket.cookies.get(GK_COOKIE)), ("qr", websocket.cookies.get(QR_COOKIE))):
+            if not cookie:
+                continue
+            principal, _grund = sitzung_pruefen_mit_grund(db, cookie, typ)
+            if principal:
+                return principal
+            db.rollback()
+        return None
     finally:
         db.close()
 

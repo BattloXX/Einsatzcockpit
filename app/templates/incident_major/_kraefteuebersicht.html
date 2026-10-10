@@ -50,6 +50,10 @@
       <span style="opacity:.4;font-size:.72rem;">Kein Führer eingetragen</span>
     {% endif %}
   </div>
+  {% set qr_druck = qr_druck_status.get(e.id) if qr_druck_status is defined else none %}
+  {% if qr_druck and qr_druck.qr_druck_job_id %}
+  <div style="font-size:.68rem;color:var(--text-muted);margin-top:3px;">QR-Druck: {{ qr_druck.druck_status|replace('_', ' ') }}</div>
+  {% endif %}
   {% if e.resource_type == 'verband' %}
   {% set summen = kue.verband_summen_by_id.get(e.id, {}) %}
   <div style="font-size:.7rem;color:var(--text-muted);margin-top:3px;">Verband · {{ summen.get('gesamt', 0) }} Personen</div>

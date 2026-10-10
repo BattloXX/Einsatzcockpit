@@ -1105,6 +1105,15 @@ def zugang_status(db: Session, einheit: LageEinheit) -> dict:
         LageEinheitZugang.einheit_id == einheit.id, LageEinheitZugang.typ == "qr"
     ).first()
     qr_cfg = bool(lage and org_einstellungen(db, lage.org_id).gk_qr_aktiv)
+    qr_druck_status = "nicht_angefordert"
+    if qr and qr.qr_druck_job_id:
+        from app.models.gateway import PrintJob
+        job = db.get(PrintJob, qr.qr_druck_job_id)
+        if job:
+            qr_druck_status = {
+                "queued": "beauftragt", "sent": "uebergeben", "printing": "uebergeben",
+                "done": "gedruckt", "failed": "fehlgeschlagen", "canceled": "fehlgeschlagen",
+            }.get(job.status, "beauftragt")
     if not qr_cfg:
         qr_state = "deaktiviert"
     elif not qr:
@@ -1135,5 +1144,6 @@ def zugang_status(db: Session, einheit: LageEinheit) -> dict:
                "generation": qr.generation if qr else None, "pin_pflicht": bool(qr and qr.pin_pflicht),
                "sitzung_aktiv": bool(qr and qr.token_hash and _aktuelle_sitzung(db, qr)),
                "qr_druck_at": qr.qr_druck_at if qr else None,
-               "qr_druck_job_id": qr.qr_druck_job_id if qr else None},
+               "qr_druck_job_id": qr.qr_druck_job_id if qr else None,
+               "druck_status": qr_druck_status},
     }
