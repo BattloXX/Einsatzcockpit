@@ -1,4 +1,5 @@
 """DB-gestuetzter OAuth-Provider und Streamable-HTTP-MCP-Server."""
+# ruff: noqa: E501
 
 import json
 import logging
@@ -27,6 +28,7 @@ from app.db import SessionLocal
 from app.mcp.context import MCPPermissionError, load_live_context
 from app.mcp.registry import TOOLS
 from app.mcp.tools import fahrtenbuch as _fahrtenbuch  # noqa: F401 - registriert Fahrtenbuch-Tools
+from app.mcp.tools import gsl as _gsl  # noqa: F401 - registriert GSL-Ressourcen-Tools
 from app.mcp.tools import kontakt as _kontakt  # noqa: F401 - registriert Kontakt-Tools
 from app.mcp.tools import objekt as _objekt  # noqa: F401 - registriert Objekt-Tools
 from app.mcp.tools import objekt_dokumente as _objekt_dokumente  # noqa: F401 - registriert Dokument-Tools
@@ -345,6 +347,51 @@ server = EinsatzcockpitMCPServer(
 @server.tool(name="mcp_whoami", description="Zeigt den aktuell verbundenen Einsatzcockpit-Benutzer.")
 async def whoami(ctx: Context) -> dict[str, object]:
     return await _call_registered_tool("mcp_whoami")
+
+
+@server.tool(name="gsl_ressourcen_liste", description="Listet Ressourcen einer GSL-Lage.")
+async def gsl_ressourcen_liste(lage_id: int, status: str = "", abschnitt_id: int | None = None, typ: str = "") -> dict[str, object]:
+    return await _call_registered_tool("gsl_ressourcen_liste", lage_id=lage_id, status=status, abschnitt_id=abschnitt_id, typ=typ)
+
+
+@server.tool(name="gsl_ressource_details", description="Liest GSL-Ressourcendetails ohne Zugangstoken oder Links.")
+async def gsl_ressource_details(lage_id: int, einheit_id: int, bereiche: list[str] | None = None) -> dict[str, object]:
+    return await _call_registered_tool("gsl_ressource_details", lage_id=lage_id, einheit_id=einheit_id, bereiche=bereiche)
+
+
+@server.tool(name="gsl_ressource_aktualisieren", description="Aktualisiert eine GSL-Ressource.")
+async def gsl_ressource_aktualisieren(lage_id: int, einheit_id: int, felder: dict) -> dict[str, object]:
+    return await _call_registered_tool("gsl_ressource_aktualisieren", lage_id=lage_id, einheit_id=einheit_id, felder=felder)
+
+
+@server.tool(name="gsl_ressource_fuehrer_setzen", description="Setzt Gruppenkommandant oder Stellvertretung.")
+async def gsl_ressource_fuehrer_setzen(lage_id: int, einheit_id: int, mitglied_id: int | None = None, name: str | None = None, telefon: str | None = None, modus: str = "auto", stellvertreter: bool = False) -> dict[str, object]:
+    return await _call_registered_tool("gsl_ressource_fuehrer_setzen", lage_id=lage_id, einheit_id=einheit_id, mitglied_id=mitglied_id, name=name, telefon=telefon, modus=modus, stellvertreter=stellvertreter)
+
+
+@server.tool(name="gsl_ressource_zugang_senden", description="Sendet Zugang ausschließlich per SMS.")
+async def gsl_ressource_zugang_senden(lage_id: int, einheit_id: int, bestaetigt: bool = False) -> dict[str, object]:
+    return await _call_registered_tool("gsl_ressource_zugang_senden", lage_id=lage_id, einheit_id=einheit_id, bestaetigt=bestaetigt)
+
+
+@server.tool(name="gsl_ressource_zugang_widerrufen", description="Widerruft Gruppenkommandanten-Zugang.")
+async def gsl_ressource_zugang_widerrufen(lage_id: int, einheit_id: int) -> dict[str, object]:
+    return await _call_registered_tool("gsl_ressource_zugang_widerrufen", lage_id=lage_id, einheit_id=einheit_id)
+
+
+@server.tool(name="gsl_ressource_journal", description="Liest oder ergänzt Ressourcenjournal.")
+async def gsl_ressource_journal(lage_id: int, einheit_id: int, typen: list[str] | None = None, seit: str | None = None, limit: int = 50, neuer_eintrag: str | None = None) -> dict[str, object]:
+    return await _call_registered_tool("gsl_ressource_journal", lage_id=lage_id, einheit_id=einheit_id, typen=typen, seit=seit, limit=limit, neuer_eintrag=neuer_eintrag)
+
+
+@server.tool(name="gsl_ressource_personal", description="Liest oder pflegt Ressourcenpersonal.")
+async def gsl_ressource_personal(lage_id: int, einheit_id: int, aktion: str = "lesen", daten: dict | None = None) -> dict[str, object]:
+    return await _call_registered_tool("gsl_ressource_personal", lage_id=lage_id, einheit_id=einheit_id, aktion=aktion, daten=daten)
+
+
+@server.tool(name="gsl_ressource_ausstattung", description="Liest oder pflegt Ressourcenausstattung.")
+async def gsl_ressource_ausstattung(lage_id: int, einheit_id: int, aktion: str = "lesen", daten: dict | None = None) -> dict[str, object]:
+    return await _call_registered_tool("gsl_ressource_ausstattung", lage_id=lage_id, einheit_id=einheit_id, aktion=aktion, daten=daten)
 
 
 @server.tool(
