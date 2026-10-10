@@ -21,9 +21,13 @@ from app.models.major_incident import (
     LageEinheitLeader,
     LageEinheitZugang,
     LageEinheitZugangSession,
+    LageEinheitZugangVersand,
     MajorIncident,
 )
 from app.models.master import OrgSettings
+from app.models.sms import SmsLog, SmsLogRecipient
+from app.services.exercise_guard import darf_extern
+from app.services.sms_service import send_sms, sms_available
 
 TOKEN_PREFIX = "gkz_"
 COOKIE = "ec_gk"
@@ -80,6 +84,27 @@ class ZugangFehlergrund(StrEnum):
     WIDERRUFEN = "widerrufen"
     ABGELAUFEN = "abgelaufen"
     UNGUELTIG = "ungueltig"
+
+
+class SitzungAktiv(Exception):
+    def __init__(self, zuletzt_aktiv: datetime):
+        self.zuletzt_aktiv = zuletzt_aktiv
+        super().__init__("Aktive Gruppenkommandanten-Sitzung")
+
+
+@dataclass(frozen=True)
+class VersandErgebnis:
+    status: str
+    fehler: str | None
+    generation: int | None
+
+
+@dataclass(frozen=True)
+class KopieErgebnis:
+    link: str
+    text: str
+    laeuft_ab_at: datetime
+    generation: int
 
 
 @dataclass
@@ -322,9 +347,7 @@ def sitzung_anlegen(
     return raw, session
 
 
-def sitzung_pruefen_mit_grund(
-    db: Session, cookie_wert: str
-) -> tuple[ZugangPrincipal | None, ZugangFehlergrund | None]:
+def sitzung_pruefen_mit_grund(db: Session, cookie_wert: str) -> tuple[ZugangPrincipal | None, ZugangFehlergrund | None]:
     """Prüft eine GK-Sitzung und liefert bei Fehlern einen sicheren Grund.
 
     Bindungsänderungen (einschließlich einer geschlossenen Lage) werden als
@@ -380,11 +403,7 @@ def sitzung_pruefen_mit_grund(
         # A closed Lage is explicitly revoked by close_lage(); retain the same
         # externally visible reason if this validator observes it first.
         return None, ZugangFehlergrund.WIDERRUFEN
-    if (
-        not zugang.laeuft_ab_at
-        or zugang.laeuft_ab_at <= now
-        or einheit.status not in {"bereitgestellt", "im_einsatz"}
-    ):
+    if not zugang.laeuft_ab_at or zugang.laeuft_ab_at <= now or einheit.status not in {"bereitgestellt", "im_einsatz"}:
         return None, ZugangFehlergrund.ABGELAUFEN
     if zugang.pin_pflicht and session.verifiziert_at is None:
         return None, ZugangFehlergrund.UNGUELTIG
@@ -449,3 +468,323 @@ def schwaerze_link(text: str) -> str:
 
 def schwaerze_pin(text: str) -> str:
     return re.sub(r"\b\d{6}\b", "******", text)
+
+
+def _mask_phone(phone: str) -> str:
+    return ("*" * max(0, len(phone) - 4)) + phone[-4:]
+
+
+def _token_aus_link(link: str | None) -> str | None:
+    if not link:
+        return None
+    match = re.fullmatch(re.escape(settings.effective_public_base_url.rstrip("/")) + r"/gk#([A-Za-z0-9_-]+)", link)
+    return match.group(1) if match else None
+
+
+def _aktuelle_sitzung(db: Session, zugang: LageEinheitZugang) -> datetime | None:
+    since = _now() - timedelta(minutes=30)
+    row = (
+        db.query(LageEinheitZugangSession)
+        .filter(
+            LageEinheitZugangSession.zugang_id == zugang.id,
+            LageEinheitZugangSession.revoked_at.is_(None),
+            LageEinheitZugangSession.last_seen_at >= since,
+        )
+        .order_by(LageEinheitZugangSession.last_seen_at.desc())
+        .first()
+    )
+    return row.last_seen_at if row else None
+
+
+def _versand(
+    db: Session,
+    zugang: LageEinheitZugang,
+    einheit: LageEinheit,
+    *,
+    kanal: str,
+    ausloeser: str,
+    user_id: int | None,
+    status: str,
+    fehler: str | None = None,
+) -> LageEinheitZugangVersand:
+    row = LageEinheitZugangVersand(
+        org_id=zugang.org_id,
+        zugang_id=zugang.id,
+        einheit_id=einheit.id,
+        leader_id=zugang.leader_id,
+        generation=zugang.generation,
+        kanal=kanal,
+        ausloeser=ausloeser,
+        user_id=user_id,
+        status=status,
+        fehler=fehler,
+        created_at=_now(),
+        abgeschlossen_at=_now() if status != "geplant" else None,
+    )
+    db.add(row)
+    return row
+
+
+def _zugang_ohne_token(
+    db: Session, lage: MajorIncident, einheit: LageEinheit, leader: LageEinheitLeader
+) -> LageEinheitZugang:
+    """Legt nur die FK-Basis für ein übersprungenes Protokoll an, ohne Tokenrotation."""
+    zugang = db.query(LageEinheitZugang).filter(LageEinheitZugang.einheit_id == einheit.id).first()
+    if zugang:
+        return zugang
+    now = _now()
+    zugang = LageEinheitZugang(
+        org_id=lage.org_id,
+        lage_id=lage.id,
+        einheit_id=einheit.id,
+        leader_id=leader.id,
+        phone_e164=leader.phone_e164,
+        phone_version=leader.phone_version,
+        status="kein_token",
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(zugang)
+    db.flush()
+    return zugang
+
+
+def _kurzer_fehler(exc: Exception | None) -> str:
+    # Provider-Details can contain arbitrary data; deliberately do not persist them.
+    return "SMS-Versand fehlgeschlagen" if exc else "SMS konnte nicht zugestellt werden"
+
+
+async def sende_zugangs_sms(
+    db: Session,
+    lage: MajorIncident,
+    einheit: LageEinheit,
+    *,
+    user_id: int | None,
+    ausloeser: str,
+    bestehender_link: str | None = None,
+    bestaetigt: bool = False,
+) -> VersandErgebnis:
+    cfg = org_einstellungen(db, lage.org_id)
+    leader = db.get(LageEinheitLeader, einheit.leader_assignment_id) if einheit.leader_assignment_id else None
+    if not cfg.gk_zugang_aktiv:
+        raise ValueError("Gruppenkommandanten-Zugang ist für diese Organisation deaktiviert")
+    if not leader or leader.end_at is not None or not leader.phone_e164:
+        raise ValueError("Aktueller Gruppenkommandant benötigt eine gültige Telefonnummer")
+    zugang = db.query(LageEinheitZugang).filter(LageEinheitZugang.einheit_id == einheit.id).first()
+    if not sms_available(lage.org_id, db):
+        zugang = zugang or _zugang_ohne_token(db, lage, einheit, leader)
+        _versand(
+            db,
+            zugang,
+            einheit,
+            kanal="sms",
+            ausloeser=ausloeser,
+            user_id=user_id,
+            status="uebersprungen",
+            fehler="Kein SMS-Anbieter verbunden",
+        )
+        db.commit()
+        return VersandErgebnis("uebersprungen", "Kein SMS-Anbieter verbunden", zugang.generation)
+    if not darf_extern("sms", is_exercise=lage.is_exercise, org_id=lage.org_id, db=db):
+        zugang = zugang or _zugang_ohne_token(db, lage, einheit, leader)
+        _versand(
+            db,
+            zugang,
+            einheit,
+            kanal="sms",
+            ausloeser=ausloeser,
+            user_id=user_id,
+            status="uebersprungen",
+            fehler="Übung: SMS unterdrückt",
+        )
+        db.commit()
+        return VersandErgebnis("uebersprungen", "Übung: SMS unterdrückt", zugang.generation)
+    if zugang and not bestaetigt:
+        active = _aktuelle_sitzung(db, zugang)
+        if active:
+            raise SitzungAktiv(active)
+    token = _token_aus_link(bestehender_link)
+    reuse = bool(token and zugang and zugang.token_hash == hash_api_key(token) and zugang.status == "aktiv")
+    neu = None if reuse else stelle_zugang_aus(db, lage, einheit, user_id=user_id, grund="rotation")
+    if neu:
+        zugang = db.get(LageEinheitZugang, neu.zugang_id)
+    assert zugang is not None
+    row = _versand(db, zugang, einheit, kanal="sms", ausloeser=ausloeser, user_id=user_id, status="geplant")
+    db.commit()
+    link = bestehender_link if reuse else neu.link  # type: ignore[union-attr]
+    assert link is not None
+    text = nachricht_rendern(cfg, lage, einheit, leader, link)
+    chars, _encoding, segments = sms_laenge(text)
+    now = _now()
+    result = None
+    try:
+        result = await send_sms(lage.org_id, leader.phone_e164, text, timeout=15)
+        success = bool(getattr(result, "success", result is True))
+        status = "gesendet" if success else "fehlgeschlagen"
+        error = None if success else _kurzer_fehler(None)
+    except TimeoutError:
+        success, status, error = False, "unklar", "Ergebnis unbekannt – bitte beim Gruppenkommandanten nachfragen"
+    except Exception as exc:  # provider exceptions are intentionally not exposed
+        success, status, error = False, "fehlgeschlagen", _kurzer_fehler(exc)
+    log = SmsLog(
+        org_id=lage.org_id,
+        source="gk_zugang",
+        text=schwaerze_link(text),
+        recipient_count=1,
+        success_count=1 if success else 0,
+        provider=getattr(result, "provider", None),
+        triggered_by_user_id=user_id,
+        completed_at=now,
+    )
+    log.recipients.append(
+        SmsLogRecipient(
+            phone_number=leader.phone_e164,
+            name="Gruppenkommandant",
+            success=success,
+            sent_at=now,
+            provider=getattr(result, "provider", None),
+        )
+    )
+    db.add(log)
+    row.status, row.fehler, row.ziel_maske, row.zeichen, row.segmente, row.abgeschlossen_at = (
+        status,
+        error,
+        _mask_phone(leader.phone_e164),
+        chars,
+        segments,
+        now,
+    )
+    db.flush()
+    row.sms_log_id = log.id
+    write_audit(
+        db,
+        f"gsl.zugang.sms_{'auto' if ausloeser == 'auto' else 'manuell'}",
+        org_id=lage.org_id,
+        user_id=user_id,
+        entity_type="lage_einheit",
+        entity_id=einheit.id,
+        payload={"lage_id": lage.id, "einheit_id": einheit.id, "generation": zugang.generation, "status": status},
+    )
+    db.commit()
+    return VersandErgebnis(status, error, zugang.generation)
+
+
+def kopie_ausstellen(
+    db: Session,
+    lage: MajorIncident,
+    einheit: LageEinheit,
+    *,
+    user_id: int | None,
+    modus: str,
+    bestehender_link: str | None = None,
+    bestaetigt: bool = False,
+) -> KopieErgebnis:
+    if modus not in {"nachricht", "link"}:
+        raise ValueError("Ungültiger Kopiermodus")
+    cfg = org_einstellungen(db, lage.org_id)
+    leader = db.get(LageEinheitLeader, einheit.leader_assignment_id) if einheit.leader_assignment_id else None
+    if not cfg.gk_zugang_aktiv or not leader or not leader.phone_e164:
+        raise ValueError("Aktueller Gruppenkommandant benötigt eine gültige Telefonnummer")
+    zugang = db.query(LageEinheitZugang).filter(LageEinheitZugang.einheit_id == einheit.id).first()
+    if zugang and not bestaetigt:
+        active = _aktuelle_sitzung(db, zugang)
+        if active:
+            raise SitzungAktiv(active)
+    token = _token_aus_link(bestehender_link)
+    reuse = bool(token and zugang and zugang.token_hash == hash_api_key(token) and zugang.status == "aktiv")
+    neu = None if reuse else stelle_zugang_aus(db, lage, einheit, user_id=user_id, grund="rotation")
+    if neu:
+        zugang = db.get(LageEinheitZugang, neu.zugang_id)
+    assert zugang is not None
+    link = bestehender_link if reuse else neu.link  # type: ignore[union-attr]
+    assert link is not None
+    text = nachricht_rendern(cfg, lage, einheit, leader, link)
+    _versand(db, zugang, einheit, kanal=f"kopie_{modus}", ausloeser="manuell", user_id=user_id, status="gesendet")
+    write_audit(
+        db,
+        "gsl.zugang.link_kopiert",
+        org_id=lage.org_id,
+        user_id=user_id,
+        entity_type="lage_einheit",
+        entity_id=einheit.id,
+        payload={"lage_id": lage.id, "einheit_id": einheit.id, "generation": zugang.generation, "modus": modus},
+    )
+    db.commit()
+    assert zugang.laeuft_ab_at is not None
+    return KopieErgebnis(link, text if modus == "nachricht" else link, zugang.laeuft_ab_at, zugang.generation)
+
+
+def aufraeumen_haengende_versaende(db: Session) -> int:
+    cutoff = _now() - timedelta(minutes=2)
+    rows = (
+        db.query(LageEinheitZugangVersand)
+        .filter(LageEinheitZugangVersand.status == "geplant", LageEinheitZugangVersand.created_at < cutoff)
+        .all()
+    )
+    for row in rows:
+        row.status, row.fehler, row.abgeschlossen_at = (
+            "fehlgeschlagen",
+            "Versand abgebrochen - bitte erneut senden",
+            _now(),
+        )
+    if rows:
+        db.commit()
+    return len(rows)
+
+
+def zugang_status(db: Session, einheit: LageEinheit) -> dict:
+    zugang = db.query(LageEinheitZugang).filter(LageEinheitZugang.einheit_id == einheit.id).first()
+    leader = db.get(LageEinheitLeader, einheit.leader_assignment_id) if einheit.leader_assignment_id else None
+    lage = db.get(MajorIncident, einheit.lage_id)
+    if not lage or not org_einstellungen(db, lage.org_id).gk_zugang_aktiv:
+        state = "deaktiviert"
+    elif not leader or not leader.phone_e164:
+        state = "keine_nummer"
+    elif not zugang:
+        state = "kein_zugang"
+    elif zugang.status == "widerrufen":
+        state = "widerrufen"
+    elif not zugang.laeuft_ab_at or zugang.laeuft_ab_at <= _now():
+        state = "abgelaufen"
+    elif zugang.laeuft_ab_at <= _now() + timedelta(hours=2):
+        state = "laeuft_bald_ab"
+    else:
+        state = "aktiv"
+    sends = (
+        []
+        if not zugang
+        else db.query(LageEinheitZugangVersand)
+        .filter(LageEinheitZugangVersand.zugang_id == zugang.id)
+        .order_by(LageEinheitZugangVersand.created_at.desc())
+        .limit(10)
+        .all()
+    )
+    sessions = (
+        []
+        if not zugang
+        else db.query(LageEinheitZugangSession)
+        .filter(LageEinheitZugangSession.zugang_id == zugang.id, LageEinheitZugangSession.revoked_at.is_(None))
+        .all()
+    )
+
+    def send_data(v):
+        return {
+            k: getattr(v, k) for k in ("kanal", "status", "fehler", "zeichen", "segmente", "created_at", "ausloeser")
+        }
+
+    return {
+        "zustand": state,
+        "laeuft_ab_at": zugang.laeuft_ab_at if zugang else None,
+        "generation": zugang.generation if zugang else None,
+        "widerruf_grund": zugang.widerruf_grund if zugang else None,
+        "widerrufen_at": zugang.widerrufen_at if zugang else None,
+        "aktive_sitzungen": [
+            {"id": s.id, "client_kurz": s.client_kurz, "last_seen_at": s.last_seen_at, "created_at": s.created_at}
+            for s in sessions
+        ],
+        "letzte_aktivitaet_at": zugang.letzte_aktivitaet_at if zugang else None,
+        "letzter_versand": send_data(sends[0]) if sends else None,
+        "versandprotokoll": [send_data(s) for s in sends],
+        "nummer_anzeige": leader.phone_e164 if leader else None,
+        "nummer_maske": _mask_phone(leader.phone_e164) if leader and leader.phone_e164 else None,
+    }

@@ -3,7 +3,7 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy.orm import Session
 
 from app.core.audit import write_audit
@@ -20,7 +20,7 @@ from app.models.major_incident import (
 )
 from app.models.master import Member
 from app.routers.ui_major_incident import _can_edit, _check_org_access, _get_mi_features, _lage_or_404, _nav_counts
-from app.services import resource_service, ressource_karte_service
+from app.services import gk_zugang_service, resource_service, ressource_karte_service
 from app.services.broadcast import broadcast_lage
 
 router = APIRouter(prefix="/lage/{lage_id}/einheiten/{einheit_id}")
@@ -40,6 +40,30 @@ def _context(request: Request, lage_id: int, einheit_id: int, db: Session):
     if not einheit or einheit.lage_id != lage.id:
         raise HTTPException(404, "Einheit nicht gefunden")
     return lage, einheit
+
+
+def _darf_zugang_verwalten(request: Request, user) -> None:
+    if (
+        not _can_edit(user)
+        or getattr(request.state, "is_device", False)
+        or getattr(request.state, "qr_lage_id", None) is not None
+        or getattr(request.state, "qr_incident_id", None) is not None
+        or getattr(user, "gsl_nur_lesen", False)
+    ):
+        raise HTTPException(403, "Zugangsverwaltung nicht erlaubt")
+
+
+def _zugang(request: Request, lage, einheit, db: Session, ergebnis=None):
+    return templates.TemplateResponse(
+        request,
+        "incident_major/_ressource_karte_zugang.html",
+        {
+            "lage": lage,
+            "einheit": einheit,
+            "zugang": gk_zugang_service.zugang_status(db, einheit),
+            "ergebnis": ergebnis,
+        },
+    )
 
 
 def _overview(request: Request, lage, einheit, db: Session):
@@ -108,8 +132,15 @@ def _journal_vor_ts(vor_ts: str | None) -> datetime | None:
 
 
 def _journal(
-    request: Request, lage, einheit, db: Session, *, typen: str | None,
-    site_id: int | None, vor_ts: str | None, limit: int,
+    request: Request,
+    lage,
+    einheit,
+    db: Session,
+    *,
+    typen: str | None,
+    site_id: int | None,
+    vor_ts: str | None,
+    limit: int,
 ):
     if site_id is not None:
         site = db.get(IncidentSite, site_id)
@@ -132,9 +163,15 @@ def _journal(
         request,
         "incident_major/_ressource_karte_journal.html",
         {
-            "lage": lage, "einheit": einheit, "entries": visible, "sites": sites,
-            "can_edit": _can_edit(request.state.user), "typen": active_filter, "site_id": site_id,
-            "limit": limit, "has_more": has_more,
+            "lage": lage,
+            "einheit": einheit,
+            "entries": visible,
+            "sites": sites,
+            "can_edit": _can_edit(request.state.user),
+            "typen": active_filter,
+            "site_id": site_id,
+            "limit": limit,
+            "has_more": has_more,
             "next_vor_ts": (visible[-1].ts.isoformat() + "Z") if visible and has_more else None,
         },
     )
@@ -179,7 +216,141 @@ def karte_tab(
         return _einsaetze(request, lage, einheit, db)
     if tab == "journal":
         return _journal(request, lage, einheit, db, typen=typen, site_id=site_id, vor_ts=vor_ts, limit=limit)
+    if tab == "zugang":
+        _darf_zugang_verwalten(request, request.state.user)
+        return _zugang(request, lage, einheit, db)
     raise HTTPException(404, "Unbekannter Tab")
+
+
+@router.post("/zugang/link")
+def zugang_link(
+    request: Request,
+    lage_id: int,
+    einheit_id: int,
+    modus: str = Form(...),
+    bestehender_link: str | None = Form(None),
+    bestaetigt: bool = Form(False),
+    db: Session = Depends(get_db),
+    _=Depends(require_role(*_WRITE)),
+):
+    lage, einheit = _context(request, lage_id, einheit_id, db)
+    _darf_zugang_verwalten(request, request.state.user)
+    try:
+        result = gk_zugang_service.kopie_ausstellen(
+            db,
+            lage,
+            einheit,
+            user_id=request.state.user.id,
+            modus=modus,
+            bestehender_link=bestehender_link,
+            bestaetigt=bestaetigt,
+        )
+    except gk_zugang_service.SitzungAktiv as exc:
+        return JSONResponse(
+            {"code": "sitzung_aktiv", "zuletzt_aktiv": exc.zuletzt_aktiv.isoformat() + "Z"}, status_code=409
+        )
+    response = JSONResponse(
+        {
+            "link": result.link,
+            "text": result.text,
+            "laeuft_ab_at": result.laeuft_ab_at.isoformat() + "Z",
+            "generation": result.generation,
+        }
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@router.post("/zugang/senden", response_class=HTMLResponse)
+async def zugang_senden(
+    request: Request,
+    lage_id: int,
+    einheit_id: int,
+    bestehender_link: str | None = Form(None),
+    bestaetigt: bool = Form(False),
+    db: Session = Depends(get_db),
+    _=Depends(require_role(*_WRITE)),
+):
+    lage, einheit = _context(request, lage_id, einheit_id, db)
+    _darf_zugang_verwalten(request, request.state.user)
+    try:
+        result = await gk_zugang_service.sende_zugangs_sms(
+            db,
+            lage,
+            einheit,
+            user_id=request.state.user.id,
+            ausloeser="manuell",
+            bestehender_link=bestehender_link,
+            bestaetigt=bestaetigt,
+        )
+    except gk_zugang_service.SitzungAktiv as exc:
+        return JSONResponse(
+            {"code": "sitzung_aktiv", "zuletzt_aktiv": exc.zuletzt_aktiv.isoformat() + "Z"}, status_code=409
+        )
+    except ValueError as exc:
+        return HTMLResponse(str(exc), status_code=422)
+    await broadcast_lage(lage.id, {"type": "ressource:changed", "einheit_id": einheit.id})
+    response = _zugang(request, lage, einheit, db, result)
+    response.headers["HX-Retarget"] = "#ressourceKarteBody"
+    return response
+
+
+@router.post("/zugang/widerrufen", response_class=HTMLResponse)
+async def zugang_widerrufen(
+    request: Request, lage_id: int, einheit_id: int, db: Session = Depends(get_db), _=Depends(require_role(*_WRITE))
+):
+    lage, einheit = _context(request, lage_id, einheit_id, db)
+    _darf_zugang_verwalten(request, request.state.user)
+    gk_zugang_service.widerrufe(db, einheit.id, grund="manuell", user_id=request.state.user.id)
+    db.commit()
+    await broadcast_lage(lage.id, {"type": "ressource:changed", "einheit_id": einheit.id})
+    return _zugang(request, lage, einheit, db)
+
+
+@router.post("/zugang/verlaengern", response_class=HTMLResponse)
+async def zugang_verlaengern(
+    request: Request, lage_id: int, einheit_id: int, db: Session = Depends(get_db), _=Depends(require_role(*_WRITE))
+):
+    lage, einheit = _context(request, lage_id, einheit_id, db)
+    _darf_zugang_verwalten(request, request.state.user)
+    gk_zugang_service.verlaengere(db, einheit.id, request.state.user.id)
+    db.commit()
+    await broadcast_lage(lage.id, {"type": "ressource:changed", "einheit_id": einheit.id})
+    return _zugang(request, lage, einheit, db)
+
+
+@router.post("/zugang/sitzung/{session_id}/beenden", response_class=HTMLResponse)
+async def zugang_sitzung_beenden(
+    request: Request,
+    lage_id: int,
+    einheit_id: int,
+    session_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_role(*_WRITE)),
+):
+    lage, einheit = _context(request, lage_id, einheit_id, db)
+    _darf_zugang_verwalten(request, request.state.user)
+    session = db.get(gk_zugang_service.LageEinheitZugangSession, session_id)
+    zugang = (
+        db.query(gk_zugang_service.LageEinheitZugang)
+        .filter(gk_zugang_service.LageEinheitZugang.einheit_id == einheit.id)
+        .first()
+    )
+    if not session or not zugang or session.zugang_id != zugang.id or session.org_id != lage.org_id:
+        raise HTTPException(404, "Sitzung nicht gefunden")
+    session.revoked_at, session.revoke_grund = datetime.utcnow(), "manuell"
+    write_audit(
+        db,
+        "gsl.zugang.sitzung_beendet",
+        org_id=lage.org_id,
+        user_id=request.state.user.id,
+        entity_type="lage_einheit",
+        entity_id=einheit.id,
+        payload={"session_id": session.id},
+    )
+    db.commit()
+    await broadcast_lage(lage.id, {"type": "ressource:changed", "einheit_id": einheit.id})
+    return _zugang(request, lage, einheit, db)
 
 
 def _error(text: str) -> HTMLResponse:
@@ -359,14 +530,23 @@ async def journal_eintrag(
         raise HTTPException(403, "Keine Bearbeitungsberechtigung")
     try:
         resource_service.journal_eintrag_manuell(
-            db, lage, einheit, text=text, site_id=site_id, user_id=request.state.user.id,
+            db,
+            lage,
+            einheit,
+            text=text,
+            site_id=site_id,
+            user_id=request.state.user.id,
             author_name=get_author_name(request) or "",
         )
     except ValueError as exc:
         return _journal_error(str(exc))
     write_audit(
-        db, "gsl.ressource.journal_eintrag", org_id=lage.org_id, user_id=request.state.user.id,
-        entity_type="lage_einheit", entity_id=einheit.id,
+        db,
+        "gsl.ressource.journal_eintrag",
+        org_id=lage.org_id,
+        user_id=request.state.user.id,
+        entity_type="lage_einheit",
+        entity_id=einheit.id,
         payload={"lage_id": lage.id, "einheit_id": einheit.id},
     )
     db.commit()
@@ -393,14 +573,23 @@ async def journal_storno(
         raise HTTPException(403, "Keine Bearbeitungsberechtigung")
     try:
         resource_service.journal_eintrag_stornieren(
-            db, lage, einheit, entry_id, grund=grund, user_id=request.state.user.id,
+            db,
+            lage,
+            einheit,
+            entry_id,
+            grund=grund,
+            user_id=request.state.user.id,
             author_name=get_author_name(request) or "",
         )
     except ValueError as exc:
         return _journal_error(str(exc))
     write_audit(
-        db, "gsl.ressource.journal_storno", org_id=lage.org_id, user_id=request.state.user.id,
-        entity_type="lage_einheit", entity_id=einheit.id,
+        db,
+        "gsl.ressource.journal_storno",
+        org_id=lage.org_id,
+        user_id=request.state.user.id,
+        entity_type="lage_einheit",
+        entity_id=einheit.id,
         payload={"lage_id": lage.id, "einheit_id": einheit.id},
     )
     db.commit()

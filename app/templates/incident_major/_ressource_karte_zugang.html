@@ -1,0 +1,22 @@
+<section id="ressourceKarteBody" data-zugang-zustand="{{ zugang.zustand }}">
+  <h3>Gruppenkommandanten-Zugang</h3>
+  <p data-zugang-status="{{ zugang.zustand }}">Status: {{ zugang.zustand }}</p>
+  {% if zugang.laeuft_ab_at %}<p>Gültig bis: {{ zugang.laeuft_ab_at|local_datetime }}</p>{% endif %}
+  {% if zugang.nummer_maske %}<p>Nummer: {{ zugang.nummer_maske }}</p>{% endif %}
+  {% if ergebnis %}<p data-versand-status="{{ ergebnis.status }}">{{ ergebnis.status }}{% if ergebnis.fehler %}: {{ ergebnis.fehler }}{% endif %}</p>{% endif %}
+  <form method="post" data-zugang-aktion="sms">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <button type="submit" data-zugang-button="sms">SMS senden</button>
+  </form>
+  <form method="post" data-zugang-aktion="nachricht">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <button type="submit" data-zugang-button="nachricht">Nachricht kopieren</button>
+  </form>
+  <form method="post" data-zugang-aktion="link">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <button type="submit" data-zugang-button="link">Nur Link kopieren</button>
+  </form>
+  <form method="post" data-zugang-aktion="widerrufen"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><button type="submit">Widerrufen</button></form>
+  <form method="post" data-zugang-aktion="verlaengern"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><button type="submit">Verlängern</button></form>
+  {% for sitzung in zugang.aktive_sitzungen %}<div data-sitzung-id="{{ sitzung.id }}">{{ sitzung.client_kurz }} <button data-zugang-button="sitzung-beenden">Beenden</button></div>{% endfor %}
+</section>
