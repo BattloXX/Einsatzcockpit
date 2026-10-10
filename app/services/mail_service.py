@@ -159,7 +159,9 @@ def get_resend_cfg(db) -> dict[str, str] | None:
         enabled = (_get("resend_enabled") or "").lower() == "true"
         api_key_enc = _get("resend_api_key")
         from_domain = (_get("resend_from_domain") or "").strip().lower()
-        if not enabled or not api_key_enc or not from_domain:
+        from app.services.org_mail_adresse import ist_gueltige_domain
+
+        if not enabled or not api_key_enc or not ist_gueltige_domain(from_domain):
             return None
         return {"api_key": decrypt_secret(api_key_enc), "from_domain": from_domain}
     except Exception:
@@ -168,17 +170,38 @@ def get_resend_cfg(db) -> dict[str, str] | None:
 
 
 def _resend_from_addr_for_org(db, org_id: int | None, from_domain: str) -> str:
-    """Leitet die Absenderadresse aus Org-Slug und verifizierter Domain ab."""
+    """Leitet die Absenderadresse sicher aus Typ, Org-Slug und Domain ab."""
     if db is not None and org_id is not None:
         try:
             from app.models.master import FireDept
+            from app.services.org_mail_adresse import absender_adresse
 
             org = db.query(FireDept).filter(FireDept.id == org_id).first()
             if org and org.slug:
-                return f"{org.slug}@{from_domain}"
+                return absender_adresse(org, from_domain)
         except Exception:
-            logger.exception("Org-Slug für Resend-Absender konnte nicht geladen werden (Org %s)", org_id)
-    return f"noreply@{from_domain}"
+            logger.exception("Org-Adresse fuer Resend-Absender konnte nicht geladen werden (Org %s)", org_id)
+    from app.services.org_mail_adresse import ist_gueltige_domain
+
+    safe_domain = from_domain.strip().lower() if ist_gueltige_domain(from_domain) else "example.invalid"
+    return f"noreply@{safe_domain}"
+
+
+def _set_resend_reply_to_if_enabled(db, org_id: int | None, msg: EmailMessage) -> None:
+    """Setzt die zentrale Empfangsadresse nur fuer aktive Org-Posteingänge."""
+    if org_id is None or msg.get("Reply-To"):
+        return
+    try:
+        from app.models.master import FireDept
+        from app.services.org_mail_adresse import empfangs_adresse, inbound_domain, mail_eingang_aktiv
+
+        if not mail_eingang_aktiv(db, org_id):
+            return
+        org = db.query(FireDept).filter(FireDept.id == org_id).first()
+        if org:
+            msg["Reply-To"] = empfangs_adresse(org, inbound_domain(db))
+    except Exception:
+        logger.exception("Reply-To fuer Resend konnte nicht gesetzt werden (Org %s)", org_id)
 
 
 async def deliver(db, org_id: int | None, msg: EmailMessage, smtp_cfg: dict | None = None) -> None:
@@ -219,6 +242,7 @@ async def deliver(db, org_id: int | None, msg: EmailMessage, smtp_cfg: dict | No
         try:
             from app.services.resend_mail_service import send_via_resend
 
+            _set_resend_reply_to_if_enabled(db, org_id, msg)
             await send_via_resend(msg, own_resend_cfg["api_key"], own_resend_cfg["from_addr"])
             return
         except Exception as exc:
@@ -232,6 +256,7 @@ async def deliver(db, org_id: int | None, msg: EmailMessage, smtp_cfg: dict | No
                 from_addr = _resend_from_addr_for_org(
                     db, org_id, global_resend_cfg["from_domain"],
                 )
+                _set_resend_reply_to_if_enabled(db, org_id, msg)
                 await send_via_resend(msg, global_resend_cfg["api_key"], from_addr)
                 return
             except Exception as exc:

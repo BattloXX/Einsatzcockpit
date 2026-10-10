@@ -46,6 +46,8 @@ def _resend_payload(msg: EmailMessage, from_addr: str, attachments: list[dict] |
         payload["text"] = ""
     if attachments:
         payload["attachments"] = attachments
+    if msg.get("Reply-To"):
+        payload["reply_to"] = str(msg["Reply-To"])
     headers = {name: str(msg[name]) for name in ("List-Unsubscribe", "List-Unsubscribe-Post") if msg[name]}
     if headers:
         payload["headers"] = headers

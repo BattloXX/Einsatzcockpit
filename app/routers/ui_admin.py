@@ -1,7 +1,6 @@
 """Admin-UI: Stammdaten, User, Rollen, API-Keys."""
 import ipaddress
 import logging
-import re
 from datetime import UTC, datetime
 from urllib.parse import quote_plus
 
@@ -2131,7 +2130,7 @@ async def save_system_settings(
         "smtp_host", "smtp_port", "smtp_user", "smtp_password", "smtp_from",
         "smtp_starttls", "smtp_timeout",
         # E-Mail (Resend); API-Key wird separat verschlüsselt behandelt
-        "resend_enabled", "resend_api_key", "resend_from_domain",
+        "resend_enabled", "resend_api_key", "resend_from_domain", "resend_inbound_domain",
         # Allgemein
         "enable_speech_input", "default_session_max_age",
         # Auto-Schließen
@@ -2146,17 +2145,20 @@ async def save_system_settings(
         "mi_feature_stab", "mi_feature_funkjournal", "mi_feature_meldungen",
         "mi_feature_sektoren", "mi_feature_karte", "mi_feature_zeitreise", "mi_feature_ressourcen",
     ]
+    from app.services.org_mail_adresse import ist_gueltige_domain
+
     resend_domain = str(form.get("k_resend_from_domain") or "").strip().lower()
-    resend_domain_invalid = bool(resend_domain) and not re.fullmatch(
-        r"(?=.{4,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}",
-        resend_domain,
-    )
+    inbound_domain = str(form.get("k_resend_inbound_domain") or "").strip().lower()
+    resend_domain_invalid = bool(resend_domain) and not ist_gueltige_domain(resend_domain)
+    inbound_domain_invalid = bool(inbound_domain) and not ist_gueltige_domain(inbound_domain)
     for key in known_keys:
         if key == "resend_api_key":
             continue
         if key == "resend_from_domain" and resend_domain_invalid:
             # Ungültige Domain nicht speichern, aber die übrigen Einstellungen
             # (z. B. resend_enabled) trotzdem übernehmen statt den ganzen POST abzubrechen.
+            continue
+        if key == "resend_inbound_domain" and inbound_domain_invalid:
             continue
         val = form.get(f"k_{key}")
         if val is not None:
@@ -2197,7 +2199,7 @@ async def save_system_settings(
                                   updated_by_user_id=request.state.user.id))
     write_audit(db, "admin.system_settings.updated", user_id=request.state.user.id)
     db.commit()
-    if resend_domain_invalid:
+    if resend_domain_invalid or inbound_domain_invalid:
         return RedirectResponse(
             "/admin/system-einstellungen?saved=1&settings_error=Ungültige+Resend-Domain+"
             "%E2%80%93+restliche+Einstellungen+wurden+gespeichert",

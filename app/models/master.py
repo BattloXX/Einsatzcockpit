@@ -389,6 +389,13 @@ class OrgSettings(Base):
     mi_auto_adopt: Mapped[bool] = mapped_column(Boolean, default=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
+    # Mail-Eingang je Organisation (M1: Einstellungen, Verarbeitung folgt spaeter).
+    mail_eingang_modus: Mapped[str] = mapped_column(String(12), nullable=False, default="aus")
+    mail_eingang_rueckblick_min: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
+    mail_eingang_mehrere: Mapped[str] = mapped_column(String(12), nullable=False, default="posteingang")
+    mail_eingang_absender: Mapped[str | None] = mapped_column(Text, nullable=True)
+    mail_eingang_max_pro_stunde: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
+
     # Gruppenkommandanten-Zugang (GSL)
     gk_zugang_aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     gk_zugang_auto_sms: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

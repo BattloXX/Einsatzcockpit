@@ -25,7 +25,7 @@ from app.core.permissions import is_system_admin, require_role, same_org_or_syst
 from app.core.security import sign_mail_inbound_webhook_org
 from app.core.templating import templates
 from app.db import get_db
-from app.models.master import FireDept
+from app.models.master import FireDept, OrgSettings
 from app.models.org_mail import OrgMailEingang, OrgO365MailConfig, OrgResendConfig, OrgSmtpConfig
 from app.models.user import User
 
@@ -75,6 +75,30 @@ def _get_or_create_resend_config(db, org_id: int) -> OrgResendConfig:
     return cfg
 
 
+def _get_or_create_org_settings(db, org_id: int) -> OrgSettings:
+    row = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
+    if not row:
+        row = OrgSettings(org_id=org_id)
+        db.add(row)
+        db.flush()
+    return row
+
+
+def _gueltige_absenderliste(raw: str) -> str | None:
+    """Bereinigt die Freigabeliste oder liefert None bei unsicherer Eingabe."""
+    from app.services.mail_service import _looks_like_email
+    from app.services.org_mail_adresse import ist_gueltige_domain
+
+    if any(ord(char) < 32 or ord(char) == 127 for char in raw):
+        return None
+    lines = [line.strip().lower() for line in raw.splitlines() if line.strip()]
+    if len(lines) > 200:
+        return None
+    if any(not (_looks_like_email(line) or (line.startswith("@") and ist_gueltige_domain(line[1:]))) for line in lines):
+        return None
+    return "\n".join(lines)
+
+
 # ── GET /admin/mail ───────────────────────────────────────────────────────────
 @router.get("/mail", response_class=HTMLResponse)
 def mail_settings_page(
@@ -100,6 +124,13 @@ def mail_settings_page(
         db.query(OrgResendConfig).filter(OrgResendConfig.org_id == effective_org_id).first()
         if effective_org_id else None
     )
+    org_settings = (
+        db.query(OrgSettings).filter(OrgSettings.org_id == effective_org_id).first()
+        if effective_org_id else None
+    )
+    from app.services.org_mail_adresse import empfangs_adresse, inbound_domain
+
+    empfangs_domain = inbound_domain(db)
 
     return templates.TemplateResponse(request, "admin/settings_org_mail.html", {
         "user": user,
@@ -107,6 +138,9 @@ def mail_settings_page(
         "smtp_config": smtp_config,
         "o365_config": o365_config,
         "resend_config": resend_config,
+        "org_settings": org_settings,
+        "empfangs_domain": empfangs_domain,
+        "empfangs_adresse": empfangs_adresse(org, empfangs_domain) if org else "",
         "is_sysadmin": is_sysadmin,
         "all_orgs": all_orgs,
         "flash": request.query_params.get("flash"),
@@ -116,6 +150,47 @@ def mail_settings_page(
             + "/mail/webhook/resend-inbound/" + sign_mail_inbound_webhook_org(effective_org_id)
         ) if effective_org_id else "",
     })
+
+
+@router.post("/mail/eingang/einstellungen/save")
+async def mail_eingang_settings_save(
+    request: Request,
+    db=Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    target_org_id: int | None = Form(None),
+    mail_eingang_modus: str = Form("aus"),
+    mail_eingang_rueckblick_min: int = Form(30),
+    mail_eingang_mehrere: str = Form("posteingang"),
+    mail_eingang_absender: str = Form(""),
+    mail_eingang_max_pro_stunde: int = Form(30),
+):
+    effective_org_id = _get_org_id(user, target_org_id)
+    if not effective_org_id:
+        return RedirectResponse("/admin/mail?flash=error_no_org", status_code=302)
+    if not same_org_or_system_admin(user, effective_org_id):
+        raise HTTPException(status_code=403, detail="Keine Berechtigung fuer diese Organisation")
+    if mail_eingang_modus not in {"aus", "freigegeben", "alle"}:
+        return RedirectResponse("/admin/mail?flash=error_mail_eingang", status_code=302)
+    if mail_eingang_mehrere not in {"posteingang", "neuester"}:
+        return RedirectResponse("/admin/mail?flash=error_mail_eingang", status_code=302)
+    if not 5 <= mail_eingang_rueckblick_min <= 240 or not 1 <= mail_eingang_max_pro_stunde <= 500:
+        return RedirectResponse("/admin/mail?flash=error_mail_eingang", status_code=302)
+    absender = _gueltige_absenderliste(mail_eingang_absender)
+    if absender is None:
+        return RedirectResponse("/admin/mail?flash=error_mail_eingang", status_code=302)
+    row = _get_or_create_org_settings(db, effective_org_id)
+    row.mail_eingang_modus = mail_eingang_modus
+    row.mail_eingang_rueckblick_min = mail_eingang_rueckblick_min
+    row.mail_eingang_mehrere = mail_eingang_mehrere
+    row.mail_eingang_absender = absender or None
+    row.mail_eingang_max_pro_stunde = mail_eingang_max_pro_stunde
+    row.updated_at = datetime.now(UTC)
+    write_audit(db, "org_mail.eingang.updated", org_id=effective_org_id, user_id=user.id,
+                ip=request.client.host if request.client else None)
+    db.commit()
+    redirect_url = (f"/admin/mail?org_id={effective_org_id}&flash=saved"
+                    if effective_org_id != user.org_id else "/admin/mail?flash=saved")
+    return RedirectResponse(redirect_url, status_code=302)
 
 
 # ── POST /admin/mail/smtp/save ────────────────────────────────────────────────
