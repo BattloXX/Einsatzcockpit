@@ -1483,16 +1483,19 @@ def rotate_gsl_leadership(
 def kraefteuebersicht(db: Session, lage: MajorIncident) -> dict[str, Any]:
     """Vollständiges S2-Lagebild: Pool + Abschnitte + Leiter aller Ebenen."""
     einheiten = lage.einheiten
+    # Kinder werden ausschließlich unter ihrem Verband dargestellt. So bleiben
+    # Karten und Zähler konsistent mit den Summen aus der Ressourcenpflege.
+    eigenstaendige = [e for e in einheiten if e.verband_id is None]
 
     # Pool: sector_id IS NULL und nicht im aktiven Einsatz
-    pool = [e for e in einheiten if e.sector_id is None and e.status not in (STATUS_IM_EINSATZ, STATUS_ABGERUECKT)]
+    pool = [e for e in eigenstaendige if e.sector_id is None and e.status not in (STATUS_IM_EINSATZ, STATUS_ABGERUECKT)]
     # Im Einsatz ohne Abschnitt: sector_id IS NULL, aber bereits aktiv eingeteilt
-    im_einsatz_no_sector = [e for e in einheiten if e.sector_id is None and e.status == STATUS_IM_EINSATZ]
-    abgerueckt = [e for e in einheiten if e.status == STATUS_ABGERUECKT]
+    im_einsatz_no_sector = [e for e in eigenstaendige if e.sector_id is None and e.status == STATUS_IM_EINSATZ]
+    abgerueckt = [e for e in eigenstaendige if e.status == STATUS_ABGERUECKT]
 
     sectors = sorted(lage.sectors, key=lambda s: s.sort_order)
     sector_map: dict[int, list[LageEinheit]] = {s.id: [] for s in sectors}
-    for e in einheiten:
+    for e in eigenstaendige:
         if e.sector_id and e.sector_id in sector_map and e.status != STATUS_ABGERUECKT:
             sector_map[e.sector_id].append(e)
 
@@ -1536,6 +1539,16 @@ def kraefteuebersicht(db: Session, lage: MajorIncident) -> dict[str, Any]:
                     if previous is None or d.letzte_rueckmeldung_at > previous:
                         letzte_rueckmeldung_by_einheit[d.einheit_id] = d.letzte_rueckmeldung_at
 
+    from app.services.ressource_pflege_service import verband_summen
+
+    kinder_by_verband: dict[int, list[LageEinheit]] = {}
+    for e in einheiten:
+        if e.verband_id is not None:
+            kinder_by_verband.setdefault(e.verband_id, []).append(e)
+    verband_summen_by_id = {
+        e.id: verband_summen(db, e) for e in eigenstaendige if e.resource_type == "verband"
+    }
+
     return {
         "pool": pool,
         "im_einsatz_no_sector": im_einsatz_no_sector,
@@ -1543,10 +1556,12 @@ def kraefteuebersicht(db: Session, lage: MajorIncident) -> dict[str, Any]:
         "abgerueckt": abgerueckt,
         "conflict_vids": conflict_vids,
         "el_asgn": el_asgn,
-        "total": len(einheiten),
+        "total": len(eigenstaendige),
         "reserve_count": len(pool),
-        "im_einsatz_count": sum(1 for e in einheiten if e.status == STATUS_IM_EINSATZ),
+        "im_einsatz_count": sum(1 for e in eigenstaendige if e.status == STATUS_IM_EINSATZ),
         "dispatched_sites_by_einheit": dispatched_sites_by_einheit,
         "active_dispatched_sites_by_einheit": active_dispatched_sites_by_einheit,
         "letzte_rueckmeldung_by_einheit": letzte_rueckmeldung_by_einheit,
+        "verband_kinder_by_id": kinder_by_verband,
+        "verband_summen_by_id": verband_summen_by_id,
     }

@@ -101,8 +101,32 @@ def _overview(request: Request, lage, einheit, db: Session):
             "can_edit": _can_edit(request.state.user),
             "members": members,
             "ausstattung_warnungen": ressource_pflege_service.ausstattung_warnungen(db, einheit),
+            **_verband_daten(db, lage, einheit),
         },
     )
+
+
+def _verband_daten(db: Session, lage, einheit) -> dict:
+    """Daten für den Verband-Abschnitt der Ressourcenkarte."""
+    if einheit.resource_type == "verband":
+        kinder = ressource_pflege_service.verband_kinder(db, einheit)
+        return {"verband_kinder": kinder, "verband_summen": ressource_pflege_service.verband_summen(db, einheit)}
+    if ressource_pflege_service.ist_kind(einheit):
+        verband = db.get(LageEinheit, einheit.verband_id)
+        return {"mutter_verband": verband}
+    freie = (
+        db.query(LageEinheit)
+        .filter(
+            LageEinheit.lage_id == lage.id,
+            LageEinheit.id != einheit.id,
+            LageEinheit.status != "abgerueckt",
+            LageEinheit.resource_type != "verband",
+            LageEinheit.verband_id.is_(None),
+        )
+        .order_by(LageEinheit.label, LageEinheit.id)
+        .all()
+    )
+    return {"freie_verband_einheiten": freie}
 
 
 def _einsaetze(request: Request, lage, einheit, db: Session):
@@ -464,7 +488,7 @@ def _pflege_error(text: str, bereich: str) -> HTMLResponse:
 async def _pflege_save(
     request: Request, lage, einheit, db: Session, bereich: str, action: str, callback, betroffen=None
 ):
-    if not _can_edit(request.state.user):
+    if not _zugang_erlaubt(request, request.state.user):
         raise HTTPException(403, "Keine Bearbeitungsberechtigung")
     try:
         callback()
@@ -483,9 +507,12 @@ async def _pflege_save(
     db.commit()
     for item in einheiten:
         await broadcast_lage(lage.id, {"type": "ressource:changed", "einheit_id": item.id})
-    response = (
-        _personal(request, lage, einheit, db) if bereich == "personal" else _ausstattung(request, lage, einheit, db)
-    )
+    if bereich == "personal":
+        response = _personal(request, lage, einheit, db)
+    elif bereich == "ausstattung":
+        response = _ausstattung(request, lage, einheit, db)
+    else:
+        response = _overview(request, lage, einheit, db)
     response.headers["HX-Retarget"] = "#ressourceKarteBody"
     response.headers["HX-Reswap"] = "innerHTML"
     response.headers["HX-Trigger"] = "ressourceChanged"
@@ -497,6 +524,101 @@ def _ziel_einheit_or_404(db: Session, lage, einheit_id: int) -> LageEinheit:
     if ziel is None or ziel.lage_id != lage.id:
         raise HTTPException(404, "Zieleinheit nicht gefunden")
     return ziel
+
+
+def _teile_aus_formular(
+    teil_label: list[str], teil_typ: list[str], teil_personal: list[int], teil_person_ids: list[str]
+) -> list[dict]:
+    if not teil_label:
+        raise ValueError("Mindestens ein Teil ist erforderlich")
+    if len(teil_typ) not in (0, len(teil_label)) or len(teil_personal) not in (0, len(teil_label)):
+        raise ValueError("Unvollständige Angaben zur Aufteilung")
+    if len(teil_person_ids) not in (0, len(teil_label)):
+        raise ValueError("Unvollständige Personenzuordnung")
+    teile = []
+    for index, label in enumerate(teil_label):
+        try:
+            person_ids = [int(wert) for wert in (teil_person_ids[index] if teil_person_ids else "").split(",") if wert]
+        except ValueError as exc:
+            raise ValueError("Personen müssen als IDs angegeben werden") from exc
+        teile.append(
+            {
+                "label": label,
+                "resource_type": teil_typ[index] if teil_typ else "fahrzeug",
+                "anzahl": teil_personal[index] if teil_personal else 0,
+                "person_ids": person_ids,
+            }
+        )
+    return teile
+
+
+@router.post("/verband/bilden", response_class=HTMLResponse)
+async def verband_bilden_route(
+    request: Request,
+    lage_id: int,
+    einheit_id: int,
+    label: str = Form(...),
+    einheit_ids: list[int] = Form([]),
+    db: Session = Depends(get_db),
+    _=Depends(require_role(*_WRITE)),
+):
+    lage, einheit = _context(request, lage_id, einheit_id, db)
+    ids = list(set(einheit_ids + [einheit.id]))
+    betroffen: list[LageEinheit] = [einheit]
+
+    def bilden():
+        verband = ressource_pflege_service.verband_bilden(
+            db, lage, label=label, einheit_ids=ids, user_id=request.state.user.id, author_name=get_author_name(request)
+        )
+        betroffen[:] = [verband, *ressource_pflege_service.verband_kinder(db, verband)]
+
+    return await _pflege_save(request, lage, einheit, db, "verband", "gsl.ressource.zusammenfassen", bilden, betroffen)
+
+
+@router.post("/verband/aufloesen", response_class=HTMLResponse)
+async def verband_aufloesen_route(
+    request: Request, lage_id: int, einheit_id: int, db: Session = Depends(get_db), _=Depends(require_role(*_WRITE))
+):
+    lage, einheit = _context(request, lage_id, einheit_id, db)
+    betroffen = [einheit, *ressource_pflege_service.verband_kinder(db, einheit)]
+    return await _pflege_save(
+        request,
+        lage,
+        einheit,
+        db,
+        "verband",
+        "gsl.ressource.zusammenfassen",
+        lambda: ressource_pflege_service.verband_aufloesen(
+            db, lage, einheit, user_id=request.state.user.id, author_name=get_author_name(request)
+        ),
+        betroffen,
+    )
+
+
+@router.post("/verband/aufteilen", response_class=HTMLResponse)
+async def einheit_aufteilen_route(
+    request: Request,
+    lage_id: int,
+    einheit_id: int,
+    teil_label: list[str] = Form([]),
+    teil_typ: list[str] = Form([]),
+    teil_personal: list[int] = Form([]),
+    teil_person_ids: list[str] = Form([]),
+    db: Session = Depends(get_db),
+    _=Depends(require_role(*_WRITE)),
+):
+    lage, einheit = _context(request, lage_id, einheit_id, db)
+    betroffen: list[LageEinheit] = [einheit]
+
+    def aufteilen():
+        teile = _teile_aus_formular(teil_label, teil_typ, teil_personal, teil_person_ids)
+        betroffen.extend(
+            ressource_pflege_service.einheit_aufteilen(
+                db, lage, einheit, teile, user_id=request.state.user.id, author_name=get_author_name(request)
+            )
+        )
+
+    return await _pflege_save(request, lage, einheit, db, "verband", "gsl.ressource.aufteilen", aufteilen, betroffen)
 
 
 @router.post("/personal/setzen", response_class=HTMLResponse)
