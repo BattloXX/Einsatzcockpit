@@ -4844,6 +4844,7 @@ def lage_ressourcen(
         "einheit_hat_tablet": einheit_hat_tablet,
         "is_admin": has_role(user, "admin"),
         "can_edit": _can_edit(user),
+        "can_view_karte": not getattr(user, "gsl_nur_lesen", False),
         "can_manage": _can_manage(user),
         "mi_features": _get_mi_features(db, lage.org_id),
         **_nav_counts(lage_id, lage, db),
@@ -4910,6 +4911,7 @@ def lage_ressourcen_kraefteuebersicht(
         "einheit_hat_tablet": einheit_hat_tablet,
         "is_admin": has_role(user, "admin"),
         "can_edit": _can_edit(user),
+        "can_view_karte": not getattr(user, "gsl_nur_lesen", False),
     })
 
 

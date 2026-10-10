@@ -3,6 +3,7 @@
 Einzige Registry: LageEinheit.
 Pool = sector_id IS NULL (Reserve im SKKM-Sinne).
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -31,33 +32,36 @@ from app.models.master import Member
 
 # ── Status-Konstanten ─────────────────────────────────────────────────────────
 
-STATUS_ANGEFORDERT   = "angefordert"
+STATUS_ANGEFORDERT = "angefordert"
 STATUS_BEREITGESTELLT = "bereitgestellt"
-STATUS_IM_EINSATZ    = "im_einsatz"
-STATUS_ABGERUECKT    = "abgerueckt"
+STATUS_IM_EINSATZ = "im_einsatz"
+STATUS_ABGERUECKT = "abgerueckt"
 
 VALID_STATUSES = {
-    STATUS_ANGEFORDERT, STATUS_BEREITGESTELLT, STATUS_IM_EINSATZ, STATUS_ABGERUECKT,
+    STATUS_ANGEFORDERT,
+    STATUS_BEREITGESTELLT,
+    STATUS_IM_EINSATZ,
+    STATUS_ABGERUECKT,
 }
 
 STATUS_LABEL = {
-    STATUS_ANGEFORDERT:    "Angefordert",
+    STATUS_ANGEFORDERT: "Angefordert",
     STATUS_BEREITGESTELLT: "Bereitgestellt",
-    STATUS_IM_EINSATZ:     "Im Einsatz",
-    STATUS_ABGERUECKT:     "Abgerückt",
+    STATUS_IM_EINSATZ: "Im Einsatz",
+    STATUS_ABGERUECKT: "Abgerückt",
 }
 
 # Welche Timestamp-Spalte wird bei Statuswechsel gesetzt?
 _STATUS_TIMESTAMP = {
-    STATUS_ANGEFORDERT:    "requested_at",
+    STATUS_ANGEFORDERT: "requested_at",
     STATUS_BEREITGESTELLT: "arrived_at",
-    STATUS_IM_EINSATZ:     "committed_at",
-    STATUS_ABGERUECKT:     "released_at",
+    STATUS_IM_EINSATZ: "committed_at",
+    STATUS_ABGERUECKT: "released_at",
 }
 
 RESOURCE_TYPE_LABEL = {
     "fahrzeug": "Fahrzeug",
-    "extern":   "Externe Kräfte",
+    "extern": "Externe Kräfte",
     "material": "Material/Gerät",
 }
 
@@ -87,18 +91,20 @@ def _journal(
     ereignis_typ: str | None = None,
     quelle: str | None = None,
 ) -> None:
-    db.add(LageJournalEntry(
-        major_incident_id=lage_id,
-        ts=datetime.now(UTC),
-        category=category,
-        text=text,
-        author_name=author_name,
-        user_id=user_id,
-        einheit_id=einheit_id,
-        site_id=site_id,
-        ereignis_typ=ereignis_typ,
-        quelle=quelle,
-    ))
+    db.add(
+        LageJournalEntry(
+            major_incident_id=lage_id,
+            ts=datetime.now(UTC),
+            category=category,
+            text=text,
+            author_name=author_name,
+            user_id=user_id,
+            einheit_id=einheit_id,
+            site_id=site_id,
+            ereignis_typ=ereignis_typ,
+            quelle=quelle,
+        )
+    )
 
 
 def _get_einheit(db: Session, einheit_id: int, lage_id: int) -> LageEinheit:
@@ -129,9 +135,16 @@ def journal_eintrag_manuell(
         if site is None or site.major_incident_id != lage.id:
             raise ValueError("Einsatzstelle nicht gefunden")
     entry = LageJournalEntry(
-        major_incident_id=lage.id, ts=datetime.now(UTC), category="ressource_manuell",
-        text=text, author_name=author_name, user_id=user_id, einheit_id=einheit.id,
-        site_id=site_id, ereignis_typ="manuell", quelle="manuell",
+        major_incident_id=lage.id,
+        ts=datetime.now(UTC),
+        category="ressource_manuell",
+        text=text,
+        author_name=author_name,
+        user_id=user_id,
+        einheit_id=einheit.id,
+        site_id=site_id,
+        ereignis_typ="manuell",
+        quelle="manuell",
     )
     db.add(entry)
     db.flush()
@@ -156,7 +169,9 @@ def journal_eintrag_stornieren(
         raise ValueError("Stornogrund erforderlich")
     entry = db.get(LageJournalEntry, entry_id)
     if (
-        entry is None or entry.major_incident_id != lage.id or entry.einheit_id != einheit.id
+        entry is None
+        or entry.major_incident_id != lage.id
+        or entry.einheit_id != einheit.id
         or not entry.category.startswith("ressource")
     ):
         raise ValueError("Journaleintrag nicht gefunden")
@@ -169,6 +184,7 @@ def journal_eintrag_stornieren(
 
 
 # ── Ressource anlegen ─────────────────────────────────────────────────────────
+
 
 def add_resource(
     db: Session,
@@ -208,6 +224,7 @@ def add_resource(
     )
     if vehicle_id:
         from app.models.master import VehicleMaster
+
         vehicle = db.get(VehicleMaster, vehicle_id)
         if vehicle:
             e.funkrufname = vehicle.funkrufname
@@ -218,14 +235,22 @@ def add_resource(
     db.add(e)
     db.flush()
 
-    _journal(db, lage_id,
-             f"Ressource hinzugefügt: {label} [{RESOURCE_TYPE_LABEL.get(resource_type, resource_type)}]",
-             category="ressource", author_name=author_name, user_id=user_id,
-             einheit_id=e.id, ereignis_typ="angelegt", quelle="manuell")
+    _journal(
+        db,
+        lage_id,
+        f"Ressource hinzugefügt: {label} [{RESOURCE_TYPE_LABEL.get(resource_type, resource_type)}]",
+        category="ressource",
+        author_name=author_name,
+        user_id=user_id,
+        einheit_id=e.id,
+        ereignis_typ="angelegt",
+        quelle="manuell",
+    )
     return e
 
 
 # ── Zuordnung Abschnitt / Einsatzstelle / Pool ────────────────────────────────
+
 
 def sync_units_sector_to_site(db: Session, site: IncidentSite) -> int:
     """Gleicht LageEinheit.sector_id aller an dieser Einsatzstelle aktiv disponierten
@@ -237,18 +262,15 @@ def sync_units_sector_to_site(db: Session, site: IncidentSite) -> int:
     Committed nicht selbst — der Aufrufer committet. Gibt Anzahl geänderter Einheiten zurück.
     """
     einheit_ids = {
-        d.einheit_id for d in db.query(EinheitSiteDispatch)
+        d.einheit_id
+        for d in db.query(EinheitSiteDispatch)
         .filter(
             EinheitSiteDispatch.site_id == site.id,
             dispatch_aktiv_filter(),
         )
         .all()
     }
-    einheit_ids.update(
-        e.id for e in db.query(LageEinheit)
-        .filter(LageEinheit.incident_site_id == site.id)
-        .all()
-    )
+    einheit_ids.update(e.id for e in db.query(LageEinheit).filter(LageEinheit.incident_site_id == site.id).all())
     if not einheit_ids:
         return 0
 
@@ -282,10 +304,17 @@ def assign_to_sector(
         e.status = STATUS_IM_EINSATZ
         e.committed_at = datetime.now(UTC)
 
-    _journal(db, lage_id,
-             f'{e.label} -> Abschnitt "{sector.name}" zugeordnet',
-             category="ressource", author_name=author_name, user_id=user_id,
-             einheit_id=e.id, ereignis_typ="status", quelle="manuell")
+    _journal(
+        db,
+        lage_id,
+        f'{e.label} -> Abschnitt "{sector.name}" zugeordnet',
+        category="ressource",
+        author_name=author_name,
+        user_id=user_id,
+        einheit_id=e.id,
+        ereignis_typ="status",
+        quelle="manuell",
+    )
     return e
 
 
@@ -305,18 +334,16 @@ def assign_to_site(
         raise ValueError("Einsatzstelle nicht gefunden")
 
     # Neuem Dispatch-System übergeben: disponieren + sofort vor Ort
-    dispatch_to_site(db, einheit_id, lage_id, site_id,
-                     author_name=author_name, user_id=user_id)
-    _, conflict = set_vor_ort_at_site(db, einheit_id, lage_id, site_id,
-                                       author_name=author_name, user_id=user_id)
+    dispatch_to_site(db, einheit_id, lage_id, site_id, author_name=author_name, user_id=user_id)
+    _, conflict = set_vor_ort_at_site(db, einheit_id, lage_id, site_id, author_name=author_name, user_id=user_id)
     if conflict:
         # Altes Verhalten: Konflikt ignorieren, altes einfach überschreiben
-        resolve_vor_ort_conflict(db, einheit_id, lage_id, site_id,
-                                  author_name=author_name, user_id=user_id)
+        resolve_vor_ort_conflict(db, einheit_id, lage_id, site_id, author_name=author_name, user_id=user_id)
     return e
 
 
 # ── Mehrfach-Disposition (Dispatch-System) ────────────────────────────────────
+
 
 def dispatch_to_site(
     db: Session,
@@ -349,7 +376,7 @@ def dispatch_to_site(
         .first()
     )
     if existing:
-        raise ValueError(f"Einheit bereits für \"{site.bezeichnung}\" disponiert")
+        raise ValueError(f'Einheit bereits für "{site.bezeichnung}" disponiert')
 
     auftrag, reihenfolge = _validiere_auftragsdaten(auftrag, reihenfolge)
     now = datetime.now(UTC)
@@ -371,10 +398,18 @@ def dispatch_to_site(
         e.committed_at = now
         e.status_at = now
 
-    _journal(db, lage_id,
-             f'{e.label} → Einsatzstelle "{site.bezeichnung}" disponiert (DISPONIERT)',
-             category="ressource", author_name=author_name, user_id=user_id,
-             einheit_id=e.id, site_id=site.id, ereignis_typ="disponiert", quelle="manuell")
+    _journal(
+        db,
+        lage_id,
+        f'{e.label} → Einsatzstelle "{site.bezeichnung}" disponiert (DISPONIERT)',
+        category="ressource",
+        author_name=author_name,
+        user_id=user_id,
+        einheit_id=e.id,
+        site_id=site.id,
+        ereignis_typ="disponiert",
+        quelle="manuell",
+    )
     return dispatch
 
 
@@ -409,13 +444,27 @@ def aendere_auftrag(
     dispatch.version += 1
     dispatch.geaendert_at = now
     text = f"Auftrag geändert: {dispatch.einheit.label}"
-    db.add(SiteLogEntry(
-        incident_site_id=dispatch.site_id, kind="resource", text=text,
-        user_id=user_id, author_name=author_name,
-    ))
-    _journal(db, dispatch.einheit.lage_id, text, category="ressource",
-             author_name=author_name, user_id=user_id, einheit_id=dispatch.einheit_id,
-             site_id=dispatch.site_id, ereignis_typ="status", quelle="manuell")
+    db.add(
+        SiteLogEntry(
+            incident_site_id=dispatch.site_id,
+            kind="resource",
+            text=text,
+            user_id=user_id,
+            author_name=author_name,
+        )
+    )
+    _journal(
+        db,
+        dispatch.einheit.lage_id,
+        text,
+        category="ressource",
+        author_name=author_name,
+        user_id=user_id,
+        einheit_id=dispatch.einheit_id,
+        site_id=dispatch.site_id,
+        ereignis_typ="status",
+        quelle="manuell",
+    )
     return True
 
 
@@ -437,13 +486,27 @@ def oeffne_auftrag_wieder(
     dispatch.version += 1
     dispatch.geaendert_at = now
     text = f"Auftrag wiedereröffnet: {dispatch.einheit.label}"
-    db.add(SiteLogEntry(
-        incident_site_id=dispatch.site_id, kind="resource", text=text,
-        user_id=user_id, author_name=author_name,
-    ))
-    _journal(db, dispatch.einheit.lage_id, text, category="ressource",
-             author_name=author_name, user_id=user_id, einheit_id=dispatch.einheit_id,
-             site_id=dispatch.site_id, ereignis_typ="status", quelle="manuell")
+    db.add(
+        SiteLogEntry(
+            incident_site_id=dispatch.site_id,
+            kind="resource",
+            text=text,
+            user_id=user_id,
+            author_name=author_name,
+        )
+    )
+    _journal(
+        db,
+        dispatch.einheit.lage_id,
+        text,
+        category="ressource",
+        author_name=author_name,
+        user_id=user_id,
+        einheit_id=dispatch.einheit_id,
+        site_id=dispatch.site_id,
+        ereignis_typ="status",
+        quelle="manuell",
+    )
 
 
 def set_vor_ort_at_site(
@@ -513,10 +576,18 @@ def set_vor_ort_at_site(
         e.status = STATUS_IM_EINSATZ
         e.committed_at = datetime.now(UTC)
 
-    _journal(db, lage_id,
-             f'{e.label} → Einsatzstelle "{site.bezeichnung}" VOR ORT',
-             category="ressource", author_name=author_name, user_id=user_id,
-             einheit_id=e.id, site_id=site.id, ereignis_typ="status", quelle="manuell")
+    _journal(
+        db,
+        lage_id,
+        f'{e.label} → Einsatzstelle "{site.bezeichnung}" VOR ORT',
+        category="ressource",
+        author_name=author_name,
+        user_id=user_id,
+        einheit_id=e.id,
+        site_id=site.id,
+        ereignis_typ="status",
+        quelle="manuell",
+    )
     return dispatch, None
 
 
@@ -547,16 +618,27 @@ def resolve_vor_ort_conflict(
         d.withdrawn_at = now
         old_site = db.get(IncidentSite, d.site_id)
         if old_site:
-            _journal(db, lage_id,
-                     f'{e.label} von "{old_site.bezeichnung}" abgezogen (Verlegung)',
-                     category="ressource", author_name=author_name, user_id=user_id,
-                     einheit_id=e.id, site_id=old_site.id,
-                     ereignis_typ="zurueckgezogen", quelle="manuell")
+            _journal(
+                db,
+                lage_id,
+                f'{e.label} von "{old_site.bezeichnung}" abgezogen (Verlegung)',
+                category="ressource",
+                author_name=author_name,
+                user_id=user_id,
+                einheit_id=e.id,
+                site_id=old_site.id,
+                ereignis_typ="zurueckgezogen",
+                quelle="manuell",
+            )
     db.flush()
 
     dispatch, _ = set_vor_ort_at_site(
-        db, einheit_id, lage_id, new_site_id,
-        author_name=author_name, user_id=user_id,
+        db,
+        einheit_id,
+        lage_id,
+        new_site_id,
+        author_name=author_name,
+        user_id=user_id,
     )
     return dispatch  # type: ignore[return-value]
 
@@ -601,9 +683,18 @@ def withdraw_from_site(
     text = f'{e.label} von "{site.bezeichnung if site else site_id}" abgezogen'
     if dispatch.withdrawn_grund:
         text += f" – {dispatch.withdrawn_grund}"
-    _journal(db, lage_id, text, category="ressource", author_name=author_name,
-             user_id=user_id, einheit_id=e.id, site_id=site_id,
-             ereignis_typ="zurueckgezogen", quelle="manuell")
+    _journal(
+        db,
+        lage_id,
+        text,
+        category="ressource",
+        author_name=author_name,
+        user_id=user_id,
+        einheit_id=e.id,
+        site_id=site_id,
+        ereignis_typ="zurueckgezogen",
+        quelle="manuell",
+    )
 
 
 def get_active_dispatches_for_site(
@@ -658,9 +749,7 @@ def get_dispatch_counts_for_site(
     return get_dispatch_counts_for_sites(db, [site_id])[site_id]
 
 
-def get_dispatch_counts_for_sites(
-    db: Session, site_ids: list[int]
-) -> dict[int, dict[str, int]]:
+def get_dispatch_counts_for_sites(db: Session, site_ids: list[int]) -> dict[int, dict[str, int]]:
     """Liefert Alarm-, Vor-Ort- und Fertig-Zähler für mehrere Stellen in einer Abfrage."""
     if not site_ids:
         return {}
@@ -668,9 +757,9 @@ def get_dispatch_counts_for_sites(
     rows = (
         db.query(
             EinheitSiteDispatch.site_id,
-            func.sum(
-                case((and_(dispatch_aktiv_filter(), EinheitSiteDispatch.vor_ort_at.is_(None)), 1), else_=0)
-            ).label("alarmed"),
+            func.sum(case((and_(dispatch_aktiv_filter(), EinheitSiteDispatch.vor_ort_at.is_(None)), 1), else_=0)).label(
+                "alarmed"
+            ),
             func.sum(
                 case((and_(dispatch_aktiv_filter(), EinheitSiteDispatch.vor_ort_at.is_not(None)), 1), else_=0)
             ).label("vor_ort"),
@@ -805,15 +894,22 @@ def move_to_pool(
         e.status = STATUS_BEREITGESTELLT
         e.status_at = datetime.now(UTC)
 
-    _journal(db, lage_id,
-             f"{e.label} → Pool/Reserve zurückgeführt"
-             + (f" (war Abschnitt {prev_sector})" if prev_sector else ""),
-             category="ressource", author_name=author_name, user_id=user_id,
-             einheit_id=e.id, ereignis_typ="status", quelle="manuell")
+    _journal(
+        db,
+        lage_id,
+        f"{e.label} → Pool/Reserve zurückgeführt" + (f" (war Abschnitt {prev_sector})" if prev_sector else ""),
+        category="ressource",
+        author_name=author_name,
+        user_id=user_id,
+        einheit_id=e.id,
+        ereignis_typ="status",
+        quelle="manuell",
+    )
     return e
 
 
 # ── Status setzen ─────────────────────────────────────────────────────────────
+
 
 def set_status(
     db: Session,
@@ -839,17 +935,23 @@ def set_status(
     # Auto-Abschnittszuweisung: wenn Einheit bereits einer Einsatzstelle mit Abschnitt zugeordnet ist
     if status == STATUS_IM_EINSATZ and not e.sector_id and e.incident_site_id:
         from app.models.major_incident import IncidentSite
+
         site = db.get(IncidentSite, e.incident_site_id)
         if site and site.sector_id:
             e.sector_id = site.sector_id
 
-    _journal(db, lage_id,
-             f"{e.label}: Status {STATUS_LABEL.get(old_status, old_status)}"
-             f" → {STATUS_LABEL.get(status, status)}",
-             category="ressource", author_name=author_name, user_id=user_id,
-             einheit_id=e.id, site_id=e.incident_site_id,
-             ereignis_typ="abgerueckt" if status == STATUS_ABGERUECKT else "status",
-             quelle="manuell")
+    _journal(
+        db,
+        lage_id,
+        f"{e.label}: Status {STATUS_LABEL.get(old_status, old_status)} → {STATUS_LABEL.get(status, status)}",
+        category="ressource",
+        author_name=author_name,
+        user_id=user_id,
+        einheit_id=e.id,
+        site_id=e.incident_site_id,
+        ereignis_typ="abgerueckt" if status == STATUS_ABGERUECKT else "status",
+        quelle="manuell",
+    )
     return e
 
 
@@ -888,7 +990,7 @@ def _fuehrungseingabe(
 
     # None bedeutet: beim Mitglied die hinterlegte Nummer vorbelegen. Ein leerer
     # Formwert entfernt dagegen bewusst die Nummer der Lagezuweisung.
-    phone = (member.phone if telefon is None and member else telefon)
+    phone = member.phone if telefon is None and member else telefon
     phone = phone.strip() if phone else None
     phone_e164 = telefon_zu_e164_at(phone)
     if phone and not phone_e164:
@@ -927,7 +1029,11 @@ def setze_gruppenkommandant(
         raise ValueError("Ungueltiger Modus")
 
     member_id, name, phone, phone_e164 = _fuehrungseingabe(
-        db, lage, member_id=member_id, person_name=person_name, telefon=telefon,
+        db,
+        lage,
+        member_id=member_id,
+        person_name=person_name,
+        telefon=telefon,
     )
     old = db.get(LageEinheitLeader, einheit.leader_assignment_id) if einheit.leader_assignment_id else None
     if old and (old.end_at is not None or old.rolle != "fuehrer"):
@@ -949,11 +1055,16 @@ def setze_gruppenkommandant(
         if old_phone_e164 != phone_e164:
             old.phone_version += 1
             _journal(
-                db, lage.id,
+                db,
+                lage.id,
                 f"{einheit.label}: Telefonnummer geaendert: "
                 f"{telefon_maske(old_phone_e164) or 'keine'} -> {telefon_maske(phone_e164) or 'keine'}",
-                category="ressource_fhr", author_name=author_name, user_id=user_id,
-                einheit_id=einheit.id, ereignis_typ="gk_telefon", quelle=quelle,
+                category="ressource_fhr",
+                author_name=author_name,
+                user_id=user_id,
+                einheit_id=einheit.id,
+                ereignis_typ="gk_telefon",
+                quelle=quelle,
             )
             # HOOK GK-2.1: Zugang widerrufen
             return GkErgebnis(aenderung="telefon", leader=old)
@@ -965,10 +1076,18 @@ def setze_gruppenkommandant(
         old.ende_grund = "wechsel"
         old.ende_von = user_id
     new_leader = LageEinheitLeader(
-        einheit_id=einheit.id, member_id=member_id, person_name=name,
-        start_at=now, predecessor_id=predecessor_id, note=note,
-        created_by=user_id, created_at=now, rolle="fuehrer", phone=phone,
-        phone_e164=phone_e164, phone_version=1,
+        einheit_id=einheit.id,
+        member_id=member_id,
+        person_name=name,
+        start_at=now,
+        predecessor_id=predecessor_id,
+        note=note,
+        created_by=user_id,
+        created_at=now,
+        rolle="fuehrer",
+        phone=phone,
+        phone_e164=phone_e164,
+        phone_version=1,
     )
     db.add(new_leader)
     db.flush()
@@ -984,8 +1103,15 @@ def setze_gruppenkommandant(
         ereignis_typ = "gk_zugewiesen"
         aenderung = "neu"
     _journal(
-        db, lage.id, text, category="ressource_fhr", author_name=author_name,
-        user_id=user_id, einheit_id=einheit.id, ereignis_typ=ereignis_typ, quelle=quelle,
+        db,
+        lage.id,
+        text,
+        category="ressource_fhr",
+        author_name=author_name,
+        user_id=user_id,
+        einheit_id=einheit.id,
+        ereignis_typ=ereignis_typ,
+        quelle=quelle,
     )
     return GkErgebnis(aenderung=aenderung, leader=new_leader)
 
@@ -1010,12 +1136,19 @@ def setze_stellvertreter(
     if modus not in {"auto", "wechsel", "korrektur"}:
         raise ValueError("Ungueltiger Modus")
     member_id, name, phone, phone_e164 = _fuehrungseingabe(
-        db, lage, member_id=member_id, person_name=person_name, telefon=telefon,
+        db,
+        lage,
+        member_id=member_id,
+        person_name=person_name,
+        telefon=telefon,
     )
     old = (
         db.query(LageEinheitLeader)
-        .filter(LageEinheitLeader.einheit_id == einheit.id,
-                LageEinheitLeader.rolle == "stellvertreter", LageEinheitLeader.end_at.is_(None))
+        .filter(
+            LageEinheitLeader.einheit_id == einheit.id,
+            LageEinheitLeader.rolle == "stellvertreter",
+            LageEinheitLeader.end_at.is_(None),
+        )
         .first()
     )
     same_person = old is not None and _gleiche_person(old, member_id, name)
@@ -1032,11 +1165,16 @@ def setze_stellvertreter(
         if old_phone_e164 != phone_e164:
             old.phone_version += 1
             _journal(
-                db, lage.id,
+                db,
+                lage.id,
                 f"{einheit.label}: Telefonnummer Stellvertreter geaendert: "
                 f"{telefon_maske(old_phone_e164) or 'keine'} -> {telefon_maske(phone_e164) or 'keine'}",
-                category="ressource_fhr", author_name=author_name, user_id=user_id,
-                einheit_id=einheit.id, ereignis_typ="gk_telefon", quelle=quelle,
+                category="ressource_fhr",
+                author_name=author_name,
+                user_id=user_id,
+                einheit_id=einheit.id,
+                ereignis_typ="gk_telefon",
+                quelle=quelle,
             )
             return GkErgebnis(aenderung="telefon", leader=old)
         return GkErgebnis(aenderung="korrektur", leader=old)
@@ -1045,17 +1183,31 @@ def setze_stellvertreter(
         old.ende_grund = "wechsel"
         old.ende_von = user_id
     leader = LageEinheitLeader(
-        einheit_id=einheit.id, member_id=member_id, person_name=name, start_at=now,
-        predecessor_id=old.id if old else None, note=note, created_by=user_id,
-        created_at=now, rolle="stellvertreter", phone=phone, phone_e164=phone_e164,
+        einheit_id=einheit.id,
+        member_id=member_id,
+        person_name=name,
+        start_at=now,
+        predecessor_id=old.id if old else None,
+        note=note,
+        created_by=user_id,
+        created_at=now,
+        rolle="stellvertreter",
+        phone=phone,
+        phone_e164=phone_e164,
         phone_version=1,
     )
     db.add(leader)
     db.flush()
     _journal(
-        db, lage.id, f"{einheit.label}: Stellvertreter {'gewechselt' if old else 'zugewiesen'}: {leader.display_name}",
-        category="ressource_fhr", author_name=author_name, user_id=user_id,
-        einheit_id=einheit.id, ereignis_typ="gk_gewechselt" if old else "gk_zugewiesen", quelle=quelle,
+        db,
+        lage.id,
+        f"{einheit.label}: Stellvertreter {'gewechselt' if old else 'zugewiesen'}: {leader.display_name}",
+        category="ressource_fhr",
+        author_name=author_name,
+        user_id=user_id,
+        einheit_id=einheit.id,
+        ereignis_typ="gk_gewechselt" if old else "gk_zugewiesen",
+        quelle=quelle,
     )
     return GkErgebnis(aenderung="wechsel" if old else "neu", leader=leader)
 
@@ -1080,11 +1232,105 @@ def entferne_gruppenkommandant(
     einheit.leader_assignment_id = None
     einheit.commander_label = None
     _journal(
-        db, lage.id, f"{einheit.label}: Gruppenkommandant entfernt: {old.display_name}",
-        category="ressource_fhr", author_name=author_name, user_id=user_id,
-        einheit_id=einheit.id, ereignis_typ="gk_gewechselt", quelle="manuell",
+        db,
+        lage.id,
+        f"{einheit.label}: Gruppenkommandant entfernt: {old.display_name}",
+        category="ressource_fhr",
+        author_name=author_name,
+        user_id=user_id,
+        einheit_id=einheit.id,
+        ereignis_typ="gk_gewechselt",
+        quelle="manuell",
     )
     return old
+
+
+def entferne_stellvertreter(
+    db: Session,
+    lage: MajorIncident,
+    einheit: LageEinheit,
+    *,
+    user_id: int | None,
+    author_name: str | None,
+) -> LageEinheitLeader | None:
+    """Beendet die aktive Stellvertreter-Zuweisung."""
+    if einheit.lage_id != lage.id:
+        raise ValueError("Einheit nicht gefunden")
+    old = (
+        db.query(LageEinheitLeader)
+        .filter(
+            LageEinheitLeader.einheit_id == einheit.id,
+            LageEinheitLeader.rolle == "stellvertreter",
+            LageEinheitLeader.end_at.is_(None),
+        )
+        .first()
+    )
+    if not old:
+        return None
+    old.end_at = datetime.now(UTC)
+    old.ende_grund = "entfernt"
+    old.ende_von = user_id
+    _journal(
+        db,
+        lage.id,
+        f"{einheit.label}: Stellvertreter entfernt: {old.display_name}",
+        category="ressource_fhr",
+        author_name=author_name,
+        user_id=user_id,
+        einheit_id=einheit.id,
+        ereignis_typ="gk_gewechselt",
+        quelle="manuell",
+    )
+    return old
+
+
+def aktualisiere_einheit_stamm(
+    db: Session,
+    lage: MajorIncident,
+    einheit: LageEinheit,
+    *,
+    funkrufname: str | None,
+    org_name: str | None,
+    bos: str | None,
+    bereitstellungsraum: str | None,
+    qty: int | None,
+    unit: str | None,
+    user_id: int | None,
+    author_name: str | None,
+) -> list[str]:
+    """Aktualisiert die editierbaren Stammdaten und journalisiert echte Aenderungen."""
+    if einheit.lage_id != lage.id:
+        raise ValueError("Einheit nicht gefunden")
+    values = {
+        "Funkrufname": ("funkrufname", funkrufname, 40),
+        "Organisation": ("org_name", org_name, 120),
+        "BOS": ("bos", bos, 20),
+        "Bereitstellungsraum": ("bereitstellungsraum", bereitstellungsraum, 200),
+        "Menge": ("qty", qty, None),
+        "Einheit": ("unit", unit, 20),
+    }
+    changed: list[str] = []
+    for label, (field, value, maximum) in values.items():
+        if isinstance(value, str):
+            value = value.strip() or None
+            if maximum is not None and len(value or "") > maximum:
+                raise ValueError(f"{label} ist zu lang")
+        if getattr(einheit, field) != value:
+            setattr(einheit, field, value)
+            changed.append(label)
+    if changed:
+        _journal(
+            db,
+            lage.id,
+            f"{einheit.label}: Stammdaten geaendert: {', '.join(changed)}",
+            category="ressource",
+            author_name=author_name,
+            user_id=user_id,
+            einheit_id=einheit.id,
+            ereignis_typ="status",
+            quelle="manuell",
+        )
+    return changed
 
 
 def rotate_einheit_leadership(
@@ -1104,8 +1350,14 @@ def rotate_einheit_leadership(
     if not lage:
         raise ValueError("Lage nicht gefunden")
     result = setze_gruppenkommandant(
-        db, lage, einheit, member_id=member_id, person_name=person_name, note=note,
-        user_id=created_by, author_name=author_name,
+        db,
+        lage,
+        einheit,
+        member_id=member_id,
+        person_name=person_name,
+        note=note,
+        user_id=created_by,
+        author_name=author_name,
     )
     if not result.leader:
         raise ValueError("Gruppenkommandant konnte nicht gesetzt werden")
@@ -1113,6 +1365,7 @@ def rotate_einheit_leadership(
 
 
 # ── EL / AbsLtr ablösen (GslStaffAssignment) ─────────────────────────────────
+
 
 def rotate_gsl_leadership(
     db: Session,
@@ -1132,6 +1385,7 @@ def rotate_gsl_leadership(
         raise ValueError("member_id oder person_name erforderlich")
 
     from app.models.major_incident import GslStaffRole
+
     role = db.query(GslStaffRole).filter(GslStaffRole.code == role_code).first()
     if not role:
         raise ValueError(f"Rolle {role_code} nicht gefunden")
@@ -1188,28 +1442,28 @@ def rotate_gsl_leadership(
             sector.leader_label = person_name or ""
 
     target = "Einsatzleiter" if role_code == "EL" else f"Abschnittsleiter Abschnitt {sector_id}"
-    _journal(db, lage.id,
-             f"{target} → {person_name or str(member_id)}",
-             category="ressource_fhr", author_name=author_name, user_id=created_by)
+    _journal(
+        db,
+        lage.id,
+        f"{target} → {person_name or str(member_id)}",
+        category="ressource_fhr",
+        author_name=author_name,
+        user_id=created_by,
+    )
     return new_asgn
 
 
 # ── Kräfteübersicht ───────────────────────────────────────────────────────────
+
 
 def kraefteuebersicht(db: Session, lage: MajorIncident) -> dict[str, Any]:
     """Vollständiges S2-Lagebild: Pool + Abschnitte + Leiter aller Ebenen."""
     einheiten = lage.einheiten
 
     # Pool: sector_id IS NULL und nicht im aktiven Einsatz
-    pool = [
-        e for e in einheiten
-        if e.sector_id is None and e.status not in (STATUS_IM_EINSATZ, STATUS_ABGERUECKT)
-    ]
+    pool = [e for e in einheiten if e.sector_id is None and e.status not in (STATUS_IM_EINSATZ, STATUS_ABGERUECKT)]
     # Im Einsatz ohne Abschnitt: sector_id IS NULL, aber bereits aktiv eingeteilt
-    im_einsatz_no_sector = [
-        e for e in einheiten
-        if e.sector_id is None and e.status == STATUS_IM_EINSATZ
-    ]
+    im_einsatz_no_sector = [e for e in einheiten if e.sector_id is None and e.status == STATUS_IM_EINSATZ]
     abgerueckt = [e for e in einheiten if e.status == STATUS_ABGERUECKT]
 
     sectors = sorted(lage.sectors, key=lambda s: s.sort_order)
@@ -1219,10 +1473,7 @@ def kraefteuebersicht(db: Session, lage: MajorIncident) -> dict[str, Any]:
             sector_map[e.sector_id].append(e)
 
     # Doppelverplanung: vehicle_id mehrfach active
-    vid_list = [
-        e.vehicle_id for e in einheiten
-        if e.vehicle_id and e.status == STATUS_IM_EINSATZ
-    ]
+    vid_list = [e.vehicle_id for e in einheiten if e.vehicle_id and e.status == STATUS_IM_EINSATZ]
     conflict_vids = {v for v in vid_list if vid_list.count(v) > 1}
 
     # Aktueller EL
@@ -1231,11 +1482,13 @@ def kraefteuebersicht(db: Session, lage: MajorIncident) -> dict[str, Any]:
     sector_data = []
     for s in sectors:
         abs_asgn = db.get(GslStaffAssignment, s.leader_assignment_id) if s.leader_assignment_id else None
-        sector_data.append({
-            "sector": s,
-            "einheiten": sector_map.get(s.id, []),
-            "leader": abs_asgn,
-        })
+        sector_data.append(
+            {
+                "sector": s,
+                "einheiten": sector_map.get(s.id, []),
+                "leader": abs_asgn,
+            }
+        )
 
     einheit_ids = [e.id for e in einheiten]
     dispatched_sites_by_einheit: dict[int, list[EinheitSiteDispatch]] = {}

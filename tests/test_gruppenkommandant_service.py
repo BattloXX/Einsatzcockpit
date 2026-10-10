@@ -55,13 +55,13 @@ def test_mitglied_extern_noop_telefon_wechsel_und_entfernen():
 
         assert rs.setze_gruppenkommandant(db, lage, einheit, member_id=member.id).aenderung == "keine"
         db.flush()
-        assert db.query(LageEinheitLeader).count() == 1
-        assert db.query(LageJournalEntry).count() == 1
+        assert db.query(LageEinheitLeader).filter_by(einheit_id=einheit.id).count() == 1
+        assert db.query(LageJournalEntry).filter_by(einheit_id=einheit.id).count() == 1
 
         changed = rs.setze_gruppenkommandant(db, lage, einheit, member_id=member.id, telefon="+43 650 1112233")
         assert changed.aenderung == "telefon"
         assert changed.leader is leader and leader.phone_version == 2
-        assert db.query(LageEinheitLeader).count() == 1
+        assert db.query(LageEinheitLeader).filter_by(einheit_id=einheit.id).count() == 1
 
         external = rs.setze_gruppenkommandant(db, lage, einheit, person_name="  Extern Frau  ")
         assert external.aenderung == "wechsel"

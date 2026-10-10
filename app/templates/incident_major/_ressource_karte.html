@@ -1,0 +1,13 @@
+<div class="ressource-karte__backdrop" data-karte-close></div>
+<section class="ressource-karte__sheet" role="dialog" aria-modal="true" aria-label="Ressourcenkarte">
+  <header class="ressource-karte__head">
+    <div><strong>{{ karte.allgemein.label }}</strong><div class="ressource-karte__meta"><span class="estatus estatus--{{ karte.allgemein.status }}">{{ karte.allgemein.status }}</span> {{ karte.allgemein.sector or 'Pool' }} · {{ karte.allgemein.funkrufname or karte.allgemein.org_name or '–' }}</div></div>
+    <button type="button" class="btn btn--xs btn--ghost" data-karte-close aria-label="Schließen">✕</button>
+  </header>
+  <nav class="ressource-karte__tabs">
+    {% for tab, label in [('uebersicht', 'Übersicht'), ('einsaetze', 'Einsätze'), ('journal', 'Journal')] %}
+    <button class="btn btn--xs btn--ghost{% if tab == 'uebersicht' %} active{% endif %}" data-karte-tab="{{ tab }}" hx-get="/lage/{{ lage.id }}/einheiten/{{ einheit.id }}/karte/{{ tab }}" hx-target="#ressourceKarteBody" hx-swap="innerHTML">{{ label }}</button>
+    {% endfor %}
+  </nav>
+  <div id="ressourceKarteBody">{% include "incident_major/_ressource_karte_uebersicht.html" %}</div>
+</section>

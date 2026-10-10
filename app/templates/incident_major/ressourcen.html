@@ -80,6 +80,7 @@
 }
 .einh-card--conflict { border-color: var(--red); }
 .einh-card__top { display: flex; align-items: center; gap: 6px; }
+.einh-card[data-einheit-id] .einh-card__top { cursor:pointer; }
 .einh-card__label { font-weight: 700; font-size: .84rem; flex: 1; min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .einh-card__type {
@@ -280,6 +281,8 @@
 
 </div>{# /x-data #}
 
+<aside id="ressourceKarte" data-lage-id="{{ lage.id }}" aria-live="polite"></aside>
+
 <!-- ── Site-Detail Dialog ─────────────────────────────────────────────────── -->
 <dialog class="modal" id="siteDetailModal">
   <div class="modal__content" id="siteDetailContent"
@@ -291,6 +294,14 @@
 {% endblock %}
 
 {% block lage_scripts %}
+<style>
+.ressource-karte__backdrop { position:fixed; inset:0; background:rgba(0,0,0,.42); z-index:80; }
+.ressource-karte__sheet { position:fixed; z-index:81; top:0; right:0; width:min(520px,42vw); height:100vh; overflow:auto; background:var(--surface); border-left:1px solid var(--border); box-shadow:var(--shadow-card); }
+.ressource-karte__head { display:flex; justify-content:space-between; gap:10px; padding:14px; position:sticky; top:0; background:var(--surface); border-bottom:1px solid var(--border); z-index:2; }
+.ressource-karte__meta { font-size:.72rem; color:var(--text-muted); margin-top:3px; }.ressource-karte__tabs { display:flex; gap:5px; padding:10px 14px; border-bottom:1px solid var(--border); }.ressource-karte__content { padding:14px; }.ressource-karte__grid { display:grid; grid-template-columns:minmax(120px,.8fr) 1.2fr; gap:7px; font-size:.8rem; }.ressource-karte__grid dt { color:var(--text-muted); }.ressource-karte__grid dd { margin:0; }.ressource-karte__actions { display:flex; gap:5px; margin:9px 0; }.ressource-karte__form { display:grid; gap:7px; margin-top:10px; }.ressource-karte__notice { position:fixed; z-index:90; right:20px; bottom:20px; }
+@media(max-width:760px) { .ressource-karte__sheet { width:100vw; }.ressource-karte__actions { position:sticky; bottom:0; padding:8px; background:var(--surface); } }
+</style>
+<script src="/static/js/ressourcen_karte.js"></script>
 {% if org_members %}
 <datalist id="cmdr-datalist">
   {% for m in org_members %}<option value="{{ m.full_name }}">{% endfor %}
@@ -318,6 +329,9 @@ function resTypeChanged(v) {
         var msg = JSON.parse(evt.data);
         if (msg.type === 'site:card_changed' || msg.type === 'ressource:changed') {
           htmx.trigger(document.body, 'ressourceChanged');
+          if (window.ressourcenKarteChanged) window.ressourcenKarteChanged(msg);
+        } else if (msg.type === 'einheit:changed') {
+          if (window.ressourcenKarteChanged) window.ressourcenKarteChanged(msg);
         } else if (msg.type === 'lage_updated') {
           htmx.ajax('GET', '/lage/{{ lage.id }}/kopf', { target: document.body, swap: 'none' });
         } else if (msg.type === 'lage_closed') {
