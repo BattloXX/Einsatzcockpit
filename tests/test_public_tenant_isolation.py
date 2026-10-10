@@ -662,7 +662,7 @@ def test_gk_token_zeigt_nur_seine_org_daten(client):
         db.close()
     csrf = client.get("/gk").cookies.get("ec_csrf")
     response = client.post("/gk/pruefen", json={"token": token}, headers={"X-CSRF-Token": csrf})
-    assert response.json() == {"ok": True, "lage": "GK Lage A", "einheit": "GK Einheit A", "pin_noetig": False}
+    assert response.json() == {"ok": True, "lage": "GK Lage A", "einheit": "GK Einheit A", "pin_noetig": False, "typ": "personal"}
 
 
 def test_gk_manipulierte_sitzungs_org_zeigt_keine_fremde_org_daten(client):
