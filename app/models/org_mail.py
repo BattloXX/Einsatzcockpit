@@ -15,9 +15,10 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.tenant import TenantScoped
 from app.db import Base
 
 
@@ -107,6 +108,10 @@ class OrgResendConfig(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     api_key_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
     from_addr: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    # Empfang ist absichtlich unabhängig vom Versand standardmäßig ausgeschaltet.
+    inbound_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    inbound_webhook_secret_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
+    inbound_retention_days: Mapped[int] = mapped_column(Integer, nullable=False, default=90)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
@@ -117,3 +122,34 @@ class OrgResendConfig(Base):
     @property
     def is_fully_configured(self) -> bool:
         return bool(self.api_key_enc and self.from_addr)
+
+
+class OrgMailEingang(TenantScoped, Base):
+    """Metadaten und kontrolliert abgerufener Inhalt eingehender Resend-Mails."""
+
+    __tablename__ = "org_mail_eingang"
+    __table_args__ = (
+        UniqueConstraint("org_id", "resend_email_id", name="uq_org_mail_eingang_resend"),
+        Index("ix_org_mail_eingang_org_empfangen", "org_id", "empfangen_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    resend_email_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    message_id: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    absender: Mapped[str] = mapped_column(String(500), nullable=False, default="")
+    empfaenger: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    cc: Mapped[str | None] = mapped_column(Text, nullable=True)
+    betreff: Mapped[str] = mapped_column(String(998), nullable=False, default="")
+    text_body: Mapped[str | None] = mapped_column(Text, nullable=True)
+    html_body: Mapped[str | None] = mapped_column(Text, nullable=True)
+    header_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    spf: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    dkim: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    dmarc: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    anhang_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    empfangen_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    abgerufen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="neu")
+    fehler: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    gelesen_von: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    gelesen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

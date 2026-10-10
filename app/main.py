@@ -49,6 +49,7 @@ from app.routers import (
     device_api,
     gateway_api,
     lagekarte_api,
+    mail_inbound_webhook,
     mailing_webhook,
     monitoring_api,
     objektpflege_public,
@@ -217,6 +218,7 @@ def _start_background_loops() -> list[asyncio.Task]:
     from app.services.org_backup_loop import org_backup_loop
     from app.services.print_watchdog import print_job_watchdog_loop
     from app.services.probe_erinnerung import probe_erinnerung_loop
+    from app.services.resend_inbound_service import resend_inbound_retention_loop
     from app.services.road_closure_notification_loop import road_closure_notification_loop
     from app.services.sms_dispatch_service import einsatzinfo_nachversand_loop
     from app.services.sms_log_retention import sms_log_retention_loop
@@ -235,7 +237,7 @@ def _start_background_loops() -> list[asyncio.Task]:
         lis_poll_loop(), lis_capture_retention_loop(), dibos_poll_loop(), dibos_trace_retention_loop(),
         nachschlagewerk_sync_loop(), org_backup_loop(), mailing_dispatch_loop(),
         api_message_dispatch_loop(), mailing_schedule_loop(),
-        incident_route_loop(),
+        incident_route_loop(), resend_inbound_retention_loop(),
     )
     return [asyncio.create_task(loop) for loop in loops]
 
@@ -827,6 +829,7 @@ app.include_router(sso.router)
 app.include_router(public.router)
 app.include_router(public_mailing_tracking.router)
 app.include_router(mailing_webhook.router)
+app.include_router(mail_inbound_webhook.router)
 app.include_router(ui_password_reset.router)
 app.include_router(ui_pin_login.router)
 app.include_router(ui_account_switch.router)

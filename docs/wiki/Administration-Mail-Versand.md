@@ -1,5 +1,11 @@
 # Mail-Versand (SMTP / Office 365)
 
+## Posteingang über Resend
+
+Der organisationsbezogene Resend-Posteingang ist standardmäßig deaktiviert. Bei Resend Empfangsdomain und MX einrichten und einen Webhook für `email.received` auf die in Administration → Mail angezeigte URL setzen. Der API-Key benötigt Empfangsrechte (Full Access); das Webhook-Signing-Secret wird verschlüsselt gespeichert und nie wieder angezeigt.
+
+Die Aufbewahrung beträgt konfigurierbar 1 bis 365 Tage (Standard 90). HTML-Mails werden nur in einem sandboxed iframe mit restriktiver CSP dargestellt. Anhänge werden nicht gespeichert und nur bei Bedarf serverseitig von Resend geladen.
+
 ← [Zurück zur Startseite](Home)
 
 > URL: `/admin/mail`  
