@@ -267,7 +267,11 @@ def _resolve_gk_principal(websocket: WebSocket):
 
 @router.websocket("/ws/einheit-zugang")
 async def einheit_zugang_ws(websocket: WebSocket):
-    """Minimaler, einheitengefilterter Echtzeitkanal für GK-Sitzungen."""
+    """Minimaler, einheitengefilterter Echtzeitkanal für GK-Sitzungen.
+
+    Widerruf wirkt spätestens beim nächsten Ping (der Client sendet ihn alle
+    25 s); einen Post-Commit-Broadcast gibt es dafür nicht.
+    """
     principal = _resolve_gk_principal(websocket)
     if principal is None:
         await websocket.close(code=WS_CLOSE_UNAUTHORIZED)
