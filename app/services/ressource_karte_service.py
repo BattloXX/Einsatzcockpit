@@ -88,7 +88,11 @@ def _einsatz(db: Session, dispatch: EinheitSiteDispatch) -> dict:
         "dispatch_id": dispatch.id,
         "site_id": site.id,
         "bezeichnung": site.bezeichnung,
+        "adresse": " ".join(wert for wert in (site.strasse, site.hausnr, site.ort) if wert) or None,
+        "prioritaet": site.priority,
         "auftrag": dispatch.auftrag,
+        "einheit_status": dispatch.einheit_status,
+        "reihenfolge": dispatch.reihenfolge,
         "einsatznummer": _einsatznummer(db, site),
         "dispatched_at": dispatched_at,
         "bestaetigt_at": _naiv(dispatch.bestaetigt_at),
@@ -149,7 +153,7 @@ def journal(
     for entry in eintraege:
         zeilen.append(JournalZeile(
             _zeit(entry.ts), entry.ereignis_typ or entry.category, entry.text, entry.quelle,
-            entry.author_name, entry.site_id, None, ("lage_journal_entry", entry.id),
+            entry.author_name, entry.site_id, None, ("lage_journal", entry.id),
             entry.storniert_at is not None, entry.storno_grund,
         ))
     logs = db.query(SiteLogEntry).join(IncidentSite).filter(

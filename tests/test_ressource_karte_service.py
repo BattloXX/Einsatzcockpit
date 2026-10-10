@@ -90,7 +90,7 @@ def test_einsaetze_alle_kategorien_dauer_und_nummern():
         db.flush()
         result = karte_service.einsaetze(db, lage, einheit)
         assert result["aktuell"]["einsatznummer"] == "LIS-7"
-        assert result["weitere"][0]["einsatznummer"] == "S4"
+        assert result["weitere"][0]["einsatznummer"] == f"S{sites[3].id}"
         assert result["abgeschlossen"][0]["dauer_sekunden"] == 1800
         assert result["abgeschlossen"][0]["letzte_lagemeldung"]["text"] == "Lage"
         assert result["abgeschlossen"][0]["massnahmen"][0]["text"] == "Maßnahme"
