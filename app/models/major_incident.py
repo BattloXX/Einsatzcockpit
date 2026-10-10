@@ -15,6 +15,7 @@ from sqlalchemy import (
     LargeBinary,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from sqlalchemy.types import TypeDecorator
@@ -183,6 +184,41 @@ EINHEIT_STATUS_COLOR = {
 }
 EINHEIT_STATUS_AKTIV = frozenset({"anfahrt", "vor_ort", "in_arbeit"})
 EINHEIT_STATUS_BEENDET = frozenset({"abgeschlossen", "nicht_durchfuehrbar"})
+
+PERSON_FUNKTIONEN = {
+    "fuehrung": "Führung",
+    "agt": "Atemschutzgeräteträger",
+    "sanitaeter": "Sanitäter",
+    "maschinist": "Maschinist",
+    "mannschaft": "Mannschaft",
+    "sonstige": "Sonstige Funktion",
+}
+
+AUSSTATTUNG_STATUS = {
+    "einsatzbereit": "Einsatzbereit",
+    "eingeschraenkt": "Eingeschränkt",
+    "defekt": "Defekt",
+    "nicht_verfuegbar": "Nicht verfügbar",
+}
+
+GSL_AUSSTATTUNG_KATALOG = {
+    "tragkraftspritze": "Tragkraftspritze",
+    "tauchpumpe": "Tauchpumpe",
+    "stromerzeuger": "Stromerzeuger",
+    "beleuchtung": "Beleuchtung",
+    "atemschutzgeraete": "Atemschutzgeräte",
+    "drohne": "Drohne",
+    "waermebildkamera": "Wärmebildkamera",
+    "schlauchmaterial": "Schlauchmaterial",
+    "motorsaege": "Motorsäge",
+    "sonderausruestung": "Sonderausrüstung",
+    "sonstiges": "Sonstiges",
+    "hochwasser": "Fähigkeit: Hochwasser",
+    "wasserrettung": "Fähigkeit: Wasserrettung",
+    "hoehenrettung": "Fähigkeit: Höhenrettung",
+    "gefahrstoff": "Fähigkeit: Gefahrstoff",
+    "faehigkeit_sonstige": "Fähigkeit: Sonstige",
+}
 
 SITE_PHASE_GROUP = {  # abgebrochen bewusst NICHT enthalten
     SitePhase.eingegangen: "neu",
@@ -476,7 +512,7 @@ class LageEinheit(Base):
     status_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # Ressourcentyp + Abschnittszuordnung (§3.1)
-    resource_type: Mapped[str] = mapped_column(String(12), default="fahrzeug")  # fahrzeug|extern|material
+    resource_type: Mapped[str] = mapped_column(String(12), default="fahrzeug")  # fahrzeug|extern|material|verband
     sector_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("site_sector.id", ondelete="SET NULL"), nullable=True
     )
@@ -494,6 +530,18 @@ class LageEinheit(Base):
     leader_assignment_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("lage_einheit_leader.id", ondelete="SET NULL"), nullable=True
     )
+    staerke_gesamt: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    staerke_fuehrung: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    staerke_agt: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    staerke_sanitaeter: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    personal_modus: Mapped[str] = mapped_column(String(8), nullable=False, default="summe", server_default="summe")
+    personal_bemerkung: Mapped[str | None] = mapped_column(Text, nullable=True)
+    verband_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("lage_einheit.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    aufgeteilt_von_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("lage_einheit.id", ondelete="SET NULL"), nullable=True
+    )
 
     sector: Mapped[Sector | None] = relationship(foreign_keys=[sector_id])
     leader: Mapped[LageEinheitLeader | None] = relationship(foreign_keys=[leader_assignment_id], lazy="joined")
@@ -502,6 +550,64 @@ class LageEinheit(Base):
         foreign_keys="[EinheitSiteDispatch.einheit_id]",
         back_populates="einheit",
         lazy="select",
+    )
+
+
+class LageEinheitPerson(TenantScoped, Base):
+    """Personaleinsatz einer Einheit innerhalb einer Lage."""
+
+    __tablename__ = "lage_einheit_person"
+    __table_args__ = (UniqueConstraint("lage_id", "aktiv_key", name="uq_lage_einheit_person_aktiv"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    lage_id: Mapped[int] = mapped_column(Integer, ForeignKey("major_incident.id", ondelete="CASCADE"), index=True)
+    einheit_id: Mapped[int] = mapped_column(Integer, ForeignKey("lage_einheit.id", ondelete="CASCADE"), index=True)
+    member_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("member.id", ondelete="SET NULL"), nullable=True
+    )
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    funktion: Mapped[str] = mapped_column(String(16), nullable=False)
+    qualifikationen: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    von_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    bis_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    herkunft: Mapped[str] = mapped_column(String(14), nullable=False)
+    abloesung_von_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("lage_einheit_person.id", ondelete="SET NULL"), nullable=True
+    )
+    umbuchung_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    bemerkung: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    aktiv_key: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    created_by: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+
+
+class LageEinheitAusstattung(TenantScoped, Base):
+    """Ausstattung oder Fähigkeit einer Einheit innerhalb einer Lage."""
+
+    __tablename__ = "lage_einheit_ausstattung"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    lage_id: Mapped[int] = mapped_column(Integer, ForeignKey("major_incident.id", ondelete="CASCADE"), index=True)
+    einheit_id: Mapped[int] = mapped_column(Integer, ForeignKey("lage_einheit.id", ondelete="CASCADE"), index=True)
+    kategorie: Mapped[str] = mapped_column(String(24), nullable=False)
+    bezeichnung: Mapped[str] = mapped_column(String(120), nullable=False)
+    ist_faehigkeit: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    menge: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="einsatzbereit", server_default="einsatzbereit"
+    )
+    bemerkung: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    stamm_ref_typ: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    stamm_ref_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    umbuchung_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    created_by: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
     )
 
 

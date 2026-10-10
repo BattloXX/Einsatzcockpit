@@ -66,6 +66,7 @@ RESOURCE_TYPE_LABEL = {
     "fahrzeug": "Fahrzeug",
     "extern": "Externe Kräfte",
     "material": "Material/Gerät",
+    "verband": "Verband",
 }
 
 # ── Hilfsfunktionen ───────────────────────────────────────────────────────────

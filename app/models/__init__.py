@@ -96,6 +96,9 @@ from app.models.major_incident import (
     CommLogEntry,
     EinheitAktion,
     IncidentSite,
+    LageEinheit,  # noqa: F401
+    LageEinheitAusstattung,  # noqa: F401
+    LageEinheitPerson,  # noqa: F401
     MajorIncident,
     MajorIncidentStatus,
     Sector,
