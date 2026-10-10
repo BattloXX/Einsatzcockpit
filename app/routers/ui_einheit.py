@@ -147,6 +147,7 @@ def _einheit_seite(request: Request, db: Session, start_dispatch_id: int | None 
         "admin_name": getattr(user, "display_name", "") if ctx and ctx.simulation else "",
         "gk_zugang": bool(ctx and ctx.quelle == "zugang"),
         "gk_name": ctx.leader.display_name if ctx and ctx.leader else "",
+        "zugang_qr": bool(ctx and ctx.zugang and ctx.zugang.typ == "qr"),
         "start_dispatch_id": start_dispatch_id, "kein_kontext": ctx is None, "simulation_fehler": None,
     })
 

@@ -88,7 +88,10 @@ async def gk_pruefen(request: Request, daten: TokenDaten, db: Session = Depends(
         return _antwort({"ok": False, "meldung": _BEENDET}, 404)
     lage, einheit = gebunden
     return _antwort(
-        {"ok": True, "lage": lage.name, "einheit": einheit.label, "pin_noetig": pruefung.zugang.pin_pflicht}
+        {
+            "ok": True, "lage": lage.name, "einheit": einheit.label,
+            "pin_noetig": pruefung.zugang.pin_pflicht, "typ": pruefung.zugang.typ,
+        }
     )
 
 
