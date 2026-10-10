@@ -1134,5 +1134,6 @@ def zugang_status(db: Session, einheit: LageEinheit) -> dict:
         "qr": {"status": qr_state, "laeuft_ab_at": qr.laeuft_ab_at if qr else None,
                "generation": qr.generation if qr else None, "pin_pflicht": bool(qr and qr.pin_pflicht),
                "sitzung_aktiv": bool(qr and qr.token_hash and _aktuelle_sitzung(db, qr)),
-               "qr_druck_at": qr.qr_druck_at if qr else None},
+               "qr_druck_at": qr.qr_druck_at if qr else None,
+               "qr_druck_job_id": qr.qr_druck_job_id if qr else None},
     }

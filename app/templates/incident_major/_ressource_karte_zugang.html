@@ -73,7 +73,7 @@
     <button type="button" class="btn btn--ghost btn--xs" style="color:var(--red);"
             hx-post="{{ basis }}/zugang/widerrufen" hx-target="#ressourceKarteBody" hx-swap="innerHTML"
             hx-confirm="Zugang widerrufen? Der Link und alle Sitzungen werden sofort ungültig."
-            {% if z.zustand not in ("aktiv", "laeuft_bald_ab", "abgelaufen") %}disabled{% endif %}>Zugang widerrufen</button>
+            {% if z.zustand not in ("aktiv", "laeuft_bald_ab", "abgelaufen") %}disabled{% endif %}>Persönlichen Zugang widerrufen</button>
   </div>
   <div class="ressource-zugang__hint">
     Ein neuer Link macht den zuletzt gesendeten Link und aktive Sitzungen sofort ungültig.
@@ -113,5 +113,26 @@
     {% else %}
     <div class="ressource-zugang__hint">Noch kein Versand.</div>
     {% endif %}
+  </div>
+
+  <div class="res-section">
+    <div class="res-section__title">QR-Zugang</div>
+    {% set qr = z.qr %}
+    <div><span class="ressource-zugang__dot ressource-zugang__dot--{{ qr.status }}"></span>
+      <strong>{% if qr.status == "deaktiviert" %}Deaktiviert{% elif qr.status == "kein_zugang" %}Kein QR-Zugang ausgegeben{% elif qr.status == "aktiv" %}Aktiv{% elif qr.status == "abgelaufen" %}Abgelaufen{% else %}Widerrufen{% endif %}</strong>
+      {% if qr.laeuft_ab_at %}<span class="ressource-zugang__hint">· gültig bis {{ qr.laeuft_ab_at|local_datetime }}</span>{% endif %}
+    </div>
+    {% if qr.status == "deaktiviert" %}<div class="ressource-zugang__hint">QR-Zugang ist in den GSL-Einstellungen deaktiviert.</div>{% endif %}
+    {% if qr.status in ("aktiv", "abgelaufen", "widerrufen") %}<div class="ressource-zugang__hint">Sitzungen: {% if qr.sitzung_aktiv %}aktiv{% else %}keine aktive Sitzung{% endif %}</div>{% endif %}
+    {% if qr_job %}<div class="ressource-zugang__hint">Druckstatus: {% if qr_job.status == "queued" %}in Warteschlange{% elif qr_job.status == "sent" %}übergeben{% elif qr_job.status == "done" %}gedruckt{% elif qr_job.status == "failed" %}fehlgeschlagen{% else %}{{ qr_job.status }}{% endif %}{% if qr.qr_druck_at %} · {{ qr.qr_druck_at|local_datetime }}{% endif %}</div>{% else %}<div class="ressource-zugang__hint">Druckstatus: nicht gedruckt</div>{% endif %}
+    <div class="ressource-zugang__actions">
+      {% if qr.status == "kein_zugang" %}<button class="btn btn--primary" hx-post="{{ basis }}/zugang/qr/ausstellen" hx-target="#ressourceKarteBody" hx-swap="innerHTML">QR-Code ausstellen</button>{% endif %}
+      {% if qr.status == "aktiv" %}
+      <button type="button" class="btn btn--secondary" data-qr-zeigen>QR anzeigen</button>
+      <form hx-post="{{ basis }}/zugang/qr/drucken" hx-target="#ressourceKarteBody" hx-swap="innerHTML"><select name="printer_id" class="form-input" aria-label="Drucker wählen">{% for p in qr_drucker %}<option value="{{ p.id }}">{{ p.name }}</option>{% else %}<option value="">Kein Drucker verfügbar</option>{% endfor %}</select><button class="btn btn--secondary" {% if not qr_drucker %}disabled{% endif %}>QR-Code drucken</button></form>
+      <button class="btn btn--ghost" hx-post="{{ basis }}/zugang/qr/ausstellen" hx-vals='{"neu":true}' hx-target="#ressourceKarteBody" hx-swap="innerHTML" hx-confirm="Neuen QR-Code ausstellen? Der alte wird sofort ungültig.">Neuen QR-Code (alter wird ungültig)</button>
+      <button class="btn btn--ghost" style="color:var(--red);" hx-post="{{ basis }}/zugang/qr/widerrufen" hx-target="#ressourceKarteBody" hx-swap="innerHTML" hx-confirm="QR-Zugang widerrufen?">QR widerrufen</button>{% endif %}
+    </div>
+    <div data-qr-vorschau-container></div>
   </div>
 </section>

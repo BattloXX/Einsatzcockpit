@@ -1,0 +1,5 @@
+<div class="ressource-zugang__qr-preview" data-qr-vorschau>
+  <img src="{{ qr_img }}" alt="QR-Code für die Einheit" style="max-width:100%;width:260px;image-rendering:pixelated;">
+  <div>Gültig bis {{ zugang.laeuft_ab_at|local_datetime }}</div>
+  {% if pin %}<div><strong>PIN: {{ pin }}</strong></div>{% endif %}
+</div>

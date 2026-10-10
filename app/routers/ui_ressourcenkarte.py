@@ -1,6 +1,6 @@
 """Detailkarte einer Lage-Einheit."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -12,6 +12,7 @@ from app.core.security import get_author_name
 from app.core.templating import templates
 from app.db import get_db
 from app.models.atemschutz_pruefung import AtemschutzGeraet
+from app.models.gateway import DOC_GSL_EINHEIT_QR, Gateway, Printer, PrintJob
 from app.models.major_incident import (
     AUSSTATTUNG_STATUS,
     EINHEIT_STATUS_COLOR,
@@ -69,13 +70,22 @@ def _gk_name(db: Session, einheit) -> str | None:
 
 
 def _zugang(request: Request, lage, einheit, db: Session, ergebnis=None):
+    status = gk_zugang_service.zugang_status(db, einheit)
+    qr_job = None
+    if status["qr"].get("qr_druck_job_id"):
+        qr_job = db.get(PrintJob, status["qr"]["qr_druck_job_id"])
+    printer = (
+        db.query(Printer).filter(Printer.org_id == lage.org_id, Printer.aktiv.is_(True)).order_by(Printer.name).all()
+    )
     return templates.TemplateResponse(
         request,
         "incident_major/_ressource_karte_zugang.html",
         {
             "lage": lage,
             "einheit": einheit,
-            "zugang": gk_zugang_service.zugang_status(db, einheit),
+            "zugang": status,
+            "qr_job": qr_job,
+            "qr_drucker": printer,
             "karte_gk_name": _gk_name(db, einheit),
             "ergebnis": ergebnis,
         },
@@ -417,10 +427,110 @@ async def zugang_widerrufen(
 ):
     lage, einheit = _context(request, lage_id, einheit_id, db)
     _darf_zugang_verwalten(request, request.state.user)
-    gk_zugang_service.widerrufe(db, einheit.id, grund="manuell", user_id=request.state.user.id)
+    gk_zugang_service.widerrufe(db, einheit.id, grund="manuell", user_id=request.state.user.id, typ="personal")
     db.commit()
     await broadcast_lage(lage.id, {"type": "ressource:changed", "einheit_id": einheit.id})
     return _zugang(request, lage, einheit, db)
+
+
+@router.post("/zugang/qr/ausstellen", response_class=HTMLResponse)
+async def qr_zugang_ausstellen(
+    request: Request, lage_id: int, einheit_id: int, neu: bool = Form(False), db: Session = Depends(get_db),
+    _=Depends(require_role(*_WRITE)),
+):
+    lage, einheit = _context(request, lage_id, einheit_id, db)
+    _darf_zugang_verwalten(request, request.state.user)
+    try:
+        gk_zugang_service.stelle_qr_zugang_aus(
+            db, lage, einheit, user_id=request.state.user.id, grund="manuell", neu=neu
+        )
+        db.commit()
+    except ValueError as exc:
+        return HTMLResponse(str(exc), status_code=422, headers={"Cache-Control": "no-store"})
+    await broadcast_lage(lage.id, {"type": "ressource:changed", "einheit_id": einheit.id})
+    response = _zugang(request, lage, einheit, db)
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@router.post("/zugang/qr/widerrufen", response_class=HTMLResponse)
+async def qr_zugang_widerrufen(
+    request: Request, lage_id: int, einheit_id: int, db: Session = Depends(get_db), _=Depends(require_role(*_WRITE))
+):
+    lage, einheit = _context(request, lage_id, einheit_id, db)
+    _darf_zugang_verwalten(request, request.state.user)
+    gk_zugang_service.widerrufe(db, einheit.id, grund="manuell", user_id=request.state.user.id, typ="qr")
+    db.commit()
+    await broadcast_lage(lage.id, {"type": "ressource:changed", "einheit_id": einheit.id})
+    response = _zugang(request, lage, einheit, db)
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@router.get("/zugang/qr/vorschau", response_class=HTMLResponse)
+def qr_zugang_vorschau(
+    request: Request, lage_id: int, einheit_id: int, db: Session = Depends(get_db), _=Depends(require_role(*_WRITE))
+):
+    from app.services.qr_service import generate_qr_datauri
+    lage, einheit = _context(request, lage_id, einheit_id, db)
+    _darf_zugang_verwalten(request, request.state.user)
+    row = db.query(gk_zugang_service.LageEinheitZugang).filter(
+        gk_zugang_service.LageEinheitZugang.einheit_id == einheit.id,
+        gk_zugang_service.LageEinheitZugang.typ == "qr",
+    ).first()
+    now = datetime.now(UTC).replace(tzinfo=None)
+    if not row or row.status != "aktiv" or not row.laeuft_ab_at or row.laeuft_ab_at <= now:
+        raise HTTPException(404, "Kein aktiver QR-Zugang")
+    link = gk_zugang_service.link_fuer(gk_zugang_service.token_neu_berechnen(row))
+    qr_img = generate_qr_datauri(link, druck=True, box_size=14)
+    html = templates.env.get_template("incident_major/_ressource_karte_qr_vorschau.html").render(
+        zugang=row, qr_img=qr_img, pin=gk_zugang_service.qr_pin_fuer_fuehrung(row), user=request.state.user
+    )
+    return HTMLResponse(html, headers={"Cache-Control": "no-store"})
+
+
+@router.post("/zugang/qr/drucken", response_class=HTMLResponse)
+async def qr_zugang_drucken(
+    request: Request, lage_id: int, einheit_id: int, printer_id: int = Form(...), db: Session = Depends(get_db),
+    _=Depends(require_role(*_WRITE)),
+):
+    from app.services.print_dispatcher import create_print_job, dispatch_job
+    lage, einheit = _context(request, lage_id, einheit_id, db)
+    _darf_zugang_verwalten(request, request.state.user)
+    try:
+        result = gk_zugang_service.stelle_qr_zugang_aus(
+            db, lage, einheit, user_id=request.state.user.id, grund="druck", neu=False
+        )
+    except ValueError as exc:
+        return HTMLResponse(str(exc), status_code=422, headers={"Cache-Control": "no-store"})
+    printer = db.get(Printer, printer_id)
+    gateway = db.get(Gateway, printer.gateway_id) if printer else None
+    if (not printer or printer.org_id != lage.org_id or not printer.aktiv or not gateway
+            or gateway.org_id != lage.org_id or not gateway.is_paired):
+        return HTMLResponse(
+            "Kein gekoppelter, aktiver Drucker verfügbar.", status_code=422, headers={"Cache-Control": "no-store"}
+        )
+    job, _created = create_print_job(
+        db, org_id=lage.org_id, gateway_id=gateway.id, printer_id=printer.id, source="manual",
+        document_type=DOC_GSL_EINHEIT_QR, gsl_id=lage.id,
+        artifact_ref=f"{einheit.id}:{result.generation}", options={}, created_by_id=request.state.user.id,
+    )
+    row = db.query(gk_zugang_service.LageEinheitZugang).filter(
+        gk_zugang_service.LageEinheitZugang.einheit_id == einheit.id,
+        gk_zugang_service.LageEinheitZugang.typ == "qr",
+    ).one()
+    row.qr_druck_at, row.qr_druck_job_id = datetime.now(UTC).replace(tzinfo=None), job.id
+    write_audit(
+        db, "gsl.zugang.qr_gedruckt", org_id=lage.org_id, user_id=request.state.user.id,
+        entity_type="lage_einheit", entity_id=einheit.id,
+        payload={"lage_id": lage.id, "einheit_id": einheit.id, "job_id": job.id},
+    )
+    db.commit()
+    await dispatch_job(db, job)
+    await broadcast_lage(lage.id, {"type": "ressource:changed", "einheit_id": einheit.id})
+    response = _zugang(request, lage, einheit, db)
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @router.post("/zugang/verlaengern", response_class=HTMLResponse)

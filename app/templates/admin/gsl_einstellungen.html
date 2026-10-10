@@ -194,6 +194,13 @@
           <span>Gruppenkommandant darf Personal/Ausstattung pflegen</span>
         </label>
         <div style="border-top:1px solid var(--border);padding-top:14px;">
+          <strong style="display:block;margin-bottom:5px;">QR-Zugang (Ausdruck)</strong>
+          <span style="font-size:.78rem;color:var(--text-muted);display:block;margin-bottom:9px;">Standard: aus. Der PIN wird nie auf dem Ausdruck angezeigt.</span>
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;"><input type="checkbox" name="gk_qr_aktiv" value="1" {% if org_settings.gk_qr_aktiv %}checked{% endif %} style="width:18px;height:18px;"><span>QR-Zugang aktivieren</span></label>
+          <label class="form-label" style="margin-top:10px;display:block;">Gültigkeit (Stunden)<input type="number" name="gk_qr_gueltigkeit_stunden" class="form-input" min="1" max="168" value="{{ org_settings.gk_qr_gueltigkeit_stunden }}"></label>
+          <label style="display:flex;align-items:center;gap:10px;cursor:pointer;"><input type="checkbox" name="gk_qr_pin" value="1" {% if org_settings.gk_qr_pin %}checked{% endif %} style="width:18px;height:18px;"><span>PIN beim QR-Zugang verlangen</span></label>
+        </div>
+        <div style="border-top:1px solid var(--border);padding-top:14px;">
           <strong style="display:block;margin-bottom:5px;">Notbremse</strong>
           <span style="font-size:.78rem;color:var(--text-muted);display:block;margin-bottom:9px;">Alle Zugänge dieser Organisation sofort widerrufen.</span>
           <button type="submit" class="btn btn--danger" formaction="/admin/gsl-einstellungen/zugaenge-widerrufen"

@@ -2715,6 +2715,11 @@ async def gsl_einstellungen_save(
         return _settings_response(
             status_code=422, gk_error="Die Sitzungsdauer darf die Gültigkeit nicht überschreiten."
         )
+    qr_gueltigkeit = _int_or_none("gk_qr_gueltigkeit_stunden")
+    if qr_gueltigkeit is None and "gk_qr_gueltigkeit_stunden" not in form:
+        qr_gueltigkeit = org_settings.gk_qr_gueltigkeit_stunden
+    if qr_gueltigkeit is None or not 1 <= qr_gueltigkeit <= 168:
+        return _settings_response(status_code=422, gk_error="QR-Gültigkeit muss zwischen 1 und 168 Stunden liegen.")
     if gk_nachricht:
         try:
             nachricht_validieren(gk_nachricht)
@@ -2732,7 +2737,7 @@ async def gsl_einstellungen_save(
         "gk_zugang_sms_pin": _bool("gk_zugang_sms_pin"),
         "gk_zugang_ressource_pflegen": _bool("gk_zugang_ressource_pflegen"),
         "gk_qr_aktiv": _bool("gk_qr_aktiv"),
-        "gk_qr_gueltigkeit_stunden": _int_or_none("gk_qr_gueltigkeit_stunden") or 72,
+        "gk_qr_gueltigkeit_stunden": qr_gueltigkeit,
         "gk_qr_pin": _bool("gk_qr_pin"),
     }
     gk_war_aktiv = bool(org_settings.gk_zugang_aktiv)
