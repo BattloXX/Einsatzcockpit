@@ -43,7 +43,7 @@ def _daten(db):
 
 def _eintrag(db, typ):
     db.flush()
-    return db.query(LageJournalEntry).filter_by(ereignis_typ=typ).one()
+    return db.query(LageJournalEntry).filter_by(ereignis_typ=typ).order_by(LageJournalEntry.id.desc()).first()
 
 
 def _ctx(db, einheit, quelle="funk"):
@@ -91,7 +91,7 @@ def test_begonnen_wird_je_dispatch_nur_einmal_geschrieben():
         setze_einheit_status(db, ctx, dispatch, "anfahrt", user_id=1, author_name="Funk")
         setze_einheit_status(db, ctx, dispatch, "vor_ort", user_id=1, author_name="Funk")
         db.flush()
-        eintraege = db.query(LageJournalEntry).filter_by(ereignis_typ="begonnen").all()
+        eintraege = db.query(LageJournalEntry).filter_by(ereignis_typ="begonnen", einheit_id=einheit.id).all()
         assert len(eintraege) == 1
         assert eintraege[0].text == "TLF: Einsatz begonnen (Stelle A)"
 
