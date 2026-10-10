@@ -101,50 +101,11 @@ logger = logging.getLogger("einsatzleiter.major_incident")
 # Pending phone verifications: verify_token → {pin, expires_at, ...}
 _pending_verifications: dict[str, dict] = {}
 
-_MI_FEATURE_KEYS: frozenset[str] = frozenset({
-    "mi_feature_stab", "mi_feature_funkjournal", "mi_feature_meldungen",
-    "mi_feature_sektoren", "mi_feature_karte", "mi_feature_zeitreise", "mi_feature_ressourcen",
-    "mi_feature_uebergreifend", "mi_feature_geraeteverleih",
-})
-
-
 def _get_mi_features(db: Session, org_id: int | None = None) -> dict[str, bool]:
-    """Liest MI-Feature-Flags: OrgSettings (per Org) AND SystemSettings (globaler Master).
+    """Effektive MI-Feature-Flags (SystemSettings AND OrgSettings), siehe mi_feature_service."""
+    from app.services.mi_feature_service import get_mi_features
 
-    Effektiv = SystemSettings[key] AND OrgSettings.mi_feature_*
-    Fehlen OrgSettings-Spalten (Altinstanz), gelten SystemSettings allein.
-    """
-    from app.models.master import OrgSettings as _OS
-    from app.models.master import SystemSettings as _SS
-
-    # Globale Masterschalter (SystemSettings Key-Value)
-    rows = db.query(_SS).filter(_SS.key.in_(_MI_FEATURE_KEYS)).all()
-    global_cfg = {r.key: r.value != "false" for r in rows}
-
-    def _global(key: str) -> bool:
-        return global_cfg.get(key, True)
-
-    # Per-Org-Overrides aus OrgSettings
-    org_settings: _OS | None = None
-    if org_id is not None:
-        org_settings = db.query(_OS).filter_by(org_id=org_id).first()
-
-    def _org(attr: str) -> bool:
-        if org_settings is None:
-            return True
-        return bool(getattr(org_settings, attr, True))
-
-    return {
-        "stab":            _global("mi_feature_stab")           and _org("mi_feature_stab"),
-        "funkjournal":     _global("mi_feature_funkjournal")    and _org("mi_feature_funkjournal"),
-        "meldungen":       _global("mi_feature_meldungen")      and _org("mi_feature_meldungen"),
-        "sektoren":        _global("mi_feature_sektoren")       and _org("mi_feature_sektoren"),
-        "karte":           _global("mi_feature_karte")          and _org("mi_feature_karte"),
-        "zeitreise":       _global("mi_feature_zeitreise")      and _org("mi_feature_zeitreise"),
-        "ressourcen":      _global("mi_feature_ressourcen")     and _org("mi_feature_ressourcen"),
-        "uebergreifend":   _global("mi_feature_uebergreifend")  and _org("mi_feature_uebergreifend"),
-        "geraeteverleih":  _global("mi_feature_geraeteverleih") and _org("mi_feature_geraeteverleih"),
-    }
+    return get_mi_features(db, org_id)
 
 
 PHASE_ORDER = [

@@ -97,3 +97,20 @@ Neue Versionen können über `/admin/system/update` per ZIP-Upload eingespielt w
 `/admin/about` — Versions-Info, Autoren, Changelog.
 
 Zugänglich für alle angemeldeten Benutzer.
+
+
+---
+
+## GSL: Gruppenkommandanten-Zugang
+
+Unter **Einstellungen → Großschadenslage** steuert die Karte „Gruppenkommandanten-Zugang“:
+
+| Einstellung | Wirkung |
+|---|---|
+| Zugang aktiv | Hauptschalter, standardmäßig **aus**. Ausschalten widerruft alle bestehenden Zugänge der Organisation. |
+| Nachrichtenvorlage | Text für SMS und Kopieren, mit Platzhaltern, Live-Zähler der SMS-Segmente und Vorschau. Der Link wird in Protokollen geschwärzt. |
+| Automatisch senden | SMS beim Zuweisen eines Gruppenkommandanten (einmal pro GK/Nummer). Im Übungsbetrieb wird keine echte SMS gesendet. |
+| Gültigkeit, Limits | Laufzeit des Links und der Sitzung, Versandlimits. |
+| SMS-PIN | Optionaler zweiter Faktor beim Einlösen; Sperre nach Fehlversuchen. |
+| Ressourcen pflegen | Erlaubt dem GK, Personal und Ausstattung der eigenen Einheit zu ändern. |
+| Notbremse | Widerruft sofort alle Zugänge der Lage/Organisation. |

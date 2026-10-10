@@ -13,6 +13,24 @@ MCP ist zweistufig aktiviert:
 
 Zusatzlich gilt das jeweilige Fachmodul: Objekt-Werkzeuge brauchen die aktivierte Objektverwaltung, Kontakt-Werkzeuge das Kontakte-Modul und Fahrtenbuch-Werkzeuge das aktivierte Fahrtenbuch. Deaktivierte Werkzeuge werden nicht angeboten.
 
+### GSL-Ressourcen
+
+Bei aktivem GSL-Ressourcenmodul (`mi_feature_ressourcen`) stehen folgende Werkzeuge für Lagen der eigenen Organisation zur Verfügung. Lesen dürfen `incident_leader`, `admin`, `recorder` und `readonly`; Änderungen dürfen `incident_leader`, `admin` und `recorder`.
+
+| Werkzeug | Zweck | Rolle |
+|---|---|---|
+| `gsl_ressourcen_liste` | Ressourcen einer Lage auflisten | Lesen |
+| `gsl_ressource_details` | Kartendetails, Einsätze, Journal, Personal und Ausstattung lesen | Lesen |
+| `gsl_ressource_aktualisieren` | Status, Abschnitt und Stammdaten ändern | Ändern |
+| `gsl_ressource_fuehrer_setzen` | Gruppenkommandant oder Stellvertretung setzen | Ändern |
+| `gsl_ressource_zugang_senden` | Zugang nach Bestätigung ausschließlich per SMS senden | Ändern |
+| `gsl_ressource_zugang_widerrufen` | Gruppenkommandanten-Zugang widerrufen | Ändern |
+| `gsl_ressource_journal` | Ressourcenjournal lesen oder manuellen Eintrag erfassen | Lesen / Ändern |
+| `gsl_ressource_personal` | Personal lesen oder mit den vorhandenen Service-Aktionen pflegen | Lesen / Ändern |
+| `gsl_ressource_ausstattung` | Ausstattung lesen oder mit den vorhandenen Service-Aktionen pflegen | Lesen / Ändern |
+
+MCP-Antworten enthalten niemals Zugangstoken, Links, Token-Hashes oder PINs. Der SMS-Versand liefert nur Versandstatus und -protokoll. Telefonnummern sind für reine Leser maskiert. Schreibvorgänge benötigen eine aktive Lage.
+
 Ist das Straßensperren-Modul aktiviert, erhalten alle Benutzer die lesenden Tools `strassensperren_liste`, `strassensperre_lesen`, `strassensperren_kataloge`, `strassensperren_suchen`, `strassensperren_im_gebiet`, `strassensperren_kennzahlen`, `einsatz_strassensperren`, `einsatz_anfahrtsroute_pruefen` und `strassensperren_entlang_route`. `objekt_verwalter` erhalten zusätzlich `strassensperre_anlegen`, `strassensperre_aktualisieren`, `strassensperre_deaktivieren`, `strassensperre_reaktivieren`, `strassensperre_beenden`, `strassensperre_teams_senden`, `strassensperre_freigabelink`, `strassensperre_geometrie_ermitteln`, `strassensperre_geometrie_bestaetigen`, `strassensperre_dokument_upload_vorbereiten`, `strassensperre_dokument_uebergeben` und `strassensperre_entwurf_aus_pdf`; Löschen ist per MCP nicht verfügbar. Erkennt das Anlegen eine wahrscheinliche Verlängerung, Änderung oder Dublette (gleicher Abschnitt mit überlappendem oder bis zu 14 Tage anschließendem Zeitraum oder gleiches Aktenzeichen), liefert es `possible_update` mit Kandidaten und fertigen `felder` für `strassensperre_aktualisieren`. Alternativ ersetzt `ersetzt_road_closure_id` die alte Sperre (sie wird deaktiviert und verlinkt), oder `als_neu_bestaetigt=true` legt bewusst zusätzlich an (`duplikat_bestaetigt` bleibt als Alias). Anlegen und relevante Adressänderungen liefern zusätzlich `adressvalidierung` mit dem OSM-Prüfstatus. Empfohlener Ablauf für eine behördliche Verordnung: `strassensperre_entwurf_aus_pdf` → Felder prüfen → `strassensperre_anlegen` (ermittelt den Abschnitt aus OSM) → bei Qualität ≠ hoch `strassensperre_geometrie_bestaetigen` → `strassensperre_dokument_uebergeben`. Erlaubte Werte liefert `strassensperren_kataloge`.
 
 ## Reverse-Proxy und Konfiguration
