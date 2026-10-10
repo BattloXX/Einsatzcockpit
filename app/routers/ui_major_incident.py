@@ -5010,6 +5010,7 @@ async def lage_einheit_kommandant(
     request: Request,
     lage_id: int,
     einheit_id: int,
+    background_tasks: BackgroundTasks,
     commander_label: str = Form(""),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
@@ -5024,7 +5025,7 @@ async def lage_einheit_kommandant(
         raise HTTPException(status_code=404)
     try:
         if name:
-            resource_service.setze_gruppenkommandant(
+            ergebnis = resource_service.setze_gruppenkommandant(
                 db, lage, einheit, person_name=name,
                 user_id=user.id, author_name=get_author_name(request),
             )
@@ -5035,6 +5036,9 @@ async def lage_einheit_kommandant(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     db.commit()
+    if name and ergebnis.auto_sms:
+        from app.services.gk_zugang_service import sende_auto_sms
+        background_tasks.add_task(sende_auto_sms, ergebnis.auto_sms)
     await broadcast_lage(lage_id, {"type": "ressource:changed", "einheit_id": einheit_id})
     return Response(status_code=204)
 
@@ -5169,6 +5173,7 @@ async def lage_einheit_fuehrer(
     request: Request,
     lage_id: int,
     einheit_id: int,
+    background_tasks: BackgroundTasks,
     person_name: str = Form(""),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
@@ -5185,13 +5190,16 @@ async def lage_einheit_fuehrer(
     if not einheit or einheit.lage_id != lage_id:
         raise HTTPException(status_code=404)
     try:
-        resource_service.setze_gruppenkommandant(
+        ergebnis = resource_service.setze_gruppenkommandant(
             db, lage, einheit, person_name=name,
             user_id=user.id, author_name=get_author_name(request),
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     db.commit()
+    if ergebnis.auto_sms:
+        from app.services.gk_zugang_service import sende_auto_sms
+        background_tasks.add_task(sende_auto_sms, ergebnis.auto_sms)
     await broadcast_lage(lage_id, {"type": "ressource:changed", "einheit_id": einheit_id})
     return RedirectResponse(f"/lage/{lage_id}/ressourcen", status_code=303)
 

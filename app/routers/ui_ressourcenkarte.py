@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy.orm import Session
 
@@ -373,11 +373,11 @@ def _journal_error(text: str) -> HTMLResponse:
     return HTMLResponse(text, status_code=422, headers={"HX-Retarget": "#journalFehler", "HX-Reswap": "innerHTML"})
 
 
-async def _save(request: Request, lage, einheit, db: Session, action: str, callback):
+async def _save(request: Request, lage, einheit, db: Session, action: str, callback, after_commit=None):
     if not _can_edit(request.state.user):
         raise HTTPException(403, "Keine Bearbeitungsberechtigung")
     try:
-        callback()
+        result = callback()
     except ValueError as exc:
         return _error(str(exc))
     write_audit(
@@ -390,6 +390,8 @@ async def _save(request: Request, lage, einheit, db: Session, action: str, callb
         payload={"lage_id": lage.id, "einheit_id": einheit.id},
     )
     db.commit()
+    if after_commit:
+        after_commit(result)
     await broadcast_lage(lage.id, {"type": "ressource:changed", "einheit_id": einheit.id})
     response = _overview(request, lage, einheit, db)
     response.headers["HX-Retarget"] = "#ressourceKarteBody"
@@ -403,6 +405,7 @@ async def gruppenkommandant(
     request: Request,
     lage_id: int,
     einheit_id: int,
+    background_tasks: BackgroundTasks,
     member_id: int | None = Form(None),
     person_name: str | None = Form(None),
     telefon: str | None = Form(None),
@@ -429,6 +432,10 @@ async def gruppenkommandant(
             note=note,
             user_id=request.state.user.id,
             author_name=get_author_name(request),
+        ),
+        after_commit=lambda ergebnis: (
+            background_tasks.add_task(gk_zugang_service.sende_auto_sms, ergebnis.auto_sms)
+            if ergebnis.auto_sms else None
         ),
     )
 

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from sqlalchemy import and_, case, func
 from sqlalchemy.orm import Session, joinedload
@@ -29,6 +29,9 @@ from app.models.major_incident import (
     SiteLogEntry,
 )
 from app.models.master import Member
+
+if TYPE_CHECKING:
+    from app.services.gk_zugang_service import AutoSmsAuftrag
 
 # ── Status-Konstanten ─────────────────────────────────────────────────────────
 
@@ -967,6 +970,7 @@ class GkErgebnis:
     aenderung: Literal["keine", "korrektur", "wechsel", "neu", "telefon"]
     leader: LageEinheitLeader | None
     zugang_gesperrt: bool = False
+    auto_sms: AutoSmsAuftrag | None = None
 
 
 def _fuehrungseingabe(
@@ -1073,7 +1077,9 @@ def setze_gruppenkommandant(
             from app.services.gk_zugang_service import widerrufe
 
             widerrufe(db, einheit.id, grund="telefon", user_id=user_id)
-            return GkErgebnis(aenderung="telefon", leader=old, zugang_gesperrt=True)
+            from app.services.gk_zugang_service import plane_auto_sms
+            return GkErgebnis(aenderung="telefon", leader=old, zugang_gesperrt=True,
+                              auto_sms=plane_auto_sms(db, lage, einheit, old, "telefon"))
         return GkErgebnis(aenderung="korrektur", leader=old)
 
     predecessor_id = old.id if old else None
@@ -1121,7 +1127,9 @@ def setze_gruppenkommandant(
         ereignis_typ=ereignis_typ,
         quelle=quelle,
     )
-    return GkErgebnis(aenderung=aenderung, leader=new_leader, zugang_gesperrt=old is not None)
+    from app.services.gk_zugang_service import plane_auto_sms
+    return GkErgebnis(aenderung=aenderung, leader=new_leader, zugang_gesperrt=old is not None,
+                      auto_sms=plane_auto_sms(db, lage, einheit, new_leader, aenderung))
 
 
 def setze_stellvertreter(

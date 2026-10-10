@@ -1,5 +1,13 @@
 {% extends "admin/_layout.html" %}
 {% block title %}GSL-Einstellungen{% endblock %}
+{% block head_extra %}
+{{ super() }}
+<style>
+@media (max-width: 760px) {
+  .gk-zugang-zahlen { grid-template-columns: 1fr !important; }
+}
+</style>
+{% endblock %}
 
 {% block admin_content %}
 <div class="page-content">
@@ -11,6 +19,7 @@
   </div>
 
   {% if saved %}<div class="alert alert--success" style="margin-bottom:16px;">Einstellungen gespeichert.</div>{% endif %}
+  {% if widerrufen_anzahl is not none %}<div class="alert alert--success" style="margin-bottom:16px;">{{ widerrufen_anzahl }} Zugänge widerrufen.</div>{% endif %}
 
   <form method="post" action="/admin/gsl-einstellungen">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
@@ -120,6 +129,82 @@
     </div>
 
     <!-- ── Allgemein ──────────────────────────────────────────────────── -->
+    <!-- ── Gruppenkommandanten-Zugang ─────────────────────────────────── -->
+    <div class="card" style="margin-bottom:20px;" id="gk-zugang-einstellungen"
+         data-standard-nachricht='{{ gk_standardnachricht|tojson }}' data-base-url="{{ gk_base_url }}">
+      <div class="card__header" style="padding:12px 16px;border-bottom:1px solid var(--border);">
+        <strong>Gruppenkommandanten-Zugang</strong>
+        <span style="font-size:.78rem;color:var(--text-muted);margin-left:8px;">Zugang zum Einheitenmodus per SMS-Link</span>
+      </div>
+      <div style="padding:16px;display:flex;flex-direction:column;gap:14px;">
+        {% if gk_error %}<div class="alert alert--error">{{ gk_error }}</div>{% endif %}
+        {% if gk_warning %}<div class="alert alert--warn">{{ gk_warning }}</div>{% endif %}
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+          <input type="checkbox" name="gk_zugang_aktiv" value="1" {% if org_settings.gk_zugang_aktiv %}checked{% endif %}
+                 style="width:18px;height:18px;">
+          <span>Gruppenkommandanten-Zugang aktivieren</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+          <input type="checkbox" name="gk_zugang_auto_sms" value="1" {% if org_settings.gk_zugang_auto_sms %}checked{% endif %}
+                 style="width:18px;height:18px;">
+          <span>SMS bei Gruppenkommandanten-Zuweisung automatisch versenden</span>
+        </label>
+        <span style="font-size:.78rem;color:var(--text-muted);margin-top:-9px;">Nur wirksam, wenn der Gesamtschalter aktiviert ist.</span>
+        <div class="form-group">
+          <label class="form-label" for="gk-zugang-nachricht">Nachrichtenvorlage</label>
+          <span style="font-size:.78rem;color:var(--text-muted);display:block;margin-bottom:6px;">Platzhalter: {lage}, {einheit}, {gruppenkommandant}, {link}</span>
+          <textarea id="gk-zugang-nachricht" name="gk_zugang_nachricht" class="form-input" rows="6"
+                    placeholder="{{ gk_standardnachricht }}">{{ org_settings.gk_zugang_nachricht or '' }}</textarea>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:7px;">
+            <button type="button" class="btn btn--secondary" id="gk-standard-wiederherstellen">Standard wiederherstellen</button>
+            <span id="gk-sms-zaehler" style="font-size:.82rem;color:var(--text-muted);"></span>
+          </div>
+          <div id="gk-sms-warnung" class="alert alert--warn" style="display:none;margin-top:8px;"></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Vorschau</label>
+          <pre id="gk-nachricht-vorschau" class="form-input" style="white-space:pre-wrap;min-height:90px;margin:0;"></pre>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;" class="gk-zugang-zahlen">
+          <div class="form-group">
+            <label class="form-label">Gültigkeit (Stunden)</label>
+            <input type="number" name="gk_zugang_gueltigkeit_stunden" class="form-input" min="1" max="168"
+                   value="{{ org_settings.gk_zugang_gueltigkeit_stunden }}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Sitzungsdauer (Stunden)</label>
+            <input type="number" name="gk_sitzung_stunden" class="form-input" min="1" max="72"
+                   value="{{ org_settings.gk_sitzung_stunden }}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Max. Sitzungen</label>
+            <input type="number" name="gk_zugang_max_sitzungen" class="form-input" min="1" max="5"
+                   value="{{ org_settings.gk_zugang_max_sitzungen }}">
+          </div>
+        </div>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+          <input type="checkbox" name="gk_zugang_sms_pin" value="1" {% if org_settings.gk_zugang_sms_pin %}checked{% endif %}
+                 style="width:18px;height:18px;">
+          <span>SMS-Bestätigungscode beim Öffnen</span>
+        </label>
+        <span style="font-size:.78rem;color:var(--text-muted);margin-top:-9px;">Empfohlen, wenn Links in Chatgruppen geteilt werden; benötigt einen SMS-Anbieter.</span>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+          <input type="checkbox" name="gk_zugang_ressource_pflegen" value="1" {% if org_settings.gk_zugang_ressource_pflegen %}checked{% endif %}
+                 style="width:18px;height:18px;">
+          <span>Gruppenkommandant darf Personal/Ausstattung pflegen</span>
+        </label>
+        <div style="border-top:1px solid var(--border);padding-top:14px;">
+          <strong style="display:block;margin-bottom:5px;">Notbremse</strong>
+          <span style="font-size:.78rem;color:var(--text-muted);display:block;margin-bottom:9px;">Alle Zugänge dieser Organisation sofort widerrufen.</span>
+          <button type="submit" class="btn btn--danger" formaction="/admin/gsl-einstellungen/zugaenge-widerrufen"
+                  formmethod="post" onclick="return confirm('Wirklich alle Gruppenkommandanten-Zugänge widerrufen?');">
+            Alle Zugänge dieser Organisation widerrufen
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Allgemein ──────────────────────────────────────────────────── -->
     <div class="card" style="margin-bottom:20px;">
       <div class="card__header" style="padding:12px 16px;border-bottom:1px solid var(--border);">
         <strong>Allgemein</strong>
@@ -139,4 +224,8 @@
     </div>
   </form>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/gk_einstellungen.js?v={{ ASSET_VERSION }}"></script>
 {% endblock %}

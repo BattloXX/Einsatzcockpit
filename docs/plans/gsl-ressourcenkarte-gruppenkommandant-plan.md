@@ -1087,3 +1087,12 @@ GK-2.1 bis GK-2.5 umgesetzt, Gate GK-2.6 durchlaufen. Abweichungen vom Plan:
 - `zugang_status()` liefert zusätzlich `sitzung_aktiv`; der Client fragt vor einer Rotation nach, wenn der Gruppenkommandant gerade angemeldet ist.
 - Die automatische SMS (`sende_auto_sms`) und der Auto-Pfad in `setze_gruppenkommandant` kommen mit GK-3.2.
 - Browser-Smoketest (Chromium): `/gk#<token>` → Fragment wird entfernt → Einlösung → `/einheit` mit Banner und Auftrag, WebSocket online.
+
+### Phase 2 – abgeschlossen am 2026-10-10 (PR #496)
+
+GK-2.1 bis GK-2.6 gemergt. Der Schalter `gk_zugang_aktiv` bleibt standardmäßig aus.
+
+### Phase 3 – GSL-Konfiguration (Branch `feat/gsl-gk-phase3`)
+
+- GK-3.1: Karte „Gruppenkommandanten-Zugang“ in `admin/gsl_einstellungen.html` (Schalter, Vorlage mit Live-Zähler und Vorschau, Limits, SMS-PIN, Ressourcenpflege, Notbremse). Ausschalten des Gesamtschalters widerruft alle Zugänge der Organisation.
+- GK-3.2: Automatischer Versand. `plane_auto_sms` legt Zugang und Outbox-Zeile (`auto_schluessel`) in der Transaktion der Zuweisung an, `sende_auto_sms` versendet nach dem Commit ohne Wiederholung. Die Aufräumschleife `gk_versand_aufraeum_loop` markiert hängende Einträge nach 2 Minuten als fehlgeschlagen.
