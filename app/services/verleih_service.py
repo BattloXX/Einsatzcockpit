@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import io
+import logging
 import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -22,6 +23,7 @@ from app.models.verleih import (
 )
 
 _VERLEIH_FOTO_DIR = "app_storage/verleih_fotos"
+logger = logging.getLogger("einsatzleiter.verleih")
 
 
 def _foto_dir(ausleihe_id: int, org_id: int | None = None) -> Path:
@@ -141,6 +143,9 @@ def create_ausleihe(
     user_id: int | None,
     pin: str | None = None,
     notizen: str | None = None,
+    quelle: str = "verleih",
+    einheit_id: int | None = None,
+    created_by_name: str | None = None,
 ) -> VerleihAusleihe:
     org = get_org_settings(db, org_id)
     erinnerung_stunden = org.gsl_verleih_erinnerung_stunden if org else None
@@ -155,6 +160,9 @@ def create_ausleihe(
         pin=pin or None,
         notizen=notizen or None,
         created_by_user_id=user_id,
+        quelle=quelle,
+        einheit_id=einheit_id,
+        created_by_name=created_by_name,
     )
     if erinnerung_stunden:
         ausleihe.erinnerung_geplant_at = datetime.now(UTC) + timedelta(hours=erinnerung_stunden)
@@ -252,6 +260,119 @@ def return_all(db: Session, ausleihe_id: int) -> VerleihAusleihe:
     return ausleihe
 
 
+def _positionen_text(positionen: list[VerleihPosition]) -> str:
+    return ", ".join(
+        f"{p.menge}× {p.bezeichnung}" if p.menge != 1 else p.bezeichnung
+        for p in positionen
+    )
+
+
+def material_an_einsatzstelle(
+    db: Session,
+    *,
+    lage,
+    site,
+    positionen: list[dict],
+    name: str | None,
+    telefon: str | None,
+    adresse: str | None,
+    notizen: str | None,
+    einheit,
+    quelle: str,
+    user_id: int | None,
+    author_name: str | None,
+    pin: str | None = None,
+) -> VerleihAusleihe:
+    """Hinterlaesst Material an einer Einsatzstelle samt Chronikeintrag."""
+    if site.major_incident_id != lage.id or site.org_id != lage.org_id:
+        raise ValueError("Einsatzstelle gehoert nicht zur Lage")
+
+    name = (name or "").strip() or f"Vor Ort – {site.bezeichnung}"[:200]
+    adresse = (adresse or "").strip()
+    if not adresse:
+        strasse = " ".join(part for part in (site.strasse, site.hausnr) if part)
+        adresse = ", ".join(part for part in (strasse, site.ort) if part)
+
+    katalog_erlaubt = einheit is None or einheit.is_from_org
+    bereinigte_positionen = []
+    for position in positionen:
+        bezeichnung = str(position.get("bezeichnung") or "").strip()
+        if not bezeichnung:
+            continue
+        artikel_id = position.get("artikel_id") if katalog_erlaubt else None
+        if artikel_id:
+            artikel = db.get(VerleihArtikel, artikel_id)
+            if artikel is None or artikel.org_id != lage.org_id:
+                artikel_id = None
+        try:
+            menge = int(position.get("menge", 1))
+        except (TypeError, ValueError):
+            menge = 1
+        bereinigte_positionen.append({
+            "bezeichnung": bezeichnung,
+            "artikel_nr": position.get("artikel_nr") or None,
+            "artikel_id": artikel_id,
+            "menge": max(1, min(9999, menge)),
+        })
+    if not bereinigte_positionen:
+        raise ValueError("Mindestens eine Position erforderlich")
+
+    ausleihe = create_ausleihe(
+        db=db,
+        lage_id=lage.id,
+        org_id=lage.org_id,
+        name=name,
+        adresse=adresse or None,
+        telefon=telefon,
+        site_id=site.id,
+        positionen=bereinigte_positionen,
+        user_id=user_id,
+        pin=pin,
+        notizen=notizen,
+        quelle=quelle,
+        einheit_id=getattr(einheit, "id", None),
+        created_by_name=author_name,
+    )
+    from app.models.major_incident import SiteLogEntry
+
+    db.add(SiteLogEntry(
+        incident_site_id=site.id,
+        kind="massnahmen",
+        text=f"Material belassen: {_positionen_text(ausleihe.positionen)} (Empfänger: {name})",
+        einheit_id=getattr(einheit, "id", None),
+        author_name=author_name,
+        user_id=user_id,
+    ))
+    db.commit()
+    db.refresh(ausleihe)
+    return ausleihe
+
+
+def material_zuruecknehmen(
+    db: Session,
+    ausleihe: VerleihAusleihe,
+    *,
+    author_name: str | None,
+    user_id: int | None,
+    einheit_id: int | None,
+) -> VerleihAusleihe:
+    """Nimmt alles Material zurueck und dokumentiert dies an der Einsatzstelle."""
+    ausleihe = return_all(db, ausleihe.id)
+    if ausleihe.site_id:
+        from app.models.major_incident import SiteLogEntry
+
+        db.add(SiteLogEntry(
+            incident_site_id=ausleihe.site_id,
+            kind="massnahmen",
+            text=f"Material zurückgenommen: {_positionen_text(ausleihe.positionen)}",
+            einheit_id=einheit_id,
+            author_name=author_name,
+            user_id=user_id,
+        ))
+        db.commit()
+    return ausleihe
+
+
 def generate_pin() -> str:
     return str(secrets.randbelow(1_000_000)).zfill(6)
 
@@ -271,7 +392,59 @@ def get_sms_ausleih_text(db: Session, org_id: int, ausleihe: VerleihAusleihe) ->
         "Das Material ({artikel}) wurde an Sie ausgeliehen. "
         "Bitte bringen Sie es schnellstmoeglich zurueck. - {org}"
     )
-    return template.replace("{artikel}", artikel).replace("{org}", org_name).replace("{name}", ausleihe.name)
+    site = ausleihe.site
+    stelle = site.bezeichnung if site is not None else ""
+    return (template.replace("{artikel}", artikel).replace("{org}", org_name)
+            .replace("{name}", ausleihe.name).replace("{stelle}", stelle))
+
+
+async def sende_material_sms(ausleihe_id: int, org_id: int, pin_senden: bool) -> bool:
+    """Versendet die Ausleih-SMS best effort und protokolliert das Ergebnis."""
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+    from app.models.major_incident import SiteLogEntry
+    from app.services.sms_service import send_sms
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    site_id: int | None = None
+    try:
+        ausleihe = db.get(VerleihAusleihe, ausleihe_id)
+        if ausleihe is None or ausleihe.org_id != org_id or not ausleihe.telefon:
+            return False
+        site_id = ausleihe.site_id
+        set_tenant_context(db, org_id)
+        text = get_sms_ausleih_text(db, org_id, ausleihe)
+        if pin_senden and ausleihe.pin:
+            text += f" PIN: {ausleihe.pin}"
+        erfolgreich = bool(await send_sms(org_id, ausleihe.telefon, text))
+        if erfolgreich:
+            ausleihe.sms_ausleih_gesendet = True
+        if ausleihe.site_id:
+            db.add(SiteLogEntry(
+                incident_site_id=ausleihe.site_id,
+                kind="massnahmen",
+                text="SMS an Empfänger gesendet" if erfolgreich else "SMS an Empfänger fehlgeschlagen",
+            ))
+        db.commit()
+        return erfolgreich
+    except Exception:
+        db.rollback()
+        logger.exception("Material-SMS fehlgeschlagen: Ausleihe %s", ausleihe_id)
+        if site_id:
+            try:
+                db.add(SiteLogEntry(
+                    incident_site_id=site_id,
+                    kind="massnahmen",
+                    text="SMS an Empfänger fehlgeschlagen",
+                ))
+                db.commit()
+            except Exception:
+                db.rollback()
+                logger.exception("SMS-Fehler konnte nicht in der Chronik gespeichert werden")
+        return False
+    finally:
+        db.close()
 
 
 async def save_verleih_foto(
@@ -280,6 +453,7 @@ async def save_verleih_foto(
     org_id: int | None,
     user_id: int | None,
     db: Session,
+    author_name: str | None = None,
 ) -> VerleihFoto:
     from app.config import settings
     data = await file.read()
@@ -321,6 +495,7 @@ async def save_verleih_foto(
         original_filename=(file.filename or "foto.jpg")[:255],
         bytes=stored_bytes,
         uploaded_by=user_id,
+        author_name=author_name,
     )
     db.add(foto)
     db.commit()

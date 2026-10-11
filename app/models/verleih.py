@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import enum
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     BigInteger,
@@ -23,6 +24,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.tenant import TenantScoped
 from app.db import Base
 from app.models.major_incident import IncidentSite
+
+if TYPE_CHECKING:
+    from app.models.major_incident import LageEinheit
 
 
 class VerleihStatus(enum.StrEnum):
@@ -148,6 +152,10 @@ class VerleihAusleihe(TenantScoped, Base):
     site_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("incident_site.id", ondelete="SET NULL"), nullable=True
     )
+    quelle: Mapped[str] = mapped_column(String(12), nullable=False, default="verleih", server_default="verleih")
+    einheit_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("lage_einheit.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     adresse: Mapped[str | None] = mapped_column(String(300), nullable=True)
     telefon: Mapped[str | None] = mapped_column(String(50), nullable=True)
@@ -164,6 +172,7 @@ class VerleihAusleihe(TenantScoped, Base):
     created_by_user_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
     )
+    created_by_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC)
@@ -176,6 +185,7 @@ class VerleihAusleihe(TenantScoped, Base):
         back_populates="ausleihe", cascade="all, delete-orphan", order_by="VerleihFoto.id"
     )
     site: Mapped[IncidentSite | None] = relationship("IncidentSite", lazy="joined", viewonly=True)
+    einheit: Mapped[LageEinheit | None] = relationship("LageEinheit", viewonly=True, lazy="select")
 
     __table_args__ = (
         Index("ix_verleih_ausleihe_lage", "lage_id"),
@@ -236,6 +246,7 @@ class VerleihFoto(Base):
     uploaded_by: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
     )
+    author_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
 
     ausleihe: Mapped[VerleihAusleihe] = relationship(back_populates="fotos")
 
