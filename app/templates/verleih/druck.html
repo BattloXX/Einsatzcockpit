@@ -141,9 +141,15 @@
     </div>
     {% endif %}
     {% if site %}
-    <div class="info-row">
+    <div class="info-row info-row--wide">
       <span class="info-row__label">Einsatzstelle</span>
-      <span class="info-row__value">{{ site.bezeichnung }}</span>
+      <span class="info-row__value">{{ site.bezeichnung }}{% if site.strasse or site.hausnr or site.ort %}<br>{{ site.strasse or '' }}{% if site.hausnr %} {{ site.hausnr }}{% endif %}{% if site.ort %}{% if site.strasse or site.hausnr %}, {% endif %}{{ site.ort }}{% endif %}{% endif %}</span>
+    </div>
+    {% endif %}
+    {% if a.einheit %}
+    <div class="info-row">
+      <span class="info-row__label">Einheit</span>
+      <span class="info-row__value">{{ a.einheit.label }}{% if a.einheit.org_name %} ({{ a.einheit.org_name }}){% endif %}</span>
     </div>
     {% endif %}
   </div>

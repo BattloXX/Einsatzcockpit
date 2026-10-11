@@ -145,12 +145,13 @@ export function createOutbox({
         const url = eintrag.typ.startsWith("ressource_")
           ? `/einheit/api/ressource/${eintrag.typ.slice("ressource_".length)}`
           : `/einheit/api/auftrag/${eintrag.dispatch_id}/${eintrag.typ}`;
-        if (eintrag.typ === "foto") {
+        if (eintrag.typ === "foto" || eintrag.typ === "material_foto") {
           const form = new FormData();
           form.append("file", eintrag.blob, eintrag.dateiname || "foto");
           form.append("client_uuid", eintrag.client_uuid);
           form.append("erfasst_at", eintrag.erfasst_at);
-          form.append("kommentar", eintrag.payload?.kommentar || "");
+          if (eintrag.typ === "foto") form.append("kommentar", eintrag.payload?.kommentar || "");
+          if (eintrag.typ === "material_foto") form.append("material_client_uuid", eintrag.payload?.material_client_uuid || "");
           form.append("_csrf", csrfToken());
           response = await fetch(url, { method: "POST", headers: header(), body: form, credentials: "same-origin" });
         } else {
@@ -176,6 +177,7 @@ export function createOutbox({
       try { antwort = await response.json(); } catch { antwort = null; }
       if (response.ok && response.headers.get("X-EC-Offline") !== "1" && antwort?.aktion_id) {
         await bestaetigen(eintrag, antwort);
+        if (eintrag.typ === "material") void fotoSpurFlushen();
         return "weiter";
       }
       const code = antwort?.code || `http_${response.status}`;
@@ -186,6 +188,7 @@ export function createOutbox({
       }
       if (response.status === 409 || response.status === 403 || response.status === 404) {
         await setze(eintrag, { status: "konflikt", letzter_fehler: code, naechster_versuch_at: null });
+        if (eintrag.typ === "material") void fotoSpurFlushen();
         return "weiter";
       }
       if (response.status >= 500 || response.status === 408 || response.status === 429 || response.ok) {
@@ -197,6 +200,7 @@ export function createOutbox({
         return "blockiert";
       }
       await setze(eintrag, { status: "fehler", letzter_fehler: code, naechster_versuch_at: null });
+      if (eintrag.typ === "material") void fotoSpurFlushen();
       return "weiter";
     } finally {
       inBearbeitung.delete(eintrag.client_uuid);
@@ -206,7 +210,7 @@ export function createOutbox({
   async function statusSpurenFlushen() {
     const eintraege = (await alle("outbox")).sort((a, b) => a.seq - b.seq);
     const spuren = new Map();
-    for (const eintrag of eintraege.filter((item) => item.typ !== "foto" && (item.status === "ausstehend" || item.status === "fehler_netz"))) {
+    for (const eintrag of eintraege.filter((item) => !["foto", "material_foto"].includes(item.typ) && (item.status === "ausstehend" || item.status === "fehler_netz"))) {
       const key = String(eintrag.dispatch_id);
       if (!spuren.has(key)) spuren.set(key, []);
       spuren.get(key).push(eintrag);
@@ -221,7 +225,19 @@ export function createOutbox({
 
   async function fotoSpurFlushen() {
     const eintraege = (await alle("outbox")).sort((a, b) => a.seq - b.seq);
-    const fotos = eintraege.filter((item) => item.typ === "foto" && faellig(item) && !inBearbeitung.has(item.client_uuid));
+    const fotos = [];
+    for (const eintrag of eintraege) {
+      if (!["foto", "material_foto"].includes(eintrag.typ) || !faellig(eintrag) || inBearbeitung.has(eintrag.client_uuid)) continue;
+      if (eintrag.typ === "material_foto") {
+        const material = eintraege.find((item) => item.client_uuid === eintrag.payload?.material_client_uuid);
+        if (material?.status === "konflikt" || material?.status === "fehler") {
+          await setze(eintrag, { status: "konflikt", letzter_fehler: "material_nicht_angelegt", naechster_versuch_at: null });
+          continue;
+        }
+        if (material) continue;
+      }
+      fotos.push(eintrag);
+    }
     await Promise.all(fotos.map(senden));
   }
 
@@ -261,7 +277,7 @@ export function createOutbox({
 
   return {
     async erfassen({ typ, dispatch_id, einheit_id, auftrag_version, payload = {}, blob = null, dateiname = null }) {
-      if (!new Set(["status", "meldung", "foto", "ressource_personal", "ressource_ausstattung"]).has(typ)) {
+      if (!new Set(["status", "meldung", "foto", "material", "material_zurueck", "material_foto", "ressource_personal", "ressource_ausstattung"]).has(typ)) {
         throw new Error("ungueltiger_typ");
       }
       const alte = await lesen("meta", "seq");

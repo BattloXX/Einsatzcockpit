@@ -89,3 +89,7 @@ Das System kann automatisch **SMS-Erinnerungen** an Empfänger mit offenen Ausle
 - Manuelle Erinnerung ist über die Ausleihe-Detailseite jederzeit möglich
 
 → Siehe [Installation SMS-Gateway](Installation-SMS-Gateway)
+
+### SMS-Variable für Einsatzstellen
+
+In der Vorlage für die Ausleih-SMS steht zusätzlich `{stelle}` zur Verfügung. Sie wird durch die Bezeichnung der zugeordneten Einsatzstelle ersetzt; ohne Zuordnung bleibt sie leer.

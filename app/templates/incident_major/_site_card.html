@@ -61,6 +61,10 @@
       {% if site.media %}
       <span title="{{ site.media|length }} Foto(s)">📷 {{ site.media|length }}</span>
       {% endif %}
+      {% set material_offen = material_open_counts_by_site.get(site.id) if material_open_counts_by_site is defined else none %}
+      {% if material_offen %}
+      <span title="{{ material_offen }} offene Material-Ausleihe(n)">📦 {{ material_offen }}</span>
+      {% endif %}
       {% if site.alarm_stufe %}
       <span class="badge--xs">{{ site.alarm_stufe }}</span>
       {% endif %}

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import UTC, datetime
 
 from fastapi import (
@@ -20,9 +21,19 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.permissions import has_role, require_role, same_org_or_system_admin
+from app.core.security import get_author_name
 from app.core.templating import templates
 from app.db import get_db
-from app.models.major_incident import IncidentSite, MajorIncident, MajorIncidentStatus, Sector, SitePhase
+from app.models.major_incident import (
+    CitizenReport,
+    EinheitSiteDispatch,
+    IncidentSite,
+    LageEinheit,
+    MajorIncident,
+    MajorIncidentStatus,
+    Sector,
+    SitePhase,
+)
 from app.models.verleih import (
     VerleihArtikel,
     VerleihAusleihe,
@@ -57,6 +68,7 @@ def _ausleihe_or_404(ausleihe_id: int, db: Session) -> VerleihAusleihe:
     a = db.query(VerleihAusleihe).options(
         selectinload(VerleihAusleihe.positionen),
         selectinload(VerleihAusleihe.fotos),
+        selectinload(VerleihAusleihe.einheit),
     ).filter_by(id=ausleihe_id).first()
     if not a:
         raise HTTPException(status_code=404, detail="Ausleihe nicht gefunden")
@@ -99,6 +111,24 @@ def _sites_data_fuer_verleih(db: Session, lage: MajorIncident) -> list[dict]:
         sites_data,
         key=lambda site: (not site["offen"], site["bezeichnung"].casefold(), site["adresse"].casefold(), site["id"]),
     )
+
+
+def _board_site_or_404(lage: MajorIncident, site_id: int, db: Session) -> IncidentSite:
+    site = db.get(IncidentSite, site_id)
+    if not site or site.major_incident_id != lage.id:
+        raise HTTPException(status_code=404, detail="Einsatzstelle nicht gefunden")
+    return site
+
+
+def _verleih_feature_or_403(db: Session, lage: MajorIncident) -> None:
+    from app.services.mi_feature_service import get_mi_features
+
+    if not get_mi_features(db, lage.org_id).get("geraeteverleih"):
+        raise HTTPException(status_code=403, detail="verleih_deaktiviert")
+
+
+def _looks_like_phone(value: str | None) -> bool:
+    return bool(value and re.fullmatch(r"[+()0-9 /.-]{6,50}", value.strip()) and sum(c.isdigit() for c in value) >= 6)
 
 
 def _detail_ctx(db: Session, user, lage, ausleihe, **extra) -> dict:
@@ -444,6 +474,168 @@ async def admin_verleih_uebersicht(
 
 # ── GSL: Ausleihe-Liste ───────────────────────────────────────────────────────
 
+@router.get("/lage/{lage_id}/stellen/{site_id}/material/neu", response_class=HTMLResponse)
+async def site_material_neu_form(
+    request: Request,
+    lage_id: int,
+    site_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org(user, lage)
+    _verleih_feature_or_403(db, lage)
+    site = _board_site_or_404(lage, site_id, db)
+    report = db.query(CitizenReport).filter(CitizenReport.site_id == site.id).first()
+    adresse = ", ".join(filter(None, (" ".join(filter(None, (site.strasse, site.hausnr))), site.ort)))
+    einheiten = (
+        db.query(LageEinheit)
+        .join(EinheitSiteDispatch, EinheitSiteDispatch.einheit_id == LageEinheit.id)
+        .filter(EinheitSiteDispatch.site_id == site.id, EinheitSiteDispatch.withdrawn_at.is_(None))
+        .order_by(LageEinheit.label)
+        .all()
+    )
+    return templates.TemplateResponse(
+        request,
+        "incident_major/_site_material_form.html",
+        {
+            "lage": lage,
+            "site": site,
+            "artikel": svc.get_artikel_aktiv(db),
+            "einheiten": einheiten,
+            "name": report.reporter_name if report else "",
+            "telefon": report.reporter_contact if report and _looks_like_phone(report.reporter_contact) else "",
+            "adresse": adresse,
+        },
+    )
+
+
+@router.post("/lage/{lage_id}/stellen/{site_id}/material", response_class=HTMLResponse)
+async def site_material_anlegen(
+    request: Request,
+    lage_id: int,
+    site_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org(user, lage)
+    _verleih_feature_or_403(db, lage)
+    if lage.status != MajorIncidentStatus.active:
+        raise HTTPException(status_code=400, detail="Lage nicht aktiv")
+    site = _board_site_or_404(lage, site_id, db)
+    form = await request.form()
+    positionen = []
+    for index, bezeichnung in enumerate(form.getlist("pos_bezeichnung[]")):
+        menge = form.getlist("pos_menge[]")
+        artikel_ids = form.getlist("pos_artikel_id[]")
+        positionen.append(
+            {
+                "bezeichnung": str(bezeichnung).strip(),
+                "menge": menge[index] if index < len(menge) else 1,
+                "artikel_id": (
+                    int(str(artikel_ids[index]))
+                    if index < len(artikel_ids) and str(artikel_ids[index]).isdigit()
+                    else None
+                ),
+            }
+        )
+    einheit = None
+    einheit_raw = str(form.get("einheit_id", ""))
+    if einheit_raw.isdigit():
+        einheit = (
+            db.query(LageEinheit).filter(LageEinheit.id == int(einheit_raw), LageEinheit.lage_id == lage.id).first()
+        )
+    pin_senden = str(form.get("pin_senden", "")) in {"1", "on", "true"}
+    try:
+        ausleihe = svc.material_an_einsatzstelle(
+            db,
+            lage=lage,
+            site=site,
+            positionen=positionen,
+            name=str(form.get("name", "")),
+            telefon=str(form.get("telefon", "")),
+            adresse=str(form.get("adresse", "")),
+            notizen=str(form.get("notizen", "")),
+            einheit=einheit,
+            quelle="board",
+            user_id=user.id,
+            author_name=get_author_name(request),
+            pin=svc.generate_pin() if pin_senden else None,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    for foto in form.getlist("fotos"):
+        if getattr(foto, "filename", None):
+            try:
+                await svc.save_verleih_foto(
+                    foto,
+                    ausleihe.id,
+                    lage.org_id,
+                    user.id,
+                    db,
+                    author_name=get_author_name(request),
+                )
+            except Exception:
+                logger.warning("Material-Foto konnte nicht gespeichert werden", exc_info=True)
+    if str(form.get("sms_senden", "")) in {"1", "on", "true"} and ausleihe.telefon:
+        background_tasks.add_task(svc.sende_material_sms, ausleihe.id, lage.org_id, pin_senden)
+    from app.services.print_dispatcher import autoprint_verleih_background
+
+    background_tasks.add_task(autoprint_verleih_background, ausleihe.id)
+    await broadcast_lage(lage.id, {"type": "site:card_changed", "site_id": site.id})
+    await broadcast_lage(lage.id, {"type": "verleih:changed", "lage_id": lage.id})
+    from app.routers.ui_major_incident import site_detail_context
+
+    return templates.TemplateResponse(
+        request,
+        "incident_major/_site_detail.html",
+        site_detail_context(request, db, lage, site, user),
+        headers={"HX-Trigger": json.dumps({"siteMaterialChanged": {"site_id": site.id, "lage_id": lage.id}})},
+    )
+
+
+@router.post("/lage/{lage_id}/stellen/{site_id}/material/{ausleihe_id}/zurueck", response_class=HTMLResponse)
+async def site_material_zurueck(
+    request: Request,
+    lage_id: int,
+    site_id: int,
+    ausleihe_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org(user, lage)
+    _verleih_feature_or_403(db, lage)
+    if lage.status != MajorIncidentStatus.active:
+        raise HTTPException(status_code=400, detail="Lage nicht aktiv")
+    site = _board_site_or_404(lage, site_id, db)
+    ausleihe = _ausleihe_or_404(ausleihe_id, db)
+    if ausleihe.lage_id != lage.id or ausleihe.site_id != site.id:
+        raise HTTPException(status_code=404)
+    svc.material_zuruecknehmen(
+        db,
+        ausleihe,
+        author_name=get_author_name(request),
+        user_id=user.id,
+        einheit_id=ausleihe.einheit_id,
+    )
+    await broadcast_lage(lage.id, {"type": "site:card_changed", "site_id": site.id})
+    await broadcast_lage(lage.id, {"type": "verleih:changed", "lage_id": lage.id})
+    from app.routers.ui_major_incident import site_detail_context
+
+    return templates.TemplateResponse(
+        request,
+        "incident_major/_site_detail.html",
+        site_detail_context(request, db, lage, site, user),
+        headers={"HX-Trigger": json.dumps({"siteMaterialChanged": {"site_id": site.id, "lage_id": lage.id}})},
+    )
+
+
 @router.get("/lage/{lage_id}/verleih", response_class=HTMLResponse)
 async def verleih_liste(
     request: Request,
@@ -466,6 +658,11 @@ async def verleih_liste(
         ausleihen = [a for a in ausleihen if a.status == VerleihStatus.ausgeliehen]
     elif filter == "zurueck":
         ausleihen = [a for a in ausleihen if a.status == VerleihStatus.zurueckgegeben]
+    elif filter == "vor_ort":
+        ausleihen = [
+            a for a in ausleihen
+            if a.site_id and a.quelle in ("board", "einheit")
+        ]
 
     sites = db.query(IncidentSite).filter_by(major_incident_id=lage_id).order_by(IncidentSite.bezeichnung).all()
 

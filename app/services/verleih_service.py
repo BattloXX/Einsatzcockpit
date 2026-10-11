@@ -125,6 +125,7 @@ def get_ausleihen_fuer_lage(db: Session, lage_id: int) -> list[VerleihAusleihe]:
         .filter_by(lage_id=lage_id)
         .options(
             selectinload(VerleihAusleihe.positionen),
+            selectinload(VerleihAusleihe.einheit),
         )
         .order_by(VerleihAusleihe.ausgeliehen_at.desc())
         .all()

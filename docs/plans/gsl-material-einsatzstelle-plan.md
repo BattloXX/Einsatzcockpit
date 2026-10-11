@@ -160,3 +160,7 @@ muss grün bleiben (es kommt kein neuer Broadcast-Typ dazu).
 ## Offen / später
 - Gerätetest am Tablet und auf dem Handy, echte SMS über das Gateway.
 - Optional: MCP-Tool für Material vor Ort.
+
+## Umsetzungsstand
+
+P1–P5 sind implementiert.
