@@ -8,6 +8,7 @@ export function createOutbox({
   csrfToken = () => "",
   simEinheitId = null,
   dbName = "ec-einheit",
+  openTimeoutMs = 4000,
   onTerminal = () => {},
 }) {
   const listeners = new Set();
@@ -22,8 +23,25 @@ export function createOutbox({
 
   function db() {
     if (dbPromise) return dbPromise;
-    dbPromise = new Promise((resolve, reject) => {
-      const request = indexedDB.open(dbName, 1);
+    let resolveDb;
+    let rejectDb;
+    const promise = new Promise((resolve, reject) => {
+      resolveDb = resolve;
+      rejectDb = reject;
+    });
+    dbPromise = promise;
+    let beendet = false;
+    let timeout;
+    const fehler = (error) => {
+      if (beendet) return;
+      beendet = true;
+      clearTimeout(timeout);
+      if (dbPromise === promise) dbPromise = undefined;
+      rejectDb(error instanceof Error ? error : new Error("IndexedDB konnte nicht geoeffnet werden"));
+    };
+    let request;
+    try {
+      request = indexedDB.open(dbName, 1);
       request.onupgradeneeded = () => {
         const database = request.result;
         if (!database.objectStoreNames.contains("outbox")) database.createObjectStore("outbox", { keyPath: "client_uuid" });
@@ -32,9 +50,26 @@ export function createOutbox({
         if (!database.objectStoreNames.contains("zustand")) database.createObjectStore("zustand");
         if (!database.objectStoreNames.contains("meta")) database.createObjectStore("meta");
       };
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
+      request.onblocked = () => fehler(new Error("IndexedDB ist durch einen anderen Tab blockiert"));
+      request.onerror = () => fehler(request.error);
+      request.onsuccess = () => {
+        const database = request.result;
+        if (beendet) {
+          database.close();
+          return;
+        }
+        beendet = true;
+        clearTimeout(timeout);
+        database.onversionchange = () => {
+          database.close();
+          if (dbPromise === promise) dbPromise = undefined;
+        };
+        resolveDb(database);
+      };
+      timeout = setTimeout(() => fehler(new Error("IndexedDB konnte nicht rechtzeitig geoeffnet werden")), openTimeoutMs);
+    } catch (error) {
+      fehler(error);
+    }
     return dbPromise;
   }
 

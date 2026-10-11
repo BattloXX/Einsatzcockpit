@@ -40,6 +40,33 @@ test("Eintrag ueberlebt Neustart und Sequenz bleibt monoton", async () => {
   const neu = await eintrag(b); assert.equal(neu.seq, 2);
 });
 
+test("blockierte oder haengende IndexedDB-Open-Anfragen werden mit Timeout abgebrochen", async () => {
+  const blockiert = { open() { const request = {}; queueMicrotask(() => request.onblocked()); return request; } };
+  const haengt = { open() { return {}; } };
+  const env = umgebung();
+  await assert.rejects(createOutbox({ ...env.basis, indexedDB: blockiert, openTimeoutMs: 20 }).zustandLaden(), /blockiert/);
+  await assert.rejects(createOutbox({ ...env.basis, indexedDB: haengt, openTimeoutMs: 5 }).bereinigen(), /rechtzeitig/);
+});
+
+test("IndexedDB-Open wird nach Fehler erneut versucht", async () => {
+  const echt = new IDBFactory();
+  let opens = 0;
+  const indexedDB = {
+    open(...args) {
+      opens += 1;
+      if (opens > 1) return echt.open(...args);
+      const request = { error: new Error("erste Oeffnung fehlgeschlagen") };
+      queueMicrotask(() => request.onerror());
+      return request;
+    },
+  };
+  const env = umgebung();
+  const outbox = createOutbox({ ...env.basis, indexedDB, openTimeoutMs: 20 });
+  await assert.rejects(outbox.zustandLaden(), /erste Oeffnung/);
+  assert.equal(await outbox.zustandLaden(), undefined);
+  assert.equal(opens, 2);
+});
+
 test("Statusfolge bleibt je Auftrag nach Netzfehler streng geordnet", async () => {
   const env = umgebung([new Error("offline"), ok(1), ok(2), ok(3)]);
   const o = createOutbox(env.basis);

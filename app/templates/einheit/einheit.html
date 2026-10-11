@@ -83,7 +83,7 @@
         {% endif %}
         <div style="min-width:0;">
           <div class="fab-header__eyebrow">
-            {% if is_exercise %}ÜBUNG · {% endif %}<span x-text="kopf.lage_name || ''"></span>
+            {% if is_exercise %}ÜBUNG<span x-show="kopf.lage_name"> · </span>{% endif %}<span x-text="kopf.lage_name || ''"></span>
           </div>
           <h1 class="fab-header__title">{{ fahrzeug }}</h1>
         </div>
