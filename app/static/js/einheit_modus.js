@@ -113,7 +113,10 @@ function registriere() {
         return await aktion(this.outbox);
       } catch (error) {
         console.warn("Einheiten-Outbox nicht verfuegbar", error);
-        this.hinweisBanner = "Lokaler Speicher ist nicht verfügbar. Meldung konnte nicht gespeichert werden.";
+        // ungueltiger_typ: Seite neuer als die geladene Outbox (veralteter Browser-Cache).
+        this.hinweisBanner = error?.message === "ungueltiger_typ"
+          ? "App-Version veraltet. Bitte Seite neu laden und erneut speichern."
+          : "Lokaler Speicher ist nicht verfügbar. Meldung konnte nicht gespeichert werden.";
         return null;
       }
     },
