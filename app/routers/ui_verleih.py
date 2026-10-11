@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.permissions import has_role, require_role, same_org_or_system_admin
 from app.core.templating import templates
 from app.db import get_db
-from app.models.major_incident import IncidentSite, MajorIncident, MajorIncidentStatus
+from app.models.major_incident import IncidentSite, MajorIncident, MajorIncidentStatus, Sector, SitePhase
 from app.models.verleih import (
     VerleihArtikel,
     VerleihAusleihe,
@@ -65,6 +65,40 @@ def _ausleihe_or_404(ausleihe_id: int, db: Session) -> VerleihAusleihe:
 
 def _can_edit(user) -> bool:
     return has_role(user, "incident_leader", "admin", "org_admin", "recorder")
+
+
+def _sites_data_fuer_verleih(db: Session, lage: MajorIncident) -> list[dict]:
+    """Liefert Einsatzstellen mit Kontext für die Verleih-Auswahl ohne N+1-Abfragen."""
+    from app.services.major_incident_service import PHASE_LABELS
+
+    rows = (
+        db.query(IncidentSite, Sector.name)
+        .outerjoin(Sector, IncidentSite.sector_id == Sector.id)
+        .filter(
+            IncidentSite.major_incident_id == lage.id,
+            IncidentSite.org_id == lage.org_id,
+        )
+        .all()
+    )
+    sites_data = []
+    for site, sektor_name in rows:
+        strassenadresse = " ".join(part for part in (site.strasse, site.hausnr) if part)
+        adresse = ", ".join(part for part in (strassenadresse, site.ort) if part)
+        phase = site.phase.value
+        offen = site.phase not in (SitePhase.erledigt, SitePhase.abgebrochen)
+        sites_data.append({
+            "id": site.id,
+            "bezeichnung": site.bezeichnung,
+            "adresse": adresse,
+            "phase": phase,
+            "phase_label": PHASE_LABELS[site.phase],
+            "sektor": sektor_name or "",
+            "offen": offen,
+        })
+    return sorted(
+        sites_data,
+        key=lambda site: (not site["offen"], site["bezeichnung"].casefold(), site["adresse"].casefold(), site["id"]),
+    )
 
 
 def _detail_ctx(db: Session, user, lage, ausleihe, **extra) -> dict:
@@ -459,10 +493,9 @@ async def verleih_neu_form(
     lage = _lage_or_404(lage_id, db)
     _check_org(user, lage)
 
-    sites = db.query(IncidentSite).filter_by(major_incident_id=lage_id).order_by(IncidentSite.bezeichnung).all()
+    sites_data = _sites_data_fuer_verleih(db, lage)
     stuecklisten = svc.get_stuecklisten_aktiv(db)
     artikel = svc.get_artikel_aktiv(db)
-    sites_data = [{"id": s.id, "bezeichnung": s.bezeichnung} for s in sites]
     artikel_data = [
         {
             "id": a.id,
@@ -478,7 +511,6 @@ async def verleih_neu_form(
     return templates.TemplateResponse(request, "verleih/_ausleihe_form.html", {
         "user": user,
         "lage": lage,
-        "sites": sites,
         "sites_data": sites_data,
         "stuecklisten": stuecklisten,
         "artikel": artikel,
@@ -509,6 +541,12 @@ async def verleih_neu(
     send_pin_flag = str(form.get("send_pin", "")).strip() == "1"
     site_id_raw = str(form.get("site_id", "")).strip()
     site_id = int(site_id_raw) if site_id_raw.isdigit() else None
+    if site_id and not db.query(IncidentSite.id).filter(
+        IncidentSite.id == site_id,
+        IncidentSite.major_incident_id == lage_id,
+        IncidentSite.org_id == lage.org_id,
+    ).first():
+        raise HTTPException(400, "Einsatzstelle gehört nicht zu dieser Lage")
     pin_to_use = pin_raw if pin_raw else (svc.generate_pin() if send_pin_flag else None)
 
     # Positionen aus dynamischen Feldern
@@ -820,7 +858,7 @@ async def schnell_einsatzstelle(
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
 ):
-    """Erzeugt eine Einsatzstelle direkt aus dem Verleih-Formular und gibt {id, bezeichnung} zurueck."""
+    """Erzeugt eine Einsatzstelle direkt aus dem Verleih-Formular mit Auswahl-Kontext."""
     user = request.state.user
     lage = _lage_or_404(lage_id, db)
     _check_org(user, lage)
@@ -835,7 +873,8 @@ async def schnell_einsatzstelle(
     await broadcast_lage(lage_id, {"type": "site_created", "site_id": site.id})
     from app.services.gsl_live_notify import notify_gsl_live
     await notify_gsl_live(db, lage, org_id=lage.org_id, reason="counts")
-    return JSONResponse({"id": site.id, "bezeichnung": site.bezeichnung})
+    site_data = next(item for item in _sites_data_fuer_verleih(db, lage) if item["id"] == site.id)
+    return JSONResponse(site_data)
 
 
 @router.post("/lage/{lage_id}/verleih/{ausleihe_id}/foto", response_class=HTMLResponse)
