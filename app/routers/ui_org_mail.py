@@ -208,6 +208,7 @@ async def smtp_settings_save(
     imap_host: str = Form(""),
     imap_port: int = Form(993),
     imap_use_ssl: str = Form(""),
+    imap_ordner: str = Form("INBOX"),
 ):
     from app.services.mail_service import _looks_like_email
 
@@ -228,10 +229,19 @@ async def smtp_settings_save(
     cfg.from_addr = from_addr_clean or None
     cfg.starttls = starttls == "1"
     cfg.timeout = max(1, min(timeout or 15, 120))
+    imap_war_aktiv = cfg.imap_enabled
     cfg.imap_enabled = imap_enabled == "1"
     cfg.imap_host = imap_host.strip() or None
     cfg.imap_port = max(1, min(imap_port or 993, 65535))
     cfg.imap_use_ssl = imap_use_ssl == "1"
+    cfg.imap_ordner = "".join(char for char in imap_ordner if ord(char) >= 32 and ord(char) != 127).strip()[:200]
+    if not cfg.imap_ordner:
+        cfg.imap_ordner = "INBOX"
+    if cfg.imap_enabled and not imap_war_aktiv:
+        cfg.imap_aktiv_seit = datetime.now(UTC).replace(tzinfo=None)
+        cfg.imap_letzte_uid = None
+        cfg.imap_uidvalidity = None
+        cfg.imap_letzter_fehler = None
     cfg.updated_at = datetime.now(UTC)
 
     if secret_changed == "1":

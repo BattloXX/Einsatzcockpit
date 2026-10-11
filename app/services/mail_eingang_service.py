@@ -154,3 +154,25 @@ def normalisiere_mime(raw: bytes) -> dict:
         "text": body("plain"), "html": body("html"), "header": headers,
         "auth": {"spf": auth[0], "dkim": auth[1], "dmarc": auth[2]}, "anhaenge": attachments,
     }
+
+
+def unter_stundenlimit(db: Session, org_id: int) -> bool:
+    """Stundenlimit für abgerufene Mails (IMAP/Graph).
+
+    Gezählt werden die tatsächlichen Eingänge der letzten Stunde (Ereignis "empfangen"), nicht das
+    Mail-Datum: Beim ersten Abruf mit 24-h-Rückblick liegt das Mail-Datum fast immer weiter zurück.
+    """
+    from datetime import timedelta
+
+    from sqlalchemy import func
+
+    from app.models.master import OrgSettings
+
+    setting = (db.query(OrgSettings).execution_options(include_all_tenants=True)
+               .filter(OrgSettings.org_id == org_id).first())
+    limit = int(setting.mail_eingang_max_pro_stunde) if setting else 30
+    since = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=1)
+    count = (db.query(func.count(OrgMailEingangEreignis.id)).execution_options(include_all_tenants=True)
+             .filter(OrgMailEingangEreignis.org_id == org_id, OrgMailEingangEreignis.typ == "empfangen",
+                     OrgMailEingangEreignis.ts >= since).scalar() or 0)
+    return count < max(1, limit)
