@@ -254,6 +254,7 @@
                placeholder="einsatz@feuerwehr-beispiel.at" class="form-input" autocomplete="off">
         <p class="form-hint">Postfach/UPN, dessen Rechte die App-Registrierung zum Senden nutzt.</p>
       </div>
+      <input type="hidden" name="read_postfach" value="{{ o365_config.read_postfach or '' if o365_config else '' }}">
 
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <button type="submit" class="btn btn--primary">Speichern</button>
@@ -395,6 +396,7 @@
   <input type="hidden" name="tenant_id" value="{{ o365_config.tenant_id or '' if o365_config else '' }}">
   <input type="hidden" name="client_id" value="{{ o365_config.client_id or '' if o365_config else '' }}">
   <input type="hidden" name="sender_address" value="{{ o365_config.sender_address or '' if o365_config else '' }}">
+  <input type="hidden" name="read_postfach" value="{{ o365_config.read_postfach or '' if o365_config else '' }}">
   <input type="hidden" name="secret_changed" value="0">
 
   <section class="card mb-4">
@@ -405,9 +407,15 @@
                  {% if o365_config and o365_config.read_enabled %}checked{% endif %}
                  class="toggle-checkbox">
           <span class="toggle-switch"></span>
-          Mail.Read-Abruf vorbereiten (Office-365-Postfach, gleiche App-Registrierung)
+          Mail.Read-Abruf aktivieren (Office-365-Postfach, gleiche App-Registrierung)
         </label>
-        <p class="form-hint" style="margin:4px 0 0 0">Braucht zusätzlich die Application-Permission <code>Mail.Read</code> in Azure &mdash; nur eine Absichts-Flag, kein Abruf implementiert.</p>
+        <p class="form-hint" style="margin:4px 0 0 0">Braucht zusätzlich die Application-Permission <code>Mail.Read</code> in Azure.</p>
+      </div>
+      <div class="form-group" style="margin:12px 0 0 0">
+        <label for="read_postfach">Postfach für den Abruf (optional)</label>
+        <input type="text" id="read_postfach" name="read_postfach"
+               value="{{ o365_config.read_postfach or '' if o365_config else '' }}"
+               placeholder="Leer = Absender-Postfach" class="form-input" autocomplete="off">
       </div>
       <div style="margin-top:12px">
         <button type="submit" class="btn btn--primary">Speichern</button>

@@ -327,6 +327,7 @@ async def o365_settings_save(
     secret_changed: str = Form(""),
     sender_address: str = Form(""),
     read_enabled: str = Form(""),
+    read_postfach: str = Form(""),
 ):
     from app.services.mail_service import _looks_like_email
 
@@ -339,13 +340,22 @@ async def o365_settings_save(
     sender_clean = sender_address.strip()
     if sender_clean and not _looks_like_email(sender_clean):
         return RedirectResponse("/admin/mail?flash=error_sender_address", status_code=302)
+    read_postfach_clean = read_postfach.strip()
+    if read_postfach_clean and not _looks_like_email(read_postfach_clean):
+        return RedirectResponse("/admin/mail?flash=error_read_postfach", status_code=302)
 
     cfg = _get_or_create_o365_config(db, effective_org_id)
+    was_read_enabled = cfg.read_enabled
     cfg.enabled = enabled == "1"
     cfg.tenant_id = tenant_id.strip() or None
     cfg.client_id = client_id.strip() or None
     cfg.sender_address = sender_clean or None
     cfg.read_enabled = read_enabled == "1"
+    cfg.read_postfach = read_postfach_clean or None
+    if cfg.read_enabled and not was_read_enabled:
+        cfg.read_aktiv_seit = datetime.now(UTC).replace(tzinfo=None)
+        cfg.read_seit = None
+        cfg.read_letzter_fehler = None
     cfg.updated_at = datetime.now(UTC)
 
     if secret_changed == "1":

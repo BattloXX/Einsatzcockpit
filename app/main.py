@@ -212,6 +212,7 @@ def _start_background_loops() -> list[asyncio.Task]:
     from app.services.incident_route_loop import incident_route_loop
     from app.services.lis.lis_capture import lis_capture_retention_loop
     from app.services.lis.lis_loop import lis_poll_loop
+    from app.services.mail_graph_poller import mail_graph_poll_loop
     from app.services.mail_imap_poller import mail_imap_poll_loop
     from app.services.mail_weiterleitung_loop import mail_weiterleitung_loop
     from app.services.mail_zuordnung_loop import mail_zuordnung_loop
@@ -243,6 +244,7 @@ def _start_background_loops() -> list[asyncio.Task]:
         api_message_dispatch_loop(), mailing_schedule_loop(),
         resend_inbound_retention_loop(),
         mail_imap_poll_loop(),
+        mail_graph_poll_loop(),
         mail_zuordnung_loop(),
         mail_weiterleitung_loop(),
         incident_route_loop(),

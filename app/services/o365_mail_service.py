@@ -4,9 +4,8 @@ Reine Graph-Mechanik: Token-Erwerb (client_credentials) + `POST /users/{sender}/
 sendMail`. Provider-agnostischer Aufrufer ist mail_service.py::deliver() — diese
 Datei kennt weder SMTP noch Fallback-Logik.
 
-Kein Lese-/Polling-Code enthalten: das Abholen eingehender Mails aus demselben
-Postfach ist in app/models/org_mail.py (OrgO365MailConfig.read_enabled) nur als
-Konfigurationsfeld vorbereitet, hier bewusst noch nicht implementiert.
+Der Lese-/Polling-Code für eingehende Mails liegt getrennt in
+app.services.mail_graph_poller.py und verwendet den Token-Erwerb dieses Moduls.
 
 Betriebsvoraussetzung (Azure, kein Code): App-Registrierung mit Application
 permission "Mail.Send" (admin-consented) auf dem angegebenen tenant_id/client_id.
