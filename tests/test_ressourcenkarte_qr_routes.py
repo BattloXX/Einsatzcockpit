@@ -49,6 +49,21 @@ def test_qr_ausstellen_idempotent_vorschau_und_widerruf(client, setup_db):
         db.close()
 
 
+def test_qr_vorschau_ist_fuer_readonly_und_fremde_org_nicht_lesbar(client, setup_db):
+    username, _, _, org_id = _daten()
+    _activate_qr(org_id)
+    _, other_lage_id, other_einheit_id, other_org_id = _daten()
+    _activate_qr(other_org_id)
+    _login(client, username)
+    assert client.get(_basis(other_lage_id, other_einheit_id) + "/zugang/qr/vorschau").status_code == 404
+
+    client.get("/logout")
+    readonly_username, readonly_lage_id, readonly_einheit_id, readonly_org_id = _daten("readonly")
+    _activate_qr(readonly_org_id)
+    _login(client, readonly_username)
+    assert client.get(_basis(readonly_lage_id, readonly_einheit_id) + "/zugang/qr/vorschau").status_code == 403
+
+
 @pytest.mark.parametrize("role", ["readonly"])
 def test_qr_routes_require_zugangsverwaltung(client, setup_db, role):
     username, lage_id, einheit_id, org_id = _daten(role)

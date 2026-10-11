@@ -6,6 +6,8 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 
 - Resend-Posteingang je Organisation mit signiertem Webhook, sicherem Abruf und Aufbewahrung ergänzt.
 
+- **GSL**: Ressourcenkarte auf Übersicht, Einsätze, Journal und Zugang fokussiert; Personal, Ausstattung und Verbandsaktionen sind nicht mehr über die Oberfläche verlinkt. Abschnittsnamen und QR-Vorschau wurden korrigiert und mobil robuster gestaltet. Die Karte lag bisher unter der oberen Navigation (Kopfzeile, Reiter und Zugang-Tab waren verdeckt); sie liegt jetzt darüber.
+
 - **GSL**: „Einheit hinzufügen“ erfasst Funkruf, Status, Abschnitt, Bereitstellungsraum, Gruppenkommandant mit Telefon und Stärke in einem Vorgang.
 - **GSL**: QR-Zugang für Einheiten mit A4-Ausdruck (Token `gkq_`, optional mit PIN) und neuer Druckregel „GSL – Neue Einheit / QR-Einheitenzugang“; Zugangslinks sind jetzt aus `GSL_ZUGANG_KEY` ableitbar und müssen nicht neu ausgegeben werden (Migrationen 0268–0270).
 - **GSL**: Gruppenkommandant bestätigt seine Mobilnummer per SMS-Code; automatische Auftrags-SMS (neu, geändert, zurückgezogen) mit manuellem Retry; Push ans Fahrzeug-Tablet.

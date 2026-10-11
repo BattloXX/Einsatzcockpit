@@ -110,8 +110,6 @@ def _overview(request: Request, lage, einheit, db: Session):
             "karte": ressource_karte_service.karte(db, lage, einheit),
             "can_edit": _can_edit(request.state.user),
             "members": members,
-            "ausstattung_warnungen": ressource_pflege_service.ausstattung_warnungen(db, einheit),
-            **_verband_daten(db, lage, einheit),
         },
     )
 

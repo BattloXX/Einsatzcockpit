@@ -1,7 +1,7 @@
 {% set basis = "/lage/%d/einheiten/%d"|format(lage.id, einheit.id) %}
 {% set z = zugang %}
 {% set sperre = z.zustand in ("deaktiviert", "keine_nummer") %}
-<section class="ressource-zugang" data-zugang-root data-basis="{{ basis }}" data-einheit-id="{{ einheit.id }}"
+<section class="ressource-zugang ressource-karte__content" data-zugang-root data-basis="{{ basis }}" data-einheit-id="{{ einheit.id }}"
          data-sitzung-aktiv="{{ 1 if z.sitzung_aktiv else 0 }}">
   <style>
     .ressource-zugang { display:flex; flex-direction:column; gap:12px; }
@@ -9,14 +9,17 @@
     .ressource-zugang__dot--aktiv { background:var(--green); }
     .ressource-zugang__dot--laeuft_bald_ab { background:var(--yellow); }
     .ressource-zugang__dot--abgelaufen, .ressource-zugang__dot--widerrufen { background:var(--red); }
-    .ressource-zugang__actions { display:flex; flex-wrap:wrap; gap:8px; }
+    .ressource-zugang__actions { display:flex; flex-wrap:wrap; gap:8px; min-width:0; }
     .ressource-zugang__actions .btn { min-height:44px; }
+    .ressource-zugang__actions form { display:flex; flex:1 1 290px; flex-wrap:wrap; gap:8px; min-width:0; }
+    .ressource-zugang__actions select { flex:1 1 170px; min-width:0; }
+    .ressource-zugang__qr-preview { overflow-wrap:anywhere; }
     .ressource-zugang__hint { font-size:.75rem; color:var(--text-muted); }
     .ressource-zugang__toast { position:sticky; bottom:8px; padding:8px 12px; border-radius:8px; background:var(--surface-mid); border:1px solid var(--green); font-size:.85rem; }
     .ressource-zugang__toast--fehler { border-color:var(--red); }
     .ressource-zugang table { width:100%; font-size:.78rem; }
     .ressource-zugang td, .ressource-zugang th { padding:3px 6px; text-align:left; }
-    @media (max-width: 760px) { .ressource-zugang__actions .btn { flex:1 1 100%; } }
+    @media (max-width: 760px) { .ressource-zugang__actions .btn { flex:1 1 100%; } .ressource-zugang__actions form { flex-basis:100%; } }
   </style>
 
   <div class="res-section">
@@ -146,6 +149,6 @@
       <button class="btn btn--ghost" hx-post="{{ basis }}/zugang/qr/ausstellen" hx-vals='{"neu":true}' hx-target="#ressourceKarteBody" hx-swap="innerHTML" hx-confirm="Neuen QR-Code ausstellen? Der alte wird sofort ungültig.">Neuen QR-Code (alter wird ungültig)</button>
       <button class="btn btn--ghost" style="color:var(--red);" hx-post="{{ basis }}/zugang/qr/widerrufen" hx-target="#ressourceKarteBody" hx-swap="innerHTML" hx-confirm="QR-Zugang widerrufen?">QR widerrufen</button>{% endif %}
     </div>
-    <div data-qr-vorschau-container></div>
+    <div data-qr-vorschau-container aria-live="polite"></div>
   </div>
 </section>

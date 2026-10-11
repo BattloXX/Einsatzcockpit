@@ -91,12 +91,10 @@ Der EL erscheint auf der Board-Karte und im Ausdruck.
 
 ## Ressourcenkarte
 
-Ein Klick auf eine Ressource öffnet die **Ressourcenkarte** (Seitenleiste) mit den Tabs Übersicht, Einsätze, Journal, Personal, Ausstattung und Zugang.
+Ein Klick auf eine Ressource öffnet die **Ressourcenkarte** (Seitenleiste) mit den Tabs Übersicht, Einsätze, Journal und – sofern berechtigt – Zugang.
 
-- **Übersicht**: Stammdaten, Gruppenkommandant (GK) mit Telefonnummer, Stellvertreter, Zugangsstatus. Hier lassen sich auch Verbände bilden (mehrere Einheiten zusammenfassen), auflösen und eine Einheit aufteilen. Die Teile eines Verbands erscheinen in der Kräfteübersicht unter dem Verband und werden nicht doppelt gezählt; sie sind nicht einzeln disponierbar.
+- **Übersicht**: Stammdaten, Gruppenkommandant (GK) mit Telefonnummer und Zugangsstatus.
 - **Einsätze** und **Journal**: Aufträge, Statuswechsel, Lagemeldungen und manuelle Einträge (Korrekturen per Storno, nie Löschen).
-- **Personal**: Stärke als Summe (Führer/Unterführer/Mannschaft) oder als Namensliste mit Verstärken, Ablösen und Umbuchen. Eine Person kann nur einer Einheit gleichzeitig zugeordnet sein.
-- **Ausstattung**: Geräte und Material mit Menge und Status, optional aus der Vorlage des Fahrzeugs; Umbuchen zwischen Einheiten.
 
 ### Zugang für den Gruppenkommandanten
 
@@ -108,14 +106,14 @@ Im Tab **Zugang** erzeugt die GSL einen persönlichen Link, mit dem der GK den E
 4. **Widerrufen** sperrt sofort. Der Zugang wird außerdem automatisch gesperrt, wenn der GK gewechselt oder entfernt wird, sich die Nummer ändert, die Einheit abrückt, die Lage geschlossen wird oder die Notbremse in den GSL-Einstellungen betätigt wird.
 5. Ist in den GSL-Einstellungen „Automatisch senden“ aktiv, geht der Link beim Zuweisen eines GK per SMS raus.
 
-Der GK sieht nur seine eigene Einheit und kann Status melden, Lagemeldungen und Fotos senden, Anforderungen stellen und – wenn die Organisation es erlaubt – Personal und Ausstattung seiner Einheit pflegen. Änderungen funktionieren auch offline und werden nachgesendet.
+Der GK sieht nur seine eigene Einheit und kann Status melden, Lagemeldungen und Fotos senden sowie Anforderungen stellen. Änderungen funktionieren auch offline und werden nachgesendet.
 
 
 ---
 
 ## Einheit schnell anlegen
 
-Über **+ Einheit** lässt sich eine Einheit in einem Vorgang erfassen: Typ, Fahrzeug bzw. Organisation, Bezeichnung, Funkrufname, Status, Abschnitt, Bereitstellungsraum, Gruppenkommandant mit Mobilnummer und Besatzungsstärke. Unter „Weitere Angaben“ stehen Stellvertreter, Führer/Unterführer/Mannschaft, AGT, Sanitäter und eine Bemerkung. Ausstattung wird danach in der Ressourcenkarte gepflegt. Ist die Nummer des Gruppenkommandanten eingetragen und der Zugang aktiv, geht – je nach Einstellung – automatisch eine SMS mit dem persönlichen Link raus.
+Über **+ Einheit** lässt sich eine Einheit in einem Vorgang erfassen: Typ, Fahrzeug bzw. Organisation, Bezeichnung, Funkrufname, Status, Abschnitt, Bereitstellungsraum sowie Gruppenkommandant mit Mobilnummer. Ist die Nummer des Gruppenkommandanten eingetragen und der Zugang aktiv, geht – je nach Einstellung – automatisch eine SMS mit dem persönlichen Link raus.
 
 ## QR-Zugang für Einheiten (Ausdruck)
 
@@ -123,7 +121,7 @@ Im Tab **Zugang** gibt es zusätzlich zum persönlichen SMS-Link einen **QR-Zuga
 
 - **Ausstellen / Anzeigen / Drucken**: „QR-Code ausstellen“, „QR anzeigen“ (nur auf Klick, wird nach 2 Minuten wieder ausgeblendet), „QR-Code drucken“ (Druckerauswahl). Erneutes Drucken ändert den Zugang nicht; „Neuen QR-Code“ macht den alten Ausdruck ungültig.
 - **Gültigkeit und PIN**: Standardmäßig 72 Stunden (einstellbar). Optional verlangt der QR-Zugang eine PIN; sie steht **nicht** auf dem Blatt, sondern wird nur der Einsatzleitung angezeigt und separat übergeben.
-- **Rechte**: Der QR-Zugang zeigt nur die eigene Einheit, erlaubt Status, Lagemeldungen und Fotos – keine Personal-/Ausstattungspflege.
+- **Rechte**: Der QR-Zugang zeigt nur die eigene Einheit und erlaubt Status, Lagemeldungen und Fotos.
 - **Widerruf** erfolgt manuell, beim Wechsel oder Entfernen des Gruppenkommandanten, beim Abrücken der Einheit, beim Lageende und über die Notbremse.
 - Auf dem Ausdruck steht: „Kräfteanforderungen und dringende Meldungen ausschließlich über Funk!“
 
