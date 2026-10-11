@@ -44,6 +44,8 @@ _GLOBAL_TABLES = frozenset({
     "fire_dept", "role", "qualification", "seed_template",
     "system_settings", "rettungsdatenblatt_cache", "rettungskarten_katalog",
     "hoehen_cache", "alembic_version",
+    # Systemweite Mail-Weiterleitungen (Sysadmin, kein Org-Bezug).
+    "mail_weiterleitung", "mail_weiterleitung_log",
 })
 
 # Fluechtige/geraetegebundene Sicherheits-Artefakte: kein Bestandteil eines
