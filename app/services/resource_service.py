@@ -533,6 +533,7 @@ def dispatch_to_site(
     site_id: int,
     *,
     auftrag: str | None = None,
+    auftragsart: str = "abarbeitung",
     reihenfolge: int | None = None,
     author_name: str | None = None,
     user_id: int | None = None,
@@ -540,7 +541,7 @@ def dispatch_to_site(
 ) -> EinheitSiteDispatch:
     """Disponiert eine Einheit für eine Einsatzstelle (vor_ort_at=NULL = alarmiert).
 
-    Fehler wenn bereits aktiv disponiert (weder abgezogen noch beendet).
+    Fehler wenn bereits in derselben Auftragsart aktiv disponiert.
     """
     e = _get_einheit(db, einheit_id, lage_id)
     if e.verband_id is not None:
@@ -550,6 +551,10 @@ def dispatch_to_site(
     site = db.get(IncidentSite, site_id)
     if not site or site.major_incident_id != lage_id:
         raise ValueError("Einsatzstelle nicht gefunden")
+    if site.phase.value in {"erledigt", "abgebrochen"}:
+        raise ValueError("Einsatz zuerst wieder öffnen")
+    if auftragsart not in {"erkundung", "abarbeitung"}:
+        raise ValueError("Unbekannte Auftragsart")
     db.flush()
 
     existing = (
@@ -557,6 +562,7 @@ def dispatch_to_site(
         .filter(
             EinheitSiteDispatch.einheit_id == einheit_id,
             EinheitSiteDispatch.site_id == site_id,
+            EinheitSiteDispatch.auftragsart == auftragsart,
             dispatch_aktiv_filter(),
         )
         .first()
@@ -574,6 +580,7 @@ def dispatch_to_site(
         dispatched_by=user_id,
         author_name=author_name,
         auftrag=auftrag,
+        auftragsart=auftragsart,
         reihenfolge=reihenfolge,
     )
     db.add(dispatch)
@@ -587,15 +594,21 @@ def dispatch_to_site(
     _journal(
         db,
         lage_id,
-        f'{e.label} → Einsatzstelle "{site.bezeichnung}" disponiert (DISPONIERT)',
+        f'{e.label} → Einsatzstelle "{site.bezeichnung}" Erkundung zugewiesen (ERKUNDUNG)'
+        if auftragsart == "erkundung"
+        else f'{e.label} → Einsatzstelle "{site.bezeichnung}" disponiert (DISPONIERT)',
         category="ressource",
         author_name=author_name,
         user_id=user_id,
         einheit_id=e.id,
         site_id=site.id,
-        ereignis_typ="disponiert",
+        ereignis_typ="erkundung_zugewiesen" if auftragsart == "erkundung" else "disponiert",
         quelle=quelle,
     )
+    from app.services.gsl_phase_automatik import aktualisiere_site_phase
+    setattr(dispatch, "phase_geaendert", aktualisiere_site_phase(
+        db, site, ausloeser=f"{e.label} disponiert", user=(user_id, author_name), quelle=quelle
+    ))
     return dispatch
 
 
@@ -694,6 +707,11 @@ def oeffne_auftrag_wieder(
         ereignis_typ="status",
         quelle="manuell",
     )
+    from app.services.gsl_phase_automatik import aktualisiere_site_phase
+    setattr(dispatch, "phase_geaendert", aktualisiere_site_phase(
+        db, dispatch.site, ausloeser=f"{dispatch.einheit.label} wiedereröffnet",
+        user=(user_id, author_name), quelle="manuell",
+    ))
 
 
 def set_vor_ort_at_site(
@@ -775,6 +793,10 @@ def set_vor_ort_at_site(
         ereignis_typ="status",
         quelle="manuell",
     )
+    from app.services.gsl_phase_automatik import aktualisiere_site_phase
+    setattr(dispatch, "phase_geaendert", aktualisiere_site_phase(
+        db, site, ausloeser=f"{e.label} vor Ort", user=(user_id, author_name), quelle="manuell"
+    ))
     return dispatch, None
 
 
@@ -817,6 +839,10 @@ def resolve_vor_ort_conflict(
                 ereignis_typ="zurueckgezogen",
                 quelle="manuell",
             )
+            from app.services.gsl_phase_automatik import aktualisiere_site_phase
+            aktualisiere_site_phase(
+                db, old_site, ausloeser=f"{e.label} verlegt", user=(user_id, author_name), quelle="manuell"
+            )
     db.flush()
 
     dispatch, _ = set_vor_ort_at_site(
@@ -840,20 +866,20 @@ def withdraw_from_site(
     user_id: int | None = None,
     grund: str | None = None,
     quelle: str = "manuell",
+    auftragsart: str | None = None,
 ) -> None:
     """Zieht Einheit von einer Einsatzstelle ab (withdrawn_at setzen)."""
     if grund is not None and len(grund.strip()) > 500:
         raise ValueError("Grund darf höchstens 500 Zeichen haben")
     e = _get_einheit(db, einheit_id, lage_id)
-    dispatch = (
-        db.query(EinheitSiteDispatch)
-        .filter(
-            EinheitSiteDispatch.einheit_id == einheit_id,
-            EinheitSiteDispatch.site_id == site_id,
-            EinheitSiteDispatch.withdrawn_at.is_(None),
-        )
-        .first()
+    query = db.query(EinheitSiteDispatch).filter(
+        EinheitSiteDispatch.einheit_id == einheit_id,
+        EinheitSiteDispatch.site_id == site_id,
+        EinheitSiteDispatch.withdrawn_at.is_(None),
     )
+    if auftragsart is not None:
+        query = query.filter(EinheitSiteDispatch.auftragsart == auftragsart)
+    dispatch = query.first()
     if not dispatch:
         raise ValueError("Keine aktive Disposition für diese Einsatzstelle")
 
@@ -883,6 +909,11 @@ def withdraw_from_site(
         ereignis_typ="zurueckgezogen",
         quelle=quelle,
     )
+    if site:
+        from app.services.gsl_phase_automatik import aktualisiere_site_phase
+        setattr(dispatch, "phase_geaendert", aktualisiere_site_phase(
+            db, site, ausloeser=f"{e.label} abgezogen", user=(user_id, author_name), quelle=quelle
+        ))
 
 
 def get_active_dispatches_for_site(

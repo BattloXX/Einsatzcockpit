@@ -120,6 +120,7 @@ PHASE_ORDER = [
     SitePhase.bewertet,
     SitePhase.disponiert,
     SitePhase.in_arbeit,
+    SitePhase.fertig_gemeldet,
     SitePhase.erledigt,
 ]
 
@@ -608,6 +609,57 @@ async def site_phase_change(
     return Response(status_code=204)
 
 
+@router.post("/lage/{lage_id}/stellen/{site_id}/abschliessen")
+async def site_einsatz_abschliessen(
+    request: Request, lage_id: int, site_id: int, aktive_zurueckziehen: bool = Form(False),
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    if not _can_manage(user):
+        raise HTTPException(status_code=403)
+    site = db.get(IncidentSite, site_id)
+    if not site or site.major_incident_id != lage_id:
+        raise HTTPException(status_code=404)
+    from app.services.gsl_phase_automatik import einsatz_abschliessen
+    try:
+        einsatz_abschliessen(db, site, user=user, quelle="manuell", aktive_zurueckziehen=aktive_zurueckziehen)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    db.commit()
+    await broadcast_lage(lage_id, {"type": "site_phase_changed", "site_id": site_id, "phase": site.phase.value})
+    from app.services.gsl_live_notify import notify_gsl_live
+    await notify_gsl_live(db, lage, org_id=lage.org_id, reason="counts")
+    return Response(status_code=204)
+
+
+@router.post("/lage/{lage_id}/stellen/{site_id}/wiedereroeffnen")
+async def site_einsatz_wiedereroeffnen(
+    request: Request, lage_id: int, site_id: int, db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    if not _can_manage(user):
+        raise HTTPException(status_code=403)
+    site = db.get(IncidentSite, site_id)
+    if not site or site.major_incident_id != lage_id:
+        raise HTTPException(status_code=404)
+    from app.services.gsl_phase_automatik import einsatz_wiedereroeffnen
+    try:
+        einsatz_wiedereroeffnen(db, site, user=user, quelle="manuell")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    db.commit()
+    await broadcast_lage(lage_id, {"type": "site_phase_changed", "site_id": site_id, "phase": site.phase.value})
+    from app.services.gsl_live_notify import notify_gsl_live
+    await notify_gsl_live(db, lage, org_id=lage.org_id, reason="counts")
+    return Response(status_code=204)
+
+
 # ── Priorität setzen ─────────────────────────────────────────────────────────
 
 @router.post("/lage/{lage_id}/stellen/{site_id}/prio")
@@ -947,6 +999,10 @@ async def site_einheit_zuweisen(
     db.commit()
     background_tasks.add_task(sende_nach_commit, benachrichtigung)
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
+    if getattr(dispatch, "phase_geaendert", False):
+        await broadcast_lage(lage_id, {"type": "site_phase_changed", "site_id": site_id})
+        from app.services.gsl_live_notify import notify_gsl_live
+        await notify_gsl_live(db, lage, org_id=lage.org_id, reason="counts")
     return Response(status_code=204)
 
 
@@ -1065,6 +1121,7 @@ async def site_einheit_disponieren(
     site_id: int,
     einheit_id: int = Form(...),
     auftrag: str | None = Form(None),
+    auftragsart: str = Form("abarbeitung"),
     reihenfolge: int | None = Form(None),
     background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
@@ -1080,7 +1137,7 @@ async def site_einheit_disponieren(
     try:
         dispatch = resource_service.dispatch_to_site(
             db, einheit_id, lage_id, site_id,
-            auftrag=auftrag, reihenfolge=reihenfolge,
+            auftrag=auftrag, auftragsart=auftragsart, reihenfolge=reihenfolge,
             author_name=get_author_name(request), user_id=user.id,
         )
         einheit = db.get(LageEinheit, einheit_id)
@@ -1100,6 +1157,10 @@ async def site_einheit_disponieren(
     db.commit()
     background_tasks.add_task(sende_nach_commit, benachrichtigung)
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
+    if getattr(dispatch, "phase_geaendert", False):
+        await broadcast_lage(lage_id, {"type": "site_phase_changed", "site_id": site_id})
+        from app.services.gsl_live_notify import notify_gsl_live
+        await notify_gsl_live(db, lage, org_id=lage.org_id, reason="counts")
     await broadcast_lage(lage_id, {"type": "einheit:changed", "einheit_id": einheit_id, "site_id": site_id})
     html = _site_detail_html_with_oob(request, db, lage, site, user)
     return HTMLResponse(content=html, headers={"HX-Retarget": "#siteDetailContent", "HX-Reswap": "innerHTML"})
@@ -1173,6 +1234,10 @@ async def site_einheit_wiedereroeffnen(
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
     await broadcast_lage(lage_id, {"type": "einheit:changed", "einheit_id": dispatch.einheit_id,
                                    "dispatch_id": dispatch_id, "site_id": site_id})
+    if getattr(dispatch, "phase_geaendert", False):
+        await broadcast_lage(lage_id, {"type": "site_phase_changed", "site_id": site_id})
+        from app.services.gsl_live_notify import notify_gsl_live
+        await notify_gsl_live(db, lage, org_id=lage.org_id, reason="counts")
     return HTMLResponse(content=_site_detail_html_with_oob(request, db, lage, site, user),
                         headers={"HX-Retarget": "#siteDetailContent", "HX-Reswap": "innerHTML"})
 
@@ -1294,6 +1359,10 @@ async def site_einheit_vor_ort(
     lagemeldung_service.ensure_timer(site, db)
     db.commit()
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
+    if dispatch and getattr(dispatch, "phase_geaendert", False):
+        await broadcast_lage(lage_id, {"type": "site_phase_changed", "site_id": site_id})
+        from app.services.gsl_live_notify import notify_gsl_live
+        await notify_gsl_live(db, lage, org_id=lage.org_id, reason="counts")
     html = _site_detail_html_with_oob(request, db, lage, site, user)
     return HTMLResponse(content=html, headers={"HX-Retarget": "#siteDetailContent", "HX-Reswap": "innerHTML"})
 
@@ -1342,6 +1411,10 @@ async def site_einheit_abziehen(
     if benachrichtigung:
         background_tasks.add_task(sende_nach_commit, benachrichtigung)
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
+    if dispatch and getattr(dispatch, "phase_geaendert", False):
+        await broadcast_lage(lage_id, {"type": "site_phase_changed", "site_id": site_id})
+        from app.services.gsl_live_notify import notify_gsl_live
+        await notify_gsl_live(db, lage, org_id=lage.org_id, reason="counts")
     html = _site_detail_html_with_oob(request, db, lage, site, user)
     return HTMLResponse(content=html, headers={"HX-Retarget": "#siteDetailContent", "HX-Reswap": "innerHTML"})
 

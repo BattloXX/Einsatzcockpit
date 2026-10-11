@@ -27,7 +27,8 @@ PHASE_LABELS = {
     SitePhase.bewertet: "Bewertet",
     SitePhase.disponiert: "Disponiert",
     SitePhase.in_arbeit: "In Arbeit",
-    SitePhase.erledigt: "Erledigt",
+    SitePhase.fertig_gemeldet: "Fertig gemeldet",
+    SitePhase.erledigt: "Abgeschlossen",
     SitePhase.abgebrochen: "Abgebrochen",
 }
 
