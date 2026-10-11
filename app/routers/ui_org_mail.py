@@ -9,8 +9,10 @@ für den Admin sichtbar sein soll.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import UTC, datetime, timedelta
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
@@ -126,7 +128,7 @@ def mail_settings_page(
         db.query(OrgSettings).filter(OrgSettings.org_id == effective_org_id).first()
         if effective_org_id else None
     )
-    from app.services.org_mail_adresse import empfangs_adresse, inbound_domain
+    from app.services.org_mail_adresse import empfangs_adresse, inbound_domain, mail_adressen_uebersicht
 
     empfangs_domain = inbound_domain(db)
 
@@ -139,6 +141,7 @@ def mail_settings_page(
         "org_settings": org_settings,
         "empfangs_domain": empfangs_domain,
         "empfangs_adresse": empfangs_adresse(org, empfangs_domain) if org else "",
+        "adressen_uebersicht": mail_adressen_uebersicht(db, org) if org else None,
         "is_sysadmin": is_sysadmin,
         "all_orgs": all_orgs,
         "flash": request.query_params.get("flash"),
@@ -427,7 +430,7 @@ async def smtp_test(
         return JSONResponse({"ok": False, "message": f"Fehler: {exc}"})
 
 
-# ── POST /admin/mail/o365/test ────────────────────────────────────────────────
+# ── POST /admin/mail/o365/test ───────────────────────────────────────────
 @router.post("/mail/o365/test")
 async def o365_test(
     request: Request,
@@ -481,6 +484,75 @@ async def o365_test(
                     ip=request.client.host if request.client else None)
         db.commit()
         return JSONResponse({"ok": False, "message": f"Unerwarteter Fehler: {exc}"})
+
+
+def _test_redirect(org_id: int, user: User, ok: bool, text: str) -> RedirectResponse:
+    params = {"test_ok": "1" if ok else "0", "test_ergebnis": text[:200]}
+    if org_id != user.org_id:
+        params["org_id"] = str(org_id)
+    return RedirectResponse(f"/admin/mail?{urlencode(params)}", status_code=302)
+
+
+@router.post("/mail/imap/verbindung-testen")
+async def imap_connection_test(
+    request: Request,
+    db=Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    target_org_id: int | None = Form(None),
+):
+    from app.core.crypto import decrypt_secret
+    from app.services import mail_imap_poller
+
+    effective_org_id = _get_org_id(user, target_org_id)
+    if not effective_org_id:
+        return _test_redirect(0, user, False, "Keine Organisation ausgewählt.")
+    if not same_org_or_system_admin(user, effective_org_id):
+        raise HTTPException(status_code=403, detail="Keine Berechtigung für diese Organisation")
+    cfg = db.query(OrgSmtpConfig).filter(OrgSmtpConfig.org_id == effective_org_id).first()
+    if not cfg or not (cfg.imap_host and cfg.user and cfg.password_enc):
+        ok, text = False, "IMAP ist unvollständig konfiguriert."
+    else:
+        config = {
+            "imap_host": cfg.imap_host,
+            "imap_port": cfg.imap_port,
+            "imap_use_ssl": cfg.imap_use_ssl,
+            "user": cfg.user,
+            "password": decrypt_secret(cfg.password_enc),
+            "imap_ordner": cfg.imap_ordner or "INBOX",
+            "timeout": settings.MAIL_IMAP_TIMEOUT_S,
+        }
+        ok, text = await asyncio.to_thread(mail_imap_poller.verbindung_testen, config)
+    write_audit(db, "org_mail.imap.test", org_id=effective_org_id, user_id=user.id, payload={"ok": ok},
+                ip=request.client.host if request.client else None)
+    db.commit()
+    return _test_redirect(effective_org_id, user, ok, text)
+
+
+@router.post("/mail/o365/verbindung-testen")
+async def o365_connection_test(
+    request: Request,
+    db=Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    target_org_id: int | None = Form(None),
+):
+    from app.services import mail_graph_poller
+
+    effective_org_id = _get_org_id(user, target_org_id)
+    if not effective_org_id:
+        return _test_redirect(0, user, False, "Keine Organisation ausgewählt.")
+    if not same_org_or_system_admin(user, effective_org_id):
+        raise HTTPException(status_code=403, detail="Keine Berechtigung für diese Organisation")
+    cfg = db.query(OrgO365MailConfig).filter(OrgO365MailConfig.org_id == effective_org_id).first()
+    if not settings.O365_MAIL_ENABLED:
+        ok, text = False, "Office 365 ist global deaktiviert."
+    elif not cfg or not cfg.is_fully_configured:
+        ok, text = False, "Office 365 ist unvollständig konfiguriert."
+    else:
+        ok, text = await mail_graph_poller.verbindung_testen(cfg)
+    write_audit(db, "org_mail.o365.test", org_id=effective_org_id, user_id=user.id, payload={"ok": ok},
+                ip=request.client.host if request.client else None)
+    db.commit()
+    return _test_redirect(effective_org_id, user, ok, text)
 
 
 @router.post("/mail/resend/test")

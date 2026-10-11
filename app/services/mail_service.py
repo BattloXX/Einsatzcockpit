@@ -43,6 +43,41 @@ def mail_available(db, org_id: int | None) -> bool:
     )
 
 
+def versandweg(db, org_id: int | None) -> dict[str, Any]:
+    """Liefert den aktiven Versandweg in derselben Priorität wie ``deliver``."""
+    wege: list[tuple[str, str | None]] = []
+    if org_id is not None and settings.O365_MAIL_ENABLED:
+        try:
+            from app.models.org_mail import OrgO365MailConfig
+
+            o365_cfg = db.query(OrgO365MailConfig).filter(OrgO365MailConfig.org_id == org_id).first()
+            if o365_cfg and o365_cfg.enabled and o365_cfg.is_fully_configured:
+                wege.append(("o365", o365_cfg.sender_address))
+        except Exception:
+            logger.exception("O365-Config-Lookup fehlgeschlagen (Org %s)", org_id)
+    own_resend_cfg = _org_resend_cfg(db, org_id)
+    if own_resend_cfg:
+        wege.append(("resend_org", own_resend_cfg["from_addr"]))
+    else:
+        global_resend_cfg = get_resend_cfg(db)
+        if global_resend_cfg:
+            wege.append((
+                "resend_global",
+                _resend_from_addr_for_org(db, org_id, global_resend_cfg["from_domain"]),
+            ))
+    own_smtp_cfg = _org_smtp_cfg(db, org_id)
+    if own_smtp_cfg:
+        wege.append(("smtp_org", own_smtp_cfg["from_addr"]))
+    else:
+        global_smtp_cfg = get_smtp_cfg(db)
+        if global_smtp_cfg.get("host"):
+            wege.append(("smtp_global", global_smtp_cfg.get("from_addr")))
+    if not wege:
+        return {"weg": "keiner", "absender": None, "fallbacks": []}
+    weg, absender = wege[0]
+    return {"weg": weg, "absender": absender, "fallbacks": [item[0] for item in wege[1:]]}
+
+
 def get_smtp_cfg(db=None) -> dict[str, Any]:
     """Lädt SMTP-Konfiguration – DB-Werte haben Vorrang vor Umgebungsvariablen."""
     cfg = {
