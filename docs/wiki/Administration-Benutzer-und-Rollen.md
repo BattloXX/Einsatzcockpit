@@ -116,6 +116,8 @@ Ein Benutzer kann **mehrere Rollen gleichzeitig** haben (z.B. `incident_leader` 
 | Stammdaten (Fahrzeuge, Qualifikationen, Alarmstichwörter) | ✓ | ✓ | – | – | – | – | – | – |
 | Teams-Alarmierung, SSO, LIS-Konfiguration, Wasserstellen | ✓ | ✓ | – | – | – | – | – | – |
 | Organisationseinstellungen | ✓ | ✓ | – | – | – | – | – | – |
+| E-Mail-Posteingang sehen, einer Meldung zuordnen, Absender freigeben | ✓ | ✓ | – | – | – | – | – | – |
+| Webhook-Secret für den E-Mail-Eingang verwalten | ✓ (nur System-Admin) | – | – | – | – | – | – | – |
 | Organisationen verwalten (Multi-Tenancy) | ✓ (nur System-Admin) | – | – | – | – | – | – | – |
 | System-Konsole (Update, Backup, Quotas, Server-Log) | ✓ (nur System-Admin) | – | – | – | – | – | – | – |
 | Landingpage/Seiten-Editor (CMS) | ✓ (nur System-Admin) | – | – | – | – | – | – | – |

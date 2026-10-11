@@ -25,12 +25,12 @@ def _png() -> bytes:
     return buf.getvalue()
 
 
-def _einsatz(org_id, *, exercise=False, status="active"):
+def _einsatz(org_id, *, exercise=False, status="active", started_at=None):
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
         inc = Incident(primary_org_id=org_id, alarm_type_code="T1", status=status,
-                       started_at=datetime.now(UTC), is_exercise=exercise)
+                       started_at=started_at or datetime.now(UTC), is_exercise=exercise)
         db.add(inc)
         db.flush()
         db.add(IncidentColumn(incident_id=inc.id, code="messages", column_kind="messages", title="Meldungen"))
@@ -40,12 +40,13 @@ def _einsatz(org_id, *, exercise=False, status="active"):
         db.close()
 
 
-def _settings(org_id, modus="freigegeben", absender="@example.at", mehrere="posteingang"):
+def _settings(org_id, modus="freigegeben", absender="@example.at", mehrere="posteingang", rueckblick=30):
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
         row = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first() or OrgSettings(org_id=org_id)
         row.mail_eingang_modus, row.mail_eingang_absender, row.mail_eingang_mehrere = modus, absender, mehrere
+        row.mail_eingang_rueckblick_min = rueckblick
         db.add(row)
         db.commit()
     finally:

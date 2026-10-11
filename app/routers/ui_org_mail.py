@@ -543,10 +543,19 @@ def eingang_list(request: Request, status: str = "", q: str = "", page: int = 1,
     per_page = 25
     total = query.with_entities(func.count(OrgMailEingang.id)).scalar() or 0
     entries = query.order_by(OrgMailEingang.empfangen_at.desc()).offset((page - 1) * per_page).limit(per_page).all()
-    return templates.TemplateResponse(request, "admin/mail_eingang.html", {
+    context = {
         "user": user, "entries": entries, "org_id": oid, "status": status, "q": q, "page": page,
         "pages": max(1, (total + per_page - 1) // per_page),
-    })
+        "offene_count": db.query(func.count(OrgMailEingang.id)).filter(
+            OrgMailEingang.org_id == oid, OrgMailEingang.status.in_(("neu", "posteingang", "wartend"))
+        ).scalar() or 0,
+    }
+    template = (
+        "admin/_mail_eingang_content.html"
+        if request.headers.get("HX-Request") == "true"
+        else "admin/mail_eingang.html"
+    )
+    return templates.TemplateResponse(request, template, context)
 
 
 @router.get("/mail/eingang/{entry_id:int}", response_class=HTMLResponse)

@@ -1,10 +1,18 @@
 # Mail-Versand (SMTP / Office 365)
 
-## Posteingang über Resend
+## E-Mail-Eingang → Meldungen
 
-Der organisationsbezogene Resend-Posteingang ist standardmäßig deaktiviert. Bei Resend Empfangsdomain und MX einrichten und einen Webhook für `email.received` auf die in Administration → Mail angezeigte URL setzen. Der API-Key benötigt Empfangsrechte (Full Access); das Webhook-Signing-Secret wird verschlüsselt gespeichert und nie wieder angezeigt.
+Die Empfangsadresse einer Organisation lautet `<typ>.<slug>@get.einsatzcockpit.com`, zum Beispiel `feuerwehr.wolfurt@get.einsatzcockpit.com`. Die bisherige `<slug>@…`-Adresse bleibt als Alias empfangsfähig. Unter **Administration → Mail** wird der Eingang je Organisation eingerichtet.
 
-Die Aufbewahrung beträgt konfigurierbar 1 bis 365 Tage (Standard 90). HTML-Mails werden nur in einem sandboxed iframe mit restriktiver CSP dargestellt. Anhänge werden nicht gespeichert und nur bei Bedarf serverseitig von Resend geladen.
+Der Modus **aus** legt nichts automatisch in einen Einsatz. **Nur freigegebene Absender** ist die sichere Vorgabe: die Liste akzeptiert einzelne Adressen und Domains mit `@` (etwa `@lls.at`). **Alle** übernimmt nur Mails, deren SPF, DKIM und DMARC jeweils bestanden haben. Ohne passende Freigabe landet die Mail im Posteingang.
+
+Ist genau ein regulärer, aktiver Einsatz vorhanden, wird daraus eine Meldung. Gibt es noch keinen Einsatz, bleibt die Mail für das einstellbare Rückblickfenster (5–240 Minuten, Standard 30) wartend; ein in diesem Zeitraum gestarteter Einsatz übernimmt sie dann automatisch. Mehrere Einsätze werden je Einstellung in den Posteingang gelegt oder dem neuesten zugeordnet. Übungseinsätze werden nie automatisch verwendet.
+
+Org-Administratoren und Administratoren sehen den Posteingang, können Mails lesen, archivieren oder löschen, einen Absender freigeben und eine Mail manuell in einen aktiven Einsatz übernehmen. Bilder, PDFs und Dateien werden als Meldungsanhänge gesichert; gefährliche oder nicht darstellbare Dateitypen werden nur als Download bereitgestellt. Der offene Zähler und eine geöffnete Liste aktualisieren sich sparsam alle 30 Sekunden.
+
+Sicherheit und Grenzen: Der Webhook prüft seine Svix-Signatur, hat ein Stundenlimit je Organisation sowie Größen- und Anhangslimits. Mailtext ist unvertrauenswürdig und wird nur als Text übernommen; HTML wird isoliert angezeigt. Es werden keine Mailinhalte geloggt. Eingangszeilen werden nach konfigurierbaren 1–365 Tagen (Standard 90) gelöscht; bereits erzeugte Meldungen samt Anhängen bleiben erhalten.
+
+Für die Einrichtung bei Resend die Domain `get.einsatzcockpit.com` als Receiving Domain anlegen, deren MX-Eintrag auf Resend setzen und für `email.received` den angezeigten Webhook konfigurieren. Der Resend-Key benötigt Empfangsrechte (Full Access). Das Webhook-Signing-Secret wird nur in der System-Konsole von einem Systemadministrator hinterlegt, verschlüsselt gespeichert und nie wieder angezeigt. Eine Empfangs-Subdomain verhindert, dass MX-Einträge bestehende Postfächer der Versanddomain beeinträchtigen.
 
 ← [Zurück zur Startseite](Home)
 

@@ -269,6 +269,11 @@ class Settings(BaseSettings):
     EINSATZ_ROUTING_API_KEY: str = ""
     EINSATZ_ROUTING_PROFILE: str = ""  # leer: ORS driving-car, OSRM driving
     EINSATZ_ROUTING_TIMEOUT_SECONDS: float = 5.0
+    # Nachträgliche Zuordnung bereits abgerufener Eingangsmails zu neu
+    # angelegten Einsätzen. Separat abschaltbar, damit Test-Worker keine
+    # Hintergrundmutationen ausführen.
+    MAIL_ZUORDNUNG_LOOP_ENABLED: bool = True
+    MAIL_ZUORDNUNG_LOOP_INTERVAL_S: int = 30
     # Gefahren der Nachbarobjekte im Umkreis des Einsatzobjekts (Einsatzinfo-Karte)
     NACHBAR_GEFAHR_RADIUS_M: int = 400
 
