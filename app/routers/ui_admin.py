@@ -268,31 +268,41 @@ async def delete_user(
 
 
 def _hard_delete_user(db: Session, u: User, acting_user_id: int) -> None:
-    """FK-sicheres Löschen eines Users — analog zu delete_device_token."""
-    from app.models.breathing import PressureLog
-    from app.models.incident import (
-        Incident,
-        IncidentChange,
-        IncidentLog,
-        IncidentOrg,
-        IncidentToken,
-        Task,
-    )
+    """FK-sicheres Löschen eines Users.
+
+    Alle Fremdschlüssel auf ``user.id`` werden aus den Metadaten ermittelt, statt sie
+    einzeln aufzuzählen: Eine handgepflegte Liste deckte nur einen Bruchteil der über
+    100 Verweise ab, und das Löschen endete mit einem 500er (Vorfall 2026-10-11).
+    Nullbare Verweise werden geleert (Journale, Meldungen, Medien bleiben erhalten);
+    Zeilen mit Pflicht-Verweis gehören dem User (Rollen, ausgestellte Tokens, …) und
+    werden gelöscht – auch dort, wo die DB selbst kein ON DELETE CASCADE kennt.
+    Die Statements filtern über die User-ID; sie betreffen damit nur Verweise auf
+    genau diesen User, unabhängig vom Tenant.
+    """
+    from sqlalchemy import delete as sa_delete
+    from sqlalchemy import update as sa_update
+
+    from app.db import Base
+
     uid = u.id
     write_audit(db, "admin.user.hard_deleted", user_id=acting_user_id,
                 entity_type="user", entity_id=uid, payload={"username": u.username})
     db.flush()
-    db.query(AuditLog).filter(AuditLog.user_id == uid).update({"user_id": None})
-    db.query(SystemSettings).filter(SystemSettings.updated_by_user_id == uid).update({"updated_by_user_id": None})
-    db.query(Incident).filter(Incident.incident_leader_user_id == uid).update({"incident_leader_user_id": None})
-    db.query(IncidentOrg).filter(IncidentOrg.added_by_user_id == uid).update({"added_by_user_id": None})
-    db.query(Task).filter(Task.created_by_user_id == uid).update({"created_by_user_id": None})
-    db.query(IncidentLog).filter(IncidentLog.user_id == uid).update({"user_id": None})
-    db.query(IncidentChange).filter(IncidentChange.user_id == uid).update({"user_id": None})
-    db.query(IncidentToken).filter(IncidentToken.target_user_id == uid).update({"target_user_id": None})
-    db.query(IncidentToken).filter(IncidentToken.issued_by_user_id == uid).delete()
-    db.query(PressureLog).filter(PressureLog.recorded_by_user_id == uid).update({"recorded_by_user_id": None})
-    db.query(UserRole).filter(UserRole.user_id == uid).delete()
+    user_table = User.__table__
+    for table in Base.metadata.tables.values():
+        if table is user_table:
+            continue
+        for fk in table.foreign_keys:
+            if fk.column.table is not user_table:
+                continue
+            column = fk.parent
+            if column.nullable:
+                db.execute(sa_update(table).where(column == uid).values({column.name: None}))
+            else:
+                db.execute(sa_delete(table).where(column == uid))
+    for fk in user_table.foreign_keys:
+        if fk.column.table is user_table and fk.parent.nullable:
+            db.execute(sa_update(user_table).where(fk.parent == uid).values({fk.parent.name: None}))
     db.flush()
     db.expire(u)
     db.delete(u)
