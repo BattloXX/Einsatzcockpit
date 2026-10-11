@@ -43,6 +43,17 @@
 .einheit-einsatzkarte__kopf{display:flex;justify-content:space-between;align-items:center;gap:.75rem;padding:.6rem .75rem;font-size:.9rem;}
 .einheit-einsatzkarte__kopf a{color:#93c5fd;font-size:.82rem;text-decoration:none;white-space:nowrap;}
 .einheit-einsatzkarte__karte{height:220px;z-index:0;}
+.einheit-uebersichtskarte{margin-top:1rem;}
+.einheit-kartenaktionen{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.5rem;}
+.einheit-kartenaktionen .btn{min-height:44px;}
+.einheit-karte{min-height:420px;width:100%;border:1px solid var(--border);
+  border-radius:var(--radius-md);overflow:hidden;z-index:0;}
+.einheit-kartenmarker span{display:block;min-width:32px;padding:7px;border-radius:999px;
+  text-align:center;background:#fff;color:#172033;border:2px solid #475569;font-weight:700;
+  box-shadow:0 1px 4px #0006;}
+.einheit-kartenmarker--naechster span{background:#b71921;color:#fff;border-color:#fff;white-space:nowrap;}
+.einheit-kartenmarker--in_arbeit span{background:#f59e0b;color:#111827;white-space:nowrap;}
+.einheit-kartenmarker--erkundung span{border-style:dashed;}
 
 .einheit-liste summary{cursor:pointer;padding:.6rem 0;font-weight:700;}
 .einheit-liste__eintrag{display:flex;justify-content:space-between;width:100%;min-height:48px;padding:.5rem .25rem;border-bottom:1px solid var(--border);text-align:left;color:var(--text);}
@@ -103,6 +114,7 @@
   /* Die gesamte Aktionsleiste darf Einsatzdaten und Karte nicht überdecken. */
   .fab-actions{position:static;background:none;padding:0;margin:.75rem 0 0;}
   .einheit-einsatzkarte__karte{height:190px;}
+  .einheit-karte{min-height:320px;}
   .einheit-zeile{align-items:flex-start;}
   .einheit-zeile > :last-child{flex-shrink:0;}
 }

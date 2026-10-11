@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal
+from urllib.parse import quote
 
 from fastapi import Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -308,14 +309,25 @@ def auftrag_laden(db: Session, ctx: EinheitKontext, dispatch_id: int) -> Einheit
 def _auftragsdaten(dispatch: EinheitSiteDispatch) -> dict:
     site = dispatch.site
     from app.services.gsl_live_service import _combined_site_address
+    adresse = _combined_site_address(site)
+    hat_koordinaten = site.lat is not None and site.lng is not None
+    nav_url = None
+    if hat_koordinaten:
+        nav_url = f"https://www.google.com/maps/dir/?api=1&destination={site.lat},{site.lng}"
+    elif adresse:
+        nav_url = f"https://www.google.com/maps/dir/?api=1&destination={quote(adresse, safe='')}"
     return {
         "dispatch_id": dispatch.id,
         "site_id": site.id,
         "bezeichnung": site.bezeichnung,
         "einsatzgrund": site.einsatzgrund,
-        "adresse": _combined_site_address(site),
+        "adresse": adresse,
         "lat": site.lat,
         "lng": site.lng,
+        "hat_koordinaten": hat_koordinaten,
+        "nav_url": nav_url,
+        "naechster": False,
+        "rang": None,
         "priority": site.priority.name if site.priority else None,
         "phase": site.phase.value,
         "auftrag": dispatch.auftrag,
@@ -364,6 +376,14 @@ def auftraege_fuer_einheit(db: Session, ctx: EinheitKontext) -> dict:
     fahrzeug = None
     if ctx.vehicle:
         fahrzeug = ctx.vehicle.code or ctx.vehicle.name
+    naechster_dispatch = weitere_dispatches[0] if weitere_dispatches else None
+
+    def auftragsdaten_mit_rang(dispatch: EinheitSiteDispatch, rang: int) -> dict:
+        daten = _auftragsdaten(dispatch)
+        daten["rang"] = rang
+        daten["naechster"] = dispatch is naechster_dispatch
+        return daten
+
     return {
         "kopf": {
             "fahrzeug": fahrzeug or ctx.einheit.label,
@@ -376,12 +396,14 @@ def auftraege_fuer_einheit(db: Session, ctx: EinheitKontext) -> dict:
             "erledigt": len(abgeschlossen),
         },
         "kategorien": {
-            "aktuell": _auftragsdaten(aktuell_dispatch) if aktuell_dispatch else None,
-            "weitere": [_auftragsdaten(d) for d in weitere_dispatches],
+            "aktuell": auftragsdaten_mit_rang(aktuell_dispatch, 1) if aktuell_dispatch else None,
+            "weitere": [auftragsdaten_mit_rang(d, rang) for rang, d in enumerate(
+                weitere_dispatches, start=2 if aktuell_dispatch else 1
+            )],
             "abgeschlossen": [_auftragsdaten(d) for d in abgeschlossen],
             "zurueckgezogen": [_auftragsdaten(d) for d in zurueckgezogen],
         },
-        "naechster_dispatch_id": weitere_dispatches[0].id if aktuell_dispatch is None and weitere_dispatches else None,
+        "naechster_dispatch_id": naechster_dispatch.id if naechster_dispatch else None,
         "server_time": _iso_z(datetime.now(UTC)),
     }
 

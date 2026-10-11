@@ -8,7 +8,10 @@
 <script src="/static/js/leaflet.min.js?v={{ ASSET_VERSION }}" defer></script>
 {# Die Outbox wird per import geladen; ohne Versions-Mapping bliebe sie wegen max-age dauerhaft im Browser-Cache. #}
 <script type="importmap">
-  {"imports": {"/static/js/einheit_outbox.js": "/static/js/einheit_outbox.js?v={{ ASSET_VERSION }}"}}
+  {"imports": {
+    "/static/js/einheit_outbox.js": "/static/js/einheit_outbox.js?v={{ ASSET_VERSION }}",
+    "/static/js/einheit_karte.js": "/static/js/einheit_karte.js?v={{ ASSET_VERSION }}"
+  }}
 </script>
 <script type="module" src="/static/js/einheit_modus.js?v={{ ASSET_VERSION }}"></script>
 <script>
@@ -152,6 +155,8 @@
           </div>
           <div class="einheit-address" x-text="aktuell.bezeichnung"></div>
           <p class="einheit-sub" x-text="aktuell.adresse"></p>
+          <p class="einheit-sub" x-show="!aktuell.hat_koordinaten"
+             x-text="'📍 keine Kartenposition – Adresse: ' + (aktuell.adresse || 'keine Angabe')"></p>
           <p class="einheit-sub" x-text="aktuell.einsatzgrund"></p>
           <div class="einheit-auftrag" x-show="aktuell.auftrag" x-text="aktuell.auftrag"></div>
           <div class="einheit-card__fuss">
@@ -178,6 +183,22 @@
           </template>
         </article>
       </template>
+      <section class="fab-card einheit-uebersichtskarte">
+        <div class="fab-card__head">
+          <span class="fab-card__icon">🗺️</span><h2 class="fab-card__title">Karte</h2>
+        </div>
+        <div class="einheit-kartenaktionen">
+          <button type="button" class="btn btn--ghost" @click="meinStandort()">📍 Mein Standort</button>
+          <button type="button" class="btn btn--ghost" @click="uebersichtKarte?.zentrieren()">Zentrieren</button>
+          <label><input type="checkbox" x-model="fertigeAufKarte"
+                        @change="uebersichtKarteAktualisieren()"> Fertige einblenden</label>
+        </div>
+        <p class="einheit-sub">Reihenfolge (Luftlinie, keine Route)</p>
+        <p class="einheit-sub" x-show="standortHinweis" x-text="standortHinweis"></p>
+        <span class="einheit-chip" x-show="ohneKartenposition"
+              x-text="ohneKartenposition + ' ohne Kartenposition'"></span>
+        <div x-ref="uebersichtKarte" class="einheit-karte"></div>
+      </section>
     </main>
 
     <aside class="fab-grid__side">
@@ -231,14 +252,17 @@
       </section>
       <template x-for="(auftrag, index) in weitere" :key="auftrag.dispatch_id">
         <article class="fab-card einheit-card einheit-card--kompakt"
+                 :data-dispatch-id="auftrag.dispatch_id"
                  :class="['einheit-prio--' + (auftrag.priority || 'keine'),
                           neuIds.includes(auftrag.dispatch_id) ? 'einheit-card--neu' : '']"
-                 @click="oeffne(auftrag.dispatch_id)">
+                 @mouseenter="markerHervorheben(auftrag.dispatch_id)" @click="oeffne(auftrag.dispatch_id)">
           <div class="einheit-card__kopf">
-            <strong x-text="(index + 1) + '. ' + auftrag.bezeichnung"></strong>
+            <strong x-text="(auftrag.rang || index + 1) + '. ' + auftrag.bezeichnung"></strong>
             <span class="einheit-chip einheit-chip--neu" x-show="neuIds.includes(auftrag.dispatch_id)">NEU</span>
           </div>
           <div class="einheit-sub" x-text="auftrag.adresse"></div>
+          <div class="einheit-sub" x-show="!auftrag.hat_koordinaten"
+               x-text="'📍 keine Kartenposition – Adresse: ' + (auftrag.adresse || 'keine Angabe')"></div>
           <div class="einheit-card__fuss">
             <span class="einheit-chip" :class="prioClass(auftrag.priority)"
                   x-text="prioLabel(auftrag.priority)"></span>
@@ -413,8 +437,9 @@
             <button type="button" class="btn btn--ghost" @click="oeffneMeldung('massnahmen')">&#x1F6E0; Maßnahme</button>
             <button type="button" class="btn btn--ghost" @click="oeffneMeldung('note')">&#x1F5D2; Notiz</button>
             <button type="button" class="btn btn--ghost" x-show="verleihAktiv && schreibbar" @click="flyout = 'material'">📦 Material</button>
-            <a class="btn btn--ghost" :href="detail?.auftrag?.gmaps_url" target="_blank" rel="noopener"
-               x-show="detail?.auftrag?.gmaps_url">&#x1F9ED; Navigation</a>
+            <a class="btn btn--ghost" :href="detail?.auftrag?.nav_url || detail?.auftrag?.gmaps_url"
+               target="_blank" rel="noopener"
+               x-show="detail?.auftrag?.nav_url || detail?.auftrag?.gmaps_url">&#x1F9ED; Navigation</a>
           </div>
         </div>
       </aside>

@@ -1,4 +1,5 @@
 import { createOutbox } from "/static/js/einheit_outbox.js";
+import { EinheitKarte } from "/static/js/einheit_karte.js";
 
 const STATUS = {
   zugewiesen: ["bestaetigt", "Auftrag erhalten"],
@@ -58,7 +59,8 @@ function registriere() {
     entwurfHinweis: false, auftragGeaendert: false, hinweisBanner: "", neuIds: [], etag: null,
     ws: null, wsTimer: null, wsVersuche: 0, pollTimer: null, retryTimer: null, lastLoad: 0, outbox: null,
     gezeigteHinweise: new Set(), geladenAb: new Date().toISOString(),
-    karte: null, kartenMarker: null, zugangBeendet: false,
+    karte: null, kartenMarker: null, uebersichtKarte: null, fertigeAufKarte: false,
+    standortHinweis: "", standort: null, zugangBeendet: false,
     nummerHinweis: false, nummerGeschlossen: false, nummerCodeGesendet: false,
     nummerTelefon: "", nummerCode: "", nummerMaske: "", nummerMeldung: "",
     verleihAktiv: false, materialKatalog: [], materialPositionen: [{ bezeichnung: "", menge: 1 }],
@@ -67,6 +69,10 @@ function registriere() {
 
     // Abgeleitete Anzeigezustände.
     get naechster() { return this.weitere[0] || null; },
+    get ohneKartenposition() {
+      return [this.aktuell, ...this.weitere, ...this.abgeschlossen]
+        .filter((auftrag) => auftrag && !auftrag.hat_koordinaten).length;
+    },
     get schreibbar() { return Boolean(config.schreibbar); },
     get hatKoordinaten() {
       return Number.isFinite(Number(this.detail?.stelle?.lat)) && Number.isFinite(Number(this.detail?.stelle?.lng));
@@ -189,6 +195,7 @@ function registriere() {
       });
       window.addEventListener("offline", () => { this.online = false; });
       document.addEventListener("visibilitychange", () => {
+        if (document.hidden) this.uebersichtKarte?.stoppeStandort();
         if (!document.hidden) {
           if (!this.zugangBeendet) void this.flush();
           void this.laden(true);
@@ -286,11 +293,45 @@ function registriere() {
       this.ressource = data.ressource || { personal: {}, ausstattung: [] };
       this.verleihAktiv = Boolean(data.verleih_aktiv);
       this.materialKatalog = data.material_katalog || [];
+      if (this.aktuell) this.aktuell.aktuell = true;
+      this.$nextTick(() => this.uebersichtKarteAktualisieren());
       const neu = this.weitere.filter((item) => vorher.size && !vorher.has(item.dispatch_id)).map((item) => item.dispatch_id);
       if (neu.length) {
         this.neuIds.push(...neu);
         new Audio("/static/audio/alert.mp3").play().catch(() => {});
       }
+    },
+    uebersichtKarteAktualisieren() {
+      const element = this.$refs?.uebersichtKarte;
+      if (!element || typeof window.L === "undefined") return;
+      if (!this.uebersichtKarte) {
+        this.uebersichtKarte = new EinheitKarte(element, { onSelect: (auftrag) => {
+          this.markerAusgewaehlt(auftrag.dispatch_id);
+        } });
+        element.addEventListener("click", (event) => {
+          const button = event.target.closest("button[data-dispatch-id]");
+          if (button) void this.oeffne(button.dataset.dispatchId);
+        });
+      }
+      this.uebersichtKarte.aktualisieren([this.aktuell, ...this.weitere, ...this.abgeschlossen].filter(Boolean), {
+        fertige: this.fertigeAufKarte, standort: this.standort,
+      });
+    },
+    markerHervorheben(dispatchId) { this.uebersichtKarte?.hervorheben(dispatchId); },
+    markerAusgewaehlt(dispatchId) {
+      const element = document.querySelector(`[data-dispatch-id="${dispatchId}"]`);
+      element?.scrollIntoView({ behavior: "smooth", block: "center" });
+      element?.classList.add("einheit-card--neu");
+      setTimeout(() => element?.classList.remove("einheit-card--neu"), 1200);
+    },
+    meinStandort() {
+      if (!this.uebersichtKarte) this.uebersichtKarteAktualisieren();
+      this.uebersichtKarte?.starteStandort(() => {
+        this.standortHinweis = "Standort nicht verfügbar – Karte funktioniert weiter";
+      }, (standort) => {
+        this.standort = standort;
+        this.uebersichtKarteAktualisieren();
+      });
     },
     async oeffne(id, push = true) {
       id = Number(id);
