@@ -1060,7 +1060,12 @@ def get_einheiten_chips_for_sites(
                 "einheit_id": dispatch.einheit_id,
                 "label": dispatch.einheit.label if dispatch.einheit else "Einheit",
                 "einheit_status": dispatch.einheit_status,
-                "label_status": EINHEIT_STATUS_LABEL.get(dispatch.einheit_status, dispatch.einheit_status),
+                "label_status": (
+                    "Erkundet" if dispatch.auftragsart == "erkundung"
+                    and dispatch.einheit_status == "abgeschlossen"
+                    else EINHEIT_STATUS_LABEL.get(dispatch.einheit_status, dispatch.einheit_status)
+                ),
+                "auftragsart": dispatch.auftragsart,
                 "farbe": EINHEIT_STATUS_COLOR.get(dispatch.einheit_status, "muted"),
                 "beendet": dispatch.beendet_at is not None,
             }

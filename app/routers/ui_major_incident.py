@@ -49,7 +49,6 @@ from app.models.major_incident import (
     CROSS_MARKER_TYPE_ICON,
     CROSS_MARKER_TYPE_LABEL,
     EINHEIT_STATUS_COLOR,
-    EINHEIT_STATUS_LABEL,
     JOURNAL_CATEGORIES,
     JOURNAL_CATEGORY_COLOR,
     JOURNAL_TEMPLATES,
@@ -88,6 +87,7 @@ from app.services.ai_service import is_enabled as ai_is_enabled
 from app.services.broadcast import broadcast_lage, manager
 from app.services.einheit_service import (
     ERLAUBTE_UEBERGAENGE,
+    ERLAUBTE_UEBERGAENGE_ERKUNDUNG,
     EinheitKonflikt,
     einheit_geraet_nur_lesen,
 )
@@ -612,6 +612,7 @@ async def site_phase_change(
 @router.post("/lage/{lage_id}/stellen/{site_id}/abschliessen")
 async def site_einsatz_abschliessen(
     request: Request, lage_id: int, site_id: int, aktive_zurueckziehen: bool = Form(False),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
 ):
@@ -623,13 +624,29 @@ async def site_einsatz_abschliessen(
     site = db.get(IncidentSite, site_id)
     if not site or site.major_incident_id != lage_id:
         raise HTTPException(status_code=404)
+    aktive_dispatches = resource_service.get_active_dispatches_for_site(db, site_id)
     from app.services.gsl_phase_automatik import einsatz_abschliessen
     try:
         einsatz_abschliessen(db, site, user=user, quelle="manuell", aktive_zurueckziehen=aktive_zurueckziehen)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    benachrichtigungen = []
+    if aktive_zurueckziehen:
+        from app.services.gsl_auftrag_events import plane_benachrichtigungen, sende_nach_commit
+        benachrichtigungen = [
+            plane_benachrichtigungen(db, lage, dispatch.einheit, dispatch, "zurueckgezogen")
+            for dispatch in aktive_dispatches
+        ]
     db.commit()
+    for benachrichtigung in benachrichtigungen:
+        if benachrichtigung:
+            background_tasks.add_task(sende_nach_commit, benachrichtigung)
+    await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
     await broadcast_lage(lage_id, {"type": "site_phase_changed", "site_id": site_id, "phase": site.phase.value})
+    for dispatch in aktive_dispatches if aktive_zurueckziehen else []:
+        await broadcast_lage(lage_id, {
+            "type": "einheit:changed", "einheit_id": dispatch.einheit_id, "site_id": site_id,
+        })
     from app.services.gsl_live_notify import notify_gsl_live
     await notify_gsl_live(db, lage, org_id=lage.org_id, reason="counts")
     return Response(status_code=204)
@@ -654,6 +671,7 @@ async def site_einsatz_wiedereroeffnen(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     db.commit()
+    await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
     await broadcast_lage(lage_id, {"type": "site_phase_changed", "site_id": site_id, "phase": site.phase.value})
     from app.services.gsl_live_notify import notify_gsl_live
     await notify_gsl_live(db, lage, org_id=lage.org_id, reason="counts")
@@ -789,6 +807,7 @@ def site_detail_context(request: Request, db: Session, lage, site, user) -> dict
         "prio_label": SITE_PRIORITY_LABEL,
         "prio_color": SITE_PRIORITY_COLOR,
         "can_edit": _can_edit(user),
+        "can_manage": _can_manage(user),
         "can_note": _can_note(user),
         "sectors": sectors,
         "now": datetime.now(UTC),
@@ -862,6 +881,7 @@ def site_card_partial(
         db, [site], org_settings=org_settings
     )[site.id]
     return templates.TemplateResponse(request, "incident_major/_site_card.html", {
+        "request": request,
         "lage": lage,
         "site": site,
         "prio_color": SITE_PRIORITY_COLOR,
@@ -869,6 +889,7 @@ def site_card_partial(
         "sectors": sectors,
         "sectors_by_id": sectors_by_id,
         "can_edit": _can_edit(user),
+        "can_manage": _can_manage(user),
         "dispatch_counts": dispatch_counts,
         "einheiten_chips": einheiten_chips,
         "material_open_counts_by_site": material_open_counts_for_sites(db, [site.id]),
@@ -923,6 +944,7 @@ def phase_column_partial(
         "einheiten_chips_by_site": einheiten_chips_by_site,
         "material_open_counts_by_site": material_open_counts_by_site,
         "can_edit": _can_edit(user),
+        "can_manage": _can_manage(user),
     })
 
 
@@ -978,10 +1000,12 @@ async def site_einheit_zuweisen(
     site = db.get(IncidentSite, site_id)
     if not site or site.major_incident_id != lage_id:
         raise HTTPException(status_code=404)
+    auftragsart = "erkundung" if site.phase in {SitePhase.eingegangen, SitePhase.erkundung} else "abarbeitung"
 
     try:
         dispatch = resource_service.dispatch_to_site(
             db, einheit_id, lage_id, site_id,
+            auftragsart=auftragsart,
             author_name=get_author_name(request), user_id=user.id,
         )
         einheit = db.get(LageEinheit, einheit_id)
@@ -1085,6 +1109,7 @@ def _site_detail_html_with_oob(request: Request, db: Session, lage, site, user) 
         "sectors": sectors,
         "sectors_by_id": sectors_by_id,
         "can_edit": _can_edit(user),
+        "can_manage": _can_manage(user),
         "dispatch_counts": dispatch_counts,
         "einheiten_chips": einheiten_chips,
         "material_open_counts_by_site": material_open_counts_for_sites(db, [site.id]),
@@ -1107,9 +1132,9 @@ def _site_dispatch_context(request: Request, db: Session, lage, site, user) -> d
             d.einheit_id: einheit_service.hat_tablet(db, d.einheit)
             for d in site_dispatches
         },
-        "einheit_status_label": EINHEIT_STATUS_LABEL,
         "einheit_status_color": EINHEIT_STATUS_COLOR,
         "erlaubte_uebergaenge": ERLAUBTE_UEBERGAENGE,
+        "erlaubte_uebergaenge_erkundung": ERLAUBTE_UEBERGAENGE_ERKUNDUNG,
         "is_admin": has_role(user, "admin"),
     }
 
@@ -1373,6 +1398,7 @@ async def site_einheit_abziehen(
     lage_id: int,
     site_id: int,
     einheit_id: int = Form(...),
+    auftragsart: str | None = Form(None),
     grund: str | None = Form(None),
     background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
@@ -1388,12 +1414,20 @@ async def site_einheit_abziehen(
     try:
         resource_service.withdraw_from_site(
             db, einheit_id, lage_id, site_id,
-            author_name=get_author_name(request), user_id=user.id, grund=grund,
+            author_name=get_author_name(request), user_id=user.id, grund=grund, auftragsart=auftragsart,
         )
         einheit = db.get(LageEinheit, einheit_id)
-        dispatch = db.query(resource_service.EinheitSiteDispatch).filter_by(
-            einheit_id=einheit_id, site_id=site_id
-        ).order_by(resource_service.EinheitSiteDispatch.id.desc()).first()
+        db.flush()  # Session ohne Autoflush: withdrawn_at muss für die folgende Abfrage sichtbar sein
+        dispatch_query = db.query(resource_service.EinheitSiteDispatch).filter(
+            resource_service.EinheitSiteDispatch.einheit_id == einheit_id,
+            resource_service.EinheitSiteDispatch.site_id == site_id,
+            resource_service.EinheitSiteDispatch.withdrawn_at.isnot(None),
+        )
+        if auftragsart:
+            dispatch_query = dispatch_query.filter(resource_service.EinheitSiteDispatch.auftragsart == auftragsart)
+        # Gerade zurückgezogener Auftrag (bei Erkundung + Abarbeitung derselben Einheit genau dieser).
+        dispatch = dispatch_query.order_by(resource_service.EinheitSiteDispatch.withdrawn_at.desc(),
+                                           resource_service.EinheitSiteDispatch.id.desc()).first()
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     db.add(SiteLogEntry(
@@ -1411,6 +1445,7 @@ async def site_einheit_abziehen(
     if benachrichtigung:
         background_tasks.add_task(sende_nach_commit, benachrichtigung)
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
+    await broadcast_lage(lage_id, {"type": "einheit:changed", "einheit_id": einheit_id, "site_id": site_id})
     if dispatch and getattr(dispatch, "phase_geaendert", False):
         await broadcast_lage(lage_id, {"type": "site_phase_changed", "site_id": site_id})
         from app.services.gsl_live_notify import notify_gsl_live

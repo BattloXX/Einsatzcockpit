@@ -242,6 +242,7 @@
     'bewertet':    '#60a5fa',
     'disponiert':  '#34d399',
     'in_arbeit':   '#fbbf24',
+    'fertig_gemeldet': '#0d9488',
     'erledigt':    '#4ade80'
   } %}
   {# ── Mobile: Phasen-Umschalter (nur ≤760px, sticky über dem Board) ── #}
@@ -318,7 +319,7 @@
                 class="btn btn--xs btn--ghost" style="padding:1px 8px;margin-left:4px;">+</button>
         {% endif %}
       </div>
-      <div class="phase-col__body" id="cross-marker-col-body"
+      <div class="phase-col__body" id="cross-marker-col-body" data-phase="uebergreifend"
            hx-get="/lage/{{ lage.id }}/uebergreifend/board-col"
            hx-trigger="crossMarkerChanged from:body"
            hx-swap="innerHTML">
@@ -548,7 +549,7 @@ function applyBoardFilters() {
   var crossChip = document.querySelector('[data-phasechip="uebergreifend"] .lage-phasechip__n');
   if (crossChip) crossChip.textContent = crossCards.length;
   var open = 0;
-  ['eingegangen', 'erkundung', 'bewertet', 'disponiert', 'in_arbeit'].forEach(function(phase) {
+  ['eingegangen', 'erkundung', 'bewertet', 'disponiert', 'in_arbeit', 'fertig_gemeldet'].forEach(function(phase) {
     open += document.querySelectorAll('.phase-col__body[data-phase="' + phase + '"] .site-card').length;
   });
   var done = document.querySelectorAll('.phase-col__body[data-phase="erledigt"] .site-card').length;
@@ -615,7 +616,7 @@ function lageSwitchPhase(phase) {
 (function() {
   try {
     var saved = sessionStorage.getItem('lage_phase_{{ lage.id }}');
-    if (saved && document.querySelector('.phase-col__body[data-phase="' + saved + '"]')) {
+    if (saved && (saved === 'uebergreifend' || document.querySelector('.phase-col__body[data-phase="' + saved + '"]'))) {
       lageSwitchPhase(saved);
     }
   } catch(e) {}

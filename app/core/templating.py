@@ -24,6 +24,7 @@ from app.core.timezones import (
     format_local_time,
     to_org_tz,
 )
+from app.services.einheit_service import einheit_status_label
 
 
 def _ctx_org(ctx):
@@ -114,6 +115,7 @@ def _person_status_label(value: str) -> str:
 
 
 templates = Jinja2Templates(directory="app/templates")
+templates.env.globals["einheit_status_label"] = einheit_status_label
 templates.env.filters["local"] = _local
 templates.env.filters["local_time"] = _local_time
 templates.env.filters["local_datetime"] = _local_datetime

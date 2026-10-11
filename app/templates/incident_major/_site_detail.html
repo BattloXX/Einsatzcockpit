@@ -242,6 +242,14 @@
       {% else %}
       {{ phase_labels[site.phase] }}
       {% endif %}
+      {% if site.phase.value == 'fertig_gemeldet' and can_manage %}
+      <form style="margin-top:6px;" hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/abschliessen"
+            hx-swap="none" hx-confirm="Einsatz wirklich abschließen?"
+            hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
+            hx-on::after-request="siteAbschlussNachher(event, {{ lage.id }}, {{ site.id }}, '{{ request.state.csrf_token }}')">
+        <button type="submit" class="btn btn--xs btn--secondary">Einsatz abschließen <span class="sr-only">– Alle Einheiten fertig</span></button>
+      </form>
+      {% endif %}
     </span>
   </div>
 
@@ -418,7 +426,7 @@
 
     {# ── Disponierte LageEinheiten (Mehrfach-Dispatch-System) ──────── #}
     {% if site_dispatches is defined %}
-    {% if site_dispatches and site_dispatches|selectattr('beendet_at')|list|length == site_dispatches|length and site.phase.value not in ['erledigt', 'abgebrochen'] %}
+    {% if site_dispatches and site_dispatches|selectattr('beendet_at')|list|length == site_dispatches|length and site.phase.value not in ['erledigt', 'abgebrochen', 'fertig_gemeldet'] %}
     <div style="margin-bottom:8px;padding:7px 9px;background:rgba(242,176,46,.1);border-left:3px solid var(--yellow);font-size:.8rem;">
       Alle Einheiten fertig – Stelle abschließen?
     </div>
@@ -426,8 +434,9 @@
     {% for dispatch in site_dispatches %}
     {% set e = dispatch.einheit %}
     <div class="res-row">
+      <span class="res-badge res-badge--blue">{% if dispatch.auftragsart == 'erkundung' %}🔍 Erkundung{% else %}Abarbeitung{% endif %}</span>
       <span class="res-badge res-badge--{{ einheit_status_color[dispatch.einheit_status] }}">
-        {{ einheit_status_label[dispatch.einheit_status] }}
+        {{ einheit_status_label(dispatch.auftragsart, dispatch.einheit_status) }}
       </span>
       <span class="res-label">
         {{ e.label }}
@@ -465,7 +474,7 @@
         <form hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/einheit-abziehen"
               hx-target="#siteDetailContent"
               hx-swap="innerHTML"
-              hx-vals='{"_csrf":"{{ request.state.csrf_token }}","einheit_id":"{{ e.id }}"}'>
+              hx-vals='{"_csrf":"{{ request.state.csrf_token }}","einheit_id":"{{ e.id }}","auftragsart":"{{ dispatch.auftragsart }}"}'>
           <button type="submit" class="btn btn--xs btn--ghost">Abziehen</button>
         </form>
         {% else %}
@@ -495,8 +504,9 @@
             hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'>
         <select name="status" class="form-select form-select--sm" required onchange="this.form.querySelector('[name=grund]').required=this.value==='nicht_durchfuehrbar'">
           <option value="">Status (per Funk)</option>
-          {% for next_status in erlaubte_uebergaenge[dispatch.einheit_status] %}
-          <option value="{{ next_status }}">{{ einheit_status_label[next_status] }}</option>
+          {% set transitions = erlaubte_uebergaenge_erkundung if dispatch.auftragsart == 'erkundung' else erlaubte_uebergaenge %}
+          {% for next_status in transitions[dispatch.einheit_status] %}
+          <option value="{{ next_status }}">{{ einheit_status_label(dispatch.auftragsart, next_status) }}</option>
           {% endfor %}
         </select>
         <input type="text" name="grund" class="form-input" placeholder="Grund bei nicht durchführbar">
@@ -512,7 +522,16 @@
     {% elif not site_einheiten %}
     {% endif %}
     {# ── Disponieren-Dropdown ───────────────────────────────────────── #}
-    {% if available_einheiten is defined and can_edit %}
+    {% if site.phase.value in ['erledigt', 'abgebrochen'] %}
+    <div style="font-size:.8rem;color:var(--text-muted);margin-top:8px;">Einsatz abgeschlossen – zum Disponieren zuerst wieder öffnen</div>
+    {% if can_manage %}
+    <form style="margin-top:6px;" hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/wiedereroeffnen"
+          hx-swap="none" hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
+          hx-on::after-request="if(event.detail.successful){ htmx.ajax('GET','/lage/{{ lage.id }}/stellen/{{ site.id }}',{target:'#siteDetailContent',swap:'innerHTML'}); htmx.ajax('GET','/lage/{{ lage.id }}/stellen/{{ site.id }}/card',{target:'[data-site-id=\'{{ site.id }}\']',swap:'outerHTML'}); }">
+      <button type="submit" class="btn btn--xs btn--secondary">Einsatz wieder öffnen</button>
+    </form>
+    {% endif %}
+    {% elif available_einheiten is defined and can_edit %}
     {% set already_ids = already_dispatched_ids if already_dispatched_ids is defined else [] %}
     {% set dispatchable = [] %}
     {% for e in available_einheiten %}
@@ -535,7 +554,8 @@
           </option>
           {% endfor %}
         </select>
-        <button type="submit" class="btn btn--secondary btn--sm">+ Disponieren</button>
+        <button type="submit" name="auftragsart" value="erkundung" class="btn btn--sm {% if site.phase.value in ['eingegangen', 'erkundung'] %}btn--primary{% else %}btn--secondary{% endif %}">Erkundung zuweisen</button>
+        <button type="submit" name="auftragsart" value="abarbeitung" class="btn btn--sm {% if site.phase.value not in ['eingegangen', 'erkundung'] %}btn--primary{% else %}btn--secondary{% endif %}">Disponieren</button>
       </div>
       <textarea name="auftrag" class="form-input" maxlength="2000" placeholder="Auftrag (optional)" style="margin-top:6px;"></textarea>
       <input type="number" name="reihenfolge" class="form-input" min="1" placeholder="Reihenfolge (optional)" style="margin-top:6px;">
@@ -618,3 +638,20 @@
 <div class="modal__footer">
   <button type="button" onclick="closeSiteDetailPanel(this)" class="btn btn--ghost">Schließen</button>
 </div>
+<script>
+// Einsatz abschließen: nach Erfolg Detail + Karte neu laden; bei noch aktiven Aufträgen (400)
+// nach Rückfrage erneut mit aktive_zurueckziehen=1 senden.
+window.siteAbschlussNachher = window.siteAbschlussNachher || function(event, lageId, siteId, csrf) {
+  var neuLaden = function() {
+    htmx.ajax('GET', '/lage/' + lageId + '/stellen/' + siteId, {target: '#siteDetailContent', swap: 'innerHTML'});
+    htmx.ajax('GET', '/lage/' + lageId + '/stellen/' + siteId + '/card',
+              {target: '[data-site-id="' + siteId + '"]', swap: 'outerHTML'});
+  };
+  if (event.detail.successful) { neuLaden(); return; }
+  if (event.detail.xhr && event.detail.xhr.status === 400 &&
+      confirm('Es sind noch Aufträge aktiv. Diese zurückziehen und den Einsatz abschließen?')) {
+    htmx.ajax('POST', '/lage/' + lageId + '/stellen/' + siteId + '/abschliessen',
+              {values: {_csrf: csrf, aktive_zurueckziehen: '1'}, swap: 'none'}).then(neuLaden);
+  }
+};
+</script>
