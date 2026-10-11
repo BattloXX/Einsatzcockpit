@@ -59,6 +59,7 @@ from app.routers import (
     teams_bot,
     ui_account_switch,
     ui_admin,
+    ui_admin_mail_weiterleitung,
     ui_ai_prompts,
     ui_annotation,
     ui_archive,
@@ -211,6 +212,7 @@ def _start_background_loops() -> list[asyncio.Task]:
     from app.services.incident_route_loop import incident_route_loop
     from app.services.lis.lis_capture import lis_capture_retention_loop
     from app.services.lis.lis_loop import lis_poll_loop
+    from app.services.mail_weiterleitung_loop import mail_weiterleitung_loop
     from app.services.mail_zuordnung_loop import mail_zuordnung_loop
     from app.services.mailing_dispatch_loop import mailing_dispatch_loop
     from app.services.mailing_schedule_loop import mailing_schedule_loop
@@ -240,6 +242,7 @@ def _start_background_loops() -> list[asyncio.Task]:
         api_message_dispatch_loop(), mailing_schedule_loop(),
         resend_inbound_retention_loop(),
         mail_zuordnung_loop(),
+        mail_weiterleitung_loop(),
         incident_route_loop(),
     )
     return [asyncio.create_task(loop) for loop in loops]
@@ -867,6 +870,7 @@ app.include_router(ui_breathing.router)
 app.include_router(ui_archive.router)
 app.include_router(ui_hilfe.router)
 app.include_router(ui_admin.router)
+app.include_router(ui_admin_mail_weiterleitung.router)
 app.include_router(ui_sms.router)
 app.include_router(ui_stats.router)
 app.include_router(ui_push.router)

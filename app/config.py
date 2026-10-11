@@ -274,6 +274,10 @@ class Settings(BaseSettings):
     # Hintergrundmutationen ausführen.
     MAIL_ZUORDNUNG_LOOP_ENABLED: bool = True
     MAIL_ZUORDNUNG_LOOP_INTERVAL_S: int = 30
+    MAIL_WEITERLEITUNG_LOOP_ENABLED: bool = True
+    MAIL_WEITERLEITUNG_LOOP_INTERVAL_S: int = 15
+    # Wartezeit vor einem erneuten Versuch einer fehlgeschlagenen Weiterleitung.
+    MAIL_WEITERLEITUNG_RETRY_WAIT_S: int = 60
     # Gefahren der Nachbarobjekte im Umkreis des Einsatzobjekts (Einsatzinfo-Karte)
     NACHBAR_GEFAHR_RADIUS_M: int = 400
 

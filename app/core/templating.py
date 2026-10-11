@@ -119,6 +119,17 @@ templates.env.filters["local_time"] = _local_time
 templates.env.filters["local_datetime"] = _local_datetime
 templates.env.filters["local_datetime_sec"] = _local_datetime_sec
 templates.env.filters["local_iso"] = _local_iso
+
+
+def _from_json(value: object) -> list:
+    try:
+        data = _json.loads(str(value or "[]"))
+    except ValueError:
+        return []
+    return data if isinstance(data, list) else []
+
+
+templates.env.filters["from_json"] = _from_json
 templates.env.filters["action_label"] = _action_label
 templates.env.filters["unit_status_slug"] = _unit_status_slug
 templates.env.filters["person_status_label"] = _person_status_label

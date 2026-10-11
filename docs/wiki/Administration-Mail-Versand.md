@@ -183,3 +183,22 @@ Beide Formulare enthalten zusätzlich Felder für einen **künftigen** Abruf ein
 - [ ] Werte im Tool unter `/admin/mail` eingetragen, Office 365 aktiviert
 - [ ] Test-Mail über Office 365 erfolgreich
 - [ ] (Optional) eigenen SMTP-Server als zusätzlichen Fallback konfiguriert und getestet
+# Weiterleitungen eingehender Mails
+
+Oberfläche: **Verwaltung → System → Mail-Weiterleitungen** (`/admin/mail-weiterleitungen`).
+Dort: Regeln anlegen/bearbeiten/löschen, aktiv schalten, **Test** (feste Testmail an die Ziele) und das Protokoll
+(letzte 200 Einträge). Regeladressen sind Adressen der Empfangsdomain **ohne Punkt** im Lokalteil
+(`info@get.einsatzcockpit.com`); Organisationsadressen (`<typ>.<slug>@…`) sind ausgeschlossen, auch vom Catch-all.
+Versand: neue Mail von `weiterleitung@<Versanddomain>`, `Reply-To` = Originalabsender, Header
+`X-Einsatzcockpit-Weitergeleitet`. Bei Fehlern bis zu 3 Versuche (Wartezeit `MAIL_WEITERLEITUNG_RETRY_WAIT_S`),
+danach Status `fehler`. Schutz: keine Weiterleitung von Bounces, automatischen Mails (`Auto-Submitted`,
+`Precedence: bulk`), bereits weitergeleiteten Mails oder wenn der Absender selbst Ziel ist; Rate-Limit je Regel;
+Gesamtgröße ≤ 35 MB.
+
+Nur Benutzer mit der Rolle `system_admin` duerfen unter System Weiterleitungsregeln
+pflegen. Regeln gelten vor der Organisationszuordnung. Eine Regel leitet entweder
+Text/HTML weiter oder sendet die Rohmail als EML-Anhang. Die Zieladressen sind auf
+zehn begrenzt; Catch-all (`*`) ist standardmaessig deaktiviert und muss beim Anlegen
+ausdruecklich bestaetigt werden. Das Protokoll enthaelt keine Mailinhalte und wird
+nach 30 Tagen geloescht.
+

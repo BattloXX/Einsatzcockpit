@@ -100,3 +100,7 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 | **2.2.0** | 2026-06-11 | Multi-Tenancy vollständig (12 PRs): Row-Level-Isolation, Org-Onboarding, KI je Org, Speicher-Quotas, Einladungsmodell, Auto-Schließen, Rate-Limiting, API-Härtung, System-Konsole, Migration-Runbook |
 | **2.0.0** | 2026-05-23 | Media-Upload + Galerie, System-Admin-Rolle, Zeitzone je Org, ZIP-Update, Python 3.14 |
 | **1.0.0** | 2026-05-22 | Initiale Webapp (FastAPI + HTMX, WebSocket, Atemschutz, PWA, QR-Code) |
+# Unreleased
+
+- Neu: System-Admins können eingehende Mails bestimmter Adressen (z. B. info@) an andere Adressen weiterleiten (inline oder als EML, mit Retry, Schleifenschutz und Protokoll ohne Inhalt).
+
