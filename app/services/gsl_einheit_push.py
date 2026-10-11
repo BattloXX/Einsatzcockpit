@@ -45,7 +45,12 @@ def push_einheit_auftrag(einheit_id: int, dispatch_id: int, ereignis: str) -> in
         body = (site.bezeichnung if site else "") or einheit.label
         if ereignis != "zurueckgezogen" and dispatch.auftrag:
             body = f"{body}: {dispatch.auftrag}"[:160]
-        anzahl = notify_vehicle(db, einheit.vehicle_id, _TITEL.get(ereignis, "Auftrag"), body,
+        title = (
+            "Neuer Erkundungsauftrag"
+            if ereignis == "neu" and dispatch.auftragsart == "erkundung"
+            else _TITEL.get(ereignis, "Auftrag")
+        )
+        anzahl = notify_vehicle(db, einheit.vehicle_id, title, body,
                                 f"/einheit/auftrag/{dispatch.id}")
         db.commit()
         return anzahl

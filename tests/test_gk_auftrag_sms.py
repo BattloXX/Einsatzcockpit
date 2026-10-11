@@ -19,6 +19,20 @@ def test_auftrag_template_length_and_gsm_counter():
     assert sms_laenge("Auftrag geaendert\n{link}") == (26, "GSM-7", 1)
 
 
+def test_erkundung_sms_uses_erkundungsauftrag_label():
+    from types import SimpleNamespace
+
+    from app.services.gk_zugang_service import auftrag_nachricht_rendern
+
+    cfg = SimpleNamespace(gk_auftrag_nachricht=None)
+    lage = SimpleNamespace(name="Lage", is_exercise=False)
+    einheit = SimpleNamespace(label="TLF")
+    site = SimpleNamespace(bezeichnung="Stelle", strasse=None, hausnr=None, ort=None)
+    dispatch = SimpleNamespace(auftragsart="erkundung", auftrag=None, site=site)
+    text = auftrag_nachricht_rendern(cfg, lage, einheit, dispatch, "neu", "https://example.test/gk#x")
+    assert "Neuer Erkundungsauftrag" in text
+
+
 # ── Route-Tests: Disposition, Änderung, Rückzug lösen genau die passenden SMS aus ──────────────
 
 from types import SimpleNamespace  # noqa: E402

@@ -67,6 +67,15 @@ def test_push_bei_neu_aenderung_und_rueckzug(client, setup_db, pushes):
     assert pushes[-1][1] == "Auftrag zurückgezogen" and len(pushes) == 3
 
 
+def test_push_erkundung_uses_erkundungsauftrag_title(client, setup_db, pushes):
+    a = _aufbau(schalter=False)
+    _tablet(a)
+    _login(client, a.username)
+    _post(client, f"/lage/{a.lage}/stellen/{a.site}/einheit-disponieren", einheit_id=a.einheit,
+          auftragsart="erkundung")
+    assert pushes[0][1] == "Neuer Erkundungsauftrag"
+
+
 @pytest.mark.parametrize("variante", ["ohne_tablet", "falsches_profil", "widerrufen"])
 def test_kein_push_ohne_passendes_tablet(client, setup_db, pushes, variante):
     a = _aufbau(schalter=False)

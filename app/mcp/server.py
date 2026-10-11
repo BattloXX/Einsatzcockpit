@@ -409,11 +409,14 @@ async def gsl_ressource_anlegen(
         personal_gesamt=personal_gesamt, bemerkung=bemerkung)
 
 
-@server.tool(name="gsl_einheit_disponieren", description="Disponiert eine Einheit zu einer Einsatzstelle.")
+@server.tool(name="gsl_einheit_disponieren", description=(
+    "Disponiert eine Einheit; auftragsart ist erkundung oder abarbeitung."
+))
 async def gsl_einheit_disponieren(lage_id: int, einheit_id: int, site_id: int, auftrag: str | None = None,
-                                  reihenfolge: int | None = None) -> dict[str, object]:
+                                  reihenfolge: int | None = None, auftragsart: str = "abarbeitung") -> dict[str, object]:
     return await _call_registered_tool("gsl_einheit_disponieren", lage_id=lage_id, einheit_id=einheit_id,
-                                       site_id=site_id, auftrag=auftrag, reihenfolge=reihenfolge)
+                                       site_id=site_id, auftrag=auftrag, reihenfolge=reihenfolge,
+                                       auftragsart=auftragsart)
 
 
 @server.tool(name="gsl_auftrag_aendern", description="Ändert einen GSL-Auftrag.")
@@ -428,6 +431,19 @@ async def gsl_auftrag_zurueckziehen(lage_id: int, einheit_id: int, site_id: int,
                                     grund: str | None = None) -> dict[str, object]:
     return await _call_registered_tool("gsl_auftrag_zurueckziehen", lage_id=lage_id, einheit_id=einheit_id,
                                        site_id=site_id, grund=grund)
+
+
+@server.tool(name="gsl_einsatz_abschliessen", description="Schließt eine GSL-Einsatzstelle ab.")
+async def gsl_einsatz_abschliessen(
+    lage_id: int, site_id: int, aktive_zurueckziehen: bool = False,
+) -> dict[str, object]:
+    return await _call_registered_tool("gsl_einsatz_abschliessen", lage_id=lage_id, site_id=site_id,
+                                       aktive_zurueckziehen=aktive_zurueckziehen)
+
+
+@server.tool(name="gsl_einsatz_wiedereroeffnen", description="Öffnet eine GSL-Einsatzstelle wieder.")
+async def gsl_einsatz_wiedereroeffnen(lage_id: int, site_id: int) -> dict[str, object]:
+    return await _call_registered_tool("gsl_einsatz_wiedereroeffnen", lage_id=lage_id, site_id=site_id)
 
 
 @server.tool(name="gsl_ressource_qr", description="Liest oder widerruft QR-Zugang ohne Token, Link oder PIN.")

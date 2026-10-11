@@ -376,7 +376,7 @@ def lage_board(
     open_count = sum(
         len(sites_by_phase[p])
         for p in [SitePhase.eingegangen, SitePhase.erkundung, SitePhase.bewertet,
-                  SitePhase.disponiert, SitePhase.in_arbeit]
+                  SitePhase.disponiert, SitePhase.in_arbeit, SitePhase.fertig_gemeldet]
     )
     done_count = len(sites_by_phase[SitePhase.erledigt])
 
@@ -2389,7 +2389,7 @@ def lage_dashboard(
     open_count = sum(
         phase_stats[p]
         for p in [SitePhase.eingegangen, SitePhase.erkundung, SitePhase.bewertet,
-                  SitePhase.disponiert, SitePhase.in_arbeit]
+                  SitePhase.disponiert, SitePhase.in_arbeit, SitePhase.fertig_gemeldet]
     )
     active_res = sum(
         sum(1 for r in s.resources if not r.released_at)
@@ -4893,6 +4893,8 @@ def lage_karte_sites(
             return "#f97316"
         if color == "yellow":
             return "#eab308"
+        if site.phase == SitePhase.fertig_gemeldet:
+            return "#0d9488"
         return "#22c55e" if site.phase == SitePhase.erledigt else "#6b7280"
 
     priority_letters = {

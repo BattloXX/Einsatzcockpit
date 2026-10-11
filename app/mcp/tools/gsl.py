@@ -19,6 +19,7 @@ from app.services.mi_feature_service import get_mi_features
 
 READ = ("incident_leader", "admin", "recorder", "readonly")
 EDIT = ("incident_leader", "admin", "recorder")
+MANAGE = ("incident_leader", "admin", "org_admin")
 _BEREICHE = {"allgemein", "fuehrer", "einsaetze", "journal", "personal", "ausstattung", "kommunikation", "zugang"}
 _STAMM_FELDER = {
     "status",
@@ -55,6 +56,13 @@ def _einheit(context: MCPContext, lage: MajorIncident, einheit_id: int) -> LageE
 
 def _edit(context: MCPContext, lage: MajorIncident) -> None:
     if not has_role(context.user, *EDIT):
+        raise ValueError("Für diese Aktion fehlen die erforderlichen Berechtigungen.")
+    if str(lage.status) != "active":
+        raise ValueError("Die Lage ist nicht aktiv.")
+
+
+def _manage(context: MCPContext, lage: MajorIncident) -> None:
+    if not has_role(context.user, *MANAGE):
         raise ValueError("Für diese Aktion fehlen die erforderlichen Berechtigungen.")
     if str(lage.status) != "active":
         raise ValueError("Die Lage ist nicht aktiv.")
@@ -111,6 +119,14 @@ async def _broadcast(lage_id: int, site_id: int, einheit_id: int, dispatch_id: i
     if dispatch_id is not None:
         event["dispatch_id"] = dispatch_id
     await broadcast_lage(lage_id, event)
+
+
+async def _broadcast_phase_changed(db: Any, lage: MajorIncident, site: IncidentSite) -> None:
+    from app.services.broadcast import broadcast_lage
+    from app.services.gsl_live_notify import notify_gsl_live
+
+    await broadcast_lage(lage.id, {"type": "site_phase_changed", "site_id": site.id, "phase": site.phase.value})
+    await notify_gsl_live(db, lage, org_id=lage.org_id, reason="counts")
 
 
 def _push_geplant(db: Any, einheit: LageEinheit) -> str:
@@ -551,10 +567,13 @@ async def gsl_ressource_anlegen(
         raise
 
 
-@register_tool(name="gsl_einheit_disponieren", description="Disponiert eine Einheit zu einer Einsatzstelle.",
+@register_tool(name="gsl_einheit_disponieren", description=(
+    "Disponiert eine Einheit zu einer Einsatzstelle; auftragsart ist erkundung oder abarbeitung."
+),
                required_roles=READ, module_check=_module_check)
 async def gsl_einheit_disponieren(context: MCPContext, lage_id: int, einheit_id: int, site_id: int,
-                                  auftrag: str | None = None, reihenfolge: int | None = None) -> dict[str, object]:
+                                  auftrag: str | None = None, reihenfolge: int | None = None,
+                                  auftragsart: str = "abarbeitung") -> dict[str, object]:
     try:
         lage = _lage(context, lage_id)
         _edit(context, lage)
@@ -562,8 +581,11 @@ async def gsl_einheit_disponieren(context: MCPContext, lage_id: int, einheit_id:
         site = context.db.get(IncidentSite, site_id)
         if site is None or site.major_incident_id != lage.id:
             raise ValueError("Einsatzstelle nicht gefunden")
+        if auftragsart not in {"erkundung", "abarbeitung"}:
+            raise ValueError("auftragsart muss erkundung oder abarbeitung sein.")
         dispatch = resource_service.dispatch_to_site(context.db, einheit_id, lage.id, site_id, auftrag=auftrag,
-            reihenfolge=reihenfolge, author_name=_author(context), user_id=context.user.id, quelle="mcp")
+            reihenfolge=reihenfolge, auftragsart=auftragsart, author_name=_author(context),
+            user_id=context.user.id, quelle="mcp")
         context.db.add(SiteLogEntry(
             incident_site_id=site_id, kind="resource", text=f"Einheit disponiert: {einheit.label}",
             user_id=context.user.id, author_name=_author(context),
@@ -574,7 +596,10 @@ async def gsl_einheit_disponieren(context: MCPContext, lage_id: int, einheit_id:
         context.db.commit()
         await sende_nach_commit(notification)
         await _broadcast(lage.id, site_id, einheit_id, dispatch.id)
-        return {"dispatch_id": dispatch.id, "sms": "geplant" if notification.sms else "übersprungen",
+        if getattr(dispatch, "phase_geaendert", False):
+            await _broadcast_phase_changed(context.db, lage, site)
+        return {"dispatch_id": dispatch.id, "auftragsart": dispatch.auftragsart,
+                "site_phase": site.phase.value, "sms": "geplant" if notification.sms else "übersprungen",
                 "push": _push_geplant(context.db, einheit)}
     except Exception:
         context.db.rollback()
@@ -638,8 +663,65 @@ async def gsl_auftrag_zurueckziehen(context: MCPContext, lage_id: int, einheit_i
         context.db.commit()
         await sende_nach_commit(notification)
         await _broadcast(lage.id, site_id, einheit_id, dispatch.id)
-        return {"dispatch_id": dispatch.id, "sms": "geplant" if notification.sms else "übersprungen",
+        if getattr(dispatch, "phase_geaendert", False):
+            await _broadcast_phase_changed(context.db, lage, site)
+        return {"dispatch_id": dispatch.id, "auftragsart": dispatch.auftragsart,
+                "site_phase": site.phase.value, "sms": "geplant" if notification.sms else "übersprungen",
                 "push": _push_geplant(context.db, einheit)}
+    except Exception:
+        context.db.rollback()
+        raise
+
+
+@register_tool(name="gsl_einsatz_abschliessen", description=(
+    "Schließt eine Einsatzstelle ab; aktive_zurueckziehen zieht aktive Aufträge zuvor zurück."
+), required_roles=MANAGE, module_check=_module_check)
+async def gsl_einsatz_abschliessen(
+    context: MCPContext, lage_id: int, site_id: int, aktive_zurueckziehen: bool = False,
+) -> dict[str, object]:
+    try:
+        lage = _lage(context, lage_id)
+        _manage(context, lage)
+        site = context.db.get(IncidentSite, site_id)
+        if site is None or site.major_incident_id != lage.id:
+            raise ValueError("Einsatzstelle nicht gefunden")
+        from app.services.gsl_auftrag_events import plane_benachrichtigungen, sende_nach_commit
+        from app.services.gsl_phase_automatik import einsatz_abschliessen
+
+        aktive = resource_service.get_active_dispatches_for_site(context.db, site.id)
+        einsatz_abschliessen(context.db, site, user=context.user, quelle="mcp",
+                             aktive_zurueckziehen=aktive_zurueckziehen)
+        # Zurückgezogene Aufträge wie beim Board-Abschluss an die Einheiten melden.
+        meldungen = [plane_benachrichtigungen(context.db, lage, d.einheit, d, "zurueckgezogen") for d in aktive]
+        _audit(context, "gsl.einsatz.abgeschlossen", lage, site.id, site_id=site.id)
+        context.db.commit()
+        for meldung, dispatch in zip(meldungen, aktive, strict=True):
+            await sende_nach_commit(meldung)
+            await _broadcast(lage.id, site.id, dispatch.einheit_id, dispatch.id)
+        await _broadcast_phase_changed(context.db, lage, site)
+        return {"site_id": site.id, "site_phase": site.phase.value,
+                "zurueckgezogen": [d.id for d in aktive]}
+    except Exception:
+        context.db.rollback()
+        raise
+
+
+@register_tool(name="gsl_einsatz_wiedereroeffnen", description="Öffnet eine abgeschlossene Einsatzstelle wieder.",
+               required_roles=MANAGE, module_check=_module_check)
+async def gsl_einsatz_wiedereroeffnen(context: MCPContext, lage_id: int, site_id: int) -> dict[str, object]:
+    try:
+        lage = _lage(context, lage_id)
+        _manage(context, lage)
+        site = context.db.get(IncidentSite, site_id)
+        if site is None or site.major_incident_id != lage.id:
+            raise ValueError("Einsatzstelle nicht gefunden")
+        from app.services.gsl_phase_automatik import einsatz_wiedereroeffnen
+
+        einsatz_wiedereroeffnen(context.db, site, user=context.user, quelle="mcp")
+        _audit(context, "gsl.einsatz.wiedereroeffnet", lage, site.id, site_id=site.id)
+        context.db.commit()
+        await _broadcast_phase_changed(context.db, lage, site)
+        return {"site_id": site.id, "site_phase": site.phase.value}
     except Exception:
         context.db.rollback()
         raise
