@@ -15,6 +15,12 @@ from app.services import mail_graph_poller as poller
 from tests.test_resend_posteingang import _org
 
 
+@pytest.fixture(autouse=True)
+def _graph_abruf_aktiv(monkeypatch):
+    """conftest schaltet den Poll-Loop global ab; die Abruf-Funktion selbst wird hier direkt getestet."""
+    monkeypatch.setattr(settings, "MAIL_GRAPH_POLL_ENABLED", True)
+
+
 def _raw(message_id: str, attachment: bool = False) -> bytes:
     extra = (
         "\r\n--x\r\nContent-Type: application/pdf\r\nContent-Disposition: attachment; filename=a.pdf\r\n"
