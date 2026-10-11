@@ -14,6 +14,7 @@ from app.models.major_incident import (
     LageEinheitLeader,
     LageJournalEntry,
     MajorIncident,
+    Sector,
     SiteLogEntry,
 )
 from app.services import resource_service as rs
@@ -52,6 +53,17 @@ def _daten(db):
     db.add_all([*sites, einheit, andere])
     db.flush()
     return now, lage, sites, einheit, andere
+
+
+def test_karte_liefert_abschnittsnamen_statt_relationship_repr():
+    with _session() as db:
+        _, lage, _, einheit, _ = _daten(db)
+        sector = Sector(major_incident_id=lage.id, name="Abschnitt Nord")
+        db.add(sector)
+        db.flush()
+        einheit.sector_id = sector.id
+        result = karte_service.karte(db, lage, einheit)
+        assert result["allgemein"]["sector"] == "Abschnitt Nord"
 
 
 def test_einsaetze_alle_kategorien_dauer_und_nummern():

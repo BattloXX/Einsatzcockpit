@@ -22,13 +22,13 @@ def _basis(lage_id: int, einheit_id: int) -> str:
     return f"/lage/{lage_id}/einheiten/{einheit_id}"
 
 
-def test_tabs_sind_readonly_lesbar_und_enthalten_keine_post_formulare(client, setup_db):
+def test_entfernte_pflege_tabs_sind_nicht_mehr_in_der_karte_verlinkt(client, setup_db):
     username, lage_id, einheit_id, _ = _daten("readonly")
     _login(client, username)
-    for tab in ("personal", "ausstattung"):
-        response = client.get(_basis(lage_id, einheit_id) + f"/karte/{tab}")
-        assert response.status_code == 200
-        assert "hx-post=" not in response.text
+    response = client.get(_basis(lage_id, einheit_id) + "/karte")
+    assert response.status_code == 200
+    assert 'data-karte-tab="personal"' not in response.text
+    assert 'data-karte-tab="ausstattung"' not in response.text
 
 
 def test_personal_setzen_modus_verstaerken_und_umbuchen_broadcastet_beide(client, setup_db, monkeypatch):

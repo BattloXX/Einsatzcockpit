@@ -124,19 +124,30 @@
     var button = event.target.closest('[data-qr-zeigen]');
     if (!button) return;
     var zone = button.closest('[data-zugang-root]');
+    if (!zone || !zone.dataset.basis) return;
     var target = zone.querySelector('[data-qr-vorschau-container]');
+    if (!target) return;
     if (target.dataset.timer) {
       clearTimeout(Number(target.dataset.timer)); target.innerHTML = '';
       delete target.dataset.timer; button.textContent = 'QR anzeigen'; return;
     }
-    fetch(zone.dataset.basis + '/zugang/qr/vorschau', { credentials: 'same-origin' })
-      .then(function (r) { return r.text(); })
+    button.disabled = true;
+    fetch(zone.dataset.basis + '/zugang/qr/vorschau', { credentials: 'same-origin', headers: { 'Accept': 'text/html' } })
+      .then(function (r) {
+        if (!r.ok) {
+          throw new Error(r.status === 403 ? 'QR-Vorschau ist für diese Rolle nicht erlaubt.' :
+            r.status === 404 ? 'Kein aktiver QR-Zugang vorhanden.' : 'QR-Vorschau konnte nicht geladen werden (' + r.status + ').');
+        }
+        return r.text();
+      })
       .then(function (html) {
         target.innerHTML = html; button.textContent = 'QR ausblenden';
         target.dataset.timer = String(setTimeout(function () {
           target.innerHTML = ''; button.textContent = 'QR anzeigen'; delete target.dataset.timer;
         }, 120000));
-      });
+      })
+      .catch(function (err) { toast(zone, err.message || 'QR-Vorschau konnte nicht geladen werden.', true); })
+      .finally(function () { button.disabled = false; });
   });
   document.addEventListener('click', function (event) {
     if (event.target.closest('[data-karte-close]')) frisch = null;

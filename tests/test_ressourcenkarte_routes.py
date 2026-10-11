@@ -54,6 +54,38 @@ def test_karte_lesbar_und_readonly_maskiert_telefon(client, setup_db):
     response = client.get(f"/lage/{lage_id}/einheiten/{einheit_id}/karte")
     assert response.status_code == 200
     assert "RLF" in response.text
+    assert "Personal" not in response.text
+    assert "Ausstattung" not in response.text
+    assert "Verband bilden" not in response.text
+
+
+def test_karte_zeigt_abschnittsnamen_nie_orm_repr(client, setup_db):
+    from app.models.major_incident import Sector
+
+    username, lage_id, einheit_id, _ = _daten()
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        sector = Sector(major_incident_id=lage_id, name="Abschnitt Nord")
+        db.add(sector)
+        db.flush()
+        db.get(LageEinheit, einheit_id).sector_id = sector.id
+        db.commit()
+    finally:
+        db.close()
+    _login(client, username)
+    response = client.get(f"/lage/{lage_id}/einheiten/{einheit_id}/karte")
+    assert "Abschnitt Nord" in response.text
+    assert "object at 0x" not in response.text
+
+
+def test_schnellanlage_enthaelt_keine_personal_ausstattung_oder_stv_felder(client, setup_db):
+    username, lage_id, _, _ = _daten()
+    _login(client, username)
+    response = client.get(f"/lage/{lage_id}/ressourcen")
+    assert response.status_code == 200
+    for field in ("personal_gesamt", "personal_fuehrer", "personal_agt", "stv_name", "ausstattung"):
+        assert f'name="{field}"' not in response.text
 
 
 def test_gk_post_broadcastet_einheit_id(client, setup_db, monkeypatch):

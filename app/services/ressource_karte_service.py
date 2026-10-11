@@ -259,7 +259,7 @@ def karte(db: Session, lage: MajorIncident, einheit: LageEinheit) -> dict:
             "resource_type": einheit.resource_type,
             "vehicle_code": vehicle.code if vehicle else None, "vehicle_name": vehicle.name if vehicle else None,
             "kennzeichen": vehicle.kennzeichen if vehicle else None, "funkrufname": einheit.funkrufname,
-            "status": einheit.status, "sector": einheit.sector,
+            "status": einheit.status, "sector": einheit.sector.name if einheit.sector else None,
             "standort": site.bezeichnung if site else einheit.bereitstellungsraum,
             "bereitstellung_at": _naiv(einheit.arrived_at or einheit.added_at),
             "status_at": _naiv(einheit.status_at),
