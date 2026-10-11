@@ -228,7 +228,7 @@
           {% endif %}
         {% else %}
         <div class="media-link">
-          {% if m.kind == 'pdf' %}📄{% else %}🎬{% endif %}
+          {% if m.kind == 'pdf' %}📄{% elif m.kind == 'datei' %}📎{% else %}🎬{% endif %}
           {% if media_exists(m) %}
           <a href="{{ (base_url or '').rstrip('/') }}/medien/datei/{{ m.id }}">{{ m.original_filename }}</a>
           <span style="color:#999;">(Login erforderlich)</span>

@@ -2290,35 +2290,12 @@ async def create_message(
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "recorder")),
 ):
-    from app.models.incident import _TRAFFIC_LIGHT_LEGACY, TRAFFIC_LIGHT_VALUES
-    status = _TRAFFIC_LIGHT_LEGACY.get(status, status)
-    if status not in TRAFFIC_LIGHT_VALUES:
-        status = "meldung"
     incident = _incident_or_404(incident_id, db)
-    due_sec = due_after_min * 60 if due_after_min > 0 else None
-    due_at = None
-    if due_sec:
-        from datetime import timedelta
-        due_at = incident.started_at + timedelta(seconds=due_sec)
-    from app.services.incident_service import _get_column as _gc
-    msgs_col = _gc(incident, "messages")
-    msg = Message(
-        incident_id=incident_id,
-        column_id=msgs_col.id if msgs_col else None,
-        title=title, detail=detail or None,
-        status=status,
-        due_after_sec=due_sec, due_at=due_at,
-        vehicle_id=vehicle_id or None,
-        author_name=get_author_name(request),
-    )
-    db.add(msg)
-    db.flush()
-    prepend_card(db, msg.column_id, "message", msg.id)
-    from app.core.audit import write_incident_change
-    write_incident_change(
-        db, incident_id, "message.created", "message", msg.id,
-        before=None, after={"title": msg.title, "detail": msg.detail},
-        user_id=request.state.user.id,
+    from app.services.incident_service import add_message
+    msg = add_message(
+        db, incident, title=title, detail=detail, status=status,
+        due_after_min=due_after_min, vehicle_id=vehicle_id,
+        author_name=get_author_name(request), user_id=request.state.user.id,
     )
     db.commit()
     # Optional: Dateien direkt beim Anlegen anhängen
@@ -2348,9 +2325,8 @@ async def create_message(
                     incident_id, msg.id, f.filename, f.content_type, request.state.user.id, 500, exc,
                 )
         db.commit()
-    await manager.broadcast(incident_id, {
-        "type": "message_created", "column_id": msg.column_id, "vehicle_uid": msg.vehicle_id,
-    })
+    from app.services.incident_service import broadcast_message_created
+    await broadcast_message_created(incident_id, msg)
     board_incident = _load_board_incident(incident_id, db)
     assert board_incident is not None
     col = next(c for c in board_incident.columns if c.id == msg.column_id)

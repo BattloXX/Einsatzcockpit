@@ -130,12 +130,14 @@ def _serve_file(user, media, db, download: bool = False):
     # Default ist "inline" damit der In-App-Viewer PDFs/Videos im <iframe>/<video>
     # rendern kann. Mit ?download=1 wird "attachment" zurückgegeben → Browser
     # speichert die Datei direkt ab.
+    is_download_only = media.kind == "datei"
+    media_type = "application/octet-stream" if is_download_only else media.mime_type
     return FileResponse(
         path,
-        media_type=media.mime_type,
+        media_type=media_type,
         filename=media.original_filename,
-        content_disposition_type="attachment" if download else "inline",
-        headers=_NO_CACHE_HEADERS,
+        content_disposition_type="attachment" if (download or is_download_only) else "inline",
+        headers={**_NO_CACHE_HEADERS, **({"X-Content-Type-Options": "nosniff"} if is_download_only else {})},
     )
 
 

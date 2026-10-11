@@ -1129,6 +1129,64 @@ def prepend_card(db: Session, column_id: int | None, kind: str, uid: int) -> Non
     db.flush()
 
 
+def add_message(
+    db: Session,
+    incident: Incident,
+    *,
+    title: str,
+    detail: str | None,
+    status: str = "meldung",
+    due_after_min: int = 0,
+    vehicle_id: int | None = None,
+    author_name: str | None,
+    user_id: int | None = None,
+    source: str | None = None,
+) -> Message:
+    """Create a message card and its audit entry without committing the session.
+
+    ``source`` is reserved for non-UI producers (such as inbound mail).  It is
+    deliberately accepted here so those callers share the creation path while
+    the current Message schema remains unchanged.
+    """
+    del source
+    from app.models.incident import _TRAFFIC_LIGHT_LEGACY
+
+    normalized_status = _TRAFFIC_LIGHT_LEGACY.get(status, status)
+    if normalized_status not in TRAFFIC_LIGHT_VALUES:
+        normalized_status = "meldung"
+    due_sec = due_after_min * 60 if due_after_min > 0 else None
+    due_at = incident.started_at + timedelta(seconds=due_sec) if due_sec else None
+    msgs_col = _get_column(incident, "messages")
+    msg = Message(
+        incident_id=incident.id,
+        column_id=msgs_col.id if msgs_col else None,
+        title=title,
+        detail=detail or None,
+        status=normalized_status,
+        due_after_sec=due_sec,
+        due_at=due_at,
+        vehicle_id=vehicle_id or None,
+        author_name=author_name,
+    )
+    db.add(msg)
+    db.flush()
+    prepend_card(db, msg.column_id, "message", msg.id)
+    write_incident_change(
+        db, incident.id, "message.created", "message", msg.id,
+        before=None, after={"title": msg.title, "detail": msg.detail}, user_id=user_id,
+    )
+    return msg
+
+
+async def broadcast_message_created(incident_id: int, msg: Message) -> None:
+    """Broadcast a newly created message; safe for routes and background jobs."""
+    from app.services.broadcast import manager
+
+    await manager.broadcast(incident_id, {
+        "type": "message_created", "column_id": msg.column_id, "vehicle_uid": msg.vehicle_id,
+    })
+
+
 def append_card(db: Session, column_id: int | None, kind: str, uid: int) -> None:
     """Reiht ein Item ganz UNTEN in die card_order der Zielspalte ein.
 

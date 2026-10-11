@@ -47,6 +47,7 @@
       {% for m in msg.media[:3] %}
         {% if m.kind == 'image' %}<img src="/medien/meldung/thumb/{{ m.id }}" alt="" loading="lazy">
         {% elif m.kind == 'pdf' %}<span class="card__media-icon">📄</span>
+        {% elif m.kind == 'datei' %}<a class="card__media-icon" href="/medien/meldung/datei/{{ m.id }}" title="{{ m.original_filename }} herunterladen">📎</a>
         {% else %}<span class="card__media-icon">🎬</span>{% endif %}
       {% endfor %}
       {% if msg.media|length > 3 %}<span class="card__media-more">+{{ msg.media|length - 3 }}</span>{% endif %}
