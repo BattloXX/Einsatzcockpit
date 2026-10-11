@@ -40,6 +40,7 @@ from app.models.major_incident import (
 )
 from app.models.master import FireDept, VehicleMaster
 from app.models.user import AuditLog, DeviceToken
+from app.models.verleih import VerleihAusleihe, VerleihFoto
 from app.services import gk_nummer_service, gk_zugang_service, ressource_pflege_service
 from app.services.broadcast import broadcast_lage
 from app.services.einheit_service import (
@@ -65,7 +66,7 @@ router = APIRouter(prefix="/einheit", tags=["einheit"])
 ZUGANG_AKTIONEN = frozenset({
     "status", "meldung", "foto", "anforderung", "antwort", "quittierung",
     "ressource_personal", "ressource_ausstattung",
-    "nummer",
+    "nummer", "material", "material_zurueck",
 })
 
 
@@ -280,6 +281,13 @@ def _schreibbar(ctx: EinheitKontext) -> None:
         _fehler(403, "simulation_nur_lesend")
 
 
+def _verleih_aktiv(db: Session, ctx: EinheitKontext) -> None:
+    from app.services.mi_feature_service import get_mi_features
+
+    if not get_mi_features(db, ctx.lage.org_id)["geraeteverleih"]:
+        _fehler(403, "verleih_deaktiviert")
+
+
 def einheit_darf(aktion: str, ctx: EinheitKontext, db: Session) -> None:
     if ctx.quelle != "zugang":
         return
@@ -389,6 +397,10 @@ async def _senden(lage_id: int, site_id: int, einheit_id: int, dispatch_id: int,
 @router.get("/api/zustand")
 def zustand(request: Request, ctx: EinheitKontext = Depends(einheit_kontext), db: Session = Depends(get_db)):
     data = auftraege_fuer_einheit(db, ctx)
+    from app.services import verleih_service as verleih_svc
+    from app.services.mi_feature_service import get_mi_features
+
+    verleih_aktiv = bool(get_mi_features(db, ctx.lage.org_id)["geraeteverleih"])
     data["simulation"] = ctx.simulation
     data["schreibbar"] = not (ctx.simulation and not ctx.lage.is_exercise)
     data["kann_ressource_pflegen"] = (
@@ -397,6 +409,20 @@ def zustand(request: Request, ctx: EinheitKontext = Depends(einheit_kontext), db
         and gk_zugang_service.org_einstellungen(db, ctx.org_id).gk_zugang_ressource_pflegen
     )
     data["ressource"] = _ressourcen_daten(db, ctx)
+    data["verleih_aktiv"] = verleih_aktiv
+    data["material_katalog"] = (
+        [
+            {
+                "id": artikel.id,
+                "artikel_nr": artikel.artikel_nr,
+                "bezeichnung": artikel.bezeichnung,
+                "verfuegbar": artikel.verfuegbarkeit == "verfuegbar",
+            }
+            for artikel in verleih_svc.get_artikel_aktiv(db)
+        ]
+        if verleih_aktiv and ctx.einheit.is_from_org
+        else []
+    )
     leader = db.get(LageEinheitLeader, ctx.einheit.leader_assignment_id) if ctx.einheit.leader_assignment_id else None
     if leader and (leader.einheit_id != ctx.einheit.id or leader.end_at is not None):
         leader = None
@@ -611,6 +637,43 @@ def auftrag_detail(dispatch_id: int, ctx: EinheitKontext = Depends(einheit_konte
             for k in ("site_id", "bezeichnung", "einsatzgrund", "adresse", "lat", "lng", "priority", "phase")
         },
     }
+    from app.services.mi_feature_service import get_mi_features
+
+    if get_mi_features(db, ctx.lage.org_id)["geraeteverleih"]:
+        material_query = db.query(VerleihAusleihe).filter(
+            VerleihAusleihe.site_id == site.id,
+            VerleihAusleihe.org_id == ctx.org_id,
+            VerleihAusleihe.lage_id == ctx.lage.id,
+        )
+        if ctx.quelle == "zugang":
+            material_query = material_query.filter(VerleihAusleihe.einheit_id == ctx.einheit.id)
+        out["material"] = [
+            {
+                "id": ausleihe.id,
+                "status": ausleihe.status,
+                "name": ausleihe.name,
+                "adresse": ausleihe.adresse,
+                "ausgeliehen_at": _iso_z(ausleihe.ausgeliehen_at),
+                "zurueckgegeben_at": _iso_z(ausleihe.zurueckgegeben_at) if ausleihe.zurueckgegeben_at else None,
+                "einheit_label": ausleihe.einheit.label if ausleihe.einheit else None,
+                "eigene": ausleihe.einheit_id == ctx.einheit.id,
+                "positionen": [
+                    {"bezeichnung": position.bezeichnung, "menge": position.menge, "status": position.status}
+                    for position in ausleihe.positionen
+                ],
+                "fotos": [
+                    {
+                        "id": foto.id,
+                        "thumb_url": f"/einheit/medien/verleih/thumb/{foto.id}",
+                        "url": f"/einheit/medien/verleih/{foto.id}",
+                    }
+                    for foto in ausleihe.fotos
+                ],
+            }
+            for ausleihe in material_query.order_by(VerleihAusleihe.ausgeliehen_at.desc()).all()
+        ]
+    else:
+        out["material"] = []
     if dispatch.withdrawn_at is not None:
         return out
     other = (
@@ -982,6 +1045,261 @@ async def foto(
     return answer
 
 
+def _material_positionen(body: dict[str, Any]) -> list[dict[str, Any]] | None:
+    positionen = body.get("positionen")
+    if not isinstance(positionen, list) or not positionen or len(positionen) > 30:
+        return None
+    for position in positionen:
+        if not isinstance(position, dict):
+            return None
+        bezeichnung = position.get("bezeichnung")
+        menge = position.get("menge", 1)
+        artikel_id = position.get("artikel_id")
+        if not isinstance(bezeichnung, str) or not bezeichnung.strip() or len(bezeichnung) > 200:
+            return None
+        if isinstance(menge, bool) or not isinstance(menge, int) or not 1 <= menge <= 9999:
+            return None
+        if artikel_id is not None and (isinstance(artikel_id, bool) or not isinstance(artikel_id, int)):
+            return None
+    return positionen
+
+
+@router.post("/api/auftrag/{dispatch_id}/material")
+async def material(
+    dispatch_id: int,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    ctx: EinheitKontext = Depends(einheit_kontext),
+    db: Session = Depends(get_db),
+):
+    _schreibbar(ctx)
+    einheit_darf("material", ctx, db)
+    _verleih_aktiv(db, ctx)
+    body = await request.json()
+    if not isinstance(body, dict):
+        return JSONResponse({"code": "body_ungueltig"}, status_code=400)
+    try:
+        dispatch = auftrag_laden(db, ctx, dispatch_id)
+    except LookupError:
+        raise HTTPException(status_code=404)
+    positionen = _material_positionen(body)
+    if positionen is None:
+        return JSONResponse({"code": "positionen_ungueltig"}, status_code=400)
+    for feld, maximum in (("name", 200), ("telefon", 50), ("adresse", 300), ("notizen", 2000)):
+        value = body.get(feld)
+        if value is not None and (not isinstance(value, str) or len(value) > maximum):
+            return JSONResponse({"code": f"{feld}_ungueltig"}, status_code=400)
+    for feld in ("sms_senden", "pin_senden"):
+        if feld in body and not isinstance(body[feld], bool):
+            return JSONResponse({"code": f"{feld}_ungueltig"}, status_code=400)
+    if body.get("erfasst_at") is not None and not isinstance(body.get("erfasst_at"), str):
+        return JSONResponse({"code": "erfasst_at_ungueltig"}, status_code=400)
+    client_uuid = body.get("client_uuid")
+    if not isinstance(client_uuid, str):
+        return JSONResponse({"code": "client_uuid_ungueltig"}, status_code=422)
+    erfasst, korr = _zeit(body.get("erfasst_at"))
+    ausgefuehrt = False
+
+    def run() -> dict[str, Any]:
+        nonlocal ausgefuehrt
+        from app.services import verleih_service as svc
+
+        ausleihe = svc.material_an_einsatzstelle(
+            db,
+            lage=ctx.lage,
+            site=dispatch.site,
+            positionen=positionen,
+            name=body.get("name"),
+            telefon=body.get("telefon"),
+            adresse=body.get("adresse"),
+            notizen=body.get("notizen"),
+            einheit=ctx.einheit,
+            quelle="einheit",
+            user_id=getattr(getattr(request.state, "user", None), "id", None),
+            author_name=_autor(request, ctx),
+            pin=svc.generate_pin() if body.get("pin_senden") else None,
+        )
+        ausgefuehrt = True
+        dispatch.letzte_rueckmeldung_at = datetime.now(UTC)
+        write_audit(
+            db,
+            "gsl.einheit.material",
+            user_id=getattr(getattr(request.state, "user", None), "id", None),
+            payload={
+                "dispatch_id": dispatch.id, "quelle": ctx.quelle,
+                "via": "zugang" if ctx.quelle == "zugang" else None,
+                "zugang_id": ctx.zugang.id if ctx.zugang else None,
+                "generation": ctx.zugang.generation if ctx.zugang else None,
+            },
+        )
+        answer = {
+            "ok": True,
+            "entity_type": "verleih_ausleihe",
+            "entity_id": ausleihe.id,
+            "server_time": _iso_z(datetime.now(UTC)),
+            "auftrag_version": dispatch.version,
+        }
+        if korr:
+            answer["hinweis"] = korr
+        return answer
+
+    try:
+        answer, code = fuehre_aktion_aus(
+            db, ctx, client_uuid=client_uuid, aktion="material", erfasst_at=erfasst,
+            dispatch_id=dispatch.id, ausfuehren=run,
+        )
+    except HTTPException as exc:
+        return _antwort_exc(exc)
+    if code == 200 and answer.get("ok") and ausgefuehrt:
+        from app.services import verleih_service as svc
+        from app.services.print_dispatcher import autoprint_verleih_background
+
+        if body.get("sms_senden") and body.get("telefon"):
+            background_tasks.add_task(svc.sende_material_sms, answer["entity_id"], ctx.org_id, bool(body.get("pin_senden")))
+        background_tasks.add_task(autoprint_verleih_background, answer["entity_id"])
+        await _senden(ctx.lage.id, dispatch.site_id, ctx.einheit.id, dispatch.id)
+        await broadcast_lage(ctx.lage.id, {"type": "verleih:changed", "lage_id": ctx.lage.id})
+    return JSONResponse(answer, status_code=code)
+
+
+@router.post("/api/auftrag/{dispatch_id}/material_foto")
+async def material_foto(
+    dispatch_id: int,
+    request: Request,
+    file: UploadFile = File(...),
+    client_uuid: str = Form(...),
+    erfasst_at: str | None = Form(None),
+    material_client_uuid: str = Form(...),
+    ctx: EinheitKontext = Depends(einheit_kontext),
+    db: Session = Depends(get_db),
+):
+    _schreibbar(ctx)
+    einheit_darf("material", ctx, db)
+    _verleih_aktiv(db, ctx)
+    try:
+        dispatch = auftrag_laden(db, ctx, dispatch_id)
+    except LookupError:
+        raise HTTPException(status_code=404)
+    parsed, korr = _zeit(erfasst_at)
+    try:
+        UUID(client_uuid)
+    except (ValueError, TypeError):
+        return JSONResponse({"code": "client_uuid_ungueltig"}, status_code=422)
+    existing = db.query(EinheitAktion).filter(EinheitAktion.client_uuid == client_uuid).first()
+    if existing:
+        same = (
+            existing.device_token_id == (ctx.device_token.id if ctx.device_token else None)
+            and existing.zugang_id == (ctx.zugang.id if ctx.zugang else None)
+        )
+        if ctx.simulation:
+            same = existing.quelle == ctx.quelle and existing.einheit_id == ctx.einheit.id
+        return JSONResponse(
+            json.loads(existing.antwort_json or "{}") if same else {"code": "client_uuid_vergeben"},
+            status_code=409 if not same or existing.ergebnis == "konflikt" else 200,
+        )
+    material_aktion = (
+        db.query(EinheitAktion)
+        .filter(
+            EinheitAktion.client_uuid == material_client_uuid,
+            EinheitAktion.aktion == "material",
+            EinheitAktion.ergebnis == "ok",
+            EinheitAktion.einheit_id == ctx.einheit.id,
+        )
+        .first()
+    )
+    ausleihe = db.get(VerleihAusleihe, material_aktion.entity_id) if material_aktion and material_aktion.entity_id else None
+    if not ausleihe or ausleihe.site_id != dispatch.site_id or ausleihe.org_id != ctx.org_id:
+        return JSONResponse({"code": "material_unbekannt"}, status_code=409)
+    from app.services import verleih_service as svc
+
+    foto = await svc.save_verleih_foto(
+        file, ausleihe.id, ctx.org_id, getattr(getattr(request.state, "user", None), "id", None), db,
+        author_name=_autor(request, ctx),
+    )
+    dispatch.letzte_rueckmeldung_at = datetime.now(UTC)
+    action = EinheitAktion(
+        client_uuid=client_uuid, org_id=ctx.org_id, quelle=ctx.quelle,
+        device_token_id=ctx.device_token.id if ctx.device_token else None,
+        zugang_id=ctx.zugang.id if ctx.zugang else None, einheit_id=ctx.einheit.id,
+        dispatch_id=dispatch.id, aktion="material_foto", ergebnis="ok",
+        entity_type="verleih_foto", entity_id=foto.id, erfasst_at=parsed, empfangen_at=datetime.now(UTC),
+    )
+    db.add(action)
+    db.flush()
+    answer: dict[str, Any] = {
+        "ok": True, "aktion_id": action.id, "entity_type": "verleih_foto", "entity_id": foto.id,
+        "server_time": _iso_z(datetime.now(UTC)), "auftrag_version": dispatch.version,
+    }
+    if korr:
+        answer["hinweis"] = korr
+    action.antwort_json = json.dumps(answer, ensure_ascii=False)
+    db.commit()
+    await _senden(ctx.lage.id, dispatch.site_id, ctx.einheit.id, dispatch.id)
+    await broadcast_lage(ctx.lage.id, {"type": "verleih:changed", "lage_id": ctx.lage.id})
+    return answer
+
+
+@router.post("/api/auftrag/{dispatch_id}/material_zurueck")
+async def material_zurueck(
+    dispatch_id: int, request: Request, ctx: EinheitKontext = Depends(einheit_kontext), db: Session = Depends(get_db)
+):
+    _schreibbar(ctx)
+    einheit_darf("material_zurueck", ctx, db)
+    _verleih_aktiv(db, ctx)
+    body = await request.json()
+    if not isinstance(body, dict):
+        return JSONResponse({"code": "body_ungueltig"}, status_code=400)
+    try:
+        dispatch = auftrag_laden(db, ctx, dispatch_id)
+    except LookupError:
+        raise HTTPException(status_code=404)
+    ausleihe_id = body.get("ausleihe_id")
+    if isinstance(ausleihe_id, bool) or not isinstance(ausleihe_id, int):
+        return JSONResponse({"code": "ausleihe_id_ungueltig"}, status_code=400)
+    if body.get("erfasst_at") is not None and not isinstance(body.get("erfasst_at"), str):
+        return JSONResponse({"code": "erfasst_at_ungueltig"}, status_code=400)
+    client_uuid = body.get("client_uuid")
+    if not isinstance(client_uuid, str):
+        return JSONResponse({"code": "client_uuid_ungueltig"}, status_code=422)
+    ausleihe = db.get(VerleihAusleihe, ausleihe_id)
+    if not ausleihe:
+        raise HTTPException(status_code=404)
+    if (
+        ausleihe.org_id != ctx.org_id or ausleihe.lage_id != ctx.lage.id
+        or ausleihe.site_id != dispatch.site_id or ausleihe.einheit_id != ctx.einheit.id
+    ):
+        return JSONResponse({"code": "material_fremd"}, status_code=403)
+    erfasst, korr = _zeit(body.get("erfasst_at"))
+
+    def run() -> dict[str, Any]:
+        from app.services import verleih_service as svc
+
+        result = svc.material_zuruecknehmen(
+            db, ausleihe, author_name=_autor(request, ctx),
+            user_id=getattr(getattr(request.state, "user", None), "id", None), einheit_id=ctx.einheit.id,
+        )
+        dispatch.letzte_rueckmeldung_at = datetime.now(UTC)
+        answer = {
+            "ok": True, "entity_type": "verleih_ausleihe", "entity_id": result.id,
+            "server_time": _iso_z(datetime.now(UTC)), "auftrag_version": dispatch.version,
+        }
+        if korr:
+            answer["hinweis"] = korr
+        return answer
+
+    try:
+        answer, code = fuehre_aktion_aus(
+            db, ctx, client_uuid=client_uuid, aktion="material_zurueck", erfasst_at=erfasst,
+            dispatch_id=dispatch.id, ausfuehren=run,
+        )
+    except HTTPException as exc:
+        return _antwort_exc(exc)
+    if code == 200 and answer.get("ok"):
+        await _senden(ctx.lage.id, dispatch.site_id, ctx.einheit.id, dispatch.id)
+        await broadcast_lage(ctx.lage.id, {"type": "verleih:changed", "lage_id": ctx.lage.id})
+    return JSONResponse(answer, status_code=code)
+
+
 @router.get("/api/karte")
 def karte(ctx: EinheitKontext = Depends(einheit_kontext), db: Session = Depends(get_db)):
     rows = (
@@ -1050,6 +1368,34 @@ def _medium(media_id: int, thumb: bool, ctx: EinheitKontext, db: Session):
     if not path.exists():
         raise HTTPException(status_code=404)
     return FileResponse(str(path), media_type="image/jpeg", headers={"Cache-Control": "no-cache"})
+
+
+def _verleih_medium(foto_id: int, thumb: bool, ctx: EinheitKontext, db: Session):
+    foto = db.get(VerleihFoto, foto_id)
+    if not foto:
+        raise HTTPException(status_code=404)
+    ausleihe = db.get(VerleihAusleihe, foto.ausleihe_id)
+    if (
+        not ausleihe or ausleihe.org_id != ctx.org_id or ausleihe.lage_id != ctx.lage.id
+        or (ctx.quelle == "zugang" and ausleihe.einheit_id != ctx.einheit.id)
+    ):
+        raise HTTPException(status_code=404)
+    from app.services import verleih_service as svc
+
+    path = svc.foto_thumb_path(foto) if thumb and svc.foto_thumb_path(foto).exists() else svc.foto_path(foto)
+    if not path.exists():
+        raise HTTPException(status_code=404)
+    return FileResponse(str(path), media_type="image/jpeg", headers={"Cache-Control": "no-cache"})
+
+
+@router.get("/medien/verleih/{foto_id}")
+def verleih_medium(foto_id: int, ctx: EinheitKontext = Depends(einheit_kontext), db: Session = Depends(get_db)):
+    return _verleih_medium(foto_id, False, ctx, db)
+
+
+@router.get("/medien/verleih/thumb/{foto_id}")
+def verleih_medium_thumb(foto_id: int, ctx: EinheitKontext = Depends(einheit_kontext), db: Session = Depends(get_db)):
+    return _verleih_medium(foto_id, True, ctx, db)
 
 
 @router.get("/medien/{media_id}")
