@@ -710,18 +710,30 @@ def reopen_incident(db: Session, incident: Incident, user_id: int | None = None)
     """Wiedereröffnen eines abgeschlossenen Einsatzes (system_admin/org_admin).
 
     Setzt den Status zurück auf "active" und löscht den Abschluss-Zeitstempel.
+    Eine manuelle Wiedereröffnung im Einsatzcockpit sperrt außerdem weitere
+    automatische Abschlüsse durch LIS oder DIBOS. Automatische Wiedereröffnungen
+    übergeben kein ``user_id`` und behalten ihr bestehendes Sperrverhalten.
     Beim Abschließen widerrufene QR-/Lagekarte-Tokens werden NICHT automatisch
     neu erzeugt – diese können bei Bedarf neu generiert werden.
     """
+    was_closed_via_lis_auto = incident.closed_via_lis_auto
     incident.status = "active"
     incident.closed_at = None
     incident.closed_via_lis_auto = False
+    if user_id is not None:
+        incident.lis_auto_close_locked = True
     # Ursprüngliche started_at bleibt erhalten (Datenintegrität). Eine evtl. anstehende
     # Autoclose-Warnung wird zurückgesetzt; bei >48h alten Einsätzen erscheint erneut das
     # "Offen halten?"-Banner, über das der Zähler bei Bedarf neu gestartet wird.
     incident.autoclose_warn_sent_at = None
     db.flush()
-    write_audit(db, "incident.reopened", incident_id=incident.id, user_id=user_id)
+    write_audit(
+        db,
+        "incident.reopened",
+        incident_id=incident.id,
+        user_id=user_id,
+        payload={"closed_via_lis_auto_before_reopen": was_closed_via_lis_auto},
+    )
     return incident
 
 

@@ -127,7 +127,7 @@ class Incident(Base):
     # ActiveParticipation)? Wird beim manuellen Schließen NICHT gesetzt. Siehe lis_sync.py.
     closed_via_lis_auto: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # Einmal gesetzt (weil ein automatisch geschlossener Einsatz in LIS wieder aktiv wurde
-    # und wir ihn deshalb wiedereröffnet haben), darf der LIS-Auto-Close diesen Einsatz nie
+    # oder manuell im Einsatzcockpit wiedereröffnet wurde), darf LIS/DIBOS diesen Einsatz nie
     # wieder automatisch schließen — nur noch ein manueller Abschluss im Einsatzcockpit.
     lis_auto_close_locked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # Anrufer/Melder aus dem Alarm-Webhook (Name/Telefon) — nur Anzeige, keine LIS-Quelle.
