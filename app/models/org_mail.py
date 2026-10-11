@@ -150,6 +150,15 @@ class OrgMailEingang(TenantScoped, Base):
     empfangen_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     abgerufen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="neu")
+    incident_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("incident.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    message_id_ref: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("message.id", ondelete="SET NULL"), nullable=True
+    )
+    zugeordnet_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    zuordnung: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    zuordnung_grund: Mapped[str | None] = mapped_column(String(255), nullable=True)
     fehler: Mapped[str | None] = mapped_column(String(255), nullable=True)
     gelesen_von: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     gelesen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
