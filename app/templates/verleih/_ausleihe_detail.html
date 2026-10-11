@@ -1,6 +1,6 @@
 <div style="padding:0;" x-data='detailPanel({{ artikel_data|tojson }})'>
   <!-- Header -->
-  <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);">
+  <div class="verleih-panel-header" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);">
     <div>
       <strong style="font-size:1rem;">{{ a.name }}</strong>
       <span class="status-chip {% if a.status.value == 'ausgeliehen' %}status-chip--ausgeliehen{% else %}status-chip--zurueck{% endif %}" style="margin-left:8px;">
@@ -10,7 +10,7 @@
     <div style="display:flex;gap:6px;align-items:center;">
       <button type="button" class="btn btn--ghost btn--xs" title="Verleihschein drucken"
          onclick="ecpgPrint({document_type:'verleih_schein', gsl_id:{{ lage.id }}, artifact_ref:'{{ a.id }}', title:'Verleihschein drucken', localUrl:'/lage/{{ lage.id }}/verleih/{{ a.id }}/drucken'})">&#128438;</button>
-      <button type="button" class="btn btn--ghost btn--xs" onclick="closeVerleihPanel()">x</button>
+      <button type="button" class="btn btn--ghost btn--xs" aria-label="Verleihdetails schließen" onclick="closeVerleihPanel()">x</button>
     </div>
   </div>
 

@@ -1,8 +1,8 @@
 <div style="padding:0;" x-data='verleihForm({{ sites_data|tojson }}, {{ lage.id }}, {{ artikel_data|tojson }})'>
   <!-- Header -->
-  <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);">
+  <div class="verleih-panel-header" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);">
     <strong>Neue Ausleihe</strong>
-    <button type="button" class="btn btn--ghost btn--xs" onclick="closeVerleihPanel()">x</button>
+    <button type="button" class="btn btn--ghost btn--xs" aria-label="Verleihformular schließen" onclick="closeVerleihPanel()">x</button>
   </div>
 
   <form hx-post="/lage/{{ lage.id }}/verleih/neu"
@@ -189,7 +189,7 @@
       </label>
     </div>
 
-    <div style="display:flex;gap:8px;justify-content:flex-end;padding-top:4px;">
+    <div class="verleih-form-actions" style="display:flex;gap:8px;justify-content:flex-end;padding-top:4px;">
       <button type="button" class="btn btn--ghost" onclick="closeVerleihPanel()">Abbrechen</button>
       <button type="submit" class="btn btn--primary">Ausleihe anlegen</button>
     </div>

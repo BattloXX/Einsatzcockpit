@@ -120,3 +120,43 @@ def test_sektoren_readonly_sieht_details_ohne_bearbeiten_und_cross_org_ist_gespe
 
     other_lage, _ = _user_lage("sektor_fremd", "sektor-fremd")
     assert client.get(f"/lage/{other_lage}/stellen/{site_id}").status_code in {403, 404}
+
+
+def test_lage_fab_oeffnet_stellen_dialog_und_ist_readonly_nicht_sichtbar(client, setup_db):
+    lage_id, _ = _user_lage("fab_leiter", "fab-leiter")
+    _login(client, "fab_leiter")
+
+    response = client.get(f"/lage/{lage_id}/sektoren")
+    assert response.status_code == 200
+    assert 'aria-label="Einsatzstelle in dieser Lage anlegen"' in response.text
+    assert 'data-ec-dialog="neuStelleDialog"' in response.text
+    assert f'hx-post="/lage/{lage_id}/stellen/neu"' in response.text
+    assert 'name="_csrf"' in response.text
+
+    readonly_lage_id, _ = _user_lage("fab_readonly", "fab-readonly", "readonly")
+    client.get("/logout")
+    _login(client, "fab_readonly")
+    readonly = client.get(f"/lage/{readonly_lage_id}/sektoren")
+    assert readonly.status_code == 200
+    assert "bottom-nav__fab" not in readonly.text
+    assert "neuStelleDialog" not in readonly.text
+
+
+def test_stellen_dialog_post_ist_per_csrf_und_org_geschuetzt(client, setup_db):
+    lage_id, _ = _user_lage("fab_post", "fab-post")
+    _login(client, "fab_post")
+    csrf = client.cookies.get("ec_csrf")
+    created = client.post(
+        f"/lage/{lage_id}/stellen/neu",
+        data={"_csrf": csrf, "bezeichnung": "Aus dem gemeinsamen Dialog"},
+        headers={"HX-Request": "true"},
+    )
+    assert created.status_code == 204
+
+    foreign_lage_id, _ = _user_lage("fab_fremd", "fab-fremd")
+    forbidden = client.post(
+        f"/lage/{foreign_lage_id}/stellen/neu",
+        data={"_csrf": csrf, "bezeichnung": "Fremde Stelle"},
+        headers={"HX-Request": "true"},
+    )
+    assert forbidden.status_code == 404

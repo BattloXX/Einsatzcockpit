@@ -58,7 +58,10 @@ def test_incident_leader_sieht_fab(client):
     response = client.get("/")
 
     assert response.status_code == 200
-    assert "bottom-nav__fab" in _bottom_nav(response.text)
+    nav = _bottom_nav(response.text)
+    assert "bottom-nav__fab" in nav
+    assert 'aria-label="Neuen Einsatz starten"' in nav
+    assert "neuenEinsatzOeffnen()" in nav
 
 
 @pytest.mark.parametrize("role_code", ["readonly", "recorder"])
