@@ -24,6 +24,7 @@ from app.core.crypto import encrypt_secret
 from app.core.permissions import is_system_admin, require_role, same_org_or_system_admin
 from app.core.templating import templates
 from app.db import get_db
+from app.models.incident import Incident
 from app.models.master import FireDept, OrgSettings, SystemSettings
 from app.models.org_mail import OrgMailEingang, OrgO365MailConfig, OrgResendConfig, OrgSmtpConfig
 from app.models.user import User
@@ -533,7 +534,7 @@ def eingang_list(request: Request, status: str = "", q: str = "", page: int = 1,
                  db=Depends(get_db), user: User = Depends(require_role("org_admin", "admin"))):
     oid = _eingang_org(user, org_id)
     query = db.query(OrgMailEingang).filter(OrgMailEingang.org_id == oid)
-    if status in {"neu", "gelesen", "archiviert", "abruf_fehler"}:
+    if status in {"neu", "gelesen", "archiviert", "abruf_fehler", "posteingang", "wartend", "zugeordnet"}:
         query = query.filter(OrgMailEingang.status == status)
     if q.strip():
         term = f"%{q.strip()[:100]}%"
@@ -542,10 +543,19 @@ def eingang_list(request: Request, status: str = "", q: str = "", page: int = 1,
     per_page = 25
     total = query.with_entities(func.count(OrgMailEingang.id)).scalar() or 0
     entries = query.order_by(OrgMailEingang.empfangen_at.desc()).offset((page - 1) * per_page).limit(per_page).all()
-    return templates.TemplateResponse(request, "admin/mail_eingang.html", {
+    context = {
         "user": user, "entries": entries, "org_id": oid, "status": status, "q": q, "page": page,
         "pages": max(1, (total + per_page - 1) // per_page),
-    })
+        "offene_count": db.query(func.count(OrgMailEingang.id)).filter(
+            OrgMailEingang.org_id == oid, OrgMailEingang.status.in_(("neu", "posteingang", "wartend"))
+        ).scalar() or 0,
+    }
+    template = (
+        "admin/_mail_eingang_content.html"
+        if request.headers.get("HX-Request") == "true"
+        else "admin/mail_eingang.html"
+    )
+    return templates.TemplateResponse(request, template, context)
 
 
 @router.get("/mail/eingang/{entry_id:int}", response_class=HTMLResponse)
@@ -559,6 +569,8 @@ def eingang_detail(request: Request, entry_id: int, org_id: int | None = None, d
     return templates.TemplateResponse(request, "admin/mail_eingang_detail.html", {
         "user": user, "entry": row, "org_id": oid,
         "attachments": _entry_attachments(row),
+        "active_incidents": (db.query(Incident).filter(Incident.primary_org_id == oid, Incident.status == "active",
+            Incident.is_exercise == False).order_by(Incident.started_at.desc()).all()),  # noqa: E712
     })
 
 
@@ -631,7 +643,8 @@ async def eingang_anhang(entry_id: int, attachment_id: str, org_id: int | None =
 
 @router.post("/mail/eingang/{entry_id:int}/{aktion}")
 async def eingang_aktion(request: Request, entry_id: int, aktion: str, org_id: int | None = Form(None),
-                         db=Depends(get_db), user: User = Depends(require_role("org_admin", "admin"))):
+                         incident_id: int | None = Form(None), db=Depends(get_db),
+                         user: User = Depends(require_role("org_admin", "admin"))):
     oid = _eingang_org(user, org_id)
     row = _eingang_row(db, oid, entry_id)
     if aktion == "loeschen":
@@ -651,6 +664,29 @@ async def eingang_aktion(request: Request, entry_id: int, aktion: str, org_id: i
         write_audit(db, "org_mail.inbound.refetched", org_id=oid, user_id=user.id)
         await fetch_inbound_message(db, oid, row.id)
         return RedirectResponse(f"/admin/mail/eingang/{entry_id}", status_code=303)
+    elif aktion == "uebernehmen":
+        if not incident_id:
+            raise HTTPException(status_code=400, detail="Einsatz fehlt")
+        from app.services.mail_zuordnung_service import uebernehme_in_einsatz
+        if not await uebernehme_in_einsatz(db, row.id, incident_id):
+            raise HTTPException(status_code=400, detail="Mail kann nicht in diesen Einsatz übernommen werden")
+        write_audit(db, "org_mail.inbound.taken_over", org_id=oid, user_id=user.id,
+                    payload={"eingang_id": row.id, "incident_id": incident_id})
+        return RedirectResponse(f"/admin/mail/eingang/{entry_id}", status_code=303)
+    elif aktion == "absender-freigeben":
+        settings_row = _get_or_create_org_settings(db, oid)
+        sender = row.absender.strip().lower()
+        if "@" not in sender or any(ord(char) < 32 for char in sender):
+            raise HTTPException(status_code=400, detail="Absender ist ungültig")
+        current = {
+            line.strip().lower()
+            for line in (settings_row.mail_eingang_absender or "").splitlines()
+            if line.strip()
+        }
+        current.add(sender)
+        settings_row.mail_eingang_absender = "\n".join(sorted(current))
+        write_audit(db, "org_mail.inbound.sender_approved", org_id=oid, user_id=user.id,
+                    payload={"eingang_id": row.id, "absender": sender})
     else:
         raise HTTPException(status_code=404)
     db.commit()

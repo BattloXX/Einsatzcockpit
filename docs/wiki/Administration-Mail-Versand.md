@@ -1,10 +1,28 @@
 # Mail-Versand (SMTP / Office 365)
 
-## Posteingang über Resend
+## Druckregel „E-Mail eingegangen"
 
-Der organisationsbezogene Resend-Posteingang ist standardmäßig deaktiviert. Bei Resend Empfangsdomain und MX einrichten und einen Webhook für `email.received` auf die in Administration → Mail angezeigte URL setzen. Der API-Key benötigt Empfangsrechte (Full Access); das Webhook-Signing-Secret wird verschlüsselt gespeichert und nie wieder angezeigt.
+Im Gateway kann eine zunächst deaktivierte Regel mit diesem Auslöser angelegt werden.
+Sie druckt ein Deckblatt mit Absender, Betreff, Zeitpunkt, Einsatzbezug, Text und
+Anhangsliste. PDF-Anhänge und Bilder werden erst beim Druck abgerufen; andere
+Typen bleiben als „nicht druckbar – im Cockpit abrufbar" gelistet. Die Regel kann
+auf zugeordnete Mails oder freigegebene Absender beschränkt und bei den
+Anhangseiten begrenzt werden. Abgelehnte Mails, deaktivierter Eingang und
+Übungseinsätze lösen keinen Druck aus.
 
-Die Aufbewahrung beträgt konfigurierbar 1 bis 365 Tage (Standard 90). HTML-Mails werden nur in einem sandboxed iframe mit restriktiver CSP dargestellt. Anhänge werden nicht gespeichert und nur bei Bedarf serverseitig von Resend geladen.
+## E-Mail-Eingang → Meldungen
+
+Die Empfangsadresse einer Organisation lautet `<typ>.<slug>@get.einsatzcockpit.com`, zum Beispiel `feuerwehr.wolfurt@get.einsatzcockpit.com`. Die bisherige `<slug>@…`-Adresse bleibt als Alias empfangsfähig. Unter **Administration → Mail** wird der Eingang je Organisation eingerichtet.
+
+Der Modus **aus** legt nichts automatisch in einen Einsatz. **Nur freigegebene Absender** ist die sichere Vorgabe: die Liste akzeptiert einzelne Adressen und Domains mit `@` (etwa `@lls.at`). **Alle** übernimmt nur Mails, deren SPF, DKIM und DMARC jeweils bestanden haben. Ohne passende Freigabe landet die Mail im Posteingang.
+
+Ist genau ein regulärer, aktiver Einsatz vorhanden, wird daraus eine Meldung. Gibt es noch keinen Einsatz, bleibt die Mail für das einstellbare Rückblickfenster (5–240 Minuten, Standard 30) wartend; ein in diesem Zeitraum gestarteter Einsatz übernimmt sie dann automatisch. Mehrere Einsätze werden je Einstellung in den Posteingang gelegt oder dem neuesten zugeordnet. Übungseinsätze werden nie automatisch verwendet.
+
+Org-Administratoren und Administratoren sehen den Posteingang, können Mails lesen, archivieren oder löschen, einen Absender freigeben und eine Mail manuell in einen aktiven Einsatz übernehmen. Bilder, PDFs und Dateien werden als Meldungsanhänge gesichert; gefährliche oder nicht darstellbare Dateitypen werden nur als Download bereitgestellt. Der offene Zähler und eine geöffnete Liste aktualisieren sich sparsam alle 30 Sekunden.
+
+Sicherheit und Grenzen: Der Webhook prüft seine Svix-Signatur, hat ein Stundenlimit je Organisation sowie Größen- und Anhangslimits. Mailtext ist unvertrauenswürdig und wird nur als Text übernommen; HTML wird isoliert angezeigt. Es werden keine Mailinhalte geloggt. Eingangszeilen werden nach konfigurierbaren 1–365 Tagen (Standard 90) gelöscht; bereits erzeugte Meldungen samt Anhängen bleiben erhalten.
+
+Für die Einrichtung bei Resend die Domain `get.einsatzcockpit.com` als Receiving Domain anlegen, deren MX-Eintrag auf Resend setzen und für `email.received` den angezeigten Webhook konfigurieren. Der Resend-Key benötigt Empfangsrechte (Full Access). Das Webhook-Signing-Secret wird nur in der System-Konsole von einem Systemadministrator hinterlegt, verschlüsselt gespeichert und nie wieder angezeigt. Eine Empfangs-Subdomain verhindert, dass MX-Einträge bestehende Postfächer der Versanddomain beeinträchtigen.
 
 ← [Zurück zur Startseite](Home)
 
@@ -175,3 +193,22 @@ Beide Formulare enthalten zusätzlich Felder für einen **künftigen** Abruf ein
 - [ ] Werte im Tool unter `/admin/mail` eingetragen, Office 365 aktiviert
 - [ ] Test-Mail über Office 365 erfolgreich
 - [ ] (Optional) eigenen SMTP-Server als zusätzlichen Fallback konfiguriert und getestet
+# Weiterleitungen eingehender Mails
+
+Oberfläche: **Verwaltung → System → Mail-Weiterleitungen** (`/admin/mail-weiterleitungen`).
+Dort: Regeln anlegen/bearbeiten/löschen, aktiv schalten, **Test** (feste Testmail an die Ziele) und das Protokoll
+(letzte 200 Einträge). Regeladressen sind Adressen der Empfangsdomain **ohne Punkt** im Lokalteil
+(`info@get.einsatzcockpit.com`); Organisationsadressen (`<typ>.<slug>@…`) sind ausgeschlossen, auch vom Catch-all.
+Versand: neue Mail von `weiterleitung@<Versanddomain>`, `Reply-To` = Originalabsender, Header
+`X-Einsatzcockpit-Weitergeleitet`. Bei Fehlern bis zu 3 Versuche (Wartezeit `MAIL_WEITERLEITUNG_RETRY_WAIT_S`),
+danach Status `fehler`. Schutz: keine Weiterleitung von Bounces, automatischen Mails (`Auto-Submitted`,
+`Precedence: bulk`), bereits weitergeleiteten Mails oder wenn der Absender selbst Ziel ist; Rate-Limit je Regel;
+Gesamtgröße ≤ 35 MB.
+
+Nur Benutzer mit der Rolle `system_admin` duerfen unter System Weiterleitungsregeln
+pflegen. Regeln gelten vor der Organisationszuordnung. Eine Regel leitet entweder
+Text/HTML weiter oder sendet die Rohmail als EML-Anhang. Die Zieladressen sind auf
+zehn begrenzt; Catch-all (`*`) ist standardmaessig deaktiviert und muss beim Anlegen
+ausdruecklich bestaetigt werden. Das Protokoll enthaelt keine Mailinhalte und wird
+nach 30 Tagen geloescht.
+

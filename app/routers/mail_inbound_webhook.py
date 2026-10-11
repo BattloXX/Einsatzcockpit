@@ -99,8 +99,18 @@ async def resend_system_inbound_webhook(
     data = payload.get("data")
     if not isinstance(data, dict):
         return {"ok": True}
-    org_ids: set[int] = set()
+    # Systemweite Weiterleitungen sind absichtlich vor jeder Org-Aufloesung:
+    # eine konsumierte Nachricht darf keinen Tenant-Datensatz erzeugen.
+    from app.services.mail_weiterleitung_loop import run_mail_weiterleitung_once
+    from app.services.mail_weiterleitung_service import finde_regel, stelle_in_warteschlange
     domain = inbound_domain(db)
+    regel = finde_regel(db, _empfaenger(data), domain)
+    if regel is not None:
+        log_id = stelle_in_warteschlange(db, regel, data)
+        if log_id is not None:
+            background_tasks.add_task(run_mail_weiterleitung_once, log_id)
+        return {"ok": True}
+    org_ids: set[int] = set()
     for adresse in _empfaenger(data):
         org = org_aus_adresse(db, adresse, domain)
         if org and org.id not in org_ids and mail_eingang_aktiv(db, org.id):

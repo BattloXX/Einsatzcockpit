@@ -482,7 +482,7 @@ def rule_create(
     )
     if existing:
         return RedirectResponse(_rule_return(gw, "error=rule_dup#regeln"), status_code=303)
-    rule = PrintRule(org_id=user.org_id, name=name, trigger=trigger, aktiv=True)
+    rule = PrintRule(org_id=user.org_id, name=name, trigger=trigger, aktiv=trigger != "mail_eingang")
     db.add(rule)
     db.commit()
     return RedirectResponse(_rule_return(gw, f"rule_created={rule.id}#regel-{rule.id}"), status_code=303)
@@ -509,6 +509,10 @@ def rule_save(
     duplex: str = Form(""),
     color: str = Form(""),
     media: str = Form(""),
+    mail_nur_zugeordnet: str = Form(""),
+    mail_nur_freigegeben: str = Form(""),
+    mail_attachments: str = Form(""),
+    mail_max_pages: int = Form(50),
     gw: int | None = Form(None),
     db: Session = Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin")),
@@ -556,6 +560,11 @@ def rule_save(
         filters["nur_bma"] = True
     if zeit_von.strip() and zeit_bis.strip():
         filters["zeitfenster"] = {"von": zeit_von.strip()[:5], "bis": zeit_bis.strip()[:5]}
+    if rule.trigger == "mail_eingang":
+        if mail_nur_zugeordnet in ("1", "true", "on"):
+            filters["mail_nur_zugeordnet"] = True
+        if mail_nur_freigegeben in ("1", "true", "on"):
+            filters["mail_nur_freigegeben"] = True
     rule.filters = filters
 
     options: dict = {"copies": max(1, int(copies))}
@@ -567,6 +576,9 @@ def rule_save(
         options["media"] = media
     if page_range.strip():
         options["page_range"] = page_range.strip()[:40]
+    if rule.trigger == "mail_eingang":
+        options["mail_attachments"] = mail_attachments in ("1", "true", "on")
+        options["mail_max_pages"] = max(1, min(int(mail_max_pages), 200))
     rule.options = options
     db.commit()
     return RedirectResponse(_rule_return(gw, f"rule_saved=1#regel-{rule.id}"), status_code=303)

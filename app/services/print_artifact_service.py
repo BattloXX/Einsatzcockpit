@@ -21,6 +21,7 @@ from app.models.gateway import (
     DOC_GSL_JOURNAL,
     DOC_GSL_LAGEBLATT,
     DOC_LAGE_KARTE,
+    DOC_MAIL_EINGANG,
     DOC_MASCHINISTEN_MATRIX,
     DOC_OBJEKT_DOKUMENT,
     DOC_OBJEKT_SAMMEL,
@@ -105,6 +106,8 @@ def render_job_pdf(db, job: PrintJob, base_url: str = "") -> bytes:
         return _render_gsl_bericht(db, job, base_url)
     if job.document_type == DOC_GSL_EINHEIT_QR:
         return _render_gsl_einheit_qr(db, job, base_url)
+    if job.document_type == DOC_MAIL_EINGANG:
+        return _render_mail_eingang(db, job, base_url)
     if job.document_type == DOC_FAHRTENBUCH_BERICHT:
         return _render_fahrtenbuch_bericht(db, job, base_url)
     if job.document_type == DOC_MASCHINISTEN_MATRIX:
@@ -684,6 +687,118 @@ def _render_gsl_einheit_qr(db, job: PrintJob, base_url: str) -> bytes:
         base_url=base_url.rstrip("/"), user=SimpleNamespace(org=org),
     )
     return _html_to_pdf(html_str, base_url)
+
+
+def _render_mail_eingang(db, job: PrintJob, base_url: str) -> bytes:
+    """Deckblatt plus sichere, erst beim Druck geladene Mail-Anhänge."""
+    import html
+    import io
+    import json
+
+    import httpx
+    from pypdf import PdfReader, PdfWriter
+
+    from app.models.incident import Incident
+    from app.models.master import FireDept
+    from app.models.org_mail import OrgMailEingang
+    from app.services.mail_zuordnung_service import _html_text
+    from app.services.resend_inbound_service import (
+        MAX_ATTACHMENT_BYTES,
+        RESEND_ATTACHMENTS_URL,
+        resend_api_key_fuer_org,
+        safe_attachment_url,
+    )
+
+    if not job.artifact_ref or not job.artifact_ref.isdigit():
+        raise ArtifactError("E-Mail-Bezug fehlt")
+    row = db.get(OrgMailEingang, int(job.artifact_ref))
+    if row is None or row.org_id != job.org_id:
+        raise ArtifactError("E-Mail nicht gefunden")
+    try:
+        attachments = json.loads(row.anhang_json or "[]")
+    except (TypeError, ValueError):
+        attachments = []
+    attachments = attachments if isinstance(attachments, list) else []
+    body = row.text_body or _html_text(row.html_body or "")
+    incident = db.get(Incident, row.incident_id) if row.incident_id else None
+    org = db.get(FireDept, row.org_id)
+    def esc(value: object) -> str:
+        return html.escape(str(value or ""))
+    lines = "".join(
+        f"<li>{esc(item.get('filename') or 'Anhang')} – {esc(item.get('content_type') or 'unbekannt')}"
+        f" ({int(item.get('size') or 0)} Bytes)</li>"
+        for item in attachments if isinstance(item, dict)
+    ) or "<li>Keine Anhänge</li>"
+    logo = esc(org.logo_path if org and org.logo_path else "/static/img/Logo-rot.png")
+    incident_text = ""
+    if incident:
+        incident_ref = getattr(incident, "nummer", None) or getattr(incident, "title", None) or incident.id
+        incident_text = f"<br><b>Einsatz:</b> {esc(incident_ref)}"
+    cover = _html_to_pdf(
+        f"<html><body style='font-family:sans-serif'><img src='{logo}' style='max-height:55px'>"
+        f"<h1>E-Mail eingegangen</h1><p><b>Von:</b> {esc(row.absender)}<br>"
+        f"<b>Betreff:</b> {esc(row.betreff)}<br><b>Empfangen:</b> {esc(row.empfangen_at)}"
+        f"{incident_text}</p><h2>Nachricht</h2><pre style='white-space:pre-wrap'>{esc(body)}</pre>"
+        f"<h2>Anhänge</h2><ul>{lines}</ul></body></html>", base_url)
+    writer = PdfWriter()
+    writer.append(PdfReader(io.BytesIO(cover)))
+    if not (job.options or {}).get("mail_attachments", True):
+        out = io.BytesIO()
+        writer.write(out)
+        return out.getvalue()
+    max_pages = max(1, min(int((job.options or {}).get("mail_max_pages", 50)), 200))
+    used_pages = 0
+    api_key = resend_api_key_fuer_org(db, row.org_id)
+    failures: list[str] = []
+    for item in attachments:
+        if not isinstance(item, dict) or not item.get("id"):
+            continue
+        name = str(item.get("filename") or "Anhang")
+        content_type = str(item.get("content_type") or "").split(";", 1)[0].lower()
+        if content_type not in {"application/pdf", "image/png", "image/jpeg", "image/gif", "image/webp"}:
+            failures.append(f"{name}: nicht druckbar – im Cockpit abrufbar")
+            continue
+        try:
+            if not api_key:
+                raise ValueError("kein Zugriff")
+            with httpx.Client(timeout=settings.RESEND_HTTP_TIMEOUT) as client:
+                response = client.get(
+                    RESEND_ATTACHMENTS_URL.format(email_id=row.resend_email_id),
+                    headers={"Authorization": f"Bearer {api_key}"},
+                )
+                data = response.json().get("data", []) if response.is_success else []
+                remote = next((x for x in data if str(x.get("id")) == str(item["id"])), None)
+                url = remote.get("download_url") if isinstance(remote, dict) else None
+                if not isinstance(url, str) or not safe_attachment_url(url, from_resend_api=True):
+                    raise ValueError("Anhang nicht verfügbar")
+                response = client.get(url)
+            if not response.is_success or len(response.content) > MAX_ATTACHMENT_BYTES:
+                raise ValueError("Anhang nicht verfügbar")
+            if content_type == "application/pdf":
+                pages = PdfReader(io.BytesIO(response.content)).pages
+                for page in pages[:max(0, max_pages - used_pages)]:
+                    writer.add_page(page)
+                    used_pages += 1
+            else:
+                from PIL import Image
+                image = Image.open(io.BytesIO(response.content)).convert("RGB")
+                image.thumbnail((1654, 2339))
+                image_pdf = io.BytesIO()
+                image.save(image_pdf, format="PDF", resolution=150)
+                if used_pages < max_pages:
+                    writer.append(PdfReader(io.BytesIO(image_pdf.getvalue())))
+                    used_pages += 1
+        except Exception:
+            failures.append(f"{name}: konnte nicht gedruckt werden")
+    if failures:
+        notes = "".join(f"<li>{esc(x)}</li>" for x in failures)
+        note = _html_to_pdf(
+            f"<html><body><h2>Hinweise zu Anhängen</h2><ul>{notes}</ul></body></html>", base_url,
+        )
+        writer.append(PdfReader(io.BytesIO(note)))
+    out = io.BytesIO()
+    writer.write(out)
+    return out.getvalue()
 
 
 def _render_gsl_bericht(db, job: PrintJob, base_url: str) -> bytes:

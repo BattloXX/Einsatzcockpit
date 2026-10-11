@@ -4,7 +4,9 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 
 ## Unreleased
 
+- Gateway-Druckregel „E-Mail eingegangen“ mit sicherem Deckblatt und optionalen PDF-/Bildanhängen ergänzt.
 - Resend-Posteingang je Organisation mit signiertem Webhook, sicherem Abruf und Aufbewahrung ergänzt.
+- Resend-Eingang ordnet wartende, freigegebene Mails innerhalb des Rückblickfensters automatisch neu angelegten Einsätzen zu; Posteingang-Zähler und Live-Aktualisierung ergänzt.
 
 - **GSL**: Ressourcenkarte auf Übersicht, Einsätze, Journal und Zugang fokussiert; Personal, Ausstattung und Verbandsaktionen sind nicht mehr über die Oberfläche verlinkt. Abschnittsnamen und QR-Vorschau wurden korrigiert und mobil robuster gestaltet. Die Karte lag bisher unter der oberen Navigation (Kopfzeile, Reiter und Zugang-Tab waren verdeckt); sie liegt jetzt darüber.
 
@@ -101,3 +103,7 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 | **2.2.0** | 2026-06-11 | Multi-Tenancy vollständig (12 PRs): Row-Level-Isolation, Org-Onboarding, KI je Org, Speicher-Quotas, Einladungsmodell, Auto-Schließen, Rate-Limiting, API-Härtung, System-Konsole, Migration-Runbook |
 | **2.0.0** | 2026-05-23 | Media-Upload + Galerie, System-Admin-Rolle, Zeitzone je Org, ZIP-Update, Python 3.14 |
 | **1.0.0** | 2026-05-22 | Initiale Webapp (FastAPI + HTMX, WebSocket, Atemschutz, PWA, QR-Code) |
+# Unreleased
+
+- Neu: System-Admins können eingehende Mails bestimmter Adressen (z. B. info@) an andere Adressen weiterleiten (inline oder als EML, mit Retry, Schleifenschutz und Protokoll ohne Inhalt).
+
