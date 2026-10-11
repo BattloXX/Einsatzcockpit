@@ -45,6 +45,11 @@
                 hx-swap="innerHTML">
           📍 {{ site.bezeichnung }}
         </button>
+        {% if site.strasse or site.hausnr or site.ort %}
+        <div style="margin-top:2px;color:var(--text-muted);font-size:.78rem;">
+          {{ site.strasse or '' }}{% if site.hausnr %} {{ site.hausnr }}{% endif %}{% if site.ort %}{% if site.strasse or site.hausnr %}, {% endif %}{{ site.ort }}{% endif %}
+        </div>
+        {% endif %}
       </div>
       {% endif %}
     </div>

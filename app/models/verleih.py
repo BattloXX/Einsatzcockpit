@@ -22,6 +22,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.tenant import TenantScoped
 from app.db import Base
+from app.models.major_incident import IncidentSite
 
 
 class VerleihStatus(enum.StrEnum):
@@ -174,6 +175,7 @@ class VerleihAusleihe(TenantScoped, Base):
     fotos: Mapped[list[VerleihFoto]] = relationship(
         back_populates="ausleihe", cascade="all, delete-orphan", order_by="VerleihFoto.id"
     )
+    site: Mapped[IncidentSite | None] = relationship("IncidentSite", lazy="joined", viewonly=True)
 
     __table_args__ = (
         Index("ix_verleih_ausleihe_lage", "lage_id"),

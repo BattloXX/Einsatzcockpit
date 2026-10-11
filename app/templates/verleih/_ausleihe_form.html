@@ -52,12 +52,39 @@
     <div class="form-group">
       <label class="form-label">Einsatzstelle zuordnen <span style="font-size:.72rem;color:var(--text-muted);">(optional)</span></label>
       <div style="display:flex;gap:6px;align-items:center;">
-        <select name="site_id" class="form-select" style="flex:1;" x-ref="siteSelect">
-          <option value="">- Keine Zuordnung -</option>
-          <template x-for="s in siteList" :key="s.id">
-            <option :value="s.id" x-text="s.bezeichnung"></option>
-          </template>
-        </select>
+        <div class="vl-site-picker" style="flex:1;" @click.outside="sitePickerOpen=false" @keydown.escape.window="sitePickerOpen=false">
+          <input type="hidden" name="site_id" :value="selectedSiteId">
+          <button type="button" class="form-select vl-site-picker__trigger" @click="sitePickerOpen=!sitePickerOpen" :aria-expanded="sitePickerOpen">
+            <span class="vl-site-picker__value" x-show="!selectedSite" x-text="'- Keine Zuordnung -'"></span>
+            <span class="vl-site-picker__value" x-show="selectedSite" x-cloak>
+              <strong x-text="selectedSite ? selectedSite.bezeichnung + duplicateSuffix(selectedSite) : ''"></strong>
+              <small x-text="selectedSite && selectedSite.adresse ? selectedSite.adresse : ''"></small>
+            </span>
+            <span class="vl-site-picker__clear" x-show="selectedSite" x-cloak @click.stop="clearSite()" aria-label="Einsatzstelle entfernen">×</span>
+            <span aria-hidden="true">⌄</span>
+          </button>
+          <div class="vl-site-picker__menu" x-show="sitePickerOpen" x-cloak>
+            <input type="search" class="form-input vl-site-picker__search" x-ref="siteSearch" x-model="siteSearch"
+                   placeholder="Einsatzstelle suchen" @keydown.escape.prevent="sitePickerOpen=false">
+            <div class="vl-site-picker__options">
+              <button type="button" class="vl-site-picker__option" @click="clearSite()">- Keine Zuordnung -</button>
+              <template x-if="matchingSites.length">
+                <div>
+                  <div class="vl-site-picker__heading">Passend zur Adresse</div>
+                  <template x-for="s in matchingSites" :key="s.id"><button type="button" class="vl-site-picker__option vl-site-picker__option--match" @click="selectSite(s)"><span><strong x-text="s.bezeichnung + duplicateSuffix(s)"></strong><small x-text="(s.adresse || 'ohne Adresse') + (s.sektor ? ' · ' + s.sektor : '')"></small></span><em x-text="s.phase_label"></em></button></template>
+                </div>
+              </template>
+              <template x-for="s in visibleOpenSites" :key="s.id"><button type="button" class="vl-site-picker__option" @click="selectSite(s)"><span><strong x-text="s.bezeichnung + duplicateSuffix(s)"></strong><small x-text="(s.adresse || 'ohne Adresse') + (s.sektor ? ' · ' + s.sektor : '')"></small></span><em x-text="s.phase_label"></em></button></template>
+              <template x-if="visibleClosedSites.length">
+                <div>
+                  <div class="vl-site-picker__heading">Abgeschlossen</div>
+                  <template x-for="s in visibleClosedSites" :key="s.id"><button type="button" class="vl-site-picker__option vl-site-picker__option--closed" @click="selectSite(s)"><span><strong x-text="s.bezeichnung + duplicateSuffix(s)"></strong><small x-text="(s.adresse || 'ohne Adresse') + (s.sektor ? ' · ' + s.sektor : '')"></small></span><em x-text="s.phase_label"></em></button></template>
+                </div>
+              </template>
+              <div class="vl-site-picker__empty" x-show="!filteredSites.length">Keine Einsatzstelle gefunden</div>
+            </div>
+          </div>
+        </div>
         <button type="button" class="btn btn--ghost btn--xs" @click="newSiteOpen=true" x-show="!newSiteOpen">+ Neu</button>
       </div>
       <div x-show="newSiteOpen" x-cloak style="margin-top:6px;display:flex;gap:6px;align-items:center;">
@@ -205,11 +232,36 @@
   </div>
 </div>
 
+<style>
+.vl-site-picker { position:relative;min-width:0; }
+.vl-site-picker__trigger { width:100%;min-height:44px;display:flex;align-items:center;gap:8px;text-align:left; }
+.vl-site-picker__value { min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.vl-site-picker__value strong,.vl-site-picker__value small { display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.vl-site-picker__value small { color:var(--text-muted);font-size:.72rem;font-weight:400; }
+.vl-site-picker__clear { font-size:1.2rem;line-height:1;padding:5px;color:var(--text-muted); }
+.vl-site-picker__menu { position:absolute;z-index:220;top:calc(100% + 4px);left:0;right:0;background:var(--surface-mid);border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow-modal);padding:8px; }
+.vl-site-picker__search { margin-bottom:6px;min-height:44px; }
+.vl-site-picker__options { max-height:50vh;overflow-y:auto; }
+.vl-site-picker__option { width:100%;min-height:44px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 8px;border:0;border-radius:6px;background:transparent;color:var(--text);text-align:left;cursor:pointer; }
+.vl-site-picker__option:hover,.vl-site-picker__option:focus { background:var(--surface-high); }
+.vl-site-picker__option span { min-width:0; }
+.vl-site-picker__option strong,.vl-site-picker__option small { display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.vl-site-picker__option small { color:var(--text-muted);font-size:.72rem;margin-top:2px; }
+.vl-site-picker__option em { flex:0 0 auto;font-style:normal;font-size:.65rem;padding:2px 7px;border:1px solid var(--border);border-radius:999px;color:var(--text-muted); }
+.vl-site-picker__option--match { background:var(--surface-high); }
+.vl-site-picker__option--closed { opacity:.58; }
+.vl-site-picker__heading { padding:9px 8px 4px;color:var(--text-muted);font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em; }
+.vl-site-picker__empty { padding:16px 8px;color:var(--text-muted);font-size:.85rem;text-align:center; }
+</style>
+
 <script>
 function verleihForm(initialSites, lageId, initialArtikel) {
   return {
     lageId: lageId,
     siteList: initialSites || [],
+    selectedSiteId: '',
+    sitePickerOpen: false,
+    siteSearch: '',
     artikelList: initialArtikel || [],
     scanIdx: -1,
     scanModalOpen: false,
@@ -221,6 +273,33 @@ function verleihForm(initialSites, lageId, initialArtikel) {
     telefon: '',
     adresse: '',
     fotoCount: 0,
+    get selectedSite() {
+      return this.siteList.find(function(s) { return String(s.id) === String(this.selectedSiteId); }.bind(this));
+    },
+    get filteredSites() {
+      var search = this.siteSearch.trim().toLowerCase();
+      if (!search) return this.siteList;
+      return this.siteList.filter(function(s) {
+        return [s.bezeichnung, s.adresse, s.sektor].join(' ').toLowerCase().includes(search);
+      });
+    },
+    get addressPart() { return this.adresse.split(',')[0].trim().toLowerCase(); },
+    get matchingSites() {
+      var part = this.addressPart;
+      if (part.length < 3) return [];
+      return this.filteredSites.filter(function(s) { return s.offen && s.adresse.toLowerCase().includes(part); });
+    },
+    get visibleOpenSites() {
+      var matches = this.matchingSites.map(function(s) { return s.id; });
+      return this.filteredSites.filter(function(s) { return s.offen && !matches.includes(s.id); });
+    },
+    get visibleClosedSites() { return this.filteredSites.filter(function(s) { return !s.offen; }); },
+    duplicateSuffix(site) {
+      var duplicates = this.siteList.filter(function(s) { return s.bezeichnung === site.bezeichnung && s.adresse === site.adresse; });
+      return duplicates.length > 1 ? ' #' + site.id : '';
+    },
+    selectSite(site) { this.selectedSiteId = String(site.id); this.sitePickerOpen = false; this.siteSearch = ''; },
+    clearSite() { this.selectedSiteId = ''; this.sitePickerOpen = false; this.siteSearch = ''; },
     rows: [{ bezeichnung: '', artikel_nr: '', menge: 1, artikel_id: '', ist_mengenartikel: true, verfuegbarkeit: 'verfuegbar', geraetetyp_id: '', geraetetyp_name: '', verfuegbare_artikel: [] }],
     addRow() {
       this.rows.push({ bezeichnung: '', artikel_nr: '', menge: 1, artikel_id: '', ist_mengenartikel: true, verfuegbarkeit: 'verfuegbar', geraetetyp_id: '', geraetetyp_name: '', verfuegbare_artikel: [] });
@@ -294,11 +373,8 @@ function verleihForm(initialSites, lageId, initialArtikel) {
         });
         if (!res.ok) { this.newSiteError = 'Fehler beim Anlegen'; return; }
         var data = await res.json();
-        this.siteList.push({ id: data.id, bezeichnung: data.bezeichnung });
-        this.$nextTick(function() {
-          var sel = this.$refs.siteSelect;
-          if (sel) sel.value = String(data.id);
-        }.bind(this));
+        this.siteList.push(data);
+        this.selectSite(data);
         this.newSiteOpen = false;
         this.newSiteName = '';
       } catch(e) {
