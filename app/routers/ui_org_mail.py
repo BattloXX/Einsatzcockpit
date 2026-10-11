@@ -287,6 +287,7 @@ async def resend_settings_save(
     cfg.from_addr = from_addr_clean or None
     cfg.inbound_enabled = inbound_enabled == "1"
     cfg.inbound_retention_days = inbound_retention_days
+    _get_or_create_org_settings(db, effective_org_id).mail_eingang_aufbewahrung_tage = inbound_retention_days
     cfg.updated_at = datetime.now(UTC)
     if secret_changed == "1" and api_key.strip():
         cfg.api_key_enc = encrypt_secret(api_key.strip())
@@ -610,7 +611,7 @@ async def eingang_anhang(entry_id: int, attachment_id: str, org_id: int | None =
             safe_attachment_filename,
         )
         attachment = await get_resend_attachment(
-            api_key, row.resend_email_id, attachment_id[:200]
+            api_key, row.extern_id, attachment_id[:200]
         )
     except Exception:
         attachment = None
@@ -652,23 +653,31 @@ async def eingang_aktion(request: Request, entry_id: int, aktion: str, org_id: i
         db.delete(row)
     elif aktion == "archivieren":
         row.status = "archiviert"
+        from app.services.mail_eingang_service import ereignis
+        ereignis(db, row, "archiviert", user_id=user.id)
         write_audit(db, "org_mail.inbound.archived", org_id=oid, user_id=user.id)
     elif aktion == "gelesen":
         row.status, row.gelesen_von, row.gelesen_at = "gelesen", user.id, datetime.now(UTC)
         write_audit(db, "org_mail.inbound.read", org_id=oid, user_id=user.id)
+        from app.services.mail_eingang_service import ereignis
+        ereignis(db, row, "gelesen", user_id=user.id)
     elif aktion == "ungelesen":
         row.status, row.gelesen_at, row.gelesen_von = "neu", None, None
         write_audit(db, "org_mail.inbound.unread", org_id=oid, user_id=user.id)
+        from app.services.mail_eingang_service import ereignis
+        ereignis(db, row, "ungelesen", user_id=user.id)
     elif aktion == "erneut-abrufen":
         from app.services.resend_inbound_service import fetch_inbound_message
         write_audit(db, "org_mail.inbound.refetched", org_id=oid, user_id=user.id)
+        from app.services.mail_eingang_service import ereignis
+        ereignis(db, row, "erneut_abgerufen", user_id=user.id)
         await fetch_inbound_message(db, oid, row.id)
         return RedirectResponse(f"/admin/mail/eingang/{entry_id}", status_code=303)
     elif aktion == "uebernehmen":
         if not incident_id:
             raise HTTPException(status_code=400, detail="Einsatz fehlt")
         from app.services.mail_zuordnung_service import uebernehme_in_einsatz
-        if not await uebernehme_in_einsatz(db, row.id, incident_id):
+        if not await uebernehme_in_einsatz(db, row.id, incident_id, user.id):
             raise HTTPException(status_code=400, detail="Mail kann nicht in diesen Einsatz übernommen werden")
         write_audit(db, "org_mail.inbound.taken_over", org_id=oid, user_id=user.id,
                     payload={"eingang_id": row.id, "incident_id": incident_id})
@@ -685,6 +694,8 @@ async def eingang_aktion(request: Request, entry_id: int, aktion: str, org_id: i
         }
         current.add(sender)
         settings_row.mail_eingang_absender = "\n".join(sorted(current))
+        from app.services.mail_eingang_service import ereignis
+        ereignis(db, row, "absender_freigegeben", user_id=user.id)
         write_audit(db, "org_mail.inbound.sender_approved", org_id=oid, user_id=user.id,
                     payload={"eingang_id": row.id, "absender": sender})
     else:

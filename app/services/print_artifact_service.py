@@ -763,7 +763,7 @@ def _render_mail_eingang(db, job: PrintJob, base_url: str) -> bytes:
                 raise ValueError("kein Zugriff")
             with httpx.Client(timeout=settings.RESEND_HTTP_TIMEOUT) as client:
                 response = client.get(
-                    RESEND_ATTACHMENTS_URL.format(email_id=row.resend_email_id),
+                    RESEND_ATTACHMENTS_URL.format(email_id=row.extern_id),
                     headers={"Authorization": f"Bearer {api_key}"},
                 )
                 data = response.json().get("data", []) if response.is_success else []

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from html.parser import HTMLParser
 
 import httpx
@@ -13,6 +13,7 @@ from app.models.incident import Incident
 from app.models.master import OrgSettings
 from app.models.org_mail import OrgMailEingang
 from app.services.incident_service import add_message, broadcast_message_created
+from app.services.mail_eingang_service import ereignis, normalisiere_absender
 from app.services.media_service import store_bytes_for_message
 from app.services.resend_inbound_service import (
     MAX_ATTACHMENT_BYTES,
@@ -47,7 +48,7 @@ def _html_text(value: str) -> str:
 
 
 def _allowed(row: OrgMailEingang, settings: OrgSettings) -> tuple[bool, str]:
-    sender = row.absender.strip().lower()
+    sender = normalisiere_absender(row.absender)
     if settings.mail_eingang_modus == "freigegeben":
         allowed = {line.strip().lower() for line in (settings.mail_eingang_absender or "").splitlines() if line.strip()}
         domain = "@" + sender.rsplit("@", 1)[1] if "@" in sender else ""
@@ -87,7 +88,7 @@ async def _attachments(db: Session, row: OrgMailEingang, message) -> list[str]:
         if not isinstance(item, dict) or not item.get("id"):
             continue
         try:
-            attachment = await get_resend_attachment(api_key, row.resend_email_id, str(item["id"])[:200])
+            attachment = await get_resend_attachment(api_key, row.extern_id, str(item["id"])[:200])
             if not attachment:
                 raise ValueError("Anhang nicht verfügbar")
             url = attachment.get("download_url") if attachment else None
@@ -104,7 +105,7 @@ async def _attachments(db: Session, row: OrgMailEingang, message) -> list[str]:
     return failures
 
 
-async def _assign(db: Session, row: OrgMailEingang, incident: Incident, kind: str) -> bool:
+async def _assign(db: Session, row: OrgMailEingang, incident: Incident, kind: str, user_id: int | None = None) -> bool:
     if row.message_id_ref:
         return False
     # The incident was loaded with the input org predicate; preserve that guard
@@ -120,11 +121,24 @@ async def _assign(db: Session, row: OrgMailEingang, incident: Incident, kind: st
     row.incident_id, row.message_id_ref = incident.id, message.id
     row.zuordnung, row.zugeordnet_at, row.status = kind, datetime.now(UTC).replace(tzinfo=None), "zugeordnet"
     row.zuordnung_grund = ("Anhänge nicht übernommen: " + ", ".join(failures))[:255] if failures else None
+    art = "automatisch" if kind == "auto" else "manuell"
+    ereignis(db, row, "zugeordnet", f"Einsatz #{incident.id} ({art}), Meldung #{message.id}", user_id)
+    for filename in failures:
+        ereignis(db, row, "anhang_fehler", filename, user_id)
     db.commit()
     await broadcast_message_created(incident.id, message)
     from app.services.print_dispatcher import autoprint_mail_eingang_background
     await autoprint_mail_eingang_background(row.id)
     return True
+
+
+def _warte_text(db: Session, row: OrgMailEingang, settings: OrgSettings) -> str:
+    from app.core.timezones import format_local_time
+    from app.models.master import FireDept
+
+    minuten = max(5, min(int(settings.mail_eingang_rueckblick_min or 30), 240))
+    org = db.query(FireDept).filter(FireDept.id == row.org_id).first()
+    return f"wartet auf Einsatz bis {format_local_time(row.empfangen_at + timedelta(minutes=minuten), org)}"
 
 
 async def ordne_zu(db: Session, eingang_id: int, incident_ids: set[int] | None = None) -> bool:
@@ -142,27 +156,33 @@ async def ordne_zu(db: Session, eingang_id: int, incident_ids: set[int] | None =
         row.status = "posteingang"
         row.zuordnung = "mehrdeutig" if "nicht bestimmbar" in reason else "abgelehnt"
         row.zuordnung_grund = reason
+        ereignis(db, row, "mehrdeutig" if "nicht bestimmbar" in reason else "absender_abgelehnt", reason)
         db.commit()
         return False
     incidents = aktive_einsaetze(db, row.org_id)
     if incident_ids is not None:
         incidents = [incident for incident in incidents if incident.id in incident_ids]
     if not incidents:
+        schon_wartend = row.status == "wartend"
         row.status, row.zuordnung, row.zuordnung_grund = "wartend", "wartend", "Kein aktiver Einsatz vorhanden"
+        # Der Warte-Loop ruft ordne_zu alle 30 s erneut auf; das Ereignis nur beim Eintritt schreiben.
+        if not schon_wartend:
+            ereignis(db, row, "wartend", _warte_text(db, row, settings))
         db.commit()
         return False
     if len(incidents) > 1 and settings.mail_eingang_mehrere != "neuester":
         row.status, row.zuordnung = "posteingang", "mehrdeutig"
         row.zuordnung_grund = "Mehrere aktive Einsätze vorhanden"
+        ereignis(db, row, "mehrdeutig", "Mehrere aktive Einsätze")
         db.commit()
         return False
     return await _assign(db, row, incidents[0], "auto")
 
 
-async def uebernehme_in_einsatz(db: Session, eingang_id: int, incident_id: int) -> bool:
+async def uebernehme_in_einsatz(db: Session, eingang_id: int, incident_id: int, user_id: int | None = None) -> bool:
     row = db.query(OrgMailEingang).filter(OrgMailEingang.id == eingang_id).with_for_update().first()
     if not row or row.message_id_ref:
         return False
     incident = db.query(Incident).filter(Incident.id == incident_id, Incident.primary_org_id == row.org_id,
                                          Incident.status == "active", Incident.is_exercise == False).first()  # noqa: E712
-    return bool(incident and await _assign(db, row, incident, "manuell"))
+    return bool(incident and await _assign(db, row, incident, "manuell", user_id))

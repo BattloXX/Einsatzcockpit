@@ -59,7 +59,7 @@ def _mail(org_id, *, absender="lls@example.at", betreff="Lagebild", anhaenge=(),
     set_tenant_context(db, None)
     try:
         row = OrgMailEingang(
-            org_id=org_id, resend_email_id=email_id or f"m_{datetime.now().timestamp()}", absender=absender,
+            org_id=org_id, quelle="resend", extern_id=email_id or f"m_{datetime.now().timestamp()}", absender=absender,
             empfaenger="[]", betreff=betreff, empfangen_at=datetime.now(), text_body=text,
             anhang_json=json.dumps([{"id": a[0], "filename": a[1]} for a in anhaenge]),
             abgerufen_at=datetime.now() if abgerufen else None,
@@ -197,6 +197,52 @@ async def test_kein_einsatz_wartet_und_uebung_wird_nie_genutzt(setup_db, anhaeng
     mail_id = _mail(org_id)
     assert await _lauf(mail_id) is False
     assert _zustand(mail_id)[:4] == ("wartend", "wartend", None, None)
+
+
+def _ereignisse(mail_id):
+    from app.models.org_mail import OrgMailEingangEreignis
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        rows = db.query(OrgMailEingangEreignis).filter_by(eingang_id=mail_id).order_by(OrgMailEingangEreignis.id)
+        return [(e.typ, e.text) for e in rows]
+    finally:
+        db.close()
+
+
+@pytest.mark.asyncio
+async def test_ereignisse_bei_zuordnung_und_ablehnung(setup_db, anhaenge):
+    org_id, _ = _org()
+    incident_id = _einsatz(org_id)
+    _settings(org_id)
+    ok = _mail(org_id)
+    assert await _lauf(ok) is True
+    typen = dict(_ereignisse(ok))
+    assert typen["zugeordnet"].startswith(f"Einsatz #{incident_id} (automatisch), Meldung #")
+    fremd = _mail(org_id, absender="Fremder <x@fremd.example>")
+    assert await _lauf(fremd) is False
+    assert [typ for typ, _ in _ereignisse(fremd)] == ["absender_abgelehnt"]
+
+
+@pytest.mark.asyncio
+async def test_wartend_ereignis_nur_einmal_mit_frist(setup_db, anhaenge):
+    from app.models.org_mail import OrgMailEingangEreignis
+
+    org_id, _ = _org()
+    _settings(org_id)
+    mail_id = _mail(org_id)
+    assert await _lauf(mail_id) is False
+    # Der Warte-Loop ruft ordne_zu wiederholt auf.
+    assert await _lauf(mail_id) is False
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        texte = [e.text for e in db.query(OrgMailEingangEreignis).filter_by(eingang_id=mail_id, typ="wartend")]
+    finally:
+        db.close()
+    assert len(texte) == 1
+    assert texte[0].startswith("wartet auf Einsatz bis ")
 
 
 @pytest.mark.asyncio

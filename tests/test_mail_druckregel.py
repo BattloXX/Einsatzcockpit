@@ -63,7 +63,7 @@ def test_mail_rule_filters_reject_unassigned_or_unapproved():
 
 def test_mail_renderer_uses_plain_text_and_lists_nonprintable_attachment(monkeypatch):
     row = OrgMailEingang(
-        id=42, org_id=9, resend_email_id="resend", absender="sender@example.at", betreff="Lage",
+        id=42, org_id=9, quelle="resend", extern_id="resend", absender="sender@example.at", betreff="Lage",
         empfangen_at=datetime.now(), html_body="<b>Nur Text</b>",
         anhang_json='[{"id":"a", "filename":"daten.zip", "content_type":"application/zip", "size":12}]',
     )
@@ -129,7 +129,7 @@ def test_kein_autodruck_wenn_abruf_fehlschlaegt(setup_db, monkeypatch):
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
-        row = OrgMailEingang(org_id=org_id, resend_email_id="mail_np", absender="a", empfaenger="[]", betreff="b",
+        row = OrgMailEingang(org_id=org_id, quelle="resend", extern_id="mail_np", absender="a", empfaenger="[]", betreff="b",
                              empfangen_at=datetime.now(UTC).replace(tzinfo=None), status="neu")
         db.add(row)
         db.commit()

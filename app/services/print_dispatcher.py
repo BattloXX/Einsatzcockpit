@@ -776,6 +776,13 @@ async def autoprint_mail_eingang_background(eingang_id: int) -> None:
             "mail_assigned": bool(row.incident_id), "mail_sender_approved": approved,
         })
         db.commit()
+        if jobs:
+            try:
+                from app.services.mail_eingang_service import ereignis
+                ereignis(db, row, "gedruckt")
+                db.commit()
+            except Exception:
+                db.rollback()
         for job in jobs:
             try:
                 await dispatch_job(db, job)
