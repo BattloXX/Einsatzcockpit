@@ -23,6 +23,7 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
 from app.config import settings
@@ -81,6 +82,7 @@ from app.models.major_incident import (
 )
 from app.models.master import FireDept, Member, VehicleMaster
 from app.models.user import User
+from app.models.verleih import VerleihAusleihe, VerleihStatus
 from app.services import einheit_service, lagemeldung_service, resource_service
 from app.services.ai_service import is_enabled as ai_is_enabled
 from app.services.broadcast import broadcast_lage, manager
@@ -380,6 +382,7 @@ def lage_board(
     abgebrochen_sites = sites_by_phase.get(SitePhase.abgebrochen, [])
     sectors = sorted(lage.sectors, key=lambda s: s.id)
     sectors_by_id = {s.id: s for s in sectors}
+    material_open_counts_by_site = material_open_counts_for_sites(db, [site.id for site in lage.sites])
     cross_markers = sorted(lage.cross_site_markers, key=lambda m: (m.sort_index, m.id))
 
     new_meldungen_count = (
@@ -425,6 +428,7 @@ def lage_board(
         "sectors": sectors,
         "sectors_by_id": sectors_by_id,
         "cross_markers": cross_markers,
+            "material_open_counts_by_site": material_open_counts_by_site,
         "cross_marker_type_label": CROSS_MARKER_TYPE_LABEL,
         "cross_marker_type_icon": CROSS_MARKER_TYPE_ICON,
         "cross_marker_status_label": CROSS_MARKER_STATUS_LABEL,
@@ -681,25 +685,51 @@ def site_detail(
     if not site or site.major_incident_id != lage_id:
         raise HTTPException(status_code=404)
 
-    sectors = sorted(lage.sectors, key=lambda s: s.id)
+    return templates.TemplateResponse(
+        request,
+        "incident_major/_site_detail.html",
+        site_detail_context(request, db, lage, site, user),
+    )
 
-    citizen_report = None
-    if site.source == "buerger":
-        citizen_report = (
-            db.query(CitizenReport)
-            .filter(CitizenReport.site_id == site.id)
-            .first()
+
+def material_open_counts_for_sites(db: Session, site_ids: list[int]) -> dict[int, int]:
+    """Offene Material-Ausleihen pro Stelle in einer einzigen Abfrage."""
+    if not site_ids:
+        return {}
+    rows = (
+        db.query(VerleihAusleihe.site_id, func.count(VerleihAusleihe.id))
+        .filter(
+            VerleihAusleihe.site_id.in_(site_ids),
+            VerleihAusleihe.status == VerleihStatus.ausgeliehen,
         )
+        .group_by(VerleihAusleihe.site_id)
+        .all()
+    )
+    return {int(site_id): int(count) for site_id, count in rows if site_id is not None}
 
+
+def site_detail_context(request: Request, db: Session, lage, site, user) -> dict:
+    """Gemeinsamer vollständiger Kontext für alle Stellen-Detail-Renderpfade."""
+    sectors = sorted(lage.sectors, key=lambda s: s.id)
+    citizen_report = db.query(CitizenReport).filter(CitizenReport.site_id == site.id).first()
     available_einheiten = sorted(
         [e for e in lage.einheiten if e.status != resource_service.STATUS_ABGERUECKT],
         key=lambda e: (e.incident_site_id is not None, e.label),
     )
-
     log_user_ids = {e.user_id for e in site.log_entries if e.user_id}
     users_by_id = {u.id: u for u in db.query(User).filter(User.id.in_(log_user_ids)).all()} if log_user_ids else {}
-
+    features = _get_mi_features(db, lage.org_id)
+    material_ausleihen = []
+    if features.get("geraeteverleih"):
+        material_ausleihen = (
+            db.query(VerleihAusleihe)
+            .filter(VerleihAusleihe.lage_id == lage.id, VerleihAusleihe.site_id == site.id)
+            .options(selectinload(VerleihAusleihe.positionen), selectinload(VerleihAusleihe.fotos))
+            .order_by(VerleihAusleihe.status, VerleihAusleihe.ausgeliehen_at.desc())
+            .all()
+        )
     context = {
+        "request": request,
         "user": user,
         "lage": lage,
         "site": site,
@@ -714,9 +744,12 @@ def site_detail(
         "available_einheiten": available_einheiten,
         "site_log_kind_label": SITE_LOG_KIND_LABEL,
         "users_by_id": users_by_id,
+        "mi_features": features,
+        "verleih_aktiv": bool(features.get("geraeteverleih")),
+        "material_ausleihen": material_ausleihen,
     }
     context.update(_site_dispatch_context(request, db, lage, site, user))
-    return templates.TemplateResponse(request, "incident_major/_site_detail.html", context)
+    return context
 
 
 @router.get("/lage/{lage_id}/stellen/{site_id}/disponieren-select", response_class=HTMLResponse)
@@ -786,6 +819,7 @@ def site_card_partial(
         "can_edit": _can_edit(user),
         "dispatch_counts": dispatch_counts,
         "einheiten_chips": einheiten_chips,
+        "material_open_counts_by_site": material_open_counts_for_sites(db, [site.id]),
     })
 
 
@@ -826,6 +860,7 @@ def phase_column_partial(
     einheiten_chips_by_site = resource_service.get_einheiten_chips_for_sites(
         db, sites, org_settings=org_settings
     )
+    material_open_counts_by_site = material_open_counts_for_sites(db, [site.id for site in sites])
     return templates.TemplateResponse(request, "incident_major/_phase_col_body.html", {
         "lage": lage,
         "sites": sites,
@@ -834,6 +869,7 @@ def phase_column_partial(
         "sectors_by_id": sectors_by_id,
         "dispatch_counts_by_site": dispatch_counts_by_site,
         "einheiten_chips_by_site": einheiten_chips_by_site,
+        "material_open_counts_by_site": material_open_counts_by_site,
         "can_edit": _can_edit(user),
     })
 
@@ -972,33 +1008,11 @@ def _site_detail_html_with_oob(request: Request, db: Session, lage, site, user) 
     """Rendert _site_detail.html + OOB-Karte als kombinierten HTML-String.
     Der Aufrufer setzt HX-Retarget:#siteDetailContent + HX-Reswap:innerHTML.
     """
-    detail_ctx = _site_dispatch_context(request, db, lage, site, user)
-    available_einheiten = [
-        e for e in lage.einheiten if e.status != resource_service.STATUS_ABGERUECKT
-    ]
-    sectors = sorted(lage.sectors, key=lambda s: s.id)
-    log_user_ids = {e.user_id for e in site.log_entries if e.user_id}
-    users_by_id = {u.id: u for u in db.query(User).filter(User.id.in_(log_user_ids)).all()} if log_user_ids else {}
-    detail_ctx.update({
-        "request": request,
-        "user": user,
-        "lage": lage,
-        "site": site,
-        "can_edit": _can_edit(user),
-        "can_note": _can_note(user),
-        "available_einheiten": available_einheiten,
-        "site_log_kind_label": SITE_LOG_KIND_LABEL,
-        "sectors": sectors,
-        "phase_labels": PHASE_LABELS,
-        "prio_label": SITE_PRIORITY_LABEL,
-        "prio_color": SITE_PRIORITY_COLOR,
-        "citizen_report": None,
-        "now": datetime.now(UTC),
-        "users_by_id": users_by_id,
-    })
+    detail_ctx = site_detail_context(request, db, lage, site, user)
     detail_html = templates.env.get_template(
         "incident_major/_site_detail.html"
     ).render(detail_ctx)
+    sectors = detail_ctx["sectors"]
     sectors_by_id = {s.id: s for s in sectors}
     dispatch_counts = resource_service.get_dispatch_counts_for_site(db, site.id)
     org_settings = lagemeldung_service.org_settings_for(db, lage.org_id)
@@ -1017,6 +1031,7 @@ def _site_detail_html_with_oob(request: Request, db: Session, lage, site, user) 
         "can_edit": _can_edit(user),
         "dispatch_counts": dispatch_counts,
         "einheiten_chips": einheiten_chips,
+        "material_open_counts_by_site": material_open_counts_for_sites(db, [site.id]),
     }
     card_html = templates.env.get_template(
         "incident_major/_site_card.html"

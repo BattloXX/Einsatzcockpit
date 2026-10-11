@@ -1,0 +1,39 @@
+<form class="site-material-form"
+      x-data='{ positions:[{bezeichnung:"", menge:1, artikel_id:""}], fotos:0, telefon:{{ (telefon or "")|tojson|forceescape }}, katalog:{{ artikel|map(attribute="bezeichnung")|list|tojson|forceescape }}, katalogIds:{{ artikel|map(attribute="id")|list|tojson|forceescape }}, add(){this.positions.push({bezeichnung:"", menge:1, artikel_id:""})}, remove(i){if(this.positions.length > 1)this.positions.splice(i,1)}, artikelZuordnen(p){var i=this.katalog.indexOf(p.bezeichnung.trim()); p.artikel_id = i >= 0 ? String(this.katalogIds[i]) : "";} }'
+      hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/material"
+      hx-target="#siteDetailContent"
+      hx-swap="innerHTML"
+      hx-encoding="multipart/form-data">
+  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+  <div class="res-section__title">Material vor Ort erfassen</div>
+  <template x-for="(position, index) in positions" :key="index">
+    <div class="site-material-form__position">
+      <input class="form-input" name="pos_bezeichnung[]" x-model="position.bezeichnung" @change="artikelZuordnen(position)" list="siteMaterialArtikel" placeholder="Materialbezeichnung" required>
+      <input class="form-input" style="max-width:90px" type="number" name="pos_menge[]" x-model="position.menge" min="1" max="9999" aria-label="Menge">
+      <input type="hidden" name="pos_artikel_id[]" x-model="position.artikel_id">
+      <button class="btn btn--xs btn--ghost" type="button" @click="remove(index)" x-show="positions.length > 1" aria-label="Position entfernen">×</button>
+    </div>
+  </template>
+  <datalist id="siteMaterialArtikel">
+    {% for artikel in artikel %}<option value="{{ artikel.bezeichnung }}"></option>{% endfor %}
+  </datalist>
+  <button class="btn btn--xs btn--ghost" type="button" @click="add()">+ Position</button>
+  <div class="site-material-form__grid">
+    <label>Empfänger<input class="form-input" name="name" value="{{ name or '' }}" maxlength="200"></label>
+    <label>Telefon<input class="form-input" name="telefon" x-model="telefon" maxlength="50"></label>
+    <label>Adresse<input class="form-input" name="adresse" value="{{ adresse or '' }}" maxlength="300"></label>
+    <label>Einheit<select class="form-select" name="einheit_id"><option value="">– keine –</option>{% for einheit in einheiten %}<option value="{{ einheit.id }}">{{ einheit.label }}</option>{% endfor %}</select></label>
+    <label style="grid-column:1 / -1">Notiz<textarea class="form-input" name="notizen" rows="2"></textarea></label>
+  </div>
+  <input id="siteMaterialFotos-{{ site.id }}" type="file" name="fotos" accept="image/*" multiple style="display:none" @change="fotos=$event.target.files.length">
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+    <button class="btn btn--secondary btn--sm" type="button" onclick="openCamera('siteMaterialFotos-{{ site.id }}')">📷 Kamera</button>
+    <button class="btn btn--ghost btn--sm" type="button" onclick="openGallery('siteMaterialFotos-{{ site.id }}')">🖼️ Galerie</button>
+    <span x-show="fotos" x-text="fotos + ' Foto(s) ausgewählt'" style="align-self:center;font-size:.75rem;color:var(--text-muted)"></span>
+  </div>
+  <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:10px">
+    <label x-show="telefon.trim()"><input type="checkbox" name="sms_senden" value="1" checked> SMS an Empfänger</label>
+    <label><input type="checkbox" name="pin_senden" value="1"> PIN erzeugen</label>
+  </div>
+  <div style="display:flex;gap:6px;margin-top:12px"><button class="btn btn--primary btn--sm" type="submit">Material belassen</button><button class="btn btn--ghost btn--sm" type="button" onclick="this.closest('.site-material-container').innerHTML=''">Abbrechen</button></div>
+</form>
