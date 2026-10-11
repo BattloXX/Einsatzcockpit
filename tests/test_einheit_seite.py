@@ -104,6 +104,17 @@ def test_einheit_template_und_javascript_sind_lesbar():
     assert max(map(len, template.splitlines())) <= 200
 
 
+def test_einheit_outbox_import_ist_versioniert():
+    # einheit_outbox.js wird mit langem max-age ausgeliefert; ohne Versions-Mapping
+    # behielten Tablets eine alte Outbox (z. B. ohne Typ "material").
+    root = Path(__file__).parents[1]
+    template = (root / "app/templates/einheit/einheit.html").read_text()
+    javascript = (root / "app/static/js/einheit_modus.js").read_text()
+    assert 'from "/static/js/einheit_outbox.js"' in javascript
+    assert '"/static/js/einheit_outbox.js": "/static/js/einheit_outbox.js?v={{ ASSET_VERSION }}"' in template
+    assert template.index('type="importmap"') < template.index('type="module"')
+
+
 def test_einheit_laed_vor_der_outbox_bereinigung():
     javascript = (Path(__file__).parents[1] / "app/static/js/einheit_modus.js").read_text()
     init = javascript[javascript.index("async init() {"):javascript.index("async navigiereZuPfad()")]

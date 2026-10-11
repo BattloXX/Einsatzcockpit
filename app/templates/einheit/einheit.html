@@ -6,6 +6,10 @@
 {% include "einheit/_einheit_styles.html" %}
 <link rel="stylesheet" href="/static/css/leaflet.min.css?v={{ ASSET_VERSION }}">
 <script src="/static/js/leaflet.min.js?v={{ ASSET_VERSION }}" defer></script>
+{# Die Outbox wird per import geladen; ohne Versions-Mapping bliebe sie wegen max-age dauerhaft im Browser-Cache. #}
+<script type="importmap">
+  {"imports": {"/static/js/einheit_outbox.js": "/static/js/einheit_outbox.js?v={{ ASSET_VERSION }}"}}
+</script>
 <script type="module" src="/static/js/einheit_modus.js?v={{ ASSET_VERSION }}"></script>
 <script>
   window.EINHEIT_WS_PATH = {{ ('/ws/einheit-zugang' if gk_zugang else '/ws/lage/' ~ lage_id)|tojson }};
