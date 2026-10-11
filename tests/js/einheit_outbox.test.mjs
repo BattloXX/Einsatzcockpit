@@ -132,6 +132,55 @@ test("Foto-FormData enthaelt alle Felder und Blob bleibt nach Abbruch", async ()
   const form = env.anfragen[1].body; assert.equal(form.get("client_uuid"), x.client_uuid); assert.equal(form.get("kommentar"), "Kommentar"); assert.equal(form.get("_csrf"), "csrf"); assert.equal(form.get("file").name, "bild.jpg");
 });
 
+test("Material wird vor dem zugehoerigen Material-Foto bestaetigt", async () => {
+  let materialBestaetigen;
+  const env = umgebung();
+  env.basis.fetch = async (url, init) => {
+    env.anfragen.push({ url, ...init });
+    if (url.endsWith("/material")) return new Promise((resolve) => { materialBestaetigen = resolve; });
+    return ok(2);
+  };
+  const o = createOutbox({ ...env.basis, csrfToken: () => "csrf" });
+  const material = await eintrag(o, "material", 3, { positionen: [{ bezeichnung: "Pumpe", menge: 1 }] });
+  await warteAuf(() => env.anfragen.length === 1);
+  await o.erfassen({ typ: "material_foto", dispatch_id: 3, einheit_id: 9, auftrag_version: 1,
+    payload: { material_client_uuid: material.client_uuid }, blob: new Blob(["bild"]), dateiname: "material.jpg" });
+  await leer(); assert.equal(env.anfragen.length, 1);
+  materialBestaetigen(ok(1));
+  await warteAuf(() => env.anfragen.length === 2);
+  assert.deepEqual(env.anfragen.map((x) => x.url), ["/einheit/api/auftrag/3/material", "/einheit/api/auftrag/3/material_foto"]);
+});
+
+test("Material-Foto wartet auf ausstehendes Material nach Netzfehler", async () => {
+  const env = umgebung([new Error("offline")]); const o = createOutbox(env.basis);
+  const material = await eintrag(o, "material", 3, { positionen: [{ bezeichnung: "Pumpe", menge: 1 }] });
+  await warteAuf(async () => (await o.liste())[0]?.status === "fehler_netz");
+  await o.erfassen({ typ: "material_foto", dispatch_id: 3, einheit_id: 9, auftrag_version: 1,
+    payload: { material_client_uuid: material.client_uuid }, blob: new Blob(["bild"]), dateiname: "material.jpg" });
+  await leer(); assert.equal(env.anfragen.length, 1);
+});
+
+test("Konflikt beim Material setzt Material-Foto auf material_nicht_angelegt", async () => {
+  const env = umgebung([antwort(409, { code: "ungueltig" })]); const o = createOutbox(env.basis);
+  const material = await eintrag(o, "material", 3, { positionen: [{ bezeichnung: "Pumpe", menge: 1 }] });
+  await o.erfassen({ typ: "material_foto", dispatch_id: 3, einheit_id: 9, auftrag_version: 1,
+    payload: { material_client_uuid: material.client_uuid }, blob: new Blob(["bild"]), dateiname: "material.jpg" });
+  await warteAuf(async () => (await o.liste()).some((item) => item.typ === "material_foto" && item.status === "konflikt"));
+  const foto = (await o.liste()).find((item) => item.typ === "material_foto");
+  assert.equal(foto.letzter_fehler, "material_nicht_angelegt");
+});
+
+test("Material-Foto-FormData enthaelt material_client_uuid", async () => {
+  const env = umgebung([ok(1)]); const o = createOutbox({ ...env.basis, csrfToken: () => "csrf" });
+  await o.erfassen({ typ: "material_foto", dispatch_id: 3, einheit_id: 9, auftrag_version: 1,
+    payload: { material_client_uuid: "material-uuid" }, blob: new Blob(["bild"]), dateiname: "material.jpg" });
+  await warteAuf(() => env.anfragen.length === 1);
+  const form = env.anfragen[0].body;
+  assert.equal(form.get("material_client_uuid"), "material-uuid");
+  assert.equal(form.get("kommentar"), null);
+  assert.equal(form.get("_csrf"), "csrf");
+});
+
 test("Zaehler und onChange reagieren auf Zustandsaenderungen", async () => {
   const env = umgebung([antwort(422, { code: "x" })]); const o = createOutbox(env.basis); let aenderungen = 0; const abmelden = o.onChange(() => aenderungen++);
   await eintrag(o); await warteAuf(async () => (await o.zaehler()).fehler === 1);

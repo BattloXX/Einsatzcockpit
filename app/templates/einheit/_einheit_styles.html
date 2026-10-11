@@ -70,6 +70,15 @@
 .einheit-log__text{white-space:pre-wrap;}
 .einheit-thumbs{display:flex;gap:.5rem;flex-wrap:wrap;}
 .einheit-thumbs img{width:96px;height:72px;object-fit:cover;border-radius:var(--radius-sm);}
+.einheit-material{padding:.65rem 0;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:.4rem;}
+.einheit-material:last-child{border-bottom:0;}
+.einheit-material__kopf{display:flex;justify-content:space-between;align-items:flex-start;gap:.75rem;}
+.einheit-material__zurueck,.einheit-material__hinzufuegen{min-height:44px;align-self:flex-start;}
+.einheit-material-position{display:grid;grid-template-columns:minmax(0,1fr) 5.5rem auto;gap:.5rem;align-items:center;}
+.einheit-material-position .form-control{min-height:44px;}
+.einheit-material-position .btn{min-height:44px;}
+.einheit-checkbox{display:flex;align-items:center;gap:.5rem;min-height:44px;}
+.einheit-checkbox input{width:20px;height:20px;}
 
 .einheit-flyout-body{padding:1rem;overflow:auto;display:flex;flex-direction:column;gap:.75rem;}
 .einheit-formular{display:flex;flex-direction:column;gap:.75rem;}
@@ -89,6 +98,8 @@
   .einheit-umschalter{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;}
   .einheit-umschalter a{justify-content:center;padding:.55rem .45rem;text-align:center;}
   .einheit-actions-row{grid-template-columns:1fr;}
+  .einheit-material-position{grid-template-columns:1fr 5.5rem;}
+  .einheit-material-position .btn{grid-column:1 / -1;}
   /* Die gesamte Aktionsleiste darf Einsatzdaten und Karte nicht überdecken. */
   .fab-actions{position:static;background:none;padding:0;margin:.75rem 0 0;}
   .einheit-einsatzkarte__karte{height:190px;}

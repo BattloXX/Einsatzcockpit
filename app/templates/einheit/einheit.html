@@ -353,6 +353,32 @@
             </div>
           </div>
 
+          <div class="fab-subcard" x-show="(detail?.material || []).length">
+            <p class="fab-subcard__title">Material an dieser Stelle</p>
+            <template x-for="ausleihe in detail?.material || []" :key="ausleihe.id">
+              <div class="einheit-material">
+                <div class="einheit-material__kopf">
+                  <strong x-text="(ausleihe.positionen || []).map((position) => position.menge + '× ' + position.bezeichnung).join(', ')"></strong>
+                  <span class="einheit-chip einheit-chip--status"
+                        x-text="ausleihe.status === 'ausgeliehen' ? 'Offen' : 'Zurückgegeben'"></span>
+                </div>
+                <div class="einheit-sub" x-text="ausleihe.name || 'Vor Ort'"></div>
+                <div class="einheit-sub" x-text="(ausleihe.einheit_label ? ausleihe.einheit_label + ' · ' : '') + zeit(ausleihe.zurueckgegeben_at || ausleihe.ausgeliehen_at)"></div>
+                <div class="einheit-thumbs" x-show="(ausleihe.fotos || []).length">
+                  <template x-for="foto in ausleihe.fotos || []" :key="foto.id">
+                    <a :href="foto.url + (simulation ? '?sim=' + simEinheitId : '')" target="_blank" rel="noopener">
+                      <img :src="(foto.thumb_url || foto.url) + (simulation ? '?sim=' + simEinheitId : '')"
+                           alt="Material-Foto" loading="lazy">
+                    </a>
+                  </template>
+                </div>
+                <button type="button" class="btn btn--ghost einheit-material__zurueck"
+                        x-show="ausleihe.eigene && ausleihe.status === 'ausgeliehen' && schreibbar"
+                        @click="materialZuruecknehmen(ausleihe)">Zurückgenommen</button>
+              </div>
+            </template>
+          </div>
+
           <div class="fab-subcard" x-show="(detail?.chronik || []).length">
             <p class="fab-subcard__title">Chronik</p>
             <template x-for="item in detail?.chronik || []">
@@ -382,6 +408,7 @@
             <button type="button" class="btn btn--ghost" @click="oeffneMeldung('lagemeldung')">&#x1F4DD; Lagemeldung</button>
             <button type="button" class="btn btn--ghost" @click="oeffneMeldung('massnahmen')">&#x1F6E0; Maßnahme</button>
             <button type="button" class="btn btn--ghost" @click="oeffneMeldung('note')">&#x1F5D2; Notiz</button>
+            <button type="button" class="btn btn--ghost" x-show="verleihAktiv && schreibbar" @click="flyout = 'material'">📦 Material</button>
             <a class="btn btn--ghost" :href="detail?.auftrag?.gmaps_url" target="_blank" rel="noopener"
                x-show="detail?.auftrag?.gmaps_url">&#x1F9ED; Navigation</a>
           </div>
@@ -406,6 +433,34 @@
             <button type="button" class="btn btn--primary btn--lg einheit-action" @click="fotoErfassen()">
               Fotos erfassen
             </button>
+          </div>
+        </template>
+
+        <template x-if="flyout === 'material'">
+          <div class="einheit-formular" aria-label="Material vor Ort belassen">
+            <p class="einheit-sub" x-text="'Empfänger leer = Vor Ort - ' + (detail?.stelle?.bezeichnung || '')"></p>
+            <datalist id="material-katalog">
+              <template x-for="artikel in materialKatalog" :key="artikel.id">
+                <option :value="artikel.bezeichnung" x-text="artikel.artikel_nr ? artikel.artikel_nr + ' · ' + artikel.bezeichnung : artikel.bezeichnung"></option>
+              </template>
+            </datalist>
+            <template x-for="(position, index) in materialPositionen" :key="index">
+              <div class="einheit-material-position">
+                <input class="form-control" x-model="position.bezeichnung" list="material-katalog" placeholder="Bezeichnung">
+                <input class="form-control" x-model.number="position.menge" type="number" min="1" max="9999" inputmode="numeric" aria-label="Menge">
+                <button type="button" class="btn btn--ghost" @click="materialPositionEntfernen(index)">Zeile entfernen</button>
+              </div>
+            </template>
+            <button type="button" class="btn btn--ghost einheit-material__hinzufuegen" @click="materialPositionHinzufuegen()">+ Position</button>
+            <input class="form-control" x-model="materialName" placeholder="Empfänger (optional)">
+            <input class="form-control" x-model="materialTelefon" type="tel" inputmode="tel" placeholder="Telefon (optional)">
+            <label class="einheit-checkbox" x-show="materialTelefon.trim()">
+              <input type="checkbox" x-model="materialSmsSenden"> SMS an Empfänger
+            </label>
+            <label class="einheit-checkbox"><input type="checkbox" x-model="materialPinSenden"> PIN erzeugen</label>
+            <textarea class="form-control" x-model="materialNotizen" placeholder="Notiz (optional)"></textarea>
+            <input x-ref="materialFotos" class="form-control" type="file" accept="image/*" capture="environment" multiple>
+            <button type="button" class="btn btn--primary btn--lg einheit-action" @click="materialErfassen()">Material erfassen</button>
           </div>
         </template>
 
@@ -481,7 +536,7 @@
         <p class="einheit-sub" x-show="!outboxListe.length">Alle Einträge wurden übermittelt.</p>
         <template x-for="item in outboxListe" :key="item.client_uuid">
           <article class="fab-subcard">
-            <strong x-text="item.typ + ' · Auftrag ' + item.dispatch_id + ' · ' + zeit(item.erfasst_at)"></strong>
+            <strong x-text="typLabel(item.typ) + ' · Auftrag ' + item.dispatch_id + ' · ' + zeit(item.erfasst_at)"></strong>
             <p x-text="outboxStatus(item)"></p>
             <textarea class="form-control" readonly x-show="item.payload?.text"
                       x-text="item.payload?.text"></textarea>
@@ -497,7 +552,7 @@
         <h3 class="fab-subcard__title">Zuletzt übermittelt</h3>
         <template x-for="item in verlauf" :key="item.id">
           <div class="einheit-zeile">
-            <span x-text="'✓ übermittelt ' + zeit(item.server_bestaetigt_at) + ' · ' + item.typ"></span>
+            <span x-text="'✓ übermittelt ' + zeit(item.server_bestaetigt_at) + ' · ' + typLabel(item.typ)"></span>
             <span class="einheit-sub" x-text="hinweisText(item.antwort?.hinweis)"></span>
           </div>
         </template>

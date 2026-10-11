@@ -61,6 +61,9 @@ function registriere() {
     karte: null, kartenMarker: null, zugangBeendet: false,
     nummerHinweis: false, nummerGeschlossen: false, nummerCodeGesendet: false,
     nummerTelefon: "", nummerCode: "", nummerMaske: "", nummerMeldung: "",
+    verleihAktiv: false, materialKatalog: [], materialPositionen: [{ bezeichnung: "", menge: 1 }],
+    materialName: "", materialTelefon: "", materialSmsSenden: true, materialPinSenden: false,
+    materialNotizen: "",
 
     // Abgeleitete Anzeigezustände.
     get naechster() { return this.weitere[0] || null; },
@@ -95,7 +98,7 @@ function registriere() {
     get flyoutTitel() {
       return {
         lagemeldung: "Lagemeldung", massnahmen: "Maßnahme", note: "Notiz", foto: "Foto erfassen",
-        nicht_durchfuehrbar: "Nicht durchführbar",
+        material: "Material vor Ort belassen", nicht_durchfuehrbar: "Nicht durchführbar",
       }[this.flyout] || "";
     },
 
@@ -143,6 +146,9 @@ function registriere() {
     prioLabel(priority) { return PRIO_LABEL[priority] || "ohne Priorität"; },
     konfliktText(code) { return KONFLIKT_TEXTE[code] || `Konflikt: ${code || "unbekannt"}`; },
     hinweisText(hinweis) { return HINWEIS_TEXTE[hinweis] || ""; },
+    typLabel(typ) {
+      return { material: "Material", material_foto: "Material-Foto", material_zurueck: "Material zurück" }[typ] || typ;
+    },
     retrySekunden(item) {
       if (!item.naechster_versuch_at) return 0;
       return Math.max(0, Math.ceil((new Date(item.naechster_versuch_at) - Date.now()) / 1000));
@@ -237,6 +243,8 @@ function registriere() {
       this.nummerHinweis = Boolean(data.nummer?.hinweis);
       if (data.nummer?.maske) this.nummerMaske = data.nummer.maske;
       this.ressource = data.ressource || { personal: {}, ausstattung: [] };
+      this.verleihAktiv = Boolean(data.verleih_aktiv);
+      this.materialKatalog = data.material_katalog || [];
       const neu = this.weitere.filter((item) => vorher.size && !vorher.has(item.dispatch_id)).map((item) => item.dispatch_id);
       if (neu.length) {
         this.neuIds.push(...neu);
@@ -373,6 +381,63 @@ function registriere() {
         });
       }
       this.flyout = null;
+    },
+    materialPositionHinzufuegen() {
+      this.materialPositionen.push({ bezeichnung: "", menge: 1 });
+    },
+    materialPositionEntfernen(index) {
+      this.materialPositionen.splice(index, 1);
+      if (!this.materialPositionen.length) this.materialPositionHinzufuegen();
+    },
+    materialFormularZuruecksetzen() {
+      this.materialPositionen = [{ bezeichnung: "", menge: 1 }];
+      this.materialName = "";
+      this.materialTelefon = "";
+      this.materialSmsSenden = true;
+      this.materialPinSenden = false;
+      this.materialNotizen = "";
+      if (this.$refs.materialFotos) this.$refs.materialFotos.value = "";
+    },
+    async materialErfassen() {
+      const positionen = this.materialPositionen
+        .filter((position) => position.bezeichnung?.trim())
+        .map((position) => {
+          const artikel = this.materialKatalog.find((item) => item.bezeichnung === position.bezeichnung.trim());
+          return {
+            bezeichnung: position.bezeichnung.trim(), menge: Math.max(1, Math.min(9999, Number(position.menge) || 1)),
+            ...(artikel ? { artikel_id: artikel.id } : {}),
+          };
+        });
+      if (!positionen.length) {
+        this.hinweisBanner = "Mindestens eine Materialposition eingeben.";
+        return;
+      }
+      const auftrag = this.detail.auftrag;
+      const eintrag = await this.outbox.erfassen({
+        typ: "material", dispatch_id: auftrag.dispatch_id, einheit_id: this.einheitId,
+        auftrag_version: auftrag.version,
+        payload: reineDaten({ positionen, name: this.materialName.trim() || undefined,
+          telefon: this.materialTelefon.trim() || undefined, sms_senden: Boolean(this.materialTelefon.trim() && this.materialSmsSenden),
+          pin_senden: this.materialPinSenden || undefined, notizen: this.materialNotizen.trim() || undefined }),
+      });
+      const input = this.$refs.materialFotos;
+      if (input?.files?.length && window.compressFilesInPlace) await window.compressFilesInPlace(input);
+      for (const file of input?.files || []) {
+        await this.outbox.erfassen({
+          typ: "material_foto", dispatch_id: auftrag.dispatch_id, einheit_id: this.einheitId,
+          auftrag_version: auftrag.version, blob: file, dateiname: file.name,
+          payload: reineDaten({ material_client_uuid: eintrag.client_uuid }),
+        });
+      }
+      this.materialFormularZuruecksetzen();
+      this.flyout = null;
+    },
+    async materialZuruecknehmen(ausleihe) {
+      if (!window.confirm("Material als zurückgenommen markieren?")) return;
+      await this.outbox.erfassen({
+        typ: "material_zurueck", dispatch_id: this.detail.auftrag.dispatch_id, einheit_id: this.einheitId,
+        auftrag_version: this.detail.auftrag.version, payload: reineDaten({ ausleihe_id: ausleihe.id }),
+      });
     },
 
     async personalSpeichern() {

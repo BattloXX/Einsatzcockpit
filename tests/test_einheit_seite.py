@@ -102,3 +102,9 @@ def test_einheit_template_und_javascript_sind_lesbar():
     assert '&#8592; Meine Einsätze' not in template
     assert max(map(len, javascript.splitlines())) <= 160
     assert max(map(len, template.splitlines())) <= 200
+
+
+def test_einheit_template_enthaelt_material_flyout():
+    template = (Path(__file__).parents[1] / "app/templates/einheit/einheit.html").read_text()
+    assert "Material vor Ort belassen" in template
+    assert "typ: \"material\"" in (Path(__file__).parents[1] / "app/static/js/einheit_modus.js").read_text()
