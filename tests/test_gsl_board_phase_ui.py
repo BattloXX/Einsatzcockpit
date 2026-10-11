@@ -182,3 +182,16 @@ def test_keine_smart_quotes_in_attributen(client):
                 f"/lage/{data['lage']}/stellen/{data['a']}/card"):
         html = client.get(url).text
         assert not _SMART_IN_ATTR.findall(html), url
+
+
+def test_board_laedt_versioniertes_skript_und_verarbeitet_eigene_phasenwechsel(client):
+    # Phasen-Automatik verschiebt Karten auch bei eigenen Aktionen: lage_board.js darf das eigene
+    # site_phase_changed-Echo nicht verwerfen, und das Skript muss versioniert geladen werden
+    # (nginx cacht /static 10 Jahre).
+    from pathlib import Path
+
+    data = _api_daten(); _leader(client, data)
+    html = client.get(f"/lage/{data['lage']}").text
+    assert re.search(r'/static/js/lage_board\.js\?v=[^"]+"', html)
+    js = Path("app/static/js/lage_board.js").read_text(encoding="utf-8")
+    assert "msg.origin === clientId && msg.type !== 'site_phase_changed'" in js
