@@ -136,8 +136,10 @@ async def fetch_inbound_background(org_id: int, message_id: int) -> None:
 
 def _loesche_lokale_anhaenge(row: OrgMailEingang) -> None:
     import shutil
-    from pathlib import Path
-    shutil.rmtree(Path(settings.MEDIA_STORAGE_DIR) / "mail_eingang" / str(row.org_id) / str(row.id), ignore_errors=True)
+
+    from app.services.mail_eingang_anhang import _verzeichnis
+
+    shutil.rmtree(_verzeichnis(row), ignore_errors=True)
 
 
 def loesche_alte_eingaenge(db: Session) -> int:

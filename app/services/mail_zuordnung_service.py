@@ -6,21 +6,15 @@ import re
 from datetime import UTC, datetime, timedelta
 from html.parser import HTMLParser
 
-import httpx
 from sqlalchemy.orm import Session
 
 from app.models.incident import Incident
 from app.models.master import OrgSettings
 from app.models.org_mail import OrgMailEingang
 from app.services.incident_service import add_message, broadcast_message_created
+from app.services.mail_eingang_anhang import lade_anhang
 from app.services.mail_eingang_service import ereignis, normalisiere_absender
 from app.services.media_service import store_bytes_for_message
-from app.services.resend_inbound_service import (
-    MAX_ATTACHMENT_BYTES,
-    get_resend_attachment,
-    resend_api_key_fuer_org,
-    safe_attachment_url,
-)
 
 _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _MAX_DETAIL = 200_000
@@ -74,31 +68,20 @@ def _detail(row: OrgMailEingang) -> str:
 
 
 async def _attachments(db: Session, row: OrgMailEingang, message) -> list[str]:
-    if row.org_id is None:
-        return ["Anhänge konnten nicht abgerufen werden."]
-    api_key = resend_api_key_fuer_org(db, row.org_id)
-    if not api_key:
-        return ["Anhänge konnten nicht abgerufen werden."]
     try:
         metadata = json.loads(row.anhang_json or "[]")
     except (TypeError, ValueError):
         metadata = []
     failures: list[str] = []
     for item in metadata if isinstance(metadata, list) else []:
-        if not isinstance(item, dict) or not item.get("id"):
+        if not isinstance(item, dict) or not item.get("id") or item.get("zu_gross"):
             continue
         try:
-            attachment = await get_resend_attachment(api_key, row.extern_id, str(item["id"])[:200])
+            attachment = await lade_anhang(db, row, str(item["id"])[:200])
             if not attachment:
                 raise ValueError("Anhang nicht verfügbar")
-            url = attachment.get("download_url") if attachment else None
-            if not isinstance(url, str) or not safe_attachment_url(url, from_resend_api=True):
-                raise ValueError("ungueltige Download-Adresse")
-            async with httpx.AsyncClient(timeout=30) as client:
-                response = await client.get(url)
-            if not response.is_success or len(response.content) > MAX_ATTACHMENT_BYTES:
-                raise ValueError("Anhang nicht verfuegbar oder zu gross")
-            await store_bytes_for_message(response.content, attachment.get("filename"), attachment.get("content_type"),
+            data, filename, content_type = attachment
+            await store_bytes_for_message(data, filename, content_type,
                                           message, db, row.org_id, user=None, allow_datei=True)
         except Exception:
             failures.append(_clean(item.get("filename") or "Anhang", 80))

@@ -11,11 +11,9 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
-from urllib.parse import quote
 
-import httpx
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from sqlalchemy import func
 
 from app.config import settings
@@ -599,44 +597,18 @@ async def eingang_anhang(entry_id: int, attachment_id: str, org_id: int | None =
     """Proxy-Download: die signierte Provider-URL wird nie an den Browser gegeben."""
     oid = _eingang_org(user, org_id)
     row = _eingang_row(db, oid, entry_id)
-    from app.services.resend_inbound_service import resend_api_key_fuer_org
-    api_key = resend_api_key_fuer_org(db, oid)
-    if not api_key:
-        raise HTTPException(status_code=404, detail="Anhang nicht gefunden")
     try:
-        from app.services.resend_inbound_service import (
-            MAX_ATTACHMENT_BYTES,
-            attachment_content_type,
-            get_resend_attachment,
-            safe_attachment_filename,
-        )
-        attachment = await get_resend_attachment(
-            api_key, row.extern_id, attachment_id[:200]
-        )
+        from app.services.mail_eingang_anhang import lade_anhang
+
+        attachment = await lade_anhang(db, row, attachment_id)
     except Exception:
         attachment = None
     if not attachment:
         raise HTTPException(status_code=404, detail="Anhang nicht gefunden")
-    url = attachment["download_url"]
-    filename = safe_attachment_filename(attachment.get("filename"))
-    content_type = attachment_content_type(attachment.get("content_type"))
+    data, filename, content_type = attachment
+    from urllib.parse import quote
 
-    async def download():
-        try:
-            async with httpx.AsyncClient(timeout=settings.RESEND_HTTP_TIMEOUT) as client:
-                async with client.stream("GET", url) as response:
-                    if not response.is_success:
-                        return
-                    size = 0
-                    async for chunk in response.aiter_bytes():
-                        size += len(chunk)
-                        if size > MAX_ATTACHMENT_BYTES:
-                            return
-                        yield chunk
-        except Exception:
-            return
-
-    return StreamingResponse(download(), media_type=content_type, headers={
+    return Response(data, media_type=content_type, headers={
         "Content-Disposition": "attachment; filename*=UTF-8''" + quote(filename, safe=""),
         "X-Content-Type-Options": "nosniff", "Cache-Control": "no-store",
     })

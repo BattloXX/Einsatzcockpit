@@ -13,6 +13,7 @@ from app.db import SessionLocal
 from app.models.incident import Incident, IncidentColumn, Message, MessageMedia
 from app.models.master import OrgSettings
 from app.models.org_mail import OrgMailEingang
+from app.services import mail_eingang_anhang as anhang_service
 from app.services import mail_zuordnung_service as zuordnung
 from tests.test_resend_posteingang import _login, _org
 
@@ -107,6 +108,12 @@ def anhaenge(monkeypatch, tmp_path):
         def __init__(self, content):
             self.content, self.is_success = content, True
 
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+
+        async def aiter_bytes(self):
+            yield self.content
+
     class _Client:
         def __init__(self, *a, **k): ...
         async def __aenter__(self): return self
@@ -114,8 +121,11 @@ def anhaenge(monkeypatch, tmp_path):
         async def get(self, url):
             return _Resp(daten[url.rsplit("/", 1)[1]][2])
 
-    monkeypatch.setattr(zuordnung, "get_resend_attachment", fake_attachment)
-    monkeypatch.setattr(zuordnung.httpx, "AsyncClient", _Client)
+        def stream(self, method, url):
+            return _Resp(daten[url.rsplit("/", 1)[1]][2])
+
+    monkeypatch.setattr(anhang_service, "get_resend_attachment", fake_attachment)
+    monkeypatch.setattr(anhang_service.httpx, "AsyncClient", _Client)
     monkeypatch.setattr(zuordnung, "broadcast_message_created", _noop_broadcast)
 
 

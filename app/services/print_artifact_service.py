@@ -695,19 +695,13 @@ def _render_mail_eingang(db, job: PrintJob, base_url: str) -> bytes:
     import io
     import json
 
-    import httpx
     from pypdf import PdfReader, PdfWriter
 
     from app.models.incident import Incident
     from app.models.master import FireDept
     from app.models.org_mail import OrgMailEingang
+    from app.services.mail_eingang_anhang import lade_anhang_sync
     from app.services.mail_zuordnung_service import _html_text
-    from app.services.resend_inbound_service import (
-        MAX_ATTACHMENT_BYTES,
-        RESEND_ATTACHMENTS_URL,
-        resend_api_key_fuer_org,
-        safe_attachment_url,
-    )
 
     if not job.artifact_ref or not job.artifact_ref.isdigit():
         raise ArtifactError("E-Mail-Bezug fehlt")
@@ -748,7 +742,6 @@ def _render_mail_eingang(db, job: PrintJob, base_url: str) -> bytes:
         return out.getvalue()
     max_pages = max(1, min(int((job.options or {}).get("mail_max_pages", 50)), 200))
     used_pages = 0
-    api_key = resend_api_key_fuer_org(db, row.org_id)
     failures: list[str] = []
     for item in attachments:
         if not isinstance(item, dict) or not item.get("id"):
@@ -759,29 +752,18 @@ def _render_mail_eingang(db, job: PrintJob, base_url: str) -> bytes:
             failures.append(f"{name}: nicht druckbar – im Cockpit abrufbar")
             continue
         try:
-            if not api_key:
-                raise ValueError("kein Zugriff")
-            with httpx.Client(timeout=settings.RESEND_HTTP_TIMEOUT) as client:
-                response = client.get(
-                    RESEND_ATTACHMENTS_URL.format(email_id=row.extern_id),
-                    headers={"Authorization": f"Bearer {api_key}"},
-                )
-                data = response.json().get("data", []) if response.is_success else []
-                remote = next((x for x in data if str(x.get("id")) == str(item["id"])), None)
-                url = remote.get("download_url") if isinstance(remote, dict) else None
-                if not isinstance(url, str) or not safe_attachment_url(url, from_resend_api=True):
-                    raise ValueError("Anhang nicht verfügbar")
-                response = client.get(url)
-            if not response.is_success or len(response.content) > MAX_ATTACHMENT_BYTES:
+            attachment = lade_anhang_sync(db, row, str(item["id"])[:200])
+            if not attachment:
                 raise ValueError("Anhang nicht verfügbar")
+            data, _, content_type = attachment
             if content_type == "application/pdf":
-                pages = PdfReader(io.BytesIO(response.content)).pages
+                pages = PdfReader(io.BytesIO(data)).pages
                 for page in pages[:max(0, max_pages - used_pages)]:
                     writer.add_page(page)
                     used_pages += 1
             else:
                 from PIL import Image
-                image = Image.open(io.BytesIO(response.content)).convert("RGB")
+                image = Image.open(io.BytesIO(data)).convert("RGB")
                 image.thumbnail((1654, 2339))
                 image_pdf = io.BytesIO()
                 image.save(image_pdf, format="PDF", resolution=150)
