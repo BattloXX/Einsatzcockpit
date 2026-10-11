@@ -68,6 +68,7 @@ def _ausleihe_or_404(ausleihe_id: int, db: Session) -> VerleihAusleihe:
     a = db.query(VerleihAusleihe).options(
         selectinload(VerleihAusleihe.positionen),
         selectinload(VerleihAusleihe.fotos),
+        selectinload(VerleihAusleihe.einheit),
     ).filter_by(id=ausleihe_id).first()
     if not a:
         raise HTTPException(status_code=404, detail="Ausleihe nicht gefunden")
@@ -657,6 +658,11 @@ async def verleih_liste(
         ausleihen = [a for a in ausleihen if a.status == VerleihStatus.ausgeliehen]
     elif filter == "zurueck":
         ausleihen = [a for a in ausleihen if a.status == VerleihStatus.zurueckgegeben]
+    elif filter == "vor_ort":
+        ausleihen = [
+            a for a in ausleihen
+            if a.site_id and a.quelle in ("board", "einheit")
+        ]
 
     sites = db.query(IncidentSite).filter_by(major_incident_id=lage_id).order_by(IncidentSite.bezeichnung).all()
 

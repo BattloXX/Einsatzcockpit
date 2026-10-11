@@ -68,6 +68,14 @@ An jede Ausleihe können **Fotos** angehängt werden (z.B. Übergabeprotokoll, Z
 
 ---
 
+## Material an der Einsatzstelle belassen
+
+Material, das an einer Einsatzstelle bleibt, wird als Ausleihe dokumentiert und erscheint in der Verleih-Übersicht mit dem Chip **Vor Ort**. Über den Filter **Vor Ort belassen** sehen Sie ausschließlich diese Einträge. Dort sind Einsatzstelle, hinterlassende Einheit, Quelle und erfassende Person nachvollziehbar; der Druckschein enthält Einsatzstelle mit Adresse sowie die Einheit.
+
+Die Rücknahme erfolgt wie bei jeder anderen Ausleihe. Erinnerungen und optionale SMS an den Empfänger funktionieren ebenfalls, sofern Telefonnummer und SMS-Gateway vorhanden sind.
+
+---
+
 ## Erinnerungen
 
 Das System sendet automatisch **SMS-Erinnerungen** an offene Ausleihen (wenn SMS-Gateway aktiv und Empfänger-Telefonnummer hinterlegt).

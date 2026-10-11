@@ -51,6 +51,41 @@ def test_board_material_form_post_and_card_badge(client, setup_db):
     assert "📦 1" in client.get(f"/lage/{lage_id}/stellen/{site_id}/card").text
 
 
+def test_verleih_vor_ort_filter_card_und_detail(client, setup_db):
+    lage_id, org_id, site_id = _material_lage("material_verleih_ansicht")
+    _login(client, "material_verleih_ansicht")
+    csrf = client.cookies.get("ec_csrf")
+    created = client.post(
+        f"/lage/{lage_id}/stellen/{site_id}/material",
+        data={"_csrf": csrf, "pos_bezeichnung[]": "Tauchpumpe", "pos_menge[]": "1"},
+        headers={"HX-Request": "true"},
+    )
+    assert created.status_code == 200
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        material = db.query(VerleihAusleihe).filter_by(site_id=site_id).one()
+        material.created_by_name = "OBI Muster"
+        svc.create_ausleihe(
+            db, lage_id, org_id, "Ohne Einsatzstelle", None, None, None,
+            [{"bezeichnung": "Normale Ausleihe", "menge": 1}], None,
+        )
+        db.commit()
+        material_id = material.id
+    finally:
+        db.close()
+
+    liste = client.get(f"/lage/{lage_id}/verleih?filter=vor_ort")
+    assert liste.status_code == 200
+    assert "Tauchpumpe" in liste.text
+    assert "Normale Ausleihe" not in liste.text
+    assert "Vor Ort" in client.get(f"/lage/{lage_id}/verleih/{material_id}/card").text
+    detail = client.get(f"/lage/{lage_id}/verleih/{material_id}").text
+    assert "Erfasst von" in detail
+    assert "OBI Muster" in detail
+
+
 def test_board_material_readonly_cannot_post(client, setup_db):
     lage_id, _, site_id = _material_lage("material_readonly", "readonly")
     _login(client, "material_readonly")

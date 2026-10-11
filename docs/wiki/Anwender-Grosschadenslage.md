@@ -95,6 +95,16 @@ Abschnitte können auch direkt auf der **Lagekarte** als Polygon eingezeichnet w
 
 ---
 
+## Material an der Einsatzstelle belassen
+
+Ist das Feature **Geräteverleih** in den GSL-Einstellungen aktiviert, gibt es im Stellen-Detail den Abschnitt **Material vor Ort**. Mit **+ Material belassen** erfassen Sie Positionen, Empfänger, optionale SMS/PIN und Fotos. Bereits hinterlassenes Material wird dort angezeigt und mit **Zurückgenommen** wieder abgeschlossen. Die Board-Karte zeigt für offene Einträge ein **📦**-Badge.
+
+Einheiten können dieselbe Funktion im Tablet über **📦 Material** verwenden, auch offline: Die Erfassung und Fotos werden über die Outbox übertragen, sobald wieder eine Verbindung besteht. Im GK-/QR-Zugang sieht eine Einheit nur ihr eigenes hinterlassenes Material.
+
+Bei angegebener Telefonnummer kann das System eine SMS an den Empfänger senden; die Variable `{stelle}` setzt darin die Bezeichnung der Einsatzstelle ein. Eine PIN ist optional. Automatische Erinnerungen folgen derselben Regel wie im Geräteverleih.
+
+---
+
 ## Lagekarte
 
 Die Lagekarte (`/lage/{id}/karte`) zeigt alle Einsatzstellen und Abschnitt-Polygone auf einer interaktiven Karte. Vollständige Dokumentation: [Lagekarte der Großschadenslage](Anwender-Grosschadenslage-Karte).

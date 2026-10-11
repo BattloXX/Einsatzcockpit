@@ -366,7 +366,8 @@ verleih_stueckliste_position
 
 verleih_ausleihe  [TenantScoped: org_id]
   id, org_id FK, lage_id FK
-  site_id FK? (Einsatzstelle), einheit_freitext
+  site_id FK? (Einsatzstelle), quelle (verleih|board|einheit)
+  einheit_id FK? (lage_einheit), created_by_name
   artikel_id FK? / stueckliste_id FK?
   status (offen|teilweise|zurueck)
   ausgeliehen_at, zurueck_at
@@ -378,7 +379,7 @@ verleih_position         ← Einzelpositionen einer Ausleihe
 
 verleih_foto
   id, ausleihe_id FK, stored_path, thumb_path
-  created_at, created_by_user_id FK?
+  created_at, created_by_user_id FK?, author_name
 ```
 
 ## Lokale Wetterstation

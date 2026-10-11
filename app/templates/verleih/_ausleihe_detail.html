@@ -34,6 +34,13 @@
       {% if a.zurueckgegeben_at %}
       <div><span style="color:var(--text-muted);">Zurückgegeben</span><br><strong>{{ a.zurueckgegeben_at|local_datetime }}</strong></div>
       {% endif %}
+      {% if a.created_by_name %}
+      <div><span style="color:var(--text-muted);">Erfasst von</span><br><strong>{{ a.created_by_name }}</strong></div>
+      {% endif %}
+      {% if a.einheit %}
+      <div><span style="color:var(--text-muted);">Einheit</span><br><strong>{{ a.einheit.label }}{% if a.einheit.org_name %} ({{ a.einheit.org_name }}){% endif %}</strong></div>
+      {% endif %}
+      <div><span style="color:var(--text-muted);">Quelle</span><br><strong>{% if a.quelle == 'board' %}Board{% elif a.quelle == 'einheit' %}Einheit-Tablet{% else %}Verleih{% endif %}</strong></div>
       {% if site %}
       <div style="grid-column:1/-1;">
         <span style="color:var(--text-muted);">Einsatzstelle</span><br>
@@ -317,12 +324,16 @@
       {% if a.fotos %}
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
         {% for foto in a.fotos %}
-        <a href="/lage/{{ lage.id }}/verleih/{{ a.id }}/foto/{{ foto.id }}/bild"
-           target="_blank"
-           style="display:block;width:72px;height:72px;border-radius:6px;overflow:hidden;border:1px solid var(--border);">
-          <img src="/lage/{{ lage.id }}/verleih/{{ a.id }}/foto/{{ foto.id }}/bild?thumb=1"
-               alt="Foto" style="width:100%;height:100%;object-fit:cover;">
-        </a>
+        <div style="width:72px;">
+          <a href="/lage/{{ lage.id }}/verleih/{{ a.id }}/foto/{{ foto.id }}/bild"
+             target="_blank"
+             {% if foto.author_name %}title="{{ foto.author_name }}"{% endif %}
+             style="display:block;width:72px;height:72px;border-radius:6px;overflow:hidden;border:1px solid var(--border);">
+            <img src="/lage/{{ lage.id }}/verleih/{{ a.id }}/foto/{{ foto.id }}/bild?thumb=1"
+                 alt="Foto" style="width:100%;height:100%;object-fit:cover;">
+          </a>
+          {% if foto.author_name %}<div style="font-size:.65rem;color:var(--text-muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ foto.author_name }}">{{ foto.author_name }}</div>{% endif %}
+        </div>
         {% endfor %}
       </div>
       {% endif %}
