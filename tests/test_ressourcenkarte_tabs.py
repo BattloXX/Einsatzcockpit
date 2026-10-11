@@ -78,6 +78,9 @@ def test_einsaetze_und_journal_filter_paging(client, setup_db):
         text in einsaetze.text
         for text in ("Aktueller Einsatz", "Weitere Aufträge", "Abgeschlossene", "Zurückgezogene", "Andere Aufgabe")
     )
+    assert "Dringend" in einsaetze.text
+    assert "SitePriority." not in einsaetze.text
+    assert "Kein Auftragstext" not in einsaetze.text
     journal = client.get(f"/lage/{lage_id}/einheiten/{einheit_id}/karte/journal?typen=manuell&limit=1")
     assert journal.status_code == 200
     assert "Eintrag" in journal.text and "Manuell" in journal.text

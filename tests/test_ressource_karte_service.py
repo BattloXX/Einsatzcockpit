@@ -74,6 +74,7 @@ def test_einsaetze_alle_kategorien_dauer_und_nummern():
         db.flush()
         sites[0].incident_id = incident.id
         sites[2].external_key = "EXT-C"
+        sites[3].einsatzgrund = "Keller auspumpen"
         dispatches = [
             EinheitSiteDispatch(einheit_id=einheit.id, site_id=site.id, dispatched_at=now - timedelta(hours=1))
             for site in sites
@@ -103,6 +104,7 @@ def test_einsaetze_alle_kategorien_dauer_und_nummern():
         result = karte_service.einsaetze(db, lage, einheit)
         assert result["aktuell"]["einsatznummer"] == "LIS-7"
         assert result["weitere"][0]["einsatznummer"] == f"S{sites[3].id}"
+        assert result["weitere"][0]["einsatzgrund"] == "Keller auspumpen"
         assert result["abgeschlossen"][0]["dauer_sekunden"] == 1800
         assert result["abgeschlossen"][0]["letzte_lagemeldung"]["text"] == "Lage"
         assert result["abgeschlossen"][0]["massnahmen"][0]["text"] == "Maßnahme"
@@ -179,6 +181,7 @@ def test_kommunikation_karte_und_manueller_storno():
         assert comm["letzte_lagemeldung"]["text"] == "Alles OK"
         card = karte_service.karte(db, lage, einheit)
         assert card["allgemein"]["standort"] == "Wartezone"
+        assert card["allgemein"]["status_label"] == "Bereitgestellt"
         assert card["gruppenkommandant"]["current"]["name"] == "GK"
         assert card["gruppenkommandant"]["stellvertreter"]["name"] == "Stv"
         entry = rs.journal_eintrag_manuell(

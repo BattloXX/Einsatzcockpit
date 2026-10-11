@@ -3,10 +3,10 @@
   hx-get="/lage/{{ lage.id }}/stellen/{{ auftrag.site_id }}" hx-target="#siteDetailContent" hx-swap="innerHTML"
   hx-on::after-swap="var d=document.getElementById('siteDetailModal');if(d&&!d.open)d.showModal()">
   <div class="res-einsatz__head"><strong>{{ auftrag.einsatznummer }} · {{ auftrag.bezeichnung }}</strong>
-    {% if auftrag.prioritaet %}<span class="dispatch-site-badge dispatch-site-badge--{{ prio_color.get(auftrag.prioritaet, 'muted') }}">{{ auftrag.prioritaet }}</span>{% endif %}
+    {% if auftrag.prioritaet %}<span class="dispatch-site-badge dispatch-site-badge--{{ prio_color.get(auftrag.prioritaet, 'muted') }}">{{ prio_label.get(auftrag.prioritaet, auftrag.prioritaet) }}</span>{% endif %}
     <span class="dispatch-site-badge dispatch-site-badge--{{ einheit_status_color.get(auftrag.einheit_status, 'muted') }}">{{ einheit_status_label.get(auftrag.einheit_status, auftrag.einheit_status) }}</span></div>
   {% if auftrag.adresse %}<div class="ressource-karte__meta">{{ auftrag.adresse }}</div>{% endif %}
-  <div>{{ auftrag.auftrag or 'Kein Auftragstext' }}</div>
+  {% if auftrag.auftrag %}<div>{{ auftrag.auftrag }}</div>{% elif auftrag.einsatzgrund and auftrag.einsatzgrund != auftrag.bezeichnung %}<div>{{ auftrag.einsatzgrund }}</div>{% endif %}
   {% if detail %}<dl class="res-einsatz__details"><dt>Zuweisung</dt><dd>{{ auftrag.dispatched_at|local_datetime }}</dd><dt>Übernahme</dt><dd>{{ auftrag.bestaetigt_at|local_datetime if auftrag.bestaetigt_at else '–' }}</dd><dt>Beginn</dt><dd>{{ auftrag.vor_ort_at|local_datetime if auftrag.vor_ort_at else '–' }}</dd><dt>Letzte Rückmeldung</dt><dd>{{ auftrag.letzte_rueckmeldung_at|local_datetime if auftrag.letzte_rueckmeldung_at else '–' }}</dd></dl>{% endif %}
 </article>
 {% endmacro %}

@@ -104,6 +104,20 @@ function registriere() {
 
     // Hilfsfunktionen für API und Darstellung.
     headers() { return this.simulation ? { "X-EC-Einheit-Sim": String(this.simEinheitId) } : {}; },
+    async outboxAusfuehren(aktion) {
+      if (!this.outbox) {
+        this.hinweisBanner = "Lokaler Speicher ist nicht verfügbar. Meldung konnte nicht gespeichert werden.";
+        return null;
+      }
+      try {
+        return await aktion(this.outbox);
+      } catch (error) {
+        console.warn("Einheiten-Outbox nicht verfuegbar", error);
+        this.hinweisBanner = "Lokaler Speicher ist nicht verfügbar. Meldung konnte nicht gespeichert werden.";
+        return null;
+      }
+    },
+    async outboxErfassen(daten) { return this.outboxAusfuehren((outbox) => outbox.erfassen(daten)); },
     async nummerAnfordern() {
       this.nummerMeldung = "";
       try {
@@ -164,19 +178,6 @@ function registriere() {
     // Initialisierung und Navigation.
     async init() {
       navigator.storage?.persist?.().catch(() => {});
-      this.outbox = createOutbox({
-        indexedDB: window.indexedDB,
-        fetch: window.fetch.bind(window),
-        csrfToken: () => decodeURIComponent(cookie("ec_csrf")),
-        simEinheitId: this.simulation ? this.simEinheitId : null,
-        dbName: this.outboxName(),
-        onTerminal: () => { void this.zugangBeenden(); },
-      });
-      await this.outbox.bereinigen();
-      this.outbox.onChange(() => {
-        void this.outboxAktualisieren();
-        void this.laden(true);
-      });
       window.addEventListener("popstate", () => { void this.navigiereZuPfad(); });
       window.addEventListener("online", () => {
         this.online = true;
@@ -190,8 +191,28 @@ function registriere() {
           void this.laden(true);
         }
       });
-      await this.laden();
-      await this.outboxAktualisieren();
+      const erstesLaden = this.laden();
+      this.outbox = createOutbox({
+        indexedDB: window.indexedDB,
+        fetch: window.fetch.bind(window),
+        csrfToken: () => decodeURIComponent(cookie("ec_csrf")),
+        simEinheitId: this.simulation ? this.simEinheitId : null,
+        dbName: this.outboxName(),
+        onTerminal: () => { void this.zugangBeenden(); },
+      });
+      this.outbox.onChange(() => {
+        void this.outboxAktualisieren();
+        void this.laden(true);
+      });
+      void (async () => {
+        try {
+          await this.outbox.bereinigen();
+          await this.outboxAktualisieren();
+        } catch (error) {
+          console.warn("Einheiten-Outbox nicht verfuegbar", error);
+        }
+      })();
+      await erstesLaden;
       await this.navigiereZuPfad();
       this.verbinden();
       this.pollTimer = setInterval(() => this.laden(true), 30000);
@@ -205,10 +226,14 @@ function registriere() {
     async laden(leise = false) {
       if (leise && Date.now() - this.lastLoad < 1000) return;
       this.lastLoad = Date.now();
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
       try {
         const headers = { ...this.headers() };
         if (this.etag) headers["If-None-Match"] = this.etag;
-        const response = await fetch("/einheit/api/zustand", { headers, credentials: "same-origin" });
+        const response = await fetch("/einheit/api/zustand", {
+          headers, credentials: "same-origin", signal: controller.signal,
+        });
         if (response.status === 304) return;
         if (response.status === 401) {
           const data = await response.json().catch(() => null);
@@ -220,16 +245,29 @@ function registriere() {
         const data = await response.json();
         this.etag = response.headers.get("ETag") || data.etag;
         this.zustand(data);
-        await this.outbox.zustandSpeichern({ data, at: new Date().toISOString() });
         this.online = true;
         this.syncText = `Sync ${this.zeit(data.server_time)}`;
-      } catch (error) {
-        const cached = await this.outbox.zustandLaden();
-        if (cached?.data) {
-          this.zustand(cached.data);
-          this.syncText = `Offline – Stand ${this.zeit(cached.at)}`;
+        if (this.outbox) {
+          try {
+            await this.outbox.zustandSpeichern({ data, at: new Date().toISOString() });
+          } catch (cacheError) {
+            console.warn("Einheiten-Zustand konnte nicht lokal gespeichert werden", cacheError);
+          }
         }
-        this.online = false;
+      } catch (error) {
+        try {
+          const cached = this.outbox ? await this.outbox.zustandLaden() : null;
+          if (cached?.data) {
+            this.zustand(cached.data);
+            this.syncText = `Offline – Stand ${this.zeit(cached.at)}`;
+          }
+        } catch (cacheError) {
+          console.warn("Einheiten-Zustand konnte nicht lokal geladen werden", cacheError);
+        } finally {
+          this.online = false;
+        }
+      } finally {
+        clearTimeout(timeout);
       }
     },
     zustand(data) {
@@ -329,7 +367,7 @@ function registriere() {
       await this.statusInOutbox(status, unterbrechen);
     },
     async statusInOutbox(status, unterbrechen = false) {
-      await this.outbox.erfassen({
+      await this.outboxErfassen({
         typ: "status", dispatch_id: this.detail.auftrag.dispatch_id, einheit_id: this.einheitId,
         auftrag_version: this.detail.auftrag.version,
         payload: reineDaten({ status, grund: this.grund || undefined, unterbrechen: unterbrechen || undefined }),
@@ -342,7 +380,7 @@ function registriere() {
       this.flyout = art;
       this.entwurfHinweis = false;
       const key = `${this.detail.auftrag.dispatch_id}:${art}`;
-      const entwurf = await this.outbox.entwurfLaden(key);
+      const entwurf = await this.outboxAusfuehren((outbox) => outbox.entwurfLaden(key));
       if (entwurf) {
         this.meldungText = entwurf.text || "";
         this.felder = entwurf.felder || {};
@@ -352,19 +390,19 @@ function registriere() {
     },
     async entwurfSpeichern() {
       if (!this.detail || !this.flyout) return;
-      await this.outbox.entwurfSpeichern(`${this.detail.auftrag.dispatch_id}:${this.flyout}`, reineDaten({
+      await this.outboxAusfuehren((outbox) => outbox.entwurfSpeichern(`${this.detail.auftrag.dispatch_id}:${this.flyout}`, reineDaten({
         text: this.meldungText, felder: this.felder,
-      }));
+      })));
     },
     async meldungErfassen() {
       if (!this.meldungText.trim()) return;
       const art = this.flyout;
-      await this.outbox.erfassen({
+      await this.outboxErfassen({
         typ: "meldung", dispatch_id: this.detail.auftrag.dispatch_id, einheit_id: this.einheitId,
         auftrag_version: this.detail.auftrag.version,
         payload: reineDaten({ art, text: this.meldungText, felder: this.felder }),
       });
-      await this.outbox.entwurfLoeschen(`${this.detail.auftrag.dispatch_id}:${art}`);
+      await this.outboxAusfuehren((outbox) => outbox.entwurfLoeschen(`${this.detail.auftrag.dispatch_id}:${art}`));
       this.meldungText = "";
       this.felder = {};
       this.flyout = null;
@@ -374,7 +412,7 @@ function registriere() {
       if (!input?.files?.length) return;
       if (window.compressFilesInPlace) await window.compressFilesInPlace(input);
       for (const file of input.files) {
-        await this.outbox.erfassen({
+        await this.outboxErfassen({
           typ: "foto", dispatch_id: this.detail.auftrag.dispatch_id, einheit_id: this.einheitId,
           auftrag_version: this.detail.auftrag.version, blob: file, dateiname: file.name,
           payload: { kommentar: this.fotoKommentar },
@@ -413,17 +451,18 @@ function registriere() {
         return;
       }
       const auftrag = this.detail.auftrag;
-      const eintrag = await this.outbox.erfassen({
+      const eintrag = await this.outboxErfassen({
         typ: "material", dispatch_id: auftrag.dispatch_id, einheit_id: this.einheitId,
         auftrag_version: auftrag.version,
         payload: reineDaten({ positionen, name: this.materialName.trim() || undefined,
           telefon: this.materialTelefon.trim() || undefined, sms_senden: Boolean(this.materialTelefon.trim() && this.materialSmsSenden),
           pin_senden: this.materialPinSenden || undefined, notizen: this.materialNotizen.trim() || undefined }),
       });
+      if (!eintrag) return;
       const input = this.$refs.materialFotos;
       if (input?.files?.length && window.compressFilesInPlace) await window.compressFilesInPlace(input);
       for (const file of input?.files || []) {
-        await this.outbox.erfassen({
+        await this.outboxErfassen({
           typ: "material_foto", dispatch_id: auftrag.dispatch_id, einheit_id: this.einheitId,
           auftrag_version: auftrag.version, blob: file, dateiname: file.name,
           payload: reineDaten({ material_client_uuid: eintrag.client_uuid }),
@@ -434,7 +473,7 @@ function registriere() {
     },
     async materialZuruecknehmen(ausleihe) {
       if (!window.confirm("Material als zurückgenommen markieren?")) return;
-      await this.outbox.erfassen({
+      await this.outboxErfassen({
         typ: "material_zurueck", dispatch_id: this.detail.auftrag.dispatch_id, einheit_id: this.einheitId,
         auftrag_version: this.detail.auftrag.version, payload: reineDaten({ ausleihe_id: ausleihe.id }),
       });
@@ -442,7 +481,7 @@ function registriere() {
 
     async personalSpeichern() {
       const personal = this.ressource.personal || {};
-      await this.outbox.erfassen({
+      await this.outboxErfassen({
         typ: "ressource_personal", einheit_id: this.einheitId,
         payload: reineDaten({ operation: "setzen", gesamt: Number(personal.gesamt || 0),
           fuehrung: Number(personal.fuehrung || 0), agt: Number(personal.agt || 0),
@@ -452,37 +491,41 @@ function registriere() {
     async personHinzufuegen() {
       const person = this.neuePerson;
       if (!person.name?.trim()) return;
-      await this.outbox.erfassen({ typ: "ressource_personal", einheit_id: this.einheitId,
+      await this.outboxErfassen({ typ: "ressource_personal", einheit_id: this.einheitId,
         payload: reineDaten({ operation: "hinzufuegen", name: person.name, funktion: person.funktion || "mannschaft",
           qualifikationen: person.qualifikationen || null }) });
       this.neuePerson = {};
     },
     async personEntfernen(person) {
-      await this.outbox.erfassen({ typ: "ressource_personal", einheit_id: this.einheitId,
+      await this.outboxErfassen({ typ: "ressource_personal", einheit_id: this.einheitId,
         payload: { operation: "entfernen", person_id: person.id } });
     },
     async ausstattungHinzufuegen() {
       const neu = this.neueAusstattung;
       if (!neu.bezeichnung?.trim()) return;
-      await this.outbox.erfassen({ typ: "ressource_ausstattung", einheit_id: this.einheitId,
+      await this.outboxErfassen({ typ: "ressource_ausstattung", einheit_id: this.einheitId,
         payload: reineDaten({ operation: "hinzufuegen", kategorie: neu.kategorie || "sonstiges",
           bezeichnung: neu.bezeichnung, menge: Number(neu.menge || 1), status: neu.status || "einsatzbereit" }) });
       this.neueAusstattung = {};
     },
     async ausstattungSpeichern(zeile) {
-      await this.outbox.erfassen({ typ: "ressource_ausstattung", einheit_id: this.einheitId,
+      await this.outboxErfassen({ typ: "ressource_ausstattung", einheit_id: this.einheitId,
         payload: reineDaten({ operation: "aendern", zeile_id: zeile.id, menge: Number(zeile.menge),
           status: zeile.status, bemerkung: zeile.bemerkung || null }) });
     },
     async ausstattungEntfernen(zeile) {
-      await this.outbox.erfassen({ typ: "ressource_ausstattung", einheit_id: this.einheitId,
+      await this.outboxErfassen({ typ: "ressource_ausstattung", einheit_id: this.einheitId,
         payload: { operation: "entfernen", zeile_id: zeile.id } });
     },
 
     // Outbox, Rückoff und Konfliktauflösung.
     async outboxAktualisieren() {
-      this.outboxListe = await this.outbox.liste();
-      this.verlauf = await this.outbox.verlauf(20);
+      const daten = await this.outboxAusfuehren(async (outbox) => ({
+        liste: await outbox.liste(), verlauf: await outbox.verlauf(20),
+      }));
+      if (!daten) return;
+      this.outboxListe = daten.liste;
+      this.verlauf = daten.verlauf;
       // Hinweise nur einmal und nur für Bestätigungen seit dem Laden der Seite zeigen.
       for (const item of this.verlauf) {
         const hinweis = this.hinweisText(item.antwort?.hinweis);
@@ -506,7 +549,7 @@ function registriere() {
     async konfliktEntscheiden(unterbrechen) {
       const eintrag = this.konfliktEintrag;
       if (!eintrag) return;
-      await this.outbox.verwerfen(eintrag.client_uuid);
+      await this.outboxAusfuehren((outbox) => outbox.verwerfen(eintrag.client_uuid));
       this.konfliktEintrag = null;
       this.flyout = null;
       if (unterbrechen) await this.statusInOutbox(eintrag.payload.status, true);
@@ -514,17 +557,19 @@ function registriere() {
     },
     retryPlanen() {
       clearTimeout(this.retryTimer);
+      if (!this.outbox) return;
       void this.outbox.naechsterVersuchIn().then((wartezeit) => {
         if (wartezeit === null) return;
         this.retryTimer = setTimeout(() => { void this.flush(); }, wartezeit);
-      });
+      }).catch((error) => console.warn("Einheiten-Outbox nicht verfuegbar", error));
     },
     async flush() {
-      if (this.zugangBeendet) return;
-      await this.outbox.flush();
+      if (this.zugangBeendet || !this.outbox) return;
+      const erfolg = await this.outboxAusfuehren((outbox) => outbox.flush());
+      if (erfolg === null) return;
       await this.outboxAktualisieren();
     },
-    async erneut(id) { await this.outbox.erneutSenden(id); },
+    async erneut(id) { await this.outboxAusfuehren((outbox) => outbox.erneutSenden(id)); },
     // Nicht übermittelte Meldung als Text kopieren, damit nichts verloren geht (z. B. für Funk/Messenger).
     async kopieren(item) {
       const text = [item.typ, "Auftrag " + item.dispatch_id, this.zeit(item.erfasst_at), item.payload?.text || ""]
@@ -541,7 +586,7 @@ function registriere() {
       this.flyout = "verwerfen_bestaetigen";
     },
     async verwerfenBestaetigen() {
-      if (this.konfliktEintrag) await this.outbox.verwerfen(this.konfliktEintrag.client_uuid);
+      if (this.konfliktEintrag) await this.outboxAusfuehren((outbox) => outbox.verwerfen(this.konfliktEintrag.client_uuid));
       this.konfliktEintrag = null;
       this.flyout = null;
     },
@@ -550,8 +595,8 @@ function registriere() {
     async zugangBeenden() {
       if (this.zugangBeendet) return;
       this.zugangBeendet = true;
-      await this.outbox.blockiereZugang();
-      await this.outbox.zustandLeeren();
+      await this.outboxAusfuehren((outbox) => outbox.blockiereZugang());
+      await this.outboxAusfuehren((outbox) => outbox.zustandLeeren());
       await this.outboxAktualisieren();
       const offen = this.outboxListe.filter((item) => item.status === "blockiert_zugang").length;
       this.hinweisBanner = `Zugang beendet - ${offen} Meldungen nicht übermittelt. Bitte Einsatzleitung informieren.`;

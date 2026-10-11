@@ -104,6 +104,12 @@ def test_einheit_template_und_javascript_sind_lesbar():
     assert max(map(len, template.splitlines())) <= 200
 
 
+def test_einheit_laed_vor_der_outbox_bereinigung():
+    javascript = (Path(__file__).parents[1] / "app/static/js/einheit_modus.js").read_text()
+    init = javascript[javascript.index("async init() {"):javascript.index("async navigiereZuPfad()")]
+    assert init.index("this.laden(") < init.index("bereinigen(")
+
+
 def test_einheit_template_enthaelt_material_flyout():
     template = (Path(__file__).parents[1] / "app/templates/einheit/einheit.html").read_text()
     assert "Material vor Ort belassen" in template

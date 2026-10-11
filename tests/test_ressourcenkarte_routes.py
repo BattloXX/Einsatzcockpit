@@ -31,7 +31,7 @@ def _daten(role_code="recorder"):
         lage = MajorIncident(org_id=org.id, name="Lage")
         db.add(lage)
         db.flush()
-        einheit = LageEinheit(lage_id=lage.id, label="RLF", status="bereitgestellt")
+        einheit = LageEinheit(lage_id=lage.id, label="RLF", status="im_einsatz")
         member = Member(org_id=org.id, firstname="Anna", lastname="Muster", active=True)
         db.add_all([einheit, member])
         db.commit()
@@ -54,6 +54,9 @@ def test_karte_lesbar_und_readonly_maskiert_telefon(client, setup_db):
     response = client.get(f"/lage/{lage_id}/einheiten/{einheit_id}/karte")
     assert response.status_code == 200
     assert "RLF" in response.text
+    assert "Im Einsatz" in response.text
+    assert ">im_einsatz<" not in response.text
+    assert "estatus--im_einsatz" in response.text
     assert "Personal" not in response.text
     assert "Ausstattung" not in response.text
     assert "Verband bilden" not in response.text
