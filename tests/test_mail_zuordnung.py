@@ -10,7 +10,7 @@ from app.services.mail_zuordnung_service import _allowed, _html_text
 
 def _entry(**values) -> OrgMailEingang:
     defaults = dict(
-        org_id=1, resend_email_id="mail_1", absender="leitstelle@example.at", empfaenger="[]",
+        org_id=1, quelle="resend", extern_id="mail_1", absender="leitstelle@example.at", empfaenger="[]",
         betreff="Test", empfangen_at=datetime.now(),
     )
     defaults.update(values)

@@ -395,6 +395,7 @@ class OrgSettings(Base):
     mail_eingang_mehrere: Mapped[str] = mapped_column(String(12), nullable=False, default="posteingang")
     mail_eingang_absender: Mapped[str | None] = mapped_column(Text, nullable=True)
     mail_eingang_max_pro_stunde: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
+    mail_eingang_aufbewahrung_tage: Mapped[int] = mapped_column(Integer, nullable=False, default=90)
 
     # Gruppenkommandanten-Zugang (GSL)
     gk_zugang_aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

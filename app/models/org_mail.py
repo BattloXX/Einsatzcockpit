@@ -49,6 +49,12 @@ class OrgSmtpConfig(Base):
     imap_host: Mapped[str | None] = mapped_column(String(255), nullable=True)
     imap_port: Mapped[int] = mapped_column(Integer, nullable=False, default=993)
     imap_use_ssl: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    imap_ordner: Mapped[str] = mapped_column(String(200), nullable=False, default="INBOX")
+    imap_uidvalidity: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    imap_letzte_uid: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    imap_letzter_abruf_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    imap_letzter_fehler: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    imap_aktiv_seit: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(
@@ -84,6 +90,11 @@ class OrgO365MailConfig(Base):
     # App-Registrierung (tenant_id/client_id/client_secret_enc/sender_address),
     # brauchen zusätzlich die Application-Permission Mail.Read in Azure.
     read_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    read_postfach: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    read_seit: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    read_letzter_abruf_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    read_letzter_fehler: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    read_aktiv_seit: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(
@@ -125,16 +136,17 @@ class OrgResendConfig(Base):
 
 
 class OrgMailEingang(TenantScoped, Base):
-    """Metadaten und kontrolliert abgerufener Inhalt eingehender Resend-Mails."""
+    """Metadaten und kontrolliert abgerufener Inhalt eingehender Mails."""
 
     __tablename__ = "org_mail_eingang"
     __table_args__ = (
-        UniqueConstraint("org_id", "resend_email_id", name="uq_org_mail_eingang_resend"),
+        UniqueConstraint("org_id", "quelle", "extern_id", name="uq_org_mail_eingang_quelle"),
         Index("ix_org_mail_eingang_org_empfangen", "org_id", "empfangen_at"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    resend_email_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    quelle: Mapped[str] = mapped_column(String(10), nullable=False, default="resend")
+    extern_id: Mapped[str] = mapped_column(String(255), nullable=False)
     message_id: Mapped[str | None] = mapped_column(String(500), nullable=True)
     absender: Mapped[str] = mapped_column(String(500), nullable=False, default="")
     empfaenger: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
@@ -147,6 +159,8 @@ class OrgMailEingang(TenantScoped, Base):
     dkim: Mapped[str | None] = mapped_column(String(20), nullable=True)
     dmarc: Mapped[str | None] = mapped_column(String(20), nullable=True)
     anhang_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    anhang_speicher: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    groesse_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     empfangen_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     abgerufen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="neu")
@@ -162,3 +176,24 @@ class OrgMailEingang(TenantScoped, Base):
     fehler: Mapped[str | None] = mapped_column(String(255), nullable=True)
     gelesen_von: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     gelesen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    ereignisse: Mapped[list[OrgMailEingangEreignis]] = relationship(
+        back_populates="eingang", order_by="OrgMailEingangEreignis.ts", cascade="all, delete-orphan"
+    )
+
+
+class OrgMailEingangEreignis(TenantScoped, Base):
+    __tablename__ = "org_mail_eingang_ereignis"
+    __table_args__ = (Index("ix_org_mail_eingang_ereignis_eingang_ts", "eingang_id", "ts"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    org_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("fire_dept.id", ondelete="SET NULL"), nullable=True
+    )
+    eingang_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("org_mail_eingang.id", ondelete="CASCADE"), nullable=False
+    )
+    ts: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    typ: Mapped[str] = mapped_column(String(32), nullable=False)
+    text: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    eingang: Mapped[OrgMailEingang] = relationship(back_populates="ereignisse")

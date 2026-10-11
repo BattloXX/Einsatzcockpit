@@ -469,7 +469,7 @@ def test_resend_inbound_webhook_token_cannot_write_to_foreign_org(client, monkey
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
-        assert db.query(OrgMailEingang).filter_by(org_id=org_b_id, resend_email_id="foreign-inbound").count() == 0
+        assert db.query(OrgMailEingang).filter_by(org_id=org_b_id, extern_id="foreign-inbound").count() == 0
     finally:
         db.close()
 
@@ -509,8 +509,8 @@ def test_system_resend_inbound_address_cannot_write_to_foreign_org(client, monke
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
-        assert db.query(OrgMailEingang).filter_by(org_id=ORG_A, resend_email_id="central-own").count() == 1
-        assert db.query(OrgMailEingang).filter_by(org_id=org_b_id, resend_email_id="central-own").count() == 0
+        assert db.query(OrgMailEingang).filter_by(org_id=ORG_A, extern_id="central-own").count() == 1
+        assert db.query(OrgMailEingang).filter_by(org_id=org_b_id, extern_id="central-own").count() == 0
     finally:
         db.close()
 

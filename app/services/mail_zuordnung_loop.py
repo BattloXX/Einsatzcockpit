@@ -15,6 +15,7 @@ from app.db import SessionLocal
 from app.models.incident import Incident
 from app.models.master import OrgSettings
 from app.models.org_mail import OrgMailEingang
+from app.services.mail_eingang_service import ereignis
 from app.services.mail_zuordnung_service import ordne_zu
 
 logger = logging.getLogger("einsatzleiter.mail_zuordnung_loop")
@@ -111,6 +112,7 @@ async def _process_claimed_mail(row_id: int, now: datetime) -> bool:
         if row.empfangen_at + _lookback(settings_row) < now:
             row.status, row.zuordnung = "posteingang", "wartend"
             row.zuordnung_grund, row.zugeordnet_at = "Rueckblickfenster abgelaufen", None
+            ereignis(db, row, "rueckblick_abgelaufen", row.zuordnung_grund)
             db.commit()
             return False
         assigned = await ordne_zu(db, row_id, incident_ids=_eligible_incident_ids(db, row, settings_row))

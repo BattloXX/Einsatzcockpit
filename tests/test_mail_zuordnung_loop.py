@@ -10,6 +10,7 @@ import pytest
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.incident import Message, MessageMedia
+from app.models.master import OrgSettings
 from app.models.org_mail import OrgMailEingang, OrgResendConfig
 from app.services import mail_zuordnung_loop as loop
 from app.services.resend_inbound_service import loesche_alte_eingaenge
@@ -143,6 +144,7 @@ async def test_retention_deletes_inbox_row_but_keeps_assigned_message(setup_db, 
             db.add(cfg)
         else:
             cfg.inbound_retention_days = 1
+        db.query(OrgSettings).filter_by(org_id=org_id).one().mail_eingang_aufbewahrung_tage = 1
         db.get(OrgMailEingang, mail_id).empfangen_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=2)
         db.commit()
         assert loesche_alte_eingaenge(db) == 1

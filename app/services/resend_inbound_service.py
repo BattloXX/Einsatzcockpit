@@ -14,7 +14,9 @@ from app.config import settings
 from app.core.crypto import decrypt_secret
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
+from app.models.master import OrgSettings
 from app.models.org_mail import OrgMailEingang, OrgResendConfig
+from app.services.mail_eingang_service import ereignis, normalisiere_absender, speichere_eingang
 
 logger = logging.getLogger("einsatzleiter.mail.inbound")
 RESEND_RECEIVING_URL = "https://api.resend.com/emails/receiving/"
@@ -41,22 +43,16 @@ def _utc(value: object) -> datetime:
 
 
 def create_inbound_metadata(db: Session, org_id: int, data: dict) -> OrgMailEingang | None:
-    email_id = clean_text(data.get("email_id"), 64)
+    email_id = clean_text(data.get("email_id"), 255)
     if not email_id:
         return None
-    exists = (db.query(OrgMailEingang).execution_options(include_all_tenants=True)
-              .filter(OrgMailEingang.org_id == org_id, OrgMailEingang.resend_email_id == email_id).first())
-    if exists:
-        return None
-    row = OrgMailEingang(org_id=org_id, resend_email_id=email_id,
-        message_id=clean_text(data.get("message_id"), 500) or None,
-        absender=clean_text(data.get("from"), 500), empfaenger=_json(data.get("to")),
-        cc=_json(data.get("cc")) if data.get("cc") else None,
-        betreff=clean_text(data.get("subject"), 998), empfangen_at=_utc(data.get("created_at")),
-        anhang_json=_json(_attachment_metadata(data.get("attachments") or [])), status="neu")
-    db.add(row)
-    db.flush()
-    return row
+    return speichere_eingang(
+        db, org_id, quelle="resend", extern_id=email_id, absender=str(data.get("from") or ""),
+        empfaenger=[str(value) for value in data.get("to", [])] if isinstance(data.get("to"), list) else [],
+        cc=[str(value) for value in data.get("cc", [])] if isinstance(data.get("cc"), list) else None,
+        betreff=str(data.get("subject") or ""), message_id=clean_text(data.get("message_id"), 500) or None,
+        empfangen_at=_utc(data.get("created_at")), anhang_json=_attachment_metadata(data.get("attachments") or []),
+    )
 
 
 def resend_api_key_fuer_org(db: Session, org_id: int) -> str | None:
@@ -95,13 +91,13 @@ async def fetch_inbound_message(db: Session, org_id: int, message_id: int) -> No
         if not api_key:
             raise RuntimeError("kein Resend-Schluessel")
         async with httpx.AsyncClient(timeout=settings.RESEND_HTTP_TIMEOUT) as client:
-            response = await client.get(RESEND_RECEIVING_URL + row.resend_email_id,
+            response = await client.get(RESEND_RECEIVING_URL + row.extern_id,
                 headers={"Authorization": f"Bearer {api_key}"})
         if not response.is_success:
             raise RuntimeError("provider status")
         payload = response.json()
         row.message_id = clean_text(payload.get("message_id"), 500) or row.message_id
-        row.absender = clean_text(payload.get("from"), 500)
+        row.absender = normalisiere_absender(str(payload.get("from") or ""))
         row.empfaenger = _json(payload.get("to"))
         row.cc = _json(payload.get("cc")) if payload.get("cc") else None
         row.betreff = clean_text(payload.get("subject"), 998)
@@ -113,12 +109,14 @@ async def fetch_inbound_message(db: Session, org_id: int, message_id: int) -> No
             setattr(row, name, clean_text(result.get("status") if isinstance(result, dict) else result, 20) or None)
         row.anhang_json = _json(_attachment_metadata(payload.get("attachments") or []))
         row.abgerufen_at, row.status, row.fehler = datetime.now(UTC).replace(tzinfo=None), "neu", None
+        ereignis(db, row, "abgerufen", "Inhalt von Resend abgerufen")
         # M4 only assigns freshly fetched content. Retries after a failed fetch
         # enter here as well; the assignment service is deliberately idempotent.
         from app.services.mail_zuordnung_service import ordne_zu
         await ordne_zu(db, row.id)
     except Exception:  # Providerdetails und Schlüssel niemals loggen/persistieren.
         row.status, row.fehler = "abruf_fehler", "Inhalt konnte nicht von Resend abgerufen werden."
+        ereignis(db, row, "abruf_fehler", row.fehler)
         logger.warning("Resend-Posteingang konnte nicht abgerufen werden (org=%s, mail=%s)", org_id, message_id)
     db.commit()
     # Erst nach dem persistierten Eingang auslösen; der Hook ist je Mail/Drucker idempotent.
@@ -136,17 +134,34 @@ async def fetch_inbound_background(org_id: int, message_id: int) -> None:
         db.close()
 
 
+def _loesche_lokale_anhaenge(row: OrgMailEingang) -> None:
+    import shutil
+
+    from app.services.mail_eingang_anhang import _verzeichnis
+
+    shutil.rmtree(_verzeichnis(row), ignore_errors=True)
+
+
 def loesche_alte_eingaenge(db: Session) -> int:
     """Entfernt Einträge objektweise, damit Tenant-Scoping bei Mutationen greift."""
     now = datetime.now(UTC).replace(tzinfo=None)
-    configs = db.query(OrgResendConfig).execution_options(include_all_tenants=True).all()
+    org_ids = [
+        org_id
+        for (org_id,) in db.query(OrgMailEingang.org_id).execution_options(include_all_tenants=True).distinct().all()
+        if org_id is not None
+    ]
     count = 0
-    for cfg in configs:
-        days = max(1, min(int(cfg.inbound_retention_days or 90), 365))
+    for org_id in org_ids:
+        settings_row = (
+            db.query(OrgSettings).execution_options(include_all_tenants=True)
+            .filter(OrgSettings.org_id == org_id).first()
+        )
+        days = max(1, min(int(settings_row.mail_eingang_aufbewahrung_tage if settings_row else 90), 365))
         rows = (db.query(OrgMailEingang).execution_options(include_all_tenants=True)
-                .filter(OrgMailEingang.org_id == cfg.org_id)
+                .filter(OrgMailEingang.org_id == org_id)
                 .filter(OrgMailEingang.empfangen_at < now - timedelta(days=days)).all())
         for row in rows:
+            _loesche_lokale_anhaenge(row)
             db.delete(row)
             count += 1
     db.commit()

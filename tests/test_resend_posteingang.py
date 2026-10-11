@@ -39,7 +39,7 @@ from app.core.crypto import encrypt_secret
 from app.core.security import hash_password, sign_mail_inbound_webhook_org
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
-from app.models.master import FireDept
+from app.models.master import FireDept, OrgSettings
 from app.models.org_mail import OrgMailEingang, OrgResendConfig
 from app.models.user import Role, User, UserRole
 from app.services import resend_inbound_service as inbound
@@ -225,15 +225,17 @@ def test_retention_loescht_nur_alte_eintraege_der_eigenen_org(setup_db):
         alt = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=200)
         neu = datetime.now(UTC).replace(tzinfo=None)
         for org, zeit, mid in ((org_a, alt, "alt_a"), (org_a, neu, "neu_a"), (org_b, alt, "alt_b")):
-            db.add(OrgMailEingang(org_id=org, resend_email_id=mid + uuid4().hex[:4], absender="x", empfaenger="[]",
+            db.add(OrgMailEingang(org_id=org, quelle="resend", extern_id=mid + uuid4().hex[:4], absender="x", empfaenger="[]",
                                   betreff="b", empfangen_at=zeit, status="neu"))
-        db.query(OrgResendConfig).filter_by(org_id=org_a).one().inbound_retention_days = 90
-        db.query(OrgResendConfig).filter_by(org_id=org_b).one().inbound_retention_days = 365
+        db.add_all([
+            OrgSettings(org_id=org_a, mail_eingang_aufbewahrung_tage=90),
+            OrgSettings(org_id=org_b, mail_eingang_aufbewahrung_tage=365),
+        ])
         db.commit()
         inbound.loesche_alte_eingaenge(db)
     finally:
         db.close()
-    assert [z.resend_email_id[:5] for z in _eintraege(org_a)] == ["neu_a"]
+    assert [z.extern_id[:5] for z in _eintraege(org_a)] == ["neu_a"]
     assert len(_eintraege(org_b)) == 1
 
 
@@ -247,7 +249,7 @@ def test_abruf_fehler_wird_generisch_gespeichert_und_abruf_erfolg_setzt_inhalt(s
     org_id, _ = _org()
     db = SessionLocal()
     set_tenant_context(db, None)
-    zeile = OrgMailEingang(org_id=org_id, resend_email_id="mail_x", absender="a", empfaenger="[]", betreff="b",
+    zeile = OrgMailEingang(org_id=org_id, quelle="resend", extern_id="mail_x", absender="a", empfaenger="[]", betreff="b",
                            empfangen_at=datetime.now(UTC).replace(tzinfo=None), status="neu")
     db.add(zeile)
     db.commit()

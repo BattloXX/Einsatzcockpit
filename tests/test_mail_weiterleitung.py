@@ -196,7 +196,8 @@ def test_regelsuche_vorrang_catch_all_und_org_adressen(setup_db):
 # ── Webhook ───────────────────────────────────────────────────────────────────
 def test_webhook_regeltreffer_queued_ohne_org_zeile_und_idempotent(client, cfg, versand):
     rid = _regel("info")
-    body = _event("mail_1", "info@" + DOMAIN)
+    email_id = "fwd_" + uuid4().hex
+    body = _event(email_id, "info@" + DOMAIN)
     for _ in range(2):
         assert client.post("/mail/webhook/resend-inbound", content=body, headers=_signiert(body)).status_code == 200
     logs = _logs(rid)
@@ -204,7 +205,7 @@ def test_webhook_regeltreffer_queued_ohne_org_zeile_und_idempotent(client, cfg, 
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
-        assert db.query(OrgMailEingang).filter_by(resend_email_id="mail_1").count() == 0
+        assert db.query(OrgMailEingang).filter_by(extern_id=email_id).count() == 0
     finally:
         db.close()
 
