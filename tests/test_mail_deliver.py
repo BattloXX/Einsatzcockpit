@@ -21,7 +21,7 @@ from app.config import settings
 from app.core.crypto import encrypt_secret
 from app.core.tenant import set_tenant_context
 from app.db import Base
-from app.models.master import FireDept, SystemSettings
+from app.models.master import FireDept, OrgSettings, SystemSettings
 from app.models.org_mail import OrgO365MailConfig, OrgResendConfig, OrgSmtpConfig
 
 
@@ -86,6 +86,16 @@ def _patch_resend(monkeypatch, *, raises: Exception | None = None):
 
     monkeypatch.setattr(resend_mail_service, "send_via_resend", fake_send_via_resend)
     return calls
+
+
+def _patch_resend_messages(monkeypatch):
+    messages: list[EmailMessage] = []
+
+    async def fake_send_via_resend(msg, api_key, from_addr):
+        messages.append(msg)
+
+    monkeypatch.setattr(resend_mail_service, "send_via_resend", fake_send_via_resend)
+    return messages
 
 
 async def test_deliver_uses_graph_when_o365_enabled_and_configured(deliver_db, monkeypatch):
@@ -292,8 +302,38 @@ async def test_deliver_global_resend_derives_org_sender(deliver_db, monkeypatch)
     send_calls = _patch_send(monkeypatch)
     resend_calls = _patch_resend(monkeypatch)
     await mail_service.deliver(db, org.id, _msg())
-    assert resend_calls == [("global-key", "deliver-org@einsatzcockpit.com")]
+    assert resend_calls == [("global-key", "feuerwehr.deliver-org@einsatzcockpit.com")]
     assert send_calls == []
+
+
+async def test_deliver_resend_sets_reply_to_only_for_active_eingang(deliver_db, monkeypatch):
+    db, org = deliver_db
+    db.add_all([
+        SystemSettings(key="resend_enabled", value="true"),
+        SystemSettings(key="resend_api_key", value=encrypt_secret("global-key")),
+        SystemSettings(key="resend_from_domain", value="einsatzcockpit.com"),
+        OrgSettings(org_id=org.id, mail_eingang_modus="freigegeben"),
+    ])
+    db.commit()
+    messages = _patch_resend_messages(monkeypatch)
+    await mail_service.deliver(db, org.id, _msg())
+    assert messages[0]["Reply-To"] == "feuerwehr.deliver-org@get.einsatzcockpit.com"
+
+
+async def test_deliver_resend_keeps_existing_reply_to(deliver_db, monkeypatch):
+    db, org = deliver_db
+    db.add_all([
+        SystemSettings(key="resend_enabled", value="true"),
+        SystemSettings(key="resend_api_key", value=encrypt_secret("global-key")),
+        SystemSettings(key="resend_from_domain", value="einsatzcockpit.com"),
+        OrgSettings(org_id=org.id, mail_eingang_modus="alle"),
+    ])
+    db.commit()
+    message = _msg()
+    message["Reply-To"] = "mailing@example.at"
+    messages = _patch_resend_messages(monkeypatch)
+    await mail_service.deliver(db, org.id, message)
+    assert messages[0]["Reply-To"] == "mailing@example.at"
 
 
 async def test_deliver_resend_failure_falls_back_to_org_smtp(deliver_db, monkeypatch):

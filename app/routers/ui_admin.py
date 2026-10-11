@@ -1,7 +1,6 @@
 """Admin-UI: Stammdaten, User, Rollen, API-Keys."""
 import ipaddress
 import logging
-import re
 from datetime import UTC, datetime
 from urllib.parse import quote_plus
 
@@ -10,6 +9,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
+from app.config import settings as app_settings
 from app.core.audit import write_audit
 from app.core.permissions import (
     authorize_user_mutation,
@@ -2108,10 +2108,14 @@ async def system_settings_page(request: Request, db: Session = Depends(get_db),
     settings_raw = db.query(SystemSettings).all()
     settings = {s.key: s.value for s in settings_raw}
     resend_api_key_set = bool(settings.pop("resend_api_key", None))
+    resend_inbound_webhook_secret_set = bool(settings.pop("resend_inbound_webhook_secret", None))
     saved = request.query_params.get("saved")
     return templates.TemplateResponse(request, "admin/system_settings.html", {
         "user": request.state.user, "settings": settings, "saved": saved,
         "resend_api_key_set": resend_api_key_set,
+        "resend_inbound_webhook_secret_set": resend_inbound_webhook_secret_set,
+        "resend_inbound_webhook_url": (app_settings.effective_public_base_url or str(request.base_url)).rstrip("/")
+        + "/mail/webhook/resend-inbound",
     })
 
 
@@ -2131,7 +2135,8 @@ async def save_system_settings(
         "smtp_host", "smtp_port", "smtp_user", "smtp_password", "smtp_from",
         "smtp_starttls", "smtp_timeout",
         # E-Mail (Resend); API-Key wird separat verschlüsselt behandelt
-        "resend_enabled", "resend_api_key", "resend_from_domain",
+        "resend_enabled", "resend_api_key", "resend_from_domain", "resend_inbound_domain",
+        "resend_inbound_webhook_secret",
         # Allgemein
         "enable_speech_input", "default_session_max_age",
         # Auto-Schließen
@@ -2146,17 +2151,20 @@ async def save_system_settings(
         "mi_feature_stab", "mi_feature_funkjournal", "mi_feature_meldungen",
         "mi_feature_sektoren", "mi_feature_karte", "mi_feature_zeitreise", "mi_feature_ressourcen",
     ]
+    from app.services.org_mail_adresse import ist_gueltige_domain
+
     resend_domain = str(form.get("k_resend_from_domain") or "").strip().lower()
-    resend_domain_invalid = bool(resend_domain) and not re.fullmatch(
-        r"(?=.{4,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}",
-        resend_domain,
-    )
+    inbound_domain = str(form.get("k_resend_inbound_domain") or "").strip().lower()
+    resend_domain_invalid = bool(resend_domain) and not ist_gueltige_domain(resend_domain)
+    inbound_domain_invalid = bool(inbound_domain) and not ist_gueltige_domain(inbound_domain)
     for key in known_keys:
-        if key == "resend_api_key":
+        if key in {"resend_api_key", "resend_inbound_webhook_secret"}:
             continue
         if key == "resend_from_domain" and resend_domain_invalid:
             # Ungültige Domain nicht speichern, aber die übrigen Einstellungen
             # (z. B. resend_enabled) trotzdem übernehmen statt den ganzen POST abzubrechen.
+            continue
+        if key == "resend_inbound_domain" and inbound_domain_invalid:
             continue
         val = form.get(f"k_{key}")
         if val is not None:
@@ -2180,6 +2188,20 @@ async def save_system_settings(
         else:
             db.add(SystemSettings(key="resend_api_key", value=encrypted_key,
                                   updated_by_user_id=request.state.user.id))
+    inbound_secret = str(form.get("k_resend_inbound_webhook_secret") or "").strip()
+    inbound_secret_invalid = bool(inbound_secret) and not inbound_secret.startswith("whsec_")
+    if form.get("k_resend_inbound_webhook_secret_changed") == "1" and inbound_secret and not inbound_secret_invalid:
+        from app.core.crypto import encrypt_secret
+
+        encrypted_secret = encrypt_secret(inbound_secret)
+        existing = db.get(SystemSettings, "resend_inbound_webhook_secret")
+        if existing:
+            existing.value = encrypted_secret
+            existing.updated_at = datetime.now(UTC)
+            existing.updated_by_user_id = request.state.user.id
+        else:
+            db.add(SystemSettings(key="resend_inbound_webhook_secret", value=encrypted_secret,
+                                  updated_by_user_id=request.state.user.id))
     # Handle any existing custom keys
     all_existing = db.query(SystemSettings).all()
     for s in all_existing:
@@ -2197,9 +2219,9 @@ async def save_system_settings(
                                   updated_by_user_id=request.state.user.id))
     write_audit(db, "admin.system_settings.updated", user_id=request.state.user.id)
     db.commit()
-    if resend_domain_invalid:
+    if resend_domain_invalid or inbound_domain_invalid or inbound_secret_invalid:
         return RedirectResponse(
-            "/admin/system-einstellungen?saved=1&settings_error=Ungültige+Resend-Domain+"
+            "/admin/system-einstellungen?saved=1&settings_error=Ungültige+Resend-Einstellung+"
             "%E2%80%93+restliche+Einstellungen+wurden+gespeichert",
             status_code=303,
         )

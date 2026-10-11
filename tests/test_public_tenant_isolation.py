@@ -474,6 +474,46 @@ def test_resend_inbound_webhook_token_cannot_write_to_foreign_org(client, monkey
         db.close()
 
 
+def test_system_resend_inbound_address_cannot_write_to_foreign_org(client, monkeypatch):
+    """Der zentrale öffentliche Webhook schreibt nur in die aus dem Empfänger bewiesene Org."""
+    import base64
+    import json
+
+    org_b_id = _setup_zwei_orgs()
+    secret = b"central-inbound"
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        setting = db.get(SystemSettings, "resend_inbound_webhook_secret")
+        value = encrypt_secret("whsec_" + base64.b64encode(secret).decode())
+        if setting:
+            setting.value = value
+        else:
+            db.add(SystemSettings(key="resend_inbound_webhook_secret", value=value))
+        for org_id in (ORG_A, org_b_id):
+            row = db.query(OrgSettings).filter_by(org_id=org_id).first() or OrgSettings(org_id=org_id)
+            row.mail_eingang_modus = "alle"
+            db.add(row)
+        org_a = db.get(FireDept, ORG_A)
+        db.commit()
+        address_a = f"feuerwehr.{org_a.slug}@get.einsatzcockpit.com"
+    finally:
+        db.close()
+
+    async def no_background(*_args):
+        return None
+
+    monkeypatch.setattr("app.routers.mail_inbound_webhook.fetch_inbound_background", no_background)
+    body = json.dumps({"type": "email.received", "data": {"email_id": "central-own", "to": [address_a]}}).encode()
+    assert client.post("/mail/webhook/resend-inbound", content=body, headers=_svix(secret, body, "central-own")).status_code == 200
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        assert db.query(OrgMailEingang).filter_by(org_id=ORG_A, resend_email_id="central-own").count() == 1
+        assert db.query(OrgMailEingang).filter_by(org_id=org_b_id, resend_email_id="central-own").count() == 0
+    finally:
+        db.close()
+
 def test_mailing_api_import_cannot_target_foreign_list(client):
     org_b_id = _setup_zwei_orgs()
     raw = "mailing-import-org-a"

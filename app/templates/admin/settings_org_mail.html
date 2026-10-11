@@ -55,6 +55,25 @@
 </div>
 {% endif %}
 
+<form method="post" action="/admin/mail/eingang/einstellungen/save">
+  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+  {% if is_sysadmin and org %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
+  <section class="card mb-4">
+    <div class="card-header"><h2>Mail-Eingang</h2></div>
+    <div class="card-body" style="padding:16px 20px;display:grid;gap:14px">
+      <p class="form-hint" style="margin:0">Ihre Empfangsadresse: <code id="mail-eingang-adresse">{{ empfangs_adresse }}</code> <button type="button" class="btn btn--ghost btn--sm" onclick="navigator.clipboard.writeText(document.getElementById('mail-eingang-adresse').textContent)">Kopieren</button><br>Der bisherige Alias <code>{{ org.slug }}@{{ empfangs_domain }}</code> bleibt empfangsfähig.</p>
+      <div class="form-row" style="display:flex;gap:16px;flex-wrap:wrap">
+        <label>Modus <select name="mail_eingang_modus" class="form-input"><option value="aus" {% if not org_settings or org_settings.mail_eingang_modus == 'aus' %}selected{% endif %}>Aus</option><option value="freigegeben" {% if org_settings and org_settings.mail_eingang_modus == 'freigegeben' %}selected{% endif %}>Nur freigegebene Absender</option><option value="alle" {% if org_settings and org_settings.mail_eingang_modus == 'alle' %}selected{% endif %}>Alle</option></select></label>
+        <label>Rückblick (Min.) <input class="form-input" type="number" name="mail_eingang_rueckblick_min" min="5" max="240" value="{{ org_settings.mail_eingang_rueckblick_min if org_settings else 30 }}"></label>
+        <label>Mehrere Einsätze <select name="mail_eingang_mehrere" class="form-input"><option value="posteingang" {% if not org_settings or org_settings.mail_eingang_mehrere == 'posteingang' %}selected{% endif %}>Posteingang</option><option value="neuester" {% if org_settings and org_settings.mail_eingang_mehrere == 'neuester' %}selected{% endif %}>Neuesten nehmen</option></select></label>
+        <label>Limit pro Stunde <input class="form-input" type="number" name="mail_eingang_max_pro_stunde" min="1" max="500" value="{{ org_settings.mail_eingang_max_pro_stunde if org_settings else 30 }}"></label>
+      </div>
+      <label>Freigegebene Absender <textarea name="mail_eingang_absender" class="form-input" rows="5" placeholder="leitstelle@example.at&#10;@lls.at">{{ org_settings.mail_eingang_absender if org_settings and org_settings.mail_eingang_absender else '' }}</textarea><span class="form-hint">Eine Adresse oder Domain mit @ je Zeile, maximal 200 Einträge.</span></label>
+      <div><button type="submit" class="btn btn--primary">Einstellungen speichern</button></div>
+    </div>
+  </section>
+</form>
+
 <!-- ── Eigener SMTP-Server ─────────────────────────────────────────────────── -->
 <form method="post" action="/admin/mail/smtp/save">
   <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
@@ -287,10 +306,9 @@
       <div style="border-top:1px solid var(--color-border);padding-top:14px;display:grid;gap:10px">
         <h3 style="margin:0">Posteingang über Resend</h3>
         <label class="toggle-label"><input type="checkbox" name="inbound_enabled" value="1" {% if resend_config and resend_config.inbound_enabled %}checked{% endif %}> Posteingang aktiv</label>
-        <label>Webhook-URL <input class="form-input" readonly value="{{ inbound_webhook_url }}"></label>
-        <label>Webhook-Signing-Secret {% if resend_config and resend_config.inbound_webhook_secret_enc %}<span style="color:var(--color-success)">&#10003; gesetzt</span>{% endif %}<input type="password" name="inbound_webhook_secret" class="form-input" autocomplete="new-password" oninput="document.getElementById('inbound_secret_changed').value='1'"></label><input id="inbound_secret_changed" type="hidden" name="inbound_secret_changed" value="0">
+        <p class="form-hint">Systemweiter Empfang: {% if system_inbound_configured %}<span style="color:var(--color-success)">&#10003; Empfang eingerichtet</span>{% else %}<span style="color:var(--color-danger)">nicht eingerichtet - System-Administrator informieren</span>{% endif %}</p>
         <label>Aufbewahrung in Tagen <input type="number" name="inbound_retention_days" min="1" max="365" value="{{ resend_config.inbound_retention_days if resend_config else 90 }}"></label>
-        <p class="form-hint">Bei Resend Empfangsdomain und MX einrichten, Webhook <code>email.received</code> auf diese URL setzen. Der API-Key benötigt Empfangsrechte (Full Access).</p><a href="/admin/mail/eingang">Posteingang öffnen</a>
+        <p class="form-hint">Der API-Key benötigt Empfangsrechte (Full Access). Die Empfangsadresse ist oben angegeben.</p><a href="/admin/mail/eingang">Posteingang öffnen</a>
       </div>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <button type="submit" class="btn btn--primary">Speichern</button>

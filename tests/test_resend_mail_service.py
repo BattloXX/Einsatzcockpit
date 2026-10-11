@@ -48,6 +48,12 @@ def test_resend_payload_contains_both_bodies_and_explicit_from():
     }
 
 
+def test_resend_payload_passes_reply_to():
+    msg = _msg()
+    msg["Reply-To"] = "feuerwehr.wolfurt@get.einsatzcockpit.com"
+    assert _resend_payload(msg, "org@verified.example")["reply_to"] == "feuerwehr.wolfurt@get.einsatzcockpit.com"
+
+
 async def test_send_via_resend_success():
     response = MagicMock(status_code=200)
     cls, client = _client(response)

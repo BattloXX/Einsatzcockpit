@@ -428,6 +428,7 @@ class Settings(BaseSettings):
     # aktiviert/konfiguriert (DB-Flag) -- kein zusätzlicher Env-Kill-Switch, damit ein
     # System-Admin das komplett übers Web bedienen kann, ohne Server-Zugriff zu brauchen.
     RESEND_HTTP_TIMEOUT: int = 15
+    MAIL_INBOUND_DOMAIN: str = "get.einsatzcockpit.com"
 
     # SMS-Versand je Org ueber die EUS Message Send API - Alternative/Fallback zum
     # SMS-Gateway-WebSocket (app/routers/ws.py::dispatch_sms).
