@@ -155,9 +155,38 @@ Nach dem Speichern jeweils **„Test-Mail senden"** nutzen (Empfänger optional 
 
 ---
 
-## Posteingang abrufen (Vorbereitung — noch nicht aktiv)
+## Posteingang (alle Empfangswege)
 
-Beide Formulare enthalten zusätzlich Felder für einen **künftigen** Abruf eingehender Mails aus demselben Postfach (IMAP beim eigenen SMTP-Server, Microsoft Graph `Mail.Read` bei Office 365). Diese Felder werden bereits gespeichert, **es findet aber noch kein automatischer Abruf oder keine Verarbeitung statt** — die Funktion ist reine Vorbereitung für eine spätere Ausbaustufe. Für Office 365 wäre dafür zusätzlich die Application-Permission `Mail.Read` in Azure nötig (analog Schritt 4, nur mit `Mail.Read` statt `Mail.Send`).
+Die Karte **Ihre Mail-Adressen** oben auf der Mail-Seite zeigt die vom Einsatzcockpit bereitgestellten
+Absender- und Empfangsadressen, den bisherigen Alias sowie die tatsächlich verwendeten Versand- und
+aktiven Empfangswege. Sie zeigt auch die Versand-Fallbacks. Jede angezeigte Adresse kann kopiert werden.
+
+Eingehende Mails können über Resend, IMAP oder Office 365 / Microsoft Graph ankommen. Der Abruf läuft
+einmal pro Minute. Das jeweilige Postfach bleibt unverändert: Mails werden weder als gelesen markiert,
+noch verschoben oder gelöscht. Beim erstmaligen Aktivieren werden die letzten 24 Stunden berücksichtigt.
+Im Posteingang sind Quelle, Verarbeitungsergebnis und Verlauf jeder Mail sichtbar.
+
+## IMAP-Abruf einrichten
+
+Unter **Posteingang abrufen** beim eigenen SMTP-Server IMAP-Abruf aktivieren und IMAP-Host, Port,
+SSL/TLS und Ordner (gewöhnlich `INBOX`) eintragen. Es werden dieselben Zugangsdaten wie beim SMTP-Server
+verwendet. Mit **Verbindung testen** wird Login und lesender Zugriff auf den Ordner geprüft; es werden
+dabei keine Mails verarbeitet oder verändert.
+
+## Office 365 / Microsoft Graph Mail.Read einrichten
+
+Für den Abruf in Office 365 zusätzlich zu `Mail.Send` die Microsoft-Graph-Application-Permission
+`Mail.Read` vergeben und Administratorzustimmung erteilen. Das Feld **Postfach für den Abruf** bestimmt
+das Empfangspostfach; bleibt es leer, wird das Absender-Postfach verwendet. Eine
+ApplicationAccessPolicy sollte den Zugriff der App auf genau dieses Postfach begrenzen. Mit
+**Verbindung testen** wird der lesende Zugriff auf den Posteingang geprüft.
+
+## Was passiert mit einer Mail
+
+Eine Mail wird im Posteingang gespeichert, geprüft und nach den Eingangseinstellungen einem passenden
+Einsatz zugeordnet oder dort zur manuellen Bearbeitung belassen. Der Verlauf dokumentiert Empfang,
+Abruf, Zuordnung und allfällige Fehler. Anhänge und Inhalte bleiben für die weitere Verarbeitung beim
+Eingang erhalten.
 
 ---
 

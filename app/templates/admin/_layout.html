@@ -425,9 +425,16 @@
               <span class="admin-nav__icon">📻</span>DIBOS/Elvis-Tracing
             </a>
             <a href="/admin/mail"
-               class="admin-nav__item {% if '/admin/mail' in request.url.path %}is-active{% endif %}"
+               class="admin-nav__item {% if '/admin/mail' in request.url.path and not request.url.path.startswith('/admin/mail/eingang') %}is-active{% endif %}"
                {{ tip('Eigener SMTP-Server und/oder Office 365 / Microsoft Graph je Organisation') }}>
               <span class="admin-nav__icon">✉️</span>Mail-Versand
+            </a>
+            <a href="/admin/mail/eingang"
+               class="admin-nav__item {% if request.url.path.startswith('/admin/mail/eingang') %}is-active{% endif %}"
+               {{ tip('Eingegangene Mails aller Empfangswege und was mit ihnen passiert ist') }}>
+              <span class="admin-nav__icon">📥</span>Posteingang
+              {% set mail_eingang_badge = mail_eingang_offene_count(user) %}
+              {% if mail_eingang_badge %}<span class="badge">{{ mail_eingang_badge }}</span>{% endif %}
             </a>
             <a href="/admin/teams-alarmierung"
                class="admin-nav__item {% if '/admin/teams-alarmierung' in request.url.path %}is-active{% endif %}"

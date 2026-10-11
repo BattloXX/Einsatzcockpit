@@ -16,6 +16,16 @@
 {% elif flash and flash.startswith('error') %}
 <div class="alert alert--error mb-4">Fehler beim Speichern.</div>
 {% endif %}
+{% if request.query_params.get('test_ergebnis') %}
+<div class="alert {% if request.query_params.get('test_ok') == '1' %}alert--success{% else %}alert--error{% endif %} mb-4">
+  {{ request.query_params.get('test_ergebnis') }}
+</div>
+{% endif %}
+
+<style>
+  .mail-address-grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:16px; }
+  @media (max-width:760px) { .mail-address-grid { grid-template-columns:1fr; } }
+</style>
 
 {% if is_sysadmin and all_orgs %}
 <section class="card mb-4">
@@ -35,6 +45,55 @@
 {% if not org %}
 <div class="alert alert--info">Bitte eine Organisation auswählen.</div>
 {% else %}
+
+<section class="card mb-4">
+  <div class="card-header"><h2>Ihre Mail-Adressen</h2></div>
+  <div class="card-body mail-address-grid" style="padding:16px 20px">
+    <div>
+      <h3 style="margin-top:0">Vom Einsatzcockpit bereitgestellt</h3>
+      <p class="form-hint">Absender</p>
+      {% if adressen_uebersicht.system.absender %}
+      <code>{{ adressen_uebersicht.system.absender }}</code>
+      <button type="button" class="btn btn--ghost btn--sm" data-copy-address="{{ adressen_uebersicht.system.absender }}">Kopieren</button>
+      {% else %}<span class="badge-pill badge-pill--gray">nicht verfügbar</span>{% endif %}
+      <p class="form-hint">Empfangsadresse</p>
+      <code>{{ adressen_uebersicht.system.empfang }}</code>
+      <button type="button" class="btn btn--ghost btn--sm" data-copy-address="{{ adressen_uebersicht.system.empfang }}">Kopieren</button>
+      <p class="form-hint">Alias</p>
+      <code>{{ adressen_uebersicht.system.alias }}</code>
+      <button type="button" class="btn btn--ghost btn--sm" data-copy-address="{{ adressen_uebersicht.system.alias }}">Kopieren</button>
+      <p><span class="badge-pill {% if adressen_uebersicht.system.empfang_aktiv %}badge-pill--green{% else %}badge-pill--gray{% endif %}">
+        Empfang {% if adressen_uebersicht.system.empfang_aktiv %}aktiv{% else %}aus{% endif %}
+      </span></p>
+    </div>
+    <div>
+      <h3 style="margin-top:0">Eigene Wege</h3>
+      <p><strong>Office 365</strong> {% if adressen_uebersicht.eigene.o365.absender %}<code>{{ adressen_uebersicht.eigene.o365.absender }}</code>{% else %}<span class="badge-pill badge-pill--gray">nicht konfiguriert</span>{% endif %}</p>
+      {% if adressen_uebersicht.eigene.o365.absender %}<button type="button" class="btn btn--ghost btn--sm" data-copy-address="{{ adressen_uebersicht.eigene.o365.absender }}">Kopieren</button>{% endif %}
+      {% if adressen_uebersicht.eigene.o365.empfang %}<p class="form-hint">Empfangspostfach: <code>{{ adressen_uebersicht.eigene.o365.empfang }}</code> <button type="button" class="btn btn--ghost btn--sm" data-copy-address="{{ adressen_uebersicht.eigene.o365.empfang }}">Kopieren</button></p>{% endif %}
+      <p><span class="badge-pill {% if adressen_uebersicht.eigene.o365.enabled %}badge-pill--green{% else %}badge-pill--gray{% endif %}">Versand {% if adressen_uebersicht.eigene.o365.enabled %}aktiv{% else %}aus{% endif %}</span> <span class="badge-pill {% if adressen_uebersicht.eigene.o365.read_enabled %}badge-pill--green{% else %}badge-pill--gray{% endif %}">Abruf {% if adressen_uebersicht.eigene.o365.read_enabled %}aktiv{% else %}aus{% endif %}</span></p>
+      <p><strong>Resend</strong> {% if adressen_uebersicht.eigene.resend.absender %}<code>{{ adressen_uebersicht.eigene.resend.absender }}</code>{% else %}<span class="badge-pill badge-pill--gray">nicht konfiguriert</span>{% endif %}</p>
+      {% if adressen_uebersicht.eigene.resend.absender %}<button type="button" class="btn btn--ghost btn--sm" data-copy-address="{{ adressen_uebersicht.eigene.resend.absender }}">Kopieren</button>{% endif %}
+      <p><span class="badge-pill {% if adressen_uebersicht.eigene.resend.enabled %}badge-pill--green{% else %}badge-pill--gray{% endif %}">Versand {% if adressen_uebersicht.eigene.resend.enabled %}aktiv{% else %}aus{% endif %}</span> <span class="badge-pill {% if adressen_uebersicht.eigene.resend.inbound_enabled %}badge-pill--green{% else %}badge-pill--gray{% endif %}">Empfang {% if adressen_uebersicht.eigene.resend.inbound_enabled %}aktiv{% else %}aus{% endif %}</span></p>
+      <p><strong>SMTP/IMAP</strong> {% if adressen_uebersicht.eigene.smtp.absender %}<code>{{ adressen_uebersicht.eigene.smtp.absender }}</code>{% else %}<span class="badge-pill badge-pill--gray">kein Absender</span>{% endif %}</p>
+      {% if adressen_uebersicht.eigene.smtp.absender %}<button type="button" class="btn btn--ghost btn--sm" data-copy-address="{{ adressen_uebersicht.eigene.smtp.absender }}">Kopieren</button>{% endif %}
+      {% if adressen_uebersicht.eigene.smtp.imap_postfach %}<p class="form-hint">IMAP: <code>{{ adressen_uebersicht.eigene.smtp.imap_postfach }}</code> ({{ adressen_uebersicht.eigene.smtp.imap_ordner or 'INBOX' }}) <button type="button" class="btn btn--ghost btn--sm" data-copy-address="{{ adressen_uebersicht.eigene.smtp.imap_postfach }}">Kopieren</button></p>{% endif %}
+      <p><span class="badge-pill {% if adressen_uebersicht.eigene.smtp.enabled %}badge-pill--green{% else %}badge-pill--gray{% endif %}">Versand {% if adressen_uebersicht.eigene.smtp.enabled %}aktiv{% else %}aus{% endif %}</span> <span class="badge-pill {% if adressen_uebersicht.eigene.smtp.imap_enabled %}badge-pill--green{% else %}badge-pill--gray{% endif %}">IMAP {% if adressen_uebersicht.eigene.smtp.imap_enabled %}aktiv{% else %}aus{% endif %}</span></p>
+    </div>
+    <div>
+      <h3 style="margin-top:0">Aktuell verwendet</h3>
+      {% set weg_labels = {'o365': 'Office 365', 'resend_org': 'Eigenes Resend', 'resend_global': 'Einsatzcockpit (Resend)', 'smtp_org': 'Eigener SMTP-Server', 'smtp_global': 'Systemweiter SMTP-Server', 'keiner': 'Kein Versand konfiguriert (Mails werden nur protokolliert)'} %}
+      <p><strong>Versand:</strong> {{ weg_labels[adressen_uebersicht.versand.weg] }}
+        <span class="badge-pill badge-pill--green">wird verwendet</span></p>
+      {% if adressen_uebersicht.versand.absender %}<code>{{ adressen_uebersicht.versand.absender }}</code>
+      <button type="button" class="btn btn--ghost btn--sm" data-copy-address="{{ adressen_uebersicht.versand.absender }}">Kopieren</button>{% endif %}
+      {% for fallback in adressen_uebersicht.versand.fallbacks %}
+      <p>{{ weg_labels[fallback] }} <span class="badge-pill badge-pill--amber">Fallback</span></p>
+      {% endfor %}
+      <p><strong>Empfang:</strong> {% if adressen_uebersicht.empfang_wege %}{{ adressen_uebersicht.empfang_wege|join(', ') }}{% else %}<span class="badge-pill badge-pill--gray">kein Weg aktiv</span>{% endif %}</p>
+    </div>
+  </div>
+</section>
 
 <section class="card mb-4">
   <div class="card-header"><h2>Reihenfolge beim Versand</h2></div>
@@ -61,7 +120,6 @@
   <section class="card mb-4">
     <div class="card-header"><h2>Mail-Eingang</h2></div>
     <div class="card-body" style="padding:16px 20px;display:grid;gap:14px">
-      <p class="form-hint" style="margin:0">Ihre Empfangsadresse: <code id="mail-eingang-adresse">{{ empfangs_adresse }}</code> <button type="button" class="btn btn--ghost btn--sm" onclick="navigator.clipboard.writeText(document.getElementById('mail-eingang-adresse').textContent)">Kopieren</button><br>Der bisherige Alias <code>{{ org.slug }}@{{ empfangs_domain }}</code> bleibt empfangsfähig.</p>
       <div class="form-row" style="display:flex;gap:16px;flex-wrap:wrap">
         <label>Modus <select name="mail_eingang_modus" class="form-input"><option value="aus" {% if not org_settings or org_settings.mail_eingang_modus == 'aus' %}selected{% endif %}>Aus</option><option value="freigegeben" {% if org_settings and org_settings.mail_eingang_modus == 'freigegeben' %}selected{% endif %}>Nur freigegebene Absender</option><option value="alle" {% if org_settings and org_settings.mail_eingang_modus == 'alle' %}selected{% endif %}>Alle</option></select></label>
         <label>Rückblick (Min.) <input class="form-input" type="number" name="mail_eingang_rueckblick_min" min="5" max="240" value="{{ org_settings.mail_eingang_rueckblick_min if org_settings else 30 }}"></label>
@@ -84,6 +142,12 @@
   <section class="card mb-4">
     <div class="card-header"><h2>Eigener SMTP-Server</h2></div>
     <div class="card-body" style="padding:16px 20px;display:grid;gap:16px">
+
+      <input type="hidden" name="imap_enabled" value="{{ '1' if smtp_config and smtp_config.imap_enabled else '' }}">
+      <input type="hidden" name="imap_host" value="{{ smtp_config.imap_host or '' if smtp_config else '' }}">
+      <input type="hidden" name="imap_port" value="{{ smtp_config.imap_port if smtp_config else 993 }}">
+      <input type="hidden" name="imap_use_ssl" value="{{ '1' if not smtp_config or smtp_config.imap_use_ssl else '' }}">
+      <input type="hidden" name="imap_ordner" value="{{ smtp_config.imap_ordner or 'INBOX' if smtp_config else 'INBOX' }}">
 
       <div class="form-group" style="margin:0">
         <label class="toggle-label" style="display:flex;align-items:center;gap:10px;cursor:pointer">
@@ -254,6 +318,7 @@
                placeholder="einsatz@feuerwehr-beispiel.at" class="form-input" autocomplete="off">
         <p class="form-hint">Postfach/UPN, dessen Rechte die App-Registrierung zum Senden nutzt.</p>
       </div>
+      <input type="hidden" name="read_postfach" value="{{ o365_config.read_postfach or '' if o365_config else '' }}">
 
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
         <button type="submit" class="btn btn--primary">Speichern</button>
@@ -320,7 +385,7 @@
   </section>
 </form>
 
-<!-- ── Posteingang abrufen (Vorbereitung, noch nicht aktiv) ───────────────────── -->
+<!-- ── Posteingang abrufen ─────────────────────────────────────────────────── -->
 <form method="post" action="/admin/mail/smtp/save">
   <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
   {% if is_sysadmin and org %}
@@ -338,13 +403,12 @@
   <input type="hidden" name="secret_changed" value="0">
 
   <section class="card mb-4">
-    <div class="card-header"><h2>Posteingang abrufen (Vorbereitung)</h2></div>
+    <div class="card-header"><h2>Posteingang abrufen</h2></div>
     <div class="card-body" style="padding:16px 20px;display:grid;gap:16px">
       <p style="font-size:.85rem;color:var(--color-text-muted);margin:0;line-height:1.6">
-        <strong>Konfiguration wird gespeichert, der automatische Abruf ist noch nicht
-        aktiv/implementiert.</strong> Diese Felder bereiten das künftige Abholen
-        eingehender Mails aus dem eigenen SMTP-Postfach (per IMAP) bzw. dem
-        Office-365-Postfach (per Microsoft Graph <code>Mail.Read</code>) nur vor.
+        Eingehende Mails werden jede Minute aus dem Postfach gelesen und wie Mails an die Empfangsadresse verarbeitet.
+        Das Postfach bleibt unverändert (nichts wird gelesen markiert, verschoben oder gelöscht). Beim Einschalten werden
+        die Mails der letzten 24 Stunden übernommen.
       </p>
 
       <div class="form-group" style="margin:0">
@@ -353,7 +417,7 @@
                  {% if smtp_config and smtp_config.imap_enabled %}checked{% endif %}
                  class="toggle-checkbox">
           <span class="toggle-switch"></span>
-          IMAP-Abruf vorbereiten (eigener SMTP-Server, gleiches Postfach/gleiche Zugangsdaten)
+          IMAP-Abruf aktivieren (eigener SMTP-Server, gleiches Postfach/gleiche Zugangsdaten)
         </label>
       </div>
 
@@ -378,9 +442,17 @@
             SSL/TLS
           </label>
         </div>
+        <div class="form-group" style="margin:0;flex:1;min-width:160px">
+          <label for="imap_ordner">Ordner</label>
+          <input type="text" id="imap_ordner" name="imap_ordner" value="{{ smtp_config.imap_ordner or 'INBOX' if smtp_config else 'INBOX' }}" class="form-input" autocomplete="off">
+        </div>
       </div>
 
-      <button type="submit" class="btn btn--primary">Speichern</button>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <button type="submit" class="btn btn--primary">Speichern</button>
+        <button type="submit" form="imap-test-form" class="btn btn--ghost btn--sm">Verbindung testen</button>
+        <a href="/admin/mail/eingang" class="btn btn--ghost btn--sm">Posteingang öffnen</a>
+      </div>
     </div>
   </section>
 </form>
@@ -395,6 +467,7 @@
   <input type="hidden" name="tenant_id" value="{{ o365_config.tenant_id or '' if o365_config else '' }}">
   <input type="hidden" name="client_id" value="{{ o365_config.client_id or '' if o365_config else '' }}">
   <input type="hidden" name="sender_address" value="{{ o365_config.sender_address or '' if o365_config else '' }}">
+  <input type="hidden" name="read_postfach" value="{{ o365_config.read_postfach or '' if o365_config else '' }}">
   <input type="hidden" name="secret_changed" value="0">
 
   <section class="card mb-4">
@@ -405,12 +478,19 @@
                  {% if o365_config and o365_config.read_enabled %}checked{% endif %}
                  class="toggle-checkbox">
           <span class="toggle-switch"></span>
-          Mail.Read-Abruf vorbereiten (Office-365-Postfach, gleiche App-Registrierung)
+          Mail.Read-Abruf aktivieren (Office-365-Postfach, gleiche App-Registrierung)
         </label>
-        <p class="form-hint" style="margin:4px 0 0 0">Braucht zusätzlich die Application-Permission <code>Mail.Read</code> in Azure &mdash; nur eine Absichts-Flag, kein Abruf implementiert.</p>
+        <p class="form-hint" style="margin:4px 0 0 0">Braucht zusätzlich die Application-Permission <code>Mail.Read</code> in Azure.</p>
+      </div>
+      <div class="form-group" style="margin:12px 0 0 0">
+        <label for="read_postfach">Postfach für den Abruf (optional)</label>
+        <input type="text" id="read_postfach" name="read_postfach"
+               value="{{ o365_config.read_postfach or '' if o365_config else '' }}"
+               placeholder="Leer = Absender-Postfach" class="form-input" autocomplete="off">
       </div>
       <div style="margin-top:12px">
         <button type="submit" class="btn btn--primary">Speichern</button>
+        <button type="submit" form="o365-connection-test-form" class="btn btn--ghost btn--sm">Verbindung testen</button>
       </div>
     </div>
   </section>
@@ -470,6 +550,25 @@ function einsatzcockpitResendTest() {
     })
     .catch(function () { result.textContent = "Fehler beim Testen."; });
 }
+</script>
+
+<form id="imap-test-form" method="post" action="/admin/mail/imap/verbindung-testen">
+  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+  {% if is_sysadmin and org %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
+</form>
+<form id="o365-connection-test-form" method="post" action="/admin/mail/o365/verbindung-testen">
+  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+  {% if is_sysadmin and org %}<input type="hidden" name="target_org_id" value="{{ org.id }}">{% endif %}
+</form>
+<script>
+document.querySelectorAll("[data-copy-address]").forEach(function (button) {
+  button.addEventListener("click", function () {
+    navigator.clipboard.writeText(button.dataset.copyAddress).then(function () {
+      button.textContent = "Kopiert";
+      window.setTimeout(function () { button.textContent = "Kopieren"; }, 1200);
+    });
+  });
+});
 </script>
 
 {% endif %}

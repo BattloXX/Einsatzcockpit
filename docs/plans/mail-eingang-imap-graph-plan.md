@@ -300,3 +300,9 @@ Wunsch des Users (2026-10-11): Ganz oben auf `settings_org_mail.html` steht, **w
    - „Verbindung testen“
    - Testmail schicken und Ergebnis im Posteingang prüfen
    - Prüfen, dass die Mail im Postfach ungelesen bleibt
+
+## Umsetzungsstand
+
+- P1–P6 umgesetzt: Eingangsspeicherung, Zuordnung und Darstellung, Resend-, IMAP- und Graph-Abruf,
+  Einstellungen mit Verbindungstests sowie Adress-Übersicht und Dokumentation.
+- Offen: Live-Test mit einem echten IMAP-Postfach und einem O365-Tenant.

@@ -9,8 +9,10 @@ für den Admin sichtbar sein soll.
 """
 from __future__ import annotations
 
+import asyncio
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
@@ -126,7 +128,7 @@ def mail_settings_page(
         db.query(OrgSettings).filter(OrgSettings.org_id == effective_org_id).first()
         if effective_org_id else None
     )
-    from app.services.org_mail_adresse import empfangs_adresse, inbound_domain
+    from app.services.org_mail_adresse import empfangs_adresse, inbound_domain, mail_adressen_uebersicht
 
     empfangs_domain = inbound_domain(db)
 
@@ -139,6 +141,7 @@ def mail_settings_page(
         "org_settings": org_settings,
         "empfangs_domain": empfangs_domain,
         "empfangs_adresse": empfangs_adresse(org, empfangs_domain) if org else "",
+        "adressen_uebersicht": mail_adressen_uebersicht(db, org) if org else None,
         "is_sysadmin": is_sysadmin,
         "all_orgs": all_orgs,
         "flash": request.query_params.get("flash"),
@@ -208,6 +211,7 @@ async def smtp_settings_save(
     imap_host: str = Form(""),
     imap_port: int = Form(993),
     imap_use_ssl: str = Form(""),
+    imap_ordner: str = Form("INBOX"),
 ):
     from app.services.mail_service import _looks_like_email
 
@@ -228,10 +232,19 @@ async def smtp_settings_save(
     cfg.from_addr = from_addr_clean or None
     cfg.starttls = starttls == "1"
     cfg.timeout = max(1, min(timeout or 15, 120))
+    imap_war_aktiv = cfg.imap_enabled
     cfg.imap_enabled = imap_enabled == "1"
     cfg.imap_host = imap_host.strip() or None
     cfg.imap_port = max(1, min(imap_port or 993, 65535))
     cfg.imap_use_ssl = imap_use_ssl == "1"
+    cfg.imap_ordner = "".join(char for char in imap_ordner if ord(char) >= 32 and ord(char) != 127).strip()[:200]
+    if not cfg.imap_ordner:
+        cfg.imap_ordner = "INBOX"
+    if cfg.imap_enabled and not imap_war_aktiv:
+        cfg.imap_aktiv_seit = datetime.now(UTC).replace(tzinfo=None)
+        cfg.imap_letzte_uid = None
+        cfg.imap_uidvalidity = None
+        cfg.imap_letzter_fehler = None
     cfg.updated_at = datetime.now(UTC)
 
     if secret_changed == "1":
@@ -317,6 +330,7 @@ async def o365_settings_save(
     secret_changed: str = Form(""),
     sender_address: str = Form(""),
     read_enabled: str = Form(""),
+    read_postfach: str = Form(""),
 ):
     from app.services.mail_service import _looks_like_email
 
@@ -329,13 +343,22 @@ async def o365_settings_save(
     sender_clean = sender_address.strip()
     if sender_clean and not _looks_like_email(sender_clean):
         return RedirectResponse("/admin/mail?flash=error_sender_address", status_code=302)
+    read_postfach_clean = read_postfach.strip()
+    if read_postfach_clean and not _looks_like_email(read_postfach_clean):
+        return RedirectResponse("/admin/mail?flash=error_read_postfach", status_code=302)
 
     cfg = _get_or_create_o365_config(db, effective_org_id)
+    was_read_enabled = cfg.read_enabled
     cfg.enabled = enabled == "1"
     cfg.tenant_id = tenant_id.strip() or None
     cfg.client_id = client_id.strip() or None
     cfg.sender_address = sender_clean or None
     cfg.read_enabled = read_enabled == "1"
+    cfg.read_postfach = read_postfach_clean or None
+    if cfg.read_enabled and not was_read_enabled:
+        cfg.read_aktiv_seit = datetime.now(UTC).replace(tzinfo=None)
+        cfg.read_seit = None
+        cfg.read_letzter_fehler = None
     cfg.updated_at = datetime.now(UTC)
 
     if secret_changed == "1":
@@ -407,7 +430,7 @@ async def smtp_test(
         return JSONResponse({"ok": False, "message": f"Fehler: {exc}"})
 
 
-# ── POST /admin/mail/o365/test ────────────────────────────────────────────────
+# ── POST /admin/mail/o365/test ───────────────────────────────────────────
 @router.post("/mail/o365/test")
 async def o365_test(
     request: Request,
@@ -461,6 +484,75 @@ async def o365_test(
                     ip=request.client.host if request.client else None)
         db.commit()
         return JSONResponse({"ok": False, "message": f"Unerwarteter Fehler: {exc}"})
+
+
+def _test_redirect(org_id: int, user: User, ok: bool, text: str) -> RedirectResponse:
+    params = {"test_ok": "1" if ok else "0", "test_ergebnis": text[:200]}
+    if org_id != user.org_id:
+        params["org_id"] = str(org_id)
+    return RedirectResponse(f"/admin/mail?{urlencode(params)}", status_code=302)
+
+
+@router.post("/mail/imap/verbindung-testen")
+async def imap_connection_test(
+    request: Request,
+    db=Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    target_org_id: int | None = Form(None),
+):
+    from app.core.crypto import decrypt_secret
+    from app.services import mail_imap_poller
+
+    effective_org_id = _get_org_id(user, target_org_id)
+    if not effective_org_id:
+        return _test_redirect(0, user, False, "Keine Organisation ausgewählt.")
+    if not same_org_or_system_admin(user, effective_org_id):
+        raise HTTPException(status_code=403, detail="Keine Berechtigung für diese Organisation")
+    cfg = db.query(OrgSmtpConfig).filter(OrgSmtpConfig.org_id == effective_org_id).first()
+    if not cfg or not (cfg.imap_host and cfg.user and cfg.password_enc):
+        ok, text = False, "IMAP ist unvollständig konfiguriert."
+    else:
+        config = {
+            "imap_host": cfg.imap_host,
+            "imap_port": cfg.imap_port,
+            "imap_use_ssl": cfg.imap_use_ssl,
+            "user": cfg.user,
+            "password": decrypt_secret(cfg.password_enc),
+            "imap_ordner": cfg.imap_ordner or "INBOX",
+            "timeout": settings.MAIL_IMAP_TIMEOUT_S,
+        }
+        ok, text = await asyncio.to_thread(mail_imap_poller.verbindung_testen, config)
+    write_audit(db, "org_mail.imap.test", org_id=effective_org_id, user_id=user.id, payload={"ok": ok},
+                ip=request.client.host if request.client else None)
+    db.commit()
+    return _test_redirect(effective_org_id, user, ok, text)
+
+
+@router.post("/mail/o365/verbindung-testen")
+async def o365_connection_test(
+    request: Request,
+    db=Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    target_org_id: int | None = Form(None),
+):
+    from app.services import mail_graph_poller
+
+    effective_org_id = _get_org_id(user, target_org_id)
+    if not effective_org_id:
+        return _test_redirect(0, user, False, "Keine Organisation ausgewählt.")
+    if not same_org_or_system_admin(user, effective_org_id):
+        raise HTTPException(status_code=403, detail="Keine Berechtigung für diese Organisation")
+    cfg = db.query(OrgO365MailConfig).filter(OrgO365MailConfig.org_id == effective_org_id).first()
+    if not settings.O365_MAIL_ENABLED:
+        ok, text = False, "Office 365 ist global deaktiviert."
+    elif not cfg or not cfg.is_fully_configured:
+        ok, text = False, "Office 365 ist unvollständig konfiguriert."
+    else:
+        ok, text = await mail_graph_poller.verbindung_testen(cfg)
+    write_audit(db, "org_mail.o365.test", org_id=effective_org_id, user_id=user.id, payload={"ok": ok},
+                ip=request.client.host if request.client else None)
+    db.commit()
+    return _test_redirect(effective_org_id, user, ok, text)
 
 
 @router.post("/mail/resend/test")
@@ -530,7 +622,8 @@ def _eingang_row(db, org_id: int, entry_id: int) -> OrgMailEingang:
 
 @router.get("/mail/eingang", response_class=HTMLResponse)
 def eingang_list(request: Request, status: str = "", q: str = "", page: int = 1, org_id: int | None = None,
-                 db=Depends(get_db), user: User = Depends(require_role("org_admin", "admin"))):
+                 quelle: str = "", ergebnis_gruppe: str = "", zeitraum: str = "alle", db=Depends(get_db),
+                 user: User = Depends(require_role("org_admin", "admin"))):
     oid = _eingang_org(user, org_id)
     query = db.query(OrgMailEingang).filter(OrgMailEingang.org_id == oid)
     if status in {"neu", "gelesen", "archiviert", "abruf_fehler", "posteingang", "wartend", "zugeordnet"}:
@@ -538,12 +631,42 @@ def eingang_list(request: Request, status: str = "", q: str = "", page: int = 1,
     if q.strip():
         term = f"%{q.strip()[:100]}%"
         query = query.filter((OrgMailEingang.betreff.like(term)) | (OrgMailEingang.absender.like(term)))
+    if quelle in {"resend", "imap", "o365"}:
+        query = query.filter(OrgMailEingang.quelle == quelle)
+    groups = {
+        "offen": ("neu", "posteingang", "wartend"), "zugeordnet": ("zugeordnet",),
+        "wartend": ("wartend",), "posteingang": ("posteingang",),
+        "abruf_fehler": ("abruf_fehler",), "archiviert": ("archiviert",),
+    }
+    if ergebnis_gruppe in groups:
+        query = query.filter(OrgMailEingang.status.in_(groups[ergebnis_gruppe]))
+    hours = {"24h": 24, "7t": 24 * 7, "30t": 24 * 30}
+    if zeitraum in hours:
+        since = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=hours[zeitraum])
+        query = query.filter(OrgMailEingang.empfangen_at >= since)
     page = max(1, page)
     per_page = 25
     total = query.with_entities(func.count(OrgMailEingang.id)).scalar() or 0
     entries = query.order_by(OrgMailEingang.empfangen_at.desc()).offset((page - 1) * per_page).limit(per_page).all()
+    org_settings = db.query(OrgSettings).filter(OrgSettings.org_id == oid).first()
+    smtp_config = db.query(OrgSmtpConfig).filter(OrgSmtpConfig.org_id == oid).first()
+    o365_config = db.query(OrgO365MailConfig).filter(OrgO365MailConfig.org_id == oid).first()
+    resend_config = db.query(OrgResendConfig).filter(OrgResendConfig.org_id == oid).first()
+    org = db.query(FireDept).filter(FireDept.id == oid).first()
+    from app.services.mail_eingang_service import QUELLE_LABELS, ergebnis
+    from app.services.org_mail_adresse import empfangs_adresse, inbound_domain
+
     context = {
         "user": user, "entries": entries, "org_id": oid, "status": status, "q": q, "page": page,
+        "quelle": quelle, "ergebnis_gruppe": ergebnis_gruppe, "zeitraum": zeitraum,
+        "quelle_labels": QUELLE_LABELS,
+        "ergebnisse": {
+            entry.id: ergebnis(entry, org_settings.mail_eingang_modus if org_settings else "aus")
+            for entry in entries
+        },
+        "smtp_config": smtp_config, "o365_config": o365_config, "resend_config": resend_config,
+        "resend_empfangsadresse": empfangs_adresse(org, inbound_domain(db)) if org else "",
+        "mail_eingang_aktiv": bool(org_settings and org_settings.mail_eingang_modus != "aus"),
         "pages": max(1, (total + per_page - 1) // per_page),
         "offene_count": db.query(func.count(OrgMailEingang.id)).filter(
             OrgMailEingang.org_id == oid, OrgMailEingang.status.in_(("neu", "posteingang", "wartend"))
@@ -565,8 +688,18 @@ def eingang_detail(request: Request, entry_id: int, org_id: int | None = None, d
     if row.status == "neu":
         row.status, row.gelesen_von, row.gelesen_at = "gelesen", user.id, datetime.now(UTC)
         db.commit()
+    from app.services.mail_eingang_service import QUELLE_LABELS, ergebnis
+
+    settings_row = db.query(OrgSettings).filter(OrgSettings.org_id == oid).first()
+    user_ids = [event.user_id for event in row.ereignisse if event.user_id]
+    users = (
+        {item.id: item.display_name for item in db.query(User).filter(User.id.in_(user_ids)).all()}
+        if user_ids else {}
+    )
     return templates.TemplateResponse(request, "admin/mail_eingang_detail.html", {
         "user": user, "entry": row, "org_id": oid,
+        "ergebnis": ergebnis(row, settings_row.mail_eingang_modus if settings_row else "aus"),
+        "quelle_labels": QUELLE_LABELS, "ereignis_users": users,
         "attachments": _entry_attachments(row),
         "active_incidents": (db.query(Incident).filter(Incident.primary_org_id == oid, Incident.status == "active",
             Incident.is_exercise == False).order_by(Incident.started_at.desc()).all()),  # noqa: E712
@@ -578,7 +711,7 @@ def _entry_attachments(row: OrgMailEingang) -> list[dict]:
         value = json.loads(row.anhang_json or "[]")
     except (TypeError, ValueError):
         return []
-    return [item for item in value if isinstance(item, dict) and item.get("id")]
+    return [item for item in value if isinstance(item, dict)]
 
 
 @router.get("/mail/eingang/{entry_id:int}/html")
@@ -638,12 +771,23 @@ async def eingang_aktion(request: Request, entry_id: int, aktion: str, org_id: i
         write_audit(db, "org_mail.inbound.unread", org_id=oid, user_id=user.id)
         from app.services.mail_eingang_service import ereignis
         ereignis(db, row, "ungelesen", user_id=user.id)
-    elif aktion == "erneut-abrufen":
-        from app.services.resend_inbound_service import fetch_inbound_message
+    elif aktion in {"erneut-abrufen", "erneut-verarbeiten"}:
         write_audit(db, "org_mail.inbound.refetched", org_id=oid, user_id=user.id)
         from app.services.mail_eingang_service import ereignis
-        ereignis(db, row, "erneut_abgerufen", user_id=user.id)
-        await fetch_inbound_message(db, oid, row.id)
+        if row.quelle == "resend":
+            from app.services.resend_inbound_service import fetch_inbound_message
+
+            ereignis(db, row, "erneut_abgerufen", user_id=user.id)
+            await fetch_inbound_message(db, oid, row.id)
+        elif row.abgerufen_at and not row.message_id_ref:
+            from app.services.mail_zuordnung_service import ordne_zu
+
+            row.status, row.zuordnung, row.zuordnung_grund = "neu", None, None
+            ereignis(db, row, "erneut_verarbeitet", user_id=user.id)
+            db.commit()
+            await ordne_zu(db, row.id)
+        else:
+            raise HTTPException(status_code=400, detail="Mail kann nicht erneut verarbeitet werden")
         return RedirectResponse(f"/admin/mail/eingang/{entry_id}", status_code=303)
     elif aktion == "uebernehmen":
         if not incident_id:

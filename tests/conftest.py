@@ -19,6 +19,11 @@ os.environ["DATABASE_URL"] = "sqlite:///./test.db"
 # Testlauf beschoss. Die Sync-Logik selbst wird in test_rettungskarten_katalog.py
 # direkt (mit gemocktem _hole_rohdaten) getestet – der Loop wird hier nicht gebraucht.
 os.environ["NACHSCHLAGEWERK_SYNC_ENABLED"] = "false"
+# IMAP-/Graph-Poller würden in der TestClient-Lifespan echte Verbindungen zu Test-Hosts aufbauen
+# und auf MariaDB parallel zu den Tests DB-Sessions halten (CI hing dadurch); Tests rufen die
+# Poller-Funktionen direkt auf.
+os.environ["MAIL_IMAP_POLL_ENABLED"] = "false"
+os.environ["MAIL_GRAPH_POLL_ENABLED"] = "false"
 # BMA-Webplattform-Import: der Loop schlaeft zwar erst (kein Sofort-Sync wie beim
 # Nachschlagewerk-Sync oben), aber ohne diesen Schalter wuerde ein langsamer/
 # Abruf gegen die BMA-Webplattform ausloesen - hart aus, analog.
