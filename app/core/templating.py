@@ -135,6 +135,32 @@ templates.env.filters["unit_status_slug"] = _unit_status_slug
 templates.env.filters["person_status_label"] = _person_status_label
 templates.env.filters["tel"] = telefon_kompakt
 
+
+def _mail_eingang_offene_count(user) -> int:
+    """Kleines, fehlertolerantes Badge für den Admin-Menüeintrag."""
+    if not user or not getattr(user, "org_id", None):
+        return 0
+    if not ({"org_admin", "admin"} & set(getattr(user, "role_codes", set()))):
+        return 0
+    try:
+        from sqlalchemy import func
+
+        from app.core.tenant import set_tenant_context
+        from app.db import SessionLocal
+        from app.models.org_mail import OrgMailEingang
+
+        with SessionLocal() as db:
+            set_tenant_context(db, user.org_id)
+            return int(db.query(func.count(OrgMailEingang.id)).filter(
+                OrgMailEingang.org_id == user.org_id,
+                OrgMailEingang.status.in_(("neu", "posteingang", "wartend")),
+            ).scalar() or 0)
+    except Exception:
+        return 0
+
+
+templates.env.globals["mail_eingang_offene_count"] = _mail_eingang_offene_count
+
 def _ordered_col_items(col, vehicles, tasks, messages, persons):
     """Gibt geordnete Liste von (kind, obj)-Tupeln zurück.
     Respektiert col.card_order wenn vorhanden, sonst: Fahrzeuge → Aufträge → Meldungen → Personen.

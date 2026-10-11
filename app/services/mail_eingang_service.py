@@ -18,6 +18,37 @@ _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _AUTH = re.compile(r"\b(spf|dkim|dmarc)=(\w+)", re.IGNORECASE)
 
 
+def ergebnis(row: OrgMailEingang, mail_eingang_modus: str | None = None) -> dict[str, object]:
+    """Liefert den Klartext für Listen und Detailansicht eines Mail-Eingangs."""
+    if row.status == "zugeordnet" or row.incident_id:
+        art = "automatisch" if row.zuordnung == "auto" else "manuell"
+        return {
+            "text": f"In Einsatz #{row.incident_id} übernommen ({art})",
+            "art": "ok",
+            "incident_id": row.incident_id,
+        }
+    if row.status == "wartend":
+        waiting = [event for event in row.ereignisse if event.typ == "wartend" and event.text]
+        return {"text": waiting[-1].text if waiting else "Wartet auf Einsatz", "art": "warten", "incident_id": None}
+    if row.status == "abruf_fehler":
+        return {"text": "Abruf fehlgeschlagen", "art": "fehler", "incident_id": None}
+    if row.status == "archiviert":
+        return {"text": "Archiviert", "art": "neutral", "incident_id": None}
+    if row.status == "posteingang":
+        reason = row.zuordnung_grund or ""
+        if "Rueckblickfenster abgelaufen" in reason:
+            reason = "kein Einsatz im Rückblickfenster"
+        elif row.zuordnung == "abgelehnt":
+            reason = reason or "Absender nicht freigegeben"
+        return {"text": f"Im Posteingang – {reason or 'nicht zugeordnet'}", "art": "achtung", "incident_id": None}
+    if not row.zuordnung and mail_eingang_modus == "aus":
+        return {"text": "Nicht verarbeitet (Mail-Eingang aus)", "art": "neutral", "incident_id": None}
+    return {"text": "Gelesen" if row.status == "gelesen" else "Neu", "art": "neutral", "incident_id": None}
+
+
+QUELLE_LABELS = {"resend": "Resend", "imap": "IMAP", "o365": "Office 365"}
+
+
 def _clean(value: object, maximum: int) -> str:
     return _CONTROL.sub("", str(value or "").replace("\r", " ").replace("\n", " ")).strip()[:maximum]
 

@@ -10,7 +10,7 @@ für den Admin sichtbar sein soll.
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
@@ -550,7 +550,8 @@ def _eingang_row(db, org_id: int, entry_id: int) -> OrgMailEingang:
 
 @router.get("/mail/eingang", response_class=HTMLResponse)
 def eingang_list(request: Request, status: str = "", q: str = "", page: int = 1, org_id: int | None = None,
-                 db=Depends(get_db), user: User = Depends(require_role("org_admin", "admin"))):
+                 quelle: str = "", ergebnis_gruppe: str = "", zeitraum: str = "alle", db=Depends(get_db),
+                 user: User = Depends(require_role("org_admin", "admin"))):
     oid = _eingang_org(user, org_id)
     query = db.query(OrgMailEingang).filter(OrgMailEingang.org_id == oid)
     if status in {"neu", "gelesen", "archiviert", "abruf_fehler", "posteingang", "wartend", "zugeordnet"}:
@@ -558,12 +559,42 @@ def eingang_list(request: Request, status: str = "", q: str = "", page: int = 1,
     if q.strip():
         term = f"%{q.strip()[:100]}%"
         query = query.filter((OrgMailEingang.betreff.like(term)) | (OrgMailEingang.absender.like(term)))
+    if quelle in {"resend", "imap", "o365"}:
+        query = query.filter(OrgMailEingang.quelle == quelle)
+    groups = {
+        "offen": ("neu", "posteingang", "wartend"), "zugeordnet": ("zugeordnet",),
+        "wartend": ("wartend",), "posteingang": ("posteingang",),
+        "abruf_fehler": ("abruf_fehler",), "archiviert": ("archiviert",),
+    }
+    if ergebnis_gruppe in groups:
+        query = query.filter(OrgMailEingang.status.in_(groups[ergebnis_gruppe]))
+    hours = {"24h": 24, "7t": 24 * 7, "30t": 24 * 30}
+    if zeitraum in hours:
+        since = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=hours[zeitraum])
+        query = query.filter(OrgMailEingang.empfangen_at >= since)
     page = max(1, page)
     per_page = 25
     total = query.with_entities(func.count(OrgMailEingang.id)).scalar() or 0
     entries = query.order_by(OrgMailEingang.empfangen_at.desc()).offset((page - 1) * per_page).limit(per_page).all()
+    org_settings = db.query(OrgSettings).filter(OrgSettings.org_id == oid).first()
+    smtp_config = db.query(OrgSmtpConfig).filter(OrgSmtpConfig.org_id == oid).first()
+    o365_config = db.query(OrgO365MailConfig).filter(OrgO365MailConfig.org_id == oid).first()
+    resend_config = db.query(OrgResendConfig).filter(OrgResendConfig.org_id == oid).first()
+    org = db.query(FireDept).filter(FireDept.id == oid).first()
+    from app.services.mail_eingang_service import QUELLE_LABELS, ergebnis
+    from app.services.org_mail_adresse import empfangs_adresse, inbound_domain
+
     context = {
         "user": user, "entries": entries, "org_id": oid, "status": status, "q": q, "page": page,
+        "quelle": quelle, "ergebnis_gruppe": ergebnis_gruppe, "zeitraum": zeitraum,
+        "quelle_labels": QUELLE_LABELS,
+        "ergebnisse": {
+            entry.id: ergebnis(entry, org_settings.mail_eingang_modus if org_settings else "aus")
+            for entry in entries
+        },
+        "smtp_config": smtp_config, "o365_config": o365_config, "resend_config": resend_config,
+        "resend_empfangsadresse": empfangs_adresse(org, inbound_domain(db)) if org else "",
+        "mail_eingang_aktiv": bool(org_settings and org_settings.mail_eingang_modus != "aus"),
         "pages": max(1, (total + per_page - 1) // per_page),
         "offene_count": db.query(func.count(OrgMailEingang.id)).filter(
             OrgMailEingang.org_id == oid, OrgMailEingang.status.in_(("neu", "posteingang", "wartend"))
@@ -585,8 +616,18 @@ def eingang_detail(request: Request, entry_id: int, org_id: int | None = None, d
     if row.status == "neu":
         row.status, row.gelesen_von, row.gelesen_at = "gelesen", user.id, datetime.now(UTC)
         db.commit()
+    from app.services.mail_eingang_service import QUELLE_LABELS, ergebnis
+
+    settings_row = db.query(OrgSettings).filter(OrgSettings.org_id == oid).first()
+    user_ids = [event.user_id for event in row.ereignisse if event.user_id]
+    users = (
+        {item.id: item.display_name for item in db.query(User).filter(User.id.in_(user_ids)).all()}
+        if user_ids else {}
+    )
     return templates.TemplateResponse(request, "admin/mail_eingang_detail.html", {
         "user": user, "entry": row, "org_id": oid,
+        "ergebnis": ergebnis(row, settings_row.mail_eingang_modus if settings_row else "aus"),
+        "quelle_labels": QUELLE_LABELS, "ereignis_users": users,
         "attachments": _entry_attachments(row),
         "active_incidents": (db.query(Incident).filter(Incident.primary_org_id == oid, Incident.status == "active",
             Incident.is_exercise == False).order_by(Incident.started_at.desc()).all()),  # noqa: E712
@@ -598,7 +639,7 @@ def _entry_attachments(row: OrgMailEingang) -> list[dict]:
         value = json.loads(row.anhang_json or "[]")
     except (TypeError, ValueError):
         return []
-    return [item for item in value if isinstance(item, dict) and item.get("id")]
+    return [item for item in value if isinstance(item, dict)]
 
 
 @router.get("/mail/eingang/{entry_id:int}/html")
@@ -658,12 +699,23 @@ async def eingang_aktion(request: Request, entry_id: int, aktion: str, org_id: i
         write_audit(db, "org_mail.inbound.unread", org_id=oid, user_id=user.id)
         from app.services.mail_eingang_service import ereignis
         ereignis(db, row, "ungelesen", user_id=user.id)
-    elif aktion == "erneut-abrufen":
-        from app.services.resend_inbound_service import fetch_inbound_message
+    elif aktion in {"erneut-abrufen", "erneut-verarbeiten"}:
         write_audit(db, "org_mail.inbound.refetched", org_id=oid, user_id=user.id)
         from app.services.mail_eingang_service import ereignis
-        ereignis(db, row, "erneut_abgerufen", user_id=user.id)
-        await fetch_inbound_message(db, oid, row.id)
+        if row.quelle == "resend":
+            from app.services.resend_inbound_service import fetch_inbound_message
+
+            ereignis(db, row, "erneut_abgerufen", user_id=user.id)
+            await fetch_inbound_message(db, oid, row.id)
+        elif row.abgerufen_at and not row.message_id_ref:
+            from app.services.mail_zuordnung_service import ordne_zu
+
+            row.status, row.zuordnung, row.zuordnung_grund = "neu", None, None
+            ereignis(db, row, "erneut_verarbeitet", user_id=user.id)
+            db.commit()
+            await ordne_zu(db, row.id)
+        else:
+            raise HTTPException(status_code=400, detail="Mail kann nicht erneut verarbeitet werden")
         return RedirectResponse(f"/admin/mail/eingang/{entry_id}", status_code=303)
     elif aktion == "uebernehmen":
         if not incident_id:
