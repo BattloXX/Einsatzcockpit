@@ -1,133 +1,48 @@
-{# Abschnitts-Karten (Inhalt von #sektorenGrid). Eigenes Partial, damit die
-   CRUD-Formulare (anlegen/bearbeiten/löschen) per HTMX gezielt nur diesen
-   Container neu laden statt die ganze Seite (GSL-Reload-Audit 2026-07-16).
-   Variablen: lage, sectors, sites_by_sector, sector_colors, prio_color, can_edit #}
+{# Inhalt von #sektorenGrid. #}
+{% macro site_row(site) -%}
+  {% set group = phase_group_by_phase.get(site.phase, 'erledigt') %}
+  <div class="sk-site-row{% if group == 'erledigt' %} sk-site-row--done{% endif %}">
+    <button type="button" class="sk-site" hx-get="/lage/{{ lage.id }}/stellen/{{ site.id }}" hx-target="#siteDetailContent" hx-swap="innerHTML" aria-label="Einsatzstelle {{ site.bezeichnung }} öffnen">
+      <span class="sk-site__main">
+        <span class="sk-site__title">{{ site.bezeichnung }}</span>
+        {% if site.strasse or site.ort or site.einsatzgrund %}<span class="sk-site__subline">{% if site.strasse %}{{ site.strasse }}{% if site.hausnr %} {{ site.hausnr }}{% endif %}{% endif %}{% if site.strasse and site.ort %}, {% endif %}{% if site.ort %}{{ site.ort }}{% endif %}{% if (site.strasse or site.ort) and site.einsatzgrund %} · {% endif %}{% if site.einsatzgrund %}{{ site.einsatzgrund }}{% endif %}</span>{% endif %}
+        {% if active_einheiten_by_site.get(site.id) %}<span class="sk-unit-chips" aria-label="Aktive Einheiten">{% for label in active_einheiten_by_site[site.id] %}<span class="sk-unit-chip">{{ label }}</span>{% endfor %}</span>{% endif %}
+      </span>
+      <span class="sk-site__badges">
+        <span class="sk-phase-badge sk-phase-badge--{{ group }}" title="{{ phase_group_label[group] }}">{{ phase_labels.get(site.phase, phase_group_label[group]) }}</span>
+        <span class="sk-prio sk-prio--{{ prio_color.get(site.priority, 'muted') }}">● {{ prio_label.get(site.priority, 'Keine Priorität') }}</span>
+        {% if site.id in overdue_site_ids %}<span class="sk-overdue">Lagemeldung überfällig</span>{% endif %}
+      </span>
+    </button>
+    <a class="sk-board-link" href="/lage/{{ lage.id }}?openSite={{ site.id }}">Auf dem Board zeigen</a>
+  </div>
+{%- endmacro %}
 
-{# ── Bestehende Abschnitte ───────────────────────────────────────────────── #}
+{% macro site_list(sites) -%}
+  {% for site in sites if phase_group_by_phase.get(site.phase) != 'erledigt' %}{{ site_row(site) }}{% endfor %}
+  {% set done_sites = sites|selectattr('phase.value', 'equalto', 'erledigt')|list %}
+  {% if done_sites %}<details class="sk-done-sites"><summary>{{ done_sites|length }} erledigte anzeigen</summary>{% for site in done_sites %}{{ site_row(site) }}{% endfor %}</details>{% endif %}
+{%- endmacro %}
+
 {% for sector in sectors %}
 {% set sites = sites_by_sector.get(sector.id, []) %}
+{% set counts = phase_counts_by_sector.get(sector.id, {'neu': 0, 'in_arbeit': 0, 'erledigt': 0}) %}
 <div class="sk-card" style="--sk-accent:{{ sector.color or '#6b7280' }};">
-  <div class="sk-card__header">
-    <div class="sk-card__dot" style="background:{{ sector.color or '#6b7280' }};"></div>
-    <div style="flex:1;">
-      <div class="sk-card__title">{{ sector.name }}</div>
-      {% if sector.leader_label %}
-      <div class="sk-card__leader">Abschnittsleiter: {{ sector.leader_label }}</div>
-      {% endif %}
-    </div>
-    <span class="sk-card__count">{{ sites|length }}</span>
-  </div>
-
-  <div class="sk-card__body">
-    {% if sites %}
-    {% for site in sites %}
-    <div class="sk-site">
-      <span style="font-size:.65rem;color:{% if prio_color.get(site.priority) == 'red' %}var(--red){% elif prio_color.get(site.priority) == 'orange' %}var(--orange){% elif prio_color.get(site.priority) == 'yellow' %}var(--yellow){% else %}var(--text-muted){% endif %};">●</span>
-      {{ site.bezeichnung }}
-    </div>
-    {% endfor %}
-    {% else %}
-    <div class="sk-empty">Keine Einsatzstellen zugewiesen.</div>
-    {% endif %}
-  </div>
-
+  <div class="sk-card__header"><div class="sk-card__dot" style="background:{{ sector.color or '#6b7280' }};"></div><div style="flex:1;"><div class="sk-card__title">{{ sector.name }}</div>{% if sector.leader_label %}<div class="sk-card__leader">Abschnittsleiter: {{ sector.leader_label }}</div>{% endif %}<div class="sk-phase-counts">{{ counts.neu }} neu · {{ counts.in_arbeit }} in Arbeit · {{ counts.erledigt }} erledigt</div></div></div>
+  <div class="sk-card__body">{% if sites %}{{ site_list(sites) }}{% else %}<div class="sk-empty">Keine Einsatzstellen zugewiesen.</div>{% endif %}</div>
   {% if can_edit %}
-  <div class="sk-card__footer">
-    <button class="btn btn--ghost btn--sm"
-            data-ec-action="open-dialog" data-ec-dialog="edit-{{ sector.id }}">✏️ Bearbeiten</button>
-    <form hx-post="/lage/{{ lage.id }}/sektoren/{{ sector.id }}/loeschen"
-          hx-target="#sektorenGrid" hx-swap="innerHTML"
-          hx-confirm="Abschnitt {{ sector.name }} löschen?" style="margin:0;">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <button aria-label="Schließen" type="submit" class="btn btn--ghost btn--sm" style="color:var(--red);">✕</button>
-    </form>
-  </div>
-
-  <dialog id="edit-{{ sector.id }}" class="sk-modal">
-    <h3>Abschnitt bearbeiten</h3>
-    <form hx-post="/lage/{{ lage.id }}/sektoren/{{ sector.id }}/bearbeiten"
-          hx-target="#sektorenGrid" hx-swap="innerHTML"
-          hx-on::after-request="if(event.detail.successful) this.closest('dialog').close()">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <div class="form-group">
-        <input type="text" name="name" class="form-input" required maxlength="80"
-               value="{{ sector.name }}" placeholder="Bezeichnung">
-      </div>
-      <div class="form-group">
-        <input type="text" name="leader_label" class="form-input" maxlength="80"
-               value="{{ sector.leader_label or '' }}" placeholder="Abschnittsleiter (optional)">
-      </div>
-      <div class="form-group">
-        <label class="form-label" style="font-size:.72rem;">Farbe</label>
-        <div class="color-swatches">
-          {% for c in sector_colors %}
-          <div class="color-swatch {% if sector.color == c %}selected{% endif %}"
-               style="background:{{ c }};"
-               onclick="this.closest('form').querySelector('[name=color]').value='{{ c }}';this.closest('.color-swatches').querySelectorAll('.color-swatch').forEach(s=>s.classList.remove('selected'));this.classList.add('selected');">
-          </div>
-          {% endfor %}
-          <input type="hidden" name="color" value="{{ sector.color or '#6b7280' }}">
-        </div>
-      </div>
-      <div style="display:flex;gap:6px;margin-top:10px;">
-        <button type="button" data-ec-action="close-dialog" class="btn btn--ghost btn--sm">Abbrechen</button>
-        <button type="submit" class="btn btn--primary btn--sm">Speichern</button>
-      </div>
-    </form>
-  </dialog>
+  <div class="sk-card__footer"><button class="btn btn--ghost btn--sm" data-ec-action="open-dialog" data-ec-dialog="edit-{{ sector.id }}">✏️ Bearbeiten</button><form hx-post="/lage/{{ lage.id }}/sektoren/{{ sector.id }}/loeschen" hx-target="#sektorenGrid" hx-swap="innerHTML" hx-confirm="Abschnitt {{ sector.name }} löschen?" style="margin:0;"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><button aria-label="Abschnitt löschen" type="submit" class="btn btn--ghost btn--sm" style="color:var(--red);">✕</button></form></div>
+  <dialog id="edit-{{ sector.id }}" class="sk-modal"><h3>Abschnitt bearbeiten</h3><form hx-post="/lage/{{ lage.id }}/sektoren/{{ sector.id }}/bearbeiten" hx-target="#sektorenGrid" hx-swap="innerHTML" hx-on::after-request="if(event.detail.successful) this.closest('dialog').close()"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><div class="form-group"><input type="text" name="name" class="form-input" required maxlength="80" value="{{ sector.name }}" placeholder="Bezeichnung"></div><div class="form-group"><input type="text" name="leader_label" class="form-input" maxlength="80" value="{{ sector.leader_label or '' }}" placeholder="Abschnittsleiter (optional)"></div><div class="form-group"><label class="form-label" style="font-size:.72rem;">Farbe</label><div class="color-swatches">{% for c in sector_colors %}<div class="color-swatch {% if sector.color == c %}selected{% endif %}" style="background:{{ c }};" onclick="this.closest('form').querySelector('[name=color]').value='{{ c }}';this.closest('.color-swatches').querySelectorAll('.color-swatch').forEach(s=>s.classList.remove('selected'));this.classList.add('selected');"></div>{% endfor %}<input type="hidden" name="color" value="{{ sector.color or '#6b7280' }}"></div></div><div style="display:flex;gap:6px;margin-top:10px;"><button type="button" data-ec-action="close-dialog" class="btn btn--ghost btn--sm">Abbrechen</button><button type="submit" class="btn btn--primary btn--sm">Speichern</button></div></form></dialog>
   {% endif %}
 </div>
 {% endfor %}
 
-{# ── Neu anlegen ─────────────────────────────────────────────────────────── #}
 {% if can_edit and lage.status.value == 'active' %}
-<div class="sk-card sk-add" style="--sk-accent:var(--green);">
-  <div class="sk-card__header">
-    <div class="sk-card__title" style="color:var(--text-muted);">+ Neuer Abschnitt</div>
-  </div>
-  <div class="sk-card__body">
-    <form hx-post="/lage/{{ lage.id }}/sektoren" hx-target="#sektorenGrid" hx-swap="innerHTML"
-          hx-on::after-request="if(event.detail.successful) this.reset()">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <div class="form-group">
-        <input type="text" name="name" class="form-input" required maxlength="80"
-               placeholder="Bezeichnung, z. B. Abschnitt Ost" autocomplete="off">
-      </div>
-      <div class="form-group">
-        <input type="text" name="leader_label" class="form-input" maxlength="80"
-               placeholder="Abschnittsleiter (optional)" autocomplete="off">
-      </div>
-      <div class="form-group">
-        <label class="form-label" style="font-size:.72rem;">Farbe</label>
-        <div class="color-swatches" id="new-swatches">
-          {% for c in sector_colors %}
-          <div class="color-swatch {% if loop.last %}selected{% endif %}"
-               style="background:{{ c }};"
-               onclick="document.getElementById('new-color').value='{{ c }}';document.getElementById('new-swatches').querySelectorAll('.color-swatch').forEach(s=>s.classList.remove('selected'));this.classList.add('selected');">
-          </div>
-          {% endfor %}
-          <input type="hidden" name="color" id="new-color" value="{{ sector_colors[-1] }}">
-        </div>
-      </div>
-      <button type="submit" class="btn btn--secondary btn--sm" style="margin-top:8px;">Anlegen</button>
-    </form>
-  </div>
-</div>
+<div class="sk-card sk-add" style="--sk-accent:var(--green);"><div class="sk-card__header"><div class="sk-card__title" style="color:var(--text-muted);">+ Neuer Abschnitt</div></div><div class="sk-card__body"><form hx-post="/lage/{{ lage.id }}/sektoren" hx-target="#sektorenGrid" hx-swap="innerHTML" hx-on::after-request="if(event.detail.successful) this.reset()"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><div class="form-group"><input type="text" name="name" class="form-input" required maxlength="80" placeholder="Bezeichnung, z. B. Abschnitt Ost" autocomplete="off"></div><div class="form-group"><input type="text" name="leader_label" class="form-input" maxlength="80" placeholder="Abschnittsleiter (optional)" autocomplete="off"></div><div class="form-group"><label class="form-label" style="font-size:.72rem;">Farbe</label><div class="color-swatches" id="new-swatches">{% for c in sector_colors %}<div class="color-swatch {% if loop.last %}selected{% endif %}" style="background:{{ c }};" onclick="document.getElementById('new-color').value='{{ c }}';document.getElementById('new-swatches').querySelectorAll('.color-swatch').forEach(s=>s.classList.remove('selected'));this.classList.add('selected');"></div>{% endfor %}<input type="hidden" name="color" id="new-color" value="{{ sector_colors[-1] }}"></div></div><button type="submit" class="btn btn--secondary btn--sm" style="margin-top:8px;">Anlegen</button></form></div></div>
 {% endif %}
 
-{# ── Nicht zugeordnet ────────────────────────────────────────────────────── #}
 {% set unassigned = sites_by_sector.get(None, []) %}
 {% if unassigned %}
-<div class="sk-card" style="--sk-accent:var(--text-muted);opacity:.7;">
-  <div class="sk-card__header">
-    <div class="sk-card__dot" style="background:var(--text-muted);"></div>
-    <div class="sk-card__title" style="color:var(--text-muted);flex:1;">Nicht zugeordnet</div>
-    <span class="sk-card__count">{{ unassigned|length }}</span>
-  </div>
-  <div class="sk-card__body">
-    {% for site in unassigned %}
-    <div class="sk-site">{{ site.bezeichnung }}</div>
-    {% endfor %}
-  </div>
-</div>
+{% set counts = phase_counts_by_sector.get(None, {'neu': 0, 'in_arbeit': 0, 'erledigt': 0}) %}
+<div class="sk-card sk-unassigned" style="--sk-accent:var(--text-muted);"><div class="sk-card__header"><div class="sk-card__dot" style="background:var(--text-muted);"></div><div style="flex:1;"><div class="sk-card__title">Nicht zugeordnet</div><div class="sk-phase-counts">{{ counts.neu }} neu · {{ counts.in_arbeit }} in Arbeit · {{ counts.erledigt }} erledigt</div></div></div><div class="sk-card__body">{{ site_list(unassigned) }}</div></div>
 {% endif %}

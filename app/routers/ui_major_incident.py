@@ -53,6 +53,8 @@ from app.models.major_incident import (
     JOURNAL_CATEGORY_COLOR,
     JOURNAL_TEMPLATES,
     SITE_LOG_KIND_LABEL,
+    SITE_PHASE_GROUP,
+    SITE_PHASE_GROUP_LABEL,
     SITE_PRIORITY_COLOR,
     SITE_PRIORITY_LABEL,
     STAFF_FUNCTION_LABEL,
@@ -61,6 +63,7 @@ from app.models.major_incident import (
     CrossMarkerLogEntry,
     CrossMarkerMedia,
     CrossSiteMarker,
+    EinheitSiteDispatch,
     IncidentSite,
     LageEinheit,
     LageJournalEntry,
@@ -4075,23 +4078,87 @@ def lage_druck_stellen(
 SECTOR_COLORS = ["#ef4444", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#a855f7", "#6b7280"]
 
 
-def _sektoren_context(lage: MajorIncident, user) -> dict:
+def _sektoren_context(db: Session, lage: MajorIncident, user) -> dict:
     """Kontext fuer sektoren.html UND das per HTMX nachgeladene _sektoren_grid.html
     (CRUD-Formulare dort, siehe unten -- vormals reine Volltreload-Forms,
     GSL-Reload-Audit 2026-07-16)."""
-    sectors = sorted(lage.sectors, key=lambda s: s.id)
+    # Diese Ansicht zeigt pro Stelle Ressourcen und Mehrfach-Dispositionen.  Die
+    # Beziehungen werden hier bewusst gesammelt geladen, damit das Grid nicht
+    # mit jeder weiteren Stelle zusätzliche Abfragen auslöst.
+    sectors = (
+        db.query(Sector)
+        .filter(Sector.major_incident_id == lage.id)
+        .order_by(Sector.id)
+        .all()
+    )
+    sites = (
+        db.query(IncidentSite)
+        .filter(
+            IncidentSite.major_incident_id == lage.id,
+            IncidentSite.org_id == lage.org_id,
+            IncidentSite.phase != SitePhase.abgebrochen,
+        )
+        .options(
+            selectinload(IncidentSite.resources),
+            selectinload(IncidentSite.dispatched_einheiten).selectinload(EinheitSiteDispatch.einheit),
+        )
+        .all()
+    )
     sites_by_sector: dict[int | None, list] = {None: []}
     for s in sectors:
         sites_by_sector[s.id] = []
-    for site in lage.sites:
-        if site.phase not in (SitePhase.abgebrochen,):
-            sites_by_sector.setdefault(site.sector_id, []).append(site)
+    for site in sites:
+        sites_by_sector.setdefault(site.sector_id, []).append(site)
+
+    phase_group_order = {"neu": 0, "in_arbeit": 1, "erledigt": 2}
+    for sector_sites in sites_by_sector.values():
+        sector_sites.sort(key=lambda site: (
+            phase_group_order.get(SITE_PHASE_GROUP.get(site.phase, "erledigt"), 2),
+            site.priority.value if site.priority else 99,
+            site.created_at or datetime.max,
+            site.id,
+        ))
+
+    phase_counts_by_sector: dict[int | None, dict[str, int]] = {}
+    active_einheiten_by_site: dict[int, list[str]] = {}
+    now = datetime.now(UTC).replace(tzinfo=None)
+    overdue_site_ids: set[int] = set()
+    for sector_id, sector_sites in sites_by_sector.items():
+        counts = {"neu": 0, "in_arbeit": 0, "erledigt": 0}
+        for site in sector_sites:
+            group = SITE_PHASE_GROUP.get(site.phase, "erledigt")
+            counts[group] = counts.get(group, 0) + 1
+            labels = [
+                dispatch.einheit.label if dispatch.einheit else "Einheit"
+                for dispatch in site.dispatched_einheiten
+                if dispatch.withdrawn_at is None
+            ]
+            labels.extend(
+                resource.label or resource.resource_type
+                for resource in site.resources
+                if resource.released_at is None
+            )
+            active_einheiten_by_site[site.id] = labels
+            if (
+                site.naechste_lagemeldung_at is not None
+                and site.naechste_lagemeldung_at <= now
+                and group != "erledigt"
+            ):
+                overdue_site_ids.add(site.id)
+        phase_counts_by_sector[sector_id] = counts
     return {
         "lage": lage,
         "sectors": sectors,
         "sites_by_sector": sites_by_sector,
         "sector_colors": SECTOR_COLORS,
         "prio_color": SITE_PRIORITY_COLOR,
+        "prio_label": SITE_PRIORITY_LABEL,
+        "phase_labels": PHASE_LABELS,
+        "phase_group_by_phase": SITE_PHASE_GROUP,
+        "phase_group_label": SITE_PHASE_GROUP_LABEL,
+        "phase_counts_by_sector": phase_counts_by_sector,
+        "active_einheiten_by_site": active_einheiten_by_site,
+        "overdue_site_ids": overdue_site_ids,
         "can_edit": _can_edit(user),
     }
 
@@ -4111,6 +4178,10 @@ def sektoren_view(
     lage = _lage_or_404(lage_id, db)
     _check_org_access(user, lage)
 
+    context = _sektoren_context(db, lage, user)
+    if _is_htmx(request):
+        return templates.TemplateResponse(request, "incident_major/_sektoren_grid.html", context)
+
     return templates.TemplateResponse(request, "incident_major/sektoren.html", {
         "user": user,
         "phase_labels": PHASE_LABELS,
@@ -4118,7 +4189,7 @@ def sektoren_view(
         "can_manage": _can_manage(user),
         "mi_features": _get_mi_features(db, lage.org_id),
         **_nav_counts(lage_id, lage, db),
-        **_sektoren_context(lage, user),
+        **context,
     })
 
 
@@ -4151,7 +4222,7 @@ def sektor_create(
         return JSONResponse({"id": sector.id, "name": sector.name, "color": sector.color})
     if _is_htmx(request):
         return templates.TemplateResponse(
-            request, "incident_major/_sektoren_grid.html", _sektoren_context(lage, user)
+            request, "incident_major/_sektoren_grid.html", _sektoren_context(db, lage, user)
         )
     return RedirectResponse(f"/lage/{lage_id}/sektoren", status_code=303)
 
@@ -4181,7 +4252,7 @@ def sektor_edit(
     db.commit()
     if _is_htmx(request):
         return templates.TemplateResponse(
-            request, "incident_major/_sektoren_grid.html", _sektoren_context(lage, user)
+            request, "incident_major/_sektoren_grid.html", _sektoren_context(db, lage, user)
         )
     return RedirectResponse(f"/lage/{lage_id}/sektoren", status_code=303)
 
@@ -4206,7 +4277,7 @@ def sektor_delete(
     db.commit()
     if _is_htmx(request):
         return templates.TemplateResponse(
-            request, "incident_major/_sektoren_grid.html", _sektoren_context(lage, user)
+            request, "incident_major/_sektoren_grid.html", _sektoren_context(db, lage, user)
         )
     return RedirectResponse(f"/lage/{lage_id}/sektoren", status_code=303)
 

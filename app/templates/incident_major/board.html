@@ -466,12 +466,13 @@
 <script src="/static/js/sortable.min.js"></script>
 <script src="/static/js/lage_board.js"></script>
 <script>
-// Auto-open site card from ?open_site= query parameter
+// Auto-open site card from ?openSite= query parameter (open_site bleibt kompatibel).
 (function() {
   var params = new URLSearchParams(window.location.search);
-  var siteId = params.get('open_site');
+  var siteId = params.get('openSite') || params.get('open_site');
   if (!siteId) return;
   var url = new URL(window.location.href);
+  url.searchParams.delete('openSite');
   url.searchParams.delete('open_site');
   history.replaceState(null, '', url.toString());
   setTimeout(function() {
