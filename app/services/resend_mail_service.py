@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import re
 from email.message import EmailMessage
+from email.utils import parseaddr
 
 import httpx
 
@@ -23,8 +24,19 @@ def _mark_test_system_from_addr(from_addr: str) -> str:
     als Test, damit Empfänger echte und Testsystem-Mails nicht verwechseln."""
     if not settings.TEST_SYSTEM or "@" not in from_addr:
         return from_addr
-    local, domain = from_addr.split("@", 1)
-    return f"Einsatzcockpit (Testsystem) <test-{local}@{domain}>"
+    name, addr = parseaddr(from_addr)
+    if "@" not in addr:
+        return from_addr
+    local, domain = addr.split("@", 1)
+    if not name:
+        return f"Einsatzcockpit (Testsystem) <test-{local}@{domain}>"
+    return absender_mit_name(f"{name} (Testsystem)", f"test-{local}@{domain}")
+
+
+def absender_mit_name(name: str, addr: str) -> str:
+    """Baut ``"Anzeigename" <addr>``; Steuerzeichen und Quotes im Namen werden entfernt."""
+    sauber = re.sub(r'[\x00-\x1f\x7f"\\<>]', "", name or "").strip()[:150]
+    return f'"{sauber}" <{addr}>' if sauber else addr
 
 
 def _resend_payload(msg: EmailMessage, from_addr: str, attachments: list[dict] | None = None) -> dict:

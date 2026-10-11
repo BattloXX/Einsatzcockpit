@@ -225,11 +225,36 @@ async def test_inline_versand_mit_reply_to_header_und_anhang(cfg, versand):
     _queue(rid, "m1")
     assert await _lauf() == 1
     msg, from_addr, anh = versand["gesendet"][0]
-    assert from_addr == "weiterleitung@mail.example.at"
+    assert from_addr == '"max@extern.at via Einsatzcockpit" <weiterleitung@mail.example.at>'
     assert msg["To"] == "a@example.at, b@example.at" and msg["Reply-To"] == "max@extern.at"
     assert msg["X-Einsatzcockpit-Weitergeleitet"] == "1" and msg["Subject"] == "Anfrage"
     assert anh and anh[0]["filename"] == "a.pdf" and base64.b64decode(anh[0]["content"]) == b"%PDF-1.4"
     assert _logs(rid)[0][1] == "gesendet"
+
+
+@pytest.mark.asyncio
+async def test_weiterleitung_zeigt_originalabsender_in_text_und_html(cfg, versand):
+    rid = _regel("info")
+    versand["mail"].update({"to": ["info@" + DOMAIN], "created_at": "2026-10-11T18:02:00Z"})
+    _queue(rid, "m_kopf")
+    await _lauf()
+    msg, _, _ = versand["gesendet"][0]
+    text = msg.get_body(preferencelist=("plain",)).get_content()
+    html = msg.get_body(preferencelist=("html",)).get_content()
+    assert "Von: Max <max@extern.at>" in text and f"An: info@{DOMAIN}" in text and text.rstrip().endswith("Hallo")
+    assert "Betreff: Anfrage" in text and "2026-10-11T18:02:00Z" in text
+    assert "Max &lt;max@extern.at&gt;" in html and html.rstrip().endswith("<p>Hallo</p>")
+
+
+@pytest.mark.asyncio
+async def test_weiterleitung_ohne_namen_und_mit_boesem_namen(cfg, versand):
+    rid = _regel("info")
+    versand["mail"]["from"] = '"<script>x</script>" <evil@extern.at>'
+    _queue(rid, "m_name")
+    await _lauf()
+    msg, from_addr, _ = versand["gesendet"][0]
+    assert from_addr == '"evil@extern.at via Einsatzcockpit" <weiterleitung@mail.example.at>'
+    assert "<script" not in msg.get_body(preferencelist=("html",)).get_content()
 
 
 @pytest.mark.asyncio
@@ -240,6 +265,8 @@ async def test_eml_modus_haengt_originalmail_an(cfg, versand):
     _, _, anh = versand["gesendet"][0]
     assert anh[0]["filename"] == "original.eml" and anh[0]["content_type"] == "message/rfc822"
     assert base64.b64decode(anh[0]["content"]) == b"From: x\r\n\r\nraw"
+    _, from_addr, _ = versand["gesendet"][0]
+    assert "max@extern.at via Einsatzcockpit" in from_addr
 
 
 @pytest.mark.asyncio

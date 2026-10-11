@@ -7,6 +7,7 @@ geholt, weitergesendet und nie gespeichert. Fehlversuche werden bis zu ``MAX_VER
 from __future__ import annotations
 
 import base64
+import html as html_mod
 import json
 import logging
 import re
@@ -29,7 +30,7 @@ from app.services.resend_inbound_service import (
     resend_api_key_fuer_org,  # noqa: F401  (Re-Export fuer Tests)
     safe_attachment_url,
 )
-from app.services.resend_mail_service import send_via_resend
+from app.services.resend_mail_service import absender_mit_name, send_via_resend
 
 logger = logging.getLogger("einsatzleiter.mail_weiterleitung")
 
@@ -92,6 +93,35 @@ def finde_regel(db: Session, empfaenger: list[str], domain: str) -> MailWeiterle
 def _sender(value: object) -> str:
     addr = parseaddr(str(value or ""))[1].strip().lower()
     return addr if _MAIL.fullmatch(addr) else ""
+
+
+def _absender_anzeige(value: object, sender: str) -> str:
+    """Originalabsender für Kopfzeilen, z. B. ``Max Muster <max@extern.at>``."""
+    name = clean_text(parseaddr(str(value or ""))[0], 120)
+    if not sender:
+        return "unbekannt"
+    return f"{name} <{sender}>" if name and name.lower() != sender else sender
+
+
+def _von_kopf(payload: dict, sender: str) -> list[tuple[str, str]]:
+    """Kopfzeilen der Originalnachricht (Von, An, Datum, Betreff) wie bei einer manuellen Weiterleitung."""
+    an = payload.get("to")
+    if isinstance(an, list):
+        an = ", ".join(str(a) for a in an if a)
+    zeilen = [("Von", _absender_anzeige(payload.get("from"), sender)), ("An", clean_text(an, 500))]
+    zeilen.append(("Datum", clean_text(payload.get("created_at") or payload.get("date"), 100)))
+    zeilen.append(("Betreff", clean_text(payload.get("subject"), 500)))
+    return [(k, v) for k, v in zeilen if v]
+
+
+def _kopf_text(zeilen: list[tuple[str, str]]) -> str:
+    return "---------- Weitergeleitete Nachricht ----------\n" + "".join(f"{k}: {v}\n" for k, v in zeilen) + "\n"
+
+
+def _kopf_html(zeilen: list[tuple[str, str]]) -> str:
+    rows = "".join(f"<b>{k}:</b> {html_mod.escape(v)}<br>" for k, v in zeilen)
+    return ('<div style="border-bottom:1px solid #ccc;margin:0 0 12px;padding:0 0 8px;color:#444">'
+            f"---------- Weitergeleitete Nachricht ----------<br>{rows}</div>")
 
 
 def _log_row(rule: MailWeiterleitung, data: dict, status: str, code: str | None = None) -> MailWeiterleitungLog:
@@ -233,22 +263,22 @@ async def verarbeite_log(db: Session, log_id: int) -> str:
         message["X-Einsatzcockpit-Weitergeleitet"] = "1"
         anhaenge: list[dict] = []
         gesamt = 0
+        zeilen = _von_kopf(payload, sender)
         if rule.modus == "eml":
             raw = payload.get("raw")
             url = raw.get("download_url") if isinstance(raw, dict) else None
             if not isinstance(url, str):
                 raise RuntimeError("raw")
             data = await _download(url, MAX_BYTES)
-            message.set_content(f"Weitergeleitete Originalnachricht von {sender or 'unbekannt'} (siehe Anhang).")
+            message.set_content(_kopf_text(zeilen) + "Die Originalnachricht ist als Anhang beigefügt.")
             anhaenge.append({"filename": "original.eml", "content_type": "message/rfc822",
                              "content": base64.b64encode(data).decode()})
         else:
             text = str(payload.get("text") or "")
             html = str(payload.get("html") or "")
-            kopf = f"Weitergeleitet von {sender or 'unbekannt'}\n\n"
-            message.set_content(kopf + text if text or not html else kopf)
+            message.set_content(_kopf_text(zeilen) + text)
             if html:
-                message.add_alternative(html, subtype="html")
+                message.add_alternative(_kopf_html(zeilen) + html, subtype="html")
             for item in payload.get("attachments") or []:
                 if not isinstance(item, dict) or not item.get("id"):
                     continue
@@ -263,7 +293,10 @@ async def verarbeite_log(db: Session, log_id: int) -> str:
         if gesamt > MAX_BYTES:
             _ergebnis(db, log, "uebersprungen", "zu_gross")
             return "uebersprungen"
-        await send_via_resend(message, key, f"weiterleitung@{domain}", anhaenge)
+        # Originalabsender im Anzeigenamen, damit er schon in der Posteingangsliste sichtbar ist.
+        von = absender_mit_name(f"{sender} via Einsatzcockpit", f"weiterleitung@{domain}") if sender \
+            else f"weiterleitung@{domain}"
+        await send_via_resend(message, key, von, anhaenge)
         rule.zaehler += 1
         rule.letzte_weiterleitung_at = _now()
         _ergebnis(db, log, "gesendet")
