@@ -123,3 +123,66 @@ def test_ohne_turnstile_secret_wird_ohne_pruefung_versendet(client, monkeypatch)
     assert response.headers["location"] == OK
     pruefen.assert_not_awaited()
     senden.assert_awaited_once()
+
+
+# ── Versandweg der Kontaktanfrage: SMTP, sonst Resend mit noreply ─────────────
+
+import asyncio  # noqa: E402
+
+import pytest  # noqa: E402
+
+from app.services import mail_service  # noqa: E402
+
+
+def _kontakt_senden():
+    asyncio.run(mail_service.send_contact_message(
+        name="Max", reply_email="max@example.at", message="Hallo", db=None,
+    ))
+
+
+def test_kontakt_ohne_smtp_geht_ueber_resend_mit_noreply(monkeypatch):
+    gesendet = []
+
+    async def resend(msg, api_key, from_addr, attachments=None):
+        gesendet.append((from_addr, msg["Reply-To"], msg["To"]))
+
+    monkeypatch.setattr(mail_service, "get_smtp_cfg", lambda _db=None: {"host": None})
+    monkeypatch.setattr(mail_service, "get_resend_cfg", lambda _db: {"api_key": "k", "from_domain": "Einsatzcockpit.com"})
+    monkeypatch.setattr("app.services.resend_mail_service.send_via_resend", resend)
+    _kontakt_senden()
+    assert gesendet == [("noreply@einsatzcockpit.com", "max@example.at", mail_service.CONTACT_RECIPIENT)]
+
+
+def test_kontakt_mit_smtp_bleibt_bei_smtp(monkeypatch):
+    smtp, resend = AsyncMock(), AsyncMock()
+    monkeypatch.setattr(mail_service, "get_smtp_cfg", lambda _db=None: {
+        "host": "smtp.example.at", "port": 587, "user": "u", "password": "p", "from_addr": "kontakt@example.at",
+        "starttls": True, "timeout": 5,
+    })
+    monkeypatch.setattr(mail_service, "get_resend_cfg", lambda _db: {"api_key": "k", "from_domain": "example.at"})
+    monkeypatch.setattr(mail_service, "_send", smtp)
+    monkeypatch.setattr("app.services.resend_mail_service.send_via_resend", resend)
+    _kontakt_senden()
+    smtp.assert_awaited_once()
+    resend.assert_not_awaited()
+
+
+def test_kontakt_ohne_versandweg_meldet_fehler(monkeypatch, client):
+    monkeypatch.setattr(mail_service, "get_smtp_cfg", lambda _db=None: {"host": None})
+    monkeypatch.setattr(mail_service, "get_resend_cfg", lambda _db: None)
+    with pytest.raises(mail_service.MailConfigError):
+        _kontakt_senden()
+    # Über das Formular: Fehlerhinweis statt stillem Erfolg.
+    monkeypatch.setattr(settings, "TEST_SYSTEM", False)
+    monkeypatch.setattr(settings, "TURNSTILE_SECRET_KEY", "")
+    assert _post_kontakt(client).headers["location"] == FEHLER
+
+
+def test_kontakt_smtp_fehler_faellt_auf_resend_zurueck(monkeypatch):
+    resend = AsyncMock()
+    monkeypatch.setattr(mail_service, "get_smtp_cfg", lambda _db=None: {"host": "smtp.kaputt.example"})
+    monkeypatch.setattr(mail_service, "get_resend_cfg", lambda _db: {"api_key": "k", "from_domain": "example.at"})
+    monkeypatch.setattr(mail_service, "_send", AsyncMock(side_effect=OSError("connection refused")))
+    monkeypatch.setattr("app.services.resend_mail_service.send_via_resend", resend)
+    _kontakt_senden()
+    assert resend.await_args.args[2] == "noreply@example.at"

@@ -503,7 +503,28 @@ async def send_contact_message(*, name: str, reply_email: str, message: str, db=
     # Reply-To nur setzen, wenn die Adresse plausibel & header-sicher ist.
     if _looks_like_email(reply_email):
         msg["Reply-To"] = reply_email
-    await _send(msg, smtp_cfg)
+    # Systemweiter SMTP hat Vorrang. Ohne SMTP (oder wenn er scheitert) über das
+    # zentrale Resend mit noreply@<Versanddomain>; Antworten gehen per Reply-To an den Absender.
+    resend_cfg = get_resend_cfg(db)
+    if smtp_cfg.get("host"):
+        try:
+            await _send(msg, smtp_cfg)
+            return
+        except Exception as exc:
+            if not resend_cfg:
+                raise
+            logger.warning("Kontaktformular: SMTP fehlgeschlagen, Fallback Resend: %s", exc)
+    if resend_cfg:
+        from app.services.org_mail_adresse import ist_gueltige_domain
+        from app.services.resend_mail_service import send_via_resend
+
+        domain = resend_cfg["from_domain"].strip().lower()
+        if not ist_gueltige_domain(domain):
+            raise MailConfigError("Resend-Versanddomain ist ungültig.")
+        await send_via_resend(msg, resend_cfg["api_key"], f"noreply@{domain}")
+        return
+    # Ohne Versandweg würde _send nur protokollieren; das Formular soll dann einen Fehler zeigen.
+    raise MailConfigError("Weder SMTP noch Resend ist konfiguriert.")
 
 
 async def send_welcome_mail(*, to: str, username: str, password: str,
