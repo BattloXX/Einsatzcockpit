@@ -158,6 +158,13 @@
           </div>
           {% endif %}
         </a>
+        {% elif m.kind == 'datei' %}
+        <a href="/medien/meldung/datei/{{ m.id }}" title="{{ m.original_filename }} herunterladen"
+           style="display:flex;flex-direction:column;align-items:center;justify-content:center;aspect-ratio:1;text-decoration:none;color:inherit;padding:4px;">
+          <span style="font-size:22px;">📎</span>
+          <span style="font-size:9px;overflow:hidden;text-overflow:ellipsis;max-width:100%;white-space:nowrap;">{{ m.original_filename }}</span>
+          <span style="font-size:9px;">{{ (m.bytes / 1024)|round(1) }} KB</span>
+        </a>
         {% endif %}
         {% if can_edit %}
         <form hx-post="/einsatz/{{ incident.id }}/meldung/{{ msg.id }}/medien/{{ m.id }}/loeschen"
@@ -178,7 +185,7 @@
           hx-target="#cardDetailBody"
           hx-swap="innerHTML">
       <input type="file" name="files" multiple
-             accept="image/*,.pdf,video/mp4,video/quicktime"
+             accept="image/*,.pdf,video/mp4,video/quicktime,.doc,.docx,.xls,.xlsx,.zip,.txt,.eml"
              id="msgMediaInput_{{ msg.id }}"
              style="display:none"
              onchange="compressAndSubmit(this)">
@@ -188,7 +195,7 @@
         <button type="button" class="btn btn--secondary btn--sm"
                 onclick="openGallery('msgMediaInput_{{ msg.id }}')">🖼️ Galerie</button>
       </div>
-      <p class="form-hint" style="margin-top:4px;">Bild max. 10 MB · PDF 20 MB · Video 50 MB. Bilder werden automatisch verkleinert.</p>
+      <p class="form-hint" style="margin-top:4px;">Bild max. 10 MB · PDF 20 MB · Video 50 MB · Datei 25 MB. Bilder werden automatisch verkleinert.</p>
     </form>
     {% endif %}
     {% if can_edit %}

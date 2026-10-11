@@ -18,6 +18,8 @@ from __future__ import annotations
 import asyncio
 import io
 import logging
+import mimetypes
+import re
 import shutil
 import subprocess
 import uuid
@@ -51,6 +53,15 @@ PDF_MIMES = {"application/pdf"}
 VIDEO_MIMES = {"video/mp4", "video/quicktime", "video/x-matroska", "video/webm"}
 
 ALLOWED_MIMES = IMAGE_MIMES | PDF_MIMES | VIDEO_MIMES
+MAX_MESSAGE_FILE_BYTES = 25 * 1024 * 1024
+_DANGEROUS_FILE_MIMES = {
+    "application/javascript", "application/x-javascript", "application/xhtml+xml",
+    "image/svg+xml", "text/html", "text/javascript", "text/xml",
+}
+_DANGEROUS_FILE_EXTENSIONS = {
+    ".bat", ".cmd", ".com", ".exe", ".hta", ".html", ".htm", ".js", ".mjs",
+    ".msi", ".ps1", ".sh", ".svg", ".vbs", ".xml",
+}
 
 # ORM-Klassenname -> annotation_service media_typ, fuer delete_media() (siehe unten)
 _ANNOTATABLE_TYP_BY_CLASS = {"TaskMedia": "task", "MessageMedia": "message", "PersonMedia": "person"}
@@ -116,6 +127,25 @@ def _size_limit_for_kind(kind: str) -> int:
         "pdf":   settings.MAX_UPLOAD_BYTES_PDF,
         "video": settings.MAX_UPLOAD_BYTES_VIDEO,
     }[kind]
+
+
+def _safe_filename(filename: str | None, default: str = "datei") -> str:
+    """Keep only a basename and printable filename characters for downloads."""
+    name = (filename or default).replace("\\", "/").split("/")[-1]
+    name = re.sub(r"[\x00-\x1f\x7f]", "", name).strip(". ")
+    return name[:255] or default
+
+
+def _file_mime(raw: bytes, filename: str | None, content_type: str | None) -> str:
+    """Return a safe stored MIME type for a download-only attachment."""
+    detected = _detect_mime(raw)
+    hinted = (content_type or "").lower().split(";", 1)[0].strip()
+    guessed = mimetypes.guess_type(filename or "")[0]
+    mime = detected or hinted or guessed or "application/octet-stream"
+    suffix = Path(filename or "").suffix.lower()
+    if mime in _DANGEROUS_FILE_MIMES or suffix in _DANGEROUS_FILE_EXTENSIONS:
+        return "application/octet-stream"
+    return mime
 
 
 # ── Bild-Pipeline ─────────────────────────────────────────────────
@@ -379,69 +409,106 @@ async def store_upload(
 
 
 async def store_upload_for_message(
-    file: UploadFile, message: Message, user: User, db: Session,
+    file: UploadFile, message: Message, user: User | None, db: Session,
     org_id: int | None = None,
 ) -> MessageMedia:
-    """Wie store_upload, aber fuer Message-Anhaenge."""
+    """Like :func:`store_bytes_for_message`, reading the request upload first."""
     raw = await file.read()
+    return await store_bytes_for_message(
+        raw, file.filename, file.content_type, message, db, org_id, user=user,
+    )
+
+
+async def store_bytes_for_message(
+    raw: bytes,
+    filename: str | None,
+    content_type: str | None,
+    msg: Message,
+    db: Session,
+    org_id: int | None,
+    user: User | None = None,
+    allow_datei: bool = False,
+) -> MessageMedia:
+    """Store a message attachment supplied by a background worker or a route.
+
+    Recognised visual media use the existing processing pipeline. With
+    ``allow_datei`` (mail intake) everything else is retained as a download-only
+    ``datei`` attachment; otherwise unsupported types are rejected with 415.
+    """
     if not raw:
         raise HTTPException(400, "Leere Datei.")
     mime = _detect_mime(raw)
     if mime is None:
-        client_ct = (file.content_type or "").lower().split(";")[0].strip()
+        client_ct = (content_type or "").lower().split(";")[0].strip()
         if client_ct in ALLOWED_MIMES:
             mime = client_ct
-        else:
+    kind = _kind_for_mime(mime) if mime else None
+    if kind is None and not allow_datei:
+        if mime is None:
             raise HTTPException(415, "Dateityp konnte nicht erkannt werden und ist nicht erlaubt.")
-    if mime not in ALLOWED_MIMES:
         raise HTTPException(415, f"Dateityp '{mime}' wird nicht unterstuetzt.")
-    kind = _kind_for_mime(mime)
-    if not kind:
-        raise HTTPException(415, f"Dateityp '{mime}' wird nicht unterstuetzt.")
-    if len(raw) > _size_limit_for_kind(kind):
+    if kind and len(raw) > _size_limit_for_kind(kind):
         limit_mb = _size_limit_for_kind(kind) // (1024 * 1024)
         raise HTTPException(413, f"Datei zu gross. Limit fuer {kind}: {limit_mb} MB.")
-    dest_dir = _entity_dir(message.incident_id, "msg", message.id, org_id)
+    if not kind and len(raw) > MAX_MESSAGE_FILE_BYTES:
+        raise HTTPException(413, "Datei zu gross. Limit fuer datei: 25 MB.")
+    if kind == "image" and mime in {"image/heic", "image/heif"} and not _HEIC_OK:
+        raise HTTPException(415, "HEIC-Dateien werden auf diesem Server nicht unterstuetzt (pillow-heif fehlt).")
+    safe_filename = _safe_filename(filename)
+    dest_dir = _entity_dir(msg.incident_id, "msg", msg.id, org_id)
     storage_root = _storage_root().resolve()
     if kind == "image":
         main_p, thumb_p, w, h, out_mime = await asyncio.to_thread(_process_image, raw, dest_dir)
         stored_bytes = main_p.stat().st_size
         _reserve(db, org_id, stored_bytes)
         media = MessageMedia(
-            message_id=message.id, incident_id=message.incident_id,
-            uploaded_by_user_id=user.id, kind="image",
-            original_filename=file.filename or "image",
+            message_id=msg.id, incident_id=msg.incident_id,
+            uploaded_by_user_id=user.id if user else None, kind="image",
+            original_filename=safe_filename,
             storage_path=str(main_p.resolve().relative_to(storage_root)).replace("\\", "/"),
             thumb_path=str(thumb_p.resolve().relative_to(storage_root)).replace("\\", "/"),
             mime_type=out_mime, bytes=stored_bytes, width=w, height=h,
         )
     elif kind == "pdf":
         main_p, thumb_p, pages = await asyncio.to_thread(  # type: ignore[assignment]
-            _process_pdf, raw, dest_dir, file.filename or "document.pdf",  # type: ignore[arg-type]
+            _process_pdf, raw, dest_dir, safe_filename,  # type: ignore[arg-type]
         )
         stored_bytes = main_p.stat().st_size
         _reserve(db, org_id, stored_bytes)
         media = MessageMedia(
-            message_id=message.id, incident_id=message.incident_id,
-            uploaded_by_user_id=user.id, kind="pdf",
-            original_filename=file.filename or "document.pdf",
+            message_id=msg.id, incident_id=msg.incident_id,
+            uploaded_by_user_id=user.id if user else None, kind="pdf",
+            original_filename=safe_filename,
             storage_path=str(main_p.resolve().relative_to(storage_root)).replace("\\", "/"),
             thumb_path=str(thumb_p.resolve().relative_to(storage_root)).replace("\\", "/") if thumb_p else None,
             mime_type="application/pdf", bytes=stored_bytes, pages=pages,
         )
-    else:
+    elif kind == "video":
         main_p, thumb_p, w, h, dur = await asyncio.to_thread(  # type: ignore[arg-type,assignment]
             _process_video, raw, dest_dir,  # type: ignore[arg-type]
         )
         stored_bytes = main_p.stat().st_size
         _reserve(db, org_id, stored_bytes)
         media = MessageMedia(
-            message_id=message.id, incident_id=message.incident_id,
-            uploaded_by_user_id=user.id, kind="video",
-            original_filename=file.filename or "video.mp4",
+            message_id=msg.id, incident_id=msg.incident_id,
+            uploaded_by_user_id=user.id if user else None, kind="video",
+            original_filename=safe_filename,
             storage_path=str(main_p.resolve().relative_to(storage_root)).replace("\\", "/"),
             thumb_path=str(thumb_p.resolve().relative_to(storage_root)).replace("\\", "/") if thumb_p else None,
             mime_type="video/mp4", bytes=stored_bytes, width=w, height=h, duration_s=dur,
+        )
+    else:
+        suffix = Path(safe_filename).suffix.lower()
+        stored_name = f"{uuid.uuid4().hex}{suffix if suffix and len(suffix) <= 16 else '.bin'}"
+        main_p = dest_dir / stored_name
+        await asyncio.to_thread(main_p.write_bytes, raw)
+        _reserve(db, org_id, len(raw))
+        media = MessageMedia(
+            message_id=msg.id, incident_id=msg.incident_id,
+            uploaded_by_user_id=user.id if user else None, kind="datei",
+            original_filename=safe_filename,
+            storage_path=str(main_p.resolve().relative_to(storage_root)).replace("\\", "/"),
+            thumb_path=None, mime_type=_file_mime(raw, safe_filename, content_type), bytes=len(raw),
         )
     db.add(media)
     db.flush()

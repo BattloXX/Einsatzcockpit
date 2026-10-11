@@ -37,7 +37,7 @@ _TYP_LABELS = {
     "site": "Lage-Stelle", "cross_marker": "Übergreifend", "lage_journal": "Lage-Journal",
     "fahrt": "Fahrt", "objekt_dokument": "Objekt-Dokument",
 }
-_KIND_LABELS = {"image": "Bild", "pdf": "PDF", "video": "Video"}
+_KIND_LABELS = {"image": "Bild", "pdf": "PDF", "video": "Video", "datei": "Datei"}
 
 
 @dataclass
