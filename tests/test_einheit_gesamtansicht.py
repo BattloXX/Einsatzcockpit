@@ -66,6 +66,7 @@ def test_einheit_geraet_darf_gesamtansicht_lesen_aber_nicht_bedienen(client, set
     assert board.status_code == 200
     assert "Nur-Lese-Ansicht (Einheitenmodus)" in board.text
     assert f'hx-post="/lage/{lage_id}/stellen/neu"' not in board.text
+    assert "bottom-nav__fab" not in board.text
 
     assert client.get(f"/lage/{lage_id}/stellen/{site_id}", follow_redirects=False).status_code == 200
     csrf = client.cookies.get("ec_csrf")

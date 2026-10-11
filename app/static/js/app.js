@@ -242,7 +242,8 @@ document.addEventListener('alpine:init', () => {
     get visible() {
       const current = this.lage ? 'lage-' + this.lage.id : (this.incident ? 'inc-' + this.incident.id : null);
       if (current === null || current === this.dismissedIncidentId) return false;
-      if (this.lage) return true;
+      // In der eigenen Lage ist das Banner redundant und überdeckt mobil die Lage-Kopfzeile.
+      if (this.lage) return !new RegExp('^/lage/' + this.lage.id + '(/|$)').test(window.location.pathname);
       const boardIncident = document.getElementById('incidentHeaderAlarm')?.dataset.incidentId;
       return boardIncident !== String(this.incident.id);
     },

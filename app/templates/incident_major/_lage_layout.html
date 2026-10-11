@@ -45,6 +45,16 @@
 } %}
 {% set _tab_label = _tab_labels[_tab] if _tab in _tab_labels else 'Navigation' %}
 
+{% block bottom_nav_fab %}
+{% if can_edit and not (request.state.user and request.state.user.gsl_nur_lesen | default(false)) %}
+<button type="button" class="bottom-nav__fab" aria-label="Einsatzstelle in dieser Lage anlegen"
+        data-ec-action="open-dialog" data-ec-dialog="neuStelleDialog">
+  <span class="bottom-nav__fab-plus" aria-hidden="true">+</span>
+  <span class="bottom-nav__fab-label">Einsatz</span>
+</button>
+{% endif %}
+{% endblock %}
+
 {% block content %}
 <div class="lage-page">
   <div class="lage-ctx-bar" id="lageCtxBar"
@@ -73,6 +83,10 @@
         <span class="lage-burger-label">{{ _tab_label }}</span>
         <span class="lage-burger-chevron" :class="lagNavOpen ? 'lage-burger-chevron--open' : ''">&#x25BE;</span>
       </button>
+    </div>
+
+    <div class="lage-mobile-actions">
+      {% block lage_mobile_actions %}{% endblock %}
     </div>
 
     <!-- Desktop: scrollbare Tab-Leiste -->
@@ -223,6 +237,9 @@
   <div class="lage-page__body">
     {% block lage_content %}{% endblock %}
   </div>
+  {% if can_edit and not (request.state.user and request.state.user.gsl_nur_lesen | default(false)) %}
+  {% include "incident_major/_neue_stelle_dialog.html" %}
+  {% endif %}
 </div>
 {% block content_extras %}{% endblock %}
 <script>

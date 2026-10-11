@@ -1534,12 +1534,16 @@ body.dnd-active .board-tabs { box-shadow: 0 0 0 2px var(--primary, #2563eb); }
   min-height: 0;
   overflow-y: auto;
 }
+.lage-mobile-actions { display: none; }
 @media (max-width: 760px) {
   .lage-page { height: auto; }
   .lage-page__body { overflow: visible; }
+  .lage-page .lage-ctx-bar { position: sticky; top: var(--topnav-h); z-index: 110; }
   .lage-ctx-bar__head { padding: 5px 10px; gap: 6px; }
   .lage-ctx-bar__tabs-row { padding: 0 4px 4px; }
   .lage-ctx-bar__title { font-size: .88rem; }
+  .lage-mobile-actions { display: flex; padding: 0 10px 8px; }
+  .lage-mobile-actions .btn { width: 100%; min-height: 44px; }
 }
 
 /* ── Mobile Bottom-Nav ────────────────────────────────────────── */
