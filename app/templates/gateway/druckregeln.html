@@ -137,10 +137,19 @@
                     {% elif key in ('gsl_lageblatt', 'gsl_bericht') %}{% set doc_trigger = "['gsl_created', 'gsl_lage_updated'].includes(trigger)" %}
                     {% elif key == 'alarm_rohtext' %}{% set doc_trigger = "trigger === 'alarm_serial_received'" %}
                     {% elif key == 'gsl_einheit_qr' %}{% set doc_trigger = "trigger === 'gsl_einheit_angelegt'" %}
+                    {% elif key == 'mail_eingang' %}{% set doc_trigger = "trigger === 'mail_eingang'" %}
                     {% else %}{% set doc_trigger = "trigger === 'verleih_created'" %}{% endif %}
                     <label class="gwx-check" x-show="{{ doc_trigger }}"><input type="checkbox" name="documents" value="{{ key }}" :disabled="!({{ doc_trigger }})"
                       {{ 'checked' if key in (r.documents or []) }}> {{ label }}</label>
                     {% endfor %}
+                  </div>
+
+                  <div class="gwx-sechd" x-show="trigger === 'mail_eingang'">✉️ E-Mail-Optionen</div>
+                  <div class="gwx-formgrid" x-show="trigger === 'mail_eingang'">
+                    <label class="gwx-check"><input type="checkbox" name="mail_nur_zugeordnet" value="1" {{ 'checked' if f.get('mail_nur_zugeordnet') }}> Nur zugeordnete Mails</label>
+                    <label class="gwx-check"><input type="checkbox" name="mail_nur_freigegeben" value="1" {{ 'checked' if f.get('mail_nur_freigegeben') }}> Nur freigegebene Absender</label>
+                    <label class="gwx-check"><input type="checkbox" name="mail_attachments" value="1" {{ 'checked' if o.get('mail_attachments', true) }}> Druckbare Anhänge drucken</label>
+                    <div class="gwx-field"><label class="gwx-label">Max. Anhangseiten</label><input class="gwx-input gwx-input--mono" type="number" min="1" max="200" name="mail_max_pages" value="{{ o.get('mail_max_pages', 50) }}"></div>
                   </div>
 
                   <div class="gwx-sechd">🏢 Objekt-Elemente (bei zugeordnetem Objekt)</div>

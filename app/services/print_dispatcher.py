@@ -380,9 +380,14 @@ def on_event(db: Session, org_id: int, trigger: str, context: dict) -> list[Prin
 
 
 def _filter_matches(rule, context: dict) -> bool:
-    from app.models.gateway import TRIGGER_EINSATZ_CREATED, TRIGGER_EINSATZ_UPDATED
+    from app.models.gateway import TRIGGER_EINSATZ_CREATED, TRIGGER_EINSATZ_UPDATED, TRIGGER_MAIL_EINGANG
 
     f = rule.filters or {}
+    if rule.trigger == TRIGGER_MAIL_EINGANG:
+        if f.get("mail_nur_zugeordnet") and not context.get("mail_assigned"):
+            return False
+        if f.get("mail_nur_freigegeben") and not context.get("mail_sender_approved"):
+            return False
     hat_einsatzbezug = rule.trigger in (TRIGGER_EINSATZ_CREATED, TRIGGER_EINSATZ_UPDATED)
     uebung = f.get("uebung", "alle")
     if uebung in ("nur_echt", "nur_uebung"):
@@ -739,6 +744,49 @@ async def autoprint_gsl_einheit_background(einheit_id: int) -> None:
         db.close()
 
 
+async def autoprint_mail_eingang_background(eingang_id: int) -> None:
+    """Best-effort-Regeldruck einer angenommenen Eingangsmail, erst nach Commit."""
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+    from app.models.gateway import TRIGGER_MAIL_EINGANG
+    from app.models.master import OrgSettings
+    from app.models.org_mail import OrgMailEingang
+    from app.services.mail_zuordnung_service import _allowed
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        row = db.get(OrgMailEingang, eingang_id)
+        if row is None or row.org_id is None or row.zuordnung == "abgelehnt":
+            return
+        settings = db.query(OrgSettings).filter(OrgSettings.org_id == row.org_id).first()
+        if settings is None or settings.mail_eingang_modus == "aus":
+            return
+        incident = None
+        if row.incident_id:
+            from app.models.incident import Incident
+            incident = db.get(Incident, row.incident_id)
+            if incident is None or incident.primary_org_id != row.org_id or incident.is_exercise:
+                return
+        approved, _ = _allowed(row, settings)
+        set_tenant_context(db, row.org_id)
+        jobs = on_event(db, row.org_id, TRIGGER_MAIL_EINGANG, {
+            "mail_eingang_id": row.id, "incident_id": row.incident_id,
+            "is_exercise": bool(getattr(incident, "is_exercise", False)),
+            "mail_assigned": bool(row.incident_id), "mail_sender_approved": approved,
+        })
+        db.commit()
+        for job in jobs:
+            try:
+                await dispatch_job(db, job)
+            except Exception as exc:  # pragma: no cover
+                logger.warning("Mail-Auto-Druck Job %s nicht zustellbar: %s", job.id, exc)
+    except Exception as exc:  # pragma: no cover
+        logger.warning("Mail-Auto-Druck fehlgeschlagen (Mail %s): %s", eingang_id, exc)
+    finally:
+        db.close()
+
+
 def _resolve_objekt_ids(db: Session, context: dict) -> list[int]:
     """Objekt(e), auf die sich die Regel bezieht: explizit im Kontext oder – bei einem
     Einsatz – die dort bestätigt verknüpften Objekte (ObjektEinsatz)."""
@@ -798,6 +846,7 @@ def _jobs_for_rule(
     from app.models.gateway import (
         DOC_ALARM_ROHTEXT,
         DOC_GSL_EINHEIT_QR,
+        DOC_MAIL_EINGANG,
         DOC_OBJEKT_DOKUMENT,
         DOC_OBJEKTBLATT,
         DOC_VERLEIH_SCHEIN,
@@ -848,6 +897,13 @@ def _jobs_for_rule(
             for printer_id in printer_ids:
                 _add(printer_id=printer_id, document_type=document_type,
                      artifact_ref=f"{context['einheit_id']}:{context['qr_generation']}")
+            continue
+        if document_type == DOC_MAIL_EINGANG:
+            mail_id = context.get("mail_eingang_id")
+            if not mail_id:
+                continue
+            for printer_id in printer_ids:
+                _add(printer_id=printer_id, document_type=document_type, artifact_ref=str(mail_id))
             continue
         if document_type == DOC_ALARM_ROHTEXT:
             # Ohne AlarmIngest-Bezug wuerde _render_alarm_rohtext ein leeres Blatt

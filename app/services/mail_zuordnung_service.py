@@ -122,6 +122,8 @@ async def _assign(db: Session, row: OrgMailEingang, incident: Incident, kind: st
     row.zuordnung_grund = ("Anhänge nicht übernommen: " + ", ".join(failures))[:255] if failures else None
     db.commit()
     await broadcast_message_created(incident.id, message)
+    from app.services.print_dispatcher import autoprint_mail_eingang_background
+    await autoprint_mail_eingang_background(row.id)
     return True
 
 

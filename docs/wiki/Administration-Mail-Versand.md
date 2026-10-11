@@ -1,5 +1,15 @@
 # Mail-Versand (SMTP / Office 365)
 
+## Druckregel „E-Mail eingegangen"
+
+Im Gateway kann eine zunächst deaktivierte Regel mit diesem Auslöser angelegt werden.
+Sie druckt ein Deckblatt mit Absender, Betreff, Zeitpunkt, Einsatzbezug, Text und
+Anhangsliste. PDF-Anhänge und Bilder werden erst beim Druck abgerufen; andere
+Typen bleiben als „nicht druckbar – im Cockpit abrufbar" gelistet. Die Regel kann
+auf zugeordnete Mails oder freigegebene Absender beschränkt und bei den
+Anhangseiten begrenzt werden. Abgelehnte Mails, deaktivierter Eingang und
+Übungseinsätze lösen keinen Druck aus.
+
 ## E-Mail-Eingang → Meldungen
 
 Die Empfangsadresse einer Organisation lautet `<typ>.<slug>@get.einsatzcockpit.com`, zum Beispiel `feuerwehr.wolfurt@get.einsatzcockpit.com`. Die bisherige `<slug>@…`-Adresse bleibt als Alias empfangsfähig. Unter **Administration → Mail** wird der Eingang je Organisation eingerichtet.

@@ -121,6 +121,10 @@ async def fetch_inbound_message(db: Session, org_id: int, message_id: int) -> No
         row.status, row.fehler = "abruf_fehler", "Inhalt konnte nicht von Resend abgerufen werden."
         logger.warning("Resend-Posteingang konnte nicht abgerufen werden (org=%s, mail=%s)", org_id, message_id)
     db.commit()
+    # Erst nach dem persistierten Eingang auslösen; der Hook ist je Mail/Drucker idempotent.
+    if row.abgerufen_at and row.status != "abruf_fehler" and row.zuordnung != "abgelehnt":
+        from app.services.print_dispatcher import autoprint_mail_eingang_background
+        await autoprint_mail_eingang_background(row.id)
 
 
 async def fetch_inbound_background(org_id: int, message_id: int) -> None:

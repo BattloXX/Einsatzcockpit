@@ -4,6 +4,7 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 
 ## Unreleased
 
+- Gateway-Druckregel „E-Mail eingegangen“ mit sicherem Deckblatt und optionalen PDF-/Bildanhängen ergänzt.
 - Resend-Posteingang je Organisation mit signiertem Webhook, sicherem Abruf und Aufbewahrung ergänzt.
 - Resend-Eingang ordnet wartende, freigegebene Mails innerhalb des Rückblickfensters automatisch neu angelegten Einsätzen zu; Posteingang-Zähler und Live-Aktualisierung ergänzt.
 
