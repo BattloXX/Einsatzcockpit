@@ -98,3 +98,13 @@ async def test_send_via_resend_marks_from_addr_on_test_system(monkeypatch):
         await send_via_resend(_msg(), "re_key", "org@verified.example")
     call = client.post.call_args
     assert call.kwargs["json"]["from"] == "Einsatzcockpit (Testsystem) <test-org@verified.example>"
+
+
+def test_testsystem_markierung_behaelt_anzeigenamen(monkeypatch):
+    from app.services import resend_mail_service as svc
+
+    monkeypatch.setattr(svc.settings, "TEST_SYSTEM", True)
+    result = svc._mark_test_system_from_addr('"max@extern.at via Einsatzcockpit" <weiterleitung@x.at>')
+    assert result == '"max@extern.at via Einsatzcockpit (Testsystem)" <test-weiterleitung@x.at>'
+    assert svc.absender_mit_name('a"\r\nBcc: <b@c>', "w@x.at") == '"aBcc: b@c" <w@x.at>'
+    assert svc.absender_mit_name("", "w@x.at") == "w@x.at"
