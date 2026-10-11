@@ -27,11 +27,24 @@
   border-radius: 999px; padding: 2px 9px; font-family: 'JetBrains Mono', monospace;
 }
 .sk-card__body { padding: 10px 14px; }
-.sk-site {
-  font-size: .8rem; padding: 6px 9px; margin-bottom: 4px; border-radius: var(--radius-md, .5rem);
-  background: var(--surface-high); display: flex; align-items: center; gap: 7px;
-}
-.sk-site:last-child { margin-bottom: 0; }
+.sk-phase-counts { margin-top:4px; font-size:.7rem; color:var(--text-muted); }
+.sk-site-row { margin-bottom:8px; }
+.sk-site { width:100%; text-align:left; font:inherit; color:inherit; cursor:pointer; border:1px solid transparent;
+  font-size:.8rem; padding:9px; border-radius:var(--radius-md, .5rem); background:var(--surface-high); display:flex; align-items:flex-start; justify-content:space-between; gap:8px; }
+.sk-site:hover, .sk-site:focus-visible { border-color:var(--sk-accent); outline:none; }
+.sk-site__main { min-width:0; display:flex; flex-direction:column; gap:3px; }
+.sk-site__title { font-weight:700; }
+.sk-site__subline { color:var(--text-muted); line-height:1.35; }
+.sk-site__badges { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:4px; flex-shrink:0; }
+.sk-phase-badge, .sk-prio, .sk-unit-chip, .sk-overdue { border-radius:999px; padding:2px 7px; font-size:.68rem; font-weight:700; white-space:nowrap; }
+.sk-phase-badge--neu { background:rgba(107,114,128,.2); color:#d1d5db; }
+.sk-phase-badge--in_arbeit { background:rgba(251,191,36,.16); color:var(--yellow); }
+.sk-phase-badge--erledigt { background:rgba(74,222,128,.15); color:#86efac; }
+.sk-prio--red { color:#f87171; background:rgba(212,34,37,.16); }.sk-prio--orange { color:var(--orange); background:rgba(230,126,34,.16); }.sk-prio--yellow { color:var(--yellow); background:rgba(242,176,46,.14); }.sk-prio--muted { color:var(--text-muted); background:rgba(122,135,168,.16); }
+.sk-unit-chips { display:flex; flex-wrap:wrap; gap:4px; margin-top:2px; }.sk-unit-chip { background:rgba(96,165,250,.14); color:#bfdbfe; font-weight:600; }
+.sk-overdue { color:#fecaca; background:rgba(220,38,38,.18); }
+.sk-board-link { display:inline-block; margin:4px 0 0 9px; font-size:.7rem; color:#93c5fd; }
+.sk-done-sites { margin-top:8px; }.sk-done-sites summary { cursor:pointer; color:var(--text-muted); font-size:.75rem; padding:6px 0; }.sk-site-row--done { opacity:.72; }
 .sk-empty { font-size: .78rem; color: var(--text-muted); padding: 6px 0; font-style: italic; }
 
 .sk-card__footer { padding: 9px 14px; border-top: 1px solid var(--border);
@@ -54,7 +67,53 @@
   border-radius: var(--radius-lg, .75rem); padding: 16px; min-width: 300px; }
 .sk-modal::backdrop { background: rgba(0,0,0,.6); }
 .sk-modal h3 { font-size: .9rem; margin-bottom: 12px; }
+@media (max-width:760px) {
+  .sk-wrap { padding:10px; }.sk-grid { grid-template-columns:1fr; gap:10px; }
+  .sk-site { min-height:44px; }.sk-site__badges { justify-content:flex-start; }
+  .sk-site { flex-direction:column; }.sk-site__badges { width:100%; }
+}
 </style>
+{% endblock %}
+
+{% block content_extras %}
+<dialog class="modal" id="siteDetailModal">
+  <div class="modal__content" id="siteDetailContent" style="min-width:min(540px,95vw);max-height:90vh;overflow-y:auto;"
+       hx-on::after-swap="var d=document.getElementById('siteDetailModal');if(d&&!d.open)d.showModal()"></div>
+</dialog>
+{% endblock %}
+
+{% block lage_scripts %}
+<script>
+(function () {
+  var lageId = {{ lage.id }};
+  var timer = null;
+  var pingTimer = null;
+  function reloadGrid() {
+    clearTimeout(timer);
+    timer = setTimeout(function () {
+      htmx.ajax('GET', '/lage/' + lageId + '/sektoren', {target:'#sektorenGrid', swap:'innerHTML'});
+    }, 180);
+  }
+  document.body.addEventListener('htmx:afterRequest', function (event) {
+    var config = event.detail.requestConfig;
+    if (event.detail.successful && config && config.verb !== 'get' && config.path.indexOf('/lage/' + lageId + '/stellen/') === 0) reloadGrid();
+  });
+  var proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  var ws;
+  function connect() {
+    ws = new WebSocket(proto + '://' + location.host + '/ws/lage/' + lageId);
+    ws.addEventListener('open', function () { pingTimer = setInterval(function () { if (ws.readyState === WebSocket.OPEN) ws.send('ping'); }, 25000); });
+    ws.addEventListener('message', function (event) {
+      try {
+        var msg = JSON.parse(event.data);
+        if (['site:card_changed', 'site_created', 'site_phase_changed', 'site:sector_changed', 'site_updated', 'site_prio_changed', 'einheit:changed', 'ressource:changed', 'section:changed'].indexOf(msg.type) !== -1) reloadGrid();
+      } catch (e) { /* noop */ }
+    });
+    ws.addEventListener('close', function (event) { clearInterval(pingTimer); if (event.code !== 4401 && event.code !== 4403) setTimeout(connect, 1000); });
+  }
+  connect();
+}());
+</script>
 {% endblock %}
 
 {% block lage_content %}
