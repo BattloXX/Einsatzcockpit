@@ -5,6 +5,7 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 ## Unreleased
 
 - Resend-Posteingang je Organisation mit signiertem Webhook, sicherem Abruf und Aufbewahrung ergänzt.
+- Resend-Eingang ordnet wartende, freigegebene Mails innerhalb des Rückblickfensters automatisch neu angelegten Einsätzen zu; Posteingang-Zähler und Live-Aktualisierung ergänzt.
 
 - **GSL**: „Einheit hinzufügen“ erfasst Funkruf, Status, Abschnitt, Bereitstellungsraum, Gruppenkommandant mit Telefon und Stärke in einem Vorgang.
 - **GSL**: QR-Zugang für Einheiten mit A4-Ausdruck (Token `gkq_`, optional mit PIN) und neuer Druckregel „GSL – Neue Einheit / QR-Einheitenzugang“; Zugangslinks sind jetzt aus `GSL_ZUGANG_KEY` ableitbar und müssen nicht neu ausgegeben werden (Migrationen 0268–0270).

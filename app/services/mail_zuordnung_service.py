@@ -125,7 +125,7 @@ async def _assign(db: Session, row: OrgMailEingang, incident: Incident, kind: st
     return True
 
 
-async def ordne_zu(db: Session, eingang_id: int) -> bool:
+async def ordne_zu(db: Session, eingang_id: int, incident_ids: set[int] | None = None) -> bool:
     """Ordnet eine bereits vollständig abgerufene Mail höchstens einmal zu."""
     row = db.query(OrgMailEingang).filter(OrgMailEingang.id == eingang_id).with_for_update().first()
     if not row or row.message_id_ref or not row.abgerufen_at:
@@ -143,6 +143,8 @@ async def ordne_zu(db: Session, eingang_id: int) -> bool:
         db.commit()
         return False
     incidents = aktive_einsaetze(db, row.org_id)
+    if incident_ids is not None:
+        incidents = [incident for incident in incidents if incident.id in incident_ids]
     if not incidents:
         row.status, row.zuordnung, row.zuordnung_grund = "wartend", "wartend", "Kein aktiver Einsatz vorhanden"
         db.commit()
