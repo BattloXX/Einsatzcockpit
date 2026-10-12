@@ -15,11 +15,6 @@
           <input type="text" name="bezeichnung" class="form-input" required maxlength="160"
                  placeholder="z. B. Überschwemmung Hauptstraße" autocomplete="off" autofocus>
         </div>
-        <div class="form-group">
-          <label class="form-label">Einsatzgrund</label>
-          <input type="text" name="einsatzgrund" class="form-input" maxlength="500"
-                 placeholder="Kurzer Einsatzgrund" autocomplete="off">
-        </div>
         {{ address_picker('neuStelle',
                          default_city=default_city|default(request.state.user.org.city|default(DEFAULT_INCIDENT_CITY, true), true),
                          ort_name='ort', strasse_name='strasse', nr_name='hausnr',

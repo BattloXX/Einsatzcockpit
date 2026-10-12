@@ -38,7 +38,7 @@ Ziel: Der GSL-Dialog verhält sich wie „Neuer Einsatz“. Damit beide nicht wi
 
 ### 2. GSL-Dialog `_neue_stelle_dialog.html`
 
-- Felder: Bezeichnung* → Einsatzgrund (optional, neu) → Adress-Picker (Ort vorbelegt mit Org-Stadt)
+- Felder: Bezeichnung* → Adress-Picker (Ort vorbelegt mit Org-Stadt)
 - Feldnamen bleiben `ort`, `strasse`, `hausnr`; neu sind `lat`, `lng`
 - Chrome-Autofill: Das eigene Dropdown von `initAddressAutocomplete` soll Chromes Adressvorschläge ersetzen. `autocomplete="off"` an `<form>` und an allen drei Feldern setzen. Die Feldnamen `ort`/`strasse`/`hausnr` bleiben, weil die Route sie erwartet. Im Browser prüfen, ob Chrome trotzdem Vorschläge zeigt. Falls ja, im Bericht melden und keinen Workaround erfinden.
 - Nach Erfolg: Dialog schließen, `form.reset()` **und** `picker.reset()`

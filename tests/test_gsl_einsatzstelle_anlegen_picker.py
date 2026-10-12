@@ -105,6 +105,8 @@ def test_board_enthaelt_gemeinsamen_picker_mit_org_stadt(client, setup_db):
     assert 'name="lat"' in response.text
     assert 'value="Pickerstadt"' in response.text
     assert "address-picker.js" in response.text
+    # Einsatzgrund wird auf Board-Karte/Detail nicht angezeigt -> kein Feld im Dialog
+    assert 'name="einsatzgrund"' not in response.text
 
 
 def test_geocode_ist_fuer_gsl_rollen_erlaubt_und_readonly_gesperrt(client, setup_db, monkeypatch):
