@@ -61,6 +61,37 @@ export function markerArt(auftrag) {
   return "offen";
 }
 
+function auftragBezeichnung(auftrag) {
+  const name = auftrag.bezeichnung || auftrag.einsatzgrund;
+  return [name, auftrag.adresse].filter(Boolean).join(", ") || "Auftrag";
+}
+
+export function markerDarstellung(auftrag, nummer) {
+  const art = markerArt(auftrag);
+  const erkundung = auftrag.auftragsart === "erkundung";
+  const klasse = `einheit-kartenmarker--${art}${erkundung ? " einheit-kartenmarker--erkundung" : ""}`;
+  const bezeichnung = auftragBezeichnung(auftrag);
+  let inhalt = String(nummer || "");
+  let titel = `Auftrag: ${bezeichnung}`;
+  let groesse = 28;
+
+  if (art === "naechster") {
+    inhalt = "\u25b6";
+    titel = `Nächster Auftrag: ${bezeichnung}`;
+  } else if (art === "in_arbeit") {
+    inhalt = "\u25cf";
+    titel = `In Arbeit: ${bezeichnung}`;
+  } else if (art === "erkundung") {
+    titel = `Erkundung: ${bezeichnung}`;
+    groesse = 30;
+  } else if (art === "fertig") {
+    inhalt = "\u2713";
+    titel = `Fertig: ${bezeichnung}`;
+    groesse = 24;
+  }
+  return { klasse, inhalt, titel, groesse, anker: [groesse / 2, groesse / 2] };
+}
+
 export function navUrl(auftrag) {
   if (auftrag.nav_url) return auftrag.nav_url;
   if (auftrag.gmaps_url) return auftrag.gmaps_url;
@@ -86,17 +117,14 @@ export class EinheitKarte {
   }
 
   icon(auftrag, nummer) {
-    const art = markerArt(auftrag);
-    const erkundung = auftrag.auftragsart === "erkundung";
-    const lupe = erkundung ? "🔍 " : "";
-    let text = String(nummer || "•");
-    if (art === "naechster") text = `${lupe}Nächster Auftrag`;
-    else if (art === "in_arbeit") text = `${lupe}${auftrag.einheit_status === "in_arbeit" ? "In Arbeit" : "Aktuell"}`;
-    else if (erkundung) text = `🔍 ${text}`;
-    const breit = art === "naechster" || art === "in_arbeit";
+    const darstellung = markerDarstellung(auftrag, nummer);
     return window.L.divIcon({
-      className: `einheit-kartenmarker einheit-kartenmarker--${art}${erkundung ? " einheit-kartenmarker--erkundung" : ""}`,
-      html: `<span>${esc(text)}</span>`, iconSize: breit ? [168, 36] : [44, 38],
+      className: `einheit-kartenmarker ${darstellung.klasse}`,
+      html: `<span title="${esc(darstellung.titel)}" aria-label="${esc(darstellung.titel)}">`
+        + `${esc(darstellung.inhalt)}</span>`,
+      iconSize: [darstellung.groesse, darstellung.groesse],
+      iconAnchor: darstellung.anker,
+      popupAnchor: [0, -darstellung.groesse / 2],
     });
   }
 
@@ -117,7 +145,10 @@ export class EinheitKarte {
       const latlng = [Number(auftrag.lat), Number(auftrag.lng)];
       punkte.push(latlng);
       if (offen) linie.push(latlng);
-      const marker = window.L.marker(latlng, { icon: this.icon(auftrag, offen ? nummer : null) }).addTo(this.layer);
+      const darstellung = markerDarstellung(auftrag, offen ? nummer : null);
+      const marker = window.L.marker(latlng, {
+        icon: this.icon(auftrag, offen ? nummer : null), title: darstellung.titel, alt: darstellung.titel,
+      }).addTo(this.layer);
       marker.bindPopup(this.popup(auftrag));
       marker.on("click", () => this.onSelect(auftrag));
       this.marker.set(Number(auftrag.dispatch_id), marker);
@@ -168,8 +199,11 @@ export class EinheitKarte {
     if (!this.standort) return;
     this.eigeneMarker?.remove(); this.genauigkeit?.remove();
     const latlng = [this.standort.lat, this.standort.lng];
-    this.eigeneMarker = window.L.circleMarker(latlng, {
-      radius: 8, color: "#fff", weight: 2, fillColor: "#2563eb", fillOpacity: 1,
+    this.eigeneMarker = window.L.marker(latlng, {
+      icon: window.L.divIcon({
+        className: "einheit-standortmarker", html: "<span></span>", iconSize: [20, 20], iconAnchor: [10, 10],
+      }),
+      zIndexOffset: 1000, title: "Mein Standort", alt: "Mein Standort",
     }).addTo(this.map);
     this.genauigkeit = window.L.circle(latlng, {
       radius: this.standort.genauigkeit || 0, color: "#2563eb", fillOpacity: 0.08,

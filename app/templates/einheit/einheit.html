@@ -216,7 +216,9 @@
           <label><input type="checkbox" x-model="fertigeAufKarte"
                         @change="uebersichtKarteAktualisieren()"> Fertige einblenden</label>
         </div>
-        <p class="einheit-sub">Reihenfolge (Luftlinie, keine Route)</p>
+        <p class="einheit-sub">
+          ● In Arbeit · ▶ Nächster · 1, 2, 3 Reihenfolge · gestrichelt = Erkundung · Linie = Luftlinie, keine Route
+        </p>
         <p class="einheit-sub" x-show="standortHinweis" x-text="standortHinweis"></p>
         <span class="einheit-chip" x-show="ohneKartenposition"
               x-text="ohneKartenposition + ' ohne Kartenposition'"></span>

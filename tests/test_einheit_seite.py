@@ -104,6 +104,12 @@ def test_einheit_template_und_javascript_sind_lesbar():
     assert max(map(len, template.splitlines())) <= 200
 
 
+def test_einheit_template_enthaelt_kompakte_kartenlegende():
+    template = (Path(__file__).parents[1] / "app/templates/einheit/einheit.html").read_text()
+    assert "● In Arbeit · ▶ Nächster · 1, 2, 3 Reihenfolge" in " ".join(template.split())
+    assert "gestrichelt = Erkundung · Linie = Luftlinie, keine Route" in " ".join(template.split())
+
+
 def test_einheit_outbox_import_ist_versioniert():
     # einheit_outbox.js wird mit langem max-age ausgeliefert; ohne Versions-Mapping
     # behielten Tablets eine alte Outbox (z. B. ohne Typ "material").
