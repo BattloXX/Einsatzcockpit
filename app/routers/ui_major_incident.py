@@ -1079,6 +1079,7 @@ async def site_einheit_freigeben(
     if benachrichtigung:
         background_tasks.add_task(sende_nach_commit, benachrichtigung)
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
+    await broadcast_lage(lage_id, {"type": "einheit:changed", "einheit_id": einheit_id, "site_id": site_id})
     return Response(status_code=204)
 
 
@@ -1307,6 +1308,10 @@ async def site_einheit_status_setzen(
         interrupted = db.get(resource_service.EinheitSiteDispatch, result["unterbrochen_dispatch_id"])
         if interrupted:
             await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": interrupted.site_id})
+            await broadcast_lage(
+                lage_id,
+                {"type": "einheit:changed", "einheit_id": interrupted.einheit_id, "site_id": interrupted.site_id},
+            )
     return HTMLResponse(content=_site_detail_html_with_oob(request, db, lage, site, user),
                         headers={"HX-Retarget": "#siteDetailContent", "HX-Reswap": "innerHTML"})
 

@@ -1,0 +1,70 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { berechneReihenfolge, esc, markerArt, navUrl } from "../../app/static/js/einheit_karte.js";
+
+const auftrag = (id, extra = {}) => ({
+  dispatch_id: id, rang: id, priority: "normal", lat: 47 + id / 100, lng: 13, ...extra,
+});
+
+test("berechneReihenfolge nutzt ohne Standort die Serverränge", () => {
+  const reihe = berechneReihenfolge([auftrag(3), auftrag(1), auftrag(2)]);
+  assert.deepEqual(reihe.map((item) => item.dispatch_id), [1, 2, 3]);
+});
+
+test("Entfernung ordnet nur gleiche Priorität ohne Reihenfolge um", () => {
+  const reihe = berechneReihenfolge([
+    auftrag(1, { reihenfolge: 1 }), auftrag(2, { lat: 48 }), auftrag(3, { lat: 47.01 }),
+  ], { lat: 47, lng: 13 });
+  assert.deepEqual(reihe.map((item) => item.dispatch_id), [1, 3, 2]);
+  assert.equal(reihe[1].vorschlag_entfernung, true);
+});
+
+test("Entfernung verschiebt weder laufenden noch höhere Priorität", () => {
+  const reihe = berechneReihenfolge([
+    auftrag(1, { aktuell: true, einheit_status: "in_arbeit", lat: 49 }),
+    auftrag(2, { priority: "sofort", lat: 49 }), auftrag(3, { priority: "normal", lat: 47.001 }),
+  ], { lat: 47, lng: 13 });
+  assert.deepEqual(reihe.map((item) => item.dispatch_id), [1, 2, 3]);
+});
+
+test("Aufträge mit Reihenfolge behalten ihre relative Reihenfolge", () => {
+  const reihe = berechneReihenfolge([
+    auftrag(1, { reihenfolge: 1 }), auftrag(2, { reihenfolge: 2 }), auftrag(3, { lat: 47.001 }),
+  ], { lat: 47, lng: 13 });
+  assert.deepEqual(reihe.map((item) => item.dispatch_id), [1, 2, 3]);
+});
+
+test("markerArt unterscheidet Kartenstatus", () => {
+  assert.equal(markerArt(auftrag(1, { naechster: true })), "naechster");
+  assert.equal(markerArt(auftrag(1, { einheit_status: "in_arbeit" })), "in_arbeit");
+  assert.equal(markerArt(auftrag(1, { auftragsart: "erkundung" })), "erkundung");
+  assert.equal(markerArt(auftrag(1, { einheit_status: "abgeschlossen" })), "fertig");
+  assert.equal(markerArt(auftrag(1, { zurueckgezogen: true })), "zurueckgezogen");
+});
+
+test("navUrl nutzt Koordinaten, Adresse oder null", () => {
+  assert.match(navUrl(auftrag(1)), /destination=47.01,13/);
+  assert.match(navUrl({ adresse: "Hauptstraße 1" }), /Hauptstra%C3%9Fe/);
+  assert.equal(navUrl({}), null);
+});
+
+test("nächste oder laufende Erkundung behält ihre Hervorhebung", () => {
+  assert.equal(markerArt(auftrag(1, { auftragsart: "erkundung", naechster: true })), "naechster");
+  assert.equal(markerArt(auftrag(1, { auftragsart: "erkundung", aktuell: true })), "in_arbeit");
+  assert.equal(markerArt(auftrag(1, { einheit_status: "nicht_durchfuehrbar" })), "fertig");
+});
+
+test("esc entschärft HTML aus Einsatzdaten (Popup)", () => {
+  assert.equal(esc('<img src=x onerror="alert(1)">'), "&lt;img src=x onerror=&quot;alert(1)&quot;&gt;");
+  assert.equal(esc(null), "");
+});
+
+test("Entfernungsvorschlag verschiebt nie den nächsten Auftrag", () => {
+  const liste = [
+    auftrag(1, { rang: 1, naechster: true, lat: 47.0, lng: 9.0 }),
+    auftrag(2, { rang: 2, lat: 47.5, lng: 9.5 }),
+    auftrag(3, { rang: 3, lat: 47.49, lng: 9.49 }),
+  ];
+  const ergebnis = berechneReihenfolge(liste, { lat: 47.5, lng: 9.5 });
+  assert.equal(ergebnis[0].dispatch_id, 1);
+});

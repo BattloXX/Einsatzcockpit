@@ -171,9 +171,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers.setdefault("Content-Security-Policy", csp)
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        # geolocation=(self): eigener Standort auf GSL-Karte, Einheitenkarte und Bürgermeldung
+        # (nur nach Freigabe im Browser); fremde Origins/iframes bleiben gesperrt.
         response.headers.setdefault(
             "Permissions-Policy",
-            "geolocation=(), microphone=(self), camera=(self), payment=()",
+            "geolocation=(self), microphone=(self), camera=(self), payment=()",
         )
 
         if trusted or public_fahrtenbuch:
