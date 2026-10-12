@@ -44,9 +44,15 @@ def pruefe_geraete_session(db, user_id: int, is_device: bool, device_token_id: i
     return query.first()
 
 
+# Kostenfaktor für neue Passwort-Hashes. Die Testsuite senkt ihn in tests/conftest.py auf 4
+# (sonst kostet jeder Test-Benutzer/Login ~0,2–0,5 s); bewusst keine Umgebungsvariable,
+# damit Produktion nicht per Konfiguration geschwächt werden kann.
+BCRYPT_ROUNDS = 12
+
+
 def hash_password(plain: str) -> str:
     import bcrypt
-    return bcrypt.hashpw(plain.encode(), bcrypt.gensalt(rounds=12)).decode()
+    return bcrypt.hashpw(plain.encode(), bcrypt.gensalt(rounds=BCRYPT_ROUNDS)).decode()
 
 
 def verify_password(plain: str, hashed: str) -> bool:
