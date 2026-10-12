@@ -25,7 +25,7 @@ from app.models.major_incident import (
     LageEinheit,
     LageEinheitLeader,
 )
-from app.models.master import Member
+from app.models.master import FireDept, Member
 from app.models.verleih import VerleihArtikel
 from app.routers.ui_major_incident import _can_edit, _check_org_access, _get_mi_features, _lage_or_404, _nav_counts
 from app.services import gk_zugang_service, resource_service, ressource_karte_service, ressource_pflege_service
@@ -529,8 +529,12 @@ async def qr_zugang_vorschau(
         )
         db.commit()
         await broadcast_lage(lage.id, {"type": "ressource:changed", "einheit_id": einheit.id})
-        html = templates.env.get_template("incident_major/_ressource_karte_qr_druck.html").render(
-            lage=lage, einheit=einheit, zugang=row, qr_img=qr_img, pin=pin, user=request.state.user,
+        # Dasselbe Blatt wie beim Stationsdruck – die PIN steht bewusst nicht darauf.
+        org = db.get(FireDept, lage.org_id)
+        html = templates.env.get_template("gsl/einheit_qr_print.html").render(
+            lage=lage, einheit=einheit, zugang=row, qr_img=qr_img, base_url="", lokal_druck=True,
+            logo_url=(org.logo_path if org and org.logo_path else None) or "/static/img/Logo-rot.png",
+            user=request.state.user,
         )
     else:
         html = templates.env.get_template("incident_major/_ressource_karte_qr_vorschau.html").render(

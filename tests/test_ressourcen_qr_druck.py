@@ -131,6 +131,8 @@ def test_lokaler_druck_auditiert_nur_druckseite(client, setup_db):
     assert "window.print" not in client.get(path + "/zugang/qr/vorschau").text
     printed = client.get(path + "/zugang/qr/vorschau?druck=1")
     assert printed.status_code == 200 and "window.print" in printed.text
+    # Gleiches Blatt wie beim Stationsdruck; die PIN wird separat übergeben und steht nie darauf.
+    assert "Kurzanleitung" in printed.text and "PIN:" not in printed.text
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
@@ -140,6 +142,28 @@ def test_lokaler_druck_auditiert_nur_druckseite(client, setup_db):
         assert json.loads(audit.payload_json)["ziel"] == "lokal"
     finally:
         db.close()
+
+
+def test_lokaler_druck_zeigt_keine_pin(client, setup_db):
+    from app.services import gk_zugang_service
+
+    username, lage_id, einheit_id, org_id = _daten()
+    _activate_qr(org_id)
+    _login(client, username)
+    path = _basis(lage_id, einheit_id)
+    _qr_ausstellen(client, path, client.cookies.get("ec_csrf"))
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        zugang = db.query(LageEinheitZugang).filter_by(einheit_id=einheit_id, typ="qr").one()
+        zugang.pin_pflicht = True
+        db.commit()
+        pin = gk_zugang_service.qr_pin_fuer_fuehrung(zugang)
+    finally:
+        db.close()
+    assert pin
+    printed = client.get(path + "/zugang/qr/vorschau?druck=1").text
+    assert pin not in printed and "PIN erhalten Sie von der Einsatzleitung" in printed
 
 
 def test_druck_und_vorschau_benoetigen_zugangsverwaltung(client, setup_db):

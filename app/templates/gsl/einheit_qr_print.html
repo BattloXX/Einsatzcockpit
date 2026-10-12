@@ -13,4 +13,7 @@
   <div class="valid">Gültig bis {{ zugang.laeuft_ab_at|local_datetime }}</div>
   <h2>Kurzanleitung</h2><ol><li>QR-Code scannen</li><li>Einheitenansicht öffnen{% if zugang.pin_pflicht %} – PIN eingeben. PIN erhalten Sie von der Einsatzleitung.{% endif %}</li><li>Aufträge ansehen</li><li>Status, Lagemeldungen und Fotos dokumentieren</li></ol>
   <div class="warning">Kräfteanforderungen und dringende Meldungen ausschließlich über Funk!</div>
-</main></body></html>
+</main>
+{# Lokaler Druck (Ressourcenkarte, ?druck=1): Browser-Druckdialog öffnen; der Gateway-Renderer setzt das nicht. #}
+{% if lokal_druck %}<script>setTimeout(function(){ window.print(); }, 350);</script>{% endif %}
+</body></html>
