@@ -11,9 +11,10 @@ Rollen:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 from fastapi import (
     APIRouter,
@@ -32,7 +33,7 @@ from app.config import settings
 from app.core.audit import write_audit
 from app.core.permissions import is_objekt_verwalter, require_role
 from app.core.templating import templates
-from app.core.timezones import format_local_datetime
+from app.core.timezones import format_local_datetime, local_date_to_utc
 from app.db import get_db
 from app.models.kontakt import Kontakt, ObjektKontaktFreigabe
 from app.models.objekt import (
@@ -223,6 +224,50 @@ async def _geocode_objekt(objekt_id: int, strasse: str | None, hausnummer: str |
 # ── Objektliste ────────────────────────────────────────────────────────────────
 
 
+ObjektListeZeile = dict[str, Any]
+
+
+def _anzahl_objekt_merkmale(objekt: Objekt) -> int:
+    """Liefert die Anzahl der in der Liste sichtbaren Merkmals-Badges."""
+    return (
+        int(objekt.bma is not None)
+        + int(objekt.bma is not None and objekt.bma.schluesselsafe_vorhanden)
+        + int(objekt.hat_merkmal("schluesselbox"))
+        + int(objekt.hat_merkmal("brandschutzplan"))
+        + len(objekt.gefahren)
+    )
+
+
+_OBJEKT_LISTE_SORTIERUNGEN: dict[str, Callable[[ObjektListeZeile], Any]] = {
+    "nummer": lambda row: row["objekt"].nummer,
+    "name": lambda row: row["objekt"].name.casefold(),
+    "kategorie": lambda row: row["objekt"].kategorie.name.casefold() if row["objekt"].kategorie else None,
+    "adresse": lambda row: row["objekt"].adresse_zeile.casefold(),
+    "merkmale": lambda row: _anzahl_objekt_merkmale(row["objekt"]),
+    "vollstaendigkeit": lambda row: row["vollstaendigkeit"]["prozent"],
+    "status": lambda row: OBJEKT_STATUS_LABELS[row["objekt"].status].casefold(),
+    "datenpflege": lambda row: AKTUALITAET_LABELS[row["aktualitaet"]].casefold(),
+    "revision": lambda row: row["objekt"].revision_datum,
+    "aktualisiert": lambda row: row["objekt"].aktualisiert_am,
+}
+
+
+def _sortiere_objekt_zeilen(
+    rows: list[ObjektListeZeile], sort: str, richtung: str
+) -> tuple[list[ObjektListeZeile], str, str]:
+    """Sortiert Listenzeilen; leere Werte bleiben in jeder Richtung zuletzt."""
+    normalisiert_sort = sort if sort in _OBJEKT_LISTE_SORTIERUNGEN else "nummer"
+    normalisierte_richtung = richtung if richtung in {"asc", "desc"} else "asc"
+    sortierung = _OBJEKT_LISTE_SORTIERUNGEN[normalisiert_sort]
+    gefuellt = [row for row in rows if sortierung(row) not in (None, "")]
+    leer = [row for row in rows if sortierung(row) in (None, "")]
+    return (
+        sorted(gefuellt, key=sortierung, reverse=normalisierte_richtung == "desc") + leer,
+        normalisiert_sort,
+        normalisierte_richtung,
+    )
+
+
 @router.get("/", response_class=HTMLResponse)
 def objekt_liste(
     request: Request,
@@ -235,6 +280,10 @@ def objekt_liste(
     revision: str = "",
     merkmal: str = "",
     datenqualitaet: str = "",
+    aktualisiert_von: str = "",
+    aktualisiert_bis: str = "",
+    sort: str = "nummer",
+    richtung: str = "asc",
 ):
     # <select>-Formular sendet bei "Alle" ein leeres value="" statt den Parameter
     # wegzulassen - int|None wuerde das nicht als None behandeln, sondern einen
@@ -266,6 +315,12 @@ def objekt_liste(
         query = query.filter(
             Objekt.id.in_(db.query(ObjektMerkmal.objekt_id).filter(ObjektMerkmal.merkmal_id == merkmal_id))
         )
+    aktualisiert_von_utc = local_date_to_utc(aktualisiert_von, org=user.org)
+    aktualisiert_bis_utc = local_date_to_utc(aktualisiert_bis, end=True, org=user.org)
+    if aktualisiert_von_utc is not None:
+        query = query.filter(Objekt.aktualisiert_am >= aktualisiert_von_utc)
+    if aktualisiert_bis_utc is not None:
+        query = query.filter(Objekt.aktualisiert_am <= aktualisiert_bis_utc)
 
     objekte = query.order_by(Objekt.nummer).all()
 
@@ -297,6 +352,7 @@ def objekt_liste(
     ]
     if datenqualitaet:
         rows = [row for row in rows if row["aktualitaet"] == datenqualitaet]
+    rows, sort, richtung = _sortiere_objekt_zeilen(rows, sort, richtung)
 
     merkmal_katalog = (
         db.query(MerkmalKatalog)
@@ -320,6 +376,10 @@ def objekt_liste(
             "filter_revision": revision,
             "filter_merkmal": merkmal_id,
             "filter_datenqualitaet": datenqualitaet,
+            "filter_aktualisiert_von": aktualisiert_von,
+            "filter_aktualisiert_bis": aktualisiert_bis,
+            "sort": sort,
+            "richtung": richtung,
             "aktualitaet_labels": AKTUALITAET_LABELS,
             "ist_verwalter": verwalter,
             "heute": date.today(),
