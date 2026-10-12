@@ -1255,7 +1255,8 @@ def einheit_aufteilen(
                 from app.services.resource_service import dispatch_to_site
 
                 dispatch_to_site(db, ziel.id, lage.id, dispatch.site_id, auftrag=dispatch.auftrag,
-                                 reihenfolge=dispatch.reihenfolge, author_name=author_name, user_id=user_id)
+                                 auftragsart=dispatch.auftragsart, reihenfolge=dispatch.reihenfolge,
+                                 author_name=author_name, user_id=user_id)
         _pflege_journal(db, lage, mutter, f"Aufteilung aus {mutter.label}: {', '.join(z.label for z in neu)}",
                         ereignis_typ="personal", user_id=user_id, author_name=author_name)
         for ziel in neu:

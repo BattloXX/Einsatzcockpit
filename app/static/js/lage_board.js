@@ -164,7 +164,9 @@
       ws.addEventListener('message', evt => {
         try {
           const msg = JSON.parse(evt.data);
-          if (msg.origin && msg.origin === clientId) return;
+          // Eigene Echos ignorieren – ausser Phasenwechseln: die Phasen-Automatik verschiebt Karten
+          // auch bei eigenen Aktionen (z. B. Erkundung zuweisen), und das Neuladen der Spalten ist idempotent.
+          if (msg.origin && msg.origin === clientId && msg.type !== 'site_phase_changed') return;
           updateConnectionStatus('verbunden');
           if (msg.type === 'cross_marker:changed') {
             htmx.trigger(document.body, 'crossMarkerChanged');

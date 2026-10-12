@@ -32,6 +32,8 @@ Bei aktivem GSL-Ressourcenmodul (`mi_feature_ressourcen`) stehen folgende Werkze
 | `gsl_einheit_disponieren` | Einheit zu einer Einsatzstelle disponieren | Ändern |
 | `gsl_auftrag_aendern` | Auftrag oder Reihenfolge einer Disposition ändern | Ändern |
 | `gsl_auftrag_zurueckziehen` | Einheit von einer Einsatzstelle abziehen | Ändern |
+| `gsl_einsatz_abschliessen` | Einsatzstelle abschließen | Einsatzleitung/Admin |
+| `gsl_einsatz_wiedereroeffnen` | Abgeschlossene Einsatzstelle wieder öffnen | Einsatzleitung/Admin |
 | `gsl_ressource_qr` | QR-Zugangstatus lesen oder QR-Zugang widerrufen; keine Ausgabe von Token, Link oder PIN | Lesen / Ändern |
 
 MCP-Antworten enthalten niemals Zugangstoken, Links, Token-Hashes oder PINs. Der SMS-Versand liefert nur Versandstatus und -protokoll. Telefonnummern sind für reine Leser maskiert. Schreibvorgänge benötigen eine aktive Lage.

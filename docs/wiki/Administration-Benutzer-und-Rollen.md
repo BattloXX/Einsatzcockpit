@@ -208,6 +208,7 @@ Voraussetzungen für alle Werkzeuge: MCP für die Organisation aktiviert, GSL-Re
 | `gsl_ressourcen_liste`, `gsl_ressource_details` (Telefon für „Lesen“ maskiert) | ✓ | – |
 | `gsl_ressource_aktualisieren`, `gsl_ressource_fuehrer_setzen`, `gsl_ressource_anlegen` | – | ✓ |
 | `gsl_einheit_disponieren`, `gsl_auftrag_aendern`, `gsl_auftrag_zurueckziehen` | – | ✓ |
+| `gsl_einsatz_abschliessen`, `gsl_einsatz_wiedereroeffnen` | – | nur Einsatzleitung/Admin |
 | `gsl_ressource_journal` (Lesen / `neuer_eintrag`) | ✓ / – | – / ✓ |
 | `gsl_ressource_personal`, `gsl_ressource_ausstattung` (`aktion=lesen` / Änderungen) | ✓ / – | – / ✓ |
 | `gsl_ressource_zugang_senden` (nur SMS, `bestaetigt=true`), `gsl_ressource_zugang_widerrufen` | – | ✓ |

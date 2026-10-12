@@ -279,11 +279,11 @@
     <button class="karte-mode-btn" id="btn-taktisch" onclick="setMode('taktisch')"
             title="Taktische Zeichen nach ÖBFV E-27">Taktisch</button>
     <div class="karte-controls__sep"></div>
-    {% for phase in ['eingegangen','erkundung','bewertet','disponiert','in_arbeit','erledigt'] %}
+    {% for phase in ['eingegangen','erkundung','bewertet','disponiert','in_arbeit','fertig_gemeldet','erledigt'] %}
     <label>
       <input type="checkbox" class="phase-filter" checked value="{{ phase }}" onchange="applyFilter()">
       {{ {'eingegangen':'Eingegangen','erkundung':'Erkundung','bewertet':'Bewertet',
-          'disponiert':'Disponiert','in_arbeit':'In Arbeit','erledigt':'Erledigt'}[phase] }}
+          'disponiert':'Disponiert','in_arbeit':'In Arbeit','fertig_gemeldet':'Fertig gemeldet','erledigt':'Abgeschlossen'}[phase] }}
     </label>
     {% endfor %}
     {% if reports_count > 0 %}

@@ -648,7 +648,8 @@ def auftrag_nachricht_rendern(
         getattr(site, "strasse", None), getattr(site, "hausnr", None), getattr(site, "ort", None),
     ]))
     adresse = " ".join(filter(None, [_clean(getattr(site, "bezeichnung", ""), 55), _clean(ort, 65)]))
-    labels = {"neu": "Neuer Einsatzauftrag", "geaendert": "Auftrag geaendert",
+    neu_label = "Neuer Erkundungsauftrag" if dispatch.auftragsart == "erkundung" else "Neuer Einsatzauftrag"
+    labels = {"neu": neu_label, "geaendert": "Auftrag geaendert",
               "zurueckgezogen": "Auftrag zurueckgezogen"}
     auftrag = _clean(dispatch.auftrag, 140)
     if dispatch.auftrag and len(dispatch.auftrag.strip()) > 140:

@@ -12,6 +12,7 @@ from starlette.requests import HTTPConnection
 from app.core.audit import write_audit
 from app.db import get_db
 from app.models.major_incident import (
+    AUFTRAGSART_LABEL,
     EINHEIT_STATUS_AKTIV,
     EINHEIT_STATUS_BEENDET,
     EINHEIT_STATUS_LABEL,
@@ -22,7 +23,6 @@ from app.models.major_incident import (
     LageEinheitZugang,
     MajorIncident,
     MajorIncidentStatus,
-    SitePhase,
 )
 from app.models.master import VehicleMaster
 from app.models.user import DeviceToken
@@ -112,14 +112,42 @@ def einheit_geraet_nur_lesen(
     request.state.user.gsl_nur_lesen = True
 
 ERLAUBTE_UEBERGAENGE: dict[str, frozenset[str]] = {
-    "zugewiesen": frozenset({"bestaetigt", "anfahrt", "vor_ort", "nicht_durchfuehrbar"}),
-    "bestaetigt": frozenset({"anfahrt", "vor_ort", "nicht_durchfuehrbar"}),
-    "anfahrt": frozenset({"bestaetigt", "vor_ort", "nicht_durchfuehrbar"}),
+    "zugewiesen": frozenset({"bestaetigt", "anfahrt", "vor_ort", "in_arbeit", "nicht_durchfuehrbar"}),
+    "bestaetigt": frozenset({"anfahrt", "vor_ort", "in_arbeit", "nicht_durchfuehrbar"}),
+    "anfahrt": frozenset({"bestaetigt", "vor_ort", "in_arbeit", "nicht_durchfuehrbar"}),
     "vor_ort": frozenset({"bestaetigt", "in_arbeit", "abgeschlossen", "nicht_durchfuehrbar"}),
     "in_arbeit": frozenset({"bestaetigt", "vor_ort", "abgeschlossen", "nicht_durchfuehrbar"}),
     "abgeschlossen": frozenset(),
     "nicht_durchfuehrbar": frozenset(),
 }
+
+ERLAUBTE_UEBERGAENGE_ERKUNDUNG: dict[str, frozenset[str]] = {
+    "zugewiesen": frozenset({"bestaetigt", "anfahrt", "vor_ort", "abgeschlossen", "nicht_durchfuehrbar"}),
+    "bestaetigt": frozenset({"anfahrt", "vor_ort", "abgeschlossen", "nicht_durchfuehrbar"}),
+    "anfahrt": frozenset({"bestaetigt", "vor_ort", "abgeschlossen", "nicht_durchfuehrbar"}),
+    "vor_ort": frozenset({"bestaetigt", "abgeschlossen", "nicht_durchfuehrbar"}),
+    "in_arbeit": frozenset(),
+    "abgeschlossen": frozenset(),
+    "nicht_durchfuehrbar": frozenset(),
+}
+
+
+def einheit_status_label(auftragsart: str, status: str) -> str:
+    """Statuslabel je Auftragsart (eine abgeschlossene Erkundung heißt „Erkundet“)."""
+    if auftragsart == "erkundung" and status == "abgeschlossen":
+        return "Erkundet"
+    return EINHEIT_STATUS_LABEL[status]
+
+
+_AUSLOESER = {"vor_ort": "vor Ort", "in_arbeit": "in Arbeit"}
+
+
+def _journal_typ(auftragsart: str, status: str) -> str:
+    if status == "bestaetigt":
+        return "uebernommen"
+    if auftragsart == "erkundung" and status == "abgeschlossen":
+        return "erkundet"
+    return "abgeschlossen"
 
 
 class EinheitKonflikt(Exception):
@@ -291,8 +319,10 @@ def _auftragsdaten(dispatch: EinheitSiteDispatch) -> dict:
         "priority": site.priority.name if site.priority else None,
         "phase": site.phase.value,
         "auftrag": dispatch.auftrag,
+        "auftragsart": dispatch.auftragsart,
+        "auftragsart_label": AUFTRAGSART_LABEL.get(dispatch.auftragsart, "Abarbeitung"),
         "einheit_status": dispatch.einheit_status,
-        "einheit_status_label": EINHEIT_STATUS_LABEL[dispatch.einheit_status],
+        "einheit_status_label": einheit_status_label(dispatch.auftragsart, dispatch.einheit_status),
         "reihenfolge": dispatch.reihenfolge,
         "version": dispatch.version,
         "dispatched_at": _iso_z(dispatch.dispatched_at),
@@ -384,7 +414,8 @@ def setze_einheit_status(
             "phase_geaendert": False, "unterbrochen_dispatch_id": None,
             "alle_einheiten_fertig": _alle_einheiten_fertig(db, dispatch.site_id),
         }
-    if neuer_status not in ERLAUBTE_UEBERGAENGE.get(alter_status, frozenset()):
+    uebergaenge = ERLAUBTE_UEBERGAENGE_ERKUNDUNG if dispatch.auftragsart == "erkundung" else ERLAUBTE_UEBERGAENGE
+    if neuer_status not in uebergaenge.get(alter_status, frozenset()):
         raise EinheitKonflikt("ungueltiger_uebergang")
     if neuer_status == "nicht_durchfuehrbar" and not (grund and grund.strip()):
         raise ValueError("Grund für nicht durchführbar erforderlich")
@@ -455,17 +486,17 @@ def setze_einheit_status(
         suffix += " (Simulation)"
     from app.services.site_log_service import add_site_log
     add_site_log(
-        db, site, "einheit", f"{ctx.einheit.label}: {EINHEIT_STATUS_LABEL[neuer_status]}{suffix}",
+        db, site, "einheit", f"{ctx.einheit.label}: {einheit_status_label(dispatch.auftragsart, neuer_status)}{suffix}",
         user_id=user_id, author_name=author_name, einheit_id=ctx.einheit.id,
         erfasst_at=erfasst_at,
     )
     journal_quelle = ctx.quelle if ctx.quelle in {"tablet", "funk", "mcp", "simulation"} else "system"
     if neuer_status in {"bestaetigt", "abgeschlossen", "nicht_durchfuehrbar"}:
         resource_service._journal(
-            db, ctx.lage.id, f"{ctx.einheit.label}: {EINHEIT_STATUS_LABEL[neuer_status]}",
+            db, ctx.lage.id, f"{ctx.einheit.label}: {einheit_status_label(dispatch.auftragsart, neuer_status)}",
             category="ressource", author_name=author_name, user_id=user_id,
             einheit_id=ctx.einheit.id, site_id=site.id,
-            ereignis_typ="uebernommen" if neuer_status == "bestaetigt" else "abgeschlossen",
+            ereignis_typ=_journal_typ(dispatch.auftragsart, neuer_status),
             quelle=journal_quelle,
         )
     if erster_einsatzbeginn:
@@ -480,15 +511,14 @@ def setze_einheit_status(
     if neuer_status in {"vor_ort", "in_arbeit"}:
         from app.services import lagemeldung_service
         lagemeldung_service.ensure_timer(site, db)
-        if site.phase in {
-            SitePhase.eingegangen, SitePhase.erkundung, SitePhase.bewertet, SitePhase.disponiert,
-        }:
-            from app.services.major_incident_service import setze_site_phase
-            ausloeser = f"{ctx.einheit.label} {'vor Ort' if neuer_status == 'vor_ort' else 'in Arbeit'}"
-            phase_geaendert = setze_site_phase(
-                db, site, SitePhase.in_arbeit, user_id=user_id,
-                author_name=author_name, ausloeser=ausloeser,
-            )
+    from app.services.gsl_phase_automatik import aktualisiere_site_phase
+    ausloeser = f"{ctx.einheit.label} " + _AUSLOESER.get(
+        neuer_status, einheit_status_label(dispatch.auftragsart, neuer_status)
+    )
+    phase_geaendert = aktualisiere_site_phase(
+        db, site, ausloeser=ausloeser,
+        user=(user_id, author_name), quelle=journal_quelle,
+    )
     write_audit(
         db, "gsl.einheit.status", user_id=user_id,
         payload={

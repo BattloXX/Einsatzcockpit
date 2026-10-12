@@ -120,6 +120,7 @@ class SitePhase(enum.StrEnum):
     bewertet = "bewertet"
     disponiert = "disponiert"
     in_arbeit = "in_arbeit"
+    fertig_gemeldet = "fertig_gemeldet"
     erledigt = "erledigt"
     abgebrochen = "abgebrochen"
 
@@ -164,6 +165,8 @@ EINHEIT_STATUS_WERTE = (
     "abgeschlossen",
     "nicht_durchfuehrbar",
 )
+AUFTRAGSART_WERTE = ("erkundung", "abarbeitung")
+AUFTRAGSART_LABEL = {"erkundung": "Erkundung", "abarbeitung": "Abarbeitung"}
 EINHEIT_STATUS_LABEL = {
     "zugewiesen": "Zugewiesen",
     "bestaetigt": "Auftrag bestätigt",
@@ -226,6 +229,7 @@ SITE_PHASE_GROUP = {  # abgebrochen bewusst NICHT enthalten
     SitePhase.bewertet: "in_arbeit",
     SitePhase.disponiert: "in_arbeit",
     SitePhase.in_arbeit: "in_arbeit",
+    SitePhase.fertig_gemeldet: "in_arbeit",
     SitePhase.erledigt: "erledigt",
 }
 SITE_PHASE_GROUP_LABEL = {"neu": "neu", "in_arbeit": "in Arbeit", "erledigt": "erledigt"}
@@ -684,6 +688,9 @@ class EinheitSiteDispatch(Base):
     site_id: Mapped[int] = mapped_column(Integer, ForeignKey("incident_site.id", ondelete="CASCADE"), index=True)
     dispatched_at: Mapped[datetime] = mapped_column(DateTime)
     auftrag: Mapped[str | None] = mapped_column(Text, nullable=True)
+    auftragsart: Mapped[str] = mapped_column(
+        String(12), nullable=False, default="abarbeitung", server_default="abarbeitung"
+    )
     einheit_status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="zugewiesen", server_default="zugewiesen"
     )

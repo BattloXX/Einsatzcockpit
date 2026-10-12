@@ -53,7 +53,9 @@ def test_disponieren_und_auftrag_aendern_speichern_fuehrungsdaten():
         assert dispatch.version == 2
         assert dispatch.geaendert_at is not None
         db.flush()
-        assert db.query(SiteLogEntry).filter_by(incident_site_id=site.id).one().text == "Auftrag geändert: TLF"
+        texte = [e.text for e in db.query(SiteLogEntry).filter_by(incident_site_id=site.id).all()]
+        # Disponieren hebt die Stelle automatisch auf „Disponiert“ (eigener Status-Logeintrag).
+        assert "Auftrag geändert: TLF" in texte and site.phase.value == "disponiert"
         db.rollback()
 
 

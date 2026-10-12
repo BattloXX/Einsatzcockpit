@@ -39,7 +39,7 @@
       {% if ec and ec.chips %}
         {% for chip in ec.chips[:4] %}
         <span class="site-card__einheit-chip site-card__einheit-chip--{{ chip.farbe }}{% if chip.beendet %} site-card__einheit-chip--beendet{% endif %}">
-          {{ chip.label }} · {{ chip.label_status }}
+          {% if chip.auftragsart == 'erkundung' %}🔍 {% endif %}{{ chip.label }} · {{ chip.label_status }}
         </span>
         {% endfor %}
         {% if ec.chips|length > 4 %}
@@ -84,7 +84,16 @@
       {% endif %}
     </div>
 
-    {% if ec and ec.alle_fertig and site.phase.value not in ['erledigt', 'abgebrochen'] %}
+    {% if site.phase.value == 'fertig_gemeldet' and can_manage %}
+    <div class="site-card__hint" onclick="event.stopPropagation()">
+      <form hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/abschliessen" hx-swap="none"
+            hx-confirm="Einsatz wirklich abschließen?"
+            hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
+            hx-on::after-request="if(event.detail.successful) htmx.ajax('GET','/lage/{{ lage.id }}/stellen/{{ site.id }}/card',{target:'[data-site-id=\'{{ site.id }}\']',swap:'outerHTML'})">
+        <button type="submit" class="btn btn--xs btn--secondary">Einsatz abschließen <span class="sr-only">– Alle Einheiten fertig</span></button>
+      </form>
+    </div>
+    {% elif ec and ec.alle_fertig and site.phase.value not in ['erledigt', 'abgebrochen'] %}
     <div class="site-card__hint">
       <span class="site-card__hint--done">✅ Einheiten fertig – abschließen?</span>
     </div>

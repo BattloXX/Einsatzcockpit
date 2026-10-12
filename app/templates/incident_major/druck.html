@@ -152,7 +152,7 @@
       <select x-model="filterPhase">
         <option value="">Alle</option>
         <option value="aktiv">Aktiv (nicht erledigt)</option>
-        <option value="erledigt">Erledigt</option>
+        <option value="erledigt">Abgeschlossen</option>
         <option value="abgebrochen">Abgebrochen</option>
         {% for phase, label in phase_labels.items() %}
         <option value="{{ phase.value }}">{{ label }}</option>
@@ -227,7 +227,7 @@
     <select x-model="filterCrossStatus">
       <option value="">Alle</option>
       <option value="aktiv">Aktiv</option>
-      <option value="erledigt">Erledigt</option>
+      <option value="erledigt">Abgeschlossen</option>
     </select>
     <label>Typ:</label>
     <select x-model="filterCrossType">

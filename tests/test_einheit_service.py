@@ -138,7 +138,7 @@ def test_kontext_fremde_org_und_fremder_auftrag_sind_nicht_sichtbar():
 
 
 @pytest.mark.parametrize("von,nach,erlaubt", [
-    ("zugewiesen", "vor_ort", True), ("zugewiesen", "in_arbeit", False),
+    ("zugewiesen", "vor_ort", True), ("zugewiesen", "in_arbeit", True),
     ("bestaetigt", "anfahrt", True), ("anfahrt", "bestaetigt", True),
     ("vor_ort", "in_arbeit", True), ("in_arbeit", "vor_ort", True),
     ("vor_ort", "anfahrt", False), ("abgeschlossen", "bestaetigt", False),
@@ -204,7 +204,7 @@ def test_e3_chronik_und_alle_einheiten_fertig():
             db, _ctx(db, e2), d2, "abgeschlossen", user_id=1, author_name="Funk",
         )
         assert letzter["alle_einheiten_fertig"] is True
-        assert site.phase == SitePhase.in_arbeit
+        assert site.phase == SitePhase.fertig_gemeldet
         db.rollback()
 
 
