@@ -36,10 +36,11 @@ Jede Einsatzstelle mit bekannten Koordinaten erscheint als farbiger Kreis. Die F
 
 | Modus | Beschreibung |
 |-------|-------------|
-| **Priorität** | Rot = Sofort · Orange = Dringend · Gelb = Normal · Grau = keine Prio / Erledigt |
+| **Priorität** | Rot = Sofort · Orange = Dringend · Gelb = Normal · Grau = keine Prio / Abgeschlossen |
 | **Abschnitt** | Farbe des zugeordneten Abschnitts; Grau = kein Abschnitt |
+| **Taktisch** | Taktische Zeichen nach ÖBFV E-27; die taktische Legende wird eingeblendet |
 
-Umschalten über die Buttons **Priorität** / **Abschnitt** in der Filter-Leiste.
+Umschalten über die Buttons **Priorität**, **Abschnitt** und **Taktisch** in der Filter-Leiste.
 
 ### Klick auf Einsatzstelle
 
@@ -61,7 +62,8 @@ Die Filter-Leiste befindet sich direkt unter der Topbar und ist immer sichtbar.
 | **Phase-Checkboxen** | Ein-/Ausblenden nach Eingegangen, Erkundung, Bewertet, Disponiert, In Arbeit, Fertig gemeldet oder Abgeschlossen |
 | **Nur Aufmerksamkeit** | Zeigt nur Einsatzstellen, die auch im Dashboard unter „Braucht Aufmerksamkeit“ erscheinen |
 | **📥 Meldungen** | Bürger-Meldungs-Marker ein-/ausblenden (erscheint nur wenn Meldungen vorhanden) |
-| **📍 Pin-Modus** | Neue Einsatzstelle per Kartenklick anlegen (nur für Berechtigte) |
+| **📍 Neuer Einsatz** | Neue Einsatzstelle per Kartenklick anlegen (nur für Berechtigte) |
+| **Board** / **Dashboard** | Wechselt zum Board beziehungsweise Dashboard derselben Lage |
 
 **Fertig gemeldet** wird im Phasenfilter und auf der Karte türkis dargestellt. Für die eigene Position fragt
 der Browser erst bei der Funktion **Mein Standort** um Erlaubnis; ohne Freigabe bleibt die Karte verwendbar.
@@ -115,7 +117,7 @@ Der Pin-Modus ermöglicht das schnelle Anlegen neuer Einsatzstellen direkt auf d
 
 ### Ablauf
 
-1. **📍 Pin-Modus**-Button in der Filter-Leiste aktivieren (wird blau hervorgehoben)
+1. **📍 Neuer Einsatz**-Button in der Filter-Leiste aktivieren (wird blau hervorgehoben)
 2. Cursor wechselt auf Fadenkreuz
 3. Auf die gewünschte Position auf der Karte klicken
 4. Dialog öffnet sich:

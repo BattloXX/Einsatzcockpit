@@ -50,6 +50,8 @@ Eine Einheit kann einer oder mehreren Einsatzstellen zugewiesen werden (**Mehrfa
 **Methode 3 — aus dem Detail-Panel der Einheit:**
 - Einheit anklicken → Einsatzstellen direkt zuweisen
 
+Im Stellen-Detail wird die Auftragsart beim Disponieren gewählt: **„Erkundung zuweisen“** oder **„Disponieren“**. In den Phasen *Eingegangen* und *Erkundung* ist Erkundung vorausgewählt, in den übrigen Phasen Abarbeitung. Die Auswahl kann vor dem Absenden jeweils geändert werden.
+
 ---
 
 ## Ressourcen-Journal
@@ -120,7 +122,7 @@ Der GK sieht nur seine eigene Einheit und kann Status melden, Lagemeldungen und 
 
 Im Tab **Zugang** gibt es zusätzlich zum persönlichen SMS-Link einen **QR-Zugang**, der auf DIN A4 ausgedruckt und der Einheit übergeben wird.
 
-- **Ausstellen / Anzeigen / Drucken**: „QR-Code ausstellen“, „QR anzeigen“ (nur auf Klick, wird nach 2 Minuten wieder ausgeblendet), „QR-Code drucken“ (Stationsdrucker oder dieses Gerät). Erneutes Drucken ändert den Zugang nicht; „Neuen QR-Code“ macht den alten Ausdruck ungültig.
+- **Ausstellen / Anzeigen / Drucken**: „QR-Code ausstellen“, „QR anzeigen“ (nur auf Klick, wird nach 2 Minuten wieder ausgeblendet), „QR-Code drucken“. Der Standard-Druckdialog bietet – sofern eingerichtet – Stationsdrucker oder **Dieses Gerät**; der lokale Ausdruck ist inhaltlich gleich. Erneutes Drucken ändert den Zugang nicht; „Neuen QR-Code“ macht den alten Ausdruck ungültig.
 - **Gültigkeit und PIN**: Standardmäßig 72 Stunden (einstellbar). Optional verlangt der QR-Zugang eine PIN; sie steht **nicht** auf dem Blatt, sondern wird nur der Einsatzleitung angezeigt und separat übergeben.
 - **Rechte**: Der QR-Zugang zeigt nur die eigene Einheit und erlaubt Status, Lagemeldungen und Fotos.
 - **Widerruf** erfolgt manuell, beim Wechsel oder Entfernen des Gruppenkommandanten, beim Abrücken der Einheit, beim Lageende und über die Notbremse.
@@ -140,18 +142,4 @@ Bei aktiviertem Schalter erhält der Gruppenkommandant eine SMS bei **neuem Auft
 
 ## Einheitenansicht auf dem Smartphone/Tablet
 
-Die Einheitenansicht hat die Bereiche **Übersicht**, **Karte** und **Aufträge**. Die Karte zeigt den nächsten
-Auftrag, einen laufenden Auftrag und weitere Aufträge als Marker; Erkundungen sind besonders gekennzeichnet.
-
-Der **nächste Auftrag** folgt zuerst der Reihenfolge der Leitstelle, dann Priorität und Zeitpunkt. Eine
-Entfernungs-Empfehlung wird nur für Aufträge gleicher Priorität ohne Leitstellen-Reihenfolge verwendet und
-ändert keine Disposition. **Navigation starten** öffnet Google Maps; Straßensperren aus dem ECP werden dabei
-nicht berücksichtigt.
-
-**Mein Standort** wird nur nach Klick im Browser abgefragt, nicht gespeichert und nie an den Server gesendet.
-
-Für eine **Erkundung** stehen Navigation, Lagemeldung, Foto und **Erkundung abschließen** bereit. Für eine
-**Abarbeitung** sind es Navigation, **In Arbeit setzen**, Lagemeldung, Foto und **Fertig melden**. Änderungen
-der Leitstelle, neue vorrangige Aufträge und Rückzüge erscheinen als Hinweisbanner. „Auftrag erhalten“
-bestätigt den Auftrag. „Jetzt synchronisieren“ überträgt offline erfasste Meldungen; nicht übermittelbare
-Einträge lassen sich kopieren.
+Die Bedienung der eigenen Einheit – Zugänge, Aufträge, Karte und Offline-Outbox – ist im eigenen Artikel beschrieben: → [GSL-Einheitenansicht](Anwender-GSL-Einheitenansicht).

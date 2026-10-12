@@ -88,8 +88,16 @@ Das System kann automatisch **SMS-Erinnerungen** an Empfänger mit offenen Ausle
 - Erinnerung wird nach konfigurierbarer Zeit automatisch ausgelöst
 - Manuelle Erinnerung ist über die Ausleihe-Detailseite jederzeit möglich
 
+Die Texte für **Ausleihe** und **Erinnerung** werden in den GSL-Einstellungen je Organisation hinterlegt. Ohne eigene Vorlage nutzt das System jeweils einen Standardtext mit Material und Organisationsname.
+
 → Siehe [Installation SMS-Gateway](Installation-SMS-Gateway)
 
 ### SMS-Variable für Einsatzstellen
 
 In der Vorlage für die Ausleih-SMS steht zusätzlich `{stelle}` zur Verfügung. Sie wird durch die Bezeichnung der zugeordneten Einsatzstelle ersetzt; ohne Zuordnung bleibt sie leer.
+
+## Material vor Ort und Verleihschein
+
+Die Funktion **Material vor Ort** steht im Stellen-Detail des GSL-Boards und in der Einheitenansicht auf einem Tablet zur Verfügung. Sie dokumentiert Material, das an der Einsatzstelle bleibt, als Ausleihe.
+
+Der Verleihschein wird über den Druckdialog ausgegeben; die Druckansicht enthält unter anderem Empfänger, zugeordnete Einsatzstelle, Einheit und Materialpositionen. Die SMS-Texte für Ausleihe und Erinnerung werden unter [GSL-Einstellungen](Administration-GSL-Einstellungen) gepflegt; die Seite nennt die verfügbaren Platzhalter.

@@ -2,8 +2,8 @@
 
 ← [Zurück zur Startseite](Home)
 
-> URL: `/lage/{lage_id}/meldungen/uebergreifend` (via Großschadenslage-Board)  
-> Zugänglich für: `incident_leader`, `org_admin`, `system_admin`
+> Bedienung: Phasen-Chip **📍 Übergreifend** im Großschadenslage-Board
+> Lesen: `readonly` und höher; bearbeiten: `recorder`, `incident_leader`, `admin`, `org_admin`
 
 **Übergreifende Meldungen** (auch Cross-Marker genannt) sind lageweite Meldungen, die nicht an eine einzelne Einsatzstelle gebunden sind. Typische Anwendungsfälle: Straßensperren, Sammelplätze, Gefahrenbereiche, allgemeine Lagehinweise.
 
@@ -12,7 +12,7 @@
 ## Übersicht
 
 Übergreifende Meldungen erscheinen:
-- Als eigene Spalte **„Übergreifend"** im GSL-Board (über das Phasen-Dropdown auswählbar)
+- Als eigene Spalte **„Übergreifend"** im GSL-Board (mobil über den Phasen-Chip **📍 Übergreifend**)
 - Mit einer **Mini-OSM-Karte** in der Karten-Kachel, wenn Koordinaten hinterlegt sind
 - Als Marker auf der **Großschadenslage-Lagekarte**
 
@@ -20,17 +20,17 @@
 
 ## Meldung anlegen
 
-1. Im GSL-Board das Phasen-Dropdown auf **„Übergreifend"** umschalten.
-2. **+ Neue Meldung** klicken.
+1. Im GSL-Board den Phasen-Chip **📍 Übergreifend** wählen.
+2. **+** öffnen und die Meldung erfassen.
 3. Formular ausfüllen:
 
 | Feld | Beschreibung |
 |------|-------------|
 | **Titel** | Kurze Beschreibung der Meldung |
-| **Status** | Meldung / Achtung / Hinweis / Information |
-| **Notizen** | Freitext, Details |
+| **Typ** | z. B. Überflutete Straße, Murenabgang, Straßensperre oder Sonstige Lageinfo |
+| **Beschreibung** | Freitext, Details |
 | **Koordinaten (Karte)** | Optional: Ort auf der Mini-Karte festlegen |
-| **Adresse** | Wird aus den Koordinaten per Reverse Geocoding vorgeschlagen |
+| **Straße / Nr. / Ort** | Ortsangabe zur Meldung |
 
 4. **Speichern** — die Meldung erscheint sofort in der Spalte (WebSocket-Update).
 
@@ -40,10 +40,11 @@
 
 | Status | Icon | Farbe | Bedeutung |
 |--------|------|-------|-----------|
-| **Meldung** | 🔴 | Rot | Allgemeine Einsatzmeldung |
-| **Achtung** | ⚠️ | Orange | Warnung, Handlungsbedarf |
-| **Hinweis** | 💡 | Gelb | Informeller Hinweis |
-| **Information** | ℹ️ | Blau | Sachliche Information, kein Handlungsbedarf |
+| **Unbestätigt** | ● | Grau | Noch nicht verifiziert |
+| **Aktiv / Gefahr** | ● | Rot | Akute Lage oder Gefahr |
+| **In Bearbeitung** | ● | Orange | Bearbeitung läuft |
+| **An Dritte / Beobachtung** | ● | Blau | Weitergegeben oder beobachten |
+| **Behoben / Aufgehoben** | ● | Grün | Keine weitere Maßnahme offen |
 
 Status kann nachträglich über das Bearbeiten-Modal geändert werden.
 
@@ -75,7 +76,5 @@ Auf der **Großschadenslage-Lagekarte** werden übergreifende Meldungen als eige
 
 ## Erledigte Meldungen
 
-Eine Meldung kann als **erledigt** markiert werden:
-- Kachel wird abgedunkelt und mit einem Haken versehen
-- Bleibt in der Spalte sichtbar (für die Dokumentation)
-- Im Bericht auflisten als abgeschlossene Maßnahmen
+Der Status **Behoben / Aufgehoben** schließt die Meldung fachlich ab. Auf der Lagekarte kann er über
+**Beh. ausbl.** ausgeblendet werden; die Meldung bleibt für Dokumentation und Druck erhalten.

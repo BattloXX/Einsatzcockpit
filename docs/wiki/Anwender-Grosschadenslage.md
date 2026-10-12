@@ -49,11 +49,16 @@ Jede Einsatzstelle wird als Karte im Phasen-Kanban dargestellt:
 | **In Arbeit** | Aktive Bekämpfung / Maßnahmen laufen |
 | **Fertig gemeldet** | Alle Abarbeitungen sind durch die Einheiten fertig gemeldet; Abschluss durch die Leitstelle steht aus |
 | **Abgeschlossen** | Einsatzleitung hat die Einsatzstelle abgeschlossen |
+| **Abgebrochen** | Abgebrochene Einsatzstelle; wird außerhalb der regulären Phasenspalten geführt |
 | **Übergreifend** | Lageweite Meldung ohne einzelne Einsatzstelle |
 
 Die Spaltenfolge lautet: **Eingegangen**, **Erkundung**, **Bewertet**, **Disponiert**, **In Arbeit**,
 **Fertig gemeldet**, **Abgeschlossen**, **Übergreifend**. Auf Mobilgeräten werden sie als Phasen-Chips
 angezeigt.
+
+**Abgebrochen** ist keine reguläre Board-Spalte. Über die Adresse lässt sich das Board mit
+`?phase=` auf eine Phase vorfiltern; `?site=<ID>` öffnet direkt das Detail einer Einsatzstelle (so verlinken
+Dashboard und Karte).
 
 ### Automatische Übergänge
 
@@ -83,8 +88,16 @@ Eine abgeschlossene Einsatzstelle wird durch Rückmeldungen niemals automatisch 
 Mit **Einsatz wieder öffnen** kann die Einsatzleitung eine abgeschlossene Einsatzstelle bewusst erneut
 bearbeitbar machen.
 
+Auf Mobilgeräten erscheint im Stellen-Detail in der Phase **Fertig gemeldet** unten eine feste Leiste mit
+**Einsatz abschließen** (nur für die Einsatzleitung). **Erkundung zuweisen** und **Disponieren** stehen
+ausschließlich am Zuweisungsformular unter Ressourcen. Eine Wiedereröffnung erfolgt nie automatisch.
+
 Per Drag & Drop auf eine Karte erzeugt eine Einheit in den Spalten **Eingegangen** und **Erkundung** eine
 Erkundung; in allen anderen Phasen entsteht eine Abarbeitung.
+
+Dasselbe gilt im Zuweisungsformular im Stellen-Detail: **Erkundung zuweisen** erzeugt ausdrücklich eine
+Erkundung, **Disponieren** eine Abarbeitung. Ohne Auswahl wird für **Eingegangen** und **Erkundung** eine
+Erkundung, ab **Bewertet** eine Abarbeitung angelegt.
 
 ---
 
@@ -148,6 +161,9 @@ Die Lagekarte (`/lage/{id}/karte`) zeigt alle Einsatzstellen und Abschnitt-Polyg
 
 ## Stab (SKKM-konform)
 
+Der Stab, das Einsatz- und Personenjournal, das Funkjournal sowie der Lagebericht sind ausführlich unter
+[GSL-Stab, Journal und Lagebericht](Anwender-GSL-Stab-und-Journal) beschrieben.
+
 Der Stab (`/lage/{id}/stab`) bietet drei Tabs:
 
 ### Tab 1 – Einsatzjournal
@@ -187,6 +203,9 @@ Das Dashboard (`/lage/{id}/dashboard`) bietet eine Echtzeit-Übersicht über:
 - **Mini-Karte** mit allen Einsatzstellen und Abschnitt-Polygonen
 - **Braucht Aufmerksamkeit**: dringende Stellen, überfällige Lagemeldungen, fehlende Bestätigungen oder
   Rückmeldungen sowie „Fertig gemeldet – Abschluss ausständig“
+
+Die Hinweise stammen aus `gsl_fuehrung_service.fuehrungs_hinweise`; sie bündeln damit die Gründe, die
+eine Führungsentscheidung oder Rückmeldung benötigen.
 
 ---
 
@@ -230,7 +249,7 @@ Das **Ressourcen-Tab** im GSL-Board ermöglicht die Erfassung und Disposition vo
 
 ## Übergreifende Meldungen
 
-Im Phasen-Dropdown gibt es die Spalte **„Übergreifend"** für lageweite Meldungen, die nicht an eine einzelne Einsatzstelle gebunden sind — z.B. Straßensperren, Sammelplätze, Gefahrenbereiche.
+Das Board hat die Spalte **„📍 Übergreifend"** (mobil als Phasen-Chip) für lageweite Meldungen, die nicht an eine einzelne Einsatzstelle gebunden sind — z.B. Straßensperren, Sammelplätze, Gefahrenbereiche.
 
 Übergreifende Meldungen haben:
 - Status-Workflow (Meldung / Achtung / Hinweis / Information)
@@ -239,6 +258,12 @@ Im Phasen-Dropdown gibt es die Spalte **„Übergreifend"** für lageweite Meldu
 - Anzeige auf der Lagekarte
 
 → Vollständige Dokumentation: [Übergreifende Meldungen](Anwender-Uebergreifende-Meldungen)
+
+## Meldungseingang und Planung
+
+Der Bürger-Meldungseingang mit Portal-Link, QR-Code, SMS-Bestätigung und Übernahme ist unter
+[GSL-Meldungseingang](Anwender-GSL-Meldungseingang) beschrieben. Abschnitte, deren Übersicht und die
+Planungsansicht finden Sie unter [GSL-Sektoren und Planung](Anwender-GSL-Sektoren-und-Planung).
 
 ---
 
