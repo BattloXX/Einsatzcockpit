@@ -145,7 +145,16 @@
       {% if qr.status == "kein_zugang" %}<button class="btn btn--primary" hx-post="{{ basis }}/zugang/qr/ausstellen" hx-target="#ressourceKarteBody" hx-swap="innerHTML">QR-Code ausstellen</button>{% endif %}
       {% if qr.status == "aktiv" %}
       <button type="button" class="btn btn--secondary" data-qr-zeigen>QR anzeigen</button>
-      <form hx-post="{{ basis }}/zugang/qr/drucken" hx-target="#ressourceKarteBody" hx-swap="innerHTML"><select name="printer_id" class="form-input" aria-label="Drucker wählen">{% for p in qr_drucker %}<option value="{{ p.id }}">{{ p.name }}</option>{% else %}<option value="">Kein Drucker verfügbar</option>{% endfor %}</select><button class="btn btn--secondary" {% if not qr_drucker %}disabled{% endif %}>QR-Code drucken</button></form>
+      <button type="button" class="btn btn--secondary"
+              onclick="ecpgPrint({
+                document_type:'gsl_einheit_qr', gsl_id:{{ lage.id }},
+                title:{{ ('QR-Zugang ' ~ einheit.label ~ ' drucken')|tojson|forceescape }},
+                stationUrl:'{{ basis }}/zugang/qr/drucken',
+                localUrl:'{{ basis }}/zugang/qr/vorschau?druck=1',
+                onStationDone:function(){
+                  htmx.ajax('GET','{{ basis }}/karte/zugang',{target:'#ressourceKarteBody',swap:'innerHTML'});
+                }
+              })">🖨 QR-Code drucken</button>
       <button class="btn btn--ghost" hx-post="{{ basis }}/zugang/qr/ausstellen" hx-vals='{"neu":true}' hx-target="#ressourceKarteBody" hx-swap="innerHTML" hx-confirm="Neuen QR-Code ausstellen? Der alte wird sofort ungültig.">Neuen QR-Code (alter wird ungültig)</button>
       <button class="btn btn--ghost" style="color:var(--red);" hx-post="{{ basis }}/zugang/qr/widerrufen" hx-target="#ressourceKarteBody" hx-swap="innerHTML" hx-confirm="QR-Zugang widerrufen?">QR widerrufen</button>{% endif %}
     </div>

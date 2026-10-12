@@ -296,6 +296,9 @@
   </div>
 </dialog>
 
+{# Einheitlicher Druck-Dialog (ecpgPrint) – QR-Druck der Ressourcenkarte und Druck-Button
+   im Stellen-Detail brauchen ihn; ohne Include ist window.ecpgPrint undefiniert. #}
+{% include "_print_dialog.html" %}
 {% endblock %}
 
 {% block lage_scripts %}

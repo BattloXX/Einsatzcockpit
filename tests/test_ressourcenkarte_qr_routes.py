@@ -119,7 +119,7 @@ def test_qr_drucken_legt_je_klick_einen_job_ohne_rotation_an(client, setup_db, m
         jobs = db.query(PrintJob).filter_by(gsl_id=lage_id, document_type=DOC_GSL_EINHEIT_QR).all()
         assert zugang.generation == 1 and zugang.qr_druck_job_id == max(j.id for j in jobs)
         assert len(jobs) == 2 and {j.artifact_ref for j in jobs} == {f"{einheit_id}:1"}
-        assert all(j.org_id == org_id and j.options in (None, {}) and not j.error for j in jobs)
+        assert all(j.org_id == org_id and j.options["copies"] == 1 and not j.error for j in jobs)
     finally:
         db.close()
 

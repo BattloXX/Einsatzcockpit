@@ -503,8 +503,9 @@ async def qr_zugang_widerrufen(
 
 
 @router.get("/zugang/qr/vorschau", response_class=HTMLResponse)
-def qr_zugang_vorschau(
-    request: Request, lage_id: int, einheit_id: int, db: Session = Depends(get_db), _=Depends(require_role(*_WRITE))
+async def qr_zugang_vorschau(
+    request: Request, lage_id: int, einheit_id: int, druck: bool = Query(False), db: Session = Depends(get_db),
+    _=Depends(require_role(*_WRITE)),
 ):
     from app.services.qr_service import generate_qr_datauri
     lage, einheit = _context(request, lage_id, einheit_id, db)
@@ -518,37 +519,66 @@ def qr_zugang_vorschau(
         raise HTTPException(404, "Kein aktiver QR-Zugang")
     link = gk_zugang_service.link_fuer(gk_zugang_service.token_neu_berechnen(row))
     qr_img = generate_qr_datauri(link, druck=True, box_size=14)
-    html = templates.env.get_template("incident_major/_ressource_karte_qr_vorschau.html").render(
-        zugang=row, qr_img=qr_img, pin=gk_zugang_service.qr_pin_fuer_fuehrung(row), user=request.state.user
-    )
+    pin = gk_zugang_service.qr_pin_fuer_fuehrung(row)
+    if druck:
+        row.qr_druck_at = datetime.now(UTC).replace(tzinfo=None)
+        write_audit(
+            db, "gsl.zugang.qr_gedruckt", org_id=lage.org_id, user_id=request.state.user.id,
+            entity_type="lage_einheit", entity_id=einheit.id,
+            payload={"lage_id": lage.id, "einheit_id": einheit.id, "ziel": "lokal"},
+        )
+        db.commit()
+        await broadcast_lage(lage.id, {"type": "ressource:changed", "einheit_id": einheit.id})
+        html = templates.env.get_template("incident_major/_ressource_karte_qr_druck.html").render(
+            lage=lage, einheit=einheit, zugang=row, qr_img=qr_img, pin=pin, user=request.state.user,
+        )
+    else:
+        html = templates.env.get_template("incident_major/_ressource_karte_qr_vorschau.html").render(
+            zugang=row, qr_img=qr_img, pin=pin, user=request.state.user
+        )
     return HTMLResponse(html, headers={"Cache-Control": "no-store"})
 
 
 @router.post("/zugang/qr/drucken", response_class=HTMLResponse)
 async def qr_zugang_drucken(
-    request: Request, lage_id: int, einheit_id: int, printer_id: int = Form(...), db: Session = Depends(get_db),
+    request: Request, lage_id: int, einheit_id: int, printer_id: int = Form(...), copies: int = Form(1, ge=1, le=20),
+    duplex: str = Form(""), media: str = Form(""), color: str = Form(""), db: Session = Depends(get_db),
     _=Depends(require_role(*_WRITE)),
 ):
     from app.services.print_dispatcher import create_print_job, dispatch_job
     lage, einheit = _context(request, lage_id, einheit_id, db)
     _darf_zugang_verwalten(request, request.state.user)
-    try:
-        result = gk_zugang_service.stelle_qr_zugang_aus(
-            db, lage, einheit, user_id=request.state.user.id, grund="druck", neu=False
-        )
-    except ValueError as exc:
-        return HTMLResponse(str(exc), status_code=422, headers={"Cache-Control": "no-store"})
+    wants_json = "application/json" in request.headers.get("accept", "") or request.headers.get("x-ecpg") == "1"
+
+    def error(message: str):
+        if wants_json:
+            return JSONResponse({"ok": False, "error": message}, status_code=422)
+        return HTMLResponse(message, status_code=422, headers={"Cache-Control": "no-store"})
+
     printer = db.get(Printer, printer_id)
     gateway = db.get(Gateway, printer.gateway_id) if printer else None
     if (not printer or printer.org_id != lage.org_id or not printer.aktiv or not gateway
             or gateway.org_id != lage.org_id or not gateway.is_paired):
-        return HTMLResponse(
-            "Kein gekoppelter, aktiver Drucker verfügbar.", status_code=422, headers={"Cache-Control": "no-store"}
+        return error("Kein gekoppelter, aktiver Drucker verfügbar.")
+    try:
+        zugang_result = gk_zugang_service.stelle_qr_zugang_aus(
+            db, lage, einheit, user_id=request.state.user.id, grund="druck", neu=False
         )
+    except ValueError as exc:
+        return error(str(exc))
+    defaults = {key: value for key, value in (printer.defaults or {}).items() if key in ("duplex", "color", "media")}
+    options = {"copies": copies, "duplex": duplex or defaults.get("duplex", "off")}
+    effective_media = media or defaults.get("media", "A4")
+    supported_media = (printer.capabilities or {}).get("media") or ["A4"]
+    if effective_media in ("A3", "A4") and effective_media in supported_media:
+        options["media"] = effective_media
+    effective_color = color or defaults.get("color", "color")
+    if effective_color in ("color", "monochrome") and (printer.capabilities or {}).get("color"):
+        options["color"] = effective_color
     job, _created = create_print_job(
         db, org_id=lage.org_id, gateway_id=gateway.id, printer_id=printer.id, source="manual",
         document_type=DOC_GSL_EINHEIT_QR, gsl_id=lage.id,
-        artifact_ref=f"{einheit.id}:{result.generation}", options={}, created_by_id=request.state.user.id,
+        artifact_ref=f"{einheit.id}:{zugang_result.generation}", options=options, created_by_id=request.state.user.id,
     )
     row = db.query(gk_zugang_service.LageEinheitZugang).filter(
         gk_zugang_service.LageEinheitZugang.einheit_id == einheit.id,
@@ -558,11 +588,16 @@ async def qr_zugang_drucken(
     write_audit(
         db, "gsl.zugang.qr_gedruckt", org_id=lage.org_id, user_id=request.state.user.id,
         entity_type="lage_einheit", entity_id=einheit.id,
-        payload={"lage_id": lage.id, "einheit_id": einheit.id, "job_id": job.id},
+        payload={"lage_id": lage.id, "einheit_id": einheit.id, "job_id": job.id, "ziel": "station"},
     )
     db.commit()
-    await dispatch_job(db, job)
+    dispatch_result = await dispatch_job(db, job)
     await broadcast_lage(lage.id, {"type": "ressource:changed", "einheit_id": einheit.id})
+    if wants_json:
+        return JSONResponse({
+            "ok": dispatch_result.get("status") != "failed", "printer": printer.name,
+            "status": dispatch_result.get("status"), "error": dispatch_result.get("error"),
+        })
     response = _zugang(request, lage, einheit, db)
     response.headers["Cache-Control"] = "no-store"
     return response
