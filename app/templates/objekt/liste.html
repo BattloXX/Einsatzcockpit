@@ -1,6 +1,25 @@
 {% extends "base.html" %}
 {% block title %}Objekte – {{ brand }}{% endblock %}
 {% block content %}
+{% macro sort_link(key, label) %}
+  {% set next_richtung = ('desc' if richtung == 'asc' else 'asc') if sort == key else ('desc' if key in ('aktualisiert', 'revision') else 'asc') %}
+  {% set params = {
+    'q': filter_q,
+    'status': filter_status,
+    'kategorie': filter_kategorie or '',
+    'merkmal': filter_merkmal or '',
+    'datenqualitaet': filter_datenqualitaet,
+    'revision': filter_revision,
+    'aktualisiert_von': filter_aktualisiert_von,
+    'aktualisiert_bis': filter_aktualisiert_bis,
+    'sort': key,
+    'richtung': next_richtung
+  } %}
+  <a class="objekt-sort-link" href="/objekte/?{{ params|urlencode }}">{{ label }}{% if sort == key %} {{ '▲' if richtung == 'asc' else '▼' }}{% endif %}</a>
+{% endmacro %}
+<style>
+  .objekt-sort-link { color: inherit; text-decoration: none; cursor: pointer; white-space: nowrap; }
+</style>
 <div class="page-content">
   <div class="page-header">
     <div>
@@ -64,6 +83,16 @@
     <div class="form-group" style="margin:0;">
       <label class="checkbox-label"><input type="checkbox" name="revision" value="faellig" {% if filter_revision == 'faellig' %}checked{% endif %}> Revision fällig</label>
     </div>
+    <div class="form-group" style="margin:0;">
+      <label class="form-label">Aktualisiert von</label>
+      <input type="date" name="aktualisiert_von" value="{{ filter_aktualisiert_von }}" class="form-input">
+    </div>
+    <div class="form-group" style="margin:0;">
+      <label class="form-label">bis</label>
+      <input type="date" name="aktualisiert_bis" value="{{ filter_aktualisiert_bis }}" class="form-input">
+    </div>
+    <input type="hidden" name="sort" value="{{ sort }}">
+    <input type="hidden" name="richtung" value="{{ richtung }}">
     <button type="submit" class="btn btn--ghost">Filtern</button>
   </form>
 
@@ -82,8 +111,8 @@
                  :checked="auswahl.length === alle.length && alle.length > 0"
                  title="Alle markieren">
         </th>
-        <th>Nummer</th><th>Name</th><th>Kategorie</th><th>Adresse</th>
-        <th>Merkmale</th><th>Vollständigkeit</th><th>Status</th><th>Datenpflege</th><th>Revision</th>
+        <th>{{ sort_link('nummer', 'Nummer') }}</th><th>{{ sort_link('name', 'Name') }}</th><th>{{ sort_link('kategorie', 'Kategorie') }}</th><th>{{ sort_link('adresse', 'Adresse') }}</th>
+        <th>{{ sort_link('merkmale', 'Merkmale') }}</th><th>{{ sort_link('vollstaendigkeit', 'Vollständigkeit') }}</th><th>{{ sort_link('status', 'Status') }}</th><th>{{ sort_link('datenpflege', 'Datenpflege') }}</th><th>{{ sort_link('revision', 'Revision') }}</th><th>{{ sort_link('aktualisiert', 'Aktualisiert') }}</th>
       </tr>
     </thead>
     <tbody>
@@ -133,6 +162,7 @@
             {% endif %}
           {% else %}<span class="text-muted">–</span>{% endif %}
         </td>
+        <td>{% if o.aktualisiert_am %}{{ o.aktualisiert_am|local_datetime }}{% else %}<span class="text-muted">–</span>{% endif %}</td>
       </tr>
       {% endfor %}
     </tbody>

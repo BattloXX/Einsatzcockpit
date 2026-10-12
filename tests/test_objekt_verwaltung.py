@@ -4,6 +4,8 @@ PR1: Detailseite mit Tabs (Übersicht / Lagekarte / Dokumente), Karte als
 editierbarer Inline-Tab.
 PR2: pflegbare Auswahllisten (Kontaktarten/Dokumentarten/Piktogramme).
 """
+from datetime import datetime
+
 import pytest
 
 from app.core.security import hash_password
@@ -18,6 +20,7 @@ from app.models.objekt import (
     GefahrenKatalog,
     MerkmalKatalog,
     Objekt,
+    ObjektKategorie,
     ObjektAuswahl,
     ObjektKontakt,
 )
@@ -126,6 +129,121 @@ def test_liste_filter_mit_numerischer_kategorie_und_merkmal(client):
 
     r = client.get("/objekte/?kategorie=999999&merkmal=999999")
     assert r.status_code == 200, r.text[:500]
+
+
+def test_liste_zeigt_aktualisiert_spalte_lokal_formatiert(client):
+    org_id, obj_id = _setup_objekt("verw_aktualisiert_anzeige", nummer=68001)
+    zeitpunkt = datetime(2024, 6, 15, 12, 30)
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        objekt = db.get(Objekt, obj_id)
+        objekt.name = "Aktualisiert-Anzeige-68001"
+        objekt.aktualisiert_am = zeitpunkt
+        db.commit()
+        from app.core.timezones import format_local_datetime
+
+        erwartet = format_local_datetime(zeitpunkt, db.get(FireDept, org_id))
+    finally:
+        db.close()
+
+    _login(client, "verw_aktualisiert_anzeige", "Test1234!")
+    r = client.get("/objekte/?q=Aktualisiert-Anzeige-68001")
+    assert r.status_code == 200, r.text[:500]
+    assert "Aktualisiert" in r.text
+    assert erwartet in r.text
+
+
+def test_liste_filtert_nach_aktualisiertem_datum(client):
+    org_id, obj_id = _setup_objekt("verw_aktualisiert_filter", nummer=68002)
+    prefix = "Aktualisiert-Filter-680"
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        alt = db.get(Objekt, obj_id)
+        alt.name = f"{prefix}-Alt"
+        alt.aktualisiert_am = datetime(2020, 1, 15, 12)
+        neu = Objekt(
+            org_id=org_id, nummer=68003, name=f"{prefix}-Neu",
+            status=OBJEKT_STATUS_FREIGEGEBEN, aktualisiert_am=datetime(2024, 6, 15, 12),
+        )
+        db.add(neu)
+        db.commit()
+    finally:
+        db.close()
+
+    _login(client, "verw_aktualisiert_filter", "Test1234!")
+    r = client.get(
+        f"/objekte/?q={prefix}&aktualisiert_von=2024-01-01&aktualisiert_bis=2024-12-31"
+    )
+    assert r.status_code == 200, r.text[:500]
+    assert f"{prefix}-Neu" in r.text
+    assert f"{prefix}-Alt" not in r.text
+
+
+def test_liste_ignoriert_ungueltige_aktualisiert_daten(client):
+    _setup_objekt("verw_aktualisiert_ungueltig", nummer=68004)
+    _login(client, "verw_aktualisiert_ungueltig", "Test1234!")
+
+    r = client.get("/objekte/?aktualisiert_von=abc&aktualisiert_bis=")
+    assert r.status_code == 200, r.text[:500]
+
+
+def test_liste_sortiert_nach_name_und_aktualisiert(client):
+    org_id, obj_id = _setup_objekt("verw_objekt_sortierung", nummer=68005)
+    prefix = "Objekt-Sortierung-680"
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        alpha = db.get(Objekt, obj_id)
+        alpha.name = f"{prefix}-Alpha"
+        alpha.aktualisiert_am = datetime(2023, 1, 15, 12)
+        zulu = Objekt(
+            org_id=org_id, nummer=68006, name=f"{prefix}-Zulu",
+            status=OBJEKT_STATUS_FREIGEGEBEN, aktualisiert_am=datetime(2024, 1, 15, 12),
+        )
+        db.add(zulu)
+        db.commit()
+    finally:
+        db.close()
+
+    _login(client, "verw_objekt_sortierung", "Test1234!")
+    nach_name = client.get(f"/objekte/?q={prefix}&sort=name&richtung=desc")
+    assert nach_name.status_code == 200, nach_name.text[:500]
+    assert nach_name.text.index(f"{prefix}-Zulu") < nach_name.text.index(f"{prefix}-Alpha")
+    nach_aktualisiert = client.get(f"/objekte/?q={prefix}&sort=aktualisiert&richtung=asc")
+    assert nach_aktualisiert.status_code == 200, nach_aktualisiert.text[:500]
+    assert nach_aktualisiert.text.index(f"{prefix}-Alpha") < nach_aktualisiert.text.index(f"{prefix}-Zulu")
+
+
+def test_liste_unbekannte_sortierung_und_leere_kategorie_zuletzt(client):
+    org_id, obj_id = _setup_objekt("verw_objekt_sortierung_fallback", nummer=68008)
+    prefix = "Objekt-Kategorie-680"
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        kategorie = ObjektKategorie(org_id=org_id, name="Sortierkategorie 680", sort=0, aktiv=True)
+        db.add(kategorie)
+        db.flush()
+        ohne_kategorie = db.get(Objekt, obj_id)
+        ohne_kategorie.name = f"{prefix}-Ohne"
+        mit_kategorie = Objekt(
+            org_id=org_id, nummer=68007, name=f"{prefix}-Mit",
+            status=OBJEKT_STATUS_FREIGEGEBEN, kategorie_id=kategorie.id,
+        )
+        db.add(mit_kategorie)
+        db.commit()
+    finally:
+        db.close()
+
+    _login(client, "verw_objekt_sortierung_fallback", "Test1234!")
+    fallback = client.get(f"/objekte/?q={prefix}&sort=xyz&richtung=quer")
+    assert fallback.status_code == 200, fallback.text[:500]
+    assert fallback.text.index(f"{prefix}-Mit") < fallback.text.index(f"{prefix}-Ohne")
+    for richtung in ("asc", "desc"):
+        r = client.get(f"/objekte/?q={prefix}&sort=kategorie&richtung={richtung}")
+        assert r.status_code == 200, r.text[:500]
+        assert r.text.index(f"{prefix}-Mit") < r.text.index(f"{prefix}-Ohne")
 
 
 def test_schreibrouten_nach_service_extraktion(client):
