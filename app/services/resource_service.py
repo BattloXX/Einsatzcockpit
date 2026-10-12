@@ -526,6 +526,16 @@ def assign_to_site(
 # ── Mehrfach-Disposition (Dispatch-System) ────────────────────────────────────
 
 
+def auftragsart_fuer_phase(site: IncidentSite) -> str:
+    """Auftragsart, wenn der Aufrufer keine nennt: in Eingegangen/Erkundung wird erkundet, sonst abgearbeitet.
+
+    Für Eingänge ohne explizite Art (Board-Formular, MCP). Ohne diese Regel landeten Aufrufer ohne
+    Parameter (z. B. MCP-Clients mit zwischengespeichertem Tool-Schema) immer bei „abarbeitung“ und die
+    Stelle sprang beim Zuweisen einer Erkundung auf Disponiert.
+    """
+    return "erkundung" if site.phase.value in {"eingegangen", "erkundung"} else "abarbeitung"
+
+
 def dispatch_to_site(
     db: Session,
     einheit_id: int,

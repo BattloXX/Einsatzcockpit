@@ -1000,12 +1000,10 @@ async def site_einheit_zuweisen(
     site = db.get(IncidentSite, site_id)
     if not site or site.major_incident_id != lage_id:
         raise HTTPException(status_code=404)
-    auftragsart = "erkundung" if site.phase in {SitePhase.eingegangen, SitePhase.erkundung} else "abarbeitung"
-
     try:
         dispatch = resource_service.dispatch_to_site(
             db, einheit_id, lage_id, site_id,
-            auftragsart=auftragsart,
+            auftragsart=resource_service.auftragsart_fuer_phase(site),
             author_name=get_author_name(request), user_id=user.id,
         )
         einheit = db.get(LageEinheit, einheit_id)
@@ -1147,7 +1145,7 @@ async def site_einheit_disponieren(
     site_id: int,
     einheit_id: int = Form(...),
     auftrag: str | None = Form(None),
-    auftragsart: str = Form("abarbeitung"),
+    auftragsart: str | None = Form(None),
     reihenfolge: int | None = Form(None),
     background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
@@ -1163,7 +1161,8 @@ async def site_einheit_disponieren(
     try:
         dispatch = resource_service.dispatch_to_site(
             db, einheit_id, lage_id, site_id,
-            auftrag=auftrag, auftragsart=auftragsart, reihenfolge=reihenfolge,
+            auftrag=auftrag, auftragsart=auftragsart or resource_service.auftragsart_fuer_phase(site),
+            reihenfolge=reihenfolge,
             author_name=get_author_name(request), user_id=user.id,
         )
         einheit = db.get(LageEinheit, einheit_id)

@@ -568,12 +568,13 @@ async def gsl_ressource_anlegen(
 
 
 @register_tool(name="gsl_einheit_disponieren", description=(
-    "Disponiert eine Einheit zu einer Einsatzstelle; auftragsart ist erkundung oder abarbeitung."
+    "Disponiert eine Einheit zu einer Einsatzstelle; auftragsart ist erkundung oder abarbeitung. "
+    "Ohne auftragsart: erkundung, solange die Stelle in Eingegangen/Erkundung steht, sonst abarbeitung."
 ),
                required_roles=READ, module_check=_module_check)
 async def gsl_einheit_disponieren(context: MCPContext, lage_id: int, einheit_id: int, site_id: int,
                                   auftrag: str | None = None, reihenfolge: int | None = None,
-                                  auftragsart: str = "abarbeitung") -> dict[str, object]:
+                                  auftragsart: str | None = None) -> dict[str, object]:
     try:
         lage = _lage(context, lage_id)
         _edit(context, lage)
@@ -581,10 +582,11 @@ async def gsl_einheit_disponieren(context: MCPContext, lage_id: int, einheit_id:
         site = context.db.get(IncidentSite, site_id)
         if site is None or site.major_incident_id != lage.id:
             raise ValueError("Einsatzstelle nicht gefunden")
-        if auftragsart not in {"erkundung", "abarbeitung"}:
+        if auftragsart is not None and auftragsart not in {"erkundung", "abarbeitung"}:
             raise ValueError("auftragsart muss erkundung oder abarbeitung sein.")
         dispatch = resource_service.dispatch_to_site(context.db, einheit_id, lage.id, site_id, auftrag=auftrag,
-            reihenfolge=reihenfolge, auftragsart=auftragsart, author_name=_author(context),
+            reihenfolge=reihenfolge, auftragsart=auftragsart or resource_service.auftragsart_fuer_phase(site),
+            author_name=_author(context),
             user_id=context.user.id, quelle="mcp")
         context.db.add(SiteLogEntry(
             incident_site_id=site_id, kind="resource", text=f"Einheit disponiert: {einheit.label}",

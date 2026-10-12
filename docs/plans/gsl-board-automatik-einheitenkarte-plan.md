@@ -236,7 +236,7 @@ Weitere Punkte:
     - Fertig gemeldet wartet auf Abschluss
   - Jede Zeile öffnet das Site-Detail.
   - Mobil einspaltig, Aktualisierung über WebSocket bzw. HTMX.
-- **Site-Detail mobil** (`_site_detail.html`): sticky Aktionsleiste mit Erkundung zuweisen · Disponieren · Einsatz abschließen, gemäß `_can_edit` und `_can_manage`. Das Dialogfenster füllt bei ≤ 760 px den Bildschirm.
+- **Site-Detail mobil** (`_site_detail.html`): sticky Aktionsleiste mit „Einsatz abschließen“ (nur bei Fertig gemeldet, `_can_manage`). Ursprünglich auch „Erkundung zuweisen“/„Disponieren“ – nach Rückmeldung entfernt (#534), sie scrollten nur zum Zuweisungsformular. Das Dialogfenster füllt bei ≤ 760 px den Bildschirm.
 - **Karte** (`karte.html`):
   - Breakpoint auf ≤ 760 px angleichen
   - Filter „Nur Aufmerksamkeit“, gleiche Quelle wie das Dashboard

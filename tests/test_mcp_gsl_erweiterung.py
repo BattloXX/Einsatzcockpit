@@ -125,7 +125,7 @@ def test_mcp_disposition_loest_genau_eine_auftrags_sms_aus(client, monkeypatch):
     monkeypatch.setattr(gk_zugang_service, "send_sms", senden)
     monkeypatch.setattr(gk_zugang_service, "sms_available", lambda org_id, db: True)
     dispatched = _call(client, token, "gsl_einheit_disponieren", lage_id=lage_id, einheit_id=einheit_id,
-                       site_id=site_id, auftrag="Keller")
+                       site_id=site_id, auftrag="Keller", auftragsart="abarbeitung")
     assert len(texte) == 1 and "Neuer Einsatzauftrag" in texte[0]
     _call(client, token, "gsl_auftrag_aendern", lage_id=lage_id, dispatch_id=dispatched["dispatch_id"],
           auftrag="Keller")

@@ -88,7 +88,7 @@
 .site-log-form__actions .btn { margin-left:auto; }
 @media (max-width:760px) { .site-material-form__grid { grid-template-columns:1fr; } .site-material-form__position { flex-wrap:wrap; } .site-material-form__position .form-input:first-child { min-width:calc(100% - 100px); } }
 @media (max-width:760px) {
-  .site-detail { padding-bottom:72px; }
+  .site-detail:has(~ .site-detail-actions) { padding-bottom:72px; }
   .site-detail-actions { position:sticky; bottom:0; z-index:5; display:flex; gap:6px; padding:9px; margin:16px -16px -16px; background:var(--surface-mid); border-top:1px solid var(--border); }
   .site-detail-actions .btn { flex:1; min-height:44px; }
 }
@@ -550,6 +550,10 @@
           hx-target="#siteDetailContent"
           hx-swap="innerHTML"
           hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'>
+      {# Auftragsart als eigenes Feld statt Button-Wert: der Wert des geklickten Submit-Buttons
+         kommt nicht in jedem Browser/htmx-Pfad mit, dann wurde aus „Erkundung zuweisen“ eine
+         Disposition. Die Buttons setzen das Feld vor dem Absenden. #}
+      <input type="hidden" name="auftragsart" value="{{ 'erkundung' if site.phase.value in ['eingegangen', 'erkundung'] else 'abarbeitung' }}">
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
         <select id="siteDisponierenEinheitSelect" name="einheit_id" class="form-select form-select--sm" style="flex:1;">
           {% for e in dispatchable %}
@@ -559,8 +563,8 @@
           </option>
           {% endfor %}
         </select>
-        <button type="submit" name="auftragsart" value="erkundung" class="btn btn--sm {% if site.phase.value in ['eingegangen', 'erkundung'] %}btn--primary{% else %}btn--secondary{% endif %}">Erkundung zuweisen</button>
-        <button type="submit" name="auftragsart" value="abarbeitung" class="btn btn--sm {% if site.phase.value not in ['eingegangen', 'erkundung'] %}btn--primary{% else %}btn--secondary{% endif %}">Disponieren</button>
+        <button type="submit" data-auftragsart="erkundung" onclick="this.form.elements.auftragsart.value='erkundung'" class="btn btn--sm {% if site.phase.value in ['eingegangen', 'erkundung'] %}btn--primary{% else %}btn--secondary{% endif %}">Erkundung zuweisen</button>
+        <button type="submit" data-auftragsart="abarbeitung" onclick="this.form.elements.auftragsart.value='abarbeitung'" class="btn btn--sm {% if site.phase.value not in ['eingegangen', 'erkundung'] %}btn--primary{% else %}btn--secondary{% endif %}">Disponieren</button>
       </div>
       <textarea name="auftrag" class="form-input" maxlength="2000" placeholder="Auftrag (optional)" style="margin-top:6px;"></textarea>
       <input type="number" name="reihenfolge" class="form-input" min="1" placeholder="Reihenfolge (optional)" style="margin-top:6px;">
@@ -640,24 +644,13 @@
 
 </div>
 
-{% if (can_edit and site.phase.value not in ['erledigt', 'abgebrochen']) or (can_manage and site.phase.value == 'fertig_gemeldet') %}
+{# Mobile Aktionsleiste: nur der Abschluss. „Erkundung zuweisen“/„Disponieren“ stehen direkt am
+   Zuweisungsformular unter Ressourcen – Kopien hier scrollten nur dorthin und verwirrten. #}
+{% if can_manage and site.phase.value == 'fertig_gemeldet' %}
 <div class="site-detail-actions">
-  {% if can_edit and site.phase.value not in ['erledigt', 'abgebrochen'] %}
-  <button type="button" class="btn btn--xs btn--secondary" onclick="siteDetailDispatch('erkundung')">Erkundung zuweisen</button>
-  <button type="button" class="btn btn--xs btn--secondary" onclick="siteDetailDispatch('abarbeitung')">Disponieren</button>
-  {% endif %}
-  {% if can_manage and site.phase.value == 'fertig_gemeldet' %}
   <button type="button" class="btn btn--xs btn--primary" onclick="siteDetailAbschliessen()">Einsatz abschließen</button>
-  {% endif %}
 </div>
 <script>
-function siteDetailDispatch(auftragsart) {
-  var form = document.querySelector('#siteDetailContent form[hx-post*="einheit-disponieren"]');
-  if (!form) return;
-  var button = form.querySelector('button[name="auftragsart"][value="' + auftragsart + '"]');
-  form.scrollIntoView({behavior: 'smooth', block: 'center'});
-  if (button) button.focus();
-}
 function siteDetailAbschliessen() {
   var form = document.querySelector('#siteDetailContent form[hx-post*="abschliessen"]');
   if (form) form.requestSubmit();
