@@ -122,6 +122,11 @@
     }
     ensureAutocomplete(function () {
       function onSelect(item) {
+        // Alle Adressteile aus dem Vorschlag übernehmen, nicht nur das Feld,
+        // in dem getippt wurde (z. B. "Kirchstraße 12" → auch Nr. 12).
+        if (item.street) street.value = item.street;
+        if (item.house_number) houseNo.value = item.house_number;
+        if (item.city) city.value = item.city;
         if (item.lat != null && item.lng != null) {
           manualPin = false;
           setMarker(item.lat, item.lng, 16);

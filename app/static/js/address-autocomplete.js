@@ -123,6 +123,11 @@
           e.preventDefault(); // blur verhindern
           selectItem(i);
         });
+        // Fallback für Touch-Geräte, auf denen mousedown nicht zuverlässig
+        // vor dem Schließen der Liste ankommt.
+        li.addEventListener('click', function () {
+          if (ul.style.display !== 'none') selectItem(i);
+        });
         li.addEventListener('mouseover', function () {
           setActive(i);
         });
@@ -156,12 +161,14 @@
       var item = lastItems[idx];
       if (!item) return;
 
+      // Fehlt der passende Teil im Vorschlag (z. B. "6922 Wolfurt" im
+      // Straßenfeld), bleibt die Eingabe stehen statt des ganzen Labels.
       if (field === 'street') {
-        input.value = item.street || item.label;
+        input.value = item.street || input.value;
       } else if (field === 'house') {
-        input.value = item.house_number || item.label;
+        input.value = item.house_number || input.value;
       } else if (field === 'city') {
-        input.value = item.city || item.label;
+        input.value = item.city || input.value;
       }
 
       hideDropdown();
@@ -180,9 +187,11 @@
         e.preventDefault();
         setActive(Math.max(activeIdx - 1, 0));
       } else if (e.key === 'Enter') {
-        if (activeIdx >= 0) {
+        // Enter bei offener Liste übernimmt den markierten bzw. ersten
+        // Vorschlag, statt das Formular mit dem Tipptext abzuschicken.
+        if (lastItems.length) {
           e.preventDefault();
-          selectItem(activeIdx);
+          selectItem(activeIdx >= 0 ? activeIdx : 0);
         }
       } else if (e.key === 'Escape') {
         hideDropdown();
@@ -191,7 +200,7 @@
 
     // Blur → schließen (Verzögerung, damit mousedown noch feuern kann)
     input.addEventListener('blur', function () {
-      setTimeout(hideDropdown, 160);
+      setTimeout(hideDropdown, 250);
     });
 
     // Scroll/Resize → Dropdown repositionieren
