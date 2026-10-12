@@ -86,15 +86,18 @@ Helper: `app/core/timezones.py`; Jinja-Filter `local`, `local_time`, `local_date
 ```
 .venv/bin/python -m ruff check app/
 .venv/bin/python -m mypy app/ --ignore-missing-imports
-.venv/bin/python -m pytest -q
+.venv/bin/python -m pytest -q -n auto
 npm run test:js # Offline-Outbox des Einheitenmodus; nötig bei Änderungen an app/static/js/einheit_*
 ```
 
 - Immer `.venv/bin/python`; es gibt kein `python` im PATH.
-- Nie zwei Testläufe parallel (gemeinsame SQLite-Datei → hunderte Scheinfehler).
+- pytest-xdist verwendet pro Worker eine eigene SQLite-Datei (`test_gw0.db`, …; seriell
+  `test_main.db`), daher ist paralleles Testen mit `-n` erlaubt. Zwei getrennte
+  pytest-Prozesse gleichzeitig bleiben verboten, sofern beide den Worker `main` nutzen.
   Laufenden Test prüfen mit `ps -eo args | grep "[p]ytest"`, nicht `pgrep pytest`.
-- Voller Lauf ≈ 4 min. CI testet gegen **MariaDB inkl. `alembic upgrade head`**,
-  lokal SQLite – Migrationen können lokal grün und in CI rot sein.
+- Voller Lauf parallel mit vier Workern: etwa 2 Minuten lokal. Der CI-Testjob verwendet
+  SQLite; **MariaDB inkl. `alembic upgrade head` und Seed** wird
+  separat im Migrationsjob geprüft.
 
 ## Orientierung (Einsatzboard)
 

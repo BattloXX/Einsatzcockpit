@@ -12,9 +12,6 @@ import pytest
 # Test-Umgebungsvariablen vor App-Import setzen
 os.environ.setdefault("SECRET_KEY", "test-secret-key-fuer-tests-mindestens-32-zeichen!")
 os.environ.setdefault("DEBUG", "true")
-os.environ["DATABASE_URL"] = "sqlite:///./test.db"
-
-
 # ── render_template ────────────────────────────────────────────────────────────
 
 def test_render_template_basic():

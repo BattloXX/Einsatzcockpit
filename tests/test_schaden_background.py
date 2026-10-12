@@ -49,7 +49,11 @@ def fahrt_mit_schaden(db_session):
                             display_order=98)
         db_session.add(fz)
         db_session.flush()
-    zweck = db_session.query(Fahrtzweck).filter(Fahrtzweck.org_id == org.id).first()
+    zweck = (
+        db_session.query(Fahrtzweck)
+        .filter(Fahrtzweck.org_id == org.id, Fahrtzweck.kategorie == FahrtKategorie.uebung)
+        .first()
+    )
     if not zweck:
         zweck = Fahrtzweck(org_id=org.id, name="Testübung", kategorie=FahrtKategorie.uebung)
         db_session.add(zweck)

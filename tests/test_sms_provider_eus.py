@@ -13,8 +13,6 @@ import pytest_asyncio
 
 os.environ.setdefault("SECRET_KEY", "test-secret-key-fuer-tests-mindestens-32-zeichen!")
 os.environ.setdefault("DEBUG", "true")
-os.environ["DATABASE_URL"] = "sqlite:///./test.db"
-
 from app.services import eus_sms_service
 from app.services.eus_sms_service import (
     EusConfig,

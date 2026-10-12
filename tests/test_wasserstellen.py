@@ -11,12 +11,13 @@ from app.models.master import FireDept
 from app.models.user import Role, User, UserRole
 from app.models.wasserstelle import Wasserstelle
 from app.services import wasserstelle_service as wss
+from tests.conftest import TEST_DB_URL
 
-# ── DB-Fixture (nutzt die von conftest angelegte test.db) ───────────────────────
+# ── DB-Fixture (nutzt die von conftest angelegte Worker-DB) ─────────────────────
 
 @pytest.fixture
 def db(setup_db):
-    eng = create_engine("sqlite:///./test.db", connect_args={"check_same_thread": False})
+    eng = create_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
     Session = sessionmaker(bind=eng)
     s = Session()
     set_tenant_context(s, None)
@@ -164,7 +165,7 @@ def test_routen_registriert():
 def _rolle(db, code):
     role = db.query(Role).filter(Role.code == code).first()
     if role is None:
-        role = Role(code=code, name=code)
+        role = Role(code=code, label=code)
         db.add(role)
         db.flush()
     return role
