@@ -2747,6 +2747,7 @@ async def gsl_einstellungen_save(
         "gk_zugang_auto_sms": _bool("gk_zugang_auto_sms"),
         "gk_zugang_nachricht": gk_nachricht,
         "gk_auto_sms_auftrag": _bool("gk_auto_sms_auftrag"),
+        "gk_sms_uebung": _bool("gk_sms_uebung"),
         "gk_auftrag_nachricht": gk_auftrag_nachricht,
         "gk_zugang_gueltigkeit_stunden": gk_gueltigkeit,
         "gk_sitzung_stunden": gk_sitzung,

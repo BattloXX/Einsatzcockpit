@@ -105,6 +105,7 @@ Im Tab **Zugang** erzeugt die GSL einen persönlichen Link, mit dem der GK den E
 3. Pro Einheit ist genau ein Zugang gültig. Jeder neue Link entwertet den vorherigen, die laufende Sitzung des GK wird beendet (die Oberfläche fragt vorher nach).
 4. **Widerrufen** sperrt sofort. Der Zugang wird außerdem automatisch gesperrt, wenn der GK gewechselt oder entfernt wird, sich die Nummer ändert, die Einheit abrückt, die Lage geschlossen wird oder die Notbremse in den GSL-Einstellungen betätigt wird.
 5. Ist in den GSL-Einstellungen „Automatisch senden“ aktiv, geht der Link beim Zuweisen eines GK per SMS raus.
+   Für Übungslagen gibt es dort zusätzlich einen eigenen Schalter für GK-SMS, unabhängig vom Einsatzinfo-SMS-Schalter.
 
 Der GK sieht nur seine eigene Einheit und kann Status melden, Lagemeldungen und Fotos senden sowie Anforderungen stellen. Änderungen funktionieren auch offline und werden nachgesendet.
 

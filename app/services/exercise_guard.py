@@ -15,6 +15,7 @@ ExerciseChannel = Literal[
     "wordpress",
     "geocoding",
     "sms",
+    "gk_sms",
     "teams",
     "autoprint",
     "objekt_kontakt",
@@ -28,6 +29,7 @@ _ORG_FLAGS = {
     "wordpress": "uebung_wordpress_bericht_erlaubt",
     "geocoding": "uebung_geocoding_erlaubt",
     "sms": "einsatzinfo_sms_send_exercise",
+    "gk_sms": "gk_sms_uebung",
 }
 
 

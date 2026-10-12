@@ -205,3 +205,29 @@ def test_api_geraet_und_ohne_sitzung_sind_gesperrt(client):
         "/einheit/api/nummer/anfordern", json={"telefon": "+436641112233"}, headers={"X-CSRF-Token": csrf}
     )
     assert antwort.status_code in (401, 403)
+
+
+def test_code_sms_bei_uebung_folgt_gk_schalter(monkeypatch):
+    """Der Bestätigungscode ist eine GK-SMS – nicht der Einsatzinfo-Schalter entscheidet."""
+    import asyncio
+
+    from app.models.master import OrgSettings
+
+    sms = _Sms(monkeypatch)
+    with _session() as db:
+        _, lage, einheit, leader, _ = _ausgestellt(db)
+        lage.is_exercise = True
+        settings = db.query(OrgSettings).filter_by(org_id=lage.org_id).first()
+        if settings is None:
+            settings = OrgSettings(org_id=lage.org_id)
+            db.add(settings)
+        settings.einsatzinfo_sms_send_exercise, settings.gk_sms_uebung = True, False
+        db.commit()
+        p = _principal(db, einheit=einheit, lage=lage, leader=leader)
+        with pytest.raises(ValueError, match="Übung: GK-SMS unterdrückt"):
+            asyncio.run(_start(db, p))
+        assert not sms.texte
+        settings.einsatzinfo_sms_send_exercise, settings.gk_sms_uebung = False, True
+        db.commit()
+        asyncio.run(_start(db, p))
+        assert sms.texte
