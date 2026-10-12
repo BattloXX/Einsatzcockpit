@@ -155,6 +155,16 @@ async def test_freigegebener_absender_erzeugt_meldung_mit_anhaengen(setup_db, an
 
 
 @pytest.mark.asyncio
+async def test_alle_ordnet_mail_ohne_authentifizierungswerte_automatisch_zu(setup_db, anhaenge):
+    org_id, _ = _org()
+    inc_id = _einsatz(org_id)
+    _settings(org_id, modus="alle")
+    mail_id = _mail(org_id)
+    assert await _lauf(mail_id) is True
+    assert _zustand(mail_id)[:3] == ("zugeordnet", "auto", inc_id)
+
+
+@pytest.mark.asyncio
 async def test_idempotent_zweiter_lauf_erzeugt_keine_zweite_meldung(setup_db, anhaenge):
     org_id, _ = _org()
     inc_id = _einsatz(org_id)

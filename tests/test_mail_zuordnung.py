@@ -23,10 +23,11 @@ def test_freigegebener_absender_akzeptiert_adresse_und_domain_case_insensitive()
     assert not _allowed(_entry(absender="other@example.org"), settings)[0]
 
 
-def test_alle_braucht_bestimmte_und_vollstaendige_authentifizierung():
+def test_alle_akzeptiert_mails_unabhaengig_von_der_authentifizierung():
     settings = OrgSettings(org_id=1, mail_eingang_modus="alle")
-    assert _allowed(_entry(spf="pass", dkim="pass", dmarc="pass"), settings)[0]
-    assert not _allowed(_entry(spf="pass", dkim="pass", dmarc=None), settings)[0]
+    assert _allowed(_entry(spf="pass", dkim="pass", dmarc="pass"), settings) == (True, "")
+    assert _allowed(_entry(spf="fail", dkim="fail", dmarc="fail"), settings) == (True, "")
+    assert _allowed(_entry(), settings) == (True, "")
 
 
 def test_html_wird_zu_text_ohne_tags_oder_remote_content():
