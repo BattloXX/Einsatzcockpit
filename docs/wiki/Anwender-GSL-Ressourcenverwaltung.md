@@ -119,7 +119,7 @@ Der GK sieht nur seine eigene Einheit und kann Status melden, Lagemeldungen und 
 
 Im Tab **Zugang** gibt es zusätzlich zum persönlichen SMS-Link einen **QR-Zugang**, der auf DIN A4 ausgedruckt und der Einheit übergeben wird.
 
-- **Ausstellen / Anzeigen / Drucken**: „QR-Code ausstellen“, „QR anzeigen“ (nur auf Klick, wird nach 2 Minuten wieder ausgeblendet), „QR-Code drucken“ (Druckerauswahl). Erneutes Drucken ändert den Zugang nicht; „Neuen QR-Code“ macht den alten Ausdruck ungültig.
+- **Ausstellen / Anzeigen / Drucken**: „QR-Code ausstellen“, „QR anzeigen“ (nur auf Klick, wird nach 2 Minuten wieder ausgeblendet), „QR-Code drucken“ (Stationsdrucker oder dieses Gerät). Erneutes Drucken ändert den Zugang nicht; „Neuen QR-Code“ macht den alten Ausdruck ungültig.
 - **Gültigkeit und PIN**: Standardmäßig 72 Stunden (einstellbar). Optional verlangt der QR-Zugang eine PIN; sie steht **nicht** auf dem Blatt, sondern wird nur der Einsatzleitung angezeigt und separat übergeben.
 - **Rechte**: Der QR-Zugang zeigt nur die eigene Einheit und erlaubt Status, Lagemeldungen und Fotos.
 - **Widerruf** erfolgt manuell, beim Wechsel oder Entfernen des Gruppenkommandanten, beim Abrücken der Einheit, beim Lageende und über die Notbremse.

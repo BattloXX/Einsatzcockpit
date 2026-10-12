@@ -1,10 +1,10 @@
 {# Einheitlicher Druck-Einstieg (ECPG).
    Aufruf: ecpgPrint(ctx) — ctx = {document_type, incident_id?, gsl_id?, objekt_id?,
-   artifact_ref?, title?, localUrl?, localFn?}.
+   artifact_ref?, title?, localUrl?, localFn?, stationUrl?, onStationDone?}.
 
    Verhalten:
    - Ist ein Gateway mit VERBUNDENEN Druckern verfügbar (printers.json: connected &&
-     printers>0), öffnet sich der Dialog mit Umschalter „Stationsdrucker / Dieses Gerät".
+     printers>0), öffnet sich der Dialog mit Umschalter "Stationsdrucker / Dieses Gerät".
    - Andernfalls (Modul aus / offline / kein Drucker) wird OHNE Dialog direkt lokal
      gedruckt — exakt wie bisher (localFn > localUrl > gemeinsame Server-PDF).
    localFn/localUrl erhalten den bestehenden lokalen Druck der jeweiligen Seite
@@ -243,10 +243,13 @@
     const fd = new FormData(this);
     localStorage.setItem('ecpg_last_printer', fd.get('printer_id'));
     try{
-      const r = await fetch('/gateway/print/job', {method:'POST', body:fd});
+      const r = await fetch(ctx.stationUrl || '/gateway/print/job', {
+        method:'POST', body:fd, headers:{'Accept':'application/json','X-ECPG':'1'}
+      });
       const d = await r.json();
       if(d.ok){ msg.className='ecpg-msg ok';
         msg.textContent = 'Gesendet an ' + (d.printer||'Drucker') + ' (' + (d.status||'') + ')';
+        if(typeof ctx.onStationDone === 'function'){ ctx.onStationDone(d); }
         setTimeout(ecpgClosePrintDialog, 1400);
       } else { msg.className='ecpg-msg err'; msg.textContent = d.error || 'Fehler'; }
     }catch(e){ msg.className='ecpg-msg err'; msg.textContent='Netzwerkfehler'; }
