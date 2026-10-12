@@ -59,7 +59,7 @@ def test_einheit_karte_template_ist_versioniert_und_ohne_smart_quotes(client, se
     _device(client, x)
     html = client.get("/einheit").text
     assert '"/static/js/einheit_karte.js": "/static/js/einheit_karte.js?v=' in html
-    for text in ("Mein Standort", "Fertige einblenden", "Reihenfolge (Luftlinie, keine Route)"):
+    for text in ("Mein Standort", "Fertige einblenden", "Linie = Luftlinie, keine Route"):
         assert text in html
     assert not any(quote in html for quote in "“”„‘’")
 

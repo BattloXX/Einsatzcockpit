@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { berechneReihenfolge, esc, markerArt, navUrl } from "../../app/static/js/einheit_karte.js";
+import { berechneReihenfolge, esc, markerArt, markerDarstellung, navUrl } from "../../app/static/js/einheit_karte.js";
 
 const auftrag = (id, extra = {}) => ({
   dispatch_id: id, rang: id, priority: "normal", lat: 47 + id / 100, lng: 13, ...extra,
@@ -40,6 +40,20 @@ test("markerArt unterscheidet Kartenstatus", () => {
   assert.equal(markerArt(auftrag(1, { auftragsart: "erkundung" })), "erkundung");
   assert.equal(markerArt(auftrag(1, { einheit_status: "abgeschlossen" })), "fertig");
   assert.equal(markerArt(auftrag(1, { zurueckgezogen: true })), "zurueckgezogen");
+});
+
+test("markerDarstellung nutzt kompakte, zugängliche Statusmarker", () => {
+  const naechster = markerDarstellung(auftrag(1, { naechster: true, adresse: "Hauptstraße 1" }), 1);
+  const laufend = markerDarstellung(auftrag(2, { einheit_status: "in_arbeit" }), 2);
+  const erkundung = markerDarstellung(auftrag(3, { auftragsart: "erkundung" }), 3);
+  const offen = markerDarstellung(auftrag(4), 4);
+  assert.equal(naechster.inhalt, "▶");
+  assert.match(naechster.titel, /Nächster Auftrag/);
+  assert.match(laufend.titel, /In Arbeit/);
+  assert.ok(laufend.groesse <= 34);
+  assert.deepEqual(laufend.anker, [laufend.groesse / 2, laufend.groesse / 2]);
+  assert.match(erkundung.klasse, /--erkundung/);
+  assert.equal(offen.inhalt, "4");
 });
 
 test("navUrl nutzt Koordinaten, Adresse oder null", () => {
