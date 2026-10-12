@@ -109,15 +109,21 @@ def _readonly(client, data):
 
 
 def test_primaere_aktion_folgt_der_spalte(client):
+    def knopf(detail, art, stil):
+        return re.search(rf'data-auftragsart="{art}"[^>]*class="btn btn--sm btn--{stil}"', detail)
+
     data = _api_daten(); _leader(client, data)
     _site_vorbereiten(data, SitePhase.eingegangen)
     detail = client.get(f"/lage/{data['lage']}/stellen/{data['a']}").text
-    assert 'value="erkundung" class="btn btn--sm btn--primary"' in detail
-    assert 'value="abarbeitung" class="btn btn--sm btn--secondary"' in detail
+    assert knopf(detail, "erkundung", "primary") and knopf(detail, "abarbeitung", "secondary")
+    assert '<input type="hidden" name="auftragsart" value="erkundung">' in detail
+    # Jeder Button setzt die Art selbst – nicht auf den Submit-Button-Wert verlassen.
+    assert "this.form.elements.auftragsart.value='erkundung'" in detail
+    assert "this.form.elements.auftragsart.value='abarbeitung'" in detail
     _site_vorbereiten(data, SitePhase.bewertet)
     detail = client.get(f"/lage/{data['lage']}/stellen/{data['a']}").text
-    assert 'value="abarbeitung" class="btn btn--sm btn--primary"' in detail
-    assert 'value="erkundung" class="btn btn--sm btn--secondary"' in detail
+    assert knopf(detail, "abarbeitung", "primary") and knopf(detail, "erkundung", "secondary")
+    assert '<input type="hidden" name="auftragsart" value="abarbeitung">' in detail
 
 
 def test_abgeschlossene_stelle_ohne_disponieren_und_wiedereroeffnen_nur_fuer_fuehrung(client):

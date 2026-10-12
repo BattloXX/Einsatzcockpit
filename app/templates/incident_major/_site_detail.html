@@ -550,6 +550,10 @@
           hx-target="#siteDetailContent"
           hx-swap="innerHTML"
           hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'>
+      {# Auftragsart als eigenes Feld statt Button-Wert: der Wert des geklickten Submit-Buttons
+         kommt nicht in jedem Browser/htmx-Pfad mit, dann wurde aus „Erkundung zuweisen“ eine
+         Disposition. Die Buttons setzen das Feld vor dem Absenden. #}
+      <input type="hidden" name="auftragsart" value="{{ 'erkundung' if site.phase.value in ['eingegangen', 'erkundung'] else 'abarbeitung' }}">
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
         <select id="siteDisponierenEinheitSelect" name="einheit_id" class="form-select form-select--sm" style="flex:1;">
           {% for e in dispatchable %}
@@ -559,8 +563,8 @@
           </option>
           {% endfor %}
         </select>
-        <button type="submit" name="auftragsart" value="erkundung" class="btn btn--sm {% if site.phase.value in ['eingegangen', 'erkundung'] %}btn--primary{% else %}btn--secondary{% endif %}">Erkundung zuweisen</button>
-        <button type="submit" name="auftragsart" value="abarbeitung" class="btn btn--sm {% if site.phase.value not in ['eingegangen', 'erkundung'] %}btn--primary{% else %}btn--secondary{% endif %}">Disponieren</button>
+        <button type="submit" data-auftragsart="erkundung" onclick="this.form.elements.auftragsart.value='erkundung'" class="btn btn--sm {% if site.phase.value in ['eingegangen', 'erkundung'] %}btn--primary{% else %}btn--secondary{% endif %}">Erkundung zuweisen</button>
+        <button type="submit" data-auftragsart="abarbeitung" onclick="this.form.elements.auftragsart.value='abarbeitung'" class="btn btn--sm {% if site.phase.value not in ['eingegangen', 'erkundung'] %}btn--primary{% else %}btn--secondary{% endif %}">Disponieren</button>
       </div>
       <textarea name="auftrag" class="form-input" maxlength="2000" placeholder="Auftrag (optional)" style="margin-top:6px;"></textarea>
       <input type="number" name="reihenfolge" class="form-input" min="1" placeholder="Reihenfolge (optional)" style="margin-top:6px;">
@@ -654,7 +658,7 @@
 function siteDetailDispatch(auftragsart) {
   var form = document.querySelector('#siteDetailContent form[hx-post*="einheit-disponieren"]');
   if (!form) return;
-  var button = form.querySelector('button[name="auftragsart"][value="' + auftragsart + '"]');
+  var button = form.querySelector('button[data-auftragsart="' + auftragsart + '"]');
   form.scrollIntoView({behavior: 'smooth', block: 'center'});
   if (button) button.focus();
 }
