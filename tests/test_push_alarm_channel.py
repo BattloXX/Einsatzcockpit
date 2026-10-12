@@ -38,9 +38,13 @@ async def test_incident_notify_writes_alarm_start_and_finish_audits(setup_db, mo
     async def no_push(*args, **kwargs):
         return None
 
+    async def no_mail(*args, **kwargs):
+        return "sent", None
+
     monkeypatch.setattr("app.services.sms_dispatch_service.dispatch_einsatzinfo", no_sms)
     monkeypatch.setattr("app.services.teams_alarm_service.post_incident_card", no_teams)
     monkeypatch.setattr("app.services.incident_notify._send_incident_push", no_push)
+    monkeypatch.setattr("app.services.alarm_outbox._send_mail", no_mail)
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
@@ -56,6 +60,7 @@ async def test_incident_notify_writes_alarm_start_and_finish_audits(setup_db, mo
         assert '"sms"' in actions["incident.alarm_finished"].payload_json
         assert '"push"' in actions["incident.alarm_finished"].payload_json
         assert '"teams"' in actions["incident.alarm_finished"].payload_json
+        assert '"mail"' in actions["incident.alarm_finished"].payload_json
     finally:
         db.close()
 
@@ -94,6 +99,10 @@ async def test_incident_channels_run_concurrently(setup_db, monkeypatch, mit_bac
         gestartet.append(name)
         await asyncio.sleep(0.05)
 
+    async def mail(*args, **kwargs):
+        await langsam("mail")
+        return "sent", None
+
     monkeypatch.setattr(
         "app.services.sms_dispatch_service.dispatch_einsatzinfo",
         lambda *args, **kwargs: langsam("sms"),
@@ -106,6 +115,10 @@ async def test_incident_channels_run_concurrently(setup_db, monkeypatch, mit_bac
         "app.services.teams_alarm_service.post_incident_card",
         lambda *args, **kwargs: langsam("teams"),
     )
+    monkeypatch.setattr(
+        "app.services.alarm_outbox._send_mail",
+        mail,
+    )
     background_tasks = BackgroundTasks() if mit_background_tasks else None
 
     start = perf_counter()
@@ -117,7 +130,7 @@ async def test_incident_channels_run_concurrently(setup_db, monkeypatch, mit_bac
         await background_tasks()
     dauer = perf_counter() - start
 
-    assert set(gestartet) == {"sms", "push", "teams"}
+    assert set(gestartet) == {"sms", "push", "teams", "mail"}
     assert dauer < 0.2
     db.close()
 
@@ -132,6 +145,10 @@ async def test_incident_channel_error_does_not_stop_others(setup_db, monkeypatch
     async def erfolgreich(name, *args, **kwargs):
         beendet.append(name)
 
+    async def mail(*args, **kwargs):
+        await erfolgreich("mail")
+        return "sent", None
+
     monkeypatch.setattr(
         "app.services.sms_dispatch_service.dispatch_einsatzinfo", sms_fehler,
     )
@@ -143,6 +160,10 @@ async def test_incident_channel_error_does_not_stop_others(setup_db, monkeypatch
         "app.services.teams_alarm_service.post_incident_card",
         lambda *args, **kwargs: erfolgreich("teams"),
     )
+    monkeypatch.setattr(
+        "app.services.alarm_outbox._send_mail",
+        mail,
+    )
 
     db = SessionLocal(); set_tenant_context(db, None)
     incident = Incident(alarm_type_code="B2", address_city="Testort", primary_org_id=1, status="active")
@@ -150,7 +171,7 @@ async def test_incident_channel_error_does_not_stop_others(setup_db, monkeypatch
     with caplog.at_level(logging.ERROR, logger="einsatzleiter.alarm_outbox"):
         await notify_incident_created(db, incident, org_id=1, base_url="https://example.test", background_tasks=None)
 
-    assert set(beendet) == {"push", "teams"}
+    assert set(beendet) == {"push", "teams", "mail"}
     from app.models.incident import IncidentAlarmJob
     db.expire_all()
     sms_job = db.query(IncidentAlarmJob).filter_by(incident_id=incident.id, channel="sms").one()
@@ -370,6 +391,6 @@ async def test_f30_wird_nie_alarmiert(setup_db, monkeypatch):
     await incident_notify.notify_incident_created(db, incident, org_id=1, base_url="https://x")
     assert calls == []
     db.expire_all()
-    assert db.query(IncidentLog).filter(IncidentLog.incident_id == incident.id).one().text == "F30 – keine Alarmierung (SMS/Push/Teams)"
+    assert db.query(IncidentLog).filter(IncidentLog.incident_id == incident.id).one().text == "F30 – keine Alarmierung (SMS/Push/Teams/Mail)"
     assert incident_notify.incident_needs_alarm_backfill(db, incident) is False
     db.close()

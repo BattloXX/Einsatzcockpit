@@ -101,7 +101,7 @@ def test_api_create_enqueues_alarm_jobs(client, api_key, monkeypatch):
     set_tenant_context(db, None)
     try:
         jobs = db.query(IncidentAlarmJob).filter_by(incident_id=response.json()["id"]).all()
-        assert {job.channel for job in jobs} == {"sms", "push", "teams"}
+        assert {job.channel for job in jobs} == {"sms", "push", "teams", "mail"}
     finally:
         db.close()
 

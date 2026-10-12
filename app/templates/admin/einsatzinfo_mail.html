@@ -1,0 +1,45 @@
+{% extends "admin/_layout.html" %}
+{% from "admin/_breadcrumb.html" import breadcrumb %}
+{% block title %}Einsatzinfo-Mail – Admin{% endblock %}
+{% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Einsatzinfo-Mail'}]) }}{% endblock %}
+{% block admin_content %}
+<div class="page-content">
+  <div class="page-header"><div><h1>Einsatzinfo-Mail</h1><p class="page-header__sub">Automatische Einsatz-Mail bei Alarmeingang konfigurieren.</p></div></div>
+  {% if saved %}<div class="alert alert--success">Einstellungen gespeichert.</div>{% endif %}
+  {% if testmail %}<div class="alert alert--success">Testmail wurde an Ihre E-Mail-Adresse gesendet.</div>{% endif %}
+  {% if fehler %}<div class="alert alert--error">{{ fehler }}</div>{% endif %}
+
+  <div class="admin-section-title">Einstellungen</div>
+  <div class="chart-box" style="margin-bottom:24px;">
+    {% if mail_verfuegbar %}<div class="alert alert--info">Versandweg: {{ versandweg.weg }}{% if versandweg.absender %} ({{ versandweg.absender }}){% endif %}</div>{% else %}<div class="alert alert--warn">Kein Mail-Versandweg konfiguriert. Bitte zuerst unter Mail-Versand einrichten.</div>{% endif %}
+    <form method="post" action="/admin/einsatzinfo-mail/einstellungen">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;">
+        <div><div class="form-group"><label style="display:flex;gap:10px;cursor:pointer;"><input type="checkbox" name="enabled" value="true" {% if org_settings and org_settings.einsatzinfo_mail_enabled %}checked{% endif %}><span><strong>Einsatzinfo-Mail aktiviert</strong><br><small class="text-muted">Bei jedem Alarm automatisch Mail versenden.</small></span></label></div><div class="form-group" style="margin-top:12px;"><label style="display:flex;gap:10px;cursor:pointer;"><input type="checkbox" name="send_exercise" value="true" {% if org_settings and org_settings.einsatzinfo_mail_send_exercise %}checked{% endif %}><span>Auch bei <strong>Übungen</strong> senden</span></label></div></div>
+        <div><div class="form-group"><label class="form-label">Betreff</label><input class="form-input" name="subject_template" maxlength="300" placeholder="{{ default_subject }}" value="{{ org_settings.einsatzinfo_mail_subject_template if org_settings and org_settings.einsatzinfo_mail_subject_template else '' }}"></div><div class="form-group"><label class="form-label">Org-Standard-Text</label><textarea class="form-input" name="template" rows="7" style="resize:vertical;font-family:monospace;font-size:.88rem;" placeholder="{{ default_template }}">{{ org_settings.einsatzinfo_mail_template if org_settings and org_settings.einsatzinfo_mail_template else '' }}</textarea></div></div>
+      </div>
+      <div class="form-help" style="font-size:.8rem;color:var(--text-muted);">Platzhalter: <code>{stichwort}</code> <code>{adresse}</code> <code>{ort}</code> <code>{meldung}</code> <code>{einsatzgrund}</code> <code>{datum}</code> <code>{zeit}</code> <code>{link}</code> <code>{leitstellennummer}</code> <code>{einsatznummer}</code> <code>{kartenlink}</code><br>Leer lassen = Systemdefault.</div>
+      <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;"><button type="submit" class="btn btn--primary">Einstellungen speichern</button><button type="button" class="btn" hx-post="/admin/einsatzinfo-mail/vorschau" hx-include="closest form" hx-target="#mail-vorschau" hx-swap="innerHTML">Vorschau</button></div>
+    </form>
+    <form method="post" action="/admin/einsatzinfo-mail/testmail" style="margin-top:10px;"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><button type="submit" class="btn btn--secondary">Testmail an mich senden</button></form>
+    <div id="mail-vorschau" style="margin-top:12px;"></div>
+  </div>
+
+  {% macro distribution(form_action, data, alarm_type=None) %}
+  <form method="post" action="{{ form_action }}"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    {% if alarm_type %}<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;"><div class="form-group"><label class="form-label">Betreff-Override</label><input class="form-input" name="subject_template_override" maxlength="300" value="{{ alarm_type.einsatzinfo_mail_subject_template or '' }}" placeholder="Org-Standard verwenden"></div><div class="form-group"><label class="form-label">Text-Override</label><textarea class="form-input" name="template_override" rows="3" placeholder="Org-Standard verwenden">{{ alarm_type.einsatzinfo_mail_template or '' }}</textarea></div></div>{% endif %}
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;">
+      <div><div style="font-size:.8rem;font-weight:700;color:var(--text-muted);margin-bottom:6px;">GRUPPEN</div><div style="border:1px solid var(--border);border-radius:4px;padding:6px;">{% for group in groups %}<label style="display:flex;gap:8px;padding:2px 0;cursor:pointer;"><input type="checkbox" name="group_id" value="{{ group.id }}" {% if group.id in data.group_ids %}checked{% endif %}>{{ group.name }} <span class="text-muted">({{ group.members|length }})</span></label>{% else %}<span class="text-muted">Keine Gruppen.</span>{% endfor %}</div></div>
+      <div><div style="font-size:.8rem;font-weight:700;color:var(--text-muted);margin-bottom:6px;">MITGLIEDER</div><div style="border:1px solid var(--border);border-radius:4px;padding:6px;max-height:180px;overflow-y:auto;">{% for member in members %}<label style="display:flex;gap:6px;padding:2px 0;cursor:pointer;font-size:.88rem;"><input type="checkbox" name="member_id" value="{{ member.id }}" {% if member.id in data.member_ids %}checked{% endif %}>{{ member.lastname }}, {{ member.firstname }} {% if member.email %}<span class="text-muted">{{ member.email }}</span>{% else %}<span class="text-muted">keine E-Mail</span>{% endif %}</label>{% else %}<span class="text-muted">Keine aktiven Mitglieder.</span>{% endfor %}</div></div>
+      <div class="form-group"><label class="form-label">Externe E-Mail-Adressen</label><textarea class="form-input" name="externe_emails" rows="6" placeholder="Eine Adresse pro Zeile">{{ data.emails }}</textarea><small class="text-muted">Eine Adresse pro Zeile, Komma oder Semikolon.</small></div>
+    </div><div style="margin-top:12px;"><button type="submit" class="btn btn--primary btn--xs">Speichern</button></div>
+  </form>
+  {% endmacro %}
+
+  <div class="admin-section-title">Basis-Verteiler <small style="font-weight:400;color:var(--text-muted);">(gilt für alle Stichworte)</small></div>
+  <div class="chart-box" style="margin-bottom:24px;">{% if without_email %}<div class="alert alert--warn">{{ without_email }} Mitglieder im Verteiler ohne E-Mail-Adresse</div>{% endif %}{{ distribution('/admin/einsatzinfo-mail/basis-verteiler', basis) }}</div>
+  <div class="admin-section-title">Stichwort-spezifischer Verteiler <small style="font-weight:400;color:var(--text-muted);">(ergänzt den Basis-Verteiler)</small></div>
+  {% for alarm_type in alarm_types %}<div class="chart-box" style="margin-bottom:14px;" id="stichwort-{{ alarm_type.id }}"><details><summary style="cursor:pointer;display:flex;gap:12px;align-items:center;"><span class="badge-pill">{{ alarm_type.code }}</span><strong>{{ alarm_type.label or alarm_type.code }}</strong></summary><div style="margin-top:16px;border-top:1px solid var(--border);padding-top:16px;">{{ distribution('/admin/einsatzinfo-mail/stichwort/' ~ alarm_type.id, stichwort_recipients.get(alarm_type.id), alarm_type) }}</div></details></div>{% else %}<div class="chart-box"><span class="text-muted">Keine Alarmtypen vorhanden.</span></div>{% endfor %}
+  <div class="admin-section-title" style="margin-top:24px;">Versandprotokoll</div><div class="chart-box" style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Zeit</th><th>Stichwort</th><th>Betreff</th><th>Empfänger</th><th>Fehler</th></tr></thead><tbody>{% for log in logs %}<tr><td>{{ log.sent_at|local_datetime }}</td><td>{{ log.alarm_type_code or '-' }}</td><td>{{ log.subject }}</td><td>{{ log.success_count }}/{{ log.recipient_count }}</td><td>{{ log.error or '-' }}</td></tr>{% else %}<tr><td colspan="5" class="text-muted">Noch keine Mails versendet.</td></tr>{% endfor %}</tbody></table></div>
+</div>
+{% endblock %}

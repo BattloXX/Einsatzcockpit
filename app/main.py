@@ -74,6 +74,7 @@ from app.routers import (
     ui_druck,
     ui_einheit,
     ui_einsatz_import,
+    ui_einsatzinfo_mail,
     ui_fahrtenbuch,
     ui_fahrtenbuch_admin,
     ui_foerderstrecke,
@@ -878,6 +879,7 @@ app.include_router(ui_hilfe.router)
 app.include_router(ui_admin.router)
 app.include_router(ui_admin_mail_weiterleitung.router)
 app.include_router(ui_sms.router)
+app.include_router(ui_einsatzinfo_mail.router)
 app.include_router(ui_stats.router)
 app.include_router(ui_push.router)
 app.include_router(ui_settings.router)

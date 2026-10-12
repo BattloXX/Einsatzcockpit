@@ -15,7 +15,7 @@ from app.models.incident import Incident, IncidentAlarmJob, IncidentLog
 
 logger = logging.getLogger("einsatzleiter.alarm_outbox")
 TERMINAL = {"sent", "suppressed", "failed"}
-CHANNELS = ("sms", "push", "teams")
+CHANNELS = ("sms", "push", "teams", "mail")
 _LEASE = timedelta(minutes=5)
 _running_incident_tasks: set[asyncio.Task] = set()
 
@@ -35,7 +35,7 @@ def enqueue_incident_alarm(
     db: Session, incident: Incident, *, org_id: int | None, source: str | None,
     triggered_by_user_id: int | None = None, base_url: str | None = None, push_url: str | None = None,
 ) -> None:
-    """Fuegt die drei Versandauftraege hinzu; der Aufrufer bestimmt den Commit."""
+    """Fuegt die Versandauftraege hinzu; der Aufrufer bestimmt den Commit."""
     from app.services.incident_notify import NIE_ALARMIEREN_STICHWORTE
 
     existing = {
@@ -70,7 +70,7 @@ def enqueue_incident_alarm(
     if suppressed and not existing:
         db.add(IncidentLog(
             incident_id=incident.id, author_name="System", level="info",
-            text=f"{incident.alarm_type_code} – keine Alarmierung (SMS/Push/Teams)",
+            text=f"{incident.alarm_type_code} – keine Alarmierung (SMS/Push/Teams/Mail)",
         ))
 
 
@@ -158,8 +158,24 @@ async def _send_teams(db: Session, incident: Incident, job: IncidentAlarmJob) ->
     return "suppressed", result.reason
 
 
+async def _send_mail(db: Session, incident: Incident, job: IncidentAlarmJob) -> tuple[str, str | None]:
+    from app.services.einsatzinfo_mail_service import dispatch_einsatzinfo_mail
+
+    if not job.org_id:
+        return "suppressed", "keine Organisation zugeordnet"
+    result = await dispatch_einsatzinfo_mail(
+        job.org_id, incident.id, job.context.get("triggered_by_user_id")
+    )
+    if result.sent:
+        return "sent", result.reason or f"gesendet an {result.recipient_count}"
+    return "suppressed", result.reason
+
+
 def _retry_at(channel: str, attempt: int, now: datetime) -> datetime | None:
-    delays = {"teams": (5, 20, 60, 300, 900), "push": (10, 60), "sms": (10, 60)}[channel]
+    delays = {
+        "teams": (5, 20, 60, 300, 900), "push": (10, 60), "sms": (10, 60),
+        "mail": (10, 60, 300),
+    }[channel]
     return now + timedelta(seconds=delays[attempt - 1]) if attempt <= len(delays) else None
 
 
@@ -174,7 +190,10 @@ async def _run_claimed(job_id: int) -> None:
         if incident is None:
             return
         try:
-            sender = {"sms": _send_sms, "push": _send_push, "teams": _send_teams}[job.channel]
+            sender = {
+                "sms": _send_sms, "push": _send_push, "teams": _send_teams,
+                "mail": _send_mail,
+            }[job.channel]
             outcome, reason = await sender(db, incident, job)
         except Exception as exc:
             logger.exception("Alarmkanal fehlgeschlagen (job=%s, Einsatz %s)", job.id, incident.id)
@@ -206,6 +225,17 @@ async def _run_claimed(job_id: int) -> None:
                 text="Alarmierung Teams: gesendet" if job.status == "sent"
                 else f"Alarmierung Teams uebersprungen: {job.last_error}",
             ))
+        if job.channel == "mail" and job.status in TERMINAL:
+            mail_text = "Alarmierung Mail: gesendet"
+            if job.status == "sent" and job.last_error:
+                mail_text += f" ({job.last_error})"
+            db.add(IncidentLog(
+                incident_id=incident.id, author_name="System",
+                level="info" if job.status == "sent" else "warning",
+                text=mail_text if job.status == "sent"
+                else f"Alarmierung Mail fehlgeschlagen: {job.last_error}" if job.status == "failed"
+                else f"Alarmierung Mail uebersprungen: {job.last_error}",
+            ))
         db.commit()
         _finish_if_done(db, incident, job.org_id, job.context.get("triggered_by_user_id"))
     except Exception:
@@ -217,7 +247,7 @@ async def _run_claimed(job_id: int) -> None:
 
 def _finish_if_done(db: Session, incident: Incident, org_id: int | None, user_id: int | None) -> None:
     jobs = db.query(IncidentAlarmJob).filter(IncidentAlarmJob.incident_id == incident.id).all()
-    if len(jobs) != 3 or any(job.status not in TERMINAL for job in jobs):
+    if not jobs or any(job.status not in TERMINAL for job in jobs):
         return
     from app.core.audit import write_audit
     from app.models.user import AuditLog
