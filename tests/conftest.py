@@ -139,6 +139,14 @@ def setup_db():
     db = TestingSession()
     set_tenant_context(db, None)
     seed(db)
+    # Viele Tests vergeben die Rolle ``org_admin`` und legen sie nur an, wenn sie
+    # fehlt (teils mit veraltetem ``name=``). Seriell hat das ein früherer Test
+    # erledigt; mit xdist ist die Reihenfolge pro Worker zufällig. Daher im
+    # Test-Seed anlegen, nicht im produktiven Seed.
+    from app.models.user import Role
+    if db.query(Role).filter(Role.code == "org_admin").first() is None:
+        db.add(Role(code="org_admin", label="Organisations-Administrator"))
+        db.commit()
     db.close()
     yield
     Base.metadata.drop_all(bind=engine)
