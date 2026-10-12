@@ -648,8 +648,10 @@ def test_resolve_test_context_alle_ausloeser_und_gsl_org_isolation(db):
     from app.models.major_incident import MajorIncident
     from app.models.verleih import VerleihAusleihe
 
-    org = 1
-    fremde_lage = MajorIncident(org_id=2, name="Fremd")
+    # Eigene Org-ID: andere Tests legen Einsätze für Org 1 an; der Resolver nimmt
+    # den jüngsten, das Ergebnis hinge sonst von der Testreihenfolge ab (xdist).
+    org = 991845
+    fremde_lage = MajorIncident(org_id=991846, name="Fremd")
     lage = MajorIncident(org_id=org, name="Eigene Lage", is_exercise=True)
     inc = Incident(primary_org_id=org, reason="B3")
     db.add_all([fremde_lage, lage, inc])
