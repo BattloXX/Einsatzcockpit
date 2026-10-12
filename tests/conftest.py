@@ -32,6 +32,12 @@ from app.core.tenant import set_tenant_context
 from app.db import Base, get_db
 from app.main import app
 from app.seed_data import seed
+from app.core import security as _security
+
+# Passwort-Hashes in Tests mit minimalem bcrypt-Kostenfaktor: 12 Runden kosten pro Benutzer
+# bzw. Login ~0,2 s lokal und mehr in der CI – bei tausenden Tests der größte Einzelposten.
+# Produktion bleibt bei security.BCRYPT_ROUNDS = 12 (siehe test_bcrypt_produktionsrunden).
+_security.BCRYPT_ROUNDS = 4
 from app.models import uas as _uas_models  # noqa: F401 – alle UAS-Tabellen in Base.metadata registrieren
 
 
