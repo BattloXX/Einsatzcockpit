@@ -10,7 +10,8 @@
 <script type="importmap">
   {"imports": {
     "/static/js/einheit_outbox.js": "/static/js/einheit_outbox.js?v={{ ASSET_VERSION }}",
-    "/static/js/einheit_karte.js": "/static/js/einheit_karte.js?v={{ ASSET_VERSION }}"
+    "/static/js/einheit_karte.js": "/static/js/einheit_karte.js?v={{ ASSET_VERSION }}",
+    "/static/js/einheit_aenderungen.js": "/static/js/einheit_aenderungen.js?v={{ ASSET_VERSION }}"
   }}
 </script>
 <script type="module" src="/static/js/einheit_modus.js?v={{ ASSET_VERSION }}"></script>
@@ -113,7 +114,7 @@
     </nav>
   </header>
 
-  <div class="einheit-warning" x-show="hinweisBanner" x-cloak>
+  <div class="einheit-warning" :class="hinweisRot ? 'einheit-warning--alarm' : ''" x-show="hinweisBanner" x-cloak>
     <span x-text="hinweisBanner"></span>
     <button type="button" class="btn btn--ghost btn--sm" x-show="zugangBeendet" @click="lokaleDatenLoeschen()">Lokale Daten löschen</button>
     <button type="button" class="btn btn--ghost btn--sm" @click="hinweisBanner = ''">OK</button>
@@ -141,8 +142,9 @@
   {% endif %}
 
   {# ── Übersicht ──────────────────────────────────────────────────────── #}
-  <div class="fab-grid" x-show="!detail">
+  <div class="fab-grid einheit-bereiche" x-show="!detail">
     <main class="fab-grid__main">
+      <section class="einheit-bereich" x-show="bereichSichtbar('uebersicht')">
       <template x-if="aktuell">
         <article class="fab-card einheit-card einheit-card--aktuell"
                  :class="'einheit-prio--' + (aktuell.priority || 'keine')"
@@ -163,6 +165,11 @@
             <span class="einheit-chip einheit-chip--status" x-text="aktuell.einheit_status_label"></span>
             <span class="einheit-sub" x-text="'zugewiesen ' + zeit(aktuell.dispatched_at)"></span>
           </div>
+          <div class="einheit-actions-row">
+            <button type="button" class="btn btn--primary" @click.stop="oeffne(aktuell.dispatch_id)">Öffnen</button>
+            <a class="btn btn--ghost" :href="aktuell.nav_url" target="_blank" rel="noopener"
+               x-show="aktuell.nav_url" @click.stop>Navigation</a>
+          </div>
         </article>
       </template>
       <template x-if="!aktuell">
@@ -179,11 +186,27 @@
               <div class="einheit-auftrag" x-show="naechster.auftrag" x-text="naechster.auftrag"></div>
               <button type="button" class="btn btn--primary btn--lg einheit-action"
                       @click="oeffne(naechster.dispatch_id)">Auftrag öffnen</button>
+              <a class="btn btn--ghost einheit-action" :href="naechster.nav_url" target="_blank" rel="noopener"
+                 x-show="naechster.nav_url">&#x1F9ED; Navigation starten</a>
+              <p class="einheit-sub" x-show="weitere.length > 1"
+                 x-text="(weitere.length - 1) + ' weitere offene Aufträge'"></p>
             </div>
           </template>
         </article>
       </template>
-      <section class="fab-card einheit-uebersichtskarte">
+      {# Nur neben einem laufenden Auftrag – ohne ihn zeigt die große Karte oben bereits den nächsten Auftrag. #}
+      <div class="fab-subcard" x-show="aktuell && naechster">
+        <p class="fab-subcard__title">Nächster Auftrag</p>
+        <strong x-text="naechster?.bezeichnung"></strong>
+        <span class="einheit-chip einheit-chip--status" x-text="naechster?.einheit_status_label"></span>
+        <div class="einheit-actions-row">
+          <button type="button" class="btn btn--primary" @click="oeffne(naechster.dispatch_id)">Öffnen</button>
+          <a class="btn btn--ghost" :href="naechster?.nav_url" target="_blank" rel="noopener" x-show="naechster?.nav_url">Navigation</a>
+        </div>
+        <p class="einheit-sub" x-text="weitere.length > 1 ? (weitere.length - 1) + ' weitere offene Aufträge' : ''"></p>
+      </div>
+      </section>
+      <section class="fab-card einheit-uebersichtskarte einheit-bereich" x-show="bereichSichtbar('karte')">
         <div class="fab-card__head">
           <span class="fab-card__icon">🗺️</span><h2 class="fab-card__title">Karte</h2>
         </div>
@@ -202,7 +225,7 @@
     </main>
 
     <aside class="fab-grid__side">
-      <section class="fab-card" x-show="kannRessourcePflegen" x-cloak>
+      <section class="fab-card einheit-bereich" x-show="kannRessourcePflegen && bereichSichtbar('uebersicht')" x-cloak>
         <div class="fab-card__head">
           <span class="fab-card__icon">&#x1F6E0;</span>
           <h2 class="fab-card__title">Meine Einheit</h2>
@@ -250,7 +273,37 @@
           <button type="button" class="btn btn--primary" @click="ausstattungHinzufuegen()">Hinzufügen</button>
         </div>
       </section>
-      <template x-for="(auftrag, index) in weitere" :key="auftrag.dispatch_id">
+      <section class="einheit-bereich einheit-auftraege" x-show="bereichSichtbar('auftraege')">
+      <h2 class="fab-card__title">Aufträge</h2>
+      <template x-if="aktuell"><div class="einheit-gruppe"><h3>Aktuell</h3>
+        <button type="button" class="einheit-liste__eintrag" :data-dispatch-id="aktuell.dispatch_id"
+                @click="oeffne(aktuell.dispatch_id)">
+          <span>
+            <span class="einheit-chip"
+                  x-text="aktuell.auftragsart === 'erkundung' ? '🔍 Erkundung' : 'Abarbeitung'"></span>
+            <span x-text="aktuell.rang + '. ' + aktuell.bezeichnung"></span>
+          </span>
+          <span>
+            <span class="einheit-chip" :class="prioClass(aktuell.priority)" x-text="prioLabel(aktuell.priority)"></span>
+            <span class="einheit-chip einheit-chip--status" x-text="aktuell.einheit_status_label"></span>
+            <span class="einheit-chip einheit-chip--neu" x-show="istGeaendert(aktuell)">GEÄNDERT</span>
+          </span>
+        </button></div></template>
+      <template x-if="naechster"><div class="einheit-gruppe"><h3>Nächster</h3>
+        <button type="button" class="einheit-liste__eintrag" :data-dispatch-id="naechster.dispatch_id" @click="oeffne(naechster.dispatch_id)">
+          <span>
+            <span class="einheit-chip"
+                  x-text="naechster.auftragsart === 'erkundung' ? '🔍 Erkundung' : 'Abarbeitung'"></span>
+            <span x-text="naechster.rang + '. ' + naechster.bezeichnung"></span>
+          </span>
+          <span>
+            <span class="einheit-chip" :class="prioClass(naechster.priority)" x-text="prioLabel(naechster.priority)"></span>
+            <span class="einheit-chip einheit-chip--status" x-text="naechster.einheit_status_label"></span>
+            <span class="einheit-chip einheit-chip--neu" x-show="istGeaendert(naechster)">GEÄNDERT</span>
+          </span>
+        </button></div></template>
+      <div class="einheit-gruppe" x-show="weitere.length > 1"><h3>Weitere offene</h3>
+      <template x-for="(auftrag, index) in weitere.slice(1)" :key="auftrag.dispatch_id">
         <article class="fab-card einheit-card einheit-card--kompakt"
                  :data-dispatch-id="auftrag.dispatch_id"
                  :class="['einheit-prio--' + (auftrag.priority || 'keine'),
@@ -258,7 +311,10 @@
                  @mouseenter="markerHervorheben(auftrag.dispatch_id)" @click="oeffne(auftrag.dispatch_id)">
           <div class="einheit-card__kopf">
             <strong x-text="(auftrag.rang || index + 1) + '. ' + auftrag.bezeichnung"></strong>
+            <span class="einheit-chip"
+                  x-text="auftrag.auftragsart === 'erkundung' ? '🔍 Erkundung' : 'Abarbeitung'"></span>
             <span class="einheit-chip einheit-chip--neu" x-show="neuIds.includes(auftrag.dispatch_id)">NEU</span>
+            <span class="einheit-chip einheit-chip--neu" x-show="istGeaendert(auftrag)">GEÄNDERT</span>
           </div>
           <div class="einheit-sub" x-text="auftrag.adresse"></div>
           <div class="einheit-sub" x-show="!auftrag.hat_koordinaten"
@@ -271,13 +327,22 @@
           </div>
         </article>
       </template>
+      </div>
 
       <details class="einheit-liste" x-show="abgeschlossen.length">
-        <summary x-text="'Abgeschlossen (' + abgeschlossen.length + ')'"></summary>
+        <summary x-text="'Fertig (' + abgeschlossen.length + ')'"></summary>
         <template x-for="auftrag in abgeschlossen" :key="auftrag.dispatch_id">
           <button type="button" class="einheit-liste__eintrag" @click="oeffne(auftrag.dispatch_id)">
-            <span x-text="auftrag.bezeichnung"></span>
-            <span class="einheit-sub" x-text="auftrag.einheit_status_label"></span>
+            <span>
+              <span class="einheit-chip"
+                    x-text="auftrag.auftragsart === 'erkundung' ? '🔍 Erkundung' : 'Abarbeitung'"></span>
+              <span x-text="auftrag.bezeichnung"></span>
+            </span>
+            <span>
+              <span class="einheit-chip" :class="prioClass(auftrag.priority)" x-text="prioLabel(auftrag.priority)"></span>
+              <span class="einheit-chip einheit-chip--status" x-text="auftrag.einheit_status_label"></span>
+              <span class="einheit-chip einheit-chip--neu" x-show="istGeaendert(auftrag)">GEÄNDERT</span>
+            </span>
           </button>
         </template>
       </details>
@@ -285,10 +350,20 @@
         <summary x-text="'Zurückgezogen (' + zurueckgezogen.length + ')'"></summary>
         <template x-for="auftrag in zurueckgezogen" :key="auftrag.dispatch_id">
           <button type="button" class="einheit-liste__eintrag" @click="oeffne(auftrag.dispatch_id)">
-            <span x-text="auftrag.bezeichnung"></span>
+            <span>
+              <span class="einheit-chip"
+                    x-text="auftrag.auftragsart === 'erkundung' ? '🔍 Erkundung' : 'Abarbeitung'"></span>
+              <span x-text="auftrag.bezeichnung"></span>
+            </span>
+            <span>
+              <span class="einheit-chip" :class="prioClass(auftrag.priority)" x-text="prioLabel(auftrag.priority)"></span>
+              <span class="einheit-chip einheit-chip--status" x-text="auftrag.einheit_status_label"></span>
+              <span class="einheit-chip einheit-chip--neu" x-show="istGeaendert(auftrag)">GEÄNDERT</span>
+            </span>
           </button>
         </template>
       </details>
+      </section>
     </aside>
   </div>
 
@@ -428,11 +503,19 @@
             <span class="einheit-status-pending" x-show="ausstehenderStatus">&#9203; nur auf diesem Gerät</span>
           </div>
           <button type="button" class="btn btn--primary btn--lg einheit-action"
-                  x-show="statusText" @click="naechsterStatus()" x-text="statusText"></button>
+                  x-show="primaererText" :disabled="primaererStatus === 'abgeschlossen' && ausstehenderStatus"
+                  @click="naechsterStatus()" x-text="primaererText"></button>
+          <div class="einheit-zwischenaktionen" x-show="zwischenStatus.length">
+            <template x-for="status in zwischenStatus" :key="status">
+              <button type="button" class="btn btn--ghost btn--sm" @click="statusErfassen(status)" x-text="statusLabel(status)"></button>
+            </template>
+          </div>
           <button type="button" class="btn btn--ghost einheit-action einheit-action--gefahr"
-                  x-show="statusText" @click="flyout = 'nicht_durchfuehrbar'">Nicht durchführbar</button>
+                  x-show="erlaubteStatus.includes('nicht_durchfuehrbar')" @click="flyout = 'nicht_durchfuehrbar'">Nicht durchführbar</button>
           <div class="einheit-actions-row">
-            <button type="button" class="btn btn--ghost" @click="flyout = 'foto'">&#x1F4F7; Foto</button>
+            <input x-ref="fotoDirekt" class="sr-only" type="file" accept="image/*" capture="environment"
+                   @change="fotoDirektErfassen()">
+            <button type="button" class="btn btn--ghost" @click="$refs.fotoDirekt.click()">&#x1F4F7; Foto</button>
             <button type="button" class="btn btn--ghost" @click="oeffneMeldung('lagemeldung')">&#x1F4DD; Lagemeldung</button>
             <button type="button" class="btn btn--ghost" @click="oeffneMeldung('massnahmen')">&#x1F6E0; Maßnahme</button>
             <button type="button" class="btn btn--ghost" @click="oeffneMeldung('note')">&#x1F5D2; Notiz</button>
@@ -445,6 +528,12 @@
       </aside>
     </div>
   </section>
+
+  <nav class="einheit-tabbar" role="tablist" aria-label="Bereiche" x-show="!detail">
+    <button type="button" role="tab" :aria-selected="aktiverBereich === 'uebersicht'" @click="waehleBereich('uebersicht')">Übersicht</button>
+    <button type="button" role="tab" :aria-selected="aktiverBereich === 'karte'" @click="waehleBereich('karte')">Karte</button>
+    <button type="button" role="tab" :aria-selected="aktiverBereich === 'auftraege'" @click="waehleBereich('auftraege')">Aufträge</button>
+  </nav>
 
   {# ── Flyouts (Erfassen und Bestätigen) ──────────────────────────────── #}
   <div class="person-flyout-backdrop" x-show="flyout" x-cloak>

@@ -1,13 +1,6 @@
 import { createOutbox } from "/static/js/einheit_outbox.js";
 import { EinheitKarte } from "/static/js/einheit_karte.js";
-
-const STATUS = {
-  zugewiesen: ["bestaetigt", "Auftrag erhalten"],
-  bestaetigt: ["anfahrt", "Anfahrt"],
-  anfahrt: ["vor_ort", "Vor Ort"],
-  vor_ort: ["in_arbeit", "In Arbeit"],
-  in_arbeit: ["abgeschlossen", "Auftrag abgeschlossen"],
-};
+import { istGeaendert, vergleicheZustand } from "/static/js/einheit_aenderungen.js";
 
 const STATUS_LABEL = {
   zugewiesen: "Zugewiesen",
@@ -54,9 +47,11 @@ function registriere() {
     startDispatchId: config.start_dispatch_id,
     kopf: {}, aktuell: null, weitere: [], abgeschlossen: [], zurueckgezogen: [], detail: null,
     kannRessourcePflegen: false, ressource: { personal: {}, ausstattung: [] }, neueAusstattung: {}, neuePerson: {},
-    online: navigator.onLine, syncText: "", outboxOffen: false, outboxListe: [], verlauf: [],
+    online: navigator.onLine, syncText: "", outboxOffen: false,
+    outboxListe: [], verlauf: [],
     flyout: null, konfliktEintrag: null, meldungText: "", felder: {}, grund: "", fotoKommentar: "",
-    entwurfHinweis: false, auftragGeaendert: false, hinweisBanner: "", neuIds: [], etag: null,
+    entwurfHinweis: false, auftragGeaendert: false, hinweisBanner: "", hinweisRot: false,
+    neuIds: [], etag: null,
     ws: null, wsTimer: null, wsVersuche: 0, pollTimer: null, retryTimer: null, lastLoad: 0, outbox: null,
     gezeigteHinweise: new Set(), geladenAb: new Date().toISOString(),
     karte: null, kartenMarker: null, uebersichtKarte: null, fertigeAufKarte: false,
@@ -66,9 +61,32 @@ function registriere() {
     verleihAktiv: false, materialKatalog: [], materialPositionen: [{ bezeichnung: "", menge: 1 }],
     materialName: "", materialTelefon: "", materialSmsSenden: true, materialPinSenden: false,
     materialNotizen: "",
+    aktiverBereich: "uebersicht",
+    mobil: window.matchMedia("(max-width: 760px)").matches,
+    letzterZustand: null, geseheneVersionen: {},
 
     // Abgeleitete Anzeigezustände.
     get naechster() { return this.weitere[0] || null; },
+    get istErkundung() { return this.detail?.auftrag?.auftragsart === "erkundung"; },
+    get erlaubteStatus() { return this.detail?.auftrag?.erlaubte_status || []; },
+    get primaererStatus() {
+      if (this.istErkundung) return this.erlaubteStatus.includes("abgeschlossen") ? "abgeschlossen" : null;
+      if (["zugewiesen", "bestaetigt", "anfahrt", "vor_ort"].includes(this.wirksamerStatus)) {
+        return this.erlaubteStatus.includes("in_arbeit") ? "in_arbeit" : null;
+      }
+      return this.wirksamerStatus === "in_arbeit" && this.erlaubteStatus.includes("abgeschlossen")
+        ? "abgeschlossen" : null;
+    },
+    get primaererText() {
+      if (this.primaererStatus === "in_arbeit") return "In Arbeit setzen";
+      if (this.primaererStatus === "abgeschlossen") {
+        return this.istErkundung ? "Erkundung abschließen" : "Fertig melden";
+      }
+      return "";
+    },
+    get zwischenStatus() {
+      return ["bestaetigt", "anfahrt", "vor_ort"].filter((status) => this.erlaubteStatus.includes(status));
+    },
     get ohneKartenposition() {
       return [this.aktuell, ...this.weitere, ...this.abgeschlossen]
         .filter((auftrag) => auftrag && !auftrag.hat_koordinaten).length;
@@ -97,10 +115,15 @@ function registriere() {
     },
     // Status, von dem der nächste Schritt ausgeht: ausstehender lokaler Status vor Serverstand.
     get wirksamerStatus() { return this.ausstehenderStatus || this.detail?.auftrag?.einheit_status; },
-    get statusText() {
-      return STATUS[this.wirksamerStatus]?.[1] || "";
+    statusLabel(status) {
+      // Label je Auftragsart (z. B. „Erkundet“) nur für den Status des geöffneten Auftrags.
+      if (status && this.detail?.auftrag && status === this.detail.auftrag.einheit_status) {
+        return this.detail.auftrag.einheit_status_label;
+      }
+      return STATUS_LABEL[status] || status || "";
     },
-    statusLabel(status) { return STATUS_LABEL[status] || status || ""; },
+    istGeaendert(auftrag) { return istGeaendert(auftrag, this.geseheneVersionen[auftrag?.dispatch_id]); },
+    bereichSichtbar(bereich) { return !this.mobil || this.aktiverBereich === bereich; },
     get flyoutTitel() {
       return {
         lagemeldung: "Lagemeldung", massnahmen: "Maßnahme", note: "Notiz", foto: "Foto erfassen",
@@ -191,7 +214,11 @@ function registriere() {
       window.addEventListener("online", () => {
         this.online = true;
         if (!this.zugangBeendet) void this.flush();
+        void this.laden(true);
         this.verbinden();
+      });
+      window.addEventListener("resize", () => {
+        this.mobil = window.matchMedia("(max-width: 760px)").matches;
       });
       window.addEventListener("offline", () => { this.online = false; });
       document.addEventListener("visibilitychange", () => {
@@ -214,18 +241,39 @@ function registriere() {
         void this.outboxAktualisieren();
         void this.laden(true);
       });
+      try {
+        const gespeichert = localStorage.getItem(`${this.outboxName()}:bereich`);
+        if (["uebersicht", "karte", "auftraege"].includes(gespeichert)) {
+          this.aktiverBereich = gespeichert;
+        }
+      } catch (error) { /* Privater Browsermodus darf die Ansicht nicht blockieren. */ }
       void (async () => {
         try {
           await this.outbox.bereinigen();
           await this.outboxAktualisieren();
+          this.geseheneVersionen = await this.outbox.metaLaden("gesehene_versionen") || {};
         } catch (error) {
           console.warn("Einheiten-Outbox nicht verfuegbar", error);
+          try {
+            const key = `${this.outboxName()}:gesehene_versionen`;
+            this.geseheneVersionen = JSON.parse(localStorage.getItem(key) || "{}");
+          } catch (storageError) { this.geseheneVersionen = {}; }
         }
       })();
       await erstesLaden;
       await this.navigiereZuPfad();
       this.verbinden();
       this.pollTimer = setInterval(() => this.laden(true), 30000);
+    },
+    waehleBereich(bereich) {
+      this.aktiverBereich = bereich;
+      try {
+        localStorage.setItem(`${this.outboxName()}:bereich`, bereich);
+      } catch (error) { /* optional */ }
+      this.$nextTick(() => {
+        if (bereich === "karte") this.uebersichtKarteAktualisieren();
+        else this.uebersichtKarte?.stoppeStandort();
+      });
     },
     async navigiereZuPfad() {
       const treffer = location.pathname.match(/^\/einheit\/auftrag\/(\d+)$/);
@@ -281,6 +329,8 @@ function registriere() {
       }
     },
     zustand(data) {
+      const aenderungen = this.letzterZustand
+        ? vergleicheZustand(this.letzterZustand, data) : null;
       const vorher = new Set(this.weitere.map((item) => item.dispatch_id));
       this.kopf = data.kopf || {};
       this.aktuell = data.kategorien?.aktuell || null;
@@ -294,12 +344,31 @@ function registriere() {
       this.verleihAktiv = Boolean(data.verleih_aktiv);
       this.materialKatalog = data.material_katalog || [];
       if (this.aktuell) this.aktuell.aktuell = true;
-      this.$nextTick(() => this.uebersichtKarteAktualisieren());
-      const neu = this.weitere.filter((item) => vorher.size && !vorher.has(item.dispatch_id)).map((item) => item.dispatch_id);
+      this.$nextTick(() => {
+        if (!this.mobil || this.aktiverBereich === "karte") {
+          this.uebersichtKarteAktualisieren();
+        }
+      });
+      const neu = this.weitere
+        .filter((item) => vorher.size && !vorher.has(item.dispatch_id))
+        .map((item) => item.dispatch_id);
       if (neu.length) {
         this.neuIds.push(...neu);
         new Audio("/static/audio/alert.mp3").play().catch(() => {});
       }
+      if (aenderungen?.reihenfolgeGeaendert) {
+        this.hinweisRot = false;
+        const bezeichnung = aenderungen.naechster?.bezeichnung || "";
+        this.hinweisBanner = `Die Leitstelle hat die Reihenfolge geändert – nächster Auftrag: ${bezeichnung}`;
+      } else if (aenderungen?.hoeherePrioritaet.length) {
+        this.hinweisRot = true;
+        this.hinweisBanner = `Neuer Auftrag mit höherer Priorität: ${aenderungen.hoeherePrioritaet[0].bezeichnung}`;
+        new Audio("/static/audio/alert.mp3").play().catch(() => {});
+      } else if (aenderungen?.zurueckgezogen.length) {
+        this.hinweisRot = false;
+        this.hinweisBanner = `Auftrag ${aenderungen.zurueckgezogen[0].bezeichnung} wurde zurückgezogen`;
+      }
+      this.letzterZustand = reineDaten(data);
     },
     uebersichtKarteAktualisieren() {
       const element = this.$refs?.uebersichtKarte;
@@ -346,6 +415,7 @@ function registriere() {
         this.detail = await response.json();
         this.detail.offline = ausCache;
         this.auftragGeaendert = Boolean(versionVorher && versionVorher !== this.detail.auftrag.version);
+        await this.markiereGesehen(this.detail.auftrag);
         this.karteAktualisieren();
         if (push) {
           const query = this.simulation ? `?sim=${this.simEinheitId}` : "";
@@ -366,6 +436,19 @@ function registriere() {
           history.pushState({}, "", `/einheit/auftrag/${id}${query}`);
         }
       }
+    },
+    async markiereGesehen(auftrag) {
+      if (!auftrag?.dispatch_id || auftrag.version === undefined) return;
+      this.geseheneVersionen = {
+        ...this.geseheneVersionen, [auftrag.dispatch_id]: auftrag.version,
+      };
+      try {
+        if (this.outbox) await this.outbox.metaSpeichern("gesehene_versionen", this.geseheneVersionen);
+        else {
+          const key = `${this.outboxName()}:gesehene_versionen`;
+          localStorage.setItem(key, JSON.stringify(this.geseheneVersionen));
+        }
+      } catch (error) { /* Sichtbarkeitsmarker sind eine Komfortfunktion. */ }
     },
     zurueck() {
       this.detail = null;
@@ -398,7 +481,7 @@ function registriere() {
 
     // Erfassen von Status, Meldung und Foto.
     async naechsterStatus() {
-      const status = STATUS[this.wirksamerStatus]?.[0];
+      const status = this.primaererStatus;
       if (!status) return;
       if (status === "abgeschlossen") {
         this.flyout = "abschluss_bestaetigen";
@@ -463,6 +546,19 @@ function registriere() {
         });
       }
       this.flyout = null;
+    },
+    async fotoDirektErfassen() {
+      const input = this.$refs.fotoDirekt;
+      if (!input?.files?.length) return;
+      if (window.compressFilesInPlace) await window.compressFilesInPlace(input);
+      for (const file of input.files) {
+        await this.outboxErfassen({
+          typ: "foto", dispatch_id: this.detail.auftrag.dispatch_id, einheit_id: this.einheitId,
+          auftrag_version: this.detail.auftrag.version, blob: file, dateiname: file.name,
+          payload: { kommentar: "" },
+        });
+      }
+      input.value = "";
     },
     materialPositionHinzufuegen() {
       this.materialPositionen.push({ bezeichnung: "", menge: 1 });

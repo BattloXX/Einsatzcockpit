@@ -44,6 +44,8 @@ from app.models.verleih import VerleihAusleihe, VerleihFoto
 from app.services import gk_nummer_service, gk_zugang_service, ressource_pflege_service
 from app.services.broadcast import broadcast_lage
 from app.services.einheit_service import (
+    ERLAUBTE_UEBERGAENGE,
+    ERLAUBTE_UEBERGAENGE_ERKUNDUNG,
     EinheitKonflikt,
     EinheitKontext,
     EinheitKontextFehler,
@@ -630,8 +632,15 @@ def auftrag_detail(dispatch_id: int, ctx: EinheitKontext = Depends(einheit_konte
     except LookupError:
         raise HTTPException(status_code=404)
     site = dispatch.site
+    auftrag = _auftragsdaten(dispatch)
+    uebergaenge = (
+        ERLAUBTE_UEBERGAENGE_ERKUNDUNG
+        if dispatch.auftragsart == "erkundung"
+        else ERLAUBTE_UEBERGAENGE
+    )
+    auftrag["erlaubte_status"] = sorted(uebergaenge.get(dispatch.einheit_status, frozenset()))
     out: dict[str, Any] = {
-        "auftrag": _auftragsdaten(dispatch),
+        "auftrag": auftrag,
         "stelle": {
             k: _auftragsdaten(dispatch)[k]
             for k in ("site_id", "bezeichnung", "einsatzgrund", "adresse", "lat", "lng", "priority", "phase")
