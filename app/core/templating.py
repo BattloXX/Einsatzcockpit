@@ -258,6 +258,8 @@ from app.config import settings as _settings  # noqa: E402
 
 templates.env.globals["WEATHER_ENABLED"] = _settings.WEATHER_ENABLED
 templates.env.globals["TEST_SYSTEM"] = _settings.TEST_SYSTEM
+# Ort-Vorbelegung im Adress-Picker, wenn die Org keine Stadt hinterlegt hat.
+templates.env.globals["DEFAULT_INCIDENT_CITY"] = _settings.DEFAULT_INCIDENT_CITY
 
 # Brand-Konstanten für Templates ({{ brand }}, {{ brand_tagline }}, {{ brand_domain }})
 templates.env.globals["brand"] = _settings.APP_NAME

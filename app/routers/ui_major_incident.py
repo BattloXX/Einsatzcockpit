@@ -453,6 +453,8 @@ async def site_create(
     ort: str = Form(""),
     strasse: str = Form(""),
     hausnr: str = Form(""),
+    lat: str = Form(""),
+    lng: str = Form(""),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
 ):
@@ -462,6 +464,14 @@ async def site_create(
     if lage.status != MajorIncidentStatus.active:
         raise HTTPException(status_code=400, detail="Lage nicht aktiv")
 
+    site_lat = site_lng = None
+    try:
+        parsed_lat, parsed_lng = float(lat), float(lng)
+        if -90 <= parsed_lat <= 90 and -180 <= parsed_lng <= 180:
+            site_lat, site_lng = parsed_lat, parsed_lng
+    except (TypeError, ValueError):
+        pass
+
     try:
         site = create_site(
             db, lage,
@@ -470,6 +480,8 @@ async def site_create(
             ort=ort.strip() or None,
             strasse=strasse.strip() or None,
             hausnr=hausnr.strip() or None,
+            lat=site_lat,
+            lng=site_lng,
             created_by=user.id,
         )
         await _geocode_site(site)

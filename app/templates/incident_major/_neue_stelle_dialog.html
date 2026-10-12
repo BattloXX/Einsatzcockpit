@@ -1,12 +1,13 @@
+{% from "_macros/address_picker.html" import address_picker %}
 <!-- ── Neue Einsatzstelle Dialog ── -->
-<dialog class="modal" id="neuStelleDialog">
-  <div class="modal__content" style="min-width:min(480px,95vw);">
+<dialog class="modal" id="neuStelleDialog" style="max-width:560px;width:95vw">
+  <div class="modal__content">
     <div class="modal__header">
       <h3 class="modal__title">Einsatzstelle anlegen</h3>
       <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">×</button>
     </div>
-    <form hx-post="/lage/{{ lage.id }}/stellen/neu" hx-swap="none" data-no-error-toast
-          hx-on::after-request="if(event.detail.successful){ this.closest('dialog').close(); this.reset(); } else { alert('Fehler beim Anlegen: ' + (event.detail.xhr.responseText || 'unbekannter Fehler')); }">
+    <form hx-post="/lage/{{ lage.id }}/stellen/neu" hx-swap="none" data-no-error-toast autocomplete="off"
+          hx-on::after-request="if(event.detail.successful){ this.closest('dialog').close(); this.reset(); window.neuStelleAddressPicker.reset(); } else { alert('Fehler beim Anlegen: ' + (event.detail.xhr.responseText || 'unbekannter Fehler')); }">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div class="modal__body">
         <div class="form-group">
@@ -14,20 +15,16 @@
           <input type="text" name="bezeichnung" class="form-input" required maxlength="160"
                  placeholder="z. B. Überschwemmung Hauptstraße" autocomplete="off" autofocus>
         </div>
-        <div class="form-row" style="display:flex;gap:8px;">
-          <div class="form-group" style="flex:3;">
-            <label class="form-label">Straße</label>
-            <input type="text" name="strasse" class="form-input" maxlength="120" autocomplete="off">
-          </div>
-          <div class="form-group" style="flex:1;">
-            <label class="form-label">Nr.</label>
-            <input type="text" name="hausnr" class="form-input" maxlength="20" autocomplete="off">
-          </div>
-        </div>
         <div class="form-group">
-          <label class="form-label">Ort</label>
-          <input type="text" name="ort" class="form-input" maxlength="120" autocomplete="off">
+          <label class="form-label">Einsatzgrund</label>
+          <input type="text" name="einsatzgrund" class="form-input" maxlength="500"
+                 placeholder="Kurzer Einsatzgrund" autocomplete="off">
         </div>
+        {{ address_picker('neuStelle',
+                         default_city=default_city|default(request.state.user.org.city|default(DEFAULT_INCIDENT_CITY, true), true),
+                         ort_name='ort', strasse_name='strasse', nr_name='hausnr',
+                         default_lat=org_lat|default(47.41, true), default_lng=org_lng|default(9.74, true),
+                         label_class='form-label') }}
       </div>
       <div class="modal__footer">
         <button type="button" data-ec-action="close-dialog" class="btn btn--ghost">Abbrechen</button>
@@ -36,3 +33,11 @@
     </form>
   </div>
 </dialog>
+<script src="/static/js/address-picker.js?v={{ ASSET_VERSION }}"></script>
+<script>
+window.neuStelleAddressPicker = initAddressPicker({
+  prefix: 'neuStelle',
+  defaultLat: {{ org_lat|default(47.41, true) }},
+  defaultLng: {{ org_lng|default(9.74, true) }}
+});
+</script>

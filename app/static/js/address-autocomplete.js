@@ -129,8 +129,10 @@
         ul.appendChild(li);
       });
 
-      reposition();
+      // Erst einblenden, dann positionieren: reposition() überspringt eine
+      // ausgeblendete Liste, sonst landet sie am unteren Dialogrand.
       ul.style.display = 'block';
+      reposition();
     }
 
     function hideDropdown() {
