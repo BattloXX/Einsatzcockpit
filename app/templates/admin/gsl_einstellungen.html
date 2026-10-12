@@ -150,6 +150,12 @@
           <span>SMS bei Gruppenkommandanten-Zuweisung automatisch versenden</span>
         </label>
         <span style="font-size:.78rem;color:var(--text-muted);margin-top:-9px;">Nur wirksam, wenn der Gesamtschalter aktiviert ist.</span>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+          <input type="checkbox" name="gk_sms_uebung" value="1" {% if org_settings.gk_sms_uebung %}checked{% endif %}
+                 style="width:18px;height:18px;">
+          <span>SMS an Gruppenkommandanten auch bei Übungen senden</span>
+        </label>
+        <span style="font-size:.78rem;color:var(--text-muted);margin-top:-9px;">Unabhängig vom Einsatzinfo-SMS-Schalter.</span>
         <div class="form-group">
           <label class="form-label" for="gk-zugang-nachricht">Nachrichtenvorlage</label>
           <span style="font-size:.78rem;color:var(--text-muted);display:block;margin-bottom:6px;">Platzhalter: {lage}, {einheit}, {gruppenkommandant}, {link}</span>

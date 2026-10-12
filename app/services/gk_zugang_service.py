@@ -903,7 +903,7 @@ async def sende_zugangs_sms(
         )
         db.commit()
         return VersandErgebnis("uebersprungen", "Kein SMS-Anbieter verbunden", zugang.generation)
-    if not darf_extern("sms", is_exercise=lage.is_exercise, org_id=lage.org_id, db=db):
+    if not darf_extern("gk_sms", is_exercise=lage.is_exercise, org_id=lage.org_id, db=db):
         zugang = zugang or _zugang_ohne_token(db, lage, einheit, leader)
         _versand(
             db,
@@ -913,10 +913,10 @@ async def sende_zugangs_sms(
             ausloeser=ausloeser,
             user_id=user_id,
             status="uebersprungen",
-            fehler="Übung: SMS unterdrückt",
+            fehler="Übung: GK-SMS unterdrückt",
         )
         db.commit()
-        return VersandErgebnis("uebersprungen", "Übung: SMS unterdrückt", zugang.generation)
+        return VersandErgebnis("uebersprungen", "Übung: GK-SMS unterdrückt", zugang.generation)
     if zugang and not bestaetigt:
         active = _aktuelle_sitzung(db, zugang)
         if active:
@@ -1033,8 +1033,8 @@ async def sende_auto_sms(auftrag: AutoSmsAuftrag) -> None:
             row.status, row.fehler, row.abgeschlossen_at = "uebersprungen", "Kein SMS-Anbieter verbunden", _now()
             db.commit()
             return
-        if not darf_extern("sms", is_exercise=lage.is_exercise, org_id=auftrag.org_id, db=db):
-            row.status, row.fehler, row.abgeschlossen_at = "uebersprungen", "Übung: SMS unterdrückt", _now()
+        if not darf_extern("gk_sms", is_exercise=lage.is_exercise, org_id=auftrag.org_id, db=db):
+            row.status, row.fehler, row.abgeschlossen_at = "uebersprungen", "Übung: GK-SMS unterdrückt", _now()
             db.commit()
             return
         if auftrag.ereignis is not None:
