@@ -1,9 +1,24 @@
-{% extends "base.html" %}
-{% from "_page_header.html" import page_header %}
+{% extends "admin/_layout.html" %}
+{% from "admin/_breadcrumb.html" import breadcrumb %}
 {% block title %}Microsoft Teams – Straßensperren{% endblock %}
-{% block content %}
+{% block head_extra %}
+{{ super() }}
+<style>
+.sperren-teams{max-width:960px;margin:0 auto;padding:1rem 1rem 3rem}
+.sperren-teams__card{padding:1rem 1.2rem;margin-bottom:1rem;display:grid;gap:.75rem}
+.sperren-teams__check{display:flex;gap:.5rem;align-items:center}
+.sperren-teams__set{border:1px solid var(--border);border-radius:8px;padding:.6rem .9rem;display:grid;gap:.4rem}
+.sperren-teams__test{margin:-.25rem 0 1rem}
+.sperren-teams__table{width:100%;border-collapse:collapse;font-size:.85rem}
+.sperren-teams__table th,.sperren-teams__table td{text-align:left;padding:.4rem .5rem;border-bottom:1px solid var(--border)}
+.sperren-teams__status--sent{color:var(--green,#22c55e)}.sperren-teams__status--failed{color:var(--red-light,#f87171)}
+@media(max-width:760px){.sperren-teams__table{display:block;overflow-x:auto}}
+</style>
+{% endblock %}
+{% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Straßensperren'}, {'label': 'Teams'}]) }}{% endblock %}
+{% block admin_content %}
 <section class="sperren-teams">
-{% call page_header("Microsoft Teams", back_href="/strassensperren", back_label="Übersicht", sub="Neue und geänderte Straßensperren als Karte in einen Teams-Kanal melden") %}{% endcall %}
+<div class="page-header"><div><h1>Microsoft Teams</h1><p class="page-header__sub">Neue und geänderte Straßensperren als Karte in einen Teams-Kanal melden</p></div></div>
 {% if error %}<div class="alert alert--error">{{ error }}</div>{% endif %}
 {% if hinweis %}<div class="alert alert--success">{{ hinweis }}</div>{% endif %}
 <form method="post" action="/strassensperren/einstellungen" class="card sperren-teams__card">
@@ -36,15 +51,4 @@
   {% else %}<p class="sperren-hint">Noch keine Benachrichtigungen.</p>{% endif %}
 </section>
 </section>
-<style>
-.sperren-teams{max-width:960px;margin:0 auto;padding:1rem 1rem 3rem}
-.sperren-teams__card{padding:1rem 1.2rem;margin-bottom:1rem;display:grid;gap:.75rem}
-.sperren-teams__check{display:flex;gap:.5rem;align-items:center}
-.sperren-teams__set{border:1px solid var(--border);border-radius:8px;padding:.6rem .9rem;display:grid;gap:.4rem}
-.sperren-teams__test{margin:-.25rem 0 1rem}
-.sperren-teams__table{width:100%;border-collapse:collapse;font-size:.85rem}
-.sperren-teams__table th,.sperren-teams__table td{text-align:left;padding:.4rem .5rem;border-bottom:1px solid var(--border)}
-.sperren-teams__status--sent{color:var(--green,#22c55e)}.sperren-teams__status--failed{color:var(--red-light,#f87171)}
-@media(max-width:760px){.sperren-teams__table{display:block;overflow-x:auto}}
-</style>
 {% endblock %}
