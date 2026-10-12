@@ -12,6 +12,11 @@ from app.models.dienst_monitor import (  # noqa: F401 -- registriert ORM-Modelle
     DienstMonitorToken,
     DienstStatus,
 )
+from app.models.einsatzinfo_mail import (
+    MailEinsatzinfoLog,
+    MailEinsatzinfoLogRecipient,
+    MailEinsatzinfoRecipient,
+)
 from app.models.fahrtenbuch import (
     Fahrt,
     FahrtBenachrichtigung,
@@ -360,6 +365,9 @@ __all__ = [
     "SmsForwardRule",
     "SmsForwardRuleGroup",
     "SmsForwardRuleMember",
+    "MailEinsatzinfoRecipient",
+    "MailEinsatzinfoLog",
+    "MailEinsatzinfoLogRecipient",
     "Fahrtzweck",
     "Zielort",
     "Fahrt",

@@ -104,6 +104,8 @@ _TENANT_TABLE_NAMES: frozenset[str] = frozenset({
     "sms_group",
     "sms_einsatzinfo_recipient",
     "sms_log",
+    "mail_einsatzinfo_recipient",
+    "mail_einsatzinfo_log",
     "sms_forward_rule",
     "sms_inbox",
     "api_message",

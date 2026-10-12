@@ -257,6 +257,9 @@ class AlarmType(TenantScoped, Base):
     triggers_major_incident: Mapped[bool] = mapped_column(Boolean, default=False)
     # Stichwort-spezifische SMS-Vorlage; überschreibt den Org-Standard wenn gesetzt
     einsatzinfo_sms_template: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Stichwort-spezifische Mail-Vorlagen; überschreiben den Org-Standard wenn gesetzt
+    einsatzinfo_mail_subject_template: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    einsatzinfo_mail_template: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Löst dieses Stichwort eine Teams-Alarmkarte aus? (siehe teams_alarm_service.post_incident_card())
     teams_alarm_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     wp_einsatzart: Mapped[str | None] = mapped_column(String(30), nullable=True)
@@ -568,6 +571,14 @@ class OrgSettings(Base):
     einsatzinfo_sms_template: Mapped[str | None] = mapped_column(Text, nullable=True)
     # True = auch bei Übungen senden (mit [ÜBUNG]-Präfix)
     einsatzinfo_sms_send_exercise: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    # Einsatzinfo-Mail: automatischer Versand bei Alarmeingang
+    einsatzinfo_mail_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # True = auch bei Übungen senden
+    einsatzinfo_mail_send_exercise: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Betreff- und Textvorlagen mit denselben Platzhaltern wie Einsatzinfo-SMS
+    einsatzinfo_mail_subject_template: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    einsatzinfo_mail_template: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # SMS-Empfang: Org-Schalter (App fordert RECEIVE_SMS nur an, wenn aktiv)
     sms_receive_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
