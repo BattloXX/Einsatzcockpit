@@ -87,6 +87,11 @@
 .site-log-form__actions .form-select, .site-log-form__actions .btn { min-height:44px; }
 .site-log-form__actions .btn { margin-left:auto; }
 @media (max-width:760px) { .site-material-form__grid { grid-template-columns:1fr; } .site-material-form__position { flex-wrap:wrap; } .site-material-form__position .form-input:first-child { min-width:calc(100% - 100px); } }
+@media (max-width:760px) {
+  .site-detail { padding-bottom:72px; }
+  .site-detail-actions { position:sticky; bottom:0; z-index:5; display:flex; gap:6px; padding:9px; margin:16px -16px -16px; background:var(--surface-mid); border-top:1px solid var(--border); }
+  .site-detail-actions .btn { flex:1; min-height:44px; }
+}
 </style>
 
 {% include "incident_major/_site_detail_header.html" %}
@@ -634,6 +639,31 @@
   {% endif %}
 
 </div>
+
+{% if (can_edit and site.phase.value not in ['erledigt', 'abgebrochen']) or (can_manage and site.phase.value == 'fertig_gemeldet') %}
+<div class="site-detail-actions">
+  {% if can_edit and site.phase.value not in ['erledigt', 'abgebrochen'] %}
+  <button type="button" class="btn btn--xs btn--secondary" onclick="siteDetailDispatch('erkundung')">Erkundung zuweisen</button>
+  <button type="button" class="btn btn--xs btn--secondary" onclick="siteDetailDispatch('abarbeitung')">Disponieren</button>
+  {% endif %}
+  {% if can_manage and site.phase.value == 'fertig_gemeldet' %}
+  <button type="button" class="btn btn--xs btn--primary" onclick="siteDetailAbschliessen()">Einsatz abschließen</button>
+  {% endif %}
+</div>
+<script>
+function siteDetailDispatch(auftragsart) {
+  var form = document.querySelector('#siteDetailContent form[hx-post*="einheit-disponieren"]');
+  if (!form) return;
+  var button = form.querySelector('button[name="auftragsart"][value="' + auftragsart + '"]');
+  form.scrollIntoView({behavior: 'smooth', block: 'center'});
+  if (button) button.focus();
+}
+function siteDetailAbschliessen() {
+  var form = document.querySelector('#siteDetailContent form[hx-post*="abschliessen"]');
+  if (form) form.requestSubmit();
+}
+</script>
+{% endif %}
 
 <div class="modal__footer">
   <button type="button" onclick="closeSiteDetailPanel(this)" class="btn btn--ghost">Schließen</button>

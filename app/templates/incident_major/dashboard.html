@@ -83,6 +83,12 @@
 .act-site  { color: #93c5fd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   max-width: 100px; flex-shrink: 0; }
 .act-text  { flex: 1; color: var(--text); }
+.phase-tiles { display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; }
+.phase-tile { padding:10px; border:1px solid var(--border); border-radius:6px; color:inherit; text-decoration:none; }
+.phase-tile strong { display:block; font-size:1.3rem; }
+.fuehrung-hinweis { display:block; padding:9px 0; border-top:1px solid var(--border); color:inherit; text-decoration:none; }
+.fuehrung-hinweis strong { display:block; }.fuehrung-hinweis span, .fuehrung-hinweis--empty { font-size:.78rem; color:var(--text-muted); }
+@media (max-width:760px) { .stat-row { grid-template-columns:repeat(2, 1fr); } .dash-grid { grid-template-columns:1fr; } .phase-tiles { grid-template-columns:repeat(2, 1fr); } }
 </style>
 {% endblock %}
 
@@ -141,6 +147,15 @@
 
       <div class="dash-section" style="--dash-accent:var(--blue);">
         <div class="dash-section__title">🧭 Phasenverteilung</div>
+        <div class="phase-tiles">
+          {% for p, label in phase_labels.items() %}
+          {% if p.value != 'abgebrochen' %}
+          <a class="phase-tile" href="/lage/{{ lage.id }}?phase={{ p.value }}">
+            <strong>{{ phase_stats[p] }}</strong>{{ label }}
+          </a>
+          {% endif %}
+          {% endfor %}
+        </div>
         {% set phase_colors = {
           'eingegangen': '#6b7280',
           'erkundung':   '#a78bfa',
@@ -176,6 +191,14 @@
           {% endif %}
           {% endfor %}
         </div>
+      </div>
+
+      <div class="dash-section" style="--dash-accent:var(--red);">
+        <div class="dash-section__title">⚠ Braucht Aufmerksamkeit</div>
+        <div id="fuehrungs-hinweise"
+             hx-get="/lage/{{ lage.id }}/dashboard/hinweise"
+             hx-trigger="load, every 30s, sitePhaseChanged from:body"
+             hx-swap="innerHTML"></div>
       </div>
 
       <div class="dash-section" style="--dash-accent:var(--red);">

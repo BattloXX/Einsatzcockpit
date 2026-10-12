@@ -82,7 +82,7 @@ from app.models.major_incident import (
 from app.models.master import FireDept, Member, VehicleMaster
 from app.models.user import User
 from app.models.verleih import VerleihAusleihe, VerleihStatus
-from app.services import einheit_service, lagemeldung_service, resource_service
+from app.services import einheit_service, gsl_fuehrung_service, lagemeldung_service, resource_service
 from app.services.ai_service import is_enabled as ai_is_enabled
 from app.services.broadcast import broadcast_lage, manager
 from app.services.einheit_service import (
@@ -2432,6 +2432,24 @@ def lage_dashboard(
     })
 
 
+@router.get("/lage/{lage_id}/dashboard/hinweise", response_class=HTMLResponse)
+def lage_dashboard_hinweise(
+    request: Request,
+    lage_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+    return templates.TemplateResponse(request, "incident_major/_fuehrungs_hinweise.html", {
+        "lage": lage,
+        "hinweise": gsl_fuehrung_service.fuehrungs_hinweise(db, lage),
+        "can_edit": _can_edit(user),
+        "can_manage": _can_manage(user),
+    })
+
+
 # ── Stab ─────────────────────────────────────────────────────────────────────
 
 @router.get("/lage/{lage_id}/stab", response_class=HTMLResponse)
@@ -4694,6 +4712,9 @@ def lage_karte(
         SitePriority.aufschiebbar: "A",
     }
     active_sites = [s for s in lage.sites if s.phase != SitePhase.abgebrochen]
+    aufmerksam_site_ids = {
+        hint["site_id"] for hint in gsl_fuehrung_service.fuehrungs_hinweise(db, lage)
+    }
     map_sites_json = json.dumps([{
         "id": s.id,
         "bezeichnung": s.bezeichnung,
@@ -4711,6 +4732,7 @@ def lage_karte(
         "strasse": s.strasse or "",
         "hausnr": s.hausnr or "",
         "ort": s.ort or "",
+        "aufmerksamkeit": s.id in aufmerksam_site_ids,
     } for s in active_sites if s.lat and s.lng])
 
     sectors = sorted(lage.sectors, key=lambda s: s.id)
@@ -4906,6 +4928,9 @@ def lage_karte_sites(
         SitePriority.sofort: "S", SitePriority.dringend: "D",
         SitePriority.normal: "N", SitePriority.aufschiebbar: "A",
     }
+    aufmerksam_site_ids = {
+        hint["site_id"] for hint in gsl_fuehrung_service.fuehrungs_hinweise(db, lage)
+    }
     return JSONResponse([{
         "id": site.id, "bezeichnung": site.bezeichnung,
         "einsatzgrund": site.einsatzgrund or "", "lat": site.lat, "lng": site.lng,
@@ -4915,6 +4940,7 @@ def lage_karte_sites(
         "color": site_color(site), "active_res": sum(1 for resource in site.resources if not resource.released_at),
         "sector_id": site.sector_id, "incident_id": site.incident_id,
         "strasse": site.strasse or "", "hausnr": site.hausnr or "", "ort": site.ort or "",
+        "aufmerksamkeit": site.id in aufmerksam_site_ids,
     } for site in lage.sites if site.phase != SitePhase.abgebrochen and site.lat and site.lng])
 
 

@@ -412,6 +412,7 @@
        hx-on::after-swap="var _d=document.getElementById('siteDetailModal');if(_d&&!_d.open)_d.showModal()">
   </div>
 </dialog>
+<style>@media (max-width:760px){#siteDetailModal{width:100vw;height:100dvh;max-width:none;max-height:none;margin:0;border:0;border-radius:0;}#siteDetailContent{min-width:100%!important;max-height:100dvh!important;height:100dvh;}}</style>
 
 {# Einheitlicher Druck-Dialog (ecpgPrint) – wird vom Stellen-Detail (_site_detail.html)
    und vom Übergreifende-Meldung-Panel (_cross_marker_panel.html) für den 🖨-Button
@@ -428,11 +429,12 @@
 // Auto-open site card from ?openSite= query parameter (open_site bleibt kompatibel).
 (function() {
   var params = new URLSearchParams(window.location.search);
-  var siteId = params.get('openSite') || params.get('open_site');
+  var siteId = params.get('site') || params.get('openSite') || params.get('open_site');
   if (!siteId) return;
   var url = new URL(window.location.href);
   url.searchParams.delete('openSite');
   url.searchParams.delete('open_site');
+  url.searchParams.delete('site');
   history.replaceState(null, '', url.toString());
   setTimeout(function() {
     htmx.ajax('GET', '/lage/{{ lage.id }}/stellen/' + siteId, {
@@ -615,7 +617,8 @@ function lageSwitchPhase(phase) {
 
 (function() {
   try {
-    var saved = sessionStorage.getItem('lage_phase_{{ lage.id }}');
+    var params = new URLSearchParams(window.location.search);
+    var saved = params.get('phase') || sessionStorage.getItem('lage_phase_{{ lage.id }}');
     if (saved && (saved === 'uebergreifend' || document.querySelector('.phase-col__body[data-phase="' + saved + '"]'))) {
       lageSwitchPhase(saved);
     }
@@ -689,10 +692,11 @@ window.openMeldungDialog = function() {
 // openSite deep-link: ?openSite= as alias
 (function() {
   var params = new URLSearchParams(location.search);
-  var siteId = params.get('openSite');
+  var siteId = params.get('site') || params.get('openSite');
   if (!siteId) return;
   var url = new URL(window.location.href);
   url.searchParams.delete('openSite');
+  url.searchParams.delete('site');
   url.searchParams.set('open_site', siteId);
   history.replaceState(null, '', url.toString());
   setTimeout(function() {

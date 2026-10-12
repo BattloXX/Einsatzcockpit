@@ -1,0 +1,8 @@
+{% for hinweis in hinweise %}
+<a class="fuehrung-hinweis" href="/lage/{{ lage.id }}?site={{ hinweis.site_id }}">
+  <strong>{{ hinweis.bezeichnung }}</strong>
+  <span>{{ hinweis.gruende|map(attribute='text')|join(' · ') }}</span>
+</a>
+{% else %}
+<div class="fuehrung-hinweis--empty">Keine Einsatzstelle braucht derzeit Aufmerksamkeit.</div>
+{% endfor %}
