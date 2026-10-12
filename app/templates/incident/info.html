@@ -22,6 +22,9 @@
    hier innerhalb der Kopf-Karte liegt. Nur diese Karte braucht sichtbaren
    Overflow, damit das Menue darueber schweben kann. */
 .einsatz-info__kopf { overflow: visible; }
+.ei-kopf__zeile { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.ei-kopf__text { flex: 1 1 320px; min-width: 0; }
+.ei-kopf__aktionen { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-left: auto; max-width: 100%; }
 @media (max-width: 900px) {
   .ei-grid { grid-template-columns: 1fr; }
   /* position:static wuerde das z-index:0 oben wirkungslos machen (Stacking-Context
@@ -154,9 +157,9 @@ html.ei-druck-vorbereitung #einsatz-info-karte { height: 58mm !important; min-he
 
   <!-- Kopf (volle Breite) -->
   <div class="card einsatz-info__kopf" style="padding:14px;margin-bottom:16px;">
-    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+    <div class="ei-kopf__zeile">
       <span class="alarm-badge alarm-badge--{{ incident.alarm_type_code[:1]|lower }}">{{ incident.alarm_type_code }}</span>
-      <div style="min-width:0;flex:1;">
+      <div class="ei-kopf__text">
         {% set _grund = incident.reason or incident.report_text or '' %}
         {% if _grund %}<div style="font-weight:700;font-size:1.15rem;">{{ _grund }}</div>{% endif %}
         <div class="text-muted" style="font-size:.9rem;">
@@ -184,7 +187,7 @@ html.ei-druck-vorbereitung #einsatz-info-karte { height: 58mm !important; min-he
         <span class="badge-pill badge-pill--green" x-text="'✅ ' + zusagen"></span>
         <span class="badge-pill badge-pill--red" x-text="'❌ ' + absagen"></span>
       </div>
-      <div class="ei-noprint" style="display:flex;gap:8px;flex-wrap:wrap;">
+      <div class="ei-noprint ei-kopf__aktionen">
         {% with active="info" %}{% include "incident/_subnav.html" %}{% endwith %}
         <button type="button" class="btn btn--secondary"
                 onclick="ecpgPrint({document_type:'einsatzinfo', incident_id:{{ incident.id }}, title:'Einsatzinfo drucken', localFn:'einsatzInfoDrucken'})">🖨 Drucken</button>
