@@ -223,6 +223,7 @@ async def dispatch_einsatzinfo_mail(
             return EinsatzinfoMailResult(True, "bereits versendet", log_entry.recipient_count, True)
 
         sender = parseaddr(mail_service.versandweg(db, org_id).get("absender") or "")[1]
+        smtp_cfg = mail_service._org_smtp_cfg(db, org_id) or mail_service.get_smtp_cfg(db)
         chunks: dict[int, list[MailEinsatzinfoLogRecipient]] = {}
         for recipient in pending:
             chunks.setdefault(recipient.chunk_no, []).append(recipient)
@@ -232,12 +233,12 @@ async def dispatch_einsatzinfo_mail(
             bcc = emails if sender else emails[1:]
             msg = mail_service._build_message(
                 to=to, subject=log_entry.subject, body_txt=log_entry.body,
-                body_html=_html_body(log_entry.body), smtp_cfg={"from_addr": sender} if sender else None,
+                body_html=_html_body(log_entry.body), smtp_cfg=smtp_cfg,
             )
             if bcc:
                 msg["Bcc"] = ", ".join(bcc)
             try:
-                await mail_service.deliver(db, org_id, msg)
+                await mail_service.deliver(db, org_id, msg, smtp_cfg)
             except Exception as exc:
                 log_entry.error = str(exc)[:2000]
                 db.commit()

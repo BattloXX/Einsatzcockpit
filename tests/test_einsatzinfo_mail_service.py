@@ -121,7 +121,7 @@ async def test_dispatch_prefers_alarm_template_and_prefixes_exercise(setup_db, m
 
     sent = []
 
-    async def fake_deliver(_db, _org_id, message):
+    async def fake_deliver(_db, _org_id, message, _smtp_cfg=None):
         sent.append(message)
 
     monkeypatch.setattr("app.services.mail_service.mail_available", lambda *_args: True)
@@ -217,7 +217,7 @@ async def test_chunking_and_resume(setup_db, monkeypatch):
     calls = []
     attempts = {"count": 0}
 
-    async def failing_deliver(_db, _org_id, message):
+    async def failing_deliver(_db, _org_id, message, _smtp_cfg=None):
         attempts["count"] += 1
         calls.append(message)
         if attempts["count"] == 2:
@@ -235,7 +235,7 @@ async def test_chunking_and_resume(setup_db, monkeypatch):
     assert all(message["To"] == "sender@example.test" for message in calls)
     assert all(len(getaddresses([message.get("Bcc", "")])) <= 50 for message in calls)
 
-    async def successful_deliver(_db, _org_id, message):
+    async def successful_deliver(_db, _org_id, message, _smtp_cfg=None):
         calls.append(message)
 
     monkeypatch.setattr("app.services.mail_service.deliver", successful_deliver)
