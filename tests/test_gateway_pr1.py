@@ -35,11 +35,12 @@ from app.models.gateway import (
 )
 from app.services import gateway_service as gw_svc
 from app.services import print_dispatcher as disp
+from tests.conftest import TEST_DB_URL
 
 
 @pytest.fixture
 def db(setup_db):
-    eng = create_engine("sqlite:///./test.db", connect_args={"check_same_thread": False})
+    eng = create_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
     Session = sessionmaker(bind=eng)
     s = Session()
     set_tenant_context(s, None)
@@ -838,7 +839,7 @@ def test_printer_reachable_rejects_stale_status_and_stale_gateway():
 # ── Tenant-Isolation ─────────────────────────────────────────────────────────────
 
 def test_tenant_isolation_gateway(setup_db):
-    eng = create_engine("sqlite:///./test.db", connect_args={"check_same_thread": False})
+    eng = create_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
     Session = sessionmaker(bind=eng)
     s = Session()
     set_tenant_context(s, None)

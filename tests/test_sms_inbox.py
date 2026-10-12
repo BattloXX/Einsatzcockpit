@@ -9,9 +9,6 @@ import pytest
 # Test-Umgebungsvariablen vor App-Import setzen
 os.environ.setdefault("SECRET_KEY", "test-secret-key-fuer-tests-mindestens-32-zeichen!")
 os.environ.setdefault("DEBUG", "true")
-os.environ["DATABASE_URL"] = "sqlite:///./test.db"
-
-
 def _make_member(mid, phone="+43660123456", active=True):
     m = MagicMock()
     m.id = mid

@@ -22,6 +22,7 @@ def _lifespan_calls(monkeypatch, tmp_path, *, hold_lock: bool) -> tuple[int, boo
     from app.config import settings
 
     path = str(tmp_path / "lifespan.lock")
+    monkeypatch.setattr(settings, "TESTING", False)
     monkeypatch.setattr(settings, "LEADER_LOCK_PATH", path)
     calls: list[int] = []
     monkeypatch.setattr(main_module, "_start_background_loops", lambda: calls.append(1) or [])

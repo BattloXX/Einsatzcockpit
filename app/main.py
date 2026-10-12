@@ -322,7 +322,7 @@ async def lifespan(app: FastAPI):
     background_tasks: list[asyncio.Task] = []
     leader_watcher: asyncio.Task | None = None
     try:
-        acquired = leader.try_acquire()
+        acquired = not settings.TESTING and leader.try_acquire()
     except Exception:
         # Fail open: ein Worker ohne Alarm-Loops wäre schlimmer als doppelte Loops.
         logger.warning("Leader-Lock nicht verfuegbar, Hintergrund-Loops starten trotzdem", exc_info=True)
@@ -330,7 +330,7 @@ async def lifespan(app: FastAPI):
     if acquired:
         background_tasks.extend(_start_background_loops())
         logger.info("Hintergrund-Loops aktiv in PID %s", os.getpid())
-    else:
+    elif not settings.TESTING:
         logger.info("Hintergrund-Loops laufen in einem anderen Worker (PID %s wartet)", os.getpid())
 
         async def _wait_for_leadership() -> None:
@@ -347,6 +347,8 @@ async def lifespan(app: FastAPI):
                 return
 
         leader_watcher = asyncio.create_task(_wait_for_leadership())
+    else:
+        logger.info("Hintergrund-Loops im Testmodus deaktiviert")
 
     try:
         yield

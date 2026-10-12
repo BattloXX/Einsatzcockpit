@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     ALARM_LINK_TTL_DAYS: int = 30
     APP_VERSION: str = "2026.10.06"
     DEBUG: bool = False
+    # Pytest setzt dies vor dem App-Import: Lifespan startet dann keine produktiven
+    # Hintergrund-Worker und kann weder externe Dienste pollen noch Testdaten ändern.
+    TESTING: bool = False
     TEST_SYSTEM: bool = False
 
     # Slow-Query-Logging: Queries oberhalb dieser Schwelle (ms) landen als

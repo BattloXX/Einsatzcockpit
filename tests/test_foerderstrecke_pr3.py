@@ -6,6 +6,7 @@ from sqlalchemy.orm import sessionmaker
 from app.core.tenant import set_tenant_context
 from app.models.hoehen_cache import HoehenCache, hoehen_key
 from app.services import hoehen_service as hs
+from tests.conftest import TEST_DB_URL
 
 
 @pytest.fixture(autouse=True)
@@ -17,7 +18,7 @@ def _clear_cache():
 
 @pytest.fixture
 def db(setup_db):
-    eng = create_engine("sqlite:///./test.db", connect_args={"check_same_thread": False})
+    eng = create_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
     Session = sessionmaker(bind=eng)
     s = Session()
     set_tenant_context(s, None)

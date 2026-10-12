@@ -7,8 +7,30 @@ on:
     branches: [main]
 
 jobs:
+  changes:
+    name: Änderungen prüfen
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code || steps.all.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            code:
+              - '**'
+              - '!docs/**'
+              - '!**/*.md'
+      - id: all
+        if: github.event_name != 'pull_request'
+        run: echo "code=true" >> "$GITHUB_OUTPUT"
+
   js:
     name: JS-Tests (Outbox)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -26,22 +48,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: { python-version: "3.14" }
+        with: { python-version: "3.14", cache: pip }
       - run: pip install ruff
       - run: ruff check app/
 
   typecheck:
     name: Type-Check (mypy)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: { python-version: "3.14" }
+        with: { python-version: "3.14", cache: pip }
       - run: pip install -e ".[dev]"
       - run: mypy app/ --ignore-missing-imports
 
-  test:
-    name: Tests (pytest + MariaDB)
+  migration:
+    name: Migration (MariaDB)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     services:
       mariadb:
@@ -58,9 +84,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: { python-version: "3.14" }
+        with: { python-version: "3.14", cache: pip }
       - run: |
-          sudo apt-get install -y libmariadb-dev libpango-1.0-0 libpangoft2-1.0-0
+          sudo apt-get install -y libmariadb-dev
           pip install -e ".[dev]"
       - env:
           DATABASE_URL: mysql+pymysql://einsatzleiter:testpass@127.0.0.1:3306/einsatzleiter_test
@@ -68,15 +94,30 @@ jobs:
         run: |
           alembic upgrade head
           python -m app.seed_data
-          pytest tests/ -v
 
-  e2e-board:
-    name: Board ohne Full-Reload (Playwright)
+  test:
+    name: Tests (pytest)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: { python-version: "3.14" }
+        with: { python-version: "3.14", cache: pip }
+      - run: |
+          sudo apt-get install -y libpango-1.0-0 libpangoft2-1.0-0
+          pip install -e ".[dev]"
+      - run: pytest tests/ -n auto -q --durations=25
+
+  e2e-board:
+    name: Board ohne Full-Reload (Playwright)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.14", cache: pip }
       - run: pip install -e ".[dev]"
       - run: playwright install --with-deps chromium
       - name: Board-Stack konfigurieren und starten

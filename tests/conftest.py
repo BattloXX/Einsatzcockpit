@@ -1,16 +1,48 @@
 import os
+import shutil
+import sys
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import BigInteger, create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.compiler import compiles
 
+# pytest lädt diese Datei je nach Importpfad als ``conftest`` oder
+# ``tests.conftest``. Tests importieren ihre gemeinsamen Fixtures über den
+# Paketpfad; ohne Alias würde die Datei ein zweites Mal ausgeführt und dabei die
+# SQLite-Datei eines laufenden Workers entfernt.
+sys.modules.setdefault("tests.conftest", sys.modules[__name__])
+
 # Test-Umgebungsvariablen VOR dem App-Import setzen
 os.environ.setdefault("SECRET_KEY", "test-secret-key-fuer-tests-mindestens-32-zeichen!")
 os.environ.setdefault("DEBUG", "true")
+os.environ["TESTING"] = "true"
 # SQLite für alle Tests erzwingen – verhindert, dass Fixtures und Client
 # auf unterschiedliche Datenbanken schreiben/lesen.
-os.environ["DATABASE_URL"] = "sqlite:///./test.db"
+WORKER = os.environ.get("PYTEST_XDIST_WORKER", "main")
+TEST_DB_PATH = Path(f"test_{WORKER}.db")
+TEST_DB_URL = f"sqlite:///./{TEST_DB_PATH}"
+TEST_STORAGE_ROOT = Path(f".test_storage_{WORKER}")
+os.environ["DATABASE_URL"] = TEST_DB_URL
+# Auch Dateien, die einzelne Tests nicht ohnehin auf tmp_path umbiegen, dürfen
+# nicht zwischen xdist-Workern geteilt werden.
+os.environ["MEDIA_STORAGE_DIR"] = str(TEST_STORAGE_ROOT / "incident_media")
+os.environ["PROBE_MEDIA_DIR"] = str(TEST_STORAGE_ROOT / "probe_media")
+os.environ["OBJEKT_MEDIA_DIR"] = str(TEST_STORAGE_ROOT / "objekt_media")
+os.environ["NACHSCHLAGEWERK_DATA_DIR"] = str(TEST_STORAGE_ROOT / "nachschlagewerk")
+os.environ["BACKUP_DIR"] = str(TEST_STORAGE_ROOT / "backups")
+os.environ["LEADER_LOCK_PATH"] = str(TEST_STORAGE_ROOT / "background-leader.lock")
+
+# Ein abgebrochener Lauf kann Daten hinterlassen; vor create_all immer sauber
+# beginnen, damit eindeutige Seed-Werte keine scheinbaren Parallelfehler liefern.
+def _remove_test_db() -> None:
+    """Entfernt auch SQLite-WAL-/Journal-Dateien eines abgebrochenen Laufs."""
+    for suffix in ("", "-journal", "-shm", "-wal"):
+        TEST_DB_PATH.with_name(f"{TEST_DB_PATH.name}{suffix}").unlink(missing_ok=True)
+
+
 # Nachschlagewerk-Sync im Test hart deaktivieren: der lifespan-Loop synchronisiert
 # beim Start SOFORT gegen die echte Euro-Rescue-Katalog-API (synchroner httpx-Call in
 # einem to_thread-Worker). In jedem TestClient-Startup blockierte dieser Netz-Call den
@@ -46,7 +78,6 @@ from app.models import uas as _uas_models  # noqa: F401 – alle UAS-Tabellen in
 def _bigint_sqlite(element, compiler, **kw):
     return "INTEGER"
 
-TEST_DB_URL = "sqlite:///./test.db"
 engine = create_engine(TEST_DB_URL, connect_args={"check_same_thread": False})
 TestingSession = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -102,6 +133,8 @@ def override_get_db():
 
 @pytest.fixture(scope="session", autouse=True)
 def setup_db():
+    _remove_test_db()
+    shutil.rmtree(TEST_STORAGE_ROOT, ignore_errors=True)
     Base.metadata.create_all(bind=engine)
     db = TestingSession()
     set_tenant_context(db, None)
@@ -109,6 +142,9 @@ def setup_db():
     db.close()
     yield
     Base.metadata.drop_all(bind=engine)
+    engine.dispose()
+    _remove_test_db()
+    shutil.rmtree(TEST_STORAGE_ROOT, ignore_errors=True)
 
 
 @pytest.fixture

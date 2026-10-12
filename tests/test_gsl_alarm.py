@@ -11,9 +11,6 @@ import pytest
 
 os.environ.setdefault("SECRET_KEY", "test-secret-key-fuer-tests-mindestens-32-zeichen!")
 os.environ.setdefault("DEBUG", "true")
-os.environ["DATABASE_URL"] = "sqlite:///./test.db"
-
-
 # ── dispatch_gsl_alarm (SMS) ─────────────────────────────────────────────────
 
 @pytest.mark.asyncio
