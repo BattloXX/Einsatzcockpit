@@ -211,7 +211,7 @@ def test_revision_erinnerung_und_kein_doppelversand(pr2_db):
 def test_revision_erneut_nach_neuem_datum(pr2_db):
     db, org_a_id, _, _ = pr2_db
     set_tenant_context(db, None)
-    objekt = db.query(Objekt).filter(Objekt.nummer == 90).execution_options(
+    objekt = db.query(Objekt).filter(Objekt.org_id == org_a_id, Objekt.nummer == 90).execution_options(
         include_all_tenants=True).first()
     # Sachbearbeiter setzt neues Revisionsdatum → Router setzt den Marker zurueck
     # (siehe stammdaten_speichern) → bei erneuter Faelligkeit wieder erinnern

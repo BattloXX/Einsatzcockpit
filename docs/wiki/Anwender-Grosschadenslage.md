@@ -143,7 +143,7 @@ Abschnitte können auch direkt auf der **Lagekarte** als Polygon eingezeichnet w
 
 Beim manuellen Anlegen ist der Ort mit der Organisationsstadt vorbelegt. Tragen Sie Straße und Hausnummer ein und wählen Sie bei Bedarf einen Vorschlag aus der Adresssuche. Mit **📍 Koordinaten suchen** wird die Adresse geprüft; ein Häkchen bestätigt einen gefundenen Ort, bei **Nicht gefunden** korrigieren Sie die Eingabe oder setzen den Standort direkt auf der Karte.
 
-Der Karten-Pin lässt sich ziehen oder per Klick auf die Karte platzieren. Ein manuell gesetzter Pin bleibt beim anschließenden Verlassen eines Adressfelds erhalten. Die automatische Abschnittszuweisung verwendet die gewählten Koordinaten.
+Der Karten-Pin lässt sich ziehen oder per Klick auf die Karte platzieren. Das Setzen eines Pins füllt Ort, Straße und Hausnummer automatisch aus der Adresse an diesem Punkt aus. Ein manuell gesetzter Pin bleibt beim anschließenden Verlassen eines Adressfelds erhalten. Die automatische Abschnittszuweisung verwendet die gewählten Koordinaten.
 
 ---
 

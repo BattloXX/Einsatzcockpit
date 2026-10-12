@@ -61,6 +61,7 @@
     var marker = null;
     var manualPin = false;
     var timer = null;
+    var reverseRequest = 0;
 
     function setStatus(text, color) {
       status.textContent = text;
@@ -87,15 +88,45 @@
       marker = L.marker([lat, lng], { draggable: true }).addTo(map);
       marker.on('dragend', function (event) {
         var point = event.target.getLatLng();
-        manualPin = true;
-        setMarker(point.lat, point.lng);
+        setManualPin(point.lat, point.lng);
       });
       map.on('click', function (event) {
-        manualPin = true;
-        setMarker(event.latlng.lat, event.latlng.lng);
+        setManualPin(event.latlng.lat, event.latlng.lng);
       });
       setTimeout(function () { map.invalidateSize(); }, 200);
       setTimeout(function () { map.invalidateSize(); }, 600);
+    }
+    function setManualPin(lat, lng) {
+      manualPin = true;
+      setMarker(lat, lng);
+      reverseGeocode(lat, lng);
+    }
+    function reverseGeocode(lat, lng) {
+      var request = ++reverseRequest;
+      setStatus('…Adresse wird ermittelt');
+      var csrf = (document.cookie.match(/ec_csrf=([^;]+)/) || [])[1] || '';
+      var data = new FormData();
+      data.append('lat', lat);
+      data.append('lng', lng);
+      data.append('_csrf', csrf);
+      fetch('/adresse/reverse', { method: 'POST', body: data })
+        .then(function (response) { if (!response.ok) throw new Error(); return response.json(); })
+        .then(function (result) {
+          if (request !== reverseRequest) return;
+          if (result.city) city.value = result.city;
+          if (!result.street) {
+            setStatus('Keine Adresse an diesem Punkt');
+            return;
+          }
+          street.value = result.street;
+          houseNo.value = result.house_number || '';
+          setStatus('✓ ' + (result.display_name || 'gefunden'), 'var(--success, #18a957)');
+        })
+        .catch(function () {
+          if (request === reverseRequest) {
+            setStatus('✗ Keine Adresse gefunden – Koordinaten bleiben gesetzt', 'var(--danger)');
+          }
+        });
     }
     function geocode(force) {
       if (!force && manualPin) return;
@@ -151,6 +182,7 @@
     return {
       reset: function () {
         clearTimeout(timer);
+        reverseRequest += 1;
         manualPin = false;
         latInput.value = '';
         lngInput.value = '';
