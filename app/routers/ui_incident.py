@@ -3637,7 +3637,7 @@ async def address_suggestions(
     user = getattr(request.state, "user", None)
     if not user:
         return Response(status_code=401)
-    if not has_role(user, "incident_leader", "admin", "recorder"):
+    if not has_role(user, "incident_leader", "admin", "org_admin", "recorder"):
         return Response(status_code=403)
     if field not in ("street", "house", "city") or not q.strip():
         return _JSONResponse({"items": []})
@@ -3661,7 +3661,7 @@ async def standalone_geocode(
     address_street: str = Form(""),
     address_no: str = Form(""),
     address_city: str = Form(""),
-    _=Depends(require_role("incident_leader", "admin")),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
 ):
     """Geocodiert eine Adresse ohne Incident-Kontext — für das Neuer-Einsatz-Formular."""
     from fastapi.responses import JSONResponse as _JSONResponse

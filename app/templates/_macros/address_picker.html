@@ -1,0 +1,35 @@
+{% macro address_picker(prefix, default_city='', ort_name='address_city', strasse_name='address_street', nr_name='address_no', default_lat=47.41, default_lng=9.74, label_class='') %}
+<style>
+.address-picker__actions { margin-bottom:.5rem; display:flex; align-items:center; gap:8px; }
+.address-picker__status { font-size:.8rem; color:var(--text-muted); }
+.address-picker__map { height:200px; border-radius:6px; margin-bottom:.75rem; border:1px solid var(--border); }
+@media (max-width:760px) { .address-picker__map { height:180px; } }
+</style>
+<div class="address-picker" data-address-picker
+     data-prefix="{{ prefix }}" data-default-lat="{{ default_lat }}" data-default-lng="{{ default_lng }}">
+  <input type="hidden" name="lat" id="{{ prefix }}Lat" value="">
+  <input type="hidden" name="lng" id="{{ prefix }}Lng" value="">
+  <div class="form-group">
+    <label{% if label_class %} class="{{ label_class }}"{% endif %}>Ort</label>
+    <input type="text" name="{{ ort_name }}" id="{{ prefix }}City" class="form-input" maxlength="120"
+           value="{{ default_city|default('', true) }}" autocomplete="off">
+  </div>
+  <div class="form-row">
+    <div class="form-group">
+      <label{% if label_class %} class="{{ label_class }}"{% endif %}>Straße</label>
+      <input type="text" name="{{ strasse_name }}" id="{{ prefix }}Street" class="form-input" maxlength="120"
+             placeholder="Senderstraße" autocomplete="off">
+    </div>
+    <div class="form-group form-group--narrow">
+      <label{% if label_class %} class="{{ label_class }}"{% endif %}>Nr.</label>
+      <input type="text" name="{{ nr_name }}" id="{{ prefix }}No" class="form-input" maxlength="20"
+             placeholder="34" autocomplete="off">
+    </div>
+  </div>
+  <div class="address-picker__actions">
+    <button type="button" class="btn btn--secondary btn--sm" id="{{ prefix }}GeocodeBtn">📍 Koordinaten suchen</button>
+    <span id="{{ prefix }}GeocodeStatus" class="address-picker__status"></span>
+  </div>
+  <div id="{{ prefix }}MapContainer" class="address-picker__map"></div>
+</div>
+{% endmacro %}
