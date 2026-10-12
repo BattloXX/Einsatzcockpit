@@ -155,6 +155,16 @@ def setup_db():
     shutil.rmtree(TEST_STORAGE_ROOT, ignore_errors=True)
 
 
+@pytest.fixture(autouse=True)
+def _rate_limit_zuruecksetzen():
+    # Viele Tests bauen ihren TestClient selbst (ohne die client-Fixture). Mit xdist
+    # laufen ihre Logins in kurzer Zeit im selben Prozess und reißen das
+    # /login-Limit (10/minute) – daher vor JEDEM Test zurücksetzen.
+    from app.core.rate_limit import limiter
+    if limiter is not None:
+        limiter.reset()
+
+
 @pytest.fixture
 def client():
     # Rate-Limit-Zustand je Test zurücksetzen: der slowapi-Limiter nutzt In-Memory-Storage,
