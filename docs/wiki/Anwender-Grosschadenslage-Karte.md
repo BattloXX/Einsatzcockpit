@@ -58,9 +58,13 @@ Die Filter-Leiste befindet sich direkt unter der Topbar und ist immer sichtbar.
 | Element | Funktion |
 |---------|---------|
 | **Priorität / Abschnitt** | Wechselt den Einfärbe-Modus der Marker |
-| **Phase-Checkboxen** | Ein-/Ausblenden nach Phase (Eingegangen, Erkundung, …) |
+| **Phase-Checkboxen** | Ein-/Ausblenden nach Eingegangen, Erkundung, Bewertet, Disponiert, In Arbeit, Fertig gemeldet oder Abgeschlossen |
+| **Nur Aufmerksamkeit** | Zeigt nur Einsatzstellen, die auch im Dashboard unter „Braucht Aufmerksamkeit“ erscheinen |
 | **📥 Meldungen** | Bürger-Meldungs-Marker ein-/ausblenden (erscheint nur wenn Meldungen vorhanden) |
 | **📍 Pin-Modus** | Neue Einsatzstelle per Kartenklick anlegen (nur für Berechtigte) |
+
+**Fertig gemeldet** wird im Phasenfilter und auf der Karte türkis dargestellt. Für die eigene Position fragt
+der Browser erst bei der Funktion **Mein Standort** um Erlaubnis; ohne Freigabe bleibt die Karte verwendbar.
 
 ### Abschnitt-Filter-Chips
 

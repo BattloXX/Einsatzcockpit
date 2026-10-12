@@ -101,7 +101,8 @@ npm run test:js # Offline-Outbox des Einheitenmodus; nötig bei Änderungen an a
 - Board-Karten: `app/templates/incident_major/_site_card.html`, Container mit
   `data-site-id`; zeigen aktive Ressourcen, Foto-Zähler, Priorität, Sektor.
 - Übergreifende Meldungen (Cross-Marker): eigene Board-Spalte mit Mini-OSM-Karte,
-  wenn `marker.lat`/`marker.lng` gesetzt; mobil über das Phasen-Dropdown, Wert `uebergreifend`.
+  wenn `marker.lat`/`marker.lng` gesetzt; mobil über die Phasen-Chips, Wert `uebergreifend`.
+- Automatische Phasenwechsel liegen ausschließlich in `app/services/gsl_phase_automatik.py`.
 - Suche ist client-seitig: Funkjournal über `data-fj-search`, Stab-Journal über
   `.journal-row`, Board über `applyBoardFilters()` in `incident_major/board.html`.
 

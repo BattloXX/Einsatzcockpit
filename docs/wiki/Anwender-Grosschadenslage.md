@@ -47,9 +47,44 @@ Jede Einsatzstelle wird als Karte im Phasen-Kanban dargestellt:
 | **Bewertet** | Lage bekannt, Entscheidung steht aus |
 | **Disponiert** | Einsatzmittel zugewiesen |
 | **In Arbeit** | Aktive Bekämpfung / Maßnahmen laufen |
-| **Erledigt** | Abgeschlossen |
+| **Fertig gemeldet** | Alle Abarbeitungen sind durch die Einheiten fertig gemeldet; Abschluss durch die Leitstelle steht aus |
+| **Abgeschlossen** | Einsatzleitung hat die Einsatzstelle abgeschlossen |
+| **Übergreifend** | Lageweite Meldung ohne einzelne Einsatzstelle |
 
-Phasen werden per **Drag & Drop** gewechselt oder über den Detail-Dialog.
+Die Spaltenfolge lautet: **Eingegangen**, **Erkundung**, **Bewertet**, **Disponiert**, **In Arbeit**,
+**Fertig gemeldet**, **Abgeschlossen**, **Übergreifend**. Auf Mobilgeräten werden sie als Phasen-Chips
+angezeigt.
+
+### Automatische Übergänge
+
+| Ereignis | Neue Phase |
+|----------|------------|
+| Erkundung zuweisen | Erkundung |
+| Letzte Erkundung abschließen | Bewertet |
+| Abarbeitung disponieren | Disponiert |
+| Eine Abarbeitung ist vor Ort oder in Arbeit | In Arbeit |
+| Alle Abarbeitungen fertig oder nicht durchführbar | Fertig gemeldet |
+| Einsatz abschließen | Abgeschlossen |
+| Einsatz wieder öffnen | Aus den vorhandenen Aufträgen berechnet, sonst Bewertet |
+
+Eine abgeschlossene Einsatzstelle wird durch Rückmeldungen niemals automatisch wieder geöffnet.
+
+### Begriffe und Aktionen
+
+| Begriff | Bedeutung |
+|---------|-----------|
+| **Erkundung zuweisen** | Auftrag zur Lageerkundung; nur „Erkundung abschließen“ ist die Hauptaktion |
+| **Erkundung abschließen** | Meldet die Erkundung als erkundet |
+| **Disponieren** | Auftrag zur Abarbeitung zuweisen |
+| **In Arbeit setzen** | Beginn der Abarbeitung melden |
+| **Fertig melden** | Abarbeitung durch die Einheit beenden |
+| **Einsatz abschließen** | Entscheidung der Leitstelle nach „Fertig gemeldet“ |
+
+Mit **Einsatz wieder öffnen** kann die Einsatzleitung eine abgeschlossene Einsatzstelle bewusst erneut
+bearbeitbar machen.
+
+Per Drag & Drop auf eine Karte erzeugt eine Einheit in den Spalten **Eingegangen** und **Erkundung** eine
+Erkundung; in allen anderen Phasen entsteht eine Abarbeitung.
 
 ---
 
@@ -150,6 +185,8 @@ Das Dashboard (`/lage/{id}/dashboard`) bietet eine Echtzeit-Übersicht über:
 - Aktive Ressourcen-Zuordnungen
 - Aktivitäts-Feed (Lageeinträge + Stellen-Protokolle)
 - **Mini-Karte** mit allen Einsatzstellen und Abschnitt-Polygonen
+- **Braucht Aufmerksamkeit**: dringende Stellen, überfällige Lagemeldungen, fehlende Bestätigungen oder
+  Rückmeldungen sowie „Fertig gemeldet – Abschluss ausständig“
 
 ---
 
