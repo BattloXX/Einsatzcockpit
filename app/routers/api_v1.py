@@ -725,7 +725,7 @@ async def create_incident_api(
     if not created_fresh:
         # Fast zeitgleicher Duplikat-Alarm mit gleichem Stichwort erkannt (Audit-Eintrag
         # "incident.duplicate_rejected" wurde bereits in create_incident() geschrieben) —
-        # bestehenden Einsatz zurueckgeben, keine zweite Alarmierung (SMS/Push/Teams/GSL)
+        # bestehenden Einsatz zurueckgeben, keine zweite Alarmierung (SMS/Push/Teams/Mail/GSL)
         # fuer dasselbe Ereignis auslösen.
         board_token, board_url = _get_or_create_board_token(
             db, incident.id, api_key.created_by_user_id, str(request.base_url)

@@ -221,7 +221,7 @@ def test_routing_down_blockiert_einsatzanlage_nicht(client, db, monkeypatch):
 
     db.expire_all()
     jobs = db.query(IncidentAlarmJob).filter_by(incident_id=incident_id).all()
-    assert {job.channel for job in jobs} == {"sms", "push", "teams"}
+    assert {job.channel for job in jobs} == {"sms", "push", "teams", "mail"}
     # Die Anlage selbst erzeugt keine Route – der Loop ist der einzige Erzeuger.
     assert db.query(IncidentRoute).filter_by(incident_id=incident_id).count() == 0
 

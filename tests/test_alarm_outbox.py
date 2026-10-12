@@ -12,12 +12,15 @@ from app.models.incident import Incident, IncidentAlarmJob, IncidentLog
 from app.models.sms import SmsLog, SmsLogRecipient
 from app.models.user import AuditLog
 from app.services.alarm_outbox import (
+    _finish_if_done,
+    _send_mail,
     enqueue_incident_alarm,
     process_incident_alarm,
     run_alarm_outbox_once,
 )
 from app.services.sms_dispatch_service import EinsatzinfoDispatchResult
 from app.services.teams_alarm_service import TeamsDispatchResult
+from app.services.einsatzinfo_mail_service import EinsatzinfoMailResult
 
 
 def _db_incident(*, code="B2", exercise=False):
@@ -49,10 +52,15 @@ def _channels(monkeypatch, calls):
         calls.append("teams")
         return TeamsDispatchResult(True)
 
+    async def mail(*args, **kwargs):
+        calls.append("mail")
+        return EinsatzinfoMailResult(True, recipient_count=1)
+
     monkeypatch.setattr("app.services.exercise_guard.darf_extern", lambda *args, **kwargs: True)
     monkeypatch.setattr("app.services.sms_dispatch_service.dispatch_einsatzinfo", sms)
     monkeypatch.setattr("app.services.incident_notify._send_incident_push", push)
     monkeypatch.setattr("app.services.teams_alarm_service.post_incident_card", teams)
+    monkeypatch.setattr("app.services.einsatzinfo_mail_service.dispatch_einsatzinfo_mail", mail)
 
 
 def test_enqueue_is_idempotent(setup_db):
@@ -61,7 +69,7 @@ def test_enqueue_is_idempotent(setup_db):
         _enqueue(db, incident)
         _enqueue(db, incident)
         jobs = db.query(IncidentAlarmJob).filter_by(incident_id=incident.id).all()
-        assert {job.channel for job in jobs} == {"sms", "push", "teams"}
+        assert {job.channel for job in jobs} == {"sms", "push", "teams", "mail"}
         assert {job.status for job in jobs} == {"pending"}
         for job in jobs:
             job.status = "suppressed"
@@ -97,9 +105,9 @@ async def test_f30_is_persistently_suppressed(setup_db, monkeypatch):
         await asyncio.gather(*await run_alarm_outbox_once())
         db.expire_all()
         jobs = db.query(IncidentAlarmJob).filter_by(incident_id=incident.id).all()
-        assert len(jobs) == 3 and {job.status for job in jobs} == {"suppressed"}
+        assert len(jobs) == 4 and {job.status for job in jobs} == {"suppressed"}
         log = db.query(IncidentLog).filter_by(incident_id=incident.id).one()
-        assert log.text == "F30 – keine Alarmierung (SMS/Push/Teams)"
+        assert log.text == "F30 – keine Alarmierung (SMS/Push/Teams/Mail)"
         assert calls == []
     finally:
         db.close()
@@ -116,7 +124,7 @@ async def test_committed_jobs_are_processed_once_after_crash(setup_db, monkeypat
         await asyncio.gather(*await run_alarm_outbox_once())
         db.expire_all()
         jobs = db.query(IncidentAlarmJob).filter_by(incident_id=incident.id).all()
-        assert sorted(calls) == ["push", "sms", "teams"]
+        assert sorted(calls) == ["mail", "push", "sms", "teams"]
         assert all(job.status in {"sent", "suppressed", "failed"} for job in jobs)
         assert db.query(AuditLog).filter_by(action="incident.alarm_finished", incident_id=incident.id).count() == 1
     finally:
@@ -138,6 +146,8 @@ async def test_stale_sending_job_is_claimed_but_valid_lease_is_not(setup_db, mon
         jobs["push"].lease_until = now + timedelta(minutes=1)
         jobs["teams"].status = "suppressed"
         jobs["teams"].finished_at = now
+        jobs["mail"].status = "suppressed"
+        jobs["mail"].finished_at = now
         db.commit()
         await asyncio.gather(*await run_alarm_outbox_once())
         assert calls == ["sms"]
@@ -155,7 +165,7 @@ async def test_concurrent_claim_sends_each_channel_once(setup_db, monkeypatch):
     try:
         _enqueue(db, incident)
         await asyncio.gather(process_incident_alarm(incident.id), process_incident_alarm(incident.id))
-        assert sorted(calls) == ["push", "sms", "teams"]
+        assert sorted(calls) == ["mail", "push", "sms", "teams"]
     finally:
         db.close()
 
@@ -326,6 +336,66 @@ def test_enqueue_zweimal_ohne_flush_legt_keine_duplikate_an(setup_db):
                 IncidentAlarmJob.incident_id == incident.id
             ).all()
         )
-        assert channels == ["push", "sms", "teams"]
+        assert channels == ["mail", "push", "sms", "teams"]
+    finally:
+        db.close()
+
+
+@pytest.mark.asyncio
+async def test_send_mail_maps_dispatch_results(setup_db, monkeypatch):
+    db, incident = _db_incident()
+    try:
+        _enqueue(db, incident)
+        job = db.query(IncidentAlarmJob).filter_by(incident_id=incident.id, channel="mail").one()
+
+        async def sent(*args, **kwargs):
+            return EinsatzinfoMailResult(True, recipient_count=12)
+
+        monkeypatch.setattr("app.services.einsatzinfo_mail_service.dispatch_einsatzinfo_mail", sent)
+        assert await _send_mail(db, incident, job) == ("sent", "gesendet an 12")
+
+        async def suppressed(*args, **kwargs):
+            return EinsatzinfoMailResult(False, "deaktiviert")
+
+        monkeypatch.setattr("app.services.einsatzinfo_mail_service.dispatch_einsatzinfo_mail", suppressed)
+        assert await _send_mail(db, incident, job) == ("suppressed", "deaktiviert")
+    finally:
+        db.close()
+
+
+@pytest.mark.asyncio
+async def test_mail_dispatch_error_retries_without_skip_log(setup_db, monkeypatch):
+    db, incident = _db_incident()
+    try:
+        _enqueue(db, incident)
+
+        async def failing(*args, **kwargs):
+            raise RuntimeError("mail kaputt")
+
+        monkeypatch.setattr("app.services.einsatzinfo_mail_service.dispatch_einsatzinfo_mail", failing)
+        await process_incident_alarm(incident.id)
+        db.expire_all()
+        job = db.query(IncidentAlarmJob).filter_by(incident_id=incident.id, channel="mail").one()
+        assert job.status == "retry" and job.next_attempt_at is not None
+        assert not db.query(IncidentLog).filter(
+            IncidentLog.incident_id == incident.id,
+            IncidentLog.text.like("Alarmierung Mail uebersprungen:%"),
+        ).count()
+    finally:
+        db.close()
+
+
+def test_finish_if_done_accepts_legacy_three_terminal_jobs(setup_db):
+    db, incident = _db_incident()
+    try:
+        _enqueue(db, incident)
+        db.query(IncidentAlarmJob).filter_by(incident_id=incident.id, channel="mail").delete()
+        for job in db.query(IncidentAlarmJob).filter_by(incident_id=incident.id):
+            job.status = "suppressed"
+        db.commit()
+        _finish_if_done(db, incident, 1, None)
+        assert db.query(AuditLog).filter_by(
+            action="incident.alarm_finished", incident_id=incident.id,
+        ).count() == 1
     finally:
         db.close()

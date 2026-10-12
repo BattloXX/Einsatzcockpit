@@ -997,7 +997,7 @@ def test_sync_operation_neuanlage_mit_echter_outbox_committet(monkeypatch):
                 IncidentAlarmJob.incident_id == incident.id
             ).all()
         )
-        assert channels == ["push", "sms", "teams"]
+        assert channels == ["mail", "push", "sms", "teams"]
         assert processed == [incident.id]
     finally:
         db.rollback()

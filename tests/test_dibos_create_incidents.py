@@ -97,7 +97,7 @@ def test_fast_path_enqueues_alarm_jobs_in_same_commit(org_id):
     db = _session(org_id)
     try:
         jobs = db.query(IncidentAlarmJob).filter_by(incident_id=incident_id).all()
-        assert {job.channel for job in jobs} == {"sms", "push", "teams"}
+        assert {job.channel for job in jobs} == {"sms", "push", "teams", "mail"}
     finally:
         db.close()
 
