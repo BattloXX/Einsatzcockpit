@@ -139,4 +139,18 @@ Bei aktiviertem Schalter erhält der Gruppenkommandant eine SMS bei **neuem Auft
 
 ## Einheitenansicht auf dem Smartphone/Tablet
 
-„Auftrag erhalten“ bestätigt den Auftrag. „Jetzt synchronisieren“ überträgt offline erfasste Meldungen; nicht übermittelbare Einträge lassen sich kopieren.
+Die Einheitenansicht hat die Bereiche **Übersicht**, **Karte** und **Aufträge**. Die Karte zeigt den nächsten
+Auftrag, einen laufenden Auftrag und weitere Aufträge als Marker; Erkundungen sind besonders gekennzeichnet.
+
+Der **nächste Auftrag** folgt zuerst der Reihenfolge der Leitstelle, dann Priorität und Zeitpunkt. Eine
+Entfernungs-Empfehlung wird nur für Aufträge gleicher Priorität ohne Leitstellen-Reihenfolge verwendet und
+ändert keine Disposition. **Navigation starten** öffnet Google Maps; Straßensperren aus dem ECP werden dabei
+nicht berücksichtigt.
+
+**Mein Standort** wird nur nach Klick im Browser abgefragt, nicht gespeichert und nie an den Server gesendet.
+
+Für eine **Erkundung** stehen Navigation, Lagemeldung, Foto und **Erkundung abschließen** bereit. Für eine
+**Abarbeitung** sind es Navigation, **In Arbeit setzen**, Lagemeldung, Foto und **Fertig melden**. Änderungen
+der Leitstelle, neue vorrangige Aufträge und Rückzüge erscheinen als Hinweisbanner. „Auftrag erhalten“
+bestätigt den Auftrag. „Jetzt synchronisieren“ überträgt offline erfasste Meldungen; nicht übermittelbare
+Einträge lassen sich kopieren.

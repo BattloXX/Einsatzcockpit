@@ -297,3 +297,13 @@ Weitere Punkte:
    - MCP-Tools gegen die lokale Instanz prüfen (disponieren mit `auftragsart`, abschließen)
    - Deploy auf test
    - Gerätetest am Tablet und am GK-Handy: Standortfreigabe ja/nein, Navigation öffnet Google Maps oder Apple Maps, Funkloch
+
+## Umsetzungsstand
+
+| Phase | Stand |
+|-------|-------|
+| Phase 1 – Statuslogik und Board | PR [#526](https://github.com/battloxx/einsatzcockpit/pull/526) |
+| Phase 2 – Einheiten-API und Kartenansicht | PR [#527](https://github.com/battloxx/einsatzcockpit/pull/527) |
+| Phase 3 – Mobile Bedienung der Einheiten | PR [#528](https://github.com/battloxx/einsatzcockpit/pull/528) |
+| Phase 4 – Mobile Führung | PR [#529](https://github.com/battloxx/einsatzcockpit/pull/529) |
+| Phase 5 – Abnahme und Doku | dieser PR (Ablauftest, Wiki) |
