@@ -93,6 +93,17 @@ def test_dashboard_partial_map_and_mobile_detail_permissions(client):
     assert readonly and '<div class="site-detail-actions">' not in readonly_detail
 
 
+def test_aktionsleiste_ohne_doppelte_zuweisungsknoepfe(client):
+    """Erkundung zuweisen/Disponieren gibt es nur am Zuweisungsformular, nicht zusätzlich in der Leiste."""
+    data = _api_daten(); _leader(client, data)
+    _set_site(data, phase=SitePhase.eingegangen)
+    detail = client.get(f"/lage/{data['lage']}/stellen/{data['a']}").text
+    assert '<div class="site-detail-actions">' not in detail and "siteDetailDispatch" not in detail
+    _set_site(data, phase=SitePhase.fertig_gemeldet)
+    detail = client.get(f"/lage/{data['lage']}/stellen/{data['a']}").text
+    assert '<div class="site-detail-actions">' in detail and "siteDetailAbschliessen()" in detail
+
+
 def test_board_query_params_and_templates_use_ascii_attribute_quotes(client):
     data = _api_daten(); _leader(client, data)
     board = client.get(f"/lage/{data['lage']}?phase=fertig_gemeldet&site={data['a']}").text
