@@ -21,7 +21,7 @@
 }
 #ctrl-toggle-btn { display: none; }
 .karte-controls-body { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-@media (max-width: 640px) {
+@media (max-width: 760px) {
   .karte-controls { left: 8px; transform: none; flex-direction: column; align-items: flex-start; }
   #ctrl-toggle-btn { display: inline-flex !important; align-items: center; gap: 4px; }
   .karte-controls-body { flex-direction: column; align-items: flex-start; }
@@ -68,7 +68,7 @@
 }
 
 /* Mobile: bottom shelf replaces overlapping fixed elements */
-@media (max-width: 640px) {
+@media (max-width: 760px) {
   .karte-badge { bottom: 60px; right: 8px; font-size: .72rem; padding: 5px 9px; }
   .karte-legend { bottom: 60px; font-size: .68rem; padding: 5px 9px; }
   .veh-legend { bottom: 60px; left: 8px; }
@@ -86,7 +86,7 @@
   .karte-bottom-shelf__toggle .arrow.open { transform: rotate(180deg); }
   .karte-bottom-shelf__body { padding: 8px 14px 10px; display: flex; gap: 10px; flex-wrap: wrap; }
 }
-@media (min-width: 641px) {
+@media (min-width: 761px) {
   .karte-bottom-shelf { display: none; }
 }
 
@@ -228,7 +228,7 @@
   font-size:.8rem; background:var(--surface-high); border:1px solid var(--border);
   border-radius:var(--radius-md, .5rem); color:var(--text); padding:5px 9px; cursor:pointer;
 }
-@media (max-width:640px) {
+@media (max-width:760px) {
   #pf-bar { bottom: 70px; width: calc(100vw - 24px); justify-content: center; }
 }
 /* Print CSS */
@@ -253,7 +253,7 @@
 }
 #poly-modal::backdrop { background: rgba(0,0,0,.6); }
 
-@media (max-width: 640px) {
+@media (max-width: 760px) {
   #site-panel-wrap { width: 100%; top: auto; height: 55vh; transform: translateY(100%); border-left: none; border-top: 1px solid var(--border); }
   #site-panel-wrap.open { transform: translateY(0); }
 }
@@ -264,7 +264,7 @@
 <div id="karte-map"></div>
 
 <div class="karte-controls" id="karte-controls"
-     x-data="{open: !window.matchMedia('(max-width:640px)').matches}">
+     x-data="{open: !window.matchMedia('(max-width:760px)').matches}">
   <button id="ctrl-toggle-btn" @click="open=!open"
           class="karte-mode-btn" :class="open ? 'active' : ''">
     <span x-text="open ? '✕ Filter' : '☰ Filter'">☰ Filter</span>
@@ -286,6 +286,13 @@
           'disponiert':'Disponiert','in_arbeit':'In Arbeit','fertig_gemeldet':'Fertig gemeldet','erledigt':'Abgeschlossen'}[phase] }}
     </label>
     {% endfor %}
+    <div class="karte-controls__sep"></div>
+    <label style="color:var(--red);">
+      <input type="checkbox" id="attention-filter" onchange="applyFilter()">
+      ⚠ Nur Aufmerksamkeit
+    </label>
+    <a class="karte-mode-btn" href="/lage/{{ lage.id }}">Board</a>
+    <a class="karte-mode-btn" href="/lage/{{ lage.id }}/dashboard">Dashboard</a>
     {% if reports_count > 0 %}
     <div class="karte-controls__sep"></div>
     <label style="color:var(--yellow);">
@@ -365,7 +372,7 @@
 
 {# Abschnitt-Filter-Chips #}
 {% if sectors %}
-<div id="section-filters" x-data="{open: !window.matchMedia('(max-width:640px)').matches}"
+<div id="section-filters" x-data="{open: !window.matchMedia('(max-width:760px)').matches}"
      style="position:fixed;top:calc(var(--topnav-h) + var(--lage-ctx-h, 80px) + 6px);right:8px;z-index:1001;
      background:rgba(19,27,46,.9);border:1px solid var(--border);border-radius:var(--radius-lg, .75rem);
      padding:7px 11px;backdrop-filter:blur(6px);max-width:200px;">
@@ -726,8 +733,9 @@
     var checks = document.querySelectorAll('#karte-controls .phase-filter');
     var active = Array.from(checks).filter(function(c) { return c.checked; }).map(function(c) { return c.value; });
     var visible = 0;
+    var attentionOnly = document.getElementById('attention-filter');
     markers.forEach(function(obj) {
-      if (active.includes(obj.phase)) {
+      if (active.includes(obj.phase) && (!attentionOnly || !attentionOnly.checked || obj.site.aufmerksamkeit)) {
         if (!map.hasLayer(obj.marker)) obj.marker.addTo(map);
         visible++;
       } else {

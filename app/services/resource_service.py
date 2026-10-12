@@ -1038,8 +1038,6 @@ def get_einheiten_chips_for_sites(
     now = jetzt or datetime.now(UTC).replace(tzinfo=None)
     if now.tzinfo is not None:
         now = now.astimezone(UTC).replace(tzinfo=None)
-    from app.services import lagemeldung_service
-
     result: dict[int, dict[str, Any]] = {}
     for site in sites:
         site_dispatches = by_site.get(site.id, [])
@@ -1072,27 +1070,9 @@ def get_einheiten_chips_for_sites(
             for dispatch in active + completed
         ]
 
-        ohne_rueckmeldung_min: int | None = None
-        interval = lagemeldung_service.interval_minutes_for(site, org_settings)
-        if interval is not None:
-            overdue_minutes = []
-            for dispatch in active:
-                if dispatch.einheit_status not in EINHEIT_STATUS_AKTIV:
-                    continue
-                last_update = max(
-                    timestamp
-                    for timestamp in (
-                        dispatch.letzte_rueckmeldung_at,
-                        dispatch.status_at,
-                        dispatch.dispatched_at,
-                    )
-                    if timestamp is not None
-                )
-                minutes = int((now - last_update).total_seconds() // 60)
-                if minutes > interval:
-                    overdue_minutes.append(minutes)
-            if overdue_minutes:
-                ohne_rueckmeldung_min = max(overdue_minutes)
+        ohne_rueckmeldung_min = ohne_rueckmeldung_min_for_dispatches(
+            site, active, org_settings=org_settings, jetzt=now
+        )
 
         result[site.id] = {
             "chips": chips,
@@ -1100,6 +1080,37 @@ def get_einheiten_chips_for_sites(
             "ohne_rueckmeldung_min": ohne_rueckmeldung_min,
         }
     return result
+
+
+def ohne_rueckmeldung_min_for_dispatches(
+    site: IncidentSite,
+    dispatches: list[EinheitSiteDispatch],
+    *,
+    org_settings: Any | None = None,
+    jetzt: datetime | None = None,
+) -> int | None:
+    """Höchste überfällige Rückmeldungsdauer aktiver Dispositionen einer Stelle."""
+    from app.services import lagemeldung_service
+
+    now = jetzt or datetime.now(UTC).replace(tzinfo=None)
+    if now.tzinfo is not None:
+        now = now.astimezone(UTC).replace(tzinfo=None)
+    interval = lagemeldung_service.interval_minutes_for(site, org_settings)
+    if interval is None:
+        return None
+    overdue_minutes = []
+    for dispatch in dispatches:
+        if dispatch.einheit_status not in EINHEIT_STATUS_AKTIV:
+            continue
+        last_update = max(
+            timestamp for timestamp in (
+                dispatch.letzte_rueckmeldung_at, dispatch.status_at, dispatch.dispatched_at
+            ) if timestamp is not None
+        )
+        minutes = int((now - last_update).total_seconds() // 60)
+        if minutes > interval:
+            overdue_minutes.append(minutes)
+    return max(overdue_minutes) if overdue_minutes else None
 
 
 def move_to_pool(
