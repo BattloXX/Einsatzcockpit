@@ -101,6 +101,10 @@ Zugänglich für alle angemeldeten Benutzer.
 
 ---
 
+## GSL-Einstellungen
+
+Die vollständige Feldliste und das Widerrufsverhalten stehen unter [GSL-Einstellungen](Administration-GSL-Einstellungen).
+
 ## GSL: Gruppenkommandanten-Zugang
 
 Unter **Einstellungen → Großschadenslage** steuert die Karte „Gruppenkommandanten-Zugang“:
@@ -109,15 +113,17 @@ Unter **Einstellungen → Großschadenslage** steuert die Karte „Gruppenkomman
 |---|---|
 | Zugang aktiv | Hauptschalter, standardmäßig **aus**. Ausschalten widerruft alle bestehenden Zugänge der Organisation. |
 | Nachrichtenvorlage | Text für SMS und Kopieren, mit Platzhaltern, Live-Zähler der SMS-Segmente und Vorschau. Der Link wird in Protokollen geschwärzt. |
-| Automatisch senden | SMS beim Zuweisen eines Gruppenkommandanten (einmal pro GK/Nummer). Im Übungsbetrieb wird keine echte SMS gesendet. |
-| Gültigkeit, Limits | Laufzeit des Links und der Sitzung, Versandlimits. |
-| SMS-PIN | Optionaler zweiter Faktor beim Einlösen; Sperre nach Fehlversuchen. |
+| Automatisch senden | SMS beim Zuweisen eines Gruppenkommandanten. Bei Übungen wird sie nur gesendet, wenn zusätzlich **„SMS an Gruppenkommandanten auch bei Übungen senden“** aktiv ist; dieser Schalter ist unabhängig von Einsatzinfo-SMS. |
+| Gültigkeit, Limits | Gültigkeit 1–168 Stunden, Sitzung 1–72 Stunden und maximal 1–5 Sitzungen. |
+| SMS-PIN | Optionaler SMS-Bestätigungscode beim Öffnen; benötigt einen SMS-Anbieter. |
 | Ressourcen pflegen | Erlaubt dem GK, Personal und Ausstattung der eigenen Einheit zu ändern. |
-| Notbremse | Widerruft sofort alle Zugänge der Lage/Organisation. |
+| Notbremse | Widerruft sofort alle Gruppenkommandanten-Zugänge der Organisation. |
 
 | Auftrags-SMS automatisch | Sendet bei neuem/geändertem/zurückgezogenem Auftrag eine SMS an den Gruppenkommandanten (eigene Vorlage mit Platzhaltern `{ereignis}`, `{gsl}`, `{einheit}`, `{einsatzstelle}`, `{auftrag}`, `{link}`; `{link}` ist Pflicht). Voraussetzung: Zugang aktiv und Mobilnummer vorhanden. |
 | QR-Zugang aktiv | Erlaubt QR-Ausdrucke für Einheiten (Standard: aus). Ausschalten widerruft alle QR-Zugänge. |
 | QR-Gültigkeit (Stunden) | 1–168, Standard 72. |
 | QR-PIN | Optional; die PIN wird nur der Einsatzleitung angezeigt, nie gedruckt. |
+
+Zusätzlich konfiguriert die GSL-Seite die Module, den Lagemeldungs-Regelkreis, Sonderalarm, Geräteverleih-SMS und die automatische Übernahme als Einsatzstelle.
 
 **Serverkonfiguration:** `GSL_ZUGANG_KEY` (eigener, geheimer Schlüssel für die Ableitung der Zugangslinks, empfohlen: `python -c "import secrets; print(secrets.token_urlsafe(48))"`). Ein Wechsel des Schlüssels macht alle ausgegebenen Links ungültig. Ohne Wert wird der Schlüssel aus `SECRET_KEY` abgeleitet (eine Warnung im Log weist darauf hin); dann entwertet eine `SECRET_KEY`-Rotation alle Links.

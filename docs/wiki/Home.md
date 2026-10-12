@@ -20,7 +20,7 @@ Eine Python-Webapp (FastAPI + HTMX + WebSocket), die ein bisheriges Single-File-
 - Mannschaftsregister mit Qualifikationen und Ablaufdaten
 - Archiv mit vollständigem Audit-Log und PDF-Export
 - Multi-Tenancy: mehrere Organisationen, row-level isoliert, gemeinsame Einsätze via Kollaborationsmodell
-- Großschadenslage (GSL): Phasen-Kanban, Einsatzstellen, SKKM-Stab, Lagekarte, Ressourcenverwaltung
+- Großschadenslage (GSL): Phasen-Kanban, Einsatzstellen, SKKM-Stab, Lagekarte, Ressourcenverwaltung, Einheitenansicht und Geräteverleih
 - SKKM-Lagemeldungs-Regelkreis: Lage → Auftrag → Kontrolle mit Fälligkeits-Timern
 - Taktische Lagekarte nach ÖBFV-Richtlinie E-27 (genormte Symbole, Magnetfarben)
 - Lageführung: einsatzbezogene Lagekarte mit Auto-Layern (Fahrzeuge, Objekt, Einsatzort), taktischen Zeichen, Multi-User-Editing (Presence/Soft-Locks), Chronologie/Replay, Kartendruck & PDF-Lagebericht
@@ -96,7 +96,11 @@ unter [Server-Voraussetzungen](Installation-Server-Voraussetzungen).
 | [Lagekarte der Großschadenslage](Anwender-Grosschadenslage-Karte) | Interaktive Karte, Polygone, Pin-Modus, Druck & Print-Center |
 | [Taktische Lagekarte (ÖBFV E-27)](Anwender-Taktische-Lagekarte) | Normkonforme Symbole, Magnetfarben, taktische Legende |
 | [Übergreifende Meldungen](Anwender-Uebergreifende-Meldungen) | Lageweite Cross-Marker mit Status-Workflow, Medien & Karte |
-| [GSL-Ressourcenverwaltung](Anwender-GSL-Ressourcenverwaltung) | Einheiten anlegen, disponieren, Mehrfach-Disposition, Fremdorg |
+| [GSL-Ressourcenverwaltung](Anwender-GSL-Ressourcenverwaltung) | Einheiten anlegen, disponieren, Zugänge und Mehrfach-Disposition |
+| [GSL-Einheitenansicht](Anwender-GSL-Einheitenansicht) | Einheit auf Tablet/GK-Handy: Aufträge, Karte, Meldungen und Offline-Outbox |
+| [GSL-Stab und Journal](Anwender-GSL-Stab-und-Journal) | SKKM-Stab, Stabstafel, Einsatz- und Funkjournal, Lagedokument, Bericht |
+| [GSL-Sektoren und Planung](Anwender-GSL-Sektoren-und-Planung) | Sektoren/Abschnitte, automatische Zuordnung, Planungsübersicht |
+| [GSL-Meldungseingang](Anwender-GSL-Meldungseingang) | Bürgermeldungen per Portal/QR, SMS-Bestätigung, Übernahme als Einsatzstelle |
 | [Geräteverleih](Anwender-Geraeteverleih) | Ausgabe & Rücknahme von Material in der GSL, Barcode-Scan |
 | [Drohne / UAS](Anwender-Drohne-UAS) | BOS-Drohneneinsatz: starten, Flugbuch, Checklisten, Notfall, Medien, PDF |
 | [Mailing-Kampagnen](Anwender-Mailing-Kampagnen) | Vorlagen verwenden, Empfängerlisten aufbauen, Kampagnen planen/senden und Zustellung auswerten |
@@ -116,6 +120,7 @@ unter [Server-Voraussetzungen](Installation-Server-Voraussetzungen).
 | [Benutzer und Rollen](Administration-Benutzer-und-Rollen) | User anlegen, Rollen zuweisen, Lockout |
 | [Stammdaten pflegen](Administration-Stammdaten-pflegen) | Fahrzeuge, Alarmtypen, Auftragsvorschläge |
 | [Einstellungen](Administration-Einstellungen) | Org-Stammdaten, Logo, Auto-Schließen, Wetter-Opt-out |
+| [GSL-Einstellungen](Administration-GSL-Einstellungen) | GSL-Module, Lagemeldungs-Regelkreis, GK-/QR-Zugang und Geräteverleih |
 | [Organisationen verwalten](Administration-Organisations-verwalten) | Multi-Org: anlegen, Seed-Profile, Einladungen, System-Konsole |
 | [API-Keys verwalten](Administration-API-Keys-verwalten) | Anlegen, Rotieren, Sperren |
 | [Einsatz-Feed](Administration-Einsatz-Feed) | Einsätze für externe Systeme per Pull bereitstellen, Scopes und Sicherheit |

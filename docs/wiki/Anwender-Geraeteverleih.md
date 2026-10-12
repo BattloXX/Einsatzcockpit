@@ -70,7 +70,7 @@ An jede Ausleihe können **Fotos** angehängt werden (z.B. Übergabeprotokoll, Z
 
 ## Material an der Einsatzstelle belassen
 
-Material, das an einer Einsatzstelle bleibt, wird als Ausleihe dokumentiert und erscheint in der Verleih-Übersicht mit dem Chip **Vor Ort**. Über den Filter **Vor Ort belassen** sehen Sie ausschließlich diese Einträge. Dort sind Einsatzstelle, hinterlassende Einheit, Quelle und erfassende Person nachvollziehbar; der Druckschein enthält Einsatzstelle mit Adresse sowie die Einheit.
+Material, das an einer Einsatzstelle bleibt, wird als Ausleihe dokumentiert und erscheint in der Verleih-Übersicht mit dem Chip **Vor Ort**. Es kann sowohl im Stellen-Detail auf dem GSL-Board als auch in der Einheitenansicht auf dem Tablet erfasst werden. Über den Filter **Vor Ort belassen** sehen Sie ausschließlich diese Einträge. Dort sind Einsatzstelle, hinterlassende Einheit, Quelle und erfassende Person nachvollziehbar; der Druckschein enthält Einsatzstelle mit Adresse sowie die Einheit.
 
 Die Rücknahme erfolgt wie bei jeder anderen Ausleihe. Erinnerungen und optionale SMS an den Empfänger funktionieren ebenfalls, sofern Telefonnummer und SMS-Gateway vorhanden sind.
 
@@ -80,11 +80,13 @@ Die Rücknahme erfolgt wie bei jeder anderen Ausleihe. Erinnerungen und optional
 
 Das System sendet automatisch **SMS-Erinnerungen** an offene Ausleihen (wenn SMS-Gateway aktiv und Empfänger-Telefonnummer hinterlegt).
 
+Beim Anlegen kann außerdem **PIN generieren + per SMS senden** gewählt werden. Ohne manuelle PIN erzeugt das System dafür eine sechsstellige PIN. Den Text der Ausleih- und Erinnerungs-SMS verwaltet die Organisation in den [GSL-Einstellungen](Administration-GSL-Einstellungen).
+
 ---
 
 ## Druckschein
 
-Über **Drucken** auf der Ausleihe-Detailseite wird ein **Übergabeschein** generiert:
+Über **Drucken** auf der Ausleihe-Detailseite wird der **Verleihschein** im Druckdialog geöffnet:
 - Ausleihedaten, Empfänger, Einzelpositionen
 - Journal-Einträge (Ausgabe / Rücknahme)
 - QR-Code für schnellen mobilen Aufruf

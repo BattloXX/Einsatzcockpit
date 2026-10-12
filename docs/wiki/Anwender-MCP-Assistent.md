@@ -2,6 +2,12 @@
 
 Mit dem MCP-Server kann eine KI-Anwendung nach deiner Anmeldung gezielt mit Daten deiner Organisation arbeiten. Die Anwendung sieht nur die Werkzeuge, für die dein Konto aktuell berechtigt ist.
 
+## GSL-Ressourcen
+
+Bei aktivem GSL-Ressourcenmanagement kann der Assistent Ressourcen lesen, anlegen und aktualisieren, Führung setzen, Personal und Ausstattung pflegen, Journal-Einträge lesen/ergänzen sowie disponieren, Aufträge ändern oder zurückziehen. Die vollständige Liste und Rollen stehen unter [MCP-Server](Administration-MCP-Server).
+
+Bei der Disposition kann Erkundung oder Abarbeitung angegeben werden. Fehlt die Angabe, wird sie aus der Phase abgeleitet: Eingegangen/Erkundung ergibt Erkundung, sonst Abarbeitung. Zugangstoken, Links, Token-Hashes und PINs gibt der Assistent nicht aus; QR-Zugänge kann er weder ausstellen noch anzeigen oder drucken.
+
 ## Verbinden und anmelden
 
 In claude.ai einen **Custom Connector** anlegen und als Server-URL `https://<host>/mcp` eintragen. Claude Desktop und Claude Code verwenden ebenfalls die vom Client vorgesehene MCP-Server-Konfiguration; als Streamable-HTTP-Adresse gilt dieselbe URL. Die konkrete Bedienung kann je Client abweichen.

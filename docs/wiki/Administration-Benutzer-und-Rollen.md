@@ -145,7 +145,7 @@ Neben den Benutzerrollen gibt es in der Großschadenslage (GSL) weitere **Zugang
 | **Gerät „Führung“** | Gerät mit Profil „Führung“ (oder ohne Profil) | Verhält sich wie der Geräte-Benutzer mit den bei der Anlage vergebenen Rollen. Die Verwaltung von Zugängen, QR-Codes und Ausdrucken bleibt Geräten grundsätzlich verwehrt. |
 | **Gruppenkommandant (SMS-Link)** | Persönlicher Link per SMS/Kopie, Sitzungs-Cookie `ec_gk`, optional SMS-Code | Ausschließlich die **eigene Einheit** im Einheitenmodus; an Person, Telefonnummer und aktuellen Gruppenkommandanten gebunden. |
 | **QR-Zugang (Ausdruck)** | Ausgedruckter QR-Code, Cookie `ec_qr`, optional PIN | Ausschließlich die **eigene Einheit**; an die Einheit gebunden, nicht an eine Person. |
-| **Admin-Simulation** | Administrator öffnet „Als Einheit ansehen“ | Einheitenansicht einer Einheit. In Übungslagen schreibend, in Echtlagen nur lesend. |
+| **Admin-Simulation** | Benutzer mit Rolle `admin` öffnet „Als Einheit ansehen“ | Einheitenansicht einer Einheit. In Übungslagen schreibend, in Echtlagen nur lesend. |
 | **MCP (KI-Assistent)** | OAuth-Token eines Benutzers | Rechte des Benutzers; Geräte-Benutzer, GK-Links und QR-Zugänge sind **nie** MCP-berechtigt. |
 
 ### Führungsoberfläche: wer darf was?
@@ -176,7 +176,7 @@ Spalten: **Admin** = `org_admin`/`admin` (`system_admin` darf zusätzlich organi
 | Geräte-Logins und Geräteprofile (Einheit/Führung) verwalten | ✓ | – | – | – |
 | Admin-Simulation einer Einheit | ✓ | – | – | – |
 
-**Zugangs-, QR- und Druckfunktionen** sind zusätzlich gesperrt für: Geräte-Logins, Gäste-Sitzungen per QR/PIN der Lage und die eingeschränkte Gesamtansicht des Einheiten-Tablets – auch wenn die Rolle des Geräte-Benutzers sonst „Bearbeiter“ wäre. Zusatzbedingungen: Der Org-Schalter „Zugang aktiv“ bzw. „QR-Zugang aktiv“ muss gesetzt sein; für den Ausdruck braucht es einen gekoppelten, aktiven Drucker der eigenen Organisation. Ausstellen ist nur in einer aktiven Lage und für nicht abgerückte Einheiten möglich.
+**Zugangs- und QR-Funktionen** sind zusätzlich gesperrt für: Geräte-Logins, Gäste-Sitzungen per QR/PIN der Lage und die eingeschränkte Gesamtansicht des Einheiten-Tablets – auch wenn die Rolle des Geräte-Benutzers sonst „Bearbeiter“ wäre. Zusatzbedingungen: Der Org-Schalter „Zugang aktiv“ bzw. „QR-Zugang aktiv“ muss gesetzt sein. Der QR-Ausdruck kann über den Druckdialog lokal oder – sofern eingerichtet – über einen Stationsdrucker ausgegeben werden. Ausstellen ist nur in einer aktiven Lage und für nicht abgerückte Einheiten möglich.
 
 ### Einheitenmodus: wer darf was in der eigenen Einheit?
 
