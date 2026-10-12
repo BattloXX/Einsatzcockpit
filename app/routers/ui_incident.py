@@ -3678,6 +3678,35 @@ async def standalone_geocode(
     return _JSONResponse({"lat": result.lat, "lng": result.lng, "display_name": result.display_name})
 
 
+@router.post("/adresse/reverse")
+async def standalone_reverse_geocode(
+    request: Request,
+    lat: str = Form(""),
+    lng: str = Form(""),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+):
+    """Ermittelt die Adresse zu manuell gesetzten Kartenkoordinaten."""
+    from fastapi.responses import JSONResponse as _JSONResponse
+
+    try:
+        parsed_lat, parsed_lng = float(lat), float(lng)
+    except (TypeError, ValueError):
+        raise HTTPException(422, "Ungültige Koordinaten")
+    if not (-90 <= parsed_lat <= 90 and -180 <= parsed_lng <= 180):
+        raise HTTPException(422, "Ungültige Koordinaten")
+
+    from app.services.geocoding import reverse_geocode
+    result = await reverse_geocode(parsed_lat, parsed_lng)
+    if result is None:
+        raise HTTPException(404, "Adresse konnte nicht gefunden werden")
+    return _JSONResponse({
+        "street": result.street,
+        "house_number": result.house_number,
+        "city": result.city,
+        "display_name": result.display_name,
+    })
+
+
 # ── Adresse & Koordinaten bearbeiten ─────────────────────────────────────────
 
 @router.get("/einsatz/{incident_id}/adresse/bearbeiten", response_class=HTMLResponse)

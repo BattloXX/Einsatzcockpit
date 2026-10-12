@@ -1,6 +1,6 @@
 """Nominatim-Geocoding (OSM).
 
-Nur Forward-Geocoding (Adresse → Koordinaten).
+Forward- und Reverse-Geocoding (Adresse ↔ Koordinaten).
 Policy: max. 1 Request/Sekunde an nominatim.openstreetmap.org.
 User-Agent muss gesetzt sein (OSM-Pflicht).
 """
@@ -40,6 +40,14 @@ async def _throttle() -> None:
 class GeocodeResult:
     lat: float
     lng: float
+    display_name: str
+
+
+@dataclass
+class ReverseGeocodeResult:
+    street: str | None
+    house_number: str | None
+    city: str | None
     display_name: str
 
 
@@ -109,6 +117,52 @@ async def geocode_address(
         )
     except (KeyError, ValueError, TypeError) as exc:
         logger.warning("Nominatim-Antwort konnte nicht geparst werden: %s", exc)
+        return None
+
+
+async def reverse_geocode(lat: float, lng: float) -> ReverseGeocodeResult | None:
+    """Ermittelt die Adresse zu Koordinaten via Nominatim."""
+    await _throttle()
+    try:
+        async with httpx.AsyncClient(
+            headers={"User-Agent": settings.NOMINATIM_USER_AGENT},
+            timeout=settings.NOMINATIM_TIMEOUT_SECONDS,
+        ) as client:
+            resp = await client.get(
+                f"{settings.NOMINATIM_BASE_URL}/reverse",
+                params={
+                    "format": "jsonv2",
+                    "lat": lat,
+                    "lon": lng,
+                    "zoom": 18,
+                    "addressdetails": 1,
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception as exc:
+        logger.warning("Nominatim-Reverse-Geocoding fehlgeschlagen: %s", exc)
+        return None
+
+    if not data:
+        return None
+
+    try:
+        address = data.get("address", {}) or {}
+        return ReverseGeocodeResult(
+            street=(
+                address.get("road")
+                or address.get("pedestrian")
+                or address.get("footway")
+                or address.get("path")
+                or address.get("square")
+            ),
+            house_number=address.get("house_number"),
+            city=(address.get("city") or address.get("town") or address.get("village") or address.get("municipality")),
+            display_name=data.get("display_name", ""),
+        )
+    except (AttributeError, TypeError) as exc:
+        logger.warning("Nominatim-Reverse-Antwort konnte nicht geparst werden: %s", exc)
         return None
 
 
