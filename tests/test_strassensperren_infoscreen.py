@@ -214,7 +214,7 @@ def test_admin_erzeugt_und_widerruft_zugaenge(client) -> None:
     page = client.get("/admin/settings/strassensperren-infoscreen")
     assert page.status_code == 200
     assert "Straßensperren – Externe Zugänge" in page.text
-    assert 'href="/admin/settings/strassensperren-infoscreen"' in page.text  # Tab
+    assert 'href="/admin/settings/strassensperren-infoscreen"' in page.text  # Verwaltungsnavigation
     csrf = client.cookies.get("ec_csrf")
     label = f"Foyer {uuid4().hex[:6]}"
     response = client.post("/admin/settings/strassensperren-infoscreen/neu", data={

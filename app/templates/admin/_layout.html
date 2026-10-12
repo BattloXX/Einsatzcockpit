@@ -28,6 +28,7 @@
        or '/admin/konfig' in _p or '/admin/sso' in _p or '/admin/gsl-einstellungen' in _p
        or '/admin/lis' in _p or '/admin/dibos' in _p or '/admin/mail' in _p
        or '/admin/teams-alarmierung' in _p
+       or _p.startswith('/strassensperren/einstellungen')
        or ('/admin/medien' in _p and is_sysadmin) %}
   {% set active_group = 'einstellungen' %}
 {% elif _p == '/admin/hilfe' %}
@@ -461,6 +462,24 @@
                {{ tip('Status externer Gateways und Monitoring-Tokens verwalten') }}>
               <span class="admin-nav__icon">🚦</span>Systemstatus
             </a>
+            {% if request.state.strassensperren_enabled %}
+            <div class="admin-nav__subheading">Straßensperren</div>
+            <a href="/strassensperren/infoscreen" target="_blank" rel="noopener"
+               class="admin-nav__item"
+               {{ tip('Interne Vollbildanzeige der aktuellen Straßensperren öffnen') }}>
+              <span class="admin-nav__icon">🖥️</span>Infoscreen
+            </a>
+            <a href="/admin/settings/strassensperren-infoscreen"
+               class="admin-nav__item {% if request.url.path.startswith('/admin/settings/strassensperren-infoscreen') %}is-active{% endif %}"
+               {{ tip('Externe Statusseiten und Infoscreens verwalten') }}>
+              <span class="admin-nav__icon">🔗</span>Externe Zugänge
+            </a>
+            <a href="/strassensperren/einstellungen"
+               class="admin-nav__item {% if request.url.path.startswith('/strassensperren/einstellungen') %}is-active{% endif %}"
+               {{ tip('Microsoft-Teams-Benachrichtigungen für Straßensperren konfigurieren') }}>
+              <span class="admin-nav__icon">💬</span>Teams
+            </a>
+            {% endif %}
             {% if is_sysadmin %}
             <a href="/admin/ki-prompts"
                class="admin-nav__item {% if '/admin/ki-prompts' in request.url.path %}is-active{% endif %}"

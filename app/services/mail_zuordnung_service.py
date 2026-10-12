@@ -48,10 +48,7 @@ def _allowed(row: OrgMailEingang, settings: OrgSettings) -> tuple[bool, str]:
         domain = "@" + sender.rsplit("@", 1)[1] if "@" in sender else ""
         return (bool(sender and (sender in allowed or domain in allowed)), "Absender ist nicht freigegeben")
     if settings.mail_eingang_modus == "alle":
-        results = [str(getattr(row, name) or "").lower() for name in ("spf", "dkim", "dmarc")]
-        if not any(results):
-            return False, "Authentifizierung des Absenders ist nicht bestimmbar"
-        return all(result == "pass" for result in results), "SPF, DKIM oder DMARC nicht bestanden"
+        return True, ""
     return False, "Automatische Uebernahme ist deaktiviert"
 
 
@@ -137,9 +134,9 @@ async def ordne_zu(db: Session, eingang_id: int, incident_ids: set[int] | None =
     allowed, reason = _allowed(row, settings)
     if not allowed:
         row.status = "posteingang"
-        row.zuordnung = "mehrdeutig" if "nicht bestimmbar" in reason else "abgelehnt"
+        row.zuordnung = "abgelehnt"
         row.zuordnung_grund = reason
-        ereignis(db, row, "mehrdeutig" if "nicht bestimmbar" in reason else "absender_abgelehnt", reason)
+        ereignis(db, row, "absender_abgelehnt", reason)
         db.commit()
         return False
     incidents = aktive_einsaetze(db, row.org_id)

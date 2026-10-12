@@ -93,6 +93,25 @@ def test_modul_aus_und_readonly_schreibschutz(client):
     assert client.post("/strassensperren/neu", data=_payload(client)).status_code == 403
 
 
+def test_navigation_verschiebt_strassensperren_einstellungen_in_die_verwaltung(client):
+    admin = _setup_user("org_admin")
+    _login(client, admin)
+
+    overview = client.get("/strassensperren")
+    assert overview.status_code == 200
+    assert 'href="/strassensperren/infoscreen"' not in overview.text
+    assert 'href="/strassensperren/einstellungen"' not in overview.text
+    assert 'href="/admin/settings/strassensperren-infoscreen"' not in overview.text
+
+    settings = client.get("/admin/settings")
+    assert settings.status_code == 200
+    assert 'href="/strassensperren/infoscreen" target="_blank" rel="noopener"' in settings.text
+    assert 'href="/admin/settings/strassensperren-infoscreen"' in settings.text
+    assert 'href="/strassensperren/einstellungen"' in settings.text
+
+    assert client.get("/strassensperren/einstellungen").status_code == 200
+
+
 def test_anlegen_validierung_und_utc_sommerzeit(client):
     user = _setup_user("objekt_verwalter")
     _login(client, user)
