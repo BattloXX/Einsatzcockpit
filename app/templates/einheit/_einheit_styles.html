@@ -57,6 +57,12 @@
 
 .einheit-liste summary{cursor:pointer;padding:.6rem 0;font-weight:700;}
 .einheit-liste__eintrag{display:flex;justify-content:space-between;width:100%;min-height:48px;padding:.5rem .25rem;border-bottom:1px solid var(--border);text-align:left;color:var(--text);}
+.einheit-gruppe{margin:.75rem 0;}
+.einheit-gruppe h3{margin:.25rem 0 .4rem;font-size:.9rem;color:var(--text-muted);}
+.einheit-zwischenaktionen{display:flex;gap:.4rem;flex-wrap:wrap;}
+.einheit-zwischenaktionen .btn{min-height:40px;}
+.einheit-warning--alarm{background:rgba(216,48,48,.17);border-color:#d83030;color:#ffb4b4;}
+.einheit-tabbar{display:none;}
 
 /* Aktionen: große Touch-Flächen */
 .einheit-aktionen{display:flex;flex-direction:column;gap:.6rem;}
@@ -109,6 +115,10 @@
   .einheit-umschalter{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;}
   .einheit-umschalter a{justify-content:center;padding:.55rem .45rem;text-align:center;}
   .einheit-actions-row{grid-template-columns:1fr;}
+  .einheit-tabbar{position:fixed;z-index:20;left:0;right:0;bottom:0;display:grid;grid-template-columns:repeat(3,1fr);gap:1px;padding:6px max(.5rem, env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) max(.5rem, env(safe-area-inset-left));background:var(--surface);border-top:1px solid var(--border);}
+  .einheit-tabbar button{min-height:48px;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--text);font:inherit;font-weight:700;}
+  .einheit-tabbar button[aria-selected="true"]{background:var(--red);color:#fff;}
+  .einheit-auftraege{padding-bottom:1rem;}
   .einheit-material-position{grid-template-columns:1fr 5.5rem;}
   .einheit-material-position .btn{grid-column:1 / -1;}
   /* Die gesamte Aktionsleiste darf Einsatzdaten und Karte nicht überdecken. */
@@ -117,5 +127,15 @@
   .einheit-karte{min-height:320px;}
   .einheit-zeile{align-items:flex-start;}
   .einheit-zeile > :last-child{flex-shrink:0;}
+  .person-flyout-backdrop{align-items:flex-end;}
+  .person-flyout{width:100%;max-height:88vh;border-radius:var(--radius-lg) var(--radius-lg) 0 0;}
+}
+
+@media (min-width:1024px), (min-width:900px) and (orientation:landscape){
+  .einheit-bereiche{display:grid;grid-template-columns:minmax(0,1fr) minmax(22rem,.8fr);gap:1rem;}
+  .einheit-bereiche .fab-grid__main,.einheit-bereiche .fab-grid__side{display:contents;}
+  .einheit-bereiche .einheit-bereich:first-child{grid-column:1 / -1;}
+  .einheit-uebersichtskarte{grid-column:1;}
+  .einheit-auftraege{grid-column:2;grid-row:2;}
 }
 </style>

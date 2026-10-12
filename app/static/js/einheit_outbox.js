@@ -353,6 +353,8 @@ export function createOutbox({
     async zustandSpeichern(obj) { await speichern("zustand", obj, "aktuell"); },
     async zustandLaden() { return lesen("zustand", "aktuell"); },
     async zustandLeeren() { await mitStore(["zustand"], "readwrite", (tx) => tx.objectStore("zustand").clear()); },
+    async metaSpeichern(key, value) { await speichern("meta", value, key); },
+    async metaLaden(key) { return lesen("meta", key); },
     async naechsterVersuchIn() {
       const zeit = now().getTime();
       const werte = (await alle("outbox")).filter((x) => x.status === "fehler_netz" && x.naechster_versuch_at)
