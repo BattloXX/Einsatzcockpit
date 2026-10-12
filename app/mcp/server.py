@@ -410,10 +410,12 @@ async def gsl_ressource_anlegen(
 
 
 @server.tool(name="gsl_einheit_disponieren", description=(
-    "Disponiert eine Einheit; auftragsart ist erkundung oder abarbeitung."
+    "Disponiert eine Einheit; auftragsart ist erkundung oder abarbeitung. Ohne auftragsart: erkundung, "
+    "solange die Stelle in Eingegangen/Erkundung steht, sonst abarbeitung."
 ))
 async def gsl_einheit_disponieren(lage_id: int, einheit_id: int, site_id: int, auftrag: str | None = None,
-                                  reihenfolge: int | None = None, auftragsart: str = "abarbeitung") -> dict[str, object]:
+                                  reihenfolge: int | None = None,
+                                  auftragsart: str | None = None) -> dict[str, object]:
     return await _call_registered_tool("gsl_einheit_disponieren", lage_id=lage_id, einheit_id=einheit_id,
                                        site_id=site_id, auftrag=auftrag, reihenfolge=reihenfolge,
                                        auftragsart=auftragsart)

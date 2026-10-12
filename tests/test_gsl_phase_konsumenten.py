@@ -130,7 +130,8 @@ def test_mcp_einsatz_abschliessen_und_wiedereroeffnen(client, monkeypatch):
     lage_id, site_id, einheit_id = _mcp_lage(seed)
     leiter = _token(client, seed, "leiter")
     editor = _token(client, seed, "editor")
-    _call(client, leiter, "gsl_einheit_disponieren", lage_id=lage_id, einheit_id=einheit_id, site_id=site_id)
+    _call(client, leiter, "gsl_einheit_disponieren", lage_id=lage_id, einheit_id=einheit_id, site_id=site_id,
+          auftragsart="abarbeitung")
     # recorder hat keine Abschlussrechte
     assert "__fehler__" in _call(client, editor, "gsl_einsatz_abschliessen", lage_id=lage_id, site_id=site_id)
     ohne = _call(client, leiter, "gsl_einsatz_abschliessen", lage_id=lage_id, site_id=site_id)
@@ -149,3 +150,23 @@ def test_mcp_einsatz_abschliessen_und_wiedereroeffnen(client, monkeypatch):
         assert {"gsl.einsatz.abgeschlossen", "gsl.einsatz.wiedereroeffnet"} <= aktionen
     finally:
         db.close()
+
+
+def test_mcp_disponieren_ohne_auftragsart_folgt_der_phase(client, monkeypatch):
+    """Ältere MCP-Clients kennen auftragsart nicht – die Stelle darf dann nicht auf Disponiert springen."""
+    _mcp_stumm(monkeypatch)
+    seed = _new_seed(f"mcp-gsl-default-{uuid4().hex[:8]}", {"editor": "recorder"})
+    lage_id, site_id, einheit_id = _mcp_lage(seed)
+    assert _site(site_id)[0] == SitePhase.eingegangen
+    result = _call(client, token := _token(client, seed, "editor"), "gsl_einheit_disponieren",
+                   lage_id=lage_id, einheit_id=einheit_id, site_id=site_id)
+    assert result["auftragsart"] == "erkundung" and result["site_phase"] == "erkundung"
+    db = SessionLocal(); set_tenant_context(db, None)
+    try:
+        db.get(IncidentSite, site_id).phase = SitePhase.bewertet
+        db.commit()
+    finally:
+        db.close()
+    zweite = _call(client, token, "gsl_einheit_disponieren", lage_id=lage_id, einheit_id=einheit_id,
+                   site_id=site_id)
+    assert zweite["auftragsart"] == "abarbeitung" and zweite["site_phase"] == "disponiert"

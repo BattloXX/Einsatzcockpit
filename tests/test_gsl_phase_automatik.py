@@ -302,3 +302,25 @@ def test_tablet_api_finished_erkundung_becomes_bewertet(client):
     db = SessionLocal(); set_tenant_context(db, None)
     try: assert db.get(IncidentSite, x["a"]).phase == SitePhase.bewertet
     finally: db.close()
+
+
+@pytest.mark.parametrize("phase, art, ziel", [
+    (SitePhase.eingegangen, "erkundung", SitePhase.erkundung),
+    (SitePhase.erkundung, "erkundung", SitePhase.erkundung),
+    (SitePhase.bewertet, "abarbeitung", SitePhase.disponiert),
+])
+def test_route_disponieren_ohne_auftragsart_folgt_der_phase(client, phase, art, ziel):
+    x = _api_daten(); _als(client, sign_session(_mit_rolle(x["admin"], "incident_leader")))
+    db = SessionLocal(); set_tenant_context(db, None)
+    for d in db.query(EinheitSiteDispatch).filter_by(site_id=x["a"]).all():
+        d.withdrawn_at = datetime.now(UTC)
+    db.get(IncidentSite, x["a"]).phase = phase
+    db.commit(); db.close()
+    url = f"/lage/{x['lage']}/stellen/{x['a']}/einheit-disponieren"
+    assert _post(client, url, {"einheit_id": x["e1"], "auftragsart": ""}).status_code == 200
+    db = SessionLocal(); set_tenant_context(db, None)
+    try:
+        d = db.query(EinheitSiteDispatch).filter_by(einheit_id=x["e1"], site_id=x["a"])
+        d = d.order_by(EinheitSiteDispatch.id.desc()).first()
+        assert d.auftragsart == art and d.site.phase == ziel
+    finally: db.close()
