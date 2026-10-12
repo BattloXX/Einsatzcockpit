@@ -39,15 +39,25 @@ def absender_mit_name(name: str, addr: str) -> str:
     return f'"{sauber}" <{addr}>' if sauber else addr
 
 
+def _split_addresses(raw: str) -> list[str]:
+    return [addr.strip() for addr in re.split(r"[,;]", raw) if addr.strip()]
+
+
 def _resend_payload(msg: EmailMessage, from_addr: str, attachments: list[dict] | None = None) -> dict:
     """Konvertiert eine EmailMessage in das Resend-Schema."""
     to_raw = msg["To"] or ""
-    recipients = [addr.strip() for addr in re.split(r"[,;]", to_raw) if addr.strip()]
+    recipients = _split_addresses(to_raw)
     payload: dict = {
         "from": from_addr,
         "to": recipients,
         "subject": msg["Subject"] or "",
     }
+    cc_recipients = _split_addresses(msg["Cc"] or "")
+    if cc_recipients:
+        payload["cc"] = cc_recipients
+    bcc_recipients = _split_addresses(msg["Bcc"] or "")
+    if bcc_recipients:
+        payload["bcc"] = bcc_recipients
     plain = msg.get_body(preferencelist=("plain",))
     html = msg.get_body(preferencelist=("html",))
     if plain is not None and plain.get_content_type() == "text/plain":

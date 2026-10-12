@@ -52,6 +52,10 @@ def _validate_ids(tenant_id: str, client_id: str) -> None:
         raise O365MailError(f"Ungültige client_id: {client_id!r}")
 
 
+def _split_addresses(raw: str) -> list[str]:
+    return [addr.strip() for addr in re.split(r"[,;]", raw) if addr.strip()]
+
+
 async def _acquire_token(
     *, org_id: int, tenant_id: str, client_id: str, client_secret: str, force: bool = False,
 ) -> str:
@@ -107,15 +111,22 @@ def _graph_payload(msg: EmailMessage) -> dict:
         content_type = "Text"
         content = ""
 
-    to_raw = msg["To"] or ""
-    recipients = [addr.strip() for addr in re.split(r"[,;]", to_raw) if addr.strip()]
+    recipients = _split_addresses(msg["To"] or "")
+
+    message = {
+        "subject": msg["Subject"] or "",
+        "body": {"contentType": content_type, "content": content},
+        "toRecipients": [{"emailAddress": {"address": addr}} for addr in recipients],
+    }
+    cc_recipients = _split_addresses(msg["Cc"] or "")
+    if cc_recipients:
+        message["ccRecipients"] = [{"emailAddress": {"address": addr}} for addr in cc_recipients]
+    bcc_recipients = _split_addresses(msg["Bcc"] or "")
+    if bcc_recipients:
+        message["bccRecipients"] = [{"emailAddress": {"address": addr}} for addr in bcc_recipients]
 
     return {
-        "message": {
-            "subject": msg["Subject"] or "",
-            "body": {"contentType": content_type, "content": content},
-            "toRecipients": [{"emailAddress": {"address": addr}} for addr in recipients],
-        },
+        "message": message,
         "saveToSentItems": "false",
     }
 
