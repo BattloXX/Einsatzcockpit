@@ -290,7 +290,7 @@
       <strong>Beendet / zurückgezogen</strong>
       <ul>
         {% for dispatch in ended_dispatches %}
-        <li><strong>{{ dispatch.einheit.label }}</strong> · {{ (dispatch.withdrawn_at or dispatch.beendet_at or dispatch.dispatched_at)|local_time }}{% if dispatch.withdrawn_grund or dispatch.beendet_grund %} · {{ dispatch.withdrawn_grund or dispatch.beendet_grund }}{% endif %}</li>
+        <li><strong>{{ dispatch.einheit.label }}</strong> · {{ (dispatch.withdrawn_at or dispatch.abgezogen_at or dispatch.beendet_at or dispatch.dispatched_at)|local_time }}{% if dispatch.abgezogen_at %} · abgezogen{% endif %}{% if dispatch.withdrawn_grund or dispatch.beendet_grund %} · {{ dispatch.withdrawn_grund or dispatch.beendet_grund }}{% endif %}</li>
         {% endfor %}
       </ul>
     </div>

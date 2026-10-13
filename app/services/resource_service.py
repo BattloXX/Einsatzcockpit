@@ -693,6 +693,9 @@ def oeffne_auftrag_wieder(
     dispatch.status_at = now
     dispatch.beendet_at = None
     dispatch.beendet_grund = None
+    dispatch.abgezogen_at = None
+    dispatch.abgezogen_by = None
+    dispatch.abgezogen_author = None
     dispatch.version += 1
     dispatch.geaendert_at = now
     text = f"Auftrag wiedereröffnet: {dispatch.einheit.label}"
@@ -722,6 +725,55 @@ def oeffne_auftrag_wieder(
         db, dispatch.site, ausloeser=f"{dispatch.einheit.label} wiedereröffnet",
         user=(user_id, author_name), quelle="manuell",
     ))
+
+
+def ziehe_fertige_einheit_ab(
+    db: Session,
+    dispatch: EinheitSiteDispatch,
+    *,
+    author_name: str | None,
+    user_id: int | None,
+    quelle: str,
+    automatisch: bool,
+) -> bool:
+    """Zieht eine beendete Disposition ab, ohne sie zurückzuziehen."""
+    if dispatch.withdrawn_at is not None:
+        raise ValueError("Auftrag ist zurückgezogen")
+    if dispatch.beendet_at is None:
+        raise ValueError("Auftrag ist nicht beendet")
+    if dispatch.abgezogen_at is not None:
+        return False
+
+    now = datetime.now(UTC)
+    dispatch.abgezogen_at = now
+    dispatch.abgezogen_by = user_id
+    dispatch.abgezogen_author = author_name
+    if not automatisch:
+        # version/geaendert_at zählen nur Führungsänderungen am Auftrag (Konflikterkennung).
+        dispatch.version += 1
+        dispatch.geaendert_at = now
+    einheit = dispatch.einheit
+    site = dispatch.site or db.get(IncidentSite, dispatch.site_id)
+    if einheit and einheit.incident_site_id == dispatch.site_id:
+        einheit.incident_site_id = None
+    label = einheit.label if einheit else "Einheit"
+    site_name = site.bezeichnung if site else str(dispatch.site_id)
+    text = f'{label} von "{site_name}" abgezogen'
+    if automatisch:
+        text += " (automatisch nach Abschluss)"
+    if site:
+        from app.services.site_log_service import add_site_log
+        add_site_log(
+            db, site, "einheit", text, user_id=user_id, author_name=author_name,
+            einheit_id=dispatch.einheit_id,
+        )
+    if einheit:
+        _journal(
+            db, einheit.lage_id, text, category="ressource", author_name=author_name,
+            user_id=user_id, einheit_id=einheit.id, site_id=dispatch.site_id,
+            ereignis_typ="abgezogen", quelle=quelle,
+        )
+    return True
 
 
 def set_vor_ort_at_site(
@@ -878,7 +930,7 @@ def withdraw_from_site(
     grund: str | None = None,
     quelle: str = "manuell",
     auftragsart: str | None = None,
-) -> None:
+) -> EinheitSiteDispatch:
     """Zieht Einheit von einer Einsatzstelle ab (withdrawn_at setzen)."""
     if grund is not None and len(grund.strip()) > 500:
         raise ValueError("Grund darf höchstens 500 Zeichen haben")
@@ -887,12 +939,20 @@ def withdraw_from_site(
         EinheitSiteDispatch.einheit_id == einheit_id,
         EinheitSiteDispatch.site_id == site_id,
         EinheitSiteDispatch.withdrawn_at.is_(None),
+        EinheitSiteDispatch.abgezogen_at.is_(None),
     )
     if auftragsart is not None:
         query = query.filter(EinheitSiteDispatch.auftragsart == auftragsart)
-    dispatch = query.first()
+    # Ein aktiver Auftrag hat Vorrang vor einem bereits beendeten Auftrag.
+    dispatch = query.order_by(EinheitSiteDispatch.beendet_at.is_not(None), EinheitSiteDispatch.id).first()
     if not dispatch:
         raise ValueError("Keine aktive Disposition für diese Einsatzstelle")
+
+    if dispatch.beendet_at is not None:
+        ziehe_fertige_einheit_ab(
+            db, dispatch, author_name=author_name, user_id=user_id, quelle=quelle, automatisch=False
+        )
+        return dispatch
 
     now = datetime.now(UTC)
     dispatch.withdrawn_at = now
@@ -925,6 +985,7 @@ def withdraw_from_site(
         setattr(dispatch, "phase_geaendert", aktualisiere_site_phase(
             db, site, ausloeser=f"{e.label} abgezogen", user=(user_id, author_name), quelle=quelle
         ))
+    return dispatch
 
 
 def get_active_dispatches_for_site(
@@ -1078,7 +1139,7 @@ def get_einheiten_chips_for_sites(
                 "farbe": EINHEIT_STATUS_COLOR.get(dispatch.einheit_status, "muted"),
                 "beendet": dispatch.beendet_at is not None,
             }
-            for dispatch in active + completed
+            for dispatch in active + completed if dispatch.abgezogen_at is None
         ]
 
         ohne_rueckmeldung_min = ohne_rueckmeldung_min_for_dispatches(
@@ -1775,7 +1836,8 @@ def kraefteuebersicht(db: Session, lage: MajorIncident) -> dict[str, Any]:
             .all()
         )
         for d in all_dispatches:
-            dispatched_sites_by_einheit.setdefault(d.einheit_id, []).append(d)
+            if d.abgezogen_at is None:
+                dispatched_sites_by_einheit.setdefault(d.einheit_id, []).append(d)
             if d.beendet_at is None:
                 active_dispatched_sites_by_einheit.setdefault(d.einheit_id, []).append(d)
                 if d.letzte_rueckmeldung_at is not None:

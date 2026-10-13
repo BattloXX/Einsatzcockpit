@@ -340,6 +340,7 @@ def _auftragsdaten(dispatch: EinheitSiteDispatch) -> dict:
         "version": dispatch.version,
         "dispatched_at": _iso_z(dispatch.dispatched_at),
         "status_at": _iso_z(dispatch.status_at),
+        "abgezogen_at": _iso_z(dispatch.abgezogen_at),
         "geaendert_at": _iso_z(dispatch.geaendert_at),
         "gmaps_url": (
             f"https://maps.google.com/?q={site.lat},{site.lng}"
@@ -535,6 +536,12 @@ def setze_einheit_status(
             category="ressource", author_name=author_name, user_id=user_id,
             einheit_id=ctx.einheit.id, site_id=site.id, ereignis_typ="begonnen",
             quelle=journal_quelle,
+        )
+
+    if neuer_status in EINHEIT_STATUS_BEENDET:
+        resource_service.ziehe_fertige_einheit_ab(
+            db, dispatch, author_name=author_name, user_id=user_id,
+            quelle=journal_quelle, automatisch=True,
         )
 
     from app.services.gsl_phase_automatik import aktualisiere_site_phase

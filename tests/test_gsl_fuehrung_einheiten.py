@@ -173,7 +173,7 @@ def test_auftrag_aendern_abschluss_und_wiedereroeffnen(client, monkeypatch):
     r = _post(client, f"{basis}/wiedereroeffnen")
     assert r.status_code == 200
     d, db = _dispatch(x["d1"])
-    assert (d.einheit_status, d.beendet_at, d.version) == ("zugewiesen", None, 3)
+    assert (d.einheit_status, d.beendet_at, d.abgezogen_at, d.version) == ("zugewiesen", None, None, 3)
     db.close()
 
 

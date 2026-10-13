@@ -459,6 +459,7 @@
         {% if dispatch.bestaetigt_at %}<span>Bestätigt {{ dispatch.bestaetigt_at|local_time }}</span>{% endif %}
         {% if dispatch.vor_ort_at %}<span>Vor Ort {{ dispatch.vor_ort_at|local_time }}</span>{% endif %}
         {% if dispatch.beendet_at %}<span>Beendet {{ dispatch.beendet_at|local_time }}</span>{% endif %}
+        {% if dispatch.abgezogen_at %}<span class="res-badge res-badge--muted">Abgezogen {{ dispatch.abgezogen_at|local_time }}</span>{% endif %}
         {% if dispatch.letzte_rueckmeldung_at %}<span>Letzte Rückmeldung {{ dispatch.letzte_rueckmeldung_at|local_time }}</span>{% endif %}
       </div>
       {% if dispatch.auftrag %}
@@ -490,6 +491,14 @@
           <button type="submit" class="btn btn--xs btn--ghost">Abziehen</button>
         </form>
         {% else %}
+        {% if not dispatch.abgezogen_at %}
+        <form hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/einheit-abziehen"
+              hx-target="#siteDetailContent"
+              hx-swap="innerHTML"
+              hx-vals='{"_csrf":"{{ request.state.csrf_token }}","einheit_id":"{{ e.id }}","auftragsart":"{{ dispatch.auftragsart }}"}'>
+          <button type="submit" class="btn btn--xs btn--ghost">Abziehen</button>
+        </form>
+        {% endif %}
         <form hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/einheit/{{ dispatch.id }}/wiedereroeffnen"
               hx-target="#siteDetailContent"
               hx-swap="innerHTML"

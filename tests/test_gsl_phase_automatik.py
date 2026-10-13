@@ -185,6 +185,7 @@ def test_two_abarbeitungen_finish_once():
         _status(db, a, da, "vor_ort"); _status(db, a, da, "abgeschlossen"); assert site.phase == SitePhase.in_arbeit
         _status(db, b, db_, "nicht_durchfuehrbar", grund="X")
         assert site.phase == SitePhase.fertig_gemeldet and len(_entries(db, site, "alle_fertig")) == 1
+        assert da.abgezogen_at is not None and db_.abgezogen_at is not None
 
 
 def test_finished_site_new_or_reopened_auftrag_is_disponiert():
@@ -338,8 +339,17 @@ def test_tablet_api_finished_erkundung_becomes_bewertet(client):
         json={"status": "abgeschlossen", "client_uuid": str(uuid4())}, headers=_h(client),
     )
     assert r.status_code == 200
+    erneut = client.post(
+        f"/einheit/api/auftrag/{x['d1']}/status",
+        json={"status": "abgeschlossen", "client_uuid": str(uuid4())}, headers=_h(client),
+    )
+    assert erneut.status_code == 200 and erneut.json()["geaendert"] is False
     db = SessionLocal(); set_tenant_context(db, None)
-    try: assert db.get(IncidentSite, x["a"]).phase == SitePhase.bewertet
+    try:
+        dispatch = db.get(EinheitSiteDispatch, x["d1"])
+        assert db.get(IncidentSite, x["a"]).phase == SitePhase.bewertet
+        assert dispatch.abgezogen_at is not None and dispatch.withdrawn_at is None
+        assert db.query(LageJournalEntry).filter_by(site_id=x["a"], ereignis_typ="abgezogen").count() == 1
     finally: db.close()
 
 

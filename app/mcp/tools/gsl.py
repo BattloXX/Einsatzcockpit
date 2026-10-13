@@ -650,28 +650,34 @@ async def gsl_auftrag_zurueckziehen(context: MCPContext, lage_id: int, einheit_i
         site = context.db.get(IncidentSite, site_id)
         if site is None or site.major_incident_id != lage.id:
             raise ValueError("Einsatzstelle nicht gefunden")
-        resource_service.withdraw_from_site(context.db, einheit_id, lage.id, site_id, author_name=_author(context),
-                                            user_id=context.user.id, grund=grund, quelle="mcp")
-        dispatch = (
-            context.db.query(EinheitSiteDispatch).filter_by(einheit_id=einheit_id, site_id=site_id)
-            .order_by(EinheitSiteDispatch.id.desc()).first()
+        dispatch = resource_service.withdraw_from_site(
+            context.db, einheit_id, lage.id, site_id, author_name=_author(context),
+            user_id=context.user.id, grund=grund, quelle="mcp",
         )
-        assert dispatch is not None
-        context.db.add(SiteLogEntry(
-            incident_site_id=site_id, kind="resource", text=f"Einheit abgezogen: {einheit.label}",
-            user_id=context.user.id, author_name=_author(context),
-        ))
+        if dispatch.withdrawn_at is not None:
+            context.db.add(SiteLogEntry(
+                incident_site_id=site_id, kind="resource", text=f"Einheit abgezogen: {einheit.label}",
+                user_id=context.user.id, author_name=_author(context),
+            ))
         _audit(context, "gsl.auftrag.zurueckgezogen", lage, dispatch.id, site_id=site_id, einheit_id=einheit_id)
         from app.services.gsl_auftrag_events import plane_benachrichtigungen, sende_nach_commit
-        notification = plane_benachrichtigungen(context.db, lage, einheit, dispatch, "zurueckgezogen")
+        notification = (
+            plane_benachrichtigungen(context.db, lage, einheit, dispatch, "zurueckgezogen")
+            if dispatch.withdrawn_at is not None else None
+        )
         context.db.commit()
-        await sende_nach_commit(notification)
+        if notification:
+            await sende_nach_commit(notification)
         await _broadcast(lage.id, site_id, einheit_id, dispatch.id)
         if getattr(dispatch, "phase_geaendert", False):
             await _broadcast_phase_changed(context.db, lage, site)
-        return {"dispatch_id": dispatch.id, "auftragsart": dispatch.auftragsart,
-                "site_phase": site.phase.value, "sms": "geplant" if notification.sms else "übersprungen",
-                "push": _push_geplant(context.db, einheit)}
+        return {
+            "dispatch_id": dispatch.id,
+            "auftragsart": dispatch.auftragsart,
+            "site_phase": site.phase.value,
+            "sms": "geplant" if notification and notification.sms else "übersprungen",
+            "push": _push_geplant(context.db, einheit),
+        }
     except Exception:
         context.db.rollback()
         raise

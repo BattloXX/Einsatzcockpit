@@ -697,6 +697,7 @@ def auftrag_detail(dispatch_id: int, ctx: EinheitKontext = Depends(einheit_konte
         .filter(
             EinheitSiteDispatch.site_id == site.id,
             EinheitSiteDispatch.withdrawn_at.is_(None),
+            EinheitSiteDispatch.abgezogen_at.is_(None),
             EinheitSiteDispatch.einheit_id != ctx.einheit.id,
         )
         .all()
@@ -1325,6 +1326,7 @@ def karte(ctx: EinheitKontext = Depends(einheit_kontext), db: Session = Depends(
             EinheitSiteDispatch.einheit_id == ctx.einheit.id,
             IncidentSite.major_incident_id == ctx.lage.id,
             EinheitSiteDispatch.withdrawn_at.is_(None),
+            EinheitSiteDispatch.abgezogen_at.is_(None),
             IncidentSite.lat.is_not(None),
             IncidentSite.lng.is_not(None),
         )
