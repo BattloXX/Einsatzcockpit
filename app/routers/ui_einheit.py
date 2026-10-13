@@ -429,7 +429,7 @@ def zustand(request: Request, ctx: EinheitKontext = Depends(einheit_kontext), db
     if leader and (leader.einheit_id != ctx.einheit.id or leader.end_at is not None):
         leader = None
     data["nummer"] = {
-        "hinweis": bool(ctx.quelle == "zugang" and (not leader or not leader.phone_verifiziert_at)),
+        "hinweis": bool(ctx.quelle == "zugang" and (not leader or not leader.phone_e164)),
         "maske": telefon_maske(leader.phone_e164) if leader and leader.phone_e164 else None,
         "verifiziert": bool(leader and leader.phone_verifiziert_at),
     }

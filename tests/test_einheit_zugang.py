@@ -8,6 +8,8 @@ from app.models.major_incident import (
     EinheitAktion,
     EinheitSiteDispatch,
     IncidentSite,
+    LageEinheit,
+    LageEinheitLeader,
     LageEinheitZugang,
     SiteLogEntry,
     SitePhase,
@@ -73,3 +75,16 @@ def test_widerruf_wird_vor_statuspost_geprueft(client):
         headers={"X-CSRF-Token": csrf},
     )
     assert response.status_code == 401
+
+
+def test_nummer_hinweis_nur_ohne_hinterlegte_nummer(client):
+    cookie, _, einheit_id, _ = _zugang_mit_auftrag()
+    client.cookies.set("ec_gk", cookie)
+    nummer = client.get("/einheit/api/zustand").json()["nummer"]
+    # Nummer ist hinterlegt (nur nicht per SMS bestätigt) → keine Abfrage.
+    assert nummer["hinweis"] is False and nummer["verifiziert"] is False and nummer["maske"]
+    with _session() as db:
+        leader = db.get(LageEinheitLeader, db.get(LageEinheit, einheit_id).leader_assignment_id)
+        leader.phone_verifiziert_at = leader.start_at
+        db.commit()
+    assert client.get("/einheit/api/zustand").json()["nummer"]["hinweis"] is False
