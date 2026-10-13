@@ -19,6 +19,7 @@ from app.mcp.context import MCPContext
 from app.mcp.registry import register_tool
 from app.models.objekt import OBJEKT_STATUS_ARCHIVIERT, Objekt, ObjektDokument, ObjektDokumentSeite
 from app.models.user import User
+from app.services.mcp_datei_url_service import lade_datei_von_url
 from app.services.mcp_dokument_seiten_service import bild_anhaengen, seite_ergebnis, seiten_text
 from app.services.mcp_download_service import erstelle_download_token, loese_datei
 from app.services.mcp_upload_service import (
@@ -184,7 +185,8 @@ def _uebergabe_sync(
 @register_tool(
     name="objekt_dokument_uebergeben",
     description=(
-        "Uebergibt ein PDF an ein Objekt. Genau eines von inhalt_base64 oder upload_id angeben. "
+        "Uebergibt ein PDF an ein Objekt. Genau eines von inhalt_base64, upload_id oder datei angeben. "
+        "datei ist fuer einen in ChatGPT angehaengten PDF-Anhang vorgesehen. "
         "Fuer grosse Dateien zuerst objekt_dokument_upload_vorbereiten aufrufen, die Datei mit dem dort "
         "gelieferten curl-Beispiel hochladen und danach upload_id uebergeben. seiten ist optional und hat "
         "das Format [{\"nr\":1,\"dokumentart\":\"bma_datenblatt\",\"titel\":null}]; optional pro Seite: "
@@ -198,15 +200,26 @@ def _uebergabe_sync(
 async def objekt_dokument_uebergeben(
     context: MCPContext,
     objekt_id: int,
-    dateiname: str,
+    dateiname: str | None = None,
     inhalt_base64: str | None = None,
     upload_id: str | None = None,
+    datei: dict | None = None,
     seiten: list[dict] | None = None,
     ersetzt_dokument_id: int | None = None,
 ) -> dict[str, object]:
-    if (inhalt_base64 is None) == (upload_id is None):
-        raise ValueError("Genau eines von inhalt_base64 oder upload_id ist erforderlich.")
+    if sum(wert is not None for wert in (inhalt_base64, upload_id, datei)) != 1:
+        raise ValueError("Genau eines von inhalt_base64, upload_id oder datei ist erforderlich.")
+    if datei is not None:
+        if not isinstance(datei, dict) or not isinstance(datei.get("download_url"), str):
+            raise ValueError("datei.download_url ist erforderlich.")
+        if dateiname is None:
+            dateiname = datei.get("file_name")
+    if not dateiname:
+        raise ValueError("dateiname ist erforderlich.")
     data = _decode_inhalt(inhalt_base64) if inhalt_base64 is not None else None
+    if datei is not None:
+        limit = effektives_limit(context.db)
+        data = await asyncio.to_thread(lade_datei_von_url, datei["download_url"], limit)
     return await asyncio.to_thread(
         _uebergabe_sync,
         context.org_id,

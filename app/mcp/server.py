@@ -20,7 +20,7 @@ from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 from mcp_types import ContentBlock, ImageContent, TextContent
-from pydantic import AnyHttpUrl, AnyUrl
+from pydantic import AnyHttpUrl, AnyUrl, BaseModel
 
 from app.config import settings
 from app.core.security import hash_api_key
@@ -1373,22 +1373,32 @@ async def objekt_aktualisieren(
     )
 
 
+class ChatGPTDatei(BaseModel):
+    download_url: str
+    file_id: str
+    mime_type: str | None = None
+    file_name: str | None = None
+
+
 @server.tool(
     name="objekt_dokument_uebergeben",
     description=(
-        "Uebergibt ein PDF an ein Objekt. Genau eines von inhalt_base64 oder upload_id angeben. "
+        "Uebergibt ein PDF an ein Objekt. Genau eines von inhalt_base64, upload_id oder datei angeben. "
+        "datei ist fuer einen in ChatGPT angehaengten PDF-Anhang vorgesehen. "
         "Fuer upload_id zuerst objekt_dokument_upload_vorbereiten aufrufen, dann die Datei mit dessen curl-Beispiel "
         "hochladen. seiten ist optional: [{\"nr\":1,\"dokumentart\":\"bma_datenblatt\",\"titel\":null}]; "
         "optional sind volltext, melderlinien, stand (YYYY-MM-DD), bei_einsatz_drucken. Fehlende Seiten werden "
         "serverseitig zur KI-Vorschlagsklassifizierung vorgemerkt. Korrekturen erfolgen ueber "
         "objekt_dokument_seiten_klassifizieren."
     ),
+    meta={"openai/fileParams": ["datei"]},
 )
 async def objekt_dokument_uebergeben(
     objekt_id: int,
-    dateiname: str,
+    dateiname: str | None = None,
     inhalt_base64: str | None = None,
     upload_id: str | None = None,
+    datei: ChatGPTDatei | None = None,
     seiten: list[dict] | None = None,
     ersetzt_dokument_id: int | None = None,
     ctx: Context | None = None,
@@ -1399,6 +1409,7 @@ async def objekt_dokument_uebergeben(
         dateiname=dateiname,
         inhalt_base64=inhalt_base64,
         upload_id=upload_id,
+        datei=datei.model_dump() if datei is not None else None,
         seiten=seiten,
         ersetzt_dokument_id=ersetzt_dokument_id,
     )
