@@ -19,6 +19,7 @@
     <div style="display:flex;gap:6px;flex-wrap:wrap;flex:1;">
       <a href="/archiv/{{ incident.id }}/pdf" target="_blank" class="btn btn--primary btn--sm">📄 PDF</a>
       <a href="/einsatz/{{ incident.id }}/historie" class="btn btn--ghost btn--sm">🕐 Verlauf</a>
+      <a href="/einsatz/{{ incident.id }}" class="btn btn--ghost btn--sm">🖥 Board ansehen</a>
       {% if can_edit and wp_report_available and incident.status == 'closed' %}
       <div id="webseiten-bericht-result" style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;">
         {% if incident.wp_report_post_id %}

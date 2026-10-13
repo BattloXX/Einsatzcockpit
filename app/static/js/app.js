@@ -905,6 +905,7 @@ function incidentBoard(incidentId, alarm, startedAt) {
     },
 
     _showAutocloseBanner(incidentId, graceMinutes) {
+      if (document.querySelector('[data-board-readonly="1"]')) return;
       if (document.getElementById('autocloseBanner')) return;
       const banner = document.createElement('div');
       banner.id = 'autocloseBanner';
@@ -1047,8 +1048,9 @@ document.addEventListener('htmx:responseError', (e) => {
       (verb === 'get' && trigger && /\b(?:every|load)\b/.test(trigger))) {
     return;
   }
-  if (xhr && xhr.status === 403) {
+  if (xhr && (xhr.status === 403 || xhr.status === 409)) {
     let msg = 'Diese Aktion ist nicht erlaubt.';
+    if (xhr.status === 409) msg = 'Einsatz ist abgeschlossen – zum Bearbeiten wieder eröffnen';
     try { msg = JSON.parse(xhr.responseText).detail || msg; } catch {}
     _showConnToast(msg);
     e.preventDefault();
