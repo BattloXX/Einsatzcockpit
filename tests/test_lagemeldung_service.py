@@ -1,10 +1,13 @@
 """Tests für den GSL-Lagemeldungs-Regelkreis (lagemeldung_service)."""
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 from app.models.major_incident import (
     AUTO_KIND_LAGEMELDUNG,
     CommLogEntry,
+    EinheitSiteDispatch,
     IncidentSite,
+    LageEinheit,
     MajorIncident,
     SitePhase,
     SitePriority,
@@ -97,7 +100,9 @@ def _mk_lage_site(db, *, phase=SitePhase.in_arbeit, with_resource=True):
     db.add(site)
     db.flush()
     if with_resource:
-        db.add(SiteResourceAssignment(incident_site_id=site.id, resource_type="free_text", label="RLF"))
+        db.add(SiteResourceAssignment(
+            incident_site_id=site.id, resource_type="free_text", label="RLF", committed_at=datetime.now(UTC),
+        ))
         db.flush()
     return lage, site
 
@@ -171,6 +176,42 @@ def test_clear_timer_closes_auftrag_and_resets():
         db.flush()
         assert site.naechste_lagemeldung_at is None
         assert auftrag.handled is True
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_register_lagemeldung_after_finished_erkundung_keeps_timer_clear():
+    db = _session()
+    try:
+        _set_interval(db, 60)
+        lage, site = _mk_lage_site(db, phase=SitePhase.bewertet, with_resource=False)
+        einheit = LageEinheit(lage_id=lage.id, label="Erkundung", status="bereitgestellt")
+        db.add(einheit)
+        db.flush()
+        db.add(EinheitSiteDispatch(
+            einheit_id=einheit.id, site_id=site.id, dispatched_at=datetime.now(UTC),
+            auftragsart="erkundung", einheit_status="abgeschlossen", beendet_at=datetime.now(UTC),
+        ))
+        site.naechste_lagemeldung_at = lm._now() + timedelta(minutes=60)
+        lm.register_lagemeldung(site, db)
+        assert site.naechste_lagemeldung_at is None
+    finally:
+        db.rollback()
+        db.close()
+
+
+def test_reminder_clears_stale_timer_without_active_resource():
+    from app.services.gsl_lagemeldung_reminder import _scan_and_create
+
+    db = _session()
+    try:
+        _set_interval(db, 60)
+        lage, site = _mk_lage_site(db, with_resource=False)
+        site.naechste_lagemeldung_at = lm._now() - timedelta(minutes=5)
+        events = _scan_and_create(db)
+        assert site.naechste_lagemeldung_at is None
+        assert events == [{"lage_id": lage.id, "site_id": site.id, "card_only": True}]
     finally:
         db.rollback()
         db.close()

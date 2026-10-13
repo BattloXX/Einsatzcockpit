@@ -620,14 +620,16 @@
           <div class="einheit-formular">
             <template x-if="istErkundung">
               <div class="einheit-formular">
-                <label for="erkundung-lage">Lage vor Ort (Pflicht)</label>
+                <label for="erkundung-lage">Lage vor Ort (optional)</label>
                 <textarea class="form-control einheit-textarea" x-model="erkundungLage"
                           id="erkundung-lage" placeholder="Lage vor Ort"></textarea>
-                <label for="erkundung-massnahmen">Notwendige Maßnahmen (Pflicht)</label>
+                <label for="erkundung-massnahmen">Notwendige Maßnahmen (optional)</label>
                 <textarea class="form-control einheit-textarea" x-model="erkundungMassnahmen"
                           id="erkundung-massnahmen" placeholder="Notwendige Maßnahmen"></textarea>
+                <label for="erkundung-fotos">Fotos (optional)</label>
+                <input x-ref="erkundungFotos" class="form-control" type="file" accept="image/*"
+                       capture="environment" multiple id="erkundung-fotos">
                 <button type="button" class="btn btn--primary btn--lg einheit-action"
-                        :disabled="!erkundungLage.trim() || !erkundungMassnahmen.trim()"
                         @click="erkundungAbschliessen()">Erkundung abschließen</button>
               </div>
             </template>

@@ -35,7 +35,9 @@ def test_add_site_log_setzt_felder_und_lagemeldung_timer_zurueck():
         db.add(settings)
         db.flush()
         settings.gsl_lagemeldung_interval_minutes = 60
-        db.add(SiteResourceAssignment(incident_site_id=site.id, resource_type="free_text", label="RLF"))
+        db.add(SiteResourceAssignment(
+            incident_site_id=site.id, resource_type="free_text", label="RLF", committed_at=datetime.now(UTC),
+        ))
         erfasst_at = datetime(2026, 10, 9, 12, 30, tzinfo=UTC).replace(tzinfo=None)
 
         entry = add_site_log(

@@ -35,8 +35,8 @@ LOOP_INTERVAL_SECONDS = 45
 def _scan_and_create(db) -> list[dict]:
     """Erzeugt fällige Auto-Aufträge und gibt die zu broadcastenden Events zurück.
 
-    Prüft zusätzlich auf Einsatzstellen ohne Timer (naechste_lagemeldung_at IS NULL)
-    und startet deren Timer – deckt Fälle ab, wo ensure_timer() nie ausgelöst wurde.
+    Gleicht zusätzlich alle offenen Einsatzstellen mit ihrem Ressourcenstatus ab:
+    fehlende Timer werden gesetzt, veraltete Timer ohne aktive Ressource gelöscht.
     """
     now = datetime.now(UTC).replace(tzinfo=None)
     candidates = (
@@ -45,7 +45,7 @@ def _scan_and_create(db) -> list[dict]:
         .filter(
             IncidentSite.naechste_lagemeldung_at.isnot(None),
             IncidentSite.naechste_lagemeldung_at <= now,
-            IncidentSite.phase == SitePhase.in_arbeit,
+            IncidentSite.phase.notin_([SitePhase.erledigt, SitePhase.abgebrochen]),
             MajorIncident.status == MajorIncidentStatus.active,
         )
         .all()
@@ -88,21 +88,18 @@ def _scan_and_create(db) -> list[dict]:
         changed = True
         events.append({"lage_id": site.major_incident_id, "site_id": site.id})
 
-    # ── Timer für Einsatzstellen ohne Timer nachziehen ──────────────────────────
-    # Deckt den Fall ab, dass ensure_timer() beim Ressourcen-/Phasenwechsel noch
-    # nicht korrekt ausgelöst wurde (z.B. Altdaten vor dem db.flush()-Fix).
-    missing_timer = (
+    # ── Timer mit Ressourcen- und Phasenstatus abgleichen ───────────────────────
+    timer_sites = (
         db.query(IncidentSite)
         .join(MajorIncident, MajorIncident.id == IncidentSite.major_incident_id)
         .filter(
-            IncidentSite.naechste_lagemeldung_at.is_(None),
-            IncidentSite.phase == SitePhase.in_arbeit,
+            IncidentSite.phase.notin_([SitePhase.erledigt, SitePhase.abgebrochen]),
             MajorIncident.status == MajorIncidentStatus.active,
         )
         .all()
     )
-    for site in missing_timer:
-        if lagemeldung_service.ensure_timer(site, db):
+    for site in timer_sites:
+        if lagemeldung_service.sync_timer(site, db):
             changed = True
             events.append({"lage_id": site.major_incident_id, "site_id": site.id, "card_only": True})
 

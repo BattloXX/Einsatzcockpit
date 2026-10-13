@@ -537,10 +537,6 @@ def setze_einheit_status(
             quelle=journal_quelle,
         )
 
-    phase_geaendert = False
-    if neuer_status in {"vor_ort", "in_arbeit"}:
-        from app.services import lagemeldung_service
-        lagemeldung_service.ensure_timer(site, db)
     from app.services.gsl_phase_automatik import aktualisiere_site_phase
     ausloeser = f"{ctx.einheit.label} " + _AUSLOESER.get(
         neuer_status, einheit_status_label(dispatch.auftragsart, neuer_status)

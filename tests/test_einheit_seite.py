@@ -141,7 +141,8 @@ def test_einheit_template_zeigt_naechsten_auftrag_und_erkundungsabschluss():
     assert 'x-show="naechster?.adresse"' in subcard
     assert 'x-text="naechster?.adresse"' in subcard
     assert 'x-show="naechster?.auftrag"' in subcard
-    assert "Lage vor Ort (Pflicht)" in template
-    assert "Notwendige Maßnahmen (Pflicht)" in template
-    assert ':disabled="!erkundungLage.trim() || !erkundungMassnahmen.trim()"' in template
+    assert "Lage vor Ort (optional)" in template
+    assert "Notwendige Maßnahmen (optional)" in template
+    assert 'x-ref="erkundungFotos"' in template
+    assert ':disabled="!erkundungLage.trim() || !erkundungMassnahmen.trim()"' not in template
     assert "async erkundungAbschliessen()" in javascript
