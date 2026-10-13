@@ -20,7 +20,7 @@ from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 from mcp_types import ContentBlock, ImageContent, TextContent
-from pydantic import AnyHttpUrl, AnyUrl
+from pydantic import AnyHttpUrl, AnyUrl, BaseModel
 
 from app.config import settings
 from app.core.security import hash_api_key
@@ -679,7 +679,9 @@ async def einsatz_objekte(
 
 @server.tool(
     name="einsatz_objekt_dokument_herunterladen",
-    description="Bereitet den Download eines freigegebenen Dokuments eines Einsatz-Objekts vor.",
+    description=("Bereitet den Download eines freigegebenen Dokuments eines Einsatz-Objekts vor. "
+                 "Zum Lesen durch das Modell einsatz_objekt_dokument_seite_ansehen / einsatz_objekt_dokument_text "
+                 "verwenden."),
 )
 async def einsatz_objekt_dokument_herunterladen(
     incident_id: int,
@@ -695,6 +697,32 @@ async def einsatz_objekt_dokument_herunterladen(
         seite=seite,
         inline=inline,
     )
+
+
+async def _dokument_seite_inhalt(name: str, **werte: object) -> list[ContentBlock]:
+    ergebnis = await _call_registered_tool(name, **werte)
+    bild = ergebnis.pop("bild_base64", None)
+    mime = ergebnis.pop("bild_mime", None)
+    inhalt: list[ContentBlock] = [TextContent(type="text", text=json.dumps(ergebnis, ensure_ascii=False, indent=2))]
+    if isinstance(bild, str) and isinstance(mime, str):
+        inhalt.append(ImageContent(type="image", data=bild, mime_type=mime))
+    return inhalt
+
+
+@server.tool(name="einsatz_objekt_dokument_seite_ansehen", description="Liest ein Einsatz-Objektdokument visuell Seite fuer Seite.")
+async def einsatz_objekt_dokument_seite_ansehen(incident_id: int, dokument_id: int, seite: int,
+                                                bild: bool = True, max_kante_px: int = 1600,
+                                                ctx: Context | None = None) -> list[ContentBlock]:
+    return await _dokument_seite_inhalt("einsatz_objekt_dokument_seite_ansehen", incident_id=incident_id,
+                                        dokument_id=dokument_id, seite=seite, bild=bild, max_kante_px=max_kante_px)
+
+
+@server.tool(name="einsatz_objekt_dokument_text", description="Liest den OCR-/Textindex eines Einsatz-Objektdokuments.")
+async def einsatz_objekt_dokument_text(incident_id: int, dokument_id: int, von_seite: int = 1,
+                                       bis_seite: int | None = None, max_zeichen: int = 60000,
+                                       ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("einsatz_objekt_dokument_text", incident_id=incident_id, dokument_id=dokument_id,
+                                       von_seite=von_seite, bis_seite=bis_seite, max_zeichen=max_zeichen)
 
 
 @server.tool(
@@ -1345,22 +1373,32 @@ async def objekt_aktualisieren(
     )
 
 
+class ChatGPTDatei(BaseModel):
+    download_url: str
+    file_id: str
+    mime_type: str | None = None
+    file_name: str | None = None
+
+
 @server.tool(
     name="objekt_dokument_uebergeben",
     description=(
-        "Uebergibt ein PDF an ein Objekt. Genau eines von inhalt_base64 oder upload_id angeben. "
+        "Uebergibt ein PDF an ein Objekt. Genau eines von inhalt_base64, upload_id oder datei angeben. "
+        "datei ist fuer einen in ChatGPT angehaengten PDF-Anhang vorgesehen. "
         "Fuer upload_id zuerst objekt_dokument_upload_vorbereiten aufrufen, dann die Datei mit dessen curl-Beispiel "
         "hochladen. seiten ist optional: [{\"nr\":1,\"dokumentart\":\"bma_datenblatt\",\"titel\":null}]; "
         "optional sind volltext, melderlinien, stand (YYYY-MM-DD), bei_einsatz_drucken. Fehlende Seiten werden "
         "serverseitig zur KI-Vorschlagsklassifizierung vorgemerkt. Korrekturen erfolgen ueber "
         "objekt_dokument_seiten_klassifizieren."
     ),
+    meta={"openai/fileParams": ["datei"]},
 )
 async def objekt_dokument_uebergeben(
     objekt_id: int,
-    dateiname: str,
+    dateiname: str | None = None,
     inhalt_base64: str | None = None,
     upload_id: str | None = None,
+    datei: ChatGPTDatei | None = None,
     seiten: list[dict] | None = None,
     ersetzt_dokument_id: int | None = None,
     ctx: Context | None = None,
@@ -1371,6 +1409,7 @@ async def objekt_dokument_uebergeben(
         dateiname=dateiname,
         inhalt_base64=inhalt_base64,
         upload_id=upload_id,
+        datei=datei.model_dump() if datei is not None else None,
         seiten=seiten,
         ersetzt_dokument_id=ersetzt_dokument_id,
     )
@@ -1397,6 +1436,7 @@ async def objekt_dokument_upload_vorbereiten(
         "Liefert einen kurzlebigen Download-Link fuer ein Objektdokument. dokument_id kommt aus "
         "objekt_dokumente_auflisten; optional seite fuer eine Einzelseite. Der Link ist ca. 15 Minuten "
         "gueltig und im Browser klickbar. inline=True nur fuer kleine Dateien verwenden."
+        " Zum Lesen durch das Modell objekt_dokument_seite_ansehen / objekt_dokument_text verwenden."
     ),
 )
 async def objekt_dokument_herunterladen(
@@ -1407,9 +1447,25 @@ async def objekt_dokument_herunterladen(
     )
 
 
-@server.tool(name="objekt_dokumente_auflisten", description="Listet Dokumente und Seiten eines Objekts.")
+@server.tool(name="objekt_dokumente_auflisten", description=("Listet Dokumente und Seiten eines Objekts. Zum Lesen "
+             "objekt_dokument_text und objekt_dokument_seite_ansehen verwenden."))
 async def objekt_dokumente_auflisten(objekt_id: int, ctx: Context | None = None) -> dict[str, object]:
     return await _call_registered_tool("objekt_dokumente_auflisten", objekt_id=objekt_id)
+
+
+@server.tool(name="objekt_dokument_seite_ansehen", description=("Liest einen Plan visuell Seite fuer Seite, etwa BMZ, "
+             "FBF, Laufkarten und Schluesselsafe-Standorte; volltext ist OCR und kann Fehler enthalten."))
+async def objekt_dokument_seite_ansehen(dokument_id: int, seite: int, bild: bool = True,
+                                        max_kante_px: int = 1600, ctx: Context | None = None) -> list[ContentBlock]:
+    return await _dokument_seite_inhalt("objekt_dokument_seite_ansehen", dokument_id=dokument_id, seite=seite,
+                                        bild=bild, max_kante_px=max_kante_px)
+
+
+@server.tool(name="objekt_dokument_text", description="Liest den OCR-/Textindex eines Objektdokuments seitenweise.")
+async def objekt_dokument_text(dokument_id: int, von_seite: int = 1, bis_seite: int | None = None,
+                               max_zeichen: int = 60000, ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("objekt_dokument_text", dokument_id=dokument_id, von_seite=von_seite,
+                                       bis_seite=bis_seite, max_zeichen=max_zeichen)
 
 
 @server.tool(

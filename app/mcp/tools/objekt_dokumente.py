@@ -19,6 +19,8 @@ from app.mcp.context import MCPContext
 from app.mcp.registry import register_tool
 from app.models.objekt import OBJEKT_STATUS_ARCHIVIERT, Objekt, ObjektDokument, ObjektDokumentSeite
 from app.models.user import User
+from app.services.mcp_datei_url_service import lade_datei_von_url
+from app.services.mcp_dokument_seiten_service import bild_anhaengen, seite_ergebnis, seiten_text
 from app.services.mcp_download_service import erstelle_download_token, loese_datei
 from app.services.mcp_upload_service import (
     MCPUploadFehler,
@@ -183,7 +185,8 @@ def _uebergabe_sync(
 @register_tool(
     name="objekt_dokument_uebergeben",
     description=(
-        "Uebergibt ein PDF an ein Objekt. Genau eines von inhalt_base64 oder upload_id angeben. "
+        "Uebergibt ein PDF an ein Objekt. Genau eines von inhalt_base64, upload_id oder datei angeben. "
+        "datei ist fuer einen in ChatGPT angehaengten PDF-Anhang vorgesehen. "
         "Fuer grosse Dateien zuerst objekt_dokument_upload_vorbereiten aufrufen, die Datei mit dem dort "
         "gelieferten curl-Beispiel hochladen und danach upload_id uebergeben. seiten ist optional und hat "
         "das Format [{\"nr\":1,\"dokumentart\":\"bma_datenblatt\",\"titel\":null}]; optional pro Seite: "
@@ -197,15 +200,26 @@ def _uebergabe_sync(
 async def objekt_dokument_uebergeben(
     context: MCPContext,
     objekt_id: int,
-    dateiname: str,
+    dateiname: str | None = None,
     inhalt_base64: str | None = None,
     upload_id: str | None = None,
+    datei: dict | None = None,
     seiten: list[dict] | None = None,
     ersetzt_dokument_id: int | None = None,
 ) -> dict[str, object]:
-    if (inhalt_base64 is None) == (upload_id is None):
-        raise ValueError("Genau eines von inhalt_base64 oder upload_id ist erforderlich.")
+    if sum(wert is not None for wert in (inhalt_base64, upload_id, datei)) != 1:
+        raise ValueError("Genau eines von inhalt_base64, upload_id oder datei ist erforderlich.")
+    if datei is not None:
+        if not isinstance(datei, dict) or not isinstance(datei.get("download_url"), str):
+            raise ValueError("datei.download_url ist erforderlich.")
+        if dateiname is None:
+            dateiname = datei.get("file_name")
+    if not dateiname:
+        raise ValueError("dateiname ist erforderlich.")
     data = _decode_inhalt(inhalt_base64) if inhalt_base64 is not None else None
+    if datei is not None:
+        limit = effektives_limit(context.db)
+        data = await asyncio.to_thread(lade_datei_von_url, datei["download_url"], limit)
     return await asyncio.to_thread(
         _uebergabe_sync,
         context.org_id,
@@ -259,7 +273,8 @@ async def objekt_dokument_upload_vorbereiten(
 _DOWNLOAD_BESCHREIBUNG = (
     "Liefert einen kurzlebigen Download-Link fuer ein Objektdokument. dokument_id kommt aus "
     "objekt_dokumente_auflisten; optional seite fuer eine Einzelseite. Der Link ist ca. 15 Minuten "
-    "gueltig und im Browser klickbar. inline=True nur fuer kleine Dateien verwenden."
+    "gueltig und im Browser klickbar. inline=True nur fuer kleine Dateien verwenden. "
+    "Zum Lesen durch das Modell objekt_dokument_seite_ansehen / objekt_dokument_text verwenden."
 )
 
 
@@ -315,7 +330,8 @@ async def objekt_dokument_herunterladen(
 
 @register_tool(
     name="objekt_dokumente_auflisten",
-    description="Listet Dokumente und Seiten eines Objekts.",
+    description=("Listet Dokumente und Seiten eines Objekts. Zum Lesen objekt_dokument_text und "
+                 "objekt_dokument_seite_ansehen verwenden."),
     required_roles=("objekt_verwalter",),
     module_check=objekt_modul_aktiv,
 )
@@ -339,11 +355,70 @@ async def objekt_dokumente_auflisten(context: MCPContext, objekt_id: int) -> dic
                 "seitenzahl": d.seitenzahl,
                 "groesse_bytes": d.groesse_bytes,
                 "mime": d.mime,
-                "seiten": [{"nr": s.seiten_nr, "dokumentart": s.dokumentart, "titel": s.titel} for s in d.seiten],
+                "seiten": [{"nr": s.seiten_nr, "dokumentart": s.dokumentart, "titel": s.titel,
+                            "hat_bild": bool(s.bild_pfad or s.thumb_pfad), "text_quelle": s.text_quelle,
+                            "textlaenge": len(s.volltext or "")} for s in d.seiten],
             }
             for d in dokumente
         ],
     }
+
+
+def _lesbares_dokument(context: MCPContext, dokument_id: int) -> ObjektDokument:
+    dokument = (context.db.query(ObjektDokument)
+                .filter(ObjektDokument.id == dokument_id, ObjektDokument.org_id == context.org_id).first())
+    if dokument is None:
+        raise ValueError("Dokument nicht gefunden.")
+    objekt = context.db.query(Objekt).filter(
+        Objekt.id == dokument.objekt_id, Objekt.org_id == context.org_id
+    ).first()
+    if objekt is None:
+        raise ValueError("Objekt nicht gefunden.")
+    return dokument
+
+
+def _seite(dokument: ObjektDokument, nr: int, context: MCPContext) -> ObjektDokumentSeite:
+    seite = (context.db.query(ObjektDokumentSeite)
+             .filter(ObjektDokumentSeite.dokument_id == dokument.id, ObjektDokumentSeite.seiten_nr == nr).first())
+    if seite is None:
+        raise ValueError("Seite nicht gefunden.")
+    return seite
+
+
+@register_tool(
+    name="objekt_dokument_seite_ansehen",
+    description=("Liest einen Plan visuell Seite fuer Seite, etwa BMZ, FBF, Laufkarten und Schluesselsafe-Standorte. "
+                 "volltext ist OCR und kann Fehler enthalten."),
+    required_roles=("objekt_verwalter",), module_check=objekt_modul_aktiv,
+)
+async def objekt_dokument_seite_ansehen(context: MCPContext, dokument_id: int, seite: int,
+                                        bild: bool = True, max_kante_px: int = 1600) -> dict[str, object]:
+    dokument = _lesbares_dokument(context, dokument_id)
+    row = _seite(dokument, seite, context)
+    result = seite_ergebnis(dokument, row)
+    if bild:
+        await asyncio.to_thread(bild_anhaengen, result, row, max_kante_px)
+    write_audit(context.db, "objekt.mcp_seite_angesehen", org_id=context.org_id, user_id=context.user.id,
+                entity_type="objekt_dokument", entity_id=dokument.id,
+                payload={"objekt_id": dokument.objekt_id, "seite": row.seiten_nr})
+    context.db.commit()
+    return result
+
+
+@register_tool(
+    name="objekt_dokument_text", description="Liest den OCR-/Textindex eines Objektdokuments seitenweise.",
+    required_roles=("objekt_verwalter",), module_check=objekt_modul_aktiv,
+)
+async def objekt_dokument_text(context: MCPContext, dokument_id: int, von_seite: int = 1,
+                               bis_seite: int | None = None, max_zeichen: int = 60000) -> dict[str, object]:
+    dokument = _lesbares_dokument(context, dokument_id)
+    ende = bis_seite if bis_seite is not None else dokument.seitenzahl
+    if von_seite < 1 or ende < von_seite:
+        raise ValueError("Ungueltiger Seitenbereich.")
+    seiten = (context.db.query(ObjektDokumentSeite).filter(ObjektDokumentSeite.dokument_id == dokument.id,
+              ObjektDokumentSeite.seiten_nr >= von_seite, ObjektDokumentSeite.seiten_nr <= ende)
+              .order_by(ObjektDokumentSeite.seiten_nr).all())
+    return {"dokument_id": dokument.id, **seiten_text(seiten, max_zeichen)}
 
 
 @register_tool(

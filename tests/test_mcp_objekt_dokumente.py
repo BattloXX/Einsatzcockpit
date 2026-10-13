@@ -17,6 +17,8 @@ TOOLS_DOKUMENTE = {
     "objekt_dokument_uebergeben",
     "objekt_dokumente_auflisten",
     "objekt_dokument_seiten_klassifizieren",
+    "objekt_dokument_seite_ansehen",
+    "objekt_dokument_text",
 }
 
 
@@ -85,7 +87,9 @@ def test_uebergabe_entwurf_freigabeversionen_auflisten_und_audit(client):
     )
     assert wartend["wartet_freigabe"]
     listed = _rufe(client, token, "objekt_dokumente_auflisten", objekt_id=seed["objekt_id"])
-    assert listed["dokumente"][0]["seiten"][0].keys() == {"nr", "dokumentart", "titel"}
+    assert listed["dokumente"][0]["seiten"][0].keys() == {
+        "nr", "dokumentart", "titel", "hat_bild", "text_quelle", "textlaenge"
+    }
     assert "pfad" not in json.dumps(listed)
     db = SessionLocal()
     set_tenant_context(db, None)
