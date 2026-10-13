@@ -1,6 +1,7 @@
 """Regression tests for privacy-safe MCP incident reads."""
 
 import json
+from datetime import datetime
 
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
@@ -8,6 +9,8 @@ from app.mcp.registry import TOOLS
 from app.models.incident import (
     Incident,
     IncidentColumn,
+    IncidentCommLog,
+    IncidentLog,
     IncidentOrg,
     IncidentVehicle,
     Message,
@@ -15,10 +18,28 @@ from app.models.incident import (
     RescuedPerson,
     Task,
 )
+from app.models.kontakt import Kontakt
 from app.models.master import VehicleMaster
+from app.models.objekt import (
+    GefahrenKatalog,
+    ObjektDokument,
+    ObjektDokumentSeite,
+    ObjektEinsatz,
+    ObjektGefahr,
+    ObjektKontakt,
+)
 from tests.test_mcp_objekte import _mcp, _seed, _token
 
-EINSATZ_TOOLS = {"einsaetze_liste", "einsatz_lesen", "einsatz_einheiten", "einsatz_auftraege", "einsatz_meldungen"}
+EINSATZ_TOOLS = {
+    "einsaetze_liste",
+    "einsatz_lesen",
+    "einsatz_einheiten",
+    "einsatz_auftraege",
+    "einsatz_meldungen",
+    "einsatz_verlauf",
+    "einsatz_objekte",
+    "einsatz_lagebild",
+}
 
 
 def _rpc(response):
@@ -151,3 +172,91 @@ def test_privacy_filter_and_media(client):
     assert [item["titel"] for item in tasks["items"]] == ["Offener Auftrag"]
     media = _rufe(client, token, "einsatz_meldungen", incident_id=incident_id)["items"][0]["medien"]
     assert media == [media[0]] and media[0]["dateiname"] == "bild.jpg" and "storage_path" not in media[0]
+
+
+def test_verlauf_objekte_und_lagebild_ohne_personendaten(client):
+    seed = _seed("mcp-einsatz-p2", {"read": "readonly"}, objekt=True, kontakte=True)
+    token = _token(client, seed, "read")
+    incident_id, _ = _einsatz(seed["org_id"])
+    db = _db()
+    try:
+        zeit = datetime(2026, 1, 2, 3, 4, 5)
+        db.add_all(
+            [
+                IncidentLog(
+                    incident_id=incident_id,
+                    ts=zeit,
+                    text="Tagebuch sichtbar",
+                    author_name="Autor Geheim",
+                ),
+                IncidentLog(incident_id=incident_id, ts=zeit, text="Person Geheim", entity_type="person"),
+                IncidentCommLog(
+                    incident_id=incident_id,
+                    ts=zeit.replace(second=6),
+                    direction="in",
+                    message="Funk sichtbar",
+                    author_name="Autor Geheim",
+                ),
+            ]
+        )
+        gefahr = GefahrenKatalog(org_id=seed["org_id"], name="Gefahr sichtbar")
+        kontakt = Kontakt(org_id=seed["org_id"], typ="person", anzeigename="Kontakt Geheim")
+        db.add_all([gefahr, kontakt])
+        db.flush()
+        db.add_all(
+            [
+                ObjektEinsatz(
+                    org_id=seed["org_id"],
+                    incident_id=incident_id,
+                    objekt_id=seed["objekt_id"],
+                    quelle="manuell",
+                    status="bestaetigt",
+                ),
+                ObjektGefahr(org_id=seed["org_id"], objekt_id=seed["objekt_id"], gefahr_id=gefahr.id),
+                ObjektKontakt(org_id=seed["org_id"], objekt_id=seed["objekt_id"], kontakt_id=kontakt.id),
+            ]
+        )
+        dokument = ObjektDokument(
+            org_id=seed["org_id"],
+            objekt_id=seed["objekt_id"],
+            dateiname_original="plan.pdf",
+            pfad="plan.pdf",
+            seitenzahl=1,
+        )
+        db.add(dokument)
+        db.flush()
+        db.add(
+            ObjektDokumentSeite(
+                org_id=seed["org_id"],
+                objekt_id=seed["objekt_id"],
+                dokument_id=dokument.id,
+                seiten_nr=1,
+                bei_einsatz_drucken=True,
+            )
+        )
+        db.commit()
+    finally:
+        db.close()
+    verlauf = _rufe(client, token, "einsatz_verlauf", incident_id=incident_id)
+    assert [row["quelle"] for row in verlauf["eintraege"]] == ["tagebuch", "funkjournal"]
+    assert "Autor Geheim" not in json.dumps(verlauf) and "Person Geheim" not in json.dumps(verlauf)
+    funkjournal = _rufe(
+        client,
+        token,
+        "einsatz_verlauf",
+        incident_id=incident_id,
+        quellen=["funkjournal"],
+    )
+    assert len(funkjournal["eintraege"]) == 1
+    objekte = _rufe(client, token, "einsatz_objekte", incident_id=incident_id)["objekte"]
+    assert objekte[0]["kontakte_anzahl"] == 1 and objekte[0]["dokumente"][0]["seiten"][0]["nr"] == 1
+    assert "Kontakt Geheim" not in json.dumps(objekte)
+    lagebild = _rufe(client, token, "einsatz_lagebild", incident_id=incident_id)
+    assert {
+        "einsatz",
+        "einheiten",
+        "offene_auftraege",
+        "offene_meldungen",
+        "objekte",
+        "letzte_eintraege",
+    } <= set(lagebild)

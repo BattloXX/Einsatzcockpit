@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import String, or_
@@ -11,16 +12,35 @@ from sqlalchemy.orm import joinedload, selectinload
 from app.core.timezones import local_date_to_utc
 from app.mcp.context import MCPContext
 from app.mcp.registry import register_tool
-from app.models.incident import Incident, IncidentColumn, IncidentOrg, IncidentVehicle, Message, Task
+from app.models.incident import (
+    Incident,
+    IncidentColumn,
+    IncidentCommLog,
+    IncidentLog,
+    IncidentOrg,
+    IncidentVehicle,
+    Message,
+    Task,
+)
 from app.models.master import FireDept, VehicleMaster
+from app.models.objekt import (
+    OBJEKT_EINSATZ_BESTAETIGT,
+    OBJEKT_EINSATZ_VORSCHLAG,
+    Objekt,
+    ObjektDokument,
+    ObjektEinsatz,
+)
 from app.services.einsatz_mcp_service import (
+    _PERSONEN_ENTITY_TYPES,
     EINSATZ_LESE_ROLLEN,
     json_value,
     message_dict,
+    objekt_einsatz_payload,
     sichtbarer_einsatz,
     task_dict,
     ui_link,
 )
+from app.services.objekt_service import objekt_effective_enabled
 
 
 def _org(context: MCPContext) -> FireDept:
@@ -381,3 +401,224 @@ async def einsatz_meldungen(
     abschnitt_id: int | None = None,
 ) -> dict[str, object]:
     return await _items(context, incident_id, status, einheit_id, abschnitt_id, Message)
+
+
+def _seit_utc(seit: str) -> datetime | None:
+    if not seit:
+        return None
+    try:
+        value = datetime.fromisoformat(seit.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError("seit muss ein ISO-Zeitpunkt sein.") from exc
+    if value.tzinfo is not None:
+        return value.astimezone(UTC).replace(tzinfo=None)
+    return value
+
+
+def _verlauf_eintraege(
+    context: MCPContext,
+    incident_id: int,
+    quellen: list[str] | None = None,
+    seit: str = "",
+    limit: int = 200,
+) -> list[dict[str, Any]]:
+    erlaubte_quellen = {"tagebuch", "funkjournal"}
+    if quellen is None:
+        quellen = ["tagebuch", "funkjournal"]
+    if not set(quellen) <= erlaubte_quellen:
+        raise ValueError("Ungültige Quelle.")
+    if not 1 <= limit <= 500:
+        raise ValueError("limit muss zwischen 1 und 500 liegen.")
+    sichtbarer_einsatz(context.db, context.org_id, incident_id)
+    seit_zeit = _seit_utc(seit)
+    eintraege: list[dict[str, Any]] = []
+    if "tagebuch" in quellen:
+        query = context.db.query(IncidentLog).filter(IncidentLog.incident_id == incident_id)
+        if seit_zeit is not None:
+            query = query.filter(IncidentLog.ts >= seit_zeit)
+        for row in query.all():
+            if (row.entity_type or "").lower() in _PERSONEN_ENTITY_TYPES:
+                continue
+            eintraege.append(
+                {
+                    "quelle": "tagebuch",
+                    "zeit": row.ts,
+                    "level": row.level,
+                    "text": row.text,
+                    "bezug": {"typ": row.entity_type, "id": row.entity_id},
+                }
+            )
+    if "funkjournal" in quellen:
+        comm_query = context.db.query(IncidentCommLog).filter(IncidentCommLog.incident_id == incident_id)
+        if seit_zeit is not None:
+            comm_query = comm_query.filter(IncidentCommLog.ts >= seit_zeit)
+        eintraege.extend(
+            {
+                "quelle": "funkjournal",
+                "zeit": row.ts,
+                "richtung": row.direction,
+                "kanal": row.channel,
+                "partner": row.partner,
+                "text": row.message,
+                "anforderung": row.is_request,
+                "lagerelevant": row.is_lage_relevant,
+                "erledigt": row.handled,
+            }
+            for row in comm_query.all()
+        )
+    eintraege.sort(key=lambda row: row["zeit"])
+    return eintraege[-limit:]
+
+
+@register_tool(
+    name="einsatz_verlauf",
+    description="Liest Einsatz-Tagebuch und Funkjournal; nur lesend und ohne Personendaten.",
+    required_roles=EINSATZ_LESE_ROLLEN,
+)
+async def einsatz_verlauf(
+    context: MCPContext,
+    incident_id: int,
+    quellen: list[str] | None = None,
+    seit: str = "",
+    limit: int = 200,
+) -> dict[str, object]:
+    return {
+        "eintraege": json_value(_verlauf_eintraege(context, incident_id, quellen, seit, limit)),
+        "ui_link": ui_link(incident_id),
+    }
+
+
+def _objekt_optionen():
+    return (
+        selectinload(ObjektEinsatz.objekt),
+        selectinload(ObjektEinsatz.objekt).selectinload(Objekt.bma),
+        selectinload(ObjektEinsatz.objekt).selectinload(Objekt.kontakte),
+        selectinload(ObjektEinsatz.objekt).selectinload(Objekt.gefahren),
+        selectinload(ObjektEinsatz.objekt).selectinload(Objekt.merkmale),
+        selectinload(ObjektEinsatz.objekt).selectinload(Objekt.zusatzadressen),
+        selectinload(ObjektEinsatz.objekt).selectinload(Objekt.wohnanlage),
+    )
+
+
+def _objekte(context: MCPContext, incident_id: int, inklusive_vorschlaege: bool) -> list[dict[str, Any]]:
+    sichtbarer_einsatz(context.db, context.org_id, incident_id)
+    if not objekt_effective_enabled(context.org_id, context.db):
+        return []
+    query = (
+        context.db.query(ObjektEinsatz)
+        .options(*_objekt_optionen())
+        .filter(
+            ObjektEinsatz.incident_id == incident_id,
+            ObjektEinsatz.status.in_([OBJEKT_EINSATZ_BESTAETIGT, OBJEKT_EINSATZ_VORSCHLAG]),
+        )
+    )
+    if not inklusive_vorschlaege:
+        query = query.filter(ObjektEinsatz.status == OBJEKT_EINSATZ_BESTAETIGT)
+    verknuepfungen = query.order_by(ObjektEinsatz.erstellt_am, ObjektEinsatz.id).all()
+    objekt_ids = [row.objekt_id for row in verknuepfungen]
+    dokumente_nach_objekt: dict[int, list[ObjektDokument]] = {}
+    if objekt_ids:
+        for dokument in (
+            context.db.query(ObjektDokument)
+            .options(selectinload(ObjektDokument.seiten))
+            .filter(
+                ObjektDokument.objekt_id.in_(objekt_ids),
+                ObjektDokument.ist_aktuelle_version.is_(True),
+                ObjektDokument.freigabe_status == "freigegeben",
+            )
+            .all()
+        ):
+            dokumente_nach_objekt.setdefault(dokument.objekt_id, []).append(dokument)
+    result = []
+    for verknuepfung in verknuepfungen:
+        objekt = verknuepfung.objekt
+        if objekt is None or objekt.entwurf_von_id is not None:
+            continue
+        payload = objekt_einsatz_payload(context.db, objekt)
+        payload["verknuepfung"] = {
+            "quelle": verknuepfung.quelle,
+            "status": verknuepfung.status,
+            "distanz_m": verknuepfung.distanz_m,
+            "erstellt": verknuepfung.erstellt_am,
+        }
+        payload["dokumente"] = [
+            {
+                "id": dokument.id,
+                "dateiname": dokument.dateiname_original,
+                "seitenzahl": dokument.seitenzahl,
+                "mime": dokument.mime,
+                "groesse_bytes": dokument.groesse_bytes,
+                "seiten": [
+                    {
+                        "nr": seite.seiten_nr,
+                        "dokumentart": seite.dokumentart,
+                        "titel": seite.titel,
+                        "bei_einsatz_drucken": seite.bei_einsatz_drucken,
+                    }
+                    for seite in dokument.seiten
+                ],
+            }
+            for dokument in dokumente_nach_objekt.get(objekt.id, [])
+        ]
+        result.append(json_value(payload))
+    return result
+
+
+@register_tool(
+    name="einsatz_objekte",
+    description="Liest verknüpfte Einsatz-Objekte; nur lesend und ohne Personendaten.",
+    required_roles=EINSATZ_LESE_ROLLEN,
+)
+async def einsatz_objekte(
+    context: MCPContext, incident_id: int, inklusive_vorschlaege: bool = True
+) -> dict[str, object]:
+    sichtbarer_einsatz(context.db, context.org_id, incident_id)
+    if not objekt_effective_enabled(context.org_id, context.db):
+        return {"objekte": [], "hinweis": "Objektmodul nicht aktiv.", "ui_link": ui_link(incident_id)}
+    return {"objekte": _objekte(context, incident_id, inklusive_vorschlaege), "ui_link": ui_link(incident_id)}
+
+
+@register_tool(
+    name="einsatz_lagebild",
+    description="Liest ein kompaktes Einsatz-Lagebild; nur lesend und ohne Personendaten.",
+    required_roles=EINSATZ_LESE_ROLLEN,
+)
+async def einsatz_lagebild(context: MCPContext, incident_id: int) -> dict[str, object]:
+    incident = sichtbarer_einsatz(context.db, context.org_id, incident_id)
+    einheiten = await einsatz_einheiten(context, incident_id)
+    auftraege = await _items(context, incident_id, "offen", None, None, Task)
+    meldungen = await _items(context, incident_id, "offen", None, None, Message)
+    objekte = _objekte(context, incident_id, True) if objekt_effective_enabled(context.org_id, context.db) else []
+    for item in auftraege["items"] + meldungen["items"]:  # type: ignore[operator]
+        item["medien_anzahl"] = len(item.pop("medien"))
+    return json_value(
+        {
+            "einsatz": {
+                "id": incident.id,
+                "nummer": incident.nummer,
+                "alarmstufe": incident.alarm_type_code,
+                "status": incident.status,
+                "begonnen": incident.started_at,
+                "reason": incident.reason,
+                "adresse": incident.address_street,
+                "ort": incident.address_city,
+                "einsatzleiter_name": incident.incident_leader_name,
+            },
+            "einheiten": einheiten["einheiten"],
+            "offene_auftraege": auftraege["items"],
+            "offene_meldungen": meldungen["items"],
+            "objekte": [
+                {
+                    "id": objekt["id"],
+                    "name": objekt["name"],
+                    "adresse": objekt["adresse_zeile"],
+                    "verknuepfungsstatus": objekt["verknuepfung"]["status"],
+                    "gefahren": [gefahr["name"] for gefahr in objekt["gefahren"]],
+                    "bma_vorhanden": objekt["bma"] is not None,
+                }
+                for objekt in objekte
+            ],
+            "letzte_eintraege": _verlauf_eintraege(context, incident_id, limit=20),
+            "ui_link": ui_link(incident_id),
+        }
+    )

@@ -8,8 +8,21 @@ from typing import Any
 from app.config import settings
 from app.core.permissions import STRASSENSPERREN_LESE_ROLLEN
 from app.models.incident import Incident, IncidentOrg, Message, MessageMedia, Task, TaskMedia
+from app.models.objekt import Objekt, ObjektBMA
 
 EINSATZ_LESE_ROLLEN = STRASSENSPERREN_LESE_ROLLEN
+
+# Die Personenkarte schreibt "person" (siehe incident/_person_modal.html). Die
+# weiteren Werte decken alte sowie modellnahe Einträge defensiv ab.
+_PERSONEN_ENTITY_TYPES = {
+    "person",
+    "rescued_person",
+    "rescuedperson",
+    "breathing_troop",
+    "breathingtroop",
+    "atemschutz",
+    "atemschutz_pruefung",
+}
 
 
 def json_value(value: Any) -> Any:
@@ -109,3 +122,89 @@ def message_dict(message: Message) -> dict[str, Any]:
             "medien": [medium_dict(medium) for medium in message.media],
         }
     )
+
+
+def objekt_einsatz_payload(db: Any, objekt: Objekt) -> dict[str, Any]:
+    """Serialisiert Objekt-Einsatzdaten ohne Kontakt- oder Verwaltungsdaten."""
+    del db
+    return {
+        "id": objekt.id,
+        "anzeige_nummer": objekt.anzeige_nummer,
+        "name": objekt.name,
+        "adresse_zeile": objekt.adresse_zeile,
+        "status": objekt.status,
+        "vulgoname": objekt.vulgoname,
+        "kategorie_id": objekt.kategorie_id,
+        "kategorie": objekt.kategorie.name if objekt.kategorie else None,
+        "lat": objekt.lat,
+        "lng": objekt.lng,
+        "informationen": objekt.informationen,
+        "anfahrtsweg": objekt.anfahrtsweg,
+        "revision_datum": objekt.revision_datum.isoformat() if objekt.revision_datum else None,
+        "adresse": {
+            "strasse": objekt.strasse,
+            "hausnummer": objekt.hausnummer,
+            "plz": objekt.plz,
+            "ort": objekt.ort,
+        },
+        "bma": (
+            {
+                column.name: getattr(objekt.bma, column.name)
+                for column in ObjektBMA.__table__.columns
+                if column.name not in {"id", "org_id", "objekt_id", "benachrichtigung_sms", "benachrichtigung_email"}
+            }
+            | {
+                "benachrichtigung_sms_gesetzt": bool(objekt.bma.benachrichtigung_sms),
+                "benachrichtigung_email_gesetzt": bool(objekt.bma.benachrichtigung_email),
+            }
+            if objekt.bma
+            else None
+        ),
+        "gefahren": [
+            {
+                "id": gefahr.id,
+                "gefahr_id": gefahr.gefahr_id,
+                "name": gefahr.gefahr.name if gefahr.gefahr else None,
+                "un_nummer": gefahr.un_nummer,
+                "stoffname": gefahr.stoffname,
+                "gefahrklasse": gefahr.gefahrklasse,
+                "gefahrnummer": gefahr.gefahrnummer,
+                "detail": gefahr.detail,
+                "links": gefahr.links,
+                "sort": gefahr.sort,
+            }
+            for gefahr in objekt.gefahren
+        ],
+        "merkmale": [
+            {
+                "id": merkmal.id,
+                "merkmal_id": merkmal.merkmal_id,
+                "name": merkmal.merkmal.name if merkmal.merkmal else None,
+                "hinweis": merkmal.hinweis,
+            }
+            for merkmal in objekt.merkmale
+        ],
+        "zusatzadressen": [
+            {
+                "id": adresse.id,
+                "bezeichnung": adresse.bezeichnung,
+                "strasse": adresse.strasse,
+                "hausnummer": adresse.hausnummer,
+                "plz": adresse.plz,
+                "ort": adresse.ort,
+                "sort": adresse.sort,
+            }
+            for adresse in objekt.zusatzadressen
+        ],
+        "wohnanlage": (
+            {
+                "wohneinheiten": objekt.wohnanlage.wohneinheiten,
+                "geschosse": objekt.wohnanlage.geschosse,
+                "stiegen": objekt.wohnanlage.stiegen,
+                "hinweise": objekt.wohnanlage.hinweise,
+            }
+            if objekt.wohnanlage
+            else None
+        ),
+        "kontakte_anzahl": len(objekt.kontakte),
+    }

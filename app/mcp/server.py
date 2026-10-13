@@ -565,6 +565,7 @@ ShareLinkActionLiteral = Literal["abrufen", "erzeugen", "widerrufen"]
 StatsScopeLiteral = Literal["alle", "oeffentlich"]
 EinsatzListStatusLiteral = Literal["aktiv", "abgeschlossen", "alle"]
 EinsatzItemStatusLiteral = Literal["alle", "offen", "erledigt", "storniert"]
+EinsatzVerlaufQuelleLiteral = Literal["tagebuch", "funkjournal"]
 
 
 @server.tool(name="einsaetze_liste", description="Listet sichtbare Einsätze; nur lesend und ohne Personendaten.")
@@ -590,6 +591,41 @@ async def einsatz_auftraege(incident_id: int, status: EinsatzItemStatusLiteral =
 @server.tool(name="einsatz_meldungen", description="Listet Einsatz-Meldungen; nur lesend und ohne Personendaten.")
 async def einsatz_meldungen(incident_id: int, status: EinsatzItemStatusLiteral = "alle", einheit_id: int | None = None, abschnitt_id: int | None = None, ctx: Context | None = None) -> dict[str, object]:
     return await _call_registered_tool("einsatz_meldungen", incident_id=incident_id, status=status, einheit_id=einheit_id, abschnitt_id=abschnitt_id)
+
+
+@server.tool(name="einsatz_verlauf", description="Liest Einsatz-Verlauf; nur lesend und ohne Personendaten.")
+async def einsatz_verlauf(
+    incident_id: int,
+    quellen: list[EinsatzVerlaufQuelleLiteral] | None = None,
+    seit: str = "",
+    limit: int = 200,
+    ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "einsatz_verlauf",
+        incident_id=incident_id,
+        quellen=quellen,
+        seit=seit,
+        limit=limit,
+    )
+
+
+@server.tool(name="einsatz_objekte", description="Liest Einsatz-Objekte; nur lesend und ohne Personendaten.")
+async def einsatz_objekte(
+    incident_id: int,
+    inklusive_vorschlaege: bool = True,
+    ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "einsatz_objekte",
+        incident_id=incident_id,
+        inklusive_vorschlaege=inklusive_vorschlaege,
+    )
+
+
+@server.tool(name="einsatz_lagebild", description="Liest ein Einsatz-Lagebild; nur lesend und ohne Personendaten.")
+async def einsatz_lagebild(incident_id: int, ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("einsatz_lagebild", incident_id=incident_id)
 
 
 @server.tool(name="strassensperren_liste", description="Listet sichtbare Straßensperren (road_closures_list). Einschränkungstypen: closed (Vollsperre), partial (Teilsperre), construction (Baustelle), one_way (Einbahn), weight_limit (Gewicht), height_limit (Höhe), width_limit (Breite), residents_only (Anrainer), difficult_passage (erschwert), other (sonstige).")  # noqa: E501
