@@ -5,7 +5,7 @@ from datetime import datetime
 
 from app.models.master import OrgSettings
 from app.models.org_mail import OrgMailEingang
-from app.services.mail_zuordnung_service import _allowed, _html_text
+from app.services.mail_zuordnung_service import _allowed, _html_text, leitstellennummer_aus_betreff
 
 
 def _entry(**values) -> OrgMailEingang:
@@ -34,3 +34,14 @@ def test_html_wird_zu_text_ohne_tags_oder_remote_content():
     text = _html_text('<p>Alarm <strong>jetzt</strong></p><img src="https://evil.invalid/a.png">')
     assert text == "Alarm jetzt"
     assert "<" not in text and "evil.invalid" not in text
+
+
+def test_leitstellennummer_aus_betreff_erkennt_nur_das_erste_token():
+    assert leitstellennummer_aus_betreff(
+        "f26009038 t1 WOLFURT L41 - SENDERSTRASSE"
+    ) == "f26009038"
+    assert leitstellennummer_aus_betreff("AW: F26009038 Antwort") == "f26009038"
+    assert leitstellennummer_aus_betreff("fu26303655 Übung") == "fu26303655"
+    assert leitstellennummer_aus_betreff("Einsatzinfo f26009038") is None
+    assert leitstellennummer_aus_betreff("") is None
+    assert leitstellennummer_aus_betreff(None) is None
