@@ -90,6 +90,8 @@ Die lesenden Einsatz-Werkzeuge stehen allen Einsatzrollen ab `readonly` zur Verf
 
 `einsatz_objekte` und `einsatz_objekt_dokument_herunterladen` benötigen zusätzlich das aktivierte Objektmodul. Objekt-Dokumente sind nur für aktuelle, freigegebene Versionen eines mit dem Einsatz verknüpften Basisobjekts verfügbar; Arbeitskopien bleiben ausgeschlossen. Die beiden Einsatz-Download-Werkzeuge geben einen 15 Minuten gültigen Link aus. Dieser benötigt keine Sitzung, prüft beim Abruf aber Benutzerstatus, Rolle, Einsatzsichtbarkeit, Modulstatus und Dokument- beziehungsweise Medienzuordnung erneut.
 
+`einsatz_auftrag_anlegen` und `einsatz_meldung_anlegen` benötigen `incident_leader` oder `recorder`; `admin`, `org_admin` und `system_admin` sind wie im Board ebenfalls berechtigt. Sie dürfen nur sichtbare, nicht abgeschlossene Einsätze ändern. Die Aktionen werden als `einsatz.mcp_auftrag_angelegt` beziehungsweise `einsatz.mcp_meldung_angelegt` im Audit-Log festgehalten.
+
 Zentrale Kontakte dürfen per MCP angelegt, aktualisiert, archiviert und zusammengeführt werden. Das Archivieren eines Kontakts mit Objektzuordnungen erfordert `bestaetigt=true`; das Zusammenführen erfordert dies immer. SMS- und Mail-Freigaben je Objektkontakt sowie der SMS-Versand bleiben ausschließlich im Einsatzcockpit. Kontakt-Import und -Export stehen ebenfalls nur in der Oberfläche zur Verfügung.
 
 ## Verbindungen trennen und Fehlersuche

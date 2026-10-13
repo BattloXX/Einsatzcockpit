@@ -11,6 +11,7 @@ from app.models.incident import Incident, IncidentOrg, Message, MessageMedia, Ta
 from app.models.objekt import Objekt, ObjektBMA
 
 EINSATZ_LESE_ROLLEN = STRASSENSPERREN_LESE_ROLLEN
+EINSATZ_SCHREIB_ROLLEN = ("incident_leader", "recorder")
 
 # Die Personenkarte schreibt "person" (siehe incident/_person_modal.html). Die
 # weiteren Werte decken alte sowie modellnahe Einträge defensiv ab.

@@ -6,6 +6,7 @@ import asyncio
 import base64
 import hashlib
 import json
+import logging
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
@@ -41,6 +42,7 @@ from app.models.objekt import (
 from app.services.einsatz_mcp_service import (
     _PERSONEN_ENTITY_TYPES,
     EINSATZ_LESE_ROLLEN,
+    EINSATZ_SCHREIB_ROLLEN,
     json_value,
     message_dict,
     objekt_einsatz_payload,
@@ -51,6 +53,8 @@ from app.services.einsatz_mcp_service import (
 from app.services.mcp_download_service import erstelle_download_token, loese_datei
 from app.services.media_service import absolute_path
 from app.services.objekt_service import objekt_effective_enabled
+
+logger = logging.getLogger(__name__)
 
 
 def _org(context: MCPContext) -> FireDept:
@@ -464,6 +468,141 @@ async def einsatz_meldungen(
     abschnitt_id: int | None = None,
 ) -> dict[str, object]:
     return await _items(context, incident_id, status, einheit_id, abschnitt_id, Message)
+
+
+def _offener_einsatz(context: MCPContext, incident_id: int) -> Incident:
+    incident = sichtbarer_einsatz(context.db, context.org_id, incident_id)
+    if incident.status == "closed":
+        raise ValueError("Einsatz ist abgeschlossen – zum Bearbeiten wieder eröffnen.")
+    return incident
+
+
+def _titel(titel: str) -> str:
+    value = titel.strip()
+    if not value:
+        raise ValueError("titel ist erforderlich.")
+    if len(value) > 500:
+        raise ValueError("titel darf höchstens 500 Zeichen lang sein.")
+    return value
+
+
+def _einheit(context: MCPContext, incident: Incident, einheit_id: int | None) -> None:
+    if einheit_id is None:
+        return
+    einheit = context.db.get(IncidentVehicle, einheit_id)
+    if einheit is None or einheit.incident_id != incident.id or einheit.removed_at is not None:
+        raise ValueError("Einheit nicht gefunden.")
+
+
+@register_tool(
+    name="einsatz_auftrag_anlegen",
+    description="Legt einen Auftrag im sichtbaren, offenen Einsatzboard an.",
+    required_roles=EINSATZ_SCHREIB_ROLLEN,
+)
+async def einsatz_auftrag_anlegen(
+    context: MCPContext,
+    incident_id: int,
+    titel: str,
+    detail: str = "",
+    einheit_id: int | None = None,
+    abschnitt_id: int | None = None,
+) -> dict[str, object]:
+    from app.services.broadcast import manager
+    from app.services.incident_service import add_task, prepend_card
+
+    incident = _offener_einsatz(context, incident_id)
+    titel = _titel(titel)
+    _einheit(context, incident, einheit_id)
+    if abschnitt_id is not None:
+        abschnitt = context.db.get(IncidentColumn, abschnitt_id)
+        if abschnitt is None or abschnitt.incident_id != incident.id or abschnitt.column_kind != "tasks":
+            raise ValueError("Abschnitt nicht gefunden.")
+    task = add_task(
+        context.db,
+        incident,
+        titel,
+        detail or None,
+        user_id=context.user.id,
+        column_id=abschnitt_id,
+    )
+    if einheit_id is not None:
+        task.vehicle_id = einheit_id
+    prepend_card(context.db, task.column_id, "task", task.id)
+    write_audit(
+        context.db,
+        "einsatz.mcp_auftrag_angelegt",
+        org_id=context.org_id,
+        user_id=context.user.id,
+        entity_type="task",
+        entity_id=task.id,
+        payload={"incident_id": incident.id},
+    )
+    context.db.commit()
+    context.db.refresh(task)
+    try:
+        await manager.broadcast(
+            incident.id,
+            {"type": "task_created", "task_id": task.id, "column_id": task.column_id, "vehicle_uid": task.vehicle_id},
+        )
+    except Exception:
+        logger.warning(
+            "MCP-Auftrag erstellt, Broadcast fehlgeschlagen: incident_id=%s task_id=%s", incident.id, task.id
+        )
+    return {"angelegt": True, "auftrag": task_dict(task), "ui_link": ui_link(incident.id)}
+
+
+@register_tool(
+    name="einsatz_meldung_anlegen",
+    description="Legt eine Meldung im sichtbaren, offenen Einsatzboard an.",
+    required_roles=EINSATZ_SCHREIB_ROLLEN,
+)
+async def einsatz_meldung_anlegen(
+    context: MCPContext,
+    incident_id: int,
+    titel: str,
+    detail: str = "",
+    status: str = "meldung",
+    faellig_in_min: int = 0,
+    einheit_id: int | None = None,
+) -> dict[str, object]:
+    from app.services.incident_service import add_message, broadcast_message_created
+
+    incident = _offener_einsatz(context, incident_id)
+    titel = _titel(titel)
+    _einheit(context, incident, einheit_id)
+    if status not in {"meldung", "achtung", "hinweis", "information"}:
+        raise ValueError("Ungültiger Status.")
+    if not 0 <= faellig_in_min <= 1440:
+        raise ValueError("faellig_in_min muss zwischen 0 und 1440 liegen.")
+    msg = add_message(
+        context.db,
+        incident,
+        title=titel,
+        detail=detail or None,
+        status=status,
+        due_after_min=faellig_in_min,
+        vehicle_id=einheit_id,
+        author_name=f"{context.user.display_name or context.user.username} (MCP)",
+        user_id=context.user.id,
+    )
+    write_audit(
+        context.db,
+        "einsatz.mcp_meldung_angelegt",
+        org_id=context.org_id,
+        user_id=context.user.id,
+        entity_type="message",
+        entity_id=msg.id,
+        payload={"incident_id": incident.id},
+    )
+    context.db.commit()
+    context.db.refresh(msg)
+    try:
+        await broadcast_message_created(incident.id, msg)
+    except Exception:
+        logger.warning(
+            "MCP-Meldung erstellt, Broadcast fehlgeschlagen: incident_id=%s message_id=%s", incident.id, msg.id
+        )
+    return {"angelegt": True, "meldung": message_dict(msg), "ui_link": ui_link(incident.id)}
 
 
 def _seit_utc(seit: str) -> datetime | None:

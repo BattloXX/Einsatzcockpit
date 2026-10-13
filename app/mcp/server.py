@@ -567,6 +567,7 @@ EinsatzListStatusLiteral = Literal["aktiv", "abgeschlossen", "alle"]
 EinsatzItemStatusLiteral = Literal["alle", "offen", "erledigt", "storniert"]
 EinsatzVerlaufQuelleLiteral = Literal["tagebuch", "funkjournal"]
 EinsatzMediumArtLiteral = Literal["auftrag", "meldung"]
+EinsatzMeldungStatusLiteral = Literal["meldung", "achtung", "hinweis", "information"]
 
 
 @server.tool(name="einsaetze_liste", description="Listet sichtbare Einsätze; nur lesend und ohne Personendaten.")
@@ -592,6 +593,58 @@ async def einsatz_auftraege(incident_id: int, status: EinsatzItemStatusLiteral =
 @server.tool(name="einsatz_meldungen", description="Listet Einsatz-Meldungen; nur lesend und ohne Personendaten.")
 async def einsatz_meldungen(incident_id: int, status: EinsatzItemStatusLiteral = "alle", einheit_id: int | None = None, abschnitt_id: int | None = None, ctx: Context | None = None) -> dict[str, object]:
     return await _call_registered_tool("einsatz_meldungen", incident_id=incident_id, status=status, einheit_id=einheit_id, abschnitt_id=abschnitt_id)
+
+
+@server.tool(
+    name="einsatz_auftrag_anlegen",
+    description=(
+        "Legt einen Auftrag im Einsatzboard an. Rechte wie im Board: Einsatzleiter, Schriftführer oder Admin. "
+        "Bei abgeschlossenen Einsätzen nicht verfügbar."
+    ),
+)
+async def einsatz_auftrag_anlegen(
+    incident_id: int,
+    titel: str,
+    detail: str = "",
+    einheit_id: int | None = None,
+    abschnitt_id: int | None = None,
+    ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "einsatz_auftrag_anlegen",
+        incident_id=incident_id,
+        titel=titel,
+        detail=detail,
+        einheit_id=einheit_id,
+        abschnitt_id=abschnitt_id,
+    )
+
+
+@server.tool(
+    name="einsatz_meldung_anlegen",
+    description=(
+        "Legt eine Meldung im Einsatzboard an. Rechte wie im Board: Einsatzleiter, Schriftführer oder Admin. "
+        "Bei abgeschlossenen Einsätzen nicht verfügbar."
+    ),
+)
+async def einsatz_meldung_anlegen(
+    incident_id: int,
+    titel: str,
+    detail: str = "",
+    status: EinsatzMeldungStatusLiteral = "meldung",
+    faellig_in_min: int = 0,
+    einheit_id: int | None = None,
+    ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "einsatz_meldung_anlegen",
+        incident_id=incident_id,
+        titel=titel,
+        detail=detail,
+        status=status,
+        faellig_in_min=faellig_in_min,
+        einheit_id=einheit_id,
+    )
 
 
 @server.tool(name="einsatz_verlauf", description="Liest Einsatz-Verlauf; nur lesend und ohne Personendaten.")
