@@ -27,6 +27,7 @@ from app.core.security import hash_api_key
 from app.db import SessionLocal
 from app.mcp.context import MCPPermissionError, load_live_context
 from app.mcp.registry import TOOLS
+from app.mcp.tools import einsatz as _einsatz  # noqa: F401 - registriert Einsatz-Lesetools
 from app.mcp.tools import fahrtenbuch as _fahrtenbuch  # noqa: F401 - registriert Fahrtenbuch-Tools
 from app.mcp.tools import gsl as _gsl  # noqa: F401 - registriert GSL-Ressourcen-Tools
 from app.mcp.tools import kontakt as _kontakt  # noqa: F401 - registriert Kontakt-Tools
@@ -562,6 +563,33 @@ ClosurePeriodLiteral = Literal["", "heute", "7tage", "30tage"]
 ClosureScopeLiteral = Literal["alle", "eigene", "nachbarn"]
 ShareLinkActionLiteral = Literal["abrufen", "erzeugen", "widerrufen"]
 StatsScopeLiteral = Literal["alle", "oeffentlich"]
+EinsatzListStatusLiteral = Literal["aktiv", "abgeschlossen", "alle"]
+EinsatzItemStatusLiteral = Literal["alle", "offen", "erledigt", "storniert"]
+
+
+@server.tool(name="einsaetze_liste", description="Listet sichtbare Einsätze; nur lesend und ohne Personendaten.")
+async def einsaetze_liste(status: EinsatzListStatusLiteral = "aktiv", von: str = "", bis: str = "", suchtext: str = "", uebung: bool | None = None, limit: int = 25, ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("einsaetze_liste", status=status, von=von, bis=bis, suchtext=suchtext, uebung=uebung, limit=limit)
+
+
+@server.tool(name="einsatz_lesen", description="Liest sichtbare Einsatz-Stammdaten; nur lesend und ohne Personendaten.")
+async def einsatz_lesen(incident_id: int, ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("einsatz_lesen", incident_id=incident_id)
+
+
+@server.tool(name="einsatz_einheiten", description="Listet Einsatz-Einheiten; nur lesend und ohne Personendaten.")
+async def einsatz_einheiten(incident_id: int, inklusive_abgezogene: bool = False, ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("einsatz_einheiten", incident_id=incident_id, inklusive_abgezogene=inklusive_abgezogene)
+
+
+@server.tool(name="einsatz_auftraege", description="Listet Einsatz-Aufträge; nur lesend und ohne Personendaten.")
+async def einsatz_auftraege(incident_id: int, status: EinsatzItemStatusLiteral = "alle", einheit_id: int | None = None, abschnitt_id: int | None = None, ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("einsatz_auftraege", incident_id=incident_id, status=status, einheit_id=einheit_id, abschnitt_id=abschnitt_id)
+
+
+@server.tool(name="einsatz_meldungen", description="Listet Einsatz-Meldungen; nur lesend und ohne Personendaten.")
+async def einsatz_meldungen(incident_id: int, status: EinsatzItemStatusLiteral = "alle", einheit_id: int | None = None, abschnitt_id: int | None = None, ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("einsatz_meldungen", incident_id=incident_id, status=status, einheit_id=einheit_id, abschnitt_id=abschnitt_id)
 
 
 @server.tool(name="strassensperren_liste", description="Listet sichtbare Straßensperren (road_closures_list). Einschränkungstypen: closed (Vollsperre), partial (Teilsperre), construction (Baustelle), one_way (Einbahn), weight_limit (Gewicht), height_limit (Höhe), width_limit (Breite), residents_only (Anrainer), difficult_passage (erschwert), other (sonstige).")  # noqa: E501
