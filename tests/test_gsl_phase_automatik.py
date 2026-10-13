@@ -13,6 +13,7 @@ from app.models.major_incident import (
     EinheitSiteDispatch, IncidentSite, LageEinheit, LageJournalEntry, MajorIncident,
     MajorIncidentStatus, SitePhase,
 )
+from app.models.master import OrgSettings
 from app.services import resource_service as rs
 from app.services.einheit_service import (
     EinheitKonflikt, einheit_status_label, kontext_fuer_einheit, setze_einheit_status,
@@ -54,6 +55,16 @@ def _unit(db, lage):
         lage_id=lage.id, label=f"E-{uuid4().hex}", resource_type="fahrzeug", status=rs.STATUS_BEREITGESTELLT,
     )
     db.add(x); db.flush(); return x
+
+
+def _enable_lagemeldung_timer(db):
+    settings = db.query(OrgSettings).filter(OrgSettings.org_id == 1).first()
+    if settings is None:
+        settings = OrgSettings(org_id=1)
+        db.add(settings)
+        db.flush()
+    settings.gsl_lagemeldung_interval_minutes = 60
+    db.flush()
 
 
 def _status(db, unit, dispatch, status, quelle="funk", grund=None):
@@ -135,6 +146,21 @@ def test_abarbeitung_statuses_progress_to_in_arbeit():
         _status(db, unit, dispatch, "bestaetigt"); _status(db, unit, dispatch, "anfahrt")
         assert site.phase == SitePhase.disponiert; _status(db, unit, dispatch, "vor_ort")
         assert site.phase == SitePhase.in_arbeit
+
+
+def test_timer_starts_on_confirmation_and_stops_after_last_dispatch():
+    with _session() as db:
+        _enable_lagemeldung_timer(db)
+        lage, site = _lage(db), None; site = _site(db, lage)
+        unit = _unit(db, lage)
+        dispatch = rs.dispatch_to_site(db, unit.id, lage.id, site.id)
+        assert site.phase == SitePhase.disponiert
+        assert site.naechste_lagemeldung_at is None
+        _status(db, unit, dispatch, "bestaetigt")
+        assert site.naechste_lagemeldung_at is not None
+        _status(db, unit, dispatch, "vor_ort")
+        _status(db, unit, dispatch, "abgeschlossen")
+        assert site.naechste_lagemeldung_at is None
 
 
 def test_abarbeitung_direct_in_arbeit_is_allowed():

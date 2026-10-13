@@ -43,11 +43,15 @@ def _zielphase(dispatches: list[EinheitSiteDispatch], aktuelle_phase: SitePhase 
 
 def aktualisiere_site_phase(db, site, *, ausloeser: str, user=None, quelle: str) -> bool:
     """Berechnet die automatische Phase nach einer Dispatch-Mutation."""
+    from app.services import lagemeldung_service
+
     if site.phase in {SitePhase.erledigt, SitePhase.abgebrochen}:
+        lagemeldung_service.sync_timer(site, db)
         return False
     dispatches = db.query(EinheitSiteDispatch).filter(EinheitSiteDispatch.site_id == site.id).all()
     ziel = _zielphase(dispatches, site.phase)
     if ziel is None:
+        lagemeldung_service.sync_timer(site, db)
         return False
     user_id, author_name = _userdaten(user)
     changed = setze_site_phase(
@@ -64,6 +68,7 @@ def aktualisiere_site_phase(db, site, *, ausloeser: str, user=None, quelle: str)
             author_name=author_name, user_id=user_id, site_id=site.id,
             ereignis_typ=ereignis, quelle=quelle,
         )
+    lagemeldung_service.sync_timer(site, db)
     return changed
 
 

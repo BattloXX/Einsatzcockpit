@@ -1086,8 +1086,8 @@ async def site_einheit_freigeben(
         author_name=get_author_name(request),
     ))
     site = db.get(IncidentSite, site_id)
-    if site and not lagemeldung_service.has_active_resource(site, db):
-        lagemeldung_service.clear_timer(site, db)
+    if site:
+        lagemeldung_service.sync_timer(site, db)
     from app.services.gsl_auftrag_events import plane_benachrichtigungen, sende_nach_commit
     benachrichtigung = plane_benachrichtigungen(db, lage, einheit, dispatch, "zurueckgezogen") if dispatch else None
     db.commit()
@@ -1365,7 +1365,7 @@ async def site_einheit_vor_ort(
             user_id=user.id,
             author_name=get_author_name(request),
         ))
-        lagemeldung_service.ensure_timer(site, db)
+        lagemeldung_service.sync_timer(site, db)
         db.commit()
         await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
         html = _site_detail_html_with_oob(request, db, lage, site, user)
@@ -1405,7 +1405,7 @@ async def site_einheit_vor_ort(
         user_id=user.id,
         author_name=get_author_name(request),
     ))
-    lagemeldung_service.ensure_timer(site, db)
+    lagemeldung_service.sync_timer(site, db)
     db.commit()
     if dispatch and getattr(dispatch, "neu_angelegt", False):
         from app.services.print_dispatcher import autoprint_gsl_stelle_disponiert_background
@@ -1464,8 +1464,7 @@ async def site_einheit_abziehen(
         user_id=user.id,
         author_name=get_author_name(request),
     ))
-    if not lagemeldung_service.has_active_resource(site, db):
-        lagemeldung_service.clear_timer(site, db)
+    lagemeldung_service.sync_timer(site, db)
     from app.services.gsl_auftrag_events import plane_benachrichtigungen, sende_nach_commit
     benachrichtigung = plane_benachrichtigungen(db, lage, einheit, dispatch, "zurueckgezogen") if dispatch else None
     db.commit()
@@ -1672,7 +1671,7 @@ async def site_resource_assign(
         _sync_einheit_assign(db, lage_id, site, vehicle_id, get_author_name(request), user.id)
         if vehicle_id else None
     )
-    lagemeldung_service.ensure_timer(site, db)
+    lagemeldung_service.sync_timer(site, db)
     db.commit()
     if dispatch:
         from app.services.print_dispatcher import autoprint_gsl_stelle_disponiert_background
@@ -1707,6 +1706,9 @@ async def site_resource_commit(
         user_id=user.id,
         author_name=get_author_name(request),
     ))
+    site = db.get(IncidentSite, site_id)
+    if site:
+        lagemeldung_service.sync_timer(site, db)
     db.commit()
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
     return Response(status_code=204)
@@ -1741,8 +1743,8 @@ async def site_resource_release(
     if res.vehicle_id:
         _sync_einheit_pool(db, lage_id, res.vehicle_id, get_author_name(request), user.id)
     site = db.get(IncidentSite, site_id)
-    if site and not lagemeldung_service.has_active_resource(site, db):
-        lagemeldung_service.clear_timer(site, db)
+    if site:
+        lagemeldung_service.sync_timer(site, db)
     db.commit()
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
     return Response(status_code=204)

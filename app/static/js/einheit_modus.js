@@ -512,17 +512,32 @@ function registriere() {
     async erkundungAbschliessen() {
       const lage = this.erkundungLage.trim();
       const massnahmen = this.erkundungMassnahmen.trim();
-      if (!lage || !massnahmen) return;
-      await this.outboxErfassen({
-        typ: "meldung", dispatch_id: this.detail.auftrag.dispatch_id, einheit_id: this.einheitId,
-        auftrag_version: this.detail.auftrag.version,
-        payload: reineDaten({
-          art: "lagemeldung", text: `Erkundung: ${lage}\nNotwendige Maßnahmen: ${massnahmen}`,
-          felder: { lage, massnahmen },
-        }),
-      });
+      if (lage || massnahmen) {
+        const teile = [];
+        if (lage) teile.push(`Erkundung: ${lage}`);
+        if (massnahmen) teile.push(`Notwendige Maßnahmen: ${massnahmen}`);
+        await this.outboxErfassen({
+          typ: "meldung", dispatch_id: this.detail.auftrag.dispatch_id, einheit_id: this.einheitId,
+          auftrag_version: this.detail.auftrag.version,
+          payload: reineDaten({
+            art: "lagemeldung", text: teile.join("\n"), felder: { lage, massnahmen },
+          }),
+        });
+      }
+      const input = this.$refs.erkundungFotos;
+      if (input?.files?.length) {
+        if (window.compressFilesInPlace) await window.compressFilesInPlace(input);
+        for (const file of input.files) {
+          await this.outboxErfassen({
+            typ: "foto", dispatch_id: this.detail.auftrag.dispatch_id, einheit_id: this.einheitId,
+            auftrag_version: this.detail.auftrag.version, blob: file, dateiname: file.name,
+            payload: { kommentar: "Erkundung" },
+          });
+        }
+      }
       this.erkundungLage = "";
       this.erkundungMassnahmen = "";
+      if (input) input.value = "";
       await this.statusInOutbox("abgeschlossen");
     },
     async oeffneMeldung(art) {

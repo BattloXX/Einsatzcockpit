@@ -14,10 +14,12 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import exists
 from sqlalchemy.orm import Session
 
 from app.models.major_incident import (
     AUTO_KIND_LAGEMELDUNG,
+    EINHEIT_STATUS_BEENDET,
     CommLogEntry,
     EinheitSiteDispatch,
     IncidentSite,
@@ -53,12 +55,12 @@ def interval_minutes_for(site: IncidentSite, org_settings: OrgSettings | None) -
 
 
 def has_active_resource(site: IncidentSite, db: Session) -> bool:
-    """True, wenn der Einsatzstelle mindestens eine nicht freigegebene Ressource zugeordnet ist.
+    """True, wenn eine Ressource die Einsatzstelle übernommen hat oder vor Ort ist.
 
-    Per DB-Query (statt der Python-Collection), damit frisch hinzugefügte bzw. soeben
-    freigegebene Ressourcen berücksichtigt werden. Die App-Session läuft mit
-    autoflush=False (app/db.py) – ohne expliziten Flush sieht diese Query noch nicht
-    zugewiesene/freigegebene Einheiten aus der laufenden Request-Transaktion nicht.
+    Legacy-Ressourcen zählen erst nach `committed_at`. Dispatch-verwaltete Einheiten
+    zählen ab Bestätigung bzw. den aktiven Statuswerten. Eine LageEinheit ohne Dispatch
+    bleibt als Legacy-Fallback erhalten; mit Dispatch entscheidet ausschließlich dieser.
+    Die App-Session läuft mit autoflush=False, daher macht die Abfrage zuerst einen Flush.
     """
     db.flush()
     ra = (
@@ -66,32 +68,36 @@ def has_active_resource(site: IncidentSite, db: Session) -> bool:
         .filter(
             SiteResourceAssignment.incident_site_id == site.id,
             SiteResourceAssignment.released_at.is_(None),
+            SiteResourceAssignment.committed_at.isnot(None),
         )
         .first()
     )
     if ra is not None:
         return True
-    le = (
-        db.query(LageEinheit.id)
-        .filter(
-            LageEinheit.incident_site_id == site.id,
-            LageEinheit.status != "abgerueckt",
-        )
-        .first()
-    )
-    if le is not None:
-        return True
-    # Dispatch-System: Timer erst wenn erste Einheit physisch vor Ort
     esd = (
         db.query(EinheitSiteDispatch.id)
         .filter(
             EinheitSiteDispatch.site_id == site.id,
-            EinheitSiteDispatch.vor_ort_at.isnot(None),
             dispatch_aktiv_filter(),
+            EinheitSiteDispatch.einheit_status.notin_(EINHEIT_STATUS_BEENDET),
+            (
+                EinheitSiteDispatch.bestaetigt_at.isnot(None)
+                | EinheitSiteDispatch.vor_ort_at.isnot(None)
+                | EinheitSiteDispatch.einheit_status.in_({"bestaetigt", "anfahrt", "vor_ort", "in_arbeit"})
+            ),
         )
         .first()
     )
-    return esd is not None
+    if esd is not None:
+        return True
+    return db.query(LageEinheit.id).filter(
+        LageEinheit.incident_site_id == site.id,
+        LageEinheit.status != "abgerueckt",
+        ~exists().where(
+            EinheitSiteDispatch.site_id == site.id,
+            EinheitSiteDispatch.einheit_id == LageEinheit.id,
+        ),
+    ).first() is not None
 
 
 def _now() -> datetime:
@@ -130,12 +136,12 @@ def close_open_auto_auftraege(db: Session, site_id: int) -> int:
 def ensure_timer(site: IncidentSite, db: Session) -> bool:
     """Startet den Timer, wenn er noch nicht läuft und die Voraussetzungen erfüllt sind.
 
-    Voraussetzungen: Phase „in_arbeit“, ≥1 aktive Ressource, Intervall konfiguriert,
-    Timer bisher None. Gibt True zurück, wenn ein Timer gesetzt wurde.
+    Voraussetzungen: nicht abgeschlossen/abgebrochen, ≥1 aktive Ressource, Intervall
+    konfiguriert, Timer bisher None. Gibt True zurück, wenn ein Timer gesetzt wurde.
     """
     if site.naechste_lagemeldung_at is not None:
         return False
-    if site.phase != SitePhase.in_arbeit:
+    if site.phase in {SitePhase.erledigt, SitePhase.abgebrochen}:
         return False
     org_settings = org_settings_for(db, site.org_id)
     if interval_minutes_for(site, org_settings) is None:
@@ -152,11 +158,31 @@ def clear_timer(site: IncidentSite, db: Session) -> None:
     close_open_auto_auftraege(db, site.id)
 
 
+def sync_timer(site: IncidentSite, db: Session) -> bool:
+    """Gleicht den Timer mit Phase, Intervall und aktiven Ressourcen ab."""
+    org_settings = org_settings_for(db, site.org_id)
+    if (
+        site.phase in {SitePhase.erledigt, SitePhase.abgebrochen}
+        or interval_minutes_for(site, org_settings) is None
+        or not has_active_resource(site, db)
+    ):
+        if site.naechste_lagemeldung_at is None:
+            return False
+        clear_timer(site, db)
+        return True
+    if site.naechste_lagemeldung_at is None:
+        return ensure_timer(site, db)
+    return False
+
+
 def register_lagemeldung(site: IncidentSite, db: Session) -> None:
     """Erfasste Lagemeldung = Kontrolle: Timer zurücksetzen + Auto-Aufträge schließen."""
     org_settings = org_settings_for(db, site.org_id)
-    recompute_due(site, org_settings)
     close_open_auto_auftraege(db, site.id)
+    if site.phase not in {SitePhase.erledigt, SitePhase.abgebrochen} and has_active_resource(site, db):
+        recompute_due(site, org_settings)
+    else:
+        site.naechste_lagemeldung_at = None
 
 
 def recompute_if_active(site: IncidentSite, db: Session) -> None:

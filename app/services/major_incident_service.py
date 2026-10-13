@@ -51,6 +51,8 @@ def setze_site_phase(
     if sort_index is not None:
         site.sort_index = sort_index
     if alte_phase == neue_phase:
+        from app.services import lagemeldung_service
+        lagemeldung_service.sync_timer(site, db)
         return False
 
     site.phase = neue_phase
@@ -80,10 +82,7 @@ def setze_site_phase(
     )
     from app.services import lagemeldung_service
 
-    if neue_phase == SitePhase.in_arbeit:
-        lagemeldung_service.ensure_timer(site, db)
-    elif neue_phase in (SitePhase.erledigt, SitePhase.abgebrochen):
-        lagemeldung_service.clear_timer(site, db)
+    lagemeldung_service.sync_timer(site, db)
     return True
 
 
