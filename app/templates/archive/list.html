@@ -92,6 +92,8 @@
         <a href="/archiv/{{ inc.id }}/pdf" target="_blank" class="btn btn--xs btn--ghost">PDF</a>
         {% if inc.status == 'active' %}
         <a href="/einsatz/{{ inc.id }}" class="btn btn--xs btn--primary">Board</a>
+        {% else %}
+        <a href="/einsatz/{{ inc.id }}" class="btn btn--xs btn--ghost">Board ansehen</a>
         {% endif %}
       </div>
     </div>

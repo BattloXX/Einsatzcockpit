@@ -83,6 +83,8 @@ def _has_granted_edit_access(db: Session, incident_id: int, user_id: int) -> boo
 
 def _check_edit_access(user: User, incident: Incident, db: Session) -> None:
     _check_access(user, incident)
+    if incident.status == "closed":
+        raise HTTPException(409, "Einsatz ist abgeschlossen – zum Bearbeiten wieder eröffnen")
     if has_role(user, *_EDIT_ROLES):
         return
     if _has_granted_edit_access(db, incident.id, user.id):
@@ -175,8 +177,10 @@ async def lagefuehrung_seite(
     # WS empfangenen lagefuehrung.berechtigung.changed (Widerruf) den korrekten
     # Endzustand ("Rolle behaelt das Recht trotzdem") ohne Reload nachzubilden,
     # statt die Seite pauschal neu zu laden (siehe lagefuehrung.js).
-    can_edit_via_rolle = has_role(user, *_EDIT_ROLES)
-    can_edit = can_edit_via_rolle or _has_granted_edit_access(db, incident_id, user.id)
+    can_edit_via_rolle = incident.status != "closed" and has_role(user, *_EDIT_ROLES)
+    can_edit = can_edit_via_rolle or (
+        incident.status != "closed" and _has_granted_edit_access(db, incident_id, user.id)
+    )
     is_fuehrer = incident.lagefuehrung_fuehrer_user_id == user.id
     granted_user_ids = [
         row.user_id for row in

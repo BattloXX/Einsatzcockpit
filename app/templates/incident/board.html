@@ -142,7 +142,19 @@
   </div>
 </div>
 
-<div class="board-wrap" x-data="incidentBoard({{ incident.id }}, '{{ incident.alarm_type_code }}', '{{ incident.started_at|local_iso }}')">
+<div class="board-wrap"{% if board_abgeschlossen %} data-board-readonly="1"{% endif %} x-data="incidentBoard({{ incident.id }}, '{{ incident.alarm_type_code }}', '{{ incident.started_at|local_iso }}')">
+  {% if board_abgeschlossen %}
+  <div class="alert alert--warn" role="status" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 12px;">
+    <span style="flex:1;min-width:220px;">🔒 Einsatz abgeschlossen{% if incident.closed_at %} am {{ incident.closed_at|local_datetime }} Uhr{% endif %} – Nur-Ansicht, Änderungen sind nicht möglich.</span>
+    <a href="/archiv/{{ incident.id }}" class="btn btn--ghost btn--sm">← Archiv</a>
+    {% if darf_wiedereroeffnen %}
+    <form method="post" action="/einsatz/{{ incident.id }}/wiedereroeffnen" style="display:contents" onsubmit="return confirm('Diesen Einsatz wieder eröffnen? Er wird erneut als aktiver Einsatz geführt.');">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <button type="submit" class="btn btn--ghost btn--sm">↻ Wieder eröffnen</button>
+    </form>
+    {% endif %}
+  </div>
+  {% endif %}
 
   <!-- Sidebar Toggle Button -->
   <button class="sidebar-toggle" @click="toggleSidebar()"
@@ -252,6 +264,7 @@
 </div>
 
 <!-- Quick-Add Auftrag Dialog -->
+{% if can_edit %}
 <dialog class="modal" id="quickAddTaskDialog" x-data="{colId: null, vehicleId: null}">
   <div class="modal__content" style="min-width:min(400px,90vw);">
     <div class="modal__header">
@@ -659,6 +672,8 @@
     </form>
   </div>
 </dialog>
+
+{% endif %}
 
 {# Einheitlicher Druck-Dialog: Umschalter erscheint nur bei Gateway+Druckern, sonst lokal.
    Immer einbinden, damit ecpgPrint auch ohne Gateway-Modul lokal drucken kann. #}

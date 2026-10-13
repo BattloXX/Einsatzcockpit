@@ -228,6 +228,7 @@
 
   // ── Haupt-Initialisierung ────────────────────────────────────────────────────
   function initSortable() {
+    if (document.querySelector('[data-board-readonly="1"]')) return;
     const incidentId = getIncidentId();
     if (!incidentId) return;
     attachDragTabSwitch();
@@ -317,6 +318,7 @@
   //   _columnDragActive-Guard             → scheduleInit() zerstört keine laufende Drag-Operation
   //
   function initColumnSortable() {
+    if (document.querySelector('[data-board-readonly="1"]')) return;
     const kanban = document.getElementById('kanban');
     if (!kanban) return;
     const incidentId = getIncidentId();

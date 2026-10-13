@@ -99,7 +99,28 @@ from app.services.incident_service import card_journal as get_card_journal
 from app.services.road_closure_flags import strassensperren_effective_enabled
 from app.services.road_closure_incident_service import route_payload
 
-router = APIRouter()
+
+class IncidentBoardRouter(APIRouter):
+    """Ergaenzt alle schreibenden Board-Routen um die Einsatz-Statuspruefung."""
+
+    def add_api_route(  # type: ignore[override]
+        self, path: str, endpoint: Any, *, methods: list[str] | None = None,
+        dependencies: list[Any] | None = None, **kwargs: Any,
+    ) -> None:
+        is_board_write = (
+            path.startswith("/einsatz/{incident_id}/")
+            and methods is not None
+            and any(method.upper() in {"POST", "PUT", "PATCH", "DELETE"} for method in methods)
+            and not any(token in path for token in (
+                "/wiedereroeffnen", "/pin", "druck", "pdf", "/abschliessen",
+            ))
+        )
+        if is_board_write:
+            dependencies = [*(dependencies or []), Depends(_require_open_incident)]
+        super().add_api_route(path, endpoint, methods=methods, dependencies=dependencies, **kwargs)
+
+
+router = IncidentBoardRouter()
 _log = logging.getLogger(__name__)
 
 
@@ -192,6 +213,19 @@ def _incident_or_404(incident_id: int, db: Session):
         from fastapi import HTTPException
         raise HTTPException(404, "Einsatz nicht gefunden")
     return inc
+
+
+def _board_can_edit(user: User, incident: Incident) -> bool:
+    """Board-Aenderungen sind bei abgeschlossenen Einsaetzen gesperrt."""
+    return incident.status != "closed" and has_role(user, "incident_leader", "admin", "recorder")
+
+
+def _require_open_incident(incident_id: int, db: Session = Depends(get_db)) -> Incident:
+    """Verhindert Board-Mutationen fuer bereits abgeschlossene Einsaetze."""
+    incident = _incident_or_404(incident_id, db)
+    if incident.status == "closed":
+        raise HTTPException(409, "Einsatz ist abgeschlossen – zum Bearbeiten wieder eröffnen")
+    return incident
 
 
 def _load_board_incident(incident_id: int, db: Session) -> Incident | None:
@@ -777,11 +811,11 @@ async def incident_board(incident_id: int, request: Request, db: Session = Depen
         .order_by(TaskSuggestionAlarm.display_order)
         .all()
     ) if _at_board else []
-    if len(task_suggestions) > 5:
+    if incident.status != "closed" and len(task_suggestions) > 5:
         task_suggestions = await _best_task_suggestions(
             task_suggestions, incident.alarm_type_code or "", incident.primary_org_id,
         )
-    can_edit = has_role(user, "incident_leader", "admin", "recorder")
+    can_edit = _board_can_edit(user, incident)
     # Leader candidates: active users of same org with relevant roles
     leader_roles = {"incident_leader", "admin", "org_admin", "system_admin"}
     leader_candidates = (
@@ -823,7 +857,7 @@ async def incident_board(incident_id: int, request: Request, db: Session = Depen
         if _ue:
             uas_einsatz_id = _ue.id
         uas_org_enabled = uas_effective_enabled(incident.primary_org_id, db)
-        can_start_uas = uas_org_enabled and has_role(
+        can_start_uas = incident.status != "closed" and uas_org_enabled and has_role(
             user, "recorder", "breathing_supervisor", "incident_leader"
         )
     except Exception:
@@ -863,6 +897,8 @@ async def incident_board(incident_id: int, request: Request, db: Session = Depen
         "task_suggestions": task_suggestions,
         "ai_task_suggestions": ai_task_suggestions,
         "can_edit": can_edit, "leader_candidates": leader_candidates,
+        "board_abgeschlossen": incident.status == "closed",
+        "darf_wiedereroeffnen": user.is_system_admin or user.is_org_admin,
         "el_member_candidates": el_member_candidates,
         "gk_member_candidates": gk_member_candidates,
         "section_leader_candidates": list_section_leader_candidates(db, org_ids),
@@ -911,7 +947,7 @@ def board_card_fragment(
     incident = _load_board_incident(incident_id, db)
     if not incident:
         return Response("Nicht gefunden", status_code=404)
-    can_edit = has_role(user, "incident_leader", "admin", "recorder")
+    can_edit = _board_can_edit(user, incident)
     return templates.TemplateResponse(request, f"incident/{template_name}", {
         "incident": incident, "can_edit": can_edit,
         "unit_status_values": UNIT_STATUS_VALUES,
@@ -950,7 +986,7 @@ def board_column_content_fragment(
     incident = _load_board_incident(incident_id, db)
     if not incident:
         return Response("Nicht gefunden", status_code=404)
-    can_edit = has_role(user, "incident_leader", "admin", "recorder")
+    can_edit = _board_can_edit(user, incident)
     lage_sprueche = (
         db.query(IncidentCommLog)
         .filter(
@@ -992,7 +1028,7 @@ def board_column_fragment(
     incident = _load_board_incident(incident_id, db)
     if not incident:
         return Response("Nicht gefunden", status_code=404)
-    can_edit = has_role(user, "incident_leader", "admin", "recorder")
+    can_edit = _board_can_edit(user, incident)
     org_ids = [incident.primary_org_id] if incident.primary_org_id else []
     for _io in (incident.collaborating_orgs or []):
         if _io.org_id not in org_ids:
@@ -1027,7 +1063,7 @@ def board_kanban_fragment(
     incident = _load_board_incident(incident_id, db)
     if not incident:
         return Response("Nicht gefunden", status_code=404)
-    can_edit = has_role(user, "incident_leader", "admin", "recorder")
+    can_edit = _board_can_edit(user, incident)
     org_ids = [incident.primary_org_id] if incident.primary_org_id else []
     for _io in (incident.collaborating_orgs or []):
         if _io.org_id not in org_ids:
@@ -1060,7 +1096,7 @@ def board_kopfleiste_fragment(
     if not user:
         return Response("Nicht eingeloggt", status_code=401)
     incident = _incident_or_404(incident_id, db)
-    can_edit = has_role(user, "incident_leader", "admin", "recorder")
+    can_edit = _board_can_edit(user, incident)
     org_ids = [incident.primary_org_id] if incident.primary_org_id else []
     for _io in (incident.collaborating_orgs or []):
         if _io.org_id not in org_ids:
@@ -1907,7 +1943,7 @@ async def assign_task(
         "column_id": task.column_id, "vehicle_uid": task.vehicle_id,
     })
     incident = _incident_or_404(incident_id, db)
-    can_edit = has_role(request.state.user, "incident_leader", "admin", "recorder")
+    can_edit = _board_can_edit(request.state.user, incident)
     task_logs = _entity_logs(db, incident_id, "task", task_id)
     return templates.TemplateResponse(request, "incident/_task_modal.html", {
         "user": request.state.user, "incident": incident, "task": task, "can_edit": can_edit,
@@ -2781,7 +2817,7 @@ def vehicle_detail(
     commander_candidates = list_commander_candidates(db, org_ids)
 
     card_journal = get_card_journal(db, incident_id, "incident_vehicle", vehicle_id)
-    can_edit = has_role(user, "incident_leader", "admin", "recorder")
+    can_edit = _board_can_edit(user, incident)
     can_note = has_role(user, "incident_leader", "admin", "recorder", "readonly")
     vehicle_logs = _entity_logs(db, incident_id, "vehicle", vehicle_id)
     return templates.TemplateResponse(request, "incident/_vehicle_modal.html", {
@@ -2853,7 +2889,7 @@ def task_detail(
     if not task:
         return Response("Nicht gefunden", status_code=404)
     incident = _incident_or_404(incident_id, db)
-    can_edit = has_role(user, "incident_leader", "admin", "recorder")
+    can_edit = _board_can_edit(user, incident)
     can_note = has_role(user, "incident_leader", "admin", "recorder", "readonly")
     task_logs = _entity_logs(db, incident_id, "task", task_id)
     card_journal = get_card_journal(db, incident_id, "task", task_id)
@@ -2876,7 +2912,7 @@ def message_detail(
     if not msg or msg.incident_id != incident_id:
         return Response("Nicht gefunden", status_code=404)
     incident = _incident_or_404(incident_id, db)
-    can_edit = has_role(user, "incident_leader", "admin", "recorder")
+    can_edit = _board_can_edit(user, incident)
     can_note = has_role(user, "incident_leader", "admin", "recorder", "readonly")
     entity_logs = _entity_logs(db, incident_id, "message", message_id)
     card_journal = get_card_journal(db, incident_id, "message", message_id)
@@ -2910,7 +2946,7 @@ async def update_message_endpoint(
         "type": "message_updated", "kind": "message", "uid": msg.id, "column_id": msg.column_id,
     })
     incident = _incident_or_404(incident_id, db)
-    can_edit = has_role(request.state.user, "incident_leader", "admin", "recorder")
+    can_edit = _board_can_edit(request.state.user, incident)
     can_note = has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
     entity_logs = _entity_logs(db, incident_id, "message", message_id)
     card_journal = get_card_journal(db, incident_id, "message", message_id)
@@ -2949,7 +2985,7 @@ async def assign_message(
         "column_id": msg.column_id, "vehicle_uid": msg.vehicle_id,
     })
     incident = _incident_or_404(incident_id, db)
-    can_edit = has_role(request.state.user, "incident_leader", "admin", "recorder")
+    can_edit = _board_can_edit(request.state.user, incident)
     can_note = has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
     entity_logs = _entity_logs(db, incident_id, "message", message_id)
     card_journal = get_card_journal(db, incident_id, "message", message_id)
@@ -2972,7 +3008,7 @@ def person_detail(
     if not person or person.incident_id != incident_id:
         return Response("Nicht gefunden", status_code=404)
     incident = _incident_or_404(incident_id, db)
-    can_edit = has_role(user, "incident_leader", "admin", "recorder")
+    can_edit = _board_can_edit(user, incident)
     can_note = has_role(user, "incident_leader", "admin", "recorder", "readonly")
     person_logs = _entity_logs(db, incident_id, "person", person_id)
     card_journal = get_card_journal(db, incident_id, "person", person_id)
@@ -3031,7 +3067,7 @@ async def update_person_endpoint(
         "source_vehicle_uid": old_vehicle_id,
     })
     incident = _incident_or_404(incident_id, db)
-    can_edit = has_role(request.state.user, "incident_leader", "admin", "recorder")
+    can_edit = _board_can_edit(request.state.user, incident)
     can_note = has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
     person_logs = _entity_logs(db, incident_id, "person", person_id)
     card_journal = get_card_journal(db, incident_id, "person", person_id)
@@ -3109,7 +3145,7 @@ async def update_task_endpoint(
         "vehicle_uid": task.vehicle_id,
     })
     incident = _incident_or_404(incident_id, db)
-    can_edit = has_role(request.state.user, "incident_leader", "admin", "recorder")
+    can_edit = _board_can_edit(request.state.user, incident)
     can_note = has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
     task_logs = _entity_logs(db, incident_id, "task", task_id)
     vehicle = db.get(IncidentVehicle, task.vehicle_id) if task.vehicle_id else None
@@ -3322,7 +3358,7 @@ async def upload_task_media(
             "type": "task_updated", "task_id": task_id, "kind": "task", "uid": task.id,
             "column_id": task.column_id,
         })
-    can_edit = has_role(request.state.user, "incident_leader", "admin", "recorder")
+    can_edit = _board_can_edit(request.state.user, incident)
     can_note = has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
     headers = {"X-Upload-Errors": quote(json.dumps(errors, ensure_ascii=False))} if errors else None
     return templates.TemplateResponse(request, "incident/_task_media.html", {
@@ -3356,7 +3392,7 @@ async def delete_task_media(
         "type": "task_updated", "task_id": task_id, "kind": "task", "uid": task.id,
         "column_id": task.column_id,
     })
-    can_edit = has_role(user, "incident_leader", "admin", "recorder")
+    can_edit = _board_can_edit(user, incident)
     can_note = has_role(user, "incident_leader", "admin", "recorder", "readonly")
     return templates.TemplateResponse(request, "incident/_task_media.html", {
         "user": user, "task": task, "incident": incident,
@@ -3409,7 +3445,7 @@ async def upload_message_media(
         await manager.broadcast(incident_id, {
             "type": "message_updated", "kind": "message", "uid": msg.id, "column_id": msg.column_id,
         })
-    can_edit = has_role(request.state.user, "incident_leader", "admin", "recorder")
+    can_edit = _board_can_edit(request.state.user, incident)
     can_note = has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
     entity_logs = _entity_logs(db, incident_id, "message", message_id)
     headers = {"X-Upload-Errors": quote(json.dumps(errors, ensure_ascii=False))} if errors else None
@@ -3434,7 +3470,7 @@ def delete_message_media(
     msg = db.get(Message, message_id)
     db.refresh(msg, ["media"])
     incident = _incident_or_404(incident_id, db)
-    can_edit = has_role(request.state.user, "incident_leader", "admin", "recorder")
+    can_edit = _board_can_edit(request.state.user, incident)
     can_note = has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
     entity_logs = _entity_logs(db, incident_id, "message", message_id)
     return templates.TemplateResponse(request, "incident/_message_modal.html", {
@@ -3489,7 +3525,7 @@ async def upload_person_media(
             "type": "person_updated", "kind": "person", "uid": person.id,
             "column_id": person.column_id, "vehicle_uid": person.vehicle_id,
         })
-    can_edit = has_role(request.state.user, "incident_leader", "admin", "recorder")
+    can_edit = _board_can_edit(request.state.user, incident)
     can_note = has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
     person_logs = _entity_logs(db, incident_id, "person", person_id)
     headers = {"X-Upload-Errors": quote(json.dumps(errors, ensure_ascii=False))} if errors else None
@@ -3514,7 +3550,7 @@ def delete_person_media(
     person = db.get(RescuedPerson, person_id)
     db.refresh(person, ["media"])
     incident = _incident_or_404(incident_id, db)
-    can_edit = has_role(request.state.user, "incident_leader", "admin", "recorder")
+    can_edit = _board_can_edit(request.state.user, incident)
     can_note = has_role(request.state.user, "incident_leader", "admin", "recorder", "readonly")
     person_logs = _entity_logs(db, incident_id, "person", person_id)
     return templates.TemplateResponse(request, "incident/_person_modal.html", {
