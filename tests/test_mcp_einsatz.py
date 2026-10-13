@@ -19,15 +19,18 @@ from app.models.incident import (
     Task,
 )
 from app.models.kontakt import Kontakt
-from app.models.master import VehicleMaster
+from app.models.master import OrgSettings, VehicleMaster
 from app.models.objekt import (
     GefahrenKatalog,
+    Objekt,
     ObjektDokument,
     ObjektDokumentSeite,
     ObjektEinsatz,
     ObjektGefahr,
     ObjektKontakt,
 )
+from app.models.user import User
+from app.services.mcp_download_service import erstelle_download_token
 from tests.test_mcp_objekte import _mcp, _seed, _token
 
 EINSATZ_TOOLS = {
@@ -39,6 +42,8 @@ EINSATZ_TOOLS = {
     "einsatz_verlauf",
     "einsatz_objekte",
     "einsatz_lagebild",
+    "einsatz_objekt_dokument_herunterladen",
+    "einsatz_medium_herunterladen",
 }
 
 
@@ -137,7 +142,10 @@ def test_tools_liste_und_sichtbarkeit_status(client):
     finally:
         db.close()
     assert EINSATZ_TOOLS <= set(TOOLS)
-    assert all(name in _mcp(client, token, "tools/list", {}, 95).text for name in EINSATZ_TOOLS)
+    tool_liste = _mcp(client, token, "tools/list", {}, 95).text
+    # Ohne Objektmodul bleibt nur der Objektdokument-Download ausgeblendet.
+    assert all(name in tool_liste for name in EINSATZ_TOOLS - {"einsatz_objekt_dokument_herunterladen"})
+    assert '"name":"einsatz_objekt_dokument_herunterladen"' not in tool_liste
     assert {row["id"] for row in _rufe(client, token, "einsaetze_liste", status="aktiv")["items"]} == {
         own_active,
         collab,
@@ -216,6 +224,28 @@ def test_verlauf_objekte_und_lagebild_ohne_personendaten(client):
                 ObjektKontakt(org_id=seed["org_id"], objekt_id=seed["objekt_id"], kontakt_id=kontakt.id),
             ]
         )
+        arbeitskopie = Objekt(
+            org_id=seed["org_id"],
+            nummer=2,
+            name="Arbeitskopie Geheim",
+            strasse="Nebenstrasse",
+            hausnummer="2",
+            plz="1010",
+            ort="Wien",
+            status="entwurf",
+            entwurf_von_id=seed["objekt_id"],
+        )
+        db.add(arbeitskopie)
+        db.flush()
+        db.add(
+            ObjektEinsatz(
+                org_id=seed["org_id"],
+                incident_id=incident_id,
+                objekt_id=arbeitskopie.id,
+                quelle="manuell",
+                status="bestaetigt",
+            )
+        )
         dokument = ObjektDokument(
             org_id=seed["org_id"],
             objekt_id=seed["objekt_id"],
@@ -251,6 +281,7 @@ def test_verlauf_objekte_und_lagebild_ohne_personendaten(client):
     objekte = _rufe(client, token, "einsatz_objekte", incident_id=incident_id)["objekte"]
     assert objekte[0]["kontakte_anzahl"] == 1 and objekte[0]["dokumente"][0]["seiten"][0]["nr"] == 1
     assert "Kontakt Geheim" not in json.dumps(objekte)
+    assert all(objekt["name"] != "Arbeitskopie Geheim" for objekt in objekte)
     lagebild = _rufe(client, token, "einsatz_lagebild", incident_id=incident_id)
     assert {
         "einsatz",
@@ -260,3 +291,165 @@ def test_verlauf_objekte_und_lagebild_ohne_personendaten(client):
         "objekte",
         "letzte_eintraege",
     } <= set(lagebild)
+    for secret in (
+        "Anrufer Geheim",
+        "Kommandant Geheim",
+        "Fahrer Geheim",
+        "Gerettete Geheim",
+        "Person Geheim",
+        "Autor Geheim",
+        "Kontakt Geheim",
+    ):
+        assert secret not in json.dumps(lagebild, ensure_ascii=False)
+    db = _db()
+    try:
+        db.query(OrgSettings).filter(OrgSettings.org_id == seed["org_id"]).one().objekt_module_enabled = False
+        db.commit()
+    finally:
+        db.close()
+    disabled = _rufe(client, token, "einsatz_objekte", incident_id=incident_id)
+    assert disabled["objekte"] == [] and "hinweis" in disabled
+
+
+def test_einsatz_objektdokument_download_und_unverknuepft(client, tmp_path):
+    seed = _seed("mcp-einsatz-download-objekt", {"read": "readonly", "admin": "objekt_verwalter"})
+    token = _token(client, seed, "read")
+    incident_id, _ = _einsatz(seed["org_id"])
+    original = b"Einsatz-Objektdokument"
+    datei = tmp_path / "plan.pdf"
+    datei.write_bytes(original)
+    db = _db()
+    try:
+        dokument = ObjektDokument(
+            org_id=seed["org_id"],
+            objekt_id=seed["objekt_id"],
+            dateiname_original="plan.pdf",
+            pfad=str(datei),
+            seitenzahl=1,
+            groesse_bytes=len(original),
+            ist_aktuelle_version=True,
+            freigabe_status="freigegeben",
+        )
+        db.add(dokument)
+        db.flush()
+        db.add(
+            ObjektEinsatz(
+                org_id=seed["org_id"],
+                incident_id=incident_id,
+                objekt_id=dokument.objekt_id,
+                quelle="manuell",
+                status="bestaetigt",
+            )
+        )
+        db.commit()
+        dokument_id = dokument.id
+    finally:
+        db.close()
+    result = _rufe(
+        client,
+        token,
+        "einsatz_objekt_dokument_herunterladen",
+        incident_id=incident_id,
+        dokument_id=dokument_id,
+    )
+    assert client.get(result["download_url"]).content == original
+
+    db = _db()
+    try:
+        foreign_objekt = Objekt(
+            org_id=seed["org_id"],
+            nummer=99,
+            name="Nicht verknuepft",
+            strasse="Nebenstrasse",
+            hausnummer="9",
+            plz="1010",
+            ort="Wien",
+            status="freigegeben",
+        )
+        db.add(foreign_objekt)
+        db.flush()
+        foreign = ObjektDokument(
+            org_id=seed["org_id"],
+            objekt_id=foreign_objekt.id,
+            dateiname_original="fremd.pdf",
+            pfad=str(datei),
+            seitenzahl=1,
+            groesse_bytes=len(original),
+            ist_aktuelle_version=True,
+            freigabe_status="freigegeben",
+        )
+        db.add(foreign)
+        db.commit()
+        foreign_id = foreign.id
+    finally:
+        db.close()
+    error = _rufe(
+        client,
+        token,
+        "einsatz_objekt_dokument_herunterladen",
+        incident_id=incident_id,
+        dokument_id=foreign_id,
+    )
+    assert "Dokument nicht gefunden" in error["__fehler__"]
+    manual_token, _ = erstelle_download_token(
+        seed["org_id"],
+        seed["users"]["read"],
+        foreign_id,
+        None,
+        art="einsatz_objekt",
+        incident_id=incident_id,
+    )
+    assert client.get(f"/api/mcp/downloads/{manual_token}").status_code == 404
+
+
+def test_einsatz_medium_download_und_live_benutzerpruefung(client, tmp_path):
+    seed = _seed("mcp-einsatz-download-medium", {"read": "readonly"}, objekt=False, kontakte=False)
+    token = _token(client, seed, "read")
+    incident_id, _ = _einsatz(seed["org_id"])
+    data = b"Meldungsmedium"
+    storage_path = tmp_path / "meldung.txt"
+    storage_path.write_bytes(data)
+    db = _db()
+    try:
+        message = db.query(Message).filter(Message.incident_id == incident_id).one()
+        medium = MessageMedia(
+            message_id=message.id,
+            incident_id=incident_id,
+            kind="datei",
+            original_filename="meldung.txt",
+            storage_path=str(storage_path),
+            mime_type="text/plain",
+            bytes=len(data),
+        )
+        db.add(medium)
+        db.commit()
+        medium_id = medium.id
+    finally:
+        db.close()
+    result = _rufe(
+        client,
+        token,
+        "einsatz_medium_herunterladen",
+        incident_id=incident_id,
+        art="meldung",
+        medium_id=medium_id,
+    )
+    response = client.get(result["download_url"])
+    assert response.status_code == 200 and response.content == data
+    assert response.headers["content-type"].startswith("application/octet-stream")
+    other_incident_id, _ = _einsatz(seed["org_id"])
+    assert "Medium nicht gefunden" in _rufe(
+        client,
+        token,
+        "einsatz_medium_herunterladen",
+        incident_id=other_incident_id,
+        art="meldung",
+        medium_id=medium_id,
+    )["__fehler__"]
+    db = _db()
+    try:
+        db.get(User, seed["users"]["read"]).active = False
+        db.commit()
+    finally:
+        db.close()
+    assert client.get(result["download_url"]).status_code == 403

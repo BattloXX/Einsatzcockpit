@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import cast
 
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from sqlalchemy.orm import Session
@@ -10,9 +11,12 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.core.permissions import STRASSENSPERREN_LESE_ROLLEN
 from app.mcp.context import MCPPermissionError, load_live_context
-from app.models.objekt import ObjektDokument, ObjektDokumentSeite
+from app.models.incident import IncidentColumn, Message, MessageMedia, TaskMedia
+from app.models.objekt import Objekt, ObjektDokument, ObjektDokumentSeite, ObjektEinsatz
 from app.models.road_closure import RoadClosure, RoadClosureDocument
 from app.services import road_closure_service
+from app.services.einsatz_mcp_service import EINSATZ_LESE_ROLLEN, sichtbarer_einsatz
+from app.services.media_service import absolute_path
 from app.services.objekt_dokument_service import absolute_pfad
 from app.services.objekt_service import objekt_effective_enabled
 from app.services.road_closure_document_service import absolute_path as road_closure_document_path
@@ -29,10 +33,18 @@ class MCPDownloadFehler(ValueError):
 
 
 def erstelle_download_token(
-    org_id: int, user_id: int, dokument_id: int, seite: int | None, art: str = "objekt"
+    org_id: int,
+    user_id: int,
+    dokument_id: int,
+    seite: int | None,
+    art: str = "objekt",
+    incident_id: int | None = None,
+    medium_art: str | None = None,
 ) -> tuple[str, datetime]:
     gueltig_bis = datetime.now(UTC).replace(tzinfo=None) + timedelta(minutes=settings.MCP_DOWNLOAD_TOKEN_MINUTEN)
-    token = _signer.dumps({"o": org_id, "u": user_id, "d": dokument_id, "s": seite, "a": art})
+    token = _signer.dumps(
+        {"o": org_id, "u": user_id, "d": dokument_id, "s": seite, "a": art, "i": incident_id, "m": medium_art}
+    )
     return token, gueltig_bis
 
 
@@ -85,6 +97,8 @@ def lade_download(db: Session, token: str) -> tuple[Path, str, str]:
         dokument_id = int(daten["d"])
         seite = daten["s"]
         art = daten.get("a", "objekt")
+        incident_id = daten.get("i")
+        medium_art = daten.get("m")
         if seite is not None:
             seite = int(seite)
     except (KeyError, TypeError, ValueError) as exc:
@@ -108,6 +122,64 @@ def lade_download(db: Session, token: str) -> tuple[Path, str, str]:
         if not path.is_file():
             raise MCPDownloadFehler("Datei fehlt.", 404)
         return path, document.filename, "application/pdf"
+    if art == "einsatz_objekt":
+        try:
+            load_live_context(db, user_id, org_id, EINSATZ_LESE_ROLLEN)
+        except MCPPermissionError as exc:
+            raise MCPDownloadFehler(str(exc), 403) from exc
+        if not objekt_effective_enabled(org_id, db):
+            raise MCPDownloadFehler("Das Objektmodul ist fuer diese Organisation nicht aktiviert.", 403)
+        try:
+            incident = sichtbarer_einsatz(db, org_id, int(incident_id))
+        except (TypeError, ValueError) as exc:
+            raise MCPDownloadFehler("Dokument nicht gefunden.", 404) from exc
+        dokument, pfad, dateiname, mime = loese_datei(db, org_id, dokument_id, seite)
+        verknuepfung = (
+            db.query(ObjektEinsatz)
+            .join(Objekt, Objekt.id == ObjektEinsatz.objekt_id)
+            .filter(
+                ObjektEinsatz.incident_id == incident.id,
+                ObjektEinsatz.objekt_id == dokument.objekt_id,
+                Objekt.entwurf_von_id.is_(None),
+            )
+            .first()
+        )
+        if (
+            verknuepfung is None
+            or not dokument.ist_aktuelle_version
+            or dokument.freigabe_status != "freigegeben"
+        ):
+            raise MCPDownloadFehler("Dokument nicht gefunden.", 404)
+        return pfad, dateiname, mime
+    if art == "einsatz_medium":
+        try:
+            load_live_context(db, user_id, org_id, EINSATZ_LESE_ROLLEN)
+        except MCPPermissionError as exc:
+            raise MCPDownloadFehler(str(exc), 403) from exc
+        try:
+            incident = sichtbarer_einsatz(db, org_id, int(incident_id))
+        except (TypeError, ValueError) as exc:
+            raise MCPDownloadFehler("Medium nicht gefunden.", 404) from exc
+        medium: TaskMedia | MessageMedia | None
+        if medium_art == "auftrag":
+            medium = db.query(TaskMedia).filter(TaskMedia.id == dokument_id).first()
+            column_id = medium.task.column_id if medium and medium.task else None
+        elif medium_art == "meldung":
+            medium = db.query(MessageMedia).filter(MessageMedia.id == dokument_id).first()
+            message = db.get(Message, medium.message_id) if medium else None
+            column_id = message.column_id if message else None
+        else:
+            raise MCPDownloadFehler("Medium nicht gefunden.", 404)
+        if medium is None or medium.incident_id != incident.id:
+            raise MCPDownloadFehler("Medium nicht gefunden.", 404)
+        column = db.get(IncidentColumn, column_id) if column_id is not None else None
+        if column is not None and column.column_kind == "rescued":
+            raise MCPDownloadFehler("Medium nicht gefunden.", 404)
+        path = absolute_path(cast(TaskMedia, medium))
+        if not path.is_file():
+            raise MCPDownloadFehler("Datei fehlt.", 404)
+        mime = "application/octet-stream" if medium.kind == "datei" else medium.mime_type
+        return path, medium.original_filename, mime
     if art != "objekt":
         raise MCPDownloadFehler("Download nicht gefunden.", 404)
     try:

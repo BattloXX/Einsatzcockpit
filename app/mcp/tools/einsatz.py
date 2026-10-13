@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
+import asyncio
+import base64
+import hashlib
 import json
 from datetime import UTC, datetime
-from typing import Any
+from pathlib import Path
+from typing import Any, cast
 
 from sqlalchemy import String, or_
 from sqlalchemy.orm import joinedload, selectinload
 
+from app.config import settings
+from app.core.audit import write_audit
 from app.core.timezones import local_date_to_utc
 from app.mcp.context import MCPContext
 from app.mcp.registry import register_tool
@@ -20,7 +26,9 @@ from app.models.incident import (
     IncidentOrg,
     IncidentVehicle,
     Message,
+    MessageMedia,
     Task,
+    TaskMedia,
 )
 from app.models.master import FireDept, VehicleMaster
 from app.models.objekt import (
@@ -40,6 +48,8 @@ from app.services.einsatz_mcp_service import (
     task_dict,
     ui_link,
 )
+from app.services.mcp_download_service import erstelle_download_token, loese_datei
+from app.services.media_service import absolute_path
 from app.services.objekt_service import objekt_effective_enabled
 
 
@@ -48,6 +58,59 @@ def _org(context: MCPContext) -> FireDept:
     if org is None:
         raise ValueError("Organisation nicht gefunden.")
     return org
+
+
+def _datei_hash_und_inhalt(pfad: Path, inline: bool) -> tuple[int, str, bytes | None]:
+    groesse = pfad.stat().st_size
+    inhalt = bytearray() if inline and groesse <= settings.MCP_DOWNLOAD_INLINE_MAX_BYTES else None
+    digest = hashlib.sha256()
+    with pfad.open("rb") as datei:
+        while chunk := datei.read(1024 * 1024):
+            digest.update(chunk)
+            if inhalt is not None:
+                inhalt.extend(chunk)
+    return groesse, digest.hexdigest(), bytes(inhalt) if inhalt is not None else None
+
+
+def _einsatz_objekt_dokument(context: MCPContext, incident_id: int, dokument_id: int, seite: int | None):
+    sichtbarer_einsatz(context.db, context.org_id, incident_id)
+    if not objekt_effective_enabled(context.org_id, context.db):
+        raise ValueError("Objektmodul nicht aktiv.")
+    dokument, pfad, dateiname, mime = loese_datei(context.db, context.org_id, dokument_id, seite)
+    verknuepfung = (
+        context.db.query(ObjektEinsatz)
+        .join(Objekt, Objekt.id == ObjektEinsatz.objekt_id)
+        .filter(
+            ObjektEinsatz.incident_id == incident_id,
+            ObjektEinsatz.objekt_id == dokument.objekt_id,
+            Objekt.entwurf_von_id.is_(None),
+        )
+        .first()
+    )
+    if verknuepfung is None or not dokument.ist_aktuelle_version or dokument.freigabe_status != "freigegeben":
+        raise ValueError("Dokument nicht gefunden.")
+    return dokument, pfad, dateiname, mime
+
+
+def _einsatz_medium(context: MCPContext, incident_id: int, art: str, medium_id: int):
+    sichtbarer_einsatz(context.db, context.org_id, incident_id)
+    medium: TaskMedia | MessageMedia | None
+    if art == "auftrag":
+        medium = context.db.query(TaskMedia).filter(TaskMedia.id == medium_id).first()
+        column = medium.task.column if medium and medium.task else None
+    elif art == "meldung":
+        medium = context.db.query(MessageMedia).filter(MessageMedia.id == medium_id).first()
+        message = context.db.get(Message, medium.message_id) if medium else None
+        column = message.column if message else None
+    else:
+        raise ValueError("art muss auftrag oder meldung sein.")
+    if medium is None or medium.incident_id != incident_id or (column is not None and column.column_kind == "rescued"):
+        raise ValueError("Medium nicht gefunden.")
+    pfad = absolute_path(cast(TaskMedia, medium))
+    if not pfad.is_file():
+        raise ValueError("Datei fehlt.")
+    mime = "application/octet-stream" if medium.kind == "datei" else medium.mime_type
+    return medium, pfad, mime
 
 
 def _visible_query(context: MCPContext):
@@ -576,6 +639,119 @@ async def einsatz_objekte(
     if not objekt_effective_enabled(context.org_id, context.db):
         return {"objekte": [], "hinweis": "Objektmodul nicht aktiv.", "ui_link": ui_link(incident_id)}
     return {"objekte": _objekte(context, incident_id, inklusive_vorschlaege), "ui_link": ui_link(incident_id)}
+
+
+@register_tool(
+    name="einsatz_objekt_dokument_herunterladen",
+    description="Bereitet den Download eines freigegebenen Dokuments eines Einsatz-Objekts vor.",
+    required_roles=EINSATZ_LESE_ROLLEN,
+    module_check=objekt_effective_enabled,
+)
+async def einsatz_objekt_dokument_herunterladen(
+    context: MCPContext,
+    incident_id: int,
+    dokument_id: int,
+    seite: int | None = None,
+    inline: bool = False,
+) -> dict[str, object]:
+    dokument, pfad, dateiname, mime = _einsatz_objekt_dokument(context, incident_id, dokument_id, seite)
+    groesse, sha256, inhalt = await asyncio.to_thread(_datei_hash_und_inhalt, pfad, inline)
+    token, gueltig_bis = erstelle_download_token(
+        context.org_id,
+        context.user.id,
+        dokument.id,
+        seite,
+        art="einsatz_objekt",
+        incident_id=incident_id,
+    )
+    url = f"{settings.effective_public_base_url.rstrip('/')}/api/mcp/downloads/{token}"
+    write_audit(
+        context.db,
+        "einsatz.mcp_download_vorbereitet",
+        org_id=context.org_id,
+        user_id=context.user.id,
+        entity_type="objekt_dokument",
+        entity_id=dokument.id,
+        payload={"incident_id": incident_id, "seite": seite},
+    )
+    context.db.commit()
+    result: dict[str, object] = {
+        "incident_id": incident_id,
+        "dokument_id": dokument.id,
+        "dateiname": dateiname,
+        "mime": mime,
+        "groesse_bytes": groesse,
+        "sha256": sha256,
+        "download_url": url,
+        "gueltig_bis": gueltig_bis.isoformat() + "Z",
+        "curl_beispiel": f'curl -o "{dateiname}" "{url}"',
+    }
+    if inline:
+        if inhalt is not None:
+            result["inhalt_base64"] = base64.b64encode(inhalt).decode("ascii")
+        else:
+            result["hinweis"] = (
+                f"Datei zu gross fuer inline ({groesse} Bytes, max. {settings.MCP_DOWNLOAD_INLINE_MAX_BYTES}), "
+                "bitte download_url verwenden."
+            )
+    return result
+
+
+@register_tool(
+    name="einsatz_medium_herunterladen",
+    description="Bereitet den Download eines Auftrags- oder Meldungsmediums eines Einsatzes vor.",
+    required_roles=EINSATZ_LESE_ROLLEN,
+)
+async def einsatz_medium_herunterladen(
+    context: MCPContext,
+    incident_id: int,
+    art: str,
+    medium_id: int,
+    inline: bool = False,
+) -> dict[str, object]:
+    medium, pfad, mime = _einsatz_medium(context, incident_id, art, medium_id)
+    groesse, sha256, inhalt = await asyncio.to_thread(_datei_hash_und_inhalt, pfad, inline)
+    token, gueltig_bis = erstelle_download_token(
+        context.org_id,
+        context.user.id,
+        medium.id,
+        None,
+        art="einsatz_medium",
+        incident_id=incident_id,
+        medium_art=art,
+    )
+    url = f"{settings.effective_public_base_url.rstrip('/')}/api/mcp/downloads/{token}"
+    write_audit(
+        context.db,
+        "einsatz.mcp_download_vorbereitet",
+        org_id=context.org_id,
+        user_id=context.user.id,
+        entity_type="task_media" if art == "auftrag" else "message_media",
+        entity_id=medium.id,
+        payload={"incident_id": incident_id},
+    )
+    context.db.commit()
+    result: dict[str, object] = {
+        "incident_id": incident_id,
+        "medium_id": medium.id,
+        "art": art,
+        "dateiname": medium.original_filename,
+        "mime": mime,
+        "groesse_bytes": groesse,
+        "sha256": sha256,
+        "download_url": url,
+        "gueltig_bis": gueltig_bis.isoformat() + "Z",
+        "curl_beispiel": f'curl -o "{medium.original_filename}" "{url}"',
+    }
+    if inline:
+        if inhalt is not None:
+            result["inhalt_base64"] = base64.b64encode(inhalt).decode("ascii")
+        else:
+            result["hinweis"] = (
+                f"Datei zu gross fuer inline ({groesse} Bytes, max. {settings.MCP_DOWNLOAD_INLINE_MAX_BYTES}), "
+                "bitte download_url verwenden."
+            )
+    return result
 
 
 @register_tool(

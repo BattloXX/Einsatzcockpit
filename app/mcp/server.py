@@ -566,6 +566,7 @@ StatsScopeLiteral = Literal["alle", "oeffentlich"]
 EinsatzListStatusLiteral = Literal["aktiv", "abgeschlossen", "alle"]
 EinsatzItemStatusLiteral = Literal["alle", "offen", "erledigt", "storniert"]
 EinsatzVerlaufQuelleLiteral = Literal["tagebuch", "funkjournal"]
+EinsatzMediumArtLiteral = Literal["auftrag", "meldung"]
 
 
 @server.tool(name="einsaetze_liste", description="Listet sichtbare Einsätze; nur lesend und ohne Personendaten.")
@@ -620,6 +621,46 @@ async def einsatz_objekte(
         "einsatz_objekte",
         incident_id=incident_id,
         inklusive_vorschlaege=inklusive_vorschlaege,
+    )
+
+
+@server.tool(
+    name="einsatz_objekt_dokument_herunterladen",
+    description="Bereitet den Download eines freigegebenen Dokuments eines Einsatz-Objekts vor.",
+)
+async def einsatz_objekt_dokument_herunterladen(
+    incident_id: int,
+    dokument_id: int,
+    seite: int | None = None,
+    inline: bool = False,
+    ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "einsatz_objekt_dokument_herunterladen",
+        incident_id=incident_id,
+        dokument_id=dokument_id,
+        seite=seite,
+        inline=inline,
+    )
+
+
+@server.tool(
+    name="einsatz_medium_herunterladen",
+    description="Bereitet den Download eines Auftrags- oder Meldungsmediums eines Einsatzes vor.",
+)
+async def einsatz_medium_herunterladen(
+    incident_id: int,
+    art: EinsatzMediumArtLiteral,
+    medium_id: int,
+    inline: bool = False,
+    ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "einsatz_medium_herunterladen",
+        incident_id=incident_id,
+        art=art,
+        medium_id=medium_id,
+        inline=inline,
     )
 
 

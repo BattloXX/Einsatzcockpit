@@ -84,6 +84,12 @@ Poppler ist weiterhin für Seitenvorschauen von übergebenen PDFs notwendig. Tes
 
 Schreibvorgänge erzeugen Audit-Einträge mit `objekt.mcp_*` beziehungsweise `kontakt.mcp_*`, etwa `objekt.mcp_angelegt`, `objekt.mcp_aktualisiert`, `objekt.mcp_dokument_übergeben`, `kontakt.mcp_angelegt` und `kontakt.mcp_aktualisiert`.
 
+### Einsätze auslesen
+
+Die lesenden Einsatz-Werkzeuge stehen allen Einsatzrollen ab `readonly` zur Verfügung; Admin- und Organisations-Admin-Rollen erfüllen diese Berechtigung ebenfalls. Sie liefern ausschließlich eigene und über `IncidentOrg` kollaborierende Einsätze der Token-Organisation. Auch System-Admins lesen damit nicht organisationsübergreifend.
+
+`einsatz_objekte` und `einsatz_objekt_dokument_herunterladen` benötigen zusätzlich das aktivierte Objektmodul. Objekt-Dokumente sind nur für aktuelle, freigegebene Versionen eines mit dem Einsatz verknüpften Basisobjekts verfügbar; Arbeitskopien bleiben ausgeschlossen. Die beiden Einsatz-Download-Werkzeuge geben einen 15 Minuten gültigen Link aus. Dieser benötigt keine Sitzung, prüft beim Abruf aber Benutzerstatus, Rolle, Einsatzsichtbarkeit, Modulstatus und Dokument- beziehungsweise Medienzuordnung erneut.
+
 Zentrale Kontakte dürfen per MCP angelegt, aktualisiert, archiviert und zusammengeführt werden. Das Archivieren eines Kontakts mit Objektzuordnungen erfordert `bestaetigt=true`; das Zusammenführen erfordert dies immer. SMS- und Mail-Freigaben je Objektkontakt sowie der SMS-Versand bleiben ausschließlich im Einsatzcockpit. Kontakt-Import und -Export stehen ebenfalls nur in der Oberfläche zur Verfügung.
 
 ## Verbindungen trennen und Fehlersuche
