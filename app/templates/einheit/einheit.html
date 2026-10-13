@@ -199,6 +199,8 @@
         <p class="fab-subcard__title">Nächster Auftrag</p>
         <strong x-text="naechster?.bezeichnung"></strong>
         <span class="einheit-chip einheit-chip--status" x-text="naechster?.einheit_status_label"></span>
+        <p class="einheit-sub" x-show="naechster?.adresse" x-text="naechster?.adresse"></p>
+        <div class="einheit-auftrag" x-show="naechster?.auftrag" x-text="naechster?.auftrag"></div>
         <div class="einheit-actions-row">
           <button type="button" class="btn btn--primary" @click="oeffne(naechster.dispatch_id)">Öffnen</button>
           <a class="btn btn--ghost" :href="naechster?.nav_url" target="_blank" rel="noopener" x-show="naechster?.nav_url">Navigation</a>
@@ -616,10 +618,27 @@
 
         <template x-if="flyout === 'abschluss_bestaetigen'">
           <div class="einheit-formular">
-            <p>Auftrag für diese Einsatzstelle als abgeschlossen melden?
-               Die Einsatzleitung entscheidet über den Abschluss der Einsatzstelle.</p>
-            <button type="button" class="btn btn--primary btn--lg einheit-action"
-                    @click="statusInOutbox('abgeschlossen')">Auftrag abgeschlossen</button>
+            <template x-if="istErkundung">
+              <div class="einheit-formular">
+                <label for="erkundung-lage">Lage vor Ort (Pflicht)</label>
+                <textarea class="form-control einheit-textarea" x-model="erkundungLage"
+                          id="erkundung-lage" placeholder="Lage vor Ort"></textarea>
+                <label for="erkundung-massnahmen">Notwendige Maßnahmen (Pflicht)</label>
+                <textarea class="form-control einheit-textarea" x-model="erkundungMassnahmen"
+                          id="erkundung-massnahmen" placeholder="Notwendige Maßnahmen"></textarea>
+                <button type="button" class="btn btn--primary btn--lg einheit-action"
+                        :disabled="!erkundungLage.trim() || !erkundungMassnahmen.trim()"
+                        @click="erkundungAbschliessen()">Erkundung abschließen</button>
+              </div>
+            </template>
+            <template x-if="!istErkundung">
+              <div>
+                <p>Auftrag für diese Einsatzstelle als abgeschlossen melden?
+                   Die Einsatzleitung entscheidet über den Abschluss der Einsatzstelle.</p>
+                <button type="button" class="btn btn--primary btn--lg einheit-action"
+                        @click="statusInOutbox('abgeschlossen')">Auftrag abgeschlossen</button>
+              </div>
+            </template>
           </div>
         </template>
 

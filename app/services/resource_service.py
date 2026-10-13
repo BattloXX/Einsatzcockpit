@@ -1088,6 +1088,14 @@ def get_einheiten_chips_for_sites(
         result[site.id] = {
             "chips": chips,
             "alle_fertig": bool(site_dispatches) and not active,
+            "nur_erkundet": (
+                bool(site_dispatches)
+                and not active
+                and not any(
+                    dispatch.auftragsart == "abarbeitung" and dispatch.withdrawn_at is None
+                    for dispatch in site_dispatches
+                )
+            ),
             "ohne_rueckmeldung_min": ohne_rueckmeldung_min,
         }
     return result

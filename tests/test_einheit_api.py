@@ -220,6 +220,40 @@ def test_status_broadcast_replay_und_uebergang(client, setup_db, monkeypatch):
     assert bad.status_code == 409 and bad.json()["code"] == "ungueltiger_uebergang"
 
 
+def test_abarbeitung_ist_auf_dem_tablet_waehrend_erkundung_gesperrt(client, setup_db):
+    x = _daten()
+    db = _db()
+    try:
+        db.get(IncidentSite, x["a"]).phase = SitePhase.erkundung
+        db.query(EinheitSiteDispatch).filter(
+            EinheitSiteDispatch.site_id == x["a"], EinheitSiteDispatch.id != x["d1"]
+        ).update({"withdrawn_at": datetime.now(UTC)})
+        db.commit()
+    finally:
+        db.close()
+    _device(client, x)
+    detail = client.get(f"/einheit/api/auftrag/{x['d1']}")
+    assert "in_arbeit" not in detail.json()["auftrag"]["erlaubte_status"]
+    response = client.post(
+        f"/einheit/api/auftrag/{x['d1']}/status",
+        json={"status": "in_arbeit", "client_uuid": str(uuid4())}, headers=_h(client),
+    )
+    assert response.status_code == 409 and response.json()["code"] == "stelle_in_erkundung"
+
+    db = _db()
+    try:
+        dispatch = db.get(EinheitSiteDispatch, x["d1"])
+        dispatch.auftragsart = "erkundung"
+        db.commit()
+    finally:
+        db.close()
+    response = client.post(
+        f"/einheit/api/auftrag/{x['d1']}/status",
+        json={"status": "abgeschlossen", "client_uuid": str(uuid4())}, headers=_h(client),
+    )
+    assert response.status_code == 200
+
+
 def test_rueckzug_meldung_zeit_und_validierung(client, setup_db):
     x = _daten()
     db = _db()
