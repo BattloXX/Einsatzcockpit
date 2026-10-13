@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.models.major_incident import LageEinheitLeader, LageEinheitNummerVerifikation, LageEinheitZugang
+from app.models.major_incident import LageEinheit, LageEinheitLeader, LageEinheitNummerVerifikation, LageEinheitZugang
 from app.models.sms import SmsLog
 from app.services import gk_nummer_service as service
 from app.services import gk_zugang_service
@@ -185,6 +185,14 @@ def test_sms_fehler_liefert_verstaendliche_meldung(monkeypatch):
 def test_api_qr_sitzung_zustand_hinweis_und_ablauf(client, monkeypatch):
     sms = _Sms(monkeypatch)
     ids = _eingeloest(client, ohne_leader=False)
+    zustand = client.get("/einheit/api/zustand").json()
+    # Hinterlegte, aber unbestätigte Nummer löst keine Abfrage aus.
+    assert zustand["nummer"]["hinweis"] is False and zustand["nummer"]["verifiziert"] is False
+    with _session() as db:
+        einheit = db.get(LageEinheit, ids["einheit"])
+        leader = db.get(LageEinheitLeader, einheit.leader_assignment_id)
+        leader.phone = leader.phone_e164 = None
+        db.commit()
     zustand = client.get("/einheit/api/zustand").json()
     assert zustand["nummer"]["hinweis"] is True and zustand["nummer"]["verifiziert"] is False
     headers = {"X-CSRF-Token": ids["csrf"]}
