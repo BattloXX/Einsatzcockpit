@@ -43,6 +43,8 @@ EINSATZ_TOOLS = {
     "einsatz_objekte",
     "einsatz_lagebild",
     "einsatz_objekt_dokument_herunterladen",
+    "einsatz_objekt_dokument_seite_ansehen",
+    "einsatz_objekt_dokument_text",
     "einsatz_medium_herunterladen",
 }
 EINSATZ_SCHREIB_TOOLS = {"einsatz_auftrag_anlegen", "einsatz_meldung_anlegen"}
@@ -157,7 +159,10 @@ def test_tools_liste_und_sichtbarkeit_status(client):
     assert EINSATZ_TOOLS <= set(TOOLS)
     tool_liste = _mcp(client, token, "tools/list", {}, 95).text
     # Ohne Objektmodul bleibt nur der Objektdokument-Download ausgeblendet.
-    assert all(name in tool_liste for name in EINSATZ_TOOLS - {"einsatz_objekt_dokument_herunterladen"})
+    assert all(name in tool_liste for name in EINSATZ_TOOLS - {
+        "einsatz_objekt_dokument_herunterladen", "einsatz_objekt_dokument_seite_ansehen",
+        "einsatz_objekt_dokument_text",
+    })
     assert '"name":"einsatz_objekt_dokument_herunterladen"' not in tool_liste
     assert {row["id"] for row in _rufe(client, token, "einsaetze_liste", status="aktiv")["items"]} == {
         own_active,

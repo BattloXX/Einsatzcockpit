@@ -37,6 +37,7 @@ from app.models.objekt import (
     OBJEKT_EINSATZ_VORSCHLAG,
     Objekt,
     ObjektDokument,
+    ObjektDokumentSeite,
     ObjektEinsatz,
 )
 from app.services.einsatz_mcp_service import (
@@ -50,6 +51,7 @@ from app.services.einsatz_mcp_service import (
     task_dict,
     ui_link,
 )
+from app.services.mcp_dokument_seiten_service import bild_anhaengen, seite_ergebnis, seiten_text
 from app.services.mcp_download_service import erstelle_download_token, loese_datei
 from app.services.media_service import absolute_path
 from app.services.objekt_service import objekt_effective_enabled
@@ -76,11 +78,14 @@ def _datei_hash_und_inhalt(pfad: Path, inline: bool) -> tuple[int, str, bytes | 
     return groesse, digest.hexdigest(), bytes(inhalt) if inhalt is not None else None
 
 
-def _einsatz_objekt_dokument(context: MCPContext, incident_id: int, dokument_id: int, seite: int | None):
+def _einsatz_dokument(context: MCPContext, incident_id: int, dokument_id: int) -> ObjektDokument:
     sichtbarer_einsatz(context.db, context.org_id, incident_id)
     if not objekt_effective_enabled(context.org_id, context.db):
         raise ValueError("Objektmodul nicht aktiv.")
-    dokument, pfad, dateiname, mime = loese_datei(context.db, context.org_id, dokument_id, seite)
+    dokument = (context.db.query(ObjektDokument)
+                .filter(ObjektDokument.id == dokument_id, ObjektDokument.org_id == context.org_id).first())
+    if dokument is None:
+        raise ValueError("Dokument nicht gefunden.")
     verknuepfung = (
         context.db.query(ObjektEinsatz)
         .join(Objekt, Objekt.id == ObjektEinsatz.objekt_id)
@@ -93,6 +98,12 @@ def _einsatz_objekt_dokument(context: MCPContext, incident_id: int, dokument_id:
     )
     if verknuepfung is None or not dokument.ist_aktuelle_version or dokument.freigabe_status != "freigegeben":
         raise ValueError("Dokument nicht gefunden.")
+    return dokument
+
+
+def _einsatz_objekt_dokument(context: MCPContext, incident_id: int, dokument_id: int, seite: int | None):
+    dokument = _einsatz_dokument(context, incident_id, dokument_id)
+    dokument, pfad, dateiname, mime = loese_datei(context.db, context.org_id, dokument.id, seite)
     return dokument, pfad, dateiname, mime
 
 
@@ -756,6 +767,9 @@ def _objekte(context: MCPContext, incident_id: int, inklusive_vorschlaege: bool)
                         "dokumentart": seite.dokumentart,
                         "titel": seite.titel,
                         "bei_einsatz_drucken": seite.bei_einsatz_drucken,
+                        "hat_bild": bool(seite.bild_pfad or seite.thumb_pfad),
+                        "text_quelle": seite.text_quelle,
+                        "textlaenge": len(seite.volltext or ""),
                     }
                     for seite in dokument.seiten
                 ],
@@ -782,7 +796,9 @@ async def einsatz_objekte(
 
 @register_tool(
     name="einsatz_objekt_dokument_herunterladen",
-    description="Bereitet den Download eines freigegebenen Dokuments eines Einsatz-Objekts vor.",
+    description=("Bereitet den Download eines freigegebenen Dokuments eines Einsatz-Objekts vor. "
+                 "Zum Lesen durch das Modell einsatz_objekt_dokument_seite_ansehen / einsatz_objekt_dokument_text "
+                 "verwenden."),
     required_roles=EINSATZ_LESE_ROLLEN,
     module_check=objekt_effective_enabled,
 )
@@ -834,6 +850,44 @@ async def einsatz_objekt_dokument_herunterladen(
                 "bitte download_url verwenden."
             )
     return result
+
+
+@register_tool(
+    name="einsatz_objekt_dokument_seite_ansehen",
+    description=("Liest ein freigegebenes Einsatz-Objektdokument visuell Seite fuer Seite; volltext ist OCR und "
+                 "kann Fehler enthalten."), required_roles=EINSATZ_LESE_ROLLEN, module_check=objekt_effective_enabled,
+)
+async def einsatz_objekt_dokument_seite_ansehen(context: MCPContext, incident_id: int, dokument_id: int, seite: int,
+                                                bild: bool = True, max_kante_px: int = 1600) -> dict[str, object]:
+    dokument = _einsatz_dokument(context, incident_id, dokument_id)
+    row = (context.db.query(ObjektDokumentSeite).filter(ObjektDokumentSeite.dokument_id == dokument.id,
+           ObjektDokumentSeite.seiten_nr == seite).first())
+    if row is None:
+        raise ValueError("Seite nicht gefunden.")
+    result: dict[str, object] = {"incident_id": incident_id, **seite_ergebnis(dokument, row)}
+    if bild:
+        await asyncio.to_thread(bild_anhaengen, result, row, max_kante_px)
+    write_audit(context.db, "objekt.mcp_seite_angesehen", org_id=context.org_id, user_id=context.user.id,
+                entity_type="objekt_dokument", entity_id=dokument.id,
+                payload={"incident_id": incident_id, "objekt_id": dokument.objekt_id, "seite": row.seiten_nr})
+    context.db.commit()
+    return result
+
+
+@register_tool(
+    name="einsatz_objekt_dokument_text", description="Liest den OCR-/Textindex eines freigegebenen Einsatzdokuments.",
+    required_roles=EINSATZ_LESE_ROLLEN, module_check=objekt_effective_enabled,
+)
+async def einsatz_objekt_dokument_text(context: MCPContext, incident_id: int, dokument_id: int, von_seite: int = 1,
+                                       bis_seite: int | None = None, max_zeichen: int = 60000) -> dict[str, object]:
+    dokument = _einsatz_dokument(context, incident_id, dokument_id)
+    ende = bis_seite if bis_seite is not None else dokument.seitenzahl
+    if von_seite < 1 or ende < von_seite:
+        raise ValueError("Ungueltiger Seitenbereich.")
+    seiten = (context.db.query(ObjektDokumentSeite).filter(ObjektDokumentSeite.dokument_id == dokument.id,
+              ObjektDokumentSeite.seiten_nr >= von_seite, ObjektDokumentSeite.seiten_nr <= ende)
+              .order_by(ObjektDokumentSeite.seiten_nr).all())
+    return {"incident_id": incident_id, "dokument_id": dokument.id, **seiten_text(seiten, max_zeichen)}
 
 
 @register_tool(
