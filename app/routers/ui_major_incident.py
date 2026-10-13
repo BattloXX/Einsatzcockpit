@@ -1439,34 +1439,27 @@ async def site_einheit_abziehen(
         raise HTTPException(status_code=404)
 
     try:
-        resource_service.withdraw_from_site(
+        dispatch = resource_service.withdraw_from_site(
             db, einheit_id, lage_id, site_id,
             author_name=get_author_name(request), user_id=user.id, grund=grund, auftragsart=auftragsart,
         )
         einheit = db.get(LageEinheit, einheit_id)
-        db.flush()  # Session ohne Autoflush: withdrawn_at muss für die folgende Abfrage sichtbar sein
-        dispatch_query = db.query(resource_service.EinheitSiteDispatch).filter(
-            resource_service.EinheitSiteDispatch.einheit_id == einheit_id,
-            resource_service.EinheitSiteDispatch.site_id == site_id,
-            resource_service.EinheitSiteDispatch.withdrawn_at.isnot(None),
-        )
-        if auftragsart:
-            dispatch_query = dispatch_query.filter(resource_service.EinheitSiteDispatch.auftragsart == auftragsart)
-        # Gerade zurückgezogener Auftrag (bei Erkundung + Abarbeitung derselben Einheit genau dieser).
-        dispatch = dispatch_query.order_by(resource_service.EinheitSiteDispatch.withdrawn_at.desc(),
-                                           resource_service.EinheitSiteDispatch.id.desc()).first()
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    db.add(SiteLogEntry(
-        incident_site_id=site_id,
-        kind="resource",
-        text=f"Einheit abgezogen: {einheit.label}",  # type: ignore[union-attr]
-        user_id=user.id,
-        author_name=get_author_name(request),
-    ))
+    if dispatch.withdrawn_at is not None:
+        db.add(SiteLogEntry(
+            incident_site_id=site_id,
+            kind="resource",
+            text=f"Einheit abgezogen: {einheit.label}",  # type: ignore[union-attr]
+            user_id=user.id,
+            author_name=get_author_name(request),
+        ))
     lagemeldung_service.sync_timer(site, db)
     from app.services.gsl_auftrag_events import plane_benachrichtigungen, sende_nach_commit
-    benachrichtigung = plane_benachrichtigungen(db, lage, einheit, dispatch, "zurueckgezogen") if dispatch else None
+    benachrichtigung = (
+        plane_benachrichtigungen(db, lage, einheit, dispatch, "zurueckgezogen")
+        if dispatch.withdrawn_at is not None else None
+    )
     db.commit()
     if benachrichtigung:
         background_tasks.add_task(sende_nach_commit, benachrichtigung)
@@ -4357,7 +4350,7 @@ def _sektoren_context(db: Session, lage: MajorIncident, user) -> dict:
             labels = [
                 dispatch.einheit.label if dispatch.einheit else "Einheit"
                 for dispatch in site.dispatched_einheiten
-                if dispatch.withdrawn_at is None
+                if dispatch.withdrawn_at is None and dispatch.abgezogen_at is None
             ]
             labels.extend(
                 resource.label or resource.resource_type

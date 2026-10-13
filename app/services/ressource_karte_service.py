@@ -107,6 +107,8 @@ def _einsatz(db: Session, dispatch: EinheitSiteDispatch) -> dict:
         "withdrawn_at": _naiv(dispatch.withdrawn_at),
         "withdrawn_grund": dispatch.withdrawn_grund,
         "withdrawn_author": dispatch.withdrawn_author,
+        "abgezogen_at": _naiv(dispatch.abgezogen_at),
+        "abgezogen_author": dispatch.abgezogen_author,
         "letzte_lagemeldung": (
             {"ts": _naiv(letzte_lagemeldung.ts), "text": letzte_lagemeldung.text}
             if letzte_lagemeldung else None
@@ -182,6 +184,7 @@ def journal(
             ("uebernommen", dispatch.bestaetigt_at, "Auftrag übernommen"),
             ("begonnen", dispatch.vor_ort_at, "Einsatz begonnen"),
             ("abgeschlossen", dispatch.beendet_at, "Einsatz abgeschlossen"),
+            ("abgezogen", dispatch.abgezogen_at, "Einheit von Einsatzstelle abgezogen"),
             ("zurueckgezogen", dispatch.withdrawn_at, "Auftrag zurückgezogen"),
         ):
             if ts is not None and (dispatch.site_id, typ) not in vorhandene:

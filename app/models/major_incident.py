@@ -713,6 +713,11 @@ class EinheitSiteDispatch(Base):
     )
     withdrawn_author: Mapped[str | None] = mapped_column(String(120), nullable=True)
     withdrawn_grund: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    abgezogen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    abgezogen_by: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+    abgezogen_author: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
     site: Mapped[IncidentSite] = relationship(foreign_keys=[site_id], overlaps="dispatched_einheiten")
     einheit: Mapped[LageEinheit] = relationship(foreign_keys=[einheit_id], back_populates="site_dispatches")

@@ -43,6 +43,7 @@ def test_einheiten_chips_status_reihenfolge_fertig_und_rueckmeldung():
         d_tlf.letzte_rueckmeldung_at = now - timedelta(minutes=40)
         d_rlf.einheit_status = "abgeschlossen"
         d_rlf.beendet_at = now - timedelta(minutes=5)
+        d_rlf.abgezogen_at = now - timedelta(minutes=4)
         db.add(EinheitSiteDispatch(
             einheit_id=retired.id,
             site_id=site.id,
@@ -55,9 +56,8 @@ def test_einheiten_chips_status_reihenfolge_fertig_und_rueckmeldung():
 
         chips = get_einheiten_chips_for_sites(db, [site], org_settings=settings, jetzt=now)[site.id]
 
-        assert [chip["label"] for chip in chips["chips"]] == ["TLF", "RLF"]
+        assert [chip["label"] for chip in chips["chips"]] == ["TLF"]
         assert chips["chips"][0]["label_status"] == "Anfahrt"
-        assert chips["chips"][1]["beendet"] is True
         assert chips["alle_fertig"] is False
         assert chips["ohne_rueckmeldung_min"] == 40
 

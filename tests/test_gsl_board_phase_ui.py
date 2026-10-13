@@ -151,6 +151,30 @@ def test_dispatchzeile_zeigt_erkundung_und_erkundet(client):
     assert "🔍 Erkundung" in detail and "Erkundet" in detail
 
 
+def test_beendeten_auftrag_manuell_abziehen_und_wiedereroeffnen(client):
+    data = _api_daten(); _leader(client, data)
+    db = SessionLocal(); set_tenant_context(db, None)
+    try:
+        dispatch = db.get(EinheitSiteDispatch, data["d1"])
+        dispatch.einheit_status = "abgeschlossen"
+        dispatch.beendet_at = datetime.now(UTC)
+        db.commit()
+    finally:
+        db.close()
+
+    url = f"/lage/{data['lage']}/stellen/{data['a']}/einheit-abziehen"
+    before = client.get(f"/lage/{data['lage']}/stellen/{data['a']}").text
+    assert "Abziehen" in before and "Abgezogen" not in before
+    response = _post(client, url, {"einheit_id": data["e1"]})
+    assert response.status_code == 200 and "Abgezogen" in response.text
+    db = SessionLocal(); set_tenant_context(db, None)
+    try:
+        dispatch = db.get(EinheitSiteDispatch, data["d1"])
+        assert dispatch.abgezogen_at is not None and dispatch.withdrawn_at is None
+    finally:
+        db.close()
+
+
 def test_detail_unterscheidet_erkundet_von_fertig_gemeldeter_abarbeitung(client):
     data = _api_daten(); _leader(client, data)
     db = SessionLocal(); set_tenant_context(db, None)

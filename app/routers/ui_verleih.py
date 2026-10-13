@@ -492,7 +492,11 @@ async def site_material_neu_form(
     einheiten = (
         db.query(LageEinheit)
         .join(EinheitSiteDispatch, EinheitSiteDispatch.einheit_id == LageEinheit.id)
-        .filter(EinheitSiteDispatch.site_id == site.id, EinheitSiteDispatch.withdrawn_at.is_(None))
+        .filter(
+            EinheitSiteDispatch.site_id == site.id,
+            EinheitSiteDispatch.withdrawn_at.is_(None),
+            EinheitSiteDispatch.abgezogen_at.is_(None),
+        )
         .order_by(LageEinheit.label)
         .all()
     )

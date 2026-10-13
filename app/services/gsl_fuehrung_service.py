@@ -21,7 +21,11 @@ def fuehrungs_hinweise(db: Session, lage: Any, *, now: datetime | None = None) -
     dispatches = (
         db.query(EinheitSiteDispatch)
         .options(joinedload(EinheitSiteDispatch.einheit))
-        .filter(EinheitSiteDispatch.site_id.in_(site_ids), EinheitSiteDispatch.withdrawn_at.is_(None))
+        .filter(
+            EinheitSiteDispatch.site_id.in_(site_ids),
+            EinheitSiteDispatch.withdrawn_at.is_(None),
+            EinheitSiteDispatch.abgezogen_at.is_(None),
+        )
         .all() if site_ids else []
     )
     by_site: dict[int, list[EinheitSiteDispatch]] = {site_id: [] for site_id in site_ids}
