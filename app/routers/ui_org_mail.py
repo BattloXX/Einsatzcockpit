@@ -89,7 +89,8 @@ def _gueltige_absenderliste(raw: str) -> str | None:
     from app.services.mail_service import _looks_like_email
     from app.services.org_mail_adresse import ist_gueltige_domain
 
-    if any(ord(char) < 32 or ord(char) == 127 for char in raw):
+    # Zeilenumbrüche (Textarea sendet \r\n) trennen die Einträge und sind erlaubt.
+    if any((ord(char) < 32 and char not in "\r\n") or ord(char) == 127 for char in raw):
         return None
     lines = [line.strip().lower() for line in raw.splitlines() if line.strip()]
     if len(lines) > 200:

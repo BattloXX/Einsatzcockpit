@@ -45,3 +45,12 @@ def test_leitstellennummer_aus_betreff_erkennt_nur_das_erste_token():
     assert leitstellennummer_aus_betreff("Einsatzinfo f26009038") is None
     assert leitstellennummer_aus_betreff("") is None
     assert leitstellennummer_aus_betreff(None) is None
+
+
+def test_absenderliste_mit_mehreren_zeilen_wird_gespeichert():
+    from app.routers.ui_org_mail import _gueltige_absenderliste
+
+    roh = "johannes@battlogg.org\r\nM.Piller@meusburger.com\r\n\r\n@lls.at\n"
+    assert _gueltige_absenderliste(roh) == "johannes@battlogg.org\nm.piller@meusburger.com\n@lls.at"
+    assert _gueltige_absenderliste("a@example.at\x00\r\nb@example.at") is None
+    assert _gueltige_absenderliste("a@example.at\tb@example.at") is None
