@@ -5,13 +5,13 @@
     <button type="button" class="sk-site" hx-get="/lage/{{ lage.id }}/stellen/{{ site.id }}" hx-target="#siteDetailContent" hx-swap="innerHTML" aria-label="Einsatzstelle {{ site.bezeichnung }} öffnen">
       <span class="sk-site__main">
         <span class="sk-site__title">{{ site.bezeichnung }}</span>
+        <span class="sk-site__badges">
+          <span class="sk-phase-badge sk-phase-badge--{{ group }}" title="{{ phase_group_label[group] }}">{{ phase_labels.get(site.phase, phase_group_label[group]) }}</span>
+          <span class="sk-prio sk-prio--{{ prio_color.get(site.priority, 'muted') }}">● {{ prio_label.get(site.priority, 'Keine Priorität') }}</span>
+          {% if site.id in overdue_site_ids %}<span class="sk-overdue">Lagemeldung überfällig</span>{% endif %}
+        </span>
         {% if site.strasse or site.ort or site.einsatzgrund %}<span class="sk-site__subline">{% if site.strasse %}{{ site.strasse }}{% if site.hausnr %} {{ site.hausnr }}{% endif %}{% endif %}{% if site.strasse and site.ort %}, {% endif %}{% if site.ort %}{{ site.ort }}{% endif %}{% if (site.strasse or site.ort) and site.einsatzgrund %} · {% endif %}{% if site.einsatzgrund %}{{ site.einsatzgrund }}{% endif %}</span>{% endif %}
         {% if active_einheiten_by_site.get(site.id) %}<span class="sk-unit-chips" aria-label="Aktive Einheiten">{% for label in active_einheiten_by_site[site.id] %}<span class="sk-unit-chip">{{ label }}</span>{% endfor %}</span>{% endif %}
-      </span>
-      <span class="sk-site__badges">
-        <span class="sk-phase-badge sk-phase-badge--{{ group }}" title="{{ phase_group_label[group] }}">{{ phase_labels.get(site.phase, phase_group_label[group]) }}</span>
-        <span class="sk-prio sk-prio--{{ prio_color.get(site.priority, 'muted') }}">● {{ prio_label.get(site.priority, 'Keine Priorität') }}</span>
-        {% if site.id in overdue_site_ids %}<span class="sk-overdue">Lagemeldung überfällig</span>{% endif %}
       </span>
     </button>
     <a class="sk-board-link" href="/lage/{{ lage.id }}?openSite={{ site.id }}">Auf dem Board zeigen</a>

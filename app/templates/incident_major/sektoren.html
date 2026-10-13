@@ -30,12 +30,12 @@
 .sk-phase-counts { margin-top:4px; font-size:.7rem; color:var(--text-muted); }
 .sk-site-row { margin-bottom:8px; }
 .sk-site { width:100%; text-align:left; font:inherit; color:inherit; cursor:pointer; border:1px solid transparent;
-  font-size:.8rem; padding:9px; border-radius:var(--radius-md, .5rem); background:var(--surface-high); display:flex; align-items:flex-start; justify-content:space-between; gap:8px; }
+  font-size:.8rem; padding:9px; border-radius:var(--radius-md, .5rem); background:var(--surface-high); display:block; }
 .sk-site:hover, .sk-site:focus-visible { border-color:var(--sk-accent); outline:none; }
-.sk-site__main { min-width:0; display:flex; flex-direction:column; gap:3px; }
-.sk-site__title { font-weight:700; }
-.sk-site__subline { color:var(--text-muted); line-height:1.35; }
-.sk-site__badges { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:4px; flex-shrink:0; }
+.sk-site__main { min-width:0; display:flex; flex-direction:column; gap:4px; }
+.sk-site__title { font-weight:700; overflow-wrap:anywhere; }
+.sk-site__subline { color:var(--text-muted); line-height:1.35; overflow-wrap:anywhere; }
+.sk-site__badges { display:flex; flex-wrap:wrap; gap:4px; }
 .sk-phase-badge, .sk-prio, .sk-unit-chip, .sk-overdue { border-radius:999px; padding:2px 7px; font-size:.68rem; font-weight:700; white-space:nowrap; }
 .sk-phase-badge--neu { background:rgba(107,114,128,.2); color:#d1d5db; }
 .sk-phase-badge--in_arbeit { background:rgba(251,191,36,.16); color:var(--yellow); }
@@ -69,8 +69,7 @@
 .sk-modal h3 { font-size: .9rem; margin-bottom: 12px; }
 @media (max-width:760px) {
   .sk-wrap { padding:10px; }.sk-grid { grid-template-columns:1fr; gap:10px; }
-  .sk-site { min-height:44px; }.sk-site__badges { justify-content:flex-start; }
-  .sk-site { flex-direction:column; }.sk-site__badges { width:100%; }
+  .sk-site { min-height:44px; }
 }
 </style>
 {% endblock %}
