@@ -597,6 +597,8 @@ async def gsl_einheit_disponieren(context: MCPContext, lage_id: int, einheit_id:
         notification = plane_benachrichtigungen(context.db, lage, einheit, dispatch, "neu")
         context.db.commit()
         await sende_nach_commit(notification)
+        from app.services.print_dispatcher import autoprint_gsl_stelle_disponiert_background
+        await autoprint_gsl_stelle_disponiert_background(dispatch.id)
         await _broadcast(lage.id, site_id, einheit_id, dispatch.id)
         if getattr(dispatch, "phase_geaendert", False):
             await _broadcast_phase_changed(context.db, lage, site)

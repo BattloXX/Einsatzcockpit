@@ -137,11 +137,18 @@
                     {% elif key in ('gsl_lageblatt', 'gsl_bericht') %}{% set doc_trigger = "['gsl_created', 'gsl_lage_updated'].includes(trigger)" %}
                     {% elif key == 'alarm_rohtext' %}{% set doc_trigger = "trigger === 'alarm_serial_received'" %}
                     {% elif key == 'gsl_einheit_qr' %}{% set doc_trigger = "trigger === 'gsl_einheit_angelegt'" %}
+                    {% elif key == 'site_karte' %}{% set doc_trigger = "trigger === 'gsl_stelle_disponiert'" %}
                     {% elif key == 'mail_eingang' %}{% set doc_trigger = "trigger === 'mail_eingang'" %}
                     {% else %}{% set doc_trigger = "trigger === 'verleih_created'" %}{% endif %}
                     <label class="gwx-check" x-show="{{ doc_trigger }}"><input type="checkbox" name="documents" value="{{ key }}" :disabled="!({{ doc_trigger }})"
                       {{ 'checked' if key in (r.documents or []) }}> {{ label }}</label>
                     {% endfor %}
+                  </div>
+
+                  <div class="gwx-sechd" x-show="trigger === 'gsl_stelle_disponiert'">Einsatzstellen-Optionen</div>
+                  <div class="gwx-formgrid" x-show="trigger === 'gsl_stelle_disponiert'">
+                    <label class="gwx-check"><input type="checkbox" name="stelle_nur_erste_disposition" value="1" {{ 'checked' if f.get('stelle_nur_erste_disposition') }}> Nur bei erster Disposition der Einsatzstelle</label>
+                    <div class="gwx-field"><label class="gwx-label">Auftragsart</label><select name="stelle_auftragsart"><option value="alle" {{ 'selected' if f.get('stelle_auftragsart', 'alle') == 'alle' }}>alle</option><option value="erkundung" {{ 'selected' if f.get('stelle_auftragsart') == 'erkundung' }}>nur Erkundung</option><option value="abarbeitung" {{ 'selected' if f.get('stelle_auftragsart') == 'abarbeitung' }}>nur Abarbeitung</option></select></div>
                   </div>
 
                   <div class="gwx-sechd" x-show="trigger === 'mail_eingang'">✉️ E-Mail-Optionen</div>

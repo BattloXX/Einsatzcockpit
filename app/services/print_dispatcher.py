@@ -45,6 +45,7 @@ TRIGGER_TEST_BEZUG = {
     "gsl_lage_updated": "gsl",
     "verleih_created": "verleih",
     "gsl_einheit_angelegt": "gsl_einheit",
+    "gsl_stelle_disponiert": "gsl_stelle",
     "alarm_serial_received": "alarm",
 }
 
@@ -76,6 +77,7 @@ def build_idempotency_key(
     artifact_ref: str | None,
     printer_id: int | None,
     fallback_of: int | None = None,
+    idempotenz_zusatz: str | None = None,
 ) -> str:
     """Deterministischer Schlüssel für Automatik-Jobs (max. einmal je Kombination).
 
@@ -96,6 +98,8 @@ def build_idempotency_key(
     ]
     if fallback_of is not None:
         parts.append(f"fb{fallback_of}")
+    if idempotenz_zusatz is not None:
+        parts.append(idempotenz_zusatz)
     raw = ":".join(parts)
     return f"{source}:{hashlib.sha256(raw.encode()).hexdigest()[:32]}"
 
@@ -116,6 +120,7 @@ def create_print_job(
     options: dict | None = None,
     created_by_id: int | None = None,
     fallback_of_job_id: int | None = None,
+    idempotenz_zusatz: str | None = None,
 ) -> tuple[PrintJob, bool]:
     """Legt einen Druckauftrag an. Gibt (job, created) zurück.
 
@@ -128,6 +133,7 @@ def create_print_job(
         objekt_id=objekt_id, document_type=document_type, artifact_ref=artifact_ref,
         printer_id=printer_id,
         fallback_of=fallback_of_job_id,
+        idempotenz_zusatz=idempotenz_zusatz,
     )
     if source != JOB_SOURCE_MANUAL:
         existing = (
@@ -380,13 +386,24 @@ def on_event(db: Session, org_id: int, trigger: str, context: dict) -> list[Prin
 
 
 def _filter_matches(rule, context: dict) -> bool:
-    from app.models.gateway import TRIGGER_EINSATZ_CREATED, TRIGGER_EINSATZ_UPDATED, TRIGGER_MAIL_EINGANG
+    from app.models.gateway import (
+        TRIGGER_EINSATZ_CREATED,
+        TRIGGER_EINSATZ_UPDATED,
+        TRIGGER_GSL_STELLE_DISPONIERT,
+        TRIGGER_MAIL_EINGANG,
+    )
 
     f = rule.filters or {}
     if rule.trigger == TRIGGER_MAIL_EINGANG:
         if f.get("mail_nur_zugeordnet") and not context.get("mail_assigned"):
             return False
         if f.get("mail_nur_freigegeben") and not context.get("mail_sender_approved"):
+            return False
+    if rule.trigger == TRIGGER_GSL_STELLE_DISPONIERT:
+        if f.get("stelle_nur_erste_disposition") and not context.get("erste_disposition"):
+            return False
+        auftragsart = f.get("stelle_auftragsart", "alle")
+        if auftragsart in ("erkundung", "abarbeitung") and context.get("auftragsart") != auftragsart:
             return False
     hat_einsatzbezug = rule.trigger in (TRIGGER_EINSATZ_CREATED, TRIGGER_EINSATZ_UPDATED)
     uebung = f.get("uebung", "alle")
@@ -485,7 +502,7 @@ def resolve_test_context(db: Session, rule) -> TestBezug | None:
     """Loest den juengsten zur Regel passenden Testbezug derselben Organisation auf."""
     from app.models.gateway import AlarmIngest
     from app.models.incident import Incident
-    from app.models.major_incident import LageEinheit, MajorIncident
+    from app.models.major_incident import EinheitSiteDispatch, IncidentSite, LageEinheit, MajorIncident
     from app.models.verleih import VerleihAusleihe
 
     art = TRIGGER_TEST_BEZUG.get(rule.trigger)
@@ -513,6 +530,24 @@ def resolve_test_context(db: Session, rule) -> TestBezug | None:
         lage = db.get(MajorIncident, einheit.lage_id)
         return TestBezug({"gsl_id": einheit.lage_id, "einheit_id": einheit.id,
                           "is_exercise": getattr(lage, "is_exercise", None)}, art, einheit.id)
+    if art == "gsl_stelle":
+        dispatch = (db.query(EinheitSiteDispatch)
+                    .join(IncidentSite, EinheitSiteDispatch.site_id == IncidentSite.id)
+                    .join(MajorIncident, IncidentSite.major_incident_id == MajorIncident.id)
+                    .filter(MajorIncident.org_id == rule.org_id)
+                    .order_by(EinheitSiteDispatch.id.desc()).first())
+        if dispatch is None:
+            return None
+        site = db.get(IncidentSite, dispatch.site_id)
+        lage = db.get(MajorIncident, site.major_incident_id) if site else None
+        if site is None or lage is None:
+            return None
+        erste = not db.query(EinheitSiteDispatch.id).filter(
+            EinheitSiteDispatch.site_id == site.id, EinheitSiteDispatch.id < dispatch.id,
+        ).first()
+        return TestBezug({"gsl_id": lage.id, "site_id": site.id, "dispatch_id": dispatch.id,
+                          "einheit_id": dispatch.einheit_id, "auftragsart": dispatch.auftragsart,
+                          "is_exercise": lage.is_exercise, "erste_disposition": erste}, art, dispatch.id)
     if art == "verleih":
         ausleihe = (
             db.query(VerleihAusleihe)
@@ -744,6 +779,51 @@ async def autoprint_gsl_einheit_background(einheit_id: int) -> None:
         db.close()
 
 
+async def autoprint_gsl_stelle_disponiert_background(dispatch_id: int) -> None:
+    """Best-effort-Regeldruck nach einer neuen Einsatzstellen-Disposition."""
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+    from app.models.gateway import TRIGGER_GSL_STELLE_DISPONIERT
+    from app.models.major_incident import EinheitSiteDispatch, IncidentSite, MajorIncident
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        dispatch = db.get(EinheitSiteDispatch, dispatch_id)
+        if dispatch is None:
+            return
+        site = db.get(IncidentSite, dispatch.site_id)
+        if site is None:
+            return
+        lage = db.get(MajorIncident, site.major_incident_id)
+        if lage is None or lage.org_id is None:
+            return
+        set_tenant_context(db, lage.org_id)
+        erste_disposition = not db.query(EinheitSiteDispatch.id).filter(
+            EinheitSiteDispatch.site_id == site.id,
+            EinheitSiteDispatch.id < dispatch.id,
+        ).first()
+        jobs = on_event(db, lage.org_id, TRIGGER_GSL_STELLE_DISPONIERT, {
+            "gsl_id": lage.id,
+            "site_id": site.id,
+            "dispatch_id": dispatch.id,
+            "einheit_id": dispatch.einheit_id,
+            "auftragsart": dispatch.auftragsart,
+            "is_exercise": lage.is_exercise,
+            "erste_disposition": erste_disposition,
+        })
+        db.commit()
+        for job in jobs:
+            try:
+                await dispatch_job(db, job)
+            except Exception as exc:  # pragma: no cover
+                logger.warning("Einsatzstellen-Auto-Druck Job %s nicht zustellbar: %s", job.id, exc)
+    except Exception as exc:  # pragma: no cover
+        logger.warning("Einsatzstellen-Auto-Druck fehlgeschlagen (Disposition %s): %s", dispatch_id, exc)
+    finally:
+        db.close()
+
+
 async def autoprint_mail_eingang_background(eingang_id: int) -> None:
     """Best-effort-Regeldruck einer angenommenen Eingangsmail, erst nach Commit."""
     from app.core.tenant import set_tenant_context
@@ -856,6 +936,7 @@ def _jobs_for_rule(
         DOC_MAIL_EINGANG,
         DOC_OBJEKT_DOKUMENT,
         DOC_OBJEKTBLATT,
+        DOC_SITE_KARTE,
         DOC_VERLEIH_SCHEIN,
         TRIGGER_DOCUMENT_TYPES,
         Printer,
@@ -876,7 +957,9 @@ def _jobs_for_rule(
         job, created = create_print_job(
             db, org_id=rule.org_id, gateway_id=gateway.id, source=source,
             rule_id=rule.id, incident_id=context.get("incident_id"),
-            gsl_id=context.get("gsl_id"), options=options, **kw,
+            gsl_id=context.get("gsl_id"), options=options,
+            idempotenz_zusatz=(f"d{context['dispatch_id']}" if context.get("dispatch_id") else None),
+            **kw,
         )
         if created:
             jobs.append(job)
@@ -911,6 +994,13 @@ def _jobs_for_rule(
                 continue
             for printer_id in printer_ids:
                 _add(printer_id=printer_id, document_type=document_type, artifact_ref=str(mail_id))
+            continue
+        if document_type == DOC_SITE_KARTE:
+            site_id = context.get("site_id")
+            if not site_id or not context.get("gsl_id"):
+                continue
+            for printer_id in printer_ids:
+                _add(printer_id=printer_id, document_type=document_type, artifact_ref=str(site_id))
             continue
         if document_type == DOC_ALARM_ROHTEXT:
             # Ohne AlarmIngest-Bezug wuerde _render_alarm_rohtext ein leeres Blatt
