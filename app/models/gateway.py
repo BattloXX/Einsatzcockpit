@@ -134,6 +134,7 @@ JOB_SOURCE_RULE = "rule"
 
 # ── Druckregel-Trigger ─────────────────────────────────────────────────────────
 TRIGGER_EINSATZ_CREATED = "einsatz_created"
+TRIGGER_EINSATZ_CREATED_GSL = "einsatz_created_gsl"
 TRIGGER_EINSATZ_UPDATED = "einsatz_updated"
 TRIGGER_GSL_CREATED = "gsl_created"
 TRIGGER_GSL_LAGE_UPDATED = "gsl_lage_updated"
@@ -145,7 +146,8 @@ TRIGGER_MAIL_EINGANG = "mail_eingang"
 TRIGGER_MANUAL_ONLY = "manual_only"
 
 TRIGGER_LABELS = {
-    TRIGGER_EINSATZ_CREATED: "Einsatz angelegt",
+    TRIGGER_EINSATZ_CREATED: "Einsatz angelegt – normaler Einsatz",
+    TRIGGER_EINSATZ_CREATED_GSL: "Einsatz angelegt – GSL-Einsatzstelle",
     TRIGGER_EINSATZ_UPDATED: "Einsatz aktualisiert",
     TRIGGER_GSL_CREATED: "Großschadenslage angelegt",
     TRIGGER_GSL_LAGE_UPDATED: "GSL-Lage aktualisiert",
@@ -175,6 +177,7 @@ RULE_DOCUMENT_LABELS = {
 
 TRIGGER_DOCUMENT_TYPES = {
     TRIGGER_EINSATZ_CREATED: frozenset({DOC_EINSATZINFO, DOC_OBJEKTBLATT, DOC_OBJEKT_DOKUMENT}),
+    TRIGGER_EINSATZ_CREATED_GSL: frozenset({DOC_EINSATZINFO, DOC_OBJEKTBLATT, DOC_OBJEKT_DOKUMENT, DOC_SITE_KARTE}),
     TRIGGER_EINSATZ_UPDATED: frozenset({DOC_EINSATZINFO, DOC_OBJEKTBLATT, DOC_OBJEKT_DOKUMENT}),
     TRIGGER_GSL_CREATED: frozenset({DOC_GSL_LAGEBLATT, DOC_GSL_BERICHT}),
     TRIGGER_GSL_LAGE_UPDATED: frozenset({DOC_GSL_LAGEBLATT, DOC_GSL_BERICHT}),

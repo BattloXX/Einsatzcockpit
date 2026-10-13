@@ -209,6 +209,38 @@ async def test_mehrere_aktive_einsaetze(setup_db, anhaenge, option, erwartet):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("option", ["posteingang", "neuester"])
+async def test_leitstellennummer_ordnet_aelteren_einsatz_zu(setup_db, anhaenge, option):
+    org_id, _ = _org()
+    aelter = _einsatz(org_id)
+    neuer = _einsatz(org_id)
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        db.get(Incident, aelter).lis_operation_number = "F26009038"
+        db.get(Incident, neuer).lis_operation_number = "f26009039"
+        db.commit()
+    finally:
+        db.close()
+    _settings(org_id, mehrere=option)
+    mail_id = _mail(org_id, betreff="f26009038 T1 WOLFURT")
+    assert await _lauf(mail_id) is True
+    assert _zustand(mail_id)[:3] == ("zugeordnet", "auto", aelter)
+    assert "per Leitstellennummer f26009038" in dict(_ereignisse(mail_id))["zugeordnet"]
+
+
+@pytest.mark.asyncio
+async def test_leitstellennummer_ohne_treffer_wartet_trotz_anderem_einsatz(setup_db, anhaenge):
+    org_id, _ = _org()
+    anderer = _einsatz(org_id)
+    _settings(org_id, mehrere="neuester")
+    mail_id = _mail(org_id, betreff="f26009038 T1 WOLFURT")
+    assert await _lauf(mail_id) is False
+    assert _zustand(mail_id)[:5] == ("wartend", "wartend", None, None, "Wartet auf Einsatz f26009038")
+    assert anderer != _zustand(mail_id)[2]
+
+
+@pytest.mark.asyncio
 async def test_kein_einsatz_wartet_und_uebung_wird_nie_genutzt(setup_db, anhaenge):
     org_id, _ = _org()
     _einsatz(org_id, exercise=True)

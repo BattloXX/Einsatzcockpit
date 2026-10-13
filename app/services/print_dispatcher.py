@@ -39,6 +39,7 @@ class TestBezug(NamedTuple):
 
 TRIGGER_TEST_BEZUG = {
     "einsatz_created": "einsatz",
+    "einsatz_created_gsl": "gsl_einsatz",
     "einsatz_updated": "einsatz",
     "manual_only": "einsatz",
     "gsl_created": "gsl",
@@ -388,6 +389,7 @@ def on_event(db: Session, org_id: int, trigger: str, context: dict) -> list[Prin
 def _filter_matches(rule, context: dict) -> bool:
     from app.models.gateway import (
         TRIGGER_EINSATZ_CREATED,
+        TRIGGER_EINSATZ_CREATED_GSL,
         TRIGGER_EINSATZ_UPDATED,
         TRIGGER_GSL_STELLE_DISPONIERT,
         TRIGGER_MAIL_EINGANG,
@@ -405,7 +407,9 @@ def _filter_matches(rule, context: dict) -> bool:
         auftragsart = f.get("stelle_auftragsart", "alle")
         if auftragsart in ("erkundung", "abarbeitung") and context.get("auftragsart") != auftragsart:
             return False
-    hat_einsatzbezug = rule.trigger in (TRIGGER_EINSATZ_CREATED, TRIGGER_EINSATZ_UPDATED)
+    hat_einsatzbezug = rule.trigger in (
+        TRIGGER_EINSATZ_CREATED, TRIGGER_EINSATZ_CREATED_GSL, TRIGGER_EINSATZ_UPDATED,
+    )
     uebung = f.get("uebung", "alle")
     if uebung in ("nur_echt", "nur_uebung"):
         is_exercise = context.get("is_exercise")
@@ -514,6 +518,25 @@ def resolve_test_context(db: Session, rule) -> TestBezug | None:
             .first()
         )
         return TestBezug(_incident_context(inc), art, inc.id) if inc else None
+    if art == "gsl_einsatz":
+        pair = (
+            db.query(Incident, IncidentSite, MajorIncident)
+            .join(IncidentSite, IncidentSite.incident_id == Incident.id)
+            .join(MajorIncident, MajorIncident.id == IncidentSite.major_incident_id)
+            .filter(
+                Incident.primary_org_id == rule.org_id,
+                IncidentSite.org_id == rule.org_id,
+                MajorIncident.org_id == rule.org_id,
+                MajorIncident.status == "active",
+            )
+            .order_by(Incident.started_at.desc(), Incident.id.desc())
+            .first()
+        )
+        if pair is None:
+            return None
+        inc, gsl_site, gsl_lage = pair
+        context = _incident_context(inc) | {"gsl_id": gsl_lage.id, "site_id": gsl_site.id}
+        return TestBezug(context, art, inc.id)
     if art == "gsl":
         lage = (
             db.query(MajorIncident)
@@ -589,8 +612,9 @@ async def autoprint_incident_background(incident_id: int, trigger: str | None = 
     und stellt die Jobs zu. Best-effort – Fehler dürfen den Request nie beeinflussen."""
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
-    from app.models.gateway import TRIGGER_EINSATZ_CREATED
+    from app.models.gateway import TRIGGER_EINSATZ_CREATED, TRIGGER_EINSATZ_CREATED_GSL
     from app.models.incident import Incident
+    from app.models.major_incident import IncidentSite, MajorIncident
 
     db = SessionLocal()
     set_tenant_context(db, None)
@@ -600,8 +624,25 @@ async def autoprint_incident_background(incident_id: int, trigger: str | None = 
             return
         org_id = inc.primary_org_id
         set_tenant_context(db, org_id)
+        effektiver_trigger = trigger or TRIGGER_EINSATZ_CREATED
         context = _incident_context(inc)
-        jobs = on_event(db, org_id, trigger or TRIGGER_EINSATZ_CREATED, context)
+        if effektiver_trigger == TRIGGER_EINSATZ_CREATED:
+            site_lage = (
+                db.query(IncidentSite, MajorIncident)
+                .join(MajorIncident, MajorIncident.id == IncidentSite.major_incident_id)
+                .filter(
+                    IncidentSite.incident_id == inc.id,
+                    IncidentSite.org_id == org_id,
+                    MajorIncident.org_id == org_id,
+                    MajorIncident.status == "active",
+                )
+                .first()
+            )
+            if site_lage is not None:
+                site, lage = site_lage
+                effektiver_trigger = TRIGGER_EINSATZ_CREATED_GSL
+                context |= {"gsl_id": lage.id, "site_id": site.id}
+        jobs = on_event(db, org_id, effektiver_trigger, context)
         db.commit()
         for job in jobs:
             try:

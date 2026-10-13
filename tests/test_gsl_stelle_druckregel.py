@@ -9,12 +9,16 @@ from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.gateway import (
     DOC_SITE_KARTE,
+    DOC_EINSATZINFO,
+    TRIGGER_EINSATZ_CREATED,
+    TRIGGER_EINSATZ_CREATED_GSL,
     TRIGGER_GSL_STELLE_DISPONIERT,
     Gateway,
     Printer,
     PrintJob,
     PrintRule,
 )
+from app.models.incident import Incident
 from app.models.major_incident import EinheitSiteDispatch, IncidentSite, LageEinheit, MajorIncident
 from app.models.master import OrgSettings, SystemSettings
 from app.services import print_dispatcher
@@ -179,5 +183,79 @@ def test_regeleditor_speichert_stellen_filter(setup_db):
         assert rule.filters["stelle_nur_erste_disposition"] is True
         assert rule.filters["stelle_auftragsart"] == "abarbeitung"
         assert rule.documents == [DOC_SITE_KARTE]
+
+        kwargs.update(
+            trigger=TRIGGER_EINSATZ_CREATED_GSL,
+            documents=[DOC_EINSATZINFO, DOC_SITE_KARTE],
+            min_alarmstufe=2,
+            stichwort="Brand",
+            nur_bma="1",
+        )
+        rule_save(**kwargs)
+        db.refresh(rule)
+        assert rule.trigger == TRIGGER_EINSATZ_CREATED_GSL
+        assert rule.documents == [DOC_EINSATZINFO, DOC_SITE_KARTE]
+        assert rule.filters == {"min_alarmstufe": 2, "stichwort": ["Brand"], "nur_bma": True}
+
+        kwargs.update(trigger=TRIGGER_EINSATZ_CREATED, documents=[DOC_SITE_KARTE])
+        response = rule_save(**kwargs)
+        assert response.status_code == 303
+        db.refresh(rule)
+        assert rule.trigger == TRIGGER_EINSATZ_CREATED_GSL
+    finally:
+        db.close()
+
+
+def test_gsl_einsatzdruck_nutzt_eigenen_trigger_und_site_karte(setup_db, monkeypatch):
+    async def no_dispatch(db, job):
+        return None
+
+    monkeypatch.setattr(print_dispatcher, "dispatch_job", no_dispatch)
+    db = _db()
+    try:
+        org, lage, site, _, _, gateway, _ = _aufbau(db)
+        printer_id = db.query(Printer.id).filter_by(gateway_id=gateway.id).scalar()
+        normal = PrintRule(org_id=org, name="Normal", aktiv=True, trigger=TRIGGER_EINSATZ_CREATED,
+                           documents=[DOC_EINSATZINFO], printer_ids=[printer_id])
+        gsl = PrintRule(org_id=org, name="GSL", aktiv=True, trigger=TRIGGER_EINSATZ_CREATED_GSL,
+                        documents=[DOC_EINSATZINFO, DOC_SITE_KARTE], printer_ids=[printer_id],
+                        filters={"min_alarmstufe": 1, "stichwort": ["Brand"]})
+        incident = Incident(primary_org_id=org, status="active", alarm_type_code="B2", reason="Brand")
+        db.add_all([normal, gsl, incident])
+        db.flush()
+        site.incident_id = incident.id
+        db.commit()
+        asyncio.run(print_dispatcher.autoprint_incident_background(incident.id))
+        db.expire_all()
+        jobs = db.query(PrintJob).filter_by(incident_id=incident.id).all()
+        assert {job.rule_id for job in jobs} == {gsl.id}
+        assert any(job.document_type == DOC_SITE_KARTE and job.artifact_ref == str(site.id) for job in jobs)
+    finally:
+        db.close()
+
+
+def test_normaler_einsatzdruck_bei_fremder_oder_beendeter_lage(setup_db, monkeypatch):
+    async def no_dispatch(db, job):
+        return None
+
+    monkeypatch.setattr(print_dispatcher, "dispatch_job", no_dispatch)
+    db = _db()
+    try:
+        org, lage, site, _, _, gateway, _ = _aufbau(db)
+        printer_id = db.query(Printer.id).filter_by(gateway_id=gateway.id).scalar()
+        normal = PrintRule(org_id=org, name="Normal", aktiv=True, trigger=TRIGGER_EINSATZ_CREATED,
+                           documents=[DOC_EINSATZINFO], printer_ids=[printer_id])
+        gsl = PrintRule(org_id=org, name="GSL", aktiv=True, trigger=TRIGGER_EINSATZ_CREATED_GSL,
+                        documents=[DOC_EINSATZINFO, DOC_SITE_KARTE], printer_ids=[printer_id])
+        incident = Incident(primary_org_id=org, status="active", alarm_type_code="B2")
+        db.add_all([normal, gsl, incident])
+        db.flush()
+        site.incident_id = incident.id
+        lage.status = "closed"
+        db.commit()
+        asyncio.run(print_dispatcher.autoprint_incident_background(incident.id))
+        db.expire_all()
+        jobs = db.query(PrintJob).filter_by(incident_id=incident.id).all()
+        assert {job.rule_id for job in jobs} == {normal.id}
     finally:
         db.close()

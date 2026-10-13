@@ -133,11 +133,11 @@
                   <div class="gwx-sechd">📄 Inhalte (Dokumente)</div>
                   <div class="gwx-checks">
                     {% for key, label in doc_labels.items() %}
-                    {% if key in ('einsatzinfo', 'objektblatt') %}{% set doc_trigger = "['einsatz_created', 'einsatz_updated'].includes(trigger)" %}
+                    {% if key in ('einsatzinfo', 'objektblatt') %}{% set doc_trigger = "['einsatz_created', 'einsatz_created_gsl', 'einsatz_updated'].includes(trigger)" %}
                     {% elif key in ('gsl_lageblatt', 'gsl_bericht') %}{% set doc_trigger = "['gsl_created', 'gsl_lage_updated'].includes(trigger)" %}
                     {% elif key == 'alarm_rohtext' %}{% set doc_trigger = "trigger === 'alarm_serial_received'" %}
                     {% elif key == 'gsl_einheit_qr' %}{% set doc_trigger = "trigger === 'gsl_einheit_angelegt'" %}
-                    {% elif key == 'site_karte' %}{% set doc_trigger = "trigger === 'gsl_stelle_disponiert'" %}
+                    {% elif key == 'site_karte' %}{% set doc_trigger = "['einsatz_created_gsl', 'gsl_stelle_disponiert'].includes(trigger)" %}
                     {% elif key == 'mail_eingang' %}{% set doc_trigger = "trigger === 'mail_eingang'" %}
                     {% else %}{% set doc_trigger = "trigger === 'verleih_created'" %}{% endif %}
                     <label class="gwx-check" x-show="{{ doc_trigger }}"><input type="checkbox" name="documents" value="{{ key }}" :disabled="!({{ doc_trigger }})"
@@ -160,9 +160,9 @@
                   </div>
 
                   <div class="gwx-sechd">🏢 Objekt-Elemente (bei zugeordnetem Objekt)</div>
-                  <div class="gwx-checks" x-show="['einsatz_created', 'einsatz_updated'].includes(trigger)">
+                  <div class="gwx-checks" x-show="['einsatz_created', 'einsatz_created_gsl', 'einsatz_updated'].includes(trigger)">
                     {% for key, label in objekt_element_labels.items() %}
-                    <label class="gwx-check"><input type="checkbox" name="objekt_elements" value="{{ key }}" :disabled="!['einsatz_created', 'einsatz_updated'].includes(trigger)"
+                    <label class="gwx-check"><input type="checkbox" name="objekt_elements" value="{{ key }}" :disabled="!['einsatz_created', 'einsatz_created_gsl', 'einsatz_updated'].includes(trigger)"
                       {{ 'checked' if key in (r.objekt_elements or []) }}> {{ label }}</label>
                     {% endfor %}
                   </div>

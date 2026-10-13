@@ -47,6 +47,26 @@ async def test_waiting_mail_is_assigned_after_incident_starts_within_lookback(se
 
 
 @pytest.mark.asyncio
+async def test_waiting_mail_with_leitstellennummer_is_assigned_after_incident_starts(setup_db):
+    org_id, _ = _org()
+    _settings(org_id, rueckblick=30)
+    mail_id = _mail(org_id, betreff="f26009038 T1 WOLFURT")
+    assert await _lauf(mail_id) is False
+    incident_id = _einsatz(org_id)
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        db.get(OrgMailEingang, mail_id)
+        from app.models.incident import Incident
+        db.get(Incident, incident_id).lis_operation_number = "F26009038"
+        db.commit()
+    finally:
+        db.close()
+    assert await loop.run_mail_zuordnung_once() == 1
+    assert _zustand(mail_id)[:3] == ("zugeordnet", "auto", incident_id)
+
+
+@pytest.mark.asyncio
 async def test_outside_lookback_moves_mail_to_posteingang(setup_db):
     org_id, _ = _org()
     _settings(org_id, rueckblick=30)

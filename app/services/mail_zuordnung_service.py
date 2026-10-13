@@ -18,6 +18,7 @@ from app.services.media_service import store_bytes_for_message
 
 _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _MAX_DETAIL = 200_000
+_LEITSTELLENNUMMER = re.compile(r"^(?:(?:aw|wg|fwd|re):\s*)*([a-z]{1,3}\d{5,})\b", re.IGNORECASE)
 
 
 class _TextExtractor(HTMLParser):
@@ -30,6 +31,12 @@ class _TextExtractor(HTMLParser):
 
 def _clean(value: object, maximum: int) -> str:
     return _CONTROL.sub("", str(value or "").replace("\r", " ").replace("\n", " ")).strip()[:maximum]
+
+
+def leitstellennummer_aus_betreff(betreff: str | None) -> str | None:
+    """Liest die vorangestellte Leitstellennummer aus einem Mail-Betreff."""
+    treffer = _LEITSTELLENNUMMER.match(str(betreff or "").lstrip())
+    return treffer.group(1).lower() if treffer else None
 
 
 def _html_text(value: str) -> str:
@@ -85,7 +92,10 @@ async def _attachments(db: Session, row: OrgMailEingang, message) -> list[str]:
     return failures
 
 
-async def _assign(db: Session, row: OrgMailEingang, incident: Incident, kind: str, user_id: int | None = None) -> bool:
+async def _assign(
+    db: Session, row: OrgMailEingang, incident: Incident, kind: str, user_id: int | None = None,
+    hinweis: str | None = None,
+) -> bool:
     if row.message_id_ref:
         return False
     # The incident was loaded with the input org predicate; preserve that guard
@@ -102,7 +112,8 @@ async def _assign(db: Session, row: OrgMailEingang, incident: Incident, kind: st
     row.zuordnung, row.zugeordnet_at, row.status = kind, datetime.now(UTC).replace(tzinfo=None), "zugeordnet"
     row.zuordnung_grund = ("Anhänge nicht übernommen: " + ", ".join(failures))[:255] if failures else None
     art = "automatisch" if kind == "auto" else "manuell"
-    ereignis(db, row, "zugeordnet", f"Einsatz #{incident.id} ({art}), Meldung #{message.id}", user_id)
+    text = f"Einsatz #{incident.id} ({art}), Meldung #{message.id}"
+    ereignis(db, row, "zugeordnet", f"{text}, {hinweis}" if hinweis else text, user_id)
     for filename in failures:
         ereignis(db, row, "anhang_fehler", filename, user_id)
     db.commit()
@@ -142,6 +153,23 @@ async def ordne_zu(db: Session, eingang_id: int, incident_ids: set[int] | None =
     incidents = aktive_einsaetze(db, row.org_id)
     if incident_ids is not None:
         incidents = [incident for incident in incidents if incident.id in incident_ids]
+    leitstellennummer = leitstellennummer_aus_betreff(row.betreff)
+    if leitstellennummer:
+        incident = next(
+            (item for item in incidents if (item.lis_operation_number or "").lower() == leitstellennummer),
+            None,
+        )
+        if incident:
+            return await _assign(
+                db, row, incident, "auto", hinweis=f"per Leitstellennummer {leitstellennummer}",
+            )
+        schon_wartend = row.status == "wartend"
+        grund = f"Wartet auf Einsatz {leitstellennummer}"
+        row.status, row.zuordnung, row.zuordnung_grund = "wartend", "wartend", grund
+        if not schon_wartend:
+            ereignis(db, row, "wartend", grund)
+        db.commit()
+        return False
     if not incidents:
         schon_wartend = row.status == "wartend"
         row.status, row.zuordnung, row.zuordnung_grund = "wartend", "wartend", "Kein aktiver Einsatz vorhanden"
