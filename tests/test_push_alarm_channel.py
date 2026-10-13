@@ -97,7 +97,7 @@ async def test_incident_channels_run_concurrently(setup_db, monkeypatch, mit_bac
 
     async def langsam(name, *args, **kwargs):
         gestartet.append(name)
-        await asyncio.sleep(0.05)
+        await asyncio.sleep(0.3)
 
     async def mail(*args, **kwargs):
         await langsam("mail")
@@ -131,7 +131,9 @@ async def test_incident_channels_run_concurrently(setup_db, monkeypatch, mit_bac
     dauer = perf_counter() - start
 
     assert set(gestartet) == {"sms", "push", "teams", "mail"}
-    assert dauer < 0.2
+    # Seriell waeren es >= 1,2 s (4 x 0,3 s); die Grenze laesst Spielraum fuer DB-Arbeit
+    # auf langsamen CI-Runnern (vorher 0,2 s bei 0,05 s Schlaf -> sporadisch rot).
+    assert dauer < 0.9
     db.close()
 
 
