@@ -1,7 +1,7 @@
 """Regression tests for privacy-safe MCP incident reads."""
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
@@ -29,7 +29,7 @@ from app.models.objekt import (
     ObjektGefahr,
     ObjektKontakt,
 )
-from app.models.user import User
+from app.models.user import AuditLog, User
 from app.services.mcp_download_service import erstelle_download_token
 from tests.test_mcp_objekte import _mcp, _seed, _token
 
@@ -45,6 +45,7 @@ EINSATZ_TOOLS = {
     "einsatz_objekt_dokument_herunterladen",
     "einsatz_medium_herunterladen",
 }
+EINSATZ_SCHREIB_TOOLS = {"einsatz_auftrag_anlegen", "einsatz_meldung_anlegen"}
 
 
 def _rpc(response):
@@ -123,6 +124,18 @@ def _einsatz(org_id, *, status="active", secret=False):
         )
         db.commit()
         return incident.id, vehicle.id
+    finally:
+        db.close()
+
+
+def _schreibspalten(incident_id):
+    db = _db()
+    try:
+        tasks = IncidentColumn(incident_id=incident_id, code="tasks", title="Aufträge", column_kind="tasks")
+        messages = IncidentColumn(incident_id=incident_id, code="messages", title="Meldungen", column_kind="messages")
+        db.add_all([tasks, messages])
+        db.commit()
+        return tasks.id, messages.id
     finally:
         db.close()
 
@@ -453,3 +466,125 @@ def test_einsatz_medium_download_und_live_benutzerpruefung(client, tmp_path):
     finally:
         db.close()
     assert client.get(result["download_url"]).status_code == 403
+
+
+def test_mcp_auftrag_anlegen_mit_rechten_zuordnung_und_broadcast(client, monkeypatch):
+    seed = _seed("mcp-einsatz-schreib-auftrag", {"rec": "recorder", "read": "readonly"}, objekt=False, kontakte=False)
+    token = _token(client, seed, "rec")
+    readonly_token = _token(client, seed, "read")
+    incident_id, vehicle_id = _einsatz(seed["org_id"])
+    tasks_id, _ = _schreibspalten(incident_id)
+    broadcast = []
+
+    async def fake_broadcast(incident_id, event):
+        broadcast.append((incident_id, event))
+
+    monkeypatch.setattr("app.services.broadcast.manager.broadcast", fake_broadcast)
+    result = _rufe(
+        client,
+        token,
+        "einsatz_auftrag_anlegen",
+        incident_id=incident_id,
+        titel="  Wasserversorgung prüfen  ",
+        detail="Hydrant Nord",
+        einheit_id=vehicle_id,
+        abschnitt_id=tasks_id,
+    )
+    assert result["angelegt"] and result["auftrag"]["titel"] == "Wasserversorgung prüfen"
+    assert result["auftrag"]["einheit"]["id"] == vehicle_id
+    assert broadcast[0][0] == incident_id and broadcast[0][1]["type"] == "task_created"
+    db = _db()
+    try:
+        task = db.get(Task, result["auftrag"]["id"])
+        assert task.created_by_user_id == seed["users"]["rec"] and task.column_id == tasks_id
+        assert db.query(AuditLog).filter_by(action="einsatz.mcp_auftrag_angelegt", entity_id=task.id).one()
+        from app.models.incident import IncidentChange
+
+        assert db.query(IncidentChange).filter_by(action="task.created", entity_id=task.id).one()
+    finally:
+        db.close()
+    assert result["auftrag"]["id"] in {
+        row["id"] for row in _rufe(client, token, "einsatz_auftraege", incident_id=incident_id)["items"]
+    }
+    listed = _mcp(client, readonly_token, "tools/list", {}, 95).text
+    assert not any(name in listed for name in EINSATZ_SCHREIB_TOOLS)
+    assert "__fehler__" in _rufe(
+        client, readonly_token, "einsatz_auftrag_anlegen", incident_id=incident_id, titel="Nein"
+    )
+
+
+def test_mcp_auftrag_sichtbarkeit_abschnitt_einheit_und_abgeschlossen(client):
+    seed = _seed("mcp-einsatz-schreib-pruefung", {"rec": "recorder"}, objekt=False, kontakte=False)
+    other = _seed("mcp-einsatz-schreib-fremd", {"rec": "recorder"}, objekt=False, kontakte=False)
+    token = _token(client, seed, "rec")
+    incident_id, _ = _einsatz(seed["org_id"])
+    tasks_id, _ = _schreibspalten(incident_id)
+    foreign_id, foreign_vehicle = _einsatz(other["org_id"])
+    _, foreign_messages = _schreibspalten(foreign_id)
+    db = _db()
+    try:
+        rescued_id = db.query(IncidentColumn.id).filter_by(incident_id=incident_id, column_kind="rescued").scalar()
+    finally:
+        db.close()
+    assert "Abschnitt nicht gefunden" in _rufe(
+        client, token, "einsatz_auftrag_anlegen", incident_id=incident_id, titel="x", abschnitt_id=rescued_id
+    )["__fehler__"]
+    assert "Abschnitt nicht gefunden" in _rufe(
+        client, token, "einsatz_auftrag_anlegen", incident_id=incident_id, titel="x", abschnitt_id=foreign_messages
+    )["__fehler__"]
+    assert "Einheit nicht gefunden" in _rufe(
+        client, token, "einsatz_auftrag_anlegen", incident_id=incident_id, titel="x", einheit_id=foreign_vehicle
+    )["__fehler__"]
+    assert "Einsatz nicht gefunden." in _rufe(
+        client, token, "einsatz_auftrag_anlegen", incident_id=foreign_id, titel="x"
+    )["__fehler__"]
+    db = _db()
+    try:
+        db.add(IncidentOrg(incident_id=foreign_id, org_id=seed["org_id"], role="collaborator"))
+        db.commit()
+    finally:
+        db.close()
+    assert _rufe(client, token, "einsatz_auftrag_anlegen", incident_id=foreign_id, titel="Kollaboration")["angelegt"]
+    db = _db()
+    try:
+        db.get(Incident, incident_id).status = "closed"
+        db.commit()
+    finally:
+        db.close()
+    error = _rufe(client, token, "einsatz_auftrag_anlegen", incident_id=incident_id, titel="Gesperrt")
+    assert "Einsatz ist abgeschlossen" in error["__fehler__"]
+    db = _db()
+    try:
+        assert db.query(Task).filter(Task.incident_id == incident_id, Task.title == "Gesperrt").count() == 0
+    finally:
+        db.close()
+    assert tasks_id
+
+
+def test_mcp_meldung_anlegen_status_faelligkeit_audit_und_broadcast(client, monkeypatch):
+    seed = _seed("mcp-einsatz-schreib-meldung", {"lead": "incident_leader"}, objekt=False, kontakte=False)
+    token = _token(client, seed, "lead")
+    incident_id, _ = _einsatz(seed["org_id"])
+    _, messages_id = _schreibspalten(incident_id)
+    broadcast = []
+
+    async def fake_broadcast(incident_id, event):
+        broadcast.append((incident_id, event))
+
+    monkeypatch.setattr("app.services.broadcast.manager.broadcast", fake_broadcast)
+    result = _rufe(client, token, "einsatz_meldung_anlegen", incident_id=incident_id, titel="Achtung",
+                   status="achtung", faellig_in_min=15)
+    assert result["angelegt"] and result["meldung"]["status"] == "achtung"
+    assert result["meldung"]["abschnitt"]["id"] == messages_id
+    assert broadcast[0][0] == incident_id and broadcast[0][1]["type"] == "message_created"
+    db = _db()
+    try:
+        message = db.get(Message, result["meldung"]["id"])
+        incident = db.get(Incident, incident_id)
+        assert message.author_name.endswith("(MCP)") and message.due_at == incident.started_at + timedelta(minutes=15)
+        assert db.query(AuditLog).filter_by(action="einsatz.mcp_meldung_angelegt", entity_id=message.id).one()
+    finally:
+        db.close()
+    assert "__fehler__" in _rufe(
+        client, token, "einsatz_meldung_anlegen", incident_id=incident_id, titel="Nein", status="erledigt"
+    )

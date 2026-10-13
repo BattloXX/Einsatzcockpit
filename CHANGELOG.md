@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 
 ## Unreleased
 
+- **MCP**: Einsatzleiter, Schriftführer und Admins können Aufträge und Meldungen im sichtbaren, offenen Einsatzboard anlegen; Erstellung, Fachverlauf und Live-Aktualisierung entsprechen dem Board.
+
 - Gateway-Druckregel „E-Mail eingegangen“ mit sicherem Deckblatt und optionalen PDF-/Bildanhängen ergänzt.
 - Resend-Posteingang je Organisation mit signiertem Webhook, sicherem Abruf und Aufbewahrung ergänzt.
 - Resend-Eingang ordnet wartende, freigegebene Mails innerhalb des Rückblickfensters automatisch neu angelegten Einsätzen zu; Posteingang-Zähler und Live-Aktualisierung ergänzt.

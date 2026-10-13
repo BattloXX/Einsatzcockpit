@@ -115,4 +115,10 @@ Für sichtbare Einsätze stehen allen Einsatzrollen ab `readonly` zehn ausschlie
 
 Beispiel-Fragen: „Welche Einsätze sind derzeit aktiv?“, „Welche offenen Aufträge hat Einsatz 42?“, „Fasse mir das Lagebild von Einsatz 42 zusammen.“ oder „Lade den Objektplan aus Einsatz 42 herunter.“
 
+### Aufträge und Meldungen anlegen
+
+`einsatz_auftrag_anlegen` und `einsatz_meldung_anlegen` legen Karten direkt im Einsatzboard an. Sie stehen Einsatzleitern, Schriftführern und Admins zur Verfügung und funktionieren auch bei kollaborierenden Einsätzen. Abgeschlossene Einsätze sind dafür gesperrt. Neue Meldungen zeigen als Autor „Name (MCP)“.
+
+Beispiel: „Lege bei Einsatz 42 den Auftrag ‚Wasserversorgung prüfen‘ für Einheit 7 an.“ oder „Erstelle eine Achtung für Einsatz 42, fällig in 15 Minuten.“
+
 Bewusst nicht geliefert werden Inhalte und Medien aus der Personen-Spalte, Atemschutzdaten, Mannschaftsnamen, Anrufer, Autoren sowie Objekt-Kontakte. Die Download-Links gelten nur kurz und werden beim Abruf nochmals gegen die aktuellen Rechte geprüft.
