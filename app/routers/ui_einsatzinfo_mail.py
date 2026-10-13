@@ -166,6 +166,7 @@ async def einsatzinfo_mail_stichwort(alarm_type_id: int, request: Request, subje
 
 
 def _sample_context(org: FireDept) -> dict[str, object]:
+    """Legacy-Platzhalterkontext fuer die Textvorschau."""
     now = to_org_tz(datetime.now(UTC), org) or datetime.now(UTC)
     return {"stichwort": "B2", "adresse": "Musterstrasse 1, Wolfurt", "ort": "Wolfurt", "meldung": "Brand Wohnhaus", "einsatzgrund": "Brand Wohnhaus", "datum": now.strftime("%d.%m.%Y"), "zeit": now.strftime("%H:%M"), "link": "https://beispiel.at/alarm/beispiel", "leitstellennummer": "F26000001", "einsatznummer": 123, "kartenlink": "https://www.google.com/maps/search/?api=1&query=Musterstrasse+1%2C+Wolfurt"}
 
@@ -176,10 +177,21 @@ async def einsatzinfo_mail_preview(request: Request, subject_template: str = For
     org = db.query(FireDept).filter(FireDept.id == org_id).first()
     if not org:
         raise HTTPException(status_code=404)
+    org_settings = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
     context = _sample_context(org)
     subject = einsatzinfo_mail_service._render_mail_template(subject_template or einsatzinfo_mail_service.default_einsatzinfo_mail_subject(), context)
     body = einsatzinfo_mail_service._render_mail_template(template or einsatzinfo_mail_service.default_einsatzinfo_mail_template(), context)
-    return HTMLResponse(f'<div class="alert alert--info"><strong>{html.escape(subject)}</strong><pre style="white-space:pre-wrap;margin:8px 0 0;">{html.escape(body)}</pre></div>')
+    view = einsatzinfo_mail_service.sample_mail_view(org, org_settings)
+    view["subject"] = subject
+    view["hinweis"] = body if template.strip() else None
+    rendered_html = einsatzinfo_mail_service.render_einsatzinfo_mail_html(view)
+    return HTMLResponse(
+        f'<div class="alert alert--info"><strong>{html.escape(subject)}</strong>'
+        f'<pre style="white-space:pre-wrap;margin:8px 0 0;">{html.escape(body)}</pre></div>'
+        f'<h2>So sieht die Mail aus</h2>'
+        f'<iframe sandbox="" srcdoc="{html.escape(rendered_html, quote=True)}" '
+        f'style="width:100%;height:900px;border:1px solid var(--border);border-radius:6px;background:#fff"></iframe>'
+    )
 
 
 @router.post("/einsatzinfo-mail/testmail")
@@ -199,7 +211,13 @@ async def einsatzinfo_mail_testmail(request: Request, db: Session = Depends(get_
     body = einsatzinfo_mail_service._render_mail_template(body_t, context)
     try:
         smtp_cfg = mail_service._org_smtp_cfg(db, org_id) or mail_service.get_smtp_cfg(db)
-        msg = mail_service._build_message(to=user.email, subject=subject, body_txt=body, body_html=einsatzinfo_mail_service._html_body(body), smtp_cfg=smtp_cfg)
+        view = einsatzinfo_mail_service.sample_mail_view(org, settings)
+        view["subject"] = subject
+        view["hinweis"] = body if (settings and settings.einsatzinfo_mail_template) else None
+        msg = mail_service._build_message(
+            to=user.email, subject=subject, body_txt=body,
+            body_html=einsatzinfo_mail_service.render_einsatzinfo_mail_html(view), smtp_cfg=smtp_cfg,
+        )
         await mail_service.deliver(db, org_id, msg, smtp_cfg)
     except Exception as exc:
         return RedirectResponse(f"/admin/einsatzinfo-mail?fehler={quote('Testmail fehlgeschlagen: ' + str(exc))}", status_code=303)
