@@ -123,8 +123,17 @@ export function createOutbox({
   }
 
   function kopieOhneBlob(eintrag) {
-    const { blob, ...rest } = eintrag;
-    return { ...rest, hat_foto: Boolean(blob) };
+    const { blob, blob_daten, ...rest } = eintrag;
+    return { ...rest, hat_foto: Boolean(blob || blob_daten) };
+  }
+
+  // Safari sendet Blobs, die aus IndexedDB gelesen wurden, per FormData teils mit leerem
+  // Body (Server sah weder file noch client_uuid). Fotos liegen deshalb als ArrayBuffer in
+  // der Outbox und werden erst beim Senden zu einem frischen In-Memory-Blob.
+  async function fotoDatei(eintrag) {
+    if (eintrag.blob_daten) return new Blob([eintrag.blob_daten], { type: eintrag.blob_typ || "image/jpeg" });
+    if (eintrag.blob) return new Blob([await eintrag.blob.arrayBuffer()], { type: eintrag.blob.type || "image/jpeg" });
+    return null;
   }
 
   function header() {
@@ -181,8 +190,14 @@ export function createOutbox({
           ? `/einheit/api/ressource/${eintrag.typ.slice("ressource_".length)}`
           : `/einheit/api/auftrag/${eintrag.dispatch_id}/${eintrag.typ}`;
         if (eintrag.typ === "foto" || eintrag.typ === "material_foto") {
+          let datei = null;
+          try { datei = await fotoDatei(eintrag); } catch { datei = null; }
+          if (!datei?.size) {
+            await setze(eintrag, { status: "fehler", letzter_fehler: "foto_daten_fehlen", naechster_versuch_at: null });
+            return "weiter";
+          }
           const form = new FormData();
-          form.append("file", eintrag.blob, eintrag.dateiname || "foto");
+          form.append("file", datei, eintrag.dateiname || "foto");
           form.append("client_uuid", eintrag.client_uuid);
           form.append("erfasst_at", eintrag.erfasst_at);
           if (eintrag.typ === "foto") form.append("kommentar", eintrag.payload?.kommentar || "");
@@ -315,10 +330,13 @@ export function createOutbox({
       if (!new Set(["status", "meldung", "foto", "material", "material_zurueck", "material_foto", "ressource_personal", "ressource_ausstattung"]).has(typ)) {
         throw new Error("ungueltiger_typ");
       }
+      // Fotodaten sofort einlesen, solange die Datei aus dem Auswahldialog noch lesbar ist.
+      const blob_daten = blob ? await blob.arrayBuffer() : null;
+      const blob_typ = blob ? (blob.type || "image/jpeg") : null;
       const alte = await lesen("meta", "seq");
       const seq = (alte || 0) + 1;
       const eintrag = {
-        client_uuid: uuid(), typ, dispatch_id, einheit_id, auftrag_version, payload, blob, dateiname,
+        client_uuid: uuid(), typ, dispatch_id, einheit_id, auftrag_version, payload, blob_daten, blob_typ, dateiname,
         erfasst_at: now().toISOString(), seq, versuche: 0, status: "ausstehend", letzter_fehler: null,
         naechster_versuch_at: null,
       };

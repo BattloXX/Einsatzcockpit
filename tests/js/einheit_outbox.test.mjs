@@ -241,3 +241,19 @@ test("Verlauf enthaelt Bestaetigung und Hinweis", async () => {
   await warteAuf(async () => (await o.verlauf()).length === 1);
   const verlauf = await o.verlauf(); assert.equal(verlauf.length, 1); assert.ok(verlauf[0].server_bestaetigt_at); assert.equal(verlauf[0].antwort.hinweis, "auftrag_geaendert");
 });
+
+test("Foto wird als frischer Blob mit vollem Inhalt gesendet", async () => {
+  const env = umgebung([ok(5)]); const o = createOutbox({ ...env.basis, dbName: "foto-inhalt" });
+  await o.erfassen({ typ: "foto", dispatch_id: 4, einheit_id: 9, auftrag_version: 1, payload: {}, blob: new Blob(["bilddaten"], { type: "image/jpeg" }), dateiname: "a.jpg" });
+  await warteAuf(() => env.anfragen.length === 1);
+  const datei = env.anfragen[0].body.get("file");
+  assert.equal(await datei.text(), "bilddaten"); assert.equal(datei.type, "image/jpeg");
+  assert.ok(env.anfragen[0].body.get("client_uuid"));
+});
+
+test("leeres Foto wird nicht gesendet und lesbar als Fehler markiert", async () => {
+  const env = umgebung(); const o = createOutbox({ ...env.basis, dbName: "foto-leer" });
+  await o.erfassen({ typ: "foto", dispatch_id: 4, einheit_id: 9, auftrag_version: 1, payload: {}, blob: new Blob([]), dateiname: "a.jpg" });
+  await warteAuf(async () => (await o.liste())[0]?.status === "fehler");
+  assert.equal((await o.liste())[0].letzter_fehler, "foto_daten_fehlen"); assert.equal(env.anfragen.length, 0);
+});
