@@ -1,98 +1,183 @@
 <!doctype html>
 <html lang="de">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{{ site.einsatzgrund or site.bezeichnung }} – Einsatzstelle</title>
-{% if site.lat and site.lng %}
-<link rel="stylesheet" href="/static/css/leaflet.min.css">
-{% endif %}
-<style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  @page { size: A4 portrait; margin: 14mm 16mm; }
-  body {
-    font-family: Arial, Helvetica, sans-serif;
-    font-size: 10.5pt; color: #111; background: #fff;
-  }
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{{ site.einsatzgrund or site.bezeichnung }} – Einsatzstelle</title>
+  {% if site.lat and site.lng %}
+  <link rel="stylesheet" href="/static/css/leaflet.min.css">
+  {% endif %}
+  <style>
+    *, *:before, *:after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    @page { size: A4 portrait; margin: 12mm 14mm; }
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 9.5pt;
+      color: #111;
+    }
 
-  .no-print { }
-  @media print { .no-print { display: none !important; } }
+    /* ── Layout ── */
+    .page { max-width: 182mm; margin: 8mm auto; }
 
-  /* ── Print-Button-Bar ── */
-  .print-bar {
-    background: #f3f4f6; border-bottom: 1px solid #d1d5db;
-    padding: 8px 16px; display: flex; align-items: center; gap: 10px;
-    font-size: 9.5pt;
-  }
-  .print-btn {
-    background: #1f2937; color: #fff; border: none; border-radius: 4px;
-    padding: 5px 14px; font-size: 9.5pt; cursor: pointer;
-  }
-  .print-btn:hover { background: #374151; }
+    /* ── Print-Button-Bar ── */
+    .print-bar {
+      background: #f3f4f6;
+      border-bottom: 1px solid #d1d5db;
+      padding: 8px 16px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    .print-btn {
+      background: #1f2937;
+      color: #fff;
+      border: 0;
+      border-radius: 4px;
+      padding: 5px 14px;
+      cursor: pointer;
+    }
 
-  /* ── Layout ── */
-  .page { padding: 0; max-width: 180mm; margin: 8mm auto 0; }
+    /* ── Header ── */
+    .hdr {
+      border-bottom: 2.5px solid #b71921;
+      padding-bottom: 7px;
+      margin-bottom: 8px;
+      min-height: 29mm;
+      display: flow-root;
+      page-break-inside: avoid;
+    }
+    .hdr__lage, .muted { color: #6b7280; }
+    .hdr__lage { font-size: 8.5pt; margin-bottom: 3px; }
+    .hdr__title { font-size: 16pt; font-weight: 700; line-height: 1.15; }
+    .hdr__sub { font-size: 10pt; color: #374151; margin-top: 3px; }
+    .badges {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+      margin-top: 6px;
+      padding-right: 29mm;
+    }
+    .badge {
+      border: 1px solid #9ca3af;
+      background: #f3f4f6;
+      border-radius: 2px;
+      padding: 2px 5px;
+      font-size: 8pt;
+      font-weight: 700;
+    }
+    .badge--red { background: #b71921; border-color: #b71921; color: #fff; }
+    .badge--orange { background: #fef3c7; border-color: #d97706; color: #92400e; }
+    .badge--yellow { background: #fef9c3; border-color: #a16207; color: #713f12; }
+    .exercise-banner {
+      background: #fef9c3;
+      border: 1px solid #fde68a;
+      color: #92400e;
+      font-weight: 700;
+      text-align: center;
+      padding: 4px;
+      margin-bottom: 8px;
+    }
 
-  /* ── Header ── */
-  .hdr { border-bottom: 2.5px solid #b71921; padding-bottom: 7px; margin-bottom: 10px; }
-  .hdr__lage { font-size: 8.5pt; color: #6b7280; margin-bottom: 3px; }
-  .hdr__title { font-size: 15pt; font-weight: 700; line-height: 1.2; }
-  .hdr__sub { font-size: 10pt; color: #374151; margin-top: 3px; }
-  .hdr__meta { font-size: 8.5pt; color: #6b7280; margin-top: 5px; display: flex; gap: 16px; flex-wrap: wrap; }
-  .exercise-banner {
-    background: #fef9c3; border: 1px solid #fde68a; color: #92400e;
-    font-weight: 700; text-align: center; padding: 4px; font-size: 9.5pt; margin-bottom: 8px;
-  }
+    /* ── Abschnitte ── */
+    .block { page-break-inside: avoid; margin-bottom: 9px; }
+    .block--flow { page-break-inside: auto; }
+    h2 {
+      font-size: 9.5pt;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      border-bottom: 1.5px solid #111;
+      margin: 0 0 5px;
+      padding-bottom: 3px;
+    }
 
-  /* ── Infoblock ── */
-  .info-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
-  .info-table td { padding: 3px 6px; vertical-align: top; font-size: 10pt; border-bottom: 1px solid #e5e7eb; word-break: break-word; overflow-wrap: break-word; }
-  .info-table td:first-child { width: 32mm; font-size: 8.5pt; color: #6b7280; font-weight: 600; }
+    /* ── Einsatzort / Karte ── */
+    .site-place {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 84mm;
+      gap: 8px;
+    }
+    .address { font-size: 12pt; font-weight: 700; line-height: 1.25; margin-bottom: 4px; }
+    .site-meta { line-height: 1.45; }
+    #printMap { width: 100%; height: 90mm; border: 1px solid #9ca3af; }
+    .map-coords, .small { font-size: 8pt; color: #6b7280; }
 
-  /* ── Prio-Badge ── */
-  .prio-sofort   { color: #b91c1c; font-weight: 700; }
-  .prio-dringend { color: #c2410c; font-weight: 700; }
-  .prio-normal   { color: #92400e; font-weight: 700; }
-  .prio-aufschiebbar { color: #6b7280; }
+    /* ── Dispositionen / Verlauf ── */
+    .dispatch-table, .log-table, .message-table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+    .dispatch-table th, .log-table th {
+      background: #e5e7eb;
+      text-align: left;
+      font-size: 7.5pt;
+      text-transform: uppercase;
+      padding: 4px;
+      border-bottom: 1px solid #9ca3af;
+    }
+    .dispatch-table td, .log-table td, .message-table td {
+      padding: 4px;
+      vertical-align: top;
+      border-bottom: 1px solid #d1d5db;
+      overflow-wrap: break-word;
+    }
+    .pre-wrap { white-space: pre-wrap; }
+    .dispatch-table th { white-space: nowrap; }
+    .dispatch-table tr, .log-table tr { page-break-inside: avoid; }
+    .dispatch-unit { font-weight: 700; }
+    .ended {
+      margin-top: 5px;
+      padding: 4px 6px;
+      background: #f3f4f6;
+      color: #4b5563;
+      font-size: 8pt;
+    }
+    .ended ul, .res-list { margin: 3px 0 0 14px; padding: 0; }
+    .ended li, .res-list li { margin: 2px 0; }
+    .message-table td:first-child {
+      width: 33mm;
+      color: #4b5563;
+      font-size: 8pt;
+      font-weight: 700;
+    }
 
-  /* ── Ressourcen-Liste ── */
-  .res-list { margin: 0; padding-left: 16px; }
-  .res-list li { margin-bottom: 2px; }
-  .res-ts { color: #9ca3af; font-size: 8pt; }
+    /* ── Fotos ── */
+    .media-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+    .media-item { width: 44mm; page-break-inside: avoid; }
+    .media-item img {
+      width: 44mm;
+      height: 40mm;
+      object-fit: cover;
+      border: 1px solid #d1d5db;
+      display: block;
+    }
+    .media-caption {
+      font-size: 7.5pt;
+      color: #4b5563;
+      margin-top: 2px;
+      overflow-wrap: break-word;
+    }
 
-  /* ── Karte ── */
-  .map-wrap { margin: 10px 0; }
-  .map-wrap h2 { font-size: 9.5pt; font-weight: 700; text-transform: uppercase;
-                 letter-spacing: .04em; border-bottom: 1.5px solid #111;
-                 margin-bottom: 6px; padding-bottom: 3px; }
-  #printMap { width: 100%; height: 130mm; border: 1px solid #ccc; border-radius: 3px; }
-  .map-coords { font-size: 7.5pt; color: #9ca3af; margin-top: 3px; }
+    /* ── Footer ── */
+    .footer {
+      margin-top: 12px;
+      padding-top: 5px;
+      border-top: 1px solid #9ca3af;
+      font-size: 8pt;
+      color: #6b7280;
+      display: flex;
+      justify-content: space-between;
+    }
 
-  /* ── Verlauf ── */
-  h2 { font-size: 9.5pt; font-weight: 700; text-transform: uppercase;
-       letter-spacing: .04em; border-bottom: 1.5px solid #111;
-       margin: 12px 0 6px; padding-bottom: 3px; }
-  .log-row { display: flex; gap: 10px; padding: 3px 0;
-             border-bottom: 1px solid #f3f4f6; font-size: 9.5pt;
-             page-break-inside: avoid; }
-  .log-time { color: #6b7280; white-space: nowrap; flex-shrink: 0; min-width: 42mm; }
-  .log-author { font-size: 7.5pt; color: #9ca3af; }
-  .log-text { flex: 1; }
-
-  /* ── Fotos ── */
-  .media-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-  .media-grid img { width: 44mm; height: 44mm; object-fit: cover;
-                    border-radius: 3px; border: 1px solid #d1d5db; page-break-inside: avoid; }
-
-  /* ── Footer ── */
-  .footer { margin-top: 16px; padding-top: 5px; border-top: 1px solid #d1d5db;
-            font-size: 8pt; color: #9ca3af; display: flex; justify-content: space-between; }
-
-  @media print {
-    .page { max-width: 100%; margin: 0; }
-    body { font-size: 10pt; }
-  }
-</style>
+    @media print {
+      .no-print { display: none !important; }
+      .page { margin: 0; max-width: 100%; }
+    }
+  </style>
 </head>
 <body>
 
@@ -108,12 +193,12 @@
 {% endif %}
 
 <div class="page">
-
   {% if lage.is_exercise %}
   <div class="exercise-banner">⚠ ÜBUNG / SIMULATION – KEIN ECHTFALL</div>
   {% endif %}
 
-  <div class="hdr">
+  {# ── Header ── #}
+  <header class="hdr">
     {% if qr_datauri %}
     <div style="float:right;text-align:center;font-size:7.5pt;color:#6b7280;">
       <img src="{{ qr_datauri }}" alt="QR-Code Einsatzstelle" style="width:26mm;height:26mm;"><br>
@@ -125,118 +210,164 @@
     {% if site.einsatzgrund and site.bezeichnung != site.einsatzgrund %}
     <div class="hdr__sub">{{ site.bezeichnung }}</div>
     {% endif %}
-    <div class="hdr__meta">
-      <span>Erfasst: {{ site.created_at|local_datetime }}</span>
-      <span>Phase: {{ phase_labels[site.phase] }}</span>
-      {% if site.alarm_stufe %}<span>Alarmstufe: {{ site.alarm_stufe }}</span>{% endif %}
-      <span>Quelle: {% if site.source == 'api' %}Leitstelle{% elif site.source == 'buerger' %}Bürgermeldung{% else %}Manuell{% endif %}</span>
-    </div>
-  </div>
-
-  <table class="info-table">
-    <tr>
-      <td>Priorität</td>
-      <td>
-        {% if site.priority %}
-        <span class="prio-{{ site.priority.name }}">{{ prio_label[site.priority] }}</span>
-        {% else %}–{% endif %}
-      </td>
-    </tr>
-    <tr>
-      <td>Adresse</td>
-      <td>
-        {% if site.strasse %}{{ site.strasse }}{% if site.hausnr %} {{ site.hausnr }}{% endif %}{% if site.ort %}, {% endif %}{% endif %}
-        {% if site.ort %}{{ site.ort }}{% endif %}
-        {% if not site.strasse and not site.ort %}–{% endif %}
-      </td>
-    </tr>
-    {% if site.lat and site.lng %}
-    <tr>
-      <td>Koordinaten</td>
-      <td>{{ '%.5f'|format(site.lat) }}, {{ '%.5f'|format(site.lng) }}</td>
-    </tr>
-    {% endif %}
-    {% if site.sector_id %}
-    {% set sector = lage.sectors | selectattr('id', 'equalto', site.sector_id) | first %}
-    {% if sector %}
-    <tr>
-      <td>Abschnitt</td>
-      <td>{{ sector.name }}</td>
-    </tr>
-    {% endif %}
-    {% endif %}
     {% set leitstellen_nr = (site.external_key if site.source == 'api' else none) or leitstellen_nummern_by_site.get(site.id) %}
-    {% if leitstellen_nr %}
-    <tr>
-      <td>Leitstellen-Nr.</td>
-      <td>{{ leitstellen_nr }}</td>
-    </tr>
+    <div class="badges">
+      <span class="badge badge--{{ prio_color[site.priority] if site.priority else 'muted' }}">Priorität: {{ prio_label[site.priority] if site.priority else '–' }}</span>
+      <span class="badge">Phase: {{ phase_labels[site.phase] }}</span>
+      {% if site.alarm_stufe %}
+      <span class="badge">Alarmstufe: {{ site.alarm_stufe }}</span>
+      {% endif %}
+      {% if leitstellen_nr %}
+      <span class="badge">Leitstellen-Nr.: {{ leitstellen_nr }}</span>
+      {% endif %}
+      <span class="badge">Quelle: {% if site.source == 'api' %}Leitstelle{% elif site.source == 'buerger' %}Bürgermeldung{% else %}Manuell{% endif %}</span>
+      <span class="badge">Erfasst: {{ site.created_at|local_datetime }}</span>
+    </div>
+  </header>
+
+  {# ── Einsatzort ── #}
+  <section class="block">
+    <h2>Einsatzort</h2>
+    <div class="site-place">
+      <div class="site-meta">
+        <div class="address">
+          {% if site.strasse %}{{ site.strasse }}{% if site.hausnr %} {{ site.hausnr }}{% endif %}{% endif %}{% if site.ort %}{% if site.strasse %}, {% endif %}{{ site.ort }}{% endif %}{% if not site.strasse and not site.ort %}Keine Adresse erfasst{% endif %}
+        </div>
+        {% if site.lat and site.lng %}
+        <div>Koordinaten: {{ '%.5f'|format(site.lat) }}, {{ '%.5f'|format(site.lng) }}</div>
+        {% endif %}
+        {% if sector %}
+        <div>
+          Abschnitt: <strong>{{ sector.name }}</strong>{% if sector.leader_label %}<br>Abschnittsleiter: <strong>{{ sector.leader_label }}</strong>{% endif %}
+        </div>
+        {% endif %}
+      </div>
+      {% if site.lat and site.lng %}
+      <div>
+        <div id="printMap"></div>
+        <div class="map-coords">{{ '%.5f'|format(site.lat) }}, {{ '%.5f'|format(site.lng) }}</div>
+      </div>
+      {% endif %}
+    </div>
+  </section>
+
+  {# ── Aufträge ── #}
+  <section class="block">
+    <h2>Aufträge / disponierte Einheiten</h2>
+    {% if active_dispatches %}
+    <table class="dispatch-table">
+      <thead>
+        <tr>
+          <th style="width:21%;">Einheit</th>
+          <th style="width:13%;">Art</th>
+          <th style="width:32%;">Auftrag</th>
+          <th style="width:14%;">Status</th>
+          <th style="width:10%;">Alarm.</th>
+          <th style="width:10%;">Vor Ort</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for dispatch in active_dispatches %}
+        {% set leader = active_leaders.get(dispatch.einheit_id) %}
+        <tr>
+          <td>
+            <span class="dispatch-unit">{{ dispatch.einheit.label }}</span>{% if leader and leader.person_name %}<br><span class="small">{{ leader.person_name }}</span>{% endif %}
+          </td>
+          <td>{{ auftragsart_label.get(dispatch.auftragsart, dispatch.auftragsart) }}</td>
+          <td class="pre-wrap">{{ dispatch.auftrag or '' }}</td>
+          <td>{{ einheit_status_label.get(dispatch.einheit_status, dispatch.einheit_status) }}</td>
+          <td>{{ dispatch.dispatched_at|local_time }}</td>
+          <td>{% if dispatch.vor_ort_at %}{{ dispatch.vor_ort_at|local_time }}{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">Noch keine Einheit disponiert</p>
+    {% endif %}
+    {% if ended_dispatches %}
+    <div class="ended">
+      <strong>Beendet / zurückgezogen</strong>
+      <ul>
+        {% for dispatch in ended_dispatches %}
+        <li><strong>{{ dispatch.einheit.label }}</strong> · {{ (dispatch.withdrawn_at or dispatch.beendet_at or dispatch.dispatched_at)|local_time }}{% if dispatch.withdrawn_grund or dispatch.beendet_grund %} · {{ dispatch.withdrawn_grund or dispatch.beendet_grund }}{% endif %}</li>
+        {% endfor %}
+      </ul>
+    </div>
     {% endif %}
     {% if site.resources %}
-    <tr>
-      <td>Ressourcen</td>
-      <td>
-        <ul class="res-list">
-        {% for r in site.resources | sort(attribute='assigned_at') %}
-        <li>
-          <strong>{{ r.label or '–' }}</strong>
-          <span class="res-ts">
-            — zugeteilt {{ r.assigned_at|local_time if r.assigned_at else '?' }}{% if r.committed_at %} · eingesetzt {{ r.committed_at|local_time }}{% endif %}{% if r.released_at %} · abgezogen {{ r.released_at|local_time }}{% endif %}
-          </span>
-        </li>
+    <div class="ended">
+      <strong>Weitere Ressourcen</strong>
+      <ul class="res-list">
+        {% for resource in site.resources|sort(attribute='assigned_at') %}
+        <li>{{ resource.label or resource.resource_type }}{% if resource.assigned_at %} · zugeteilt {{ resource.assigned_at|local_time }}{% endif %}</li>
         {% endfor %}
-        </ul>
-      </td>
-    </tr>
+      </ul>
+    </div>
     {% endif %}
-  </table>
+  </section>
 
-  {# ── Karte ── #}
-  {% if site.lat and site.lng %}
-  <div class="map-wrap">
-    <h2>Karte</h2>
-    <div id="printMap"></div>
-    <div class="map-coords">{{ '%.5f'|format(site.lat) }}, {{ '%.5f'|format(site.lng) }}</div>
-  </div>
-  {% elif site.strasse or site.ort %}
-  <div class="map-wrap">
-    <h2>Adresse</h2>
-    <p style="font-size:10pt;">
-      {{ site.strasse or '' }} {{ site.hausnr or '' }}{% if site.ort %}, {{ site.ort }}{% endif %}
-    </p>
-  </div>
+  {# ── Meldung / Lage ── #}
+  {% if citizen_report and (citizen_report.description or citizen_report.reporter_name or citizen_report.reporter_contact) %}
+  <section class="block">
+    <h2>Meldung / Lage</h2>
+    <table class="message-table">
+      <tbody>
+        {% if citizen_report.description %}
+        <tr><td>Meldung</td><td class="pre-wrap">{{ citizen_report.description }}</td></tr>
+        {% endif %}
+        {% if citizen_report.reporter_name %}
+        <tr><td>Melder / Anrufer</td><td>{{ citizen_report.reporter_name }}{% if citizen_report.reporter_contact %} · {{ citizen_report.reporter_contact }}{% endif %}</td></tr>
+        {% elif citizen_report.reporter_contact %}
+        <tr><td>Melder / Anrufer</td><td>{{ citizen_report.reporter_contact }}</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </section>
   {% endif %}
 
   {# ── Verlauf ── #}
   {% if site.log_entries %}
-  <h2>Verlauf &amp; Notizen</h2>
-  {% for entry in site.log_entries %}
-  <div class="log-row">
-    <span class="log-time">
-      {{ entry.ts|local_datetime }}
-      {% if entry.author_name %}<br><span class="log-author">{{ entry.author_name }}</span>{% endif %}
-    </span>
-    <span class="log-text">{% if site_log_kind_label and entry.kind in site_log_kind_label and entry.kind != 'note' %}<strong>[{{ site_log_kind_label[entry.kind] }}]</strong> {% endif %}{{ entry.text }}</span>
-  </div>
-  {% endfor %}
+  <section class="block block--flow">
+    <h2>Verlauf &amp; Notizen</h2>
+    <table class="log-table">
+      <thead>
+        <tr><th style="width:31%;">Zeit / Autor</th><th>Eintrag</th></tr>
+      </thead>
+      <tbody>
+        {% for entry in site.log_entries %}
+        <tr>
+          <td>{{ entry.ts|local_datetime }}{% if entry.author_name %}<br><span class="small">{{ entry.author_name }}</span>{% endif %}</td>
+          <td>{% if entry.kind in site_log_kind_label and entry.kind != 'note' %}<strong>[{{ site_log_kind_label[entry.kind] }}]</strong> {% endif %}<span class="pre-wrap">{{ entry.text }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
   {% endif %}
 
   {# ── Fotos ── #}
   {% if site.media %}
-  <h2>Fotos ({{ site.media|length }})</h2>
-  <div class="media-grid">
-    {% for m in site.media %}
-    <img src="/lage-medien/thumb/{{ m.id }}" alt="{{ m.original_filename }}" loading="eager">
-    {% endfor %}
-  </div>
+  <section class="block">
+    <h2>Fotos ({{ site.media|length }})</h2>
+    <div class="media-grid">
+      {% for media in site.media %}
+      <figure class="media-item">
+        <img src="/lage-medien/thumb/{{ media.id }}" alt="{{ media.original_filename }}" loading="eager">
+        {% if media.kommentar %}
+        <figcaption class="media-caption">{{ media.kommentar }}</figcaption>
+        {% endif %}
+      </figure>
+      {% endfor %}
+    </div>
+  </section>
   {% endif %}
 
-  <div class="footer">
+  <footer class="footer">
     <span>{{ lage.name }} · Einsatzstelle #{{ site.id }}</span>
-    <span>Gedruckt: <span id="printTs">–</span></span>
-  </div>
-
-</div>{# /page #}
+    <span>Gedruckt: {{ gedruckt_at|local_datetime }}</span>
+  </footer>
+</div>
 
 {% if site.lat and site.lng %}
 <script src="/static/js/leaflet.min.js"></script>
@@ -248,13 +379,11 @@
   L.Icon.Default.mergeOptions({
     iconUrl: '/static/img/leaflet/marker-icon.png',
     iconRetinaUrl: '/static/img/leaflet/marker-icon-2x.png',
-    shadowUrl: '/static/img/leaflet/marker-shadow.png',
+    shadowUrl: '/static/img/leaflet/marker-shadow.png'
   });
-  var map = L.map('printMap', { zoomControl: false })
-             .setView([lat, lng], 18);
+  var map = L.map('printMap', { zoomControl: false }).setView([lat, lng], 18);
   var tiles = window.EinsatzcockpitMapConfig.addOsmTileLayer(map);
   L.marker([lat, lng]).addTo(map);
-
   setTimeout(function() { map.invalidateSize(); }, 50);
   setTimeout(function() { map.invalidateSize(); }, 300);
   window.addEventListener('beforeprint', function() { map.invalidateSize(); });
@@ -264,8 +393,11 @@
   function autoPrint() {
     if (printed) return;
     printed = true;
-    if (ECPG_RENDER) { setTimeout(function() { window.__ecpgReady = true; }, 800); }
-    else { setTimeout(function() { window.print(); }, 800); }
+    if (ECPG_RENDER) {
+      setTimeout(function() { window.__ecpgReady=true; }, 800);
+    } else {
+      setTimeout(function() { window.print(); }, 800);
+    }
   }
   tiles.on('load', autoPrint);
   setTimeout(autoPrint, 8000);
@@ -274,15 +406,13 @@
 {% else %}
 <script>
 window.addEventListener('load', function() {
-  if ({{ 'true' if render_mode else 'false' }}) { window.__ecpgReady = true; }
-  else { setTimeout(window.print, 300); }
+  if ({{ 'true' if render_mode else 'false' }}) {
+    window.__ecpgReady=true;
+  } else {
+    setTimeout(window.print, 300);
+  }
 });
 </script>
 {% endif %}
-<script>
-document.getElementById('printTs').textContent =
-  new Date().toLocaleString('de-AT', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
-</script>
-
 </body>
 </html>

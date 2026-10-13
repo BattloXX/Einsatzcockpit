@@ -24,7 +24,7 @@ from fastapi import (
 )
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse
 from sqlalchemy import func
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.config import settings
 from app.core.audit import write_audit
@@ -44,11 +44,13 @@ from app.core.templating import templates
 from app.db import get_db
 from app.models.incident import Incident
 from app.models.major_incident import (
+    AUFTRAGSART_LABEL,
     CROSS_MARKER_STATUS_COLOR,
     CROSS_MARKER_STATUS_LABEL,
     CROSS_MARKER_TYPE_ICON,
     CROSS_MARKER_TYPE_LABEL,
     EINHEIT_STATUS_COLOR,
+    EINHEIT_STATUS_LABEL,
     JOURNAL_CATEGORIES,
     JOURNAL_CATEGORY_COLOR,
     JOURNAL_TEMPLATES,
@@ -66,6 +68,7 @@ from app.models.major_incident import (
     EinheitSiteDispatch,
     IncidentSite,
     LageEinheit,
+    LageEinheitLeader,
     LageJournalEntry,
     LageJournalMedia,
     LageToken,
@@ -1504,6 +1507,45 @@ def build_site_druck_context(db: Session, lage, site: IncidentSite) -> dict:
     from app.services.incident_qr_service import lage_qr_login_url
     from app.services.qr_service import generate_qr_datauri
 
+    dispatches = (
+        db.query(EinheitSiteDispatch)
+        .options(joinedload(EinheitSiteDispatch.einheit))
+        .filter(EinheitSiteDispatch.site_id == site.id)
+        .all()
+    )
+    active_dispatches = sorted(
+        (
+            dispatch for dispatch in db.query(EinheitSiteDispatch)
+            .options(joinedload(EinheitSiteDispatch.einheit))
+            .filter(
+                EinheitSiteDispatch.site_id == site.id,
+                resource_service.dispatch_aktiv_filter(),
+            )
+            .all()
+        ),
+        key=lambda dispatch: (
+            dispatch.reihenfolge is None,
+            dispatch.reihenfolge or 0,
+            dispatch.dispatched_at,
+        ),
+    )
+    ended_dispatches = sorted(
+        (dispatch for dispatch in dispatches if dispatch not in active_dispatches),
+        key=lambda dispatch: dispatch.withdrawn_at or dispatch.beendet_at or dispatch.dispatched_at,
+    )
+    einheit_ids = [dispatch.einheit_id for dispatch in dispatches]
+    active_leaders = {}
+    if einheit_ids:
+        active_leaders = {
+            leader.einheit_id: leader
+            for leader in db.query(LageEinheitLeader).filter(
+                LageEinheitLeader.einheit_id.in_(einheit_ids),
+                LageEinheitLeader.end_at.is_(None),
+                LageEinheitLeader.rolle == "fuehrer",
+            ).all()
+        }
+    sector = next((item for item in lage.sectors if item.id == site.sector_id), None)
+    citizen_report = db.query(CitizenReport).filter(CitizenReport.site_id == site.id).first()
     qr_url = lage_qr_login_url(db, lage, site_id=site.id)
     return {
         "lage": lage,
@@ -1511,7 +1553,16 @@ def build_site_druck_context(db: Session, lage, site: IncidentSite) -> dict:
         "leitstellen_nummern_by_site": _leitstellen_nummern_by_site(db, lage, [site]),
         "phase_labels": PHASE_LABELS,
         "prio_label": SITE_PRIORITY_LABEL,
+        "prio_color": SITE_PRIORITY_COLOR,
         "site_log_kind_label": SITE_LOG_KIND_LABEL,
+        "auftragsart_label": AUFTRAGSART_LABEL,
+        "einheit_status_label": EINHEIT_STATUS_LABEL,
+        "active_dispatches": active_dispatches,
+        "ended_dispatches": ended_dispatches,
+        "active_leaders": active_leaders,
+        "sector": sector,
+        "citizen_report": citizen_report,
+        "gedruckt_at": datetime.now(UTC).replace(tzinfo=None),
         "qr_datauri": generate_qr_datauri(qr_url, druck=True, box_size=10) if qr_url else None,
     }
 
@@ -1531,6 +1582,8 @@ def site_druck(
     if not site or site.major_incident_id != lage_id:
         raise HTTPException(status_code=404)
     ctx = build_site_druck_context(db, lage, site)
+    ctx["user"] = user
+    ctx["render_mode"] = False
     return templates.TemplateResponse(request, "incident_major/_site_druck.html", ctx)
 
 
