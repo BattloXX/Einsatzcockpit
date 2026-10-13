@@ -1035,6 +1035,8 @@ async def site_einheit_zuweisen(
     benachrichtigung = plane_benachrichtigungen(db, lage, einheit, dispatch, "neu")
     db.commit()
     background_tasks.add_task(sende_nach_commit, benachrichtigung)
+    from app.services.print_dispatcher import autoprint_gsl_stelle_disponiert_background
+    background_tasks.add_task(autoprint_gsl_stelle_disponiert_background, dispatch.id)
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
     if getattr(dispatch, "phase_geaendert", False):
         await broadcast_lage(lage_id, {"type": "site_phase_changed", "site_id": site_id})
@@ -1196,6 +1198,8 @@ async def site_einheit_disponieren(
     benachrichtigung = plane_benachrichtigungen(db, lage, einheit, dispatch, "neu")
     db.commit()
     background_tasks.add_task(sende_nach_commit, benachrichtigung)
+    from app.services.print_dispatcher import autoprint_gsl_stelle_disponiert_background
+    background_tasks.add_task(autoprint_gsl_stelle_disponiert_background, dispatch.id)
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
     if getattr(dispatch, "phase_geaendert", False):
         await broadcast_lage(lage_id, {"type": "site_phase_changed", "site_id": site_id})
@@ -1337,6 +1341,7 @@ async def site_einheit_vor_ort(
     site_id: int,
     einheit_id: int = Form(...),
     confirmed: bool = Form(False),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
 ):
@@ -1402,6 +1407,9 @@ async def site_einheit_vor_ort(
     ))
     lagemeldung_service.ensure_timer(site, db)
     db.commit()
+    if dispatch and getattr(dispatch, "neu_angelegt", False):
+        from app.services.print_dispatcher import autoprint_gsl_stelle_disponiert_background
+        background_tasks.add_task(autoprint_gsl_stelle_disponiert_background, dispatch.id)
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
     if dispatch and getattr(dispatch, "phase_geaendert", False):
         await broadcast_lage(lage_id, {"type": "site_phase_changed", "site_id": site_id})
@@ -1629,6 +1637,7 @@ async def site_resource_assign(
     site_id: int,
     vehicle_id: int | None = Form(None),
     label: str = Form(""),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
 ):
@@ -1659,10 +1668,15 @@ async def site_resource_assign(
         user_id=user.id,
         author_name=get_author_name(request),
     ))
-    if vehicle_id:
+    dispatch = (
         _sync_einheit_assign(db, lage_id, site, vehicle_id, get_author_name(request), user.id)
+        if vehicle_id else None
+    )
     lagemeldung_service.ensure_timer(site, db)
     db.commit()
+    if dispatch:
+        from app.services.print_dispatcher import autoprint_gsl_stelle_disponiert_background
+        background_tasks.add_task(autoprint_gsl_stelle_disponiert_background, dispatch.id)
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
     return Response(status_code=204)
 
@@ -5017,7 +5031,7 @@ def _sync_einheit_assign(
     vehicle_id: int,
     author_name: str | None,
     user_id: int | None,
-) -> None:
+) -> EinheitSiteDispatch | None:
     """Board-Zuweisung eines Fahrzeugs → LageEinheit synchronisieren."""
     einheit = (
         db.query(LageEinheit)
@@ -5025,14 +5039,14 @@ def _sync_einheit_assign(
         .first()
     )
     if not einheit:
-        return
+        return None
     try:
-        resource_service.assign_to_site(
+        return resource_service.assign_to_site(
             db, einheit.id, lage_id, site.id,
             author_name=author_name, user_id=user_id,
         )
     except ValueError:
-        pass
+        return None
 
 
 def _sync_einheit_pool(
@@ -5472,6 +5486,7 @@ async def lage_einheit_einsatz(
     lage_id: int,
     einheit_id: int,
     site_id: int | None = Form(None),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
 ):
@@ -5481,7 +5496,7 @@ async def lage_einheit_einsatz(
 
     try:
         if site_id:
-            resource_service.assign_to_site(
+            dispatch = resource_service.assign_to_site(
                 db, einheit_id, lage_id, site_id,
                 author_name=get_author_name(user), user_id=user.id,
             )
@@ -5493,6 +5508,9 @@ async def lage_einheit_einsatz(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     db.commit()
+    if site_id:
+        from app.services.print_dispatcher import autoprint_gsl_stelle_disponiert_background
+        background_tasks.add_task(autoprint_gsl_stelle_disponiert_background, dispatch.id)
     await broadcast_lage(lage_id, {"type": "ressource:changed", "einheit_id": einheit_id})
     return RedirectResponse(f"/lage/{lage_id}/ressourcen", status_code=303)
 

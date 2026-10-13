@@ -1254,6 +1254,7 @@ def einheit_aufteilen(
                     raise ValueError("Disposition gehört nicht zur Muttereinheit oder ist nicht aktiv")
                 from app.services.resource_service import dispatch_to_site
 
+                # Übernahme einer bestehenden Disposition: kein neuer Einsatzstellen-Druck.
                 dispatch_to_site(db, ziel.id, lage.id, dispatch.site_id, auftrag=dispatch.auftrag,
                                  auftragsart=dispatch.auftragsart, reihenfolge=dispatch.reihenfolge,
                                  author_name=author_name, user_id=user_id)

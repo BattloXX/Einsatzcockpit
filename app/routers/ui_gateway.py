@@ -513,6 +513,8 @@ def rule_save(
     mail_nur_freigegeben: str = Form(""),
     mail_attachments: str = Form(""),
     mail_max_pages: int = Form(50),
+    stelle_nur_erste_disposition: str = Form(""),
+    stelle_auftragsart: str = Form("alle"),
     gw: int | None = Form(None),
     db: Session = Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin")),
@@ -565,6 +567,11 @@ def rule_save(
             filters["mail_nur_zugeordnet"] = True
         if mail_nur_freigegeben in ("1", "true", "on"):
             filters["mail_nur_freigegeben"] = True
+    if rule.trigger == "gsl_stelle_disponiert":
+        if stelle_nur_erste_disposition in ("1", "true", "on"):
+            filters["stelle_nur_erste_disposition"] = True
+        if stelle_auftragsart in ("erkundung", "abarbeitung"):
+            filters["stelle_auftragsart"] = stelle_auftragsart
     rule.filters = filters
 
     options: dict = {"copies": max(1, int(copies))}

@@ -507,20 +507,20 @@ def assign_to_site(
     *,
     author_name: str | None = None,
     user_id: int | None = None,
-) -> LageEinheit:
-    e = _get_einheit(db, einheit_id, lage_id)
+) -> EinheitSiteDispatch:
+    _get_einheit(db, einheit_id, lage_id)
 
     site = db.get(IncidentSite, site_id)
     if not site or site.major_incident_id != lage_id:
         raise ValueError("Einsatzstelle nicht gefunden")
 
     # Neuem Dispatch-System übergeben: disponieren + sofort vor Ort
-    dispatch_to_site(db, einheit_id, lage_id, site_id, author_name=author_name, user_id=user_id)
+    dispatch = dispatch_to_site(db, einheit_id, lage_id, site_id, author_name=author_name, user_id=user_id)
     _, conflict = set_vor_ort_at_site(db, einheit_id, lage_id, site_id, author_name=author_name, user_id=user_id)
     if conflict:
         # Altes Verhalten: Konflikt ignorieren, altes einfach überschreiben
         resolve_vor_ort_conflict(db, einheit_id, lage_id, site_id, author_name=author_name, user_id=user_id)
-    return e
+    return dispatch
 
 
 # ── Mehrfach-Disposition (Dispatch-System) ────────────────────────────────────
@@ -779,6 +779,7 @@ def set_vor_ort_at_site(
         )
         db.add(dispatch)
         db.flush()
+        setattr(dispatch, "neu_angelegt", True)
 
     now = datetime.now(UTC)
     dispatch.vor_ort_at = now
