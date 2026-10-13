@@ -151,6 +151,36 @@ def test_dispatchzeile_zeigt_erkundung_und_erkundet(client):
     assert "🔍 Erkundung" in detail and "Erkundet" in detail
 
 
+def test_detail_unterscheidet_erkundet_von_fertig_gemeldeter_abarbeitung(client):
+    data = _api_daten(); _leader(client, data)
+    db = SessionLocal(); set_tenant_context(db, None)
+    try:
+        db.query(EinheitSiteDispatch).filter_by(site_id=data["a"]).update({"withdrawn_at": datetime.now(UTC)})
+        erkundung = rs.dispatch_to_site(db, data["e1"], data["lage"], data["a"], auftragsart="erkundung")
+        erkundung.einheit_status, erkundung.beendet_at = "abgeschlossen", datetime.now(UTC)
+        db.get(IncidentSite, data["a"]).phase = SitePhase.bewertet
+        db.commit()
+    finally:
+        db.close()
+    detail = client.get(f"/lage/{data['lage']}/stellen/{data['a']}").text
+    assert "Einsatz erkundet – disponieren?" in detail
+    assert "Stelle abschließen?" not in detail
+    assert "Einheit disponieren" in detail
+    karte = client.get(f"/lage/{data['lage']}/stellen/{data['a']}/card").text
+    assert "Erkundet – disponieren?" in karte
+
+    db = SessionLocal(); set_tenant_context(db, None)
+    try:
+        abarbeitung = rs.dispatch_to_site(db, data["e1"], data["lage"], data["a"])
+        abarbeitung.einheit_status, abarbeitung.beendet_at = "abgeschlossen", datetime.now(UTC)
+        db.get(IncidentSite, data["a"]).phase = SitePhase.fertig_gemeldet
+        db.commit()
+    finally:
+        db.close()
+    detail = client.get(f"/lage/{data['lage']}/stellen/{data['a']}").text
+    assert "Stelle abschließen?" in detail
+
+
 def test_karte_fertig_gemeldet_zeigt_abschliessen_nur_fuer_fuehrung(client):
     data = _api_daten(); _leader(client, data)
     _site_vorbereiten(data, SitePhase.fertig_gemeldet)

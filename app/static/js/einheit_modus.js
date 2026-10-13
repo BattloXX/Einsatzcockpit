@@ -22,6 +22,7 @@ const KONFLIKT_TEXTE = {
   nicht_gefunden: "Auftrag nicht mehr vorhanden",
   client_uuid_vergeben: "Doppelte Aktion",
   aktiver_auftrag: "Anderer Auftrag läuft noch",
+  stelle_in_erkundung: "Einsatzstelle ist noch in Erkundung – Abarbeitung erst nach Bewertung",
 };
 
 const HINWEIS_TEXTE = {
@@ -50,6 +51,7 @@ function registriere() {
     online: navigator.onLine, syncText: "", outboxOffen: false,
     outboxListe: [], verlauf: [],
     flyout: null, konfliktEintrag: null, meldungText: "", felder: {}, grund: "", fotoKommentar: "",
+    erkundungLage: "", erkundungMassnahmen: "",
     entwurfHinweis: false, auftragGeaendert: false, hinweisBanner: "", hinweisRot: false,
     neuIds: [], etag: null,
     ws: null, wsTimer: null, wsVersuche: 0, pollTimer: null, retryTimer: null, lastLoad: 0, outbox: null,
@@ -128,6 +130,7 @@ function registriere() {
       return {
         lagemeldung: "Lagemeldung", massnahmen: "Maßnahme", note: "Notiz", foto: "Foto erfassen",
         material: "Material vor Ort belassen", nicht_durchfuehrbar: "Nicht durchführbar",
+        abschluss_bestaetigen: this.istErkundung ? "Erkundung abschließen" : "Bestätigen",
       }[this.flyout] || "";
     },
 
@@ -505,6 +508,22 @@ function registriere() {
       // Die Anzeige "nur auf diesem Gerät" kommt aus ausstehenderStatus (Outbox), nicht aus detail.
       this.grund = "";
       this.flyout = null;
+    },
+    async erkundungAbschliessen() {
+      const lage = this.erkundungLage.trim();
+      const massnahmen = this.erkundungMassnahmen.trim();
+      if (!lage || !massnahmen) return;
+      await this.outboxErfassen({
+        typ: "meldung", dispatch_id: this.detail.auftrag.dispatch_id, einheit_id: this.einheitId,
+        auftrag_version: this.detail.auftrag.version,
+        payload: reineDaten({
+          art: "lagemeldung", text: `Erkundung: ${lage}\nNotwendige Maßnahmen: ${massnahmen}`,
+          felder: { lage, massnahmen },
+        }),
+      });
+      this.erkundungLage = "";
+      this.erkundungMassnahmen = "";
+      await this.statusInOutbox("abgeschlossen");
     },
     async oeffneMeldung(art) {
       this.flyout = art;

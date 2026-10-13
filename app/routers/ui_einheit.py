@@ -36,6 +36,7 @@ from app.models.major_incident import (
     LageEinheitPerson,
     SiteLogEntry,
     SiteMedia,
+    SitePhase,
     VehiclePosition,
 )
 from app.models.master import FireDept, VehicleMaster
@@ -638,7 +639,13 @@ def auftrag_detail(dispatch_id: int, ctx: EinheitKontext = Depends(einheit_konte
         if dispatch.auftragsart == "erkundung"
         else ERLAUBTE_UEBERGAENGE
     )
-    auftrag["erlaubte_status"] = sorted(uebergaenge.get(dispatch.einheit_status, frozenset()))
+    erlaubte_status = uebergaenge.get(dispatch.einheit_status, frozenset())
+    if (
+        dispatch.auftragsart == "abarbeitung"
+        and site.phase in {SitePhase.eingegangen, SitePhase.erkundung}
+    ):
+        erlaubte_status = erlaubte_status - {"in_arbeit", "abgeschlossen"}
+    auftrag["erlaubte_status"] = sorted(erlaubte_status)
     out: dict[str, Any] = {
         "auftrag": auftrag,
         "stelle": {

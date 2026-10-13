@@ -93,6 +93,10 @@
         <button type="submit" class="btn btn--xs btn--secondary">Einsatz abschließen <span class="sr-only">– Alle Einheiten fertig</span></button>
       </form>
     </div>
+    {% elif ec and ec.nur_erkundet and site.phase.value not in ['erledigt', 'abgebrochen'] %}
+    <div class="site-card__hint">
+      <span class="site-card__hint--done">🔍 Erkundet – disponieren?</span>
+    </div>
     {% elif ec and ec.alle_fertig and site.phase.value not in ['erledigt', 'abgebrochen'] %}
     <div class="site-card__hint">
       <span class="site-card__hint--done">✅ Einheiten fertig – abschließen?</span>

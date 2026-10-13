@@ -81,6 +81,19 @@ def test_erkundung_bewertung_und_abarbeitung_phasen():
         rs.dispatch_to_site(db, c.id, lage.id, site.id); assert site.phase == SitePhase.disponiert
 
 
+def test_tablet_abarbeitung_nach_erkundung_wird_fertig_gemeldet():
+    with _session() as db:
+        lage, site = _lage(db), None; site = _site(db, lage)
+        erkunder, abarbeitung = _unit(db, lage), _unit(db, lage)
+        erkundung = rs.dispatch_to_site(db, erkunder.id, lage.id, site.id, auftragsart="erkundung")
+        _status(db, erkunder, erkundung, "abgeschlossen", quelle="tablet")
+        assert site.phase == SitePhase.bewertet
+        dispatch = rs.dispatch_to_site(db, abarbeitung.id, lage.id, site.id, auftragsart="abarbeitung")
+        _status(db, abarbeitung, dispatch, "in_arbeit", quelle="tablet")
+        _status(db, abarbeitung, dispatch, "abgeschlossen", quelle="tablet")
+        assert site.phase == SitePhase.fertig_gemeldet
+
+
 def test_new_site_stays_eingegangen_without_dispatches():
     with _session() as db:
         site = _site(db, _lage(db)); assert not aktualisiere_site_phase(db, site, ausloeser="T", quelle="manuell")

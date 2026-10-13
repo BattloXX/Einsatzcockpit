@@ -131,3 +131,17 @@ def test_einheit_template_enthaelt_material_flyout():
     template = (Path(__file__).parents[1] / "app/templates/einheit/einheit.html").read_text()
     assert "Material vor Ort belassen" in template
     assert "typ: \"material\"" in (Path(__file__).parents[1] / "app/static/js/einheit_modus.js").read_text()
+
+
+def test_einheit_template_zeigt_naechsten_auftrag_und_erkundungsabschluss():
+    root = Path(__file__).parents[1]
+    template = (root / "app/templates/einheit/einheit.html").read_text()
+    javascript = (root / "app/static/js/einheit_modus.js").read_text()
+    subcard = template[template.index('class="fab-subcard" x-show="aktuell && naechster"'):]
+    assert 'x-show="naechster?.adresse"' in subcard
+    assert 'x-text="naechster?.adresse"' in subcard
+    assert 'x-show="naechster?.auftrag"' in subcard
+    assert "Lage vor Ort (Pflicht)" in template
+    assert "Notwendige Maßnahmen (Pflicht)" in template
+    assert ':disabled="!erkundungLage.trim() || !erkundungMassnahmen.trim()"' in template
+    assert "async erkundungAbschliessen()" in javascript

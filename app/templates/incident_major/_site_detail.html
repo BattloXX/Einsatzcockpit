@@ -431,7 +431,14 @@
 
     {# ── Disponierte LageEinheiten (Mehrfach-Dispatch-System) ──────── #}
     {% if site_dispatches is defined %}
-    {% if site_dispatches and site_dispatches|selectattr('beendet_at')|list|length == site_dispatches|length and site.phase.value not in ['erledigt', 'abgebrochen', 'fertig_gemeldet'] %}
+    {% set alle_dispatches_beendet = site_dispatches and site_dispatches|selectattr('beendet_at')|list|length == site_dispatches|length %}
+    {% set abarbeitungen = site_dispatches|selectattr('auftragsart', 'equalto', 'abarbeitung')|selectattr('withdrawn_at', 'none')|list %}
+    {% if alle_dispatches_beendet and not abarbeitungen and site.phase.value not in ['erledigt', 'abgebrochen', 'disponiert', 'in_arbeit', 'fertig_gemeldet'] %}
+    <div style="margin-bottom:8px;padding:7px 9px;background:rgba(242,176,46,.1);border-left:3px solid var(--yellow);font-size:.8rem;">
+      🔍 Einsatz erkundet – disponieren?
+      <button type="button" class="btn btn--xs btn--secondary" onclick="const select=document.getElementById('siteDisponierenEinheitSelect');select?.focus();select?.scrollIntoView({block:'center'});">Einheit disponieren</button>
+    </div>
+    {% elif alle_dispatches_beendet and abarbeitungen and site.phase.value not in ['erledigt', 'abgebrochen'] %}
     <div style="margin-bottom:8px;padding:7px 9px;background:rgba(242,176,46,.1);border-left:3px solid var(--yellow);font-size:.8rem;">
       Alle Einheiten fertig – Stelle abschließen?
     </div>

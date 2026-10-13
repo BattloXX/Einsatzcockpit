@@ -24,6 +24,7 @@ from app.models.major_incident import (
     LageEinheitZugang,
     MajorIncident,
     MajorIncidentStatus,
+    SitePhase,
 )
 from app.models.master import VehicleMaster
 from app.models.user import DeviceToken
@@ -439,6 +440,13 @@ def setze_einheit_status(
     uebergaenge = ERLAUBTE_UEBERGAENGE_ERKUNDUNG if dispatch.auftragsart == "erkundung" else ERLAUBTE_UEBERGAENGE
     if neuer_status not in uebergaenge.get(alter_status, frozenset()):
         raise EinheitKonflikt("ungueltiger_uebergang")
+    if (
+        ctx.quelle != "funk"
+        and dispatch.auftragsart == "abarbeitung"
+        and neuer_status in {"in_arbeit", "abgeschlossen"}
+        and dispatch.site.phase in {SitePhase.eingegangen, SitePhase.erkundung}
+    ):
+        raise EinheitKonflikt("stelle_in_erkundung")
     if neuer_status == "nicht_durchfuehrbar" and not (grund and grund.strip()):
         raise ValueError("Grund für nicht durchführbar erforderlich")
 
