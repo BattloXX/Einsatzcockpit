@@ -202,6 +202,9 @@ function registriere() {
     outboxStatus(item) {
       if (item.status === "blockiert_zugang") return "Zugang beendet – nicht übermittelt";
       if (item.status === "konflikt") return this.konfliktText(item.letzter_fehler);
+      if (item.status === "fehler" && item.letzter_fehler === "foto_daten_fehlen") {
+        return "Foto auf diesem Gerät nicht mehr lesbar – bitte neu aufnehmen";
+      }
       if (item.status === "fehler") return `Fehler: ${item.letzter_fehler || "unbekannt"}`;
       if (item.status === "fehler_netz") return `↻ erneuter Versuch in ${this.retrySekunden(item)} s`;
       return "⏳ nur auf diesem Gerät";
