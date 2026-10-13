@@ -156,7 +156,7 @@ def test_mcp_dokument_download_ist_ohne_objekt_verwalter_nicht_verfuegbar(client
     seed = _seed("mcp-download-rolle", {"admin": "objekt_verwalter", "read": "readonly"})
     dokument, _ = _dokument(client, seed)
     token = _token(client, seed, "read")
-    assert "objekt_dokument_herunterladen" not in _mcp(client, token, "tools/list", {}, 1).text
+    assert '"name":"objekt_dokument_herunterladen"' not in _mcp(client, token, "tools/list", {}, 1).text
     assert "__fehler__" in _rufe(
         client, token, "objekt_dokument_herunterladen", dokument_id=dokument["dokument_id"]
     )

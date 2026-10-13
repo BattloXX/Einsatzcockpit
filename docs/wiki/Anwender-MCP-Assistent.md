@@ -95,3 +95,24 @@ Gibt es für Einsatz 2026-471 Probleme bei der Anfahrt?
 ## Grenzen und Datenschutz
 
 PDFs werden entweder als Base64 im Tool-Aufruf (dekodiert bis 8 MB) oder über einen einmaligen Upload-Link (bis 50 MB, 15 Minuten gültig, an Benutzer und Objekt gebunden) übergeben; nicht übergebene Uploads werden nach 24 Stunden gelöscht. Kontakt-Import und -Export, SMS- und Mail-Freigaben je Objektkontakt sowie SMS-Versand sind keine MCP-Werkzeuge. Fahrtenbuchdaten enthalten Fahrernamen; Fahrtenbuch-Admins sehen diese und übermitteln sie bei einer Abfrage an die verwendete KI-Anwendung. Beachte deshalb die Datenschutz- und Freigaberegeln deiner Organisation.
+
+## Einsätze auslesen
+
+Für sichtbare Einsätze stehen allen Einsatzrollen ab `readonly` zehn ausschließlich lesende Werkzeuge zur Verfügung:
+
+| Werkzeug | Zweck |
+|---|---|
+| `einsaetze_liste` | sichtbare Einsätze filtern und auflisten |
+| `einsatz_lesen` | Stammdaten und Meldebild eines Einsatzes lesen |
+| `einsatz_einheiten` | alarmierte und eingesetzte Einheiten lesen |
+| `einsatz_auftraege` | Aufträge einschließlich Medien-Metadaten lesen |
+| `einsatz_meldungen` | Meldungen einschließlich Medien-Metadaten lesen |
+| `einsatz_verlauf` | Tagebuch und Funkjournal lesen |
+| `einsatz_objekte` | verknüpfte Objekte und freigegebene Dokumente lesen |
+| `einsatz_lagebild` | kompaktes Lagebild aus Einheiten, offenen Punkten, Objekten und Verlauf lesen |
+| `einsatz_objekt_dokument_herunterladen` | kurzlebigen Link für ein freigegebenes Dokument eines verknüpften Objekts vorbereiten |
+| `einsatz_medium_herunterladen` | kurzlebigen Link für ein Auftrags- oder Meldungsmedium vorbereiten |
+
+Beispiel-Fragen: „Welche Einsätze sind derzeit aktiv?“, „Welche offenen Aufträge hat Einsatz 42?“, „Fasse mir das Lagebild von Einsatz 42 zusammen.“ oder „Lade den Objektplan aus Einsatz 42 herunter.“
+
+Bewusst nicht geliefert werden Inhalte und Medien aus der Personen-Spalte, Atemschutzdaten, Mannschaftsnamen, Anrufer, Autoren sowie Objekt-Kontakte. Die Download-Links gelten nur kurz und werden beim Abruf nochmals gegen die aktuellen Rechte geprüft.

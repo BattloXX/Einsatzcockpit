@@ -11,6 +11,10 @@ Die MCP-Implementierung liegt in `app/mcp/`: `server.py` stellt den OAuth-Provid
 3. In `server.py` den passenden `@server.tool`-Adapter anlegen, der ausschließlich `_call_registered_tool()` aufruft.
 4. Fachliche Eingaben validieren und erwartete Nutzungsfehler als `ValueError` melden. Der Handler erhält `MCPContext` mit Datenbank, Benutzer und `org_id`.
 
+## Einsatz-Modul und Datenschutz
+
+Die lesenden Einsatz-Werkzeuge liegen in `app/mcp/tools/einsatz.py`; gemeinsame, rein lesende Serialisierung und Sichtbarkeitsprüfung liegen in `app/services/einsatz_mcp_service.py`. Kurzlebige Download-Tokens und die Live-Prüfung beim Abruf liegen in `app/services/mcp_download_service.py`. Neue Felder werden nur nach ausdrücklicher Whitelist in die Antwort aufgenommen. Personendaten werden nie ausgegeben: insbesondere keine Personen-Spalte, Mannschaftsnamen, Anrufer, Autoren oder Objekt-Kontakte.
+
 `load_live_context()` prüft Benutzer, Organisation, MCP-Flags und Rollen bei jedem Aufruf. `module_check` entscheidet zusätzlich pro Fachmodul; `list_tools()` blendet Werkzeuge mit fehlender Live-Berechtigung aus.
 
 ## Werkzeuge und Berechtigungen

@@ -105,5 +105,6 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 | **1.0.0** | 2026-05-22 | Initiale Webapp (FastAPI + HTMX, WebSocket, Atemschutz, PWA, QR-Code) |
 # Unreleased
 
+- Neu: MCP-Assistenten können sichtbare Einsätze datensparsam lesen, einschließlich Lagebild, Einheiten, Aufträgen, Meldungen, Verlauf und verknüpften Objekten; freigegebene Objekt-Dokumente sowie Auftrags- und Meldungsmedien werden über kurzlebige, live geprüfte Download-Links bereitgestellt.
 - Neu: System-Admins können eingehende Mails bestimmter Adressen (z. B. info@) an andere Adressen weiterleiten (inline oder als EML, mit Retry, Schleifenschutz und Protokoll ohne Inhalt).
 
