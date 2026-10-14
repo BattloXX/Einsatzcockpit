@@ -10,7 +10,7 @@ from app.core.security import hash_password
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.master import FireDept, OrgSettings, SystemSettings
-from app.models.planspiel import PlanspielMitglied, PlanspielRun
+from app.models.planspiel import PlanspielMitglied, PlanspielRun, PlanspielSzenario
 from app.models.user import AuditLog, Role, User, UserRole
 from app.routers.ui_planspiel import require_planspiel_enabled
 
@@ -179,6 +179,12 @@ def test_org_toggle_schreibt_flag_und_audit(client):
     set_tenant_context(db, None)
     try:
         assert db.query(OrgSettings).filter_by(org_id=admin.org_id).one().planspiel_modul_aktiv is True
+        assert (
+            db.query(PlanspielSzenario)
+            .filter(PlanspielSzenario.org_id == admin.org_id, PlanspielSzenario.herkunft == "system")
+            .count()
+            == 57
+        )
         assert (
             db.query(AuditLog)
             .filter(AuditLog.action == "planspiel.org_toggle", AuditLog.user_id == admin.id)

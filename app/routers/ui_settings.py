@@ -573,6 +573,10 @@ async def save_org_settings(
         old_planspiel = org_s.planspiel_modul_aktiv
         new_planspiel = planspiel_modul_aktiv_raw in ("1", "true", "on")
         org_s.planspiel_modul_aktiv = new_planspiel
+        if new_planspiel and not old_planspiel:
+            from app.services.planspiel_katalog_service import katalog_importieren
+
+            katalog_importieren(db, effective_org_id, user.id)
         if old_planspiel != new_planspiel:
             from app.core.audit import write_audit
 
