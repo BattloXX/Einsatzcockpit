@@ -531,7 +531,7 @@
           {% endfor %}
         </select>
         <input type="text" name="grund" class="form-input" placeholder="Grund bei nicht durchführbar">
-        <button type="submit" class="btn btn--xs btn--secondary">Setzen</button>
+        <button type="submit" class="btn btn--xs btn--secondary" title="Per Funk gemeldeten Status für die Einheit eintragen">Status eintragen</button>
       </form>
       {% endif %}
       {% endif %}
@@ -554,12 +554,7 @@
     {% endif %}
     {% elif available_einheiten is defined and can_edit %}
     {% set already_ids = already_dispatched_ids if already_dispatched_ids is defined else [] %}
-    {% set dispatchable = [] %}
-    {% for e in available_einheiten %}
-      {% if e.id not in already_ids and e.status != 'abgerueckt' %}
-        {% set _ = dispatchable.append(e) %}
-      {% endif %}
-    {% endfor %}
+    {% set dispatchable = available_einheiten|rejectattr('id', 'in', already_ids)|list %}
     {% if dispatchable %}
     <form style="margin-top:8px;"
           hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/einheit-disponieren"
@@ -571,14 +566,8 @@
          Disposition. Die Buttons setzen das Feld vor dem Absenden. #}
       <input type="hidden" name="auftragsart" value="{{ 'erkundung' if site.phase.value in ['eingegangen', 'erkundung'] else 'abarbeitung' }}">
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-        <select id="siteDisponierenEinheitSelect" name="einheit_id" class="form-select form-select--sm" style="flex:1;">
-          {% for e in dispatchable %}
-          <option value="{{ e.id }}"
-                  style="{% if e.incident_site_id %}color:var(--red);{% elif e.status == 'im_einsatz' %}color:var(--yellow);{% else %}color:var(--green);{% endif %}">
-            {% if e.incident_site_id %}🔴{% elif e.status == 'im_einsatz' %}🟡{% else %}🟢{% endif %} {{ e.label }}{% if e.incident_site_id %} (Im Einsatz){% elif e.status == 'im_einsatz' %} (disponiert){% endif %}
-          </option>
-          {% endfor %}
-        </select>
+        {% from "incident_major/_einheit_dispatch_options.html" import dispatch_options with context %}
+        <select id="siteDisponierenEinheitSelect" name="einheit_id" class="form-select form-select--sm" style="flex:1;">{{ dispatch_options(dispatchable, site, sectors, sector_names) }}</select>
         <button type="submit" data-auftragsart="erkundung" onclick="this.form.elements.auftragsart.value='erkundung'" class="btn btn--sm {% if site.phase.value in ['eingegangen', 'erkundung'] %}btn--primary{% else %}btn--secondary{% endif %}">Erkundung zuweisen</button>
         <button type="submit" data-auftragsart="abarbeitung" onclick="this.form.elements.auftragsart.value='abarbeitung'" class="btn btn--sm {% if site.phase.value not in ['eingegangen', 'erkundung'] %}btn--primary{% else %}btn--secondary{% endif %}">Disponieren</button>
       </div>
