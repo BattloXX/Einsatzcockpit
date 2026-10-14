@@ -105,6 +105,7 @@ from app.routers import (
     ui_password_reset,
     ui_pin_login,
     ui_planspiel,
+    ui_planspiel_admin,
     ui_probenplanung,
     ui_probenplanung_admin,
     ui_probenplanung_public,
@@ -911,6 +912,7 @@ app.include_router(ui_objekt_pflege_review.router)
 app.include_router(ui_kontakt.router)
 app.include_router(ui_road_closure.router)
 app.include_router(ui_planspiel.router)
+app.include_router(ui_planspiel_admin.router)
 app.include_router(ui_road_closure_admin.router)
 app.include_router(ui_road_closure_public.router)
 app.include_router(ui_nachschlagewerke.router)

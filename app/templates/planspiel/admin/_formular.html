@@ -1,0 +1,234 @@
+<form method="post" x-data="planspielForm()" x-init="init()" @submit="$refs.events.value = JSON.stringify(events)">
+  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+  <input type="hidden" name="ereignisse_json" x-ref="events">
+  {% if not szenario %}
+  <label>Code<input class="form-input" name="code" value="{{ form.code if form else '' }}" required pattern="[A-Za-z0-9_-]{1,40}"></label>
+  {% endif %}
+  <div class="planspiel-pane" x-show="!$root.tab || $root.tab === 'grund'">
+    <h2>Grunddaten</h2>
+    <div class="planspiel-grid">
+      <label>Titel<input class="form-input" name="titel" value="{{ version.titel if version else '' }}" required></label>
+      <label>
+        Kategorie
+        <select class="form-input" name="kategorie">
+          {% for key in ['brand', 'technik', 'gsl', 'sonstiges'] %}
+          <option value="{{ key }}" {% if version and version.kategorie == key %}selected{% endif %}>{{ key }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Stichwort-Code<input class="form-input" name="stichwort_code" value="{{ version.stichwort_code if version else '' }}" required list="lfv-codes"></label>
+      <label>
+        Schwierigkeit
+        <select class="form-input" name="schwierigkeit">
+          {% for key in ['leicht', 'mittel', 'schwer'] %}
+          <option value="{{ key }}" {% if version and version.schwierigkeit == key %}selected{% endif %}>{{ key }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Gewicht<input class="form-input" name="gewicht" type="number" min="0" value="{{ szenario.gewicht if szenario else 10 }}"></label>
+      <label><input type="checkbox" name="aktiv" {% if not szenario or szenario.aktiv %}checked{% endif %}> Aktiv</label>
+      <label>Beschreibung<textarea class="form-input" name="beschreibung">{{ version.beschreibung if version and version.beschreibung else '' }}</textarea></label>
+      <label>Grundsituation<textarea class="form-input" name="grundsituation">{{ version.grundsituation if version and version.grundsituation else '' }}</textarea></label>
+      <label>Schlagworte<input class="form-input" name="schlagworte" value="{{ version.schlagworte if version and version.schlagworte else '' }}"></label>
+    </div>
+    <datalist id="lfv-codes">{% for entry in stichworte %}<option value="{{ entry.code|upper }}">{{ entry.bezeichnung }}</option>{% endfor %}</datalist>
+  </div>
+  <div class="planspiel-pane" x-show="$root.tab === 'alarm'">
+    <h2>Alarmierung</h2>
+    <label>Alarmtext-Template<textarea class="form-input" name="alarmtext_template" required>{{ version.alarmtext_template if version else '' }}</textarea></label>
+    <p class="planspiel-hint">Erlaubte Platzhalter: {adresse}, {strasse}, {hausnr}, {ort}, {objekt}, {gebaeudeart}, {meldender}, {meldezeit}, {stock}, {bereich}, {ursache}, {gruppe}, {hindernis}, {geraet}, {material}, {einheit}, {neu}, {ortsteil}.</p>
+  </div>
+  <div class="planspiel-pane" x-show="$root.tab === 'ort'">
+    <h2>Standortregeln</h2>
+    <fieldset>
+      <legend>Ortstypen</legend>
+      <div class="planspiel-checkboxes">
+        {% for key, label in ort_typen.items() %}
+        <label>
+          <input type="checkbox" name="ort_typen" value="{{ key }}" {% if version and key in version.ort_typen %}checked{% endif %}>
+          {{ label }}
+        </label>
+        {% endfor %}
+      </div>
+      <label>
+        <input type="checkbox" name="requires_existing_object" {% if version and version.requires_existing_object %}checked{% endif %}>
+        Bestehendes Objekt erforderlich
+      </label>
+      <label>
+        <input type="checkbox" name="requires_verified_bma" {% if version and version.requires_verified_bma %}checked{% endif %}>
+        Registrierte BMA erforderlich (F14)
+      </label>
+    </fieldset>
+    <div class="planspiel-grid">
+      <label>
+        Geografie-Bedingung
+        <input class="form-input" name="geografie_bedingung" placeholder="gewaesser=bodensee"
+               value="{% if version and version.geografie_bedingung %}{% for key, value in version.geografie_bedingung.items() %}{{ key }}={{ value }}{% endfor %}{% endif %}">
+      </label>
+      <label>
+        Min. Adressqualität
+        <select class="form-input" name="min_adressqualitaet">
+          <option value="">keine</option>
+          {% for key in ['A', 'B', 'C'] %}
+          <option value="{{ key }}" {% if version and version.min_adressqualitaet == key %}selected{% endif %}>{{ key }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+  </div>
+  <div class="planspiel-pane" x-show="$root.tab === 'meldungen'">
+    <h2>Folgemeldungen</h2>
+    <label>
+      Baustein einfügen
+      <select class="form-input" @change="insertBlock($event.target.value); $event.target.value = ''">
+        <option value="">Baustein wählen</option>
+        {% for code, baustein in bausteine.items() %}
+        <option value="{{ code }}">{{ code }}: {{ baustein.text }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <template x-for="(event, index) in events" :key="index">
+      <section class="planspiel-event">
+        <div class="planspiel-event__head">
+          <h3 x-text="'Folgemeldung ' + (index + 1)"></h3>
+          <button class="btn" type="button" @click="events.splice(index, 1)">Entfernen</button>
+        </div>
+        <div class="planspiel-grid">
+          <label>
+            Typ
+            <select class="form-input" x-model="event.ereignis_typ">
+              <option value="aufklaerung">Aufklärung</option>
+              <option value="eskalation">Eskalation</option>
+              <option value="komplikation">Komplikation</option>
+              <option value="entspannung">Entspannung</option>
+              <option value="lageweit">Lageweit</option>
+              <option value="funk">Funk (simuliert)</option>
+              <option value="duplikat">Duplikat/Bürgeranruf</option>
+            </select>
+          </label>
+          <label>
+            Trigger
+            <select class="form-input" x-model="event.trigger_type">
+              <option value="elapsed_time">Zeit ab Start</option>
+              <option value="phase_reached">Phase erreicht</option>
+              <option value="assignment_created">Auftrag erstellt</option>
+              <option value="assignment_completed">Auftrag abgeschlossen</option>
+              <option value="manual">Manuell (Regie)</option>
+              <option value="condition">Bedingung</option>
+            </select>
+          </label>
+          <label>
+            Ziel
+            <select class="form-input" x-model="event.ziel">
+              <option value="stelle">Einsatzstelle</option>
+              <option value="lage">Lage</option>
+              <option value="einheit">Einheit</option>
+              <option value="regie">Regie</option>
+            </select>
+          </label>
+          <label>
+            Sichtbarkeit
+            <select class="form-input" x-model="event.sichtbarkeit">
+              <option value="teilnehmer">Teilnehmer</option>
+              <option value="regie">Nur Regie</option>
+            </select>
+          </label>
+          <label>
+            Offset min. (Minuten)
+            <input class="form-input" type="number" min="0" step="any" x-model="event.offset_min_s">
+          </label>
+          <label>
+            Offset max. (Minuten)
+            <input class="form-input" type="number" min="0" step="any" x-model="event.offset_max_s">
+          </label>
+          <label>
+            Phase
+            <select class="form-input" x-model="event.trigger_param.phase">
+              <option value="">keine</option>
+              <option value="eingegangen">Eingegangen</option>
+              <option value="erkundung">Erkundung</option>
+              <option value="bewertet">Bewertet</option>
+              <option value="disponiert">Disponiert</option>
+              <option value="in_arbeit">In Arbeit</option>
+              <option value="fertig_gemeldet">Fertig gemeldet</option>
+              <option value="erledigt">Abgeschlossen</option>
+            </select>
+          </label>
+          <label>
+            Auftragsart
+            <select class="form-input" x-model="event.trigger_param.auftragsart">
+              <option value="">keine</option>
+              <option value="erkundung">Erkundung</option>
+              <option value="abarbeitung">Abarbeitung</option>
+            </select>
+          </label>
+          <label>
+            Wahrscheinlichkeit (%)
+            <input class="form-input" type="number" min="0" max="100" step="1" x-model="event.wahrscheinlichkeit">
+          </label>
+          <label>
+            Max. Auslösungen
+            <input class="form-input" type="number" min="1" x-model="event.max_fires">
+          </label>
+          <label>
+            Priorität
+            <input class="form-input" type="number" x-model="event.prioritaet">
+          </label>
+        </div>
+        <label>
+          Text
+          <textarea class="form-input" x-model="event.payload_template"></textarea>
+        </label>
+      </section>
+    </template>
+    <button class="btn" type="button" :disabled="events.length >= 20" @click="add()">Zeile hinzufügen</button>
+    <p class="planspiel-hint" x-show="events.length >= 20">Maximal 20 Folgemeldungen.</p>
+  </div>
+  <div class="planspiel-pane" x-show="$root.tab === 'lernziele'">
+    <h2>Lernziele</h2>
+    <label>
+      Lernziele
+      <textarea class="form-input" name="lernziele">{{ version.lernziele if version and version.lernziele else '' }}</textarea>
+    </label>
+    <aside class="planspiel-secret">
+      <strong>Regie-Geheimlage</strong>
+      <span>Nur für die Regie sichtbar, nie für Teilnehmer.</span>
+      <textarea class="form-input" name="regie_geheimlage">{{ version.regie_geheimlage if version and version.regie_geheimlage else '' }}</textarea>
+    </aside>
+  </div>
+  <div class="planspiel-pane" x-show="$root.tab === 'zufall'">
+    <h2>Varianten &amp; Zufall</h2>
+    <label>
+      <input type="checkbox" name="zufall_erlaubt" {% if not szenario or szenario.zufall_erlaubt %}checked{% endif %}>
+      Für Zufallsauswahl zulassen
+    </label>
+    <label>
+      GSL-Modus
+      <select class="form-input" name="gsl_modus">
+        <option value="">keiner</option>
+        {% for key in ['hochwasser', 'sturm', 'kombination'] %}
+        <option value="{{ key }}" {% if version and version.gsl_modus == key %}selected{% endif %}>{{ key }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </div>
+  <div class="planspiel-actions"><button class="btn btn--primary" type="submit">Speichern</button></div>
+</form>
+<script id="planspiel-bausteine" type="application/json">{{ baustein_daten|default({})|tojson }}</script>
+<script>
+function planspielForm() {
+  return {
+    events: [], blocks: {},
+    init() { this.events = {{ form_events|default([])|tojson }}.map((event) => ({ ...event, trigger_param: event.trigger_param || {} })); this.blocks = JSON.parse(document.getElementById('planspiel-bausteine').textContent); },
+    add() {
+      if (this.events.length >= 20) return;
+      this.events.push({
+        ereignis_typ: 'aufklaerung', trigger_type: 'manual', wahrscheinlichkeit: 100,
+        sichtbarkeit: 'teilnehmer', ziel: 'stelle', payload_template: '',
+        offset_min_s: null, offset_max_s: null, trigger_param: {}, max_fires: 1, prioritaet: 0,
+      });
+    },
+    insertBlock(code) { if (!code || this.events.length >= 20) return; const block = this.blocks[code]; if (block) this.events.push({ ...block, trigger_param: block.trigger_param || {} }); },
+  };
+}
+</script>

@@ -29,6 +29,7 @@
        or '/admin/konfig' in _p or '/admin/sso' in _p or '/admin/gsl-einstellungen' in _p
        or '/admin/lis' in _p or '/admin/dibos' in _p or '/admin/mail' in _p
        or '/admin/teams-alarmierung' in _p
+       or '/admin/settings/planspiele' in _p
        or _p.startswith('/strassensperren/einstellungen')
        or ('/admin/medien' in _p and is_sysadmin) %}
   {% set active_group = 'einstellungen' %}
@@ -485,6 +486,11 @@
                {{ tip('Microsoft-Teams-Benachrichtigungen für Straßensperren konfigurieren') }}>
               <span class="admin-nav__icon">💬</span>Teams
             </a>
+            {% endif %}
+            {% if request.state.planspiel_enabled and ('org_admin' in user_role_codes or 'admin' in user_role_codes or 'system_admin' in user_role_codes or 'uebungsleiter' in user_role_codes) %}
+            <div class="admin-nav__subheading">Planspiele</div>
+            <a href="/admin/settings/planspiele/szenarien" class="admin-nav__item {% if request.url.path.startswith('/admin/settings/planspiele/szenarien') %}is-active{% endif %}"><span class="admin-nav__icon">🎭</span>Szenariokatalog</a>
+            <a href="/admin/settings/planspiele/stichworte" class="admin-nav__item {% if request.url.path.startswith('/admin/settings/planspiele/stichworte') %}is-active{% endif %}"><span class="admin-nav__icon">📚</span>Stichwort-Referenz</a>
             {% endif %}
             {% if is_sysadmin %}
             <a href="/admin/ki-prompts"

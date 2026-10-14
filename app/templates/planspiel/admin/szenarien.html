@@ -1,0 +1,23 @@
+{% extends "admin/_layout.html" %}
+{% from "admin/_breadcrumb.html" import breadcrumb %}
+{% block title %}Szenariokatalog{% endblock %}
+{% block content %}
+<section class="planspiel-admin">
+  {{ breadcrumb([{"label": "Einstellungen", "href": "/admin/settings"}, {"label": "Planspiele", "href": "/planspiele"}, {"label": "Szenariokatalog", "href": none}]) }}
+  <div class="planspiel-admin__head"><h1>Szenariokatalog</h1><div>{% if can_edit %}<a class="btn" href="/admin/settings/planspiele/szenarien/export.json">Export JSON</a><a class="btn btn--primary" href="/admin/settings/planspiele/szenarien/neu">Neues Szenario</a>{% endif %}<a class="btn" href="/admin/settings/planspiele/stichworte">Stichwort-Referenz</a></div></div>
+  {% if fehler %}<p class="form-error">{{ fehler }}</p>{% endif %}
+  {% if meldung %}<p class="form-success">{{ meldung }}</p>{% endif %}
+  <form class="planspiel-filter" hx-get="/admin/settings/planspiele/szenarien" hx-target="#szenario-liste" hx-push-url="true">
+    <input class="form-input" name="q" value="{{ filters.q or '' }}" placeholder="Code oder Titel suchen" hx-trigger="keyup changed delay:300ms">
+    <select class="form-input" name="kategorie" hx-trigger="change"><option value="">Alle Kategorien</option>{% for key in ['brand', 'technik', 'gsl', 'sonstiges'] %}<option value="{{ key }}" {% if filters.kategorie == key %}selected{% endif %}>{{ key }}</option>{% endfor %}</select>
+    <input class="form-input" name="stichwort" value="{{ filters.stichwort or '' }}" placeholder="Stichwort">
+    <select class="form-input" name="schwierigkeit"><option value="">Alle Schwierigkeiten</option>{% for key in ['leicht', 'mittel', 'schwer'] %}<option value="{{ key }}" {% if filters.schwierigkeit == key %}selected{% endif %}>{{ key }}</option>{% endfor %}</select>
+    <select class="form-input" name="orttyp"><option value="">Alle Ortstypen</option>{% for key, label in ort_typen.items() %}<option value="{{ key }}" {% if filters.orttyp == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+    <select class="form-input" name="status"><option value="">Aktive und inaktive</option>{% for key in ['aktiv', 'inaktiv', 'archiviert'] %}<option value="{{ key }}" {% if filters.status == key %}selected{% endif %}>{{ key }}</option>{% endfor %}</select>
+    <select class="form-input" name="herkunft"><option value="">System und eigene</option><option value="system" {% if filters.herkunft == 'system' %}selected{% endif %}>System</option><option value="org" {% if filters.herkunft == 'org' %}selected{% endif %}>Eigene</option></select>
+    <button class="btn" type="submit">Filtern</button>
+  </form>
+  {% if can_edit %}<form class="planspiel-import" method="post" action="/admin/settings/planspiele/szenarien/import" enctype="multipart/form-data"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><label>Import JSON<input type="file" name="file" accept="application/json" required></label><button class="btn" type="submit">Importieren</button></form>{% endif %}
+  <div id="szenario-liste">{% include "planspiel/admin/_szenario_liste.html" %}</div>
+</section>
+{% endblock %}
