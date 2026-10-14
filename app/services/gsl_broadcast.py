@@ -47,3 +47,20 @@ async def site_log_geaendert(lage_id: int, site_id: int, funkjournal_geaendert: 
     await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
     if funkjournal_geaendert:
         await broadcast_lage(lage_id, {"type": "funkjournal:changed"})
+
+
+async def journal_geaendert(lage_id: int) -> None:
+    await broadcast_lage(lage_id, {"type": "journal_updated"})
+
+
+async def funkjournal_geaendert(lage_id: int, site_id: int | None = None) -> None:
+    await broadcast_lage(lage_id, {"type": "funkjournal:changed"})
+    if site_id:
+        await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
+
+
+async def cross_marker_geaendert(lage_id: int, marker_id: int, deleted: bool = False) -> None:
+    event = {"type": "cross_marker:changed", "marker_id": marker_id}
+    if deleted:
+        event["deleted"] = True
+    await broadcast_lage(lage_id, event)

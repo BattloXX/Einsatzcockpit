@@ -61,3 +61,12 @@ def toggle_handled(db: Session, lage: MajorIncident, entry_id: int) -> CommLogEn
         raise LookupError("Funkjournaleintrag nicht gefunden")
     entry.handled = not entry.handled
     return entry
+
+
+def setze_erledigt(db: Session, lage: MajorIncident, entry_id: int, erledigt: bool) -> CommLogEntry:
+    """Setzt den Zustand idempotent (für API- und MCP-Schreibpfade)."""
+    entry = db.get(CommLogEntry, entry_id)
+    if not entry or entry.major_incident_id != lage.id:
+        raise LookupError("Funkjournaleintrag nicht gefunden")
+    entry.handled = erledigt
+    return entry

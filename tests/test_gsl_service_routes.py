@@ -65,6 +65,10 @@ def test_site_media_upload_broadcastet_und_schreibt_medien_log(client, setup_db,
         events.append((lage, event))
 
     monkeypatch.setattr(router, "broadcast_lage", fake_broadcast)
+
+    from app.services import gsl_broadcast
+
+    monkeypatch.setattr(gsl_broadcast, "broadcast_lage", fake_broadcast)
     monkeypatch.setattr(lage_media_service, "_LAGE_MEDIA_DIR", str(tmp_path / "lage_media"))
     csrf = client.cookies.get("ec_csrf")
     response = client.post(
@@ -95,6 +99,10 @@ def test_funkjournal_add_broadcastet(client, setup_db, monkeypatch):
         events.append((lage, event))
 
     monkeypatch.setattr(router, "broadcast_lage", fake_broadcast)
+
+    from app.services import gsl_broadcast
+
+    monkeypatch.setattr(gsl_broadcast, "broadcast_lage", fake_broadcast)
     csrf = client.cookies.get("ec_csrf")
     response = client.post(
         f"/lage/{lage_id}/funkjournal",
@@ -152,6 +160,10 @@ def test_funkjournal_handled_broadcastet(client, setup_db, monkeypatch):
         events.append((lage, event))
 
     monkeypatch.setattr(router, "broadcast_lage", fake_broadcast)
+
+    from app.services import gsl_broadcast
+
+    monkeypatch.setattr(gsl_broadcast, "broadcast_lage", fake_broadcast)
     csrf = client.cookies.get("ec_csrf")
     response = client.post(f"/lage/{lage_id}/funkjournal/{entry_id}/erledigt", data={"_csrf": csrf})
     assert response.status_code == 204
