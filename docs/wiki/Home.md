@@ -11,6 +11,7 @@ Eine Python-Webapp (FastAPI + HTMX + WebSocket), die ein bisheriges Single-File-
 ### Kernfunktionen
 - Echtzeit-Kanban-Board für mehrere Geräte gleichzeitig (WebSockets)
 - Automatische Einsatzanlage aus dem Alarmierungssystem (REST-API, idempotent)
+- Einsatzinfo: Alarmdaten, Anfahrt, Hydranten, Objektunterlagen und Gefahren auf einen Blick
 - LIS/IPR-Anbindung an das Leitstellensystem: Einsatz-/Übungseinsatzabgleich, Fahrzeugstatus, Meldungen, automatisches Schließen
 - SMS-Einsatzinfo bei Alarm sowie SMS-Empfang mit Weiterleitungsregeln (Teams, Gruppen, Mitglieder, Ad-hoc)
 - Print & Alarm Gateway: lokaler Docker-Container für seriellen Leitstellen-Alarm (→ Einsatzanlage) und Netzwerkdruck (Automatik-Druckregeln + manuell)
@@ -78,6 +79,7 @@ unter [Server-Voraussetzungen](Installation-Server-Voraussetzungen).
 |-------|-------------|
 | [Erste Schritte](Anwender-Erste-Schritte) | Login, Übersicht, Tastatur-Shortcuts |
 | [Einsatz starten](Anwender-Einsatz-starten) | Manuell vs. Automatik über Alarmierungssystem oder LIS/Leitstelle |
+| [Einsatzinfo](Anwender-Einsatzinfo) | Alarmdaten, Anfahrt, Hydranten, Objekte und Gefahren vor dem Einsatzboard |
 | [Kanban-Board bedienen](Anwender-Kanban-Board-bedienen) | Spalten, Karten, Drag&Drop, Status-Ampel |
 | [Aufträge und Meldungen](Anwender-Auftraege-und-Meldungen) | Anlegen, Zuteilen, Erledigen, Sprachdiktat |
 | [Personen erfassen](Anwender-Personen-erfassen) | 4-Stufen-Wizard |
@@ -144,6 +146,7 @@ unter [Server-Voraussetzungen](Installation-Server-Voraussetzungen).
 | [Push mit Firebase Cloud Messaging](Administration-Push-FCM) | Globale FCM-Konfiguration für Push-Nachrichten an die native Android-App |
 | [Datensicherung (Org, Self-Service)](Administration-Org-Datensicherung) | Eigene Org-Daten als Archiv herunterladen oder geplant an ein eigenes Ziel senden (SFTP/FTP/rclone); Restore in neue Org (Sysadmin) |
 | [Objektverwaltung](Administration-Objektverwaltung) | Modul aktivieren (System+Org), Rolle Objektverwalter, Kataloge, Alarm-Matching, Alarm-Infoscreen, KI-Klassifizierung |
+| [Alarm-Infoscreen](Administration-Alarm-Infoscreen) | Wandmonitor mit Token-URL, URL-Rotation, Wetter, GSL-Ansicht und Rückmeldungen |
 | [Straßensperren & Anfahrtsrouting](Administration-Strassensperren) | Modul, Rechte, Routing-Startpunkt und Routingdienst konfigurieren |
 | [Externe Objektpflege](Administration-Objektpflege) | Berechtigungen, Einladungslinks, Erinnerungen und extern sichtbarer Umfang |
 | [Kontaktverwaltung](Administration-Kontaktverwaltung) | Modul aktivieren (System+Org), Rollen, Kategorien, Einsatzinfo-Freigabe, BMA-Import-Verhalten, Offline-Sync-API |
