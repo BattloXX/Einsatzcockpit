@@ -122,11 +122,8 @@ async def _broadcast(lage_id: int, site_id: int, einheit_id: int, dispatch_id: i
 
 
 async def _broadcast_phase_changed(db: Any, lage: MajorIncident, site: IncidentSite) -> None:
-    from app.services.broadcast import broadcast_lage
-    from app.services.gsl_live_notify import notify_gsl_live
-
-    await broadcast_lage(lage.id, {"type": "site_phase_changed", "site_id": site.id, "phase": site.phase.value})
-    await notify_gsl_live(db, lage, org_id=lage.org_id, reason="counts")
+    from app.services.gsl_broadcast import phase_geaendert
+    await phase_geaendert(db, lage, site.id, site.phase)
 
 
 def _push_geplant(db: Any, einheit: LageEinheit) -> str:

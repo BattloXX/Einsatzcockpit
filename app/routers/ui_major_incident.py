@@ -85,7 +85,14 @@ from app.models.major_incident import (
 from app.models.master import FireDept, Member, VehicleMaster
 from app.models.user import User
 from app.models.verleih import VerleihAusleihe, VerleihStatus
-from app.services import einheit_service, gsl_fuehrung_service, lagemeldung_service, resource_service
+from app.services import (
+    einheit_service,
+    gsl_broadcast,
+    gsl_fuehrung_service,
+    gsl_stelle_service,
+    lagemeldung_service,
+    resource_service,
+)
 from app.services.ai_service import is_enabled as ai_is_enabled
 from app.services.broadcast import broadcast_lage, manager
 from app.services.einheit_service import (
@@ -127,27 +134,7 @@ PHASE_ORDER = [
     SitePhase.erledigt,
 ]
 
-async def _apply_ai_prio(site: IncidentSite, db: Session, org_id: int | None = None) -> None:
-    """Automatically suggest priority via AI. Never raises.
-
-    Only sets priority when none exists — never overwrites a manually set value.
-    """
-    text = site.einsatzgrund or site.bezeichnung
-    if site.priority or not ai_is_enabled() or not text:
-        return
-    try:
-        from app.services.ai_service import analyze_site_reconnaissance
-        result = await analyze_site_reconnaissance(
-            text,
-            {"bezeichnung": site.bezeichnung, "ort": site.ort or "", "strasse": site.strasse or ""},
-            org_id=org_id,
-        )
-        if result and result.get("prio_vorschlag"):
-            site.priority = SitePriority(result["prio_vorschlag"])
-            site.danger_score = result.get("danger_score")
-            site.urgency_score = result.get("urgency_score")
-    except Exception:
-        pass
+_apply_ai_prio = gsl_stelle_service._apply_ai_prio
 
 
 def _lage_or_404(lage_id: int, db: Session, *, eager_sites: bool = False) -> MajorIncident:
@@ -182,19 +169,7 @@ def _sites_by_phase(lage: MajorIncident) -> dict:
     return grouped
 
 
-async def _geocode_site(site: IncidentSite) -> None:
-    """Try to fill site.lat/lng from its address. Silently ignores failures."""
-    if site.lat and site.lng:
-        return
-    if not (site.strasse or site.ort):
-        return
-    try:
-        from app.services.geocoding import geocode_address
-        geo = await geocode_address(site.strasse, site.hausnr, site.ort)
-        if geo:
-            site.lat, site.lng = geo.lat, geo.lng
-    except Exception:
-        pass
+_geocode_site = gsl_stelle_service._geocode_site
 
 
 def _can_edit(user) -> bool:
@@ -476,39 +451,17 @@ async def site_create(
         pass
 
     try:
-        site = create_site(
-            db, lage,
-            bezeichnung=bezeichnung.strip(),
-            einsatzgrund=einsatzgrund.strip() or None,
-            ort=ort.strip() or None,
-            strasse=strasse.strip() or None,
-            hausnr=hausnr.strip() or None,
-            lat=site_lat,
-            lng=site_lng,
-            created_by=user.id,
+        site = await gsl_stelle_service.stelle_anlegen(
+            db, lage, bezeichnung=bezeichnung.strip(), einsatzgrund=einsatzgrund.strip() or None,
+            ort=ort.strip() or None, strasse=strasse.strip() or None, hausnr=hausnr.strip() or None,
+            lat=site_lat, lng=site_lng, user_id=user.id, author_name=get_author_name(request),
         )
-        await _geocode_site(site)
-        await _apply_ai_prio(site, db, org_id=lage.org_id)
-        db.add(SiteLogEntry(
-            incident_site_id=site.id,
-            kind="status",
-            text="Einsatzstelle angelegt",
-            user_id=user.id,
-            author_name=get_author_name(request),
-        ))
-        write_audit(db, "major_incident.site.created", user_id=user.id,
-                    payload={"lage_id": lage_id, "site_id": site.id, "bezeichnung": site.bezeichnung})
-        # Auto-Abschnitts-Zuweisung nach Geocoding
-        from app.services.geo_service import auto_assign_section
-        auto_assign_section(db, site)
         db.commit()
     except Exception:
         logger.exception("Fehler beim Anlegen der Einsatzstelle lage_id=%s", lage_id)
         db.rollback()
         raise
-    await broadcast_lage(lage_id, {"type": "site_created", "site_id": site.id})
-    from app.services.gsl_live_notify import notify_gsl_live
-    await notify_gsl_live(db, lage, org_id=lage.org_id, reason="counts")
+    await gsl_broadcast.stelle_angelegt(db, lage, site.id)
     # Board (board.html) ruft per HTMX auf (hx-swap="none") -- die neue Karte
     # erscheint bei allen verbundenen Clients (auch dem anlegenden) ueber den
     # site_created-Broadcast (lage_board.js -> sitePhaseChanged), daher hier
@@ -614,13 +567,7 @@ async def site_phase_change(
         sort_index=sort_index,
     )
     db.commit()
-    await broadcast_lage(lage_id, {
-        "type": "site_phase_changed",
-        "site_id": site_id,
-        "phase": new_phase.value,
-    })
-    from app.services.gsl_live_notify import notify_gsl_live
-    await notify_gsl_live(db, lage, org_id=lage.org_id, reason="counts")
+    await gsl_broadcast.phase_geaendert(db, lage, site_id, new_phase)
     return Response(status_code=204)
 
 
@@ -713,20 +660,11 @@ async def site_prio_change(
         raise HTTPException(status_code=404)
 
     if not priority.strip():
-        old_prio = site.priority
-        site.priority = None
-        if old_prio:
-            old_label = SITE_PRIORITY_LABEL.get(old_prio, "–")
-            db.add(SiteLogEntry(
-                incident_site_id=site_id,
-                kind="prio",
-                text=f"Priorität: {old_label} → –",
-                user_id=user.id,
-                author_name=get_author_name(request),
-            ))
-        lagemeldung_service.recompute_if_active(site, db)
+        gsl_stelle_service.stelle_prio_setzen(
+            db, site, None, user_id=user.id, author_name=get_author_name(request),
+        )
         db.commit()
-        await broadcast_lage(lage_id, {"type": "site_prio_changed", "site_id": site_id})
+        await gsl_broadcast.prio_geaendert(lage_id, site_id)
         return Response(status_code=204)
 
     try:
@@ -734,21 +672,11 @@ async def site_prio_change(
     except (ValueError, TypeError):
         raise HTTPException(status_code=400)
 
-    old_prio = site.priority
-    site.priority = new_prio
-
-    if old_prio != new_prio:
-        old_label = SITE_PRIORITY_LABEL.get(old_prio, "–") if old_prio else "–"
-        db.add(SiteLogEntry(
-            incident_site_id=site_id,
-            kind="prio",
-            text=f"Priorität: {old_label} → {SITE_PRIORITY_LABEL[new_prio]}",
-            user_id=user.id,
-            author_name=get_author_name(request),
-        ))
-    lagemeldung_service.recompute_if_active(site, db)
+    gsl_stelle_service.stelle_prio_setzen(
+        db, site, new_prio, user_id=user.id, author_name=get_author_name(request),
+    )
     db.commit()
-    await broadcast_lage(lage_id, {"type": "site_prio_changed", "site_id": site_id})
+    await gsl_broadcast.prio_geaendert(lage_id, site_id)
     return Response(status_code=204)
 
 
@@ -1300,36 +1228,18 @@ async def site_einheit_status_setzen(
         raise HTTPException(status_code=404)
     dispatch = _dispatch_fuer_stelle_oder_404(db, dispatch_id, site_id)
     try:
-        ctx = einheit_service.kontext_fuer_einheit(db, user, dispatch.einheit_id, quelle="funk")
-        result = einheit_service.setze_einheit_status(
-            db, ctx, dispatch, status, user_id=user.id, author_name=get_author_name(request),
-            grund=grund, unterbrechen=True,
+        result = einheit_service.melde_status_per_funk(
+            db, user, dispatch, status, author_name=get_author_name(request), grund=grund,
         )
     except EinheitKonflikt as exc:
-        meldungen = {
-            "auftrag_zurueckgezogen": "Der Auftrag wurde bereits zurückgezogen.",
-            "ungueltiger_uebergang": "Dieser Statusübergang ist nicht erlaubt.",
-            "aktiver_auftrag": "Die Einheit hat bereits einen aktiven Auftrag.",
-        }
-        raise HTTPException(status_code=409, detail=meldungen.get(exc.code, "Status kann nicht gesetzt werden."))
+        raise HTTPException(status_code=409, detail=einheit_service.KONFLIKT_MELDUNGEN.get(
+            exc.code, "Status kann nicht gesetzt werden."))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     db.commit()
-    await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
-    await broadcast_lage(lage_id, {"type": "einheit:changed", "einheit_id": dispatch.einheit_id,
-                                   "dispatch_id": dispatch_id, "site_id": site_id})
-    if result["phase_geaendert"]:
-        await broadcast_lage(lage_id, {"type": "site_phase_changed", "site_id": site_id})
-        from app.services.gsl_live_notify import notify_gsl_live
-        await notify_gsl_live(db, lage, org_id=lage.org_id, reason="counts")
-    if result["unterbrochen_dispatch_id"]:
-        interrupted = db.get(resource_service.EinheitSiteDispatch, result["unterbrochen_dispatch_id"])
-        if interrupted:
-            await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": interrupted.site_id})
-            await broadcast_lage(
-                lage_id,
-                {"type": "einheit:changed", "einheit_id": interrupted.einheit_id, "site_id": interrupted.site_id},
-            )
+    await gsl_broadcast.einheit_status_geaendert(
+        db, lage, site_id, dispatch_id, dispatch.einheit_id, result,
+    )
     return HTMLResponse(content=_site_detail_html_with_oob(request, db, lage, site, user),
                         headers={"HX-Retarget": "#siteDetailContent", "HX-Reswap": "innerHTML"})
 
@@ -1766,24 +1676,12 @@ async def site_edit(
     if not site or site.major_incident_id != lage_id:
         raise HTTPException(status_code=404)
 
-    old_bezeichnung = site.bezeichnung
-    site.bezeichnung  = bezeichnung.strip()
-    site.einsatzgrund = einsatzgrund.strip() or None
-    site.ort          = ort.strip() or None
-    site.strasse      = strasse.strip() or None
-    site.hausnr       = hausnr.strip() or None
-
-    if site.bezeichnung != old_bezeichnung:
-        db.add(SiteLogEntry(
-            incident_site_id=site_id,
-            kind="status",
-            text=f"Bezeichnung geändert: {old_bezeichnung} → {site.bezeichnung}",
-            user_id=user.id,
-            author_name=get_author_name(request),
-        ))
-    await _geocode_site(site)
+    await gsl_stelle_service.stelle_bearbeiten(
+        db, site, bezeichnung=bezeichnung, einsatzgrund=einsatzgrund, ort=ort, strasse=strasse,
+        hausnr=hausnr, user_id=user.id, author_name=get_author_name(request),
+    )
     db.commit()
-    await broadcast_lage(lage_id, {"type": "site_updated", "site_id": site_id})
+    await gsl_broadcast.stelle_geaendert(lage_id, site_id)
     return Response(status_code=204)
 
 
@@ -4518,15 +4416,12 @@ async def site_sektor_assign(
     if not site or site.major_incident_id != lage_id:
         raise HTTPException(status_code=404)
 
-    site.sector_id = sector_id or None
-    site.section_assigned_mode = "manual"  # manuell → sticky
-    resource_service.sync_units_sector_to_site(db, site)
+    try:
+        gsl_stelle_service.stelle_abschnitt_setzen(db, site, sector_id or None)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
     db.commit()
-    await broadcast_lage(lage_id, {
-        "type": "site:sector_changed",
-        "site_id": site_id,
-        "sector_id": site.sector_id,
-    })
+    await gsl_broadcast.abschnitt_geaendert(lage_id, site_id, site.sector_id)
     return Response(status_code=204)
 
 
