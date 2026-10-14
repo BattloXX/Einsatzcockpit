@@ -153,3 +153,102 @@ class PlanspielBeobachtung(TenantScoped, Base):
     text: Mapped[str] = mapped_column(sa.Text, nullable=False)
     bewertung: Mapped[int | None] = mapped_column(sa.Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(sa.DateTime, nullable=False, default=_utcnow)
+
+
+class PlanspielSzenario(TenantScoped, Base):
+    __tablename__ = "planspiel_szenario"
+    __table_args__ = (sa.UniqueConstraint("org_id", "code", name="uq_planspiel_szenario_org_code"),)
+
+    id: Mapped[int] = mapped_column(sa.BigInteger, primary_key=True, autoincrement=True)
+    code: Mapped[str] = mapped_column(sa.String(40), nullable=False)
+    herkunft: Mapped[str] = mapped_column(sa.String(10), nullable=False)
+    system_code: Mapped[str | None] = mapped_column(sa.String(40))
+    system_version: Mapped[int | None] = mapped_column(sa.Integer)
+    org_geaendert: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, default=False)
+    aktiv: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, default=True)
+    zufall_erlaubt: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, default=True)
+    gewicht: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=10)
+    aktive_version_id: Mapped[int | None] = mapped_column(
+        sa.BigInteger,
+        sa.ForeignKey(
+            "planspiel_szenario_version.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name="fk_planspiel_szenario_aktive_version",
+        ),
+    )
+    archiviert_at: Mapped[datetime | None] = mapped_column(sa.DateTime)
+    created_at: Mapped[datetime] = mapped_column(sa.DateTime, nullable=False, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(sa.DateTime, nullable=False, default=_utcnow, onupdate=_utcnow)
+    created_by_user_id: Mapped[int | None] = mapped_column(sa.BigInteger, sa.ForeignKey("user.id", ondelete="SET NULL"))
+    updated_by_user_id: Mapped[int | None] = mapped_column(sa.BigInteger, sa.ForeignKey("user.id", ondelete="SET NULL"))
+
+
+class PlanspielSzenarioVersion(TenantScoped, Base):
+    __tablename__ = "planspiel_szenario_version"
+    __table_args__ = (sa.UniqueConstraint("szenario_id", "version", name="uq_planspiel_szenario_version"),)
+
+    id: Mapped[int] = mapped_column(sa.BigInteger, primary_key=True, autoincrement=True)
+    szenario_id: Mapped[int] = mapped_column(
+        sa.BigInteger, sa.ForeignKey("planspiel_szenario.id", ondelete="CASCADE"), nullable=False
+    )
+    version: Mapped[int] = mapped_column(sa.Integer, nullable=False)
+    veroeffentlicht_at: Mapped[datetime | None] = mapped_column(sa.DateTime)
+    titel: Mapped[str] = mapped_column(sa.String(200), nullable=False)
+    beschreibung: Mapped[str | None] = mapped_column(sa.Text)
+    kategorie: Mapped[str] = mapped_column(sa.String(20), nullable=False)
+    stichwort_code: Mapped[str] = mapped_column(sa.String(10), nullable=False)
+    stichwort_quelle: Mapped[str | None] = mapped_column(sa.String(60))
+    alarmtext_template: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    regie_geheimlage: Mapped[str | None] = mapped_column(sa.Text)
+    grundsituation: Mapped[str | None] = mapped_column(sa.Text)
+    ort_typen: Mapped[list[str]] = mapped_column(sa.JSON, nullable=False)
+    geografie_bedingung: Mapped[dict[str, Any] | None] = mapped_column(sa.JSON)
+    requires_existing_object: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, default=False)
+    requires_verified_bma: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, default=False)
+    min_adressqualitaet: Mapped[str | None] = mapped_column(sa.String(1))
+    schwierigkeit: Mapped[str] = mapped_column(sa.String(10), nullable=False)
+    schlagworte: Mapped[str | None] = mapped_column(sa.Text)
+    lernziele: Mapped[str | None] = mapped_column(sa.Text)
+    ressourcenhinweis: Mapped[str | None] = mapped_column(sa.Text)
+    ausschlussregeln: Mapped[dict[str, Any] | None] = mapped_column(sa.JSON)
+    gsl_modus: Mapped[str | None] = mapped_column(sa.String(20))
+    gsl_verteilung: Mapped[dict[str, Any] | None] = mapped_column(sa.JSON)
+    created_at: Mapped[datetime] = mapped_column(sa.DateTime, nullable=False, default=_utcnow)
+    created_by_user_id: Mapped[int | None] = mapped_column(sa.BigInteger, sa.ForeignKey("user.id", ondelete="SET NULL"))
+
+
+class PlanspielSzenarioEreignis(TenantScoped, Base):
+    __tablename__ = "planspiel_szenario_ereignis"
+
+    id: Mapped[int] = mapped_column(sa.BigInteger, primary_key=True, autoincrement=True)
+    version_id: Mapped[int] = mapped_column(
+        sa.BigInteger, sa.ForeignKey("planspiel_szenario_version.id", ondelete="CASCADE"), nullable=False
+    )
+    baustein_code: Mapped[str | None] = mapped_column(sa.String(40))
+    ereignis_typ: Mapped[str] = mapped_column(sa.String(16), nullable=False)
+    trigger_type: Mapped[str] = mapped_column(sa.String(24), nullable=False)
+    offset_min_s: Mapped[int | None] = mapped_column(sa.Integer)
+    offset_max_s: Mapped[int | None] = mapped_column(sa.Integer)
+    trigger_param: Mapped[dict[str, Any] | None] = mapped_column(sa.JSON)
+    wahrscheinlichkeit: Mapped[float] = mapped_column(sa.Float, nullable=False, default=1.0)
+    max_fires: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=1)
+    prioritaet: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=0)
+    sichtbarkeit: Mapped[str] = mapped_column(sa.String(12), nullable=False, default="teilnehmer")
+    ziel: Mapped[str] = mapped_column(sa.String(12), nullable=False, default="stelle")
+    payload_template: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    voraussetzungen: Mapped[dict[str, Any] | None] = mapped_column(sa.JSON)
+    abbruch: Mapped[dict[str, Any] | None] = mapped_column(sa.JSON)
+    reihenfolge: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=0)
+
+
+class PlanspielOrtTypZuordnung(TenantScoped, Base):
+    __tablename__ = "planspiel_ort_typ_zuordnung"
+    __table_args__ = (
+        sa.UniqueConstraint("org_id", "quelle", "schluessel", "ort_typ", name="uq_planspiel_ort_typ_zuordnung"),
+    )
+
+    id: Mapped[int] = mapped_column(sa.BigInteger, primary_key=True, autoincrement=True)
+    quelle: Mapped[str] = mapped_column(sa.String(12), nullable=False)
+    schluessel: Mapped[str] = mapped_column(sa.String(120), nullable=False)
+    ort_typ: Mapped[str] = mapped_column(sa.String(40), nullable=False)
