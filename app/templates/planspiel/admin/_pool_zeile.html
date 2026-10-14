@@ -1,0 +1,25 @@
+<tr id="pool-{{ row.id }}">
+  <td>
+    {% if row.bezeichnung %}{{ row.bezeichnung }}<br>{% endif %}
+    {{ row.strasse }} {{ row.hausnr or '' }}{% if row.ort %}, {{ row.ort }}{% endif %}
+  </td>
+  <td>{{ row.quelle }}</td>
+  <td>{{ row.qualitaet }}</td>
+  <td>{{ (row.ort_typen or [])|join(', ') }}</td>
+  <td>
+    {% for key, value in (row.merkmale or {}).items() %}
+      {{ key }}: {{ value }}{% if not loop.last %}, {% endif %}
+    {% endfor %}
+  </td>
+  <td>{{ row.zuletzt_verwendet_at|local_datetime if row.zuletzt_verwendet_at else '–' }}</td>
+  <td>
+    {% if can_edit %}
+      <form method="post" action="/admin/settings/planspiele/adresspool/{{ row.id }}/aktiv" hx-post="/admin/settings/planspiele/adresspool/{{ row.id }}/aktiv" hx-target="#pool-{{ row.id }}" hx-swap="outerHTML">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <button class="btn btn--small" type="submit">{{ 'Aktiv' if row.aktiv else 'Inaktiv' }}</button>
+      </form>
+    {% else %}
+      {{ 'Aktiv' if row.aktiv else 'Inaktiv' }}
+    {% endif %}
+  </td>
+</tr>

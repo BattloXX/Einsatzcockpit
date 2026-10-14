@@ -9,7 +9,7 @@
 {% block content %}
 <section class="planspiel-page">
   {% call page_header("Planspiele", back_href="/", back_label="Konsole") %}
-    {% if can_leiten %}<button class="btn btn--primary" type="button" disabled title="folgt in Kürze">+ Neues Planspiel</button> <a class="btn" href="/admin/settings/planspiele/szenarien">Szenariokatalog</a>{% endif %}
+    {% if can_leiten %}<button class="btn btn--primary" type="button" disabled title="folgt in Kürze">+ Neues Planspiel</button> <a class="btn" href="/admin/settings/planspiele/szenarien">Szenariokatalog</a> <a class="btn" href="/admin/settings/planspiele">Einstellungen &amp; Adresspool</a>{% endif %}
   {% endcall %}
   <div class="planspiel-banner">Alle hier erzeugten Einsätze und Lagen sind ÜBUNGEN. Externe Alarmierung (SMS, Push, Teams, Mail, Druck) ist gesperrt.</div>
   <div id="planspiel-liste">{% include "planspiel/_liste.html" %}</div>
