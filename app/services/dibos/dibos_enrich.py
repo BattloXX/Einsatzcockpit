@@ -852,12 +852,12 @@ def enrich_events_for_org(
                 # Nur im LIS-Ausfall: Liefert LIS, ist es für Abschluss/Wiedereröffnung
                 # autoritativ. LIS schließt, sobald die eigene Beteiligung endet, während
                 # das DIBOS-Event oft noch offen ist — ein Reopen hier würde den Einsatz
-                # dann wieder öffnen und dauerhaft sperren (nur noch manueller Abschluss).
+                # dann wieder öffnen. Manuelle Wiedereröffnungen sperren weiterhin über
+                # reopen_incident(user_id=...), DIBOS-Auto-Reopens dagegen nicht.
                 from app.services.incident_service import reopen_incident
                 reopen_incident(db, incident, user_id=None)
-                incident.lis_auto_close_locked = True
                 db.flush()
-                logger.info("Einsatz %s durch wieder aktives DIBOS-Event wiedereröffnet und gesperrt", incident.id)
+                logger.info("Einsatz %s durch wieder aktives DIBOS-Event wiedereröffnet", incident.id)
             if incident.status == "closed":
                 continue
             changed = False
@@ -927,6 +927,7 @@ def enrich_events_for_org(
                 # vor Ende eingetroffen) — zur Dokumentation anlegen, aber KEINE
                 # Alarmierung mehr auslösen, direkt schließen (Muster: lis_sync.py).
                 from app.services.incident_service import close_incident
+                incident.dibos_closed_marker = str(event.get("closed"))[:40]
                 close_incident(db, incident, user_id=None, auto_closed_by_lis=True)
                 db.flush()
                 closed_ids.append(incident.id)
@@ -956,7 +957,15 @@ def enrich_events_for_org(
                 continue
             if incident.lis_auto_close_locked:
                 continue
+            closed_marker = str(event.get("closed"))
+            if incident.dibos_closed_marker is not None and incident.dibos_closed_marker == closed_marker:
+                logger.debug(
+                    "Einsatz %s: DIBOS-Abschluss %s bereits verarbeitet",
+                    incident.id, event.get("eventNumber"),
+                )
+                continue
             from app.services.incident_service import close_incident
+            incident.dibos_closed_marker = closed_marker[:40]
             close_incident(db, incident, user_id=None, auto_closed_by_lis=True)
             db.flush()
             closed_ids.append(incident.id)
