@@ -12,11 +12,13 @@ ROLES = {
     "mailing_sender": 30,
     "incident_leader": 70,
     "objekt_verwalter": 60,     # Objektverwaltung: Objekte pflegen/freigeben, Dokumente, Lagekarte
+    "uebungsleiter": 60,
     "kontakt_verwalter": 60,    # Zentrale Kontakte pflegen
     "probenverwalter": 60,      # Probenplanung bearbeiten
     "breathing_supervisor": 50,
     "recorder": 30,
     "readonly": 10,
+    "uebungsbeobachter": 20,
 }
 
 # Roles that bypass all org-scoping checks
@@ -42,6 +44,8 @@ STRASSENSPERREN_LESE_ROLLEN = (
     "fahrtenbuch_admin",
     "objekt_verwalter",
 )
+PLANSPIEL_LEITER_ROLES = {"system_admin", "admin", "org_admin", "uebungsleiter"}
+PLANSPIEL_LESE_ROLLEN = ("uebungsleiter", "uebungsbeobachter")
 PROBEN_EDIT_ROLES = {"system_admin", "admin", "org_admin", "probenverwalter", "incident_leader", "recorder"}
 
 

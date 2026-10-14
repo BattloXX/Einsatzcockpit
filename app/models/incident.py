@@ -88,6 +88,9 @@ class Incident(Base):
     # primary_org_id: the organisation leading this incident
     primary_org_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("fire_dept.id"), nullable=True)
     is_exercise: Mapped[bool] = mapped_column(Boolean, default=False)
+    planspiel_run_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("planspiel_run.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     address_street: Mapped[str | None] = mapped_column(String(200), nullable=True)
     address_no: Mapped[str | None] = mapped_column(String(20), nullable=True)
     address_city: Mapped[str | None] = mapped_column(String(100), nullable=True)

@@ -1,7 +1,9 @@
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import (
+    JSON,
     BigInteger,
     Boolean,
     Date,
@@ -474,6 +476,13 @@ class OrgSettings(Base):
     probenplanung_modul_aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # Straßensperren & Anfahrtsrouting: effektiv nur mit System-Flag aktiv.
     strassensperren_modul_aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    planspiel_modul_aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    planspiel_gebiet_geojson: Mapped[str | None] = mapped_column(Text, nullable=True)
+    planspiel_gebiet_radius_m: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    planspiel_max_laufende_runs: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
+    planspiel_max_stellen_je_minute: Mapped[int] = mapped_column(Integer, nullable=False, default=6)
+    planspiel_gsl_gewichte: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    planspiel_aufbewahrung_tage: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Fahrzeugausfahrt für die automatische Anfahrtsroute.
     routing_start_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     routing_start_lng: Mapped[float | None] = mapped_column(Float, nullable=True)
