@@ -349,9 +349,67 @@ def test_6_reopens_only_when_lis_is_not_delivering_and_locked_events_stay_open()
     )
     check = _session()
     reopened, locked = check.get(Incident, reopened_id), check.get(Incident, locked_id)
-    assert reopened.status == "active" and reopened.lis_auto_close_locked is True
+    assert reopened.status == "active" and reopened.lis_auto_close_locked is False
     assert check.get(Incident, lis_id).status == "closed"
     assert locked.status == "active"
+    check.close()
+
+
+def test_dibos_reopen_allows_a_new_public_event_close():
+    number = "dibos-reclose-after-reopen"
+    first_closed = "2026-10-14T15:35:50"
+    second_closed = "2026-10-14T15:38:35"
+    db = _session()
+    incident_id = _incident(db, number)
+    db.close()
+
+    dibos_enrich.enrich_events_for_org(
+        ORG_ID, [], raw_public_events=[_event(number, closed=first_closed)]
+    )
+    check = _session()
+    incident = check.get(Incident, incident_id)
+    assert incident.status == "closed"
+    assert incident.dibos_closed_marker == first_closed
+    check.close()
+
+    dibos_enrich.enrich_events_for_org(ORG_ID, [_event(number)])
+    check = _session()
+    incident = check.get(Incident, incident_id)
+    assert incident.status == "active"
+    assert incident.lis_auto_close_locked is False
+    check.close()
+
+    dibos_enrich.enrich_events_for_org(
+        ORG_ID, [], raw_public_events=[_event(number, closed=second_closed)]
+    )
+
+    check = _session()
+    incident = check.get(Incident, incident_id)
+    assert incident.status == "closed"
+    assert incident.lis_auto_close_locked is False
+    assert incident.dibos_closed_marker == second_closed
+    check.close()
+
+
+def test_dibos_reopen_ignores_same_public_event_close_marker():
+    number = "dibos-close-marker-flip-flop"
+    closed = "2026-10-14T15:35:50"
+    db = _session()
+    incident_id = _incident(db, number)
+    db.close()
+
+    dibos_enrich.enrich_events_for_org(
+        ORG_ID, [], raw_public_events=[_event(number, closed=closed)]
+    )
+    dibos_enrich.enrich_events_for_org(ORG_ID, [_event(number)])
+    dibos_enrich.enrich_events_for_org(
+        ORG_ID, [], raw_public_events=[_event(number, closed=closed)]
+    )
+
+    check = _session()
+    incident = check.get(Incident, incident_id)
+    assert incident.status == "active"
+    assert incident.dibos_closed_marker == closed
     check.close()
 
 

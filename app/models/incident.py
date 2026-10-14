@@ -126,10 +126,15 @@ class Incident(Base):
     # War der letzte Abschluss ein automatischer LIS-Abschluss (Operation nicht mehr in
     # ActiveParticipation)? Wird beim manuellen Schließen NICHT gesetzt. Siehe lis_sync.py.
     closed_via_lis_auto: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    # Einmal gesetzt (weil ein automatisch geschlossener Einsatz in LIS wieder aktiv wurde
-    # oder manuell im Einsatzcockpit wiedereröffnet wurde), darf LIS/DIBOS diesen Einsatz nie
-    # wieder automatisch schließen — nur noch ein manueller Abschluss im Einsatzcockpit.
+    # Einmal gesetzt (LIS-Auto-Reopen oder manuelles Wiedereröffnen im Einsatzcockpit),
+    # darf LIS/DIBOS diesen Einsatz nie wieder automatisch schließen — nur noch ein
+    # manueller Abschluss im Einsatzcockpit. Ein DIBOS-Auto-Reopen sperrt nicht, siehe
+    # dibos_closed_marker.
     lis_auto_close_locked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Roher DIBOS-`closed`-Wert des Events beim letzten automatischen DIBOS-Abschluss:
+    # Ein DIBOS-Auto-Reopen sperrt nicht; ein späterer Auto-Abschluss erfolgt nur bei einem
+    # anderen `closed`-Wert (neuer Abschluss durch die Leitstelle) und verhindert Flip-Flops.
+    dibos_closed_marker: Mapped[str | None] = mapped_column(String(40), nullable=True)
     # Anrufer/Melder aus dem Alarm-Webhook (Name/Telefon) — nur Anzeige, keine LIS-Quelle.
     caller_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     caller_phone: Mapped[str | None] = mapped_column(String(50), nullable=True)
