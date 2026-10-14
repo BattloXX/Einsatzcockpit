@@ -36,7 +36,7 @@ def enqueue_incident_alarm(
     triggered_by_user_id: int | None = None, base_url: str | None = None, push_url: str | None = None,
 ) -> None:
     """Fuegt die Versandauftraege hinzu; der Aufrufer bestimmt den Commit."""
-    from app.services.incident_notify import NIE_ALARMIEREN_STICHWORTE
+    from app.services.incident_notify import alarm_unterdrueckung_grund
 
     existing = {
         channel for (channel,) in db.query(IncidentAlarmJob.channel).filter(
@@ -52,13 +52,15 @@ def enqueue_incident_alarm(
         obj.channel for obj in db.new
         if isinstance(obj, IncidentAlarmJob) and obj.incident_id == incident.id
     }
-    suppressed = (incident.alarm_type_code or "").upper() in NIE_ALARMIEREN_STICHWORTE
+    grund = alarm_unterdrueckung_grund(db, incident, org_id)
+    suppressed = grund is not None
     now = _now()
     context = {
         "source": source,
         "triggered_by_user_id": triggered_by_user_id,
         "base_url": base_url or settings.effective_public_base_url,
         "push_url": push_url or f"/einsatz/{incident.id}",
+        "suppressed_reason": grund,
     }
     for channel in CHANNELS:
         if channel not in existing:
@@ -70,7 +72,7 @@ def enqueue_incident_alarm(
     if suppressed and not existing:
         db.add(IncidentLog(
             incident_id=incident.id, author_name="System", level="info",
-            text=f"{incident.alarm_type_code} – keine Alarmierung (SMS/Push/Teams/Mail)",
+            text=f"Keine Alarmierung (SMS/Push/Teams/Mail): {grund}",
         ))
 
 

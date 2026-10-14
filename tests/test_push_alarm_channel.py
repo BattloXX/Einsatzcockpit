@@ -393,6 +393,6 @@ async def test_f30_wird_nie_alarmiert(setup_db, monkeypatch):
     await incident_notify.notify_incident_created(db, incident, org_id=1, base_url="https://x")
     assert calls == []
     db.expire_all()
-    assert db.query(IncidentLog).filter(IncidentLog.incident_id == incident.id).one().text == "F30 – keine Alarmierung (SMS/Push/Teams/Mail)"
+    assert db.query(IncidentLog).filter(IncidentLog.incident_id == incident.id).one().text == "Keine Alarmierung (SMS/Push/Teams/Mail): Stichwort F30"
     assert incident_notify.incident_needs_alarm_backfill(db, incident) is False
     db.close()

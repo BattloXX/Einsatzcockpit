@@ -48,6 +48,10 @@ Der Fallback-Standort bestimmt, wo der Karten-Picker im Adress-Bearbeitungs-Dial
 
 Details zur Lagekarte.info-Integration: [Lagekarte.info](Anwender-Lagekarte)
 
+### Keine Alarmierung bei Begriffen
+
+Unter **Keine Alarmierung bei Begriffen** können pro Zeile Begriffe hinterlegt werden. Kommt einer davon in Stichwort, Meldung oder Grund eines neuen Einsatzes vor, wird der Einsatz weiterhin angelegt und angezeigt, aber SMS, Teams, Mail und Push werden nicht versendet. Groß- und Kleinschreibung werden dabei ignoriert. Einsätze mit dem Stichwort F30 werden immer unterdrückt.
+
 ## Auto-Schließen (Einsatz automatisch beenden)
 
 Einsätze können automatisch geschlossen werden, wenn sie für eine konfigurierbare Zeit inaktiv waren.

@@ -8,9 +8,53 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy.orm import Session
 
 from app.models.incident import Incident
+from app.models.master import OrgSettings
 
 logger = logging.getLogger("einsatzleiter.incident_notify")
 NIE_ALARMIEREN_STICHWORTE = frozenset({"F30"})
+
+
+def _normalisiere_leerzeichen(text: str) -> str:
+    return " ".join(text.split())
+
+
+def alarm_ausschluss_begriffe(raw: str | None) -> list[str]:
+    """Liest Ausschlussbegriffe aus der zeilenbasierten Org-Einstellung."""
+    if not raw:
+        return []
+
+    begriffe: list[str] = []
+    gesehen: set[str] = set()
+    for zeile in raw.splitlines():
+        begriff = zeile.strip()
+        schluessel = begriff.casefold()
+        if begriff and schluessel not in gesehen:
+            begriffe.append(begriff)
+            gesehen.add(schluessel)
+    return begriffe
+
+
+def alarm_unterdrueckung_grund(db: Session, incident: Incident, org_id: int | None) -> str | None:
+    """Gibt den Grund zurueck, wenn ein Einsatz nicht alarmiert werden darf."""
+    if (incident.alarm_type_code or "").upper() in NIE_ALARMIEREN_STICHWORTE:
+        return "Stichwort F30"
+    if org_id is None:
+        return None
+
+    org_settings = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
+    if org_settings is None:
+        return None
+
+    durchsuchbare_felder = [
+        _normalisiere_leerzeichen(wert).casefold()
+        for wert in (incident.alarm_type_code, incident.report_text, incident.reason)
+        if wert
+    ]
+    for begriff in alarm_ausschluss_begriffe(org_settings.alarm_ausschluss_begriffe):
+        normalisierter_begriff = _normalisiere_leerzeichen(begriff).casefold()
+        if any(normalisierter_begriff in feld for feld in durchsuchbare_felder):
+            return f'Ausschlussbegriff "{begriff}"'
+    return None
 
 
 def _combined_address(incident: Incident) -> str:
@@ -33,7 +77,7 @@ def incident_alarm_started(db: Session, incident_id: int) -> bool:
 
 
 def incident_needs_alarm_backfill(db: Session, incident: Incident) -> bool:
-    if (incident.alarm_type_code or "").upper() in NIE_ALARMIEREN_STICHWORTE:
+    if alarm_unterdrueckung_grund(db, incident, incident.primary_org_id) is not None:
         return False
     started_at = incident.started_at
     if started_at is None or incident.status != "active":
