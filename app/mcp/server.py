@@ -30,6 +30,7 @@ from app.mcp.registry import TOOLS
 from app.mcp.tools import einsatz as _einsatz  # noqa: F401 - registriert Einsatz-Lesetools
 from app.mcp.tools import fahrtenbuch as _fahrtenbuch  # noqa: F401 - registriert Fahrtenbuch-Tools
 from app.mcp.tools import gsl as _gsl  # noqa: F401 - registriert GSL-Ressourcen-Tools
+from app.mcp.tools import gsl_lage as _gsl_lage  # noqa: F401 - registriert GSL-Lagebild-Tools
 from app.mcp.tools import kontakt as _kontakt  # noqa: F401 - registriert Kontakt-Tools
 from app.mcp.tools import objekt as _objekt  # noqa: F401 - registriert Objekt-Tools
 from app.mcp.tools import objekt_dokumente as _objekt_dokumente  # noqa: F401 - registriert Dokument-Tools
@@ -452,6 +453,81 @@ async def gsl_einsatz_wiedereroeffnen(lage_id: int, site_id: int) -> dict[str, o
 @server.tool(name="gsl_ressource_qr", description="Liest oder widerruft QR-Zugang ohne Token, Link oder PIN.")
 async def gsl_ressource_qr(lage_id: int, einheit_id: int, aktion: str) -> dict[str, object]:
     return await _call_registered_tool("gsl_ressource_qr", lage_id=lage_id, einheit_id=einheit_id, aktion=aktion)
+
+
+@server.tool(name="gsl_lagen_liste", description="Listet Lagen der eigenen Organisation.")
+async def gsl_lagen_liste(status: str = "aktiv", limit: int = 25) -> dict[str, object]:
+    return await _call_registered_tool("gsl_lagen_liste", status=status, limit=limit)
+
+
+@server.tool(name="gsl_lagebild", description="Liest das aktuelle GSL-Lagebild.")
+async def gsl_lagebild(lage_id: int | None = None) -> dict[str, object]:
+    return await _call_registered_tool("gsl_lagebild", lage_id=lage_id)
+
+
+@server.tool(name="gsl_einsatzstellen_liste", description="Listet Einsatzstellen einer GSL-Lage.")
+async def gsl_einsatzstellen_liste(
+    lage_id: int | None = None,
+    phase: str | None = None,
+    prio: int | None = None,
+    abschnitt_id: int | None = None,
+    suchtext: str = "",
+    inklusive_erledigte: bool = False,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "gsl_einsatzstellen_liste",
+        lage_id=lage_id,
+        phase=phase,
+        prio=prio,
+        abschnitt_id=abschnitt_id,
+        suchtext=suchtext,
+        inklusive_erledigte=inklusive_erledigte,
+    )
+
+
+@server.tool(name="gsl_einsatzstelle_lesen", description="Liest datensparsame Details einer Einsatzstelle.")
+async def gsl_einsatzstelle_lesen(lage_id: int, site_id: int, bereiche: list[str] | None = None) -> dict[str, object]:
+    return await _call_registered_tool("gsl_einsatzstelle_lesen", lage_id=lage_id, site_id=site_id, bereiche=bereiche)
+
+
+@server.tool(name="gsl_kraefteuebersicht", description="Liest die GSL-Kräfteübersicht.")
+async def gsl_kraefteuebersicht(lage_id: int | None = None) -> dict[str, object]:
+    return await _call_registered_tool("gsl_kraefteuebersicht", lage_id=lage_id)
+
+
+@server.tool(name="gsl_abschnitte", description="Listet GSL-Abschnitte und Sektoren.")
+async def gsl_abschnitte(lage_id: int | None = None, mit_geometrie: bool = False) -> dict[str, object]:
+    return await _call_registered_tool("gsl_abschnitte", lage_id=lage_id, mit_geometrie=mit_geometrie)
+
+
+@server.tool(name="gsl_journal", description="Liest Lage- und Funkjournal ohne Autorendaten.")
+async def gsl_journal(
+    lage_id: int | None = None,
+    quellen: list[str] | None = None,
+    seit: str = "",
+    kategorie: str | None = None,
+    nur_offen: bool = False,
+    limit: int = 100,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "gsl_journal",
+        lage_id=lage_id,
+        quellen=quellen,
+        seit=seit,
+        kategorie=kategorie,
+        nur_offen=nur_offen,
+        limit=limit,
+    )
+
+
+@server.tool(name="gsl_meldungen", description="Listet datensparsame Bürgermeldungen.")
+async def gsl_meldungen(lage_id: int | None = None, status: str = "new") -> dict[str, object]:
+    return await _call_registered_tool("gsl_meldungen", lage_id=lage_id, status=status)
+
+
+@server.tool(name="gsl_uebergreifend_liste", description="Listet einsatzstellenübergreifende Lageinfos.")
+async def gsl_uebergreifend_liste(lage_id: int | None = None, status: str = "aktiv") -> dict[str, object]:
+    return await _call_registered_tool("gsl_uebergreifend_liste", lage_id=lage_id, status=status)
 
 
 @server.tool(
