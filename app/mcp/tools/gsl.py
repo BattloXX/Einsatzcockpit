@@ -636,7 +636,9 @@ async def gsl_auftrag_aendern(context: MCPContext, lage_id: int, dispatch_id: in
         raise
 
 
-@register_tool(name="gsl_auftrag_zurueckziehen", description="Zieht eine Einheit von einer Einsatzstelle ab.",
+@register_tool(name="gsl_auftrag_zurueckziehen", description=(
+    "Zieht aktive Aufträge mit Benachrichtigung der Einheit zurück; fertige Aufträge werden nur ohne SMS abgezogen."
+),
                required_roles=READ, module_check=_module_check)
 async def gsl_auftrag_zurueckziehen(context: MCPContext, lage_id: int, einheit_id: int, site_id: int,
                                     grund: str | None = None) -> dict[str, object]:

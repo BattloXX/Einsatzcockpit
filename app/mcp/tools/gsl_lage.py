@@ -6,11 +6,19 @@ from datetime import UTC, datetime
 from typing import Any
 
 from app.config import settings
+from app.core.audit import write_audit
 from app.mcp.context import MCPContext
 from app.mcp.registry import register_tool
-from app.mcp.tools.gsl import READ, _json
-from app.models.major_incident import IncidentSite, MajorIncident
-from app.services import gsl_mcp_service, major_incident_service
+from app.mcp.tools.gsl import READ, _author, _edit, _json
+from app.models.major_incident import EinheitSiteDispatch, IncidentSite, MajorIncident, SitePhase, SitePriority
+from app.services import (
+    einheit_service,
+    gsl_broadcast,
+    gsl_mcp_service,
+    gsl_stelle_service,
+    major_incident_service,
+    resource_service,
+)
 from app.services.mi_feature_service import get_mi_features
 
 _BEREICHE = {"allgemein", "auftraege", "log", "medien", "material", "meldungen"}
@@ -35,6 +43,44 @@ def _lage(context: MCPContext, lage_id: int | None) -> MajorIncident:
 
 def _antwort(lage: MajorIncident, **inhalt: Any) -> dict[str, Any]:
     return _json({"ui_link": f"{settings.effective_public_base_url.rstrip('/')}/lage/{lage.id}", **inhalt})
+
+
+def _site(context: MCPContext, lage: MajorIncident, site_id: int) -> IncidentSite:
+    site = context.db.get(IncidentSite, site_id)
+    if site is None or site.major_incident_id != lage.id or site.org_id != context.org_id:
+        raise ValueError("Einsatzstelle nicht gefunden.")
+    return site
+
+
+def _dispatch(context: MCPContext, lage: MajorIncident, dispatch_id: int) -> EinheitSiteDispatch:
+    dispatch = context.db.get(EinheitSiteDispatch, dispatch_id)
+    if (
+        dispatch is None
+        or dispatch.site is None
+        or dispatch.site.major_incident_id != lage.id
+        or dispatch.site.org_id != context.org_id
+    ):
+        raise ValueError("Auftrag nicht gefunden.")
+    return dispatch
+
+
+def _koordinaten_pruefen(lat: float | None, lng: float | None) -> None:
+    if lat is not None and not -90 <= lat <= 90:
+        raise ValueError("lat muss zwischen -90 und 90 liegen.")
+    if lng is not None and not -180 <= lng <= 180:
+        raise ValueError("lng muss zwischen -180 und 180 liegen.")
+
+
+def _audit(context: MCPContext, name: str, lage: MajorIncident, entity_id: int, **payload: Any) -> None:
+    write_audit(
+        context.db,
+        f"gsl.mcp.{name}",
+        org_id=context.org_id,
+        user_id=context.user.id,
+        entity_type="gsl_lage",
+        entity_id=entity_id,
+        payload={"lage_id": lage.id, "via": "mcp", **payload},
+    )
 
 
 def _seit(value: str) -> datetime | None:
@@ -238,6 +284,301 @@ async def gsl_uebergreifend_liste(
         if status not in {"aktiv", "unbestaetigt", "in_bearbeitung", "beobachtung", "behoben", "alle"}:
             raise ValueError("Ungültiger Status.")
         return _antwort(lage, marker=gsl_mcp_service.uebergreifend_liste(context.db, lage, status))
+    except Exception:
+        context.db.rollback()
+        raise
+
+
+@register_tool(
+    name="gsl_einsatzstelle_anlegen",
+    description="Legt eine Einsatzstelle in einer aktiven GSL-Lage an.",
+    required_roles=READ,
+)
+async def gsl_einsatzstelle_anlegen(
+    context: MCPContext, lage_id: int, bezeichnung: str, einsatzgrund: str = "", ort: str = "",
+    strasse: str = "", hausnr: str = "", lat: float | None = None, lng: float | None = None,
+    prio: int | None = None, abschnitt_id: int | None = None, trotz_duplikat: bool = False,
+) -> dict[str, object]:
+    try:
+        lage = _lage(context, lage_id)
+        _edit(context, lage)
+        _koordinaten_pruefen(lat, lng)
+        if prio is not None:
+            try:
+                priority = SitePriority(prio)
+            except ValueError as exc:
+                raise ValueError("prio muss zwischen 1 und 4 liegen.") from exc
+        else:
+            priority = None
+        duplikate = gsl_stelle_service.finde_adress_duplikate(
+            context.db, lage, ort=ort, strasse=strasse, hausnr=hausnr,
+        )
+        if duplikate and not trotz_duplikat:
+            return _antwort(lage, angelegt=False, duplikate=[{
+                "id": site.id, "bezeichnung": site.bezeichnung,
+                "adresse": ", ".join(part for part in (site.strasse, site.hausnr, site.ort) if part),
+                "phase": site.phase.value,
+            } for site in duplikate], hinweis="Eine offene Einsatzstelle mit derselben Adresse existiert bereits.")
+        site = await gsl_stelle_service.stelle_anlegen(
+            context.db, lage, bezeichnung=bezeichnung, einsatzgrund=einsatzgrund, ort=ort, strasse=strasse,
+            hausnr=hausnr, lat=lat, lng=lng, user_id=context.user.id, author_name=_author(context),
+        )
+        if priority is not None:
+            gsl_stelle_service.stelle_prio_setzen(
+                context.db, site, priority, user_id=context.user.id, author_name=_author(context),
+            )
+        if abschnitt_id is not None:
+            gsl_stelle_service.stelle_abschnitt_setzen(context.db, site, abschnitt_id)
+        _audit(context, "einsatzstelle_anlegen", lage, site.id, site_id=site.id)
+        context.db.commit()
+        await gsl_broadcast.stelle_angelegt(context.db, lage, site.id)
+        return _antwort(lage, ui_link=f"{settings.effective_public_base_url.rstrip('/')}/lage/{lage.id}?site={site.id}",
+                         angelegt=True, id=site.id, phase=site.phase.value,
+                         prio=site.priority.value if site.priority else None, abschnitt_id=site.sector_id,
+                         lat=site.lat, lng=site.lng)
+    except Exception:
+        context.db.rollback()
+        raise
+
+
+@register_tool(
+    name="gsl_einsatzstelle_aendern",
+    description="Ändert Felder einer Einsatzstelle in einer aktiven Lage.",
+    required_roles=READ,
+)
+async def gsl_einsatzstelle_aendern(
+    context: MCPContext, lage_id: int, site_id: int, felder: dict[str, Any],
+) -> dict[str, object]:
+    try:
+        lage = _lage(context, lage_id)
+        _edit(context, lage)
+        site = _site(context, lage, site_id)
+        erlaubt = {"bezeichnung", "einsatzgrund", "ort", "strasse", "hausnr", "lat", "lng", "prio", "abschnitt_id"}
+        unbekannt = set(felder) - erlaubt
+        if unbekannt:
+            raise ValueError("Unbekannte Felder: " + ", ".join(sorted(unbekannt)))
+        _koordinaten_pruefen(felder.get("lat"), felder.get("lng"))
+        if "prio" in felder and felder["prio"] is not None:
+            try:
+                priority = SitePriority(felder["prio"])
+            except (TypeError, ValueError) as exc:
+                raise ValueError("prio muss zwischen 1 und 4 liegen oder null sein.") from exc
+        else:
+            priority = None
+        if (
+            "abschnitt_id" in felder
+            and felder["abschnitt_id"] is not None
+            and not isinstance(felder["abschnitt_id"], int)
+        ):
+            raise ValueError("abschnitt_id muss eine Ganzzahl oder null sein.")
+        adresse_geaendert = any(key in felder for key in {"ort", "strasse", "hausnr"})
+        if adresse_geaendert and "lat" not in felder and "lng" not in felder:
+            site.lat = site.lng = None
+        if any(key in felder for key in {"bezeichnung", "einsatzgrund", "ort", "strasse", "hausnr"}):
+            await gsl_stelle_service.stelle_bearbeiten(
+                context.db, site,
+                bezeichnung=felder.get("bezeichnung", site.bezeichnung),
+                einsatzgrund=felder.get("einsatzgrund", site.einsatzgrund),
+                ort=felder.get("ort", site.ort), strasse=felder.get("strasse", site.strasse),
+                hausnr=felder.get("hausnr", site.hausnr), user_id=context.user.id, author_name=_author(context),
+            )
+        if "lat" in felder:
+            site.lat = felder["lat"]
+        if "lng" in felder:
+            site.lng = felder["lng"]
+        if "prio" in felder:
+            gsl_stelle_service.stelle_prio_setzen(
+                context.db, site, priority, user_id=context.user.id, author_name=_author(context),
+            )
+        if "abschnitt_id" in felder:
+            gsl_stelle_service.stelle_abschnitt_setzen(context.db, site, felder["abschnitt_id"])
+        duplikate = gsl_stelle_service.finde_adress_duplikate(
+            context.db, lage, ort=site.ort, strasse=site.strasse, hausnr=site.hausnr, ausser_site_id=site.id,
+        ) if adresse_geaendert else []
+        _audit(context, "einsatzstelle_aendern", lage, site.id, site_id=site.id, felder=sorted(felder))
+        context.db.commit()
+        if any(key in felder for key in {"bezeichnung", "einsatzgrund", "ort", "strasse", "hausnr", "lat", "lng"}):
+            await gsl_broadcast.stelle_geaendert(lage.id, site.id)
+        if "prio" in felder:
+            await gsl_broadcast.prio_geaendert(lage.id, site.id)
+        if "abschnitt_id" in felder:
+            await gsl_broadcast.abschnitt_geaendert(lage.id, site.id, site.sector_id)
+        result: dict[str, Any] = _antwort(
+            lage, ui_link=f"{settings.effective_public_base_url.rstrip('/')}/lage/{lage.id}?site={site.id}",
+            id=site.id, phase=site.phase.value, prio=site.priority.value if site.priority else None,
+            abschnitt_id=site.sector_id, lat=site.lat, lng=site.lng,
+        )
+        if duplikate:
+            result["warnung_duplikate"] = [{"id": other.id, "bezeichnung": other.bezeichnung} for other in duplikate]
+        return result
+    except Exception:
+        context.db.rollback()
+        raise
+
+
+@register_tool(
+    name="gsl_einsatzstelle_phase_setzen",
+    description="Setzt eine manuelle Phase einer Einsatzstelle.",
+    required_roles=READ,
+)
+async def gsl_einsatzstelle_phase_setzen(
+    context: MCPContext, lage_id: int, site_id: int, phase: str,
+) -> dict[str, object]:
+    try:
+        lage = _lage(context, lage_id)
+        _edit(context, lage)
+        site = _site(context, lage, site_id)
+        if phase in {"erledigt", "abgebrochen"}:
+            raise ValueError("Für erledigt oder abgebrochen bitte gsl_einsatz_abschliessen verwenden.")
+        try:
+            new_phase = SitePhase(phase)
+        except ValueError as exc:
+            erlaubt = ", ".join(
+                item.value for item in SitePhase if item not in {SitePhase.erledigt, SitePhase.abgebrochen}
+            )
+            raise ValueError(f"Unbekannte Phase. Erlaubt sind: {erlaubt}.") from exc
+        major_incident_service.setze_site_phase(
+            context.db, site, new_phase, user_id=context.user.id, author_name=_author(context),
+        )
+        _audit(context, "einsatzstelle_phase_setzen", lage, site.id, site_id=site.id, phase=phase)
+        context.db.commit()
+        await gsl_broadcast.phase_geaendert(context.db, lage, site.id, new_phase)
+        return _antwort(lage, site_id=site.id, phase=site.phase.value,
+                         ui_link=f"{settings.effective_public_base_url.rstrip('/')}/lage/{lage.id}?site={site.id}")
+    except Exception:
+        context.db.rollback()
+        raise
+
+
+@register_tool(
+    name="gsl_einsatzstelle_eintrag",
+    description=(
+        "Erfasst einen Chronik-Eintrag an einer Einsatzstelle; art ist note oder massnahmen "
+        "(Lagemeldungen über gsl_lagemeldung_erfassen)."
+    ),
+    required_roles=READ,
+)
+async def gsl_einsatzstelle_eintrag(
+    context: MCPContext, lage_id: int, site_id: int, text: str, art: str = "note",
+) -> dict[str, object]:
+    try:
+        from app.models.major_incident import SITE_LOG_RESET_KINDS
+        from app.services.site_log_service import add_site_log, normalisiere_user_kind
+
+        lage = _lage(context, lage_id)
+        _edit(context, lage)
+        site = _site(context, lage, site_id)
+        kind = normalisiere_user_kind(art)
+        add_site_log(context.db, site, kind, text, user_id=context.user.id, author_name=_author(context))
+        _audit(context, "einsatzstelle_eintrag", lage, site.id, site_id=site.id, art=kind)
+        context.db.commit()
+        await gsl_broadcast.site_log_geaendert(lage.id, site.id, kind in SITE_LOG_RESET_KINDS)
+        return _antwort(lage, site_id=site.id, art=kind,
+                         ui_link=f"{settings.effective_public_base_url.rstrip('/')}/lage/{lage.id}?site={site.id}")
+    except Exception:
+        context.db.rollback()
+        raise
+
+
+@register_tool(
+    name="gsl_lagemeldung_erfassen",
+    description="Erfasst eine strukturierte Lagemeldung und setzt deren Timer zurück.",
+    required_roles=READ,
+)
+async def gsl_lagemeldung_erfassen(
+    context: MCPContext, lage_id: int, site_id: int, lage: str = "", gefahren: str = "", massnahmen: str = "",
+    fortschritt: str = "", text: str = "",
+) -> dict[str, object]:
+    try:
+        from app.services.site_log_service import add_site_log, format_lagemeldung
+
+        incident = _lage(context, lage_id)
+        _edit(context, incident)
+        site = _site(context, incident, site_id)
+        inhalt = format_lagemeldung({
+            "lage": lage, "gefahren": gefahren, "massnahmen": massnahmen,
+            "fortschritt": fortschritt, "freitext": text,
+        })
+        if not inhalt:
+            raise ValueError("Mindestens ein Feld der Lagemeldung muss gefüllt sein.")
+        add_site_log(context.db, site, "lagemeldung", inhalt, user_id=context.user.id, author_name=_author(context))
+        _audit(context, "lagemeldung_erfassen", incident, site.id, site_id=site.id)
+        context.db.commit()
+        await gsl_broadcast.site_log_geaendert(incident.id, site.id, True)
+        return _antwort(incident, site_id=site.id, text=inhalt,
+                         ui_link=f"{settings.effective_public_base_url.rstrip('/')}/lage/{incident.id}?site={site.id}")
+    except Exception:
+        context.db.rollback()
+        raise
+
+
+@register_tool(
+    name="gsl_einheit_status_melden",
+    description="Erfasst eine per Funk gemeldete Statusänderung einer Einheit.",
+    required_roles=READ,
+)
+async def gsl_einheit_status_melden(
+    context: MCPContext, lage_id: int, dispatch_id: int, status: str, kommentar: str | None = None,
+    grund: str | None = None,
+) -> dict[str, object]:
+    try:
+        from app.services.site_log_service import add_site_log
+
+        lage = _lage(context, lage_id)
+        _edit(context, lage)
+        dispatch = _dispatch(context, lage, dispatch_id)
+        try:
+            result = einheit_service.melde_status_per_funk(
+                context.db, context.user, dispatch, status, author_name=_author(context), grund=grund,
+                anzeige_quelle="Funk (MCP)",
+            )
+        except einheit_service.EinheitKonflikt as exc:
+            raise ValueError(
+                einheit_service.KONFLIKT_MELDUNGEN.get(exc.code, "Status kann nicht gesetzt werden.")
+            ) from exc
+        if kommentar and kommentar.strip():
+            add_site_log(
+                context.db, dispatch.site, "note", f"Funk (MCP) {dispatch.einheit.label}: {kommentar.strip()}",
+                user_id=context.user.id, author_name=_author(context), einheit_id=dispatch.einheit_id,
+            )
+        _audit(context, "einheit_status_melden", lage, dispatch.id, dispatch_id=dispatch.id, status=status)
+        context.db.commit()
+        await gsl_broadcast.einheit_status_geaendert(
+            context.db, lage, dispatch.site_id, dispatch.id, dispatch.einheit_id, result,
+        )
+        return _antwort(
+            lage, dispatch_id=dispatch.id, status=result["einheit_status"], site_phase=dispatch.site.phase.value,
+            abgezogen=dispatch.abgezogen_at is not None, phase_geaendert=result["phase_geaendert"],
+            ui_link=f"{settings.effective_public_base_url.rstrip('/')}/lage/{lage.id}?site={dispatch.site_id}",
+        )
+    except Exception:
+        context.db.rollback()
+        raise
+
+
+@register_tool(
+    name="gsl_auftrag_wiedereroeffnen", description="Öffnet einen beendeten Auftrag wieder.", required_roles=READ
+)
+async def gsl_auftrag_wiedereroeffnen(context: MCPContext, lage_id: int, dispatch_id: int) -> dict[str, object]:
+    try:
+        lage = _lage(context, lage_id)
+        _edit(context, lage)
+        dispatch = _dispatch(context, lage, dispatch_id)
+        resource_service.oeffne_auftrag_wieder(
+            context.db, dispatch, author_name=_author(context), user_id=context.user.id,
+        )
+        _audit(context, "auftrag_wiedereroeffnen", lage, dispatch.id, dispatch_id=dispatch.id, site_id=dispatch.site_id)
+        context.db.commit()
+        result = {
+            "phase_geaendert": getattr(dispatch, "phase_geaendert", False),
+            "unterbrochen_dispatch_id": None,
+        }
+        await gsl_broadcast.einheit_status_geaendert(
+            context.db, lage, dispatch.site_id, dispatch.id, dispatch.einheit_id, result,
+        )
+        return _antwort(lage, dispatch_id=dispatch.id, status=dispatch.einheit_status,
+                         site_phase=dispatch.site.phase.value, phase_geaendert=result["phase_geaendert"],
+                         ui_link=f"{settings.effective_public_base_url.rstrip('/')}/lage/{lage.id}?site={dispatch.site_id}")
     except Exception:
         context.db.rollback()
         raise

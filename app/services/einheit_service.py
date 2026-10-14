@@ -429,6 +429,7 @@ def setze_einheit_status(
     grund: str | None = None,
     unterbrechen: bool = False,
     erfasst_at: datetime | None = None,
+    anzeige_quelle: str | None = None,
 ) -> dict:
     """Wendet einen erlaubten Einheiten-Statuswechsel an, ohne zu committen."""
     if dispatch.withdrawn_at is not None:
@@ -520,7 +521,7 @@ def setze_einheit_status(
 
     suffix = f" – {grund.strip()}" if grund and grund.strip() else ""
     if ctx.quelle == "funk":
-        suffix += " (per Funk)"
+        suffix += f" (per {anzeige_quelle or 'Funk'})"
     elif ctx.simulation:
         suffix += " (Simulation)"
     from app.services.site_log_service import add_site_log
@@ -530,9 +531,11 @@ def setze_einheit_status(
         erfasst_at=erfasst_at,
     )
     journal_quelle = ctx.quelle if ctx.quelle in {"tablet", "funk", "mcp", "simulation"} else "system"
+    journal_praefix = f"{anzeige_quelle}: " if anzeige_quelle else ""
     if neuer_status in {"bestaetigt", "abgeschlossen", "nicht_durchfuehrbar"}:
         resource_service._journal(
-            db, ctx.lage.id, f"{ctx.einheit.label}: {einheit_status_label(dispatch.auftragsart, neuer_status)}",
+            db, ctx.lage.id,
+            f"{journal_praefix}{ctx.einheit.label}: {einheit_status_label(dispatch.auftragsart, neuer_status)}",
             category="ressource", author_name=author_name, user_id=user_id,
             einheit_id=ctx.einheit.id, site_id=site.id,
             ereignis_typ=_journal_typ(dispatch.auftragsart, neuer_status),
@@ -540,7 +543,7 @@ def setze_einheit_status(
         )
     if erster_einsatzbeginn:
         resource_service._journal(
-            db, ctx.lage.id, f"{ctx.einheit.label}: Einsatz begonnen ({site.bezeichnung})",
+            db, ctx.lage.id, f"{journal_praefix}{ctx.einheit.label}: Einsatz begonnen ({site.bezeichnung})",
             category="ressource", author_name=author_name, user_id=user_id,
             einheit_id=ctx.einheit.id, site_id=site.id, ereignis_typ="begonnen",
             quelle=journal_quelle,
@@ -586,13 +589,13 @@ def setze_einheit_status(
 
 def melde_status_per_funk(
     db: Session, user, dispatch: EinheitSiteDispatch, status: str, *, author_name: str | None,
-    grund: str | None = None,
+    grund: str | None = None, anzeige_quelle: str | None = None,
 ) -> dict:
     """Erfasst eine durch die Führung per Funk gemeldete Statusänderung."""
     ctx = kontext_fuer_einheit(db, user, dispatch.einheit_id, quelle="funk")
     return setze_einheit_status(
         db, ctx, dispatch, status, user_id=user.id, author_name=author_name,
-        grund=grund, unterbrechen=True,
+        grund=grund, unterbrechen=True, anzeige_quelle=anzeige_quelle,
     )
 
 
