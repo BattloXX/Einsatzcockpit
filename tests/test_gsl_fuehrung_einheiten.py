@@ -113,7 +113,9 @@ def _broadcasts(monkeypatch):
         events.append(event)
 
     import app.routers.ui_major_incident as router_modul
+    from app.services import gsl_broadcast
     monkeypatch.setattr(router_modul, "broadcast_lage", fake)
+    monkeypatch.setattr(gsl_broadcast, "broadcast_lage", fake)
     return events
 
 

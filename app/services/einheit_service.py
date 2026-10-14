@@ -161,6 +161,14 @@ class EinheitKonflikt(Exception):
         self.details = details
 
 
+KONFLIKT_MELDUNGEN = {
+    "auftrag_zurueckgezogen": "Der Auftrag wurde bereits zurückgezogen.",
+    "ungueltiger_uebergang": "Dieser Statusübergang ist nicht erlaubt.",
+    "aktiver_auftrag": "Die Einheit hat bereits einen aktiven Auftrag.",
+    "stelle_in_erkundung": "Die Einsatzstelle ist noch in Erkundung – zuerst Erkundung abschließen.",
+}
+
+
 class EinheitKontextFehler(LookupError):
     """Aufloesbarer Fehler beim Oeffnen eines Einheiten-Kontexts."""
 
@@ -574,6 +582,18 @@ def setze_einheit_status(
         "unterbrochen_dispatch_id": unterbrochen_dispatch_id,
         "alle_einheiten_fertig": _alle_einheiten_fertig(db, site.id),
     }
+
+
+def melde_status_per_funk(
+    db: Session, user, dispatch: EinheitSiteDispatch, status: str, *, author_name: str | None,
+    grund: str | None = None,
+) -> dict:
+    """Erfasst eine durch die Führung per Funk gemeldete Statusänderung."""
+    ctx = kontext_fuer_einheit(db, user, dispatch.einheit_id, quelle="funk")
+    return setze_einheit_status(
+        db, ctx, dispatch, status, user_id=user.id, author_name=author_name,
+        grund=grund, unterbrechen=True,
+    )
 
 
 def _alle_einheiten_fertig(db: Session, site_id: int) -> bool:
