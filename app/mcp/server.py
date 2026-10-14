@@ -430,7 +430,9 @@ async def gsl_auftrag_aendern(lage_id: int, dispatch_id: int, auftrag: str | Non
                                        auftrag=auftrag, reihenfolge=reihenfolge)
 
 
-@server.tool(name="gsl_auftrag_zurueckziehen", description="Zieht eine Einheit von einer Einsatzstelle ab.")
+@server.tool(name="gsl_auftrag_zurueckziehen", description=(
+    "Zieht aktive Aufträge mit Benachrichtigung der Einheit zurück; fertige Aufträge werden nur ohne SMS abgezogen."
+))
 async def gsl_auftrag_zurueckziehen(lage_id: int, einheit_id: int, site_id: int,
                                     grund: str | None = None) -> dict[str, object]:
     return await _call_registered_tool("gsl_auftrag_zurueckziehen", lage_id=lage_id, einheit_id=einheit_id,
@@ -528,6 +530,54 @@ async def gsl_meldungen(lage_id: int | None = None, status: str = "new") -> dict
 @server.tool(name="gsl_uebergreifend_liste", description="Listet einsatzstellenübergreifende Lageinfos.")
 async def gsl_uebergreifend_liste(lage_id: int | None = None, status: str = "aktiv") -> dict[str, object]:
     return await _call_registered_tool("gsl_uebergreifend_liste", lage_id=lage_id, status=status)
+
+
+@server.tool(name="gsl_einsatzstelle_anlegen", description="Legt eine Einsatzstelle in einer aktiven GSL-Lage an.")
+async def gsl_einsatzstelle_anlegen(
+    lage_id: int, bezeichnung: str, einsatzgrund: str = "", ort: str = "", strasse: str = "", hausnr: str = "",
+    lat: float | None = None, lng: float | None = None, prio: int | None = None, abschnitt_id: int | None = None,
+    trotz_duplikat: bool = False,
+) -> dict[str, object]:
+    return await _call_registered_tool("gsl_einsatzstelle_anlegen", lage_id=lage_id, bezeichnung=bezeichnung,
+        einsatzgrund=einsatzgrund, ort=ort, strasse=strasse, hausnr=hausnr, lat=lat, lng=lng, prio=prio,
+        abschnitt_id=abschnitt_id, trotz_duplikat=trotz_duplikat)
+
+
+@server.tool(name="gsl_einsatzstelle_aendern", description="Ändert Felder einer Einsatzstelle in einer aktiven Lage.")
+async def gsl_einsatzstelle_aendern(lage_id: int, site_id: int, felder: dict) -> dict[str, object]:
+    return await _call_registered_tool("gsl_einsatzstelle_aendern", lage_id=lage_id, site_id=site_id, felder=felder)
+
+
+@server.tool(name="gsl_einsatzstelle_phase_setzen", description="Setzt eine manuelle Phase einer Einsatzstelle.")
+async def gsl_einsatzstelle_phase_setzen(lage_id: int, site_id: int, phase: str) -> dict[str, object]:
+    return await _call_registered_tool("gsl_einsatzstelle_phase_setzen", lage_id=lage_id, site_id=site_id, phase=phase)
+
+
+@server.tool(name="gsl_einsatzstelle_eintrag", description="Erfasst einen Chronik-Eintrag an einer Einsatzstelle; art ist note oder massnahmen (Lagemeldungen über gsl_lagemeldung_erfassen).")
+async def gsl_einsatzstelle_eintrag(lage_id: int, site_id: int, text: str, art: str = "note") -> dict[str, object]:
+    return await _call_registered_tool("gsl_einsatzstelle_eintrag", lage_id=lage_id, site_id=site_id, text=text, art=art)
+
+
+@server.tool(name="gsl_lagemeldung_erfassen", description="Erfasst eine strukturierte Lagemeldung und setzt deren Timer zurück.")
+async def gsl_lagemeldung_erfassen(
+    lage_id: int, site_id: int, lage: str = "", gefahren: str = "", massnahmen: str = "", fortschritt: str = "",
+    text: str = "",
+) -> dict[str, object]:
+    return await _call_registered_tool("gsl_lagemeldung_erfassen", lage_id=lage_id, site_id=site_id, lage=lage,
+        gefahren=gefahren, massnahmen=massnahmen, fortschritt=fortschritt, text=text)
+
+
+@server.tool(name="gsl_einheit_status_melden", description="Erfasst eine per Funk gemeldete Statusänderung einer Einheit.")
+async def gsl_einheit_status_melden(
+    lage_id: int, dispatch_id: int, status: str, kommentar: str | None = None, grund: str | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool("gsl_einheit_status_melden", lage_id=lage_id, dispatch_id=dispatch_id,
+        status=status, kommentar=kommentar, grund=grund)
+
+
+@server.tool(name="gsl_auftrag_wiedereroeffnen", description="Öffnet einen beendeten Auftrag wieder.")
+async def gsl_auftrag_wiedereroeffnen(lage_id: int, dispatch_id: int) -> dict[str, object]:
+    return await _call_registered_tool("gsl_auftrag_wiedereroeffnen", lage_id=lage_id, dispatch_id=dispatch_id)
 
 
 @server.tool(

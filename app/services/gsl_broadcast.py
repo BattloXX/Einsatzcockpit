@@ -40,3 +40,10 @@ async def einheit_status_geaendert(db, lage, site_id: int, dispatch_id: int, ein
             await broadcast_lage(lage.id, {"type": "site:card_changed", "site_id": interrupted.site_id})
             await broadcast_lage(lage.id, {"type": "einheit:changed", "einheit_id": interrupted.einheit_id,
                                            "site_id": interrupted.site_id})
+
+
+async def site_log_geaendert(lage_id: int, site_id: int, funkjournal_geaendert: bool = False) -> None:
+    """Informiert Board-Clients über einen neuen Einsatzstellen-Chronikeintrag."""
+    await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
+    if funkjournal_geaendert:
+        await broadcast_lage(lage_id, {"type": "funkjournal:changed"})
