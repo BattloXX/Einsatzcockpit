@@ -252,3 +252,33 @@ class PlanspielOrtTypZuordnung(TenantScoped, Base):
     quelle: Mapped[str] = mapped_column(sa.String(12), nullable=False)
     schluessel: Mapped[str] = mapped_column(sa.String(120), nullable=False)
     ort_typ: Mapped[str] = mapped_column(sa.String(40), nullable=False)
+
+
+class PlanspielAdresse(TenantScoped, Base):
+    """Wiederverwendbarer, organisationsgebundener Ort fuer Planspiele."""
+    __tablename__ = "planspiel_adresse"
+    __table_args__ = (
+        sa.UniqueConstraint("org_id", "quelle", "quell_id", name="uq_planspiel_adresse_org_quelle_quell_id"),
+        sa.Index("ix_planspiel_adresse_org_aktiv", "org_id", "aktiv"),
+    )
+
+    id: Mapped[int] = mapped_column(sa.BigInteger, primary_key=True, autoincrement=True)
+    quelle: Mapped[str] = mapped_column(sa.String(16), nullable=False)
+    quell_id: Mapped[str | None] = mapped_column(sa.String(64), nullable=True)
+    objekt_id: Mapped[int | None] = mapped_column(
+        sa.BigInteger, sa.ForeignKey("objekt.id", ondelete="SET NULL"), nullable=True
+    )
+    bezeichnung: Mapped[str | None] = mapped_column(sa.String(200), nullable=True)
+    strasse: Mapped[str] = mapped_column(sa.String(200), nullable=False)
+    hausnr: Mapped[str | None] = mapped_column(sa.String(20), nullable=True)
+    plz: Mapped[str | None] = mapped_column(sa.String(10), nullable=True)
+    ort: Mapped[str | None] = mapped_column(sa.String(100), nullable=True)
+    lat: Mapped[float] = mapped_column(sa.Float, nullable=False)
+    lng: Mapped[float] = mapped_column(sa.Float, nullable=False)
+    qualitaet: Mapped[str] = mapped_column(sa.String(1), nullable=False)
+    ort_typen: Mapped[list[str]] = mapped_column(sa.JSON, nullable=False)
+    merkmale: Mapped[dict[str, Any] | None] = mapped_column(sa.JSON, nullable=True)
+    aktiv: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, default=True)
+    zuletzt_verwendet_at: Mapped[datetime | None] = mapped_column(sa.DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(sa.DateTime, nullable=False, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(sa.DateTime, nullable=False, default=_utcnow, onupdate=_utcnow)
