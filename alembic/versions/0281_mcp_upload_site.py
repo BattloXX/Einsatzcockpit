@@ -1,13 +1,13 @@
 """MCP-Upload einer GSL-Einsatzstelle zuordnen.
 
-Revision ID: 0281_mcp_upload_site
-Revises: 0280_dispatch_abgezogen
+Revision ID: 0281
+Revises: 0280
 """
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0281_mcp_upload_site"
-down_revision = "0280_dispatch_abgezogen"
+revision = "0281"
+down_revision = "0280"
 branch_labels = None
 depends_on = None
 
