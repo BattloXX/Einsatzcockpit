@@ -1,0 +1,17 @@
+{% macro dispatch_options(units, site, sectors, sector_names) -%}
+  {% if units %}
+  {% macro option(e) -%}
+  <option value="{{ e.id }}" style="{% if e.incident_site_id %}color:var(--red);{% elif e.status == 'im_einsatz' %}color:var(--yellow);{% else %}color:var(--green);{% endif %}">{% if e.incident_site_id %}🔴{% elif e.status == 'im_einsatz' %}🟡{% else %}🟢{% endif %} {{ e.label }}{% if e.incident_site_id %} (Im Einsatz){% elif e.status == 'im_einsatz' %} (disponiert){% endif %}{% if e.sector_id %} · {{ sector_names.get(e.sector_id, e.sector_id) }}{% endif %}</option>
+  {%- endmacro %}
+  {% if site.sector_id %}
+    {% set own = units|selectattr('sector_id', 'equalto', site.sector_id)|list %}
+    {% if own %}<optgroup label="Eigener Abschnitt: {{ sector_names.get(site.sector_id, '') }}">{% for e in own %}{{ option(e) }}{% endfor %}</optgroup>{% endif %}
+  {% endif %}
+  {% set unassigned = units|selectattr('sector_id', 'equalto', none)|list %}
+  {% if unassigned %}<optgroup label="Ohne Abschnitt">{% for e in unassigned %}{{ option(e) }}{% endfor %}</optgroup>{% endif %}
+  {% for sector in sectors if sector.id != site.sector_id %}
+    {% set grouped = units|selectattr('sector_id', 'equalto', sector.id)|list %}
+    {% if grouped %}<optgroup label="Abschnitt {{ sector.name }}">{% for e in grouped %}{{ option(e) }}{% endfor %}</optgroup>{% endif %}
+  {% endfor %}
+  {% endif %}
+{%- endmacro %}

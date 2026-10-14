@@ -725,7 +725,7 @@ def site_detail_context(request: Request, db: Session, lage, site, user) -> dict
     citizen_report = db.query(CitizenReport).filter(CitizenReport.site_id == site.id).first()
     available_einheiten = sorted(
         [e for e in lage.einheiten if e.status != resource_service.STATUS_ABGERUECKT],
-        key=lambda e: (e.incident_site_id is not None, e.label),
+        key=lambda e: (2 if e.incident_site_id else 1 if e.status == "im_einsatz" else 0, e.label),
     )
     log_user_ids = {e.user_id for e in site.log_entries if e.user_id}
     users_by_id = {u.id: u for u in db.query(User).filter(User.id.in_(log_user_ids)).all()} if log_user_ids else {}
@@ -751,6 +751,7 @@ def site_detail_context(request: Request, db: Session, lage, site, user) -> dict
         "can_manage": _can_manage(user),
         "can_note": _can_note(user),
         "sectors": sectors,
+        "sector_names": {sector.id: sector.name for sector in sectors},
         "now": datetime.now(UTC),
         "citizen_report": citizen_report,
         "available_einheiten": available_einheiten,
@@ -779,9 +780,12 @@ def site_disponieren_select_oob(
     return templates.TemplateResponse(request, "incident_major/_site_disponieren_select_oob.html", {
         "available_einheiten": sorted(
             [e for e in lage.einheiten if e.status != resource_service.STATUS_ABGERUECKT],
-            key=lambda e: (e.incident_site_id is not None, e.label),
+            key=lambda e: (2 if e.incident_site_id else 1 if e.status == "im_einsatz" else 0, e.label),
         ),
         "already_dispatched_ids": [dispatch.einheit_id for dispatch in dispatched],
+        "site": site,
+        "sectors": sorted(lage.sectors, key=lambda sector: sector.id),
+        "sector_names": {sector.id: sector.name for sector in lage.sectors},
     })
 
 
@@ -3773,6 +3777,10 @@ def lage_zeitreise(
     lage = _lage_or_404(lage_id, db)
     _check_org_access(user, lage)
 
+    sites = db.query(IncidentSite).filter(IncidentSite.major_incident_id == lage_id).all()
+    sites_by_id = {site.id: site for site in sites}
+    sectors_by_id = {sector.id: sector for sector in lage.sectors}
+
     site_logs = (
         db.query(SiteLogEntry, IncidentSite)
         .join(IncidentSite, SiteLogEntry.incident_site_id == IncidentSite.id)
@@ -3797,16 +3805,26 @@ def lage_zeitreise(
 
     # Interleave all streams into a single chronological list
     timeline: list[dict] = []
-    for entry, site in site_logs:
+    for entry, log_site in site_logs:
+        sector = sectors_by_id.get(log_site.sector_id) if log_site.sector_id is not None else None
         timeline.append({
             "ts": entry.ts, "kind": "site_log",
             "log_kind": entry.kind,
+            "log_kind_label": SITE_LOG_KIND_LABEL.get(entry.kind, {
+                "status": "Status", "prio": "Priorität", "resource": "Einheit/Ressource",
+                "media": "Medien", "massnahmen": "Maßnahmen", "note": "Notiz",
+            }.get(entry.kind, entry.kind)),
             "text": entry.text,
-            "site_bezeichnung": site.bezeichnung,
-            "site_id": site.id,
+            "site_bezeichnung": log_site.bezeichnung,
+            "site_id": log_site.id,
+            "sector_id": log_site.sector_id,
+            "sector_name": sector.name if sector else None,
+            "sector_color": sector.color if sector else None,
             "author": entry.author_name,
         })
     for c in comms:
+        comm_site = sites_by_id.get(c.related_site_id) if c.related_site_id is not None else None
+        sector = sectors_by_id.get(comm_site.sector_id) if comm_site and comm_site.sector_id is not None else None
         label = "↓ Eingehend" if c.direction == "in" else "↑ Ausgehend" if c.direction == "out" else "↔ Intern"
         timeline.append({
             "ts": c.ts, "kind": "comm",
@@ -3816,6 +3834,13 @@ def lage_zeitreise(
             "partner": c.partner,
             "text": c.message,
             "author": c.author_name,
+            "site_id": comm_site.id if comm_site else None,
+            "site_bezeichnung": comm_site.bezeichnung if comm_site else None,
+            "sector_id": comm_site.sector_id if comm_site else None,
+            "sector_name": sector.name if sector else None,
+            "sector_color": sector.color if sector else None,
+            "is_request": c.is_request,
+            "handled": c.handled,
         })
     for j in journal:
         timeline.append({
@@ -3825,19 +3850,37 @@ def lage_zeitreise(
             "author": j.author_name,
             "entry_id": j.id,
         })
-    timeline.sort(key=lambda x: x["ts"])
+    timeline.sort(key=lambda x: x["ts"], reverse=True)
 
-    return templates.TemplateResponse(request, "incident_major/zeitreise.html", {
+    type_counts = {kind: sum(entry["kind"] == kind for entry in timeline) for kind in ("site_log", "comm", "journal")}
+    subkinds = []
+    for timeline_entry in timeline:
+        value = timeline_entry.get("log_kind") or timeline_entry.get("direction") or timeline_entry.get("category")
+        if value and value not in subkinds:
+            subkinds.append(value)
+
+    context = {
         "user": user,
         "lage": lage,
         "timeline": timeline,
+        "sites": sorted(
+            {entry["site_id"]: entry for entry in timeline if entry.get("site_id")}.values(),
+            key=lambda entry: entry["site_bezeichnung"],
+        ),
+        "sectors": sorted(sectors_by_id.values(), key=lambda sector: sector.id),
+        "type_counts": type_counts,
+        "subkinds": subkinds,
         "journal_categories": JOURNAL_CATEGORIES,
+        "site_log_kind_label": SITE_LOG_KIND_LABEL,
         "journal_category_color": JOURNAL_CATEGORY_COLOR,
         "can_edit": _can_edit(user),
         "can_manage": _can_manage(user),
         "mi_features": _get_mi_features(db, lage.org_id),
         **_nav_counts(lage_id, lage, db),
-    })
+    }
+    if request.query_params.get("partial") == "1" or request.headers.get("HX-Request"):
+        return templates.TemplateResponse(request, "incident_major/_zeitreise_list.html", context)
+    return templates.TemplateResponse(request, "incident_major/zeitreise.html", context)
 
 
 # ── Druckansicht ─────────────────────────────────────────────────────────────

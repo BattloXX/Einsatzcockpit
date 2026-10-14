@@ -24,6 +24,11 @@
   {% if done_sites %}<details class="sk-done-sites"><summary>{{ done_sites|length }} erledigte anzeigen</summary>{% for site in done_sites %}{{ site_row(site) }}{% endfor %}</details>{% endif %}
 {%- endmacro %}
 
+{% set unassigned = sites_by_sector.get(None, []) %}
+{% if unassigned %}
+{% set counts = phase_counts_by_sector.get(None, {'neu': 0, 'in_arbeit': 0, 'erledigt': 0}) %}
+<div class="sk-card sk-unassigned" style="--sk-accent:var(--text-muted);"><div class="sk-card__header"><div class="sk-card__dot" style="background:var(--text-muted);"></div><div style="flex:1;"><div class="sk-card__title">Nicht zugeordnet</div><div class="sk-phase-counts">{{ counts.neu }} neu · {{ counts.in_arbeit }} in Arbeit · {{ counts.erledigt }} erledigt</div></div></div><div class="sk-card__body">{{ site_list(unassigned) }}</div></div>
+{% endif %}
 {% for sector in sectors %}
 {% set sites = sites_by_sector.get(sector.id, []) %}
 {% set counts = phase_counts_by_sector.get(sector.id, {'neu': 0, 'in_arbeit': 0, 'erledigt': 0}) %}
@@ -39,10 +44,4 @@
 
 {% if can_edit and lage.status.value == 'active' %}
 <div class="sk-card sk-add" style="--sk-accent:var(--green);"><div class="sk-card__header"><div class="sk-card__title" style="color:var(--text-muted);">+ Neuer Abschnitt</div></div><div class="sk-card__body"><form hx-post="/lage/{{ lage.id }}/sektoren" hx-target="#sektorenGrid" hx-swap="innerHTML" hx-on::after-request="if(event.detail.successful) this.reset()"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><div class="form-group"><input type="text" name="name" class="form-input" required maxlength="80" placeholder="Bezeichnung, z. B. Abschnitt Ost" autocomplete="off"></div><div class="form-group"><input type="text" name="leader_label" class="form-input" maxlength="80" placeholder="Abschnittsleiter (optional)" autocomplete="off"></div><div class="form-group"><label class="form-label" style="font-size:.72rem;">Farbe</label><div class="color-swatches" id="new-swatches">{% for c in sector_colors %}<div class="color-swatch {% if loop.last %}selected{% endif %}" style="background:{{ c }};" onclick="document.getElementById('new-color').value='{{ c }}';document.getElementById('new-swatches').querySelectorAll('.color-swatch').forEach(s=>s.classList.remove('selected'));this.classList.add('selected');"></div>{% endfor %}<input type="hidden" name="color" id="new-color" value="{{ sector_colors[-1] }}"></div></div><button type="submit" class="btn btn--secondary btn--sm" style="margin-top:8px;">Anlegen</button></form></div></div>
-{% endif %}
-
-{% set unassigned = sites_by_sector.get(None, []) %}
-{% if unassigned %}
-{% set counts = phase_counts_by_sector.get(None, {'neu': 0, 'in_arbeit': 0, 'erledigt': 0}) %}
-<div class="sk-card sk-unassigned" style="--sk-accent:var(--text-muted);"><div class="sk-card__header"><div class="sk-card__dot" style="background:var(--text-muted);"></div><div style="flex:1;"><div class="sk-card__title">Nicht zugeordnet</div><div class="sk-phase-counts">{{ counts.neu }} neu · {{ counts.in_arbeit }} in Arbeit · {{ counts.erledigt }} erledigt</div></div></div><div class="sk-card__body">{{ site_list(unassigned) }}</div></div>
 {% endif %}

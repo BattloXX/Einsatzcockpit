@@ -1,10 +1,20 @@
-﻿{% extends "incident_major/_lage_layout.html" %}
+{% extends "incident_major/_lage_layout.html" %}
 {% block title %}{{ lage.name }} – Zeitreise{% endblock %}
 
 {% block head_extra %}
 <style>
 .zt-wrap { padding: 16px; max-width: 900px; margin: 0 auto; }
-.zt-count { font-size: .74rem; color: var(--text-muted); margin-bottom: 14px; font-family: 'JetBrains Mono', monospace; }
+.zt-filter, .zt-controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+.zt-filter label, .zt-controls label {
+  display: flex; align-items: center; gap: 6px;
+  font-size: .76rem; font-weight: 600; cursor: pointer;
+  padding: 5px 11px; background: var(--surface-mid); border: 1px solid var(--border);
+  border-radius: 999px;
+}
+.zt-controls .form-input, .zt-controls .form-select { width: auto; min-width: 120px; }
+.zt-controls input[type=search] { flex: 1; min-width: 160px; }
+.zt-count { font-size: .74rem; color: var(--text-muted); margin: 8px 0 14px; font-family: 'JetBrains Mono', monospace; }
+.zt-empty { text-align: center; padding: 40px; color: var(--text-muted); }
 
 /* Timeline */
 .tl { position: relative; padding-left: 30px; }
@@ -23,42 +33,34 @@
   border: 2px solid var(--surface);
   background: var(--text-muted);
 }
-.tl-dot--status   { background: #93c5fd; }
-.tl-dot--prio     { background: var(--yellow); }
-.tl-dot--resource { background: var(--green); }
-.tl-dot--media    { background: #c4b5fd; }
-.tl-dot--note     { background: var(--text-muted); }
-.tl-dot--comm-in  { background: #93c5fd; }
-.tl-dot--comm-out { background: var(--green); }
-.tl-dot--comm-int { background: var(--text-muted); }
-.tl-dot--journal-entscheidung { background: #c4b5fd; }
-.tl-dot--journal-anweisung    { background: var(--orange); }
-.tl-dot--journal-meldung      { background: #93c5fd; }
-.tl-dot--journal-sonstiges    { background: var(--text-muted); }
-.tl-badge--journal-entscheidung { background:rgba(167,139,250,.18); color:#c4b5fd; }
-.tl-badge--journal-anweisung    { background:rgba(230,126,34,.18);  color:var(--orange); }
-.tl-badge--journal-meldung      { background:rgba(24,119,242,.18);  color:#93c5fd; }
-.tl-badge--journal-sonstiges    { background:rgba(122,135,168,.18); color:var(--text-muted); }
+.tl-dot--status, .tl-dot--comm-in, .tl-dot--journal-meldung { background: #93c5fd; }
+.tl-dot--prio { background: var(--yellow); }
+.tl-dot--resource, .tl-dot--einheit, .tl-dot--comm-out { background: var(--green); }
+.tl-dot--media, .tl-dot--journal-entscheidung { background: #c4b5fd; }
+.tl-dot--journal-anweisung { background: var(--orange); }
 
-.tl-time  { font-size: .7rem; color: var(--text-muted); margin-bottom: 3px; font-family: 'JetBrains Mono', monospace; }
-.tl-site  { font-size: .68rem; color: #93c5fd; margin-bottom: 3px; font-weight: 600; }
-.tl-text  { font-size: .84rem; line-height: 1.45; }
+.tl-time, .tl-author, .tl-muted { font-size: .7rem; color: var(--text-muted); }
+.tl-time { margin-bottom: 3px; font-family: 'JetBrains Mono', monospace; }
+.tl-author { margin-top: 3px; }
+.tl-site { font-size: .68rem; color: #93c5fd; margin-bottom: 3px; font-weight: 600; }
+.tl-site a { color: inherit; }
+.tl-sector-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin: 0 4px 1px 8px; }
+.tl-text { font-size: .84rem; line-height: 1.45; }
 .tl-badge {
   display: inline-block; font-size: .58rem; font-weight: 700;
   padding: 1px 7px; border-radius: 999px; margin-right: 5px;
   vertical-align: middle; text-transform: uppercase;
+  background: rgba(122,135,168,.18); color: var(--text-muted);
 }
-.tl-badge--comm-in  { background: rgba(24,119,242,.18); color: #93c5fd; }
-.tl-badge--comm-out { background: rgba(24,169,87,.18);  color: var(--green); }
-.tl-badge--comm-int { background: rgba(122,135,168,.18); color: var(--text-muted); }
-.tl-author { font-size: .68rem; color: var(--text-muted); margin-top: 3px; }
-
-.zt-filter { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
-.zt-filter label {
-  display: flex; align-items: center; gap: 6px;
-  font-size: .76rem; font-weight: 600; cursor: pointer;
-  padding: 5px 11px; background: var(--surface-mid); border: 1px solid var(--border);
-  border-radius: 999px;
+.tl-badge--comm-in       { background: rgba(24,119,242,.18); color: #93c5fd; }
+.tl-badge--comm-out      { background: rgba(24,169,87,.18);  color: var(--green); }
+.tl-badge--journal-entscheidung { background: rgba(167,139,250,.18); color: #c4b5fd; }
+.tl-badge--journal-anweisung    { background: rgba(230,126,34,.18);  color: var(--orange); }
+.tl-badge--journal-meldung      { background: rgba(24,119,242,.18);  color: #93c5fd; }
+.tl-partner { font-size: .78rem; font-weight: 500; }
+.tl-day {
+  font-size: .72rem; font-weight: 700; color: var(--text-muted);
+  margin: 14px 0 8px; text-transform: uppercase; letter-spacing: .04em;
 }
 </style>
 {% endblock %}
@@ -66,117 +68,218 @@
 {% block lage_content %}
 <div class="zt-wrap">
 
-  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
-    <div class="zt-filter" id="zt-filter" style="margin-bottom:0;">
-      <label><input type="checkbox" checked value="site_log" onchange="applyFilter()"> Stellenlog</label>
-      <label><input type="checkbox" checked value="comm" onchange="applyFilter()"> Funkjournal</label>
-      <label><input type="checkbox" checked value="journal" onchange="applyFilter()"> Journal</label>
-    </div>
-    <div style="display:flex;align-items:center;gap:5px;font-size:.78rem;flex-wrap:wrap;">
-      <span style="color:var(--text-muted);">Von</span>
-      <input type="time" id="zt-from" class="form-input"
-             style="padding:2px 6px;font-size:.78rem;width:88px;" oninput="applyFilter()">
-      <span style="color:var(--text-muted);">Bis</span>
-      <input type="time" id="zt-to" class="form-input"
-             style="padding:2px 6px;font-size:.78rem;width:88px;" oninput="applyFilter()">
-      <button aria-label="Schließen" class="btn btn--ghost btn--sm" onclick="resetTimeFilter()" title="Zeitfilter zurücksetzen">×</button>
-    </div>
-    <a href="/lage/{{ lage.id }}/protokoll.txt"
-       class="btn btn--ghost btn--sm" style="margin-left:auto;" download>
-      ⬇ Protokoll exportieren
-    </a>
-  </div>
-
-  <div class="zt-count" id="zt-count">{{ timeline|length }} Einträge</div>
-
-  {% if timeline %}
-  <div class="tl" id="zt-timeline">
-    {% for e in timeline %}
-    {% if e.kind == 'site_log' %}
-    <div class="tl-entry" data-kind="site_log" data-ts="{{ e.ts.isoformat() }}Z">
-      <div class="tl-dot tl-dot--{{ e.log_kind }}"></div>
-      <div class="tl-time">{{ e.ts|local_time }}</div>
-      <div class="tl-site">{{ e.site_bezeichnung }}</div>
-      <div class="tl-text">{{ e.text }}</div>
-      {% if e.author %}<div class="tl-author">{{ e.author }}</div>{% endif %}
-    </div>
-    {% elif e.kind == 'journal' %}
-    <div class="tl-entry" data-kind="journal" data-ts="{{ e.ts.isoformat() }}Z">
-      <div class="tl-dot tl-dot--journal-{{ e.category }}"></div>
-      <div class="tl-time">{{ e.ts|local_time }}</div>
-      <div class="tl-text">
-        <span class="tl-badge tl-badge--journal-{{ e.category }}">
-          {{ journal_categories.get(e.category, e.category)|upper }}
-        </span>
-        {{ e.text }}
-      </div>
-      {% if e.author %}<div class="tl-author">{{ e.author }}</div>{% endif %}
-    </div>
-    {% else %}
-    <div class="tl-entry" data-kind="comm" data-ts="{{ e.ts.isoformat() }}Z">
-      <div class="tl-dot tl-dot--comm-{{ e.direction }}"></div>
-      <div class="tl-time">{{ e.ts|local_time }}</div>
-      <div class="tl-text">
-        <span class="tl-badge tl-badge--comm-{{ e.direction }}">{{ e.label }}</span>
-        {% if e.channel %}<span style="font-size:.72rem;color:var(--text-muted);">{{ e.channel }} · </span>{% endif %}
-        {% if e.partner %}<span style="font-size:.78rem;font-weight:500;">{{ e.partner }}: </span>{% endif %}
-        {{ e.text }}
-      </div>
-      {% if e.author %}<div class="tl-author">{{ e.author }}</div>{% endif %}
-    </div>
-    {% endif %}
+  <div class="zt-filter" id="zt-kinds">
+    {% for kind, label in [('site_log', 'Stellenlog'), ('comm', 'Funkjournal'), ('journal', 'Journal')] %}
+    <label><input type="checkbox" value="{{ kind }}" checked> {{ label }} ({{ type_counts[kind] }})</label>
     {% endfor %}
   </div>
-  {% else %}
-  <div style="text-align:center;padding:40px;color:var(--text-muted);">Noch keine Ereignisse.</div>
-  {% endif %}
+
+  <div class="zt-controls">
+    <input id="zt-search" class="form-input form-input--sm" type="search" placeholder="Suche in Text, Partner, Autor, Einsatzstelle" aria-label="Suche">
+    <select id="zt-subkind" class="form-select form-select--sm" aria-label="Untertyp">
+      <option value="">Alle Untertypen</option>
+      {% for value in subkinds %}
+      <option value="{{ value }}">{{ journal_categories.get(value, site_log_kind_label.get(value, {'in': 'Eingehend', 'out': 'Ausgehend', 'int': 'Intern', 'status': 'Status', 'prio': 'Priorität', 'resource': 'Einheit/Ressource', 'media': 'Medien'}.get(value, value))) }}</option>
+      {% endfor %}
+    </select>
+    <select id="zt-sector" class="form-select form-select--sm" aria-label="Abschnitt">
+      <option value="">Alle Abschnitte</option>
+      <option value="none">Ohne Abschnitt</option>
+      {% for sector in sectors %}<option value="{{ sector.id }}">{{ sector.name }}</option>{% endfor %}
+    </select>
+    <select id="zt-site" class="form-select form-select--sm" aria-label="Einsatzstelle">
+      <option value="">Alle Einsatzstellen</option>
+      {% for site in sites %}<option value="{{ site.site_id }}">{{ site.site_bezeichnung }}</option>{% endfor %}
+    </select>
+  </div>
+
+  <div class="zt-controls">
+    <span class="tl-muted">Von</span>
+    <input id="zt-from" class="form-input form-input--sm" type="datetime-local" aria-label="Von">
+    <span class="tl-muted">Bis</span>
+    <input id="zt-to" class="form-input form-input--sm" type="datetime-local" aria-label="Bis">
+    <button type="button" class="btn btn--ghost btn--xs" data-quick="15">15 min</button>
+    <button type="button" class="btn btn--ghost btn--xs" data-quick="60">1 h</button>
+    <button type="button" class="btn btn--ghost btn--xs" data-quick="240">4 h</button>
+    <button type="button" class="btn btn--ghost btn--xs" data-quick="all">Alle</button>
+  </div>
+
+  <div class="zt-controls">
+    <label><input id="zt-open" type="checkbox"> Nur offene Anfragen</label>
+    <select id="zt-sort" class="form-select form-select--sm" aria-label="Sortierung">
+      <option value="new">Neueste zuerst</option>
+      <option value="old">Älteste zuerst</option>
+    </select>
+    <label><input id="zt-auto" type="checkbox" checked> Automatisch aktualisieren</label>
+    <button id="zt-reset" class="btn btn--ghost btn--sm" type="button">Filter zurücksetzen</button>
+    <a href="/lage/{{ lage.id }}/protokoll.txt" class="btn btn--ghost btn--sm" style="margin-left:auto;" download>⬇ Protokoll exportieren</a>
+  </div>
+
+  <div class="zt-count" id="zt-count"></div>
+  <div id="zt-list">{% include "incident_major/_zeitreise_list.html" %}</div>
+  <div class="zt-empty" id="zt-filter-empty" hidden>Keine Einträge für diese Filter.</div>
 
 </div>
 {% endblock %}
 
 {% block lage_scripts %}
 <script>
-var ZT_TOTAL = {{ timeline|length }};
+(function () {
+  var total = {{ timeline|length }};
+  var debounce;
+  var dayFormat = new Intl.DateTimeFormat('de-AT', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' });
 
-function parseHHMM(val) {
-  var p = val.split(':');
-  return parseInt(p[0], 10) * 60 + parseInt(p[1], 10);
-}
+  function q(id) { return document.getElementById(id); }
 
-function applyFilter() {
-  var checks  = document.querySelectorAll('#zt-filter input[type=checkbox]');
-  var active  = Array.from(checks).filter(function(c) { return c.checked; }).map(function(c) { return c.value; });
-  var fromVal = document.getElementById('zt-from').value;
-  var toVal   = document.getElementById('zt-to').value;
-  var fromMin = fromVal ? parseHHMM(fromVal) : -1;
-  var toMin   = toVal   ? parseHHMM(toVal)   : 1441;
+  // datetime-local erwartet Ortszeit ohne Zeitzone, toISOString() liefert UTC.
+  function toLocalInput(d) {
+    function p(n) { return String(n).padStart(2, '0'); }
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes());
+  }
 
-  var visible = 0;
-  document.querySelectorAll('#zt-timeline .tl-entry').forEach(function(el) {
-    var inKind = active.includes(el.dataset.kind);
-    var inTime = true;
-    if (fromVal || toVal) {
-      var d    = new Date(el.dataset.ts);
-      var hhmm = d.getHours() * 60 + d.getMinutes();
-      inTime   = (hhmm >= fromMin && hhmm <= toMin);
+  function readState() {
+    return {
+      k: Array.from(document.querySelectorAll('#zt-kinds input:checked')).map(function (x) { return x.value; }),
+      sub: q('zt-subkind').value,
+      sec: q('zt-sector').value,
+      site: q('zt-site').value,
+      s: q('zt-search').value.trim(),
+      f: q('zt-from').value,
+      t: q('zt-to').value,
+      o: q('zt-open').checked,
+      sort: q('zt-sort').value,
+      auto: q('zt-auto').checked,
+    };
+  }
+
+  // Filterzustand in der URL halten: Links sind teilbar, Neuladen behält die Filter.
+  function saveState(s) {
+    var p = new URLSearchParams();
+    if (s.k.length !== 3) p.set('k', s.k.join(','));
+    ['sub', 'sec', 'site', 's', 'f', 't'].forEach(function (key) { if (s[key]) p.set(key, s[key]); });
+    if (s.o) p.set('o', '1');
+    if (s.sort === 'old') p.set('sort', 'old');
+    if (!s.auto) p.set('auto', '0');
+    var qs = p.toString();
+    history.replaceState(null, '', location.pathname + (qs ? '?' + qs : ''));
+  }
+
+  function restoreState() {
+    var p = new URLSearchParams(location.search);
+    var k = p.get('k');
+    if (k !== null) {
+      var kinds = k.split(',');
+      document.querySelectorAll('#zt-kinds input').forEach(function (x) { x.checked = kinds.includes(x.value); });
     }
-    var show = inKind && inTime;
-    el.style.display = show ? '' : 'none';
-    if (show) visible++;
+    [['sub', 'zt-subkind'], ['sec', 'zt-sector'], ['site', 'zt-site'], ['s', 'zt-search'], ['f', 'zt-from'], ['t', 'zt-to'], ['sort', 'zt-sort']]
+      .forEach(function (pair) { if (p.get(pair[0]) !== null) q(pair[1]).value = p.get(pair[0]); });
+    q('zt-open').checked = p.get('o') === '1';
+    q('zt-auto').checked = p.get('auto') !== '0';
+  }
+
+  function matches(e, s, from, to) {
+    var d = new Date(e.dataset.ts);
+    if (!s.k.includes(e.dataset.kind)) return false;
+    if (s.sub && e.dataset.subkind !== s.sub) return false;
+    if (s.sec && (s.sec === 'none' ? e.dataset.sector : e.dataset.sector !== s.sec)) return false;
+    if (s.site && e.dataset.site !== s.site) return false;
+    if (s.o && e.dataset.openRequest !== 'true') return false;
+    if (s.s && !e.dataset.search.toLowerCase().includes(s.s.toLowerCase())) return false;
+    if (from && d < from) return false;
+    if (to && d > to) return false;
+    return true;
+  }
+
+  // Tagestrenner nur, wenn die sichtbaren Einträge mehr als einen Tag umfassen.
+  function renderDayHeaders(list) {
+    list.querySelectorAll('.tl-day').forEach(function (x) { x.remove(); });
+    var visible = Array.from(list.querySelectorAll('.tl-entry')).filter(function (e) { return e.style.display !== 'none'; });
+    var days = new Set(visible.map(function (e) { return new Date(e.dataset.ts).toDateString(); }));
+    if (days.size < 2) return;
+    var last = '';
+    visible.forEach(function (e) {
+      var d = new Date(e.dataset.ts);
+      var key = d.toDateString();
+      if (key === last) return;
+      var h = document.createElement('div');
+      h.className = 'tl-day';
+      h.textContent = dayFormat.format(d);
+      e.before(h);
+      last = key;
+    });
+  }
+
+  function apply() {
+    var s = readState();
+    var from = s.f ? new Date(s.f) : null;
+    var to = s.t ? new Date(s.t) : null;
+    var visible = 0;
+    var list = q('zt-timeline');
+    if (list) {
+      var dir = s.sort === 'old' ? 1 : -1;
+      Array.from(list.querySelectorAll('.tl-entry'))
+        .sort(function (a, b) { return (new Date(a.dataset.ts) - new Date(b.dataset.ts)) * dir; })
+        .forEach(function (e) {
+          list.appendChild(e);
+          var ok = matches(e, s, from, to);
+          e.style.display = ok ? '' : 'none';
+          if (ok) visible++;
+        });
+      renderDayHeaders(list);
+    }
+    q('zt-count').textContent = visible === total ? total + ' Einträge' : visible + ' von ' + total + ' Einträgen';
+    q('zt-filter-empty').hidden = visible !== 0 || total === 0;
+    saveState(s);
+  }
+
+  function refresh() {
+    if (!q('zt-auto').checked || document.hidden) return;
+    fetch(location.pathname + '?partial=1', { headers: { 'HX-Request': 'true' }, credentials: 'same-origin' })
+      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
+      .then(function (html) {
+        // Partial ist serverseitig gerendert und escaped.
+        q('zt-list').innerHTML = html;
+        var list = q('zt-timeline');
+        total = list ? list.querySelectorAll('.tl-entry').length : 0;
+        apply();
+      })
+      .catch(function () { /* nächster Versuch beim nächsten Intervall */ });
+  }
+
+  document.querySelectorAll('#zt-kinds input, .zt-controls input, .zt-controls select').forEach(function (el) {
+    if (el.id === 'zt-search') {
+      el.addEventListener('input', function () { clearTimeout(debounce); debounce = setTimeout(apply, 150); });
+    } else {
+      el.addEventListener('change', apply);
+    }
   });
 
-  var countEl = document.getElementById('zt-count');
-  if (visible === ZT_TOTAL) {
-    countEl.textContent = ZT_TOTAL + ' Einträge';
-  } else {
-    countEl.textContent = visible + ' von ' + ZT_TOTAL + ' Einträgen';
-  }
-}
+  document.querySelectorAll('[data-quick]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      if (b.dataset.quick === 'all') {
+        q('zt-from').value = '';
+        q('zt-to').value = '';
+      } else {
+        q('zt-from').value = toLocalInput(new Date(Date.now() - Number(b.dataset.quick) * 60000));
+        q('zt-to').value = '';
+      }
+      apply();
+    });
+  });
 
-function resetTimeFilter() {
-  document.getElementById('zt-from').value = '';
-  document.getElementById('zt-to').value   = '';
-  applyFilter();
-}
+  q('zt-reset').addEventListener('click', function () {
+    document.querySelectorAll('#zt-kinds input').forEach(function (x) { x.checked = true; });
+    ['zt-subkind', 'zt-sector', 'zt-site', 'zt-search', 'zt-from', 'zt-to'].forEach(function (id) { q(id).value = ''; });
+    q('zt-open').checked = false;
+    q('zt-sort').value = 'new';
+    apply();
+  });
+
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) refresh(); });
+
+  restoreState();
+  apply();
+  setInterval(refresh, 30000);
+})();
 </script>
 {% endblock %}

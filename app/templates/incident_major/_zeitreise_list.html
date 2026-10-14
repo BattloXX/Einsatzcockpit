@@ -1,0 +1,42 @@
+{# Eintragsliste der Zeitreise – auch Partial für die automatische Aktualisierung (?partial=1). #}
+{% if timeline %}
+<div class="tl" id="zt-timeline">
+  {% for e in timeline %}
+  {% set subkind = e.log_kind if e.kind == 'site_log' else e.direction if e.kind == 'comm' else e.category %}
+  <div class="tl-entry"
+       data-kind="{{ e.kind }}"
+       data-ts="{{ e.ts.isoformat() }}Z"
+       data-site="{{ e.site_id or '' }}"
+       data-sector="{{ e.sector_id or '' }}"
+       data-subkind="{{ subkind }}"
+       data-author="{{ e.author or '' }}"
+       data-open-request="{{ 'true' if e.kind == 'comm' and e.is_request and not e.handled else 'false' }}"
+       data-search="{{ (e.text or '') ~ ' ' ~ (e.partner or '') ~ ' ' ~ (e.author or '') ~ ' ' ~ (e.site_bezeichnung or '') }}">
+    <div class="tl-dot {% if e.kind == 'site_log' %}tl-dot--{{ e.log_kind }}{% elif e.kind == 'comm' %}tl-dot--comm-{{ e.direction }}{% else %}tl-dot--journal-{{ e.category }}{% endif %}"></div>
+    <div class="tl-time">{{ e.ts|local_datetime }}</div>
+    {% if e.site_id %}
+    <div class="tl-site">
+      <a href="/lage/{{ lage.id }}?openSite={{ e.site_id }}" title="Auf dem Board zeigen">{{ e.site_bezeichnung }}</a>
+      {% if e.sector_name %}<span class="tl-sector-dot" style="background:{{ e.sector_color or 'var(--text-muted)' }};"></span>{{ e.sector_name }}{% endif %}
+    </div>
+    {% endif %}
+    <div class="tl-text">
+      {% if e.kind == 'site_log' %}
+      <span class="tl-badge">{{ e.log_kind_label }}</span>
+      {% elif e.kind == 'journal' %}
+      <span class="tl-badge tl-badge--journal-{{ e.category }}">{{ journal_categories.get(e.category, e.category)|upper }}</span>
+      {% else %}
+      <span class="tl-badge tl-badge--comm-{{ e.direction }}">{{ e.label }}</span>
+      {% if e.is_request and not e.handled %}<span class="tl-badge" style="color:var(--orange);">Offene Anfrage</span>{% endif %}
+      {% if e.channel %}<span class="tl-muted">{{ e.channel }} · </span>{% endif %}
+      {% if e.partner %}<span class="tl-partner">{{ e.partner }}: </span>{% endif %}
+      {% endif %}
+      {{ e.text }}
+    </div>
+    {% if e.author %}<div class="tl-author">{{ e.author }}</div>{% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="zt-empty">Noch keine Ereignisse.</div>
+{% endif %}

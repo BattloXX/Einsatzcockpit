@@ -5,12 +5,14 @@ from app.core.security import hash_password
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.major_incident import (
+    CommLogEntry,
     EinheitSiteDispatch,
     IncidentSite,
     LageEinheit,
     MajorIncident,
     MajorIncidentStatus,
     Sector,
+    SiteLogEntry,
     SitePhase,
     SitePriority,
     SiteResourceAssignment,
@@ -98,6 +100,89 @@ def test_sektoren_grid_sortiert_zaehlt_und_zeigt_detaildaten(client, setup_db):
     assert "Fremde Organisation" not in response.text
     assert f'hx-get="/lage/{lage_id}/stellen/{urgent_id}"' in response.text
     assert f'href="/lage/{lage_id}?openSite={urgent_id}"' in response.text
+
+
+def test_sektoren_unzugeordnet_steht_vor_abschnitten(client, setup_db):
+    lage_id, org_id = _user_lage("sektor_inbox", "sektor-inbox")
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        sector = Sector(major_incident_id=lage_id, name="West")
+        db.add(sector)
+        db.flush()
+        db.add_all([
+            IncidentSite(major_incident_id=lage_id, org_id=org_id, bezeichnung="Ohne Abschnitt"),
+            IncidentSite(major_incident_id=lage_id, org_id=org_id, sector_id=sector.id, bezeichnung="West-Stelle"),
+        ])
+        db.commit()
+    finally:
+        db.close()
+    _login(client, "sektor_inbox")
+    response = client.get(f"/lage/{lage_id}/sektoren")
+    assert response.text.index("Nicht zugeordnet") < response.text.index("West-Stelle")
+
+
+def test_zeitreise_neueste_zuerst_und_partial_mit_site_sektor(client, setup_db):
+    lage_id, org_id = _user_lage("zeitreise_leiter", "zeitreise-leiter")
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        sector = Sector(major_incident_id=lage_id, name="Nord", color="#123456")
+        db.add(sector)
+        db.flush()
+        site = IncidentSite(major_incident_id=lage_id, org_id=org_id, sector_id=sector.id, bezeichnung="Schule")
+        db.add(site)
+        db.flush()
+        now = datetime.now(UTC).replace(tzinfo=None)
+        db.add_all([
+            SiteLogEntry(incident_site_id=site.id, ts=now - timedelta(minutes=5), kind="note", text="Zeitreise-Eintrag-Alt"),
+            CommLogEntry(
+                major_incident_id=lage_id, related_site_id=site.id, ts=now,
+                direction="in", message="Zeitreise-Eintrag-Neu", is_request=True,
+            ),
+        ])
+        db.commit()
+    finally:
+        db.close()
+    _login(client, "zeitreise_leiter")
+    page = client.get(f"/lage/{lage_id}/zeitreise")
+    assert page.status_code == 200
+    assert page.text.index("Zeitreise-Eintrag-Neu") < page.text.index("Zeitreise-Eintrag-Alt")
+    assert "Offene Anfrage" in page.text
+    partial = client.get(f"/lage/{lage_id}/zeitreise?partial=1")
+    assert partial.status_code == 200
+    assert 'id="zt-timeline"' in partial.text
+    assert 'data-site="' in partial.text and 'data-sector="' in partial.text
+    assert "zt-wrap" not in partial.text
+
+
+def test_disponieren_optionen_nach_abschnitt_in_beiden_renderpfaden(client, setup_db):
+    lage_id, org_id = _user_lage("dispatch_abschnitte", "dispatch-abschnitte")
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        own = Sector(major_incident_id=lage_id, name="Nord")
+        other = Sector(major_incident_id=lage_id, name="Süd")
+        db.add_all([own, other])
+        db.flush()
+        site = IncidentSite(major_incident_id=lage_id, org_id=org_id, sector_id=own.id, bezeichnung="Nordstelle")
+        db.add(site)
+        db.flush()
+        db.add_all([
+            LageEinheit(lage_id=lage_id, label="Eigene Einheit", sector_id=own.id),
+            LageEinheit(lage_id=lage_id, label="Pool Einheit"),
+            LageEinheit(lage_id=lage_id, label="Süd Einheit", sector_id=other.id),
+        ])
+        db.commit()
+        site_id = site.id
+    finally:
+        db.close()
+    _login(client, "dispatch_abschnitte")
+    for path in (f"/lage/{lage_id}/stellen/{site_id}", f"/lage/{lage_id}/stellen/{site_id}/disponieren-select"):
+        html = client.get(path).text
+        assert html.index("Eigener Abschnitt: Nord") < html.index("Ohne Abschnitt") < html.index("Abschnitt Süd")
+        assert "Eigene Einheit · Nord" in html
+        assert "Süd Einheit · Süd" in html
 
 
 def test_sektoren_readonly_sieht_details_ohne_bearbeiten_und_cross_org_ist_gesperrt(client, setup_db):
