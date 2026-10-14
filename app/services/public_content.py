@@ -10,135 +10,239 @@ abgeglichen werden koennen.
 Die Icon-Namen verweisen auf das SVG-Set in
 ``templates/public/_icons.html`` (Makro ``icon(name)``).
 """
+
 from __future__ import annotations
 
 # Status-Metadaten: Schluessel -> Anzeigelabel + CSS-Modifier (public.css:
 # .pub-status--<cls> / .pub-tl-item--<cls>).
 STATUS: dict[str, dict[str, str]] = {
     "verfuegbar": {"label": "Verfügbar", "cls": "avail"},
-    "beta":       {"label": "Beta",      "cls": "beta"},
-    "in_arbeit":  {"label": "In Arbeit", "cls": "live"},
-    "geplant":    {"label": "Geplant",   "cls": "planned"},
+    "beta": {"label": "Beta", "cls": "beta"},
+    "in_arbeit": {"label": "In Arbeit", "cls": "live"},
+    "geplant": {"label": "Geplant", "cls": "planned"},
 }
 
 # Hauptnavigation (Header + Footer). Reihenfolge = Anzeige.
 NAV: list[dict[str, str]] = [
-    {"slug": "start",      "label": "Start",            "href": "/"},
-    {"slug": "funktionen", "label": "Funktionen",       "href": "/funktionen"},
-    {"slug": "ueber",      "label": "Über das Projekt", "href": "/ueber-das-projekt"},
-    {"slug": "roadmap",    "label": "Roadmap",          "href": "/roadmap"},
+    {"slug": "start", "label": "Start", "href": "/"},
+    {"slug": "funktionen", "label": "Funktionen", "href": "/funktionen"},
+    {"slug": "ueber", "label": "Über das Projekt", "href": "/ueber-das-projekt"},
+    {"slug": "roadmap", "label": "Roadmap", "href": "/roadmap"},
 ]
 
-# Die sechs Highlight-Module. Genutzt auf der Startseite (Karten-Grid) und auf
+# Die fuenf Highlight-Bereiche. Genutzt auf der Startseite (Karten-Grid) und auf
 # /funktionen (alternierende Split-Sektionen mit Anker). ``tagline`` = kurze
 # Kartenbeschreibung, ``bullets`` = Faehigkeiten auf der Funktionsseite.
 FEATURES: list[dict] = [
     {
-        "key": "lagefuehrung",
-        "anchor": "lagefuehrung",
-        "title": "Lageführung",
+        "key": "einsatzinfo",
+        "anchor": "einsatzinfo",
+        "title": "Einsatzinfo",
         "status": "verfuegbar",
-        "icon": "map",
+        "icon": "bell",
         "image": "/seite/bild/Lagefuehrung.png",
-        "tagline": "Digitale Echtzeit-Lagekarte: taktische Zeichen, Bereiche und "
-                   "Marker – gemeinsam bearbeitet.",
+        "tagline": "Alle wichtigen Einsatzinformationen sofort und übersichtlich – "
+        "vom Feuerwehrhaus bis zur Einsatzstelle.",
+        "intro": "Mit dem Alarm steht alles Wichtige auf einen Blick bereit – für Mannschaft "
+        "und Einsatzleitung, am PC, Tablet oder Handy. So sind Einsatzdaten, Anfahrt "
+        "und relevante Informationen schon vor dem Ausrücken griffbereit.",
+        "wiki": "Anwender-Einsatzinfo",
         "bullets": [
-            "Taktische Zeichen, Bereiche und Marker",
-            "Gleichzeitige Bearbeitung durch mehrere Nutzer",
-            "Einsatzabschnitte und Kartenlagen",
-            "Export für Dokumentation und Übergabe",
+            "Stichwort, Einsatzort und Alarmierungsdaten sofort im Überblick",
+            "Alarmierte Fahrzeuge mit aktuellem Status",
+            "Verknüpfte Objekte mit Einsatzunterlagen, BMA-Daten und Gefahrenhinweisen",
+            "Karte mit Anfahrt, Hydranten und Gefahren in der Umgebung",
+            {
+                "text": "Hinweis auf Straßensperren entlang der Anfahrt",
+                "tag": "optional",
+                "wiki": "Anwender-Strassensperren",
+            },
+            {"text": "Alarm-Infoscreen für Wandmonitore im Feuerwehrhaus", "wiki": "Administration-Alarm-Infoscreen"},
+            {"text": "Mobil abrufbar – auch per SMS-/Teams-Link ohne Login", "wiki": "Anwender-Mobile-Nutzung-PWA"},
+        ],
+    },
+    {
+        "key": "einsatzboard",
+        "anchor": "einsatzboard",
+        "title": "Einsatzboard",
+        "status": "verfuegbar",
+        "icon": "dashboard",
+        "image": "/seite/bild/Protokollierung.png",
+        "tagline": "Die gesamte Einsatzführung in einer gemeinsamen, aktuellen Übersicht.",
+        "intro": "Auf dem Einsatzboard führt die Einsatzleitung Aufträge, Meldungen und Kräfte "
+        "an einem Ort zusammen. Alle Beteiligten sehen Änderungen sofort und arbeiten "
+        "mit demselben aktuellen Lagebild.",
+        "wiki": "Anwender-Kanban-Board-bedienen",
+        "bullets": [
+            {
+                "text": "Aufträge, Meldungen, Fahrzeuge und Personen auf einem Kanban-Board",
+                "wiki": "Anwender-Auftraege-und-Meldungen",
+            },
+            "Änderungen sofort auf allen Geräten – mehrere Benutzer arbeiten gleichzeitig",
+            {
+                "text": "Taktische Lagekarte mit genormten Zeichen und Einsatzabschnitten",
+                "wiki": "Anwender-Taktische-Lagekarte",
+            },
+            "Status und Verlauf jedes Auftrags nachvollziehbar",
+            {
+                "text": "Einsatzjournal, Audit-Log und PDF-Bericht für die Nachbereitung",
+                "wiki": "Anwender-Archiv-und-PDF-Export",
+            },
+            {
+                "text": "Atemschutzüberwachung mit Rückzugsdruck und Zeitwarnungen",
+                "wiki": "Anwender-Atemschutzueberwachung",
+            },
+            {
+                "text": "Förderstrecken-Planer für Löschwasser über lange Wege",
+                "wiki": "Anwender-Foerderstrecken-Planer",
+            },
         ],
     },
     {
         "key": "grossschadenslage",
         "anchor": "grossschadenslage",
-        "title": "Großschadenslage (SKKM)",
+        "title": "Großschadenslage (GSL)",
         "status": "verfuegbar",
         "icon": "hub",
         "image": "/seite/bild/Grossschadenslage.png",
-        "tagline": "Stabsarbeit nach SKKM: Kräfte, Ressourcen, Einsatztagebuch "
-                   "und taktische Karte für ausgedehnte Lagen.",
+        "tagline": "Auch komplexe Lagen strukturiert führen – von der Einsatzleitung bis zur einzelnen Einheit.",
+        "intro": "Für ausgedehnte oder parallele Ereignisse bringt die GSL klare Abläufe in die "
+        "Einsatzführung. Einsatzleitung, Stab und Einheiten arbeiten vom selben Lagebild "
+        "aus, auch wenn die Verbindung an der Einsatzstelle schwankt.",
+        "wiki": "Anwender-Grosschadenslage",
         "bullets": [
-            "Kräfte- und Ressourcenübersicht",
-            "Einsatztagebuch und Aufgabenverteilung im Stab",
-            "Überörtliche Marker",
-            "Taktische Karte für ausgedehnte Lagen",
+            "Einsatzstellen durchlaufen Erkundung, Bewertung, Disposition und Abarbeitung",
+            {
+                "text": "GSL-Board mit Abschnitten und Kräfteübersicht",
+                "wiki": "Anwender-GSL-Sektoren-und-Planung",
+            },
+            {
+                "text": "Ressourcen und Gruppenkommandanten zentral verwalten",
+                "wiki": "Anwender-GSL-Ressourcenverwaltung",
+            },
+            {
+                "text": "Einheitenansicht für Fahrzeug-Tablets und Smartphones",
+                "tag": "Beta",
+                "wiki": "Anwender-GSL-Einheitenansicht",
+            },
+            "Zugang für Einheiten per QR-Code oder SMS – ohne eigenes Benutzerkonto",
+            "Aufträge erreichen die Einheit automatisch",
+            "Lagemeldungen, Fotos und Status direkt von der Einsatzstelle – auch bei schlechtem Netz",
+            {"text": "GSL-Lagekarte, Journale und Druckblätter", "wiki": "Anwender-Grosschadenslage-Karte"},
+            {
+                "text": "Stabsarbeit mit SKKM-Regelkreis (Lage → Auftrag → Kontrolle)",
+                "wiki": "Anwender-GSL-Stab-und-Journal",
+            },
         ],
     },
     {
-        "key": "wetter",
-        "anchor": "wetter",
-        "title": "Wetterwarnungen",
+        "key": "verwaltung",
+        "anchor": "verwaltung",
+        "title": "Verwaltung & Einsatzvorbereitung",
         "status": "verfuegbar",
-        "icon": "cloud",
-        "image": "/seite/bild/Wetter.png",
-        "tagline": "Konfigurierbare Warnregeln auf Basis amtlicher Wetterdaten – "
-                   "automatisch bei Unwetter-, Hochwasser- und Sturmlagen.",
-        "bullets": [
-            "Warnregeln auf Basis amtlicher Wetterdaten (GeoSphere Austria, Kachelmannwetter)",
-            "Automatische Benachrichtigungen bei Unwetterlagen",
-            "Hochwasser- und Sturmwarnungen",
-        ],
-    },
-    {
-        "key": "objekte",
-        "anchor": "objekte",
-        "title": "Objektverwaltung",
-        "status": "beta",
         "icon": "clipboard",
         "image": "/seite/bild/Objektverwaltung.png",
-        "tagline": "Einsatzrelevante Objekte zentral: Daten, Pläne, "
-                   "Ansprechpartner und Besonderheiten – im Einsatz sofort abrufbar.",
-        "bullets": [
-            "Objektdaten, Pläne und Dokumente",
-            "Ansprechpartner",
-            "Besonderheiten – im Einsatz sofort abrufbar",
+        "tagline": "Objekte, Kontakte, Übungen, Fahrzeuge und Infrastruktur – gut vorbereitet in den nächsten Einsatz.",
+        "intro": "Gute Vorbereitung spart im Einsatz wertvolle Zeit. Einsatzcockpit bündelt die "
+        "Daten, Unterlagen und Abläufe des Feuerwehralltags, damit sie im richtigen "
+        "Moment verlässlich zur Verfügung stehen.",
+        "wiki": "Anwender-Objekte",
+        "groups": [
+            {
+                "title": "Objekte & Kontakte",
+                "wiki": "Anwender-Objekte",
+                "bullets": [
+                    {
+                        "text": "Objekte mit Einsatzunterlagen, BMA, Gefahren und Ansprechpartnern",
+                        "wiki": "Anwender-Objektpflege",
+                    },
+                    "Versionierte Dokumente mit Volltextsuche (OCR)",
+                    "Externe Objektpflege durch Betreiber – mit Freigabe durch die Feuerwehr",
+                    {
+                        "text": "Zentrale Kontakte mit Import, Dublettenprüfung und Verknüpfungen",
+                        "wiki": "Anwender-Kontaktverwaltung",
+                    },
+                ],
+            },
+            {
+                "title": "Übungen & Mannschaft",
+                "wiki": "Anwender-Probenplan",
+                "bullets": [
+                    "Probenplan mit Jahresübersicht, Checklisten und Teilnehmern",
+                    {"text": "Übungseinsätze und Nachbereitung", "wiki": "Anwender-Uebungsmodus"},
+                    {
+                        "text": "Mannschaftsregister mit Qualifikationen und Ablaufdaten",
+                        "wiki": "Anwender-Mannschaftsregister",
+                    },
+                ],
+            },
+            {
+                "title": "Fahrzeuge & Ausrüstung",
+                "wiki": "Anwender-Fahrtenbuch",
+                "bullets": [
+                    "Digitales Fahrtenbuch mit Auswertungen und Maschinisten-Matrix",
+                    {"text": "Geräteverleih mit Stücklisten und Barcode-Scan", "wiki": "Anwender-Geraeteverleih"},
+                    {"text": "Drohnendokumentation nach RL-UAS", "wiki": "Anwender-Drohne-UAS"},
+                ],
+            },
+            {
+                "title": "Infrastruktur & Informationen",
+                "wiki": "Anwender-Strassensperren",
+                "bullets": [
+                    "Straßensperren mit Karte und Nachbarfreigaben",
+                    {"text": "Anfahrtsrouting mit Umfahrung", "tag": "optional", "wiki": "Anwender-Strassensperren"},
+                    {"text": "Wetter, Unwetterwarnungen und Radar", "wiki": "Anwender-Wetter"},
+                    {"text": "Lokale Wetterstation", "tag": "optional", "wiki": "Administration-Wetterstation"},
+                    {"text": "Gefahrgut-Suche und Rettungsdatenblätter", "wiki": "Anwender-Nachschlagewerke"},
+                ],
+            },
         ],
     },
     {
-        "key": "protokollierung",
-        "anchor": "protokollierung",
-        "title": "Protokollierung & Dokumentation",
+        "key": "schnittstellen",
+        "anchor": "schnittstellen",
+        "title": "Schnittstellen & Automatisierung",
         "status": "verfuegbar",
-        "icon": "doc",
-        "image": "/seite/bild/Protokollierung.png",
-        "tagline": "Lückenlose Dokumentation im Einsatz und im Alltagsbetrieb – "
-                   "auswertbar und jederzeit abrufbar.",
-        "bullets": [
-            "Digitales Fahrtenbuch für alle Fahrzeugbewegungen",
-            "Atemschutzgeräteprüfung mit Prüfhistorie",
-            "Mannschaftslisten mit Anwesenheitserfassung (Einsätze, Übungen, Veranstaltungen)",
-            "Auswertbar und jederzeit abrufbar",
-        ],
-    },
-    {
-        "key": "alarmierung",
-        "anchor": "alarmierung",
-        "title": "Alarmierung & Print-Gateway",
-        "status": "verfuegbar",
-        "icon": "bell",
+        "icon": "server",
         "image": "/seite/bild/Gateway.png",
-        "tagline": "Anbindung an die lokale Infrastruktur im Feuerwehrhaus – "
-                   "Ausdruck und Alarmmonitor, auch bei Netzstörungen.",
+        "tagline": "Einsatzcockpit fügt sich in die vorhandene Infrastruktur ein – von der Leitstelle bis zum Drucker.",
+        "intro": "Einsatzcockpit verbindet sich mit den Wegen, die in Ihrer Organisation schon "
+        "funktionieren. Alarmdaten, Benachrichtigungen und externe Systeme werden dort "
+        "eingebunden, wo sie die Arbeit im Alltag und im Einsatz erleichtern.",
+        "wiki": "Home#kernfunktionen",
         "bullets": [
-            "Anbindung an die lokale Infrastruktur im Feuerwehrhaus (ECPG)",
-            "Automatische Einsatzausdrucke",
-            "Alarmmonitor",
-            "Robuste Alarmverarbeitung auch bei Netzstörungen",
+            {"text": "Anbindung an DIBOS und LIS sowie REST-API", "wiki": "Administration-DIBOS-Elvis-Anbindung"},
+            {"text": "Alarmierung per SMS, E-Mail, Teams und Push", "wiki": "Administration-SMS-Einsatzinfo"},
+            {
+                "text": "Print & Alarm Gateway mit automatischen Druckregeln",
+                "tag": "optional",
+                "wiki": "Administration-Print-Alarm-Gateway",
+            },
+            {"text": "Android-App und PWA – auch offline nutzbar", "wiki": "Anwender-Native-Android-App"},
+            {"text": "MCP-Schnittstelle für KI-Assistenten", "tag": "Beta", "wiki": "Anwender-MCP-Assistent"},
+            {
+                "text": "KI-Assistent für Lagebilder, Vorschläge und Berichtsentwürfe",
+                "tag": "optional",
+                "wiki": "Administration-Einstellungen",
+            },
+            {
+                "text": "Mehrere Organisationen, Rollen und Berechtigungen, Single Sign-On",
+                "wiki": "Administration-Benutzer-und-Rollen",
+            },
         ],
     },
 ]
 
 # "Und vieles mehr" – Chip-Grid auf /funktionen. ``tag`` = kleiner Mono-Zusatz.
 MORE_CHIPS: list[dict[str, str]] = [
-    {"label": "Leitstellen-Anbindung", "tag": "GPS · FMS"},
-    {"label": "Mandantenfähigkeit", "tag": ""},
-    {"label": "Single Sign-On", "tag": "Entra ID"},
+    {"label": "Mail-Eingang / Posteingang", "tag": ""},
     {"label": "Bild-Annotation & Skizzen", "tag": ""},
-    {"label": "Drohnen-/UAS-Modul", "tag": ""},
-    {"label": "Teilnehmerlisten", "tag": ""},
-    {"label": "Berichte & Auswertungen", "tag": ""},
-    {"label": "KI-Unterstützung", "tag": "in Entwicklung"},
+    {"label": "Statistik-Dashboard", "tag": ""},
+    {"label": "WordPress-Berichte", "tag": "optional"},
+    {"label": "Mailing-Kampagnen", "tag": ""},
+    {"label": "Org-Datensicherung", "tag": ""},
+    {"label": "In-App-Update", "tag": ""},
+    {"label": "Bürger-Meldungsportal", "tag": "GSL"},
 ]
 
 # Roadmap – gruppiert nach Status. Reihenfolge der Gruppen = Anzeige.
@@ -147,37 +251,39 @@ ROADMAP: list[dict] = [
     {
         "status": "in_arbeit",
         "items": [
-            {"title": "KI-Unterstützung",
-             "text": "Einsatzanalyse & Assistenz direkt im Einsatzverlauf."},
-            {"title": "Objektverwaltung (Ausbau)",
-             "text": "Erweiterung um weitere Objektdaten und Auswertungen."},
-            {"title": "Drohnen-/UAS-Modul",
-             "text": "Umsetzung nach der Richtlinie RL-UAS."},
+            {
+                "title": "Einheitenansicht – Praxiserprobung",
+                "text": "Rückmeldungen aus Einsätzen fließen in die weitere Optimierung ein.",
+            },
         ],
     },
     {
         "status": "geplant",
         "items": [
-            {"title": "Mobile Optimierungen",
-             "text": "Weitere Verbesserungen für die Nutzung am Einsatzort."},
-            {"title": "Erweiterte Berichte & Statistik",
-             "text": "Mehr Auswertungen für Nachbereitung und Verwaltung."},
-            {"title": "Weitere Leitstellen-Schnittstellen",
-             "text": "Anbindung zusätzlicher Leitstellen- und Fremdsysteme."},
+            {"title": "Mobile Optimierungen", "text": "Weitere Verbesserungen für die Nutzung am Einsatzort."},
+            {"title": "Erweiterte Berichte & Statistik", "text": "Mehr Auswertungen für Nachbereitung und Verwaltung."},
+            {
+                "title": "Weitere Leitstellen-Schnittstellen",
+                "text": "Anbindung zusätzlicher Leitstellen- und Fremdsysteme.",
+            },
         ],
     },
 ]
 
 # Prinzipien-Grid auf /ueber-das-projekt.
 PRINCIPLES: list[dict[str, str]] = [
-    {"icon": "heart", "title": "Nicht-kommerziell",
-     "text": "Kein Verkauf, keine Lizenzkosten – aus Überzeugung."},
-    {"icon": "code", "title": "Open Source",
-     "text": "Der Quellcode ist offen einsehbar und auditierbar."},
-    {"icon": "shield", "title": "Aus der Praxis",
-     "text": "Entstanden im aktiven Feuerwehrdienst, gewachsen aus echten Einsätzen."},
-    {"icon": "server", "title": "Datensouveränität",
-     "text": "Betrieb auf eigener Infrastruktur möglich – keine Cloud-Pflicht."},
+    {"icon": "heart", "title": "Nicht-kommerziell", "text": "Kein Verkauf, keine Lizenzkosten – aus Überzeugung."},
+    {"icon": "code", "title": "Open Source", "text": "Der Quellcode ist offen einsehbar und auditierbar."},
+    {
+        "icon": "shield",
+        "title": "Aus der Praxis",
+        "text": "Entstanden im aktiven Feuerwehrdienst, gewachsen aus echten Einsätzen.",
+    },
+    {
+        "icon": "server",
+        "title": "Datensouveränität",
+        "text": "Betrieb auf eigener Infrastruktur möglich – keine Cloud-Pflicht.",
+    },
 ]
 
 # Fakten-Leiste (Startseite).

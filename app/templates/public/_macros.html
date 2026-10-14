@@ -33,11 +33,35 @@
         {{ status_badge(f.status, status_map) }}
       </div>
       <h2 class="pub-h2">{{ f.title }}</h2>
+      {% if f.intro %}
+      <p class="pub-card__text">{{ f.intro }}</p>
+      {% endif %}
+      {% if f.groups %}
+        {% for group in f.groups %}
+        <h3 class="pub-h3" style="margin-top:22px">{{ group.title }}</h3>
+        {% if group.wiki %}
+        <a href="{{ public_github_url ~ '/wiki/' ~ group.wiki }}" target="_blank" rel="noopener" style="color:var(--text-muted);font-size:13px">Im Wiki ansehen</a>
+        {% endif %}
+        <ul class="pub-split__list" style="margin-top:10px">
+          {% for b in group.bullets %}
+          {% set text = b.text if b is mapping else b %}
+          <li>{{ icon("check") }}<span>{{ text }}{% if b is mapping and b.tag %} <span class="pub-chip__tag">{{ b.tag }}</span>{% endif %}{% if b is mapping and b.wiki %} <a href="{{ public_github_url ~ '/wiki/' ~ b.wiki }}" target="_blank" rel="noopener" style="color:var(--text-muted);font-size:13px">Im Wiki</a>{% endif %}</span></li>
+          {% endfor %}
+        </ul>
+        {% endfor %}
+      {% else %}
       <ul class="pub-split__list">
         {% for b in f.bullets %}
-        <li>{{ icon("check") }}<span>{{ b }}</span></li>
+        {% set text = b.text if b is mapping else b %}
+        <li>{{ icon("check") }}<span>{{ text }}{% if b is mapping and b.tag %} <span class="pub-chip__tag">{{ b.tag }}</span>{% endif %}{% if b is mapping and b.wiki %} <a href="{{ public_github_url ~ '/wiki/' ~ b.wiki }}" target="_blank" rel="noopener" style="color:var(--text-muted);font-size:13px">Im Wiki</a>{% endif %}</span></li>
         {% endfor %}
       </ul>
+      {% endif %}
+      {% if f.wiki %}
+      <a class="pub-card__link" style="margin-top:24px" href="{{ public_github_url ~ '/wiki/' ~ f.wiki }}" target="_blank" rel="noopener">
+        Ausführlich im Wiki {{ icon("arrow") }}
+      </a>
+      {% endif %}
     </div>
     <div class="pub-split__visual">
       <div class="pub-frame{{ ' pub-frame--placeholder' if is_placeholder else '' }}">
