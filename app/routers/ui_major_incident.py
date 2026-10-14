@@ -105,6 +105,7 @@ from app.services.major_incident_service import (
     create_lage,
     create_site,
     get_active_lage,
+    lage_einrichten,
 )
 
 router = APIRouter(dependencies=[Depends(einheit_geraet_nur_lesen)])
@@ -281,28 +282,7 @@ async def lage_neu_create(
         is_exercise=is_exercise,
         started_by_user_id=user.id,
     )
-    from app.models.master import OrgSettings
-
-    org_einstellungen = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
-    if org_einstellungen and org_einstellungen.default_access_pin_hash:
-        lage.access_pin_hash = org_einstellungen.default_access_pin_hash
-    write_audit(db, "major_incident.created", user_id=user.id,
-                payload={"name": lage.name, "lage_id": lage.id})
-    for _v in (
-        db.query(VehicleMaster)
-        .filter(VehicleMaster.dept_id == org_id, VehicleMaster.active == True)  # noqa: E712
-        .order_by(VehicleMaster.display_order, VehicleMaster.code)
-        .all()
-    ):
-        db.add(LageEinheit(
-            lage_id=lage.id,
-            vehicle_id=_v.id,
-            label=_v.display_label,
-            is_from_org=True,
-            resource_type="fahrzeug",
-            status=resource_service.STATUS_BEREITGESTELLT,
-            funkrufname=_v.funkrufname,
-        ))
+    lage_einrichten(db, lage, org_id=org_id, user_id=user.id)
     db.commit()
 
     from app.services.print_dispatcher import autoprint_gsl_background
