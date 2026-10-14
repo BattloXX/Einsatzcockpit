@@ -181,6 +181,13 @@ def _settings_context(request, db, user, org_id, **extra) -> dict:
     )
     all_orgs = db.query(FireDept).order_by(FireDept.name).all() if is_sysadmin else []
     sys_settings = {s.key: s.value for s in db.query(SystemSettings).all()} if is_sysadmin else {}
+    # System-Flags fuer die Org-Schalter auch fuer Org-Admins lesen: sys_settings ist
+    # nur fuer system_admin befuellt, sonst waeren MCP/Kontakte immer gesperrt.
+    module_flags = {
+        s.key: s.value for s in db.query(SystemSettings).filter(
+            SystemSettings.key.in_(("mcp_module_enabled", "kontakte_module_enabled"))
+        )
+    }
     from app.models.weather import WeatherStation
     from app.services.breathing_service import breathing_system_enabled
     from app.services.foerderstrecke_service import foerderstrecke_system_enabled
@@ -209,7 +216,7 @@ def _settings_context(request, db, user, org_id, **extra) -> dict:
         "uas_sys_enabled": uas_system_enabled(db),
         "breathing_sys_enabled": breathing_system_enabled(db),
         "objekt_sys_enabled": objekt_system_enabled(db),
-        "kontakte_sys_enabled": sys_settings.get("kontakte_module_enabled") == "true",
+        "kontakte_sys_enabled": module_flags.get("kontakte_module_enabled") == "true",
         "nachschlagewerke_sys_enabled": nachschlagewerke_system_enabled(db),
         "foerderstrecke_sys_enabled": foerderstrecke_system_enabled(db),
         "gateway_sys_enabled": _gateway_system_enabled(db),
@@ -217,7 +224,7 @@ def _settings_context(request, db, user, org_id, **extra) -> dict:
         "lagefuehrung_sys_enabled": lagefuehrung_system_enabled(db),
         "probenplanung_sys_enabled": probenplanung_system_enabled(db),
         "strassensperren_sys_enabled": strassensperren_system_enabled(db),
-        "mcp_sys_enabled": sys_settings.get("mcp_module_enabled") == "true",
+        "mcp_sys_enabled": module_flags.get("mcp_module_enabled") == "true",
         "timezones": common_timezones(),
         "default_timezone": app_settings.DEFAULT_TIMEZONE,
         "weather_stations": weather_stations,
