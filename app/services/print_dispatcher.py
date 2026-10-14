@@ -348,6 +348,7 @@ def on_event(db: Session, org_id: int, trigger: str, context: dict) -> list[Prin
         is_exercise=bool(context.get("is_exercise")),
         org_id=org_id,
         db=db,
+        planspiel_run_id=context.get("planspiel_run_id"),
     ):
         return []
 
@@ -477,6 +478,7 @@ def _incident_context(inc) -> dict:
         "incident_id": inc.id,
         "stichwort": getattr(inc, "reason", None) or getattr(inc, "report_text", None),
         "is_exercise": getattr(inc, "is_exercise", None),
+        "planspiel_run_id": inc.planspiel_run_id,
         "alarmstufe": int(treffer.group()) if treffer else None,
         "nur_bma": nur_bma,
     }
@@ -488,6 +490,7 @@ def _gsl_context(lage) -> dict:
         "gsl_id": lage.id,
         "stichwort": lage.name,
         "is_exercise": getattr(lage, "is_exercise", None),
+        "planspiel_run_id": lage.planspiel_run_id,
     }
 
 
@@ -551,8 +554,11 @@ def resolve_test_context(db: Session, rule) -> TestBezug | None:
         if einheit is None:
             return None
         lage = db.get(MajorIncident, einheit.lage_id)
+        if lage is None:
+            return None
         return TestBezug({"gsl_id": einheit.lage_id, "einheit_id": einheit.id,
-                          "is_exercise": getattr(lage, "is_exercise", None)}, art, einheit.id)
+                          "is_exercise": getattr(lage, "is_exercise", None),
+                          "planspiel_run_id": lage.planspiel_run_id}, art, einheit.id)
     if art == "gsl_stelle":
         dispatch = (db.query(EinheitSiteDispatch)
                     .join(IncidentSite, EinheitSiteDispatch.site_id == IncidentSite.id)
@@ -570,7 +576,8 @@ def resolve_test_context(db: Session, rule) -> TestBezug | None:
         ).first()
         return TestBezug({"gsl_id": lage.id, "site_id": site.id, "dispatch_id": dispatch.id,
                           "einheit_id": dispatch.einheit_id, "auftragsart": dispatch.auftragsart,
-                          "is_exercise": lage.is_exercise, "erste_disposition": erste}, art, dispatch.id)
+                          "is_exercise": lage.is_exercise, "planspiel_run_id": lage.planspiel_run_id,
+                          "erste_disposition": erste}, art, dispatch.id)
     if art == "verleih":
         ausleihe = (
             db.query(VerleihAusleihe)
@@ -590,6 +597,7 @@ def resolve_test_context(db: Session, rule) -> TestBezug | None:
             "gsl_id": ausleihe.lage_id,
             "ausleihe_id": ausleihe.id,
             "is_exercise": getattr(lage, "is_exercise", None),
+            "planspiel_run_id": lage.planspiel_run_id if lage else None,
         }
         return TestBezug(context, art, ausleihe.id)
     if art == "alarm":
@@ -758,6 +766,7 @@ async def autoprint_verleih_background(ausleihe_id: int) -> None:
             "gsl_id": a.lage_id,
             "ausleihe_id": a.id,
             "is_exercise": getattr(lage, "is_exercise", None),
+            "planspiel_run_id": lage.planspiel_run_id if lage else None,
         }
         jobs = on_event(db, org_id, TRIGGER_VERLEIH_CREATED, context)
 
@@ -801,7 +810,7 @@ async def autoprint_gsl_einheit_background(einheit_id: int) -> None:
             logger.info("QR-Autodruck für Einheit %s übersprungen: QR-Zugang nicht aktiviert", einheit.id)
             return
         context = {"gsl_id": lage.id, "einheit_id": einheit.id, "qr_generation": qr.generation,
-                   "is_exercise": lage.is_exercise}
+                   "is_exercise": lage.is_exercise, "planspiel_run_id": lage.planspiel_run_id}
         jobs = on_event(db, lage.org_id, TRIGGER_GSL_EINHEIT_ANGELEGT, context)
         if jobs:
             zugang = db.query(LageEinheitZugang).filter(LageEinheitZugang.id == qr.zugang_id).one()
@@ -851,6 +860,7 @@ async def autoprint_gsl_stelle_disponiert_background(dispatch_id: int) -> None:
             "einheit_id": dispatch.einheit_id,
             "auftragsart": dispatch.auftragsart,
             "is_exercise": lage.is_exercise,
+            "planspiel_run_id": lage.planspiel_run_id,
             "erste_disposition": erste_disposition,
         })
         db.commit()
@@ -894,6 +904,7 @@ async def autoprint_mail_eingang_background(eingang_id: int) -> None:
         jobs = on_event(db, row.org_id, TRIGGER_MAIL_EINGANG, {
             "mail_eingang_id": row.id, "incident_id": row.incident_id,
             "is_exercise": bool(getattr(incident, "is_exercise", False)),
+            "planspiel_run_id": incident.planspiel_run_id if incident else None,
             "mail_assigned": bool(row.incident_id), "mail_sender_approved": approved,
         })
         db.commit()

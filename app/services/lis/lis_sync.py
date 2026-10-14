@@ -1008,7 +1008,8 @@ async def sync_operation(
             "incident_id": incident.id,
             "alarm": incident.alarm_type_code,
             "alarm_erlaubt": darf_extern(
-                "ws_alarm", is_exercise=incident.is_exercise, org_id=org.id, db=db
+                "ws_alarm", is_exercise=incident.is_exercise, org_id=org.id, db=db,
+                planspiel_run_id=incident.planspiel_run_id,
             ),
             "alarm_type_code": incident.alarm_type_code,
             "is_exercise": incident.is_exercise,
@@ -1269,6 +1270,7 @@ async def push_vehicle_status_to_lis(incident_vehicle_id: int, status: str) -> N
             is_exercise=incident.is_exercise,
             org_id=incident.primary_org_id,
             db=db,
+            planspiel_run_id=incident.planspiel_run_id,
         ):
             return
         config = db.query(OrgLisConfig).filter(OrgLisConfig.org_id == incident.primary_org_id).first()

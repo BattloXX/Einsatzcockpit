@@ -95,10 +95,10 @@ def test_exercise_guard_mail_folgt_org_schalter(setup_db):
         db.add(settings)
         db.flush()
 
-        assert darf_extern("mail", is_exercise=True, org_id=org.id, db=db) is False
+        assert darf_extern("mail", is_exercise=True, org_id=org.id, db=db, planspiel_run_id=None) is False
         settings.einsatzinfo_mail_send_exercise = True
-        assert darf_extern("mail", is_exercise=True, org_id=org.id, db=db) is True
-        assert darf_extern("mail", is_exercise=False, org_id=org.id, db=db) is True
+        assert darf_extern("mail", is_exercise=True, org_id=org.id, db=db, planspiel_run_id=None) is True
+        assert darf_extern("mail", is_exercise=False, org_id=org.id, db=db, planspiel_run_id=None) is True
     finally:
         db.rollback()
         db.close()

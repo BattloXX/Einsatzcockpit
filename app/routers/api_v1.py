@@ -101,7 +101,8 @@ def _create_neighbor_invitations_api_guarded(
     from app.services.exercise_guard import darf_extern
 
     if darf_extern(
-        "nachbar", is_exercise=incident.is_exercise, org_id=org_id, db=db
+        "nachbar", is_exercise=incident.is_exercise, org_id=org_id, db=db,
+        planspiel_run_id=incident.planspiel_run_id,
     ):
         _create_neighbor_invitations_api(db, incident, alarm_type_code, org_id)
 
@@ -283,6 +284,7 @@ async def _geocode_incident(incident_id: int, street: str | None, no: str | None
             is_exercise=incident.is_exercise,
             org_id=incident.primary_org_id,
             db=db,
+            planspiel_run_id=incident.planspiel_run_id,
         ):
             return
     finally:
@@ -849,7 +851,8 @@ async def create_incident_api(
                 "incident_id": incident.id,
                 "alarm": alarm_type_code,
                 "alarm_erlaubt": darf_extern(
-                    "ws_alarm", is_exercise=payload.Uebung, org_id=api_key.org_id, db=db
+                    "ws_alarm", is_exercise=payload.Uebung, org_id=api_key.org_id, db=db,
+                    planspiel_run_id=incident.planspiel_run_id,
                 ),
                 "alarm_type_code": alarm_type_code,
                 "address": address,

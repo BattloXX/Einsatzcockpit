@@ -169,6 +169,7 @@ async def dispatch_objekt_einsatzinfo(
             is_exercise=incident.is_exercise,
             org_id=org_id,
             db=db,
+            planspiel_run_id=incident.planspiel_run_id,
         ):
             return ergebnis
         sms_geprueft = False

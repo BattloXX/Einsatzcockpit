@@ -37,18 +37,25 @@ async def notify_gsl_created(
     teams_args = (lage.org_id, lage.id, lage.name, lage.is_exercise) if base_url else None
 
     if background_tasks is not None:
-        background_tasks.add_task(dispatch_gsl_alarm, *sms_args)
+        background_tasks.add_task(
+            dispatch_gsl_alarm, *sms_args, planspiel_run_id=lage.planspiel_run_id,
+        )
         if teams_args is not None:
-            background_tasks.add_task(post_gsl_alarm_card, *teams_args, base_url=base_url)
+            background_tasks.add_task(
+                post_gsl_alarm_card, *teams_args, base_url=base_url,
+                planspiel_run_id=lage.planspiel_run_id,
+            )
         return
 
     try:
-        await dispatch_gsl_alarm(*sms_args)
+        await dispatch_gsl_alarm(*sms_args, planspiel_run_id=lage.planspiel_run_id)
     except Exception:
         logger.exception("GSL-Sonderalarm-SMS fehlgeschlagen (Lage %s)", lage.id)
     if teams_args is not None:
         assert base_url is not None  # teams_args ist nur gesetzt, wenn base_url vorhanden ist
         try:
-            await post_gsl_alarm_card(*teams_args, base_url=base_url)
+            await post_gsl_alarm_card(
+                *teams_args, base_url=base_url, planspiel_run_id=lage.planspiel_run_id,
+            )
         except Exception:
             logger.exception("GSL-Sonderalarm-Teams fehlgeschlagen (Lage %s)", lage.id)

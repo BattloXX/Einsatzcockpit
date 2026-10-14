@@ -31,6 +31,7 @@ async def post_incident_report(db: Session, incident: Incident) -> WordPressRepo
         is_exercise=incident.is_exercise,
         org_id=incident.primary_org_id,
         db=db,
+        planspiel_run_id=incident.planspiel_run_id,
     ):
         return WordPressReportResult(
             success=False,

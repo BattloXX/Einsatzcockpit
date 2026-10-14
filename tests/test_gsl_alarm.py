@@ -209,6 +209,7 @@ async def test_notify_gsl_created_uses_background_tasks_when_given():
 
     lage = MagicMock(id=5, org_id=1, is_exercise=False)
     lage.name = "Lage X"
+    lage.planspiel_run_id = None
     bg = MagicMock()
 
     await notify_gsl_created(lage, base_url="https://example.com", background_tasks=bg)
@@ -222,6 +223,7 @@ async def test_notify_gsl_created_awaits_directly_without_background_tasks():
 
     lage = MagicMock(id=5, org_id=1, is_exercise=False)
     lage.name = "Lage X"
+    lage.planspiel_run_id = None
 
     with patch("app.services.sms_dispatch_service.dispatch_gsl_alarm",
                new_callable=AsyncMock) as mock_sms, \
@@ -229,5 +231,7 @@ async def test_notify_gsl_created_awaits_directly_without_background_tasks():
                new_callable=AsyncMock) as mock_teams:
         await notify_gsl_created(lage, base_url="https://example.com", background_tasks=None)
 
-    mock_sms.assert_awaited_once_with(1, "Lage X", False, None)
-    mock_teams.assert_awaited_once_with(1, 5, "Lage X", False, base_url="https://example.com")
+    mock_sms.assert_awaited_once_with(1, "Lage X", False, None, planspiel_run_id=None)
+    mock_teams.assert_awaited_once_with(
+        1, 5, "Lage X", False, base_url="https://example.com", planspiel_run_id=None,
+    )

@@ -150,7 +150,8 @@ async def gk_pin(request: Request, daten: TokenDaten, db: Session = Depends(get_
     if (
         zugang.phone_e164
         and sms_available(org_id, db)
-        and darf_extern("sms", is_exercise=lage.is_exercise, org_id=org_id, db=db)
+        and darf_extern("sms", is_exercise=lage.is_exercise, org_id=org_id, db=db,
+                         planspiel_run_id=lage.planspiel_run_id)
     ):
         try:
             result = await send_sms(org_id, zugang.phone_e164, f"GSL-Bestätigungscode: {pin}")

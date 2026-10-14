@@ -488,6 +488,8 @@ async def dispatch_einsatzinfo(
     link: str = "",
     leitstellennummer: str | None = None,
     incident_id: int | None = None,
+    *,
+    planspiel_run_id: int | None = None,
 ) -> EinsatzinfoDispatchResult:
     """Versendet automatische Einsatzinfo-SMS nach Alarmeingang.
 
@@ -516,7 +518,10 @@ async def dispatch_einsatzinfo(
             return EinsatzinfoDispatchResult(False, reason)
 
         from app.services.exercise_guard import darf_extern
-        if not darf_extern("sms", is_exercise=is_exercise, org_id=org_id, db=db):
+        if not darf_extern(
+            "sms", is_exercise=is_exercise, org_id=org_id, db=db,
+            planspiel_run_id=planspiel_run_id,
+        ):
             reason = "Uebung unterdrueckt"
             logger.info(
                 "Einsatzinfo-SMS uebersprungen: %s (Einsatz %s, org_id=%d, stichwort=%s, is_exercise=%s)",
@@ -736,6 +741,8 @@ async def dispatch_gsl_alarm(
     lage_name: str,
     is_exercise: bool,
     triggered_by_user_id: int | None = None,
+    *,
+    planspiel_run_id: int | None = None,
 ) -> None:
     """Versendet den einmaligen Grossschadenslage-Sonderalarm per SMS bei Ausrufung einer
     neuen Lage — unabhaengig von der stichwortbezogenen Einsatzinfo-SMS (anderer Text,
@@ -759,7 +766,10 @@ async def dispatch_gsl_alarm(
             return
 
         from app.services.exercise_guard import darf_extern
-        if not darf_extern("sms", is_exercise=is_exercise, org_id=org_id, db=db):
+        if not darf_extern(
+            "sms", is_exercise=is_exercise, org_id=org_id, db=db,
+            planspiel_run_id=planspiel_run_id,
+        ):
             logger.debug("GSL-Alarm-SMS bei Uebung unterdrueckt (org_id=%d) — uebersprungen", org_id)
             return
 

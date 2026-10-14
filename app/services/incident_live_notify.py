@@ -98,7 +98,8 @@ def _dispatch_live_push(incident_id: int, org_id: int | None, reason: str) -> No
             return
         from app.services.exercise_guard import darf_extern
         if not darf_extern(
-            "push", is_exercise=incident.is_exercise, org_id=org_id, db=db
+            "push", is_exercise=incident.is_exercise, org_id=org_id, db=db,
+            planspiel_run_id=incident.planspiel_run_id,
         ):
             return
         payload = build_incident_live_payload(db, incident)
@@ -142,7 +143,8 @@ async def notify_incident_live(
     from app.services.exercise_guard import darf_extern
     payload["alarm"] = incident.alarm_type_code
     payload["alarm_erlaubt"] = darf_extern(
-        "ws_alarm", is_exercise=incident.is_exercise, org_id=org_id, db=db
+        "ws_alarm", is_exercise=incident.is_exercise, org_id=org_id, db=db,
+        planspiel_run_id=incident.planspiel_run_id,
     )
     if org_id is not None:
         collaborating = db.query(IncidentOrg.incident_id).filter(IncidentOrg.org_id == org_id)

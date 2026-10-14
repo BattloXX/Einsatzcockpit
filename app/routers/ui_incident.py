@@ -333,7 +333,8 @@ def _create_neighbor_invitations_guarded(
     from app.services.exercise_guard import darf_extern
 
     if darf_extern(
-        "nachbar", is_exercise=incident.is_exercise, org_id=org_id, db=db
+        "nachbar", is_exercise=incident.is_exercise, org_id=org_id, db=db,
+        planspiel_run_id=incident.planspiel_run_id,
     ):
         _create_neighbor_invitations(db, incident, alarm_type_code, org_id, user_id)
 
@@ -596,7 +597,8 @@ async def new_incident(
                 "type": "incident_created", "incident_id": incident.id,
                 "alarm": alarm_type_code,
                 "alarm_erlaubt": darf_extern(
-                    "ws_alarm", is_exercise=is_exercise, org_id=user.org_id, db=db
+                    "ws_alarm", is_exercise=is_exercise, org_id=user.org_id, db=db,
+                    planspiel_run_id=incident.planspiel_run_id,
                 ),
                 "alarm_type_code": alarm_type_code, "is_exercise": is_exercise,
                 "url": f"/einsatz/{incident.id}/info",

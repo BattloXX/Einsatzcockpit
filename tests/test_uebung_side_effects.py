@@ -43,13 +43,13 @@ def test_uebung_opt_ins_defaults_und_realeinsatz_regression(setup_db):
         channels = ("push", "ws_alarm", "nachbar", "lis_status", "wordpress")
         for channel in channels:
             assert darf_extern(
-                channel, is_exercise=False, org_id=settings.org_id, db=db
+                channel, is_exercise=False, org_id=settings.org_id, db=db, planspiel_run_id=None
             ) is True
             assert darf_extern(
-                channel, is_exercise=True, org_id=settings.org_id, db=db
+                channel, is_exercise=True, org_id=settings.org_id, db=db, planspiel_run_id=None
             ) is False
         assert darf_extern(
-            "geocoding", is_exercise=True, org_id=settings.org_id, db=db
+            "geocoding", is_exercise=True, org_id=settings.org_id, db=db, planspiel_run_id=None
         ) is True
     finally:
         db.rollback()
@@ -72,7 +72,7 @@ def test_uebung_opt_ins_geben_jeden_neuen_kanal_frei(setup_db):
         for channel, attribute in mapping.items():
             setattr(settings, attribute, True)
             assert darf_extern(
-                channel, is_exercise=True, org_id=settings.org_id, db=db
+                channel, is_exercise=True, org_id=settings.org_id, db=db, planspiel_run_id=None
             ) is True
             setattr(settings, attribute, False)
     finally:
@@ -416,5 +416,5 @@ def test_guard_delegiert_bestehende_teams_autoprint_objekt_und_sms_flags(guard_d
     db.flush()
     for channel in ("teams", "autoprint", "objekt_kontakt", "sms"):
         assert darf_extern(
-            channel, is_exercise=True, org_id=settings.org_id, db=db
+            channel, is_exercise=True, org_id=settings.org_id, db=db, planspiel_run_id=None
         ) is True

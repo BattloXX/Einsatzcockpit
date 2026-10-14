@@ -726,7 +726,8 @@ async def _notify_new_dibos_incident(incident_id: int, org_id: int) -> None:
                 "incident_id": incident.id,
                 "alarm": incident.alarm_type_code,
                 "alarm_erlaubt": darf_extern(
-                    "ws_alarm", is_exercise=incident.is_exercise, org_id=org_id, db=db
+                    "ws_alarm", is_exercise=incident.is_exercise, org_id=org_id, db=db,
+                    planspiel_run_id=incident.planspiel_run_id,
                 ),
                 "alarm_type_code": incident.alarm_type_code,
                 "is_exercise": incident.is_exercise,

@@ -337,7 +337,10 @@ async def dispatch_einsatzinfo_mail(
         if not org_settings or not org_settings.einsatzinfo_mail_enabled:
             logger.info("Einsatzinfo-Mail uebersprungen: deaktiviert (Einsatz %s)", incident_id)
             return EinsatzinfoMailResult(False, "deaktiviert")
-        if not darf_extern("mail", is_exercise=incident.is_exercise, org_id=org_id, db=db):
+        if not darf_extern(
+            "mail", is_exercise=incident.is_exercise, org_id=org_id, db=db,
+            planspiel_run_id=incident.planspiel_run_id,
+        ):
             logger.info("Einsatzinfo-Mail uebersprungen: Uebung unterdrueckt (Einsatz %s)", incident_id)
             return EinsatzinfoMailResult(False, "Uebung unterdrueckt")
         if not mail_service.mail_available(db, org_id):
