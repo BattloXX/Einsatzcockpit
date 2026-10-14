@@ -239,6 +239,38 @@ Regeln für den Zufall (im Datensatz als `zufall_erlaubt`/`geografie_bedingung`)
 - Löschen: Ist eine Vorlage verwendet, wird sie nur archiviert, sonst gelöscht.
 - JSON-Export/-Import über ein pydantic-Schema (`PlanspielSzenarioExport`). Nur Whitelist-Felder werden übernommen. Alle Templates werden mit `jinja2.sandbox.SandboxedEnvironment` und nur den erlaubten Variablen gerendert. Es wird kein Code ausgeführt.
 
+### 5.4 LFV-Referenz „Stichworte Beschreibung f und t V03“ (Inhalt für `app/data/lfv_stichworte_v03.py`)
+Quelle: LFV Vorarlberg, Dokumentvermerk `V03 Beschreibung f und t Stichworte 02_2021.xlsx`. Die Texte werden wörtlich übernommen, sind read-only und nur als Referenz gedacht.
+
+| Code | Bezeichnung | Beschreibung (LFV) |
+|---|---|---|
+| f1 | Geringes Ereignis Brand | Kein Feuer, Geruchswahrnehmung, besorgter / unsicherer Melder, Kontrolle, belüften nach gelöschtem Brand, Nachlöscharbeiten, … |
+| f2 | Kleines Ereignis Brand | Brand außerhalb von Gebäuden, freistehendem PKW, Mülleimer, Container, Freifläche/Schilf/Hecke/Baum, Kaminbrand, Rauchwarnmelder oder nicht registrierte BMA, … |
+| f3 | Mittleres Ereignis Brand | Zimmerbrand, Wohnungsbrand oder Brand direkt an Gebäuden, Balkon, Fassade, Carport (Gebäudeanbau), Fahrzeug in Garage/Carport/Schuppen, LKW, Heustocküberhitzung, … |
+| f4 | Großes Ereignis Brand | Haus steht in Vollbrand, Dachstuhlbrand, Industriegebäude, landwirtschaftliches Gebäude, Kraftwerk, Brand in Tiefgarage, in anderen sensiblen/großen Objekten (z. B. viele Personen im Gebäude), … |
+| f5 | Nachbarschaftshilfe Brand | Feuerwehr fordert Nachbarschaftshilfe an. Im Auftrag der zuständigen Feuerwehr alarmiert die RFL die Feuerwehr(en), welche im Alarmplan hinterlegt sind. |
+| f10 | Abklärung | Abklärung einer Sachlage bzw. eines möglichen Einsatzes mit entsprechend kompetenter Stelle. Sachlage ist nicht einem anderen Einsatzstichwort zuordenbar oder bedarf der vorherigen Abklärung. |
+| f11 | Sondereinsatzmittel | Zur Bewältigung eines Ereignisses sind Sondereinsatzmittel erforderlich. Alle nicht als Sondereinsatzmittel definierten Geräte/Fahrzeuge/Materialien werden bei Anforderung per f11_FW-Gemeinde alarmiert. |
+| f14 | BMA | Eine Brandmeldeanlage, welche als registrierter Notrufteilnehmer über eine automatische Alarmweiterleitung verfügt. |
+| f21 | Bootseinsatz Brand | Brandereignis auf dem Bodensee. |
+| f30 | Proberuf | Proberuf. |
+| t1 | Geringes Ereignis Technik | Tierrettung, Wasser im Gebäude, Wasserschaden, Hindernisse und Sachschäden sichern/beseitigen/reinigen, Ölbindemittel aufbringen, Ausleuchtung, Tragehilfe, Zugangsschaffung mit Leiter, … |
+| t2 | Kleines Ereignis Technik | Befreiung/Bergung ohne hydraulisches Rettungsgerät u. a. nach VU, Sichtschutz, große Hindernisse und Sachschäden, Hangrutschung/Mure mit Gefahr, Fahrzeuge/Maschinen/Geräte sichern, bergen, … |
+| t3 | Mittleres Ereignis Technik | Stützpunkt mit hydraulischem Rettungsgerät, Personen retten, befreien nach Unfall eingeschlossener Person, verschüttete Person, Personenrettung bei Pfählungsverletzung, … |
+| t4 | Großes Ereignis Technik | Unfall Bus-/Bahnverkehr oder viele beteiligte Fahrzeuge, MANV (Massenanfall von Verletzten), Einsturz Gebäude. |
+| t5 | Nachbarschaftshilfe Technik | Feuerwehr fordert Nachbarschaftshilfe an. Im Auftrag der zuständigen Feuerwehr alarmiert die RFL die Feuerwehr(en), welche im Alarmplan hinterlegt sind. |
+| t6 | Gefahrgut klein | Messgerät und/oder Beratung wird benötigt, Messeinsatz (Erkundung, Lagebeurteilung), Beratung bei Freisetzung chemischer Stoffe, Beratung bei Gewässerverunreinigung, … |
+| t7 | Gefahrgut groß | Ereignis mit Freisetzung von Gefahrstoffen (chemisch, biologisch, radioaktiv), Strahlenschutz. |
+| t9 | Großlage | Ereignis mit vielen Schadenstellen. Hindernisse und Sachschäden sichern/beseitigen/reinigen, Sturmschäden, Wasserschäden, Verklausung, Hangrutschung/Mure, … |
+| t21 | Bootseinsatz Technik | Personenrettung, Sucheinsatz, Arbeitseinsatz, Bergungen, … Unterstichwort Ölwehr: Öl-/Betriebsmittel-Austritt, Verschmutzung. |
+
+**Abgleich mit dem Katalog (§5.2):**
+- Alle Szenario-Zuordnungen passen zur LFV-Beschreibung. Belege: B08 Rauchwarnmelder → f2, B12 Fahrzeug in Garage → f3, B18 Tiefgarage → f4, T11 Bergung ohne hydraulisches Rettungsgerät → t2, T15/T17 → t3, T18 MANV → t4.
+- **B20/B21 (f14):** Die Vorlagen setzen eine registrierte BMA voraus, also `ObjektBMA` mit BMA- bzw. RFL-Nummer und Objektstatus `freigegeben`. Ein Objekt mit nicht registrierter BMA bekommt höchstens ein f2-Szenario (B08-Variante).
+- **B25/T26 (f21/t21):** nur Bodensee. `geografie_bedingung = {"gewaesser": "bodensee"}` gilt nur für Pool-Einträge, die als `boot`/`gewaesser_boot` markiert sind.
+- **t21-Unterstichwort Ölwehr:** Es kommt nicht in die 56 Vorlagen. Es ist als optionale Org-Vorlage vorgesehen (Duplikat von T26 mit Ölwehr-Text).
+- **Groß-/Kleinschreibung:** Die LFV-Codes und das Seed-Profil `_VORARLBERG_ALARM_TYPES` sind klein geschrieben (`f1`), `ALARM_TYPES` groß (`F1`). Der Abgleich zwischen Szenario-`stichwort_code` und `AlarmType.code` erfolgt deshalb **case-insensitive**. Beim Einsatz wird der Code genau so geschrieben, wie er in der Org existiert.
+
 ## 6. Sicherheitsmatrix und Umsetzung
 
 | Kanal | Planspiel-Standard | Umsetzung |
@@ -391,7 +423,7 @@ Jede Phase ist ein PR auf einem eigenen Branch, die Implementierung übernimmt C
 - **Board-Last bei Tempo > 1:** begrenzt über `planspiel_max_stellen_je_minute`.
 
 ## 14. Offene Produktentscheidungen (mit Standardannahme)
-1. **LFV-Langtexte (V03-PDF):** Das PDF liegt nicht im Repo. *Standard:* Phase B übernimmt Code und Kurzbezeichnung. Die Langtexte werden nachgetragen, sobald das PDF bereitgestellt ist.
+1. **LFV-Langtexte (V03-PDF):** erledigt. Die Texte stehen in §5.4 und werden in Phase B wörtlich übernommen.
 2. **Adresspool-Quelle:** *Standard:* Objekte + Einsatzhistorie automatisch; der OSM-Import ist opt-in per Admin-Button.
 3. **Gebiet:** *Standard:* Radius 5 km um `FireDept.fallback_lat/lng`, bis ein Polygon gezeichnet ist.
 4. **Rollen:** *Standard:* zwei neue Rollen plus Run-Mitglieder. Admin/org_admin dürfen immer alles.
