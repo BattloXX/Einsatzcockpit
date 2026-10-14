@@ -181,8 +181,12 @@ from app.models.password_reset import PasswordResetToken
 from app.models.planspiel import (  # noqa: F401 -- registriert ORM-Modelle
     PlanspielBeobachtung,
     PlanspielMitglied,
+    PlanspielOrtTypZuordnung,
     PlanspielRun,
     PlanspielRunEreignis,
+    PlanspielSzenario,
+    PlanspielSzenarioEreignis,
+    PlanspielSzenarioVersion,
     PlanspielZiel,
 )
 from app.models.probenplanung import (  # noqa: F401 -- registriert ORM-Modelle

@@ -1,0 +1,13 @@
+{% extends "admin/_layout.html" %}
+{% from "admin/_breadcrumb.html" import breadcrumb %}
+{% block title %}Neues Szenario{% endblock %}
+{% block content %}
+<section class="planspiel-admin" x-data="{ tab: 'grund' }">
+  {{ breadcrumb([{"label": "Einstellungen", "href": "/admin/settings"}, {"label": "Planspiele", "href": "/planspiele"}, {"label": "Szenariokatalog", "href": "/admin/settings/planspiele/szenarien"}, {"label": "Neu", "href": none}]) }}
+  <h1>Neues Szenario</h1>
+  {% if fehler %}
+  <p class="form-error">{{ fehler }}</p>
+  {% endif %}
+  {% include "planspiel/admin/_formular.html" %}
+</section>
+{% endblock %}

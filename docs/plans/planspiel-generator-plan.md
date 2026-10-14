@@ -469,3 +469,17 @@ Phase A (Basis & Safety) als eigener Codex-Auftrag; Start erst auf ausdrücklich
 - MariaDB-Downgrade: Fremdschlüssel vor dem zugehörigen Index entfernen.
 - Der GSL-Live-Push (`notify_org_web`) läuft bei normalen Übungslagen weiterhin ohne Übungsprüfung. Das ist bewusst unverändert, weil das bestehende Verhalten mit dem Präfix „[UEBUNG]“ so gedacht ist. Für Planspiel-Lagen ist der Push gesperrt.
 - Die Migrationskette ist nur auf MariaDB lauffähig (`ADD COLUMN IF NOT EXISTS`). Lokal wird sie mit einem temporären Container `mariadb:10.11` geprüft.
+
+### Phase B – Katalog (Branch `feat/planspiel-b-katalog`, 2026-10-14)
+- **B1:** Modelle Szenario, Version, Ereignis und Ortstyp-Zuordnung, Migration 0285 (FK-Zyklus Szenario↔Version über einen nachträglichen FK). `app/data/lfv_stichworte_v03.py` enthält die 19 LFV-Texte wörtlich. `app/data/planspiel_katalog.py` enthält 37 Bausteine, 56 Vorlagen plus F30 mit leitstellennahen Alarmtexten, `MELDENDE` (anonym), GSL-Wellen und Schweregewichte.
+- **B2:** `planspiel_katalog_service`:
+  - Der Import ist idempotent. Geänderte Org-Kopien werden nie überschrieben, sie erscheinen nur als `update_verfuegbar`.
+  - Versionen, Duplizieren, Zurücksetzen und Archivieren statt Löschen bei Verwendung.
+  - JSON-Import/-Export über Pydantic mit `extra="forbid"`; die Validierung läuft vor jeder Änderung.
+  - Abweichung zum Plan: Für das Rendern wird **kein** Jinja-Sandbox verwendet. Es gibt nur eine Regex-Ersetzung erlaubter `{platzhalter}`, Attribute und Indizes werden nicht ausgewertet. Das ist sicherer und reicht aus.
+- **B3:** Verwaltung unter `/admin/settings/planspiele/szenarien` und `/stichworte`. Ändern darf nur `org_admin`, lesen dürfen auch Übungsleiter.
+
+**Hinweise für Phase C/D:**
+- Der Run-Snapshot muss den Szenario-Code unter dem Schlüssel `code` speichern, weil `entfernen()` diesen Schlüssel prüft.
+- Die Phasenwerte in `trigger_param.phase` sind die GSL-`SitePhase`-Werte.
+- Alarmtexte verwenden `{adresse}`, `{objekt}` und `{meldender}`; `{meldender}` wird aus `MELDENDE` gezogen, `{objekt}` fällt ohne Objekt auf „Gebäude“ zurück.
