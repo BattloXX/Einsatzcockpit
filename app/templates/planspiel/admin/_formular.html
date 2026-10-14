@@ -4,7 +4,7 @@
   {% if not szenario %}
   <label>Code<input class="form-input" name="code" value="{{ form.code if form else '' }}" required pattern="[A-Za-z0-9_-]{1,40}"></label>
   {% endif %}
-  <div class="planspiel-pane" x-show="!$root.tab || $root.tab === 'grund'">
+  <div class="planspiel-pane" x-show="tab === 'grund'">
     <h2>Grunddaten</h2>
     <div class="planspiel-grid">
       <label>Titel<input class="form-input" name="titel" value="{{ version.titel if version else '' }}" required></label>
@@ -33,12 +33,12 @@
     </div>
     <datalist id="lfv-codes">{% for entry in stichworte %}<option value="{{ entry.code|upper }}">{{ entry.bezeichnung }}</option>{% endfor %}</datalist>
   </div>
-  <div class="planspiel-pane" x-show="$root.tab === 'alarm'">
+  <div class="planspiel-pane" x-show="tab === 'alarm'">
     <h2>Alarmierung</h2>
     <label>Alarmtext-Template<textarea class="form-input" name="alarmtext_template" required>{{ version.alarmtext_template if version else '' }}</textarea></label>
     <p class="planspiel-hint">Erlaubte Platzhalter: {adresse}, {strasse}, {hausnr}, {ort}, {objekt}, {gebaeudeart}, {meldender}, {meldezeit}, {stock}, {bereich}, {ursache}, {gruppe}, {hindernis}, {geraet}, {material}, {einheit}, {neu}, {ortsteil}.</p>
   </div>
-  <div class="planspiel-pane" x-show="$root.tab === 'ort'">
+  <div class="planspiel-pane" x-show="tab === 'ort'">
     <h2>Standortregeln</h2>
     <fieldset>
       <legend>Ortstypen</legend>
@@ -76,7 +76,7 @@
       </label>
     </div>
   </div>
-  <div class="planspiel-pane" x-show="$root.tab === 'meldungen'">
+  <div class="planspiel-pane" x-show="tab === 'meldungen'">
     <h2>Folgemeldungen</h2>
     <label>
       Baustein einfügen
@@ -184,7 +184,7 @@
     <button class="btn" type="button" :disabled="events.length >= 20" @click="add()">Zeile hinzufügen</button>
     <p class="planspiel-hint" x-show="events.length >= 20">Maximal 20 Folgemeldungen.</p>
   </div>
-  <div class="planspiel-pane" x-show="$root.tab === 'lernziele'">
+  <div class="planspiel-pane" x-show="tab === 'lernziele'">
     <h2>Lernziele</h2>
     <label>
       Lernziele
@@ -196,7 +196,7 @@
       <textarea class="form-input" name="regie_geheimlage">{{ version.regie_geheimlage if version and version.regie_geheimlage else '' }}</textarea>
     </aside>
   </div>
-  <div class="planspiel-pane" x-show="$root.tab === 'zufall'">
+  <div class="planspiel-pane" x-show="tab === 'zufall'">
     <h2>Varianten &amp; Zufall</h2>
     <label>
       <input type="checkbox" name="zufall_erlaubt" {% if not szenario or szenario.zufall_erlaubt %}checked{% endif %}>

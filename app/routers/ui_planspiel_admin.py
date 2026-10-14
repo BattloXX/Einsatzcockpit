@@ -16,11 +16,19 @@ from app.core.permissions import has_role, require_role
 from app.core.templating import templates
 from app.data.lfv_stichworte_v03 import QUELLE, REVISION, STICHWORTE
 from app.data.planspiel_katalog import BAUSTEINE, MELDENDE, ORT_TYPEN, SYSTEM_KATALOG_VERSION
-from app.db import get_db
-from app.models.master import AlarmType
-from app.models.planspiel import PlanspielSzenario, PlanspielSzenarioEreignis, PlanspielSzenarioVersion
+from app.db import SessionLocal, get_db
+from app.models.master import AlarmType, OrgSettings
+from app.models.objekt import ObjektKategorie
+from app.models.planspiel import (
+    PlanspielAdresse,
+    PlanspielOrtTypZuordnung,
+    PlanspielSzenario,
+    PlanspielSzenarioEreignis,
+    PlanspielSzenarioVersion,
+)
 from app.models.user import User
 from app.routers.ui_planspiel import require_planspiel_enabled
+from app.services.geo_service import validate_geojson_polygon
 from app.services.planspiel_katalog_service import (
     aktiv_setzen,
     aktive_version,
@@ -35,6 +43,14 @@ from app.services.planspiel_katalog_service import (
     rendern,
     systemdiff,
     version_als_dict,
+)
+from app.services.planspiel_ort_service import (
+    GebietFehlt,
+    OsmImportFehler,
+    gebiet,
+    manuellen_punkt_anlegen,
+    osm_importieren,
+    pool_aufbauen,
 )
 
 router = APIRouter(prefix="/admin/settings/planspiele", tags=["planspiele-admin"])
@@ -563,3 +579,323 @@ def delete(
     _audit(db, "entfernen", user, item)
     db.commit()
     return RedirectResponse(f"/admin/settings/planspiele/szenarien?meldung={result}+{item.code}", status_code=303)
+
+
+def _settings_audit(db: Session, action: str, user: User, payload: dict[str, Any] | None = None) -> None:
+    write_audit(
+        db,
+        f"planspiel.einstellungen.{action}",
+        user_id=user.id,
+        org_id=_org(user),
+        entity_type="planspiel_einstellungen",
+        entity_id=_org(user),
+        payload=payload or {},
+    )
+
+
+def _settings(db: Session, org_id: int) -> OrgSettings:
+    item = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).one_or_none()
+    if item is None:
+        item = OrgSettings(org_id=org_id)
+        db.add(item)
+        db.flush()
+    return item
+
+
+def _pool_context(request: Request, db: Session, user: User) -> dict[str, Any]:
+    org_id = _org(user)
+    filters = {key: value for key, value in request.query_params.items() if value}
+    query = db.query(PlanspielAdresse).filter(PlanspielAdresse.org_id == org_id)
+    if filters.get("quelle"):
+        query = query.filter(PlanspielAdresse.quelle == filters["quelle"])
+    if filters.get("qualitaet") in {"A", "B", "C"}:
+        query = query.filter(PlanspielAdresse.qualitaet == filters["qualitaet"])
+    if filters.get("q"):
+        query = query.filter(PlanspielAdresse.strasse.ilike(f"%{filters['q']}%"))
+    try:
+        seite = max(1, int(filters.get("seite", "1")))
+    except ValueError:
+        seite = 1
+    rows = query.order_by(PlanspielAdresse.strasse, PlanspielAdresse.hausnr).all()
+    if filters.get("ort_typ"):
+        rows = [row for row in rows if filters["ort_typ"] in (row.ort_typen or [])]
+    total = len(rows)
+    return {
+        "pool_rows": rows[(seite - 1) * 50 : seite * 50],
+        "pool_filters": filters,
+        "pool_seite": seite,
+        "pool_seiten": max(1, (total + 49) // 50),
+        "can_edit": has_role(user, "org_admin"),
+        "ort_typen": ORT_TYPEN,
+    }
+
+
+def _settings_context(request: Request, db: Session, user: User, **extra: Any) -> dict[str, Any]:
+    org_id = _org(user)
+    setting = _settings(db, org_id)
+    polygon = None
+    if setting.planspiel_gebiet_geojson:
+        try:
+            polygon = json.loads(setting.planspiel_gebiet_geojson)
+        except (TypeError, json.JSONDecodeError):
+            polygon = None
+    center = None
+    missing_area = False
+    try:
+        area = gebiet(db, org_id)
+        center = area.zentrum
+    except GebietFehlt:
+        missing_area = True
+    categories = (
+        db.query(ObjektKategorie)
+        .filter(ObjektKategorie.org_id == org_id)
+        .order_by(ObjektKategorie.sort, ObjektKategorie.name)
+        .all()
+    )
+    mappings: dict[int, list[str]] = {}
+    for mapping in db.query(PlanspielOrtTypZuordnung).filter(
+        PlanspielOrtTypZuordnung.org_id == org_id,
+        PlanspielOrtTypZuordnung.quelle == "kategorie",
+    ):
+        mappings.setdefault(int(mapping.schluessel), []).append(mapping.ort_typ)
+    stats: dict[str, int] = {}
+    for row in db.query(PlanspielAdresse).filter(PlanspielAdresse.org_id == org_id).all():
+        stats[f"quelle:{row.quelle}"] = stats.get(f"quelle:{row.quelle}", 0) + int(row.aktiv)
+        stats[f"qualitaet:{row.qualitaet}"] = stats.get(f"qualitaet:{row.qualitaet}", 0) + int(row.aktiv)
+    context = {
+        "user": user,
+        "setting": setting,
+        "can_edit": has_role(user, "org_admin"),
+        "ort_typen": ORT_TYPEN,
+        "gebiet_geojson": polygon,
+        "gebiet_zentrum": center,
+        "gebiet_fehlt": missing_area,
+        "kategorien": categories,
+        "zuordnungen": mappings,
+        "pool_stats": stats,
+    }
+    context.update(_pool_context(request, db, user))
+    context.update(extra)
+    return context
+
+
+def _settings_error(request: Request, db: Session, user: User, error: Exception):
+    return templates.TemplateResponse(
+        request,
+        "planspiel/admin/einstellungen.html",
+        _settings_context(request, db, user, fehler=str(error)),
+        status_code=400,
+    )
+
+
+@router.get("", response_class=HTMLResponse)
+def einstellungen(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("uebungsleiter", "org_admin")),
+    _guard: None = Depends(require_planspiel_enabled),
+):
+    return templates.TemplateResponse(
+        request, "planspiel/admin/einstellungen.html", _settings_context(request, db, user)
+    )
+
+
+@router.get("/adresspool", response_class=HTMLResponse)
+def adresspool_liste(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("uebungsleiter", "org_admin")),
+    _guard: None = Depends(require_planspiel_enabled),
+):
+    return templates.TemplateResponse(request, "planspiel/admin/_pool_liste.html", _pool_context(request, db, user))
+
+
+@router.post("/einstellungen/gebiet")
+async def gebiet_speichern(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin")),
+    _guard: None = Depends(require_planspiel_enabled),
+):
+    form = await request.form()
+    try:
+        radius = int(str(form.get("radius_m", "")))
+        if not 500 <= radius <= 50000:
+            raise ValueError("Der Radius muss zwischen 500 und 50000 Metern liegen.")
+        raw = str(form.get("gebiet_geojson", "")).strip()
+        geometry = None
+        if raw:
+            geometry = json.loads(raw)
+            error = validate_geojson_polygon(geometry)
+            if error:
+                raise ValueError(error)
+        setting = _settings(db, _org(user))
+        setting.planspiel_gebiet_geojson = json.dumps(geometry) if geometry else None
+        setting.planspiel_gebiet_radius_m = radius
+        _settings_audit(db, "gebiet", user, {"polygon": bool(geometry), "radius_m": radius})
+        db.commit()
+    except (ValueError, TypeError, json.JSONDecodeError) as exc:
+        db.rollback()
+        return _settings_error(request, db, user, exc)
+    return RedirectResponse("/admin/settings/planspiele", status_code=303)
+
+
+@router.post("/einstellungen/grenzen")
+async def grenzen_speichern(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin")),
+    _guard: None = Depends(require_planspiel_enabled),
+):
+    form = await request.form()
+    try:
+        runs = int(str(form.get("max_laufende_runs", "")))
+        stellen = int(str(form.get("max_stellen_je_minute", "")))
+        if not 1 <= runs <= 10 or not 1 <= stellen <= 60:
+            raise ValueError("Grenzen liegen außerhalb des erlaubten Bereichs.")
+        setting = _settings(db, _org(user))
+        setting.planspiel_max_laufende_runs = runs
+        setting.planspiel_max_stellen_je_minute = stellen
+        _settings_audit(db, "grenzen", user, {"runs": runs, "stellen": stellen})
+        db.commit()
+    except ValueError as exc:
+        db.rollback()
+        return _settings_error(request, db, user, exc)
+    return RedirectResponse("/admin/settings/planspiele", status_code=303)
+
+
+def _pool_result(request: Request, db: Session, user: User, message: str, status_code: int = 200):
+    context = _pool_context(request, db, user)
+    context["meldung"] = message
+    return templates.TemplateResponse(request, "planspiel/admin/_pool_ergebnis.html", context, status_code=status_code)
+
+
+@router.post("/adresspool/aufbauen")
+def pool_aufbauen_post(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin")),
+    _guard: None = Depends(require_planspiel_enabled),
+):
+    try:
+        result = pool_aufbauen(db, _org(user))
+        _settings_audit(db, "adresspool_aufbauen", user)
+        db.commit()
+        message = (
+            f"{result.neu} neu, {result.aktualisiert} aktualisiert, {result.deaktiviert} deaktiviert"
+        )
+        return _pool_result(request, db, user, message)
+    except (GebietFehlt, ValueError) as exc:
+        db.rollback()
+        return _pool_result(request, db, user, str(exc), 400)
+
+
+@router.post("/adresspool/osm")
+async def pool_osm_post(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin")),
+    _guard: None = Depends(require_planspiel_enabled),
+):
+    try:
+        result = await osm_importieren(SessionLocal, _org(user))
+        _settings_audit(db, "adresspool_osm", user)
+        db.commit()
+        message = f"{result.neu} neu, {result.aktualisiert} aktualisiert, {result.deaktiviert} deaktiviert"
+        return _pool_result(request, db, user, message)
+    except (OsmImportFehler, GebietFehlt) as exc:
+        db.rollback()
+        return _pool_result(request, db, user, str(exc), 400)
+
+
+@router.post("/adresspool/punkt")
+async def punkt_anlegen(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin")),
+    _guard: None = Depends(require_planspiel_enabled),
+):
+    form = await request.form()
+    try:
+        water = str(form.get("gewaesser", "")).strip()
+        merkmale: dict[str, Any] | None = None
+        if water:
+            merkmale = {"gewaesser": water}
+        if form.get("bma"):
+            merkmale = (merkmale or {}) | {"bma": True}
+        row = manuellen_punkt_anlegen(
+            db,
+            _org(user),
+            lat=float(str(form.get("lat", ""))),
+            lng=float(str(form.get("lng", ""))),
+            bezeichnung=str(form.get("bezeichnung", "")).strip() or None,
+            strasse=str(form.get("strasse", "")).strip(), hausnr=str(form.get("hausnr", "")).strip() or None,
+            ort=str(form.get("ort", "")).strip() or None,
+            ort_typen=[str(value) for value in form.getlist("ort_typen")],
+            merkmale=merkmale,
+        )
+        if not row.strasse:
+            raise ValueError("Straße ist erforderlich.")
+        _settings_audit(db, "punkt", user, {"adresse_id": row.id})
+        db.commit()
+    except (GebietFehlt, ValueError) as exc:
+        db.rollback()
+        return _settings_error(request, db, user, exc)
+    return RedirectResponse("/admin/settings/planspiele", status_code=303)
+
+
+@router.post("/adresspool/{adresse_id:int}/aktiv")
+def pool_aktiv(
+    adresse_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin")),
+    _guard: None = Depends(require_planspiel_enabled),
+):
+    row = (
+        db.query(PlanspielAdresse)
+        .filter(PlanspielAdresse.id == adresse_id, PlanspielAdresse.org_id == _org(user))
+        .one_or_none()
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Nicht gefunden")
+    row.aktiv = not row.aktiv
+    _settings_audit(db, "adresspool_aktiv", user, {"adresse_id": row.id, "aktiv": row.aktiv})
+    db.commit()
+    return templates.TemplateResponse(request, "planspiel/admin/_pool_zeile.html", {"row": row, "can_edit": True})
+
+
+@router.post("/einstellungen/ortstypen")
+async def ortstypen_speichern(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin")),
+    _guard: None = Depends(require_planspiel_enabled),
+):
+    form = await request.form()
+    try:
+        org_id = _org(user)
+        mappings = db.query(PlanspielOrtTypZuordnung).filter(
+            PlanspielOrtTypZuordnung.org_id == org_id,
+            PlanspielOrtTypZuordnung.quelle == "kategorie",
+        )
+        for row in mappings.all():
+            db.delete(row)
+        for category in db.query(ObjektKategorie).filter(ObjektKategorie.org_id == org_id).all():
+            for ort_typ in form.getlist(f"kategorie_{category.id}"):
+                if ort_typ not in ORT_TYPEN:
+                    raise ValueError("Unbekannter Ortstyp")
+                db.add(
+                    PlanspielOrtTypZuordnung(
+                        org_id=org_id,
+                        quelle="kategorie",
+                        schluessel=str(category.id),
+                        ort_typ=ort_typ,
+                    )
+                )
+        _settings_audit(db, "ortstypen", user)
+        db.commit()
+    except ValueError as exc:
+        db.rollback()
+        return _settings_error(request, db, user, exc)
+    return RedirectResponse("/admin/settings/planspiele?meldung=Ortstyp-Zuordnung+gespeichert", status_code=303)

@@ -135,6 +135,7 @@ _TENANT_TABLE_NAMES: frozenset[str] = frozenset({
     "planspiel_szenario_version",
     "planspiel_szenario_ereignis",
     "planspiel_ort_typ_zuordnung",
+    "planspiel_adresse",
     # Teilnehmerlisten-Modul (TenantScoped via Mixin)
     "termin",
     "funktion",

@@ -489,6 +489,7 @@
             {% endif %}
             {% if request.state.planspiel_enabled and ('org_admin' in user_role_codes or 'admin' in user_role_codes or 'system_admin' in user_role_codes or 'uebungsleiter' in user_role_codes) %}
             <div class="admin-nav__subheading">Planspiele</div>
+            <a href="/admin/settings/planspiele" class="admin-nav__item {% if request.url.path == '/admin/settings/planspiele' %}is-active{% endif %}"><span class="admin-nav__icon">⚙️</span>Einstellungen &amp; Adresspool</a>
             <a href="/admin/settings/planspiele/szenarien" class="admin-nav__item {% if request.url.path.startswith('/admin/settings/planspiele/szenarien') %}is-active{% endif %}"><span class="admin-nav__icon">🎭</span>Szenariokatalog</a>
             <a href="/admin/settings/planspiele/stichworte" class="admin-nav__item {% if request.url.path.startswith('/admin/settings/planspiele/stichworte') %}is-active{% endif %}"><span class="admin-nav__icon">📚</span>Stichwort-Referenz</a>
             {% endif %}

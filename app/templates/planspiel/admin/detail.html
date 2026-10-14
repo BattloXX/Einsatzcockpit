@@ -1,6 +1,9 @@
 {% extends "admin/_layout.html" %}
 {% from "admin/_breadcrumb.html" import breadcrumb %}
 {% block title %}{{ szenario.code }}{% endblock %}
+{% block head_extra %}
+  {% include "planspiel/admin/_styles.html" %}
+{% endblock %}
 {% block content %}
 <section class="planspiel-admin" x-data="{ tab: 'grund' }">
   {{ breadcrumb([{"label": "Einstellungen", "href": "/admin/settings"}, {"label": "Planspiele", "href": "/planspiele"}, {"label": "Szenariokatalog", "href": "/admin/settings/planspiele/szenarien"}, {"label": szenario.code, "href": none}]) }}
@@ -47,6 +50,7 @@
     {% endif %}
   </section>
   {% if not archiviert %}
+  <div class="planspiel-nebenaktionen">
   <form method="post" action="/admin/settings/planspiele/szenarien/{{ szenario.id }}/duplizieren">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <label>Code der Kopie<input class="form-input" name="code" required></label>
@@ -62,6 +66,7 @@
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <button class="btn" type="submit">Entfernen</button>
   </form>
+  </div>
   {% endif %}
 </section>
 {% endblock %}

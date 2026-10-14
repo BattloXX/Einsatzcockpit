@@ -483,3 +483,25 @@ Phase A (Basis & Safety) als eigener Codex-Auftrag; Start erst auf ausdrücklich
 - Der Run-Snapshot muss den Szenario-Code unter dem Schlüssel `code` speichern, weil `entfernen()` diesen Schlüssel prüft.
 - Die Phasenwerte in `trigger_param.phase` sind die GSL-`SitePhase`-Werte.
 - Alarmtexte verwenden `{adresse}`, `{objekt}` und `{meldender}`; `{meldender}` wird aus `MELDENDE` gezogen, `{objekt}` fällt ohne Objekt auf „Gebäude“ zurück.
+
+### Phase C – Ortswahl & Einzelgenerator (Branch `feat/planspiel-c-einzel`, 2026-10-14)
+- **C1:** `planspiel_adresse` (Migration 0286) und `planspiel_ort_service`:
+  - Gebiet als Polygon oder Radius um die Routing-/Org-Koordinaten.
+  - Pool aus freigegebenen Objekten (BMA mit BMA-/RFL-Nummer ergibt `objekt_bma`), Zusatzadressen und Realeinsatz-Historie; optionaler OSM-Import (Hausnummern, Straßen, Bäche, Bahn).
+  - Deterministische, nach Qualität gewichtete Ortswahl mit Sperrfrist; `szenario_zufall` wählt nur Szenarien mit verfügbarem Ort.
+- **C2:** `planspiel_run_service`:
+  - Entwurf mit Snapshot (Code, Version, Inhalt, Ort, Variablen, Org-Stichwort), Zeitplan und Vorschau.
+  - `starten()` legt den Übungseinsatz über `create_incident` an, mit `planspiel_run_id`, IncidentLog „[Planspiel]“, `PlanspielZiel` und geplanten `PlanspielRunEreignis`. Alarmierung, Druck, Geocoding und Objekt-Matching werden nicht ausgelöst.
+- **C3:** `/admin/settings/planspiele` (Gebiet mit Leaflet/Geoman, Adresspool, OSM-Import, manuelle Punkte, Ortstyp-Zuordnung), `/planspiele/neu` (Assistent) und `/planspiele/{id}` (Vorschau, Start).
+- **Browser-Durchlauf** gegen MariaDB (lokal, Chromium): Assistent → Entwurf → Start → Übungseinsatz mit ÜBUNG-Badge, ohne JS-Fehler. Dabei behoben:
+  - Tabs der Szenario-Detailseite (`$root` zeigte auf die Formular-Komponente).
+  - Fehlende Admin-Styles.
+  - Fehlende Leaflet-Markerbilder (jetzt `circleMarker`).
+  - `btn--sm`.
+
+**Hinweise für Phase D:**
+- Einzeleinsatz ohne GSL-Phasen: `phase_reached erkundung` gilt als erreicht, sobald ein Fahrzeug „Am Einsatzort“ meldet.
+- `assignment_created`/`assignment_completed` beziehen sich auf die Aufgaben (`Task`) des Einsatzes.
+- Fallback: Ist der Trigger nach `konfig.reaktiv_fallback_s` (Standard 480 s Übungszeit) nicht eingetreten, löst das Ereignis trotzdem aus. Die Regie kann jederzeit sofort auslösen.
+- Folgemeldungen im Einzeleinsatz über `incident_service.add_message` + `broadcast_message_created` und zusätzlich IncidentLog; `sichtbarkeit=regie` erscheint nur in der Regie.
+- Ein Systemadministrator ohne `?org=` hat keinen Modulkontext (wie bei allen Modulen). Für Tests einen Org-Admin (`admin`) verwenden.

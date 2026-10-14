@@ -179,6 +179,7 @@ from app.models.org_mail import (
 from app.models.org_sms import OrgSmsConfig
 from app.models.password_reset import PasswordResetToken
 from app.models.planspiel import (  # noqa: F401 -- registriert ORM-Modelle
+    PlanspielAdresse,
     PlanspielBeobachtung,
     PlanspielMitglied,
     PlanspielOrtTypZuordnung,

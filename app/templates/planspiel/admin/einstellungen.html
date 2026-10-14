@@ -1,0 +1,141 @@
+{% extends "admin/_layout.html" %}
+{% from "admin/_breadcrumb.html" import breadcrumb %}
+{% block title %}Planspiel-Einstellungen{% endblock %}
+{% block head_extra %}
+  {% include "planspiel/admin/_styles.html" %}
+  <link rel="stylesheet" href="/static/css/leaflet.min.css">
+  <link rel="stylesheet" href="/static/css/leaflet-geoman.min.css">
+  <style>
+    .planspiel-settings__section { margin: 1.5rem 0; padding-top: .5rem; border-top: 1px solid var(--border); }
+    .planspiel-map { height: 360px; margin: .75rem 0; border: 1px solid var(--border); }
+    .planspiel-map--small { height: 240px; }
+    .planspiel-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin: .75rem 0; }
+    .planspiel-pagination { display: flex; gap: .75rem; align-items: center; margin-top: .75rem; }
+    .planspiel-inline { display: inline-block; margin: .15rem .5rem .15rem 0; }
+    @media (max-width: 760px) { .planspiel-map { height: 280px; } .planspiel-actions { flex-direction: column; } }
+  </style>
+{% endblock %}
+{% block content %}
+<section class="planspiel-admin planspiel-settings">
+  {{ breadcrumb([{"label": "Einstellungen", "href": "/admin/settings"}, {"label": "Planspiele", "href": none}]) }}
+  <div class="planspiel-admin__head">
+    <h1>Einstellungen &amp; Adresspool</h1>
+    <a class="btn" href="/admin/settings/planspiele/szenarien">Szenariokatalog</a>
+  </div>
+  {% if fehler %}<p class="form-error">{{ fehler }}</p>{% endif %}
+  {% if meldung %}<p class="form-success">{{ meldung }}</p>{% endif %}
+
+  <section class="planspiel-settings__section">
+    <h2>Gebiet</h2>
+    {% if gebiet_fehlt %}<p class="form-error">Planspiel-Gebiet ist nicht festgelegt: Es fehlen Organisationskoordinaten.</p>{% endif %}
+    <div id="gebiet-karte" class="planspiel-map"></div>
+    {% if can_edit %}
+      <form method="post" action="/admin/settings/planspiele/einstellungen/gebiet">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <input id="gebiet-geojson" type="hidden" name="gebiet_geojson" value="{{ gebiet_geojson|tojson if gebiet_geojson else '' }}">
+        <label>Radius im Kreis-Modus (m)
+          <input class="form-input" type="number" name="radius_m" min="500" max="50000" value="{{ setting.planspiel_gebiet_radius_m or 5000 }}" required>
+        </label>
+        <button class="btn btn--primary" type="submit">Gebiet speichern</button>
+      </form>
+    {% endif %}
+  </section>
+
+  <section class="planspiel-settings__section">
+    <h2>Grenzen</h2>
+    {% if can_edit %}
+      <form class="planspiel-grid" method="post" action="/admin/settings/planspiele/einstellungen/grenzen">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <label>Maximal laufende Planspiele
+          <input class="form-input" type="number" name="max_laufende_runs" min="1" max="10" value="{{ setting.planspiel_max_laufende_runs }}" required>
+        </label>
+        <label>Maximal Stellen je Minute
+          <input class="form-input" type="number" name="max_stellen_je_minute" min="1" max="60" value="{{ setting.planspiel_max_stellen_je_minute }}" required>
+        </label>
+        <button class="btn btn--primary" type="submit">Grenzen speichern</button>
+      </form>
+    {% endif %}
+  </section>
+
+  <section class="planspiel-settings__section">
+    <h2>Adresspool</h2>
+    <p>Aktive Einträge: {% for key, count in pool_stats.items() if key.startswith('quelle:') %}{{ key[7:] }} {{ count }}{% if not loop.last %}, {% endif %}{% endfor %}; Qualität A {{ pool_stats.get('qualitaet:A', 0) }}, B {{ pool_stats.get('qualitaet:B', 0) }}, C {{ pool_stats.get('qualitaet:C', 0) }}.</p>
+    {% if can_edit %}
+      <div class="planspiel-actions">
+        <form method="post" action="/admin/settings/planspiele/adresspool/aufbauen" hx-post="/admin/settings/planspiele/adresspool/aufbauen" hx-target="#pool-liste">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          <button class="btn" type="submit">Pool aus Objekten/Einsätzen aktualisieren</button>
+        </form>
+        <form method="post" action="/admin/settings/planspiele/adresspool/osm" hx-post="/admin/settings/planspiele/adresspool/osm" hx-target="#pool-liste" hx-indicator="#osm-laden">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          <button class="btn" type="submit">OSM-Adressen importieren</button>
+          <span id="osm-laden" class="htmx-indicator">Import läuft …</span>
+        </form>
+      </div>
+    {% endif %}
+    <form class="planspiel-filter" hx-get="/admin/settings/planspiele/adresspool" hx-target="#pool-liste">
+      <select class="form-input" name="quelle"><option value="">Alle Quellen</option><option value="objekt">Objekt</option><option value="osm">OSM</option><option value="manuell">Manuell</option></select>
+      <select class="form-input" name="qualitaet"><option value="">Alle Qualitäten</option><option value="A">A</option><option value="B">B</option><option value="C">C</option></select>
+      <select class="form-input" name="ort_typ"><option value="">Alle Ortstypen</option>{% for key, label in ort_typen.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select>
+      <input class="form-input" name="q" placeholder="Straße suchen" hx-trigger="keyup changed delay:300ms">
+      <button class="btn" type="submit">Filtern</button>
+    </form>
+    <div id="pool-liste">{% include "planspiel/admin/_pool_liste.html" %}</div>
+  </section>
+
+  {% if can_edit %}
+    <section class="planspiel-settings__section">
+      <h2>Manueller Punkt</h2>
+      <p>Für Bootseinsätze (F21/T21) einen Punkt am Bodensee mit Ortstyp 'Boot'/'Gewässer (Boot)' und Gewässer 'bodensee' anlegen.</p>
+      <div id="punkt-karte" class="planspiel-map planspiel-map--small"></div>
+      <form class="planspiel-grid" method="post" action="/admin/settings/planspiele/adresspool/punkt">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <label>Breitengrad<input id="punkt-lat" class="form-input" name="lat" required></label>
+        <label>Längengrad<input id="punkt-lng" class="form-input" name="lng" required></label>
+        <label>Bezeichnung<input class="form-input" name="bezeichnung"></label>
+        <label>Straße<input class="form-input" name="strasse" required></label>
+        <label>Hausnr.<input class="form-input" name="hausnr"></label>
+        <label>Ort<input class="form-input" name="ort"></label>
+        <label>Gewässer<input class="form-input" name="gewaesser" placeholder="bodensee"></label>
+        <label><input type="checkbox" name="bma"> BMA-Merkmal</label>
+        <fieldset class="planspiel-checkboxes"><legend>Ortstypen</legend>{% for key, label in ort_typen.items() %}<label><input type="checkbox" name="ort_typen" value="{{ key }}"> {{ label }}</label>{% endfor %}</fieldset>
+        <button class="btn btn--primary" type="submit">Punkt anlegen</button>
+      </form>
+    </section>
+    <section class="planspiel-settings__section">
+      <h2>Ortstyp-Zuordnung</h2>
+      <form method="post" action="/admin/settings/planspiele/einstellungen/ortstypen">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <table class="planspiel-table"><thead><tr><th>Objektkategorie</th><th>Ortstypen</th></tr></thead><tbody>{% for category in kategorien %}<tr><td>{{ category.name }}</td><td>{% for key, label in ort_typen.items() %}<label class="planspiel-inline"><input type="checkbox" name="kategorie_{{ category.id }}" value="{{ key }}" {% if key in zuordnungen.get(category.id, []) %}checked{% endif %}> {{ label }}</label>{% endfor %}</td></tr>{% else %}<tr><td colspan="2">Keine Objektkategorien vorhanden.</td></tr>{% endfor %}</tbody></table>
+        <button class="btn btn--primary" type="submit">Zuordnung speichern</button>
+      </form>
+      <p class="planspiel-hint">Pool neu aufbauen, damit Änderungen wirken.</p>
+    </section>
+  {% endif %}
+</section>
+{% endblock %}
+{% block scripts %}
+  <script src="/static/js/leaflet.min.js"></script>
+  <script src="/static/js/leaflet-geoman.min.js"></script>
+  <script>
+    (function () {
+      var polygon = {{ gebiet_geojson|tojson }};
+      var center = {{ gebiet_zentrum|tojson }} || [47.47, 9.75];
+      var map = L.map('gebiet-karte').setView(center, polygon ? 13 : 11);
+      L.tileLayer('https://mapsneu.wien.gv.at/basemap/geolandbasemap/normal/google3857/{z}/{y}/{x}.png', { maxZoom: 20, attribution: 'Datenquelle: basemap.at' }).addTo(map);
+      var field = document.getElementById('gebiet-geojson');
+      var layer;
+      function sync() { field.value = layer ? JSON.stringify(layer.toGeoJSON().geometry) : ''; }
+      if (polygon) { layer = L.geoJSON(polygon).addTo(map); map.fitBounds(layer.getBounds()); }
+      {% if gebiet_zentrum %}if (!polygon) { L.circle(center, { radius: {{ setting.planspiel_gebiet_radius_m or 5000 }} }).addTo(map); }{% endif %}
+      map.pm.addControls({ position: 'topleft', drawCircle: false, drawCircleMarker: false, drawMarker: false, drawPolyline: false, drawRectangle: false, drawText: false });
+      map.on('pm:create', function (event) { if (layer) { map.removeLayer(layer); } layer = event.layer; sync(); });
+      map.on('pm:edit', sync);
+      map.on('pm:remove', function () { layer = null; sync(); });
+      var pointMap = L.map('punkt-karte').setView(center, 12);
+      L.tileLayer('https://mapsneu.wien.gv.at/basemap/geolandbasemap/normal/google3857/{z}/{y}/{x}.png', { maxZoom: 20, attribution: 'Datenquelle: basemap.at' }).addTo(pointMap);
+      var marker;
+      pointMap.on('click', function (event) { if (marker) { marker.setLatLng(event.latlng); } else { marker = L.circleMarker(event.latlng, { radius: 9, color: '#dc2626', weight: 3, fillOpacity: .7 }).addTo(pointMap); } document.getElementById('punkt-lat').value = event.latlng.lat.toFixed(6); document.getElementById('punkt-lng').value = event.latlng.lng.toFixed(6); });
+    }());
+  </script>
+{% endblock %}

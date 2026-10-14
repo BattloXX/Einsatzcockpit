@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% import "planspiel/_labels.html" as L with context %}
+{% from "_page_header.html" import page_header %}
+{% block title %}{{ run.titel }}{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="/static/css/leaflet.min.css">
+<style>
+  .planspiel-detail { max-width: 1080px; margin: 0 auto; padding: 1rem 1rem 3rem; }
+  .planspiel-detail__head { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; }
+  .planspiel-detail__card { margin-top: 1rem; padding: 1rem; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface-low); }
+  .planspiel-detail__meta { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; }
+  .planspiel-detail__safety { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+  .planspiel-detail__safe { border-left: 4px solid #15803d; padding-left: .8rem; }
+  .planspiel-detail__blocked { border-left: 4px solid #b91c1c; padding-left: .8rem; }
+  .planspiel-detail__map { height: 230px; margin-top: .75rem; border: 1px solid var(--border); }
+  .planspiel-detail__table { width: 100%; border-collapse: collapse; }
+  .planspiel-detail__table th, .planspiel-detail__table td { padding: .5rem; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+  .planspiel-detail__scroll { overflow-x: auto; }
+  .planspiel-detail__actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+  @media (max-width: 760px) {
+    .planspiel-detail { padding: .75rem .75rem 2rem; }
+    .planspiel-detail__meta, .planspiel-detail__safety { grid-template-columns: 1fr; }
+    .planspiel-detail__actions { flex-direction: column; }
+  }
+</style>
+{% endblock %}
+{% block content %}
+<main class="planspiel-detail">
+  {% call page_header(run.titel, back_href="/planspiele", back_label="Planspiele",
+                       sub="Planspiel · " ~ status_labels.get(run.status, run.status)) %}
+    <span class="planspiel-pill">{{ status_labels.get(run.status, run.status) }}</span>
+  {% endcall %}
+  {% if fehler %}<p class="form-error">{{ fehler }}</p>{% endif %}
+  <section class="planspiel-detail__card planspiel-detail__meta">
+    <div><strong>Art</strong><br>Einzeleinsatz</div>
+    <div><strong>Seed</strong><br>{{ run.seed }}</div>
+    <div><strong>Tempo</strong><br>{{ run.tempo }}×</div>
+    <div><strong>Leiter</strong><br>{{ leiter.display_name or leiter.username if leiter else 'Nicht zugeteilt' }}</div>
+  </section>
+  {% if vorschau %}
+  <section class="planspiel-detail__card">
+    <h2>Vorschau</h2>
+    <h3>Alarmtext</h3>
+    <p>{{ vorschau.alarmtext }}</p>
+    <h3>Ort</h3>
+    <p>{{ vorschau.ort.adresse or vorschau.ort.bezeichnung }} · Qualität {{ vorschau.ort.qualitaet }} · Quelle {{ vorschau.ort.quelle }}</p>
+    <div id="vorschau-karte" class="planspiel-detail__map"></div>
+    <h3>Stichwort</h3>
+    <p>{{ vorschau.stichwort_org }}</p>
+  </section>
+  <section class="planspiel-detail__card">
+    <h2>Zeitplan</h2>
+    <div class="planspiel-detail__scroll">
+      <table class="planspiel-detail__table">
+        <thead><tr><th>Typ</th><th>Trigger</th><th>Fällig</th><th>Status</th><th>Text</th></tr></thead>
+        <tbody>
+          {% for event in vorschau.zeitplan %}
+          <tr>
+            <td>{{ L.EREIGNIS_TYP.get(event.ereignis_typ, event.ereignis_typ) }}</td>
+            <td>{{ L.TRIGGER.get(event.trigger_type, event.trigger_type) }}</td>
+            <td>{{ L.faellig(event) }}</td>
+            <td>{{ L.EREIGNIS_STATUS.get(event.status, event.status) }}</td>
+            <td>{{ event.text }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  <section class="planspiel-detail__card planspiel-detail__safety">
+    <div class="planspiel-detail__safe"><h2>Wird angelegt</h2><ul>{% for text in vorschau.wird_angelegt %}<li>{{ text }}</li>{% endfor %}</ul></div>
+    <div class="planspiel-detail__blocked"><h2>Wird NICHT ausgelöst</h2><ul>{% for text in vorschau.wird_nicht_ausgeloest %}<li>{{ text }}</li>{% endfor %}</ul></div>
+  </section>
+  {% if can_leiten %}
+  <section class="planspiel-detail__actions">
+    <form method="post" action="/planspiele/{{ run.id }}/start" onsubmit="return confirm('Übungseinsatz jetzt anlegen? Es wird keine echte Alarmierung ausgelöst.');"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><button class="btn btn--primary" type="submit">Übung starten</button></form>
+    <a class="btn" href="/planspiele/{{ run.id }}/bearbeiten">Bearbeiten</a>
+    <form method="post" action="/planspiele/{{ run.id }}/verwerfen" onsubmit="return confirm('Entwurf wirklich verwerfen?');"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><button class="btn" type="submit">Entwurf verwerfen</button></form>
+  </section>
+  {% endif %}
+  {% else %}
+  <section class="planspiel-detail__card">
+    <h2>Übung läuft</h2>
+    <p>Gestartet: {{ run.gestartet_at|local_datetime }}</p>
+    {% if run.incident_id %}<p><a class="btn btn--primary" href="/einsatz/{{ run.incident_id }}">Zum Übungseinsatz</a></p>{% endif %}
+    <p>Steuerung (Pause, Einspielen) folgt in Phase D.</p>
+  </section>
+  <section class="planspiel-detail__card">
+    <h2>Ereignisse</h2>
+    <div class="planspiel-detail__scroll"><table class="planspiel-detail__table"><thead><tr><th>Seq.</th><th>Trigger</th><th>Fällig</th><th>Status</th><th>Text</th></tr></thead><tbody>{% for event in ereignisse %}
+          <tr>
+            <td>{{ event.seq }}</td>
+            <td>{{ L.TRIGGER.get(event.trigger_type, event.trigger_type) }}</td>
+            <td>{{ L.faellig(event) }}</td>
+            <td>{{ L.EREIGNIS_STATUS.get(event.status, event.status) }}</td>
+            <td>{{ event.text }}</td>
+          </tr>
+          {% else %}<tr><td colspan="5">Keine Ereignisse.</td></tr>{% endfor %}</tbody></table></div>
+  </section>
+  {% endif %}
+</main>
+{% endblock %}
+{% block scripts %}
+{% if vorschau and vorschau.ort.lat is not none and vorschau.ort.lng is not none %}
+<script src="/static/js/leaflet.min.js"></script>
+<script>
+  (function () {
+    var point = [{{ vorschau.ort.lat|tojson }}, {{ vorschau.ort.lng|tojson }}];
+    var map = L.map('vorschau-karte').setView(point, 15);
+    L.tileLayer('https://mapsneu.wien.gv.at/basemap/geolandbasemap/normal/google3857/{z}/{y}/{x}.png', { maxZoom: 20, attribution: 'Datenquelle: basemap.at' }).addTo(map);
+    L.circleMarker(point, { radius: 9, color: '#dc2626', weight: 3, fillOpacity: .7 }).addTo(map);
+  }());
+</script>
+{% endif %}
+{% endblock %}
