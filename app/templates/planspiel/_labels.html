@@ -1,0 +1,51 @@
+{# Deutsche Bezeichnungen fuer Planspiel-Ereignisse (Lauf-Detail, Regie). #}
+{% set EREIGNIS_TYP = {
+  "aufklaerung": "Aufklärung",
+  "eskalation": "Eskalation",
+  "komplikation": "Komplikation",
+  "entspannung": "Entspannung",
+  "lageweit": "Lageweite Meldung",
+  "funk": "Funk (simuliert)",
+  "duplikat": "Doppelmeldung",
+} %}
+{% set TRIGGER = {
+  "elapsed_time": "Zeit",
+  "phase_reached": "Phase erreicht",
+  "assignment_created": "Auftrag erstellt",
+  "assignment_completed": "Auftrag abgeschlossen",
+  "manual": "Manuell (Regie)",
+  "condition": "Bedingung",
+} %}
+{% set PHASE = {
+  "eingegangen": "Eingegangen",
+  "erkundung": "Erkundung",
+  "bewertet": "Bewertet",
+  "disponiert": "Disponiert",
+  "in_arbeit": "In Arbeit",
+  "fertig_gemeldet": "Fertig gemeldet",
+  "erledigt": "Abgeschlossen",
+} %}
+{% set EREIGNIS_STATUS = {
+  "geplant": "geplant",
+  "faellig": "fällig",
+  "laeuft": "wird ausgeführt",
+  "ausgefuehrt": "ausgeführt",
+  "uebersprungen": "übersprungen",
+  "fehlgeschlagen": "fehlgeschlagen",
+  "abgebrochen": "abgebrochen",
+} %}
+
+{% macro faellig(event) -%}
+  {%- set param = event.trigger_param or {} -%}
+  {%- if event.faellig_sim_s is not none -%}
+    {{ '%02d:%02d'|format((event.faellig_sim_s // 60)|int, (event.faellig_sim_s % 60)|int) }} Übungszeit
+  {%- elif event.trigger_type == 'manual' -%}
+    durch die Regie
+  {%- elif event.trigger_type == 'phase_reached' -%}
+    bei Phase {{ PHASE.get(param.get('phase'), param.get('phase') or '?') }}
+  {%- elif event.trigger_type in ('assignment_created', 'assignment_completed') -%}
+    {{ TRIGGER[event.trigger_type] }}{% if param.get('auftragsart') %} ({{ param.get('auftragsart')|capitalize }}){% endif %}
+  {%- else -%}
+    {{ TRIGGER.get(event.trigger_type, event.trigger_type) }}
+  {%- endif -%}
+{%- endmacro %}

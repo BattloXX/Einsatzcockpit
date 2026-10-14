@@ -16,7 +16,7 @@
     {% if can_edit %}
       <form method="post" action="/admin/settings/planspiele/adresspool/{{ row.id }}/aktiv" hx-post="/admin/settings/planspiele/adresspool/{{ row.id }}/aktiv" hx-target="#pool-{{ row.id }}" hx-swap="outerHTML">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-        <button class="btn btn--small" type="submit">{{ 'Aktiv' if row.aktiv else 'Inaktiv' }}</button>
+        <button class="btn btn--sm" type="submit">{{ 'Aktiv' if row.aktiv else 'Inaktiv' }}</button>
       </form>
     {% else %}
       {{ 'Aktiv' if row.aktiv else 'Inaktiv' }}

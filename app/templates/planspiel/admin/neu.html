@@ -1,6 +1,9 @@
 {% extends "admin/_layout.html" %}
 {% from "admin/_breadcrumb.html" import breadcrumb %}
 {% block title %}Neues Szenario{% endblock %}
+{% block head_extra %}
+  {% include "planspiel/admin/_styles.html" %}
+{% endblock %}
 {% block content %}
 <section class="planspiel-admin" x-data="{ tab: 'grund' }">
   {{ breadcrumb([{"label": "Einstellungen", "href": "/admin/settings"}, {"label": "Planspiele", "href": "/planspiele"}, {"label": "Szenariokatalog", "href": "/admin/settings/planspiele/szenarien"}, {"label": "Neu", "href": none}]) }}

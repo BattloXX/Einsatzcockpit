@@ -6,10 +6,16 @@
     {% if runs[key] %}
     <div class="planspiel-list">
       {% for run in runs[key] %}
-      <article class="planspiel-row">
-        <div class="planspiel-row__main"><strong>{{ run.titel }}</strong><small>{{ run.art }}{% if run.gestartet_at %} · gestartet {{ run.gestartet_at|local_datetime }}{% endif %}</small><small>Leitung: {{ leiter_namen.get(run.leiter_user_id, 'Nicht zugeteilt') }}</small></div>
-        <div class="planspiel-row__meta"><span class="planspiel-pill">{{ status_labels.get(run.status, run.status) }}</span></div>
-      </article>
+      <a class="planspiel-row" href="/planspiele/{{ run.id }}">
+        <div class="planspiel-row__main">
+          <strong>{{ run.titel }}</strong>
+          <small>{{ run.art }}{% if run.gestartet_at %} · gestartet {{ run.gestartet_at|local_datetime }}{% endif %}</small>
+          <small>Leitung: {{ leiter_namen.get(run.leiter_user_id, 'Nicht zugeteilt') }}</small>
+        </div>
+        <div class="planspiel-row__meta">
+          <span class="planspiel-pill">{{ status_labels.get(run.status, run.status) }}</span>
+        </div>
+      </a>
       {% endfor %}
     </div>
     {% else %}<p class="planspiel-empty">Keine Einträge.</p>{% endif %}

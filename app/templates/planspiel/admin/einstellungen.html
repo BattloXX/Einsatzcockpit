@@ -2,6 +2,7 @@
 {% from "admin/_breadcrumb.html" import breadcrumb %}
 {% block title %}Planspiel-Einstellungen{% endblock %}
 {% block head_extra %}
+  {% include "planspiel/admin/_styles.html" %}
   <link rel="stylesheet" href="/static/css/leaflet.min.css">
   <link rel="stylesheet" href="/static/css/leaflet-geoman.min.css">
   <style>
@@ -134,7 +135,7 @@
       var pointMap = L.map('punkt-karte').setView(center, 12);
       L.tileLayer('https://mapsneu.wien.gv.at/basemap/geolandbasemap/normal/google3857/{z}/{y}/{x}.png', { maxZoom: 20, attribution: 'Datenquelle: basemap.at' }).addTo(pointMap);
       var marker;
-      pointMap.on('click', function (event) { if (marker) { marker.setLatLng(event.latlng); } else { marker = L.marker(event.latlng).addTo(pointMap); } document.getElementById('punkt-lat').value = event.latlng.lat.toFixed(6); document.getElementById('punkt-lng').value = event.latlng.lng.toFixed(6); });
+      pointMap.on('click', function (event) { if (marker) { marker.setLatLng(event.latlng); } else { marker = L.circleMarker(event.latlng, { radius: 9, color: '#dc2626', weight: 3, fillOpacity: .7 }).addTo(pointMap); } document.getElementById('punkt-lat').value = event.latlng.lat.toFixed(6); document.getElementById('punkt-lng').value = event.latlng.lng.toFixed(6); });
     }());
   </script>
 {% endblock %}

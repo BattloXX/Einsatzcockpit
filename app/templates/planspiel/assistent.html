@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% from "_page_header.html" import page_header %}
+{% block title %}{% if run %}Planspiel bearbeiten{% else %}Neues Planspiel{% endif %}{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="/static/css/leaflet.min.css">
+<style>
+  .planspiel-wizard { max-width: 980px; margin: 0 auto; padding: 1rem 1rem 3rem; }
+  .planspiel-wizard__step { margin: 1rem 0; padding: 1rem; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface-low); }
+  .planspiel-wizard__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; }
+  .planspiel-wizard__grid label { display: grid; gap: .3rem; }
+  .planspiel-wizard__full { grid-column: 1 / -1; }
+  .planspiel-wizard__map { height: 280px; margin-top: .5rem; border: 1px solid var(--border); }
+  .planspiel-wizard__actions { display: flex; justify-content: space-between; gap: .75rem; margin-top: 1rem; }
+  .planspiel-wizard__choice { display: flex; align-items: center; gap: .4rem; }
+  .planspiel-wizard__hint { color: var(--text-muted); }
+  @media (max-width: 760px) {
+    .planspiel-wizard { padding: .75rem .75rem 2rem; }
+    .planspiel-wizard__grid { grid-template-columns: 1fr; }
+    .planspiel-wizard__full { grid-column: auto; }
+    .planspiel-wizard__actions { flex-direction: column; }
+  }
+</style>
+{% endblock %}
+{% block content %}
+<main class="planspiel-wizard" x-data="{ step: 1 }">
+  {{ page_header("Planspiel bearbeiten" if run else "Neues Planspiel",
+                 back_href=("/planspiele/" ~ run.id) if run else "/planspiele", back_label="Zurück",
+                 sub="Alle erzeugten Einsätze sind ÜBUNGEN – es wird nicht echt alarmiert.") }}
+  {% if fehler %}
+  <p class="form-error">{{ fehler }}</p>
+  {% endif %}
+  <form method="post" action="{% if run %}/planspiele/{{ run.id }}/bearbeiten{% else %}/planspiele/neu{% endif %}">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <section class="planspiel-wizard__step" x-show="step === 1">
+      <h2>1. Titel und Lernziele</h2>
+      <div class="planspiel-wizard__grid">
+        <label class="planspiel-wizard__full">Titel
+          <input class="form-input" name="titel" value="{{ form.get('titel', '') }}" required>
+        </label>
+        <label class="planspiel-wizard__full">Lernziele
+          <textarea class="form-input" name="lernziele" rows="4">{{ form.get('lernziele', '') }}</textarea>
+        </label>
+      </div>
+    </section>
+    <section class="planspiel-wizard__step" x-show="step === 2">
+      <h2>2. Art</h2>
+      <label class="planspiel-wizard__choice"><input type="radio" name="art" value="einzel" {% if form.get('art', 'einzel') == 'einzel' %}checked{% endif %}> Einzeleinsatz</label>
+      <label class="planspiel-wizard__choice"><input type="radio" disabled> Großschadenslage <span class="planspiel-wizard__hint">folgt</span></label>
+    </section>
+    <section class="planspiel-wizard__step" x-show="step === 3">
+      <h2>3. Erzeugung</h2>
+      {% for value, label in [('manuell', 'Manuell'), ('teilauto', 'Teilautomatisch'), ('zufall', 'Zufällig')] %}
+      <label class="planspiel-wizard__choice"><input type="radio" name="erzeugung" value="{{ value }}" {% if form.get('erzeugung', 'manuell') == value %}checked{% endif %}> {{ label }}</label>
+      {% endfor %}
+    </section>
+    <section class="planspiel-wizard__step" x-show="step === 4">
+      <h2>4. Szenario</h2>
+      <label>Stichwortvorschlag
+        <input class="form-input" name="stichwort_suche" hx-get="/planspiele/neu/stichwort" hx-target="#stichwort-vorschlag" hx-trigger="keyup changed delay:300ms" hx-include="this" placeholder="z. B. Rauch aus Fenster">
+      </label>
+      <div id="stichwort-vorschlag"></div>
+      <label>Szenario
+        <select id="szenario-id" class="form-input" name="szenario_id">
+          <option value="">Zufällig</option>
+          {% for kategorie, items in szenarien.items() %}
+          <optgroup label="{{ kategorie|capitalize }}">
+            {% for scenario, version in items %}
+            <option value="{{ scenario.id }}" {% if form.get('szenario_id')|string == scenario.id|string %}selected{% endif %}>{{ scenario.code }} – {{ version.titel }} ({{ version.stichwort_code }})</option>
+            {% endfor %}
+          </optgroup>
+          {% endfor %}
+        </select>
+      </label>
+    </section>
+    <section class="planspiel-wizard__step" x-show="step === 5">
+      <h2>5. Ort</h2>
+      <div class="planspiel-wizard__grid">
+        {% for value, label in [('zufall', 'Zufällig'), ('pool', 'Pool-Eintrag'), ('objekt', 'Objekt'), ('manuell', 'Manuelle Adresse'), ('karte', 'Kartenpunkt')] %}
+        <label class="planspiel-wizard__choice"><input type="radio" name="ort_modus" value="{{ value }}" {% if form.get('ort_modus', 'zufall') == value %}checked{% endif %}> {{ label }}</label>
+        {% endfor %}
+        <label>Pool-Eintrag
+          <select class="form-input" name="adresse_id"><option value="">Bitte wählen</option>{% for adresse in pool %}<option value="{{ adresse.id }}" {% if form.get('adresse_id')|string == adresse.id|string %}selected{% endif %}>{{ adresse.quelle }}: {{ adresse.strasse }} {{ adresse.hausnr or '' }}, {{ adresse.ort or '' }}</option>{% endfor %}</select>
+        </label>
+        <label>Objekt
+          <select class="form-input" name="objekt_id"><option value="">Bitte wählen</option>{% for objekt in objekte %}<option value="{{ objekt.id }}" {% if form.get('objekt_id')|string == objekt.id|string %}selected{% endif %}>{{ objekt.name }}</option>{% endfor %}</select>
+        </label>
+        <label>Straße<input class="form-input" name="strasse" value="{{ form.get('strasse', '') }}"></label>
+        <label>Hausnummer<input class="form-input" name="hausnr" value="{{ form.get('hausnr', '') }}"></label>
+        <label>PLZ<input class="form-input" name="plz" value="{{ form.get('plz', '') }}"></label>
+        <label>Ort<input class="form-input" name="ort" value="{{ form.get('ort', '') }}"></label>
+        <label>Breitengrad<input id="ort-lat" class="form-input" name="lat" value="{{ form.get('lat', '') }}"></label>
+        <label>Längengrad<input id="ort-lng" class="form-input" name="lng" value="{{ form.get('lng', '') }}"></label>
+        <label class="planspiel-wizard__full">Bezeichnung für Kartenpunkt<input id="ort-bezeichnung" class="form-input" name="bezeichnung" value="{{ form.get('bezeichnung', '') }}"></label>
+      </div>
+      <div id="ort-karte" class="planspiel-wizard__map"></div>
+    </section>
+    <section class="planspiel-wizard__step" x-show="step === 6">
+      <h2>6. Varianten</h2>
+      <div class="planspiel-wizard__grid">
+        <label>Stichwort-Override<input class="form-input" name="stichwort_code" value="{{ form.get('stichwort_code', '') }}"></label>
+        <label>Tempo<select class="form-input" name="tempo">{% for value in [0.5, 1, 2, 5, 10] %}<option value="{{ value }}" {% if form.get('tempo', 1)|float == value %}selected{% endif %}>{{ value }}×</option>{% endfor %}</select></label>
+        <label class="planspiel-wizard__full">Alarmtext-Override<textarea class="form-input" name="alarmtext" rows="3">{{ form.get('alarmtext', '') }}</textarea></label>
+        <label>Seed (optional)<input class="form-input" type="number" name="seed" value="{{ form.get('seed', '') }}"></label>
+        <label class="planspiel-wizard__choice"><input type="checkbox" name="folgemeldungen_aktiv" {% if form.get('folgemeldungen_aktiv', True) %}checked{% endif %}> Folgemeldungen aktiv</label>
+      </div>
+    </section>
+    <section class="planspiel-wizard__step" x-show="step === 7">
+      <h2>7. Simulation</h2>
+      <p>Allein-Betrieb und simulierte Einheiten folgen in einer späteren Phase.</p>
+    </section>
+    <div class="planspiel-wizard__actions">
+      <button class="btn" type="button" x-show="step > 1" @click="step--">Zurück</button>
+      <button class="btn btn--primary" type="button" x-show="step < 7" @click="step++">Weiter</button>
+      <button class="btn btn--primary" type="submit" x-show="step === 7">Als Entwurf speichern</button>
+    </div>
+  </form>
+</main>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/leaflet.min.js"></script>
+<script>
+  (function () {
+    var lat = document.getElementById('ort-lat');
+    var lng = document.getElementById('ort-lng');
+    var marker;
+    var map = L.map('ort-karte').setView([47.47, 9.75], 12);
+    L.tileLayer('https://mapsneu.wien.gv.at/basemap/geolandbasemap/normal/google3857/{z}/{y}/{x}.png', { maxZoom: 20, attribution: 'Datenquelle: basemap.at' }).addTo(map);
+    function place(point) {
+      if (marker) { marker.setLatLng(point); } else { marker = L.circleMarker(point, { radius: 9, color: '#dc2626', weight: 3, fillOpacity: .7 }).addTo(map); }
+      lat.value = point.lat.toFixed(6);
+      lng.value = point.lng.toFixed(6);
+    }
+    map.on('click', function (event) { place(event.latlng); });
+    if (lat.value && lng.value) { place(L.latLng(Number(lat.value), Number(lng.value))); }
+  }());
+</script>
+{% endblock %}
