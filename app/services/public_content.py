@@ -252,15 +252,39 @@ ROADMAP: list[dict] = [
         "status": "in_arbeit",
         "items": [
             {
-                "title": "Einheitenansicht – Praxiserprobung",
-                "text": "Rückmeldungen aus Einsätzen fließen in die weitere Optimierung ein.",
+                "title": "GSL-Einheitenansicht – Praxiserprobung",
+                "text": "Tests auf Fahrzeug-Tablets und Smartphones: Kamera, Upload im Funkloch, "
+                        "mehrere Geräte pro Fahrzeug. Rückmeldungen aus Übungen fließen direkt ein.",
+            },
+            {
+                "title": "Mail-Eingang – Erprobung",
+                "text": "Einsatz-Mails über Resend, IMAP oder Microsoft 365 landen als Meldung im "
+                        "Einsatz; der Betrieb mit echten Postfächern wird erprobt.",
+            },
+            {
+                "title": "KI-Assistenten über MCP – Erprobung",
+                "text": "Objekte, Kontakte, Straßensperren, Einsätze und die GSL-Lage per "
+                        "KI-Assistent abfragen und pflegen – im Praxistest mit Claude und ChatGPT.",
             },
         ],
     },
     {
         "status": "geplant",
         "items": [
-            {"title": "Mobile Optimierungen", "text": "Weitere Verbesserungen für die Nutzung am Einsatzort."},
+            {
+                "title": "Einheitenansicht: Navigation mit Straßensperren",
+                "text": "Route zur Einsatzstelle direkt im Einheitenmodus, unter Berücksichtigung "
+                        "aktiver Sperren.",
+            },
+            {
+                "title": "Einheitenansicht: Hintergrund-Synchronisation",
+                "text": "Offline erfasste Meldungen und Fotos überträgt die Android-App auch dann, "
+                        "wenn sie gerade nicht geöffnet ist.",
+            },
+            {
+                "title": "Auswertung von Großschadenslagen",
+                "text": "Zeiten, Einheitenstatus und Abläufe einer GSL für die Nachbereitung auswerten.",
+            },
             {"title": "Erweiterte Berichte & Statistik", "text": "Mehr Auswertungen für Nachbereitung und Verwaltung."},
             {
                 "title": "Weitere Leitstellen-Schnittstellen",
