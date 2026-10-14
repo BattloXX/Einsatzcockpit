@@ -95,7 +95,10 @@ async def _send_sms(db: Session, incident: Incident, job: IncidentAlarmJob) -> t
     org_id = job.org_id
     if not org_id:
         return "suppressed", "keine Organisation zugeordnet"
-    if not darf_extern("sms", is_exercise=incident.is_exercise, org_id=org_id, db=db):
+    if not darf_extern(
+        "sms", is_exercise=incident.is_exercise, org_id=org_id, db=db,
+        planspiel_run_id=incident.planspiel_run_id,
+    ):
         logger.info("Einsatzinfo-SMS uebersprungen: Uebung unterdrueckt (Einsatz %s)", incident.id)
         return "suppressed", "Uebung unterdrueckt"
     address = _address(incident)
@@ -107,6 +110,7 @@ async def _send_sms(db: Session, incident: Incident, job: IncidentAlarmJob) -> t
         org_id, incident.alarm_type_code, address, incident.address_city, incident.report_text,
         incident.reason, incident.is_exercise, job.context.get("triggered_by_user_id"), info_link,
         incident.lis_operation_number, incident.id,
+        planspiel_run_id=incident.planspiel_run_id,
     )
     if result is None:
         return "sent", None
@@ -126,7 +130,10 @@ async def _send_push(db: Session, incident: Incident, job: IncidentAlarmJob) -> 
     body = address or incident.report_text or "Kein Ort angegeben"
     url = job.context.get("push_url") or f"/einsatz/{incident.id}"
     user_id = job.context.get("triggered_by_user_id")
-    if not darf_extern("push", is_exercise=incident.is_exercise, org_id=org_id, db=db):
+    if not darf_extern(
+        "push", is_exercise=incident.is_exercise, org_id=org_id, db=db,
+        planspiel_run_id=incident.planspiel_run_id,
+    ):
         if incident.is_exercise:
             await _send_incident_wake_only(incident.id, org_id, title, body, url, user_id)
         return "suppressed", "Uebung unterdrueckt"
@@ -144,7 +151,10 @@ async def _send_push(db: Session, incident: Incident, job: IncidentAlarmJob) -> 
 async def _send_teams(db: Session, incident: Incident, job: IncidentAlarmJob) -> tuple[str, str | None]:
     from app.services.exercise_guard import darf_extern
     from app.services.teams_alarm_service import post_incident_card
-    if not darf_extern("teams", is_exercise=incident.is_exercise, org_id=job.org_id, db=db):
+    if not darf_extern(
+        "teams", is_exercise=incident.is_exercise, org_id=job.org_id, db=db,
+        planspiel_run_id=incident.planspiel_run_id,
+    ):
         logger.info("Teams-Alarmierung uebersprungen: Uebung unterdrueckt (Einsatz %s)", incident.id)
         return "suppressed", "Uebung unterdrueckt"
     base_url = job.context.get("base_url")

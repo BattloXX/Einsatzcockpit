@@ -53,6 +53,16 @@ def _dispatch_gsl_push(lage_id: int, org_id: int | None, reason: str) -> None:
         lage = db.get(MajorIncident, lage_id)
         if lage is None or lage.org_id != org_id:
             return
+        from app.services.exercise_guard import darf_extern
+
+        if lage.planspiel_run_id is not None and not darf_extern(
+            "push",
+            is_exercise=bool(lage.is_exercise),
+            org_id=lage.org_id,
+            db=db,
+            planspiel_run_id=lage.planspiel_run_id,
+        ):
+            return
         payload = build_gsl_live_payload(db, lage)
         counts = payload["counts"]
         sig = f"{counts['neu']}-{counts['in_arbeit']}-{counts['erledigt']}"

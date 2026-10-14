@@ -36,6 +36,8 @@ def alarm_ausschluss_begriffe(raw: str | None) -> list[str]:
 
 def alarm_unterdrueckung_grund(db: Session, incident: Incident, org_id: int | None) -> str | None:
     """Gibt den Grund zurueck, wenn ein Einsatz nicht alarmiert werden darf."""
+    if incident.planspiel_run_id is not None:
+        return "Planspiel"
     if (incident.alarm_type_code or "").upper() in NIE_ALARMIEREN_STICHWORTE:
         return "Stichwort F30"
     if org_id is None:

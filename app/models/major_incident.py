@@ -271,6 +271,9 @@ class MajorIncident(Base):
     status: Mapped[MajorIncidentStatus] = mapped_column(Enum(MajorIncidentStatus), default=MajorIncidentStatus.active)
     trigger: Mapped[str] = mapped_column(String(20), default="manual")  # "manual"|"alarm_auto"
     is_exercise: Mapped[bool] = mapped_column(Boolean, default=False)
+    planspiel_run_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("planspiel_run.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     auto_adopt: Mapped[bool] = mapped_column(Boolean, default=True)
     public_token: Mapped[str | None] = mapped_column(String(64), unique=True, index=True, nullable=True)
     public_token_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

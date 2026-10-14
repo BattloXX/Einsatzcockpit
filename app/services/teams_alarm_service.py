@@ -130,6 +130,7 @@ async def post_incident_card(db: Session, incident: Incident, *, base_url: str) 
         is_exercise=incident.is_exercise,
         org_id=incident.primary_org_id,
         db=db,
+        planspiel_run_id=incident.planspiel_run_id,
     ):
         reason = "Uebung unterdrueckt"
         logger.info(
@@ -263,6 +264,7 @@ def _record_card_post(
 
 async def post_gsl_alarm_card(
     org_id: int, lage_id: int, lage_name: str, is_exercise: bool, *, base_url: str,
+    planspiel_run_id: int | None = None,
 ) -> None:
     """Postet den Großschadenslage-Sonderalarm bei Ausrufung einer neuen Lage — unabhängig
     von der stichwortbezogenen Einsatzkarte (post_incident_card()): eigener, schlanker
@@ -280,7 +282,10 @@ async def post_gsl_alarm_card(
         if not cfg or not cfg.enabled:
             return
         from app.services.exercise_guard import darf_extern
-        if not darf_extern("teams", is_exercise=is_exercise, org_id=org_id, db=db):
+        if not darf_extern(
+            "teams", is_exercise=is_exercise, org_id=org_id, db=db,
+            planspiel_run_id=planspiel_run_id,
+        ):
             return
 
         org_settings = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()

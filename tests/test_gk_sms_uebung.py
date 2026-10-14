@@ -141,14 +141,14 @@ def test_exercise_guard_gk_sms_ist_fail_closed_ohne_einstellungen():
         org = FireDept(slug=f"gk-guard-{uuid4().hex[:10]}", name="GK Guard")
         db.add(org)
         db.flush()
-        assert darf_extern("gk_sms", is_exercise=True, org_id=org.id, db=db) is False
+        assert darf_extern("gk_sms", is_exercise=True, org_id=org.id, db=db, planspiel_run_id=None) is False
         settings = OrgSettings(org_id=org.id, gk_sms_uebung=True)
         db.add(settings)
         db.flush()
-        assert darf_extern("gk_sms", is_exercise=True, org_id=org.id, db=db) is True
+        assert darf_extern("gk_sms", is_exercise=True, org_id=org.id, db=db, planspiel_run_id=None) is True
         settings.gk_sms_uebung = False
-        assert darf_extern("gk_sms", is_exercise=True, org_id=org.id, db=db) is False
-        assert darf_extern("gk_sms", is_exercise=False, org_id=org.id, db=db) is True
+        assert darf_extern("gk_sms", is_exercise=True, org_id=org.id, db=db, planspiel_run_id=None) is False
+        assert darf_extern("gk_sms", is_exercise=False, org_id=org.id, db=db, planspiel_run_id=None) is True
 
 
 def test_gsl_einstellungen_speichern_gk_sms_uebung(client, setup_db):

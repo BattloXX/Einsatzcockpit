@@ -1,0 +1,18 @@
+{% set has_runs = runs.entwuerfe or runs.laufend or runs.beendet %}
+{% if has_runs %}
+  {% for key, (titel, _) in gruppen.items() %}
+  <section class="planspiel-section">
+    <h2>{{ titel }}</h2>
+    {% if runs[key] %}
+    <div class="planspiel-list">
+      {% for run in runs[key] %}
+      <article class="planspiel-row">
+        <div class="planspiel-row__main"><strong>{{ run.titel }}</strong><small>{{ run.art }}{% if run.gestartet_at %} · gestartet {{ run.gestartet_at|local_datetime }}{% endif %}</small><small>Leitung: {{ leiter_namen.get(run.leiter_user_id, 'Nicht zugeteilt') }}</small></div>
+        <div class="planspiel-row__meta"><span class="planspiel-pill">{{ status_labels.get(run.status, run.status) }}</span></div>
+      </article>
+      {% endfor %}
+    </div>
+    {% else %}<p class="planspiel-empty">Keine Einträge.</p>{% endif %}
+  </section>
+  {% endfor %}
+{% else %}<p class="planspiel-empty">Noch keine Planspiele angelegt.</p>{% endif %}

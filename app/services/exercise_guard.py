@@ -6,6 +6,7 @@ from typing import Literal
 from sqlalchemy.orm import Session
 
 from app.models.master import OrgSettings
+from app.models.planspiel import PlanspielRun
 
 ExerciseChannel = Literal[
     "push",
@@ -41,14 +42,27 @@ def darf_extern(
     is_exercise: bool,
     org_id: int | None,
     db: Session,
+    planspiel_run_id: int | None,
 ) -> bool:
     """Gibt externe Aktionen für Realeinsätze unverändert frei.
 
-    Fehlende Organisationen bzw. Einstellungen sind bei Übungen fail-closed. Die
+    Planspiel-Einsaetze werden ausschliesslich ueber die Kanal-Freigaben ihres
+    Runs gesteuert und bleiben auch bei fehlendem Run oder abweichender Org
+    gesperrt. Fehlende Organisationen bzw. Einstellungen sind bei Übungen fail-closed. Die
     kontextabhängigen Bestandskanäle Teams, Autodruck und Objekt-Kontakte behalten
     ihre detaillierte Prüfung an der Versandstelle; der zentrale Guard bestätigt
     dort nur, dass keine neue globale Sperre hinzugekommen ist.
     """
+    if planspiel_run_id is not None:
+        run = (
+            db.query(PlanspielRun)
+            .execution_options(include_all_tenants=True)
+            .filter(PlanspielRun.id == planspiel_run_id)
+            .first()
+        )
+        if run is None or (org_id is not None and run.org_id != org_id):
+            return False
+        return (run.kanal_freigaben or {}).get(kanal) is True
     if not is_exercise:
         return True
     if org_id is None:

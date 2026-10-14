@@ -144,6 +144,7 @@ async def ingest_alarm(
                             is_exercise=inc.is_exercise,
                             org_id=gateway.org_id,
                             db=db,
+                            planspiel_run_id=inc.planspiel_run_id,
                         ),
                         "alarm_type_code": inc.alarm_type_code,
                         "is_exercise": inc.is_exercise,

@@ -50,6 +50,9 @@ def _check_due_messages_sync(db) -> list[dict]:
                 "message_id": msg.id,
                 "title": msg.title,
                 "leader_user_id": incident.incident_leader_user_id,
+                "planspiel_run_id": incident.planspiel_run_id,
+                "is_exercise": incident.is_exercise,
+                "org_id": incident.primary_org_id,
             })
     # Check tasks with due_at
     task_candidates = (
@@ -78,6 +81,9 @@ def _check_due_messages_sync(db) -> list[dict]:
                 "title": f"Auftrag: {task.title}",
                 "leader_user_id": incident.incident_leader_user_id,
                 "kind": "task",
+                "planspiel_run_id": incident.planspiel_run_id,
+                "is_exercise": incident.is_exercise,
+                "org_id": incident.primary_org_id,
             })
 
     if due:
@@ -107,6 +113,16 @@ async def _notify_due(item: dict) -> None:
             db2 = SessionLocal()
             set_tenant_context(db2, None)
             try:
+                from app.services.exercise_guard import darf_extern
+
+                if item.get("planspiel_run_id") is not None and not darf_extern(
+                    "push",
+                    is_exercise=bool(item.get("is_exercise")),
+                    org_id=item.get("org_id"),
+                    db=db2,
+                    planspiel_run_id=item["planspiel_run_id"],
+                ):
+                    return
                 notify_user(
                     db2, leader_user_id,
                     "Meldung fällig",

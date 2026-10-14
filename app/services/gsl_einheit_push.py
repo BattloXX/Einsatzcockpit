@@ -32,7 +32,10 @@ def push_einheit_auftrag(einheit_id: int, dispatch_id: int, ereignis: str) -> in
         if not lage or lage.org_id is None or lage.status != "active":
             return 0
         set_tenant_context(db, lage.org_id)
-        if not darf_extern("push", is_exercise=bool(lage.is_exercise), org_id=lage.org_id, db=db):
+        if not darf_extern(
+            "push", is_exercise=bool(lage.is_exercise), org_id=lage.org_id, db=db,
+            planspiel_run_id=lage.planspiel_run_id,
+        ):
             return 0
         hat_tablet = db.query(DeviceToken.id).filter(
             DeviceToken.vehicle_master_id == einheit.vehicle_id,

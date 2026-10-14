@@ -147,6 +147,48 @@ def create_lage(
     return lage
 
 
+def lage_einrichten(
+    db: Session,
+    lage: MajorIncident,
+    *,
+    org_id: int,
+    user_id: int | None,
+) -> None:
+    """Richtet die Standardzugriffe und Einheiten einer neuen Lage ein.
+
+    Die aufrufende Stelle verantwortet Commit und alle Benachrichtigungen.
+    """
+    from app.core.audit import write_audit
+    from app.models.major_incident import LageEinheit
+    from app.models.master import OrgSettings, VehicleMaster
+    from app.services import resource_service
+
+    org_einstellungen = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
+    if org_einstellungen and org_einstellungen.default_access_pin_hash:
+        lage.access_pin_hash = org_einstellungen.default_access_pin_hash
+    write_audit(
+        db,
+        "major_incident.created",
+        user_id=user_id,
+        payload={"name": lage.name, "lage_id": lage.id},
+    )
+    for vehicle in (
+        db.query(VehicleMaster)
+        .filter(VehicleMaster.dept_id == org_id, VehicleMaster.active == True)  # noqa: E712
+        .order_by(VehicleMaster.display_order, VehicleMaster.code)
+        .all()
+    ):
+        db.add(LageEinheit(
+            lage_id=lage.id,
+            vehicle_id=vehicle.id,
+            label=vehicle.display_label,
+            is_from_org=True,
+            resource_type="fahrzeug",
+            status=resource_service.STATUS_BEREITGESTELLT,
+            funkrufname=vehicle.funkrufname,
+        ))
+
+
 def close_lage(
     db: Session,
     lage: MajorIncident,

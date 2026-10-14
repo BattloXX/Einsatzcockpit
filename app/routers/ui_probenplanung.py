@@ -1343,7 +1343,10 @@ async def probe_uebungseinsatz_starten(
             "type": "incident_created",
             "incident_id": incident.id,
             "alarm": incident.alarm_type_code,
-            "alarm_erlaubt": darf_extern("ws_alarm", is_exercise=True, org_id=user.org_id, db=db),
+            "alarm_erlaubt": darf_extern(
+                "ws_alarm", is_exercise=True, org_id=user.org_id, db=db,
+                planspiel_run_id=incident.planspiel_run_id,
+            ),
             "alarm_type_code": incident.alarm_type_code,
             "is_exercise": True,
             "url": f"/einsatz/{incident.id}/info",

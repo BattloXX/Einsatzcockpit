@@ -52,7 +52,10 @@ async def starte_verifikation(db: Session, ctx_principal, telefon_roh: str) -> N
         raise ValueError("Zu viele Code-Anforderungen. Bitte später erneut versuchen.")
     if not sms_available(ctx_principal.org_id, db):
         raise ValueError("Kein SMS-Anbieter verbunden")
-    if not darf_extern("gk_sms", is_exercise=ctx_principal.lage.is_exercise, org_id=ctx_principal.org_id, db=db):
+    if not darf_extern(
+        "gk_sms", is_exercise=ctx_principal.lage.is_exercise, org_id=ctx_principal.org_id, db=db,
+        planspiel_run_id=ctx_principal.lage.planspiel_run_id,
+    ):
         raise ValueError("Übung: GK-SMS unterdrückt")
     for old in db.query(LageEinheitNummerVerifikation).filter(
         LageEinheitNummerVerifikation.einheit_id == ctx_principal.einheit.id,
