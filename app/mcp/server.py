@@ -580,6 +580,36 @@ async def gsl_auftrag_wiedereroeffnen(lage_id: int, dispatch_id: int) -> dict[st
     return await _call_registered_tool("gsl_auftrag_wiedereroeffnen", lage_id=lage_id, dispatch_id=dispatch_id)
 
 
+@server.tool(name="gsl_journal_eintrag", description="Erfasst einen Klartext-Eintrag im Lagejournal.")
+async def gsl_journal_eintrag(lage_id: int, betreff: str, kategorie: str = "sonstiges", text: str = "", von: str = "", an: str = "", veranlassung: str = "", site_id: int | None = None, einheit_id: int | None = None) -> dict[str, object]:
+    return await _call_registered_tool("gsl_journal_eintrag", lage_id=lage_id, betreff=betreff, kategorie=kategorie, text=text, von=von, an=an, veranlassung=veranlassung, site_id=site_id, einheit_id=einheit_id)
+
+
+@server.tool(name="gsl_funkjournal_eintrag", description="Erfasst einen Funkjournaleintrag.")
+async def gsl_funkjournal_eintrag(lage_id: int, text: str, richtung: str = "in", partner: str = "", kanal: str = "", anfrage: bool = False, site_id: int | None = None) -> dict[str, object]:
+    return await _call_registered_tool("gsl_funkjournal_eintrag", lage_id=lage_id, text=text, richtung=richtung, partner=partner, kanal=kanal, anfrage=anfrage, site_id=site_id)
+
+
+@server.tool(name="gsl_funkjournal_erledigt", description="Setzt den Erledigt-Status eines Funkjournaleintrags.")
+async def gsl_funkjournal_erledigt(lage_id: int, entry_id: int, erledigt: bool = True) -> dict[str, object]:
+    return await _call_registered_tool("gsl_funkjournal_erledigt", lage_id=lage_id, entry_id=entry_id, erledigt=erledigt)
+
+
+@server.tool(name="gsl_meldung_bearbeiten", description="Bearbeitet eine Bürgermeldung datensparsam.")
+async def gsl_meldung_bearbeiten(lage_id: int, report_id: int, aktion: str, site_id: int | None = None, bezeichnung: str | None = None, prio: int | None = None, trotz_duplikat: bool = False) -> dict[str, object]:
+    return await _call_registered_tool("gsl_meldung_bearbeiten", lage_id=lage_id, report_id=report_id, aktion=aktion, site_id=site_id, bezeichnung=bezeichnung, prio=prio, trotz_duplikat=trotz_duplikat)
+
+
+@server.tool(name="gsl_uebergreifend_anlegen", description="Erstellt eine übergreifende Lageinfo.")
+async def gsl_uebergreifend_anlegen(lage_id: int, titel: str, typ: str = "sonstiges", beschreibung: str = "", ort: str = "", strasse: str = "", hausnr: str = "", lat: float | None = None, lng: float | None = None) -> dict[str, object]:
+    return await _call_registered_tool("gsl_uebergreifend_anlegen", lage_id=lage_id, titel=titel, typ=typ, beschreibung=beschreibung, ort=ort, strasse=strasse, hausnr=hausnr, lat=lat, lng=lng)
+
+
+@server.tool(name="gsl_uebergreifend_aendern", description="Ändert eine übergreifende Lageinfo.")
+async def gsl_uebergreifend_aendern(lage_id: int, marker_id: int, felder: dict | None = None, status: str | None = None, eintrag: str | None = None) -> dict[str, object]:
+    return await _call_registered_tool("gsl_uebergreifend_aendern", lage_id=lage_id, marker_id=marker_id, felder=felder, status=status, eintrag=eintrag)
+
+
 @server.tool(
     name="organisation_lesen",
     description="Liest Stammdaten und Logo der eigenen Organisation (z. B. fuer Briefkoepfe oder Berichte).",

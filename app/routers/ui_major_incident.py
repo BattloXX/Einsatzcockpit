@@ -28,7 +28,6 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.config import settings
 from app.core.audit import write_audit
-from app.core.html_utils import sanitize_html
 from app.core.permissions import has_role, require_role, same_org_or_system_admin
 from app.core.rate_limit import limiter as _limiter
 from app.core.security import (
@@ -93,7 +92,6 @@ from app.services import (
     lagemeldung_service,
     resource_service,
 )
-from app.services.ai_service import is_enabled as ai_is_enabled
 from app.services.broadcast import broadcast_lage, manager
 from app.services.einheit_service import (
     ERLAUBTE_UEBERGAENGE,
@@ -2540,18 +2538,12 @@ async def lage_journal_add(
         raise HTTPException(status_code=403)
     if category not in JOURNAL_CATEGORIES:
         category = "sonstiges"
-    entry = LageJournalEntry(
-        major_incident_id=lage_id,
-        category=category,
-        text=text.strip()[:2000],
-        body_html=sanitize_html(body_html),
-        partner_from=partner_from.strip()[:120] or None,
-        partner_to=partner_to.strip()[:120] or None,
-        measure=measure.strip()[:500] or None,
+    from app.services.lage_journal_service import journal_eintrag_anlegen
+    entry = journal_eintrag_anlegen(
+        db, lage, text=text, category=category, body_html=body_html, partner_from=partner_from,
+        partner_to=partner_to, measure=measure, user_id=getattr(user, "id", None),
         author_name=get_author_name(request),
-        user_id=getattr(user, "id", None),
     )
-    db.add(entry)
     db.flush()  # get entry.id for media FK
     if media:
         from app.services.lage_media_service import upload_journal_media
@@ -2567,7 +2559,7 @@ async def lage_journal_add(
             )
             db.add(m)
     db.commit()
-    await broadcast_lage(lage_id, {"type": "journal_updated"})
+    await gsl_broadcast.journal_geaendert(lage_id)
     return Response(status_code=204)
 
 
@@ -2726,24 +2718,12 @@ async def cross_marker_create(
         status = "aktiv"
     if marker_type not in CROSS_MARKER_TYPE_LABEL:
         marker_type = "sonstiges"
-    m = CrossSiteMarker(
-        major_incident_id=lage_id,
-        org_id=lage.org_id,
-        title=title.strip()[:160],
-        marker_type=marker_type,
-        status=status,
-        description=description.strip() or None,
-        strasse=strasse.strip()[:160] or None,
-        hausnr=hausnr.strip()[:20] or None,
-        ort=ort.strip()[:120] or None,
-        lat=lat,
-        lng=lng,
-        created_by=getattr(user, "id", None),
-        author_name=get_author_name(request),
-    )
-    db.add(m)
+    from app.services.cross_marker_service import anlegen
+    m = anlegen(db, lage, title=title, marker_type=marker_type, status=status, description=description,
+                strasse=strasse, hausnr=hausnr, ort=ort, lat=lat, lng=lng,
+                user_id=getattr(user, "id", None), author_name=get_author_name(request))
     db.commit()
-    await broadcast_lage(lage_id, {"type": "cross_marker:changed", "marker_id": m.id})
+    await gsl_broadcast.cross_marker_geaendert(lage_id, m.id)
     return Response(status_code=204)
 
 
@@ -2782,10 +2762,11 @@ async def cross_marker_set_status(
     m = db.get(CrossSiteMarker, mid)
     if not m or m.major_incident_id != lage_id:
         raise HTTPException(status_code=404)
+    from app.services.cross_marker_service import setze_status
+    setze_status(db, lage, mid, status)
     if status in CROSS_MARKER_STATUS_LABEL:
-        m.status = status
         db.commit()
-    await broadcast_lage(lage_id, {"type": "cross_marker:changed", "marker_id": mid})
+    await gsl_broadcast.cross_marker_geaendert(lage_id, mid)
     return Response(status_code=204)
 
 
@@ -2810,17 +2791,11 @@ async def cross_marker_update(
     m = db.get(CrossSiteMarker, mid)
     if not m or m.major_incident_id != lage_id:
         raise HTTPException(status_code=404)
-    m.title = title.strip()[:160]
-    if marker_type in CROSS_MARKER_TYPE_LABEL:
-        m.marker_type = marker_type
-    if status in CROSS_MARKER_STATUS_LABEL:
-        m.status = status
-    m.description = description.strip() or None
-    m.strasse = strasse.strip()[:160] or None
-    m.hausnr = hausnr.strip()[:20] or None
-    m.ort = ort.strip()[:120] or None
+    from app.services.cross_marker_service import bearbeiten
+    bearbeiten(db, lage, mid, title=title, marker_type=marker_type, status=status, description=description,
+              strasse=strasse, hausnr=hausnr, ort=ort)
     db.commit()
-    await broadcast_lage(lage_id, {"type": "cross_marker:changed", "marker_id": mid})
+    await gsl_broadcast.cross_marker_geaendert(lage_id, mid)
     return Response(status_code=204)
 
 
@@ -2961,14 +2936,10 @@ async def cross_marker_log_add(
     m = db.get(CrossSiteMarker, mid)
     if not m or m.major_incident_id != lage_id:
         raise HTTPException(status_code=404)
-    db.add(CrossMarkerLogEntry(
-        marker_id=mid,
-        text=text.strip()[:500],
-        user_id=getattr(user, "id", None),
-        author_name=get_author_name(request),
-    ))
+    from app.services.cross_marker_service import log_eintrag
+    log_eintrag(db, lage, mid, text, getattr(user, "id", None), get_author_name(request))
     db.commit()
-    await broadcast_lage(lage_id, {"type": "cross_marker:changed", "marker_id": mid})
+    await gsl_broadcast.cross_marker_geaendert(lage_id, mid)
     return Response(status_code=204)
 
 
@@ -3176,9 +3147,7 @@ async def funkjournal_add(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     db.commit()
-    await broadcast_lage(lage_id, {"type": "funkjournal:changed"})
-    if related_site_id:
-        await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": related_site_id})
+    await gsl_broadcast.funkjournal_geaendert(lage_id, related_site_id)
     return Response(status_code=204)
 
 
@@ -3230,7 +3199,7 @@ async def funkjournal_handled(
     except LookupError:
         raise HTTPException(status_code=404)
     db.commit()
-    await broadcast_lage(lage_id, {"type": "funkjournal:changed"})
+    await gsl_broadcast.funkjournal_geaendert(lage_id)
     return Response(status_code=204)
 
 
@@ -3598,81 +3567,18 @@ async def meldung_annehmen(
     if not report or report.major_incident_id != lage_id:
         raise HTTPException(status_code=404)
 
-    # AI-generierte Kurzbezeichnung aus der Bürgerbeschreibung
-    bezeichnung = f"Bürgermeldung – {report.ort or report.strasse or 'unbekannt'}"
-    if ai_is_enabled() and report.description:
-        try:
-            from app.services.ai_service import generate_site_bezeichnung
-            ai_bez = await generate_site_bezeichnung(report.description, org_id=lage.org_id)
-            if ai_bez:
-                bezeichnung = ai_bez
-        except Exception:
-            pass
-
     try:
-        site = create_site(
-            db, lage,
-            bezeichnung=bezeichnung,
-            einsatzgrund=(report.description or "")[:160] or None,
-            ort=report.ort,
-            strasse=report.strasse,
-            lat=report.lat,
-            lng=report.lng,
-            created_by=user.id,
-            source="buerger",
+        from app.services.buergermeldung_service import annehmen
+        report, site = await annehmen(
+            db, lage, report_id, user_id=user.id, author_name=get_author_name(request), nur_neu=False,
         )
-        await _geocode_site(site)
-        await _apply_ai_prio(site, db, org_id=lage.org_id)
-        db.add(SiteLogEntry(
-            incident_site_id=site.id,
-            kind="status",
-            text=f"Aus Bürgermeldung #{report.id} erstellt",
-            user_id=user.id,
-            author_name=get_author_name(request),
-        ))
-        # Name/Telefon aus Bürgermeldung in Notizen übernehmen
-        contact_parts: list[str] = []
-        if report.reporter_name:
-            contact_parts.append(f"Anrufer: {report.reporter_name.strip()}")
-        if report.reporter_contact:
-            contact_parts.append(f"Tel.: {report.reporter_contact.strip()}")
-        if contact_parts:
-            db.add(SiteLogEntry(
-                incident_site_id=site.id,
-                kind="note",
-                text=" · ".join(contact_parts),
-                user_id=user.id,
-                author_name=get_author_name(request),
-            ))
-        # Abschnitts-Zuweisung anhand GPS-Koordinaten
-        from app.services.geo_service import auto_assign_section
-        auto_assign_section(db, site)
-
-        # Bürgermeldungs-Foto auf Einsatzstelle übertragen
-        if report.photo_filename:
-            from pathlib import Path as _Path
-
-            from app.services.lage_media_service import copy_citizen_photo_to_site
-            citizen_photo = _Path("app_storage/citizen_media") / report.photo_filename
-            media_obj = copy_citizen_photo_to_site(
-                citizen_photo, site.id,
-                org_id=lage.org_id,
-                user_id=user.id,
-                author_name=get_author_name(request),
-                db=db,
-            )
-            if media_obj:
-                db.add(media_obj)
-
-        report.status = "accepted"
-        report.site_id = site.id
         db.commit()
     except Exception:
         logger.exception("Fehler beim Annehmen der Bürgermeldung lage_id=%s report_id=%s",
                          lage_id, report_id)
         db.rollback()
         raise
-    await broadcast_lage(lage_id, {"type": "site_created", "site_id": site.id})
+    await gsl_broadcast.stelle_angelegt(db, lage, site.id)
     if _is_htmx(request):
         return templates.TemplateResponse(request, "incident_major/_meldung_card.html", {
             "r": report, "lage": lage, "can_edit": _can_edit(user),
@@ -3696,7 +3602,11 @@ def meldung_ablehnen(
     if not report or report.major_incident_id != lage_id:
         raise HTTPException(status_code=404)
 
-    report.status = "rejected"
+    from app.services.buergermeldung_service import ablehnen
+    try:
+        report = ablehnen(db, lage, report_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     db.commit()
     if _is_htmx(request):
         return templates.TemplateResponse(request, "incident_major/_meldung_card.html", {
@@ -3722,26 +3632,15 @@ async def meldung_als_lageinfo(
     if not report or report.major_incident_id != lage_id:
         raise HTTPException(status_code=404)
 
-    title = f"Bürgermeldung – {report.ort or report.strasse or 'unbekannt'}"
-    m = CrossSiteMarker(
-        major_incident_id=lage_id,
-        org_id=lage.org_id,
-        title=title[:160],
-        marker_type="sonstiges",
-        status="unbestaetigt",
-        source="buerger",
-        description=(report.description or None),
-        strasse=report.strasse,
-        ort=report.ort,
-        lat=report.lat,
-        lng=report.lng,
-        created_by=getattr(user, "id", None),
-        author_name=get_author_name(request),
-    )
-    db.add(m)
-    report.status = "accepted"
+    from app.services.buergermeldung_service import als_lageinfo
+    try:
+        report, m = als_lageinfo(
+            db, lage, report_id, user_id=getattr(user, "id", None), author_name=get_author_name(request)
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     db.commit()
-    await broadcast_lage(lage_id, {"type": "cross_marker:changed", "marker_id": m.id})
+    await gsl_broadcast.cross_marker_geaendert(lage_id, m.id)
     if _is_htmx(request):
         return templates.TemplateResponse(request, "incident_major/_meldung_card.html", {
             "r": report, "lage": lage, "can_edit": _can_edit(user),

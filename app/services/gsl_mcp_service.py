@@ -153,6 +153,14 @@ def _quelle(author: str | None) -> str | None:
     return None
 
 
+def _log_text(item: Any) -> str:
+    """Blendet aus Bürgermeldungen übernommene Melder-Kontaktdaten aus."""
+    text = item.text or ""
+    if item.kind == "note" and (text.startswith("Anrufer: ") or text.startswith("Tel.: ")):
+        return "[Kontaktdaten der Bürgermeldung ausgeblendet]"
+    return text
+
+
 def _medien(medien: Any) -> list[dict[str, Any]]:
     return [
         {
@@ -200,7 +208,10 @@ def einsatzstelle_lesen(
         ]
     if "log" in bereiche:
         result["log"] = [
-            {"id": item.id, "zeit": item.ts, "art": item.kind, "text": item.text, "quelle": _quelle(item.author_name)}
+            {
+                "id": item.id, "zeit": item.ts, "art": item.kind, "text": _log_text(item),
+                "quelle": _quelle(item.author_name),
+            }
             for item in site.log_entries
         ]
     if "medien" in bereiche:

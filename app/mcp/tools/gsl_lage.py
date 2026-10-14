@@ -10,7 +10,16 @@ from app.core.audit import write_audit
 from app.mcp.context import MCPContext
 from app.mcp.registry import register_tool
 from app.mcp.tools.gsl import READ, _author, _edit, _json
-from app.models.major_incident import EinheitSiteDispatch, IncidentSite, MajorIncident, SitePhase, SitePriority
+from app.models.major_incident import (
+    CROSS_MARKER_STATUS_LABEL,
+    CROSS_MARKER_TYPE_LABEL,
+    JOURNAL_CATEGORIES,
+    EinheitSiteDispatch,
+    IncidentSite,
+    MajorIncident,
+    SitePhase,
+    SitePriority,
+)
 from app.services import (
     einheit_service,
     gsl_broadcast,
@@ -579,6 +588,212 @@ async def gsl_auftrag_wiedereroeffnen(context: MCPContext, lage_id: int, dispatc
         return _antwort(lage, dispatch_id=dispatch.id, status=dispatch.einheit_status,
                          site_phase=dispatch.site.phase.value, phase_geaendert=result["phase_geaendert"],
                          ui_link=f"{settings.effective_public_base_url.rstrip('/')}/lage/{lage.id}?site={dispatch.site_id}")
+    except Exception:
+        context.db.rollback()
+        raise
+
+
+def _plain_html(text: str) -> str:
+    from html import escape
+    parts = [part.replace("\n", "<br>") for part in escape(text).split("\n\n")]
+    return "".join(f"<p>{part}</p>" for part in parts if part) or "<p></p>"
+
+
+@register_tool(
+    name="gsl_journal_eintrag", description="Erfasst einen Klartext-Eintrag im Lagejournal.", required_roles=READ
+)
+async def gsl_journal_eintrag(
+    context: MCPContext, lage_id: int, betreff: str, kategorie: str = "sonstiges", text: str = "",
+    von: str = "", an: str = "", veranlassung: str = "", site_id: int | None = None,
+    einheit_id: int | None = None,
+) -> dict[str, object]:
+    try:
+        from app.services import lage_journal_service
+        lage = _lage(context, lage_id)
+        _edit(context, lage)
+        if kategorie not in JOURNAL_CATEGORIES:
+            raise ValueError("Unbekannte Kategorie. Erlaubt sind: " + ", ".join(sorted(JOURNAL_CATEGORIES)))
+        entry = lage_journal_service.journal_eintrag_anlegen(
+            context.db, lage, text=betreff, category=kategorie, body_html=_plain_html(text), partner_from=von,
+            partner_to=an, measure=veranlassung, user_id=context.user.id, author_name=_author(context),
+            site_id=site_id, einheit_id=einheit_id,
+        )
+        entry.quelle = "mcp"
+        context.db.flush()
+        _audit(context, "journal_eintrag", lage, entry.id, entry_id=entry.id)
+        context.db.commit()
+        await gsl_broadcast.journal_geaendert(lage.id)
+        return _antwort(lage, id=entry.id, kategorie=entry.category)
+    except Exception:
+        context.db.rollback()
+        raise
+
+
+@register_tool(name="gsl_funkjournal_eintrag", description="Erfasst einen Funkjournaleintrag.", required_roles=READ,
+               module_check=_feature("funkjournal"))
+async def gsl_funkjournal_eintrag(
+    context: MCPContext, lage_id: int, text: str, richtung: str = "in", partner: str = "", kanal: str = "",
+    anfrage: bool = False, site_id: int | None = None,
+) -> dict[str, object]:
+    try:
+        from app.services import funkjournal_service
+        lage = _lage(context, lage_id)
+        _edit(context, lage)
+        entry = funkjournal_service.add_comm_entry(context.db, lage, direction=richtung, message=text,
+            channel=kanal, partner=partner, is_request=anfrage, related_site_id=site_id,
+            user_id=context.user.id, author_name=_author(context))
+        _audit(context, "funkjournal_eintrag", lage, entry.id or 0, entry_id=entry.id)
+        context.db.commit()
+        await gsl_broadcast.funkjournal_geaendert(lage.id, site_id)
+        return _antwort(lage, id=entry.id, erledigt=entry.handled)
+    except Exception:
+        context.db.rollback()
+        raise
+
+
+@register_tool(name="gsl_funkjournal_erledigt", description="Setzt den Erledigt-Status eines Funkjournaleintrags.",
+               required_roles=READ, module_check=_feature("funkjournal"))
+async def gsl_funkjournal_erledigt(
+    context: MCPContext, lage_id: int, entry_id: int, erledigt: bool = True,
+) -> dict[str, object]:
+    try:
+        from app.services import funkjournal_service
+        lage = _lage(context, lage_id)
+        _edit(context, lage)
+        try:
+            entry = funkjournal_service.setze_erledigt(context.db, lage, entry_id, erledigt)
+        except LookupError as exc:
+            raise ValueError("Funkjournaleintrag nicht gefunden.") from exc
+        _audit(context, "funkjournal_erledigt", lage, entry.id, entry_id=entry.id, erledigt=erledigt)
+        context.db.commit()
+        await gsl_broadcast.funkjournal_geaendert(lage.id, entry.related_site_id)
+        return _antwort(lage, id=entry.id, erledigt=entry.handled)
+    except Exception:
+        context.db.rollback()
+        raise
+
+
+@register_tool(
+    name="gsl_meldung_bearbeiten", description="Bearbeitet eine Bürgermeldung datensparsam.",
+    required_roles=READ, module_check=_feature("meldungen"),
+)
+async def gsl_meldung_bearbeiten(
+    context: MCPContext, lage_id: int, report_id: int, aktion: str, site_id: int | None = None,
+    bezeichnung: str | None = None, prio: int | None = None, trotz_duplikat: bool = False,
+) -> dict[str, object]:
+    try:
+        from app.services import buergermeldung_service
+        lage = _lage(context, lage_id)
+        _edit(context, lage)
+        if aktion not in {"annehmen", "ablehnen", "als_lageinfo"}:
+            raise ValueError("aktion muss annehmen, ablehnen oder als_lageinfo sein.")
+        try:
+            report = buergermeldung_service.report(context.db, lage, report_id)
+        except LookupError as exc:
+            raise ValueError("Bürgermeldung nicht gefunden.") from exc
+        if report.status != "new":
+            raise ValueError("Bürgermeldung wurde bereits bearbeitet.")
+        if aktion == "annehmen":
+            duplicates = [] if site_id else gsl_stelle_service.finde_adress_duplikate(
+                context.db, lage, ort=report.ort, strasse=report.strasse, hausnr=None)
+            if duplicates and not trotz_duplikat:
+                return _antwort(lage, bearbeitet=False,
+                                duplikate=[{"id": s.id, "bezeichnung": s.bezeichnung} for s in duplicates])
+            report, site = await buergermeldung_service.annehmen(context.db, lage, report_id,
+                user_id=context.user.id, author_name=_author(context), bezeichnung=bezeichnung, site_id=site_id)
+            if prio is not None:
+                try:
+                    priority = SitePriority(prio)
+                except ValueError as exc:
+                    raise ValueError("prio muss zwischen 1 und 4 liegen.") from exc
+                gsl_stelle_service.stelle_prio_setzen(context.db, site, priority, user_id=context.user.id,
+                                                      author_name=_author(context))
+            _audit(context, "meldung_bearbeiten", lage, report.id, aktion=aktion, site_id=site.id)
+            context.db.commit()
+            if site_id is None:
+                await gsl_broadcast.stelle_angelegt(context.db, lage, site.id)
+            else:
+                await gsl_broadcast.site_log_geaendert(lage.id, site.id)
+            return _antwort(lage, bearbeitet=True, aktion=aktion, report_id=report.id, site_id=site.id)
+        if aktion == "ablehnen":
+            buergermeldung_service.ablehnen(context.db, lage, report_id, nur_neu=True)
+            marker_id = None
+        else:
+            report, marker = buergermeldung_service.als_lageinfo(context.db, lage, report_id,
+                user_id=context.user.id, author_name=_author(context), nur_neu=True)
+            marker_id = marker.id
+        _audit(context, "meldung_bearbeiten", lage, report.id, aktion=aktion)
+        context.db.commit()
+        if marker_id:
+            await gsl_broadcast.cross_marker_geaendert(lage.id, marker_id)
+        return _antwort(lage, bearbeitet=True, aktion=aktion, report_id=report.id)
+    except Exception:
+        context.db.rollback()
+        raise
+
+
+@register_tool(
+    name="gsl_uebergreifend_anlegen", description="Erstellt eine übergreifende Lageinfo.",
+    required_roles=READ, module_check=_feature("uebergreifend"),
+)
+async def gsl_uebergreifend_anlegen(
+    context: MCPContext, lage_id: int, titel: str, typ: str = "sonstiges", beschreibung: str = "", ort: str = "",
+    strasse: str = "", hausnr: str = "", lat: float | None = None, lng: float | None = None,
+) -> dict[str, object]:
+    try:
+        from app.services import cross_marker_service
+        lage = _lage(context, lage_id)
+        _edit(context, lage)
+        _koordinaten_pruefen(lat, lng)
+        if typ not in CROSS_MARKER_TYPE_LABEL:
+            raise ValueError("Unbekannter Typ. Erlaubt sind: " + ", ".join(sorted(CROSS_MARKER_TYPE_LABEL)))
+        marker = cross_marker_service.anlegen(
+            context.db, lage, title=titel, marker_type=typ, description=beschreibung, ort=ort, strasse=strasse,
+            hausnr=hausnr, lat=lat, lng=lng, user_id=context.user.id, author_name=_author(context),
+        )
+        context.db.flush()
+        _audit(context, "uebergreifend_anlegen", lage, marker.id, marker_id=marker.id)
+        context.db.commit()
+        await gsl_broadcast.cross_marker_geaendert(lage.id, marker.id)
+        return _antwort(lage, id=marker.id, status=marker.status)
+    except Exception:
+        context.db.rollback()
+        raise
+
+
+@register_tool(name="gsl_uebergreifend_aendern", description="Ändert eine übergreifende Lageinfo.", required_roles=READ,
+               module_check=_feature("uebergreifend"))
+async def gsl_uebergreifend_aendern(
+    context: MCPContext, lage_id: int, marker_id: int, felder: dict[str, Any] | None = None,
+    status: str | None = None, eintrag: str | None = None,
+) -> dict[str, object]:
+    try:
+        from app.services import cross_marker_service
+        lage = _lage(context, lage_id)
+        _edit(context, lage)
+        fields = felder or {}
+        allowed = {"title", "marker_type", "status", "description", "strasse", "hausnr", "ort", "lat", "lng"}
+        if set(fields) - allowed:
+            raise ValueError("Unbekannte Felder: " + ", ".join(sorted(set(fields) - allowed)))
+        if status is not None:
+            fields["status"] = status
+        if fields.get("status") not in (None, *CROSS_MARKER_STATUS_LABEL):
+            raise ValueError("Unbekannter Status.")
+        if fields.get("marker_type") not in (None, *CROSS_MARKER_TYPE_LABEL):
+            raise ValueError("Unbekannter Typ.")
+        _koordinaten_pruefen(fields.get("lat"), fields.get("lng"))
+        try:
+            marker = cross_marker_service.bearbeiten(context.db, lage, marker_id, **fields)
+            if eintrag:
+                cross_marker_service.log_eintrag(
+                    context.db, lage, marker_id, eintrag, context.user.id, _author(context)
+                )
+        except LookupError as exc:
+            raise ValueError("Übergreifende Lageinfo nicht gefunden.") from exc
+        _audit(context, "uebergreifend_aendern", lage, marker.id, marker_id=marker.id, felder=sorted(fields))
+        context.db.commit()
+        await gsl_broadcast.cross_marker_geaendert(lage.id, marker.id)
+        return _antwort(lage, id=marker.id, status=marker.status)
     except Exception:
         context.db.rollback()
         raise
