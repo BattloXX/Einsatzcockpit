@@ -532,6 +532,27 @@ async def gsl_uebergreifend_liste(lage_id: int | None = None, status: str = "akt
     return await _call_registered_tool("gsl_uebergreifend_liste", lage_id=lage_id, status=status)
 
 
+@server.tool(name="gsl_medium_herunterladen", description="Bereitet einen GSL-Medien-Download vor; bei meldung ist medium_id die report_id.")
+async def gsl_medium_herunterladen(lage_id: int, art: str, medium_id: int, inline: bool = False,
+                                   ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("gsl_medium_herunterladen", lage_id=lage_id, art=art,
+                                       medium_id=medium_id, inline=inline)
+
+
+@server.tool(name="gsl_einsatzstelle_foto_upload_vorbereiten", description="Bereitet einen Foto-Upload für eine GSL-Einsatzstelle vor.")
+async def gsl_einsatzstelle_foto_upload_vorbereiten(lage_id: int, site_id: int, dateiname: str,
+                                                    groesse_bytes: int | None = None,
+                                                    ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("gsl_einsatzstelle_foto_upload_vorbereiten", lage_id=lage_id,
+                                       site_id=site_id, dateiname=dateiname, groesse_bytes=groesse_bytes)
+
+
+@server.tool(name="gsl_einsatzstelle_foto_uebergeben", description="Übernimmt ein zuvor hochgeladenes Einsatzstellenfoto.")
+async def gsl_einsatzstelle_foto_uebergeben(lage_id: int, upload_id: str,
+                                            ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("gsl_einsatzstelle_foto_uebergeben", lage_id=lage_id, upload_id=upload_id)
+
+
 @server.tool(name="gsl_einsatzstelle_anlegen", description="Legt eine Einsatzstelle in einer aktiven GSL-Lage an.")
 async def gsl_einsatzstelle_anlegen(
     lage_id: int, bezeichnung: str, einsatzgrund: str = "", ort: str = "", strasse: str = "", hausnr: str = "",

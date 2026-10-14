@@ -1,9 +1,10 @@
 """Kurzlebige, signierte Downloads fuer MCP-Objektdokumente."""
 from __future__ import annotations
 
+import mimetypes
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from sqlalchemy.orm import Session
@@ -11,12 +12,23 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.core.permissions import STRASSENSPERREN_LESE_ROLLEN
 from app.mcp.context import MCPPermissionError, load_live_context
+from app.mcp.tools.gsl import READ
 from app.models.incident import IncidentColumn, Message, MessageMedia, TaskMedia
+from app.models.major_incident import (
+    CitizenReport,
+    CrossMarkerMedia,
+    CrossSiteMarker,
+    LageJournalEntry,
+    LageJournalMedia,
+    MajorIncident,
+    SiteMedia,
+)
 from app.models.objekt import Objekt, ObjektDokument, ObjektDokumentSeite, ObjektEinsatz
 from app.models.road_closure import RoadClosure, RoadClosureDocument
-from app.services import road_closure_service
+from app.services import lage_media_service, road_closure_service
 from app.services.einsatz_mcp_service import EINSATZ_LESE_ROLLEN, sichtbarer_einsatz
 from app.services.media_service import absolute_path
+from app.services.mi_feature_service import get_mi_features
 from app.services.objekt_dokument_service import absolute_pfad
 from app.services.objekt_service import objekt_effective_enabled
 from app.services.road_closure_document_service import absolute_path as road_closure_document_path
@@ -180,6 +192,48 @@ def lade_download(db: Session, token: str) -> tuple[Path, str, str]:
             raise MCPDownloadFehler("Datei fehlt.", 404)
         mime = "application/octet-stream" if medium.kind == "datei" else medium.mime_type
         return path, medium.original_filename, mime
+    if art == "gsl_medium":
+        try:
+            load_live_context(db, user_id, org_id, READ)
+            lage = db.get(MajorIncident, int(incident_id))
+        except (MCPPermissionError, TypeError, ValueError) as exc:
+            raise MCPDownloadFehler(str(exc), 403) from exc
+        if lage is None or lage.org_id != org_id:
+            raise MCPDownloadFehler("Medium nicht gefunden.", 404)
+        features = get_mi_features(db, org_id)
+        gsl_medium: Any
+        if medium_art == "stelle":
+            gsl_medium = db.get(SiteMedia, dokument_id)
+            ok = gsl_medium is not None and gsl_medium.incident_site_id in {s.id for s in lage.sites}
+            path = lage_media_service.site_media_path(gsl_medium) if ok else Path()
+        elif medium_art == "journal":
+            gsl_medium = db.get(LageJournalMedia, dokument_id)
+            entry = db.get(LageJournalEntry, gsl_medium.journal_entry_id) if gsl_medium else None
+            ok = entry is not None and entry.major_incident_id == lage.id
+            path = lage_media_service.journal_media_path(gsl_medium) if ok else Path()
+        elif medium_art == "uebergreifend":
+            gsl_medium = db.get(CrossMarkerMedia, dokument_id)
+            marker = db.get(CrossSiteMarker, gsl_medium.marker_id) if gsl_medium else None
+            if not features["uebergreifend"]:
+                raise MCPDownloadFehler("Das Modul für übergreifende Meldungen ist nicht aktiviert.", 403)
+            ok = marker is not None and marker.major_incident_id == lage.id
+            path = lage_media_service.cross_media_path(gsl_medium) if ok else Path()
+        elif medium_art == "meldung":
+            report = db.get(CitizenReport, dokument_id)
+            if not features["meldungen"]:
+                raise MCPDownloadFehler("Das Meldungsmodul ist nicht aktiviert.", 403)
+            if report is None or report.major_incident_id != lage.id or not report.photo_filename:
+                raise MCPDownloadFehler("Medium nicht gefunden.", 404)
+            path = Path("app_storage/citizen_media") / report.photo_filename
+            if not path.is_file():
+                raise MCPDownloadFehler("Datei fehlt.", 404)
+            return path, report.photo_filename, "image/jpeg"
+        else:
+            raise MCPDownloadFehler("Medium nicht gefunden.", 404)
+        if not ok or not path.is_file():
+            raise MCPDownloadFehler("Medium nicht gefunden.", 404)
+        gsl_mime = mimetypes.guess_type(path.name)[0] or mimetypes.guess_type(gsl_medium.original_filename)[0]
+        return path, gsl_medium.original_filename, gsl_mime or "application/octet-stream"
     if art != "objekt":
         raise MCPDownloadFehler("Download nicht gefunden.", 404)
     try:

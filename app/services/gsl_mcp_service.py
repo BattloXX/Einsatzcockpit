@@ -388,6 +388,7 @@ def uebergreifend_liste(db: Session, lage: MajorIncident, status: str) -> list[d
             "lng": item.lng,
             "beschreibung": item.description,
             "log_anzahl": len(item.log_entries),
+            "medien": _medien(item.media),
             "erstellt_am": item.created_at,
         }
         for item in query.order_by(CrossSiteMarker.sort_index, CrossSiteMarker.id).all()
