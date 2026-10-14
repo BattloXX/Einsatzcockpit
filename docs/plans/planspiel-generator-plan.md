@@ -455,3 +455,17 @@ Jede Phase ist ein PR auf einem eigenen Branch, die Implementierung übernimmt C
 
 ## Nächster Schritt
 Phase A (Basis & Safety) als eigener Codex-Auftrag; Start erst auf ausdrückliche Anweisung.
+
+## 16. Umsetzungsstand
+
+### Phase A – Basis & Safety (Branch `feat/planspiel-a-basis`, 2026-10-14)
+- **A1** Datenmodell + Migration 0284 + Rollen `uebungsleiter`/`uebungsbeobachter`. Lokal auf MariaDB 10.11 geprüft (upgrade → downgrade → upgrade → Seed).
+- **A2** `darf_extern(..., planspiel_run_id)` ist jetzt ein Pflichtparameter. Alle 28 Aufrufstellen sind umgestellt, inkl. Durchreichen in `dispatch_einsatzinfo`, `dispatch_gsl_alarm`, `post_gsl_alarm_card` und den Druckkontexten. Der AST-Test liegt in `tests/test_planspiel_guard.py`.
+- **A3** Modulschalter (System + Org), Navigation, `/planspiele`-Übersicht mit Rollen- und Tenant-Filter.
+- **A4** Outbox-Grund „Planspiel“, Sperre für GSL-Live-Push (`gsl_live_notify._dispatch_gsl_push`) und Fälligkeits-Push (`task_reminder`), nur für Planspiel-Objekte. Extraktion `major_incident_service.lage_einrichten`.
+
+**Erkenntnisse für die Folgephasen:**
+- `major_incident.id`, `incident_site.id` und `cross_site_marker.id` sind `INT`, nicht `BIGINT`. FK-Spalten auf diese Tabellen müssen `sa.Integer` sein, sonst schlägt MariaDB fehl (errno 150). SQLite merkt das nicht.
+- MariaDB-Downgrade: Fremdschlüssel vor dem zugehörigen Index entfernen.
+- Der GSL-Live-Push (`notify_org_web`) läuft bei normalen Übungslagen weiterhin ohne Übungsprüfung. Das ist bewusst unverändert, weil das bestehende Verhalten mit dem Präfix „[UEBUNG]“ so gedacht ist. Für Planspiel-Lagen ist der Push gesperrt.
+- Die Migrationskette ist nur auf MariaDB lauffähig (`ADD COLUMN IF NOT EXISTS`). Lokal wird sie mit einem temporären Container `mariadb:10.11` geprüft.
