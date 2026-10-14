@@ -19,6 +19,7 @@ from app.db import SessionLocal
 from app.models.master import SystemSettings
 from app.models.mcp import MCPUpload
 from app.models.user import User
+from app.services.media_service import IMAGE_MIMES
 from app.services.objekt_dokument_service import _detect_mime
 
 logger = logging.getLogger("einsatzleiter.mcp_upload")
@@ -47,14 +48,14 @@ def effektives_limit(db: Session) -> int:
     return min(settings.MCP_UPLOAD_MAX_BYTES, objekt_limit)
 
 
-def _upload_pfad(org_id: int, upload_id: str) -> tuple[Path, str]:
-    relativ = f"_mcp_uploads/{org_id}/{upload_id}.pdf"
+def _upload_pfad(org_id: int, upload_id: str, suffix: str = ".pdf") -> tuple[Path, str]:
+    relativ = f"_mcp_uploads/{org_id}/{upload_id}{suffix}"
     return Path(settings.OBJEKT_MEDIA_DIR) / relativ, relativ
 
 
 def erstelle_upload(
     db: Session, user: User, org_id: int, objekt_id: int | None, dateiname: str, groesse: int | None,
-    *, road_closure_id: int | None = None, zweck: str = "objekt"
+    *, road_closure_id: int | None = None, site_id: int | None = None, zweck: str = "objekt"
 ) -> tuple[MCPUpload, str]:
     if groesse is not None and (not isinstance(groesse, int) or groesse < 0):
         raise MCPUploadFehler("groesse_bytes muss eine nicht-negative Ganzzahl sein.")
@@ -64,7 +65,7 @@ def erstelle_upload(
     token = secrets.token_urlsafe(32)
     row = MCPUpload(
         upload_id=secrets.token_hex(16), token_hash=hash_api_key(token), org_id=org_id,
-        user_id=user.id, objekt_id=objekt_id, road_closure_id=road_closure_id, zweck=zweck,
+        user_id=user.id, objekt_id=objekt_id, road_closure_id=road_closure_id, site_id=site_id, zweck=zweck,
         dateiname=(dateiname or "dokument.pdf")[:255],
         erwartete_bytes=groesse, expires_at=_now() + timedelta(minutes=settings.MCP_UPLOAD_TOKEN_MINUTEN),
     )
@@ -86,7 +87,10 @@ def speichere_upload(db: Session, upload_id: str, token: str, stream: BinaryIO) 
         raise MCPUploadFehler("Dieser Upload wurde bereits hochgeladen.", 409)
 
     limit = effektives_limit(db)
-    ziel, relativ = _upload_pfad(row.org_id, row.upload_id)
+    # Endung nie aus dem Client-Dateinamen übernehmen; Bilder werden erst
+    # nach der MIME-Erkennung umbenannt.
+    suffix = ".upload" if row.zweck == "gsl_site_media" else ".pdf"
+    ziel, relativ = _upload_pfad(row.org_id, row.upload_id, suffix)
     ziel.parent.mkdir(parents=True, exist_ok=True)
     total = 0
     digest = hashlib.sha256()
@@ -101,18 +105,21 @@ def speichere_upload(db: Session, upload_id: str, token: str, stream: BinaryIO) 
                     first += chunk[: 4096 - len(first)]
                 digest.update(chunk)
                 out.write(chunk)
-        if not first.startswith(b"%PDF") or _detect_mime(first) != "application/pdf":
-            raise MCPUploadFehler("Nur PDF-Dateien erlaubt.", 415)
-        try:
-            from pypdf import PdfReader
-            seitenzahl = len(PdfReader(str(ziel)).pages)
-        except Exception as exc:
-            raise MCPUploadFehler("PDF konnte nicht gelesen werden.", 415) from exc
+        if row.zweck == "gsl_site_media":
+            if _detect_mime(first) not in IMAGE_MIMES:
+                raise MCPUploadFehler("Nur Bilder erlaubt.", 415)
+        else:
+            if not first.startswith(b"%PDF") or _detect_mime(first) != "application/pdf":
+                raise MCPUploadFehler("Nur PDF-Dateien erlaubt.", 415)
+            try:
+                from pypdf import PdfReader
+                row.seitenzahl = len(PdfReader(str(ziel)).pages)
+            except Exception as exc:
+                raise MCPUploadFehler("PDF konnte nicht gelesen werden.", 415) from exc
         row.hochgeladen_am = _now()
         row.pfad = relativ
         row.sha256 = digest.hexdigest()
         row.groesse_bytes = total
-        row.seitenzahl = seitenzahl
         db.commit()
         db.refresh(row)
         return row

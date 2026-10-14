@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
+import base64
+import hashlib
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
+
+from fastapi import UploadFile
 
 from app.config import settings
 from app.core.audit import write_audit
@@ -17,6 +23,7 @@ from app.models.major_incident import (
     EinheitSiteDispatch,
     IncidentSite,
     MajorIncident,
+    SiteMedia,
     SitePhase,
     SitePriority,
 )
@@ -25,9 +32,12 @@ from app.services import (
     gsl_broadcast,
     gsl_mcp_service,
     gsl_stelle_service,
+    lage_media_service,
     major_incident_service,
     resource_service,
 )
+from app.services.mcp_download_service import erstelle_download_token
+from app.services.mcp_upload_service import effektives_limit, erstelle_upload, lade_upload_fuer_uebergabe
 from app.services.mi_feature_service import get_mi_features
 
 _BEREICHE = {"allgemein", "auftraege", "log", "medien", "material", "meldungen"}
@@ -35,6 +45,52 @@ _BEREICHE = {"allgemein", "auftraege", "log", "medien", "material", "meldungen"}
 
 def _feature(name: str):
     return lambda org_id, db: get_mi_features(db, org_id)[name]
+
+
+def _datei_hash_und_inhalt(pfad: Path, inline: bool) -> tuple[int, str, bytes | None]:
+    groesse = pfad.stat().st_size
+    inhalt = bytearray() if inline and groesse <= settings.MCP_DOWNLOAD_INLINE_MAX_BYTES else None
+    digest = hashlib.sha256()
+    with pfad.open("rb") as datei:
+        while chunk := datei.read(1024 * 1024):
+            digest.update(chunk)
+            if inhalt is not None:
+                inhalt.extend(chunk)
+    return groesse, digest.hexdigest(), bytes(inhalt) if inhalt is not None else None
+
+
+def _medium(context: MCPContext, lage: MajorIncident, art: str, medium_id: int):
+    from app.models.major_incident import (
+        CitizenReport,
+        CrossMarkerMedia,
+        CrossSiteMarker,
+        LageJournalEntry,
+        LageJournalMedia,
+    )
+    medium: Any
+    features = get_mi_features(context.db, context.org_id)
+    if art == "stelle":
+        medium = context.db.get(SiteMedia, medium_id)
+        if medium and _site(context, lage, medium.incident_site_id):
+            return medium, lage_media_service.site_media_path(medium), medium.original_filename, "image/jpeg"
+    elif art == "journal":
+        medium = context.db.get(LageJournalMedia, medium_id)
+        entry = context.db.get(LageJournalEntry, medium.journal_entry_id) if medium else None
+        if medium and entry and entry.major_incident_id == lage.id:
+            return medium, lage_media_service.journal_media_path(medium), medium.original_filename, "image/jpeg"
+    elif art == "uebergreifend" and features["uebergreifend"]:
+        medium = context.db.get(CrossMarkerMedia, medium_id)
+        marker = context.db.get(CrossSiteMarker, medium.marker_id) if medium else None
+        if medium and marker and marker.major_incident_id == lage.id:
+            return medium, lage_media_service.cross_media_path(medium), medium.original_filename, "image/jpeg"
+    elif art == "meldung" and features["meldungen"]:
+        report = context.db.get(CitizenReport, medium_id)
+        if report and report.major_incident_id == lage.id and report.photo_filename:
+            return (
+                report, Path("app_storage/citizen_media") / report.photo_filename,
+                report.photo_filename, "image/jpeg",
+            )
+    raise ValueError("Medium nicht gefunden.")
 
 
 def _lage(context: MCPContext, lage_id: int | None) -> MajorIncident:
@@ -274,6 +330,97 @@ async def gsl_meldungen(context: MCPContext, lage_id: int | None = None, status:
         if status not in {"new", "accepted", "rejected", "alle"}:
             raise ValueError("Ungültiger Status.")
         return _antwort(lage, meldungen=gsl_mcp_service.meldungen(context.db, lage, status))
+    except Exception:
+        context.db.rollback()
+        raise
+
+
+@register_tool(
+    name="gsl_medium_herunterladen",
+    description=("Bereitet einen Medien-Download vor. art=stelle/journal/uebergreifend verwendet die medium_id aus "
+                 "der jeweiligen Medienliste; art=meldung verwendet report_id als medium_id."),
+    required_roles=READ,
+)
+async def gsl_medium_herunterladen(
+    context: MCPContext, lage_id: int, art: str, medium_id: int, inline: bool = False
+) -> dict[str, object]:
+    try:
+        lage = _lage(context, lage_id)
+        if art not in {"stelle", "journal", "uebergreifend", "meldung"}:
+            raise ValueError("Ungültige Medienart.")
+        medium, pfad, dateiname, mime = _medium(context, lage, art, medium_id)
+        if not pfad.is_file():
+            raise ValueError("Medium nicht gefunden.")
+        groesse, sha256, inhalt = await asyncio.to_thread(_datei_hash_und_inhalt, pfad, inline)
+        token, gueltig_bis = erstelle_download_token(context.org_id, context.user.id, medium_id, None,
+                                                      art="gsl_medium", incident_id=lage.id, medium_art=art)
+        url = f"{settings.effective_public_base_url.rstrip('/')}/api/mcp/downloads/{token}"
+        _audit(context, "download_vorbereitet", lage, medium_id, art=art)
+        context.db.commit()
+        result: dict[str, object] = {"lage_id": lage.id, "art": art, "medium_id": medium_id,
+            "dateiname": dateiname, "mime": mime, "groesse_bytes": groesse, "sha256": sha256,
+            "download_url": url, "gueltig_bis": gueltig_bis.isoformat() + "Z",
+            "curl_beispiel": f'curl -o "{dateiname}" "{url}"'}
+        if inline:
+            if inhalt is not None:
+                result["inhalt_base64"] = base64.b64encode(inhalt).decode("ascii")
+            else:
+                result["hinweis"] = f"Datei zu gross fuer inline ({groesse} Bytes), bitte download_url verwenden."
+        return result
+    except Exception:
+        context.db.rollback()
+        raise
+
+
+@register_tool(
+    name="gsl_einsatzstelle_foto_upload_vorbereiten",
+    description="Bereitet einen kurzlebigen Bearer-Upload eines Fotos für eine Einsatzstelle vor.",
+    required_roles=READ,
+)
+async def gsl_einsatzstelle_foto_upload_vorbereiten(
+    context: MCPContext, lage_id: int, site_id: int, dateiname: str, groesse_bytes: int | None = None
+) -> dict[str, object]:
+    lage = _lage(context, lage_id)
+    _edit(context, lage)
+    site = _site(context, lage, site_id)
+    limit = effektives_limit(context.db)
+    if groesse_bytes is not None and groesse_bytes > limit:
+        raise ValueError(f"Datei zu gross (max. {limit} Bytes).")
+    row, token = erstelle_upload(context.db, context.user, context.org_id, None, dateiname, groesse_bytes,
+                                 site_id=site.id, zweck="gsl_site_media")
+    _audit(context, "foto_upload_vorbereitet", lage, site.id, upload_id=row.upload_id, dateiname=row.dateiname)
+    context.db.commit()
+    url = f"{settings.effective_public_base_url.rstrip('/')}/api/mcp/uploads/{row.upload_id}"
+    return {"upload_id": row.upload_id, "upload_url": url, "upload_token": token,
+            "gueltig_bis": row.expires_at.isoformat() + "Z", "max_bytes": limit,
+            "curl_beispiel": f'curl -X POST -H "Authorization: Bearer {token}" -F "datei=@<pfad>" {url}'}
+
+
+@register_tool(
+    name="gsl_einsatzstelle_foto_uebergeben",
+    description="Übernimmt ein zuvor hochgeladenes Einsatzstellenfoto.", required_roles=READ,
+)
+async def gsl_einsatzstelle_foto_uebergeben(context: MCPContext, lage_id: int, upload_id: str) -> dict[str, object]:
+    try:
+        lage = _lage(context, lage_id)
+        _edit(context, lage)
+        upload = lade_upload_fuer_uebergabe(context.db, context.org_id, context.user.id, upload_id, "gsl_site_media")
+        site = _site(context, lage, upload.site_id or 0)
+        if not upload.pfad:
+            raise ValueError("Upload nicht gefunden.")
+        pfad = Path(settings.OBJEKT_MEDIA_DIR) / upload.pfad
+        if not pfad.is_file():
+            raise ValueError("Upload-Datei nicht gefunden.")
+        with pfad.open("rb") as datei:
+            media = await lage_media_service.speichere_site_foto(
+                context.db, site, UploadFile(filename=upload.dateiname, file=datei), org_id=lage.org_id,
+                user_id=context.user.id, author_name=_author(context)
+            )
+        upload.uebergeben_am = datetime.now(UTC).replace(tzinfo=None)
+        _audit(context, "foto_uebergeben", lage, media.id, site_id=site.id, upload_id=upload_id)
+        context.db.commit()
+        await gsl_broadcast.site_log_geaendert(lage.id, site.id)
+        return _antwort(lage, site_id=site.id, medium_id=media.id, dateiname=media.original_filename)
     except Exception:
         context.db.rollback()
         raise
