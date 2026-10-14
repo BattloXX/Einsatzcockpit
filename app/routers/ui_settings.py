@@ -59,6 +59,21 @@ ALLOWED_LOGO_MIME = {"image/png", "image/jpeg", "image/svg+xml", "image/webp"}
 MAX_LOGO_BYTES = 2 * 1024 * 1024  # 2 MB
 
 
+def normalisiere_alarm_ausschluss_begriffe(raw: str) -> str | None:
+    """Bereitet die zeilenbasierte Liste fuer die Organisations-Einstellung auf."""
+    begriffe: list[str] = []
+    gesehen: set[str] = set()
+    for zeile in raw.splitlines():
+        begriff = zeile.strip()[:100]
+        schluessel = begriff.casefold()
+        if begriff and schluessel not in gesehen:
+            begriffe.append(begriff)
+            gesehen.add(schluessel)
+        if len(begriffe) == 50:
+            break
+    return "\n".join(begriffe) or None
+
+
 def _wordpress_effective_org_id(user: User, target_org_id: int | None = None) -> int | None:
     if is_system_admin(user) and target_org_id:
         return target_org_id
@@ -279,11 +294,13 @@ async def save_org_settings(
     lagefuehrung_modul_aktiv_raw: str = Form(""),
     einsatzinfo_sms_enabled_raw: str = Form(""),
     hydrant_layer_enabled_raw: str | None = Form(None),
+    alarm_ausschluss_begriffe: str = Form(""),
 ):
     is_sysadmin = has_role(user, "system_admin")
     effective_org_id = target_org_id if is_sysadmin and target_org_id else user.org_id
     if not effective_org_id:
         return RedirectResponse("/admin/settings", status_code=303)
+    form = await request.form()
 
     org = db.query(FireDept).filter(FireDept.id == effective_org_id).first()
     if org and org_name:
@@ -374,6 +391,10 @@ async def save_org_settings(
         org_s.footer_text = footer_text
     if logo_path:
         org_s.logo_path = logo_path
+    if "alarm_ausschluss_begriffe" in form:
+        org_s.alarm_ausschluss_begriffe = normalisiere_alarm_ausschluss_begriffe(
+            alarm_ausschluss_begriffe
+        )
 
     # Autoclose-Override (leer = globale SystemSettings-Fallback verwenden)
     if autoclose_enabled_raw == "":

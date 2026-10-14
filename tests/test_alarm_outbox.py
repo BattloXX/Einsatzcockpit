@@ -9,6 +9,7 @@ import pytest
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.incident import Incident, IncidentAlarmJob, IncidentLog
+from app.models.master import OrgSettings
 from app.models.sms import SmsLog, SmsLogRecipient
 from app.models.user import AuditLog
 from app.services.alarm_outbox import (
@@ -18,9 +19,9 @@ from app.services.alarm_outbox import (
     process_incident_alarm,
     run_alarm_outbox_once,
 )
+from app.services.einsatzinfo_mail_service import EinsatzinfoMailResult
 from app.services.sms_dispatch_service import EinsatzinfoDispatchResult
 from app.services.teams_alarm_service import TeamsDispatchResult
-from app.services.einsatzinfo_mail_service import EinsatzinfoMailResult
 
 
 def _db_incident(*, code="B2", exercise=False):
@@ -38,6 +39,27 @@ def _db_incident(*, code="B2", exercise=False):
 def _enqueue(db, incident):
     enqueue_incident_alarm(db, incident, org_id=1, source="test", base_url="https://example.test")
     db.commit()
+
+
+def _set_ausschlussbegriffe(db, org_id, begriffe):
+    settings = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
+    if settings is None:
+        settings = OrgSettings(org_id=org_id)
+        db.add(settings)
+    settings.alarm_ausschluss_begriffe = begriffe
+    db.commit()
+
+
+def _aufraeumen(db, incident):
+    # Die Test-DB lebt die ganze Session: Begriffe zuruecksetzen und offene Jobs
+    # entfernen, sonst verarbeitet run_alarm_outbox_once sie in spaeteren Tests mit.
+    db.rollback()
+    for settings in db.query(OrgSettings).filter(OrgSettings.alarm_ausschluss_begriffe.isnot(None)):
+        settings.alarm_ausschluss_begriffe = None
+    for job in db.query(IncidentAlarmJob).filter(IncidentAlarmJob.incident_id == incident.id):
+        db.delete(job)
+    db.commit()
+    db.close()
 
 
 def _channels(monkeypatch, calls):
@@ -107,10 +129,78 @@ async def test_f30_is_persistently_suppressed(setup_db, monkeypatch):
         jobs = db.query(IncidentAlarmJob).filter_by(incident_id=incident.id).all()
         assert len(jobs) == 4 and {job.status for job in jobs} == {"suppressed"}
         log = db.query(IncidentLog).filter_by(incident_id=incident.id).one()
-        assert log.text == "F30 – keine Alarmierung (SMS/Push/Teams/Mail)"
+        assert log.text == "Keine Alarmierung (SMS/Push/Teams/Mail): Stichwort F30"
+        assert {job.context["suppressed_reason"] for job in jobs} == {"Stichwort F30"}
         assert calls == []
     finally:
         db.close()
+
+
+def test_ausschlussbegriff_in_meldung_unterdrueckt_alle_kanaele(setup_db):
+    db, incident = _db_incident()
+    incident.report_text = "Strassenreinigung - Bereits   erledigt"
+    db.commit()
+    try:
+        _set_ausschlussbegriffe(db, 1, "bereits erledigt")
+        _enqueue(db, incident)
+        jobs = db.query(IncidentAlarmJob).filter_by(incident_id=incident.id).all()
+        assert len(jobs) == 4
+        assert {job.status for job in jobs} == {"suppressed"}
+        assert {job.context["suppressed_reason"] for job in jobs} == {
+            'Ausschlussbegriff "bereits erledigt"'
+        }
+        log = db.query(IncidentLog).filter_by(incident_id=incident.id).one()
+        assert "Ausschlussbegriff" in log.text
+    finally:
+        _aufraeumen(db, incident)
+
+
+def test_ausschlussbegriff_im_grund_unterdrueckt_alarm(setup_db):
+    db, incident = _db_incident()
+    incident.reason = "Einsatz bereits erledigt"
+    db.commit()
+    try:
+        _set_ausschlussbegriffe(db, 1, "BEREITS ERLEDIGT")
+        _enqueue(db, incident)
+        assert {job.status for job in db.query(IncidentAlarmJob).filter_by(incident_id=incident.id)} == {"suppressed"}
+    finally:
+        _aufraeumen(db, incident)
+
+
+def test_ausschlussbegriff_ohne_treffer_bleibt_pending(setup_db):
+    db, incident = _db_incident()
+    incident.report_text = "Rauchentwicklung im Keller"
+    db.commit()
+    try:
+        _set_ausschlussbegriffe(db, 1, "bereits erledigt")
+        _enqueue(db, incident)
+        assert {job.status for job in db.query(IncidentAlarmJob).filter_by(incident_id=incident.id)} == {"pending"}
+    finally:
+        _aufraeumen(db, incident)
+
+
+def test_ausschlussbegriff_anderer_org_wird_nicht_beruecksichtigt(setup_db):
+    db, incident = _db_incident()
+    incident.report_text = "Bereits erledigt"
+    try:
+        _set_ausschlussbegriffe(db, 2, "bereits erledigt")
+        _enqueue(db, incident)
+        assert {job.status for job in db.query(IncidentAlarmJob).filter_by(incident_id=incident.id)} == {"pending"}
+    finally:
+        _aufraeumen(db, incident)
+
+
+def test_alarm_backfill_bei_ausschlussbegriff_nicht_noetig(setup_db):
+    from app.services.incident_notify import incident_needs_alarm_backfill
+
+    db, incident = _db_incident()
+    incident.report_text = "Bereits erledigt"
+    db.commit()
+    try:
+        _set_ausschlussbegriffe(db, 1, "bereits erledigt")
+        assert incident_needs_alarm_backfill(db, incident) is False
+    finally:
+        _aufraeumen(db, incident)
 
 
 @pytest.mark.asyncio

@@ -580,6 +580,10 @@ class OrgSettings(Base):
     einsatzinfo_mail_subject_template: Mapped[str | None] = mapped_column(String(300), nullable=True)
     einsatzinfo_mail_template: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # Begriffe, bei denen neue Einsaetze ohne externe Alarmierung angelegt werden.
+    # Ein Begriff pro Zeile; die Auswertung erfolgt organisationsbezogen.
+    alarm_ausschluss_begriffe: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     # SMS-Empfang: Org-Schalter (App fordert RECEIVE_SMS nur an, wenn aktiv)
     sms_receive_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # Org-Default-Webhook fuer Weiterleitungsregeln ohne eigenen teams_webhook_url
