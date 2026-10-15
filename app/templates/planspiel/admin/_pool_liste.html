@@ -1,9 +1,9 @@
 {% set _quellen = {"objekt": "Objekte", "zusatzadresse": "Zusatzadressen", "einsatzhistorie": "Einsatzhistorie", "osm": "OSM-Adressen", "strassenpunkt": "Straßenpunkte", "manuell": "Manuell"} %}
-<p class="planspiel-pool-stats"><strong>Aktive Einträge:</strong>
-  {% for key, count in pool_stats.items() if key.startswith('quelle:') %}{{ _quellen.get(key[7:], key[7:]) }} {{ count }}{% if not loop.last %}, {% endif %}{% else %}keine{% endfor %}
-  · Qualität A {{ pool_stats.get('qualitaet:A', 0) }}, B {{ pool_stats.get('qualitaet:B', 0) }}, C {{ pool_stats.get('qualitaet:C', 0) }}</p>
-<div class="planspiel-pool-wrap">
-  <table class="planspiel-table">
+<p class="ps-count"><strong>Aktive Einträge:</strong>
+  {% for key, count in pool_stats.items() if key.startswith('quelle:') %}<span class="ps-badge ps-badge--gray">{{ _quellen.get(key[7:], key[7:]) }} {{ count }}</span>{% else %}keine{% endfor %}
+  · Qualität <span class="ps-badge ps-badge--green">A {{ pool_stats.get('qualitaet:A', 0) }}</span> <span class="ps-badge ps-badge--blue">B {{ pool_stats.get('qualitaet:B', 0) }}</span> <span class="ps-badge ps-badge--gray">C {{ pool_stats.get('qualitaet:C', 0) }}</span></p>
+<div class="ps-card planspiel-pool-wrap">
+  <table class="ps-table">
     <thead>
       <tr>
         <th>Adresse</th>

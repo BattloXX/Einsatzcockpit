@@ -1,61 +1,16 @@
 <style>
-  .planspiel-admin {
-    max-width: 1200px;
-    padding: 0 1rem 3rem;
-  }
-  .planspiel-admin h1 {
-    margin: .5rem 0 1rem;
-    font-size: 1.4rem;
-  }
-  .planspiel-admin h2 {
-    margin: 1rem 0 .6rem;
-    font-size: 1.1rem;
-  }
-  .planspiel-admin__head {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: .75rem;
-  }
-  .planspiel-admin__head .btn {
-    margin-left: .4rem;
-  }
-  .planspiel-filter {
-    display: flex;
-    flex-wrap: wrap;
-    gap: .5rem;
-    margin: .75rem 0;
-  }
-  .planspiel-filter .form-input {
-    width: auto;
-    min-width: 10rem;
-  }
-  .planspiel-tabs {
-    display: flex;
-    flex-wrap: wrap;
-    gap: .35rem;
-    margin: .5rem 0 1rem;
-    border-bottom: 1px solid var(--border);
-  }
-  .planspiel-tab {
-    padding: .5rem .85rem;
-    border: 1px solid transparent;
-    border-bottom: 0;
-    border-radius: var(--radius-md, 6px) var(--radius-md, 6px) 0 0;
-    background: transparent;
-    color: var(--text-muted);
-    font-weight: 600;
-    cursor: pointer;
-  }
-  .planspiel-tab.active {
-    border-color: var(--border);
-    background: var(--surface-low);
-    color: var(--on-surface);
-  }
-  .planspiel-pane {
-    margin-bottom: 1rem;
-  }
+  /* Einstellungsseite (Paket 3) verwendet diese bestehenden Hilfsklassen weiter. */
+  .planspiel-admin { max-width: 1200px; padding: 0 1rem 3rem; }
+  .planspiel-admin h1 { margin: .5rem 0 1rem; font-size: 1.4rem; }
+  .planspiel-admin__head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; }
+  .planspiel-filter { display: flex; flex-wrap: wrap; gap: .5rem; margin: .75rem 0; }
+  .planspiel-filter .form-input { width: auto; min-width: 10rem; }
+  .planspiel-table-wrap { overflow-x: auto; }
+  .planspiel-table { width: 100%; border-collapse: collapse; }
+  .planspiel-table th, .planspiel-table td { padding: .5rem .6rem; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+  .planspiel-title { display: flex; align-items: center; flex-wrap: wrap; gap: .6rem; margin-top: .6rem; }
+  .planspiel-import { display: flex; flex-wrap: wrap; align-items: end; gap: .75rem; margin: 0 0 1rem; }
+  .planspiel-import label { display: grid; gap: .25rem; }
   .planspiel-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -63,7 +18,7 @@
     align-items: start;
   }
   .planspiel-grid label,
-  .planspiel-pane > label {
+  .ps-box > label {
     display: grid;
     gap: .25rem;
     font-weight: 600;
@@ -84,9 +39,6 @@
   .planspiel-event {
     margin: .75rem 0;
     padding: .75rem 1rem;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg, 8px);
-    background: var(--surface-low);
   }
   .planspiel-event__head {
     display: flex;
@@ -103,63 +55,8 @@
     gap: .35rem;
     margin-top: 1rem;
     padding: .75rem 1rem;
-    border: 2px solid #b91c1c;
-    border-radius: var(--radius-lg, 8px);
-    background: rgba(185, 28, 28, .08);
-  }
-  .planspiel-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: .5rem;
-    margin: 1rem 0;
-  }
-  .planspiel-table-wrap {
-    overflow-x: auto;
-  }
-  .planspiel-table {
-    width: 100%;
-    border-collapse: collapse;
-  }
-  .planspiel-table th,
-  .planspiel-table td {
-    padding: .5rem .6rem;
-    border-bottom: 1px solid var(--border);
-    text-align: left;
-    vertical-align: top;
-  }
-  .planspiel-badge {
-    display: inline-block;
-    margin: 0 .25rem .25rem 0;
-    padding: .1rem .5rem;
-    border-radius: 999px;
-    background: var(--surface-high);
-    font-size: .75rem;
-    font-weight: 700;
-  }
-  .planspiel-nebenaktionen {
-    display: flex;
-    flex-wrap: wrap;
-    gap: .75rem;
-    margin-top: 1.5rem;
-    padding-top: 1rem;
-    border-top: 1px solid var(--border);
-  }
-  .planspiel-nebenaktionen form {
-    display: flex;
-    gap: .5rem;
-    align-items: end;
   }
   @media (max-width: 760px) {
-    .planspiel-admin {
-      padding: 0 .5rem 2rem;
-    }
-    .planspiel-filter .form-input {
-      width: 100%;
-    }
-    .planspiel-nebenaktionen,
-    .planspiel-nebenaktionen form {
-      flex-direction: column;
-      align-items: stretch;
-    }
+    .planspiel-grid, .planspiel-checkboxes { grid-template-columns: 1fr; }
   }
 </style>

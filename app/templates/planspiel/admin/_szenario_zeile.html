@@ -2,20 +2,19 @@
   <td><a href="/admin/settings/planspiele/szenarien/{{ item.id }}">{{ item.code }}</a></td>
   <td>{{ version.titel }}</td>
   <td>{{ version.stichwort_code }}</td>
-  <td>{{ version.kategorie }}</td>
+  <td><span class="ps-badge ps-badge--blue">{{ version.kategorie }}</span></td>
   <td>{{ version.schwierigkeit }}</td>
   <td>{{ 'ja' if item.zufall_erlaubt else 'nein' }} / {{ item.gewicht }}</td>
   <td>
-    <span class="planspiel-badge">{{ 'System' if item.herkunft == 'system' else 'Eigene' }}</span>
-    {% if item.org_geaendert %}<span class="planspiel-badge">angepasst</span>{% endif %}
-    {% if item.herkunft == 'system' and item.system_version < system_version and item.org_geaendert %}<span class="planspiel-badge planspiel-badge--warn">Systemupdate verfügbar</span>{% endif %}
-    {% if not item.aktiv %}<span class="planspiel-badge">inaktiv</span>{% endif %}
-    {% if item.archiviert_at %}<span class="planspiel-badge">archiviert</span>{% endif %}
+    <span class="ps-badge ps-badge--blue">{{ 'System' if item.herkunft == 'system' else 'Org' }}</span>
+    {% if item.org_geaendert %}<span class="ps-badge ps-badge--amber">angepasst</span>{% endif %}
+    {% if item.herkunft == 'system' and item.system_version < system_version and item.org_geaendert %}<span class="ps-badge ps-badge--amber">Systemupdate verfügbar</span>{% endif %}
+    {% if item.archiviert_at %}<span class="ps-badge ps-badge--gray">archiviert</span>{% elif item.aktiv %}<span class="ps-badge ps-badge--green">aktiv</span>{% else %}<span class="ps-badge ps-badge--amber">deaktiviert</span>{% endif %}
     {% if can_edit %}
     <form method="post" action="/admin/settings/planspiele/szenarien/{{ item.id }}/aktiv" hx-post="/admin/settings/planspiele/szenarien/{{ item.id }}/aktiv" hx-target="#szenario-{{ item.id }}" hx-swap="outerHTML">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <input type="hidden" name="aktiv" value="{{ '0' if item.aktiv else '1' }}">
-      <button class="btn btn--secondary" type="submit">{{ 'Deaktivieren' if item.aktiv else 'Aktivieren' }}</button>
+      <button class="btn btn--secondary btn--sm" type="submit">{{ 'Deaktivieren' if item.aktiv else 'Aktivieren' }}</button>
     </form>
     {% endif %}
   </td>

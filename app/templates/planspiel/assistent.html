@@ -1,38 +1,47 @@
 {% extends "base.html" %}
-{% from "_page_header.html" import page_header %}
 {% block title %}{% if run %}Planspiel bearbeiten{% else %}Neues Planspiel{% endif %}{% endblock %}
 {% block head_extra %}
 <link rel="stylesheet" href="/static/css/leaflet.min.css">
+{% include "planspiel/_design.html" %}
 <style>
-  .planspiel-wizard { max-width: 980px; margin: 0 auto; padding: 1rem 1rem 3rem; }
-  .planspiel-wizard__step { margin: 1rem 0; padding: 1rem; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface-low); }
+  .planspiel-wizard__steps { display:flex;gap:.35rem;align-items:center;padding:.3rem;margin-bottom:1rem;border:1px solid var(--border);border-radius:999px;background:var(--surface-low);overflow-x:auto; }
+  .planspiel-wizard__step-pill { padding:.4rem .75rem;border-radius:999px;font-size:.8rem;white-space:nowrap;color:var(--text-muted); }
+  .planspiel-wizard__step-pill--active { background:var(--surface-high);box-shadow:inset 0 0 0 1px var(--border);color:var(--text);font-weight:700; }
+  .planspiel-wizard__step { margin:0; }
+  .planspiel-wizard__step h2 { margin:0 0 1rem;font-size:1.05rem; }
   .planspiel-wizard__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; }
   .planspiel-wizard__grid label { display: grid; gap: .3rem; }
   .planspiel-wizard__full { grid-column: 1 / -1; }
   .planspiel-wizard__map { height: 280px; margin-top: .5rem; border: 1px solid var(--border); }
-  .planspiel-wizard__actions { display: flex; justify-content: space-between; gap: .75rem; margin-top: 1rem; }
+  .planspiel-wizard__actions { margin-top:1rem; }
   .planspiel-wizard__choice { display: flex; align-items: center; gap: .4rem; }
   .planspiel-wizard__hint { color: var(--text-muted); }
   @media (max-width: 760px) {
-    .planspiel-wizard { padding: .75rem .75rem 2rem; }
     .planspiel-wizard__grid { grid-template-columns: 1fr; }
     .planspiel-wizard__full { grid-column: auto; }
-    .planspiel-wizard__actions { flex-direction: column; }
+    .planspiel-wizard__actions { flex-direction:column; }
   }
 </style>
 {% endblock %}
 {% block content %}
-<main class="planspiel-wizard" x-data="{ step: 1, art: '{{ form.get('art', 'einzel') }}' }">
-  {{ page_header("Planspiel bearbeiten" if run else "Neues Planspiel",
-                 back_href=("/planspiele/" ~ run.id) if run else "/planspiele", back_label="Zurück",
-                 sub="Alle erzeugten Einsätze sind ÜBUNGEN – es wird nicht echt alarmiert.") }}
+<main class="ps-page ps-page--narrow" x-data="{ step: 1, art: '{{ form.get('art', 'einzel') }}' }">
+  <header class="ps-header">
+    <div>
+      <a href="{{ ('/planspiele/' ~ run.id) if run else '/planspiele' }}" class="btn btn--ghost btn--sm">&#8592; Zurück</a>
+      <h1 style="margin-top:.65rem;">{{ "Planspiel bearbeiten" if run else "Neues Planspiel" }}</h1>
+      <p class="ps-header__sub">Alle erzeugten Einsätze sind ÜBUNGEN – es wird nicht echt alarmiert.</p>
+    </div>
+  </header>
+  <nav class="planspiel-wizard__steps" aria-label="Schritte">
+    {% for nummer in range(1, 8) %}<span class="planspiel-wizard__step-pill" :class="{ 'planspiel-wizard__step-pill--active': step === {{ nummer }} }">{{ nummer }}</span>{% endfor %}
+  </nav>
   {% if fehler %}
   <p class="form-error">{{ fehler }}</p>
   {% endif %}
   <form method="post" action="{% if run %}/planspiele/{{ run.id }}/bearbeiten{% else %}/planspiele/neu{% endif %}">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-    <section class="planspiel-wizard__step" x-show="step === 1">
-      <h2>1. Titel und Lernziele</h2>
+    <section class="ps-box planspiel-wizard__step" x-show="step === 1">
+      <h2 class="ps-box__title">1. Titel und Lernziele</h2>
       <div class="planspiel-wizard__grid">
         <label class="planspiel-wizard__full">Titel
           <input class="form-input" name="titel" value="{{ form.get('titel', '') }}" required>
@@ -42,8 +51,8 @@
         </label>
       </div>
     </section>
-    <section class="planspiel-wizard__step" x-show="step === 2">
-      <h2>2. Art</h2>
+    <section class="ps-box planspiel-wizard__step" x-show="step === 2">
+      <h2 class="ps-box__title">2. Art</h2>
       <label class="planspiel-wizard__choice">
         <input type="radio" name="art" value="einzel" x-model="art">
         Einzeleinsatz
@@ -55,14 +64,14 @@
         <span class="planspiel-wizard__hint">Übungs-GSL, in die laufend neue Einsatzstellen einlaufen – bitte ein GSL-Szenario (G01–G05) wählen</span>
       </label>
     </section>
-    <section class="planspiel-wizard__step" x-show="step === 3">
-      <h2>3. Erzeugung</h2>
+    <section class="ps-box planspiel-wizard__step" x-show="step === 3">
+      <h2 class="ps-box__title">3. Erzeugung</h2>
       {% for value, label in [('manuell', 'Manuell'), ('teilauto', 'Teilautomatisch'), ('zufall', 'Zufällig')] %}
       <label class="planspiel-wizard__choice"><input type="radio" name="erzeugung" value="{{ value }}" {% if form.get('erzeugung', 'manuell') == value %}checked{% endif %}> {{ label }}</label>
       {% endfor %}
     </section>
-    <section class="planspiel-wizard__step" x-show="step === 4">
-      <h2>4. Szenario</h2>
+    <section class="ps-box planspiel-wizard__step" x-show="step === 4">
+      <h2 class="ps-box__title">4. Szenario</h2>
       <label>Stichwortvorschlag
         <input class="form-input" name="stichwort_suche" hx-get="/planspiele/neu/stichwort" hx-target="#stichwort-vorschlag" hx-trigger="keyup changed delay:300ms" hx-include="this" placeholder="z. B. Rauch aus Fenster">
       </label>
@@ -80,13 +89,13 @@
         </select>
       </label>
     </section>
-    <section class="planspiel-wizard__step" x-show="step === 5 && art === 'gsl'">
-      <h2>5. Ort</h2>
+    <section class="ps-box planspiel-wizard__step" x-show="step === 5 && art === 'gsl'">
+      <h2 class="ps-box__title">5. Ort</h2>
       <p>Bei einer Großschadenslage entstehen die Einsatzstellen verteilt im Planspiel-Gebiet aus dem Adresspool.
         Ein einzelner Ort ist nicht nötig.</p>
     </section>
-    <section class="planspiel-wizard__step" x-show="step === 5 && art !== 'gsl'">
-      <h2>5. Ort</h2>
+    <section class="ps-box planspiel-wizard__step" x-show="step === 5 && art !== 'gsl'">
+      <h2 class="ps-box__title">5. Ort</h2>
       <div class="planspiel-wizard__grid">
         {% for value, label in [('zufall', 'Zufällig'), ('pool', 'Pool-Eintrag'), ('objekt', 'Objekt'), ('manuell', 'Manuelle Adresse'), ('karte', 'Kartenpunkt')] %}
         <label class="planspiel-wizard__choice"><input type="radio" name="ort_modus" value="{{ value }}" {% if form.get('ort_modus', 'zufall') == value %}checked{% endif %}> {{ label }}</label>
@@ -107,8 +116,8 @@
       </div>
       <div id="ort-karte" class="planspiel-wizard__map"></div>
     </section>
-    <section class="planspiel-wizard__step" x-show="step === 6">
-      <h2>6. Varianten</h2>
+    <section class="ps-box planspiel-wizard__step" x-show="step === 6">
+      <h2 class="ps-box__title">6. Varianten</h2>
       <div class="planspiel-wizard__grid">
         <label>Stichwort-Override<input class="form-input" name="stichwort_code" value="{{ form.get('stichwort_code', '') }}"></label>
         <label>Tempo<select class="form-input" name="tempo">{% for value in [0.5, 1, 2, 5, 10] %}<option value="{{ value }}" {% if form.get('tempo', 1)|float == value %}selected{% endif %}>{{ value }}×</option>{% endfor %}</select></label>
@@ -141,11 +150,11 @@
         </label>
       </fieldset>
     </section>
-    <section class="planspiel-wizard__step" x-show="step === 7">
-      <h2>7. Simulation</h2>
+    <section class="ps-box planspiel-wizard__step" x-show="step === 7">
+      <h2 class="ps-box__title">7. Simulation</h2>
       <p>Allein-Betrieb und simulierte Einheiten folgen in einer späteren Phase.</p>
     </section>
-    <div class="planspiel-wizard__actions">
+    <div class="ps-actions planspiel-wizard__actions">
       <button class="btn btn--secondary" type="button" x-show="step > 1" @click="step--">Zurück</button>
       <button class="btn btn--primary" type="button" x-show="step < 7" @click="step++">Weiter</button>
       <button class="btn btn--primary" type="submit" x-show="step === 7">Als Entwurf speichern</button>

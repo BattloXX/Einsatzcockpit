@@ -1,13 +1,13 @@
 <div id="beobachtungen-liste">
   {% for row in beobachtungen %}
-  <article class="planspiel-regie__observation">
-    <strong>{{ row.created_at|local_datetime }}</strong> · {{ '%02d:%02d'|format(((row.sim_s or 0) // 60)|int, ((row.sim_s or 0) % 60)|int) }}
-    {% if row.kategorie %} · {{ row.kategorie }}{% endif %}
-    {% if row.lernziel %} · {{ row.lernziel }}{% endif %}
-    {% if row.bewertung %} · Bewertung {{ row.bewertung }}/5{% endif %}
-    <br>{{ row.text }}
+  <article class="ps-sidecard" style="margin-bottom:.5rem;overflow-wrap:anywhere">
+    <div class="ps-row">
+      <span class="ps-row__label">{{ row.created_at|local_datetime }} · {{ '%02d:%02d'|format(((row.sim_s or 0) // 60)|int, ((row.sim_s or 0) % 60)|int) }}</span>
+      <span class="ps-row__value">{% if row.kategorie %}{{ row.kategorie }}{% endif %}{% if row.lernziel %} · {{ row.lernziel }}{% endif %}{% if row.bewertung %} · Bewertung {{ row.bewertung }}/5{% endif %}</span>
+    </div>
+    <p style="margin-top:.5rem">{{ row.text }}</p>
   </article>
   {% else %}
-  <p>Noch keine Beobachtungen.</p>
+  <p class="ps-empty">Noch keine Beobachtungen.</p>
   {% endfor %}
 </div>

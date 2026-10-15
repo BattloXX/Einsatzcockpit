@@ -2,10 +2,10 @@
   <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
   <input type="hidden" name="ereignisse_json" x-ref="events">
   {% if not szenario %}
-  <label>Code<input class="form-input" name="code" value="{{ form.code if form else '' }}" required pattern="[A-Za-z0-9_-]{1,40}"></label>
+  <div class="ps-box"><div class="ps-box__head"><h2 class="ps-box__title">Kennung</h2></div><label>Code<input class="form-input" name="code" value="{{ form.code if form else '' }}" required pattern="[A-Za-z0-9_-]{1,40}"></label></div>
   {% endif %}
-  <div class="planspiel-pane" x-show="tab === 'grund'">
-    <h2>Grunddaten</h2>
+  <div class="ps-box" x-show="tab === 'grund'">
+    <div class="ps-box__head"><h2 class="ps-box__title">Grunddaten</h2></div>
     <div class="planspiel-grid">
       <label>Titel<input class="form-input" name="titel" value="{{ version.titel if version else '' }}" required></label>
       <label>
@@ -33,13 +33,13 @@
     </div>
     <datalist id="lfv-codes">{% for entry in stichworte %}<option value="{{ entry.code|upper }}">{{ entry.bezeichnung }}</option>{% endfor %}</datalist>
   </div>
-  <div class="planspiel-pane" x-show="tab === 'alarm'">
-    <h2>Alarmierung</h2>
+  <div class="ps-box" x-show="tab === 'alarm'">
+    <div class="ps-box__head"><h2 class="ps-box__title">Alarmierung</h2></div>
     <label>Alarmtext-Template<textarea class="form-input" name="alarmtext_template" required>{{ version.alarmtext_template if version else '' }}</textarea></label>
     <p class="planspiel-hint">Erlaubte Platzhalter: {adresse}, {strasse}, {hausnr}, {ort}, {objekt}, {gebaeudeart}, {meldender}, {meldezeit}, {stock}, {bereich}, {ursache}, {gruppe}, {hindernis}, {geraet}, {material}, {einheit}, {neu}, {ortsteil}.</p>
   </div>
-  <div class="planspiel-pane" x-show="tab === 'ort'">
-    <h2>Standortregeln</h2>
+  <div class="ps-box" x-show="tab === 'ort'">
+    <div class="ps-box__head"><h2 class="ps-box__title">Standortregeln</h2></div>
     <fieldset>
       <legend>Ortstypen</legend>
       <div class="planspiel-checkboxes">
@@ -76,8 +76,8 @@
       </label>
     </div>
   </div>
-  <div class="planspiel-pane" x-show="tab === 'meldungen'">
-    <h2>Folgemeldungen</h2>
+  <div class="ps-box" x-show="tab === 'meldungen'">
+    <div class="ps-box__head"><h2 class="ps-box__title">Folgemeldungen</h2></div>
     <label>
       Baustein einfügen
       <select class="form-input" @change="insertBlock($event.target.value); $event.target.value = ''">
@@ -88,7 +88,7 @@
       </select>
     </label>
     <template x-for="(event, index) in events" :key="index">
-      <section class="planspiel-event">
+      <section class="ps-box planspiel-event">
         <div class="planspiel-event__head">
           <h3 x-text="'Folgemeldung ' + (index + 1)"></h3>
           <button class="btn btn--secondary" type="button" @click="events.splice(index, 1)">Entfernen</button>
@@ -184,20 +184,20 @@
     <button class="btn btn--secondary" type="button" :disabled="events.length >= 20" @click="add()">Zeile hinzufügen</button>
     <p class="planspiel-hint" x-show="events.length >= 20">Maximal 20 Folgemeldungen.</p>
   </div>
-  <div class="planspiel-pane" x-show="tab === 'lernziele'">
-    <h2>Lernziele</h2>
+  <div class="ps-box" x-show="tab === 'lernziele'">
+    <div class="ps-box__head"><h2 class="ps-box__title">Lernziele</h2></div>
     <label>
       Lernziele
       <textarea class="form-input" name="lernziele">{{ version.lernziele if version and version.lernziele else '' }}</textarea>
     </label>
-    <aside class="planspiel-secret">
+    <aside class="ps-box ps-box--danger planspiel-secret">
       <strong>Regie-Geheimlage</strong>
       <span>Nur für die Regie sichtbar, nie für Teilnehmer.</span>
       <textarea class="form-input" name="regie_geheimlage">{{ version.regie_geheimlage if version and version.regie_geheimlage else '' }}</textarea>
     </aside>
   </div>
-  <div class="planspiel-pane" x-show="tab === 'zufall'">
-    <h2>Varianten &amp; Zufall</h2>
+  <div class="ps-box" x-show="tab === 'zufall'">
+    <div class="ps-box__head"><h2 class="ps-box__title">Varianten &amp; Zufall</h2></div>
     <label>
       <input type="checkbox" name="zufall_erlaubt" {% if not szenario or szenario.zufall_erlaubt %}checked{% endif %}>
       Für Zufallsauswahl zulassen
@@ -212,7 +212,7 @@
       </select>
     </label>
   </div>
-  <div class="planspiel-actions"><button class="btn btn--primary" type="submit">Speichern</button></div>
+  <div class="ps-actions"><button class="btn btn--primary btn--sm" type="submit">Speichern</button></div>
 </form>
 <script id="planspiel-bausteine" type="application/json">{{ baustein_daten|default({})|tojson }}</script>
 <script>

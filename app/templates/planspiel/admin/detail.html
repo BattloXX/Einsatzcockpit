@@ -2,28 +2,29 @@
 {% from "admin/_breadcrumb.html" import breadcrumb %}
 {% block title %}{{ szenario.code }}{% endblock %}
 {% block head_extra %}
+  {% include "planspiel/_design.html" %}
   {% include "planspiel/admin/_styles.html" %}
 {% endblock %}
 {% block content %}
-<section class="planspiel-admin" x-data="{ tab: 'grund' }">
+<section class="ps-page ps-page--narrow" x-data="{ tab: 'grund' }">
   {{ breadcrumb([{"label": "Einstellungen", "href": "/admin/settings"}, {"label": "Planspiele", "href": "/planspiele"}, {"label": "Szenariokatalog", "href": "/admin/settings/planspiele/szenarien"}, {"label": szenario.code, "href": none}]) }}
-  <h1>{{ szenario.code }}: {{ version.titel }}</h1>
+  <div class="ps-header"><div><a href="/admin/settings/planspiele/szenarien" class="btn btn--ghost btn--sm">← Katalog</a><div class="planspiel-title"><h1>{{ szenario.code }}: {{ version.titel }}</h1><span class="ps-status {% if archiviert %}ps-status--gray{% elif szenario.aktiv %}ps-status--green{% else %}ps-status--amber{% endif %}">{{ 'archiviert' if archiviert else ('aktiv' if szenario.aktiv else 'deaktiviert') }}</span></div></div></div>
   {% if fehler %}
   <p class="form-error">{{ fehler }}</p>
   {% endif %}
   {% if archiviert %}
   <p class="form-error">Dieses Szenario ist archiviert und nur lesbar.</p>
   {% endif %}
-  <nav class="planspiel-tabs" aria-label="Szenario-Bereiche">
+  <nav class="subtabnav" aria-label="Szenario-Bereiche">
     {% for key, label in [('grund', 'Grunddaten'), ('alarm', 'Alarmierung'), ('ort', 'Standortregeln'), ('meldungen', 'Folgemeldungen'), ('lernziele', 'Lernziele'), ('zufall', 'Varianten & Zufall'), ('vorschau', 'Vorschau'), ('versionen', 'Versionen')] %}
-    <button class="planspiel-tab" type="button" @click="tab = '{{ key }}'" :class="tab === '{{ key }}' && 'active'">{{ label }}</button>
+    <button class="subtabnav__item" type="button" @click="tab = '{{ key }}'" :class="tab === '{{ key }}' && 'subtabnav__item--active'">{{ label }}</button>
     {% endfor %}
   </nav>
   {% if not archiviert %}
   {% include "planspiel/admin/_formular.html" %}
   {% endif %}
-  <section class="planspiel-pane" x-show="tab === 'vorschau'">
-    <h2>Vorschau</h2>
+  <section class="ps-box" x-show="tab === 'vorschau'">
+    <div class="ps-box__head"><h2 class="ps-box__title">Vorschau</h2></div>
     <h3>Alarmtext</h3>
     <p>{{ rendern(version.alarmtext_template, werte) }}</p>
     <h3>Folgemeldungen</h3>
@@ -33,16 +34,16 @@
     <p>Keine Folgemeldungen.</p>
     {% endfor %}
   </section>
-  <section class="planspiel-pane" x-show="tab === 'versionen'">
-    <h2>Versionen</h2>
+  <section class="ps-box" x-show="tab === 'versionen'">
+    <div class="ps-box__head"><h2 class="ps-box__title">Versionen</h2></div>
     <ul>
       {% for row in versions %}
       <li>Version {{ row.version }}, {{ row.veroeffentlicht_at|local_datetime }}</li>
       {% endfor %}
     </ul>
     {% if systemdiff %}
-    <div class="planspiel-table-wrap">
-      <table class="planspiel-table">
+    <div class="ps-card ps-table-wrap">
+      <table class="ps-table">
         <thead><tr><th>Feld</th><th>aktuell</th><th>System</th></tr></thead>
         <tbody>{% for field, current, system in systemdiff %}<tr><td>{{ field }}</td><td>{{ current }}</td><td>{{ system }}</td></tr>{% endfor %}</tbody>
       </table>
@@ -50,21 +51,21 @@
     {% endif %}
   </section>
   {% if not archiviert %}
-  <div class="planspiel-nebenaktionen">
+  <div class="ps-actions">
   <form method="post" action="/admin/settings/planspiele/szenarien/{{ szenario.id }}/duplizieren">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <label>Code der Kopie<input class="form-input" name="code" required></label>
-    <button class="btn btn--secondary" type="submit">Duplizieren</button>
+    <button class="btn btn--secondary btn--sm" type="submit">Duplizieren</button>
   </form>
   {% if szenario.herkunft == 'system' %}
   <form method="post" action="/admin/settings/planspiele/szenarien/{{ szenario.id }}/zuruecksetzen" onsubmit="return confirm('Eigene Änderungen werden durch den Systemstand ersetzt. Ältere Versionen bleiben erhalten.')">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-    <button class="btn btn--secondary" type="submit">Auf Standard zurücksetzen</button>
+    <button class="btn btn--ghost btn--sm" type="submit">Auf Standard zurücksetzen</button>
   </form>
   {% endif %}
   <form method="post" action="/admin/settings/planspiele/szenarien/{{ szenario.id }}/entfernen" onsubmit="return confirm('Szenario wirklich entfernen?')">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-    <button class="btn btn--secondary" type="submit">Entfernen</button>
+    <button class="btn btn--danger btn--sm" type="submit">Entfernen</button>
   </form>
   </div>
   {% endif %}
