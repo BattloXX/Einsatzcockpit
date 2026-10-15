@@ -886,7 +886,10 @@ def test_close_incidents_missing_from_lis_closes_stale_incident(monkeypatch):
         db.refresh(incident)
         assert incident.status == "closed"
         assert incident.closed_at is not None
-        assert report_calls == [(db, incident.id)]
+        # Andere Tests desselben Workers koennen weitere aktive LIS-Einsaetze in
+        # ORG_ID hinterlassen; die werden korrekt ebenfalls geschlossen. Hier
+        # zaehlt nur, dass der Bericht fuer DIESEN Einsatz genau einmal laeuft.
+        assert [call for call in report_calls if call[1] == incident.id] == [(db, incident.id)]
     finally:
         db.rollback()
         db.close()
