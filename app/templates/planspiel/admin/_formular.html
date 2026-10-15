@@ -91,7 +91,7 @@
       <section class="planspiel-event">
         <div class="planspiel-event__head">
           <h3 x-text="'Folgemeldung ' + (index + 1)"></h3>
-          <button class="btn" type="button" @click="events.splice(index, 1)">Entfernen</button>
+          <button class="btn btn--secondary" type="button" @click="events.splice(index, 1)">Entfernen</button>
         </div>
         <div class="planspiel-grid">
           <label>
@@ -181,7 +181,7 @@
         </label>
       </section>
     </template>
-    <button class="btn" type="button" :disabled="events.length >= 20" @click="add()">Zeile hinzufügen</button>
+    <button class="btn btn--secondary" type="button" :disabled="events.length >= 20" @click="add()">Zeile hinzufügen</button>
     <p class="planspiel-hint" x-show="events.length >= 20">Maximal 20 Folgemeldungen.</p>
   </div>
   <div class="planspiel-pane" x-show="tab === 'lernziele'">

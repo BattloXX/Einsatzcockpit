@@ -5,7 +5,7 @@
 <p>Passende Szenarien:</p>
 <ul>
   {% for scenario in szenarien %}
-  <li><button class="btn btn--sm" type="button" onclick="document.getElementById('szenario-id').value='{{ scenario.id }}'">{{ scenario.code }} auswählen</button></li>
+  <li><button class="btn btn--secondary btn--sm" type="button" onclick="document.getElementById('szenario-id').value='{{ scenario.id }}'">{{ scenario.code }} auswählen</button></li>
   {% endfor %}
 </ul>
 {% endif %}

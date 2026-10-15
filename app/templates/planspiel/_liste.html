@@ -15,7 +15,7 @@
         <div class="planspiel-row__meta">
           <span class="planspiel-pill">{{ status_labels.get(run.status, run.status) }}</span>
           {% if run.status in ('beendet', 'abgebrochen') %}
-          <a class="btn btn--sm" href="/planspiele/{{ run.id }}/auswertung">Auswertung</a>
+          <a class="btn btn--secondary btn--sm" href="/planspiele/{{ run.id }}/auswertung">Auswertung</a>
           {% endif %}
         </div>
       </div>

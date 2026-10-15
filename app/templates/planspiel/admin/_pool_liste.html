@@ -1,3 +1,7 @@
+{% set _quellen = {"objekt": "Objekte", "zusatzadresse": "Zusatzadressen", "einsatzhistorie": "Einsatzhistorie", "osm": "OSM-Adressen", "strassenpunkt": "Straßenpunkte", "manuell": "Manuell"} %}
+<p class="planspiel-pool-stats"><strong>Aktive Einträge:</strong>
+  {% for key, count in pool_stats.items() if key.startswith('quelle:') %}{{ _quellen.get(key[7:], key[7:]) }} {{ count }}{% if not loop.last %}, {% endif %}{% else %}keine{% endfor %}
+  · Qualität A {{ pool_stats.get('qualitaet:A', 0) }}, B {{ pool_stats.get('qualitaet:B', 0) }}, C {{ pool_stats.get('qualitaet:C', 0) }}</p>
 <div class="planspiel-pool-wrap">
   <table class="planspiel-table">
     <thead>
@@ -23,11 +27,11 @@
 {% if pool_seiten > 1 %}
   <nav class="planspiel-pagination" aria-label="Seitennavigation">
     {% if pool_seite > 1 %}
-      <button class="btn" type="button" hx-get="/admin/settings/planspiele/adresspool?seite={{ pool_seite - 1 }}" hx-target="#pool-liste">Zurück</button>
+      <button class="btn btn--secondary" type="button" hx-get="/admin/settings/planspiele/adresspool?seite={{ pool_seite - 1 }}" hx-target="#pool-liste">Zurück</button>
     {% endif %}
     <span>Seite {{ pool_seite }} von {{ pool_seiten }}</span>
     {% if pool_seite < pool_seiten %}
-      <button class="btn" type="button" hx-get="/admin/settings/planspiele/adresspool?seite={{ pool_seite + 1 }}" hx-target="#pool-liste">Weiter</button>
+      <button class="btn btn--secondary" type="button" hx-get="/admin/settings/planspiele/adresspool?seite={{ pool_seite + 1 }}" hx-target="#pool-liste">Weiter</button>
     {% endif %}
   </nav>
 {% endif %}

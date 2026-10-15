@@ -146,7 +146,7 @@
       <p>Allein-Betrieb und simulierte Einheiten folgen in einer späteren Phase.</p>
     </section>
     <div class="planspiel-wizard__actions">
-      <button class="btn" type="button" x-show="step > 1" @click="step--">Zurück</button>
+      <button class="btn btn--secondary" type="button" x-show="step > 1" @click="step--">Zurück</button>
       <button class="btn btn--primary" type="button" x-show="step < 7" @click="step++">Weiter</button>
       <button class="btn btn--primary" type="submit" x-show="step === 7">Als Entwurf speichern</button>
     </div>

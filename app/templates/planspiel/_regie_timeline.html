@@ -4,7 +4,7 @@
   {{ '%02d:%02d:%02d'|format(s // 3600, (s // 60) % 60, s % 60) }}
 {%- endmacro %}
 {% macro aktion(run, event, pfad, label) -%}
-  <button class="btn btn--sm" type="button"
+  <button class="btn btn--secondary btn--sm" type="button"
           hx-post="/planspiele/{{ run.id }}/ereignis/{{ event.id }}/{{ pfad }}"
           hx-vals='js:{_csrf: document.querySelector("input[name=_csrf]").value, client_uuid: crypto.randomUUID()}'
           hx-target="#regie-timeline"
@@ -70,7 +70,7 @@
             hx-confirm="Keine neuen Einsatzstellen mehr erzeugen? Vorhandene Stellen bleiben bearbeitbar.">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
         <input type="hidden" name="aktion" value="stoppen">
-        <button class="btn btn--sm" type="submit">Generator stoppen</button>
+        <button class="btn btn--secondary btn--sm" type="submit">Generator stoppen</button>
       </form>
       <form class="regie-generator__welle" hx-post="/planspiele/{{ run.id }}/welle" hx-target="#regie-timeline"
             hx-swap="outerHTML">
@@ -78,13 +78,13 @@
         <select class="form-input" name="anzahl" aria-label="Anzahl Einsatzstellen">
           {% for n in [2, 3, 5, 8] %}<option value="{{ n }}">{{ n }} Stellen</option>{% endfor %}
         </select>
-        <button class="btn btn--sm" type="submit">Welle jetzt</button>
+        <button class="btn btn--secondary btn--sm" type="submit">Welle jetzt</button>
       </form>
       {% else %}
       <form hx-post="/planspiele/{{ run.id }}/generator" hx-target="#regie-timeline" hx-swap="outerHTML">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
         <input type="hidden" name="aktion" value="fortsetzen">
-        <button class="btn btn--sm" type="submit">Generator fortsetzen</button>
+        <button class="btn btn--secondary btn--sm" type="submit">Generator fortsetzen</button>
       </form>
       {% endif %}
     </div>

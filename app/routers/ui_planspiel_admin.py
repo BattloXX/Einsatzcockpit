@@ -11,6 +11,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.audit import write_audit
@@ -623,7 +624,15 @@ def _pool_context(request: Request, db: Session, user: User) -> dict[str, Any]:
     if filters.get("ort_typ"):
         rows = [row for row in rows if filters["ort_typ"] in (row.ort_typen or [])]
     total = len(rows)
+    stats: dict[str, int] = {}
+    aktive = db.query(PlanspielAdresse.quelle, PlanspielAdresse.qualitaet, func.count(PlanspielAdresse.id)).filter(
+        PlanspielAdresse.org_id == org_id, PlanspielAdresse.aktiv.is_(True)
+    ).group_by(PlanspielAdresse.quelle, PlanspielAdresse.qualitaet)
+    for quelle, qualitaet, anzahl in aktive:
+        stats[f"quelle:{quelle}"] = stats.get(f"quelle:{quelle}", 0) + anzahl
+        stats[f"qualitaet:{qualitaet}"] = stats.get(f"qualitaet:{qualitaet}", 0) + anzahl
     return {
+        "pool_stats": stats,
         "pool_rows": rows[(seite - 1) * 50 : seite * 50],
         "pool_filters": filters,
         "pool_seite": seite,
@@ -661,10 +670,6 @@ def _settings_context(request: Request, db: Session, user: User, **extra: Any) -
         PlanspielOrtTypZuordnung.quelle == "kategorie",
     ):
         mappings.setdefault(int(mapping.schluessel), []).append(mapping.ort_typ)
-    stats: dict[str, int] = {}
-    for row in db.query(PlanspielAdresse).filter(PlanspielAdresse.org_id == org_id).all():
-        stats[f"quelle:{row.quelle}"] = stats.get(f"quelle:{row.quelle}", 0) + int(row.aktiv)
-        stats[f"qualitaet:{row.qualitaet}"] = stats.get(f"qualitaet:{row.qualitaet}", 0) + int(row.aktiv)
     context = {
         "user": user,
         "setting": setting,
@@ -675,7 +680,6 @@ def _settings_context(request: Request, db: Session, user: User, **extra: Any) -
         "gebiet_fehlt": missing_area,
         "kategorien": categories,
         "zuordnungen": mappings,
-        "pool_stats": stats,
     }
     context.update(_pool_context(request, db, user))
     context["osm_laeuft"] = bool((_osm_importe.get(_org(user)) or {}).get("laeuft"))

@@ -212,7 +212,7 @@
     {% if run.lage_id %}
     <a class="btn btn--primary" href="/lage/{{ run.lage_id }}" target="_blank" rel="noopener">Zum GSL-Board</a>
     {% endif %}
-    <a class="btn" href="/planspiele/{{ run.id }}/auswertung">Auswertung</a>
+    <a class="btn btn--secondary" href="/planspiele/{{ run.id }}/auswertung">Auswertung</a>
   {% endcall %}
 
   {% if fehler %}
@@ -236,18 +236,18 @@
     {% else %}
     <form method="post" action="/planspiele/{{ run.id }}/pause">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <button class="btn" type="submit">Pause</button>
+      <button class="btn btn--secondary" type="submit">Pause</button>
     </form>
     {% endif %}
     <form method="post" action="/planspiele/{{ run.id }}/folgemeldungen">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <input type="hidden" name="aktiv" value="{{ '0' if run.folge_aktiv else '1' }}">
-      <button class="btn" type="submit">Folgemeldungen {{ 'ausschalten' if run.folge_aktiv else 'einschalten' }}</button>
+      <button class="btn btn--secondary" type="submit">Folgemeldungen {{ 'ausschalten' if run.folge_aktiv else 'einschalten' }}</button>
     </form>
     <form method="post" action="/planspiele/{{ run.id }}/beenden"
           onsubmit="return confirm('Übung endgültig beenden? Offene Ereignisse werden abgebrochen.');">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <button class="btn" type="submit">Übung beenden</button>
+      <button class="btn btn--secondary" type="submit">Übung beenden</button>
     </form>
   </nav>
   {% endif %}
@@ -293,7 +293,7 @@
             <option value="{{ alarm.code }}">{{ alarm.code }} · {{ alarm.label }}</option>
             {% endfor %}
           </select>
-          <button class="btn" type="submit">Stichwort ändern</button>
+          <button class="btn btn--secondary" type="submit">Stichwort ändern</button>
         </form>
       </section>
       {% endif %}
@@ -336,7 +336,7 @@
         <div class="planspiel-regie__mitglied">
           <span>{{ einheit.label }} <span class="planspiel-hint">· {{ einheit.status }}</span></span>
           {% if einsatzrechte and aktiv %}
-          <a class="btn btn--sm" href="/einheit?sim={{ einheit.id }}" target="_blank" rel="noopener">Als Einheit bedienen</a>
+          <a class="btn btn--secondary btn--sm" href="/einheit?sim={{ einheit.id }}" target="_blank" rel="noopener">Als Einheit bedienen</a>
           {% endif %}
         </div>
         {% else %}
@@ -346,7 +346,7 @@
         <form class="planspiel-regie__form" method="post" action="/planspiele/{{ run.id }}/einheit">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
           <input class="form-input" name="label" maxlength="60" required placeholder="z. B. Nachbarwehr LF">
-          <button class="btn" type="submit">Simulierte Einheit anlegen</button>
+          <button class="btn btn--secondary" type="submit">Simulierte Einheit anlegen</button>
         </form>
         {% endif %}
       </section>
@@ -374,7 +374,7 @@
             <option value="{{ n }}">{{ n }} von 5</option>
             {% endfor %}
           </select>
-          <button class="btn" type="submit">Beobachtung speichern</button>
+          <button class="btn btn--secondary" type="submit">Beobachtung speichern</button>
         </form>
         {% endif %}
       </section>
@@ -388,7 +388,7 @@
           {% if member.rolle != 'leiter' and aktiv %}
           <form method="post" action="/planspiele/{{ run.id }}/mitglied/{{ member.id }}/entfernen">
             <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-            <button class="btn btn--sm" type="submit">Entfernen</button>
+            <button class="btn btn--secondary btn--sm" type="submit">Entfernen</button>
           </form>
           {% endif %}
         </div>
@@ -407,7 +407,7 @@
               <option value="beobachter">Beobachter</option>
             </select>
           </div>
-          <button class="btn" type="submit">Mitglied hinzufügen</button>
+          <button class="btn btn--secondary" type="submit">Mitglied hinzufügen</button>
         </form>
         {% endif %}
       </section>

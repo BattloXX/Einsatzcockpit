@@ -231,3 +231,18 @@ def test_post_ohne_csrf_403(client):
     _login(client, _setup_user("org_admin"))
     data = {"max_laufende_runs": "2", "max_stellen_je_minute": "6"}
     assert client.post(f"{BASIS}/einstellungen/grenzen", data=data).status_code == 403
+
+
+def test_planspiel_buttons_haben_stil():
+    from pathlib import Path
+
+    ordner = Path(__file__).resolve().parent.parent / "app" / "templates" / "planspiel"
+    for datei in ordner.rglob("*.html"):
+        text = datei.read_text(encoding="utf-8")
+        assert 'class="btn"' not in text and 'class="btn btn--sm"' not in text, datei.name
+
+
+def test_pool_statistik_ohne_eintraege(client):
+    _login(client, _setup_user("org_admin"))
+    text = client.get(BASIS).text
+    assert "Aktive Einträge:" in text and "keine" in text

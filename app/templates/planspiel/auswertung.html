@@ -34,7 +34,7 @@
       {% if can_steuern %}
       <form method="post" action="/planspiele/{{ run.id }}/wiederholen">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-        <button class="btn" type="submit">Wiederholen</button>
+        <button class="btn btn--secondary" type="submit">Wiederholen</button>
       </form>
       {% endif %}
     </div>
