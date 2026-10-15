@@ -1,19 +1,21 @@
 """Uebersicht der Planspiel-Laeufe."""
 
 import asyncio
+from copy import deepcopy
 from datetime import UTC, datetime
 from typing import Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session
 from starlette.datastructures import FormData
 
+from app.core.audit import write_audit
 from app.core.permissions import PLANSPIEL_LEITER_ROLES, PLANSPIEL_LESE_ROLLEN, has_role, require_role
 from app.core.templating import templates
 from app.db import SessionLocal, get_db
-from app.models.major_incident import IncidentSite
-from app.models.master import AlarmType
+from app.models.major_incident import IncidentSite, LageEinheit, MajorIncident
+from app.models.master import AlarmType, FireDept
 from app.models.objekt import OBJEKT_STATUS_FREIGEGEBEN, Objekt
 from app.models.planspiel import (
     PLANSPIEL_STATUS_LABELS,
@@ -26,6 +28,7 @@ from app.models.planspiel import (
 )
 from app.models.user import User
 from app.services.broadcast import broadcast_org
+from app.services.planspiel_auswertung_service import auswertung
 from app.services.planspiel_engine import (
     beenden,
     ereignis_jetzt,
@@ -179,7 +182,12 @@ def _cockpit_context(request: Request, db: Session, user: User, run: PlanspielRu
     now = _jetzt()
     # Die Seite bindet das Timeline-Partial direkt ein und braucht dessen Daten schon beim ersten Laden.
     timeline = _timeline_context(db, user, run, fehler)
+    from app.services.planspiel_zugriff import hat_einsatzrechte
+    einheiten = []
+    if run.lage_id is not None:
+        einheiten = db.query(LageEinheit).filter(LageEinheit.lage_id == run.lage_id).order_by(LageEinheit.label).all()
     return {**timeline, "user": user, "run": run, "fehler": fehler, "status_labels": PLANSPIEL_STATUS_LABELS,
+            "einheiten": einheiten, "einsatzrechte": hat_einsatzrechte(user),
             "sim_s": sim_sekunden(run, now), "server_jetzt": now.isoformat() + "Z",
             "can_steuern": _darf_steuern(db, user, run), "beobachtungen": observations,
             "mitglieder": members, "org_users": users,
@@ -364,6 +372,70 @@ def detail(
         "ereignisse": events,
         "can_leiten": has_role(user, *PLANSPIEL_LEITER_ROLES),
     })
+
+
+@router.get("/{run_id:int}/auswertung", response_class=HTMLResponse)
+def auswertung_seite(
+    run_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*PLANSPIEL_LESE_ROLLEN)),
+    _guard: None = Depends(require_planspiel_enabled),
+):
+    run = _run(db, user, run_id)
+    if run.gestartet_at is None:
+        raise HTTPException(status_code=404, detail="Nicht gefunden")
+    return templates.TemplateResponse(request, "planspiel/auswertung.html", {
+        "user": user, "run": run, "daten": auswertung(db, run),
+        "can_steuern": _darf_steuern(db, user, run),
+    })
+
+
+@router.get("/{run_id:int}/auswertung.pdf")
+def auswertung_pdf(
+    run_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*PLANSPIEL_LESE_ROLLEN)),
+    _guard: None = Depends(require_planspiel_enabled),
+):
+    run = _run(db, user, run_id)
+    if run.gestartet_at is None:
+        raise HTTPException(status_code=404, detail="Nicht gefunden")
+    org = db.query(FireDept).filter(FireDept.id == run.org_id).one()
+    from app.services.pdf_service import render_planspiel_bericht_pdf
+    content = render_planspiel_bericht_pdf(auswertung(db, run), org, str(request.base_url))
+    return Response(content=content, media_type="application/pdf", headers={
+        "Content-Disposition": f'attachment; filename="planspiel-{run.id}.pdf"',
+    })
+
+
+@router.post("/{run_id:int}/wiederholen")
+async def wiederholen(
+    run_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*PLANSPIEL_LESE_ROLLEN)),
+    _guard: None = Depends(require_planspiel_enabled),
+):
+    run = _run(db, user, run_id)
+    _require_steuern(db, user, run)
+    copy_run = PlanspielRun(
+        org_id=run.org_id, titel=f"{run.titel} (Wiederholung)", art=run.art,
+        erzeugung=run.erzeugung, status="entwurf", seed=run.seed, tempo=run.tempo,
+        konfig=deepcopy(run.konfig), szenario_snapshot=deepcopy(run.szenario_snapshot),
+        kanal_freigaben={}, leiter_user_id=user.id, folge_aktiv=run.folge_aktiv,
+        created_by_user_id=user.id,
+    )
+    db.add(copy_run)
+    db.flush()
+    db.add(PlanspielMitglied(org_id=run.org_id, run_id=copy_run.id, user_id=user.id, rolle="leiter"))
+    write_audit(
+        db, "planspiel.run.wiederholt", org_id=run.org_id, user_id=user.id,
+        entity_type="planspiel_run", entity_id=copy_run.id, payload={"quelle_run_id": run.id},
+    )
+    db.commit()
+    return RedirectResponse(f"/planspiele/{copy_run.id}", status_code=303)
 
 
 @router.get("/{run_id:int}/bearbeiten", response_class=HTMLResponse)
@@ -636,6 +708,40 @@ async def welle(run_id: int, request: Request, db: Session = Depends(get_db),
     except (ValueError, ZustandsFehler) as exc:
         db.rollback()
         return _action_response(request, db, user, run, str(exc))
+
+
+@router.post("/{run_id:int}/einheit")
+async def einheit_anlegen(run_id: int, request: Request, db: Session = Depends(get_db),
+                          user: User = Depends(require_role(*PLANSPIEL_LESE_ROLLEN)),
+                          _guard: None = Depends(require_planspiel_enabled)):
+    """Legt eine zusaetzliche simulierte Einheit in der Uebungslage an (ohne SMS/Druck)."""
+    run = _run(db, user, run_id)
+    _require_steuern(db, user, run)
+    form = await request.form()
+    name = str(form.get("label", "")).strip()[:60]
+    try:
+        if run.art != "gsl" or run.lage_id is None:
+            raise ValueError("Simulierte Einheiten gibt es nur bei Großschadenslagen")
+        if run.status not in ("laeuft", "pausiert", "generierung_gestoppt"):
+            raise ZustandsFehler("Das Planspiel läuft nicht")
+        if not name:
+            raise ValueError("Bitte eine Bezeichnung angeben")
+        lage = db.query(MajorIncident).filter(
+            MajorIncident.id == run.lage_id, MajorIncident.org_id == run.org_id,
+        ).one()
+        from app.services.resource_service import lege_einheit_an
+        lege_einheit_an(db, lage, resource_type="extern", label=f"SIM {name}", org_name="Planspiel",
+                        bemerkung="Simulierte Einheit aus dem Planspiel", user_id=user.id,
+                        author_name=user.display_name or user.username)
+        write_audit(db, "planspiel.sim.einheit_angelegt", org_id=run.org_id, user_id=user.id,
+                    entity_type="planspiel_run", entity_id=run.id, payload={"label": name})
+        db.commit()
+        await _broadcast(run)
+    except (ValueError, ZustandsFehler) as exc:
+        db.rollback()
+        return templates.TemplateResponse(request, "planspiel/regie.html",
+                                          _cockpit_context(request, db, user, run, str(exc)), status_code=400)
+    return RedirectResponse(f"/planspiele/{run.id}", status_code=303)
 
 
 @router.post("/{run_id:int}/stichwort")
