@@ -21,6 +21,11 @@
       {% if event.quelle == 'regie' %}<span class="planspiel-badge">Regie</span>{% endif %}
       {% if event.sichtbarkeit == 'regie' %}<span class="planspiel-badge planspiel-badge--warn">nur Regie</span>{% endif %}
     </div>
+    {% if event.ziel_typ == 'site' %}
+    <p class="regie-ereignis__zeit">Einsatzstelle: {{ stellen.get(event.ziel_id, '#' ~ event.ziel_id) }}</p>
+    {% elif event.ziel_typ == 'lage' %}
+    <p class="regie-ereignis__zeit">Ganze Lage</p>
+    {% endif %}
     <p class="regie-ereignis__text">{{ event.text or '-' }}</p>
     <p class="regie-ereignis__zeit">
       {% if event.status == 'ausgefuehrt' and event.ausgefuehrt_sim_s is not none %}
@@ -48,6 +53,44 @@
          hx-get="/planspiele/{{ run.id }}/timeline"
          hx-trigger="every 5s"
          hx-swap="outerHTML">
+  {% if run.art == 'gsl' %}
+  <div class="regie-generator">
+    <h2>Unwetter-Generator</h2>
+    <p>
+      <span class="planspiel-badge">{{ 'läuft' if run.gen_aktiv and run.status == 'laeuft' else ('pausiert' if run.status == 'pausiert' else 'gestoppt') }}</span>
+      {{ run.gen_seq }}{% if run.max_stellen %} von höchstens {{ run.max_stellen }}{% endif %} Einsatzstellen erzeugt
+      {% if run.gen_aktiv and run.naechste_gen_sim_s is not none %}
+      · nächste Meldung bei {{ uebungszeit(run.naechste_gen_sim_s) }}
+      {% endif %}
+    </p>
+    {% if can_steuern and run.status in ('laeuft', 'generierung_gestoppt') %}
+    <div class="regie-ereignis__aktionen">
+      {% if run.gen_aktiv %}
+      <form hx-post="/planspiele/{{ run.id }}/generator" hx-target="#regie-timeline" hx-swap="outerHTML"
+            hx-confirm="Keine neuen Einsatzstellen mehr erzeugen? Vorhandene Stellen bleiben bearbeitbar.">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <input type="hidden" name="aktion" value="stoppen">
+        <button class="btn btn--sm" type="submit">Generator stoppen</button>
+      </form>
+      <form class="regie-generator__welle" hx-post="/planspiele/{{ run.id }}/welle" hx-target="#regie-timeline"
+            hx-swap="outerHTML">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <select class="form-input" name="anzahl" aria-label="Anzahl Einsatzstellen">
+          {% for n in [2, 3, 5, 8] %}<option value="{{ n }}">{{ n }} Stellen</option>{% endfor %}
+        </select>
+        <button class="btn btn--sm" type="submit">Welle jetzt</button>
+      </form>
+      {% else %}
+      <form hx-post="/planspiele/{{ run.id }}/generator" hx-target="#regie-timeline" hx-swap="outerHTML">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <input type="hidden" name="aktion" value="fortsetzen">
+        <button class="btn btn--sm" type="submit">Generator fortsetzen</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
   <h2>Ereignisse</h2>
   {% if fehler %}
   <p class="form-error">{{ fehler }}</p>

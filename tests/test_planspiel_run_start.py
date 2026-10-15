@@ -239,13 +239,12 @@ def test_org_limit_laufender_runs():
         db.close()
 
 
-def test_gsl_start_noch_nicht_verfuegbar():
+def test_gsl_entwurf_lehnt_einzel_szenario_ab():
     db, org, user = _basis()
     try:
         b09 = _b09(db)
-        run = entwurf_anlegen(db, org.id, user, _daten(_pool(db, org), art="gsl", szenario_id=b09.id))
-        with pytest.raises(ZustandsFehler, match="Phase E"):
-            starten(db, run, user)
+        with pytest.raises(ValueError, match="GSL-Szenario"):
+            entwurf_anlegen(db, org.id, user, _daten(_pool(db, org), art="gsl", szenario_id=b09.id))
     finally:
         db.rollback()
         db.close()

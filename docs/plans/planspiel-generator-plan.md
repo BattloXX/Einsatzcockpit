@@ -529,3 +529,27 @@ Phase A (Basis & Safety) als eigener Codex-Auftrag; Start erst auf ausdrücklich
 **Hinweise für Phase E:**
 - Der Ausführer-Dispatch `_AUSFUEHRER` in der Engine bekommt die Zieltypen `site` (Funkjournal/Site-Log) und `lage` (Lagejournal bzw. Cross-Marker).
 - Der Generator hängt sich in `tick()` ein (gen_aktiv, `naechste_gen_sim_s`, Unique `(run_id, seq)` auf `planspiel_ziel`).
+
+### Phase E – GSL-Unwettergenerator (Branch `feat/planspiel-e-gsl`, 2026-10-15)
+- **E1 Start und Generator:**
+  - Der GSL-Start legt eine Übungs-GSL an (`create_lage` + `lage_einrichten`, `is_exercise`, `planspiel_run_id`), ohne GSL-Alarm, Druck oder Live-Push.
+  - Generator im Tick:
+    - Wellen je Modus mit Schweregewichten.
+    - Ortswahl mit Ersatz-Ortstypen; der Adressausschluss wird nur bevorzugt, damit kleine Pools nicht versiegen.
+    - Doppelmeldungen und Bursts.
+    - Grenzen für Rate, Stellenzahl und Laufzeit.
+    - Nachholregel nach Ausfall; Unique `(run_id, seq)` gegen parallele Worker.
+  - Stellen werden mit `source=simulation` angelegt (`stelle_simuliert_anlegen`, ohne Geocoding und KI-Prio), jede mit eigenen Folgemeldungen und eigenem Seed.
+- **E2 Ausführung:**
+  - Stellenmeldungen gehen ins Funkjournal und werden in die Stellenchronik gespiegelt; Lagemeldungen gehen ins Funkjournal.
+  - `LAG-SPERRE` wird als übergreifende Meldung `strasse_gesperrt` (`source=simulation`) angelegt, nie als echte Straßensperre.
+  - Trigger nach Stellenphase und Aufträgen (mit Auftragsart). Die Rückfallzeit zählt ab Erzeugung der Stelle.
+- **E3 Oberfläche:**
+  - GSL-Optionen im Assistenten.
+  - Generator-Panel im Cockpit (stoppen/fortsetzen, „Welle jetzt“), Link zum GSL-Board.
+  - Badge „Planspiel“ auf der Board-Karte.
+- **Browser-Durchlauf** (Tempo 10, G03): Stellen laufen im Board ein, Folgemeldungen erscheinen im Funkjournal. Ein Fehler wurde dabei behoben: Die Ereignisliste im Cockpit war beim ersten Laden leer.
+
+**Hinweise für Phase F:**
+- Die reine Rolle `uebungsleiter` hat **keinen** Zugriff auf das GSL-Board und den Übungseinsatz, dafür braucht es `incident_leader`/`admin`. Für den Allein-Betrieb muss der Übungsleiter entweder zusätzlich Einsatzleiter sein, oder Phase F gibt Run-Mitgliedern Zugriff auf genau ihre Übungslage/ihren Übungseinsatz. Empfehlung: Zugriff an die Mitgliedschaft binden, nur bei `planspiel_run_id`.
+- Die Einheiten-Simulation (`/einheit?sim=`) verlangt heute die Rolle `admin` und muss für Run-Mitglieder (leiter/regie) geöffnet werden.

@@ -24,7 +24,13 @@ from app.db import SessionLocal
 from app.models.master import OrgSettings, SystemSettings
 from app.models.planspiel import PlanspielRun
 from app.services.loop_utils import iteration_watch
-from app.services.planspiel_engine import AusfuehrungsErgebnis, nach_ausfuehrung_benachrichtigen, tick
+from app.services.planspiel_engine import (
+    AusfuehrungsErgebnis,
+    GeneriertErgebnis,
+    nach_ausfuehrung_benachrichtigen,
+    nach_generierung_benachrichtigen,
+    tick,
+)
 
 logger = logging.getLogger("einsatzleiter.planspiel_loop")
 
@@ -82,7 +88,7 @@ def planspiel_runde(
     db_factory: Callable[[], Session] = SessionLocal,
     worker_id: str = WORKER_ID,
     jetzt: datetime | None = None,
-) -> list[tuple[int, int, AusfuehrungsErgebnis]]:
+) -> list[tuple[int, int, AusfuehrungsErgebnis | GeneriertErgebnis]]:
     """Eine Runde: alle beanspruchbaren Runs ticken. Liefert (org_id, run_id, Ergebnis)."""
     jetzt = jetzt or _utcnow()
     db = db_factory()
@@ -91,7 +97,7 @@ def planspiel_runde(
         kandidaten = aktive_runs(db)
     finally:
         db.close()
-    ergebnisse: list[tuple[int, int, AusfuehrungsErgebnis]] = []
+    ergebnisse: list[tuple[int, int, AusfuehrungsErgebnis | GeneriertErgebnis]] = []
     for run_id, org_id in kandidaten:
         claim_db = db_factory()
         try:
@@ -106,6 +112,7 @@ def planspiel_runde(
             logger.exception("planspiel.tick_failed run=%s", run_id)
             continue
         ergebnisse.extend((org_id, run_id, item) for item in tick_ergebnis.ausgefuehrt)
+        ergebnisse.extend((org_id, run_id, item) for item in tick_ergebnis.generiert)
     return ergebnisse
 
 
@@ -119,7 +126,10 @@ async def planspiel_loop() -> None:
             with iteration_watch(logger, "planspiel_loop", intervall):
                 ergebnisse = await asyncio.to_thread(planspiel_runde)
             for org_id, run_id, ergebnis in ergebnisse:
-                await nach_ausfuehrung_benachrichtigen(org_id, run_id, ergebnis)
+                if isinstance(ergebnis, GeneriertErgebnis):
+                    await nach_generierung_benachrichtigen(org_id, run_id, [ergebnis])
+                else:
+                    await nach_ausfuehrung_benachrichtigen(org_id, run_id, ergebnis)
         except Exception:
             logger.exception("planspiel.loop_failed")
         await asyncio.sleep(intervall)

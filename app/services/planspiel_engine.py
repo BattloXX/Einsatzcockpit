@@ -3,23 +3,34 @@ from __future__ import annotations
 
 import logging
 import math
+import random
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
 
 from sqlalchemy import and_, func, or_, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.audit import write_audit
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.incident import Incident, IncidentLog, IncidentVehicle, Message, Task
-from app.models.planspiel import PlanspielRun, PlanspielRunEreignis
+from app.models.major_incident import EinheitSiteDispatch, IncidentSite, MajorIncident
+from app.models.master import OrgSettings
+from app.models.planspiel import (
+    PlanspielAdresse,
+    PlanspielRun,
+    PlanspielRunEreignis,
+    PlanspielSzenario,
+    PlanspielZiel,
+)
 from app.services.broadcast import broadcast_org
 from app.services.incident_service import add_message, broadcast_message_created
-from app.services.planspiel_katalog_service import org_stichwort_code
-from app.services.planspiel_run_service import ZustandsFehler
+from app.services.planspiel_katalog_service import aktive_version, org_stichwort_code, rendern, version_als_dict
+from app.services.planspiel_ort_service import OrtNichtGefunden, OrtWahl, als_verwendet_markieren, ort_waehlen
+from app.services.planspiel_run_service import ZustandsFehler, _variablen, zeitplan_fuer
 
 logger = logging.getLogger(__name__)
 _RUNNING = {"laeuft", "generierung_gestoppt"}
@@ -34,13 +45,24 @@ _TYP_LABELS = {
 
 @dataclass(frozen=True)
 class AusfuehrungsErgebnis:
-    incident_id: int
+    incident_id: int | None
     message_id: int | None
+    lage_id: int | None = None
+    site_id: int | None = None
+    marker_id: int | None = None
+
+
+@dataclass(frozen=True)
+class GeneriertErgebnis:
+    lage_id: int
+    site_id: int
+    seq: int
 
 
 @dataclass(frozen=True)
 class TickErgebnis:
     ausgefuehrt: list[AusfuehrungsErgebnis]
+    generiert: list[GeneriertErgebnis] = field(default_factory=list)
     verpasst: int = 0
     reaktiv_faellig: int = 0
 
@@ -121,6 +143,11 @@ def beenden(db: Session, run: PlanspielRun, user: Any, jetzt: datetime) -> Plans
     if incident is not None:
         db.add(IncidentLog(incident_id=incident.id, author_name="Planspiel", level="info",
                            text="[Planspiel] Übung durch die Übungsleitung beendet."))
+    run.gen_aktiv = False
+    lage = _lage(db, run)
+    if lage is not None:
+        _generator_journal(db, lage, "[Planspiel] Übung durch die Übungsleitung beendet. "
+                           "Vorhandene Einsatzstellen bleiben bearbeitbar.")
     _audit(db, run, user, "beendet")
     return run
 
@@ -206,7 +233,8 @@ def freie_meldung(db: Session, run: PlanspielRun, user: Any, jetzt: datetime, *,
         return existing
     key = f"run{run.id}:regie:{client_uuid}" if client_uuid else f"run{run.id}:regie:free:{_naechste_seq(db, run)}"
     event = PlanspielRunEreignis(org_id=run.org_id, run_id=run.id, seq=_naechste_seq(db, run), quelle="regie",
-        ziel_typ="incident", ziel_id=run.incident_id, trigger_type="manual",
+        ziel_typ="lage" if run.art == "gsl" else "incident",
+        ziel_id=run.lage_id if run.art == "gsl" else run.incident_id, trigger_type="manual",
         trigger_param={"ereignis_typ": ereignis_typ}, faellig_sim_s=_sofort_faellig(run, jetzt), status="geplant",
         idempotenz_key=key, sichtbarkeit=sichtbarkeit, text=text)
     db.add(event)
@@ -217,6 +245,8 @@ def freie_meldung(db: Session, run: PlanspielRun, user: Any, jetzt: datetime, *,
 
 def stichwort_aendern(db: Session, run: PlanspielRun, user: Any, code: str) -> Incident:
     _steuerbar(run)
+    if run.art == "gsl":
+        raise ValueError("Das Stichwort lässt sich nur bei Einzeleinsätzen ändern")
     if run.org_id is None or org_stichwort_code(db, run.org_id, code) is None:
         raise ValueError("Stichwort ist in der Organisation nicht vorhanden")
     incident = _incident(db, run.incident_id, run.org_id)
@@ -236,7 +266,57 @@ def _incident(db: Session, incident_id: int | None, org_id: int | None) -> Incid
     return db.query(Incident).filter(Incident.id == incident_id, Incident.primary_org_id == org_id).one_or_none()
 
 
+_PHASEN_REIHENFOLGE = (
+    "eingegangen", "erkundung", "bewertet", "disponiert", "in_arbeit", "fertig_gemeldet", "erledigt",
+)
+
+
+def _site(db: Session, run: PlanspielRun, site_id: int | None) -> IncidentSite | None:
+    if site_id is None or run.lage_id is None:
+        return None
+    return db.query(IncidentSite).filter(
+        IncidentSite.id == site_id, IncidentSite.major_incident_id == run.lage_id,
+    ).one_or_none()
+
+
+def _site_trigger_erfuellt(db: Session, run: PlanspielRun, event: PlanspielRunEreignis) -> bool:
+    site = _site(db, run, event.ziel_id)
+    if site is None:
+        return False
+    param = event.trigger_param or {}
+    if event.trigger_type == "phase_reached":
+        aktuell = getattr(site.phase, "value", site.phase)
+        ziel = param.get("phase") or "erkundung"
+        if aktuell not in _PHASEN_REIHENFOLGE or ziel not in _PHASEN_REIHENFOLGE:
+            return False
+        return _PHASEN_REIHENFOLGE.index(aktuell) >= _PHASEN_REIHENFOLGE.index(ziel)
+    auftraege = db.query(EinheitSiteDispatch).filter(
+        EinheitSiteDispatch.site_id == site.id, EinheitSiteDispatch.withdrawn_at.is_(None),
+    )
+    if param.get("auftragsart"):
+        auftraege = auftraege.filter(EinheitSiteDispatch.auftragsart == param["auftragsart"])
+    if event.trigger_type == "assignment_created":
+        return auftraege.first() is not None
+    if event.trigger_type == "assignment_completed":
+        return auftraege.filter(EinheitSiteDispatch.einheit_status == "abgeschlossen").first() is not None
+    return False
+
+
+def _fallback_basis(db: Session, run: PlanspielRun, event: PlanspielRunEreignis) -> float:
+    """Rueckfallzeit zaehlt bei GSL-Stellen ab deren Erzeugung, sonst ab Uebungsbeginn."""
+    if event.ziel_typ != "site":
+        return 0.0
+    ziel = db.query(PlanspielZiel).filter(
+        PlanspielZiel.run_id == run.id, PlanspielZiel.org_id == run.org_id, PlanspielZiel.site_id == event.ziel_id,
+    ).first()
+    return float(ziel.erzeugt_sim_s or 0) if ziel is not None else 0.0
+
+
 def _trigger_erfuellt(db: Session, run: PlanspielRun, event: PlanspielRunEreignis, sim: float) -> bool:
+    if event.ziel_typ == "site":
+        return _site_trigger_erfuellt(db, run, event)
+    if event.ziel_typ == "lage":
+        return False
     incident = _incident(db, run.incident_id, run.org_id)
     if incident is None:
         return False
@@ -275,7 +355,7 @@ def reaktive_trigger_auswerten(db: Session, run: PlanspielRun, jetzt: datetime) 
         if _trigger_erfuellt(db, run, event, sim):
             event.faellig_sim_s = float(math.floor(sim))
             count += 1
-        elif sim >= fallback:
+        elif sim >= _fallback_basis(db, run, event) + fallback:
             event.faellig_sim_s = float(math.floor(sim))
             event.ergebnis_ref = {**(event.ergebnis_ref or {}), "ausloesung": "fallback"}
             count += 1
@@ -321,8 +401,62 @@ def _execute_incident(db: Session, run: PlanspielRun, event: PlanspielRunEreigni
     return AusfuehrungsErgebnis(incident.id, msg.id)
 
 
+def _funkmeldung(db: Session, lage: MajorIncident, event: PlanspielRunEreignis, site_id: int | None) -> None:
+    from app.services.funkjournal_service import add_comm_entry
+    add_comm_entry(db, lage, direction="in", message=f"[Übung] {_typ_label(event)}: {event.text or ''}",
+                   user_id=None, author_name="Übungsleitung (Planspiel)", channel="Planspiel",
+                   partner="Leitstelle (Übung)", related_site_id=site_id)
+
+
+def _execute_site(db: Session, run: PlanspielRun, event: PlanspielRunEreignis) -> AusfuehrungsErgebnis:
+    lage = _lage(db, run)
+    site = _site(db, run, event.ziel_id)
+    if lage is None or site is None:
+        raise ValueError("Ziel-Einsatzstelle wurde nicht gefunden")
+    if event.sichtbarkeit != "regie":
+        _funkmeldung(db, lage, event, site.id)
+    return AusfuehrungsErgebnis(None, None, lage_id=lage.id, site_id=site.id)
+
+
+def _sperrpunkt(db: Session, run: PlanspielRun, event: PlanspielRunEreignis) -> PlanspielAdresse | None:
+    punkte = db.query(PlanspielAdresse).filter(
+        PlanspielAdresse.org_id == run.org_id, PlanspielAdresse.aktiv.is_(True),
+        PlanspielAdresse.quelle == "strassenpunkt",
+    ).order_by(PlanspielAdresse.id).all()
+    punkte = [p for p in punkte if "strasse" in (p.ort_typen or [])]
+    if not punkte:
+        return None
+    return random.Random(event.idempotenz_key).choice(punkte)
+
+
+def _execute_lage(db: Session, run: PlanspielRun, event: PlanspielRunEreignis) -> AusfuehrungsErgebnis:
+    lage = _lage(db, run)
+    if lage is None:
+        raise ValueError("Übungslage wurde nicht gefunden")
+    if event.sichtbarkeit == "regie":
+        return AusfuehrungsErgebnis(None, None, lage_id=lage.id)
+    marker_id = None
+    if event.baustein_code == "LAG-SPERRE":
+        # Uebungssperre nur als uebergreifende Meldung der Uebungslage – nie als echte Strassensperre.
+        from app.services.cross_marker_service import anlegen
+        punkt = _sperrpunkt(db, run, event)
+        marker = anlegen(
+            db, lage, title=f"[Übung] {event.text or 'Straße nicht passierbar'}", marker_type="strasse_gesperrt",
+            description="Übungssperre aus dem Planspiel – keine echte Straßensperre.",
+            strasse=punkt.strasse if punkt else "", ort=(punkt.ort or "") if punkt else "",
+            lat=punkt.lat if punkt else None, lng=punkt.lng if punkt else None,
+            author_name="Übungsleitung (Planspiel)", source="simulation",
+        )
+        db.flush()
+        marker_id = marker.id
+    _funkmeldung(db, lage, event, None)
+    return AusfuehrungsErgebnis(None, None, lage_id=lage.id, marker_id=marker_id)
+
+
 _AUSFUEHRER: dict[str, Callable[[Session, PlanspielRun, PlanspielRunEreignis], AusfuehrungsErgebnis]] = {
     "incident": _execute_incident,
+    "site": _execute_site,
+    "lage": _execute_lage,
 }
 
 
@@ -385,13 +519,42 @@ async def nach_ausfuehrung_benachrichtigen(org_id: int, run_id: int, ergebnis: A
             try:
                 set_tenant_context(db, org_id)
                 message = db.get(Message, ergebnis.message_id)
-                if message is not None:
+                if message is not None and ergebnis.incident_id is not None:
                     await broadcast_message_created(ergebnis.incident_id, message)
             finally:
                 db.close()
+        if ergebnis.lage_id is not None:
+            from app.services import gsl_broadcast
+            await gsl_broadcast.funkjournal_geaendert(ergebnis.lage_id, ergebnis.site_id)
+            if ergebnis.marker_id is not None:
+                await gsl_broadcast.cross_marker_geaendert(ergebnis.lage_id, ergebnis.marker_id)
         await broadcast_org(org_id, {"type": "planspiel_changed", "run_id": run_id})
     except Exception:
         logger.exception("Planspiel-Benachrichtigung fehlgeschlagen (run=%s)", run_id)
+
+
+async def nach_generierung_benachrichtigen(
+    org_id: int, run_id: int, ergebnisse: list[GeneriertErgebnis],
+) -> None:
+    """Sendet erst nach Commit die erlaubten Board- und Regie-Updates."""
+    if not ergebnisse:
+        return
+    try:
+        from app.services.gsl_broadcast import stelle_angelegt
+        db = SessionLocal()
+        try:
+            set_tenant_context(db, org_id)
+            for ergebnis in ergebnisse:
+                lage = db.query(MajorIncident).filter(
+                    MajorIncident.id == ergebnis.lage_id, MajorIncident.org_id == org_id,
+                ).one_or_none()
+                if lage is not None:
+                    await stelle_angelegt(db, lage, ergebnis.site_id)
+        finally:
+            db.close()
+        await broadcast_org(org_id, {"type": "planspiel_changed", "run_id": run_id})
+    except Exception:
+        logger.exception("Planspiel-Generator-Benachrichtigung fehlgeschlagen (run=%s)", run_id)
 
 
 def verpasste_markieren(db: Session, run: PlanspielRun, jetzt: datetime, fenster_s: int = 120) -> int:
@@ -406,6 +569,236 @@ def verpasste_markieren(db: Session, run: PlanspielRun, jetzt: datetime, fenster
     return len(events)
 
 
+def _lage(db: Session, run: PlanspielRun) -> MajorIncident | None:
+    if run.lage_id is None or run.org_id is None:
+        return None
+    return db.query(MajorIncident).filter(
+        MajorIncident.id == run.lage_id, MajorIncident.org_id == run.org_id,
+    ).one_or_none()
+
+
+def _generator_journal(db: Session, lage: MajorIncident, text: str) -> None:
+    from app.services.lage_journal_service import journal_eintrag_anlegen
+    journal_eintrag_anlegen(db, lage, text=text, category="info", body_html="", partner_from="", partner_to="",
+                            measure="", user_id=None, author_name="Planspiel")
+
+
+def _welle(run: PlanspielRun, sim: float) -> Any:
+    from app.data.planspiel_katalog import GSL_WELLEN
+    waves = GSL_WELLEN[(run.szenario_snapshot or {}).get("gsl_modus", "hochwasser")]
+    remaining = sim
+    for wave in waves:
+        if remaining < wave.dauer_s:
+            return wave
+        remaining -= wave.dauer_s
+    return waves[-1]
+
+
+def _szenario_fuer_code(db: Session, run: PlanspielRun, code: str) -> tuple[PlanspielSzenario, dict[str, Any]] | None:
+    scenario = db.query(PlanspielSzenario).filter(
+        PlanspielSzenario.org_id == run.org_id, PlanspielSzenario.code == code,
+        PlanspielSzenario.aktiv.is_(True), PlanspielSzenario.archiviert_at.is_(None),
+    ).one_or_none()
+    if scenario is None:
+        return None
+    version = aktive_version(db, scenario)
+    return (scenario, version_als_dict(version, db)) if version is not None else None
+
+
+def _generator_stop_auto(db: Session, run: PlanspielRun, lage: MajorIncident) -> None:
+    run.gen_aktiv, run.status = False, "generierung_gestoppt"
+    _generator_journal(db, lage, "[Planspiel] Generator automatisch gestoppt (Obergrenze erreicht).")
+
+
+def generator_schritt(db: Session, run: PlanspielRun, jetzt: datetime) -> list[GeneriertErgebnis]:
+    """Erzeugt höchstens fünf GSL-Stellen; jeder erfolgreiche Insert wird einzeln committed."""
+    if run.art != "gsl" or run.status != "laeuft" or not run.gen_aktiv:
+        return []
+    lage = _lage(db, run)
+    if lage is None or run.org_id is None:
+        return []
+    sim = sim_sekunden(run, jetzt)
+    if run.max_stellen is not None and run.gen_seq >= run.max_stellen or (
+        run.max_laufzeit_s is not None and sim >= run.max_laufzeit_s
+    ):
+        _generator_stop_auto(db, run, lage)
+        db.commit()
+        return []
+    due = run.naechste_gen_sim_s if run.naechste_gen_sim_s is not None else 0.0
+    mittel = float((run.konfig or {}).get("mittel_s", 45))
+    if sim - due > 120:
+        count = max(1, round((sim - due) / mittel))
+        run.naechste_gen_sim_s = float(math.floor(sim))
+        _generator_journal(db, lage, f"[Planspiel] {count} Meldungen wegen Unterbrechung ausgelassen")
+        db.commit()
+        return []
+    settings = db.query(OrgSettings).filter(OrgSettings.org_id == run.org_id).one_or_none()
+    rate_limit = settings.planspiel_max_stellen_je_minute if settings else 6
+    since = jetzt - timedelta(minutes=1)
+    results: list[GeneriertErgebnis] = []
+    for _ in range(5):
+        db.refresh(run)
+        sim = sim_sekunden(run, jetzt)
+        if not run.gen_aktiv or run.status != "laeuft" or (run.naechste_gen_sim_s or 0) > sim:
+            break
+        if (run.max_stellen is not None and run.gen_seq >= run.max_stellen) or (
+            run.max_laufzeit_s is not None and sim >= run.max_laufzeit_s
+        ):
+            _generator_stop_auto(db, run, lage)
+            db.commit()
+            break
+        created = db.query(PlanspielZiel).filter(
+            PlanspielZiel.run_id == run.id, PlanspielZiel.created_at >= since,
+        ).count()
+        if created >= rate_limit:
+            break
+        seq = run.gen_seq + 1
+        rng = random.Random(f"{run.seed}:gen:{seq}")
+        wave = _welle(run, sim)
+        candidates: list[tuple[PlanspielSzenario, dict[str, Any]]] = []
+        for code in wave.stellen_codes:
+            item = _szenario_fuer_code(db, run, code)
+            if item is not None:
+                candidates.append(item)
+        if not candidates:
+            run.letzter_fehler = "Keine aktiven GSL-Szenarien für die aktuelle Welle"
+            run.naechste_gen_sim_s = float(math.floor(sim + mittel))
+            db.commit()
+            break
+        severity = (settings.planspiel_gsl_gewichte or {}) if settings else {}
+        from app.data.planspiel_katalog import GSL_SCHWERE_GEWICHTE
+        weights = [wave.stellen_codes[item[0].code] * severity.get(
+            item[1]["stichwort_code"], GSL_SCHWERE_GEWICHTE.get(item[1]["stichwort_code"], 1)
+        ) for item in candidates]
+        scenario, content = rng.choices(candidates, weights=weights, k=1)[0]
+        targets = db.query(PlanspielZiel).filter(PlanspielZiel.run_id == run.id).order_by(PlanspielZiel.seq).all()
+        duplicate_of = None
+        if targets and rng.random() < float((run.konfig or {}).get("duplikat_p", 0.05)):
+            original = rng.choice(targets)
+            address = dict(original.adress_snapshot or {})
+            duplicate_of = original.id
+            ort = OrtWahl(address.get("adresse_id", 0), address.get("objekt_id"), address.get("bezeichnung"),
+                          address.get("strasse", ""), address.get("hausnr"), address.get("plz"),
+                          address.get("ort"), address["lat"], address["lng"], address.get("qualitaet", "C"),
+                          address.get("quelle", "planspiel"), address.get("adresse", ""))
+        else:
+            excluded = {
+                address_id for item in targets if item.adress_snapshot
+                if isinstance(address_id := item.adress_snapshot.get("adresse_id"), int)
+            }
+            fallback = dict(content)
+            fallback["ort_typen"] = ["strasse", "wohngebaeude", "gebaeude", "beliebig_geeignet"]
+            # Bereits verwendete Adressen nur bevorzugt meiden: Bei kleinem Pool wuerde
+            # ein harter Ausschluss den Generator nach wenigen Stellen versiegen lassen.
+            versuche: list[tuple[dict[str, Any], set[int] | frozenset[int]]] = [
+                (content, excluded), (content, frozenset()), (fallback, excluded), (fallback, frozenset()),
+            ]
+            gefunden: OrtWahl | None = None
+            letzter_fehler: OrtNichtGefunden | None = None
+            for inhalt_versuch, ausschluss in versuche:
+                try:
+                    gefunden = ort_waehlen(db, run.org_id, inhalt_versuch, rng, ausschliessen_ids=ausschluss)
+                    break
+                except OrtNichtGefunden as exc:
+                    letzter_fehler = exc
+            if gefunden is None:
+                run.letzter_fehler = str(letzter_fehler)
+                run.naechste_gen_sim_s = float(math.floor(sim + mittel))
+                db.commit()
+                break
+            ort = gefunden
+        target = PlanspielZiel(org_id=run.org_id, run_id=run.id, seq=seq, typ="site", szenario_code=scenario.code,
+                               stichwort_code=content["stichwort_code"], adress_snapshot={
+                                   "adresse_id": ort.adresse_id, "objekt_id": ort.objekt_id,
+                                   "bezeichnung": ort.bezeichnung,
+                                   "strasse": ort.strasse, "hausnr": ort.hausnr, "plz": ort.plz, "ort": ort.ort,
+                                   "lat": ort.lat, "lng": ort.lng, "qualitaet": ort.qualitaet, "quelle": ort.quelle,
+                                   "adresse": ort.adresse,
+                               }, ist_duplikat_von=duplicate_of, erzeugt_sim_s=float(math.floor(sim)))
+        try:
+            db.add(target)
+            db.flush()
+        except IntegrityError:
+            db.rollback()
+            return results
+        variables = _variablen(content, ort, run.seed + seq)
+        name = content["titel"] + (" (weitere Meldung)" if duplicate_of is not None else "")
+        from app.services.gsl_stelle_service import stelle_simuliert_anlegen
+        site = stelle_simuliert_anlegen(
+            db, lage, bezeichnung=name, einsatzgrund=rendern(content["alarmtext_template"], variables),
+            ort=ort.ort, strasse=ort.strasse, hausnr=ort.hausnr, lat=ort.lat, lng=ort.lng,
+            alarm_stufe=content["stichwort_code"], user_id=run.leiter_user_id, author_name="Planspiel",
+        )
+        target.site_id = site.id
+        if ort.adresse_id:
+            als_verwendet_markieren(db, ort.adresse_id, jetzt)
+        if run.folge_aktiv:
+            next_event = _naechste_seq(db, run)
+            for event in zeitplan_fuer(content, variables, f"{run.seed}:stelle:{seq}"):
+                params = dict(event.trigger_param or {})
+                params.setdefault("ereignis_typ", event.ereignis_typ)
+                db.add(PlanspielRunEreignis(
+                    org_id=run.org_id, run_id=run.id, seq=next_event + event.index, quelle="szenario",
+                    baustein_code=event.baustein_code, ziel_typ="site", ziel_id=site.id,
+                    trigger_type=event.trigger_type, trigger_param=params,
+                    faellig_sim_s=(float(math.floor(sim)) + event.faellig_sim_s
+                                   if event.faellig_sim_s is not None else None), status=event.status,
+                    idempotenz_key=f"run{run.id}:stelle:{seq}:{event.index}", sichtbarkeit=event.sichtbarkeit,
+                    text=event.text,
+                ))
+        config = dict(run.konfig or {})
+        burst = int(config.get("burst_rest", 0))
+        if burst > 0:
+            config["burst_rest"] = burst - 1
+            due_next = float(math.floor(sim))
+        elif rng.random() < float(config.get("burst_p", 0.03)):
+            config["burst_rest"] = rng.randint(1, 4)
+            due_next = float(math.floor(sim))
+        else:
+            delta = min(max(rng.expovariate(1 / mittel), mittel / 3), mittel * 2) / wave.faktor
+            due_next = float(math.floor(sim + delta))
+        run.konfig, run.gen_seq, run.naechste_gen_sim_s = config, seq, due_next
+        db.commit()
+        results.append(GeneriertErgebnis(lage.id, site.id, seq))
+    return results
+
+
+def generator_stoppen(db: Session, run: PlanspielRun, user: Any) -> PlanspielRun:
+    if run.status != "laeuft" or not run.gen_aktiv:
+        raise ZustandsFehler("Generator kann nicht gestoppt werden")
+    lage = _lage(db, run)
+    run.gen_aktiv, run.status = False, "generierung_gestoppt"
+    if lage is not None:
+        _generator_journal(db, lage, "[Planspiel] Generator durch Übungsleitung gestoppt – vorhandene "
+                           "Einsatzstellen bleiben bearbeitbar.")
+    _audit(db, run, user, "generator_gestoppt")
+    return run
+
+
+def generator_fortsetzen(db: Session, run: PlanspielRun, user: Any, jetzt: datetime) -> PlanspielRun:
+    if run.status != "generierung_gestoppt":
+        raise ZustandsFehler("Generator kann nicht fortgesetzt werden")
+    if (run.max_stellen is not None and run.gen_seq >= run.max_stellen) or (
+        run.max_laufzeit_s is not None and sim_sekunden(run, jetzt) >= run.max_laufzeit_s
+    ):
+        raise ZustandsFehler("Obergrenze ist bereits erreicht")
+    run.status, run.gen_aktiv, run.naechste_gen_sim_s = "laeuft", True, _sofort_faellig(run, jetzt)
+    _audit(db, run, user, "generator_fortgesetzt")
+    return run
+
+
+def welle_jetzt(db: Session, run: PlanspielRun, user: Any, jetzt: datetime, anzahl: int) -> PlanspielRun:
+    if not 1 <= anzahl <= 10:
+        raise ValueError("Anzahl muss zwischen 1 und 10 liegen")
+    if run.status != "laeuft" or not run.gen_aktiv:
+        raise ZustandsFehler("Generator ist nicht aktiv")
+    config = dict(run.konfig or {})
+    config["burst_rest"] = anzahl - 1
+    run.konfig, run.naechste_gen_sim_s = config, _sofort_faellig(run, jetzt)
+    _audit(db, run, user, "welle_jetzt", anzahl=anzahl)
+    return run
+
+
 def tick(db_factory: Callable[[], Session], run_id: int, org_id: int, jetzt: datetime) -> TickErgebnis:
     db = db_factory()
     try:
@@ -416,6 +809,7 @@ def tick(db_factory: Callable[[], Session], run_id: int, org_id: int, jetzt: dat
         verpasst = verpasste_markieren(db, run, jetzt)
         reaktiv = reaktive_trigger_auswerten(db, run, jetzt)
         db.commit()
+        generated = generator_schritt(db, run, jetzt)
         version = run.steuer_version
         ids = faellige_ereignisse(db, run, jetzt)
     finally:
@@ -438,4 +832,4 @@ def tick(db_factory: Callable[[], Session], run_id: int, org_id: int, jetzt: dat
                 results.append(result)
         finally:
             execute_db.close()
-    return TickErgebnis(results, verpasst, reaktiv)
+    return TickErgebnis(results, generated, verpasst, reaktiv)

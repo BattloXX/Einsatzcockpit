@@ -72,6 +72,8 @@
       <span class="badge--xs badge--blue">Leitstelle</span>
       {% elif site.source == 'buerger' %}
       <span class="badge--xs badge--purple">Bürger</span>
+      {% elif site.source == 'simulation' %}
+      <span class="badge--xs" style="background:rgba(245,158,11,.18);color:#fbbf24;" title="Vom Planspiel-Generator erzeugt">Planspiel</span>
       {% endif %}
       {% if site.priority %}
       <span style="font-size:.66rem;font-weight:700;padding:1px 8px;border-radius:999px;

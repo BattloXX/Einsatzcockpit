@@ -22,7 +22,7 @@
 </style>
 {% endblock %}
 {% block content %}
-<main class="planspiel-wizard" x-data="{ step: 1 }">
+<main class="planspiel-wizard" x-data="{ step: 1, art: '{{ form.get('art', 'einzel') }}' }">
   {{ page_header("Planspiel bearbeiten" if run else "Neues Planspiel",
                  back_href=("/planspiele/" ~ run.id) if run else "/planspiele", back_label="Zurück",
                  sub="Alle erzeugten Einsätze sind ÜBUNGEN – es wird nicht echt alarmiert.") }}
@@ -44,8 +44,16 @@
     </section>
     <section class="planspiel-wizard__step" x-show="step === 2">
       <h2>2. Art</h2>
-      <label class="planspiel-wizard__choice"><input type="radio" name="art" value="einzel" {% if form.get('art', 'einzel') == 'einzel' %}checked{% endif %}> Einzeleinsatz</label>
-      <label class="planspiel-wizard__choice"><input type="radio" disabled> Großschadenslage <span class="planspiel-wizard__hint">folgt</span></label>
+      <label class="planspiel-wizard__choice">
+        <input type="radio" name="art" value="einzel" x-model="art">
+        Einzeleinsatz
+        <span class="planspiel-wizard__hint">ein Übungseinsatz mit Folgemeldungen</span>
+      </label>
+      <label class="planspiel-wizard__choice">
+        <input type="radio" name="art" value="gsl" x-model="art">
+        Großschadenslage (Unwetter)
+        <span class="planspiel-wizard__hint">Übungs-GSL, in die laufend neue Einsatzstellen einlaufen – bitte ein GSL-Szenario (G01–G05) wählen</span>
+      </label>
     </section>
     <section class="planspiel-wizard__step" x-show="step === 3">
       <h2>3. Erzeugung</h2>
@@ -72,7 +80,12 @@
         </select>
       </label>
     </section>
-    <section class="planspiel-wizard__step" x-show="step === 5">
+    <section class="planspiel-wizard__step" x-show="step === 5 && art === 'gsl'">
+      <h2>5. Ort</h2>
+      <p>Bei einer Großschadenslage entstehen die Einsatzstellen verteilt im Planspiel-Gebiet aus dem Adresspool.
+        Ein einzelner Ort ist nicht nötig.</p>
+    </section>
+    <section class="planspiel-wizard__step" x-show="step === 5 && art !== 'gsl'">
       <h2>5. Ort</h2>
       <div class="planspiel-wizard__grid">
         {% for value, label in [('zufall', 'Zufällig'), ('pool', 'Pool-Eintrag'), ('objekt', 'Objekt'), ('manuell', 'Manuelle Adresse'), ('karte', 'Kartenpunkt')] %}
@@ -103,6 +116,30 @@
         <label>Seed (optional)<input class="form-input" type="number" name="seed" value="{{ form.get('seed', '') }}"></label>
         <label class="planspiel-wizard__choice"><input type="checkbox" name="folgemeldungen_aktiv" {% if form.get('folgemeldungen_aktiv', True) %}checked{% endif %}> Folgemeldungen aktiv</label>
       </div>
+      <fieldset class="planspiel-wizard__grid" x-show="art === 'gsl'">
+        <legend>Unwetter-Generator</legend>
+        <label>
+          Modus
+          <select class="form-input" name="gsl_modus">
+            <option value="">wie im Szenario</option>
+            {% for value, label in [('hochwasser', 'Hochwasser / Starkregen'), ('sturm', 'Sturm'), ('kombination', 'Kombination')] %}
+            <option value="{{ value }}" {% if form.get('gsl_modus') == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          Mittlerer Abstand neuer Stellen (Sekunden Übungszeit)
+          <input class="form-input" type="number" name="mittel_s" min="15" max="600" value="{{ form.get('mittel_s', 45) }}">
+        </label>
+        <label>
+          Höchstens Einsatzstellen
+          <input class="form-input" type="number" name="max_stellen" min="1" max="300" value="{{ form.get('max_stellen', 60) }}">
+        </label>
+        <label>
+          Höchstens Laufzeit (Minuten Übungszeit)
+          <input class="form-input" type="number" name="max_laufzeit_min" min="10" max="720" value="{{ form.get('max_laufzeit_min', 120) }}">
+        </label>
+      </fieldset>
     </section>
     <section class="planspiel-wizard__step" x-show="step === 7">
       <h2>7. Simulation</h2>

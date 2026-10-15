@@ -117,8 +117,12 @@ def test_runde_fuehrt_aus_und_zweiter_worker_bleibt_aussen_vor():
 
     erste = planspiel_runde(TestingSession, "worker-a", JETZT + timedelta(seconds=30))
     zweite = planspiel_runde(TestingSession, "worker-b", JETZT + timedelta(seconds=31))
-    assert any(ergebnis.incident_id == incident_id for _org, _run, ergebnis in erste)
-    assert not any(ergebnis.incident_id == incident_id for _org, _run, ergebnis in zweite)
+    # Die Runde liefert auch Ergebnisse anderer Laeufe (z. B. GSL-Generierung) – nur die eigenen pruefen.
+    def eigene(ergebnisse):
+        return [e for _org, _run, e in ergebnisse if getattr(e, "incident_id", None) == incident_id]
+
+    assert eigene(erste)
+    assert not eigene(zweite)
     assert _meldungen(incident_id, "Runde A") == 1
 
 

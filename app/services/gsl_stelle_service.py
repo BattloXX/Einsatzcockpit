@@ -9,6 +9,27 @@ from app.services import lagemeldung_service, resource_service
 from app.services.major_incident_service import create_site
 
 
+def stelle_simuliert_anlegen(
+    db: Session, lage: MajorIncident, *, bezeichnung: str, einsatzgrund: str | None,
+    ort: str | None, strasse: str | None, hausnr: str | None, lat: float | None,
+    lng: float | None, alarm_stufe: str | None, user_id: int | None, author_name: str | None,
+) -> IncidentSite:
+    """Legt eine Planspiel-Stelle ohne Geocoding, KI oder externe Wirkung an."""
+    site = create_site(
+        db, lage, bezeichnung=bezeichnung, einsatzgrund=(einsatzgrund or "")[:160], ort=ort,
+        strasse=strasse, hausnr=hausnr, lat=lat, lng=lng, source="simulation", alarm_stufe=alarm_stufe,
+        created_by=user_id,
+    )
+    db.add(SiteLogEntry(incident_site_id=site.id, kind="status", text="Einsatzstelle angelegt (Planspiel)",
+                        user_id=user_id, author_name=author_name))
+    write_audit(db, "major_incident.site.created", user_id=user_id,
+                payload={"lage_id": lage.id, "site_id": site.id, "bezeichnung": site.bezeichnung,
+                         "quelle": "planspiel"})
+    from app.services.geo_service import auto_assign_section
+    auto_assign_section(db, site)
+    return site
+
+
 async def _apply_ai_prio(site: IncidentSite, db: Session, org_id: int | None = None) -> None:
     """Schlägt eine Priorität per KI vor, ohne jemals einen Fehler weiterzugeben."""
     from app.services.ai_service import is_enabled
