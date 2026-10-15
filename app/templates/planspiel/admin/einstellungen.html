@@ -10,6 +10,10 @@
     .planspiel-map { height: 360px; margin: .75rem 0; border: 1px solid var(--border); }
     .planspiel-map--small { height: 240px; }
     .planspiel-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin: .75rem 0; }
+    .planspiel-osm-status { display: flex; gap: .75rem; align-items: flex-start; margin: .75rem 0; padding: .85rem 1rem; border: 1px solid var(--yellow); border-left-width: 4px; border-radius: .5rem; background: var(--surface-high); color: var(--on-surface); }
+    .planspiel-osm-status__spinner { flex: none; width: 1.25rem; height: 1.25rem; margin-top: .1rem; border: 3px solid var(--border); border-top-color: var(--yellow); border-radius: 50%; animation: planspiel-spin .9s linear infinite; }
+    @keyframes planspiel-spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .planspiel-osm-status__spinner { animation: none; } }
     .planspiel-pool-wrap { overflow-x: auto; max-width: 100%; }
     .planspiel-pagination { display: flex; gap: .75rem; align-items: center; margin-top: .75rem; }
     .planspiel-inline { display: inline-block; margin: .15rem .5rem .15rem 0; }
@@ -21,7 +25,7 @@
   {{ breadcrumb([{"label": "Einstellungen", "href": "/admin/settings"}, {"label": "Planspiele", "href": none}]) }}
   <div class="planspiel-admin__head">
     <h1>Einstellungen &amp; Adresspool</h1>
-    <a class="btn" href="/admin/settings/planspiele/szenarien">Szenariokatalog</a>
+    <a class="btn btn--secondary" href="/admin/settings/planspiele/szenarien">Szenariokatalog</a>
   </div>
   {% if fehler %}<p class="form-error">{{ fehler }}</p>{% endif %}
   {% if meldung %}<p class="form-success">{{ meldung }}</p>{% endif %}
@@ -60,16 +64,15 @@
 
   <section class="planspiel-settings__section">
     <h2>Adresspool</h2>
-    <p>Aktive Einträge: {% for key, count in pool_stats.items() if key.startswith('quelle:') %}{{ key[7:] }} {{ count }}{% if not loop.last %}, {% endif %}{% endfor %}; Qualität A {{ pool_stats.get('qualitaet:A', 0) }}, B {{ pool_stats.get('qualitaet:B', 0) }}, C {{ pool_stats.get('qualitaet:C', 0) }}.</p>
     {% if can_edit %}
       <div class="planspiel-actions">
         <form method="post" action="/admin/settings/planspiele/adresspool/aufbauen" hx-post="/admin/settings/planspiele/adresspool/aufbauen" hx-target="#pool-liste">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-          <button class="btn" type="submit">Pool aus Objekten/Einsätzen aktualisieren</button>
+          <button class="btn btn--secondary" type="submit">Pool aus Objekten/Einsätzen aktualisieren</button>
         </form>
         <form method="post" action="/admin/settings/planspiele/adresspool/osm" hx-post="/admin/settings/planspiele/adresspool/osm" hx-target="#pool-liste">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-          <button class="btn" type="submit">OSM-Adressen importieren</button>
+          <button class="btn btn--secondary" type="submit">OSM-Adressen importieren</button>
         </form>
       </div>
     {% endif %}
@@ -78,7 +81,7 @@
       <select class="form-input" name="qualitaet"><option value="">Alle Qualitäten</option><option value="A">A</option><option value="B">B</option><option value="C">C</option></select>
       <select class="form-input" name="ort_typ"><option value="">Alle Ortstypen</option>{% for key, label in ort_typen.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select>
       <input class="form-input" name="q" placeholder="Straße suchen" hx-trigger="keyup changed delay:300ms">
-      <button class="btn" type="submit">Filtern</button>
+      <button class="btn btn--secondary" type="submit">Filtern</button>
     </form>
     <div id="pool-liste">{% if osm_laeuft %}{% include "planspiel/admin/_osm_laeuft.html" %}{% else %}{% include "planspiel/admin/_pool_liste.html" %}{% endif %}</div>
   </section>

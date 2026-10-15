@@ -54,17 +54,17 @@
   <form method="post" action="/admin/settings/planspiele/szenarien/{{ szenario.id }}/duplizieren">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <label>Code der Kopie<input class="form-input" name="code" required></label>
-    <button class="btn" type="submit">Duplizieren</button>
+    <button class="btn btn--secondary" type="submit">Duplizieren</button>
   </form>
   {% if szenario.herkunft == 'system' %}
   <form method="post" action="/admin/settings/planspiele/szenarien/{{ szenario.id }}/zuruecksetzen" onsubmit="return confirm('Eigene Änderungen werden durch den Systemstand ersetzt. Ältere Versionen bleiben erhalten.')">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-    <button class="btn" type="submit">Auf Standard zurücksetzen</button>
+    <button class="btn btn--secondary" type="submit">Auf Standard zurücksetzen</button>
   </form>
   {% endif %}
   <form method="post" action="/admin/settings/planspiele/szenarien/{{ szenario.id }}/entfernen" onsubmit="return confirm('Szenario wirklich entfernen?')">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-    <button class="btn" type="submit">Entfernen</button>
+    <button class="btn btn--secondary" type="submit">Entfernen</button>
   </form>
   </div>
   {% endif %}

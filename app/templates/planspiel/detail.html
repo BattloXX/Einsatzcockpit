@@ -74,8 +74,8 @@
   {% if can_leiten %}
   <section class="planspiel-detail__actions">
     <form method="post" action="/planspiele/{{ run.id }}/start" onsubmit="return confirm('Übungseinsatz jetzt anlegen? Es wird keine echte Alarmierung ausgelöst.');"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><button class="btn btn--primary" type="submit">Übung starten</button></form>
-    <a class="btn" href="/planspiele/{{ run.id }}/bearbeiten">Bearbeiten</a>
-    <form method="post" action="/planspiele/{{ run.id }}/verwerfen" onsubmit="return confirm('Entwurf wirklich verwerfen?');"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><button class="btn" type="submit">Entwurf verwerfen</button></form>
+    <a class="btn btn--secondary" href="/planspiele/{{ run.id }}/bearbeiten">Bearbeiten</a>
+    <form method="post" action="/planspiele/{{ run.id }}/verwerfen" onsubmit="return confirm('Entwurf wirklich verwerfen?');"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><button class="btn btn--secondary" type="submit">Entwurf verwerfen</button></form>
   </section>
   {% endif %}
   {% else %}

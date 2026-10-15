@@ -15,7 +15,7 @@
     <form method="post" action="/admin/settings/planspiele/szenarien/{{ item.id }}/aktiv" hx-post="/admin/settings/planspiele/szenarien/{{ item.id }}/aktiv" hx-target="#szenario-{{ item.id }}" hx-swap="outerHTML">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <input type="hidden" name="aktiv" value="{{ '0' if item.aktiv else '1' }}">
-      <button class="btn" type="submit">{{ 'Deaktivieren' if item.aktiv else 'Aktivieren' }}</button>
+      <button class="btn btn--secondary" type="submit">{{ 'Deaktivieren' if item.aktiv else 'Aktivieren' }}</button>
     </form>
     {% endif %}
   </td>

@@ -1,3 +1,8 @@
-<div hx-get="/admin/settings/planspiele/adresspool/osm/status" hx-trigger="every 3s" hx-target="#pool-liste" hx-swap="innerHTML">
-  <p class="planspiel-hint">OSM-Import läuft … Das kann bei ausgelastetem Overpass-Dienst ein bis drei Minuten dauern. Die Seite darf offen bleiben oder verlassen werden.</p>
+<div class="planspiel-osm-status" role="status" aria-live="polite"
+     hx-get="/admin/settings/planspiele/adresspool/osm/status" hx-trigger="every 3s" hx-target="#pool-liste" hx-swap="innerHTML">
+  <span class="planspiel-osm-status__spinner" aria-hidden="true"></span>
+  <div>
+    <strong>OSM-Import läuft …</strong>
+    <div>Das kann bei ausgelastetem Overpass-Dienst ein bis drei Minuten dauern. Die Seite darf offen bleiben oder verlassen werden.</div>
+  </div>
 </div>
