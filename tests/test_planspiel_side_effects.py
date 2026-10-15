@@ -160,11 +160,14 @@ def test_task_reminder_sperrt_nur_planspiel_push_und_broadcastet_weiter(monkeypa
             "app.services.push_service.notify_user", lambda *args, **kwargs: pushes.append(args)
         )
 
-        due = _check_due_messages_sync(db)
+        # Andere Tests desselben Workers koennen weitere faellige Meldungen
+        # hinterlassen; ausgewertet werden nur die beiden eigenen Einsaetze.
+        eigene = {planspiel.id, normal.id}
+        due = [item for item in _check_due_messages_sync(db) if item["incident_id"] in eigene]
         for item in due:
             asyncio.run(_notify_due(item))
 
-        assert {incident_id for incident_id, _ in broadcasts} == {planspiel.id, normal.id}
+        assert {incident_id for incident_id, _ in broadcasts} == eigene
         assert [call[1] for call in pushes] == [102]
     finally:
         db.close()
