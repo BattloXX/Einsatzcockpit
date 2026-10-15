@@ -318,6 +318,39 @@
         </dl>
       </section>
 
+      {% if run.art == 'gsl' and can_steuern %}
+      <section class="planspiel-regie__panel">
+        <h2>Simulierte Einheiten</h2>
+        {% if not einsatzrechte %}
+        <p class="form-error">
+          Für Board, Disposition und Einheiten-Simulation braucht die Übungsleitung zusätzlich die Rolle
+          Einsatzleiter (oder Admin). Planspiel-Rechte allein reichen dafür nicht.
+        </p>
+        {% endif %}
+        <p class="planspiel-hint">
+          Öffnet die normale Einheitenansicht als SIMULATION: Auftrag bestätigen, Anfahrt, vor Ort, Erkundung
+          abschließen, fertig melden – die GSL-Phasen laufen dabei wie im Echtbetrieb.
+        </p>
+        {% for einheit in einheiten %}
+        <div class="planspiel-regie__mitglied">
+          <span>{{ einheit.label }} <span class="planspiel-hint">· {{ einheit.status }}</span></span>
+          {% if einsatzrechte and aktiv %}
+          <a class="btn btn--sm" href="/einheit?sim={{ einheit.id }}" target="_blank" rel="noopener">Als Einheit bedienen</a>
+          {% endif %}
+        </div>
+        {% else %}
+        <p class="planspiel-hint">Noch keine Einheiten in der Übungslage.</p>
+        {% endfor %}
+        {% if aktiv %}
+        <form class="planspiel-regie__form" method="post" action="/planspiele/{{ run.id }}/einheit">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          <input class="form-input" name="label" maxlength="60" required placeholder="z. B. Nachbarwehr LF">
+          <button class="btn" type="submit">Simulierte Einheit anlegen</button>
+        </form>
+        {% endif %}
+      </section>
+      {% endif %}
+
       <section class="planspiel-regie__panel">
         <h2>Beobachtungen</h2>
         {% include "planspiel/_beobachtungen.html" %}

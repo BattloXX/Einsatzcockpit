@@ -148,6 +148,11 @@ def beenden(db: Session, run: PlanspielRun, user: Any, jetzt: datetime) -> Plans
     if lage is not None:
         _generator_journal(db, lage, "[Planspiel] Übung durch die Übungsleitung beendet. "
                            "Vorhandene Einsatzstellen bleiben bearbeitbar.")
+        # Externe Zugaenge (GK-Link/QR) und der oeffentliche Lagelink enden mit der Uebung.
+        from app.services.gk_zugang_service import widerrufe_alle_fuer_lage
+        widerrufe_alle_fuer_lage(db, lage.id, "Planspiel beendet")
+        lage.public_token = None
+        lage.public_token_expires_at = None
     _audit(db, run, user, "beendet")
     return run
 

@@ -63,11 +63,15 @@
   {# ── Simulation ─────────────────────────────────────────────────────── #}
   {% if simulation %}
   <div class="einheit-simulation">
-    <strong>SIMULATION – {{ einheit_label }}</strong> · Admin: {{ admin_name }}
+    <strong>SIMULATION – {{ einheit_label }}</strong> · {{ 'Übungsleitung' if planspiel_run_id else 'Admin' }}: {{ admin_name }}
     {% if not schreibbar %}
     <div>Echtlage – Simulation nur zur Ansicht</div>
     {% endif %}
+    {% if planspiel_run_id %}
+    <a href="/planspiele/{{ planspiel_run_id }}" class="einheit-simulation__ende">Zurück zur Regie</a>
+    {% else %}
     <a href="/lage/{{ lage_id }}/ressourcen" class="einheit-simulation__ende">Simulation beenden</a>
+    {% endif %}
   </div>
   {% endif %}
 

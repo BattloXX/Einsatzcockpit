@@ -92,12 +92,19 @@ def _simulationskontext(request: Request, db: Session) -> EinheitKontext | None:
         or getattr(request.state, "qr_lage_id", None) is not None
     ):
         raise EinheitKontextFehler(403, "kein_einheitenkontext", "Keine Berechtigung für die Simulation")
-    if not has_role(user, "admin"):
+    from app.services.planspiel_zugriff import simulation_erlaubt
+
+    try:
+        sim_id = int(sim)
+    except ValueError as exc:
+        raise EinheitKontextFehler(404, "einheit_nicht_gefunden", "Einheit nicht gefunden") from exc
+    # Planspiel-Allein-Betrieb: Einsatzleiter darf Einheiten seiner laufenden Uebungslage simulieren.
+    if not has_role(user, "admin") and not simulation_erlaubt(db, user, sim_id):
         write_audit(db, "gsl.einheit.simulation_abgelehnt", user_id=user.id, payload={"einheit_id": sim})
         db.commit()
         raise EinheitKontextFehler(403, "kein_einheitenkontext", "Keine Berechtigung für die Simulation")
     try:
-        return kontext_fuer_einheit(db, user, int(sim), quelle="simulation")
+        return kontext_fuer_einheit(db, user, sim_id, quelle="simulation")
     except ValueError as exc:
         raise EinheitKontextFehler(404, "einheit_nicht_gefunden", "Einheit nicht gefunden") from exc
 
@@ -160,6 +167,7 @@ def _einheit_seite(request: Request, db: Session, start_dispatch_id: int | None 
         "fahrzeug": (ctx.vehicle.code or ctx.vehicle.name) if ctx and ctx.vehicle else (ctx.einheit.label if ctx else vehicle_label),
         "is_exercise": bool(ctx and ctx.lage.is_exercise), "simulation": bool(ctx and ctx.simulation),
         "sim_einheit_id": ctx.einheit.id if ctx and ctx.simulation else None,
+        "planspiel_run_id": ctx.lage.planspiel_run_id if ctx and ctx.simulation else None,
         "schreibbar": bool(ctx and not (ctx.simulation and not ctx.lage.is_exercise)),
         "admin_name": getattr(user, "display_name", "") if ctx and ctx.simulation else "",
         "gk_zugang": bool(ctx and ctx.quelle == "zugang"),

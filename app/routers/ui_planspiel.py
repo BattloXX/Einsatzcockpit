@@ -9,10 +9,11 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 from starlette.datastructures import FormData
 
+from app.core.audit import write_audit
 from app.core.permissions import PLANSPIEL_LEITER_ROLES, PLANSPIEL_LESE_ROLLEN, has_role, require_role
 from app.core.templating import templates
 from app.db import SessionLocal, get_db
-from app.models.major_incident import IncidentSite
+from app.models.major_incident import IncidentSite, LageEinheit, MajorIncident
 from app.models.master import AlarmType
 from app.models.objekt import OBJEKT_STATUS_FREIGEGEBEN, Objekt
 from app.models.planspiel import (
@@ -179,7 +180,12 @@ def _cockpit_context(request: Request, db: Session, user: User, run: PlanspielRu
     now = _jetzt()
     # Die Seite bindet das Timeline-Partial direkt ein und braucht dessen Daten schon beim ersten Laden.
     timeline = _timeline_context(db, user, run, fehler)
+    from app.services.planspiel_zugriff import hat_einsatzrechte
+    einheiten = []
+    if run.lage_id is not None:
+        einheiten = db.query(LageEinheit).filter(LageEinheit.lage_id == run.lage_id).order_by(LageEinheit.label).all()
     return {**timeline, "user": user, "run": run, "fehler": fehler, "status_labels": PLANSPIEL_STATUS_LABELS,
+            "einheiten": einheiten, "einsatzrechte": hat_einsatzrechte(user),
             "sim_s": sim_sekunden(run, now), "server_jetzt": now.isoformat() + "Z",
             "can_steuern": _darf_steuern(db, user, run), "beobachtungen": observations,
             "mitglieder": members, "org_users": users,
@@ -636,6 +642,40 @@ async def welle(run_id: int, request: Request, db: Session = Depends(get_db),
     except (ValueError, ZustandsFehler) as exc:
         db.rollback()
         return _action_response(request, db, user, run, str(exc))
+
+
+@router.post("/{run_id:int}/einheit")
+async def einheit_anlegen(run_id: int, request: Request, db: Session = Depends(get_db),
+                          user: User = Depends(require_role(*PLANSPIEL_LESE_ROLLEN)),
+                          _guard: None = Depends(require_planspiel_enabled)):
+    """Legt eine zusaetzliche simulierte Einheit in der Uebungslage an (ohne SMS/Druck)."""
+    run = _run(db, user, run_id)
+    _require_steuern(db, user, run)
+    form = await request.form()
+    name = str(form.get("label", "")).strip()[:60]
+    try:
+        if run.art != "gsl" or run.lage_id is None:
+            raise ValueError("Simulierte Einheiten gibt es nur bei Großschadenslagen")
+        if run.status not in ("laeuft", "pausiert", "generierung_gestoppt"):
+            raise ZustandsFehler("Das Planspiel läuft nicht")
+        if not name:
+            raise ValueError("Bitte eine Bezeichnung angeben")
+        lage = db.query(MajorIncident).filter(
+            MajorIncident.id == run.lage_id, MajorIncident.org_id == run.org_id,
+        ).one()
+        from app.services.resource_service import lege_einheit_an
+        lege_einheit_an(db, lage, resource_type="extern", label=f"SIM {name}", org_name="Planspiel",
+                        bemerkung="Simulierte Einheit aus dem Planspiel", user_id=user.id,
+                        author_name=user.display_name or user.username)
+        write_audit(db, "planspiel.sim.einheit_angelegt", org_id=run.org_id, user_id=user.id,
+                    entity_type="planspiel_run", entity_id=run.id, payload={"label": name})
+        db.commit()
+        await _broadcast(run)
+    except (ValueError, ZustandsFehler) as exc:
+        db.rollback()
+        return templates.TemplateResponse(request, "planspiel/regie.html",
+                                          _cockpit_context(request, db, user, run, str(exc)), status_code=400)
+    return RedirectResponse(f"/planspiele/{run.id}", status_code=303)
 
 
 @router.post("/{run_id:int}/stichwort")
