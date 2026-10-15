@@ -353,7 +353,7 @@ def starten(db: Session, run: PlanspielRun, user: Any) -> Incident:
     incident.planspiel_run_id = run.id
     if settings and settings.default_access_pin_hash:
         incident.access_pin_hash = settings.default_access_pin_hash
-    log_text = f"[Planspiel] Übungseinsatz aus Planspiel „{run.titel}“ erzeugt – "
+    log_text = f"[Planspiel] Übungseinsatz aus Planspiel '{run.titel}' erzeugt – "
     log_text += "keine externe Alarmierung."
     db.add(IncidentLog(incident_id=incident.id, author_name="Planspiel", level="info", text=log_text))
     if ort.get("objekt_id"):
@@ -363,9 +363,11 @@ def starten(db: Session, run: PlanspielRun, user: Any) -> Incident:
                          szenario_code=snapshot.get("code"), stichwort_code=snapshot["stichwort_org"],
                          adress_snapshot=ort))
     for event in zeitplan(run):
+        trigger_param = dict(event.trigger_param or {})
+        trigger_param.setdefault("ereignis_typ", event.ereignis_typ)
         db.add(PlanspielRunEreignis(org_id=run.org_id, run_id=run.id, seq=event.index + 1, quelle="szenario",
             baustein_code=event.baustein_code, ziel_typ="incident", ziel_id=incident.id,
-            trigger_type=event.trigger_type, trigger_param=event.trigger_param, faellig_sim_s=event.faellig_sim_s,
+            trigger_type=event.trigger_type, trigger_param=trigger_param, faellig_sim_s=event.faellig_sim_s,
             status=event.status, idempotenz_key=f"run{run.id}:szenario:{event.index}",
             sichtbarkeit=event.sichtbarkeit, text=event.text))
     if ort.get("adresse_id"):

@@ -277,6 +277,9 @@ class Settings(BaseSettings):
     # Hintergrundmutationen ausführen.
     MAIL_ZUORDNUNG_LOOP_ENABLED: bool = True
     MAIL_ZUORDNUNG_LOOP_INTERVAL_S: int = 30
+    # Planspiele: Tick-Intervall des Ereignis-Workers (Sekunden).
+    PLANSPIEL_LOOP_ENABLED: bool = True
+    PLANSPIEL_LOOP_INTERVAL_S: int = 2
     MAIL_IMAP_POLL_ENABLED: bool = True
     MAIL_IMAP_TIMEOUT_S: int = 20
     MAIL_GRAPH_POLL_ENABLED: bool = True

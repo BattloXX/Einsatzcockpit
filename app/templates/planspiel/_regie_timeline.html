@@ -1,0 +1,63 @@
+{% import "planspiel/_labels.html" as L with context %}
+{% macro uebungszeit(sekunden) -%}
+  {%- set s = (sekunden or 0)|int -%}
+  {{ '%02d:%02d:%02d'|format(s // 3600, (s // 60) % 60, s % 60) }}
+{%- endmacro %}
+{% macro aktion(run, event, pfad, label) -%}
+  <button class="btn btn--sm" type="button"
+          hx-post="/planspiele/{{ run.id }}/ereignis/{{ event.id }}/{{ pfad }}"
+          hx-vals='js:{_csrf: document.querySelector("input[name=_csrf]").value, client_uuid: crypto.randomUUID()}'
+          hx-target="#regie-timeline"
+          hx-swap="outerHTML">{{ label }}</button>
+{%- endmacro %}
+{% macro gruppe(run, titel, events, can_steuern, leer) %}
+  <h3 class="regie-timeline__titel">{{ titel }} <span class="regie-timeline__anzahl">{{ events|length }}</span></h3>
+  {% for event in events %}
+  {% set typ = (event.trigger_param or {}).get('ereignis_typ') %}
+  <article class="regie-ereignis regie-ereignis--{{ event.status }}">
+    <div class="regie-ereignis__kopf">
+      <strong>{{ L.EREIGNIS_TYP.get(typ, 'Meldung') }}</strong>
+      <span class="planspiel-badge">{{ L.EREIGNIS_STATUS.get(event.status, event.status) }}</span>
+      {% if event.quelle == 'regie' %}<span class="planspiel-badge">Regie</span>{% endif %}
+      {% if event.sichtbarkeit == 'regie' %}<span class="planspiel-badge planspiel-badge--warn">nur Regie</span>{% endif %}
+    </div>
+    <p class="regie-ereignis__text">{{ event.text or '-' }}</p>
+    <p class="regie-ereignis__zeit">
+      {% if event.status == 'ausgefuehrt' and event.ausgefuehrt_sim_s is not none %}
+        ausgeführt bei {{ uebungszeit(event.ausgefuehrt_sim_s) }} Übungszeit
+      {% else %}
+        {{ L.faellig(event) }}
+      {% endif %}
+    </p>
+    {% if event.fehler %}
+    <p class="regie-ereignis__fehler">{{ event.fehler }}</p>
+    {% endif %}
+    {% if can_steuern and run.status in ('laeuft', 'pausiert', 'generierung_gestoppt') %}
+    <div class="regie-ereignis__aktionen">
+      {% if event.status in ('geplant', 'uebersprungen') %}{{ aktion(run, event, 'jetzt', 'Jetzt auslösen') }}{% endif %}
+      {% if event.status == 'geplant' %}{{ aktion(run, event, 'ueberspringen', 'Überspringen') }}{% endif %}
+      {% if event.status == 'ausgefuehrt' %}{{ aktion(run, event, 'wiederholen', 'Wiederholen') }}{% endif %}
+    </div>
+    {% endif %}
+  </article>
+  {% else %}
+  <p class="planspiel-hint">{{ leer }}</p>
+  {% endfor %}
+{% endmacro %}
+<section id="regie-timeline" class="planspiel-regie__panel"
+         hx-get="/planspiele/{{ run.id }}/timeline"
+         hx-trigger="every 5s"
+         hx-swap="outerHTML">
+  <h2>Ereignisse</h2>
+  {% if fehler %}
+  <p class="form-error">{{ fehler }}</p>
+  {% endif %}
+  {{ gruppe(run, 'Anstehend', anstehend, can_steuern, 'Keine anstehenden Ereignisse.') }}
+  {{ gruppe(run, 'Ausgeführt', ausgefuehrt, can_steuern, 'Noch nichts ausgeführt.') }}
+  {{ gruppe(run, 'Übersprungen / abgebrochen / Fehler', fehlgeschlagen, can_steuern, 'Keine.') }}
+  <p class="regie-health">
+    Worker: {{ run.worker_id or 'noch kein Durchlauf' }}
+    {% if run.worker_lease_until %}· Lease bis {{ run.worker_lease_until|local_time }}{% endif %}
+    {% if run.letzter_fehler %}<br><span class="form-error">Letzter Fehler: {{ run.letzter_fehler }}</span>{% endif %}
+  </p>
+</section>
