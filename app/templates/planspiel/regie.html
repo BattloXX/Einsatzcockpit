@@ -1,413 +1,350 @@
 {% extends "base.html" %}
 {% import "planspiel/_labels.html" as L with context %}
-{% from "_page_header.html" import page_header %}
 {% set snapshot = run.szenario_snapshot or {} %}
 {% set inhalt = snapshot.get('inhalt', {}) %}
 {% set ort = snapshot.get('ort', {}) %}
 {% set aktiv = run.status in ('laeuft', 'pausiert', 'generierung_gestoppt') %}
-{% block title %}Regie: {{ run.titel }}{% endblock %}
+{% set status_farbe = {'laeuft': 'red', 'pausiert': 'amber', 'generierung_gestoppt': 'amber', 'beendet': 'green', 'entwurf': 'gray'} %}
+{% block title %}
+Regie: {{ run.titel }}
+{% endblock %}
 {% block head_extra %}
+{% include "planspiel/_design.html" %}
 <style>
-  .planspiel-regie {
-    max-width: 1280px;
-    margin: 0 auto;
-    padding: 1rem 1rem 3rem;
+  .planspiel-regie__clock{
+    font-family:var(--font-mono,monospace);
+    font-size:2.6rem;
+    font-weight:700
   }
-  .planspiel-regie__uhr {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: .75rem;
+  .planspiel-regie__clock[data-pausiert="true"]{
+    color:#f59e0b
   }
-  .planspiel-regie__clock {
-    font-family: var(--font-mono, monospace);
-    font-size: 2.6rem;
-    font-weight: 700;
+  .planspiel-regie__bar{
+    position:sticky;
+    top:0;
+    z-index:3;
+    margin:1rem 0;
+    padding:.75rem;
+    background:var(--surface)
   }
-  .planspiel-regie__clock[data-pausiert="true"] {
-    color: #f59e0b;
+  .planspiel-regie__bar form,.regie-form{
+    margin:0
   }
-  .planspiel-regie__bar {
-    position: sticky;
-    top: 0;
-    z-index: 3;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: .5rem;
-    margin-top: 1rem;
-    padding: .75rem;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg, 8px);
-    background: var(--surface);
+  .regie-form{
+    display:grid;
+    gap:.5rem
   }
-  .planspiel-regie__bar form {
-    margin: 0;
+  .regie-form__row{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:.5rem
   }
-  .planspiel-regie__grid {
-    display: grid;
-    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
-    gap: 1rem;
-    margin-top: 1rem;
+  .planspiel-regie dl{
+    display:grid;
+    grid-template-columns:max-content minmax(0,1fr);
+    gap:.35rem .75rem;
+    margin:0
   }
-  .planspiel-regie__panel {
-    margin-bottom: 1rem;
-    padding: 1rem;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg, 8px);
-    background: var(--surface-low);
+  .planspiel-regie dt{
+    color:var(--text-muted)
   }
-  .planspiel-regie__panel h2 {
-    margin: 0 0 .75rem;
-    font-size: 1.1rem;
+  .planspiel-regie dd{
+    margin:0;
+    overflow-wrap:anywhere
   }
-  .planspiel-regie__secret {
-    border: 2px solid #b91c1c;
+  .planspiel-regie__member{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:.5rem;
+    padding:.5rem 0;
+    border-bottom:1px solid var(--border)
   }
-  .planspiel-regie__form {
-    display: grid;
-    gap: .5rem;
+  .planspiel-regie__member:last-of-type{
+    border-bottom:0
   }
-  .planspiel-regie__zeile {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: .5rem;
-  }
-  .planspiel-regie__mitglied {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: .5rem;
-    padding: .35rem 0;
-    border-bottom: 1px solid var(--border);
-  }
-  .planspiel-regie__observation {
-    padding: .5rem 0;
-    border-bottom: 1px solid var(--border);
-    overflow-wrap: anywhere;
-  }
-  .planspiel-regie dl {
-    display: grid;
-    grid-template-columns: max-content minmax(0, 1fr);
-    gap: .35rem .75rem;
-    margin: 0;
-  }
-  .planspiel-regie dt {
-    color: var(--text-muted);
-  }
-  .planspiel-regie dd {
-    margin: 0;
-    overflow-wrap: anywhere;
-  }
-  .planspiel-badge {
-    display: inline-block;
-    padding: .1rem .5rem;
-    border-radius: 999px;
-    background: var(--surface-high);
-    font-size: .75rem;
-    font-weight: 700;
-  }
-  .planspiel-badge--warn {
-    background: rgba(185, 28, 28, .2);
-    color: #fca5a5;
-  }
-  .regie-timeline__titel {
-    margin: 1rem 0 .5rem;
-    font-size: 1rem;
-  }
-  .regie-timeline__anzahl {
-    color: var(--text-muted);
-    font-weight: 400;
-  }
-  .regie-ereignis {
-    margin-bottom: .5rem;
-    padding: .6rem .75rem;
-    border: 1px solid var(--border);
-    border-left-width: 4px;
-    border-radius: var(--radius-md, 6px);
-  }
-  .regie-ereignis--ausgefuehrt {
-    border-left-color: #16a34a;
-  }
-  .regie-ereignis--geplant {
-    border-left-color: #2563eb;
-  }
-  .regie-ereignis--uebersprungen,
-  .regie-ereignis--abgebrochen,
-  .regie-ereignis--fehlgeschlagen {
-    border-left-color: #6b7280;
-    opacity: .8;
-  }
-  .regie-ereignis__kopf {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: .35rem;
-  }
-  .regie-ereignis__text {
-    margin: .35rem 0;
-    overflow-wrap: anywhere;
-  }
-  .regie-ereignis__zeit {
-    margin: 0;
-    color: var(--text-muted);
-    font-size: .85rem;
-  }
-  .regie-ereignis__fehler {
-    margin: .25rem 0 0;
-    color: #f87171;
-    font-size: .85rem;
-  }
-  .regie-ereignis__aktionen {
-    display: flex;
-    flex-wrap: wrap;
-    gap: .35rem;
-    margin-top: .5rem;
-  }
-  .regie-generator {
-    margin-bottom: 1rem;
-    padding-bottom: .75rem;
-    border-bottom: 1px solid var(--border);
-  }
-  .regie-generator__welle {
-    display: flex;
-    gap: .35rem;
-  }
-  .regie-generator__welle .form-input {
-    width: auto;
-  }
-  .regie-health {
-    margin: 1rem 0 0;
-    color: var(--text-muted);
-    font-size: .85rem;
-  }
-  @media (max-width: 760px) {
-    .planspiel-regie {
-      padding: .75rem .5rem 2rem;
+  @media (max-width:760px){
+    .planspiel-regie__clock{
+      font-size:2rem
     }
-    .planspiel-regie__grid {
-      grid-template-columns: minmax(0, 1fr);
+    .planspiel-regie__bar .btn{
+      flex:1 1 auto
     }
-    .planspiel-regie__clock {
-      font-size: 2rem;
+    .regie-form__row{
+      grid-template-columns:1fr
     }
-    .planspiel-regie__bar .btn {
-      flex: 1 1 auto;
-    }
-    .planspiel-regie__zeile {
-      grid-template-columns: minmax(0, 1fr);
+    .planspiel-regie__member{
+      align-items:flex-start;
+      flex-wrap:wrap
     }
   }
 </style>
 {% endblock %}
 {% block content %}
-<main class="planspiel-regie"
-      x-data="planspielUhr({{ sim_s|int }}, {{ run.tempo|tojson }}, {{ (run.status != 'laeuft' and run.status != 'generierung_gestoppt')|tojson }})"
-      x-init="start()">
-  {% call page_header("Regie: " ~ run.titel, back_href="/planspiele", back_label="Planspiele",
-                      sub=status_labels.get(run.status, run.status) ~ " · Tempo " ~ run.tempo ~ "×") %}
-    {% if run.incident_id %}
-    <a class="btn btn--primary" href="/einsatz/{{ run.incident_id }}" target="_blank" rel="noopener">Zum Übungseinsatz</a>
-    {% endif %}
-    {% if run.lage_id %}
-    <a class="btn btn--primary" href="/lage/{{ run.lage_id }}" target="_blank" rel="noopener">Zum GSL-Board</a>
-    {% endif %}
-    <a class="btn btn--secondary" href="/planspiele/{{ run.id }}/auswertung">Auswertung</a>
-  {% endcall %}
-
+<main class="ps-page planspiel-regie" x-data="planspielUhr({{ sim_s|int }}, {{ run.tempo|tojson }}, {{ (run.status != 'laeuft' and run.status != 'generierung_gestoppt')|tojson }})" x-init="start()">
+  <header class="ps-header">
+    <div>
+      <a class="btn btn--ghost btn--sm" href="/planspiele">← Planspiele</a>
+      <div style="display:flex;align-items:center;gap:.5rem;margin-top:.65rem;flex-wrap:wrap">
+        <h1>
+          Regie: {{ run.titel }}
+        </h1>
+        <span class="ps-status ps-status--{{ status_farbe.get(run.status, 'gray') }}">{{ status_labels.get(run.status, run.status) }}</span>
+      </div>
+      <p class="ps-header__sub">
+        {{ run.art }} · {{ snapshot.get('code') or '–' }}
+        {% if inhalt.get('titel') %}
+        · {{ inhalt.get('titel') }}
+        {% endif %}
+      </p>
+    </div>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+      {% if run.incident_id %}
+      <a class="btn btn--primary btn--sm" href="/einsatz/{{ run.incident_id }}" target="_blank" rel="noopener">Zum Übungseinsatz</a>
+      {% endif %}
+      {% if run.lage_id %}
+      <a class="btn btn--primary btn--sm" href="/lage/{{ run.lage_id }}" target="_blank" rel="noopener">Zum GSL-Board</a>
+      {% endif %}
+      <a class="btn btn--secondary btn--sm" href="/planspiele/{{ run.id }}/auswertung">Auswertung</a>
+    </div>
+  </header>
   {% if fehler %}
-  <p class="form-error">{{ fehler }}</p>
+  <p class="form-error">
+    {{ fehler }}
+  </p>
   {% endif %}
-
-  <section class="planspiel-regie__panel planspiel-regie__uhr">
-    <div class="planspiel-regie__clock"
-         data-pausiert="{{ 'true' if run.status == 'pausiert' else 'false' }}"
-         x-text="anzeige()">{{ '%02d:%02d:%02d'|format((sim_s|int) // 3600, ((sim_s|int) // 60) % 60, (sim_s|int) % 60) }}</div>
-    <span>Übungszeit{% if run.status == 'pausiert' %} – pausiert{% endif %}</span>
+  <section class="ps-sidecard">
+    <p class="ps-box__title">
+      Übungszeit
+      {% if run.status == 'pausiert' %}
+      – pausiert
+      {% endif %}
+    </p>
+    <div class="planspiel-regie__clock" data-pausiert="{{ 'true' if run.status == 'pausiert' else 'false' }}" x-text="anzeige()">
+      {{ '%02d:%02d:%02d'|format((sim_s|int) // 3600, ((sim_s|int) // 60) % 60, (sim_s|int) % 60) }}
+    </div>
   </section>
-
   {% if can_steuern and aktiv %}
-  <nav class="planspiel-regie__bar" aria-label="Steuerung">
+  <nav class="ps-actions planspiel-regie__bar" aria-label="Steuerung">
     {% if run.status == 'pausiert' %}
     <form method="post" action="/planspiele/{{ run.id }}/fortsetzen">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <button class="btn btn--primary" type="submit">Fortsetzen</button>
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><button class="btn btn--primary btn--sm" type="submit">Fortsetzen</button>
     </form>
     {% else %}
     <form method="post" action="/planspiele/{{ run.id }}/pause">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <button class="btn btn--secondary" type="submit">Pause</button>
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><button class="btn btn--secondary btn--sm" type="submit">Pause</button>
     </form>
     {% endif %}
     <form method="post" action="/planspiele/{{ run.id }}/folgemeldungen">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <input type="hidden" name="aktiv" value="{{ '0' if run.folge_aktiv else '1' }}">
-      <button class="btn btn--secondary" type="submit">Folgemeldungen {{ 'ausschalten' if run.folge_aktiv else 'einschalten' }}</button>
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><input type="hidden" name="aktiv" value="{{ '0' if run.folge_aktiv else '1' }}"><button class="btn btn--secondary btn--sm" type="submit">Folgemeldungen {{ 'ausschalten' if run.folge_aktiv else 'einschalten' }}</button>
     </form>
-    <form method="post" action="/planspiele/{{ run.id }}/beenden"
-          onsubmit="return confirm('Übung endgültig beenden? Offene Ereignisse werden abgebrochen.');">
-      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <button class="btn btn--secondary" type="submit">Übung beenden</button>
+    <form method="post" action="/planspiele/{{ run.id }}/beenden" onsubmit="return confirm('Übung endgültig beenden? Offene Ereignisse werden abgebrochen.');">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><button class="btn btn--danger btn--sm" type="submit">Übung beenden</button>
     </form>
   </nav>
   {% endif %}
-
-  <div class="planspiel-regie__grid">
-    <div>
+  <div class="ps-grid">
+    <div class="ps-grid__main">
       {% include "planspiel/_regie_timeline.html" %}
-
       {% if can_steuern and aktiv %}
-      <section class="planspiel-regie__panel">
-        <h2>Freie Meldung einspielen</h2>
-        <form class="planspiel-regie__form"
-              hx-post="/planspiele/{{ run.id }}/meldung"
-              hx-target="#regie-timeline"
-              hx-swap="outerHTML"
-              hx-vals='js:{client_uuid: crypto.randomUUID()}'
-              hx-on::after-request="if (event.detail.successful) this.reset()">
+      <section class="ps-box">
+        <div class="ps-box__head">
+          <h2 class="ps-box__title">
+            Freie Meldung einspielen
+          </h2>
+        </div>
+        <form class="regie-form" hx-post="/planspiele/{{ run.id }}/meldung" hx-target="#regie-timeline" hx-swap="outerHTML" hx-vals='js:{client_uuid: crypto.randomUUID()}' hx-on::after-request="if (event.detail.successful) this.reset()">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-          <textarea class="form-input" name="text" rows="3" required maxlength="1000"
-                    placeholder="z. B. Polizei meldet: Schaulustige blockieren die Zufahrt"></textarea>
-          <div class="planspiel-regie__zeile">
+          <textarea class="form-input" name="text" rows="3" required maxlength="1000" placeholder="z. B. Polizei meldet: Schaulustige blockieren die Zufahrt"></textarea>
+          <div class="regie-form__row">
             <select class="form-input" name="ereignis_typ" aria-label="Meldungsart">
               {% for code, label in L.EREIGNIS_TYP.items() %}
-              <option value="{{ code }}" {% if code == 'lageweit' %}selected{% endif %}>{{ label }}</option>
+              <option value="{{ code }}" {% if code == 'lageweit' %}selected{% endif %}>
+                {{ label }}
+              </option>
               {% endfor %}
             </select>
             <select class="form-input" name="sichtbarkeit" aria-label="Sichtbarkeit">
-              <option value="teilnehmer">An die Teilnehmer</option>
-              <option value="regie">Nur Regie-Vermerk</option>
+              <option value="teilnehmer">
+                An die Teilnehmer
+              </option>
+              <option value="regie">
+                Nur Regie-Vermerk
+              </option>
             </select>
           </div>
-          <button class="btn btn--primary" type="submit">Meldung einspielen</button>
+          <button class="btn btn--primary btn--sm" type="submit">Meldung einspielen</button>
         </form>
       </section>
-
       {% if run.art != 'gsl' %}
-      <section class="planspiel-regie__panel">
-        <h2>Stichwort ändern</h2>
-        <form class="planspiel-regie__form" method="post" action="/planspiele/{{ run.id }}/stichwort">
+      <section class="ps-box">
+        <div class="ps-box__head">
+          <h2 class="ps-box__title">
+            Stichwort ändern
+          </h2>
+        </div>
+        <form class="regie-form" method="post" action="/planspiele/{{ run.id }}/stichwort">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
           <select class="form-input" name="code" aria-label="Neues Stichwort">
             {% for alarm in alarm_types %}
-            <option value="{{ alarm.code }}">{{ alarm.code }} · {{ alarm.label }}</option>
+            <option value="{{ alarm.code }}">
+              {{ alarm.code }} · {{ alarm.label }}
+            </option>
             {% endfor %}
           </select>
-          <button class="btn btn--secondary" type="submit">Stichwort ändern</button>
+          <button class="btn btn--secondary btn--sm" type="submit">Stichwort ändern</button>
         </form>
       </section>
       {% endif %}
       {% endif %}
     </div>
-
-    <aside>
-      <section class="planspiel-regie__panel planspiel-regie__secret">
-        <h2>Regie <span class="planspiel-badge planspiel-badge--warn">nur Regie</span></h2>
+    <aside class="ps-grid__side">
+      <section class="ps-box ps-box--danger">
+        <div class="ps-box__head">
+          <h2 class="ps-box__title">
+            Geheimlage
+          </h2>
+          <span class="ps-badge ps-badge--red">nur Regie</span>
+        </div>
         <dl>
-          <dt>Geheimlage</dt>
-          <dd>{{ inhalt.get('regie_geheimlage') or '–' }}</dd>
-          <dt>Lernziele</dt>
-          <dd>{{ (run.konfig or {}).get('lernziele') or inhalt.get('lernziele') or '–' }}</dd>
-          <dt>Szenario</dt>
-          <dd>{{ snapshot.get('code') or '–' }} · {{ inhalt.get('titel') or '' }}</dd>
-          <dt>Alarmtext</dt>
-          <dd>{{ snapshot.get('alarmtext') or '–' }}</dd>
-          <dt>Ort</dt>
-          <dd>{{ ort.get('adresse') or ort.get('bezeichnung') or '–' }}</dd>
-          <dt>Seed</dt>
-          <dd>{{ run.seed }}</dd>
+          <dt>
+            Geheimlage
+          </dt>
+          <dd>
+            {{ inhalt.get('regie_geheimlage') or '–' }}
+          </dd>
+          <dt>
+            Lernziele
+          </dt>
+          <dd>
+            {{ (run.konfig or {}).get('lernziele') or inhalt.get('lernziele') or '–' }}
+          </dd>
+          <dt>
+            Szenario
+          </dt>
+          <dd>
+            {{ snapshot.get('code') or '–' }} · {{ inhalt.get('titel') or '' }}
+          </dd>
+          <dt>
+            Alarmtext
+          </dt>
+          <dd>
+            {{ snapshot.get('alarmtext') or '–' }}
+          </dd>
+          <dt>
+            Ort
+          </dt>
+          <dd>
+            {{ ort.get('adresse') or ort.get('bezeichnung') or '–' }}
+          </dd>
+          <dt>
+            Seed
+          </dt>
+          <dd>
+            {{ run.seed }}
+          </dd>
         </dl>
       </section>
-
       {% if run.art == 'gsl' and can_steuern %}
-      <section class="planspiel-regie__panel">
-        <h2>Simulierte Einheiten</h2>
+      <section class="ps-sidecard">
+        <div class="ps-box__head">
+          <h2 class="ps-box__title">
+            Simulierte Einheiten
+          </h2>
+        </div>
         {% if not einsatzrechte %}
         <p class="form-error">
-          Für Board, Disposition und Einheiten-Simulation braucht die Übungsleitung zusätzlich die Rolle
-          Einsatzleiter (oder Admin). Planspiel-Rechte allein reichen dafür nicht.
+          Für Board, Disposition und Einheiten-Simulation braucht die Übungsleitung zusätzlich die Rolle Einsatzleiter (oder Admin). Planspiel-Rechte allein reichen dafür nicht.
         </p>
         {% endif %}
         <p class="planspiel-hint">
-          Öffnet die normale Einheitenansicht als SIMULATION: Auftrag bestätigen, Anfahrt, vor Ort, Erkundung
-          abschließen, fertig melden – die GSL-Phasen laufen dabei wie im Echtbetrieb.
+          Öffnet die normale Einheitenansicht als SIMULATION: Auftrag bestätigen, Anfahrt, vor Ort, Erkundung abschließen, fertig melden – die GSL-Phasen laufen dabei wie im Echtbetrieb.
         </p>
         {% for einheit in einheiten %}
-        <div class="planspiel-regie__mitglied">
+        <div class="planspiel-regie__member">
           <span>{{ einheit.label }} <span class="planspiel-hint">· {{ einheit.status }}</span></span>
           {% if einsatzrechte and aktiv %}
           <a class="btn btn--secondary btn--sm" href="/einheit?sim={{ einheit.id }}" target="_blank" rel="noopener">Als Einheit bedienen</a>
           {% endif %}
         </div>
         {% else %}
-        <p class="planspiel-hint">Noch keine Einheiten in der Übungslage.</p>
+        <p class="planspiel-hint">
+          Noch keine Einheiten in der Übungslage.
+        </p>
         {% endfor %}
         {% if aktiv %}
-        <form class="planspiel-regie__form" method="post" action="/planspiele/{{ run.id }}/einheit">
-          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-          <input class="form-input" name="label" maxlength="60" required placeholder="z. B. Nachbarwehr LF">
-          <button class="btn btn--secondary" type="submit">Simulierte Einheit anlegen</button>
+        <form class="regie-form" method="post" action="/planspiele/{{ run.id }}/einheit">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><input class="form-input" name="label" maxlength="60" required placeholder="z. B. Nachbarwehr LF"><button class="btn btn--secondary btn--sm" type="submit">Simulierte Einheit anlegen</button>
         </form>
         {% endif %}
       </section>
       {% endif %}
-
-      <section class="planspiel-regie__panel">
-        <h2>Beobachtungen</h2>
+      <section class="ps-sidecard">
+        <div class="ps-box__head">
+          <h2 class="ps-box__title">
+            Beobachtungen
+          </h2>
+        </div>
         {% include "planspiel/_beobachtungen.html" %}
         {% if aktiv %}
-        <form class="planspiel-regie__form"
-              hx-post="/planspiele/{{ run.id }}/beobachtung"
-              hx-target="#beobachtungen-liste"
-              hx-swap="outerHTML"
-              hx-on::after-request="if (event.detail.successful) this.reset()">
+        <form class="regie-form" hx-post="/planspiele/{{ run.id }}/beobachtung" hx-target="#beobachtungen-liste" hx-swap="outerHTML" hx-on::after-request="if (event.detail.successful) this.reset()">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-          <textarea class="form-input" name="text" rows="3" required maxlength="2000"
-                    placeholder="Beobachtung"></textarea>
-          <div class="planspiel-regie__zeile">
-            <input class="form-input" name="kategorie" placeholder="Kategorie">
-            <input class="form-input" name="lernziel" placeholder="Lernziel">
+          <textarea class="form-input" name="text" rows="3" required maxlength="2000" placeholder="Beobachtung"></textarea>
+          <div class="regie-form__row">
+            <input class="form-input" name="kategorie" placeholder="Kategorie"><input class="form-input" name="lernziel" placeholder="Lernziel">
           </div>
           <select class="form-input" name="bewertung" aria-label="Bewertung">
-            <option value="">Ohne Bewertung</option>
+            <option value="">
+              Ohne Bewertung
+            </option>
             {% for n in range(1, 6) %}
-            <option value="{{ n }}">{{ n }} von 5</option>
+            <option value="{{ n }}">
+              {{ n }} von 5
+            </option>
             {% endfor %}
           </select>
-          <button class="btn btn--secondary" type="submit">Beobachtung speichern</button>
+          <button class="btn btn--secondary btn--sm" type="submit">Beobachtung speichern</button>
         </form>
         {% endif %}
       </section>
-
       {% if can_steuern %}
-      <section class="planspiel-regie__panel">
-        <h2>Mitglieder</h2>
+      <section class="ps-sidecard">
+        <div class="ps-box__head">
+          <h2 class="ps-box__title">
+            Mitglieder
+          </h2>
+        </div>
         {% for member, member_user in mitglieder %}
-        <div class="planspiel-regie__mitglied">
+        <div class="planspiel-regie__member">
           <span>{{ member_user.display_name or member_user.username }} · {{ member.rolle }}</span>
           {% if member.rolle != 'leiter' and aktiv %}
           <form method="post" action="/planspiele/{{ run.id }}/mitglied/{{ member.id }}/entfernen">
-            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-            <button class="btn btn--secondary btn--sm" type="submit">Entfernen</button>
+            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><button class="btn btn--secondary btn--sm" type="submit">Entfernen</button>
           </form>
           {% endif %}
         </div>
         {% endfor %}
         {% if aktiv %}
-        <form class="planspiel-regie__form" method="post" action="/planspiele/{{ run.id }}/mitglied">
+        <form class="regie-form" method="post" action="/planspiele/{{ run.id }}/mitglied">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-          <div class="planspiel-regie__zeile">
+          <div class="regie-form__row">
             <select class="form-input" name="user_id" aria-label="Benutzer">
               {% for org_user in org_users %}
-              <option value="{{ org_user.id }}">{{ org_user.display_name or org_user.username }}</option>
+              <option value="{{ org_user.id }}">
+                {{ org_user.display_name or org_user.username }}
+              </option>
               {% endfor %}
             </select>
             <select class="form-input" name="rolle" aria-label="Rolle">
-              <option value="regie">Regie</option>
-              <option value="beobachter">Beobachter</option>
+              <option value="regie">
+                Regie
+              </option>
+              <option value="beobachter">
+                Beobachter
+              </option>
             </select>
           </div>
-          <button class="btn btn--secondary" type="submit">Mitglied hinzufügen</button>
+          <button class="btn btn--secondary btn--sm" type="submit">Mitglied hinzufügen</button>
         </form>
         {% endif %}
       </section>

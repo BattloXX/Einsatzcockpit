@@ -1,0 +1,17 @@
+{% from "_tabnav.html" import tabnav %}
+{% set _ps_path = request.url.path %}
+{# Sichtbar wie require_role("uebungsleiter", "org_admin"): admin/org_admin/system_admin immer #}
+{% set _ps_user = user if user is defined and user else request.state.user %}
+{% set _ps_roles = _ps_user.role_codes if _ps_user else [] %}
+{% set _ps_can_admin = ('uebungsleiter' in _ps_roles or 'admin' in _ps_roles or 'org_admin' in _ps_roles or 'system_admin' in _ps_roles) %}
+{% set _ps_tabs = [
+  {'label': 'Planspiele', 'href': '/planspiele', 'active': _ps_path.startswith('/planspiele')}
+] %}
+{% if _ps_can_admin %}
+  {% set _ps_tabs = _ps_tabs + [
+    {'label': 'Szenarien', 'href': '/admin/settings/planspiele/szenarien', 'active': _ps_path.startswith('/admin/settings/planspiele/szenarien')},
+    {'label': 'Stichworte', 'href': '/admin/settings/planspiele/stichworte', 'active': _ps_path.startswith('/admin/settings/planspiele/stichworte')},
+    {'label': 'Einstellungen & Adresspool', 'href': '/admin/settings/planspiele', 'active': _ps_path == '/admin/settings/planspiele' or _ps_path.startswith('/admin/settings/planspiele/adresspool')}
+  ] %}
+{% endif %}
+{{ tabnav(_ps_tabs) }}

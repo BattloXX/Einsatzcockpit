@@ -3,8 +3,8 @@
     {% if row.bezeichnung %}{{ row.bezeichnung }}<br>{% endif %}
     {{ row.strasse }} {{ row.hausnr or '' }}{% if row.ort %}, {{ row.ort }}{% endif %}
   </td>
-  <td>{{ row.quelle }}</td>
-  <td>{{ row.qualitaet }}</td>
+  <td><span class="ps-badge ps-badge--gray">{{ row.quelle }}</span></td>
+  <td><span class="ps-badge {% if row.qualitaet == 'A' %}ps-badge--green{% elif row.qualitaet == 'B' %}ps-badge--blue{% else %}ps-badge--gray{% endif %}">{{ row.qualitaet }}</span></td>
   <td>{{ (row.ort_typen or [])|join(', ') }}</td>
   <td>
     {% for key, value in (row.merkmale or {}).items() %}

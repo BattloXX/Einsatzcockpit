@@ -1,111 +1,276 @@
 {% extends "base.html" %}
 {% import "planspiel/_labels.html" as L with context %}
-{% from "_page_header.html" import page_header %}
-{% block title %}Auswertung: {{ run.titel }}{% endblock %}
+{% block title %}
+Auswertung: {{ run.titel }}
+{% endblock %}
 {% block head_extra %}
+{% include "planspiel/_design.html" %}
 <style>
-  .planspiel-auswertung { max-width: 1180px; margin: 0 auto; padding: 1rem 1rem 3rem; }
-  .planspiel-auswertung__cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; }
-  .planspiel-auswertung__card, .planspiel-auswertung__section { margin-top: 1rem; padding: 1rem; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface-low); }
-  .planspiel-auswertung__card { margin-top: 0; }
-  .planspiel-auswertung__card strong { display: block; font-size: 1.5rem; }
-  .planspiel-auswertung__table-wrap { overflow-x: auto; }
-  .planspiel-auswertung__table { width: 100%; border-collapse: collapse; }
-  .planspiel-auswertung__table th, .planspiel-auswertung__table td { padding: .5rem; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
-  .planspiel-auswertung__section h2 { margin: 0 0 .6rem; font-size: 1.1rem; }
-  .planspiel-auswertung__section h3 { margin: 1rem 0 .4rem; font-size: .98rem; }
-  .planspiel-auswertung__meta { color: var(--text-muted); font-size: .86rem; }
-  .planspiel-auswertung__entry { padding: .75rem 0; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
-  .planspiel-auswertung__entry:last-child { border-bottom: 0; }
-  .planspiel-auswertung__actions { display: flex; flex-wrap: wrap; gap: .5rem; }
-  @media (max-width: 760px) {
-    .planspiel-auswertung { padding: .75rem .5rem 2rem; }
-    .planspiel-auswertung__cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .planspiel-auswertung__actions { flex-direction: column; }
+  .planspiel-auswertung__meta{
+    color:var(--text-muted);
+    font-size:.86rem;
+  }
+  .planspiel-auswertung__entry{
+    padding:.75rem 0;
+    border-bottom:1px solid var(--border);
+    overflow-wrap:anywhere;
+  }
+  .planspiel-auswertung__entry:last-child{
+    border-bottom:0;
+  }
+  .planspiel-auswertung__entry strong{
+    font-size:.9rem;
   }
 </style>
 {% endblock %}
 {% block content %}
-<main class="planspiel-auswertung">
-  {% call page_header("Auswertung: " ~ daten.kopf.titel, back_href="/planspiele/" ~ run.id, back_label="Regie",
-                      sub="Neutraler Bericht ohne Bewertung") %}
-    <div class="planspiel-auswertung__actions">
-      <a class="btn btn--primary" href="/planspiele/{{ run.id }}/auswertung.pdf">PDF</a>
+<main class="ps-page">
+  <header class="ps-header">
+    <div>
+      <a href="/planspiele/{{ run.id }}" class="btn btn--ghost btn--sm">&#8592; Regie</a>
+      <h1 style="margin-top:.65rem;">
+        Auswertung: {{ daten.kopf.titel }}
+      </h1>
+      <p class="ps-header__sub">
+        Neutraler Bericht ohne Bewertung
+      </p>
+    </div>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+      <a class="btn btn--primary btn--sm" href="/planspiele/{{ run.id }}/auswertung.pdf">PDF</a>
       {% if can_steuern %}
       <form method="post" action="/planspiele/{{ run.id }}/wiederholen">
-        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-        <button class="btn btn--secondary" type="submit">Wiederholen</button>
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><button class="btn btn--secondary btn--sm" type="submit">Wiederholen</button>
       </form>
       {% endif %}
     </div>
-  {% endcall %}
-  <section class="planspiel-auswertung__section">
-    <p><strong>{{ daten.kopf.szenario.code or '-' }}</strong> {{ daten.kopf.szenario.titel or '-' }} · Seed {{ daten.kopf.seed }} · Tempo {{ daten.kopf.tempo }}×</p>
-    <p class="planspiel-auswertung__meta">Start: {{ daten.kopf.gestartet_at|local_datetime }} · Ende: {{ daten.kopf.beendet_at|local_datetime if daten.kopf.beendet_at else 'laufend' }}</p>
+  </header>
+  <section class="ps-box">
+    <p>
+      <strong>{{ daten.kopf.szenario.code or '-' }}</strong> {{ daten.kopf.szenario.titel or '-' }} · Seed {{ daten.kopf.seed }} · Tempo {{ daten.kopf.tempo }}×
+    </p>
+    <p class="planspiel-auswertung__meta" style="margin-top:.4rem;">
+      Start: {{ daten.kopf.gestartet_at|local_datetime }} · Ende: {{ daten.kopf.beendet_at|local_datetime if daten.kopf.beendet_at else 'laufend' }}
+    </p>
   </section>
-  <section class="planspiel-auswertung__cards">
-    <div class="planspiel-auswertung__card"><strong>{{ '%.1f'|format(daten.kopf.dauer_real_min or 0) }}</strong>Minuten Echtzeit</div>
-    <div class="planspiel-auswertung__card"><strong>{{ '%.1f'|format(daten.kopf.dauer_uebung_min or 0) }}</strong>Minuten Übungszeit</div>
-    <div class="planspiel-auswertung__card"><strong>{{ daten.ereignisse|length }}</strong>Ereignisse</div>
-    {% if daten.gsl %}
-    <div class="planspiel-auswertung__card"><strong>{{ daten.gsl.stellen_gesamt }}</strong>Stellen</div>
-    {% else %}
-    <div class="planspiel-auswertung__card"><strong>{{ daten.einzel.aufgaben }}</strong>Aufgaben</div>
-    {% endif %}
+  <section class="ps-box" style="margin-top:1rem;">
+    <div class="ps-box__head">
+      <h2 class="ps-box__title">
+        Kennzahlen
+      </h2>
+    </div>
+    <div class="ps-metric-grid">
+      <div>
+        <div class="ps-metric__value">
+          {{ '%.1f'|format(daten.kopf.dauer_real_min or 0) }}
+        </div>
+        <div class="ps-metric__label">
+          Minuten Echtzeit
+        </div>
+      </div>
+      <div>
+        <div class="ps-metric__value">
+          {{ '%.1f'|format(daten.kopf.dauer_uebung_min or 0) }}
+        </div>
+        <div class="ps-metric__label">
+          Minuten Übungszeit
+        </div>
+      </div>
+      <div>
+        <div class="ps-metric__value">
+          {{ daten.ereignisse|length }}
+        </div>
+        <div class="ps-metric__label">
+          Ereignisse
+        </div>
+      </div>
+      {% if daten.gsl %}
+      <div>
+        <div class="ps-metric__value">
+          {{ daten.gsl.stellen_gesamt }}
+        </div>
+        <div class="ps-metric__label">
+          Stellen
+        </div>
+      </div>
+      {% else %}
+      <div>
+        <div class="ps-metric__value">
+          {{ daten.einzel.aufgaben }}
+        </div>
+        <div class="ps-metric__label">
+          Aufgaben
+        </div>
+      </div>
+      {% endif %}
+    </div>
   </section>
   {% if daten.gsl %}
-  <section class="planspiel-auswertung__section">
-    <h2>Stellen und Zeiten</h2>
-    <p>Überfällige Lagemeldungen: {{ daten.gsl.lagemeldungen_ueberfaellig }} · Doppelmeldungen: {{ daten.gsl.doppelmeldungen }} (davon erledigt: {{ daten.gsl.doppelmeldungen_erledigt }})</p>
-    <div class="planspiel-auswertung__table-wrap"><table class="planspiel-auswertung__table">
-      <thead><tr><th>Übergang</th><th>Anzahl</th><th>Median (Min.)</th><th>Mittelwert (Min.)</th></tr></thead>
-      <tbody>{% for row in daten.gsl.zeiten %}<tr><td>{{ row.bezeichnung }}</td><td>{{ row.anzahl }}</td><td>{{ row.median_min if row.median_min is not none else '-' }}</td><td>{{ row.mittel_min if row.mittel_min is not none else '-' }}</td></tr>{% endfor %}</tbody>
-    </table></div>
-    <h3>Verlauf je 10 Minuten Übungszeit</h3>
-    <div class="planspiel-auswertung__table-wrap"><table class="planspiel-auswertung__table"><thead><tr><th>Minute</th><th>Stellen bis dahin</th><th>Fertig gemeldet bis dahin</th></tr></thead><tbody>{% for row in daten.gsl.verlauf %}<tr><td>{{ (row.sim_s / 60)|int }}</td><td>{{ row.neu }}</td><td>{{ row.fertig }}</td></tr>{% endfor %}</tbody></table></div>
+  <section class="ps-box" style="margin-top:1rem;">
+    <div class="ps-box__head">
+      <h2 class="ps-box__title">
+        Stellen und Zeiten
+      </h2>
+    </div>
+    <p>
+      Überfällige Lagemeldungen: {{ daten.gsl.lagemeldungen_ueberfaellig }} · Doppelmeldungen: {{ daten.gsl.doppelmeldungen }} (davon erledigt: {{ daten.gsl.doppelmeldungen_erledigt }})
+    </p>
+    <div class="ps-card" style="margin-top:.75rem;">
+      <div class="ps-table-wrap--scroll">
+        <table class="ps-table">
+          <thead>
+            <tr>
+              <th>
+                Übergang
+              </th>
+              <th>
+                Anzahl
+              </th>
+              <th>
+                Median (Min.)
+              </th>
+              <th>
+                Mittelwert (Min.)
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in daten.gsl.zeiten %}
+            <tr>
+              <td>
+                {{ row.bezeichnung }}
+              </td>
+              <td>
+                {{ row.anzahl }}
+              </td>
+              <td>
+                {{ row.median_min if row.median_min is not none else '-' }}
+              </td>
+              <td>
+                {{ row.mittel_min if row.mittel_min is not none else '-' }}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <h3 style="margin:1rem 0 .4rem;font-size:.98rem;">
+      Verlauf je 10 Minuten Übungszeit
+    </h3>
+    <div class="ps-card">
+      <div class="ps-table-wrap--scroll">
+        <table class="ps-table">
+          <thead>
+            <tr>
+              <th>
+                Minute
+              </th>
+              <th>
+                Stellen bis dahin
+              </th>
+              <th>
+                Fertig gemeldet bis dahin
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in daten.gsl.verlauf %}
+            <tr>
+              <td>
+                {{ (row.sim_s / 60)|int }}
+              </td>
+              <td>
+                {{ row.neu }}
+              </td>
+              <td>
+                {{ row.fertig }}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
   </section>
   {% else %}
-  <section class="planspiel-auswertung__section"><h2>Einzeleinsatz</h2><p>Meldungen: {{ daten.einzel.meldungen }} (erledigt: {{ daten.einzel.meldungen_erledigt }}) · Aufgaben: {{ daten.einzel.aufgaben }} (erledigt: {{ daten.einzel.aufgaben_erledigt }})</p></section>
+  <section class="ps-box" style="margin-top:1rem;">
+    <div class="ps-box__head">
+      <h2 class="ps-box__title">
+        Einzeleinsatz
+      </h2>
+    </div>
+    <p>
+      Meldungen: {{ daten.einzel.meldungen }} (erledigt: {{ daten.einzel.meldungen_erledigt }}) · Aufgaben: {{ daten.einzel.aufgaben }} (erledigt: {{ daten.einzel.aufgaben_erledigt }})
+    </p>
+  </section>
   {% endif %}
-  <section class="planspiel-auswertung__section">
-    <h2>Ereignis-Timeline</h2>
+  <section class="ps-card" style="margin-top:1rem;padding:1.1rem 1.2rem;">
+    <div class="ps-box__head">
+      <h2 class="ps-box__title">
+        Ereignis-Timeline
+      </h2>
+    </div>
     {% set verworfen = daten.ereignis_status.get('abgebrochen', 0) %}
-    {% if verworfen %}<p class="planspiel-auswertung__meta">{{ verworfen }} geplante Ereignisse wurden beim Beenden verworfen und sind nicht aufgeführt.</p>{% endif %}
+    {% if verworfen %}
+    <p class="planspiel-auswertung__meta">
+      {{ verworfen }} geplante Ereignisse wurden beim Beenden verworfen und sind nicht aufgeführt.
+    </p>
+    {% endif %}
     {% for event in daten.ereignisse if event.status != 'abgebrochen' %}
     <div class="planspiel-auswertung__entry">
       <strong>{{ L.EREIGNIS_TYP.get(event.typ, event.typ) }}</strong> · {{ L.EREIGNIS_STATUS.get(event.status, event.status) }}
       <div class="planspiel-auswertung__meta">
-        {{ L.TRIGGER.get(event.trigger, event.trigger) }} · {{ event.quelle }} · {{ event.ziel or '-' }}
-        · Übungszeit {{ ((event.ausgefuehrt_sim_s or event.faellig_sim_s or 0) / 60)|round(1) }} Min.
+        {{ L.TRIGGER.get(event.trigger, event.trigger) }} · {{ event.quelle }} · {{ event.ziel or '-' }} · Übungszeit {{ ((event.ausgefuehrt_sim_s or event.faellig_sim_s or 0) / 60)|round(1) }} Min.
       </div>
-      <div>{{ event.text or '-' }}</div>
+      <div>
+        {{ event.text or '-' }}
+      </div>
     </div>
     {% else %}
-    <p>Keine Ereignisse.</p>
+    <p>
+      Keine Ereignisse.
+    </p>
     {% endfor %}
   </section>
-
-  <section class="planspiel-auswertung__section">
-    <h2>Beobachtungen</h2>
+  <section class="ps-card" style="margin-top:1rem;padding:1.1rem 1.2rem;">
+    <div class="ps-box__head">
+      <h2 class="ps-box__title">
+        Beobachtungen
+      </h2>
+    </div>
     {% for row in daten.beobachtungen %}
     <div class="planspiel-auswertung__entry">
       <strong>{{ row.autor }}</strong> · {{ ((row.sim_s or 0) / 60)|round(1) }} Min.
-      <div>{{ row.text }}</div>
+      <div>
+        {{ row.text }}
+      </div>
     </div>
     {% else %}
-    <p>Keine Beobachtungen.</p>
+    <p>
+      Keine Beobachtungen.
+    </p>
     {% endfor %}
   </section>
-
-  <section class="planspiel-auswertung__section">
-    <h2>Regie-Aktionen</h2>
+  <section class="ps-card" style="margin-top:1rem;padding:1.1rem 1.2rem;">
+    <div class="ps-box__head">
+      <h2 class="ps-box__title">
+        Regie-Aktionen
+      </h2>
+    </div>
     {% for row in daten.regie_aktionen %}
     <div class="planspiel-auswertung__entry">
       <strong>{{ row.bezeichnung }}</strong> · {{ row.benutzer }}
-      <div class="planspiel-auswertung__meta">{{ row.zeit|local_datetime }}{% if row.details %} · {{ row.details }}{% endif %}</div>
+      <div class="planspiel-auswertung__meta">
+        {{ row.zeit|local_datetime }}
+        {% if row.details %}
+        · {{ row.details }}
+        {% endif %}
+      </div>
     </div>
     {% else %}
-    <p>Keine Regie-Aktionen.</p>
+    <p>
+      Keine Regie-Aktionen.
+    </p>
     {% endfor %}
   </section>
 </main>

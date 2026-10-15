@@ -1,17 +1,16 @@
 {% extends "base.html" %}
-{% from "_page_header.html" import page_header %}
 {% block title %}Planspiele{% endblock %}
 {% block head_extra %}
-<style>
-  .planspiel-page{max-width:1080px;margin:0 auto;padding:1rem 1rem 3rem}.planspiel-banner{margin:0 0 1rem;padding:.9rem 1rem;border:1px solid #b45309;border-radius:var(--radius-lg);background:rgba(180,83,9,.14);color:var(--on-surface);font-weight:700}.planspiel-section{margin-top:1.25rem}.planspiel-section h2{font-size:1.05rem;margin:0 0 .6rem}.planspiel-list{border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;background:var(--surface-low)}.planspiel-row{display:flex;justify-content:space-between;gap:1rem;padding:.85rem 1rem;border-bottom:1px solid var(--border)}.planspiel-row:last-child{border-bottom:0}.planspiel-row__main{display:grid;gap:.2rem}.planspiel-row__main small{color:var(--text-muted)}.planspiel-row__meta{display:flex;flex-direction:column;align-items:flex-end;gap:.35rem;white-space:nowrap}.planspiel-pill{padding:.2rem .55rem;border-radius:999px;background:var(--surface-high);font-size:.78rem;font-weight:700}.planspiel-empty{margin:0;padding:1rem;color:var(--text-muted);background:var(--surface-low);border:1px solid var(--border);border-radius:var(--radius-lg)}@media(max-width:760px){.planspiel-page{padding:.75rem .75rem 2rem}.planspiel-row{align-items:flex-start;flex-direction:column;gap:.55rem}.planspiel-row__meta{align-items:flex-start;flex-direction:row;flex-wrap:wrap;white-space:normal}}
-</style>
+{% include "planspiel/_design.html" %}
 {% endblock %}
 {% block content %}
-<section class="planspiel-page">
-  {% call page_header("Planspiele", back_href="/", back_label="Konsole") %}
-    {% if can_leiten %}<a class="btn btn--primary" href="/planspiele/neu">+ Neues Planspiel</a> <a class="btn btn--secondary" href="/admin/settings/planspiele/szenarien">Szenariokatalog</a> <a class="btn btn--secondary" href="/admin/settings/planspiele">Einstellungen &amp; Adresspool</a>{% endif %}
-  {% endcall %}
-  <div class="planspiel-banner">Alle hier erzeugten Einsätze und Lagen sind ÜBUNGEN. Externe Alarmierung (SMS, Push, Teams, Mail, Druck) ist gesperrt.</div>
+<section class="ps-page">
+  <div class="ps-header">
+    <h1>Planspiele</h1>
+    {% if can_leiten %}<a class="btn btn--primary btn--sm" href="/planspiele/neu">+ Neues Planspiel</a>{% endif %}
+  </div>
+  {% include "planspiel/_tabs.html" %}
+  <div class="ps-box ps-box--warn" style="margin:0 0 1rem;">Alle hier erzeugten Einsätze und Lagen sind ÜBUNGEN. Externe Alarmierung (SMS, Push, Teams, Mail, Druck) ist gesperrt.</div>
   <div id="planspiel-liste">{% include "planspiel/_liste.html" %}</div>
 </section>
 {% endblock %}

@@ -2,12 +2,18 @@
 {% from "admin/_breadcrumb.html" import breadcrumb %}
 {% block title %}Neues Szenario{% endblock %}
 {% block head_extra %}
+  {% include "planspiel/_design.html" %}
   {% include "planspiel/admin/_styles.html" %}
 {% endblock %}
 {% block content %}
-<section class="planspiel-admin" x-data="{ tab: 'grund' }">
+<section class="ps-page ps-page--narrow" x-data="{ tab: 'grund' }">
   {{ breadcrumb([{"label": "Einstellungen", "href": "/admin/settings"}, {"label": "Planspiele", "href": "/planspiele"}, {"label": "Szenariokatalog", "href": "/admin/settings/planspiele/szenarien"}, {"label": "Neu", "href": none}]) }}
-  <h1>Neues Szenario</h1>
+  <div class="ps-header"><div><a href="/admin/settings/planspiele/szenarien" class="btn btn--ghost btn--sm">← Katalog</a><div class="planspiel-title"><h1>Neues Szenario</h1><span class="ps-status ps-status--gray">Entwurf</span></div></div></div>
+  <nav class="subtabnav" aria-label="Szenario-Bereiche">
+    {% for key, label in [('grund', 'Grunddaten'), ('alarm', 'Alarmierung'), ('ort', 'Standortregeln'), ('meldungen', 'Folgemeldungen'), ('lernziele', 'Lernziele'), ('zufall', 'Varianten & Zufall')] %}
+    <button class="subtabnav__item" type="button" @click="tab = '{{ key }}'" :class="tab === '{{ key }}' && 'subtabnav__item--active'">{{ label }}</button>
+    {% endfor %}
+  </nav>
   {% if fehler %}
   <p class="form-error">{{ fehler }}</p>
   {% endif %}

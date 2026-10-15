@@ -1,27 +1,42 @@
-{% set has_runs = runs.entwuerfe or runs.laufend or runs.beendet %}
-{% if has_runs %}
-  {% for key, (titel, _) in gruppen.items() %}
-  <section class="planspiel-section">
-    <h2>{{ titel }}</h2>
-    {% if runs[key] %}
-    <div class="planspiel-list">
-      {% for run in runs[key] %}
-      <div class="planspiel-row">
-        <div class="planspiel-row__main">
-          <strong><a href="/planspiele/{{ run.id }}">{{ run.titel }}</a></strong>
-          <small>{{ run.art }}{% if run.gestartet_at %} · gestartet {{ run.gestartet_at|local_datetime }}{% endif %}</small>
-          <small>Leitung: {{ leiter_namen.get(run.leiter_user_id, 'Nicht zugeteilt') }}</small>
-        </div>
-        <div class="planspiel-row__meta">
-          <span class="planspiel-pill">{{ status_labels.get(run.status, run.status) }}</span>
-          {% if run.status in ('beendet', 'abgebrochen') %}
-          <a class="btn btn--secondary btn--sm" href="/planspiele/{{ run.id }}/auswertung">Auswertung</a>
-          {% endif %}
-        </div>
+{% for key, (titel, _) in gruppen.items() %}
+{% set badge = 'green' if key == 'beendet' else ('red' if key == 'laufend' else 'gray') %}
+<section style="margin-top:1.25rem;">
+  <h2 style="font-size:1.05rem;margin:0 0 .6rem;">{{ titel }}</h2>
+  <div class="ps-card ps-table-wrap" style="overflow-x:auto;">
+    <table class="ps-table">
+      <thead><tr><th>Titel</th><th>Art</th><th>Status</th><th>Gestartet</th><th>Leitung</th><th style="text-align:right;">Aktion</th></tr></thead>
+      <tbody>
+        {% for run in runs[key] %}
+        {% set run_badge = 'amber' if run.status in ('pausiert', 'generierung_gestoppt') else ('red' if run.status == 'laeuft' else ('green' if run.status in ('beendet', 'abgebrochen') else 'gray')) %}
+        <tr>
+          <td><a href="/planspiele/{{ run.id }}" style="color:var(--red-light);font-weight:700;text-decoration:none;">{{ run.titel }}</a></td>
+          <td>{{ run.art }}</td>
+          <td><span class="ps-badge ps-badge--{{ run_badge }}">{{ status_labels.get(run.status, run.status) }}</span></td>
+          <td style="font-family:'JetBrains Mono',monospace;">{{ run.gestartet_at|local_datetime if run.gestartet_at else '—' }}</td>
+          <td>{{ leiter_namen.get(run.leiter_user_id, 'Nicht zugeteilt') }}</td>
+          <td style="text-align:right;"><a class="btn btn--ghost btn--sm" href="/planspiele/{{ run.id }}">Details</a>{% if run.status in ('beendet', 'abgebrochen') %} <a class="btn btn--secondary btn--sm" href="/planspiele/{{ run.id }}/auswertung">Auswertung</a>{% endif %}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:2rem;">Keine Einträge.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="ps-mobile-list">
+    {% for run in runs[key] %}
+    {% set run_badge = 'amber' if run.status in ('pausiert', 'generierung_gestoppt') else ('red' if run.status == 'laeuft' else ('green' if run.status in ('beendet', 'abgebrochen') else 'gray')) %}
+    <div class="ps-mcard" style="--ps-accent:{% if run_badge == 'red' %}var(--red){% elif run_badge == 'amber' %}var(--yellow){% elif run_badge == 'green' %}#0f766e{% else %}var(--text-muted){% endif %};">
+      <div class="ps-mcard__top"><span class="ps-mcard__title">{{ run.titel }}</span><span class="ps-badge ps-badge--{{ run_badge }}">{{ status_labels.get(run.status, run.status) }}</span></div>
+      <div class="ps-mcard__grid">
+        <div><div class="ps-mcard__label">Art</div><div class="ps-mcard__value">{{ run.art }}</div></div>
+        <div><div class="ps-mcard__label">Gestartet</div><div class="ps-mcard__value">{{ run.gestartet_at|local_datetime if run.gestartet_at else '—' }}</div></div>
+        <div><div class="ps-mcard__label">Leitung</div><div class="ps-mcard__value">{{ leiter_namen.get(run.leiter_user_id, 'Nicht zugeteilt') }}</div></div>
       </div>
-      {% endfor %}
+      <div class="ps-mcard__footer"><a class="btn btn--ghost btn--sm" href="/planspiele/{{ run.id }}">Details</a>{% if run.status in ('beendet', 'abgebrochen') %}<a class="btn btn--secondary btn--sm" href="/planspiele/{{ run.id }}/auswertung">Auswertung</a>{% endif %}</div>
     </div>
-    {% else %}<p class="planspiel-empty">Keine Einträge.</p>{% endif %}
-  </section>
-  {% endfor %}
-{% else %}<p class="planspiel-empty">Noch keine Planspiele angelegt.</p>{% endif %}
+    {% else %}
+    <p class="ps-empty">Keine Einträge.</p>
+    {% endfor %}
+  </div>
+</section>
+{% endfor %}
