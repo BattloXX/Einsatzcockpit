@@ -505,3 +505,27 @@ Phase A (Basis & Safety) als eigener Codex-Auftrag; Start erst auf ausdrücklich
 - Fallback: Ist der Trigger nach `konfig.reaktiv_fallback_s` (Standard 480 s Übungszeit) nicht eingetreten, löst das Ereignis trotzdem aus. Die Regie kann jederzeit sofort auslösen.
 - Folgemeldungen im Einzeleinsatz über `incident_service.add_message` + `broadcast_message_created` und zusätzlich IncidentLog; `sichtbarkeit=regie` erscheint nur in der Regie.
 - Ein Systemadministrator ohne `?org=` hat keinen Modulkontext (wie bei allen Modulen). Für Tests einen Org-Admin (`admin`) verwenden.
+
+### Phase D – Ereignis-Engine & Regie (Branch `feat/planspiel-d-engine`, 2026-10-15)
+- **D1** `planspiel_engine`:
+  - Übungsuhr (Tempo, Pause).
+  - Steuerung: Pause/Fortsetzen, Folgemeldungen an/aus, Beenden mit Abbruch offener Ereignisse.
+  - Regie-Aktionen mit `client_uuid`-Idempotenz: jetzt auslösen, überspringen, wiederholen, freie Meldung, Stichwort ändern.
+  - Reaktive Trigger am Einzeleinsatz mit Rückfallzeit.
+  - Ereignis-Claim per bedingtem UPDATE, Ausführung mit Recheck der Steuerversion, Fehlerzähler (3 Versuche).
+  - Ausführung als Einsatz-Meldung (`add_message`) plus IncidentLog.
+- **D2** `planspiel_loop`:
+  - Leader-Loop (2 s), nur Orgs mit aktivem Modul.
+  - Run-Lease 30 s; Übernahme nach Ablauf, z. B. nach einem Neustart.
+  - Tests: zwei Worker, parallele Ticks ohne Lease (genau eine Meldung), keine späten Jobs nach Beenden.
+- **D3** Regie-Cockpit unter `/planspiele/{id}`: Uhr, Steuerleiste, Ereignisliste mit Auto-Refresh und Worker-Status, freie Meldung mit Sofort-Ausführung, Stichwortwechsel, Regie-Panel, Beobachtungen, Mitglieder.
+- **Browser-Durchlauf gegen MariaDB mit laufendem Worker:**
+  - Zeitgesteuerte Meldungen erscheinen auf dem Board des Übungseinsatzes.
+  - Nach Ausfall des Workers werden versäumte Meldungen als „verpasst (Ausfall)“ übersprungen, statt alle auf einmal nachzukommen.
+  - Pause hält die Uhr an; Beenden bricht offene Ereignisse ab.
+
+**Erkenntnis:** `FLOAT`-Spalten sind unter MariaDB einfach genau. Werte, die sofort fällig sein sollen, werden auf ganze Sekunden abgerundet, sonst gelten sie wegen Rundung noch nicht als fällig. Gilt auch für Phase E (`naechste_gen_sim_s`).
+
+**Hinweise für Phase E:**
+- Der Ausführer-Dispatch `_AUSFUEHRER` in der Engine bekommt die Zieltypen `site` (Funkjournal/Site-Log) und `lage` (Lagejournal bzw. Cross-Marker).
+- Der Generator hängt sich in `tick()` ein (gen_aktiv, `naechste_gen_sim_s`, Unique `(run_id, seq)` auf `planspiel_ziel`).
