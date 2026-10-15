@@ -72,6 +72,7 @@ def setze_site_phase(
     write_audit(
         db,
         "major_incident.site.phase_changed",
+        org_id=site.org_id,
         user_id=user_id,
         payload={
             "lage_id": site.major_incident_id,

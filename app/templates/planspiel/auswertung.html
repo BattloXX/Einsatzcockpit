@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% import "planspiel/_labels.html" as L with context %}
+{% from "_page_header.html" import page_header %}
+{% block title %}Auswertung: {{ run.titel }}{% endblock %}
+{% block head_extra %}
+<style>
+  .planspiel-auswertung { max-width: 1180px; margin: 0 auto; padding: 1rem 1rem 3rem; }
+  .planspiel-auswertung__cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; }
+  .planspiel-auswertung__card, .planspiel-auswertung__section { margin-top: 1rem; padding: 1rem; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface-low); }
+  .planspiel-auswertung__card { margin-top: 0; }
+  .planspiel-auswertung__card strong { display: block; font-size: 1.5rem; }
+  .planspiel-auswertung__table-wrap { overflow-x: auto; }
+  .planspiel-auswertung__table { width: 100%; border-collapse: collapse; }
+  .planspiel-auswertung__table th, .planspiel-auswertung__table td { padding: .5rem; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+  .planspiel-auswertung__meta { color: var(--text-muted); font-size: .86rem; }
+  .planspiel-auswertung__entry { padding: .75rem 0; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+  .planspiel-auswertung__entry:last-child { border-bottom: 0; }
+  .planspiel-auswertung__actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+  @media (max-width: 760px) {
+    .planspiel-auswertung { padding: .75rem .5rem 2rem; }
+    .planspiel-auswertung__cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .planspiel-auswertung__actions { flex-direction: column; }
+  }
+</style>
+{% endblock %}
+{% block content %}
+<main class="planspiel-auswertung">
+  {% call page_header("Auswertung: " ~ daten.kopf.titel, back_href="/planspiele/" ~ run.id, back_label="Regie",
+                      sub="Neutraler Bericht ohne Bewertung") %}
+    <div class="planspiel-auswertung__actions">
+      <a class="btn btn--primary" href="/planspiele/{{ run.id }}/auswertung.pdf">PDF</a>
+      {% if can_steuern %}
+      <form method="post" action="/planspiele/{{ run.id }}/wiederholen">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <button class="btn" type="submit">Wiederholen</button>
+      </form>
+      {% endif %}
+    </div>
+  {% endcall %}
+  <section class="planspiel-auswertung__section">
+    <p><strong>{{ daten.kopf.szenario.code or '-' }}</strong> {{ daten.kopf.szenario.titel or '-' }} · Seed {{ daten.kopf.seed }} · Tempo {{ daten.kopf.tempo }}×</p>
+    <p class="planspiel-auswertung__meta">Start: {{ daten.kopf.gestartet_at|local_datetime }} · Ende: {{ daten.kopf.beendet_at|local_datetime if daten.kopf.beendet_at else 'laufend' }}</p>
+  </section>
+  <section class="planspiel-auswertung__cards">
+    <div class="planspiel-auswertung__card"><strong>{{ '%.1f'|format(daten.kopf.dauer_real_min or 0) }}</strong>Minuten Echtzeit</div>
+    <div class="planspiel-auswertung__card"><strong>{{ '%.1f'|format(daten.kopf.dauer_uebung_min or 0) }}</strong>Minuten Übungszeit</div>
+    <div class="planspiel-auswertung__card"><strong>{{ daten.ereignisse|length }}</strong>Ereignisse</div>
+    {% if daten.gsl %}
+    <div class="planspiel-auswertung__card"><strong>{{ daten.gsl.stellen_gesamt }}</strong>Stellen</div>
+    {% else %}
+    <div class="planspiel-auswertung__card"><strong>{{ daten.einzel.aufgaben }}</strong>Aufgaben</div>
+    {% endif %}
+  </section>
+  {% if daten.gsl %}
+  <section class="planspiel-auswertung__section">
+    <h2>Stellen und Zeiten</h2>
+    <p>Überfällige Lagemeldungen: {{ daten.gsl.lagemeldungen_ueberfaellig }} · Doppelmeldungen: {{ daten.gsl.doppelmeldungen }} (davon erledigt: {{ daten.gsl.doppelmeldungen_erledigt }})</p>
+    <div class="planspiel-auswertung__table-wrap"><table class="planspiel-auswertung__table">
+      <thead><tr><th>Übergang</th><th>Anzahl</th><th>Median (Min.)</th><th>Mittelwert (Min.)</th></tr></thead>
+      <tbody>{% for row in daten.gsl.zeiten %}<tr><td>{{ row.bezeichnung }}</td><td>{{ row.anzahl }}</td><td>{{ row.median_min if row.median_min is not none else '-' }}</td><td>{{ row.mittel_min if row.mittel_min is not none else '-' }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+    <h3>Verlauf je 10 Minuten Übungszeit</h3>
+    <div class="planspiel-auswertung__table-wrap"><table class="planspiel-auswertung__table"><thead><tr><th>Minute</th><th>Stellen bis dahin</th><th>Fertig gemeldet bis dahin</th></tr></thead><tbody>{% for row in daten.gsl.verlauf %}<tr><td>{{ (row.sim_s / 60)|int }}</td><td>{{ row.neu }}</td><td>{{ row.fertig }}</td></tr>{% endfor %}</tbody></table></div>
+  </section>
+  {% else %}
+  <section class="planspiel-auswertung__section"><h2>Einzeleinsatz</h2><p>Meldungen: {{ daten.einzel.meldungen }} (erledigt: {{ daten.einzel.meldungen_erledigt }}) · Aufgaben: {{ daten.einzel.aufgaben }} (erledigt: {{ daten.einzel.aufgaben_erledigt }})</p></section>
+  {% endif %}
+  <section class="planspiel-auswertung__section">
+    <h2>Ereignis-Timeline</h2>
+    {% for event in daten.ereignisse %}
+    <div class="planspiel-auswertung__entry">
+      <strong>{{ L.EREIGNIS_TYP.get(event.typ, event.typ) }}</strong> · {{ L.EREIGNIS_STATUS.get(event.status, event.status) }}
+      <div class="planspiel-auswertung__meta">
+        {{ L.TRIGGER.get(event.trigger, event.trigger) }} · {{ event.quelle }} · {{ event.ziel or '-' }}
+        · Übungszeit {{ ((event.ausgefuehrt_sim_s or event.faellig_sim_s or 0) / 60)|round(1) }} Min.
+      </div>
+      <div>{{ event.text or '-' }}</div>
+    </div>
+    {% else %}
+    <p>Keine Ereignisse.</p>
+    {% endfor %}
+  </section>
+
+  <section class="planspiel-auswertung__section">
+    <h2>Beobachtungen</h2>
+    {% for row in daten.beobachtungen %}
+    <div class="planspiel-auswertung__entry">
+      <strong>{{ row.autor }}</strong> · {{ ((row.sim_s or 0) / 60)|round(1) }} Min.
+      <div>{{ row.text }}</div>
+    </div>
+    {% else %}
+    <p>Keine Beobachtungen.</p>
+    {% endfor %}
+  </section>
+
+  <section class="planspiel-auswertung__section">
+    <h2>Regie-Aktionen</h2>
+    {% for row in daten.regie_aktionen %}
+    <div class="planspiel-auswertung__entry">
+      <strong>{{ row.bezeichnung }}</strong> · {{ row.benutzer }}
+      <div class="planspiel-auswertung__meta">{{ row.zeit|local_datetime }}{% if row.details %} · {{ row.details }}{% endif %}</div>
+    </div>
+    {% else %}
+    <p>Keine Regie-Aktionen.</p>
+    {% endfor %}
+  </section>
+</main>
+{% endblock %}

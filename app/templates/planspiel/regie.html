@@ -212,6 +212,7 @@
     {% if run.lage_id %}
     <a class="btn btn--primary" href="/lage/{{ run.lage_id }}" target="_blank" rel="noopener">Zum GSL-Board</a>
     {% endif %}
+    <a class="btn" href="/planspiele/{{ run.id }}/auswertung">Auswertung</a>
   {% endcall %}
 
   {% if fehler %}

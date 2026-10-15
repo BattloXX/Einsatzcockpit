@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+{% import "planspiel/_labels.html" as L %}
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<style>
+@page { size: A4; margin: 13mm; }
+body { font-family: Arial, sans-serif; color: #20242b; font-size: 10pt; }
+header { background: #b91c1c; color: white; padding: 12pt; }
+h1 { margin: 0 0 4pt; } h2 { color: #b91c1c; margin-top: 16pt; }
+.notice { font-weight: bold; letter-spacing: .08em; }
+.kpis { display: table; width: 100%; margin: 12pt 0; table-layout: fixed; }
+.kpi { display: table-cell; border: 1px solid #ddd; padding: 8pt; text-align: center; }
+.value { font-size: 18pt; font-weight: bold; }
+table { width: 100%; border-collapse: collapse; }
+th { background: #333; color: white; text-align: left; padding: 5pt; }
+td { padding: 5pt; border-bottom: 1px solid #ddd; vertical-align: top; }
+</style>
+</head>
+<body>
+<header>
+  <div class="notice">ÜBUNG / Planspiel</div>
+  <h1>{{ daten.kopf.titel }}</h1>
+  <div>{{ org.name }} · Szenario {{ daten.kopf.szenario.code or '-' }} {{ daten.kopf.szenario.titel or '' }}</div>
+</header>
+<p>Start: {{ format_local_datetime(daten.kopf.gestartet_at, org) }} · Ende: {{ format_local_datetime(daten.kopf.beendet_at, org) or 'laufend' }}</p>
+<div class="kpis">
+  <div class="kpi"><div class="value">{{ '%.1f'|format(daten.kopf.dauer_real_min or 0) }}</div>Min. Echtzeit</div>
+  <div class="kpi"><div class="value">{{ '%.1f'|format(daten.kopf.dauer_uebung_min or 0) }}</div>Min. Übungszeit</div>
+  <div class="kpi"><div class="value">{{ daten.ereignisse|length }}</div>Ereignisse</div>
+  {% if daten.gsl %}<div class="kpi"><div class="value">{{ daten.gsl.stellen_gesamt }}</div>Stellen</div>{% endif %}
+</div>
+{% if daten.gsl %}
+<h2>Zeiten</h2>
+<table><thead><tr><th>Übergang</th><th>Anzahl</th><th>Median</th><th>Mittelwert</th></tr></thead><tbody>
+{% for row in daten.gsl.zeiten %}<tr><td>{{ row.bezeichnung }}</td><td>{{ row.anzahl }}</td><td>{{ row.median_min if row.median_min is not none else '-' }}</td><td>{{ row.mittel_min if row.mittel_min is not none else '-' }}</td></tr>{% endfor %}
+</tbody></table>
+{% else %}
+<h2>Einzeleinsatz</h2>
+<p>Meldungen: {{ daten.einzel.meldungen }} (erledigt {{ daten.einzel.meldungen_erledigt }}) · Aufgaben: {{ daten.einzel.aufgaben }} (erledigt {{ daten.einzel.aufgaben_erledigt }})</p>
+{% endif %}
+<h2>Ereignisse</h2>
+<table><thead><tr><th>Typ</th><th>Status</th><th>Übungszeit</th><th>Text</th></tr></thead><tbody>
+{% for event in daten.ereignisse %}<tr><td>{{ L.EREIGNIS_TYP.get(event.typ, event.typ) }}</td><td>{{ L.EREIGNIS_STATUS.get(event.status, event.status) }}</td><td>{{ ((event.ausgefuehrt_sim_s or event.faellig_sim_s or 0) / 60)|round(1) }} Min.</td><td>{{ event.text or '-' }}</td></tr>{% endfor %}
+</tbody></table>
+<h2>Beobachtungen</h2>
+{% if daten.beobachtungen %}
+<table><thead><tr><th>Übungszeit</th><th>Autor</th><th>Beobachtung</th></tr></thead><tbody>
+{% for row in daten.beobachtungen %}<tr><td>{{ ((row.sim_s or 0) / 60)|round(1) }} Min.</td><td>{{ row.autor }}</td><td>{{ row.text }}</td></tr>{% endfor %}
+</tbody></table>
+{% else %}<p>Keine Beobachtungen.</p>{% endif %}
+<h2>Regie-Aktionen</h2>
+{% if daten.regie_aktionen %}
+<table><thead><tr><th>Zeit</th><th>Aktion</th><th>Benutzer</th><th>Details</th></tr></thead><tbody>
+{% for row in daten.regie_aktionen %}<tr><td>{{ format_local_datetime(row.zeit, org) }}</td><td>{{ row.bezeichnung }}</td><td>{{ row.benutzer }}</td><td>{{ row.details or '-' }}</td></tr>{% endfor %}
+</tbody></table>
+{% else %}<p>Keine Regie-Aktionen.</p>{% endif %}
+</body>
+</html>

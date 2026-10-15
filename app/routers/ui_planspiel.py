@@ -1,11 +1,12 @@
 """Uebersicht der Planspiel-Laeufe."""
 
 import asyncio
+from copy import deepcopy
 from datetime import UTC, datetime
 from typing import Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session
 from starlette.datastructures import FormData
 
@@ -14,7 +15,7 @@ from app.core.permissions import PLANSPIEL_LEITER_ROLES, PLANSPIEL_LESE_ROLLEN, 
 from app.core.templating import templates
 from app.db import SessionLocal, get_db
 from app.models.major_incident import IncidentSite, LageEinheit, MajorIncident
-from app.models.master import AlarmType
+from app.models.master import AlarmType, FireDept
 from app.models.objekt import OBJEKT_STATUS_FREIGEGEBEN, Objekt
 from app.models.planspiel import (
     PLANSPIEL_STATUS_LABELS,
@@ -27,6 +28,7 @@ from app.models.planspiel import (
 )
 from app.models.user import User
 from app.services.broadcast import broadcast_org
+from app.services.planspiel_auswertung_service import auswertung
 from app.services.planspiel_engine import (
     beenden,
     ereignis_jetzt,
@@ -370,6 +372,70 @@ def detail(
         "ereignisse": events,
         "can_leiten": has_role(user, *PLANSPIEL_LEITER_ROLES),
     })
+
+
+@router.get("/{run_id:int}/auswertung", response_class=HTMLResponse)
+def auswertung_seite(
+    run_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*PLANSPIEL_LESE_ROLLEN)),
+    _guard: None = Depends(require_planspiel_enabled),
+):
+    run = _run(db, user, run_id)
+    if run.gestartet_at is None:
+        raise HTTPException(status_code=404, detail="Nicht gefunden")
+    return templates.TemplateResponse(request, "planspiel/auswertung.html", {
+        "user": user, "run": run, "daten": auswertung(db, run),
+        "can_steuern": _darf_steuern(db, user, run),
+    })
+
+
+@router.get("/{run_id:int}/auswertung.pdf")
+def auswertung_pdf(
+    run_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*PLANSPIEL_LESE_ROLLEN)),
+    _guard: None = Depends(require_planspiel_enabled),
+):
+    run = _run(db, user, run_id)
+    if run.gestartet_at is None:
+        raise HTTPException(status_code=404, detail="Nicht gefunden")
+    org = db.query(FireDept).filter(FireDept.id == run.org_id).one()
+    from app.services.pdf_service import render_planspiel_bericht_pdf
+    content = render_planspiel_bericht_pdf(auswertung(db, run), org, str(request.base_url))
+    return Response(content=content, media_type="application/pdf", headers={
+        "Content-Disposition": f'attachment; filename="planspiel-{run.id}.pdf"',
+    })
+
+
+@router.post("/{run_id:int}/wiederholen")
+async def wiederholen(
+    run_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*PLANSPIEL_LESE_ROLLEN)),
+    _guard: None = Depends(require_planspiel_enabled),
+):
+    run = _run(db, user, run_id)
+    _require_steuern(db, user, run)
+    copy_run = PlanspielRun(
+        org_id=run.org_id, titel=f"{run.titel} (Wiederholung)", art=run.art,
+        erzeugung=run.erzeugung, status="entwurf", seed=run.seed, tempo=run.tempo,
+        konfig=deepcopy(run.konfig), szenario_snapshot=deepcopy(run.szenario_snapshot),
+        kanal_freigaben={}, leiter_user_id=user.id, folge_aktiv=run.folge_aktiv,
+        created_by_user_id=user.id,
+    )
+    db.add(copy_run)
+    db.flush()
+    db.add(PlanspielMitglied(org_id=run.org_id, run_id=copy_run.id, user_id=user.id, rolle="leiter"))
+    write_audit(
+        db, "planspiel.run.wiederholt", org_id=run.org_id, user_id=user.id,
+        entity_type="planspiel_run", entity_id=copy_run.id, payload={"quelle_run_id": run.id},
+    )
+    db.commit()
+    return RedirectResponse(f"/planspiele/{copy_run.id}", status_code=303)
 
 
 @router.get("/{run_id:int}/bearbeiten", response_class=HTMLResponse)
