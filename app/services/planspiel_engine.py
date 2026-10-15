@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -50,6 +51,16 @@ def sim_sekunden(run: PlanspielRun, jetzt: datetime) -> float:
     ende = run.pausiert_seit or jetzt
     sekunden = (ende - run.gestartet_at).total_seconds() - run.pausiert_summe_s
     return max(0.0, sekunden * run.tempo)
+
+
+def _sofort_faellig(run: PlanspielRun, jetzt: datetime) -> float:
+    """Faelligkeit fuer Regie-Ereignisse: abgerundete ganze Uebungssekunde.
+
+    faellig_sim_s ist unter MariaDB ein FLOAT mit einfacher Genauigkeit; ein
+    gebrochener Wert wird beim Speichern minimal aufgerundet und waere fuer den
+    sofortigen Tick dann noch nicht faellig. Ganze Zahlen sind exakt darstellbar.
+    """
+    return float(math.floor(sim_sekunden(run, jetzt)))
 
 
 def _audit(db: Session, run: PlanspielRun, user: Any, aktion: str, **payload: Any) -> None:
@@ -142,7 +153,7 @@ def ereignis_jetzt(db: Session, run: PlanspielRun, ereignis_id: int, user: Any, 
     event = _event(db, run, ereignis_id)
     if event.status not in {"geplant", "uebersprungen"}:
         raise ZustandsFehler("Ereignis kann nicht sofort ausgelöst werden")
-    event.faellig_sim_s, event.status = sim_sekunden(run, jetzt), "geplant"
+    event.faellig_sim_s, event.status = _sofort_faellig(run, jetzt), "geplant"
     if client_uuid:
         event.idempotenz_key = f"run{run.id}:regie:{client_uuid}"
     _audit(db, run, user, "ereignis_jetzt", ereignis_id=event.id)
@@ -176,7 +187,7 @@ def ereignis_wiederholen(db: Session, run: PlanspielRun, ereignis_id: int, user:
     key = f"run{run.id}:regie:{client_uuid}" if client_uuid else f"run{run.id}:regie:repeat:{_naechste_seq(db, run)}"
     event = PlanspielRunEreignis(org_id=run.org_id, run_id=run.id, seq=_naechste_seq(db, run), quelle="regie",
         baustein_code=source.baustein_code, ziel_typ=source.ziel_typ, ziel_id=source.ziel_id, trigger_type="manual",
-        trigger_param=dict(source.trigger_param or {}), faellig_sim_s=sim_sekunden(run, jetzt), status="geplant",
+        trigger_param=dict(source.trigger_param or {}), faellig_sim_s=_sofort_faellig(run, jetzt), status="geplant",
         idempotenz_key=key, sichtbarkeit=source.sichtbarkeit, text=source.text)
     db.add(event)
     db.flush()
@@ -196,7 +207,7 @@ def freie_meldung(db: Session, run: PlanspielRun, user: Any, jetzt: datetime, *,
     key = f"run{run.id}:regie:{client_uuid}" if client_uuid else f"run{run.id}:regie:free:{_naechste_seq(db, run)}"
     event = PlanspielRunEreignis(org_id=run.org_id, run_id=run.id, seq=_naechste_seq(db, run), quelle="regie",
         ziel_typ="incident", ziel_id=run.incident_id, trigger_type="manual",
-        trigger_param={"ereignis_typ": ereignis_typ}, faellig_sim_s=sim_sekunden(run, jetzt), status="geplant",
+        trigger_param={"ereignis_typ": ereignis_typ}, faellig_sim_s=_sofort_faellig(run, jetzt), status="geplant",
         idempotenz_key=key, sichtbarkeit=sichtbarkeit, text=text)
     db.add(event)
     db.flush()
@@ -262,10 +273,10 @@ def reaktive_trigger_auswerten(db: Session, run: PlanspielRun, jetzt: datetime) 
     fallback = float((run.konfig or {}).get("reaktiv_fallback_s", 480))
     for event in events:
         if _trigger_erfuellt(db, run, event, sim):
-            event.faellig_sim_s = sim
+            event.faellig_sim_s = float(math.floor(sim))
             count += 1
         elif sim >= fallback:
-            event.faellig_sim_s = sim
+            event.faellig_sim_s = float(math.floor(sim))
             event.ergebnis_ref = {**(event.ergebnis_ref or {}), "ausloesung": "fallback"}
             count += 1
     return count

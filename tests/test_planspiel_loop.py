@@ -141,3 +141,11 @@ def test_beendeter_run_hat_keine_spaeten_jobs():
         assert check.get(PlanspielRun, run_id).worker_lease_until is None
     finally:
         check.close()
+
+
+def test_main_registriert_planspiel_loop():
+    from pathlib import Path
+
+    source = (Path(__file__).parents[1] / "app" / "main.py").read_text()
+    assert "from app.services.planspiel_loop import planspiel_loop" in source
+    assert "planspiel_loop()," in source

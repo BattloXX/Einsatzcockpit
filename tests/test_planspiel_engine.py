@@ -294,3 +294,16 @@ def test_fremde_org_ereignis_nicht_beanspruchbar():
         assert not ereignis_beanspruchen(db, event.id, org.id + 999999, JETZT)
     finally:
         _close(db)
+
+
+def test_regie_faelligkeit_ist_ganzzahlig_fuer_mariadb_float():
+    """MariaDB speichert faellig_sim_s als FLOAT (einfache Genauigkeit): gebrochene
+    Werte werden minimal aufgerundet und waeren fuer den Sofort-Tick nicht faellig."""
+    db, _org, user, run = _basis()
+    try:
+        jetzt = JETZT + timedelta(seconds=12.345)
+        event = freie_meldung(db, run, user, jetzt, text="Ganzzahlig")
+        assert event.faellig_sim_s == float(int(event.faellig_sim_s))
+        assert event.faellig_sim_s <= sim_sekunden(run, jetzt)
+    finally:
+        _close(db)

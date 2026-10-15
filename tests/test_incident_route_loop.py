@@ -144,7 +144,7 @@ def test_error_backoff_lease_and_unexpected_error(db, monkeypatch):
 def test_main_registers_incident_route_loop():
     source = (Path(__file__).parents[1] / "app" / "main.py").read_text()
     assert "from app.services.incident_route_loop import incident_route_loop" in source
-    assert "incident_route_loop(),\n    )" in source
+    assert "incident_route_loop()," in source
 
 
 def test_running_mit_abgelaufenem_lease_wird_wieder_aufgenommen(db):
