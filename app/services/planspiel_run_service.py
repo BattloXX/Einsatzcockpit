@@ -16,8 +16,8 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import write_audit
 from app.data.planspiel_katalog import BAUSTEINE, MELDENDE
-from app.models.incident import Incident, IncidentLog
-from app.models.master import OrgSettings
+from app.models.incident import IncidentLog
+from app.models.master import FireDept, OrgSettings
 from app.models.objekt import OBJEKT_EINSATZ_BESTAETIGT, Objekt, ObjektEinsatz
 from app.models.planspiel import (
     PlanspielAdresse,
@@ -30,6 +30,8 @@ from app.models.planspiel import (
 )
 from app.services.broadcast import broadcast_org
 from app.services.incident_service import create_incident
+from app.services.lage_journal_service import journal_eintrag_anlegen
+from app.services.major_incident_service import create_lage, lage_einrichten
 from app.services.planspiel_katalog_service import (
     VersionSchema,
     aktive_version,
@@ -78,6 +80,10 @@ class EntwurfDaten:
     tempo: float = 1.0
     lernziele: str | None = None
     leiter_user_id: int | None = None
+    gsl_modus: str | None = None
+    mittel_s: int = 45
+    max_stellen: int = 60
+    max_laufzeit_min: int = 120
 
 
 @dataclass(frozen=True)
@@ -217,7 +223,22 @@ def _versionsnummer(db: Session, version_id: int) -> int | None:
 def _snapshot(db: Session, org_id: int, daten: EntwurfDaten, seed: int) -> dict[str, Any]:
     szenario, roh, version_id = _lade_szenario(db, org_id, daten, seed)
     inhalt = _inhalt_mit_overrides(roh, daten)
-    ort = _ort_waehlen(db, org_id, inhalt, daten, seed)
+    if daten.art == "gsl" and inhalt["kategorie"] != "gsl":
+        raise ValueError("Für eine Großschadenslage ist ein GSL-Szenario (G01–G05 oder eigenes) nötig")
+    if daten.art == "gsl":
+        area = gebiet(db, org_id)
+        if area.polygon is not None:
+            point = area.polygon.centroid
+            lat, lng = point.y, point.x
+        elif area.zentrum is not None:
+            lat, lng = area.zentrum
+        else:
+            raise ValueError("Planspiel-Gebiet ist nicht festgelegt")
+        org = db.get(FireDept, org_id)
+        name = org.name if org is not None else "Organisation"
+        ort = OrtWahl(0, None, None, "", None, None, None, lat, lng, "C", "gebiet", f"{name} Ortsgebiet")
+    else:
+        ort = _ort_waehlen(db, org_id, inhalt, daten, seed)
     variablen = _variablen(inhalt, ort, seed)
     code = inhalt["stichwort_code"]
     stichwort = org_stichwort_code(db, org_id, code)
@@ -226,12 +247,16 @@ def _snapshot(db: Session, org_id: int, daten: EntwurfDaten, seed: int) -> dict[
         stichwort = org_stichwort_code(db, org_id, fallback)
     if stichwort is None:
         raise ValueError(f"Stichwort {code} ist in der Organisation nicht angelegt")
-    return {
+    result = {
         "code": szenario.code, "szenario_id": szenario.id, "version_id": version_id,
-        "version": _versionsnummer(db, version_id), "inhalt": inhalt, "ort": _ort_dict(ort, daten.ort_modus),
+        "version": _versionsnummer(db, version_id), "inhalt": inhalt,
+        "ort": _ort_dict(ort, "gebiet" if daten.art == "gsl" else daten.ort_modus),
         "variablen": variablen, "alarmtext": rendern(inhalt["alarmtext_template"], variablen),
         "stichwort_org": stichwort,
     }
+    if daten.art == "gsl":
+        result["gsl_modus"] = daten.gsl_modus or inhalt.get("gsl_modus")
+    return result
 
 
 def _konfig(daten: EntwurfDaten, seed: int) -> dict[str, Any]:
@@ -255,6 +280,12 @@ def _leiter(db: Session, run: PlanspielRun, user_id: int) -> None:
 def entwurf_anlegen(db: Session, org_id: int, user: Any, daten: EntwurfDaten) -> PlanspielRun:
     if not 0.25 <= daten.tempo <= 20:
         raise ValueError("Tempo muss zwischen 0.25 und 20 liegen")
+    if daten.art == "gsl" and not 15 <= daten.mittel_s <= 600:
+        raise ValueError("Mittelwert muss zwischen 15 und 600 Sekunden liegen")
+    if daten.art == "gsl" and not 1 <= daten.max_stellen <= 300:
+        raise ValueError("Maximale Stellenanzahl muss zwischen 1 und 300 liegen")
+    if daten.art == "gsl" and not 10 <= daten.max_laufzeit_min <= 720:
+        raise ValueError("Maximale Laufzeit muss zwischen 10 und 720 Minuten liegen")
     seed = daten.seed if daten.seed is not None else secrets.randbelow(2 ** 31)
     snapshot = _snapshot(db, org_id, daten, seed)
     leiter_id = daten.leiter_user_id or user.id
@@ -275,6 +306,9 @@ def entwurf_aktualisieren(db: Session, run: PlanspielRun, user: Any, daten: Entw
         raise ZustandsFehler("Entwurf kann in diesem Status nicht geändert werden")
     if not 0.25 <= daten.tempo <= 20:
         raise ValueError("Tempo muss zwischen 0.25 und 20 liegen")
+    if daten.art == "gsl" and not (15 <= daten.mittel_s <= 600 and 1 <= daten.max_stellen <= 300
+                                     and 10 <= daten.max_laufzeit_min <= 720):
+        raise ValueError("Ungültige GSL-Generatorgrenzen")
     if run.org_id is None:
         raise ValueError("Planspiel hat keine Organisation")
     seed = daten.seed if daten.seed is not None else run.seed
@@ -293,10 +327,14 @@ def zeitplan(run: PlanspielRun) -> list[GeplantesEreignis]:
     if not run.folge_aktiv:
         return []
     snapshot = run.szenario_snapshot or {}
-    werte = snapshot.get("variablen", {})
+    return zeitplan_fuer(snapshot.get("inhalt", {}), snapshot.get("variablen", {}), str(run.seed))
+
+
+def zeitplan_fuer(inhalt: dict[str, Any], werte: dict[str, str], seed_text: str) -> list[GeplantesEreignis]:
+    """Zeitplan fuer einen Szenario-Inhalt; seed_text trennt z. B. die einzelnen GSL-Stellen."""
     result = []
-    for index, event in enumerate(snapshot.get("inhalt", {}).get("ereignisse", [])):
-        rng = random.Random(f"{run.seed}:ereignis:{index}")
+    for index, event in enumerate(inhalt.get("ereignisse", [])):
+        rng = random.Random(f"{seed_text}:ereignis:{index}")
         status: Literal["geplant", "uebersprungen"] = "geplant"
         if rng.random() >= event.get("wahrscheinlichkeit", 1.0):
             status = "uebersprungen"
@@ -312,7 +350,6 @@ def zeitplan(run: PlanspielRun) -> list[GeplantesEreignis]:
 
 
 def vorschau(db: Session, run: PlanspielRun) -> dict[str, Any]:
-    del db
     snapshot = run.szenario_snapshot or {}
     plan = zeitplan(run)
     plan.sort(key=lambda e: (e.faellig_sim_s is None, e.trigger_type != "elapsed_time", e.faellig_sim_s or 0, e.index))
@@ -321,7 +358,7 @@ def vorschau(db: Session, run: PlanspielRun) -> dict[str, Any]:
     ort = snapshot.get("ort", {})
     adresse = ort.get("adresse") or ort.get("bezeichnung") or "ohne Adresse"
     kanaele = [name for name, aktiv in (run.kanal_freigaben or {}).items() if aktiv]
-    return {
+    result = {
         "titel": run.titel, "code": snapshot.get("code"), "stichwort_org": snapshot.get("stichwort_org"),
         "alarmtext": snapshot.get("alarmtext"), "ort": ort, "zeitplan": plan,
         "wird_angelegt": [f"1 Übungseinsatz (ÜBUNG) mit Stichwort {snapshot.get('stichwort_org')} an Adresse {adresse}",
@@ -330,11 +367,24 @@ def vorschau(db: Session, run: PlanspielRun) -> dict[str, Any]:
                                     "WordPress", "Geocoding", "öffentliche Links",
                                     "Kanal-Freigaben dieses Laufs: " + (", ".join(kanaele) if kanaele else "keine")],
     }
-
-
-def starten(db: Session, run: PlanspielRun, user: Any) -> Incident:
     if run.art == "gsl":
-        raise ZustandsFehler("GSL-Planspiele folgen in Phase E")
+        from app.data.planspiel_katalog import GSL_WELLEN
+        modus = snapshot.get("gsl_modus")
+        konfig = run.konfig or {}
+        mittel = int(konfig.get("mittel_s", 45))
+        maximum = int(konfig.get("max_stellen", 60))
+        laufzeit = int(konfig.get("max_laufzeit_min", 120))
+        result["wird_angelegt"] = [
+            "1 Übungs-Großschadenslage (ÜBUNG) – keine externe Alarmierung.",
+            f"ca. {round(3600 / mittel)} Einsatzstellen pro Stunde (Mittel {mittel} s), "
+            f"max. {maximum} Stellen / {laufzeit} Minuten",
+        ]
+        result["wellen"] = [welle.name for welle in GSL_WELLEN.get(str(modus), ())]
+    del db
+    return result
+
+
+def starten(db: Session, run: PlanspielRun, user: Any) -> Any:
     if run.status not in {"entwurf", "bereit"}:
         raise ZustandsFehler("Planspiel kann in diesem Status nicht gestartet werden")
     settings = db.query(OrgSettings).filter(OrgSettings.org_id == run.org_id).one_or_none()
@@ -344,6 +394,37 @@ def starten(db: Session, run: PlanspielRun, user: Any) -> Incident:
     if laufend >= limit:
         raise ZustandsFehler("Maximale Anzahl laufender Planspiele erreicht")
     snapshot = run.szenario_snapshot or {}
+    if run.org_id is None:
+        raise ValueError("Planspiel hat keine Organisation")
+    if run.art == "gsl":
+        lage = create_lage(db, run.org_id, f"ÜBUNG – {run.titel}", trigger="manual", is_exercise=True,
+                           started_by_user_id=user.id, description=snapshot["alarmtext"])
+        lage.planspiel_run_id = run.id
+        lage_einrichten(db, lage, org_id=run.org_id, user_id=user.id)
+        journal_eintrag_anlegen(
+            db, lage, text=f"[Planspiel] Übungs-Großschadenslage aus Planspiel '{run.titel}' gestartet – "
+            "keine externe Alarmierung.", category="info", body_html="", partner_from="", partner_to="",
+            measure="", user_id=user.id, author_name="Planspiel",
+        )
+        for event in zeitplan(run):
+            trigger_param = dict(event.trigger_param or {})
+            trigger_param.setdefault("ereignis_typ", event.ereignis_typ)
+            db.add(PlanspielRunEreignis(
+                org_id=run.org_id, run_id=run.id, seq=event.index + 1, quelle="szenario",
+                baustein_code=event.baustein_code, ziel_typ="lage", ziel_id=lage.id,
+                trigger_type=event.trigger_type, trigger_param=trigger_param, faellig_sim_s=event.faellig_sim_s,
+                status=event.status, idempotenz_key=f"run{run.id}:szenario:{event.index}",
+                sichtbarkeit=event.sichtbarkeit, text=event.text,
+            ))
+        run.lage_id, run.gen_aktiv, run.naechste_gen_sim_s, run.gen_seq = lage.id, True, 0.0, 0
+        run.max_stellen = int((run.konfig or {}).get("max_stellen", 60))
+        run.max_laufzeit_s = int((run.konfig or {}).get("max_laufzeit_min", 120)) * 60
+        run.status, run.gestartet_at = "laeuft", _now()
+        run.steuer_version += 1
+        write_audit(db, "planspiel.run.gestartet", org_id=run.org_id, user_id=user.id,
+                    entity_type="planspiel_run", entity_id=run.id, payload={"lage_id": lage.id})
+        db.flush()
+        return lage
     ort = snapshot["ort"]
     incident, _ = create_incident(db, snapshot["stichwort_org"], is_exercise=True,
         address_street=ort.get("strasse"), address_no=ort.get("hausnr"), address_city=ort.get("ort"),
@@ -380,10 +461,14 @@ def starten(db: Session, run: PlanspielRun, user: Any) -> Incident:
     return incident
 
 
-async def nach_start_benachrichtigen(run: PlanspielRun, incident: Incident) -> None:
+async def nach_start_benachrichtigen(run: PlanspielRun, incident: Any) -> None:
     try:
         if run.org_id is None:
             raise ValueError("Planspiel hat keine Organisation")
+        if run.art == "gsl":
+            await broadcast_org(run.org_id, {"type": "gsl_changed"})
+            await broadcast_org(run.org_id, {"type": "planspiel_changed", "run_id": run.id})
+            return
         code = incident.alarm_type_code
         await broadcast_org(run.org_id, {"type": "incident_created", "incident_id": incident.id, "alarm": code,
             "alarm_erlaubt": False, "alarm_type_code": code, "is_exercise": True,
