@@ -165,6 +165,7 @@ def test_osm_import_mapping_idempotent_und_fehler(monkeypatch):
     finally:
         db.close()
 
+    monkeypatch.setattr("app.services.planspiel_ort_service._OSM_WARTEN_S", (0.0, 0.0))
     _mock_overpass(monkeypatch, 504, {})
     with pytest.raises(OsmImportFehler):
         asyncio.run(osm_importieren(TestingSession, org_id))

@@ -239,6 +239,8 @@ class Settings(BaseSettings):
     HYDRANT_USER_AGENT: str = "Einsatzcockpit/1.0 (+https://einsatzcockpit.com)"
     STRASSEN_OVERPASS_URL: str = "https://overpass-api.de/api/interpreter"
     STRASSEN_OVERPASS_TIMEOUT_SECONDS: float = 20.0
+    # Planspiel-OSM-Import: ganzes Übungsgebiet, dauert auf Overpass oft 30–60 s
+    PLANSPIEL_OVERPASS_TIMEOUT_SECONDS: float = 120.0
     STRASSEN_SUCHRADIUS_M: int = 6000
     # Eigene Wasserstellen-Stammdaten haben Vorrang; OSM-Hydranten näher als dieser
     # Wert an einer eigenen Wasserstelle werden ausgeblendet (kein Doppelbild).

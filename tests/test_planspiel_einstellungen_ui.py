@@ -123,16 +123,57 @@ def test_pool_aufbauen_button(client):
     assert client.post(f"{BASIS}/adresspool/aufbauen", data={"_csrf": _csrf(client)}).status_code == 200
 
 
+def _osm_ergebnis(client) -> str:
+    import time
+
+    antwort = client.post(f"{BASIS}/adresspool/osm", data={"_csrf": _csrf(client)})
+    assert antwort.status_code == 200
+    for _ in range(50):
+        if "OSM-Import läuft" not in antwort.text:
+            return antwort.text
+        time.sleep(0.05)
+        antwort = client.get(f"{BASIS}/adresspool/osm/status")
+        assert antwort.status_code == 200
+    raise AssertionError("OSM-Import wurde nicht fertig")
+
+
 def test_osm_import_button_fehler_und_erfolg(client, monkeypatch):
     _login(client, _setup_user("org_admin"))
     async def fails(*args):
-        raise OsmImportFehler("Fehler")
+        raise OsmImportFehler("Overpass ausgelastet")
     monkeypatch.setattr("app.routers.ui_planspiel_admin.osm_importieren", fails)
-    assert client.post(f"{BASIS}/adresspool/osm", data={"_csrf": _csrf(client)}).status_code == 400
+    text = _osm_ergebnis(client)
+    assert "form-error" in text and "Overpass ausgelastet" in text
     async def succeeds(*args):
         return PoolErgebnis(neu=1)
     monkeypatch.setattr("app.routers.ui_planspiel_admin.osm_importieren", succeeds)
-    assert "1 neu" in client.post(f"{BASIS}/adresspool/osm", data={"_csrf": _csrf(client)}).text
+    assert "1 neu" in _osm_ergebnis(client)
+
+
+def test_osm_import_laeuft_wird_nicht_doppelt_gestartet(client, monkeypatch):
+    import asyncio
+
+    _login(client, _setup_user("org_admin"))
+    aufrufe = []
+    async def langsam(*args):
+        aufrufe.append(args)
+        await asyncio.sleep(0.3)
+        return PoolErgebnis(neu=2)
+    monkeypatch.setattr("app.routers.ui_planspiel_admin.osm_importieren", langsam)
+    erste = client.post(f"{BASIS}/adresspool/osm", data={"_csrf": _csrf(client)})
+    assert "OSM-Import läuft" in erste.text
+    zweite = client.post(f"{BASIS}/adresspool/osm", data={"_csrf": _csrf(client)})
+    assert "OSM-Import läuft" in zweite.text
+    assert "OSM-Import läuft" in client.get(BASIS).text
+    import time
+
+    for _ in range(40):
+        status = client.get(f"{BASIS}/adresspool/osm/status").text
+        if "OSM-Import läuft" not in status:
+            break
+        time.sleep(0.05)
+    assert "2 neu" in status
+    assert len(aufrufe) == 1
 
 
 def test_manueller_punkt_innerhalb_und_ausserhalb(client):

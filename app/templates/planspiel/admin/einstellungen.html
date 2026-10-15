@@ -10,6 +10,7 @@
     .planspiel-map { height: 360px; margin: .75rem 0; border: 1px solid var(--border); }
     .planspiel-map--small { height: 240px; }
     .planspiel-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin: .75rem 0; }
+    .planspiel-pool-wrap { overflow-x: auto; max-width: 100%; }
     .planspiel-pagination { display: flex; gap: .75rem; align-items: center; margin-top: .75rem; }
     .planspiel-inline { display: inline-block; margin: .15rem .5rem .15rem 0; }
     @media (max-width: 760px) { .planspiel-map { height: 280px; } .planspiel-actions { flex-direction: column; } }
@@ -66,21 +67,20 @@
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
           <button class="btn" type="submit">Pool aus Objekten/Einsätzen aktualisieren</button>
         </form>
-        <form method="post" action="/admin/settings/planspiele/adresspool/osm" hx-post="/admin/settings/planspiele/adresspool/osm" hx-target="#pool-liste" hx-indicator="#osm-laden">
+        <form method="post" action="/admin/settings/planspiele/adresspool/osm" hx-post="/admin/settings/planspiele/adresspool/osm" hx-target="#pool-liste">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
           <button class="btn" type="submit">OSM-Adressen importieren</button>
-          <span id="osm-laden" class="htmx-indicator">Import läuft …</span>
         </form>
       </div>
     {% endif %}
     <form class="planspiel-filter" hx-get="/admin/settings/planspiele/adresspool" hx-target="#pool-liste">
-      <select class="form-input" name="quelle"><option value="">Alle Quellen</option><option value="objekt">Objekt</option><option value="osm">OSM</option><option value="manuell">Manuell</option></select>
+      <select class="form-input" name="quelle"><option value="">Alle Quellen</option><option value="objekt">Objekt</option><option value="zusatzadresse">Zusatzadresse</option><option value="einsatzhistorie">Einsatzhistorie</option><option value="osm">OSM</option><option value="strassenpunkt">Straßenpunkt</option><option value="manuell">Manuell</option></select>
       <select class="form-input" name="qualitaet"><option value="">Alle Qualitäten</option><option value="A">A</option><option value="B">B</option><option value="C">C</option></select>
       <select class="form-input" name="ort_typ"><option value="">Alle Ortstypen</option>{% for key, label in ort_typen.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select>
       <input class="form-input" name="q" placeholder="Straße suchen" hx-trigger="keyup changed delay:300ms">
       <button class="btn" type="submit">Filtern</button>
     </form>
-    <div id="pool-liste">{% include "planspiel/admin/_pool_liste.html" %}</div>
+    <div id="pool-liste">{% if osm_laeuft %}{% include "planspiel/admin/_osm_laeuft.html" %}{% else %}{% include "planspiel/admin/_pool_liste.html" %}{% endif %}</div>
   </section>
 
   {% if can_edit %}

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 import re
 from decimal import Decimal, InvalidOperation
 from typing import Any
@@ -54,6 +56,7 @@ from app.services.planspiel_ort_service import (
 )
 
 router = APIRouter(prefix="/admin/settings/planspiele", tags=["planspiele-admin"])
+logger = logging.getLogger(__name__)
 _CODE_RE = re.compile(r"^[A-Za-z0-9_-]{1,40}$")
 
 
@@ -675,6 +678,7 @@ def _settings_context(request: Request, db: Session, user: User, **extra: Any) -
         "pool_stats": stats,
     }
     context.update(_pool_context(request, db, user))
+    context["osm_laeuft"] = bool((_osm_importe.get(_org(user)) or {}).get("laeuft"))
     context.update(extra)
     return context
 
@@ -764,10 +768,12 @@ async def grenzen_speichern(
     return RedirectResponse("/admin/settings/planspiele", status_code=303)
 
 
-def _pool_result(request: Request, db: Session, user: User, message: str, status_code: int = 200):
+def _pool_result(request: Request, db: Session, user: User, message: str, *, fehler: bool = False):
+    # Fehler bewusst mit 200, damit HTMX die Meldung einblendet statt nur „HTTP 400“ zu melden
     context = _pool_context(request, db, user)
     context["meldung"] = message
-    return templates.TemplateResponse(request, "planspiel/admin/_pool_ergebnis.html", context, status_code=status_code)
+    context["fehler"] = fehler
+    return templates.TemplateResponse(request, "planspiel/admin/_pool_ergebnis.html", context)
 
 
 @router.post("/adresspool/aufbauen")
@@ -787,7 +793,43 @@ def pool_aufbauen_post(
         return _pool_result(request, db, user, message)
     except (GebietFehlt, ValueError) as exc:
         db.rollback()
-        return _pool_result(request, db, user, str(exc), 400)
+        return _pool_result(request, db, user, str(exc), fehler=True)
+
+
+# Laufende OSM-Importe je Organisation (Prozess-lokal, Produktion läuft mit einem Worker)
+_osm_importe: dict[int, dict[str, Any]] = {}
+_osm_tasks: set[asyncio.Task[None]] = set()
+
+
+async def _osm_import_ausfuehren(org_id: int) -> None:
+    try:
+        result = await osm_importieren(SessionLocal, org_id)
+        _osm_importe[org_id] = {
+            "laeuft": False,
+            "meldung": f"OSM-Import fertig: {result.neu} neu, {result.aktualisiert} aktualisiert",
+            "fehler": False,
+        }
+    except (OsmImportFehler, GebietFehlt) as exc:
+        _osm_importe[org_id] = {"laeuft": False, "meldung": str(exc), "fehler": True}
+    except Exception:
+        logger.exception("Planspiel-OSM-Import für Org %s fehlgeschlagen", org_id)
+        _osm_importe[org_id] = {
+            "laeuft": False, "meldung": "OSM-Import fehlgeschlagen: interner Fehler.", "fehler": True,
+        }
+
+
+def _osm_status_antwort(request: Request, db: Session, user: User):
+    org_id = _org(user)
+    job = _osm_importe.get(org_id)
+    if job and job["laeuft"]:
+        return templates.TemplateResponse(request, "planspiel/admin/_osm_laeuft.html", {})
+    if job:
+        _osm_importe.pop(org_id, None)
+        context = _pool_context(request, db, user)
+        context["meldung"] = job["meldung"]
+        context["fehler"] = job["fehler"]
+        return templates.TemplateResponse(request, "planspiel/admin/_pool_ergebnis.html", context)
+    return _pool_result(request, db, user, "")
 
 
 @router.post("/adresspool/osm")
@@ -797,15 +839,26 @@ async def pool_osm_post(
     user: User = Depends(require_role("org_admin")),
     _guard: None = Depends(require_planspiel_enabled),
 ):
-    try:
-        result = await osm_importieren(SessionLocal, _org(user))
+    org_id = _org(user)
+    job = _osm_importe.get(org_id)
+    if not (job and job["laeuft"]):
+        _osm_importe[org_id] = {"laeuft": True}
         _settings_audit(db, "adresspool_osm", user)
         db.commit()
-        message = f"{result.neu} neu, {result.aktualisiert} aktualisiert, {result.deaktiviert} deaktiviert"
-        return _pool_result(request, db, user, message)
-    except (OsmImportFehler, GebietFehlt) as exc:
-        db.rollback()
-        return _pool_result(request, db, user, str(exc), 400)
+        task = asyncio.create_task(_osm_import_ausfuehren(org_id))
+        _osm_tasks.add(task)
+        task.add_done_callback(_osm_tasks.discard)
+    return _osm_status_antwort(request, db, user)
+
+
+@router.get("/adresspool/osm/status")
+def pool_osm_status(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin")),
+    _guard: None = Depends(require_planspiel_enabled),
+):
+    return _osm_status_antwort(request, db, user)
 
 
 @router.post("/adresspool/punkt")
