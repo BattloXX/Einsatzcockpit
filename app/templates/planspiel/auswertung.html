@@ -12,6 +12,8 @@
   .planspiel-auswertung__table-wrap { overflow-x: auto; }
   .planspiel-auswertung__table { width: 100%; border-collapse: collapse; }
   .planspiel-auswertung__table th, .planspiel-auswertung__table td { padding: .5rem; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+  .planspiel-auswertung__section h2 { margin: 0 0 .6rem; font-size: 1.1rem; }
+  .planspiel-auswertung__section h3 { margin: 1rem 0 .4rem; font-size: .98rem; }
   .planspiel-auswertung__meta { color: var(--text-muted); font-size: .86rem; }
   .planspiel-auswertung__entry { padding: .75rem 0; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
   .planspiel-auswertung__entry:last-child { border-bottom: 0; }
@@ -67,7 +69,9 @@
   {% endif %}
   <section class="planspiel-auswertung__section">
     <h2>Ereignis-Timeline</h2>
-    {% for event in daten.ereignisse %}
+    {% set verworfen = daten.ereignis_status.get('abgebrochen', 0) %}
+    {% if verworfen %}<p class="planspiel-auswertung__meta">{{ verworfen }} geplante Ereignisse wurden beim Beenden verworfen und sind nicht aufgeführt.</p>{% endif %}
+    {% for event in daten.ereignisse if event.status != 'abgebrochen' %}
     <div class="planspiel-auswertung__entry">
       <strong>{{ L.EREIGNIS_TYP.get(event.typ, event.typ) }}</strong> · {{ L.EREIGNIS_STATUS.get(event.status, event.status) }}
       <div class="planspiel-auswertung__meta">

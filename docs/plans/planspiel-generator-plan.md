@@ -553,3 +553,16 @@ Phase A (Basis & Safety) als eigener Codex-Auftrag; Start erst auf ausdrücklich
 **Hinweise für Phase F:**
 - Die reine Rolle `uebungsleiter` hat **keinen** Zugriff auf das GSL-Board und den Übungseinsatz, dafür braucht es `incident_leader`/`admin`. Für den Allein-Betrieb muss der Übungsleiter entweder zusätzlich Einsatzleiter sein, oder Phase F gibt Run-Mitgliedern Zugriff auf genau ihre Übungslage/ihren Übungseinsatz. Empfehlung: Zugriff an die Mitgliedschaft binden, nur bei `planspiel_run_id`.
 - Die Einheiten-Simulation (`/einheit?sim=`) verlangt heute die Rolle `admin` und muss für Run-Mitglieder (leiter/regie) geöffnet werden.
+
+### Phase F – Allein-Betrieb & Auswertung (Branch `feat/planspiel-f-solo`, 2026-10-15)
+- **F1 Allein-Betrieb:**
+  - `planspiel_zugriff.simulation_erlaubt`: `/einheit?sim=` ist zusätzlich für Einsatzleiter erlaubt, die Leiter/Regie des laufenden Runs der Übungslage sind. Es gibt **keine** Rechteausweitung: Wer nur `uebungsleiter` ist, braucht weiterhin `incident_leader`/`admin`. Das Cockpit weist darauf hin.
+  - „Simulierte Einheit anlegen“ in der Regie (`lege_einheit_an`, Label „SIM …“, ohne SMS/Druck). Die Einheitenansicht verlinkt zurück zur Regie.
+  - `beenden()` widerruft alle QR/PIN-Zugänge der Lage und setzt `public_token` auf leer.
+  - Test für den Solo-Durchlauf (Akzeptanz 7): eingegangen → Erkundung → bewertet → disponiert → in Arbeit → fertig gemeldet, mit einem Login über die normalen Dispositions- und Statuspfade.
+- **F2 Auswertung:**
+  - `planspiel_auswertung_service.auswertung` liest die Kennzahlen nur aus vorhandenen Daten: Phasenwechsel-Audit (`major_incident.site.phase_changed`, trägt jetzt `org_id`), Aufträge, Doppelmeldungen, überfällige Lagemeldungen, Einsatzmeldungen/-aufgaben, Beobachtungen und Regie-Aktionen (mit deutschen Bezeichnungen).
+  - Seite `/planspiele/{id}/auswertung`, PDF `/auswertung.pdf`, „Wiederholen“ (neuer Entwurf mit gleichem Snapshot und Seed). Beim Beenden verworfene Ereignisse werden nur gezählt.
+  - Statistik-Test: Planspiel-Einsätze zählen als Übung, nicht als Einsatz (Akzeptanz 11).
+- **Browser-Durchlauf** (MariaDB): simulierte Einheit anlegen → Einheitenansicht mit Rücklink → Beenden → Auswertung (Desktop/mobil) → PDF.
+- **Offen bzw. Phase G:** Vergleich mehrerer Runs, Aufbewahrungsfrist, automatisierte Einheiten, Kanal-Opt-ins. Die Übungs-GSL bleibt nach dem Beenden offen und wird wie gewohnt im Board geschlossen.

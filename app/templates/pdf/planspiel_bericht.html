@@ -40,8 +40,10 @@ td { padding: 5pt; border-bottom: 1px solid #ddd; vertical-align: top; }
 <p>Meldungen: {{ daten.einzel.meldungen }} (erledigt {{ daten.einzel.meldungen_erledigt }}) · Aufgaben: {{ daten.einzel.aufgaben }} (erledigt {{ daten.einzel.aufgaben_erledigt }})</p>
 {% endif %}
 <h2>Ereignisse</h2>
+{% set verworfen = daten.ereignis_status.get('abgebrochen', 0) %}
+{% if verworfen %}<p>{{ verworfen }} geplante Ereignisse wurden beim Beenden verworfen und sind nicht aufgeführt.</p>{% endif %}
 <table><thead><tr><th>Typ</th><th>Status</th><th>Übungszeit</th><th>Text</th></tr></thead><tbody>
-{% for event in daten.ereignisse %}<tr><td>{{ L.EREIGNIS_TYP.get(event.typ, event.typ) }}</td><td>{{ L.EREIGNIS_STATUS.get(event.status, event.status) }}</td><td>{{ ((event.ausgefuehrt_sim_s or event.faellig_sim_s or 0) / 60)|round(1) }} Min.</td><td>{{ event.text or '-' }}</td></tr>{% endfor %}
+{% for event in daten.ereignisse if event.status != 'abgebrochen' %}<tr><td>{{ L.EREIGNIS_TYP.get(event.typ, event.typ) }}</td><td>{{ L.EREIGNIS_STATUS.get(event.status, event.status) }}</td><td>{{ ((event.ausgefuehrt_sim_s or event.faellig_sim_s or 0) / 60)|round(1) }} Min.</td><td>{{ event.text or '-' }}</td></tr>{% endfor %}
 </tbody></table>
 <h2>Beobachtungen</h2>
 {% if daten.beobachtungen %}
