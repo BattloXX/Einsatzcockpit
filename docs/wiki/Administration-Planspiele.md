@@ -45,7 +45,7 @@ Planspiele verwenden **nur reale Adressen**, es werden keine Hausnummern erfunde
 
 Qualitätsstufen: **A** = verifiziertes Objekt, **B** = Adresse mit Hausnummer, **C** = Straßen- oder Kartenpunkt. Szenarien können eine Mindestqualität verlangen, und bei der Zufallsauswahl werden bessere Adressen bevorzugt. Einzelne Einträge lassen sich deaktivieren.
 
-Der OSM-Import ist **opt-in**, wird manuell ausgelöst und belastet den öffentlichen Overpass-Dienst. Daher nur bei Bedarf und nicht wiederholt hintereinander ausführen.
+Der OSM-Import ist **opt-in**, wird manuell ausgelöst und belastet den öffentlichen Overpass-Dienst. Daher nur bei Bedarf und nicht wiederholt hintereinander ausführen. Er läuft im Hintergrund und dauert je nach Gebiet und Auslastung von Overpass etwa eine bis drei Minuten (5 km Radius ≈ 18 000 Einträge). Die Seite zeigt so lange „OSM-Import läuft …“ und darf verlassen werden. Ist Overpass ausgelastet, wird zweimal automatisch neu versucht; scheitert auch das, erscheint ein Hinweis, es später erneut zu probieren.
 
 ### Ortstyp-Zuordnung
 Hier wird festgelegt, welche Objekt-Kategorie welchem Ortstyp entspricht (z. B. *Wohnhaus* → `wohngebaeude`, *Tiefgarage* → `tiefgarage`). Szenarien wählen ihre Orte über Ortstypen. Ohne passenden Typ werden manche Vorlagen nie gezogen: B18 und T03 brauchen eine Tiefgarage, T20 einen Gleisbereich, B20 und B21 ein Objekt mit Brandmeldeanlage.

@@ -1,2 +1,2 @@
-<p class="form-success">{{ meldung }}</p>
+{% if meldung %}<p class="{{ 'form-error' if fehler else 'form-success' }}">{{ meldung }}</p>{% endif %}
 {% include "planspiel/admin/_pool_liste.html" %}

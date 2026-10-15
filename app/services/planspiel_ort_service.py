@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import random
 import uuid
 from dataclasses import dataclass
@@ -21,6 +22,8 @@ from app.models.objekt import Objekt, ObjektBMA, ObjektZusatzadresse
 from app.models.planspiel import PlanspielAdresse, PlanspielOrtTypZuordnung, PlanspielSzenario, PlanspielSzenarioVersion
 from app.services.geo_service import validate_geojson_polygon
 from app.services.hoehen_service import haversine_m
+
+logger = logging.getLogger(__name__)
 
 
 class GebietFehlt(ValueError):
@@ -204,7 +207,7 @@ def _overpass_query(area: Gebiet) -> str:
         selector = f"({bounds[1]},{bounds[0]},{bounds[3]},{bounds[2]})"
     else:
         raise GebietFehlt("Planspiel-Gebiet ist nicht festgelegt (Polygon oder Koordinaten der Organisation fehlen).")
-    timeout = int(settings.STRASSEN_OVERPASS_TIMEOUT_SECONDS)
+    timeout = int(settings.PLANSPIEL_OVERPASS_TIMEOUT_SECONDS)
     highway = "^(primary|secondary|tertiary|residential|unclassified|living_street)$"
     teile = (
         f'nwr["addr:housenumber"]["addr:street"]{selector};',
@@ -213,6 +216,41 @@ def _overpass_query(area: Gebiet) -> str:
         f'way["railway"="rail"]{selector};',
     )
     return f"[out:json][timeout:{timeout}];(" + "".join(teile) + ");out center tags;"
+
+
+# Wartezeiten vor dem 2. und 3. Versuch, wenn Overpass ausgelastet ist
+_OSM_WARTEN_S: tuple[float, ...] = (5.0, 15.0)
+_OSM_WIEDERHOLEN = {429, 502, 503, 504}
+
+
+async def _overpass_abrufen(query: str) -> list[dict[str, Any]]:
+    timeout = settings.PLANSPIEL_OVERPASS_TIMEOUT_SECONDS + 15
+    async with httpx.AsyncClient(headers={"User-Agent": settings.HYDRANT_USER_AGENT}, timeout=timeout) as client:
+        for versuch in range(len(_OSM_WARTEN_S) + 1):
+            try:
+                response = await client.post(settings.STRASSEN_OVERPASS_URL, data={"data": query})
+                if response.status_code in _OSM_WIEDERHOLEN and versuch < len(_OSM_WARTEN_S):
+                    logger.info("Overpass HTTP %s, Versuch %s", response.status_code, versuch + 1)
+                    await asyncio.sleep(_OSM_WARTEN_S[versuch])
+                    continue
+                response.raise_for_status()
+                return list(response.json().get("elements", []))
+            except httpx.TimeoutException as exc:
+                if versuch < len(_OSM_WARTEN_S):
+                    logger.info("Overpass Timeout, Versuch %s", versuch + 1)
+                    await asyncio.sleep(_OSM_WARTEN_S[versuch])
+                    continue
+                raise OsmImportFehler(
+                    "OSM-Import fehlgeschlagen: Overpass hat nicht rechtzeitig geantwortet. "
+                    "Bitte später erneut versuchen."
+                ) from exc
+            except (httpx.HTTPError, ValueError) as exc:
+                logger.warning("Overpass-Abruf fehlgeschlagen: %s", exc)
+                raise OsmImportFehler(
+                    "OSM-Import fehlgeschlagen: Overpass ist derzeit ausgelastet oder nicht erreichbar. "
+                    "Bitte in einigen Minuten erneut versuchen."
+                ) from exc
+    raise OsmImportFehler("OSM-Import fehlgeschlagen: Overpass ist derzeit ausgelastet.")
 
 
 async def osm_importieren(db_factory: Any, org_id: int) -> PoolErgebnis:
@@ -224,15 +262,7 @@ async def osm_importieren(db_factory: Any, org_id: int) -> PoolErgebnis:
         finally:
             db.close()
     area = await asyncio.to_thread(get_area)
-    try:
-        async with httpx.AsyncClient(
-            headers={"User-Agent": settings.HYDRANT_USER_AGENT}, timeout=settings.STRASSEN_OVERPASS_TIMEOUT_SECONDS
-        ) as client:
-            response = await client.post(settings.STRASSEN_OVERPASS_URL, data={"data": _overpass_query(area)})
-            response.raise_for_status()
-            elements = response.json().get("elements", [])
-    except (httpx.HTTPError, ValueError) as exc:
-        raise OsmImportFehler("OSM-Import fehlgeschlagen: Overpass ist derzeit nicht erreichbar.") from exc
+    elements = await _overpass_abrufen(_overpass_query(area))
     if len(elements) > 20000:
         elements = elements[:20000]
     def store() -> PoolErgebnis:
@@ -240,6 +270,12 @@ async def osm_importieren(db_factory: Any, org_id: int) -> PoolErgebnis:
         set_tenant_context(db, org_id)
         result = PoolErgebnis()
         try:
+            vorhanden = {
+                (row.quelle, row.quell_id): row
+                for row in db.query(PlanspielAdresse).filter(
+                    PlanspielAdresse.org_id == org_id, PlanspielAdresse.quelle.in_(("osm", "strassenpunkt"))
+                )
+            }
             for item in elements:
                 tags, center = item.get("tags") or {}, item.get("center") or item
                 if "lat" not in center or "lon" not in center:
@@ -279,7 +315,16 @@ async def osm_importieren(db_factory: Any, org_id: int) -> PoolErgebnis:
                         "ort": None, "qualitaet": "C", "ort_typen": ["gleisbereich"], "merkmale": None}
                 else:
                     continue
-                result = _upsert(db, org_id, values, result)
+                row = vorhanden.get((values["quelle"], values["quell_id"]))
+                if row is None:
+                    row = PlanspielAdresse(org_id=org_id, **values)
+                    db.add(row)
+                    vorhanden[(values["quelle"], values["quell_id"])] = row
+                    result = PoolErgebnis(result.neu + 1, result.aktualisiert, result.deaktiviert)
+                else:
+                    for key, value in values.items():
+                        setattr(row, key, value)
+                    result = PoolErgebnis(result.neu, result.aktualisiert + 1, result.deaktiviert)
             db.commit()
             return result
         except Exception:
