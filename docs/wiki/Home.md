@@ -87,6 +87,7 @@ unter [Server-Voraussetzungen](Installation-Server-Voraussetzungen).
 | [Mannschaftsregister](Anwender-Mannschaftsregister) | Mitglieder, Qualifikationen |
 | [Archiv und PDF-Export](Anwender-Archiv-und-PDF-Export) | Abschließen, Bericht drucken |
 | [Übungsmodus](Anwender-Uebungsmodus) | Was ist anders, Statistik-Ausschluss |
+| [Planspiele & Simulation](Anwender-Planspiele) | Übungseinsätze und Unwetter-GSL erzeugen, Regie-Cockpit, allein üben mit simulierten Einheiten, Auswertung & PDF |
 | [QR-Code Schnellzugriff](Anwender-QR-Code-Schnellzugriff) | Zweites Gerät per Scan einbinden |
 | [Mobile Nutzung / PWA](Anwender-Mobile-Nutzung-PWA) | Installieren, Offline-Verhalten, Homescreen-Widgets |
 | [Native Android-App](Anwender-Native-Android-App) | Sideload-APK, Anmeldung, Live-Einsatzstatus, Widgets, Offline-Datenbestand für Objekte & Kontakte |
@@ -152,6 +153,7 @@ unter [Server-Voraussetzungen](Installation-Server-Voraussetzungen).
 | [Kontaktverwaltung](Administration-Kontaktverwaltung) | Modul aktivieren (System+Org), Rollen, Kategorien, Einsatzinfo-Freigabe, BMA-Import-Verhalten, Offline-Sync-API |
 | [Nachschlagewerke](Administration-Nachschlagewerke) | Modul aktivieren (System+Org), Gefahrgut-Datenquelle (BAM/ADR), Rettungskarten-URL, Offline-Funktion |
 | [Print & Alarm Gateway](Administration-Print-Alarm-Gateway) | Modul aktivieren (System+Org), Gateways koppeln, Drucker & Discovery, Druckregeln (Automatikdruck), manueller Druck |
+| [Planspiele einrichten](Administration-Planspiele) | Modul aktivieren (System+Org), Rollen, Gebiet, Adresspool, Ortstypen, Szenario-Katalog, Sicherheit |
 | [Förderstrecken-Planer](Administration-Foerderstrecken-Planer) | Modul aktivieren (System+Org), Pumpen/Schläuche mit Kennlinien (Vorlagen TS 1600/TS 1200), Kalibrierung über Übungsmessungen, PDF & Maschinisten-Token |
 
 ### Entwickler
@@ -161,6 +163,7 @@ unter [Server-Voraussetzungen](Installation-Server-Voraussetzungen).
 | [Sicherheit](Entwickler-Sicherheit) | Authentifizierung, CSRF, Tenant-Isolation, Medien und Rate-Limiting |
 | [MCP-Erweiterung](Entwickler-MCP-Erweiterung) | OAuth-Server, Tool-Registry, Live-Kontext und Testmuster |
 | [Straßensperren & Anfahrtsrouting](Entwickler-Strassensperren) | Architektur, Geometrie, Routing-Provider und Tests |
+| [Planspiele & Simulation](Entwickler-Planspiele) | Übungs-Guard, Übungsuhr, Worker mit Lease/Claim, Generator, Tests |
 | [Datenmodell](Entwickler-Datenmodell) | Tabellen, Beziehungen, Multi-Tenancy-Schema |
 | [Einsatz-Feed-Schema](Entwickler-Einsatz-Feed) | Pull-Endpunkte, Felder, ETag und `feed_rev` |
 | [REST-API](Entwickler-REST-API) | Endpoints, Payload-Validierung, Rate-Limiting, curl-Beispiele |

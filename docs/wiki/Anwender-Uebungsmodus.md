@@ -6,6 +6,8 @@
 
 Wenn ein Einsatz als **Übung** markiert ist (`is_exercise = true`), verhält er sich funktional identisch zu einem Echteinsatz — für eine realistische Übung — wird aber in mehreren Bereichen besonders behandelt.
 
+> Übungen automatisch erzeugen und mit Folgemeldungen steuern: siehe [Planspiele & Simulation](Anwender-Planspiele).
+
 ## Übung starten
 
 **Via Alarmierungssystem:** Wenn das Alarmierungssystem `"Uebung": true` im Payload übergibt, wird der Einsatz automatisch als Übung markiert.

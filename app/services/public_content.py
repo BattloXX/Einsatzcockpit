@@ -171,6 +171,12 @@ FEATURES: list[dict] = [
                     "Probenplan mit Jahresübersicht, Checklisten und Teilnehmern",
                     {"text": "Übungseinsätze und Nachbereitung", "wiki": "Anwender-Uebungsmodus"},
                     {
+                        "text": "Planspiele: Übungseinsätze und Unwetter-GSL automatisch erzeugen, "
+                                "mit Regie, Folgemeldungen und Auswertung – ohne echte Alarmierung",
+                        "wiki": "Anwender-Planspiele",
+                        "tag": "Beta",
+                    },
+                    {
                         "text": "Mannschaftsregister mit Qualifikationen und Ablaufdaten",
                         "wiki": "Anwender-Mannschaftsregister",
                     },
@@ -260,6 +266,11 @@ ROADMAP: list[dict] = [
                 "title": "Mail-Eingang – Erprobung",
                 "text": "Einsatz-Mails über Resend, IMAP oder Microsoft 365 landen als Meldung im "
                         "Einsatz; der Betrieb mit echten Postfächern wird erprobt.",
+            },
+            {
+                "title": "Planspiele – Erprobung",
+                "text": "Übungseinsätze und Unwetter-Großschadenslagen mit Szenario-Katalog, "
+                        "Folgemeldungen, simulierten Einheiten und Auswertung – im ersten Praxistest.",
             },
             {
                 "title": "KI-Assistenten über MCP – Erprobung",
