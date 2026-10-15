@@ -164,6 +164,18 @@
     gap: .35rem;
     margin-top: .5rem;
   }
+  .regie-generator {
+    margin-bottom: 1rem;
+    padding-bottom: .75rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .regie-generator__welle {
+    display: flex;
+    gap: .35rem;
+  }
+  .regie-generator__welle .form-input {
+    width: auto;
+  }
   .regie-health {
     margin: 1rem 0 0;
     color: var(--text-muted);
@@ -196,6 +208,9 @@
                       sub=status_labels.get(run.status, run.status) ~ " · Tempo " ~ run.tempo ~ "×") %}
     {% if run.incident_id %}
     <a class="btn btn--primary" href="/einsatz/{{ run.incident_id }}" target="_blank" rel="noopener">Zum Übungseinsatz</a>
+    {% endif %}
+    {% if run.lage_id %}
+    <a class="btn btn--primary" href="/lage/{{ run.lage_id }}" target="_blank" rel="noopener">Zum GSL-Board</a>
     {% endif %}
   {% endcall %}
 
@@ -267,6 +282,7 @@
         </form>
       </section>
 
+      {% if run.art != 'gsl' %}
       <section class="planspiel-regie__panel">
         <h2>Stichwort ändern</h2>
         <form class="planspiel-regie__form" method="post" action="/planspiele/{{ run.id }}/stichwort">
@@ -279,6 +295,7 @@
           <button class="btn" type="submit">Stichwort ändern</button>
         </form>
       </section>
+      {% endif %}
       {% endif %}
     </div>
 

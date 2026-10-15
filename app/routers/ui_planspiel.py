@@ -12,6 +12,7 @@ from starlette.datastructures import FormData
 from app.core.permissions import PLANSPIEL_LEITER_ROLES, PLANSPIEL_LESE_ROLLEN, has_role, require_role
 from app.core.templating import templates
 from app.db import SessionLocal, get_db
+from app.models.major_incident import IncidentSite
 from app.models.master import AlarmType
 from app.models.objekt import OBJEKT_STATUS_FREIGEGEBEN, Objekt
 from app.models.planspiel import (
@@ -33,11 +34,15 @@ from app.services.planspiel_engine import (
     folgemeldungen_setzen,
     fortsetzen,
     freie_meldung,
+    generator_fortsetzen,
+    generator_stoppen,
     nach_ausfuehrung_benachrichtigen,
+    nach_generierung_benachrichtigen,
     pausieren,
     sim_sekunden,
     stichwort_aendern,
     tick,
+    welle_jetzt,
 )
 from app.services.planspiel_katalog_service import aktive_version, stichwort_vorschlag, szenarien_fuer_stichwort
 from app.services.planspiel_ort_service import GebietFehlt, OrtNichtGefunden
@@ -147,7 +152,17 @@ def _timeline_context(db: Session, user: User, run: PlanspielRun, fehler: str | 
     done = sorted((event for event in events if event.status == "ausgefuehrt"),
                   key=lambda event: event.ausgefuehrt_at or datetime.min, reverse=True)
     failed = [event for event in events if event.status in {"uebersprungen", "abgebrochen", "fehlgeschlagen"}]
-    return {"run": run, "user": user, "anstehend": pending, "ausgefuehrt": done,
+    stellen: dict[int, str] = {}
+    site_ids = {event.ziel_id for event in events if event.ziel_typ == "site" and event.ziel_id}
+    if site_ids and run.lage_id:
+        stellen = {
+            site.id: site.bezeichnung
+            for site in db.query(IncidentSite).filter(
+                IncidentSite.id.in_(site_ids), IncidentSite.major_incident_id == run.lage_id,
+            ).all()
+        }
+    return {"run": run, "user": user, "anstehend": pending, "ausgefuehrt": done, "stellen": stellen,
+            "sim_s": sim_sekunden(run, _jetzt()),
             "fehlgeschlagen": failed, "can_steuern": _darf_steuern(db, user, run), "fehler": fehler}
 
 
@@ -162,7 +177,9 @@ def _cockpit_context(request: Request, db: Session, user: User, run: PlanspielRu
     ).order_by(User.display_name).all()
     users = db.query(User).filter(User.org_id == run.org_id, User.active.is_(True)).order_by(User.display_name).all()
     now = _jetzt()
-    return {"user": user, "run": run, "fehler": fehler, "status_labels": PLANSPIEL_STATUS_LABELS,
+    # Die Seite bindet das Timeline-Partial direkt ein und braucht dessen Daten schon beim ersten Laden.
+    timeline = _timeline_context(db, user, run, fehler)
+    return {**timeline, "user": user, "run": run, "fehler": fehler, "status_labels": PLANSPIEL_STATUS_LABELS,
             "sim_s": sim_sekunden(run, now), "server_jetzt": now.isoformat() + "Z",
             "can_steuern": _darf_steuern(db, user, run), "beobachtungen": observations,
             "mitglieder": members, "org_users": users,
@@ -231,9 +248,17 @@ def _form_data(form: FormData, user: User) -> tuple[EntwurfDaten, dict[str, obje
         stichwort_code=text("stichwort_code"), alarmtext=text("alarmtext"),
         folgemeldungen_aktiv=bool(form.get("folgemeldungen_aktiv")),
         tempo=float(text("tempo") or "1"), leiter_user_id=user.id,
+        gsl_modus=text("gsl_modus"),
+        mittel_s=int(text("mittel_s") or 45),
+        max_stellen=int(text("max_stellen") or 60),
+        max_laufzeit_min=int(text("max_laufzeit_min") or 120),
     )
-    if daten.art != "einzel":
-        raise ValueError("Derzeit ist nur Einzeleinsatz verfügbar")
+    if daten.art not in {"einzel", "gsl"}:
+        raise ValueError("Ungültige Planspiel-Art")
+    if daten.gsl_modus not in {None, "hochwasser", "sturm", "kombination"}:
+        raise ValueError("Ungültiger GSL-Modus")
+    if not 15 <= daten.mittel_s <= 600 or not 1 <= daten.max_stellen <= 300 or not 10 <= daten.max_laufzeit_min <= 720:
+        raise ValueError("GSL-Grenzen liegen außerhalb der erlaubten Bereiche")
     if daten.erzeugung not in {"manuell", "teilauto", "zufall"}:
         raise ValueError("Ungültige Erzeugungsart")
     if daten.ort_modus not in {"zufall", "pool", "objekt", "manuell", "karte"}:
@@ -422,6 +447,7 @@ async def _tick_now(run: PlanspielRun, jetzt: datetime) -> None:
     result = await asyncio.to_thread(tick, SessionLocal, run.id, run.org_id, jetzt)
     for item in result.ausgefuehrt:
         await nach_ausfuehrung_benachrichtigen(run.org_id, run.id, item)
+    await nach_generierung_benachrichtigen(run.org_id, run.id, result.generiert)
 
 
 def _action_response(request: Request, db: Session, user: User, run: PlanspielRun,
@@ -561,6 +587,48 @@ async def meldung(run_id: int, request: Request, db: Session = Depends(get_db),
                       ereignis_typ=str(form.get("ereignis_typ", "lageweit")),
                       sichtbarkeit=str(form.get("sichtbarkeit", "teilnehmer")),
                       client_uuid=str(form.get("client_uuid") or "") or None)
+        db.commit()
+        await _tick_now(run, jetzt)
+        await _broadcast(run)
+        return _action_response(request, db, user, run)
+    except (ValueError, ZustandsFehler) as exc:
+        db.rollback()
+        return _action_response(request, db, user, run, str(exc))
+
+
+@router.post("/{run_id:int}/generator")
+async def generator(run_id: int, request: Request, db: Session = Depends(get_db),
+                    user: User = Depends(require_role(*PLANSPIEL_LESE_ROLLEN)),
+                    _guard: None = Depends(require_planspiel_enabled)):
+    run = _run(db, user, run_id)
+    _require_steuern(db, user, run)
+    form = await request.form()
+    jetzt = _jetzt()
+    try:
+        if str(form.get("aktion", "")) == "fortsetzen":
+            generator_fortsetzen(db, run, user, jetzt)
+        else:
+            generator_stoppen(db, run, user)
+        db.commit()
+        await _tick_now(run, jetzt)
+        await _broadcast(run)
+        return _action_response(request, db, user, run)
+    except (ValueError, ZustandsFehler) as exc:
+        db.rollback()
+        return _action_response(request, db, user, run, str(exc))
+
+
+@router.post("/{run_id:int}/welle")
+async def welle(run_id: int, request: Request, db: Session = Depends(get_db),
+                user: User = Depends(require_role(*PLANSPIEL_LESE_ROLLEN)),
+                _guard: None = Depends(require_planspiel_enabled)):
+    run = _run(db, user, run_id)
+    _require_steuern(db, user, run)
+    form = await request.form()
+    jetzt = _jetzt()
+    try:
+        anzahl = int(str(form.get("anzahl", "3")) or 3)
+        welle_jetzt(db, run, user, jetzt, anzahl)
         db.commit()
         await _tick_now(run, jetzt)
         await _broadcast(run)
