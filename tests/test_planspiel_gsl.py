@@ -1,6 +1,7 @@
 """Gezielte Tests fuer den GSL-Planspielgenerator."""
 from __future__ import annotations
 
+from collections import Counter
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -12,7 +13,7 @@ from app.models.master import AlarmType, FireDept, OrgSettings, VehicleMaster
 from app.models.planspiel import PlanspielAdresse, PlanspielRun, PlanspielSzenario, PlanspielZiel
 from app.models.user import User
 from app.services.planspiel_engine import generator_stoppen, tick, welle_jetzt
-from app.services.planspiel_katalog_service import katalog_importieren
+from app.services.planspiel_katalog_service import katalog_importieren, neue_version, system_inhalt
 from app.services.planspiel_run_service import EntwurfDaten, entwurf_anlegen, starten
 from tests.conftest import TestingSession
 
@@ -46,6 +47,22 @@ def _run(db, org, user, **values):
     starten(db, run, user)
     db.commit()
     return run
+
+
+def _stellen(db, org, user, modus, seed=12345, groups=6):
+    run = _run(db, org, user, gsl_modus=modus, seed=seed, mittel_s=15, max_stellen=60,
+               max_laufzeit_min=600)
+    run.konfig = {**run.konfig, "duplikat_p": 0.0}
+    db.commit()
+    for group in range(groups):
+        db.refresh(run)
+        jetzt = run.gestartet_at + timedelta(seconds=group * 1000)
+        welle_jetzt(db, run, user, jetzt, 10)
+        db.commit()
+        tick(TestingSession, run.id, org.id, jetzt)
+        tick(TestingSession, run.id, org.id, jetzt)
+    db.expire_all()
+    return run, db.query(PlanspielZiel).filter_by(run_id=run.id).order_by(PlanspielZiel.seq).all()
 
 
 def test_gsl_entwurf_nur_mit_gsl_szenario():
@@ -185,8 +202,11 @@ def test_doppelmeldung_verweist_auf_frueheres_ziel():
         tick(TestingSession, run.id, org.id, run.gestartet_at)
         duplicates = db.query(PlanspielZiel).filter(
             PlanspielZiel.run_id == run.id, PlanspielZiel.ist_duplikat_von.is_not(None),
-        ).count()
+        ).all()
         assert duplicates
+        for duplicate in duplicates:
+            original = db.get(PlanspielZiel, duplicate.ist_duplikat_von)
+            assert original and duplicate.szenario_code == original.szenario_code
     finally:
         db.close()
 
@@ -214,3 +234,52 @@ def test_folgemeldungen_je_stelle_mit_eigenem_zufall():
         for plan in (zeitplan_fuer(inhalt, {}, f"7:stelle:{seq}") for seq in range(1, 30))
     }
     assert len(plaene) > 10
+
+
+@pytest.mark.parametrize("modus", ("hochwasser", "sturm", "kombination"))
+def test_gsl_verteilung_ist_breit_und_ohne_dreifachfolge(modus):
+    db, org, user = _basis()
+    try:
+        _, targets = _stellen(db, org, user, modus)
+        codes = [target.szenario_code for target in targets]
+        assert len(codes) == 60
+        assert len(set(codes)) >= 6
+        assert len({target.stichwort_code for target in targets}) >= 2
+        assert all(codes[index:index + 3] != [code] * 3 for index, code in enumerate(codes[:-2]))
+        assert max(Counter(codes).values()) <= 21
+    finally:
+        db.close()
+
+
+def test_unveraenderte_systemvorlage_darf_alarmtext_variante_nutzen():
+    db, org, user = _basis()
+    try:
+        scenario = db.query(PlanspielSzenario).filter_by(org_id=org.id, code="T01").one()
+        content = system_inhalt("T01")
+        content["alarmtext_template"] = "Gepflegter Alarmtext. {adresse}."
+        neue_version(db, scenario, content, user.id)
+        db.commit()
+        run = _run(db, org, user, max_stellen=1)
+        tick(TestingSession, run.id, org.id, run.gestartet_at)
+        target = db.query(PlanspielZiel).filter_by(run_id=run.id).one()
+        site = db.get(IncidentSite, target.site_id)
+        assert site.einsatzgrund.startswith("Gepflegter Alarmtext.")
+    finally:
+        db.close()
+
+
+def test_gleicher_seed_liefert_gleiche_code_abfolge_in_zwei_organisationen():
+    first_db, first_org, first_user = _basis()
+    second_db = None
+    try:
+        _, first = _stellen(first_db, first_org, first_user, "kombination", seed=991, groups=1)
+        first_codes = [target.szenario_code for target in first]
+        first_db.close()
+        second_db, second_org, second_user = _basis()
+        _, second = _stellen(second_db, second_org, second_user, "kombination", seed=991, groups=1)
+        assert first_codes == [target.szenario_code for target in second]
+    finally:
+        if first_db.is_active:
+            first_db.close()
+        if second_db is not None:
+            second_db.close()

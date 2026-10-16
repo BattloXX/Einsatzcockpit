@@ -3,7 +3,9 @@
 import re
 
 from app.data import lfv_stichworte_v03
-from app.data.planspiel_katalog import BAUSTEINE, GSL_WELLEN, ORT_TYPEN, SZENARIEN, TEMPLATE_VARIABLEN
+from app.data.planspiel_katalog import (
+    BAUSTEINE, GSL_ALARMTEXT_VARIANTEN, GSL_WELLEN, ORT_TYPEN, SZENARIEN, TEMPLATE_VARIABLEN,
+)
 
 _PLACEHOLDER = re.compile(r"{([a-z_]+)}")
 _ADRESS_VARIABLEN = {"adresse", "strasse", "hausnr", "ort", "objekt", "einheit", "meldezeit"}
@@ -54,6 +56,11 @@ def test_katalog_regeln_und_gsl_wellen():
     gsl_codes = ("G01", "G02", "G03", "G04", "G05")
     assert all(nach_code[code].kategorie == "gsl" and nach_code[code].gsl_modus for code in gsl_codes)
     assert all(code in nach_code for wellen in GSL_WELLEN.values() for welle in wellen for code in welle.stellen_codes)
+    assert set(GSL_ALARMTEXT_VARIANTEN) == {f"T{number:02d}" for number in range(1, 18)}
+    for varianten in GSL_ALARMTEXT_VARIANTEN.values():
+        assert 3 <= len(varianten) <= 4
+        for variante in varianten:
+            _assert_variablen(variante, {}, require_auswahl=False)
 
 
 def test_lfv_referenz():

@@ -254,22 +254,42 @@ class Welle:
 
 GSL_WELLEN: dict[str, tuple[Welle, ...]] = {
     "hochwasser": (
-        Welle("Anstieg", 900, 0.8, {"T01": 45, "T02": 25, "T03": 10, "T14": 20}),
-        Welle("Spitze", 1800, 1.5, {"T01": 30, "T02": 20, "T03": 15, "T13": 10, "T14": 25}),
-        Welle("Konzentration", 1200, 1.0, {"T01": 35, "T02": 25, "T14": 25, "T17": 15}),
-        Welle("Entspannung", 900, 0.5, {"T01": 55, "T02": 25, "T14": 20}),
+        Welle("Anstieg", 900, 0.8, {"T01": 18, "T02": 16, "T03": 14, "T05": 12, "T06": 10, "T07": 10, "T11": 8, "T14": 12}),
+        Welle("Spitze", 1800, 1.5, {"T01": 15, "T02": 14, "T03": 13, "T05": 10, "T09": 10, "T11": 8, "T13": 12, "T14": 18}),
+        Welle("Konzentration", 1200, 1.0, {"T01": 15, "T02": 14, "T03": 12, "T05": 10, "T09": 10, "T11": 9, "T14": 16, "T17": 14}),
+        Welle("Entspannung", 900, 0.5, {"T01": 18, "T02": 16, "T03": 12, "T05": 14, "T06": 12, "T07": 10, "T11": 8, "T14": 10}),
     ),
     "sturm": (
-        Welle("Böen", 900, 0.9, {"T04": 25, "T08": 20, "T09": 35, "T10": 20}),
-        Welle("Spitze", 1500, 1.6, {"T04": 20, "T08": 20, "T09": 30, "T10": 15, "T12": 15}),
-        Welle("Nachphase", 1200, 0.6, {"T04": 25, "T08": 20, "T09": 35, "T12": 20}),
+        Welle("Böen", 900, 0.9, {"T01": 10, "T04": 14, "T05": 10, "T08": 14, "T09": 16, "T10": 12, "T11": 10, "T15": 14}),
+        Welle("Spitze", 1500, 1.6, {"T01": 9, "T04": 13, "T05": 9, "T08": 13, "T09": 16, "T10": 11, "T11": 10, "T12": 11, "T15": 8}),
+        Welle("Nachphase", 1200, 0.6, {"T01": 10, "T04": 15, "T05": 11, "T08": 14, "T09": 16, "T10": 11, "T11": 10, "T12": 13}),
     ),
     "kombination": (
-        Welle("Starkregen", 900, 0.9, {"T01": 35, "T02": 25, "T03": 15, "T14": 25}),
-        Welle("Böen", 900, 1.2, {"T04": 20, "T08": 20, "T09": 35, "T10": 25}),
-        Welle("Mischphase", 1800, 1.7, {"T01": 20, "T04": 15, "T09": 20, "T12": 15, "T14": 20, "T15": 10}),
-        Welle("Nachphase", 1200, 0.6, {"T01": 25, "T04": 20, "T09": 30, "T14": 15, "T17": 10}),
+        Welle("Starkregen", 900, 0.9, {"T01": 15, "T02": 14, "T03": 12, "T04": 10, "T05": 10, "T09": 10, "T11": 8, "T14": 12, "T15": 9}),
+        Welle("Böen", 900, 1.2, {"T01": 10, "T03": 9, "T04": 14, "T05": 10, "T08": 13, "T09": 15, "T11": 10, "T12": 10, "T15": 9}),
+        Welle("Mischphase", 1800, 1.7, {"T01": 12, "T02": 11, "T03": 10, "T04": 12, "T08": 10, "T09": 13, "T12": 10, "T14": 12, "T15": 10}),
+        Welle("Nachphase", 1200, 0.6, {"T01": 12, "T02": 10, "T04": 13, "T05": 11, "T08": 11, "T09": 14, "T11": 10, "T14": 10, "T17": 9}),
     ),
 }
 
-GSL_SCHWERE_GEWICHTE = {"T1": 70, "T2": 25, "T3": 4, "T4": 1}
+GSL_SCHWERE_GEWICHTE = {"T1": 1.0, "T2": 0.8, "T3": 0.25, "T4": 0.05}
+
+GSL_ALARMTEXT_VARIANTEN: dict[str, tuple[str, ...]] = {
+    "T01": ("Starkregen setzt Keller unter Wasser, Pegel steigt. {adresse}. Meldung: {meldender}.", "Wassereintritt im Keller nach Regen, Auspumpen erforderlich. {adresse}. Meldung: {meldender}.", "Keller überflutet, Wasser dringt weiter nach. {adresse}. Meldung: {meldender}."),
+    "T02": ("Rückstau aus Kanalisation im Keller. {adresse}. Meldung: {meldender}.", "Abwasser tritt im Keller aus Bodenablauf aus. {adresse}. Meldung: {meldender}.", "Kanalwasser drückt in Kellerräume, Lage nimmt zu. {adresse}. Meldung: {meldender}."),
+    "T03": ("Tiefgarageneinfahrt läuft voll, Fahrzeuge gefährdet. {adresse}. Meldung: {meldender}.", "Wasser strömt in Garage, Zufahrt nicht mehr passierbar. {adresse}. Meldung: {meldender}.", "Starkregen überflutet Tiefgaragenzufahrt. {adresse}. Meldung: {meldender}."),
+    "T04": ("Äste nach Windbruch auf Gehsteig, Durchgang blockiert. {adresse}. Meldung: {meldender}.", "Lose Baumteile liegen auf dem Gehweg. {adresse}. Meldung: {meldender}.", "Wind hat Äste abgerissen, Gefahr für Passanten. {adresse}. Meldung: {meldender}."),
+    "T05": ("Betriebsmittel auf Fahrbahn, Bindemittel notwendig. {adresse}. Meldung: {meldender}.", "Verunreinigung durch Öl auf Straße festgestellt. {adresse}. Meldung: {meldender}.", "Rutschige Ölspur im Fahrbahnbereich. {adresse}. Meldung: {meldender}."),
+    "T06": ("Tier steckt fest und braucht Hilfe. {adresse}. Meldung: {meldender}.", "Tierrettung angefordert, Tier kann sich nicht befreien. {adresse}. Meldung: {meldender}.", "Verletztes oder eingeklemmtes Tier gemeldet. {adresse}. Meldung: {meldender}."),
+    "T07": ("Rettungsdienst benötigt Tragehilfe über Stiege. {adresse}. Meldung: Rettungsdienst.", "Patiententransport über engen Zugang, Feuerwehrhilfe erbeten. {adresse}. Meldung: Rettungsdienst.", "Tragehilfe wegen fehlender Liftmöglichkeit angefordert. {adresse}. Meldung: Rettungsdienst."),
+    "T08": ("Dachziegel werden vom Wind gelöst, Bereich sichern. {adresse}. Meldung: {meldender}.", "Teile vom Dach fallen auf den Gehsteig. {adresse}. Meldung: {meldender}.", "Sturmschaden am Dach, lose Ziegel gefährden Passanten. {adresse}. Meldung: {meldender}."),
+    "T09": ("Umgestürzter Baum sperrt Fahrbahn vollständig. {adresse}. Meldung: {meldender}.", "Baum liegt über Straße, kein Durchkommen. {adresse}. Meldung: {meldender}.", "Fahrbahn durch Windwurf blockiert. {adresse}. Meldung: {meldender}."),
+    "T10": ("Baum auf abgestelltem Fahrzeug, Personenlage unklar. {adresse}. Meldung: {meldender}.", "Windwurf hat Pkw getroffen. {adresse}. Meldung: {meldender}.", "Astwerk und Baum liegen auf einem Fahrzeug. {adresse}. Meldung: {meldender}."),
+    "T11": ("Pkw muss nach Abkommen von Fahrbahn geborgen werden. {adresse}. Meldung: {meldender}.", "Fahrzeugbergung ohne eingeklemmte Personen angefordert. {adresse}. Meldung: {meldender}.", "Auto abseits der Straße, technische Hilfe benötigt. {adresse}. Meldung: {meldender}."),
+    "T12": ("Sturmböen lösen Gebäudeteile, Sicherung erforderlich. {adresse}. Meldung: {meldender}.", "Blechteile schlagen im Wind am Gebäude. {adresse}. Meldung: {meldender}.", "Planen und Verkleidung drohen sich zu lösen. {adresse}. Meldung: {meldender}."),
+    "T13": ("Erdreich rutscht auf Straße, Hang weiterhin instabil. {adresse}. Meldung: {meldender}.", "Murenmaterial blockiert Fahrbahn. {adresse}. Meldung: {meldender}.", "Hangbewegung mit Material auf Verkehrsfläche. {adresse}. Meldung: {meldender}."),
+    "T14": ("Bach ist verklaust, Wasser bedroht nahe Gebäude. {adresse}. Meldung: {meldender}.", "Wasser tritt bei Bachlauf über die Ufer. {adresse}. Meldung: {meldender}.", "Verklausung verursacht Überflutung im Nahbereich. {adresse}. Meldung: {meldender}."),
+    "T15": ("Verkehrsunfall mit eingeklemmter Person. {adresse}. Meldung: {meldender}.", "Person nach Unfall im Fahrzeug eingeschlossen. {adresse}. Meldung: {meldender}.", "Pkw-Unfall, technische Rettung erforderlich. {adresse}. Meldung: {meldender}."),
+    "T16": ("Person unter umgestürztem Bauteil eingeschlossen. {adresse}. Meldung: {meldender}.", "Bauteil hat Person eingeklemmt, Rettung läuft an. {adresse}. Meldung: {meldender}.", "Technische Rettung einer eingeschlossenen Person. {adresse}. Meldung: {meldender}."),
+    "T17": ("Person nach Erdrutsch teilweise verschüttet. {adresse}. Meldung: {meldender}.", "Verschüttete Person, Kollegen leisten Erste Hilfe. {adresse}. Meldung: {meldender}.", "Erdmaterial hat Person eingeschlossen. {adresse}. Meldung: {meldender}."),
+}
