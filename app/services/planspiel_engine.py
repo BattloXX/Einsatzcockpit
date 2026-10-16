@@ -672,14 +672,27 @@ def generator_schritt(db: Session, run: PlanspielRun, jetzt: datetime) -> list[G
             break
         severity = (settings.planspiel_gsl_gewichte or {}) if settings else {}
         from app.data.planspiel_katalog import GSL_SCHWERE_GEWICHTE
-        weights = [wave.stellen_codes[item[0].code] * severity.get(
-            item[1]["stichwort_code"], GSL_SCHWERE_GEWICHTE.get(item[1]["stichwort_code"], 1)
-        ) for item in candidates]
+        recent_codes = [code for (code,) in db.query(PlanspielZiel.szenario_code).filter(
+            PlanspielZiel.run_id == run.id,
+        ).order_by(PlanspielZiel.seq.desc()).limit(3)]
+        weights = [wave.stellen_codes[item[0].code]
+                   * GSL_SCHWERE_GEWICHTE.get(item[1]["stichwort_code"], 1.0)
+                   * float(severity.get(item[1]["stichwort_code"], 1.0))
+                   * (0.25 if item[0].code in recent_codes else 1.0)
+                   for item in candidates]
+        if len(candidates) > 1 and len(recent_codes) >= 2 and recent_codes[0] == recent_codes[1]:
+            for index, item in enumerate(candidates):
+                if item[0].code == recent_codes[0]:
+                    weights[index] = 0.0
         scenario, content = rng.choices(candidates, weights=weights, k=1)[0]
         targets = db.query(PlanspielZiel).filter(PlanspielZiel.run_id == run.id).order_by(PlanspielZiel.seq).all()
         duplicate_of = None
         if targets and rng.random() < float((run.konfig or {}).get("duplikat_p", 0.05)):
             original = rng.choice(targets)
+            original_scenario = (_szenario_fuer_code(db, run, original.szenario_code)
+                                 if original.szenario_code is not None else None)
+            if original_scenario is not None:
+                scenario, content = original_scenario
             address = dict(original.adress_snapshot or {})
             duplicate_of = original.id
             ort = OrtWahl(address.get("adresse_id", 0), address.get("objekt_id"), address.get("bezeichnung"),
@@ -731,9 +744,17 @@ def generator_schritt(db: Session, run: PlanspielRun, jetzt: datetime) -> list[G
             return results
         variables = _variablen(content, ort, run.seed + seq)
         name = content["titel"] + (" (weitere Meldung)" if duplicate_of is not None else "")
+        alarmtext_template = content["alarmtext_template"]
+        if scenario.herkunft == "system" and not scenario.org_geaendert:
+            from app.data.planspiel_katalog import GSL_ALARMTEXT_VARIANTEN
+            variants = GSL_ALARMTEXT_VARIANTEN.get(scenario.code, ())
+            if variants:
+                alarmtext_template = rng.choice(variants if duplicate_of is not None else (
+                    content["alarmtext_template"], *variants
+                ))
         from app.services.gsl_stelle_service import stelle_simuliert_anlegen
         site = stelle_simuliert_anlegen(
-            db, lage, bezeichnung=name, einsatzgrund=rendern(content["alarmtext_template"], variables),
+            db, lage, bezeichnung=name, einsatzgrund=rendern(alarmtext_template, variables),
             ort=ort.ort, strasse=ort.strasse, hausnr=ort.hausnr, lat=ort.lat, lng=ort.lng,
             alarm_stufe=content["stichwort_code"], user_id=run.leiter_user_id, author_name="Planspiel",
         )
