@@ -484,6 +484,18 @@ def test_check_org_fast_path_enriches_before_units_and_public(monkeypatch):
     finally:
         db.close()
     order = []
+    # Modulweiter Poll-Zustand frisch: ein früherer Test im selben xdist-Worker kann "fast-1"
+    # als bekannt bzw. den PublicEvents-Abruf als gerade erledigt hinterlassen haben.
+    monkeypatch.setattr(dibos_loop, "_previous_event_numbers", {})
+    monkeypatch.setattr(dibos_loop, "_last_public_events_at", {})
+    monkeypatch.setattr(dibos_loop, "_org_clients", {})
+
+    async def fehlender_aktiver_einsatz(*_args, **_kwargs):
+        # PublicEvents werden nur bei einem aktiven Einsatz ohne aktuelle Meldung abgefragt;
+        # bisher hing das davon ab, ob ein anderer Test so einen Einsatz hinterlassen hatte.
+        return True
+
+    monkeypatch.setattr(dibos_loop, "_has_missing_active_incidents", fehlender_aktiver_einsatz)
     monkeypatch.setattr(
         dibos_client, "DibosClient",
         lambda *args, **kwargs: _RecordingClient([{"eventNumber": "fast-1"}], calls=order),

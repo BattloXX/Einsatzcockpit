@@ -48,6 +48,14 @@ GATEWAY_STATUS_LABELS = {
     GATEWAY_STATUS_OFFLINE: "Offline",
 }
 
+GATEWAY_KIND_LINUX = "linux"
+GATEWAY_KIND_WINDOWS_AGENT = "windows_agent"
+
+GATEWAY_KIND_LABELS = {
+    GATEWAY_KIND_LINUX: "Linux-Gateway",
+    GATEWAY_KIND_WINDOWS_AGENT: "Windows-Druckagent",
+}
+
 # Pairing-Code Gueltigkeit
 PAIRING_CODE_TTL_MINUTES = 10
 
@@ -118,6 +126,7 @@ JOB_PRINTING = "printing"  # CUPS druckt
 JOB_DONE = "done"
 JOB_FAILED = "failed"
 JOB_CANCELED = "canceled"
+JOB_UNCERTAIN = "uncertain"
 
 JOB_STATUS_LABELS = {
     JOB_QUEUED: "In Warteschlange",
@@ -126,11 +135,28 @@ JOB_STATUS_LABELS = {
     JOB_DONE: "Gedruckt",
     JOB_FAILED: "Fehlgeschlagen",
     JOB_CANCELED: "Abgebrochen",
+    JOB_UNCERTAIN: "Unklar – bitte prüfen",
 }
 JOB_TERMINAL = frozenset({JOB_DONE, JOB_FAILED, JOB_CANCELED})
 
 JOB_SOURCE_MANUAL = "manual"
 JOB_SOURCE_RULE = "rule"
+
+DELIVERY_PUSH = "push"
+DELIVERY_LEASE = "lease"
+
+PHASE_LEASED = "leased"
+PHASE_FETCHING = "fetching"
+PHASE_SUBMITTING = "submitting"
+PHASE_SPOOLED = "spooled"
+
+RENDER_MODES = {
+    "driver": "Windows-Druckertreiber",
+    "pdf_direct": "PDF direkt",
+    "ipp_direct": "IPP direkt",
+    "command": "Befehl",
+    "folder": "Ordner",
+}
 
 # ── Druckregel-Trigger ─────────────────────────────────────────────────────────
 TRIGGER_EINSATZ_CREATED = "einsatz_created"
@@ -215,6 +241,10 @@ class Gateway(TenantScoped, Base):
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(150), nullable=False)
     standort: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    kind: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=GATEWAY_KIND_LINUX, server_default=GATEWAY_KIND_LINUX
+    )
+    agent_info: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     # Device-Token (SHA256-Hash, hash_api_key) – gesetzt nach Pairing, rotierbar.
     device_token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
@@ -241,6 +271,9 @@ class Gateway(TenantScoped, Base):
     printers: Mapped[list[Printer]] = relationship(
         "Printer", back_populates="gateway", cascade="all, delete-orphan"
     )
+    agent_routes: Mapped[list[PrinterAgentRoute]] = relationship(
+        "PrinterAgentRoute", back_populates="gateway", cascade="all, delete-orphan"
+    )
 
     __table_args__ = (
         Index("ix_gateway_org", "org_id"),
@@ -253,6 +286,10 @@ class Gateway(TenantScoped, Base):
     @property
     def is_paired(self) -> bool:
         return bool(self.device_token_hash)
+
+    @property
+    def is_windows_agent(self) -> bool:
+        return self.kind == GATEWAY_KIND_WINDOWS_AGENT
 
 
 class Printer(TenantScoped, Base):
@@ -282,9 +319,43 @@ class Printer(TenantScoped, Base):
     erstellt_am: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
     gateway: Mapped[Gateway] = relationship("Gateway", back_populates="printers")
+    agent_routes: Mapped[list[PrinterAgentRoute]] = relationship(
+        "PrinterAgentRoute", back_populates="printer", cascade="all, delete-orphan"
+    )
 
     __table_args__ = (
         Index("ix_printer_org_gateway", "org_id", "gateway_id"),
+    )
+
+
+class PrinterAgentRoute(TenantScoped, Base):
+    """Route eines Druckziels zu einer lokalen Queue eines Windows-Druckagents."""
+    __tablename__ = "printer_agent_route"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    printer_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("printer.id", ondelete="CASCADE"), nullable=False
+    )
+    gateway_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("gateway.id", ondelete="CASCADE"), nullable=False
+    )
+    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=100, server_default="100")
+    local_queue: Mapped[str] = mapped_column(String(255), nullable=False)
+    render_mode: Mapped[str] = mapped_column(String(20), nullable=False, default="driver", server_default="driver")
+    options: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    identity_check: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="1")
+    aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="1")
+    identity: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    ready: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    readiness: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    erstellt_am: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
+
+    printer: Mapped[Printer] = relationship("Printer", back_populates="agent_routes")
+    gateway: Mapped[Gateway] = relationship("Gateway", back_populates="agent_routes")
+
+    __table_args__ = (
+        UniqueConstraint("printer_id", "gateway_id", name="uq_printer_agent_route"),
+        Index("ix_printer_agent_route_org_gateway", "org_id", "gateway_id"),
     )
 
 
@@ -321,6 +392,21 @@ class PrintJob(TenantScoped, Base):
     # Druckoptionen: {copies, duplex, color, media}
     options: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default=JOB_QUEUED)
+    delivery: Mapped[str] = mapped_column(
+        String(10), nullable=False, default=DELIVERY_PUSH, server_default=DELIVERY_PUSH
+    )
+    lease_gateway_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("gateway.id", ondelete="SET NULL"), nullable=True
+    )
+    lease_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    lease_generation: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    phase: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    spool_ref: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    queued_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    agent_contact_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     idempotency_key: Mapped[str] = mapped_column(String(120), nullable=False, unique=True)
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     error: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -339,6 +425,7 @@ class PrintJob(TenantScoped, Base):
     __table_args__ = (
         Index("ix_print_job_org_incident", "org_id", "incident_id"),
         Index("ix_print_job_org_gateway_status", "org_id", "gateway_id", "status"),
+        Index("ix_print_job_delivery_status", "delivery", "status"),
     )
 
     @property
