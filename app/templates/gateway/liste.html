@@ -71,6 +71,10 @@
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
         <input class="gwl-input" type="text" name="name" placeholder="Name (z. B. Gerätehaus)" required maxlength="150">
         <input class="gwl-input" type="text" name="standort" placeholder="Standort (optional)" maxlength="200">
+        <select class="gwl-input" name="kind" title="Art des Geräts">
+          <option value="linux">Linux-Gateway (Docker, Alarmleitung + Druck)</option>
+          <option value="windows_agent">Windows-Druckagent (Dienst auf einem PC)</option>
+        </select>
         <button type="submit" class="gwl-btn">+ Gateway anlegen</button>
       </form>
     </div>
@@ -85,8 +89,8 @@
         <a class="gwl-card" href="/gateway/{{ gw.id }}">
           <div class="gwl-card__top">
             <div>
-              <div class="gwl-card__name">🖨️ {{ gw.name }}</div>
-              <div class="gwl-card__loc">{{ gw.standort or 'Kein Standort' }}</div>
+              <div class="gwl-card__name">{{ '🪟' if gw.is_windows_agent else '🖨️' }} {{ gw.name }}</div>
+              <div class="gwl-card__loc">{{ "Windows-Druckagent · " if gw.is_windows_agent else "" }}{{ gw.standort or "Kein Standort" }}</div>
             </div>
             {% if gw.id in connected_ids %}
             <span class="gwl-chip gwl-chip--ok"><span class="gwl-chip__d"></span>Online</span>
