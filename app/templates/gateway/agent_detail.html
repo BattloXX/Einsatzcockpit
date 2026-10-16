@@ -1,0 +1,316 @@
+{% extends "admin/_layout.html" %}
+{% block title %}{{ gw.name }} – Windows-Druckagent – {{ brand }}{% endblock %}
+{% block admin_content %}
+{% include "gateway/_gwx_style.html" %}
+{% set info = gw.agent_info or {} %}
+{% set host = info.get('host') or {} %}
+
+<div class="gwx">
+  <div class="gwx-bar">
+    <div class="gwx-brand">
+      <div class="gwx-brand__icon">🪟</div>
+      <div>
+        <div class="gwx-brand__t">{{ gw.name }}</div>
+        <div class="gwx-brand__s">{{ (gw.standort or 'WINDOWS-DRUCKAGENT')|upper }}</div>
+      </div>
+    </div>
+    <div class="gwx-pills">
+      {% if connected %}
+      <span class="gwx-pill gwx-pill--ok"><span class="gwx-pill__d"></span>Online</span>
+      {% elif not gw.is_paired %}
+      <span class="gwx-pill"><span class="gwx-pill__d"></span>Nicht gekoppelt</span>
+      {% else %}
+      <span class="gwx-pill gwx-pill--err"><span class="gwx-pill__d"></span>Offline</span>
+      {% endif %}
+      {% if host.get('host') %}<span class="gwx-pill">💻 {{ host.get('host') }}</span>{% endif %}
+      {% if gw.version %}<span class="gwx-pill">v{{ gw.version }}</span>{% endif %}
+    </div>
+    <div class="gwx-spacer"></div>
+    <a href="/gateway" class="gwx-btn">&larr; Übersicht</a>
+  </div>
+
+  {% from "gateway/_tabs.html" import gwtabs %}
+  {{ gwtabs(gw.id, "gateway") }}
+
+  <div class="gwx-body">
+    {% set q = request.query_params %}
+    {% if q.get('pairing_code') %}
+    <div class="gwx-alert gwx-alert--info">
+      <strong>Pairing-Code (10 min gültig):</strong>
+      <code style="font-size:1.3em; letter-spacing:2px;">{{ q.get('pairing_code') }}</code><br>
+      Auf dem Windows-PC als Administrator ausführen:<br>
+      <code style="word-break:break-all;">EinsatzcockpitPrintAgent.exe pair --url {{ cloud_url }} --code {{ q.get('pairing_code') }}</code>
+    </div>
+    {% endif %}
+    {% if q.get('device_token') %}
+    <div class="gwx-alert gwx-alert--info">
+      <strong>Neues Device-Token (nur jetzt sichtbar):</strong>
+      <code style="word-break:break-all;">{{ q.get('device_token') }}</code>
+    </div>
+    {% endif %}
+    {% if q.get('saved') %}<div class="gwx-alert gwx-alert--ok">Gespeichert – der Agent erhält die neue Konfiguration sofort.</div>{% endif %}
+    {% if q.get('route_deleted') %}<div class="gwx-alert gwx-alert--ok">Zuordnung entfernt.</div>{% endif %}
+    {% if q.get('error') == 'queue' %}<div class="gwx-alert gwx-alert--err">Bitte eine Windows-Warteschlange wählen.</div>{% endif %}
+    {% if q.get('error') == 'route_doppelt' %}<div class="gwx-alert gwx-alert--err">Dieser Agent ist dem Druckziel bereits zugeordnet.</div>{% endif %}
+
+    <div class="gwx-grid">
+      {# ── Kopplung ── #}
+      <div class="gwx-col-4">
+        <div class="gwx-panel" id="kopplung" style="height:100%;">
+          <div class="gwx-panel__hd"><div class="gwx-panel__t">🔗 Kopplung</div></div>
+          <div class="gwx-panel__bd">
+            <p style="font-size:.82rem;color:var(--g-muted);margin:0 0 12px;">
+              Jeder PC bekommt einen eigenen Code und ein eigenes Token. Der Agent läuft als
+              Windows-Dienst und startet ohne Anmeldung.</p>
+            <form method="post" action="/gateway/{{ gw.id }}/pair-code" style="margin-bottom:8px;">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              <button class="gwx-btn gwx-btn--primary" type="submit" style="width:100%; justify-content:center;">🔑 Pairing-Code erzeugen</button>
+            </form>
+            {% if gw.is_paired %}
+            <div class="gwx-btnrow" style="margin-top:8px;">
+              <form method="post" action="/gateway/{{ gw.id }}/revoke" style="flex:1;"
+                    onsubmit="return confirm('Token widerrufen? Der Agent muss neu gekoppelt werden.')">
+                <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+                <button class="gwx-btn gwx-btn--danger" type="submit" style="width:100%; justify-content:center;">Widerrufen</button>
+              </form>
+            </div>
+            {% endif %}
+            {% if host %}
+            <div class="gwx-pcard__meta" style="margin-top:12px;">
+              {% if host.get('os') %}<span>{{ host.get('os') }}</span>{% endif %}
+              {% if info.get('reported_at') %}<span title="Letztes Inventar">🕓 {{ info.get('reported_at')[:16]|replace('T', ' ') }} UTC</span>{% endif %}
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      {# ── Druckziele (Routen) ── #}
+      <div class="gwx-col-8">
+        <div class="gwx-panel" id="routen" style="height:100%;">
+          <div class="gwx-panel__hd">
+            <div>
+              <div class="gwx-panel__t">🎯 Druckziele dieses Agents</div>
+              <div class="gwx-panel__sub">Kleinere Priorität = bevorzugt · fällt ein Agent aus oder ist sein Drucker nicht bereit, übernimmt der nächste</div>
+            </div>
+          </div>
+          <div class="gwx-panel__bd">
+            {% if not routen %}
+            <div class="gwx-empty">Noch kein Druckziel. Unten im Inventar eine Windows-Warteschlange zuordnen.</div>
+            {% endif %}
+            <div class="gwx-printers">
+              {% for r in routen %}
+              {% set p = printer_by_id.get(r.printer_id) %}
+              {% set rd = r.readiness or {} %}
+              {% set o = r.options or {} %}
+              <div class="gwx-pcard" x-data="{ cfg:false }">
+                <div class="gwx-pcard__top">
+                  <div style="min-width:0;">
+                    <div class="gwx-pcard__name">{{ p.name if p else '–' }}</div>
+                    <div class="gwx-pcard__uri">{{ r.local_queue }} · {{ render_modes.get(r.render_mode, r.render_mode) }} · Prio {{ r.priority }}</div>
+                  </div>
+                  {% if not r.aktiv %}
+                  <span class="gwx-chip"><span class="gwx-chip__d"></span>deaktiviert</span>
+                  {% elif r.ready %}
+                  <span class="gwx-chip gwx-chip--ok"><span class="gwx-chip__d"></span>bereit</span>
+                  {% elif rd.get('state') == 'identity_mismatch' %}
+                  <span class="gwx-chip gwx-chip--err" title="Die Warteschlange zeigt auf einen anderen Drucker als das Druckziel."><span class="gwx-chip__d"></span>anderer Drucker</span>
+                  {% elif rd.get('state') %}
+                  <span class="gwx-chip gwx-chip--err"><span class="gwx-chip__d"></span>nicht bereit</span>
+                  {% else %}
+                  <span class="gwx-chip"><span class="gwx-chip__d"></span>unbekannt</span>
+                  {% endif %}
+                </div>
+                <div class="gwx-pcard__meta">
+                  {% if rd.get('detail') %}<span>{{ rd.get('detail') }}</span>{% endif %}
+                  {% if rd.get('checked_at') %}<span title="Zuletzt geprüft (UTC)">🕓 {{ rd.get('checked_at')[11:16] }} UTC</span>{% endif %}
+                  {% if r.identity %}<span class="gwx-mono" title="Gemeldete Druckeridentität">🆔 {{ r.identity.get('serial') or r.identity.get('uuid') or r.identity.get('mac') or r.identity.get('ip') }}</span>{% endif %}
+                  {% if not r.identity_check %}<span class="gwx-role">ohne Identitäts-Check</span>{% endif %}
+                </div>
+                {% set alle = routen_je_drucker.get(r.printer_id, []) %}
+                {% if alle|length > 1 %}
+                <div class="gwx-pcard__meta" title="Redundanz: Reihenfolge der Agents für dieses Druckziel">
+                  <span>🔁</span>
+                  {% for andere in alle %}
+                  {% set ag = gateways.get(andere.gateway_id) %}
+                  <span class="gwx-role" style="{{ 'font-weight:700;' if andere.id == r.id else '' }}">{{ loop.index }}. {{ ag.name if ag else '?' }}{% if andere.ready and andere.aktiv %} ✓{% else %} ✕{% endif %}</span>
+                  {% endfor %}
+                </div>
+                {% endif %}
+
+                <template x-if="cfg">
+                  <form method="post" action="/gateway/routes/{{ r.id }}/save" style="border-top:1px solid var(--g-line); padding-top:10px;">
+                    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+                    <div class="gwx-formgrid">
+                      <div class="gwx-field"><label class="gwx-label">Priorität</label>
+                        <input class="gwx-input" type="number" name="priority" min="1" max="999" value="{{ r.priority }}"></div>
+                      <div class="gwx-field"><label class="gwx-label">Druckweg</label>
+                        <select name="render_mode">
+                          {% for key, label in render_modes.items() %}
+                          <option value="{{ key }}" {{ 'selected' if r.render_mode == key }}>{{ label }}</option>
+                          {% endfor %}
+                        </select></div>
+                      <div class="gwx-field"><label class="gwx-label">Warteschlange / Ziel</label>
+                        <input class="gwx-input" type="text" name="local_queue" value="{{ r.local_queue }}" maxlength="255"></div>
+                      <div class="gwx-field"><label class="gwx-label">Papierfach</label>
+                        <input class="gwx-input" type="text" name="tray" value="{{ o.get('tray', '') }}" placeholder="Treiber-Standard"></div>
+                      <div class="gwx-field"><label class="gwx-label">Ausrichtung</label>
+                        <select name="orientation">
+                          <option value="" {{ 'selected' if not o.get('orientation') }}>Automatisch je Seite</option>
+                          <option value="portrait" {{ 'selected' if o.get('orientation') == 'portrait' }}>Hochformat</option>
+                          <option value="landscape" {{ 'selected' if o.get('orientation') == 'landscape' }}>Querformat</option>
+                        </select></div>
+                      <div class="gwx-field"><label class="gwx-label">Skalierung</label>
+                        <select name="scaling">
+                          <option value="" {{ 'selected' if o.get('scaling', 'fit') == 'fit' }}>An Seite anpassen</option>
+                          <option value="actual" {{ 'selected' if o.get('scaling') == 'actual' }}>Originalgröße</option>
+                        </select></div>
+                      <div class="gwx-field"><label class="gwx-label">Farbe</label>
+                        <select name="force_color">
+                          <option value="" {{ 'selected' if not o.get('force_color') }}>Wie Auftrag</option>
+                          <option value="monochrome" {{ 'selected' if o.get('force_color') == 'monochrome' }}>Immer S/W</option>
+                          <option value="color" {{ 'selected' if o.get('force_color') == 'color' }}>Immer Farbe</option>
+                        </select></div>
+                      <div class="gwx-field"><label class="gwx-label">Auflösung (dpi)</label>
+                        <input class="gwx-input" type="number" name="dpi" min="72" max="1200" value="{{ o.get('dpi', '') }}" placeholder="300"></div>
+                      <div class="gwx-field"><label class="gwx-label">Zielordner (Ordner)</label>
+                        <input class="gwx-input gwx-input--mono" type="text" name="target_dir" value="{{ o.get('target_dir', '') }}" placeholder="D:\Archiv\Einsatz"></div>
+                      <div class="gwx-field"><label class="gwx-label">Drucker-URI (IPP direkt)</label>
+                        <input class="gwx-input gwx-input--mono" type="text" name="target_uri" value="{{ o.get('target_uri', '') }}" placeholder="ipp://192.168.1.50/ipp/print"></div>
+                      <div class="gwx-field" style="grid-column:1/-1;"><label class="gwx-label">Befehl (eine Zeile je Argument, erste Zeile = Programm; nur wenn lokal in agent.json erlaubt)</label>
+                        <textarea class="gwx-input gwx-input--mono" name="command" rows="3" placeholder="C:\Tools\SumatraPDF.exe&#10;-print-to&#10;{queue}&#10;{pdf}">{{ (o.get('command') or [])|join('\n') }}</textarea></div>
+                    </div>
+                    <div class="gwx-inline" style="margin-top:8px; gap:14px; flex-wrap:wrap;">
+                      <label><input type="checkbox" name="aktiv" value="1" {{ 'checked' if r.aktiv }}> aktiv</label>
+                      <label><input type="checkbox" name="identity_check" value="1" {{ 'checked' if r.identity_check }}> Druckeridentität prüfen</label>
+                      <label><input type="checkbox" name="collate" value="1" {{ 'checked' if o.get('collate') }}> Kopien sortieren</label>
+                    </div>
+                    <div class="gwx-btnrow" style="margin-top:10px;">
+                      <button class="gwx-btn gwx-btn--primary gwx-btn--sm" type="submit">Speichern</button>
+                      <button class="gwx-btn gwx-btn--sm" type="button" @click="cfg=false">Schließen</button>
+                    </div>
+                  </form>
+                </template>
+
+                <div class="gwx-pcard__acts">
+                  <button class="gwx-btn gwx-btn--sm" type="button" @click="cfg=!cfg">⚙️ Einstellungen</button>
+                  {% if p and r.identity_check %}
+                  <form method="post" action="/gateway/printers/{{ p.id }}/identity-reset"
+                        onsubmit="return confirm('Gespeicherte Druckeridentität verwerfen (z. B. nach Drucker-Tausch)?')">
+                    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+                    <button class="gwx-btn gwx-btn--sm" type="submit">🆔 Identität neu lernen</button>
+                  </form>
+                  {% endif %}
+                  <form method="post" action="/gateway/routes/{{ r.id }}/delete"
+                        onsubmit="return confirm('Zuordnung entfernen? Das Druckziel selbst bleibt erhalten.')">
+                    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+                    <button class="gwx-btn gwx-btn--danger gwx-btn--sm" type="submit">Entfernen</button>
+                  </form>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {# ── Inventar ── #}
+      <div class="gwx-col-12">
+        <div class="gwx-panel" id="inventar">
+          <div class="gwx-panel__hd">
+            <div>
+              <div class="gwx-panel__t">🖨️ Windows-Drucker auf diesem PC</div>
+              <div class="gwx-panel__sub">Vom Agent gemeldet · Netzwerkdrucker als lokale TCP/IP-Warteschlange einrichten (keine Benutzer-Druckerfreigabe)</div>
+            </div>
+          </div>
+          <div class="gwx-panel__bd" style="padding:0;">
+            {% if not queues %}
+            <div class="gwx-empty">Noch kein Inventar – erscheint, sobald der Agent verbunden ist.</div>
+            {% else %}
+            <div style="overflow:auto;">
+              <table class="gwx-table">
+                <thead><tr><th>Warteschlange</th><th>Treiber / Anschluss</th><th>Fähigkeiten</th><th>Zuordnen</th></tr></thead>
+                <tbody>
+                  {% for qu in queues %}
+                  {% set caps = qu.get('capabilities') or {} %}
+                  <tr>
+                    <td><strong>{{ qu.get('queue') }}</strong>{% if qu.get('status') == 'offline' %} <span class="gwx-chip gwx-chip--err"><span class="gwx-chip__d"></span>offline</span>{% endif %}</td>
+                    <td style="font-size:.8rem;">{{ qu.get('driver') or '–' }}<br><span class="gwx-mono">{{ qu.get('host') or qu.get('port') or '' }}</span></td>
+                    <td style="font-size:.8rem;">{{ (caps.get('media') or [])|join(', ') }}{% if caps.get('duplex') %} · Duplex{% endif %}{% if caps.get('color') %} · Farbe{% endif %}</td>
+                    <td>
+                      {% if qu.get('queue') in gebundene_queues %}
+                      <span class="gwx-chip gwx-chip--ok"><span class="gwx-chip__d"></span>zugeordnet</span>
+                      {% else %}
+                      <form method="post" action="/gateway/{{ gw.id }}/routes/add" class="gwx-inline" style="flex-wrap:wrap;" x-data="{ ziel:'neu' }">
+                        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+                        <input type="hidden" name="local_queue" value="{{ qu.get('queue') }}">
+                        <select name="ziel" x-model="ziel" style="width:auto;">
+                          <option value="neu">Neues Druckziel</option>
+                          {% for p in org_printers if p.aktiv %}
+                          <option value="{{ p.id }}">→ {{ p.name }}</option>
+                          {% endfor %}
+                        </select>
+                        <input class="gwx-input" style="width:auto;" type="text" name="name" x-show="ziel === 'neu'" placeholder="Name, z. B. Kommandofunk" maxlength="150">
+                        <input class="gwx-input" style="width:5.5em;" type="number" name="priority" min="1" max="999" value="10" title="Priorität (kleiner = bevorzugt)">
+                        <select name="render_mode" style="width:auto;">
+                          <option value="driver">Windows-Druckertreiber</option>
+                          <option value="pdf_direct">PDF direkt</option>
+                        </select>
+                        <button class="gwx-btn gwx-btn--primary gwx-btn--sm" type="submit">Zuordnen</button>
+                      </form>
+                      {% endif %}
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            {% endif %}
+            <details style="padding:12px 16px;">
+              <summary style="cursor:pointer;">Weitere Druckwege: IPP direkt, Ordner, Befehl</summary>
+              <form method="post" action="/gateway/{{ gw.id }}/routes/add" class="gwx-formgrid" style="margin-top:10px;">
+                <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+                <div class="gwx-field"><label class="gwx-label">Druckweg</label>
+                  <select name="render_mode">
+                    <option value="ipp_direct">IPP direkt (ohne Windows-Warteschlange)</option>
+                    <option value="folder">PDF in Ordner ablegen</option>
+                    <option value="command">Externes Programm</option>
+                  </select></div>
+                <div class="gwx-field"><label class="gwx-label">Druckziel</label>
+                  <select name="ziel">
+                    <option value="neu">Neues Druckziel</option>
+                    {% for p in org_printers if p.aktiv %}
+                    <option value="{{ p.id }}">→ {{ p.name }}</option>
+                    {% endfor %}
+                  </select></div>
+                <div class="gwx-field"><label class="gwx-label">Name (neues Druckziel)</label>
+                  <input class="gwx-input" type="text" name="name" maxlength="150" placeholder="z. B. Einsatzarchiv"></div>
+                <div class="gwx-field"><label class="gwx-label">Priorität</label>
+                  <input class="gwx-input" type="number" name="priority" min="1" max="999" value="10"></div>
+                <div class="gwx-field"><label class="gwx-label">Drucker-URI (IPP)</label>
+                  <input class="gwx-input gwx-input--mono" type="text" name="target_uri" placeholder="ipp://192.168.1.50/ipp/print"></div>
+                <div class="gwx-field"><label class="gwx-label">Zielordner</label>
+                  <input class="gwx-input gwx-input--mono" type="text" name="target_dir" placeholder="D:\Archiv\Einsatz"></div>
+                <div class="gwx-field" style="grid-column:1/-1;"><label class="gwx-label">Befehl (eine Zeile je Argument)</label>
+                  <textarea class="gwx-input gwx-input--mono" name="command" rows="3" placeholder="C:\Tools\SumatraPDF.exe&#10;-print-to&#10;{queue}&#10;{pdf}"></textarea></div>
+                <input type="hidden" name="identity_check" value="0">
+                <div><button class="gwx-btn gwx-btn--primary gwx-btn--sm" type="submit">Druckweg anlegen</button></div>
+              </form>
+            </details>
+          </div>
+        </div>
+      </div>
+
+      {% include "gateway/_druckhistorie.html" %}
+    </div>
+
+    <div style="display:flex; justify-content:center; padding:8px 0 4px;">
+      <form method="post" action="/gateway/{{ gw.id }}/delete"
+            onsubmit="return confirm('Diesen Druckagent endgültig löschen? Seine Zuordnungen werden entfernt.')">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <button class="gwx-btn gwx-btn--danger" type="submit">🗑 Druckagent löschen</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

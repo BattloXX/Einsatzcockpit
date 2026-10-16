@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
 from app.core.permissions import require_role
 from app.core.templating import templates
@@ -21,6 +21,8 @@ from app.db import get_db
 from app.models.gateway import (
     DOC_OBJEKT_DOKUMENT,
     DOCUMENT_TYPE_LABELS,
+    GATEWAY_KIND_LABELS,
+    GATEWAY_KIND_LINUX,
     OBJEKT_ELEMENT_LABELS,
     RULE_DOCUMENT_LABELS,
     TRIGGER_DOCUMENT_TYPES,
@@ -61,13 +63,21 @@ def _is_connected(org_id: int | None) -> bool:
 
 
 def _prepare_printer_status(printers: list[Printer], gateways: dict[int, Gateway]) -> None:
-    """Bereitet gateway-genaue, abgeleitete Statuswerte fuer Templates vor."""
+    """Bereitet gateway-genaue, abgeleitete Statuswerte fuer Templates vor.
+
+    Druckziele mit Windows-Druckagent-Routen gelten als erreichbar, sobald mindestens eine
+    Route bereit ist (Agent online, Drucker erreichbar, Identität passt)."""
     from app.services.gateway_service import printer_checked_at, printer_reachable
+    from app.services.print_agent_service import hat_agent_routen, route_kandidaten
     for printer in printers:
         gateway = gateways.get(printer.gateway_id)
-        setattr(printer, "reachable_derived", (
-            printer_reachable(printer, gateway) if gateway is not None else None
-        ))
+        session = object_session(printer)
+        if session is not None and hat_agent_routen(session, printer.id):
+            setattr(printer, "reachable_derived", bool(route_kandidaten(session, printer)))
+        else:
+            setattr(printer, "reachable_derived", (
+                printer_reachable(printer, gateway) if gateway is not None else None
+            ))
         setattr(printer, "checked_at_derived", printer_checked_at(printer))
 
 
@@ -80,6 +90,240 @@ def _historie_context(db: Session, gw: Gateway) -> dict:
         .order_by(PrintJob.erstellt_am.desc()).limit(30).all()
     )
     return {"gw": gw, "printers": printers, "jobs": jobs}
+
+
+# ── Windows-Druckagent ─────────────────────────────────────────────────────────
+
+def _agent_detail(request: Request, db: Session, user: User, gw: Gateway) -> HTMLResponse:
+    """Detailseite eines Windows-Druckagents: Inventar, Routen, Redundanz, Historie."""
+    from app.models.gateway import RENDER_MODES, PrinterAgentRoute
+    from app.routers.ws import gateway_online_id
+
+    eigene = (
+        db.query(PrinterAgentRoute)
+        .filter(PrinterAgentRoute.gateway_id == gw.id)
+        .order_by(PrinterAgentRoute.priority, PrinterAgentRoute.id)
+        .all()
+    )
+    org_printers = db.query(Printer).filter(Printer.org_id == user.org_id).order_by(Printer.name).all()
+    gateways = {g.id: g for g in db.query(Gateway).filter(Gateway.org_id == user.org_id).all()}
+    _prepare_printer_status(org_printers, gateways)
+    printer_by_id = {p.id: p for p in org_printers}
+    alle_routen = (
+        db.query(PrinterAgentRoute)
+        .filter(PrinterAgentRoute.printer_id.in_([r.printer_id for r in eigene] or [-1]))
+        .order_by(PrinterAgentRoute.priority, PrinterAgentRoute.id)
+        .all()
+    )
+    routen_je_drucker: dict[int, list] = {}
+    for route in alle_routen:
+        routen_je_drucker.setdefault(route.printer_id, []).append(route)
+    queues = (gw.agent_info or {}).get("queues") or []
+    gebundene_queues = {route.local_queue for route in eigene}
+    jobs = (
+        db.query(PrintJob).filter(PrintJob.gateway_id == gw.id)
+        .order_by(PrintJob.erstellt_am.desc()).limit(30).all()
+    )
+    return templates.TemplateResponse(request, "gateway/agent_detail.html", {
+        "user": user,
+        "gw": gw,
+        "connected": gateway_online_id(gw.id, user.org_id),
+        "routen": eigene,
+        "routen_je_drucker": routen_je_drucker,
+        "printer_by_id": printer_by_id,
+        "org_printers": org_printers,
+        "gateways": gateways,
+        "queues": [q for q in queues if isinstance(q, dict)],
+        "gebundene_queues": gebundene_queues,
+        "render_modes": RENDER_MODES,
+        # Druckhistorie-Partial: Druckernamen aller Druckziele (auch fremd beheimatete)
+        "printers": org_printers,
+        "jobs": jobs,
+        "cloud_url": str(request.base_url).rstrip("/"),
+    })
+
+
+async def _agent_config_push(db: Session, gw: Gateway) -> None:
+    """Schickt dem Agent nach einer Routenänderung sofort die neue Konfiguration."""
+    from app.routers.ws import push_agent_message
+    from app.services.print_agent_service import agent_config_sync
+
+    assert gw.org_id is not None
+    await push_agent_message(gw.org_id, [gw.id], {"type": "config_sync", "payload": agent_config_sync(db, gw)})
+
+
+_ROUTE_OPTION_KEYS = ("tray", "orientation", "scaling", "force_color", "dpi", "target_dir", "target_uri")
+
+
+def _route_options(form) -> dict:
+    """Druckweg-Optionen aus dem Formular (leere Felder entfallen, Befehl als Zeilenliste)."""
+    import json as _json
+
+    optionen: dict = {}
+    for key in _ROUTE_OPTION_KEYS:
+        wert = str(form.get(key) or "").strip()
+        if not wert:
+            continue
+        if key == "dpi":
+            try:
+                optionen[key] = max(72, min(int(wert), 1200))
+            except ValueError:
+                continue
+        else:
+            optionen[key] = wert[:500]
+    if str(form.get("collate") or "") == "1":
+        optionen["collate"] = True
+    befehl = str(form.get("command") or "").strip()
+    if befehl:
+        # Eine Zeile je Argument; erste Zeile = Programmpfad (muss lokal in agent.json erlaubt sein).
+        try:
+            liste = _json.loads(befehl)
+        except ValueError:
+            liste = [zeile.strip() for zeile in befehl.splitlines() if zeile.strip()]
+        if isinstance(liste, list) and liste:
+            optionen["command"] = [str(teil)[:500] for teil in liste][:20]
+    return optionen
+
+
+@router.post("/{gateway_id}/routes/add")
+async def agent_route_add(
+    gateway_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    _guard: None = Depends(require_gateway_enabled),
+):
+    """Ordnet eine lokale Queue des Agents einem Druckziel zu (neu oder bestehend)."""
+    from app.models.gateway import RENDER_MODES, PrinterAgentRoute
+
+    gw = _gw_or_404(db, user.org_id, gateway_id)
+    if not gw.is_windows_agent:
+        raise HTTPException(status_code=400, detail="Kein Windows-Druckagent")
+    form = await request.form()
+    queue = str(form.get("local_queue") or "").strip()[:255]
+    render_mode = str(form.get("render_mode") or "driver")
+    if render_mode not in RENDER_MODES:
+        render_mode = "driver"
+    if not queue and render_mode in ("driver", "pdf_direct"):
+        return RedirectResponse(f"/gateway/{gw.id}?error=queue#routen", status_code=303)
+    try:
+        prioritaet = max(1, min(int(str(form.get("priority") or "10")), 999))
+    except ValueError:
+        prioritaet = 10
+    inventar = next(
+        (q for q in (gw.agent_info or {}).get("queues") or [] if isinstance(q, dict) and q.get("queue") == queue),
+        {},
+    )
+    ziel = str(form.get("ziel") or "neu")
+    if ziel == "neu":
+        name = str(form.get("name") or "").strip()[:150] or queue or "Druckziel"
+        printer = Printer(
+            org_id=user.org_id, gateway_id=gw.id, name=name, uri=f"agent://{queue or render_mode}"[:300],
+            modell=(str(inventar.get("driver") or "")[:150] or None), aktiv=True,
+            capabilities=inventar.get("capabilities") if isinstance(inventar.get("capabilities"), dict) else None,
+            identity=inventar.get("identity") if isinstance(inventar.get("identity"), dict) else None,
+            activated_at=datetime.now(UTC).replace(tzinfo=None),
+        )
+        db.add(printer)
+        db.flush()
+    else:
+        try:
+            printer_id = int(ziel)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Ungültiges Druckziel")
+        bestehend = db.get(Printer, printer_id)
+        if bestehend is None or bestehend.org_id != user.org_id:
+            raise HTTPException(status_code=404, detail="Druckziel nicht gefunden")
+        printer = bestehend
+        vorhanden = (
+            db.query(PrinterAgentRoute)
+            .filter(PrinterAgentRoute.printer_id == printer.id, PrinterAgentRoute.gateway_id == gw.id)
+            .first()
+        )
+        if vorhanden is not None:
+            return RedirectResponse(f"/gateway/{gw.id}?error=route_doppelt#routen", status_code=303)
+    db.add(PrinterAgentRoute(
+        org_id=user.org_id, printer_id=printer.id, gateway_id=gw.id, priority=prioritaet,
+        local_queue=queue or render_mode, render_mode=render_mode, options=_route_options(form) or None,
+        identity_check=str(form.get("identity_check") or "1") == "1", aktiv=True,
+    ))
+    db.commit()
+    await _agent_config_push(db, gw)
+    return RedirectResponse(f"/gateway/{gw.id}?saved=1#routen", status_code=303)
+
+
+def _route_or_404(db: Session, user: User, route_id: int):
+    from app.models.gateway import PrinterAgentRoute
+
+    route = db.get(PrinterAgentRoute, route_id)
+    if route is None or route.org_id != user.org_id:
+        raise HTTPException(status_code=404, detail="Route nicht gefunden")
+    return route
+
+
+@router.post("/routes/{route_id}/save")
+async def agent_route_save(
+    route_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    _guard: None = Depends(require_gateway_enabled),
+):
+    from app.models.gateway import RENDER_MODES
+
+    route = _route_or_404(db, user, route_id)
+    form = await request.form()
+    try:
+        route.priority = max(1, min(int(str(form.get("priority") or route.priority)), 999))
+    except ValueError:
+        pass
+    render_mode = str(form.get("render_mode") or route.render_mode)
+    if render_mode in RENDER_MODES:
+        route.render_mode = render_mode
+    queue = str(form.get("local_queue") or "").strip()[:255]
+    if queue:
+        route.local_queue = queue
+    route.options = _route_options(form) or None
+    route.identity_check = str(form.get("identity_check") or "") == "1"
+    route.aktiv = str(form.get("aktiv") or "") == "1"
+    db.commit()
+    gw = _gw_or_404(db, user.org_id, route.gateway_id)
+    await _agent_config_push(db, gw)
+    return RedirectResponse(f"/gateway/{gw.id}?saved=1#routen", status_code=303)
+
+
+@router.post("/routes/{route_id}/delete")
+async def agent_route_delete(
+    route_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    _guard: None = Depends(require_gateway_enabled),
+):
+    route = _route_or_404(db, user, route_id)
+    gw = _gw_or_404(db, user.org_id, route.gateway_id)
+    db.delete(route)
+    db.commit()
+    await _agent_config_push(db, gw)
+    return RedirectResponse(f"/gateway/{gw.id}?route_deleted=1#routen", status_code=303)
+
+
+@router.post("/printers/{printer_id}/identity-reset")
+def printer_identity_reset(
+    printer_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    _guard: None = Depends(require_gateway_enabled),
+):
+    """Soll-Identität eines Druckziels verwerfen (z. B. nach Drucker-Tausch); die nächste
+    Bereitschaftsmeldung einer Route übernimmt die neue Identität."""
+    printer = db.get(Printer, printer_id)
+    if printer is None or printer.org_id != user.org_id:
+        raise HTTPException(status_code=404, detail="Drucker nicht gefunden")
+    printer.identity = None
+    db.commit()
+    return RedirectResponse(f"/gateway/{printer.gateway_id}?saved=1#routen", status_code=303)
 
 
 # ── Übersicht ──────────────────────────────────────────────────────────────────
@@ -114,6 +358,8 @@ def gateway_detail(
     _guard: None = Depends(require_gateway_enabled),
 ):
     gw = _gw_or_404(db, user.org_id, gateway_id)
+    if gw.is_windows_agent:
+        return _agent_detail(request, db, user, gw)
     historie = _historie_context(db, gw)
     printers = historie["printers"]
     rules = (
@@ -163,7 +409,11 @@ def gateway_druckregeln(
     org_id = user.org_id
     if org_id is None:
         raise HTTPException(status_code=404, detail="Organisation nicht gefunden")
-    printers = db.query(Printer).filter(Printer.gateway_id == gw.id).order_by(Printer.name).all()
+    # Alle Drucker der Org (nicht nur die dieses Gateways): Regeln sind org-weit, und das
+    # Speichern ersetzt printer_ids – sonst fielen Druckziele anderer Gateways/Agents heraus.
+    printers = (
+        db.query(Printer).filter(Printer.org_id == org_id).order_by(Printer.name).all()
+    )
     rules = (
         db.query(PrintRule).filter(PrintRule.org_id == user.org_id)
         .order_by(PrintRule.sort_order, PrintRule.name).all()
@@ -233,7 +483,7 @@ def gateway_druckregeln_simulation(
     user: User = Depends(require_role("org_admin", "admin")),
     _guard: None = Depends(require_gateway_enabled),
 ):
-    gw = _gw_or_404(db, user.org_id, gateway_id)
+    _gw_or_404(db, user.org_id, gateway_id)  # Gateway-Guard (Org)
     org_id = user.org_id
     if org_id is None:
         raise HTTPException(status_code=404, detail="Organisation nicht gefunden")
@@ -248,7 +498,7 @@ def gateway_druckregeln_simulation(
         uhrzeit = datetime.now(UTC).astimezone(org_tz(db.get(FireDept, org_id))).strftime("%H:%M")
     rules = (db.query(PrintRule).filter(PrintRule.org_id == org_id)
              .order_by(PrintRule.sort_order, PrintRule.name).all())
-    printers = db.query(Printer).filter(Printer.gateway_id == gw.id).all()
+    printers = db.query(Printer).filter(Printer.org_id == org_id).all()
     ergebnisse = simuliere(
         db, org_id, rules, trigger=trigger, alarm_code=alarm_code, is_exercise=uebung == "uebung",
         nur_bma=bma == "1", uhrzeit=uhrzeit, stichwort=stichwort,
@@ -267,6 +517,7 @@ def gateway_create(
     request: Request,
     name: str = Form(...),
     standort: str = Form(""),
+    kind: str = Form(GATEWAY_KIND_LINUX),
     db: Session = Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin")),
     _guard: None = Depends(require_gateway_enabled),
@@ -274,7 +525,9 @@ def gateway_create(
     name = name.strip()[:150]
     if not name:
         return RedirectResponse("/gateway?error=name", status_code=303)
-    gw = Gateway(org_id=user.org_id, name=name, standort=(standort.strip()[:200] or None))
+    if kind not in GATEWAY_KIND_LABELS:
+        kind = GATEWAY_KIND_LINUX
+    gw = Gateway(org_id=user.org_id, name=name, standort=(standort.strip()[:200] or None), kind=kind)
     db.add(gw)
     db.commit()
     return RedirectResponse(f"/gateway/{gw.id}?created=1", status_code=303)
