@@ -7,7 +7,14 @@ import pytest
 from app.core.tenant import set_tenant_context
 from app.models.master import FireDept, OrgSettings
 from app.models.planspiel import PlanspielAdresse
-from app.services.planspiel_ort_service import GebietFehlt, gebiet, im_gebiet, ort_waehlen
+from app.services.planspiel_ort_service import (
+    GebietFehlt,
+    gebiet,
+    im_gebiet,
+    ort_waehlen,
+    ortschaften_ergaenzen,
+    standard_ortschaften,
+)
 from tests.conftest import TestingSession
 
 
@@ -46,6 +53,38 @@ def test_ortwahl_respektiert_tenant_und_orttyp():
         db.commit()
         selected = ort_waehlen(db, org.id, {"ort_typen": ["wohngebaeude"]}, random.Random(1))
         assert selected.strasse == "Hauptstraße"
+    finally:
+        db.close()
+
+
+def test_ortschaften_filter_und_ergaenzen():
+    db = TestingSession()
+    set_tenant_context(db, None)
+    try:
+        org = _org(db)
+        org.city = "Wolfurt"
+        db.add_all([
+            PlanspielAdresse(org_id=org.id, quelle="manuell", quell_id="wolfurt", strasse="A",
+                             ort="Wolfurt", lat=47.470, lng=9.750, qualitaet="A",
+                             ort_typen=["wohngebaeude"], aktiv=True),
+            PlanspielAdresse(org_id=org.id, quelle="manuell", quell_id="bregenz", strasse="B",
+                             ort="Bregenz", lat=47.480, lng=9.760, qualitaet="A",
+                             ort_typen=["wohngebaeude"], aktiv=True),
+            PlanspielAdresse(org_id=org.id, quelle="manuell", quell_id="near", strasse="N",
+                             lat=47.471, lng=9.751, qualitaet="C", ort_typen=["strasse"], aktiv=True),
+            PlanspielAdresse(org_id=org.id, quelle="manuell", quell_id="far", strasse="F",
+                             lat=47.500, lng=9.750, qualitaet="C", ort_typen=["strasse"], aktiv=True),
+        ])
+        db.flush()
+        assert ortschaften_ergaenzen(db, org.id) == 1
+        assert db.query(PlanspielAdresse).filter_by(org_id=org.id, quell_id="near").one().ort == "Wolfurt"
+        assert db.query(PlanspielAdresse).filter_by(org_id=org.id, quell_id="far").one().ort is None
+        assert standard_ortschaften(db, org.id) == ["Wolfurt"]
+        selected = ort_waehlen(db, org.id, {"ort_typen": ["wohngebaeude"]}, random.Random(1),
+                               ortschaften=["wolfurt"])
+        assert selected.ort == "Wolfurt"
+        org.city = ""
+        assert standard_ortschaften(db, org.id) is None
     finally:
         db.close()
 

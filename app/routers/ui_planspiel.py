@@ -3,7 +3,7 @@
 import asyncio
 from copy import deepcopy
 from datetime import UTC, datetime
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -48,7 +48,7 @@ from app.services.planspiel_engine import (
     welle_jetzt,
 )
 from app.services.planspiel_katalog_service import aktive_version, stichwort_vorschlag, szenarien_fuer_stichwort
-from app.services.planspiel_ort_service import GebietFehlt, OrtNichtGefunden
+from app.services.planspiel_ort_service import GebietFehlt, OrtNichtGefunden, ortschaften, standard_ortschaften
 from app.services.planspiel_run_service import (
     EntwurfDaten,
     ZustandsFehler,
@@ -217,14 +217,23 @@ def _wizard_context(request: Request, db: Session, user: User, form_data: dict[s
         Objekt.lat.is_not(None),
         Objekt.lng.is_not(None),
     ).order_by(Objekt.name).all()
+    source: dict[str, Any] = form_data if form_data is not None else (run.konfig or {}) if run else {}
+    form = dict(source)
+    defaults = standard_ortschaften(db, org_id)
+    form["ortschaften"] = form.get("ortschaften") or defaults
+    org = db.query(FireDept).filter(FireDept.id == org_id).one_or_none()
     return {
         "user": user,
-        "form": form_data or (run.konfig if run else {}),
+        "form": form,
         "fehler": fehler,
         "run": run,
         "szenarien": grouped,
         "pool": pool,
         "objekte": objects,
+        "ortschaften": ortschaften(db, org_id),
+        "standard_ortschaften": defaults,
+        "ortschaften_hinweis": not defaults,
+        "org_ort": (org.city or "").strip() if org else "",
     }
 
 
@@ -238,10 +247,14 @@ def _form_data(form: FormData, user: User) -> tuple[EntwurfDaten, dict[str, obje
         return cast(value) if value is not None else None  # type: ignore[operator]
 
     raw: dict[str, object] = {key: form.get(key, "") for key in form.keys()}
+    ortschaften = [value.strip() for value in form.getlist("ortschaften")
+                   if isinstance(value, str) and value.strip()] or None
+    raw["ortschaften"] = ortschaften or []
     raw["folgemeldungen_aktiv"] = bool(form.get("folgemeldungen_aktiv"))
     daten = EntwurfDaten(
         titel=text("titel") or "",
         lernziele=text("lernziele"),
+        ortschaften=ortschaften,
         art=cast(Literal["einzel", "gsl"], text("art") or "einzel"),
         erzeugung=cast(Literal["manuell", "teilauto", "zufall"], text("erzeugung") or "manuell"),
         szenario_id=cast(int | None, number("szenario_id", int)),
@@ -263,6 +276,10 @@ def _form_data(form: FormData, user: User) -> tuple[EntwurfDaten, dict[str, obje
     )
     if daten.art not in {"einzel", "gsl"}:
         raise ValueError("Ungültige Planspiel-Art")
+    if daten.art == "gsl":
+        daten.erzeugung = "zufall"
+        daten.szenario_id = None
+        daten.ort_modus = "zufall"
     if daten.gsl_modus not in {None, "hochwasser", "sturm", "kombination"}:
         raise ValueError("Ungültiger GSL-Modus")
     if not 15 <= daten.mittel_s <= 600 or not 1 <= daten.max_stellen <= 300 or not 10 <= daten.max_laufzeit_min <= 720:

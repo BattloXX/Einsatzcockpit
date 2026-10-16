@@ -702,7 +702,10 @@ def generator_schritt(db: Session, run: PlanspielRun, jetzt: datetime) -> list[G
             letzter_fehler: OrtNichtGefunden | None = None
             for inhalt_versuch, ausschluss in versuche:
                 try:
-                    gefunden = ort_waehlen(db, run.org_id, inhalt_versuch, rng, ausschliessen_ids=ausschluss)
+                    gefunden = ort_waehlen(
+                        db, run.org_id, inhalt_versuch, rng, ausschliessen_ids=ausschluss,
+                        ortschaften=(run.konfig or {}).get("ortschaften"),
+                    )
                     break
                 except OrtNichtGefunden as exc:
                     letzter_fehler = exc

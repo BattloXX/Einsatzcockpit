@@ -24,7 +24,7 @@
 </style>
 {% endblock %}
 {% block content %}
-<main class="ps-page ps-page--narrow" x-data="{ step: 1, art: '{{ form.get('art', 'einzel') }}' }">
+<main class="ps-page ps-page--narrow" x-data="{ step: 1, art: '{{ form.get('art', 'einzel') }}', einzelSteps: ['titel', 'art', 'erzeugung', 'szenario', 'ort', 'varianten', 'simulation'], gslSteps: ['titel', 'art', 'ortschaften', 'unwetter', 'simulation'], get steps() { return this.art === 'gsl' ? this.gslSteps : this.einzelSteps }, get current() { return this.steps[this.step - 1] }, setArt(value) { this.art = value; this.step = 2 } }">
   <header class="ps-header">
     <div>
       <a href="{{ ('/planspiele/' ~ run.id) if run else '/planspiele' }}" class="btn btn--ghost btn--sm">&#8592; Zurück</a>
@@ -33,14 +33,14 @@
     </div>
   </header>
   <nav class="planspiel-wizard__steps" aria-label="Schritte">
-    {% for nummer in range(1, 8) %}<span class="planspiel-wizard__step-pill" :class="{ 'planspiel-wizard__step-pill--active': step === {{ nummer }} }">{{ nummer }}</span>{% endfor %}
+    <template x-for="(name, index) in steps" :key="name"><span class="planspiel-wizard__step-pill" :class="{ 'planspiel-wizard__step-pill--active': step === index + 1 }" x-text="index + 1"></span></template>
   </nav>
   {% if fehler %}
   <p class="form-error">{{ fehler }}</p>
   {% endif %}
   <form method="post" action="{% if run %}/planspiele/{{ run.id }}/bearbeiten{% else %}/planspiele/neu{% endif %}">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-    <section class="ps-box planspiel-wizard__step" x-show="step === 1">
+    <section class="ps-box planspiel-wizard__step" x-show="current === 'titel'">
       <h2 class="ps-box__title">1. Titel und Lernziele</h2>
       <div class="planspiel-wizard__grid">
         <label class="planspiel-wizard__full">Titel
@@ -51,33 +51,33 @@
         </label>
       </div>
     </section>
-    <section class="ps-box planspiel-wizard__step" x-show="step === 2">
+    <section class="ps-box planspiel-wizard__step" x-show="current === 'art'">
       <h2 class="ps-box__title">2. Art</h2>
       <label class="planspiel-wizard__choice">
-        <input type="radio" name="art" value="einzel" x-model="art">
+        <input type="radio" name="art" value="einzel" x-model="art" @change="setArt('einzel')">
         Einzeleinsatz
         <span class="planspiel-wizard__hint">ein Übungseinsatz mit Folgemeldungen</span>
       </label>
       <label class="planspiel-wizard__choice">
-        <input type="radio" name="art" value="gsl" x-model="art">
+        <input type="radio" name="art" value="gsl" x-model="art" @change="setArt('gsl')">
         Großschadenslage (Unwetter)
-        <span class="planspiel-wizard__hint">Übungs-GSL, in die laufend neue Einsatzstellen einlaufen – bitte ein GSL-Szenario (G01–G05) wählen</span>
+        <span class="planspiel-wizard__hint">Übungs-GSL, in die laufend neue Einsatzstellen einlaufen – Szenario und Meldungen werden automatisch erzeugt</span>
       </label>
     </section>
-    <section class="ps-box planspiel-wizard__step" x-show="step === 3">
+    <section class="ps-box planspiel-wizard__step" x-show="current === 'erzeugung'">
       <h2 class="ps-box__title">3. Erzeugung</h2>
       {% for value, label in [('manuell', 'Manuell'), ('teilauto', 'Teilautomatisch'), ('zufall', 'Zufällig')] %}
-      <label class="planspiel-wizard__choice"><input type="radio" name="erzeugung" value="{{ value }}" {% if form.get('erzeugung', 'manuell') == value %}checked{% endif %}> {{ label }}</label>
+      <label class="planspiel-wizard__choice"><input type="radio" name="erzeugung" value="{{ value }}" :disabled="art === 'gsl'" {% if form.get('erzeugung', 'manuell') == value %}checked{% endif %}> {{ label }}</label>
       {% endfor %}
     </section>
-    <section class="ps-box planspiel-wizard__step" x-show="step === 4">
+    <section class="ps-box planspiel-wizard__step" x-show="current === 'szenario'">
       <h2 class="ps-box__title">4. Szenario</h2>
       <label>Stichwortvorschlag
-        <input class="form-input" name="stichwort_suche" hx-get="/planspiele/neu/stichwort" hx-target="#stichwort-vorschlag" hx-trigger="keyup changed delay:300ms" hx-include="this" placeholder="z. B. Rauch aus Fenster">
+        <input class="form-input" name="stichwort_suche" :disabled="art === 'gsl'" hx-get="/planspiele/neu/stichwort" hx-target="#stichwort-vorschlag" hx-trigger="keyup changed delay:300ms" hx-include="this" placeholder="z. B. Rauch aus Fenster">
       </label>
       <div id="stichwort-vorschlag"></div>
       <label>Szenario
-        <select id="szenario-id" class="form-input" name="szenario_id">
+        <select id="szenario-id" class="form-input" name="szenario_id" :disabled="art === 'gsl'">
           <option value="">Zufällig</option>
           {% for kategorie, items in szenarien.items() %}
           <optgroup label="{{ kategorie|capitalize }}">
@@ -89,48 +89,57 @@
         </select>
       </label>
     </section>
-    <section class="ps-box planspiel-wizard__step" x-show="step === 5 && art === 'gsl'">
-      <h2 class="ps-box__title">5. Ort</h2>
-      <p>Bei einer Großschadenslage entstehen die Einsatzstellen verteilt im Planspiel-Gebiet aus dem Adresspool.
-        Ein einzelner Ort ist nicht nötig.</p>
+    <section class="ps-box planspiel-wizard__step" x-show="current === 'ortschaften' || (art !== 'gsl' && current === 'ort')">
+      <h2 class="ps-box__title">Ortschaften</h2>
+      <p class="planspiel-wizard__hint" x-show="art !== 'gsl'">Gilt für den Ortsmodus „Zufällig“.</p>
+      <p class="planspiel-wizard__hint" x-show="art === 'gsl'">Neue Einsatzstellen entstehen nur in den gewählten Ortschaften.</p>
+      {% if ortschaften_hinweis %}<p class="planspiel-wizard__hint">Keine Ortschaft der Organisation hinterlegt – alle Ortschaften im Pool werden verwendet.</p>{% endif %}
+      <div class="planspiel-wizard__grid">
+        {% for name, count in ortschaften %}
+        <label class="planspiel-wizard__choice"><input type="checkbox" name="ortschaften" value="{{ name }}" {% if name|lower in form.get('ortschaften', [])|map('lower')|list %}checked{% endif %}> {{ name }} ({{ count }} Adressen)</label>
+        {% endfor %}
+      </div>
     </section>
-    <section class="ps-box planspiel-wizard__step" x-show="step === 5 && art !== 'gsl'">
-      <h2 class="ps-box__title">5. Ort</h2>
+    <section class="ps-box planspiel-wizard__step" x-show="current === 'ort'">
+      <h2 class="ps-box__title">Ort</h2>
       <div class="planspiel-wizard__grid">
         {% for value, label in [('zufall', 'Zufällig'), ('pool', 'Pool-Eintrag'), ('objekt', 'Objekt'), ('manuell', 'Manuelle Adresse'), ('karte', 'Kartenpunkt')] %}
-        <label class="planspiel-wizard__choice"><input type="radio" name="ort_modus" value="{{ value }}" {% if form.get('ort_modus', 'zufall') == value %}checked{% endif %}> {{ label }}</label>
+        <label class="planspiel-wizard__choice"><input type="radio" name="ort_modus" value="{{ value }}" :disabled="art === 'gsl'" {% if form.get('ort_modus', 'zufall') == value %}checked{% endif %}> {{ label }}</label>
         {% endfor %}
         <label>Pool-Eintrag
-          <select class="form-input" name="adresse_id"><option value="">Bitte wählen</option>{% for adresse in pool %}<option value="{{ adresse.id }}" {% if form.get('adresse_id')|string == adresse.id|string %}selected{% endif %}>{{ adresse.quelle }}: {{ adresse.strasse }} {{ adresse.hausnr or '' }}, {{ adresse.ort or '' }}</option>{% endfor %}</select>
+          <select class="form-input" name="adresse_id" :disabled="art === 'gsl'"><option value="">Bitte wählen</option>{% for adresse in pool %}<option value="{{ adresse.id }}" {% if form.get('adresse_id')|string == adresse.id|string %}selected{% endif %}>{{ adresse.quelle }}: {{ adresse.strasse }} {{ adresse.hausnr or '' }}, {{ adresse.ort or '' }}</option>{% endfor %}</select>
         </label>
         <label>Objekt
-          <select class="form-input" name="objekt_id"><option value="">Bitte wählen</option>{% for objekt in objekte %}<option value="{{ objekt.id }}" {% if form.get('objekt_id')|string == objekt.id|string %}selected{% endif %}>{{ objekt.name }}</option>{% endfor %}</select>
+          <select class="form-input" name="objekt_id" :disabled="art === 'gsl'"><option value="">Bitte wählen</option>{% for objekt in objekte %}<option value="{{ objekt.id }}" {% if form.get('objekt_id')|string == objekt.id|string %}selected{% endif %}>{{ objekt.name }}</option>{% endfor %}</select>
         </label>
-        <label>Straße<input class="form-input" name="strasse" value="{{ form.get('strasse', '') }}"></label>
-        <label>Hausnummer<input class="form-input" name="hausnr" value="{{ form.get('hausnr', '') }}"></label>
-        <label>PLZ<input class="form-input" name="plz" value="{{ form.get('plz', '') }}"></label>
-        <label>Ort<input class="form-input" name="ort" value="{{ form.get('ort', '') }}"></label>
-        <label>Breitengrad<input id="ort-lat" class="form-input" name="lat" value="{{ form.get('lat', '') }}"></label>
-        <label>Längengrad<input id="ort-lng" class="form-input" name="lng" value="{{ form.get('lng', '') }}"></label>
-        <label class="planspiel-wizard__full">Bezeichnung für Kartenpunkt<input id="ort-bezeichnung" class="form-input" name="bezeichnung" value="{{ form.get('bezeichnung', '') }}"></label>
+        <label>Straße<input class="form-input" name="strasse" :disabled="art === 'gsl'" value="{{ form.get('strasse', '') }}"></label>
+        <label>Hausnummer<input class="form-input" name="hausnr" :disabled="art === 'gsl'" value="{{ form.get('hausnr', '') }}"></label>
+        <label>PLZ<input class="form-input" name="plz" :disabled="art === 'gsl'" value="{{ form.get('plz', '') }}"></label>
+        <label>Ort<input class="form-input" name="ort" :disabled="art === 'gsl'" value="{{ form.get('ort', '') }}"></label>
+        <label>Breitengrad<input id="ort-lat" class="form-input" name="lat" :disabled="art === 'gsl'" value="{{ form.get('lat', '') }}"></label>
+        <label>Längengrad<input id="ort-lng" class="form-input" name="lng" :disabled="art === 'gsl'" value="{{ form.get('lng', '') }}"></label>
+        <label class="planspiel-wizard__full">Bezeichnung für Kartenpunkt<input id="ort-bezeichnung" class="form-input" name="bezeichnung" :disabled="art === 'gsl'" value="{{ form.get('bezeichnung', '') }}"></label>
       </div>
       <div id="ort-karte" class="planspiel-wizard__map"></div>
     </section>
-    <section class="ps-box planspiel-wizard__step" x-show="step === 6">
-      <h2 class="ps-box__title">6. Varianten</h2>
+    <section class="ps-box planspiel-wizard__step" x-show="current === 'varianten'">
+      <h2 class="ps-box__title">Varianten</h2>
       <div class="planspiel-wizard__grid">
-        <label>Stichwort-Override<input class="form-input" name="stichwort_code" value="{{ form.get('stichwort_code', '') }}"></label>
-        <label>Tempo<select class="form-input" name="tempo">{% for value in [0.5, 1, 2, 5, 10] %}<option value="{{ value }}" {% if form.get('tempo', 1)|float == value %}selected{% endif %}>{{ value }}×</option>{% endfor %}</select></label>
-        <label class="planspiel-wizard__full">Alarmtext-Override<textarea class="form-input" name="alarmtext" rows="3">{{ form.get('alarmtext', '') }}</textarea></label>
-        <label>Seed (optional)<input class="form-input" type="number" name="seed" value="{{ form.get('seed', '') }}"></label>
-        <label class="planspiel-wizard__choice"><input type="checkbox" name="folgemeldungen_aktiv" {% if form.get('folgemeldungen_aktiv', True) %}checked{% endif %}> Folgemeldungen aktiv</label>
+        <label>Stichwort-Override<input class="form-input" name="stichwort_code" :disabled="art === 'gsl'" value="{{ form.get('stichwort_code', '') }}"></label>
+        <label>Tempo<select class="form-input" name="tempo" :disabled="art === 'gsl'">{% for value in [0.5, 1, 2, 5, 10] %}<option value="{{ value }}" {% if form.get('tempo', 1)|float == value %}selected{% endif %}>{{ value }}×</option>{% endfor %}</select></label>
+        <label class="planspiel-wizard__full">Alarmtext-Override<textarea class="form-input" name="alarmtext" rows="3" :disabled="art === 'gsl'">{{ form.get('alarmtext', '') }}</textarea></label>
+        <label>Seed (optional)<input class="form-input" type="number" name="seed" :disabled="art === 'gsl'" value="{{ form.get('seed', '') }}"></label>
+        <label class="planspiel-wizard__choice"><input type="checkbox" name="folgemeldungen_aktiv" :disabled="art === 'gsl'" {% if form.get('folgemeldungen_aktiv', True) %}checked{% endif %}> Folgemeldungen aktiv</label>
       </div>
-      <fieldset class="planspiel-wizard__grid" x-show="art === 'gsl'">
+    </section>
+    <section class="ps-box planspiel-wizard__step" x-show="current === 'unwetter'">
+      <h2 class="ps-box__title">Unwetter</h2>
+      <fieldset class="planspiel-wizard__grid">
         <legend>Unwetter-Generator</legend>
         <label>
           Modus
           <select class="form-input" name="gsl_modus">
-            <option value="">wie im Szenario</option>
+            <option value="">Zufällig (automatisch)</option>
             {% for value, label in [('hochwasser', 'Hochwasser / Starkregen'), ('sturm', 'Sturm'), ('kombination', 'Kombination')] %}
             <option value="{{ value }}" {% if form.get('gsl_modus') == value %}selected{% endif %}>{{ label }}</option>
             {% endfor %}
@@ -148,16 +157,19 @@
           Höchstens Laufzeit (Minuten Übungszeit)
           <input class="form-input" type="number" name="max_laufzeit_min" min="10" max="720" value="{{ form.get('max_laufzeit_min', 120) }}">
         </label>
+        <label>Tempo<select class="form-input" name="tempo" :disabled="art !== 'gsl'">{% for value in [0.5, 1, 2, 5, 10] %}<option value="{{ value }}" {% if form.get('tempo', 1)|float == value %}selected{% endif %}>{{ value }}×</option>{% endfor %}</select></label>
+        <label>Seed (optional)<input class="form-input" type="number" name="seed" :disabled="art !== 'gsl'" value="{{ form.get('seed', '') }}"></label>
+        <label class="planspiel-wizard__choice"><input type="checkbox" name="folgemeldungen_aktiv" :disabled="art !== 'gsl'" {% if form.get('folgemeldungen_aktiv', True) %}checked{% endif %}> Folgemeldungen aktiv</label>
       </fieldset>
     </section>
-    <section class="ps-box planspiel-wizard__step" x-show="step === 7">
-      <h2 class="ps-box__title">7. Simulation</h2>
+    <section class="ps-box planspiel-wizard__step" x-show="current === 'simulation'">
+      <h2 class="ps-box__title">Simulation</h2>
       <p>Allein-Betrieb und simulierte Einheiten folgen in einer späteren Phase.</p>
     </section>
     <div class="ps-actions planspiel-wizard__actions">
       <button class="btn btn--secondary" type="button" x-show="step > 1" @click="step--">Zurück</button>
-      <button class="btn btn--primary" type="button" x-show="step < 7" @click="step++">Weiter</button>
-      <button class="btn btn--primary" type="submit" x-show="step === 7">Als Entwurf speichern</button>
+      <button class="btn btn--primary" type="button" x-show="step < steps.length" @click="step++">Weiter</button>
+      <button class="btn btn--primary" type="submit" x-show="step === steps.length">Als Entwurf speichern</button>
     </div>
   </form>
 </main>
