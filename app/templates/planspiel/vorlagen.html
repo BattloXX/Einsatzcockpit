@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Planspiel-Vorlagen{% endblock %}
+{% block head_extra %}
+{% include "planspiel/_design.html" %}
+{% endblock %}
+{% block content %}
+<section class="ps-page">
+  <header class="ps-header">
+    <div>
+      <h1>Vorlagen</h1>
+      <p class="ps-header__sub">Wiederverwendbare Konfigurationen für neue Planspiele.</p>
+    </div>
+    <a class="btn btn--primary btn--sm" href="/planspiele/neu">+ Neues Planspiel</a>
+  </header>
+  {% include "planspiel/_tabs.html" %}
+  {% if fehler %}
+  <p class="form-error">{{ fehler }}</p>
+  {% endif %}
+  {% if vorlagen %}
+  <div class="ps-card ps-table-wrap" style="overflow-x:auto;">
+    <table class="ps-table">
+      <thead><tr><th>Titel</th><th>Art</th><th>Ortschaften</th><th>Gleicher Ablauf</th><th>Verwendet</th><th>Zuletzt verwendet</th><th style="text-align:right;">Aktionen</th></tr></thead>
+      <tbody>
+      {% for vorlage in vorlagen %}
+        <tr>
+          <td>
+            <strong>{{ vorlage.titel }}</strong>
+            {% if vorlage.beschreibung %}<small style="display:block;color:var(--text-muted);">{{ vorlage.beschreibung }}</small>{% endif %}
+          </td>
+          <td><span class="ps-badge ps-badge--blue">{{ 'Einzeleinsatz' if vorlage.art == 'einzel' else 'Großschadenslage' }}</span></td>
+          <td>{{ (vorlage.konfig.get('ortschaften') or [])|join(', ') or 'alle' }}</td>
+          <td>{{ 'Ja' if vorlage.seed_fixiert is not none else 'Nein' }}</td>
+          <td>{{ vorlage.verwendet_anzahl }}</td>
+          <td>{{ vorlage.zuletzt_verwendet_at|local_datetime if vorlage.zuletzt_verwendet_at else '–' }}</td>
+          <td style="text-align:right;">
+            <form method="post" action="/planspiele/vorlagen/{{ vorlage.id }}/anlegen" style="display:inline;">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              <button class="btn btn--primary btn--sm" type="submit">Planspiel anlegen</button>
+            </form>
+            <form method="post" action="/planspiele/vorlagen/{{ vorlage.id }}/loeschen" style="display:inline;" onsubmit="return confirm('Vorlage wirklich löschen?');">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              <button class="btn btn--danger btn--sm" type="submit">Löschen</button>
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="ps-mobile-list">
+    {% for vorlage in vorlagen %}
+    <article class="ps-mcard" style="--ps-accent:var(--blue);">
+      <div class="ps-mcard__top"><span class="ps-mcard__title">{{ vorlage.titel }}</span><span class="ps-badge ps-badge--blue">{{ 'Einzeleinsatz' if vorlage.art == 'einzel' else 'Großschadenslage' }}</span></div>
+      {% if vorlage.beschreibung %}<p>{{ vorlage.beschreibung }}</p>{% endif %}
+      <div class="ps-mcard__grid">
+        <div><div class="ps-mcard__label">Ortschaften</div><div class="ps-mcard__value">{{ (vorlage.konfig.get('ortschaften') or [])|join(', ') or 'alle' }}</div></div>
+        <div><div class="ps-mcard__label">Verwendet</div><div class="ps-mcard__value">{{ vorlage.verwendet_anzahl }}</div></div>
+      </div>
+      <div class="ps-mcard__footer">
+        <form method="post" action="/planspiele/vorlagen/{{ vorlage.id }}/anlegen"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><button class="btn btn--primary btn--sm" type="submit">Planspiel anlegen</button></form>
+        <form method="post" action="/planspiele/vorlagen/{{ vorlage.id }}/loeschen" onsubmit="return confirm('Vorlage wirklich löschen?');"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><button class="btn btn--danger btn--sm" type="submit">Löschen</button></form>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="ps-empty">Vorlagen speichern Sie in einem Planspiel über „Als Vorlage speichern“.</p>
+  {% endif %}
+</section>
+{% endblock %}

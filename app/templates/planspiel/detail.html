@@ -49,6 +49,18 @@
       </p>
     </div>
   </header>
+  {% if can_steuern %}
+  <details class="ps-box" style="margin-bottom:1rem;">
+    <summary>Als Vorlage speichern</summary>
+    <form method="post" action="/planspiele/{{ run.id }}/als-vorlage" style="margin-top:.75rem;">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <label>Titel<input class="form-input" name="titel" value="{{ run.titel }}" required maxlength="200"></label>
+      <label>Beschreibung<textarea class="form-input" name="beschreibung" rows="3"></textarea></label>
+      <label><input type="checkbox" name="gleicher_ablauf"> Gleichen Ablauf wiederholen (gleicher Zufall)</label>
+      <button class="btn btn--primary btn--sm" type="submit">Speichern</button>
+    </form>
+  </details>
+  {% endif %}
   {% if fehler %}
   <p class="form-error">
     {{ fehler }}
