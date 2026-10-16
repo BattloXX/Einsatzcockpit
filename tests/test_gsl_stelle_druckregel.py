@@ -155,7 +155,8 @@ def test_disponieren_route_plant_autodruck(client, setup_db, monkeypatch):
 def test_regeleditor_speichert_stellen_filter(setup_db):
     import inspect
     from types import SimpleNamespace
-    from unittest.mock import MagicMock
+    import asyncio
+    from unittest.mock import AsyncMock, MagicMock
 
     from fastapi.params import Depends as DependsParam
     from pydantic.fields import FieldInfo
@@ -173,12 +174,13 @@ def test_regeleditor_speichert_stellen_filter(setup_db):
             elif isinstance(param.default, DependsParam):
                 kwargs[name] = None
         kwargs.update(
-            rule_id=rule.id, request=MagicMock(), db=db, user=SimpleNamespace(org_id=org),
+            rule_id=rule.id, request=MagicMock(form=AsyncMock(return_value={})), db=db,
+            user=SimpleNamespace(org_id=org),
             name=rule.name, trigger=TRIGGER_GSL_STELLE_DISPONIERT, documents=[DOC_SITE_KARTE],
             objekt_elements=[], printer_ids=list(rule.printer_ids),
             stelle_nur_erste_disposition="1", stelle_auftragsart="abarbeitung",
         )
-        rule_save(**kwargs)
+        asyncio.run(rule_save(**kwargs))
         db.refresh(rule)
         assert rule.filters["stelle_nur_erste_disposition"] is True
         assert rule.filters["stelle_auftragsart"] == "abarbeitung"
@@ -190,15 +192,17 @@ def test_regeleditor_speichert_stellen_filter(setup_db):
             min_alarmstufe=2,
             stichwort="Brand",
             nur_bma="1",
+            # Altfeld min_alarmstufe wird nur übernommen, wenn das Formular es mitsendet.
+            request=MagicMock(form=AsyncMock(return_value={"min_alarmstufe": "2"})),
         )
-        rule_save(**kwargs)
+        asyncio.run(rule_save(**kwargs))
         db.refresh(rule)
         assert rule.trigger == TRIGGER_EINSATZ_CREATED_GSL
         assert rule.documents == [DOC_EINSATZINFO, DOC_SITE_KARTE]
         assert rule.filters == {"min_alarmstufe": 2, "stichwort": ["Brand"], "nur_bma": True}
 
         kwargs.update(trigger=TRIGGER_EINSATZ_CREATED, documents=[DOC_SITE_KARTE])
-        response = rule_save(**kwargs)
+        response = asyncio.run(rule_save(**kwargs))
         assert response.status_code == 303
         db.refresh(rule)
         assert rule.trigger == TRIGGER_EINSATZ_CREATED_GSL

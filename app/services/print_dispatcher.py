@@ -51,6 +51,18 @@ TRIGGER_TEST_BEZUG = {
 }
 
 
+def objekt_element_optionen(db: Session, org_id: int) -> dict[str, str]:
+    """Aktive Objekt-Druckelemente der Organisation mit dem Systemelement."""
+    from app.models.gateway import OBJEKT_ELEMENT_LABELS
+    from app.models.objekt import AUSWAHL_DOKUMENTART
+    from app.services.objekt_service import lade_auswahl
+
+    return {
+        "bei_einsatz_drucken": OBJEKT_ELEMENT_LABELS["bei_einsatz_drucken"],
+        **lade_auswahl(db, org_id, AUSWAHL_DOKUMENTART),
+    }
+
+
 def unfulfilled_print_jobs(db: Session, incident_id: int) -> list[PrintJob]:
     """Bereits angelegte Regel-Jobs eines Einsatzes, die noch nicht fertig sind."""
     return (
@@ -411,6 +423,13 @@ def _filter_matches(rule, context: dict) -> bool:
     hat_einsatzbezug = rule.trigger in (
         TRIGGER_EINSATZ_CREATED, TRIGGER_EINSATZ_CREATED_GSL, TRIGGER_EINSATZ_UPDATED,
     )
+    alarmstufen = f.get("alarmstufen")
+    if hat_einsatzbezug and isinstance(alarmstufen, list):
+        alarmstufen = {str(code).strip().upper() for code in alarmstufen if str(code).strip()}
+        alarm_code = context.get("alarm_code")
+        alarm_code = alarm_code.strip().upper() if isinstance(alarm_code, str) else None
+        if alarmstufen and alarm_code not in alarmstufen:
+            return False
     uebung = f.get("uebung", "alle")
     if uebung in ("nur_echt", "nur_uebung"):
         is_exercise = context.get("is_exercise")
@@ -449,6 +468,37 @@ def _filter_matches(rule, context: dict) -> bool:
     return True
 
 
+def effektive_regel_einstellungen(rule, context: dict) -> tuple[list[str], list[str], dict]:
+    """Grundwerte einer Druckregel samt optionaler Abweichung je Alarmstufe."""
+    documents = list(rule.documents or [])
+    objekt_elements = list(rule.objekt_elements or [])
+    optionen_roh = rule.options or {}
+    options = {key: value for key, value in optionen_roh.items() if key != "je_alarmstufe"}
+    alarm_code = context.get("alarm_code")
+    if not isinstance(alarm_code, str) or not alarm_code.strip():
+        return documents, objekt_elements, options
+    abweichungen = optionen_roh.get("je_alarmstufe", {})
+    if not isinstance(abweichungen, dict):
+        return documents, objekt_elements, options
+    abweichung = next(
+        (wert for code, wert in abweichungen.items()
+         if str(code).strip().upper() == alarm_code.strip().upper() and isinstance(wert, dict)),
+        None,
+    )
+    if abweichung is None:
+        return documents, objekt_elements, options
+    copies = abweichung.get("copies")
+    if isinstance(copies, int) and copies >= 1:
+        options["copies"] = copies
+    if abweichung.get("media") in ("A3", "A4"):
+        options["media"] = abweichung["media"]
+    if isinstance(abweichung.get("documents"), list):
+        documents = abweichung["documents"]
+    if isinstance(abweichung.get("objekt_elements"), list):
+        objekt_elements = abweichung["objekt_elements"]
+    return documents, objekt_elements, options
+
+
 def _incident_context(inc) -> dict:
     """Vollständiger Filterkontext eines Einsatzes."""
     alarm_code = getattr(inc, "alarm_type_code", None)
@@ -480,6 +530,7 @@ def _incident_context(inc) -> dict:
         "is_exercise": getattr(inc, "is_exercise", None),
         "planspiel_run_id": inc.planspiel_run_id,
         "alarmstufe": int(treffer.group()) if treffer else None,
+        "alarm_code": alarm_code.strip().upper() or None,
         "nur_bma": nur_bma,
     }
 
@@ -955,7 +1006,7 @@ def _seiten_for_elements(db: Session, objekt_id: int, elements: list[str]):
     """
     from sqlalchemy import or_
 
-    from app.models.objekt import ObjektDokumentSeite
+    from app.models.objekt import ObjektDokument, ObjektDokumentSeite
 
     dokumentarten = [e for e in elements if e != "bei_einsatz_drucken"]
     bedingungen = []
@@ -967,9 +1018,12 @@ def _seiten_for_elements(db: Session, objekt_id: int, elements: list[str]):
         return []
     return (
         db.query(ObjektDokumentSeite)
+        .join(ObjektDokument, ObjektDokumentSeite.dokument_id == ObjektDokument.id)
         .filter(
             ObjektDokumentSeite.objekt_id == objekt_id,
             ObjektDokumentSeite.einzel_pdf_pfad.isnot(None),
+            ObjektDokument.ist_aktuelle_version.is_(True),
+            ObjektDokument.freigabe_status == "freigegeben",
             or_(*bedingungen),
         )
         .order_by(ObjektDokumentSeite.dokument_id, ObjektDokumentSeite.seiten_nr)
@@ -995,6 +1049,7 @@ def _jobs_for_rule(
     )
 
     jobs: list[PrintJob] = []
+    documents, objekt_elements, regel_optionen = effektive_regel_einstellungen(rule, context)
     printer_ids = rule.printer_ids or []
     if not printer_ids:
         return jobs
@@ -1005,7 +1060,7 @@ def _jobs_for_rule(
             key: value for key, value in (printer.defaults or {}).items()
             if key in ("duplex", "color", "media")
         } if printer is not None else {}
-        options = defaults | (rule.options or {})
+        options = defaults | regel_optionen
         job, created = create_print_job(
             db, org_id=rule.org_id, gateway_id=gateway.id, source=source,
             rule_id=rule.id, incident_id=context.get("incident_id"),
@@ -1016,7 +1071,6 @@ def _jobs_for_rule(
         if created:
             jobs.append(job)
 
-    documents = rule.documents or []
     erlaubte_typen = (
         frozenset(documents) | {DOC_OBJEKT_DOKUMENT}
         if source == JOB_SOURCE_MANUAL
@@ -1098,7 +1152,6 @@ def _jobs_for_rule(
                  artifact_ref=str(context["ausleihe_id"]))
 
     # 2) Objekt-Elemente → konkrete Objekt-Dokumentseiten des zugeordneten Objekts
-    objekt_elements = rule.objekt_elements or []
     if objekt_elements and DOC_OBJEKT_DOKUMENT in erlaubte_typen:
         for objekt_id in _resolve_objekt_ids(db, context):
             for seite in _seiten_for_elements(db, objekt_id, objekt_elements):

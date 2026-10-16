@@ -1,0 +1,28 @@
+{% set treffer = ergebnisse|selectattr('greift')|list %}
+{% set blaetter = namespace(anzahl=0) %}
+{% for ergebnis in treffer %}
+  {% for druck in ergebnis.druckt %}
+    {% set blaetter.anzahl = blaetter.anzahl + druck.kopien * (druck.drucker|length) %}
+  {% endfor %}
+{% endfor %}
+<div class="gwx-simulation__summary">
+  {{ treffer|length }} Regeln greifen, insgesamt {{ blaetter.anzahl }} Blätter-Sätze
+  {% if treffer|selectattr('objekt_inhalte')|list %} · + Objektseiten, wenn Objekt zugeordnet{% endif %}
+</div>
+<div class="gwx-simulation__cards">
+  {% for ergebnis in ergebnisse %}
+  <div class="gwx-simulation__card {{ 'gwx-simulation__card--ok' if ergebnis.greift else '' }}">
+    {% if ergebnis.greift %}
+      <strong>✅ {{ ergebnis.rule.name }} druckt:</strong>
+      {% for druck in ergebnis.druckt %}
+        {{ druck.kopien }}× {{ druck.dokument }} ({{ druck.format }}) auf {{ druck.drucker|join(', ') }}{{ ';' if not loop.last }}
+      {% endfor %}
+      {% if ergebnis.objekt_inhalte %}<span>Objekt-Inhalte: {{ ergebnis.objekt_inhalte|join(', ') }}</span>{% endif %}
+    {% else %}
+      <strong>⛔ {{ ergebnis.rule.name }}</strong> – {{ ergebnis.grund }}
+    {% endif %}
+  </div>
+  {% else %}
+  <div class="gwx-help">Keine Regel für diesen Auslöser.</div>
+  {% endfor %}
+</div>

@@ -71,13 +71,91 @@
               <button class="gwx-btn gwx-btn--primary gwx-btn--sm" type="submit">+ Regel</button>
             </form>
 
+            <div class="gwx-overview" x-data="{ open: {{ 'true' if matrix.spalten else 'false' }}, tab: 'matrix' }">
+              <button type="button" class="gwx-overview__toggle" @click="open = !open">
+                <span x-text="open ? '▾' : '▸'"></span>
+                🗺️ Übersicht – was wird wann gedruckt?
+              </button>
+              <div x-show="open" x-cloak class="gwx-overview__body">
+                <div class="gwx-overview__tabs">
+                  <button type="button" class="gwx-btn gwx-btn--sm" :class="{ 'gwx-btn--primary': tab === 'matrix' }" @click="tab = 'matrix'">Matrix</button>
+                  <button type="button" class="gwx-btn gwx-btn--sm" :class="{ 'gwx-btn--primary': tab === 'simulation' }" @click="tab = 'simulation'">Durchspielen</button>
+                </div>
+
+                <div x-show="tab === 'matrix'">
+                  {% if not matrix.spalten %}
+                  <div class="gwx-help">Keine Einsatz-Regeln vorhanden.</div>
+                  {% elif not matrix.zeilen %}
+                  <div class="gwx-help">Noch kein Alarmtyp-Katalog. <a href="/admin/alarmtypen">Alarmtypen pflegen</a></div>
+                  {% else %}
+                  <div class="gwx-matrix-wrap">
+                    <table class="gwx-matrix">
+                      <thead>
+                        <tr>
+                          <th class="gwx-matrix__stufe">Stufe</th>
+                          {% for spalte in matrix.spalten %}
+                          <th class="{{ 'gwx-matrix__inaktiv' if not spalte.aktiv }}">
+                            <a href="#regel-{{ spalte.rule.id }}">{{ spalte.titel }}</a>
+                            <small>{{ spalte.trigger_label }}</small>
+                            {% for hinweis in spalte.hinweise %}<span class="gwx-chip">{{ hinweis }}</span>{% endfor %}
+                            {% if spalte.ohne_drucker %}<span class="gwx-chip gwx-chip--warn">⚠️ ohne Drucker</span>{% endif %}
+                            {% if not spalte.aktiv %}<span class="gwx-chip">aus</span>{% endif %}
+                          </th>
+                          {% endfor %}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {% for zeile in matrix.zeilen %}
+                        <tr>
+                          <th class="gwx-matrix__stufe"><span class="gwx-mono">{{ zeile.code }}</span><small>{{ zeile.label }}</small></th>
+                          {% for zelle in zeile.zellen %}
+                          <td class="{{ 'gwx-matrix__abweichung' if zelle.abweichung }} {{ 'gwx-matrix__leer' if not zelle.greift }}">
+                            {{ zelle.kurz if zelle.greift else '–' }}
+                          </td>
+                          {% endfor %}
+                        </tr>
+                        {% endfor %}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div class="gwx-help">– greift nicht · fett = Abweichung je Stufe · Hinweise oben = zusätzliche Bedingungen</div>
+                  {% endif %}
+                </div>
+
+                <div x-show="tab === 'simulation'" x-cloak>
+                  <form id="gwx-sim-form" class="gwx-formgrid gwx-simulation-form"
+                        hx-get="/gateway/{{ gw.id }}/druckregeln/simulation"
+                        hx-target="#gwx-sim-ergebnis"
+                        hx-trigger="change, input delay:400ms from:input[name=stichwort], load"
+                        hx-include="#gwx-sim-form">
+                    <div class="gwx-field"><label class="gwx-label">Auslöser</label>
+                      <select name="trigger">{% for key in ('einsatz_created', 'einsatz_created_gsl', 'einsatz_updated') %}<option value="{{ key }}">{{ trigger_labels[key] }}</option>{% endfor %}</select></div>
+                    <div class="gwx-field"><label class="gwx-label">Alarmstufe</label>
+                      <select name="alarm_code">{% for alarm in alarmstufen_katalog %}<option value="{{ alarm.code }}">{{ alarm.code }} – {{ alarm.label }}</option>{% endfor %}</select></div>
+                    <div class="gwx-field"><label class="gwx-label">Einsatzart</label>
+                      <select name="uebung"><option value="echt">Echt</option><option value="uebung">Übung</option></select></div>
+                    <label class="gwx-check"><input type="checkbox" name="bma" value="1"> BMA</label>
+                    <div class="gwx-field"><label class="gwx-label">Uhrzeit</label>
+                      <input class="gwx-input gwx-input--mono" type="time" name="uhrzeit" value="{{ simulation_default_uhrzeit }}"></div>
+                    <div class="gwx-field"><label class="gwx-label">Stichwort</label>
+                      <input class="gwx-input" type="text" name="stichwort" placeholder="z. B. BMA"></div>
+                  </form>
+                  <div id="gwx-sim-ergebnis"></div>
+                </div>
+              </div>
+            </div>
+
             {% if not rules %}
-            <div class="gwx-empty">Noch keine Druckregel. Automatischer Verleihschein-Druck wird über eine Regel mit Auslöser „Verleihschein angelegt" abgebildet.</div>
+            <div class="gwx-empty">Noch keine Druckregel. Automatischer Verleihschein-Druck wird über eine Regel mit Auslöser "Verleihschein angelegt" abgebildet.</div>
             {% else %}
             <p style="font-size:.76rem;color:var(--g-dim);margin:0 0 10px;">⠿ Ziehen ändert die Reihenfolge – obere Regeln werden zuerst ausgewertet.</p>
             <div id="gwx-rule-list" data-gw="{{ gw.id }}">
             {% for r in rules %}
             {% set f = r.filters or {} %}{% set o = r.options or {} %}{% set fenster = f.get('zeitfenster') or {} %}
+            {% set einsatz_trigger = r.trigger in ('einsatz_created', 'einsatz_created_gsl', 'einsatz_updated') %}
+            {% set alarmstufen = f.get('alarmstufen') or [] %}
+            {% set abweichungen = o.get('je_alarmstufe') or {} %}
+            {% set katalog_codes = alarmstufen_katalog|map(attribute='code')|list %}
             <div class="gwx-rule" id="regel-{{ r.id }}" data-rule-id="{{ r.id }}"
                  x-data="{ open: {{ 'true' if q.get('rule_created')|string == r.id|string else 'false' }} }">
               <div class="gwx-rule__hd" @click="open=!open">
@@ -97,7 +175,21 @@
                     {% if f.get('uebung') == 'nur_echt' %} · <span class="gwx-chip">nur Echteinsätze</span>{% endif %}
                     {% if f.get('uebung') == 'nur_uebung' %} · <span class="gwx-chip">nur Übungen</span>{% endif %}
                     {% if fenster.get('von') %} · {{ fenster.get('von') }}–{{ fenster.get('bis') }}{% endif %}
+                    {% if einsatz_trigger and alarmstufen %}
+                      · {{ alarmstufen[:6]|join(', ') }}{% if alarmstufen|length > 6 %} +{{ alarmstufen|length - 6 }}{% endif %}
+                    {% elif einsatz_trigger %}
+                      · alle Stufen
+                    {% endif %}
+                    {% if einsatz_trigger and not alarmstufen and f.get('min_alarmstufe') %}
+                      · ab Stufe {{ f.get('min_alarmstufe') }}
+                    {% endif %}
+                    {% if abweichungen %} · {{ abweichungen|length }} Abweichungen je Stufe{% endif %}
+                    {% if r.objekt_elements %}
+                      · Objekt: {% for key in r.objekt_elements[:3] %}{{ objekt_element_labels.get(key, key) }}{{ ', ' if not loop.last }}{% endfor %}{% if r.objekt_elements|length > 3 %} +{{ r.objekt_elements|length - 3 }}{% endif %}
+                    {% endif %}
+                    {% if o.get('media') %} · {{ o.get('media') }}{% endif %}
                   </div>
+                  <div class="gwx-rule__description">{{ regel_beschreibungen[r.id] }}</div>
                 </div>
                 <div class="gwx-inline" @click.stop>
                   <form method="post" action="/gateway/rules/{{ r.id }}/test"
@@ -115,7 +207,22 @@
               </div>
 
               <div class="gwx-rule__body" x-show="open" x-cloak>
-                <form method="post" action="/gateway/rules/{{ r.id }}/save" x-data="{ trigger: '{{ r.trigger }}' }">
+                <form method="post" action="/gateway/rules/{{ r.id }}/save"
+                      x-data="{
+                        trigger: '{{ r.trigger }}',
+                        selectedAlarmstufen: {{ alarmstufen|tojson|forceescape }},
+                        triggerDocumentTypes: {{ trigger_document_types|tojson|forceescape }},
+                        alarmstufeSichtbar(code, hatAbweichung) {
+                          return hatAbweichung || this.selectedAlarmstufen.length === 0 || this.selectedAlarmstufen.includes(code);
+                        },
+                        dokumentErlaubt(dokument) {
+                          return (this.triggerDocumentTypes[this.trigger] || []).includes(dokument);
+                        },
+                        waehleGruppe(codes) {
+                          this.selectedAlarmstufen = Array.from(new Set(this.selectedAlarmstufen.concat(codes)));
+                        },
+                        leereAlarmstufen() { this.selectedAlarmstufen = []; }
+                      }">
                   <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
                   <input type="hidden" name="gw" value="{{ gw.id }}">
 
@@ -223,8 +330,6 @@
                         <option value="nur_echt" {{ 'selected' if f.get('uebung') == 'nur_echt' }}>Nur Echteinsätze</option>
                         <option value="nur_uebung" {{ 'selected' if f.get('uebung') == 'nur_uebung' }}>Nur Übungen</option>
                       </select></div>
-                    <div class="gwx-field" x-show="!['verleih_created', 'gsl_einheit_angelegt'].includes(trigger)"><label class="gwx-label">Min. Alarmstufe</label>
-                      <input class="gwx-input gwx-input--mono" type="number" name="min_alarmstufe" value="{{ f.get('min_alarmstufe','') }}" placeholder="egal"></div>
                     <div class="gwx-field" x-show="!['verleih_created', 'gsl_einheit_angelegt'].includes(trigger)"><label class="gwx-label">Stichwort enthält (Komma-getrennt)</label>
                       <input class="gwx-input" type="text" name="stichwort" value="{{ (f.get('stichwort') or [])|join(', ') }}" placeholder="z. B. B, T, BMA"></div>
                     <div class="gwx-field"><label class="gwx-label">Nur ab</label>
@@ -234,6 +339,160 @@
                     <div class="gwx-field" style="justify-content:end;" x-show="!['verleih_created', 'gsl_einheit_angelegt'].includes(trigger)">
                       <label class="gwx-check" style="border:none;background:none;padding:0;">
                         <input type="checkbox" name="nur_bma" value="1" {{ 'checked' if f.get('nur_bma') }}> Nur BMA-Alarme</label></div>
+                  </div>
+
+                  <div class="gwx-field" style="margin-top:12px;"
+                       x-show="['einsatz_created', 'einsatz_created_gsl', 'einsatz_updated'].includes(trigger)">
+                    <label class="gwx-label">Alarmstufen</label>
+                    {% set brand_stufen = alarmstufen_katalog|selectattr('gruppe', 'equalto', 'F')|list %}
+                    {% set technik_stufen = alarmstufen_katalog|selectattr('gruppe', 'equalto', 'T')|list %}
+                    {% set sonstige_stufen = alarmstufen_katalog|selectattr('gruppe', 'equalto', 'S')|list %}
+                    {% if alarmstufen_katalog %}
+                    <div class="gwx-alarm-actions">
+                      {% if brand_stufen %}<button class="gwx-btn gwx-btn--sm" type="button" @click="waehleGruppe({{ brand_stufen|map(attribute='code')|list|tojson|forceescape }})">Alle F</button>{% endif %}
+                      {% if technik_stufen %}<button class="gwx-btn gwx-btn--sm" type="button" @click="waehleGruppe({{ technik_stufen|map(attribute='code')|list|tojson|forceescape }})">Alle T</button>{% endif %}
+                      <button class="gwx-btn gwx-btn--sm" type="button" @click="leereAlarmstufen()">Keine (= alle Stufen)</button>
+                    </div>
+                    <div class="gwx-alarm-groups">
+                      {% for gruppenname, stufen in [('🔥 Brand (F)', brand_stufen), ('🔧 Technik (T)', technik_stufen), ('Sonstige', sonstige_stufen)] %}
+                      {% if stufen %}
+                      <div>
+                        <div class="gwx-alarm-group__title">{{ gruppenname }}</div>
+                        <div class="gwx-checks">
+                          {% for s in stufen %}
+                          <label class="gwx-check gwx-alarm-chip" title="{{ s.label }}">
+                            <input type="checkbox" name="alarmstufen" value="{{ s.code }}" x-model="selectedAlarmstufen"
+                              :disabled="!['einsatz_created', 'einsatz_created_gsl', 'einsatz_updated'].includes(trigger)"
+                              {{ 'checked' if s.code in alarmstufen }}>
+                            {{ s.code }} – {{ s.label }}
+                          </label>
+                          {% endfor %}
+                        </div>
+                      </div>
+                      {% endif %}
+                      {% endfor %}
+                      {% for code in alarmstufen if code not in katalog_codes %}
+                      <label class="gwx-check gwx-alarm-chip" title="{{ code }} (nicht im Katalog)">
+                        <input type="checkbox" name="alarmstufen" value="{{ code }}" x-model="selectedAlarmstufen"
+                          :disabled="!['einsatz_created', 'einsatz_created_gsl', 'einsatz_updated'].includes(trigger)" checked>
+                        {{ code }} (nicht im Katalog)
+                      </label>
+                      {% endfor %}
+                    </div>
+                    <div class="gwx-help">Keine Auswahl = Regel greift bei jeder Alarmstufe.</div>
+                    {% else %}
+                    <div class="gwx-help">Noch keine Alarmtypen vorhanden. <a href="/admin/alarmtypen">Alarmtypen pflegen</a></div>
+                    {% endif %}
+                    {% if f.get('min_alarmstufe') and not alarmstufen %}
+                    <div class="gwx-help">Bisher: ab Stufe {{ f.get('min_alarmstufe') }} (alt)</div>
+                    <input type="hidden" name="min_alarmstufe" value="{{ f.get('min_alarmstufe') }}">
+                    {% endif %}
+                  </div>
+
+                  <div class="gwx-sechd"
+                       x-show="['einsatz_created', 'einsatz_created_gsl', 'einsatz_updated'].includes(trigger)">
+                    📊 Abweichungen je Alarmstufe (optional)
+                  </div>
+                  <div x-show="['einsatz_created', 'einsatz_created_gsl', 'einsatz_updated'].includes(trigger)">
+                    <div class="gwx-help">Leer = wie oben. Hier z. B. bei F14 3 Kopien in A3 mit Brandschutzplan.</div>
+                    <div class="gwx-alarm-table-wrap">
+                      <table class="gwx-table gwx-alarm-table">
+                        <thead>
+                          <tr>
+                            <th>Stufe</th>
+                            <th>Kopien</th>
+                            <th>Format</th>
+                            {% for key, label in trigger_document_labels.items() %}<th x-show="dokumentErlaubt('{{ key }}')">{{ label }}</th>{% endfor %}
+                            <th>Objekt-Inhalte</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {% for s in alarmstufen_katalog %}
+                          {% set stufen_option = abweichungen.get(s.code) or {} %}
+                          <tr x-show="alarmstufeSichtbar('{{ s.code }}', {{ 'true' if stufen_option else 'false' }})">
+                            <td data-label="Stufe" class="gwx-mono" title="{{ s.label }}">{{ s.code }}</td>
+                            <td data-label="Kopien"><input class="gwx-input gwx-input--mono" type="number" min="1" max="20"
+                              name="stufe_{{ s.code }}_copies" value="{{ stufen_option.get('copies', '') }}" placeholder="{{ o.get('copies', 1) }}"></td>
+                            <td data-label="Format"><select name="stufe_{{ s.code }}_media">
+                              <option value="">wie oben</option>
+                              <option value="A4" {{ 'selected' if stufen_option.get('media') == 'A4' }}>A4</option>
+                              <option value="A3" {{ 'selected' if stufen_option.get('media') == 'A3' }}>A3</option>
+                            </select></td>
+                            {% for key, label in trigger_document_labels.items() %}
+                            {% set stufen_dokumente = stufen_option.get('documents') %}
+                            {% set dokument_wert = 'ja' if stufen_dokumente is not none and key in stufen_dokumente and key not in (r.documents or []) else ('nein' if stufen_dokumente is not none and key not in stufen_dokumente and key in (r.documents or []) else '') %}
+                            <td data-label="{{ label }}" x-show="dokumentErlaubt('{{ key }}')">
+                              <select name="stufe_{{ s.code }}_doc_{{ key }}" :disabled="!dokumentErlaubt('{{ key }}')">
+                                <option value="" {{ 'selected' if not dokument_wert }}>wie oben</option>
+                                <option value="ja" {{ 'selected' if dokument_wert == 'ja' }}>ja</option>
+                                <option value="nein" {{ 'selected' if dokument_wert == 'nein' }}>nein</option>
+                              </select>
+                            </td>
+                            {% endfor %}
+                            <td data-label="Objekt-Inhalte"><details {{ 'open' if 'objekt_elements' in stufen_option }}>
+                              <summary><label class="gwx-check" style="display:inline-flex;" @click.stop>
+                                <input type="checkbox" name="stufe_{{ s.code }}_custom_elements" value="1"
+                                  {{ 'checked' if 'objekt_elements' in stufen_option }}> abweichend
+                              </label></summary>
+                              <div class="gwx-checks">
+                                {% for key, label in objekt_element_labels.items() %}
+                                <label class="gwx-check"><input type="checkbox" name="stufe_{{ s.code }}_objekt_elements" value="{{ key }}"
+                                  {{ 'checked' if key in (stufen_option.get('objekt_elements') or []) }}> {{ label }}</label>
+                                {% endfor %}
+                              </div>
+                            </details></td>
+                          </tr>
+                          {% endfor %}
+                          {% for code, stufen_option in abweichungen.items() if code not in katalog_codes %}
+                          <tr x-show="alarmstufeSichtbar('{{ code }}', true)">
+                            <td data-label="Stufe" class="gwx-mono">
+                              {{ code }} <span class="gwx-help">(nicht im Katalog)</span>
+                            </td>
+                            <td data-label="Kopien">
+                              <input class="gwx-input gwx-input--mono" type="number" min="1" max="20"
+                                name="stufe_{{ code }}_copies" value="{{ stufen_option.get('copies', '') }}"
+                                placeholder="{{ o.get('copies', 1) }}">
+                            </td>
+                            <td data-label="Format">
+                              <select name="stufe_{{ code }}_media">
+                                <option value="">wie oben</option>
+                                <option value="A4" {{ 'selected' if stufen_option.get('media') == 'A4' }}>A4</option>
+                                <option value="A3" {{ 'selected' if stufen_option.get('media') == 'A3' }}>A3</option>
+                              </select>
+                            </td>
+                            {% for key, label in trigger_document_labels.items() %}
+                            {% set stufen_dokumente = stufen_option.get('documents') %}
+                            {% set dokument_wert = 'ja' if stufen_dokumente is not none and key in stufen_dokumente and key not in (r.documents or []) else ('nein' if stufen_dokumente is not none and key not in stufen_dokumente and key in (r.documents or []) else '') %}
+                            <td data-label="{{ label }}" x-show="dokumentErlaubt('{{ key }}')">
+                              <select name="stufe_{{ code }}_doc_{{ key }}"
+                                :disabled="!dokumentErlaubt('{{ key }}')">
+                                <option value="" {{ 'selected' if not dokument_wert }}>wie oben</option>
+                                <option value="ja" {{ 'selected' if dokument_wert == 'ja' }}>ja</option>
+                                <option value="nein" {{ 'selected' if dokument_wert == 'nein' }}>nein</option>
+                              </select>
+                            </td>
+                            {% endfor %}
+                            <td data-label="Objekt-Inhalte">
+                              <details open>
+                                <summary><label class="gwx-check" style="display:inline-flex;" @click.stop>
+                                  <input type="checkbox" name="stufe_{{ code }}_custom_elements" value="1"
+                                    {{ 'checked' if 'objekt_elements' in stufen_option }}> abweichend
+                                </label></summary>
+                                <div class="gwx-checks">
+                                  {% for key, label in objekt_element_labels.items() %}
+                                  <label class="gwx-check">
+                                    <input type="checkbox" name="stufe_{{ code }}_objekt_elements" value="{{ key }}"
+                                      {{ 'checked' if key in (stufen_option.get('objekt_elements') or []) }}> {{ label }}
+                                  </label>
+                                  {% endfor %}
+                                </div>
+                              </details>
+                            </td>
+                          </tr>
+                          {% endfor %}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
 
                   <div class="gwx-btnrow" style="margin-top:16px;">
