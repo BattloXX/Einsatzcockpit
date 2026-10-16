@@ -209,6 +209,7 @@ _TENANT_TABLE_NAMES: frozenset[str] = frozenset({
     # Print & Alarm Gateway (ECPG) – TenantScoped via Mixin
     "gateway",
     "printer",
+    "printer_agent_route",
     "print_job",
     "mailing_template",
     "mailing_recipient_list",

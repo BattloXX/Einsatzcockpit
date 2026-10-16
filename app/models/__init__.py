@@ -40,6 +40,7 @@ from app.models.gateway import (
     AlarmIngest,
     Gateway,
     Printer,
+    PrinterAgentRoute,
     PrintJob,
     PrintRule,
 )
@@ -449,6 +450,7 @@ __all__ = [
     "HoehenCache",
     "Gateway",
     "Printer",
+    "PrinterAgentRoute",
     "PrintJob",
     "AlarmIngest",
     "PrintRule",
