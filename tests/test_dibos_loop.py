@@ -484,6 +484,9 @@ def test_check_org_fast_path_enriches_before_units_and_public(monkeypatch):
     finally:
         db.close()
     order = []
+    # "fast-1" muss neu sein: ein früherer Test im selben xdist-Worker kann die Nummer im
+    # modulweiten Zustand hinterlassen haben, dann greift der Fast Path nicht.
+    monkeypatch.setattr(dibos_loop, "_previous_event_numbers", {})
     monkeypatch.setattr(
         dibos_client, "DibosClient",
         lambda *args, **kwargs: _RecordingClient([{"eventNumber": "fast-1"}], calls=order),
