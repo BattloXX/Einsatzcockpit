@@ -25,6 +25,7 @@ from app.models.planspiel import (
     PlanspielRun,
     PlanspielRunEreignis,
     PlanspielSzenario,
+    PlanspielVorlage,
 )
 from app.models.user import User
 from app.services.broadcast import broadcast_org
@@ -59,6 +60,12 @@ from app.services.planspiel_run_service import (
     starten,
     vorschau,
 )
+from app.services.planspiel_vorlage_service import (
+    aus_run_speichern,
+    entwurf_aus_vorlage,
+    vorlage_laden,
+)
+from app.services.planspiel_vorlage_service import loeschen as vorlage_loeschen
 
 router = APIRouter(prefix="/planspiele", tags=["planspiele"])
 
@@ -222,6 +229,9 @@ def _wizard_context(request: Request, db: Session, user: User, form_data: dict[s
     defaults = standard_ortschaften(db, org_id)
     form["ortschaften"] = form.get("ortschaften") or defaults
     org = db.query(FireDept).filter(FireDept.id == org_id).one_or_none()
+    vorlagen = db.query(PlanspielVorlage).filter(
+        PlanspielVorlage.org_id == org_id,
+    ).order_by(PlanspielVorlage.titel).all()
     return {
         "user": user,
         "form": form,
@@ -234,6 +244,7 @@ def _wizard_context(request: Request, db: Session, user: User, form_data: dict[s
         "standard_ortschaften": defaults,
         "ortschaften_hinweis": not defaults,
         "org_ort": (org.city or "").strip() if org else "",
+        "vorlagen": vorlagen,
     }
 
 
@@ -314,11 +325,21 @@ def index(
 @router.get("/neu", response_class=HTMLResponse)
 def neu_form(
     request: Request,
+    vorlage: int | None = None,
     db: Session = Depends(get_db),
     user: User = Depends(require_role(*PLANSPIEL_LEITER_ROLES)),
     _guard: None = Depends(require_planspiel_enabled),
 ):
-    return templates.TemplateResponse(request, "planspiel/assistent.html", _wizard_context(request, db, user))
+    form_data: dict[str, object] | None = None
+    if vorlage is not None:
+        row = vorlage_laden(db, _org(user), vorlage)
+        if row is None:
+            raise HTTPException(status_code=404, detail="Nicht gefunden")
+        form_data = dict(row.konfig or {})
+        form_data["titel"] = row.titel
+    return templates.TemplateResponse(
+        request, "planspiel/assistent.html", _wizard_context(request, db, user, form_data)
+    )
 
 
 @router.get("/neu/stichwort", response_class=HTMLResponse)
@@ -365,6 +386,96 @@ async def neu_anlegen(
         )
 
 
+def _vorlagen_context(user: User, vorlagen: list[PlanspielVorlage], fehler: str | None = None) -> dict[str, object]:
+    return {"user": user, "vorlagen": vorlagen, "fehler": fehler}
+
+
+def _vorlagen_fuer_org(db: Session, user: User) -> list[PlanspielVorlage]:
+    return db.query(PlanspielVorlage).filter(
+        PlanspielVorlage.org_id == _org(user),
+    ).order_by(PlanspielVorlage.titel).all()
+
+
+@router.get("/vorlagen", response_class=HTMLResponse)
+def vorlagen_liste(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*PLANSPIEL_LEITER_ROLES)),
+    _guard: None = Depends(require_planspiel_enabled),
+):
+    return templates.TemplateResponse(
+        request, "planspiel/vorlagen.html", _vorlagen_context(user, _vorlagen_fuer_org(db, user))
+    )
+
+
+@router.post("/{run_id:int}/als-vorlage")
+async def als_vorlage(
+    run_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*PLANSPIEL_LEITER_ROLES)),
+    _guard: None = Depends(require_planspiel_enabled),
+):
+    run = _run(db, user, run_id)
+    _require_steuern(db, user, run)
+    form = await request.form()
+    try:
+        aus_run_speichern(
+            db, run, user, titel=str(form.get("titel", "")),
+            beschreibung=str(form.get("beschreibung", "")), gleicher_ablauf=bool(form.get("gleicher_ablauf")),
+        )
+        db.commit()
+        return RedirectResponse("/planspiele/vorlagen", status_code=303)
+    except ValueError as exc:
+        db.rollback()
+        return templates.TemplateResponse(
+            request, "planspiel/detail.html", {
+                "user": user, "run": run, "fehler": str(exc), "status_labels": PLANSPIEL_STATUS_LABELS,
+                "vorschau": vorschau(db, run) if run.status in {"entwurf", "bereit"} else None,
+                "ereignisse": [], "can_leiten": has_role(user, *PLANSPIEL_LEITER_ROLES),
+            }, status_code=400,
+        )
+
+
+@router.post("/vorlagen/{vorlage_id:int}/anlegen")
+def aus_vorlage_anlegen(
+    vorlage_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*PLANSPIEL_LEITER_ROLES)),
+    _guard: None = Depends(require_planspiel_enabled),
+):
+    vorlage = vorlage_laden(db, _org(user), vorlage_id)
+    if vorlage is None:
+        raise HTTPException(status_code=404, detail="Nicht gefunden")
+    try:
+        run = entwurf_aus_vorlage(db, vorlage, user)
+        db.commit()
+        return RedirectResponse(f"/planspiele/{run.id}", status_code=303)
+    except (ValueError, OrtNichtGefunden, GebietFehlt) as exc:
+        db.rollback()
+        return templates.TemplateResponse(
+            request, "planspiel/vorlagen.html", _vorlagen_context(user, _vorlagen_fuer_org(db, user), str(exc)),
+            status_code=400,
+        )
+
+
+@router.post("/vorlagen/{vorlage_id:int}/loeschen")
+def vorlage_entfernen(
+    vorlage_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(*PLANSPIEL_LEITER_ROLES)),
+    _guard: None = Depends(require_planspiel_enabled),
+):
+    vorlage = vorlage_laden(db, _org(user), vorlage_id)
+    if vorlage is None:
+        raise HTTPException(status_code=404, detail="Nicht gefunden")
+    vorlage_loeschen(db, vorlage, user)
+    db.commit()
+    return RedirectResponse("/planspiele/vorlagen", status_code=303)
+
+
 @router.get("/{run_id:int}", response_class=HTMLResponse)
 def detail(
     run_id: int,
@@ -388,6 +499,7 @@ def detail(
         "vorschau": vorschau(db, run) if run.status in {"entwurf", "bereit"} else None,
         "ereignisse": events,
         "can_leiten": has_role(user, *PLANSPIEL_LEITER_ROLES),
+        "can_steuern": _darf_steuern(db, user, run),
     })
 
 

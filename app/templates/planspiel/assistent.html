@@ -14,7 +14,7 @@
   .planspiel-wizard__full { grid-column: 1 / -1; }
   .planspiel-wizard__map { height: 280px; margin-top: .5rem; border: 1px solid var(--border); }
   .planspiel-wizard__actions { margin-top:1rem; }
-  .planspiel-wizard__choice { display: flex; align-items: center; gap: .4rem; }
+  .planspiel-wizard__choice, .planspiel-wizard__grid label.planspiel-wizard__choice { display: flex; align-items: center; gap: .4rem; }
   .planspiel-wizard__hint { color: var(--text-muted); }
   @media (max-width: 760px) {
     .planspiel-wizard__grid { grid-template-columns: 1fr; }
@@ -32,6 +32,16 @@
       <p class="ps-header__sub">Alle erzeugten Einsätze sind ÜBUNGEN – es wird nicht echt alarmiert.</p>
     </div>
   </header>
+  {% if vorlagen and not run %}
+  <form method="get" action="/planspiele/neu" class="ps-box" style="margin-bottom:1rem;">
+    <label>Aus Vorlage
+      <select class="form-input" name="vorlage">
+        {% for vorlage in vorlagen %}<option value="{{ vorlage.id }}">{{ vorlage.titel }}</option>{% endfor %}
+      </select>
+    </label>
+    <button class="btn btn--secondary btn--sm" type="submit">Übernehmen</button>
+  </form>
+  {% endif %}
   <nav class="planspiel-wizard__steps" aria-label="Schritte">
     <template x-for="(name, index) in steps" :key="name"><span class="planspiel-wizard__step-pill" :class="{ 'planspiel-wizard__step-pill--active': step === index + 1 }" x-text="index + 1"></span></template>
   </nav>

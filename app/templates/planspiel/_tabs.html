@@ -5,10 +5,11 @@
 {% set _ps_roles = _ps_user.role_codes if _ps_user else [] %}
 {% set _ps_can_admin = ('uebungsleiter' in _ps_roles or 'admin' in _ps_roles or 'org_admin' in _ps_roles or 'system_admin' in _ps_roles) %}
 {% set _ps_tabs = [
-  {'label': 'Planspiele', 'href': '/planspiele', 'active': _ps_path.startswith('/planspiele')}
+  {'label': 'Planspiele', 'href': '/planspiele', 'active': _ps_path.startswith('/planspiele') and not _ps_path.startswith('/planspiele/vorlagen')}
 ] %}
 {% if _ps_can_admin %}
   {% set _ps_tabs = _ps_tabs + [
+    {'label': 'Vorlagen', 'href': '/planspiele/vorlagen', 'active': _ps_path.startswith('/planspiele/vorlagen')},
     {'label': 'Szenarien', 'href': '/admin/settings/planspiele/szenarien', 'active': _ps_path.startswith('/admin/settings/planspiele/szenarien')},
     {'label': 'Stichworte', 'href': '/admin/settings/planspiele/stichworte', 'active': _ps_path.startswith('/admin/settings/planspiele/stichworte')},
     {'label': 'Einstellungen & Adresspool', 'href': '/admin/settings/planspiele', 'active': _ps_path == '/admin/settings/planspiele' or _ps_path.startswith('/admin/settings/planspiele/adresspool')}

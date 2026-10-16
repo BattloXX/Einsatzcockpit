@@ -41,6 +41,16 @@ Auswertung: {{ run.titel }}
       <form method="post" action="/planspiele/{{ run.id }}/wiederholen">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><button class="btn btn--secondary btn--sm" type="submit">Wiederholen</button>
       </form>
+      <details>
+        <summary class="btn btn--secondary btn--sm">Als Vorlage speichern</summary>
+        <form method="post" action="/planspiele/{{ run.id }}/als-vorlage" class="ps-box" style="margin-top:.5rem;">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          <label>Titel<input class="form-input" name="titel" value="{{ run.titel }}" required maxlength="200"></label>
+          <label>Beschreibung<textarea class="form-input" name="beschreibung" rows="3"></textarea></label>
+          <label><input type="checkbox" name="gleicher_ablauf"> Gleichen Ablauf wiederholen (gleicher Zufall)</label>
+          <button class="btn btn--primary btn--sm" type="submit">Speichern</button>
+        </form>
+      </details>
       {% endif %}
     </div>
   </header>

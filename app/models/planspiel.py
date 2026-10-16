@@ -71,6 +71,30 @@ class PlanspielRun(TenantScoped, Base):
     created_by_user_id: Mapped[int | None] = mapped_column(sa.BigInteger, sa.ForeignKey("user.id", ondelete="SET NULL"))
 
 
+class PlanspielVorlage(TenantScoped, Base):
+    """Wiederverwendbare Konfiguration fuer einen neuen Planspiel-Entwurf."""
+
+    __tablename__ = "planspiel_vorlage"
+    __table_args__ = (sa.Index("ix_planspiel_vorlage_org_art", "org_id", "art"),)
+
+    id: Mapped[int] = mapped_column(sa.BigInteger, primary_key=True, autoincrement=True)
+    titel: Mapped[str] = mapped_column(sa.String(200), nullable=False)
+    beschreibung: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    art: Mapped[str] = mapped_column(sa.String(10), nullable=False)
+    konfig: Mapped[dict[str, Any]] = mapped_column(sa.JSON, nullable=False)
+    seed_fixiert: Mapped[int | None] = mapped_column(sa.BigInteger, nullable=True)
+    quelle_run_id: Mapped[int | None] = mapped_column(
+        sa.BigInteger, sa.ForeignKey("planspiel_run.id", ondelete="SET NULL"), nullable=True
+    )
+    created_by_user_id: Mapped[int | None] = mapped_column(
+        sa.BigInteger, sa.ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(sa.DateTime, nullable=False, default=_utcnow)
+    updated_at: Mapped[datetime] = mapped_column(sa.DateTime, nullable=False, default=_utcnow, onupdate=_utcnow)
+    zuletzt_verwendet_at: Mapped[datetime | None] = mapped_column(sa.DateTime, nullable=True)
+    verwendet_anzahl: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=0)
+
+
 class PlanspielRunEreignis(TenantScoped, Base):
     __tablename__ = "planspiel_run_ereignis"
     __table_args__ = (
