@@ -8,6 +8,8 @@ Der manuelle Druck (/print/job) ist für jeden Nutzer mit Zugriff auf den Bezug
 from __future__ import annotations
 
 import logging
+import re
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -17,6 +19,7 @@ from app.core.permissions import require_role
 from app.core.templating import templates
 from app.db import get_db
 from app.models.gateway import (
+    DOC_OBJEKT_DOKUMENT,
     DOCUMENT_TYPE_LABELS,
     OBJEKT_ELEMENT_LABELS,
     RULE_DOCUMENT_LABELS,
@@ -157,17 +160,103 @@ def gateway_druckregeln(
     _guard: None = Depends(require_gateway_enabled),
 ):
     gw = _gw_or_404(db, user.org_id, gateway_id)
+    org_id = user.org_id
+    if org_id is None:
+        raise HTTPException(status_code=404, detail="Organisation nicht gefunden")
     printers = db.query(Printer).filter(Printer.gateway_id == gw.id).order_by(Printer.name).all()
     rules = (
         db.query(PrintRule).filter(PrintRule.org_id == user.org_id)
         .order_by(PrintRule.sort_order, PrintRule.name).all()
     )
+    from app.services.druckregel_uebersicht import (
+        alarmstufen_katalog,
+        alarmstufen_matrix,
+        regel_beschreibung,
+    )
+    from app.services.print_dispatcher import objekt_element_optionen
+
+    objekt_labels = objekt_element_optionen(db, org_id)
+    for regel in rules:
+        abweichungen = (regel.options or {}).get("je_alarmstufe", {})
+        abweichungs_elemente = []
+        if isinstance(abweichungen, dict):
+            for wert in abweichungen.values():
+                if isinstance(wert, dict) and isinstance(wert.get("objekt_elements"), list):
+                    abweichungs_elemente.extend(wert["objekt_elements"])
+        for code in (regel.objekt_elements or []) + abweichungs_elemente:
+            objekt_labels.setdefault(
+                code, OBJEKT_ELEMENT_LABELS.get(code, f"{code} (nicht mehr vorhanden)")
+            )
+    drucker_namen = {drucker.id: drucker.name for drucker in printers}
+    matrix = alarmstufen_matrix(db, org_id, rules, objekt_labels=objekt_labels)
+    from app.core.timezones import org_tz
+    from app.models.master import FireDept
+    org = db.get(FireDept, org_id)
     return templates.TemplateResponse(request, "gateway/druckregeln.html", {
         "user": user, "gw": gw, "printers": printers, "rules": rules,
         "connected": _is_connected(user.org_id),
         "doc_labels": RULE_DOCUMENT_LABELS,
-        "objekt_element_labels": OBJEKT_ELEMENT_LABELS,
+        "objekt_element_labels": objekt_labels,
+        "alarmstufen_katalog": alarmstufen_katalog(db, org_id),
+        "trigger_document_types": {
+            trigger: sorted(document_types)
+            for trigger, document_types in TRIGGER_DOCUMENT_TYPES.items()
+        },
+        "trigger_document_labels": {
+            document_type: DOCUMENT_TYPE_LABELS.get(document_type, document_type)
+            for document_type in sorted(set().union(*TRIGGER_DOCUMENT_TYPES.values()))
+            # Objekt-Dokumentseiten laufen über die Objekt-Inhalte, nicht als eigene Spalte.
+            if document_type != DOC_OBJEKT_DOKUMENT
+        },
         "trigger_labels": TRIGGER_LABELS,
+        "matrix": matrix,
+        "regel_beschreibungen": {
+            regel.id: regel_beschreibung(
+                regel, drucker_namen=drucker_namen, objekt_labels=objekt_labels,
+            ) for regel in rules
+        },
+        "simulation_default_uhrzeit": datetime.now(UTC).astimezone(org_tz(org)).strftime("%H:%M"),
+    })
+
+
+@router.get("/{gateway_id:int}/druckregeln/simulation", response_class=HTMLResponse)
+def gateway_druckregeln_simulation(
+    gateway_id: int,
+    request: Request,
+    trigger: str = "einsatz_created",
+    alarm_code: str = "",
+    uebung: str = "echt",
+    bma: str = "",
+    uhrzeit: str = "",
+    stichwort: str = "",
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    _guard: None = Depends(require_gateway_enabled),
+):
+    gw = _gw_or_404(db, user.org_id, gateway_id)
+    org_id = user.org_id
+    if org_id is None:
+        raise HTTPException(status_code=404, detail="Organisation nicht gefunden")
+    from app.services.druckregel_uebersicht import EINSATZ_TRIGGER, simuliere
+    from app.services.print_dispatcher import objekt_element_optionen
+
+    if trigger not in EINSATZ_TRIGGER:
+        raise HTTPException(status_code=422, detail="Ungültiger Auslöser")
+    if not re.fullmatch(r"\d{2}:\d{2}", uhrzeit or ""):
+        from app.core.timezones import org_tz
+        from app.models.master import FireDept
+        uhrzeit = datetime.now(UTC).astimezone(org_tz(db.get(FireDept, org_id))).strftime("%H:%M")
+    rules = (db.query(PrintRule).filter(PrintRule.org_id == org_id)
+             .order_by(PrintRule.sort_order, PrintRule.name).all())
+    printers = db.query(Printer).filter(Printer.gateway_id == gw.id).all()
+    ergebnisse = simuliere(
+        db, org_id, rules, trigger=trigger, alarm_code=alarm_code, is_exercise=uebung == "uebung",
+        nur_bma=bma == "1", uhrzeit=uhrzeit, stichwort=stichwort,
+        drucker_namen={drucker.id: drucker.name for drucker in printers},
+        objekt_labels=objekt_element_optionen(db, org_id),
+    )
+    return templates.TemplateResponse(request, "gateway/_druckregel_simulation.html", {
+        "ergebnisse": ergebnisse,
     })
 
 
@@ -489,7 +578,7 @@ def rule_create(
 
 
 @router.post("/rules/{rule_id}/save")
-def rule_save(
+async def rule_save(
     rule_id: int,
     request: Request,
     name: str = Form(""),
@@ -498,6 +587,7 @@ def rule_save(
     objekt_elements: list[str] = Form(default=[]),
     printer_ids: list[int] = Form(default=[]),
     fallback_printer_id: int | None = Form(None),
+    alarmstufen: list[str] = Form(default=[]),
     min_alarmstufe: int | None = Form(None),
     stichwort: str = Form(""),
     nur_bma: str = Form(""),
@@ -523,6 +613,9 @@ def rule_save(
     rule = db.get(PrintRule, rule_id)
     if rule is None or rule.org_id != user.org_id:
         raise HTTPException(status_code=404, detail="Regel nicht gefunden")
+    org_id = user.org_id
+    if org_id is None:
+        raise HTTPException(status_code=404, detail="Organisation nicht gefunden")
 
     # Name/Auslöser optional änderbar (Editor). Name-Kollision mit anderer Regel abfangen.
     name = name.strip()[:150]
@@ -544,8 +637,12 @@ def rule_save(
         return RedirectResponse(
             _rule_return(gw, f"error=rule_documents#regel-{rule.id}"), status_code=303,
         )
+    from app.services.druckregel_uebersicht import alarmstufen_katalog
+    from app.services.print_dispatcher import objekt_element_optionen
+
+    erlaubte_objekt_elemente = objekt_element_optionen(db, org_id)
     rule.documents = ausgewaehlte_dokumente
-    rule.objekt_elements = [e for e in objekt_elements if e in OBJEKT_ELEMENT_LABELS]
+    rule.objekt_elements = [e for e in objekt_elements if e in erlaubte_objekt_elemente]
     rule.printer_ids = [int(p) for p in printer_ids]
     rule.fallback_printer_id = fallback_printer_id
 
@@ -553,7 +650,21 @@ def rule_save(
     filters: dict = {}
     if filter_uebung in ("nur_echt", "nur_uebung"):
         filters["uebung"] = filter_uebung
-    if min_alarmstufe:
+    katalog = alarmstufen_katalog(db, org_id)
+    katalog_codes = [eintrag["code"] for eintrag in katalog]
+    angeforderte_alarmstufen = []
+    for code in alarmstufen:
+        normalisiert = code.strip().upper()[:10]
+        if normalisiert and normalisiert not in angeforderte_alarmstufen:
+            angeforderte_alarmstufen.append(normalisiert)
+    ausgewaehlte_alarmstufen = (
+        [code for code in katalog_codes if code in angeforderte_alarmstufen]
+        + [code for code in angeforderte_alarmstufen if code not in katalog_codes]
+    )
+    form = await request.form()
+    if ausgewaehlte_alarmstufen:
+        filters["alarmstufen"] = ausgewaehlte_alarmstufen
+    elif "min_alarmstufe" in form and min_alarmstufe:
         filters["min_alarmstufe"] = int(min_alarmstufe)
     stichworte = [s.strip() for s in stichwort.replace(";", ",").split(",") if s.strip()]
     if stichworte:
@@ -586,6 +697,60 @@ def rule_save(
     if rule.trigger == "mail_eingang":
         options["mail_attachments"] = mail_attachments in ("1", "true", "on")
         options["mail_max_pages"] = max(1, min(int(mail_max_pages), 200))
+    if rule.trigger in ("einsatz_created", "einsatz_created_gsl", "einsatz_updated"):
+        abweichungen: dict[str, dict] = {}
+        bisherige_abweichungen = (rule.options or {}).get("je_alarmstufe", {})
+        bisherige_codes = (
+            list(bisherige_abweichungen)
+            if isinstance(bisherige_abweichungen, dict) else []
+        )
+        pruef_codes = katalog_codes + [
+            code for code in ausgewaehlte_alarmstufen + bisherige_codes
+            if code not in katalog_codes
+        ]
+        if ausgewaehlte_alarmstufen:
+            pruef_codes = [
+                code for code in pruef_codes
+                if code in ausgewaehlte_alarmstufen
+                or (code in bisherige_codes and code not in katalog_codes)
+            ]
+        grund_copies = options["copies"]
+        for code in pruef_codes:
+            abweichung: dict = {}
+            copies_wert = str(form.get(f"stufe_{code}_copies", "")).strip()
+            if copies_wert:
+                try:
+                    stufen_copies = int(copies_wert)
+                except ValueError:
+                    stufen_copies = 0
+                if 1 <= stufen_copies <= 20 and stufen_copies != grund_copies:
+                    abweichung["copies"] = stufen_copies
+            media_wert = str(form.get(f"stufe_{code}_media", "")).strip()
+            if media_wert in ("A3", "A4") and media_wert != options.get("media"):
+                abweichung["media"] = media_wert
+            stufen_dokumente = list(rule.documents)
+            dokument_abweichend = False
+            for dokument in erlaubte_dokumente:
+                wert = str(form.get(f"stufe_{code}_doc_{dokument}", "")).strip()
+                if wert == "ja" and dokument not in stufen_dokumente:
+                    stufen_dokumente.append(dokument)
+                    dokument_abweichend = True
+                elif wert == "nein" and dokument in stufen_dokumente:
+                    stufen_dokumente.remove(dokument)
+                    dokument_abweichend = True
+            if dokument_abweichend:
+                abweichung["documents"] = stufen_dokumente
+            if str(form.get(f"stufe_{code}_custom_elements", "")) == "1":
+                elemente = [
+                    element for element in form.getlist(f"stufe_{code}_objekt_elements")
+                    if element in erlaubte_objekt_elemente
+                ]
+                if elemente != rule.objekt_elements:
+                    abweichung["objekt_elements"] = elemente
+            if abweichung:
+                abweichungen[code] = abweichung
+        if abweichungen:
+            options["je_alarmstufe"] = abweichungen
     rule.options = options
     db.commit()
     return RedirectResponse(_rule_return(gw, f"rule_saved=1#regel-{rule.id}"), status_code=303)

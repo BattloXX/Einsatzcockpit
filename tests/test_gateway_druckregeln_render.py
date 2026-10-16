@@ -5,11 +5,13 @@ druckregeln.html + _gwx_style.html + _tabs.html) riskiert: kaputtes Include,
 fehlender Makro-Import oder ein Context-Key, den die neue Route nicht mehr
 liefert. Muster: tests/test_dibos_admin_routes.py.
 """
+import re
+
 from app.core.security import hash_password
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
-from app.models.gateway import JOB_SENT, Gateway, PrintJob
-from app.models.master import OrgSettings, SystemSettings
+from app.models.gateway import JOB_SENT, Gateway, PrintJob, PrintRule
+from app.models.master import AlarmType, OrgSettings, SystemSettings
 from app.models.user import Role, User, UserRole
 import pytest
 
@@ -104,6 +106,63 @@ def test_druckregeln_tab_ist_fuer_recorder_gesperrt():
 
     r = client.get(f"/gateway/{gw_id}/druckregeln")
     assert r.status_code == 403, r.status_code
+
+
+def test_druckregeln_editor_rendert_alarmstufen_abweichung_und_altlast():
+    """Der Editor zeigt Katalog, gespeicherte Abweichungen und Altfilter gemeinsam."""
+    gw_id = _setup("druckregeln_alarm_editor", "org_admin")
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        for code, label, category in (
+            ("F14", "Brand in Wohnhaus", "F"),
+            ("T12", "Technische Hilfeleistung", "T"),
+        ):
+            if not db.query(AlarmType).filter(
+                AlarmType.org_id == ORG_ID, AlarmType.code == code
+            ).first():
+                db.add(AlarmType(org_id=ORG_ID, code=code, label=label, category=category))
+        db.add_all([
+            PrintRule(
+                org_id=ORG_ID, name="F14-Regel", trigger="einsatz_created",
+                printer_ids=[gw_id], documents=["einsatzinfo"],
+                objekt_elements=["foerderstrecke"], filters={"alarmstufen": ["F14"]},
+                options={"copies": 1, "je_alarmstufe": {"F14": {"copies": 3}}},
+            ),
+            PrintRule(
+                org_id=ORG_ID, name="Altfilter", trigger="einsatz_updated",
+                filters={"min_alarmstufe": 4}, options={"copies": 1},
+            ),
+        ])
+        db.commit()
+    finally:
+        db.close()
+
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    client = TestClient(app)
+    _login(client, "druckregeln_alarm_editor", "Test1234!")
+    response = client.get(f"/gateway/{gw_id}/druckregeln")
+
+    assert response.status_code == 200, response.text[:300]
+    assert 'name="alarmstufen" value="F14"' in response.text
+    assert 'name="alarmstufen" value="T12"' in response.text
+    assert re.search(
+        r'name="alarmstufen" value="F14" x-model="selectedAlarmstufen".*?checked',
+        response.text,
+        re.DOTALL,
+    )
+    assert 'name="stufe_F14_copies" value="3"' in response.text
+    assert 'name="stufe_F14_objekt_elements" value="foerderstrecke"' in response.text
+    assert "Bisher: ab Stufe 4 (alt)" in response.text
+    assert 'name="min_alarmstufe" value="4"' in response.text
+    assert "F14" in response.text
+    # JSON im doppelt gequoteten x-data muss HTML-escaped sein, sonst bricht das
+    # Attribut und Alpine blendet den ganzen Editor aus.
+    assert 'selectedAlarmstufen: ["' not in response.text
+    assert "selectedAlarmstufen: [&#34;F14&#34;]" in response.text
+    assert 'name="stufe_F14_doc_objekt_dokument"' not in response.text
 
 
 def _add_job(gateway_id: int, *, document_type: str = "einsatzinfo") -> int:
