@@ -79,6 +79,7 @@ class EntwurfDaten:
     folgemeldungen_aktiv: bool = True
     tempo: float = 1.0
     lernziele: str | None = None
+    ortschaften: list[str] | None = None
     leiter_user_id: int | None = None
     gsl_modus: str | None = None
     mittel_s: int = 45
@@ -116,7 +117,8 @@ def _lade_szenario(
 ) -> tuple[PlanspielSzenario, dict[str, Any], int]:
     if daten.szenario_id is None:
         szenario, inhalt = szenario_zufall(
-            db, org_id, random.Random(f"{seed}:szenario"), art=daten.art
+            db, org_id, random.Random(f"{seed}:szenario"), art=daten.art,
+            ortschaften=daten.ortschaften, gsl_modus=daten.gsl_modus if daten.art == "gsl" else None,
         )
         version_id = szenario.aktive_version_id
         if version_id is None:
@@ -166,7 +168,7 @@ def _pool_ort(db: Session, org_id: int, adresse_id: int) -> OrtWahl:
 
 def _ort_waehlen(db: Session, org_id: int, inhalt: dict[str, Any], daten: EntwurfDaten, seed: int) -> OrtWahl:
     if daten.ort_modus == "zufall":
-        return ort_waehlen(db, org_id, inhalt, random.Random(f"{seed}:ort"))
+        return ort_waehlen(db, org_id, inhalt, random.Random(f"{seed}:ort"), ortschaften=daten.ortschaften)
     if daten.ort_modus == "pool":
         if daten.adresse_id is None:
             raise ValueError("Pool-Ort braucht eine Adresse")
@@ -255,7 +257,7 @@ def _snapshot(db: Session, org_id: int, daten: EntwurfDaten, seed: int) -> dict[
         "stichwort_org": stichwort,
     }
     if daten.art == "gsl":
-        result["gsl_modus"] = daten.gsl_modus or inhalt.get("gsl_modus")
+        result["gsl_modus"] = daten.gsl_modus or inhalt.get("gsl_modus") or "hochwasser"
     return result
 
 
@@ -379,7 +381,11 @@ def vorschau(db: Session, run: PlanspielRun) -> dict[str, Any]:
             f"ca. {round(3600 / mittel)} Einsatzstellen pro Stunde (Mittel {mittel} s), "
             f"max. {maximum} Stellen / {laufzeit} Minuten",
         ]
+        if konfig.get("ortschaften"):
+            result["wird_angelegt"].append("Ortschaften: " + ", ".join(konfig["ortschaften"]))
         result["wellen"] = [welle.name for welle in GSL_WELLEN.get(str(modus), ())]
+    elif (run.konfig or {}).get("ortschaften"):
+        result["wird_angelegt"].append("Ortschaften: " + ", ".join((run.konfig or {})["ortschaften"]))
     del db
     return result
 

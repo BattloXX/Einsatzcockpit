@@ -251,6 +251,11 @@
         <div class="ps-row">
           <span class="ps-row__label">Erzeugung</span><span class="ps-row__value">{{ run.erzeugung }}</span>
         </div>
+        {% if run.konfig and run.konfig.get('ortschaften') %}
+        <div class="ps-row">
+          <span class="ps-row__label">Ortschaften</span><span class="ps-row__value">{{ run.konfig.get('ortschaften')|join(', ') }}</span>
+        </div>
+        {% endif %}
         <div class="ps-row">
           <span class="ps-row__label">Folgemeldungen</span><span class="ps-row__value">{% if run.folge_aktiv %}aktiv{% else %}inaktiv{% endif %}</span>
         </div>

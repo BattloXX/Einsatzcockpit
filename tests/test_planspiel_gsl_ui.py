@@ -145,3 +145,31 @@ def test_cockpit_zeigt_ereignisse_schon_beim_ersten_laden(client):
     seite = client.get(f"/planspiele/{run.id}")
     assert "Keine anstehenden Ereignisse." not in seite.text
     assert "Ganze Lage" in seite.text
+
+
+def test_assistent_gsl_ohne_szenario_waehlt_automatisch(client):
+    user = _setup_user("uebungsleiter")
+    _login(client, user)
+    _gsl_vorbereiten(user.org_id)
+    antwort = client.post("/planspiele/neu", data=_data(
+        client, titel="GSL automatisch", art="gsl", erzeugung="manuell", gsl_modus="sturm",
+    ), follow_redirects=False)
+    assert antwort.status_code == 303, antwort.text[:500]
+    run = _run_by_title(user.org_id, "GSL automatisch")
+    assert run.erzeugung == "zufall"
+    assert run.szenario_snapshot["code"] == "G02"
+    assert run.szenario_snapshot["gsl_modus"] == "sturm"
+
+
+def test_assistent_gsl_ohne_modus_nimmt_modus_aus_szenario(client):
+    user = _setup_user("uebungsleiter")
+    _login(client, user)
+    _gsl_vorbereiten(user.org_id)
+    antwort = client.post("/planspiele/neu", data=_data(
+        client, titel="GSL Zufall", art="gsl", ortschaften="Wolfurt",
+    ), follow_redirects=False)
+    assert antwort.status_code == 303, antwort.text[:500]
+    run = _run_by_title(user.org_id, "GSL Zufall")
+    assert run.szenario_snapshot["code"] in {"G01", "G02", "G03", "G04", "G05"}
+    assert run.szenario_snapshot["gsl_modus"] in {"hochwasser", "sturm", "kombination"}
+    assert run.konfig["ortschaften"] == ["Wolfurt"]

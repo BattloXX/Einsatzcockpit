@@ -196,7 +196,62 @@ def pool_aufbauen(db: Session, org_id: int) -> PoolErgebnis:
             row.aktiv = False
             result = PoolErgebnis(result.neu, result.aktualisiert, result.deaktiviert + 1)
     db.flush()
+    ortschaften_ergaenzen(db, org_id)
+    db.flush()
     return result
+
+
+def ortschaften_ergaenzen(db: Session, org_id: int) -> int:
+    """Ergaenzt fehlende Ortsnamen vom naechsten bekannten Pool-Eintrag.
+
+    Das grobe Koordinatengitter begrenzt die Distanzberechnungen auch bei
+    groesseren Pools auf die unmittelbare Nachbarschaft.
+    """
+    rows = db.query(PlanspielAdresse).filter_by(org_id=org_id, aktiv=True).all()
+    bekannte = [row for row in rows if row.ort and row.ort.strip()]
+    fehlende = [row for row in rows if not row.ort or not row.ort.strip()]
+    if not bekannte or not fehlende:
+        return 0
+    bucket_size = 0.02
+    buckets: dict[tuple[int, int], list[PlanspielAdresse]] = {}
+    for row in bekannte:
+        key = (int(row.lat / bucket_size), int(row.lng / bucket_size))
+        buckets.setdefault(key, []).append(row)
+    ergaenzt = 0
+    for row in fehlende:
+        x, y = int(row.lat / bucket_size), int(row.lng / bucket_size)
+        nearby = [candidate for dx in (-1, 0, 1) for dy in (-1, 0, 1)
+                  for candidate in buckets.get((x + dx, y + dy), [])]
+        if not nearby:
+            continue
+        nearest = min(nearby, key=lambda candidate: haversine_m(row.lat, row.lng, candidate.lat, candidate.lng))
+        if haversine_m(row.lat, row.lng, nearest.lat, nearest.lng) <= 1500:
+            row.ort = nearest.ort
+            ergaenzt += 1
+    return ergaenzt
+
+
+def ortschaften(db: Session, org_id: int) -> list[tuple[str, int]]:
+    rows = db.query(PlanspielAdresse).filter_by(org_id=org_id, aktiv=True).all()
+    grouped: dict[str, list[str]] = {}
+    for row in rows:
+        if row.ort and row.ort.strip():
+            name = row.ort.strip()
+            grouped.setdefault(name.casefold(), []).append(name)
+    result = []
+    for names in grouped.values():
+        spelling = sorted(set(names), key=lambda name: (-names.count(name), name.casefold(), name))[0]
+        result.append((spelling, len(names)))
+    return sorted(result, key=lambda item: item[0].casefold())
+
+
+def standard_ortschaften(db: Session, org_id: int) -> list[str] | None:
+    org = db.query(FireDept).filter(FireDept.id == org_id).one_or_none()
+    city = (org.city or "").strip() if org else ""
+    if not city:
+        return None
+    available = {name.casefold() for name, _count in ortschaften(db, org_id)}
+    return [city] if city.casefold() in available else None
 
 
 def _overpass_query(area: Gebiet) -> str:
@@ -325,6 +380,8 @@ async def osm_importieren(db_factory: Any, org_id: int) -> PoolErgebnis:
                     for key, value in values.items():
                         setattr(row, key, value)
                     result = PoolErgebnis(result.neu, result.aktualisiert + 1, result.deaktiviert)
+            db.flush()
+            ortschaften_ergaenzen(db, org_id)
             db.commit()
             return result
         except Exception:
@@ -354,32 +411,40 @@ def manuellen_punkt_anlegen(
 
 
 def _candidates(
-    db: Session, org_id: int, inhalt: dict[str, Any], ausschliessen_ids: set[int] | frozenset[int] = frozenset(),
+    db: Session, org_id: int, inhalt: dict[str, Any], ausschliessen_ids: set[int] | frozenset[int] = frozenset(), *,
+    ortschaften: set[str] | list[str] | None = None,
 ) -> list[PlanspielAdresse]:
     rows = db.query(PlanspielAdresse).filter_by(org_id=org_id, aktiv=True).all()
     wanted = set(inhalt.get("ort_typen") or [])
     quality = inhalt.get("min_adressqualitaet")
+    filter_orte = {name.strip().casefold() for name in (ortschaften or []) if name.strip()}
     return [r for r in rows if r.id not in ausschliessen_ids and wanted.intersection(r.ort_typen or [])
+            and (not filter_orte or (r.ort or "").strip().casefold() in filter_orte)
             and (not inhalt.get("requires_existing_object") or r.objekt_id is not None)
             and (not inhalt.get("requires_verified_bma") or (r.merkmale or {}).get("bma") is True)
             and (not quality or r.qualitaet <= quality)
             and all((r.merkmale or {}).get(k) == v for k, v in (inhalt.get("geografie_bedingung") or {}).items())]
 
 
-def hat_kandidaten(db: Session, org_id: int, version_inhalt: dict[str, Any]) -> bool:
-    return bool(_candidates(db, org_id, version_inhalt))
+def hat_kandidaten(db: Session, org_id: int, version_inhalt: dict[str, Any], *,
+                   ortschaften: set[str] | list[str] | None = None) -> bool:
+    return bool(_candidates(db, org_id, version_inhalt, ortschaften=ortschaften))
 
 
 def ort_waehlen(
     db: Session, org_id: int, version_inhalt: dict[str, Any], rng: random.Random, *,
     ausschliessen_ids: set[int] | frozenset[int] = frozenset(), sperrfrist_h: int = 24, jetzt: datetime | None = None,
+    ortschaften: set[str] | list[str] | None = None,
 ) -> OrtWahl:
-    rows = _candidates(db, org_id, version_inhalt, ausschliessen_ids)
+    rows = _candidates(db, org_id, version_inhalt, ausschliessen_ids, ortschaften=ortschaften)
     now = jetzt or _now()
     fresh = [r for r in rows if r.zuletzt_verwendet_at is None
              or r.zuletzt_verwendet_at <= now - timedelta(hours=sperrfrist_h)]
     rows = fresh or rows
     if not rows:
+        orts_filter = [name.strip() for name in (ortschaften or []) if name.strip()]
+        if orts_filter:
+            raise OrtNichtGefunden(f"Kein Ort in {', '.join(orts_filter)} im Adresspool")
         if version_inhalt.get("requires_verified_bma"):
             raise OrtNichtGefunden("Kein Objekt mit registrierter BMA im Gebiet")
         wanted = ", ".join(version_inhalt.get("ort_typen") or [])
@@ -404,6 +469,7 @@ def als_verwendet_markieren(db: Session, adresse_id: int, jetzt: datetime | None
 def szenario_zufall(
     db: Session, org_id: int, rng: random.Random, *, art: Literal["einzel", "gsl"],
     kategorie: str | None = None, schwierigkeit: str | None = None,
+    ortschaften: set[str] | list[str] | None = None, gsl_modus: str | None = None,
 ) -> tuple[PlanspielSzenario, dict[str, Any]]:
     choices: list[tuple[PlanspielSzenario, PlanspielSzenarioVersion, dict[str, Any]]] = []
     query = db.query(PlanspielSzenario).filter_by(org_id=org_id, aktiv=True, zufall_erlaubt=True)
@@ -417,10 +483,12 @@ def szenario_zufall(
             continue
         if schwierigkeit and version.schwierigkeit != schwierigkeit:
             continue
+        if gsl_modus and getattr(version, "gsl_modus", None) != gsl_modus:
+            continue
         fields = ("ort_typen", "geografie_bedingung", "requires_existing_object",
                   "requires_verified_bma", "min_adressqualitaet")
         content = {key: getattr(version, key) for key in fields}
-        if hat_kandidaten(db, org_id, content):
+        if art == "gsl" or hat_kandidaten(db, org_id, content, ortschaften=ortschaften):
             choices.append((scenario, version, content))
     if not choices:
         raise OrtNichtGefunden("Kein passendes Szenario mit einem Ort im Adresspool")

@@ -149,3 +149,26 @@ def test_post_ohne_csrf_403(client):
 def test_alarmtext_wird_escaped(client):
     _login(client, _setup_user("uebungsleiter"))
     assert client.get("/planspiele/neu").status_code == 200
+
+
+def test_assistent_ortschaften_mit_org_ortschaft_vorausgewaehlt(client):
+    user = _setup_user("uebungsleiter")
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        org = db.get(FireDept, user.org_id)
+        org.city = "feldkirch"
+        db.add(PlanspielAdresse(
+            org_id=user.org_id, quelle="manuell", quell_id=uuid4().hex, strasse="Andere Straße", hausnr="2",
+            plz="6900", ort="Bregenz", lat=47.48, lng=9.74, qualitaet="B", ort_typen=["wohngebaeude"],
+            merkmale=None, aktiv=True,
+        ))
+        db.commit()
+    finally:
+        db.close()
+    _login(client, user)
+    seite = client.get("/planspiele/neu")
+    assert seite.status_code == 200
+    assert 'name="ortschaften" value="Feldkirch" checked' in seite.text
+    assert 'name="ortschaften" value="Bregenz" >' in seite.text or 'value="Bregenz"' in seite.text
+    assert 'value="Bregenz" checked' not in seite.text
