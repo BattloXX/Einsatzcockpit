@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
-from app.models.gateway import JOB_PRINTING, JOB_SENT, PrintJob
+from app.models.gateway import DELIVERY_PUSH, JOB_PRINTING, JOB_SENT, PrintJob
 from app.services.loop_utils import iteration_watch
 
 logger = logging.getLogger("einsatzleiter.print_watchdog")
@@ -29,6 +29,9 @@ def _pruefe_haengende_jobs() -> list[int]:
             db.query(PrintJob)
             .filter(
                 PrintJob.status.in_((JOB_SENT, JOB_PRINTING)),
+                # Agent-Jobs (Lease) überwacht print_agent_service.sweep – eine Eskalation
+                # hier würde nach der Druckübergabe einen doppelten Ersatzdruck auslösen.
+                PrintJob.delivery == DELIVERY_PUSH,
                 PrintJob.aktualisiert_am < cutoff,
             )
             .execution_options(include_all_tenants=True)

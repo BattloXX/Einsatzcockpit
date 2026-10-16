@@ -46,6 +46,8 @@ _sms_nachversand_tasks: set[asyncio.Task] = set()
 # ── Print & Alarm Gateway (ECPG) Registry ──────────────────────────────────────
 # org_id → (gateway_id, WebSocket)-Paare aktiver Gateway-Verbindungen.
 _print_gateways: dict[int, list[tuple[int, WebSocket]]] = defaultdict(list)
+# org_id → (gateway_id, WebSocket)-Paare verbundener Windows-Druckagents (/ws/print-agent).
+_print_agents: dict[int, list[tuple[int, WebSocket]]] = defaultdict(list)
 # job_id(str) → Future für die erste job_status-Rückmeldung (dispatch_print_job)
 _job_pending: dict[str, asyncio.Future] = {}
 # org_id → letzter Serial-Fan-Out-Status {enabled, listening, clients} (best effort, live).
@@ -601,7 +603,7 @@ def _resolve_gateway(websocket: WebSocket):
             .first()
         )
         if gw is not None:
-            _ = gw.org_id, gw.id  # eager vor Session-Close
+            _ = gw.org_id, gw.id, gw.kind  # eager vor Session-Close
         return gw
     finally:
         db.close()
@@ -697,7 +699,9 @@ async def print_gateway_ws(websocket: WebSocket):
     wird sofort config_sync gepusht. Nachrichten-Typen siehe Konzept Abschnitt 6.
     """
     gateway = _resolve_gateway(websocket)
-    if gateway is None:
+    # Windows-Druckagents sprechen das Lease-Protokoll auf /ws/print-agent und dürfen die
+    # Org-weiten print_job-Broadcasts dieses Kanals nie erhalten.
+    if gateway is None or gateway.is_windows_agent:
         await websocket.close(code=WS_CLOSE_UNAUTHORIZED)
         return
 
@@ -970,6 +974,10 @@ async def _bus_gateway_deliver(payload: dict) -> None:
         await _send_to_local_gateways(org_id, {
             "type": "config_sync", "payload": _gateway_config_sync(gateway_id),
         })
+    elif kind == "agent":
+        gateway_ids = payload.get("gateway_ids")
+        if isinstance(gateway_ids, list):
+            await _send_to_local_agents(org_id, set(gateway_ids), payload.get("message") or {})
 
 
 ws_bus.register(ws_bus.CH_GW, _bus_gateway_deliver)
@@ -1061,3 +1069,233 @@ async def _dispatch_print_job_local(org_id: int, job_id: int, payload: dict, tim
             raise
 
     raise RuntimeError(f"Kein erreichbares Gateway für org_id={org_id} (letzter Fehler: {last_error})")
+
+
+# ── Windows-Druckagent (Lease-Protokoll) ───────────────────────────────────────
+# Spezifikation: docs/print-agent-architektur.md. Anders als /ws/gateway wird hier nichts
+# gepusht: der Agent holt sich Jobs per lease_request, die Cloud entscheidet atomar in der DB.
+# Gezielte Hinweise (job_available, cancel_job, config_sync) laufen über den Bus-Kind
+# "agent" an genau die adressierten Agents – egal, an welchem Worker deren Socket hängt.
+
+def _agent_call(gateway_id: int, fn, *args):
+    """Führt eine print_agent_service-Funktion mit frisch geladenem Agent-Gateway aus."""
+    from app.models.gateway import Gateway
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        gw = db.get(Gateway, gateway_id)
+        if gw is None or not gw.is_windows_agent or not gw.device_token_hash:
+            return None
+        return fn(db, gw, *args)
+    finally:
+        db.close()
+
+
+def _agent_hello(db, gw, payload: dict) -> list[dict]:
+    from app.services import print_agent_service
+    from app.services.gateway_service import mark_seen
+
+    mark_seen(db, gw, version=payload.get("version"))
+    info = dict(gw.agent_info or {})
+    host_info = payload.get("host_info")
+    if isinstance(host_info, dict):
+        info["host"] = host_info
+    info["version"] = payload.get("version")
+    gw.agent_info = info
+    db.commit()
+    open_jobs = [eintrag for eintrag in (payload.get("open_jobs") or []) if isinstance(eintrag, dict)]
+    return print_agent_service.resume(db, gw, open_jobs)
+
+
+def _agent_touch(db, gw) -> None:
+    from app.services.gateway_service import mark_seen
+
+    mark_seen(db, gw)
+    db.commit()
+
+
+def _discard_print_agent(org_id: int, websocket: WebSocket) -> None:
+    agents = _print_agents.get(org_id, [])
+    for entry in list(agents):
+        if entry[1] is websocket:
+            agents.remove(entry)
+
+
+def connected_print_agent_ids(org_id: int) -> set[int]:
+    """Gateway-IDs aller an DIESEM Worker verbundenen Windows-Druckagents."""
+    return {gateway_id for gateway_id, _ in _print_agents.get(org_id, [])}
+
+
+def _mark_agent_offline(gateway_id: int) -> None:
+    from app.models.gateway import GATEWAY_STATUS_OFFLINE, Gateway
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        gw = db.get(Gateway, gateway_id)
+        if gw and gw.org_id is not None and gateway_id not in connected_print_agent_ids(gw.org_id):
+            gw.status = GATEWAY_STATUS_OFFLINE
+            db.commit()
+    finally:
+        db.close()
+
+
+async def _send_to_local_agents(org_id: int, gateway_ids: set, message: dict) -> bool:
+    """Stellt eine Nachricht an die an DIESEM Worker verbundenen, adressierten Agents zu."""
+    payload = json.dumps(message, ensure_ascii=False)
+    sent = False
+    for gateway_id, ws in list(_print_agents.get(org_id, [])):
+        if gateway_id not in gateway_ids:
+            continue
+        try:
+            await ws.send_text(payload)
+            sent = True
+        except Exception:
+            _discard_print_agent(org_id, ws)
+    return sent
+
+
+async def push_agent_message(org_id: int, gateway_ids: list[int], message: dict) -> None:
+    """Gezielte Nachricht an Windows-Druckagents (worker-übergreifend über den Bus)."""
+    if not gateway_ids:
+        return
+    if ws_bus.enabled():
+        await ws_bus.publish(ws_bus.CH_GW, {
+            "kind": "agent", "org_id": org_id, "gateway_ids": list(gateway_ids), "message": message,
+        })
+        return
+    await _send_to_local_agents(org_id, set(gateway_ids), message)
+
+
+async def notify_agents_job_available(org_id: int, gateway_ids: list[int], job_ids: list[int]) -> None:
+    await push_agent_message(org_id, gateway_ids, {"type": "job_available", "payload": {"job_ids": job_ids}})
+
+
+async def _agent_job_status(websocket: WebSocket, org_id: int, gateway_id: int, msg: dict) -> None:
+    from app.models.gateway import JOB_SENT
+    from app.services import print_agent_service
+
+    p = msg.get("payload") or {}
+    jid = p.get("job_id")
+    ergebnis = None
+    if isinstance(jid, int):
+        ergebnis = _agent_call(
+            gateway_id, print_agent_service.apply_agent_status, jid, str(p.get("lease_token") or ""),
+            str(p.get("status") or ""), p.get("phase"), p.get("spool_ref"), p.get("error"),
+        )
+        _log_gateway_job_status(jid, p.get("status"), org_id, gateway_id, p.get("error"))
+    # Ack auch bei veralteten Meldungen: die Outbox des Agents soll sie nicht endlos wiederholen.
+    if msg.get("id") is not None:
+        await websocket.send_text(json.dumps({"type": "ack", "payload": {"id": msg.get("id")}}))
+    if not ergebnis or ergebnis.get("result") != "applied" or not isinstance(jid, int):
+        return
+    status = JOB_SENT if ergebnis.get("requeued") else ergebnis.get("status")
+    await broadcast_org(org_id, {"type": "print_job_status", "job_id": jid, "status": status})
+    if ergebnis.get("requeued"):
+        await notify_agents_job_available(org_id, ergebnis.get("notify_gateway_ids") or [], [jid])
+    if ergebnis.get("fallback"):
+        from app.services.print_dispatcher import dispatch_fallback_for_failed_job
+        await dispatch_fallback_for_failed_job(jid)
+
+
+@router.websocket("/ws/print-agent")
+async def print_agent_ws(websocket: WebSocket):
+    """WebSocket-Kanal für Windows-Druckagents (ausgehend vom Agent, Lease-Protokoll).
+
+    Auth per Bearer-Device-Token wie /ws/gateway; nur Gateways vom Typ windows_agent.
+    """
+    from app.services import print_agent_service
+
+    gateway = _resolve_gateway(websocket)
+    if gateway is None or not gateway.is_windows_agent:
+        await websocket.close(code=WS_CLOSE_UNAUTHORIZED)
+        return
+    org_id = gateway.org_id
+    gateway_id = gateway.id
+
+    await websocket.accept()
+    _print_agents[org_id].append((gateway_id, websocket))
+    _touch_gateway(gateway_id)
+    await broadcast_org(org_id, {"type": "gateway_status", "gateway_id": gateway_id, "online": True})
+    logger.info("Windows-Druckagent verbunden (org_id=%s, gateway_id=%s)", org_id, gateway_id)
+
+    async def senden(mtype: str, payload: dict, rid: object = None) -> None:
+        nachricht: dict = {"type": mtype, "payload": payload}
+        if rid is not None:
+            nachricht["rid"] = rid
+        await websocket.send_text(json.dumps(nachricht, ensure_ascii=False, default=str))
+
+    async def config_senden() -> None:
+        await senden("config_sync", _agent_call(gateway_id, print_agent_service.agent_config_sync) or {})
+
+    await config_senden()
+    try:
+        while True:
+            raw = await websocket.receive_text()
+            try:
+                msg = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(msg, dict):
+                continue
+            mtype = msg.get("type")
+            roh = msg.get("payload")
+            p: dict = roh if isinstance(roh, dict) else {}
+            rid = msg.get("rid")
+            if mtype == "ping":
+                await websocket.send_text(json.dumps({"type": "pong"}))
+            elif mtype in ("pong", "ack"):
+                pass
+            elif mtype == "heartbeat":
+                _agent_call(gateway_id, _agent_touch)
+            elif mtype == "hello":
+                abandon = _agent_call(gateway_id, _agent_hello, p) or []
+                await config_senden()
+                for eintrag in abandon:
+                    await senden("abandon", eintrag)
+            elif mtype == "inventory":
+                _agent_call(gateway_id, print_agent_service.inventar_speichern, p)
+                await broadcast_org(org_id, {"type": "printer_report", "gateway_id": gateway_id})
+            elif mtype == "readiness":
+                routen = [eintrag for eintrag in (p.get("routes") or []) if isinstance(eintrag, dict)]
+                _agent_call(gateway_id, print_agent_service.route_readiness_aktualisieren, routen)
+                await broadcast_org(org_id, {"type": "printer_report", "gateway_id": gateway_id})
+            elif mtype == "lease_request":
+                try:
+                    anzahl = max(0, min(int(p.get("max") or 1), 10))
+                except (TypeError, ValueError):
+                    anzahl = 1
+                grants = _agent_call(gateway_id, print_agent_service.lease_jobs, anzahl) or []
+                await senden("lease_grant", {"jobs": grants}, rid)
+                for grant in grants:
+                    await broadcast_org(org_id, {"type": "print_job_status", "job_id": grant["job_id"],
+                                                 "status": "sent"})
+            elif mtype == "lease_renew":
+                leases = [eintrag for eintrag in (p.get("leases") or []) if isinstance(eintrag, dict)]
+                ungueltig = _agent_call(gateway_id, print_agent_service.renew, leases) or []
+                for job_id in ungueltig:
+                    await senden("abandon", {"job_id": job_id, "reason": "invalid_lease"})
+            elif mtype == "print_intent":
+                jid = p.get("job_id")
+                ok, grund = False, "unknown"
+                if isinstance(jid, int):
+                    antwort = _agent_call(gateway_id, print_agent_service.print_intent, jid,
+                                          str(p.get("lease_token") or ""))
+                    if antwort is not None:
+                        ok, grund = antwort
+                await senden("intent_result", {"job_id": jid, "ok": ok, "reason": grund}, rid)
+            elif mtype == "job_status":
+                await _agent_job_status(websocket, org_id, gateway_id, msg)
+            elif mtype == "log_event":
+                level = str(p.get("level") or "info").lower()
+                log_fn = logger.error if level == "error" else logger.warning if level == "warning" else logger.info
+                log_fn("Windows-Druckagent %s: %s", gateway_id, str(p.get("message", ""))[:1000])
+            else:
+                logger.debug("Windows-Druckagent unbekannter Typ: %s", mtype)
+    except WebSocketDisconnect:
+        logger.info("Windows-Druckagent getrennt (org_id=%s, gateway_id=%s)", org_id, gateway_id)
+    finally:
+        _discard_print_agent(org_id, websocket)
+        _mark_agent_offline(gateway_id)
+        await broadcast_org(org_id, {"type": "gateway_status", "gateway_id": gateway_id, "online": False})

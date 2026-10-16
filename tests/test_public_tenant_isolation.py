@@ -1300,3 +1300,37 @@ def test_strassensperren_status_und_infoscreen_token_zeigen_nie_org_b(client, ar
         assert f"Status A {art}" in response.text
         assert "GEHEIM-B-Status" not in response.text
         assert "GEHEIM-B-Geteilt" not in response.text
+
+
+def test_druckagent_token_least_keine_jobs_fremder_org(client):
+    """/ws/print-agent: Ein Agent-Token von Org B sieht und übernimmt keine Jobs von Org A,
+    auch nicht über eine manipulierte Route auf ein fremdes Druckziel."""
+    import json as _json
+    from datetime import UTC as _UTC
+    from datetime import datetime as _dt
+
+    from app.models.gateway import PrinterAgentRoute
+    from tests.test_print_agent_ws import _anlegen, _auth, _job, _laden, _recv
+
+    org_a = _anlegen(993201)
+    job_id = _job(org_a)
+    org_b = _anlegen(993202, routen=False)
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        db.add(PrinterAgentRoute(
+            org_id=993202, printer_id=org_a["printer_id"], gateway_id=org_b["gateway_id"], priority=1,
+            local_queue="X", ready=True,
+            readiness={"state": "ready", "checked_at": _dt.now(_UTC).replace(tzinfo=None).isoformat()},
+        ))
+        db.commit()
+    finally:
+        db.close()
+    with client.websocket_connect("/ws/print-agent", headers=_auth(org_b["token"])) as ws:
+        assert _recv(ws, "config_sync")["payload"]["routes"] == []
+        ws.send_text(_json.dumps({"type": "lease_request", "rid": "r", "payload": {"max": 5}}))
+        assert _recv(ws, "lease_grant")["payload"]["jobs"] == []
+        ws.send_text(_json.dumps({"type": "print_intent", "rid": "i",
+                                  "payload": {"job_id": job_id, "lease_token": "x"}}))
+        assert _recv(ws, "intent_result")["payload"]["ok"] is False
+    assert _laden(job_id).lease_gateway_id is None

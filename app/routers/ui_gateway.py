@@ -1029,6 +1029,11 @@ async def cancel_print_job(
         )
         assert user.org_id is not None  # Guard oben hat bereits org-gebunden gefunden
         await push_gateway_command(user.org_id, {"type": "cancel_job", "payload": {"job_id": job_id}})
+        if job.lease_gateway_id is not None:
+            # Windows-Druckagents erreicht der Org-Broadcast nicht – gezielt an den Halter.
+            from app.routers.ws import push_agent_message
+            await push_agent_message(user.org_id, [job.lease_gateway_id],
+                                     {"type": "cancel_job", "payload": {"job_id": job_id}})
         await broadcast_org(user.org_id, {"type": "print_job_status", "job_id": job_id,
                                           "status": JOB_CANCELED})
     if request.headers.get("HX-Request") == "true":
@@ -1037,3 +1042,60 @@ async def cancel_print_job(
         context["user"] = user
         return templates.TemplateResponse(request, "gateway/_druckhistorie.html", context)
     return RedirectResponse(f"/gateway/{gw_id}?job_canceled=1#historie", status_code=303)
+
+
+AUFLOESUNG_LABELS = {
+    "reprint": "Erneut drucken",
+    "done": "Wurde gedruckt",
+    "discard": "Nicht drucken",
+}
+
+
+@router.post("/jobs/{job_id}/resolve")
+async def resolve_uncertain_job(
+    job_id: int,
+    request: Request,
+    action: str = Form(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    _guard: None = Depends(require_gateway_enabled),
+):
+    """Löst einen unklaren Agent-Druckauftrag ('uncertain') durch einen Menschen auf.
+
+    reprint: neuer manueller Auftrag auf dasselbe Druckziel (bewusster Nachdruck),
+    done: als gedruckt markieren, discard: als abgebrochen markieren. Ohne Prüfung am
+    Drucker darf das System nie selbst nachdrucken (kein blinder Doppeldruck)."""
+    from app.models.gateway import JOB_CANCELED, JOB_DONE, JOB_UNCERTAIN, PrintJob
+    from app.services.broadcast import broadcast_org
+    from app.services.print_dispatcher import create_print_job, dispatch_job
+
+    if action not in AUFLOESUNG_LABELS:
+        raise HTTPException(status_code=400, detail="Unbekannte Aktion")
+    job = db.get(PrintJob, job_id)
+    if job is None or job.org_id != user.org_id:
+        raise HTTPException(status_code=404, detail="Druckauftrag nicht gefunden")
+    assert user.org_id is not None
+    gw_id = job.gateway_id
+    if job.status == JOB_UNCERTAIN:
+        hinweis = f"{AUFLOESUNG_LABELS[action]} (geprüft von {user.display_name or user.username})"
+        job.status = JOB_DONE if action == "done" else JOB_CANCELED
+        job.error = (hinweis + (f" – {job.error}" if job.error else ""))[:500]
+        db.commit()
+        logger.info("Unklarer Druckauftrag %s aufgelöst: %s (user_id=%s)", job.id, action, user.id)
+        await broadcast_org(user.org_id, {"type": "print_job_status", "job_id": job.id,
+                                          "status": job.status})
+        if action == "reprint":
+            ersatz, _created = create_print_job(
+                db, org_id=user.org_id, gateway_id=job.gateway_id, printer_id=job.printer_id,
+                document_type=job.document_type, source="manual", incident_id=job.incident_id,
+                gsl_id=job.gsl_id, objekt_id=job.objekt_id, artifact_ref=job.artifact_ref,
+                options=dict(job.options or {}), created_by_id=user.id, fallback_of_job_id=job.id,
+            )
+            db.commit()
+            await dispatch_job(db, ersatz)
+    if request.headers.get("HX-Request") == "true":
+        gw = _gw_or_404(db, user.org_id, gw_id)
+        context = _historie_context(db, gw)
+        context["user"] = user
+        return templates.TemplateResponse(request, "gateway/_druckhistorie.html", context)
+    return RedirectResponse(f"/gateway/{gw_id}#historie", status_code=303)

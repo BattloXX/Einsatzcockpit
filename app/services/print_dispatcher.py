@@ -19,6 +19,7 @@ from app.models.gateway import (
     JOB_DONE,
     JOB_FAILED,
     JOB_PRINTING,
+    JOB_QUEUED,
     JOB_SENT,
     JOB_SOURCE_MANUAL,
     JOB_SOURCE_RULE,
@@ -200,7 +201,13 @@ async def dispatch_job(db: Session, job: PrintJob) -> dict:
     (printing/done/failed) kommt asynchron per job_status vom Gateway zurück.
     """
     from app.routers.ws import dispatch_print_job
+    from app.services import print_agent_service
     from app.services.print_artifact_service import artifact_url, is_html_render
+
+    # Druckziele mit Windows-Druckagent-Routen: Lease-Zustellung statt Push. Der Job wartet
+    # als 'queued', bis ein bereiter Agent ihn atomar übernimmt (print_agent_service).
+    if print_agent_service.hat_agent_routen(db, job.printer_id):
+        return await _dispatch_job_to_agents(db, job)
 
     payload = {
         "job_id": job.id,
@@ -240,6 +247,18 @@ async def dispatch_job(db: Session, job: PrintJob) -> dict:
         logger.info("Druckauftrag %s zugestellt: %s", job.id, result["note"])
     return {"job_id": job.id, "status": result.get("status") or JOB_SENT,
             "error": result.get("error")}
+
+
+async def _dispatch_job_to_agents(db: Session, job: PrintJob) -> dict:
+    """Reiht einen Job für Windows-Druckagents ein und weckt die zuständigen Agents."""
+    from app.routers.ws import notify_agents_job_available
+    from app.services import print_agent_service
+
+    assert job.org_id is not None  # create_print_job() setzt org_id immer
+    gateway_ids = print_agent_service.enqueue_for_agents(db, job)
+    await notify_agents_job_available(job.org_id, gateway_ids, [job.id])
+    logger.info("Druckauftrag %s für Druckagents %s eingereiht", job.id, gateway_ids)
+    return {"job_id": job.id, "status": JOB_QUEUED, "error": None}
 
 
 def mark_job_failed(db: Session, job: PrintJob, grund: str) -> bool:
