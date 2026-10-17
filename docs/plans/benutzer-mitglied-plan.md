@@ -57,6 +57,12 @@ Stand: 2026-10-17
 | P6 | MCP Benutzer schreiben: `benutzer_anlegen` (Willkommens-/Reset-Mail statt Passwort), `benutzer_aktualisieren`, `benutzer_rollen_setzen`, `benutzer_aktivieren`/`_deaktivieren`, `benutzer_mitglied_verknuepfen`, `benutzer_passwort_reset_mail` |
 | P7 | MCP für jeden Benutzer: `whoami` um verknüpftes Mitglied erweitern, `meine_einheiten` (Einheiten, die ich gerade führe, mit offenen Aufträgen) |
 
+## Status
+
+- P1+P2: PR #593.
+- P3–P7: PR „MCP Benutzer und Mitglieder“ (gestapelt auf #593). Gemeinsame Logik in
+  `app/services/mitglied_service.py` und `app/services/benutzer_service.py`.
+
 ## Offene Tests nach Deploy
 
 - Benutzer mit Mitglied verknüpfen, Mitglied in Übungslage als GK setzen, Login → Startseite zeigt

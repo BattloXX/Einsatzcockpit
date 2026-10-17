@@ -348,9 +348,26 @@ server = EinsatzcockpitMCPServer(
 )
 
 
-@server.tool(name="mcp_whoami", description="Zeigt den aktuell verbundenen Einsatzcockpit-Benutzer.")
+@server.tool(
+    name="mcp_whoami",
+    description=(
+        "Zeigt den aktuell verbundenen Einsatzcockpit-Benutzer, das verknüpfte Mitglied und die Einheiten, "
+        "die er gerade als Gruppenkommandant führt."
+    ),
+)
 async def whoami(ctx: Context) -> dict[str, object]:
     return await _call_registered_tool("mcp_whoami")
+
+
+@server.tool(
+    name="meine_einheiten",
+    description=(
+        "Zeigt die Einheiten, die der verbundene Benutzer über sein verknüpftes Mitglied gerade als "
+        "Gruppenkommandant führt, mit offenen Aufträgen und Link zur Einheitenansicht. Nur lesend."
+    ),
+)
+async def meine_einheiten() -> dict[str, object]:
+    return await _call_registered_tool("meine_einheiten")
 
 
 @server.tool(name="gsl_ressourcen_liste", description="Listet Ressourcen einer GSL-Lage.")

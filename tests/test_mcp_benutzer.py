@@ -228,3 +228,95 @@ def test_schreibtools_schutz_verknuepfung_tokenwiderruf_und_reset_mail(monkeypat
         assert sent == [target.id]
     finally:
         db.close()
+
+
+def _gk_lage(org_id: int, member_id: int, *, fremd_org_id: int | None = None) -> dict:
+    from datetime import UTC
+    from datetime import datetime as dt
+
+    from app.models.major_incident import (
+        EinheitSiteDispatch,
+        IncidentSite,
+        LageEinheit,
+        LageEinheitLeader,
+        MajorIncident,
+        MajorIncidentStatus,
+        SitePhase,
+    )
+    from app.services.resource_service import STATUS_IM_EINSATZ
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    lage = MajorIncident(org_id=fremd_org_id or org_id, name="Hochwasser", status=MajorIncidentStatus.active,
+                         is_exercise=True)
+    db.add(lage)
+    db.flush()
+    einheit = LageEinheit(lage_id=lage.id, label="RLF Gruppe", status=STATUS_IM_EINSATZ)
+    db.add(einheit)
+    db.flush()
+    leader = LageEinheitLeader(einheit_id=einheit.id, member_id=member_id, person_name="Anna Admin",
+                               start_at=dt.now(UTC))
+    db.add(leader)
+    db.flush()
+    einheit.leader_assignment_id = leader.id
+    site = IncidentSite(major_incident_id=lage.id, org_id=lage.org_id, bezeichnung="Keller auspumpen",
+                        phase=SitePhase.disponiert)
+    db.add(site)
+    db.flush()
+    db.add(EinheitSiteDispatch(einheit_id=einheit.id, site_id=site.id, dispatched_at=dt.now(UTC)))
+    db.commit()
+    result = {"lage": lage.id, "einheit": einheit.id}
+    db.close()
+    return result
+
+
+def test_whoami_und_meine_einheiten_fuer_verknuepften_gk(client):
+    seed = _seed("ben-meine-einheit", {"leser": "readonly"})
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    member = Member(org_id=seed["org_id"], firstname="Gerda", lastname="Kommandant")
+    db.add(member)
+    db.flush()
+    db.get(User, seed["users"]["leser"]).member_id = member.id
+    db.commit()
+    member_id = member.id
+    db.close()
+    gk = _gk_lage(seed["org_id"], member_id)
+    token = _token(client, seed["usernames"]["leser"])
+
+    ich = _rufe(client, token, "mcp_whoami")
+    assert ich["mitglied"] == {"id": member_id, "name": "Gerda Kommandant"}
+    assert ich["fuehrt_einheiten"] == [{
+        "lage_id": gk["lage"], "lage_name": "Hochwasser", "einheit_id": gk["einheit"],
+        "einheit_label": "RLF Gruppe", "is_exercise": True,
+    }]
+
+    meine = _rufe(client, token, "meine_einheiten")
+    assert meine["mitglied_verknuepft"] is True
+    [eintrag] = meine["einheiten"]
+    assert eintrag["einheit_id"] == gk["einheit"]
+    assert eintrag["einheit_url"].endswith(f"/einheit?einheit={gk['einheit']}")
+    assert [a["bezeichnung"] for a in eintrag["offene_auftraege"]] == ["Keller auspumpen"]
+
+
+def test_meine_einheiten_leer_ohne_verknuepfung_und_ohne_fremde_org(client):
+    seed = _seed("ben-meine-leer", {"leser": "readonly"})
+    fremd = _seed("ben-meine-fremd", {"anderer": "readonly"})
+    token = _token(client, seed["usernames"]["leser"])
+    leer = _rufe(client, token, "meine_einheiten")
+    assert leer == {"einheiten": [], "mitglied_verknuepft": False}
+    assert _rufe(client, token, "mcp_whoami")["mitglied"] is None
+
+    # Ein Mitglied der eigenen Org, das in einer fremden Lage als GK eingetragen ist, gibt keinen Zugriff.
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    member = Member(org_id=seed["org_id"], firstname="Otto", lastname="Fremd")
+    db.add(member)
+    db.flush()
+    db.get(User, seed["users"]["leser"]).member_id = member.id
+    db.commit()
+    member_id = member.id
+    db.close()
+    _gk_lage(seed["org_id"], member_id, fremd_org_id=fremd["org_id"])
+    assert _rufe(client, token, "meine_einheiten")["einheiten"] == []
+    assert _rufe(client, token, "mcp_whoami")["fuehrt_einheiten"] == []

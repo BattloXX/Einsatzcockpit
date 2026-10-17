@@ -323,3 +323,50 @@ async def benutzer_passwort_reset_mail(context: MCPContext, benutzer_id: int) ->
         raise ValueError("Passwort-Reset-Mail konnte nicht gesendet werden.") from None
     _audit(context, "password_reset_mail", user)
     return {"benutzer": _listen_payload(context, user), "mail_gesendet": True}
+
+
+def _auftrag_kompakt(auftrag: dict) -> dict[str, object]:
+    return {
+        "dispatch_id": auftrag["dispatch_id"],
+        "bezeichnung": auftrag["bezeichnung"],
+        "adresse": auftrag["adresse"],
+        "auftrag": auftrag["auftrag"],
+        "auftragsart": auftrag["auftragsart"],
+        "einheit_status": auftrag["einheit_status"],
+        "einheit_status_label": auftrag["einheit_status_label"],
+        "priority": auftrag["priority"],
+    }
+
+
+@register_tool(
+    name="meine_einheiten",
+    description=(
+        "Zeigt die Einheiten, die der verbundene Benutzer über sein verknüpftes Mitglied gerade als "
+        "Gruppenkommandant führt, mit offenen Aufträgen und Link zur Einheitenansicht. Für jeden Benutzer; "
+        "nur lesend, keine Seiteneffekte."
+    ),
+    required_roles=("readonly",),
+)
+async def meine_einheiten(context: MCPContext) -> dict[str, object]:
+    from app.config import settings
+    from app.services.einheit_service import auftraege_fuer_einheit, einheiten_fuer_benutzer, kontext_fuer_benutzer
+
+    basis = settings.effective_public_base_url.rstrip("/")
+    ergebnis: list[dict[str, object]] = []
+    for einheit, lage, _leader in einheiten_fuer_benutzer(context.db, context.user):
+        ctx = kontext_fuer_benutzer(context.db, context.user, einheit.id)
+        if ctx is None:
+            continue
+        kategorien = auftraege_fuer_einheit(context.db, ctx)["kategorien"]
+        offene = ([kategorien["aktuell"]] if kategorien["aktuell"] else []) + list(kategorien["weitere"])
+        ergebnis.append({
+            "lage_id": lage.id,
+            "lage_name": lage.name,
+            "is_exercise": lage.is_exercise,
+            "einheit_id": einheit.id,
+            "einheit_label": einheit.label,
+            "einheit_url": f"{basis}/einheit?einheit={einheit.id}",
+            "offene_auftraege": [_auftrag_kompakt(auftrag) for auftrag in offene],
+            "erledigte_auftraege": len(kategorien["abgeschlossen"]),
+        })
+    return {"einheiten": ergebnis, "mitglied_verknuepft": context.user.member_id is not None}
