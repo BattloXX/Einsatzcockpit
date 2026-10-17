@@ -32,6 +32,7 @@ from app.mcp.tools import fahrtenbuch as _fahrtenbuch  # noqa: F401 - registrier
 from app.mcp.tools import gsl as _gsl  # noqa: F401 - registriert GSL-Ressourcen-Tools
 from app.mcp.tools import gsl_lage as _gsl_lage  # noqa: F401 - registriert GSL-Lagebild-Tools
 from app.mcp.tools import kontakt as _kontakt  # noqa: F401 - registriert Kontakt-Tools
+from app.mcp.tools import mitglieder as _mitglieder  # noqa: F401 - registriert Mitglieder-Lesetools
 from app.mcp.tools import objekt as _objekt  # noqa: F401 - registriert Objekt-Tools
 from app.mcp.tools import objekt_dokumente as _objekt_dokumente  # noqa: F401 - registriert Dokument-Tools
 from app.mcp.tools import organisation as _organisation  # noqa: F401 - registriert Organisations-Tool
@@ -1252,6 +1253,58 @@ async def kontakt_suchen(
         organisation_id=organisation_id, funktion=funktion, quelle=quelle, externe_id=externe_id,
         aktiv=aktiv, aktualisiert_seit=aktualisiert_seit, vollstaendig=vollstaendig,
     )
+
+
+@server.tool(
+    name="mitglieder_suchen",
+    description=(
+        "Sucht Mitglieder der eigenen Organisation. Erfordert admin oder fahrtenbuch_admin; "
+        "nur lesend, keine Seiteneffekte."
+    ),
+)
+async def mitglieder_suchen(
+    q: str = "",
+    aktiv: bool | None = True,
+    qualifikation: str = "",
+    tag: str = "",
+    gruppenkommandant: bool | None = None,
+    mit_benutzer: bool | None = None,
+    limit: int = 50,
+    seite: int = 1,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "mitglieder_suchen",
+        q=q,
+        aktiv=aktiv,
+        qualifikation=qualifikation,
+        tag=tag,
+        gruppenkommandant=gruppenkommandant,
+        mit_benutzer=mit_benutzer,
+        limit=limit,
+        seite=seite,
+    )
+
+
+@server.tool(
+    name="mitglied_lesen",
+    description=(
+        "Liest ein Mitglied der eigenen Organisation. Erfordert admin oder fahrtenbuch_admin; "
+        "nur lesend, keine Seiteneffekte."
+    ),
+)
+async def mitglied_lesen(mitglied_id: int) -> dict[str, object]:
+    return await _call_registered_tool("mitglied_lesen", mitglied_id=mitglied_id)
+
+
+@server.tool(
+    name="mitglieder_kataloge",
+    description=(
+        "Listet Mitglieder-Kataloge der eigenen Organisation. Erfordert admin oder fahrtenbuch_admin; "
+        "nur lesend, keine Seiteneffekte."
+    ),
+)
+async def mitglieder_kataloge() -> dict[str, object]:
+    return await _call_registered_tool("mitglieder_kataloge")
 
 
 @server.tool(name="objekt_duplikate_pruefen", description="Prueft moegliche Objekt-Dubletten.")
