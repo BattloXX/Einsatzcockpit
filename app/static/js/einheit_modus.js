@@ -45,6 +45,7 @@ function registriere() {
     lageId: config.lage_id,
     einheitId: config.einheit_id,
     simEinheitId: config.sim_einheit_id,
+    benutzerEinheitId: config.benutzer_einheit_id,
     startDispatchId: config.start_dispatch_id,
     kopf: {}, aktuell: null, weitere: [], abgeschlossen: [], zurueckgezogen: [], detail: null,
     kannRessourcePflegen: false, ressource: { personal: {}, ausstattung: [] }, neueAusstattung: {}, neuePerson: {},
@@ -135,7 +136,10 @@ function registriere() {
     },
 
     // Hilfsfunktionen für API und Darstellung.
-    headers() { return this.simulation ? { "X-EC-Einheit-Sim": String(this.simEinheitId) } : {}; },
+    headers() {
+      if (this.simulation) return { "X-EC-Einheit-Sim": String(this.simEinheitId) };
+      return this.benutzerEinheitId ? { "X-EC-Einheit": String(this.benutzerEinheitId) } : {};
+    },
     async outboxAusfuehren(aktion) {
       if (!this.outbox) {
         this.hinweisBanner = "Lokaler Speicher ist nicht verfügbar. Meldung konnte nicht gespeichert werden.";
@@ -240,6 +244,7 @@ function registriere() {
         fetch: window.fetch.bind(window),
         csrfToken: () => decodeURIComponent(cookie("ec_csrf")),
         simEinheitId: this.simulation ? this.simEinheitId : null,
+        benutzerEinheitId: this.benutzerEinheitId,
         dbName: this.outboxName(),
         onTerminal: () => { void this.zugangBeenden(); },
       });
@@ -799,6 +804,7 @@ function registriere() {
     // Live-Synchronisation.
     outboxName() {
       if (this.simulation) return `ec-einheit-sim-${this.simEinheitId}`;
+      if (this.benutzerEinheitId) return `ec-einheit-benutzer-${this.benutzerEinheitId}`;
       if ((window.EINHEIT_PRINCIPAL || "").startsWith("gk:")) return `ec-einheit-gk-${this.einheitId}`;
       if ((window.EINHEIT_PRINCIPAL || "").startsWith("qr:")) return `ec-einheit-qr-${this.einheitId}`;
       return "ec-einheit";

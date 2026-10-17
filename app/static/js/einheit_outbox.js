@@ -7,6 +7,7 @@ export function createOutbox({
   uuid = () => crypto.randomUUID(),
   csrfToken = () => "",
   simEinheitId = null,
+  benutzerEinheitId = null,
   dbName = "ec-einheit",
   openTimeoutMs = 4000,
   onTerminal = () => {},
@@ -139,6 +140,7 @@ export function createOutbox({
   function header() {
     const headers = { "X-CSRF-Token": csrfToken() };
     if (simEinheitId !== null && simEinheitId !== undefined) headers["X-EC-Einheit-Sim"] = String(simEinheitId);
+    if (benutzerEinheitId !== null && benutzerEinheitId !== undefined) headers["X-EC-Einheit"] = String(benutzerEinheitId);
     return headers;
   }
 

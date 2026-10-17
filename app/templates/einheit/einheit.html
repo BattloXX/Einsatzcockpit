@@ -30,6 +30,7 @@
   'einheit_id': einheit_id,
   'simulation': simulation,
   'sim_einheit_id': sim_einheit_id,
+  'benutzer_einheit_id': benutzer_einheit_id|default(none),
   'schreibbar': schreibbar,
   'start_dispatch_id': start_dispatch_id,
 } %}
@@ -55,7 +56,11 @@
       <span class="fab-card__icon">&#x1F692;</span>
       <h1 class="fab-card__title">Keine aktive Großschadenslage für {{ fahrzeug }}</h1>
     </div>
+    {% if benutzer_ohne_einheit %}
+    <p>Du führst derzeit keine Einheit in einer aktiven Großschadenslage.</p>
+    {% else %}
     <p>Für dieses Fahrzeug bzw. Gerät ist derzeit keine Einheit in einer aktiven Großschadenslage eingesetzt.</p>
+    {% endif %}
     <a class="btn btn--primary" href="/?klassisch=1">Normale Ansicht</a>
   </div>
   {% else %}
@@ -112,6 +117,9 @@
     </div>
     <nav class="einheit-umschalter">
       <a href="#" class="is-active" @click.prevent="zurueck()">Meine Einsätze</a>
+      {% for einheit in benutzer_einheiten|default([]) %}
+      <a href="/einheit?einheit={{ einheit.id }}"{% if einheit.id == benutzer_einheit_id %} class="is-active"{% endif %}>{{ einheit.label }} · {{ einheit.lage_name }}</a>
+      {% endfor %}
       {% if not gk_zugang %}
       <a href="/lage/{{ lage_id }}">Gesamtansicht</a>
       {% endif %}
