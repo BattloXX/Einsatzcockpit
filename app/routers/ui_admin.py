@@ -105,6 +105,48 @@ def _update_user_roles(db: Session, actor: User, target: User,
     return sorted(final_codes)
 
 
+def _member_options(db: Session, user: User) -> tuple[dict[int, str], dict[int, list[dict[str, int | str]]]]:
+    """Aktive Mitglieder fuer Benutzerformulare und die Listenanzeige laden."""
+    members = (
+        _org_filter(db.query(Member), user, Member.org_id)
+        .execution_options(include_all_tenants=True)
+        .order_by(Member.lastname, Member.firstname)
+        .all()
+    )
+    names = {member.id: f"{member.lastname} {member.firstname}" for member in members}
+    by_org: dict[int, list[dict[str, int | str]]] = {}
+    for member in members:
+        if member.active and member.org_id is not None:
+            by_org.setdefault(member.org_id, []).append({
+                "id": member.id, "name": names[member.id],
+            })
+    return names, by_org
+
+
+def _validate_user_member(
+    db: Session, member_id: int | None, target_org_id: int | None, target_is_device: bool,
+    user_id: int | None = None,
+) -> str | None:
+    """Gibt den Redirect-Fehler fuer eine unzulaessige Mitgliedsverknuepfung zurueck."""
+    if member_id is None:
+        return None
+    if target_is_device:
+        return "member_invalid"
+    member = db.query(Member).execution_options(include_all_tenants=True).filter(
+        Member.id == member_id,
+    ).first()
+    if member is None or member.org_id != target_org_id:
+        return "member_invalid"
+    existing = db.query(User).execution_options(include_all_tenants=True).filter(
+        User.member_id == member_id,
+    )
+    if user_id is not None:
+        existing = existing.filter(User.id != user_id)
+    if existing.first() is not None:
+        return "member_taken"
+    return None
+
+
 # ── Benutzer ──────────────────────────────────────────────────────────────────
 
 @router.get("/benutzer", response_class=HTMLResponse)
@@ -115,6 +157,7 @@ async def users_list(request: Request, db: Session = Depends(get_db),
     user = request.state.user
     is_sysadmin = has_role(user, "system_admin")
     users = _org_filter(db.query(User), user, User.org_id).filter(User.is_device == False).order_by(User.username).all()  # noqa: E712
+    member_names, members_by_org = _member_options(db, user)
     roles = [role for role in db.query(Role).all()
              if role.code in manageable_role_codes(user, {r.code for r in db.query(Role).all()})]
     all_orgs = db.query(FireDept).order_by(FireDept.name).all() if is_sysadmin else []
@@ -126,6 +169,7 @@ async def users_list(request: Request, db: Session = Depends(get_db),
     return templates.TemplateResponse(request, "admin/users.html", {
         "user": user,
         "users": users, "roles": roles,
+        "member_names": member_names, "members_by_org": members_by_org,
         "is_sysadmin": is_sysadmin,
         "all_orgs": all_orgs,
         "org_sso_enabled": org_sso_enabled,
@@ -143,6 +187,7 @@ async def create_user(
     full_name: str = Form(""), email: str = Form(""), phone: str = Form(""),
     password: str = Form(""), role_codes: list[str] = Form([]),
     org_id: int | None = Form(None),
+    member_id: int | None = Form(None),
     send_welcome: bool = Form(False),
     send_sso_info: bool = Form(False),
     db: Session = Depends(get_db), _=Depends(require_role("admin")),
@@ -162,6 +207,9 @@ async def create_user(
     target_org_id = (
         org_id if has_role(current_user, "system_admin") and org_id and org_id != 0 else current_user.org_id
     )
+    member_error = _validate_user_member(db, member_id, target_org_id, False)
+    if member_error:
+        return RedirectResponse(f"/admin/benutzer?error={member_error}", status_code=303)
     if not password:
         password = _sec.token_urlsafe(16)
     new_user = User(
@@ -172,6 +220,7 @@ async def create_user(
         phone=(phone.strip() or None),
         password_hash=hash_password(password),
         org_id=target_org_id,
+        member_id=member_id,
     )
     db.add(new_user)
     db.flush()
@@ -184,7 +233,8 @@ async def create_user(
             db.add(UserRole(user_id=new_user.id, role_id=role.id))
     write_audit(db, "admin.user.created", user_id=request.state.user.id,
                 entity_type="user", entity_id=new_user.id,
-                payload={"role_codes": sorted(assigned_codes)})
+                payload={"role_codes": sorted(assigned_codes),
+                         "member_id": {"alt": None, "neu": member_id}})
     db.commit()
     app_url = app_settings.effective_public_base_url.rstrip("/")
     is_test = app_settings.TEST_SYSTEM
@@ -231,6 +281,7 @@ async def create_user(
         .order_by(User.username)
         .all()
     )
+    member_names, members_by_org = _member_options(db, current_user)
     roles_list = [role for role in db.query(Role).all()
                   if role.code in manageable_role_codes(current_user, {r.code for r in db.query(Role).all()})]
     all_orgs = db.query(FireDept).order_by(FireDept.name).all() if is_sysadmin else []
@@ -245,6 +296,7 @@ async def create_user(
     return templates.TemplateResponse(request, "admin/users.html", {
         "user": current_user,
         "users": users, "roles": roles_list,
+        "member_names": member_names, "members_by_org": members_by_org,
         "is_sysadmin": is_sysadmin, "all_orgs": all_orgs,
         "org_sso_enabled": org_sso_enabled,
         "new_password": password, "new_password_user": username,
@@ -627,6 +679,11 @@ async def bulk_delete_members(
             db.query(_PL).filter(_PL.member_id == mid).update(
                 {"member_id": None}, synchronize_session=False
             )
+            linked_users = db.query(User).execution_options(include_all_tenants=True).filter(
+                User.member_id == mid,
+            ).all()
+            for linked_user in linked_users:
+                linked_user.member_id = None
             db.delete(m)
             db.flush()
             sp.commit()
@@ -878,6 +935,7 @@ async def edit_user(
     display_name: str = Form(...),
     full_name: str = Form(""), email: str = Form(""), phone: str = Form(""),
     org_id: int | None = Form(None),
+    member_id: int | None = Form(None),
     role_codes: list[str] = Form([]),
     db: Session = Depends(get_db), _=Depends(require_role("admin")),
 ):
@@ -895,11 +953,23 @@ async def edit_user(
     u.full_name = full_name.strip() or None
     u.email = email_clean
     u.phone = phone.strip() or None
+    target_org_id = u.org_id
     if has_role(current_user, "system_admin") and org_id is not None:
-        u.org_id = org_id if org_id != 0 else None
+        target_org_id = org_id if org_id != 0 else None
+    if target_org_id != u.org_id and member_id == u.member_id:
+        member_id = None
+    member_error = _validate_user_member(db, member_id, target_org_id, u.is_device, u.id)
+    if member_error:
+        return RedirectResponse(f"/admin/benutzer?error={member_error}", status_code=303)
+    old_member_id = u.member_id
+    u.org_id = target_org_id
+    u.member_id = member_id
     _update_user_roles(db, current_user, u, role_codes, "edit")
+    payload = None
+    if old_member_id != member_id:
+        payload = {"member_id": {"alt": old_member_id, "neu": member_id}}
     write_audit(db, "admin.user.edited", user_id=current_user.id,
-                entity_type="user", entity_id=user_id)
+                entity_type="user", entity_id=user_id, payload=payload)
     db.commit()
     return RedirectResponse("/admin/benutzer?saved=1", status_code=303)
 
