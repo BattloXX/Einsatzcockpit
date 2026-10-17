@@ -99,6 +99,28 @@ def _mitglied_liste_payload(
     }
 
 
+def gruppenkommandant_funktionen(context: MCPContext, member_id: int) -> list[dict[str, object]]:
+    """Liest aktuelle Gruppenkommandant-Funktionen eines Mitglieds der eigenen Organisation."""
+    funktionen = (
+        context.db.query(LageEinheitLeader, LageEinheit, MajorIncident)
+        .join(LageEinheit, LageEinheit.id == LageEinheitLeader.einheit_id)
+        .join(MajorIncident, MajorIncident.id == LageEinheit.lage_id)
+        .filter(
+            LageEinheitLeader.member_id == member_id,
+            LageEinheitLeader.end_at.is_(None),
+            LageEinheit.leader_assignment_id == LageEinheitLeader.id,
+            MajorIncident.org_id == context.org_id,
+            MajorIncident.status == MajorIncidentStatus.active,
+        )
+        .order_by(MajorIncident.started_at.desc(), LageEinheit.label, LageEinheit.id)
+        .all()
+    )
+    return [
+        {"lage_id": lage.id, "lage_name": lage.name, "einheit_id": einheit.id, "einheit_label": einheit.label}
+        for _leader, einheit, lage in funktionen
+    ]
+
+
 @register_tool(
     name="mitglieder_suchen",
     description=(
@@ -203,20 +225,6 @@ async def mitglied_lesen(context: MCPContext, mitglied_id: int) -> dict[str, obj
                 "aktiv": user.active,
             }
 
-    funktionen = (
-        context.db.query(LageEinheitLeader, LageEinheit, MajorIncident)
-        .join(LageEinheit, LageEinheit.id == LageEinheitLeader.einheit_id)
-        .join(MajorIncident, MajorIncident.id == LageEinheit.lage_id)
-        .filter(
-            LageEinheitLeader.member_id == member.id,
-            LageEinheitLeader.end_at.is_(None),
-            LageEinheit.leader_assignment_id == LageEinheitLeader.id,
-            MajorIncident.org_id == context.org_id,
-            MajorIncident.status == MajorIncidentStatus.active,
-        )
-        .order_by(MajorIncident.started_at.desc(), LageEinheit.label, LageEinheit.id)
-        .all()
-    )
     return _mitglied_liste_payload(member, qualifikationen, tags, {}) | {
         "telefon": member.phone,
         "email": member.email,
@@ -224,15 +232,7 @@ async def mitglied_lesen(context: MCPContext, mitglied_id: int) -> dict[str, obj
         "created_at": format_local_iso(member.created_at, context.user.org),
         "qualifikationen": qualifikationen[member.id],
         "benutzer": linked_user,
-        "gruppenkommandant_funktionen": [
-            {
-                "lage_id": lage.id,
-                "lage_name": lage.name,
-                "einheit_id": einheit.id,
-                "einheit_label": einheit.label,
-            }
-            for _leader, einheit, lage in funktionen
-        ],
+        "gruppenkommandant_funktionen": gruppenkommandant_funktionen(context, member.id),
     }
 
 

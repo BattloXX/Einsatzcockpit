@@ -27,6 +27,7 @@ from app.core.security import hash_api_key
 from app.db import SessionLocal
 from app.mcp.context import MCPPermissionError, load_live_context
 from app.mcp.registry import TOOLS
+from app.mcp.tools import benutzer as _benutzer  # noqa: F401 - registriert Benutzer-Lesetools
 from app.mcp.tools import einsatz as _einsatz  # noqa: F401 - registriert Einsatz-Lesetools
 from app.mcp.tools import fahrtenbuch as _fahrtenbuch  # noqa: F401 - registriert Fahrtenbuch-Tools
 from app.mcp.tools import gsl as _gsl  # noqa: F401 - registriert GSL-Ressourcen-Tools
@@ -1305,6 +1306,23 @@ async def mitglied_lesen(mitglied_id: int) -> dict[str, object]:
 )
 async def mitglieder_kataloge() -> dict[str, object]:
     return await _call_registered_tool("mitglieder_kataloge")
+
+
+@server.tool(name="benutzer_suchen", description="Sucht nicht technische Benutzer der eigenen Organisation; erfordert admin und ist nur lesend.")
+async def benutzer_suchen(q: str = "", aktiv: bool | None = None, rolle: str = "", mit_mitglied: bool | None = None,
+                          limit: int = 50, seite: int = 1) -> dict[str, object]:
+    return await _call_registered_tool("benutzer_suchen", q=q, aktiv=aktiv, rolle=rolle,
+                                       mit_mitglied=mit_mitglied, limit=limit, seite=seite)
+
+
+@server.tool(name="benutzer_lesen", description="Liest einen nicht technischen Benutzer der eigenen Organisation; erfordert admin und ist nur lesend.")
+async def benutzer_lesen(benutzer_id: int) -> dict[str, object]:
+    return await _call_registered_tool("benutzer_lesen", benutzer_id=benutzer_id)
+
+
+@server.tool(name="rollen_katalog", description="Listet Rollen mit Vergabemoglichkeit; erfordert admin und ist nur lesend.")
+async def rollen_katalog() -> dict[str, object]:
+    return await _call_registered_tool("rollen_katalog")
 
 
 @server.tool(
