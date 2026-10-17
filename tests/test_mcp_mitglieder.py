@@ -21,10 +21,18 @@ from app.models.master import (
     Qualification,
     SystemSettings,
 )
-from app.models.user import Role, User, UserRole
+from app.models.user import AuditLog, Role, User, UserRole
 from tests.test_mcp_fundament import _mcp, _oauth_tokens
 
-MITGLIEDER_TOOLS = ("mitglieder_suchen", "mitglied_lesen", "mitglieder_kataloge")
+LESE_TOOLS = ("mitglieder_suchen", "mitglied_lesen", "mitglieder_kataloge")
+SCHREIB_TOOLS = (
+    "mitglied_anlegen",
+    "mitglied_aktualisieren",
+    "mitglied_aktivieren",
+    "mitglied_deaktivieren",
+    "mitglied_qualifikationen_setzen",
+    "mitglied_tags_setzen",
+)
 
 
 def _seed(slug: str, rollen: dict[str, str]) -> dict:
@@ -113,10 +121,13 @@ def _rufe(client, token: str, tool: str, **arguments) -> dict:
     return _ergebnis(_mcp(client, token, "tools/call", {"name": tool, "arguments": arguments}, 10))
 
 
-def test_mitglieder_tools_sind_registriert_und_nur_lesend():
-    assert {name for name in TOOLS if name.startswith("mitglied")} == set(MITGLIEDER_TOOLS)
-    for name in MITGLIEDER_TOOLS:
+def test_mitglieder_tools_sind_registriert_mit_den_passenden_rechten():
+    assert {name for name in TOOLS if name.startswith("mitglied")} == set(LESE_TOOLS + SCHREIB_TOOLS)
+    for name in LESE_TOOLS:
         assert TOOLS[name].required_roles == ("admin", "fahrtenbuch_admin")
+        assert TOOLS[name].module_check is None
+    for name in SCHREIB_TOOLS:
+        assert TOOLS[name].required_roles == ("admin",)
         assert TOOLS[name].module_check is None
 
 
@@ -196,5 +207,96 @@ def test_lesetools_schreiben_nichts():
             asyncio.run(TOOLS[name].handler(context, **args))
             assert not (db.new or db.dirty or db.deleted), name
         assert commits == []
+    finally:
+        db.close()
+
+
+def test_schreibtools_admin_ok_und_fahrtenbuch_admin_sowie_recorder_verweigert(client):
+    seed = _seed("mit-write", {"admin-write": "admin", "fb-write": "fahrtenbuch_admin", "rec-write": "recorder"})
+    admin = _token(client, "admin-write")
+    angelegt = _rufe(
+        client, admin, "mitglied_anlegen", vorname="  Dora  ", nachname="  Dienst  ", telefon="0664000000",
+        qualifikationen=[seed["codes"]["gk"]], tags=[seed["tag"]],
+    )["mitglied"]
+    assert angelegt["vorname"] == "Dora" and angelegt["qualifikationen"] == [seed["codes"]["gk"]]
+    mitglied_id = angelegt["id"]
+    assert _rufe(client, admin, "mitglied_aktualisieren", mitglied_id=mitglied_id,
+                 felder={"telefon": "", "ist_gruppenkommandant": True})["geaendert"] == {
+        "telefon": {"alt": "0664000000", "neu": None},
+        "ist_gruppenkommandant": {"alt": False, "neu": True},
+    }
+    assert _rufe(client, admin, "mitglied_deaktivieren", mitglied_id=mitglied_id)["mitglied"]["aktiv"] is False
+    assert _rufe(client, admin, "mitglied_aktivieren", mitglied_id=mitglied_id)["mitglied"]["aktiv"] is True
+    assert _rufe(client, admin, "mitglied_qualifikationen_setzen", mitglied_id=mitglied_id,
+                 qualifikationen=[])["qualifikationen"] == []
+    assert _rufe(client, admin, "mitglied_tags_setzen", mitglied_id=mitglied_id, tags=[])["tags"] == []
+
+    for username in ("fb-write", "rec-write"):
+        token = _token(client, username)
+        listed = _mcp(client, token, "tools/list", {}, 2).text
+        for tool in SCHREIB_TOOLS:
+            assert tool not in listed
+        assert "__fehler__" in _rufe(client, token, "mitglied_anlegen", vorname="Ohne", nachname="Recht")
+        assert "__fehler__" in _rufe(client, token, "mitglied_aktualisieren", mitglied_id=mitglied_id, felder={})
+        assert "__fehler__" in _rufe(client, token, "mitglied_aktivieren", mitglied_id=mitglied_id)
+        assert "__fehler__" in _rufe(client, token, "mitglied_deaktivieren", mitglied_id=mitglied_id)
+        assert "__fehler__" in _rufe(client, token, "mitglied_qualifikationen_setzen", mitglied_id=mitglied_id,
+                                       qualifikationen=[])
+        assert "__fehler__" in _rufe(client, token, "mitglied_tags_setzen", mitglied_id=mitglied_id, tags=[])
+
+
+def test_schreibtools_dubletten_validierung_und_cross_org(client):
+    seed_a = _seed("mit-write-a", {"admin-write-a": "admin"})
+    seed_b = _seed("mit-write-b", {"admin-write-b": "admin"})
+    token = _token(client, "admin-write-a")
+    duplicate = _rufe(client, token, "mitglied_anlegen", vorname="anna", nachname="ADMIN")
+    assert "__fehler__" in duplicate and str(seed_a["members"]["anna"]) in duplicate["__fehler__"]
+    created = _rufe(client, token, "mitglied_anlegen", vorname="anna", nachname="ADMIN", dublette_ignorieren=True)
+    assert created["mitglied"]["id"] != seed_a["members"]["anna"]
+    assert "__fehler__" in _rufe(client, token, "mitglied_anlegen", vorname="Neu", nachname="Mitglied",
+                                   qualifikationen=["UNBEKANNT"])
+    assert "__fehler__" in _rufe(client, token, "mitglied_anlegen", vorname="Neu", nachname="Tag",
+                                   tags=["Unbekannt"])
+    assert "__fehler__" in _rufe(client, token, "mitglied_aktualisieren", mitglied_id=seed_a["members"]["anna"],
+                                   felder={"fremd": "wert"})
+    fremd_id = seed_b["members"]["anna"]
+    for tool, arguments in (
+        ("mitglied_aktualisieren", {"felder": {"vorname": "Fremd"}}),
+        ("mitglied_aktivieren", {}),
+        ("mitglied_deaktivieren", {}),
+        ("mitglied_qualifikationen_setzen", {"qualifikationen": []}),
+        ("mitglied_tags_setzen", {"tags": []}),
+    ):
+        result = _rufe(client, token, tool, mitglied_id=fremd_id, **arguments)
+        assert "__fehler__" in result and "nicht gefunden" in result["__fehler__"]
+
+
+def test_qualifikationen_tags_aktivierung_und_audit(client):
+    seed = _seed("mit-audit", {"admin-audit": "admin"})
+    token = _token(client, "admin-audit")
+    mitglied_id = seed["members"]["anna"]
+    gesetzt = _rufe(
+        client, token, "mitglied_qualifikationen_setzen", mitglied_id=mitglied_id,
+        qualifikationen=[{"code": seed["codes"]["agt"], "gueltig_bis": "2030-12-31"}],
+    )
+    assert gesetzt["qualifikationen"] == [{"code": seed["codes"]["agt"], "gueltig_bis": "2030-12-31"}]
+    gelesen = _rufe(client, token, "mitglied_lesen", mitglied_id=mitglied_id)
+    assert gelesen["qualifikationen"] == [{"code": seed["codes"]["agt"], "valid_until": "2030-12-31"}]
+    assert _rufe(client, token, "mitglied_tags_setzen", mitglied_id=mitglied_id, tags=[])["tags"] == []
+    first = _rufe(client, token, "mitglied_deaktivieren", mitglied_id=mitglied_id)
+    second = _rufe(client, token, "mitglied_deaktivieren", mitglied_id=mitglied_id)
+    assert first["aktiv"] == {"alt": True, "neu": False}
+    assert second["aktiv"] == {"alt": False, "neu": False}
+
+    db = SessionLocal()
+    set_tenant_context(db, seed["org_id"])
+    try:
+        audits = db.query(AuditLog).filter(AuditLog.entity_id == mitglied_id).all()
+        actions = {audit.action for audit in audits}
+        assert {"mcp.member.qualifications_set", "mcp.member.tags_set", "mcp.member.deactivated"} <= actions
+        quali_audit = next(audit for audit in audits if audit.action == "mcp.member.qualifications_set")
+        assert json.loads(quali_audit.payload_json)["qualifikationen"] == [
+            {"code": seed["codes"]["agt"], "gueltig_bis": "2030-12-31"}
+        ]
     finally:
         db.close()

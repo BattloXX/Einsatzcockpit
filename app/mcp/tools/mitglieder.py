@@ -5,15 +5,31 @@ from collections import defaultdict
 from sqlalchemy import func, or_
 from sqlalchemy.orm import lazyload
 
+from app.core.audit import write_audit
 from app.core.timezones import format_local_iso
 from app.mcp.context import MCPContext
 from app.mcp.registry import register_tool
 from app.models.major_incident import LageEinheit, LageEinheitLeader, MajorIncident, MajorIncidentStatus
 from app.models.master import Member, MemberQualification, MemberTag, MemberTagAssignment, Qualification
 from app.models.user import User
+from app.services import mitglied_service
 
 MAX_LIMIT = 200
 MITGLIEDER_LESE_ROLLEN = ("admin", "fahrtenbuch_admin")
+MITGLIEDER_SCHREIB_ROLLEN = ("admin",)
+
+
+def _audit(context: MCPContext, aktion: str, mitglied_id: int, payload: dict[str, object]) -> None:
+    write_audit(
+        context.db,
+        f"mcp.member.{aktion}",
+        org_id=context.org_id,
+        user_id=context.user.id,
+        entity_type="member",
+        entity_id=mitglied_id,
+        payload=payload,
+    )
+    context.db.commit()
 
 
 def _limit_und_seite_pruefen(limit: int, seite: int) -> None:
@@ -259,3 +275,129 @@ async def mitglieder_kataloge(context: MCPContext) -> dict[str, object]:
         "anzahl_aktive_mitglieder": aktiv,
         "anzahl_inaktive_mitglieder": inaktiv,
     }
+
+
+def _mitglied_schreib_payload(context: MCPContext, member: Member) -> dict[str, object]:
+    qualifikationen, tags, benutzer = _zuordnungen(context, [member.id])
+    return _mitglied_liste_payload(member, qualifikationen, tags, benutzer)
+
+
+@register_tool(
+    name="mitglied_anlegen",
+    description=(
+        "Legt ein Mitglied in der eigenen Organisation an und kann Qualifikationen sowie vorhandene Tags zuordnen. "
+        "Erfordert admin; schreibt Daten und erzeugt einen Audit-Eintrag."
+    ),
+    required_roles=MITGLIEDER_SCHREIB_ROLLEN,
+)
+async def mitglied_anlegen(
+    context: MCPContext,
+    vorname: str,
+    nachname: str,
+    telefon: str = "",
+    email: str = "",
+    sybos_id: str = "",
+    qualifikationen: list[str] | None = None,
+    tags: list[str] | None = None,
+    dublette_ignorieren: bool = False,
+) -> dict[str, object]:
+    member = mitglied_service.mitglied_anlegen(
+        context.db, context.org_id, vorname, nachname, telefon, email, sybos_id,
+        dublette_ignorieren=dublette_ignorieren,
+    )
+    _, gesetzte_qualifikationen = mitglied_service.qualifikationen_setzen(
+        context.db, context.org_id, member.id,
+        [{"code": code, "gueltig_bis": None} for code in (qualifikationen or [])],
+    )
+    _, gesetzte_tags = mitglied_service.tags_setzen(context.db, context.org_id, member.id, tags or [])
+    _audit(context, "created", member.id, {
+        "vorname": member.firstname, "nachname": member.lastname, "telefon": member.phone,
+        "email": member.email, "sybos_id": member.sybos_id,
+        "qualifikationen": [eintrag["code"] for eintrag in gesetzte_qualifikationen],
+        "tags": gesetzte_tags, "dublette_ignorieren": dublette_ignorieren,
+    })
+    return {"mitglied": _mitglied_schreib_payload(context, member)}
+
+
+@register_tool(
+    name="mitglied_aktualisieren",
+    description=(
+        "Aktualisiert erlaubte Stammdaten eines Mitglieds der eigenen Organisation. "
+        "Erfordert admin; schreibt Daten und erzeugt einen Audit-Eintrag."
+    ),
+    required_roles=MITGLIEDER_SCHREIB_ROLLEN,
+)
+async def mitglied_aktualisieren(
+    context: MCPContext, mitglied_id: int, felder: dict[str, object]
+) -> dict[str, object]:
+    member, geaendert = mitglied_service.mitglied_aktualisieren(context.db, context.org_id, mitglied_id, felder)
+    _audit(context, "updated", member.id, {"felder": geaendert})
+    return {"mitglied": _mitglied_schreib_payload(context, member), "geaendert": geaendert}
+
+
+async def _mitglied_aktiv_setzen(context: MCPContext, mitglied_id: int, aktiv: bool) -> dict[str, object]:
+    member, status = mitglied_service.aktiv_setzen(context.db, context.org_id, mitglied_id, aktiv)
+    _audit(context, "activated" if aktiv else "deactivated", member.id, {"aktiv": status})
+    return {"mitglied": _mitglied_schreib_payload(context, member), "aktiv": status}
+
+
+@register_tool(
+    name="mitglied_aktivieren",
+    description=(
+        "Aktiviert ein Mitglied der eigenen Organisation idempotent. "
+        "Erfordert admin; schreibt Daten und erzeugt einen Audit-Eintrag."
+    ),
+    required_roles=MITGLIEDER_SCHREIB_ROLLEN,
+)
+async def mitglied_aktivieren(context: MCPContext, mitglied_id: int) -> dict[str, object]:
+    return await _mitglied_aktiv_setzen(context, mitglied_id, True)
+
+
+@register_tool(
+    name="mitglied_deaktivieren",
+    description=(
+        "Deaktiviert ein Mitglied der eigenen Organisation idempotent. "
+        "Erfordert admin; schreibt Daten und erzeugt einen Audit-Eintrag."
+    ),
+    required_roles=MITGLIEDER_SCHREIB_ROLLEN,
+)
+async def mitglied_deaktivieren(context: MCPContext, mitglied_id: int) -> dict[str, object]:
+    return await _mitglied_aktiv_setzen(context, mitglied_id, False)
+
+
+@register_tool(
+    name="mitglied_qualifikationen_setzen",
+    description=(
+        "Ersetzt alle Qualifikationen eines Mitglieds der eigenen Organisation. "
+        "Erfordert admin; schreibt Daten und erzeugt einen Audit-Eintrag."
+    ),
+    required_roles=MITGLIEDER_SCHREIB_ROLLEN,
+)
+async def mitglied_qualifikationen_setzen(
+    context: MCPContext, mitglied_id: int, qualifikationen: list[dict[str, object]]
+) -> dict[str, object]:
+    member, gesetzt = mitglied_service.qualifikationen_setzen(
+        context.db, context.org_id, mitglied_id, qualifikationen
+    )
+    payload = [
+        {"code": eintrag["code"], "gueltig_bis": str(eintrag["gueltig_bis"] or "") or None}
+        for eintrag in gesetzt
+    ]
+    _audit(context, "qualifications_set", member.id, {"qualifikationen": payload})
+    return {"mitglied": _mitglied_schreib_payload(context, member), "qualifikationen": payload}
+
+
+@register_tool(
+    name="mitglied_tags_setzen",
+    description=(
+        "Ersetzt alle Tag-Zuordnungen eines Mitglieds der eigenen Organisation. "
+        "Erfordert admin; schreibt Daten und erzeugt einen Audit-Eintrag."
+    ),
+    required_roles=MITGLIEDER_SCHREIB_ROLLEN,
+)
+async def mitglied_tags_setzen(
+    context: MCPContext, mitglied_id: int, tags: list[str]
+) -> dict[str, object]:
+    member, gesetzt = mitglied_service.tags_setzen(context.db, context.org_id, mitglied_id, tags)
+    _audit(context, "tags_set", member.id, {"tags": gesetzt})
+    return {"mitglied": _mitglied_schreib_payload(context, member), "tags": gesetzt}

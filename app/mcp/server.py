@@ -1307,6 +1307,77 @@ async def mitglieder_kataloge() -> dict[str, object]:
     return await _call_registered_tool("mitglieder_kataloge")
 
 
+@server.tool(
+    name="mitglied_anlegen",
+    description="Legt ein Mitglied der eigenen Organisation an; erfordert admin und schreibt Daten.",
+)
+async def mitglied_anlegen(
+    vorname: str,
+    nachname: str,
+    telefon: str = "",
+    email: str = "",
+    sybos_id: str = "",
+    qualifikationen: list[str] | None = None,
+    tags: list[str] | None = None,
+    dublette_ignorieren: bool = False,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "mitglied_anlegen",
+        vorname=vorname,
+        nachname=nachname,
+        telefon=telefon,
+        email=email,
+        sybos_id=sybos_id,
+        qualifikationen=qualifikationen,
+        tags=tags,
+        dublette_ignorieren=dublette_ignorieren,
+    )
+
+
+@server.tool(
+    name="mitglied_aktualisieren",
+    description="Aktualisiert ein Mitglied der eigenen Organisation; erfordert admin und schreibt Daten.",
+)
+async def mitglied_aktualisieren(mitglied_id: int, felder: dict) -> dict[str, object]:
+    return await _call_registered_tool("mitglied_aktualisieren", mitglied_id=mitglied_id, felder=felder)
+
+
+@server.tool(
+    name="mitglied_aktivieren",
+    description="Aktiviert ein Mitglied der eigenen Organisation; erfordert admin und schreibt Daten.",
+)
+async def mitglied_aktivieren(mitglied_id: int) -> dict[str, object]:
+    return await _call_registered_tool("mitglied_aktivieren", mitglied_id=mitglied_id)
+
+
+@server.tool(
+    name="mitglied_deaktivieren",
+    description="Deaktiviert ein Mitglied der eigenen Organisation; erfordert admin und schreibt Daten.",
+)
+async def mitglied_deaktivieren(mitglied_id: int) -> dict[str, object]:
+    return await _call_registered_tool("mitglied_deaktivieren", mitglied_id=mitglied_id)
+
+
+@server.tool(
+    name="mitglied_qualifikationen_setzen",
+    description="Ersetzt Mitgliedsqualifikationen; erfordert admin und schreibt Daten.",
+)
+async def mitglied_qualifikationen_setzen(
+    mitglied_id: int, qualifikationen: list[dict]
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "mitglied_qualifikationen_setzen", mitglied_id=mitglied_id, qualifikationen=qualifikationen
+    )
+
+
+@server.tool(
+    name="mitglied_tags_setzen",
+    description="Ersetzt Mitglieds-Tags; erfordert admin und schreibt Daten.",
+)
+async def mitglied_tags_setzen(mitglied_id: int, tags: list[str]) -> dict[str, object]:
+    return await _call_registered_tool("mitglied_tags_setzen", mitglied_id=mitglied_id, tags=tags)
+
+
 @server.tool(name="objekt_duplikate_pruefen", description="Prueft moegliche Objekt-Dubletten.")
 async def objekt_duplikate_pruefen(
     name: str = "",
