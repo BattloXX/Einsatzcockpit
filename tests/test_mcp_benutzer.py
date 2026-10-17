@@ -1,6 +1,7 @@
 """MCP-Benutzer-Lesetools: Rechte, Mandantentrennung und sensible Ausgabefelder."""
 import asyncio
 import json
+from datetime import datetime
 
 import pytest
 
@@ -10,7 +11,8 @@ from app.db import SessionLocal
 from app.mcp.context import MCPContext, MCPPermissionError, load_live_context
 from app.mcp.registry import TOOLS
 from app.models.master import FireDept, Member, OrgSettings, SystemSettings
-from app.models.user import Role, User, UserRole
+from app.models.mcp import MCPOAuthToken
+from app.models.user import AuditLog, Role, User, UserRole
 from tests.test_mcp_fundament import _mcp, _oauth_tokens
 
 TOOLS_BENUTZER = ("benutzer_suchen", "benutzer_lesen", "rollen_katalog")
@@ -154,5 +156,75 @@ def test_lesetools_schreiben_nichts():
             asyncio.run(TOOLS[name].handler(context, **args))
             assert not (db.new or db.dirty or db.deleted), name
         assert commits == []
+    finally:
+        db.close()
+
+
+def test_schreibtools_admin_ok_recorder_verweigert_und_audit(client, monkeypatch):
+    seed = _seed("ben-write", {"admin": "admin", "recorder": "recorder"})
+    admin = _token(client, seed["usernames"]["admin"])
+    recorder = _token(client, seed["usernames"]["recorder"])
+    for name in ("benutzer_anlegen", "benutzer_aktualisieren", "benutzer_rollen_setzen", "benutzer_aktivieren",
+                 "benutzer_deaktivieren", "benutzer_mitglied_verknuepfen", "benutzer_passwort_reset_mail"):
+        assert name not in _mcp(client, recorder, "tools/list", {}, 20).text
+    assert "__fehler__" in _rufe(client, recorder, "benutzer_anlegen", username="x", display_name="X")
+    created = _rufe(client, admin, "benutzer_anlegen", username="mcp-write-ben", display_name="MCP Write",
+                    rollen=["readonly"], willkommensmail=False)["benutzer"]
+    assert created["rollen"] == ["readonly"]
+    assert _rufe(client, admin, "benutzer_aktualisieren", benutzer_id=created["id"],
+                 felder={"phone": "0664000000"})["geaendert"]["phone"]["neu"] == "0664000000"
+    assert _rufe(client, admin, "benutzer_rollen_setzen", benutzer_id=created["id"], rollen=["recorder"])["rollen"] == ["recorder"]
+    assert _rufe(client, admin, "benutzer_deaktivieren", benutzer_id=created["id"])["aktiv"]["neu"] is False
+    assert _rufe(client, admin, "benutzer_aktivieren", benutzer_id=created["id"])["aktiv"]["neu"] is True
+    db = SessionLocal()
+    set_tenant_context(db, seed["org_id"])
+    try:
+        actions = {row.action for row in db.query(AuditLog).filter(AuditLog.entity_id == created["id"]).all()}
+        assert {"mcp.user.created", "mcp.user.updated", "mcp.user.roles_set", "mcp.user.deactivated", "mcp.user.activated"} <= actions
+    finally:
+        db.close()
+
+
+def test_schreibtools_schutz_verknuepfung_tokenwiderruf_und_reset_mail(monkeypatch):
+    seed = _seed("ben-protect", {"admin": "admin"})
+    db = SessionLocal()
+    set_tenant_context(db, seed["org_id"])
+    try:
+        actor = db.get(User, seed["users"]["admin"])
+        target = db.get(User, seed["visible"])
+        assert actor and target
+        context = MCPContext(db=db, user=actor, org_id=seed["org_id"])
+        other = FireDept(slug="ben-protect-other", name="Andere Org")
+        sysadmin = User(username="mcp-system-target", display_name="System", org_id=seed["org_id"], password_hash="x")
+        db.add_all([other, sysadmin])
+        db.flush()
+        system_role = db.query(Role).filter(Role.code == "system_admin").first()
+        assert system_role
+        db.add(UserRole(user_id=sysadmin.id, role_id=system_role.id))
+        foreign_member = Member(org_id=other.id, firstname="Fremd", lastname="Mitglied")
+        db.add(foreign_member)
+        db.add(MCPOAuthToken(token_hash="a" * 64, token_type="access", client_id="test", user_id=target.id,
+                             org_id=seed["org_id"], scopes="mcp", expires_at=datetime.now(), family_id="f" * 64))
+        db.commit()
+        with pytest.raises(ValueError, match="Keine Berechtigung"):
+            asyncio.run(TOOLS["benutzer_aktualisieren"].handler(context, sysadmin.id, {"phone": "1"}))
+        with pytest.raises(ValueError, match="Nicht vergebbare Rollen"):
+            asyncio.run(TOOLS["benutzer_rollen_setzen"].handler(context, target.id, ["system_admin"]))
+        with pytest.raises(ValueError, match="selbst"):
+            asyncio.run(TOOLS["benutzer_deaktivieren"].handler(context, actor.id))
+        with pytest.raises(ValueError, match="nicht gefunden"):
+            asyncio.run(TOOLS["benutzer_mitglied_verknuepfen"].handler(context, target.id, foreign_member.id))
+        asyncio.run(TOOLS["benutzer_deaktivieren"].handler(context, target.id))
+        assert db.query(MCPOAuthToken).filter(MCPOAuthToken.user_id == target.id).one().revoked_at is not None
+        sent = []
+
+        async def fake_reset(user, session):
+            sent.append(user.id)
+
+        monkeypatch.setattr("app.mcp.tools.benutzer.benutzer_service.send_password_reset_mail", fake_reset)
+        target.active = True
+        target.auth_provider = "local"
+        asyncio.run(TOOLS["benutzer_passwort_reset_mail"].handler(context, target.id))
+        assert sent == [target.id]
     finally:
         db.close()

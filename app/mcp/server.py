@@ -1325,6 +1325,45 @@ async def rollen_katalog() -> dict[str, object]:
     return await _call_registered_tool("rollen_katalog")
 
 
+@server.tool(name="benutzer_anlegen", description="Legt einen Benutzer der eigenen Organisation an; erfordert admin und schreibt Daten.")
+async def benutzer_anlegen(username: str, display_name: str, email: str = "", full_name: str = "", phone: str = "",
+                           rollen: list[str] | None = None, mitglied_id: int | None = None,
+                           willkommensmail: bool = True) -> dict[str, object]:
+    return await _call_registered_tool("benutzer_anlegen", username=username, display_name=display_name, email=email,
+                                       full_name=full_name, phone=phone, rollen=rollen, mitglied_id=mitglied_id,
+                                       willkommensmail=willkommensmail)
+
+
+@server.tool(name="benutzer_aktualisieren", description="Aktualisiert einen Benutzer der eigenen Organisation; erfordert admin und schreibt Daten.")
+async def benutzer_aktualisieren(benutzer_id: int, felder: dict) -> dict[str, object]:
+    return await _call_registered_tool("benutzer_aktualisieren", benutzer_id=benutzer_id, felder=felder)
+
+
+@server.tool(name="benutzer_rollen_setzen", description="Ersetzt Benutzerrollen der eigenen Organisation; erfordert admin und schreibt Daten.")
+async def benutzer_rollen_setzen(benutzer_id: int, rollen: list[str]) -> dict[str, object]:
+    return await _call_registered_tool("benutzer_rollen_setzen", benutzer_id=benutzer_id, rollen=rollen)
+
+
+@server.tool(name="benutzer_aktivieren", description="Aktiviert einen Benutzer der eigenen Organisation; erfordert admin und schreibt Daten.")
+async def benutzer_aktivieren(benutzer_id: int) -> dict[str, object]:
+    return await _call_registered_tool("benutzer_aktivieren", benutzer_id=benutzer_id)
+
+
+@server.tool(name="benutzer_deaktivieren", description="Deaktiviert einen Benutzer und widerruft MCP-Tokens; erfordert admin und schreibt Daten.")
+async def benutzer_deaktivieren(benutzer_id: int) -> dict[str, object]:
+    return await _call_registered_tool("benutzer_deaktivieren", benutzer_id=benutzer_id)
+
+
+@server.tool(name="benutzer_mitglied_verknuepfen", description="Verknuepft ein Mitglied mit einem Benutzer; erfordert admin und schreibt Daten.")
+async def benutzer_mitglied_verknuepfen(benutzer_id: int, mitglied_id: int | None = None) -> dict[str, object]:
+    return await _call_registered_tool("benutzer_mitglied_verknuepfen", benutzer_id=benutzer_id, mitglied_id=mitglied_id)
+
+
+@server.tool(name="benutzer_passwort_reset_mail", description="Sendet eine Passwort-Reset-Mail; erfordert admin und schreibt Reset-Daten.")
+async def benutzer_passwort_reset_mail(benutzer_id: int) -> dict[str, object]:
+    return await _call_registered_tool("benutzer_passwort_reset_mail", benutzer_id=benutzer_id)
+
+
 @server.tool(
     name="mitglied_anlegen",
     description="Legt ein Mitglied der eigenen Organisation an; erfordert admin und schreibt Daten.",

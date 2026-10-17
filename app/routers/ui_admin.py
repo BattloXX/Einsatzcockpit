@@ -57,6 +57,7 @@ from app.models.user import (
     UserRole,
 )
 from app.routers.ws import connected_gateway_token_ids
+from app.services import benutzer_service
 from app.services.alarm_service import get_alarm_type_by_code
 from app.services.push_service import notify_all as _push_notify_all
 from app.services.push_service import notify_org as _push_notify_org
@@ -92,17 +93,7 @@ def _update_user_roles(db: Session, actor: User, target: User,
     Unmanageable existing roles are retained.  This is important even if a
     future role is added above an organisation administrator's hierarchy.
     """
-    allowed_submitted = permitted_submitted_roles(
-        db, actor, submitted_codes, action=action, target=target,
-    )
-    existing_codes = {role.code for role in target.roles}
-    all_roles = {role.code: role for role in db.query(Role).all()}
-    manageable = manageable_role_codes(actor, set(all_roles))
-    final_codes = (existing_codes - manageable) | allowed_submitted
-    db.query(UserRole).filter(UserRole.user_id == target.id).delete()
-    for code in final_codes:
-        db.add(UserRole(user_id=target.id, role_id=all_roles[code].id))
-    return sorted(final_codes)
+    return benutzer_service.update_user_roles(db, actor, target, submitted_codes, action)
 
 
 def _member_options(db: Session, user: User) -> tuple[dict[int, str], dict[int, list[dict[str, int | str]]]]:
@@ -128,23 +119,7 @@ def _validate_user_member(
     user_id: int | None = None,
 ) -> str | None:
     """Gibt den Redirect-Fehler fuer eine unzulaessige Mitgliedsverknuepfung zurueck."""
-    if member_id is None:
-        return None
-    if target_is_device:
-        return "member_invalid"
-    member = db.query(Member).execution_options(include_all_tenants=True).filter(
-        Member.id == member_id,
-    ).first()
-    if member is None or member.org_id != target_org_id:
-        return "member_invalid"
-    existing = db.query(User).execution_options(include_all_tenants=True).filter(
-        User.member_id == member_id,
-    )
-    if user_id is not None:
-        existing = existing.filter(User.id != user_id)
-    if existing.first() is not None:
-        return "member_taken"
-    return None
+    return benutzer_service.validate_member_link(db, member_id, target_org_id, target_is_device, user_id)
 
 
 # ── Benutzer ──────────────────────────────────────────────────────────────────
@@ -212,18 +187,13 @@ async def create_user(
         return RedirectResponse(f"/admin/benutzer?error={member_error}", status_code=303)
     if not password:
         password = _sec.token_urlsafe(16)
-    new_user = User(
-        username=username,
-        display_name=display_name or username,
-        full_name=(full_name.strip() or None),
-        email=email_clean,
-        phone=(phone.strip() or None),
-        password_hash=hash_password(password),
-        org_id=target_org_id,
-        member_id=member_id,
-    )
-    db.add(new_user)
-    db.flush()
+    try:
+        new_user, password = benutzer_service.create_user(
+            db, org_id=target_org_id, username=username, display_name=display_name, email=email,
+            full_name=full_name, phone=phone, member_id=member_id, password=password or None,
+        )
+    except ValueError:
+        return RedirectResponse("/admin/benutzer?error=username_exists", status_code=303)
     assigned_codes = permitted_submitted_roles(
         db, current_user, role_codes, action="create", target=new_user,
     )
@@ -241,17 +211,7 @@ async def create_user(
     display = new_user.full_name or new_user.display_name or username
     if email_clean and send_welcome:
         try:
-            from app.services.mail_service import send_welcome_mail
-            await send_welcome_mail(
-                to=email_clean,
-                username=username,
-                password=password,
-                user_display_name=display,
-                app_url=app_url,
-                is_test=is_test,
-                db=db,
-                org_id=target_org_id,
-            )
+            await benutzer_service.send_welcome_mail(new_user, password, db)
         except Exception:
             logger_admin.warning("Willkommensmail an %s konnte nicht gesendet werden", email_clean)
     if email_clean and send_sso_info:
@@ -980,47 +940,17 @@ async def send_user_reset_mail(
     _=Depends(require_role("admin")),
 ):
     """Admin löst den Self-Service-Reset-Flow für einen anderen Benutzer aus."""
-    import hashlib
-    import secrets as sec
-    from datetime import datetime, timedelta
-
-    from app.config import settings
-    from app.models.password_reset import PasswordResetToken
-    from app.services.mail_service import send_password_reset
-
     u = db.get(User, user_id)
     if not u:
         return RedirectResponse("/admin/benutzer?error=no_email", status_code=303)
     authorize_user_mutation(db, request.state.user, u, "reset_mail")
     if not u.email:
         return RedirectResponse("/admin/benutzer?error=no_email", status_code=303)
-
-    # Alte Tokens entwerten
-    now = datetime.now(UTC)
-    db.query(PasswordResetToken).filter(
-        PasswordResetToken.user_id == u.id,
-        PasswordResetToken.used_at.is_(None),
-    ).update({"used_at": now})
-
-    raw_token = sec.token_urlsafe(32)
-    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
-    db.add(PasswordResetToken(
-        user_id=u.id,
-        token_hash=token_hash,
-        expires_at=now + timedelta(minutes=settings.PASSWORD_RESET_TTL_MIN),
-        requesting_ip=request.client.host if request.client else None,
-    ))
     write_audit(db, "admin.user.password_reset_mail",
                 user_id=request.state.user.id, entity_type="user", entity_id=u.id)
-    db.commit()
-
-    base = settings.effective_public_base_url.rstrip("/")
-    reset_url = f"{base}/passwort-zuruecksetzen?token={raw_token}"
     try:
-        await send_password_reset(
-            to=u.email, reset_url=reset_url,
-            user_display_name=u.full_name or u.display_name or u.username,
-            db=db, org_id=u.org_id,
+        await benutzer_service.send_password_reset_mail(
+            u, db, request.client.host if request.client else None,
         )
     except Exception:
         return RedirectResponse("/admin/benutzer?error=mail_failed", status_code=303)

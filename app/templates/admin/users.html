@@ -25,6 +25,8 @@
 {% if deleted %}<div class="alert alert--success">Benutzer gelöscht.</div>{% endif %}
 {% if error == 'email_exists' %}
 <div class="alert alert--error">Diese E-Mail-Adresse ist bereits einem anderen Benutzer zugeordnet.</div>
+{% elif error == 'username_exists' %}
+<div class="alert alert--error">Dieser Benutzername ist bereits vergeben.</div>
 {% elif error == 'member_invalid' %}
 <div class="alert alert--error">Das ausgewählte Mitglied gehört nicht zur Organisation des Benutzers.</div>
 {% elif error == 'member_taken' %}
