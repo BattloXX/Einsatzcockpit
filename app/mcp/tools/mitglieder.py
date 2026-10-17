@@ -125,7 +125,7 @@ def gruppenkommandant_funktionen(context: MCPContext, member_id: int) -> list[di
     name="mitglieder_suchen",
     description=(
         "Sucht Mitglieder der eigenen Organisation nach Name, E-Mail, Telefon oder syBOS-ID. "
-        "Erfordert admin oder fahrtenbuch_admin; das Werkzeug ist nur lesend und hat keine Seiteneffekte."
+        "Erfordert die Rolle Admin oder Fahrtenbuch-Admin; das Werkzeug ist nur lesend und hat keine Seiteneffekte."
     ),
     required_roles=MITGLIEDER_LESE_ROLLEN,
 )
@@ -194,7 +194,7 @@ async def mitglieder_suchen(
     name="mitglied_lesen",
     description=(
         "Liest ein Mitglied der eigenen Organisation mit Kontaktdaten, Qualifikationen, Tags, Benutzer und "
-        "aktuellen Gruppenkommandant-Funktionen. Erfordert admin oder fahrtenbuch_admin; nur lesend, "
+        "aktuellen Gruppenkommandant-Funktionen. Erfordert die Rolle Admin oder Fahrtenbuch-Admin; nur lesend, "
         "keine Seiteneffekte."
     ),
     required_roles=MITGLIEDER_LESE_ROLLEN,
@@ -240,7 +240,7 @@ async def mitglied_lesen(context: MCPContext, mitglied_id: int) -> dict[str, obj
     name="mitglieder_kataloge",
     description=(
         "Listet Qualifikationen, Tags und Mitgliederzahlen der eigenen Organisation. "
-        "Erfordert admin oder fahrtenbuch_admin; das Werkzeug ist nur lesend und hat keine Seiteneffekte."
+        "Erfordert die Rolle Admin oder Fahrtenbuch-Admin; das Werkzeug ist nur lesend und hat keine Seiteneffekte."
     ),
     required_roles=MITGLIEDER_LESE_ROLLEN,
 )

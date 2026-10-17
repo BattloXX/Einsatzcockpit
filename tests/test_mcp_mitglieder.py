@@ -151,12 +151,12 @@ def test_rollenmatrix_live_kontext(rolle, erlaubt):
 
 
 def test_admin_und_fahrtenbuch_admin_koennen_lesen_recorder_nicht(client):
-    seed = _seed("mit-http", {"admin": "admin", "fb": "fahrtenbuch_admin", "rec": "recorder"})
-    for username in ("admin", "fb"):
+    seed = _seed("mit-http", {"mit-http-admin": "admin", "mit-http-fb": "fahrtenbuch_admin", "mit-http-rec": "recorder"})
+    for username in ("mit-http-admin", "mit-http-fb"):
         token = _token(client, username)
         assert [m["id"] for m in _rufe(client, token, "mitglieder_suchen")["mitglieder"]] == [seed["members"]["anna"], seed["members"]["clara"]]
         assert _rufe(client, token, "mitglied_lesen", mitglied_id=seed["members"]["anna"])["telefon"] == "0664123456"
-    token = _token(client, "rec")
+    token = _token(client, "mit-http-rec")
     assert "mitglieder_" not in _mcp(client, token, "tools/list", {}, 2).text
     assert "__fehler__" in _rufe(client, token, "mitglieder_suchen")
 

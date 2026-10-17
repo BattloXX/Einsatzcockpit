@@ -1276,7 +1276,7 @@ async def kontakt_suchen(
 @server.tool(
     name="mitglieder_suchen",
     description=(
-        "Sucht Mitglieder der eigenen Organisation. Erfordert admin oder fahrtenbuch_admin; "
+        "Sucht Mitglieder der eigenen Organisation. Erfordert die Rolle Admin oder Fahrtenbuch-Admin; "
         "nur lesend, keine Seiteneffekte."
     ),
 )
@@ -1306,7 +1306,7 @@ async def mitglieder_suchen(
 @server.tool(
     name="mitglied_lesen",
     description=(
-        "Liest ein Mitglied der eigenen Organisation. Erfordert admin oder fahrtenbuch_admin; "
+        "Liest ein Mitglied der eigenen Organisation. Erfordert die Rolle Admin oder Fahrtenbuch-Admin; "
         "nur lesend, keine Seiteneffekte."
     ),
 )
@@ -1317,7 +1317,7 @@ async def mitglied_lesen(mitglied_id: int) -> dict[str, object]:
 @server.tool(
     name="mitglieder_kataloge",
     description=(
-        "Listet Mitglieder-Kataloge der eigenen Organisation. Erfordert admin oder fahrtenbuch_admin; "
+        "Listet Mitglieder-Kataloge der eigenen Organisation. Erfordert die Rolle Admin oder Fahrtenbuch-Admin; "
         "nur lesend, keine Seiteneffekte."
     ),
 )
