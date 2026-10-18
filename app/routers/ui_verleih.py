@@ -20,6 +20,7 @@ from fastapi import (
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.async_bridge import run_async
 from app.core.permissions import has_role, require_role, same_org_or_system_admin
 from app.core.security import get_author_name
 from app.core.templating import templates
@@ -162,7 +163,7 @@ def _detail_ctx(db: Session, user, lage, ausleihe, **extra) -> dict:
 # ── Admin: Artikelstammdaten ──────────────────────────────────────────────────
 
 @router.get("/admin/verleih-artikel", response_class=HTMLResponse)
-async def verleih_artikel_liste(
+def verleih_artikel_liste(
     request: Request,
     db: Session = Depends(get_db),
     _=Depends(require_role("admin", "org_admin")),
@@ -178,7 +179,7 @@ async def verleih_artikel_liste(
 
 
 @router.post("/admin/verleih-artikel/neu", response_class=HTMLResponse)
-async def verleih_artikel_neu(
+def verleih_artikel_neu(
     request: Request,
     bezeichnung: str = Form(...),
     artikel_nr: str = Form(""),
@@ -222,7 +223,7 @@ async def verleih_artikel_neu(
 
 
 @router.post("/admin/verleih-artikel/{artikel_id}/bearbeiten", response_class=HTMLResponse)
-async def verleih_artikel_bearbeiten(
+def verleih_artikel_bearbeiten(
     request: Request,
     artikel_id: int,
     bezeichnung: str = Form(...),
@@ -254,7 +255,7 @@ async def verleih_artikel_bearbeiten(
 
 
 @router.post("/admin/verleih-artikel/{artikel_id}/loeschen", response_class=HTMLResponse)
-async def verleih_artikel_loeschen(
+def verleih_artikel_loeschen(
     request: Request,
     artikel_id: int,
     db: Session = Depends(get_db),
@@ -268,7 +269,7 @@ async def verleih_artikel_loeschen(
 
 
 @router.get("/admin/verleih-artikel/autocomplete")
-async def verleih_artikel_autocomplete(
+def verleih_artikel_autocomplete(
     request: Request,
     q: str = "",
     db: Session = Depends(get_db),
@@ -294,7 +295,7 @@ async def verleih_artikel_autocomplete(
 # ── Admin: Stücklisten ────────────────────────────────────────────────────────
 
 @router.get("/admin/verleih-stuecklisten", response_class=HTMLResponse)
-async def stuecklisten_liste(
+def stuecklisten_liste(
     request: Request,
     db: Session = Depends(get_db),
     _=Depends(require_role("admin", "org_admin")),
@@ -312,14 +313,14 @@ async def stuecklisten_liste(
 
 
 @router.post("/admin/verleih-stuecklisten/neu", response_class=HTMLResponse)
-async def stueckliste_neu(
+def stueckliste_neu(
     request: Request,
     db: Session = Depends(get_db),
     _=Depends(require_role("admin", "org_admin")),
 ):
     user = request.state.user
     org_id = user.org_id
-    form = await request.form()
+    form = run_async(request.form)
     bezeichnung = str(form.get("bezeichnung", "")).strip()
     notizen = str(form.get("notizen", "")).strip()
     if not bezeichnung:
@@ -367,7 +368,7 @@ async def stueckliste_neu(
 
 
 @router.post("/admin/verleih-stuecklisten/{sl_id}/bearbeiten", response_class=HTMLResponse)
-async def stueckliste_bearbeiten(
+def stueckliste_bearbeiten(
     request: Request,
     sl_id: int,
     db: Session = Depends(get_db),
@@ -380,7 +381,7 @@ async def stueckliste_bearbeiten(
     if not sl:
         raise HTTPException(404, "Stückliste nicht gefunden")
 
-    form = await request.form()
+    form = run_async(request.form)
     bezeichnung = str(form.get("bezeichnung", "")).strip()
     notizen = str(form.get("notizen", "")).strip()
     if not bezeichnung:
@@ -430,7 +431,7 @@ async def stueckliste_bearbeiten(
 
 
 @router.post("/admin/verleih-stuecklisten/{sl_id}/loeschen", response_class=HTMLResponse)
-async def stueckliste_loeschen(
+def stueckliste_loeschen(
     request: Request,
     sl_id: int,
     db: Session = Depends(get_db),
@@ -444,7 +445,7 @@ async def stueckliste_loeschen(
 
 
 @router.get("/admin/verleih-uebersicht", response_class=HTMLResponse)
-async def admin_verleih_uebersicht(
+def admin_verleih_uebersicht(
     request: Request,
     db: Session = Depends(get_db),
     _=Depends(require_role("admin", "org_admin")),
@@ -475,7 +476,7 @@ async def admin_verleih_uebersicht(
 # ── GSL: Ausleihe-Liste ───────────────────────────────────────────────────────
 
 @router.get("/lage/{lage_id}/stellen/{site_id}/material/neu", response_class=HTMLResponse)
-async def site_material_neu_form(
+def site_material_neu_form(
     request: Request,
     lage_id: int,
     site_id: int,
@@ -603,7 +604,7 @@ async def site_material_anlegen(
 
 
 @router.post("/lage/{lage_id}/stellen/{site_id}/material/{ausleihe_id}/zurueck", response_class=HTMLResponse)
-async def site_material_zurueck(
+def site_material_zurueck(
     request: Request,
     lage_id: int,
     site_id: int,
@@ -628,8 +629,8 @@ async def site_material_zurueck(
         user_id=user.id,
         einheit_id=ausleihe.einheit_id,
     )
-    await broadcast_lage(lage.id, {"type": "site:card_changed", "site_id": site.id})
-    await broadcast_lage(lage.id, {"type": "verleih:changed", "lage_id": lage.id})
+    run_async(broadcast_lage, lage.id, {"type": "site:card_changed", "site_id": site.id})
+    run_async(broadcast_lage, lage.id, {"type": "verleih:changed", "lage_id": lage.id})
     from app.routers.ui_major_incident import site_detail_context
 
     return templates.TemplateResponse(
@@ -641,7 +642,7 @@ async def site_material_zurueck(
 
 
 @router.get("/lage/{lage_id}/verleih", response_class=HTMLResponse)
-async def verleih_liste(
+def verleih_liste(
     request: Request,
     lage_id: int,
     filter: str = "alle",
@@ -684,7 +685,7 @@ async def verleih_liste(
 
 
 @router.get("/lage/{lage_id}/verleih/neu", response_class=HTMLResponse)
-async def verleih_neu_form(
+def verleih_neu_form(
     request: Request,
     lage_id: int,
     db: Session = Depends(get_db),
@@ -866,7 +867,7 @@ async def verleih_neu(
 # ── GSL: Ausleihe-Detail ──────────────────────────────────────────────────────
 
 @router.get("/lage/{lage_id}/verleih/{ausleihe_id}", response_class=HTMLResponse)
-async def verleih_detail(
+def verleih_detail(
     request: Request,
     lage_id: int,
     ausleihe_id: int,
@@ -885,7 +886,7 @@ async def verleih_detail(
 # ── GSL: Rückgabe ─────────────────────────────────────────────────────────────
 
 @router.get("/lage/{lage_id}/verleih/{ausleihe_id}/card", response_class=HTMLResponse)
-async def verleih_card(
+def verleih_card(
     request: Request,
     lage_id: int,
     ausleihe_id: int,
@@ -904,7 +905,7 @@ async def verleih_card(
 
 
 @router.post("/lage/{lage_id}/verleih/{ausleihe_id}/position/{position_id}/zurueck", response_class=HTMLResponse)
-async def position_zurueck(
+def position_zurueck(
     request: Request,
     lage_id: int,
     ausleihe_id: int,
@@ -917,7 +918,7 @@ async def position_zurueck(
     _check_org(user, lage)
 
     ausleihe = svc.return_position(db, position_id)
-    await broadcast_lage(lage_id, {"type": "verleih:changed", "lage_id": lage_id})
+    run_async(broadcast_lage, lage_id, {"type": "verleih:changed", "lage_id": lage_id})
 
     return templates.TemplateResponse(request, "verleih/_ausleihe_detail.html",
         _detail_ctx(db, user, lage, ausleihe),
@@ -925,7 +926,7 @@ async def position_zurueck(
 
 
 @router.post("/lage/{lage_id}/verleih/{ausleihe_id}/alle-zurueck", response_class=HTMLResponse)
-async def alle_zurueck(
+def alle_zurueck(
     request: Request,
     lage_id: int,
     ausleihe_id: int,
@@ -937,7 +938,7 @@ async def alle_zurueck(
     _check_org(user, lage)
 
     ausleihe = svc.return_all(db, ausleihe_id)
-    await broadcast_lage(lage_id, {"type": "verleih:changed", "lage_id": lage_id})
+    run_async(broadcast_lage, lage_id, {"type": "verleih:changed", "lage_id": lage_id})
 
     return templates.TemplateResponse(request, "verleih/_ausleihe_detail.html",
         _detail_ctx(db, user, lage, ausleihe),
@@ -947,7 +948,7 @@ async def alle_zurueck(
 # ── GSL: Stückliste laden (HTMX-JSON) ────────────────────────────────────────
 
 @router.get("/lage/{lage_id}/verleih/stueckliste/{sl_id}")
-async def stueckliste_positionen(
+def stueckliste_positionen(
     lage_id: int,
     sl_id: int,
     db: Session = Depends(get_db),
@@ -1051,7 +1052,7 @@ async def sms_ausleih_senden(
 
 
 @router.post("/lage/{lage_id}/verleih/schnell-einsatzstelle")
-async def schnell_einsatzstelle(
+def schnell_einsatzstelle(
     request: Request,
     lage_id: int,
     bezeichnung: str = Form(...),
@@ -1071,9 +1072,9 @@ async def schnell_einsatzstelle(
     from app.services.major_incident_service import create_site
     site = create_site(db, lage, bezeichnung=bezeichnung, ort=ort.strip()[:120] or None, created_by=user.id)
     db.commit()
-    await broadcast_lage(lage_id, {"type": "site_created", "site_id": site.id})
+    run_async(broadcast_lage, lage_id, {"type": "site_created", "site_id": site.id})
     from app.services.gsl_live_notify import notify_gsl_live
-    await notify_gsl_live(db, lage, org_id=lage.org_id, reason="counts")
+    run_async(notify_gsl_live, db, lage, org_id=lage.org_id, reason="counts")
     site_data = next(item for item in _sites_data_fuer_verleih(db, lage) if item["id"] == site.id)
     return JSONResponse(site_data)
 
@@ -1100,7 +1101,7 @@ async def verleih_foto_upload(
 
 
 @router.get("/lage/{lage_id}/verleih/{ausleihe_id}/foto/{foto_id}/bild")
-async def verleih_foto_bild(
+def verleih_foto_bild(
     request: Request,
     lage_id: int,
     ausleihe_id: int,
@@ -1122,7 +1123,7 @@ async def verleih_foto_bild(
 
 
 @router.get("/lage/{lage_id}/verleih/{ausleihe_id}/drucken", response_class=HTMLResponse)
-async def verleih_drucken(
+def verleih_drucken(
     request: Request,
     lage_id: int,
     ausleihe_id: int,
@@ -1206,7 +1207,7 @@ async def erinnerung_manuell(
 # ── GSL: Positionen nachträglich hinzufügen ───────────────────────────────────
 
 @router.post("/lage/{lage_id}/verleih/{ausleihe_id}/positionen-hinzufuegen", response_class=HTMLResponse)
-async def positionen_hinzufuegen(
+def positionen_hinzufuegen(
     request: Request,
     lage_id: int,
     ausleihe_id: int,
@@ -1218,7 +1219,7 @@ async def positionen_hinzufuegen(
     _check_org(user, lage)
     ausleihe = _ausleihe_or_404(ausleihe_id, db)
 
-    form = await request.form()
+    form = run_async(request.form)
     bez_list = form.getlist("pos_bezeichnung[]")
     nr_list  = form.getlist("pos_artikel_nr[]")
     menge_list = form.getlist("pos_menge[]")
@@ -1273,7 +1274,7 @@ async def positionen_hinzufuegen(
     except Exception:
         logger.warning("Journal-Eintrag fuer Verleih-Nachtrag fehlgeschlagen", exc_info=True)
 
-    await broadcast_lage(lage_id, {"type": "verleih:changed", "lage_id": lage_id})
+    run_async(broadcast_lage, lage_id, {"type": "verleih:changed", "lage_id": lage_id})
 
     return templates.TemplateResponse(request, "verleih/_ausleihe_detail.html",
         _detail_ctx(db, user, lage, ausleihe, add_ok=True),
@@ -1283,7 +1284,7 @@ async def positionen_hinzufuegen(
 # ── Admin: Artikel-Status toggle ─────────────────────────────────────────────
 
 @router.post("/admin/verleih-artikel/{artikel_id}/status-toggle", response_class=HTMLResponse)
-async def artikel_status_toggle(
+def artikel_status_toggle(
     request: Request,
     artikel_id: int,
     db: Session = Depends(get_db),
@@ -1299,7 +1300,7 @@ async def artikel_status_toggle(
 # ── Admin: Etiketten drucken ──────────────────────────────────────────────────
 
 @router.get("/admin/verleih-artikel/etiketten", response_class=HTMLResponse)
-async def etiketten_drucken(
+def etiketten_drucken(
     request: Request,
     ids: str = "",
     vorlage: str = "standard",
@@ -1348,7 +1349,7 @@ async def etiketten_drucken(
 # ── Admin: Gerätetypen ────────────────────────────────────────────────────────
 
 @router.get("/admin/verleih-geraetetypen", response_class=HTMLResponse)
-async def geraetetypen_liste(
+def geraetetypen_liste(
     request: Request,
     db: Session = Depends(get_db),
     _=Depends(require_role("admin", "org_admin")),
@@ -1366,7 +1367,7 @@ async def geraetetypen_liste(
 
 
 @router.post("/admin/verleih-geraetetypen/neu", response_class=HTMLResponse)
-async def geraetetyp_neu(
+def geraetetyp_neu(
     request: Request,
     name: str = Form(...),
     beschreibung: str = Form(""),
@@ -1394,7 +1395,7 @@ async def geraetetyp_neu(
 
 
 @router.post("/admin/verleih-geraetetypen/{gt_id}/bearbeiten", response_class=HTMLResponse)
-async def geraetetyp_bearbeiten(
+def geraetetyp_bearbeiten(
     request: Request,
     gt_id: int,
     name: str = Form(...),
@@ -1419,7 +1420,7 @@ async def geraetetyp_bearbeiten(
 
 
 @router.post("/admin/verleih-geraetetypen/{gt_id}/loeschen", response_class=HTMLResponse)
-async def geraetetyp_loeschen(
+def geraetetyp_loeschen(
     request: Request,
     gt_id: int,
     db: Session = Depends(get_db),
@@ -1433,7 +1434,7 @@ async def geraetetyp_loeschen(
 
 
 @router.post("/lage/{lage_id}/verleih/{ausleihe_id}/notizen", response_class=HTMLResponse)
-async def notizen_aktualisieren(
+def notizen_aktualisieren(
     request: Request,
     lage_id: int,
     ausleihe_id: int,

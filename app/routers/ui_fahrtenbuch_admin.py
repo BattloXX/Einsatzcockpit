@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.async_bridge import run_async
 from app.core.audit import write_audit
 from app.core.permissions import (
     can_view_fahrtenbuch,
@@ -149,7 +150,7 @@ def _sysadmin_org_context(request: Request, user, org, db: Session) -> dict:
 # ── Verwaltungsliste ──────────────────────────────────────────────────────────
 
 @router.get("/verwaltung/fahrten", response_class=HTMLResponse)
-async def fahrten_liste(
+def fahrten_liste(
     request: Request,
     db: Session = Depends(get_db),
     von: str = "", bis: str = "",
@@ -201,7 +202,7 @@ async def fahrten_liste(
 
 
 @router.get("/verwaltung/fahrten/export.xlsx")
-async def fahrten_export(
+def fahrten_export(
     request: Request,
     db: Session = Depends(get_db),
     von: str = "", bis: str = "",
@@ -229,7 +230,7 @@ async def fahrten_export(
 
 
 @router.get("/verwaltung/fahrten/hx/fahrzeug-felder", response_class=HTMLResponse)
-async def hx_fahrzeug_felder_korrektur(
+def hx_fahrzeug_felder_korrektur(
     request: Request, fahrzeug_id: int = 0, fahrt_id: int = 0, db: Session = Depends(get_db),
 ):
     _user, org_id, _org = _fb_admin(request, db)
@@ -274,7 +275,7 @@ async def hx_fahrzeug_felder_korrektur(
 
 
 @router.get("/verwaltung/fahrten/hx/zweck-felder", response_class=HTMLResponse)
-async def hx_zweck_felder_korrektur(
+def hx_zweck_felder_korrektur(
     request: Request,
     zweck_id: int = 0,
     fahrzeug_id: int = 0,
@@ -313,7 +314,7 @@ async def hx_zweck_felder_korrektur(
 
 
 @router.post("/verwaltung/fahrten/hx/zaehler-check", response_class=HTMLResponse)
-async def hx_zaehler_check_korrektur(
+def hx_zaehler_check_korrektur(
     request: Request,
     fahrt_id: int = Form(0),
     fahrzeug_id: int = Form(0),
@@ -354,7 +355,7 @@ async def hx_zaehler_check_korrektur(
 
 
 @router.get("/verwaltung/fahrten/{fahrt_id}", response_class=HTMLResponse)
-async def fahrt_detail(request: Request, fahrt_id: int, db: Session = Depends(get_db)):
+def fahrt_detail(request: Request, fahrt_id: int, db: Session = Depends(get_db)):
     user, org_id, org = _fb_view(request, db)
     fahrt = (
         db.query(Fahrt)
@@ -421,19 +422,19 @@ def _serve_fahrt_media(user, org_id: int, media_id: int, db: Session, *, thumb: 
 
 
 @router.get("/medien/fahrt/datei/{media_id}")
-async def serve_fahrt_media_datei(media_id: int, request: Request, db: Session = Depends(get_db)):
+def serve_fahrt_media_datei(media_id: int, request: Request, db: Session = Depends(get_db)):
     user, org_id, _org = _fb_view(request, db)
     return _serve_fahrt_media(user, org_id, media_id, db, thumb=False)
 
 
 @router.get("/medien/fahrt/thumb/{media_id}")
-async def serve_fahrt_media_thumb(media_id: int, request: Request, db: Session = Depends(get_db)):
+def serve_fahrt_media_thumb(media_id: int, request: Request, db: Session = Depends(get_db)):
     user, org_id, _org = _fb_view(request, db)
     return _serve_fahrt_media(user, org_id, media_id, db, thumb=True)
 
 
 @router.post("/verwaltung/fahrten/{fahrt_id}/storno")
-async def fahrt_storno(
+def fahrt_storno(
     request: Request, fahrt_id: int,
     grund: str = Form(""),
     db: Session = Depends(get_db),
@@ -455,7 +456,7 @@ async def fahrt_storno(
 
 
 @router.post("/verwaltung/fahrten/loeschen")
-async def fahrten_loeschen(request: Request, db: Session = Depends(get_db)):
+def fahrten_loeschen(request: Request, db: Session = Depends(get_db)):
     """Endgültiges Löschen markierter Fahrten – nur für Systemadministratoren."""
     user = require_system_admin(request)
     from app.services.fahrtenbuch_service import loesche_fahrten
@@ -468,7 +469,7 @@ async def fahrten_loeschen(request: Request, db: Session = Depends(get_db)):
         except ValueError:
             raise HTTPException(status_code=400, detail="Ungültiger org-Parameter")
         set_tenant_context(db, org_id)
-    form = await request.form()
+    form = run_async(request.form)
     ids: list[int] = []
     for raw in form.getlist("ids"):
         # form.getlist() liefert laut Starlette-Typing str | UploadFile (Formulare koennten
@@ -622,7 +623,7 @@ async def fahrt_korrektur_speichern(
 
 
 @router.post("/verwaltung/fahrten/{fahrt_id}/statistikflag")
-async def statistikflag_toggle(
+def statistikflag_toggle(
     request: Request, fahrt_id: int, db: Session = Depends(get_db)
 ):
     user, org_id, org = _fb_admin(request, db)
@@ -661,7 +662,7 @@ async def schaden_retry(
 # ── Stammdaten: Zwecke ────────────────────────────────────────────────────────
 
 @router.get("/admin/fahrtenbuch/zwecke", response_class=HTMLResponse)
-async def zwecke_liste(request: Request, db: Session = Depends(get_db)):
+def zwecke_liste(request: Request, db: Session = Depends(get_db)):
     user, org_id, org = _fb_admin(request, db)
     zwecke = (
         db.query(Fahrtzweck).filter(Fahrtzweck.org_id == org_id)
@@ -674,7 +675,7 @@ async def zwecke_liste(request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/admin/fahrtenbuch/zwecke/neu")
-async def zweck_neu(
+def zweck_neu(
     request: Request,
     name: str = Form(...), kategorie: str = Form(...),
     verlangt_ausbildner: bool = Form(False), verlangt_gruppenkommandant: bool = Form(False),
@@ -696,7 +697,7 @@ async def zweck_neu(
 
 
 @router.post("/admin/fahrtenbuch/zwecke/{zweck_id}/bearbeiten")
-async def zweck_bearbeiten(
+def zweck_bearbeiten(
     request: Request, zweck_id: int,
     name: str = Form(...), kategorie: str = Form(...),
     verlangt_ausbildner: bool = Form(False), verlangt_gruppenkommandant: bool = Form(False),
@@ -722,7 +723,7 @@ async def zweck_bearbeiten(
 # ── Stammdaten: Zielorte ──────────────────────────────────────────────────────
 
 @router.get("/admin/fahrtenbuch/zielorte", response_class=HTMLResponse)
-async def zielorte_liste(request: Request, db: Session = Depends(get_db)):
+def zielorte_liste(request: Request, db: Session = Depends(get_db)):
     user, org_id, org = _fb_admin(request, db)
     zielorte = (
         db.query(Zielort).filter(Zielort.org_id == org_id)
@@ -735,7 +736,7 @@ async def zielorte_liste(request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/admin/fahrtenbuch/zielorte/neu")
-async def zielort_neu(
+def zielort_neu(
     request: Request,
     name: str = Form(...), sort: int = Form(0),
     db: Session = Depends(get_db),
@@ -747,7 +748,7 @@ async def zielort_neu(
 
 
 @router.post("/admin/fahrtenbuch/zielorte/{zielort_id}/bearbeiten")
-async def zielort_bearbeiten(
+def zielort_bearbeiten(
     request: Request, zielort_id: int,
     name: str = Form(...), aktiv: bool = Form(True), sort: int = Form(0),
     db: Session = Depends(get_db),
@@ -766,7 +767,7 @@ async def zielort_bearbeiten(
 # ── Fahrzeug-Stammdaten Fahrtenbuch ──────────────────────────────────────────
 
 @router.post("/admin/fahrzeuge/{fahrzeug_id}/fahrtenbuch")
-async def fahrzeug_fahrtenbuch_settings(
+def fahrzeug_fahrtenbuch_settings(
     request: Request, fahrzeug_id: int,
     kennzeichen: str = Form(""),
     erfasst_km: bool = Form(False),
@@ -806,7 +807,7 @@ async def fahrzeug_fahrtenbuch_settings(
 
 
 @router.post("/admin/fahrzeuge/{fahrzeug_id}/zaehler-korrektur")
-async def zaehler_korrektur(
+def zaehler_korrektur(
     request: Request, fahrzeug_id: int,
     art: str = Form(...), wert: str = Form(...),
     db: Session = Depends(get_db),
@@ -828,7 +829,7 @@ async def zaehler_korrektur(
 
 
 @router.post("/admin/fahrzeuge/{fahrzeug_id}/qr")
-async def qr_generieren(
+def qr_generieren(
     request: Request, fahrzeug_id: int, db: Session = Depends(get_db)
 ):
     user, org_id, org = _fb_admin(request, db)
@@ -873,7 +874,7 @@ async def qr_generieren(
 
 
 @router.post("/admin/fahrtenbuch/token")
-async def org_token_generieren(
+def org_token_generieren(
     request: Request, db: Session = Depends(get_db)
 ):
     user, org_id, org = _fb_admin(request, db)
@@ -890,7 +891,7 @@ async def org_token_generieren(
 
 
 @router.get("/admin/fahrtenbuch/token", response_class=HTMLResponse)
-async def org_token_seite(request: Request, db: Session = Depends(get_db)):
+def org_token_seite(request: Request, db: Session = Depends(get_db)):
     user, org_id, org = _fb_admin(request, db)
     org_s = (
         db.query(OrgSettings).filter(OrgSettings.org_id == org_id)
@@ -905,7 +906,7 @@ async def org_token_seite(request: Request, db: Session = Depends(get_db)):
 
 
 @router.get("/admin/fahrtenbuch/einstellungen", response_class=HTMLResponse)
-async def fahrtenbuch_einstellungen(request: Request, db: Session = Depends(get_db)):
+def fahrtenbuch_einstellungen(request: Request, db: Session = Depends(get_db)):
     user, org_id, org = _fb_admin(request, db)
     org_s = (
         db.query(OrgSettings).filter(OrgSettings.org_id == org_id)
@@ -919,7 +920,7 @@ async def fahrtenbuch_einstellungen(request: Request, db: Session = Depends(get_
 
 
 @router.post("/admin/fahrtenbuch/einstellungen")
-async def fahrtenbuch_einstellungen_speichern(
+def fahrtenbuch_einstellungen_speichern(
     request: Request,
     schaden_mail: str = Form(""),
     schaden_teams_webhook_url: str = Form(""),
@@ -943,13 +944,13 @@ async def fahrtenbuch_einstellungen_speichern(
 
 
 @router.post("/admin/fahrtenbuch/fahrzeuge/sortierung")
-async def fahrzeuge_sortierung(
+def fahrzeuge_sortierung(
     request: Request,
     db: Session = Depends(get_db),
 ):
     user, org_id, org = _fb_admin(request, db)
     try:
-        data = await request.json()
+        data = run_async(request.json)
         ids = [int(i) for i in data.get("ids", [])]
     except Exception:
         raise HTTPException(status_code=422, detail="Ungültige Reihenfolge")
@@ -967,7 +968,7 @@ async def fahrzeuge_sortierung(
 
 
 @router.get("/admin/fahrtenbuch/fahrzeuge", response_class=HTMLResponse)
-async def fahrzeuge_fahrtenbuch(request: Request, db: Session = Depends(get_db)):
+def fahrzeuge_fahrtenbuch(request: Request, db: Session = Depends(get_db)):
     user, org_id, org = _fb_admin(request, db)
     fahrzeuge = (
         db.query(VehicleMaster)
@@ -996,7 +997,7 @@ async def fahrzeuge_fahrtenbuch(request: Request, db: Session = Depends(get_db))
 
 
 @router.post("/admin/fahrtenbuch/fahrzeuge/export-links")
-async def fahrzeuge_export_links(request: Request, db: Session = Depends(get_db)):
+def fahrzeuge_export_links(request: Request, db: Session = Depends(get_db)):
     """Excel-Export aller (aktiven) Fahrzeuge inkl. direktem Fahrtenbuch-Link.
 
     Fehlende QR-Tokens werden erzeugt, damit jedes Fahrzeug einen Link erhält.
