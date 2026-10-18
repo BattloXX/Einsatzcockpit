@@ -10,6 +10,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.config import settings as app_settings
+from app.core.async_bridge import run_async
 from app.core.audit import write_audit
 from app.core.permissions import (
     authorize_user_mutation,
@@ -132,7 +133,7 @@ def _validate_user_member(
 # ── Benutzer ──────────────────────────────────────────────────────────────────
 
 @router.get("/benutzer", response_class=HTMLResponse)
-async def users_list(request: Request, db: Session = Depends(get_db),
+def users_list(request: Request, db: Session = Depends(get_db),
                      _=Depends(require_role("admin"))):
     from app.config import settings as app_settings
     from app.models.sso import OrgSsoConfig
@@ -172,7 +173,7 @@ async def users_list(request: Request, db: Session = Depends(get_db),
 
 
 @router.get("/benutzer/mail-vorschau", response_class=HTMLResponse)
-async def user_mail_preview(
+def user_mail_preview(
     request: Request, typ: str = "einladung", db: Session = Depends(get_db),
     _=Depends(require_role("admin")),
 ):
@@ -348,7 +349,7 @@ async def send_user_invitation(
 
 
 @router.post("/benutzer/{user_id}/loeschen")
-async def delete_user(
+def delete_user(
     user_id: int, request: Request, db: Session = Depends(get_db),
     _=Depends(require_role("admin")),
 ):
@@ -405,7 +406,7 @@ def _hard_delete_user(db: Session, u: User, acting_user_id: int) -> None:
 
 
 @router.post("/benutzer/{user_id}/endgueltig-loeschen")
-async def hard_delete_user(
+def hard_delete_user(
     user_id: int, request: Request, db: Session = Depends(get_db),
     _=Depends(require_role("admin")),
 ):
@@ -421,7 +422,7 @@ async def hard_delete_user(
 
 
 @router.post("/benutzer/bulk-loeschen")
-async def bulk_delete_users(
+def bulk_delete_users(
     request: Request,
     user_ids: list[int] = Form(default=[]),
     db: Session = Depends(get_db),
@@ -446,7 +447,7 @@ async def bulk_delete_users(
 # ── API-Keys ──────────────────────────────────────────────────────────────────
 
 @router.get("/api-keys", response_class=HTMLResponse)
-async def api_keys(request: Request, db: Session = Depends(get_db),
+def api_keys(request: Request, db: Session = Depends(get_db),
                    _=Depends(require_role("admin"))):
     keys = _org_filter(db.query(ApiKey), request.state.user, ApiKey.org_id).order_by(ApiKey.created_at.desc()).all()
     return templates.TemplateResponse(request, "admin/api_keys.html", {
@@ -455,11 +456,11 @@ async def api_keys(request: Request, db: Session = Depends(get_db),
 
 
 @router.post("/api-keys/neu")
-async def create_api_key(
+def create_api_key(
     request: Request, label: str = Form(...), ip_allowlist: str = Form(""),
     db: Session = Depends(get_db), _=Depends(require_role("admin")),
 ):
-    form = await request.form()
+    form = run_async(request.form)
     erlaubte_scopes = {
         "einsatz:write", "mailing:import", "sms:send", "mail:send",
         "einsatz:read", "einsatz:read:kraefte", "einsatz:read:board",
@@ -504,7 +505,7 @@ async def create_api_key(
 
 
 @router.post("/api-keys/{key_id}/sperren")
-async def revoke_api_key(
+def revoke_api_key(
     key_id: int, request: Request, db: Session = Depends(get_db),
     _=Depends(require_role("admin")),
 ):
@@ -522,7 +523,7 @@ async def revoke_api_key(
 # ── Mitglieder ────────────────────────────────────────────────────────────────
 
 @router.get("/mitglieder", response_class=HTMLResponse)
-async def members_list(request: Request, db: Session = Depends(get_db),
+def members_list(request: Request, db: Session = Depends(get_db),
                        _=Depends(require_role("admin", "fahrtenbuch_admin"))):
     members = (
         _org_filter(db.query(Member), request.state.user, Member.org_id)
@@ -542,7 +543,7 @@ async def members_list(request: Request, db: Session = Depends(get_db),
 
 
 @router.post("/mitglieder/neu")
-async def create_member(
+def create_member(
     request: Request,
     lastname: str = Form(...), firstname: str = Form(...),
     phone: str = Form(""), email: str = Form(""),
@@ -570,7 +571,7 @@ async def create_member(
 # ── Audit-Log ─────────────────────────────────────────────────────────────────
 
 @router.get("/audit", response_class=HTMLResponse)
-async def audit_log(request: Request, db: Session = Depends(get_db),
+def audit_log(request: Request, db: Session = Depends(get_db),
                     scope: str | None = None, _=Depends(require_role("admin"))):
     user = request.state.user
     if has_role(user, "system_admin"):
@@ -599,7 +600,7 @@ async def audit_log(request: Request, db: Session = Depends(get_db),
 
 @router.get("", response_class=HTMLResponse)
 @router.get("/", response_class=HTMLResponse)
-async def admin_index(request: Request, db: Session = Depends(get_db),
+def admin_index(request: Request, db: Session = Depends(get_db),
                       _=Depends(require_role("admin", "org_admin", "system_admin", "fahrtenbuch_admin"))):
     from app.core.permissions import has_role
     from app.core.queries import visible_incidents_q
@@ -644,7 +645,7 @@ async def admin_index(request: Request, db: Session = Depends(get_db),
 # ── Mitglieder Edit / Toggle / Qualifikationen ────────────────────────────────
 
 @router.post("/mitglieder/{member_id}/edit")
-async def edit_member(
+def edit_member(
     member_id: int, request: Request,
     lastname: str = Form(...), firstname: str = Form(...),
     phone: str = Form(""), email: str = Form(""), sybos_id: str = Form(""),
@@ -666,7 +667,7 @@ async def edit_member(
 
 
 @router.post("/mitglieder/{member_id}/toggle")
-async def toggle_member(
+def toggle_member(
     member_id: int, request: Request, db: Session = Depends(get_db),
     _=Depends(require_role("admin")),
 ):
@@ -682,7 +683,7 @@ async def toggle_member(
 
 
 @router.post("/mitglieder/bulk-delete")
-async def bulk_delete_members(
+def bulk_delete_members(
     request: Request,
     member_ids: list[int] = Form(...),
     db: Session = Depends(get_db),
@@ -748,7 +749,7 @@ async def bulk_delete_members(
 
 
 @router.post("/mitglieder/{member_id}/quali")
-async def update_member_quali(
+def update_member_quali(
     member_id: int, request: Request,
     qualification_codes: list[str] = Form([]),
     db: Session = Depends(get_db), _=Depends(require_role("admin", "fahrtenbuch_admin")),
@@ -765,7 +766,7 @@ async def update_member_quali(
         raise HTTPException(403, "Keine Berechtigung")
     # Remove all existing, then re-add
     db.query(MemberQualification).filter(MemberQualification.member_id == member_id).delete()
-    form_data = await request.form()
+    form_data = run_async(request.form)
     for code in qualification_codes:
         q = db.query(Qualification).filter(Qualification.code == code).first()
         if q:
@@ -793,7 +794,7 @@ def excel_import_redirect(_=Depends(require_role("admin"))):
 
 
 @router.post("/mitglieder/excel-import")
-async def import_members_excel(
+def import_members_excel(
     request: Request,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
@@ -813,7 +814,7 @@ async def import_members_excel(
     except ImportError:
         return RedirectResponse("/admin/mitglieder?error=openpyxl_missing", status_code=303)
 
-    raw = await file.read()
+    raw = run_async(file.read)
     if not raw:
         return RedirectResponse("/admin/mitglieder?error=empty_file", status_code=303)
 
@@ -974,7 +975,7 @@ async def import_members_excel(
 # ── Benutzer Edit / Rollen / Passwort-Reset ───────────────────────────────────
 
 @router.post("/benutzer/{user_id}/edit")
-async def edit_user(
+def edit_user(
     user_id: int, request: Request,
     display_name: str = Form(...),
     full_name: str = Form(""), email: str = Form(""), phone: str = Form(""),
@@ -1042,7 +1043,7 @@ async def send_user_reset_mail(
 
 
 @router.post("/benutzer/{user_id}/rollen")
-async def update_user_roles(
+def update_user_roles(
     user_id: int, request: Request,
     role_codes: list[str] = Form([]),
     db: Session = Depends(get_db), _=Depends(require_role("admin")),
@@ -1099,13 +1100,13 @@ async def reset_user_password(
 # ── Fahrzeuge CRUD ────────────────────────────────────────────────────────────
 
 @router.get("/einheiten", response_class=HTMLResponse, include_in_schema=False)
-async def vehicles_list_alias(request: Request, db: Session = Depends(get_db),
+def vehicles_list_alias(request: Request, db: Session = Depends(get_db),
                               _=Depends(require_role("admin", "org_admin"))):
     return RedirectResponse("/admin/fahrzeuge", status_code=301)
 
 
 @router.get("/fahrzeuge", response_class=HTMLResponse)
-async def vehicles_list(
+def vehicles_list(
     request: Request, db: Session = Depends(get_db),
     _=Depends(require_role("admin", "org_admin")),
     filter_org_id: int | None = None,
@@ -1163,7 +1164,7 @@ async def vehicles_list(
 
 
 @router.post("/fahrzeuge/neu")
-async def create_vehicle(
+def create_vehicle(
     request: Request,
     code: str = Form(...), name: str = Form(...), type: str = Form(""),
     is_first_train: str = Form(""),
@@ -1211,7 +1212,7 @@ async def create_vehicle(
 
 
 @router.post("/fahrzeuge/neu-extern")
-async def create_external_resource(
+def create_external_resource(
     request: Request,
     org_name: str = Form(...), org_short: str = Form(""),
     code: str = Form(...), name: str = Form(...), type: str = Form(""),
@@ -1249,7 +1250,7 @@ async def create_external_resource(
 
 
 @router.get("/fahrzeuge/zusammenfuehren", response_class=HTMLResponse)
-async def merge_vehicles_preview(
+def merge_vehicles_preview(
     request: Request, ids: str = "", db: Session = Depends(get_db),
     _=Depends(require_role("admin", "org_admin")),
 ):
@@ -1284,7 +1285,7 @@ async def merge_vehicles_preview(
 
 
 @router.post("/fahrzeuge/zusammenfuehren")
-async def merge_vehicles_apply(
+def merge_vehicles_apply(
     request: Request, winner_id: int = Form(...), loser_id: int = Form(...),
     db: Session = Depends(get_db), _=Depends(require_role("admin", "org_admin")),
 ):
@@ -1309,7 +1310,7 @@ async def merge_vehicles_apply(
 
 
 @router.post("/fahrzeuge/{vehicle_id}/edit")
-async def edit_vehicle(
+def edit_vehicle(
     vehicle_id: int, request: Request,
     code: str = Form(...), name: str = Form(...), type: str = Form(""),
     is_first_train: str = Form(""),
@@ -1352,7 +1353,7 @@ async def edit_vehicle(
 
 
 @router.post("/fahrzeuge/{vehicle_id}/edit-extern")
-async def edit_external_resource(
+def edit_external_resource(
     vehicle_id: int, request: Request,
     org_name: str = Form(...), org_short: str = Form(""),
     code: str = Form(...), name: str = Form(...), type: str = Form(""),
@@ -1381,7 +1382,7 @@ async def edit_external_resource(
 
 
 @router.post("/fahrzeuge/{vehicle_id}/toggle")
-async def toggle_vehicle(
+def toggle_vehicle(
     vehicle_id: int, request: Request, db: Session = Depends(get_db),
     _=Depends(require_role("admin", "org_admin")),
 ):
@@ -1396,7 +1397,7 @@ async def toggle_vehicle(
 
 
 @router.post("/fahrzeuge/{vehicle_id}/order/{direction}")
-async def reorder_vehicle(
+def reorder_vehicle(
     vehicle_id: int, direction: str, request: Request, db: Session = Depends(get_db),
     _=Depends(require_role("admin", "org_admin")),
 ):
@@ -1421,7 +1422,7 @@ async def reorder_vehicle(
 
 
 @router.post("/fahrzeuge/reorder")
-async def reorder_vehicles_bulk(
+def reorder_vehicles_bulk(
     request: Request,
     vehicle_ids: list[int] = Form([]),
     db: Session = Depends(get_db),
@@ -1438,7 +1439,7 @@ async def reorder_vehicles_bulk(
 
 
 @router.post("/fahrzeuge/{vehicle_id}/loeschen")
-async def delete_vehicle(
+def delete_vehicle(
     vehicle_id: int, request: Request, db: Session = Depends(get_db),
     _=Depends(require_role("admin", "org_admin")),
 ):
@@ -1459,7 +1460,7 @@ async def delete_vehicle(
 # ── Auftragsvorlagen CRUD ─────────────────────────────────────────────────────
 
 @router.get("/auftragsvorlagen", response_class=HTMLResponse)
-async def task_suggestions_list(request: Request, db: Session = Depends(get_db),
+def task_suggestions_list(request: Request, db: Session = Depends(get_db),
                                 _=Depends(require_role("admin", "org_admin"))):
     from sqlalchemy.orm import joinedload
     alarm_types = db.query(AlarmType).order_by(AlarmType.code).all()
@@ -1503,7 +1504,7 @@ async def task_suggestions_list(request: Request, db: Session = Depends(get_db),
 
 
 @router.post("/auftragsvorlagen/neu")
-async def create_task_suggestion(
+def create_task_suggestion(
     request: Request, text: str = Form(...),
     db: Session = Depends(get_db), _=Depends(require_role("admin", "org_admin")),
 ):
@@ -1520,7 +1521,7 @@ async def create_task_suggestion(
 
 
 @router.post("/auftragsvorlagen/{sid}/edit")
-async def edit_task_suggestion(
+def edit_task_suggestion(
     sid: int, request: Request, text: str = Form(...),
     db: Session = Depends(get_db), _=Depends(require_role("admin", "org_admin")),
 ):
@@ -1538,7 +1539,7 @@ async def edit_task_suggestion(
 
 
 @router.post("/auftragsvorlagen/{sid}/alarms")
-async def save_task_suggestion_alarms(
+def save_task_suggestion_alarms(
     sid: int, request: Request,
     alarm_type_codes: list[str] = Form([]),
     db: Session = Depends(get_db), _=Depends(require_role("admin", "org_admin")),
@@ -1557,7 +1558,7 @@ async def save_task_suggestion_alarms(
 
 
 @router.post("/auftragsvorlagen/{sid}/loeschen")
-async def delete_task_suggestion(
+def delete_task_suggestion(
     sid: int, request: Request, db: Session = Depends(get_db),
     _=Depends(require_role("admin", "org_admin")),
 ):
@@ -1571,7 +1572,7 @@ async def delete_task_suggestion(
 # ── Meldungsvorlagen CRUD ─────────────────────────────────────────────────────
 
 @router.get("/meldungsvorlagen", response_class=HTMLResponse)
-async def msg_suggestions_list(request: Request, db: Session = Depends(get_db),
+def msg_suggestions_list(request: Request, db: Session = Depends(get_db),
                                _=Depends(require_role("admin", "org_admin"))):
     from sqlalchemy.orm import joinedload
     alarm_types = db.query(AlarmType).order_by(AlarmType.code).all()
@@ -1615,7 +1616,7 @@ async def msg_suggestions_list(request: Request, db: Session = Depends(get_db),
 
 
 @router.post("/meldungsvorlagen/neu")
-async def create_msg_suggestion(
+def create_msg_suggestion(
     request: Request, text: str = Form(...),
     db: Session = Depends(get_db), _=Depends(require_role("admin", "org_admin")),
 ):
@@ -1632,7 +1633,7 @@ async def create_msg_suggestion(
 
 
 @router.post("/meldungsvorlagen/{sid}/edit")
-async def edit_msg_suggestion(
+def edit_msg_suggestion(
     sid: int, request: Request, text: str = Form(...),
     db: Session = Depends(get_db), _=Depends(require_role("admin", "org_admin")),
 ):
@@ -1650,7 +1651,7 @@ async def edit_msg_suggestion(
 
 
 @router.post("/meldungsvorlagen/{sid}/alarms")
-async def save_msg_suggestion_alarms(
+def save_msg_suggestion_alarms(
     sid: int, request: Request,
     alarm_type_codes: list[str] = Form([]),
     db: Session = Depends(get_db), _=Depends(require_role("admin", "org_admin")),
@@ -1669,7 +1670,7 @@ async def save_msg_suggestion_alarms(
 
 
 @router.post("/meldungsvorlagen/{sid}/loeschen")
-async def delete_msg_suggestion(
+def delete_msg_suggestion(
     sid: int, request: Request, db: Session = Depends(get_db),
     _=Depends(require_role("admin", "org_admin")),
 ):
@@ -1683,7 +1684,7 @@ async def delete_msg_suggestion(
 # ── Alarmtypen CRUD ───────────────────────────────────────────────────────────
 
 @router.get("/alarmtypen", response_class=HTMLResponse)
-async def alarm_types_list(request: Request, db: Session = Depends(get_db),
+def alarm_types_list(request: Request, db: Session = Depends(get_db),
                            _=Depends(require_role("admin"))):
     alarm_types = db.query(AlarmType).order_by(AlarmType.code).all()
     saved = request.query_params.get("saved")
@@ -1694,7 +1695,7 @@ async def alarm_types_list(request: Request, db: Session = Depends(get_db),
 
 
 @router.post("/alarmtypen/neu")
-async def create_alarm_type(
+def create_alarm_type(
     request: Request,
     code: str = Form(...), category: str = Form("T"), label: str = Form(""),
     wp_einsatzart: str = Form(""),
@@ -1721,7 +1722,7 @@ async def create_alarm_type(
 
 
 @router.post("/alarmtypen/{code}/edit")
-async def edit_alarm_type(
+def edit_alarm_type(
     code: str, request: Request,
     category: str = Form("T"), label: str = Form(""),
     wp_einsatzart: str = Form(""),
@@ -1743,7 +1744,7 @@ async def edit_alarm_type(
 
 
 @router.post("/alarmtypen/{code}/loeschen")
-async def delete_alarm_type(
+def delete_alarm_type(
     code: str, request: Request, db: Session = Depends(get_db),
     _=Depends(require_role("admin")),
 ):
@@ -1762,7 +1763,7 @@ async def delete_alarm_type(
 # ── Ausrückordnung ────────────────────────────────────────────────────────────
 
 @router.get("/ausrueckordnung", response_class=HTMLResponse)
-async def dispatch_order_list(request: Request, db: Session = Depends(get_db),
+def dispatch_order_list(request: Request, db: Session = Depends(get_db),
                               _=Depends(require_role("admin", "org_admin"))):
     user = request.state.user
     variant = request.query_params.get("variant", "standard")
@@ -1829,7 +1830,7 @@ async def dispatch_order_list(request: Request, db: Session = Depends(get_db),
 
 
 @router.post("/ausrueckordnung/{alarm_type_code}")
-async def save_dispatch_order(
+def save_dispatch_order(
     alarm_type_code: str, request: Request,
     vehicle_ids: list[int] = Form([]),
     db: Session = Depends(get_db), _=Depends(require_role("admin", "org_admin")),
@@ -1862,7 +1863,7 @@ async def save_dispatch_order(
 
 
 @router.get("/ausrueckordnung/{alarm_type_code}/reset")
-async def reset_dispatch_order(
+def reset_dispatch_order(
     alarm_type_code: str, request: Request, db: Session = Depends(get_db),
     _=Depends(require_role("admin")),
 ):
@@ -1886,7 +1887,7 @@ async def reset_dispatch_order(
 # ── Qualifikationen CRUD ──────────────────────────────────────────────────────
 
 @router.get("/qualifikationen", response_class=HTMLResponse)
-async def qualifications_list(request: Request, db: Session = Depends(get_db),
+def qualifications_list(request: Request, db: Session = Depends(get_db),
                               _=Depends(require_role("admin", "fahrtenbuch_admin"))):
     qualifications = db.query(Qualification).order_by(Qualification.code).all()
     from sqlalchemy import func as sqlfunc
@@ -1903,7 +1904,7 @@ async def qualifications_list(request: Request, db: Session = Depends(get_db),
 
 
 @router.post("/qualifikationen/neu")
-async def create_qualification(
+def create_qualification(
     request: Request, code: str = Form(...), label: str = Form(...),
     is_einsatzleiter: str = Form(""), is_gruppenkommandant: str = Form(""),
     maschinist_stufe: int | None = Form(None),
@@ -1921,7 +1922,7 @@ async def create_qualification(
 
 
 @router.post("/qualifikationen/{qid}/edit")
-async def edit_qualification(
+def edit_qualification(
     qid: int, request: Request, code: str = Form(...), label: str = Form(...),
     is_einsatzleiter: str = Form(""), is_gruppenkommandant: str = Form(""),
     maschinist_stufe: int | None = Form(None),
@@ -1939,7 +1940,7 @@ async def edit_qualification(
 
 
 @router.post("/qualifikationen/{qid}/loeschen")
-async def delete_qualification(
+def delete_qualification(
     qid: int, request: Request, db: Session = Depends(get_db),
     _=Depends(require_role("admin", "fahrtenbuch_admin")),
 ):
@@ -1956,7 +1957,7 @@ async def delete_qualification(
 # ── Lage-Hinweise CRUD ────────────────────────────────────────────────────────
 
 @router.get("/lage-hinweise", response_class=HTMLResponse)
-async def lage_hints_list(request: Request, db: Session = Depends(get_db),
+def lage_hints_list(request: Request, db: Session = Depends(get_db),
                           _=Depends(require_role("admin", "org_admin"))):
     from sqlalchemy.orm import joinedload
     alarm_types = db.query(AlarmType).order_by(AlarmType.code).all()
@@ -2003,7 +2004,7 @@ async def lage_hints_list(request: Request, db: Session = Depends(get_db),
 
 
 @router.post("/lage-hinweise/neu")
-async def create_lage_hint(
+def create_lage_hint(
     request: Request, text: str = Form(...),
     db: Session = Depends(get_db), _=Depends(require_role("admin", "org_admin")),
 ):
@@ -2017,7 +2018,7 @@ async def create_lage_hint(
 
 
 @router.post("/lage-hinweise/{hid}/edit")
-async def edit_lage_hint(
+def edit_lage_hint(
     hid: int, request: Request, text: str = Form(...),
     db: Session = Depends(get_db), _=Depends(require_role("admin", "org_admin")),
 ):
@@ -2029,7 +2030,7 @@ async def edit_lage_hint(
 
 
 @router.post("/lage-hinweise/{hid}/alarms")
-async def save_lage_hint_alarms(
+def save_lage_hint_alarms(
     hid: int, request: Request,
     alarm_type_codes: list[str] = Form([]),
     db: Session = Depends(get_db), _=Depends(require_role("admin", "org_admin")),
@@ -2048,7 +2049,7 @@ async def save_lage_hint_alarms(
 
 
 @router.post("/lage-hinweise/{hid}/loeschen")
-async def delete_lage_hint(
+def delete_lage_hint(
     hid: int, request: Request, db: Session = Depends(get_db),
     _=Depends(require_role("admin", "org_admin")),
 ):
@@ -2060,7 +2061,7 @@ async def delete_lage_hint(
 
 
 @router.post("/lage-hinweise/{hid}/order/{direction}")
-async def reorder_lage_hint(
+def reorder_lage_hint(
     hid: int, direction: str, request: Request, db: Session = Depends(get_db),
     _=Depends(require_role("admin", "org_admin")),
 ):
@@ -2082,7 +2083,7 @@ async def reorder_lage_hint(
 # ── Default-Meldungen CRUD ────────────────────────────────────────────────────
 
 @router.get("/default-meldungen", response_class=HTMLResponse)
-async def default_messages_list(request: Request, db: Session = Depends(get_db),
+def default_messages_list(request: Request, db: Session = Depends(get_db),
                                 _=Depends(require_role("admin", "org_admin"))):
     from sqlalchemy.orm import joinedload
     alarm_types = db.query(AlarmType).order_by(AlarmType.code).all()
@@ -2128,7 +2129,7 @@ async def default_messages_list(request: Request, db: Session = Depends(get_db),
 
 
 @router.post("/default-meldungen/neu")
-async def create_default_message(
+def create_default_message(
     request: Request, text: str = Form(...),
     db: Session = Depends(get_db), _=Depends(require_role("admin", "org_admin")),
 ):
@@ -2145,7 +2146,7 @@ async def create_default_message(
 
 
 @router.post("/default-meldungen/{mid}/edit")
-async def edit_default_message(
+def edit_default_message(
     mid: int, request: Request, text: str = Form(...),
     db: Session = Depends(get_db), _=Depends(require_role("admin", "org_admin")),
 ):
@@ -2163,11 +2164,11 @@ async def edit_default_message(
 
 
 @router.post("/default-meldungen/{mid}/alarms")
-async def save_default_message_alarms(
+def save_default_message_alarms(
     mid: int, request: Request,
     db: Session = Depends(get_db), _=Depends(require_role("admin", "org_admin")),
 ):
-    form = await request.form()
+    form = run_async(request.form)
     alarm_type_codes = form.getlist("alarm_type_codes")
     m = db.get(DefaultMessage, mid)
     if not m:
@@ -2192,7 +2193,7 @@ async def save_default_message_alarms(
 
 
 @router.post("/default-meldungen/{mid}/loeschen")
-async def delete_default_message(
+def delete_default_message(
     mid: int, request: Request, db: Session = Depends(get_db),
     _=Depends(require_role("admin", "org_admin")),
 ):
@@ -2206,7 +2207,7 @@ async def delete_default_message(
 # ── System-Einstellungen ──────────────────────────────────────────────────────
 
 @router.get("/system-einstellungen", response_class=HTMLResponse)
-async def system_settings_page(request: Request, db: Session = Depends(get_db),
+def system_settings_page(request: Request, db: Session = Depends(get_db),
                                _=Depends(require_role("system_admin"))):
     settings_raw = db.query(SystemSettings).all()
     settings = {s.key: s.value for s in settings_raw}
@@ -2223,12 +2224,12 @@ async def system_settings_page(request: Request, db: Session = Depends(get_db),
 
 
 @router.post("/system-einstellungen")
-async def save_system_settings(
+def save_system_settings(
     request: Request, db: Session = Depends(get_db),
     _=Depends(require_role("system_admin")),
     new_key: str = Form(""), new_value: str = Form(""),
 ):
-    form = await request.form()
+    form = run_async(request.form)
     known_keys = [
         # Web Push (VAPID)
         "vapid_public_key", "vapid_private_key", "vapid_email", "enable_push",
@@ -2547,7 +2548,7 @@ async def backup_page(request: Request, _=Depends(require_role("system_admin")))
 
 
 @router.get("/backup/json")
-async def backup_json(request: Request, db: Session = Depends(get_db),
+def backup_json(request: Request, db: Session = Depends(get_db),
                       _=Depends(require_role("system_admin"))):
     import json as json_lib
 
@@ -2633,7 +2634,7 @@ async def backup_json(request: Request, db: Session = Depends(get_db),
 
 
 @router.post("/backup/restore", response_class=HTMLResponse)
-async def backup_restore(
+def backup_restore(
     request: Request,
     db: Session = Depends(get_db),
     _=Depends(require_role("system_admin")),
@@ -2642,7 +2643,7 @@ async def backup_restore(
     import json as json_lib
     lines = []
     try:
-        raw = await backup_file.read()
+        raw = run_async(backup_file.read)
         data = json_lib.loads(raw)
 
         dept_map = {d.slug: d for d in db.query(FireDept).all()}
@@ -2817,7 +2818,7 @@ async def backup_restore(
 # ── Lagekarte-Tokens ──────────────────────────────────────────────────────────
 
 @router.get("/lagekarte-tokens", response_class=HTMLResponse)
-async def lagekarte_tokens(
+def lagekarte_tokens(
     request: Request, db: Session = Depends(get_db),
     _=Depends(require_role("admin")),
 ):
@@ -2842,7 +2843,7 @@ async def lagekarte_tokens(
 
 
 @router.post("/lagekarte-tokens/neu")
-async def create_lagekarte_token(
+def create_lagekarte_token(
     request: Request,
     label: str = Form(...),
     einsatz_id: str = Form(""),
@@ -2901,7 +2902,7 @@ async def create_lagekarte_token(
 
 
 @router.post("/lagekarte-tokens/{token_id}/sperren")
-async def revoke_lagekarte_token(
+def revoke_lagekarte_token(
     token_id: int, request: Request,
     db: Session = Depends(get_db), _=Depends(require_role("admin")),
 ):
@@ -2918,7 +2919,7 @@ async def revoke_lagekarte_token(
 
 
 @router.post("/lagekarte-tokens/{token_id}/loeschen")
-async def delete_lagekarte_token(
+def delete_lagekarte_token(
     token_id: int, request: Request,
     db: Session = Depends(get_db), _=Depends(require_role("admin")),
 ):
@@ -2937,7 +2938,7 @@ async def delete_lagekarte_token(
 
 
 @router.post("/lagekarte-tokens/bulk-loeschen")
-async def bulk_delete_lagekarte_tokens(
+def bulk_delete_lagekarte_tokens(
     request: Request,
     token_ids: list[int] = Form(default=[]),
     db: Session = Depends(get_db),
@@ -2960,7 +2961,7 @@ async def bulk_delete_lagekarte_tokens(
 # ── Push-Nachrichten ──────────────────────────────────────────────────────────
 
 @router.get("/push-nachrichten", response_class=HTMLResponse)
-async def push_notifications_page(
+def push_notifications_page(
     request: Request,
     db: Session = Depends(get_db),
     _=Depends(require_role("admin")),
@@ -3051,7 +3052,7 @@ async def push_notifications_page(
 
 
 @router.post("/push-nachrichten/senden")
-async def send_push_notification(
+def send_push_notification(
     request: Request,
     title: str = Form(...),
     body: str = Form(...),
@@ -3083,7 +3084,7 @@ async def send_push_notification(
 # ── Geräte-Login ──────────────────────────────────────────────────────────────
 
 @router.get("/geraete-login", response_class=HTMLResponse)
-async def device_tokens_list(
+def device_tokens_list(
     request: Request,
     db: Session = Depends(get_db),
     _=Depends(require_role("admin")),
@@ -3141,7 +3142,7 @@ async def device_tokens_list(
 
 
 @router.get("/geraete-login/{token_id}", response_class=HTMLResponse)
-async def device_token_detail(
+def device_token_detail(
     token_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -3162,7 +3163,7 @@ async def device_token_detail(
 
 
 @router.post("/geraete-login/neu")
-async def create_device_token(
+def create_device_token(
     request: Request,
     label: str = Form(...),
     device_type: str = Form("unit"),  # "unit" | "sms-gateway" | "unit+sms-gateway"
@@ -3365,7 +3366,7 @@ def _assert_gateway_token_access(gw: SmsGatewayToken | None, current_user) -> No
 
 
 @router.post("/geraete-login/gateway/{token_id}/prioritaet")
-async def gateway_token_reorder(
+def gateway_token_reorder(
     token_id: int,
     request: Request,
     richtung: str = Form(...),
@@ -3391,7 +3392,7 @@ async def gateway_token_reorder(
 
 
 @router.post("/geraete-login/gateway/{token_id}/widerrufen")
-async def revoke_gateway_token(
+def revoke_gateway_token(
     token_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -3409,7 +3410,7 @@ async def revoke_gateway_token(
 
 
 @router.post("/geraete-login/{token_id}/gsl-profil")
-async def assign_device_gsl_profil(
+def assign_device_gsl_profil(
     token_id: int,
     request: Request,
     gsl_profil: str = Form(""),
@@ -3431,7 +3432,7 @@ async def assign_device_gsl_profil(
 
 
 @router.post("/geraete-login/gateway/{token_id}/reaktivieren")
-async def reactivate_gateway_token(
+def reactivate_gateway_token(
     token_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -3449,7 +3450,7 @@ async def reactivate_gateway_token(
 
 
 @router.post("/geraete-login/gateway/{token_id}/loeschen")
-async def delete_gateway_token(
+def delete_gateway_token(
     token_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -3477,7 +3478,7 @@ def _assert_device_token_access(dt: DeviceToken | None, current_user) -> None:
 
 
 @router.post("/geraete-login/{token_id}/loeschen")
-async def delete_device_token(
+def delete_device_token(
     token_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -3528,7 +3529,7 @@ async def delete_device_token(
 
 
 @router.post("/geraete-login/{token_id}/widerrufen")
-async def revoke_device_token(
+def revoke_device_token(
     token_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -3550,7 +3551,7 @@ async def revoke_device_token(
 
 
 @router.post("/geraete-login/{token_id}/reaktivieren")
-async def reactivate_device_token(
+def reactivate_device_token(
     token_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -3572,7 +3573,7 @@ async def reactivate_device_token(
 
 
 @router.post("/geraete-login/{token_id}/pin-neu")
-async def regenerate_device_pairing_pin(
+def regenerate_device_pairing_pin(
     token_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -3602,7 +3603,7 @@ async def regenerate_device_pairing_pin(
 
 
 @router.post("/geraete-login/{token_id}/fahrzeug")
-async def assign_device_vehicle(
+def assign_device_vehicle(
     token_id: int,
     request: Request,
     vehicle_master_id: int | None = Form(None),
