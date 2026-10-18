@@ -86,6 +86,7 @@ def render_objektblatt_pdf(
     base_url: str = "",
     *,
     mit_hinweisen: bool = False,
+    mit_kontakten: bool = True,
     karte_png: bytes | None = None,
 ) -> bytes:
     """Objektblatt A4 (1–2 Seiten). mit_hinweisen: Wohnanlagen-Hinweise andrucken
@@ -135,6 +136,7 @@ def render_objektblatt_pdf(
         kontakt_arten=kontakt_arten,
         symbol_legende=symbol_legende,
         mit_hinweisen=mit_hinweisen,
+        mit_kontakten=mit_kontakten,
         erstellt_str=format_local_datetime(objekt.erstellt_am, org),
         geaendert_str=format_local_datetime(objekt.aktualisiert_am, org),
         gedruckt_str=format_local_datetime(datetime.now(UTC), org),
@@ -175,13 +177,14 @@ def objektblatt_mit_anhang(
     *,
     mit_anhang: bool = True,
     mit_hinweisen: bool = False,
+    mit_kontakten: bool = True,
 ) -> bytes:
     """Objektblatt + optional alle 'bei Einsatz drucken'-Seiten als ein PDF."""
     from pypdf import PdfReader, PdfWriter
 
     from app.services.objekt_dokument_service import absolute_pfad
 
-    blatt = render_objektblatt_pdf(objekt, org, base_url, mit_hinweisen=mit_hinweisen)
+    blatt = render_objektblatt_pdf(objekt, org, base_url, mit_hinweisen=mit_hinweisen, mit_kontakten=mit_kontakten)
     if not mit_anhang:
         return blatt
 
@@ -208,13 +211,14 @@ def sammelmappe(
     base_url: str = "",
     *,
     mit_anhang: bool = False,
+    mit_kontakten: bool = True,
 ) -> bytes:
     """Mehrere Objektblaetter (Mappe fuers Fahrzeug) in einem PDF."""
     from pypdf import PdfReader, PdfWriter
 
     writer = PdfWriter()
     for objekt in objekte:
-        pdf = objektblatt_mit_anhang(objekt, org, db, base_url, mit_anhang=mit_anhang)
+        pdf = objektblatt_mit_anhang(objekt, org, db, base_url, mit_anhang=mit_anhang, mit_kontakten=mit_kontakten)
         for page in PdfReader(io.BytesIO(pdf)).pages:
             writer.add_page(page)
     buf = io.BytesIO()

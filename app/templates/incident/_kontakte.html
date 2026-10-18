@@ -1,0 +1,43 @@
+<div id="einsatz-kontakte" class="card" style="padding:14px;">
+  <h3 style="margin-top:0;">📞 Einsatzkontakte</h3>
+  {% for k in einsatzkontakte %}
+  <div style="margin-bottom:12px;">
+    <strong>{{ k.anzeigename }}</strong>
+    {% if k.funktion %}<span>{{ k.funktion }}</span>{% endif %}
+    {% if k.organisation %}<span class="text-muted"> · {{ k.organisation }}</span>{% endif %}
+    {% if k.hinweis %}<div>{{ k.hinweis }}</div>{% endif %}
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+      {% for tel in k.telefone %}<a class="btn btn--primary btn--sm" href="tel:{{ tel.nummer|tel }}">📞 {{ tel.label or tel.nummer }}</a>{% endfor %}
+      {% if kontakte_vollzugriff %}<a class="btn btn--ghost btn--sm" href="/kontakte/{{ k.id }}">Kontakt öffnen</a>{% endif %}
+      {% if kontakte_bearbeiten %}
+      <form hx-post="/einsatz/{{ incident.id }}/kontakte/zuordnen" hx-target="#einsatz-kontakte" hx-swap="outerHTML">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <input type="hidden" name="kontakt_id" value="{{ k.id }}">
+        <input class="form-input" name="hinweis" maxlength="500" value="{{ k.hinweis or '' }}" aria-label="Hinweis zum Einsatzkontakt">
+        <button class="btn btn--ghost btn--sm">Hinweis speichern</button>
+      </form>
+      <form hx-post="/einsatz/{{ incident.id }}/kontakte/{{ k.id }}/entfernen" hx-target="#einsatz-kontakte" hx-swap="outerHTML">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <button class="btn btn--ghost btn--sm">Aus Einsatz entfernen</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+  {% else %}<p class="text-muted">Keine zusätzlichen Kontakte zugeordnet. Objektkontakte stehen beim jeweiligen Objekt.</p>{% endfor %}
+  {% if kontakte_bearbeiten %}
+  <form hx-get="/einsatz/{{ incident.id }}/kontakte" hx-target="#einsatz-kontakte" hx-swap="outerHTML">
+    <label class="form-label" for="einsatz-kontakt-suche">Kontakt zum Einsatz hinzufügen</label>
+    <input id="einsatz-kontakt-suche" class="form-input" type="search" name="q" value="{{ q }}" placeholder="Name, Organisation oder Telefonnummer">
+    <button class="btn btn--ghost btn--sm">Suchen</button>
+  </form>
+  {% for k in kontakt_kandidaten %}
+  <form hx-post="/einsatz/{{ incident.id }}/kontakte/zuordnen" hx-target="#einsatz-kontakte" hx-swap="outerHTML" style="margin-top:8px;">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <input type="hidden" name="kontakt_id" value="{{ k.id }}">
+    <strong>{{ k.anzeigename }}</strong>
+    <input class="form-input" name="hinweis" maxlength="500" placeholder="Hinweis für diesen Einsatz (optional)">
+    <button class="btn btn--primary btn--sm">Zum Einsatz hinzufügen</button>
+  </form>
+  {% endfor %}
+  {% endif %}
+</div>

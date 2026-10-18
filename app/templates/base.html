@@ -44,7 +44,7 @@
   </script>
   {% block head_extra %}{% endblock %}
 </head>
-<body x-data="appState()" @incident-created.window="onIncidentCreated($event.detail)"
+<body data-kontakt-cache-owner="{{ user.id if user else 0 }}:{{ user.org_id if user else 0 }}:{{ 1 if can_view_kontakt_directory(request) else 0 }}:{{ request.state.device_token_id or 0 }}:{{ request.state.qr_incident_id or 0 }}:{{ request.state.qr_lage_id or 0 }}" x-data="appState()" @incident-created.window="onIncidentCreated($event.detail)"
       :class="{ 'mobile-menu-open': mobileMenuOpen || profilSheetOpen }">
 
   {% if user %}
@@ -114,7 +114,7 @@
           {% if request.state.planspiel_enabled and ('admin' in user_roles or 'org_admin' in user_roles or 'system_admin' in user_roles or 'uebungsleiter' in user_roles or 'uebungsbeobachter' in user_roles) %}
           <a href="/planspiele" class="{% if request.url.path.startswith('/planspiele') %}active{% endif %}">🎲 Planspiele</a>
           {% endif %}
-          {% if request.state.kontakte_enabled %}
+          {% if request.state.kontakte_enabled and can_view_kontakt_directory(request) %}
           <a href="/kontakte" class="{% if request.url.path.startswith('/kontakte') %}active{% endif %}">👥 Kontakte</a>
           {% endif %}
           {% if request.state.nachschlagewerke_enabled %}
@@ -284,7 +284,7 @@
       {% if request.state.planspiel_enabled and ('admin' in user_roles or 'org_admin' in user_roles or 'system_admin' in user_roles or 'uebungsleiter' in user_roles or 'uebungsbeobachter' in user_roles) %}
       <a href="/planspiele" class="mobile-menu__link {% if request.url.path.startswith('/planspiele') %}active{% endif %}">🎲 Planspiele</a>
       {% endif %}
-      {% if request.state.kontakte_enabled %}
+      {% if request.state.kontakte_enabled and can_view_kontakt_directory(request) %}
       <a href="/kontakte" class="mobile-menu__link {% if request.url.path.startswith('/kontakte') %}active{% endif %}">👥 Kontakte</a>
       {% endif %}
       {% if request.state.nachschlagewerke_enabled %}

@@ -6,6 +6,7 @@ import json
 from typing import Any
 
 from app.core.audit import write_audit
+from app.core.permissions import KONTAKT_LESE_ROLLEN
 from app.mcp.context import MCPContext
 from app.mcp.registry import register_tool
 from app.models.kontakt import (
@@ -111,7 +112,7 @@ def _audit(context: MCPContext, action: str, kontakt_id: int, payload: dict[str,
 @register_tool(
     name="kontakt_suchen",
     description="Sucht zentrale Kontakte der eigenen Organisation.",
-    required_roles=KONTAKT_ROLLEN,
+    required_roles=KONTAKT_LESE_ROLLEN,
     module_check=kontakte_modul_aktiv,
 )
 async def kontakt_suchen(
@@ -187,7 +188,7 @@ async def kontakt_duplikate_pruefen(
 @register_tool(
     name="kontakt_lesen",
     description="Liest einen zentralen Kontakt mit Telefonen, Kategorien und Objektzuordnungen.",
-    required_roles=KONTAKT_ROLLEN,
+    required_roles=KONTAKT_LESE_ROLLEN,
     module_check=kontakte_modul_aktiv,
 )
 async def kontakt_lesen(context: MCPContext, kontakt_id: int) -> dict[str, object]:
@@ -215,7 +216,7 @@ async def kontakt_lesen(context: MCPContext, kontakt_id: int) -> dict[str, objec
 @register_tool(
     name="kontakt_kategorien",
     description="Listet die Kontaktkategorien der eigenen Organisation.",
-    required_roles=KONTAKT_ROLLEN,
+    required_roles=KONTAKT_LESE_ROLLEN,
     module_check=kontakte_modul_aktiv,
 )
 async def kontakt_kategorien(context: MCPContext) -> dict[str, object]:
@@ -366,7 +367,7 @@ async def kontakt_organisation_upsert(context: MCPContext, organisation: dict[st
 @register_tool(
     name="kontakt_organisation_suchen",
     description="Sucht Organisationen einschließlich übergeordneter Organisation und Ansprechpartnern.",
-    required_roles=KONTAKT_ROLLEN, module_check=kontakte_modul_aktiv,
+    required_roles=KONTAKT_LESE_ROLLEN, module_check=kontakte_modul_aktiv,
 )
 async def kontakt_organisation_suchen(context: MCPContext, q: str = "", limit: int = 25) -> dict[str, object]:
     _limit(limit)

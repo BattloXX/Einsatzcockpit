@@ -1,3 +1,20 @@
+// Personenbezogene Offline-Seiten gehoeren zur angemeldeten Identitaet und
+// deren Kontaktrechten. Kontowechsel und Rechteentzug verwerfen alte Kopien.
+window.ecKontaktCacheReady = (async function () {
+  if (!("caches" in window) || !document.body) return;
+  var owner = document.body.dataset.kontaktCacheOwner;
+  if (!owner) return;
+  var sameOwner = false;
+  try { sameOwner = localStorage.getItem("ec-kontakt-cache-owner") === owner; } catch (e) {}
+  if (!sameOwner) {
+    var keys = await caches.keys();
+    await Promise.all(keys.filter(function (key) {
+      return /^ec-(board|objekt)-/.test(key);
+    }).map(function (key) { return caches.delete(key); }));
+    try { localStorage.setItem("ec-kontakt-cache-owner", owner); } catch (e) {}
+  }
+})();
+
 /* ─── Site-Detail-Panel: gemeinsames Schließen für Board-Dialog & Karten-Sidebar ─── */
 window.closeSiteDetailPanel = function(el) {
   const dlg = el.closest('dialog');

@@ -2,11 +2,11 @@
 // Cache-Namen bei jedem Deploy mit spürbaren JS/CSS-Änderungen erhöhen (v1 -> v2 -> ...):
 // der activate-Handler löscht dann automatisch alle Caches mit altem Namen, statt dass
 // veraltete Board-Skripte unbegrenzt im Cache liegen bleiben ("F5 nötig nach Update").
-const CACHE = 'ec-v18';
-const BOARD_CACHE = 'ec-board-v3';
+const CACHE = 'ec-v19';
+const BOARD_CACHE = 'ec-board-v4';
 // Objektverwaltung: Offline-Precache der Android-App (objekt_offline_sync.js
-// befuellt ihn; hier nur lesen/ergaenzen — App-Updates loeschen ihn nicht)
-const OBJEKT_CACHE = 'ec-objekt-v1';
+// befuellt ihn; Version 2 entfernt alte Kontaktseiten mit zu weiten Rechten)
+const OBJEKT_CACHE = 'ec-objekt-v2';
 // Nachschlagewerke: Gefahrgut-Offline-Index (network-first) + unveraenderliche
 // Rettungskarten-PDFs (cache-first, /nachschlagewerk-cache/). App-Updates
 // loeschen ihn nicht (Offline-Bestand bleibt erhalten).
@@ -209,16 +209,31 @@ self.addEventListener('fetch', e => {
     return;
   }
 
+  // Einsatzkontakte und Objektfragmente bleiben fuer den zuletzt berechtigten
+  // Einsatz offline nutzbar. Ein serverseitiger Entzug entfernt den alten Stand.
+  if (/^\/einsatz\/\d+\/kontakte$/.test(url.pathname) || /^\/objekte\/\d+\/einsatz-fragment$/.test(url.pathname)) {
+    e.respondWith(fetch(e.request).then(async res => {
+      const cache = await caches.open(BOARD_CACHE);
+      if (res.ok) await cache.put(e.request, res.clone());
+      else await cache.delete(e.request);
+      return res;
+    }).catch(async () => (await caches.match(e.request, { cacheName: BOARD_CACHE }))
+      || new Response('Offline', { status: 503 })));
+    return;
+  }
+
   // Board pages (/einsatz/<id>[/info]) sowie Objekt-Verwaltungs- und
   // Einsatzansichten (/objekte/<id>[/einsatz])
   // — network-first, cache last successful response (Objektinfo im Fahrzeug bei Funkloch)
   if (/^\/einsatz\/\d+(\/info)?$/.test(url.pathname) || /^\/objekte\/\d+(\/einsatz)?$/.test(url.pathname)) {
     e.respondWith(
       fetch(e.request)
-        .then(res => {
+        .then(async res => {
           if (res.ok) {
             const clone = res.clone();
-            caches.open(BOARD_CACHE).then(c => c.put(e.request, clone));
+            await caches.open(BOARD_CACHE).then(c => c.put(e.request, clone));
+          } else {
+            await Promise.all([BOARD_CACHE, OBJEKT_CACHE].map(name => caches.open(name).then(c => c.delete(e.request))));
           }
           return res;
         })
@@ -238,7 +253,7 @@ self.addEventListener('fetch', e => {
               headers: { 'Content-Type': 'text/html; charset=utf-8', 'X-Offline': '1' },
             });
           }
-          return caches.match('/') || new Response('Offline', { status: 503 });
+          return await caches.match('/') || new Response('Offline', { status: 503 });
         })
     );
     return;
@@ -253,6 +268,8 @@ self.addEventListener('fetch', e => {
           if (res.ok) {
             const cache = await caches.open(OBJEKT_CACHE);
             await cache.put(e.request, res.clone());
+          } else {
+            await caches.open(OBJEKT_CACHE).then(c => c.delete(e.request));
           }
           return res;
         })
@@ -272,13 +289,16 @@ self.addEventListener('fetch', e => {
   // Übersichten aktualisiert außerdem jeder normale Online-Aufruf. Ohne diese
   // Regel fiel eine spätere Navigation im Funkloch durch, weil der generische
   // Netzwerkpfad HTML-Antworten nicht speichert.
-  if (url.pathname === '/objekte/' || url.pathname === '/kontakte' || /^\/kontakte\/\d+$/.test(url.pathname)) {
+  if (url.pathname === '/objekte/' || url.pathname === '/kontakte' || /^\/kontakte\/\d+$/.test(url.pathname)
+      || /^\/kontakte\/\d+\/profilbild$/.test(url.pathname)) {
     e.respondWith(
-      fetch(e.request)
+      fetch(e.request, { cache: "no-store" })
         .then(async res => {
           if (res.ok) {
             const cache = await caches.open(OBJEKT_CACHE);
             await cache.put(e.request, res.clone());
+          } else {
+            await caches.open(OBJEKT_CACHE).then(c => c.delete(e.request));
           }
           return res;
         })

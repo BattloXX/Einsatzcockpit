@@ -26,7 +26,7 @@
         {% endif %}
         <button type="button" class="btn btn--sm btn--ghost ei-noprint" title="Objektblatt drucken"
                 onclick="ecpgPrint({document_type:'objektblatt', objekt_id:{{ o.id }}, title:'Objektblatt drucken', localUrl:'/objekte/{{ o.id }}/objektblatt.pdf?anhang=1'})">🖨 Drucken</button>
-        <a href="/objekte/{{ o.id }}/einsatz" class="btn btn--sm btn--secondary ei-noprint">Objektinfo öffnen</a>
+        <a href="/objekte/{{ o.id }}/einsatz?incident_id={{ incident.id }}" class="btn btn--sm btn--secondary ei-noprint">Objektinfo öffnen</a>
         {% if darf_verknuepfen %}
         {% if v.status == 'bestaetigt' %}
         <form hx-post="/objekte/einsatz-panel/{{ incident.id }}/{{ v.id }}/benachrichtigen" hx-target="#ei-objekt-section" hx-swap="outerHTML" hx-confirm="Einsatzinfo jetzt an die Objektkontakte senden?" style="display:inline;margin:0;">
@@ -45,7 +45,7 @@
         {% endif %}
       </div>
     </div>
-    <div hx-get="/objekte/{{ o.id }}/einsatz-fragment" hx-trigger="load" hx-swap="innerHTML" style="margin-top:12px;">
+    <div hx-get="/objekte/{{ o.id }}/einsatz-fragment?incident_id={{ incident.id }}" hx-trigger="load" hx-swap="innerHTML" style="margin-top:12px;">
       <span class="text-muted">Lade Objektdaten …</span>
     </div>
   </div>

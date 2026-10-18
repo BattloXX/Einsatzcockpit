@@ -87,7 +87,7 @@
 </div>
 {% endif %}
 
-{% if objekt.kontakte %}
+{% if mit_kontakten and objekt.kontakte %}
 <h2>📞 Kontakte</h2>
 <table class="daten">
   {% for k in objekt.kontakte if k.zentraler_kontakt %}
@@ -119,7 +119,7 @@
   {% if wa.wohneinheiten is not none %}<tr><td class="k">Wohneinheiten</td><td>{{ wa.wohneinheiten }}</td></tr>{% endif %}
   {% if wa.geschosse is not none %}<tr><td class="k">Geschosse</td><td>{{ wa.geschosse }}</td></tr>{% endif %}
   {% if wa.stiegen is not none %}<tr><td class="k">Stiegen</td><td>{{ wa.stiegen }}</td></tr>{% endif %}
-  {% if wa.hausverwaltung_kontakt and wa.hausverwaltung_kontakt.zentraler_kontakt %}<tr><td class="k">Hausverwaltung</td><td>{{ wa.hausverwaltung_kontakt.zentraler_kontakt.anzeigename }}</td></tr>{% endif %}
+  {% if mit_kontakten and wa.hausverwaltung_kontakt and wa.hausverwaltung_kontakt.zentraler_kontakt %}<tr><td class="k">Hausverwaltung</td><td>{{ wa.hausverwaltung_kontakt.zentraler_kontakt.anzeigename }}</td></tr>{% endif %}
   {% if mit_hinweisen and wa.hinweise %}<tr><td class="k">Hinweise</td><td>{{ wa.hinweise }}</td></tr>{% endif %}
 </table>
 {% endif %}

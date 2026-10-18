@@ -106,9 +106,11 @@
     <button type="button" class="objekt-tabs__btn" :class="{ 'is-active': tab === 'dokumente' }"
             @click="tab = 'dokumente'; $dispatch('objekt-tab-dokumente')">📄 Dokumente{% if dokument_count %}
       <span class="objekt-tabs__badge">{{ dokument_count }}</span>{% endif %}</button>
+    {% if kontakt_vollzugriff %}
     <button type="button" class="objekt-tabs__btn" :class="{ 'is-active': tab === 'datenpflege' }"
             @click="tab = 'datenpflege'; $dispatch('objekt-tab-datenpflege')">🔄 Datenpflege{% if aktualitaet != 'aktuell' %}
       <span class="objekt-tabs__badge {% if aktualitaet == 'ueberfaellig' %}badge-pill--red{% else %}badge-pill--amber{% endif %}">!</span>{% endif %}</button>
+    {% endif %}
   </nav>
 
   <!-- Tab: Übersicht (bisheriger Abschnitts-Stack ohne Lagekarte/Dokumente) -->
@@ -118,12 +120,12 @@
       <a href="#abschnitt-gefahren">Gefahren</a>
       <a href="#abschnitt-bma">BMA &amp; Schlüssel</a>
       <a href="#abschnitt-merkmale">Merkmale</a>
-      <a href="#abschnitt-kontakte">Kontakte</a>
+      {% if kontakt_vollzugriff %}<a href="#abschnitt-kontakte">Kontakte</a>{% endif %}
       <a href="#abschnitt-benachrichtigung">Benachrichtigung</a>
       <a href="#abschnitt-wohnanlage">Wohnanlage</a>
       <a href="#abschnitt-zusatzadressen">Zugänge / Stiegen</a>
       <a href="#abschnitt-einsaetze">Einsätze</a>
-      <a href="#abschnitt-protokoll">Protokoll</a>
+      {% if kontakt_vollzugriff %}<a href="#abschnitt-protokoll">Protokoll</a>{% endif %}
     </nav>
 
     <div style="display:flex;flex-direction:column;gap:16px;min-width:0;">
@@ -147,9 +149,11 @@
         <div class="card" style="padding:16px;"><span class="text-muted">Lade Merkmale …</span></div>
       </section>
 
+      {% if kontakt_vollzugriff %}
       <section id="abschnitt-kontakte" hx-get="/objekte/{{ objekt.id }}/kontakte" hx-trigger="load" hx-swap="innerHTML">
         <div class="card" style="padding:16px;"><span class="text-muted">Lade Kontakte …</span></div>
       </section>
+      {% endif %}
 
       <section id="abschnitt-benachrichtigung" hx-get="/objekte/{{ objekt.id }}/benachrichtigung" hx-trigger="load" hx-swap="innerHTML">
         <div class="card" style="padding:16px;"><span class="text-muted">Lade Benachrichtigung …</span></div>
@@ -167,9 +171,11 @@
         <div class="card" style="padding:16px;"><span class="text-muted">Lade Einsätze …</span></div>
       </section>
 
+{% if kontakt_vollzugriff %}
       <section id="abschnitt-protokoll" hx-get="/objekte/{{ objekt.id }}/protokoll" hx-trigger="load" hx-swap="innerHTML">
         <div class="card" style="padding:16px;"><span class="text-muted">Lade Protokoll …</span></div>
       </section>
+{% endif %}
 
       {% if is_admin %}
       <div class="card" style="padding:16px;border-color:var(--red,#b71921);">
@@ -202,12 +208,14 @@
   </div>
 
   <!-- Tab: Datenpflege (lazy bei erster Aktivierung geladen) -->
+{% if kontakt_vollzugriff %}
   <div x-show="tab === 'datenpflege'" x-cloak>
     <section id="abschnitt-datenpflege" hx-get="/objekte/{{ produktiv_objekt_id }}/datenpflege"
              hx-trigger="objekt-tab-datenpflege from:body once" hx-swap="innerHTML">
       <div class="card" style="padding:16px;"><span class="text-muted">Lade Datenpflege …</span></div>
     </section>
   </div>
+{% endif %}
 </div>
 {% include "_print_dialog.html" %}
 {% endblock %}

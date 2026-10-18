@@ -16,7 +16,7 @@
 (function () {
   "use strict";
 
-  var CACHE_NAME = "ec-objekt-v1";
+  var CACHE_NAME = "ec-objekt-v2";
   var SYNC_INTERVALL_MS = 6 * 60 * 60 * 1000; // 6 h
   var LS_KEY = "ec_objekt_sync_zuletzt";
   var DETAIL_FRAGMENTE = [
@@ -84,6 +84,7 @@
       return true;
     }
     if (!("caches" in window)) { return false; }
+    if (window.ecKontaktCacheReady) { await window.ecKontaktCacheReady; }
     cacheStatus(0, 0, "Objektcache wird auf Aktualisierungen geprüft …");
     var antwort;
     try {
@@ -136,6 +137,8 @@
         soll.add(o.detail_url);
         pfade.push(o.detail_url);
         DETAIL_FRAGMENTE.forEach(function (fragment) {
+          if (manifest.kontaktverzeichnis_erlaubt === false
+              && ["kontakte", "protokoll"].includes(fragment)) { return; }
           var fragmentPfad = o.detail_url + "/" + fragment;
           soll.add(fragmentPfad);
           pfade.push(fragmentPfad);
@@ -196,7 +199,7 @@
         try {
           var res = await fetch(url, { credentials: "same-origin" });
           if (res.ok) { await cache.put(url, res); }
-          else { failedDownloads++; }
+          else { await cache.delete(url); failedDownloads++; }
         } catch (e) { failedDownloads++; /* einzelner Fehler stoppt den Sync nicht */ }
       }
 
@@ -252,6 +255,7 @@
   window.objektOfflineSync = synchronisieren;
   window.objektOfflineCacheLeeren = async function () {
     if (!("caches" in window)) { return false; }
+    if (window.ecKontaktCacheReady) { await window.ecKontaktCacheReady; }
     try {
       await caches.delete(CACHE_NAME);
       try { localStorage.removeItem(LS_KEY); } catch (e) { /* egal */ }

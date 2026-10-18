@@ -32,7 +32,12 @@ from sqlalchemy.orm import Session, selectinload
 from app.config import settings
 from app.core.async_bridge import run_async
 from app.core.audit import write_audit
-from app.core.permissions import is_objekt_verwalter, require_role
+from app.core.permissions import (
+    can_view_kontakt_directory_request,
+    is_objekt_verwalter,
+    require_kontakt_directory,
+    require_role,
+)
 from app.core.templating import templates
 from app.core.timezones import format_local_datetime, local_date_to_utc
 from app.db import get_db
@@ -68,6 +73,7 @@ from app.models.objekt import (
 from app.models.user import User
 from app.services import kontakt_service
 from app.services import objekt_pflege_schreiben_service as objekt_schreiben
+from app.services.kontakt_access_service import incident_for_contacts, objekt_contact_summaries
 from app.services.mail_service import send_pflegeauftrag_einladung
 from app.services.objekt_pflege_service import (
     _TERMINALE_STATUS,
@@ -693,6 +699,8 @@ def _detail_context(request: Request, db: Session, user: User, objekt: Objekt) -
         ),
         "fehlende_kartensymbole": fehlende_kartensymbole(objekt),
         "ist_verwalter": is_objekt_verwalter(user),
+        "kontakt_vollzugriff": can_view_kontakt_directory_request(request),
+        "einsatzkontakte": objekt_contact_summaries(db, request, objekt),
         "aktualitaet": ermittle_objekt_aktualitaet(
             produktiv_objekt or objekt,
             offener_auftrag=offener_pflegeauftrag,
@@ -896,7 +904,7 @@ async def dokumente_upload_verarbeiten(
 # von "/{objekt_id}" abgefangen und mit 422 (ungueltiger Integer "changelog") abgelehnt.
 
 
-@router.get("/changelog", response_class=HTMLResponse)
+@router.get("/changelog", response_class=HTMLResponse, dependencies=[Depends(require_kontakt_directory)])
 def objekt_changelog(
     request: Request,
     db: Session = Depends(get_db),
@@ -998,6 +1006,8 @@ def _datenpflege_context(request: Request, db: Session, user: User, objekt: Obje
         ),
         "aktualitaet_labels": AKTUALITAET_LABELS,
         "ist_verwalter": is_objekt_verwalter(user),
+        "kontakt_vollzugriff": can_view_kontakt_directory_request(request),
+        "einsatzkontakte": objekt_contact_summaries(db, request, objekt),
     }
 
 
@@ -1007,7 +1017,7 @@ def _datenpflege_response(request: Request, db: Session, user: User, objekt: Obj
     )
 
 
-@router.get("/{objekt_id}/datenpflege", response_class=HTMLResponse)
+@router.get("/{objekt_id}/datenpflege", response_class=HTMLResponse, dependencies=[Depends(require_kontakt_directory)])
 def datenpflege_partial(
     objekt_id: int,
     request: Request,
@@ -1375,7 +1385,7 @@ def zusatzadresse_loeschen(
 # ── Abschnitt: Protokoll ───────────────────────────────────────────────────────
 
 
-@router.get("/{objekt_id}/protokoll", response_class=HTMLResponse)
+@router.get("/{objekt_id}/protokoll", response_class=HTMLResponse, dependencies=[Depends(require_kontakt_directory)])
 def protokoll_partial(
     objekt_id: int,
     request: Request,
@@ -1929,7 +1939,9 @@ def _kontakte_response(request: Request, db: Session, user: User, objekt: Objekt
     return templates.TemplateResponse(request, "objekt/_kontakte.html", _detail_context(request, db, user, objekt))
 
 
-@router.get("/{objekt_id}/kontakte/suche", response_class=HTMLResponse)
+@router.get(
+    "/{objekt_id}/kontakte/suche", response_class=HTMLResponse, dependencies=[Depends(require_kontakt_directory)]
+)
 def kontakte_suche(
     objekt_id: int,
     request: Request,
@@ -2045,6 +2057,7 @@ def kontakt_zuordnung_speichern(
     erreichbarkeit: str = Form(""),
     freigabe_sms: list[str] = Form(default=[]),
     freigabe_mail: list[str] = Form(default=[]),
+    einsatz_sichtbar: str = Form(""),
 ):
     objekt = _objekt_or_404(db, objekt_id, user)
     org_id = _objekt_org_id(objekt)
@@ -2053,9 +2066,17 @@ def kontakt_zuordnung_speichern(
     )
     if kontakt is None or kontakt.kontakt_id is None or kontakt.zentraler_kontakt is None:
         raise HTTPException(status_code=400, detail="Nur zentrale Kontaktzuordnungen sind hier bearbeitbar")
+    vorher_sichtbar = kontakt.einsatz_sichtbar
     kontakt.art = _kontakt_art(db, org_id, art)
     kontakt.sort = max(sort, 0)
     kontakt.erreichbarkeit = erreichbarkeit.strip() or None
+    kontakt.einsatz_sichtbar = einsatz_sichtbar == "1"
+    if kontakt.einsatz_sichtbar != vorher_sichtbar:
+        write_audit(
+            db, "kontakt.einsatzfreigabe_geaendert", org_id=org_id, user_id=user.id,
+            entity_type="objekt_kontakt", entity_id=kontakt.id,
+            payload={"vorher": vorher_sichtbar, "nachher": kontakt.einsatz_sichtbar},
+        )
     erlaubte_sms = {tel.nummer_normalisiert for tel in kontakt.zentraler_kontakt.telefone if tel.nummer_normalisiert}
     erlaubte_mail = {(kontakt.zentraler_kontakt.email or "").strip().casefold()} - {""}
     gewuenscht = {("sms", wert) for wert in freigabe_sms if wert in erlaubte_sms}
@@ -2917,6 +2938,9 @@ def _panel_context(request: Request, db: Session, user: User, incident_id: int) 
     if incident is None:
         raise HTTPException(status_code=404, detail="Einsatz nicht gefunden")
 
+    if not can_view_kontakt_directory_request(request):
+        incident_for_contacts(db, request, incident_id)
+
     # Explizites Scoping ueber die Org DES EINSATZES, nicht ueber user.org_id: bei
     # system_admin ist user.org_id NULL (models/user.py:38) bzw. beim Org-Wechsel per
     # ?org= die Heimat-Org des Admins - beides wuerde das Panel faelschlich leeren.
@@ -3396,6 +3420,7 @@ def objektblatt_pdf(
         str(request.base_url),
         mit_anhang=bool(anhang),
         mit_hinweisen=bool(hinweise),
+        mit_kontakten=can_view_kontakt_directory_request(request),
     )
     # inline: Browser-PDF-Viewer zeigt direkt an (Speichern dort weiterhin moeglich)
     name = f"{objekt.anzeige_nummer}_Objektblatt.pdf"
@@ -3433,6 +3458,7 @@ def objekte_mappe_drucken(
         db,
         str(request.base_url),
         mit_anhang=bool(mit_anhang),
+        mit_kontakten=can_view_kontakt_directory_request(request),
     )
     return Response(
         content=pdf,

@@ -1176,4 +1176,6 @@ def objekte_sync_manifest(
     # Nur für die eigene App-Session sichtbar: liefert die fehlende
     # End-to-End-Diagnose bei einem technisch erfolgreichen, aber leeren Sync.
     manifest["diagnostics"]["login_type"] = "geraet" if is_device else "benutzer"
+    from app.core.permissions import can_view_kontakt_directory_request
+    manifest["kontaktverzeichnis_erlaubt"] = can_view_kontakt_directory_request(request)
     return manifest

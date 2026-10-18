@@ -418,9 +418,9 @@ def test_rolle_suche_kategorie_idempotent_und_tenant_isolation(client):
     assert "Org A Kontakt" in client.get("/kontakte/liste?q=%2B43664123456").text
 
     _login(client, readonly.username)
-    assert client.get("/kontakte").status_code == 200
-    assert client.get("/kontakte/liste").status_code == 200
-    assert client.get(f"/kontakte/{kontakt_id}").status_code == 200
+    assert client.get("/kontakte").status_code == 403
+    assert client.get("/kontakte/liste").status_code == 403
+    assert client.get(f"/kontakte/{kontakt_id}").status_code == 403
     assert client.post("/kontakte/", data={"_csrf": client.cookies.get("ec_csrf")}).status_code == 403
 
     _login(client, "kontakte_org_b")

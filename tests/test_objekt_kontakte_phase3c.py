@@ -127,7 +127,7 @@ def test_bma_kontakt_ohne_telefon_zeigt_admin_warnung_und_mit_telefon_nicht(clie
 
 
 def test_kontakt_zuordnung_verlinkt_zentralen_kontakt(client):
-    org_id, objekt_id = _setup("p3c_kontakt_link", 93009, ("readonly",))
+    org_id, objekt_id = _setup("p3c_kontakt_link", 93009, ("incident_leader",))
     zentral = _zentral(org_id, "Verlinkter zentraler Kontakt")
     db = SessionLocal()
     set_tenant_context(db, None)
@@ -324,7 +324,7 @@ def test_berechtigungen_und_tenant_isolation(client):
 
     csrf = _login(client, "p3c_leser")
     assert client.get(f"/objekte/{objekt_id}/kontakte").status_code == 200
-    assert client.get(f"/objekte/{objekt_id}/kontakte/suche?q=Org").status_code == 200
+    assert client.get(f"/objekte/{objekt_id}/kontakte/suche?q=Org").status_code == 403
     for url in (f"/objekte/{objekt_id}/kontakte/zuordnen", f"/objekte/{objekt_id}/kontakte/anlegen"):
         assert client.post(url, data={"_csrf": csrf, "kontakt_id": zentral.id}).status_code == 403
     assert client.post(

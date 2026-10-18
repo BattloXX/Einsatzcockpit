@@ -172,6 +172,10 @@
     {% include "incident/_sidebar_lage_ticker.html" %}
 
     <!-- Objekt-Panel (Objektverwaltung, laedt lazy; aktualisiert sich bei objekt_match-WS-Event) -->
+    {% if request.state.kontakte_enabled %}
+    <div id="einsatz-kontakte" hx-get="/einsatz/{{ incident.id }}/kontakte" hx-trigger="load" hx-swap="outerHTML"></div>
+    {% endif %}
+
     {% if request.state.objekt_enabled %}
     <div id="objekt-panel-wrap"
          hx-get="/objekte/einsatz-panel/{{ incident.id }}" hx-trigger="load, objekt-match from:body"

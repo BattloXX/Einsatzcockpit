@@ -33,6 +33,7 @@ FAHRTENBUCH_ADMIN_ROLES = {"system_admin", "admin", "org_admin", "fahrtenbuch_ad
 # Roles that can manage Objekte (anlegen, bearbeiten, freigeben, Dokumente, Lagekarte)
 OBJEKT_VERWALTER_ROLES = {"system_admin", "admin", "org_admin", "objekt_verwalter"}
 KONTAKT_VERWALTER_ROLES = {"system_admin", "admin", "org_admin", "objekt_verwalter", "kontakt_verwalter"}
+KONTAKT_LESE_ROLLEN = ("recorder", "incident_leader", "objekt_verwalter", "kontakt_verwalter")
 # Straßensperren pflegt, wer Objekte verwalten darf (keine eigene Rolle).
 STRASSENSPERREN_VERWALTER_ROLES = OBJEKT_VERWALTER_ROLES
 # Lesen: alle Einsatzrollen inkl. Objektverwaltung (die sonst nur schreiben, aber nicht lesen duerfte).
@@ -235,6 +236,31 @@ def is_objekt_verwalter(user) -> bool:
 def is_kontakt_verwalter(user) -> bool:
     """True if user can manage central contacts."""
     return has_role(user, "kontakt_verwalter")
+
+
+def can_view_kontakt_directory(user) -> bool:
+    """Zentrales Verzeichnis: explizite Fachrolle, niemals reine Einheitengeraete."""
+    return bool(user and not getattr(user, "is_device", False) and has_role(user, *KONTAKT_LESE_ROLLEN))
+
+
+def can_view_kontakt_directory_request(request: Request) -> bool:
+    # QR-Sessions koennen einen Benutzer mit weitergehenden Rollen vertreten.
+    return bool(
+        not getattr(request.state, "is_device", False)
+        and not getattr(request.state, "is_qr", False)
+        and not getattr(request.state, "qr_incident_id", None)
+        and not getattr(request.state, "qr_lage_id", None)
+        and can_view_kontakt_directory(getattr(request.state, "user", None))
+    )
+
+
+def require_kontakt_directory(request: Request):
+    user = getattr(request.state, "user", None)
+    if user is None:
+        raise HTTPException(status_code=401, detail="Nicht angemeldet")
+    if not can_view_kontakt_directory_request(request):
+        raise HTTPException(status_code=403, detail="Kontakte sind nur innerhalb eines berechtigten Einsatzes sichtbar")
+    return user
 
 
 def is_strassensperren_verwalter(user) -> bool:

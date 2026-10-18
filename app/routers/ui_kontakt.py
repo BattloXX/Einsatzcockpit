@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.core.async_bridge import run_async
-from app.core.permissions import can_send_manual_sms, require_role, require_role_or_device
+from app.core.permissions import KONTAKT_LESE_ROLLEN, can_send_manual_sms, require_kontakt_directory, require_role
 from app.core.templating import templates
 from app.db import get_db
 from app.models.kontakt import KONTAKT_TYP_PERSON, Kontakt, KontaktTelefon
@@ -26,20 +26,12 @@ from app.models.user import User
 from app.services import kontakt_service
 from app.services.kontakt_service import bereinigter_text
 
-router = APIRouter(prefix="/kontakte", tags=["kontakte"])
+router = APIRouter(prefix="/kontakte", tags=["kontakte"], dependencies=[Depends(require_kontakt_directory)])
 logger = logging.getLogger("einsatzleiter.kontakte")
 _BILD_DIR = Path(settings.MEDIA_STORAGE_DIR).parent / "kontaktbilder"
 _BILD_MAX_BYTES = 3 * 1024 * 1024
 _BILD_SIZE = 192
-_LESE_ROLLEN = (
-    "readonly",
-    "recorder",
-    "breathing_supervisor",
-    "incident_leader",
-    "fahrtenbuch_admin",
-    "objekt_verwalter",
-    "kontakt_verwalter",
-)
+_LESE_ROLLEN = KONTAKT_LESE_ROLLEN
 _SCHREIB_ROLLEN = ("kontakt_verwalter", "objekt_verwalter")
 
 
@@ -293,7 +285,7 @@ def liste_partial(
 def offline_sync_manifest(
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role_or_device(*_LESE_ROLLEN)),
+    user: User = Depends(require_kontakt_directory),
     _guard: None = Depends(require_kontakte_enabled),
 ):
     """Alle Kontaktseiten, die die Android-PWA fuer Offlinezugriff vorlaedt."""
@@ -550,7 +542,7 @@ def profilbild(
     return FileResponse(
         path,
         media_type="image/jpeg",
-        headers={"Cache-Control": "private, max-age=86400"},
+        headers={"Cache-Control": "private, no-store"},
     )
 
 

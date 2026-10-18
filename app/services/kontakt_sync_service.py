@@ -64,6 +64,7 @@ def mapping_payload(mapping: ObjektKontakt) -> dict[str, Any]:
         "rolle": mapping.art,
         "sort": mapping.sort,
         "erreichbarkeit": mapping.erreichbarkeit,
+        "einsatz_sichtbar": mapping.einsatz_sichtbar,
     }
 
 
