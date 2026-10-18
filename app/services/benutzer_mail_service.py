@@ -54,6 +54,31 @@ def _reset_gueltigkeit(minuten: int) -> str:
     return f"{minuten} Minuten"
 
 
+def _einladung_gueltigkeit(stunden: int) -> str:
+    if stunden % 24 == 0:
+        tage = stunden // 24
+        return f"{tage} Tag" + ("e" if tage != 1 else "")
+    return f"{stunden} Stunde" + ("n" if stunden != 1 else "")
+
+
+async def send_einladung(*, to: str, username: str, einladung_url: str,
+                          user_display_name: str, db=None, org_id: int | None = None) -> None:
+    """Versendet eine Einladung zum Festlegen eines Passworts."""
+    from app.services import mail_service
+
+    context = mail_kontext(db, org_id)
+    html, text = render(
+        "einladung", **context, user_display_name=user_display_name, username=username,
+        einladung_url=einladung_url, gueltigkeit=_einladung_gueltigkeit(settings.INVITE_TTL_HOURS),
+    )
+    smtp_cfg = mail_service._org_smtp_cfg(db, org_id) or mail_service.get_smtp_cfg(db)
+    msg = mail_service._build_message(
+        to=to, subject=f"Willkommen bei Einsatzcockpit – {context['org_name']}",
+        body_txt=text, body_html=html, smtp_cfg=smtp_cfg,
+    )
+    await mail_service.deliver(db, org_id, msg, smtp_cfg)
+
+
 async def send_welcome_mail(*, to: str, username: str, password: str,
                             user_display_name: str, app_url: str = "",
                             is_test: bool = False, db=None, org_id: int | None = None) -> None:

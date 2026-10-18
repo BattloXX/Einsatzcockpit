@@ -34,7 +34,7 @@ def test_android_download_leitet_auf_apk_weiter_und_cached(client, monkeypatch):
         aufrufe.append((url, headers, timeout))
         return httpx.Response(
             200,
-            json={"assets": [{"name": "einsatzcockpit-v2.0.apk", "browser_download_url": "https://cdn.example/app.apk"}]},
+            json={"assets": [{"name": "einsatzcockpit-autoupdate-v2.0.apk", "browser_download_url": "https://cdn.example/app.apk"}]},
             request=httpx.Request("GET", url),
         )
 

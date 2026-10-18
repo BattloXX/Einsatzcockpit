@@ -7,7 +7,7 @@
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background:#ffffff;">
   <tr><td style="padding:20px 24px 16px;background:#ffffff;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
-      <td style="font-size:20px;font-weight:bold;color:#1f2937;vertical-align:middle;">{% if logo_url %}<img src="{{ logo_url }}" alt="{{ org_name }}" height="44" style="display:inline-block;max-width:150px;height:44px;width:auto;vertical-align:middle;border:0;margin-right:12px;">{% endif %}{{ org_name }}</td>
+      <td style="font-size:20px;font-weight:bold;color:#1f2937;vertical-align:middle;">{% if logo_url %}<img src="{{ logo_url }}" alt="" height="44" style="display:inline-block;max-width:150px;height:44px;width:auto;vertical-align:middle;border:0;margin-right:12px;">{% endif %}{{ org_name }}</td>
     </tr></table>
   </td></tr>
   <tr><td style="height:5px;background:{{ brand_color }};font-size:0;line-height:0;">&nbsp;</td></tr>
@@ -18,7 +18,31 @@
 </td></tr></table>
 </body></html>
 
-{% macro button(url, text) -%}
+{% macro button(url, text, fallback=True) -%}
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:20px auto;"><tr><td style="background:{{ brand_color }};border-radius:5px;"><a href="{{ url }}" style="display:inline-block;padding:12px 20px;color:#ffffff;text-decoration:none;font-weight:bold;font-size:15px;">{{ text }}</a></td></tr></table>
-<p style="font-size:12px;line-height:18px;color:#6b7280;word-break:break-all;">Falls der Button nicht funktioniert: <a href="{{ url }}" style="color:{{ brand_color }};">{{ url }}</a></p>
+{% if fallback %}<p style="font-size:12px;line-height:18px;color:#6b7280;word-break:break-all;">Falls der Button nicht funktioniert: <a href="{{ url }}" style="color:{{ brand_color }};">{{ url }}</a></p>{% endif %}
+{%- endmacro %}
+
+{% macro app_abschnitt() -%}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="margin-top:24px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;">
+  <tr><td style="padding:16px 16px 4px;">
+    <strong style="font-size:16px;">Einsatzcockpit aufs Handy</strong>
+    <p style="margin:6px 0 12px;font-size:14px;line-height:20px;color:#4b5563;">Mit der App bist du im Einsatz schneller drin und bekommst Mitteilungen.</p>
+  </td></tr>
+  <tr><td style="padding:0 16px 8px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+      <td width="50%" style="padding:0 6px 8px 0;vertical-align:top;">
+        <a href="{{ android_app_url }}" style="display:block;padding:10px 8px;border:2px solid {{ brand_color }};border-radius:5px;color:{{ brand_color }};text-decoration:none;font-weight:bold;font-size:14px;text-align:center;">Android-App</a>
+      </td>
+      <td width="50%" style="padding:0 0 8px 6px;vertical-align:top;">
+        <a href="{{ iphone_app_url }}" style="display:block;padding:10px 8px;border:2px solid {{ brand_color }};border-radius:5px;color:{{ brand_color }};text-decoration:none;font-weight:bold;font-size:14px;text-align:center;">iPhone / iPad</a>
+      </td>
+    </tr></table>
+  </td></tr>
+  <tr><td style="padding:0 16px 14px;font-size:13px;line-height:19px;color:#4b5563;">
+    <strong>Android:</strong> App laden, öffnen und installieren. Einmalig unter Einstellungen → Apps → Einsatzcockpit „Installation unbekannter Apps“ erlauben, damit sich die App selbst aktualisiert.<br>
+    <strong>iPhone:</strong> Link in Safari öffnen, auf Teilen tippen und „Zum Home-Bildschirm“ wählen.
+  </td></tr>
+</table>
 {%- endmacro %}

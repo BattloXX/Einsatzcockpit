@@ -6,6 +6,7 @@
 {% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Benutzer'}]) }}{% endblock %}
 
 {% block admin_content %}
+{% set invitation_status = einladungs_status|default({}) %}
 <div class="page-header">
   <div>
     <h1>Benutzerverwaltung</h1>
@@ -35,6 +36,8 @@
 <div class="alert alert--error">Der Benutzer hat keine hinterlegte E-Mail-Adresse — Reset-Mail kann nicht versendet werden.</div>
 {% elif error == 'mail_failed' %}
 <div class="alert alert--error">Die Reset-Mail konnte nicht versendet werden. Bitte SMTP-Konfiguration prüfen.</div>
+{% elif error == 'invite_mail_failed' %}
+<div class="alert alert--error">Benutzer angelegt, Einladung konnte nicht gesendet werden. Bitte SMTP-Konfiguration prüfen.</div>
 {% endif %}
 
 <form method="post" action="/admin/benutzer/bulk-loeschen" id="bulkUserForm"
@@ -82,6 +85,8 @@
       <td data-label="Status">
         {% if u.active %}<span class="badge-pill badge-pill--green">Aktiv</span>
         {% else %}<span class="badge-pill badge-pill--gray">Deaktiviert</span>{% endif %}
+        {% if invitation_status.get(u.id) == 'offen' %}<br><span class="badge-pill badge-pill--green">Einladung offen</span>
+        {% elif invitation_status.get(u.id) == 'abgelaufen' %}<br><span class="badge-pill badge-pill--gray">Einladung abgelaufen</span>{% endif %}
         {% if u.locked_until %}<br><span class="badge-pill badge-pill--red" {{ tip('Account ist temporär gesperrt') }}>Gesperrt</span>{% endif %}
       </td>
       <td data-label="Aktionen" style="display:flex; gap:4px; flex-wrap:wrap;">
@@ -105,8 +110,12 @@
         </button>
         {% if u.email %}
         <button type="button" class="btn btn--ghost btn--xs"
-                onclick="if(confirm('Reset-Link an {{ u.email }} senden?')) postAction('/admin/benutzer/{{ u.id }}/reset-mail')"
+                onclick='if(confirm("Reset-Link an " + {{ u.email | tojson }} + " senden?")) postAction("/admin/benutzer/{{ u.id }}/reset-mail")'
                 {{ tip('Sendet einen Self-Service-Reset-Link an die hinterlegte E-Mail') }}>📧 Reset-Mail</button>
+        {% endif %}
+        {% if u.auth_provider == 'local' and u.email and not u.last_login_at %}
+        <button type="button" class="btn btn--ghost btn--xs"
+                onclick='if(confirm("Einladung an " + {{ u.email | tojson }} + " senden?")) postAction("/admin/benutzer/{{ u.id }}/einladung")'>Einladung senden</button>
         {% endif %}
         <button type="button" class="btn btn--ghost btn--xs"
                 onclick="if(confirm('Sofort neues Zufallspasswort für {{ u.username }} setzen?')) postAction('/admin/benutzer/{{ u.id }}/passwort')"
@@ -157,7 +166,7 @@
           <input type="tel" name="phone" class="form-input" {{ tip('Optional — z. B. für Pager-Listen') }}></div>
       </div>
       <p class="text-muted" style="font-size:.85rem; margin:.25rem 0 .75rem;">
-        Initial-Passwort wird automatisch sicher generiert und nach dem Anlegen einmalig angezeigt.
+        Initial-Passwort wird automatisch sicher generiert. Mit Einladung legt der Benutzer sein Passwort selbst fest.
       </p>
       {% if is_sysadmin %}
       <div class="form-group"><label class="form-label">Organisation</label>
@@ -190,8 +199,8 @@
         <label class="form-label">E-Mail-Benachrichtigungen</label>
         <label class="checkbox-label">
           <input type="checkbox" name="send_welcome" value="true" checked
-                 {{ tip('Sendet dem Benutzer eine E-Mail mit Benutzername, Passwort und Login-URL') }}>
-          Willkommensmail mit Zugangsdaten senden
+                 {{ tip('Sendet dem Benutzer eine Einladung zum Festlegen eines Passworts') }}>
+          Einladung zum Festlegen eines Passworts senden
         </label>
         {% if org_sso_enabled %}
         <label class="checkbox-label" style="margin-top:.25rem;">

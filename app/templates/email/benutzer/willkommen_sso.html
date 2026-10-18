@@ -1,5 +1,5 @@
 {% extends "email/benutzer/_layout.html" %}
-{% from "email/benutzer/_layout.html" import button with context %}
+{% from "email/benutzer/_layout.html" import button, app_abschnitt with context %}
 {% block content %}
 <tr><td style="padding:24px;font-size:15px;line-height:22px;">
   <p>Hallo <strong>{{ user_display_name }}</strong>,</p>
@@ -8,10 +8,6 @@
   {{ button(sso_url, 'Mit Microsoft anmelden') }}
   <p>Alternativ: Öffne <a href="{{ app_url }}" style="color:{{ brand_color }};">{{ app_url }}</a> und wähle „Mit Microsoft anmelden“.</p>
   <p>Du benötigst kein eigenes Passwort; die Anmeldung erfolgt über Microsoft.</p>
-  <h2 style="font-size:18px;line-height:24px;">App aufs Handy</h2>
-  <p>Installiere Einsatzcockpit für einen schnellen Zugriff.</p>
-  {{ button(android_app_url, 'Android-App herunterladen') }}
-  {{ button(iphone_app_url, 'Auf dem iPhone installieren') }}
-  <p>iPhone: Öffne den Link in Safari, tippe auf Teilen und wähle „Zum Home-Bildschirm“.</p>
+  {{ app_abschnitt() }}
 </td></tr>
 {% endblock %}

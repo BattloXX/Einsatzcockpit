@@ -43,6 +43,7 @@ from app.models.master import (
     TaskSuggestionAlarm,
     VehicleMaster,
 )
+from app.models.password_reset import PasswordResetToken
 from app.models.user import (
     ApiKey,
     AuditLog,
@@ -132,6 +133,14 @@ async def users_list(request: Request, db: Session = Depends(get_db),
     user = request.state.user
     is_sysadmin = has_role(user, "system_admin")
     users = _org_filter(db.query(User), user, User.org_id).filter(User.is_device == False).order_by(User.username).all()  # noqa: E712
+    offene_einladungen = db.query(PasswordResetToken).filter(
+        PasswordResetToken.user_id.in_([u.id for u in users]),
+        PasswordResetToken.zweck == "einladung", PasswordResetToken.used_at.is_(None),
+    ).all() if users else []
+    einladungs_status = {
+        token.user_id: ("offen" if token.is_valid else "abgelaufen")
+        for token in offene_einladungen
+    }
     member_names, members_by_org = _member_options(db, user)
     roles = [role for role in db.query(Role).all()
              if role.code in manageable_role_codes(user, {r.code for r in db.query(Role).all()})]
@@ -144,6 +153,7 @@ async def users_list(request: Request, db: Session = Depends(get_db),
     return templates.TemplateResponse(request, "admin/users.html", {
         "user": user,
         "users": users, "roles": roles,
+        "einladungs_status": einladungs_status,
         "member_names": member_names, "members_by_org": members_by_org,
         "is_sysadmin": is_sysadmin,
         "all_orgs": all_orgs,
@@ -185,6 +195,7 @@ async def create_user(
     member_error = _validate_user_member(db, member_id, target_org_id, False)
     if member_error:
         return RedirectResponse(f"/admin/benutzer?error={member_error}", status_code=303)
+    manuelles_passwort = bool(password.strip())
     if not password:
         password = _sec.token_urlsafe(16)
     try:
@@ -209,11 +220,17 @@ async def create_user(
     app_url = app_settings.effective_public_base_url.rstrip("/")
     is_test = app_settings.TEST_SYSTEM
     display = new_user.full_name or new_user.display_name or username
-    if email_clean and send_welcome:
+    einladung_fehler = False
+    einladung_gesendet = False
+    if email_clean and send_welcome and not manuelles_passwort:
         try:
-            await benutzer_service.send_welcome_mail(new_user, password, db)
+            await benutzer_service.einladung_senden(
+                db, new_user, request.client.host if request.client else None,
+            )
+            einladung_gesendet = True
         except Exception:
-            logger_admin.warning("Willkommensmail an %s konnte nicht gesendet werden", email_clean)
+            logger_admin.warning("Einladung an %s konnte nicht gesendet werden", email_clean)
+            einladung_fehler = True
     if email_clean and send_sso_info:
         try:
             from app.services.mail_service import send_sso_welcome_mail
@@ -259,8 +276,30 @@ async def create_user(
         "member_names": member_names, "members_by_org": members_by_org,
         "is_sysadmin": is_sysadmin, "all_orgs": all_orgs,
         "org_sso_enabled": org_sso_enabled,
-        "new_password": password, "new_password_user": username,
+        # Ohne versendete Einladung ist das (ggf. erzeugte) Passwort der einzige Zugang und wird einmalig angezeigt.
+        "new_password": None if einladung_gesendet else password, "new_password_user": username,
+        "error": "invite_mail_failed" if einladung_fehler else None,
     })
+
+
+@router.post("/benutzer/{user_id}/einladung")
+async def send_user_invitation(
+    user_id: int, request: Request, db: Session = Depends(get_db),
+    _=Depends(require_role("admin")),
+):
+    u = db.get(User, user_id)
+    if not u or u.auth_provider != "local" or not u.email or u.last_login_at is not None:
+        return RedirectResponse("/admin/benutzer", status_code=303)
+    authorize_user_mutation(db, request.state.user, u, "invite")
+    write_audit(db, "admin.user.invite_sent", user_id=request.state.user.id,
+                entity_type="user", entity_id=u.id)
+    try:
+        await benutzer_service.einladung_senden(
+            db, u, request.client.host if request.client else None,
+        )
+    except Exception:
+        return RedirectResponse("/admin/benutzer?error=invite_mail_failed", status_code=303)
+    return RedirectResponse("/admin/benutzer?saved=1&invite=1", status_code=303)
 
 
 @router.post("/benutzer/{user_id}/loeschen")

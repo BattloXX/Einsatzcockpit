@@ -11,7 +11,9 @@ Jetzt anmelden: {{ app_url }}
 
 Bitte ändere dein Passwort nach der ersten Anmeldung unter Profil.
 
-App aufs Handy
-Android-App herunterladen: {{ android_app_url }}
-Auf dem iPhone installieren: {{ iphone_app_url }}
-IPhone: Öffne den Link in Safari, tippe auf Teilen und wähle „Zum Home-Bildschirm“.{% endblock %}
+Einsatzcockpit aufs Handy
+Android-App: {{ android_app_url }}
+  App laden, öffnen und installieren. Einmalig unter Einstellungen → Apps → Einsatzcockpit
+  „Installation unbekannter Apps“ erlauben, damit sich die App selbst aktualisiert.
+iPhone / iPad: {{ iphone_app_url }}
+  Link in Safari öffnen, auf Teilen tippen und „Zum Home-Bildschirm“ wählen.{% endblock %}

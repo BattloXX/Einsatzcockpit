@@ -111,17 +111,22 @@ async def forgot_submit(
 @router.get("/passwort-zuruecksetzen", response_class=HTMLResponse)
 async def reset_form(request: Request, token: str = "", db: Session = Depends(get_db)):
     error: str | None = None
+    ist_einladung = False
     if not token:
         error = "Token fehlt."
     else:
         prt = db.query(PasswordResetToken).filter(
             PasswordResetToken.token_hash == _hash_token(token)
         ).first()
+        ist_einladung = bool(prt and prt.zweck == "einladung")
         if not prt or not prt.is_valid:
-            error = "Dieser Reset-Link ist nicht mehr gültig. Fordere bitte einen neuen an."
+            error = (
+                "Diese Einladung ist abgelaufen. Bitte wende dich an deinen Administrator."
+                if ist_einladung else "Dieser Reset-Link ist nicht mehr gültig. Fordere bitte einen neuen an."
+            )
     return templates.TemplateResponse(
         request, "auth/reset.html",
-        {"token": token, "error": error, "done": False},
+        {"token": token, "error": error, "done": False, "ist_einladung": ist_einladung},
     )
 
 
@@ -135,9 +140,13 @@ async def reset_submit(
     db: Session = Depends(get_db),
 ):
     def _err(msg: str) -> HTMLResponse:
+        prt_fehler = db.query(PasswordResetToken).filter(
+            PasswordResetToken.token_hash == _hash_token(token)
+        ).first()
         return templates.TemplateResponse(
             request, "auth/reset.html",
-            {"token": token, "error": msg, "done": False},
+            {"token": token, "error": msg, "done": False,
+             "ist_einladung": bool(prt_fehler and prt_fehler.zweck == "einladung")},
         )
 
     if not token:
@@ -151,7 +160,11 @@ async def reset_submit(
         PasswordResetToken.token_hash == _hash_token(token)
     ).first()
     if not prt or not prt.is_valid:
-        return _err("Dieser Reset-Link ist nicht mehr gültig. Fordere bitte einen neuen an.")
+        return _err(
+            "Diese Einladung ist abgelaufen. Bitte wende dich an deinen Administrator."
+            if prt and prt.zweck == "einladung"
+            else "Dieser Reset-Link ist nicht mehr gültig. Fordere bitte einen neuen an."
+        )
 
     user = db.get(User, prt.user_id)
     if not user or not user.active:
@@ -169,5 +182,5 @@ async def reset_submit(
 
     return templates.TemplateResponse(
         request, "auth/reset.html",
-        {"token": "", "error": None, "done": True},
+        {"token": "", "error": None, "done": True, "ist_einladung": prt.zweck == "einladung"},
     )
