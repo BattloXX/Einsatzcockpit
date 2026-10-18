@@ -14,6 +14,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, selectinload
 
 from app.config import settings
+from app.core.async_bridge import run_async
 from app.core.permissions import STRASSENSPERREN_LESE_ROLLEN, can_access_incident, has_role, require_role
 from app.core.queries import visible_incidents_q
 from app.core.redirects import login_redirect
@@ -451,7 +452,7 @@ def index(request: Request, db: Session = Depends(get_db)):
 # ── Einsatz starten (manuell) ─────────────────────────────────────────────────
 
 @router.post("/einsatz/neu")
-async def new_incident(
+def new_incident(
     request: Request,
     background_tasks: BackgroundTasks,
     alarm_type_code: str = Form(...),
@@ -523,7 +524,7 @@ async def new_incident(
 
     # Einsatzinfo-SMS + Web-Push (+ Teams) vor langsameren Nebenwirkungen einreihen.
     from app.services.incident_notify import notify_incident_created
-    await notify_incident_created(
+    run_async(notify_incident_created,
         db, incident,
         org_id=user.org_id,
         triggered_by_user_id=user.id,
@@ -554,7 +555,7 @@ async def new_incident(
                 _lage_redirect = f"/lage/{lage.id}"
                 if _created:
                     from app.services.gsl_notify import notify_gsl_created
-                    await notify_gsl_created(
+                    run_async(notify_gsl_created,
                         lage, triggered_by_user_id=user.id, base_url=str(request.base_url),
                         background_tasks=background_tasks,
                     )
@@ -677,7 +678,7 @@ def alarm_edit_modal(
 
 
 @router.post("/einsatz/{incident_id}/alarm", response_class=HTMLResponse)
-async def alarm_save(
+def alarm_save(
     incident_id: int, request: Request, background_tasks: BackgroundTasks,
     alarm_type_code: str = Form(...),
     reason: str = Form(""),
@@ -694,14 +695,14 @@ async def alarm_save(
     if before != (incident.alarm_type_code, incident.reason, incident.report_text):
         from app.services.print_dispatcher import autoprint_incident_updated_background
         background_tasks.add_task(autoprint_incident_updated_background, incident.id)
-    await manager.broadcast(incident_id, {"type": "alarm_type_changed"})
+    run_async(manager.broadcast, incident_id, {"type": "alarm_type_changed"})
     return templates.TemplateResponse(request, "incident/_alarm_confirm_fahrzeuge.html", {
         "incident": incident,
     })
 
 
 @router.post("/einsatz/{incident_id}/alarm/fahrzeuge", response_class=HTMLResponse)
-async def alarm_dispatch_vehicles(
+def alarm_dispatch_vehicles(
     incident_id: int, request: Request, db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin")),
 ):
@@ -745,7 +746,7 @@ async def alarm_dispatch_vehicles(
                     added += 1
         if added:
             db.commit()
-            await manager.broadcast(incident_id, {"type": "vehicle_added", "column_id": active_col.id})
+            run_async(manager.broadcast, incident_id, {"type": "vehicle_added", "column_id": active_col.id})
 
     return templates.TemplateResponse(request, "incident/_alarm_confirm_ki.html", {
         "incident": incident,
@@ -1701,7 +1702,7 @@ def dashboard_latest(request: Request, db: Session = Depends(get_db)):
 # ── Einsatzleiter wechseln ────────────────────────────────────────────────────
 
 @router.post("/einsatz/{incident_id}/einsatzleiter-mitglied")
-async def set_incident_leader_member(
+def set_incident_leader_member(
     incident_id: int, request: Request,
     member_id: int | None = Form(None),
     db: Session = Depends(get_db),
@@ -1711,12 +1712,12 @@ async def set_incident_leader_member(
     incident.incident_leader_member_id = member_id or None
     incident.incident_leader_name = None
     db.commit()
-    await manager.broadcast(incident_id, {"type": "incident_leader_changed"})
+    run_async(manager.broadcast, incident_id, {"type": "incident_leader_changed"})
     return Response(status_code=204)
 
 
 @router.post("/einsatz/{incident_id}/einsatzleiter-mitglied-neu")
-async def set_incident_leader_member_new(
+def set_incident_leader_member_new(
     incident_id: int, request: Request,
     full_name: str = Form(...),
     db: Session = Depends(get_db),
@@ -1729,13 +1730,13 @@ async def set_incident_leader_member_new(
     incident.incident_leader_name = full_name.strip()
     incident.incident_leader_member_id = None
     db.commit()
-    await manager.broadcast(incident_id, {"type": "incident_leader_changed"})
+    run_async(manager.broadcast, incident_id, {"type": "incident_leader_changed"})
     return Response(status_code=204)
 
 
 
 @router.post("/einsatz/{incident_id}/fahrzeug/{vehicle_id}/gk")
-async def set_vehicle_gk_quick(
+def set_vehicle_gk_quick(
     incident_id: int, vehicle_id: int, request: Request,
     member_id: int | None = Form(None),
     db: Session = Depends(get_db),
@@ -1759,14 +1760,14 @@ async def set_vehicle_gk_quick(
     vehicle.commander_name = None
     set_commander(db, vehicle, member_id or None, user_id=request.state.user.id)
     db.commit()
-    await manager.broadcast(incident_id, {
+    run_async(manager.broadcast, incident_id, {
         "type": "vehicle_updated", "kind": "vehicle", "uid": vehicle.id, "column_id": vehicle.column_id,
     })
     return Response(status_code=204)
 
 
 @router.post("/einsatz/{incident_id}/fahrzeug/{vehicle_id}/kommandant-neu")
-async def set_vehicle_commander_new(
+def set_vehicle_commander_new(
     incident_id: int, vehicle_id: int, request: Request,
     full_name: str = Form(...),
     db: Session = Depends(get_db),
@@ -1779,14 +1780,14 @@ async def set_vehicle_commander_new(
     vehicle.commander_name = full_name.strip()
     vehicle.commander_member_id = None
     db.commit()
-    await manager.broadcast(incident_id, {
+    run_async(manager.broadcast, incident_id, {
         "type": "vehicle_updated", "kind": "vehicle", "uid": vehicle.id, "column_id": vehicle.column_id,
     })
     return RedirectResponse(f"/einsatz/{incident_id}/fahrzeug/{vehicle_id}/detail", status_code=303)
 
 
 @router.post("/einsatz/{incident_id}/einsatzleiter")
-async def set_incident_leader(
+def set_incident_leader(
     incident_id: int, request: Request,
     user_id: int = Form(...),
     db: Session = Depends(get_db),
@@ -1797,7 +1798,7 @@ async def set_incident_leader(
     if leader and leader.active:
         incident.incident_leader_user_id = leader.id
         db.commit()
-        await manager.broadcast(incident_id, {
+        run_async(manager.broadcast, incident_id, {
             "type": "incident_leader_changed",
             "leader_id": leader.id,
             "leader_name": leader.display_name,
@@ -1808,7 +1809,7 @@ async def set_incident_leader(
 # ── Aufgaben ───────────────────────────────────────────────────────────────────
 
 @router.post("/einsatz/{incident_id}/aufgabe", response_class=HTMLResponse)
-async def create_task(
+def create_task(
     incident_id: int, request: Request,
     title: str = Form(...), detail: str = Form(""),
     column_id: int | None = Form(None),
@@ -1832,7 +1833,7 @@ async def create_task(
                            user_id=request.state.user.id, author_name=get_author_name(request)))
     prepend_card(db, task.column_id, "task", task.id)
     db.commit()
-    await manager.broadcast(incident_id, {
+    run_async(manager.broadcast, incident_id, {
         "type": "task_created", "task_id": task.id, "column_id": task.column_id,
         "vehicle_uid": task.vehicle_id,
     })
@@ -1847,7 +1848,7 @@ async def create_task(
 
 
 @router.post("/einsatz/{incident_id}/aufgabe/{task_id}/erledigt")
-async def toggle_task_done(
+def toggle_task_done(
     incident_id: int, task_id: int, request: Request, db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "recorder")),
 ):
@@ -1864,7 +1865,7 @@ async def toggle_task_done(
     db.commit()
     # Spalten-Swap statt Einzelkarte: sink_done_cards() kann die Karte ans Spaltenende
     # verschieben, das muss auch bei anderen Clients sichtbar werden.
-    await manager.broadcast(incident_id, {
+    run_async(manager.broadcast, incident_id, {
         "type": "task_updated", "task_id": task_id, "kind": "task", "uid": task.id,
         "column_id": task.column_id, "vehicle_uid": task.vehicle_id,
     })
@@ -1890,7 +1891,7 @@ async def toggle_task_done(
 
 
 @router.post("/einsatz/{incident_id}/aufgabe/{task_id}/ampel")
-async def set_task_ampel(
+def set_task_ampel(
     incident_id: int, task_id: int, request: Request,
     status: str = Form(...),
     db: Session = Depends(get_db),
@@ -1907,7 +1908,7 @@ async def set_task_ampel(
     if status in ("done", "cancelled"):
         sink_done_cards(db, col_id)
     db.commit()
-    await manager.broadcast(incident_id, {
+    run_async(manager.broadcast, incident_id, {
         "type": "task_updated", "task_id": task_id, "kind": "task", "uid": task.id,
         "column_id": col_id, "vehicle_uid": task.vehicle_id,
     })
@@ -1930,7 +1931,7 @@ async def set_task_ampel(
 
 
 @router.post("/einsatz/{incident_id}/aufgabe/{task_id}/zuweisen", response_class=HTMLResponse)
-async def assign_task(
+def assign_task(
     incident_id: int, task_id: int, request: Request,
     vehicle_id: int | None = Form(None),
     db: Session = Depends(get_db),
@@ -1946,7 +1947,7 @@ async def assign_task(
     else:
         task.vehicle_id = None
     db.commit()
-    await manager.broadcast(incident_id, {
+    run_async(manager.broadcast, incident_id, {
         "type": "task_assigned", "kind": "task", "uid": task.id,
         "column_id": task.column_id, "vehicle_uid": task.vehicle_id,
     })
@@ -2019,7 +2020,7 @@ def vehicle_suggestions(
 
 
 @router.post("/einsatz/{incident_id}/fahrzeug-hinzufuegen")
-async def attach_vehicle_to_incident(
+def attach_vehicle_to_incident(
     incident_id: int, request: Request,
     vehicle_master_id: int | None = Form(None),
     new_code: str = Form(""),
@@ -2130,7 +2131,7 @@ async def attach_vehicle_to_incident(
     else:
         prepend_card(db, target_col.id, "vehicle", iv.id)
     db.commit()
-    await manager.broadcast(incident_id, {"type": "vehicle_added", "column_id": target_col.id})
+    run_async(manager.broadcast, incident_id, {"type": "vehicle_added", "column_id": target_col.id})
     if not is_htmx:
         return RedirectResponse(redirect_to, status_code=303)
     board_incident = _load_board_incident(incident_id, db)
@@ -2155,7 +2156,7 @@ async def attach_vehicle_to_incident(
 # ── Fahrzeug verschieben ──────────────────────────────────────────────────────
 
 @router.post("/einsatz/{incident_id}/fahrzeug/{vehicle_id}/verschieben")
-async def move_vehicle(
+def move_vehicle(
     incident_id: int, vehicle_id: int, request: Request,
     column_id: int = Form(...),
     db: Session = Depends(get_db),
@@ -2168,7 +2169,7 @@ async def move_vehicle(
     source_column_id = vehicle.column_id
     move_vehicle_to_column(db, vehicle, column, user_id=request.state.user.id)
     db.commit()
-    await manager.broadcast(incident_id, {
+    run_async(manager.broadcast, incident_id, {
         "type": "vehicle_moved", "column_id": column_id, "source_column_id": source_column_id,
     })
     return Response(status_code=204)
@@ -2177,7 +2178,7 @@ async def move_vehicle(
 # ── Abschnitt-Spalte anlegen ──────────────────────────────────────────────────
 
 @router.post("/einsatz/{incident_id}/abschnitt")
-async def create_section(
+def create_section(
     incident_id: int, request: Request,
     title: str = Form(...),
     column_kind: str = Form("vehicles"),
@@ -2187,12 +2188,12 @@ async def create_section(
     incident = _incident_or_404(incident_id, db)
     add_section_column(db, incident, title, column_kind=column_kind, user_id=request.state.user.id)
     db.commit()
-    await manager.broadcast(incident_id, {"type": "column_created"})
+    run_async(manager.broadcast, incident_id, {"type": "column_created"})
     return Response(status_code=204)
 
 
 @router.post("/einsatz/{incident_id}/spalten/{column_id}/titel")
-async def rename_column_endpoint(
+def rename_column_endpoint(
     incident_id: int, column_id: int, request: Request,
     title: str = Form(...),
     db: Session = Depends(get_db),
@@ -2214,7 +2215,7 @@ async def rename_column_endpoint(
         user_id=request.state.user.id,
     )
     db.commit()
-    await manager.broadcast(incident_id, {"type": "column_renamed", "column_id": column.id})
+    run_async(manager.broadcast, incident_id, {"type": "column_renamed", "column_id": column.id})
     return Response(status_code=204)
 
 
@@ -2226,7 +2227,7 @@ def _section_leader_state(column: IncidentColumn) -> dict:
 
 
 @router.post("/einsatz/{incident_id}/spalten/{column_id}/abschnittsleiter")
-async def set_section_leader_endpoint(
+def set_section_leader_endpoint(
     incident_id: int, column_id: int, request: Request,
     member_id: int | None = Form(None),
     db: Session = Depends(get_db),
@@ -2249,12 +2250,12 @@ async def set_section_leader_endpoint(
         user_id=request.state.user.id,
     )
     db.commit()
-    await manager.broadcast(incident_id, {"type": "column_updated", "column_id": column.id})
+    run_async(manager.broadcast, incident_id, {"type": "column_updated", "column_id": column.id})
     return Response(status_code=204)
 
 
 @router.post("/einsatz/{incident_id}/spalten/{column_id}/abschnittsleiter-freitext")
-async def set_section_leader_freitext_endpoint(
+def set_section_leader_freitext_endpoint(
     incident_id: int, column_id: int, request: Request,
     full_name: str = Form(...),
     db: Session = Depends(get_db),
@@ -2279,12 +2280,12 @@ async def set_section_leader_freitext_endpoint(
         user_id=request.state.user.id,
     )
     db.commit()
-    await manager.broadcast(incident_id, {"type": "column_updated", "column_id": column.id})
+    run_async(manager.broadcast, incident_id, {"type": "column_updated", "column_id": column.id})
     return Response(status_code=204)
 
 
 @router.delete("/einsatz/{incident_id}/spalten/{column_id}")
-async def delete_column_endpoint(
+def delete_column_endpoint(
     incident_id: int, column_id: int, request: Request,
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin")),
@@ -2298,12 +2299,12 @@ async def delete_column_endpoint(
         db.commit()
     except ValueError as exc:
         return JSONResponse({"detail": str(exc)}, status_code=409)
-    await manager.broadcast(incident_id, {"type": "column_deleted"})
+    run_async(manager.broadcast, incident_id, {"type": "column_deleted"})
     return Response(status_code=204)
 
 
 @router.post("/einsatz/{incident_id}/spalten/reihenfolge")
-async def reorder_columns_endpoint(
+def reorder_columns_endpoint(
     incident_id: int, request: Request,
     column_order: str = Form(...),
     db: Session = Depends(get_db),
@@ -2317,7 +2318,7 @@ async def reorder_columns_endpoint(
             db.commit()
     except Exception:
         pass
-    await manager.broadcast(incident_id, {"type": "columns_reordered"})
+    run_async(manager.broadcast, incident_id, {"type": "columns_reordered"})
     return Response(status_code=204)
 
 
@@ -2385,7 +2386,7 @@ async def create_message(
 
 
 @router.post("/einsatz/{incident_id}/meldung/{msg_id}/erledigt")
-async def toggle_message(
+def toggle_message(
     incident_id: int, msg_id: int, request: Request, db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "recorder")),
 ):
@@ -2400,14 +2401,14 @@ async def toggle_message(
     db.commit()
     # Spalten-Swap statt Einzelkarte: sink_done_cards() kann die Karte ans Spaltenende
     # verschieben, das muss auch bei anderen Clients sichtbar werden.
-    await manager.broadcast(incident_id, {
+    run_async(manager.broadcast, incident_id, {
         "type": "message_updated", "kind": "message", "uid": msg.id, "column_id": col_id,
     })
     return Response(status_code=204)
 
 
 @router.post("/einsatz/{incident_id}/meldung/{msg_id}/ampel")
-async def set_message_ampel(
+def set_message_ampel(
     incident_id: int, msg_id: int, request: Request,
     status: str = Form(...),
     db: Session = Depends(get_db),
@@ -2424,7 +2425,7 @@ async def set_message_ampel(
     if status in ("erledigt", "storniert"):
         sink_done_cards(db, col_id)
     db.commit()
-    await manager.broadcast(incident_id, {
+    run_async(manager.broadcast, incident_id, {
         "type": "message_updated", "kind": "message", "uid": msg.id, "column_id": col_id,
     })
     return Response(status_code=204)
@@ -2433,7 +2434,7 @@ async def set_message_ampel(
 # ── Person erfassen ──────────────────────────────────────────────────────────
 
 @router.post("/einsatz/{incident_id}/person")
-async def create_person(
+def create_person(
     incident_id: int, request: Request,
     gender: str = Form("Unbekannt"), person_group: str = Form("Erwachsen"),
     age_range: str = Form(""), name: str = Form(""), location: str = Form(""),
@@ -2477,7 +2478,7 @@ async def create_person(
         user_id=request.state.user.id,
     )
     db.commit()
-    await manager.broadcast(incident_id, {
+    run_async(manager.broadcast, incident_id, {
         "type": "person_created", "column_id": rescued_col.id if rescued_col else None,
     })
     board_incident = _load_board_incident(incident_id, db)
@@ -2529,7 +2530,7 @@ async def close_incident_view(
 # ── Einsatz wiedereröffnen (system_admin / org_admin) ─────────────────────────
 
 @router.post("/einsatz/{incident_id}/wiedereroeffnen")
-async def reopen_incident_view(
+def reopen_incident_view(
     incident_id: int, request: Request, db: Session = Depends(get_db),
     _=Depends(require_role("org_admin", "admin")),
 ):
@@ -2544,16 +2545,16 @@ async def reopen_incident_view(
         return RedirectResponse(f"/einsatz/{incident_id}", status_code=303)
     reopen_incident(db, incident, user_id=user.id)
     db.commit()
-    await manager.broadcast(incident_id, {"type": "incident_reopened"})
+    run_async(manager.broadcast, incident_id, {"type": "incident_reopened"})
     from app.services.incident_live_notify import notify_incident_live
-    await notify_incident_live(
+    run_async(notify_incident_live,
         db, incident, org_id=incident.primary_org_id, reason="reopened", background_tasks=None,
     )
     return RedirectResponse(f"/einsatz/{incident_id}", status_code=303)
 
 
 @router.post("/einsatz/{incident_id}/autoclose/keepopen")
-async def autoclose_keepopen(
+def autoclose_keepopen(
     incident_id: int, request: Request, db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "recorder")),
 ):
@@ -2567,14 +2568,14 @@ async def autoclose_keepopen(
     incident.started_at = datetime.now(UTC).replace(tzinfo=None)
     incident.autoclose_keepopen_count = (incident.autoclose_keepopen_count or 0) + 1
     db.commit()
-    await manager.broadcast(incident_id, {"type": "autoclose_dismissed"})
+    run_async(manager.broadcast, incident_id, {"type": "autoclose_dismissed"})
     return Response(status_code=204)
 
 
 # ── Log-Eintrag ───────────────────────────────────────────────────────────────
 
 @router.post("/einsatz/{incident_id}/log")
-async def add_log(
+def add_log(
     incident_id: int, request: Request,
     text: str = Form(...),
     entity_type: str = Form(""),
@@ -2591,7 +2592,7 @@ async def add_log(
     )
     db.add(entry)
     db.commit()
-    await manager.broadcast(incident_id, {"type": "log_updated"})
+    run_async(manager.broadcast, incident_id, {"type": "log_updated"})
     return Response(status_code=204)
 
 
@@ -2837,7 +2838,7 @@ def vehicle_detail(
 
 
 @router.post("/einsatz/{incident_id}/fahrzeug/{vehicle_id}/kommandant")
-async def set_vehicle_commander(
+def set_vehicle_commander(
     incident_id: int, vehicle_id: int, request: Request,
     member_id: int | None = Form(None),
     db: Session = Depends(get_db),
@@ -2848,14 +2849,14 @@ async def set_vehicle_commander(
         return Response(status_code=404)
     set_commander(db, vehicle, member_id or None, user_id=request.state.user.id)
     db.commit()
-    await manager.broadcast(incident_id, {
+    run_async(manager.broadcast, incident_id, {
         "type": "vehicle_updated", "kind": "vehicle", "uid": vehicle.id, "column_id": vehicle.column_id,
     })
     return RedirectResponse(f"/einsatz/{incident_id}/fahrzeug/{vehicle_id}/detail", status_code=303)
 
 
 @router.post("/einsatz/{incident_id}/fahrzeug/{vehicle_id}/status")
-async def set_vehicle_unit_status(
+def set_vehicle_unit_status(
     incident_id: int, vehicle_id: int, request: Request,
     background_tasks: BackgroundTasks,
     unit_status: str = Form(...),
@@ -2872,12 +2873,12 @@ async def set_vehicle_unit_status(
     db.commit()
     from app.services.lis.lis_sync import push_vehicle_status_to_lis
     background_tasks.add_task(push_vehicle_status_to_lis, vehicle.id, unit_status)
-    await manager.broadcast(incident_id, {
+    run_async(manager.broadcast, incident_id, {
         "type": "vehicle_updated", "kind": "vehicle", "uid": vehicle.id, "column_id": vehicle.column_id,
     })
     incident = _incident_or_404(incident_id, db)
     from app.services.incident_live_notify import notify_incident_live
-    await notify_incident_live(
+    run_async(notify_incident_live,
         db, incident, org_id=incident.primary_org_id, reason="unit_status",
         background_tasks=background_tasks,
     )
@@ -2931,7 +2932,7 @@ def message_detail(
 
 
 @router.post("/einsatz/{incident_id}/meldung/{message_id}", response_class=HTMLResponse)
-async def update_message_endpoint(
+def update_message_endpoint(
     incident_id: int, message_id: int, request: Request,
     title: str = Form(...), detail: str = Form(""),
     db: Session = Depends(get_db),
@@ -2950,7 +2951,7 @@ async def update_message_endpoint(
         user_id=request.state.user.id,
     )
     db.commit()
-    await manager.broadcast(incident_id, {
+    run_async(manager.broadcast, incident_id, {
         "type": "message_updated", "kind": "message", "uid": msg.id, "column_id": msg.column_id,
     })
     incident = _incident_or_404(incident_id, db)
@@ -2965,7 +2966,7 @@ async def update_message_endpoint(
 
 
 @router.post("/einsatz/{incident_id}/meldung/{message_id}/zuweisen", response_class=HTMLResponse)
-async def assign_message(
+def assign_message(
     incident_id: int, message_id: int, request: Request,
     vehicle_id: int | None = Form(None),
     db: Session = Depends(get_db),
@@ -2988,7 +2989,7 @@ async def assign_message(
         user_id=request.state.user.id,
     )
     db.commit()
-    await manager.broadcast(incident_id, {
+    run_async(manager.broadcast, incident_id, {
         "type": "message_assigned", "kind": "message", "uid": msg.id,
         "column_id": msg.column_id, "vehicle_uid": msg.vehicle_id,
     })
@@ -3027,7 +3028,7 @@ def person_detail(
 
 
 @router.post("/einsatz/{incident_id}/person/{person_id}", response_class=HTMLResponse)
-async def update_person_endpoint(
+def update_person_endpoint(
     incident_id: int, person_id: int, request: Request,
     gender: str = Form(""), person_group: str = Form(""),
     age_range: str = Form(""), name: str = Form(""), location: str = Form(""),
@@ -3069,7 +3070,7 @@ async def update_person_endpoint(
         user_id=request.state.user.id,
     )
     db.commit()
-    await manager.broadcast(incident_id, {
+    run_async(manager.broadcast, incident_id, {
         "type": "person_updated", "kind": "person", "uid": person.id,
         "column_id": person.column_id, "vehicle_uid": person.vehicle_id,
         "source_vehicle_uid": old_vehicle_id,
@@ -3086,7 +3087,7 @@ async def update_person_endpoint(
 
 
 @router.post("/einsatz/{incident_id}/person/{person_id}/status")
-async def set_person_status_endpoint(
+def set_person_status_endpoint(
     incident_id: int, person_id: int, request: Request,
     status: str = Form(...),
     db: Session = Depends(get_db),
@@ -3107,12 +3108,12 @@ async def set_person_status_endpoint(
             user_id=request.state.user.id,
         )
     db.commit()
-    await manager.broadcast(incident_id, {"type": "person_updated", "kind": "person", "uid": person.id})
+    run_async(manager.broadcast, incident_id, {"type": "person_updated", "kind": "person", "uid": person.id})
     return Response(status_code=204)
 
 
 @router.post("/einsatz/{incident_id}/person/{person_id}/loeschen")
-async def delete_person_endpoint(
+def delete_person_endpoint(
     incident_id: int, person_id: int, request: Request,
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "recorder")),
@@ -3123,12 +3124,12 @@ async def delete_person_endpoint(
     person_uid = person.id
     db.delete(person)
     db.commit()
-    await manager.broadcast(incident_id, {"type": "person_deleted", "uid": person_uid})
+    run_async(manager.broadcast, incident_id, {"type": "person_deleted", "uid": person_uid})
     return RedirectResponse(f"/einsatz/{incident_id}", status_code=303)
 
 
 @router.post("/einsatz/{incident_id}/aufgabe/{task_id}", response_class=HTMLResponse)
-async def update_task_endpoint(
+def update_task_endpoint(
     incident_id: int, task_id: int, request: Request,
     title: str = Form(...), detail: str = Form(""),
     due_after_min: int = Form(0),
@@ -3148,7 +3149,7 @@ async def update_task_endpoint(
         task.due_at = None
         task.due_after_sec = None
     db.commit()
-    await manager.broadcast(incident_id, {
+    run_async(manager.broadcast, incident_id, {
         "type": "task_updated", "kind": "task", "uid": task.id, "column_id": task.column_id,
         "vehicle_uid": task.vehicle_id,
     })
@@ -3171,7 +3172,7 @@ async def update_task_endpoint(
 
 
 @router.post("/einsatz/{incident_id}/aufgabe/{task_id}/ausblenden")
-async def cancel_task_endpoint(
+def cancel_task_endpoint(
     incident_id: int, task_id: int, request: Request, db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "recorder")),
 ):
@@ -3180,7 +3181,7 @@ async def cancel_task_endpoint(
         return Response(status_code=404)
     cancel_task(db, task, user_id=request.state.user.id)
     db.commit()
-    await manager.broadcast(incident_id, {
+    run_async(manager.broadcast, incident_id, {
         "type": "task_updated", "kind": "task", "uid": task.id, "column_id": task.column_id,
         "vehicle_uid": task.vehicle_id,
     })
@@ -3188,7 +3189,7 @@ async def cancel_task_endpoint(
 
 
 @router.post("/einsatz/{incident_id}/aufgabe/{task_id}/ki-annehmen")
-async def accept_ai_suggestion(
+def accept_ai_suggestion(
     incident_id: int, task_id: int, request: Request, db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "recorder")),
 ):
@@ -3197,14 +3198,14 @@ async def accept_ai_suggestion(
         return Response(status_code=404)
     task.source = "manual"
     db.commit()
-    await manager.broadcast(incident_id, {
+    run_async(manager.broadcast, incident_id, {
         "type": "task_updated", "kind": "task", "uid": task.id, "column_id": task.column_id,
     })
     return Response(status_code=204)
 
 
 @router.post("/einsatz/{incident_id}/aufgabe/{task_id}/ki-verwerfen")
-async def reject_ai_suggestion(
+def reject_ai_suggestion(
     incident_id: int, task_id: int, request: Request, db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "recorder")),
 ):
@@ -3214,7 +3215,7 @@ async def reject_ai_suggestion(
     task_column_id = task.column_id
     db.delete(task)
     db.commit()
-    await manager.broadcast(incident_id, {"type": "task_cancelled", "column_id": task_column_id})
+    run_async(manager.broadcast, incident_id, {"type": "task_cancelled", "column_id": task_column_id})
     return Response(status_code=204)
 
 
@@ -3247,7 +3248,7 @@ async def generate_lagebild(
 
 
 @router.post("/einsatz/{incident_id}/ki-lagebild/journal")
-async def save_lagebild_journal(
+def save_lagebild_journal(
     incident_id: int, request: Request, db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "recorder")),
 ):
@@ -3256,7 +3257,7 @@ async def save_lagebild_journal(
     from app.core.audit import write_audit
     from app.services.incident_service import _get_column as _gc
 
-    body = await request.json()
+    body = run_async(request.json)
     text = (body.get("text") or "").strip()
     if not text:
         raise HTTPException(400, "Kein Text übergeben.")
@@ -3274,7 +3275,7 @@ async def save_lagebild_journal(
     user_id = getattr(getattr(request.state, "user", None), "id", None)
     write_audit(db, "ai.lagebild.journal", incident_id=incident_id, user_id=user_id)
     db.commit()
-    await manager.broadcast(incident_id, {
+    run_async(manager.broadcast, incident_id, {
         "type": "message_created", "column_id": msg.column_id, "vehicle_uid": msg.vehicle_id,
     })
     return Response(status_code=204)
@@ -3376,7 +3377,7 @@ async def upload_task_media(
 
 
 @router.post("/einsatz/{incident_id}/aufgabe/{task_id}/medien/{media_id}/loeschen", response_class=HTMLResponse)
-async def delete_task_media(
+def delete_task_media(
     incident_id: int, task_id: int, media_id: int, request: Request,
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "recorder")),
@@ -3396,7 +3397,7 @@ async def delete_task_media(
         return Response(status_code=404)
     db.refresh(task, ["media"])
     incident = _incident_or_404(incident_id, db)
-    await manager.broadcast(incident_id, {
+    run_async(manager.broadcast, incident_id, {
         "type": "task_updated", "task_id": task_id, "kind": "task", "uid": task.id,
         "column_id": task.column_id,
     })
@@ -3570,7 +3571,7 @@ def delete_person_media(
 # ── Drag & Drop: generischer Karte-verschieben-Endpoint ──────────────────────
 
 @router.post("/einsatz/{incident_id}/karte/verschieben")
-async def move_card_endpoint(
+def move_card_endpoint(
     incident_id: int, request: Request,
     background_tasks: BackgroundTasks,
     kind: str = Form(...),
@@ -3609,7 +3610,7 @@ async def move_card_endpoint(
     if kind == "person" and not moved:
         # The client has already changed its DOM.  Broadcast the affected zones
         # before returning the conflict so all clients can resynchronise them.
-        await manager.broadcast(incident_id, {
+        run_async(manager.broadcast, incident_id, {
             "type": "card_moved", "kind": kind, "uid": uid,
             "column_id": source_column_id, "source_column_id": source_column_id,
             "dropped_column_id": column_id,
@@ -3638,7 +3639,7 @@ async def move_card_endpoint(
             target_column_id = _entity_after.column_id
             if kind in {"task", "message", "person"}:
                 vehicle_uid = _entity_after.vehicle_id
-    await manager.broadcast(incident_id, {
+    run_async(manager.broadcast, incident_id, {
         "type": "card_moved", "kind": kind, "uid": uid,
         "column_id": target_column_id, "source_column_id": source_column_id,
         # The browser has already optimistically put a card into this zone.
@@ -3653,7 +3654,7 @@ async def move_card_endpoint(
         if vehicle_status_after != vehicle_status_before:
             incident = _incident_or_404(incident_id, db)
             from app.services.incident_live_notify import notify_incident_live
-            await notify_incident_live(
+            run_async(notify_incident_live,
                 db, incident, org_id=incident.primary_org_id, reason="unit_status",
                 background_tasks=background_tasks,
             )
@@ -3800,7 +3801,7 @@ async def address_geocode(
 
 
 @router.post("/einsatz/{incident_id}/adresse", response_class=HTMLResponse)
-async def address_save(
+def address_save(
     incident_id: int, request: Request, background_tasks: BackgroundTasks,
     address_street: str = Form(""),
     address_no: str = Form(""),
@@ -3861,7 +3862,7 @@ async def address_save(
         from app.services.print_dispatcher import autoprint_incident_updated_background
         background_tasks.add_task(autoprint_incident_updated_background, incident.id)
 
-    await manager.broadcast(incident_id, {"type": "address_updated"})
+    run_async(manager.broadcast, incident_id, {"type": "address_updated"})
 
     org = db.get(FireDept, incident.primary_org_id) if incident.primary_org_id else None
     return templates.TemplateResponse(request, "incident/_address_modal.html", {

@@ -1,7 +1,6 @@
 """Regression tests for the rescued-person board visibility invariant."""
 from __future__ import annotations
 
-import asyncio
 from types import SimpleNamespace
 
 import pytest
@@ -218,7 +217,7 @@ def test_person_move_endpoint_returns_conflict_for_invalid_vehicle(scene, monkey
     monkeypatch.setattr(ui_incident.manager, "broadcast", no_broadcast)
     request = Request({"type": "http", "method": "POST", "path": "/"})
     request.state.user = SimpleNamespace(id=1, org_id=scene.incident.primary_org_id)
-    response = asyncio.run(ui_incident.move_card_endpoint(
+    response = (ui_incident.move_card_endpoint(
         scene.incident.id, request, BackgroundTasks(), "person", person.id,
         vehicle_id=scene.other_vehicle.id, db=scene.db, _=None,
     ))
