@@ -80,7 +80,7 @@ def _stats_context(request: Request, db: Session, user, von: str, bis: str) -> d
 
 
 @router.get("/statistik", response_class=HTMLResponse)
-async def stats(request: Request, db: Session = Depends(get_db), von: str = "", bis: str = ""):
+def stats(request: Request, db: Session = Depends(get_db), von: str = "", bis: str = ""):
     user = getattr(request.state, "user", None)
     if not user:
         return RedirectResponse("/login", status_code=302)
@@ -89,7 +89,7 @@ async def stats(request: Request, db: Session = Depends(get_db), von: str = "", 
 
 
 @router.get("/statistik/inhalt", response_class=HTMLResponse)
-async def stats_content(request: Request, db: Session = Depends(get_db), von: str = "", bis: str = ""):
+def stats_content(request: Request, db: Session = Depends(get_db), von: str = "", bis: str = ""):
     user = getattr(request.state, "user", None)
     if not user:
         return RedirectResponse("/login", status_code=302)
@@ -100,7 +100,7 @@ async def stats_content(request: Request, db: Session = Depends(get_db), von: st
 
 
 @router.get("/statistik/export.xlsx")
-async def stats_export(request: Request, db: Session = Depends(get_db), von: str = "", bis: str = ""):
+def stats_export(request: Request, db: Session = Depends(get_db), von: str = "", bis: str = ""):
     user = getattr(request.state, "user", None)
     if not user:
         return RedirectResponse("/login", status_code=302)
@@ -118,7 +118,7 @@ async def stats_export(request: Request, db: Session = Depends(get_db), von: str
 
 
 @router.get("/statistik/bericht.pdf")
-async def stats_pdf(request: Request, db: Session = Depends(get_db), von: str = "", bis: str = ""):
+def stats_pdf(request: Request, db: Session = Depends(get_db), von: str = "", bis: str = ""):
     user = getattr(request.state, "user", None)
     if not user:
         return RedirectResponse("/login", status_code=302)
@@ -140,7 +140,7 @@ async def stats_pdf(request: Request, db: Session = Depends(get_db), von: str = 
 
 
 @router.get("/statistik/fahrtenbuch", response_class=HTMLResponse)
-async def stats_fahrtenbuch(
+def stats_fahrtenbuch(
     request: Request,
     db: Session = Depends(get_db),
     von: str = "",
@@ -256,7 +256,7 @@ async def stats_fahrtenbuch(
 
 
 @router.get("/statistik/fahrtenbuch/maschinisten.xlsx")
-async def stats_fahrtenbuch_maschinisten_xlsx(
+def stats_fahrtenbuch_maschinisten_xlsx(
     request: Request,
     jahr: int = 0,
     db: Session = Depends(get_db),

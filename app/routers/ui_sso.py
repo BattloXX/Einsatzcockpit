@@ -85,7 +85,7 @@ def sso_settings_page(
 # ── POST /admin/sso/save ──────────────────────────────────────────────────────
 
 @router.post("/sso/save")
-async def sso_settings_save(
+def sso_settings_save(
     request: Request,
     db=Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin")),

@@ -68,7 +68,7 @@ def _wechsel_response(
 
 
 @router.post("/benutzer/wechseln")
-async def benutzer_wechseln(
+def benutzer_wechseln(
     request: Request,
     user_id: int = Form(...),
     fcm_token: str = Form(""),
@@ -100,7 +100,7 @@ async def benutzer_hinzufuegen():
 
 
 @router.post("/logout/alle")
-async def alle_abmelden(request: Request, db: Session = Depends(get_db)):
+def alle_abmelden(request: Request, db: Session = Depends(get_db)):
     set_tenant_context(db, None)
     user = getattr(request.state, "user", None)
     if user:

@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
+from app.core.async_bridge import run_async
 from app.core.audit import write_audit
 from app.core.crypto import encrypt_secret
 from app.core.permissions import is_system_admin, require_role, same_org_or_system_admin
@@ -84,7 +85,7 @@ def teams_alarm_settings_page(
 
 # ── POST /admin/teams-alarmierung/save ───────────────────────────────────────
 @router.post("/teams-alarmierung/save")
-async def teams_alarm_settings_save(
+def teams_alarm_settings_save(
     request: Request,
     db=Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin")),
@@ -150,7 +151,7 @@ async def teams_alarm_settings_save(
 # nur ein An/Aus je Alarmtyp — alle Zeilen der Org werden in einem Formular gesammelt
 # gespeichert (angehakt = aktiv, sonst deaktiviert).
 @router.post("/teams-alarmierung/stichworte")
-async def teams_alarm_settings_save_stichworte(
+def teams_alarm_settings_save_stichworte(
     request: Request,
     db=Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin")),
@@ -162,7 +163,7 @@ async def teams_alarm_settings_save_stichworte(
     if not same_org_or_system_admin(user, effective_org_id):
         raise HTTPException(status_code=403, detail="Keine Berechtigung für diese Organisation")
 
-    form = await request.form()
+    form = run_async(request.form)
     # Checkbox-Werte, nie Datei-Uploads -- isinstance-Guard narrowt str | UploadFile auf str.
     enabled_ids = {
         int(v) for k, v in form.multi_items() if k == "alarm_type_id" and isinstance(v, str)
@@ -186,7 +187,7 @@ async def teams_alarm_settings_save_stichworte(
 # ── POST /admin/teams-alarmierung/kanalbindung/{binding_id} ──────────────────
 # Ordnet eine per Bot eingefangene Kanalbindung einem Ziel zu (Echtalarm/Übung).
 @router.post("/teams-alarmierung/kanalbindung/{binding_id}/loeschen")
-async def teams_alarm_binding_delete(
+def teams_alarm_binding_delete(
     binding_id: int,
     request: Request,
     db=Depends(get_db),

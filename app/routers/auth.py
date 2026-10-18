@@ -64,7 +64,7 @@ async def login_page(request: Request, next: str = "", fcm_token: str = "", add:
 
 @router.post("/login")
 @(_limiter.limit(settings.LOGIN_RATELIMIT) if _limiter else lambda f: f)
-async def login(
+def login(
     request: Request,
     response: Response,
     username: str = Form(...),
@@ -110,7 +110,7 @@ async def login(
 
 
 @router.get("/geraet-login")
-async def device_login(
+def device_login(
     request: Request,
     token: str,
     fcm_token: str | None = None,
@@ -162,7 +162,7 @@ async def device_login_pin_form(request: Request):
 
 @router.post("/geraet-login-pin", response_class=HTMLResponse)
 @(_limiter.limit("5/15minutes") if _limiter else lambda f: f)
-async def device_login_pin_submit(request: Request, pin: str = Form(...), db: Session = Depends(get_db)):
+def device_login_pin_submit(request: Request, pin: str = Form(...), db: Session = Depends(get_db)):
     from app.services.device_login_service import redeem_pairing_pin
 
     result = redeem_pairing_pin(db, pin)
@@ -205,14 +205,14 @@ async def device_login_pin_submit(request: Request, pin: str = Form(...), db: Se
 
 
 @router.get("/logout")
-async def logout(request: Request, db: Session = Depends(get_db)):
+def logout(request: Request, db: Session = Depends(get_db)):
     from app.routers.ui_account_switch import logout_oder_wechseln
 
     return logout_oder_wechseln(request, db)
 
 
 @router.get("/qr-login")
-async def qr_login(request: Request, token: str, incident_id: int, db: Session = Depends(get_db)):
+def qr_login(request: Request, token: str, incident_id: int, db: Session = Depends(get_db)):
     """One-click login via QR-Code – valid for incident lifetime."""
     data = unsign_qr_token(token)
     if not data or data.get("incident_id") != incident_id:
@@ -274,7 +274,7 @@ def _has_valid_pin_cookie(request: Request, incident_id: int) -> bool:
 
 
 @router.get("/qr-pin", response_class=HTMLResponse)
-async def qr_pin_page(request: Request, incident_id: int, db: Session = Depends(get_db)):
+def qr_pin_page(request: Request, incident_id: int, db: Session = Depends(get_db)):
     """PIN-Abfrage im QR-Flow – vor der Namenseingabe."""
     user = getattr(request.state, "user", None)
     if not user:
@@ -292,7 +292,7 @@ async def qr_pin_page(request: Request, incident_id: int, db: Session = Depends(
 
 @router.post("/qr-pin")
 @(_limiter.limit("5/15minutes") if _limiter else lambda f: f)
-async def qr_pin_submit(
+def qr_pin_submit(
     request: Request,
     incident_id: int = Form(...),
     pin: str = Form(""),
@@ -313,7 +313,7 @@ async def qr_pin_submit(
 
 
 @router.get("/qr-name", response_class=HTMLResponse)
-async def qr_name_page(request: Request, incident_id: int | None = None, db: Session = Depends(get_db)):
+def qr_name_page(request: Request, incident_id: int | None = None, db: Session = Depends(get_db)):
     """Intermediate name-entry step after QR login."""
     user = getattr(request.state, "user", None)
     if not user:

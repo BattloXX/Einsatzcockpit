@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from sqlalchemy import case, func, or_, update
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.async_bridge import run_async
 from app.core.dependencies import CurrentOrgId
 from app.core.permissions import can_edit_proben, is_proben_admin
 from app.core.templating import templates
@@ -1304,7 +1305,7 @@ def probe_weiteren_uebungseinsatz_anlegen(
 
 
 @router.post("/{termin_id}/uebungseinsatz/starten")
-async def probe_uebungseinsatz_starten(
+def probe_uebungseinsatz_starten(
     request: Request,
     termin_id: int,
     background_tasks: BackgroundTasks,
@@ -1324,13 +1325,10 @@ async def probe_uebungseinsatz_starten(
     db.commit()
     from app.services.incident_notify import notify_incident_created
 
-    await notify_incident_created(
-        db,
-        incident,
-        org_id=user.org_id,
-        triggered_by_user_id=user.id,
-        base_url=str(request.base_url),
-        background_tasks=background_tasks,
+    run_async(
+        notify_incident_created, db, incident,
+        org_id=user.org_id, triggered_by_user_id=user.id,
+        base_url=str(request.base_url), background_tasks=background_tasks,
     )
     from app.services.broadcast import broadcast_org
     from app.services.exercise_guard import darf_extern
@@ -1424,7 +1422,7 @@ def probe_teilnehmer_appell(
 
 
 @router.put("/{termin_id}/teilnehmer/appell/{member_id}")
-async def probe_teilnehmer_appell_status(
+def probe_teilnehmer_appell_status(
     request: Request,
     termin_id: int,
     member_id: int,
@@ -1440,7 +1438,7 @@ async def probe_teilnehmer_appell_status(
     if member is None:
         raise HTTPException(404, "Mitglied nicht gefunden")
     try:
-        payload = await request.json()
+        payload = run_async(request.json)
         status = TeilnahmeStatus(str(payload.get("status")))
     except (ValueError, TypeError, AttributeError) as exc:
         raise HTTPException(422, "Ungültiger Teilnahmestatus") from exc
@@ -1466,7 +1464,7 @@ async def probe_teilnehmer_appell_status(
 
 
 @router.post("/{termin_id}/teilnehmer/appell/abschliessen")
-async def probe_teilnehmer_appell_abschliessen(
+def probe_teilnehmer_appell_abschliessen(
     request: Request,
     termin_id: int,
     db: Session = Depends(get_db),
@@ -1477,7 +1475,7 @@ async def probe_teilnehmer_appell_abschliessen(
     _require_edit(user)
     termin = _termin_or_404(db, user.org_id, termin_id)
     try:
-        payload = await request.json()
+        payload = run_async(request.json)
     except ValueError:
         payload = {}
     force = bool(payload.get("force"))
@@ -1508,7 +1506,7 @@ async def probe_teilnehmer_appell_abschliessen(
 
 
 @router.patch("/{termin_id}/teilnehmer/{member_id}", response_class=HTMLResponse)
-async def probe_teilnehmer_bearbeiten(
+def probe_teilnehmer_bearbeiten(
     request: Request,
     termin_id: int,
     member_id: int,
@@ -1522,7 +1520,7 @@ async def probe_teilnehmer_bearbeiten(
     member = db.query(Member).filter(Member.id == member_id, Member.active.is_(True)).first()
     if member is None:
         raise HTTPException(404, "Mitglied nicht gefunden")
-    form = await request.form()
+    form = run_async(request.form)
     status = str(form.get("status") or TeilnahmeStatus.NICHT_ERFASST.value)
     try:
         normalized_status = TeilnahmeStatus(status)
@@ -1712,7 +1710,7 @@ def probe_erkenntnis_anlegen(
 
 
 @router.patch("/{termin_id}/nachbereitung/erkenntnis/{erkenntnis_id}", response_class=HTMLResponse)
-async def probe_erkenntnis_bearbeiten(
+def probe_erkenntnis_bearbeiten(
     request: Request,
     termin_id: int,
     erkenntnis_id: int,
@@ -1724,7 +1722,7 @@ async def probe_erkenntnis_bearbeiten(
     _require_edit(user)
     termin = _termin_or_404(db, user.org_id, termin_id)
     row = _erkenntnis_or_404(db, user.org_id, termin.id, erkenntnis_id)
-    form = await request.form()
+    form = run_async(request.form)
     text = str(form.get("text") or "").strip()
     kategorie = str(form.get("kategorie") or "").strip()
     if not text or not kategorie:

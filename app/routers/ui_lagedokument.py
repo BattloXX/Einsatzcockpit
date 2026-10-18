@@ -72,7 +72,7 @@ def _get_or_create_dokument(db: Session, lage: MajorIncident) -> LageDokument:
 
 
 @router.get("/lage/{lage_id}/lagedokument", response_class=HTMLResponse)
-async def lagedokument_view(
+def lagedokument_view(
     lage_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -97,7 +97,7 @@ async def lagedokument_view(
 
 
 @router.post("/lage/{lage_id}/lagedokument", response_class=HTMLResponse)
-async def lagedokument_save(
+def lagedokument_save(
     lage_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -121,7 +121,7 @@ async def lagedokument_save(
 
 
 @router.get("/lage/{lage_id}/lagedokument/druck", response_class=HTMLResponse)
-async def lagedokument_druck(
+def lagedokument_druck(
     lage_id: int,
     request: Request,
     db: Session = Depends(get_db),

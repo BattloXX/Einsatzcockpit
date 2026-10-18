@@ -12,6 +12,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.async_bridge import run_async
 from app.core.audit import write_audit
 from app.core.permissions import require_role
 from app.core.templating import templates
@@ -426,7 +427,7 @@ def list_detail(
 
 
 @router.post("/lists/{list_id}/csv")
-async def csv_import(
+def csv_import(
     list_id: int,
     file: UploadFile = File(...),
     db=Depends(get_db),
@@ -436,13 +437,13 @@ async def csv_import(
     item = db.get(MailingRecipientList, list_id)
     if not item or item.kind != "static":
         raise HTTPException(404)
-    service.import_csv(db, item, await file.read())
+    service.import_csv(db, item, run_async(file.read))
     db.commit()
     return RedirectResponse(f"/mailing/lists/{item.id}", 303)
 
 
 @router.post("/lists/{list_id}/xlsx")
-async def xlsx_import(
+def xlsx_import(
     list_id: int,
     file: UploadFile = File(...),
     db=Depends(get_db),
@@ -453,7 +454,7 @@ async def xlsx_import(
     if not item or item.kind != "static":
         raise HTTPException(404)
     try:
-        service.import_xlsx(db, item, await file.read())
+        service.import_xlsx(db, item, run_async(file.read))
         db.commit()
     except Exception as exc:
         db.rollback()
@@ -878,7 +879,7 @@ def campaign_retry(
 
 
 @router.post("/campaigns/{campaign_id}/attachments")
-async def attachment_upload(
+def attachment_upload(
     campaign_id: int,
     file: UploadFile = File(...),
     db=Depends(get_db),
@@ -890,7 +891,7 @@ async def attachment_upload(
     item = db.get(MailingCampaign, campaign_id)
     if not item:
         raise HTTPException(404)
-    obj = store_attachment(db, item, file.filename or "attachment", await file.read(), user.id)
+    obj = store_attachment(db, item, file.filename or "attachment", run_async(file.read), user.id)
     write_audit(
         db,
         "mailing.attachment.uploaded",

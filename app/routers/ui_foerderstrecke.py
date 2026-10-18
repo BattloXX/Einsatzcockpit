@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
+from app.core.async_bridge import run_async
 from app.core.audit import write_audit
 from app.core.permissions import require_role
 from app.core.templating import templates
@@ -335,13 +336,13 @@ def _baue_eingabe(daten: dict, db: Session, org_id: int):
 
 
 @router.post("/berechnen")
-async def berechnen(
+def berechnen(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_role("recorder")),
     _guard: None = Depends(require_foerderstrecke_enabled),
 ):
-    daten = await request.json()
+    daten = run_async(request.json)
     param = daten.get("parameter") or {}
     ansaug, stationen, material_abschnitte = _baue_eingabe(daten, db, user.org_id)  # type: ignore[arg-type]
     if not stationen:
@@ -411,7 +412,7 @@ def _punkt_bei_s(route: list, s_ziel: float) -> list | None:
 
 
 @router.post("/standort-vorschlag")
-async def standort_vorschlag(
+def standort_vorschlag(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_role("recorder")),
@@ -422,7 +423,7 @@ async def standort_vorschlag(
     Nutzt die gewählte Quellpumpe + eine Relaispumpe (aus dem Katalog) und liefert eine
     fertige Stationenliste (mit Koordinaten) zurück, die der Wizard übernimmt.
     """
-    daten = await request.json()
+    daten = run_async(request.json)
     route = [[float(p[0]), float(p[1])] for p in (daten.get("route") or []) if len(p) >= 2]
     if len(route) < 2:
         raise HTTPException(400, "Route mit mindestens 2 Punkten erforderlich.")
@@ -504,13 +505,13 @@ def _kennlinie_stufe(pumpe: FoerderPumpenTyp, rpm: str) -> list:
 # ── Persistenz (PR 5-UI): Speichern / Laden / Status / Löschen ────────────────
 
 @router.post("/speichern")
-async def speichern(
+def speichern(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_role("recorder")),
     _guard: None = Depends(require_foerderstrecke_enabled),
 ):
-    daten = await request.json()
+    daten = run_async(request.json)
     sid = daten.get("id")
     if sid:
         strecke = db.get(Foerderstrecke, int(sid))

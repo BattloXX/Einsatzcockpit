@@ -72,7 +72,7 @@ class AnnotationPayload(BaseModel):
 
 
 @router.put("/api/annotation/{media_typ}/{media_id}")
-async def annotate_save(
+def annotate_save(
     media_typ: str,
     media_id: int,
     payload: AnnotationPayload,

@@ -9,6 +9,7 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.async_bridge import run_async
 from app.core.crypto import decrypt_secret
 from app.core.rate_limit import limiter as _limiter
 from app.core.security import unsign_mail_inbound_webhook_org
@@ -136,7 +137,7 @@ async def resend_system_inbound_webhook(
 
 @router.post("/mail/webhook/resend-inbound/{org_token}")
 @(_limiter.limit("120/minute") if _limiter else lambda f: f)
-async def resend_inbound_webhook(
+def resend_inbound_webhook(
     org_token: str, request: Request, background_tasks: BackgroundTasks, db: Session = Depends(get_db)
 ):
     org_id = unsign_mail_inbound_webhook_org(org_token)
@@ -158,7 +159,7 @@ async def resend_inbound_webhook(
                 return JSONResponse({"detail": "Payload zu groß"}, status_code=413)
         except ValueError:
             return JSONResponse({"detail": "Ungültige Content-Length"}, status_code=400)
-    body = await request.body()
+    body = run_async(request.body)
     if len(body) > 256 * 1024:
         return JSONResponse({"detail": "Payload zu groß"}, status_code=413)
     try:

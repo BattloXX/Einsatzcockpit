@@ -15,7 +15,7 @@ router = APIRouter()
 
 
 @router.get("/infoscreen/statistik/{token}", response_class=HTMLResponse, include_in_schema=False)
-async def statistik_infoscreen(request: Request, token: str, db: Session = Depends(get_db)):
+def statistik_infoscreen(request: Request, token: str, db: Session = Depends(get_db)):
     dash_token = (db.query(StatistikDashboardToken)
                   .execution_options(include_all_tenants=True)
                   .filter(StatistikDashboardToken.token_hash == hash_api_key(token)).first())

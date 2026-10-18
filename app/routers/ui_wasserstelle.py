@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Uplo
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
+from app.core.async_bridge import run_async
 from app.core.audit import write_audit
 from app.core.permissions import require_role
 from app.core.templating import templates
@@ -215,14 +216,14 @@ def wasserstelle_loeschen(
 # ── CSV-Import ──────────────────────────────────────────────────────────────────
 
 @router.post("/import")
-async def wasserstellen_import(
+def wasserstellen_import(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_role("org_admin")),
     datei: UploadFile = File(...),
     ersetzen: str = Form(""),
 ):
-    inhalt = await datei.read()
+    inhalt = run_async(datei.read)
     if not inhalt:
         raise HTTPException(400, "Leere Datei")
     parsed = parse_wasserstellen_csv(inhalt)

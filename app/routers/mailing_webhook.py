@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
+from app.core.async_bridge import run_async
 from app.core.rate_limit import limiter as _limiter
 from app.core.security import unsign_mailing_webhook_org
 from app.db import get_db
@@ -18,7 +19,7 @@ router = APIRouter(tags=["mailing-webhook"])
 
 @router.post("/mailing/webhook/resend/{org_token}")
 @(_limiter.limit("120/minute") if _limiter else lambda f: f)
-async def resend_webhook(org_token: str, request: Request, db: Session = Depends(get_db)):
+def resend_webhook(org_token: str, request: Request, db: Session = Depends(get_db)):
     org_id = unsign_mailing_webhook_org(org_token)
     if org_id is None:
         return JSONResponse({"detail": "Nicht gefunden"}, status_code=404)
@@ -36,7 +37,7 @@ async def resend_webhook(org_token: str, request: Request, db: Session = Depends
     signature = request.headers.get("svix-signature")
     if svix_id is None or timestamp is None or signature is None:
         return JSONResponse({"detail": "Svix-Header fehlen"}, status_code=400)
-    body = await request.body()
+    body = run_async(request.body)
     if not verify_resend_webhook_signature(secret, body, svix_id, timestamp, signature):
         return JSONResponse({"detail": "Ungültige Signatur"}, status_code=401)
     try:

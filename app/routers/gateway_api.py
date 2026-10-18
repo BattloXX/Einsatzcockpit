@@ -16,6 +16,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 from sqlalchemy.orm import Session
 
+from app.core.async_bridge import run_async
 from app.core.security import hash_api_key
 from app.core.tenant import set_tenant_context
 from app.db import get_db
@@ -42,10 +43,10 @@ def _resolve_gateway_from_bearer(request: Request, db: Session) -> Gateway | Non
 # ── Pairing ────────────────────────────────────────────────────────────────────
 
 @router.post("/gateway/pair")
-async def pair(request: Request, db: Session = Depends(get_db)):
+def pair(request: Request, db: Session = Depends(get_db)):
     """Löst einen Pairing-Code ein und gibt ein langlebiges Device-Token zurück."""
     set_tenant_context(db, None)
-    data = await request.json()
+    data = run_async(request.json)
     code = (data.get("code") or data.get("pairing_code") or "").strip()
     if not code:
         raise HTTPException(status_code=400, detail="code fehlt")
@@ -68,7 +69,7 @@ async def pair(request: Request, db: Session = Depends(get_db)):
 # ── Serieller Alarm-Ingest ─────────────────────────────────────────────────────
 
 @router.post("/gateway/alarms")
-async def ingest_alarm(
+def ingest_alarm(
     request: Request, background_tasks: BackgroundTasks, db: Session = Depends(get_db)
 ):
     """Nimmt einen seriell empfangenen Alarm entgegen (idempotent via Rohtext-Hash)."""
@@ -78,7 +79,7 @@ async def ingest_alarm(
         raise HTTPException(status_code=401, detail="Ungültiges Device-Token")
     assert gateway.org_id is not None  # Gateway wird immer mit org_id angelegt
 
-    data = await request.json()
+    data = run_async(request.json)
     raw_text = data.get("raw_text") or ""
     if not raw_text:
         raise HTTPException(status_code=400, detail="raw_text fehlt")
@@ -121,21 +122,16 @@ async def ingest_alarm(
         if inc is not None:
             from app.services.incident_notify import incident_alarm_started, notify_incident_created
             if not incident_alarm_started(db, inc.id):
-                await notify_incident_created(
-                    db, inc,
-                    org_id=gateway.org_id,
-                    triggered_by_user_id=None,
-                    push_url=f"/einsatz/{inc.id}",
-                    base_url=str(request.base_url),
-                    background_tasks=background_tasks,
-                    source="gateway",
+                run_async(
+                    notify_incident_created, db, inc,
+                    org_id=gateway.org_id, triggered_by_user_id=None,
+                    push_url=f"/einsatz/{inc.id}", base_url=str(request.base_url),
+                    background_tasks=background_tasks, source="gateway",
                 )
             try:
                 from app.services.broadcast import broadcast_org
                 from app.services.exercise_guard import darf_extern
-                await broadcast_org(
-                    gateway.org_id,
-                    {
+                run_async(broadcast_org, gateway.org_id, {
                         "type": "incident_created",
                         "incident_id": ingest.einsatz_id,
                         "alarm": inc.alarm_type_code,
@@ -148,8 +144,7 @@ async def ingest_alarm(
                         ),
                         "alarm_type_code": inc.alarm_type_code,
                         "is_exercise": inc.is_exercise,
-                    },
-                )
+                    })
             except Exception:
                 pass
             if inc.lat is None and (inc.address_street or inc.address_city):

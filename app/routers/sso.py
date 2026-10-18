@@ -105,7 +105,7 @@ def _load_sso_config(db: Session, slug: str) -> tuple[FireDept, OrgSsoConfig] | 
 
 @router.get("/sso/{slug}/login")
 @(_limiter.limit(settings.LOGIN_RATELIMIT) if _limiter else lambda f: f)
-async def sso_login(
+def sso_login(
     request: Request, slug: str, next: str | None = None,
     login_hint: str | None = None, db: Session = Depends(get_db),
 ):
@@ -373,7 +373,7 @@ async def sso_callback(
 
 @router.get("/sso/discover")
 @(_limiter.limit("20/minute") if _limiter else lambda f: f)  # F-08: Rate-Limit
-async def sso_discover(request: Request, email: str, db: Session = Depends(get_db)):
+def sso_discover(request: Request, email: str, db: Session = Depends(get_db)):
     """Ermittelt die SSO-Login-URL für eine E-Mail-Domain."""
     if not settings.SSO_ENABLED or "@" not in email:
         return JSONResponse({"found": False})

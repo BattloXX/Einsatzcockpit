@@ -23,7 +23,7 @@ def _bearbeiten(db: Session, raw: str | None) -> MailWeiterleitung | None:
 
 
 @router.get("/mail-weiterleitungen", response_class=HTMLResponse)
-async def page(request: Request, db: Session = Depends(get_db), _=Depends(require_role("system_admin"))):
+def page(request: Request, db: Session = Depends(get_db), _=Depends(require_role("system_admin"))):
     return templates.TemplateResponse(request, "admin/mail_weiterleitungen.html", {
         "user": request.state.user,
         "regeln": db.query(MailWeiterleitung).order_by(MailWeiterleitung.adresse).all(),
@@ -36,7 +36,7 @@ async def page(request: Request, db: Session = Depends(get_db), _=Depends(requir
 
 
 @router.post("/mail-weiterleitungen")
-async def speichern(request: Request, db: Session = Depends(get_db), _=Depends(require_role("system_admin")),
+def speichern(request: Request, db: Session = Depends(get_db), _=Depends(require_role("system_admin")),
                     regel_id: int | None = Form(None), adresse: str = Form(""), ziele: str = Form(""),
                     modus: str = Form("inline"), beschreibung: str = Form(""), max_pro_stunde: int = Form(60),
                     aktiv: bool = Form(False), catch_all_bestaetigt: bool = Form(False)):
@@ -62,7 +62,7 @@ async def speichern(request: Request, db: Session = Depends(get_db), _=Depends(r
 
 
 @router.post("/mail-weiterleitungen/{regel_id}/toggle")
-async def toggle(regel_id: int, request: Request, db: Session = Depends(get_db),
+def toggle(regel_id: int, request: Request, db: Session = Depends(get_db),
                  _=Depends(require_role("system_admin"))):
     row = db.get(MailWeiterleitung, regel_id)
     if row:
@@ -73,7 +73,7 @@ async def toggle(regel_id: int, request: Request, db: Session = Depends(get_db),
 
 
 @router.post("/mail-weiterleitungen/{regel_id}/loeschen")
-async def loeschen(regel_id: int, request: Request, db: Session = Depends(get_db),
+def loeschen(regel_id: int, request: Request, db: Session = Depends(get_db),
                    _=Depends(require_role("system_admin"))):
     row = db.get(MailWeiterleitung, regel_id)
     if row:

@@ -9,6 +9,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.core.async_bridge import run_async
 from app.core.security import hash_password, verify_password
 from app.core.templating import templates
 from app.db import get_db
@@ -30,7 +31,7 @@ def _avatar_url(user: User) -> str | None:
 
 
 @router.get("/profil", response_class=HTMLResponse)
-async def profile_page(request: Request, db: Session = Depends(get_db)):
+def profile_page(request: Request, db: Session = Depends(get_db)):
     user = getattr(request.state, "user", None)
     if not user:
         return RedirectResponse("/login", status_code=302)
@@ -51,7 +52,7 @@ async def profile_page(request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/profil")
-async def profile_update(
+def profile_update(
     request: Request,
     display_name: str = Form(""),
     phone: str = Form(""),
@@ -81,7 +82,7 @@ async def profile_update(
 
 
 @router.post("/profil/mcp/{client_id}/trennen")
-async def profile_disconnect_mcp(request: Request, client_id: str, db: Session = Depends(get_db)):
+def profile_disconnect_mcp(request: Request, client_id: str, db: Session = Depends(get_db)):
     user = getattr(request.state, "user", None)
     if not user:
         return RedirectResponse("/login", status_code=302)
@@ -126,7 +127,7 @@ async def profile_change_password(
 
 
 @router.post("/profil/avatar")
-async def profile_upload_avatar(
+def profile_upload_avatar(
     request: Request,
     avatar: UploadFile = File(...),
     db: Session = Depends(get_db),
@@ -138,7 +139,7 @@ async def profile_upload_avatar(
     if not db_user:
         return RedirectResponse("/login", status_code=302)
 
-    data = await avatar.read(_AVATAR_MAX_BYTES + 1)
+    data = run_async(avatar.read, _AVATAR_MAX_BYTES + 1)
     if len(data) > _AVATAR_MAX_BYTES:
         return RedirectResponse("/profil?error=avatar_too_large", status_code=302)
 

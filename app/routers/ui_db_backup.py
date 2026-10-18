@@ -6,7 +6,6 @@ from threading import Lock
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
-from starlette.concurrency import run_in_threadpool
 from starlette.responses import FileResponse
 
 from app.cli import run_backup
@@ -76,7 +75,7 @@ def db_backups(
 
 
 @router.post("/db-backups/erstellen", response_class=HTMLResponse)
-async def db_backup_erstellen(
+def db_backup_erstellen(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_system_admin),
@@ -89,8 +88,7 @@ async def db_backup_erstellen(
         )
 
     try:
-        result = await run_in_threadpool(
-            run_backup,
+        result = run_backup(
             out_dir=settings.BACKUP_DIR,
             keep=-1,
             include_media=0,

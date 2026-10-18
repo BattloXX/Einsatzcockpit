@@ -169,7 +169,7 @@ async def pin_login_code_form(request: Request, phone: str = "", add: int = 0):
 
 @router.post("/pin-login/code", response_class=HTMLResponse)
 @(_limiter.limit("5/minute") if _limiter else lambda f: f)
-async def pin_login_code_submit(
+def pin_login_code_submit(
     request: Request, phone: str = Form(...), pin: str = Form(...),
     remember: str = Form(""), add: int = Form(0), db: Session = Depends(get_db),
 ):

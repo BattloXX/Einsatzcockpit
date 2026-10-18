@@ -11,6 +11,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, R
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
+from app.core.async_bridge import run_async
 from app.core.dependencies import _set_module_states
 from app.core.security import hash_api_key, sign_native_link_token
 from app.db import get_db
@@ -112,14 +113,14 @@ def sync_kontakte(
 # ── FCM-Token ─────────────────────────────────────────────────────────────────
 
 @router.post("/fcm-token")
-async def register_fcm_token(request: Request, db: Session = Depends(get_db)):
+def register_fcm_token(request: Request, db: Session = Depends(get_db)):
     """Registriert oder aktualisiert den FCM Registration Token des eingeloggten Geräts."""
     user = getattr(request.state, "user", None)
     if not user:
         user = _resolve_user_via_bearer_token(request, db)
     if not user:
         raise HTTPException(status_code=401, detail="Nicht eingeloggt")
-    data = await request.json()
+    data = run_async(request.json)
     token = (data.get("token") or "").strip()
     platform = (data.get("platform") or "android").strip()[:20]
     if not token:
@@ -180,7 +181,7 @@ def get_fcm_token_status(
 
 
 @router.delete("/fcm-token")
-async def unregister_fcm_token(request: Request, db: Session = Depends(get_db)):
+def unregister_fcm_token(request: Request, db: Session = Depends(get_db)):
     """Entfernt den FCM Token bei Logout oder Token-Rotation.
 
     Auth erforderlich; löscht nur Token des eigenen Users (verhindert Push-DoS
@@ -189,7 +190,7 @@ async def unregister_fcm_token(request: Request, db: Session = Depends(get_db)):
     user = getattr(request.state, "user", None)
     if not user:
         raise HTTPException(status_code=401, detail="Nicht eingeloggt")
-    data = await request.json()
+    data = run_async(request.json)
     token = (data.get("token") or "").strip()
     if token:
         db.query(FcmToken).filter(
@@ -229,7 +230,7 @@ async def create_native_link(request: Request):
 # ── Standort ──────────────────────────────────────────────────────────────────
 
 @router.post("/location")
-async def update_location(request: Request, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+def update_location(request: Request, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     """Aktualisiert den Gerätestandort.
 
     Wird von der App nur bei aktivem Einsatz/Dienst aufgerufen (alle 10–30 s).
@@ -238,7 +239,7 @@ async def update_location(request: Request, background_tasks: BackgroundTasks, d
     user = getattr(request.state, "user", None)
     if not user:
         raise HTTPException(status_code=401, detail="Nicht eingeloggt")
-    data = await request.json()
+    data = run_async(request.json)
     try:
         lat = float(data["lat"])
         lng = float(data["lng"])
@@ -354,7 +355,7 @@ def get_vehicles(request: Request, db: Session = Depends(get_db)):
     })
 
 @router.post("/duty")
-async def set_duty(request: Request, db: Session = Depends(get_db)):
+def set_duty(request: Request, db: Session = Depends(get_db)):
     """Setzt den Dienst-Status des Geräts (aktiv/inaktiv).
 
     Die App startet / stoppt das Background-Tracking entsprechend.
@@ -362,7 +363,7 @@ async def set_duty(request: Request, db: Session = Depends(get_db)):
     user = getattr(request.state, "user", None)
     if not user:
         raise HTTPException(status_code=401, detail="Nicht eingeloggt")
-    data = await request.json()
+    data = run_async(request.json)
     active = bool(data.get("active", False))
 
     device_token = _get_device_token(user.id, db)
@@ -454,7 +455,7 @@ def get_duty_state(
 
 
 @router.post("/push-ack")
-async def acknowledge_push(request: Request, db: Session = Depends(get_db)):
+def acknowledge_push(request: Request, db: Session = Depends(get_db)):
     """Bestätigt eine FCM-Zustellung fuer das angemeldete Geraet."""
     user = _resolve_user_via_bearer_token(request, db)
     if not user:
@@ -462,7 +463,7 @@ async def acknowledge_push(request: Request, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=401, detail="Nicht eingeloggt")
 
-    data = await request.json()
+    data = run_async(request.json)
     try:
         delivery_id = int(data.get("delivery_id"))
     except (AttributeError, TypeError, ValueError):

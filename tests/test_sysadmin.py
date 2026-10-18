@@ -361,11 +361,6 @@ def test_quota_rows_ai_used_zero_for_stale_month():
     assert rows[0]["storage_pct"] is None  # keine Quota gesetzt
 
 
-def _run(coro):
-    import asyncio
-    return asyncio.run(coro)
-
-
 def _save_db(org, os_row):
     db = MagicMock()
     db.get.return_value = org
@@ -384,9 +379,9 @@ def test_quota_save_converts_gb_and_tokens():
     db = _save_db(org, os_row)
     request = SimpleNamespace(state=SimpleNamespace(user=SimpleNamespace(id=1)))
 
-    resp = _run(sysadmin_quota_save(
+    resp = sysadmin_quota_save(
         1, request, storage_quota_gb="5", ai_monthly_token_quota="1.000.000", db=db,
-    ))
+    )
 
     assert org.storage_quota_bytes == 5 * _GIB
     assert os_row.ai_monthly_token_quota == 1_000_000
@@ -403,9 +398,9 @@ def test_quota_save_empty_means_unlimited():
     db = _save_db(org, os_row)
     request = SimpleNamespace(state=SimpleNamespace(user=SimpleNamespace(id=1)))
 
-    _run(sysadmin_quota_save(
+    sysadmin_quota_save(
         1, request, storage_quota_gb="  ", ai_monthly_token_quota="", db=db,
-    ))
+    )
 
     assert org.storage_quota_bytes is None
     assert os_row.ai_monthly_token_quota is None
@@ -419,9 +414,9 @@ def test_quota_save_comma_decimal():
     db = _save_db(org, os_row)
     request = SimpleNamespace(state=SimpleNamespace(user=SimpleNamespace(id=1)))
 
-    _run(sysadmin_quota_save(
+    sysadmin_quota_save(
         1, request, storage_quota_gb="1,5", ai_monthly_token_quota="", db=db,
-    ))
+    )
 
     assert org.storage_quota_bytes == int(round(1.5 * _GIB))
 
@@ -437,7 +432,7 @@ def test_quota_save_invalid_storage_raises():
     request = SimpleNamespace(state=SimpleNamespace(user=SimpleNamespace(id=1)))
 
     with pytest.raises(HTTPException) as exc:
-        _run(sysadmin_quota_save(
+        sysadmin_quota_save(
             1, request, storage_quota_gb="abc", ai_monthly_token_quota="", db=db,
-        ))
+        )
     assert exc.value.status_code == 400

@@ -91,7 +91,7 @@ def lis_settings_page(
 
 # ── POST /admin/lis/save ──────────────────────────────────────────────────────
 @router.post("/lis/save")
-async def lis_settings_save(
+def lis_settings_save(
     request: Request,
     db=Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin")),
@@ -237,7 +237,7 @@ async def lis_capture_start(
 
 
 @router.post("/lis/capture/auto-toggle")
-async def lis_capture_auto_toggle(
+def lis_capture_auto_toggle(
     request: Request,
     db=Depends(get_db),
     user: User = Depends(require_system_admin),
@@ -259,7 +259,7 @@ async def lis_capture_auto_toggle(
 
 
 @router.post("/lis/capture/{run_id}/cancel")
-async def lis_capture_cancel(
+def lis_capture_cancel(
     run_id: str,
     request: Request,
     db=Depends(get_db),
@@ -275,7 +275,7 @@ async def lis_capture_cancel(
 
 
 @router.post("/lis/capture/{run_id}/delete")
-async def lis_capture_delete(
+def lis_capture_delete(
     run_id: str,
     request: Request,
     db=Depends(get_db),

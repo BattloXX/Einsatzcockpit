@@ -19,6 +19,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.core.async_bridge import run_async
 from app.core.audit import write_audit
 from app.core.dependencies import get_api_key
 from app.core.rate_limit import get_api_key_identifier
@@ -1131,7 +1132,7 @@ async def _enrich_site_from_alarm(
     settings.API_ALARM_RATELIMIT,
     key_func=get_api_key_identifier,
 ) if _limiter else lambda f: f)
-async def lage_alarm(
+def lage_alarm(
     payload: LageAlarmPayload,
     request: Request,
     background_tasks: BackgroundTasks,
@@ -1191,8 +1192,7 @@ async def lage_alarm(
     db.commit()
 
     from app.services.gsl_live_notify import notify_gsl_live
-    await notify_gsl_live(db, lage, org_id=lage.org_id, reason="counts",
-                          background_tasks=background_tasks)
+    run_async(notify_gsl_live, db, lage, org_id=lage.org_id, reason="counts", background_tasks=background_tasks)
 
     background_tasks.add_task(
         broadcast_lage, lage.id, {"type": "site_created"}

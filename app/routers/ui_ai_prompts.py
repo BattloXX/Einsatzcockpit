@@ -21,7 +21,7 @@ _VALID_KEYS = frozenset(PROMPT_META.keys())
 
 
 @router.get("/ki-anfragen", response_class=HTMLResponse)
-async def ai_request_log_page(
+def ai_request_log_page(
     request: Request,
     db: Session = Depends(get_db),
     _=Depends(require_role("system_admin", "org_admin")),
@@ -70,7 +70,7 @@ def _prune_old_versions(db: Session, prompt_key: str, org_id: int) -> None:
 
 
 @router.get("/ki-prompts", response_class=HTMLResponse)
-async def ki_prompts_page(
+def ki_prompts_page(
     request: Request,
     db: Session = Depends(get_db),
     _=Depends(require_role("system_admin", "org_admin")),
@@ -99,7 +99,7 @@ async def ki_prompts_page(
 
 
 @router.post("/ki-prompts/{prompt_key}")
-async def save_prompt_version(
+def save_prompt_version(
     prompt_key: str,
     request: Request,
     db: Session = Depends(get_db),
@@ -133,7 +133,7 @@ async def save_prompt_version(
 
 
 @router.post("/ki-prompts/{prompt_key}/restore/{version_id}")
-async def restore_prompt_version(
+def restore_prompt_version(
     prompt_key: str,
     version_id: int,
     request: Request,

@@ -67,7 +67,7 @@ def _scoped_incident_or_404(db: Session, einsatz_id: int, lk_token: LagekarteTok
 # ── GeoJSON-Endpoint ──────────────────────────────────────────────────────────
 
 @router.get("/einsatz/{einsatz_id}/fahrzeuge.geojson")
-async def vehicles_geojson(
+def vehicles_geojson(
     request: Request,
     einsatz_id: int,
     token: str = Query(..., min_length=10),
@@ -97,7 +97,7 @@ async def vehicles_geojson(
 
 
 @router.get("/einsatz/{einsatz_id}/fahrzeuge.kml")
-async def vehicles_kml(
+def vehicles_kml(
     request: Request,
     einsatz_id: int,
     token: str = Query(..., min_length=10),

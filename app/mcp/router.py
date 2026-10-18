@@ -37,7 +37,7 @@ def _anmeldeseite(request: Request, row: MCPOAuthCode, vorgang: str, error: str 
 
 
 @router.get("/mcp/anmelden", response_class=HTMLResponse)
-async def anmelden(request: Request, vorgang: str, db: Session = Depends(get_db)):
+def anmelden(request: Request, vorgang: str, db: Session = Depends(get_db)):
     row = db.query(MCPOAuthCode).filter(MCPOAuthCode.code_hash == hash_api_key(vorgang)).first()
     if not row or row.user_id or row.expires_at.replace(tzinfo=UTC) < __import__("datetime").datetime.now(UTC):
         return HTMLResponse("Anmeldevorgang ist abgelaufen.", status_code=400)
@@ -46,7 +46,7 @@ async def anmelden(request: Request, vorgang: str, db: Session = Depends(get_db)
 
 @router.post("/mcp/anmelden", response_class=HTMLResponse)
 @(limiter.limit(settings.MCP_LOGIN_RATELIMIT) if limiter else lambda f: f)
-async def anmelden_submit(
+def anmelden_submit(
     request: Request,
     vorgang: str = Form(...),
     username: str = Form(...),

@@ -15,6 +15,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Resp
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.core.async_bridge import run_async
 from app.core.permissions import can_send_manual_sms, require_role, require_role_or_device
 from app.core.templating import templates
 from app.db import get_db
@@ -403,7 +404,7 @@ def import_startseite(
 
 
 @router.post("/import/vorschau")
-async def import_vorschau(
+def import_vorschau(
     datei: UploadFile = File(...),
     db: Session = Depends(get_db),
     user: User = Depends(require_role(*_SCHREIB_ROLLEN)),
@@ -412,7 +413,7 @@ async def import_vorschau(
     from app.services.kontakt_transfer_service import parse_import, preview_import, save_preview
 
     try:
-        rows = parse_import(await datei.read(), datei.filename or "")
+        rows = parse_import(run_async(datei.read), datei.filename or "")
         preview = preview_import(db, _org_id(user), rows)
     except ValueError as exc:
         return RedirectResponse(f"/kontakte?import_error={exc}", status_code=303)
@@ -614,7 +615,7 @@ def objekt_zuordnen(
 
 
 @router.post("/{kontakt_id}/sms")
-async def sms_an_kontakt_senden(
+def sms_an_kontakt_senden(
     kontakt_id: int,
     request: Request,
     background_tasks: BackgroundTasks,

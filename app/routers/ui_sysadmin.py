@@ -142,7 +142,7 @@ def _quota_rows(db: Session) -> list[dict]:
 
 
 @router.get("/system/orgs", response_class=HTMLResponse)
-async def sysadmin_orgs(
+def sysadmin_orgs(
     request: Request,
     db: Session = Depends(get_db),
     _=Depends(require_role("system_admin")),
@@ -159,7 +159,7 @@ async def sysadmin_orgs(
 
 
 @router.get("/system/quotas", response_class=HTMLResponse)
-async def sysadmin_quotas(
+def sysadmin_quotas(
     request: Request,
     saved: int | None = None,
     db: Session = Depends(get_db),
@@ -178,7 +178,7 @@ async def sysadmin_quotas(
 
 
 @router.post("/system/quotas/{org_id}")
-async def sysadmin_quota_save(
+def sysadmin_quota_save(
     org_id: int,
     request: Request,
     storage_quota_gb: str = Form(""),
@@ -241,7 +241,7 @@ async def sysadmin_quota_save(
 
 
 @router.post("/system/quotas/{org_id}/reconcile")
-async def sysadmin_quota_reconcile(
+def sysadmin_quota_reconcile(
     org_id: int,
     request: Request,
     db: Session = Depends(get_db),
