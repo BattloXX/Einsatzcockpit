@@ -59,8 +59,13 @@ from app.models.user import (
 )
 from app.routers.ws import connected_gateway_token_ids
 from app.services import benutzer_service
-from app.services.benutzer_mail_service import send_passwort_geaendert
 from app.services.alarm_service import get_alarm_type_by_code
+from app.services.benutzer_mail_service import (
+    MAIL_VORSCHAU_TYPEN,
+    mail_vorschau,
+    send_mail_vorschau,
+    send_passwort_geaendert,
+)
 from app.services.push_service import notify_all as _push_notify_all
 from app.services.push_service import notify_org as _push_notify_org
 from app.services.vehicle_merge_service import VehicleMergeError, merge_vehicles
@@ -164,6 +169,45 @@ async def users_list(request: Request, db: Session = Depends(get_db),
         "mail_sent": request.query_params.get("mail"),
         "error": request.query_params.get("error"),
     })
+
+
+@router.get("/benutzer/mail-vorschau", response_class=HTMLResponse)
+async def user_mail_preview(
+    request: Request, typ: str = "einladung", db: Session = Depends(get_db),
+    _=Depends(require_role("admin")),
+):
+    if typ not in MAIL_VORSCHAU_TYPEN:
+        raise HTTPException(status_code=404, detail="Unbekannter Mail-Typ.")
+    current_user = request.state.user
+    subject, html, text = mail_vorschau(typ, db, current_user.org_id)
+    return templates.TemplateResponse(request, "admin/user_mail_preview.html", {
+        "user": current_user, "mail_typen": MAIL_VORSCHAU_TYPEN, "typ": typ,
+        "subject": subject, "mail_html": html, "mail_text": text,
+        "sent": request.query_params.get("sent"), "error": request.query_params.get("error"),
+    })
+
+
+@router.post("/benutzer/mail-vorschau/test")
+async def send_user_mail_preview(
+    request: Request, typ: str = Form(""), db: Session = Depends(get_db),
+    _=Depends(require_role("admin")),
+):
+    if typ not in MAIL_VORSCHAU_TYPEN:
+        return RedirectResponse("/admin/benutzer/mail-vorschau?error=type", status_code=303)
+    current_user = request.state.user
+    if not current_user.email:
+        return RedirectResponse(f"/admin/benutzer/mail-vorschau?typ={typ}&error=no_email", status_code=303)
+    write_audit(
+        db, "admin.user.mail_preview_test", user_id=current_user.id, payload={"typ": typ},
+        ip=request.client.host if request.client else None,
+    )
+    db.commit()
+    try:
+        await send_mail_vorschau(typ, to=current_user.email, db=db, org_id=current_user.org_id)
+    except Exception:
+        logger_admin.exception("Testversand der Benutzer-Mail-Vorschau fehlgeschlagen")
+        return RedirectResponse(f"/admin/benutzer/mail-vorschau?typ={typ}&error=mail_failed", status_code=303)
+    return RedirectResponse(f"/admin/benutzer/mail-vorschau?typ={typ}&sent=1", status_code=303)
 
 
 @router.post("/benutzer/neu")

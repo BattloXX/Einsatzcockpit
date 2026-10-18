@@ -18,6 +18,14 @@ _templates = Environment(
     autoescape=select_autoescape(enabled_extensions=("html",), default=False),
 )
 
+MAIL_VORSCHAU_TYPEN = {
+    "einladung": "Einladung",
+    "willkommen_sso": "Willkommen mit Microsoft",
+    "passwort_reset": "Passwort zurücksetzen",
+    "sso_hinweis": "Microsoft-Anmeldung",
+    "passwort_geaendert": "Passwort geändert",
+}
+
 
 def mail_kontext(db, org_id: int | None) -> dict:
     """Liefert den gemeinsamen, request-unabhaengigen Mail-Kontext einer Org."""
@@ -72,25 +80,6 @@ async def send_einladung(*, to: str, username: str, einladung_url: str,
     html, text = render(
         "einladung", **context, user_display_name=user_display_name, username=username,
         einladung_url=einladung_url, gueltigkeit=_einladung_gueltigkeit(settings.INVITE_TTL_HOURS),
-    )
-    smtp_cfg = mail_service._org_smtp_cfg(db, org_id) or mail_service.get_smtp_cfg(db)
-    msg = mail_service._build_message(
-        to=to, subject=f"Willkommen bei Einsatzcockpit – {context['org_name']}",
-        body_txt=text, body_html=html, smtp_cfg=smtp_cfg,
-    )
-    await mail_service.deliver(db, org_id, msg, smtp_cfg)
-
-
-async def send_welcome_mail(*, to: str, username: str, password: str,
-                            user_display_name: str, app_url: str = "",
-                            is_test: bool = False, db=None, org_id: int | None = None) -> None:
-    """Versendet die Willkommensmail fuer lokale Benutzer."""
-    from app.services import mail_service
-
-    context = mail_kontext(db, org_id)
-    html, text = render(
-        "willkommen", **context, user_display_name=user_display_name,
-        username=username, password=password,
     )
     smtp_cfg = mail_service._org_smtp_cfg(db, org_id) or mail_service.get_smtp_cfg(db)
     msg = mail_service._build_message(
@@ -178,3 +167,49 @@ async def send_passwort_geaendert(user, db, *, ausloeser: str, ip: str | None) -
         body_txt=text, body_html=html, smtp_cfg=smtp_cfg,
     )
     await mail_service.deliver(db, user.org_id, msg, smtp_cfg)
+
+
+def mail_vorschau(typ: str, db, org_id: int | None) -> tuple[str, str, str]:
+    """Rendert eine Benutzer-Mail mit sicheren Beispieldaten für die Admin-Vorschau."""
+    if typ not in MAIL_VORSCHAU_TYPEN:
+        raise ValueError("Unbekannter Mail-Typ.")
+    context = mail_kontext(db, org_id)
+    context["app_url"] = "https://example.invalid"
+    context["android_app_url"] = "https://example.invalid/app/android"
+    context["iphone_app_url"] = "https://example.invalid/app"
+    org = db.query(FireDept).filter(FireDept.id == org_id).first() if org_id else None
+    beispiel = {
+        "user_display_name": "Max Mustermann",
+        "username": "max.mustermann",
+        "einladung_url": "https://example.invalid/passwort-zuruecksetzen?token=beispiel",
+        "reset_url": "https://example.invalid/passwort-zuruecksetzen?token=beispiel",
+        "sso_url": f"https://example.invalid/sso/{getattr(org, 'slug', 'organisation')}/login",
+        "gueltigkeit": _einladung_gueltigkeit(settings.INVITE_TTL_HOURS),
+        "durch_admin": True,
+        "zeitpunkt": format_local_datetime(datetime.now(UTC), org),
+        "ausloeser": "reset",
+        "ip": None,
+    }
+    if typ == "passwort_reset":
+        beispiel["gueltigkeit"] = _reset_gueltigkeit(settings.PASSWORD_RESET_TTL_MIN)
+    html, text = render(typ, **context, **beispiel)
+    subjects = {
+        "einladung": f"Dein Konto ist eingerichtet – Einsatzcockpit {context['org_name']}",
+        "willkommen_sso": "Willkommen bei Einsatzcockpit – Anmeldung mit Microsoft",
+        "passwort_reset": f"Passwort zurücksetzen – Einsatzcockpit {context['org_name']}",
+        "sso_hinweis": "Anmeldung mit Microsoft – Einsatzcockpit",
+        "passwort_geaendert": "Dein Passwort wurde geändert – Einsatzcockpit",
+    }
+    return subjects[typ], html, text
+
+
+async def send_mail_vorschau(typ: str, *, to: str, db, org_id: int | None) -> None:
+    """Versendet eine gerenderte Vorschau ohne echte Zugangsdaten oder Tokens."""
+    from app.services import mail_service
+
+    subject, html, text = mail_vorschau(typ, db, org_id)
+    smtp_cfg = mail_service._org_smtp_cfg(db, org_id) or mail_service.get_smtp_cfg(db)
+    msg = mail_service._build_message(
+        to=to, subject=f"[Test] {subject}", body_txt=text, body_html=html, smtp_cfg=smtp_cfg,
+    )
+    await mail_service.deliver(db, org_id, msg, smtp_cfg)

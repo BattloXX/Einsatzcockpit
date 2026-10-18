@@ -71,20 +71,6 @@ def create_user(
     return user, generated_password
 
 
-async def send_welcome_mail(user: User, password: str, db: Session) -> None:
-    """Versendet die Willkommensmail fuer einen neu angelegten lokalen Benutzer."""
-    if not user.email:
-        return
-    from app.services.mail_service import send_welcome_mail as _send_welcome_mail
-
-    await _send_welcome_mail(
-        to=user.email, username=user.username, password=password,
-        user_display_name=user.full_name or user.display_name or user.username,
-        app_url=settings.effective_public_base_url.rstrip("/"), is_test=settings.TEST_SYSTEM,
-        db=db, org_id=user.org_id,
-    )
-
-
 def einladung_erstellen(db: Session, user: User, requesting_ip: str | None = None) -> str:
     """Erstellt eine neue Einladung und entwertet offene Tokens dieses Benutzers."""
     now = datetime.now(UTC)

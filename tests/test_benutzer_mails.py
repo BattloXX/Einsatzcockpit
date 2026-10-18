@@ -29,7 +29,6 @@ def org():
 @pytest.mark.parametrize(
     ("name", "daten", "button_url"),
     [
-        ("willkommen", {"user_display_name": "Anna", "username": "anna", "password": "secret"}, "http://localhost:8092"),
         ("willkommen_sso", {"user_display_name": "Anna", "sso_url": "https://login.example/sso"}, "https://login.example/sso"),
         ("passwort_reset", {"user_display_name": "Anna", "reset_url": "https://login.example/reset", "gueltigkeit": "30 Minuten"}, "https://login.example/reset"),
     ],
@@ -48,7 +47,6 @@ def test_anzeigename_wird_in_html_escaped_auch_beim_reset(org):
     db, org_id = org
     context = benutzer_mail_service.mail_kontext(db, org_id)
     for name, daten in (
-        ("willkommen", {"username": "anna", "password": "secret"}),
         ("willkommen_sso", {"sso_url": "https://example.test/sso"}),
         ("passwort_reset", {"reset_url": "https://example.test/reset", "gueltigkeit": "30 Minuten"}),
     ):
@@ -60,7 +58,6 @@ def test_anzeigename_wird_in_html_escaped_auch_beim_reset(org):
 @pytest.mark.parametrize(
     ("name", "daten"),
     [
-        ("willkommen", {"user_display_name": "Anna", "username": "anna", "password": "secret"}),
         ("willkommen_sso", {"user_display_name": "Anna", "sso_url": "https://example.test/sso"}),
     ],
 )
@@ -97,7 +94,6 @@ def test_ungueltige_brand_color_faellt_zurueck(org):
 @pytest.mark.parametrize(
     ("funktion", "kwargs", "betreff"),
     [
-        (mail_service.send_welcome_mail, {"username": "anna", "password": "secret", "user_display_name": "Anna"}, "Willkommen bei Einsatzcockpit – Mail Test"),
         (mail_service.send_sso_welcome_mail, {"user_display_name": "Anna", "app_url": "https://ignored.example", "org_slug": "mail-test"}, "Willkommen bei Einsatzcockpit – Anmeldung mit Microsoft"),
         (mail_service.send_password_reset, {"reset_url": "https://example.test/reset", "user_display_name": "Anna"}, "Passwort zurücksetzen – Einsatzcockpit Mail Test"),
     ],

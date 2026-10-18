@@ -31,8 +31,8 @@ from app.db import get_db
 from app.models.master import FireDept
 from app.models.password_reset import PasswordResetToken
 from app.models.user import User
-from app.services.mail_service import send_password_reset
 from app.services.benutzer_mail_service import send_passwort_geaendert, send_sso_hinweis
+from app.services.mail_service import send_password_reset
 
 logger = logging.getLogger("einsatzleiter.password_reset")
 router = APIRouter()

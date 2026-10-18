@@ -4,6 +4,10 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 
 ## Unreleased
 
+- **Benutzer-Mails**: Gebrandete Einladungen statt Klartext-Passwörtern, App-Links,
+  SSO-Hinweis beim Passwort-Reset, Bestätigung nach Passwortänderungen und sichere
+  Admin-Mail-Vorschau mit Testversand ergänzt (Migration 0291).
+
 - **Benutzer**: Benutzer lassen sich mit einem Mitglied verknüpfen (Migration 0290). Führt das Mitglied in einer aktiven Großschadenslage eine Einheit, öffnet der normale Login die Einheitenansicht dieser Einheit; die Startseite zeigt „Meine Einheiten“.
 - **MCP**: Werkzeuge für Mitglieder (lesen ab `fahrtenbuch_admin`, pflegen ab `admin`) und Benutzer (nur `admin`, gleiche Schutzregeln wie die Benutzerverwaltung) sowie `meine_einheiten`; `mcp_whoami` zeigt Mitglied und geführte Einheiten.
 

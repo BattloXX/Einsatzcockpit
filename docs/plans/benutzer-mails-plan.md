@@ -41,6 +41,15 @@ Apps: Android-App (Capacitor, öffentliches Repo `BattloXX/Einsatzcockpit-Androi
 | M4 | Reset-Ablauf: SSO-Benutzer bekommen bei „Passwort vergessen" einen Microsoft-Login-Hinweis, Bestätigungs-Mail nach Passwortänderung (Reset, Einladung, Profil), Admin-Reset-Mail mit Hinweis „von deinem Administrator ausgelöst". |
 | M5 | Admin-Vorschau `/admin/benutzer/mail-vorschau` (alle Typen mit Beispieldaten der eigenen Org, Testversand an sich selbst), Wiki/CHANGELOG. |
 
+## Umsetzungsstatus
+
+- M1–M5 umgesetzt. Die aktive Mail-Auswahl umfasst Einladung, Microsoft-Willkommen,
+  Passwort-Reset, SSO-Hinweis und Passwort-Bestätigung. Der alte lokale
+  Klartext-Willkommensversand wurde entfernt.
+- Migration 0291 ergänzt den Zweck von Passwort-Tokens für Einladungen.
+- `/app/android` liefert die Auto-Update-APK; `ANDROID_APP_REPO`,
+  `ANDROID_APK_PRAEFIX` und `INVITE_TTL_HOURS` sind konfigurierbar.
+
 ## Offene Tests nach Deploy
 
 - Willkommens-Mail in Outlook, Gmail und iOS Mail ansehen (Logo, Buttons, Dark Mode).

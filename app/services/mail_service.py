@@ -533,17 +533,6 @@ async def send_contact_message(*, name: str, reply_email: str, message: str, db=
     raise MailConfigError("Weder SMTP noch Resend ist konfiguriert.")
 
 
-async def send_welcome_mail(*, to: str, username: str, password: str,
-                            user_display_name: str, app_url: str = "",
-                            is_test: bool = False, db=None, org_id: int | None = None) -> None:
-    from app.services.benutzer_mail_service import send_welcome_mail as _send_welcome_mail
-
-    await _send_welcome_mail(
-        to=to, username=username, password=password, user_display_name=user_display_name,
-        app_url=app_url, is_test=is_test, db=db, org_id=org_id,
-    )
-
-
 async def send_sso_welcome_mail(*, to: str, user_display_name: str,
                                  app_url: str, org_slug: str, org_name: str = "",
                                  is_test: bool = False, db=None, org_id: int | None = None) -> None:

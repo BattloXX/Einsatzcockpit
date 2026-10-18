@@ -12,8 +12,11 @@
     <h1>Benutzerverwaltung</h1>
     <p class="page-header__sub">Login-Accounts, Rollen, Kontaktdaten, Passwort-Reset</p>
   </div>
-  <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newUserModal"
-          {{ tip('Neuen Login-Account anlegen') }}>+ Benutzer</button>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <a class="btn btn--ghost" href="/admin/benutzer/mail-vorschau">Mail-Vorschau</a>
+    <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newUserModal"
+            {{ tip('Neuen Login-Account anlegen') }}>+ Benutzer</button>
+  </div>
 </div>
 
 {% if new_password %}
