@@ -3,7 +3,7 @@
  * Laeuft NUR in der Android-App (Capacitor-WebView, window.Capacitor vorhanden):
  * laedt periodisch das Sync-Manifest (/api/objekte/sync) und legt Einsatz-
  * ansichten, Verwaltungsansichten, Thumbnails, Hi-Res-Seiten und Einzel-PDFs aller freigegebenen
- * Objekte in den Cache 'ec-objekt-v1'. Der Service Worker (sw.js) bedient
+ * Objekte in den Cache 'ec-objekt-v2'. Der Service Worker (sw.js) bedient
  * /objekt-medien/* und /objekte/<id>/einsatz offline daraus.
  *
  * Im Desktop-/Mobil-Browser laeuft KEIN Voll-Precaching (Datenvolumen!) —
