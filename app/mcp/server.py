@@ -27,11 +27,13 @@ from app.core.security import hash_api_key
 from app.db import SessionLocal
 from app.mcp.context import MCPPermissionError, load_live_context
 from app.mcp.registry import TOOLS
+from app.mcp.tools import benutzer as _benutzer  # noqa: F401 - registriert Benutzer-Lesetools
 from app.mcp.tools import einsatz as _einsatz  # noqa: F401 - registriert Einsatz-Lesetools
 from app.mcp.tools import fahrtenbuch as _fahrtenbuch  # noqa: F401 - registriert Fahrtenbuch-Tools
 from app.mcp.tools import gsl as _gsl  # noqa: F401 - registriert GSL-Ressourcen-Tools
 from app.mcp.tools import gsl_lage as _gsl_lage  # noqa: F401 - registriert GSL-Lagebild-Tools
 from app.mcp.tools import kontakt as _kontakt  # noqa: F401 - registriert Kontakt-Tools
+from app.mcp.tools import mitglieder as _mitglieder  # noqa: F401 - registriert Mitglieder-Lesetools
 from app.mcp.tools import objekt as _objekt  # noqa: F401 - registriert Objekt-Tools
 from app.mcp.tools import objekt_dokumente as _objekt_dokumente  # noqa: F401 - registriert Dokument-Tools
 from app.mcp.tools import organisation as _organisation  # noqa: F401 - registriert Organisations-Tool
@@ -346,9 +348,26 @@ server = EinsatzcockpitMCPServer(
 )
 
 
-@server.tool(name="mcp_whoami", description="Zeigt den aktuell verbundenen Einsatzcockpit-Benutzer.")
+@server.tool(
+    name="mcp_whoami",
+    description=(
+        "Zeigt den aktuell verbundenen Einsatzcockpit-Benutzer, das verknüpfte Mitglied und die Einheiten, "
+        "die er gerade als Gruppenkommandant führt."
+    ),
+)
 async def whoami(ctx: Context) -> dict[str, object]:
     return await _call_registered_tool("mcp_whoami")
+
+
+@server.tool(
+    name="meine_einheiten",
+    description=(
+        "Zeigt die Einheiten, die der verbundene Benutzer über sein verknüpftes Mitglied gerade als "
+        "Gruppenkommandant führt, mit offenen Aufträgen und Link zur Einheitenansicht. Nur lesend."
+    ),
+)
+async def meine_einheiten() -> dict[str, object]:
+    return await _call_registered_tool("meine_einheiten")
 
 
 @server.tool(name="gsl_ressourcen_liste", description="Listet Ressourcen einer GSL-Lage.")
@@ -1252,6 +1271,185 @@ async def kontakt_suchen(
         organisation_id=organisation_id, funktion=funktion, quelle=quelle, externe_id=externe_id,
         aktiv=aktiv, aktualisiert_seit=aktualisiert_seit, vollstaendig=vollstaendig,
     )
+
+
+@server.tool(
+    name="mitglieder_suchen",
+    description=(
+        "Sucht Mitglieder der eigenen Organisation. Erfordert die Rolle Admin oder Fahrtenbuch-Admin; "
+        "nur lesend, keine Seiteneffekte."
+    ),
+)
+async def mitglieder_suchen(
+    q: str = "",
+    aktiv: bool | None = True,
+    qualifikation: str = "",
+    tag: str = "",
+    gruppenkommandant: bool | None = None,
+    mit_benutzer: bool | None = None,
+    limit: int = 50,
+    seite: int = 1,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "mitglieder_suchen",
+        q=q,
+        aktiv=aktiv,
+        qualifikation=qualifikation,
+        tag=tag,
+        gruppenkommandant=gruppenkommandant,
+        mit_benutzer=mit_benutzer,
+        limit=limit,
+        seite=seite,
+    )
+
+
+@server.tool(
+    name="mitglied_lesen",
+    description=(
+        "Liest ein Mitglied der eigenen Organisation. Erfordert die Rolle Admin oder Fahrtenbuch-Admin; "
+        "nur lesend, keine Seiteneffekte."
+    ),
+)
+async def mitglied_lesen(mitglied_id: int) -> dict[str, object]:
+    return await _call_registered_tool("mitglied_lesen", mitglied_id=mitglied_id)
+
+
+@server.tool(
+    name="mitglieder_kataloge",
+    description=(
+        "Listet Mitglieder-Kataloge der eigenen Organisation. Erfordert die Rolle Admin oder Fahrtenbuch-Admin; "
+        "nur lesend, keine Seiteneffekte."
+    ),
+)
+async def mitglieder_kataloge() -> dict[str, object]:
+    return await _call_registered_tool("mitglieder_kataloge")
+
+
+@server.tool(name="benutzer_suchen", description="Sucht nicht technische Benutzer der eigenen Organisation; erfordert admin und ist nur lesend.")
+async def benutzer_suchen(q: str = "", aktiv: bool | None = None, rolle: str = "", mit_mitglied: bool | None = None,
+                          limit: int = 50, seite: int = 1) -> dict[str, object]:
+    return await _call_registered_tool("benutzer_suchen", q=q, aktiv=aktiv, rolle=rolle,
+                                       mit_mitglied=mit_mitglied, limit=limit, seite=seite)
+
+
+@server.tool(name="benutzer_lesen", description="Liest einen nicht technischen Benutzer der eigenen Organisation; erfordert admin und ist nur lesend.")
+async def benutzer_lesen(benutzer_id: int) -> dict[str, object]:
+    return await _call_registered_tool("benutzer_lesen", benutzer_id=benutzer_id)
+
+
+@server.tool(name="rollen_katalog", description="Listet Rollen mit Vergabemoglichkeit; erfordert admin und ist nur lesend.")
+async def rollen_katalog() -> dict[str, object]:
+    return await _call_registered_tool("rollen_katalog")
+
+
+@server.tool(name="benutzer_anlegen", description="Legt einen Benutzer der eigenen Organisation an; erfordert admin und schreibt Daten.")
+async def benutzer_anlegen(username: str, display_name: str, email: str = "", full_name: str = "", phone: str = "",
+                           rollen: list[str] | None = None, mitglied_id: int | None = None,
+                           willkommensmail: bool = True) -> dict[str, object]:
+    return await _call_registered_tool("benutzer_anlegen", username=username, display_name=display_name, email=email,
+                                       full_name=full_name, phone=phone, rollen=rollen, mitglied_id=mitglied_id,
+                                       willkommensmail=willkommensmail)
+
+
+@server.tool(name="benutzer_aktualisieren", description="Aktualisiert einen Benutzer der eigenen Organisation; erfordert admin und schreibt Daten.")
+async def benutzer_aktualisieren(benutzer_id: int, felder: dict) -> dict[str, object]:
+    return await _call_registered_tool("benutzer_aktualisieren", benutzer_id=benutzer_id, felder=felder)
+
+
+@server.tool(name="benutzer_rollen_setzen", description="Ersetzt Benutzerrollen der eigenen Organisation; erfordert admin und schreibt Daten.")
+async def benutzer_rollen_setzen(benutzer_id: int, rollen: list[str]) -> dict[str, object]:
+    return await _call_registered_tool("benutzer_rollen_setzen", benutzer_id=benutzer_id, rollen=rollen)
+
+
+@server.tool(name="benutzer_aktivieren", description="Aktiviert einen Benutzer der eigenen Organisation; erfordert admin und schreibt Daten.")
+async def benutzer_aktivieren(benutzer_id: int) -> dict[str, object]:
+    return await _call_registered_tool("benutzer_aktivieren", benutzer_id=benutzer_id)
+
+
+@server.tool(name="benutzer_deaktivieren", description="Deaktiviert einen Benutzer und widerruft MCP-Tokens; erfordert admin und schreibt Daten.")
+async def benutzer_deaktivieren(benutzer_id: int) -> dict[str, object]:
+    return await _call_registered_tool("benutzer_deaktivieren", benutzer_id=benutzer_id)
+
+
+@server.tool(name="benutzer_mitglied_verknuepfen", description="Verknuepft ein Mitglied mit einem Benutzer; erfordert admin und schreibt Daten.")
+async def benutzer_mitglied_verknuepfen(benutzer_id: int, mitglied_id: int | None = None) -> dict[str, object]:
+    return await _call_registered_tool("benutzer_mitglied_verknuepfen", benutzer_id=benutzer_id, mitglied_id=mitglied_id)
+
+
+@server.tool(name="benutzer_passwort_reset_mail", description="Sendet eine Passwort-Reset-Mail; erfordert admin und schreibt Reset-Daten.")
+async def benutzer_passwort_reset_mail(benutzer_id: int) -> dict[str, object]:
+    return await _call_registered_tool("benutzer_passwort_reset_mail", benutzer_id=benutzer_id)
+
+
+@server.tool(
+    name="mitglied_anlegen",
+    description="Legt ein Mitglied der eigenen Organisation an; erfordert admin und schreibt Daten.",
+)
+async def mitglied_anlegen(
+    vorname: str,
+    nachname: str,
+    telefon: str = "",
+    email: str = "",
+    sybos_id: str = "",
+    qualifikationen: list[str] | None = None,
+    tags: list[str] | None = None,
+    dublette_ignorieren: bool = False,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "mitglied_anlegen",
+        vorname=vorname,
+        nachname=nachname,
+        telefon=telefon,
+        email=email,
+        sybos_id=sybos_id,
+        qualifikationen=qualifikationen,
+        tags=tags,
+        dublette_ignorieren=dublette_ignorieren,
+    )
+
+
+@server.tool(
+    name="mitglied_aktualisieren",
+    description="Aktualisiert ein Mitglied der eigenen Organisation; erfordert admin und schreibt Daten.",
+)
+async def mitglied_aktualisieren(mitglied_id: int, felder: dict) -> dict[str, object]:
+    return await _call_registered_tool("mitglied_aktualisieren", mitglied_id=mitglied_id, felder=felder)
+
+
+@server.tool(
+    name="mitglied_aktivieren",
+    description="Aktiviert ein Mitglied der eigenen Organisation; erfordert admin und schreibt Daten.",
+)
+async def mitglied_aktivieren(mitglied_id: int) -> dict[str, object]:
+    return await _call_registered_tool("mitglied_aktivieren", mitglied_id=mitglied_id)
+
+
+@server.tool(
+    name="mitglied_deaktivieren",
+    description="Deaktiviert ein Mitglied der eigenen Organisation; erfordert admin und schreibt Daten.",
+)
+async def mitglied_deaktivieren(mitglied_id: int) -> dict[str, object]:
+    return await _call_registered_tool("mitglied_deaktivieren", mitglied_id=mitglied_id)
+
+
+@server.tool(
+    name="mitglied_qualifikationen_setzen",
+    description="Ersetzt Mitgliedsqualifikationen; erfordert admin und schreibt Daten.",
+)
+async def mitglied_qualifikationen_setzen(
+    mitglied_id: int, qualifikationen: list[dict]
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "mitglied_qualifikationen_setzen", mitglied_id=mitglied_id, qualifikationen=qualifikationen
+    )
+
+
+@server.tool(
+    name="mitglied_tags_setzen",
+    description="Ersetzt Mitglieds-Tags; erfordert admin und schreibt Daten.",
+)
+async def mitglied_tags_setzen(mitglied_id: int, tags: list[str]) -> dict[str, object]:
+    return await _call_registered_tool("mitglied_tags_setzen", mitglied_id=mitglied_id, tags=tags)
 
 
 @server.tool(name="objekt_duplikate_pruefen", description="Prueft moegliche Objekt-Dubletten.")

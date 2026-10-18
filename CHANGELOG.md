@@ -4,6 +4,9 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 
 ## Unreleased
 
+- **Benutzer**: Benutzer lassen sich mit einem Mitglied verknüpfen (Migration 0290). Führt das Mitglied in einer aktiven Großschadenslage eine Einheit, öffnet der normale Login die Einheitenansicht dieser Einheit; die Startseite zeigt „Meine Einheiten“.
+- **MCP**: Werkzeuge für Mitglieder (lesen ab `fahrtenbuch_admin`, pflegen ab `admin`) und Benutzer (nur `admin`, gleiche Schutzregeln wie die Benutzerverwaltung) sowie `meine_einheiten`; `mcp_whoami` zeigt Mitglied und geführte Einheiten.
+
 - **MCP**: Einsatzleiter, Schriftführer und Admins können Aufträge und Meldungen im sichtbaren, offenen Einsatzboard anlegen; Erstellung, Fachverlauf und Live-Aktualisierung entsprechen dem Board.
 
 - Gateway-Druckregel „E-Mail eingegangen“ mit sicherem Deckblatt und optionalen PDF-/Bildanhängen ergänzt.

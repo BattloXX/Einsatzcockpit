@@ -24,10 +24,18 @@ Beim Verbinden öffnet sich die Einsatzcockpit-Anmeldung. Melde dich mit deinem 
 | `org_admin`, `admin` | Wasserstellen |
 | Alle Benutzer mit aktivem Straßensperren-Modul | Straßensperren lesen und Anfahrten prüfen |
 | `objekt_verwalter`, `org_admin`, `admin` | Straßensperren anlegen und pflegen |
+| `fahrtenbuch_admin`, `org_admin`, `admin` | Mitglieder lesen |
+| `org_admin`, `admin` | Mitglieder pflegen, Benutzer lesen und verwalten |
+| Alle Benutzer | `mcp_whoami`, `meine_einheiten` |
 
 Die verfügbaren Werkzeuge sind:
 
-- `mcp_whoami`: zeigt Benutzer, Organisation und Rollen.
+- `mcp_whoami`: zeigt Benutzer, Organisation, Rollen, das verknüpfte Mitglied und die Einheiten, die man gerade als Gruppenkommandant führt.
+- `meine_einheiten`: listet die Einheiten, die man über das verknüpfte Mitglied gerade führt, mit offenen Aufträgen und Link zur Einheitenansicht.
+- `mitglieder_suchen`, `mitglied_lesen` und `mitglieder_kataloge`: suchen und lesen Mitglieder der eigenen Organisation (Telefon und E-Mail nur in `mitglied_lesen`), inklusive verknüpftem Benutzer und aktueller Gruppenkommandanten-Funktion, sowie Qualifikationen und Tags.
+- `mitglied_anlegen` (mit Dublettenprüfung; `dublette_ignorieren=true` zum bewussten Anlegen), `mitglied_aktualisieren`, `mitglied_aktivieren`, `mitglied_deaktivieren`, `mitglied_qualifikationen_setzen` und `mitglied_tags_setzen` (nur Admins): pflegen Mitglieder. Tags werden nie implizit angelegt. Löschen ist per MCP nicht möglich.
+- `benutzer_suchen`, `benutzer_lesen` und `rollen_katalog` (nur Admins): lesen Benutzer ohne Geräte-Konten und ohne Passwort- oder Token-Daten; der Rollenkatalog zeigt, welche Rollen man vergeben darf.
+- `benutzer_anlegen`, `benutzer_aktualisieren`, `benutzer_rollen_setzen`, `benutzer_aktivieren`, `benutzer_deaktivieren`, `benutzer_mitglied_verknuepfen` und `benutzer_passwort_reset_mail` (nur Admins): verwalten Benutzer mit denselben Grenzen wie die Benutzerverwaltung. Passwörter werden nie gesetzt (neue Benutzer erhalten die Willkommens-Mail), `system_admin` wird nie vergeben, System-Admins und Geräte-Benutzer sind tabu, endgültiges Löschen gibt es nicht. Sich selbst deaktivieren oder die eigene Admin-Rolle entziehen ist gesperrt; Deaktivieren widerruft die MCP-Verbindungen des Benutzers.
 - `organisation_lesen`: liefert Stammdaten der eigenen Organisation (Name, Kürzel, Kontakt, Adresse, Farben, Fußzeile) und das Logo direkt als Bild, damit Claude es z. B. für Briefköpfe oder Berichte verwenden kann. SVG-Logos kommen als Quelltext, ohne eigenes Logo das Standardlogo.
 - `fahrtenbuch_stammdaten`, `fahrtenbuch_fahrten`, `fahrtenbuch_fahrt` und `fahrtenbuch_auswertung`: lesen Stammdaten, Fahrten, Korrekturkette und Auswertungen.
 - `objekt_kataloge`, `objekt_suchen`, `objekt_lesen` und `objekt_duplikate_pruefen`: lesen Objektwerte und prüfen Dubletten. `objekt_lesen` liefert alle pflegbaren Felder: Stammdaten inkl. `informationen` (der allgemeine Hinweis-/Infotext zum Objekt) und `anfahrtsweg`, alle BMA-Angaben (SMS-/Mail-Empfänger nur als „gesetzt“), Gefahren mit Details, Merkmale mit Name und Hinweis, Zusatzadressen und Wohnanlage, jeweils mit den IDs für Änderungen; mit `arbeitskopie=true` liest es eine vorhandene Arbeitskopie. Das Feld `arbeitskopie_hinweis` ist nur ein technischer Hinweis auf eine offene Arbeitskopie, kein Objekttext.
