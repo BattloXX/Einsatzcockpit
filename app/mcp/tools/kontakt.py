@@ -33,7 +33,7 @@ KONTAKT_FELDER = {
     "organisation",
     "email",
     "erreichbarkeit",
-    "notizen",
+    "notizen", "einsatzrelevant", "druck_freigegeben", "druck_prioritaet", "druckhinweis", "druck_sortierung", "aktiv",
 }
 
 
@@ -81,7 +81,8 @@ def _kontakt_daten(kontakt: Kontakt) -> dict[str, object]:
         feld: getattr(kontakt, feld)
         for feld in (
             "typ", "anzeigename", "vorname", "nachname", "funktion", "organisation", "email",
-            "erreichbarkeit", "notizen",
+            "erreichbarkeit", "notizen", "einsatzrelevant", "druck_freigegeben",
+            "druck_prioritaet", "druckhinweis", "druck_sortierung", "aktiv",
         )
     } | {"telefone": [_telefon(telefon) for telefon in kontakt.telefone], "kategorien": _kategorien(kontakt)}
 
@@ -221,7 +222,9 @@ async def kontakt_lesen(context: MCPContext, kontakt_id: int) -> dict[str, objec
 )
 async def kontakt_kategorien(context: MCPContext) -> dict[str, object]:
     kategorien = kontakt_service.list_kategorien(context.db)
-    return {"kategorien": [{"id": kategorie.id, "name": kategorie.name} for kategorie in kategorien]}
+    keys = ("id", "name", "aktiv", "sortierung", "druck_standard", "objektkontakte")
+    return {"kategorien": [{key: getattr(kategorie, key) for key in keys} for kategorie in kategorien]}
+
 
 
 @register_tool(
@@ -569,3 +572,108 @@ async def kontakt_import_status(context: MCPContext, batch_id: int) -> dict[str,
     if batch is None:
         raise ValueError("Import-Batch nicht gefunden.")
     return {"batch_id": batch.id, "status": batch.status, "quelle": batch.quelle, **json.loads(batch.ergebnis_json)}
+
+
+@register_tool(
+    name="kontakt_kategorie_speichern",
+    description="Pflegt eine bestehende Kontaktkategorie oder legt sie an.",
+    required_roles=KONTAKT_ROLLEN,
+    module_check=kontakte_modul_aktiv,
+)
+async def kontakt_kategorie_speichern(
+    context: MCPContext,
+    name: str,
+    kategorie_id: int | None = None,
+    aktiv: bool | None = None,
+    sortierung: int | None = None,
+    druck_standard: bool | None = None,
+    objektkontakte: bool | None = None,
+) -> dict[str, object]:
+    from app.services import kontakt_druck_service as druck
+
+    kat = druck.kategorie_speichern(
+        context.db,
+        context.org_id,
+        name=name,
+        kategorie_id=kategorie_id,
+        aktiv=aktiv,
+        sortierung=sortierung,
+        druck_standard=druck_standard,
+        objektkontakte=objektkontakte,
+    )
+    _audit(context, "kontakt_kategorie_speichern", kat.id)
+    return {"id": kat.id, "name": kat.name}
+
+
+@register_tool(
+    name="kontakt_druckprofile",
+    description="Listet Standardprofile und eigene persönliche Druckprofile.",
+    required_roles=KONTAKT_LESE_ROLLEN,
+    module_check=kontakte_modul_aktiv,
+)
+async def kontakt_druckprofile(context: MCPContext) -> dict[str, object]:
+    from app.services import kontakt_druck_service as druck
+
+    return {"profile": druck.profile(context.db, context.org_id, context.user.id)}
+
+
+@register_tool(
+    name="kontakt_druckprofil_speichern",
+    description="Speichert eigene Druckeinstellungen; gleicher Name ersetzt das Profil.",
+    required_roles=KONTAKT_LESE_ROLLEN,
+    module_check=kontakte_modul_aktiv,
+)
+async def kontakt_druckprofil_speichern(
+    context: MCPContext, name: str, einstellungen: dict[str, Any]
+) -> dict[str, object]:
+    from app.services import kontakt_druck_service as druck
+
+    opts = druck.DruckEinstellungen.model_validate(einstellungen)
+    druck.auswahl(context.db, context.org_id, opts)
+    profil = druck.profil_speichern(context.db, context.org_id, context.user.id, name, opts)
+    _audit(context, "kontakt_druckprofil_speichern", profil.id)
+    return {"id": str(profil.id), "name": profil.name}
+
+
+@register_tool(
+    name="kontakt_druckprofil_loeschen",
+    description="Löscht ein eigenes persönliches Druckprofil.",
+    required_roles=KONTAKT_LESE_ROLLEN,
+    module_check=kontakte_modul_aktiv,
+)
+async def kontakt_druckprofil_loeschen(context: MCPContext, profil_id: int) -> dict[str, object]:
+    from app.services import kontakt_druck_service as druck
+
+    druck.profil_loeschen(context.db, context.org_id, context.user.id, profil_id)
+    _audit(context, "kontakt_druckprofil_loeschen", profil_id)
+    return {"geloescht": True}
+
+
+@register_tool(
+    name="kontakt_druckliste",
+    description="Liest aktuelle Einsatzkontakte nach Profil/Filtern, ohne private Kommunikationswerte.",
+    required_roles=KONTAKT_LESE_ROLLEN,
+    module_check=kontakte_modul_aktiv,
+)
+async def kontakt_druckliste(
+    context: MCPContext,
+    profil_id: str = "einsatz",
+    einstellungen: dict[str, Any] | None = None,
+    seite: int = 1,
+    limit: int = 50,
+) -> dict[str, object]:
+    from app.services import kontakt_druck_service as druck
+
+    _limit(limit)
+    if seite < 1:
+        raise ValueError("seite muss mindestens 1 sein.")
+    opts = (
+        druck.DruckEinstellungen.model_validate(einstellungen)
+        if einstellungen is not None
+        else druck.profil_laden(context.db, context.org_id, context.user.id, profil_id)
+    )
+    result = druck.auswahl(context.db, context.org_id, opts)
+    result["kontakte"] = result["kontakte"][(seite - 1) * limit : seite * limit]
+    ids = {k["id"] for k in result["kontakte"]}
+    result["hinweise"] = [h for h in result["hinweise"] if h["id"] in ids]
+    return result

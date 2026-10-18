@@ -16,9 +16,14 @@ Jede Organisation kann ihre eigenen Einstellungen verwalten.
 Das Logo wird angezeigt:
 - Im Header der App (neben dem Organisationsnamen)
 - Auf dem Deckblatt des PDF-Einsatzberichts
+- Im Kopf der Kontakt-Druckverzeichnisse (beide Layouts, Vorschau, PDF und Browserdruck)
 - Auf der About-Seite
 
 Hochgeladene Logos werden in `app/static/img/uploads/` gespeichert und sind beim System-Update **geschützt** (werden nicht überschrieben).
+
+Im [Kontakt-Druckdialog](Anwender-Kontaktverwaltung#organisationslogo) lässt sich die Logoanzeige
+ein- oder ausschalten und im persönlichen Druckprofil speichern. Ohne lesbare Logodatei
+bleibt das Verzeichnis ohne Bild nutzbar.
 
 ### Organisationsname
 

@@ -36,6 +36,11 @@ class Kontakt(TenantScoped, Base):
     notizen: Mapped[str | None] = mapped_column(Text, nullable=True)
     bild_pfad: Mapped[str | None] = mapped_column(String(500), nullable=True)
     aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    einsatzrelevant: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    druck_freigegeben: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    druck_prioritaet: Mapped[str] = mapped_column(String(10), nullable=False, default="normal")
+    druckhinweis: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    druck_sortierung: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     gueltig_ab: Mapped[date | None] = mapped_column(nullable=True)
     gueltig_bis: Mapped[date | None] = mapped_column(nullable=True)
     zuletzt_geprueft: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -248,6 +253,22 @@ class KontaktKategorie(TenantScoped, Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
+    aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    sortierung: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    schluessel: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    druck_standard: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    objektkontakte: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+
+class KontaktDruckprofil(TenantScoped, Base):
+    """Persönliche Einstellungen, keine gespeicherten Kontaktdaten."""
+
+    __tablename__ = "kontakt_druckprofil"
+    __table_args__ = (UniqueConstraint("org_id", "user_id", "name", name="uq_kontakt_druckprofil_name"),)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    einstellungen_json: Mapped[str] = mapped_column(Text, nullable=False)
 
 
 class KontaktKategorieZuordnung(TenantScoped, Base):

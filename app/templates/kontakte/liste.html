@@ -27,12 +27,19 @@
 {% block content %}
 {% set kann_verwalten = user.roles|selectattr('code', 'in', ['kontakt_verwalter', 'objekt_verwalter', 'admin', 'org_admin', 'system_admin'])|list %}
 <main class="kontakte-page">
-  <header class="kontakte-header"><div><h1>Kontaktverwaltung</h1><p class="kontakte-header__sub">Zentrale Kontakte der Organisation</p></div>{% if kann_verwalten %}<div class="kontakte-header__actions"><a class="btn btn--ghost btn--sm" href="/kontakte/export.xlsx">Excel-Export</a><a class="btn btn--ghost btn--sm" href="/kontakte/export.csv">CSV-Export</a><button class="btn btn--primary btn--sm" hx-get="/kontakte/neu" hx-target="#kontaktModal" hx-swap="outerHTML">+ Kontakt anlegen</button></div>{% endif %}</header>
-  <nav class="kontakte-tabs"><a class="active" href="/kontakte">Kontakte</a>{% if kann_verwalten %}<a href="/kontakte/import">Import</a>{% endif %}</nav>
+  <header class="kontakte-header"><div><h1>Kontaktverwaltung</h1><p class="kontakte-header__sub">Zentrale Kontakte der Organisation</p></div><a id="kontakte-drucken" class="btn btn--ghost btn--sm" href="/kontakte/drucken?q={{ q|urlencode }}&amp;typ={{ typ }}{% if kategorie_id %}&amp;kategorie={{ kategorie_id }}{% endif %}">Drucken</a>{% if kann_verwalten %}<div class="kontakte-header__actions"><a class="btn btn--ghost btn--sm" href="/kontakte/export.xlsx">Excel-Export</a><a class="btn btn--ghost btn--sm" href="/kontakte/export.csv">CSV-Export</a><button class="btn btn--primary btn--sm" hx-get="/kontakte/neu" hx-target="#kontaktModal" hx-swap="outerHTML">+ Kontakt anlegen</button></div>{% endif %}</header>
+  <nav class="kontakte-tabs">{% if kann_verwalten %}<a href="/kontakte/druckkategorien">Kategorien verwalten</a>{% endif %}<a class="active" href="/kontakte">Kontakte</a>{% if kann_verwalten %}<a href="/kontakte/import">Import</a>{% endif %}</nav>
   {% if error %}<div class="alert alert--error">{{ error }}</div>{% endif %}
   <form class="kontakte-filter"><label>Kontakte suchen<input class="form-input" type="search" name="q" value="{{ q }}" placeholder="Name, Organisation, Telefon …" hx-get="/kontakte/liste" hx-trigger="keyup changed delay:300ms" hx-target="#kontakt-liste" hx-include="#kontakt-filter"></label><div id="kontakt-filter"><label>Kategorie<select class="form-select" name="kategorie" hx-get="/kontakte/liste" hx-target="#kontakt-liste" hx-include="#kontakt-filter"><option value="">Alle Kategorien</option>{% for kat in kategorien %}<option value="{{ kat.id }}" {% if kategorie_id == kat.id %}selected{% endif %}>{{ kat.name }}</option>{% endfor %}</select></label><input type="hidden" name="typ" value="{{ typ }}"></div><div class="kontakte-filter__types"><a class="btn btn--ghost btn--sm" href="/kontakte?typ=all">Alle</a><a class="btn btn--ghost btn--sm" href="/kontakte?typ=person">Personen</a><a class="btn btn--ghost btn--sm" href="/kontakte?typ=stelle">Stellen</a></div></form>
   <p class="kontakte-count">{{ total }} Kontakt{% if total != 1 %}e{% endif %} gefunden{% if total > pro_seite %} · Seite {{ page }}{% endif %}</p>
   <div class="kontakte-layout"><section class="kontakte-card kontakt-list-card"><div id="kontakt-liste">{% include "kontakte/_liste.html" %}</div></section><aside id="kontakt-detail" class="kontakte-card kontakt-detail">{% if merge_konflikte %}<div class="alert alert--warn"><strong>Freigabe-Konflikt nach Zusammenfuehren</strong>{% for konflikt in merge_konflikte %}<p>{{ konflikt }}</p>{% endfor %}</div>{% endif %}{% include "kontakte/_detail.html" %}</aside></div>
 </main>
 {% include "kontakte/_form.html" %}
+<script>
+document.getElementById('kontakte-drucken').addEventListener('click', function () {
+  const form = document.querySelector('.kontakte-filter');
+  const params = new URLSearchParams(new FormData(form));
+  this.href = '/kontakte/drucken?' + params.toString();
+});
+</script>
 {% endblock %}

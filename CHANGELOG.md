@@ -4,6 +4,10 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 
 ## Unreleased
 
+- **Kontakte**: Gefilterte Einsatztelefonlisten und Kontaktverzeichnisse mit Druckvorschau,
+  PDF-Download, Browserdruck, persönlichen Profilen und optionalem Organisationslogo ergänzt.
+  Kategorien und Druckkennzeichnungen sind über Oberfläche und MCP pflegbar (Migration 0293).
+
 - **Benutzer-Mails**: Gebrandete Einladungen statt Klartext-Passwörtern, App-Links,
   SSO-Hinweis beim Passwort-Reset, Bestätigung nach Passwortänderungen und sichere
   Admin-Mail-Vorschau mit Testversand ergänzt (Migration 0291).

@@ -1,0 +1,27 @@
+<!doctype html><html lang="de"><head><meta charset="utf-8"><title>Einsatzkontakte – {{ org.name }}</title>
+<style>
+@page { size: {{ opts.papier }} {{ ('landscape' if opts.layout == 'kompakt' else 'portrait') if opts.ausrichtung == 'auto' else opts.ausrichtung }}; margin: 12mm 12mm 16mm;
+@bottom-left { content: '{{ jetzt.strftime("%d.%m.%Y %H:%M") }}'; font-size: 8pt; }
+@bottom-right { content: 'Seite ' counter(page) ' / ' counter(pages); font-size: 8pt; }
+}
+* {box-sizing:border-box} body {font:10pt Arial,sans-serif;color:#111;background:white;margin:0} h1 {font-size:17pt;margin:0 0 3mm} .meta {font-size:9pt;color:#444;margin-bottom:5mm}
+.druckkopf{display:table;width:100%;margin-bottom:5mm;break-inside:avoid}.druckkopf__text{display:table-cell;vertical-align:middle}.druckkopf .meta{margin-bottom:0}.druckkopf__logo{display:table-cell;width:30mm;text-align:right;vertical-align:middle}.druckkopf__logo img{max-width:26mm;max-height:22mm;width:auto;height:auto}
+table {width:100%;border-collapse:collapse;table-layout:fixed} th,td {text-align:left;vertical-align:top;padding:2mm;border-bottom:1px solid #bbb;overflow-wrap:anywhere} th {background:#eee;font-size:9pt} thead {display:table-header-group} tr {break-inside:avoid} .category td {background:#ddd;font-weight:bold;padding-top:3mm} .category {break-after:avoid} .phone {font-weight:bold;font-size:11pt;white-space:nowrap} small {font-size:8pt} .detail {border-bottom:1px solid #999;padding:3mm 0;break-inside:avoid} .detail h3 {margin:0 0 2mm;font-size:12pt} .detail p {margin:1mm 0} h2 {font-size:12pt;background:#eee;padding:2mm;break-after:avoid}.toolbar {margin:10px 0} @media print {.toolbar {display:none}} @media screen {body{padding:20px;max-width:1200px;margin:auto}}
+</style></head><body>
+<div class="toolbar"><button type="button" onclick="window.print()">Drucken</button></div>
+<header class="druckkopf"><div class="druckkopf__text">
+<h1>{{ 'Einsatztelefonliste' if opts.layout == 'kompakt' else 'Kontaktverzeichnis' }}</h1><div class="meta">{{ org.name }} · Erstellt am {{ jetzt.strftime('%d.%m.%Y, %H:%M') }} · {{ anzahl }} Kontakte</div>
+</div>{% if opts.logo_anzeigen and logo_data_uri %}<div class="druckkopf__logo"><img src="{{ logo_data_uri }}" alt="Organisationslogo von {{ org.name }}"></div>{% endif %}</header>
+{% if opts.layout == 'kompakt' %}
+<table><thead><tr><th>Organisation / Kontakt</th>{% if 'funktion' in opts.felder %}<th>Funktion</th>{% endif %}{% if 'telefone' in opts.felder %}<th>Telefonnummer(n)</th>{% endif %}{% if 'erreichbarkeit' in opts.felder or 'druckhinweis' in opts.felder %}<th>Erreichbarkeit / Kurzhinweis</th>{% endif %}{% if 'email' in opts.felder %}<th>E-Mail</th>{% endif %}</tr></thead><tbody>
+{% for k in kontakte %}{% if opts.gruppieren and (loop.first or k.kategorie != kontakte[loop.index0-1].kategorie) %}<tr class="category"><td colspan="{{ 1 + ('funktion' in opts.felder)|int + ('telefone' in opts.felder)|int + ('erreichbarkeit' in opts.felder or 'druckhinweis' in opts.felder)|int + ('email' in opts.felder)|int }}">{{ k.kategorie }}</td></tr>{% endif %}
+<tr><td><strong>{{ k.name }}</strong>{% if 'organisation' in opts.felder and k.organisation %}<br>{{ k.organisation }}{% endif %}</td>{% if 'funktion' in opts.felder %}<td>{{ k.funktion }}</td>{% endif %}{% if 'telefone' in opts.felder %}<td>{% for p in k.telefone %}<span class="phone">{{ p.nummer }}</span>{% if p.label %}<br><small>{{ p.label }}</small>{% endif %}{% if not loop.last %}<br>{% endif %}{% endfor %}</td>{% endif %}{% if 'erreichbarkeit' in opts.felder or 'druckhinweis' in opts.felder %}<td>{% if 'erreichbarkeit' in opts.felder %}{{ k.erreichbarkeit }}{% endif %}{% if 'druckhinweis' in opts.felder and k.druckhinweis %}<br>{{ k.druckhinweis }}{% endif %}</td>{% endif %}{% if 'email' in opts.felder %}<td>{{ k.email }}</td>{% endif %}</tr>
+{% endfor %}</tbody></table>
+{% else %}
+{% for k in kontakte %}{% if opts.gruppieren and (loop.first or k.kategorie != kontakte[loop.index0-1].kategorie) %}<h2>{{ k.kategorie }}</h2>{% endif %}<article class="detail"><h3>{{ k.name }}</h3>
+{% if 'organisation' in opts.felder and k.organisation %}<p><strong>Organisation:</strong> {{ k.organisation }}</p>{% endif %}
+{% if 'funktion' in opts.felder and k.funktion %}<p><strong>Funktion:</strong> {{ k.funktion }}</p>{% endif %}
+{% if 'telefone' in opts.felder %}{% for p in k.telefone %}<p><span class="phone">{{ p.nummer }}</span> {{ p.label }}</p>{% endfor %}{% endif %}
+{% for feld, label in [('email','E-Mail'),('erreichbarkeit','Erreichbarkeit'),('druckhinweis','Druckhinweis')] %}{% if feld in opts.felder and k[feld] %}<p><strong>{{ label }}:</strong> {{ k[feld] }}</p>{% endif %}{% endfor %}</article>{% endfor %}
+{% endif %}{% if not kontakte %}<p>Keine passenden Kontakte. Bitte Filter und Druckfreigaben prüfen.</p>{% endif %}
+</body></html>

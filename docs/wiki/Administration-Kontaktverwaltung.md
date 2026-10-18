@@ -21,25 +21,48 @@ verschwindet, und Objekte zeigen im Reiter **Kontakte** keine Zuordnungsmöglich
 
 ## Rollen
 
-| Rolle | Lesen | Anlegen/Bearbeiten/Zusammenführen/Import/Export |
+| Rolle | Zentrales Verzeichnis und Druck | Kontakt- und Kategoriepflege |
 |---|---|---|
-| `kontakt_verwalter` | ✅ | ✅ |
-| `objekt_verwalter` | ✅ | ✅ |
-| `admin` / `org_admin` / `system_admin` | ✅ (über allgemeine Admin-Rechte) | — |
-| `readonly`, `recorder`, `breathing_supervisor`, `incident_leader`, `fahrtenbuch_admin` | ✅ | ❌ |
+| `kontakt_verwalter`, `objekt_verwalter` | Ja | Ja |
+| `admin` / `org_admin` / `system_admin` | Ja, innerhalb des gewählten Organisationskontexts | Ja |
+| `recorder`, `incident_leader` | Ja | Nein |
+| `readonly`, `breathing_supervisor`, `fahrtenbuch_admin` ohne weitere Fachrolle | Nein; nur berechtigte Einsatzkontakte | Nein |
 
-Schreibrechte (Anlegen, Bearbeiten, Archivieren, Zusammenführen, Import, Export) sind auf
-`kontakt_verwalter` und `objekt_verwalter` beschränkt — letztere Rolle deshalb, weil
-Objekt-Kontaktzuordnungen ohne zentrale Kontaktpflege wenig Sinn ergeben. Alle anderen
-oben gelisteten Rollen dürfen die Kontaktliste einsehen, aber nichts ändern.
+Geräte- und QR-Sessions erhalten keinen Zugriff auf das zentrale Druckverzeichnis.
+Benutzer mit Verzeichnisrechten können ihre eigenen persönlichen Druckprofile verwalten.
+Details zur Ausgabe: [Einsatzkontakte drucken](Anwender-Kontaktverwaltung#einsatzkontakte-drucken).
 
 ## Kategorien pflegen
 
-Kategorien (z. B. „Hausverwaltung", „Behörde", „Schlüsselträger") sind frei benennbare,
-org-weite Schlagworte ohne feste Vorbelegung — sie entstehen beim ersten Anlegen eines
-Kontakts mit einer neuen Kategoriebezeichnung und lassen sich über die Kontaktliste als
-Filter verwenden. Es gibt keine separate Verwaltungsseite dafür; eine nicht mehr verwendete
-Kategorie verschwindet automatisch aus dem Filter, sobald kein Kontakt sie mehr trägt.
+Unter **Kontakte → Kategorien verwalten** können Kontakt-/Objektverwalter und Administratoren
+Kategorien anlegen, umbenennen, sortieren und deaktivieren. Bestehende Mehrfachzuordnungen
+bleiben erhalten. Deaktivierte Kategorien sind weiterhin in Kontaktdetails sichtbar.
+Kategorien können auch beim Bearbeiten eines Kontakts über neue, kommagetrennte Namen entstehen.
+
+Migration **0293** ergänzt acht Standardkategorien pro bestehender Organisation. Für neue
+Organisationen steht **Fehlende Standardkategorien ergänzen** zur Verfügung. Gleichnamige
+Kategorien werden wiederverwendet. Umbenannte Standardkategorien bleiben über ihre interne
+Kennung mit den vordefinierten Druckprofilen verbunden.
+
+**Standardmäßig im Druck auswählen** steuert die Auswahl der Einsatztelefonliste.
+**Objektkontakte** kennzeichnet Kategorien, deren Kontakte standardmäßig ausgeschlossen werden.
+Auch eine bestehende Objektzuordnung führt zum Standardausschluss beim Drucken.
+
+## Druckverzeichnis und Organisationslogo
+
+Die [Anwenderanleitung](Anwender-Kontaktverwaltung#einsatzkontakte-drucken) beschreibt Filter,
+Layouts, Druckfreigaben und persönliche Profile. Bestehende Kontakte erhalten durch die
+Migration keine automatische Druckfreigabe. Die Druckfreigabe umfasst berufliche Kontaktdaten
+und die allgemeine E-Mail-Adresse; private Kommunikationswerte werden nicht exportiert.
+
+Das Logo wird weiterhin unter [Einstellungen → Logo](Administration-Einstellungen#logo-hochladen)
+hochgeladen: PNG, JPG/JPEG, SVG oder WebP, maximal 2 MB. Ein gesonderter Upload für das
+Kontaktverzeichnis ist nicht erforderlich. Die Logoanzeige lässt sich pro Druckprofil abschalten.
+Ohne gültige Logodatei funktioniert die Ausgabe weiterhin ohne Bild.
+
+Die Druckausgabe liest nur das Logo derselben Organisation und bettet es in das Dokument ein.
+Es entstehen keine öffentlichen Kontakt-Downloadlinks und keine dauerhaft gespeicherten PDFs.
+Die Erweiterung der Logoanzeige benötigt keine weitere Migration zusätzlich zu **0293**.
 
 ## Einsatzinfo-Freigabe je Kontakt
 

@@ -190,6 +190,7 @@ _TENANT_TABLE_NAMES: frozenset[str] = frozenset({
     "kontakt_import_vorschau",
     "kontakt_sync_aenderung",
     "kontakt_kategorie",
+    "kontakt_druckprofil",
     "kontakt_kategorie_zuordnung",
     "kontakt_anhang",
     "kontakt_externe_referenz",

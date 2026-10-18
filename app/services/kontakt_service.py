@@ -95,6 +95,21 @@ def _werte(kontakt: Kontakt, daten: dict[str, Any], user_id: int | None) -> None
         kontakt.anzeigename = " ".join(x for x in (kontakt.nachname, kontakt.vorname) if x).strip()
     if not kontakt.anzeigename:
         raise ValueError("Bitte einen Anzeigenamen eingeben")
+    for feld in (
+        "einsatzrelevant", "druck_freigegeben", "druck_prioritaet", "druckhinweis", "druck_sortierung", "aktiv"
+    ):
+        if feld in daten:
+            value = daten[feld]
+            if feld in ("einsatzrelevant", "druck_freigegeben", "aktiv") and not isinstance(value, bool):
+                raise ValueError("Kennzeichnungen müssen boolesche Werte sein.")
+            if feld == "druck_prioritaet" and value not in ("hoch", "normal", "niedrig"):
+                raise ValueError("Priorität muss hoch, normal oder niedrig sein.")
+            if feld == "druck_sortierung" and (type(value) is not int or not -2147483648 <= value <= 2147483647):
+                raise ValueError("Sortierung muss eine gültige ganze Zahl sein.")
+            if (feld == "druckhinweis" and value is not None
+                    and (not isinstance(value, str) or len(value) > 500)):
+                raise ValueError("Druckhinweis darf höchstens 500 Zeichen enthalten.")
+            setattr(kontakt, feld, value)
     kontakt.aktualisiert_von_id = user_id
 
 
@@ -102,7 +117,9 @@ def _kategorien_sync(db: Session, kontakt: Kontakt, namen: list[str], org_id: in
     bereinigt = list(dict.fromkeys(name.strip() for name in namen if name.strip()))
     kategorien: list[KontaktKategorie] = []
     for name in bereinigt:
-        kategorie = db.query(KontaktKategorie).filter(KontaktKategorie.name == name).first()
+        kategorie = db.query(KontaktKategorie).filter(
+            KontaktKategorie.name == name, KontaktKategorie.org_id == org_id
+        ).first()
         if kategorie is None:
             kategorie = KontaktKategorie(org_id=org_id, name=name)
             db.add(kategorie)
@@ -121,12 +138,18 @@ def _telefone_sync(kontakt: Kontakt, telefone: list[dict[str, Any]], org_id: int
     zeilen = [zeile for zeile in telefone if str(zeile.get("nummer", "")).strip()]
     if len(zeilen) > 20:
         raise ValueError("Hoechstens 20 Telefonnummern sind erlaubt")
+    bisher = {p.nummer_normalisiert: p for p in kontakt.telefone}
     kontakt.telefone[:] = [
         KontaktTelefon(
             org_id=org_id,
             nummer=str(zeile["nummer"]).strip(),
             label=str(zeile.get("label") or "").strip() or None,
             sort=index,
+            verwendung=zeile.get(
+                "verwendung", getattr(bisher.get(telefon_normalisiert(zeile["nummer"])), "verwendung", "dienst")
+            ),
+            typ=zeile.get("typ", getattr(bisher.get(telefon_normalisiert(zeile["nummer"])), "typ", "sonstige")),
+            aktiv=zeile.get("aktiv", getattr(bisher.get(telefon_normalisiert(zeile["nummer"])), "aktiv", True)),
             bevorzugt=bool(zeile.get("bevorzugt")),
             sms_eignung=(
                 bool(zeile.get("sms_eignung"))
@@ -242,7 +265,9 @@ def list_kontakte(
 
 
 def list_kategorien(db: Session) -> list[KontaktKategorie]:
-    return db.query(KontaktKategorie).order_by(KontaktKategorie.name, KontaktKategorie.id).all()
+    return db.query(KontaktKategorie).order_by(
+        KontaktKategorie.sortierung, KontaktKategorie.name, KontaktKategorie.id
+    ).all()
 
 
 def find_duplicate_candidates(
