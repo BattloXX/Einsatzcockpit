@@ -15,7 +15,7 @@ from app.services import kontakt_service
 from app.services.bma_import.bma_sync import _sync_kontakte
 
 
-def _setup_device_sync_user(*, role_code: str = "readonly", org_id: int | None = None):
+def _setup_device_sync_user(*, role_code: str = "incident_leader", org_id: int | None = None):
     """Create an authenticated app user and enable contacts for its organization."""
     db = SessionLocal()
     set_tenant_context(db, None)
@@ -161,7 +161,7 @@ def test_snapshot_delta_and_tombstone(client):
         org = db.query(FireDept).filter(FireDept.is_home_org.is_(True)).first()
         assert org is not None
         org_id = org.id
-        db.add(ApiKey(key_hash=hash_api_key(raw), label="Kontakt-Sync", org_id=org_id))
+        db.add(ApiKey(key_hash=hash_api_key(raw), label="Kontakt-Sync", org_id=org_id, scopes="kontakte:read"))
         kontakt = kontakt_service.create_kontakt(
             db, {"typ": "person", "anzeigename": "Offline Kontakt"}, [], [], org_id=org_id, user_id=None
         )
@@ -192,7 +192,7 @@ def test_bma_import_emits_contact_and_mapping_delta(client):
         org = db.query(FireDept).filter(FireDept.is_home_org.is_(True)).first()
         assert org is not None
         org_id = org.id
-        db.add(ApiKey(key_hash=hash_api_key(raw), label="BMA-Kontakt-Sync", org_id=org.id))
+        db.add(ApiKey(key_hash=hash_api_key(raw), label="BMA-Kontakt-Sync", org_id=org.id, scopes="kontakte:read"))
         db.commit()
     finally:
         db.close()

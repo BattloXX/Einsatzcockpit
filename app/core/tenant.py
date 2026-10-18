@@ -168,6 +168,7 @@ _TENANT_TABLE_NAMES: frozenset[str] = frozenset({
     "merkmal_katalog",
     "objekt_merkmal",
     "objekt_kontakt",
+    "einsatz_kontakt",
     "objekt_kontakt_freigabe",
     "objekt_kontakt_benachrichtigung",
     "objekt_wohnanlage",

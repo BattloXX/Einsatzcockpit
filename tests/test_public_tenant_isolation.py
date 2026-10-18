@@ -157,7 +157,9 @@ def test_kontakt_sync_api_key_zeigt_keine_fremden_snapshot_oder_delta_kontakte(c
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
-        db.add(ApiKey(key_hash=hash_api_key(raw_key), label="Kontakt-Sync Isolation", org_id=ORG_A))
+        db.add(ApiKey(
+            key_hash=hash_api_key(raw_key), label="Kontakt-Sync Isolation", org_id=ORG_A, scopes="kontakte:read"
+        ))
         kontakt_b = kontakt_service.create_kontakt(
             db,
             {"typ": "person", "anzeigename": "Geheimer Kontakt Org B"},

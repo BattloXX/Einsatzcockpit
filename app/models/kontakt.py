@@ -78,6 +78,23 @@ class Kontakt(TenantScoped, Base):
     )
 
 
+class EinsatzKontakt(TenantScoped, Base):
+    """Explizite Freigabe eines zentralen Kontakts fuer genau einen Einsatz."""
+
+    __tablename__ = "einsatz_kontakt"
+    __table_args__ = (UniqueConstraint("incident_id", "kontakt_id", name="uq_einsatz_kontakt"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    incident_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("incident.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    kontakt_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("kontakt.id", ondelete="CASCADE"), nullable=False
+    )
+    hinweis: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    kontakt: Mapped[Kontakt] = relationship()
+
+
 class KontaktTelefon(TenantScoped, Base):
     """Telefonnummer eines zentralen Kontakts mit persistierter Normalform."""
 

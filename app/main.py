@@ -75,6 +75,7 @@ from app.routers import (
     ui_druck,
     ui_einheit,
     ui_einsatz_import,
+    ui_einsatz_kontakte,
     ui_einsatzinfo_mail,
     ui_fahrtenbuch,
     ui_fahrtenbuch_admin,
@@ -916,6 +917,7 @@ app.include_router(ui_objekt.router)
 app.include_router(ui_objekt_dokumente.router)
 app.include_router(ui_objekt_pflege_review.router)
 app.include_router(ui_kontakt.router)
+app.include_router(ui_einsatz_kontakte.router)
 app.include_router(ui_road_closure.router)
 app.include_router(ui_planspiel.router)
 app.include_router(ui_planspiel_admin.router)

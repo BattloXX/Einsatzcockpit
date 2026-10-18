@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.core.async_bridge import run_async
 from app.core.dependencies import _set_module_states
+from app.core.permissions import can_view_kontakt_directory, can_view_kontakt_directory_request
 from app.core.security import hash_api_key, sign_native_link_token
 from app.db import get_db
 from app.models.master import VehicleMaster
@@ -27,15 +28,6 @@ from app.services.resource_service import STATUS_IM_EINSATZ
 router = APIRouter(prefix="/api/v1/device", tags=["device"])
 log = logging.getLogger(__name__)
 
-_KONTAKT_LESE_ROLLEN = (
-    "readonly",
-    "recorder",
-    "breathing_supervisor",
-    "incident_leader",
-    "fahrtenbuch_admin",
-    "objekt_verwalter",
-    "kontakt_verwalter",
-)
 
 
 def _resolve_user_via_bearer_token(request: Request, db: Session) -> User | None:
@@ -70,9 +62,7 @@ def _get_device_token(user_id: int, db: Session) -> DeviceToken | None:
 
 
 def _can_read_kontakte(user: User) -> bool:
-    """Role check equivalent to require_role(), for an already authenticated user."""
-    role_codes = {role.code for role in user.roles}
-    return bool(role_codes & (set(_KONTAKT_LESE_ROLLEN) | {"system_admin", "admin", "org_admin"}))
+    return can_view_kontakt_directory(user)
 
 
 @router.get("/kontakte/sync")
@@ -91,7 +81,7 @@ def sync_kontakte(
         bearer_authenticated = user is not None
     if not user:
         raise HTTPException(status_code=401, detail="Nicht eingeloggt")
-    if not _can_read_kontakte(user):
+    if not _can_read_kontakte(user) or (not bearer_authenticated and not can_view_kontakt_directory_request(request)):
         raise HTTPException(status_code=403, detail="Keine Berechtigung")
     if user.org_id is None:
         raise HTTPException(status_code=400, detail="Keine Organisation ausgewaehlt")

@@ -599,6 +599,7 @@ class ObjektKontakt(TenantScoped, Base):
     # Art: brandschutzbeauftragter / betreiber / hausverwaltung / schluesseltraeger / sonstig
     art: Mapped[str] = mapped_column(String(50), nullable=False, default="sonstig")
     erreichbarkeit: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    einsatz_sichtbar: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="1")
     sort: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # Externe Identitaet (siehe app/services/bma_import/): NULL = haendisch gepflegt,
     # wird vom Import NIE angefasst. Gesetzt (z. B. extern_quelle="dibos_bma",

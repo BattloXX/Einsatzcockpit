@@ -45,7 +45,7 @@ def _rolle(db, code):
     return role
 
 
-def _setup_org_mit_user(username: str, rollen=("readonly",)) -> int:
+def _setup_org_mit_user(username: str, rollen=("recorder",)) -> int:
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
@@ -98,6 +98,7 @@ def test_changelog_zeigt_aenderungen_ueber_mehrere_objekte():
         db.close()
 
     from fastapi.testclient import TestClient
+
     from app.main import app
     client = TestClient(app)
     _login(client, "changelog_user", "Test1234!")
@@ -116,6 +117,7 @@ def test_changelog_ohne_aenderungen_zeigt_leeren_zustand():
     _setup_org_mit_user("changelog_leer_user")
 
     from fastapi.testclient import TestClient
+
     from app.main import app
     client = TestClient(app)
     _login(client, "changelog_leer_user", "Test1234!")
@@ -146,6 +148,7 @@ def test_changelog_tenant_isolation():
         db.close()
 
     from fastapi.testclient import TestClient
+
     from app.main import app
     client = TestClient(app)
     _login(client, "changelog_org_a_user", "Test1234!")
@@ -156,16 +159,15 @@ def test_changelog_tenant_isolation():
     assert org_a != org_b
 
 
-def test_changelog_erreichbar_fuer_reine_lesekraft():
-    """Anders als die BMA-Import-Review-Queue (nur objekt_verwalter) ist das
-    globale Protokoll fuer ALLE Lese-Rollen zugaenglich (_LESE_ROLLEN, Muster
-    Objektliste/protokoll_partial)."""
+def test_changelog_verweigert_reiner_lesekraft_kontaktdaten_im_protokoll():
+    """Das globale Protokoll kann Kontaktstammdaten ausserhalb eines Einsatzes enthalten."""
     _setup_org_mit_user("changelog_readonly_user", rollen=("readonly",))
 
     from fastapi.testclient import TestClient
+
     from app.main import app
     client = TestClient(app)
     _login(client, "changelog_readonly_user", "Test1234!")
 
     r = client.get("/objekte/changelog")
-    assert r.status_code == 200
+    assert r.status_code == 403

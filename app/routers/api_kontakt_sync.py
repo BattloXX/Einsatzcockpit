@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import get_api_key
+from app.core.dependencies import require_scope
 from app.db import get_db
 from app.models.user import ApiKey
 from app.services.kontakt_sync_service import delta, snapshot
@@ -16,7 +16,7 @@ def sync_kontakte(
     cursor: int | None = Query(None, ge=0),
     page_after: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
-    api_key: ApiKey = Depends(get_api_key),
+    api_key: ApiKey = Depends(require_scope("kontakte:read")),
     db: Session = Depends(get_db),
 ):
     """Return a versioned full snapshot or append-only delta for this API key's org."""

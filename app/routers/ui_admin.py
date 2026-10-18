@@ -466,7 +466,7 @@ def create_api_key(
 ):
     form = run_async(request.form)
     erlaubte_scopes = {
-        "einsatz:write", "mailing:import", "sms:send", "mail:send",
+        "einsatz:write", "mailing:import", "sms:send", "mail:send", "kontakte:read",
         "einsatz:read", "einsatz:read:kraefte", "einsatz:read:board",
     }
     angeforderte_scopes = form.getlist("scopes")

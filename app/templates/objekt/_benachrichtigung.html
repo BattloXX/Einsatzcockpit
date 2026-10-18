@@ -23,10 +23,12 @@
   {% endif %}
 
   <p class="form-hint" style="margin-top:12px;">Platzhalter: {objekt}, {objektnummer}, {vulgoname}, {stichwort}, {adresse}, {ort}, {meldung}, {einsatzgrund}, {datum}, {zeit}, {feuerwehr}, {kontakt}, {leitstellennummer}</p>
+  {% if kontakt_vollzugriff %}
   <div style="margin-top:10px;"><strong>Aktuelle Empfänger</strong>
     {% set ns = namespace(anzahl=0) %}
     <ul>{% for k in objekt.kontakte if k.zentraler_kontakt %}{% for f in k.freigaben if f.aktiv %}{% set ns.anzahl = ns.anzahl + 1 %}<li>{{ k.zentraler_kontakt.anzeigename }} · {{ 'E-Mail' if f.kanal == 'mail' else 'SMS' }} · {{ f.ziel_wert }}</li>{% endfor %}{% endfor %}</ul>
     {% if ns.anzahl == 0 %}<p style="color:var(--warning);">Kein Kontakt hat einen verwendbaren Kanal freigegeben.</p>{% endif %}
   </div>
+  {% endif %}
   <div class="alert alert--warn" style="margin-top:12px;">Der Platzhalter <code>{meldung}</code> gibt den Alarmtext unverändert an externe Empfänger weiter und kann Melderdaten enthalten.</div>
 </div>

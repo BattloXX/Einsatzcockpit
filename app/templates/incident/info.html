@@ -233,6 +233,10 @@ html.ei-druck-vorbereitung #einsatz-info-karte { height: 58mm !important; min-he
       </div>
       {% endif %}
 
+      {% if request.state.kontakte_enabled %}
+      <div id="einsatz-kontakte" hx-get="/einsatz/{{ incident.id }}/kontakte" hx-trigger="load" hx-swap="outerHTML"></div>
+      {% endif %}
+
       <!-- Objektinformationen inkl. Dokumenten + direkte manuelle Verknüpfung.
            Lazy per HTMX geladen (_ei_objekt_section.html); Verknüpfen/Bestätigen/
            Lösen laufen über die einsatz-panel-Endpoints (view=info). -->

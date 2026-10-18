@@ -407,7 +407,7 @@ def _ersetze_kinddaten(db: Session, basis: Objekt, kopie: Objekt, *, user_id: in
     db.flush()
 
     kontakt_map: dict[int, int] = {}
-    mutable_felder = ("art", "erreichbarkeit", "sort", "kontakt_id", "extern_quelle", "extern_id")
+    mutable_felder = ("art", "erreichbarkeit", "sort", "kontakt_id", "extern_quelle", "extern_id", "einsatz_sichtbar")
     for basis_kontakt, kontakt_vorlage in paare:
         for feld in mutable_felder:
             setattr(basis_kontakt, feld, getattr(kontakt_vorlage, feld))

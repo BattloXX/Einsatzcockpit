@@ -64,17 +64,17 @@
 {% endif %}
 
 <!-- 4) Kontakte -->
-{% if objekt.kontakte %}
+{% if einsatzkontakte %}
 <div class="card" style="padding:14px;margin-bottom:12px;">
   <h3 style="margin:0 0 10px;">📞 Kontakte</h3>
   <div style="display:flex;flex-direction:column;gap:10px;">
-    {% for k in objekt.kontakte if k.zentraler_kontakt %}
+    {% for k in einsatzkontakte %}
     <div>
-      <div><span class="badge-pill badge-pill--gray">{{ kontakt_arten.get(k.art, k.art) }}</span> <strong>{{ k.zentraler_kontakt.anzeigename }}</strong>
+      <div><span class="badge-pill badge-pill--gray">{{ kontakt_arten.get(k.art, k.art) }}</span> <strong>{{ k.anzeigename }}</strong>
         {% if k.erreichbarkeit %}<span class="text-muted" style="font-size:0.85em;"> · {{ k.erreichbarkeit }}</span>{% endif %}
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">
-        {% for tel in k.zentraler_kontakt.telefone %}
+        {% for tel in k.telefone %}
         <a href="tel:{{ tel.nummer|tel }}" class="btn btn--primary objekt-einsatz-telbtn">📞 {% if tel.label %}{{ tel.label }}: {% endif %}{{ tel.nummer }}</a>
         {% endfor %}
       </div>
