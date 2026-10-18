@@ -455,6 +455,8 @@ def test_18_panel_scoping_ueber_einsatz_org_nicht_user_org(versand):
     """
     from types import SimpleNamespace
 
+    from starlette.requests import Request
+
     from app.routers.ui_objekt import _panel_context
 
     db, org, _, objekt, _, incident, _, _, _, _ = versand
@@ -463,7 +465,9 @@ def test_18_panel_scoping_ueber_einsatz_org_nicht_user_org(versand):
         role_codes={"system_admin"},
     )
 
-    ctx = _panel_context(SimpleNamespace(), db, admin, incident.id)
+    request = Request({"type": "http", "headers": []})
+    request.state.user = admin
+    ctx = _panel_context(request, db, admin, incident.id)
 
     assert [v.objekt_id for v in ctx["verknuepfungen"]] == [objekt.id]
     assert ctx["hat_empfaenger"][objekt.id] is True
