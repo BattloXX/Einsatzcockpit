@@ -105,7 +105,7 @@ async def test_abschnitt_route_liefert_404_fuer_fremden_abschnitt():
         user = SimpleNamespace(id=1, org_id=1, roles=[])
         request = SimpleNamespace(state=SimpleNamespace(user=user))
         with pytest.raises(HTTPException) as exc:
-            await site_sektor_assign(request, lage.id, site.id, sector.id, db)
+            site_sektor_assign(request, lage.id, site.id, sector.id, db)
         assert exc.value.status_code == 404
     finally:
         db.close()
