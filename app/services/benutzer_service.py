@@ -52,10 +52,13 @@ def create_user(
     username = username.strip()
     if not username:
         raise ValueError("Benutzername darf nicht leer sein.")
-    if db.query(User).filter(User.username == username).first():
+    # Die UNIQUE-Constraints gelten systemweit, auch wenn die Session auf die
+    # Organisation des Administrators eingeschraenkt ist. Nur die ID abfragen.
+    identifiers = db.query(User.id).execution_options(include_all_tenants=True)
+    if identifiers.filter(User.username == username).first():
         raise ValueError("Benutzername ist bereits vergeben.")
     email_clean = email.strip().lower() or None
-    if email_clean and db.query(User).filter(User.email == email_clean).first():
+    if email_clean and identifiers.filter(User.email == email_clean).first():
         raise ValueError("E-Mail-Adresse ist bereits vergeben.")
     member_error = validate_member_link(db, member_id, org_id, False)
     if member_error:
