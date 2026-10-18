@@ -135,14 +135,13 @@ def ausgabe(request: Request, db: Session = Depends(get_db), user: User = Depend
 
 
 @router.post("/druckprofile")
-async def profil_speichern(
-    request: Request,
+def profil_speichern(
     name: str = Form(...),
+    einstellungen: str = Form(...),
     db: Session = Depends(get_db),
     user: User = Depends(require_role(*_LESE_ROLLEN)),
 ):
-    form = await request.form()
-    opts = _optionen(form, db, user)
+    opts = _optionen({"einstellungen": einstellungen}, db, user)
     _daten(db, user, opts)
     try:
         profil = service.profil_speichern(db, _org_id(user), user.id, name, opts)
