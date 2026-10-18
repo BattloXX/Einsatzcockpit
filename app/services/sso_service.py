@@ -184,18 +184,18 @@ async def validate_id_token(
 ) -> dict[str, Any]:
     """Validiert id_token: Signatur, aud, iss, exp, nbf, nonce, tid."""
     try:
-        from jose import ExpiredSignatureError, JWTError, jwt
+        import jwt
     except (ImportError, OSError) as exc:
-        logger.exception("SSO nicht verfügbar: python-jose kann nicht geladen werden; pip install -e . ausführen")
+        logger.exception("SSO nicht verfügbar: PyJWT kann nicht geladen werden; pip install -e . ausführen")
         raise SsoError(
-            "sso_failed", "SSO nicht verfügbar: Abhängigkeit python-jose fehlt oder ist defekt. "
+            "sso_failed", "SSO nicht verfügbar: Abhängigkeit PyJWT fehlt oder ist defekt. "
             "Bitte pip install -e . ausführen.",
         ) from exc
     jwks = await _get_jwks(tenant_id, authority_base)
 
     try:
         header = jwt.get_unverified_header(id_token)
-    except JWTError as exc:
+    except jwt.PyJWTError as exc:
         logger.warning("SSO id_token header invalid: tenant_id=%s", tenant_id, exc_info=True)
         raise SsoError("idtoken_invalid", f"id_token Header unlesbar: {exc}") from exc
 
@@ -209,18 +209,32 @@ async def validate_id_token(
     issuer = f"{_authority(tenant_id, authority_base)}"
 
     try:
+        jwk_set = jwt.PyJWKSet.from_dict(jwks)
+        signing_keys = [
+            key for key in jwk_set.keys
+            if key.algorithm_name == "RS256" and key.public_key_use in (None, "sig")
+        ]
+        if kid:
+            matching_keys = [key for key in signing_keys if key.key_id == kid]
+            if not matching_keys:
+                raise jwt.PyJWKError(f"Kein passender Schlüssel für kid '{kid}' in JWKS")
+            signing_key = matching_keys[0]
+        elif len(signing_keys) == 1:
+            signing_key = signing_keys[0]
+        else:
+            raise jwt.PyJWKError("id_token Header enthält kein kid und JWKS ist nicht eindeutig")
         claims = jwt.decode(
             id_token,
-            jwks,
+            signing_key.key,
             algorithms=["RS256"],
             audience=client_id,
             issuer=issuer,
-            options={"leeway": 60},
+            leeway=60,
         )
-    except ExpiredSignatureError as exc:
+    except jwt.ExpiredSignatureError as exc:
         logger.warning("SSO id_token expired: tenant_id=%s", tenant_id, exc_info=True)
         raise SsoError("idtoken_invalid", "id_token abgelaufen") from exc
-    except JWTError as exc:
+    except jwt.PyJWTError as exc:
         logger.warning("SSO id_token invalid: tenant_id=%s", tenant_id, exc_info=True)
         raise SsoError("idtoken_invalid", f"id_token ungültig: {exc}") from exc
 

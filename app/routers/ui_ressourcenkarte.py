@@ -641,7 +641,7 @@ async def zugang_sitzung_beenden(
     )
     if not session or not zugang or session.zugang_id != zugang.id or session.org_id != lage.org_id:
         raise HTTPException(404, "Sitzung nicht gefunden")
-    session.revoked_at, session.revoke_grund = datetime.utcnow(), "manuell"
+    session.revoked_at, session.revoke_grund = datetime.now(UTC).replace(tzinfo=None), "manuell"
     write_audit(
         db,
         "gsl.zugang.sitzung_beendet",

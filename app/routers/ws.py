@@ -545,7 +545,7 @@ async def dispatch_sms(
         entries.sort(key=lambda entry: entry[0] != preferred_gateway_token_id)
 
     payload = json.dumps({"type": "sms.send", "id": job_id, "to": to, "text": text}, ensure_ascii=False)
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     last_error: Exception | None = None
 
     for token_id, ws in entries:
@@ -1019,7 +1019,7 @@ async def dispatch_print_job(org_id: int, job_id: int, payload: dict, timeout: f
         if not gateway_online(org_id):
             raise RuntimeError(f"Kein Gateway für org_id={org_id} verbunden")
         key = str(job_id)
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         fut: asyncio.Future = loop.create_future()
         _job_pending[key] = fut
         await ws_bus.publish(ws_bus.CH_GW, {
@@ -1044,7 +1044,7 @@ async def _dispatch_print_job_local(org_id: int, job_id: int, payload: dict, tim
 
     key = str(job_id)
     msg = json.dumps({"type": "print_job", "id": key, "payload": payload}, ensure_ascii=False)
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     last_error: Exception | None = None
 
     for _gateway_id, ws in reversed(gateways):

@@ -162,8 +162,8 @@ def test_crdt_unavailable_closes_only_sync(client, unavailable, caplog, package)
 async def test_sso_unavailable_has_service_error(unavailable, caplog):
     from app.services.sso_service import SsoError, validate_id_token
 
-    unavailable("jose")
-    with pytest.raises(SsoError, match="python-jose.*pip install -e") as error:
+    unavailable("jwt")
+    with pytest.raises(SsoError, match="PyJWT.*pip install -e") as error:
         await validate_id_token(id_token="test", tenant_id="test", client_id="test", nonce="test")
     assert error.value.code == "sso_failed"
-    assert "python-jose kann nicht geladen werden" in caplog.text
+    assert "PyJWT kann nicht geladen werden" in caplog.text

@@ -22,7 +22,7 @@ dependencies = [
     # Auth
     "bcrypt>=4",
     "itsdangerous>=2.2",
-    "python-jose[cryptography]>=3.3",
+    "PyJWT[crypto]>=2.10",
     # Config
     "pydantic-settings>=2.3",
     "python-dotenv>=1.0",
@@ -43,8 +43,6 @@ dependencies = [
     "qrcode[pil]>=7.4",
     # Structured logging
     "structlog>=24",
-    # Scheduling (background tasks)
-    "apscheduler>=3.10",
     # HTTP client (for internal tasks)
     "httpx>=0.27",
     # SMTP (Passwort-Reset)
@@ -111,7 +109,88 @@ line-length = 120
 target-version = "py314"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP"]
+# ASYNC/DTZ/B/S110/T20 seit 2026-10-18; B008 = FastAPI-Depends-Idiom.
+select = ["E", "F", "I", "UP", "ASYNC", "DTZ", "B", "S110", "T20"]
+ignore = ["B008"]
+
+[tool.ruff.lint.per-file-ignores]
+# CLI und Seed geben bewusst auf stdout aus.
+"app/cli.py" = ["T201"]
+"app/seed_data.py" = ["T201"]
+# Baseline (2026-10-18): Bestandsverstöße gegen die neuen Regeln. Neuer Code muss sie
+# einhalten; Einträge beim Anfassen der Datei abbauen, nie neue hinzufügen.
+"app/core/dependencies.py" = ["B904", "S110"]
+"app/core/tenant.py" = ["S110"]
+"app/db.py" = ["S110"]
+"app/main.py" = ["B010", "S110"]
+"app/middleware/csrf.py" = ["B023", "S110"]
+"app/routers/api_v1.py" = ["S110"]
+"app/routers/device_api.py" = ["B904"]
+"app/routers/gateway_api.py" = ["B904", "S110"]
+"app/routers/teams_bot.py" = ["B904"]
+"app/routers/ui_archive.py" = ["S110"]
+"app/routers/ui_atemschutz_pruefung_admin.py" = ["B904"]
+"app/routers/ui_einheit.py" = ["B904"]
+"app/routers/ui_fahrtenbuch_admin.py" = ["B904"]
+"app/routers/ui_gateway.py" = ["B010", "B904"]
+"app/routers/ui_gsl_staff.py" = ["B904"]
+"app/routers/ui_incident.py" = ["B904", "S110"]
+"app/routers/ui_infoscreen_alarm.py" = ["S110"]
+"app/routers/ui_kontakt.py" = ["B904"]
+"app/routers/ui_lagefuehrung.py" = ["B904"]
+"app/routers/ui_major_incident.py" = ["ASYNC240", "B904", "DTZ901", "S110"]
+"app/routers/ui_objekt.py" = ["DTZ007", "DTZ011", "S110"]
+"app/routers/ui_org_mail.py" = ["ASYNC109"]
+"app/routers/ui_planspiel.py" = ["DTZ901"]
+"app/routers/ui_push.py" = ["S110"]
+"app/routers/ui_road_closure.py" = ["B904"]
+"app/routers/ui_settings.py" = ["ASYNC240", "S110"]
+"app/routers/ui_sysadmin.py" = ["B904"]
+"app/routers/ui_termin.py" = ["DTZ901"]
+"app/routers/ui_uas.py" = ["DTZ011", "S110"]
+"app/routers/ui_verleih.py" = ["B904"]
+"app/routers/ws.py" = ["ASYNC109", "B904"]
+"app/services/abfluss_service.py" = ["S110"]
+"app/services/address_autocomplete.py" = ["S110"]
+"app/services/ai_service.py" = ["B904", "S110"]
+"app/services/breathing_service.py" = ["S110"]
+"app/services/broadcast.py" = ["B905"]
+"app/services/buergermeldung_service.py" = ["S110"]
+"app/services/einsatz_import_service.py" = ["DTZ007"]
+"app/services/eus_sms_service.py" = ["ASYNC109"]
+"app/services/excel_export_service.py" = ["B904"]
+"app/services/foerderstrecke_service.py" = ["B905"]
+"app/services/gefahrgut_service.py" = ["S110"]
+"app/services/gsl_fuehrung_service.py" = ["DTZ901"]
+"app/services/gsl_stelle_service.py" = ["S110"]
+"app/services/hoehen_service.py" = ["B905"]
+"app/services/incident_service.py" = ["S110"]
+"app/services/lage_media_service.py" = ["S110"]
+"app/services/lis/lis_capture.py" = ["B023"]
+"app/services/mail_imap_poller.py" = ["S110"]
+"app/services/mail_zuordnung_service.py" = ["S110"]
+"app/services/maschinisten_matrix_service.py" = ["DTZ011"]
+"app/services/objekt_dokument_service.py" = ["B904", "B905", "DTZ007", "S110"]
+"app/services/objekt_ki_service.py" = ["DTZ007", "S110"]
+"app/services/objekt_matching_service.py" = ["S110"]
+"app/services/objekt_pflege_service.py" = ["DTZ011"]
+"app/services/objekt_service.py" = ["DTZ011"]
+"app/services/print_artifact_service.py" = ["S110"]
+"app/services/push_service.py" = ["S110"]
+"app/services/resource_service.py" = ["B010", "DTZ901"]
+"app/services/road_closure_document_service.py" = ["DTZ001"]
+"app/services/road_closure_section_resolver.py" = ["B905"]
+"app/services/road_closure_section_service.py" = ["B905"]
+"app/services/road_closure_service.py" = ["B007"]
+"app/services/sms_dispatch_service.py" = ["B023", "S110"]
+"app/services/sms_inbox_service.py" = ["S110"]
+"app/services/sms_service.py" = ["ASYNC109"]
+"app/services/uas_compliance.py" = ["DTZ011"]
+"app/services/uas_pdf.py" = ["S110"]
+"app/services/update_service.py" = ["S110"]
+"app/services/verleih_service.py" = ["B904", "S110"]
+"app/services/weather_retention.py" = ["B905"]
+"app/services/ws_bus.py" = ["S110"]
 
 [tool.mypy]
 python_version = "3.14"

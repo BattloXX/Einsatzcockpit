@@ -91,6 +91,9 @@ npm run test:js # Offline-Outbox des Einheitenmodus; nötig bei Änderungen an a
 ```
 
 - Immer `.venv/bin/python`; es gibt kein `python` im PATH.
+- Ruff prüft zusätzlich `ASYNC`, `DTZ`, `B`, `S110` (kein stilles `except: pass`) und `T20`.
+  Bestandsverstöße stehen als Baseline in `[tool.ruff.lint.per-file-ignores]` – dort nie
+  neue Einträge ergänzen, sondern beim Anfassen einer Datei abbauen.
 - pytest-xdist verwendet pro Worker eine eigene SQLite-Datei (`test_gw0.db`, …; seriell
   `test_main.db`), daher ist paralleles Testen mit `-n` erlaubt. Zwei getrennte
   pytest-Prozesse gleichzeitig bleiben verboten, sofern beide den Worker `main` nutzen.
