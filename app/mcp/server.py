@@ -278,6 +278,7 @@ def _live_context_for_tool(tool_name: str):
     db = SessionLocal()
     try:
         context = load_live_context(db, int(token.subject), int(token.claims["org_id"]), definition.required_roles)
+        context.client_id = token.client_id
         if definition.module_check and not definition.module_check(context.org_id, db):
             raise MCPPermissionError("Das Modul für dieses Werkzeug ist für diese Organisation nicht aktiviert.")
         return definition, context
@@ -1332,6 +1333,21 @@ async def benutzer_suchen(q: str = "", aktiv: bool | None = None, rolle: str = "
                                        mit_mitglied=mit_mitglied, limit=limit, seite=seite)
 
 
+@server.tool(name="benutzer_liste", description=TOOLS["benutzer_liste"].description)
+async def benutzer_liste(limit: int = 50, seite: int = 1) -> dict[str, object]:
+    return await _call_registered_tool("benutzer_liste", limit=limit, seite=seite)
+
+
+@server.tool(name="mitglieder_liste", description=TOOLS["mitglieder_liste"].description)
+async def mitglieder_liste(limit: int = 50, seite: int = 1) -> dict[str, object]:
+    return await _call_registered_tool("mitglieder_liste", limit=limit, seite=seite)
+
+
+@server.tool(name="benutzer_mitglied_abgleichen", description=TOOLS["benutzer_mitglied_abgleichen"].description)
+async def benutzer_mitglied_abgleichen() -> dict[str, object]:
+    return await _call_registered_tool("benutzer_mitglied_abgleichen")
+
+
 @server.tool(name="benutzer_lesen", description="Liest einen nicht technischen Benutzer der eigenen Organisation; erfordert admin und ist nur lesend.")
 async def benutzer_lesen(benutzer_id: int) -> dict[str, object]:
     return await _call_registered_tool("benutzer_lesen", benutzer_id=benutzer_id)
@@ -1371,9 +1387,26 @@ async def benutzer_deaktivieren(benutzer_id: int) -> dict[str, object]:
     return await _call_registered_tool("benutzer_deaktivieren", benutzer_id=benutzer_id)
 
 
-@server.tool(name="benutzer_mitglied_verknuepfen", description="Verknuepft ein Mitglied mit einem Benutzer; erfordert admin und schreibt Daten.")
-async def benutzer_mitglied_verknuepfen(benutzer_id: int, mitglied_id: int | None = None) -> dict[str, object]:
-    return await _call_registered_tool("benutzer_mitglied_verknuepfen", benutzer_id=benutzer_id, mitglied_id=mitglied_id)
+@server.tool(name="benutzer_mitglied_verknuepfen", description=TOOLS["benutzer_mitglied_verknuepfen"].description)
+async def benutzer_mitglied_verknuepfen(
+    benutzer_id: int, mitglied_id: int, dry_run: bool = False, manuell_bestaetigt: bool = False,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "benutzer_mitglied_verknuepfen", benutzer_id=benutzer_id, mitglied_id=mitglied_id,
+        dry_run=dry_run, manuell_bestaetigt=manuell_bestaetigt,
+    )
+
+
+@server.tool(name="benutzer_mitglied_trennen", description=TOOLS["benutzer_mitglied_trennen"].description)
+async def benutzer_mitglied_trennen(benutzer_id: int, dry_run: bool = False) -> dict[str, object]:
+    return await _call_registered_tool("benutzer_mitglied_trennen", benutzer_id=benutzer_id, dry_run=dry_run)
+
+
+@server.tool(name="benutzer_mitglieder_bulk_verknuepfen", description=TOOLS["benutzer_mitglieder_bulk_verknuepfen"].description)
+async def benutzer_mitglieder_bulk_verknuepfen(
+    zuordnungen: list[dict[str, int]], dry_run: bool = False,
+) -> dict[str, object]:
+    return await _call_registered_tool("benutzer_mitglieder_bulk_verknuepfen", zuordnungen=zuordnungen, dry_run=dry_run)
 
 
 @server.tool(name="benutzer_passwort_reset_mail", description="Sendet eine Passwort-Reset-Mail; erfordert admin und schreibt Reset-Daten.")

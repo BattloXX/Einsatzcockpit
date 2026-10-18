@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 
 from fastapi import HTTPException
 from sqlalchemy import or_
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.audit import write_audit
 from app.core.permissions import ROLES, authorize_user_mutation, manageable_role_codes, permitted_submitted_roles
@@ -14,7 +15,7 @@ from app.mcp.tools.mitglieder import gruppenkommandant_funktionen
 from app.models.master import Member
 from app.models.mcp import MCPOAuthToken
 from app.models.user import Role, User, UserRole
-from app.services import benutzer_service
+from app.services import benutzer_mitglied_service, benutzer_service
 
 MAX_LIMIT = 200
 BENUTZER_ROLLEN = ("admin",)
@@ -39,11 +40,15 @@ def _mitglied_payload(context: MCPContext, member_id: int | None) -> dict[str, o
 
 
 def _listen_payload(context: MCPContext, user: User) -> dict[str, object]:
+    vorname, nachname = benutzer_mitglied_service.benutzer_name(user)
     return {
         "id": user.id, "username": user.username, "display_name": user.display_name, "aktiv": user.active,
         "rollen": _rollen(user), "auth_provider": user.auth_provider,
         "last_login_at": format_local_iso(user.last_login_at, context.user.org),
         "mitglied": _mitglied_payload(context, user.member_id),
+        "vorname": vorname, "nachname": nachname, "full_name": user.full_name,
+        "email": user.email, "telefon": user.phone, "organisations_id": user.org_id,
+        "mitglied_id": user.member_id,
     }
 
 
@@ -110,6 +115,27 @@ async def benutzer_suchen(context: MCPContext, q: str = "", aktiv: bool | None =
     users = query.order_by(User.username, User.id).offset((seite - 1) * limit).limit(limit).all()
     return {"benutzer": [_listen_payload(context, user) for user in users], "gesamt": gesamt,
             "seite": seite, "truncated": seite * limit < gesamt}
+
+
+@register_tool(
+    name="benutzer_liste",
+    description="Listet alle nicht technischen Benutzer inklusive Kontakte und Mitgliedsbezug, auch inaktive. "
+                "Admin; lesend. Alle Seiten bis truncated=false abrufen.",
+    required_roles=BENUTZER_ROLLEN,
+)
+async def benutzer_liste(context: MCPContext, limit: int = 50, seite: int = 1) -> dict[str, object]:
+    return await benutzer_suchen(context, limit=limit, seite=seite)
+
+
+@register_tool(
+    name="benutzer_mitglied_abgleichen",
+    description="Vergleicht alle Benutzer und Mitglieder der Organisation ohne Aenderungen. Liefert sicher, pruefen, "
+                "kein_treffer und bestehend. Sicher erfordert zwei Merkmale und Eindeutigkeit in beide Richtungen. "
+                "Namensgleichheit allein genuegt nicht. Admin; nur lesend.",
+    required_roles=BENUTZER_ROLLEN,
+)
+async def benutzer_mitglied_abgleichen(context: MCPContext) -> dict[str, object]:
+    return {key: value for key, value in benutzer_mitglied_service.abgleichen(context.db, context.org_id).items()}
 
 
 @register_tool(
@@ -285,22 +311,82 @@ async def benutzer_deaktivieren(context: MCPContext, benutzer_id: int) -> dict[s
 
 @register_tool(
     name="benutzer_mitglied_verknuepfen",
-    description="Verknuepft oder loest ein Mitglied; erfordert admin und erzeugt einen Audit-Eintrag.",
+    description="Verknuepft ein Mitglied ohne bestehende Links zu ersetzen. Standardmaessig nur sichere Treffer; "
+                "unsichere Faelle erfordern manuell_bestaetigt=true nach menschlicher Pruefung. "
+                "Admin; dry_run simuliert, jede Aenderung wird protokolliert. Trennen hat ein eigenes Werkzeug.",
     required_roles=BENUTZER_ROLLEN,
 )
 async def benutzer_mitglied_verknuepfen(
-    context: MCPContext, benutzer_id: int, mitglied_id: int | None = None
+    context: MCPContext, benutzer_id: int, mitglied_id: int, dry_run: bool = False,
+    manuell_bestaetigt: bool = False,
 ) -> dict[str, object]:
-    user = _ziel_benutzer(context, benutzer_id, "member_link")
-    error = benutzer_service.validate_member_link(context.db, mitglied_id, context.org_id, user.is_device, user.id)
-    if error == "member_taken":
-        raise ValueError("Mitglied ist bereits mit einem Benutzer verknuepft.")
-    if error:
-        raise ValueError("Mitglied nicht gefunden.")
-    old = user.member_id
-    user.member_id = mitglied_id
-    _audit(context, "member_linked", user, {"mitglied_id": {"alt": old, "neu": mitglied_id}})
-    return {"benutzer": _listen_payload(context, user), "mitglied_id": {"alt": old, "neu": mitglied_id}}
+    if mitglied_id is None:
+        raise ValueError("Zum Trennen benutzer_mitglied_trennen verwenden.")
+    result = benutzer_service.mitglied_verknuepfung_setzen(
+        context.db, context.user, context.org_id, benutzer_id, mitglied_id, dry_run=dry_run,
+        manuell_bestaetigt=manuell_bestaetigt, audit_prefix="mcp", client_id=context.client_id,
+    )
+    if result["geaendert"]:
+        context.db.commit()
+    user = context.db.get(User, benutzer_id)
+    if user is None:
+        raise ValueError("Benutzer nicht mehr vorhanden.")
+    return result | {"benutzer": _listen_payload(context, user)}
+
+
+@register_tool(
+    name="benutzer_mitglied_trennen",
+    description="Loest ausschliesslich den Mitgliedsbezug eines Benutzers, idempotent. Admin; dry_run simuliert. "
+                "Jede Aenderung wird mit vorherigem und neuem Bezug protokolliert.",
+    required_roles=BENUTZER_ROLLEN,
+)
+async def benutzer_mitglied_trennen(
+    context: MCPContext, benutzer_id: int, dry_run: bool = False,
+) -> dict[str, object]:
+    result = benutzer_service.mitglied_verknuepfung_setzen(
+        context.db, context.user, context.org_id, benutzer_id, None, dry_run=dry_run,
+        audit_prefix="mcp", client_id=context.client_id,
+    )
+    if result["geaendert"]:
+        context.db.commit()
+    return result
+
+
+@register_tool(
+    name="benutzer_mitglieder_bulk_verknuepfen",
+    description="Verknuepft bis zu 200 sichere eindeutige Treffer. zuordnungen: Liste aus benutzer_id/mitglied_id. "
+                "Unsichere Faelle bleiben unveraendert. Einzelresultate und Zaehler; Fehler isoliert. Admin; "
+                "dry_run simuliert, jede Aenderung wird protokolliert.",
+    required_roles=BENUTZER_ROLLEN,
+)
+async def benutzer_mitglieder_bulk_verknuepfen(
+    context: MCPContext, zuordnungen: list[dict[str, int]], dry_run: bool = False,
+) -> dict[str, object]:
+    if not 1 <= len(zuordnungen) <= MAX_LIMIT:
+        raise ValueError("1 bis 200 Zuordnungen erforderlich.")
+    # Snapshot verhindert, dass die Reihenfolge im Bulk Mehrdeutigkeiten scheinbar aufloest.
+    matching = benutzer_mitglied_service.abgleichen(context.db, context.org_id)
+    allowed = {(row["benutzer_id"], row["mitglied_id"]) for row in matching["sicher"] + matching["bestehend"]}
+    results = []
+    counts = {key: 0 for key in ("erfolgreich", "uebersprungen", "fehlgeschlagen", "simuliert")}
+    for pair in zuordnungen:
+        try:
+            if set(pair) != {"benutzer_id", "mitglied_id"} or any(type(v) is not int for v in pair.values()):
+                raise ValueError("Je Zuordnung sind benutzer_id und mitglied_id als Ganzzahlen erforderlich.")
+            ids = (pair["benutzer_id"], pair["mitglied_id"])
+            if ids not in allowed:
+                result = pair | {"status": "uebersprungen", "grund": "Kein sicherer eindeutiger Treffer."}
+            else:
+                result = await benutzer_mitglied_verknuepfen(context, *ids, dry_run=dry_run)
+        except ValueError as exc:
+            context.db.rollback()
+            result = pair | {"status": "fehlgeschlagen", "fehler": str(exc)}
+        except SQLAlchemyError:
+            context.db.rollback()
+            result = pair | {"status": "fehlgeschlagen", "fehler": "Datenbankfehler. Bitte erneut versuchen."}
+        counts[str(result["status"])] += 1
+        results.append(result)
+    return {"ergebnisse": results, "zusammenfassung": counts, "dry_run": dry_run}
 
 
 @register_tool(

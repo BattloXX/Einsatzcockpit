@@ -24,7 +24,7 @@ from app.models.master import (
 from app.models.user import AuditLog, Role, User, UserRole
 from tests.test_mcp_fundament import _mcp, _oauth_tokens
 
-LESE_TOOLS = ("mitglieder_suchen", "mitglied_lesen", "mitglieder_kataloge")
+LESE_TOOLS = ("mitglieder_suchen", "mitglieder_liste", "mitglied_lesen", "mitglieder_kataloge")
 SCHREIB_TOOLS = (
     "mitglied_anlegen",
     "mitglied_aktualisieren",
@@ -151,10 +151,14 @@ def test_rollenmatrix_live_kontext(rolle, erlaubt):
 
 
 def test_admin_und_fahrtenbuch_admin_koennen_lesen_recorder_nicht(client):
-    seed = _seed("mit-http", {"mit-http-admin": "admin", "mit-http-fb": "fahrtenbuch_admin", "mit-http-rec": "recorder"})
+    seed = _seed("mit-http", {
+        "mit-http-admin": "admin", "mit-http-fb": "fahrtenbuch_admin", "mit-http-rec": "recorder",
+    })
     for username in ("mit-http-admin", "mit-http-fb"):
         token = _token(client, username)
-        assert [m["id"] for m in _rufe(client, token, "mitglieder_suchen")["mitglieder"]] == [seed["members"]["anna"], seed["members"]["clara"]]
+        assert [m["id"] for m in _rufe(client, token, "mitglieder_suchen")["mitglieder"]] == [
+            seed["members"]["anna"], seed["members"]["clara"],
+        ]
         assert _rufe(client, token, "mitglied_lesen", mitglied_id=seed["members"]["anna"])["telefon"] == "0664123456"
     token = _token(client, "mit-http-rec")
     assert "mitglieder_" not in _mcp(client, token, "tools/list", {}, 2).text
@@ -166,16 +170,25 @@ def test_filter_paginierung_kataloge_und_gk_funktion(client):
     token = _token(client, "admin-filter")
     anna = seed["members"]["anna"]
     assert [m["id"] for m in _rufe(client, token, "mitglieder_suchen", q="SY-mit-filter-1")["mitglieder"]] == [anna]
-    assert [m["id"] for m in _rufe(client, token, "mitglieder_suchen", aktiv=False)["mitglieder"]] == [seed["members"]["bert"]]
-    assert [m["id"] for m in _rufe(client, token, "mitglieder_suchen", qualifikation=seed["codes"]["gk"])["mitglieder"]] == [anna]
+    assert [m["id"] for m in _rufe(client, token, "mitglieder_suchen", aktiv=False)["mitglieder"]] == [
+        seed["members"]["bert"],
+    ]
+    assert [m["id"] for m in _rufe(
+        client, token, "mitglieder_suchen", qualifikation=seed["codes"]["gk"],
+    )["mitglieder"]] == [anna]
     assert [m["id"] for m in _rufe(client, token, "mitglieder_suchen", tag=seed["tag"])["mitglieder"]] == [anna]
     assert [m["id"] for m in _rufe(client, token, "mitglieder_suchen", mit_benutzer=True)["mitglieder"]] == [anna]
     page = _rufe(client, token, "mitglieder_suchen", aktiv=None, limit=2)
     assert page["gesamt"] == 3 and len(page["mitglieder"]) == 2 and page["truncated"] is True
     assert "__fehler__" in _rufe(client, token, "mitglieder_suchen", limit=201)
     detail = _rufe(client, token, "mitglied_lesen", mitglied_id=anna)
-    assert detail["benutzer"] == {"id": detail["benutzer"]["id"], "username": "linked-mit-filter", "display_name": "Anna A.", "aktiv": True}
-    assert detail["gruppenkommandant_funktionen"] == [{"lage_id": detail["gruppenkommandant_funktionen"][0]["lage_id"], "lage_name": "Hochwasser", "einheit_id": detail["gruppenkommandant_funktionen"][0]["einheit_id"], "einheit_label": "RLF 1"}]
+    assert detail["benutzer"] == {
+        "id": detail["benutzer"]["id"], "username": "linked-mit-filter", "display_name": "Anna A.", "aktiv": True,
+    }
+    assert detail["gruppenkommandant_funktionen"] == [{
+        "lage_id": detail["gruppenkommandant_funktionen"][0]["lage_id"], "lage_name": "Hochwasser",
+        "einheit_id": detail["gruppenkommandant_funktionen"][0]["einheit_id"], "einheit_label": "RLF 1",
+    }]
     kataloge = _rufe(client, token, "mitglieder_kataloge")
     assert kataloge["anzahl_aktive_mitglieder"] == 2 and kataloge["anzahl_inaktive_mitglieder"] == 1
     assert kataloge["tags"] == [{"id": kataloge["tags"][0]["id"], "name": "Ausbilder", "color": "#112233"}]
