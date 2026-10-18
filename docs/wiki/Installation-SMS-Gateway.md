@@ -85,7 +85,7 @@ Ist [SMS-Empfang](Administration-SMS-Einsatzinfo) für die Organisation serverse
 - **In der App**: Gateway-Bildschirm zeigt Verbindungsstatus (grün = verbunden), Anzahl gesendeter SMS und ein Verbindungslog (kopierbar/herunterladbar für die Fehlersuche)
 - **Im Admin-Bereich**: **Admin → Geräte-Login** zeigt bei jedem SMS-Gateway ein Badge **Verbunden** oder **Nicht verbunden** neben dem Status **Aktiv** beziehungsweise **Widerrufen**; eine Test-SMS lässt sich über **Admin → SMS senden** direkt vom Server aus verschicken
 
-Mehrere Gateways können gleichzeitig registriert werden. Mit den Auf-/Ab-Pfeilen in der SMS-Gateway-Tabelle wird ihre Priorität festgelegt; diese Reihenfolge ist zugleich die Fallback-Reihenfolge beim SMS-Versand.
+Mehrere Gateways können gleichzeitig registriert werden. Einzel-SMS (etwa Bürgerportal-Codes, Verleih-PINs und Erinnerungen) wechseln zwischen den verbundenen Geräten, ebenso wie SMS innerhalb eines Sammelversands verteilt werden. Mit den Auf-/Ab-Pfeilen in der SMS-Gateway-Tabelle wird die Reihenfolge dieser Verteilung festgelegt. Bei einem Verbindungsfehler vor dem Senden wird das nächste Gateway versucht. Bleibt nach der Übergabe die Bestätigung aus, wird dieselbe SMS nicht erneut gesendet, um Doppelzustellungen zu vermeiden.
 
 ---
 
