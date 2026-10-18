@@ -14,6 +14,7 @@ from app.core.templating import templates
 from app.db import get_db
 from app.models.mcp import MCPOAuthToken
 from app.models.user import User
+from app.services.benutzer_mail_service import send_passwort_geaendert
 
 logger = logging.getLogger("einsatzleiter.profile")
 router = APIRouter()
@@ -115,6 +116,12 @@ async def profile_change_password(
         return RedirectResponse("/profil?error=password_too_short", status_code=302)
     db_user.password_hash = hash_password(new_password)
     db.commit()
+    try:
+        await send_passwort_geaendert(
+            db_user, db, ausloeser="profil", ip=request.client.host if request.client else None,
+        )
+    except Exception as exc:  # pragma: no cover
+        logger.error("Versand der Passwort-Bestätigung fehlgeschlagen für user_id=%s: %s", db_user.id, exc)
     return RedirectResponse("/profil?saved=1", status_code=302)
 
 

@@ -1,0 +1,7 @@
+{% extends "email/benutzer/_layout.txt" %}
+{% block content %}Hallo {{ user_display_name }},
+
+Dein Konto meldet sich mit Microsoft an – es hat kein eigenes Passwort.
+
+Mit Microsoft anmelden: {{ sso_url }}
+{% endblock %}

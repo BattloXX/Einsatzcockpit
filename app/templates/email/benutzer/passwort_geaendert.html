@@ -1,0 +1,15 @@
+{% extends "email/benutzer/_layout.html" %}
+{% from "email/benutzer/_layout.html" import button with context %}
+{% block content %}
+<tr><td style="padding:24px;font-size:15px;line-height:22px;">
+  <p>Hallo <strong>{{ user_display_name }}</strong>,</p>
+  {% if ausloeser == 'einladung' %}
+  <p>Dein Konto ist jetzt eingerichtet.</p>
+  {% else %}
+  <p>Dein Passwort wurde am {{ zeitpunkt }} geändert.</p>
+  <p>Art der Änderung: {% if ausloeser == 'reset' %}Passwort zurücksetzen{% elif ausloeser == 'profil' %}Änderung im Profil{% else %}durch deinen Administrator{% endif %}.</p>
+  <p><strong>Warst du das nicht?</strong> Wende dich sofort an deinen Administrator.</p>
+  {{ button(app_url ~ '/passwort-vergessen', 'Passwort zurücksetzen') }}
+  {% endif %}
+</td></tr>
+{% endblock %}

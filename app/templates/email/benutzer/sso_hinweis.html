@@ -1,0 +1,9 @@
+{% extends "email/benutzer/_layout.html" %}
+{% from "email/benutzer/_layout.html" import button with context %}
+{% block content %}
+<tr><td style="padding:24px;font-size:15px;line-height:22px;">
+  <p>Hallo <strong>{{ user_display_name }}</strong>,</p>
+  <p>Dein Konto meldet sich mit Microsoft an – es hat kein eigenes Passwort.</p>
+  {{ button(sso_url, 'Mit Microsoft anmelden') }}
+</td></tr>
+{% endblock %}

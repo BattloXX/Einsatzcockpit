@@ -28,9 +28,11 @@ from app.core.rate_limit import limiter as _limiter
 from app.core.security import hash_password
 from app.core.templating import templates
 from app.db import get_db
+from app.models.master import FireDept
 from app.models.password_reset import PasswordResetToken
 from app.models.user import User
 from app.services.mail_service import send_password_reset
+from app.services.benutzer_mail_service import send_passwort_geaendert, send_sso_hinweis
 
 logger = logging.getLogger("einsatzleiter.password_reset")
 router = APIRouter()
@@ -69,6 +71,24 @@ async def forgot_submit(
     user = db.query(User).filter(User.email == email_clean, User.active == True).first()  # noqa: E712
     if not user:
         # Trotzdem warten, um Timing-Unterschiede zu reduzieren – minimaler Schutz
+        return neutral_response
+
+    if user.auth_provider != "local":
+        org = db.get(FireDept, user.org_id)
+        write_audit(
+            db, "auth.password_reset.sso_hinweis",
+            user_id=user.id, ip=request.client.host if request.client else None,
+        )
+        db.commit()
+        try:
+            await send_sso_hinweis(
+                to=user.email,  # type: ignore[arg-type]
+                user_display_name=user.full_name or user.display_name or user.username,
+                org_slug=org.slug if org else "",
+                db=db, org_id=user.org_id,
+            )
+        except Exception as exc:  # pragma: no cover
+            logger.error("Versand des SSO-Hinweises fehlgeschlagen für user_id=%s: %s", user.id, exc)
         return neutral_response
 
     # Alte offene Tokens entwerten
@@ -179,6 +199,13 @@ async def reset_submit(
         user_id=user.id, ip=request.client.host if request.client else None,
     )
     db.commit()
+
+    try:
+        await send_passwort_geaendert(
+            user, db, ausloeser=prt.zweck, ip=request.client.host if request.client else None,
+        )
+    except Exception as exc:  # pragma: no cover
+        logger.error("Versand der Passwort-Bestätigung fehlgeschlagen für user_id=%s: %s", user.id, exc)
 
     return templates.TemplateResponse(
         request, "auth/reset.html",

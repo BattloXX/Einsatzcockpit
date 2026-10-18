@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import re
+from datetime import UTC, datetime
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from app.config import settings
+from app.core.timezones import format_local_datetime
 from app.models.master import FireDept, OrgSettings
 from app.services.einsatzinfo_mail_service import _absolute_url
 
@@ -119,7 +121,7 @@ async def send_sso_welcome_mail(*, to: str, user_display_name: str,
 
 
 async def send_password_reset(*, to: str, reset_url: str, user_display_name: str,
-                              db=None, org_id: int | None = None) -> None:
+                              durch_admin: bool = False, db=None, org_id: int | None = None) -> None:
     """Versendet eine Passwort-Reset-Mail im Organisations-Layout."""
     from app.services import mail_service
 
@@ -127,6 +129,7 @@ async def send_password_reset(*, to: str, reset_url: str, user_display_name: str
     html, text = render(
         "passwort_reset", **context, user_display_name=user_display_name,
         reset_url=reset_url, gueltigkeit=_reset_gueltigkeit(settings.PASSWORD_RESET_TTL_MIN),
+        durch_admin=durch_admin,
     )
     smtp_cfg = mail_service._org_smtp_cfg(db, org_id) or mail_service.get_smtp_cfg(db)
     msg = mail_service._build_message(
@@ -134,3 +137,44 @@ async def send_password_reset(*, to: str, reset_url: str, user_display_name: str
         body_txt=text, body_html=html, smtp_cfg=smtp_cfg,
     )
     await mail_service.deliver(db, org_id, msg, smtp_cfg)
+
+
+async def send_sso_hinweis(*, to: str, user_display_name: str, org_slug: str,
+                           db=None, org_id: int | None = None) -> None:
+    """Weist SSO-Benutzer beim Passwort-Reset auf die Microsoft-Anmeldung hin."""
+    from app.services import mail_service
+
+    context = mail_kontext(db, org_id)
+    sso_url = f"{context['app_url']}/sso/{org_slug}/login"
+    html, text = render("sso_hinweis", **context, user_display_name=user_display_name, sso_url=sso_url)
+    smtp_cfg = mail_service._org_smtp_cfg(db, org_id) or mail_service.get_smtp_cfg(db)
+    msg = mail_service._build_message(
+        to=to, subject="Anmeldung mit Microsoft – Einsatzcockpit",
+        body_txt=text, body_html=html, smtp_cfg=smtp_cfg,
+    )
+    await mail_service.deliver(db, org_id, msg, smtp_cfg)
+
+
+async def send_passwort_geaendert(user, db, *, ausloeser: str, ip: str | None) -> None:
+    """Versendet nach einer erfolgreichen Passwortänderung die Sicherheitsbestätigung."""
+    if not user.email:
+        return
+    from app.services import mail_service
+
+    context = mail_kontext(db, user.org_id)
+    org = db.query(FireDept).filter(FireDept.id == user.org_id).first()
+    zeitpunkt = format_local_datetime(datetime.now(UTC), org)
+    html, text = render(
+        "passwort_geaendert", **context,
+        user_display_name=user.full_name or user.display_name or user.username,
+        zeitpunkt=zeitpunkt, ausloeser=ausloeser, ip=ip,
+    )
+    smtp_cfg = mail_service._org_smtp_cfg(db, user.org_id) or mail_service.get_smtp_cfg(db)
+    msg = mail_service._build_message(
+        to=user.email, subject=(
+            f"Dein Konto ist eingerichtet – Einsatzcockpit {context['org_name']}" if ausloeser == "einladung"
+            else "Dein Passwort wurde geändert – Einsatzcockpit"
+        ),
+        body_txt=text, body_html=html, smtp_cfg=smtp_cfg,
+    )
+    await mail_service.deliver(db, user.org_id, msg, smtp_cfg)

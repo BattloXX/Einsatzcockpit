@@ -59,6 +59,7 @@ from app.models.user import (
 )
 from app.routers.ws import connected_gateway_token_ids
 from app.services import benutzer_service
+from app.services.benutzer_mail_service import send_passwort_geaendert
 from app.services.alarm_service import get_alarm_type_by_code
 from app.services.push_service import notify_all as _push_notify_all
 from app.services.push_service import notify_org as _push_notify_org
@@ -989,7 +990,7 @@ async def send_user_reset_mail(
                 user_id=request.state.user.id, entity_type="user", entity_id=u.id)
     try:
         await benutzer_service.send_password_reset_mail(
-            u, db, request.client.host if request.client else None,
+            u, db, request.client.host if request.client else None, durch_admin=True,
         )
     except Exception:
         return RedirectResponse("/admin/benutzer?error=mail_failed", status_code=303)
@@ -1028,15 +1029,24 @@ async def reset_user_password(
     write_audit(db, "admin.user.password_reset", user_id=request.state.user.id,
                 entity_type="user", entity_id=user_id)
     db.commit()
+    if u.email:
+        try:
+            await send_passwort_geaendert(
+                u, db, ausloeser="admin", ip=request.client.host if request.client else None,
+            )
+        except Exception as exc:  # pragma: no cover
+            logger_admin.error("Versand der Passwort-Bestätigung fehlgeschlagen für user_id=%s: %s", u.id, exc)
     acting = request.state.user
     is_sysadmin = has_role(acting, "system_admin")
     users = _org_filter(db.query(User), acting, User.org_id).order_by(User.username).all()
+    member_names, members_by_org = _member_options(db, acting)
     roles = [role for role in db.query(Role).all()
              if role.code in manageable_role_codes(acting, {r.code for r in db.query(Role).all()})]
     all_orgs = db.query(FireDept).order_by(FireDept.name).all() if is_sysadmin else []
     return templates.TemplateResponse(request, "admin/users.html", {
         "user": acting,
         "users": users, "roles": roles,
+        "member_names": member_names, "members_by_org": members_by_org,
         "is_sysadmin": is_sysadmin, "all_orgs": all_orgs,
         "new_password": new_pw, "new_password_user": u.username,
     })

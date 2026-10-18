@@ -3,6 +3,10 @@
 
 Du erhältst diese Mail, weil für dein Konto ein Passwort-Reset angefordert wurde.
 
+{% if durch_admin %}Dein Administrator hat das Zurücksetzen deines Passworts ausgelöst.
+
+{% endif %}
+
 Neues Passwort festlegen: {{ reset_url }}
 Der Link ist {{ gueltigkeit }} gültig.
 

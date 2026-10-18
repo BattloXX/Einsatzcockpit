@@ -119,7 +119,9 @@ async def einladung_senden(db: Session, user: User, requesting_ip: str | None = 
     )
 
 
-async def send_password_reset_mail(user: User, db: Session, requesting_ip: str | None = None) -> None:
+async def send_password_reset_mail(
+    user: User, db: Session, requesting_ip: str | None = None, *, durch_admin: bool = False,
+) -> None:
     """Entwertet alte Reset-Tokens, erstellt einen neuen und versendet die Reset-Mail.
 
     Token (und ein vom Aufrufer vorbereitetes Audit) werden vor dem Versand committet,
@@ -142,5 +144,5 @@ async def send_password_reset_mail(user: User, db: Session, requesting_ip: str |
     reset_url = f"{settings.effective_public_base_url.rstrip('/')}/passwort-zuruecksetzen?token={raw_token}"
     await send_password_reset(
         to=user.email, reset_url=reset_url, user_display_name=user.full_name or user.display_name or user.username,
-        db=db, org_id=user.org_id,
+        durch_admin=durch_admin, db=db, org_id=user.org_id,
     )

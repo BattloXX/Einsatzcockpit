@@ -49,7 +49,10 @@ def test_einladung_entwertet_altes_token_und_hat_lange_gueltigkeit(org):
         db.commit()
 
         link = benutzer_service.einladung_erstellen(db, user)
-        neu = db.query(PasswordResetToken).filter(PasswordResetToken.token_hash != alt.token_hash).one()
+        neu = db.query(PasswordResetToken).filter(
+            PasswordResetToken.user_id == user.id,
+            PasswordResetToken.token_hash != alt.token_hash,
+        ).one()
         assert _token_aus_link(link)
         assert alt.used_at is not None
         assert neu.zweck == "einladung"

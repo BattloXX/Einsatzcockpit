@@ -339,11 +339,12 @@ async def _send(msg: EmailMessage, smtp_cfg: dict) -> None:
 
 
 async def send_password_reset(*, to: str, reset_url: str, user_display_name: str,
-                               db=None, org_id: int | None = None) -> None:
+                               durch_admin: bool = False, db=None, org_id: int | None = None) -> None:
     from app.services.benutzer_mail_service import send_password_reset as _send_password_reset
 
     await _send_password_reset(
-        to=to, reset_url=reset_url, user_display_name=user_display_name, db=db, org_id=org_id,
+        to=to, reset_url=reset_url, user_display_name=user_display_name,
+        durch_admin=durch_admin, db=db, org_id=org_id,
     )
 
 
