@@ -76,7 +76,7 @@ def _replace_recipients(db: Session, org_id: int, alarm_type_id: int | None,
 
 
 @router.get("/einsatzinfo-mail", response_class=HTMLResponse)
-async def einsatzinfo_mail_page(request: Request, db: Session = Depends(get_db), _=Depends(require_role("admin"))):
+def einsatzinfo_mail_page(request: Request, db: Session = Depends(get_db), _=Depends(require_role("admin"))):
     user = request.state.user
     org_id = _require_org(user)
     settings = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
@@ -111,7 +111,7 @@ async def einsatzinfo_mail_page(request: Request, db: Session = Depends(get_db),
 
 
 @router.post("/einsatzinfo-mail/einstellungen")
-async def einsatzinfo_mail_settings(request: Request, enabled: bool = Form(False), send_exercise: bool = Form(False),
+def einsatzinfo_mail_settings(request: Request, enabled: bool = Form(False), send_exercise: bool = Form(False),
                                     subject_template: str = Form(""), template: str = Form(""), db: Session = Depends(get_db), _=Depends(require_role("admin"))):
     user = request.state.user
     org_id = _require_org(user)
@@ -172,7 +172,7 @@ def _sample_context(org: FireDept) -> dict[str, object]:
 
 
 @router.post("/einsatzinfo-mail/vorschau", response_class=HTMLResponse)
-async def einsatzinfo_mail_preview(request: Request, subject_template: str = Form(""), template: str = Form(""), db: Session = Depends(get_db), _=Depends(require_role("admin"))):
+def einsatzinfo_mail_preview(request: Request, subject_template: str = Form(""), template: str = Form(""), db: Session = Depends(get_db), _=Depends(require_role("admin"))):
     org_id = _require_org(request.state.user)
     org = db.query(FireDept).filter(FireDept.id == org_id).first()
     if not org:

@@ -154,16 +154,14 @@ def alarm_objekt(token: str, db: Session = Depends(get_db)):
 # ── Kartenbild (No-Login, wird von Teams-Servern per URL geladen) ───────────────
 
 @router.get("/api/v1/teams/map/{token}.png")
-async def alarm_map_png(token: str, db: Session = Depends(get_db)):
+def alarm_map_png(token: str, db: Session = Depends(get_db)):
     _tok, incident = _resolve_alarm_token(db, token, zweck="bild")
     if incident.lat is None or incident.lng is None:
         raise HTTPException(status_code=404, detail="Keine Koordinaten für diesen Einsatz")
 
-    import asyncio
-
     from app.services.staticmap_service import render_incident_map_png
     try:
-        png = await asyncio.to_thread(render_incident_map_png, incident.lat, incident.lng)
+        png = render_incident_map_png(incident.lat, incident.lng)
     except Exception:
         logger.exception("Kartenbild konnte nicht gerendert werden (Einsatz %s)", incident.id)
         raise HTTPException(status_code=502, detail="Kartenbild derzeit nicht verfügbar")
@@ -177,7 +175,7 @@ async def alarm_map_png(token: str, db: Session = Depends(get_db)):
 # ── Schadensfoto (No-Login, wird von Teams-Servern per URL geladen) ─────────────
 
 @router.get("/api/v1/teams/fahrt-foto/{media_id}.jpg")
-async def fahrt_foto_jpg(media_id: int, sig: str = "", db: Session = Depends(get_db)):
+def fahrt_foto_jpg(media_id: int, sig: str = "", db: Session = Depends(get_db)):
     """Liefert ein Schadensfoto für die Teams-Adaptive-Card (siehe schaden_service.py::
     _foto_urls). Auth-Muster wie alarm_map_png() oben: signierter Query-Token statt
     Login (Teams' Cloud hat keine Session/Cookie)."""

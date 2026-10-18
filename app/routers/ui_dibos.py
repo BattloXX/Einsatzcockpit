@@ -175,7 +175,7 @@ def dibos_einsaetze_page(
 
 # ── POST /admin/dibos/save ──────────────────────────────────────────────────
 @router.post("/dibos/save")
-async def dibos_settings_save(
+def dibos_settings_save(
     request: Request,
     db=Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin")),
@@ -331,7 +331,7 @@ async def dibos_trace_start(
 
 
 @router.post("/dibos/trace/{run_id}/cancel")
-async def dibos_trace_cancel(
+def dibos_trace_cancel(
     run_id: str,
     request: Request,
     db=Depends(get_db),
@@ -347,7 +347,7 @@ async def dibos_trace_cancel(
 
 
 @router.post("/dibos/trace/{run_id}/delete")
-async def dibos_trace_delete(
+def dibos_trace_delete(
     run_id: str,
     request: Request,
     db=Depends(get_db),

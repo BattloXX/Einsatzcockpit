@@ -6,7 +6,6 @@ Das Remote-Ziel + die Zeitsteuerung kommen in PR 3, der Restore (Sysadmin) in PR
 """
 from __future__ import annotations
 
-import asyncio
 import logging
 import re
 import shutil
@@ -19,6 +18,7 @@ from sqlalchemy.orm import Session
 from starlette.background import BackgroundTask
 from starlette.responses import FileResponse
 
+from app.core.async_bridge import run_async
 from app.core.crypto import encrypt_secret
 from app.core.permissions import (
     is_system_admin,
@@ -52,7 +52,7 @@ def _effective_org_id(user, org_id_param: int | None) -> int | None:
 
 
 @router.get("/org-backup", response_class=HTMLResponse)
-async def org_backup_page(
+def org_backup_page(
     request: Request,
     db: Session = Depends(get_db),
     _=Depends(require_role("org_admin", "admin")),
@@ -82,7 +82,7 @@ async def org_backup_page(
 
 
 @router.get("/org-backup/export.zip")
-async def org_backup_export(
+def org_backup_export(
     request: Request,
     db: Session = Depends(get_db),
     _=Depends(require_role("org_admin", "admin")),
@@ -142,7 +142,7 @@ def _guard(user, target_org_id: int | None) -> int:
 
 
 @router.post("/org-backup/save")
-async def org_backup_save(
+def org_backup_save(
     request: Request,
     db: Session = Depends(get_db),
     _=Depends(require_role("org_admin", "admin")),
@@ -219,7 +219,7 @@ async def org_backup_save(
 
 
 @router.post("/org-backup/test")
-async def org_backup_test(
+def org_backup_test(
     request: Request,
     db: Session = Depends(get_db),
     _=Depends(require_role("org_admin", "admin")),
@@ -236,7 +236,7 @@ async def org_backup_test(
         probe.write_text("Einsatzcockpit Org-Backup Verbindungstest\n", encoding="utf-8")
         try:
             with rbs.org_remote_config(cfg) as remote:
-                await asyncio.to_thread(rbs.upload, remote, [probe], Path(td))
+                rbs.upload(remote, [probe], Path(td))
             return _redirect(user, effective, "test_ok")
         except Exception as exc:  # noqa: BLE001
             logger.warning("Org-Backup-Verbindungstest fehlgeschlagen (org %s): %s", effective, exc)
@@ -244,7 +244,7 @@ async def org_backup_test(
 
 
 @router.post("/org-backup/run-now")
-async def org_backup_run_now(
+def org_backup_run_now(
     request: Request,
     db: Session = Depends(get_db),
     _=Depends(require_role("org_admin", "admin")),
@@ -259,7 +259,7 @@ async def org_backup_run_now(
     cfg = _lade_config(db, effective)
     if cfg is None or not cfg.is_fully_configured:
         return _redirect(user, effective, "run_incomplete")
-    status = await asyncio.to_thread(run_org_backup_sync, cfg.id)
+    status = run_org_backup_sync(cfg.id)
     return _redirect(user, effective, "run_ok" if status == "ok" else "run_error")
 
 
@@ -306,7 +306,7 @@ def _restore_inplace_in_thread(zip_path: str, ziel_org_id: int) -> dict:
 
 
 @router.get("/org-backup/restore", response_class=HTMLResponse)
-async def org_restore_page(
+def org_restore_page(
     request: Request,
     db: Session = Depends(get_db),
     _=Depends(require_system_admin),
@@ -319,7 +319,7 @@ async def org_restore_page(
 
 
 @router.post("/org-backup/restore", response_class=HTMLResponse)
-async def org_restore_apply(
+def org_restore_apply(
     request: Request,
     db: Session = Depends(get_db),
     _=Depends(require_system_admin),
@@ -336,7 +336,7 @@ async def org_restore_apply(
     if not settings.ORG_BACKUP_ENABLED:
         raise HTTPException(404)
 
-    rohdaten = await archiv.read()
+    rohdaten = run_async(archiv.read)
     if settings.ORG_BACKUP_MAX_BYTES and len(rohdaten) > settings.ORG_BACKUP_MAX_BYTES:
         raise HTTPException(413, "Archiv zu gross")
 
@@ -367,10 +367,10 @@ async def org_restore_apply(
                 shutil.rmtree(tmp, ignore_errors=True)
                 return templates.TemplateResponse(request, "admin/org_restore.html",
                     _ctx(error="Ersetzen erfordert eine Ziel-Organisation UND die Bestaetigung."))
-            summary = await asyncio.to_thread(_restore_inplace_in_thread, str(zpath), ziel_org_id)
+            summary = _restore_inplace_in_thread(str(zpath), ziel_org_id)
         else:
             name = neue_org_name.strip() or f"Restore Org {manifest.get('org_id')}"
-            summary = await asyncio.to_thread(_restore_in_thread, str(zpath), name)
+            summary = _restore_in_thread(str(zpath), name)
     except Exception as exc:  # noqa: BLE001
         logger.exception("Org-Restore fehlgeschlagen")
         return templates.TemplateResponse(request, "admin/org_restore.html",

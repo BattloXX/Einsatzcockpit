@@ -713,7 +713,7 @@ async def gsl_wetter_panel(
     "/gsl/{lage_id}/wetter/focus.json",
     include_in_schema=False,
 )
-async def gsl_wetter_focus(
+def gsl_wetter_focus(
     request: Request,
     lage_id: int,
     db: Session = Depends(get_db),
@@ -1080,7 +1080,7 @@ _HISTORY_RANGES = {"24h": timedelta(hours=24), "7d": timedelta(days=7), "30d": t
     response_class=HTMLResponse,
     include_in_schema=False,
 )
-async def station_detail(
+def station_detail(
     request: Request,
     station_id: int,
     hours: int = 24,
@@ -1133,7 +1133,7 @@ async def station_detail(
     response_class=HTMLResponse,
     include_in_schema=False,
 )
-async def station_history(
+def station_history(
     request: Request,
     station_id: int,
     range: str = "24h",
@@ -1179,7 +1179,7 @@ async def station_history(
     response_class=HTMLResponse,
     include_in_schema=False,
 )
-async def station_sparkline(
+def station_sparkline(
     request: Request,
     station_id: int,
     db: Session = Depends(get_db),

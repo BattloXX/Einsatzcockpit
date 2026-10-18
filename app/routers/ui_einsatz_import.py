@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, File, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
+from app.core.async_bridge import run_async
 from app.core.permissions import require_role
 from app.core.templating import templates
 from app.db import get_db
@@ -27,7 +28,7 @@ def einsatz_import_page(
 
 
 @router.post("/admin/einsatz-import")
-async def einsatz_import_upload(
+def einsatz_import_upload(
     request: Request,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
@@ -36,7 +37,7 @@ async def einsatz_import_upload(
     if user.org_id is None:
         return RedirectResponse("/admin/einsatz-import?error=org_missing", status_code=303)
     try:
-        parsed = parse_einsatz_excel(await file.read())
+        parsed = parse_einsatz_excel(run_async(file.read))
         result = import_einsaetze(db, parsed, user.org_id, user.id)
     except EinsatzImportError as exc:
         return RedirectResponse(

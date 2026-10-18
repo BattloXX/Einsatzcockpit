@@ -198,7 +198,7 @@ async def token_qr_formular(request: Request, token: str, qr_token: str, db: Ses
 # ── HTMX-Partials ─────────────────────────────────────────────────────────────
 
 @router.get("/fahrtenbuch/hx/maschinist", response_class=HTMLResponse)
-async def hx_maschinist_autocomplete(
+def hx_maschinist_autocomplete(
     request: Request, db: Session = Depends(get_db)
 ):
     # HTMX sendet den Feldnamen als Parameter-Key (maschinist_name, ausbildner_name …)
@@ -245,7 +245,7 @@ async def hx_maschinist_autocomplete(
 
 
 @router.get("/fahrtenbuch/hx/fahrzeug-felder", response_class=HTMLResponse)
-async def hx_fahrzeug_felder(
+def hx_fahrzeug_felder(
     request: Request, fahrzeug_id: int = 0, db: Session = Depends(get_db)
 ):
     fahrzeug = (
@@ -272,7 +272,7 @@ async def hx_fahrzeug_felder(
 
 
 @router.get("/fahrtenbuch/hx/zweck-felder", response_class=HTMLResponse)
-async def hx_zweck_felder(
+def hx_zweck_felder(
     request: Request, zweck_id: int = 0, fahrzeug_id: int = 0, db: Session = Depends(get_db)
 ):
     user = _current_user(request)
@@ -312,7 +312,7 @@ async def hx_zweck_felder(
 
 
 @router.post("/fahrtenbuch/hx/zaehler-check", response_class=HTMLResponse)
-async def hx_zaehler_check(
+def hx_zaehler_check(
     request: Request,
     fahrzeug_id: int = Form(0),
     art: str = Form("km"),

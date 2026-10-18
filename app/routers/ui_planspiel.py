@@ -10,6 +10,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session
 from starlette.datastructures import FormData
 
+from app.core.async_bridge import run_async
 from app.core.audit import write_audit
 from app.core.permissions import PLANSPIEL_LEITER_ROLES, PLANSPIEL_LESE_ROLLEN, has_role, require_role
 from app.core.templating import templates
@@ -361,13 +362,13 @@ def stichwort_partial(
 
 
 @router.post("/neu")
-async def neu_anlegen(
+def neu_anlegen(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_role(*PLANSPIEL_LEITER_ROLES)),
     _guard: None = Depends(require_planspiel_enabled),
 ):
-    form = await request.form()
+    form = run_async(request.form)
     raw: dict[str, object] = {}
     try:
         daten, raw = _form_data(form, user)
@@ -409,7 +410,7 @@ def vorlagen_liste(
 
 
 @router.post("/{run_id:int}/als-vorlage")
-async def als_vorlage(
+def als_vorlage(
     run_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -418,7 +419,7 @@ async def als_vorlage(
 ):
     run = _run(db, user, run_id)
     _require_steuern(db, user, run)
-    form = await request.form()
+    form = run_async(request.form)
     try:
         aus_run_speichern(
             db, run, user, titel=str(form.get("titel", "")),
@@ -540,7 +541,7 @@ def auswertung_pdf(
 
 
 @router.post("/{run_id:int}/wiederholen")
-async def wiederholen(
+def wiederholen(
     run_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -580,7 +581,7 @@ def bearbeiten_form(
 
 
 @router.post("/{run_id:int}/bearbeiten")
-async def bearbeiten(
+def bearbeiten(
     run_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -588,7 +589,7 @@ async def bearbeiten(
     _guard: None = Depends(require_planspiel_enabled),
 ):
     run = _run(db, user, run_id)
-    form = await request.form()
+    form = run_async(request.form)
     raw: dict[str, object] = {}
     try:
         daten, raw = _form_data(form, user)

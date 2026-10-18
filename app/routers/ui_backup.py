@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Uplo
 from fastapi.responses import HTMLResponse, Response
 from sqlalchemy.orm import Session
 
+from app.core.async_bridge import run_async
 from app.core.permissions import has_role, require_role, same_org_or_system_admin
 from app.core.templating import templates
 from app.db import get_db
@@ -69,7 +70,7 @@ def _resolve_org(request: Request, user, org_id_param: int | None) -> int | None
 
 
 @router.get("/konfig", response_class=HTMLResponse)
-async def konfig_page(
+def konfig_page(
     request: Request,
     db: Session = Depends(get_db),
     _=Depends(require_role("org_admin", "admin")),
@@ -84,7 +85,7 @@ async def konfig_page(
 
 
 @router.get("/konfig/export.json")
-async def export_org_config(
+def export_org_config(
     request: Request,
     db: Session = Depends(get_db),
     _=Depends(require_role("org_admin", "admin")),
@@ -110,7 +111,7 @@ async def export_org_config(
 
 
 @router.post("/konfig/import", response_class=HTMLResponse)
-async def import_org_config(
+def import_org_config(
     request: Request,
     db: Session = Depends(get_db),
     _=Depends(require_role("org_admin", "admin")),
@@ -130,7 +131,7 @@ async def import_org_config(
     all_orgs = db.query(FireDept).order_by(FireDept.name).all() if is_sysadmin else []
 
     try:
-        raw = await konfig_file.read()
+        raw = run_async(konfig_file.read)
         incoming = json.loads(raw)
     except Exception as exc:
         return _render(request, user, org, is_sysadmin, all_orgs,
@@ -171,7 +172,7 @@ async def import_org_config(
 
 
 @router.post("/konfig/import-apply", response_class=HTMLResponse)
-async def apply_pending_import(
+def apply_pending_import(
     request: Request,
     db: Session = Depends(get_db),
     _=Depends(require_role("org_admin", "admin")),

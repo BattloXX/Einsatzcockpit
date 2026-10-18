@@ -102,7 +102,7 @@ def _ingest_rate_key(request: Request) -> str:
     },
 )
 @(_limiter.limit("120/minute", key_func=_ingest_rate_key) if _limiter else lambda f: f)
-async def weather_ingest(
+def weather_ingest(
     request: Request,
     db: Session = Depends(get_db),
 ):

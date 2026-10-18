@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 
+from app.core.async_bridge import run_async
 from app.core.permissions import require_role, same_org_or_system_admin
 from app.core.templating import templates
 from app.db import get_db
@@ -25,7 +26,7 @@ def _inv_or_404(inv_id: int, db: Session) -> OrgInvitation:
 # ── Einladung erstellen ───────────────────────────────────────────────────────
 
 @router.post("/einsatz/{incident_id}/einladen", response_class=HTMLResponse)
-async def invite_org(
+def invite_org(
     request: Request,
     incident_id: int,
     invited_org_id: int = Form(...),
@@ -66,7 +67,7 @@ async def invite_org(
 
     # WebSocket-Benachrichtigung an die eingeladene Org
     from app.services.broadcast import broadcast_org
-    await broadcast_org(invited_org_id, {
+    run_async(broadcast_org, invited_org_id, {
         "type": "invitation_received",
         "invitation_id": inv.id,
         "incident_id": incident_id,
@@ -90,7 +91,7 @@ async def invite_org(
 # ── Einladung annehmen ────────────────────────────────────────────────────────
 
 @router.post("/einladungen/{inv_id}/annehmen", response_class=HTMLResponse)
-async def accept_invitation(
+def accept_invitation(
     request: Request,
     inv_id: int,
     db: Session = Depends(get_db),
@@ -123,7 +124,7 @@ async def accept_invitation(
 
     # Benachrichtigung an die einladende Org
     from app.services.broadcast import broadcast_org
-    await broadcast_org(inv.inviting_org_id, {
+    run_async(broadcast_org, inv.inviting_org_id, {
         "type": "invitation_accepted",
         "invitation_id": inv_id,
         "incident_id": inv.incident_id,
@@ -136,7 +137,7 @@ async def accept_invitation(
 # ── Einladung ablehnen ────────────────────────────────────────────────────────
 
 @router.post("/einladungen/{inv_id}/ablehnen", response_class=HTMLResponse)
-async def decline_invitation(
+def decline_invitation(
     request: Request,
     inv_id: int,
     db: Session = Depends(get_db),
@@ -159,7 +160,7 @@ async def decline_invitation(
 # ── Einladung widerrufen ──────────────────────────────────────────────────────
 
 @router.post("/einladungen/{inv_id}/widerrufen", response_class=HTMLResponse)
-async def revoke_invitation(
+def revoke_invitation(
     request: Request,
     inv_id: int,
     db: Session = Depends(get_db),
@@ -203,7 +204,7 @@ async def revoke_invitation(
 # ── Offene Einladungen für eigene Org ────────────────────────────────────────
 
 @router.get("/einladungen/offen", response_class=HTMLResponse)
-async def pending_invitations(
+def pending_invitations(
     request: Request,
     db: Session = Depends(get_db),
     _=Depends(require_role("admin", "org_admin")),
@@ -215,7 +216,7 @@ async def pending_invitations(
 # ── Partner-Org-Verwaltung ────────────────────────────────────────────────────
 
 @router.post("/einstellungen/partner-orgs", response_class=HTMLResponse)
-async def add_partner_org(
+def add_partner_org(
     request: Request,
     partner_org_id: int = Form(...),
     db: Session = Depends(get_db),
@@ -239,7 +240,7 @@ async def add_partner_org(
 
 
 @router.delete("/einstellungen/partner-orgs/{partner_org_id}", response_class=HTMLResponse)
-async def remove_partner_org(
+def remove_partner_org(
     request: Request,
     partner_org_id: int,
     db: Session = Depends(get_db),

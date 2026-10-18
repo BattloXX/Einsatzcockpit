@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Uplo
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session
 
+from app.core.async_bridge import run_async
 from app.core.permissions import require_role
 from app.core.templating import templates
 from app.core.timezones import format_local_datetime
@@ -232,7 +233,7 @@ def geraet_neu_form(
 
 
 @router.post("/geraete/neu")
-async def geraet_neu_save(
+def geraet_neu_save(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin")),
@@ -351,7 +352,7 @@ def geraet_bearbeiten_form(
 
 
 @router.post("/geraete/{device_id}/bearbeiten")
-async def geraet_bearbeiten_save(
+def geraet_bearbeiten_save(
     device_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -500,7 +501,7 @@ def wartung_neu_form(
 
 
 @router.post("/geraete/{device_id}/wartung/neu")
-async def wartung_neu_save(
+def wartung_neu_save(
     device_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -517,7 +518,7 @@ async def wartung_neu_save(
     if not device:
         raise HTTPException(404)
 
-    form = await request.form()
+    form = run_async(request.form)
     art = str(form.get("art", "monatliche_sichtkontrolle"))
     datum_raw = str(form.get("datum", date.today().isoformat()))
     pruefer = str(form.get("pruefer", "")).strip()
@@ -614,7 +615,7 @@ def pilot_neu_form(
 
 
 @router.post("/piloten/neu")
-async def pilot_neu_save(
+def pilot_neu_save(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin")),
@@ -755,7 +756,7 @@ def pilot_bearbeiten_form(
 
 
 @router.post("/piloten/{pilot_id}/bearbeiten")
-async def pilot_bearbeiten_save(
+def pilot_bearbeiten_save(
     pilot_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -821,7 +822,7 @@ async def pilot_bearbeiten_save(
 # ── Flugbewegung manuell eintragen ────────────────────────────────────────────
 
 @router.post("/piloten/{pilot_id}/flugbewegung")
-async def flugbewegung_eintragen(
+def flugbewegung_eintragen(
     pilot_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -908,7 +909,7 @@ def einsatz_starten_form(
 
 
 @router.post("/incidents/{incident_id}/einsatz/starten")
-async def einsatz_starten_save(
+def einsatz_starten_save(
     incident_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -1029,7 +1030,7 @@ def einsatz_detail(
 
 
 @router.post("/einsatz/{einsatz_id}/status")
-async def einsatz_status_aendern(
+def einsatz_status_aendern(
     einsatz_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -1064,7 +1065,7 @@ async def einsatz_status_aendern(
 
 
 @router.post("/einsatz/{einsatz_id}/rolle/hinzufuegen")
-async def rolle_hinzufuegen(
+def rolle_hinzufuegen(
     einsatz_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -1108,7 +1109,7 @@ async def rolle_hinzufuegen(
 
 
 @router.post("/einsatz/{einsatz_id}/rolle/{rolle_id}/loeschen")
-async def rolle_loeschen(
+def rolle_loeschen(
     einsatz_id: int,
     rolle_id: int,
     request: Request,
@@ -1130,7 +1131,7 @@ async def rolle_loeschen(
 
 
 @router.post("/einsatz/{einsatz_id}/kommunikationsmatrix")
-async def kommunikationsmatrix_speichern(
+def kommunikationsmatrix_speichern(
     einsatz_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -1162,7 +1163,7 @@ async def kommunikationsmatrix_speichern(
 
 
 @router.post("/einsatz/{einsatz_id}/risikobewertung")
-async def risikobewertung_speichern(
+def risikobewertung_speichern(
     einsatz_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -1313,7 +1314,7 @@ def flug_neu_form(
 
 
 @router.post("/einsatz/{einsatz_id}/flug/neu")
-async def flug_neu_save(
+def flug_neu_save(
     einsatz_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -1450,7 +1451,7 @@ def flug_detail(
 
 
 @router.post("/flug/{flug_id}/abschliessen")
-async def flug_abschliessen(
+def flug_abschliessen(
     flug_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -1518,7 +1519,7 @@ async def flug_abschliessen(
 
 
 @router.post("/flug/{flug_id}/checkliste/{cl_id}/speichern")
-async def checkliste_speichern(
+def checkliste_speichern(
     flug_id: int,
     cl_id: int,
     request: Request,
@@ -1540,7 +1541,7 @@ async def checkliste_speichern(
     if not cl:
         raise HTTPException(404)
 
-    form = await request.form()
+    form = run_async(request.form)
     punkte = []
     if cl.punkte:
         try:
@@ -1564,7 +1565,7 @@ async def checkliste_speichern(
 
 
 @router.post("/flug/{flug_id}/nachflug-checkliste")
-async def nachflug_checkliste_anlegen(
+def nachflug_checkliste_anlegen(
     flug_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -1640,7 +1641,7 @@ def ereignis_neu_form(
 
 
 @router.post("/flug/{flug_id}/ereignis/neu")
-async def ereignis_neu_save(
+def ereignis_neu_save(
     flug_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -1734,7 +1735,7 @@ def ereignis_detail(
 
 
 @router.post("/ereignis/{ereignis_id}/meldekette")
-async def meldekette_update(
+def meldekette_update(
     ereignis_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -1823,7 +1824,7 @@ def einsatz_karte(
 
 
 @router.post("/einsatz/{einsatz_id}/karte/objekt")
-async def karte_objekt_hinzufuegen(
+def karte_objekt_hinzufuegen(
     einsatz_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -1869,7 +1870,7 @@ async def karte_objekt_hinzufuegen(
 
 
 @router.post("/einsatz/{einsatz_id}/karte/objekt/{obj_id}/loeschen")
-async def karte_objekt_loeschen(
+def karte_objekt_loeschen(
     einsatz_id: int,
     obj_id: int,
     request: Request,
@@ -2189,7 +2190,7 @@ def uas_medien_thumb(
 
 
 @router.post("/medien/{medien_id}/loeschen")
-async def uas_medien_loeschen(
+def uas_medien_loeschen(
     medien_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -2209,7 +2210,7 @@ async def uas_medien_loeschen(
 
 
 @router.post("/medien/{medien_id}/status")
-async def medien_status_aendern(
+def medien_status_aendern(
     medien_id: int,
     request: Request,
     db: Session = Depends(get_db),

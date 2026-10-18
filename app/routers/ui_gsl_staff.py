@@ -64,7 +64,7 @@ async def _broadcast_staff(lage_id: int):
 # ── Besetzungstafel (HTMX-Partial) ────────────────────────────────────────────
 
 @router.get("/lage/{lage_id}/stab/tafel", response_class=HTMLResponse)
-async def stab_tafel(
+def stab_tafel(
     request: Request,
     lage_id: int,
     db: Session = Depends(get_db),
@@ -241,7 +241,7 @@ async def stab_patch(
 # ── Einsatzjournal-Partial (HTMX live-reload) ─────────────────────────────────
 
 @router.get("/lage/{lage_id}/stab/einsatzjournal", response_class=HTMLResponse)
-async def stab_einsatzjournal(
+def stab_einsatzjournal(
     request: Request,
     lage_id: int,
     db: Session = Depends(get_db),
@@ -272,7 +272,7 @@ async def stab_einsatzjournal(
 # ── Personenjournal-API ────────────────────────────────────────────────────────
 
 @router.get("/lage/{lage_id}/stab/journal", response_class=HTMLResponse)
-async def stab_journal(
+def stab_journal(
     request: Request,
     lage_id: int,
     db: Session = Depends(get_db),

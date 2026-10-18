@@ -11,6 +11,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session, joinedload, selectinload
 
+from app.core.async_bridge import run_async
 from app.core.permissions import can_access_incident, has_role, same_org_or_system_admin
 from app.core.templating import templates
 from app.core.timezones import local_date_to_utc, now_local
@@ -336,7 +337,7 @@ async def create_wordpress_report(incident_id: int, request: Request, db: Sessio
 
 
 @router.post("/archiv/{incident_id}/ki-bericht/speichern", response_class=HTMLResponse)
-async def save_ai_report(incident_id: int, request: Request, db: Session = Depends(get_db)):
+def save_ai_report(incident_id: int, request: Request, db: Session = Depends(get_db)):
     user = getattr(request.state, "user", None)
     if not user:
         return RedirectResponse("/login", status_code=302)
@@ -349,7 +350,7 @@ async def save_ai_report(incident_id: int, request: Request, db: Session = Depen
     if not can_access_incident(user, incident):
         raise _deny_access(user, incident)
 
-    form = await request.form()
+    form = run_async(request.form)
     draft_text = str(form.get("ki_bericht_entwurf", "")).strip()
     incident.ai_report_draft = draft_text or None
     db.commit()

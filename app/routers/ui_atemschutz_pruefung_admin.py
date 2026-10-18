@@ -27,7 +27,7 @@ _require_admin = require_role("admin")
 # ── Stammdaten: Geräte ───────────────────────────────────────────────────────
 
 @router.get("/admin/atemschutz-pruefung/geraete", response_class=HTMLResponse)
-async def geraete_liste(request: Request, db: Session = Depends(get_db), user=Depends(_require_admin)):
+def geraete_liste(request: Request, db: Session = Depends(get_db), user=Depends(_require_admin)):
     geraete = (
         db.query(AtemschutzGeraet)
         .filter(AtemschutzGeraet.org_id == user.org_id)
@@ -41,7 +41,7 @@ async def geraete_liste(request: Request, db: Session = Depends(get_db), user=De
 
 
 @router.post("/admin/atemschutz-pruefung/geraete/neu")
-async def geraet_neu(
+def geraet_neu(
     request: Request,
     nummer: str = Form(...),
     bezeichnung: str = Form(""),
@@ -59,7 +59,7 @@ async def geraet_neu(
 
 
 @router.post("/admin/atemschutz-pruefung/geraete/{geraet_id}/bearbeiten")
-async def geraet_bearbeiten(
+def geraet_bearbeiten(
     request: Request,
     geraet_id: int,
     nummer: str = Form(...),
@@ -87,7 +87,7 @@ async def geraet_bearbeiten(
 # ── Einstellungen: Wart-Benachrichtigung + Modul-Toggle ─────────────────────
 
 @router.get("/admin/atemschutz-pruefung/einstellungen", response_class=HTMLResponse)
-async def einstellungen(request: Request, db: Session = Depends(get_db), user=Depends(_require_admin)):
+def einstellungen(request: Request, db: Session = Depends(get_db), user=Depends(_require_admin)):
     org = db.query(OrgSettings).filter(OrgSettings.org_id == user.org_id).first()
     return templates.TemplateResponse(request, "admin/atemschutz_pruefung/einstellungen.html", {
         "user": user, "org": org,
@@ -96,7 +96,7 @@ async def einstellungen(request: Request, db: Session = Depends(get_db), user=De
 
 
 @router.post("/admin/atemschutz-pruefung/einstellungen")
-async def einstellungen_speichern(
+def einstellungen_speichern(
     request: Request,
     atemschutz_wart_mail: str = Form(""),
     atemschutz_wart_teams_webhook_url: str = Form(""),
@@ -116,7 +116,7 @@ async def einstellungen_speichern(
 # ── Öffentlicher Link / QR ───────────────────────────────────────────────────
 
 @router.get("/admin/atemschutz-pruefung/token", response_class=HTMLResponse)
-async def token_seite(request: Request, db: Session = Depends(get_db), user=Depends(_require_admin)):
+def token_seite(request: Request, db: Session = Depends(get_db), user=Depends(_require_admin)):
     org = db.query(OrgSettings).filter(OrgSettings.org_id == user.org_id).first()
     base_url = str(request.base_url).rstrip("/")
     return templates.TemplateResponse(request, "admin/atemschutz_pruefung/token.html", {
@@ -126,7 +126,7 @@ async def token_seite(request: Request, db: Session = Depends(get_db), user=Depe
 
 
 @router.post("/admin/atemschutz-pruefung/token")
-async def token_generieren(request: Request, db: Session = Depends(get_db), user=Depends(_require_admin)):
+def token_generieren(request: Request, db: Session = Depends(get_db), user=Depends(_require_admin)):
     org = db.query(OrgSettings).filter(OrgSettings.org_id == user.org_id).first()
     if not org:
         raise HTTPException(status_code=404)
@@ -137,7 +137,7 @@ async def token_generieren(request: Request, db: Session = Depends(get_db), user
 
 
 @router.get("/admin/atemschutz-pruefung/token/qr.png")
-async def token_qr(request: Request, db: Session = Depends(get_db), user=Depends(_require_admin)):
+def token_qr(request: Request, db: Session = Depends(get_db), user=Depends(_require_admin)):
     org = db.query(OrgSettings).filter(OrgSettings.org_id == user.org_id).first()
     if not org or not org.atemschutz_pruef_token:
         raise HTTPException(status_code=404)

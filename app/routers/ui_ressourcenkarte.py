@@ -6,6 +6,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Qu
 from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy.orm import Session
 
+from app.core.async_bridge import run_async
 from app.core.audit import write_audit
 from app.core.permissions import require_role
 from app.core.security import get_author_name
@@ -457,19 +458,19 @@ async def zugang_auftrag_sms_erneut(
 
 
 @router.post("/zugang/widerrufen", response_class=HTMLResponse)
-async def zugang_widerrufen(
+def zugang_widerrufen(
     request: Request, lage_id: int, einheit_id: int, db: Session = Depends(get_db), _=Depends(require_role(*_WRITE))
 ):
     lage, einheit = _context(request, lage_id, einheit_id, db)
     _darf_zugang_verwalten(request, request.state.user)
     gk_zugang_service.widerrufe(db, einheit.id, grund="manuell", user_id=request.state.user.id, typ="personal")
     db.commit()
-    await broadcast_lage(lage.id, {"type": "ressource:changed", "einheit_id": einheit.id})
+    run_async(broadcast_lage, lage.id, {"type": "ressource:changed", "einheit_id": einheit.id})
     return _zugang(request, lage, einheit, db)
 
 
 @router.post("/zugang/qr/ausstellen", response_class=HTMLResponse)
-async def qr_zugang_ausstellen(
+def qr_zugang_ausstellen(
     request: Request, lage_id: int, einheit_id: int, neu: bool = Form(False), db: Session = Depends(get_db),
     _=Depends(require_role(*_WRITE)),
 ):
@@ -482,28 +483,28 @@ async def qr_zugang_ausstellen(
         db.commit()
     except ValueError as exc:
         return HTMLResponse(str(exc), status_code=422, headers={"Cache-Control": "no-store"})
-    await broadcast_lage(lage.id, {"type": "ressource:changed", "einheit_id": einheit.id})
+    run_async(broadcast_lage, lage.id, {"type": "ressource:changed", "einheit_id": einheit.id})
     response = _zugang(request, lage, einheit, db)
     response.headers["Cache-Control"] = "no-store"
     return response
 
 
 @router.post("/zugang/qr/widerrufen", response_class=HTMLResponse)
-async def qr_zugang_widerrufen(
+def qr_zugang_widerrufen(
     request: Request, lage_id: int, einheit_id: int, db: Session = Depends(get_db), _=Depends(require_role(*_WRITE))
 ):
     lage, einheit = _context(request, lage_id, einheit_id, db)
     _darf_zugang_verwalten(request, request.state.user)
     gk_zugang_service.widerrufe(db, einheit.id, grund="manuell", user_id=request.state.user.id, typ="qr")
     db.commit()
-    await broadcast_lage(lage.id, {"type": "ressource:changed", "einheit_id": einheit.id})
+    run_async(broadcast_lage, lage.id, {"type": "ressource:changed", "einheit_id": einheit.id})
     response = _zugang(request, lage, einheit, db)
     response.headers["Cache-Control"] = "no-store"
     return response
 
 
 @router.get("/zugang/qr/vorschau", response_class=HTMLResponse)
-async def qr_zugang_vorschau(
+def qr_zugang_vorschau(
     request: Request, lage_id: int, einheit_id: int, druck: bool = Query(False), db: Session = Depends(get_db),
     _=Depends(require_role(*_WRITE)),
 ):
@@ -528,7 +529,7 @@ async def qr_zugang_vorschau(
             payload={"lage_id": lage.id, "einheit_id": einheit.id, "ziel": "lokal"},
         )
         db.commit()
-        await broadcast_lage(lage.id, {"type": "ressource:changed", "einheit_id": einheit.id})
+        run_async(broadcast_lage, lage.id, {"type": "ressource:changed", "einheit_id": einheit.id})
         # Dasselbe Blatt wie beim Stationsdruck – die PIN steht bewusst nicht darauf.
         org = db.get(FireDept, lage.org_id)
         html = templates.env.get_template("gsl/einheit_qr_print.html").render(
@@ -608,19 +609,19 @@ async def qr_zugang_drucken(
 
 
 @router.post("/zugang/verlaengern", response_class=HTMLResponse)
-async def zugang_verlaengern(
+def zugang_verlaengern(
     request: Request, lage_id: int, einheit_id: int, db: Session = Depends(get_db), _=Depends(require_role(*_WRITE))
 ):
     lage, einheit = _context(request, lage_id, einheit_id, db)
     _darf_zugang_verwalten(request, request.state.user)
     gk_zugang_service.verlaengere(db, einheit.id, request.state.user.id)
     db.commit()
-    await broadcast_lage(lage.id, {"type": "ressource:changed", "einheit_id": einheit.id})
+    run_async(broadcast_lage, lage.id, {"type": "ressource:changed", "einheit_id": einheit.id})
     return _zugang(request, lage, einheit, db)
 
 
 @router.post("/zugang/sitzung/{session_id}/beenden", response_class=HTMLResponse)
-async def zugang_sitzung_beenden(
+def zugang_sitzung_beenden(
     request: Request,
     lage_id: int,
     einheit_id: int,
@@ -652,7 +653,7 @@ async def zugang_sitzung_beenden(
         payload={"session_id": session.id},
     )
     db.commit()
-    await broadcast_lage(lage.id, {"type": "ressource:changed", "einheit_id": einheit.id})
+    run_async(broadcast_lage, lage.id, {"type": "ressource:changed", "einheit_id": einheit.id})
     return _zugang(request, lage, einheit, db)
 
 
@@ -1344,7 +1345,7 @@ async def stamm(
 
 
 @router.post("/journal", response_class=HTMLResponse)
-async def journal_eintrag(
+def journal_eintrag(
     request: Request,
     lage_id: int,
     einheit_id: int,
@@ -1378,7 +1379,7 @@ async def journal_eintrag(
         payload={"lage_id": lage.id, "einheit_id": einheit.id},
     )
     db.commit()
-    await broadcast_lage(lage.id, {"type": "ressource:changed", "einheit_id": einheit.id})
+    run_async(broadcast_lage, lage.id, {"type": "ressource:changed", "einheit_id": einheit.id})
     response = _journal(request, lage, einheit, db, typen=None, site_id=None, vor_ts=None, limit=50)
     response.headers["HX-Retarget"] = "#ressourceKarteBody"
     response.headers["HX-Reswap"] = "innerHTML"
@@ -1387,7 +1388,7 @@ async def journal_eintrag(
 
 
 @router.post("/journal/{entry_id}/storno", response_class=HTMLResponse)
-async def journal_storno(
+def journal_storno(
     request: Request,
     lage_id: int,
     einheit_id: int,
@@ -1421,7 +1422,7 @@ async def journal_storno(
         payload={"lage_id": lage.id, "einheit_id": einheit.id},
     )
     db.commit()
-    await broadcast_lage(lage.id, {"type": "ressource:changed", "einheit_id": einheit.id})
+    run_async(broadcast_lage, lage.id, {"type": "ressource:changed", "einheit_id": einheit.id})
     response = _journal(request, lage, einheit, db, typen=None, site_id=None, vor_ts=None, limit=50)
     response.headers["HX-Retarget"] = "#ressourceKarteBody"
     response.headers["HX-Reswap"] = "innerHTML"

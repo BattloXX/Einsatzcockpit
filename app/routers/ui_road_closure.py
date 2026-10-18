@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.core.async_bridge import run_async
 from app.core.audit import write_audit
 from app.core.crypto import decrypt_secret, encrypt_secret
 from app.core.permissions import STRASSENSPERREN_LESE_ROLLEN, has_role, require_role
@@ -948,13 +949,13 @@ def dokument_anzeigen(
 
 
 @router.post("/{closure_id}/dokumente")
-async def dokument_hochladen(
+def dokument_hochladen(
     closure_id: int, datei: UploadFile = File(...), db: Session = Depends(get_db),
     user: User = Depends(require_role("objekt_verwalter")), _guard: None = Depends(require_strassensperren_enabled),
 ):
     closure = _closure_or_404(db, user, closure_id, writable=True)
     try:
-        store_document(db, closure, await datei.read(), datei.filename or "verordnung.pdf", user.id, "ui")
+        store_document(db, closure, run_async(datei.read), datei.filename or "verordnung.pdf", user.id, "ui")
         db.commit()
     except ValueError as exc:
         db.rollback()

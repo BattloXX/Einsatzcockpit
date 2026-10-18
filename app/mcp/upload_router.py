@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.core.async_bridge import run_async
 from app.core.rate_limit import limiter
 from app.db import get_db
 from app.services.mcp_upload_service import MCPUploadFehler, speichere_upload
@@ -12,7 +13,7 @@ router = APIRouter()
 
 @router.post("/api/mcp/uploads/{upload_id}")
 @(limiter.limit(settings.MCP_UPLOAD_RATELIMIT) if limiter else lambda f: f)
-async def upload(
+def upload(
     request: Request,
     upload_id: str,
     datei: UploadFile = File(...),
@@ -27,7 +28,7 @@ async def upload(
     except MCPUploadFehler as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail) from exc
     finally:
-        await datei.close()
+        run_async(datei.close)
     return {
         "upload_id": row.upload_id,
         "sha256": row.sha256,

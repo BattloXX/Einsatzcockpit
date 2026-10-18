@@ -121,7 +121,7 @@ def _existing(db: Session, api_key: ApiKey, kanal: str, key: str) -> ApiMessage 
 )
 @(_limiter.limit(settings.API_MESSAGE_RATELIMIT, key_func=get_api_key_identifier)
   if _limiter else lambda f: f)
-async def send_sms_message(
+def send_sms_message(
     request: Request, payload: SmsMessageRequest, db: Session = Depends(get_db),
     api_key: ApiKey = Depends(require_scope("sms:send")),
 ):
@@ -208,7 +208,7 @@ async def send_sms_gateway(
 )
 @(_limiter.limit(settings.API_MESSAGE_RATELIMIT, key_func=get_api_key_identifier)
   if _limiter else lambda f: f)
-async def send_mail_message(
+def send_mail_message(
     request: Request, payload: MailMessageRequest, db: Session = Depends(get_db),
     api_key: ApiKey = Depends(require_scope("mail:send")),
 ):

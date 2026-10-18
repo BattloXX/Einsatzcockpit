@@ -10,6 +10,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from sqlalchemy import select as sa_select
 from sqlalchemy.orm import Session
 
+from app.core.async_bridge import run_async
 from app.core.dependencies import CurrentOrgId
 from app.core.permissions import has_role
 from app.core.templating import templates
@@ -96,7 +97,7 @@ def _load_fahrzeuge(db: Session) -> list[VehicleMaster]:
 # ── Termin-Liste ──────────────────────────────────────────────────────────────
 
 @router.get("/termine", response_class=HTMLResponse)
-async def termin_liste(
+def termin_liste(
     request: Request,
     typ: str | None = None,
     db: Session = Depends(get_db),
@@ -141,7 +142,7 @@ async def termin_liste(
 # ── Termin anlegen ────────────────────────────────────────────────────────────
 
 @router.get("/termine/neu", response_class=HTMLResponse)
-async def termin_neu_formular(
+def termin_neu_formular(
     request: Request,
     typ: str = "uebung",
     db: Session = Depends(get_db),
@@ -160,7 +161,7 @@ async def termin_neu_formular(
 
 
 @router.post("/termine", response_class=HTMLResponse)
-async def termin_anlegen(
+def termin_anlegen(
     request: Request,
     typ: str = Form(...),
     titel: str = Form(...),
@@ -204,7 +205,7 @@ async def termin_anlegen(
 # ── Termin-Detail ─────────────────────────────────────────────────────────────
 
 @router.get("/termine/{termin_id}", response_class=HTMLResponse)
-async def termin_detail(
+def termin_detail(
     request: Request,
     termin_id: int,
     db: Session = Depends(get_db),
@@ -233,7 +234,7 @@ async def termin_detail(
 # ── Termin bearbeiten ─────────────────────────────────────────────────────────
 
 @router.get("/termine/{termin_id}/bearbeiten", response_class=HTMLResponse)
-async def termin_bearbeiten_formular(
+def termin_bearbeiten_formular(
     request: Request,
     termin_id: int,
     db: Session = Depends(get_db),
@@ -253,7 +254,7 @@ async def termin_bearbeiten_formular(
 
 
 @router.post("/termine/{termin_id}", response_class=HTMLResponse)
-async def termin_speichern(
+def termin_speichern(
     request: Request,
     termin_id: int,
     typ: str = Form(...),
@@ -288,7 +289,7 @@ async def termin_speichern(
 
 
 @router.post("/termine/{termin_id}/loeschen")
-async def termin_loeschen(
+def termin_loeschen(
     request: Request,
     termin_id: int,
     db: Session = Depends(get_db),
@@ -333,7 +334,7 @@ def _lade_teilnahmen(db: Session, bezug_typ: str, bezug_id: int, sort: str = "")
 
 
 @router.get("/teilnahme/{bezug_typ}/{bezug_id}/liste", response_class=HTMLResponse)
-async def teilnahme_liste(
+def teilnahme_liste(
     request: Request,
     bezug_typ: str,
     bezug_id: int,
@@ -360,7 +361,7 @@ async def teilnahme_liste(
 
 
 @router.get("/teilnahme/{bezug_typ}/{bezug_id}/auswahl", response_class=HTMLResponse)
-async def teilnahme_auswahl(
+def teilnahme_auswahl(
     request: Request,
     bezug_typ: str,
     bezug_id: int,
@@ -427,7 +428,7 @@ async def teilnahme_auswahl(
 
 
 @router.post("/teilnahme/{bezug_typ}/{bezug_id}", response_class=HTMLResponse)
-async def teilnahme_hinzufuegen(
+def teilnahme_hinzufuegen(
     request: Request,
     bezug_typ: str,
     bezug_id: int,
@@ -441,7 +442,7 @@ async def teilnahme_hinzufuegen(
     if bezug_typ not in _BEZUG_TYPEN:
         raise HTTPException(status_code=422, detail="Ungültiger Bezug-Typ")
 
-    form = await request.form()
+    form = run_async(request.form)
     mitglied_ids = form.getlist("mitglied_id")
     freitext = (form.get("freitext_name") or "").strip()  # type: ignore[union-attr]
 
@@ -517,7 +518,7 @@ async def teilnahme_hinzufuegen(
 
 
 @router.patch("/teilnahme/{teilnahme_id}", response_class=HTMLResponse)
-async def teilnahme_bearbeiten(
+def teilnahme_bearbeiten(
     request: Request,
     teilnahme_id: int,
     sort: str = "",
@@ -529,7 +530,7 @@ async def teilnahme_bearbeiten(
         raise HTTPException(status_code=403, detail="Keine Berechtigung")
     teilnahme = _teilnahme_or_404(teilnahme_id, db)
 
-    form = await request.form()
+    form = run_async(request.form)
     if "funktion_id" in form:
         v = form.get("funktion_id")
         teilnahme.funktion_id = int(v) if v else None  # type: ignore[arg-type]
@@ -573,7 +574,7 @@ async def teilnahme_bearbeiten(
 
 
 @router.delete("/teilnahme/{teilnahme_id}", response_class=HTMLResponse)
-async def teilnahme_entfernen(
+def teilnahme_entfernen(
     request: Request,
     teilnahme_id: int,
     sort: str = "",
@@ -607,7 +608,7 @@ async def teilnahme_entfernen(
 # ── Export ────────────────────────────────────────────────────────────────────
 
 @router.get("/teilnahme/{bezug_typ}/{bezug_id}/druck", response_class=HTMLResponse)
-async def teilnahme_druck(
+def teilnahme_druck(
     request: Request,
     bezug_typ: str,
     bezug_id: int,
@@ -633,7 +634,7 @@ async def teilnahme_druck(
 
 
 @router.get("/teilnahme/{bezug_typ}/{bezug_id}/export.pdf")
-async def teilnahme_export_pdf(
+def teilnahme_export_pdf(
     request: Request,
     bezug_typ: str,
     bezug_id: int,
@@ -667,7 +668,7 @@ async def teilnahme_export_pdf(
 
 
 @router.get("/teilnahme/{bezug_typ}/{bezug_id}/export.xlsx")
-async def teilnahme_export_xlsx(
+def teilnahme_export_xlsx(
     request: Request,
     bezug_typ: str,
     bezug_id: int,

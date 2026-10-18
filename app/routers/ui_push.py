@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session
 
+from app.core.async_bridge import run_async
 from app.db import get_db
 from app.models.user import PushSubscription
 
@@ -21,11 +22,11 @@ def vapid_public_key(db: Session = Depends(get_db)):
 
 
 @router.post("/subscribe")
-async def subscribe(request: Request, db: Session = Depends(get_db)):
+def subscribe(request: Request, db: Session = Depends(get_db)):
     user = getattr(request.state, "user", None)
     if not user:
         return Response(status_code=401)
-    data = await request.json()
+    data = run_async(request.json)
     endpoint = data.get("endpoint", "")
     p256dh = data.get("keys", {}).get("p256dh", "")
     auth = data.get("keys", {}).get("auth", "")
@@ -42,11 +43,11 @@ async def subscribe(request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/unsubscribe")
-async def unsubscribe(request: Request, db: Session = Depends(get_db)):
+def unsubscribe(request: Request, db: Session = Depends(get_db)):
     user = getattr(request.state, "user", None)
     if not user:
         return Response(status_code=401)
-    data = await request.json()
+    data = run_async(request.json)
     endpoint = data.get("endpoint", "")
     subscription = (
         db.query(PushSubscription)
@@ -63,14 +64,14 @@ async def unsubscribe(request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/test")
-async def test_push(request: Request, db: Session = Depends(get_db)):
+def test_push(request: Request, db: Session = Depends(get_db)):
     """Sendet einen Test-Push an die Subscription des anfragenden Geräts.
     Gibt JSON mit ok/error zurück – für die Admin-Push-Seite."""
     user = getattr(request.state, "user", None)
     if not user:
         return JSONResponse({"ok": False, "error": "Nicht eingeloggt"}, status_code=401)
 
-    data = await request.json()
+    data = run_async(request.json)
     endpoint = data.get("endpoint", "")
     if not endpoint:
         return JSONResponse({"ok": False, "error": "Kein Endpoint übermittelt"})
@@ -138,7 +139,7 @@ async def test_push(request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/test-fcm")
-async def test_push_fcm(request: Request, db: Session = Depends(get_db)):
+def test_push_fcm(request: Request, db: Session = Depends(get_db)):
     """Sendet eine FCM-Testbenachrichtigung an DIESES Gerät (native Android-App)."""
     user = getattr(request.state, "user", None)
     if not user:

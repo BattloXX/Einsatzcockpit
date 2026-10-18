@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 from types import SimpleNamespace
@@ -200,13 +199,13 @@ def public_geometry(token: str, request: Request, db: Session = Depends(get_db))
 
 @router.get("/oeffentlich/strassensperre/{token}/karte.png")
 @(_limiter.limit(settings.STRASSENSPERREN_PUBLIC_RATELIMIT) if _limiter else lambda f: f)
-async def public_map_png(token: str, request: Request, db: Session = Depends(get_db)):
+def public_map_png(token: str, request: Request, db: Session = Depends(get_db)):
     try:
         _access, org, closure, _beendet = resolve_detail(db, token)
         geometry = public_closure_dict(closure, org).get("geometry")
         if not geometry:
             raise TokenUngueltig()
-        png = await asyncio.to_thread(render_road_closure_map_png, geometry)
+        png = render_road_closure_map_png(geometry)
     except TokenUngueltig:
         return Response(status_code=404)
     except Exception:

@@ -129,7 +129,7 @@ async def forgot_submit(
 
 
 @router.get("/passwort-zuruecksetzen", response_class=HTMLResponse)
-async def reset_form(request: Request, token: str = "", db: Session = Depends(get_db)):
+def reset_form(request: Request, token: str = "", db: Session = Depends(get_db)):
     error: str | None = None
     ist_einladung = False
     if not token:

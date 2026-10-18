@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
 import uuid
+from types import SimpleNamespace
 
 import pytest
 from fastapi import BackgroundTasks
@@ -145,12 +145,11 @@ class _AlarmRequest:
         return {"raw_text": self._raw_text}
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("created", "dedup_action", "scheduled"),
     [(True, "created", True), (True, "merged", True), (False, "created", False)],
 )
-async def test_alarm_route_schedules_trigger_only_for_new_ingest(
+def test_alarm_route_schedules_trigger_only_for_new_ingest(
     monkeypatch, created, dedup_action, scheduled,
 ):
     import app.routers.gateway_api as api
@@ -169,7 +168,7 @@ async def test_alarm_route_schedules_trigger_only_for_new_ingest(
     monkeypatch.setattr(serial, "ingest_alarm", lambda *_args, **_kwargs: (ingest, created))
     tasks = BackgroundTasks()
 
-    await api.ingest_alarm(_AlarmRequest(uuid.uuid4().hex), tasks, db)
+    api.ingest_alarm(_AlarmRequest(uuid.uuid4().hex), tasks, db)
 
     scheduled_functions = [task.func for task in tasks.tasks]
     assert (autoprint_alarm_background in scheduled_functions) is scheduled

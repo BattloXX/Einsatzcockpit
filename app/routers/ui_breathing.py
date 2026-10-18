@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session
 
+from app.core.async_bridge import run_async
 from app.core.permissions import has_role, require_role
 from app.core.templating import templates
 from app.db import get_db
@@ -37,7 +38,7 @@ def require_breathing_enabled(request: Request) -> None:
 
 
 @router.get("/einsatz/{incident_id}/atemschutz", response_class=HTMLResponse)
-async def breathing_board(
+def breathing_board(
     incident_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -66,7 +67,7 @@ async def breathing_board(
 
 
 @router.post("/einsatz/{incident_id}/atemschutz/trupp")
-async def create_breathing_troop(
+def create_breathing_troop(
     incident_id: int, request: Request,
     name: str = Form(...),
     task_text: str = Form(""),
@@ -89,7 +90,7 @@ async def create_breathing_troop(
             duration = preset_dur
 
     # Parse member data from form (member_0_id, member_0_role, member_0_press, etc.)
-    form_data = await request.form()
+    form_data = run_async(request.form)
     members_data = []
     i = 0
     while True:
@@ -130,12 +131,12 @@ async def create_breathing_troop(
         user_id=request.state.user.id,
     )
     db.commit()
-    await manager.broadcast(incident_id, {"type": "troop_created", "reload_breathing": True})
+    run_async(manager.broadcast, incident_id, {"type": "troop_created", "reload_breathing": True})
     return RedirectResponse(f"/einsatz/{incident_id}/atemschutz", status_code=303)
 
 
 @router.post("/einsatz/{incident_id}/atemschutz/{troop_id}/erneut-einsetzen")
-async def redeploy_troop_view(
+def redeploy_troop_view(
     incident_id: int, troop_id: int, request: Request,
     task_text: str | None = Form(None),
     location_text: str | None = Form(None),
@@ -150,7 +151,7 @@ async def redeploy_troop_view(
     if not troop or troop.incident_id != incident_id:
         return Response(status_code=404)
 
-    form_data = await request.form()
+    form_data = run_async(request.form)
     members_data = []
     index = 0
     while True:
@@ -189,14 +190,14 @@ async def redeploy_troop_view(
         return Response(str(exc), status_code=400)
     db.commit()
     lfd_nr = troop.deployments[-1].lfd_nr
-    await manager.broadcast(incident_id, {
+    run_async(manager.broadcast, incident_id, {
         "type": "troop_redeployed", "troop_id": troop_id, "lfd_nr": lfd_nr,
     })
     return RedirectResponse(f"/einsatz/{incident_id}/atemschutz", status_code=303)
 
 
 @router.post("/einsatz/{incident_id}/atemschutz/{troop_id}/starten")
-async def start_troop_view(
+def start_troop_view(
     incident_id: int, troop_id: int, request: Request,
     override_reason: str | None = Form(None),
     db: Session = Depends(get_db),
@@ -225,7 +226,7 @@ async def start_troop_view(
     except ValueError as exc:
         return Response(str(exc), status_code=400)
     db.commit()
-    await manager.broadcast(incident_id, {
+    run_async(manager.broadcast, incident_id, {
         "type": "troop_started", "troop_id": troop_id,
         "readiness_overridden": bool(permitted_reason),
     })
@@ -233,7 +234,7 @@ async def start_troop_view(
 
 
 @router.post("/einsatz/{incident_id}/atemschutz/{troop_id}/enddruck")
-async def back_pressure_view(
+def back_pressure_view(
     incident_id: int, troop_id: int, request: Request,
     troop_member_id: int = Form(...),
     pressure_bar: float = Form(...),
@@ -253,7 +254,7 @@ async def back_pressure_view(
     except ValueError:
         return Response(status_code=400)
     db.commit()
-    await manager.broadcast(incident_id, {
+    run_async(manager.broadcast, incident_id, {
         "type": "troop_back_pressure_reported", "troop_id": troop_id,
         "troop_member_id": member.id, "pressure": pressure_bar,
     })
@@ -261,7 +262,7 @@ async def back_pressure_view(
 
 
 @router.post("/einsatz/{incident_id}/atemschutz/{troop_id}/status")
-async def update_status(
+def update_status(
     incident_id: int, troop_id: int, request: Request,
     status: str = Form(...),
     db: Session = Depends(get_db),
@@ -275,7 +276,7 @@ async def update_status(
     db.commit()
     warning = get_warning_level(troop)
     time_warn = get_time_warning(troop)
-    await manager.broadcast(incident_id, {
+    run_async(manager.broadcast, incident_id, {
         "type": "troop_status_changed", "troop_id": troop_id,
         "status": status, "warning": warning.level, "time_warning": time_warn,
     })
@@ -283,7 +284,7 @@ async def update_status(
 
 
 @router.post("/einsatz/{incident_id}/atemschutz/{troop_id}/druck")
-async def log_pressure_view(
+def log_pressure_view(
     incident_id: int, troop_id: int, request: Request,
     troop_member_id: int = Form(...),
     pressure_bar: float = Form(...),
@@ -307,7 +308,7 @@ async def log_pressure_view(
     warning = get_warning_level(updated_troop)
     time_warn = get_time_warning(updated_troop)
     lowest = updated_troop.lowest_current_pressure or pressure_bar
-    await manager.broadcast(incident_id, {
+    run_async(manager.broadcast, incident_id, {
         "type": "pressure_logged", "troop_id": troop_id,
         "troop_member_id": troop_member_id,
         "pressure": pressure_bar, "lowest_pressure": lowest,
@@ -321,7 +322,7 @@ async def log_pressure_view(
 
 
 @router.post("/einsatz/{incident_id}/atemschutz/{troop_id}/einsatzziel")
-async def objective_reached_view(
+def objective_reached_view(
     incident_id: int, troop_id: int, request: Request,
     troop_member_id: int = Form(...),
     pressure_bar: float = Form(...),
@@ -342,7 +343,7 @@ async def objective_reached_view(
         return Response(status_code=400)
     db.commit()
     warning = get_warning_level(troop)
-    await manager.broadcast(incident_id, {
+    run_async(manager.broadcast, incident_id, {
         "type": "troop_objective_reached", "troop_id": troop_id,
         "troop_member_id": member.id, "pressure": pressure_bar,
         "withdraw_press": member.withdraw_press,
@@ -353,7 +354,7 @@ async def objective_reached_view(
 
 
 @router.get("/einsatz/{incident_id}/atemschutz/aktive-warnungen")
-async def active_breathing_warnings(
+def active_breathing_warnings(
     incident_id: int, request: Request, db: Session = Depends(get_db),
     _guard: None = Depends(require_breathing_enabled),
 ):
@@ -374,7 +375,7 @@ async def active_breathing_warnings(
 
 
 @router.post("/einsatz/{incident_id}/atemschutz/{troop_id}/meldung")
-async def troop_meldung(
+def troop_meldung(
     incident_id: int, troop_id: int, request: Request,
     text: str = Form(""),
     db: Session = Depends(get_db),
@@ -387,7 +388,7 @@ async def troop_meldung(
     update_meldung(db, troop, text.strip() or None, user_id=request.state.user.id)
     db.commit()
     time_warn = get_time_warning(troop)
-    await manager.broadcast(incident_id, {
+    run_async(manager.broadcast, incident_id, {
         "type": "troop_meldung", "troop_id": troop_id,
         "text": text.strip() or None,
         "time_warning": time_warn,
@@ -396,7 +397,7 @@ async def troop_meldung(
 
 
 @router.post("/einsatz/{incident_id}/atemschutz/{troop_id}/ack")
-async def troop_ack(
+def troop_ack(
     incident_id: int, troop_id: int, request: Request,
     kind: str = Form(...),
     db: Session = Depends(get_db),
@@ -410,14 +411,14 @@ async def troop_ack(
         return Response(status_code=404)
     ack_warning(db, troop, kind, user_id=request.state.user.id)
     db.commit()
-    await manager.broadcast(incident_id, {
+    run_async(manager.broadcast, incident_id, {
         "type": "troop_warning_acked", "troop_id": troop_id, "kind": kind,
     })
     return Response(status_code=204)
 
 
 @router.post("/einsatz/{incident_id}/atemschutz/{troop_id}/standort")
-async def troop_standort(
+def troop_standort(
     incident_id: int, troop_id: int, request: Request,
     location_text: str = Form(""),
     db: Session = Depends(get_db),
@@ -429,7 +430,7 @@ async def troop_standort(
         return Response(status_code=404)
     troop.location_text = location_text.strip() or None
     db.commit()
-    await manager.broadcast(incident_id, {
+    run_async(manager.broadcast, incident_id, {
         "type": "troop_standort", "troop_id": troop_id,
         "location_text": troop.location_text,
     })
@@ -437,7 +438,7 @@ async def troop_standort(
 
 
 @router.post("/einsatz/{incident_id}/atemschutz/{troop_id}/auftrag")
-async def troop_auftrag(
+def troop_auftrag(
     incident_id: int, troop_id: int, request: Request,
     task_text: str = Form(""),
     db: Session = Depends(get_db),
@@ -453,7 +454,7 @@ async def troop_auftrag(
 
 
 @router.get("/einsatz/{incident_id}/atemschutz/{troop_id}/pdf")
-async def troop_pdf(
+def troop_pdf(
     incident_id: int, troop_id: int, request: Request,
     db: Session = Depends(get_db),
     _guard: None = Depends(require_breathing_enabled),

@@ -79,7 +79,7 @@ async def gk_start(request: Request):
 
 @router.post("/gk/pruefen")
 @(_limiter.limit("10/15minutes") if _limiter else lambda f: f)
-async def gk_pruefen(request: Request, daten: TokenDaten, db: Session = Depends(get_db)):
+def gk_pruefen(request: Request, daten: TokenDaten, db: Session = Depends(get_db)):
     pruefung = gk_zugang_service.token_pruefen(db, daten.token, _typ(daten.token))
     if pruefung.zustand != "ok" or not pruefung.zugang:
         return _antwort({"ok": False, "meldung": _meldung(pruefung)}, 404)
@@ -178,7 +178,7 @@ async def gk_pin(request: Request, daten: TokenDaten, db: Session = Depends(get_
 
 @router.post("/gk/einloesen")
 @(_limiter.limit("10/15minutes") if _limiter else lambda f: f)
-async def gk_einloesen(request: Request, daten: EinloesenDaten, db: Session = Depends(get_db)):
+def gk_einloesen(request: Request, daten: EinloesenDaten, db: Session = Depends(get_db)):
     typ = _typ(daten.token)
     pruefung = gk_zugang_service.token_pruefen(db, daten.token, typ)
     zugang = pruefung.zugang
@@ -248,7 +248,7 @@ async def gk_einloesen(request: Request, daten: EinloesenDaten, db: Session = De
 
 
 @router.post("/gk/abmelden")
-async def gk_abmelden(request: Request, db: Session = Depends(get_db)):
+def gk_abmelden(request: Request, db: Session = Depends(get_db)):
     for typ, cookie_name in (("personal", gk_zugang_service.COOKIE), ("qr", gk_zugang_service.QR_COOKIE)):
         cookie = request.cookies.get(cookie_name)
         if cookie:

@@ -23,6 +23,7 @@ from fastapi.responses import (
 )
 
 from app.config import settings
+from app.core.async_bridge import run_async
 from app.core.permissions import require_system_admin
 from app.core.rate_limit import limiter as _limiter
 from app.core.templating import templates
@@ -237,7 +238,7 @@ async def sitemap(request: Request):
 
 
 @router.get("/startseite/vorschau", response_class=HTMLResponse)
-async def landing_preview(request: Request, db=Depends(get_db),
+def landing_preview(request: Request, db=Depends(get_db),
                           user: User = Depends(require_system_admin)):
     """Vorschau der öffentlichen Startseite – auch für eingeloggte Admins."""
     return render_public_page(request, db, "landing", preview=True)
@@ -257,7 +258,7 @@ async def page_image(name: str):
 # ── CMS (nur system_admin) ────────────────────────────────────────────────────
 
 @router.get("/admin/seiten", response_class=HTMLResponse)
-async def pages_list(request: Request, db=Depends(get_db),
+def pages_list(request: Request, db=Depends(get_db),
                      user: User = Depends(require_system_admin)):
     return templates.TemplateResponse(request, "admin/pages_list.html", {
         "user": user,
@@ -270,21 +271,21 @@ async def pages_list(request: Request, db=Depends(get_db),
 # z.B. "bild" ab und liefert 404.
 
 @router.get("/admin/seiten/bilder/liste")
-async def page_images_list(request: Request, db=Depends(get_db),
+def page_images_list(request: Request, db=Depends(get_db),
                            user: User = Depends(require_system_admin)):
     """JSON-Liste der hochgeladenen Bilder (für die Galerie im Editor)."""
     return JSONResponse({"images": site_pages.list_images()})
 
 
 @router.post("/admin/seiten/bild")
-async def page_image_upload(request: Request, db=Depends(get_db),
+def page_image_upload(request: Request, db=Depends(get_db),
                             user: User = Depends(require_system_admin),
                             image: UploadFile = File(...)):
     """Bild-Upload aus dem WYSIWYG-Editor. Gibt JSON {"url": ...} zurück."""
     ext = Path(image.filename or "").suffix.lower()
     if ext not in ALLOWED_IMG_EXTS:
         raise HTTPException(400, "Format nicht erlaubt (PNG, JPG, WEBP, GIF)")
-    data = await image.read()
+    data = run_async(image.read)
     if not data:
         raise HTTPException(400, "Leere Datei")
     if len(data) > MAX_IMG_BYTES:
@@ -296,7 +297,7 @@ async def page_image_upload(request: Request, db=Depends(get_db),
 
 
 @router.get("/admin/seiten/{slug}", response_class=HTMLResponse)
-async def page_edit(slug: str, request: Request, db=Depends(get_db),
+def page_edit(slug: str, request: Request, db=Depends(get_db),
                     user: User = Depends(require_system_admin)):
     if slug not in site_pages.PAGES:
         raise HTTPException(404)
@@ -311,7 +312,7 @@ async def page_edit(slug: str, request: Request, db=Depends(get_db),
 
 
 @router.post("/admin/seiten/{slug}")
-async def page_save(slug: str, request: Request, db=Depends(get_db),
+def page_save(slug: str, request: Request, db=Depends(get_db),
                     user: User = Depends(require_system_admin), html: str = Form("")):
     if slug not in site_pages.PAGES:
         raise HTTPException(404)
