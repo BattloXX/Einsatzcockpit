@@ -4,7 +4,8 @@
     "namespace": "android_app",
     "package_name": "cloud.einsatzleiter.app",
     "sha256_cert_fingerprints": [
-      "54:EC:66:A8:0D:40:32:BC:21:03:A9:21:91:82:76:CC:94:09:18:32:5B:13:CA:B3:AC:3F:AF:B4:EF:BF:80:B6"
+      "54:EC:66:A8:0D:40:32:BC:21:03:A9:21:91:82:76:CC:94:09:18:32:5B:13:CA:B3:AC:3F:AF:B4:EF:BF:80:B6",
+      "34:E3:F1:45:B3:2D:92:AE:5D:72:6C:DA:D1:95:FB:FA:4C:92:21:CD:DF:E1:38:12:78:66:17:95:B9:56:54:3E"
     ]
   }
 }]
