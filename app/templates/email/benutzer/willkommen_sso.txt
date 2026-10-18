@@ -1,0 +1,12 @@
+{% extends "email/benutzer/_layout.txt" %}
+{% block content %}Hallo {{ user_display_name }},
+
+Für dich wurde ein Konto bei {{ org_name }} im Einsatzcockpit angelegt.
+
+Melde dich mit deinem dienstlichen Microsoft-Konto an, das du auch für Microsoft 365 oder Teams verwendest. Verwende kein privates Microsoft-, Hotmail- oder Outlook.com-Konto.
+
+Mit Microsoft anmelden: {{ sso_url }}
+
+Alternativ: Öffne {{ app_url }} und wähle "Mit Microsoft anmelden".
+
+Du benötigst kein eigenes Passwort; die Anmeldung erfolgt über Microsoft.{% endblock %}

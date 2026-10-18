@@ -1,0 +1,12 @@
+{% extends "email/benutzer/_layout.txt" %}
+{% block content %}Hallo {{ user_display_name }},
+
+Für dich wurde ein Konto bei {{ org_name }} im Einsatzcockpit angelegt.
+
+Anmelde-Adresse: {{ app_url }}
+Benutzername: {{ username }}
+Passwort: {{ password }}
+
+Jetzt anmelden: {{ app_url }}
+
+Bitte ändere dein Passwort nach der ersten Anmeldung unter Profil.{% endblock %}

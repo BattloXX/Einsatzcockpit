@@ -1,0 +1,11 @@
+{{ org_name }}
+{% if is_test %}
+
+TESTSYSTEM – bitte keine Echtdaten eingeben.
+{% endif %}
+
+{% block content %}{% endblock %}
+
+---
+Diese Nachricht wurde automatisch von Einsatzcockpit für {{ org_name }} versendet.
+Hilfe: {{ hilfe_url }}
