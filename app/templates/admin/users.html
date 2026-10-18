@@ -25,6 +25,10 @@
 {% if deleted %}<div class="alert alert--success">Benutzer gelöscht.</div>{% endif %}
 {% if error == 'email_exists' %}
 <div class="alert alert--error">Diese E-Mail-Adresse ist bereits einem anderen Benutzer zugeordnet.</div>
+{% elif error == 'member_invalid' %}
+<div class="alert alert--error">Das ausgewählte Mitglied gehört nicht zur Organisation des Benutzers.</div>
+{% elif error == 'member_taken' %}
+<div class="alert alert--error">Das ausgewählte Mitglied ist bereits einem anderen Benutzer zugeordnet.</div>
 {% elif error == 'no_email' %}
 <div class="alert alert--error">Der Benutzer hat keine hinterlegte E-Mail-Adresse — Reset-Mail kann nicht versendet werden.</div>
 {% elif error == 'mail_failed' %}
@@ -49,6 +53,7 @@
       <th>E-Mail</th>
       <th>Telefon</th>
       {% if is_sysadmin %}<th>Organisation</th>{% endif %}
+      <th>Mitglied</th>
       <th>Rollen</th>
       <th>Letzter Login</th>
       <th>Status</th>
@@ -69,6 +74,7 @@
       <td data-label="E-Mail">{{ u.email or '—' }}</td>
       <td data-label="Telefon">{{ u.phone or '—' }}</td>
       {% if is_sysadmin %}<td data-label="Organisation">{{ u.org.name if u.org else '—' }}</td>{% endif %}
+      <td data-label="Mitglied">{{ member_names.get(u.member_id, '—') }}</td>
       <td data-label="Rollen">{{ u.roles|map(attribute='label')|join(', ') or '–' }}</td>
       <td data-label="Letzter Login">{{ u.last_login_at|local_datetime if u.last_login_at else '–' }}</td>
       <td data-label="Status">
@@ -88,6 +94,7 @@
                   "email": u.email or "",
                   "phone": u.phone or "",
                   "org_id": u.org_id or 0,
+                  "member_id": u.member_id or 0,
                 }|tojson }}'
                 data-user-roles='{{ u.roles|map(attribute="code")|list|tojson }}'
                 onclick="openEditUser(this)"
@@ -152,7 +159,7 @@
       </p>
       {% if is_sysadmin %}
       <div class="form-group"><label class="form-label">Organisation</label>
-        <select name="org_id" class="form-input">
+        <select name="org_id" id="nu_org_id" class="form-input" onchange="updateMemberOptions('nu_member_id', this.value)">
           <option value="0">— keine Organisation —</option>
           {% for org in all_orgs %}
           <option value="{{ org.id }}">{{ org.name }}</option>
@@ -160,6 +167,17 @@
         </select>
       </div>
       {% endif %}
+      <div class="form-group"><label class="form-label">Verknüpftes Mitglied</label>
+        <select name="member_id" id="nu_member_id" class="form-input"
+                {{ tip('Gruppenkommandanten sehen damit mit ihrem Login die Einheitenansicht der Einheit, die sie in einer Großschadenslage führen.') }}>
+          <option value="">— kein —</option>
+          {% if not is_sysadmin %}
+          {% for member in members_by_org.get(user.org_id, []) %}
+          <option value="{{ member.id }}">{{ member.name }}</option>
+          {% endfor %}
+          {% endif %}
+        </select>
+      </div>
       <div class="form-group">
         <label class="form-label">Rollen</label>
         {% for r in roles %}
@@ -209,7 +227,7 @@
         </div>
         {% if is_sysadmin %}
         <div class="form-group"><label class="form-label">Organisation</label>
-          <select name="org_id" id="eu_org_id" class="form-input">
+          <select name="org_id" id="eu_org_id" class="form-input" onchange="updateMemberOptions('eu_member_id', this.value)">
             <option value="0">— keine Organisation —</option>
             {% for org in all_orgs %}
             <option value="{{ org.id }}">{{ org.name }}</option>
@@ -217,6 +235,17 @@
           </select>
         </div>
         {% endif %}
+        <div class="form-group"><label class="form-label">Verknüpftes Mitglied</label>
+          <select name="member_id" id="eu_member_id" class="form-input"
+                  {{ tip('Gruppenkommandanten sehen damit mit ihrem Login die Einheitenansicht der Einheit, die sie in einer Großschadenslage führen.') }}>
+            <option value="">— kein —</option>
+            {% if not is_sysadmin %}
+            {% for member in members_by_org.get(user.org_id, []) %}
+            <option value="{{ member.id }}">{{ member.name }}</option>
+            {% endfor %}
+            {% endif %}
+          </select>
+        </div>
         <div class="form-group">
           <label class="form-label">Rollen</label>
           {% for r in roles %}
@@ -238,6 +267,25 @@
 
 {% block scripts %}
 <script>
+const membersByOrg = {{ members_by_org|tojson }};
+
+function updateMemberOptions(selectId, orgId, selectedId = '') {
+  const select = document.getElementById(selectId);
+  if (!select) return;
+  select.innerHTML = '';
+  const empty = document.createElement('option');
+  empty.value = '';
+  empty.textContent = '— kein —';
+  select.appendChild(empty);
+  (membersByOrg[String(orgId)] || []).forEach(member => {
+    const option = document.createElement('option');
+    option.value = member.id;
+    option.textContent = member.name;
+    option.selected = String(member.id) === String(selectedId);
+    select.appendChild(option);
+  });
+}
+
 function getCsrfToken() {
   const m = document.cookie.match(/ec_csrf=([^;]+)/);
   return m ? decodeURIComponent(m[1]) : '';
@@ -276,6 +324,7 @@ function openEditUser(btn) {
   document.getElementById('eu_phone').value = data.phone || '';
   const orgSel = document.getElementById('eu_org_id');
   if (orgSel) orgSel.value = data.org_id || 0;
+  updateMemberOptions('eu_member_id', data.org_id || {{ user.org_id or 0 }}, data.member_id || '');
   document.querySelectorAll('.eu-role-check').forEach(cb => {
     cb.checked = Array.isArray(currentRoles) && currentRoles.includes(cb.value);
   });

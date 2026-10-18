@@ -9,7 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db import Base
 
 if TYPE_CHECKING:
-    from app.models.master import FireDept, VehicleMaster
+    from app.models.master import FireDept, Member, VehicleMaster
     from app.models.password_reset import PasswordResetToken
 
 
@@ -39,6 +39,9 @@ class User(Base):
     org_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("fire_dept.id", ondelete="SET NULL"), nullable=True
     )
+    member_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("member.id", ondelete="SET NULL"), nullable=True, unique=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # Lockout (Phase 7)
@@ -58,6 +61,9 @@ class User(Base):
     )
     org: Mapped[FireDept | None] = relationship(
         "FireDept", foreign_keys=[org_id], lazy="joined"
+    )
+    member: Mapped[Member | None] = relationship(
+        "Member", foreign_keys=[member_id], lazy="select"
     )
 
     @property

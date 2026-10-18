@@ -401,6 +401,11 @@ def index(request: Request, db: Session = Depends(get_db)):
         payload = build_gsl_live_payload(db, lage)
         payload["display_started_at"] = lage.started_at
         active_major_payloads.append(payload)
+    from app.services.einheit_service import einheiten_fuer_benutzer
+    meine_einheiten = [] if getattr(request.state, "is_device", False) else [
+        {"id": einheit.id, "label": einheit.label, "lage_name": lage.name, "is_exercise": lage.is_exercise}
+        for einheit, lage, _leader in einheiten_fuer_benutzer(db, user)
+    ]
     adopted_ids = (
         db.query(IncidentSite.incident_id)
         .join(MajorIncident, IncidentSite.major_incident_id == MajorIncident.id)
@@ -435,6 +440,7 @@ def index(request: Request, db: Session = Depends(get_db)):
         "user": user,
         "active_incidents": active,
         "active_major_incidents": active_major_payloads,
+        "meine_einheiten": meine_einheiten,
         "alarm_types": alarm_types,
         "default_city": default_city,
         "show_strassensperren": show_strassensperren,

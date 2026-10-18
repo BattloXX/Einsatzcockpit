@@ -16,6 +16,21 @@
   {% endif %}
 </div>
 
+{% if meine_einheiten %}
+<section class="section">
+  <h3 class="section-title">Meine Einheiten</h3>
+  <div class="incident-cards">
+    {% for einheit in meine_einheiten %}
+    <article class="incident-card" style="border-left:3px solid var(--red,#b71921);">
+      {% if einheit.is_exercise %}<div class="exercise-banner">ÜBUNG</div>{% endif %}
+      <div class="incident-card__address" style="font-weight:600;">Du führst {{ einheit.label }} – {{ einheit.lage_name }}</div>
+      <a class="btn btn--primary btn--sm" href="/einheit?einheit={{ einheit.id }}">Einheitenansicht öffnen</a>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
 {% if active_major_incidents %}
 <section class="section">
   <h3 class="section-title">Großschadenslagen ({{ active_major_incidents|length }})</h3>

@@ -54,6 +54,8 @@ from app.services.einheit_service import (
     _iso_z,
     auftraege_fuer_einheit,
     auftrag_laden,
+    einheiten_fuer_benutzer,
+    kontext_fuer_benutzer,
     kontext_fuer_einheit,
     kontext_fuer_geraet,
     kontext_fuer_zugang,
@@ -119,6 +121,8 @@ def _optionaler_kontext(request: Request, db: Session) -> EinheitKontext | None:
         return kontext_fuer_geraet(db, user, token) if token else None
     if user is not None and (request.headers.get("X-EC-Einheit-Sim") or request.query_params.get("sim")):
         return _simulationskontext(request, db)
+    if user is not None and not getattr(request.state, "is_device", False):
+        return kontext_fuer_benutzer(db, user, _benutzer_einheit_id(request))
     for typ, cookie_name in (("personal", gk_zugang_service.COOKIE), ("qr", gk_zugang_service.QR_COOKIE)):
         cookie = request.cookies.get(cookie_name)
         if not cookie:
@@ -141,6 +145,7 @@ def _einheit_seite(request: Request, db: Session, start_dispatch_id: int | None 
         simulation_fehler = exc
     if ctx is None and user is None:
         return RedirectResponse("/login", status_code=302)
+    benutzer_ohne_einheit = bool(user and not getattr(request.state, "is_device", False) and user.member_id)
     if ctx is None and not getattr(request.state, "is_device", False):
         if simulation_fehler:
             return templates.TemplateResponse(request, "einheit/einheit.html", {
@@ -150,7 +155,8 @@ def _einheit_seite(request: Request, db: Session, start_dispatch_id: int | None 
                 "start_dispatch_id": start_dispatch_id, "kein_kontext": False,
                 "simulation_fehler": simulation_fehler.nachricht,
             }, status_code=simulation_fehler.status_code)
-        return RedirectResponse("/", status_code=302)
+        if not benutzer_ohne_einheit:
+            return RedirectResponse("/", status_code=302)
     vehicle_label = "Fahrzeug/Gerät"
     if getattr(request.state, "is_device", False) and user:
         token_id = getattr(request.state, "device_token_id", None)
@@ -161,6 +167,12 @@ def _einheit_seite(request: Request, db: Session, start_dispatch_id: int | None 
     org_id = ctx.lage.org_id if ctx else getattr(user, "org_id", None)
     if org_id:
         org = db.query(FireDept).filter(FireDept.id == org_id).execution_options(include_all_tenants=True).first()
+    benutzer_einheiten = []
+    if ctx and ctx.quelle == "benutzer":
+        benutzer_einheiten = [
+            {"id": einheit.id, "label": einheit.label, "lage_name": lage.name}
+            for einheit, lage, _leader in einheiten_fuer_benutzer(db, user)
+        ]
     return templates.TemplateResponse(request, "einheit/einheit.html", {
         "org": org, "lage_id": ctx.lage.id if ctx else None, "einheit_id": ctx.einheit.id if ctx else None,
         "einheit_label": ctx.einheit.label if ctx else vehicle_label,
@@ -173,6 +185,9 @@ def _einheit_seite(request: Request, db: Session, start_dispatch_id: int | None 
         "gk_zugang": bool(ctx and ctx.quelle == "zugang"),
         "gk_name": ctx.leader.display_name if ctx and ctx.leader else "",
         "zugang_qr": bool(ctx and ctx.zugang and ctx.zugang.typ == "qr"),
+        "benutzer_einheit_id": ctx.einheit.id if ctx and ctx.quelle == "benutzer" else None,
+        "benutzer_einheiten": benutzer_einheiten if len(benutzer_einheiten) > 1 else [],
+        "benutzer_ohne_einheit": benutzer_ohne_einheit,
         "start_dispatch_id": start_dispatch_id, "kein_kontext": ctx is None, "simulation_fehler": None,
     })
 
@@ -192,6 +207,16 @@ def _fehler(status: int, code: str, details: dict | None = None) -> NoReturn:
     if details:
         body["details"] = details
     raise HTTPException(status_code=status, detail=body)
+
+
+def _benutzer_einheit_id(request: Request) -> int | None:
+    wert = request.headers.get("X-EC-Einheit") or request.query_params.get("einheit")
+    if wert is None:
+        return None
+    try:
+        return int(wert)
+    except ValueError as exc:
+        raise EinheitKontextFehler(404, "einheit_nicht_gefunden", "Einheit nicht gefunden") from exc
 
 
 def _antwort_exc(exc: HTTPException) -> JSONResponse:
@@ -266,6 +291,16 @@ def einheit_kontext(request: Request, db: Session = Depends(get_db)) -> EinheitK
             _fehler(403, "kein_einheitenkontext")
         return ctx
 
+    try:
+        benutzer_einheit_id = _benutzer_einheit_id(request)
+    except EinheitKontextFehler as exc:
+        _fehler(exc.status_code, exc.code)
+    ctx = kontext_fuer_benutzer(db, user, benutzer_einheit_id)
+    if ctx:
+        return ctx
+    if request.headers.get("X-EC-Einheit") is not None:
+        _fehler(403, "kein_einheitenkontext")
+
     principal = None
     grund = None
     for typ, cookie in (("personal", request.cookies.get(gk_zugang_service.COOKIE)), ("qr", request.cookies.get(gk_zugang_service.QR_COOKIE))):
@@ -300,11 +335,11 @@ def _verleih_aktiv(db: Session, ctx: EinheitKontext) -> None:
 
 
 def einheit_darf(aktion: str, ctx: EinheitKontext, db: Session) -> None:
-    if ctx.quelle != "zugang":
+    if ctx.quelle not in {"zugang", "benutzer"}:
         return
     if aktion not in ZUGANG_AKTIONEN:
         _fehler(403, "zugang_aktion_nicht_erlaubt")
-    if ctx.zugang and ctx.zugang.typ == "qr" and aktion.startswith("ressource_"):
+    if ctx.quelle == "zugang" and ctx.zugang and ctx.zugang.typ == "qr" and aktion.startswith("ressource_"):
         _fehler(403, "zugang_aktion_nicht_erlaubt")
     if aktion.startswith("ressource_") and not gk_zugang_service.org_einstellungen(db, ctx.org_id).gk_zugang_ressource_pflegen:
         _fehler(403, "zugang_aktion_nicht_erlaubt")
@@ -344,7 +379,7 @@ def fuehre_aktion_aus(
             vorhanden.device_token_id == (ctx.device_token.id if ctx.device_token else None)
             and vorhanden.zugang_id == (ctx.zugang.id if ctx.zugang else None)
         )
-        if ctx.simulation:
+        if ctx.simulation or ctx.quelle == "benutzer":
             gleich = vorhanden.quelle == ctx.quelle and vorhanden.einheit_id == ctx.einheit.id
         if not gleich:
             return {"code": "client_uuid_vergeben"}, 409
@@ -389,7 +424,7 @@ def fuehre_aktion_aus(
 
 
 def _autor(request: Request, ctx: EinheitKontext) -> str | None:
-    if ctx.quelle == "zugang":
+    if ctx.quelle in {"zugang", "benutzer"}:
         return ctx.akteur_name
     if ctx.simulation:
         return f"{request.state.user.display_name} (Simulation {ctx.einheit.label})"
@@ -416,7 +451,7 @@ def zustand(request: Request, ctx: EinheitKontext = Depends(einheit_kontext), db
     data["schreibbar"] = not (ctx.simulation and not ctx.lage.is_exercise)
     data["kann_ressource_pflegen"] = (
         data["schreibbar"]
-        and ctx.quelle == "zugang"
+        and ctx.quelle in {"zugang", "benutzer"}
         and gk_zugang_service.org_einstellungen(db, ctx.org_id).gk_zugang_ressource_pflegen
     )
     data["ressource"] = _ressourcen_daten(db, ctx)
@@ -997,7 +1032,7 @@ async def foto(
             existing.device_token_id == (ctx.device_token.id if ctx.device_token else None)
             and existing.zugang_id == (ctx.zugang.id if ctx.zugang else None)
         )
-        if ctx.simulation:
+        if ctx.simulation or ctx.quelle == "benutzer":
             same = existing.quelle == ctx.quelle and existing.einheit_id == ctx.einheit.id
         return JSONResponse(
             json.loads(existing.antwort_json or "{}") if same else {"code": "client_uuid_vergeben"},
@@ -1216,7 +1251,7 @@ async def material_foto(
             existing.device_token_id == (ctx.device_token.id if ctx.device_token else None)
             and existing.zugang_id == (ctx.zugang.id if ctx.zugang else None)
         )
-        if ctx.simulation:
+        if ctx.simulation or ctx.quelle == "benutzer":
             same = existing.quelle == ctx.quelle and existing.einheit_id == ctx.einheit.id
         return JSONResponse(
             json.loads(existing.antwort_json or "{}") if same else {"code": "client_uuid_vergeben"},

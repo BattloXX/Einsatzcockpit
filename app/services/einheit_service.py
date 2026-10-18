@@ -31,7 +31,7 @@ from app.models.user import DeviceToken
 from app.services import resource_service
 from app.services.resource_service import STATUS_BEREITGESTELLT, STATUS_IM_EINSATZ, dispatch_aktiv_filter
 
-Quelle = Literal["tablet", "funk", "mcp", "simulation", "zugang"]
+Quelle = Literal["tablet", "funk", "mcp", "simulation", "zugang", "benutzer"]
 
 # Gesamtansicht (E1): Diese Routen zeigen den Einsatz, ohne eine Bedienung oder
 # Token-Ausgabe zu ermoeglichen. Die Namen sind bewusst an die Endpunktfunktionen
@@ -198,6 +198,8 @@ class EinheitKontext:
             return f"QR-Zugang {self.einheit.label}"
         if self.quelle == "zugang" and self.leader:
             return f"{self.leader.display_name} (GK {self.einheit.label})"
+        if self.quelle == "benutzer" and self.leader:
+            return f"{self.leader.display_name} (GK {self.einheit.label})"
         return None
 
     @property
@@ -206,6 +208,8 @@ class EinheitKontext:
             return f"d:{self.device_token.id}"
         if self.zugang:
             return f"z:{self.zugang.id}"
+        if self.quelle == "benutzer" and self.user_id is not None:
+            return f"u:{self.user_id}"
         return f"s:{self.user_id}" if self.user_id is not None else "s:0"
 
 
@@ -252,6 +256,45 @@ def kontext_fuer_geraet(
         org_id=user.org_id,
         quelle="tablet",
         user_id=user.id,
+    )
+
+
+def einheiten_fuer_benutzer(db: Session, user) -> list[tuple[LageEinheit, MajorIncident, LageEinheitLeader]]:
+    """Gibt die aktiven Einheiten zurück, die das verknüpfte Mitglied derzeit führt."""
+    if user.is_device or not user.org_id or not user.member_id:
+        return []
+    rows = (
+        db.query(LageEinheit, MajorIncident, LageEinheitLeader)
+        .join(LageEinheitLeader, LageEinheit.leader_assignment_id == LageEinheitLeader.id)
+        .join(MajorIncident, MajorIncident.id == LageEinheit.lage_id)
+        .filter(
+            LageEinheitLeader.member_id == user.member_id,
+            LageEinheitLeader.end_at.is_(None),
+            LageEinheitLeader.rolle == "fuehrer",
+            LageEinheit.status.in_((STATUS_BEREITGESTELLT, STATUS_IM_EINSATZ)),
+            MajorIncident.status == MajorIncidentStatus.active,
+            MajorIncident.org_id == user.org_id,
+        )
+        .order_by(MajorIncident.started_at.desc(), MajorIncident.id.desc())
+        .all()
+    )
+    return [(einheit, lage, leader) for einheit, lage, leader in rows]
+
+
+def kontext_fuer_benutzer(db: Session, user, einheit_id: int | None = None) -> EinheitKontext | None:
+    """Löst den live geprüften Einheiten-Kontext eines verknüpften Benutzers auf."""
+    einheiten = einheiten_fuer_benutzer(db, user)
+    if einheit_id is not None:
+        result = next((row for row in einheiten if row[0].id == einheit_id), None)
+    else:
+        result = einheiten[0] if einheiten else None
+    if result is None:
+        return None
+    einheit, lage, leader = result
+    return EinheitKontext(
+        device_token=None,
+        vehicle=db.get(VehicleMaster, einheit.vehicle_id) if einheit.vehicle_id else None,
+        einheit=einheit, lage=lage, org_id=user.org_id, quelle="benutzer", leader=leader, user_id=user.id,
     )
 
 
