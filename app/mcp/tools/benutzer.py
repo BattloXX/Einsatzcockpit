@@ -135,7 +135,7 @@ async def benutzer_liste(context: MCPContext, limit: int = 50, seite: int = 1) -
     required_roles=BENUTZER_ROLLEN,
 )
 async def benutzer_mitglied_abgleichen(context: MCPContext) -> dict[str, object]:
-    return benutzer_mitglied_service.abgleichen(context.db, context.org_id)
+    return {key: value for key, value in benutzer_mitglied_service.abgleichen(context.db, context.org_id).items()}
 
 
 @register_tool(
@@ -329,6 +329,8 @@ async def benutzer_mitglied_verknuepfen(
     if result["geaendert"]:
         context.db.commit()
     user = context.db.get(User, benutzer_id)
+    if user is None:
+        raise ValueError("Benutzer nicht mehr vorhanden.")
     return result | {"benutzer": _listen_payload(context, user)}
 
 
@@ -382,7 +384,7 @@ async def benutzer_mitglieder_bulk_verknuepfen(
         except SQLAlchemyError:
             context.db.rollback()
             result = pair | {"status": "fehlgeschlagen", "fehler": "Datenbankfehler. Bitte erneut versuchen."}
-        counts[result["status"]] += 1
+        counts[str(result["status"])] += 1
         results.append(result)
     return {"ergebnisse": results, "zusammenfassung": counts, "dry_run": dry_run}
 

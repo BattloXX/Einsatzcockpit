@@ -12,7 +12,7 @@ from app.models.user import User
 
 
 def name_normalisieren(value: str | None) -> str:
-    value = (value or "").casefold().translate(str.maketrans({"ä": "ae", "ö": "oe", "ü": "ue"}))
+    value = (value or "").casefold().replace("ä", "ae").replace("ö", "oe").replace("ü", "ue")
     value = "".join(c for c in unicodedata.normalize("NFKD", value) if not unicodedata.combining(c))
     return " ".join(re.findall(r"[^\W_]+", value))
 
@@ -37,7 +37,9 @@ def abgleichen(db: Session, org_id: int) -> dict[str, list[dict]]:
     linked = {row[0] for row in db.query(User.member_id).filter(
         User.org_id == org_id, User.member_id.is_not(None),
     ).all()}
-    indexes = {key: defaultdict(set) for key in ("name", "email", "telefon")}
+    indexes: dict[str, defaultdict[str, set[int]]] = {
+        key: defaultdict(set) for key in ("name", "email", "telefon")
+    }
     member_by_id = {m.id: m for m in members}
     for member in members:
         values = {
