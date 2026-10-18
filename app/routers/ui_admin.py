@@ -230,7 +230,11 @@ async def create_user(
     current_user = request.state.user
     email_clean = (email or "").strip().lower() or None
     if email_clean:
-        existing = db.query(User).filter(User.email == email_clean).first()
+        # E-Mail-Adressen sind systemweit eindeutig, nicht nur innerhalb der Org.
+        existing = (
+            db.query(User.id).execution_options(include_all_tenants=True)
+            .filter(User.email == email_clean).first()
+        )
         if existing:
             return RedirectResponse(
                 "/admin/benutzer?error=email_exists", status_code=303,
