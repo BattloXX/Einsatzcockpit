@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Reques
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app.config import settings as app_settings
+from app.core.async_bridge import run_async
 from app.core.audit import write_audit
 from app.core.permissions import (
     has_role,
@@ -249,7 +250,7 @@ def settings_page(
 
 
 @router.post("/settings/org", response_class=HTMLResponse)
-async def save_org_settings(
+def save_org_settings(
     request: Request,
     db=Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin")),
@@ -310,7 +311,7 @@ async def save_org_settings(
     effective_org_id = target_org_id if is_sysadmin and target_org_id else user.org_id
     if not effective_org_id:
         return RedirectResponse("/admin/settings", status_code=303)
-    form = await request.form()
+    form = run_async(request.form)
 
     org = db.query(FireDept).filter(FireDept.id == effective_org_id).first()
     if org and org_name:
@@ -370,7 +371,7 @@ async def save_org_settings(
         if ext not in ALLOWED_LOGO_EXTS:
             upload_error = "Dateityp nicht erlaubt (nur PNG/JPG/SVG/WEBP)"
         else:
-            data = await logo.read()
+            data = run_async(logo.read)
             ok, msg = _validate_logo_bytes(data, ext)
             if not ok:
                 upload_error = msg
@@ -776,7 +777,7 @@ async def save_org_settings(
 
 
 @router.post("/settings/org/logo/reset")
-async def reset_org_logo(
+def reset_org_logo(
     request: Request,
     db=Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin")),
@@ -806,7 +807,7 @@ async def reset_org_logo(
 
 
 @router.post("/settings/abfluss/add")
-async def abfluss_station_add(
+def abfluss_station_add(
     request: Request,
     db=Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin")),
@@ -844,7 +845,7 @@ async def abfluss_station_add(
 
 
 @router.post("/settings/abfluss/remove")
-async def abfluss_station_remove(
+def abfluss_station_remove(
     request: Request,
     db=Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin")),
@@ -1010,7 +1011,7 @@ def weather_infoscreen_settings_page(
 
 
 @router.post("/settings/wetter/dashboard-token/neu", response_class=HTMLResponse)
-async def weather_dashboard_token_create(
+def weather_dashboard_token_create(
     request: Request,
     db=Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin")),
@@ -1058,7 +1059,7 @@ async def weather_dashboard_token_create(
 
 
 @router.post("/settings/wetter/dashboard-token/{token_id}/loeschen")
-async def weather_dashboard_token_delete(
+def weather_dashboard_token_delete(
     token_id: int,
     request: Request,
     db=Depends(get_db),
@@ -1088,7 +1089,7 @@ async def weather_dashboard_token_delete(
 
 
 @router.post("/settings/wetter/weather-toggle", response_class=HTMLResponse)
-async def weather_toggle(
+def weather_toggle(
     request: Request,
     db=Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin")),
@@ -1168,7 +1169,7 @@ def statistik_settings_page(
 
 
 @router.post("/settings/statistik/infoscreen-toggle", response_class=HTMLResponse)
-async def statistik_toggle(
+def statistik_toggle(
     request: Request,
     db=Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin")),
@@ -1193,7 +1194,7 @@ async def statistik_toggle(
 
 
 @router.post("/settings/statistik/dashboard-token/neu", response_class=HTMLResponse)
-async def statistik_token_create(
+def statistik_token_create(
     request: Request,
     db=Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin")),
@@ -1225,7 +1226,7 @@ async def statistik_token_create(
 
 
 @router.post("/settings/statistik/dashboard-token/{token_id}/loeschen", response_class=HTMLResponse)
-async def statistik_token_delete(
+def statistik_token_delete(
     token_id: int,
     request: Request,
     db=Depends(get_db),
@@ -1257,7 +1258,7 @@ async def statistik_token_delete(
 
 
 @router.post("/settings/wetter/infoscreen-hours", response_class=HTMLResponse)
-async def weather_infoscreen_hours_save(
+def weather_infoscreen_hours_save(
     request: Request,
     db=Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin")),
@@ -1291,7 +1292,7 @@ async def weather_infoscreen_hours_save(
 
 
 @router.post("/settings/wetter/kachelmann")
-async def weather_kachelmann_save(
+def weather_kachelmann_save(
     request: Request,
     db=Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin", "system_admin")),
@@ -1410,7 +1411,7 @@ def _alert_logs_for_template(db, org_id: int, limit: int = 20) -> list:
 
 
 @router.post("/settings/wetter/alert-channels")
-async def weather_alert_channels_save(
+def weather_alert_channels_save(
     request: Request,
     db=Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin")),
@@ -1452,7 +1453,7 @@ async def weather_alert_channels_save(
 
 
 @router.post("/settings/wetter/alert-rule/{rule_id}")
-async def weather_alert_rule_save(
+def weather_alert_rule_save(
     request: Request,
     rule_id: int,
     db=Depends(get_db),
@@ -1588,7 +1589,7 @@ def _parse_coord(raw: str | None, lo: float, hi: float) -> float | None:
 
 
 @router.post("/settings/weather/add", response_class=HTMLResponse)
-async def weather_station_add(
+def weather_station_add(
     request: Request,
     db=Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin")),
@@ -1633,7 +1634,7 @@ async def weather_station_add(
 
 
 @router.post("/settings/weather/regenerate", response_class=HTMLResponse)
-async def weather_station_regenerate(
+def weather_station_regenerate(
     request: Request,
     db=Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin")),
@@ -1662,7 +1663,7 @@ async def weather_station_regenerate(
 
 
 @router.post("/settings/weather/remove")
-async def weather_station_remove(
+def weather_station_remove(
     request: Request,
     db=Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin")),
@@ -2728,7 +2729,7 @@ def gsl_einstellungen(
 
 
 @router.post("/gsl-einstellungen", response_class=HTMLResponse)
-async def gsl_einstellungen_save(
+def gsl_einstellungen_save(
     request: Request,
     db=Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin")),
@@ -2737,7 +2738,7 @@ async def gsl_einstellungen_save(
     if not org_id:
         raise HTTPException(403)
 
-    form = await request.form()
+    form = run_async(request.form)
     org_settings = db.query(OrgSettings).filter_by(org_id=org_id).first()
     if not org_settings:
         raise HTTPException(404, "Org-Settings nicht gefunden")

@@ -6,7 +6,6 @@ wie die übrigen Einsatz-Unterseiten in ui_incident.py.
 """
 from __future__ import annotations
 
-import asyncio
 import json
 from datetime import UTC, datetime
 
@@ -14,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.async_bridge import run_async
 from app.core.permissions import can_access_incident, has_role
 from app.core.templating import templates
 from app.db import get_db
@@ -157,7 +157,7 @@ def _feature_query(db: Session, incident_id: int):
 # ── Seite ──────────────────────────────────────────────────────────────────────
 
 @router.get("/einsatz/{incident_id}/lagefuehrung", response_class=HTMLResponse)
-async def lagefuehrung_seite(
+def lagefuehrung_seite(
     incident_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -235,7 +235,7 @@ _LFT_DRUCK_VALID_LAYERS = {
 
 
 @router.get("/einsatz/{incident_id}/lagefuehrung/karte/druck", response_class=HTMLResponse)
-async def lagefuehrung_karte_druck(
+def lagefuehrung_karte_druck(
     incident_id: int,
     request: Request,
     min_lat: float,
@@ -271,7 +271,7 @@ async def lagefuehrung_karte_druck(
 # ── Auto-Layer: Fahrzeuge ───────────────────────────────────────────────────────
 
 @router.get("/einsatz/{incident_id}/lagefuehrung/vehicles.json")
-async def lagefuehrung_vehicles(
+def lagefuehrung_vehicles(
     incident_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -324,7 +324,7 @@ async def lagefuehrung_vehicles(
 
 
 @router.post("/einsatz/{incident_id}/lagefuehrung/vehicles/{iv_id}/pin")
-async def lagefuehrung_vehicle_pin(
+def lagefuehrung_vehicle_pin(
     incident_id: int,
     iv_id: int,
     request: Request,
@@ -351,7 +351,7 @@ async def lagefuehrung_vehicle_pin(
     if not iv:
         raise HTTPException(404, "Fahrzeug nicht gefunden")
 
-    data = await request.json()
+    data = run_async(request.json)
     try:
         lat = float(data["lat"])
         lng = float(data["lng"])
@@ -376,14 +376,14 @@ async def lagefuehrung_vehicle_pin(
     _log_event(db, incident, user, "vehicle.pinned", "vehicle", iv.id, {"lat": lat, "lng": lng})
     db.commit()
 
-    await manager.broadcast(incident_id, {"type": "lagefuehrung.vehicle.pinned", "iv_id": iv.id})
+    run_async(manager.broadcast, incident_id, {"type": "lagefuehrung.vehicle.pinned", "iv_id": iv.id})
     return JSONResponse({"ok": True})
 
 
 # ── Auto-Layer: Objekt ──────────────────────────────────────────────────────────
 
 @router.get("/einsatz/{incident_id}/lagefuehrung/objekte.json")
-async def lagefuehrung_objekte(
+def lagefuehrung_objekte(
     incident_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -489,7 +489,7 @@ async def lagefuehrung_objekte(
 # ── Auto-Layer: Wasserstellen ────────────────────────────────────────────────────
 
 @router.get("/einsatz/{incident_id}/lagefuehrung/wasserstellen.json")
-async def lagefuehrung_wasserstellen(
+def lagefuehrung_wasserstellen(
     incident_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -515,7 +515,7 @@ async def lagefuehrung_wasserstellen(
 # ── Auto-Layer: Förderstrecke ────────────────────────────────────────────────────
 
 @router.get("/einsatz/{incident_id}/lagefuehrung/foerderstrecken.json")
-async def lagefuehrung_foerderstrecken(
+def lagefuehrung_foerderstrecken(
     incident_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -671,7 +671,7 @@ async def lagefuehrung_ausbreitung(
 # ── Chronologie ──────────────────────────────────────────────────────────────────
 
 @router.get("/einsatz/{incident_id}/lagefuehrung/events.json")
-async def lagefuehrung_events(
+def lagefuehrung_events(
     incident_id: int,
     request: Request,
     limit: int = 50,
@@ -699,7 +699,7 @@ async def lagefuehrung_events(
 # ── Manuelle Features (Zeichnungen/Marker/Text) ─────────────────────────────────
 
 @router.get("/einsatz/{incident_id}/lagefuehrung/features.json")
-async def lagefuehrung_features_list(
+def lagefuehrung_features_list(
     incident_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -714,7 +714,7 @@ async def lagefuehrung_features_list(
 
 
 @router.post("/einsatz/{incident_id}/lagefuehrung/features")
-async def lagefuehrung_feature_create(
+def lagefuehrung_feature_create(
     incident_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -724,7 +724,7 @@ async def lagefuehrung_feature_create(
     incident = _incident_or_404(incident_id, db)
     _check_edit_access(user, incident, db)
 
-    data = await request.json()
+    data = run_async(request.json)
     typ = (data.get("typ") or "zeichnung").strip()
     if typ not in LAGEFUEHRUNG_FEATURE_TYPEN:
         raise HTTPException(400, "Unbekannter Feature-Typ")
@@ -754,12 +754,12 @@ async def lagefuehrung_feature_create(
     db.commit()
 
     out = _feature_dict(feature)
-    await manager.broadcast(incident_id, {"type": "lagefuehrung.feature.created", "feature": out})
+    run_async(manager.broadcast, incident_id, {"type": "lagefuehrung.feature.created", "feature": out})
     return JSONResponse(out, status_code=201)
 
 
 @router.patch("/einsatz/{incident_id}/lagefuehrung/features/{feature_id}")
-async def lagefuehrung_feature_update(
+def lagefuehrung_feature_update(
     incident_id: int,
     feature_id: int,
     request: Request,
@@ -774,7 +774,7 @@ async def lagefuehrung_feature_update(
     if not feature:
         raise HTTPException(404, "Feature nicht gefunden")
 
-    data = await request.json()
+    data = run_async(request.json)
     expected_version = data.get("version")
     if expected_version is not None and int(expected_version) != feature.version:
         raise HTTPException(409, "Feature wurde zwischenzeitlich von einem anderen Nutzer geändert")
@@ -798,12 +798,12 @@ async def lagefuehrung_feature_update(
     db.commit()
 
     out = _feature_dict(feature)
-    await manager.broadcast(incident_id, {"type": "lagefuehrung.feature.updated", "feature": out})
+    run_async(manager.broadcast, incident_id, {"type": "lagefuehrung.feature.updated", "feature": out})
     return JSONResponse(out)
 
 
 @router.delete("/einsatz/{incident_id}/lagefuehrung/features/{feature_id}")
-async def lagefuehrung_feature_delete(
+def lagefuehrung_feature_delete(
     incident_id: int,
     feature_id: int,
     request: Request,
@@ -829,14 +829,14 @@ async def lagefuehrung_feature_delete(
     _log_event(db, incident, user, "feature.deleted", "feature", feature.id, vorher)
     db.commit()
 
-    await manager.broadcast(incident_id, {"type": "lagefuehrung.feature.deleted", "feature_id": feature.id})
+    run_async(manager.broadcast, incident_id, {"type": "lagefuehrung.feature.deleted", "feature_id": feature.id})
     return Response(status_code=204)
 
 
 # ── Rollen: Lageführung übernehmen ──────────────────────────────────────────────
 
 @router.post("/einsatz/{incident_id}/lagefuehrung/uebernehmen")
-async def lagefuehrung_uebernehmen(
+def lagefuehrung_uebernehmen(
     incident_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -853,7 +853,7 @@ async def lagefuehrung_uebernehmen(
     })
     db.commit()
 
-    await manager.broadcast(incident_id, {
+    run_async(manager.broadcast, incident_id, {
         "type": "lagefuehrung.fuehrer_changed",
         "user_id": user.id,
         "name": user.display_name,
@@ -869,7 +869,7 @@ def _require_fuehrer(user: User, incident: Incident) -> None:
 
 
 @router.post("/einsatz/{incident_id}/lagefuehrung/berechtigung/{target_user_id}")
-async def lagefuehrung_berechtigung_erteilen(
+def lagefuehrung_berechtigung_erteilen(
     incident_id: int,
     target_user_id: int,
     request: Request,
@@ -897,7 +897,7 @@ async def lagefuehrung_berechtigung_erteilen(
         })
         db.commit()
 
-    await manager.broadcast(incident_id, {
+    run_async(manager.broadcast, incident_id, {
         "type": "lagefuehrung.berechtigung.changed",
         "user_id": target_user_id, "granted": True,
     })
@@ -905,7 +905,7 @@ async def lagefuehrung_berechtigung_erteilen(
 
 
 @router.delete("/einsatz/{incident_id}/lagefuehrung/berechtigung/{target_user_id}")
-async def lagefuehrung_berechtigung_entziehen(
+def lagefuehrung_berechtigung_entziehen(
     incident_id: int,
     target_user_id: int,
     request: Request,
@@ -930,7 +930,7 @@ async def lagefuehrung_berechtigung_entziehen(
         _log_event(db, incident, user, "berechtigung.entzogen", "user", target_user_id, None)
         db.commit()
 
-    await manager.broadcast(incident_id, {
+    run_async(manager.broadcast, incident_id, {
         "type": "lagefuehrung.berechtigung.changed",
         "user_id": target_user_id, "granted": False,
     })
@@ -940,7 +940,7 @@ async def lagefuehrung_berechtigung_entziehen(
 # ── Momentaufnahme ("Lage einfrieren", Phase 3, F-Snapshot) ─────────────────────
 
 @router.post("/einsatz/{incident_id}/lagefuehrung/momentaufnahme")
-async def lagefuehrung_momentaufnahme_erstellen(
+def lagefuehrung_momentaufnahme_erstellen(
     incident_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -957,7 +957,7 @@ async def lagefuehrung_momentaufnahme_erstellen(
     org_id: int = incident.primary_org_id
 
     try:
-        data = await request.json()
+        data = run_async(request.json)
     except Exception:
         data = {}
     label = (data.get("label") or "").strip() or None
@@ -974,7 +974,7 @@ async def lagefuehrung_momentaufnahme_erstellen(
             incident, ctx["features"], ctx["vehicles_positions"], ctx["objekt_marker"],
         )
 
-    png_bytes = await asyncio.to_thread(_render)
+    png_bytes = _render()
     if not png_bytes:
         raise HTTPException(400, "Momentaufnahme konnte nicht gerendert werden")
 
@@ -994,7 +994,7 @@ async def lagefuehrung_momentaufnahme_erstellen(
     _log_event(db, incident, user, "snapshot.erstellt", "snapshot", snapshot.id, {"label": label})
     db.commit()
 
-    await manager.broadcast(incident_id, {"type": "lagefuehrung.chronologie_changed"})
+    run_async(manager.broadcast, incident_id, {"type": "lagefuehrung.chronologie_changed"})
     return JSONResponse({
         "id": snapshot.id,
         "label": snapshot.label,
@@ -1003,7 +1003,7 @@ async def lagefuehrung_momentaufnahme_erstellen(
 
 
 @router.get("/einsatz/{incident_id}/lagefuehrung/momentaufnahme/{snapshot_id}/bild")
-async def lagefuehrung_momentaufnahme_bild(
+def lagefuehrung_momentaufnahme_bild(
     incident_id: int,
     snapshot_id: int,
     request: Request,
@@ -1033,7 +1033,7 @@ async def lagefuehrung_momentaufnahme_bild(
 # ── PDF-Lagebericht ──────────────────────────────────────────────────────────────
 
 @router.get("/einsatz/{incident_id}/lagefuehrung/pdf")
-async def lagefuehrung_pdf(
+def lagefuehrung_pdf(
     incident_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -1046,9 +1046,8 @@ async def lagefuehrung_pdf(
     from app.services.lagefuehrung_pdf_service import render_lagefuehrung_pdf
 
     # render_lagefuehrung_pdf rendert die Kartenkachel synchron via staticmap/requests —
-    # in einem Thread ausfuehren, damit der Event-Loop nicht blockiert (Muster
-    # staticmap_service.py-Docstring).
-    pdf_bytes = await asyncio.to_thread(render_lagefuehrung_pdf, incident, db, str(request.base_url))
+    # die Route ist sync und laeuft damit bereits im Threadpool, nicht auf dem Event-Loop.
+    pdf_bytes = render_lagefuehrung_pdf(incident, db, str(request.base_url))
     filename = f"lagebericht_einsatz_{incident.id}.pdf"
     return Response(
         content=pdf_bytes,

@@ -8,6 +8,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPExcepti
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
+from app.core.async_bridge import run_async
 from app.core.audit import write_audit
 from app.core.permissions import require_manual_sms_sender, require_role
 from app.core.templating import templates
@@ -62,7 +63,7 @@ def _get_or_create_sms_config(db: Session, org_id: int) -> OrgSmsConfig:
 
 
 @router.get("/sms-provider", response_class=HTMLResponse)
-async def sms_provider_page(
+def sms_provider_page(
     request: Request, db: Session = Depends(get_db), _=Depends(require_role("admin")),
 ):
     user = request.state.user
@@ -75,7 +76,7 @@ async def sms_provider_page(
 
 
 @router.post("/sms-provider/speichern")
-async def sms_provider_save(
+def sms_provider_save(
     request: Request,
     primary_provider: str = Form("gateway"),
     fallback_provider: str = Form(""),
@@ -170,7 +171,7 @@ def _active_members(db: Session, org_id: int) -> list[Member]:
 # ── SMS-Gruppen ───────────────────────────────────────────────────────────────
 
 @router.get("/gruppen", response_class=HTMLResponse)
-async def sms_groups_page(
+def sms_groups_page(
     request: Request,
     db: Session = Depends(get_db),
     _=Depends(require_role("admin")),
@@ -189,7 +190,7 @@ async def sms_groups_page(
 
 
 @router.post("/gruppen/neu")
-async def sms_group_create(
+def sms_group_create(
     request: Request,
     name: str = Form(...),
     description: str = Form(""),
@@ -216,7 +217,7 @@ async def sms_group_create(
 
 
 @router.post("/gruppen/{group_id}/edit")
-async def sms_group_edit(
+def sms_group_edit(
     group_id: int,
     request: Request,
     name: str = Form(...),
@@ -238,7 +239,7 @@ async def sms_group_edit(
 
 
 @router.post("/gruppen/{group_id}/loeschen")
-async def sms_group_delete(
+def sms_group_delete(
     group_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -257,7 +258,7 @@ async def sms_group_delete(
 
 
 @router.post("/gruppen/{group_id}/mitglieder")
-async def sms_group_set_members(
+def sms_group_set_members(
     group_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -270,7 +271,7 @@ async def sms_group_set_members(
     if not grp or grp.org_id != org_id:
         raise HTTPException(status_code=404)
 
-    form = await request.form()
+    form = run_async(request.form)
     selected_ids = {int(v) for k, v in form.multi_items() if k == "member_id"}  # type: ignore[arg-type]
 
     # Alle bestehenden Eintraege loeschen und neu anlegen
@@ -303,7 +304,7 @@ def gruppen_excel_import_redirect():
 
 
 @router.post("/gruppen/excel-import")
-async def import_gruppen_excel(
+def import_gruppen_excel(
     request: Request,
     file: UploadFile = File(...),
     target_group_id: int = Form(0),
@@ -326,7 +327,7 @@ async def import_gruppen_excel(
     except ImportError:
         return RedirectResponse("/admin/gruppen?error=openpyxl_missing", status_code=303)
 
-    raw = await file.read()
+    raw = run_async(file.read)
     if not raw:
         return RedirectResponse("/admin/gruppen?error=empty_file", status_code=303)
 
@@ -489,7 +490,7 @@ async def import_gruppen_excel(
 # ── Einsatzinfo-SMS-Konfiguration ─────────────────────────────────────────────
 
 @router.get("/einsatzinfo-sms", response_class=HTMLResponse)
-async def einsatzinfo_sms_page(
+def einsatzinfo_sms_page(
     request: Request,
     db: Session = Depends(get_db),
     _=Depends(require_role("admin")),
@@ -551,7 +552,7 @@ async def einsatzinfo_sms_page(
 
 
 @router.post("/einsatzinfo-sms/einstellungen")
-async def einsatzinfo_sms_save_settings(
+def einsatzinfo_sms_save_settings(
     request: Request,
     enabled: bool = Form(False),
     send_exercise: bool = Form(False),
@@ -575,7 +576,7 @@ async def einsatzinfo_sms_save_settings(
 
 
 @router.post("/einsatzinfo-sms/basis-verteiler")
-async def einsatzinfo_sms_save_basis(
+def einsatzinfo_sms_save_basis(
     request: Request,
     db: Session = Depends(get_db),
     _=Depends(require_role("admin")),
@@ -584,7 +585,7 @@ async def einsatzinfo_sms_save_basis(
     user = request.state.user
     org_id = _require_org(user)
 
-    form = await request.form()
+    form = run_async(request.form)
     group_ids = {int(v) for k, v in form.multi_items() if k == "group_id"}  # type: ignore[arg-type]
     member_ids = {int(v) for k, v in form.multi_items() if k == "member_id"}  # type: ignore[arg-type]
 
@@ -606,7 +607,7 @@ async def einsatzinfo_sms_save_basis(
 
 
 @router.post("/einsatzinfo-sms/stichwort/{alarm_type_id}")
-async def einsatzinfo_sms_save_stichwort(
+def einsatzinfo_sms_save_stichwort(
     alarm_type_id: int,
     request: Request,
     template_override: str = Form(""),
@@ -625,7 +626,7 @@ async def einsatzinfo_sms_save_stichwort(
     at.einsatzinfo_sms_template = template_override.strip() or None
 
     # Empfaenger-Eintraege ersetzen
-    form = await request.form()
+    form = run_async(request.form)
     group_ids = {int(v) for k, v in form.multi_items() if k == "group_id"}  # type: ignore[arg-type]
     member_ids = {int(v) for k, v in form.multi_items() if k == "member_id"}  # type: ignore[arg-type]
 
@@ -649,7 +650,7 @@ async def einsatzinfo_sms_save_stichwort(
 # ── Manueller SMS-Versand ─────────────────────────────────────────────────────
 
 @router.get("/sms-senden", response_class=HTMLResponse)
-async def sms_send_page(
+def sms_send_page(
     request: Request,
     db: Session = Depends(get_db),
     _=Depends(require_role("admin")),
@@ -681,7 +682,7 @@ async def sms_send_page(
 
 
 @router.get("/sms-senden/{log_id}/details", response_class=HTMLResponse)
-async def sms_send_details(
+def sms_send_details(
     log_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -710,7 +711,7 @@ async def sms_send_details(
 
 
 @router.get("/sms-senden/{log_id}/status", response_class=HTMLResponse)
-async def sms_send_status(
+def sms_send_status(
     log_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -729,7 +730,7 @@ async def sms_send_status(
 
 
 @router.post("/sms-senden/senden")
-async def sms_send_execute(
+def sms_send_execute(
     request: Request,
     background_tasks: BackgroundTasks,
     text: str = Form(...),
@@ -747,7 +748,7 @@ async def sms_send_execute(
     from app.services.sms_service import sms_available
     if not sms_available(org_id, db):
         return RedirectResponse("/admin/sms-senden?error=no_provider", status_code=303)
-    form = await request.form()
+    form = run_async(request.form)
 
     # Empfaenger aus Formular zusammenstellen
     import re as _re
@@ -834,7 +835,7 @@ def _forward_rules_for_org(db: Session, org_id: int) -> list[SmsForwardRule]:
 
 
 @router.get("/sms-empfang", response_class=HTMLResponse)
-async def sms_empfang_page(
+def sms_empfang_page(
     request: Request,
     db: Session = Depends(get_db),
     _=Depends(require_role("admin")),
@@ -866,7 +867,7 @@ async def sms_empfang_page(
 
 
 @router.post("/sms-empfang/einstellungen")
-async def sms_empfang_save_settings(
+def sms_empfang_save_settings(
     request: Request,
     enabled: bool = Form(False),
     teams_webhook_url: str = Form(""),
@@ -901,7 +902,7 @@ def _apply_rule_targets(db: Session, rule: SmsForwardRule, form) -> None:
 
 
 @router.post("/sms-empfang/regel/neu")
-async def sms_forward_rule_create(
+def sms_forward_rule_create(
     request: Request,
     name: str = Form(...),
     match_type: str = Form("exact"),
@@ -938,7 +939,7 @@ async def sms_forward_rule_create(
     db.add(rule)
     db.flush()
 
-    form = await request.form()
+    form = run_async(request.form)
     _apply_rule_targets(db, rule, form)
 
     write_audit(db, "admin.sms_forward_rule.created", org_id=org_id, user_id=user.id,
@@ -948,7 +949,7 @@ async def sms_forward_rule_create(
 
 
 @router.post("/sms-empfang/regel/{rule_id}/edit")
-async def sms_forward_rule_edit(
+def sms_forward_rule_edit(
     rule_id: int,
     request: Request,
     name: str = Form(...),
@@ -977,7 +978,7 @@ async def sms_forward_rule_edit(
     rule.forward_adhoc_numbers = forward_adhoc_numbers.strip() or None
     rule.prepend_sender = prepend_sender
 
-    form = await request.form()
+    form = run_async(request.form)
     _apply_rule_targets(db, rule, form)
 
     write_audit(db, "admin.sms_forward_rule.edited", org_id=org_id, user_id=user.id,
@@ -987,7 +988,7 @@ async def sms_forward_rule_edit(
 
 
 @router.post("/sms-empfang/regel/{rule_id}/loeschen")
-async def sms_forward_rule_delete(
+def sms_forward_rule_delete(
     rule_id: int,
     request: Request,
     db: Session = Depends(get_db),
