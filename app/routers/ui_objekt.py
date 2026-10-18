@@ -30,6 +30,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session, selectinload
 
 from app.config import settings
+from app.core.async_bridge import run_async
 from app.core.audit import write_audit
 from app.core.permissions import is_objekt_verwalter, require_role
 from app.core.templating import templates
@@ -2797,7 +2798,7 @@ async def objekt_hydranten(
 
 
 @router.post("/{objekt_id}/karte/objekte")
-async def karten_objekt_neu(
+def karten_objekt_neu(
     objekt_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -2809,7 +2810,7 @@ async def karten_objekt_neu(
     from app.models.objekt import OBJEKT_SYMBOL_TYPEN
 
     objekt = _objekt_or_404(db, objekt_id, user)
-    daten = await request.json()
+    daten = run_async(request.json)
     typ = str(daten.get("typ", ""))
     if typ not in OBJEKT_SYMBOL_TYPEN and typ != "geometrie":
         raise HTTPException(status_code=400, detail="Unbekannter Symboltyp")
@@ -2837,7 +2838,7 @@ async def karten_objekt_neu(
 
 
 @router.post("/{objekt_id}/karte/objekte/{eintrag_id}")
-async def karten_objekt_update(
+def karten_objekt_update(
     objekt_id: int,
     eintrag_id: int,
     request: Request,
@@ -2855,7 +2856,7 @@ async def karten_objekt_update(
     )
     if eintrag is None:
         raise HTTPException(status_code=404, detail="Kartenobjekt nicht gefunden")
-    daten = await request.json()
+    daten = run_async(request.json)
     if "lat" in daten:
         eintrag.lat = float(daten["lat"]) if daten["lat"] is not None else None
     if "lng" in daten:
@@ -3022,7 +3023,7 @@ def einsatz_panel(
 
 
 @router.post("/einsatz-panel/{incident_id}/verknuepfen", response_class=HTMLResponse)
-async def einsatz_manuell_verknuepfen(
+def einsatz_manuell_verknuepfen(
     incident_id: int,
     request: Request,
     background_tasks: BackgroundTasks,
@@ -3077,7 +3078,7 @@ async def einsatz_manuell_verknuepfen(
         try:
             from app.services.broadcast import manager
 
-            await manager.broadcast(incident_id, {"type": "objektgefahren"})
+            run_async(manager.broadcast, incident_id, {"type": "objektgefahren"})
         except Exception:
             pass
     return templates.TemplateResponse(
@@ -3188,7 +3189,7 @@ def einsatz_kontakte_benachrichtigen(
 
 
 @router.post("/einsatz-panel/{incident_id}/{verknuepfung_id}/loesen", response_class=HTMLResponse)
-async def einsatz_match_loesen(
+def einsatz_match_loesen(
     incident_id: int,
     verknuepfung_id: int,
     request: Request,
@@ -3226,7 +3227,7 @@ async def einsatz_match_loesen(
         try:
             from app.services.broadcast import manager
 
-            await manager.broadcast(incident_id, {"type": "objektgefahren"})
+            run_async(manager.broadcast, incident_id, {"type": "objektgefahren"})
         except Exception:
             pass
     return templates.TemplateResponse(

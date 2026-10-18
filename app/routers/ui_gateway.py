@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session, object_session
 
+from app.core.async_bridge import run_async
 from app.core.permissions import require_role
 from app.core.templating import templates
 from app.db import get_db
@@ -831,7 +832,7 @@ def rule_create(
 
 
 @router.post("/rules/{rule_id}/save")
-async def rule_save(
+def rule_save(
     rule_id: int,
     request: Request,
     name: str = Form(""),
@@ -914,7 +915,7 @@ async def rule_save(
         [code for code in katalog_codes if code in angeforderte_alarmstufen]
         + [code for code in angeforderte_alarmstufen if code not in katalog_codes]
     )
-    form = await request.form()
+    form = run_async(request.form)
     if ausgewaehlte_alarmstufen:
         filters["alarmstufen"] = ausgewaehlte_alarmstufen
     elif "min_alarmstufe" in form and min_alarmstufe:

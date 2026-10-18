@@ -9,7 +9,6 @@ für den Admin sichtbar sein soll.
 """
 from __future__ import annotations
 
-import asyncio
 import json
 from datetime import UTC, datetime, timedelta
 from urllib.parse import urlencode
@@ -152,7 +151,7 @@ def mail_settings_page(
 
 
 @router.post("/mail/eingang/einstellungen/save")
-async def mail_eingang_settings_save(
+def mail_eingang_settings_save(
     request: Request,
     db=Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin")),
@@ -194,7 +193,7 @@ async def mail_eingang_settings_save(
 
 # ── POST /admin/mail/smtp/save ────────────────────────────────────────────────
 @router.post("/mail/smtp/save")
-async def smtp_settings_save(
+def smtp_settings_save(
     request: Request,
     db=Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin")),
@@ -267,7 +266,7 @@ async def smtp_settings_save(
 
 
 @router.post("/mail/resend/save")
-async def resend_settings_save(
+def resend_settings_save(
     request: Request,
     db=Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin")),
@@ -319,7 +318,7 @@ async def resend_settings_save(
 
 # ── POST /admin/mail/o365/save ────────────────────────────────────────────────
 @router.post("/mail/o365/save")
-async def o365_settings_save(
+def o365_settings_save(
     request: Request,
     db=Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin")),
@@ -495,7 +494,7 @@ def _test_redirect(org_id: int, user: User, ok: bool, text: str) -> RedirectResp
 
 
 @router.post("/mail/imap/verbindung-testen")
-async def imap_connection_test(
+def imap_connection_test(
     request: Request,
     db=Depends(get_db),
     user: User = Depends(require_role("org_admin", "admin")),
@@ -522,7 +521,7 @@ async def imap_connection_test(
             "imap_ordner": cfg.imap_ordner or "INBOX",
             "timeout": settings.MAIL_IMAP_TIMEOUT_S,
         }
-        ok, text = await asyncio.to_thread(mail_imap_poller.verbindung_testen, config)
+        ok, text = mail_imap_poller.verbindung_testen(config)
     write_audit(db, "org_mail.imap.test", org_id=effective_org_id, user_id=user.id, payload={"ok": ok},
                 ip=request.client.host if request.client else None)
     db.commit()

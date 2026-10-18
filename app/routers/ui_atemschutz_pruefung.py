@@ -13,6 +13,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, Form, HTTPException, Re
 from fastapi.responses import HTMLResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
+from app.core.async_bridge import run_async
 from app.core.audit import write_incident_change
 from app.core.templating import templates
 from app.core.timezones import format_local_datetime
@@ -91,7 +92,7 @@ def _recent_incidents(org_id: int, db: Session) -> list[Incident]:
 # ── Öffentlich (kein Login, token-basiert) ──────────────────────────────────
 
 @router.get("/ap/{token}", response_class=HTMLResponse)
-async def pruefung_formular(request: Request, token: str, db: Session = Depends(get_db)):
+def pruefung_formular(request: Request, token: str, db: Session = Depends(get_db)):
     org_settings = _resolve_org_by_token(token, db)
     if not org_settings or not org_settings.atemschutz_pruefung_modul_aktiv:
         raise HTTPException(status_code=404, detail="Token ungültig")
@@ -108,7 +109,7 @@ async def pruefung_formular(request: Request, token: str, db: Session = Depends(
 
 
 @router.get("/ap/{token}/einsaetze", response_class=HTMLResponse)
-async def pruefung_einsaetze_dropdown(request: Request, token: str, db: Session = Depends(get_db)):
+def pruefung_einsaetze_dropdown(request: Request, token: str, db: Session = Depends(get_db)):
     org_settings = _resolve_org_by_token(token, db)
     if not org_settings:
         return HTMLResponse("")
@@ -120,13 +121,13 @@ async def pruefung_einsaetze_dropdown(request: Request, token: str, db: Session 
 
 
 @router.post("/atemschutz-pruefung", response_class=HTMLResponse)
-async def pruefung_speichern(
+def pruefung_speichern(
     request: Request,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
     user = getattr(request.state, "user", None)
-    form = await request.form()
+    form = run_async(request.form)
     token = str(form.get("t", "") or "")
     org_settings = _resolve_org_by_token(token, db) if token else None
     if not user and not org_settings:
@@ -296,7 +297,7 @@ def _pruefungen_query(org_id: int, db: Session):
 
 
 @router.get("/atemschutz-pruefung", response_class=HTMLResponse)
-async def pruefung_liste(
+def pruefung_liste(
     request: Request,
     db: Session = Depends(get_db),
     geraet_id: int = 0,
@@ -352,7 +353,7 @@ async def pruefung_liste(
 
 
 @router.get("/atemschutz-pruefung/geraete", response_class=HTMLResponse)
-async def pruefung_geraete_uebersicht(request: Request, db: Session = Depends(get_db)):
+def pruefung_geraete_uebersicht(request: Request, db: Session = Depends(get_db)):
     user = _require_login(request)
     geraete = (
         db.query(AtemschutzGeraet)
@@ -376,7 +377,7 @@ async def pruefung_geraete_uebersicht(request: Request, db: Session = Depends(ge
 
 
 @router.get("/atemschutz-pruefung/export.xlsx")
-async def pruefung_export_xlsx(
+def pruefung_export_xlsx(
     request: Request,
     db: Session = Depends(get_db),
     geraet_id: int = 0,
@@ -463,7 +464,7 @@ def _build_xlsx(pruefungen: list[AtemschutzPruefung], org=None) -> bytes:
 
 
 @router.get("/atemschutz-pruefung/{pruefung_id}", response_class=HTMLResponse)
-async def pruefung_detail(request: Request, pruefung_id: int, db: Session = Depends(get_db)):
+def pruefung_detail(request: Request, pruefung_id: int, db: Session = Depends(get_db)):
     user = _require_login(request)
     pruefung = _pruefungen_query(user.org_id, db).filter(AtemschutzPruefung.id == pruefung_id).first()
     if not pruefung:
@@ -475,7 +476,7 @@ async def pruefung_detail(request: Request, pruefung_id: int, db: Session = Depe
 
 
 @router.get("/atemschutz-pruefung/{pruefung_id}/pdf")
-async def pruefung_export_pdf(request: Request, pruefung_id: int, db: Session = Depends(get_db)):
+def pruefung_export_pdf(request: Request, pruefung_id: int, db: Session = Depends(get_db)):
     user = _require_login(request)
     pruefung = _pruefungen_query(user.org_id, db).filter(AtemschutzPruefung.id == pruefung_id).first()
     if not pruefung:
@@ -490,7 +491,7 @@ async def pruefung_export_pdf(request: Request, pruefung_id: int, db: Session = 
 
 
 @router.post("/atemschutz-pruefung/druck-pdf")
-async def pruefung_export_pdf_sammel(
+def pruefung_export_pdf_sammel(
     request: Request,
     db: Session = Depends(get_db),
     ids: list[int] = Form(default=[]),

@@ -14,6 +14,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.async_bridge import run_async
 from app.core.audit import write_audit
 from app.core.permissions import has_role, require_role
 from app.core.templating import templates
@@ -326,13 +327,13 @@ def neu_form(
 
 
 @router.post("/szenarien/neu")
-async def neu(
+def neu(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_role("org_admin")),
     _guard: None = Depends(require_planspiel_enabled),
 ):
-    form = await request.form()
+    form = run_async(request.form)
     code = str(form.get("code", "")).strip()
     try:
         if not _CODE_RE.fullmatch(code):
@@ -390,7 +391,7 @@ def export(
 
 
 @router.post("/szenarien/import")
-async def import_(
+def import_(
     request: Request,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
@@ -398,7 +399,7 @@ async def import_(
     _guard: None = Depends(require_planspiel_enabled),
 ):
     try:
-        raw = await file.read()
+        raw = run_async(file.read)
         if len(raw) > 1_000_000:
             raise ValueError("Die Datei ist größer als 1 MB.")
         result = import_json(db, _org(user), json.loads(raw), user.id)
@@ -463,7 +464,7 @@ def detail(
 
 
 @router.post("/szenarien/{scenario_id:int}")
-async def speichern(
+def speichern(
     scenario_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -471,7 +472,7 @@ async def speichern(
     _guard: None = Depends(require_planspiel_enabled),
 ):
     item = _scenario(db, user, scenario_id)
-    form = await request.form()
+    form = run_async(request.form)
     try:
         neue_version(db, item, _content(form), user.id)
         item.aktiv = bool(form.get("aktiv"))
@@ -491,7 +492,7 @@ async def speichern(
 
 
 @router.post("/szenarien/{scenario_id:int}/duplizieren")
-async def kopieren(
+def kopieren(
     scenario_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -499,7 +500,7 @@ async def kopieren(
     _guard: None = Depends(require_planspiel_enabled),
 ):
     item = _scenario(db, user, scenario_id)
-    form = await request.form()
+    form = run_async(request.form)
     try:
         code = str(form.get("code", "")).strip()
         if not _CODE_RE.fullmatch(code):
@@ -519,7 +520,7 @@ async def kopieren(
 
 
 @router.post("/szenarien/{scenario_id:int}/aktiv")
-async def toggle(
+def toggle(
     scenario_id: int,
     request: Request,
     db: Session = Depends(get_db),
@@ -527,7 +528,7 @@ async def toggle(
     _guard: None = Depends(require_planspiel_enabled),
 ):
     item = _scenario(db, user, scenario_id)
-    form = await request.form()
+    form = run_async(request.form)
     aktiv_setzen(db, item, str(form.get("aktiv", "")) == "1")
     _audit(db, "aktiv", user, item)
     db.commit()
@@ -719,13 +720,13 @@ def adresspool_liste(
 
 
 @router.post("/einstellungen/gebiet")
-async def gebiet_speichern(
+def gebiet_speichern(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_role("org_admin")),
     _guard: None = Depends(require_planspiel_enabled),
 ):
-    form = await request.form()
+    form = run_async(request.form)
     try:
         radius = int(str(form.get("radius_m", "")))
         if not 500 <= radius <= 50000:
@@ -749,13 +750,13 @@ async def gebiet_speichern(
 
 
 @router.post("/einstellungen/grenzen")
-async def grenzen_speichern(
+def grenzen_speichern(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_role("org_admin")),
     _guard: None = Depends(require_planspiel_enabled),
 ):
-    form = await request.form()
+    form = run_async(request.form)
     try:
         runs = int(str(form.get("max_laufende_runs", "")))
         stellen = int(str(form.get("max_stellen_je_minute", "")))
@@ -866,13 +867,13 @@ def pool_osm_status(
 
 
 @router.post("/adresspool/punkt")
-async def punkt_anlegen(
+def punkt_anlegen(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_role("org_admin")),
     _guard: None = Depends(require_planspiel_enabled),
 ):
-    form = await request.form()
+    form = run_async(request.form)
     try:
         water = str(form.get("gewaesser", "")).strip()
         merkmale: dict[str, Any] | None = None
@@ -923,13 +924,13 @@ def pool_aktiv(
 
 
 @router.post("/einstellungen/ortstypen")
-async def ortstypen_speichern(
+def ortstypen_speichern(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_role("org_admin")),
     _guard: None = Depends(require_planspiel_enabled),
 ):
-    form = await request.form()
+    form = run_async(request.form)
     try:
         org_id = _org(user)
         mappings = db.query(PlanspielOrtTypZuordnung).filter(

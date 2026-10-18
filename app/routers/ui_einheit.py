@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.async_bridge import run_async
 from app.core.audit import write_audit
 from app.core.permissions import has_role
 from app.core.rate_limit import limiter as _limiter
@@ -501,7 +502,7 @@ async def nummer_anfordern(request: Request, daten: NummerAnfordernDaten, ctx: E
 
 @router.post("/api/nummer/bestaetigen")
 @(_limiter.limit("10/15minutes") if _limiter else lambda f: f)
-async def nummer_bestaetigen(request: Request, daten: NummerBestaetigenDaten, background_tasks: BackgroundTasks,
+def nummer_bestaetigen(request: Request, daten: NummerBestaetigenDaten, background_tasks: BackgroundTasks,
                              ctx: EinheitKontext = Depends(einheit_kontext), db: Session = Depends(get_db)):
     einheit_darf("nummer", ctx, db)
     if ctx.quelle != "zugang":
@@ -571,12 +572,12 @@ def _ressourcen_daten(db: Session, ctx: EinheitKontext) -> dict[str, Any]:
 
 
 @router.post("/api/ressource/personal")
-async def ressource_personal(
+def ressource_personal(
     request: Request, ctx: EinheitKontext = Depends(einheit_kontext), db: Session = Depends(get_db)
 ):
     _schreibbar(ctx)
     einheit_darf("ressource_personal", ctx, db)
-    body = await request.json()
+    body = run_async(request.json)
     operation = body.get("operation", body.get("aktion", "setzen"))
     autor = _autor(request, ctx)
 
@@ -617,17 +618,17 @@ async def ressource_personal(
         return _antwort_exc(exc)
     if code == 200 and answer.get("ok"):
         answer["ressource"] = _ressourcen_daten(db, ctx)
-        await broadcast_lage(ctx.lage.id, {"type": "ressource:changed", "einheit_id": ctx.einheit.id})
+        run_async(broadcast_lage, ctx.lage.id, {"type": "ressource:changed", "einheit_id": ctx.einheit.id})
     return JSONResponse(answer, status_code=code)
 
 
 @router.post("/api/ressource/ausstattung")
-async def ressource_ausstattung(
+def ressource_ausstattung(
     request: Request, ctx: EinheitKontext = Depends(einheit_kontext), db: Session = Depends(get_db)
 ):
     _schreibbar(ctx)
     einheit_darf("ressource_ausstattung", ctx, db)
-    body = await request.json()
+    body = run_async(request.json)
     operation = body.get("operation", body.get("aktion", "hinzufuegen"))
     autor = _autor(request, ctx)
 
@@ -665,7 +666,7 @@ async def ressource_ausstattung(
         return _antwort_exc(exc)
     if code == 200 and answer.get("ok"):
         answer["ressource"] = _ressourcen_daten(db, ctx)
-        await broadcast_lage(ctx.lage.id, {"type": "ressource:changed", "einheit_id": ctx.einheit.id})
+        run_async(broadcast_lage, ctx.lage.id, {"type": "ressource:changed", "einheit_id": ctx.einheit.id})
     return JSONResponse(answer, status_code=code)
 
 

@@ -79,3 +79,20 @@ def test_baseline_contains_only_existing_async_routes_with_sync_db() -> None:
         f"{len(found)} async+DB-Routen gefunden. Nicht mehr vorhandene Baseline-Einträge: "
         f"{sorted(obsolete_routes)}. Aus Baseline entfernen."
     )
+
+
+def test_run_async_nicht_in_async_funktionen() -> None:
+    """``run_async`` blockiert bzw. wirft auf der Event-Loop – in async-Code ``await`` nutzen."""
+    import ast
+
+    app_dir = Path(__file__).resolve().parent.parent / "app"
+    treffer: list[str] = []
+    for datei in sorted(app_dir.rglob("*.py")):
+        baum = ast.parse(datei.read_text(encoding="utf-8"))
+        for knoten in ast.walk(baum):
+            if not isinstance(knoten, ast.AsyncFunctionDef):
+                continue
+            for aufruf in ast.walk(knoten):
+                if isinstance(aufruf, ast.Call) and getattr(aufruf.func, "id", None) == "run_async":
+                    treffer.append(f"{datei.relative_to(app_dir.parent)}:{aufruf.lineno} ({knoten.name})")
+    assert not treffer, f"run_async in async-Funktionen: {treffer}"
