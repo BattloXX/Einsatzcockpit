@@ -3,10 +3,13 @@ import hashlib
 import secrets
 from datetime import UTC, datetime, timedelta
 
+from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.core.permissions import manageable_role_codes, permitted_submitted_roles
+from app.core.audit import write_audit
+from app.core.permissions import authorize_user_mutation, has_role, manageable_role_codes, permitted_submitted_roles
 from app.core.security import hash_password
 from app.models.master import Member
 from app.models.password_reset import PasswordResetToken
@@ -29,6 +32,72 @@ def validate_member_link(
     if user_id is not None:
         existing = existing.filter(User.id != user_id)
     return "member_taken" if existing.first() is not None else None
+
+
+def mitglied_verknuepfung_setzen(
+    db: Session, actor: User, org_id: int, benutzer_id: int, mitglied_id: int | None, *,
+    dry_run: bool = False, manuell_bestaetigt: bool = False, audit_prefix: str = "admin",
+    client_id: str | None = None,
+) -> dict[str, object]:
+    """Geschuetztes Verknuepfen/Trennen; Transaktionsabschluss beim Aufrufer.
+
+    Bestehende Links werden nie ersetzt. Der bedingte UPDATE und der bestehende
+    UNIQUE-Index verhindern auch bei konkurrierenden Aufrufen verlorene Zuordnungen.
+    """
+    if not has_role(actor, "admin") or actor.org_id != org_id:
+        raise ValueError("Keine Berechtigung fuer die Benutzer-Mitgliederverwaltung.")
+    user = db.query(User).filter(
+        User.id == benutzer_id, User.org_id == org_id, User.is_device.is_(False),
+    ).populate_existing().first()
+    if user is None:
+        raise ValueError("Benutzer nicht gefunden.")
+    try:
+        authorize_user_mutation(db, actor, user, "member_link")
+    except HTTPException as exc:
+        raise ValueError(str(exc.detail)) from exc
+    if user.is_system_admin:
+        raise ValueError("Systemadministratoren koennen nicht bearbeitet werden.")
+    error = validate_member_link(db, mitglied_id, org_id, user.is_device, user.id)
+    if error == "member_taken":
+        raise ValueError("Mitglied ist bereits mit einem Benutzer verknuepft.")
+    if error:
+        raise ValueError("Mitglied nicht gefunden.")
+    old = user.member_id
+    if old is not None and mitglied_id is not None and old != mitglied_id:
+        raise ValueError("Benutzer ist bereits verknuepft. Bestehende Verknuepfung zuerst explizit trennen.")
+    changed = old != mitglied_id
+    if changed and mitglied_id is not None and not manuell_bestaetigt:
+        from app.services.benutzer_mitglied_service import abgleichen
+
+        safe = abgleichen(db, org_id)["sicher"]
+        if not any(row["benutzer_id"] == benutzer_id and row["mitglied_id"] == mitglied_id for row in safe):
+            raise ValueError("Kein sicherer eindeutiger Treffer. Manuelle Bestaetigung erforderlich.")
+    result = {
+        "benutzer_id": benutzer_id, "mitglied_id": {"alt": old, "neu": mitglied_id},
+        "dry_run": dry_run, "geaendert": changed and not dry_run,
+        "wuerde_aendern": changed,
+        "status": "simuliert" if dry_run and changed else "erfolgreich" if changed else "uebersprungen",
+    }
+    if not changed or dry_run:
+        return result
+    try:
+        with db.begin_nested():
+            updated = db.query(User).filter(
+                User.id == benutzer_id, User.org_id == org_id, User.member_id == old,
+            ).update({User.member_id: mitglied_id}, synchronize_session=False)
+            if updated != 1:
+                raise ValueError("Verknuepfung wurde zwischenzeitlich geaendert. Bitte erneut abgleichen.")
+            write_audit(
+                db, f"{audit_prefix}.user.member_{'unlinked' if mitglied_id is None else 'linked'}",
+                org_id=org_id, user_id=actor.id, entity_type="user", entity_id=benutzer_id,
+                payload={"mitglied_id": {"alt": old, "neu": mitglied_id},
+                         "client_id": client_id, "manuell_bestaetigt": manuell_bestaetigt},
+            )
+            db.flush()
+    except IntegrityError as exc:
+        raise ValueError("Mitglied wurde zwischenzeitlich mit einem anderen Benutzer verknuepft.") from exc
+    db.expire(user, ["member_id", "member"])
+    return result
 
 
 def update_user_roles(db: Session, actor: User, target: User, submitted_codes: list[str], action: str) -> list[str]:

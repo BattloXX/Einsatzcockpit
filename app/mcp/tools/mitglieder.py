@@ -96,6 +96,8 @@ def _mitglied_liste_payload(
         "qualifikationen": [eintrag["code"] for eintrag in qualifikationen[member.id]],
         "tags": tags[member.id],
         "benutzer": benutzer.get(member.id),
+        "benutzer_id": benutzer[member.id]["id"] if member.id in benutzer else None,
+        "email": member.email, "telefon": member.phone, "organisations_id": member.org_id,
     }
 
 
@@ -191,6 +193,16 @@ async def mitglieder_suchen(
 
 
 @register_tool(
+    name="mitglieder_liste",
+    description="Listet alle Mitglieder der Organisation inklusive Kontakte, Status und Benutzerbezug, auch inaktive. "
+                "Admin oder Fahrtenbuch-Admin; lesend. Alle Seiten bis truncated=false abrufen.",
+    required_roles=MITGLIEDER_LESE_ROLLEN,
+)
+async def mitglieder_liste(context: MCPContext, limit: int = 50, seite: int = 1) -> dict[str, object]:
+    return await mitglieder_suchen(context, aktiv=None, limit=limit, seite=seite)
+
+
+@register_tool(
     name="mitglied_lesen",
     description=(
         "Liest ein Mitglied der eigenen Organisation mit Kontaktdaten, Qualifikationen, Tags, Benutzer und "
@@ -225,7 +237,7 @@ async def mitglied_lesen(context: MCPContext, mitglied_id: int) -> dict[str, obj
                 "aktiv": user.active,
             }
 
-    return _mitglied_liste_payload(member, qualifikationen, tags, {}) | {
+    return _mitglied_liste_payload(member, qualifikationen, tags, benutzer) | {
         "telefon": member.phone,
         "email": member.email,
         "sybos_id": member.sybos_id,

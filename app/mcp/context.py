@@ -14,6 +14,7 @@ class MCPContext:
     db: Session
     user: User
     org_id: int
+    client_id: str | None = None
 
 
 class MCPPermissionError(PermissionError):
