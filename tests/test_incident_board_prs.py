@@ -3,7 +3,6 @@
 - Neue Karten werden ganz oben in der Lane eingereiht (prepend_card, _ordered_col_items)
 - Abschnittsleiter je Lane (Qualifikation EL/GK) — Modellfelder + Kandidaten-Query
 """
-import asyncio
 from types import SimpleNamespace
 
 import pytest
@@ -191,7 +190,7 @@ def test_set_task_ampel_returns_assigned_vehicle_card_as_oob(db, incident, org, 
     })
     request.state.user = SimpleNamespace(id=1, org_id=org.id)
 
-    response = asyncio.run(ui_incident.set_task_ampel(
+    response = (ui_incident.set_task_ampel(
         incident.id, task.id, request, status="in_progress", db=db, _=None,
     ))
 
@@ -222,7 +221,7 @@ def test_neues_fahrzeug_fragment_enthaelt_status_und_gk_auswahl(db, incident, or
     })
     request.state.user = SimpleNamespace(id=1, org_id=org.id)
 
-    context = asyncio.run(ui_incident.attach_vehicle_to_incident(
+    context = (ui_incident.attach_vehicle_to_incident(
         incident.id,
         request,
         vehicle_master_id=master.id,

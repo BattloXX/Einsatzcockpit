@@ -27,6 +27,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.config import settings
+from app.core.async_bridge import run_async
 from app.core.audit import write_audit
 from app.core.permissions import has_role, require_role, same_org_or_system_admin
 from app.core.rate_limit import limiter as _limiter
@@ -262,7 +263,7 @@ def lage_neu_form(
 
 
 @router.post("/lage/neu")
-async def lage_neu_create(
+def lage_neu_create(
     request: Request,
     background_tasks: BackgroundTasks,
     name: str = Form(...),
@@ -289,17 +290,17 @@ async def lage_neu_create(
     background_tasks.add_task(autoprint_gsl_background, lage.id, lage.org_id)
 
     from app.services.gsl_notify import notify_gsl_created
-    await notify_gsl_created(
+    run_async(notify_gsl_created,
         lage, triggered_by_user_id=user.id, base_url=str(request.base_url),
         background_tasks=background_tasks,
     )
     from app.services.gsl_live_notify import notify_gsl_live
-    await notify_gsl_live(db, lage, org_id=org_id, reason="created",
+    run_async(notify_gsl_live, db, lage, org_id=org_id, reason="created",
                           background_tasks=background_tasks)
     # Alarm-Infoscreen: GSL-Sonderansicht sofort einblenden
     try:
         from app.services.broadcast import broadcast_org
-        await broadcast_org(org_id, {"type": "gsl_changed"})
+        run_async(broadcast_org, org_id, {"type": "gsl_changed"})
     except Exception:
         pass
 
@@ -450,7 +451,7 @@ async def site_create(
 
 
 @router.post("/lage/{lage_id}/stellen/via-karte")
-async def site_create_via_karte(
+def site_create_via_karte(
     request: Request,
     lage_id: int,
     db: Session = Depends(get_db),
@@ -464,7 +465,7 @@ async def site_create_via_karte(
     if lage.status != MajorIncidentStatus.active:
         raise HTTPException(status_code=400, detail="Lage nicht aktiv")
 
-    data = await request.json()
+    data = run_async(request.json)
     try:
         lat = float(data["lat"])
         lng = float(data["lng"])
@@ -504,9 +505,9 @@ async def site_create_via_karte(
         logger.exception("Fehler beim Anlegen via Karte lage_id=%s", lage_id)
         db.rollback()
         raise
-    await broadcast_lage(lage_id, {"type": "site_created", "site_id": site.id})
+    run_async(broadcast_lage, lage_id, {"type": "site_created", "site_id": site.id})
     from app.services.gsl_live_notify import notify_gsl_live
-    await notify_gsl_live(db, lage, org_id=lage.org_id, reason="counts")
+    run_async(notify_gsl_live, db, lage, org_id=lage.org_id, reason="counts")
     return JSONResponse({"id": site.id, "bezeichnung": site.bezeichnung,
                          "lat": site.lat, "lng": site.lng})
 
@@ -514,7 +515,7 @@ async def site_create_via_karte(
 # ── Phase ändern (Drag & Drop) ───────────────────────────────────────────────
 
 @router.post("/lage/{lage_id}/stellen/{site_id}/phase")
-async def site_phase_change(
+def site_phase_change(
     request: Request,
     lage_id: int,
     site_id: int,
@@ -545,12 +546,12 @@ async def site_phase_change(
         sort_index=sort_index,
     )
     db.commit()
-    await gsl_broadcast.phase_geaendert(db, lage, site_id, new_phase)
+    run_async(gsl_broadcast.phase_geaendert, db, lage, site_id, new_phase)
     return Response(status_code=204)
 
 
 @router.post("/lage/{lage_id}/stellen/{site_id}/abschliessen")
-async def site_einsatz_abschliessen(
+def site_einsatz_abschliessen(
     request: Request, lage_id: int, site_id: int, aktive_zurueckziehen: bool = Form(False),
     background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
@@ -581,19 +582,19 @@ async def site_einsatz_abschliessen(
     for benachrichtigung in benachrichtigungen:
         if benachrichtigung:
             background_tasks.add_task(sende_nach_commit, benachrichtigung)
-    await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
-    await broadcast_lage(lage_id, {"type": "site_phase_changed", "site_id": site_id, "phase": site.phase.value})
+    run_async(broadcast_lage, lage_id, {"type": "site:card_changed", "site_id": site_id})
+    run_async(broadcast_lage, lage_id, {"type": "site_phase_changed", "site_id": site_id, "phase": site.phase.value})
     for dispatch in aktive_dispatches if aktive_zurueckziehen else []:
-        await broadcast_lage(lage_id, {
+        run_async(broadcast_lage, lage_id, {
             "type": "einheit:changed", "einheit_id": dispatch.einheit_id, "site_id": site_id,
         })
     from app.services.gsl_live_notify import notify_gsl_live
-    await notify_gsl_live(db, lage, org_id=lage.org_id, reason="counts")
+    run_async(notify_gsl_live, db, lage, org_id=lage.org_id, reason="counts")
     return Response(status_code=204)
 
 
 @router.post("/lage/{lage_id}/stellen/{site_id}/wiedereroeffnen")
-async def site_einsatz_wiedereroeffnen(
+def site_einsatz_wiedereroeffnen(
     request: Request, lage_id: int, site_id: int, db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
 ):
@@ -611,17 +612,17 @@ async def site_einsatz_wiedereroeffnen(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     db.commit()
-    await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
-    await broadcast_lage(lage_id, {"type": "site_phase_changed", "site_id": site_id, "phase": site.phase.value})
+    run_async(broadcast_lage, lage_id, {"type": "site:card_changed", "site_id": site_id})
+    run_async(broadcast_lage, lage_id, {"type": "site_phase_changed", "site_id": site_id, "phase": site.phase.value})
     from app.services.gsl_live_notify import notify_gsl_live
-    await notify_gsl_live(db, lage, org_id=lage.org_id, reason="counts")
+    run_async(notify_gsl_live, db, lage, org_id=lage.org_id, reason="counts")
     return Response(status_code=204)
 
 
 # ── Priorität setzen ─────────────────────────────────────────────────────────
 
 @router.post("/lage/{lage_id}/stellen/{site_id}/prio")
-async def site_prio_change(
+def site_prio_change(
     request: Request,
     lage_id: int,
     site_id: int,
@@ -642,7 +643,7 @@ async def site_prio_change(
             db, site, None, user_id=user.id, author_name=get_author_name(request),
         )
         db.commit()
-        await gsl_broadcast.prio_geaendert(lage_id, site_id)
+        run_async(gsl_broadcast.prio_geaendert, lage_id, site_id)
         return Response(status_code=204)
 
     try:
@@ -654,7 +655,7 @@ async def site_prio_change(
         db, site, new_prio, user_id=user.id, author_name=get_author_name(request),
     )
     db.commit()
-    await gsl_broadcast.prio_geaendert(lage_id, site_id)
+    run_async(gsl_broadcast.prio_geaendert, lage_id, site_id)
     return Response(status_code=204)
 
 
@@ -910,7 +911,7 @@ def lage_kopf_oob(
 # ── Einheit einer Einsatzstelle zuweisen (Board-Karte) ──────────────────────
 
 @router.post("/lage/{lage_id}/stellen/{site_id}/einheit-zuweisen", response_class=HTMLResponse)
-async def site_einheit_zuweisen(
+def site_einheit_zuweisen(
     request: Request,
     lage_id: int,
     site_id: int,
@@ -947,16 +948,16 @@ async def site_einheit_zuweisen(
     background_tasks.add_task(sende_nach_commit, benachrichtigung)
     from app.services.print_dispatcher import autoprint_gsl_stelle_disponiert_background
     background_tasks.add_task(autoprint_gsl_stelle_disponiert_background, dispatch.id)
-    await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
+    run_async(broadcast_lage, lage_id, {"type": "site:card_changed", "site_id": site_id})
     if getattr(dispatch, "phase_geaendert", False):
-        await broadcast_lage(lage_id, {"type": "site_phase_changed", "site_id": site_id})
+        run_async(broadcast_lage, lage_id, {"type": "site_phase_changed", "site_id": site_id})
         from app.services.gsl_live_notify import notify_gsl_live
-        await notify_gsl_live(db, lage, org_id=lage.org_id, reason="counts")
+        run_async(notify_gsl_live, db, lage, org_id=lage.org_id, reason="counts")
     return Response(status_code=204)
 
 
 @router.post("/lage/{lage_id}/stellen/{site_id}/einheit-freigeben")
-async def site_einheit_freigeben(
+def site_einheit_freigeben(
     request: Request,
     lage_id: int,
     site_id: int,
@@ -1003,8 +1004,8 @@ async def site_einheit_freigeben(
     db.commit()
     if benachrichtigung:
         background_tasks.add_task(sende_nach_commit, benachrichtigung)
-    await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
-    await broadcast_lage(lage_id, {"type": "einheit:changed", "einheit_id": einheit_id, "site_id": site_id})
+    run_async(broadcast_lage, lage_id, {"type": "site:card_changed", "site_id": site_id})
+    run_async(broadcast_lage, lage_id, {"type": "einheit:changed", "einheit_id": einheit_id, "site_id": site_id})
     return Response(status_code=204)
 
 
@@ -1066,7 +1067,7 @@ def _site_dispatch_context(request: Request, db: Session, lage, site, user) -> d
 
 
 @router.post("/lage/{lage_id}/stellen/{site_id}/einheit-disponieren", response_class=HTMLResponse)
-async def site_einheit_disponieren(
+def site_einheit_disponieren(
     request: Request,
     lage_id: int,
     site_id: int,
@@ -1110,12 +1111,12 @@ async def site_einheit_disponieren(
     background_tasks.add_task(sende_nach_commit, benachrichtigung)
     from app.services.print_dispatcher import autoprint_gsl_stelle_disponiert_background
     background_tasks.add_task(autoprint_gsl_stelle_disponiert_background, dispatch.id)
-    await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
+    run_async(broadcast_lage, lage_id, {"type": "site:card_changed", "site_id": site_id})
     if getattr(dispatch, "phase_geaendert", False):
-        await broadcast_lage(lage_id, {"type": "site_phase_changed", "site_id": site_id})
+        run_async(broadcast_lage, lage_id, {"type": "site_phase_changed", "site_id": site_id})
         from app.services.gsl_live_notify import notify_gsl_live
-        await notify_gsl_live(db, lage, org_id=lage.org_id, reason="counts")
-    await broadcast_lage(lage_id, {"type": "einheit:changed", "einheit_id": einheit_id, "site_id": site_id})
+        run_async(notify_gsl_live, db, lage, org_id=lage.org_id, reason="counts")
+    run_async(broadcast_lage, lage_id, {"type": "einheit:changed", "einheit_id": einheit_id, "site_id": site_id})
     html = _site_detail_html_with_oob(request, db, lage, site, user)
     return HTMLResponse(content=html, headers={"HX-Retarget": "#siteDetailContent", "HX-Reswap": "innerHTML"})
 
@@ -1128,7 +1129,7 @@ def _dispatch_fuer_stelle_oder_404(db: Session, dispatch_id: int, site_id: int):
 
 
 @router.post("/lage/{lage_id}/stellen/{site_id}/einheit/{dispatch_id}/auftrag", response_class=HTMLResponse)
-async def site_einheit_auftrag_aendern(
+def site_einheit_auftrag_aendern(
     request: Request, lage_id: int, site_id: int, dispatch_id: int,
     auftrag: str | None = Form(None), reihenfolge: int | None = Form(None),
     background_tasks: BackgroundTasks = BackgroundTasks(),
@@ -1158,15 +1159,15 @@ async def site_einheit_auftrag_aendern(
     db.commit()
     if benachrichtigung:
         background_tasks.add_task(sende_nach_commit, benachrichtigung)
-    await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
-    await broadcast_lage(lage_id, {"type": "einheit:changed", "einheit_id": dispatch.einheit_id,
+    run_async(broadcast_lage, lage_id, {"type": "site:card_changed", "site_id": site_id})
+    run_async(broadcast_lage, lage_id, {"type": "einheit:changed", "einheit_id": dispatch.einheit_id,
                                    "dispatch_id": dispatch_id, "site_id": site_id})
     return HTMLResponse(content=_site_detail_html_with_oob(request, db, lage, site, user),
                         headers={"HX-Retarget": "#siteDetailContent", "HX-Reswap": "innerHTML"})
 
 
 @router.post("/lage/{lage_id}/stellen/{site_id}/einheit/{dispatch_id}/wiedereroeffnen", response_class=HTMLResponse)
-async def site_einheit_wiedereroeffnen(
+def site_einheit_wiedereroeffnen(
     request: Request, lage_id: int, site_id: int, dispatch_id: int,
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
@@ -1185,19 +1186,19 @@ async def site_einheit_wiedereroeffnen(
     write_audit(db, "gsl.auftrag.wiedereroeffnet", user_id=user.id,
                 payload={"lage_id": lage_id, "site_id": site_id, "dispatch_id": dispatch_id})
     db.commit()
-    await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
-    await broadcast_lage(lage_id, {"type": "einheit:changed", "einheit_id": dispatch.einheit_id,
+    run_async(broadcast_lage, lage_id, {"type": "site:card_changed", "site_id": site_id})
+    run_async(broadcast_lage, lage_id, {"type": "einheit:changed", "einheit_id": dispatch.einheit_id,
                                    "dispatch_id": dispatch_id, "site_id": site_id})
     if getattr(dispatch, "phase_geaendert", False):
-        await broadcast_lage(lage_id, {"type": "site_phase_changed", "site_id": site_id})
+        run_async(broadcast_lage, lage_id, {"type": "site_phase_changed", "site_id": site_id})
         from app.services.gsl_live_notify import notify_gsl_live
-        await notify_gsl_live(db, lage, org_id=lage.org_id, reason="counts")
+        run_async(notify_gsl_live, db, lage, org_id=lage.org_id, reason="counts")
     return HTMLResponse(content=_site_detail_html_with_oob(request, db, lage, site, user),
                         headers={"HX-Retarget": "#siteDetailContent", "HX-Reswap": "innerHTML"})
 
 
 @router.post("/lage/{lage_id}/stellen/{site_id}/einheit/{dispatch_id}/status", response_class=HTMLResponse)
-async def site_einheit_status_setzen(
+def site_einheit_status_setzen(
     request: Request, lage_id: int, site_id: int, dispatch_id: int,
     status: str = Form(...), grund: str | None = Form(None), db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
@@ -1219,7 +1220,7 @@ async def site_einheit_status_setzen(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     db.commit()
-    await gsl_broadcast.einheit_status_geaendert(
+    run_async(gsl_broadcast.einheit_status_geaendert,
         db, lage, site_id, dispatch_id, dispatch.einheit_id, result,
     )
     return HTMLResponse(content=_site_detail_html_with_oob(request, db, lage, site, user),
@@ -1227,7 +1228,7 @@ async def site_einheit_status_setzen(
 
 
 @router.post("/lage/{lage_id}/stellen/{site_id}/einheit-vor-ort", response_class=HTMLResponse)
-async def site_einheit_vor_ort(
+def site_einheit_vor_ort(
     request: Request,
     lage_id: int,
     site_id: int,
@@ -1259,7 +1260,7 @@ async def site_einheit_vor_ort(
         ))
         lagemeldung_service.sync_timer(site, db)
         db.commit()
-        await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
+        run_async(broadcast_lage, lage_id, {"type": "site:card_changed", "site_id": site_id})
         html = _site_detail_html_with_oob(request, db, lage, site, user)
         return HTMLResponse(content=html, headers={"HX-Retarget": "#siteDetailContent", "HX-Reswap": "innerHTML"})
 
@@ -1302,17 +1303,17 @@ async def site_einheit_vor_ort(
     if dispatch and getattr(dispatch, "neu_angelegt", False):
         from app.services.print_dispatcher import autoprint_gsl_stelle_disponiert_background
         background_tasks.add_task(autoprint_gsl_stelle_disponiert_background, dispatch.id)
-    await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
+    run_async(broadcast_lage, lage_id, {"type": "site:card_changed", "site_id": site_id})
     if dispatch and getattr(dispatch, "phase_geaendert", False):
-        await broadcast_lage(lage_id, {"type": "site_phase_changed", "site_id": site_id})
+        run_async(broadcast_lage, lage_id, {"type": "site_phase_changed", "site_id": site_id})
         from app.services.gsl_live_notify import notify_gsl_live
-        await notify_gsl_live(db, lage, org_id=lage.org_id, reason="counts")
+        run_async(notify_gsl_live, db, lage, org_id=lage.org_id, reason="counts")
     html = _site_detail_html_with_oob(request, db, lage, site, user)
     return HTMLResponse(content=html, headers={"HX-Retarget": "#siteDetailContent", "HX-Reswap": "innerHTML"})
 
 
 @router.post("/lage/{lage_id}/stellen/{site_id}/einheit-abziehen", response_class=HTMLResponse)
-async def site_einheit_abziehen(
+def site_einheit_abziehen(
     request: Request,
     lage_id: int,
     site_id: int,
@@ -1355,12 +1356,12 @@ async def site_einheit_abziehen(
     db.commit()
     if benachrichtigung:
         background_tasks.add_task(sende_nach_commit, benachrichtigung)
-    await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
-    await broadcast_lage(lage_id, {"type": "einheit:changed", "einheit_id": einheit_id, "site_id": site_id})
+    run_async(broadcast_lage, lage_id, {"type": "site:card_changed", "site_id": site_id})
+    run_async(broadcast_lage, lage_id, {"type": "einheit:changed", "einheit_id": einheit_id, "site_id": site_id})
     if dispatch and getattr(dispatch, "phase_geaendert", False):
-        await broadcast_lage(lage_id, {"type": "site_phase_changed", "site_id": site_id})
+        run_async(broadcast_lage, lage_id, {"type": "site_phase_changed", "site_id": site_id})
         from app.services.gsl_live_notify import notify_gsl_live
-        await notify_gsl_live(db, lage, org_id=lage.org_id, reason="counts")
+        run_async(notify_gsl_live, db, lage, org_id=lage.org_id, reason="counts")
     html = _site_detail_html_with_oob(request, db, lage, site, user)
     return HTMLResponse(content=html, headers={"HX-Retarget": "#siteDetailContent", "HX-Reswap": "innerHTML"})
 
@@ -1482,7 +1483,7 @@ def site_druck(
 # ── Log-Eintrag hinzufügen ──────────────────────────────────────────────────
 
 @router.post("/lage/{lage_id}/stellen/{site_id}/log")
-async def site_log_add(
+def site_log_add(
     request: Request,
     lage_id: int,
     site_id: int,
@@ -1505,9 +1506,9 @@ async def site_log_add(
     add_site_log(db, site, kind, text, user_id=user.id, author_name=get_author_name(request))
     is_reset = kind in SITE_LOG_RESET_KINDS
     db.commit()
-    await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
+    run_async(broadcast_lage, lage_id, {"type": "site:card_changed", "site_id": site_id})
     if is_reset:
-        await broadcast_lage(lage_id, {"type": "funkjournal:changed"})
+        run_async(broadcast_lage, lage_id, {"type": "funkjournal:changed"})
     html = _site_detail_html_with_oob(request, db, lage, site, user)
     return HTMLResponse(content=html, headers={"HX-Retarget": "#siteDetailContent", "HX-Reswap": "innerHTML"})
 
@@ -1515,7 +1516,7 @@ async def site_log_add(
 # ── Ressource zuweisen ──────────────────────────────────────────────────────
 
 @router.post("/lage/{lage_id}/stellen/{site_id}/ressourcen")
-async def site_resource_assign(
+def site_resource_assign(
     request: Request,
     lage_id: int,
     site_id: int,
@@ -1561,14 +1562,14 @@ async def site_resource_assign(
     if dispatch:
         from app.services.print_dispatcher import autoprint_gsl_stelle_disponiert_background
         background_tasks.add_task(autoprint_gsl_stelle_disponiert_background, dispatch.id)
-    await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
+    run_async(broadcast_lage, lage_id, {"type": "site:card_changed", "site_id": site_id})
     return Response(status_code=204)
 
 
 # ── Ressource vor Ort bestätigen ─────────────────────────────────────────────
 
 @router.post("/lage/{lage_id}/stellen/{site_id}/ressourcen/{res_id}/commit")
-async def site_resource_commit(
+def site_resource_commit(
     request: Request,
     lage_id: int,
     site_id: int,
@@ -1595,14 +1596,14 @@ async def site_resource_commit(
     if site:
         lagemeldung_service.sync_timer(site, db)
     db.commit()
-    await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
+    run_async(broadcast_lage, lage_id, {"type": "site:card_changed", "site_id": site_id})
     return Response(status_code=204)
 
 
 # ── Ressource freigeben ──────────────────────────────────────────────────────
 
 @router.post("/lage/{lage_id}/stellen/{site_id}/ressourcen/{res_id}/freigeben")
-async def site_resource_release(
+def site_resource_release(
     request: Request,
     lage_id: int,
     site_id: int,
@@ -1631,7 +1632,7 @@ async def site_resource_release(
     if site:
         lagemeldung_service.sync_timer(site, db)
     db.commit()
-    await broadcast_lage(lage_id, {"type": "site:card_changed", "site_id": site_id})
+    run_async(broadcast_lage, lage_id, {"type": "site:card_changed", "site_id": site_id})
     return Response(status_code=204)
 
 
@@ -1694,7 +1695,7 @@ def site_pin_form(
 
 
 @router.post("/lage/{lage_id}/stellen/{site_id}/pin", response_class=HTMLResponse)
-async def site_pin_save(
+def site_pin_save(
     request: Request,
     lage_id: int,
     site_id: int,
@@ -1723,7 +1724,7 @@ async def site_pin_save(
     from app.services.geo_service import auto_assign_section
     auto_assign_section(db, site)
     db.commit()
-    await broadcast_lage(lage_id, {"type": "site_updated", "site_id": site_id})
+    run_async(broadcast_lage, lage_id, {"type": "site_updated", "site_id": site_id})
 
     vehicles = (
         db.query(VehicleMaster)
@@ -1984,7 +1985,7 @@ def lage_bearbeiten_form(
 
 
 @router.post("/lage/{lage_id}/bearbeiten")
-async def lage_bearbeiten_save(
+def lage_bearbeiten_save(
     request: Request,
     lage_id: int,
     background_tasks: BackgroundTasks,
@@ -2011,7 +2012,7 @@ async def lage_bearbeiten_save(
         background_tasks.add_task(autoprint_gsl_updated_background, lage.id, lage.org_id)
     write_audit(db, "major_incident.edited", user_id=user.id,
                 payload={"lage_id": lage_id, "name": lage.name})
-    await broadcast_lage(lage_id, {"type": "lage_updated"})
+    run_async(broadcast_lage, lage_id, {"type": "lage_updated"})
     return RedirectResponse(f"/lage/{lage_id}", status_code=303)
 
 
@@ -2035,7 +2036,7 @@ def lage_pin_setzen(
 # ── Lage wiedereröffnen ───────────────────────────────────────────────────────
 
 @router.post("/lage/{lage_id}/wiederoeffnen")
-async def lage_wiederoeffnen(
+def lage_wiederoeffnen(
     request: Request,
     lage_id: int,
     db: Session = Depends(get_db),
@@ -2052,7 +2053,7 @@ async def lage_wiederoeffnen(
     write_audit(db, "major_incident.reopened", user_id=user.id,
                 payload={"lage_id": lage_id, "name": lage.name})
     db.commit()
-    await broadcast_lage(lage_id, {"type": "lage_updated"})
+    run_async(broadcast_lage, lage_id, {"type": "lage_updated"})
     return RedirectResponse(f"/lage/{lage_id}", status_code=303)
 
 
@@ -2680,7 +2681,7 @@ def lage_journal_entry_druck(
 # ── Übergreifende Meldungen (CrossSiteMarker) ────────────────────────────────
 
 @router.post("/lage/{lage_id}/uebergreifend")
-async def cross_marker_create(
+def cross_marker_create(
     request: Request,
     lage_id: int,
     title: str = Form(...),
@@ -2707,7 +2708,7 @@ async def cross_marker_create(
                 strasse=strasse, hausnr=hausnr, ort=ort, lat=lat, lng=lng,
                 user_id=getattr(user, "id", None), author_name=get_author_name(request))
     db.commit()
-    await gsl_broadcast.cross_marker_geaendert(lage_id, m.id)
+    run_async(gsl_broadcast.cross_marker_geaendert, lage_id, m.id)
     return Response(status_code=204)
 
 
@@ -2732,7 +2733,7 @@ def cross_marker_board_col(
 
 
 @router.post("/lage/{lage_id}/uebergreifend/{mid}/status")
-async def cross_marker_set_status(
+def cross_marker_set_status(
     request: Request,
     lage_id: int,
     mid: int,
@@ -2750,12 +2751,12 @@ async def cross_marker_set_status(
     setze_status(db, lage, mid, status)
     if status in CROSS_MARKER_STATUS_LABEL:
         db.commit()
-    await gsl_broadcast.cross_marker_geaendert(lage_id, mid)
+    run_async(gsl_broadcast.cross_marker_geaendert, lage_id, mid)
     return Response(status_code=204)
 
 
 @router.post("/lage/{lage_id}/uebergreifend/{mid}/bearbeiten")
-async def cross_marker_update(
+def cross_marker_update(
     request: Request,
     lage_id: int,
     mid: int,
@@ -2779,7 +2780,7 @@ async def cross_marker_update(
     bearbeiten(db, lage, mid, title=title, marker_type=marker_type, status=status, description=description,
               strasse=strasse, hausnr=hausnr, ort=ort)
     db.commit()
-    await gsl_broadcast.cross_marker_geaendert(lage_id, mid)
+    run_async(gsl_broadcast.cross_marker_geaendert, lage_id, mid)
     return Response(status_code=204)
 
 
@@ -2807,7 +2808,7 @@ def cross_marker_pin_picker(
 
 
 @router.post("/lage/{lage_id}/uebergreifend/{mid}/pin", response_class=HTMLResponse)
-async def cross_marker_set_pin(
+def cross_marker_set_pin(
     request: Request,
     lage_id: int,
     mid: int,
@@ -2825,7 +2826,7 @@ async def cross_marker_set_pin(
     m.lat = lat
     m.lng = lng
     db.commit()
-    await broadcast_lage(lage_id, {"type": "cross_marker:changed", "marker_id": mid})
+    run_async(broadcast_lage, lage_id, {"type": "cross_marker:changed", "marker_id": mid})
     return templates.TemplateResponse(request, "incident_major/_cross_marker_panel.html", {
         "lage": lage,
         "marker": m,
@@ -2838,7 +2839,7 @@ async def cross_marker_set_pin(
 
 
 @router.post("/lage/{lage_id}/uebergreifend/{mid}/loeschen")
-async def cross_marker_delete(
+def cross_marker_delete(
     request: Request,
     lage_id: int,
     mid: int,
@@ -2853,7 +2854,7 @@ async def cross_marker_delete(
         raise HTTPException(status_code=404)
     db.delete(m)
     db.commit()
-    await broadcast_lage(lage_id, {
+    run_async(broadcast_lage, lage_id, {
         "type": "cross_marker:changed", "marker_id": mid,
         "deleted": True,
     })
@@ -2906,7 +2907,7 @@ def cross_marker_druck(
 
 
 @router.post("/lage/{lage_id}/uebergreifend/{mid}/log")
-async def cross_marker_log_add(
+def cross_marker_log_add(
     request: Request,
     lage_id: int,
     mid: int,
@@ -2923,7 +2924,7 @@ async def cross_marker_log_add(
     from app.services.cross_marker_service import log_eintrag
     log_eintrag(db, lage, mid, text, getattr(user, "id", None), get_author_name(request))
     db.commit()
-    await gsl_broadcast.cross_marker_geaendert(lage_id, mid)
+    run_async(gsl_broadcast.cross_marker_geaendert, lage_id, mid)
     return Response(status_code=204)
 
 
@@ -3106,7 +3107,7 @@ def lage_funkjournal(
 
 
 @router.post("/lage/{lage_id}/funkjournal")
-async def funkjournal_add(
+def funkjournal_add(
     request: Request,
     lage_id: int,
     direction: str = Form(...),
@@ -3131,7 +3132,7 @@ async def funkjournal_add(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     db.commit()
-    await gsl_broadcast.funkjournal_geaendert(lage_id, related_site_id)
+    run_async(gsl_broadcast.funkjournal_geaendert, lage_id, related_site_id)
     return Response(status_code=204)
 
 
@@ -3166,7 +3167,7 @@ def meldungen_qr(
 
 
 @router.post("/lage/{lage_id}/funkjournal/{entry_id}/erledigt")
-async def funkjournal_handled(
+def funkjournal_handled(
     request: Request,
     lage_id: int,
     entry_id: int,
@@ -3183,7 +3184,7 @@ async def funkjournal_handled(
     except LookupError:
         raise HTTPException(status_code=404)
     db.commit()
-    await gsl_broadcast.funkjournal_geaendert(lage_id)
+    run_async(gsl_broadcast.funkjournal_geaendert, lage_id)
     return Response(status_code=204)
 
 
@@ -3600,7 +3601,7 @@ def meldung_ablehnen(
 
 
 @router.post("/lage/{lage_id}/meldungen/{report_id}/als-lageinfo")
-async def meldung_als_lageinfo(
+def meldung_als_lageinfo(
     request: Request,
     lage_id: int,
     report_id: int,
@@ -3624,7 +3625,7 @@ async def meldung_als_lageinfo(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     db.commit()
-    await gsl_broadcast.cross_marker_geaendert(lage_id, m.id)
+    run_async(gsl_broadcast.cross_marker_geaendert, lage_id, m.id)
     if _is_htmx(request):
         return templates.TemplateResponse(request, "incident_major/_meldung_card.html", {
             "r": report, "lage": lage, "can_edit": _can_edit(user),
@@ -4322,7 +4323,7 @@ def sektor_delete(
 
 
 @router.post("/lage/{lage_id}/stellen/{site_id}/sektor")
-async def site_sektor_assign(
+def site_sektor_assign(
     request: Request,
     lage_id: int,
     site_id: int,
@@ -4343,14 +4344,14 @@ async def site_sektor_assign(
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     db.commit()
-    await gsl_broadcast.abschnitt_geaendert(lage_id, site_id, site.sector_id)
+    run_async(gsl_broadcast.abschnitt_geaendert, lage_id, site_id, site.sector_id)
     return Response(status_code=204)
 
 
 # ── Abschnitt-Polygon-API ──────────────────────────────────────────────────────
 
 @router.put("/lage/{lage_id}/sektoren/{sektor_id}/geometrie")
-async def sektor_geometry_update(
+def sektor_geometry_update(
     request: Request,
     lage_id: int,
     sektor_id: int,
@@ -4367,7 +4368,7 @@ async def sektor_geometry_update(
     if not sector or sector.major_incident_id != lage_id:
         raise HTTPException(status_code=404)
 
-    data = await request.json()
+    data = run_async(request.json)
     geometry = data.get("geometry")  # GeoJSON Polygon oder null
 
     if geometry is not None:
@@ -4387,7 +4388,7 @@ async def sektor_geometry_update(
     if reassigned:
         db.commit()
 
-    await broadcast_lage(lage_id, {
+    run_async(broadcast_lage, lage_id, {
         "type": "section:changed",
         "sector_id": sektor_id,
         "reassigned": reassigned,
@@ -4397,7 +4398,7 @@ async def sektor_geometry_update(
 
 
 @router.delete("/lage/{lage_id}/sektoren/{sektor_id}/geometrie")
-async def sektor_geometry_delete(
+def sektor_geometry_delete(
     request: Request,
     lage_id: int,
     sektor_id: int,
@@ -4419,7 +4420,7 @@ async def sektor_geometry_delete(
     bulk_reassign_section(db, lage_id)
     db.commit()
 
-    await broadcast_lage(lage_id, {"type": "section:changed", "sector_id": sektor_id})
+    run_async(broadcast_lage, lage_id, {"type": "section:changed", "sector_id": sektor_id})
     return Response(status_code=204)
 
 
@@ -4518,7 +4519,7 @@ def vehicle_positions(
 
 
 @router.post("/lage/{lage_id}/fahrzeuge/manuell")
-async def vehicle_manual_pin(
+def vehicle_manual_pin(
     request: Request,
     lage_id: int,
     db: Session = Depends(get_db),
@@ -4531,7 +4532,7 @@ async def vehicle_manual_pin(
     lage = _lage_or_404(lage_id, db)
     _check_org_access(user, lage)
 
-    data = await request.json()
+    data = run_async(request.json)
     try:
         lat = float(data["lat"])
         lng = float(data["lng"])
@@ -4556,7 +4557,7 @@ async def vehicle_manual_pin(
     ))
     db.commit()
 
-    await broadcast_lage(lage_id, {
+    run_async(broadcast_lage, lage_id, {
         "type": "vehicle:position",
         "vehicle_id": vehicle_id,
         "label": label or str(vehicle_id or "?"),
@@ -5096,7 +5097,7 @@ def lage_ressourcen_planung(
 # ── Einheiten-Pool ────────────────────────────────────────────────────────────
 
 @router.post("/lage/{lage_id}/einheiten")
-async def lage_einheit_create(
+def lage_einheit_create(
     request: Request,
     lage_id: int,
     background_tasks: BackgroundTasks,
@@ -5177,13 +5178,13 @@ async def lage_einheit_create(
     if ergebnis.auto_sms:
         from app.services.gk_zugang_service import sende_auto_sms
         background_tasks.add_task(sende_auto_sms, ergebnis.auto_sms)
-    await broadcast_lage(lage_id, {"type": "ressource:changed", "einheit_id": ergebnis.einheit.id})
+    run_async(broadcast_lage, lage_id, {"type": "ressource:changed", "einheit_id": ergebnis.einheit.id})
     # Nur noch per HTMX aufgerufen (ressourcen.html, hx-swap="none").
     return Response(status_code=204)
 
 
 @router.post("/lage/{lage_id}/einheiten/{einheit_id}/kommandant")
-async def lage_einheit_kommandant(
+def lage_einheit_kommandant(
     request: Request,
     lage_id: int,
     einheit_id: int,
@@ -5216,12 +5217,12 @@ async def lage_einheit_kommandant(
     if name and ergebnis.auto_sms:
         from app.services.gk_zugang_service import sende_auto_sms
         background_tasks.add_task(sende_auto_sms, ergebnis.auto_sms)
-    await broadcast_lage(lage_id, {"type": "ressource:changed", "einheit_id": einheit_id})
+    run_async(broadcast_lage, lage_id, {"type": "ressource:changed", "einheit_id": einheit_id})
     return Response(status_code=204)
 
 
 @router.post("/lage/{lage_id}/einheiten/{einheit_id}/status")
-async def lage_einheit_status(
+def lage_einheit_status(
     request: Request,
     lage_id: int,
     einheit_id: int,
@@ -5252,7 +5253,7 @@ async def lage_einheit_status(
     except ValueError:
         raise HTTPException(status_code=400)
     db.commit()
-    await broadcast_lage(lage_id, {"type": "ressource:changed", "einheit_id": einheit_id})
+    run_async(broadcast_lage, lage_id, {"type": "ressource:changed", "einheit_id": einheit_id})
     # Nur noch per HTMX (_kraefteuebersicht.html, hx-swap="none") aufgerufen --
     # der Container aktualisiert sich selbst ueber den ressource:changed-Broadcast/
     # -Trigger, ein Redirect-Body wird nirgends mehr benoetigt (GSL-Reload-Audit
@@ -5261,7 +5262,7 @@ async def lage_einheit_status(
 
 
 @router.post("/lage/{lage_id}/einheiten/{einheit_id}/sektor")
-async def lage_einheit_sektor(
+def lage_einheit_sektor(
     request: Request,
     lage_id: int,
     einheit_id: int,
@@ -5287,13 +5288,13 @@ async def lage_einheit_sektor(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     db.commit()
-    await broadcast_lage(lage_id, {"type": "ressource:changed", "einheit_id": einheit_id})
+    run_async(broadcast_lage, lage_id, {"type": "ressource:changed", "einheit_id": einheit_id})
     # Nur noch per HTMX aufgerufen (siehe lage_einheit_status oben).
     return Response(status_code=204)
 
 
 @router.post("/lage/{lage_id}/einheiten/{einheit_id}/einsatz")
-async def lage_einheit_einsatz(
+def lage_einheit_einsatz(
     request: Request,
     lage_id: int,
     einheit_id: int,
@@ -5323,12 +5324,12 @@ async def lage_einheit_einsatz(
     if site_id:
         from app.services.print_dispatcher import autoprint_gsl_stelle_disponiert_background
         background_tasks.add_task(autoprint_gsl_stelle_disponiert_background, dispatch.id)
-    await broadcast_lage(lage_id, {"type": "ressource:changed", "einheit_id": einheit_id})
+    run_async(broadcast_lage, lage_id, {"type": "ressource:changed", "einheit_id": einheit_id})
     return RedirectResponse(f"/lage/{lage_id}/ressourcen", status_code=303)
 
 
 @router.post("/lage/{lage_id}/einheiten/{einheit_id}/pool")
-async def lage_einheit_pool(
+def lage_einheit_pool(
     request: Request,
     lage_id: int,
     einheit_id: int,
@@ -5344,13 +5345,13 @@ async def lage_einheit_pool(
         author_name=get_author_name(request), user_id=user.id,
     )
     db.commit()
-    await broadcast_lage(lage_id, {"type": "ressource:changed", "einheit_id": einheit_id})
+    run_async(broadcast_lage, lage_id, {"type": "ressource:changed", "einheit_id": einheit_id})
     # Nur noch per HTMX aufgerufen (siehe lage_einheit_status oben).
     return Response(status_code=204)
 
 
 @router.post("/lage/{lage_id}/einheiten/{einheit_id}/fuehrer")
-async def lage_einheit_fuehrer(
+def lage_einheit_fuehrer(
     request: Request,
     lage_id: int,
     einheit_id: int,
@@ -5381,12 +5382,12 @@ async def lage_einheit_fuehrer(
     if ergebnis.auto_sms:
         from app.services.gk_zugang_service import sende_auto_sms
         background_tasks.add_task(sende_auto_sms, ergebnis.auto_sms)
-    await broadcast_lage(lage_id, {"type": "ressource:changed", "einheit_id": einheit_id})
+    run_async(broadcast_lage, lage_id, {"type": "ressource:changed", "einheit_id": einheit_id})
     return RedirectResponse(f"/lage/{lage_id}/ressourcen", status_code=303)
 
 
 @router.post("/lage/{lage_id}/einheiten/{einheit_id}/loeschen")
-async def lage_einheit_delete(
+def lage_einheit_delete(
     request: Request,
     lage_id: int,
     einheit_id: int,
@@ -5403,7 +5404,7 @@ async def lage_einheit_delete(
 
     db.delete(einheit)
     db.commit()
-    await broadcast_lage(lage_id, {"type": "ressource:changed", "einheit_id": einheit_id})
+    run_async(broadcast_lage, lage_id, {"type": "ressource:changed", "einheit_id": einheit_id})
     # Nur noch per HTMX aufgerufen (siehe lage_einheit_status oben).
     return Response(status_code=204)
 
