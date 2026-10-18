@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Kontakte drucken{% endblock %}
+{% block content %}
+<style>
+.kontakt-druck{max-width:1400px;margin:auto;padding:1.5rem}.kontakt-druck h1{font-size:1.65rem;font-weight:700;margin:.5rem 0 1.25rem}.kontakt-druck h2{font-size:1.2rem;font-weight:700;margin:1rem 0 .6rem}.kontakt-druck fieldset{border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface-mid);padding:1rem;margin-bottom:1rem}.kontakt-druck legend{font-weight:700;font-size:.9rem;padding:0 .4rem}.kontakt-druck label{font-size:.85rem}.kontakt-druck p{margin:.65rem 0}.kontakt-druck .form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:.8rem}.druck-kategorien{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:.6rem}.druck-kategorien label{display:flex;align-items:center;gap:.5rem}.druck-profil{display:flex;align-items:end;flex-wrap:wrap;gap:.75rem;margin:1rem 0}.druck-profil label{flex:1;min-width:240px}.druck-profil button{flex:0 0 auto}.druck-vorschau{width:100%;height:700px;border:1px solid var(--border);border-radius:var(--radius-md);background:white}@media(max-width:600px){.kontakt-druck{padding:.8rem}.druck-profil label{min-width:100%}}
+</style>
+<main class="kontakt-druck">
+  <a href="/kontakte">← Kontaktverwaltung</a><h1>Kontakte drucken</h1>
+  <form method="get" class="druck-profil"><label>Druckprofil<select class="form-select" name="profil"><option disabled value="" {% if not profil_id %}selected{% endif %}>Individuelle Auswahl</option>{% for profil in profile %}<option value="{{ profil.id }}" {% if profil.id == profil_id %}selected{% endif %}>{{ profil.name }}{{ ' (persönlich)' if profil.persoenlich else '' }}</option>{% endfor %}</select></label><button class="btn btn--ghost">Profil laden</button></form>
+  <form id="druckfilter" method="get" action="/kontakte/drucken">
+    <input type="hidden" name="angepasst" value="1">
+    <fieldset><legend>Kategorien</legend><p class="text-muted">Mehrere Kategorien auswählen. Ohne Auswahl werden alle Kategorien berücksichtigt.</p>
+    <div class="druck-kategorien">{% for kat in kategorien if kat.aktiv %}<label><input type="checkbox" name="kategorien" value="{{ kat.id }}" {% if kat.id in selected %}checked{% endif %}> {{ kat.name }}</label>{% endfor %}</div>
+    {% if not kategorien %}<p>Es sind noch keine Kategorien eingerichtet. Ein Kontaktverwalter kann unter „Kategorien verwalten“ die Standardkategorien anlegen.</p>{% endif %}</fieldset>
+    <fieldset><legend>Kontaktauswahl</legend>
+    {% for key, label in [('nur_aktiv','Nur aktive Kontakte'),('nur_freigegeben','Nur ausdrücklich für den Druck freigegebene Kontakte'),('nur_einsatzrelevant','Nur einsatzrelevante Kontakte'),('objektkontakte_ausschliessen','Objektkontakte ausschließen'),('ohne_telefon_ausschliessen','Kontakte ohne druckbare Telefonnummer ausschließen')] %}<label style="display:block"><input type="checkbox" name="{{ key }}" value="1" {% if opts[key] %}checked{% endif %}> {{ label }}</label>{% endfor %}
+    <p class="text-muted">Für alle Kontakte die Einschränkungen deaktivieren. Private Telefonnummern werden immer ausgeschlossen.</p>
+    <div class="form-grid"><label>Typ<select class="form-select" name="typ">{% for key,label in [('all','Alle Kontakte'),('stelle','Nur Stellen und Organisationen'),('person','Nur Personen')] %}<option value="{{ key }}" {% if opts.typ == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    {% for key,label in [('organisation','Organisation'),('funktion','Funktion'),('q','Freitextsuche')] %}<label>{{ label }}<input class="form-input" name="{{ key }}" value="{{ opts[key] }}"></label>{% endfor %}
+    <label>Priorität<select class="form-select" name="prioritaet">{% for key,label in [('', 'Alle'),('hoch','Hoch'),('normal','Normal'),('niedrig','Niedrig')] %}<option value="{{ key }}" {% if opts.prioritaet == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label></div></fieldset>
+    <fieldset><legend>Drucklayout</legend><div class="form-grid">
+    <label>Layout<select class="form-select" name="layout"><option value="kompakt" {% if opts.layout == 'kompakt' %}selected{% endif %}>Kompakte Einsatztelefonliste</option><option value="detail" {% if opts.layout == 'detail' %}selected{% endif %}>Detailliertes Kontaktverzeichnis</option></select></label>
+    <label>Papier<select class="form-select" name="papier">{% for p in ['A4','A3'] %}<option {% if opts.papier == p %}selected{% endif %}>{{ p }}</option>{% endfor %}</select></label>
+    <label>Ausrichtung<select class="form-select" name="ausrichtung">{% for key,label in [('auto','Automatisch nach Layout'),('landscape','Querformat'),('portrait','Hochformat')] %}<option value="{{ key }}" {% if opts.ausrichtung == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+    <label>Sortierung<select class="form-select" name="sortierung">{% for key,label in [('prioritaet','Priorität'),('name','Name'),('organisation','Organisation'),('manuell','Manuelle Reihenfolge')] %}<option value="{{ key }}" {% if opts.sortierung == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label></div>
+    <label><input type="checkbox" name="logo_anzeigen" value="1" {% if opts.logo_anzeigen %}checked{% endif %}> Organisationslogo anzeigen (falls hinterlegt)</label><br>
+    <label><input type="checkbox" name="gruppieren" value="1" {% if opts.gruppieren %}checked{% endif %}> Kategorienüberschriften anzeigen</label>
+    <p>Angezeigte Felder (Kontaktname bleibt sichtbar):</p>{% for key,label in felder.items() %}<label style="display:inline-block;margin-right:1rem"><input type="checkbox" name="felder" value="{{ key }}" {% if key in opts.felder %}checked{% endif %}> {{ label }}</label>{% endfor %}</fieldset>
+    <button class="btn btn--primary" type="submit">Auswahl und Vorschau aktualisieren</button>
+  </form>
+  <form method="post" action="/kontakte/druckprofile" class="druck-profil">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <input type="hidden" name="einstellungen" value="{{ opts.model_dump_json() }}">
+    <label>Aktualisierte Auswahl als persönliches Profil speichern (gleicher Name ersetzt das Profil)<input class="form-input" name="name" required maxlength="100"></label><button class="btn btn--ghost">Profil speichern</button>
+  </form>
+  {% for profil in profile if profil.persoenlich and profil.id == profil_id %}<form method="post" action="/kontakte/druckprofile/{{ profil.id }}/loeschen"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><button class="btn btn--ghost">Persönliches Profil löschen</button></form>{% endfor %}
+  <h2>{{ anzahl }} passende Kontakte</h2>
+  {% if hinweise %}<details><summary>Plausibilitätsprüfung: Hinweise zu {{ hinweise|length }} Kontakten</summary><ul>{% for h in hinweise %}<li>{{ h.name }}: {{ h.hinweise|join(' · ') }}</li>{% endfor %}</ul></details>{% endif %}
+  <p class="text-muted">Die Vorschau und die Aktionen verwenden die zuletzt aktualisierte Auswahl. Kontaktdaten werden bei jedem Abruf aktuell geladen.</p>
+  <p><a class="btn btn--primary" href="/kontakte/druck.pdf?{{ query }}">PDF herunterladen</a> <button id="browser-drucken" type="button" class="btn btn--ghost">Drucken</button> <a class="btn btn--ghost" href="/kontakte/druckvorschau?{{ query }}" target="_blank" rel="noopener">Vorschau öffnen</a></p>
+  <iframe id="druckvorschau" title="Druckvorschau der Einsatzkontakte" src="/kontakte/druckvorschau?{{ query }}" class="druck-vorschau"></iframe>
+</main>
+<script>
+document.getElementById('browser-drucken').addEventListener('click', function () {
+  const button = this;
+  const frame = document.getElementById('druckvorschau');
+  button.disabled = true;
+  frame.addEventListener('load', function () {
+    button.disabled = false;
+    frame.contentWindow.focus();
+    frame.contentWindow.print();
+  }, {once: true});
+  frame.src = frame.src;
+});
+</script>
+{% endblock %}

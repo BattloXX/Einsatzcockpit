@@ -1926,3 +1926,63 @@ def application():
     )
     _metadata_route_mit_public_clients(app.routes)
     return app
+
+
+@server.tool(
+    name="kontakt_kategorie_speichern", description="Kontaktkategorie anlegen, bearbeiten, sortieren oder deaktivieren."
+)
+async def kontakt_kategorie_speichern(
+    name: str,
+    kategorie_id: int | None = None,
+    aktiv: bool | None = None,
+    sortierung: int | None = None,
+    druck_standard: bool | None = None,
+    objektkontakte: bool | None = None,
+    ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "kontakt_kategorie_speichern",
+        name=name,
+        kategorie_id=kategorie_id,
+        aktiv=aktiv,
+        sortierung=sortierung,
+        druck_standard=druck_standard,
+        objektkontakte=objektkontakte,
+    )
+
+
+@server.tool(
+    name="kontakt_druckprofile", description="Standardprofile und eigene persönliche Kontakt-Druckprofile lesen."
+)
+async def kontakt_druckprofile(ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("kontakt_druckprofile")
+
+
+@server.tool(
+    name="kontakt_druckprofil_speichern", description="Eigene Kontakt-Druckeinstellungen als Profil speichern."
+)
+async def kontakt_druckprofil_speichern(
+    name: str, einstellungen: dict, ctx: Context | None = None
+) -> dict[str, object]:
+    return await _call_registered_tool("kontakt_druckprofil_speichern", name=name, einstellungen=einstellungen)
+
+
+@server.tool(name="kontakt_druckprofil_loeschen", description="Eigenes persönliches Kontakt-Druckprofil löschen.")
+async def kontakt_druckprofil_loeschen(profil_id: int, ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("kontakt_druckprofil_loeschen", profil_id=profil_id)
+
+
+@server.tool(
+    name="kontakt_druckliste",
+    description="Aktuelle Kontaktliste nach Druckprofil oder Filtern ohne private Telefonnummern.",
+)
+async def kontakt_druckliste(
+    profil_id: str = "einsatz",
+    einstellungen: dict | None = None,
+    seite: int = 1,
+    limit: int = 50,
+    ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "kontakt_druckliste", profil_id=profil_id, einstellungen=einstellungen, seite=seite, limit=limit
+    )

@@ -522,3 +522,24 @@ def render_mailing_report_pdf(data: dict, org, base_url: str = "") -> bytes:
     buf = io.BytesIO()
     HTML(string=html_str, base_url=base_url or ".").write_pdf(buf)
     return buf.getvalue()
+
+
+def render_kontaktverzeichnis_pdf(html: str, *, logo_data_uri: str = "") -> bytes:
+    """Kontakt-PDF ohne Netzwerk-/Dateizugriffe und ohne persistierte Ausgabedatei."""
+    from weasyprint import HTML, urls
+
+    class EmbeddedLogoFetcher:
+        _fail_on_errors = False
+
+        def __call__(self, url, *args, **kwargs):
+            if logo_data_uri and url == logo_data_uri and url.startswith("data:image/"):
+                mime_type, encoded = logo_data_uri[5:].split(";base64,", 1)
+                content = base64.b64decode(encoded, validate=True)
+                # Neuere WeasyPrint-Versionen verwenden Antwortobjekte, ältere Dictionaries.
+                response_type = getattr(urls, "URLFetcherResponse", None)
+                if response_type is not None:
+                    return response_type(url, body=content, headers={"Content-Type": mime_type})
+                return {"string": content, "mime_type": mime_type, "redirected_url": url}
+            raise ValueError("Externe Ressourcen sind im Kontaktverzeichnis nicht erlaubt.")
+
+    return HTML(string=html, url_fetcher=EmbeddedLogoFetcher()).write_pdf()

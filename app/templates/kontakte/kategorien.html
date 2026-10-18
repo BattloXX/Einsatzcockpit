@@ -1,0 +1,11 @@
+{% extends "base.html" %}{% block title %}Kontaktkategorien{% endblock %}{% block content %}
+<style>.kontakt-kategorien h1{font-size:1.65rem;font-weight:700;margin:.6rem 0 1rem}.kontakt-kategorien h2{font-size:1.15rem;font-weight:700}.kontakt-kategorien p{margin:1rem 0}.kontakt-kategorien form{margin:1rem 0;padding:1rem;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface-mid)}.kontakt-kategorien label{font-size:.85rem;margin-right:.75rem}.kontakt-kategorien .form-grid{display:grid;grid-template-columns:3fr 1fr;gap:1rem;margin-bottom:.8rem}@media(max-width:600px){.kontakt-kategorien .form-grid{grid-template-columns:1fr}}</style>
+<main class="kontakt-kategorien" style="max-width:1100px;margin:auto;padding:1rem"><a href="/kontakte">← Kontaktverwaltung</a><h1>Kategorien verwalten</h1>
+<p>Deaktivierte Kategorien bleiben an vorhandenen Kontakten sichtbar. Die Objektkennzeichnung schließt zugeordnete Kontakte standardmäßig beim Druck aus.</p>
+<form method="post" action="/kontakte/druckkategorien/standard"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><button class="btn btn--ghost">Fehlende Standardkategorien ergänzen</button></form>
+{% for kat in kategorien + [none] %}
+<form method="post" action="/kontakte/druckkategorien" style="padding:1rem 0;border-bottom:1px solid var(--border)">
+<input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">{% if kat %}<input type="hidden" name="kategorie_id" value="{{ kat.id }}">{% else %}<h2>Neue Kategorie</h2>{% endif %}
+<div class="form-grid"><label>Name<input class="form-input" name="name" required maxlength="100" value="{{ kat.name if kat else '' }}"></label><label>Reihenfolge<input class="form-input" type="number" name="sortierung" value="{{ kat.sortierung if kat else 0 }}"></label></div>
+{% for key,label in [('aktiv','Aktiv'),('druck_standard','Standardmäßig im Druck auswählen'),('objektkontakte','Objektkontakte')] %}<label><input type="checkbox" name="{{ key }}" value="1" {% if (kat and kat[key]) or (not kat and key == 'aktiv') %}checked{% endif %}> {{ label }}</label> {% endfor %}<button class="btn btn--primary">{{ 'Speichern' if kat else 'Anlegen' }}</button></form>
+{% endfor %}</main>{% endblock %}

@@ -51,7 +51,7 @@ def _form_daten(
     email: str,
     erreichbarkeit: str,
     notizen: str,
-) -> dict[str, str]:
+) -> dict[str, object]:
     return {
         "typ": typ,
         "anzeigename": bereinigter_text(anzeigename) or "",
@@ -168,6 +168,9 @@ def _bearbeitungsdaten(db: Session, kontakt: Kontakt) -> dict[str, object]:
     )
     from app.services.kontakt_mcp_import_service import kontakt_payload
     return {
+        **{key: getattr(kontakt, key) for key in (
+            "einsatzrelevant", "druck_freigegeben", "druck_prioritaet", "druckhinweis", "druck_sortierung", "aktiv"
+        )},
         "id": kontakt.id,
         "version": kontakt.version,
         "typ": kontakt.typ,
@@ -697,6 +700,18 @@ async def create(
     _guard: None = Depends(require_kontakte_enabled),
 ):
     daten = _form_daten(typ, anzeigename, vorname, nachname, funktion, organisation, email, erreichbarkeit, notizen)
+    form = await request.form()
+    if form.get("druck_kennzeichnungen") == "1":
+        try:
+            sortierung = int(str(form.get("druck_sortierung", "0")))
+        except ValueError:
+            raise HTTPException(422, "Sortierung muss eine ganze Zahl sein.") from None
+        daten.update(einsatzrelevant=form.get("einsatzrelevant") == "1",
+                     druck_freigegeben=form.get("druck_freigegeben") == "1",
+                     aktiv=form.get("aktiv") == "1", druck_sortierung=sortierung,
+                     druck_prioritaet=str(form.get("druck_prioritaet", "normal")),
+                     druckhinweis=str(form.get("druckhinweis", "")))
+
     form_data: dict[str, object] = {
         **daten,
         "nummer": nummer,
@@ -853,6 +868,18 @@ async def update(
     _guard: None = Depends(require_kontakte_enabled),
 ):
     daten = _form_daten(typ, anzeigename, vorname, nachname, funktion, organisation, email, erreichbarkeit, notizen)
+    form = await request.form()
+    if form.get("druck_kennzeichnungen") == "1":
+        try:
+            sortierung = int(str(form.get("druck_sortierung", "0")))
+        except ValueError:
+            raise HTTPException(422, "Sortierung muss eine ganze Zahl sein.") from None
+        daten.update(einsatzrelevant=form.get("einsatzrelevant") == "1",
+                     druck_freigegeben=form.get("druck_freigegeben") == "1",
+                     aktiv=form.get("aktiv") == "1", druck_sortierung=sortierung,
+                     druck_prioritaet=str(form.get("druck_prioritaet", "normal")),
+                     druckhinweis=str(form.get("druckhinweis", "")))
+
     form_data = {
         **daten,
         "nummer": nummer,

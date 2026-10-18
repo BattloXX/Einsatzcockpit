@@ -46,6 +46,73 @@ Anzeigename **und** gleicher Organisation. Bei einem Treffer wird vor dem Speich
 Liste möglicher Duplikate angezeigt; du kannst trotzdem einen neuen, separaten Kontakt
 anlegen oder stattdessen den bestehenden verwenden.
 
+## Einsatzkontakte drucken
+
+Über **Kontakte → Drucken** öffnest du die Druckansicht. Suche, Kontakttyp und eine
+gewählte Kategorie werden aus der Kontaktliste übernommen. Die Kontaktverwaltung bleibt
+die einzige Datenquelle; für Vorschau, PDF und Browserdruck werden die aktuellen Kontakte geladen.
+
+### Druckfreigaben und Standardauswahl
+
+Im Kontaktformular stehen **Einsatzrelevant**, **Im Druckverzeichnis anzeigen**,
+**Priorität**, **Druckhinweis** und **Sortierreihenfolge** zur Verfügung. Die vorhandene
+Erreichbarkeit wird auch im Druck verwendet. Mehrere Kategorien kannst du mit Komma getrennt zuweisen.
+
+Beim Öffnen sind aktive, ausdrücklich druckfreigegebene Kontakte aus diesen Kategorien ausgewählt:
+
+- Feuerwehr & Einsatzorganisationen
+- Gemeinde & Behörden
+- Infrastruktur & Versorger
+
+**Objektkontakte ausschließen** ist eingeschaltet. Das betrifft sowohl Kontakte mit einer
+Objektkategorie als auch Kontakte mit einer bestehenden Objektzuordnung. Bestehende Kontakte
+werden nicht automatisch für den Druck freigegeben. Bei einer leeren Liste prüfe daher zuerst
+Kategorie und Druckfreigabe des Kontakts.
+
+### Auswahl, Vorschau und Ausgabe
+
+Du kannst mehrere Kategorien sowie Typ, Organisation, Funktion, Priorität und Freitext
+filtern. Einsatzrelevanz, Aktivstatus, Druckfreigabe und Objektausschluss lassen sich
+unabhängig einstellen. Eine leere Kategorienauswahl berücksichtigt alle Kategorien.
+**Auswahl und Vorschau aktualisieren** zeigt die passende Anzahl und die neue Vorschau.
+Jeder Kontakt erscheint auch bei mehreren Kategorien nur einmal.
+
+| Layout | Standardformat | Verwendung |
+|---|---|---|
+| Kompakte Einsatztelefonliste | A4 quer | Telefonliste für den Kommandofunk mit hervorgehobenen Rufnummern |
+| Detailliertes Kontaktverzeichnis | A4 hoch | Nachschlagewerk mit zusätzlichen Kontaktinformationen |
+
+Papierformat, Ausrichtung, Sortierung, Kategorienüberschriften und angezeigte Felder sind
+änderbar. Hinweise zu fehlenden Telefonnummern, Kategorien, Organisationen, inaktiven
+Kontakten oder möglichen Dubletten verhindern den Ausdruck nicht. Kontakte ohne druckbare
+Telefonnummer kannst du ausdrücklich ausschließen.
+
+**PDF herunterladen** erzeugt das Dokument serverseitig mit Seitenzahlen. **Drucken** lädt
+die Vorschau erneut und öffnet den Browserdruck. Beide Aktionen verwenden die zuletzt
+aktualisierte Filterauswahl. Private oder inaktive Telefonnummern und private E-Mail-Adressen
+werden ausgeschlossen; allgemeine interne Notizen werden nicht gedruckt.
+
+### Organisationslogo
+
+Das unter [Administration → Einstellungen → Logo](Administration-Einstellungen#logo-hochladen)
+hinterlegte Organisationslogo wird standardmäßig rechts im Kopf beider Layouts angezeigt.
+Mit **Organisationslogo anzeigen (falls hinterlegt)** kannst du es abschalten. Aktualisiere
+anschließend die Vorschau. Die Einstellung gilt für Vorschau, PDF und Browserdruck.
+
+Das Logo wird proportional verkleinert, ohne es zu verzerren. Fehlt die Datei oder kann sie
+nicht gelesen werden, erscheint das Verzeichnis mit Organisationsname und ohne Logo.
+
+### Persönliche Druckprofile
+
+Die vordefinierten Profile heißen **Einsatztelefonliste**, **GSL-Kontaktverzeichnis**,
+**Feuerwehr intern**, **Dienstleister** und **Vollständiges Kontaktverzeichnis**.
+Nach dem Aktualisieren der Vorschau kannst du die Auswahl unter einem eigenen Namen speichern.
+Ein gleicher Name ersetzt dein vorhandenes Profil; persönliche Profile kannst du auch löschen.
+
+Ein Profil speichert Filter, Kategorien, Sortierung, Layout, Feldauswahl und Logoanzeige.
+Es speichert keine Kontaktkopien und ist nur für dich innerhalb der jeweiligen Organisation
+verfügbar. Das Logo und die Kontaktdaten werden bei der Ausgabe aktuell gelesen.
+
 ## Kontakt einem Objekt zuordnen
 
 Im Objekt-Reiter **Kontakte** wird ein zentraler Kontakt gesucht und mit einer **Rolle**
