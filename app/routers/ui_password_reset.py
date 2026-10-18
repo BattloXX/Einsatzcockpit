@@ -28,8 +28,10 @@ from app.core.rate_limit import limiter as _limiter
 from app.core.security import hash_password
 from app.core.templating import templates
 from app.db import get_db
+from app.models.master import FireDept
 from app.models.password_reset import PasswordResetToken
 from app.models.user import User
+from app.services.benutzer_mail_service import send_passwort_geaendert, send_sso_hinweis
 from app.services.mail_service import send_password_reset
 
 logger = logging.getLogger("einsatzleiter.password_reset")
@@ -69,6 +71,24 @@ async def forgot_submit(
     user = db.query(User).filter(User.email == email_clean, User.active == True).first()  # noqa: E712
     if not user:
         # Trotzdem warten, um Timing-Unterschiede zu reduzieren – minimaler Schutz
+        return neutral_response
+
+    if user.auth_provider != "local":
+        org = db.get(FireDept, user.org_id)
+        write_audit(
+            db, "auth.password_reset.sso_hinweis",
+            user_id=user.id, ip=request.client.host if request.client else None,
+        )
+        db.commit()
+        try:
+            await send_sso_hinweis(
+                to=user.email,  # type: ignore[arg-type]
+                user_display_name=user.full_name or user.display_name or user.username,
+                org_slug=org.slug if org else "",
+                db=db, org_id=user.org_id,
+            )
+        except Exception as exc:  # pragma: no cover
+            logger.error("Versand des SSO-Hinweises fehlgeschlagen für user_id=%s: %s", user.id, exc)
         return neutral_response
 
     # Alte offene Tokens entwerten
@@ -111,17 +131,22 @@ async def forgot_submit(
 @router.get("/passwort-zuruecksetzen", response_class=HTMLResponse)
 async def reset_form(request: Request, token: str = "", db: Session = Depends(get_db)):
     error: str | None = None
+    ist_einladung = False
     if not token:
         error = "Token fehlt."
     else:
         prt = db.query(PasswordResetToken).filter(
             PasswordResetToken.token_hash == _hash_token(token)
         ).first()
+        ist_einladung = bool(prt and prt.zweck == "einladung")
         if not prt or not prt.is_valid:
-            error = "Dieser Reset-Link ist nicht mehr gültig. Fordere bitte einen neuen an."
+            error = (
+                "Diese Einladung ist abgelaufen. Bitte wende dich an deinen Administrator."
+                if ist_einladung else "Dieser Reset-Link ist nicht mehr gültig. Fordere bitte einen neuen an."
+            )
     return templates.TemplateResponse(
         request, "auth/reset.html",
-        {"token": token, "error": error, "done": False},
+        {"token": token, "error": error, "done": False, "ist_einladung": ist_einladung},
     )
 
 
@@ -135,9 +160,13 @@ async def reset_submit(
     db: Session = Depends(get_db),
 ):
     def _err(msg: str) -> HTMLResponse:
+        prt_fehler = db.query(PasswordResetToken).filter(
+            PasswordResetToken.token_hash == _hash_token(token)
+        ).first()
         return templates.TemplateResponse(
             request, "auth/reset.html",
-            {"token": token, "error": msg, "done": False},
+            {"token": token, "error": msg, "done": False,
+             "ist_einladung": bool(prt_fehler and prt_fehler.zweck == "einladung")},
         )
 
     if not token:
@@ -151,7 +180,11 @@ async def reset_submit(
         PasswordResetToken.token_hash == _hash_token(token)
     ).first()
     if not prt or not prt.is_valid:
-        return _err("Dieser Reset-Link ist nicht mehr gültig. Fordere bitte einen neuen an.")
+        return _err(
+            "Diese Einladung ist abgelaufen. Bitte wende dich an deinen Administrator."
+            if prt and prt.zweck == "einladung"
+            else "Dieser Reset-Link ist nicht mehr gültig. Fordere bitte einen neuen an."
+        )
 
     user = db.get(User, prt.user_id)
     if not user or not user.active:
@@ -167,7 +200,14 @@ async def reset_submit(
     )
     db.commit()
 
+    try:
+        await send_passwort_geaendert(
+            user, db, ausloeser=prt.zweck, ip=request.client.host if request.client else None,
+        )
+    except Exception as exc:  # pragma: no cover
+        logger.error("Versand der Passwort-Bestätigung fehlgeschlagen für user_id=%s: %s", user.id, exc)
+
     return templates.TemplateResponse(
         request, "auth/reset.html",
-        {"token": "", "error": None, "done": True},
+        {"token": "", "error": None, "done": True, "ist_einladung": prt.zweck == "einladung"},
     )

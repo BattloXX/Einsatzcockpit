@@ -339,42 +339,13 @@ async def _send(msg: EmailMessage, smtp_cfg: dict) -> None:
 
 
 async def send_password_reset(*, to: str, reset_url: str, user_display_name: str,
-                               db=None, org_id: int | None = None) -> None:
-    smtp_cfg = _org_smtp_cfg(db, org_id) or get_smtp_cfg(db)
-    subject = "Passwort zurücksetzen – Einsatzcockpit"
-    ttl = settings.PASSWORD_RESET_TTL_MIN
-    body_txt = (
-        f"Hallo {user_display_name},\n\n"
-        f"Du erhältst diese Mail, weil für deinen Account ein Passwort-Reset "
-        f"angefordert wurde.\n\n"
-        f"Öffne folgenden Link innerhalb von {ttl} Minuten, um ein neues "
-        f"Passwort zu vergeben:\n\n"
-        f"{reset_url}\n\n"
-        f"Falls du den Reset nicht selbst angefordert hast, ignoriere diese Mail einfach.\n\n"
-        f"Mit freundlichen Grüßen\n"
-        f"Einsatzcockpit"
+                               durch_admin: bool = False, db=None, org_id: int | None = None) -> None:
+    from app.services.benutzer_mail_service import send_password_reset as _send_password_reset
+
+    await _send_password_reset(
+        to=to, reset_url=reset_url, user_display_name=user_display_name,
+        durch_admin=durch_admin, db=db, org_id=org_id,
     )
-    body_html = f"""<!doctype html>
-<html lang="de"><body style="font-family: Arial, sans-serif; max-width: 540px; margin: 0 auto;">
-<p>Hallo <strong>{user_display_name}</strong>,</p>
-<p>Du erhältst diese Mail, weil für deinen Account ein Passwort-Reset
-angefordert wurde.</p>
-<p>Öffne folgenden Link innerhalb von <strong>{ttl} Minuten</strong>, um ein neues
-Passwort zu vergeben:</p>
-<p style="text-align:center;">
-  <a href="{reset_url}" style="background:#d42225;color:#fff;padding:10px 18px;
-     border-radius:6px;text-decoration:none;display:inline-block;">
-     Neues Passwort setzen
-  </a>
-</p>
-<p style="font-size:0.85rem;color:#666;">Falls du den Reset nicht selbst angefordert hast,
-kannst du diese Mail ignorieren. Dein Passwort bleibt unverändert.</p>
-<p style="font-size:0.85rem;color:#666;">URL: <code>{reset_url}</code></p>
-</body></html>
-"""
-    msg = _build_message(to=to, subject=subject, body_txt=body_txt,
-                         body_html=body_html, smtp_cfg=smtp_cfg)
-    await deliver(db, org_id, msg, smtp_cfg)
 
 
 async def send_pflegeauftrag_einladung(
@@ -562,124 +533,15 @@ async def send_contact_message(*, name: str, reply_email: str, message: str, db=
     raise MailConfigError("Weder SMTP noch Resend ist konfiguriert.")
 
 
-async def send_welcome_mail(*, to: str, username: str, password: str,
-                            user_display_name: str, app_url: str = "",
-                            is_test: bool = False, db=None, org_id: int | None = None) -> None:
-    smtp_cfg = _org_smtp_cfg(db, org_id) or get_smtp_cfg(db)
-    subject = "Willkommen bei Einsatzcockpit – Zugangsdaten"
-    test_notice_txt = "\n⚠️  HINWEIS: Dies ist ein TESTSYSTEM – bitte keine Echtdaten eingeben.\n" if is_test else ""
-    test_notice_html = (
-        '<p style="background:#7c3c00;color:#ffe0b2;padding:8px 12px;border-radius:4px;font-weight:bold;">'
-        '⚠️  HINWEIS: Dies ist ein TESTSYSTEM – bitte keine Echtdaten eingeben.</p>'
-    ) if is_test else ""
-    url_txt = f"\nAnmelden unter: {app_url}\n" if app_url else ""
-    safe_url = html.escape(app_url) if app_url else ""
-    url_html = (
-        f'<p style="text-align:center;margin:16px 0;">'
-        f'<a href="{safe_url}" style="background:#d42225;color:#fff;padding:10px 18px;'
-        f'border-radius:6px;text-decoration:none;display:inline-block;">Jetzt anmelden</a></p>'
-        f'<p style="font-size:0.85rem;color:#666;">URL: <code>{safe_url}</code></p>'
-    ) if app_url else ""
-    body_txt = (
-        f"Hallo {user_display_name},\n\n"
-        f"Dein Account bei Einsatzcockpit wurde eingerichtet.\n"
-        f"{test_notice_txt}"
-        f"\nBenutzername: {username}\n"
-        f"Passwort:     {password}\n"
-        f"{url_txt}"
-        f"\nBitte ändere dein Passwort nach dem ersten Login.\n\n"
-        f"Mit freundlichen Grüßen\n"
-        f"Einsatzcockpit"
-    )
-    safe_name = html.escape(user_display_name)
-    safe_user = html.escape(username)
-    safe_pw = html.escape(password)
-    body_html = f"""<!doctype html>
-<html lang="de"><body style="font-family: Arial, sans-serif; max-width: 540px; margin: 0 auto;">
-<p>Hallo <strong>{safe_name}</strong>,</p>
-<p>Dein Account bei Einsatzcockpit wurde eingerichtet.</p>
-{test_notice_html}
-<table style="border-collapse:collapse;margin:12px 0;">
-<tr><td style="padding:4px 12px 4px 0;color:#666;">Benutzername:</td>
-    <td style="padding:4px 0;"><code>{safe_user}</code></td></tr>
-<tr><td style="padding:4px 12px 4px 0;color:#666;">Passwort:</td>
-    <td style="padding:4px 0;"><code>{safe_pw}</code></td></tr>
-</table>
-<p><strong>Bitte ändere dein Passwort nach dem ersten Login.</strong></p>
-{url_html}
-<p style="font-size:0.85rem;color:#666;">Bewahre deine Zugangsdaten sicher auf.</p>
-</body></html>
-"""
-    msg = _build_message(to=to, subject=subject, body_txt=body_txt,
-                         body_html=body_html, smtp_cfg=smtp_cfg)
-    await deliver(db, org_id, msg, smtp_cfg)
-
-
 async def send_sso_welcome_mail(*, to: str, user_display_name: str,
                                  app_url: str, org_slug: str, org_name: str = "",
                                  is_test: bool = False, db=None, org_id: int | None = None) -> None:
-    smtp_cfg = _org_smtp_cfg(db, org_id) or get_smtp_cfg(db)
-    subject = "Anmeldung per Microsoft-Login – Einsatzcockpit"
-    sso_url = f"{app_url.rstrip('/')}/sso/{org_slug}/login"
-    safe_url = html.escape(app_url.rstrip("/"))
-    safe_sso_url = html.escape(sso_url)
-    safe_name = html.escape(user_display_name)
-    org_display = org_name if org_name else "deiner Organisation"
-    safe_org = html.escape(org_display)
-    test_notice_txt = "\n⚠️  HINWEIS: Dies ist ein TESTSYSTEM – bitte keine Echtdaten eingeben.\n" if is_test else ""
-    test_notice_html = (
-        '<p style="background:#7c3c00;color:#ffe0b2;padding:8px 12px;border-radius:4px;font-weight:bold;">'
-        '⚠️  HINWEIS: Dies ist ein TESTSYSTEM – bitte keine Echtdaten eingeben.</p>'
-    ) if is_test else ""
-    body_txt = (
-        f"Hallo {user_display_name},\n\n"
-        f"Dein Account bei Einsatzcockpit wurde eingerichtet.\n"
-        f"Du kannst dich mit deinem dienstlichen Microsoft-Account der {org_display} anmelden.\n"
-        f"{test_notice_txt}"
-        f"\n"
-        f"WICHTIG: Verwende ausschliesslich deinen dienstlichen Microsoft-Account\n"
-        f"der {org_display} – also jenen Account, den du auch fuer\n"
-        f"Microsoft 365 / Teams der {org_display} nutzt.\n"
-        f"Kein privates Microsoft-, Hotmail- oder Outlook.com-Konto verwenden!\n"
-        f"\n"
-        f"Anmeldung per Microsoft-Login:\n  {sso_url}\n\n"
-        f"Alternativ: Gehe auf {app_url.rstrip('/')} und klicke auf \"Mit Microsoft anmelden\".\n\n"
-        f"Kein eigenes Passwort erforderlich – die Anmeldung erfolgt vollstaendig ueber Microsoft.\n\n"
-        f"Mit freundlichen Gruessen\n"
-        f"Einsatzcockpit"
+    from app.services.benutzer_mail_service import send_sso_welcome_mail as _send_sso_welcome_mail
+
+    await _send_sso_welcome_mail(
+        to=to, user_display_name=user_display_name, app_url=app_url, org_slug=org_slug,
+        org_name=org_name, is_test=is_test, db=db, org_id=org_id,
     )
-    body_html = f"""<!doctype html>
-<html lang="de"><body style="font-family: Arial, sans-serif; max-width: 540px; margin: 0 auto;">
-<p>Hallo <strong>{safe_name}</strong>,</p>
-<p>Dein Account bei Einsatzcockpit wurde eingerichtet.<br>
-Du kannst dich mit deinem <strong>dienstlichen Microsoft-Account der {safe_org}</strong> anmelden.</p>
-{test_notice_html}
-<div style="background:#e8f4fd;border-left:4px solid #0078d4;padding:12px 16px;
-border-radius:0 4px 4px 0;margin:16px 0;font-size:0.95rem;">
-  <strong>Welches Konto verwenden?</strong><br><br>
-  Melde dich mit deinem <strong>dienstlichen Microsoft-Account der {safe_org}</strong> an –
-  also dem Konto, das du auch für Microsoft 365 / Teams der {safe_org} verwendest.<br><br>
-  <span style="color:#c0392b;font-weight:bold;">&#10060; Kein privates
-  Microsoft-, Hotmail- oder Outlook.com-Konto verwenden!</span>
-</div>
-<p style="text-align:center;margin:20px 0;">
-  <a href="{safe_sso_url}" style="background:#0078d4;color:#fff;padding:12px 24px;
-     border-radius:6px;text-decoration:none;display:inline-block;font-size:1rem;">
-    &#128274; Mit Microsoft anmelden ({safe_org})
-  </a>
-</p>
-<p style="font-size:0.85rem;color:#666;">
-  Direkter SSO-Link: <code>{safe_sso_url}</code><br>
-  Oder gehe auf <a href="{safe_url}">{safe_url}</a> und klicke auf &bdquo;Mit Microsoft anmelden&ldquo;.
-</p>
-<p style="font-size:0.85rem;color:#666;">
-  Kein eigenes Passwort erforderlich – die Anmeldung erfolgt vollständig über Microsoft.
-</p>
-</body></html>
-"""
-    msg = _build_message(to=to, subject=subject, body_txt=body_txt,
-                         body_html=body_html, smtp_cfg=smtp_cfg)
-    await deliver(db, org_id, msg, smtp_cfg)
 
 
 async def send_test_mail(*, to: str, db=None) -> None:

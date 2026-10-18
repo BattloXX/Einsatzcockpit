@@ -71,21 +71,43 @@ def create_user(
     return user, generated_password
 
 
-async def send_welcome_mail(user: User, password: str, db: Session) -> None:
-    """Versendet die Willkommensmail fuer einen neu angelegten lokalen Benutzer."""
-    if not user.email:
-        return
-    from app.services.mail_service import send_welcome_mail as _send_welcome_mail
+def einladung_erstellen(db: Session, user: User, requesting_ip: str | None = None) -> str:
+    """Erstellt eine neue Einladung und entwertet offene Tokens dieses Benutzers."""
+    now = datetime.now(UTC)
+    offene_tokens = db.query(PasswordResetToken).filter(
+        PasswordResetToken.user_id == user.id,
+        PasswordResetToken.used_at.is_(None),
+    ).all()
+    for token in offene_tokens:
+        token.used_at = now
+    raw_token = secrets.token_urlsafe(32)
+    db.add(PasswordResetToken(
+        user_id=user.id, token_hash=hashlib.sha256(raw_token.encode()).hexdigest(),
+        expires_at=now + timedelta(hours=settings.INVITE_TTL_HOURS),
+        requesting_ip=requesting_ip, zweck="einladung",
+    ))
+    db.commit()
+    base = settings.effective_public_base_url.rstrip("/")
+    return f"{base}/passwort-zuruecksetzen?token={raw_token}"
 
-    await _send_welcome_mail(
-        to=user.email, username=user.username, password=password,
+
+async def einladung_senden(db: Session, user: User, requesting_ip: str | None = None) -> None:
+    """Erstellt eine Einladung und versendet sie an den lokalen Benutzer."""
+    if not user.email:
+        raise ValueError("Benutzer hat keine E-Mail-Adresse.")
+    einladung_url = einladung_erstellen(db, user, requesting_ip)
+    from app.services.benutzer_mail_service import send_einladung
+
+    await send_einladung(
+        to=user.email, username=user.username, einladung_url=einladung_url,
         user_display_name=user.full_name or user.display_name or user.username,
-        app_url=settings.effective_public_base_url.rstrip("/"), is_test=settings.TEST_SYSTEM,
         db=db, org_id=user.org_id,
     )
 
 
-async def send_password_reset_mail(user: User, db: Session, requesting_ip: str | None = None) -> None:
+async def send_password_reset_mail(
+    user: User, db: Session, requesting_ip: str | None = None, *, durch_admin: bool = False,
+) -> None:
     """Entwertet alte Reset-Tokens, erstellt einen neuen und versendet die Reset-Mail.
 
     Token (und ein vom Aufrufer vorbereitetes Audit) werden vor dem Versand committet,
@@ -108,5 +130,5 @@ async def send_password_reset_mail(user: User, db: Session, requesting_ip: str |
     reset_url = f"{settings.effective_public_base_url.rstrip('/')}/passwort-zuruecksetzen?token={raw_token}"
     await send_password_reset(
         to=user.email, reset_url=reset_url, user_display_name=user.full_name or user.display_name or user.username,
-        db=db, org_id=user.org_id,
+        durch_admin=durch_admin, db=db, org_id=user.org_id,
     )

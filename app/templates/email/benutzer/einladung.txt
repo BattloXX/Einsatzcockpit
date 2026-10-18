@@ -1,0 +1,18 @@
+{% extends "email/benutzer/_layout.txt" %}
+{% block content %}Hallo {{ user_display_name }},
+
+Für dich wurde ein Konto bei {{ org_name }} im Einsatzcockpit angelegt.
+
+Benutzername: {{ username }}
+
+Passwort festlegen: {{ einladung_url }}
+Dieser Link ist {{ gueltigkeit }} gültig.
+
+Danach kannst du dich unter {{ app_url }} anmelden.
+
+Einsatzcockpit aufs Handy
+Android-App: {{ android_app_url }}
+  App laden, öffnen und installieren. Einmalig unter Einstellungen → Apps → Einsatzcockpit
+  „Installation unbekannter Apps“ erlauben, damit sich die App selbst aktualisiert.
+iPhone / iPad: {{ iphone_app_url }}
+  Link in Safari öffnen, auf Teilen tippen und „Zum Home-Bildschirm“ wählen.{% endblock %}

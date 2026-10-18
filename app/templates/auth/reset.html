@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#d42225">
-  <title>Neues Passwort – {{ brand }}</title>
+  <title>{{ 'Willkommen – Passwort festlegen' if ist_einladung else 'Neues Passwort' }} – {{ brand }}</title>
   <link rel="stylesheet" href="/static/css/app.css">
   <link rel="manifest" href="/static/manifest.webmanifest?v={{ IMG_VERSION }}">
   <link rel="icon" type="image/x-icon" href="/static/img/favicon.ico">
@@ -15,7 +15,7 @@
     <div class="login-card">
       <div class="login-logo">
         <img src="/static/img/logo_einsatzcockpit.png" alt="{{ brand }}" onerror="this.style.display='none'" class="login-logo__img">
-        <h1 class="login-logo__title" style="font-size:1.15rem;margin-top:4px">Neues Passwort setzen</h1>
+        <h1 class="login-logo__title" style="font-size:1.15rem;margin-top:4px">{{ 'Willkommen – Passwort festlegen' if ist_einladung else 'Neues Passwort setzen' }}</h1>
       </div>
 
       {% if done %}
@@ -23,7 +23,8 @@
           Dein Passwort wurde erfolgreich aktualisiert. Du kannst dich jetzt anmelden.
         </div>
         <div style="text-align:center; margin-top:12px;">
-          <a href="/login" class="btn btn--primary btn--sm">Zum Login</a>
+          <a href="/login" class="btn btn--primary btn--sm">Jetzt anmelden</a>
+          <p class="form-hint">Die Einsatzcockpit-App findest du unter <a href="/app">/app</a>.</p>
         </div>
       {% elif error %}
         <div class="alert alert--error">{{ error }}</div>
@@ -45,7 +46,7 @@
             <input type="password" id="password_repeat" name="password_repeat" required minlength="10"
                    autocomplete="new-password" class="form-input">
           </div>
-          <button type="submit" class="btn btn--primary btn--full">Passwort setzen</button>
+          <button type="submit" class="btn btn--primary btn--full">{{ 'Passwort festlegen' if ist_einladung else 'Passwort setzen' }}</button>
         </form>
       {% endif %}
     </div>

@@ -28,6 +28,9 @@ class PasswordResetToken(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     requesting_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    zweck: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="reset", server_default="reset"
+    )
 
     user: Mapped[User] = relationship(back_populates="password_reset_tokens")
 

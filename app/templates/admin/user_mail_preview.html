@@ -1,0 +1,16 @@
+{% extends "admin/_layout.html" %}
+{% from "admin/_breadcrumb.html" import breadcrumb %}
+{% block title %}Mail-Vorschau – Admin{% endblock %}
+{% block admin_breadcrumb %}{{ breadcrumb([{'label': 'Benutzer', 'url': '/admin/benutzer'}, {'label': 'Mail-Vorschau'}]) }}{% endblock %}
+{% block admin_content %}
+<style>@media (max-width:760px){.mail-preview-grid{grid-template-columns:1fr!important}.mail-preview-grid iframe{min-height:480px!important}}</style>
+<div class="page-header"><div><h1>Mail-Vorschau</h1><p class="page-header__sub">Beispieldaten und Branding deiner Organisation. Links enthalten keine echten Tokens.</p></div><a class="btn btn--ghost" href="/admin/benutzer">Zur Benutzerverwaltung</a></div>
+{% if sent %}<div class="alert alert--success">Testmail wurde an deine E-Mail-Adresse gesendet.</div>{% endif %}
+{% if error == 'no_email' %}<div class="alert alert--error">Für dein Konto ist keine E-Mail-Adresse hinterlegt.</div>{% endif %}
+{% if error == 'mail_failed' %}<div class="alert alert--error">Testmail konnte nicht versendet werden. Bitte SMTP-Konfiguration prüfen.</div>{% endif %}
+{% if error == 'type' %}<div class="alert alert--error">Unbekannter Mail-Typ.</div>{% endif %}
+<div class="mail-preview-grid" style="display:grid;grid-template-columns:minmax(0,2fr) minmax(260px,1fr);gap:20px;align-items:start;">
+  <section class="card" style="padding:16px;min-width:0;"><form method="get" action="/admin/benutzer/mail-vorschau" style="display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:16px;"><label style="flex:1;min-width:220px;">Mail-Typ<select name="typ" onchange="this.form.submit()">{% for value, label in mail_typen.items() %}<option value="{{ value }}"{% if value == typ %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label><noscript><button class="btn btn--ghost" type="submit">Anzeigen</button></noscript></form><p><strong>Betreff:</strong> {{ subject }}</p><iframe title="HTML-Mail-Vorschau" sandbox srcdoc="{{ mail_html|e }}" style="display:block;width:100%;min-height:620px;border:1px solid #d1d5db;border-radius:6px;background:#f3f4f6;"></iframe></section>
+  <aside class="card" style="padding:16px;min-width:0;"><h2 style="margin-top:0;font-size:1.1rem;">Text-Variante</h2><pre style="white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;line-height:1.5;margin:0 0 20px;">{{ mail_text }}</pre><form method="post" action="/admin/benutzer/mail-vorschau/test"><input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><input type="hidden" name="typ" value="{{ typ }}"><button class="btn btn--primary" type="submit">Testmail an mich senden</button></form></aside>
+</div>
+{% endblock %}

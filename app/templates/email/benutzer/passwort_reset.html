@@ -1,0 +1,12 @@
+{% extends "email/benutzer/_layout.html" %}
+{% from "email/benutzer/_layout.html" import button with context %}
+{% block content %}
+<tr><td style="padding:24px;font-size:15px;line-height:22px;">
+  <p>Hallo <strong>{{ user_display_name }}</strong>,</p>
+  <p>Du erhältst diese Mail, weil für dein Konto ein Passwort-Reset angefordert wurde.</p>
+  {% if durch_admin %}<p>Dein Administrator hat das Zurücksetzen deines Passworts ausgelöst.</p>{% endif %}
+  <p>Der Link ist {{ gueltigkeit }} gültig.</p>
+  {{ button(reset_url, 'Neues Passwort festlegen') }}
+  <p>Nicht angefordert? Ignoriere diese Mail, dein Passwort bleibt unverändert.</p>
+</td></tr>
+{% endblock %}

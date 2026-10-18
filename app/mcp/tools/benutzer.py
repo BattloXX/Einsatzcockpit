@@ -175,7 +175,7 @@ async def benutzer_anlegen(
     if denied:
         context.db.commit()
         raise ValueError(f"Nicht vergebbare Rollen: {', '.join(sorted(denied))}.")
-    user, password = benutzer_service.create_user(
+    user, _password = benutzer_service.create_user(
         context.db, org_id=context.org_id, username=username, display_name=display_name, email=email,
         full_name=full_name, phone=phone, member_id=mitglied_id,
     )
@@ -184,14 +184,14 @@ async def benutzer_anlegen(
         "rollen": sorted(allowed), "mitglied_id": mitglied_id, "willkommensmail": willkommensmail,
     })
     # Der Benutzer ist bereits gespeichert; ein Mailfehler darf die Anlage nicht als gescheitert melden.
-    mail_gesendet = False
+    einladung_gesendet = False
     if willkommensmail and user.email:
         try:
-            await benutzer_service.send_welcome_mail(user, password, context.db)
-            mail_gesendet = True
+            await benutzer_service.einladung_senden(context.db, user)
+            einladung_gesendet = True
         except Exception:
-            mail_gesendet = False
-    return {"benutzer": _listen_payload(context, user), "mail_gesendet": mail_gesendet}
+            einladung_gesendet = False
+    return {"benutzer": _listen_payload(context, user), "einladung_gesendet": einladung_gesendet}
 
 
 @register_tool(

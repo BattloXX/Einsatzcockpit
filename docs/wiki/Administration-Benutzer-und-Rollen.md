@@ -30,6 +30,25 @@ Oder per CLI (für Admin-Passwort ohne Login):
 python -m app.cli reset-password --username admin --password neues-passwort
 ```
 
+### Benutzer-Mails
+
+Neue lokale Konten erhalten eine **Einladung** zum Festlegen ihres Passworts. Der Link
+gilt standardmäßig sieben Tage (`INVITE_TTL_HOURS`) und kann aus der Benutzerliste erneut
+versendet werden. Nach jeder Passwortänderung erhält der Benutzer eine Bestätigung; bei
+Microsoft-SSO-Konten weist die Passwort-vergessen-Seite stattdessen auf die Microsoft-Anmeldung hin.
+
+Die Willkommensmails verlinken auf die Installationsseite `/app`. Android-Geräte können
+unter `/app/android` die Auto-Update-APK laden; deren Release-Repository und Dateipräfix
+sind über `ANDROID_APP_REPO` und `ANDROID_APK_PRAEFIX` konfigurierbar.
+
+Über **Admin → Benutzer → Mail-Vorschau** können Administratoren Einladung, SSO-Hinweis,
+Reset- und Bestätigungs-Mails mit dem Branding der eigenen Organisation prüfen und eine
+Testmail an die eigene hinterlegte Adresse senden. Die Vorschau enthält ausschließlich
+Beispieldaten und keine echten Zugangstokens.
+
+> Beim Update muss die Migration `0291` für den Einladungszweck der Reset-Tokens mit
+> `alembic upgrade head` eingespielt werden.
+
 ### Benutzer deaktivieren
 
 Benutzer in der Liste → **Deaktivieren** → Bestätigen.

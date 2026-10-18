@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     APP_BASE_URL: str = "http://localhost:8092"
     LEADER_LOCK_PATH: str = "app_storage/background-leader.lock"
     PUBLIC_BASE_URL: str = ""  # Für Mail-Links; leer = falls leer APP_BASE_URL verwenden
+    ANDROID_APP_REPO: str = "BattloXX/Einsatzcockpit-Android"
+    ANDROID_APK_PRAEFIX: str = "einsatzcockpit-autoupdate-v"  # Auto-Update-Variante aktualisiert sich selbst
     # Teams rendert das Kartenbild beim Scrollen durch die Kanalhistorie erneut.
     ALARM_MAP_TTL_DAYS: int = 365
     # Die oeffentliche No-Login-Seite zeigt mehr Daten und laeuft frueher ab.
@@ -113,6 +115,7 @@ class Settings(BaseSettings):
     SMTP_TIMEOUT: int = 15
 
     PASSWORD_RESET_TTL_MIN: int = 30
+    INVITE_TTL_HOURS: int = 168
 
     # Login-Lockout
     LOGIN_MAX_FAILED: int = 10

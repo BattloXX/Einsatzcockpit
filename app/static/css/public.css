@@ -463,6 +463,21 @@ h1, h2, h3, .pub-h1, .pub-h2, .pub-h3 {
 .pub-card__link:hover { gap: 12px; }
 .pub-card__link svg { width: 14px; height: 14px; }
 
+/* ── App installieren ──────────────────────────────────── */
+.app-install-grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
+.app-install-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--line);
+  padding: 28px;
+}
+.app-install-card--highlight { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.app-install-card .pub-h2 { margin: 8px 0 14px; }
+.app-install-card p, .app-install-card li { color: var(--text-muted); }
+.app-install-card ol { padding-left: 22px; line-height: 1.7; }
+.app-install-card .pub-btn { margin: 4px 0 12px; }
+.app-install-note { font-size: 14px; border-top: 1px solid var(--line); padding-top: 14px; }
+@media (min-width: 760px) { .app-install-grid { grid-template-columns: repeat(3, 1fr); } }
+
 /* ── Split-Sektion (Text / Visual, alternierend) ────────── */
 .pub-split {
   display: grid;

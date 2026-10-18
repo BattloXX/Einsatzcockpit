@@ -1,0 +1,13 @@
+{% extends "email/benutzer/_layout.html" %}
+{% from "email/benutzer/_layout.html" import button, app_abschnitt with context %}
+{% block content %}
+<tr><td style="padding:24px;font-size:15px;line-height:22px;">
+  <p>Hallo <strong>{{ user_display_name }}</strong>,</p>
+  <p>Für dich wurde ein Konto bei {{ org_name }} im Einsatzcockpit angelegt.</p>
+  <p>Melde dich mit deinem dienstlichen Microsoft-Konto an – dem Konto, das du auch für Microsoft 365 oder Teams verwendest. Verwende kein privates Microsoft-, Hotmail- oder Outlook.com-Konto.</p>
+  {{ button(sso_url, 'Mit Microsoft anmelden') }}
+  <p>Alternativ: Öffne <a href="{{ app_url }}" style="color:{{ brand_color }};">{{ app_url }}</a> und wähle „Mit Microsoft anmelden“.</p>
+  <p>Du benötigst kein eigenes Passwort; die Anmeldung erfolgt über Microsoft.</p>
+  {{ app_abschnitt() }}
+</td></tr>
+{% endblock %}

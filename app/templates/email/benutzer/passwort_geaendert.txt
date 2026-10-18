@@ -1,0 +1,12 @@
+{% extends "email/benutzer/_layout.txt" %}
+{% block content %}Hallo {{ user_display_name }},
+
+{% if ausloeser == 'einladung' %}Dein Konto ist jetzt eingerichtet.
+{% else %}Dein Passwort wurde am {{ zeitpunkt }} geändert.
+
+Art der Änderung: {% if ausloeser == 'reset' %}Passwort zurücksetzen{% elif ausloeser == 'profil' %}Änderung im Profil{% else %}durch deinen Administrator{% endif %}.
+
+Warst du das nicht? Wende dich sofort an deinen Administrator.
+
+Passwort zurücksetzen: {{ app_url }}/passwort-vergessen
+{% endif %}{% endblock %}

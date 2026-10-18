@@ -1748,15 +1748,11 @@ async def create_organisation(
 
 async def _invite_org_admin(request: Request, db, org: FireDept, email: str, display_name: str) -> None:
     """Legt einen Organisations-Administrator an und sendet einen Passwort-Set-Link."""
-    import hashlib
     import secrets as sec
-    from datetime import UTC, datetime, timedelta
 
-    from app.config import settings as cfg
-    from app.core.auth import hash_password
-    from app.models.password_reset import PasswordResetToken
+    from app.core.security import hash_password
     from app.models.user import Role, User, UserRole
-    from app.services.mail_service import send_password_reset
+    from app.services.benutzer_service import einladung_senden
 
     # User bereits vorhanden?
     existing_user = db.query(User).filter(User.email == email.lower()).first()
@@ -1779,28 +1775,8 @@ async def _invite_org_admin(request: Request, db, org: FireDept, email: str, dis
         db.add(UserRole(user_id=new_user.id, role_id=admin_role.id))
     db.flush()
 
-    raw_token = sec.token_urlsafe(32)
-    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
-    db.add(
-        PasswordResetToken(
-            user_id=new_user.id,
-            token_hash=token_hash,
-            expires_at=datetime.now(UTC) + timedelta(days=7),
-            requesting_ip=request.client.host if request.client else None,
-        )
-    )
-    db.flush()
-
-    base = cfg.effective_public_base_url.rstrip("/")
-    reset_url = f"{base}/passwort-zuruecksetzen?token={raw_token}"
     try:
-        await send_password_reset(
-            to=email.lower(),
-            reset_url=reset_url,
-            user_display_name=new_user.display_name,
-            db=db,
-            org_id=new_user.org_id,
-        )
+        await einladung_senden(db, new_user, request.client.host if request.client else None)
     except Exception:
         pass
 

@@ -43,6 +43,7 @@ from app.models.master import (
     TaskSuggestionAlarm,
     VehicleMaster,
 )
+from app.models.password_reset import PasswordResetToken
 from app.models.user import (
     ApiKey,
     AuditLog,
@@ -59,6 +60,12 @@ from app.models.user import (
 from app.routers.ws import connected_gateway_token_ids
 from app.services import benutzer_service
 from app.services.alarm_service import get_alarm_type_by_code
+from app.services.benutzer_mail_service import (
+    MAIL_VORSCHAU_TYPEN,
+    mail_vorschau,
+    send_mail_vorschau,
+    send_passwort_geaendert,
+)
 from app.services.push_service import notify_all as _push_notify_all
 from app.services.push_service import notify_org as _push_notify_org
 from app.services.vehicle_merge_service import VehicleMergeError, merge_vehicles
@@ -132,6 +139,14 @@ async def users_list(request: Request, db: Session = Depends(get_db),
     user = request.state.user
     is_sysadmin = has_role(user, "system_admin")
     users = _org_filter(db.query(User), user, User.org_id).filter(User.is_device == False).order_by(User.username).all()  # noqa: E712
+    offene_einladungen = db.query(PasswordResetToken).filter(
+        PasswordResetToken.user_id.in_([u.id for u in users]),
+        PasswordResetToken.zweck == "einladung", PasswordResetToken.used_at.is_(None),
+    ).all() if users else []
+    einladungs_status = {
+        token.user_id: ("offen" if token.is_valid else "abgelaufen")
+        for token in offene_einladungen
+    }
     member_names, members_by_org = _member_options(db, user)
     roles = [role for role in db.query(Role).all()
              if role.code in manageable_role_codes(user, {r.code for r in db.query(Role).all()})]
@@ -144,6 +159,7 @@ async def users_list(request: Request, db: Session = Depends(get_db),
     return templates.TemplateResponse(request, "admin/users.html", {
         "user": user,
         "users": users, "roles": roles,
+        "einladungs_status": einladungs_status,
         "member_names": member_names, "members_by_org": members_by_org,
         "is_sysadmin": is_sysadmin,
         "all_orgs": all_orgs,
@@ -153,6 +169,45 @@ async def users_list(request: Request, db: Session = Depends(get_db),
         "mail_sent": request.query_params.get("mail"),
         "error": request.query_params.get("error"),
     })
+
+
+@router.get("/benutzer/mail-vorschau", response_class=HTMLResponse)
+async def user_mail_preview(
+    request: Request, typ: str = "einladung", db: Session = Depends(get_db),
+    _=Depends(require_role("admin")),
+):
+    if typ not in MAIL_VORSCHAU_TYPEN:
+        raise HTTPException(status_code=404, detail="Unbekannter Mail-Typ.")
+    current_user = request.state.user
+    subject, html, text = mail_vorschau(typ, db, current_user.org_id)
+    return templates.TemplateResponse(request, "admin/user_mail_preview.html", {
+        "user": current_user, "mail_typen": MAIL_VORSCHAU_TYPEN, "typ": typ,
+        "subject": subject, "mail_html": html, "mail_text": text,
+        "sent": request.query_params.get("sent"), "error": request.query_params.get("error"),
+    })
+
+
+@router.post("/benutzer/mail-vorschau/test")
+async def send_user_mail_preview(
+    request: Request, typ: str = Form(""), db: Session = Depends(get_db),
+    _=Depends(require_role("admin")),
+):
+    if typ not in MAIL_VORSCHAU_TYPEN:
+        return RedirectResponse("/admin/benutzer/mail-vorschau?error=type", status_code=303)
+    current_user = request.state.user
+    if not current_user.email:
+        return RedirectResponse(f"/admin/benutzer/mail-vorschau?typ={typ}&error=no_email", status_code=303)
+    write_audit(
+        db, "admin.user.mail_preview_test", user_id=current_user.id, payload={"typ": typ},
+        ip=request.client.host if request.client else None,
+    )
+    db.commit()
+    try:
+        await send_mail_vorschau(typ, to=current_user.email, db=db, org_id=current_user.org_id)
+    except Exception:
+        logger_admin.exception("Testversand der Benutzer-Mail-Vorschau fehlgeschlagen")
+        return RedirectResponse(f"/admin/benutzer/mail-vorschau?typ={typ}&error=mail_failed", status_code=303)
+    return RedirectResponse(f"/admin/benutzer/mail-vorschau?typ={typ}&sent=1", status_code=303)
 
 
 @router.post("/benutzer/neu")
@@ -185,6 +240,7 @@ async def create_user(
     member_error = _validate_user_member(db, member_id, target_org_id, False)
     if member_error:
         return RedirectResponse(f"/admin/benutzer?error={member_error}", status_code=303)
+    manuelles_passwort = bool(password.strip())
     if not password:
         password = _sec.token_urlsafe(16)
     try:
@@ -209,11 +265,17 @@ async def create_user(
     app_url = app_settings.effective_public_base_url.rstrip("/")
     is_test = app_settings.TEST_SYSTEM
     display = new_user.full_name or new_user.display_name or username
-    if email_clean and send_welcome:
+    einladung_fehler = False
+    einladung_gesendet = False
+    if email_clean and send_welcome and not manuelles_passwort:
         try:
-            await benutzer_service.send_welcome_mail(new_user, password, db)
+            await benutzer_service.einladung_senden(
+                db, new_user, request.client.host if request.client else None,
+            )
+            einladung_gesendet = True
         except Exception:
-            logger_admin.warning("Willkommensmail an %s konnte nicht gesendet werden", email_clean)
+            logger_admin.warning("Einladung an %s konnte nicht gesendet werden", email_clean)
+            einladung_fehler = True
     if email_clean and send_sso_info:
         try:
             from app.services.mail_service import send_sso_welcome_mail
@@ -259,8 +321,30 @@ async def create_user(
         "member_names": member_names, "members_by_org": members_by_org,
         "is_sysadmin": is_sysadmin, "all_orgs": all_orgs,
         "org_sso_enabled": org_sso_enabled,
-        "new_password": password, "new_password_user": username,
+        # Ohne versendete Einladung ist das (ggf. erzeugte) Passwort der einzige Zugang und wird einmalig angezeigt.
+        "new_password": None if einladung_gesendet else password, "new_password_user": username,
+        "error": "invite_mail_failed" if einladung_fehler else None,
     })
+
+
+@router.post("/benutzer/{user_id}/einladung")
+async def send_user_invitation(
+    user_id: int, request: Request, db: Session = Depends(get_db),
+    _=Depends(require_role("admin")),
+):
+    u = db.get(User, user_id)
+    if not u or u.auth_provider != "local" or not u.email or u.last_login_at is not None:
+        return RedirectResponse("/admin/benutzer", status_code=303)
+    authorize_user_mutation(db, request.state.user, u, "invite")
+    write_audit(db, "admin.user.invite_sent", user_id=request.state.user.id,
+                entity_type="user", entity_id=u.id)
+    try:
+        await benutzer_service.einladung_senden(
+            db, u, request.client.host if request.client else None,
+        )
+    except Exception:
+        return RedirectResponse("/admin/benutzer?error=invite_mail_failed", status_code=303)
+    return RedirectResponse("/admin/benutzer?saved=1&invite=1", status_code=303)
 
 
 @router.post("/benutzer/{user_id}/loeschen")
@@ -950,7 +1034,7 @@ async def send_user_reset_mail(
                 user_id=request.state.user.id, entity_type="user", entity_id=u.id)
     try:
         await benutzer_service.send_password_reset_mail(
-            u, db, request.client.host if request.client else None,
+            u, db, request.client.host if request.client else None, durch_admin=True,
         )
     except Exception:
         return RedirectResponse("/admin/benutzer?error=mail_failed", status_code=303)
@@ -989,15 +1073,24 @@ async def reset_user_password(
     write_audit(db, "admin.user.password_reset", user_id=request.state.user.id,
                 entity_type="user", entity_id=user_id)
     db.commit()
+    if u.email:
+        try:
+            await send_passwort_geaendert(
+                u, db, ausloeser="admin", ip=request.client.host if request.client else None,
+            )
+        except Exception as exc:  # pragma: no cover
+            logger_admin.error("Versand der Passwort-Bestätigung fehlgeschlagen für user_id=%s: %s", u.id, exc)
     acting = request.state.user
     is_sysadmin = has_role(acting, "system_admin")
     users = _org_filter(db.query(User), acting, User.org_id).order_by(User.username).all()
+    member_names, members_by_org = _member_options(db, acting)
     roles = [role for role in db.query(Role).all()
              if role.code in manageable_role_codes(acting, {r.code for r in db.query(Role).all()})]
     all_orgs = db.query(FireDept).order_by(FireDept.name).all() if is_sysadmin else []
     return templates.TemplateResponse(request, "admin/users.html", {
         "user": acting,
         "users": users, "roles": roles,
+        "member_names": member_names, "members_by_org": members_by_org,
         "is_sysadmin": is_sysadmin, "all_orgs": all_orgs,
         "new_password": new_pw, "new_password_user": u.username,
     })
