@@ -9,4 +9,9 @@ Mit Microsoft anmelden: {{ sso_url }}
 
 Alternativ: Öffne {{ app_url }} und wähle "Mit Microsoft anmelden".
 
-Du benötigst kein eigenes Passwort; die Anmeldung erfolgt über Microsoft.{% endblock %}
+Du benötigst kein eigenes Passwort; die Anmeldung erfolgt über Microsoft.
+
+App aufs Handy
+Android-App herunterladen: {{ android_app_url }}
+Auf dem iPhone installieren: {{ iphone_app_url }}
+IPhone: Öffne den Link in Safari, tippe auf Teilen und wähle „Zum Home-Bildschirm“.{% endblock %}

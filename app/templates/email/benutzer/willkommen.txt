@@ -9,4 +9,9 @@ Passwort: {{ password }}
 
 Jetzt anmelden: {{ app_url }}
 
-Bitte ändere dein Passwort nach der ersten Anmeldung unter Profil.{% endblock %}
+Bitte ändere dein Passwort nach der ersten Anmeldung unter Profil.
+
+App aufs Handy
+Android-App herunterladen: {{ android_app_url }}
+Auf dem iPhone installieren: {{ iphone_app_url }}
+IPhone: Öffne den Link in Safari, tippe auf Teilen und wähle „Zum Home-Bildschirm“.{% endblock %}

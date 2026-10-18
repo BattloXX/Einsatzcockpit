@@ -54,6 +54,7 @@ from app.routers import (
     monitoring_api,
     objektpflege_public,
     public,
+    public_app,
     public_mailing_tracking,
     sso,
     teams_bot,
@@ -846,6 +847,7 @@ app.include_router(mcp_upload_router.router)
 app.include_router(mcp_download_router.router)
 app.include_router(sso.router)
 app.include_router(public.router)
+app.include_router(public_app.router)
 app.include_router(public_mailing_tracking.router)
 app.include_router(mailing_webhook.router)
 app.include_router(mail_inbound_webhook.router)

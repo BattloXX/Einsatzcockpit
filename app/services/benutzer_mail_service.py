@@ -33,6 +33,8 @@ def mail_kontext(db, org_id: int | None) -> dict:
         "logo_url": _absolute_url(logo_path),
         "brand_color": color if _FARBE.fullmatch(color or "") else "#c8102e",
         "app_url": app_url,
+        "android_app_url": f"{app_url}/app/android",
+        "iphone_app_url": f"{app_url}/app",
         "is_test": settings.TEST_SYSTEM,
         "hilfe_url": f"{app_url}/hilfe",
     }

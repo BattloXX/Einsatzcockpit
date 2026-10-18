@@ -57,6 +57,21 @@ def test_anzeigename_wird_in_html_escaped_auch_beim_reset(org):
         assert "&lt;script&gt;x&lt;/script&gt;" in html
 
 
+@pytest.mark.parametrize(
+    ("name", "daten"),
+    [
+        ("willkommen", {"user_display_name": "Anna", "username": "anna", "password": "secret"}),
+        ("willkommen_sso", {"user_display_name": "Anna", "sso_url": "https://example.test/sso"}),
+    ],
+)
+def test_willkommensmails_enthalten_app_installationslinks(org, name, daten):
+    db, org_id = org
+    html, text = benutzer_mail_service.render(name, **benutzer_mail_service.mail_kontext(db, org_id), **daten)
+
+    assert "/app/android" in html and "/app" in html
+    assert "/app/android" in text and "/app" in text
+
+
 def test_testsystem_banner_nur_bei_testsystem(org, monkeypatch):
     db, org_id = org
     monkeypatch.setattr(settings, "TEST_SYSTEM", False)

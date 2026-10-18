@@ -1,0 +1,54 @@
+{% extends "public/base.html" %}
+
+{% block page_title %}App installieren{% endblock %}
+{% block meta_description %}Einsatzcockpit auf Android, iPhone, iPad oder Computer installieren.{% endblock %}
+
+{% block content %}
+<section class="pub-section pub-section--tight pub-topo">
+  <div class="pub-wrap">
+    <span class="pub-eyebrow">[ EINSATZCOCKPIT APP ]</span>
+    <h1 class="pub-h1">Einsatzcockpit auf dein Gerät holen.</h1>
+    <p class="pub-lead" style="margin-top:20px;max-width:46rem">
+      Nutze Einsatzcockpit direkt im Browser oder installiere es für einen schnellen Zugriff
+      auf deinem Handy, Tablet oder Computer.
+    </p>
+  </div>
+</section>
+
+<section class="pub-section">
+  <div class="pub-wrap app-install-grid">
+    <article class="app-install-card{% if not ist_iphone %} app-install-card--highlight{% endif %}" id="android">
+      <span class="pub-eyebrow">ANDROID</span>
+      <h2 class="pub-h2">App herunterladen</h2>
+      <p>Die Android-App wird direkt als APK bereitgestellt.</p>
+      <a class="pub-btn pub-btn--primary" href="/app/android">App herunterladen</a>
+      <ol>
+        <li>APK herunterladen und öffnen.</li>
+        <li>Erlaube bei Bedarf für deinen Browser die „Installation unbekannter Apps“.</li>
+        <li>Installiere die App und melde dich an.</li>
+      </ol>
+      <p class="app-install-note">Für automatische Aktualisierungen steht zusätzlich eine Auto-Update-Variante bereit.</p>
+    </article>
+
+    <article class="app-install-card{% if ist_iphone %} app-install-card--highlight{% endif %}" id="iphone">
+      <span class="pub-eyebrow">IPHONE &amp; IPAD</span>
+      <h2 class="pub-h2">Als Web-App installieren</h2>
+      <p>Öffne Einsatzcockpit in <strong>Safari</strong> und lege es auf deinen Home-Bildschirm.</p>
+      <ol>
+        <li>Öffne Safari und rufe <a href="{{ app_url }}">{{ app_url }}</a> auf.</li>
+        <li>Tippe auf das Teilen-Symbol.</li>
+        <li>Wähle „Zum Home-Bildschirm“ und danach „Hinzufügen“.</li>
+      </ol>
+      <p class="app-install-note">Das funktioniert nur mit Safari. Mitteilungen können erst nach der Installation aktiviert werden.</p>
+    </article>
+
+    <article class="app-install-card" id="computer">
+      <span class="pub-eyebrow">COMPUTER</span>
+      <h2 class="pub-h2">Direkt loslegen</h2>
+      <p>Am Computer genügt ein aktueller Browser. Melde dich einfach über Einsatzcockpit an.</p>
+      <a class="pub-btn pub-btn--secondary" href="{{ app_url }}">Einsatzcockpit öffnen</a>
+      <p class="app-install-note">Optional kannst du die Seite in Chrome oder Edge über „App installieren“ als eigene Anwendung ablegen.</p>
+    </article>
+  </div>
+</section>
+{% endblock %}

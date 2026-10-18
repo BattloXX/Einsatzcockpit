@@ -1,3 +1,26 @@
 {% extends "email/benutzer/_layout.html" %}
 {% from "email/benutzer/_layout.html" import button with context %}
-{% block content %}<tr><td style="padding:24px;font-size:15px;line-height:22px;"><p>Hallo <strong>{{ user_display_name }}</strong>,</p><p>Für dich wurde ein Konto bei {{ org_name }} im Einsatzcockpit angelegt.</p><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f9fafb;border:1px solid #e5e7eb;"><tr><td style="padding:14px;"><strong>Anmelde-Adresse</strong><br><a href="{{ app_url }}" style="color:{{ brand_color }};">{{ app_url }}</a><br><br><strong>Benutzername</strong><br>{{ username }}<br><br><strong>Passwort</strong><br>{{ password }}</td></tr></table>{{ button(app_url, 'Jetzt anmelden') }}<p>Bitte ändere dein Passwort nach der ersten Anmeldung unter Profil.</p></td></tr>{% endblock %}
+{% block content %}
+<tr><td style="padding:24px;font-size:15px;line-height:22px;">
+  <p>Hallo <strong>{{ user_display_name }}</strong>,</p>
+  <p>Für dich wurde ein Konto bei {{ org_name }} im Einsatzcockpit angelegt.</p>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+         style="background:#f9fafb;border:1px solid #e5e7eb;">
+    <tr><td style="padding:14px;">
+      <strong>Anmelde-Adresse</strong><br>
+      <a href="{{ app_url }}" style="color:{{ brand_color }};">{{ app_url }}</a><br><br>
+      <strong>Benutzername</strong><br>
+      {{ username }}<br><br>
+      <strong>Passwort</strong><br>
+      {{ password }}
+    </td></tr>
+  </table>
+  {{ button(app_url, 'Jetzt anmelden') }}
+  <p>Bitte ändere dein Passwort nach der ersten Anmeldung unter Profil.</p>
+  <h2 style="font-size:18px;line-height:24px;">App aufs Handy</h2>
+  <p>Installiere Einsatzcockpit für einen schnellen Zugriff.</p>
+  {{ button(android_app_url, 'Android-App herunterladen') }}
+  {{ button(iphone_app_url, 'Auf dem iPhone installieren') }}
+  <p>iPhone: Öffne den Link in Safari, tippe auf Teilen und wähle „Zum Home-Bildschirm“.</p>
+</td></tr>
+{% endblock %}
