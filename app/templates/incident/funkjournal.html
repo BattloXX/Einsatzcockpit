@@ -110,7 +110,7 @@
   {% with active="funk" %}{% include "incident/_subnav.html" %}{% endwith %}
 </div>
 
-<div class="fj-wrap">
+<div class="fj-wrap" x-data="incidentBoard({{ incident.id }})">
 
   {# ── Eintrag hinzufügen ────────────────────────────────────────────────────── #}
   {% if can_note %}
@@ -119,7 +119,7 @@
     <form hx-post="/einsatz/{{ incident.id }}/funkjournal"
           hx-swap="none"
           hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
-          hx-on::after-request="if(event.detail.successful){resetFjForm();location.reload();}">
+          hx-on::after-request="if(event.detail.successful){resetFjForm();refreshFjList();}">
 
       <input type="hidden" name="direction"        :value="dir">
       <input type="hidden" name="is_request"       :value="typ === 'auftrag' ? 'true' : ''">
@@ -198,8 +198,10 @@
   </div>
   {% endif %}
 
+  <input type="search" id="fj-search" class="form-input" placeholder="Suchen (Einheit, Kanal, Inhalt)…"
+         aria-label="Funkjournal durchsuchen" oninput="applyFjFilters()" style="margin-bottom:10px;">
+  <div id="fjList">
   {# ── Filter: offene Aufträge ──────────────────────────────────────────────── #}
-  {% if open_requests > 0 %}
   <div class="fj-filter-bar">
     <button type="button" id="fj-filter-btn" onclick="toggleOpenFilter()" class="btn btn--ghost btn--sm">
       Nur offene Aufträge
@@ -207,7 +209,6 @@
     </button>
     <span id="fj-filter-hint" style="display:none; font-size:.75rem; color:var(--text-muted);">Filter aktiv</span>
   </div>
-  {% endif %}
 
   {# ── Journaltabelle ────────────────────────────────────────────────────────── #}
   {% if comms %}
@@ -226,6 +227,7 @@
     <tbody>
       {% for c in comms %}
       <tr class="{% if c.handled %}fj-row--handled{% endif %} {% if c.is_lage_relevant and not c.handled %}fj-row--lage{% endif %}"
+          data-fj-search="{{ ((c.partner or '') ~ ' ' ~ (c.channel or '') ~ ' ' ~ c.message)|lower }}"
           data-is-request="{{ 'true' if c.is_request else 'false' }}"
           data-handled="{{ 'true' if c.handled else 'false' }}">
         <td style="white-space:nowrap; color:var(--text-muted);">{{ c.ts|local_time }}</td>
@@ -250,7 +252,7 @@
                 hx-post="/einsatz/{{ incident.id }}/funkjournal/{{ c.id }}/erledigt"
                 hx-swap="none"
                 hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
-                hx-on::after-request="if(event.detail.successful){location.reload();}">
+                hx-on::after-request="if(event.detail.successful){refreshFjList();}">
             <button type="submit" class="btn btn--xs fj-handle-btn
               {% if c.handled %}btn--ghost{% else %}btn--secondary{% endif %}"
                 title="{% if c.handled %}Als offen markieren{% else %}Als erledigt markieren{% endif %}">
@@ -261,7 +263,7 @@
                 hx-post="/einsatz/{{ incident.id }}/funkjournal/{{ c.id }}/lage"
                 hx-swap="none"
                 hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
-                hx-on::after-request="if(event.detail.successful){location.reload();}">
+                hx-on::after-request="if(event.detail.successful){refreshFjList();}">
             <button type="submit" class="btn btn--xs fj-handle-btn
               {% if c.is_lage_relevant %}btn--secondary{% else %}btn--ghost{% endif %}"
                 title="{% if c.is_lage_relevant %}Lagerelevanz entfernen{% else %}Als lagerelevant markieren{% endif %}"
@@ -281,6 +283,7 @@
   </div>
   {% endif %}
 
+  </div>
 </div>
 {% endblock %}
 
@@ -308,17 +311,26 @@ var FJ_FILTER = false;
 
 function toggleOpenFilter() {
   FJ_FILTER = !FJ_FILTER;
+  applyFjFilters();
+}
+
+function refreshFjList() {
+  return incidentBoard({{ incident.id }})._swapFunkjournal({{ incident.id }});
+}
+
+function applyFjFilters() {
+  var q = document.getElementById('fj-search').value.trim().toLowerCase();
   var btn  = document.getElementById('fj-filter-btn');
   var hint = document.getElementById('fj-filter-hint');
   document.querySelectorAll('.fj-table tbody tr').forEach(function(tr) {
-    if (FJ_FILTER) {
-      tr.style.display = (tr.dataset.isRequest === 'true' && tr.dataset.handled !== 'true') ? '' : 'none';
-    } else {
-      tr.style.display = '';
-    }
+    var open = tr.dataset.isRequest === 'true' && tr.dataset.handled !== 'true';
+    tr.style.display = (!FJ_FILTER || open) && tr.dataset.fjSearch.includes(q) ? '' : 'none';
   });
   if (btn)  { btn.style.background = FJ_FILTER ? 'rgba(251,191,36,.15)' : ''; btn.style.color = FJ_FILTER ? '#fbbf24' : ''; }
   if (hint) { hint.style.display = FJ_FILTER ? '' : 'none'; }
 }
+document.addEventListener('htmx:afterSwap', function(event) {
+  if (event.target.id === 'fjList') applyFjFilters();
+});
 </script>
 {% endblock %}

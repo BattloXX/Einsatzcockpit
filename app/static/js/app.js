@@ -520,7 +520,7 @@ function incidentBoard(incidentId, alarm, startedAt) {
         if (event.detail.successful) this._bumpLastUpdate();
       });
       this._connectWS(incidentId);
-      this._setupKeyboard(incidentId);
+      if (document.getElementById('kanban')) this._setupKeyboard(incidentId);
       this._trackOpenModalEntity();
       window.addEventListener('ec:resync', () => this._resyncBoard(incidentId));
       this._keepaliveTimer = setInterval(() => {
@@ -618,6 +618,58 @@ function incidentBoard(incidentId, alarm, startedAt) {
       if (!kanban) return;
       return htmx.ajax('GET', `/einsatz/${incidentId}/kanban`, { target: kanban, swap: 'innerHTML' })
         .then(() => { if (window.reapplyMobileLane) window.reapplyMobileLane(); });
+    },
+
+    _swapFunkjournal(incidentId) {
+      if (!document.getElementById('fjList')) return;
+      return htmx.ajax('GET', `/einsatz/${incidentId}/funkjournal`, {
+        target: '#fjList', select: '#fjList', swap: 'outerHTML'
+      });
+    },
+
+    _swapLeader(incidentId) {
+      if (document.getElementById('topnavLeader')) {
+        htmx.ajax('GET', location.pathname + location.search, {
+          target: '#topnavLeader', select: '#topnavLeader', swap: 'outerHTML'
+        });
+      }
+      return this._swapKopfleiste(incidentId);
+    },
+
+    _breathingBusy() {
+      const grid = document.getElementById('troopsGrid');
+      if (!grid) return false;
+      const focused = document.activeElement;
+      return !!grid.querySelector('dialog[open]') || !!(focused && grid.contains(focused)
+        && focused.matches('input, textarea, select, [contenteditable]'));
+    },
+
+    _queueBreathing(incidentId) {
+      if (!document.getElementById('troopsGrid')) return;
+      this._breathingPending = true;
+      if (!this._breathingListeners) {
+        this._breathingListeners = true;
+        const resume = () => {
+          if (this._breathingPending) this._queueBreathing(incidentId);
+        };
+        document.addEventListener('focusout', resume);
+        document.addEventListener('close', resume, true);
+        document.addEventListener('htmx:beforeSwap', (event) => {
+          if (event.detail.target.id === 'troopsGrid' && this._breathingBusy()) {
+            event.detail.shouldSwap = false;
+            this._breathingPending = true;
+          }
+        });
+      }
+      clearTimeout(this._breathingTimer);
+      this._breathingTimer = setTimeout(() => {
+        if (this._breathingBusy()) return;
+        this._breathingPending = false;
+        if (!document.getElementById('troopsGrid')) return;
+        htmx.ajax('GET', `/einsatz/${incidentId}/atemschutz`, {
+          target: '#troopsGrid', select: '#troopsGrid', swap: 'outerHTML'
+        });
+      }, 300);
     },
 
     _swapKopfleiste(incidentId) {
@@ -754,9 +806,14 @@ function incidentBoard(incidentId, alarm, startedAt) {
           break;
         case 'alarm_type_changed':
         case 'address_updated':
-        case 'incident_leader_changed':
         case 'ai_hints_ready':
           this._swapKopfleiste(incidentId);
+          break;
+        case 'incident_leader_changed':
+          this._swapLeader(incidentId);
+          break;
+        case 'funkjournal_changed':
+          this._swapFunkjournal(incidentId);
           break;
         case 'lis_sync':
         case 'dibos_sync':
@@ -826,7 +883,7 @@ function incidentBoard(incidentId, alarm, startedAt) {
           this._bumpLastUpdate();
           this._handleBoardEvent(ev, id);
           if (ev.reload_breathing || ev.type === 'troop_created' || ev.type === 'troop_started' || ev.type === 'troop_status_changed') {
-            if (document.getElementById('troopsGrid')) location.reload();
+            this._queueBreathing(id);
           }
           if (ev.type === 'pressure_logged') {
             window.dispatchEvent(new CustomEvent('breathing-pressure', {
@@ -849,7 +906,7 @@ function incidentBoard(incidentId, alarm, startedAt) {
             }));
           }
           if (ev.type === 'troop_meldung' || ev.type === 'troop_standort') {
-            if (document.getElementById('troopsGrid')) location.reload();
+            this._queueBreathing(id);
           }
           if (ev.type === 'message_due' || ev.type === 'task_due') {
             const state = window.Alpine && Alpine.$data(document.body);
@@ -1093,6 +1150,10 @@ document.addEventListener('htmx:responseError', (e) => {
 });
 
 document.addEventListener('htmx:afterRequest', (e) => {
+  const config = e.detail.requestConfig;
+  const leader = config && config.verb.toLowerCase() === 'post'
+    && config.path.match(/^\/einsatz\/(\d+)\/einsatzleiter-mitglied(?:-neu)?$/);
+  if (e.detail.successful && leader) incidentBoard(leader[1])._swapLeader(leader[1]);
   const xhr = e.detail.xhr;
   const encodedErrors = xhr && xhr.getResponseHeader && xhr.getResponseHeader('X-Upload-Errors');
   if (!encodedErrors) return;

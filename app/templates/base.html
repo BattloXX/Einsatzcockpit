@@ -131,12 +131,12 @@
       {% endif %}
     </div>
     {% if incident is defined and incident and leader_candidates is defined %}
-    <div class="topnav__leader" x-data="{open:false}" @click.outside="open=false" style="position:relative;">
+    <div id="topnavLeader" class="topnav__leader" x-data="{open:false}" @click.outside="open=false" style="position:relative;">
       <button type="button" class="nav-link nav-link--dropdown topnav__leader-btn"
               @click="open=!open"
               title="Aktuellen Einsatzleiter anzeigen oder wechseln">
         <span style="font-size:.75rem; opacity:.7; margin-right:2px;">EL</span>
-        <span>{% if incident.leader_member %}{{ incident.leader_member.full_name }}{% elif incident.leader %}{{ incident.leader.display_name }}{% else %}— kein EL —{% endif %}</span>
+        <span>{% if incident.leader_member %}{{ incident.leader_member.full_name }}{% elif incident.incident_leader_name %}{{ incident.incident_leader_name }}{% elif incident.leader %}{{ incident.leader.display_name }}{% else %}— kein EL —{% endif %}</span>
         <span style="font-size:.7rem; opacity:.7; margin-left:2px;">▾</span>
       </button>
       <div x-show="open" x-cloak
@@ -148,22 +148,22 @@
           Einsatzleiter wechseln
         </div>
         <form hx-post="/einsatz/{{ incident.id }}/einsatzleiter-mitglied" hx-swap="none"
-              @htmx:after-request="if(event.detail.successful){open=false; location.reload();}" style="display:block;">
+              @htmx:after-request="if(event.detail.successful){open=false;}" style="display:block;">
           <input type="hidden" name="member_id" value="">
           <button type="submit"
                   style="display:block; width:100%; text-align:left; padding:7px 16px;
-                         background:{% if not incident.incident_leader_member_id %}rgba(183,25,33,.15){% else %}none{% endif %};
-                         color:{% if not incident.incident_leader_member_id %}var(--red-light){% else %}var(--on-surface){% endif %};
+                         background:{% if not incident.incident_leader_member_id and not incident.incident_leader_name %}rgba(183,25,33,.15){% else %}none{% endif %};
+                         color:{% if not incident.incident_leader_member_id and not incident.incident_leader_name %}var(--red-light){% else %}var(--on-surface){% endif %};
                          border:none; cursor:pointer; font-size:.88rem; transition:background .15s;"
                   onmouseover="this.style.background='var(--surface-high)'"
-                  onmouseout="this.style.background='{% if not incident.incident_leader_member_id %}rgba(183,25,33,.15){% else %}none{% endif %}'">
-            {% if not incident.incident_leader_member_id %}✓ {% endif %}— kein EL —
+                  onmouseout="this.style.background='{% if not incident.incident_leader_member_id and not incident.incident_leader_name %}rgba(183,25,33,.15){% else %}none{% endif %}'">
+            {% if not incident.incident_leader_member_id and not incident.incident_leader_name %}✓ {% endif %}— kein EL —
           </button>
         </form>
         {% if el_member_candidates is defined and el_member_candidates %}
         {% for m in el_member_candidates %}
         <form hx-post="/einsatz/{{ incident.id }}/einsatzleiter-mitglied" hx-swap="none"
-              @htmx:after-request="if(event.detail.successful){open=false; location.reload();}" style="display:block;">
+              @htmx:after-request="if(event.detail.successful){open=false;}" style="display:block;">
           <input type="hidden" name="member_id" value="{{ m.id }}">
           <button type="submit"
                   style="display:block; width:100%; text-align:left; padding:7px 16px;

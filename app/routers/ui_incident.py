@@ -3987,6 +3987,7 @@ def funkjournal_add(
         author_name=get_author_name(request),
     ))
     db.commit()
+    run_async(manager.broadcast, incident_id, {"type": "funkjournal_changed"})
     return Response(status_code=204)
 
 
@@ -4009,6 +4010,7 @@ def funkjournal_toggle_handled(
         raise HTTPException(status_code=404)
     entry.handled = not entry.handled
     db.commit()
+    run_async(manager.broadcast, incident_id, {"type": "funkjournal_changed"})
     return Response(status_code=204)
 
 
@@ -4031,4 +4033,5 @@ def funkjournal_toggle_lage(
         raise HTTPException(status_code=404)
     entry.is_lage_relevant = not entry.is_lage_relevant
     db.commit()
+    run_async(manager.broadcast, incident_id, {"type": "funkjournal_changed"})
     return Response(status_code=204)

@@ -213,6 +213,15 @@ def test_revision_erneut_nach_neuem_datum(pr2_db):
     set_tenant_context(db, None)
     objekt = db.query(Objekt).filter(Objekt.org_id == org_a_id, Objekt.nummer == 90).execution_options(
         include_all_tenants=True).first()
+    if objekt is None:
+        # Reihenfolgeunabhängig (xdist): Objekt anlegen, falls der Vortest auf einem anderen
+        # Worker lief – Zustand wie nach dessen erster Erinnerung.
+        objekt = Objekt(org_id=org_a_id, nummer=90, name="Revision faellig",
+                        status=OBJEKT_STATUS_FREIGEGEBEN,
+                        revision_datum=date.today() - timedelta(days=1),
+                        revision_erinnert_am=date.today())
+        db.add(objekt)
+        db.commit()
     # Sachbearbeiter setzt neues Revisionsdatum → Router setzt den Marker zurueck
     # (siehe stammdaten_speichern) → bei erneuter Faelligkeit wieder erinnern
     objekt.revision_datum = date.today()
