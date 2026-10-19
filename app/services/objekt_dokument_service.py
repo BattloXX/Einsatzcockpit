@@ -40,6 +40,7 @@ from app.models.objekt import (
     ObjektDokumentSeite,
 )
 from app.models.user import User
+from app.services import pdf_seiten_pipeline
 from app.services.objekt_service import lade_auswahl, write_objekt_change
 from app.services.storage_service import release_storage, reserve_storage
 
@@ -154,24 +155,13 @@ def store_dokument_bytes(
         raise ObjektDokumentFehler("Leere Datei")
 
     max_bytes = _system_int(db, "objekt_pdf_max_bytes", settings.OBJEKT_PDF_MAX_BYTES)
-    if len(data) > max_bytes:
-        raise ObjektDokumentFehler(f"Datei zu gross (max. {max_bytes // (1024 * 1024)} MB)", 413)
-
-    mime = _detect_mime(data)
-    if mime != "application/pdf":
-        raise ObjektDokumentFehler("Nur PDF-Dateien erlaubt", 415)
-
-    # Seitenzahl + Validierung via pypdf
-    try:
-        from pypdf import PdfReader
-        reader = PdfReader(io.BytesIO(data))
-        seitenzahl = len(reader.pages)
-    except Exception as exc:
-        raise ObjektDokumentFehler("PDF konnte nicht gelesen werden", 415) from exc
-
     max_seiten = _system_int(db, "objekt_pdf_max_seiten", settings.OBJEKT_PDF_MAX_SEITEN)
-    if seitenzahl > max_seiten:
-        raise ObjektDokumentFehler(f"PDF hat {seitenzahl} Seiten (max. {max_seiten})", 413)
+    try:
+        seitenzahl = pdf_seiten_pipeline.pruefe_pdf(
+            data, max_bytes=max_bytes, max_seiten=max_seiten, detect_mime=_detect_mime,
+        )
+    except pdf_seiten_pipeline.PdfFehler as exc:
+        raise ObjektDokumentFehler(exc.detail, exc.status_code) from exc
 
     org_id = objekt.org_id
     if org_id is None:
@@ -247,50 +237,15 @@ def store_dokument_bytes(
 
 
 def _render_page_png_poppler(pdf_path: Path, seiten_nr: int, dpi: int) -> bytes | None:
-    """Rastert eine PDF-Seite via pdf2image/Poppler. None wenn nicht verfuegbar.
-
-    Entscheidung 2026-07-05: pdf2image + Poppler (Prod = Debian, apt install
-    poppler-utils) statt PyMuPDF (AGPL). Kapselung haelt einen Backend-Tausch lokal.
-    """
-    try:
-        from pdf2image import convert_from_path  # type: ignore
-    except ImportError:
-        logger.warning("pdf2image nicht installiert — Seiten-Rendering uebersprungen")
-        return None
-    try:
-        bilder = convert_from_path(
-            str(pdf_path), dpi=dpi, first_page=seiten_nr, last_page=seiten_nr,
-        )
-    except Exception:
-        logger.exception("Poppler-Rendering fehlgeschlagen (%s Seite %d)", pdf_path, seiten_nr)
-        return None
-    if not bilder:
-        return None
-    buf = io.BytesIO()
-    bilder[0].save(buf, format="PNG")
-    return buf.getvalue()
+    return pdf_seiten_pipeline.render_seite_png_poppler(pdf_path, seiten_nr, dpi)
 
 
 def _ocr_tesseract(png: bytes) -> str:
-    """OCR eines Seitenbilds via Tesseract. "" wenn pytesseract/Binary fehlt (CI/Tests)."""
-    try:
-        import pytesseract  # type: ignore
-        from PIL import Image
-    except ImportError:
-        logger.warning("pytesseract nicht installiert — OCR uebersprungen")
-        return ""
-    try:
-        img = Image.open(io.BytesIO(png))
-        return pytesseract.image_to_string(img, lang=settings.OBJEKT_OCR_LANG)
-    except Exception:
-        logger.exception("Tesseract-OCR fehlgeschlagen")
-        return ""
+    return pdf_seiten_pipeline.ocr_tesseract(png)
 
 
 def _normalisiere_text(text: str) -> str:
-    """Whitespace normalisieren + auf die konfigurierte Maximallaenge kappen."""
-    zusammen = " ".join((text or "").split())
-    return zusammen[: settings.OBJEKT_VOLLTEXT_MAX_CHARS]
+    return pdf_seiten_pipeline.normalisiere_text(text)
 
 
 def extrahiere_seitentext(
@@ -298,28 +253,8 @@ def extrahiere_seitentext(
     png: bytes | None,
     ocr_func: OcrFunc | None = None,
 ) -> tuple[str | None, str]:
-    """Ermittelt den Volltext einer Seite: erst PDF-Textlayer (pypdf), sonst OCR.
-
-    Gibt (volltext, quelle) zurueck — quelle ∈ pdf/ocr/none. Injizierbare ocr_func
-    fuer Tests/CI ohne Tesseract (Default _ocr_tesseract).
-    """
-    ocr = ocr_func or _ocr_tesseract
-    text = ""
-    if page is not None:
-        try:
-            text = _normalisiere_text(page.extract_text() or "")  # type: ignore[attr-defined]
-        except Exception:
-            text = ""
-    if text and len(text) >= settings.OBJEKT_OCR_MIN_CHARS:
-        return text, "pdf"
-    # Textlayer fehlt/zu kurz → OCR auf dem gerenderten Seitenbild versuchen
-    if settings.OBJEKT_OCR_ENABLED and png:
-        ocr_text = _normalisiere_text(ocr(png))
-        if len(ocr_text) >= settings.OBJEKT_OCR_MIN_CHARS:
-            return ocr_text, "ocr"
-    if text:
-        return text, "pdf"
-    return None, "none"
+    """Extrahiert Seitentext mit dem zur Laufzeit aufgeloesten OCR-Default."""
+    return pdf_seiten_pipeline.extrahiere_seitentext(page, png, ocr_func or _ocr_tesseract)
 
 
 def verarbeite_dokument(
@@ -338,6 +273,7 @@ def verarbeite_dokument(
     from app.db import SessionLocal
 
     render = render_func or _render_page_png_poppler
+    ocr = ocr_func or _ocr_tesseract
 
     db = SessionLocal()
     set_tenant_context(db, None)
@@ -358,57 +294,25 @@ def verarbeite_dokument(
         ).delete()
         db.commit()
 
-        from PIL import Image
-        from pypdf import PdfReader, PdfWriter
-
-        reader = PdfReader(str(original))
+        ergebnisse = pdf_seiten_pipeline.zerlege_pdf(
+            original, dest_dir, render_func=render, ocr_func=ocr,
+            dpi=settings.OBJEKT_SEITE_RENDER_DPI, thumb_groesse=settings.MEDIA_THUMB_SIZE,
+            log_kontext=f"Dokument {dokument.id}",
+        )
         neu_belegt = 0
-
-        for i, page in enumerate(reader.pages, start=1):
-            # 1) Verlustfreie Einzelseite
-            writer = PdfWriter()
-            writer.add_page(page)
-            einzel = dest_dir / f"seite_{i:04d}.pdf"
-            with einzel.open("wb") as fh:
-                writer.write(fh)
-            neu_belegt += einzel.stat().st_size
-
-            # 2) Hi-Res-Rendering + Thumb (optional, wenn Poppler verfuegbar)
-            bild_pfad_rel: str | None = None
-            thumb_pfad_rel: str | None = None
-            png = render(original, i, settings.OBJEKT_SEITE_RENDER_DPI)
-            if png:
-                bild = dest_dir / f"seite_{i:04d}.png"
-                bild.write_bytes(png)
-                neu_belegt += len(png)
-                bild_pfad_rel = f"{dokument.pfad.rsplit('/', 1)[0]}/seite_{i:04d}.png"
-
-                try:
-                    img: Any = Image.open(io.BytesIO(png))
-                    img.thumbnail((settings.MEDIA_THUMB_SIZE, settings.MEDIA_THUMB_SIZE * 2))
-                    if img.mode not in ("RGB", "L"):
-                        img = img.convert("RGB")
-                    thumb = dest_dir / f"seite_{i:04d}_thumb.jpg"
-                    img.save(thumb, "JPEG", quality=80)
-                    neu_belegt += thumb.stat().st_size
-                    thumb_pfad_rel = f"{dokument.pfad.rsplit('/', 1)[0]}/seite_{i:04d}_thumb.jpg"
-                except Exception:
-                    logger.exception("Thumb-Erzeugung fehlgeschlagen (Dokument %d Seite %d)",
-                                     dokument.id, i)
-
-            # 3) Volltext fuer die Suche (PDF-Textlayer, sonst OCR auf dem Rendering)
-            volltext, text_quelle = extrahiere_seitentext(page, png, ocr_func)
-
+        basis_pfad = dokument.pfad.rsplit('/', 1)[0]
+        for ergebnis in ergebnisse:
+            neu_belegt += ergebnis.bytes_belegt
             db.add(ObjektDokumentSeite(
                 org_id=org_id,
                 objekt_id=dokument.objekt_id,
                 dokument_id=dokument.id,
-                seiten_nr=i,
-                einzel_pdf_pfad=f"{dokument.pfad.rsplit('/', 1)[0]}/seite_{i:04d}.pdf",
-                bild_pfad=bild_pfad_rel,
-                thumb_pfad=thumb_pfad_rel,
-                volltext=volltext,
-                text_quelle=text_quelle,
+                seiten_nr=ergebnis.seiten_nr,
+                einzel_pdf_pfad=f"{basis_pfad}/{ergebnis.einzel_pdf_name}",
+                bild_pfad=f"{basis_pfad}/{ergebnis.bild_name}" if ergebnis.bild_name else None,
+                thumb_pfad=f"{basis_pfad}/{ergebnis.thumb_name}" if ergebnis.thumb_name else None,
+                volltext=ergebnis.volltext,
+                text_quelle=ergebnis.text_quelle,
             ))
 
         # Quota fuer abgeleitete Dateien reservieren (Entscheidung: zaehlt zur Org-Quota)
@@ -420,9 +324,7 @@ def verarbeite_dokument(
                     "Quota beim Zerlegen ueberschritten (Dokument %d) — Renderings verworfen",
                     dokument.id,
                 )
-                for pfx in ("seite_",):
-                    for f in dest_dir.glob(f"{pfx}*"):
-                        f.unlink(missing_ok=True)
+                pdf_seiten_pipeline.entferne_seitendateien(dest_dir)
                 db.rollback()
                 dokument = db.get(ObjektDokument, dokument_id)
                 if dokument is not None:
