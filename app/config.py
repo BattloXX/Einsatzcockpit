@@ -65,6 +65,11 @@ class Settings(BaseSettings):
     PUBLIC_GITHUB_URL: str = "https://github.com/BattloXX/einsatzcockpit"
     PUBLIC_CONTACT_EMAIL: str = "johannes@battlogg.org"
 
+    # Inline-Script-Verstöße vor der CSP-Härtung nur melden (Content-Security-Policy-
+    # Report-Only → /csp-report, aggregiert im Server-Log); aktive CSP bleibt unverändert.
+    # Standard aus – für einen Messzeitraum gezielt per .env einschalten.
+    CSP_REPORT_ONLY: bool = False
+
     # Cookie-Flags
     COOKIE_SECURE: bool = False  # In Produktion auf true (HTTPS)
 

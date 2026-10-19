@@ -13,6 +13,9 @@ Setzt restriktive Default-Header für alle HTTP-Antworten:
 
 CSP nutzt 'unsafe-inline' für Styles + Scripts, da das Template-System derzeit
 viele Inline-Handler und Styles enthält. Schrittweise Härtung kann via Nonces erfolgen.
+Der optionale Report-Only-Modus (CSP_REPORT_ONLY, Standard aus) meldet Inline-Scripts
+und Inline-Handler an /csp-report, ohne sie zu blockieren. Alle übrigen Direktiven
+einschließlich Inline-Styles, 'unsafe-eval' und routenspezifischer Ausnahmen bleiben gleich.
 """
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -58,6 +61,23 @@ _CSP_INFOSCREEN_BASE = (
     "base-uri 'self'; "
     "form-action 'none'"
 )
+
+
+def _report_only_policy(policy: str) -> str:
+    """Leitet die Mess-Policy ab; nur script-src verliert 'unsafe-inline'.
+
+    'unsafe-eval' bleibt erlaubt: Der Alpine-Standard-Build wertet Ausdrücke per
+    eval aus – jede Auswertung erzeugte sonst einen Bericht (Flut vom Tablet),
+    ohne neue Erkenntnis. Gemessen werden Inline-Skripte und Inline-Handler.
+    """
+    directives = []
+    for directive in policy.split(";"):
+        parts = directive.split()
+        if parts and parts[0] == "script-src":
+            prefix = directive[:len(directive) - len(directive.lstrip())]
+            directive = prefix + " ".join(part for part in parts if part != "'unsafe-inline'")
+        directives.append(directive)
+    return ";".join(directives).rstrip("; ") + "; report-uri /csp-report"
 
 
 def _csp_with_turnstile(csp_base: str) -> str:
@@ -169,6 +189,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
         # CSP überschreibt frame-ancestors → eigener X-Frame-Options als Fallback
         response.headers.setdefault("Content-Security-Policy", csp)
+        if settings.CSP_REPORT_ONLY:
+            response.headers["Content-Security-Policy-Report-Only"] = _report_only_policy(
+                response.headers["Content-Security-Policy"],
+            )
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
         # geolocation=(self): eigener Standort auf GSL-Karte, Einheitenkarte und Bürgermeldung

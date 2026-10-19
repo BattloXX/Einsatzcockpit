@@ -46,6 +46,7 @@ from app.routers import (
     api_v1,
     api_weather,
     auth,
+    csp_report,
     device_api,
     gateway_api,
     lagekarte_api,
@@ -843,6 +844,7 @@ app.add_middleware(WriteFailureLogMiddleware)
 
 
 # Routers
+app.include_router(csp_report.router)
 app.include_router(auth.router)
 app.include_router(mcp_router.router)
 app.include_router(mcp_upload_router.router)
