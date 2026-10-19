@@ -175,6 +175,48 @@ class KatplanElementPhase(TenantScoped, Base):
     )
 
 
+class KatplanLink(TenantScoped, Base):
+    __tablename__ = "katplan_link"
+    __table_args__ = (
+        sa.UniqueConstraint("element_id", "ziel_typ", "ziel_id", "rolle"),
+        sa.Index("ix_katplan_link_org_ziel", "org_id", "ziel_typ", "ziel_id"),
+        sa.Index("ix_katplan_link_org_plan", "org_id", "plan_id"),
+    )
+
+    id: Mapped[int] = mapped_column(sa.BigInteger, primary_key=True, autoincrement=True)
+    plan_id: Mapped[int] = mapped_column(
+        sa.BigInteger, sa.ForeignKey("katplan_plan.id", ondelete="CASCADE"), nullable=False
+    )
+    element_id: Mapped[int | None] = mapped_column(
+        sa.BigInteger, sa.ForeignKey("katplan_element.id", ondelete="CASCADE"), nullable=True
+    )
+    ziel_typ: Mapped[str] = mapped_column(sa.String(30), nullable=False)
+    ziel_id: Mapped[int] = mapped_column(sa.BigInteger, nullable=False)
+    rolle: Mapped[str] = mapped_column(sa.String(30), nullable=False)
+    hinweis: Mapped[str] = mapped_column(sa.String(500), nullable=False, default="")
+    sort: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=0)
+    erstellt_am: Mapped[datetime] = mapped_column(sa.DateTime, nullable=False, default=_utcnow)
+    erstellt_von_id: Mapped[int | None] = mapped_column(
+        sa.BigInteger, sa.ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+
+
+class KatplanRelation(TenantScoped, Base):
+    __tablename__ = "katplan_relation"
+    __table_args__ = (sa.UniqueConstraint("von_element_id", "zu_element_uuid", "art"),)
+
+    id: Mapped[int] = mapped_column(sa.BigInteger, primary_key=True, autoincrement=True)
+    plan_id: Mapped[int] = mapped_column(
+        sa.BigInteger, sa.ForeignKey("katplan_plan.id", ondelete="CASCADE"), nullable=False
+    )
+    von_element_id: Mapped[int] = mapped_column(
+        sa.BigInteger, sa.ForeignKey("katplan_element.id", ondelete="CASCADE"), nullable=False
+    )
+    zu_element_uuid: Mapped[str] = mapped_column(sa.String(36), nullable=False)
+    art: Mapped[str] = mapped_column(sa.String(20), nullable=False)
+    hinweis: Mapped[str] = mapped_column(sa.String(300), nullable=False, default="")
+
+
 class KatplanAenderung(TenantScoped, Base):
     __tablename__ = "katplan_aenderung"
     __table_args__ = (
@@ -274,6 +316,7 @@ class KatplanVersionElement(TenantScoped, Base):
     suchtext: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     sort: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=0)
     phasen_json: Mapped[str] = mapped_column(sa.Text, nullable=False, default="[]")
+    relationen_json: Mapped[str] = mapped_column(sa.Text, nullable=False, default="[]", server_default="[]")
     links_json: Mapped[str] = mapped_column(sa.Text, nullable=False, default="[]")
     anhaenge_json: Mapped[str] = mapped_column(sa.Text, nullable=False, default="[]")
     gsl_json: Mapped[str] = mapped_column(sa.Text, nullable=False, default="{}")

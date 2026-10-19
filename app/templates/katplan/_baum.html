@@ -35,6 +35,7 @@
             <a href="/katastrophenplaene/{{ plan.id }}/elemente/{{ e.id }}" hx-get="/katastrophenplaene/{{ plan.id }}/elemente/{{ e.id }}"
               hx-target="#kp-detail" {% if aktiv_element_id|default(0) == e.id %}aria-current="true"{% endif %}>
               {{ typen[e.typ].icon }} <span class="kp-mono">{{ e.kennung }}</span> {{ e.titel }}
+              {% if e.id in fehlende_link_elemente %}<span class="kp-badge kp-badge--amber" title="Verknüpfungsziel fehlt">⚠</span>{% endif %}
               <span class="kp-prio-{{ e.prioritaet }}">P{{ e.prioritaet }}</span>
             </a>
           </li>

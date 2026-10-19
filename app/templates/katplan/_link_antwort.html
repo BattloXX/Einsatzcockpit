@@ -1,0 +1,9 @@
+{% include "katplan/_design.html" %}
+{% if beziehung %}
+  {% include "katplan/_beziehungen.html" %}
+{% else %}
+  {% include "katplan/_links.html" %}
+{% endif %}
+{% if version_oob %}
+  <input type="hidden" name="version" id="kp-element-version" value="{{ element.version }}" hx-swap-oob="outerHTML">
+{% endif %}

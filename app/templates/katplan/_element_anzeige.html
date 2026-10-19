@@ -1,5 +1,5 @@
 {% set daten = element_daten[element.id] %}
-<article class="kp-box kp-box--prio-{{ element.prioritaet }}" data-element-id="{{ element.id }}"
+<article id="element-{{ element.element_uuid if leseversion is defined else element.uuid }}" class="kp-box kp-box--prio-{{ element.prioritaet }}" data-element-id="{{ element.id }}"
   {% if leseversion is defined %}data-phasen="{{ element.phasen_json }}"
   x-show="phase === null || JSON.parse($el.dataset.phasen).length === 0 || JSON.parse($el.dataset.phasen).includes(phase)"{% endif %}>
   <div class="kp-box__head">
@@ -81,5 +81,17 @@
         <p class="kp-freitext">{{ wert }}</p>
       {% endif %}
     {% endif %}
+  {% endfor %}
+  {% set links = element_links.get(element.id, []) %}
+  {% set links_bearbeiten = false %}
+  {% if links %}
+    <h4 class="kp-box__title">Verknüpfungen</h4>
+    {% include "katplan/_links_anzeige.html" %}
+  {% endif %}
+  {% for relation in element_relationen.get(element.id, []) %}
+    <p>{{ relation_arten[relation.art] }}: <a href="{{ relation.url }}">{{ relation.kennung }} {{ relation.titel }}</a>
+      {% if relation.plan_titel %} · {{ relation.plan_titel }}{% endif %}
+      {% if relation.hinweis %} · {{ relation.hinweis }}{% endif %}
+    </p>
   {% endfor %}
 </article>

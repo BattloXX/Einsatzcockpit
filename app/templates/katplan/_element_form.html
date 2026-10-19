@@ -8,7 +8,7 @@
     hx-post="/katastrophenplaene/{{ plan.id }}/elemente/{{ element.id }}" hx-target="#kp-detail" class="kp-form kp-form--contents" x-data="{ daten: {} }"
     x-init="daten = JSON.parse($el.previousElementSibling.textContent)" @submit="$refs.daten.value = JSON.stringify(daten)">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-    <input type="hidden" name="version" value="{{ form.get('version', element.version) }}">
+    <input type="hidden" name="version" id="kp-element-version" value="{{ form.get('version', element.version) }}">
     <input type="hidden" name="daten_json" x-ref="daten" :value="JSON.stringify(daten)" value="{{ daten|tojson|forceescape }}">
     <div class="kp-form kp-editor-fields">
       <h3 class="kp-box__title">Grunddaten</h3>
@@ -75,6 +75,8 @@
           </label>
         {% endfor %}
       </fieldset>
+      {% include "katplan/_links.html" %}
+      {% include "katplan/_beziehungen.html" %}
       <fieldset>
         <legend class="kp-box__title">Typspezifische Angaben</legend>
         {% if element.typ == "info" %}

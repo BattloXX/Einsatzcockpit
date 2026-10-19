@@ -7,9 +7,11 @@ from typing import Any
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, ConfigDict
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.async_bridge import run_async
+from app.core.permissions import can_view_kontakt_directory, has_role
 from app.core.templating import templates
 from app.core.timezones import now_local
 from app.db import get_db
@@ -20,15 +22,19 @@ from app.models.katplan import (
     KatplanAenderung,
     KatplanElement,
     KatplanElementPhase,
+    KatplanLink,
     KatplanPhase,
     KatplanPlan,
     KatplanPruefung,
+    KatplanRelation,
     KatplanVersion,
     KatplanVersionElement,
 )
 from app.models.major_incident import AUFTRAGSART_LABEL, AUFTRAGSART_WERTE
 from app.models.user import User
+from app.routers.ui_objekt import _LESE_ROLLEN
 from app.services import katplan_freigabe_service as freigabe_service
+from app.services import katplan_link_service as link_service
 from app.services.katplan_service import (
     KatplanKonflikt,
     abschnitte_baum,
@@ -43,6 +49,7 @@ from app.services.katplan_service import (
     verschiebe_nachbar,
 )
 from app.services.katplan_typen import ELEMENT_TYPEN, ELEMENT_VORLAGEN, bereinige_daten
+from app.services.katplan_ziel_service import ziel_suchen, ziel_verfuegbar
 from app.services.katplan_zugriff import (
     darf_bearbeiten,
     darf_freigeben,
@@ -88,7 +95,8 @@ def _kontext(db: Session, user: User, plan: KatplanPlan | None = None) -> dict[s
             "can_release": darf_freigeben(user), "protokoll": protokoll,
             "aktuelle_version": aktuelle_version, "freigegeben_von": freigegeben_von,
             "heute": now_local(user.org).date(),
-            **(_editor_kontext(db, plan) if plan and darf_bearbeiten(user) else {})}
+            **(_editor_kontext(db, plan) if plan and darf_bearbeiten(user) else {}),
+            **(_link_kontext(db, user, plan) if plan else {})}
 
 
 class Stammdaten:
@@ -201,6 +209,7 @@ def _lesekontext(db: Session, user: User, plan: KatplanPlan, vid: int | None = N
     termin = daten.get("wiedervorlage_am")
     return {"lesekopf": {**daten, "wiedervorlage_am": date.fromisoformat(termin) if termin else None},
             "plan_daten": daten, "leseversion": version,
+            **_link_kontext(db, user, plan, elemente, daten),
             "version_baum": freigabe_service.version_baum(daten, elemente, mit_vertraulichen=True),
             "typen": ELEMENT_TYPEN,
             "element_daten": {e.id: json.loads(e.daten_json or "{}") for e in elemente},
@@ -393,6 +402,9 @@ def _editor_kontext(db: Session, plan: KatplanPlan) -> dict[str, Any]:
             "ziel_plaene": db.query(KatplanPlan).filter(
                 KatplanPlan.org_id == plan.org_id, KatplanPlan.status != "archiviert",
             ).order_by(KatplanPlan.titel).all(),
+            "fehlende_link_elemente": {link.element_id for link in db.query(KatplanLink).filter_by(
+                org_id=plan.org_id, plan_id=plan.id).all()
+                if link_service.link_ansicht(db, link, voll=False)["fehlt"]},
             "farben": _FARBEN, "abschnitte": db.query(KatplanAbschnitt).filter_by(
                 org_id=plan.org_id, plan_id=plan.id,
             ).order_by(KatplanAbschnitt.sort, KatplanAbschnitt.id).all(),
@@ -875,3 +887,188 @@ def zurueckweisen(plan_id: int, request: Request, kommentar: str = Form(""),
 def freigeben(plan_id: int, request: Request, aenderungsnotiz: str = Form(""),
               db: Session = Depends(get_db), user: User = Depends(require_katplan_freigeben)):
     return _workflow(request, db, user, plan_id, "freigeben", aenderungsnotiz)
+
+
+_ZIEL_TYPEN = {"kontakt": "Kontakt", "kontakt_organisation": "Organisation", "objekt": "Objekt",
+               "fahrzeug": "Fahrzeug", "wasserstelle": "Wasserstelle"}
+
+
+def _relation_ansichten(db: Session, user: User, plan: KatplanPlan, relationen: list) -> list[dict]:
+    ergebnis = []
+    for relation in relationen:
+        uuid = relation["zu_element_uuid"]
+        ziel = db.query(KatplanElement).join(KatplanPlan, KatplanPlan.id == KatplanElement.plan_id).filter(
+            KatplanElement.org_id == plan.org_id, KatplanPlan.org_id == plan.org_id,
+            KatplanPlan.status != "archiviert", KatplanElement.uuid == uuid,
+        ).one_or_none()
+        if ziel is None:
+            continue
+        ziel_plan = db.query(KatplanPlan).filter_by(id=ziel.plan_id, org_id=plan.org_id).one()
+        titel, kennung, plan_titel = ziel.titel, ziel.kennung, ziel_plan.titel
+        # Leser duerfen keine Titel oder vertraulichen Elemente aus Arbeitsstaenden sehen.
+        if not darf_bearbeiten(user):
+            if not ziel_plan.aktuelle_version_id:
+                continue
+            _, ziel_plan_daten, version_elemente = _lade_version(db, ziel_plan)
+            plan_titel = ziel_plan_daten["titel"]
+            snapshot = next((e for e in version_elemente if e.element_uuid == uuid), None)
+            if snapshot is None or (snapshot.vertraulich and not sieht_vertraulich(user)):
+                continue
+            titel, kennung = snapshot.titel, snapshot.kennung
+        ergebnis.append({**relation, "titel": titel, "kennung": kennung,
+                         "plan_titel": plan_titel if ziel_plan.id != plan.id else "",
+                         "url": (f"/katastrophenplaene/{ziel.plan_id}" if ziel.plan_id != plan.id else "")
+                                + f"#element-{uuid}"})
+    return ergebnis
+
+
+def _link_kontext(db: Session, user: User, plan: KatplanPlan, version_elemente: list | None = None,
+                  plan_daten: dict | None = None) -> dict[str, Any]:
+    voll = can_view_kontakt_directory(user)
+    rechte: dict[str, Any] = {"org_id": plan.org_id, "kontakt": voll,
+              "objekt": ziel_verfuegbar(db, plan.org_id, "objekt") and has_role(user, *_LESE_ROLLEN)}
+    element_links: dict[int, list] = {}
+    element_relationen: dict[int, list] = {}
+    if version_elemente is not None:
+        for e in version_elemente:
+            element_links[e.id] = [{**ansicht, "hinweis": roh.get("hinweis", "")} for ansicht, roh in zip(
+                link_service.links_aus_version(db, e.links_json, voll=voll, user_rechte=rechte),
+                json.loads(e.links_json), strict=True)]
+            element_relationen[e.id] = _relation_ansichten(db, user, plan, json.loads(e.relationen_json or "[]"))
+        plan_roh = (plan_daten or {}).get("links", [])
+        plan_links = [{**ansicht, "hinweis": roh.get("hinweis", "")} for ansicht, roh in zip(
+            link_service.links_aus_version(db, plan_roh, voll=voll, user_rechte=rechte), plan_roh, strict=True)]
+    else:
+        plan_links = []
+        for link in db.query(KatplanLink).filter_by(org_id=plan.org_id, plan_id=plan.id).order_by(KatplanLink.id):
+            ansicht = {**link_service.link_ansicht(db, link, voll=voll, user_rechte=rechte),
+                       "id": link.id, "hinweis": link.hinweis}
+            if link.element_id is None:
+                plan_links.append(ansicht)
+            else:
+                element_links.setdefault(link.element_id, []).append(ansicht)
+        for relation in db.query(KatplanRelation).filter_by(org_id=plan.org_id, plan_id=plan.id):
+            element_relationen.setdefault(relation.von_element_id, []).extend(_relation_ansichten(
+                db, user, plan, [{"id": relation.id, "zu_element_uuid": relation.zu_element_uuid,
+                                  "art": relation.art, "hinweis": relation.hinweis}]))
+    return {"element_links": element_links, "element_relationen": element_relationen,
+            "plan_links": plan_links, "link_rollen": link_service.KATPLAN_LINK_ROLLEN,
+            "relation_arten": link_service.KATPLAN_RELATION_ARTEN,
+            "ziel_typen": {typ: label for typ, label in _ZIEL_TYPEN.items()
+                           if darf_bearbeiten(user) and ziel_verfuegbar(db, plan.org_id, typ)}}
+
+
+def _link_antwort(request: Request, db: Session, user: User, plan: KatplanPlan,
+                  element: KatplanElement | None, *, beziehung: bool = False, fehler: str = ""):
+    return templates.TemplateResponse(request, "katplan/_link_antwort.html", {
+        **_kontext(db, user, plan), "element": element, "beziehung": beziehung,
+        "fehler": fehler, "version_oob": element is not None,
+    }, status_code=422 if fehler else 200)
+
+
+@router.get("/{plan_id}/verknuepfungen/suche")
+def link_suche(plan_id: int, request: Request, ziel_typ: str = "", q: str = "", element_id: int | None = None,
+               db: Session = Depends(get_db), user: User = Depends(require_katplan_bearbeiten)):
+    plan = _plan(db, plan_id, user)
+    element = _objekt(db, KatplanElement, element_id, plan, user) if element_id is not None else None
+    treffer = ziel_suchen(db, plan.org_id, ziel_typ, q) if plan.org_id is not None and len(q.strip()) >= 2 else []
+    return templates.TemplateResponse(request, "katplan/_link_treffer.html", {
+        **_kontext(db, user, plan), "element": element, "treffer": treffer, "q": q, "ziel_typ": ziel_typ})
+
+
+def _link_anlegen(request: Request, db: Session, user: User, plan: KatplanPlan, element: KatplanElement | None):
+    form = run_async(request.form)
+    try:
+        link_service.link_anlegen(db, plan, user, element=element, ziel_typ=str(form.get("ziel_typ", "")),
+                                  ziel_id=int(str(form.get("ziel_id", "0"))),
+                                  rolle=str(form.get("rolle", "")), hinweis=str(form.get("hinweis", "")))
+        db.commit()
+    except ValueError as exc:
+        db.rollback()
+        return _link_antwort(request, db, user, plan, element, fehler=str(exc))
+    return _link_antwort(request, db, user, plan, element)
+
+
+@router.post("/{plan_id}/elemente/{eid}/links")
+def element_link_anlegen(plan_id: int, eid: int, request: Request, db: Session = Depends(get_db),
+                         user: User = Depends(require_katplan_bearbeiten)):
+    plan = _plan(db, plan_id, user)
+    return _link_anlegen(request, db, user, plan, _objekt(db, KatplanElement, eid, plan, user))
+
+
+@router.post("/{plan_id}/links")
+def plan_link_anlegen(plan_id: int, request: Request, db: Session = Depends(get_db),
+                      user: User = Depends(require_katplan_bearbeiten)):
+    return _link_anlegen(request, db, user, _plan(db, plan_id, user), None)
+
+
+@router.post("/{plan_id}/links/{lid}/loeschen")
+def link_loeschen(plan_id: int, lid: int, request: Request, db: Session = Depends(get_db),
+                  user: User = Depends(require_katplan_bearbeiten)):
+    plan = _plan(db, plan_id, user)
+    link = db.query(KatplanLink).filter_by(id=lid, org_id=user.org_id, plan_id=plan.id).one_or_none()
+    if link is None:
+        raise HTTPException(404, "Nicht gefunden")
+    element = _objekt(db, KatplanElement, link.element_id, plan, user) if link.element_id is not None else None
+    try:
+        link_service.link_entfernen(db, plan, user, link)
+        db.commit()
+    except ValueError as exc:
+        db.rollback()
+        return _link_antwort(request, db, user, plan, element, fehler=str(exc))
+    return _link_antwort(request, db, user, plan, element)
+
+
+@router.get("/{plan_id}/elemente/{eid}/beziehungen/suche")
+def beziehung_suche(plan_id: int, eid: int, request: Request, q: str = "",
+                    db: Session = Depends(get_db), user: User = Depends(require_katplan_bearbeiten)):
+    plan = _plan(db, plan_id, user)
+    element = _objekt(db, KatplanElement, eid, plan, user)
+    treffer = db.query(KatplanElement, KatplanPlan.titel).join(
+        KatplanPlan, KatplanPlan.id == KatplanElement.plan_id,
+    ).filter(KatplanElement.org_id == user.org_id, KatplanPlan.org_id == user.org_id,
+             KatplanPlan.status != "archiviert", KatplanElement.id != eid,
+             or_(KatplanElement.titel.ilike(f"%{q.strip()}%"), KatplanElement.kennung.ilike(f"%{q.strip()}%")),
+    ).order_by(KatplanElement.titel, KatplanElement.id).limit(20).all() if len(q.strip()) >= 2 else []
+    return templates.TemplateResponse(request, "katplan/_beziehung_treffer.html", {
+        **_kontext(db, user, plan), "element": element, "treffer": treffer, "q": q})
+
+
+@router.post("/{plan_id}/elemente/{eid}/beziehungen")
+def beziehung_anlegen(plan_id: int, eid: int, request: Request, db: Session = Depends(get_db),
+                      user: User = Depends(require_katplan_bearbeiten)):
+    plan = _plan(db, plan_id, user)
+    element = _objekt(db, KatplanElement, eid, plan, user)
+    form = run_async(request.form)
+    try:
+        uuid = str(form.get("zu_element_uuid", ""))
+        ziel = db.query(KatplanElement).join(KatplanPlan, KatplanPlan.id == KatplanElement.plan_id).filter(
+            KatplanElement.uuid == uuid, KatplanElement.org_id == user.org_id,
+            KatplanPlan.org_id == user.org_id, KatplanPlan.status != "archiviert",
+        ).one_or_none()
+        if ziel is None:
+            raise ValueError("Zielelement nicht verfügbar.")
+        link_service.relation_anlegen(db, plan, user, element, uuid, str(form.get("art", "")),
+                                      str(form.get("hinweis", "")))
+        db.commit()
+    except ValueError as exc:
+        db.rollback()
+        return _link_antwort(request, db, user, plan, element, beziehung=True, fehler=str(exc))
+    return _link_antwort(request, db, user, plan, element, beziehung=True)
+
+
+@router.post("/{plan_id}/beziehungen/{rid}/loeschen")
+def beziehung_loeschen(plan_id: int, rid: int, request: Request, db: Session = Depends(get_db),
+                       user: User = Depends(require_katplan_bearbeiten)):
+    plan = _plan(db, plan_id, user)
+    relation = db.query(KatplanRelation).filter_by(id=rid, org_id=user.org_id, plan_id=plan.id).one_or_none()
+    if relation is None:
+        raise HTTPException(404, "Nicht gefunden")
+    element = _objekt(db, KatplanElement, relation.von_element_id, plan, user)
+    try:
+        link_service.relation_entfernen(db, plan, user, relation)
+        db.commit()
+    except ValueError as exc:
+        db.rollback()
+        return _link_antwort(request, db, user, plan, element, beziehung=True, fehler=str(exc))
+    return _link_antwort(request, db, user, plan, element, beziehung=True)

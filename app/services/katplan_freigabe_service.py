@@ -15,15 +15,19 @@ from app.models.katplan import (
     KatplanAbschnitt,
     KatplanElement,
     KatplanElementPhase,
+    KatplanLink,
     KatplanPhase,
     KatplanPlan,
     KatplanPruefung,
+    KatplanRelation,
     KatplanVersion,
     KatplanVersionElement,
     _utcnow,
 )
 from app.models.master import FireDept
 from app.models.user import User
+from app.services.katplan_link_service import link_snapshot
+from app.services.katplan_link_service import links_aus_version as links_aus_version
 from app.services.katplan_service import _HTMLText, protokolliere
 
 
@@ -32,8 +36,9 @@ def _json(wert: Any) -> str:
 
 
 def _link_snapshot(db: Session, element: KatplanElement) -> list:
-    """Erweiterungspunkt fuer die Link-Snapshots aus K4."""
-    return []
+    return [link_snapshot(db, link) for link in db.query(KatplanLink).filter_by(
+        org_id=element.org_id, plan_id=element.plan_id, element_id=element.id,
+    ).order_by(KatplanLink.sort, KatplanLink.id)]
 
 
 def erstelle_snapshot(db: Session, plan: KatplanPlan, *, flush: bool = True) -> tuple[dict, list[dict]]:
@@ -50,6 +55,9 @@ def erstelle_snapshot(db: Session, plan: KatplanPlan, *, flush: bool = True) -> 
         kopf[name] = [{f: getattr(obj, f) for f in felder} for obj in db.query(modell).filter_by(
             org_id=plan.org_id, plan_id=plan.id,
         ).order_by(modell.sort, modell.id).all()]
+    kopf["links"] = [link_snapshot(db, link) for link in db.query(KatplanLink).filter_by(
+        org_id=plan.org_id, plan_id=plan.id, element_id=None,
+    ).order_by(KatplanLink.sort, KatplanLink.id)]
     phasen_ids = [p["id"] for p in kopf["phasen"]]
     elemente = []
     for element in db.query(KatplanElement).filter_by(org_id=plan.org_id, plan_id=plan.id).order_by(
@@ -57,11 +65,15 @@ def erstelle_snapshot(db: Session, plan: KatplanPlan, *, flush: bool = True) -> 
     ).all():
         daten = {c.name: getattr(element, c.name) for c in KatplanVersionElement.__table__.columns
                  if c.name not in {"id", "org_id", "version_id", "element_uuid", "phasen_json",
-                                   "links_json", "anhaenge_json", "gsl_json"}}
+                                   "links_json", "relationen_json", "anhaenge_json", "gsl_json"}}
         daten.update(element_uuid=element.uuid, links_json=_json(_link_snapshot(db, element)),
                      anhaenge_json="[]", gsl_json=_json({c.name: getattr(element, c.name)
                                                         for c in KatplanElement.__table__.columns
                                                         if c.name.startswith("gsl_")}))
+        daten["relationen_json"] = _json([{f: getattr(r, f) for f in ("zu_element_uuid", "art", "hinweis")}
+                                          for r in db.query(KatplanRelation).filter_by(
+                                              org_id=plan.org_id, plan_id=plan.id, von_element_id=element.id,
+                                          ).order_by(KatplanRelation.zu_element_uuid, KatplanRelation.art)])
         daten["phasen_json"] = _json([z.phase_id for z in db.query(KatplanElementPhase).filter(
             KatplanElementPhase.org_id == plan.org_id, KatplanElementPhase.element_id == element.id,
             KatplanElementPhase.phase_id.in_(phasen_ids),
@@ -108,6 +120,12 @@ def freigeben(db: Session, plan: KatplanPlan, user: User,
         raise ValueError("Der Plan muss mindestens ein Element enthalten.")
     # Datumswerte werden fuer den Hash identisch zu ihrer JSON-Darstellung serialisiert.
     hash_daten = json.loads(json.dumps([kopf, elemente], default=lambda d: d.isoformat()))
+    # Nur die Verknuepfungsstruktur ist Planinhalt. Live-Stammdaten im historischen
+    # Snapshot duerfen allein keine erneute Freigabe ermoeglichen.
+    hash_daten[0]["links"] = _link_struktur(hash_daten[0].get("links", []))
+    for daten in hash_daten[1]:
+        daten["links_json"] = _json(_link_struktur(json.loads(daten["links_json"])))
+        daten.pop("suchtext", None)  # Abgeleiteter Index enthaelt Live-Anzeigenamen.
     inhalt_hash = hashlib.sha256(_json(hash_daten).encode("utf-8")).hexdigest()
     if plan.aktuelle_version_id:
         aktuell, _, _ = lade_version(db, plan)
@@ -182,6 +200,10 @@ def _textzeilen(html: str | None) -> list[str]:
     return [zeile for roh in "".join(parser.teile).splitlines() if (zeile := " ".join(roh.split()))]
 
 
+def _link_struktur(links: list[dict]) -> list[dict]:
+    return [{f: link.get(f) for f in ("ziel_typ", "ziel_id", "rolle", "hinweis")} for link in links]
+
+
 def _aenderungen(alt: dict, neu: dict) -> list[dict]:
     ergebnis = []
     for feld in sorted(alt.keys() | neu.keys()):
@@ -190,8 +212,12 @@ def _aenderungen(alt: dict, neu: dict) -> list[dict]:
             a, n = _text(a), _text(n)
         elif feld.endswith("_json"):
             a, n = json.loads(a) if a else None, json.loads(n) if n else None
+        if feld in ("links", "links_json"):
+            a, n = _link_struktur(a or []), _link_struktur(n or [])
         if a != n:
             wert = {"feld": feld, "alt": a, "neu": n}
+            if feld in ("links", "links_json", "relationen_json"):
+                wert["label"] = "Beziehungen" if feld == "relationen_json" else "Verknüpfungen"
             if feld == "beschreibung_html":
                 # Nur Inhaltszeilen; die technischen Kopfzeilen (---/+++/@@) sind fuer Anwender wertlos.
                 wert["diff"] = [z for z in difflib.unified_diff(_textzeilen(alt.get(feld)), _textzeilen(neu.get(feld)),

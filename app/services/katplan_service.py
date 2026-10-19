@@ -6,11 +6,12 @@ from collections.abc import Iterator
 from html.parser import HTMLParser
 from typing import Any
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 
 from app.core.html_utils import sanitize_html
-from app.models.katplan import KatplanAbschnitt, KatplanAenderung, KatplanElement, KatplanPlan
+from app.models.katplan import KatplanAbschnitt, KatplanAenderung, KatplanElement, KatplanLink, KatplanPlan
 from app.models.user import User
+from app.services.katplan_ziel_service import _anzeige, ziel_laden
 
 _KENNUNG_PRAEFIXE = {
     "kontrollstelle": "KS", "massnahme": "M", "info": "I", "gefahrenbereich": "GB",
@@ -48,7 +49,7 @@ def _strings(wert: Any) -> Iterator[str]:
             yield from _strings(value)
 
 
-def baue_suchtext(element: KatplanElement) -> str:
+def baue_suchtext(element: KatplanElement, link_titel: list[str] | None = None) -> str:
     parser = _HTMLText()
     parser.feed(element.beschreibung_html or "")
     parser.close()
@@ -60,6 +61,17 @@ def baue_suchtext(element: KatplanElement) -> str:
             continue
         teile.extend(_strings(daten))
     teile.extend([element.strasse or "", element.hausnummer or "", element.plz or "", element.ort or ""])
+    if link_titel is None:
+        db = object_session(element)
+        link_titel = []
+        if db is not None and element.id is not None:
+            for link in db.query(KatplanLink).filter_by(org_id=element.org_id, element_id=element.id,
+                                                       plan_id=element.plan_id).order_by(
+                                                           KatplanLink.sort, KatplanLink.id):
+                ziel = ziel_laden(db, element.org_id, link.ziel_typ, link.ziel_id)
+                if ziel is not None:
+                    link_titel.append(_anzeige(ziel)[0])
+    teile.extend(link_titel)
     return " ".join(" ".join(teile).lower().split())[:20000]
 
 

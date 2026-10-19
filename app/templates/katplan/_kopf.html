@@ -25,6 +25,11 @@
   </header>
   <aside class="kp-grid__side">
     <section class="kp-sidecard">
+      {% with element = none %}
+        {% include "katplan/_links.html" %}
+      {% endwith %}
+    </section>
+    <section class="kp-sidecard">
       <h2 class="kp-box__title">Stammdaten</h2>
       <div class="kp-row">
         <span class="kp-row__label">Gefahrenarten</span>
