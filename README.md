@@ -9,7 +9,7 @@ Multi-User, mandantenfähig, Echtzeit. Für Feuerwehr, BOS und Gemeinden.
 [![Docker Build](https://github.com/BattloXX/Einsatzcockpit/actions/workflows/docker-build.yml/badge.svg)](https://github.com/BattloXX/Einsatzcockpit/pkgs/container/einsatzcockpit)
 ![Python](https://img.shields.io/badge/python-3.14-blue)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-green)
-![Version](https://img.shields.io/badge/version-2026.10.12-orange)
+![Version](https://img.shields.io/badge/version-2026.10.19-orange)
 
 **Dokumentation:** [GitHub Wiki](https://github.com/BattloXX/Einsatzcockpit/wiki) · [Wiki-Quellen](docs/wiki/Home.md) · [Lizenz](#lizenz)
 
@@ -210,7 +210,7 @@ Produktivbetrieb umfasst neben Updates insbesondere automatisierte Datenbank- un
 
 ## Version
 
-Aktuell: **2026.10.12** · → [Vollständige Versionshistorie](CHANGELOG.md)
+Aktuell: **2026.10.19** · → [Vollständige Versionshistorie](CHANGELOG.md)
 
 ## Lizenz
 
