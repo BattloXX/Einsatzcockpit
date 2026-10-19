@@ -1,10 +1,10 @@
-<h2>Phasen verwalten</h2>
+<h2 class="kp-section-title">Phasen verwalten</h2>
 {% for phase in phasen + [none] %}
   {% set pid = phase.id if phase else 0 %}
   {% set f = phase_form if phase_fehler_id|default(-1) == pid else phase %}
   {% set ziel = '/katastrophenplaene/' ~ plan.id ~ '/phasen' ~ ('/' ~ pid if pid else '') %}
   <section class="kp-box">
-    <h3>{{ phase.name if phase else 'Neue Phase' }}</h3>
+    <h3 class="kp-box__title">{{ phase.name if phase else 'Neue Phase' }}</h3>
     <form method="post" action="{{ ziel }}" hx-post="{{ ziel }}" hx-target="#kp-detail" class="kp-form">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <label>
@@ -36,7 +36,7 @@
     {% if phase %}
       <form method="post" action="{{ ziel }}/loeschen" hx-post="{{ ziel }}/loeschen" hx-target="#kp-detail" hx-confirm="Phase und ihre Zuordnungen löschen?">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-        <button type="submit" class="btn">Phase löschen</button>
+        <button type="submit" class="btn btn--ghost kp-delete">Phase löschen</button>
       </form>
     {% endif %}
   </section>

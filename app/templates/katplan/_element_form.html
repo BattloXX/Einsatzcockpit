@@ -1,135 +1,172 @@
-<h2>{{ typen[element.typ].icon }} {{ typen[element.typ].label }}</h2>
-{% if fehler %}
-  <a href="/katastrophenplaene/{{ plan.id }}/elemente/{{ element.id }}" hx-get="/katastrophenplaene/{{ plan.id }}/elemente/{{ element.id }}" hx-target="#kp-detail">Aktuellen Stand laden</a>
-{% endif %}
-<script type="application/json" id="kp-element-daten">{{ daten|tojson }}</script>
-<form method="post" action="/katastrophenplaene/{{ plan.id }}/elemente/{{ element.id }}" hx-post="/katastrophenplaene/{{ plan.id }}/elemente/{{ element.id }}" hx-target="#kp-detail" class="kp-form" x-data="{ daten: {} }" x-init="daten = JSON.parse($el.previousElementSibling.textContent)" @submit="$refs.daten.value = JSON.stringify(daten)">
-  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-  <input type="hidden" name="version" value="{{ form.get('version', element.version) }}">
-  <input type="hidden" name="daten_json" x-ref="daten" :value="JSON.stringify(daten)" value="{{ daten|tojson|forceescape }}">
-  <label>
-    Titel
-    <input class="form-control" name="titel" required maxlength="200" value="{{ form.get('titel', '') }}">
-  </label>
-  <label>
-    Kennung
-    <input class="form-control" name="kennung" required maxlength="30" value="{{ form.get('kennung', '') }}">
-  </label>
-  <label>
-    Kapitel
-    <select class="form-control" name="abschnitt_id">
-      <option value="">Ohne Kapitel</option>
-      {% for a in abschnitte %}
-        <option value="{{ a.id }}" {% if form.get('abschnitt_id', '')|string == a.id|string %}selected{% endif %}>{{ a.titel }}</option>
-      {% endfor %}
-    </select>
-  </label>
-  {% set beschreibung = form.get('beschreibung_html', '') %}
-  {% include "katplan/_quill.html" %}
-  <label>
-    Priorität
-    <select class="form-control" name="prioritaet">
-      {% for p in [1, 2, 3] %}
-        <option value="{{ p }}" {% if form.get('prioritaet', 2)|int == p %}selected{% endif %}>{{ p }}</option>
-      {% endfor %}
-    </select>
-  </label>
-  <label class="kp-chip">
-    <input type="checkbox" name="vertraulich" value="1" {% if form.get('vertraulich') %}checked{% endif %}>
-    Vertraulich
-  </label>
-  <label>
-    Tags (kommagetrennt, maximal 20)
-    <input class="form-control" name="tags" value="{{ form.get('tags', '') }}">
-  </label>
-  {% for feld, label in [('gueltig_bis', 'Gültig bis'), ('pruefen_am', 'Prüfen am')] %}
-    <label>
-      {{ label }}
-      <input class="form-control" type="date" name="{{ feld }}" value="{{ form.get(feld, '') }}">
-    </label>
-  {% endfor %}
-  {% for feld, label, maximum in [('strasse', 'Straße', 200), ('hausnummer', 'Hausnummer', 20), ('plz', 'PLZ', 10), ('ort', 'Ort', 100)] %}
-    <label>
-      {{ label }}
-      <input class="form-control" name="{{ feld }}" maxlength="{{ maximum }}" value="{{ form.get(feld, '') }}">
-    </label>
-  {% endfor %}
-  <fieldset>
-    <legend>Phasen</legend>
-    {% for phase in phasen %}
-      <label class="kp-chip">
-        <input type="checkbox" name="phasen" value="{{ phase.id }}" {% if phase.id|string in form.get('phasen', []) %}checked{% endif %}>
-        {{ phase.name }}
-      </label>
-    {% endfor %}
-  </fieldset>
-  <fieldset>
-    <legend>Typspezifische Angaben</legend>
-    {% include "katplan/typen/_" + element.typ + ".html" %}
-  </fieldset>
-  <details>
-    <summary>GSL-Vorlage (vorbereitet, noch ohne Funktion)</summary>
-    <label class="kp-chip">
-      <input type="checkbox" name="gsl_vorlage" value="1" {% if form.get('gsl_vorlage') %}checked{% endif %}>
-      GSL-Vorlage
-    </label>
-    <label>
-      Auftragsart
-      <select class="form-control" name="gsl_auftragsart">
-        <option value="">– keine –</option>
-        {% for code, label in auftragsarten.items() %}
-          <option value="{{ code }}" {% if form.get('gsl_auftragsart') == code %}selected{% endif %}>{{ label }}</option>
-        {% endfor %}
-      </select>
-    </label>
-    <label>
-      Priorität
-      <select class="form-control" name="gsl_prioritaet">
-        <option value="">– keine –</option>
-        {% for p in [1, 2, 3] %}
-          <option value="{{ p }}" {% if form.get('gsl_prioritaet')|string == p|string %}selected{% endif %}>{{ p }}</option>
-        {% endfor %}
-      </select>
-    </label>
-    <label>
-      Ressourcentypen (kommagetrennt, maximal 20 mit je 50 Zeichen)
-      <input class="form-control" name="gsl_ressourcentypen" value="{{ form.get('gsl_ressourcentypen', '') }}">
-    </label>
-    <label>
-      Dauer (Minuten)
-      <input class="form-control" type="number" name="gsl_dauer_min" min="0" max="10080" value="{{ form.get('gsl_dauer_min', '') }}">
-    </label>
-    <label>
-      Voraussetzungen
-      <textarea class="form-control" name="gsl_voraussetzungen" maxlength="2000">{{ form.get('gsl_voraussetzungen', '') }}</textarea>
-    </label>
-  </details>
-  <p>Zuletzt geändert: {{ element.aktualisiert_am|local_datetime }}</p>
-  <button type="submit" class="btn btn--primary">Speichern</button>
-</form>
-<form method="post" action="/katastrophenplaene/{{ plan.id }}/elemente/{{ element.id }}/loeschen" hx-post="/katastrophenplaene/{{ plan.id }}/elemente/{{ element.id }}/loeschen" hx-target="#kp-detail" hx-confirm="Element löschen?">
-  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-  <button type="submit" class="btn">Element löschen</button>
-</form>
-
-<form method="post" action="/katastrophenplaene/{{ plan.id }}/elemente/{{ element.id }}/verschieben" hx-post="/katastrophenplaene/{{ plan.id }}/elemente/{{ element.id }}/verschieben" hx-target="#kp-detail" class="kp-actions">
-  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-  <button type="submit" name="richtung" value="hoch" class="btn" aria-label="Nach oben verschieben">↑</button>
-  <button type="submit" name="richtung" value="runter" class="btn" aria-label="Nach unten verschieben">↓</button>
-</form>
-
-<details>
-  <summary>Duplizieren</summary>
-  <form method="post" action="/katastrophenplaene/{{ plan.id }}/elemente/{{ element.id }}/duplizieren" hx-post="/katastrophenplaene/{{ plan.id }}/elemente/{{ element.id }}/duplizieren" hx-target="#kp-detail" class="kp-form">
+<section class="kp-box kp-editor-form">
+  <h2 class="kp-section-title">{{ typen[element.typ].icon }} {{ typen[element.typ].label }}</h2>
+  {% if fehler %}
+    <a href="/katastrophenplaene/{{ plan.id }}/elemente/{{ element.id }}" hx-get="/katastrophenplaene/{{ plan.id }}/elemente/{{ element.id }}" hx-target="#kp-detail">Aktuellen Stand laden</a>
+  {% endif %}
+  <script type="application/json" id="kp-element-daten">{{ daten|tojson }}</script>
+  <form method="post" action="/katastrophenplaene/{{ plan.id }}/elemente/{{ element.id }}"
+    hx-post="/katastrophenplaene/{{ plan.id }}/elemente/{{ element.id }}" hx-target="#kp-detail" class="kp-form kp-form--contents" x-data="{ daten: {} }"
+    x-init="daten = JSON.parse($el.previousElementSibling.textContent)" @submit="$refs.daten.value = JSON.stringify(daten)">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-    <label>
-      Zielplan
-      <select class="form-control" name="ziel_plan_id">
-        {% for ziel in ziel_plaene %}
-          <option value="{{ ziel.id }}" {% if ziel.id == plan.id %}selected{% endif %}>{{ ziel.titel }}</option>
+    <input type="hidden" name="version" value="{{ form.get('version', element.version) }}">
+    <input type="hidden" name="daten_json" x-ref="daten" :value="JSON.stringify(daten)" value="{{ daten|tojson|forceescape }}">
+    <div class="kp-form kp-editor-fields">
+      <h3 class="kp-box__title">Grunddaten</h3>
+      <div class="kp-form-grid">
+        <label>
+          Titel
+          <input class="form-control" name="titel" required maxlength="200" value="{{ form.get('titel', '') }}">
+        </label>
+        <label>
+          Kennung
+          <input class="form-control" name="kennung" required maxlength="30" value="{{ form.get('kennung', '') }}">
+        </label>
+        <label>
+          Kapitel
+          <select class="form-control" name="abschnitt_id">
+            <option value="">Ohne Kapitel</option>
+            {% for a in abschnitte %}
+              <option value="{{ a.id }}" {% if form.get('abschnitt_id', '')|string == a.id|string %}selected{% endif %}>{{ a.titel }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+      {% set beschreibung = form.get('beschreibung_html', '') %}
+      {% include "katplan/_quill.html" %}
+      <div class="kp-form-grid">
+        <label>
+          Priorität
+          <select class="form-control" name="prioritaet">
+            {% for p in [1, 2, 3] %}
+              <option value="{{ p }}" {% if form.get('prioritaet', 2)|int == p %}selected{% endif %}>{{ p }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="kp-chip">
+          <input type="checkbox" name="vertraulich" value="1" {% if form.get('vertraulich') %}checked{% endif %}>
+          Vertraulich
+        </label>
+        <label>
+          Tags (kommagetrennt, maximal 20)
+          <input class="form-control" name="tags" value="{{ form.get('tags', '') }}">
+        </label>
+        {% for feld, label in [('gueltig_bis', 'Gültig bis'), ('pruefen_am', 'Prüfen am')] %}
+          <label>
+            {{ label }}
+            <input class="form-control" type="date" name="{{ feld }}" value="{{ form.get(feld, '') }}">
+          </label>
         {% endfor %}
-      </select>
-    </label>
-    <button type="submit" class="btn">Element duplizieren</button>
+      </div>
+      <h3 class="kp-box__title">Ort</h3>
+      <div class="kp-form-grid">
+        {% for feld, label, maximum in [('strasse', 'Straße', 200), ('hausnummer', 'Hausnummer', 20), ('plz', 'PLZ', 10), ('ort', 'Ort', 100)] %}
+          <label>
+            {{ label }}
+            <input class="form-control" name="{{ feld }}" maxlength="{{ maximum }}" value="{{ form.get(feld, '') }}">
+          </label>
+        {% endfor %}
+      </div>
+      <fieldset>
+        <legend class="kp-box__title">Phasen</legend>
+        {% for phase in phasen %}
+          <label class="kp-chip">
+            <input type="checkbox" name="phasen" value="{{ phase.id }}" {% if phase.id|string in form.get('phasen', []) %}checked{% endif %}>
+            {{ phase.name }}
+          </label>
+        {% endfor %}
+      </fieldset>
+      <fieldset>
+        <legend class="kp-box__title">Typspezifische Angaben</legend>
+        {% if element.typ == "info" %}
+          {% include "katplan/typen/_info.html" %}
+        {% elif element.typ == "massnahme" %}
+          {% include "katplan/typen/_massnahme.html" %}
+        {% elif element.typ == "kontrollstelle" %}
+          {% include "katplan/typen/_kontrollstelle.html" %}
+        {% elif element.typ == "gefahrenbereich" %}
+          {% include "katplan/typen/_gefahrenbereich.html" %}
+        {% elif element.typ == "ablauf" %}
+          {% include "katplan/typen/_ablauf.html" %}
+        {% elif element.typ == "ressource" %}
+          {% include "katplan/typen/_ressource.html" %}
+        {% elif element.typ == "medien" %}
+          {% include "katplan/typen/_medien.html" %}
+        {% elif element.typ == "zustaendigkeit" %}
+          {% include "katplan/typen/_zustaendigkeit.html" %}
+        {% elif element.typ == "objektverweis" %}
+          {% include "katplan/typen/_objektverweis.html" %}
+        {% endif %}
+      </fieldset>
+      <details>
+        <summary class="kp-box__title">GSL-Vorlage (vorbereitet, noch ohne Funktion)</summary>
+        <label class="kp-chip">
+          <input type="checkbox" name="gsl_vorlage" value="1" {% if form.get('gsl_vorlage') %}checked{% endif %}>
+          GSL-Vorlage
+        </label>
+        <label>
+          Auftragsart
+          <select class="form-control" name="gsl_auftragsart">
+            <option value="">– keine –</option>
+            {% for code, label in auftragsarten.items() %}
+              <option value="{{ code }}" {% if form.get('gsl_auftragsart') == code %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          Priorität
+          <select class="form-control" name="gsl_prioritaet">
+            <option value="">– keine –</option>
+            {% for p in [1, 2, 3] %}
+              <option value="{{ p }}" {% if form.get('gsl_prioritaet')|string == p|string %}selected{% endif %}>{{ p }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          Ressourcentypen (kommagetrennt, maximal 20 mit je 50 Zeichen)
+          <input class="form-control" name="gsl_ressourcentypen" value="{{ form.get('gsl_ressourcentypen', '') }}">
+        </label>
+        <label>
+          Dauer (Minuten)
+          <input class="form-control" type="number" name="gsl_dauer_min" min="0" max="10080" value="{{ form.get('gsl_dauer_min', '') }}">
+        </label>
+        <label>
+          Voraussetzungen
+          <textarea class="form-control" name="gsl_voraussetzungen" maxlength="2000">{{ form.get('gsl_voraussetzungen', '') }}</textarea>
+        </label>
+      </details>
+      <p>Zuletzt geändert: {{ element.aktualisiert_am|local_datetime }}</p>
+    </div>
+    <div class="kp-actions">
+      <button type="submit" class="btn btn--primary">Speichern</button>
+    </div>
   </form>
-</details>
+  <form method="post" action="/katastrophenplaene/{{ plan.id }}/elemente/{{ element.id }}/loeschen"
+    hx-post="/katastrophenplaene/{{ plan.id }}/elemente/{{ element.id }}/loeschen" hx-target="#kp-detail" hx-confirm="Element löschen?">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <button type="submit" class="btn btn--ghost kp-delete">Element löschen</button>
+  </form>
+
+  <form method="post" action="/katastrophenplaene/{{ plan.id }}/elemente/{{ element.id }}/verschieben"
+    hx-post="/katastrophenplaene/{{ plan.id }}/elemente/{{ element.id }}/verschieben" hx-target="#kp-detail" class="kp-actions">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <button type="submit" name="richtung" value="hoch" class="btn" aria-label="Nach oben verschieben">↑</button>
+    <button type="submit" name="richtung" value="runter" class="btn" aria-label="Nach unten verschieben">↓</button>
+  </form>
+
+  <details>
+    <summary class="kp-box__title">Duplizieren</summary>
+    <form method="post" action="/katastrophenplaene/{{ plan.id }}/elemente/{{ element.id }}/duplizieren"
+      hx-post="/katastrophenplaene/{{ plan.id }}/elemente/{{ element.id }}/duplizieren" hx-target="#kp-detail" class="kp-form">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <label>
+        Zielplan
+        <select class="form-control" name="ziel_plan_id">
+          {% for ziel in ziel_plaene %}
+            <option value="{{ ziel.id }}" {% if ziel.id == plan.id %}selected{% endif %}>{{ ziel.titel }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <button type="submit" class="btn">Element duplizieren</button>
+    </form>
+  </details>
+</section>

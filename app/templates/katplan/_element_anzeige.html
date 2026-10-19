@@ -1,14 +1,18 @@
 {% set daten = element_daten[element.id] %}
-<article class="kp-box" data-element-id="{{ element.id }}">
-  <h3>{{ typen[element.typ].icon }} {{ element.kennung }} · {{ element.titel }}</h3>
+<article class="kp-box kp-box--prio-{{ element.prioritaet }}" data-element-id="{{ element.id }}"
+  {% if leseversion is defined %}data-phasen="{{ element.phasen_json }}"
+  x-show="phase === null || JSON.parse($el.dataset.phasen).length === 0 || JSON.parse($el.dataset.phasen).includes(phase)"{% endif %}>
+  <div class="kp-box__head">
+    <h3>{{ typen[element.typ].icon }} <span class="kp-mono">{{ element.kennung }}</span> · {{ element.titel }}</h3>
+  </div>
   <div class="kp-chips">
     <span>{{ typen[element.typ].label }}</span>
     <span class="kp-prio-{{ element.prioritaet }}">Priorität {{ element.prioritaet }}</span>
-    {% if can_edit and element.gsl_vorlage %}
+    {% if can_edit and (element_gsl[element.id].get('gsl_vorlage') if leseversion is defined else element.gsl_vorlage) %}
       <span class="kp-badge">GSL-Vorlage</span>
     {% endif %}
     {% if element.vertraulich %}
-      <span class="kp-badge">vertraulich</span>
+      <span class="kp-badge kp-badge--amber">vertraulich</span>
     {% endif %}
     {% for phase in element_phasen[element.id] %}
       <span class="kp-chip kp-farbe-{{ phase.farbe }}">{{ phase.name }}</span>
@@ -22,7 +26,10 @@
   {% endif %}
   {% for feld, label in [('gueltig_bis', 'Gültig bis'), ('pruefen_am', 'Prüfen am')] %}
     {% if element[feld] %}
-      <p>{{ label }}: {{ element[feld].strftime('%d.%m.%Y') }}</p>
+      <div class="kp-row">
+        <span class="kp-row__label">{{ label }}</span>
+        <span class="kp-row__value kp-mono">{{ element[feld].strftime('%d.%m.%Y') }}</span>
+      </div>
     {% endif %}
   {% endfor %}
   {% if element.beschreibung_html %}
@@ -44,24 +51,26 @@
           {% endfor %}
         </ol>
       {% elif feld in ['bedingungen', 'bedarf'] %}
-        <table class="kp-tabelle">
-          <thead>
-            <tr>
-              {% for label in (['Wenn', 'Dann'] if feld == 'bedingungen' else ['Bezeichnung', 'Menge', 'Einheit']) %}
-                <th>{{ label }}</th>
-              {% endfor %}
-            </tr>
-          </thead>
-          <tbody>
-            {% for zeile in wert %}
+        <div class="kp-table-wrap--scroll">
+          <table class="kp-table">
+            <thead>
               <tr>
-                {% for key in (['wenn', 'dann'] if feld == 'bedingungen' else ['bezeichnung', 'menge', 'einheit']) %}
-                  <td>{{ zeile.get(key, '') if zeile is mapping else (zeile if loop.first else '') }}</td>
+                {% for label in (['Wenn', 'Dann'] if feld == 'bedingungen' else ['Bezeichnung', 'Menge', 'Einheit']) %}
+                  <th>{{ label }}</th>
                 {% endfor %}
               </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {% for zeile in wert %}
+                <tr>
+                  {% for key in (['wenn', 'dann'] if feld == 'bedingungen' else ['bezeichnung', 'menge', 'einheit']) %}
+                    <td>{{ zeile.get(key, '') if zeile is mapping else (zeile if loop.first else '') }}</td>
+                  {% endfor %}
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
       {% elif feld == 'gefahren' %}
         <div class="kp-chips">
           {% for gefahr in wert %}

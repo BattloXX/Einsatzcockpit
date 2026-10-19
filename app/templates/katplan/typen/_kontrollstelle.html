@@ -1,21 +1,21 @@
 <div x-init="daten.gefahren = (daten.gefahren || []).filter(zeile => typeof zeile === 'string')">
-  <h3>Gefahren</h3>
+  <h3 class="kp-box__title">Gefahren</h3>
   <template x-for="(zeile, index) in daten.gefahren" :key="index">
-    <div class="kp-listen-zeile">
-      <label>
+    <div class="kp-listen-zeile kp-listen-zeile--gefahr">
+      <label class="kp-field">
         Gefahr
         <input class="form-control" x-model="daten.gefahren[index]">
       </label>
-      <button type="button" class="btn" @click="daten.gefahren.splice(index, 1)">Entfernen</button>
+      <button type="button" class="btn btn--ghost btn--sm" @click="daten.gefahren.splice(index, 1)">Entfernen</button>
     </div>
   </template>
-  <button type="button" class="btn" @click="daten.gefahren.push('')">+ Zeile</button>
+  <button type="button" class="btn btn--ghost btn--sm" @click="daten.gefahren.push('')">+ Zeile</button>
 </div>
-<label>
+<label class="kp-field">
   Kontrollhinweise
   <textarea class="form-control" x-model="daten.kontrollhinweise"></textarea>
 </label>
-<label>
+<label class="kp-field">
   Zugänglichkeit
   <textarea class="form-control" x-model="daten.zugaenglichkeit"></textarea>
 </label>

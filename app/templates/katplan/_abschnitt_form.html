@@ -1,22 +1,33 @@
-{% set f = form|default({'titel': abschnitt.titel, 'beschreibung_html': abschnitt.beschreibung_html or ''}) %}
-<h2>Kapitel bearbeiten</h2>
-<form method="post" action="/katastrophenplaene/{{ plan.id }}/abschnitte/{{ abschnitt.id }}" hx-post="/katastrophenplaene/{{ plan.id }}/abschnitte/{{ abschnitt.id }}" hx-target="#kp-detail" class="kp-form">
-  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-  <label>
-    Titel
-    <input class="form-control" name="titel" required maxlength="200" value="{{ f.titel }}">
-  </label>
-  {% set beschreibung = f.beschreibung_html %}
-  {% include "katplan/_quill.html" %}
-  <button type="submit" class="btn btn--primary">Speichern</button>
-</form>
-<form method="post" action="/katastrophenplaene/{{ plan.id }}/abschnitte/{{ abschnitt.id }}/loeschen" hx-post="/katastrophenplaene/{{ plan.id }}/abschnitte/{{ abschnitt.id }}/loeschen" hx-target="#kp-detail" hx-confirm="Kapitel löschen? Inhalte werden dem übergeordneten Kapitel zugeordnet.">
-  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-  <button type="submit" class="btn">Kapitel löschen</button>
-</form>
+<section class="kp-box kp-editor-form">
+  {% set f = form|default({'titel': abschnitt.titel, 'beschreibung_html': abschnitt.beschreibung_html or ''}) %}
+  <h2 class="kp-section-title">Kapitel bearbeiten</h2>
+  <form method="post" action="/katastrophenplaene/{{ plan.id }}/abschnitte/{{ abschnitt.id }}"
+    hx-post="/katastrophenplaene/{{ plan.id }}/abschnitte/{{ abschnitt.id }}" hx-target="#kp-detail" class="kp-form kp-form--contents">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <div class="kp-form kp-editor-fields">
+      <h3 class="kp-box__title">Grunddaten</h3>
+      <label>
+        Titel
+        <input class="form-control" name="titel" required maxlength="200" value="{{ f.titel }}">
+      </label>
+      {% set beschreibung = f.beschreibung_html %}
+      {% include "katplan/_quill.html" %}
+    </div>
+    <div class="kp-actions">
+      <button type="submit" class="btn btn--primary">Speichern</button>
+    </div>
+  </form>
+  <form method="post" action="/katastrophenplaene/{{ plan.id }}/abschnitte/{{ abschnitt.id }}/loeschen"
+    hx-post="/katastrophenplaene/{{ plan.id }}/abschnitte/{{ abschnitt.id }}/loeschen" hx-target="#kp-detail"
+    hx-confirm="Kapitel löschen? Inhalte werden dem übergeordneten Kapitel zugeordnet.">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <button type="submit" class="btn btn--ghost kp-delete">Kapitel löschen</button>
+  </form>
 
-<form method="post" action="/katastrophenplaene/{{ plan.id }}/abschnitte/{{ abschnitt.id }}/verschieben" hx-post="/katastrophenplaene/{{ plan.id }}/abschnitte/{{ abschnitt.id }}/verschieben" hx-target="#kp-detail" class="kp-actions">
-  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-  <button type="submit" name="richtung" value="hoch" class="btn" aria-label="Nach oben verschieben">↑</button>
-  <button type="submit" name="richtung" value="runter" class="btn" aria-label="Nach unten verschieben">↓</button>
-</form>
+  <form method="post" action="/katastrophenplaene/{{ plan.id }}/abschnitte/{{ abschnitt.id }}/verschieben"
+    hx-post="/katastrophenplaene/{{ plan.id }}/abschnitte/{{ abschnitt.id }}/verschieben" hx-target="#kp-detail" class="kp-actions">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <button type="submit" name="richtung" value="hoch" class="btn" aria-label="Nach oben verschieben">↑</button>
+    <button type="submit" name="richtung" value="runter" class="btn" aria-label="Nach unten verschieben">↓</button>
+  </form>
+</section>

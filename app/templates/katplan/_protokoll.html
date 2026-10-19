@@ -2,12 +2,12 @@
 <div id="kp-protokoll" {% if protokoll_oob %}hx-swap-oob="outerHTML"{% endif %}>
   {% for eintrag, benutzername in protokoll %}
     <article class="kp-box">
-      <p>{{ eintrag.zeit|local_datetime }} · {{ benutzername or 'Unbekannter Benutzer' }} · {{ eintrag.aktion }}</p>
+      <p class="kp-mono">{{ eintrag.zeit|local_datetime }} · {{ benutzername or 'Unbekannter Benutzer' }} · {{ eintrag.aktion }}</p>
       {% if eintrag.feld %}
         <p>{{ eintrag.feld }}: {{ eintrag.alt or '-' }} → {{ eintrag.neu or '-' }}</p>
       {% endif %}
     </article>
   {% else %}
-    <p class="kp-box">Noch keine Protokolleinträge</p>
+    <p class="kp-empty">Noch keine Protokolleinträge</p>
   {% endfor %}
 </div>

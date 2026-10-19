@@ -1,0 +1,30 @@
+{% macro felder(aenderungen) %}
+  {% set labels = {
+  'titel': 'Titel', 'beschreibung_html': 'Beschreibung', 'geltungsbereich': 'Geltungsbereich',
+  'verantwortliche_stelle': 'Verantwortliche Stelle', 'gefahrenarten': 'Gefahrenarten',
+  'wiedervorlage_am': 'Wiedervorlage', 'kennung': 'Kennung', 'typ': 'Typ',
+  'daten_json': 'Zusatzdaten', 'prioritaet': 'Priorität', 'tags_json': 'Tags',
+  'gueltig_bis': 'Gültig bis', 'pruefen_am': 'Prüfen am', 'vertraulich': 'Vertraulich',
+  'strasse': 'Straße', 'hausnummer': 'Hausnummer', 'plz': 'Postleitzahl', 'ort': 'Ort',
+  'lat': 'Breitengrad', 'lng': 'Längengrad', 'geometry_json': 'Geometrie',
+  'geo_status': 'Ortsprüfung', 'herkunft': 'Herkunft', 'quelle_dokument_id': 'Quelldokument',
+  'quelle_seiten': 'Quellseiten', 'suchtext': 'Suchtext', 'sort': 'Reihenfolge',
+  'abschnitt_id': 'Kapitel', 'phasen_json': 'Phasenzuordnung', 'links_json': 'Verknüpfungen',
+  'anhaenge_json': 'Anhänge', 'gsl_json': 'GSL-Vorlage', 'parent_id': 'Übergeordnetes Kapitel',
+  'name': 'Name', 'beschreibung': 'Beschreibung', 'ausloeser': 'Auslöser', 'farbe': 'Farbe', 'uuid': 'Kennung'
+  } %}
+  {% macro wert(angabe) -%}
+    {{ angabe.strftime('%d.%m.%Y') if angabe and angabe.strftime is defined else (angabe if angabe is not none else '-') }}
+    {%- endmacro %}
+    {% for feld in aenderungen %}
+      <div class="kp-box kp-box--info">
+        <strong>{{ labels.get(feld.feld, feld.feld|replace('_', ' ')|capitalize) }}</strong>
+        {% if feld.diff is defined %}
+          <pre class="kp-diff">{% for zeile in feld.diff %}<span class="{{ 'kp-diff-neu' if zeile.startswith('+') else ('kp-diff-alt' if zeile.startswith('-') else '') }}">{{ zeile }}</span>
+{% endfor %}</pre>
+          {% else %}
+            <p class="kp-freitext">{{ wert(feld.alt) }} → {{ wert(feld.neu) }}</p>
+          {% endif %}
+        </div>
+        {% else %}<p class="kp-empty">Keine Änderungen</p>{% endfor %}
+      {% endmacro %}

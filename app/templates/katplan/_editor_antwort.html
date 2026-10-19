@@ -1,11 +1,24 @@
+{% include "katplan/_design.html" %}
+{% set status_farben = {'entwurf': 'gray', 'in_pruefung': 'amber', 'freigegeben': 'green', 'in_ueberarbeitung': 'blue', 'archiviert': 'gray'} %}
 {% if fehler %}
-  <p role="alert" class="kp-error">{{ fehler }}</p>
+  <p role="alert" class="kp-box kp-box--danger">{{ fehler }}</p>
 {% endif %}
 {% if erfolg %}
-  <p role="status">{{ erfolg }}</p>
+  <p class="kp-box kp-box--success" role="status">{{ erfolg }}</p>
 {% endif %}
-{% include "katplan/" + partial %}
+{# Statische Includes, damit test_css_klassen_definiert die Fragmente diesem Stylesheet zuordnen kann #}
+{% if partial == "_element_form.html" %}
+  {% include "katplan/_element_form.html" %}
+{% elif partial == "_abschnitt_form.html" %}
+  {% include "katplan/_abschnitt_form.html" %}
+{% elif partial == "_phasen.html" %}
+  {% include "katplan/_phasen.html" %}
+{% elif partial == "_dupliziert.html" %}
+  {% include "katplan/_dupliziert.html" %}
+{% else %}
+  {% include "katplan/_leer.html" %}
+{% endif %}
 {% if baum_oob %}
   {% include "katplan/_baum.html" %}
-  <span id="kp-editor-status" class="kp-badge" hx-swap-oob="outerHTML">{{ status_labels[plan.status] }}</span>
+  <span id="kp-editor-status" class="kp-status kp-status--{{ status_farben.get(plan.status, 'gray') }}" hx-swap-oob="outerHTML">{{ status_labels[plan.status] }}</span>
 {% endif %}
