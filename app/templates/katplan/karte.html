@@ -27,12 +27,15 @@
     {% endif %}
     <div class="kp-card" data-kp-kartenbereich>
       <div class="kp-kartenfilter" aria-label="Kartenfilter">
-        <fieldset class="kp-chips">
-          <legend>Typ</legend>
-          {% for code, typ in typen.items() %}
-            <label><input type="checkbox" data-kp-filter-typ value="{{ code }}" checked> {{ typ.label }}</label>
-          {% endfor %}
-        </fieldset>
+        <details class="kp-typfilter">
+          <summary class="kp-field">Typen ({{ typen|length }})</summary>
+          <fieldset class="kp-chips">
+            <legend class="sr-only">Typ</legend>
+            {% for code, typ in typen.items() %}
+              <label><input type="checkbox" data-kp-filter-typ value="{{ code }}" checked> {{ typ.icon }} {{ typ.label }}</label>
+            {% endfor %}
+          </fieldset>
+        </details>
         <label class="kp-field">Phase
           <select class="form-control" data-kp-filter-phase>
             <option value="">Alle</option>

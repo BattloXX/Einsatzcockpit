@@ -3,8 +3,21 @@
   'use strict';
   let timer;
 
+  let iconGesetzt = false;
+
   function initialisieren() {
     if (!window.L) return;
+    if (!iconGesetzt) {
+      // Leaflets Default-Icon zeigt relativ zur CSS auf images/marker-icon.png; das Projekt
+      // liefert die Bilder unter /static/img/leaflet/ aus (Muster lagefuehrung.js/map-picker.js).
+      delete L.Icon.Default.prototype._getIconUrl;
+      L.Icon.Default.mergeOptions({
+        iconUrl: '/static/img/leaflet/marker-icon.png',
+        iconRetinaUrl: '/static/img/leaflet/marker-icon-2x.png',
+        shadowUrl: '/static/img/leaflet/marker-shadow.png'
+      });
+      iconGesetzt = true;
+    }
     plankartenInitialisieren();
     document.querySelectorAll('[data-kp-geo]').forEach(function (element) {
       if (element.kpGeo) return;
