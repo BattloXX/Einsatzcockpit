@@ -11,6 +11,11 @@
     {% if can_edit and (element_gsl[element.id].get('gsl_vorlage') if leseversion is defined else element.gsl_vorlage) %}
       <span class="kp-badge">GSL-Vorlage</span>
     {% endif %}
+    {% if element.herkunft == 'imported' %}
+      <span class="kp-badge kp-badge--blue">aus Dokument übernommen</span>
+    {% elif element.herkunft == 'ai_suggested' %}
+      <span class="kp-badge kp-badge--amber">KI-Vorschlag</span>
+    {% endif %}
     {% if element.vertraulich %}
       <span class="kp-badge kp-badge--amber">vertraulich</span>
     {% endif %}
@@ -21,6 +26,16 @@
       <span class="kp-chip">{{ tag }}</span>
     {% endfor %}
   </div>
+  {% if element.quelle_dokument_id %}
+    {% set q = quellen_nach_id.get(element.quelle_dokument_id) %}
+    <p>Quelle:
+      {% if q %}
+        <a href="/katastrophenplaene/{{ plan.id }}/quellen/{{ element.quelle_dokument_id }}?{% if element.quelle_seiten %}seite={{ element.quelle_seiten.split('-')[0] }}&amp;{% endif %}{% if leseversion is defined %}version_id={{ leseversion.id }}{% endif %}">{{ q.titel }} (v{{ q.versionsnummer }}){% if element.quelle_seiten %}, S. {{ element.quelle_seiten }}{% endif %}</a>
+      {% else %}
+        Quelle nicht mehr verfügbar{% if element.quelle_seiten %}, S. {{ element.quelle_seiten }}{% endif %}
+      {% endif %}
+    </p>
+  {% endif %}
   {% if element.strasse or element.ort or element.plz or element.hausnummer %}
     <p>{{ element.strasse or '' }} {{ element.hausnummer or '' }}, {{ element.plz or '' }} {{ element.ort or '' }}</p>
   {% endif %}

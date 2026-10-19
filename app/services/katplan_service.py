@@ -256,3 +256,33 @@ def verschiebe_nachbar(db: Session, plan: KatplanPlan, user: User,
                 eintrag.aktualisiert_von_id = user.id
         protokolliere(db, plan, "plan", "sortiert", user)
         markiere_ueberarbeitung(db, plan, user)
+
+
+def lege_element_an(db: Session, plan: KatplanPlan, user: User, *, typ: str, titel: str,
+                    abschnitt_id: int | None = None, daten: dict | None = None,
+                    beschreibung_html: str | None = None, herkunft: str = "manual",
+                    quelle_dokument_id: int | None = None, quelle_seiten: str | None = None) -> KatplanElement:
+    """Gemeinsame Anlage fuer Schnellerfassung und Uebernahme einer Quellseite."""
+    from app.services.katplan_typen import ELEMENT_TYPEN
+
+    if plan.org_id != user.org_id or plan.status == "archiviert":
+        raise ValueError("Dieser Plan kann nicht bearbeitet werden.")
+    if typ not in ELEMENT_TYPEN:
+        raise ValueError("Unbekannter Elementtyp.")
+    geschwister = db.query(KatplanElement).filter_by(
+        org_id=plan.org_id, plan_id=plan.id, abschnitt_id=abschnitt_id,
+    ).all()
+    element = KatplanElement(
+        org_id=plan.org_id, plan_id=plan.id, typ=typ, titel=titel, abschnitt_id=abschnitt_id,
+        kennung=naechste_kennung(db, plan, typ), sort=max((e.sort for e in geschwister), default=0) + 10,
+        herkunft=herkunft, quelle_dokument_id=quelle_dokument_id, quelle_seiten=quelle_seiten,
+        daten_json=json.dumps(daten or {}, ensure_ascii=False), tags_json="[]",
+        beschreibung_html=bereinige_beschreibung(beschreibung_html),
+        erstellt_von_id=user.id, aktualisiert_von_id=user.id,
+    )
+    aktualisiere_element_suchtext(element)
+    db.add(element)
+    db.flush()
+    protokolliere(db, plan, "element", "angelegt", user, element_id=element.id)
+    markiere_ueberarbeitung(db, plan, user)
+    return element

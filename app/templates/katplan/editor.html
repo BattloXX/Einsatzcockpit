@@ -23,7 +23,11 @@
     <div class="kp-editor" hx-on::before-swap="if ([409, 422].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false; }">
       {% include "katplan/_baum.html" %}
       <div id="kp-detail" aria-live="polite">
-        {% include "katplan/_leer.html" %}
+        {% if element is defined %}
+          {% include "katplan/_element_form.html" %}
+        {% else %}
+          {% include "katplan/_leer.html" %}
+        {% endif %}
       </div>
     </div>
   </section>

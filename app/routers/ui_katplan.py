@@ -2,6 +2,7 @@
 
 import json
 from datetime import UTC, date, datetime
+from html import escape
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
@@ -22,6 +23,7 @@ from app.models.katplan import (
     KatplanAenderung,
     KatplanAnhang,
     KatplanDokument,
+    KatplanDokumentSeite,
     KatplanElement,
     KatplanElementPhase,
     KatplanLink,
@@ -46,6 +48,7 @@ from app.services.katplan_service import (
     abschnitte_baum,
     aktualisiere_element_suchtext,
     bereinige_beschreibung,
+    lege_element_an,
     loesche_abschnitt,
     markiere_ueberarbeitung,
     naechste_kennung,
@@ -436,6 +439,7 @@ def _lesekontext(db: Session, user: User, plan: KatplanPlan, vid: int | None = N
     termin = daten.get("wiedervorlage_am")
     return {"lesekopf": {**daten, "wiedervorlage_am": date.fromisoformat(termin) if termin else None},
             "plan_daten": daten, "leseversion": version,
+            "quellen_nach_id": {q["id"]: q for q in daten.get("quellen", [])},
             **_link_kontext(db, user, plan, elemente, daten),
             **_anhaenge_kontext(db, user, plan, elemente, daten, version.id),
             "version_baum": freigabe_service.version_baum(daten, elemente, mit_vertraulichen=True),
@@ -705,6 +709,8 @@ def _editor_kontext(db: Session, plan: KatplanPlan) -> dict[str, Any]:
                 org_id=plan.org_id, plan_id=plan.id,
             ).order_by(KatplanAbschnitt.sort, KatplanAbschnitt.id).all(),
             "element_daten": {e.id: json.loads(e.daten_json or "{}") for e in elemente},
+            "quellen_nach_id": {q.id: q for q in db.query(KatplanDokument).filter_by(
+                org_id=plan.org_id, plan_id=plan.id).all()},
             "element_tags": {e.id: json.loads(e.tags_json or "[]") for e in elemente},
             "element_phasen": {e.id: [p for p in phasen if any(
                 z.element_id == e.id and z.phase_id == p.id for z in zuordnungen
@@ -722,7 +728,8 @@ def _formular_element(db: Session, element: KatplanElement) -> dict[str, Any]:
     form = {feld: getattr(element, feld) or "" for feld in (
         "titel", "kennung", "abschnitt_id", "beschreibung_html", "prioritaet", "vertraulich",
         "gueltig_bis", "pruefen_am", "strasse", "hausnummer", "plz", "ort", "version",
-        "gsl_vorlage", "gsl_auftragsart", "gsl_prioritaet", "gsl_voraussetzungen")}
+        "gsl_vorlage", "gsl_auftragsart", "gsl_prioritaet", "gsl_voraussetzungen",
+        "quelle_dokument_id", "quelle_seiten")}
     form["gsl_dauer_min"] = element.gsl_dauer_min if element.gsl_dauer_min is not None else ""
     form["gsl_ressourcentypen"] = ", ".join(json.loads(element.gsl_ressourcentypen_json or "[]"))
     form["tags"] = ", ".join(json.loads(element.tags_json or "[]"))
@@ -746,10 +753,15 @@ def _abschnitt_id(db: Session, roh: str, plan: KatplanPlan, user: User) -> int |
 
 
 @router.get("/{plan_id}/bearbeiten")
-def editor(plan_id: int, request: Request, db: Session = Depends(get_db),
+def editor(plan_id: int, request: Request, element: int | None = None, db: Session = Depends(get_db),
            user: User = Depends(require_katplan_bearbeiten)):
     plan = _plan(db, plan_id, user)
-    return templates.TemplateResponse(request, "katplan/editor.html", _kontext(db, user, plan))
+    context = _kontext(db, user, plan)
+    if element is not None:
+        vorauswahl = _objekt(db, KatplanElement, element, plan, user)
+        context.update(element=vorauswahl, aktiv_element_id=vorauswahl.id,
+                       form=_formular_element(db, vorauswahl), daten=json.loads(vorauswahl.daten_json or "{}"))
+    return templates.TemplateResponse(request, "katplan/editor.html", context)
 
 
 @router.post("/{plan_id}/abschnitte")
@@ -900,24 +912,13 @@ def element_anlegen(plan_id: int, request: Request, typ: str = Form(""), titel: 
         if typ not in ELEMENT_TYPEN:
             raise ValueError("Unbekannter Elementtyp.")
         abschnitt = _abschnitt_id(db, abschnitt_id, plan, user)
+        element = lege_element_an(
+            db, plan, user, typ=typ, titel=titel, abschnitt_id=abschnitt,
+            daten=bereinige_daten(typ, muster.daten) if muster else {},
+            beschreibung_html=muster.beschreibung_html if muster else None,
+        )
     except ValueError as exc:
         return _antwort(request, db, user, plan, status=422, fehler=str(exc))
-    geschwister = db.query(KatplanElement).filter_by(
-        org_id=user.org_id, plan_id=plan.id, abschnitt_id=abschnitt,
-    ).all()
-    element = KatplanElement(org_id=user.org_id, plan_id=plan.id, typ=typ, titel=titel,
-                            abschnitt_id=abschnitt, kennung=naechste_kennung(db, plan, typ),
-                            sort=max((e.sort for e in geschwister), default=0) + 10,
-                            herkunft="manual", daten_json=json.dumps(
-                                bereinige_daten(typ, muster.daten) if muster else {}, ensure_ascii=False),
-                            beschreibung_html=bereinige_beschreibung(muster.beschreibung_html) if muster else None,
-                            tags_json="[]",
-                            erstellt_von_id=user.id, aktualisiert_von_id=user.id)
-    aktualisiere_element_suchtext(element)
-    db.add(element)
-    db.flush()
-    protokolliere(db, plan, "element", "angelegt", user, element_id=element.id)
-    markiere_ueberarbeitung(db, plan, user)
     db.commit()
     return _antwort(request, db, user, plan, "_element_form.html", element=element,
                     aktiv_element_id=element.id, form=_formular_element(db, element),
@@ -1395,26 +1396,31 @@ def _quelle(db: Session, plan: KatplanPlan, dok_id: int) -> KatplanDokument:
 
 
 def _quellen_antwort(request: Request, db: Session, plan: KatplanPlan, user: User,
-                     *, status: int = 200, fehler: str = ""):
+                     *, status: int = 200, fehler: str = "", hinweis: str = ""):
     return templates.TemplateResponse(request, "katplan/_quellen.html", {
         "user": user, "plan": plan, "quellen": quelle_service.sichtbare_quellen(db, plan, user),
-        "fehler": fehler,
+        "fehler": fehler, "hinweis": hinweis, "can_edit": darf_bearbeiten(user),
     }, status_code=status)
 
 
 @router.post("/{plan_id}/quellen")
 def quelle_hochladen(plan_id: int, request: Request, background_tasks: BackgroundTasks,
-                     datei: UploadFile = File(...), titel: str = Form(...),
+                     datei: UploadFile | None = File(None), titel: str = Form(""),
                      herausgeber: str = Form(""), stand: str = Form(""),
                      ersetzt_dokument_id: str = Form(""), db: Session = Depends(get_db),
                      user: User = Depends(require_katplan_bearbeiten)):
     plan = _plan(db, plan_id, user)
     try:
+        if datei is None:
+            raise ValueError("Bitte eine PDF-Datei auswählen.")
         dokument = quelle_service.quelle_hochladen(
             db, plan, user, run_async(datei.read), datei.filename or "original.pdf", titel=titel,
             herausgeber=herausgeber, stand=date.fromisoformat(stand) if stand else None,
             ersetzt_dokument_id=int(ersetzt_dokument_id) if ersetzt_dokument_id else None,
         )
+    except HTTPException as exc:
+        db.rollback()
+        return _quellen_antwort(request, db, plan, user, status=exc.status_code, fehler=str(exc.detail))
     except ValueError as exc:
         db.rollback()
         return _quellen_antwort(request, db, plan, user, status=422, fehler=str(exc))
@@ -1444,8 +1450,10 @@ def quelle_loeschen(plan_id: int, dok_id: int, request: Request, db: Session = D
         quelle_service.quelle_entfernen(db, plan, user, dokument)
     except ValueError as exc:
         return _quellen_antwort(request, db, plan, user, status=422, fehler=str(exc))
+    archiviert = dokument.archiviert
     db.commit()
-    return _quellen_antwort(request, db, plan, user)
+    return _quellen_antwort(request, db, plan, user,
+                           hinweis="Quelle wurde archiviert, da sie noch verknüpft ist." if archiviert else "")
 
 
 @router.post("/{plan_id}/quellen/{dok_id}/neu-verarbeiten")
@@ -1518,3 +1526,103 @@ def quelle_seite(uuid: str, nr: int, request: Request, version_id: int | None = 
         "pdf": (seite.einzel_pdf_pfad, "application/pdf", "pdf"),
     }[art]
     return _quelle_datei(pfad, mime, f"seite_{nr}.{suffix}")
+
+
+@router.get("/{plan_id}/quellen")
+def quellen(plan_id: int, request: Request, db: Session = Depends(get_db),
+            user: User = Depends(require_katplan_lesen)):
+    plan = _sichtbarer_plan(db, plan_id, user)
+    return templates.TemplateResponse(request, "katplan/quellen.html", {
+        "user": user, "plan": plan, "can_edit": darf_bearbeiten(user),
+        "quellen": quelle_service.sichtbare_quellen(db, plan, user),
+    })
+
+
+def _seitenbereich_enthaelt(bereich: str | None, nr: int) -> bool:
+    try:
+        grenzen = (bereich or "").split("-")
+        return int(grenzen[0]) <= nr <= int(grenzen[-1])
+    except ValueError:
+        return False
+
+
+def _seitentitel(seite: KatplanDokumentSeite, fallback: str) -> str:
+    """Seitentitel bzw. erste Textzeile bis zum ersten Aufzaehlungspunkt, auf ~120 Zeichen gekuerzt."""
+    zeile = seite.titel or next(
+        (z.strip() for z in (seite.volltext or "").splitlines() if z.strip()), fallback)
+    zeile = zeile.split("\u2022")[0].strip() or fallback
+    if len(zeile) > 120:
+        zeile = zeile[:120].rsplit(" ", 1)[0] + " ..."
+    return zeile[:200]
+
+
+def _seitentext_als_html(volltext: str | None) -> str:
+    """Seitentext als Absaetze; mit Aufzaehlungspunkt getrennte Teile werden zu einer Liste."""
+    teile = []
+    for zeile in (volltext or "").splitlines():
+        stuecke = [t.strip() for t in zeile.split("\u2022")]
+        if stuecke[0]:
+            teile.append(f"<p>{escape(stuecke[0])}</p>")
+        punkte = [t for t in stuecke[1:] if t]
+        if punkte:
+            teile.append("<ul>" + "".join(f"<li>{escape(t)}</li>" for t in punkte) + "</ul>")
+    return "".join(teile)
+
+
+@router.get("/{plan_id}/quellen/{dok_id}")
+def quelle_ansicht(plan_id: int, dok_id: int, request: Request, seite: int | None = None,
+                   version_id: int | None = None, db: Session = Depends(get_db),
+                   user: User = Depends(require_katplan_lesen)):
+    plan = _sichtbarer_plan(db, plan_id, user)
+    dokument = _quelle(db, plan, dok_id)
+    _quelle_auslieferung(db, user, dokument.uuid, version_id)
+    seiten = db.query(KatplanDokumentSeite).filter_by(
+        org_id=plan.org_id, plan_id=plan.id, dokument_id=dokument.id,
+    ).order_by(KatplanDokumentSeite.seiten_nr).all()
+    aktuelle_seite = next((s for s in seiten if s.seiten_nr == seite), None)
+    if seite is not None and (not 1 <= seite <= dokument.seitenzahl or aktuelle_seite is None):
+        raise HTTPException(404, "Nicht gefunden")
+    context = {"user": user, "plan": plan, "dokument": dokument, "seiten": seiten,
+               "seite": aktuelle_seite, "can_edit": darf_bearbeiten(user), "typen": ELEMENT_TYPEN,
+               "version_id": version_id, "version_query": f"?version_id={version_id}" if version_id else ""}
+    if darf_bearbeiten(user):
+        context.update(_editor_kontext(db, plan))
+        elemente = db.query(KatplanElement).filter_by(
+            org_id=plan.org_id, plan_id=plan.id, quelle_dokument_id=dokument.id,
+        ).all()
+    else:
+        _, _, elemente = _lade_version(db, plan, version_id)
+        elemente = [e for e in elemente if e.quelle_dokument_id == dokument.id
+                    and (not e.vertraulich or sieht_vertraulich(user))]
+    context["verknuepfte_elemente"] = [e for e in elemente if seite is not None
+                                         and _seitenbereich_enthaelt(e.quelle_seiten, seite)]
+    context["seitentitel"] = _seitentitel(aktuelle_seite, dokument.titel) if aktuelle_seite else ""
+    return templates.TemplateResponse(request, "katplan/quelle_seiten.html", context)
+
+
+@router.post("/{plan_id}/quellen/{dok_id}/element")
+def quelle_element_anlegen(plan_id: int, dok_id: int, request: Request, seite: int = Form(...),
+                          typ: str = Form("info"), titel: str = Form(""), abschnitt_id: str = Form(""),
+                          db: Session = Depends(get_db), user: User = Depends(require_katplan_bearbeiten)):
+    plan = _plan(db, plan_id, user)
+    dokument = _quelle(db, plan, dok_id)
+    quelle_seite = quelle_service.quelle_der_seite(db, plan, dok_id, seite)
+    if quelle_seite is None:
+        raise HTTPException(404, "Nicht gefunden")
+    try:
+        quelle_service.validiere_element_quelle(db, plan, dokument.id, str(seite))
+        abschnitt = _abschnitt_id(db, abschnitt_id, plan, user)
+        beschreibung = _seitentext_als_html(quelle_seite.volltext)
+        element = lege_element_an(db, plan, user, typ=typ, titel=_pflicht(titel, 200, "Titel"),
+                                  abschnitt_id=abschnitt, beschreibung_html=beschreibung,
+                                  herkunft="imported", quelle_dokument_id=dokument.id, quelle_seiten=str(seite))
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(422, str(exc)) from exc
+    db.commit()
+    ziel = f"/katastrophenplaene/{plan.id}/bearbeiten?element={element.id}"
+    if request.headers.get("HX-Request"):
+        from fastapi.responses import Response
+
+        return Response(headers={"HX-Redirect": ziel})
+    return RedirectResponse(ziel, status_code=303)

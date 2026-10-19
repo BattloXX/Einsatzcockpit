@@ -31,6 +31,27 @@
           </select>
         </label>
       </div>
+      <fieldset>
+        <legend class="kp-box__title">Quelle</legend>
+        <div class="kp-form-grid">
+          <label>Dokument
+            <select class="form-control" name="quelle_dokument_id">
+              <option value="">Keine Quelle</option>
+              {% for q in quellen_nach_id.values() %}
+                {% if (q.ist_aktuelle_version and not q.archiviert) or form.get('quelle_dokument_id')|string == q.id|string %}
+                  <option value="{{ q.id }}" {% if form.get('quelle_dokument_id')|string == q.id|string %}selected{% endif %}>{{ q.titel }} (v{{ q.versionsnummer }}){% if not q.ist_aktuelle_version or q.archiviert %} (ältere Version){% endif %}</option>
+                {% endif %}
+              {% endfor %}
+            </select>
+          </label>
+          <label>Seiten (z. B. 1 oder 2-4)
+            <input class="form-control" name="quelle_seiten" maxlength="30" value="{{ form.get('quelle_seiten', '') }}">
+          </label>
+        </div>
+        {% if element.quelle_dokument_id %}
+          <a href="/katastrophenplaene/{{ plan.id }}/quellen/{{ element.quelle_dokument_id }}{% if element.quelle_seiten %}?seite={{ element.quelle_seiten.split('-')[0] }}{% endif %}">Quelle anzeigen</a>
+        {% endif %}
+      </fieldset>
       {% set beschreibung = form.get('beschreibung_html', '') %}
       {% include "katplan/_quill.html" %}
       <div class="kp-form-grid">

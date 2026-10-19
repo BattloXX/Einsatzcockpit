@@ -1,3 +1,6 @@
-<span id="kp-quelle-status-{{ dokument.id }}"{% if dokument.status in ("neu", "verarbeitung") %}
-      hx-get="/katastrophenplaene/{{ plan.id }}/quellen/{{ dokument.id }}/status"
-      hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>{{ dokument.status }}{% if dokument.fehler_text %}: {{ dokument.fehler_text }}{% endif %}</span>
+<div{% if dokument.status in ("neu", "verarbeitung") %}
+  hx-get="/katastrophenplaene/{{ plan.id }}/quellen/{{ dokument.id }}/status"
+  hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+  {% if not quelle_status_statisch %}{% include "katplan/_design.html" %}{% endif %}
+  <span class="kp-badge kp-badge--{{ 'green' if dokument.status == 'fertig' else ('red' if dokument.status == 'fehler' else 'amber') }}">{{ dokument.status }}{% if dokument.fehler_text %}: {{ dokument.fehler_text }}{% endif %}</span>
+</div>
