@@ -289,5 +289,6 @@ Templates nicht minifizieren, nur gezielte Testdateien laufen lassen, Testliste 
 | K1 Grundgerüst | #619 | Modulschalter, Rollen, Migration 0294, Plan-Stammdaten/Liste/Protokoll; Editor folgt in K2 |
 | K2 Editor | #620 | Kapitel/Phasen/Elemente aller 9 Typen, Drag-and-drop + ↑/↓, Quill (h3/h4), Vorlagen, Duplizieren, GSL-Felder; Browser-Check ok |
 | K3 Versionen & Freigabe | #625 | Migration 0295, Snapshot-Versionen (unveränderlich), Workflow ohne Vier-Augen, Lesesicht, Historie, Vergleich, Wiedervorlage-Mail, Übersicht-Badge |
-| K4 Verknüpfungen | (dieser PR) | Migration 0296, Links zu Kontakt/Organisation/Objekt/Fahrzeug/Wasserstelle, Beziehungen, Snapshot bei Freigabe, Telefonregel (Verzeichnisrecht oder einsatzrelevant+Dienst) |
-| K5–K13 | – | offen (Pilot-PDF liegt außerhalb des Repos vor) |
+| K4 Verknüpfungen | #626 | Migration 0296, Links zu Kontakt/Organisation/Objekt/Fahrzeug/Wasserstelle, Beziehungen, Snapshot bei Freigabe, Telefonregel (Verzeichnisrecht oder einsatzrelevant+Dienst) |
+| K5 Karte | (dieser PR) | Geometrie je Element mit Prüfstatus, Adresssuche, Plankarte mit Filtern; validate_geometry bleibt in road_closure_geo_service (nicht verschoben) |
+| K6–K13 | – | offen (Pilot-PDF liegt außerhalb des Repos vor) |

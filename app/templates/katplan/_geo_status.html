@@ -1,0 +1,4 @@
+{% set geo_status = element.geo_status %}
+{% set geo_farben = {'keine': 'gray', 'ungeprueft': 'amber', 'geprueft': 'green'} %}
+{% set geo_labels = {'keine': 'nicht verortet', 'ungeprueft': 'Ort ungeprüft', 'geprueft': 'Ort geprüft'} %}
+<span class="kp-badge kp-badge--{{ geo_farben.get(geo_status, 'gray') }}" data-kp-geo-status>{{ geo_labels.get(geo_status, 'nicht verortet') }}</span>

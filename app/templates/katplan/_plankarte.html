@@ -1,0 +1,8 @@
+{% include "katplan/_design.html" %}
+<div data-kp-plankarte data-url="/katastrophenplaene/{{ plan.id }}/karte.geojson{{ karten_suffix }}"
+  data-mini="{{ 'true' if karten_mini else 'false' }}"
+  data-lat="{{ user.org.fallback_lat if user.org.fallback_lat is not none else 47.4664 }}"
+  data-lng="{{ user.org.fallback_lng if user.org.fallback_lng is not none else 9.7416 }}">
+  <p data-kp-karten-status role="status">Karte wird geladen …</p>
+  <div class="kp-plankarte {{ 'kp-plankarte-mini' if karten_mini else '' }}" aria-label="Plankarte"></div>
+</div>

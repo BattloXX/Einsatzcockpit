@@ -2,6 +2,7 @@
 {% block title %}{{ lesekopf.titel if lesekopf is defined else plan.titel }} · Katastrophenpläne{% endblock %}
 {% block head_extra %}
   {% include "katplan/_design.html" %}
+  {% include "katplan/_karten_assets.html" %}
   <link href="/static/css/quill.snow.css" rel="stylesheet">
   <script src="/static/js/quill.min.js" defer></script>
   <script src="/static/js/sortable.min.js" defer></script>
@@ -14,6 +15,7 @@
       {% include "katplan/_kopf.html" %}
       <div role="tablist" aria-label="Planansicht" class="tabnav">
         <button type="button" role="tab" :aria-selected="reiter === 'plan'" @click="reiter = 'plan'" class="tabnav__item">Plan</button>
+        <a class="tabnav__item" href="{{ karten_url|default("/katastrophenplaene/" ~ plan.id ~ "/karte") }}">Karte</a>
         <a class="tabnav__item" href="/katastrophenplaene/{{ plan.id }}/versionen">Versionen</a>
         {% if can_edit %}
           <button type="button" role="tab" :aria-selected="reiter === 'protokoll'" @click="reiter = 'protokoll'" class="tabnav__item">Protokoll</button>

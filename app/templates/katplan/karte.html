@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Karte · {{ karten_titel }}{% endblock %}
+{% block head_extra %}
+  {% include "katplan/_design.html" %}
+  {% include "katplan/_karten_assets.html" %}
+{% endblock %}
+{% block content %}
+  <section class="kp-page">
+    <header class="kp-header"><h1>Karte · {{ karten_titel }}</h1></header>
+    {% from "_tabnav.html" import tabnav %}
+    {% set tabs = [
+      {'label': 'Plan', 'href': '/katastrophenplaene/' ~ plan.id ~ karten_suffix, 'active': false},
+      {'label': 'Karte', 'href': karten_url, 'active': true},
+      {'label': 'Versionen', 'href': '/katastrophenplaene/' ~ plan.id ~ '/versionen', 'active': false}
+    ] %}
+    {% if can_edit %}
+      {% set tabs = tabs + [{'label': 'Protokoll', 'href': '/katastrophenplaene/' ~ plan.id ~ '#kp-protokoll', 'active': false}] %}
+    {% endif %}
+    {{ tabnav(tabs) }}
+    {% if can_edit %}
+      <nav class="kp-chips" aria-label="Fassung">
+        {% if plan.aktuelle_version_id %}
+          <a class="btn btn--ghost btn--sm" href="?ansicht=freigabe" {% if not arbeitsstand %}aria-current="page"{% endif %}>Freigegebene Fassung</a>
+        {% endif %}
+        <a class="btn btn--ghost btn--sm" href="?ansicht=arbeitsstand" {% if arbeitsstand %}aria-current="page"{% endif %}>Arbeitsstand</a>
+      </nav>
+    {% endif %}
+    <div class="kp-card" data-kp-kartenbereich>
+      <div class="kp-kartenfilter" aria-label="Kartenfilter">
+        <details class="kp-typfilter">
+          <summary class="kp-field">Typen ({{ typen|length }})</summary>
+          <fieldset class="kp-chips">
+            <legend class="sr-only">Typ</legend>
+            {% for code, typ in typen.items() %}
+              <label><input type="checkbox" data-kp-filter-typ value="{{ code }}" checked> {{ typ.icon }} {{ typ.label }}</label>
+            {% endfor %}
+          </fieldset>
+        </details>
+        <label class="kp-field">Phase
+          <select class="form-control" data-kp-filter-phase>
+            <option value="">Alle</option>
+            {% for phase in karten_phasen %}<option value="{{ phase.id }}">{{ phase.name }}</option>{% endfor %}
+          </select>
+        </label>
+        <label class="kp-field">Priorität
+          <select class="form-control" data-kp-filter-prio>
+            <option value="">Alle</option>
+            <option value="1">1 – Hoch</option><option value="2">2 – Mittel</option><option value="3">3 – Niedrig</option>
+          </select>
+        </label>
+        <label><input type="checkbox" data-kp-filter-geprueft> Nur geprüfte Orte</label>
+      </div>
+      {% include "katplan/_plankarte.html" %}
+      <p class="kp-chips" aria-label="Legende">
+        <span class="kp-badge kp-badge--red">1 – Hoch</span>
+        <span class="kp-badge kp-badge--blue">2 – Mittel</span>
+        <span class="kp-badge kp-badge--gray">3 – Niedrig</span>
+        <span class="kp-karten-ungeprueft">ungeprüft</span>
+      </p>
+    </div>
+    <section class="kp-sidecard">
+      <h2 class="kp-box__title">Nicht verortete Elemente: {{ karten_unverortet|length }}</h2>
+      <ul>
+        {% for element in karten_unverortet %}
+          <li><a href="{{ element.url }}">{{ element.kennung or '' }} {{ element.titel }}</a></li>
+        {% endfor %}
+      </ul>
+    </section>
+  </section>
+{% endblock %}

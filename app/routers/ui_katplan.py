@@ -35,6 +35,7 @@ from app.models.user import User
 from app.routers.ui_objekt import _LESE_ROLLEN
 from app.services import katplan_freigabe_service as freigabe_service
 from app.services import katplan_link_service as link_service
+from app.services.katplan_geo_service import ableite_punkt, pruefe_geometrie
 from app.services.katplan_service import (
     KatplanKonflikt,
     abschnitte_baum,
@@ -170,6 +171,13 @@ def liste(request: Request, gefahr: str = "", status: str = "", q: str = "", arc
     return templates.TemplateResponse(request, f"katplan/{name}", context)
 
 
+@router.get("/adress-suche")
+async def adress_suche(q: str = "", user: User = Depends(require_katplan_bearbeiten)):
+    from app.services.geocoding import search_addresses
+
+    return {"treffer": await search_addresses(q, limit=6)}
+
+
 @router.get("/neu")
 def neu(request: Request, db: Session = Depends(get_db), user: User = Depends(require_katplan_bearbeiten)):
     return templates.TemplateResponse(request, "katplan/formular.html", {**_kontext(db, user), "form": {}})
@@ -223,12 +231,78 @@ def _lesekontext(db: Session, user: User, plan: KatplanPlan, vid: int | None = N
 def detail(plan_id: int, request: Request, ansicht: str = "", db: Session = Depends(get_db),
            user: User = Depends(require_katplan_lesen)):
     plan = _sichtbarer_plan(db, plan_id, user)
-    arbeitsstand = darf_bearbeiten(user) and (not plan.aktuelle_version_id or ansicht == "arbeitsstand"
-                    or (ansicht != "freigabe" and plan.status != "freigegeben"))
+    arbeitsstand = _ist_arbeitsstand(user, plan, ansicht)
     context = {**_kontext(db, user, plan), "arbeitsstand": arbeitsstand}
     if not arbeitsstand:
         context.update(_lesekontext(db, user, plan))
+    context.update(_kartenkontext(db, user, plan, arbeitsstand))
     return templates.TemplateResponse(request, "katplan/detail.html", context)
+
+
+def _ist_arbeitsstand(user: User, plan: KatplanPlan, ansicht: str) -> bool:
+    return darf_bearbeiten(user) and (not plan.aktuelle_version_id or ansicht == "arbeitsstand"
+           or (ansicht != "freigabe" and plan.status != "freigegeben"))
+
+
+def _kartendaten(db: Session, user: User, plan: KatplanPlan, arbeitsstand: bool) -> tuple[dict, list[dict]]:
+    if arbeitsstand:
+        kopf, elemente = freigabe_service.erstelle_snapshot(db, plan, flush=False)
+    else:
+        _, kopf, snapshots = _lade_version(db, plan)
+        elemente = [{c.name: getattr(e, c.name) for c in KatplanVersionElement.__table__.columns}
+                    for e in snapshots]
+    return kopf, [e for e in elemente if sieht_vertraulich(user) or not e["vertraulich"]]
+
+
+def _kartenkontext(db: Session, user: User, plan: KatplanPlan, arbeitsstand: bool) -> dict:
+    kopf, elemente = _kartendaten(db, user, plan, arbeitsstand)
+    features = []
+    unverortet = []
+    suffix = "?ansicht=arbeitsstand" if arbeitsstand else "?ansicht=freigabe"
+    for e in elemente:
+        uuid = e["element_uuid"]
+        typ = ELEMENT_TYPEN[e["typ"]]
+        eigenschaften = {"uuid": uuid, "kennung": e["kennung"], "titel": e["titel"],
+                        "typ": e["typ"], "typ_label": typ.label, "typ_icon": typ.icon,
+                        "prioritaet": e["prioritaet"], "geo_status": e["geo_status"],
+                        "phasen": json.loads(e["phasen_json"]),
+                        "url": f"/katastrophenplaene/{plan.id}"
+                               + (suffix if arbeitsstand else "") + f"#element-{uuid}"}
+        geometrie = json.loads(e["geometry_json"]) if e["geometry_json"] else None
+        if geometrie is None and e["lat"] is not None and e["lng"] is not None:
+            geometrie = {"type": "Point", "coordinates": [e["lng"], e["lat"]]}
+        if geometrie:
+            features.append({"type": "Feature", "geometry": geometrie, "properties": eigenschaften})
+        else:
+            unverortet.append(eigenschaften)
+    return {"karten_geojson": {"type": "FeatureCollection", "features": features},
+            "karten_unverortet": unverortet, "karten_phasen": kopf.get("phasen", []),
+            "karten_titel": kopf["titel"], "karten_suffix": suffix,
+            "karten_url": f"/katastrophenplaene/{plan.id}/karte" + suffix}
+
+
+def _kopfkontext(db: Session, user: User, plan: KatplanPlan) -> dict:
+    arbeitsstand = _ist_arbeitsstand(user, plan, "")
+    return {**_kontext(db, user, plan), "arbeitsstand": arbeitsstand,
+            **_kartenkontext(db, user, plan, arbeitsstand)}
+
+
+@router.get("/{plan_id}/karte.geojson")
+def karte_geojson(plan_id: int, ansicht: str = "", db: Session = Depends(get_db),
+                  user: User = Depends(require_katplan_lesen)):
+    plan = _sichtbarer_plan(db, plan_id, user)
+    return _kartenkontext(db, user, plan, _ist_arbeitsstand(user, plan, ansicht))["karten_geojson"]
+
+
+@router.get("/{plan_id}/karte")
+def karte(plan_id: int, request: Request, ansicht: str = "", db: Session = Depends(get_db),
+          user: User = Depends(require_katplan_lesen)):
+    plan = _sichtbarer_plan(db, plan_id, user)
+    arbeitsstand = _ist_arbeitsstand(user, plan, ansicht)
+    context = {"user": user, "plan": plan, "can_edit": darf_bearbeiten(user),
+               "arbeitsstand": arbeitsstand, "typen": ELEMENT_TYPEN,
+               **_kartenkontext(db, user, plan, arbeitsstand)}
+    return templates.TemplateResponse(request, "katplan/karte.html", context)
 
 
 @router.get("/{plan_id}/versionen")
@@ -344,7 +418,7 @@ def speichern(plan_id: int, request: Request, version: int = Form(-1), daten: St
     plan.aktualisiert_von_id = user.id
     db.commit()
     return templates.TemplateResponse(request, "katplan/_kopf.html", {
-        **_kontext(db, user, plan), "protokoll_oob": True})
+        **_kopfkontext(db, user, plan), "protokoll_oob": True})
 
 
 def _statuswechsel(request: Request, db: Session, user: User, plan_id: int, status: str, aktion: str):
@@ -358,7 +432,7 @@ def _statuswechsel(request: Request, db: Session, user: User, plan_id: int, stat
     db.add(KatplanPruefung(org_id=plan.org_id, plan_id=plan.id, aktion=aktion, user_id=user.id))
     db.commit()
     return templates.TemplateResponse(request, "katplan/_kopf.html", {
-        **_kontext(db, user, plan), "protokoll_oob": True})
+        **_kopfkontext(db, user, plan), "protokoll_oob": True})
 
 
 @router.post("/{plan_id}/archivieren")
@@ -433,6 +507,8 @@ def _formular_element(db: Session, element: KatplanElement) -> dict[str, Any]:
     form["phasen"] = [str(z.phase_id) for z in db.query(KatplanElementPhase).filter_by(
         org_id=element.org_id, element_id=element.id,
     ).all()]
+    form["geometry_json"] = element.geometry_json or ""
+    form["geo_geprueft"] = element.geo_status == "geprueft"
     form["version"] = element.version
     return form
 
@@ -647,6 +723,7 @@ def element_speichern(plan_id: int, eid: int, request: Request, db: Session = De
     form["phasen"] = [str(v) for v in roh.getlist("phasen")]
     form["vertraulich"] = bool(roh.get("vertraulich"))
     form["gsl_vorlage"] = bool(roh.get("gsl_vorlage"))
+    form["geo_geprueft"] = bool(roh.get("geo_geprueft"))
     daten = json.loads(element.daten_json or "{}")
     try:
         titel = _pflicht(form.get("titel", ""), 200, "Titel")
@@ -682,6 +759,11 @@ def element_speichern(plan_id: int, eid: int, request: Request, db: Session = De
             if len(wert) > maximum:
                 raise ValueError(f"{feld}: höchstens {maximum} Zeichen.")
             werte[feld] = wert or None
+        geom = pruefe_geometrie(element.typ, form.get("geometry_json"))
+        lat, lng = ableite_punkt(geom) if geom else (None, None)
+        werte.update(geometry_json=json.dumps(geom, sort_keys=True) if geom else None,
+                     lat=lat, lng=lng,
+                     geo_status=("geprueft" if form["geo_geprueft"] else "ungeprueft") if geom else "keine")
         auftragsart = form.get("gsl_auftragsart", "").strip() or None
         if auftragsart is not None and auftragsart not in AUFTRAGSART_WERTE:
             raise ValueError("Ungültige GSL-Auftragsart.")
@@ -712,9 +794,10 @@ def element_speichern(plan_id: int, eid: int, request: Request, db: Session = De
         if alt != wert:
             setattr(element, feld, wert)
             protokolliere(db, plan, "element", "geaendert", user,
-                          feld="daten" if feld == "daten_json" else feld,
-                          alt=str(alt) if alt is not None else None,
-                          neu=str(wert) if wert is not None else None, element_id=element.id)
+                          feld={"daten_json": "daten", "geometry_json": "geometrie"}.get(feld, feld),
+                          alt=(str(alt)[:200] if feld == "geometry_json" else str(alt)) if alt is not None else None,
+                          neu=(str(wert)[:200] if feld == "geometry_json" else str(wert)) if wert is not None else None,
+                          element_id=element.id)
     zuordnungen = db.query(KatplanElementPhase).filter_by(org_id=user.org_id, element_id=element.id).all()
     alte_ids = {z.phase_id for z in zuordnungen}
     if alte_ids != phase_ids:
@@ -865,10 +948,10 @@ def _workflow(request: Request, db: Session, user: User, plan_id: int, aktion: s
     except ValueError as exc:
         db.rollback()
         return templates.TemplateResponse(request, "katplan/_kopf.html", {
-            **_kontext(db, user, plan), "fehler": str(exc)}, status_code=422)
+            **_kopfkontext(db, user, plan), "fehler": str(exc)}, status_code=422)
     db.commit()
     return templates.TemplateResponse(request, "katplan/_kopf.html", {
-        **_kontext(db, user, plan), "protokoll_oob": True})
+        **_kopfkontext(db, user, plan), "protokoll_oob": True})
 
 
 @router.post("/{plan_id}/einreichen")

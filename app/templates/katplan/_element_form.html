@@ -66,6 +66,22 @@
           </label>
         {% endfor %}
       </div>
+      {% if typen[element.typ].geometrie != 'keine' %}
+        <div class="kp-geo" data-kp-geo="{{ typen[element.typ].geometrie }}"
+          data-lat="{{ user.org.fallback_lat if user.org.fallback_lat is not none else 47.4664 }}"
+          data-lng="{{ user.org.fallback_lng if user.org.fallback_lng is not none else 9.7416 }}">
+          <input type="hidden" name="geometry_json" value="{{ form.get('geometry_json', '') }}">
+          <div id="kp-geo-karte-{{ element.id }}" class="kp-geo-karte" aria-label="Ort auf der Karte bearbeiten"></div>
+          <button type="button" class="btn" data-kp-adress-suche>Adresse auf Karte suchen</button>
+          <div data-kp-geo-treffer aria-live="polite"></div>
+          <label class="kp-chip">
+            <input class="form-control" type="checkbox" name="geo_geprueft" value="1" {% if form.get('geo_geprueft') %}checked{% endif %}>
+            Ort geprüft
+          </label>
+          <p>Nur setzen, wenn die Position vor Ort oder anhand gesicherter Unterlagen bestätigt ist.</p>
+          {% include "katplan/_geo_status.html" %}
+        </div>
+      {% endif %}
       <fieldset>
         <legend class="kp-box__title">Phasen</legend>
         {% for phase in phasen %}

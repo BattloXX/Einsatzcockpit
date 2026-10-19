@@ -603,6 +603,17 @@
   .kp-farbe-grau {
     border-color: var(--text-muted);
   }
+  .kp-geo {
+    display: grid;
+    gap: .75rem;
+    min-width: 0;
+  }
+  .kp-geo-karte {
+    width: 100%;
+    height: 320px;
+    min-width: 0;
+    z-index: 0;
+  }
   @media (max-width: 760px) {
     .kp-editor-form {
       grid-template-columns: auto minmax(0, 1fr);
@@ -651,4 +662,9 @@
       max-width: 100%;
     }
   }
+  .kp-plankarte { height: 65vh; min-height: 320px; width: 100%; z-index: 0; }
+  .kp-plankarte-mini { height: 220px; min-height: 220px; }
+  .kp-kartenfilter { display: flex; flex-wrap: wrap; gap: 1rem; padding: 1rem; align-items: end; }
+  .kp-kartenfilter fieldset { flex-basis: 100%; min-width: 0; }
+  .kp-karten-ungeprueft { border: 2px dashed #64748b; opacity: 0.6; padding: 0.2rem; }
 </style>
