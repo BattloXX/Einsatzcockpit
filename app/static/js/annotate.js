@@ -9,6 +9,9 @@
   var cfg = window.ANNOTATE_CONFIG;
   if (!cfg || typeof Konva === "undefined") { return; }
 
+  // Gespeicherte Annotationen behalten die Textpositionierung aus Konva 9.
+  Konva.legacyTextRendering = true;
+
   var stage, imageLayer, annLayer, tr = null, natW = 0, natH = 0;
   var tool = "pen", color = "#e11d1d", width = 9, textSize = 40;
   var drawing = false, shape = null, startPt = null;
@@ -89,7 +92,7 @@
     var tmp = Konva.Node.create(json);
     annLayer.destroyChildren();  // zerstoert auch den Transformer
     tr = null;
-    // Konva 9: getChildren() liefert ein Array — vor dem Verschieben kopieren
+    // getChildren() liefert ein Array — vor dem Verschieben kopieren
     Array.prototype.slice.call(tmp.getChildren()).forEach(function (ch) { ch.moveTo(annLayer); });
     tmp.destroy();
     ensureTransformer();

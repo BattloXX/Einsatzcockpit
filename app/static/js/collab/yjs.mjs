@@ -3275,20 +3275,22 @@ const cleanupTransactions = (transactionCleanups, i) => {
           // We need to think about the possibility that the user transforms the
           // Y.Doc in the event.
           if (type._dEH.l.length > 0 && (type._item === null || !type._item.deleted)) {
-            events = events
-              .filter(event =>
-                event.target._item === null || !event.target._item.deleted
-              );
-            events
-              .forEach(event => {
-                event.currentTarget = type;
-                // path is relative to the current target
-                event._path = null;
-              });
-            // sort events by path length so that top-level events are fired first.
-            events
-              .sort((event1, event2) => event1.path.length - event2.path.length);
             fs.push(() => {
+              // The same event instance is shared by all parent types. Hence, we must set
+              // currentTarget right before calling the handlers (see #768).
+              events = events
+                .filter(event =>
+                  event.target._item === null || !event.target._item.deleted
+                );
+              events
+                .forEach(event => {
+                  event.currentTarget = type;
+                  // path is relative to the current target
+                  event._path = null;
+                });
+              // sort events by path length so that top-level events are fired first.
+              events
+                .sort((event1, event2) => event1.path.length - event2.path.length);
               // We don't need to check for events.length
               // because we know it has at least one element
               callEventHandlerListeners(type._dEH, events, transaction);
@@ -3302,6 +3304,7 @@ const cleanupTransactions = (transactionCleanups, i) => {
           }
         });
       });
+      // note the nested fs calls, must not modify fs at this point
       callAll(fs, []);
     } finally {
       // Replace deleted items with ItemDeleted / GC.
@@ -3679,10 +3682,9 @@ class UndoManager extends ObservableV2 {
         this.emit('stack-item-updated', changeEvent);
       }
     };
+    this.destroy = this.destroy.bind(this);
     this.doc.on('afterTransaction', this.afterTransactionHandler);
-    this.doc.on('destroy', () => {
-      this.destroy();
-    });
+    this.doc.on('destroy', this.destroy);
   }
 
   /**
@@ -3809,6 +3811,7 @@ class UndoManager extends ObservableV2 {
   destroy () {
     this.trackedOrigins.delete(this);
     this.doc.off('afterTransaction', this.afterTransactionHandler);
+    this.doc.off('destroy', this.destroy);
     super.destroy();
   }
 }

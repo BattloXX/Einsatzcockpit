@@ -23,7 +23,7 @@
     "leaflet.markercluster": "1.5.3",
     "lib0": "0.2.119",
     "quill": "2.0.3",
-    "quill-cursors": "6.0.0",
+    "quill-cursors": "5.0.0",
     "sortablejs": "1.15.7",
     "tailwindcss": "^3.4.0",
     "y-protocols": "1.0.7",
