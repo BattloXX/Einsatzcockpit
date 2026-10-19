@@ -158,6 +158,9 @@
       <button type="submit" class="btn btn--primary">Speichern</button>
     </div>
   </form>
+  {% with anhang_element_id = element.id %}
+    {% include "katplan/_anhaenge.html" %}
+  {% endwith %}
   <form method="post" action="/katastrophenplaene/{{ plan.id }}/elemente/{{ element.id }}/loeschen"
     hx-post="/katastrophenplaene/{{ plan.id }}/elemente/{{ element.id }}/loeschen" hx-target="#kp-detail" hx-confirm="Element löschen?">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">

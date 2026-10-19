@@ -1,0 +1,32 @@
+<div class="kp-anhaenge-inhalt">
+  <div class="kp-fotogalerie">
+    {% for anhang in anhaenge if anhang.art == 'foto' %}
+      <figure data-anhang="{{ anhang.uuid }}">
+        <a href="{{ anhang.datei_url }}" data-kp-lightbox>
+          <img src="{{ anhang.thumb_url }}" alt="{{ anhang.beschriftung or anhang.dateiname }}" loading="lazy">
+        </a>
+        <figcaption>{{ anhang.beschriftung or anhang.dateiname }}</figcaption>
+        {% if anhang.vertraulich %}<span class="kp-badge kp-badge--amber">vertraulich</span>{% endif %}
+        {% if anhang_bearbeiten %}{% include "katplan/_anhang_aktionen.html" %}{% endif %}
+      </figure>
+    {% endfor %}
+  </div>
+  <ul class="kp-anhang-liste">
+    {% for anhang in anhaenge if anhang.art != 'foto' %}
+      <li data-anhang="{{ anhang.uuid }}">
+        {% if anhang.art == 'link' %}
+          🔗 <a href="{{ anhang.url }}" rel="noopener noreferrer" target="_blank">{{ anhang.beschriftung or anhang.url }}</a>
+        {% elif anhang.art == 'objekt_dokument' %}
+          📑 {% if anhang.objekt_recht %}
+            <a href="{{ anhang.datei_url }}">Objektdokument {{ anhang.dokument_name }}{% if anhang.seiten %}, S. {{ anhang.seiten|replace('-', '–') }}{% endif %}</a>
+          {% else %}Objektdokument (keine Berechtigung){% endif %}
+        {% else %}
+          📄 <a href="{{ anhang.datei_url }}" download>{{ anhang.beschriftung or anhang.dateiname }}</a>
+        {% endif %}
+        {% if anhang.groesse %}<span class="kp-mono">{{ anhang.groesse }}</span>{% endif %}
+        {% if anhang.vertraulich %}<span class="kp-badge kp-badge--amber">vertraulich</span>{% endif %}
+        {% if anhang_bearbeiten %}{% include "katplan/_anhang_aktionen.html" %}{% endif %}
+      </li>
+    {% endfor %}
+  </ul>
+</div>

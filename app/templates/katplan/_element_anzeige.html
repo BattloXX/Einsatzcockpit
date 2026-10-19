@@ -100,4 +100,7 @@
       {% if relation.hinweis %} · {{ relation.hinweis }}{% endif %}
     </p>
   {% endfor %}
+  {% with anhaenge = element_anhaenge.get(element.id, []), anhang_bearbeiten = false %}
+    {% include "katplan/_anhaenge_anzeige.html" %}
+  {% endwith %}
 </article>

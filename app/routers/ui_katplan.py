@@ -4,8 +4,8 @@ import json
 from datetime import UTC, date, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -20,6 +20,7 @@ from app.models.katplan import (
     KATPLAN_STATUS_LABELS,
     KatplanAbschnitt,
     KatplanAenderung,
+    KatplanAnhang,
     KatplanElement,
     KatplanElementPhase,
     KatplanLink,
@@ -31,8 +32,10 @@ from app.models.katplan import (
     KatplanVersionElement,
 )
 from app.models.major_incident import AUFTRAGSART_LABEL, AUFTRAGSART_WERTE
+from app.models.objekt import Objekt, ObjektDokument
 from app.models.user import User
 from app.routers.ui_objekt import _LESE_ROLLEN
+from app.services import katplan_anhang_service as anhang_service
 from app.services import katplan_freigabe_service as freigabe_service
 from app.services import katplan_link_service as link_service
 from app.services.katplan_geo_service import ableite_punkt, pruefe_geometrie
@@ -59,6 +62,7 @@ from app.services.katplan_zugriff import (
     require_katplan_lesen,
     sieht_vertraulich,
 )
+from app.services.media_service import _storage_root
 
 router = APIRouter(prefix="/katastrophenplaene", tags=["Katastrophenplaene"])
 
@@ -97,7 +101,8 @@ def _kontext(db: Session, user: User, plan: KatplanPlan | None = None) -> dict[s
             "aktuelle_version": aktuelle_version, "freigegeben_von": freigegeben_von,
             "heute": now_local(user.org).date(),
             **(_editor_kontext(db, plan) if plan and darf_bearbeiten(user) else {}),
-            **(_link_kontext(db, user, plan) if plan else {})}
+            **(_link_kontext(db, user, plan) if plan else {}),
+            **(_anhaenge_kontext(db, user, plan) if plan else {})}
 
 
 class Stammdaten:
@@ -127,6 +132,218 @@ class Stammdaten:
                       "geltungsbereich": geltungsbereich.strip() or None,
                       "verantwortliche_stelle": verantwortliche_stelle.strip() or None,
                       "wiedervorlage_am": termin}
+
+
+def _anhang(db: Session, plan: KatplanPlan, uuid: str) -> KatplanAnhang:
+    anhang = db.query(KatplanAnhang).filter_by(org_id=plan.org_id, plan_id=plan.id, uuid=uuid).one_or_none()
+    if anhang is None:
+        raise HTTPException(404, "Nicht gefunden")
+    return anhang
+
+
+def _anhaenge_kontext(db: Session, user: User, plan: KatplanPlan,
+                      elemente: list | None = None, kopf: dict | None = None,
+                      version_id: int | None = None) -> dict:
+    dateien = {a.uuid: a for a in db.query(KatplanAnhang).filter_by(
+        org_id=plan.org_id, plan_id=plan.id).order_by(KatplanAnhang.sort, KatplanAnhang.id).all()}
+    objekt_recht = has_role(user, *_LESE_ROLLEN) and ziel_verfuegbar(db, plan.org_id, "objekt")
+    dokumente = {d.id: d for d in db.query(ObjektDokument).filter_by(
+        org_id=plan.org_id).all()} if objekt_recht else {}
+
+    def ansichten(rohdaten: list[dict]) -> list[dict]:
+        result = []
+        for daten in rohdaten:
+            if daten.get("vertraulich") and not sieht_vertraulich(user):
+                continue
+            a = dateien.get(daten["uuid"])
+            url = "/katastrophenplaene/anhang/" + daten["uuid"]
+            suffix = f"?version_id={version_id}" if version_id is not None else ""
+            dokument = dokumente.get(daten.get("objekt_dokument_id") or 0)
+            result.append({**daten, "datei_url": url + suffix, "thumb_url": url + "/thumb" + suffix,
+                           "groesse": f"{a.groesse_bytes / 1024:.1f} KB" if a and a.groesse_bytes else "",
+                           "urheber": a.urheber if a else "",
+                           "aufnahme_datum": a.aufnahme_datum if a else None,
+                           "sort": a.sort if a else 0,
+                           "objekt_recht": objekt_recht and dokument is not None,
+                           "dokument_name": dokument.dateiname_original if dokument else "Dokument"})
+        return result
+
+    if elemente is not None:
+        element_map = {e.id: ansichten(json.loads(e.anhaenge_json)) for e in elemente}
+        plan_roh = (kopf or {}).get("anhaenge", [])
+    else:
+        element_map = {}
+        plan_roh = []
+        for a in dateien.values():
+            if a.geloescht_am:
+                continue
+            daten = {**anhang_service.anhang_snapshot(a), "abschnitt_id": a.abschnitt_id}
+            if a.element_id:
+                element_map.setdefault(a.element_id, []).extend(ansichten([daten]))
+            else:
+                plan_roh.append(daten)
+    kapitel_map: dict[int, list] = {}
+    for a in plan_roh:
+        if a.get("abschnitt_id"):
+            kapitel_map.setdefault(a["abschnitt_id"], []).extend(ansichten([a]))
+    return {"element_anhaenge": element_map, "kapitel_anhaenge": kapitel_map,
+            "plan_anhaenge": ansichten([a for a in plan_roh if not a.get("abschnitt_id")]),
+            "objektmodul": ziel_verfuegbar(db, plan.org_id, "objekt")}
+
+
+def _anhang_antwort(request: Request, db: Session, user: User, plan: KatplanPlan,
+                    element_id: int | None = None, abschnitt_id: int | None = None,
+                    fehler: str = "", status: int = 200):
+    element = db.query(KatplanElement).filter_by(
+        org_id=plan.org_id, plan_id=plan.id, id=element_id).one_or_none() if element_id else None
+    return templates.TemplateResponse(request, "katplan/_anhaenge.html", {
+        **_kontext(db, user, plan), "anhang_element_id": element_id,
+        "anhang_abschnitt_id": abschnitt_id, "anhang_fehler": fehler,
+        "anhang_version": element.version if element else None, "anhang_oob": True,
+    }, status_code=status)
+
+
+@router.get("/{plan_id}/objektdokumente/suche")
+def objektdokument_suche(plan_id: int, request: Request, q: str = "",
+                         db: Session = Depends(get_db), user: User = Depends(require_katplan_bearbeiten)):
+    plan = _plan(db, plan_id, user)
+    treffer = []
+    if ziel_verfuegbar(db, plan.org_id, "objekt") and len(q.strip()) >= 2:
+        muster = "%" + q.strip().replace("%", r"\%").replace("_", r"\_") + "%"
+        treffer = db.query(ObjektDokument, Objekt.name).join(Objekt, Objekt.id == ObjektDokument.objekt_id).filter(
+            ObjektDokument.org_id == plan.org_id, Objekt.org_id == plan.org_id,
+            ObjektDokument.ist_aktuelle_version.is_(True),
+            or_(Objekt.name.ilike(muster, escape="\\"),
+                ObjektDokument.dateiname_original.ilike(muster, escape="\\")),
+        ).order_by(Objekt.name, ObjektDokument.dateiname_original).limit(30).all()
+    return templates.TemplateResponse(request, "katplan/_objektdokument_treffer.html", {"treffer": treffer})
+
+
+@router.get("/anhang/{uuid}")
+@router.get("/anhang/{uuid}/thumb")
+def anhang_datei(uuid: str, request: Request, version_id: int | None = None,
+                 db: Session = Depends(get_db), user: User = Depends(require_katplan_lesen)):
+    anhang = db.query(KatplanAnhang).filter_by(org_id=user.org_id, uuid=uuid).one_or_none()
+    if anhang is None:
+        raise HTTPException(404, "Nicht gefunden")
+    plan = _plan(db, anhang.plan_id, user)
+    bearbeiten = darf_bearbeiten(user)
+    # Leser duerfen wie in der Versionshistorie jede freigegebene Version des Plans sehen;
+    # anhaenge_aus_version prueft, dass die Version zu diesem Plan gehoert.
+    if not bearbeiten and (plan.status == "archiviert" or not plan.aktuelle_version_id):
+        raise HTTPException(404, "Nicht gefunden")
+    nur_version = not bearbeiten or anhang.geloescht_am is not None or version_id is not None
+    if nur_version:
+        vid = version_id if version_id is not None else plan.aktuelle_version_id
+        referenz = next((a for a in anhang_service.anhaenge_aus_version(db, plan, vid)
+                         if a["uuid"] == uuid), None) if vid else None
+        if referenz is None or (referenz["vertraulich"] and not sieht_vertraulich(user)):
+            raise HTTPException(404, "Nicht gefunden")
+    else:
+        element = db.query(KatplanElement).filter_by(
+            org_id=plan.org_id, plan_id=plan.id, id=anhang.element_id,
+        ).one_or_none() if anhang.element_id else None
+        if (anhang.vertraulich or (element and element.vertraulich)) and not sieht_vertraulich(user):
+            raise HTTPException(404, "Nicht gefunden")
+    thumb = request.url.path.endswith("/thumb")
+    if anhang.art == "objekt_dokument" and not thumb:
+        from app.models.objekt import ObjektDokument
+        if not has_role(user, *_LESE_ROLLEN) or not ziel_verfuegbar(db, user.org_id, "objekt"):
+            raise HTTPException(404, "Nicht gefunden")
+        dokument = db.query(ObjektDokument).filter_by(id=anhang.objekt_dokument_id, org_id=user.org_id).first()
+        if dokument is None:
+            raise HTTPException(404, "Nicht gefunden")
+        return RedirectResponse(f"/objekt-medien/dokument/{dokument.id}/original", status_code=303)
+    rel = anhang.thumb_pfad if thumb else anhang.pfad
+    if anhang.art not in ("foto", "datei") or not rel:
+        raise HTTPException(404, "Nicht gefunden")
+    root = _storage_root().resolve()
+    path = (root / rel).resolve()
+    if not path.is_relative_to(root) or not path.is_file():
+        raise HTTPException(404, "Nicht gefunden")
+    mime = "image/jpeg" if thumb else anhang.mime or "application/octet-stream"
+    disposition = "inline" if anhang.art == "foto" or mime == "application/pdf" else "attachment"
+    return FileResponse(path, media_type=mime, filename=anhang.dateiname or "datei",
+                        content_disposition_type=disposition, headers={"X-Content-Type-Options": "nosniff"})
+
+
+@router.post("/{plan_id}/anhaenge")
+def anhang_anlegen(plan_id: int, request: Request, datei: UploadFile | None = File(None),
+                   url: str = Form(""), objekt_dokument_id: int | None = Form(None),
+                   element_id: int | None = Form(None), abschnitt_id: int | None = Form(None),
+                   beschriftung: str = Form(""), urheber: str = Form(""), aufnahme_datum: str = Form(""),
+                   vertraulich: bool = Form(False), seiten: str = Form(""),
+                   db: Session = Depends(get_db), user: User = Depends(require_katplan_bearbeiten)):
+    plan = _plan(db, plan_id, user)
+    try:
+        if sum((datei is not None, bool(url), objekt_dokument_id is not None)) != 1:
+            raise ValueError("Bitte genau eine Datei, einen Link oder ein Objektdokument angeben.")
+        element = db.query(KatplanElement).filter_by(
+            id=element_id, org_id=plan.org_id, plan_id=plan.id,
+        ).one_or_none() if element_id is not None else None
+        abschnitt = db.query(KatplanAbschnitt).filter_by(
+            id=abschnitt_id, org_id=plan.org_id, plan_id=plan.id,
+        ).one_or_none() if abschnitt_id is not None else None
+        if (element_id is not None and element is None) or (abschnitt_id is not None and abschnitt is None):
+            raise ValueError("Element/Kapitel gehört nicht zu diesem Plan.")
+        kwargs: dict[str, Any] = {"element": element, "abschnitt": abschnitt, "beschriftung": beschriftung,
+                  "urheber": urheber, "aufnahme_datum": date.fromisoformat(aufnahme_datum) if aufnahme_datum else None,
+                  "vertraulich": vertraulich}
+        if datei is not None:
+            anhang_service.anhang_hochladen(db, plan, user, run_async(datei.read),
+                                            datei.filename or "datei", datei.content_type, **kwargs)
+        elif objekt_dokument_id is not None:
+            anhang_service.objektdokument_verlinken(db, plan, user, objekt_dokument_id, seiten, **kwargs)
+        else:
+            anhang_service.link_hinzufuegen(db, plan, user, url, **kwargs)
+        db.commit()
+    except ValueError as exc:
+        db.rollback()
+        return _anhang_antwort(request, db, user, plan, element_id, abschnitt_id, str(exc), 422)
+    except HTTPException as exc:
+        db.rollback()
+        if exc.status_code not in (413, 415, 422):
+            raise
+        return _anhang_antwort(request, db, user, plan, element_id, abschnitt_id, str(exc.detail), exc.status_code)
+    return _anhang_antwort(request, db, user, plan, element_id, abschnitt_id)
+
+
+@router.post("/{plan_id}/anhaenge/{uuid}")
+def anhang_bearbeiten(plan_id: int, uuid: str, request: Request, beschriftung: str = Form(""),
+                      urheber: str = Form(""), aufnahme_datum: str = Form(""),
+                      vertraulich: bool = Form(False), sort: int = Form(0),
+                      db: Session = Depends(get_db), user: User = Depends(require_katplan_bearbeiten)):
+    plan = _plan(db, plan_id, user)
+    anhang = _anhang(db, plan, uuid)
+    try:
+        anhang_service.anhang_aendern(db, plan, user, anhang, beschriftung=beschriftung,
+                                     urheber=urheber, aufnahme_datum=date.fromisoformat(aufnahme_datum)
+                                     if aufnahme_datum else None, vertraulich=vertraulich, sort=sort)
+        db.commit()
+    except ValueError as exc:
+        db.rollback()
+        return _anhang_antwort(request, db, user, plan, anhang.element_id, anhang.abschnitt_id, str(exc), 422)
+    return _anhang_antwort(request, db, user, plan, anhang.element_id, anhang.abschnitt_id)
+
+
+@router.post("/{plan_id}/anhaenge/{uuid}/loeschen")
+def anhang_loeschen(plan_id: int, uuid: str, request: Request,
+                    db: Session = Depends(get_db), user: User = Depends(require_katplan_bearbeiten)):
+    plan = _plan(db, plan_id, user)
+    anhang = _anhang(db, plan, uuid)
+    element_id, abschnitt_id = anhang.element_id, anhang.abschnitt_id
+    try:
+        anhang_service.anhang_entfernen(db, plan, user, anhang)
+        db.commit()
+    except ValueError as exc:
+        db.rollback()
+        return _anhang_antwort(request, db, user, plan, element_id, abschnitt_id, str(exc), 422)
+    except HTTPException as exc:
+        db.rollback()
+        if exc.status_code not in (413, 415, 422):
+            raise
+        return _anhang_antwort(request, db, user, plan, element_id, abschnitt_id, str(exc.detail), exc.status_code)
+    return _anhang_antwort(request, db, user, plan, element_id, abschnitt_id)
 
 
 @router.get("")
@@ -218,6 +435,7 @@ def _lesekontext(db: Session, user: User, plan: KatplanPlan, vid: int | None = N
     return {"lesekopf": {**daten, "wiedervorlage_am": date.fromisoformat(termin) if termin else None},
             "plan_daten": daten, "leseversion": version,
             **_link_kontext(db, user, plan, elemente, daten),
+            **_anhaenge_kontext(db, user, plan, elemente, daten, version.id),
             "version_baum": freigabe_service.version_baum(daten, elemente, mit_vertraulichen=True),
             "typen": ELEMENT_TYPEN,
             "element_daten": {e.id: json.loads(e.daten_json or "{}") for e in elemente},
@@ -284,6 +502,7 @@ def _kartenkontext(db: Session, user: User, plan: KatplanPlan, arbeitsstand: boo
 def _kopfkontext(db: Session, user: User, plan: KatplanPlan) -> dict:
     arbeitsstand = _ist_arbeitsstand(user, plan, "")
     return {**_kontext(db, user, plan), "arbeitsstand": arbeitsstand,
+            **(_lesekontext(db, user, plan) if not arbeitsstand else {}),
             **_kartenkontext(db, user, plan, arbeitsstand)}
 
 
@@ -359,7 +578,8 @@ def vergleich(plan_id: int, request: Request, von: int | None = None, nach: str 
     if not sieht_vertraulich(user):
         alt_elemente = [e for e in alt_elemente if e.element_uuid not in verborgen]
         neu_elemente = [e for e in neu_elemente if e.element_uuid not in verborgen]
-    diff = freigabe_service.vergleiche_versionen(alt_elemente, neu_elemente, alt_kopf, neu_kopf)
+    diff = freigabe_service.vergleiche_versionen(alt_elemente, neu_elemente, alt_kopf, neu_kopf,
+                                                mit_vertraulichen=sieht_vertraulich(user))
     feldgruppen = [diff["kopf"], *(e["felder"] for e in diff["geaendert"])]
     for gruppe in feldgruppen:
         for feld in gruppe:
@@ -929,6 +1149,7 @@ def element_duplizieren(plan_id: int, eid: int, request: Request, ziel_plan_id: 
                  KatplanPhase.org_id == user.org_id, KatplanPhase.plan_id == plan.id).all():
             db.add(KatplanElementPhase(org_id=user.org_id, element_id=kopie.id, phase_id=z.phase_id))
     verweis = f"Quelle: Plan {plan.id}, Element {quelle.uuid}; Ziel: Plan {ziel.id}, Element {kopie.uuid}"
+    verweis += "; Anhänge nicht kopiert"
     protokolliere(db, ziel, "element", "dupliziert", user, neu=verweis, element_id=kopie.id)
     if not gleicher_plan:
         protokolliere(db, plan, "element", "dupliziert", user, neu=verweis, element_id=quelle.id)

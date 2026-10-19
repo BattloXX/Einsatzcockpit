@@ -6,6 +6,9 @@
         {% if k.abschnitt.beschreibung_html %}
           <div>{{ k.abschnitt.beschreibung_html|safe }}</div>
         {% endif %}
+        {% with anhaenge = kapitel_anhaenge.get(k.abschnitt.id, []), anhang_bearbeiten = false %}
+            {% include "katplan/_anhaenge_anzeige.html" %}
+          {% endwith %}
       {% elif k.elemente %}
         <h2>Ohne Kapitel</h2>
       {% endif %}

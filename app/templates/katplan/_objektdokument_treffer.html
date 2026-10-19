@@ -1,0 +1,7 @@
+{% include "katplan/_design.html" %}
+{% for dokument, objektname in treffer %}
+  <label class="kp-row">
+    <input type="radio" name="objekt_dokument_id" value="{{ dokument.id }}" required>
+    {{ objektname }} · {{ dokument.dateiname_original }} · {{ dokument.seitenzahl }} Seiten
+  </label>
+{% else %}<p>Keine aktuellen Objektdokumente gefunden (mindestens 2 Zeichen).</p>{% endfor %}

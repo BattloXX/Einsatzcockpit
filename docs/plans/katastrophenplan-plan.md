@@ -176,7 +176,8 @@ Kontakt seit Freigabe geändert, `pruefen_am` überschritten, KI-Herkunft noch n
 
 - **Fotos/Dateien:** über generalisierte Helfer aus `media_service` (Bild verkleinern, Thumb,
   MIME-Erkennung, Quota über `storage_service.reserve_storage`). Ablage unter
-  `settings.KATPLAN_MEDIA_DIR/{org_id}/{plan_uuid}/…`.
+  `MEDIA_STORAGE_DIR/{org_id}/katplan/{plan_uuid}/{anhang_uuid}/…`.
+- **Duplizieren:** Anhänge werden nicht kopiert; das Protokoll enthält "Anhänge nicht kopiert".
 - **Objektdokumente verlinken:** Anhang-Art `objekt_dokument` mit `objekt_dokument_id` und
   optional Seiten. Ausgeliefert wird über die bestehende Objekt-Dokumentroute samt deren Rechten.
 - **Importierte Planquellen:** `katplan_dokument` mit generalisierter Seiten-Pipeline (K7a).
@@ -291,4 +292,5 @@ Templates nicht minifizieren, nur gezielte Testdateien laufen lassen, Testliste 
 | K3 Versionen & Freigabe | #625 | Migration 0295, Snapshot-Versionen (unveränderlich), Workflow ohne Vier-Augen, Lesesicht, Historie, Vergleich, Wiedervorlage-Mail, Übersicht-Badge |
 | K4 Verknüpfungen | #626 | Migration 0296, Links zu Kontakt/Organisation/Objekt/Fahrzeug/Wasserstelle, Beziehungen, Snapshot bei Freigabe, Telefonregel (Verzeichnisrecht oder einsatzrelevant+Dienst) |
 | K5 Karte | (dieser PR) | Geometrie je Element mit Prüfstatus, Adresssuche, Plankarte mit Filtern; validate_geometry bleibt in road_closure_geo_service (nicht verschoben) |
-| K6–K13 | – | offen (Pilot-PDF liegt außerhalb des Repos vor) |
+| K6 Anhänge | (dieser PR) | K6a: Migration 0297, Upload/Quota/Snapshots und geschützte Auslieferung; K6b: Verwaltung auf Element-/Kapitel-/Planebene, Galerie/Lightbox, Objektdokument-Suche, Versions-OOB, Baumzähler und historische URLs mit version_id |
+| K7–K13 | – | offen (Pilot-PDF liegt außerhalb des Repos vor) |

@@ -326,3 +326,44 @@ class KatplanVersionElement(TenantScoped, Base):
 @sa.event.listens_for(KatplanVersionElement, "before_update")
 def _version_unveraenderlich(mapper, connection, target) -> None:
     raise RuntimeError("Freigegebene Versionen sind unveränderlich")
+
+
+class KatplanAnhang(TenantScoped, Base):
+    __tablename__ = "katplan_anhang"
+    __table_args__ = (
+        sa.Index("ix_katplan_anhang_org_plan", "org_id", "plan_id"),
+        sa.Index("ix_katplan_anhang_org_element", "org_id", "element_id"),
+    )
+
+    id: Mapped[int] = mapped_column(sa.BigInteger, primary_key=True, autoincrement=True)
+    uuid: Mapped[str] = mapped_column(sa.String(36), nullable=False, unique=True, default=lambda: str(uuid4()))
+    plan_id: Mapped[int] = mapped_column(
+        sa.BigInteger, sa.ForeignKey("katplan_plan.id", ondelete="CASCADE"), nullable=False
+    )
+    abschnitt_id: Mapped[int | None] = mapped_column(
+        sa.BigInteger, sa.ForeignKey("katplan_abschnitt.id", ondelete="SET NULL"), nullable=True
+    )
+    element_id: Mapped[int | None] = mapped_column(
+        sa.BigInteger, sa.ForeignKey("katplan_element.id", ondelete="SET NULL"), nullable=True
+    )
+    art: Mapped[str] = mapped_column(sa.String(20), nullable=False)
+    dateiname: Mapped[str | None] = mapped_column(sa.String(255), nullable=True)
+    pfad: Mapped[str | None] = mapped_column(sa.String(500), nullable=True)
+    thumb_pfad: Mapped[str | None] = mapped_column(sa.String(500), nullable=True)
+    mime: Mapped[str | None] = mapped_column(sa.String(100), nullable=True)
+    groesse_bytes: Mapped[int] = mapped_column(sa.BigInteger, nullable=False, default=0)
+    breite: Mapped[int | None] = mapped_column(sa.Integer, nullable=True)
+    hoehe: Mapped[int | None] = mapped_column(sa.Integer, nullable=True)
+    url: Mapped[str | None] = mapped_column(sa.String(1000), nullable=True)
+    objekt_dokument_id: Mapped[int | None] = mapped_column(sa.BigInteger, nullable=True)
+    seiten: Mapped[str | None] = mapped_column(sa.String(30), nullable=True)
+    beschriftung: Mapped[str] = mapped_column(sa.String(300), nullable=False, default="")
+    urheber: Mapped[str] = mapped_column(sa.String(150), nullable=False, default="")
+    aufnahme_datum: Mapped[date | None] = mapped_column(sa.Date, nullable=True)
+    vertraulich: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, default=False)
+    sort: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=0)
+    geloescht_am: Mapped[datetime | None] = mapped_column(sa.DateTime, nullable=True)
+    erstellt_am: Mapped[datetime] = mapped_column(sa.DateTime, nullable=False, default=_utcnow)
+    erstellt_von_id: Mapped[int | None] = mapped_column(
+        sa.BigInteger, sa.ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )

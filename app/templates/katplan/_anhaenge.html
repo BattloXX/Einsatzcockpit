@@ -1,0 +1,58 @@
+{% include "katplan/_design.html" %}
+{% set eid = anhang_element_id|default(none) %}
+{% set aid = anhang_abschnitt_id|default(none) %}
+{% set anhang_ziel = 'kp-anhaenge-element-' ~ eid if eid else ('kp-anhaenge-kapitel-' ~ aid if aid else 'kp-anhaenge-plan-' ~ plan.id) %}
+{% set anhaenge = element_anhaenge.get(eid, []) if eid else (kapitel_anhaenge.get(aid, []) if aid else plan_anhaenge) %}
+{% set anhang_bearbeiten = true %}
+<section id="{{ anhang_ziel }}" class="kp-form kp-anhaenge" data-kp-anhaenge
+  hx-on::before-swap="if ([413, 415, 422].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false; }">
+  <h3 class="kp-box__title">Anhänge</h3>
+  {% if anhang_fehler %}<p role="alert" class="kp-error">{{ anhang_fehler }}</p>{% endif %}
+  {% include "katplan/_anhaenge_anzeige.html" %}
+  {% if not anhaenge %}<p>Keine Anhänge vorhanden.</p>{% endif %}
+  <details>
+    <summary>Hinzufügen</summary>
+    <div x-data="{ art: 'datei' }">
+      <div class="kp-chips" role="tablist" aria-label="Anhangsart">
+        <button type="button" class="btn" role="tab" :aria-selected="art === 'datei'" @click="art = 'datei'">Datei/Foto</button>
+        <button type="button" class="btn" role="tab" :aria-selected="art === 'link'" @click="art = 'link'">Link</button>
+        {% if objektmodul %}<button type="button" class="btn" role="tab" :aria-selected="art === 'objekt'" @click="art = 'objekt'">Objektdokument</button>{% endif %}
+      </div>
+      {% for art in ['datei', 'link', 'objekt'] if art != 'objekt' or objektmodul %}
+        <form method="post" action="/katastrophenplaene/{{ plan.id }}/anhaenge" enctype="multipart/form-data"
+          hx-post="/katastrophenplaene/{{ plan.id }}/anhaenge" hx-encoding="multipart/form-data"
+          hx-target="#{{ anhang_ziel }}" hx-swap="outerHTML" class="kp-form" x-show="art === '{{ art }}'"
+          {% if art == 'datei' %}data-kp-mehrfach-upload{% endif %}>
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          {% if eid %}<input type="hidden" name="element_id" value="{{ eid }}">{% endif %}
+          {% if aid %}<input type="hidden" name="abschnitt_id" value="{{ aid }}">{% endif %}
+          {% if art == 'datei' %}
+            <label>Datei/Foto<input class="form-control" type="file" name="datei" multiple accept="image/*,application/pdf,.docx,.xlsx,.odt,.ods,.txt"></label>
+            <button type="button" class="btn kp-kamera" data-kp-kamera-oeffnen>Kamera öffnen</button>
+            <input class="form-control" type="file" capture="environment" accept="image/*" data-kp-kamera hidden aria-label="Kamerafoto">
+          {% elif art == 'link' %}
+            <label>URL<input class="form-control" type="url" name="url" required maxlength="1000"></label>
+          {% else %}
+            <label>Objektdokument suchen
+              <input class="form-control" type="search" name="q" placeholder="Objekt oder Dokument, mindestens 2 Zeichen"
+                hx-get="/katastrophenplaene/{{ plan.id }}/objektdokumente/suche" hx-trigger="input changed delay:300ms, search"
+                hx-target="#{{ anhang_ziel }}-objekttreffer" hx-swap="innerHTML">
+            </label>
+            <div id="{{ anhang_ziel }}-objekttreffer"></div>
+            <label>Seitenbereich<input class="form-control" name="seiten" placeholder="z. B. 2-4" maxlength="30"></label>
+          {% endif %}
+          <label>Beschriftung<input class="form-control" name="beschriftung" maxlength="300"></label>
+          <label><input type="checkbox" name="vertraulich" value="true"> Vertraulich</label>
+          <button type="submit" class="btn">Hinzufügen</button>
+        </form>
+      {% endfor %}
+    </div>
+  </details>
+  <p role="status" data-kp-upload-status aria-live="polite"></p>
+</section>
+{% if anhang_oob %}
+  {% if anhang_version is not none %}<input type="hidden" name="version" id="kp-element-version" value="{{ anhang_version }}" hx-swap-oob="outerHTML">{% endif %}
+  {% set baum_oob = true %}
+  {% set sortierung_status = true %}
+  {% include "katplan/_baum.html" %}
+{% endif %}

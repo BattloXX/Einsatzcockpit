@@ -128,6 +128,7 @@ _TENANT_TABLE_NAMES: frozenset[str] = frozenset({
     # Katastrophenplaene
     "katplan_version",
     "katplan_version_element",
+    "katplan_anhang",
     "katplan_link",
     "katplan_relation",
     "katplan_plan",

@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.core.timezones import now_local
 from app.models.katplan import (
     KatplanAbschnitt,
+    KatplanAnhang,
     KatplanElement,
     KatplanElementPhase,
     KatplanLink,
@@ -26,6 +27,7 @@ from app.models.katplan import (
 )
 from app.models.master import FireDept
 from app.models.user import User
+from app.services.katplan_anhang_service import HASH_FELDER, anhang_snapshot
 from app.services.katplan_link_service import link_snapshot
 from app.services.katplan_link_service import links_aus_version as links_aus_version
 from app.services.katplan_service import _HTMLText, protokolliere
@@ -58,6 +60,11 @@ def erstelle_snapshot(db: Session, plan: KatplanPlan, *, flush: bool = True) -> 
     kopf["links"] = [link_snapshot(db, link) for link in db.query(KatplanLink).filter_by(
         org_id=plan.org_id, plan_id=plan.id, element_id=None,
     ).order_by(KatplanLink.sort, KatplanLink.id)]
+    anhaenge = db.query(KatplanAnhang).filter_by(
+        org_id=plan.org_id, plan_id=plan.id, geloescht_am=None,
+    ).order_by(KatplanAnhang.sort, KatplanAnhang.uuid).all()
+    kopf["anhaenge"] = [{**anhang_snapshot(a), "abschnitt_id": a.abschnitt_id}
+                        for a in anhaenge if a.element_id is None]
     phasen_ids = [p["id"] for p in kopf["phasen"]]
     elemente = []
     for element in db.query(KatplanElement).filter_by(org_id=plan.org_id, plan_id=plan.id).order_by(
@@ -67,7 +74,8 @@ def erstelle_snapshot(db: Session, plan: KatplanPlan, *, flush: bool = True) -> 
                  if c.name not in {"id", "org_id", "version_id", "element_uuid", "phasen_json",
                                    "links_json", "relationen_json", "anhaenge_json", "gsl_json"}}
         daten.update(element_uuid=element.uuid, links_json=_json(_link_snapshot(db, element)),
-                     anhaenge_json="[]", gsl_json=_json({c.name: getattr(element, c.name)
+                     anhaenge_json=_json([anhang_snapshot(a) for a in anhaenge if a.element_id == element.id]),
+                     gsl_json=_json({c.name: getattr(element, c.name)
                                                         for c in KatplanElement.__table__.columns
                                                         if c.name.startswith("gsl_")}))
         daten["relationen_json"] = _json([{f: getattr(r, f) for f in ("zu_element_uuid", "art", "hinweis")}
@@ -123,7 +131,11 @@ def freigeben(db: Session, plan: KatplanPlan, user: User,
     # Nur die Verknuepfungsstruktur ist Planinhalt. Live-Stammdaten im historischen
     # Snapshot duerfen allein keine erneute Freigabe ermoeglichen.
     hash_daten[0]["links"] = _link_struktur(hash_daten[0].get("links", []))
+    hash_daten[0]["anhaenge"] = [{f: a.get(f) for f in HASH_FELDER}
+                                 for a in hash_daten[0]["anhaenge"]]
     for daten in hash_daten[1]:
+        daten["anhaenge_json"] = _json([{f: a.get(f) for f in HASH_FELDER}
+                                       for a in json.loads(daten["anhaenge_json"])])
         daten["links_json"] = _json(_link_struktur(json.loads(daten["links_json"])))
         daten.pop("suchtext", None)  # Abgeleiteter Index enthaelt Live-Anzeigenamen.
     inhalt_hash = hashlib.sha256(_json(hash_daten).encode("utf-8")).hexdigest()
@@ -204,7 +216,7 @@ def _link_struktur(links: list[dict]) -> list[dict]:
     return [{f: link.get(f) for f in ("ziel_typ", "ziel_id", "rolle", "hinweis")} for link in links]
 
 
-def _aenderungen(alt: dict, neu: dict) -> list[dict]:
+def _aenderungen(alt: dict, neu: dict, verborgene_anhaenge: set[str] | None = None) -> list[dict]:
     ergebnis = []
     for feld in sorted(alt.keys() | neu.keys()):
         a, n = alt.get(feld), neu.get(feld)
@@ -214,10 +226,16 @@ def _aenderungen(alt: dict, neu: dict) -> list[dict]:
             a, n = json.loads(a) if a else None, json.loads(n) if n else None
         if feld in ("links", "links_json"):
             a, n = _link_struktur(a or []), _link_struktur(n or [])
+        if feld in ("anhaenge", "anhaenge_json"):
+            a, n = ([{f: item.get(f) for f in (*HASH_FELDER, "abschnitt_id")}
+                     for item in daten or [] if item["uuid"] not in (verborgene_anhaenge or set())]
+                    for daten in (a, n))
         if a != n:
             wert = {"feld": feld, "alt": a, "neu": n}
             if feld in ("links", "links_json", "relationen_json"):
                 wert["label"] = "Beziehungen" if feld == "relationen_json" else "Verknüpfungen"
+            if feld in ("anhaenge", "anhaenge_json"):
+                wert["label"] = "Anhänge"
             if feld == "beschreibung_html":
                 # Nur Inhaltszeilen; die technischen Kopfzeilen (---/+++/@@) sind fuer Anwender wertlos.
                 wert["diff"] = [z for z in difflib.unified_diff(_textzeilen(alt.get(feld)), _textzeilen(neu.get(feld)),
@@ -228,7 +246,11 @@ def _aenderungen(alt: dict, neu: dict) -> list[dict]:
 
 
 def vergleiche_versionen(alt_elemente: list[KatplanVersionElement], neu_elemente: list[KatplanVersionElement],
-                        alt_plan: dict, neu_plan: dict) -> dict:
+                        alt_plan: dict, neu_plan: dict, *, mit_vertraulichen: bool = True) -> dict:
+    anhaenge = [*alt_plan.get("anhaenge", []), *neu_plan.get("anhaenge", [])]
+    for element in [*alt_elemente, *neu_elemente]:
+        anhaenge.extend(json.loads(element.anhaenge_json or "[]"))
+    verborgen = {a["uuid"] for a in anhaenge if a.get("vertraulich")} if not mit_vertraulichen else set()
     alt = {e.element_uuid: e for e in alt_elemente}
     neu = {e.element_uuid: e for e in neu_elemente}
     felder = [c.name for c in KatplanVersionElement.__table__.columns
@@ -236,11 +258,11 @@ def vergleiche_versionen(alt_elemente: list[KatplanVersionElement], neu_elemente
     geaendert = []
     for uuid in sorted(alt.keys() & neu.keys()):
         diff = _aenderungen({f: getattr(alt[uuid], f) for f in felder},
-                           {f: getattr(neu[uuid], f) for f in felder})
+                           {f: getattr(neu[uuid], f) for f in felder}, verborgen)
         if diff:
             geaendert.append({"element_uuid": uuid, "felder": diff})
     kopf = _aenderungen({k: v for k, v in alt_plan.items() if k not in ("abschnitte", "phasen")},
-                        {k: v for k, v in neu_plan.items() if k not in ("abschnitte", "phasen")})
+                        {k: v for k, v in neu_plan.items() if k not in ("abschnitte", "phasen")}, verborgen)
     struktur = {}
     for name in ("abschnitte", "phasen"):
         a = {str(v["id"]): v for v in alt_plan.get(name, [])}

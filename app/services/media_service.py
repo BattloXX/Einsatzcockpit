@@ -856,3 +856,101 @@ def delete_uas_medien(medien, db: Session) -> None:
     if n_bytes > 0:
         _release(db, medien.org_id, n_bytes)
     db.delete(medien)
+
+
+def store_upload_for_katplan_anhang(
+    raw: bytes, filename: str, content_type: str | None, anhang, plan, db: Session,
+) -> None:
+    """Synchrone Katplan-Pipeline; Quota umfasst Original und Thumbnail.
+
+    Buerodateien bleiben download-only. Magic Bytes haben Vorrang vor Client-MIME.
+    Bei Verarbeitungs- oder Quota-Fehlern bleiben keine Dateien zurueck.
+    """
+    import zipfile
+
+    name = _safe_filename(filename)
+    suffix = Path(name).suffix.lower()
+    mime = _detect_mime(raw)
+    office = {
+        ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ".odt": "application/vnd.oasis.opendocument.text",
+        ".ods": "application/vnd.oasis.opendocument.spreadsheet",
+    }
+    if not raw or suffix in _DANGEROUS_FILE_EXTENSIONS:
+        raise ValueError("Dateityp nicht erlaubt")
+    kind = "image" if mime in IMAGE_MIMES else "pdf"
+    if mime in IMAGE_MIMES:
+        if mime in {"image/heic", "image/heif"} and not _HEIC_OK:
+            raise ValueError("HEIC-Dateien werden auf diesem Server nicht unterstuetzt.")
+    elif mime == "application/pdf":
+        pass
+    elif suffix in office and mime in (None, "application/zip", office[suffix]):
+        try:
+            with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+                names = set(archive.namelist())
+                expected = {".docx": "word/document.xml", ".xlsx": "xl/workbook.xml",
+                            ".odt": "content.xml", ".ods": "content.xml"}[suffix]
+                if expected not in names:
+                    raise ValueError("Dateityp nicht erlaubt")
+        except zipfile.BadZipFile as exc:
+            raise ValueError("Dateityp nicht erlaubt") from exc
+        mime = office[suffix]
+    elif suffix == ".txt" and mime is None:
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise ValueError("Dateityp nicht erlaubt") from exc
+        if "\x00" in text or text.lstrip().lower().startswith(("<", "mz", "#!")):
+            raise ValueError("Dateityp nicht erlaubt")
+        mime = "text/plain"
+    else:
+        raise ValueError("Dateityp nicht erlaubt")
+    if len(raw) > _size_limit_for_kind(kind):
+        raise HTTPException(413, "Datei zu gross.")
+    root = _storage_root().resolve()
+    dest = root / str(plan.org_id) / "katplan" / plan.uuid / anhang.uuid
+    dest.resolve().relative_to(root)
+    dest.mkdir(parents=True, exist_ok=False)
+    reserved = 0
+    try:
+        thumb = None
+        width = height = None
+        if kind == "image":
+            try:
+                main, thumb, width, height, mime = _process_image(raw, dest)
+            except (OSError, ValueError) as exc:
+                raise ValueError("Ungueltige Bilddatei.") from exc
+        else:
+            main = dest / name
+            main.write_bytes(raw)
+            # Helfer schuetzt auch kuenftige zusaetzliche Download-Typen.
+            mime = _file_mime(raw, name, mime or content_type)
+        size = main.stat().st_size + (thumb.stat().st_size if thumb else 0)
+        _reserve(db, plan.org_id, size)
+        reserved = size
+        anhang.art = "foto" if kind == "image" else "datei"
+        anhang.dateiname = name
+        anhang.mime = mime
+        anhang.pfad = main.relative_to(root).as_posix()
+        anhang.thumb_pfad = thumb.relative_to(root).as_posix() if thumb else None
+        anhang.breite, anhang.hoehe = width, height
+        anhang.groesse_bytes = size
+        db.add(anhang)
+        db.flush()
+    except Exception:
+        shutil.rmtree(dest)
+        if reserved:
+            _release(db, plan.org_id, reserved)
+        raise
+
+
+def delete_katplan_anhang_dateien(anhang, db: Session) -> None:
+    """Dateien sicher entfernen und den gesamten belegten Storage freigeben."""
+    root = _storage_root().resolve()
+    paths = [(root / rel).resolve() for rel in (anhang.pfad, anhang.thumb_pfad) if rel]
+    for path in paths:
+        path.relative_to(root)
+    for path in paths:
+        path.unlink(missing_ok=True)
+    _release(db, anhang.org_id, anhang.groesse_bytes or 0)
