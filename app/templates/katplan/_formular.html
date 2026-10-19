@@ -27,10 +27,8 @@
         {% endfor %}
       </div>
     </fieldset>
-    <label>
-      Beschreibung
-      <textarea name="beschreibung_html" class="form-control">{{ form.get('beschreibung_html', '') }}</textarea>
-    </label>
+    {% set beschreibung = form.get('beschreibung_html', '') %}
+    {% include "katplan/_quill.html" %}
     <label>
       Geltungsbereich
       <input name="geltungsbereich" maxlength="300" value="{{ form.get('geltungsbereich', '') }}" class="form-control">

@@ -2,6 +2,10 @@
 {% block title %}Neuer Katastrophenplan{% endblock %}
 {% block head_extra %}
   {% include "katplan/_design.html" %}
+  <link href="/static/css/quill.snow.css" rel="stylesheet">
+  <script src="/static/js/quill.min.js" defer></script>
+  <script src="/static/js/sortable.min.js" defer></script>
+  <script src="/static/js/katplan_editor.js" defer></script>
 {% endblock %}
 {% block content %}
 <section class="kp-page">

@@ -1,0 +1,21 @@
+<div x-init="daten.gefahren = (daten.gefahren || []).filter(zeile => typeof zeile === 'string')">
+  <h3>Gefahren</h3>
+  <template x-for="(zeile, index) in daten.gefahren" :key="index">
+    <div class="kp-listen-zeile">
+      <label>
+        Gefahr
+        <input class="form-control" x-model="daten.gefahren[index]">
+      </label>
+      <button type="button" class="btn" @click="daten.gefahren.splice(index, 1)">Entfernen</button>
+    </div>
+  </template>
+  <button type="button" class="btn" @click="daten.gefahren.push('')">+ Zeile</button>
+</div>
+<label>
+  Kontrollhinweise
+  <textarea class="form-control" x-model="daten.kontrollhinweise"></textarea>
+</label>
+<label>
+  Zugänglichkeit
+  <textarea class="form-control" x-model="daten.zugaenglichkeit"></textarea>
+</label>

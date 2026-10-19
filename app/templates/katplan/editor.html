@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}{{ plan.titel }} bearbeiten{% endblock %}
+{% block head_extra %}
+  {% include "katplan/_design.html" %}
+  <link href="/static/css/quill.snow.css" rel="stylesheet">
+  <script src="/static/js/quill.min.js" defer></script>
+  <script src="/static/js/sortable.min.js" defer></script>
+  <script src="/static/js/katplan_editor.js" defer></script>
+{% endblock %}
+{% block content %}
+<section class="kp-page">
+  <a href="/katastrophenplaene/{{ plan.id }}">← Zurück zum Plan</a>
+  <h1>{{ plan.titel }} bearbeiten</h1>
+  <span id="kp-editor-status" class="kp-badge">{{ status_labels[plan.status] }}</span>
+  <div class="kp-editor" hx-on::before-swap="if ([409, 422].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false; }">
+    {% include "katplan/_baum.html" %}
+    <div id="kp-detail" aria-live="polite">
+      {% include "katplan/_leer.html" %}
+    </div>
+  </div>
+</section>
+{% endblock %}

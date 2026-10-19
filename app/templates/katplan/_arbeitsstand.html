@@ -1,0 +1,20 @@
+{% macro inhalt(knoten) %}
+  {% for k in knoten %}
+    <section>
+      {% if k.abschnitt %}
+        <h2>{{ k.abschnitt.titel }}</h2>
+        {% if k.abschnitt.beschreibung_html %}
+          <div>{{ k.abschnitt.beschreibung_html|safe }}</div>
+        {% endif %}
+      {% elif k.elemente %}
+        <h2>Ohne Kapitel</h2>
+      {% endif %}
+      {% for element in k.elemente %}
+        {% include "katplan/_element_anzeige.html" %}
+      {% endfor %}
+      {{ inhalt(k.kinder) }}
+    </section>
+  {% endfor %}
+{% endmacro %}
+<a href="/katastrophenplaene/{{ plan.id }}/bearbeiten" class="btn btn--primary">Bearbeiten</a>
+{{ inhalt(baum) }}

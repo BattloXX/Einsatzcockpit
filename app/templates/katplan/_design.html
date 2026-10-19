@@ -13,7 +13,40 @@
   .kp-form .kp-chip { display: flex; align-items: center; gap: .4rem; }
   .kp-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
   .kp-meta dd { margin: .25rem 0 0; }
+  .kp-editor { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 1.5rem; margin-top: 1rem; }
+  .kp-editor > *, .kp-editor fieldset, .kp-schnell > * { min-width: 0; max-width: 100%; }
+  .kp-baum-liste, .kp-element-liste { list-style: none; padding-left: 0; }
+  .kp-unterkapitel { list-style: none; padding-left: .75rem; border-left: 1px solid var(--border); }
+  .kp-schnell { display: flex; flex-wrap: wrap; gap: .4rem; margin: .6rem 0; }
+  .kp-schnell input, .kp-schnell select { flex: 1 1 9rem; min-width: 0; width: 100%; }
+  .kp-aktiv { background: rgba(99, 102, 241, .18); border-left: 3px solid var(--primary, #4338ca); }
+  .kp-prio-1 { color: var(--danger, #dc2626); font-weight: bold; }
+  .kp-prio-2 { font-weight: bold; }
+  .kp-listen-zeile { display: grid; gap: .5rem; margin-bottom: 1rem; }
+  .kp-tabelle { width: 100%; table-layout: fixed; overflow-wrap: anywhere; }
+  .kp-tabelle th, .kp-tabelle td { padding: .4rem; text-align: left; border-bottom: 1px solid var(--border); }
+  .kp-freitext { white-space: pre-wrap; }
+  .kp-farbe-gruen { border-color: #16a34a; }
+  .kp-farbe-gelb { border-color: #ca8a04; }
+  .kp-farbe-orange { border-color: #ea580c; }
+  .kp-farbe-rot { border-color: #dc2626; }
+  .kp-farbe-blau { border-color: #2563eb; }
+  .kp-farbe-grau { border-color: #6b7280; }
+  .kp-griff { display: inline-flex; min-width: 44px; min-height: 44px; align-items: center; justify-content: center; cursor: grab; touch-action: none; }
+  .kp-element-liste { min-height: 2rem; }
+  .kp-quill-field { min-width: 0; display: grid; gap: .3rem; }
+  .kp-quill-field .ql-container.ql-snow { height: auto; }
+  .kp-quill-field .ql-toolbar.ql-snow { background: var(--surface-low); border: 1px solid var(--border); border-radius: 8px 8px 0 0; }
+  .kp-quill-field .ql-container.ql-snow { background: var(--surface, #0b1326); color: var(--on-surface, #dae2fd); border: 1px solid var(--border); border-radius: 0 0 8px 8px; font-size: .95rem; }
+  .kp-quill-field .ql-editor { min-height: 9rem; overflow-wrap: anywhere; }
+  .kp-quill-field .ql-editor.ql-blank::before { color: var(--text-muted); }
+  .kp-quill-field .ql-stroke { stroke: var(--on-surface, #dae2fd); }
+  .kp-quill-field .ql-fill { fill: var(--on-surface, #dae2fd); }
+  .kp-quill-field .ql-picker { color: var(--on-surface); }
+  .kp-quill-field .ql-picker-options, .kp-quill-field .ql-tooltip { background: var(--surface-elevated, #1e2130); color: var(--on-surface); border-color: var(--border); }
+  .kp-quill-field .ql-picker-label { border-color: var(--border); }
   @media (max-width: 760px) {
+    .kp-editor { grid-template-columns: minmax(0, 1fr); }
     .kp-row, .kp-meta { grid-template-columns: 1fr; }
     .kp-filter > label { width: 100%; }
     .kp-filter input, .kp-filter select { width: 100%; }

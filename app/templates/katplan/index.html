@@ -14,11 +14,11 @@
   <form method="get" action="/katastrophenplaene" class="kp-filter" hx-get="/katastrophenplaene" hx-target="#kp-liste" hx-swap="outerHTML">
     <label>
       Titel
-      <input name="q" value="{{ q }}" type="search">
+      <input class="form-control" name="q" value="{{ q }}" type="search">
     </label>
     <label>
       Gefahrenart
-      <select name="gefahr">
+      <select class="form-control" name="gefahr">
         <option value="">Alle Gefahrenarten</option>
         {% for code, label in gefahrenarten.items() %}
           <option value="{{ code }}" {% if gefahr == code %}selected{% endif %}>{{ label }}</option>
@@ -27,7 +27,7 @@
     </label>
     <label>
       Status
-      <select name="status">
+      <select class="form-control" name="status">
         <option value="">Alle Status</option>
         {% for code, label in status_labels.items() %}
           <option value="{{ code }}" {% if status == code %}selected{% endif %}>{{ label }}</option>

@@ -1,0 +1,25 @@
+<div x-init="daten.bedarf = (daten.bedarf || []).map(zeile => typeof zeile === 'string' ? { bezeichnung: zeile } : zeile)">
+  <h3>Bedarf</h3>
+  <template x-for="(zeile, index) in daten.bedarf" :key="index">
+    <div class="kp-listen-zeile">
+      <label>
+        Bezeichnung
+        <input class="form-control" x-model="zeile.bezeichnung">
+      </label>
+      <label>
+        Menge
+        <input class="form-control" x-model="zeile.menge">
+      </label>
+      <label>
+        Einheit
+        <input class="form-control" x-model="zeile.einheit">
+      </label>
+      <button type="button" class="btn" @click="daten.bedarf.splice(index, 1)">Entfernen</button>
+    </div>
+  </template>
+  <button type="button" class="btn" @click="daten.bedarf.push({})">+ Zeile</button>
+</div>
+<label>
+  Lagerort
+  <textarea class="form-control" x-model="daten.lagerort"></textarea>
+</label>

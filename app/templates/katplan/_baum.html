@@ -1,0 +1,72 @@
+{% macro schnellerfassung(abschnitt_id) %}
+  <form method="post" action="/katastrophenplaene/{{ plan.id }}/elemente" hx-post="/katastrophenplaene/{{ plan.id }}/elemente" hx-target="#kp-detail" class="kp-schnell">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <input type="hidden" name="abschnitt_id" value="{{ abschnitt_id or '' }}">
+    <select class="form-control" name="typ" aria-label="Elementtyp">
+      {% for code, typ in typen.items() %}
+        <option value="{{ code }}">{{ typ.icon }} {{ typ.label }}</option>
+      {% endfor %}
+    </select>
+    <select class="form-control" name="vorlage" aria-label="Elementvorlage">
+      <option value="">– keine –</option>
+      {% for code, vorlage in vorlagen.items() %}
+        <option value="{{ code }}">{{ vorlage.label }}</option>
+      {% endfor %}
+    </select>
+    <input class="form-control" name="titel" maxlength="200" placeholder="Neues Element" aria-label="Elementtitel">
+    <button type="submit" class="btn" aria-label="Element anlegen">+</button>
+  </form>
+{% endmacro %}
+{% macro kapitel(knoten) %}
+  {% for k in knoten %}
+    <li {% if k.abschnitt %}data-abschnitt-id="{{ k.abschnitt.id }}"{% endif %}>
+      {% if k.abschnitt %}
+        <span class="kp-griff" aria-hidden="true">⋮⋮</span>
+        <a href="/katastrophenplaene/{{ plan.id }}/abschnitte/{{ k.abschnitt.id }}" hx-get="/katastrophenplaene/{{ plan.id }}/abschnitte/{{ k.abschnitt.id }}" hx-target="#kp-detail">{{ k.abschnitt.titel }}</a>
+      {% else %}
+        <h3>Ohne Kapitel</h3>
+      {% endif %}
+      <ul class="kp-element-liste" data-abschnitt-id="{{ k.abschnitt.id if k.abschnitt else '' }}">
+        {% for e in k.elemente %}
+          <li data-element-id="{{ e.id }}" {% if aktiv_element_id|default(0) == e.id %}class="kp-aktiv"{% endif %}>
+            <span class="kp-griff" aria-hidden="true">⋮⋮</span>
+            <a href="/katastrophenplaene/{{ plan.id }}/elemente/{{ e.id }}" hx-get="/katastrophenplaene/{{ plan.id }}/elemente/{{ e.id }}" hx-target="#kp-detail" {% if aktiv_element_id|default(0) == e.id %}aria-current="true"{% endif %}>
+              {{ typen[e.typ].icon }} {{ e.kennung }} {{ e.titel }}
+              <span class="kp-prio-{{ e.prioritaet }}">P{{ e.prioritaet }}</span>
+            </a>
+          </li>
+        {% endfor %}
+      </ul>
+      {{ schnellerfassung(k.abschnitt.id if k.abschnitt else none) }}
+      {% if k.abschnitt %}
+        <details>
+          <summary>+ Unterkapitel</summary>
+          {{ kapitel_form(k.abschnitt.id) }}
+        </details>
+      {% endif %}
+      {% if k.kinder %}
+        <ul class="kp-unterkapitel" data-parent-id="{{ k.abschnitt.id }}">
+          {{ kapitel(k.kinder) }}
+        </ul>
+      {% endif %}
+    </li>
+  {% endfor %}
+{% endmacro %}
+{% macro kapitel_form(parent_id) %}
+  <form method="post" action="/katastrophenplaene/{{ plan.id }}/abschnitte" hx-post="/katastrophenplaene/{{ plan.id }}/abschnitte" hx-target="#kp-detail" class="kp-schnell">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <input type="hidden" name="parent_id" value="{{ parent_id or '' }}">
+    <input class="form-control" name="titel" required maxlength="200" placeholder="Kapiteltitel" aria-label="Kapiteltitel">
+    <button type="submit" class="btn">+ Kapitel</button>
+  </form>
+{% endmacro %}
+<nav id="kp-baum" data-plan-id="{{ plan.id }}" aria-label="Plankapitel" {% if baum_oob|default(false) %}hx-swap-oob="outerHTML"{% endif %}>
+  {{ kapitel_form(none) }}
+  <a href="/katastrophenplaene/{{ plan.id }}/phasen" hx-get="/katastrophenplaene/{{ plan.id }}/phasen" hx-target="#kp-detail" class="btn">Phasen verwalten</a>
+  <ul class="kp-baum-liste" data-parent-id="">
+    {{ kapitel(baum) }}
+  </ul>
+</nav>
+{% if sortierung_status|default(false) %}
+  <span id="kp-editor-status" class="kp-badge" hx-swap-oob="outerHTML">{{ status_labels[plan.status] }}</span>
+{% endif %}
