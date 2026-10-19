@@ -2,42 +2,111 @@
 {% block title %}Versionen · {{ lesekopf.titel if lesekopf is defined else plan.titel }}{% endblock %}
 {% block head_extra %}{% include "katplan/_design.html" %}{% endblock %}
 {% block content %}
-<section class="kp-page">
-  <nav class="kp-actions">
-    <a href="/katastrophenplaene/{{ plan.id }}">Plan</a>
-    <a href="/katastrophenplaene/{{ plan.id }}/versionen" aria-current="page">Versionen</a>
-    {% if can_edit %}<a href="/katastrophenplaene/{{ plan.id }}#kp-protokoll">Protokoll</a>{% endif %}
-  </nav>
-  <h1>Versionshistorie · {{ lesekopf.titel if lesekopf is defined else plan.titel }}</h1>
-  <table class="kp-tabelle kp-historie">
-    <thead><tr><th>Version</th><th>Freigegeben am</th><th>Von</th><th>Änderungsnotiz</th><th>Elementanzahl</th><th>Aktionen</th></tr></thead>
-    <tbody>
+  <section class="kp-page">
+    <header class="kp-header">
+      <h1>Versionshistorie · {{ lesekopf.titel if lesekopf is defined else plan.titel }}</h1>
+    </header>
+    {% from "_tabnav.html" import tabnav %}
+    {% set tabs = [
+    {'label': 'Plan', 'href': '/katastrophenplaene/' ~ plan.id, 'active': false},
+    {'label': 'Versionen', 'href': '/katastrophenplaene/' ~ plan.id ~ '/versionen', 'active': true}
+    ] %}
+    {% if can_edit %}
+      {% set tabs = tabs + [{'label': 'Protokoll', 'href': '/katastrophenplaene/' ~ plan.id ~ '#kp-protokoll', 'active': false}] %}
+    {% endif %}
+    {{ tabnav(tabs) }}
+
+    <div class="kp-card kp-table-wrap">
+      <table class="kp-table">
+        <thead>
+          <tr>
+            <th>Version</th>
+            <th>Freigegeben am</th>
+            <th>Von</th>
+            <th>Änderungsnotiz</th>
+            <th>Elementanzahl</th>
+            <th>Aktionen</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for version, name in versionen_liste %}
+            <tr>
+              <td class="kp-mono" data-label="Version">{{ version.versionsnummer }}</td>
+              <td class="kp-mono" data-label="Freigegeben am">{{ version.freigegeben_am|local_datetime }}</td>
+              <td data-label="Von">{{ name or 'Gelöschter Benutzer' }}</td>
+              <td data-label="Änderungsnotiz">{{ version.aenderungsnotiz or '-' }}</td>
+              <td data-label="Elementanzahl">{{ version.anzahl_elemente }}</td>
+              <td data-label="Aktionen">
+                <a href="/katastrophenplaene/{{ plan.id }}/versionen/{{ version.id }}">Ansehen</a>
+                {% if not loop.first %}
+                  <a href="/katastrophenplaene/{{ plan.id }}/vergleich?von={{ versionen_liste[loop.index0 - 1][0].id }}&amp;nach={{ version.id }}">Vergleichen mit vorheriger</a>
+                {% endif %}
+                {% if can_edit %}
+                  <a href="/katastrophenplaene/{{ plan.id }}/vergleich?von={{ version.id }}&amp;nach=arbeitsstand">Mit Arbeitsstand vergleichen</a>
+                {% endif %}
+              </td>
+            </tr>
+          {% else %}
+            <tr>
+              <td colspan="6">Noch keine freigegebenen Versionen</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="kp-mobile-list">
       {% for version, name in versionen_liste %}
-        <tr>
-          <td data-label="Version">{{ version.versionsnummer }}</td>
-          <td data-label="Freigegeben am">{{ version.freigegeben_am|local_datetime }}</td>
-          <td data-label="Von">{{ name or 'Gelöschter Benutzer' }}</td>
-          <td data-label="Änderungsnotiz">{{ version.aenderungsnotiz or '-' }}</td>
-          <td data-label="Elementanzahl">{{ version.anzahl_elemente }}</td>
-          <td data-label="Aktionen">
-            <a href="/katastrophenplaene/{{ plan.id }}/versionen/{{ version.id }}">Ansehen</a>
+        <article class="kp-mcard kp-mcard--green">
+          <div class="kp-mcard__top">
+            <span class="kp-mcard__title">Version {{ version.versionsnummer }}</span>
+            <span class="kp-badge kp-badge--green">Freigegeben</span>
+          </div>
+          <div class="kp-mcard__grid">
+            <div>
+              <div class="kp-mcard__label">Freigegeben am</div>
+              <div class="kp-mono">{{ version.freigegeben_am|local_datetime }}</div>
+            </div>
+            <div>
+              <div class="kp-mcard__label">Von</div>
+              <div class="kp-mcard__value">{{ name or 'Gelöschter Benutzer' }}</div>
+            </div>
+            <div>
+              <div class="kp-mcard__label">Elementanzahl</div>
+              <div class="kp-mono">{{ version.anzahl_elemente }}</div>
+            </div>
+          </div>
+          <p class="kp-freitext">{{ version.aenderungsnotiz or '-' }}</p>
+          <div class="kp-actions">
+            <a class="btn btn--ghost btn--sm" href="/katastrophenplaene/{{ plan.id }}/versionen/{{ version.id }}">Ansehen</a>
             {% if not loop.first %}
-              <a href="/katastrophenplaene/{{ plan.id }}/vergleich?von={{ versionen_liste[loop.index0 - 1][0].id }}&amp;nach={{ version.id }}">Vergleichen mit vorheriger</a>
+              <a class="btn btn--ghost btn--sm"
+                href="/katastrophenplaene/{{ plan.id }}/vergleich?von={{ versionen_liste[loop.index0 - 1][0].id }}&amp;nach={{ version.id }}">
+                Vergleichen mit vorheriger
+              </a>
             {% endif %}
             {% if can_edit %}
-              <a href="/katastrophenplaene/{{ plan.id }}/vergleich?von={{ version.id }}&amp;nach=arbeitsstand">Mit Arbeitsstand vergleichen</a>
+              <a class="btn btn--ghost btn--sm" href="/katastrophenplaene/{{ plan.id }}/vergleich?von={{ version.id }}&amp;nach=arbeitsstand">
+                Mit Arbeitsstand vergleichen
+              </a>
             {% endif %}
-          </td>
-        </tr>
-      {% else %}<tr><td colspan="6">Noch keine freigegebenen Versionen</td></tr>{% endfor %}
-    </tbody>
-  </table>
-  <h2>Prüf-Verlauf</h2>
-  {% for pruefung, name in pruefungen %}
-    <article class="kp-box">
-      <p>{{ pruefung.zeit|local_datetime }} · {{ name or 'Gelöschter Benutzer' }} · {{ {'eingereicht': 'Eingereicht', 'zurueckgewiesen': 'Zurückgewiesen', 'freigegeben': 'Freigegeben', 'archiviert': 'Archiviert', 'reaktiviert': 'Reaktiviert'}.get(pruefung.aktion, pruefung.aktion) }}</p>
-      <p class="kp-freitext">{{ pruefung.kommentar or '-' }}</p>
-    </article>
-  {% else %}<p>Noch keine Prüfungen</p>{% endfor %}
-</section>
+          </div>
+        </article>
+      {% else %}
+        <p class="kp-empty">Noch keine freigegebenen Versionen</p>
+      {% endfor %}
+    </div>
+    <h2 class="kp-section-title">Prüf-Verlauf</h2>
+    {% set pruef_labels = {
+    'eingereicht': 'Eingereicht', 'zurueckgewiesen': 'Zurückgewiesen', 'freigegeben': 'Freigegeben',
+    'archiviert': 'Archiviert', 'reaktiviert': 'Reaktiviert'
+    } %}
+    {% for pruefung, name in pruefungen %}
+      <article class="kp-box">
+        <p>{{ pruefung.zeit|local_datetime }} · {{ name or 'Gelöschter Benutzer' }} · {{ pruef_labels.get(pruefung.aktion, pruefung.aktion) }}</p>
+        <p class="kp-freitext">{{ pruefung.kommentar or '-' }}</p>
+      </article>
+    {% else %}
+      <p class="kp-empty">Noch keine Prüfungen</p>
+    {% endfor %}
+  </section>
 {% endblock %}

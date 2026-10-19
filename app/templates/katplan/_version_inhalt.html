@@ -1,9 +1,9 @@
-<div x-data="{ phase: null }">
+<div class="kp-planinhalt" x-data="{ phase: null }">
   <div class="kp-chips" aria-label="Phasenfilter">
-    <button class="btn" type="button" @click="phase = null" :aria-pressed="phase === null">Alle</button>
+    <button class="btn btn--ghost btn--sm" type="button" @click="phase = null" :aria-pressed="phase === null">Alle</button>
     {% for phase in plan_daten.get('phasen', []) %}
       <button class="btn kp-chip kp-farbe-{{ phase.farbe }}" type="button"
-              @click="phase = {{ phase.id }}" :aria-pressed="phase === {{ phase.id }}">{{ phase.name }}</button>
+        @click="phase = {{ phase.id }}" :aria-pressed="phase === {{ phase.id }}">{{ phase.name }}</button>
     {% endfor %}
   </div>
   {% macro verzeichnis(knoten) %}

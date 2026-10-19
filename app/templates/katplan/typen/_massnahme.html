@@ -1,21 +1,21 @@
 <div x-init="daten.schritte = (daten.schritte || []).map(zeile => typeof zeile === 'string' ? { text: zeile } : zeile)">
-  <h3>Schritte</h3>
+  <h3 class="kp-box__title">Schritte</h3>
   <template x-for="(zeile, index) in daten.schritte" :key="index">
     <div class="kp-listen-zeile">
-      <label>
+      <label class="kp-field">
         Schritt
         <input class="form-control" x-model="zeile.text">
       </label>
-      <label>
+      <label class="kp-field">
         Erledigt-Hinweis
         <input class="form-control" x-model="zeile.erledigt_hinweis">
       </label>
-      <button type="button" class="btn" @click="daten.schritte.splice(index, 1)">Entfernen</button>
+      <button type="button" class="btn btn--ghost btn--sm" @click="daten.schritte.splice(index, 1)">Entfernen</button>
     </div>
   </template>
-  <button type="button" class="btn" @click="daten.schritte.push({})">+ Zeile</button>
+  <button type="button" class="btn btn--ghost btn--sm" @click="daten.schritte.push({})">+ Zeile</button>
 </div>
-<label>
+<label class="kp-field">
   Erwartetes Ergebnis
   <textarea class="form-control" x-model="daten.erwartetes_ergebnis"></textarea>
 </label>

@@ -1,24 +1,89 @@
 {% include "katplan/_design.html" %}
+{% set status_farben = {'entwurf': 'gray', 'in_pruefung': 'amber', 'freigegeben': 'green', 'in_ueberarbeitung': 'blue', 'archiviert': 'gray'} %}
 <div id="kp-liste">
-  {% for plan in plaene %}
-    <article class="kp-box kp-row{% if can_edit %} kp-row-version{% endif %}">
-      <a href="/katastrophenplaene/{{ plan.id }}">{{ plan.titel }}</a>
-      <div class="kp-chips">
-        {% for code in plan.gefahrenarten %}
-          <span class="kp-chip">{{ gefahrenarten.get(code, code) }}</span>
-        {% endfor %}
-      </div>
-      <span class="kp-badge">{{ status_labels.get(plan.status, plan.status) }}</span>
-      <div {% if plan.wiedervorlage_am and plan.wiedervorlage_am <= heute %}class="kp-due"{% endif %}>
-        Wiedervorlage: {{ plan.wiedervorlage_am.strftime('%d.%m.%Y') if plan.wiedervorlage_am else '-' }}
-      </div>
-      {% if can_edit %}
-        {% set version = versionen.get(plan.aktuelle_version_id) %}
-        <div>Version: {{ version.versionsnummer if version else '–' }}</div>
-      {% endif %}
-      <div>Geändert: {{ plan.aktualisiert_am|local_datetime }}</div>
-    </article>
+  {% if plaene %}
+    <div class="kp-card kp-table-wrap">
+      <table class="kp-table">
+        <thead>
+          <tr>
+            <th>Titel</th>
+            <th>Gefahrenarten</th>
+            <th>Status</th>
+            {% if can_edit %}<th>Version</th>{% endif %}
+            <th>Wiedervorlage</th>
+            <th>Zuletzt geändert</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for plan in plaene %}
+            {% set farbe = status_farben.get(plan.status, 'gray') %}
+            <tr>
+              <td><a class="kp-link" href="/katastrophenplaene/{{ plan.id }}">{{ plan.titel }}</a></td>
+              <td>
+                <div class="kp-chips">
+                  {% for code in plan.gefahrenarten %}
+                    <span class="kp-badge kp-badge--gray">{{ gefahrenarten.get(code, code) }}</span>
+                  {% endfor %}
+                </div>
+              </td>
+              <td><span class="kp-badge kp-badge--{{ farbe }}">{{ status_labels.get(plan.status, plan.status) }}</span></td>
+              {% if can_edit %}
+                {% set version = versionen.get(plan.aktuelle_version_id) %}
+                <td class="kp-mono">{{ version.versionsnummer if version else '–' }}</td>
+              {% endif %}
+              <td class="kp-mono">
+                {% if plan.wiedervorlage_am and plan.wiedervorlage_am <= heute %}
+                  <span class="kp-badge kp-badge--red">{{ plan.wiedervorlage_am.strftime('%d.%m.%Y') }}</span>
+                {% else %}
+                  {{ plan.wiedervorlage_am.strftime('%d.%m.%Y') if plan.wiedervorlage_am else '-' }}
+                {% endif %}
+              </td>
+              <td class="kp-mono">{{ plan.aktualisiert_am|local_datetime }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="kp-mobile-list">
+      {% for plan in plaene %}
+        {% set farbe = status_farben.get(plan.status, 'gray') %}
+        <article class="kp-mcard kp-mcard--{{ farbe }}">
+          <div class="kp-mcard__top">
+            <a class="kp-link kp-mcard__title" href="/katastrophenplaene/{{ plan.id }}">{{ plan.titel }}</a>
+            <span class="kp-badge kp-badge--{{ farbe }}">{{ status_labels.get(plan.status, plan.status) }}</span>
+          </div>
+          <div class="kp-chips">
+            {% for code in plan.gefahrenarten %}
+              <span class="kp-badge kp-badge--gray">{{ gefahrenarten.get(code, code) }}</span>
+            {% endfor %}
+          </div>
+          <div class="kp-mcard__grid">
+            {% if can_edit %}
+              {% set version = versionen.get(plan.aktuelle_version_id) %}
+              <div>
+                <div class="kp-mcard__label">Version</div>
+                <div class="kp-mono">Version: {{ version.versionsnummer if version else '–' }}</div>
+              </div>
+            {% endif %}
+            <div>
+              <div class="kp-mcard__label">Wiedervorlage</div>
+              <div class="kp-mono">
+                {% if plan.wiedervorlage_am and plan.wiedervorlage_am <= heute %}
+                  <span class="kp-badge kp-badge--red">{{ plan.wiedervorlage_am.strftime('%d.%m.%Y') }}</span>
+                {% else %}
+                  {{ plan.wiedervorlage_am.strftime('%d.%m.%Y') if plan.wiedervorlage_am else '-' }}
+                {% endif %}
+              </div>
+            </div>
+            <div>
+              <div class="kp-mcard__label">Zuletzt geändert</div>
+              <div class="kp-mono">{{ plan.aktualisiert_am|local_datetime }}</div>
+            </div>
+          </div>
+        </article>
+      {% endfor %}
+    </div>
   {% else %}
-    <p class="kp-box">{{ 'Noch keine Pläne vorhanden oder keine Treffer' if can_edit else 'Noch keine freigegebenen Pläne' }}</p>
-  {% endfor %}
+    <p class="kp-empty">{{ 'Noch keine Pläne vorhanden oder keine Treffer' if can_edit else 'Noch keine freigegebenen Pläne' }}</p>
+  {% endif %}
 </div>

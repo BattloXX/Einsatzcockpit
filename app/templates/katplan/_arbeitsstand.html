@@ -16,5 +16,7 @@
     </section>
   {% endfor %}
 {% endmacro %}
-<a href="/katastrophenplaene/{{ plan.id }}/bearbeiten" class="btn btn--primary">Bearbeiten</a>
-{{ inhalt(baum) }}
+<div class="kp-planinhalt">
+  <a href="/katastrophenplaene/{{ plan.id }}/bearbeiten" class="btn btn--primary">Bearbeiten</a>
+  {{ inhalt(baum) }}
+</div>

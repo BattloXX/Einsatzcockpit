@@ -2,36 +2,53 @@
 {% block title %}Versionsvergleich{% endblock %}
 {% block head_extra %}{% include "katplan/_design.html" %}{% endblock %}
 {% block content %}
-<section class="kp-page">
-  <nav class="kp-actions">
-    <a href="/katastrophenplaene/{{ plan.id }}">Plan</a>
-    <a href="/katastrophenplaene/{{ plan.id }}/versionen">Versionen</a>
-    {% if can_edit %}<a href="/katastrophenplaene/{{ plan.id }}#kp-protokoll">Protokoll</a>{% endif %}
-  </nav>
-  <h1>Vergleich {{ von_label }} → {{ nach_label }}</h1>
-  {% from "katplan/_vergleich_felder.html" import felder %}
-  <h2>Kopf-Änderungen</h2>
-  {{ felder(vergleich.kopf) }}
-  {% for key, label in [('abschnitte', 'Kapitel-Änderungen'), ('phasen', 'Phasen-Änderungen')] %}
-    <h2>{{ label }}</h2>
-    {% for k in vergleich[key].hinzugefuegt %}<p>Neu: {{ k.titel if key == 'abschnitte' else k.name }}</p>{% endfor %}
-    {% for k in vergleich[key].entfernt %}<p>Entfernt: {{ k.titel if key == 'abschnitte' else k.name }}</p>{% endfor %}
-    {% for k in vergleich[key].geaendert %}
-      <article class="kp-box">{{ felder(k.felder) }}</article>
+  <section class="kp-page">
+    <header class="kp-header">
+      <h1>Vergleich {{ von_label }} → {{ nach_label }}</h1>
+    </header>
+    {% from "_tabnav.html" import tabnav %}
+    {% set tabs = [
+    {'label': 'Plan', 'href': '/katastrophenplaene/' ~ plan.id, 'active': false},
+    {'label': 'Versionen', 'href': '/katastrophenplaene/' ~ plan.id ~ '/versionen', 'active': true}
+    ] %}
+    {% if can_edit %}
+      {% set tabs = tabs + [{'label': 'Protokoll', 'href': '/katastrophenplaene/' ~ plan.id ~ '#kp-protokoll', 'active': false}] %}
+    {% endif %}
+    {{ tabnav(tabs) }}
+
+    {% from "katplan/_vergleich_felder.html" import felder %}
+    <h2 class="kp-section-title">Kopf-Änderungen</h2>
+    {{ felder(vergleich.kopf) }}
+    {% for key, label in [('abschnitte', 'Kapitel-Änderungen'), ('phasen', 'Phasen-Änderungen')] %}
+      <h2 class="kp-section-title">{{ label }}</h2>
+      {% for k in vergleich[key].hinzugefuegt %}
+        <p class="kp-box kp-box--success">Neu: {{ k.titel if key == 'abschnitte' else k.name }}</p>
+      {% endfor %}
+      {% for k in vergleich[key].entfernt %}
+        <p class="kp-box kp-box--danger">Entfernt: {{ k.titel if key == 'abschnitte' else k.name }}</p>
+      {% endfor %}
+      {% for k in vergleich[key].geaendert %}
+        <article class="kp-box kp-box--info">{{ felder(k.felder) }}</article>
+      {% endfor %}
     {% endfor %}
-  {% endfor %}
-  {% for key, label in [('hinzugefuegt', 'Neu'), ('entfernt', 'Entfernt')] %}
-    <h2>{{ label }}</h2>
-    {% for element in vergleich[key] %}
-      <article class="kp-box"><h3>{{ element.kennung or '' }} {{ element.titel }}</h3></article>
-    {% else %}<p>Keine Elemente</p>{% endfor %}
-  {% endfor %}
-  <h2>Geändert</h2>
-  {% for element in vergleich.geaendert %}
-    <article class="kp-box">
-      <h3>{{ element_namen[element.element_uuid] }}</h3>
-      {{ felder(element.felder) }}
-    </article>
-  {% else %}<p>Keine Elemente</p>{% endfor %}
-</section>
+    {% for key, label in [('hinzugefuegt', 'Neu'), ('entfernt', 'Entfernt')] %}
+      <h2 class="kp-section-title">{{ label }}</h2>
+      {% for element in vergleich[key] %}
+        <article class="kp-box {{ 'kp-box--success' if key == 'hinzugefuegt' else 'kp-box--danger' }}">
+          <h3>{{ element.kennung or '' }} {{ element.titel }}</h3>
+        </article>
+      {% else %}
+        <p class="kp-empty">Keine Elemente</p>
+      {% endfor %}
+    {% endfor %}
+    <h2 class="kp-section-title">Geändert</h2>
+    {% for element in vergleich.geaendert %}
+      <article class="kp-box kp-box--info">
+        <h3>{{ element_namen[element.element_uuid] }}</h3>
+        {{ felder(element.felder) }}
+      </article>
+    {% else %}
+      <p class="kp-empty">Keine Elemente</p>
+    {% endfor %}
+  </section>
 {% endblock %}

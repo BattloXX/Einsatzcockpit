@@ -1,7 +1,8 @@
 {% include "katplan/_design.html" %}
-<div id="kp-kopf" class="kp-box" hx-on::before-swap="if (event.detail.xhr.status === 409 || event.detail.xhr.status === 422) { event.detail.shouldSwap = true; event.detail.isError = false; }">
+<div id="kp-kopf" class="kp-box"
+  hx-on::before-swap="if (event.detail.xhr.status === 409 || event.detail.xhr.status === 422) { event.detail.shouldSwap = true; event.detail.isError = false; }">
   <form method="post" action="/katastrophenplaene/{{ (plan.id|string) + '/stammdaten' if plan else 'neu' }}" class="kp-form"
-        {% if plan %}hx-post="/katastrophenplaene/{{ plan.id }}/stammdaten" hx-target="#kp-kopf" hx-swap="outerHTML"{% endif %}>
+    {% if plan %}hx-post="/katastrophenplaene/{{ plan.id }}/stammdaten" hx-target="#kp-kopf" hx-swap="outerHTML"{% endif %}>
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     {% if plan %}
       <input type="hidden" name="version" value="{{ formular_version }}">
@@ -12,12 +13,13 @@
         <a href="/katastrophenplaene/{{ plan.id }}/stammdaten" hx-get="/katastrophenplaene/{{ plan.id }}/stammdaten" hx-target="#kp-kopf" hx-swap="outerHTML">Aktuellen Stand laden</a>
       {% endif %}
     {% endif %}
+    <h2 class="kp-box__title">Grunddaten</h2>
     <label>
       Titel (Pflichtfeld)
       <input name="titel" maxlength="200" required value="{{ form.get('titel', '') }}" class="form-control">
     </label>
     <fieldset>
-      <legend>Gefahrenarten (mindestens eine)</legend>
+      <legend class="kp-box__title">Gefahrenarten (mindestens eine)</legend>
       <div class="kp-chips">
         {% for code, label in gefahrenarten.items() %}
           <label class="kp-chip">
@@ -29,18 +31,20 @@
     </fieldset>
     {% set beschreibung = form.get('beschreibung_html', '') %}
     {% include "katplan/_quill.html" %}
-    <label>
-      Geltungsbereich
-      <input name="geltungsbereich" maxlength="300" value="{{ form.get('geltungsbereich', '') }}" class="form-control">
-    </label>
-    <label>
-      Verantwortliche Stelle
-      <input name="verantwortliche_stelle" maxlength="200" value="{{ form.get('verantwortliche_stelle', '') }}" class="form-control">
-    </label>
-    <label>
-      Wiedervorlage
-      <input type="date" name="wiedervorlage_am" value="{{ form.get('wiedervorlage_am', '') }}" class="form-control">
-    </label>
+    <div class="kp-form-grid">
+      <label>
+        Geltungsbereich
+        <input name="geltungsbereich" maxlength="300" value="{{ form.get('geltungsbereich', '') }}" class="form-control">
+      </label>
+      <label>
+        Verantwortliche Stelle
+        <input name="verantwortliche_stelle" maxlength="200" value="{{ form.get('verantwortliche_stelle', '') }}" class="form-control">
+      </label>
+      <label>
+        Wiedervorlage
+        <input type="date" name="wiedervorlage_am" value="{{ form.get('wiedervorlage_am', '') }}" class="form-control">
+      </label>
+    </div>
     <div class="kp-actions">
       <button type="submit" class="btn btn--primary">{{ 'Speichern' if plan else 'Plan anlegen' }}</button>
       {% if plan %}

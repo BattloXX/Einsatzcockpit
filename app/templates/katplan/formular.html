@@ -8,8 +8,10 @@
   <script src="/static/js/katplan_editor.js" defer></script>
 {% endblock %}
 {% block content %}
-<section class="kp-page">
-  <h1>Neuer Katastrophenplan</h1>
-  {% include "katplan/_formular.html" %}
-</section>
+  <section class="kp-page">
+    <header class="kp-header">
+      <h1>Neuer Katastrophenplan</h1>
+    </header>
+    {% include "katplan/_formular.html" %}
+  </section>
 {% endblock %}

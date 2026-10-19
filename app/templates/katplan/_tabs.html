@@ -1,0 +1,6 @@
+{% from "_tabnav.html" import tabnav %}
+{% set tabs = [{'label': 'Pläne', 'href': '/katastrophenplaene', 'active': archiv != 1}] %}
+{% if can_edit %}
+  {% set tabs = tabs + [{'label': 'Archiv', 'href': '/katastrophenplaene?archiv=1', 'active': archiv == 1}] %}
+{% endif %}
+{{ tabnav(tabs) }}
