@@ -90,6 +90,7 @@ from app.routers import (
     ui_infoscreen_alarm,
     ui_infoscreen_stats,
     ui_invitation,
+    ui_katplan,
     ui_kontakt,
     ui_kontakt_druck,
     ui_lagedokument,
@@ -923,6 +924,7 @@ app.include_router(ui_kontakt_druck.router)
 app.include_router(ui_kontakt.router)
 app.include_router(ui_einsatz_kontakte.router)
 app.include_router(ui_road_closure.router)
+app.include_router(ui_katplan.router)
 app.include_router(ui_planspiel.router)
 app.include_router(ui_planspiel_admin.router)
 app.include_router(ui_road_closure_admin.router)

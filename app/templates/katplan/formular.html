@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Neuer Katastrophenplan{% endblock %}
+{% block head_extra %}
+  {% include "katplan/_design.html" %}
+{% endblock %}
+{% block content %}
+<section class="kp-page">
+  <h1>Neuer Katastrophenplan</h1>
+  {% include "katplan/_formular.html" %}
+</section>
+{% endblock %}

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}{{ plan.titel }} · Katastrophenpläne{% endblock %}
+{% block head_extra %}
+  {% include "katplan/_design.html" %}
+{% endblock %}
+{% block content %}
+<section class="kp-page" x-data="{ reiter: 'plan' }">
+  <a href="/katastrophenplaene">← Katastrophenpläne</a>
+  {% include "katplan/_kopf.html" %}
+  <div role="tablist" aria-label="Planansicht" class="kp-actions">
+    <button type="button" role="tab" :aria-selected="reiter === 'plan'" @click="reiter = 'plan'" class="btn">Plan</button>
+    <button type="button" role="tab" :aria-selected="reiter === 'protokoll'" @click="reiter = 'protokoll'" class="btn">Protokoll</button>
+  </div>
+  <div x-show="reiter === 'plan'" role="tabpanel">
+    {% if can_edit %}
+      <p class="kp-box">Kapitel und Elemente folgen (Editor in Arbeit)</p>
+    {% endif %}
+  </div>
+  <div x-show="reiter === 'protokoll'" role="tabpanel">
+    {% include "katplan/_protokoll.html" %}
+  </div>
+</section>
+{% endblock %}

@@ -59,6 +59,15 @@ from app.models.incident import (
     Task,
 )
 from app.models.invitation import OrgInvitation, OrgPartner
+from app.models.katplan import (  # noqa: F401 -- registriert ORM-Modelle
+    KatplanAbschnitt,
+    KatplanAenderung,
+    KatplanElement,
+    KatplanElementPhase,
+    KatplanPhase,
+    KatplanPlan,
+    KatplanPruefung,
+)
 from app.models.kontakt import (
     Kontakt,
     KontaktAdresse,

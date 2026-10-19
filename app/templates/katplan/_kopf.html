@@ -1,0 +1,46 @@
+{% include "katplan/_design.html" %}
+<div id="kp-kopf" class="kp-box">
+  <div class="kp-header">
+    <h1>{{ plan.titel }}</h1>
+    <span class="kp-badge">{{ status_labels.get(plan.status, plan.status) }}</span>
+  </div>
+  <div class="kp-chips">
+    {% for code in plan.gefahrenarten %}
+      <span class="kp-chip">{{ gefahrenarten.get(code, code) }}</span>
+    {% endfor %}
+  </div>
+  <dl class="kp-meta">
+    <div>
+      <dt>Geltungsbereich</dt>
+      <dd>{{ plan.geltungsbereich or '-' }}</dd>
+    </div>
+    <div>
+      <dt>Verantwortliche Stelle</dt>
+      <dd>{{ plan.verantwortliche_stelle or '-' }}</dd>
+    </div>
+    <div {% if plan.wiedervorlage_am and plan.wiedervorlage_am <= heute %}class="kp-due"{% endif %}>
+      <dt>Wiedervorlage</dt>
+      <dd>{{ plan.wiedervorlage_am.strftime('%d.%m.%Y') if plan.wiedervorlage_am else '-' }}</dd>
+    </div>
+    <div>
+      <dt>Zuletzt geändert</dt>
+      <dd>{{ plan.aktualisiert_am|local_datetime }}</dd>
+    </div>
+  </dl>
+  <div>{{ (plan.beschreibung_html or '')|safe }}</div>
+  <div class="kp-actions">
+    {% if can_edit %}
+      <a href="/katastrophenplaene/{{ plan.id }}/stammdaten" hx-get="/katastrophenplaene/{{ plan.id }}/stammdaten" hx-target="#kp-kopf" hx-swap="outerHTML" class="btn">Stammdaten bearbeiten</a>
+    {% endif %}
+    {% if can_release %}
+      <form method="post" action="/katastrophenplaene/{{ plan.id }}/{{ 'reaktivieren' if plan.status == 'archiviert' else 'archivieren' }}"
+            hx-post="/katastrophenplaene/{{ plan.id }}/{{ 'reaktivieren' if plan.status == 'archiviert' else 'archivieren' }}" hx-target="#kp-kopf" hx-swap="outerHTML">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <button type="submit" class="btn">{{ 'Reaktivieren' if plan.status == 'archiviert' else 'Archivieren' }}</button>
+      </form>
+    {% endif %}
+  </div>
+</div>
+{% if protokoll_oob %}
+  {% include "katplan/_protokoll.html" %}
+{% endif %}

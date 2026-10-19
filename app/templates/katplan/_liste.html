@@ -1,0 +1,20 @@
+{% include "katplan/_design.html" %}
+<div id="kp-liste">
+  {% for plan in plaene %}
+    <article class="kp-box kp-row">
+      <a href="/katastrophenplaene/{{ plan.id }}">{{ plan.titel }}</a>
+      <div class="kp-chips">
+        {% for code in plan.gefahrenarten %}
+          <span class="kp-chip">{{ gefahrenarten.get(code, code) }}</span>
+        {% endfor %}
+      </div>
+      <span class="kp-badge">{{ status_labels.get(plan.status, plan.status) }}</span>
+      <div {% if plan.wiedervorlage_am and plan.wiedervorlage_am <= heute %}class="kp-due"{% endif %}>
+        Wiedervorlage: {{ plan.wiedervorlage_am.strftime('%d.%m.%Y') if plan.wiedervorlage_am else '-' }}
+      </div>
+      <div>Geändert: {{ plan.aktualisiert_am|local_datetime }}</div>
+    </article>
+  {% else %}
+    <p class="kp-box">{{ 'Noch keine Pläne vorhanden oder keine Treffer' if can_edit else 'Noch keine freigegebenen Pläne' }}</p>
+  {% endfor %}
+</div>

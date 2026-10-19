@@ -125,6 +125,14 @@ _TENANT_TABLE_NAMES: frozenset[str] = frozenset({
     "road_closure_notification",
     "incident_route",
     "incident_road_closure",
+    # Katastrophenplaene
+    "katplan_plan",
+    "katplan_abschnitt",
+    "katplan_phase",
+    "katplan_element",
+    "katplan_element_phase",
+    "katplan_aenderung",
+    "katplan_pruefung",
     # Planspiele
     "planspiel_run",
     "planspiel_vorlage",

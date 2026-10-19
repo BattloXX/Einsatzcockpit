@@ -286,4 +286,5 @@ Templates nicht minifizieren, nur gezielte Testdateien laufen lassen, Testliste 
 
 | Paket | PR | Stand |
 |---|---|---|
-| K1–K13 | – | offen |
+| K1 Grundgerüst | (dieser PR) | Modulschalter, Rollen, Migration 0294, Plan-Stammdaten/Liste/Protokoll; Editor folgt in K2 |
+| K2–K13 | – | offen |

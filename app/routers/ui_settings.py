@@ -193,6 +193,7 @@ def _settings_context(request, db, user, org_id, **extra) -> dict:
     from app.services.breathing_service import breathing_system_enabled
     from app.services.foerderstrecke_service import foerderstrecke_system_enabled
     from app.services.gateway_service import gateway_system_enabled as _gateway_system_enabled
+    from app.services.katplan_flags import katplan_system_enabled
     from app.services.lagefuehrung_service import lagefuehrung_system_enabled
     from app.services.mailing_service import mailing_system_enabled
     from app.services.nachschlagewerk_service import nachschlagewerke_system_enabled
@@ -226,6 +227,7 @@ def _settings_context(request, db, user, org_id, **extra) -> dict:
         "lagefuehrung_sys_enabled": lagefuehrung_system_enabled(db),
         "probenplanung_sys_enabled": probenplanung_system_enabled(db),
         "planspiel_sys_enabled": planspiel_system_enabled(db),
+        "katplan_sys_enabled": katplan_system_enabled(db),
         "strassensperren_sys_enabled": strassensperren_system_enabled(db),
         "mcp_sys_enabled": module_flags.get("mcp_module_enabled") == "true",
         "timezones": common_timezones(),
@@ -286,6 +288,7 @@ def save_org_settings(
     probenplanung_modul_aktiv_raw: str = Form(""),
     strassensperren_modul_aktiv_raw: str = Form(""),
     planspiel_modul_aktiv_raw: str = Form(""),
+    katplan_modul_aktiv_raw: str = Form(""),
     routing_start_lat: str = Form(""),
     routing_start_lng: str = Form(""),
     routing_start_label: str = Form(""),
@@ -568,6 +571,7 @@ def save_org_settings(
                 ip=request.client.host if request.client else None,
             )
 
+    from app.services.katplan_flags import katplan_system_enabled
     from app.services.planspiel_flags import planspiel_system_enabled
 
     if planspiel_system_enabled(db):
@@ -587,6 +591,19 @@ def save_org_settings(
                 org_id=effective_org_id,
                 user_id=user.id,
                 payload={"alt": old_planspiel, "neu": new_planspiel},
+                ip=request.client.host if request.client else None,
+            )
+
+    if katplan_system_enabled(db):
+        old_katplan = org_s.katplan_modul_aktiv
+        new_katplan = katplan_modul_aktiv_raw in ("1", "true", "on")
+        org_s.katplan_modul_aktiv = new_katplan
+        if old_katplan != new_katplan:
+            from app.core.audit import write_audit
+
+            write_audit(
+                db, "katplan.org_toggle", org_id=effective_org_id, user_id=user.id,
+                payload={"alt": old_katplan, "neu": new_katplan},
                 ip=request.client.host if request.client else None,
             )
 
@@ -2051,6 +2068,37 @@ def toggle_planspiel_system(
     write_audit(
         db,
         "planspiel.system_toggle",
+        user_id=user.id,
+        payload={"alt": old, "neu": value},
+        ip=request.client.host if request.client else None,
+    )
+    db.commit()
+    org_suffix = f"&org_id={org_id}" if org_id else ""
+    return RedirectResponse(f"/admin/settings?saved=1{org_suffix}", status_code=303)
+
+
+@router.post("/settings/system/katplan-toggle")
+def toggle_katplan_system(
+    request: Request,
+    db=Depends(get_db),
+    user: User = Depends(require_system_admin),
+    enabled_raw: str = Form(""),
+    org_id: int | None = Form(None),
+):
+    key = "katplan_module_enabled"
+    value = "true" if enabled_raw in ("1", "true", "on") else "false"
+    row = db.query(SystemSettings).filter(SystemSettings.key == key).first()
+    old = row.value if row else "false"
+    if row is None:
+        row = SystemSettings(key=key, value=value, updated_at=datetime.now(UTC), updated_by_user_id=user.id)
+        db.add(row)
+    else:
+        row.value = value
+        row.updated_at = datetime.now(UTC)
+        row.updated_by_user_id = user.id
+    write_audit(
+        db,
+        "katplan.system_toggle",
         user_id=user.id,
         payload={"alt": old, "neu": value},
         ip=request.client.host if request.client else None,
