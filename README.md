@@ -66,7 +66,7 @@ Eine vollwertige Webapp, die Einsatzleitern und Schriftführern eine strukturier
 
 ## Quick Start (lokale Entwicklung)
 
-Vorausgesetzt werden Python 3.14, MariaDB 10.11+, Node.js 20+ und optional `ffmpeg`.
+Vorausgesetzt werden Python 3.14, MariaDB 10.11+, Node.js 22+ und optional `ffmpeg`.
 
 ```bash
 git clone https://github.com/BattloXX/Einsatzcockpit.git
@@ -116,6 +116,7 @@ Pre-Flight-Checks, Reihenfolge, Rollback und bekannte Fallstricke: [Migration-Ru
 npm install
 npm run build       # einmaliger Produktions-Build
 npm run dev         # Tailwind Watch-Modus
+npm run vendor      # nur bei Bibliotheks-Updates
 ```
 
 Die generierte Datei `app/static/css/app.css` wird mitcommittet.

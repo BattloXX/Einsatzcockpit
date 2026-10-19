@@ -181,6 +181,33 @@ Bei jeder schreibenden Aktion:
 3. Nach Commit: `broadcast.publish(incident_id, event)` mit HTML-Partial
 4. Alle verbundenen Clients patchen ihr DOM (`htmx.swap`)
 
+Nach HTMX-Aktionen wird gezielt aktualisiert: im Funkjournal `#fjList` (auch beim
+WebSocket-Event `funkjournal_changed`), beim Einsatzleiter-Wechsel `#topnavLeader`
+und die Kopfleiste, beim Atemschutz gebündelt `#troopsGrid`. Auch Freitext-Einsatzleiter
+erscheinen in der Topnav. `tests/test_kein_reload_nach_htmx.py` sichert die gezielten
+Swaps und das Ausbleiben von Vollreloads ab.
+
+## Routen und Event-Loop
+
+Routen mit eigener synchroner SQLAlchemy-Session über `Depends(get_db)` werden als
+`def` geschrieben. FastAPI führt sie im anyio-Threadpool aus; ihre DB-Zugriffe
+blockieren damit die Event-Loop nicht. Im Zuge der Modernisierung wurden 522
+`async def`-Routen umgestellt; 182 Routen mit echter Async-I/O verbleiben in der Baseline.
+
+Asynchrone Aufrufe aus synchronen Routen laufen über
+`app/core/async_bridge.py::run_async(fn, *args, **kwargs)`. Die Brücke führt etwa
+Broadcasts, `request.form`, `request.json`, `request.body` und `UploadFile.read`
+auf der Event-Loop aus und wartet im Worker-Thread auf das Ergebnis.
+Immer die Coroutine-Funktion übergeben, z. B. `run_async(request.json)`, nie das
+Coroutine-Objekt `request.json()`.
+
+`async def` bleibt für echte Async-I/O, etwa asynchrone HTTP-Aufrufe oder Streaming.
+Darin direkt `await` verwenden, niemals `run_async`.
+Der Wächter `tests/test_async_routes_sync_db.py` verhindert neue Async-Routen mit
+eigener synchroner DB-Session; `tests/data/async_routes_sync_db_baseline.txt` darf
+nur schrumpfen. `test_run_async_nicht_in_async_funktionen` verbietet die Brücke in
+Async-Funktionen.
+
 ## Request-Lifecycle (typisch)
 
 ```
