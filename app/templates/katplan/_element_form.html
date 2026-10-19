@@ -77,7 +77,25 @@
       </fieldset>
       <fieldset>
         <legend class="kp-box__title">Typspezifische Angaben</legend>
-        {% include "katplan/typen/_" + element.typ + ".html" %}
+        {% if element.typ == "info" %}
+          {% include "katplan/typen/_info.html" %}
+        {% elif element.typ == "massnahme" %}
+          {% include "katplan/typen/_massnahme.html" %}
+        {% elif element.typ == "kontrollstelle" %}
+          {% include "katplan/typen/_kontrollstelle.html" %}
+        {% elif element.typ == "gefahrenbereich" %}
+          {% include "katplan/typen/_gefahrenbereich.html" %}
+        {% elif element.typ == "ablauf" %}
+          {% include "katplan/typen/_ablauf.html" %}
+        {% elif element.typ == "ressource" %}
+          {% include "katplan/typen/_ressource.html" %}
+        {% elif element.typ == "medien" %}
+          {% include "katplan/typen/_medien.html" %}
+        {% elif element.typ == "zustaendigkeit" %}
+          {% include "katplan/typen/_zustaendigkeit.html" %}
+        {% elif element.typ == "objektverweis" %}
+          {% include "katplan/typen/_objektverweis.html" %}
+        {% endif %}
       </fieldset>
       <details>
         <summary class="kp-box__title">GSL-Vorlage (vorbereitet, noch ohne Funktion)</summary>
