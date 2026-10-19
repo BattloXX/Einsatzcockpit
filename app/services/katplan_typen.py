@@ -32,6 +32,41 @@ ELEMENT_TYPEN: dict[str, TypDef] = {
     "objektverweis": TypDef("objektverweis", "Objektverweis", "🏢", ("hinweis",), "punkt"),
 }
 
+
+@dataclass(frozen=True)
+class VorlageDef:
+    code: str
+    label: str
+    typ: str
+    titel: str
+    beschreibung_html: str
+    daten: dict[str, Any]
+
+
+ELEMENT_VORLAGEN: dict[str, VorlageDef] = {
+    "gewaesser_kontrollstelle": VorlageDef(
+        "gewaesser_kontrollstelle", "Gewässer-Kontrollstelle", "kontrollstelle", "Gewässer-Kontrollstelle",
+        "<p>Gewässer und Einlaufbereiche regelmäßig kontrollieren.</p>",
+        {"gefahren": ["Verklausung", "Überflutung"],
+         "kontrollhinweise": "Einlauf, Rechen und Schotterfang auf Verlegung prüfen; Wasserstand beobachten."},
+    ),
+    "verstaendigung": VorlageDef(
+        "verstaendigung", "Verständigung", "zustaendigkeit", "Verständigung",
+        "<p>Zuständige Stellen gemäß Verständigungsplan informieren.</p>",
+        {"ausloeser": "Bei Erreichen der Phase …"},
+    ),
+    "materialbereitstellung": VorlageDef(
+        "materialbereitstellung", "Materialbereitstellung", "ressource", "Materialbereitstellung",
+        "<p>Benötigtes Material bereitstellen.</p>",
+        {"bedarf": [{"bezeichnung": "Sandsäcke", "menge": "", "einheit": "Stk"}]},
+    ),
+    "sicherheitshinweis": VorlageDef(
+        "sicherheitshinweis", "Sicherheitshinweis", "info", "Sicherheitshinweis",
+        "<p>Örtliche Gefahren vor Beginn der Arbeiten beurteilen.</p>",
+        {"kategorie": "Sicherheit", "warnhinweis": ""},
+    ),
+}
+
 _LISTEN_FELDER = {
     "schritte": ("text", "erledigt_hinweis"),
     "gefahren": None,

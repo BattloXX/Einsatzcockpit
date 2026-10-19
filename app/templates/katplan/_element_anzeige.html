@@ -1,0 +1,76 @@
+{% set daten = element_daten[element.id] %}
+<article class="kp-box" data-element-id="{{ element.id }}">
+  <h3>{{ typen[element.typ].icon }} {{ element.kennung }} · {{ element.titel }}</h3>
+  <div class="kp-chips">
+    <span>{{ typen[element.typ].label }}</span>
+    <span class="kp-prio-{{ element.prioritaet }}">Priorität {{ element.prioritaet }}</span>
+    {% if can_edit and element.gsl_vorlage %}
+      <span class="kp-badge">GSL-Vorlage</span>
+    {% endif %}
+    {% if element.vertraulich %}
+      <span class="kp-badge">vertraulich</span>
+    {% endif %}
+    {% for phase in element_phasen[element.id] %}
+      <span class="kp-chip kp-farbe-{{ phase.farbe }}">{{ phase.name }}</span>
+    {% endfor %}
+    {% for tag in element_tags[element.id] %}
+      <span class="kp-chip">{{ tag }}</span>
+    {% endfor %}
+  </div>
+  {% if element.strasse or element.ort or element.plz or element.hausnummer %}
+    <p>{{ element.strasse or '' }} {{ element.hausnummer or '' }}, {{ element.plz or '' }} {{ element.ort or '' }}</p>
+  {% endif %}
+  {% for feld, label in [('gueltig_bis', 'Gültig bis'), ('pruefen_am', 'Prüfen am')] %}
+    {% if element[feld] %}
+      <p>{{ label }}: {{ element[feld].strftime('%d.%m.%Y') }}</p>
+    {% endif %}
+  {% endfor %}
+  {% if element.beschreibung_html %}
+    <div>{{ element.beschreibung_html|safe }}</div>
+  {% endif %}
+  {% for feld in typen[element.typ].felder %}
+    {% set wert = daten.get(feld) %}
+    {% if wert %}
+      <h4>{{ feld|replace('_', ' ')|capitalize }}</h4>
+      {% if feld == 'schritte' %}
+        <ol>
+          {% for schritt in wert %}
+            <li>
+              {{ schritt.text if schritt is mapping else schritt }}
+              {% if schritt is mapping and schritt.get('erledigt_hinweis') %}
+                <span>({{ schritt.erledigt_hinweis }})</span>
+              {% endif %}
+            </li>
+          {% endfor %}
+        </ol>
+      {% elif feld in ['bedingungen', 'bedarf'] %}
+        <table class="kp-tabelle">
+          <thead>
+            <tr>
+              {% for label in (['Wenn', 'Dann'] if feld == 'bedingungen' else ['Bezeichnung', 'Menge', 'Einheit']) %}
+                <th>{{ label }}</th>
+              {% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for zeile in wert %}
+              <tr>
+                {% for key in (['wenn', 'dann'] if feld == 'bedingungen' else ['bezeichnung', 'menge', 'einheit']) %}
+                  <td>{{ zeile.get(key, '') if zeile is mapping else (zeile if loop.first else '') }}</td>
+                {% endfor %}
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% elif feld == 'gefahren' %}
+        <div class="kp-chips">
+          {% for gefahr in wert %}
+            <span class="kp-chip">{{ gefahr }}</span>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="kp-freitext">{{ wert }}</p>
+      {% endif %}
+    {% endif %}
+  {% endfor %}
+</article>

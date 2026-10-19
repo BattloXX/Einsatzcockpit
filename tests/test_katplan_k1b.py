@@ -95,7 +95,7 @@ def test_anlegen_sanitizing_und_protokoll(client, umgebung):
         assert db.query(KatplanAenderung).filter_by(plan_id=plan_id).one().aktion == "angelegt"
     detail = client.get(response.headers["location"])
     assert detail.status_code == 200
-    assert "Editor in Arbeit" in detail.text and "Bauhof" in detail.text
+    assert f'href="/katastrophenplaene/{plan_id}/bearbeiten"' in detail.text and "Bauhof" in detail.text
     assert "angelegt" in detail.text and umgebung["users"]["katplan_verwalter"] in detail.text
 
 

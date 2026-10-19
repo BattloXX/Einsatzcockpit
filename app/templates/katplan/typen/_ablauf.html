@@ -1,0 +1,21 @@
+<label>
+  Auslöser
+  <textarea class="form-control" x-model="daten.ausloeser"></textarea>
+</label>
+<div x-init="daten.bedingungen = (daten.bedingungen || []).map(zeile => typeof zeile === 'string' ? { wenn: zeile } : zeile)">
+  <h3>Bedingungen</h3>
+  <template x-for="(zeile, index) in daten.bedingungen" :key="index">
+    <div class="kp-listen-zeile">
+      <label>
+        Wenn
+        <input class="form-control" x-model="zeile.wenn">
+      </label>
+      <label>
+        Dann
+        <input class="form-control" x-model="zeile.dann">
+      </label>
+      <button type="button" class="btn" @click="daten.bedingungen.splice(index, 1)">Entfernen</button>
+    </div>
+  </template>
+  <button type="button" class="btn" @click="daten.bedingungen.push({})">+ Zeile</button>
+</div>

@@ -8,7 +8,8 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from app.models.katplan import KatplanAenderung, KatplanElement, KatplanPlan
+from app.core.html_utils import sanitize_html
+from app.models.katplan import KatplanAbschnitt, KatplanAenderung, KatplanElement, KatplanPlan
 from app.models.user import User
 
 _KENNUNG_PRAEFIXE = {
@@ -96,3 +97,150 @@ def protokolliere(
 def pruefe_version(obj: KatplanPlan | KatplanElement, erwartet: int) -> None:
     if obj.version != erwartet:
         raise KatplanKonflikt("Der Arbeitsstand wurde zwischenzeitlich geaendert. Bitte neu laden.")
+
+
+
+def markiere_ueberarbeitung(db: Session, plan: KatplanPlan, user: User) -> None:
+    """Inhaltsaenderungen schuetzen unabhaengig von der Kopfdaten-Version."""
+    if plan.status == "freigegeben":
+        protokolliere(db, plan, "plan", "geaendert", user, feld="status",
+                      alt=plan.status, neu="in_ueberarbeitung")
+        plan.status = "in_ueberarbeitung"
+
+
+def aktualisiere_element_suchtext(element: KatplanElement) -> None:
+    element.suchtext = baue_suchtext(element)
+
+
+def abschnitte_baum(db: Session, plan: KatplanPlan) -> list[dict[str, Any]]:
+    """Jeden Knoten genau einmal aufnehmen, auch bei beschaedigten Elternketten."""
+    abschnitte = db.query(KatplanAbschnitt).filter_by(
+        org_id=plan.org_id, plan_id=plan.id,
+    ).order_by(KatplanAbschnitt.sort, KatplanAbschnitt.id).all()
+    elemente = db.query(KatplanElement).filter_by(
+        org_id=plan.org_id, plan_id=plan.id,
+    ).order_by(KatplanElement.sort, KatplanElement.id).all()
+    knoten: dict[int, dict[str, Any]] = {
+        a.id: {"abschnitt": a, "kinder": [], "elemente": []} for a in abschnitte
+    }
+    wurzeln: list[dict[str, Any]] = []
+    ohne: dict[str, Any] = {"abschnitt": None, "kinder": [], "elemente": []}
+    for abschnitt in abschnitte:
+        eltern = abschnitt.parent_id
+        gesehen = {abschnitt.id}
+        while eltern is not None and eltern in knoten and eltern not in gesehen:
+            gesehen.add(eltern)
+            eltern = knoten[eltern]["abschnitt"].parent_id
+        if abschnitt.parent_id is not None and abschnitt.parent_id in knoten and eltern not in gesehen:
+            knoten[abschnitt.parent_id]["kinder"].append(knoten[abschnitt.id])
+        else:
+            wurzeln.append(knoten[abschnitt.id])
+    for element in elemente:
+        ziel = knoten.get(element.abschnitt_id, ohne) if element.abschnitt_id is not None else ohne
+        ziel["elemente"].append(element)
+    return [*wurzeln, ohne]
+
+
+def loesche_abschnitt(db: Session, plan: KatplanPlan, abschnitt: KatplanAbschnitt, user: User) -> None:
+    for kind in db.query(KatplanAbschnitt).filter_by(
+        org_id=plan.org_id, plan_id=plan.id, parent_id=abschnitt.id,
+    ).all():
+        kind.parent_id = abschnitt.parent_id
+    for element in db.query(KatplanElement).filter_by(
+        org_id=plan.org_id, plan_id=plan.id, abschnitt_id=abschnitt.id,
+    ).all():
+        element.abschnitt_id = abschnitt.parent_id
+        element.version += 1
+        element.aktualisiert_von_id = user.id
+        aktualisiere_element_suchtext(element)
+        protokolliere(db, plan, "element", "geaendert", user, feld="abschnitt_id",
+                      alt=str(abschnitt.id), neu=str(abschnitt.parent_id) if abschnitt.parent_id else None,
+                      element_id=element.id)
+    # Vor dem DELETE flushen, damit ON DELETE CASCADE keine Unterkapitel entfernt.
+    db.flush()
+    db.delete(abschnitt)
+    protokolliere(db, plan, "abschnitt", "geloescht", user, alt=abschnitt.titel)
+    markiere_ueberarbeitung(db, plan, user)
+
+
+def bereinige_beschreibung(roh: str | None) -> str | None:
+    """Quill-Leerabsätze ebenfalls als fehlende Beschreibung behandeln."""
+    html = sanitize_html(roh)
+    parser = _HTMLText()
+    parser.feed(html or "")
+    return html if "".join(parser.teile).strip() else None
+
+
+def sortiere_baum(db: Session, plan: KatplanPlan, user: User,
+                  abschnitte: list[dict[str, Any]], elemente: list[dict[str, Any]]) -> None:
+    """Gesamten Baum vor der ersten Mutation auf Zugehörigkeit und Zyklen prüfen."""
+    kapitel = {a.id: a for a in db.query(KatplanAbschnitt).filter_by(
+        org_id=plan.org_id, plan_id=plan.id,
+    ).all()}
+    eintraege = {e.id: e for e in db.query(KatplanElement).filter_by(
+        org_id=plan.org_id, plan_id=plan.id,
+    ).all()}
+    for daten, bestand, elternfeld in ((abschnitte, kapitel, "parent_id"),
+                                       (elemente, eintraege, "abschnitt_id")):
+        if len(daten) != len(bestand) or {d["id"] for d in daten} != set(bestand):
+            raise ValueError("Die Sortierung muss alle Einträge dieses Plans genau einmal enthalten.")
+        if any(d[elternfeld] is not None and d[elternfeld] not in kapitel for d in daten):
+            raise ValueError("Unbekanntes Kapitel in der Sortierung.")
+    eltern = {d["id"]: d["parent_id"] for d in abschnitte}
+    for aid in eltern:
+        gesehen: set[int] = set()
+        aktuell: int | None = aid
+        while aktuell is not None:
+            if aktuell in gesehen:
+                raise ValueError("Kapitel dürfen keinen Zyklus bilden.")
+            gesehen.add(aktuell)
+            aktuell = eltern[aktuell]
+    geaendert = False
+    for daten, bestand, elternfeld in ((abschnitte, kapitel, "parent_id"),
+                                       (elemente, eintraege, "abschnitt_id")):
+        zaehler: dict[int | None, int] = {}
+        for d in sorted(daten, key=lambda d: d["sort"]):
+            parent = d[elternfeld]
+            zaehler[parent] = zaehler.get(parent, 0) + 10
+            obj = bestand[d["id"]]
+            if getattr(obj, elternfeld) != parent or obj.sort != zaehler[parent]:
+                setattr(obj, elternfeld, parent)
+                obj.sort = zaehler[parent]
+                if isinstance(obj, KatplanElement):
+                    obj.version += 1
+                    obj.aktualisiert_von_id = user.id
+                geaendert = True
+    if geaendert:
+        protokolliere(db, plan, "plan", "sortiert", user)
+        markiere_ueberarbeitung(db, plan, user)
+
+
+def verschiebe_nachbar(db: Session, plan: KatplanPlan, user: User,
+                      obj: KatplanAbschnitt | KatplanElement, richtung: str) -> None:
+    if richtung not in ("hoch", "runter"):
+        raise ValueError("Richtung muss hoch oder runter sein.")
+    geschwister: list[KatplanAbschnitt | KatplanElement] = []
+    if isinstance(obj, KatplanElement):
+        geschwister.extend(db.query(KatplanElement).filter_by(
+            org_id=plan.org_id, plan_id=plan.id, abschnitt_id=obj.abschnitt_id,
+        ).order_by(KatplanElement.sort, KatplanElement.id).all())
+    else:
+        geschwister.extend(db.query(KatplanAbschnitt).filter_by(
+            org_id=plan.org_id, plan_id=plan.id, parent_id=obj.parent_id,
+        ).order_by(KatplanAbschnitt.sort, KatplanAbschnitt.id).all())
+    index = geschwister.index(obj)
+    ziel = index + (-1 if richtung == "hoch" else 1)
+    if 0 <= ziel < len(geschwister):
+        nachbar = geschwister[ziel]
+        obj.sort, nachbar.sort = nachbar.sort, obj.sort
+        if obj.sort == nachbar.sort:
+            # Auch Altbestände mit gleichen Sortwerten bleiben bedienbar.
+            geschwister[index], geschwister[ziel] = nachbar, obj
+            for nummer, eintrag in enumerate(geschwister, 1):
+                eintrag.sort = nummer * 10
+        for eintrag in (obj, nachbar):
+            if isinstance(eintrag, KatplanElement):
+                eintrag.version += 1
+                eintrag.aktualisiert_von_id = user.id
+        protokolliere(db, plan, "plan", "sortiert", user)
+        markiere_ueberarbeitung(db, plan, user)

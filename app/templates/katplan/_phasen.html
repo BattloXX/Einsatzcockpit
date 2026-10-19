@@ -1,0 +1,43 @@
+<h2>Phasen verwalten</h2>
+{% for phase in phasen + [none] %}
+  {% set pid = phase.id if phase else 0 %}
+  {% set f = phase_form if phase_fehler_id|default(-1) == pid else phase %}
+  {% set ziel = '/katastrophenplaene/' ~ plan.id ~ '/phasen' ~ ('/' ~ pid if pid else '') %}
+  <section class="kp-box">
+    <h3>{{ phase.name if phase else 'Neue Phase' }}</h3>
+    <form method="post" action="{{ ziel }}" hx-post="{{ ziel }}" hx-target="#kp-detail" class="kp-form">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <label>
+        Name
+        <input class="form-control" name="name" required maxlength="120" value="{{ f.name if f else '' }}">
+      </label>
+      <label>
+        Beschreibung
+        <textarea class="form-control" name="beschreibung">{{ (f.beschreibung or '') if f else '' }}</textarea>
+      </label>
+      <label>
+        Auslöser
+        <textarea class="form-control" name="ausloeser">{{ (f.ausloeser or '') if f else '' }}</textarea>
+      </label>
+      <label>
+        Farbe
+        <select class="form-control" name="farbe">
+          {% for farbe in farben %}
+            <option value="{{ farbe }}" {% if (f.farbe if f else 'grau') == farbe %}selected{% endif %}>{{ farbe }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        Reihenfolge
+        <input class="form-control" type="number" name="sort" value="{{ f.sort if f else 0 }}" required>
+      </label>
+      <button type="submit" class="btn btn--primary">{{ 'Speichern' if phase else 'Phase anlegen' }}</button>
+    </form>
+    {% if phase %}
+      <form method="post" action="{{ ziel }}/loeschen" hx-post="{{ ziel }}/loeschen" hx-target="#kp-detail" hx-confirm="Phase und ihre Zuordnungen löschen?">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <button type="submit" class="btn">Phase löschen</button>
+      </form>
+    {% endif %}
+  </section>
+{% endfor %}

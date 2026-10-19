@@ -1,0 +1,11 @@
+{% if fehler %}
+  <p role="alert" class="kp-error">{{ fehler }}</p>
+{% endif %}
+{% if erfolg %}
+  <p role="status">{{ erfolg }}</p>
+{% endif %}
+{% include "katplan/" + partial %}
+{% if baum_oob %}
+  {% include "katplan/_baum.html" %}
+  <span id="kp-editor-status" class="kp-badge" hx-swap-oob="outerHTML">{{ status_labels[plan.status] }}</span>
+{% endif %}
