@@ -436,6 +436,23 @@ def index(request: Request, db: Session = Depends(get_db)):
             sperren_kennzahlen = kennzahlen(db, org, scope="all")
         except Exception:
             _log.warning("Straßensperren-Kennzahlen konnten nicht geladen werden", exc_info=True)
+    from sqlalchemy import case, func, or_
+
+    from app.core.timezones import now_local
+    from app.models.katplan import KatplanPlan
+    from app.services.katplan_flags import katplan_effective_enabled
+    from app.services.katplan_zugriff import darf_bearbeiten, darf_freigeben
+
+    katplan_badge = None
+    if (darf_bearbeiten(user) or darf_freigeben(user)) and katplan_effective_enabled(user.org_id, db):
+        faellig, in_pruefung = db.query(
+            func.count(case((KatplanPlan.wiedervorlage_am <= now_local(org).date(), 1))),
+            func.count(case((KatplanPlan.status == "in_pruefung", 1))),
+        ).filter(
+            KatplanPlan.org_id == user.org_id, KatplanPlan.status != "archiviert",
+            or_(KatplanPlan.wiedervorlage_am <= now_local(org).date(), KatplanPlan.status == "in_pruefung"),
+        ).one()
+        katplan_badge = {"faellig": faellig, "in_pruefung": in_pruefung}
     default_city = (org.city if org and org.city else settings.DEFAULT_INCIDENT_CITY)
     return templates.TemplateResponse(request, "index.html", {
         "user": user,
@@ -446,6 +463,7 @@ def index(request: Request, db: Session = Depends(get_db)):
         "default_city": default_city,
         "show_strassensperren": show_strassensperren,
         "sperren_kennzahlen": sperren_kennzahlen,
+        "katplan_badge": katplan_badge,
     })
 
 

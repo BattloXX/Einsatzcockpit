@@ -20,6 +20,7 @@ logger = logging.getLogger("einsatzleiter.task_reminder")
 # Datum des letzten Objekt-Revisions-Checks (einmal taeglich, im 30s-Loop)
 _letzter_revision_check: date | None = None
 _letzter_pflegeauftrag_check: date | None = None
+_letzter_katplan_check: date | None = None
 
 
 def _check_due_messages_sync(db) -> list[dict]:
@@ -178,6 +179,66 @@ async def _check_objekt_revisionen() -> None:
             logger.exception("task_reminder: Objekt-Revisions-Broadcast fehlgeschlagen")
 
 
+async def _check_katplan_wiedervorlagen() -> None:
+    """Einmal taeglich faellige Plaene per Mail an die Freigeber erinnern."""
+    global _letzter_katplan_check
+    heute = datetime.now(UTC).date()
+    if _letzter_katplan_check == heute:
+        return
+    _letzter_katplan_check = heute
+
+    from app.config import settings
+    from app.models.user import User
+    from app.services import mail_service
+    from app.services.katplan_flags import katplan_effective_enabled
+    from app.services.katplan_freigabe_service import pruefe_wiedervorlagen
+
+    def _pruefe() -> list[dict]:
+        with SessionLocal() as db:
+            set_tenant_context(db, None)
+            nachrichten = []
+            from app.models.master import FireDept
+            treffer = []
+            org_ids = [org.id for org in db.query(FireDept).all()]
+            for org_id in org_ids:
+                set_tenant_context(db, org_id)
+                if not katplan_effective_enabled(org_id, db) or not mail_service.mail_available(db, org_id):
+                    continue
+                treffer.extend(pruefe_wiedervorlagen(db))
+            for item in treffer:
+                org_id = item["org_id"]
+                set_tenant_context(db, org_id)
+                users = db.query(User).filter_by(org_id=org_id, active=True).filter(
+                    User.email.is_not(None), User.email != "",
+                ).all()
+                empfaenger = [u for u in users if "katplan_freigeber" in u.role_codes]
+                if not empfaenger:
+                    empfaenger = [u for u in users if u.role_codes & {"org_admin", "admin"}]
+                smtp_cfg = mail_service._org_smtp_cfg(db, org_id) or mail_service.get_smtp_cfg(db)
+                link = f"{settings.effective_public_base_url.rstrip('/')}/katastrophenplaene/{item['plan_id']}"
+                for user in empfaenger:
+                    msg = mail_service._build_message(
+                        to=user.email or "", subject=f"Wiedervorlage Katastrophenplan: {item['titel']}",
+                        body_txt=f"Der Katastrophenplan {item['titel']} ist zur Wiedervorlage fällig.\n\n{link}",
+                        smtp_cfg=smtp_cfg,
+                    )
+                    nachrichten.append({"org_id": org_id, "msg": msg, "smtp_cfg": smtp_cfg})
+            db.commit()
+            return nachrichten
+
+    try:
+        nachrichten = await asyncio.to_thread(_pruefe)
+        for item in nachrichten:
+            try:
+                with SessionLocal() as db:
+                    set_tenant_context(db, item["org_id"])
+                    await mail_service.deliver(db, item["org_id"], item["msg"], item["smtp_cfg"])
+            except Exception:
+                logger.exception("task_reminder: Katastrophenplan-Mail fehlgeschlagen")
+    except Exception:
+        logger.exception("task_reminder: Katastrophenplan-Wiedervorlage fehlgeschlagen")
+
+
 async def _check_pflegeauftrag_erinnerungen() -> None:
     """Einmal taeglich: offene Pflegeauftraege per Mail erinnern."""
     global _letzter_pflegeauftrag_check
@@ -309,6 +370,7 @@ async def task_reminder_loop() -> None:
                 for item in due:
                     await _notify_due(item)
                 await _check_objekt_revisionen()
+                await _check_katplan_wiedervorlagen()
                 await _check_pflegeauftrag_erinnerungen()
         except asyncio.CancelledError:
             logger.info("task_reminder_loop beendet")

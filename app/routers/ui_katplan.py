@@ -23,9 +23,12 @@ from app.models.katplan import (
     KatplanPhase,
     KatplanPlan,
     KatplanPruefung,
+    KatplanVersion,
+    KatplanVersionElement,
 )
 from app.models.major_incident import AUFTRAGSART_LABEL, AUFTRAGSART_WERTE
 from app.models.user import User
+from app.services import katplan_freigabe_service as freigabe_service
 from app.services.katplan_service import (
     KatplanKonflikt,
     abschnitte_baum,
@@ -46,6 +49,7 @@ from app.services.katplan_zugriff import (
     require_katplan_bearbeiten,
     require_katplan_freigeben,
     require_katplan_lesen,
+    sieht_vertraulich,
 )
 
 router = APIRouter(prefix="/katastrophenplaene", tags=["Katastrophenplaene"])
@@ -62,6 +66,17 @@ def _plan(db: Session, plan_id: int, user: User) -> KatplanPlan:
 
 def _kontext(db: Session, user: User, plan: KatplanPlan | None = None) -> dict[str, Any]:
     protokoll = []
+    aktuelle_version = None
+    freigegeben_von = None
+    if plan and plan.aktuelle_version_id:
+        try:
+            aktuelle_version, _, _ = freigabe_service.lade_version(db, plan)
+            freigeber = db.query(User).filter_by(
+                id=aktuelle_version.freigegeben_von_id, org_id=plan.org_id,
+            ).one_or_none()
+            freigegeben_von = freigeber.display_name if freigeber else "Gelöschter Benutzer"
+        except ValueError:
+            aktuelle_version = None
     if plan:
         protokoll = db.query(KatplanAenderung, User.display_name).outerjoin(
             User, User.id == KatplanAenderung.user_id,
@@ -71,6 +86,7 @@ def _kontext(db: Session, user: User, plan: KatplanPlan | None = None) -> dict[s
     return {"user": user, "plan": plan, "gefahrenarten": KATPLAN_GEFAHRENARTEN,
             "status_labels": KATPLAN_STATUS_LABELS, "can_edit": darf_bearbeiten(user),
             "can_release": darf_freigeben(user), "protokoll": protokoll,
+            "aktuelle_version": aktuelle_version, "freigegeben_von": freigegeben_von,
             "heute": now_local(user.org).date(),
             **(_editor_kontext(db, plan) if plan and darf_bearbeiten(user) else {})}
 
@@ -112,15 +128,36 @@ def liste(request: Request, gefahr: str = "", status: str = "", q: str = "", arc
         query = query.filter(KatplanPlan.aktuelle_version_id.is_not(None), KatplanPlan.status != "archiviert")
     elif archiv != 1:
         query = query.filter(KatplanPlan.status != "archiviert")
-    if status:
+    if status and darf_bearbeiten(user):
         query = query.filter(KatplanPlan.status == status)
-    if q.strip():
+    elif status and status != "freigegeben":
+        query = query.filter(KatplanPlan.id == -1)
+    if q.strip() and darf_bearbeiten(user):
         query = query.filter(KatplanPlan.titel.ilike(f"%{q.strip()}%"))
-    plaene = query.order_by(KatplanPlan.aktualisiert_am.desc()).all()
+    plaene: list[Any] = query.order_by(KatplanPlan.aktualisiert_am.desc()).all()
+    version_ids = [p.aktuelle_version_id for p in plaene if p.aktuelle_version_id]
+    versionen = {v.id: v for v in db.query(KatplanVersion).filter(
+        KatplanVersion.org_id == user.org_id, KatplanVersion.id.in_(version_ids),
+    ).all()} if version_ids else {}
+    if not darf_bearbeiten(user):
+        leseliste = []
+        for plan in plaene:
+            v = versionen.get(plan.aktuelle_version_id or 0)
+            if v is None:
+                continue
+            daten = json.loads(v.plan_json)
+            termin = daten.get("wiedervorlage_am")
+            leseliste.append({**daten, "id": plan.id, "status": "freigegeben",
+                              "wiedervorlage_am": date.fromisoformat(termin) if termin else None,
+                              "aktualisiert_am": v.freigegeben_am})
+        plaene = leseliste
+        if q.strip():
+            plaene = [p for p in plaene if q.strip().casefold() in p["titel"].casefold()]
     if gefahr:
-        plaene = [plan for plan in plaene if gefahr in plan.gefahrenarten]
+        plaene = [plan for plan in plaene
+                  if gefahr in (plan["gefahrenarten"] if isinstance(plan, dict) else plan.gefahrenarten)]
     context = {**_kontext(db, user), "plaene": plaene, "gefahr": gefahr,
-               "status": status, "q": q, "archiv": archiv}
+               "status": status, "q": q, "archiv": archiv, "versionen": versionen}
     name = "_liste.html" if request.headers.get("HX-Request") == "true" else "index.html"
     return templates.TemplateResponse(request, f"katplan/{name}", context)
 
@@ -144,13 +181,115 @@ def anlegen(request: Request, daten: Stammdaten = Depends(), db: Session = Depen
     return RedirectResponse(f"/katastrophenplaene/{plan.id}", status_code=303)
 
 
-@router.get("/{plan_id}")
-def detail(plan_id: int, request: Request, db: Session = Depends(get_db),
-           user: User = Depends(require_katplan_lesen)):
+def _sichtbarer_plan(db: Session, plan_id: int, user: User) -> KatplanPlan:
     plan = _plan(db, plan_id, user)
     if not darf_bearbeiten(user) and (plan.aktuelle_version_id is None or plan.status == "archiviert"):
         raise HTTPException(404, "Nicht gefunden")
-    return templates.TemplateResponse(request, "katplan/detail.html", _kontext(db, user, plan))
+    return plan
+
+
+def _lade_version(db: Session, plan: KatplanPlan, vid: int | None = None):
+    try:
+        return freigabe_service.lade_version(db, plan, vid)
+    except ValueError as exc:
+        raise HTTPException(404, "Nicht gefunden") from exc
+
+
+def _lesekontext(db: Session, user: User, plan: KatplanPlan, vid: int | None = None) -> dict:
+    version, daten, elemente = _lade_version(db, plan, vid)
+    elemente = [e for e in elemente if sieht_vertraulich(user) or not e.vertraulich]
+    termin = daten.get("wiedervorlage_am")
+    return {"lesekopf": {**daten, "wiedervorlage_am": date.fromisoformat(termin) if termin else None},
+            "plan_daten": daten, "leseversion": version,
+            "version_baum": freigabe_service.version_baum(daten, elemente, mit_vertraulichen=True),
+            "typen": ELEMENT_TYPEN,
+            "element_daten": {e.id: json.loads(e.daten_json or "{}") for e in elemente},
+            "element_tags": {e.id: json.loads(e.tags_json or "[]") for e in elemente},
+            "element_gsl": {e.id: json.loads(e.gsl_json or "{}") for e in elemente},
+            "element_phasen": {e.id: [p for p in daten.get("phasen", [])
+                                      if p["id"] in json.loads(e.phasen_json)] for e in elemente}}
+
+
+@router.get("/{plan_id}")
+def detail(plan_id: int, request: Request, ansicht: str = "", db: Session = Depends(get_db),
+           user: User = Depends(require_katplan_lesen)):
+    plan = _sichtbarer_plan(db, plan_id, user)
+    arbeitsstand = darf_bearbeiten(user) and (not plan.aktuelle_version_id or ansicht == "arbeitsstand"
+                    or (ansicht != "freigabe" and plan.status != "freigegeben"))
+    context = {**_kontext(db, user, plan), "arbeitsstand": arbeitsstand}
+    if not arbeitsstand:
+        context.update(_lesekontext(db, user, plan))
+    return templates.TemplateResponse(request, "katplan/detail.html", context)
+
+
+@router.get("/{plan_id}/versionen")
+def versionen(plan_id: int, request: Request, db: Session = Depends(get_db),
+              user: User = Depends(require_katplan_lesen)):
+    plan = _sichtbarer_plan(db, plan_id, user)
+    zeilen = db.query(KatplanVersion, User.display_name).outerjoin(
+        User, (User.id == KatplanVersion.freigegeben_von_id) & (User.org_id == plan.org_id),
+    ).filter(KatplanVersion.plan_id == plan.id, KatplanVersion.org_id == plan.org_id).order_by(
+        KatplanVersion.versionsnummer).all()
+    pruefungen = db.query(KatplanPruefung, User.display_name).outerjoin(
+        User, (User.id == KatplanPruefung.user_id) & (User.org_id == plan.org_id),
+    ).filter(KatplanPruefung.plan_id == plan.id, KatplanPruefung.org_id == plan.org_id).order_by(
+        KatplanPruefung.zeit.desc(), KatplanPruefung.id.desc()).all()
+    context = {**_kontext(db, user, plan), "versionen_liste": zeilen, "pruefungen": pruefungen}
+    if not darf_bearbeiten(user):
+        context.update(_lesekontext(db, user, plan))
+    return templates.TemplateResponse(request, "katplan/versionen.html", context)
+
+
+@router.get("/{plan_id}/versionen/{vid}")
+def historische_version(plan_id: int, vid: int, request: Request, db: Session = Depends(get_db),
+                        user: User = Depends(require_katplan_lesen)):
+    plan = _sichtbarer_plan(db, plan_id, user)
+    return templates.TemplateResponse(request, "katplan/detail.html", {
+        **_kontext(db, user, plan), **_lesekontext(db, user, plan, vid), "historisch": True})
+
+
+@router.get("/{plan_id}/vergleich")
+def vergleich(plan_id: int, request: Request, von: int | None = None, nach: str = "",
+              db: Session = Depends(get_db), user: User = Depends(require_katplan_lesen)):
+    plan = _sichtbarer_plan(db, plan_id, user)
+    if nach == "arbeitsstand" and not darf_bearbeiten(user):
+        raise HTTPException(403, "Keine Berechtigung")
+    ids = [v.id for v in db.query(KatplanVersion).filter_by(plan_id=plan.id, org_id=plan.org_id).order_by(
+        KatplanVersion.versionsnummer).all()]
+    if not ids:
+        raise HTTPException(404, "Nicht gefunden")
+    alt, alt_kopf, alt_elemente = _lade_version(db, plan, von if von is not None else ids[max(0, len(ids) - 2)])
+    if nach == "arbeitsstand":
+        with db.no_autoflush:
+            neu_kopf, snapshot = freigabe_service.erstelle_snapshot(db, plan, flush=False)
+        neu_elemente = [KatplanVersionElement(org_id=plan.org_id, **daten) for daten in snapshot]
+        nach_label = "Arbeitsstand"
+    else:
+        try:
+            nid = int(nach) if nach else ids[-1]
+        except ValueError as exc:
+            raise HTTPException(404, "Nicht gefunden") from exc
+        neu, neu_kopf, neu_elemente = _lade_version(db, plan, nid)
+        nach_label = f"Version {neu.versionsnummer}"
+    # Bei Vertraulichkeitswechseln weder alte noch neue Inhalte offenlegen.
+    verborgen = {e.element_uuid for e in [*alt_elemente, *neu_elemente] if e.vertraulich}
+    if not sieht_vertraulich(user):
+        alt_elemente = [e for e in alt_elemente if e.element_uuid not in verborgen]
+        neu_elemente = [e for e in neu_elemente if e.element_uuid not in verborgen]
+    diff = freigabe_service.vergleiche_versionen(alt_elemente, neu_elemente, alt_kopf, neu_kopf)
+    feldgruppen = [diff["kopf"], *(e["felder"] for e in diff["geaendert"])]
+    for gruppe in feldgruppen:
+        for feld in gruppe:
+            if feld["feld"] == "wiedervorlage_am":
+                for seite in ("alt", "neu"):
+                    if feld[seite]:
+                        feld[seite] = date.fromisoformat(feld[seite])
+    namen = {e.element_uuid: e.titel for e in [*alt_elemente, *neu_elemente]}
+    context = {**_kontext(db, user, plan), "vergleich": diff, "element_namen": namen,
+               "von_label": f"Version {alt.versionsnummer}", "nach_label": nach_label}
+    if not darf_bearbeiten(user):
+        context.update(_lesekontext(db, user, plan))
+    return templates.TemplateResponse(request, "katplan/vergleich.html", context)
 
 
 @router.get("/{plan_id}/stammdaten")
@@ -182,6 +321,8 @@ def speichern(plan_id: int, request: Request, version: int = Form(-1), daten: St
     for feld, wert in daten.werte.items():
         alt = getattr(plan, feld)
         if alt != wert:
+            if feld == "wiedervorlage_am":
+                plan.wiedervorlage_erinnert_am = None
             setattr(plan, feld, wert)
             protokolliere(db, plan, "plan", "geaendert", user, feld=feld,
                           alt=str(alt) if alt is not None else None, neu=str(wert) if wert is not None else None)
@@ -220,7 +361,9 @@ def archivieren(plan_id: int, request: Request, db: Session = Depends(get_db),
 @router.post("/{plan_id}/reaktivieren")
 def reaktivieren(plan_id: int, request: Request, db: Session = Depends(get_db),
                  user: User = Depends(require_katplan_freigeben)):
-    return _statuswechsel(request, db, user, plan_id, "entwurf", "reaktiviert")
+    plan = _plan(db, plan_id, user)
+    return _statuswechsel(request, db, user, plan_id,
+                          "freigegeben" if plan.aktuelle_version_id else "entwurf", "reaktiviert")
 
 
 _FARBEN = ("gruen", "gelb", "orange", "rot", "blau", "grau")
@@ -701,3 +844,34 @@ def element_duplizieren(plan_id: int, eid: int, request: Request, ziel_plan_id: 
                         aktiv_element_id=kopie.id, form=_formular_element(db, kopie),
                         daten=json.loads(kopie.daten_json or "{}"))
     return _antwort(request, db, user, plan, "_dupliziert.html", ziel_plan=ziel, baum_oob=False)
+
+
+def _workflow(request: Request, db: Session, user: User, plan_id: int, aktion: str, text: str):
+    plan = _plan(db, plan_id, user)
+    try:
+        getattr(freigabe_service, aktion)(db, plan, user, text)
+    except ValueError as exc:
+        db.rollback()
+        return templates.TemplateResponse(request, "katplan/_kopf.html", {
+            **_kontext(db, user, plan), "fehler": str(exc)}, status_code=422)
+    db.commit()
+    return templates.TemplateResponse(request, "katplan/_kopf.html", {
+        **_kontext(db, user, plan), "protokoll_oob": True})
+
+
+@router.post("/{plan_id}/einreichen")
+def einreichen(plan_id: int, request: Request, kommentar: str = Form(""),
+               db: Session = Depends(get_db), user: User = Depends(require_katplan_bearbeiten)):
+    return _workflow(request, db, user, plan_id, "einreichen", kommentar)
+
+
+@router.post("/{plan_id}/zurueckweisen")
+def zurueckweisen(plan_id: int, request: Request, kommentar: str = Form(""),
+                  db: Session = Depends(get_db), user: User = Depends(require_katplan_freigeben)):
+    return _workflow(request, db, user, plan_id, "zurueckweisen", kommentar)
+
+
+@router.post("/{plan_id}/freigeben")
+def freigeben(plan_id: int, request: Request, aenderungsnotiz: str = Form(""),
+              db: Session = Depends(get_db), user: User = Depends(require_katplan_freigeben)):
+    return _workflow(request, db, user, plan_id, "freigeben", aenderungsnotiz)

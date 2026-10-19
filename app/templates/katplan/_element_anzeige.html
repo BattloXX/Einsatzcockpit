@@ -1,10 +1,12 @@
 {% set daten = element_daten[element.id] %}
-<article class="kp-box" data-element-id="{{ element.id }}">
+<article class="kp-box" data-element-id="{{ element.id }}"
+         {% if leseversion is defined %}data-phasen="{{ element.phasen_json }}"
+         x-show="phase === null || JSON.parse($el.dataset.phasen).length === 0 || JSON.parse($el.dataset.phasen).includes(phase)"{% endif %}>
   <h3>{{ typen[element.typ].icon }} {{ element.kennung }} · {{ element.titel }}</h3>
   <div class="kp-chips">
     <span>{{ typen[element.typ].label }}</span>
     <span class="kp-prio-{{ element.prioritaet }}">Priorität {{ element.prioritaet }}</span>
-    {% if can_edit and element.gsl_vorlage %}
+    {% if can_edit and (element_gsl[element.id].get('gsl_vorlage') if leseversion is defined else element.gsl_vorlage) %}
       <span class="kp-badge">GSL-Vorlage</span>
     {% endif %}
     {% if element.vertraulich %}

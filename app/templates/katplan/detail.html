@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ plan.titel }} · Katastrophenpläne{% endblock %}
+{% block title %}{{ lesekopf.titel if lesekopf is defined else plan.titel }} · Katastrophenpläne{% endblock %}
 {% block head_extra %}
   {% include "katplan/_design.html" %}
   <link href="/static/css/quill.snow.css" rel="stylesheet">
@@ -8,20 +8,30 @@
   <script src="/static/js/katplan_editor.js" defer></script>
 {% endblock %}
 {% block content %}
-<section class="kp-page" x-data="{ reiter: 'plan' }">
+<section class="kp-page" x-data="{ reiter: window.location.hash === '#kp-protokoll' ? 'protokoll' : 'plan' }">
   <a href="/katastrophenplaene">← Katastrophenpläne</a>
   {% include "katplan/_kopf.html" %}
+  {% if historisch %}
+    <p class="kp-box">Historische Version {{ leseversion.versionsnummer }} – aktuell gilt Version {{ aktuelle_version.versionsnummer if aktuelle_version else '-' }}</p>
+  {% endif %}
   <div role="tablist" aria-label="Planansicht" class="kp-actions">
     <button type="button" role="tab" :aria-selected="reiter === 'plan'" @click="reiter = 'plan'" class="btn">Plan</button>
-    <button type="button" role="tab" :aria-selected="reiter === 'protokoll'" @click="reiter = 'protokoll'" class="btn">Protokoll</button>
-  </div>
-  <div x-show="reiter === 'plan'" role="tabpanel">
+    <a class="btn" href="/katastrophenplaene/{{ plan.id }}/versionen">Versionen</a>
     {% if can_edit %}
-      {% include "katplan/_arbeitsstand.html" %}
+    <button type="button" role="tab" :aria-selected="reiter === 'protokoll'" @click="reiter = 'protokoll'" class="btn">Protokoll</button>
     {% endif %}
   </div>
+  <div x-show="reiter === 'plan'" role="tabpanel">
+    {% if arbeitsstand %}
+      {% include "katplan/_arbeitsstand.html" %}
+    {% else %}
+      {% include "katplan/_version_inhalt.html" %}
+    {% endif %}
+  </div>
+  {% if can_edit %}
   <div x-show="reiter === 'protokoll'" role="tabpanel">
     {% include "katplan/_protokoll.html" %}
   </div>
+  {% endif %}
 </section>
 {% endblock %}

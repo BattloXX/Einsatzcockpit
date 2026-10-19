@@ -212,3 +212,74 @@ class KatplanPruefung(TenantScoped, Base):
         sa.BigInteger, sa.ForeignKey("user.id", ondelete="SET NULL"), nullable=True
     )
     zeit: Mapped[datetime] = mapped_column(sa.DateTime, nullable=False, default=_utcnow)
+
+
+class KatplanVersion(TenantScoped, Base):
+    __tablename__ = "katplan_version"
+    __table_args__ = (
+        sa.UniqueConstraint("plan_id", "versionsnummer"),
+        sa.Index("ix_katplan_version_org_plan", "org_id", "plan_id"),
+    )
+
+    id: Mapped[int] = mapped_column(sa.BigInteger, primary_key=True, autoincrement=True)
+    plan_id: Mapped[int] = mapped_column(
+        sa.BigInteger, sa.ForeignKey("katplan_plan.id", ondelete="CASCADE"), nullable=False
+    )
+    versionsnummer: Mapped[int] = mapped_column(sa.Integer, nullable=False)
+    freigegeben_am: Mapped[datetime] = mapped_column(sa.DateTime, nullable=False, default=_utcnow)
+    freigegeben_von_id: Mapped[int | None] = mapped_column(
+        sa.BigInteger, sa.ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+    aenderungsnotiz: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    plan_json: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    inhalt_hash: Mapped[str] = mapped_column(sa.String(64), nullable=False)
+    anzahl_elemente: Mapped[int] = mapped_column(sa.Integer, nullable=False)
+
+
+class KatplanVersionElement(TenantScoped, Base):
+    __tablename__ = "katplan_version_element"
+    __table_args__ = (
+        sa.UniqueConstraint("version_id", "element_uuid"),
+        sa.Index("ix_katplan_version_element_org_version", "org_id", "version_id"),
+        sa.Index("ix_katplan_version_element_org_uuid", "org_id", "element_uuid"),
+    )
+
+    id: Mapped[int] = mapped_column(sa.BigInteger, primary_key=True, autoincrement=True)
+    version_id: Mapped[int] = mapped_column(
+        sa.BigInteger, sa.ForeignKey("katplan_version.id", ondelete="CASCADE"), nullable=False
+    )
+    element_uuid: Mapped[str] = mapped_column(sa.String(36), nullable=False)
+    abschnitt_id: Mapped[int | None] = mapped_column(sa.BigInteger, nullable=True)
+    kennung: Mapped[str | None] = mapped_column(sa.String(30), nullable=True)
+    typ: Mapped[str] = mapped_column(sa.String(30), nullable=False)
+    titel: Mapped[str] = mapped_column(sa.String(200), nullable=False)
+    beschreibung_html: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    daten_json: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    prioritaet: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=2)
+    tags_json: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    gueltig_bis: Mapped[date | None] = mapped_column(sa.Date, nullable=True)
+    pruefen_am: Mapped[date | None] = mapped_column(sa.Date, nullable=True)
+    vertraulich: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, default=False)
+    strasse: Mapped[str | None] = mapped_column(sa.String(200), nullable=True)
+    hausnummer: Mapped[str | None] = mapped_column(sa.String(20), nullable=True)
+    plz: Mapped[str | None] = mapped_column(sa.String(10), nullable=True)
+    ort: Mapped[str | None] = mapped_column(sa.String(100), nullable=True)
+    lat: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
+    lng: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
+    geometry_json: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    geo_status: Mapped[str] = mapped_column(sa.String(12), nullable=False, default="keine")
+    herkunft: Mapped[str] = mapped_column(sa.String(20), nullable=False, default="manual")
+    quelle_dokument_id: Mapped[int | None] = mapped_column(sa.BigInteger, nullable=True)
+    quelle_seiten: Mapped[str | None] = mapped_column(sa.String(30), nullable=True)
+    suchtext: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    sort: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=0)
+    phasen_json: Mapped[str] = mapped_column(sa.Text, nullable=False, default="[]")
+    links_json: Mapped[str] = mapped_column(sa.Text, nullable=False, default="[]")
+    anhaenge_json: Mapped[str] = mapped_column(sa.Text, nullable=False, default="[]")
+    gsl_json: Mapped[str] = mapped_column(sa.Text, nullable=False, default="{}")
+
+
+@sa.event.listens_for(KatplanVersion, "before_update")
+@sa.event.listens_for(KatplanVersionElement, "before_update")
+def _version_unveraenderlich(mapper, connection, target) -> None:
+    raise RuntimeError("Freigegebene Versionen sind unveränderlich")

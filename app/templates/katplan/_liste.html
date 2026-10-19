@@ -1,7 +1,7 @@
 {% include "katplan/_design.html" %}
 <div id="kp-liste">
   {% for plan in plaene %}
-    <article class="kp-box kp-row">
+    <article class="kp-box kp-row{% if can_edit %} kp-row-version{% endif %}">
       <a href="/katastrophenplaene/{{ plan.id }}">{{ plan.titel }}</a>
       <div class="kp-chips">
         {% for code in plan.gefahrenarten %}
@@ -12,6 +12,10 @@
       <div {% if plan.wiedervorlage_am and plan.wiedervorlage_am <= heute %}class="kp-due"{% endif %}>
         Wiedervorlage: {{ plan.wiedervorlage_am.strftime('%d.%m.%Y') if plan.wiedervorlage_am else '-' }}
       </div>
+      {% if can_edit %}
+        {% set version = versionen.get(plan.aktuelle_version_id) %}
+        <div>Version: {{ version.versionsnummer if version else '–' }}</div>
+      {% endif %}
       <div>Geändert: {{ plan.aktualisiert_am|local_datetime }}</div>
     </article>
   {% else %}

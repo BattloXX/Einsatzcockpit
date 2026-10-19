@@ -114,6 +114,9 @@
     <a href="/katastrophenplaene" class="module-btn">
       <span class="module-btn__icon">📘</span>
       <span class="module-btn__label">Katastrophenpläne</span>
+      {% if katplan_badge and (katplan_badge.faellig or katplan_badge.in_pruefung) %}
+        <span class="module-btn__badge module-btn__badge--active">{{ katplan_badge.faellig }} fällige Wiedervorlagen · {{ katplan_badge.in_pruefung }} in Prüfung</span>
+      {% endif %}
     </a>
     {% endif %}
     {% if is_as_pruefung %}

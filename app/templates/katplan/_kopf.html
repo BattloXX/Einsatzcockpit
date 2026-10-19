@@ -1,34 +1,78 @@
 {% include "katplan/_design.html" %}
-<div id="kp-kopf" class="kp-box">
+<div id="kp-kopf" class="kp-box" hx-on::before-swap="if (event.detail.xhr.status === 422) { event.detail.shouldSwap = true; event.detail.isError = false; }">
+  {% if fehler %}
+    <p role="alert" class="kp-due">{{ fehler }}</p>
+  {% endif %}
+  {% if can_edit %}
+    {% if aktuelle_version %}
+      <nav class="kp-actions" aria-label="Fassung">
+        <a class="btn" href="/katastrophenplaene/{{ plan.id }}?ansicht=freigabe" {% if not arbeitsstand %}aria-current="page"{% endif %}>Freigegebene Fassung</a>
+        <a class="btn" href="/katastrophenplaene/{{ plan.id }}?ansicht=arbeitsstand" {% if arbeitsstand %}aria-current="page"{% endif %}>Arbeitsstand</a>
+      </nav>
+      {% if plan.status in ['in_ueberarbeitung', 'in_pruefung'] %}
+        <p class="kp-box">Unveröffentlichte Änderungen seit Version {{ aktuelle_version.versionsnummer }}</p>
+      {% endif %}
+    {% else %}
+      <p>Arbeitsstand</p>
+    {% endif %}
+  {% endif %}
+  {% if aktuelle_version %}
+    <p>Freigegebene Version {{ aktuelle_version.versionsnummer }} vom {{ aktuelle_version.freigegeben_am|local_datetime }} ({{ freigegeben_von }})</p>
+  {% endif %}
+  {% set kopf = lesekopf if lesekopf is defined else plan %}
   <div class="kp-header">
-    <h1>{{ plan.titel }}</h1>
-    <span class="kp-badge">{{ status_labels.get(plan.status, plan.status) }}</span>
+    <h1>{{ kopf.titel }}</h1>
+    <span class="kp-badge">{{ status_labels.get(plan.status, plan.status) if can_edit else 'Freigegeben' }}</span>
   </div>
   <div class="kp-chips">
-    {% for code in plan.gefahrenarten %}
+    {% for code in kopf.gefahrenarten %}
       <span class="kp-chip">{{ gefahrenarten.get(code, code) }}</span>
     {% endfor %}
   </div>
   <dl class="kp-meta">
     <div>
       <dt>Geltungsbereich</dt>
-      <dd>{{ plan.geltungsbereich or '-' }}</dd>
+      <dd>{{ kopf.geltungsbereich or '-' }}</dd>
     </div>
     <div>
       <dt>Verantwortliche Stelle</dt>
-      <dd>{{ plan.verantwortliche_stelle or '-' }}</dd>
+      <dd>{{ kopf.verantwortliche_stelle or '-' }}</dd>
     </div>
-    <div {% if plan.wiedervorlage_am and plan.wiedervorlage_am <= heute %}class="kp-due"{% endif %}>
+    <div {% if kopf.wiedervorlage_am and kopf.wiedervorlage_am <= heute %}class="kp-due"{% endif %}>
       <dt>Wiedervorlage</dt>
-      <dd>{{ plan.wiedervorlage_am.strftime('%d.%m.%Y') if plan.wiedervorlage_am else '-' }}</dd>
+      <dd>{{ kopf.wiedervorlage_am.strftime('%d.%m.%Y') if kopf.wiedervorlage_am else '-' }}</dd>
     </div>
     <div>
       <dt>Zuletzt geändert</dt>
-      <dd>{{ plan.aktualisiert_am|local_datetime }}</dd>
+      <dd>{{ (leseversion.freigegeben_am if leseversion is defined else plan.aktualisiert_am)|local_datetime }}</dd>
     </div>
   </dl>
-  <div>{{ (plan.beschreibung_html or '')|safe }}</div>
+  <div>{{ (kopf.beschreibung_html or '')|safe }}</div>
   <div class="kp-actions">
+    {% if can_edit and plan.status in ['entwurf', 'in_ueberarbeitung'] %}
+      <form method="post" action="/katastrophenplaene/{{ plan.id }}/einreichen"
+            hx-post="/katastrophenplaene/{{ plan.id }}/einreichen" hx-target="#kp-kopf" hx-swap="outerHTML">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <label>Kommentar (optional)<input class="form-control" name="kommentar"></label>
+        <button type="submit" class="btn">Zur Prüfung einreichen</button>
+      </form>
+    {% endif %}
+    {% if can_release and plan.status in ['entwurf', 'in_pruefung', 'in_ueberarbeitung'] %}
+      <form method="post" action="/katastrophenplaene/{{ plan.id }}/freigeben"
+            hx-post="/katastrophenplaene/{{ plan.id }}/freigeben" hx-target="#kp-kopf" hx-swap="outerHTML">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <label>Änderungsnotiz (optional)<textarea class="form-control" name="aenderungsnotiz" maxlength="2000"></textarea></label>
+        <button type="submit" class="btn">Freigeben</button>
+      </form>
+    {% endif %}
+    {% if can_release and plan.status == 'in_pruefung' %}
+      <form method="post" action="/katastrophenplaene/{{ plan.id }}/zurueckweisen"
+            hx-post="/katastrophenplaene/{{ plan.id }}/zurueckweisen" hx-target="#kp-kopf" hx-swap="outerHTML">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <label>Kommentar zur Zurückweisung<textarea class="form-control" name="kommentar" required></textarea></label>
+        <button type="submit" class="btn">Zurückweisen</button>
+      </form>
+    {% endif %}
     {% if can_edit %}
       <a href="/katastrophenplaene/{{ plan.id }}/stammdaten" hx-get="/katastrophenplaene/{{ plan.id }}/stammdaten" hx-target="#kp-kopf" hx-swap="outerHTML" class="btn">Stammdaten bearbeiten</a>
     {% endif %}

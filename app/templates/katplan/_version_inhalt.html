@@ -1,0 +1,39 @@
+<div x-data="{ phase: null }">
+  <div class="kp-chips" aria-label="Phasenfilter">
+    <button class="btn" type="button" @click="phase = null" :aria-pressed="phase === null">Alle</button>
+    {% for phase in plan_daten.get('phasen', []) %}
+      <button class="btn kp-chip kp-farbe-{{ phase.farbe }}" type="button"
+              @click="phase = {{ phase.id }}" :aria-pressed="phase === {{ phase.id }}">{{ phase.name }}</button>
+    {% endfor %}
+  </div>
+  {% macro verzeichnis(knoten) %}
+    <ul>
+      {% for k in knoten if k.abschnitt %}
+        <li>
+          <a href="#kapitel-{{ k.abschnitt.id }}">{{ k.abschnitt.titel }}</a>
+          {{ verzeichnis(k.kinder) }}
+        </li>
+      {% endfor %}
+    </ul>
+  {% endmacro %}
+  <details class="kp-inhalt" open>
+    <summary>Inhaltsverzeichnis</summary>
+    <nav aria-label="Inhaltsverzeichnis">{{ verzeichnis(version_baum) }}</nav>
+  </details>
+  {% macro inhalt(knoten, tiefe=0) %}
+    {% for k in knoten %}
+      <section>
+        {% if k.abschnitt %}
+          {% set ebene = [tiefe + 2, 6]|min %}
+          <h{{ ebene }} id="kapitel-{{ k.abschnitt.id }}">{{ k.abschnitt.titel }}</h{{ ebene }}>
+          <div>{{ (k.abschnitt.beschreibung_html or '')|safe }}</div>
+        {% endif %}
+        {% for element in k.elemente %}
+          {% include "katplan/_element_anzeige.html" %}
+        {% endfor %}
+        {{ inhalt(k.kinder, tiefe + 1) }}
+      </section>
+    {% endfor %}
+  {% endmacro %}
+  {{ inhalt(version_baum) }}
+</div>
