@@ -1,0 +1,23 @@
+{% include "katplan/_design.html" %}
+{% set links_ziel = 'kp-links-' ~ element.id if element else 'kp-plan-links' %}
+{% if q|trim|length < 2 %}
+  <p>Bitte mindestens 2 Zeichen eingeben.</p>
+{% else %}
+  {% for treffer in treffer %}
+    <div class="kp-form kp-box">
+      <strong>{{ treffer.titel }}</strong>
+      <p>{{ treffer.untertitel }}</p>
+      <input form="" type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <input form="" type="hidden" name="ziel_typ" value="{{ ziel_typ }}">
+      <input form="" type="hidden" name="ziel_id" value="{{ treffer.id }}">
+      <label>Rolle
+        <select form="" class="form-control" name="rolle">
+          {% for code, label in link_rollen.items() %}<option value="{{ code }}">{{ label }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Hinweis<input form="" class="form-control" name="hinweis" maxlength="500"></label>
+      <button type="button" class="btn" hx-post="/katastrophenplaene/{{ plan.id }}{{ '/elemente/' ~ element.id if element else '' }}/links"
+        hx-include="closest .kp-form" hx-target="#{{ links_ziel }}" hx-swap="outerHTML">Verknüpfen</button>
+    </div>
+  {% else %}<p>Keine Treffer.</p>{% endfor %}
+{% endif %}

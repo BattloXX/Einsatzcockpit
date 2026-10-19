@@ -1,0 +1,21 @@
+{% include "katplan/_design.html" %}
+{% if q|trim|length < 2 %}
+  <p>Bitte mindestens 2 Zeichen eingeben.</p>
+{% else %}
+  {% for ziel, plan_titel in treffer %}
+    <div class="kp-form kp-box">
+      <strong>{{ ziel.kennung }} {{ ziel.titel }}</strong>
+      {% if ziel.plan_id != plan.id %}<p>{{ plan_titel }}</p>{% endif %}
+      <input form="" type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <input form="" type="hidden" name="zu_element_uuid" value="{{ ziel.uuid }}">
+      <label>Art
+        <select form="" class="form-control" name="art">
+          {% for code, label in relation_arten.items() %}<option value="{{ code }}">{{ label }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Hinweis<input form="" class="form-control" name="hinweis" maxlength="300"></label>
+      <button type="button" class="btn" hx-post="/katastrophenplaene/{{ plan.id }}/elemente/{{ element.id }}/beziehungen"
+        hx-include="closest .kp-form" hx-target="#kp-beziehungen-{{ element.id }}" hx-swap="outerHTML">Verknüpfen</button>
+    </div>
+  {% else %}<p>Keine Treffer.</p>{% endfor %}
+{% endif %}

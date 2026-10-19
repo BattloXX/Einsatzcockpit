@@ -1,0 +1,23 @@
+<section id="kp-beziehungen-{{ element.id }}" class="kp-form kp-editor-fields"
+  hx-on::before-swap="if (event.detail.xhr.status === 422) { event.detail.shouldSwap = true; event.detail.isError = false; }">
+  <h3 class="kp-box__title">Beziehungen</h3>
+  {% if fehler %}<p role="alert" class="kp-error">{{ fehler }}</p>{% endif %}
+  {% for relation in element_relationen.get(element.id, []) %}
+    <div class="kp-form">
+      <p><span class="kp-badge">{{ relation_arten[relation.art] }}</span>
+        <a href="{{ relation.url }}">{{ relation.kennung }} {{ relation.titel }}</a>
+        {% if relation.plan_titel %} · {{ relation.plan_titel }}{% endif %}
+      </p>
+      {% if relation.hinweis %}<p>{{ relation.hinweis }}</p>{% endif %}
+      <input form="" type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <button type="button" class="btn btn--ghost btn--sm kp-delete kp-delete--kompakt" hx-post="/katastrophenplaene/{{ plan.id }}/beziehungen/{{ relation.id }}/loeschen"
+        hx-include="closest .kp-form" hx-target="#kp-beziehungen-{{ element.id }}" hx-swap="outerHTML">Entfernen</button>
+    </div>
+  {% endfor %}
+  <label>Suche nach Kennung oder Titel
+    <input form="" class="form-control" type="search" name="q" placeholder="Mindestens 2 Zeichen"
+      hx-get="/katastrophenplaene/{{ plan.id }}/elemente/{{ element.id }}/beziehungen/suche"
+      hx-trigger="input changed delay:300ms, search" hx-target="#kp-beziehungen-{{ element.id }}-treffer">
+  </label>
+  <div id="kp-beziehungen-{{ element.id }}-treffer"></div>
+</section>

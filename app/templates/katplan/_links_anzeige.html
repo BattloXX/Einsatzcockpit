@@ -1,0 +1,32 @@
+{% set icons = {'kontakt': '👤', 'kontakt_organisation': '🏛', 'objekt': '🏢', 'fahrzeug': '🚒', 'wasserstelle': '💧'} %}
+{% for gruppe in links|groupby('rolle_label') %}
+  <h4 class="kp-box__title">{{ gruppe.grouper }}</h4>
+  {% for link in gruppe.list %}
+    <div>
+      <span class="kp-badge">{{ icons.get(link.typ, '') }} {{ link.typ|replace('_', ' ') }}</span>
+      {% if links_bearbeiten %}<span class="kp-badge">{{ link.rolle_label }}</span>{% endif %}
+      {% if link.url %}
+        <a href="{{ link.url }}">{{ link.titel }}</a>
+      {% else %}
+        <strong>{{ link.titel }}</strong>
+      {% endif %}
+      {% if link.untertitel %}<p>{{ link.untertitel }}</p>{% endif %}
+      {% for telefon in link.telefone %}
+        <a class="kp-mono" href="tel:{{ telefon.nummer }}">{{ telefon.nummer }}{% if telefon.label %} ({{ telefon.label }}){% endif %}</a>
+      {% endfor %}
+      {% if link.hinweis %}<p>{{ link.hinweis }}</p>{% endif %}
+      {% if link.fehlt %}
+        <span class="kp-badge kp-badge--red">nicht mehr vorhanden</span>
+      {% elif link.geaendert_seit_freigabe %}
+        <span class="kp-badge kp-badge--amber">geändert seit Freigabe</span>
+      {% endif %}
+      {% if links_bearbeiten %}
+        <div class="kp-form">
+          <input form="" type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          <button type="button" class="btn btn--ghost btn--sm kp-delete kp-delete--kompakt" hx-post="/katastrophenplaene/{{ plan.id }}/links/{{ link.id }}/loeschen"
+            hx-include="closest .kp-form" hx-target="#{{ links_ziel }}" hx-swap="outerHTML">Entfernen</button>
+        </div>
+      {% endif %}
+    </div>
+  {% endfor %}
+{% endfor %}
