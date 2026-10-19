@@ -14,5 +14,4 @@ Konvention wie `quill.min.js`). Eingebunden per Browser-Import-Map, siehe
 | y-quill | 1.0.0 | MIT | https://www.npmjs.com/package/y-quill |
 | quill-cursors | 5.0.0 | MIT | https://www.npmjs.com/package/quill-cursors (UMD-Bundle, daher NICHT hier sondern als `app/static/js/quill-cursors.js` + `app/static/css/quill-cursors.min.css` abgelegt, gleiche Konvention wie `quill.min.js`) |
 
-Aktualisieren: Version in dieser Tabelle anpassen, Dateien neu von
-`https://cdn.jsdelivr.net/npm/<paket>@<version>/<pfad>` laden und 1:1 ersetzen.
+Aktualisierung jetzt über `package.json` + `npm run vendor`; Versionen in dieser Tabelle entsprechend anpassen.

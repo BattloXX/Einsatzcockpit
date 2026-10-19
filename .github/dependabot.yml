@@ -1,0 +1,35 @@
+version: 2
+# Bei npm-Updates npm run vendor ausführen und die kopierten Dateien mitcommitten.
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      vendor:
+        patterns:
+          - "htmx.org"
+          - "alpinejs"
+          - "sortablejs"
+          - "leaflet"
+          - "@geoman-io/leaflet-geoman-free"
+          - "quill"
+          - "chart.js"
+          - "konva"
+          - "quill-cursors"
+          - "leaflet.markercluster"
+          - "yjs"
+          - "lib0"
+          - "y-protocols"
+          - "y-websocket"
+          - "y-quill"
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
