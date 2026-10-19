@@ -9,6 +9,7 @@
     {% from "_tabnav.html" import tabnav %}
     {% set tabs = [
     {'label': 'Plan', 'href': '/katastrophenplaene/' ~ plan.id, 'active': false},
+    {'label': 'Karte', 'href': '/katastrophenplaene/' ~ plan.id ~ '/karte', 'active': false},
     {'label': 'Versionen', 'href': '/katastrophenplaene/' ~ plan.id ~ '/versionen', 'active': true}
     ] %}
     {% if can_edit %}

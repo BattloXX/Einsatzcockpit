@@ -24,6 +24,12 @@
   {% if element.strasse or element.ort or element.plz or element.hausnummer %}
     <p>{{ element.strasse or '' }} {{ element.hausnummer or '' }}, {{ element.plz or '' }} {{ element.ort or '' }}</p>
   {% endif %}
+  {% if typen[element.typ].geometrie != 'keine' %}
+    {% include "katplan/_geo_status.html" %}
+  {% endif %}
+  {% if element.geometry_json %}
+    <a href="/katastrophenplaene/{{ plan.id }}/karte#element-{{ element.element_uuid if leseversion is defined else element.uuid }}">Auf Karte zeigen</a>
+  {% endif %}
   {% for feld, label in [('gueltig_bis', 'Gültig bis'), ('pruefen_am', 'Prüfen am')] %}
     {% if element[feld] %}
       <div class="kp-row">

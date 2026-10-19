@@ -24,6 +24,15 @@
     {% endif %}
   </header>
   <aside class="kp-grid__side">
+    {% if karten_geojson is defined and karten_geojson.features %}
+      <section class="kp-sidecard">
+        <h2 class="kp-box__title">Übersichtskarte</h2>
+        {% with karten_mini = true %}
+          {% include "katplan/_plankarte.html" %}
+        {% endwith %}
+        <a href="{{ karten_url }}">Große Karte</a>
+      </section>
+    {% endif %}
     <section class="kp-sidecard">
       {% with element = none %}
         {% include "katplan/_links.html" %}
