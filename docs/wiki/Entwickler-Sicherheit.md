@@ -7,6 +7,8 @@ Die MCP-spezifischen OAuth-, PKCE- und Live-Berechtigungsregeln beschreibt [MCP-
 ## Authentifizierung und Session
 
 - Passwörter: **bcrypt** (12 Runden)
+- SSO-ID-Token: Validierung mit **PyJWT[crypto]** in `app/services/sso_service.py`
+  (RS256, Signatur über JWKS sowie Prüfung von Issuer, Audience und Ablaufzeit).
 - Session-Token: signiert mit **itsdangerous** (HMAC-SHA1), Max-Age 24 h und Inaktivitäts-Timeout 8 h (Sliding Window)
 - Brute-Force-Schutz: konfigurierbare Anzahl Fehlversuche sperrt das Konto für eine konfigurierbare Dauer (`LOGIN_MAX_FAILED`, `LOGIN_LOCKOUT_MINUTES`)
 - `COOKIE_SECURE=true` wird in Produktion erzwungen (HTTPS)
@@ -16,8 +18,40 @@ Die MCP-spezifischen OAuth-, PKCE- und Live-Berechtigungsregeln beschreibt [MCP-
 ## CSRF
 
 - `CSRFMiddleware` verwendet das Double-Submit-Cookie-Pattern.
-- Alle zustandsändernden POST-Requests werden geprüft.
+- Zustandsändernde POST-Requests werden geprüft; der reine CSP-Meldeendpunkt
+  `POST /csp-report` ist CSRF-frei (siehe unten).
 - `app/static/js/csrf.js` setzt den CSRF-Token automatisch im HTMX-Header.
+
+## Content-Security-Policy
+
+`app/middleware/security_headers.py` setzt die aktive `Content-Security-Policy`.
+Die Basis ist `default-src 'self'`; Skripte und Styles kommen grundsätzlich von
+der eigenen Instanz, mit gezielten Ausnahmen etwa für Karten und aktiviertes Turnstile.
+`script-src 'self' 'unsafe-inline' 'unsafe-eval'` und
+`style-src 'self' 'unsafe-inline'` erlauben die bestehenden Inline-Skripte,
+Event-Handler und Styles. `'unsafe-eval'` wird für die Ausdrucksauswertung des
+Alpine-Standard-Builds benötigt.
+
+Infoscreens haben eigene Policies: Wetter/Statistik erlauben das Tailwind-CDN,
+Alarm-Infoscreens für die URL-Rotation fremde HTTPS-Seiten in Frames.
+`TRUSTED_FRAME_ANCESTORS` erlaubt konfigurierte Eltern-Origins für die Einbettung
+der App; öffentliche Fahrtenbuch-Routen erlauben `frame-ancestors *`.
+
+Mit `CSP_REPORT_ONLY=true` in `.env` wird zusätzlich
+`Content-Security-Policy-Report-Only` gesendet (Standard: `false`). Die Mess-Policy
+entspricht der jeweils aktiven CSP, entfernt aber nur `'unsafe-inline'` aus
+`script-src` und ergänzt `report-uri /csp-report`. `'unsafe-eval'` bleibt wegen
+Alpine erlaubt. Die aktive CSP wird dabei weiter durchgesetzt; die strengere
+Mess-Policy meldet Inline-Skripte und Inline-Handler, ohne sie zusätzlich zu blockieren.
+
+Browser senden Berichte an das anonyme, CSRF-freie `POST /csp-report`
+(`app/routers/csp_report.py`, 60 Requests/Minute, maximal 16 KiB pro Bericht).
+Der Logger `einsatzleiter.csp` aggregiert nach Direktive, blockierter Quelle und
+Dokumentpfad; gleiche Kombinationen werden höchstens stündlich protokolliert.
+Quellen werden auf ihre Origin gekürzt, numerische Pfadsegmente anonymisiert.
+In der Sysadmin-Log-Ansicht nach diesem Logger auswerten und betroffene Templates
+priorisieren. Der nächste Härtungsschritt sind Nonces für Skripte, der Abbau von
+Inline-Handlern und die Umstellung auf den Alpine-CSP-Build.
 
 ## Multi-Tenant-Isolation
 

@@ -21,6 +21,22 @@ das Markup ungültig, Formulare brechen stillschweigend (Vorfall 2026-06-19,
 - Editor-Autokorrektur beim Umordnen von Blöcken deaktiviert lassen.
 - Vor Commit von Templates: `rg '[“”„‘’]' app/templates`
 
+## Pflicht: DB-Routen synchron, Async-Aufrufe über Brücke
+
+- Neue Routen mit eigener `Depends(get_db)`-Session als `def` schreiben (anyio-Threadpool).
+- Asynchrone Aufrufe darin über `app.core.async_bridge.run_async(fn, *args, **kwargs)`:
+  Coroutine-Funktion übergeben, nie ein Coroutine-Objekt, z. B. `run_async(request.form)`.
+- `async def` nur bei echter Async-I/O; darin direkt `await`, nie `run_async`.
+- `tests/test_async_routes_sync_db.py` bewacht den Bestand und verbietet `run_async`
+  in Async-Funktionen. `tests/data/async_routes_sync_db_baseline.txt` darf nur schrumpfen.
+
+## Pflicht: Third-Party-JavaScript über npm vendoren
+
+- Versionen nur über `package.json` + `npm run vendor` aktualisieren;
+  Third-Party-Dateien unter `app/static/js` nie von Hand ersetzen.
+- Dependabot-Vendor-PRs brauchen `npm ci && npm run vendor` und einen Commit der
+  kopierten Dateien; `npm run vendor:check` prüft die Übereinstimmung (auch im CI-Job JS).
+
 ## Pflicht: Tenant-Scoping bei Mutationen und Public-Routen
 
 Der Tenant-Listener (`app/core/tenant.py`) filtert **nur SELECTs**.

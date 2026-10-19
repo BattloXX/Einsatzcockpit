@@ -6,7 +6,7 @@
 
 - Python 3.14
 - Docker (für lokale MariaDB) oder eine lokale MariaDB-Installation
-- Node.js 20+ (für den Tailwind-CSS-Build)
+- Node.js 22+ (für den Tailwind-CSS-Build und Bibliotheks-Updates)
 - Git
 - Optional: `ffmpeg` für Video-Uploads
 
@@ -39,6 +39,35 @@ Für laufendes CSS-Kompilieren in einem zweiten Terminal:
 ```bash
 npm run dev
 ```
+
+## Frontend-Bibliotheken aktualisieren
+
+Third-Party-Bibliotheken sind mit exakten Versionen in `package.json` erfasst.
+`scripts/vendor-js.mjs` kopiert die zugeordneten JS- und CSS-Dateien aus den npm-Paketen:
+
+```bash
+npm ci
+# Gewünschte Version in package.json anpassen, danach Lockdatei aktualisieren:
+npm install
+npm run vendor
+npm run vendor:check
+```
+
+`package.json`, `package-lock.json` und die kopierten Dateien gemeinsam committen.
+Third-Party-Dateien unter `app/static/js` nie von Hand ersetzen.
+Die separat minifizierten `leaflet.min.js` und `leaflet.min.css` sind nicht im
+Mapping, da sie vom npm-Paket abweichen.
+
+Dependabot aktualisiert npm-, pip- und Actions-Abhängigkeiten über
+`.github/dependabot.yml`. Bei Vendor-PRs nach dem Checkout `npm ci && npm run vendor`
+ausführen und die kopierten Dateien mitcommitten; der CI-Job JS prüft sie mit
+`npm run vendor:check`. Major-Updates von quill-cursors sind ausgenommen:
+Version 5.0.0 bleibt, weil 6.x nur ESM bietet und die bisherige Script-Einbindung bricht.
+Bei Konva bleibt `Konva.legacyTextRendering = true` in `app/static/js/annotate.js`
+für die bisherige Textdarstellung gesetzt.
+
+Die vendorten Dateien sind im Repository committet. Der Server braucht weiterhin
+kein Node.js; `npm run vendor` ist nur lokal bei Bibliotheks-Updates nötig.
 
 ## MariaDB via Docker
 

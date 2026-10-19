@@ -4,6 +4,22 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 
 ## Unreleased
 
+- **Technik/Modernisierung**: 522 Routen mit synchroner DB-Session auf `def` im
+  Threadpool umgestellt; Async-Brücke und Wächtertests verhindern neue Event-Loop-Blockaden.
+  Ruff um `ASYNC`, `DTZ`, `B`, `S110` und `T20` mit Bestandsbaseline erweitert,
+  `apscheduler` entfernt, Docker-Frontend auf `node:22` und GitHub Actions aktualisiert.
+- **Bedienung**: Funkjournal, Einsatzleiter-Wechsel und Atemschutz aktualisieren sich
+  nach HTMX-Aktionen ohne Vollreload; Freitext-Einsatzleiter in der Topnav und
+  Funkjournal-Suche nach Einheit, Kanal und Inhalt ergänzt.
+- **Sicherheit**: SSO-ID-Token-Validierung von `python-jose` auf `PyJWT[crypto]`
+  umgestellt; optionaler CSP-Messmodus (`CSP_REPORT_ONLY`) mit aggregierten Berichten
+  über `/csp-report` ergänzt.
+- **Frontend-Bibliotheken**: Versionen zentral in `package.json`, reproduzierbares
+  Vendoring mit CI-Prüfung und Dependabot für npm, pip und Actions eingerichtet.
+  Geoman 2.20.2, Alpine 3.17.4, htmx 2.0.11, Konva 10.9.0 (bisherige Textdarstellung),
+  Yjs 13.6.33, lib0 0.2.119 und y-websocket 3.1.0 aktualisiert;
+  quill-cursors bleibt wegen der ESM-Umstellung ab 6.x auf 5.0.0.
+
 - **Kontakte**: Gefilterte Einsatztelefonlisten und Kontaktverzeichnisse mit Druckvorschau,
   PDF-Download, Browserdruck, persönlichen Profilen und optionalem Organisationslogo ergänzt.
   Kategorien und Druckkennzeichnungen sind über Oberfläche und MCP pflegbar (Migration 0293).
