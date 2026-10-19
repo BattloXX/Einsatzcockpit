@@ -1,0 +1,55 @@
+{% include "katplan/_design.html" %}
+<div id="kp-kopf" class="kp-box" hx-on::before-swap="if (event.detail.xhr.status === 409 || event.detail.xhr.status === 422) { event.detail.shouldSwap = true; event.detail.isError = false; }">
+  <form method="post" action="/katastrophenplaene/{{ (plan.id|string) + '/stammdaten' if plan else 'neu' }}" class="kp-form"
+        {% if plan %}hx-post="/katastrophenplaene/{{ plan.id }}/stammdaten" hx-target="#kp-kopf" hx-swap="outerHTML"{% endif %}>
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    {% if plan %}
+      <input type="hidden" name="version" value="{{ formular_version }}">
+    {% endif %}
+    {% if fehler %}
+      <p role="alert" class="kp-error">{{ fehler }}</p>
+      {% if plan %}
+        <a href="/katastrophenplaene/{{ plan.id }}/stammdaten" hx-get="/katastrophenplaene/{{ plan.id }}/stammdaten" hx-target="#kp-kopf" hx-swap="outerHTML">Aktuellen Stand laden</a>
+      {% endif %}
+    {% endif %}
+    <label>
+      Titel (Pflichtfeld)
+      <input name="titel" maxlength="200" required value="{{ form.get('titel', '') }}" class="form-control">
+    </label>
+    <fieldset>
+      <legend>Gefahrenarten (mindestens eine)</legend>
+      <div class="kp-chips">
+        {% for code, label in gefahrenarten.items() %}
+          <label class="kp-chip">
+            <input type="checkbox" name="gefahrenarten" value="{{ code }}" {% if code in form.get('gefahrenarten', []) %}checked{% endif %}>
+            {{ label }}
+          </label>
+        {% endfor %}
+      </div>
+    </fieldset>
+    <label>
+      Beschreibung
+      <textarea name="beschreibung_html" class="form-control">{{ form.get('beschreibung_html', '') }}</textarea>
+    </label>
+    <label>
+      Geltungsbereich
+      <input name="geltungsbereich" maxlength="300" value="{{ form.get('geltungsbereich', '') }}" class="form-control">
+    </label>
+    <label>
+      Verantwortliche Stelle
+      <input name="verantwortliche_stelle" maxlength="200" value="{{ form.get('verantwortliche_stelle', '') }}" class="form-control">
+    </label>
+    <label>
+      Wiedervorlage
+      <input type="date" name="wiedervorlage_am" value="{{ form.get('wiedervorlage_am', '') }}" class="form-control">
+    </label>
+    <div class="kp-actions">
+      <button type="submit" class="btn btn--primary">{{ 'Speichern' if plan else 'Plan anlegen' }}</button>
+      {% if plan %}
+        <a href="/katastrophenplaene/{{ plan.id }}" hx-get="/katastrophenplaene/{{ plan.id }}" hx-select="#kp-kopf" hx-target="#kp-kopf" hx-swap="outerHTML" class="btn">Abbrechen</a>
+      {% else %}
+        <a href="/katastrophenplaene" class="btn">Abbrechen</a>
+      {% endif %}
+    </div>
+  </form>
+</div>

@@ -12,6 +12,8 @@ ROLES = {
     "mailing_sender": 30,
     "incident_leader": 70,
     "objekt_verwalter": 60,     # Objektverwaltung: Objekte pflegen/freigeben, Dokumente, Lagekarte
+    "katplan_verwalter": 60,
+    "katplan_freigeber": 65,
     "uebungsleiter": 60,
     "kontakt_verwalter": 60,    # Zentrale Kontakte pflegen
     "probenverwalter": 60,      # Probenplanung bearbeiten
@@ -45,6 +47,13 @@ STRASSENSPERREN_LESE_ROLLEN = (
     "fahrtenbuch_admin",
     "objekt_verwalter",
 )
+KATPLAN_VERWALTER_ROLES = {"system_admin", "admin", "org_admin", "katplan_verwalter", "katplan_freigeber"}
+KATPLAN_FREIGEBER_ROLES = {"system_admin", "admin", "org_admin", "katplan_freigeber"}
+KATPLAN_LESE_ROLLEN = (
+    "readonly", "recorder", "breathing_supervisor", "incident_leader", "objekt_verwalter",
+    "katplan_verwalter", "katplan_freigeber",
+)
+KATPLAN_VERTRAULICH_ROLES = KATPLAN_VERWALTER_ROLES | {"incident_leader"}
 PLANSPIEL_LEITER_ROLES = {"system_admin", "admin", "org_admin", "uebungsleiter"}
 PLANSPIEL_LESE_ROLLEN = ("uebungsleiter", "uebungsbeobachter")
 PROBEN_EDIT_ROLES = {"system_admin", "admin", "org_admin", "probenverwalter", "incident_leader", "recorder"}
@@ -295,3 +304,11 @@ def can_edit_proben(user) -> bool:
 def is_proben_admin(user) -> bool:
     """True fuer organisationsweite Probenplanung-Verwaltung."""
     return has_role(user, "org_admin")
+
+
+def can_view_katplan_request(request: Request) -> bool:
+    from app.services.katplan_zugriff import darf_lesen
+
+    return bool(getattr(request.state, "katplan_enabled", False)) and darf_lesen(
+        getattr(request.state, "user", None)
+    )

@@ -110,6 +110,12 @@
     {% if request.state.planspiel_enabled and (is_admin or 'uebungsleiter' in user_roles or 'uebungsbeobachter' in user_roles) %}
     <a href="/planspiele" class="module-btn"><span class="module-btn__icon">🎲</span><span class="module-btn__label">Planspiele</span></a>
     {% endif %}
+    {% if can_view_katplan(request) %}
+    <a href="/katastrophenplaene" class="module-btn">
+      <span class="module-btn__icon">📘</span>
+      <span class="module-btn__label">Katastrophenpläne</span>
+    </a>
+    {% endif %}
     {% if is_as_pruefung %}
     <a href="/atemschutz-pruefung" class="module-btn"><span class="module-btn__icon">🫁</span><span class="module-btn__label">Atemschutzprüfung</span></a>
     {% endif %}

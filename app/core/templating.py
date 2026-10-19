@@ -16,7 +16,7 @@ from datetime import datetime as _datetime
 from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 
-from app.core.permissions import can_view_kontakt_directory_request
+from app.core.permissions import can_view_katplan_request, can_view_kontakt_directory_request
 from app.core.telefon import telefon_kompakt
 from app.core.timezones import (
     format_local_datetime,
@@ -336,3 +336,5 @@ try:
     templates.env.globals["IMG_VERSION"] = str(int(max(_img_mtimes))) if _img_mtimes else "1"
 except OSError:
     templates.env.globals["IMG_VERSION"] = "1"
+
+templates.env.globals["can_view_katplan"] = can_view_katplan_request

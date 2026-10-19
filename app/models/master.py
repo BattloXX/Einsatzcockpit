@@ -477,6 +477,7 @@ class OrgSettings(Base):
     # Straßensperren & Anfahrtsrouting: effektiv nur mit System-Flag aktiv.
     strassensperren_modul_aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     planspiel_modul_aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    katplan_modul_aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     planspiel_gebiet_geojson: Mapped[str | None] = mapped_column(Text, nullable=True)
     planspiel_gebiet_radius_m: Mapped[int | None] = mapped_column(Integer, nullable=True)
     planspiel_max_laufende_runs: Mapped[int] = mapped_column(Integer, nullable=False, default=2)

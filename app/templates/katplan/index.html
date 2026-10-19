@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Katastrophenpläne{% endblock %}
+{% block head_extra %}
+  {% include "katplan/_design.html" %}
+{% endblock %}
+{% block content %}
+<section class="kp-page">
+  <div class="kp-header">
+    <h1>Katastrophenpläne</h1>
+    {% if can_edit %}
+      <a href="/katastrophenplaene/neu" class="btn btn--primary">Neuer Plan</a>
+    {% endif %}
+  </div>
+  <form method="get" action="/katastrophenplaene" class="kp-filter" hx-get="/katastrophenplaene" hx-target="#kp-liste" hx-swap="outerHTML">
+    <label>
+      Titel
+      <input name="q" value="{{ q }}" type="search">
+    </label>
+    <label>
+      Gefahrenart
+      <select name="gefahr">
+        <option value="">Alle Gefahrenarten</option>
+        {% for code, label in gefahrenarten.items() %}
+          <option value="{{ code }}" {% if gefahr == code %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      Status
+      <select name="status">
+        <option value="">Alle Status</option>
+        {% for code, label in status_labels.items() %}
+          <option value="{{ code }}" {% if status == code %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% if can_edit %}
+      <label>
+        <input type="checkbox" name="archiv" value="1" {% if archiv == 1 %}checked{% endif %}>
+        Archivierte einschließen
+      </label>
+    {% endif %}
+    <button type="submit" class="btn">Filtern</button>
+  </form>
+  {% include "katplan/_liste.html" %}
+</section>
+{% endblock %}

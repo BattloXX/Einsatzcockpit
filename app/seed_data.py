@@ -35,6 +35,8 @@ ROLES = [
     {"code": "recorder",             "label": "Bearbeiter"},
     {"code": "readonly",             "label": "Nur Lesen"},
     {"code": "uebungsbeobachter",    "label": "Übungsbeobachter"},
+    {"code": "katplan_verwalter",    "label": "Katastrophenpläne bearbeiten"},
+    {"code": "katplan_freigeber",    "label": "Katastrophenpläne freigeben"},
 ]
 
 # Vollständiger Alarmstichwort-Katalog der Vorarlberger Feuerwehren, siehe

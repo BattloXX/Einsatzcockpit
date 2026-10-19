@@ -1,0 +1,23 @@
+<style>
+  .kp-page { max-width: 1100px; margin: 0 auto; padding: 1rem; }
+  .kp-header, .kp-actions, .kp-chips, .kp-filter { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; }
+  .kp-header { justify-content: space-between; margin-bottom: 1rem; }
+  .kp-box { border: 1px solid var(--border); border-radius: .5rem; padding: 1rem; margin: 1rem 0; overflow-wrap: anywhere; }
+  .kp-row { display: grid; grid-template-columns: 2fr 2fr 1fr 1fr 1fr; gap: .75rem; align-items: start; }
+  .kp-chip, .kp-badge { display: inline-block; padding: .2rem .5rem; border: 1px solid var(--border); border-radius: 1rem; }
+  .kp-due, .kp-error { color: var(--danger, #dc2626); }
+  .kp-form { display: grid; gap: 1rem; }
+  .kp-form label { display: grid; gap: .3rem; }
+  .kp-form input, .kp-form textarea, .kp-filter input, .kp-filter select { max-width: 100%; min-width: 0; box-sizing: border-box; }
+  .kp-form textarea { min-height: 9rem; }
+  .kp-form .kp-chip { display: flex; align-items: center; gap: .4rem; }
+  .kp-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+  .kp-meta dd { margin: .25rem 0 0; }
+  @media (max-width: 760px) {
+    .kp-row, .kp-meta { grid-template-columns: 1fr; }
+    .kp-filter > label { width: 100%; }
+    .kp-filter input, .kp-filter select { width: 100%; }
+    .kp-filter input[type="checkbox"] { width: auto; }
+    .kp-page { padding: .5rem; }
+  }
+</style>
