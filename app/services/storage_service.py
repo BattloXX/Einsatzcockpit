@@ -209,6 +209,12 @@ def reconcile_storage(db: Session, org_id: int) -> int:
             # addieren (waere Doppelzaehlung).
             "  SELECT COALESCE(belegt_bytes, 0) FROM objekt_dokument WHERE org_id = :oid"
             "  UNION ALL"
+            "  SELECT COALESCE(belegt_bytes, 0) FROM katplan_dokument WHERE org_id = :oid"
+            "  UNION ALL"
+            # Katastrophenplan-Anhaenge: groesse_bytes = Original + Thumb. Soft-geloeschte
+            # (geloescht_am gesetzt) belegen weiter Speicher, weil Versionen sie referenzieren.
+            "  SELECT COALESCE(groesse_bytes, 0) FROM katplan_anhang WHERE org_id = :oid"
+            "  UNION ALL"
             "  SELECT COALESCE(size_bytes, 0) FROM probe_media WHERE org_id = :oid"
             ") AS t"
         ),

@@ -63,6 +63,8 @@ from app.models.katplan import (  # noqa: F401 -- registriert ORM-Modelle
     KatplanAbschnitt,
     KatplanAenderung,
     KatplanAnhang,
+    KatplanDokument,
+    KatplanDokumentSeite,
     KatplanElement,
     KatplanElementPhase,
     KatplanPhase,

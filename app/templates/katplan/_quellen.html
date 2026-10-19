@@ -1,0 +1,10 @@
+{% include "katplan/_design.html" %}
+<div id="kp-quellen">
+  {% if fehler %}<p role="alert">{{ fehler }}</p>{% endif %}
+  {% for dokument in quellen %}
+  <div>
+    <span>{{ dokument.titel }} - Version {{ dokument.versionsnummer }}</span>
+    {% include "katplan/_quelle_status.html" %}
+  </div>
+  {% else %}<p>Keine Planquellen vorhanden.</p>{% endfor %}
+</div>

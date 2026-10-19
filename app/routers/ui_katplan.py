@@ -4,7 +4,7 @@ import json
 from datetime import UTC, date, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import or_
@@ -21,6 +21,7 @@ from app.models.katplan import (
     KatplanAbschnitt,
     KatplanAenderung,
     KatplanAnhang,
+    KatplanDokument,
     KatplanElement,
     KatplanElementPhase,
     KatplanLink,
@@ -38,6 +39,7 @@ from app.routers.ui_objekt import _LESE_ROLLEN
 from app.services import katplan_anhang_service as anhang_service
 from app.services import katplan_freigabe_service as freigabe_service
 from app.services import katplan_link_service as link_service
+from app.services import katplan_quelle_service as quelle_service
 from app.services.katplan_geo_service import ableite_punkt, pruefe_geometrie
 from app.services.katplan_service import (
     KatplanKonflikt,
@@ -1003,6 +1005,11 @@ def element_speichern(plan_id: int, eid: int, request: Request, db: Session = De
                      gsl_prioritaet=gsl_prioritaet, gsl_dauer_min=dauer,
                      gsl_ressourcentypen_json=json.dumps(ressourcen, ensure_ascii=False) if ressourcen else None,
                      gsl_voraussetzungen=voraussetzungen or None)
+        if "quelle_dokument_id" in form or "quelle_seiten" in form:
+            quelle_id = int(form["quelle_dokument_id"]) if form.get("quelle_dokument_id") else None
+            quelle_seiten = form.get("quelle_seiten", "").strip()
+            quelle_service.validiere_element_quelle(db, plan, quelle_id, quelle_seiten)
+            werte.update(quelle_dokument_id=quelle_id, quelle_seiten=quelle_seiten or None)
         pruefe_version(element, int(form.get("version", "-1")))
     except (ValueError, KatplanKonflikt) as exc:
         return _antwort(request, db, user, plan, "_element_form.html",
@@ -1376,3 +1383,138 @@ def beziehung_loeschen(plan_id: int, rid: int, request: Request, db: Session = D
         db.rollback()
         return _link_antwort(request, db, user, plan, element, beziehung=True, fehler=str(exc))
     return _link_antwort(request, db, user, plan, element, beziehung=True)
+
+
+def _quelle(db: Session, plan: KatplanPlan, dok_id: int) -> KatplanDokument:
+    dokument = db.query(KatplanDokument).filter_by(
+        id=dok_id, plan_id=plan.id, org_id=plan.org_id,
+    ).one_or_none()
+    if dokument is None:
+        raise HTTPException(404, "Nicht gefunden")
+    return dokument
+
+
+def _quellen_antwort(request: Request, db: Session, plan: KatplanPlan, user: User,
+                     *, status: int = 200, fehler: str = ""):
+    return templates.TemplateResponse(request, "katplan/_quellen.html", {
+        "user": user, "plan": plan, "quellen": quelle_service.sichtbare_quellen(db, plan, user),
+        "fehler": fehler,
+    }, status_code=status)
+
+
+@router.post("/{plan_id}/quellen")
+def quelle_hochladen(plan_id: int, request: Request, background_tasks: BackgroundTasks,
+                     datei: UploadFile = File(...), titel: str = Form(...),
+                     herausgeber: str = Form(""), stand: str = Form(""),
+                     ersetzt_dokument_id: str = Form(""), db: Session = Depends(get_db),
+                     user: User = Depends(require_katplan_bearbeiten)):
+    plan = _plan(db, plan_id, user)
+    try:
+        dokument = quelle_service.quelle_hochladen(
+            db, plan, user, run_async(datei.read), datei.filename or "original.pdf", titel=titel,
+            herausgeber=herausgeber, stand=date.fromisoformat(stand) if stand else None,
+            ersetzt_dokument_id=int(ersetzt_dokument_id) if ersetzt_dokument_id else None,
+        )
+    except ValueError as exc:
+        db.rollback()
+        return _quellen_antwort(request, db, plan, user, status=422, fehler=str(exc))
+    db.commit()
+    background_tasks.add_task(quelle_service.verarbeite_quelle, dokument.id)
+    return _quellen_antwort(request, db, plan, user)
+
+
+@router.get("/{plan_id}/quellen/{dok_id}/status")
+def quelle_status(plan_id: int, dok_id: int, request: Request, db: Session = Depends(get_db),
+                  user: User = Depends(require_katplan_lesen)):
+    plan = _plan(db, plan_id, user)
+    dokument = _quelle(db, plan, dok_id)
+    if dokument not in quelle_service.sichtbare_quellen(db, plan, user):
+        raise HTTPException(404, "Nicht gefunden")
+    return templates.TemplateResponse(request, "katplan/_quelle_status.html", {
+        "plan": plan, "dokument": dokument,
+    })
+
+
+@router.post("/{plan_id}/quellen/{dok_id}/loeschen")
+def quelle_loeschen(plan_id: int, dok_id: int, request: Request, db: Session = Depends(get_db),
+                    user: User = Depends(require_katplan_bearbeiten)):
+    plan = _plan(db, plan_id, user)
+    dokument = _quelle(db, plan, dok_id)
+    try:
+        quelle_service.quelle_entfernen(db, plan, user, dokument)
+    except ValueError as exc:
+        return _quellen_antwort(request, db, plan, user, status=422, fehler=str(exc))
+    db.commit()
+    return _quellen_antwort(request, db, plan, user)
+
+
+@router.post("/{plan_id}/quellen/{dok_id}/neu-verarbeiten")
+def quelle_neu_verarbeiten(plan_id: int, dok_id: int, request: Request, background_tasks: BackgroundTasks,
+                           db: Session = Depends(get_db), user: User = Depends(require_katplan_bearbeiten)):
+    plan = _plan(db, plan_id, user)
+    dokument = _quelle(db, plan, dok_id)
+    if plan.status == "archiviert":
+        raise HTTPException(422, "Dieser Plan kann nicht bearbeitet werden.")
+    if dokument.status != "verarbeitung":
+        dokument.status, dokument.fehler_text = "neu", None
+        db.commit()
+        background_tasks.add_task(quelle_service.verarbeite_quelle, dokument.id)
+    return _quellen_antwort(request, db, plan, user)
+
+
+def _quelle_auslieferung(db: Session, user: User, uuid: str,
+                        version_id: int | None) -> tuple[KatplanPlan, KatplanDokument]:
+    dokument = db.query(KatplanDokument).filter_by(org_id=user.org_id, uuid=uuid).one_or_none()
+    if dokument is None:
+        raise HTTPException(404, "Nicht gefunden")
+    plan = _plan(db, dokument.plan_id, user)
+    if not darf_bearbeiten(user):
+        if plan.status == "archiviert" or not plan.aktuelle_version_id:
+            raise HTTPException(404, "Nicht gefunden")
+        vid = version_id if version_id is not None else plan.aktuelle_version_id
+        if dokument.id not in quelle_service.quellen_ids_aus_version(db, plan, vid, user):
+            raise HTTPException(404, "Nicht gefunden")
+    return plan, dokument
+
+
+def _quelle_datei(relativ: str | None, mime: str, dateiname: str):
+    try:
+        path = quelle_service.absolute_pfad(relativ) if relativ else None
+    except ValueError as exc:
+        raise HTTPException(404, "Nicht gefunden") from exc
+    if path is None or not path.is_file():
+        raise HTTPException(404, "Nicht gefunden")
+    return FileResponse(path, media_type=mime, filename=dateiname, content_disposition_type="inline",
+                        headers={"X-Content-Type-Options": "nosniff"})
+
+
+@router.get("/quelle/{uuid}/original")
+def quelle_original(uuid: str, version_id: int | None = None, db: Session = Depends(get_db),
+                    user: User = Depends(require_katplan_lesen)):
+    _, dokument = _quelle_auslieferung(db, user, uuid, version_id)
+    return _quelle_datei(dokument.pfad, "application/pdf", dokument.dateiname_original)
+
+
+@router.get("/quelle/{uuid}/seite/{nr}/bild")
+@router.get("/quelle/{uuid}/seite/{nr}/thumb")
+@router.get("/quelle/{uuid}/seite/{nr}/pdf")
+@router.get("/quelle/{uuid}/seite/{nr}/text")
+def quelle_seite(uuid: str, nr: int, request: Request, version_id: int | None = None,
+                 db: Session = Depends(get_db), user: User = Depends(require_katplan_lesen)):
+    plan, dokument = _quelle_auslieferung(db, user, uuid, version_id)
+    if not 1 <= nr <= dokument.seitenzahl:
+        raise HTTPException(404, "Nicht gefunden")
+    seite = quelle_service.quelle_der_seite(db, plan, dokument.id, nr)
+    if seite is None:
+        raise HTTPException(404, "Nicht gefunden")
+    art = request.url.path.rsplit("/", 1)[1]
+    if art == "text":
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"volltext": seite.volltext, "text_quelle": seite.text_quelle},
+                            headers={"X-Content-Type-Options": "nosniff"})
+    pfad, mime, suffix = {
+        "bild": (seite.bild_pfad, "image/png", "png"),
+        "thumb": (seite.thumb_pfad, "image/jpeg", "jpg"),
+        "pdf": (seite.einzel_pdf_pfad, "application/pdf", "pdf"),
+    }[art]
+    return _quelle_datei(pfad, mime, f"seite_{nr}.{suffix}")

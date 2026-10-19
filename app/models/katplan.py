@@ -367,3 +367,49 @@ class KatplanAnhang(TenantScoped, Base):
     erstellt_von_id: Mapped[int | None] = mapped_column(
         sa.BigInteger, sa.ForeignKey("user.id", ondelete="SET NULL"), nullable=True
     )
+
+
+class KatplanDokument(TenantScoped, Base):
+    __tablename__ = "katplan_dokument"
+    __table_args__ = (sa.Index("ix_katplan_dokument_org_plan", "org_id", "plan_id"),)
+
+    id: Mapped[int] = mapped_column(sa.BigInteger, primary_key=True, autoincrement=True)
+    uuid: Mapped[str] = mapped_column(sa.String(36), nullable=False, unique=True, default=lambda: str(uuid4()))
+    plan_id: Mapped[int] = mapped_column(sa.BigInteger, sa.ForeignKey("katplan_plan.id", ondelete="CASCADE"))
+    titel: Mapped[str] = mapped_column(sa.String(200))
+    dateiname_original: Mapped[str] = mapped_column(sa.String(255))
+    pfad: Mapped[str] = mapped_column(sa.String(500))
+    groesse_bytes: Mapped[int] = mapped_column(sa.BigInteger)
+    belegt_bytes: Mapped[int] = mapped_column(sa.BigInteger, default=0)
+    seitenzahl: Mapped[int] = mapped_column(sa.Integer)
+    status: Mapped[str] = mapped_column(sa.String(20), default="neu")
+    fehler_text: Mapped[str | None] = mapped_column(sa.String(500))
+    dokument_gruppe_id: Mapped[int | None] = mapped_column(
+        sa.BigInteger, sa.ForeignKey("katplan_dokument.id", ondelete="SET NULL"))
+    versionsnummer: Mapped[int] = mapped_column(sa.Integer, default=1)
+    ist_aktuelle_version: Mapped[bool] = mapped_column(sa.Boolean, default=True)
+    herausgeber: Mapped[str] = mapped_column(sa.String(200), default="")
+    stand: Mapped[date | None] = mapped_column(sa.Date)
+    archiviert: Mapped[bool] = mapped_column(sa.Boolean, default=False)
+    hochgeladen_von_id: Mapped[int | None] = mapped_column(
+        sa.BigInteger, sa.ForeignKey("user.id", ondelete="SET NULL"))
+    hochgeladen_am: Mapped[datetime] = mapped_column(sa.DateTime, default=_utcnow)
+
+
+class KatplanDokumentSeite(TenantScoped, Base):
+    __tablename__ = "katplan_dokument_seite"
+    __table_args__ = (
+        sa.Index("ix_katplan_dokument_seite_org_plan", "org_id", "plan_id"),
+        sa.Index("ix_katplan_dokument_seite_org_dok_nr", "org_id", "dokument_id", "seiten_nr"),
+    )
+
+    id: Mapped[int] = mapped_column(sa.BigInteger, primary_key=True, autoincrement=True)
+    dokument_id: Mapped[int] = mapped_column(sa.BigInteger, sa.ForeignKey("katplan_dokument.id", ondelete="CASCADE"))
+    plan_id: Mapped[int] = mapped_column(sa.BigInteger, sa.ForeignKey("katplan_plan.id", ondelete="CASCADE"))
+    seiten_nr: Mapped[int] = mapped_column(sa.Integer)
+    einzel_pdf_pfad: Mapped[str] = mapped_column(sa.String(500))
+    bild_pfad: Mapped[str | None] = mapped_column(sa.String(500))
+    thumb_pfad: Mapped[str | None] = mapped_column(sa.String(500))
+    volltext: Mapped[str | None] = mapped_column(sa.Text)
+    text_quelle: Mapped[str] = mapped_column(sa.String(10), default="none")
+    titel: Mapped[str | None] = mapped_column(sa.String(200))

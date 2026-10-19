@@ -1,0 +1,3 @@
+<span id="kp-quelle-status-{{ dokument.id }}"{% if dokument.status in ("neu", "verarbeitung") %}
+      hx-get="/katastrophenplaene/{{ plan.id }}/quellen/{{ dokument.id }}/status"
+      hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>{{ dokument.status }}{% if dokument.fehler_text %}: {{ dokument.fehler_text }}{% endif %}</span>
