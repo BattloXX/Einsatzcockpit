@@ -700,8 +700,14 @@ def material_open_counts_for_sites(db: Session, site_ids: list[int]) -> dict[int
     return {int(site_id): int(count) for site_id, count in rows if site_id is not None}
 
 
-def _site_leitstellennummer(db: Session, lage, site: IncidentSite) -> str:
+def _incident_leitstellennummer(incident: Incident | None, org_id: int) -> str:
     """Nur echte Leitstellennummern aus Einsätzen der führenden Organisation."""
+    if incident is None or incident.primary_org_id != org_id:
+        return ""
+    return (incident.lis_operation_number or "").strip()
+
+
+def _site_leitstellennummer(db: Session, lage, site: IncidentSite) -> str:
     if site.incident_id is None:
         return ""
     # IncidentSite hat keine Incident-Beziehung; bereits geladene Einsätze nutzen.
@@ -711,9 +717,7 @@ def _site_leitstellennummer(db: Session, lage, site: IncidentSite) -> str:
             Incident.id == site.incident_id,
             Incident.primary_org_id == lage.org_id,
         ).first()
-    if incident is None or incident.primary_org_id != lage.org_id:
-        return ""
-    return (incident.lis_operation_number or "").strip()
+    return _incident_leitstellennummer(incident, lage.org_id)
 
 
 def site_detail_context(request: Request, db: Session, lage, site, user) -> dict:
@@ -1387,13 +1391,13 @@ def site_einheit_abziehen(
 
 def _leitstellen_nummern_by_site(
     db: Session, lage, sites: list[IncidentSite]
-) -> dict[int, str | int]:
-    """Ermittelt Leitstellen- bzw. Einsatznummern verknüpfter Einsätze per Batch-Abfrage."""
+) -> dict[int, str]:
+    """Ermittelt echte Leitstellennummern verknüpfter Einsätze per Batch-Abfrage."""
     incident_ids = {site.incident_id for site in sites if site.incident_id is not None}
     if not incident_ids:
         return {}
 
-    incident_nummern: dict[int, str | int] = {}
+    incident_nummern: dict[int, str] = {}
     for incident in (
         db.query(Incident)
         .filter(
@@ -1402,8 +1406,8 @@ def _leitstellen_nummern_by_site(
         )
         .all()
     ):
-        nummer = incident.lis_operation_number or incident.nummer
-        if nummer is not None:
+        nummer = _incident_leitstellennummer(incident, lage.org_id)
+        if nummer:
             incident_nummern[incident.id] = nummer
     return {
         site.id: incident_nummern[site.incident_id]

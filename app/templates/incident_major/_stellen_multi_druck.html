@@ -180,7 +180,7 @@
     </tr>
     {% endif %}
     {% endif %}
-    {% set leitstellen_nr = (site.external_key if site.source == 'api' else none) or leitstellen_nummern_by_site.get(site.id) %}
+    {% set leitstellen_nr = leitstellen_nummern_by_site.get(site.id) %}
     {% if leitstellen_nr %}
     <tr>
       <td>Leitstellen-Nr.</td>
