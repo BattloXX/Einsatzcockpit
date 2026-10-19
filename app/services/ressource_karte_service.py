@@ -18,6 +18,7 @@ from app.models.major_incident import (
 )
 from app.models.master import FireDept, VehicleMaster
 from app.services import einheit_service, resource_service
+from app.services.gsl_leitstellennummer import leitstellen_nummern_by_site
 
 
 @dataclass(frozen=True)
@@ -119,7 +120,10 @@ def _einsatz(db: Session, dispatch: EinheitSiteDispatch) -> dict:
     }
 
 
-def einsaetze(db: Session, lage: MajorIncident, einheit: LageEinheit) -> dict:
+def einsaetze(
+    db: Session, lage: MajorIncident, einheit: LageEinheit, *,
+    leitstellen_nummern: dict[int, str] | None = None,
+) -> dict:
     """Vollstaendige, um Kartendetails ergaenzte Auftragshistorie."""
     if einheit.lage_id != lage.id:
         raise ValueError("Einheit nicht gefunden")
@@ -129,10 +133,13 @@ def einsaetze(db: Session, lage: MajorIncident, einheit: LageEinheit) -> dict:
         org_id=lage.org_id, quelle="funk",
     )
     kategorien = einheit_service.auftraege_fuer_einheit(db, ctx)["kategorien"]
+    nummern = (leitstellen_nummern if leitstellen_nummern is not None
+               else leitstellen_nummern_by_site(db, lage, lage.sites))
+
     def laden(wert: dict) -> dict:
         dispatch = db.get(EinheitSiteDispatch, wert["dispatch_id"])
         assert dispatch is not None
-        return _einsatz(db, dispatch)
+        return {**_einsatz(db, dispatch), "leitstellennummer": nummern.get(dispatch.site_id)}
 
     return {
         "aktuell": laden(kategorien["aktuell"]) if kategorien["aktuell"] else None,
@@ -243,7 +250,10 @@ def _leader(leader: LageEinheitLeader | None) -> dict | None:
     }
 
 
-def karte(db: Session, lage: MajorIncident, einheit: LageEinheit) -> dict:
+def karte(
+    db: Session, lage: MajorIncident, einheit: LageEinheit, *,
+    leitstellen_nummern: dict[int, str] | None = None,
+) -> dict:
     if einheit.lage_id != lage.id:
         raise ValueError("Einheit nicht gefunden")
     vehicle = db.get(VehicleMaster, einheit.vehicle_id) if einheit.vehicle_id else None
@@ -275,6 +285,6 @@ def karte(db: Session, lage: MajorIncident, einheit: LageEinheit) -> dict:
             "current": _leader(current), "stellvertreter": _leader(stellvertreter),
             "historie": [_leader(leader) for leader in historie],
         },
-        "einsaetze": einsaetze(db, lage, einheit),
+        "einsaetze": einsaetze(db, lage, einheit, leitstellen_nummern=leitstellen_nummern),
         "kommunikation": kommunikation(db, lage, einheit),
     }

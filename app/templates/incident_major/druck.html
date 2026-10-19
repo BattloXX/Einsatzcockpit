@@ -171,7 +171,7 @@
     </div>
     {% endif %}
     <div class="filter-group">
-      <label>Straße</label>
+      <label>Straße / Leitstellennr.</label>
       <input type="text" x-model="filterStreet" placeholder="Suche…" style="width:140px;">
     </div>
   </div>
@@ -311,8 +311,7 @@ function printCenter() {
         if (self.filterPhase === 'aktiv' && (s.phase_val === 'erledigt' || s.phase_val === 'abgebrochen')) return false;
         if (self.filterPhase && self.filterPhase !== 'aktiv' && s.phase_val !== self.filterPhase) return false;
         if (self.filterSector && s.sector_id != self.filterSector) return false;
-        if (self.filterStreet && s.street && !s.street.toLowerCase().includes(self.filterStreet.toLowerCase())) return false;
-        if (self.filterStreet && !s.street) return false;
+        if (self.filterStreet && ![s.street, s.leitstellennummer].filter(Boolean).join(' ').toLowerCase().includes(self.filterStreet.toLowerCase())) return false;
         return true;
       });
     },
