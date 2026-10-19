@@ -27,6 +27,9 @@
           {% set ebene = [tiefe + 2, 6]|min %}
           <h{{ ebene }} id="kapitel-{{ k.abschnitt.id }}">{{ k.abschnitt.titel }}</h{{ ebene }}>
           <div>{{ (k.abschnitt.beschreibung_html or '')|safe }}</div>
+          {% with anhaenge = kapitel_anhaenge.get(k.abschnitt.id, []), anhang_bearbeiten = false %}
+            {% include "katplan/_anhaenge_anzeige.html" %}
+          {% endwith %}
         {% endif %}
         {% for element in k.elemente %}
           {% include "katplan/_element_anzeige.html" %}

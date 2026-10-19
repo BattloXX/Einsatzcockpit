@@ -62,6 +62,7 @@ from app.models.invitation import OrgInvitation, OrgPartner
 from app.models.katplan import (  # noqa: F401 -- registriert ORM-Modelle
     KatplanAbschnitt,
     KatplanAenderung,
+    KatplanAnhang,
     KatplanElement,
     KatplanElementPhase,
     KatplanPhase,

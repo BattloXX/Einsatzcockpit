@@ -110,3 +110,118 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initialisieren);
   else initialisieren();
 })();
+
+/* Anhaenge: sequenzielle Uploads mit Versions-OOB und zugängliche Fotogalerie. */
+(function () {
+  'use strict';
+  const uploads = new Set();
+  document.addEventListener('click', function (event) {
+    const button = event.target.closest('[data-kp-kamera-oeffnen]');
+    if (button) button.closest('form').querySelector('[data-kp-kamera]').click();
+  });
+  document.addEventListener('change', function (event) {
+    const form = event.target.closest('[data-kp-mehrfach-upload]');
+    if (!form) return;
+    if (event.target.matches('[data-kp-kamera]')) form.querySelector('[name="datei"]').value = '';
+    if (event.target.matches('[name="datei"]')) form.querySelector('[data-kp-kamera]').value = '';
+  });
+  document.addEventListener('submit', async function (event) {
+    const form = event.target.closest('[data-kp-mehrfach-upload]');
+    if (!form) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const kamera = form.querySelector('[data-kp-kamera]');
+    const dateien = Array.from(kamera.files.length ? kamera.files : form.querySelector('[name="datei"]').files);
+    const bereich = form.closest('[data-kp-anhaenge]');
+    const zielId = bereich.id;
+    if (uploads.has(zielId)) return;
+    const grunddaten = new FormData(form);
+    if (!dateien.length) {
+      bereich.querySelector('[data-kp-upload-status]').textContent = 'Bitte eine Datei auswählen.';
+      return;
+    }
+    const button = form.querySelector('[type="submit"]');
+    uploads.add(zielId);
+    button.disabled = true;
+    function status(text) {
+      const aktuell = document.getElementById(zielId);
+      if (aktuell) {
+        aktuell.querySelector('[data-kp-upload-status]').textContent = text;
+        aktuell.querySelectorAll('[data-kp-mehrfach-upload] [type="submit"]').forEach(function (b) {
+          b.disabled = uploads.has(zielId);
+        });
+      }
+    }
+    try {
+      for (let index = 0; index < dateien.length; index += 1) {
+        grunddaten.set('datei', dateien[index]);
+        status(index + '/' + dateien.length + ' hochgeladen');
+        const antwort = await fetch(form.action, {
+          method: 'POST', body: grunddaten,
+          headers: { 'HX-Request': 'true', 'X-CSRF-Token': grunddaten.get('_csrf') }
+        });
+        const html = await antwort.text();
+        if (html.includes('id="' + zielId + '"')) {
+          htmx.swap('#' + zielId, html, { swapStyle: 'outerHTML' });
+        } else {
+          throw new Error('Upload fehlgeschlagen (' + antwort.status + ').');
+        }
+        if (!antwort.ok) {
+          status(index + '/' + dateien.length + ' hochgeladen. Upload abgebrochen.');
+          break;
+        }
+        status((index + 1) + '/' + dateien.length + ' hochgeladen');
+      }
+    } catch (fehler) {
+      status(fehler.message || 'Upload fehlgeschlagen.');
+    } finally {
+      uploads.delete(zielId);
+      button.disabled = false;
+      const aktuell = document.getElementById(zielId);
+      if (aktuell) aktuell.querySelectorAll('[data-kp-mehrfach-upload] [type="submit"]').forEach(function (b) {
+        b.disabled = false;
+      });
+    }
+  }, true);
+
+  let dialog;
+  let fotos = [];
+  let index = 0;
+  let ausloeser;
+  function zeigen(schritt) {
+    index = (index + schritt + fotos.length) % fotos.length;
+    const link = fotos[index];
+    dialog.querySelector('img').src = link.href;
+    dialog.querySelector('img').alt = link.querySelector('img').alt;
+    dialog.querySelector('p').textContent = link.querySelector('img').alt;
+  }
+  document.addEventListener('click', function (event) {
+    const link = event.target.closest('[data-kp-lightbox]');
+    if (!link) return;
+    event.preventDefault();
+    ausloeser = link;
+    fotos = Array.from(link.closest('.kp-fotogalerie').querySelectorAll('[data-kp-lightbox]'));
+    index = fotos.indexOf(link);
+    if (!dialog) {
+      dialog = document.createElement('dialog');
+      dialog.className = 'kp-lightbox';
+      dialog.setAttribute('aria-label', 'Fotogalerie');
+      dialog.innerHTML = '<button type="button" class="btn" data-schliessen>Schließen (Esc)</button>' +
+        '<img alt=""><p></p><div><button type="button" class="btn" data-zurueck aria-label="Vorheriges Foto">←</button> ' +
+        '<button type="button" class="btn" data-weiter aria-label="Nächstes Foto">→</button></div>';
+      document.body.appendChild(dialog);
+      dialog.querySelector('[data-schliessen]').addEventListener('click', function () { dialog.close(); });
+      dialog.querySelector('[data-zurueck]').addEventListener('click', function () { zeigen(-1); });
+      dialog.querySelector('[data-weiter]').addEventListener('click', function () { zeigen(1); });
+      dialog.addEventListener('close', function () { if (ausloeser) ausloeser.focus(); });
+      dialog.addEventListener('keydown', function (e) {
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+          e.preventDefault();
+          zeigen(e.key === 'ArrowLeft' ? -1 : 1);
+        }
+      });
+    }
+    zeigen(0);
+    dialog.showModal();
+  });
+})();

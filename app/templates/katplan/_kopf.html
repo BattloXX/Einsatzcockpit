@@ -131,6 +131,16 @@
         {% endif %}
       </div>
     </section>
+    <section class="kp-sidecard" id="kp-unterlagen">
+      <h2 class="kp-box__title">Unterlagen</h2>
+      {% if can_edit and leseversion is not defined %}
+        {% include "katplan/_anhaenge.html" %}
+      {% else %}
+        {% with anhaenge = plan_anhaenge, anhang_bearbeiten = false %}
+          {% include "katplan/_anhaenge_anzeige.html" %}
+        {% endwith %}
+      {% endif %}
+    </section>
   </aside>
 </div>
 {% if protokoll_oob %}

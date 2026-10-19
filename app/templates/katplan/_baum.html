@@ -36,6 +36,7 @@
               hx-target="#kp-detail" {% if aktiv_element_id|default(0) == e.id %}aria-current="true"{% endif %}>
               {{ typen[e.typ].icon }} <span class="kp-mono">{{ e.kennung }}</span> {{ e.titel }}
               {% if e.id in fehlende_link_elemente %}<span class="kp-badge kp-badge--amber" title="Verknüpfungsziel fehlt">⚠</span>{% endif %}
+              {% if element_anhaenge.get(e.id, []) %}<span title="Anhänge">📎 {{ element_anhaenge[e.id]|length }}</span>{% endif %}
               {% if e.geometry_json %}<span title="Verortet">📍</span>{% endif %}
               {% if e.geo_status == 'ungeprueft' %}<span class="kp-badge kp-badge--amber" title="Ort ungeprüft">⚠</span>{% endif %}
               <span class="kp-prio-{{ e.prioritaet }}">P{{ e.prioritaet }}</span>
