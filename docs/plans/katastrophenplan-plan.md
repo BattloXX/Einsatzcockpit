@@ -286,7 +286,8 @@ Templates nicht minifizieren, nur gezielte Testdateien laufen lassen, Testliste 
 
 | Paket | PR | Stand |
 |---|---|---|
-| K1 Grundgerüst | (dieser PR) | Modulschalter, Rollen, Migration 0294, Plan-Stammdaten/Liste/Protokoll; Editor folgt in K2 |
-| K2 Editor | (dieser PR) | Kapitel/Phasen/Elemente aller 9 Typen, Drag-and-drop + ↑/↓, Quill (h3/h4), Vorlagen, Duplizieren, GSL-Felder; Browser-Check ok |
-| K3 Versionen & Freigabe | (dieser PR) | Migration 0295, Snapshot-Versionen (unveränderlich), Workflow ohne Vier-Augen, Lesesicht, Historie, Vergleich, Wiedervorlage-Mail, Übersicht-Badge |
-| K4–K13 | – | offen |
+| K1 Grundgerüst | #619 | Modulschalter, Rollen, Migration 0294, Plan-Stammdaten/Liste/Protokoll; Editor folgt in K2 |
+| K2 Editor | #620 | Kapitel/Phasen/Elemente aller 9 Typen, Drag-and-drop + ↑/↓, Quill (h3/h4), Vorlagen, Duplizieren, GSL-Felder; Browser-Check ok |
+| K3 Versionen & Freigabe | #625 | Migration 0295, Snapshot-Versionen (unveränderlich), Workflow ohne Vier-Augen, Lesesicht, Historie, Vergleich, Wiedervorlage-Mail, Übersicht-Badge |
+| K4 Verknüpfungen | (dieser PR) | Migration 0296, Links zu Kontakt/Organisation/Objekt/Fahrzeug/Wasserstelle, Beziehungen, Snapshot bei Freigabe, Telefonregel (Verzeichnisrecht oder einsatzrelevant+Dienst) |
+| K5–K13 | – | offen (Pilot-PDF liegt außerhalb des Repos vor) |

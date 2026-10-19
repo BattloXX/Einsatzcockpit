@@ -10,7 +10,7 @@
       </p>
       {% if relation.hinweis %}<p>{{ relation.hinweis }}</p>{% endif %}
       <input form="" type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <button type="button" class="btn btn--ghost kp-delete" hx-post="/katastrophenplaene/{{ plan.id }}/beziehungen/{{ relation.id }}/loeschen"
+      <button type="button" class="btn btn--ghost btn--sm kp-delete kp-delete--kompakt" hx-post="/katastrophenplaene/{{ plan.id }}/beziehungen/{{ relation.id }}/loeschen"
         hx-include="closest .kp-form" hx-target="#kp-beziehungen-{{ element.id }}" hx-swap="outerHTML">Entfernen</button>
     </div>
   {% endfor %}

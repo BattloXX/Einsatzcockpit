@@ -23,7 +23,7 @@
       {% if links_bearbeiten %}
         <div class="kp-form">
           <input form="" type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-          <button type="button" class="btn btn--ghost kp-delete" hx-post="/katastrophenplaene/{{ plan.id }}/links/{{ link.id }}/loeschen"
+          <button type="button" class="btn btn--ghost btn--sm kp-delete kp-delete--kompakt" hx-post="/katastrophenplaene/{{ plan.id }}/links/{{ link.id }}/loeschen"
             hx-include="closest .kp-form" hx-target="#{{ links_ziel }}" hx-swap="outerHTML">Entfernen</button>
         </div>
       {% endif %}
