@@ -15,6 +15,7 @@ from app.mcp.context import MCPContext
 from app.mcp.registry import register_tool
 from app.models.major_incident import EinheitSiteDispatch, IncidentSite, LageEinheit, MajorIncident, SiteLogEntry
 from app.services import gk_zugang_service, resource_service, ressource_karte_service, ressource_pflege_service
+from app.services.gsl_leitstellennummer import leitstellen_nummern_by_site
 from app.services.mi_feature_service import get_mi_features
 
 READ = ("incident_leader", "admin", "recorder", "readonly")
@@ -179,6 +180,7 @@ async def gsl_ressourcen_liste(
         lage = _lage(context, lage_id)
         can_edit = has_role(context.user, *EDIT)
         rows = []
+        nummern = leitstellen_nummern_by_site(context.db, lage, lage.sites)
         for einheit in lage.einheiten:
             if (
                 status
@@ -188,7 +190,7 @@ async def gsl_ressourcen_liste(
                 or (abschnitt_id is not None and einheit.sector_id != abschnitt_id)
             ):
                 continue
-            card = ressource_karte_service.karte(context.db, lage, einheit)
+            card = ressource_karte_service.karte(context.db, lage, einheit, leitstellen_nummern=nummern)
             leader = card["gruppenkommandant"]["current"]
             rows.append(
                 {

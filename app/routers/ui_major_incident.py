@@ -89,6 +89,7 @@ from app.services import (
     einheit_service,
     gsl_broadcast,
     gsl_fuehrung_service,
+    gsl_leitstellennummer,
     gsl_stelle_service,
     lagemeldung_service,
     resource_service,
@@ -368,6 +369,7 @@ def lage_board(
     return templates.TemplateResponse(request, "incident_major/board.html", {
         "user": user,
         "lage": lage,
+        "leitstellen_nummern_by_site": _leitstellen_nummern_by_site(db, lage, lage.sites),
         "sites_by_phase": sites_by_phase,
         "dispatch_counts_by_site": dispatch_counts_by_site,
         "einheiten_chips_by_site": einheiten_chips_by_site,
@@ -701,23 +703,11 @@ def material_open_counts_for_sites(db: Session, site_ids: list[int]) -> dict[int
 
 
 def _incident_leitstellennummer(incident: Incident | None, org_id: int) -> str:
-    """Nur echte Leitstellennummern aus Einsätzen der führenden Organisation."""
-    if incident is None or incident.primary_org_id != org_id:
-        return ""
-    return (incident.lis_operation_number or "").strip()
+    return gsl_leitstellennummer.incident_leitstellennummer(incident, org_id)
 
 
 def _site_leitstellennummer(db: Session, lage, site: IncidentSite) -> str:
-    if site.incident_id is None:
-        return ""
-    # IncidentSite hat keine Incident-Beziehung; bereits geladene Einsätze nutzen.
-    incident = db.identity_map.get(db.identity_key(Incident, site.incident_id))
-    if incident is None:
-        incident = db.query(Incident).filter(
-            Incident.id == site.incident_id,
-            Incident.primary_org_id == lage.org_id,
-        ).first()
-    return _incident_leitstellennummer(incident, lage.org_id)
+    return gsl_leitstellennummer.site_leitstellennummer(db, lage, site)
 
 
 def site_detail_context(request: Request, db: Session, lage, site, user) -> dict:
@@ -830,6 +820,7 @@ def site_card_partial(
     return templates.TemplateResponse(request, "incident_major/_site_card.html", {
         "request": request,
         "lage": lage,
+        "leitstellen_nummern_by_site": _leitstellen_nummern_by_site(db, lage, [site]),
         "site": site,
         "prio_color": SITE_PRIORITY_COLOR,
         "prio_label": SITE_PRIORITY_LABEL,
@@ -883,6 +874,7 @@ def phase_column_partial(
     material_open_counts_by_site = material_open_counts_for_sites(db, [site.id for site in sites])
     return templates.TemplateResponse(request, "incident_major/_phase_col_body.html", {
         "lage": lage,
+        "leitstellen_nummern_by_site": _leitstellen_nummern_by_site(db, lage, sites),
         "sites": sites,
         "prio_color": SITE_PRIORITY_COLOR,
         "prio_label": SITE_PRIORITY_LABEL,
@@ -1051,6 +1043,7 @@ def _site_detail_html_with_oob(request: Request, db: Session, lage, site, user) 
         "request": request,
         "user": user,
         "lage": lage,
+        "leitstellen_nummern_by_site": _leitstellen_nummern_by_site(db, lage, [site]),
         "site": site,
         "prio_color": SITE_PRIORITY_COLOR,
         "prio_label": SITE_PRIORITY_LABEL,
@@ -1392,28 +1385,7 @@ def site_einheit_abziehen(
 def _leitstellen_nummern_by_site(
     db: Session, lage, sites: list[IncidentSite]
 ) -> dict[int, str]:
-    """Ermittelt echte Leitstellennummern verknüpfter Einsätze per Batch-Abfrage."""
-    incident_ids = {site.incident_id for site in sites if site.incident_id is not None}
-    if not incident_ids:
-        return {}
-
-    incident_nummern: dict[int, str] = {}
-    for incident in (
-        db.query(Incident)
-        .filter(
-            Incident.id.in_(incident_ids),
-            Incident.primary_org_id == lage.org_id,
-        )
-        .all()
-    ):
-        nummer = _incident_leitstellennummer(incident, lage.org_id)
-        if nummer:
-            incident_nummern[incident.id] = nummer
-    return {
-        site.id: incident_nummern[site.incident_id]
-        for site in sites
-        if site.incident_id in incident_nummern
-    }
+    return gsl_leitstellennummer.leitstellen_nummern_by_site(db, lage, sites)
 
 
 def build_site_druck_context(db: Session, lage, site: IncidentSite) -> dict:
@@ -3866,6 +3838,7 @@ def lage_zeitreise(
         "user": user,
         "lage": lage,
         "timeline": timeline,
+        "leitstellen_nummern_by_site": _leitstellen_nummern_by_site(db, lage, sites),
         "sites": sorted(
             {entry["site_id"]: entry for entry in timeline if entry.get("site_id")}.values(),
             key=lambda entry: entry["site_bezeichnung"],
@@ -3957,7 +3930,10 @@ def lage_druck(
     sites = sorted(lage.sites, key=lambda s: (s.priority.value if s.priority else 99, s.sort_index, s.id))
     cross_markers = sorted(lage.cross_site_markers, key=lambda m: m.sort_index)
 
-    sites_json = json.dumps([_site_to_json(s, sectors) for s in sites], ensure_ascii=False)
+    nummern = _leitstellen_nummern_by_site(db, lage, sites)
+    sites_json = json.dumps([
+        {**_site_to_json(s, sectors), "leitstellennummer": nummern.get(s.id)} for s in sites
+    ], ensure_ascii=False)
     cross_json = json.dumps([_cross_to_json(m) for m in cross_markers], ensure_ascii=False)
 
     return templates.TemplateResponse(request, "incident_major/druck.html", {

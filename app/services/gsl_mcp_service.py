@@ -22,6 +22,7 @@ from app.models.major_incident import (
     SitePriority,
 )
 from app.services import gsl_fuehrung_service, lagemeldung_service, resource_service, verleih_service
+from app.services.gsl_leitstellennummer import leitstellen_nummern_by_site
 
 
 def _text(html: str | None) -> str | None:
@@ -99,6 +100,7 @@ def einsatzstellen_liste(
     chips = resource_service.get_einheiten_chips_for_sites(
         db, sites, org_settings=lagemeldung_service.org_settings_for(db, lage.org_id)
     )
+    nummern = leitstellen_nummern_by_site(db, lage, sites)
     sectors = {sector.id: sector for sector in lage.sectors}
     needle = suchtext.casefold().strip()
     result = []
@@ -113,7 +115,9 @@ def einsatzstellen_liste(
             continue
         if (
             needle
-            and needle not in " ".join(filter(None, (site.bezeichnung, site.einsatzgrund, _adresse(site)))).casefold()
+            and needle not in " ".join(filter(None, (
+                site.bezeichnung, site.einsatzgrund, _adresse(site), nummern.get(site.id),
+            ))).casefold()
         ):
             continue
         chip = chips.get(site.id, {})
@@ -121,6 +125,7 @@ def einsatzstellen_liste(
             {
                 "id": site.id,
                 "bezeichnung": site.bezeichnung,
+                "leitstellennummer": nummern.get(site.id),
                 "einsatzgrund": site.einsatzgrund,
                 "adresse": _adresse(site),
                 "lat": site.lat,

@@ -487,7 +487,7 @@ async def gsl_lagebild(lage_id: int | None = None) -> dict[str, object]:
     return await _call_registered_tool("gsl_lagebild", lage_id=lage_id)
 
 
-@server.tool(name="gsl_einsatzstellen_liste", description="Listet Einsatzstellen einer GSL-Lage.")
+@server.tool(name="gsl_einsatzstellen_liste", description="Listet Einsatzstellen einer GSL-Lage; suchtext sucht auch nach Leitstellennummer.")
 async def gsl_einsatzstellen_liste(
     lage_id: int | None = None,
     phase: str | None = None,
@@ -767,7 +767,7 @@ EinsatzMediumArtLiteral = Literal["auftrag", "meldung"]
 EinsatzMeldungStatusLiteral = Literal["meldung", "achtung", "hinweis", "information"]
 
 
-@server.tool(name="einsaetze_liste", description="Listet sichtbare Einsätze; nur lesend und ohne Personendaten.")
+@server.tool(name="einsaetze_liste", description="Listet sichtbare Einsätze ohne Personendaten; suchtext sucht auch nach Leitstellennummer.")
 async def einsaetze_liste(status: EinsatzListStatusLiteral = "aktiv", von: str = "", bis: str = "", suchtext: str = "", uebung: bool | None = None, limit: int = 25, ctx: Context | None = None) -> dict[str, object]:
     return await _call_registered_tool("einsaetze_liste", status=status, von=von, bis=bis, suchtext=suchtext, uebung=uebung, limit=limit)
 

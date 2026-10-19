@@ -139,7 +139,7 @@ def _visible_query(context: MCPContext):
 
 @register_tool(
     name="einsaetze_liste",
-    description="Listet sichtbare Einsätze ohne Personendaten.",
+    description="Listet sichtbare Einsätze ohne Personendaten; suchtext sucht auch nach Leitstellennummer.",
     required_roles=EINSATZ_LESE_ROLLEN,
 )
 async def einsaetze_liste(
@@ -182,6 +182,7 @@ async def einsaetze_liste(
                 Incident.address_street.ilike(term),
                 Incident.address_city.ilike(term),
                 Incident.reason.ilike(term),
+                Incident.lis_operation_number.ilike(term),
                 Incident.dibos_diagnose.ilike(term),
                 Incident.nummer.cast(String).ilike(term),
             )
@@ -195,6 +196,7 @@ async def einsaetze_liste(
                 {
                     "id": incident.id,
                     "nummer": incident.nummer,
+                    "lis_operation_number": incident.lis_operation_number,
                     "alarmstufe": incident.alarm_type_code,
                     "stichwort": incident.reason,
                     "adresse": incident.address_street,

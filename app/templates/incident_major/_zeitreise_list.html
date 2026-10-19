@@ -11,7 +11,7 @@
        data-subkind="{{ subkind }}"
        data-author="{{ e.author or '' }}"
        data-open-request="{{ 'true' if e.kind == 'comm' and e.is_request and not e.handled else 'false' }}"
-       data-search="{{ (e.text or '') ~ ' ' ~ (e.partner or '') ~ ' ' ~ (e.author or '') ~ ' ' ~ (e.site_bezeichnung or '') }}">
+       data-search="{{ (e.text or '') ~ ' ' ~ (e.partner or '') ~ ' ' ~ (e.author or '') ~ ' ' ~ (e.site_bezeichnung or '') ~ ' ' ~ (leitstellen_nummern_by_site|default({})).get(e.site_id, '') }}">
     <div class="tl-dot {% if e.kind == 'site_log' %}tl-dot--{{ e.log_kind }}{% elif e.kind == 'comm' %}tl-dot--comm-{{ e.direction }}{% else %}tl-dot--journal-{{ e.category }}{% endif %}"></div>
     <div class="tl-time">{{ e.ts|local_datetime }}</div>
     {% if e.site_id %}

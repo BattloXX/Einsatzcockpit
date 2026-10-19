@@ -189,7 +189,9 @@ async def gsl_lagebild(context: MCPContext, lage_id: int | None = None) -> dict[
 
 
 @register_tool(
-    name="gsl_einsatzstellen_liste", description="Listet Einsatzstellen einer GSL-Lage.", required_roles=READ
+    name="gsl_einsatzstellen_liste",
+    description="Listet Einsatzstellen einer GSL-Lage; suchtext sucht auch nach Leitstellennummer.",
+    required_roles=READ,
 )
 async def gsl_einsatzstellen_liste(
     context: MCPContext,
