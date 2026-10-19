@@ -24,6 +24,11 @@ updates:
           - "y-protocols"
           - "y-websocket"
           - "y-quill"
+    ignore:
+      # Ab 6.0.0 nur noch ESM ohne QuillCursors-Global – bricht die <script>-Einbindung
+      # im Lagedokument. Erst mit Umstellung auf die Import-Map anheben.
+      - dependency-name: "quill-cursors"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: pip
     directory: /
     schedule:
