@@ -20,6 +20,9 @@ jobs:
         uses: Andrew-Chen-Wang/github-wiki-action@v5
         with:
           path: docs/wiki/
+          # v5 formatiert sonst alle Seiten per remark neu (Code-Fences → Einrückung,
+          # zusätzliche Escapes). Unsere Links sind schon im Wiki-Format.
+          preprocess: false
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}
