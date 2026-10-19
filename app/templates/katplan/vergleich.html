@@ -14,6 +14,7 @@
     {% if can_edit %}
       {% set tabs = tabs + [{'label': 'Protokoll', 'href': '/katastrophenplaene/' ~ plan.id ~ '#kp-protokoll', 'active': false}] %}
     {% endif %}
+    {% set tabs = tabs + [{'label': 'Quellen', 'href': '/katastrophenplaene/' ~ plan.id ~ '/quellen', 'active': false}] %}
     {{ tabnav(tabs) }}
 
     {% from "katplan/_vergleich_felder.html" import felder %}

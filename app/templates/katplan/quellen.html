@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Quellen · {{ plan.titel }}{% endblock %}
+{% block head_extra %}{% include "katplan/_design.html" %}{% endblock %}
+{% block content %}
+  <section class="kp-page">
+    <header class="kp-header"><h1>Quellen · {{ plan.titel }}</h1></header>
+    {% include "katplan/_quellen_tabs.html" %}
+    {% include "katplan/_quellen.html" %}
+  </section>
+{% endblock %}

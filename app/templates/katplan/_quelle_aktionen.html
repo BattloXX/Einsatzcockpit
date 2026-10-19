@@ -1,0 +1,16 @@
+{% if can_edit and plan.status != 'archiviert' %}
+  <details>
+    <summary>Neue Version hochladen</summary>
+    {% with ersetzt = dokument %}{% include "katplan/_quelle_upload.html" %}{% endwith %}
+  </details>
+  <form method="post" action="/katastrophenplaene/{{ plan.id }}/quellen/{{ dokument.id }}/neu-verarbeiten"
+    hx-post="/katastrophenplaene/{{ plan.id }}/quellen/{{ dokument.id }}/neu-verarbeiten" hx-target="#kp-quellen" hx-swap="outerHTML">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <button type="submit" class="btn btn--sm">Neu verarbeiten</button>
+  </form>
+  <form method="post" action="/katastrophenplaene/{{ plan.id }}/quellen/{{ dokument.id }}/loeschen"
+    hx-post="/katastrophenplaene/{{ plan.id }}/quellen/{{ dokument.id }}/loeschen" hx-target="#kp-quellen" hx-swap="outerHTML" hx-confirm="Quelle entfernen? Verknüpfte Quellen werden archiviert.">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <button type="submit" class="btn btn--sm btn--ghost kp-delete">Entfernen</button>
+  </form>
+{% endif %}

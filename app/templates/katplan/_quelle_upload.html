@@ -1,0 +1,10 @@
+<form method="post" action="/katastrophenplaene/{{ plan.id }}/quellen" enctype="multipart/form-data"
+  hx-post="/katastrophenplaene/{{ plan.id }}/quellen" hx-encoding="multipart/form-data" hx-target="#kp-quellen" hx-swap="outerHTML" class="kp-form">
+  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+  {% if ersetzt %}<input type="hidden" name="ersetzt_dokument_id" value="{{ ersetzt.id }}">{% endif %}
+  <label>PDF-Datei <input class="form-control" type="file" name="datei" accept="application/pdf" required></label>
+  <label>Titel <input class="form-control" name="titel" required maxlength="200" value="{{ ersetzt.titel if ersetzt else '' }}"></label>
+  <label>Herausgeber <input class="form-control" name="herausgeber" maxlength="200" value="{{ ersetzt.herausgeber or '' if ersetzt else '' }}"></label>
+  <label>Stand <input class="form-control" type="date" name="stand" value="{{ ersetzt.stand.isoformat() if ersetzt and ersetzt.stand else '' }}"></label>
+  <button type="submit" class="btn btn--primary">{{ 'Neue Version hochladen' if ersetzt else 'Quelle hochladen' }}</button>
+</form>

@@ -385,3 +385,29 @@ def test_vertrauliches_element_und_historische_datei(client, umgebung):
     assert client.get(url + f"/thumb?version_id={v1}").status_code == 200
     login(client, umgebung, "readonly")
     assert client.get(url + f"?version_id={v1}").status_code == 404
+
+
+def test_reconcile_storage_zaehlt_anhaenge_und_quellen():
+    """Quota-Abstimmung muss Katplan-Anhaenge und -Quellen mitzaehlen."""
+    from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
+    from app.models.katplan import KatplanAnhang, KatplanDokument, KatplanPlan
+    from app.models.master import FireDept
+    from app.services.storage_service import reconcile_storage
+
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        org = FireDept(slug=f"kp-reconcile-{id(db)}", name="Reconcile")
+        db.add(org)
+        db.flush()
+        plan = KatplanPlan(org_id=org.id, titel="Plan", gefahrenarten_json='["hochwasser"]')
+        db.add(plan)
+        db.flush()
+        db.add(KatplanAnhang(org_id=org.id, plan_id=plan.id, uuid="a" * 32, art="foto", groesse_bytes=1000))
+        db.add(KatplanAnhang(org_id=org.id, plan_id=plan.id, uuid="b" * 32, art="datei", groesse_bytes=500,
+                             geloescht_am=plan.erstellt_am))
+        db.add(KatplanDokument(org_id=org.id, plan_id=plan.id, uuid="c" * 32, titel="Q",
+                               dateiname_original="q.pdf", pfad="x", groesse_bytes=100, belegt_bytes=300,
+                               seitenzahl=1, status="fertig"))
+        db.commit()
+        assert reconcile_storage(db, org.id) == 1800

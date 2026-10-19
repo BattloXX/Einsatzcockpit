@@ -683,4 +683,14 @@
     .kp-fotogalerie { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .kp-kamera { display: block; }
   }
+  .kp-quellen { min-width: 0; overflow-wrap: anywhere; }
+  .kp-quellen .form-control { min-width: 0; max-width: 100%; box-sizing: border-box; }
+  .kp-quellen .kp-table { table-layout: fixed; width: 100%; }
+  .kp-seitenraster { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; margin-top: 1rem; }
+  .kp-seitenraster img { display: block; width: 100%; height: auto; }
+  .kp-seitenbild { display: block; width: 100%; height: auto; margin-block: 1rem; }
+  @media (max-width: 760px) {
+    .kp-seitenraster { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .kp-seitenraster .kp-box { padding: .5rem; }
+  }
 </style>

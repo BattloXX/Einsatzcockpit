@@ -1,0 +1,44 @@
+<div id="kp-quellen" class="kp-quellen" hx-on::before-swap="if ([413, 415, 422].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false; }">
+  {% include "katplan/_design.html" %}
+  {% if fehler %}<p class="kp-error" role="alert">{{ fehler }}</p>{% endif %}
+  {% if hinweis %}<p role="status">{{ hinweis }}</p>{% endif %}
+  <div class="kp-card kp-table-wrap">
+    <table class="kp-table">
+      <thead>
+        <tr><th>Titel</th><th>Herausgeber</th><th>Stand</th><th>Seiten</th><th>Version</th><th>Status</th><th>Aktionen</th></tr>
+      </thead>
+      <tbody>
+        {% for dokument in quellen %}
+          <tr>
+            <td><a href="/katastrophenplaene/{{ plan.id }}/quellen/{{ dokument.id }}">{{ dokument.titel }}</a>{% if dokument.archiviert %} · archiviert{% endif %}</td>
+            <td>{{ dokument.herausgeber or '-' }}</td>
+            <td>{{ dokument.stand.strftime('%d.%m.%Y') if dokument.stand else '-' }}</td>
+            <td>{{ dokument.seitenzahl }}</td>
+            <td>v{{ dokument.versionsnummer }}{% if dokument.versionsnummer > 1 %} (ersetzt v{{ dokument.versionsnummer - 1 }}){% endif %}</td>
+            <td>{% with quelle_status_statisch = true %}{% include "katplan/_quelle_status.html" %}{% endwith %}</td>
+            <td>{% include "katplan/_quelle_aktionen.html" %}</td>
+          </tr>
+        {% else %}
+          <tr><td colspan="7">Keine Planquellen vorhanden.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="kp-mobile-list">
+    {% for dokument in quellen %}
+      <article class="kp-mcard">
+        <a class="kp-mcard__title" href="/katastrophenplaene/{{ plan.id }}/quellen/{{ dokument.id }}">{{ dokument.titel }}</a>
+        <p>{{ dokument.herausgeber or '-' }} · {{ dokument.stand.strftime('%d.%m.%Y') if dokument.stand else '-' }}</p>
+        <p>{{ dokument.seitenzahl }} Seiten · v{{ dokument.versionsnummer }}{% if dokument.versionsnummer > 1 %} (ersetzt v{{ dokument.versionsnummer - 1 }}){% endif %}{% if dokument.archiviert %} · archiviert{% endif %}</p>
+        {% with quelle_status_statisch = true %}{% include "katplan/_quelle_status.html" %}{% endwith %}
+        {% include "katplan/_quelle_aktionen.html" %}
+      </article>
+    {% else %}<p class="kp-empty">Keine Planquellen vorhanden.</p>{% endfor %}
+  </div>
+  {% if can_edit and plan.status != 'archiviert' %}
+    <section class="kp-box">
+      <h2 class="kp-box__title">Planquelle hochladen</h2>
+      {% with ersetzt = none %}{% include "katplan/_quelle_upload.html" %}{% endwith %}
+    </section>
+  {% endif %}
+</div>

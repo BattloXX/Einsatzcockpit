@@ -16,6 +16,7 @@
     {% if can_edit %}
       {% set tabs = tabs + [{'label': 'Protokoll', 'href': '/katastrophenplaene/' ~ plan.id ~ '#kp-protokoll', 'active': false}] %}
     {% endif %}
+    {% set tabs = tabs + [{'label': 'Quellen', 'href': '/katastrophenplaene/' ~ plan.id ~ '/quellen', 'active': false}] %}
     {{ tabnav(tabs) }}
     {% if can_edit %}
       <nav class="kp-chips" aria-label="Fassung">

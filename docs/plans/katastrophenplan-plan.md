@@ -292,5 +292,6 @@ Templates nicht minifizieren, nur gezielte Testdateien laufen lassen, Testliste 
 | K3 Versionen & Freigabe | #625 | Migration 0295, Snapshot-Versionen (unveränderlich), Workflow ohne Vier-Augen, Lesesicht, Historie, Vergleich, Wiedervorlage-Mail, Übersicht-Badge |
 | K4 Verknüpfungen | #626 | Migration 0296, Links zu Kontakt/Organisation/Objekt/Fahrzeug/Wasserstelle, Beziehungen, Snapshot bei Freigabe, Telefonregel (Verzeichnisrecht oder einsatzrelevant+Dienst) |
 | K5 Karte | (dieser PR) | Geometrie je Element mit Prüfstatus, Adresssuche, Plankarte mit Filtern; validate_geometry bleibt in road_closure_geo_service (nicht verschoben) |
-| K6 Anhänge | (dieser PR) | K6a: Migration 0297, Upload/Quota/Snapshots und geschützte Auslieferung; K6b: Verwaltung auf Element-/Kapitel-/Planebene, Galerie/Lightbox, Objektdokument-Suche, Versions-OOB, Baumzähler und historische URLs mit version_id |
-| K7–K13 | – | offen (Pilot-PDF liegt außerhalb des Repos vor) |
+| K6 Anhänge | #628 | K6a: Migration 0297, Upload/Quota/Snapshots und geschützte Auslieferung; K6b: Verwaltung auf Element-/Kapitel-/Planebene, Galerie/Lightbox, Objektdokument-Suche, Versions-OOB, Baumzähler und historische URLs mit version_id |
+| K7 Planquellen | (dieser PR) | K7a: `pdf_seiten_pipeline.py` aus dem Objektdienst gelöst (Objektverhalten unverändert); K7b: Migration 0298, Upload/Verarbeitung/Quellversionen, Archivieren statt Löschen bei Referenzen, Snapshot `quellen`, geschützte Auslieferung, Quota-Abgleich inkl. Anhänge; K7c: Quellen-Reiter, Seitenansicht, Element aus Seite (`herkunft=imported`), Quellenangabe/Herkunft-Badge. Mit dem Hochwasser-PDF (21 Seiten, Textebene) lokal geprüft |
+| K8–K13 | – | offen (Pilot-PDF liegt außerhalb des Repos vor) |

@@ -14,6 +14,7 @@ from app.core.timezones import now_local
 from app.models.katplan import (
     KatplanAbschnitt,
     KatplanAnhang,
+    KatplanDokument,
     KatplanElement,
     KatplanElementPhase,
     KatplanLink,
@@ -65,6 +66,12 @@ def erstelle_snapshot(db: Session, plan: KatplanPlan, *, flush: bool = True) -> 
     ).order_by(KatplanAnhang.sort, KatplanAnhang.uuid).all()
     kopf["anhaenge"] = [{**anhang_snapshot(a), "abschnitt_id": a.abschnitt_id}
                         for a in anhaenge if a.element_id is None]
+    kopf["quellen"] = [{**{f: getattr(d, f) for f in (
+        "id", "uuid", "titel", "versionsnummer", "seitenzahl", "herausgeber")},
+        "stand": d.stand.isoformat() if d.stand else None}
+        for d in db.query(KatplanDokument).filter_by(
+            org_id=plan.org_id, plan_id=plan.id, ist_aktuelle_version=True, archiviert=False,
+        ).order_by(KatplanDokument.id)]
     phasen_ids = [p["id"] for p in kopf["phasen"]]
     elemente = []
     for element in db.query(KatplanElement).filter_by(org_id=plan.org_id, plan_id=plan.id).order_by(
@@ -133,6 +140,8 @@ def freigeben(db: Session, plan: KatplanPlan, user: User,
     hash_daten[0]["links"] = _link_struktur(hash_daten[0].get("links", []))
     hash_daten[0]["anhaenge"] = [{f: a.get(f) for f in HASH_FELDER}
                                  for a in hash_daten[0]["anhaenge"]]
+    hash_daten[0]["quellen"] = [{f: q[f] for f in ("id", "versionsnummer", "titel")}
+                                for q in hash_daten[0]["quellen"]]
     for daten in hash_daten[1]:
         daten["anhaenge_json"] = _json([{f: a.get(f) for f in HASH_FELDER}
                                        for a in json.loads(daten["anhaenge_json"])])
