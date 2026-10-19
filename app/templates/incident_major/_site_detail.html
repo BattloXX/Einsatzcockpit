@@ -300,6 +300,7 @@
         Manuell
       {% endif %}
       {% if site.alarm_stufe %} · {{ site.alarm_stufe }}{% endif %}
+      {% if leitstellennummer|default('') %} · {{ leitstellennummer }}{% endif %}
     </span>
   </div>
 

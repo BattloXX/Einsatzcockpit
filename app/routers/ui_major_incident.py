@@ -700,6 +700,22 @@ def material_open_counts_for_sites(db: Session, site_ids: list[int]) -> dict[int
     return {int(site_id): int(count) for site_id, count in rows if site_id is not None}
 
 
+def _site_leitstellennummer(db: Session, lage, site: IncidentSite) -> str:
+    """Nur echte Leitstellennummern aus Einsätzen der führenden Organisation."""
+    if site.incident_id is None:
+        return ""
+    # IncidentSite hat keine Incident-Beziehung; bereits geladene Einsätze nutzen.
+    incident = db.identity_map.get(db.identity_key(Incident, site.incident_id))
+    if incident is None:
+        incident = db.query(Incident).filter(
+            Incident.id == site.incident_id,
+            Incident.primary_org_id == lage.org_id,
+        ).first()
+    if incident is None or incident.primary_org_id != lage.org_id:
+        return ""
+    return (incident.lis_operation_number or "").strip()
+
+
 def site_detail_context(request: Request, db: Session, lage, site, user) -> dict:
     """Gemeinsamer vollständiger Kontext für alle Stellen-Detail-Renderpfade."""
     sectors = sorted(lage.sectors, key=lambda s: s.id)
@@ -741,6 +757,7 @@ def site_detail_context(request: Request, db: Session, lage, site, user) -> dict
         "mi_features": features,
         "verleih_aktiv": bool(features.get("geraeteverleih")),
         "material_ausleihen": material_ausleihen,
+        "leitstellennummer": _site_leitstellennummer(db, lage, site),
     }
     context.update(_site_dispatch_context(request, db, lage, site, user))
     return context
@@ -1753,6 +1770,7 @@ def site_pin_save(
         "sectors": sectors,
         "now": datetime.now(UTC),
         "citizen_report": citizen_report,
+        "leitstellennummer": _site_leitstellennummer(db, lage, site),
     }
     context.update(_site_dispatch_context(request, db, lage, site, user))
     return templates.TemplateResponse(request, "incident_major/_site_detail.html", context)
