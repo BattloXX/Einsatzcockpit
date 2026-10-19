@@ -2,7 +2,7 @@
      :data-editing="editing ? 'true' : 'false'" id="siteDetailHeader"{% if oob %} hx-swap-oob="true"{% endif %}>
   <div style="flex:1;min-width:0;">
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-      <h3 class="modal__title" x-show="!editing">{{ site.bezeichnung }}</h3>
+      <h3 class="modal__title" x-show="!editing" style="min-width:0;white-space:normal;overflow-wrap:anywhere;">{{ site.bezeichnung }}{% if leitstellennummer|default('') %} <span style="color:var(--text-muted);font-family:'JetBrains Mono',monospace;">– {{ leitstellennummer }}</span>{% endif %}</h3>
       {% if can_edit %}<button class="btn btn--xs btn--ghost" x-show="!editing" @click.stop="editing=true" title="Bezeichnung/Adresse bearbeiten">✏️</button>{% endif %}
       <button type="button" class="btn btn--xs btn--ghost" title="Drucken (Station/lokal)" style="text-decoration:none;"
               onclick="ecpgPrint({document_type:'site_karte', gsl_id:{{ lage.id }}, artifact_ref:'{{ site.id }}', title:'Stelle drucken', localUrl:'/lage/{{ lage.id }}/stellen/{{ site.id }}/druck'})">🖨</button>
