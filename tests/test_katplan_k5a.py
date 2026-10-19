@@ -107,9 +107,10 @@ def test_adresssuche_rechte_und_json(client, umgebung, monkeypatch):
         aufrufe.append((q, limit))
         return [{"display_name": "Hauptstraße 1", "lat": 47.46, "lng": 9.74}]
     monkeypatch.setattr(geocoding, "search_addresses", suche)
+    # Seit K8 duerfen auch Leser Adressen suchen (Umkreissuche in der Plansuche).
     login(client, umgebung, "readonly")
-    assert client.get('/katastrophenplaene/adress-suche?q=Hauptstraße').status_code == 403
-    assert not aufrufe
+    assert client.get('/katastrophenplaene/adress-suche?q=Hauptstraße').status_code == 200
+    aufrufe.clear()
     login(client, umgebung)
     r = client.get('/katastrophenplaene/adress-suche', params={"q": "Hauptstraße"})
     assert r.status_code == 200

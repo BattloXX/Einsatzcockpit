@@ -1,0 +1,9 @@
+<label id="kp-suche-phasen" {% if fragment %}hx-swap-oob="outerHTML"{% endif %}>
+  Phase
+  <select class="form-control" name="phase" {% if not form.get('plan_id') %}disabled{% endif %}>
+    <option value="">Alle Phasen</option>
+    {% for phase in phasen %}
+      <option value="{{ phase.id }}" {% if form.get('phase') == phase.id|string %}selected{% endif %}>{{ phase.name }}</option>
+    {% endfor %}
+  </select>
+</label>
