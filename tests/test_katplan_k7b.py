@@ -183,7 +183,7 @@ def test_element_quelle_fremd_und_seiten_validieren(client, umgebung, fremde_org
         fremd_id = fremd.id
     path = basis(umgebung) + f"/elemente/{element.id}"
     assert post(client, path, **element_form(element, quelle_dokument_id=fremd_id)).status_code == 422
-    for seiten in ("0", "3", "2-1", "1-3", "1,2", "x"):
+    for seiten in ("0", "3", "2-1", "1-3", "1,3", "x"):
         assert post(client, path, **element_form(element, quelle_dokument_id=dokument.id,
                                                 quelle_seiten=seiten)).status_code == 422
     r = post(client, path, **element_form(element, quelle_dokument_id=dokument.id, quelle_seiten="1-2"))

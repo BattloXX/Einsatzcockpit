@@ -4,6 +4,12 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 
 ## Unreleased
 
+- **Katplan-MCP – Quellseiten und Bilder**: Bis 50 Quellzuordnungen mit optionalem
+  Versionsschutz, Teilfehlern und strengem Rollback. Quellreferenzen enthalten geschützte
+  Seiten-, Text- und Vorschau-URLs mit Freigabebindung. Eingebettete Bilder lassen sich
+  mit Vorschauen lesen; Seitenbilder, Einzelbilder und Ausschnitte als Anhänge übernehmen.
+  Trockenläufe hinterlassen weder Anhänge noch Bilddateien.
+
 - **Katplan-MCP**: Zahlen in Typdaten bleiben als Text erhalten; verworfene Werte werden
   mit Pfad gemeldet. Entwürfe liefern das gespeicherte Element und die wirksamen Felder,
   unterstützen `streng` und einen rückstandsfreien Trockenlauf mit `pruefen`.

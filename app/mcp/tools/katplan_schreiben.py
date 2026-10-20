@@ -1,6 +1,7 @@
 """MCP-Entwuerfe im Arbeitsstand; die Freigabe bleibt beim Menschen."""
 
 import asyncio
+import contextlib
 import json
 from datetime import date
 from functools import wraps
@@ -47,11 +48,15 @@ def _tool(name: str, description: str):
                 raise MCPPermissionError("Keine Berechtigung")
             if context.org_id != context.user.org_id or not katplan_effective_enabled(context.org_id, context.db):
                 raise MCPPermissionError("Werkzeug nicht verfügbar")
+            dateien: list[Path] = []
+            context.db.info["katplan_mcp_dateien"] = dateien
             try:
                 result = await handler(context, **kwargs)
                 write_audit(context.db, "mcp." + name, org_id=context.org_id, user_id=context.user.id,
                             entity_type="katplan", entity_id=kwargs.get("plan_id"))
                 context.db.commit()
+                if not kwargs.get("pruefen"):
+                    dateien.clear()
                 return result
             except service.KatplanKonflikt as exc:
                 context.db.rollback()
@@ -59,6 +64,14 @@ def _tool(name: str, description: str):
             except Exception:
                 context.db.rollback()
                 raise
+            finally:
+                context.db.info.pop("katplan_mcp_dateien", None)
+                for pfad in dateien:
+                    pfad.unlink(missing_ok=True)
+                for verzeichnis in {p.parent for p in dateien}:
+                    # Nur leere Anhangsverzeichnisse entfernen; geteilte Ordner bleiben.
+                    with contextlib.suppress(OSError):
+                        verzeichnis.rmdir()
         return register_tool(name=name, description=description, required_roles=tuple(KATPLAN_VERWALTER_ROLES),
                              module_check=katplan_effective_enabled)(aufruf)
     return decorator
@@ -206,6 +219,33 @@ def _antwort(context: MCPContext, plan: KatplanPlan, element: KatplanElement, *,
     return antwort
 
 
+def _pruefe_element_version(element: KatplanElement, version: int) -> None:
+    if element.version != version:
+        raise ValueError(
+            f"Versionskonflikt: Element {element.kennung} hat version {element.version}, übergeben {version}. "
+            'Mit katplan_element_lesen(fassung="arbeitsstand") neu lesen.'
+        )
+
+
+def _schreibe_element_werte(context: MCPContext, plan: KatplanPlan, element: KatplanElement,
+                            werte: dict) -> None:
+    for feld, wert in werte.items():
+        alt = getattr(element, feld)
+        if alt != wert:
+            setattr(element, feld, wert)
+            service.protokolliere(context.db, plan, "element", "geaendert", context.user,
+                                  feld={"daten_json": "daten", "geometry_json": "geometrie"}.get(feld, feld),
+                                  alt=str(alt) if alt is not None else None,
+                                  neu=str(wert) if wert is not None else None, element_id=element.id, quelle="mcp")
+
+
+def _element_geaendert(context: MCPContext, plan: KatplanPlan, element: KatplanElement) -> None:
+    element.version += 1
+    element.aktualisiert_am, element.aktualisiert_von_id = _utcnow(), context.user.id
+    service.aktualisiere_element_suchtext(element)
+    service.markiere_ueberarbeitung(context.db, plan, context.user, quelle="mcp")
+
+
 _SCHREIB_HINWEIS = (
     " Zahlen in daten-Textfeldern und Listen werden zu Text (500 wird zu \"500\"); bool ist kein Text. "
     "quelle_dokument_id verweist auf die Quelle, quelle_seiten enthält Seiten wie 3-4,7. "
@@ -294,11 +334,7 @@ async def katplan_element_entwurf_aendern(context: MCPContext, plan_id: int, ele
                                          streng: bool = False, pruefen: bool = False) -> dict[str, object]:
     plan = _plan(context, plan_id)
     element = _element(context, plan, element_id)
-    if element.version != version:
-        raise ValueError(
-            f"Versionskonflikt: Element {element.kennung} hat version {element.version}, übergeben {version}. "
-            'Mit katplan_element_lesen(fassung="arbeitsstand") neu lesen.'
-        )
+    _pruefe_element_version(element, version)
     if not isinstance(felder, dict):
         raise ValueError("felder muss ein Objekt sein.")
     verboten = set(felder) - _FELDER
@@ -352,14 +388,7 @@ async def katplan_element_entwurf_aendern(context: MCPContext, plan_id: int, ele
         validiere_element_quelle(context.db, plan, qid, seiten)
         werte.update(quelle_dokument_id=qid, quelle_seiten=seiten or None)
     phase_ids = _phasen(context, plan, felder["phasen"]) if "phasen" in felder else None
-    for feld, wert in werte.items():
-        alt = getattr(element, feld)
-        if alt != wert:
-            setattr(element, feld, wert)
-            service.protokolliere(context.db, plan, "element", "geaendert", context.user,
-                                  feld={"daten_json": "daten", "geometry_json": "geometrie"}.get(feld, feld),
-                                  alt=str(alt) if alt is not None else None,
-                                  neu=str(wert) if wert is not None else None, element_id=element.id, quelle="mcp")
+    _schreibe_element_werte(context, plan, element, werte)
     if phase_ids is not None:
         rows = context.db.query(KatplanElementPhase).filter_by(org_id=plan.org_id, element_id=element.id).all()
         alt_ids = {r.phase_id for r in rows}
@@ -372,10 +401,7 @@ async def katplan_element_entwurf_aendern(context: MCPContext, plan_id: int, ele
             service.protokolliere(context.db, plan, "element", "geaendert", context.user, feld="phasen",
                                   alt=json.dumps(sorted(alt_ids)), neu=json.dumps(sorted(phase_ids)),
                                   element_id=element.id, quelle="mcp")
-    element.version += 1
-    element.aktualisiert_am, element.aktualisiert_von_id = _utcnow(), context.user.id
-    service.aktualisiere_element_suchtext(element)
-    service.markiere_ueberarbeitung(context.db, plan, context.user, quelle="mcp")
+    _element_geaendert(context, plan, element)
     context.db.flush()
     nachher = _feldwerte(context, element)
     antwort = _antwort(context, plan, element,
@@ -672,6 +698,101 @@ async def katplan_stammdaten_aendern(context: MCPContext, plan_id: int, version:
     antwort = {"plan_id": plan.id, "plan_version": plan.version, "geaendert": geaendert,
                "unveraendert": [k for k in felder if k not in geaendert], "verworfen": [],
                "gespeichert": not pruefen, "plan": lesedaten.kopf_ansicht(kopf), "hinweis": _HINWEIS}
+    if pruefen:
+        context.db.rollback()
+    return antwort
+
+
+@_tool("katplan_quellseite_verknuepfen", (
+    "Verknüpft bis 50 Elemente (UUID/Kennung) mit dokument_id und seiten wie 3-4,7. "
+    "Optionale version prüft Konflikte. Fehler je Eintrag; streng=true bricht alles ab. pruefen=true rollt zurück."
+))
+async def katplan_quellseite_verknuepfen(context: MCPContext, plan_id: int, zuordnungen: list[dict],
+                                        pruefen: bool = False, streng: bool = False) -> dict[str, object]:
+    from app.services.katplan_quelle_service import sichtbare_quellen
+
+    plan = _plan(context, plan_id)
+    if not isinstance(zuordnungen, list) or len(zuordnungen) > 50:
+        raise ValueError("Maximal 50 Zuordnungen je Aufruf.")
+    sichtbar = {d.id for d in sichtbare_quellen(context.db, plan, context.user)}
+    ergebnisse = []
+    for eintrag in zuordnungen:
+        element = None
+        try:
+            if not isinstance(eintrag, dict) or not isinstance(eintrag.get("element_id"), str):
+                raise ValueError("Zuordnung benötigt element_id, dokument_id und seiten.")
+            element = _element(context, plan, eintrag["element_id"])
+            if "version" in eintrag:
+                _pruefe_element_version(element, eintrag["version"])
+            qid, seiten = eintrag.get("dokument_id"), eintrag.get("seiten")
+            if type(qid) is not int or qid not in sichtbar:
+                raise ValueError("Quelle nicht gefunden.")
+            if not isinstance(seiten, str):
+                raise ValueError("Seiten müssen als Text angegeben werden.")
+            validiere_element_quelle(context.db, plan, qid, seiten)
+            werte = {"quelle_dokument_id": qid, "quelle_seiten": seiten or None}
+            geaendert = any(getattr(element, k) != v for k, v in werte.items())
+            if geaendert:
+                _schreibe_element_werte(context, plan, element, werte)
+                _element_geaendert(context, plan, element)
+            ergebnisse.append({"element_id": element.uuid, "kennung": element.kennung,
+                                "status": "geaendert" if geaendert else "unveraendert", "version": element.version})
+        except ValueError as exc:
+            if streng:
+                raise
+            ergebnisse.append({"element_id": eintrag.get("element_id") if isinstance(eintrag, dict) else None,
+                                "kennung": element.kennung if element else None, "status": "fehler",
+                                "fehler": str(exc), "version": element.version if element else None})
+    context.db.flush()
+    antwort = {"ergebnisse": ergebnisse, "gespeichert": not pruefen, "hinweis": _HINWEIS}
+    if pruefen:
+        context.db.rollback()
+    return antwort
+
+
+@_tool("katplan_anhang_aus_quellseite", (
+    "Übernimmt eine sichtbare Quellseite als Anhang im Arbeitsstand: modus seite, bild (bild_index) "
+    "oder ausschnitt (rahmen [x0,y0,x1,y1], relativ 0..1, mindestens 5 % je Achse). "
+    "Ohne element_id auf Planebene. pruefen=true entfernt auch erzeugte Dateien."
+))
+async def katplan_anhang_aus_quellseite(
+    context: MCPContext, plan_id: int, dokument_id: int, seiten_nr: int, element_id: str | None = None,
+    modus: str = "seite", bild_index: int | None = None, rahmen: list[float] | None = None,
+    beschriftung: str | None = None, vertraulich: bool = False, pruefen: bool = False,
+) -> dict[str, object]:
+    from app.mcp.tools.katplan import _quellseite
+    from app.services import katplan_quellbild_service as bilder
+    from app.services.katplan_quelle_service import absolute_pfad
+
+    plan = _plan(context, plan_id)
+    _, dokument, seite = _quellseite(context, plan_id, dokument_id, seiten_nr)
+    element = _element(context, plan, element_id) if element_id is not None else None
+    if modus == "seite":
+        data = bilder.ausschnitt(seite, [0, 0, 1, 1])
+    elif modus == "bild":
+        if bild_index is None:
+            raise ValueError("bild_index ist erforderlich.")
+        data, _ = bilder.bild_bytes(seite, bild_index)
+    elif modus == "ausschnitt":
+        if rahmen is None:
+            raise ValueError("rahmen ist erforderlich.")
+        data = bilder.ausschnitt(seite, rahmen)
+    else:
+        raise ValueError("modus muss seite, bild oder ausschnitt sein.")
+    beschriftung = (f"Quelle: {dokument.titel} v{dokument.versionsnummer}, S. {seiten_nr}"
+                    if beschriftung is None else beschriftung)
+    anhang = anhang_hochladen(context.db, plan, context.user, data, "quellseite.jpg", "image/jpeg",
+                              element=element, beschriftung=beschriftung, vertraulich=vertraulich, quelle="mcp")
+    # Pfade vor Rollback sichern; keine Quota-Freigabe nach Rollback (bereits zurueckgesetzt).
+    pfade = [absolute_pfad(p) for p in (anhang.pfad, anhang.thumb_pfad) if p]
+    context.db.info["katplan_mcp_dateien"].extend(pfade)
+    context.db.flush()
+    antwort: dict[str, object] = {"anhang_id": anhang.id, "uuid": anhang.uuid, "mime": anhang.mime,
+                                  "beschriftung": anhang.beschriftung, "gespeichert": not pruefen,
+                                  "geaendert": ["anhang"], "hinweis": _HINWEIS}
+    if element is not None:
+        antwort.update(_antwort(context, plan, element, geaendert=["anhang"], verworfen=[], pruefen=False))
+        antwort["gespeichert"] = not pruefen
     if pruefen:
         context.db.rollback()
     return antwort

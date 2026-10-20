@@ -264,11 +264,32 @@ def validiere_element_quelle(db: Session, plan: KatplanPlan, dokument_id: int | 
         return
     dokument = _dokument(db, plan, dokument_id)
     if seiten:
-        match = re.fullmatch(r"([1-9][0-9]*)(?:-([1-9][0-9]*))?", seiten)
-        if len(seiten) > 30 or not match:
+        parse_seiten(seiten, dokument.seitenzahl, limit=0)
+
+
+def parse_seiten(seiten: str, seitenzahl: int | None = None, *, limit: int | None = None) -> list[int]:
+    """Seitenangaben wie 3-4,7 pruefen, ohne grosse Bereiche zu expandieren."""
+    if not isinstance(seiten, str) or len(seiten) > 30:
+        raise ValueError("Ungültiger Seitenbereich.")
+    if not seiten:
+        return []
+    nummern: list[int] = []
+    for teil in seiten.split(","):
+        match = re.fullmatch(r"([1-9][0-9]*)(?:-([1-9][0-9]*))?", teil)
+        if not match:
             raise ValueError("Ungültiger Seitenbereich.")
-        if not 1 <= int(match[1]) <= int(match[2] or match[1]) <= dokument.seitenzahl:
+        start, ende = int(match[1]), int(match[2] or match[1])
+        if start > ende or (seitenzahl is not None and ende > seitenzahl):
             raise ValueError("Seitenbereich liegt außerhalb des Dokuments.")
+        # Auch nach Erreichen des Ausgabelimits alle restlichen Bereiche validieren.
+        if limit is not None and len(nummern) >= limit:
+            continue
+        for nr in range(start, ende + 1):
+            if nr not in nummern:
+                nummern.append(nr)
+                if limit is not None and len(nummern) >= limit:
+                    break
+    return nummern
 
 
 def vergleiche_quellen(db: Session, plan: KatplanPlan, dokument_id: int,
@@ -302,8 +323,8 @@ def vergleiche_quellen(db: Session, plan: KatplanPlan, dokument_id: int,
         KatplanElement.quelle_dokument_id.in_([d.id for d in gruppe]),
     ).order_by(KatplanElement.sort, KatplanElement.id):
         try:
-            grenzen = (e.quelle_seiten or "").split("-")
-            if any(int(grenzen[0]) <= nr <= int(grenzen[-1]) for nr in betroffen):
+            referenzen = parse_seiten(e.quelle_seiten or "", max(d.seitenzahl for d in gruppe))
+            if betroffen.intersection(referenzen):
                 elemente.append(e)
         except ValueError:
             continue

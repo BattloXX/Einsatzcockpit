@@ -902,9 +902,14 @@ async def _dokument_seite_inhalt(name: str, **werte: object) -> list[ContentBloc
     ergebnis = await _call_registered_tool(name, **werte)
     bild = ergebnis.pop("bild_base64", None)
     mime = ergebnis.pop("bild_mime", None)
+    vorschauen = cast(list[dict], ergebnis.pop("vorschauen", []))
+    if name == "katplan_quellseite_bilder":
+        ergebnis["vorschau_indizes"] = [v["index"] for v in vorschauen]
     inhalt: list[ContentBlock] = [TextContent(type="text", text=json.dumps(ergebnis, ensure_ascii=False, indent=2))]
     if isinstance(bild, str) and isinstance(mime, str):
         inhalt.append(ImageContent(type="image", data=bild, mime_type=mime))
+    for v in vorschauen:
+        inhalt.append(ImageContent(type="image", data=v["bild_base64"], mime_type=v["bild_mime"]))
     return inhalt
 
 
@@ -2142,3 +2147,29 @@ async def katplan_stammdaten_aendern(
     return await _call_registered_tool(
         "katplan_stammdaten_aendern", plan_id=plan_id, version=version, felder=felder, streng=streng, pruefen=pruefen,
     )
+
+
+@server.tool(name="katplan_quellseite_verknuepfen", description=TOOLS["katplan_quellseite_verknuepfen"].description)
+async def katplan_quellseite_verknuepfen(plan_id: int, zuordnungen: list[dict], pruefen: bool = False,
+                                        streng: bool = False, ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("katplan_quellseite_verknuepfen", plan_id=plan_id,
+                                       zuordnungen=zuordnungen, pruefen=pruefen, streng=streng)
+
+
+@server.tool(name="katplan_quellseite_bilder", description=TOOLS["katplan_quellseite_bilder"].description)
+async def katplan_quellseite_bilder(plan_id: int, dokument_id: int, seiten_nr: int, vorschau: bool = True,
+                                   ctx: Context | None = None) -> list[ContentBlock]:
+    return await _dokument_seite_inhalt("katplan_quellseite_bilder", plan_id=plan_id,
+                                        dokument_id=dokument_id, seiten_nr=seiten_nr, vorschau=vorschau)
+
+
+@server.tool(name="katplan_anhang_aus_quellseite", description=TOOLS["katplan_anhang_aus_quellseite"].description)
+async def katplan_anhang_aus_quellseite(
+    plan_id: int, dokument_id: int, seiten_nr: int, element_id: str | None = None, modus: str = "seite",
+    bild_index: int | None = None, rahmen: list[float] | None = None, beschriftung: str | None = None,
+    vertraulich: bool = False, pruefen: bool = False, ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool("katplan_anhang_aus_quellseite", plan_id=plan_id,
+                                       dokument_id=dokument_id, seiten_nr=seiten_nr, element_id=element_id,
+                                       modus=modus, bild_index=bild_index, rahmen=rahmen,
+                                       beschriftung=beschriftung, vertraulich=vertraulich, pruefen=pruefen)

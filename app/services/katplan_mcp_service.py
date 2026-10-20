@@ -12,6 +12,7 @@ from app.models.katplan import KatplanDokument, KatplanElement, KatplanPlan, Kat
 from app.models.user import User
 from app.services.katplan_freigabe_service import erstelle_snapshot, lade_version
 from app.services.katplan_link_service import links_aus_version
+from app.services.katplan_quelle_service import parse_seiten
 from app.services.katplan_service import _HTMLText
 from app.services.katplan_typen import ELEMENT_TYPEN, bereinige_daten
 from app.services.katplan_ziel_service import ziel_verfuegbar
@@ -158,8 +159,24 @@ def element_dict(db: Session, user: User, plan: KatplanPlan, e: dict, kopf: dict
                 org_id=plan.org_id, plan_id=plan.id, id=e["quelle_dokument_id"],
             ).one_or_none()
             q = {"titel": d.titel, "versionsnummer": d.versionsnummer} if d else {}
+        dokument = db.query(KatplanDokument).filter_by(
+            org_id=plan.org_id, plan_id=plan.id, id=e["quelle_dokument_id"],
+        ).one_or_none()
+        seiten_liste = []
+        if dokument:
+            try:
+                nummern = parse_seiten(e.get("quelle_seiten") or "", dokument.seitenzahl, limit=30)
+            except ValueError:
+                nummern = []
+                warnings.append("Ungültiger Seitenbereich der Quellreferenz.")
+            suffix = f"?version_id={version_id}" if version_id is not None else ""
+            for nr in nummern:
+                basis = f"/katastrophenplaene/quelle/{dokument.uuid}/seite/{nr}"
+                seiten_liste.append({"seiten_nr": nr, "thumb_url": basis + "/thumb" + suffix,
+                                     "seiten_url": basis + "/bild" + suffix, "text_url": basis + "/text" + suffix})
         quellen.append({"dokument_id": e["quelle_dokument_id"], "titel": q.get("titel"),
-                        "versionsnummer": q.get("versionsnummer"), "seiten": e.get("quelle_seiten") or None})
+                        "versionsnummer": q.get("versionsnummer"), "seiten": e.get("quelle_seiten") or None,
+                        "seiten_liste": seiten_liste})
     datum = e.get("pruefen_am")
     ueberfaellig = bool(datum and str(datum) < now_local(user.org).date().isoformat())
     result: dict[str, Any] = {
