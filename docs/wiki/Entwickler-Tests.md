@@ -144,7 +144,7 @@ Drei Jobs in `.github/workflows/ci.yml`:
 ```yaml
 services:
   mariadb:
-    image: mariadb:10.11
+    image: mariadb:12.3
     env:
       MARIADB_DATABASE: einsatzleiter_test
       MARIADB_USER: einsatzleiter

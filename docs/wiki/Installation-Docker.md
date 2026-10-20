@@ -2,7 +2,9 @@
 
 ← [Zurück zur Startseite](Home)
 
-Docker Compose startet die App mit MariaDB 10.11 und Redis 7. Redis ist wegen der
+Docker Compose startet die App mit MariaDB 12.3 und Redis 7. Ein vorhandenes
+Datenverzeichnis einer älteren Version (z. B. 10.11) aktualisiert der Container beim
+ersten Start selbst (`MARIADB_AUTO_UPGRADE`); vorher ein Backup ziehen. Redis ist wegen der
 zwei Gunicorn-Worker verpflichtend. Ein Reverse-Proxy mit TLS bleibt erforderlich;
 Compose ersetzt NGINX nicht.
 

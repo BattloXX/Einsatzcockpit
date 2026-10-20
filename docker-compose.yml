@@ -18,12 +18,14 @@ services:
     restart: unless-stopped
 
   db:
-    image: mariadb:10.11
+    image: mariadb:12.3
     environment:
       MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?in .env setzen}
       MARIADB_DATABASE: ${MARIADB_DATABASE:?in .env setzen}
       MARIADB_USER: ${MARIADB_USER:?in .env setzen}
       MARIADB_PASSWORD: ${MARIADB_PASSWORD:?in .env setzen}
+      # Bestehende Datenverzeichnisse (z. B. von 10.11) beim Start automatisch aktualisieren.
+      MARIADB_AUTO_UPGRADE: "1"
     volumes:
       - mariadb_data:/var/lib/mysql
     healthcheck:
