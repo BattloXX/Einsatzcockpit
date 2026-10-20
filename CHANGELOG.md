@@ -4,6 +4,10 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 
 ## Unreleased
 
+- **Zentrale Suche**: Organisationsweite und kontextbezogene Suche über freigegebene
+  Fachinhalte und Live-Daten mit Rechteprüfung. Org-Schalter, Indexstatus und
+  asynchroner Neuaufbau, MariaDB-FULLTEXT-Test und Betriebsdokumentation ergänzt.
+
 - **Katplan-MCP – Quellenabgleich**: Neues lesendes Werkzeug für Bearbeiter meldet
   Seiten ohne Element, Elemente ohne Quelle, veraltete Quellbezüge, mögliche Dubletten
   und offene Vorschläge je Seite mit nächsten Schritten. Vorschlagsimporte warnen vor

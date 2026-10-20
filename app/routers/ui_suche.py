@@ -123,3 +123,59 @@ def api_suche(request: Request, anfrage: SuchAnfrage,
         return suche(db, user, anfrage).model_dump(mode="json")
     except PermissionError:
         raise HTTPException(status_code=404, detail="Suchkontext nicht verfügbar") from None
+
+
+# Die Administration bleibt auch bei ausgeschaltetem Org-Schalter erreichbar.
+def _admin_org(user: User) -> int:
+    from app.config import settings
+
+    if not settings.SEARCH_ENABLED or user.org_id is None:
+        raise HTTPException(status_code=404, detail="Suchadministration nicht verfügbar")
+    return user.org_id
+
+
+def _admin_status(request: Request, user: User, db: Session, *, partial: bool = False) -> HTMLResponse:
+    from app.services.suche.admin import indexstatus
+
+    org_id = _admin_org(user)
+    return templates.TemplateResponse(request, "suche/_admin_status.html" if partial else "suche/admin.html", {
+        "user": user, **indexstatus(db, org_id),
+    })
+
+
+@router.get("/einstellungen/suche", response_class=HTMLResponse)
+def admin_index(request: Request, user: User = Depends(require_role("org_admin", "admin")),
+                db: Session = Depends(get_db)):
+    return _admin_status(request, user, db)
+
+
+@router.post("/einstellungen/suche/neuaufbau", response_class=HTMLResponse)
+def admin_neuaufbau(request: Request, user: User = Depends(require_role("org_admin", "admin")),
+                    db: Session = Depends(get_db)):
+    from app.services.suche.outbox import plane_neuaufbau
+
+    plane_neuaufbau(db, _admin_org(user))
+    db.commit()
+    return _admin_status(request, user, db, partial=True)
+
+
+@router.post("/einstellungen/suche/fehler-zuruecksetzen", response_class=HTMLResponse)
+def admin_fehler_zuruecksetzen(request: Request, user: User = Depends(require_role("org_admin", "admin")),
+                              db: Session = Depends(get_db)):
+    from datetime import UTC, datetime
+
+    from sqlalchemy import select
+
+    from app.models.suche import SearchOutbox
+
+    org_id = _admin_org(user)
+    jetzt = datetime.now(UTC).replace(tzinfo=None)
+    for job in db.scalars(select(SearchOutbox).where(
+        SearchOutbox.org_id == org_id, SearchOutbox.status == "failed",
+    )).all():
+        job.status = "retry"
+        job.versuche = 0
+        job.naechster_versuch_am = jetzt
+        job.gesperrt_bis = None
+    db.commit()
+    return _admin_status(request, user, db, partial=True)

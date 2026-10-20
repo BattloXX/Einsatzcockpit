@@ -189,6 +189,6 @@ Nicht Teil dieses Plans. Erst nach S8 und eigener Freigabe.
 | S3 | #646 | umgesetzt: after_flush-Erfassung, Leader-Worker mit Lease/Retry, Auffächern, stündlicher Abgleich; MariaDB-12.3-Probe ok |
 | S4 | #647 | umgesetzt: Vertrag, Live-Resolver, 7 Live-Anbieter, RRF, Geo; offen für S7: Einzelabfragen je Index-Treffer messen (p95) |
 | S5 | #648 | umgesetzt: /suche, HTMX-Treffer, /api/suche, Lupe + Strg+K, Einstieg Einsatz/GSL; Browser-Check Desktop/mobil ok |
-| S6 | (dieser PR) | umgesetzt: MCP `ecp_suchen` mit Feld-Whitelist, Detailwerkzeug-Verweisen und API-Parität |
-| S7 | – | offen |
+| S6 | #649 | umgesetzt: MCP `ecp_suchen` mit Feld-Whitelist, Detailwerkzeug-Verweisen und API-Parität |
+| S7 | (dieser PR) | umgesetzt: Org-Schalter + Neuaufbau, Statusseite, MariaDB-FULLTEXT-Test in CI (lokal gegen 12.3 grün), Messskript, Wiki, CHANGELOG |
 | S8 | – | gesperrt (Entscheidung) |

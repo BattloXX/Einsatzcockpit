@@ -24,3 +24,9 @@
   .suche-eingabe { flex-direction: column; }
   .suche-seite { padding: .75rem; }
 }
+.suche-admin { width: 100%; min-width: 0; box-sizing: border-box; }
+.suche-admin h2 { margin: 1.25rem 0 .5rem; }
+.suche-admin .btn { min-height: 44px; }
+.suche-tabelle { width: 100%; max-width: 100%; overflow-x: auto; margin: .75rem 0; }
+.suche-tabelle table { width: 100%; min-width: 620px; }
+.suche-tabelle th, .suche-tabelle td { padding: .5rem; text-align: left; }

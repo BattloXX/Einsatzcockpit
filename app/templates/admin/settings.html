@@ -643,6 +643,15 @@
         </label>
         <small class="form-hint">Uebungseinsaetze und Uebungs-GSLs generieren und steuern; loest keine echten Alarmierungen aus.</small>
       </div>
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">Zentrale Suche</h3>
+      <div class="form-group">
+        <label style="display:flex;align-items:center;gap:.5rem">
+          <input type="checkbox" name="suche_aktiv_raw" value="1" {% if org_settings and org_settings.suche_aktiv %}checked{% endif %} {% if not suche_sys_enabled %}disabled{% endif %}>
+          Zentrale Suche für diese Organisation aktivieren
+        </label>
+        <small class="form-hint">Durchsucht Objekte, Objektdokumente und freigegebene Katastrophenpläne über einen Index, dazu live Einsätze, Sperren, Wasserstellen und GSL. Kontakte sind nicht enthalten.</small>
+        {% if suche_sys_enabled %}<a href="/einstellungen/suche">Indexstatus und Neuaufbau</a>{% else %}<p class="form-hint">Systemweit deaktiviert - bitte System-Admin kontaktieren.</p>{% endif %}
+      </div>
       <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">Katastrophenpläne</h3>
       {% set _katplan_org_on = (org_settings.katplan_modul_aktiv) if org_settings else false %}
       <div class="form-group">
