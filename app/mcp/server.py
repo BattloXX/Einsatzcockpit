@@ -40,6 +40,7 @@ from app.mcp.tools import objekt as _objekt  # noqa: F401 - registriert Objekt-T
 from app.mcp.tools import objekt_dokumente as _objekt_dokumente  # noqa: F401 - registriert Dokument-Tools
 from app.mcp.tools import organisation as _organisation  # noqa: F401 - registriert Organisations-Tool
 from app.mcp.tools import strassensperren as _strassensperren  # noqa: F401 - registriert Strassensperren-Tools
+from app.mcp.tools import suche as _suche  # noqa: F401 - registriert zentrale Suche
 from app.mcp.tools import wasserstelle as _wasserstelle  # noqa: F401 - registriert Wasserstellen-Tools
 from app.mcp.tools import whoami as _whoami  # noqa: F401 - registriert Beispiel-Tool
 from app.models.mcp import MCPOAuthClient, MCPOAuthCode, MCPOAuthToken
@@ -2003,6 +2004,18 @@ async def katplan_liste(gefahr: str = '', status: str = '', suchbegriff: str = '
 @server.tool(name="katplan_lesen", description=TOOLS["katplan_lesen"].description)
 async def katplan_lesen(plan_id: int, fassung: str = 'freigegeben', version_id: int | None = None, mit_elementen: bool = False, ctx: Context | None = None) -> dict[str, object]:
     return await _call_registered_tool("katplan_lesen", plan_id=plan_id, fassung=fassung, version_id=version_id, mit_elementen=mit_elementen)
+
+
+@server.tool(name="ecp_suchen", description=TOOLS["ecp_suchen"].description)
+async def ecp_suchen(
+    q: str, kontext: str = "global", kontext_id: int | None = None, typen: list[str] | None = None,
+    inkl_erledigt: bool = False, ganze_org: bool = False, lat: float | None = None,
+    lng: float | None = None, radius_m: int | None = None, limit: int = 20, ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "ecp_suchen", q=q, kontext=kontext, kontext_id=kontext_id, typen=typen,
+        inkl_erledigt=inkl_erledigt, ganze_org=ganze_org, lat=lat, lng=lng, radius_m=radius_m, limit=limit,
+    )
 
 
 @server.tool(name="katplan_suchen", description=TOOLS["katplan_suchen"].description)
