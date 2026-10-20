@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from starlette.templating import Jinja2Templates
 
 from app.config import settings
+from app.core.icons import render_icon, status_dot
 from app.db import get_db
 from app.models.master import FireDept
 from app.models.probenplanung import ProbePublicToken
@@ -20,6 +21,8 @@ logger = logging.getLogger(__name__)
 public_router = APIRouter(tags=["probenplanung-public"])
 # Keine internen Context-Processors (Benutzer, Organisation, Navigation).
 public_templates = Jinja2Templates(directory="app/templates")
+public_templates.env.globals["icon"] = render_icon
+public_templates.env.globals["status_dot"] = status_dot
 _PUBLIC_HEADERS = {"Cache-Control": "private, no-store", "X-Robots-Tag": "noindex, nofollow",
                    "Referrer-Policy": "no-referrer"}
 

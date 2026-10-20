@@ -30,6 +30,19 @@ das Markup ungültig, Formulare brechen stillschweigend (Vorfall 2026-06-19,
 - `tests/test_async_routes_sync_db.py` bewacht den Bestand und verbietet `run_async`
   in Async-Funktionen. `tests/data/async_routes_sync_db_baseline.txt` darf nur schrumpfen.
 
+## Pflicht: Icons nur über das Icon-System
+
+UI-Icons nur über `{{ icon("name") }}`, `ecpIcon('name')` oder `ecpMarkerIcon`;
+Statuspunkte über `status_dot` (JS: `ecpStatusDot`). Neue Namen in
+`app/static/icons/tabler-auswahl.txt` aufnehmen und `npm run vendor` ausführen.
+Keine Emojis in UI-Code (externe Kanäle SMS/Teams/Mail ausgenommen), keine fremden
+Icon-Bibliotheken oder CDNs. Icon-only-Buttons brauchen `aria-label` oder `label=`.
+`tests/test_icon_waechter.py` bewacht den Bestand; `tests/data/icon_emoji_baseline.txt`
+darf nur schrumpfen (neu erzeugen: `.venv/bin/python scripts/icon_inventar.py --baseline`).
+Feuerwehr-/Fachzeichen ohne Tabler-Entsprechung bleiben unverändert (`=fw` im Inventar).
+Details: [Icon-System-Plan](docs/plans/icon-system-plan.md) und
+[Icon-Inventar](docs/icon-inventar.md).
+
 ## Pflicht: Third-Party-JavaScript über npm vendoren
 
 - Versionen nur über `package.json` + `npm run vendor` aktualisieren;

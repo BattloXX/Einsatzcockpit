@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     # Die oeffentliche No-Login-Seite zeigt mehr Daten und laeuft frueher ab.
     ALARM_LINK_TTL_DAYS: int = 30
     APP_VERSION: str = "2026.10.19"
+    ICONS_STRICT: bool = False
     DEBUG: bool = False
     # Pytest setzt dies vor dem App-Import: Lifespan startet dann keine produktiven
     # Hintergrund-Worker und kann weder externe Dienste pollen noch Testdaten ändern.

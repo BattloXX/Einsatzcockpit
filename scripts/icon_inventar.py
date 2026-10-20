@@ -7,6 +7,7 @@ Plan: ``docs/plans/icon-system-plan.md``.
 Aufruf:
     .venv/bin/python scripts/icon_inventar.py            # schreibt docs/icon-inventar.md
     .venv/bin/python scripts/icon_inventar.py --check    # Exit 1, wenn ein Zeichen fehlt
+    .venv/bin/python scripts/icon_inventar.py --baseline # schreibt die Waechter-Baseline neu
 """
 from __future__ import annotations
 
@@ -19,6 +20,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 APP = ROOT / "app"
 ZIEL = ROOT / "docs" / "icon-inventar.md"
+BASELINE = ROOT / "tests" / "data" / "icon_emoji_baseline.txt"
+MIGRIER_KONTEXTE = ("markup", "js", "python", "css", "option")
 TABLER_VERSION = "3.49.0"
 
 EMOJI_RE = re.compile(
@@ -147,6 +150,28 @@ def sammeln():
     return treffer
 
 
+def migrierbar_je_datei(treffer=None) -> Counter:
+    """Noch zu migrierende UI-Zeichen je Datei (ohne =text/=fw, Kommentare, extern)."""
+    treffer = sammeln() if treffer is None else treffer
+    jedatei: Counter = Counter()
+    for ch, fund in treffer.items():
+        if ZUORDNUNG.get(ch, "").startswith(("=text", "=fw")):
+            continue
+        for f, _, k in fund:
+            if k in MIGRIER_KONTEXTE:
+                jedatei[f] += 1
+    return jedatei
+
+
+def baseline_schreiben(jedatei: Counter) -> None:
+    kopf = (
+        "# Waechter tests/test_icon_waechter.py: noch nicht migrierte UI-Emojis je Datei.\n"
+        "# Darf nur schrumpfen. Neu erzeugen: .venv/bin/python scripts/icon_inventar.py --baseline\n"
+    )
+    zeilen = [f"{f} {n}" for f, n in sorted(jedatei.items())]
+    BASELINE.write_text(kopf + "\n".join(zeilen) + "\n", encoding="utf-8")
+
+
 def _bericht(treffer) -> str:
     zeilen = [
         "# Icon-Inventar",
@@ -170,7 +195,7 @@ def _bericht(treffer) -> str:
                "|---|---|---:|---:|---|"]
     for ch, fund in sorted(treffer.items(), key=lambda x: -len(x[1])):
         ziel = ZUORDNUNG.get(ch, "**FEHLT**")
-        offen = sum(1 for _, _, k in fund if k in ("markup", "js", "python", "css", "option"))
+        offen = sum(1 for _, _, k in fund if k in MIGRIER_KONTEXTE)
         dateien = sorted({f for f, _, _ in fund})
         auszug = ", ".join(f"`{d.removeprefix('app/')}`" for d in dateien[:4])
         if len(dateien) > 4:
@@ -179,13 +204,7 @@ def _bericht(treffer) -> str:
     zeilen += ["", "\\* ohne Kommentare und externe Kanäle.", "",
                "## Dateien mit den meisten migrierbaren Treffern", "",
                "| Datei | Treffer |", "|---|---:|"]
-    jedatei = Counter()
-    for ch, fund in treffer.items():
-        if ZUORDNUNG.get(ch, "").startswith("="):
-            continue
-        for f, _, k in fund:
-            if k in ("markup", "js", "python", "css", "option"):
-                jedatei[f] += 1
+    jedatei = migrierbar_je_datei(treffer)
     zeilen += [f"| `{f}` | {n} |" for f, n in jedatei.most_common(60)]
     return "\n".join(zeilen) + "\n"
 
@@ -193,6 +212,7 @@ def _bericht(treffer) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true")
+    ap.add_argument("--baseline", action="store_true")
     args = ap.parse_args()
     treffer = sammeln()
     fehlend = sorted(ch for ch in treffer if ch not in ZUORDNUNG)
@@ -200,6 +220,9 @@ def main() -> int:
         if fehlend:
             print("Ohne Zuordnung:", " ".join(fehlend))  # noqa: T201
             return 1
+        return 0
+    if args.baseline:
+        baseline_schreiben(migrierbar_je_datei(treffer))
         return 0
     ZIEL.write_text(_bericht(treffer), encoding="utf-8")
     print(f"{ZIEL.relative_to(ROOT)} geschrieben, {len(treffer)} Zeichen, ohne Zuordnung: {''.join(fehlend) or '-'}")  # noqa: T201

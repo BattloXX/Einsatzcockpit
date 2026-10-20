@@ -19,6 +19,7 @@ sys.modules.setdefault("tests.conftest", sys.modules[__name__])
 os.environ.setdefault("SECRET_KEY", "test-secret-key-fuer-tests-mindestens-32-zeichen!")
 os.environ.setdefault("DEBUG", "true")
 os.environ["TESTING"] = "true"
+os.environ["ICONS_STRICT"] = "true"
 # SQLite für alle Tests erzwingen – verhindert, dass Fixtures und Client
 # auf unterschiedliche Datenbanken schreiben/lesen.
 WORKER = os.environ.get("PYTEST_XDIST_WORKER", "main")
