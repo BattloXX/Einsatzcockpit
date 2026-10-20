@@ -1,0 +1,43 @@
+{% if fehler %}
+<p class="suche-warnung" role="alert">{{ fehler }}</p>
+{% elif not q|trim %}
+<p>Suchbegriffe eingeben, um die Suche zu starten.</p>
+{% else %}
+<p>Suche nach: {{ q }}</p>
+{% if ergebnis.teilweise %}
+<div class="suche-warnung" role="status">
+  <strong>Die Suche ist teilweise nicht verfügbar.</strong>
+  {% for hinweis in ergebnis.hinweise %}<p>{{ hinweis }}</p>{% endfor %}
+</div>
+{% elif ergebnis.hinweise %}
+<div class="suche-hinweis" role="status">
+  {% for hinweis in ergebnis.hinweise %}<p>{{ hinweis }}</p>{% endfor %}
+</div>
+{% endif %}
+{% if not ergebnis.treffer %}<p>Keine Treffer</p>{% endif %}
+<div class="suche-karten">
+{% for t in ergebnis.treffer %}
+<article class="suche-karte">
+  <div class="suche-badges">
+    <span class="suche-badge">🔎 {{ typ_labels.get(t.quelle, t.quelle) }}</span>
+    {% if t.ist_aktuell == false %}
+    <span class="suche-inaktuell">nicht aktuell{% if t.status %} · {{ t.status }}{% endif %}</span>
+    {% elif t.status %}<span class="suche-badge">{{ t.status }}</span>{% endif %}
+  </div>
+  <h2>{{ t.titel }}</h2>
+  {% if t.untertitel %}<p>{{ t.untertitel }}</p>{% endif %}
+  {% if t.auszug %}<p class="suche-auszug">{{ markiere(t.auszug, q) }}</p>{% endif %}
+  {% if t.fundstelle %}<p>{{ t.fundstelle }}</p>{% endif %}
+  {% if t.distanz_m is not none %}<p>Entfernung: {{ t.distanz_m }} m</p>{% endif %}
+  {% if t.stand %}<p class="suche-stand">Stand: {{ t.stand|local_datetime }}</p>{% endif %}
+  <div class="suche-kartenfuss">
+    <div class="suche-badges">
+      {% for grund in t.grund %}<span class="suche-badge">{{ 'Volltext' if grund == 'volltext' else grund }}</span>{% endfor %}
+    </div>
+    {% if t.url %}<a class="btn btn--ghost" href="{{ t.url }}">Öffnen</a>{% endif %}
+  </div>
+</article>
+{% endfor %}
+</div>
+{% if ergebnis.index_stand %}<p class="suche-stand">Indexstand: {{ ergebnis.index_stand|local_datetime }}</p>{% endif %}
+{% endif %}
