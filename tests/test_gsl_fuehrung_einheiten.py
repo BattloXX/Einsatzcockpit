@@ -202,7 +202,8 @@ def test_tablet_kennzeichnung_und_simulationslink(client):
     _als(client, sign_session(x["admin"]))
     r = client.get(f"/lage/{x['lage']}/stellen/{x['a']}")
     assert r.status_code == 200
-    assert "📱" in r.text and "Als Einheit ansehen" in r.text
+    assert 'class="res-label"' in r.text and 'aria-label="Tablet verfügbar"' in r.text
+    assert "Als Einheit ansehen" in r.text
     assert f"/einheit?sim={x['e1']}" in r.text
     _als(client, sign_session(x["recorder"]))
     r = client.get(f"/lage/{x['lage']}/stellen/{x['a']}")
@@ -221,7 +222,8 @@ def test_funk_kennzeichnung_ohne_tablet(client):
     db.close()
     _als(client, sign_session(x["recorder"]))
     r = client.get(f"/lage/{x['lage']}/stellen/{x['a']}")
-    assert "📻" in r.text and "📱" not in r.text.split("Disponierte")[-1].split("Disponieren")[0]
+    assert 'aria-label="Funk"' in r.text
+    assert 'aria-label="Tablet verfügbar"' not in r.text
 
 
 def test_rollen_und_fremde_stelle(client, monkeypatch):

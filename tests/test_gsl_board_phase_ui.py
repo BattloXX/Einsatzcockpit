@@ -148,7 +148,8 @@ def test_dispatchzeile_zeigt_erkundung_und_erkundet(client):
     finally:
         db.close()
     detail = client.get(f"/lage/{data['lage']}/stellen/{data['a']}").text
-    assert "🔍 Erkundung" in detail and "Erkundet" in detail
+    assert re.search(r'class="res-badge res-badge--blue">\s*<svg\b[^>]*>.*?</svg> Erkundung</span>', detail, re.S)
+    assert "Erkundet" in detail
 
 
 def test_beendeten_auftrag_manuell_abziehen_und_wiedereroeffnen(client):

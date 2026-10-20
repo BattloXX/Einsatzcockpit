@@ -172,8 +172,7 @@
   {% if can_edit %}
   <button @click="showAdd = !showAdd"
           :class="showAdd ? 'btn btn--ghost btn--sm' : 'btn btn--primary btn--sm'"
-          style="margin-left:auto;"
-          x-text="showAdd ? '✕ Schließen' : '+ Einheit'">+ Einheit</button>
+          style="margin-left:auto;"><span x-show="showAdd">{{ icon("x", size="xs") }}</span><span x-show="!showAdd">{{ icon("plus", size="xs") }}</span> <span x-text="showAdd ? 'Schließen' : 'Einheit'">Einheit</span></button>
   {% endif %}
 </div>
 
@@ -182,7 +181,7 @@
 <div x-show="showAdd" x-transition
      style="padding:12px 16px;border-bottom:1px solid var(--border);background:var(--surface);">
   <div class="dash-section" style="--dash-accent:var(--green);margin:0;max-width:780px;">
-    <div class="dash-section__title">➕ Einheit hinzufügen</div>
+    <div class="dash-section__title">{{ icon("plus", size="md") }} Einheit hinzufügen</div>
     <form hx-post="/lage/{{ lage.id }}/einheiten" hx-swap="none" data-no-error-toast
           hx-on::after-request="resourceAddFinished(event, this)">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">

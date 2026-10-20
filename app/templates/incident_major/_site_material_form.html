@@ -11,7 +11,7 @@
       <input class="form-input" name="pos_bezeichnung[]" x-model="position.bezeichnung" @change="artikelZuordnen(position)" list="siteMaterialArtikel" placeholder="Materialbezeichnung" required>
       <input class="form-input" style="max-width:90px" type="number" name="pos_menge[]" x-model="position.menge" min="1" max="9999" aria-label="Menge">
       <input type="hidden" name="pos_artikel_id[]" x-model="position.artikel_id">
-      <button class="btn btn--xs btn--ghost" type="button" @click="remove(index)" x-show="positions.length > 1" aria-label="Position entfernen">×</button>
+      <button class="btn btn--xs btn--ghost" type="button" @click="remove(index)" x-show="positions.length > 1" aria-label="Position entfernen">{{ icon("x", size="xs") }}</button>
     </div>
   </template>
   <datalist id="siteMaterialArtikel">
@@ -27,8 +27,8 @@
   </div>
   <input id="siteMaterialFotos-{{ site.id }}" type="file" name="fotos" accept="image/*" multiple style="display:none" @change="fotos=$event.target.files.length">
   <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
-    <button class="btn btn--secondary btn--sm" type="button" onclick="openCamera('siteMaterialFotos-{{ site.id }}')">📷 Kamera</button>
-    <button class="btn btn--ghost btn--sm" type="button" onclick="openGallery('siteMaterialFotos-{{ site.id }}')">🖼️ Galerie</button>
+    <button class="btn btn--secondary btn--sm" type="button" onclick="openCamera('siteMaterialFotos-{{ site.id }}')">{{ icon("camera", size="xs") }} Kamera</button>
+    <button class="btn btn--ghost btn--sm" type="button" onclick="openGallery('siteMaterialFotos-{{ site.id }}')">{{ icon("photo", size="xs") }} Galerie</button>
     <span x-show="fotos" x-text="fotos + ' Foto(s) ausgewählt'" style="align-self:center;font-size:.75rem;color:var(--text-muted)"></span>
   </div>
   <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:10px">

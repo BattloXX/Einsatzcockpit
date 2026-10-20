@@ -112,7 +112,7 @@
     </select>
     <label><input id="zt-auto" type="checkbox" checked> Automatisch aktualisieren</label>
     <button id="zt-reset" class="btn btn--ghost btn--sm" type="button">Filter zurücksetzen</button>
-    <a href="/lage/{{ lage.id }}/protokoll.txt" class="btn btn--ghost btn--sm" style="margin-left:auto;" download>⬇ Protokoll exportieren</a>
+    <a href="/lage/{{ lage.id }}/protokoll.txt" class="btn btn--ghost btn--sm" style="margin-left:auto;" download>{{ icon("download", size="xs") }} Protokoll exportieren</a>
   </div>
 
   <div class="zt-count" id="zt-count"></div>

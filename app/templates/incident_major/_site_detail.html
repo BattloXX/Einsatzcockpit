@@ -133,15 +133,15 @@
     <div style="margin-top:4px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:.72rem;">
       <span style="color:var(--text-muted);">{{ '%.5f'|format(site.lat) }}, {{ '%.5f'|format(site.lng) }}</span>
       <a href="https://www.openstreetmap.org/?mlat={{ site.lat }}&mlon={{ site.lng }}&zoom=17"
-         target="_blank" rel="noopener" style="color:#93c5fd;text-decoration:none;">↗ OSM</a>
+         target="_blank" rel="noopener" style="color:#93c5fd;text-decoration:none;">{{ icon("external-link", size="sm") }} OSM</a>
       <a href="https://maps.google.com/?q={{ site.lat }},{{ site.lng }}"
-         target="_blank" rel="noopener" style="color:#93c5fd;text-decoration:none;">↗ Google Maps</a>
+         target="_blank" rel="noopener" style="color:#93c5fd;text-decoration:none;">{{ icon("external-link", size="sm") }} Google Maps</a>
       {% if can_edit %}
       <button type="button"
               hx-get="/lage/{{ lage.id }}/stellen/{{ site.id }}/pin"
               hx-target="#siteDetailContent"
               hx-swap="innerHTML"
-              class="btn btn--xs btn--ghost" style="font-size:.7rem;padding:1px 6px;">📍 Pin korrigieren</button>
+              class="btn btn--xs btn--ghost" style="font-size:.7rem;padding:1px 6px;">{{ icon("map-pin", size="xs") }} Pin korrigieren</button>
       {% endif %}
     </div>
   </div>
@@ -192,14 +192,14 @@
     {% if site.strasse or site.ort %}
     <a href="https://maps.google.com/?q={{ site.strasse or '' }} {{ site.hausnr or '' }}, {{ site.ort or '' }}"
        target="_blank" rel="noopener"
-       style="font-size:.78rem;color:#93c5fd;text-decoration:none;">🗺 Adresse auf Karte ↗</a>
+       style="font-size:.78rem;color:#93c5fd;text-decoration:none;">{{ icon("map", size="sm") }} Adresse auf Karte {{ icon("external-link", size="sm") }}</a>
     {% endif %}
     {% if can_edit %}
     <button type="button"
             hx-get="/lage/{{ lage.id }}/stellen/{{ site.id }}/pin"
             hx-target="#siteDetailContent"
             hx-swap="innerHTML"
-            class="btn btn--xs btn--ghost">📍 Koordinaten per Pin setzen</button>
+            class="btn btn--xs btn--ghost">{{ icon("map-pin", size="xs") }} Koordinaten per Pin setzen</button>
     {% endif %}
   </div>
   {% endif %}
@@ -292,7 +292,7 @@
       {% elif site.source == 'buerger' %}
         {% if citizen_report %}
           <a href="/lage/{{ lage.id }}/meldungen#mel-{{ citizen_report.id }}"
-             style="color:#93c5fd;text-decoration:none;" target="_blank">Bürger-Meldung #{{ citizen_report.id }} ↗</a>
+             style="color:#93c5fd;text-decoration:none;" target="_blank">Bürger-Meldung #{{ citizen_report.id }} {{ icon("external-link", size="sm") }}</a>
         {% else %}
           Bürger-Meldung
         {% endif %}
@@ -315,7 +315,7 @@
   <div class="lm-detail-row">
     <span class="lm-chip"
           x-data="lmChip('{{ site.naechste_lagemeldung_at.isoformat() }}Z')" x-init="start()"
-          :class="cls" x-text="label"></span>
+          :class="cls"><span x-show="cls === 'lm-chip--red'" x-cloak>{{ icon("alert-triangle", size="xs") }}</span><span x-text="label"></span></span>
     {% if can_edit %}
     <button type="button" class="btn btn--xs btn--secondary"
             onclick="(function(){var f=document.getElementById('siteLogForm-{{ site.id }}');if(!f)return;var s=f.querySelector('[name=art]');if(s)s.value='lagemeldung';var t=f.querySelector('[name=text]');if(t){t.scrollIntoView({block:'center'});t.focus();}})()">
@@ -349,7 +349,7 @@
           <span id="siteLog-spin-{{ site.id }}" class="htmx-indicator" style="font-size:.75rem;"> …</span>
         </button>
       </div>
-      <p class="form-hint" style="margin-top:4px;">Nur „Lagemeldung“ setzt den Lagemeldungs-Timer zurück.</p>
+      <p class="form-hint" style="margin-top:4px;">Nur "Lagemeldung" setzt den Lagemeldungs-Timer zurück.</p>
     </form>
   </div>
   {% endif %}
@@ -366,9 +366,9 @@
            style="display:none;" onchange="_lmPhoto(this,'{{ site.id }}')">
     <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
       <button type="button" class="btn btn--secondary btn--sm"
-              onclick="openCamera('lmPhotoFile-{{ site.id }}')">📷 Kamera</button>
+              onclick="openCamera('lmPhotoFile-{{ site.id }}')">{{ icon("camera", size="xs") }} Kamera</button>
       <button type="button" class="btn btn--ghost btn--sm"
-              onclick="openGallery('lmPhotoFile-{{ site.id }}')">🖼️ Galerie</button>
+              onclick="openGallery('lmPhotoFile-{{ site.id }}')">{{ icon("photo", size="xs") }} Galerie</button>
       <button type="submit" class="btn btn--primary btn--sm"
               id="lmUpBtn-{{ site.id }}" style="display:none;">Hochladen</button>
     </div>
@@ -412,7 +412,7 @@
               hx-swap="none"
               hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
               hx-on::after-request="if(event.detail.successful){ htmx.ajax('GET','/lage/{{ lage.id }}/stellen/{{ site.id }}',{target:'#siteDetailContent',swap:'innerHTML'}); htmx.ajax('GET','/lage/{{ lage.id }}/stellen/{{ site.id }}/card',{target:'[data-site-id=\'{{ site.id }}\']',swap:'outerHTML'}); }">
-          <button type="submit" class="btn btn--xs btn--secondary">✓ VorOrt</button>
+          <button type="submit" class="btn btn--xs btn--secondary">{{ icon("check", size="xs") }} VorOrt</button>
         </form>
         {% endif %}
         <form hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/ressourcen/{{ res.id }}/freigeben"
@@ -436,7 +436,7 @@
     {% set abarbeitungen = site_dispatches|selectattr('auftragsart', 'equalto', 'abarbeitung')|selectattr('withdrawn_at', 'none')|list %}
     {% if alle_dispatches_beendet and not abarbeitungen and site.phase.value not in ['erledigt', 'abgebrochen', 'disponiert', 'in_arbeit', 'fertig_gemeldet'] %}
     <div style="margin-bottom:8px;padding:7px 9px;background:rgba(242,176,46,.1);border-left:3px solid var(--yellow);font-size:.8rem;">
-      🔍 Einsatz erkundet – disponieren?
+      {{ icon("search", size="sm") }} Einsatz erkundet – disponieren?
       <button type="button" class="btn btn--xs btn--secondary" onclick="const select=document.getElementById('siteDisponierenEinheitSelect');select?.focus();select?.scrollIntoView({block:'center'});">Einheit disponieren</button>
     </div>
     {% elif alle_dispatches_beendet and abarbeitungen and site.phase.value not in ['erledigt', 'abgebrochen'] %}
@@ -447,13 +447,13 @@
     {% for dispatch in site_dispatches %}
     {% set e = dispatch.einheit %}
     <div class="res-row">
-      <span class="res-badge res-badge--blue">{% if dispatch.auftragsart == 'erkundung' %}🔍 Erkundung{% else %}Abarbeitung{% endif %}</span>
+      <span class="res-badge res-badge--blue">{% if dispatch.auftragsart == 'erkundung' %}{{ icon("search", size="sm") }} Erkundung{% else %}Abarbeitung{% endif %}</span>
       <span class="res-badge res-badge--{{ einheit_status_color[dispatch.einheit_status] }}">
         {{ einheit_status_label(dispatch.auftragsart, dispatch.einheit_status) }}
       </span>
       <span class="res-label">
         {{ e.label }}
-        {% if einheit_hat_tablet.get(e.id) %}📱{% else %}📻{% endif %}
+        {% if einheit_hat_tablet.get(e.id) %}{{ icon("device-mobile", size="sm", label="Tablet verfügbar") }}{% else %}{{ icon("radio", size="sm", label="Funk") }}{% endif %}
       </span>
       <div class="dispatch-meta">
         <span>Zugewiesen {{ dispatch.dispatched_at|local_time }}</span>
@@ -480,7 +480,7 @@
                 hx-target="#siteDetailContent"
                 hx-swap="innerHTML"
                 hx-vals='{"_csrf":"{{ request.state.csrf_token }}","einheit_id":"{{ e.id }}"}'>
-            <button type="submit" class="btn btn--xs btn--secondary">✓ VorOrt</button>
+            <button type="submit" class="btn btn--xs btn--secondary">{{ icon("check", size="xs") }} VorOrt</button>
           </form>
         </div>
         {% endif %}
@@ -537,7 +537,7 @@
       {% endif %}
       {% endif %}
       {% if is_admin %}
-      <a href="/einheit?sim={{ e.id }}" target="_blank" rel="noopener" class="res-time">📱 Als Einheit ansehen</a>
+      <a href="/einheit?sim={{ e.id }}" target="_blank" rel="noopener" class="res-time">{{ icon("device-mobile", size="sm") }} Als Einheit ansehen</a>
       {% endif %}
     </div>
     {% endfor %}
@@ -563,7 +563,7 @@
           hx-swap="innerHTML"
           hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'>
       {# Auftragsart als eigenes Feld statt Button-Wert: der Wert des geklickten Submit-Buttons
-         kommt nicht in jedem Browser/htmx-Pfad mit, dann wurde aus „Erkundung zuweisen“ eine
+         kommt nicht in jedem Browser/htmx-Pfad mit, dann wurde aus "Erkundung zuweisen" eine
          Disposition. Die Buttons setzen das Feld vor dem Absenden. #}
       <input type="hidden" name="auftragsart" value="{{ 'erkundung' if site.phase.value in ['eingegangen', 'erkundung'] else 'abarbeitung' }}">
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
@@ -640,7 +640,7 @@
              {% if m.media_type == 'image' %}@click="open({{ lbi.i }})"{% set lbi.i = lbi.i + 1 %}{% else %}onclick='openMediaViewer("/lage-medien/{{ m.id }}", "{{ m.media_type }}", {{ m.original_filename|tojson }})'{% endif %}>
         {% if can_edit and m.media_type == 'image' %}
         <a href="/annotieren/site/{{ m.id }}" title="Bearbeiten" @click.stop
-           style="position:absolute;top:2px;left:2px;background:rgba(0,0,0,0.75);border-radius:50%;width:18px;height:18px;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;line-height:1;">✏️</a>
+           style="position:absolute;top:2px;left:2px;background:rgba(0,0,0,0.75);border-radius:50%;width:18px;height:18px;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;line-height:1;" aria-label="Bearbeiten">{{ icon("pencil", size="xs") }}</a>
         {% endif %}
       </div>
       {% endfor %}
@@ -650,7 +650,7 @@
 
 </div>
 
-{# Mobile Aktionsleiste: nur der Abschluss. „Erkundung zuweisen“/„Disponieren“ stehen direkt am
+{# Mobile Aktionsleiste: nur der Abschluss. "Erkundung zuweisen"/"Disponieren" stehen direkt am
    Zuweisungsformular unter Ressourcen – Kopien hier scrollten nur dorthin und verwirrten. #}
 {% if can_manage and site.phase.value == 'fertig_gemeldet' %}
 <div class="site-detail-actions">

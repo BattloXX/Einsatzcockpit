@@ -6,7 +6,7 @@
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:10px;">
     <h2 style="margin:0;">Großschadenslagen</h2>
     {% if can_manage %}
-    <a href="/lage/neu" class="btn btn--danger">🚨 Neue Lage starten</a>
+    <a href="/lage/neu" class="btn btn--danger">{{ modul_icon("lage", size="sm") }} Neue Lage starten</a>
     {% endif %}
   </div>
 
@@ -46,7 +46,7 @@
   <div class="card" style="padding:32px;text-align:center;color:var(--text-muted);">
     <p style="font-size:1.1rem;margin-bottom:16px;">Keine Großschadenslagen vorhanden.</p>
     {% if can_manage %}
-    <a href="/lage/neu" class="btn btn--danger">🚨 Erste Lage starten</a>
+    <a href="/lage/neu" class="btn btn--danger">{{ modul_icon("lage", size="sm") }} Erste Lage starten</a>
     {% endif %}
   </div>
   {% endif %}

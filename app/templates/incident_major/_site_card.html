@@ -39,7 +39,7 @@
       {% if ec and ec.chips %}
         {% for chip in ec.chips[:4] %}
         <span class="site-card__einheit-chip site-card__einheit-chip--{{ chip.farbe }}{% if chip.beendet %} site-card__einheit-chip--beendet{% endif %}">
-          {% if chip.auftragsart == 'erkundung' %}🔍 {% endif %}{{ chip.label }} · {{ chip.label_status }}
+          {% if chip.auftragsart == 'erkundung' %}{{ icon("search", size="sm") }} {% endif %}{{ chip.label }} · {{ chip.label_status }}
         </span>
         {% endfor %}
         {% if ec.chips|length > 4 %}
@@ -47,23 +47,23 @@
         {% endif %}
       {% elif counts %}
         {% if counts.vor_ort > 0 %}
-        <span title="Vor Ort">🚒 {{ counts.vor_ort }}</span>
+        <span title="Vor Ort">{{ icon("firetruck", size="sm") }} {{ counts.vor_ort }}</span>
         {% elif active_res %}
-        <span>🚒 {{ active_res|length }}</span>
+        <span>{{ icon("firetruck", size="sm") }} {{ active_res|length }}</span>
         {% endif %}
         {% if counts.alarmed > 0 %}
         <span class="card-badge--alarmed" style="font-weight:600;"
-              title="{{ counts.alarmed }} disponiert, noch nicht vor Ort">↗ {{ counts.alarmed }}</span>
+              title="{{ counts.alarmed }} disponiert, noch nicht vor Ort">{{ icon("external-link", size="sm") }} {{ counts.alarmed }}</span>
         {% endif %}
       {% elif active_res %}
-      <span>🚒 {{ active_res|length }}</span>
+      <span>{{ icon("firetruck", size="sm") }} {{ active_res|length }}</span>
       {% endif %}
       {% if site.media %}
-      <span title="{{ site.media|length }} Foto(s)">📷 {{ site.media|length }}</span>
+      <span title="{{ site.media|length }} Foto(s)">{{ icon("camera", size="sm") }} {{ site.media|length }}</span>
       {% endif %}
       {% set material_offen = material_open_counts_by_site.get(site.id) if material_open_counts_by_site is defined else none %}
       {% if material_offen %}
-      <span title="{{ material_offen }} offene Material-Ausleihe(n)">📦 {{ material_offen }}</span>
+      <span title="{{ material_offen }} offene Material-Ausleihe(n)">{{ icon("package", size="sm") }} {{ material_offen }}</span>
       {% endif %}
       {% if site.alarm_stufe %}
       <span class="badge--xs">{{ site.alarm_stufe }}</span>
@@ -97,16 +97,16 @@
     </div>
     {% elif ec and ec.nur_erkundet and site.phase.value not in ['erledigt', 'abgebrochen'] %}
     <div class="site-card__hint">
-      <span class="site-card__hint--done">🔍 Erkundet – disponieren?</span>
+      <span class="site-card__hint--done">{{ icon("search", size="sm") }} Erkundet – disponieren?</span>
     </div>
     {% elif ec and ec.alle_fertig and site.phase.value not in ['erledigt', 'abgebrochen'] %}
     <div class="site-card__hint">
-      <span class="site-card__hint--done">✅ Einheiten fertig – abschließen?</span>
+      <span class="site-card__hint--done">{{ icon("circle-check", size="sm") }} Einheiten fertig – abschließen?</span>
     </div>
     {% endif %}
     {% if ec and ec.ohne_rueckmeldung_min is not none %}
     <div class="site-card__hint">
-      <span class="site-card__hint--overdue">⏱ keine Rückmeldung seit {{ ec.ohne_rueckmeldung_min }} min</span>
+      <span class="site-card__hint--overdue">{{ icon("stopwatch", size="sm") }} keine Rückmeldung seit {{ ec.ohne_rueckmeldung_min }} min</span>
     </div>
     {% endif %}
 
@@ -115,7 +115,7 @@
     <div style="margin-top:6px;">
       <span class="lm-chip"
             x-data="lmChip('{{ site.naechste_lagemeldung_at.isoformat() }}Z')" x-init="start()"
-            :class="cls" x-text="label"></span>
+            :class="cls"><span x-show="cls === 'lm-chip--red'" x-cloak>{{ icon("alert-triangle", size="xs") }}</span><span x-text="label"></span></span>
     </div>
     {% endif %}
   </div>

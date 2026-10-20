@@ -17,7 +17,7 @@
   <div class="einh-card__top">
     <span class="einh-card__label" title="{{ e.label }}">{{ e.label }}</span>
     <span title="{{ 'Tablet verfügbar' if einheit_hat_tablet.get(e.id) else 'Funk' }}">
-      {% if einheit_hat_tablet.get(e.id) %}📱{% else %}📻{% endif %}
+      {% if einheit_hat_tablet.get(e.id) %}{{ icon("device-mobile", size="sm") }}{% else %}{{ icon("radio", size="sm") }}{% endif %}
     </span>
     <span class="einh-card__type">
       {%- if e.resource_type == 'extern' -%}EXT
@@ -42,10 +42,10 @@
   {% endif %}
   <div class="einh-card__commander">
     {% if e.leader and e.leader.end_at is none %}
-      <span>👤 <span>{{ e.leader.display_name }}</span></span>
+      <span>{{ icon("user", size="sm") }} <span>{{ e.leader.display_name }}</span></span>
       <span class="einh-card__since">{{ e.leader.start_at|local_time }}</span>
     {% elif e.commander_label %}
-      <span>👤 <span>{{ e.commander_label }}</span></span>
+      <span>{{ icon("user", size="sm") }} <span>{{ e.commander_label }}</span></span>
     {% else %}
       <span style="opacity:.4;font-size:.72rem;">Kein Führer eingetragen</span>
     {% endif %}
@@ -87,12 +87,12 @@
      target="_blank"
      rel="noopener"
      style="display:inline-block;margin-top:5px;font-size:.7rem;">
-    📱 Als Einheit ansehen
+    {{ icon("device-mobile", size="sm") }} Als Einheit ansehen
   </a>
   {% endif %}
   {% endif %}
   {% if is_conflict %}
-  <div style="font-size:.65rem;color:var(--red);font-weight:700;margin-top:3px;">⚠ Fahrzeug mehrfach eingeteilt</div>
+  <div style="font-size:.65rem;color:var(--red);font-weight:700;margin-top:3px;">{{ icon("alert-triangle", size="sm") }} Fahrzeug mehrfach eingeteilt</div>
   {% endif %}
   {% if can_edit and not e.verband_id %}
   <div class="einh-card__actions">
@@ -106,7 +106,7 @@
           style="display:flex;gap:3px;flex:1;">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <select name="sector_id" class="sektor-select">
-        <option value="">→ Pool</option>
+        <option value="">Pool</option>
         {% for s in sectors %}<option value="{{ s.id }}"{% if s.id == e.sector_id %} selected{% endif %}>{{ s.name }}</option>{% endfor %}
       </select>
       <button type="submit" class="btn btn--xs btn--secondary">OK</button>
@@ -142,7 +142,7 @@
           hx-on::after-request="if(event.detail.successful) htmx.trigger(document.body,'ressourceChanged')"
           style="margin:0;">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <button aria-label="Schließen" type="submit" class="btn btn--xs btn--ghost" style="color:var(--red);">✕</button>
+      <button aria-label="Einheit entfernen" type="submit" class="btn btn--xs btn--ghost" style="color:var(--red);">{{ icon("trash", size="xs") }}</button>
     </form>
   </div>
   {% endif %}
@@ -159,7 +159,7 @@
   {# Pool / Reserve #}
   <div class="res-col res-col--pool">
     <div class="res-col__head">
-      <span>🟡 POOL / RESERVE</span>
+      <span>{{ status_dot("gelb", "Pool / Reserve") }} POOL / RESERVE</span>
       <span class="res-col__count">{{ kue.pool|length }}</span>
     </div>
     <div class="res-col__leader" style="color:var(--yellow);font-size:.68rem;">
@@ -175,7 +175,7 @@
   {# Ressourcen im Einsatz (kein Abschnitt) #}
   <div class="res-col" style="border-color:rgba(242,176,46,.35);">
     <div class="res-col__head" style="color:var(--yellow);">
-      <span>🟠 RESSOURCEN IM EINSATZ</span>
+      <span>{{ status_dot("orange", "Ressourcen im Einsatz") }} RESSOURCEN IM EINSATZ</span>
       <span class="res-col__count" style="background:rgba(242,176,46,.2);color:var(--yellow);">{{ kue.im_einsatz_no_sector|length }}</span>
     </div>
     <div class="res-col__leader" style="font-size:.68rem;">

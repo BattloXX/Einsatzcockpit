@@ -137,7 +137,7 @@
           <div class="planung-res-chips">
             {% for e in res.vor_ort %}
             <span class="planung-chip planung-chip--vor-ort" title="{{ e.label }}">
-              🚒 {{ e.label[:17] }}{% if e.label | length > 17 %}…{% endif %}
+              {{ icon("firetruck", size="sm") }} {{ e.label[:17] }}{% if e.label | length > 17 %}…{% endif %}
             </span>
             {% endfor %}
           </div>
@@ -154,7 +154,7 @@
           <div class="planung-res-chips">
             {% for e in res.alarmed %}
             <span class="planung-chip planung-chip--alarmed" title="{{ e.label }}">
-              ↗ {{ e.label[:17] }}{% if e.label | length > 17 %}…{% endif %}
+              {{ icon("external-link", size="sm") }} {{ e.label[:17] }}{% if e.label | length > 17 %}…{% endif %}
             </span>
             {% endfor %}
           </div>

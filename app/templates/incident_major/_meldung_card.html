@@ -15,7 +15,7 @@
     <span style="font-size:.78rem;color:var(--text-muted);">
       {{ r.reporter_contact }}
       {% if r.phone_verified %}
-      <span title="Telefonnummer per SMS verifiziert" style="color:var(--green);font-size:.85rem;">✓</span>
+      <span title="Telefonnummer per SMS verifiziert" style="color:var(--green);font-size:.85rem;">{{ icon("check", size="sm") }}</span>
       {% endif %}
     </span>
     {% endif %}
@@ -23,7 +23,7 @@
 
   {% if r.ort or r.strasse %}
   <div style="font-size:.78rem;color:#93c5fd;margin-bottom:8px;">
-    📍 {% if r.strasse %}{{ r.strasse }}{% if r.ort %}, {% endif %}{% endif %}{{ r.ort or '' }}
+    {{ icon("map-pin", size="sm") }} {% if r.strasse %}{{ r.strasse }}{% if r.ort %}, {% endif %}{% endif %}{{ r.ort or '' }}
   </div>
   {% endif %}
 
@@ -43,7 +43,7 @@
       <button aria-label="Schließen" @click="lbOpen=false"
               style="position:fixed;top:16px;right:20px;background:rgba(0,0,0,.6);border:none;
                      color:#fff;font-size:28px;line-height:1;cursor:pointer;border-radius:50%;
-                     width:40px;height:40px;display:flex;align-items:center;justify-content:center;">×</button>
+                     width:40px;height:40px;display:flex;align-items:center;justify-content:center;">{{ icon("x", size="sm") }}</button>
     </div>
   </div>
   {% endif %}
@@ -60,19 +60,19 @@
           hx-target="#mel-{{ r.id }}" hx-swap="outerHTML"
           hx-confirm="Als Einsatzstelle übernehmen?" style="margin:0;">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <button type="submit" class="btn btn--secondary btn--sm">✓ Als Einsatzstelle anlegen</button>
+      <button type="submit" class="btn btn--secondary btn--sm">{{ icon("check", size="xs") }} Als Einsatzstelle anlegen</button>
     </form>
     <form hx-post="/lage/{{ lage.id }}/meldungen/{{ r.id }}/als-lageinfo"
           hx-target="#mel-{{ r.id }}" hx-swap="outerHTML"
           hx-confirm="Als übergreifende Lageinfo übernehmen?" style="margin:0;">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <button type="submit" class="btn btn--ghost btn--sm" style="color:#818cf8;border-color:rgba(129,140,248,.35);">📍 Als Lageinfo</button>
+      <button type="submit" class="btn btn--ghost btn--sm" style="color:#818cf8;border-color:rgba(129,140,248,.35);">{{ icon("map-pin", size="xs") }} Als Lageinfo</button>
     </form>
     <form hx-post="/lage/{{ lage.id }}/meldungen/{{ r.id }}/ablehnen"
           hx-target="#mel-{{ r.id }}" hx-swap="outerHTML"
           hx-confirm="Meldung ablehnen?" style="margin:0;">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <button type="submit" class="btn btn--ghost btn--sm">✕ Ablehnen</button>
+      <button type="submit" class="btn btn--ghost btn--sm">{{ icon("x", size="xs") }} Ablehnen</button>
     </form>
   </div>
   {% endif %}
