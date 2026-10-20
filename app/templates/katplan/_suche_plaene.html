@@ -1,0 +1,9 @@
+<label id="kp-suche-plaene" {% if fragment %}hx-swap-oob="outerHTML"{% endif %}>
+  Plan
+  <select class="form-control" name="plan_id">
+    <option value="">Alle sichtbaren Pläne</option>
+    {% for plan in plaene %}
+      <option value="{{ plan.id }}" {% if form.get('plan_id') == plan.id|string %}selected{% endif %}>{{ plan.titel }}</option>
+    {% endfor %}
+  </select>
+</label>

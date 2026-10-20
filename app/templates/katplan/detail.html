@@ -11,6 +11,13 @@
 {% block content %}
   <section class="kp-page" x-data="{ reiter: window.location.hash === '#kp-protokoll' ? 'protokoll' : 'plan' }">
     <a class="btn btn--ghost btn--sm" href="/katastrophenplaene">← Katastrophenpläne</a>
+    <form method="get" action="/katastrophenplaene/suche" class="kp-filter">
+      <label>Inhalte suchen
+        <input class="form-control" type="search" name="q" placeholder="Elemente und Dokumentseiten durchsuchen">
+      </label>
+      <input type="hidden" name="plan_id" value="{{ plan.id }}">
+      <button class="btn btn--primary btn--sm" type="submit">Suchen</button>
+    </form>
     <div class="kp-grid kp-detail-grid">
       {% include "katplan/_kopf.html" %}
       <div role="tablist" aria-label="Planansicht" class="tabnav">

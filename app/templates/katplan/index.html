@@ -11,6 +11,12 @@
         <a href="/katastrophenplaene/neu" class="btn btn--primary btn--sm">+ Neuer Plan</a>
       {% endif %}
     </div>
+    <form method="get" action="/katastrophenplaene/suche" class="kp-filter">
+      <label>Inhalte suchen
+        <input class="form-control" type="search" name="q" placeholder="Elemente und Dokumentseiten durchsuchen">
+      </label>
+      <button class="btn btn--primary btn--sm" type="submit">Suchen</button>
+    </form>
     {% include "katplan/_tabs.html" %}
     <form method="get" action="/katastrophenplaene" class="kp-filter" hx-get="/katastrophenplaene" hx-target="#kp-liste" hx-swap="outerHTML">
       <label>

@@ -42,6 +42,7 @@ from app.services import katplan_anhang_service as anhang_service
 from app.services import katplan_freigabe_service as freigabe_service
 from app.services import katplan_link_service as link_service
 from app.services import katplan_quelle_service as quelle_service
+from app.services import katplan_suche_service as suche_service
 from app.services.katplan_geo_service import ableite_punkt, pruefe_geometrie
 from app.services.katplan_service import (
     KatplanKonflikt,
@@ -206,6 +207,48 @@ def _anhang_antwort(request: Request, db: Session, user: User, plan: KatplanPlan
         "anhang_abschnitt_id": abschnitt_id, "anhang_fehler": fehler,
         "anhang_version": element.version if element else None, "anhang_oob": True,
     }, status_code=status)
+
+
+@router.get("/suche")
+def suche(request: Request, db: Session = Depends(get_db), user: User = Depends(require_katplan_lesen)):
+    form = dict(request.query_params)
+    fehler = None
+    zahlen: dict[str, Any] = {}
+    try:
+        for name in ("plan_id", "prioritaet", "phase", "lat", "lng", "radius_m"):
+            roh = form.get(name, "").strip()
+            zahlen[name] = (float(roh) if name in {"lat", "lng", "radius_m"} else int(roh)) if roh else None
+        for name in ("plan_id", "phase"):
+            if zahlen[name] is not None and not 0 < zahlen[name] <= 9223372036854775807:
+                raise ValueError("Ungültige ID.")
+        if zahlen["prioritaet"] is not None and zahlen["prioritaet"] not in (1, 2, 3):
+            raise ValueError("Bitte eine gültige Priorität auswählen.")
+    except (ValueError, OverflowError):
+        fehler = "Bitte gültige Zahlen für Plan, Priorität, Phase und Umkreis eingeben."
+    arbeit = form.get("arbeitsstand") == "1" and darf_bearbeiten(user)
+    plaene = suche_service.sichtbare_plaene(db, user, arbeit)
+    phasen: list[dict[str, Any]] = next((p["phasen"] for p in plaene if p["id"] == zahlen.get("plan_id")), [])
+    ergebnis: dict[str, Any] = {"treffer": [], "gesamt": 0, "abgeschnitten": False}
+    if not fehler:
+        try:
+            ergebnis = suche_service.suche(
+                db, user, q=form.get("q", ""), plan_id=zahlen["plan_id"], gefahr=form.get("gefahr", ""),
+                typ=form.get("typ", ""), prioritaet=zahlen["prioritaet"], phase=str(zahlen["phase"] or ""),
+                ort=form.get("ort", ""), nur_geprueft=form.get("nur_geprueft") == "1",
+                lat=zahlen["lat"], lng=zahlen["lng"], radius_m=zahlen["radius_m"], arbeitsstand=arbeit,
+            )
+        except ValueError as exc:
+            fehler = str(exc)
+    for treffer in ergebnis["treffer"]:
+        treffer["ausschnitt_html"] = suche_service.markiere(treffer["ausschnitt"], form.get("q", ""))
+    leer = not any(form.get(k, "").strip() for k in (
+        "q", "plan_id", "gefahr", "typ", "prioritaet", "ort", "nur_geprueft", "lat", "lng", "radius_m"))
+    context = {"user": user, "can_edit": darf_bearbeiten(user), "form": form, "plaene": plaene,
+               "phasen": phasen, "typen": ELEMENT_TYPEN, "gefahrenarten": KATPLAN_GEFAHRENARTEN,
+               "fehler": fehler, "leere_suche": leer, **ergebnis}
+    fragment = request.headers.get("HX-Request") == "true"
+    return templates.TemplateResponse(request, "katplan/_suche_treffer.html" if fragment else "katplan/suche.html",
+                                      {**context, "fragment": fragment})
 
 
 @router.get("/{plan_id}/objektdokumente/suche")
@@ -394,7 +437,7 @@ def liste(request: Request, gefahr: str = "", status: str = "", q: str = "", arc
 
 
 @router.get("/adress-suche")
-async def adress_suche(q: str = "", user: User = Depends(require_katplan_bearbeiten)):
+async def adress_suche(q: str = "", user: User = Depends(require_katplan_lesen)):
     from app.services.geocoding import search_addresses
 
     return {"treffer": await search_addresses(q, limit=6)}

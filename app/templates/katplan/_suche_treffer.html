@@ -1,0 +1,30 @@
+{% include "katplan/_design.html" %}
+{% if fragment %}
+  {% include "katplan/_suche_plaene.html" %}
+  {% include "katplan/_suche_phasen.html" %}
+{% endif %}
+<div id="kp-suche-treffer" aria-live="polite">
+  {% if fehler %}
+    <p class="kp-box kp-box--danger" role="alert">{{ fehler }}</p>
+  {% elif leere_suche %}
+    <p class="kp-empty">Bitte Suchbegriffe eingeben oder einen Filter auswählen.</p>
+  {% else %}
+    <p>{{ gesamt }} Treffer{% if abgeschnitten %}. Die Liste wurde gekürzt. Bitte die Suche eingrenzen.{% endif %}</p>
+    {% for t in treffer %}
+      <article class="kp-box">
+        <div class="kp-chips">
+          <span class="kp-badge">{{ t.typ_label }}</span>
+          {% if t.vertraulich %}<span class="kp-badge">vertraulich</span>{% endif %}
+          {% if t.prioritaet %}<span class="kp-badge">Priorität {{ t.prioritaet }}</span>{% endif %}
+          {% if t.distanz_m is not none %}<span class="kp-badge">{{ t.distanz_m|round|int }} m</span>{% endif %}
+        </div>
+        <h2><a class="kp-link" href="{{ t.url }}">{{ t.titel }}</a></h2>
+        <p>{{ t.plan_titel }}{% if t.kennung %} · <span class="kp-mono">{{ t.kennung }}</span>{% endif %}</p>
+        {% if t.art == 'seite' %}<p>{{ t.dokument_titel }} · Seite {{ t.seiten_nr }}</p>{% endif %}
+        <p>{{ t.ausschnitt_html }}</p>
+      </article>
+    {% else %}
+      <p class="kp-empty">Keine passenden Inhalte gefunden.</p>
+    {% endfor %}
+  {% endif %}
+</div>

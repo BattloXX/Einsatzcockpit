@@ -693,4 +693,10 @@
     .kp-seitenraster { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .kp-seitenraster .kp-box { padding: .5rem; }
   }
+  .kp-suche { min-width: 0; overflow-wrap: anywhere; }
+  .kp-suche .form-control { min-width: 0; max-width: 100%; box-sizing: border-box; }
+  .kp-suche .kp-filter > * { min-width: 0; }
+  @media (max-width: 760px) {
+    .kp-suche .kp-filter { grid-template-columns: minmax(0, 1fr); }
+  }
 </style>
