@@ -70,6 +70,11 @@
     return L.divIcon({ html: html, className: "lft-divicon", iconSize: null, iconAnchor: anchor });
   }
 
+  function markerIcon(name) {
+    var icon = ecpMarkerIcon(name, {color: '#d42225', size: 22, border: '2px solid #fff'});
+    return icon;
+  }
+
   // Ohne eigens zugeordnetes taktisches Zeichen (Fahrzeugverwaltung, Board- oder
   // manuell hinzugefügte Fahrzeuge) zeigt jedes Fahrzeug das generische
   // "feuerwehrfahrzeug"-Symbol. Statusfarbe bleibt als Ring um das Symbol sichtbar.
@@ -216,7 +221,7 @@
       if (!sidebarToggle || !sidebar) { return; }
       sidebar.classList.toggle("lft-sidebar--offen", offen);
       sidebarToggle.setAttribute("aria-expanded", offen ? "true" : "false");
-      sidebarToggle.textContent = offen ? "✕ Schließen" : "🧰 Werkzeuge";
+      sidebarToggle.innerHTML = ecpIcon(offen ? "x" : "box", {size: "sm"}) + (offen ? " Schließen" : " Werkzeuge");
       setTimeout(function () { karte.invalidateSize(); }, 280);
     }
     if (sidebarToggle && sidebar) {
@@ -319,7 +324,7 @@
 
     // ── Auto-Layer: Einsatzort ───────────────────────────────────────────────
     if (opts.incidentLat != null && opts.incidentLng != null) {
-      L.marker([opts.incidentLat, opts.incidentLng], { icon: divIcon('<div class="lft-einsatzort-icon">📍</div>', [14, 28]) })
+      L.marker([opts.incidentLat, opts.incidentLng], { icon: markerIcon("map-pin") })
         .addTo(layerEinsatzort)
         .bindTooltip("Einsatzort");
     }
@@ -378,7 +383,7 @@
         var btn = document.createElement("button");
         btn.type = "button";
         btn.className = "btn btn--ghost btn--xs";
-        btn.textContent = (v.lat == null || v.lng == null) ? "📍 Platzieren" : "📍 Verschieben";
+        btn.innerHTML = ecpIcon("map-pin", {size: "sm"}) + ((v.lat == null || v.lng == null) ? " Platzieren" : " Verschieben");
         btn.addEventListener("click", function () { armPlacement("fahrzeug-pin", v); });
         li.appendChild(btn);
         el.appendChild(li);
@@ -429,9 +434,11 @@
     // Zeigt nicht nur das Objekt-Symbol, sondern die am Objekt gepflegten Infos
     // (Gefahren, Informationen, Anfahrtsweg, Kontakte) im Popup — Gefahren zusätzlich
     // als kleines Warnzeichen direkt am Symbol, damit sie auch ohne Klick auffallen.
-    function objektIconHtml(o) {
-      var warn = (o.gefahren && o.gefahren.length) ? '<span class="lft-objekt-icon__warn">⚠</span>' : "";
-      return '<div class="lft-objekt-icon">🏢' + warn + '</div>';
+    function objektIcon(o) {
+      var icon = markerIcon("building");
+      var warn = (o.gefahren && o.gefahren.length) ? '<span class="lft-objekt-icon__warn">' + ecpIcon("alert-triangle", {size: "xs"}) + '</span>' : "";
+      icon.options.html = '<div class="lft-objekt-icon">' + icon.options.html + warn + '</div>';
+      return icon;
     }
     function objektPopupHtml(o) {
       var html = '<div class="lft-objekt-popup">';
@@ -441,7 +448,7 @@
         html += '<div class="lft-objekt-popup__info">' +
           (o.adresse ? escapeHtml(o.adresse) : "") +
           (o.adresse && o.bma_nummer ? " · " : "") +
-          (o.bma_nummer ? "🔥 BMA " + escapeHtml(o.bma_nummer) : "") + "</div>";
+          (o.bma_nummer ? ecpIcon("flame", {size: "xs"}) + " BMA " + escapeHtml(o.bma_nummer) : "") + "</div>";
       }
       if (o.gefahren && o.gefahren.length) {
         html += '<div class="lft-objekt-popup__gefahren">';
@@ -509,7 +516,7 @@
     if (opts.objektEnabled) {
       fetchJson(apiBase + "/objekte.json").then(function (liste) {
         (liste || []).forEach(function (o) {
-          L.marker([o.lat, o.lng], { icon: divIcon(objektIconHtml(o), [14, 28]) })
+          L.marker([o.lat, o.lng], { icon: objektIcon(o) })
             .addTo(layerObjekt)
             .bindPopup(objektPopupHtml(o));
           (o.kartenobjekte || []).forEach(renderKartenobjekt);
@@ -677,8 +684,8 @@
         '<button type="button" data-save-label>Speichern</button></div>' +
         (zeigeDrehGroesse ?
           '<div class="lft-tz-popup__row"><span>Drehen</span>' +
-          '<button type="button" data-rot="-15">↺</button>' +
-          '<button type="button" data-rot="15">↻</button></div>' +
+          '<button type="button" data-rot="-15" aria-label="Links drehen">' + ecpIcon("rotate", {size: "xs"}) + '</button>' +
+          '<button type="button" data-rot="15" aria-label="Rechts drehen">' + ecpIcon("refresh", {size: "xs"}) + '</button></div>' +
           '<div class="lft-tz-popup__row"><span>Größe</span>' +
           '<button type="button" data-scale="0.75">S</button>' +
           '<button type="button" data-scale="1">M</button>' +
@@ -728,7 +735,7 @@
             return L.marker(latlng, { icon: tzFeatureIcon(f) });
           }
           if (f.typ === "meldung") {
-            return L.marker(latlng, { icon: divIcon('<div class="lft-meldung-icon">📢</div>', [14, 28]) });
+            return L.marker(latlng, { icon: markerIcon("speakerphone") });
           }
           if (f.typ === "text") {
             return L.marker(latlng, { icon: divIcon("", [0, 0]) });
@@ -825,7 +832,7 @@
         style: featureStyle(f),
         pointToLayer: function (geoJsonPoint, latlng) {
           if (f.typ === "taktisches_zeichen" && f.zeichen_key) { return L.marker(latlng, { icon: tzFeatureIcon(f) }); }
-          if (f.typ === "meldung") { return L.marker(latlng, { icon: divIcon('<div class="lft-meldung-icon">📢</div>', [14, 28]) }); }
+          if (f.typ === "meldung") { return L.marker(latlng, { icon: markerIcon("speakerphone") }); }
           if (f.typ === "text") { return L.marker(latlng, { icon: divIcon("", [0, 0]) }); }
           if (f.typ === "distanz" && f.props && f.props.kind === "kreis") {
             return L.circle(latlng, { radius: f.props.distanz_m || 0, color: "#6b7280", weight: 2, dashArray: "6 4", fillOpacity: 0.04 });
@@ -840,7 +847,7 @@
       var layer = group.getLayers()[0];
       if (!layer) { return; }
       if (f.typ === "meldung") {
-        layer.bindTooltip("📢 " + escapeHtml(f.label || ""), { permanent: false });
+        layer.bindTooltip(ecpIcon("speakerphone", {size: "xs"}) + " " + escapeHtml(f.label || ""), { permanent: false });
       } else if (f.typ === "distanz" && f.props && f.props.distanz_m != null) {
         layer.bindTooltip(f.props.distanz_m + " m", { permanent: true, direction: "center" });
       } else if (f.label) {
@@ -866,7 +873,10 @@
     function stopReplayPlayback() {
       if (replayTimer) { clearInterval(replayTimer); replayTimer = null; }
       var playBtn = document.getElementById("lft-replay-play");
-      if (playBtn) { playBtn.textContent = "▶"; }
+      if (playBtn) {
+        playBtn.innerHTML = ecpIcon("player-play", {size: "xs"});
+        playBtn.setAttribute("aria-label", "Replay abspielen");
+      }
     }
 
     function enterReplay() {
@@ -996,7 +1006,8 @@
     if (replayPlayBtn) {
       replayPlayBtn.addEventListener("click", function () {
         if (replayTimer) { stopReplayPlayback(); return; }
-        replayPlayBtn.textContent = "⏸";
+        replayPlayBtn.innerHTML = ecpIcon("player-pause", {size: "xs"});
+        replayPlayBtn.setAttribute("aria-label", "Replay pausieren");
         replayTimer = setInterval(function () {
           var slider = document.getElementById("lft-replay-slider");
           var next = parseInt(slider.value, 10) + 1;
@@ -1170,7 +1181,7 @@
     }
 
     function openMeldungForm(latlng) {
-      var marker = L.marker(latlng, { icon: divIcon('<div class="lft-meldung-icon">📢</div>', [14, 28]) }).addTo(karte);
+      var marker = L.marker(latlng, { icon: markerIcon("speakerphone") }).addTo(karte);
       var el = document.createElement("div");
       el.className = "lft-meldung-form";
       el.innerHTML =
@@ -1637,7 +1648,7 @@
           var btn = document.createElement("button");
           btn.type = "button";
           btn.className = "lft-presence__grant";
-          btn.textContent = granted ? "Editor ✕" : "→ Editor";
+          btn.innerHTML = granted ? "Editor " + ecpIcon("x", {size: "xs"}) : "→ Editor";
           btn.title = granted ? "Editor-Recht entziehen" : "Zum Editor machen";
           btn.addEventListener("click", function () {
             fetchJson(apiBase + "/berechtigung/" + uid, {

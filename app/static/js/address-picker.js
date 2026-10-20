@@ -120,11 +120,11 @@
           }
           street.value = result.street;
           houseNo.value = result.house_number || '';
-          setStatus('✓ ' + (result.display_name || 'gefunden'), 'var(--success, #18a957)');
+          setStatus(result.display_name || 'gefunden', 'var(--success, #18a957)');
         })
         .catch(function () {
           if (request === reverseRequest) {
-            setStatus('✗ Keine Adresse gefunden – Koordinaten bleiben gesetzt', 'var(--danger)');
+            setStatus('Keine Adresse gefunden – Koordinaten bleiben gesetzt', 'var(--danger)');
           }
         });
     }
@@ -142,10 +142,10 @@
         .then(function (response) { if (!response.ok) throw new Error(); return response.json(); })
         .then(function (result) {
           setMarker(result.lat, result.lng, 16);
-          setStatus('✓ ' + (result.display_name || 'gefunden'), 'var(--success, #18a957)');
+          setStatus(result.display_name || 'gefunden', 'var(--success, #18a957)');
           manualPin = false;
         })
-        .catch(function () { setStatus('✗ Nicht gefunden', 'var(--danger)'); });
+        .catch(function () { setStatus('Nicht gefunden', 'var(--danger)'); });
     }
     function autoGeocode() {
       clearTimeout(timer);
@@ -161,7 +161,7 @@
         if (item.lat != null && item.lng != null) {
           manualPin = false;
           setMarker(item.lat, item.lng, 16);
-          setStatus('✓ ' + item.label, 'var(--success, #18a957)');
+          setStatus(item.label, 'var(--success, #18a957)');
         }
       }
       initAddressAutocomplete({ inputId: city.id, field: 'city', onSelect: onSelect });

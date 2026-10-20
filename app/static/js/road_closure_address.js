@@ -37,7 +37,7 @@
     function show(data) {
       status.textContent = '';
       if (data.status === 'ok') {
-        add('✓ ' + data.osm_name + ' (OSM' + (data.laenge_m ? ', ' + Math.round(data.laenge_m) + ' m' : '') + ')', 'success');
+        add(data.osm_name + ' (OSM' + (data.laenge_m ? ', ' + Math.round(data.laenge_m) + ' m' : '') + ')', 'success');
       } else if (data.status === 'abweichend') {
         add('≈ Gefunden als „' + (data.osm_name || '') + '“', 'warning');
         var button = document.createElement('button');
@@ -47,13 +47,13 @@
         button.addEventListener('click', function () { street.value = data.osm_name || street.value; street.dispatchEvent(new Event('change')); });
         status.appendChild(button);
       } else if (data.status === 'nicht_gefunden') {
-        add('✗ Straße nicht in OSM gefunden' + (data.vorschlaege.length ? ' - Vorschläge: ' + data.vorschlaege.join(', ') : ''), 'danger');
+        add('Straße nicht in OSM gefunden' + (data.vorschlaege.length ? ' - Vorschläge: ' + data.vorschlaege.join(', ') : ''), 'danger');
       } else {
         add('OSM derzeit nicht erreichbar - Prüfung übersprungen', 'text-muted');
       }
       [['Von', data.von], ['Bis', data.bis]].forEach(function (entry) {
         if (!entry[1].text || entry[1].gefunden === null) return;
-        add(entry[0] + ': ' + (entry[1].gefunden ? '✓ Kreuzung gefunden' : '✗ nicht gefunden'), entry[1].gefunden ? 'success' : 'danger');
+        add(entry[0] + ': ' + (entry[1].gefunden ? 'Kreuzung gefunden' : 'nicht gefunden'), entry[1].gefunden ? 'success' : 'danger');
       });
     }
     function validate() {

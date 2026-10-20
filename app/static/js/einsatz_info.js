@@ -114,13 +114,9 @@
 
   /* ── Einsatzort-Marker ── */
   if (hatEinsatzKoords) {
+    var einsatzIcon = ecpMarkerIcon("urgent", {color: '#d42225', size: 26, border: '2px solid #fff'});
     L.marker([incLat, incLng], {
-      icon: L.divIcon({
-        html: '<div class="einsatz-marker">🚨</div>',
-        className: "einsatz-marker-divicon",
-        iconSize: null,
-        iconAnchor: [16, 32]
-      }),
+      icon: einsatzIcon,
       zIndexOffset: 1000
     }).addTo(karte).bindPopup("<strong>Einsatzort</strong>");
     objektBounds.push([incLat, incLng]);
@@ -130,10 +126,17 @@
   /* ── Anfahrt und relevante Straßensperren ── */
   var routeLayer = L.layerGroup().addTo(karte);
   var routeReloadVersuche = 0;
-  function routeText(parent, text, klasse) {
+  function routeText(parent, text, klasse, iconName) {
     var zeile = document.createElement("div");
     if (klasse) { zeile.className = klasse; }
-    zeile.textContent = text;
+    if (iconName) {
+      var icon = document.createElement("span");
+      icon.innerHTML = ecpIcon(iconName, {size: "sm"});
+      zeile.appendChild(icon);
+    }
+    var inhalt = document.createElement("span");
+    inhalt.textContent = text;
+    zeile.appendChild(inhalt);
     parent.appendChild(zeile);
   }
   function zeichneRoute(payload) {
@@ -172,12 +175,14 @@
       if (layer.getBounds && layer.getBounds().isValid()) { routeBounds.push.apply(routeBounds, [layer.getBounds().getSouthWest(), layer.getBounds().getNorthEast()]); }
     });
     if (payload.start && payload.start.lat != null && payload.start.lng != null) {
-      L.marker([payload.start.lat, payload.start.lng], { icon: L.divIcon({ html: "<div>🚒</div>", className: "route-start-divicon", iconSize: null, iconAnchor: [10, 10] }) }).addTo(routeLayer).bindTooltip(payload.start.label || "Startpunkt");
+      var startIcon = ecpMarkerIcon("firetruck", {color: '#d42225', size: 20, border: '2px solid #fff'});
+      startIcon.options.iconAnchor = [10, 10];
+      L.marker([payload.start.lat, payload.start.lng], { icon: startIcon }).addTo(routeLayer).bindTooltip(escapeHtml(payload.start.label || "Startpunkt"));
       routeBounds.push([payload.start.lat, payload.start.lng]);
     }
     var routeBetroffen = closures.some(function (c) { return c.relevance === "route"; });
     box.className = "anfahrt-hinweis" + (routeBetroffen ? "" : " anfahrt-hinweis--warn");
-    routeText(box, routeBetroffen ? "⚠️ ANFAHRT BEEINTRÄCHTIGT" : "⚠️ SPERRE AM EINSATZORT", "anfahrt-hinweis__titel");
+    routeText(box, routeBetroffen ? " ANFAHRT BEEINTRÄCHTIGT" : " SPERRE AM EINSATZORT", "anfahrt-hinweis__titel", "alert-triangle");
     closures.forEach(function (c) {
       routeText(box, (c.title || "Straßensperre") + " – " + (c.restriction_label || c.restriction_type || "") +
         (c.geometry_status === "needs_review" ? " · Geometrie ungeprüft" : "") +
@@ -411,7 +416,7 @@
           return (g.piktogramm || "⚠️") + " " + escapeHtml(g.name)
             + (g.un_nummer ? " (UN " + escapeHtml(g.un_nummer) + ")" : "");
         }).join("<br>");
-        m.bindPopup("<strong>⚠️ " + escapeHtml(o.name) + "</strong>"
+        m.bindPopup("<strong>" + ecpIcon("alert-triangle", {size: "sm"}) + " " + escapeHtml(o.name) + "</strong>"
           + (o.vulgoname ? ' <span class="text-muted" style="font-size:.85em;">' + escapeHtml(o.vulgoname) + "</span>" : "")
           + (o.entfernung_m != null ? " <span>" + o.entfernung_m + " m</span>" : "")
           + "<br>" + chips);
