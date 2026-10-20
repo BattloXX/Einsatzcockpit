@@ -39,7 +39,7 @@
         <div style="margin-top:5px;">
           <button type="button" class="btn btn--xs btn--secondary"
                   onclick='openFjLm({{ lage.id }}, {{ c.related_site_id }}, {{ (rel_site.bezeichnung if rel_site else ("#" ~ c.related_site_id))|tojson }})'>
-            ✎ Lagemeldung erfassen
+            {{ icon("pencil", size="xs") }} Lagemeldung erfassen
           </button>
         </div>
         {% endif %}
@@ -53,8 +53,7 @@
            hx-target="#siteDetailContent" hx-swap="innerHTML"
            title="{{ rel_site.bezeichnung }}">
           {% if rel_site.priority %}
-          <span style="display:inline-block;width:7px;height:7px;border-radius:50%;flex-shrink:0;
-            background:{% if rel_site.priority.value == 1 %}#ef4444{% elif rel_site.priority.value == 2 %}#f97316{% elif rel_site.priority.value == 3 %}#eab308{% else %}#6b7280{% endif %};"></span>
+          {{ status_dot({1: "rot", 2: "orange", 3: "gelb"}.get(rel_site.priority.value, "grau"), "Priorität " ~ rel_site.priority.value) }}
           {% endif %}
           {% if rel_site.strasse %}{{ rel_site.strasse }}{% if rel_site.hausnr %} {{ rel_site.hausnr }}{% endif %} – {% endif %}{{ rel_site.bezeichnung[:30] }}
         </a>
@@ -74,8 +73,9 @@
               hx-on::after-request="if(event.detail.successful){htmx.ajax('GET','/lage/{{ lage.id }}/funkjournal/rows',{target:'#fj-table-section',swap:'innerHTML'});}">
           <button type="submit" class="btn btn--xs fj-handle-btn
             {% if c.handled %}btn--ghost{% else %}btn--secondary{% endif %}"
+              aria-label="{% if c.handled %}Als offen markieren{% else %}Als erledigt markieren{% endif %}"
               title="{% if c.handled %}Als offen markieren{% else %}Als erledigt markieren{% endif %}">
-            {% if c.handled %}↩{% else %}✓{% endif %}
+            {% if c.handled %}{{ icon("arrow-back-up", size="xs") }}{% else %}{{ icon("check", size="xs") }}{% endif %}
           </button>
         </form>
       </td>

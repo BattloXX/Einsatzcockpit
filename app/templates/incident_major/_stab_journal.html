@@ -57,7 +57,7 @@
 {# Zeitstrahl-Spanne wird clientseitig via JS berechnet #}
 
 <div class="dash-section" style="--dash-accent:var(--blue);margin-top:0;">
-  <div class="timeline-header">📊 Zeitstrahl je Funktion</div>
+  <div class="timeline-header">{{ icon("chart-bar", size="sm") }} Zeitstrahl je Funktion</div>
 
   {% set seen = namespace(ids=[]) %}
   {% for a in assignments | sort(attribute='role_id') %}

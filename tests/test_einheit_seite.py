@@ -106,7 +106,8 @@ def test_einheit_template_und_javascript_sind_lesbar():
 
 def test_einheit_template_enthaelt_kompakte_kartenlegende():
     template = (Path(__file__).parents[1] / "app/templates/einheit/einheit.html").read_text()
-    assert "● In Arbeit · ▶ Nächster · 1, 2, 3 Reihenfolge" in " ".join(template.split())
+    assert '{{ status_dot("orange", "In Arbeit") }} In Arbeit' in template
+    assert '{{ icon("player-play", size="sm") }} Nächster · 1, 2, 3 Reihenfolge' in template
     assert "gestrichelt = Erkundung · Linie = Luftlinie, keine Route" in " ".join(template.split())
 
 

@@ -31,7 +31,7 @@
     {% if entry.measure %}
     <div style="font-size:.72rem;color:#fbbf24;margin-top:4px;padding:3px 8px;
                 background:rgba(251,191,36,.08);border-radius:3px;border-left:2px solid #fbbf24;">
-      ⚡ {{ entry.measure }}
+      {{ icon("bolt", size="sm") }} {{ entry.measure }}
     </div>
     {% endif %}
     {% if entry.media %}
@@ -51,8 +51,8 @@
           </div>
           <button aria-label="Schließen" @click="lbOpen=false"
                   style="position:fixed;top:16px;right:20px;background:rgba(0,0,0,.6);border:none;
-                         color:#fff;font-size:28px;line-height:1;cursor:pointer;border-radius:50%;
-                         width:40px;height:40px;display:flex;align-items:center;justify-content:center;">×</button>
+                         color:#fff;line-height:1;cursor:pointer;border-radius:50%;
+                         width:40px;height:40px;display:flex;align-items:center;justify-content:center;">{{ icon("x", size="lg") }}</button>
         </div>
       </div>
       {% endfor %}
@@ -63,11 +63,11 @@
   <div style="flex-shrink:0;font-size:.68rem;color:var(--text-muted);white-space:nowrap;padding-top:2px;">{{ entry.author_name }}</div>
   {% endif %}
   <button type="button" onclick="openJournalDetail({{ entry.id }})"
-          class="btn btn--xs btn--ghost" title="Öffnen"
-          style="flex-shrink:0;opacity:.6;padding:1px 5px;font-size:.65rem;">↗</button>
+          class="btn btn--xs btn--ghost" title="Öffnen" aria-label="Öffnen"
+          style="flex-shrink:0;opacity:.6;padding:1px 5px;font-size:.65rem;">{{ icon("external-link", size="xs") }}</button>
   <button type="button" onclick="printJournalEntry({{ entry.id }})"
-          class="btn btn--xs btn--ghost" title="Drucken"
-          style="flex-shrink:0;opacity:.5;padding:1px 5px;font-size:.65rem;">🖨</button>
+          class="btn btn--xs btn--ghost" title="Drucken" aria-label="Drucken"
+          style="flex-shrink:0;opacity:.5;padding:1px 5px;font-size:.65rem;">{{ icon("printer", size="xs") }}</button>
   {% if can_edit %}
   <form hx-post="/lage/{{ lage.id }}/journal/{{ entry.id }}/loeschen"
         hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
@@ -75,7 +75,7 @@
         hx-on::after-request="if(event.detail.successful){this.closest('.journal-row').remove()}"
         style="margin:0;">
     <button aria-label="Schließen" type="submit" class="btn btn--xs btn--ghost" title="Löschen"
-            style="opacity:.5;padding:1px 5px;font-size:.65rem;">✕</button>
+            style="opacity:.5;padding:1px 5px;font-size:.65rem;">{{ icon("x", size="xs") }}</button>
   </form>
   {% endif %}
 </div>

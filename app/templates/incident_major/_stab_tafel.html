@@ -11,7 +11,7 @@
   <div class="fn-card fn-card--{{ status }} {% if role.code == 'EL' %}fn-card--el{% endif %}">
     <div class="fn-card__header">
       <div style="display:flex;align-items:center;gap:6px;">
-        <div class="fn-card__ampel fn-card__ampel--{{ status }}"></div>
+        {{ status_dot({"red": "rot", "yellow": "gelb", "green": "gruen"}[status], role.name ~ ": " ~ {"red": "unbesetzt", "yellow": "Hinweise", "green": "besetzt"}[status], cls="fn-card__ampel fn-card__ampel--" ~ status) }}
         <span>{{ role.name }}</span>
       </div>
       <div style="display:flex;align-items:center;gap:6px;">
@@ -28,7 +28,7 @@
     <div class="fn-card__body">
       {% if warnings %}
       {% for w in warnings %}
-      <div class="fn-warn">⚠ {{ w }}</div>
+      <div class="fn-warn">{{ icon("alert-triangle", size="sm") }} {{ w }}</div>
       {% endfor %}
       {% endif %}
 
@@ -41,10 +41,10 @@
         </span>
         {% if can_edit and lage.status.value == 'active' %}
         <div class="asgn-actions">
-          <button class="btn btn--xs btn--ghost" title="Ablösen"
-                  onclick="openAbloesen({{ a.id }}, '{{ role.name }}')">↕</button>
+          <button class="btn btn--xs btn--ghost" title="Ablösen" aria-label="Ablösen"
+                  onclick="openAbloesen({{ a.id }}, '{{ role.name }}')">{{ icon("arrows-sort", size="xs") }}</button>
           <button aria-label="Schließen" class="btn btn--xs btn--ghost" title="Beenden"
-                  onclick="beendeAsgn({{ a.id }})">✕</button>
+                  onclick="beendeAsgn({{ a.id }})">{{ icon("x", size="xs") }}</button>
         </div>
         {% endif %}
       </div>
@@ -73,7 +73,7 @@
           <span class="asgn-label">{{ a.display_name }} <span style="font-size:.65rem;">(MA)</span></span>
           <span class="asgn-since">{{ a.start_at|local_time }}</span>
           {% if can_edit and lage.status.value == 'active' %}
-          <button aria-label="Schließen" class="btn btn--xs btn--ghost" onclick="beendeAsgn({{ a.id }})">✕</button>
+          <button aria-label="Schließen" class="btn btn--xs btn--ghost" onclick="beendeAsgn({{ a.id }})">{{ icon("x", size="xs") }}</button>
           {% endif %}
         </div>
         {% endfor %}

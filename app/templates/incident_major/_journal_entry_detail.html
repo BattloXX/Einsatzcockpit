@@ -43,7 +43,7 @@
   {% if entry.measure %}
   <div style="font-size:.78rem;color:var(--yellow);margin-bottom:12px;padding:7px 11px;
               background:rgba(242,176,46,.1);border-radius:var(--radius-md, .5rem);border-left:3px solid var(--yellow);">
-    ⚡ <strong>Veranlassung:</strong> {{ entry.measure }}
+    {{ icon("bolt", size="sm") }} <strong>Veranlassung:</strong> {{ entry.measure }}
   </div>
   {% endif %}
 
@@ -60,8 +60,8 @@
                     border:1px solid var(--border);cursor:zoom-in;"
              {% if m.media_type == 'image' %}onclick="openImageLightbox([{src:'/annotieren/lage_journal/{{ m.id }}/bild'{% if can_edit %},edit:'/annotieren/lage_journal/{{ m.id }}'{% endif %}}])"{% else %}onclick='openMediaViewer("/lage/{{ lage.id }}/journal/{{ entry.id }}/medien/{{ m.id }}/bild", "image", {{ m.original_filename|tojson }})'{% endif %}>
         {% if can_edit and m.media_type == 'image' %}
-        <a href="/annotieren/lage_journal/{{ m.id }}" title="Bearbeiten" @click.stop
-           style="position:absolute;top:2px;left:2px;background:rgba(0,0,0,0.75);border-radius:50%;width:18px;height:18px;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;line-height:1;">✏️</a>
+        <a href="/annotieren/lage_journal/{{ m.id }}" title="Bearbeiten" aria-label="Bearbeiten" @click.stop
+           style="position:absolute;top:2px;left:2px;background:rgba(0,0,0,0.75);border-radius:50%;width:18px;height:18px;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;line-height:1;">{{ icon("pencil", size="xs") }}</a>
         {% endif %}
         <div style="font-size:.65rem;color:var(--text-muted);text-align:center;margin-top:2px;
                     max-width:96px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">

@@ -255,11 +255,11 @@ a.stab-tab { text-decoration: none; display: inline-flex; align-items: center; g
        hx-target="#stab-tafel"
        hx-swap="innerHTML">
     {% if overall == 'red' %}
-      ⚠ Pflichtfunktion(en) unbesetzt — Lage kritisch
+      {{ icon("alert-triangle", size="sm") }} Pflichtfunktion(en) unbesetzt — Lage kritisch
     {% elif overall == 'yellow' %}
-      ⚠ Hinweise: Ablösebedarf oder Mehrfachbesetzung
+      {{ icon("alert-triangle", size="sm") }} Hinweise: Ablösebedarf oder Mehrfachbesetzung
     {% else %}
-      ✓ Stab vollständig besetzt
+      {{ icon("check", size="sm") }} Stab vollständig besetzt
     {% endif %}
     {% set red_count = check.roles | selectattr('status', 'equalto', 'red') | list | length %}
     {% set yellow_count = check.roles | selectattr('status', 'equalto', 'yellow') | list | length %}
@@ -275,7 +275,7 @@ a.stab-tab { text-decoration: none; display: inline-flex; align-items: center; g
   {# ── Tab-Navigation ────────────────────────────────────────────────────────── #}
   <div class="stab-tabs">
     <button class="stab-tab" :class="{active: tab==='einsatzjournal'}" @click="setTab('einsatzjournal')">Einsatzjournal</button>
-    <a class="stab-tab" href="/lage/{{ lage.id }}/lagedokument">📝 Lagebericht</a>
+    <a class="stab-tab" href="/lage/{{ lage.id }}/lagedokument">{{ icon("note", size="sm") }} Lagebericht</a>
     <button class="stab-tab" :class="{active: tab==='tafel'}" @click="setTab('tafel')">Besetzungstafel</button>
     <button class="stab-tab" :class="{active: tab==='journal'}" @click="setTab('journal')">Personenjournal</button>
   </div>
@@ -286,7 +286,7 @@ a.stab-tab { text-decoration: none; display: inline-flex; align-items: center; g
     {# Neuer Eintrag #}
     {% if can_edit %}
     <div class="dash-section" style="--dash-accent:var(--red);margin-bottom:16px;">
-      <div class="dash-section__title">📝 Neuer Eintrag</div>
+      <div class="dash-section__title">{{ icon("note", size="sm") }} Neuer Eintrag</div>
       <form id="form-journal-add"
             hx-post="/lage/{{ lage.id }}/journal"
             hx-encoding="multipart/form-data"
@@ -341,7 +341,7 @@ a.stab-tab { text-decoration: none; display: inline-flex; align-items: center; g
              style="flex:1;min-width:160px;max-width:280px;padding:3px 9px;font-size:.78rem;border-radius:4px;
                     border:1px solid var(--border);background:var(--surface-high);color:var(--text);">
       <button type="button" class="btn btn--xs btn--ghost" title="Ganzes Journal / Gesamtbericht drucken (Station/lokal)"
-              onclick="ecpgPrint({document_type:'gsl_bericht', gsl_id:{{ lage.id }}, title:'GSL-Gesamtbericht drucken', localUrl:'/lage/{{ lage.id }}/druck/bericht#journal'})">🖨 Journal drucken</button>
+              onclick="ecpgPrint({document_type:'gsl_bericht', gsl_id:{{ lage.id }}, title:'GSL-Gesamtbericht drucken', localUrl:'/lage/{{ lage.id }}/druck/bericht#journal'})">{{ icon("printer", size="sm") }} Journal drucken</button>
     </div>
     <div id="journal-list">
       {% include "incident_major/_stab_einsatzjournal.html" %}
@@ -366,13 +366,13 @@ a.stab-tab { text-decoration: none; display: inline-flex; align-items: center; g
   {# ── KI-Pressemeldung (S5) ─────────────────────────────────────────────────── #}
   <div class="dash-section" style="margin-top:16px;--dash-accent:var(--yellow);">
     <div class="dash-section__title" style="justify-content:space-between;margin-bottom:8px;">
-      <span>✨ KI-Pressemeldung (S5)</span>
+      <span>{{ icon("sparkles", size="sm") }} KI-Pressemeldung (S5)</span>
       <form hx-post="/lage/{{ lage.id }}/pressemeldung"
             hx-target="#presse-result" hx-swap="innerHTML"
             hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
             hx-indicator="#presse-spin" style="margin:0;">
         <button type="submit" class="btn btn--ghost btn--sm">
-          ✨ Entwurf erstellen
+          {{ icon("sparkles", size="sm") }} Entwurf erstellen
           <span id="presse-spin" class="htmx-indicator" style="font-size:.75rem;"> …</span>
         </button>
       </form>
@@ -389,7 +389,7 @@ a.stab-tab { text-decoration: none; display: inline-flex; align-items: center; g
   <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;
               border-bottom:1px solid var(--border);background:var(--surface-elevated,#1e2130);">
     <span style="font-size:.78rem;font-weight:600;color:var(--text-muted);">JOURNALEINTRAG</span>
-    <button aria-label="Schließen" data-ec-action="close-dialog" class="btn btn--xs btn--ghost">✕</button>
+    <button aria-label="Schließen" data-ec-action="close-dialog" class="btn btn--xs btn--ghost">{{ icon("x", size="sm") }}</button>
   </div>
   <div id="journalDetailContent">
     <div style="padding:24px;color:var(--text-muted);font-size:.82rem;text-align:center;">Lade…</div>
