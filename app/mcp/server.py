@@ -2185,3 +2185,8 @@ async def katplan_elemente_verorten(
         "katplan_elemente_verorten", plan_id=plan_id, element_ids=element_ids, nur_ohne_ort=nur_ohne_ort,
         auswahl=auswahl, pruefen=pruefen, ueberschreiben_geprueft=ueberschreiben_geprueft,
     )
+
+
+@server.tool(name="katplan_import_abgleichen", description=TOOLS["katplan_import_abgleichen"].description)
+async def katplan_import_abgleichen(plan_id: int, dokument_id: int, ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("katplan_import_abgleichen", plan_id=plan_id, dokument_id=dokument_id)

@@ -541,7 +541,19 @@ async def katplan_vorschlaege_aus_dokument(context: MCPContext, plan_id: int, do
         if isinstance(adresse, dict):
             eintrag = {**{k: adresse.get(k) for k in ("strasse", "hausnummer", "plz", "ort")}, **eintrag}
         eintraege.append(eintrag)
+    from app.services.katplan_abgleich_service import titel_aehnlichkeit
+    from app.services.katplan_zugriff import sieht_vertraulich
+
     werte = _parse_antwort(json.dumps({"elemente": eintraege}))
+    bestand = context.db.query(KatplanElement).filter_by(org_id=plan.org_id, plan_id=plan.id)
+    if not sieht_vertraulich(context.user):
+        bestand = bestand.filter_by(vertraulich=False)
+    vorhandene = bestand.order_by(KatplanElement.sort, KatplanElement.id).all()
+    warnungen = [
+        f"Vorschlag {n} '{wert['titel']}' ähnelt {e.kennung or e.uuid} '{e.titel}'"
+        for n, wert in enumerate(werte, 1) for e in vorhandene
+        if e.typ == wert["typ"] and titel_aehnlichkeit(e.titel, wert["titel"]) >= 0.85
+    ]
     for position, wert in enumerate(werte):
         vorschlag = KatplanImportVorschlag(org_id=plan.org_id, plan_id=plan.id, dokument_id=dokument_id,
                                           seite_id=seite.id, seiten_nr=seiten_nr, reihenfolge=position,
@@ -550,7 +562,7 @@ async def katplan_vorschlaege_aus_dokument(context: MCPContext, plan_id: int, do
         context.db.add(vorschlag)
     service.protokolliere(context.db, plan, "plan", "import_vorschlaege", context.user,
                           neu=f"{len(werte)} Vorschläge, Quelle {dokument_id}, Seite {seiten_nr}", quelle="mcp")
-    return {"anzahl": len(werte),
+    return {"anzahl": len(werte), "warnungen": warnungen,
             "ui_link": f"/katastrophenplaene/{plan.id}/import?quelle={dokument_id}&seite={seiten_nr}",
             "hinweis": _HINWEIS}
 
