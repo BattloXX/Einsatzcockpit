@@ -1,13 +1,12 @@
 # ECP – Einheitliches Icon-System (Tabler Icons)
 
-Stand: 2026-10-20 · Status: Plan, noch keine Umsetzung
+Stand: 2026-10-20 · Status: in Umsetzung
 
 ## Ziel
 
 Alle Icons des Einsatzcockpits werden durch ein konsistentes, geräteunabhängiges
 SVG-Icon-System auf Basis von [Tabler Icons](https://tabler.io/icons) (MIT) ersetzt.
-Feuerwehrspezifische Symbole ohne Tabler-Entsprechung kommen als eigene SVG-Erweiterung
-im selben Stil dazu. Funktionen, Statuslogik und Barrierefreiheit bleiben unverändert.
+Feuerwehrspezifische Symbole ohne Tabler-Entsprechung bleiben unverändert. Funktionen, Statuslogik und Barrierefreiheit bleiben unverändert.
 
 ## 1. Bestandsaufnahme (Messung 2026-10-20, `origin/main` 83fc795d)
 
@@ -65,8 +64,8 @@ Sonderfälle:
 | Noto-Emoji-Subset als PDF-Font | `pdf/_emoji_font_face.html`, `static/fonts/noto-emoji-pdf-subset.ttf` | nach PDF-Umstellung entfernen |
 | Material Symbols (CSS-Rest) | `tailwind.input.css` Z. 136–147 `.material-symbols-outlined` | toter Code, laut Kommentar nicht referenziert, entfernen |
 | Leaflet `L.divIcon` mit Emoji/HTML | 56 Aufrufe: `einsatz_info.js`, `lagefuehrung.js`, `objekt_karte.js`, `einheit_karte.js`, `stats_karte.js`, `wasserstellen_admin.js`, `incident_major/karte.html`, `karte_druck.html`, `lagefuehrung_druck.html`, `infoscreen_alarm.html`, `public/alarm_summary.html`, `foerderstrecke/wizard.html` | migrieren (Abschnitt 4.5) |
-| Hydranten-Icons per CSS | `app.css` / `einsatz_info.js` (`WASSERSTELLE_ICON_KAT`: ueberflur/unterflur/loeschwasser) | in ECP-Erweiterung überführen |
-| Objekt-Kartensymbole (Text-Boxen „BMZ“, „FSD“, Dreiecke, Bild-Upload) | `objekt_symbol_service.py`, `objekt_karte.js` | **fachliche Planzeichen**, bleiben in eigener Logik. Nur `➜` (Haupt-/Nebenzugang) wird ECP-Erweiterung |
+| Hydranten-Icons per CSS | `app.css` / `einsatz_info.js` (`WASSERSTELLE_ICON_KAT`: ueberflur/unterflur/loeschwasser) | bleibt unverändert (Feuerwehrsymbol) |
+| Objekt-Kartensymbole (Text-Boxen „BMZ“, „FSD“, Dreiecke, Bild-Upload) | `objekt_symbol_service.py`, `objekt_karte.js` | **fachliche Planzeichen**, bleiben unverändert in eigener Logik |
 | Leaflet-/Geoman-Standard-Assets | `static/img/leaflet`, `leaflet-geoman.min.css` | Vendor, unverändert |
 | Statische Karten-PNGs | `staticmap_service.py` (CircleMarker) | keine Icons, bleiben |
 
@@ -74,7 +73,7 @@ Sonderfälle:
 
 | Feld/Konstante | Art | Bewertung |
 |---|---|---|
-| `ObjektAuswahl.icon` (String 40, Typen kontaktart/dokumentart/piktogramm) | frei pflegbar je Org, wird dem Label vorangestellt (`objekt.py:502`) | **frei wählbares Symbol** → neues Feld `icon_name` (Tabler/ECP), Altwert als Fallback-Text, siehe Phase 10 |
+| `ObjektAuswahl.icon` (String 40, Typen kontaktart/dokumentart/piktogramm) | frei pflegbar je Org, wird dem Label vorangestellt (`objekt.py:502`) | **frei wählbares Symbol** → neues Feld `icon_name` (Tabler), Altwert als Fallback-Text, siehe Phase 10 |
 | `MerkmalKatalog.icon` (String 40) | frei pflegbar je Org | wie oben |
 | `CROSS_MARKER_TYPE_ICON` (`major_incident.py:1030`) | Code-Konstante, Schlüssel `marker_type` | **fachlich**, keine Migration nötig, nur Mapping im Code |
 | `katplan_typen.py` `icon=` | Code-Konstante | fachlich, im Code umstellen |
@@ -116,7 +115,7 @@ Tabler-Version geprüft. Entwurf für die häufigsten:
 | 🚨 📢 📣 | Alarm/Durchsage | `urgent` / `speakerphone` |
 | 🔥 | Brand | `flame` |
 | 💧 🌊 | Wasser/Überflutung | `droplet` / `ripple` |
-| 🚰 | Hydrant/Wasserstelle | **ECP** `ecp-hydrant` |
+| 🚰 | Hydrant/Wasserstelle | bleibt (Feuerwehrsymbol) |
 | 🫁 | Atemschutz | `lungs` |
 | 👥 👤 | Personen/Person | `users` / `user` |
 | 📞 📱 📲 | Telefon/Mobil | `phone` / `device-mobile` |
@@ -155,29 +154,27 @@ Tabler-Version geprüft. Entwurf für die häufigsten:
 | 🛣 | Route | `route` |
 | 🔴 🟢 🟡 🟠 ⚪ ⚫ ● | Status | **kein Icon** → `status-dot` (4.6) |
 
-### ECP-Erweiterungen (eigene SVGs, Präfix `ecp-`)
+### Feuerwehrsymbole bleiben unverändert (Entscheidung 2026-10-20)
 
-Kandidaten, für die Tabler nichts Passendes hat (wird in Phase 0 bestätigt):
-`ecp-hydrant-ueberflur`, `ecp-hydrant-unterflur`, `ecp-loeschwasser` (Behälter/Saugstelle),
-`ecp-drehleiter`, `ecp-schlauch`, `ecp-verteiler`, `ecp-atemschutztrupp`,
-`ecp-bmz` (Brandmeldezentrale), `ecp-fsd` (Feuerwehrschlüsseldepot), `ecp-zugang`
-(Haupt-/Nebenzugang, ersetzt `➜`), `ecp-mure`, `ecp-verklausung`, `ecp-damm`.
-
-Stilregeln wie Tabler: 24 × 24-Raster, 2 px Strich, `stroke-linecap/linejoin: round`,
-`fill="none"`, `stroke="currentColor"`, 2 px Innenabstand, keine Füllflächen außer bei
-bewussten Akzenten. Normierte Zeichen (taktische Zeichen, GHS-Piktogramme,
-Objekt-Planzeichen) werden **nicht** umgezeichnet.
+Für fachspezifische Feuerwehrsymbole ohne passendes Tabler-Icon werden **keine eigenen SVGs**
+gezeichnet. Ihre bisherige Darstellung bleibt, wie sie ist:
+Hydranten-/Löschwasser-Icons per CSS (`WASSERSTELLE_ICON_KAT`), Objekt-Planzeichen
+(`objekt_symbol_service.py`, inkl. `➜` für Zugänge), taktische Zeichen, GHS-/Gefahrenpiktogramme
+sowie Emojis ohne Tabler-Entsprechung wie `🚰` (Hydrant), `🪵` (Verklausung), `🧱` (Damm/Deich).
+Die verbleibenden Zeichen stehen mit Begründung auf der Ausnahmeliste des Wächter-Tests
+(`tests/data/icon_emoji_ausnahmen.txt`). Wo Tabler ein passendes Icon hat (`firetruck`,
+`flame`, `lungs`, `ambulance`, `fire-extinguisher` …), wird normal migriert.
 
 ## 3. Architekturentscheidungen
 
 1. **Bezugsquelle**: npm-Paket `@tabler/icons` mit exakt gepinnter Version in
-   `package.json` (beim Start die aktuelle 3.x-Version, die mindestens zwei Wochen alt ist).
+   `package.json` (`3.49.0`, veröffentlicht 2026-10-05).
    `scripts/vendor-js.mjs` wird um einen Icon-Schritt erweitert. Kopiert werden **nur die
    verwendeten** Outline-SVGs nach `app/static/icons/tabler/` plus `LICENSE`. `npm run vendor:check`
    in der CI prüft die Übereinstimmung wie bei den JS-Libs. Keine CDN-Zugriffe, kein Node auf
    dem Server.
 2. **Eine Registry, drei Ausgaben**: `app/core/icons.py` lädt beim Start
-   `app/static/icons/tabler/*.svg` + `app/static/icons/ecp/*.svg` und hält die
+   `app/static/icons/tabler/*.svg` und hält die
    SVG-Innenteile (`<path>…`) im Speicher. Daraus entstehen:
    - **Jinja**: globale Funktion/Makro `icon(name, size="md", cls="", label=None)` rendert
      **Inline-SVG**. Inline (statt Sprite mit `<use href>`) funktioniert in HTMX-Partials,
@@ -294,8 +291,8 @@ Neue Datei `tests/test_icon_system.py`:
    (parsebar, `viewBox="0 0 24 24"`, mindestens ein Pfad).
 4. **Vendor-Abgleich**: `icons.js` und `app/static/icons/tabler/` entsprechen der gepinnten
    Version und der Liste der verwendeten Icons (`npm run vendor:check` in der CI).
-5. **ECP-Stilprüfung**: Jedes SVG in `app/static/icons/ecp/` hat `stroke-width="2"`,
-   `stroke="currentColor"`, `fill="none"` und eine 24er-Viewbox.
+5. **Ausnahmeliste**: Jede Zeile in `tests/data/icon_emoji_ausnahmen.txt` (Zeichen + Begründung)
+   wird noch verwendet, sonst muss sie raus.
 6. **A11y**: Icon-only-Buttons ohne `aria-label`/`label=` lassen den Test fehlschlagen.
 7. **PDF**: siehe 4.7.
 8. JS-Test `tests/js/icons.test.mjs`: `ecpIcon` liefert für bekannte Namen SVG und für
@@ -308,13 +305,13 @@ Die Entwicklerdoku kommt nach `docs/wiki` (Icon-Katalog-Seite mit allen verfügb
 
 | Phase | Inhalt | Ergebnis |
 |---|---|---|
-| **P0 Inventar** | Skript `scripts/icon_inventar.py` (Fundstellen je Zeichen mit Kontext: Markup, `<option>`, JS-String, Python, extern), generiert `docs/icon-inventar.md` inkl. Ziel-Icon-Spalte; Tabler-Namen gegen gepinnte Version geprüft; Liste ECP-Erweiterungen final; Prod-Abfrage `objekt_auswahl.icon`/`merkmal_katalog.icon` | vollständige Migrationsübersicht |
+| **P0 Inventar** | Skript `scripts/icon_inventar.py` (Fundstellen je Zeichen mit Kontext: Markup, `<option>`, JS-String, Python, extern), generiert `docs/icon-inventar.md` inkl. Ziel-Icon-Spalte; Tabler-Namen gegen gepinnte Version geprüft; Ausnahmeliste Feuerwehrsymbole final; Prod-Abfrage `objekt_auswahl.icon`/`merkmal_katalog.icon` | vollständige Migrationsübersicht |
 | **P1 Fundament** | `@tabler/icons` pinnen + Vendor-Schritt, `app/core/icons.py`, Jinja-Global `icon()`, `status_dot()`, `icons.js` + `ecpMarkerIcon`, CSS-Klassen/Tokens, SW-Precache, Fallback-Icon, Tests 3–5 + 8, Wiki-Katalogseite | System nutzbar, noch nichts migriert |
 | **P2 Wächter** | Test 1, 2, 6 mit Baseline aus Ist-Stand, CLAUDE.md-Regel | keine neuen Emojis ab jetzt |
 | **P3 Rahmen** | `base.html`, `admin/_layout.html`, Navigation, `index.html`, `hilfe.html`, Flash/Toasts, gemeinsame Buttons (Drucken, Schließen, Bearbeiten, Löschen) | einheitliche Grundbedienelemente |
 | **P4 Einsatzboard** | `incident/*` (board, `_task_card`, `_message_card`, `_message_modal`, `_dashboard_body`, `lagefuehrung`, `funkjournal`, `info`), `incident-board.js`, `sortable-glue.js`, `breathing/*`; mobil ≤ 760 px prüfen | Board fertig |
 | **P5 GSL** | `incident_major/*` ohne Karte, `einheit/*`, `gsl`, `lage_board.js`, Einheitenmodus | GSL fertig |
-| **P6 Karten** | alle `L.divIcon`-Stellen (4.5), `CROSS_MARKER_TYPE_ICON` → Icon-Namen, Wasserstellen/Hydranten → ECP, Förderstrecke | Karten fertig |
+| **P6 Karten** | alle `L.divIcon`-Stellen (4.5), `CROSS_MARKER_TYPE_ICON` → Icon-Namen, Förderstrecke | Karten fertig |
 | **P7 Fachmodule** | `objekt/*` (inkl. `objekt_service.py`), `katplan/*` + `katplan_typen.py`, `gateway/*`, `archive`, `termin`, `probenplanung`, `verleih`, `nachschlagewerke`, `annotate`, `media`, `stats`, `fahrtenbuch`, restliches `admin/*` (z. B. `device_tokens.html`) | Innenbereich fertig |
 | **P8 Öffentlich/Infoscreen** | `public/*` (altes `_icons.html` ablösen, Strich 1.75 → 2), Landing (`site_pages.py`), `weather/*` + `weather_service.py`, `objekt/infoscreen_alarm.html`, Road-Closure-Infoscreen, Probe-Appell | öffentliche Seiten fertig |
 | **P9 PDF/Druck** | alle PDF- und Druck-Templates, xhtml2pdf-Verhalten, PDF-Test (4.7) | PDF fertig |
@@ -353,6 +350,4 @@ Gestützt auf die Inventarliste werden die Codex-Aufträge pro Phase in 1–3 Pa
   kleine optische Änderung.
 - **Tabler-Namensänderungen** bei Major-Updates: Version exakt gepinnt, Dependabot-Updates
   laufen über `npm run vendor`, Test 3 schlägt bei verschwundenen Namen an.
-- **ECP-Icons zeichnen**: Wer zeichnet die Feuerwehrsymbole (Codex-Entwurf + Review oder
-  eigene Vorlage)? Zu klären vor P6.
 - **xhtml2pdf**: Icons fehlen dort bewusst, Abhängigkeit zur Modernisierung Phase 5.
