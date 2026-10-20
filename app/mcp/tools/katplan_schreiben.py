@@ -34,7 +34,7 @@ from app.services.mcp_datei_url_service import lade_datei_von_url
 from app.services.mcp_upload_service import effektives_limit, erstelle_upload, lade_upload_fuer_uebergabe
 
 _FELDER = {
-    "titel", "beschreibung", "prioritaet", "daten", "tags", "adresse", "geometrie", "kapitel_id",
+    "titel", "beschreibung", "prioritaet", "daten", "tags", "adresse", "geometrie", "geometrie_von", "kapitel_id",
     "phasen", "quelle_dokument_id", "quelle_seiten", "gueltig_bis", "pruefen_am",
 }
 _HINWEIS = "Nur Arbeitsstand: Ein Bearbeiter muss den Entwurf prüfen und ein Mensch muss ihn freigeben."
@@ -155,10 +155,23 @@ async def _verorten(context: MCPContext, typ: str, adresse: dict[str, str]) -> t
     q = ", ".join(v for v in (zeile1, zeile2) if v)
     if not zeile1 or len(q) < 3:
         return None, adresse, {"verortet": False, "hinweis": "Für die Verortung mindestens die Straße angeben."}
-    treffer = await search_addresses(q, limit=1)
+    treffer = await search_addresses(q, limit=3)
     if not treffer:
         return None, adresse, {"verortet": False, "suche": q, "hinweis": "Keine Adresse gefunden."}
-    t = treffer[0]
+    from app.services.katplan_verortung_service import entfernung_m, kandidat
+
+    hausnummer = adresse.get("hausnummer", "").strip().casefold()
+    passend = [t for t in treffer if hausnummer and str(t.get("hausnummer") or "").strip().casefold() == hausnummer]
+    gleichwertig = passend if passend else treffer
+    if len(gleichwertig) > 1 and any(
+        entfernung_m(a["lat"], a["lng"], b["lat"], b["lng"]) > 200
+        for i, a in enumerate(gleichwertig) for b in gleichwertig[i + 1:]
+    ):
+        return None, adresse, {
+            "verortet": False, "kandidaten": [kandidat("adresse", t, context.user.org) for t in gleichwertig],
+            "hinweis": "Mehrdeutig; mit katplan_elemente_verorten(auswahl=...) waehlen.",
+        }
+    t = gleichwertig[0]
     ergaenzt = {**adresse, **{k: t[k] for k in _ADRESS_FELDER if t.get(k) and not adresse.get(k)}}
     return ({"type": "Point", "coordinates": [t["lng"], t["lat"]]}, ergaenzt,
             {"verortet": True, "suche": q, "treffer": t["display_name"], "geo_status": "ungeprueft",
@@ -193,6 +206,7 @@ def _feldwerte(context: MCPContext, element: KatplanElement) -> dict:
         "tags": json.loads(element.tags_json or "[]"),
         "adresse": {k: getattr(element, k) or "" for k in _ADRESS_FELDER},
         "geometrie": (element.geometry_json, element.lat, element.lng, element.geo_status),
+        "geometrie_von": (element.geometry_json, element.lat, element.lng, element.geo_status),
         "kapitel_id": element.abschnitt_id, "kapitel_titel": element.abschnitt_id,
         "phasen": {r.phase_id for r in context.db.query(KatplanElementPhase).filter_by(
             org_id=context.org_id, element_id=element.id)},
@@ -262,7 +276,8 @@ _SCHREIB_HINWEIS = (
 @_tool("katplan_element_entwurf_anlegen", (
     "Legt einen KI-Entwurf nur im Arbeitsstand an; menschliche Freigabe nötig. " + _ADRESS_HINWEIS
     + " verorten=true setzt aus der Adresse einen ungeprüften Punkt (ohne Ort wird der Ort der Organisation "
-    "verwendet); geometrie (GeoJSON) hat Vorrang. typ: info, massnahme, kontrollstelle, gefahrenbereich, "
+    "verwendet); mehrdeutige Treffer liefern Kandidaten zur Auswahl mit katplan_elemente_verorten. "
+    "geometrie (GeoJSON) hat Vorrang. typ: info, massnahme, kontrollstelle, gefahrenbereich, "
     "ablauf, ressource, medien, zustaendigkeit, objektverweis." + _SCHREIB_HINWEIS
 ))
 async def katplan_element_entwurf_anlegen(
@@ -323,9 +338,12 @@ async def katplan_element_entwurf_anlegen(
 
 @_tool("katplan_element_entwurf_aendern", (
     "Ändert erlaubte Entwurfsfelder mit Versionsprüfung nur im Arbeitsstand. felder darf enthalten: titel, "
-    "beschreibung, prioritaet, daten, tags, adresse, geometrie, kapitel_id, phasen, quelle_dokument_id, "
-    "quelle_seiten, gueltig_bis, pruefen_am. " + _ADRESS_HINWEIS + " Nur übergebene Adressfelder werden "
-    "geändert. verorten=true setzt aus der (neuen) Adresse einen ungeprüften Punkt. "
+    "beschreibung, prioritaet, daten, tags, adresse, geometrie, geometrie_von, kapitel_id, phasen, quelle_dokument_id, "
+    "quelle_seiten, gueltig_bis, pruefen_am. "
+    'geometrie_von: {"objekt_id": n} oder {"wasserstelle_id": n} übernimmt einen ungeprüften Stammdatenpunkt; '
+    "nicht zusammen mit geometrie. " + _ADRESS_HINWEIS + " Nur übergebene Adressfelder werden "
+    "geändert. verorten=true setzt aus der (neuen) Adresse einen ungeprüften Punkt; mehrdeutige Treffer "
+    "liefern Kandidaten zur Auswahl mit katplan_elemente_verorten. "
     "version aus katplan_element_lesen(fassung=arbeitsstand), Feld version, NICHT element_version_id, verwenden."
     + _SCHREIB_HINWEIS
 ))
@@ -344,6 +362,26 @@ async def katplan_element_entwurf_aendern(context: MCPContext, plan_id: int, ele
     vorher = _feldwerte(context, element)
     verworfen: list[str] = []
     felder = dict(felder)
+    if "geometrie_von" in felder:
+        from app.services.katplan_ziel_service import ziel_laden, ziel_verfuegbar
+
+        referenz = felder.pop("geometrie_von")
+        if "geometrie" in felder:
+            raise ValueError("geometrie_von nicht zusammen mit geometrie angeben.")
+        if not isinstance(referenz, dict) or len(referenz) != 1 or not set(referenz) <= {
+            "objekt_id", "wasserstelle_id",
+        }:
+            raise ValueError("geometrie_von braucht objekt_id oder wasserstelle_id.")
+        key, ziel_id = next(iter(referenz.items()))
+        ziel_typ = key.removesuffix("_id")
+        if type(ziel_id) is not int or not ziel_verfuegbar(context.db, context.org_id, ziel_typ):
+            raise ValueError("Stammdatenziel nicht verfügbar.")
+        ziel = ziel_laden(context.db, context.org_id, ziel_typ, ziel_id)
+        if ziel is None:
+            raise ValueError("Stammdatenziel nicht gefunden.")
+        if ziel.lat is None or ziel.lng is None:
+            raise ValueError("Stammdatenziel hat keine Koordinaten.")
+        felder["geometrie"] = {"type": "Point", "coordinates": [ziel.lng, ziel.lat]}
     if "adresse" in felder:
         # Teiladressen mit dem Bestand zusammenfuehren, damit {"hausnummer": "7"} die Straße nicht loescht.
         bestand = {k: getattr(element, k) or "" for k in _ADRESS_FELDER}
@@ -793,6 +831,85 @@ async def katplan_anhang_aus_quellseite(
     if element is not None:
         antwort.update(_antwort(context, plan, element, geaendert=["anhang"], verworfen=[], pruefen=False))
         antwort["gespeichert"] = not pruefen
+    if pruefen:
+        context.db.rollback()
+    return antwort
+
+
+@_tool("katplan_elemente_verorten", (
+    "Verortet bis zu 30 Elemente im Arbeitsstand. Ohne auswahl nur Ortskandidaten, gespeichert=false. "
+    "element_ids: UUID oder Kennung; sonst Elemente des Plans, nur_ohne_ort filtert vorhandene Geometrien. "
+    "auswahl={element_id: kandidat_id} berechnet Kandidaten neu und setzt gewählte Punkte ungeprüft; "
+    "für bestehende geprüfte Orte ueberschreiben_geprueft=true und nur_ohne_ort=false verwenden. "
+    "weitere zählt nicht bearbeitete Elemente. Nominatim-Suche wird gedrosselt und kann dauern. "
+    "pruefen=true führt einen Trockenlauf mit Rollback aus. Lage vor Ort prüfen und im Editor als geprüft markieren."
+))
+async def katplan_elemente_verorten(
+    context: MCPContext, plan_id: int, element_ids: list[str] | None = None, nur_ohne_ort: bool = True,
+    auswahl: dict[str, str] | None = None, pruefen: bool = False, ueberschreiben_geprueft: bool = False,
+) -> dict[str, object]:
+    from app.services.katplan_typen import ELEMENT_TYPEN
+    from app.services.katplan_verortung_service import kandidaten
+
+    plan = _plan(context, plan_id)
+    if element_ids is not None and (not isinstance(element_ids, list) or len(element_ids) > 30
+                                    or any(not isinstance(e, str) for e in element_ids)):
+        raise ValueError("element_ids muss eine Liste mit maximal 30 UUIDs/Kennungen sein.")
+    if auswahl is not None and (not isinstance(auswahl, dict) or len(auswahl) > 30
+                               or any(not isinstance(k, str) or not isinstance(v, str) for k, v in auswahl.items())):
+        raise ValueError("auswahl muss maximal 30 element_id: kandidat_id enthalten.")
+    # Eine Auswahl muss auch ohne wiederholte element_ids gezielt aufloesbar sein.
+    ids = element_ids if element_ids is not None else list(auswahl) if auswahl is not None else None
+    if ids is not None:
+        elemente = list({e.id: e for e in (_element(context, plan, eid) for eid in ids)}.values())
+        if auswahl is not None:
+            erlaubte = {wert for e in elemente for wert in (e.uuid, e.kennung)}
+            if set(auswahl) - erlaubte:
+                raise ValueError("auswahl enthält Elemente außerhalb von element_ids.")
+        elemente = [e for e in elemente if not nur_ohne_ort or not e.geometry_json]
+        weitere = 0
+    else:
+        query = context.db.query(KatplanElement).filter_by(org_id=context.org_id, plan_id=plan.id)
+        if nur_ohne_ort:
+            query = query.filter((KatplanElement.geometry_json.is_(None)) | (KatplanElement.geometry_json == ""))
+        weitere = max(0, query.count() - 30)
+        elemente = query.order_by(KatplanElement.sort, KatplanElement.id).limit(30).all()
+    org = context.user.org
+    if org is None:
+        raise ValueError("Organisation nicht gefunden.")
+    ergebnisse = []
+    gesetzt = False
+    for element in elemente:
+        version = element.version
+        vorschlaege = await kandidaten(context.db, org, element)
+        eintrag: dict = {
+            "element_id": element.uuid, "kennung": element.kennung, "titel": element.titel,
+            "status": "kandidaten" if vorschlaege else "keine_kandidaten",
+            "kandidaten": vorschlaege, "version": version,
+        }
+        if ELEMENT_TYPEN[element.typ].geometrie not in ("punkt", "beliebig"):
+            eintrag["hinweis"] = "Dieser Typ unterstützt keine Punktgeometrie."
+        kandidat_id = auswahl.get(element.uuid, auswahl.get(element.kennung or "")) if auswahl is not None else None
+        if kandidat_id is not None:
+            treffer = next((k for k in vorschlaege if k["kandidat_id"] == kandidat_id), None)
+            if treffer is None:
+                eintrag.update(status="fehler", hinweis="Unbekannte kandidat_id; Kandidaten erneut lesen.")
+            elif element.geo_status == "geprueft" and not ueberschreiben_geprueft:
+                eintrag.update(status="fehler", hinweis="Geprüfter Ort: ueberschreiben_geprueft=true erforderlich.")
+            else:
+                _pruefe_element_version(element, version)
+                geom = {"type": "Point", "coordinates": [treffer["lng"], treffer["lat"]]}
+                _schreibe_element_werte(context, plan, element, {
+                    "geometry_json": json.dumps(geom), "lat": treffer["lat"], "lng": treffer["lng"],
+                    "geo_status": "ungeprueft",
+                })
+                _element_geaendert(context, plan, element)
+                eintrag.update(status="gesetzt", gesetzt=geom, version=element.version)
+                gesetzt = True
+        ergebnisse.append(eintrag)
+    context.db.flush()
+    antwort = {"ergebnisse": ergebnisse, "weitere": weitere, "gespeichert": gesetzt and not pruefen,
+               "hinweis": "Lage vor Ort prüfen und im Editor als geprüft markieren. " + _HINWEIS}
     if pruefen:
         context.db.rollback()
     return antwort

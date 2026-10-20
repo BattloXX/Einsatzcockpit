@@ -4,6 +4,13 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 
 ## Unreleased
 
+- **Katplan-MCP – Serienverortung**: Bis 30 Elemente mit Ortskandidaten aus verknüpften
+  Objekten/Wasserstellen, Adresse und Titel; begrenztes Suchgebiet um die Organisation,
+  stabile Auswahl-IDs und Duplikatzusammenfassung. Ausgewählte Punkte bleiben ungeprüft,
+  geprüfte Orte sind vor unbeabsichtigtem Überschreiben geschützt; Trockenlauf mit Rollback.
+  Mehrdeutige Adressen werden zur Auswahl angeboten. Entwürfe können Stammdatenpunkte
+  über `geometrie_von` übernehmen.
+
 - **Katplan-MCP – Quellseiten und Bilder**: Bis 50 Quellzuordnungen mit optionalem
   Versionsschutz, Teilfehlern und strengem Rollback. Quellreferenzen enthalten geschützte
   Seiten-, Text- und Vorschau-URLs mit Freigabebindung. Eingebettete Bilder lassen sich

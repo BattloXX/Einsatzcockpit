@@ -237,3 +237,24 @@ Planprotokoll mit Herkunft `mcp`. Ein freigegebener Plan wechselt dabei auf „i
 Beispiel: „Lege im Hochwasserplan unter ‚Problemstellen‘ eine Kontrollstelle ‚Eulentobelbach –
 Durchlass‘ an, Adresse Eulentobel 7, verorten, Phase ‚Stufe 1‘, Kontrollhinweis: Rechen auf
 Verklausung prüfen.“
+
+### Kontrollstellen in Serie verorten
+
+Mit `katplan_elemente_verorten(plan_id=42)` liefert der Assistent Ortskandidaten für
+bis zu 30 Elemente ohne Geometrie. Optional begrenzt `element_ids` die Auswahl auf UUIDs
+oder Kennungen; `weitere` nennt die übrigen Elemente. Vorschläge kommen zuerst aus
+verknüpften Objekten/Wasserstellen, dann aus Adresse und Titel (etwa Brücke oder Bach).
+Nahe Treffer werden zusammengefasst. Ohne `auswahl` wird nichts geändert.
+
+Nach Prüfung setzt `auswahl={"<element_id>": "<kandidat_id>"}` den gewählten Punkt.
+Die Kandidaten werden erneut gesucht; unbekannte IDs ergeben einen Fehler je Element.
+`pruefen=true` zeigt das Ergebnis als Trockenlauf. Vorhandene Orte benötigen
+`nur_ohne_ort=false`, geprüfte Orte zusätzlich `ueberschreiben_geprueft=true`.
+Gesetzte Orte sind immer **ungeprüft**: Lage vor Ort prüfen und im Editor als geprüft
+markieren. Die gedrosselte Adresssuche kann bei vielen Elementen dauern.
+
+Auch `verorten=true` beim Anlegen/Ändern gibt bei mehreren gleichwertigen, mehr als
+200 Meter auseinanderliegenden Treffern Kandidaten zurück und setzt keinen neuen Punkt.
+Mit `felder={"geometrie_von": {"wasserstelle_id": 7}}` oder `{"objekt_id": 7}` beim
+Ändern lässt sich ein vorhandener Stammdatenpunkt der eigenen Organisation übernehmen;
+das geht nicht zusammen mit `geometrie` und verlangt verfügbare Stammdaten mit Koordinaten.

@@ -65,6 +65,7 @@ Schreibende Werkzeuge verlangen `katplan_verwalter`, `katplan_freigeber` oder Ad
 | Werkzeuge | Zugriff |
 |-----------|---------|
 | `katplan_element_entwurf_anlegen`, `katplan_element_entwurf_aendern` | Elemente anlegen/ändern mit Versionsprüfung; Adresse als Objekt (`strasse`, `hausnummer`, `plz`, `ort`), optional `verorten` (Geokodierung, Ort der Organisation als Vorauswahl, immer ungeprüft) |
+| `katplan_elemente_verorten` | Bis 30 Elemente: ohne `auswahl` nur Kandidaten, mit `{element_id: kandidat_id}` ungeprüfte Punkte; `pruefen` rollt zurück, geprüfte Orte brauchen `ueberschreiben_geprueft=true` und `nur_ohne_ort=false` |
 | `katplan_verknuepfung_setzen`, `katplan_verknuepfung_entfernen` | Idempotente Links auf Plan-/Elementebene, orggebundene Ziele, Telefonregel auch in Schreibantworten |
 | `katplan_beziehung_setzen`, `katplan_beziehung_entfernen` | Elementbeziehungen per Kennung im Plan oder UUID innerhalb der Organisation |
 | `katplan_stammdaten_aendern` | Teiländerungen am Plankopf mit `plan_version` aus dem Arbeitsstand, Kontakt nur aus eigener Organisation |
@@ -154,3 +155,14 @@ abgewiesen. Optionales kann mit `null` oder leer geleert werden, Titel und Gefah
 bleiben Pflicht. Die gemeinsame Stammdatenlogik bewahrt Versionsprüfung, Feldprotokoll,
 Wiedervorlage und automatische Überarbeitung auch für die Oberfläche. Ein neuer
 Qualitätshinweis meldet Telefonnummern im Beschreibungstext trotz Kontaktverknüpfung.
+
+Die Serienverortung verwendet verknüpfte Objekte/Wasserstellen, Adressen und Titel.
+Nominatim wird weiterhin gedrosselt; bei 30 Elementen kann der Aufruf entsprechend dauern.
+`weitere` zählt die nicht bearbeiteten Elemente. Die Titelsuche nutzt bei gepflegten
+Organisationskoordinaten eine begrenzte Viewbox (±0,08 Grad).
+`verorten` in Entwurfswerkzeugen setzt bei mehrdeutigen, über 200 m entfernten Treffern
+keinen Punkt; eine einzige passende Hausnummer entscheidet eindeutig.
+`geometrie_von` in `felder` von `katplan_element_entwurf_aendern` übernimmt alternativ
+`{"objekt_id": n}` oder `{"wasserstelle_id": n}` aus verfügbaren Stammdaten der eigenen
+Organisation. Die Modulprüfung entspricht den Verknüpfungszielen; fehlende Koordinaten
+werden abgewiesen. Jede Übernahme bleibt ungeprüft.

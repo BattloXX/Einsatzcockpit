@@ -54,6 +54,15 @@ wird der **Ort der Organisation** ergänzt
 ihn zu pflegen, damit gleichnamige Straßen anderer Gemeinden nicht vorgeschlagen werden.
 Aus der Suche gesetzte Orte gelten immer als **ungeprüft**.
 
+Für die MCP-Serienverortung (`katplan_elemente_verorten`) lassen sich zuerst Kandidaten
+anzeigen und anschließend einzeln auswählen. Das hilft bei Brücken, Durchlässen und
+Bachabschnitten ohne Hausadresse. Die Titelsuche begrenzt ihr Suchgebiet auf ±0,08 Grad
+um die Organisationskoordinaten, wenn beide gesetzt sind: **Einstellungen → Karte /
+Lagekarte.info → Fallback-Breitengrad (lat)** und **Fallback-Längengrad (lng)**
+(`fallback_lat`, `fallback_lng`). Ohne Koordinaten erfolgt die Suche mit dem Organisationsort.
+Mehrdeutige Adressen setzt `verorten` nicht automatisch. Nach Übernahme die Lage vor Ort
+prüfen und im Editor als geprüft markieren.
+
 ## KI-Import
 
 - **Voraussetzungen:** Der zentrale KI-Assistent ist aktiv (`ai_enabled` und API-Schlüssel
