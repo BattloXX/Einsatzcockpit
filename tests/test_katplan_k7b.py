@@ -306,7 +306,8 @@ def test_migration_0298_up_down_sqlite():
             inspector = sa.inspect(conn)
             for model in (KatplanDokument, KatplanDokumentSeite):
                 assert {c["name"]: c["nullable"] for c in inspector.get_columns(model.__tablename__)} == {
-                    c.name: c.nullable for c in model.__table__.columns}
+                    c.name: c.nullable for c in model.__table__.columns
+                    if c.name not in {"ki_status", "ki_fehler", "ki_analysiert_am"}}
                 assert {tuple(i["column_names"]) for i in inspector.get_indexes(model.__tablename__)} == {
                     tuple(c.name for c in i.columns) for i in model.__table__.indexes}
             assert {fk["constrained_columns"][0]: fk["options"].get("ondelete")

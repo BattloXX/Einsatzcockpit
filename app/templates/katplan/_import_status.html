@@ -1,0 +1,15 @@
+<div{% if dokument.ki_status == 'laeuft' %} hx-get="/katastrophenplaene/{{ plan.id }}/quellen/{{ dokument.id }}/ki-status" hx-trigger="every 3s" hx-swap="outerHTML"{% endif %}>
+  {% include "katplan/_design.html" %}
+  {% if ki_enabled and dokument.status == 'fertig' and not dokument.archiviert and dokument.ki_status != 'laeuft' %}
+    <form method="post" action="/katastrophenplaene/{{ plan.id }}/quellen/{{ dokument.id }}/ki-analyse"
+      hx-post="/katastrophenplaene/{{ plan.id }}/quellen/{{ dokument.id }}/ki-analyse" hx-target="#kp-quellen" hx-swap="outerHTML">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <button class="btn btn--sm" type="submit">KI-Vorschläge erzeugen</button>
+    </form>
+  {% endif %}
+  {% if dokument.ki_status %}<span class="kp-badge">KI: {{ dokument.ki_status }}</span>{% endif %}
+  {% if dokument.ki_fehler %}<p class="kp-error">{{ dokument.ki_fehler }}</p>{% endif %}
+  {% if ki_offene.get(dokument.id, 0) %}
+    <a href="/katastrophenplaene/{{ plan.id }}/import?quelle={{ dokument.id }}">{{ ki_offene[dokument.id] }} offene Vorschläge prüfen</a>
+  {% endif %}
+</div>

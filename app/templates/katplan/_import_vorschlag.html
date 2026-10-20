@@ -1,0 +1,75 @@
+<article id="kp-vorschlag-{{ v.id }}" class="kp-box kp-box--prio-{{ v.prioritaet or 2 }}">
+  {% include "katplan/_design.html" %}
+  {% if v.status == 'offen' and plan.status != 'archiviert' %}
+    <div class="kp-box__head">
+      <label class="kp-check"><input type="checkbox" name="ids" value="{{ v.id }}" form="kp-import-sammel"> Für Sammelübernahme auswählen</label>
+      <span class="kp-badge kp-badge--amber">KI-Vorschlag</span>
+    </div>
+    {% if v.begruendung %}<p class="kp-header__sub">{{ v.begruendung }}</p>{% endif %}
+    {% set kapitel = abschnitte|selectattr('titel', 'equalto', v.kapitel)|list %}
+    {% set phase = phasen|selectattr('name', 'equalto', v.phase)|list %}
+    <form method="post" action="/katastrophenplaene/{{ plan.id }}/import/{{ v.id }}/uebernehmen" class="kp-form"
+      hx-post="/katastrophenplaene/{{ plan.id }}/import/{{ v.id }}/uebernehmen" hx-target="#kp-vorschlag-{{ v.id }}" hx-swap="outerHTML"
+      x-data="{ kapitel: '{{ 'neu' if v.kapitel and not kapitel else (kapitel[0].id if kapitel else '') }}', phase: '{{ 'neu' if v.phase and not phase else (phase[0].id if phase else '') }}' }">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <div class="kp-form-grid">
+        <label>Typ <select class="form-control" name="typ">{% for code, typ in typen.items() %}<option value="{{ code }}" {% if v.typ == code %}selected{% endif %}>{{ typ.label }}</option>{% endfor %}</select></label>
+        <label>Titel <input class="form-control" name="titel" maxlength="200" required value="{{ v.titel }}"></label>
+        <label>Priorität <select class="form-control" name="prioritaet"><option value="">Normal (2)</option>{% for prio in [1, 2, 3] %}<option value="{{ prio }}" {% if v.prioritaet == prio %}selected{% endif %}>{{ prio }}</option>{% endfor %}</select></label>
+      </div>
+      <div class="kp-form-grid">
+        <label>Kapitel <select class="form-control" name="abschnitt_id" x-model="kapitel">
+          <option value="">Ohne Kapitel</option>
+          {% for a in abschnitte %}<option value="{{ a.id }}">{{ a.titel }}</option>{% endfor %}
+          <option value="neu">Neues Kapitel</option>
+        </select></label>
+        <label x-show="kapitel === 'neu'">Titel des neuen Kapitels <input class="form-control" name="neues_kapitel" maxlength="200" value="{{ v.kapitel or '' }}"></label>
+        <label>Phase <select class="form-control" name="phase_id" x-model="phase">
+          <option value="">Ohne Phase</option>
+          {% for p in phasen %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+          <option value="neu">Neue Phase</option>
+        </select></label>
+        <label x-show="phase === 'neu'">Name der neuen Phase <input class="form-control" name="neue_phase" maxlength="100" value="{{ v.phase or '' }}"></label>
+      </div>
+      <div class="kp-form-grid">
+        {% for feld, label, maximum in [('strasse', 'Straße', 200), ('hausnummer', 'Hausnummer', 20), ('plz', 'PLZ', 10), ('ort', 'Ort', 100)] %}
+          <label>{{ label }} <input class="form-control" name="{{ feld }}" maxlength="{{ maximum }}" value="{{ v|attr(feld) or '' }}"></label>
+        {% endfor %}
+      </div>
+      <label>Beschreibung (eine Zeile je Absatz, Listenpunkte mit •)
+        <textarea class="form-control" name="beschreibung_text" rows="{{ [3, (texte[v.id].count('\n') + 2)]|max }}">{{ texte[v.id] }}</textarea>
+      </label>
+      {% for k in kontakte[v.id] %}
+        <div class="kp-box kp-box--info">
+          <p>{{ k.name }}{% if k.organisation %} · {{ k.organisation }}{% endif %}{% if k.rolle %} · {{ k.rolle }}{% endif %}{% if k.telefon %} · {{ k.telefon }}{% endif %}</p>
+          {% if k.telefon %}<p class="kp-header__sub">Telefonnummer aus dem Dokument, nicht geprüft und nicht übernommen.</p>{% endif %}
+          {% if k.kontakt_id and k.kontakt_name and kontakt_modul %}
+            <label class="kp-check"><input type="checkbox" name="kontakt_ids" value="{{ k.kontakt_id }}"> mit Kontakt {{ k.kontakt_name }} verknüpfen</label>
+          {% elif kontakt_modul %}
+            <p class="kp-header__sub">Kein eindeutiger Kontakt gefunden. Nach der Übernahme im Editor verknüpfen.</p>
+          {% endif %}
+        </div>
+      {% endfor %}
+      {% if v.objekt_name %}
+        <div class="kp-box kp-box--info">
+          <p>Objekt laut Dokument: {{ v.objekt_name }}</p>
+          {% if v.objekt_id and objekt_recht %}<label class="kp-check"><input type="checkbox" name="objekt_verknuepfen" value="1"> mit gefundenem Objekt verknüpfen</label>{% endif %}
+        </div>
+      {% endif %}
+      <div class="kp-actions">
+        <button class="btn btn--primary" type="submit">Übernehmen</button>
+        <button class="btn" type="submit" form="kp-verwerfen-{{ v.id }}">Verwerfen</button>
+      </div>
+    </form>
+    <form id="kp-verwerfen-{{ v.id }}" method="post" action="/katastrophenplaene/{{ plan.id }}/import/{{ v.id }}/verwerfen"
+      hx-post="/katastrophenplaene/{{ plan.id }}/import/{{ v.id }}/verwerfen" hx-target="#kp-vorschlag-{{ v.id }}" hx-swap="outerHTML" hx-confirm="Vorschlag verwerfen?">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    </form>
+  {% else %}
+    <div class="kp-box__head">
+      <h4>{{ v.titel }}</h4>
+      <span class="kp-badge {{ 'kp-badge--green' if v.status == 'uebernommen' else 'kp-badge--gray' }}">{{ 'übernommen' if v.status == 'uebernommen' else v.status }}</span>
+    </div>
+    {% if v.element_id %}<a href="/katastrophenplaene/{{ plan.id }}/bearbeiten?element={{ v.element_id }}">Element öffnen</a>{% endif %}
+  {% endif %}
+</article>

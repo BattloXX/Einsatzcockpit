@@ -1,0 +1,6 @@
+<div class="kp-box" role="status">
+  {% include "katplan/_design.html" %}
+  {% if fehler %}<p class="kp-error" role="alert">{{ fehler }}</p>
+  {% elif element %}<p>Vorschlag übernommen. <a href="/katastrophenplaene/{{ plan.id }}/bearbeiten?element={{ element.id }}">Element bearbeiten</a></p>
+  {% elif verworfen %}<p>Vorschlag verworfen.</p>{% endif %}
+</div>

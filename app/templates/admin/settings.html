@@ -756,6 +756,21 @@
             Setzt aktivierten KI-Assistenten voraus (zentral oder BYOK).
           </small>
         </div>
+      </div>
+      {% endif %}
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Katastrophenplan-Import</label>
+          <label>
+            <input class="form-control" type="checkbox" name="katplan_ki_import_raw" value="1"
+                   {% if org_settings and org_settings.katplan_ki_import_enabled %}checked{% endif %}>
+            KI-Import für Planquellen aktivieren
+          </label>
+          <small class="form-hint">Vorschläge müssen vor der Anlage bestätigt werden. Setzt den KI-Assistenten voraus.</small>
+        </div>
+      </div>
+      {% if objekt_sys_enabled %}
+      <div class="form-grid">
         <div class="form-group">
           <label>Standard-Betreff für Einsatzinfo an Objektkontakte</label>
           <input type="text" name="objekt_kontakt_info_betreff_raw" maxlength="200" class="form-control" value="{{ org_settings.objekt_kontakt_info_betreff or '' if org_settings else '' }}">

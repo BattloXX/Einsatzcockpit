@@ -3,9 +3,10 @@
   {'label': 'Plan', 'href': '/katastrophenplaene/' ~ plan.id, 'active': false},
   {'label': 'Karte', 'href': '/katastrophenplaene/' ~ plan.id ~ '/karte', 'active': false},
   {'label': 'Versionen', 'href': '/katastrophenplaene/' ~ plan.id ~ '/versionen', 'active': false},
-  {'label': 'Quellen', 'href': '/katastrophenplaene/' ~ plan.id ~ '/quellen', 'active': true}
+  {'label': 'Quellen', 'href': '/katastrophenplaene/' ~ plan.id ~ '/quellen', 'active': not import_aktiv}
 ] %}
 {% if can_edit %}
+  {% set tabs = tabs + [{'label': 'Import', 'href': '/katastrophenplaene/' ~ plan.id ~ '/import', 'active': import_aktiv|default(false)}] %}
   {% set tabs = tabs + [{'label': 'Protokoll', 'href': '/katastrophenplaene/' ~ plan.id ~ '#kp-protokoll', 'active': false}] %}
 {% endif %}
 {{ tabnav(tabs) }}

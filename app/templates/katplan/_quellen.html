@@ -1,4 +1,4 @@
-<div id="kp-quellen" class="kp-quellen" hx-on::before-swap="if ([413, 415, 422].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false; }">
+<div id="kp-quellen" class="kp-quellen" hx-on::before-swap="if ([409, 413, 415, 422].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false; }">
   {% include "katplan/_design.html" %}
   {% if fehler %}<p class="kp-error" role="alert">{{ fehler }}</p>{% endif %}
   {% if hinweis %}<p role="status">{{ hinweis }}</p>{% endif %}

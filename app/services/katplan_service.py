@@ -9,7 +9,14 @@ from typing import Any
 from sqlalchemy.orm import Session, object_session
 
 from app.core.html_utils import sanitize_html
-from app.models.katplan import KatplanAbschnitt, KatplanAenderung, KatplanElement, KatplanLink, KatplanPlan
+from app.models.katplan import (
+    KatplanAbschnitt,
+    KatplanAenderung,
+    KatplanElement,
+    KatplanLink,
+    KatplanPhase,
+    KatplanPlan,
+)
 from app.models.user import User
 from app.services.katplan_ziel_service import _anzeige, ziel_laden
 
@@ -286,3 +293,38 @@ def lege_element_an(db: Session, plan: KatplanPlan, user: User, *, typ: str, tit
     protokolliere(db, plan, "element", "angelegt", user, element_id=element.id)
     markiere_ueberarbeitung(db, plan, user)
     return element
+
+
+def lege_abschnitt_an(db: Session, plan: KatplanPlan, user: User, *, titel: str,
+                      parent_id: int | None = None) -> KatplanAbschnitt:
+    """Gemeinsame Kapitelanlage fuer Editor und Import."""
+    if plan.org_id != user.org_id or plan.status == "archiviert":
+        raise ValueError("Dieser Plan kann nicht bearbeitet werden.")
+    titel = titel.strip()
+    if not titel or len(titel) > 200:
+        raise ValueError("Bitte einen Titel mit höchstens 200 Zeichen eingeben.")
+    if parent_id is not None and not db.query(KatplanAbschnitt).filter_by(
+        id=parent_id, org_id=plan.org_id, plan_id=plan.id,
+    ).first():
+        raise ValueError("Unbekanntes Kapitel.")
+    geschwister = db.query(KatplanAbschnitt).filter_by(
+        org_id=plan.org_id, plan_id=plan.id, parent_id=parent_id,
+    ).all()
+    abschnitt = KatplanAbschnitt(org_id=plan.org_id, plan_id=plan.id, parent_id=parent_id,
+                                titel=titel, sort=max((a.sort for a in geschwister), default=0) + 10)
+    db.add(abschnitt)
+    db.flush()
+    protokolliere(db, plan, "abschnitt", "angelegt", user, neu=titel)
+    markiere_ueberarbeitung(db, plan, user)
+    return abschnitt
+
+
+def lege_phase_an(db: Session, plan: KatplanPlan, user: User, *, name: str) -> KatplanPhase:
+    if plan.org_id != user.org_id or plan.status == "archiviert" or not name.strip() or len(name) > 120:
+        raise ValueError("Ungültige Phase oder archivierter Plan.")
+    phase = KatplanPhase(org_id=plan.org_id, plan_id=plan.id, name=name.strip())
+    db.add(phase)
+    db.flush()
+    protokolliere(db, plan, "phase", "angelegt", user, neu=phase.name)
+    markiere_ueberarbeitung(db, plan, user)
+    return phase

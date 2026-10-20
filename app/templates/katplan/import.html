@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}KI-Import · {{ plan.titel }}{% endblock %}
+{% block head_extra %}{% include "katplan/_design.html" %}{% endblock %}
+{% block content %}
+  <section class="kp-page kp-import">
+    <header class="kp-header"><h1>KI-Import · {{ plan.titel }}</h1></header>
+    {% include "katplan/_quellen_tabs.html" %}
+    <p>Prüfen und bearbeiten Sie jeden Vorschlag. Erst die Bestätigung legt Elemente an.</p>
+    <form method="get" class="kp-filter">
+      <label>Quelle <select class="form-control" name="quelle"><option value="">Alle Quellen</option>{% for q in quellen %}<option value="{{ q.id }}" {% if quelle_filter == q.id %}selected{% endif %}>{{ q.titel }}</option>{% endfor %}</select></label>
+      <label>Status <select class="form-control" name="status">{% for code, label in [('offen', 'Offen'), ('uebernommen', 'Übernommen'), ('verworfen', 'Verworfen'), ('', 'Alle')] %}<option value="{{ code }}" {% if status_filter == code %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+      {% if seite_filter %}<input type="hidden" name="seite" value="{{ seite_filter }}">{% endif %}
+      <button class="btn" type="submit">Filtern</button>
+    </form>
+    {% include "katplan/_import_liste.html" %}
+  </section>
+{% endblock %}

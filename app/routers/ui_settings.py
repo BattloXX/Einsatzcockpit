@@ -298,6 +298,7 @@ def save_org_settings(
     uebung_lis_status_erlaubt_raw: str = Form(""),
     uebung_wordpress_bericht_erlaubt_raw: str = Form(""),
     objekt_geo_match_radius_raw: str = Form(""),
+    katplan_ki_import_raw: str = Form(""),
     objekt_ki_klassifikation_raw: str = Form(""),
     objekt_kontakt_info_betreff_raw: str = Form(""),
     objekt_kontakt_info_template_raw: str = Form(""),
@@ -657,6 +658,8 @@ def save_org_settings(
         org_s.objekt_ki_klassifikation_enabled = objekt_ki_klassifikation_raw in ("1", "true", "on")
         org_s.objekt_kontakt_info_betreff = objekt_kontakt_info_betreff_raw.strip() or None
         org_s.objekt_kontakt_info_template = objekt_kontakt_info_template_raw.strip() or None
+
+    org_s.katplan_ki_import_enabled = katplan_ki_import_raw in ("1", "true", "on")
 
     # Zentrale Kontakte: zweistufig wie die anderen optionalen Module schalten.
     kontakte_system = db.query(SystemSettings).filter(SystemSettings.key == "kontakte_module_enabled").first()
