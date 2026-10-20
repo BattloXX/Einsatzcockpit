@@ -170,6 +170,26 @@ vorbehalten; freigegebene Versionen ändern sich nicht.
   - Sie landen in der Import-Prüfung im Einsatzcockpit; erst ein Mensch übernimmt sie
     als Elemente.
 
+Vor Änderungen das Element mit `katplan_element_lesen(fassung="arbeitsstand")` lesen und
+seinen Sperrzähler `version` übergeben. `element_version_id` bezeichnet ausschließlich eine
+Freigabezeile und dient nicht zum Schreiben. Ein Versionskonflikt nennt die aktuelle Version;
+danach neu lesen. `katplan_lesen` liefert im Arbeitsstand außerdem `plan_version`.
+
+Beide Entwurfswerkzeuge liefern `geaendert`, `verworfen` (Pfad und Grund), `gespeichert`
+und `element` im Leseformat des Arbeitsstands; beim Ändern außerdem `unveraendert`.
+Zahlen in `daten` werden zu Text, etwa `bedarf: [{"bezeichnung": "Sandsäcke", "menge": 500,
+"einheit": "Stk"}]` mit gespeicherter Menge `"500"`. Unbekannte Felder, falsche Typen und
+Begrenzungen werden unter `verworfen` gemeldet. `streng=true` verhindert bei solchen Verlusten
+die gesamte Speicherung. Mit `pruefen=true` wird alles validiert und das vorgeschlagene Element
+zurückgegeben, aber nichts gespeichert (`gespeichert=false`), auch keine neuen Kapitel/Phasen.
+
+Beim Ändern leert `adresse: null` alle vier Adressfelder. Einzelne Werte wie
+`{"hausnummer": null}` oder `{"ort": ""}` leeren nur dieses Feld; fehlende Schlüssel bleiben.
+`geometrie: null` entfernt den Ort. `quelle_dokument_id: null` entfernt die Quelle und auch
+die Seiten, sofern `quelle_seiten` nicht mitgegeben wird. Seitenangaben wie `"3-4,7"` beziehen
+sich auf die angegebene `quelle_dokument_id`. `gueltig_bis`, `pruefen_am` und `kapitel_id`
+lassen sich mit `null` oder `""` leeren.
+
 Neue Elemente sind als „KI-Vorschlag“ gekennzeichnet; alle Änderungen erscheinen im
 Planprotokoll mit Herkunft `mcp`. Ein freigegebener Plan wechselt dabei auf „in Überarbeitung“.
 

@@ -112,7 +112,7 @@ def test_arbeitskopie_planlinks_und_bindung(db, org, daten):
         service.link_anlegen(db, anderer_plan, user, element=element, ziel_typ="kontakt",
                              ziel_id=ziel["kontakt"].id, rolle="info")
     with pytest.raises(ValueError):
-        service.link_entfernen(db, anderer_plan, user, db.query(KatplanLink).one())
+        service.link_entfernen(db, anderer_plan, user, db.query(KatplanLink).filter_by(plan_id=plan.id).one())
     set_tenant_context(db, fremd["kontakt"].org_id)
     assert db.query(KatplanLink).all() == []
 

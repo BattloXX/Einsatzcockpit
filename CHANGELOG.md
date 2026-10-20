@@ -4,6 +4,12 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 
 ## Unreleased
 
+- **Katplan-MCP**: Zahlen in Typdaten bleiben als Text erhalten; verworfene Werte werden
+  mit Pfad gemeldet. Entwürfe liefern das gespeicherte Element und die wirksamen Felder,
+  unterstützen `streng` und einen rückstandsfreien Trockenlauf mit `pruefen`.
+  Adressen, Geometrie und Quellbezug lassen sich explizit leeren; Leseantworten des
+  Arbeitsstands liefern die zum Schreiben benötigte `version` und `plan_version`.
+
 - **Katastrophenpläne**: Arbeitsstand und unveränderliche Freigaben, Kapitel/Phasen,
   Karte, Suche, Kontakte und Anhänge, versionierte PDF-Quellen mit Vergleich,
   KI-Import mit Review, MCP, Qualitätsstatus und PDF-Offlinefassung ergänzt.

@@ -91,12 +91,22 @@ def test_registry_und_http_wrapper(client, inhalte):
     assert set(NAMEN) <= {t["name"] for t in liste}
     neu = _rufe(client, token, NAMEN[0], plan_id=inhalte["plan_id"], typ="info", titel="HTTP Entwurf")
     assert neu["element_id"]
+    assert set(neu["geaendert"]) == {"typ", "titel", "prioritaet"}
     result = _rufe(client, token, NAMEN[1], plan_id=inhalte["plan_id"], element_id=neu["element_id"],
                    version=neu["version"], felder={"titel": "HTTP geändert"})
     assert result["version"] == neu["version"] + 1
     konflikt = _rufe(client, token, NAMEN[1], plan_id=inhalte["plan_id"], element_id=neu["element_id"],
                       version=neu["version"], felder={"titel": "Veraltet"})
     assert "Versionskonflikt" in konflikt["__fehler__"]
+    probe = _rufe(client, token, NAMEN[0], plan_id=inhalte["plan_id"], typ="info", titel="HTTP Probe",
+                  kapitel_titel="HTTP Probe", phasen=["HTTP Probe"], pruefen=True)
+    assert probe["gespeichert"] is False and probe["element"]["chapter"] == "HTTP Probe"
+    streng = _rufe(client, token, NAMEN[1], plan_id=inhalte["plan_id"], element_id=neu["element_id"],
+                   version=result["version"], felder={"daten": {"fremd": 1}}, streng=True)
+    assert "Nicht gespeichert" in streng["__fehler__"]
+    probe = _rufe(client, token, NAMEN[1], plan_id=inhalte["plan_id"], element_id=neu["element_id"],
+                  version=result["version"], felder={"titel": "HTTP Probe geändert"}, pruefen=True)
+    assert probe["gespeichert"] is False and probe["element"]["title"] == "HTTP Probe geändert"
     vorbereitet = _rufe(client, token, NAMEN[2], plan_id=inhalte["plan_id"], dateiname="foto.png")
     assert vorbereitet["upload_token"]
     result = _rufe(client, token, NAMEN[3], plan_id=inhalte["plan_id"], dateiname="foto.png",
@@ -369,3 +379,114 @@ def test_adresse_schema_fuer_ki_clients(client, inhalte):
     assert set(adresse["properties"]) == {"strasse", "hausnummer", "plz", "ort"}
     assert "verorten" in schema["properties"]
     assert "verorten" in tools["katplan_element_entwurf_aendern"]["inputSchema"]["properties"]
+
+
+def lesen_arbeit(inhalte, element_id):
+    return rufe(inhalte, "katplan_element_lesen", "katplan_verwalter", plan_id=inhalte["plan_id"],
+                element_id=element_id, fassung="arbeitsstand")
+
+
+def test_m1_zahlen_verluste_und_streng(inhalte):
+    daten = {"bedarf": [{"bezeichnung": "Sandsäcke", "menge": 500, "einheit": "Stk"}]}
+    neu = schreiben(inhalte, NAMEN[0], typ="ressource", titel="Material", daten=daten)
+    assert neu["gespeichert"] is True and neu["verworfen"] == []
+    assert set(neu["geaendert"]) == {"typ", "titel", "prioritaet", "daten"}
+    assert neu["element"]["daten"]["bedarf"][0]["menge"] == "500"
+    daten_neu = {"bedarf": [{"bezeichnung": "Sandsäcke", "menge": 501, "einheit": "Stk",
+                             "lieferant": "X"}], "lieferant": "X"}
+    angepasst = schreiben(inhalte, NAMEN[1], element_id=neu["element_id"], version=neu["version"],
+                           felder={"daten": daten_neu})
+    assert angepasst["geaendert"] == ["daten"] and len(angepasst["verworfen"]) == 2
+    assert angepasst["element"]["daten"]["bedarf"][0]["menge"] == "501"
+    neu = schreiben(inhalte, NAMEN[1], element_id=neu["element_id"], version=angepasst["version"],
+                     felder={"daten": daten})
+    assert neu["element"] == lesen_arbeit(inhalte, neu["element_id"])
+    daten["lieferant"] = "Unbekannt"
+    daten["bedarf"][0]["lieferant"] = "Unbekannt"
+    with pytest.raises(ValueError, match="Nicht gespeichert:.*daten.bedarf.*daten.lieferant"):
+        schreiben(inhalte, NAMEN[1], element_id=neu["element_id"], version=neu["version"],
+                   felder={"titel": "Verlust", "daten": daten}, streng=True)
+    assert lesen_arbeit(inhalte, neu["element_id"]) == neu["element"]
+    result = schreiben(inhalte, NAMEN[1], element_id=neu["element_id"], version=neu["version"],
+                        felder={"titel": "Material", "daten": daten})
+    assert result["geaendert"] == []
+    assert result["unveraendert"] == ["titel", "daten"]
+    assert set(result["verworfen"]) == {"daten.lieferant: unbekanntes Feld",
+                                         "daten.bedarf[0].lieferant: unbekanntes Feld"}
+    with pytest.raises(ValueError, match="Nicht gespeichert"):
+        schreiben(inhalte, NAMEN[0], typ="ressource", titel="Streng", daten=daten,
+                   kapitel_titel="Nie angelegt", phasen=["Nie angelegt"], streng=True)
+    with TestingSession() as db:
+        set_tenant_context(db, None)
+        assert not db.query(KatplanElement).filter_by(plan_id=inhalte["plan_id"], titel="Streng").count()
+
+
+def test_m1_leeren_und_version(inhalte):
+    neu = schreiben(inhalte, NAMEN[0], typ="kontrollstelle", titel="Adresse",
+                     adresse={"strasse": "Weg", "hausnummer": "7", "ort": "Wolfurt", "plz": "6922"},
+                     geometrie={"type": "Point", "coordinates": [9.7, 47.4]},
+                     quelle_dokument_id=inhalte["dokument_id"], quelle_seiten="1-2")
+    for eingabe, erwartet in [
+        ({"hausnummer": None}, {"strasse": "Weg", "hausnummer": "", "ort": "Wolfurt", "plz": "6922"}),
+        ({"ort": ""}, {"strasse": "Weg", "hausnummer": "", "ort": "", "plz": "6922"}),
+        (None, {"strasse": "", "hausnummer": "", "ort": "", "plz": ""}),
+    ]:
+        gelesen = lesen_arbeit(inhalte, neu["element_id"])
+        assert gelesen["version"] == neu["version"]
+        assert not any(w.startswith(("version:", "element_version_id:", "plan_version_id:"))
+                       for w in gelesen["warnings"])
+        neu = schreiben(inhalte, NAMEN[1], element_id=neu["element_id"], version=gelesen["version"],
+                         felder={"adresse": eingabe})
+        assert neu["element"]["address_parts"] == erwartet
+        assert neu["geaendert"] == ["adresse"]
+    with pytest.raises(ValueError, match=f'hat version {neu["version"]}, übergeben 9999'):
+        schreiben(inhalte, NAMEN[1], element_id=neu["element_id"], version=9999, felder={"titel": "Alt"})
+    neu = schreiben(inhalte, NAMEN[1], element_id=neu["element_id"], version=neu["version"],
+                     felder={"geometrie": None, "quelle_dokument_id": None})
+    assert neu["element"]["geometry"] is None and neu["element"]["geo_status"] == "keine"
+    assert neu["element"]["source_references"] == []
+    with TestingSession() as db:
+        set_tenant_context(db, None)
+        e = db.get(KatplanElement, neu["id"])
+        assert e.geometry_json is e.lat is e.lng is e.quelle_dokument_id is e.quelle_seiten is None
+    kopf = rufe(inhalte, "katplan_lesen", "katplan_verwalter", plan_id=inhalte["plan_id"], fassung="arbeitsstand")
+    with TestingSession() as db:
+        set_tenant_context(db, None)
+        assert kopf["plan_version"] == db.get(KatplanPlan, inhalte["plan_id"]).version
+    freigabe = rufe(inhalte, "katplan_element_lesen", plan_id=inhalte["plan_id"], element_id="KS-01")
+    assert freigabe["version"] is None and "version: nicht vorhanden." not in freigabe["warnings"]
+    assert rufe(inhalte, "katplan_lesen", plan_id=inhalte["plan_id"])["plan_version"] is None
+
+
+def test_m1_trockenlauf_ohne_rueckstaende(inhalte):
+    modelle = (KatplanPlan, KatplanElement, KatplanAbschnitt, KatplanPhase, KatplanElementPhase, KatplanAenderung)
+
+    def zustand():
+        with TestingSession() as db:
+            set_tenant_context(db, None)
+            return [[{c.name: getattr(row, c.name) for c in m.__table__.columns}
+                     for row in db.query(m).filter_by(org_id=inhalte["org_id"]).order_by(m.id)] for m in modelle]
+
+    vorher = zustand()
+    neu = schreiben(inhalte, NAMEN[0], typ="ressource", titel="Probe", kapitel_titel="Probe-Kapitel",
+                     phasen=["Probe-Phase"], daten={"bedarf": [{"menge": 500}]}, pruefen=True)
+    assert neu["gespeichert"] is False
+    assert neu["element"]["title"] == "Probe" and neu["element"]["chapter"] == "Probe-Kapitel"
+    assert neu["element"]["phases"] == ["Probe-Phase"]
+    assert zustand() == vorher
+    gelesen = lesen_arbeit(inhalte, "KS-01")
+    result = schreiben(inhalte, NAMEN[1], element_id="KS-01", version=gelesen["version"],
+                        felder={"titel": "Probe neu", "phasen": ["Neue Probe-Phase"]}, pruefen=True)
+    assert result["gespeichert"] is False and result["element"]["title"] == "Probe neu"
+    assert result["element"]["phases"] == ["Neue Probe-Phase"]
+    assert set(result["geaendert"]) == {"titel", "phasen"}
+    assert zustand() == vorher
+    assert lesen_arbeit(inhalte, "KS-01") == gelesen
+
+
+def test_m1_anlegen_nur_wirksame_eingaben(inhalte):
+    neu = schreiben(inhalte, NAMEN[0], typ="info", titel="Leerwerte", prioritaet=2,
+                     adresse={"ort": " "}, tags=[" "], daten={"unbekannt": 500})
+    assert set(neu["geaendert"]) == {"typ", "titel", "prioritaet"}
+    assert neu["verworfen"] == ["daten.unbekannt: unbekanntes Feld"]
+    assert not any(neu["element"]["address_parts"].values())

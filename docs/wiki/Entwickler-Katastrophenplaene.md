@@ -28,6 +28,20 @@ Alle Tabellen sind `TenantScoped` und in `_TENANT_TABLE_NAMES` eingetragen.
 - Elemente behalten über alle Versionen ihre `element_uuid`. `element_version_id` ist die
   ID der Versionszeile.
 - Optimistisches Sperren über `version` an Plan und Element (`KatplanKonflikt`).
+  MCP ergänzt die Live-Sperrzähler im Arbeitsstand mit einer Query über alle Element-UUIDs;
+  `version` ist in Freigaben `None`, `element_version_id` nur dort gesetzt.
+  `katplan_lesen` liefert im Arbeitsstand zusätzlich `plan_version`.
+- `bereinige_daten(..., verworfen=liste)` meldet Verluste mit vollständigem Datenpfad.
+  Zahlen außer bool werden in Textfeldern und Listeneinträgen als Text übernommen.
+  `validiere_element_felder` reicht diese optionale Liste durch.
+- MCP-Entwurfsantworten enthalten `geaendert`, `unveraendert` (Ändern), `verworfen`,
+  `gespeichert` und das Element nach `flush()` über `fassung_laden`/`element_dict`.
+  `streng` bricht bei Verlusten vor dem Schreiben ab, der Tool-Dekorator rollt zurück.
+  `pruefen` berechnet zuerst die Antwort und rollt danach die gesamte Transaktion zurück;
+  anschließend kann der Dekorator den Audit-Eintrag schreiben und committen.
+  `null`/`""` leeren übergebene Adressfelder, `adresse=null` leert alle vier.
+  `geometrie=null` entfernt Geometrie/Koordinaten (`geo_status="keine"`),
+  `quelle_dokument_id=null` entfernt auch nicht explizit übergebene Quellseiten.
 - Inhaltsänderungen an einem freigegebenen Plan setzen `in_ueberarbeitung`
   (`markiere_ueberarbeitung`).
 

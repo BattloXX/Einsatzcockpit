@@ -148,7 +148,7 @@ def test_freigabe_arbeitsstand_und_format(inhalte):
         assert e == rufe(inhalte, "katplan_element_lesen", rolle, element_id=inhalte["uuid"], **args)
         assert e["title"] == "Wasser Brücke"
         assert e["body"] == "Offener Inhalt\n- Schritt eins\n- Schritt zwei"
-        assert set(e) == {"plan_id", "plan_version_id", "element_id", "element_version_id", "type", "type_label",
+        assert set(e) == {"plan_id", "plan_version_id", "element_id", "element_version_id", "version", "type", "type_label",
                           "kennung", "title", "body", "daten", "priority", "tags", "phases", "chapter", "address", "address_parts",
                           "geometry", "geo_status", "linked_entities", "relations", "attachments", "source_references",
                           "review_status", "vertraulich", "gueltig_bis", "pruefen_am", "warnings"}
