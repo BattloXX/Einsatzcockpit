@@ -8,7 +8,7 @@ Code ab und legt die Pakete fest, die nacheinander umgesetzt werden.
 
 | Thema | Befund | Folge für den Plan |
 |---|---|---|
-| DB-Version | `docker-compose.yml` und CI-Job „Migration (MariaDB)“ nutzen **MariaDB 10.11**. Nur das Testsystem hat 12.3.3. | `VECTOR` nie in der regulären Alembic-Kette. Volltext (InnoDB-FULLTEXT, ab 10.0) ist die Basis für alle Installationen. |
+| DB-Version | Test- und Produktivsystem laufen auf **MariaDB 12.3.3**. Docker, E2E und CI wurden am 2026-10-20 auf `mariadb:12.3` umgestellt (PR #643). Fremdinstallationen können noch auf 10.11 laufen. | Volltext (InnoDB-FULLTEXT) ist die Basis. `VECTOR` (ab 11.7) bleibt trotzdem außerhalb der Alembic-Kette, damit ältere Installationen migrierbar bleiben. Die CI kann die Vektorstufe jetzt direkt gegen 12.3 testen. |
 | Testdatenbank | pytest läuft auf **SQLite** (`Base.metadata.create_all`, je xdist-Worker eine Datei). | `MATCH … AGAINST` gibt es dort nicht. Die Textsuche braucht ein Backend je Dialekt: MariaDB FULLTEXT, SQLite `LIKE`. Echte FULLTEXT-Tests laufen als eigener MariaDB-Test im Migrationsjob. |
 | Vorhandene Suchen | Alle fachlichen Suchen sind `LIKE`-basiert und modulbezogen: `katplan_suche_service.suche`, `objekt_pflege_schreiben_service.suche_objekte`/`filtere_objekte_nach_text`, Wasserstellen- und Straßensperren-Suche in den MCP-Tools. Eine globale Suche gibt es nicht. GSL-Board und Journale filtern clientseitig. | Keine Fachlogik neu bauen. Adapter und Live-Abfragen rufen die vorhandenen Sichtbarkeitsfunktionen auf (`nur_produktiv`, `katplan_zugriff.darf_lesen/sieht_vertraulich`, `sichtbare_plaene`, `sichtbare_quellen`, `visible_incidents_q`). |
 | Mandanten | `app/core/tenant.py` filtert SELECTs fail-closed für Tabellen in `_TENANT_TABLE_NAMES`. Bulk-Update/-Delete wird **nicht** gefiltert. | Neue Suchtabellen mit `org_id` in `_TENANT_TABLE_NAMES` aufnehmen. Zusätzlich in jeder Query explizit `org_id` filtern. Der Worker setzt `set_tenant_context(db, None)` und filtert selbst. |
@@ -24,7 +24,7 @@ Code ab und legt die Pakete fest, die nacheinander umgesetzt werden.
 
 1. **Kein Index für Live-Quellen.** GSL, Einsätze, Sperren und Wasserstellen werden immer live abgefragt. Das Konzept verlangt ohnehin die Live-Verifikation. Ein zusätzlicher Index brächte nur Veralterung und Personendaten-Risiko.
 2. **Keine `search_index_settings`-Tabelle.** Konfiguration über `.env` und `OrgSettings`.
-3. **Vektortabelle außerhalb von Alembic.** Sie wird erst in S8 per CLI/Worker idempotent angelegt, wenn Flag und DB-Fähigkeit vorliegen. Name `search_vector_<modellkennung>`. Die Alembic-Kette bleibt auf 10.11 lauffähig.
+3. **Vektortabelle außerhalb von Alembic.** Sie wird erst in S8 per CLI/Worker idempotent angelegt, wenn Flag und DB-Fähigkeit vorliegen. Name `search_vector_<modellkennung>`. Die Alembic-Kette bleibt auf älteren Versionen lauffähig; in Test, Produktion und CI (12.3) ist die Fähigkeit immer vorhanden.
 4. **Kein Cursor.** Ergebnisliste auf 50 begrenzt (Konzept erlaubt das für den MVP).
 5. **Kontakte nicht in der universellen Suche** (weder UI noch MCP). Dafür gibt es die Kontaktsuche mit eigener Berechtigung.
 6. **Historische Einsätze** zunächst nur live über `visible_incidents_q` (Stichwort, Adresse, Einsatzbericht-Text ohne Personen). Ein Index folgt nur bei Bedarf.
@@ -184,9 +184,9 @@ Nicht Teil dieses Plans. Erst nach S8 und eigener Freigabe.
 | Paket | PR | Stand |
 |---|---|---|
 | S0 Plan/ADR | – | dieser Plan |
-| S1 | (dieser PR) | umgesetzt: Migration 0300, Modelle, Flags, Textsuche; MariaDB-10.11-Probe lokal ok |
-| S2 | – | offen |
-| S3 | – | offen |
+| S1 | #642 | umgesetzt: Migration 0300, Modelle, Flags, Textsuche; MariaDB-10.11-Probe lokal ok |
+| S2 | #644 | umgesetzt: 4 Adapter, Indexer mit Hash, CLI `suche-neuaufbau` |
+| S3 | (dieser PR) | umgesetzt: after_flush-Erfassung, Leader-Worker mit Lease/Retry, Auffächern, stündlicher Abgleich; MariaDB-12.3-Probe ok |
 | S4 | – | offen |
 | S5 | – | offen |
 | S6 | – | offen |

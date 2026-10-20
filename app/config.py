@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     # Zentrale Suche: Volltext aktiv, semantische Stufe vorerst deaktiviert.
     SEARCH_ENABLED: bool = True
     SEARCH_INDEX_WORKER_ENABLED: bool = True
+    SEARCH_ABGLEICH_MINUTEN: int = 60
     SEARCH_MCP_ENABLED: bool = True
     SEARCH_SEMANTIC_ENABLED: bool = False
 
