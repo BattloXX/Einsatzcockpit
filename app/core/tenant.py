@@ -141,6 +141,10 @@ _TENANT_TABLE_NAMES: frozenset[str] = frozenset({
     "katplan_element_phase",
     "katplan_aenderung",
     "katplan_pruefung",
+    # Zentrale Suche
+    "search_document",
+    "search_chunk",
+    "search_outbox",
     # Planspiele
     "planspiel_run",
     "planspiel_vorlage",
@@ -302,6 +306,7 @@ def _add_tenant_filter(execute_state) -> None:
     from app.models.incident import Incident, IncidentOrg
     from app.models.major_incident import IncidentSite, MajorIncident
     from app.models.master import VehicleMaster
+    from app.models.suche import SearchChunk, SearchDocument, SearchOutbox
     from app.models.user import AuditLog, User
 
     _org_id = org_id  # lokale Kopie für Closure
@@ -338,6 +343,16 @@ def _add_tenant_filter(execute_state) -> None:
             AuditLog,
             lambda c: c.org_id == _org_id,
             include_aliases=True,
+        ),
+        # Zentrale Suche: explizit nicht-nullbare org_id statt TenantScoped-Mixin.
+        with_loader_criteria(
+            SearchDocument, lambda c: c.org_id == _org_id, include_aliases=True,
+        ),
+        with_loader_criteria(
+            SearchChunk, lambda c: c.org_id == _org_id, include_aliases=True,
+        ),
+        with_loader_criteria(
+            SearchOutbox, lambda c: c.org_id == _org_id, include_aliases=True,
         ),
         # GSL/Großschadenslage (SEC-1): kein Kollaborations-Modell wie bei Incident/
         # IncidentOrg — org_id ist ein einfacher, nicht-nullbarer FK, daher genügt

@@ -241,6 +241,7 @@ from app.models.sms import (
     SmsLog,
 )
 from app.models.sso import OrgSsoConfig, OrgSsoGroupMap
+from app.models.suche import SearchChunk, SearchDocument, SearchOutbox
 from app.models.teams_bot import AlarmToken, TeamsAlarmConfig, TeamsCardPost, TeamsChannelBinding
 from app.models.teilnahme import Funktion, Teilnahme, Termin, TerminGruppe  # noqa: F401
 from app.models.uas import (
@@ -283,6 +284,9 @@ from app.models.weather_alert import WeatherAlertLog, WeatherAlertRule, WeatherA
 from app.models.wordpress_report import WordPressReportConfig
 
 __all__ = [
+    "SearchChunk",
+    "SearchDocument",
+    "SearchOutbox",
     "ApiMessage",
     "ApiMessageRecipient",
     "OrgSsoConfig",

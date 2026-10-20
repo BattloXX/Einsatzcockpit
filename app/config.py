@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     TESTING: bool = False
     TEST_SYSTEM: bool = False
 
+    # Zentrale Suche: Volltext aktiv, semantische Stufe vorerst deaktiviert.
+    SEARCH_ENABLED: bool = True
+    SEARCH_INDEX_WORKER_ENABLED: bool = True
+    SEARCH_MCP_ENABLED: bool = True
+    SEARCH_SEMANTIC_ENABLED: bool = False
+
     # Slow-Query-Logging: Queries oberhalb dieser Schwelle (ms) landen als
     # WARNING im Log ("einsatzleiter.slow_query") — Messbasis für gezielte
     # Index-/N+1-Optimierungen. 0 = deaktiviert.
