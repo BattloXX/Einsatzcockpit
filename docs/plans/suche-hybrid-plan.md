@@ -185,8 +185,8 @@ Nicht Teil dieses Plans. Erst nach S8 und eigener Freigabe.
 |---|---|---|
 | S0 Plan/ADR | – | dieser Plan |
 | S1 | #642 | umgesetzt: Migration 0300, Modelle, Flags, Textsuche; MariaDB-10.11-Probe lokal ok |
-| S2 | (dieser PR) | umgesetzt: 4 Adapter, Indexer mit Hash, CLI `suche-neuaufbau` |
-| S3 | – | offen |
+| S2 | #644 | umgesetzt: 4 Adapter, Indexer mit Hash, CLI `suche-neuaufbau` |
+| S3 | (dieser PR) | umgesetzt: after_flush-Erfassung, Leader-Worker mit Lease/Retry, Auffächern, stündlicher Abgleich; MariaDB-12.3-Probe ok |
 | S4 | – | offen |
 | S5 | – | offen |
 | S6 | – | offen |

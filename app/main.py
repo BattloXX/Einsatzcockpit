@@ -134,6 +134,9 @@ from app.routers import (
     ws,
 )
 from app.services.leader_lock import LeaderLock
+from app.services.suche.outbox import registriere_listener
+
+registriere_listener()
 
 logger = logging.getLogger("einsatzleiter")
 
@@ -237,6 +240,7 @@ def _start_background_loops() -> list[asyncio.Task]:
     from app.services.road_closure_notification_loop import road_closure_notification_loop
     from app.services.sms_dispatch_service import einsatzinfo_nachversand_loop
     from app.services.sms_log_retention import sms_log_retention_loop
+    from app.services.suche.outbox import suche_outbox_loop
     from app.services.task_reminder import task_reminder_loop
     from app.services.vehicle_position_retention import vehicle_position_retention_loop
     from app.services.verleih_erinnerung import verleih_erinnerung_loop
@@ -245,7 +249,7 @@ def _start_background_loops() -> list[asyncio.Task]:
 
     loops = (
         autoclose_loop(), _breathing_watchdog_loop(), task_reminder_loop(), print_job_watchdog_loop(),
-        print_agent_sweep_loop(),
+        print_agent_sweep_loop(), suche_outbox_loop(),
         gsl_lagemeldung_reminder_loop(), gk_versand_aufraeum_loop(), verleih_erinnerung_loop(), probe_erinnerung_loop(),
         weather_retention_loop(), ai_log_retention_loop(), mcp_upload_retention_loop(),
         sms_log_retention_loop(), einsatzinfo_nachversand_loop(), alarm_outbox_loop(), road_closure_notification_loop(),
