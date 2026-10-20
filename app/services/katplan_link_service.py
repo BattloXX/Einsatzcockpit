@@ -31,8 +31,9 @@ def _pruefe_bindung(plan: KatplanPlan, element: KatplanElement | None = None) ->
         raise ValueError("Element gehört nicht zu diesem Plan.")
 
 
-def _geaendert(db: Session, plan: KatplanPlan, user: User, element: KatplanElement | None) -> None:
-    markiere_ueberarbeitung(db, plan, user)
+def _geaendert(db: Session, plan: KatplanPlan, user: User, element: KatplanElement | None,
+               *, quelle: str = "ui") -> None:
+    markiere_ueberarbeitung(db, plan, user, quelle=quelle)
     plan.version += 1
     plan.aktualisiert_am = _utcnow()
     plan.aktualisiert_von_id = user.id
@@ -43,7 +44,7 @@ def _geaendert(db: Session, plan: KatplanPlan, user: User, element: KatplanEleme
 
 
 def link_anlegen(db: Session, plan: KatplanPlan, user: User, *, element: KatplanElement | None = None,
-                 ziel_typ: str, ziel_id: int, rolle: str, hinweis: str = "") -> KatplanLink:
+                 ziel_typ: str, ziel_id: int, rolle: str, hinweis: str = "", quelle: str = "ui") -> KatplanLink:
     _pruefe_bindung(plan, element)
     if ziel_typ not in _ZIELE or rolle not in KATPLAN_LINK_ROLLEN:
         raise ValueError("Unbekannter Zieltyp oder unbekannte Rolle.")
@@ -62,25 +63,26 @@ def link_anlegen(db: Session, plan: KatplanPlan, user: User, *, element: Katplan
     db.add(link)
     db.flush()
     protokolliere(db, plan, "link", "verknuepft", user, feld=ziel_typ,
-                  neu=_anzeige(ziel)[0], element_id=element_id)
-    _geaendert(db, plan, user, element)
+                  neu=_anzeige(ziel)[0], element_id=element_id, quelle=quelle)
+    _geaendert(db, plan, user, element, quelle=quelle)
     return link
 
 
-def link_entfernen(db: Session, plan: KatplanPlan, user: User, link: KatplanLink) -> None:
+def link_entfernen(db: Session, plan: KatplanPlan, user: User, link: KatplanLink, *, quelle: str = "ui") -> None:
     _pruefe_bindung(plan)
     if link.org_id != plan.org_id or link.plan_id != plan.id:
         raise ValueError("Verknüpfung gehört nicht zu diesem Plan.")
     element = db.query(KatplanElement).filter_by(id=link.element_id, org_id=plan.org_id, plan_id=plan.id).first()
     titel = _anzeige(ziel_laden(db, plan.org_id, link.ziel_typ, link.ziel_id))[0]
-    protokolliere(db, plan, "link", "entknuepft", user, feld=link.ziel_typ, alt=titel, element_id=link.element_id)
+    protokolliere(db, plan, "link", "entknuepft", user, feld=link.ziel_typ, alt=titel,
+                  element_id=link.element_id, quelle=quelle)
     db.delete(link)
     db.flush()
-    _geaendert(db, plan, user, element)
+    _geaendert(db, plan, user, element, quelle=quelle)
 
 
 def relation_anlegen(db: Session, plan: KatplanPlan, user: User, von_element: KatplanElement,
-                     zu_element_uuid: str, art: str, hinweis: str = "") -> KatplanRelation:
+                     zu_element_uuid: str, art: str, hinweis: str = "", *, quelle: str = "ui") -> KatplanRelation:
     _pruefe_bindung(plan, von_element)
     if art not in KATPLAN_RELATION_ARTEN or len(hinweis) > 300:
         raise ValueError("Ungültige Beziehungsart oder zu langer Hinweis.")
@@ -94,22 +96,24 @@ def relation_anlegen(db: Session, plan: KatplanPlan, user: User, von_element: Ka
                                zu_element_uuid=zu_element_uuid, art=art, hinweis=hinweis)
     db.add(relation)
     db.flush()
-    protokolliere(db, plan, "relation", "verknuepft", user, feld=art, neu=ziel.titel, element_id=von_element.id)
-    _geaendert(db, plan, user, von_element)
+    protokolliere(db, plan, "relation", "verknuepft", user, feld=art, neu=ziel.titel,
+                  element_id=von_element.id, quelle=quelle)
+    _geaendert(db, plan, user, von_element, quelle=quelle)
     return relation
 
 
-def relation_entfernen(db: Session, plan: KatplanPlan, user: User, relation: KatplanRelation) -> None:
+def relation_entfernen(db: Session, plan: KatplanPlan, user: User, relation: KatplanRelation,
+                       *, quelle: str = "ui") -> None:
     _pruefe_bindung(plan)
     if relation.org_id != plan.org_id or relation.plan_id != plan.id:
         raise ValueError("Beziehung gehört nicht zu diesem Plan.")
     element = db.query(KatplanElement).filter_by(id=relation.von_element_id, org_id=plan.org_id,
                                                plan_id=plan.id).one()
     protokolliere(db, plan, "relation", "entknuepft", user, feld=relation.art,
-                  alt=relation.zu_element_uuid, element_id=element.id)
+                  alt=relation.zu_element_uuid, element_id=element.id, quelle=quelle)
     db.delete(relation)
     db.flush()
-    _geaendert(db, plan, user, element)
+    _geaendert(db, plan, user, element, quelle=quelle)
 
 
 def link_ansicht(db: Session, link: KatplanLink, *, voll: bool,

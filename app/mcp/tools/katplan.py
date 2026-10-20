@@ -119,9 +119,7 @@ async def katplan_lesen(context: MCPContext, plan_id: int, fassung: str = "freig
         warnings.append("Elemente auf 200 begrenzt; katplan_elemente mit Filtern verwenden.")
     return {"plan_id": plan.id, "plan_version_id": vid, "fassung": fassung,
             "plan_version": plan.version if vid is None else None,
-            "kopf": {**{k: kopf.get(k) for k in ("uuid", "titel", "gefahrenarten", "geltungsbereich",
-                                                 "verantwortliche_stelle", "wiedervorlage_am")},
-                     "body": daten.text(kopf.get("beschreibung_html"))},
+            "kopf": daten.kopf_ansicht(kopf),
             "kapitelbaum": kapitel, "phasen": kopf.get("phasen", []),
             "links": daten.link_ansichten(context.db, context.user, kopf.get("links", [])),
             "anhaenge": daten.anhang_ansichten(context.user, kopf.get("anhaenge", []), vid),

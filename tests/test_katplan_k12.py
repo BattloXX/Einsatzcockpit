@@ -55,6 +55,14 @@ def test_jeder_qs_code_einzeln(umgebung, code, monkeypatch):
         elif code == "link_ziel_fehlt":
             db.add(KatplanLink(org_id=plan.org_id, plan_id=plan.id, element_id=e.id,
                               ziel_typ="kontakt", ziel_id=9999999, rolle="zustaendig"))
+        elif code == "telefon_im_text":
+            kontakt = Kontakt(org_id=plan.org_id, anzeigename="Kontakt")
+            db.add(kontakt)
+            db.flush()
+            db.add(KatplanLink(org_id=plan.org_id, plan_id=plan.id, element_id=e.id,
+                              ziel_typ="kontakt", ziel_id=kontakt.id, rolle="info"))
+            e.beschreibung_html = "<p>Telefon +43 555 123456</p>"
+            monkeypatch.setattr(qs, "ziel_verfuegbar", lambda *args: True)
         elif code == "kontakt_geaendert":
             kontakt = Kontakt(org_id=plan.org_id, anzeigename="Alter Name")
             db.add(kontakt)

@@ -161,6 +161,28 @@ vorbehalten; freigegebene Versionen ändern sich nicht.
   `pruefen_am`. Eine Teiladresse wie `{"adresse": {"hausnummer": "9"}}` ändert nur dieses Feld;
   `verorten=true` setzt den Punkt aus der Adresse neu. Herkunft, Vertraulichkeit und
   Ortsprüfung lassen sich nicht ändern.
+- `katplan_verknuepfung_setzen` / `katplan_verknuepfung_entfernen`: Stammdatenziele
+  (`kontakt`, `kontakt_organisation`, `objekt`, `fahrzeug`, `wasserstelle`) am Element oder,
+  ohne `element_id`, am Plan verknüpfen. Kontakte vorher über `kontakt_suchen` bzw.
+  `kontakt_organisation_suchen` finden. Telefonnummern über Kontakte pflegen und nicht
+  in die Beschreibung kopieren; doppelte Telefonnummern meldet die Qualitätsprüfung.
+  Gleiches Ziel mit gleicher Rolle wird wiederverwendet (`bereits_vorhanden`), ein
+  übergebener abweichender Hinweis aktualisiert. Ohne Rolle entfernt das Entfernen alle
+  Rollen für dieses Ziel.
+- `katplan_beziehung_setzen` / `katplan_beziehung_entfernen`: Elemente verbinden; Kennungen
+  gelten im selben Plan, UUIDs auch planübergreifend innerhalb der Organisation.
+  Arten: `siehe_auch`, `folgt_auf`, `abhaengig_von`, `eskaliert_zu`. Ohne `art` werden beim
+  Entfernen alle Beziehungen zum Ziel entfernt. Setzen ist idempotent.
+- `katplan_stammdaten_aendern`: `version` aus `katplan_lesen(fassung="arbeitsstand")["plan_version"]`
+  verwenden. `felder` darf `titel`, `beschreibung` (Text), `gefahrenarten` (Liste von Codes),
+  `geltungsbereich`, `verantwortliche_stelle`, `verantwortlich_kontakt_id` und
+  `wiedervorlage_am` (YYYY-MM-DD) enthalten. Nur übergebene Felder ändern sich; `null` oder
+  `""` leert optionale Felder. Titel und Gefahrenarten sind Pflicht; unbekannte Felder sind
+  Fehler. Die Antwort enthält den Kopf als `plan`, die neue `plan_version`, `geaendert`,
+  `unveraendert`, `verworfen` und `gespeichert`. Der Status wird automatisch zur
+  Überarbeitung, die Freigabe bleibt beim Menschen.
+  Verknüpfungen und Beziehungen setzen sowie Stammdaten ändern unterstützen
+  `pruefen=true` als Trockenlauf mit Rollback; Stammdaten akzeptieren auch `streng=true`.
 - `katplan_anhang_upload_vorbereiten` / `katplan_anhang_uebergeben`: Foto oder PDF an Plan oder
   Element. Kleine Dateien per `inhalt_base64` oder als ChatGPT-Anhang (`datei.download_url`),
   größere über den Upload-Link.

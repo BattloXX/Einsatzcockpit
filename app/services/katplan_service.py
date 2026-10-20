@@ -3,6 +3,7 @@
 import json
 import re
 from collections.abc import Iterator
+from datetime import date
 from html.parser import HTMLParser
 from typing import Any
 
@@ -10,13 +11,16 @@ from sqlalchemy.orm import Session, object_session
 
 from app.core.html_utils import sanitize_html
 from app.models.katplan import (
+    KATPLAN_GEFAHRENARTEN,
     KatplanAbschnitt,
     KatplanAenderung,
     KatplanElement,
     KatplanLink,
     KatplanPhase,
     KatplanPlan,
+    _utcnow,
 )
+from app.models.kontakt import Kontakt
 from app.models.user import User
 from app.services.katplan_ziel_service import _anzeige, ziel_laden
 
@@ -365,3 +369,58 @@ def validiere_element_felder(typ: str, *, titel: str, prioritaet: int, daten: di
                  lat=lat, lng=lng,
                  geo_status=("geprueft" if geo_geprueft else "ungeprueft") if geom else "keine")
     return werte
+
+
+def validiere_stammdaten(*, titel: str, gefahrenarten: list[str], beschreibung_html: str = "",
+                         geltungsbereich: str = "", verantwortliche_stelle: str = "",
+                         wiedervorlage_am: str = "") -> dict:
+    """Gemeinsame Formularvalidierung; Fehlerprioritaet der Oberflaeche beibehalten."""
+    fehler = None
+    termin = None
+    try:
+        termin = date.fromisoformat(wiedervorlage_am) if wiedervorlage_am else None
+    except ValueError:
+        fehler = "Bitte ein gültiges Wiedervorlagedatum eingeben."
+    if not titel.strip() or len(titel.strip()) > 200:
+        fehler = "Bitte einen Titel mit höchstens 200 Zeichen eingeben."
+    if not gefahrenarten or any(code not in KATPLAN_GEFAHRENARTEN for code in gefahrenarten):
+        fehler = "Bitte mindestens eine gültige Gefahrenart auswählen."
+    if len(geltungsbereich) > 300 or len(verantwortliche_stelle) > 200:
+        fehler = "Geltungsbereich (300) oder verantwortliche Stelle (200) ist zu lang."
+    if fehler:
+        raise ValueError(fehler)
+    return {"titel": titel.strip(), "gefahrenarten_json": json.dumps(sorted(set(gefahrenarten))),
+            "beschreibung_html": bereinige_beschreibung(beschreibung_html),
+            "geltungsbereich": geltungsbereich.strip() or None,
+            "verantwortliche_stelle": verantwortliche_stelle.strip() or None,
+            "wiedervorlage_am": termin}
+
+
+def stammdaten_aendern(db: Session, plan: KatplanPlan, user: User, *, version: int,
+                      werte: dict, quelle: str = "ui") -> list[str]:
+    """Validierte Stammdaten mit Versionsschutz und Feldprotokoll schreiben."""
+    pruefe_version(plan, version)
+    if plan.org_id != user.org_id or plan.status == "archiviert":
+        raise ValueError("Dieser Plan kann nicht bearbeitet werden.")
+    erlaubt = {"titel", "gefahrenarten_json", "beschreibung_html", "geltungsbereich",
+               "verantwortliche_stelle", "wiedervorlage_am", "verantwortlich_kontakt_id"}
+    if set(werte) - erlaubt:
+        raise ValueError("Nicht erlaubte Stammdatenfelder.")
+    kontakt_id = werte.get("verantwortlich_kontakt_id")
+    if kontakt_id is not None and not db.query(Kontakt).filter_by(org_id=plan.org_id, id=kontakt_id).first():
+        raise ValueError("Kontakt nicht verfügbar.")
+    geaendert = []
+    for feld, wert in werte.items():
+        alt = getattr(plan, feld)
+        if alt != wert:
+            if feld == "wiedervorlage_am":
+                plan.wiedervorlage_erinnert_am = None
+            setattr(plan, feld, wert)
+            geaendert.append(feld)
+            protokolliere(db, plan, "plan", "geaendert", user, feld=feld,
+                          alt=str(alt) if alt is not None else None,
+                          neu=str(wert) if wert is not None else None, quelle=quelle)
+    markiere_ueberarbeitung(db, plan, user, quelle=quelle)
+    plan.version += 1
+    plan.aktualisiert_am, plan.aktualisiert_von_id = _utcnow(), user.id
+    return geaendert

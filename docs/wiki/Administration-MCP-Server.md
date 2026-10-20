@@ -59,6 +59,9 @@ Schreibende Werkzeuge verlangen `katplan_verwalter`, `katplan_freigeber` oder Ad
 | Werkzeuge | Zugriff |
 |-----------|---------|
 | `katplan_element_entwurf_anlegen`, `katplan_element_entwurf_aendern` | Elemente anlegen/ändern mit Versionsprüfung; Adresse als Objekt (`strasse`, `hausnummer`, `plz`, `ort`), optional `verorten` (Geokodierung, Ort der Organisation als Vorauswahl, immer ungeprüft) |
+| `katplan_verknuepfung_setzen`, `katplan_verknuepfung_entfernen` | Idempotente Links auf Plan-/Elementebene, orggebundene Ziele, Telefonregel auch in Schreibantworten |
+| `katplan_beziehung_setzen`, `katplan_beziehung_entfernen` | Elementbeziehungen per Kennung im Plan oder UUID innerhalb der Organisation |
+| `katplan_stammdaten_aendern` | Teiländerungen am Plankopf mit `plan_version` aus dem Arbeitsstand, Kontakt nur aus eigener Organisation |
 | `katplan_anhang_upload_vorbereiten`, `katplan_anhang_uebergeben` | Fotos/PDFs über die Anhangspipeline (MIME-Prüfung, Quota, Vorschaubild) |
 | `katplan_vorschlaege_aus_dokument` | Strukturierte Vorschläge zu einer Quellseite in die Import-Prüfung (keine Elemente) |
 
@@ -135,3 +138,11 @@ Bei Problemen zuerst prüfen: HTTPS und `PUBLIC_BASE_URL`, die beiden MCP-Flags,
 ### Dokument-Download
 
 `objekt_dokument_herunterladen` liefert für ein Objektdokument (jede Version, auch wartende Dokumente und archivierte Objekte; optional nur eine Einzelseite) einen signierten Link `GET /api/mcp/downloads/{token}`. Der Link braucht keine Sitzung, ist 15 Minuten gültig und im Browser klickbar. Beim Abruf werden Benutzer, Rolle `objekt_verwalter`, MCP- und Objekt-Modul erneut geprüft – ein Rechteentzug wirkt also sofort, auch auf schon ausgegebene Links. Die Antwort ist `Cache-Control: no-store`. Das Ausstellen eines Links wird als `objekt.mcp_download_vorbereitet` im Audit-Log festgehalten. Für den Pfad ist im Reverse-Proxy keine Sonderkonfiguration nötig.
+
+Verknüpfungen und Beziehungen setzen sowie Plan-Stammdaten ändern unterstützen
+`pruefen=true` (Rollback, `gespeichert=false`). Die Kopfdatenantwort enthält `plan`,
+`plan_version`, `geaendert`, `unveraendert` und `verworfen`; unbekannte Felder werden
+abgewiesen. Optionales kann mit `null` oder leer geleert werden, Titel und Gefahrenarten
+bleiben Pflicht. Die gemeinsame Stammdatenlogik bewahrt Versionsprüfung, Feldprotokoll,
+Wiedervorlage und automatische Überarbeitung auch für die Oberfläche. Ein neuer
+Qualitätshinweis meldet Telefonnummern im Beschreibungstext trotz Kontaktverknüpfung.

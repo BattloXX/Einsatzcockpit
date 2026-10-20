@@ -1,6 +1,7 @@
 """Dynamische Qualitaetshinweise ausschliesslich fuer den Arbeitsstand."""
 
 import json
+import re
 from collections import Counter
 from datetime import date
 
@@ -13,6 +14,7 @@ from app.services.katplan_quelle_service import _gruppe
 from app.services.katplan_ziel_service import ziel_verfuegbar
 
 LABELS = {
+    "telefon_im_text": "Telefonnummer im Text trotz verknüpftem Kontakt",
     "ohne_geometrie": "ohne Geometrie", "geo_ungeprueft": "Ort ungeprüft",
     "link_ziel_fehlt": "Verknüpfungsziel fehlt", "kontakt_geaendert": "Kontakt seit Freigabe geändert",
     "pruefen_faellig": "Prüfung fällig", "gueltig_abgelaufen": "Gültigkeit abgelaufen",
@@ -21,9 +23,20 @@ LABELS = {
 
 
 SYMBOLE = {
+    "telefon_im_text": "☎",
     "ohne_geometrie": "📍", "geo_ungeprueft": "❔", "link_ziel_fehlt": "🔗", "kontakt_geaendert": "👤",
     "pruefen_faellig": "⏰", "gueltig_abgelaufen": "⌛", "ki_ungeprueft": "🤖", "quelle_neuer": "📄",
 }
+
+
+_TELEFON = re.compile(r"(?<![\d.])(?:\+|00)?\d[\d /-]{6,}\d")
+_DATUM = re.compile(r"\d{1,4}[-./]\d{1,2}[-./]\d{1,4}")
+
+
+def _hat_telefon(text: str) -> bool:
+    """Mindestens acht Ziffern, keine Datumsangabe."""
+    return any(sum(c.isdigit() for c in m.group()) >= 8 and not _DATUM.fullmatch(m.group().strip())
+               for m in _TELEFON.finditer(text))
 
 
 def freigabe_links(db: Session, plan: KatplanPlan) -> dict[str, list[dict]]:
@@ -50,6 +63,12 @@ def element_hinweise(db: Session, plan: KatplanPlan, element: KatplanElement, *,
     if any(link_ansicht(db, link, voll=False)["fehlt"] or not ziel_verfuegbar(
         db, plan.org_id, link.ziel_typ) for link in links):
         codes.append("link_ziel_fehlt")
+    from app.services.katplan_mcp_service import text
+
+    if any(link.ziel_typ in ("kontakt", "kontakt_organisation") for link in links) and _hat_telefon(
+        text(element.beschreibung_html) or "",
+    ):
+        codes.append("telefon_im_text")
     if version_links is None:
         version_links = freigabe_links(db, plan)
     roh = version_links.get(element.uuid)

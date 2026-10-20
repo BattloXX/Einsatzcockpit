@@ -2090,3 +2090,55 @@ async def katplan_vorschlaege_aus_dokument(plan_id: int, dokument_id: int, seite
                                           ctx: Context | None = None) -> dict[str, object]:
     return await _call_registered_tool("katplan_vorschlaege_aus_dokument", plan_id=plan_id,
                                        dokument_id=dokument_id, seiten_nr=seiten_nr, elemente=elemente)
+
+
+@server.tool(name="katplan_verknuepfung_setzen", description=TOOLS["katplan_verknuepfung_setzen"].description)
+async def katplan_verknuepfung_setzen(
+    plan_id: int, ziel_typ: str, ziel_id: int, rolle: str = "info", element_id: str | None = None,
+    hinweis: str | None = None, pruefen: bool = False, ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "katplan_verknuepfung_setzen", plan_id=plan_id, ziel_typ=ziel_typ, ziel_id=ziel_id,
+        rolle=rolle, element_id=element_id, hinweis=hinweis, pruefen=pruefen,
+    )
+
+
+@server.tool(name="katplan_verknuepfung_entfernen", description=TOOLS["katplan_verknuepfung_entfernen"].description)
+async def katplan_verknuepfung_entfernen(
+    plan_id: int, ziel_typ: str, ziel_id: int, element_id: str | None = None,
+    rolle: str | None = None, ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "katplan_verknuepfung_entfernen", plan_id=plan_id, ziel_typ=ziel_typ, ziel_id=ziel_id,
+        element_id=element_id, rolle=rolle,
+    )
+
+
+@server.tool(name="katplan_beziehung_setzen", description=TOOLS["katplan_beziehung_setzen"].description)
+async def katplan_beziehung_setzen(
+    plan_id: int, element_id: str, zu_element_id: str, art: str = "siehe_auch", hinweis: str | None = None,
+    pruefen: bool = False, ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "katplan_beziehung_setzen", plan_id=plan_id, element_id=element_id, zu_element_id=zu_element_id,
+        art=art, hinweis=hinweis, pruefen=pruefen,
+    )
+
+
+@server.tool(name="katplan_beziehung_entfernen", description=TOOLS["katplan_beziehung_entfernen"].description)
+async def katplan_beziehung_entfernen(
+    plan_id: int, element_id: str, zu_element_id: str, art: str | None = None, ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "katplan_beziehung_entfernen", plan_id=plan_id, element_id=element_id, zu_element_id=zu_element_id, art=art,
+    )
+
+
+@server.tool(name="katplan_stammdaten_aendern", description=TOOLS["katplan_stammdaten_aendern"].description)
+async def katplan_stammdaten_aendern(
+    plan_id: int, version: int, felder: dict, streng: bool = False, pruefen: bool = False,
+    ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "katplan_stammdaten_aendern", plan_id=plan_id, version=version, felder=felder, streng=streng, pruefen=pruefen,
+    )
