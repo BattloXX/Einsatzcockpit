@@ -132,3 +132,15 @@ Beispiel-Fragen: „Welche Einsätze sind derzeit aktiv?“, „Welche offenen A
 Beispiel: „Lege bei Einsatz 42 den Auftrag ‚Wasserversorgung prüfen‘ für Einheit 7 an.“ oder „Erstelle eine Achtung für Einsatz 42, fällig in 15 Minuten.“
 
 Bewusst nicht geliefert werden Inhalte und Medien aus der Personen-Spalte, Atemschutzdaten, Mannschaftsnamen, Anrufer, Autoren sowie Objekt-Kontakte. Die Download-Links gelten nur kurz und werden beim Abruf nochmals gegen die aktuellen Rechte geprüft.
+
+
+Die Katastrophenplan-Entwurfswerkzeuge können Elemente anlegen und mit ihrer aktuellen
+`version` ändern, Anhänge (auch über `datei.download_url` aus ChatGPT) übergeben und
+strukturierte Vorschläge aus Quellseiten in die offene Import-Review stellen.
+Für größere Anhänge zuerst `katplan_anhang_upload_vorbereiten` verwenden und anschließend
+`katplan_anhang_uebergeben` mit der Upload-ID aufrufen. Diese Werkzeuge stehen nur
+Bearbeitern zur Verfügung und ändern nur den Arbeitsstand. Neue Elemente sind als
+`ai_suggested` gekennzeichnet; Änderungen werden mit Herkunft `mcp` protokolliert und
+Geometrien bleiben ungeprüft. Vorschläge erzeugen erst nach menschlicher Übernahme
+Elemente. Einreichen und Freigeben erfolgt immer durch Menschen im Einsatzcockpit;
+bereits freigegebene Versionen bleiben unverändert.

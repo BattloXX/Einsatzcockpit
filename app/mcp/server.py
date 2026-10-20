@@ -33,6 +33,7 @@ from app.mcp.tools import fahrtenbuch as _fahrtenbuch  # noqa: F401 - registrier
 from app.mcp.tools import gsl as _gsl  # noqa: F401 - registriert GSL-Ressourcen-Tools
 from app.mcp.tools import gsl_lage as _gsl_lage  # noqa: F401 - registriert GSL-Lagebild-Tools
 from app.mcp.tools import katplan as _katplan  # noqa: F401 - registriert Katplan-Lesetools
+from app.mcp.tools import katplan_schreiben as _katplan_schreiben  # noqa: F401 - registriert Entwurfswerkzeuge
 from app.mcp.tools import kontakt as _kontakt  # noqa: F401 - registriert Kontakt-Tools
 from app.mcp.tools import mitglieder as _mitglieder  # noqa: F401 - registriert Mitglieder-Lesetools
 from app.mcp.tools import objekt as _objekt  # noqa: F401 - registriert Objekt-Tools
@@ -2027,3 +2028,53 @@ async def katplan_dokument_auszug(plan_id: int, dokument_id: int, seite: int | N
 @server.tool(name="katplan_verknuepfungen", description=TOOLS["katplan_verknuepfungen"].description)
 async def katplan_verknuepfungen(plan_id: int, element_id: str | None = None, fassung: str = 'freigegeben', version_id: int | None = None, ctx: Context | None = None) -> dict[str, object]:
     return await _call_registered_tool("katplan_verknuepfungen", plan_id=plan_id, element_id=element_id, fassung=fassung, version_id=version_id)
+
+
+@server.tool(name="katplan_element_entwurf_anlegen", description=TOOLS["katplan_element_entwurf_anlegen"].description)
+async def katplan_element_entwurf_anlegen(
+    plan_id: int, typ: str, titel: str, beschreibung: str = "", kapitel_id: int | None = None,
+    kapitel_titel: str | None = None, phasen: list[str] | None = None, prioritaet: int = 2,
+    daten: dict | None = None, tags: list[str] | None = None, adresse: dict | None = None,
+    geometrie: dict | None = None, quelle_dokument_id: int | None = None, quelle_seiten: str | None = None,
+    ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "katplan_element_entwurf_anlegen", plan_id=plan_id, typ=typ, titel=titel, beschreibung=beschreibung,
+        kapitel_id=kapitel_id, kapitel_titel=kapitel_titel, phasen=phasen, prioritaet=prioritaet, daten=daten,
+        tags=tags, adresse=adresse, geometrie=geometrie, quelle_dokument_id=quelle_dokument_id,
+        quelle_seiten=quelle_seiten,
+    )
+
+
+@server.tool(name="katplan_element_entwurf_aendern", description=TOOLS["katplan_element_entwurf_aendern"].description)
+async def katplan_element_entwurf_aendern(plan_id: int, element_id: str, version: int, felder: dict,
+                                         ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("katplan_element_entwurf_aendern", plan_id=plan_id,
+                                       element_id=element_id, version=version, felder=felder)
+
+
+@server.tool(name="katplan_anhang_upload_vorbereiten", description=TOOLS["katplan_anhang_upload_vorbereiten"].description)
+async def katplan_anhang_upload_vorbereiten(plan_id: int, dateiname: str, groesse_bytes: int | None = None,
+                                           element_id: str | None = None,
+                                           ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("katplan_anhang_upload_vorbereiten", plan_id=plan_id,
+                                       dateiname=dateiname, groesse_bytes=groesse_bytes, element_id=element_id)
+
+
+@server.tool(name="katplan_anhang_uebergeben", description=TOOLS["katplan_anhang_uebergeben"].description)
+async def katplan_anhang_uebergeben(
+    plan_id: int, upload_id: str | None = None, inhalt_base64: str | None = None, datei: dict | None = None,
+    dateiname: str | None = None, element_id: str | None = None, beschriftung: str = "", urheber: str = "",
+    ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "katplan_anhang_uebergeben", plan_id=plan_id, upload_id=upload_id, inhalt_base64=inhalt_base64,
+        datei=datei, dateiname=dateiname, element_id=element_id, beschriftung=beschriftung, urheber=urheber,
+    )
+
+
+@server.tool(name="katplan_vorschlaege_aus_dokument", description=TOOLS["katplan_vorschlaege_aus_dokument"].description)
+async def katplan_vorschlaege_aus_dokument(plan_id: int, dokument_id: int, seiten_nr: int, elemente: list[dict],
+                                          ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("katplan_vorschlaege_aus_dokument", plan_id=plan_id,
+                                       dokument_id=dokument_id, seiten_nr=seiten_nr, elemente=elemente)

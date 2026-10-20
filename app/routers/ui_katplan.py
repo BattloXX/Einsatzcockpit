@@ -45,7 +45,6 @@ from app.services import katplan_ki_service as ki_service
 from app.services import katplan_link_service as link_service
 from app.services import katplan_quelle_service as quelle_service
 from app.services import katplan_suche_service as suche_service
-from app.services.katplan_geo_service import ableite_punkt, pruefe_geometrie
 from app.services.katplan_service import (
     KatplanKonflikt,
     abschnitte_baum,
@@ -60,6 +59,7 @@ from app.services.katplan_service import (
     protokolliere,
     pruefe_version,
     sortiere_baum,
+    validiere_element_felder,
     verschiebe_nachbar,
 )
 from app.services.katplan_typen import ELEMENT_TYPEN, ELEMENT_VORLAGEN, bereinige_daten
@@ -996,34 +996,20 @@ def element_speichern(plan_id: int, eid: int, request: Request, db: Session = De
         eingabe = json.loads(form.get("daten_json", "{}"))
         if not isinstance(eingabe, dict):
             raise ValueError("Daten müssen ein JSON-Objekt sein.")
-        daten = bereinige_daten(element.typ, eingabe)
-        prioritaet = int(form.get("prioritaet", "2"))
-        if prioritaet not in (1, 2, 3):
-            raise ValueError("Priorität muss 1, 2 oder 3 sein.")
         tags = [t.strip() for t in form.get("tags", "").split(",") if t.strip()]
-        if len(tags) > 20 or any(len(t) > 50 for t in tags):
-            raise ValueError("Höchstens 20 Tags mit je 50 Zeichen eingeben.")
+        werte = validiere_element_felder(
+            element.typ, titel=titel, prioritaet=int(form.get("prioritaet", "2")), daten=eingabe,
+            tags=tags, adresse=form, beschreibung_html=form.get("beschreibung_html", ""),
+            geometrie=form.get("geometry_json"), geo_geprueft=form["geo_geprueft"],
+        )
+        daten = json.loads(werte["daten_json"])
         phase_ids = {int(v) for v in form["phasen"]}
         for pid in phase_ids:
             _objekt(db, KatplanPhase, pid, plan, user)
-        werte = {"titel": titel, "kennung": kennung,
-                 "abschnitt_id": _abschnitt_id(db, form.get("abschnitt_id", ""), plan, user),
-                 "beschreibung_html": bereinige_beschreibung(form.get("beschreibung_html", "")),
-                 "prioritaet": prioritaet, "vertraulich": form["vertraulich"],
-                 "tags_json": json.dumps(tags, ensure_ascii=False),
-                 "daten_json": json.dumps(daten, ensure_ascii=False)}
+        werte.update(kennung=kennung, vertraulich=form["vertraulich"],
+                     abschnitt_id=_abschnitt_id(db, form.get("abschnitt_id", ""), plan, user))
         for feld in ("gueltig_bis", "pruefen_am"):
             werte[feld] = date.fromisoformat(form[feld]) if form.get(feld) else None
-        for feld, maximum in (("strasse", 200), ("hausnummer", 20), ("plz", 10), ("ort", 100)):
-            wert = form.get(feld, "").strip()
-            if len(wert) > maximum:
-                raise ValueError(f"{feld}: höchstens {maximum} Zeichen.")
-            werte[feld] = wert or None
-        geom = pruefe_geometrie(element.typ, form.get("geometry_json"))
-        lat, lng = ableite_punkt(geom) if geom else (None, None)
-        werte.update(geometry_json=json.dumps(geom, sort_keys=True) if geom else None,
-                     lat=lat, lng=lng,
-                     geo_status=("geprueft" if form["geo_geprueft"] else "ungeprueft") if geom else "keine")
         auftragsart = form.get("gsl_auftragsart", "").strip() or None
         if auftragsart is not None and auftragsart not in AUFTRAGSART_WERTE:
             raise ValueError("Ungültige GSL-Auftragsart.")

@@ -89,7 +89,7 @@ def speichere_upload(db: Session, upload_id: str, token: str, stream: BinaryIO) 
     limit = effektives_limit(db)
     # Endung nie aus dem Client-Dateinamen übernehmen; Bilder werden erst
     # nach der MIME-Erkennung umbenannt.
-    suffix = ".upload" if row.zweck == "gsl_site_media" else ".pdf"
+    suffix = ".upload" if row.zweck in ("gsl_site_media", "katplan_anhang") else ".pdf"
     ziel, relativ = _upload_pfad(row.org_id, row.upload_id, suffix)
     ziel.parent.mkdir(parents=True, exist_ok=True)
     total = 0
@@ -105,7 +105,10 @@ def speichere_upload(db: Session, upload_id: str, token: str, stream: BinaryIO) 
                     first += chunk[: 4096 - len(first)]
                 digest.update(chunk)
                 out.write(chunk)
-        if row.zweck == "gsl_site_media":
+        if row.zweck == "katplan_anhang":
+            # Die bestehende Anhangspipeline prueft den Dateityp bei der Uebergabe.
+            pass
+        elif row.zweck == "gsl_site_media":
             if _detect_mime(first) not in IMAGE_MIMES:
                 raise MCPUploadFehler("Nur Bilder erlaubt.", 415)
         else:
