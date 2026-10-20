@@ -154,7 +154,7 @@
                 onStationDone:function(){
                   htmx.ajax('GET','{{ basis }}/karte/zugang',{target:'#ressourceKarteBody',swap:'innerHTML'});
                 }
-              })">🖨 QR-Code drucken</button>
+              })">{{ icon("printer", size="sm") }} QR-Code drucken</button>
       <button class="btn btn--ghost" hx-post="{{ basis }}/zugang/qr/ausstellen" hx-vals='{"neu":true}' hx-target="#ressourceKarteBody" hx-swap="innerHTML" hx-confirm="Neuen QR-Code ausstellen? Der alte wird sofort ungültig.">Neuen QR-Code (alter wird ungültig)</button>
       <button class="btn btn--ghost" style="color:var(--red);" hx-post="{{ basis }}/zugang/qr/widerrufen" hx-target="#ressourceKarteBody" hx-swap="innerHTML" hx-confirm="QR-Zugang widerrufen?">QR widerrufen</button>{% endif %}
     </div>

@@ -4,7 +4,7 @@
 {% block content %}
 <div style="max-width:520px;margin:40px auto;padding:0 16px;">
   <div style="margin-bottom:20px;">
-    <a href="/lage" class="btn btn--ghost btn--sm">← Zurück</a>
+    <a href="/lage" class="btn btn--ghost btn--sm">{{ icon("chevron-left", size="xs") }} Zurück</a>
   </div>
   <h2 style="margin-bottom:24px;">Neue Großschadenslage starten</h2>
 
@@ -36,7 +36,7 @@
 
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:24px;">
       <a href="/lage" class="btn btn--ghost">Abbrechen</a>
-      <button type="submit" class="btn btn--danger">🚨 Lage starten</button>
+      <button type="submit" class="btn btn--danger">{{ modul_icon("lage", size="sm") }} Lage starten</button>
     </div>
   </form>
 </div>

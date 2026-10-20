@@ -183,7 +183,7 @@
   {% include "incident_major/_board_sector_filter.html" %}
   <span id="lage-connection-status" style="font-size:.75rem;color:var(--text-muted);" aria-live="polite">verbunden · aktualisiert --:--:--</span>
   <button id="prio-sort-btn" type="button" onclick="togglePrioSort()"
-          class="btn btn--ghost btn--sm" title="Karten nach Priorität sortieren">↕ Prio</button>
+          class="btn btn--ghost btn--sm" title="Karten nach Priorität sortieren">{{ icon("arrows-sort", size="xs") }} Prio</button>
   <span style="font-size:.8rem;color:var(--text-muted);white-space:nowrap;" id="board-counts">
     {{ open_count }} offen · {{ done_count }} erledigt
   </span>
@@ -201,7 +201,7 @@
   {# Mobile Phasen-Umschaltung: eigene sticky Pill-Leiste über dem Board (siehe unten). #}
 
   {% if can_manage %}
-  <a href="/lage/{{ lage.id }}/bearbeiten" class="btn btn--ghost btn--sm" title="Lage bearbeiten">✏️</a>
+  <a href="/lage/{{ lage.id }}/bearbeiten" class="btn btn--ghost btn--sm" title="Lage bearbeiten" aria-label="Lage bearbeiten">{{ icon("pencil", size="xs") }}</a>
   {% endif %}
 
   {% if can_edit and lage.status.value == 'active' %}
@@ -226,7 +226,7 @@
            style="border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0;">
     <summary style="padding:4px 14px;cursor:pointer;font-size:.75rem;color:var(--text-muted);
                     user-select:none;list-style:none;display:flex;align-items:center;gap:6px;">
-      <span>▸</span><span>🌦 Wetter</span>
+      <span>{{ icon("chevron-right", size="sm") }}</span><span>{{ modul_icon("wetter", size="sm") }} Wetter</span>
     </summary>
     <div id="wetter-panel"
          hx-get="/gsl/{{ lage.id }}/wetter/panel"
@@ -265,7 +265,7 @@
     {% if mi_features.uebergreifend %}
     <button type="button" class="lage-phasechip" data-phasechip="uebergreifend"
             onclick="lageSwitchPhase('uebergreifend')">
-      📍 Übergreifend <span class="lage-phasechip__n">{{ cross_markers|length }}</span>
+      {{ icon("map-pin", size="sm") }} Übergreifend <span class="lage-phasechip__n">{{ cross_markers|length }}</span>
     </button>
     {% endif %}
   </div>
@@ -311,12 +311,12 @@
     {% if mi_features.uebergreifend %}
     <div class="phase-col" id="cross-marker-col" style="--phase-accent:var(--blue);">
       <div class="phase-col__header" style="flex-wrap:wrap;gap:4px;">
-        <span style="flex:1;">📍 Übergreifend</span>
+        <span style="flex:1;">{{ icon("map-pin", size="md") }} Übergreifend</span>
         <span class="phase-col__count">{{ cross_markers|length }}</span>
         <button type="button" id="cm-hide-behoben-btn"
                 onclick="toggleCmHideBehoben()"
                 class="btn btn--xs btn--ghost" title="Behobene ein-/ausblenden"
-                style="padding:1px 6px;font-size:.62rem;margin-left:4px;">Beh. ☑</button>
+                style="padding:1px 6px;font-size:.62rem;margin-left:4px;">Beh. {{ icon("square-check", size="xs") }}</button>
         {% if can_edit %}
         <button type="button" onclick="openMeldungDialog()"
                 class="btn btn--xs btn--ghost" style="padding:1px 8px;margin-left:4px;">+</button>
@@ -345,7 +345,7 @@
   <div class="modal__content" style="min-width:min(460px,95vw);">
     <div class="modal__header">
       <h3 class="modal__title">Übergreifende Meldung</h3>
-      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">{{ icon("x", size="sm") }}</button>
     </div>
     <form hx-post="/lage/{{ lage.id }}/uebergreifend"
           hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
@@ -390,7 +390,7 @@
           <input type="text" name="ort" class="form-input" maxlength="120" autocomplete="off">
         </div>
         <div class="form-group">
-          <label class="form-label" style="font-size:.75rem;">📍 Koordinaten (Klick auf Karte setzt Pin)</label>
+          <label class="form-label" style="font-size:.75rem;">{{ icon("map-pin", size="sm") }} Koordinaten (Klick auf Karte setzt Pin)</label>
           <div id="meldung-pin-map" style="height:200px;border-radius:4px;border:1px solid var(--border);"></div>
           <div id="meldung-pin-coords" style="font-size:.7rem;color:var(--text-muted);margin-top:3px;">
             Noch kein Pin gesetzt
@@ -418,7 +418,7 @@
 <style>@media (max-width:760px){ #siteDetailModal{width:100vw;height:100dvh;max-width:none;max-height:none;margin:0;border:0;border-radius:0;}#siteDetailContent{min-width:100%!important;max-height:100dvh!important;height:100dvh;}}</style>
 
 {# Einheitlicher Druck-Dialog (ecpgPrint) – wird vom Stellen-Detail (_site_detail.html)
-   und vom Übergreifende-Meldung-Panel (_cross_marker_panel.html) für den 🖨-Button
+   und vom Übergreifende-Meldung-Panel (_cross_marker_panel.html) für den Druck-Button
    benötigt. Ohne diesen Include ist window.ecpgPrint undefiniert und der Druck-Button
    im Stellen-Detail reagiert nicht. #}
 {% include "_print_dialog.html" %}
@@ -581,7 +581,7 @@ function _applyCmHideBehoben() {
     if (!hide) visible++;
   });
   var btn = document.getElementById('cm-hide-behoben-btn');
-  if (btn) btn.textContent = _cmHideBehoben ? 'Beh. ☐' : 'Beh. ☑';
+  if (btn) btn.innerHTML = 'Beh. ' + ecpIcon(_cmHideBehoben ? 'square' : 'square-check', {size: 'xs'});
   var badge = document.querySelector('#cross-marker-col .phase-col__count');
   if (badge) badge.textContent = visible;
 }

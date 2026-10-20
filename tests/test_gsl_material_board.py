@@ -1,5 +1,7 @@
 """Board-Erfassung von an der Einsatzstelle belassenem Material."""
 
+import re
+
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.major_incident import IncidentSite
@@ -48,7 +50,8 @@ def test_board_material_form_post_and_card_badge(client, setup_db):
         assert ausleihe.quelle == "board"
     finally:
         db.close()
-    assert "📦 1" in client.get(f"/lage/{lage_id}/stellen/{site_id}/card").text
+    card = client.get(f"/lage/{lage_id}/stellen/{site_id}/card").text
+    assert re.search(r'<span title="1 offene Material-Ausleihe\(n\)"><svg\b[^>]*>.*?</svg> 1</span>', card, re.S)
 
 
 def test_verleih_vor_ort_filter_card_und_detail(client, setup_db):

@@ -1,4 +1,5 @@
 """Tests für Einheiten-Chips auf Board und Kräfteübersicht."""
+import re
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -111,3 +112,23 @@ def test_kraefteuebersicht_status_und_sim_link_nur_admin(client):
     recorder = client.get(f"/lage/{x['lage']}/ressourcen/kraefteuebersicht")
     assert recorder.status_code == 200
     assert f'/einheit?sim={x["e1"]}' not in recorder.text
+
+
+def test_lagemeldungs_chip_behaelt_warnicon_beim_textupdate(client):
+    x = _daten()
+    db = _db()
+    try:
+        site = db.get(IncidentSite, x["a"])
+        site.naechste_lagemeldung_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=5)
+        db.commit()
+    finally:
+        db.close()
+    _als(client, sign_session(x["admin"]))
+    for suffix in ("", f"/stellen/{x['a']}/card", f"/stellen/{x['a']}"):
+        response = client.get(f"/lage/{x['lage']}{suffix}")
+        assert response.status_code == 200
+        chip = re.search(r'<span class="lm-chip".*?:class="cls">(.*?)<span x-text="label"></span></span>', response.text, re.S)
+        assert chip is not None
+        assert "x-show=\"cls === 'lm-chip--red'\" x-cloak" in chip[1]
+        assert '<svg class="ecp-icon ecp-icon--xs"' in chip[1]
+        assert 'x-text=' not in chip[1]

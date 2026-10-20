@@ -1,7 +1,7 @@
 {# HTMX-Fragment: Abzugs-Bestätigung für Vor-Ort-Konflikt #}
 <div id="dispatch-confirm-wrap-{{ einheit.id }}" class="dispatch-conflict-box">
   <div class="dispatch-conflict-box__title">
-    ⚠ {{ einheit.label }} ist bereits bei
+    {{ icon("alert-triangle", size="sm") }} {{ einheit.label }} ist bereits bei
     <strong>{{ conflict_site.bezeichnung }}</strong> vor Ort.
     Abziehen und zu <strong>{{ site.bezeichnung }}</strong> verlegen?
   </div>

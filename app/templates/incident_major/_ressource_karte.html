@@ -2,7 +2,7 @@
 <section class="ressource-karte__sheet" role="dialog" aria-modal="true" aria-label="Ressourcenkarte">
   <header class="ressource-karte__head">
     <div><strong>{{ karte.allgemein.label }}</strong><div class="ressource-karte__meta"><span class="estatus estatus--{{ karte.allgemein.status }}">{{ karte.allgemein.status_label }}</span> {{ karte.allgemein.sector or 'Pool' }} · {{ karte.allgemein.funkrufname or karte.allgemein.org_name or '–' }}</div></div>
-    <button type="button" class="btn btn--xs btn--ghost" data-karte-close aria-label="Schließen">✕</button>
+    <button type="button" class="btn btn--xs btn--ghost" data-karte-close aria-label="Schließen">{{ icon("x", size="xs") }}</button>
   </header>
   <nav class="ressource-karte__tabs">
     {% for tab, label in [('uebersicht', 'Übersicht'), ('einsaetze', 'Einsätze'), ('journal', 'Journal')] + ([('zugang', 'Zugang')] if can_zugang else []) %}

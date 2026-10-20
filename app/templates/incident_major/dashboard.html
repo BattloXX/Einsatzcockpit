@@ -100,7 +100,7 @@
     <div class="stat-card">
       <div class="stat-card__head">
         <span class="stat-card__lbl">Einsatzstellen gesamt</span>
-        <span class="stat-card__icon">📍</span>
+        <span class="stat-card__icon">{{ icon("map-pin", size="md") }}</span>
       </div>
       <div class="stat-card__val">{{ total_sites }}</div>
       <div class="stat-card__bar"><div class="stat-card__bar-fill" style="width:100%;background:var(--blue);"></div></div>
@@ -108,7 +108,7 @@
     <div class="stat-card">
       <div class="stat-card__head">
         <span class="stat-card__lbl">Offen / In Bearbeitung</span>
-        <span class="stat-card__icon">⏳</span>
+        <span class="stat-card__icon">{{ icon("hourglass", size="md") }}</span>
       </div>
       <div class="stat-card__val" style="color:var(--orange);">{{ open_count }}</div>
       <div class="stat-card__bar"><div class="stat-card__bar-fill" style="width:{{ (open_count / _total_for_bar * 100)|round(0,'floor')|int }}%;background:var(--orange);"></div></div>
@@ -116,7 +116,7 @@
     <div class="stat-card">
       <div class="stat-card__head">
         <span class="stat-card__lbl">Abgeschlossen</span>
-        <span class="stat-card__icon">✅</span>
+        <span class="stat-card__icon">{{ icon("circle-check", size="md") }}</span>
       </div>
       <div class="stat-card__val" style="color:var(--green);">{{ done_count }}</div>
       <div class="stat-card__bar"><div class="stat-card__bar-fill" style="width:{{ (done_count / _total_for_bar * 100)|round(0,'floor')|int }}%;background:var(--green);"></div></div>
@@ -124,7 +124,7 @@
     <div class="stat-card">
       <div class="stat-card__head">
         <span class="stat-card__lbl">Ressourcen aktiv</span>
-        <span class="stat-card__icon">🚒</span>
+        <span class="stat-card__icon">{{ icon("firetruck", size="md") }}</span>
       </div>
       <div class="stat-card__val" style="color:#93c5fd;">{{ active_res }}</div>
       <div class="stat-card__bar"><div class="stat-card__bar-fill" style="width:100%;background:#93c5fd;"></div></div>
@@ -133,7 +133,7 @@
        {% if pending_reports > 0 %}style="border-color:var(--yellow);"{% endif %}>
       <div class="stat-card__head">
         <span class="stat-card__lbl">Offene Meldungen</span>
-        <span class="stat-card__icon">📥</span>
+        <span class="stat-card__icon">{{ icon("inbox", size="md") }}</span>
       </div>
       <div class="stat-card__val" style="color:{% if pending_reports > 0 %}var(--yellow){% else %}var(--text-muted){% endif %};">
         {{ pending_reports }}
@@ -146,7 +146,7 @@
     <div>
 
       <div class="dash-section" style="--dash-accent:var(--blue);">
-        <div class="dash-section__title">🧭 Phasenverteilung</div>
+        <div class="dash-section__title">{{ icon("compass", size="md") }} Phasenverteilung</div>
         <div class="phase-tiles">
           {% for p, label in phase_labels.items() %}
           {% if p.value != 'abgebrochen' %}
@@ -194,7 +194,7 @@
       </div>
 
       <div class="dash-section" style="--dash-accent:var(--red);">
-        <div class="dash-section__title">⚠ Braucht Aufmerksamkeit</div>
+        <div class="dash-section__title">{{ icon("alert-triangle", size="md") }} Braucht Aufmerksamkeit</div>
         <div id="fuehrungs-hinweise"
              hx-get="/lage/{{ lage.id }}/dashboard/hinweise"
              hx-trigger="load, every 30s, sitePhaseChanged from:body"
@@ -202,7 +202,7 @@
       </div>
 
       <div class="dash-section" style="--dash-accent:var(--red);">
-        <div class="dash-section__title">⚠ Prioritäten (aktive Stellen)</div>
+        <div class="dash-section__title">{{ icon("alert-triangle", size="md") }} Prioritäten (aktive Stellen)</div>
         <div class="prio-grid">
           {% for pk, pt in prio_label.items() %}
           <div class="prio-pill">
@@ -220,7 +220,7 @@
       </div>
 
       <div class="dash-section" style="--dash-accent:var(--green);">
-        <div class="dash-section__title">🗺 Karte</div>
+        <div class="dash-section__title">{{ icon("map", size="md") }} Karte</div>
         <div class="map-frame">
           <div id="lage-map"></div>
           <div class="map-legend" id="lage-map-legend">
@@ -231,18 +231,18 @@
       </div>
 
       <div class="dash-section" style="--dash-accent:var(--yellow);">
-        <div class="dash-section__title">📄 Lagebericht</div>
+        <div class="dash-section__title">{{ icon("file-text", size="md") }} Lagebericht</div>
         <p style="font-size:.82rem;color:var(--text-muted);margin-bottom:10px;">
           Gemeinsam bearbeitbares Dokument mit KI-Unterstützung, live für mehrere Stabsmitglieder.
         </p>
-        <a href="/lage/{{ lage.id }}/lagedokument" class="btn btn--ghost btn--sm">📄 Lagebericht öffnen</a>
+        <a href="/lage/{{ lage.id }}/lagedokument" class="btn btn--ghost btn--sm">{{ icon("file-text", size="xs") }} Lagebericht öffnen</a>
       </div>
 
     </div>
 
     <div class="dash-section" style="--dash-accent:var(--red);max-height:calc(100vh - 200px);overflow-y:auto;">
       <div class="dash-section__title act-panel__title">
-        <span>📻 Echtzeit-Journal</span>
+        <span>{{ icon("radio", size="sm") }} Echtzeit-Journal</span>
         <span class="act-live-dot" title="Live"></span>
       </div>
       {% for item in activity_feed %}
@@ -255,14 +255,14 @@
           {% elif item.category == 'meldung' %}#93c5fd
           {% else %}var(--text-muted){% endif %};white-space:nowrap;"
           title="{{ journal_categories.get(item.category, item.category) }}">
-          {%- if item.category == 'entscheidung' %}🧭
-          {%- elif item.category == 'anweisung' %}📢
-          {%- elif item.category == 'meldung' %}📨
-          {%- else %}📻{% endif %}
+          {%- if item.category == 'entscheidung' %}{{ icon("compass", size="xs") }}
+          {%- elif item.category == 'anweisung' %}{{ icon("speakerphone", size="xs") }}
+          {%- elif item.category == 'meldung' %}{{ icon("mail-forward", size="xs") }}
+          {%- else %}{{ icon("radio", size="xs") }}{% endif %}
           {{ (journal_categories.get(item.category, item.category) or '')[:9] }}
         </span>
         {% else %}
-        <span class="act-site" title="{{ item.site }}">📝 {{ (item.site or '')[:16] }}</span>
+        <span class="act-site" title="{{ item.site }}">{{ icon("note", size="sm") }} {{ (item.site or '')[:16] }}</span>
         {% endif %}
         <span class="act-text">{{ item.text }}</span>
       </div>
