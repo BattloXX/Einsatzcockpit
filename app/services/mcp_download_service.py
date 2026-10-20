@@ -116,6 +116,41 @@ def lade_download(db: Session, token: str) -> tuple[Path, str, str]:
     except (KeyError, TypeError, ValueError) as exc:
         raise MCPDownloadFehler("Download nicht gefunden.", 404) from exc
 
+    if art == "katplan_quelle":
+        from app.core.permissions import KATPLAN_LESE_ROLLEN
+        from app.models.katplan import KatplanDokument
+        from app.services.katplan_flags import katplan_effective_enabled
+        from app.services.katplan_mcp_service import plan_laden
+        from app.services.katplan_quelle_service import absolute_pfad as quelle_pfad
+        from app.services.katplan_quelle_service import quelle_der_seite, sichtbare_quellen
+
+        try:
+            context = load_live_context(db, user_id, org_id, KATPLAN_LESE_ROLLEN)
+        except MCPPermissionError as exc:
+            raise MCPDownloadFehler(str(exc), 403) from exc
+        if not katplan_effective_enabled(org_id, db):
+            raise MCPDownloadFehler("Katastrophenplan-Modul nicht aktiviert.", 403)
+        quelle = db.query(KatplanDokument).filter_by(org_id=org_id, id=dokument_id).one_or_none()
+        if quelle is None:
+            raise MCPDownloadFehler("Dokument nicht gefunden.", 404)
+        try:
+            plan = plan_laden(db, context.user, quelle.plan_id)
+        except LookupError as exc:
+            raise MCPDownloadFehler("Dokument nicht gefunden.", 404) from exc
+        if quelle.id not in {d.id for d in sichtbare_quellen(db, plan, context.user)}:
+            raise MCPDownloadFehler("Dokument nicht gefunden.", 404)
+        relativ = quelle.pfad
+        name = quelle.dateiname_original
+        if seite is not None:
+            quellseite = quelle_der_seite(db, plan, quelle.id, seite)
+            if quellseite is None or not quellseite.einzel_pdf_pfad:
+                raise MCPDownloadFehler("Seite nicht gefunden.", 404)
+            relativ = quellseite.einzel_pdf_pfad
+            name = f"{Path(name).stem}_seite_{seite:04d}.pdf"
+        pfad = quelle_pfad(relativ)
+        if not pfad.is_file():
+            raise MCPDownloadFehler("Datei fehlt.", 404)
+        return pfad, name, "application/pdf"
     if art == "strassensperre":
         try:
             load_live_context(db, user_id, org_id, STRASSENSPERREN_LESE_ROLLEN)
