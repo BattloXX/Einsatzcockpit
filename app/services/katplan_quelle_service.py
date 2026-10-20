@@ -269,3 +269,60 @@ def validiere_element_quelle(db: Session, plan: KatplanPlan, dokument_id: int | 
             raise ValueError("Ungültiger Seitenbereich.")
         if not 1 <= int(match[1]) <= int(match[2] or match[1]) <= dokument.seitenzahl:
             raise ValueError("Seitenbereich liegt außerhalb des Dokuments.")
+
+
+def vergleiche_quellen(db: Session, plan: KatplanPlan, dokument_id: int,
+                      mit: int | None = None) -> dict:
+    """Vergleicht gleiche Seitennummern; aendert keine Referenzen."""
+    import difflib
+    import textwrap
+
+    neu = _dokument(db, plan, dokument_id)
+    gruppe = _gruppe(db, plan, neu)
+    alt = _dokument(db, plan, mit) if mit is not None else next(
+        (d for d in reversed(gruppe) if d.versionsnummer < neu.versionsnummer), None)
+    if alt is None or alt.versionsnummer >= neu.versionsnummer or alt.id not in {d.id for d in gruppe}:
+        raise ValueError("Keine passende Vorgängerversion.")
+    seiten: list[dict] = []
+    maps = [{s.seiten_nr: s for s in db.query(KatplanDokumentSeite).filter_by(
+        org_id=plan.org_id, plan_id=plan.id, dokument_id=d.id,
+    )} for d in (alt, neu)]
+    for nr in sorted(maps[0].keys() | maps[1].keys()):
+        vorher, nachher = [pipeline.normalisiere_text(m[nr].volltext or "") if nr in m else "" for m in maps]
+        status = ("neu" if nr not in maps[0] else "entfallen" if nr not in maps[1]
+                  else "unverändert" if vorher == nachher else "geändert")
+        diff = list(difflib.unified_diff(textwrap.wrap(vorher, 100), textwrap.wrap(nachher, 100),
+                                        fromfile="alt", tofile="neu", lineterm="")) if status != "unverändert" else []
+        seiten.append({"nr": nr, "status": status, "quote": difflib.SequenceMatcher(
+            None, vorher, nachher).ratio(), "diff": diff[:60], "gekuerzt": len(diff) > 60})
+    betroffen = {s["nr"] for s in seiten if s["status"] in ("geändert", "entfallen")}
+    elemente = []
+    for e in db.query(KatplanElement).filter(
+        KatplanElement.org_id == plan.org_id, KatplanElement.plan_id == plan.id,
+        KatplanElement.quelle_dokument_id.in_([d.id for d in gruppe]),
+    ).order_by(KatplanElement.sort, KatplanElement.id):
+        try:
+            grenzen = (e.quelle_seiten or "").split("-")
+            if any(int(grenzen[0]) <= nr <= int(grenzen[-1]) for nr in betroffen):
+                elemente.append(e)
+        except ValueError:
+            continue
+    return {"alt": alt, "neu": neu, "seiten": seiten, "elemente": elemente}
+
+
+def stelle_quelle_um(db: Session, plan: KatplanPlan, user: User, dokument_id: int,
+                     element: KatplanElement) -> None:
+    _bindung(plan, user)
+    if not darf_bearbeiten(user) or element.org_id != plan.org_id or element.plan_id != plan.id:
+        raise ValueError("Element gehört nicht zu diesem Plan.")
+    neu = _dokument(db, plan, dokument_id)
+    if element.quelle_dokument_id not in {d.id for d in _gruppe(db, plan, neu)}:
+        raise ValueError("Quelle gehört nicht zur selben Gruppe.")
+    alt = element.quelle_dokument_id
+    element.quelle_dokument_id = neu.id
+    element.version += 1
+    element.aktualisiert_am = _utcnow()
+    element.aktualisiert_von_id = user.id
+    protokolliere(db, plan, "element", "quelle_umgestellt", user, element_id=element.id,
+                  feld="quelle_dokument_id", alt=str(alt), neu=str(neu.id))
+    _geaendert(db, plan, user, neu, "Referenz umgestellt")

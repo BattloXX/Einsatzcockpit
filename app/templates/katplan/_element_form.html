@@ -11,6 +11,11 @@
     <input type="hidden" name="version" id="kp-element-version" value="{{ form.get('version', element.version) }}">
     <input type="hidden" name="daten_json" x-ref="daten" :value="JSON.stringify(daten)" value="{{ daten|tojson|forceescape }}">
     <div class="kp-form kp-editor-fields">
+      {% if qs_hinweise.get(element.id) %}
+        <div class="kp-box"><h3 class="kp-box__title">Qualität</h3>
+          <ul>{% for h in qs_hinweise[element.id] %}<li>{{ h.text }}</li>{% endfor %}</ul>
+        </div>
+      {% endif %}
       <h3 class="kp-box__title">Grunddaten</h3>
       <div class="kp-form-grid">
         <label>

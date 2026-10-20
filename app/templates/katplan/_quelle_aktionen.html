@@ -15,3 +15,7 @@
     <button type="submit" class="btn btn--sm btn--ghost kp-delete">Entfernen</button>
   </form>
 {% endif %}
+
+{% if can_edit and dokument.versionsnummer > 1 %}
+  <a class="btn btn--ghost btn--sm" href="/katastrophenplaene/{{ plan.id }}/quellen/{{ dokument.id }}/vergleich">Mit v{{ dokument.versionsnummer - 1 }} vergleichen</a>
+{% endif %}

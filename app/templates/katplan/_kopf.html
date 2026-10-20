@@ -107,6 +107,7 @@
           </form>
         {% endif %}
         {% if can_release and plan.status in ['entwurf', 'in_pruefung', 'in_ueberarbeitung'] %}
+          <p>Es gibt {{ qs_anzahl|default(0) }} offene Hinweise.</p>
           <form method="post" action="/katastrophenplaene/{{ plan.id }}/freigeben"
             hx-post="/katastrophenplaene/{{ plan.id }}/freigeben" hx-target="#kp-kopf" hx-swap="outerHTML">
             <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
@@ -142,6 +143,7 @@
       {% endif %}
     </section>
   </aside>
+  {% if can_edit %}{% include "katplan/_qualitaet.html" %}{% endif %}
 </div>
 {% if protokoll_oob %}
   {% include "katplan/_protokoll.html" %}

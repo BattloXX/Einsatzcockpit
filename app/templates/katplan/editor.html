@@ -20,6 +20,7 @@
       <h1>{{ plan.titel }} bearbeiten</h1>
       <span id="kp-editor-status" class="kp-status kp-status--{{ status_farben.get(plan.status, 'gray') }}">{{ status_labels[plan.status] }}</span>
     </header>
+    {% include "katplan/_qualitaet.html" %}
     <div class="kp-editor" hx-on::before-swap="if ([409, 422].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false; }">
       {% include "katplan/_baum.html" %}
       <div id="kp-detail" aria-live="polite">

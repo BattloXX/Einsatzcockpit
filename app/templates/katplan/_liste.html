@@ -9,7 +9,7 @@
             <th>Titel</th>
             <th>Gefahrenarten</th>
             <th>Status</th>
-            {% if can_edit %}<th>Version</th>{% endif %}
+            {% if can_edit %}<th>Version</th><th>Qualität</th>{% endif %}
             <th>Wiedervorlage</th>
             <th>Zuletzt geändert</th>
           </tr>
@@ -30,6 +30,7 @@
               {% if can_edit %}
                 {% set version = versionen.get(plan.aktuelle_version_id) %}
                 <td class="kp-mono">{{ version.versionsnummer if version else '–' }}</td>
+                <td>{{ qs_anzahlen.get(plan.id, 0) }} Hinweise</td>
               {% endif %}
               <td class="kp-mono">
                 {% if plan.wiedervorlage_am and plan.wiedervorlage_am <= heute %}
@@ -61,6 +62,7 @@
             {% if can_edit %}
               {% set version = versionen.get(plan.aktuelle_version_id) %}
               <div>
+                <div>{{ qs_anzahlen.get(plan.id, 0) }} Hinweise</div>
                 <div class="kp-mcard__label">Version</div>
                 <div class="kp-mono">Version: {{ version.versionsnummer if version else '–' }}</div>
               </div>

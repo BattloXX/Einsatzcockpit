@@ -19,6 +19,7 @@
   {% include "katplan/_leer.html" %}
 {% endif %}
 {% if baum_oob %}
+  {% include "katplan/_qualitaet.html" %}
   {% include "katplan/_baum.html" %}
   <span id="kp-editor-status" class="kp-status kp-status--{{ status_farben.get(plan.status, 'gray') }}" hx-swap-oob="outerHTML">{{ status_labels[plan.status] }}</span>
 {% endif %}

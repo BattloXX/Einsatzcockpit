@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Quellenvergleich · {{ plan.titel }}{% endblock %}
+{% block head_extra %}{% include "katplan/_design.html" %}{% endblock %}
+{% block content %}
+  <section class="kp-page">
+    <a class="btn" href="/katastrophenplaene/{{ plan.id }}/quellen">Zurück zu Quellen</a>
+    <h1>{{ vergleich.neu.titel }}: v{{ vergleich.alt.versionsnummer }} → v{{ vergleich.neu.versionsnummer }}</h1>
+    {% for s in vergleich.seiten %}
+      <article class="kp-box">
+        <h2>Seite {{ s.nr }} · {{ s.status }} · Ähnlichkeit {{ '%.0f'|format(s.quote * 100) }} %</h2>
+        {% if s.diff %}<pre class="kp-diff">{% for zeile in s.diff %}<span{% if zeile.startswith('-') %} class="kp-diff-alt"{% elif zeile.startswith('+') %} class="kp-diff-neu"{% endif %}>{{ zeile }}</span>
+{% endfor %}</pre>{% endif %}
+        {% if s.gekuerzt %}<p>Diff auf 60 Zeilen gekürzt.</p>{% endif %}
+      </article>
+    {% endfor %}
+    <h2>Betroffene Elemente</h2>
+    {% for e in vergleich.elemente %}
+      <article class="kp-box">
+        <a href="/katastrophenplaene/{{ plan.id }}/bearbeiten?element={{ e.id }}">{{ e.kennung }} · {{ e.titel }}</a>
+        <p>Seiten {{ e.quelle_seiten }} · Inhalt und Seitenbezug fachlich prüfen.</p>
+          <form method="post" action="/katastrophenplaene/{{ plan.id }}/quellen/{{ vergleich.neu.id }}/elemente/{{ e.id }}/umstellen">
+            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+            <button class="btn" type="submit">Quelle auf v{{ vergleich.neu.versionsnummer }} umstellen</button>
+          </form>
+      </article>
+    {% else %}<p>Keine betroffenen Elemente.</p>{% endfor %}
+  </section>
+{% endblock %}

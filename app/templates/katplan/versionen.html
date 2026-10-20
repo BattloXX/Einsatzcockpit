@@ -40,6 +40,7 @@
               <td data-label="Elementanzahl">{{ version.anzahl_elemente }}</td>
               <td data-label="Aktionen">
                 <a href="/katastrophenplaene/{{ plan.id }}/versionen/{{ version.id }}">Ansehen</a>
+                <a href="/katastrophenplaene/{{ plan.id }}/pdf?version_id={{ version.id }}">PDF / Offlinefassung</a>
                 {% if not loop.first %}
                   <a href="/katastrophenplaene/{{ plan.id }}/vergleich?von={{ versionen_liste[loop.index0 - 1][0].id }}&amp;nach={{ version.id }}">Vergleichen mit vorheriger</a>
                 {% endif %}
@@ -79,6 +80,7 @@
           </div>
           <p class="kp-freitext">{{ version.aenderungsnotiz or '-' }}</p>
           <div class="kp-actions">
+            <a class="btn btn--ghost btn--sm" href="/katastrophenplaene/{{ plan.id }}/pdf?version_id={{ version.id }}">PDF / Offlinefassung</a>
             <a class="btn btn--ghost btn--sm" href="/katastrophenplaene/{{ plan.id }}/versionen/{{ version.id }}">Ansehen</a>
             {% if not loop.first %}
               <a class="btn btn--ghost btn--sm"

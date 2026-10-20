@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    @page { size: A4; margin: 18mm 15mm 22mm; @bottom-center { content: element(fuss); } }
+    body { font-family: sans-serif; font-size: 10pt; color: #20242b; overflow-wrap: anywhere; }
+    footer { position: running(fuss); font-size: 8pt; }
+    .seite::after { content: counter(page) " / " counter(pages); }
+    .deckblatt { page-break-after: always; }
+    .kapitel { page-break-before: always; }
+    h1, h2, h3 { color: #9f2025; }
+    table { border-collapse: collapse; width: 100%; }
+    td, th { border-bottom: 1px solid #ddd; padding: 5pt; text-align: left; vertical-align: top; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+    img { max-width: 100%; max-height: 180px; }
+    .wasserzeichen { position: fixed; top: 40%; left: 0; width: 100%; font-size: 36pt; color: #b91c1c; opacity: .22; text-align: center; transform: rotate(-30deg); }
+  </style>
+</head>
+<body>
+  <footer>{{ kopf.titel }} · Version {{ version.versionsnummer if version else 'Entwurf' }} · Seite <span class="seite"></span> · Druck: {{ format_local_datetime(now, org) }}</footer>
+  {% if entwurf %}<div class="wasserzeichen">ENTWURF – nicht freigegeben</div>{% endif %}
+  <section class="deckblatt">
+    {% if logo %}<img src="{{ logo }}" alt="Organisationslogo">{% endif %}
+    <p>{{ org.name }}</p>
+    <h1>{{ kopf.titel }}</h1>
+    <p>{% for g in kopf.gefahrenarten %}{{ gefahrenarten.get(g, g) }}{% if not loop.last %} · {% endif %}{% endfor %}</p>
+    <p>Version: {{ version.versionsnummer if version else 'Entwurf' }}</p>
+    {% if version %}<p>Freigegeben: {{ format_local_datetime(version.freigegeben_am, org) }} · {{ freigeber }}</p>{% endif %}
+    <p>Wiedervorlage: {{ kopf.wiedervorlage_am or '-' }}</p>
+    <p>Geltungsbereich: {{ kopf.geltungsbereich or '-' }}</p>
+    <p>Verantwortliche Stelle: {{ kopf.verantwortliche_stelle or '-' }}</p>
+    {% for link in plan_links %}<p>{{ link.rolle_label }}: {{ link.titel }}{% for t in link.telefone %} · {{ t.nummer }}{% endfor %}</p>{% endfor %}
+  </section>
+  <h2>Inhaltsverzeichnis</h2>
+  <ul>{% for name in kapitel %}<li><a href="#kapitel-{{ loop.index }}">{{ name }}</a></li>{% endfor %}</ul>
+  <h2>Phasenübersicht</h2>
+  {% for p in kopf.phasen %}<h3>{{ p.name }}</h3><p>{{ p.beschreibung or '' }}</p><p>Auslöser: {{ p.ausloeser or '-' }}</p>{% endfor %}
+  {% for name, elemente in kapitel.items() %}
+    <section class="kapitel" id="kapitel-{{ loop.index }}">
+      <h2>{{ name }}</h2>
+      {% for e in elemente %}
+        <article>
+          <h3>{{ e.kennung }} · {{ e.title }}</h3>
+          <p>{{ e.type_label }} · Priorität {{ e.priority }} · Phasen: {{ e.phases|join(', ') or '-' }}</p>
+          {{ (e.beschreibung_html or '')|safe }}
+          <table>{% for feld, wert in e.daten.items() %}<tr><th>{{ feld }}</th><td>{% if wert is mapping or (wert is iterable and wert is not string) %}<pre>{{ wert|tojson(indent=2) }}</pre>{% else %}{{ wert }}{% endif %}</td></tr>{% endfor %}</table>
+          {% if e.address %}<p>Adresse: {{ e.address }}</p>{% endif %}
+          {% if e.geometry %}<p>Koordinaten ({{ e.geo_status }}): {{ e.geometry|tojson }}</p>{% endif %}
+          {% for link in e.linked_entities %}<p>{{ link.rolle_label }}: {{ link.titel }} · {{ link.untertitel }}{% for t in link.telefone %} · {{ t.nummer }}{% endfor %}</p>{% endfor %}
+          {% for q in e.source_references %}<p>Quelle: {{ q.titel }} · v{{ q.versionsnummer }} · Seiten {{ q.seiten or '-' }}</p>{% endfor %}
+          {% if e.attachments %}<h4>Anhänge</h4><ul>{% for a in e.attachments %}<li>{{ a.beschriftung or a.dateiname or a.art }}{% if a.url %} · {{ a.url }}{% endif %}</li>{% endfor %}</ul>{% endif %}
+          {% for bild in e.bilder %}<img src="{{ bild }}" alt="Anhang-Vorschaubild">{% endfor %}
+        </article>
+      {% endfor %}
+    </section>
+  {% endfor %}
+</body>
+</html>
