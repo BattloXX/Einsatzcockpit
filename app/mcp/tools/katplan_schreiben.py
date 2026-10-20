@@ -22,6 +22,7 @@ from app.models.katplan import (
     KatplanPlan,
     _utcnow,
 )
+from app.services import katplan_mcp_service as lesedaten
 from app.services import katplan_service as service
 from app.services.katplan_anhang_service import anhang_hochladen
 from app.services.katplan_flags import katplan_effective_enabled
@@ -106,6 +107,7 @@ def _phasen(context: MCPContext, plan: KatplanPlan, namen: list[str]) -> set[int
 
 _ADRESS_FELDER = ("strasse", "hausnummer", "plz", "ort")
 _ADRESS_HINWEIS = ('adresse ist ein Objekt mit den Textfeldern strasse, hausnummer, plz und ort, '
+                   'null oder "" leert ein Feld; adresse=null leert alle vier Felder. '
                    'z. B. {"strasse": "Eulentobel", "hausnummer": "7", "plz": "6922", "ort": "Wolfurt"}.')
 
 
@@ -120,7 +122,7 @@ def _adresse(adresse: dict | None) -> dict[str, str]:
         raise ValueError("Unbekannte Adressfelder: " + ", ".join(sorted(unbekannt)) + ". " + _ADRESS_HINWEIS)
     if any(v is not None and not isinstance(v, str) for v in adresse.values()):
         raise ValueError(_ADRESS_HINWEIS)
-    return {k: (adresse.get(k) or "").strip() for k in _ADRESS_FELDER if adresse.get(k) is not None}
+    return {k: (adresse.get(k) or "").strip() for k in _ADRESS_FELDER if k in adresse}
 
 
 async def _verorten(context: MCPContext, typ: str, adresse: dict[str, str]) -> tuple[dict | None, dict, dict]:
@@ -151,7 +153,8 @@ async def _verorten(context: MCPContext, typ: str, adresse: dict[str, str]) -> t
 
 
 def _werte(typ: str, *, titel: str, beschreibung: str, prioritaet: int, daten: dict,
-           tags: list[str], adresse: dict, geometrie: dict | None) -> dict:
+           tags: list[str], adresse: dict, geometrie: dict | None,
+           verworfen: list[str] | None = None) -> dict:
     if not isinstance(titel, str) or not isinstance(beschreibung, str):
         raise ValueError("Titel und Beschreibung müssen Text sein.")
     if type(prioritaet) is not int:
@@ -162,23 +165,65 @@ def _werte(typ: str, *, titel: str, beschreibung: str, prioritaet: int, daten: d
     if geometrie is not None and not isinstance(geometrie, dict):
         raise ValueError("Geometrie muss ein GeoJSON-Objekt sein.")
     return service.validiere_element_felder(
-        typ, titel=titel, prioritaet=prioritaet, daten=daten,
+        typ, titel=titel, prioritaet=prioritaet, daten=daten, verworfen=verworfen,
         tags=[t.strip() for t in tags if t.strip()], adresse=adresse,
         beschreibung_html=text_zu_html(beschreibung),
         geometrie=json.dumps(geometrie) if geometrie is not None else None,
     )
 
 
-def _antwort(element: KatplanElement) -> dict[str, object]:
-    return {"element_id": element.uuid, "id": element.id, "kennung": element.kennung,
-            "version": element.version, "hinweis": _HINWEIS}
+def _feldwerte(context: MCPContext, element: KatplanElement) -> dict:
+    """Gespeicherte Werte nach Eingabeschluesseln fuer den Wirkungsvergleich."""
+    return {
+        "typ": element.typ, "titel": element.titel, "beschreibung": element.beschreibung_html,
+        "prioritaet": element.prioritaet, "daten": json.loads(element.daten_json or "{}"),
+        "tags": json.loads(element.tags_json or "[]"),
+        "adresse": {k: getattr(element, k) or "" for k in _ADRESS_FELDER},
+        "geometrie": (element.geometry_json, element.lat, element.lng, element.geo_status),
+        "kapitel_id": element.abschnitt_id, "kapitel_titel": element.abschnitt_id,
+        "phasen": {r.phase_id for r in context.db.query(KatplanElementPhase).filter_by(
+            org_id=context.org_id, element_id=element.id)},
+        **{k: getattr(element, k) for k in (
+            "quelle_dokument_id", "quelle_seiten", "gueltig_bis", "pruefen_am")},
+    }
+
+
+def _antwort(context: MCPContext, plan: KatplanPlan, element: KatplanElement, *,
+             geaendert: list[str], verworfen: list[str], pruefen: bool,
+             unveraendert: list[str] | None = None) -> dict[str, object]:
+    context.db.flush()
+    _, elemente, _, _ = lesedaten.fassung_laden(context.db, context.user, plan, "arbeitsstand")
+    antwort: dict[str, object] = {
+        "element_id": element.uuid, "id": element.id, "kennung": element.kennung,
+        "version": element.version, "hinweis": _HINWEIS, "geaendert": geaendert,
+        "verworfen": verworfen, "gespeichert": not pruefen,
+        "element": next(e for e in elemente if e["element_id"] == element.uuid),
+    }
+    if unveraendert is not None:
+        antwort["unveraendert"] = unveraendert
+    if pruefen:
+        context.db.rollback()
+    return antwort
+
+
+_SCHREIB_HINWEIS = (
+    " Zahlen in daten-Textfeldern und Listen werden zu Text (500 wird zu \"500\"); bool ist kein Text. "
+    "quelle_dokument_id verweist auf die Quelle, quelle_seiten enthält Seiten wie 3-4,7. "
+    "quelle_dokument_id=null entfernt auch Seiten, sofern quelle_seiten nicht übergeben wird. "
+    "geometrie=null entfernt den Ort; gueltig_bis, pruefen_am und kapitel_id werden mit null oder leer geleert. "
+    "Antwort: geaendert, unveraendert (beim Ändern), verworfen (Pfad und Grund), gespeichert und element "
+    "im Leseformat des Arbeitsstands. Für Folgeänderungen version aus "
+    "katplan_element_lesen(fassung=arbeitsstand) verwenden, nicht element_version_id. "
+    "streng=true lehnt Datenverlust ab; pruefen=true validiert als "
+    "Trockenlauf mit Rollback und gespeichert=false."
+)
 
 
 @_tool("katplan_element_entwurf_anlegen", (
     "Legt einen KI-Entwurf nur im Arbeitsstand an; menschliche Freigabe nötig. " + _ADRESS_HINWEIS
     + " verorten=true setzt aus der Adresse einen ungeprüften Punkt (ohne Ort wird der Ort der Organisation "
     "verwendet); geometrie (GeoJSON) hat Vorrang. typ: info, massnahme, kontrollstelle, gefahrenbereich, "
-    "ablauf, ressource, medien, zustaendigkeit, objektverweis."
+    "ablauf, ressource, medien, zustaendigkeit, objektverweis." + _SCHREIB_HINWEIS
 ))
 async def katplan_element_entwurf_anlegen(
     context: MCPContext, plan_id: int, typ: str, titel: str, beschreibung: str = "",
@@ -186,18 +231,23 @@ async def katplan_element_entwurf_anlegen(
     prioritaet: int = 2, daten: dict | None = None, tags: list[str] | None = None,
     adresse: dict | None = None, geometrie: dict | None = None,
     quelle_dokument_id: int | None = None, quelle_seiten: str | None = None, verorten: bool = False,
+    streng: bool = False, pruefen: bool = False,
 ) -> dict[str, object]:
     plan = _plan(context, plan_id)
     from app.services.katplan_typen import ELEMENT_TYPEN
     if typ not in ELEMENT_TYPEN:
         raise ValueError("Unbekannter Elementtyp. Erlaubt: " + ", ".join(ELEMENT_TYPEN))
+    eingaben = dict(locals())
+    verworfen: list[str] = []
     adresse_werte = _adresse(adresse)
     verortung = None
     if verorten and geometrie is None:
         geometrie, adresse_werte, verortung = await _verorten(context, typ, adresse_werte)
     werte = _werte(typ, titel=titel, beschreibung=beschreibung, prioritaet=prioritaet,
                    daten=daten if daten is not None else {}, tags=tags if tags is not None else [],
-                   adresse=adresse_werte, geometrie=geometrie)
+                   adresse=adresse_werte, geometrie=geometrie, verworfen=verworfen)
+    if streng and verworfen:
+        raise ValueError("Nicht gespeichert: " + "; ".join(verworfen))
     validiere_element_quelle(context.db, plan, quelle_dokument_id, quelle_seiten or "")
     if kapitel_id is not None and kapitel_titel is not None:
         raise ValueError("Entweder kapitel_id oder kapitel_titel angeben.")
@@ -220,7 +270,12 @@ async def katplan_element_entwurf_anlegen(
     for pid in phase_ids:
         context.db.add(KatplanElementPhase(org_id=plan.org_id, element_id=element.id, phase_id=pid))
     service.aktualisiere_element_suchtext(element)
-    antwort = _antwort(element)
+    context.db.flush()
+    gespeichert = _feldwerte(context, element)
+    geaendert = [k for k, v in eingaben.items() if k in gespeichert and v not in (None, "", [], {})
+                and gespeichert[k] not in (None, "", [], {}, set())
+                and (k != "adresse" or any(gespeichert[k].values()))]
+    antwort = _antwort(context, plan, element, geaendert=geaendert, verworfen=verworfen, pruefen=pruefen)
     if verortung is not None:
         antwort["verortung"] = verortung
     return antwort
@@ -230,23 +285,34 @@ async def katplan_element_entwurf_anlegen(
     "Ändert erlaubte Entwurfsfelder mit Versionsprüfung nur im Arbeitsstand. felder darf enthalten: titel, "
     "beschreibung, prioritaet, daten, tags, adresse, geometrie, kapitel_id, phasen, quelle_dokument_id, "
     "quelle_seiten, gueltig_bis, pruefen_am. " + _ADRESS_HINWEIS + " Nur übergebene Adressfelder werden "
-    "geändert. verorten=true setzt aus der (neuen) Adresse einen ungeprüften Punkt."
+    "geändert. verorten=true setzt aus der (neuen) Adresse einen ungeprüften Punkt. "
+    "version aus katplan_element_lesen(fassung=arbeitsstand), Feld version, NICHT element_version_id, verwenden."
+    + _SCHREIB_HINWEIS
 ))
 async def katplan_element_entwurf_aendern(context: MCPContext, plan_id: int, element_id: str,
-                                         version: int, felder: dict, verorten: bool = False) -> dict[str, object]:
+                                         version: int, felder: dict, verorten: bool = False,
+                                         streng: bool = False, pruefen: bool = False) -> dict[str, object]:
     plan = _plan(context, plan_id)
     element = _element(context, plan, element_id)
-    service.pruefe_version(element, version)
+    if element.version != version:
+        raise ValueError(
+            f"Versionskonflikt: Element {element.kennung} hat version {element.version}, übergeben {version}. "
+            'Mit katplan_element_lesen(fassung="arbeitsstand") neu lesen.'
+        )
     if not isinstance(felder, dict):
         raise ValueError("felder muss ein Objekt sein.")
     verboten = set(felder) - _FELDER
     if verboten:
         raise ValueError("Nicht erlaubte Felder: " + ", ".join(sorted(verboten)))
+    eingaben = list(felder)
+    vorher = _feldwerte(context, element)
+    verworfen: list[str] = []
     felder = dict(felder)
     if "adresse" in felder:
         # Teiladressen mit dem Bestand zusammenfuehren, damit {"hausnummer": "7"} die Straße nicht loescht.
         bestand = {k: getattr(element, k) or "" for k in _ADRESS_FELDER}
-        felder["adresse"] = {**bestand, **_adresse(felder["adresse"])}
+        felder["adresse"] = ({k: "" for k in _ADRESS_FELDER} if felder["adresse"] is None
+                             else {**bestand, **_adresse(felder["adresse"])})
     verortung = None
     if verorten and "geometrie" not in felder:
         adresse_neu = felder.get("adresse") or {k: getattr(element, k) or "" for k in _ADRESS_FELDER}
@@ -263,7 +329,9 @@ async def katplan_element_entwurf_aendern(context: MCPContext, plan_id: int, ele
                     "adresse": {k: getattr(element, k) or "" for k in ("strasse", "hausnummer", "plz", "ort")},
                     "geometrie": None}
         defaults.update({k: v for k, v in felder.items() if k in scalar})
-        alle = _werte(element.typ, **defaults)
+        alle = _werte(element.typ, **defaults, verworfen=verworfen if "daten" in felder else None)
+        if streng and verworfen:
+            raise ValueError("Nicht gespeichert: " + "; ".join(verworfen))
         mapping = {"beschreibung": ("beschreibung_html",), "daten": ("daten_json",), "tags": ("tags_json",),
                    "adresse": ("strasse", "hausnummer", "plz", "ort"),
                    "geometrie": ("geometry_json", "lat", "lng", "geo_status")}
@@ -271,7 +339,7 @@ async def katplan_element_entwurf_aendern(context: MCPContext, plan_id: int, ele
             for feld in mapping.get(key, (key,)):
                 werte[feld] = alle[feld]
     if "kapitel_id" in felder:
-        werte["abschnitt_id"] = _kapitel(context, plan, felder["kapitel_id"])
+        werte["abschnitt_id"] = _kapitel(context, plan, None if felder["kapitel_id"] == "" else felder["kapitel_id"])
     for feld in ("gueltig_bis", "pruefen_am"):
         if feld in felder:
             if felder[feld] is not None and not isinstance(felder[feld], str):
@@ -279,7 +347,8 @@ async def katplan_element_entwurf_aendern(context: MCPContext, plan_id: int, ele
             werte[feld] = date.fromisoformat(felder[feld]) if felder[feld] else None
     if {"quelle_dokument_id", "quelle_seiten"} & set(felder):
         qid = felder.get("quelle_dokument_id", element.quelle_dokument_id)
-        seiten = felder.get("quelle_seiten", element.quelle_seiten) or ""
+        seiten = felder.get("quelle_seiten", "" if "quelle_dokument_id" in felder and qid is None
+                            else element.quelle_seiten) or ""
         validiere_element_quelle(context.db, plan, qid, seiten)
         werte.update(quelle_dokument_id=qid, quelle_seiten=seiten or None)
     phase_ids = _phasen(context, plan, felder["phasen"]) if "phasen" in felder else None
@@ -307,7 +376,12 @@ async def katplan_element_entwurf_aendern(context: MCPContext, plan_id: int, ele
     element.aktualisiert_am, element.aktualisiert_von_id = _utcnow(), context.user.id
     service.aktualisiere_element_suchtext(element)
     service.markiere_ueberarbeitung(context.db, plan, context.user, quelle="mcp")
-    antwort = _antwort(element)
+    context.db.flush()
+    nachher = _feldwerte(context, element)
+    antwort = _antwort(context, plan, element,
+                       geaendert=[k for k in eingaben if vorher[k] != nachher[k]],
+                       unveraendert=[k for k in eingaben if vorher[k] == nachher[k]],
+                       verworfen=verworfen, pruefen=pruefen)
     if verortung is not None:
         antwort["verortung"] = verortung
     return antwort

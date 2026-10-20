@@ -196,7 +196,7 @@ def test_bereinige_daten():
     assert bereinige_daten("massnahme", {"schritte": "falsch"}) == {}
     assert bereinige_daten("massnahme", {"schritte": [None, 7, " Text ",
         {"text": " Schritt ", "erledigt_hinweis": " OK ", "fremd": "weg"}]}) == {
-        "schritte": ["Text", {"text": "Schritt", "erledigt_hinweis": "OK"}],
+        "schritte": ["7", "Text", {"text": "Schritt", "erledigt_hinweis": "OK"}],
     }
     assert len(bereinige_daten("kontrollstelle", {"gefahren": [" Gefahr "] * 150})["gefahren"]) == 100
     assert bereinige_daten("ablauf", {"bedingungen": [{"wenn": " A ", "dann": " B "}]}) == {
@@ -321,3 +321,29 @@ def test_migration_upgrade_downgrade():
             assert [c["name"] for c in sa.inspect(conn).get_columns("org_settings")] == ["id"]
     finally:
         engine.dispose()
+
+
+def test_bereinige_daten_zahlen_und_verworfen():
+    verworfen = []
+    assert bereinige_daten("ressource", {"bedarf": [
+        {"menge": 500.0, "einheit": 2.5, "lieferant": "X"}, {"menge": True}, None,
+    ], "lagerort": 42, "fremd": "X"}, verworfen) == {
+        "bedarf": [{"menge": "500", "einheit": "2.5"}], "lagerort": "42",
+    }
+    assert verworfen == ["daten.bedarf[0].lieferant: unbekanntes Feld",
+                         "daten.bedarf[1].menge: ungueltiger Typ (bool)",
+                         "daten.bedarf[1]: leerer oder ungueltiger Eintrag",
+                         "daten.bedarf[2]: leerer oder ungueltiger Eintrag",
+                         "daten.fremd: unbekanntes Feld"]
+    verworfen = []
+    assert bereinige_daten("kontrollstelle", {"gefahren": [500, 2.5, 500.0, False]}, verworfen) == {
+        "gefahren": ["500", "2.5", "500"],
+    }
+    assert verworfen == ["daten.gefahren[3]: leerer oder ungueltiger Eintrag"]
+    verworfen = []
+    bereinige_daten("massnahme", {"schritte": ["x" * 5001] * 101}, verworfen)
+    assert "daten.schritte: nur 100 Eintraege uebernommen" in verworfen
+    assert "daten.schritte[0]: auf 5000 Zeichen gekuerzt" in verworfen
+    verworfen = []
+    assert bereinige_daten("objektverweis", {"hinweis": "x" * 5001}, verworfen) == {"hinweis": "x" * 5000}
+    assert verworfen == ["daten.hinweis: auf 5000 Zeichen gekuerzt"]

@@ -118,6 +118,7 @@ async def katplan_lesen(context: MCPContext, plan_id: int, fassung: str = "freig
     if mit_elementen and len(elemente) > 200:
         warnings.append("Elemente auf 200 begrenzt; katplan_elemente mit Filtern verwenden.")
     return {"plan_id": plan.id, "plan_version_id": vid, "fassung": fassung,
+            "plan_version": plan.version if vid is None else None,
             "kopf": {**{k: kopf.get(k) for k in ("uuid", "titel", "gefahrenarten", "geltungsbereich",
                                                  "verantwortliche_stelle", "wiedervorlage_am")},
                      "body": daten.text(kopf.get("beschreibung_html"))},
@@ -143,7 +144,8 @@ async def katplan_suchen(context: MCPContext, q: str = "", plan_id: int | None =
     return result
 
 
-@_tool("katplan_elemente", "Liest Elemente in Planreihenfolge, gefiltert nach Typ, Phase oder Kapitel.")
+@_tool("katplan_elemente", "Liest Elemente in Planreihenfolge, gefiltert nach Typ, Phase oder Kapitel. "
+       "Zum Schreiben version aus fassung=arbeitsstand verwenden, nicht element_version_id.")
 async def katplan_elemente(context: MCPContext, plan_id: int, fassung: str = "freigegeben",
                            typ: str = "", phase: str = "", kapitel: str = "", limit: int = 100) -> dict[str, object]:
     if not 1 <= limit <= 200:
@@ -158,7 +160,8 @@ async def katplan_elemente(context: MCPContext, plan_id: int, fassung: str = "fr
     return {"plan_id": plan_id, "plan_version_id": vid, "elemente": elemente[:limit], "warnings": warnings}
 
 
-@_tool("katplan_element_lesen", "Liest ein Element anhand seiner UUID oder Kennung (z. B. M-01).")
+@_tool("katplan_element_lesen", "Liest ein Element anhand seiner UUID oder Kennung (z. B. M-01). "
+       "Zum Schreiben version aus fassung=arbeitsstand verwenden, nicht element_version_id.")
 async def katplan_element_lesen(context: MCPContext, plan_id: int, element_id: str,
                                 fassung: str = "freigegeben", version_id: int | None = None) -> dict[str, object]:
     _, _, elemente, _, _ = _fassung(context, plan_id, fassung, version_id)

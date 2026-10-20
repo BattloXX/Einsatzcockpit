@@ -333,7 +333,8 @@ def lege_phase_an(db: Session, plan: KatplanPlan, user: User, *, name: str, quel
 
 def validiere_element_felder(typ: str, *, titel: str, prioritaet: int, daten: dict,
                              tags: list[str], adresse: dict, beschreibung_html: str | None,
-                             geometrie: str | None, geo_geprueft: bool = False) -> dict[str, Any]:
+                             geometrie: str | None, geo_geprueft: bool = False,
+                             verworfen: list[str] | None = None) -> dict[str, Any]:
     """Gemeinsame Feldregeln des Editors und der MCP-Entwurfswerkzeuge."""
     from app.services.katplan_geo_service import ableite_punkt, pruefe_geometrie
     from app.services.katplan_typen import bereinige_daten
@@ -342,7 +343,7 @@ def validiere_element_felder(typ: str, *, titel: str, prioritaet: int, daten: di
         raise ValueError("Titel: Bitte 1 bis 200 Zeichen eingeben.")
     if not isinstance(daten, dict):
         raise ValueError("Daten müssen ein JSON-Objekt sein.")
-    bereinigt = bereinige_daten(typ, daten)
+    bereinigt = bereinige_daten(typ, daten, verworfen)
     if prioritaet not in (1, 2, 3):
         raise ValueError("Priorität muss 1, 2 oder 3 sein.")
     if len(tags) > 20 or any(len(t) > 50 for t in tags):

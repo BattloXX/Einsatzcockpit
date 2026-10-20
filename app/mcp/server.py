@@ -2045,21 +2045,24 @@ async def katplan_element_entwurf_anlegen(
     kapitel_titel: str | None = None, phasen: list[str] | None = None, prioritaet: int = 2,
     daten: dict | None = None, tags: list[str] | None = None, adresse: KatplanAdresse | None = None,
     geometrie: dict | None = None, quelle_dokument_id: int | None = None, quelle_seiten: str | None = None,
-    verorten: bool = False, ctx: Context | None = None,
+    verorten: bool = False, streng: bool = False, pruefen: bool = False, ctx: Context | None = None,
 ) -> dict[str, object]:
     return await _call_registered_tool(
         "katplan_element_entwurf_anlegen", plan_id=plan_id, typ=typ, titel=titel, beschreibung=beschreibung,
         kapitel_id=kapitel_id, kapitel_titel=kapitel_titel, phasen=phasen, prioritaet=prioritaet, daten=daten,
         tags=tags, adresse=dict(adresse) if adresse is not None else None, geometrie=geometrie,
         quelle_dokument_id=quelle_dokument_id, quelle_seiten=quelle_seiten, verorten=verorten,
+        streng=streng, pruefen=pruefen,
     )
 
 
 @server.tool(name="katplan_element_entwurf_aendern", description=TOOLS["katplan_element_entwurf_aendern"].description)
 async def katplan_element_entwurf_aendern(plan_id: int, element_id: str, version: int, felder: dict,
-                                         verorten: bool = False, ctx: Context | None = None) -> dict[str, object]:
+                                         verorten: bool = False, streng: bool = False, pruefen: bool = False,
+                                         ctx: Context | None = None) -> dict[str, object]:
     return await _call_registered_tool("katplan_element_entwurf_aendern", plan_id=plan_id,
-                                       element_id=element_id, version=version, felder=felder, verorten=verorten)
+                                       element_id=element_id, version=version, felder=felder, verorten=verorten,
+                                       streng=streng, pruefen=pruefen)
 
 
 @server.tool(name="katplan_anhang_upload_vorbereiten", description=TOOLS["katplan_anhang_upload_vorbereiten"].description)

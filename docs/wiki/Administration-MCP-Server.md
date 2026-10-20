@@ -52,7 +52,7 @@ Für Katastrophenpläne müssen MCP und das Katastrophenplan-Modul auf System- u
 | `katplan_dokument_auszug` | Quellseiten und kurzlebige PDF-Downloads mit erneuter Live-Rechteprüfung |
 | `katplan_verknuepfungen` | Live-Links sowie ausgehende und eingehende Beziehungen |
 
-Standard ist die freigegebene Fassung; Arbeitsstände sind nur für Planbearbeiter mit `fassung="arbeitsstand"` verfügbar. Vertrauliches sehen nur Planverwalter, Planfreigeber, Einsatzleiter und Admins. Ohne Kontaktverzeichnisrecht werden ausschließlich Dienstnummern einsatzrelevanter Kontakte angezeigt. Objektdetails erfordern zusätzlich das Objektmodul und dessen Leserecht. Alle erfolgreichen Katplan-Toolaufrufe werden mit `mcp.katplan_*` auditiert; es gibt keine Schreib- oder Freigabewerkzeuge.
+Standard ist die freigegebene Fassung; Arbeitsstände sind nur für Planbearbeiter mit `fassung="arbeitsstand"` verfügbar. Vertrauliches sehen nur Planverwalter, Planfreigeber, Einsatzleiter und Admins. Ohne Kontaktverzeichnisrecht werden ausschließlich Dienstnummern einsatzrelevanter Kontakte angezeigt. Objektdetails erfordern zusätzlich das Objektmodul und dessen Leserecht. Alle erfolgreichen Katplan-Toolaufrufe werden mit `mcp.katplan_*` auditiert; Freigabewerkzeuge gibt es nicht.
 
 Schreibende Werkzeuge verlangen `katplan_verwalter`, `katplan_freigeber` oder Admin und ändern nur den Arbeitsstand:
 
@@ -63,6 +63,16 @@ Schreibende Werkzeuge verlangen `katplan_verwalter`, `katplan_freigeber` oder Ad
 | `katplan_vorschlaege_aus_dokument` | Strukturierte Vorschläge zu einer Quellseite in die Import-Prüfung (keine Elemente) |
 
 Alle Schreibzugriffe werden im Planprotokoll mit Herkunft `mcp` und im Audit-Log (`mcp.katplan_…`) geführt. Kein Werkzeug kann einreichen, freigeben, archivieren oder freigegebene Versionen ändern.
+
+Entwurfswerkzeuge melden mit `geaendert`, `unveraendert` (Ändern), `verworfen`,
+`gespeichert` und `element` ihre Wirkung. `streng=true` rollt bei Datenverlust zurück;
+`pruefen=true` berechnet einen vollständigen Vorschlag und rollt alle fachlichen Änderungen
+inklusive neuer Kapitel, Phasen und Planprotokolle zurück. Der erfolgreiche Trockenlauf
+erscheint weiterhin im Audit-Log. Für Versionsprüfungen `version` aus
+`katplan_element_lesen(fassung="arbeitsstand")` verwenden, nicht `element_version_id`.
+Zahlen in Typdaten werden als Text erhalten; `null`/`""` leeren Adressfelder,
+`adresse=null` alle Adressfelder, `geometrie=null` den Ort und
+`quelle_dokument_id=null` den Quellbezug samt nicht explizit übergebenen Seiten.
 
 ## Reverse-Proxy und Konfiguration
 

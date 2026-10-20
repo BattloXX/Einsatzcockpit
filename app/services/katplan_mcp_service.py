@@ -81,6 +81,10 @@ def _rohdaten(db: Session, plan: KatplanPlan, arbeit: bool, version_id: int | No
         if version_id is not None:
             raise ValueError("version_id ist nur für freigegebene Fassungen zulässig.")
         kopf, elemente = erstelle_snapshot(db, plan, flush=False)
+        versionen = dict(db.query(KatplanElement.uuid, KatplanElement.version).filter_by(
+            org_id=plan.org_id, plan_id=plan.id).all())
+        for e in elemente:
+            e["version"] = versionen[e["element_uuid"]]
         return kopf, elemente, None
     try:
         version, kopf, rows = lade_version(db, plan, version_id)
@@ -161,6 +165,7 @@ def element_dict(db: Session, user: User, plan: KatplanPlan, e: dict, kopf: dict
     result: dict[str, Any] = {
         "plan_id": plan.id, "plan_version_id": version_id, "element_id": e["element_uuid"],
         "element_version_id": e.get("id") if version_id else None,
+        "version": e.get("version") if version_id is None else None,
         "type": e["typ"], "type_label": ELEMENT_TYPEN[e["typ"]].label,
         "kennung": e.get("kennung") or None, "title": e["titel"], "body": text(e.get("beschreibung_html")),
         "daten": bereinige_daten(e["typ"], json.loads(e.get("daten_json") or "{}")),
@@ -180,7 +185,8 @@ def element_dict(db: Session, user: User, plan: KatplanPlan, e: dict, kopf: dict
         "gueltig_bis": str(e["gueltig_bis"]) if e.get("gueltig_bis") else None,
         "pruefen_am": str(datum) if datum else None,
     }
-    warnings.extend(f"{key}: nicht vorhanden." for key, value in result.items() if value is None)
+    warnings.extend(f"{key}: nicht vorhanden." for key, value in result.items() if value is None
+                    and key not in {"version", "element_version_id", "plan_version_id"})
     if ueberfaellig:
         warnings.append("Prüftermin überschritten.")
     if e.get("herkunft") == "ai_suggested":
