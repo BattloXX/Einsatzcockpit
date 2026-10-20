@@ -33,10 +33,10 @@ NAMEN = {
 }
 
 
-def rufe(info, name, rolle="readonly", **kwargs):
+def rufe(info, name, benutzerrolle="readonly", **kwargs):
     with TestingSession() as db:
         set_tenant_context(db, None)
-        user = db.query(User).filter_by(username=info["users"][rolle]).one()
+        user = db.query(User).filter_by(username=info["users"][benutzerrolle]).one()
         return asyncio.run(TOOLS[name].handler(MCPContext(db, user, user.org_id), **kwargs))
 
 

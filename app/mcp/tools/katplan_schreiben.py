@@ -489,3 +489,189 @@ async def katplan_vorschlaege_aus_dokument(context: MCPContext, plan_id: int, do
     return {"anzahl": len(werte),
             "ui_link": f"/katastrophenplaene/{plan.id}/import?quelle={dokument_id}&seite={seiten_nr}",
             "hinweis": _HINWEIS}
+
+
+def _zu_element(context: MCPContext, plan: KatplanPlan, element_id: str) -> KatplanElement:
+    # Kennungen sind nur innerhalb des Quellplans eindeutig; UUIDs orgweit.
+    ziel = context.db.query(KatplanElement).filter_by(org_id=context.org_id, uuid=element_id).one_or_none()
+    return ziel if ziel is not None else _element(context, plan, element_id)
+
+
+def _link_antwort(context: MCPContext, plan: KatplanPlan, element: KatplanElement | None,
+                  *, geaendert: list[str]) -> dict[str, object]:
+    if element is not None:
+        return _antwort(context, plan, element, geaendert=geaendert, verworfen=[], pruefen=False)
+    context.db.flush()
+    return {"plan_id": plan.id, "plan_version": plan.version, "geaendert": geaendert, "hinweis": _HINWEIS}
+
+
+@_tool("katplan_verknuepfung_setzen", (
+    "Verknüpft ein Stammdatenziel im Arbeitsstand, ohne element_id auf Planebene. "
+    "ziel_typ: kontakt, kontakt_organisation, objekt, fahrzeug, wasserstelle. "
+    "rolle: zu_verstaendigen, verantwortlich, zustaendig, ausfuehrend, info, sonstiges. "
+    "Kontakte vorher mit kontakt_suchen / kontakt_organisation_suchen finden. Telefonnummern nicht in "
+    "die Beschreibung kopieren, sondern Kontakt verknüpfen. Idempotent; pruefen=true rollt zurück."
+))
+async def katplan_verknuepfung_setzen(context: MCPContext, plan_id: int, ziel_typ: str, ziel_id: int,
+                                     rolle: str = "info", element_id: str | None = None,
+                                     hinweis: str | None = None, pruefen: bool = False) -> dict[str, object]:
+    from app.models.katplan import KatplanLink
+    from app.services import katplan_link_service as links
+
+    plan = _plan(context, plan_id)
+    element = _element(context, plan, element_id) if element_id is not None else None
+    link = context.db.query(KatplanLink).filter_by(
+        org_id=context.org_id, plan_id=plan.id, element_id=element.id if element else None,
+        ziel_typ=ziel_typ, ziel_id=ziel_id, rolle=rolle).one_or_none()
+    vorhanden = link is not None
+    geaendert = []
+    if link is None:
+        link = links.link_anlegen(context.db, plan, context.user, element=element,
+                                  ziel_typ=ziel_typ, ziel_id=ziel_id, rolle=rolle, hinweis=hinweis or "", quelle="mcp")
+        geaendert = ["verknuepfung"]
+    elif hinweis is not None and link.hinweis != hinweis:
+        if len(hinweis) > 500:
+            raise ValueError("Der Hinweis darf höchstens 500 Zeichen enthalten.")
+        service.protokolliere(context.db, plan, "link", "geaendert", context.user, feld="hinweis",
+                              alt=link.hinweis, neu=hinweis, element_id=link.element_id, quelle="mcp")
+        link.hinweis = hinweis
+        links._geaendert(context.db, plan, context.user, element, quelle="mcp")
+        geaendert = ["hinweis"]
+    antwort = _link_antwort(context, plan, element, geaendert=geaendert)
+    antwort.update(verknuepfung=lesedaten.link_ansichten(
+        context.db, context.user, [links.link_snapshot(context.db, link)])[0],
+        bereits_vorhanden=vorhanden, gespeichert=not pruefen)
+    if pruefen:
+        context.db.rollback()
+    return antwort
+
+
+@_tool("katplan_verknuepfung_entfernen",
+       "Entfernt passende Verknüpfungen im Arbeitsstand; rolle=null entfernt alle Rollen.")
+async def katplan_verknuepfung_entfernen(context: MCPContext, plan_id: int, ziel_typ: str, ziel_id: int,
+                                        element_id: str | None = None, rolle: str | None = None) -> dict[str, object]:
+    from app.models.katplan import KatplanLink
+    from app.services.katplan_link_service import link_entfernen
+
+    plan = _plan(context, plan_id)
+    element = _element(context, plan, element_id) if element_id is not None else None
+    query = context.db.query(KatplanLink).filter_by(
+        org_id=context.org_id, plan_id=plan.id, element_id=element.id if element else None,
+        ziel_typ=ziel_typ, ziel_id=ziel_id)
+    rows = (query.filter_by(rolle=rolle) if rolle is not None else query).all()
+    if not rows:
+        raise ValueError("Verknuepfung nicht gefunden.")
+    for link in rows:
+        link_entfernen(context.db, plan, context.user, link, quelle="mcp")
+    return {"entfernt": len(rows), "hinweis": _HINWEIS}
+
+
+@_tool("katplan_beziehung_setzen", (
+    "Verknüpft Elemente im Arbeitsstand. Kennungen gelten im selben Plan, UUIDs in derselben Organisation. "
+    "art: siehe_auch, folgt_auf, abhaengig_von, eskaliert_zu. Idempotent; pruefen=true rollt zurück."
+))
+async def katplan_beziehung_setzen(context: MCPContext, plan_id: int, element_id: str, zu_element_id: str,
+                                  art: str = "siehe_auch", hinweis: str | None = None,
+                                  pruefen: bool = False) -> dict[str, object]:
+    from app.models.katplan import KatplanRelation
+    from app.services import katplan_link_service as links
+
+    plan = _plan(context, plan_id)
+    element = _element(context, plan, element_id)
+    ziel = _zu_element(context, plan, zu_element_id)
+    relation = context.db.query(KatplanRelation).filter_by(
+        org_id=context.org_id, plan_id=plan.id, von_element_id=element.id,
+        zu_element_uuid=ziel.uuid, art=art).one_or_none()
+    vorhanden = relation is not None
+    geaendert = []
+    if relation is None:
+        relation = links.relation_anlegen(context.db, plan, context.user, element, ziel.uuid,
+                                          art, hinweis or "", quelle="mcp")
+        geaendert = ["beziehung"]
+    elif hinweis is not None and relation.hinweis != hinweis:
+        if len(hinweis) > 300:
+            raise ValueError("Ungültige Beziehungsart oder zu langer Hinweis.")
+        service.protokolliere(context.db, plan, "relation", "geaendert", context.user, feld="hinweis",
+                              alt=relation.hinweis, neu=hinweis, element_id=element.id, quelle="mcp")
+        relation.hinweis = hinweis
+        links._geaendert(context.db, plan, context.user, element, quelle="mcp")
+        geaendert = ["hinweis"]
+    antwort = _link_antwort(context, plan, element, geaendert=geaendert)
+    antwort.update(beziehung={"zu_element_id": ziel.uuid, "art": art, "hinweis": relation.hinweis},
+                   bereits_vorhanden=vorhanden, gespeichert=not pruefen)
+    if pruefen:
+        context.db.rollback()
+    return antwort
+
+
+@_tool("katplan_beziehung_entfernen", "Entfernt Beziehungen im Arbeitsstand; art=null entfernt alle Arten zum Ziel.")
+async def katplan_beziehung_entfernen(context: MCPContext, plan_id: int, element_id: str,
+                                     zu_element_id: str, art: str | None = None) -> dict[str, object]:
+    from app.models.katplan import KatplanRelation
+    from app.services.katplan_link_service import relation_entfernen
+
+    plan = _plan(context, plan_id)
+    element = _element(context, plan, element_id)
+    ziel = _zu_element(context, plan, zu_element_id)
+    query = context.db.query(KatplanRelation).filter_by(
+        org_id=context.org_id, plan_id=plan.id, von_element_id=element.id, zu_element_uuid=ziel.uuid)
+    rows = (query.filter_by(art=art) if art is not None else query).all()
+    if not rows:
+        raise ValueError("Beziehung nicht gefunden.")
+    for relation in rows:
+        relation_entfernen(context.db, plan, context.user, relation, quelle="mcp")
+    return {"entfernt": len(rows), "hinweis": _HINWEIS}
+
+
+@_tool("katplan_stammdaten_aendern", (
+    "Ändert nur übergebene Plan-Stammdaten im Arbeitsstand. version aus katplan_lesen(fassung=arbeitsstand), "
+    "Feld plan_version. felder: titel, beschreibung (Text), gefahrenarten (Liste gültiger Codes), "
+    "geltungsbereich, verantwortliche_stelle, verantwortlich_kontakt_id, wiedervorlage_am (YYYY-MM-DD). "
+    "null oder leer leert optionale Felder; titel und gefahrenarten sind Pflicht. Status bleibt menschlich. "
+    "Unbekannte Felder sind Fehler; streng=true erlaubt keinen Datenverlust; pruefen=true rollt zurück."
+))
+async def katplan_stammdaten_aendern(context: MCPContext, plan_id: int, version: int, felder: dict,
+                                    streng: bool = False, pruefen: bool = False) -> dict[str, object]:
+    plan = _plan(context, plan_id)
+    if version != plan.version:
+        raise ValueError(f"Versionskonflikt: Plan hat version {plan.version}, übergeben {version}. "
+                         'Mit katplan_lesen(fassung="arbeitsstand") neu lesen.')
+    mapping = {"beschreibung": "beschreibung_html", "gefahrenarten": "gefahrenarten_json"}
+    erlaubt = {"titel", "beschreibung", "gefahrenarten", "geltungsbereich", "verantwortliche_stelle",
+               "verantwortlich_kontakt_id", "wiedervorlage_am"}
+    if not isinstance(felder, dict):
+        raise ValueError("felder muss ein Objekt sein.")
+    if set(felder) - erlaubt:
+        raise ValueError("Nicht erlaubte Felder: " + ", ".join(sorted(set(felder) - erlaubt)))
+    bestand: dict = {"titel": plan.titel, "gefahrenarten": plan.gefahrenarten,
+               "beschreibung_html": plan.beschreibung_html or "", "geltungsbereich": plan.geltungsbereich or "",
+               "verantwortliche_stelle": plan.verantwortliche_stelle or "",
+               "wiedervorlage_am": plan.wiedervorlage_am.isoformat() if plan.wiedervorlage_am else ""}
+    for feld, wert in felder.items():
+        if feld == "verantwortlich_kontakt_id":
+            if wert not in (None, "") and type(wert) is not int:
+                raise ValueError("verantwortlich_kontakt_id muss eine Kontakt-ID oder null sein.")
+            continue
+        if feld == "gefahrenarten":
+            if not isinstance(wert, list) or any(not isinstance(code, str) for code in wert):
+                raise ValueError("Bitte mindestens eine gültige Gefahrenart auswählen.")
+        else:
+            if wert is not None and not isinstance(wert, str):
+                raise ValueError(f"{feld} muss Text sein.")
+            wert = wert or ""
+        bestand["beschreibung_html" if feld == "beschreibung" else feld] = (
+            text_zu_html(wert) if feld == "beschreibung" else wert)
+    validiert = service.validiere_stammdaten(**bestand)
+    werte = {mapping.get(k, k): validiert[mapping.get(k, k)] for k in felder if k != "verantwortlich_kontakt_id"}
+    if "verantwortlich_kontakt_id" in felder:
+        werte["verantwortlich_kontakt_id"] = felder["verantwortlich_kontakt_id"] or None
+    geaendert = service.stammdaten_aendern(context.db, plan, context.user, version=version, werte=werte, quelle="mcp")
+    context.db.flush()
+    kopf, _, _, _ = lesedaten.fassung_laden(context.db, context.user, plan, "arbeitsstand")
+    geaendert = [k for k in felder if mapping.get(k, k) in geaendert]
+    antwort = {"plan_id": plan.id, "plan_version": plan.version, "geaendert": geaendert,
+               "unveraendert": [k for k in felder if k not in geaendert], "verworfen": [],
+               "gespeichert": not pruefen, "plan": lesedaten.kopf_ansicht(kopf), "hinweis": _HINWEIS}
+    if pruefen:
+        context.db.rollback()
+    return antwort

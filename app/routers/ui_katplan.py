@@ -61,7 +61,9 @@ from app.services.katplan_service import (
     protokolliere,
     pruefe_version,
     sortiere_baum,
+    stammdaten_aendern,
     validiere_element_felder,
+    validiere_stammdaten,
     verschiebe_nachbar,
 )
 from app.services.katplan_typen import ELEMENT_TYPEN, ELEMENT_VORLAGEN, bereinige_daten
@@ -128,22 +130,14 @@ class Stammdaten:
                      "geltungsbereich": geltungsbereich,
                      "verantwortliche_stelle": verantwortliche_stelle, "wiedervorlage_am": wiedervorlage_am}
         self.fehler: str | None = None
-        termin = None
+        self.werte = {}
         try:
-            termin = date.fromisoformat(wiedervorlage_am) if wiedervorlage_am else None
-        except ValueError:
-            self.fehler = "Bitte ein gültiges Wiedervorlagedatum eingeben."
-        if not titel.strip() or len(titel.strip()) > 200:
-            self.fehler = "Bitte einen Titel mit höchstens 200 Zeichen eingeben."
-        if not gefahrenarten or any(code not in KATPLAN_GEFAHRENARTEN for code in gefahrenarten):
-            self.fehler = "Bitte mindestens eine gültige Gefahrenart auswählen."
-        if len(geltungsbereich) > 300 or len(verantwortliche_stelle) > 200:
-            self.fehler = "Geltungsbereich (300) oder verantwortliche Stelle (200) ist zu lang."
-        self.werte = {"titel": titel.strip(), "gefahrenarten_json": json.dumps(sorted(set(gefahrenarten))),
-                      "beschreibung_html": bereinige_beschreibung(beschreibung_html),
-                      "geltungsbereich": geltungsbereich.strip() or None,
-                      "verantwortliche_stelle": verantwortliche_stelle.strip() or None,
-                      "wiedervorlage_am": termin}
+            self.werte = validiere_stammdaten(
+                titel=titel, gefahrenarten=gefahrenarten, beschreibung_html=beschreibung_html,
+                geltungsbereich=geltungsbereich, verantwortliche_stelle=verantwortliche_stelle,
+                wiedervorlage_am=wiedervorlage_am)
+        except ValueError as exc:
+            self.fehler = str(exc)
 
 
 def _anhang(db: Session, plan: KatplanPlan, uuid: str) -> KatplanAnhang:
@@ -678,21 +672,7 @@ def speichern(plan_id: int, request: Request, version: int = Form(-1), daten: St
         return templates.TemplateResponse(request, "katplan/_formular.html", {
             **_kontext(db, user, plan), "form": daten.form, "fehler": fehler,
             "formular_version": version}, status_code=status_code)
-    for feld, wert in daten.werte.items():
-        alt = getattr(plan, feld)
-        if alt != wert:
-            if feld == "wiedervorlage_am":
-                plan.wiedervorlage_erinnert_am = None
-            setattr(plan, feld, wert)
-            protokolliere(db, plan, "plan", "geaendert", user, feld=feld,
-                          alt=str(alt) if alt is not None else None, neu=str(wert) if wert is not None else None)
-    if plan.status == "freigegeben":
-        protokolliere(db, plan, "plan", "geaendert", user, feld="status",
-                      alt=plan.status, neu="in_ueberarbeitung")
-        plan.status = "in_ueberarbeitung"
-    plan.version += 1
-    plan.aktualisiert_am = datetime.now(UTC).replace(tzinfo=None)
-    plan.aktualisiert_von_id = user.id
+    stammdaten_aendern(db, plan, user, version=version, werte=daten.werte)
     db.commit()
     return templates.TemplateResponse(request, "katplan/_kopf.html", {
         **_kopfkontext(db, user, plan), "protokoll_oob": True})

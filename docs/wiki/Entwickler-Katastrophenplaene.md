@@ -57,16 +57,16 @@ Status: `entwurf` → `in_pruefung` → `freigegeben` → `in_ueberarbeitung` �
 |---------|---------------|
 | `katplan_flags`, `katplan_zugriff` | Modulschalter; Rollen (`darf_lesen/bearbeiten/freigeben`, `sieht_vertraulich`) und FastAPI-Dependencies |
 | `katplan_typen` | Typregister `ELEMENT_TYPEN` (Felder, Geometrieart), Vorlagen, `bereinige_daten`, `FELD_LABELS` |
-| `katplan_service` | Kennungen, Suchtext, Kapitelbaum, Sortierung, `lege_element_an`, `lege_abschnitt_an`, `lege_phase_an`, gemeinsame Feldvalidierung `validiere_element_felder` (UI und MCP), Protokoll |
+| `katplan_service` | Kennungen, Suchtext, Kapitelbaum, Sortierung, `lege_element_an`, `lege_abschnitt_an`, `lege_phase_an`, gemeinsame Feldvalidierung `validiere_element_felder`, `validiere_stammdaten` und `stammdaten_aendern` (UI und MCP), Protokoll |
 | `katplan_freigabe_service` | Snapshot, Workflow, Versionsvergleich, Wiedervorlage |
-| `katplan_link_service`, `katplan_ziel_service` | Live-Ziele mit Tenant- und Modulprüfung, Telefonregel (`link_ansicht`), Snapshotvergleich „seit Freigabe geändert“ |
+| `katplan_link_service`, `katplan_ziel_service` | Live-Ziele mit Tenant- und Modulprüfung, Mutationen mit `quelle="ui"`/`"mcp"`, Telefonregel (`link_ansicht`), Snapshotvergleich „seit Freigabe geändert“ |
 | `katplan_geo_service` | Geometrieprüfung je Typ (über `road_closure_geo_service.validate_geometry`), Bezugspunkt |
 | `katplan_anhang_service` | Upload, Quota, Snapshots, geschützte Auslieferung |
 | `katplan_quelle_service` + `pdf_seiten_pipeline` | Quellen hochladen und versionieren, Seiten zerlegen (Poppler/Tesseract, gemeinsam mit Objektdokumenten), Seitenvergleich `vergleiche_quellen` |
 | `katplan_suche_service` | Kombinierte Suche (Freigabe/Arbeitsstand, LIKE mit Escape, Umkreis), auch für MCP |
 | `katplan_ki_service` | KI-Seitenanalyse, Parser (`_parse_antwort` inkl. `daten`), Kontakt-/Objektabgleich, Review-Übernahme |
 | `katplan_mcp_service` | Rechtegeprüfte Aufbereitung einer Fassung (`fassung_laden`, `element_dict`) |
-| `katplan_qs_service` | Qualitätshinweise im Arbeitsstand (`freigabe_links` einmal je Plan laden) |
+| `katplan_qs_service` | Qualitätshinweise im Arbeitsstand einschließlich Telefonnummern trotz Kontaktlink (`freigabe_links` einmal je Plan laden) |
 | `katplan_pdf_service` | PDF-Offlinefassung über `fassung_laden`; `typdaten_fuer_druck`, WeasyPrint mit xhtml2pdf-Fallback |
 
 ## Oberfläche
@@ -112,6 +112,19 @@ Die PDF-Vorlage liegt in `app/templates/pdf/katplan.html`:
   `FireDept.city`. Das Ergebnis ist immer `ungeprueft`.
 - Schreibwerkzeuge laufen über den Dekorator `_tool`: Rechte, Modul, Audit `mcp.<name>`,
   Commit/Rollback, Versionskonflikt.
+- `katplan_verknuepfung_setzen/entfernen` und `katplan_beziehung_setzen/entfernen`
+  delegieren an den Link-Service mit Quelle `mcp`. Setzen ist für gleiche Rolle/Art
+  idempotent; nur ein übergebener abweichender Hinweis wird aktualisiert. Die Linkantwort
+  läuft durch `katplan_mcp_service.link_ansichten` und damit dieselbe Telefonregel wie Lesen.
+  Kennungen werden im Quellplan aufgelöst, Beziehungsziel-UUIDs orgweit.
+- `katplan_stammdaten_aendern` validiert Teiländerungen mit dem Bestand und schreibt nur
+  übergebene Felder über `stammdaten_aendern`. Letzteres prüft die Version, protokolliert
+  je Feld, setzt Erinnerungen bei Terminänderung zurück und markiert Überarbeitung.
+  `plan_version` ist der Live-Sperrzähler; der Antwortkopf entspricht `katplan_lesen`.
+  `verantwortlich_kontakt_id` wird im Snapshot gespeichert; ältere Köpfe liefern `null`.
+- Diese Setzwerkzeuge und Stammdaten unterstützen `pruefen` mit Rollback nach der
+  Antwortaufbereitung. Stammdaten verwerfen keine unbekannten Felder, sondern melden Fehler
+  (auch ohne `streng`).
 - Download von Quellen: `mcp_download_service` mit `art="katplan_quelle"` und erneuter
   Live-Rechteprüfung beim Abruf.
 
@@ -140,6 +153,7 @@ Die PDF-Vorlage liegt in `app/templates/pdf/katplan.html`:
 | `test_katplan_k8` | Suche |
 | `test_katplan_k9` | KI-Import und Review (KI gemockt) |
 | `test_mcp_katplan`, `test_mcp_katplan_schreiben` | MCP lesend/schreibend, Adresse und Verortung (Geokodierung gemockt), Schema |
+| `test_mcp_katplan_m2` | Verknüpfungen, Beziehungen, Telefonrechte, Plan-Stammdaten, Trockenlauf und HTTP-Wrapper |
 | `test_katplan_k12` | Qualitätshinweise, PDF (HTML über `render_katplan_html`, Typdaten), Quellenvergleich |
 
 Lokal gezielt starten mit `.venv/bin/python -m pytest -q tests/test_katplan_*.py tests/test_mcp_katplan*.py`.

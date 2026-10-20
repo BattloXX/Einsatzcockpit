@@ -210,3 +210,10 @@ def fassung_laden(db: Session, user: User, plan: KatplanPlan, fassung: str,
     if not text(kopf.get("beschreibung_html")):
         warnings.append("body: nicht vorhanden.")
     return kopf, elemente, vid, warnings
+
+
+def kopf_ansicht(kopf: dict) -> dict:
+    """Gleicher Plankopf fuer Lese- und Schreibantworten, ohne Transaktionsabschluss."""
+    return {**{k: kopf.get(k) for k in ("uuid", "titel", "gefahrenarten", "geltungsbereich",
+                                       "verantwortliche_stelle", "verantwortlich_kontakt_id", "wiedervorlage_am")},
+            "body": text(kopf.get("beschreibung_html"))}

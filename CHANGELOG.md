@@ -9,6 +9,10 @@ Die Versionshistorie wird reverse-chronologisch geführt.
   unterstützen `streng` und einen rückstandsfreien Trockenlauf mit `pruefen`.
   Adressen, Geometrie und Quellbezug lassen sich explizit leeren; Leseantworten des
   Arbeitsstands liefern die zum Schreiben benötigte `version` und `plan_version`.
+  Verknüpfungen und Elementbeziehungen lassen sich idempotent setzen und entfernen;
+  Plan-Stammdaten unterstützen Teiländerungen mit Versionsschutz und Trockenlauf.
+  Schreibantworten beachten die Telefonrechte; die Qualitätsprüfung meldet Telefonnummern
+  im Beschreibungstext trotz Kontaktverknüpfung.
 
 - **Katastrophenpläne**: Arbeitsstand und unveränderliche Freigaben, Kapitel/Phasen,
   Karte, Suche, Kontakte und Anhänge, versionierte PDF-Quellen mit Vergleich,
