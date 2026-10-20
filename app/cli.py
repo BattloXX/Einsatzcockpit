@@ -381,6 +381,31 @@ def restore_test(scratch_db: str = "") -> int:
                   file=sys.stderr)
 
 
+def suche_neuaufbau(org_id: int | None = None, alle: bool = False, quelle: str | None = None) -> None:
+    """Baut die ausgewaehlten Org-Indizes in einer eigenen System-Session auf."""
+    from app.models.master import OrgSettings
+    from app.services.suche.indexer import neuaufbau
+    from app.services.suche.quellen import ADAPTER, adapter_fuer, lade_adapter
+
+    lade_adapter()
+    if quelle is not None:
+        adapter_fuer(quelle)
+    if (org_id is None) == (not alle):
+        raise ValueError("Genau --org oder --alle angeben")
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        org_ids = ([o.org_id for o in db.query(OrgSettings).filter(OrgSettings.suche_aktiv.is_(True))]
+                   if alle else [org_id])
+        for ident in org_ids:
+            assert ident is not None
+            for name in ([quelle] if quelle is not None else list(ADAPTER)):
+                zaehler = neuaufbau(db, ident, name)
+                print(f"Org {ident}, Quelle {name}: " + ", ".join(f"{k}={v}" for k, v in zaehler.items()))
+    finally:
+        db.close()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="app.cli")
     sub = parser.add_subparsers(dest="command")
@@ -411,6 +436,12 @@ def main() -> None:
     p_upload = sub.add_parser("backup-upload", help="Vorhandene Backups an das Remote-Ziel laden")
     p_upload.add_argument("--all", action="store_true", help="Alle Backups statt nur der neuesten je Typ")
 
+    p_suche = sub.add_parser("suche-neuaufbau", help="Suchindex neu aufbauen")
+    org_wahl = p_suche.add_mutually_exclusive_group(required=True)
+    org_wahl.add_argument("--org", type=int)
+    org_wahl.add_argument("--alle", action="store_true")
+    p_suche.add_argument("--quelle", choices=("objekt", "objekt_dokument_seite", "katplan_element", "katplan_seite"))
+
     args = parser.parse_args()
     if args.command == "create-admin":
         create_admin(args.username, args.password, args.display_name)
@@ -425,6 +456,8 @@ def main() -> None:
         sys.exit(result.returncode)
     elif args.command == "restore-test":
         sys.exit(restore_test(args.scratch_db))
+    elif args.command == "suche-neuaufbau":
+        suche_neuaufbau(args.org, args.alle, args.quelle)
     elif args.command == "backup-upload":
         sys.exit(backup_upload(args.all))
     else:
