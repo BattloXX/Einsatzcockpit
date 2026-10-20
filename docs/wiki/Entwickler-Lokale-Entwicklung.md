@@ -79,7 +79,7 @@ docker run -d \
   -e MARIADB_USER=einsatzleiter \
   -e MARIADB_PASSWORD=devpassword \
   -p 3306:3306 \
-  mariadb:10.11
+  mariadb:12.3
 ```
 
 ## `.env` anlegen

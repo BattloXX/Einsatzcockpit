@@ -57,7 +57,7 @@ Eine vollwertige Webapp, die Einsatzleitern und Schriftführern eine strukturier
 | Schicht | Technologie |
 |---------|-------------|
 | Backend | **FastAPI** auf Python 3.14, Uvicorn/Gunicorn |
-| Daten | **SQLAlchemy 2.x**, Alembic, MariaDB 10.11+ |
+| Daten | **SQLAlchemy 2.x**, Alembic, MariaDB 12.3 |
 | Frontend | Jinja2, **HTMX**, Alpine.js, Tailwind CSS, SortableJS |
 | Karten | Leaflet, Leaflet-Geoman, Markercluster |
 | Echtzeit & PWA | WebSockets, Service Worker, Web Push |
@@ -66,7 +66,7 @@ Eine vollwertige Webapp, die Einsatzleitern und Schriftführern eine strukturier
 
 ## Quick Start (lokale Entwicklung)
 
-Vorausgesetzt werden Python 3.14, MariaDB 10.11+, Node.js 22+ und optional `ffmpeg`.
+Vorausgesetzt werden Python 3.14, MariaDB 12.3 (Docker, CI, Test- und Produktivsystem; ab 10.11 lauffähig, aber nicht mehr getestet), Node.js 22+ und optional `ffmpeg`.
 
 ```bash
 git clone https://github.com/BattloXX/Einsatzcockpit.git

@@ -28,7 +28,7 @@ services:
     restart: unless-stopped
 
   db:
-    image: mariadb:10.11
+    image: mariadb:12.3
     environment:
       MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?in .env.board-e2e setzen}
       MARIADB_DATABASE: ${MARIADB_DATABASE:?in .env.board-e2e setzen}

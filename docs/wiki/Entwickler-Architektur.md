@@ -127,7 +127,7 @@ Browser (HTMX + Alpine.js + WebSocket)
     SQLAlchemy 2.x (ORM + do_orm_execute Tenant-Filter + Alembic)
     db_weather.py             – zweiter Engine/Pool (pool_size=3) für Wetter-Zeitreihe
          │
-    MariaDB 10.11 (UTF8MB4, InnoDB, 97 Migrationen)
+    MariaDB 12.3 (UTF8MB4, InnoDB, 97 Migrationen)
     + MariaDB einsatzleiter_weather (Zeitreihen-DB, separater Pool)
 ```
 
