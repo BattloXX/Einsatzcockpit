@@ -1,27 +1,211 @@
 # Katastrophenpläne
 
-Unter **Module → Katastrophenpläne** stehen die freigegebenen Einsatzunterlagen der eigenen Organisation bereit. Die Liste lässt sich nach Gefahr und Titel durchsuchen. Leser sehen die freigegebene Fassung; Bearbeiter können zusätzlich den Arbeitsstand öffnen.
+Unter **Module → Katastrophenpläne** pflegt die Organisation ihre Katastrophen- und
+Maßnahmenpläne direkt im Einsatzcockpit (z. B. Hochwasser, Blackout, Sturm). Ein Plan
+besteht aus Kapiteln, Phasen und Elementen. Vorhandene PDF-Pläne lassen sich als
+Quellen hochladen und Seite für Seite übernehmen.
 
-## Lesen, Suche und Karte
+- **Leser** (Einsatzrollen wie `readonly`, `recorder`, `incident_leader`) sehen nur die
+  **freigegebene Fassung**.
+- **Bearbeiter** (`katplan_verwalter`) ändern den **Arbeitsstand**.
+- **Freigeber** (`katplan_freigeber`) geben ihn frei.
 
-Öffne einen Plan und navigiere durch Kapitel und Elemente. Kennung, Priorität und Phasen erleichtern die Orientierung. Die Phasenfilter grenzen die Maßnahmen auf die aktuelle Lage ein. Die Suche findet native Inhalte und Volltext von verarbeiteten Quellseiten. Treffer führen direkt zum Element oder zur Quellseite.
+Rollen und Schalter: [Administration](Administration-Katastrophenplaene).
 
-Der Reiter **Karte** zeigt verortete Elemente als Punkte, Linien oder Flächen. Filter für Phase, Typ und Priorität grenzen die Anzeige ein. Ungeprüfte Orte sind gekennzeichnet; prüfe ihre Lage vor der Verwendung. Vertrauliche Inhalte und Kontakttelefonnummern erscheinen entsprechend deiner Berechtigung.
+## Liste und Suche
+
+Die Liste zeigt alle sichtbaren Pläne mit Gefahrenart, Status, Version und Wiedervorlage.
+Filter nach Gefahrenart, Status und Titel grenzen sie ein; archivierte Pläne zeigt der
+Schalter **Archiv**. Bearbeiter sehen zusätzlich die Zahl offener Qualitätshinweise je Plan.
+
+**Inhalte suchen** (Liste und Lesesicht) durchsucht Elemente und den Volltext verarbeiteter
+Quellseiten:
+
+- Mehrere Wörter müssen alle vorkommen.
+- Filter: Plan, Gefahrenart, Typ, Priorität, Phase (bei gewähltem Plan), Ort und „nur geprüfte Orte“.
+- **Umkreis**: Adresse suchen oder **Mein Standort** verwenden, dann einen Radius
+  (500 m bis 10 km) wählen. Treffer werden nach Entfernung sortiert.
+- Bearbeiter können mit **Arbeitsstand durchsuchen** auch noch nicht freigegebene Inhalte finden.
+- Jeder Treffer führt direkt zum Element oder zur Quellseite.
+
+## Plan lesen
+
+Die Lesesicht zeigt die freigegebene Version: Kopf mit Gefahrenarten, Geltungsbereich,
+verantwortlicher Stelle, Version und Wiedervorlage, darunter Inhaltsverzeichnis, Kapitel
+und Elemente.
+
+- **Phasenfilter** (Chips oben) blenden nur die Elemente einer Phase ein, z. B.
+  „Stufe 2 – Übergehen“.
+- Elemente zeigen Kennung (z. B. `KS-03`), Typ, Priorität, Phasen, Beschreibung,
+  typspezifische Angaben (Schritte, Bedingungen, Materialbedarf, Gefahren …), Adresse,
+  Verknüpfungen, Beziehungen, Anhänge und die **Quelle** (Dokument, Version, Seite).
+- **Verknüpfte Kontakte** werden live angezeigt. Telefonnummern erscheinen nur, wenn du das
+  Kontaktverzeichnis sehen darfst. Sonst erscheinen nur Dienstnummern einsatzrelevanter
+  Kontakte. „Seit Freigabe geändert“ weist auf neue Kontaktdaten hin.
+- Badges: **aus Dokument übernommen** (Herkunft Planquelle), **KI-Vorschlag**
+  (über KI oder MCP erstellt), **vertraulich** (nur für berechtigte Rollen sichtbar).
+
+## Karte
+
+Der Reiter **Karte** zeigt verortete Elemente als Punkte, Linien oder Flächen. Filter für
+Phase, Typ und Priorität grenzen die Anzeige ein. Ungeprüfte Orte sind gekennzeichnet; prüfe
+ihre Lage vor der Verwendung. Bearbeiter können zwischen freigegebener Fassung und
+Arbeitsstand umschalten.
+
+## Versionen und Vergleich
+
+Jede Freigabe erzeugt eine unveränderliche Version. Unter **Versionen** stehen alle
+Freigaben mit Datum, Freigeber und Änderungsnotiz. Zwei Versionen (oder Version und
+Arbeitsstand) lassen sich vergleichen: neue, geänderte und entfernte Elemente werden je
+Feld gegenübergestellt. Ältere Versionen bleiben samt ihren Anhängen und Quellseiten lesbar.
 
 ## PDF / Offlinefassung
 
-**PDF / Offlinefassung** lädt die freigegebene Version mit Inhaltsverzeichnis, Phasen, Elementen, Kontakten, Quellen und Anhangsliste herunter. In **Versionen** lässt sich auch eine frühere Freigabe als PDF speichern. Änderungen im Arbeitsstand erscheinen erst nach einer neuen Freigabe. Bearbeiter können ein PDF mit dem Wasserzeichen **ENTWURF – nicht freigegeben** erzeugen.
+**PDF / Offlinefassung** lädt die freigegebene Version herunter. Enthalten sind:
 
-Das heruntergeladene PDF ist die Offlinefassung. Bewahre die benötigte Version vor dem Einsatz auf und lade sie nach einer neuen Freigabe erneut. Anhänge werden aufgelistet; bis zu zwei nicht vertrauliche Bildvorschaubilder je Element werden eingebettet. Originaldateien bleiben separate Downloads.
+- Deckblatt mit Fassung, Geltungsbereich, verantwortlicher Stelle, Wiedervorlage und Ansprechstellen
+- Inhaltsverzeichnis mit Seitenzahlen bis auf Elementebene und eine Phasenübersicht
+- Kapitel in Planreihenfolge, je Element eine Karte mit Prioritätsfarbe, Beschreibung und
+  typspezifischen Angaben: Schritte als Checkliste zum Abhaken, Wenn/Dann und Materialbedarf
+  als Tabelle, Gefahren als Liste
+- Adresse, Ort mit Koordinaten und Prüfstatus, Gültigkeit, Quelle und Seite
+- Verknüpfungen mit Telefonnummern (nach deinen Rechten)
+- eine Anhangsliste mit bis zu zwei Bildvorschauen je Element
 
-## Quellen und Vergleich
+In **Versionen** lässt sich jede frühere Freigabe als PDF speichern. Bearbeiter können ein
+PDF des Arbeitsstands mit dem Wasserzeichen **ENTWURF – nicht freigegeben** erzeugen.
+Bewahre die aktuelle Fassung für den Einsatz offline auf und lade sie nach jeder neuen
+Freigabe erneut.
 
-Unter **Quellen** findest du die PDF-Originale und deren verarbeitete Seiten. Seiten lassen sich lesen und als einzelne PDF öffnen. Bearbeiter können Seiten als Element übernehmen und weitere Quellversionen hochladen. Eine neue Quellversion verändert vorhandene Elemente und Freigaben nicht automatisch.
+## Plan bearbeiten (Bearbeiter)
 
-**Mit v… vergleichen** zeigt je Seitennummer unveränderte, geänderte, neue und entfallene Seiten mit Ähnlichkeitsquote und kurzem Textvergleich. Unter **Betroffene Elemente** stehen Arbeitsstandelemente, deren Quellseiten geändert wurden oder entfallen sind. **Quelle auf v… umstellen** ändert nur die Dokumentreferenz, behält die Seiten und protokolliert die Aktion. Prüfe Inhalt und Seitenbezug anschließend im Editor; eine entfallene Seite kann eine manuelle Korrektur erfordern.
+**+ Neuer Plan** legt einen Plan mit Titel, Gefahrenarten und Beschreibung an.
+**Bearbeiten** öffnet den Editor: links der Kapitelbaum, rechts das Formular des gewählten
+Elements.
 
-## Bearbeiten und Qualität
+- **Kapitel** anlegen, umbenennen und per Drag-and-drop sortieren; **+ Unterkapitel** für
+  eine zweite Ebene.
+- **Phasen verwalten**: Phasen wie „Vorwarnung“ oder „Stufe 2 – Übergehen“ mit Auslöser,
+  Farbe und Reihenfolge. Das Formular **Neue Phase** steht oben.
+- **Elemente** über die Schnellerfassung je Kapitel anlegen: Typ oder **Vorlage**
+  (Gewässer-Kontrollstelle, Verständigung, Materialbereitstellung, Sicherheitshinweis)
+  wählen, Titel eingeben. Die Kennung wird automatisch vergeben.
+- **Elementtypen:**
+  - Information/Hinweis
+  - Maßnahme/Checkliste (Schritte)
+  - Kontroll-/Gefahrenstelle (Gefahren, Kontrollhinweise, Zugänglichkeit)
+  - Gefahrenbereich/Kontrollstrecke
+  - Ablauf/Entscheidungshilfe (Wenn/Dann)
+  - Ressourcen-/Materialbedarf (Bezeichnung, Menge, Einheit, Lagerort)
+  - Dokument-/Medienverweis
+  - Kontakt-/Zuständigkeitsverweis
+  - Objektverweis
+- **Formular**:
+  - Titel, Kapitel, Beschreibung (Editor mit Zwischenüberschriften und Listen),
+    Priorität, Tags, Gültig bis, Prüfen am, Vertraulich.
+  - Adresse, Phasen und die typspezifischen Angaben.
+  - Quelle: Dokument und Seiten.
+  - Speichern aktualisiert sofort.
+  - Hat jemand anderes das Element inzwischen geändert, erscheint ein Hinweis, statt die
+    Änderung zu überschreiben.
+- **Verortung**:
+  - Auf der Karte im Formular Marker, Linie oder Fläche zeichnen.
+  - Oder **Adresse suchen**: Das Feld ist mit der Adresse des Elements vorbelegt. Ist kein
+    Ort eingetragen, wird der Ort der Organisation ergänzt. **Suchen** oder Enter zeigt die
+    Treffer.
+  - Ein Treffer setzt den Marker und füllt Straße, Hausnummer, PLZ und Ort aus.
+  - **Ort geprüft** erst setzen, wenn die Lage vor Ort oder anhand gesicherter Unterlagen
+    bestätigt ist. Jede Änderung der Geometrie setzt den Ort wieder auf „ungeprüft“.
+- **Verknüpfungen**:
+  - Kontakte, Kontakt-Organisationen, Objekte, Fahrzeuge oder Wasserstellen suchen und mit
+    Rolle verknüpfen (z. B. „Zu verständigen“, „Zuständig“).
+  - Angezeigt werden immer die aktuellen Stammdaten; es wird nichts kopiert.
+- **Beziehungen** zwischen Elementen: z. B. „Folgt auf“ oder „Siehe auch“, per Kennung oder
+  Titel suchen.
+- **Anhänge**:
+  - Fotos und Dateien hochladen (mit Beschriftung, Urheber und Aufnahmedatum), Links oder
+    Objektdokumente anfügen.
+  - Anhänge sind an Plan, Kapitel oder Element möglich und lassen sich als vertraulich
+    markieren.
+- **Duplizieren** kopiert ein Element in denselben oder einen anderen Plan (ohne Anhänge).
+  **Verschieben** und die Pfeile ändern die Reihenfolge.
 
-Im Editor zeigen kompakte Warnzeichen und die Qualitätsliste fehlende oder ungeprüfte Geometrie, fehlende Verknüpfungsziele, geänderte Kontakte, fällige Prüfung, abgelaufene Gültigkeit, ungeprüfte KI-Inhalte und neuere Quellen. Die Summenzeile öffnet das erste betroffene Element. Die Hinweise verhindern die Freigabe nicht. Ein KI-Element gilt nach bewusstem Speichern in der Oberfläche als geprüft; eine Änderung über MCP genügt dafür nicht.
+### Qualitätshinweise
+
+Der Editor zeigt oben eine Summenzeile (z. B. „Qualität: 12 ohne Geometrie · 3 KI
+ungeprüft“). Die Symbole im Baum stehen für folgende Hinweise:
+
+| Symbol | Hinweis |
+|---|---|
+| 📍 | Kontroll-/Gefahrenstelle oder Gefahrenbereich ohne Geometrie |
+| ❔ | Ort ungeprüft |
+| 🔗 | Verknüpfungsziel fehlt (archiviert, gelöscht oder Modul aus) |
+| 👤 | Kontakt seit der letzten Freigabe geändert |
+| ⏰ | Prüftermin („Prüfen am“) erreicht |
+| ⌛ | Gültigkeit abgelaufen |
+| 🤖 | KI-Vorschlag noch nicht in der Oberfläche geprüft und gespeichert |
+| 📄 | Die Quelle hat eine neuere Version |
+
+Die Summenzeile öffnet das erste betroffene Element. Hinweise sperren die Freigabe nicht.
+Ein KI-Element gilt als geprüft, sobald es einmal bewusst im Editor gespeichert wurde.
+Eine Änderung über MCP genügt dafür nicht.
+
+### Freigabe-Ablauf
+
+| Schritt | Wer | Wirkung |
+|---|---|---|
+| **Einreichen** | Bearbeiter | Status „in Prüfung“, optional mit Kommentar |
+| **Zurückweisen** | Freigeber | zurück in „Entwurf“ bzw. „in Überarbeitung“, Kommentar Pflicht |
+| **Freigeben** | Freigeber | neue Version mit Änderungsnotiz, sofort für Leser sichtbar |
+| **Archivieren / Reaktivieren** | Freigeber | Plan aus der Liste nehmen bzw. zurückholen |
+
+Ein Vier-Augen-Prinzip gibt es nicht; ein Freigeber kann auch eigene Änderungen freigeben,
+Einreichen ist dafür nicht nötig. Status: Entwurf → (in Prüfung) → freigegeben → in Überarbeitung → …
+Ändert jemand einen freigegebenen Plan, wechselt er auf **in Überarbeitung**. Leser sehen
+bis zur nächsten Freigabe weiterhin die alte Version. Unter **Stammdaten** wird die
+**Wiedervorlage** gesetzt; bei Fälligkeit erhalten die Freigeber eine Erinnerungs-Mail.
+Das **Protokoll** zeigt alle Änderungen mit Benutzer, Zeit und Herkunft (Oberfläche oder MCP).
+
+## Planquellen (PDF-Pläne)
+
+Unter **Quellen** werden vorhandene PDF-Pläne hochgeladen: Titel, Herausgeber und Stand
+angeben. Die Verarbeitung zerlegt das PDF in Seiten mit Vorschaubild und Volltext; der
+Status aktualisiert sich selbst.
+
+- Die **Seitenansicht** zeigt alle Seiten als Raster. Eine Einzelseite bietet Bild,
+  Volltext, Blättern, Sprung zu Seite, Einzelseiten-PDF und den Download des Originals.
+- **Element aus dieser Seite anlegen** übernimmt Seitentext und Titel (Aufzählungen werden
+  zu Listen) und öffnet das neue Element im Editor. Herkunft: „aus Dokument übernommen“.
+- **Neue Version hochladen** legt eine weitere Version derselben Quelle an. Vorhandene
+  Elemente und Freigaben bleiben unverändert.
+- **Mit v… vergleichen** zeigt je Seitennummer unveränderte, geänderte, neue und entfallene
+  Seiten mit kurzem Textvergleich.
+  - **Betroffene Elemente** listet Elemente, deren Quellseiten sich geändert haben.
+  - **Quelle auf v… umstellen** ändert nur die Dokumentreferenz und protokolliert die
+    Aktion. Inhalt und Seitenbezug danach im Editor prüfen.
+- **Entfernen** löscht eine Quelle nur, wenn kein Element und keine Freigabe sie verwendet;
+  sonst wird sie archiviert.
+
+### KI-Vorschläge aus Quellen
+
+Ist der KI-Import für die Organisation aktiviert, erzeugt **KI-Vorschläge erzeugen** in
+der Quellenliste Elementvorschläge je Seite. Unter **Import** (bzw. „n offene Vorschläge
+prüfen“) steht für jeden Vorschlag eine Karte mit bearbeitbarem Typ, Titel, Priorität,
+Kapitel und Phase (vorhanden oder neu), Adresse und Beschreibung (eine Zeile je Absatz,
+Listenpunkte mit •). Die Karte zeigt außerdem:
+
+- die typspezifischen Angaben, die mit übernommen werden;
+- im Dokument genannte Kontakte mit dem Hinweis „Telefonnummer aus dem Dokument, nicht
+  geprüft und nicht übernommen“;
+- bei eindeutig gefundenen Kontakten bzw. Objekten ein Häkchen **verknüpfen**, das
+  standardmäßig aus ist.
+
+**Übernehmen** legt das Element an (Herkunft „KI-Vorschlag“, Quellseite gesetzt),
+**Verwerfen** entfernt den Vorschlag. **Ausgewählte übernehmen** übernimmt mehrere
+Vorschläge mit ihren Vorschlagswerten. Gleichnamige Kapitel und Phasen werden dabei
+zusammengeführt, Kontakte und Objekte nicht verknüpft. Ohne Bestätigung entsteht kein
+Element. Koordinaten werden nie übernommen; Mengen und Telefonnummern immer fachlich prüfen.
+Vorschläge können auch von einem KI-Assistenten über MCP kommen
+([MCP-Assistent](Anwender-MCP-Assistent)).
 
 Siehe auch: [Administration](Administration-Katastrophenplaene), [Entwicklung](Entwickler-Katastrophenplaene).

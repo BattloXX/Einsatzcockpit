@@ -58,7 +58,9 @@ Die verfügbaren Werkzeuge sind:
 - `objekt_dokument_uebergeben`, `objekt_dokumente_auflisten` und `objekt_dokument_seiten_klassifizieren`: übergeben, listen und klassifizieren Objekt-PDFs. Übergabe entweder mit `upload_id` (nach dem curl-Upload) oder – für kleine Dateien – mit `inhalt_base64`. `seiten` hat das Format `[{"nr":1,"dokumentart":"bma_datenblatt","titel":null}]`; die Klassifizierung des Clients wird unverändert übernommen.
 - `objekt_dokument_herunterladen`: holt das Original-PDF eines Objektdokuments (jede Version, optional mit `seite` nur eine Einzelseite). Liefert einen 15 Minuten gültigen Download-Link, den du auch im Browser öffnen kannst, samt curl-Beispiel; mit `inline=true` kommt eine kleine Datei (bis 8 MB) zusätzlich direkt als Base64. Die `dokument_id` liefert `objekt_dokumente_auflisten` (dort jetzt auch mit Dateigröße).
 
-Bei aktivem Katastrophenplan-Modul lesen `katplan_liste`, `katplan_lesen`, `katplan_elemente` und `katplan_element_lesen` die freigegebene Fassung. `katplan_suchen` durchsucht Elemente und Quellseiten; `katplan_orte_suchen` findet Orte nach Entfernung. `katplan_verknuepfungen` zeigt Live-Links und Beziehungen, `katplan_dokument_auszug` Quelltexte oder mit `download=true` einen kurzlebigen PDF-Link. Elemente sind per UUID oder Kennung lesbar. Nur Planbearbeiter dürfen ausdrücklich `fassung="arbeitsstand"` wählen. Vertrauliche Inhalte und Telefonnummern folgen denselben Rechten wie die Oberfläche. Fehlende Angaben stehen als `null` mit Hinweis in `warnings`; diese Werkzeuge ändern keine Planinhalte und geben nichts frei.
+Bei aktivem Katastrophenplan-Modul lesen `katplan_liste`, `katplan_lesen`, `katplan_elemente` und `katplan_element_lesen` die freigegebene Fassung. `katplan_suchen` durchsucht Elemente und Quellseiten; `katplan_orte_suchen` findet Orte nach Entfernung. `katplan_verknuepfungen` zeigt Live-Links und Beziehungen, `katplan_dokument_auszug` Quelltexte oder mit `download=true` einen kurzlebigen PDF-Link. Elemente sind per UUID oder Kennung lesbar. Nur Planbearbeiter dürfen ausdrücklich `fassung="arbeitsstand"` wählen. Vertrauliche Inhalte und Telefonnummern folgen denselben Rechten wie die Oberfläche. Fehlende Angaben stehen als `null` mit Hinweis in `warnings`; diese Werkzeuge ändern keine Planinhalte und geben nichts frei. Adressen kommen als Text (`address`) und strukturiert (`address_parts` mit `strasse`, `hausnummer`, `plz`, `ort`).
+
+Beispiele: „Welche Kontrollstellen gibt es im Hochwasserplan?“, „Was ist bei Stufe 2 zu tun?“, „Welche Problemstellen liegen im Umkreis von 500 m um die Kesselstraße?“, „Zeig mir Seite 6 der Quelle.“
 
 ## Kontrollierter Ablauf
 
@@ -134,13 +136,43 @@ Beispiel: „Lege bei Einsatz 42 den Auftrag ‚Wasserversorgung prüfen‘ für
 Bewusst nicht geliefert werden Inhalte und Medien aus der Personen-Spalte, Atemschutzdaten, Mannschaftsnamen, Anrufer, Autoren sowie Objekt-Kontakte. Die Download-Links gelten nur kurz und werden beim Abruf nochmals gegen die aktuellen Rechte geprüft.
 
 
-Die Katastrophenplan-Entwurfswerkzeuge können Elemente anlegen und mit ihrer aktuellen
-`version` ändern, Anhänge (auch über `datei.download_url` aus ChatGPT) übergeben und
-strukturierte Vorschläge aus Quellseiten in die offene Import-Review stellen.
-Für größere Anhänge zuerst `katplan_anhang_upload_vorbereiten` verwenden und anschließend
-`katplan_anhang_uebergeben` mit der Upload-ID aufrufen. Diese Werkzeuge stehen nur
-Bearbeitern zur Verfügung und ändern nur den Arbeitsstand. Neue Elemente sind als
-`ai_suggested` gekennzeichnet; Änderungen werden mit Herkunft `mcp` protokolliert und
-Geometrien bleiben ungeprüft. Vorschläge erzeugen erst nach menschlicher Übernahme
-Elemente. Einreichen und Freigeben erfolgt immer durch Menschen im Einsatzcockpit;
-bereits freigegebene Versionen bleiben unverändert.
+### Katastrophenpläne als Entwurf pflegen
+
+Planverwalter und Planfreigeber können über den Assistenten den **Arbeitsstand** eines
+Katastrophenplans pflegen. Einreichen und Freigeben bleibt immer Menschen im Einsatzcockpit
+vorbehalten; freigegebene Versionen ändern sich nicht.
+
+- `katplan_element_entwurf_anlegen`:
+  - Pflichtangaben sind `typ` (info, massnahme, kontrollstelle, gefahrenbereich, ablauf,
+    ressource, medien, zustaendigkeit, objektverweis) und `titel`.
+  - Optional: `beschreibung` (Zeilen; Listenpunkte mit „•“ oder „-“), `kapitel_id` oder
+    `kapitel_titel` (ein neues Kapitel wird bei Bedarf angelegt), `phasen` (Namen),
+    `prioritaet` 1–3, `daten` (typspezifisch, z. B. `schritte`, `kontrollhinweise`, `bedarf`),
+    `tags`, `quelle_dokument_id`/`quelle_seiten`.
+  - Adresse: `adresse` als Objekt, z. B.
+    `{"strasse": "Eulentobel", "hausnummer": "7", "plz": "6922", "ort": "Wolfurt"}`.
+    Straße und Hausnummer bitte getrennt angeben, andere Schlüssel werden abgewiesen.
+  - Ort: `geometrie` als GeoJSON, oder `verorten=true`. Damit wird die Adresse
+    geokodiert; fehlt der Ort, gilt der Ort der Organisation. Fehlende PLZ und Ort werden
+    aus dem Treffer ergänzt, und die Antwort nennt unter `verortung` den Treffer.
+  - Per MCP gesetzte Orte sind immer **ungeprüft**.
+- `katplan_element_entwurf_aendern`: ändert Felder eines Elements (UUID oder Kennung wie
+  `KS-03`) mit der aktuellen `version`. Erlaubt sind die Felder oben sowie `gueltig_bis` und
+  `pruefen_am`. Eine Teiladresse wie `{"adresse": {"hausnummer": "9"}}` ändert nur dieses Feld;
+  `verorten=true` setzt den Punkt aus der Adresse neu. Herkunft, Vertraulichkeit und
+  Ortsprüfung lassen sich nicht ändern.
+- `katplan_anhang_upload_vorbereiten` / `katplan_anhang_uebergeben`: Foto oder PDF an Plan oder
+  Element. Kleine Dateien per `inhalt_base64` oder als ChatGPT-Anhang (`datei.download_url`),
+  größere über den Upload-Link.
+- `katplan_vorschlaege_aus_dokument`:
+  - Der Assistent liest eine Quellseite (`katplan_dokument_auszug`) und reicht bis zu
+    30 strukturierte Vorschläge ein (Felder wie oben, dazu `kontakte` und `objekt`).
+  - Sie landen in der Import-Prüfung im Einsatzcockpit; erst ein Mensch übernimmt sie
+    als Elemente.
+
+Neue Elemente sind als „KI-Vorschlag“ gekennzeichnet; alle Änderungen erscheinen im
+Planprotokoll mit Herkunft `mcp`. Ein freigegebener Plan wechselt dabei auf „in Überarbeitung“.
+
+Beispiel: „Lege im Hochwasserplan unter ‚Problemstellen‘ eine Kontrollstelle ‚Eulentobelbach –
+Durchlass‘ an, Adresse Eulentobel 7, verorten, Phase ‚Stufe 1‘, Kontrollhinweis: Rechen auf
+Verklausung prüfen.“

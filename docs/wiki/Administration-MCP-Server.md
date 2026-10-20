@@ -54,6 +54,16 @@ Für Katastrophenpläne müssen MCP und das Katastrophenplan-Modul auf System- u
 
 Standard ist die freigegebene Fassung; Arbeitsstände sind nur für Planbearbeiter mit `fassung="arbeitsstand"` verfügbar. Vertrauliches sehen nur Planverwalter, Planfreigeber, Einsatzleiter und Admins. Ohne Kontaktverzeichnisrecht werden ausschließlich Dienstnummern einsatzrelevanter Kontakte angezeigt. Objektdetails erfordern zusätzlich das Objektmodul und dessen Leserecht. Alle erfolgreichen Katplan-Toolaufrufe werden mit `mcp.katplan_*` auditiert; es gibt keine Schreib- oder Freigabewerkzeuge.
 
+Schreibende Werkzeuge verlangen `katplan_verwalter`, `katplan_freigeber` oder Admin und ändern nur den Arbeitsstand:
+
+| Werkzeuge | Zugriff |
+|-----------|---------|
+| `katplan_element_entwurf_anlegen`, `katplan_element_entwurf_aendern` | Elemente anlegen/ändern mit Versionsprüfung; Adresse als Objekt (`strasse`, `hausnummer`, `plz`, `ort`), optional `verorten` (Geokodierung, Ort der Organisation als Vorauswahl, immer ungeprüft) |
+| `katplan_anhang_upload_vorbereiten`, `katplan_anhang_uebergeben` | Fotos/PDFs über die Anhangspipeline (MIME-Prüfung, Quota, Vorschaubild) |
+| `katplan_vorschlaege_aus_dokument` | Strukturierte Vorschläge zu einer Quellseite in die Import-Prüfung (keine Elemente) |
+
+Alle Schreibzugriffe werden im Planprotokoll mit Herkunft `mcp` und im Audit-Log (`mcp.katplan_…`) geführt. Kein Werkzeug kann einreichen, freigeben, archivieren oder freigegebene Versionen ändern.
+
 ## Reverse-Proxy und Konfiguration
 
 Für `/mcp` ist Streaming erforderlich: `proxy_buffering off` sowie ausreichend hohe `proxy_read_timeout`- und `proxy_send_timeout`-Werte setzen. Das mitgelieferte [`deploy/nginx-snippet.conf`](../../deploy/nginx-snippet.conf) enthält die `/mcp`-Konfiguration. Die OAuth-Discovery und OAuth-Endpunkte dürfen nicht umgeleitet, geblockt oder von einem Login-Gateway abgefangen werden: `/.well-known/oauth-*`, `/authorize`, `/token`, `/register` und `/revoke` müssen die App erreichen.

@@ -11,12 +11,60 @@ from app.core.templating import templates
 from app.core.timezones import format_local_datetime
 from app.models.katplan import KATPLAN_GEFAHRENARTEN, KatplanAnhang, KatplanPlan, KatplanVersion
 from app.models.user import User
+from app.services.katplan_geo_service import ableite_punkt
 from app.services.katplan_mcp_service import _rohdaten, fassung_laden, link_ansichten
 from app.services.katplan_quelle_service import absolute_pfad
 from app.services.katplan_service import bereinige_beschreibung
+from app.services.katplan_typen import FELD_LABELS
 from app.services.kontakt_druck_service import organisationslogo_data_uri
 
 logger = logging.getLogger(__name__)
+
+
+_PHASENFARBEN = {"gruen": "#15803d", "gelb": "#ca8a04", "orange": "#ea580c", "rot": "#b91c1c",
+                 "blau": "#1d4ed8", "grau": "#6b7280"}
+
+
+def typdaten_fuer_druck(daten: dict) -> list[dict]:
+    """Typspezifische Angaben als Druckbausteine (statt JSON): Text, Liste, Schritte, Wenn/Dann, Bedarf."""
+    bausteine = []
+    for feld, wert in daten.items():
+        if not wert:
+            continue
+        label = FELD_LABELS.get(feld, feld.replace("_", " ").capitalize())
+        if isinstance(wert, str):
+            bausteine.append({"art": "text", "label": label, "wert": wert})
+        elif feld == "schritte":
+            schritte = [s for s in wert if isinstance(s, dict) and s.get("text")]
+            if schritte:
+                bausteine.append({"art": "schritte", "label": label, "wert": schritte})
+        elif feld == "bedingungen":
+            zeilen = [b for b in wert if isinstance(b, dict) and (b.get("wenn") or b.get("dann"))]
+            if zeilen:
+                bausteine.append({"art": "bedingungen", "label": label, "wert": zeilen})
+        elif feld == "bedarf":
+            zeilen = [b for b in wert if isinstance(b, dict) and b.get("bezeichnung")]
+            if zeilen:
+                bausteine.append({"art": "bedarf", "label": label, "wert": zeilen})
+        elif isinstance(wert, list):
+            eintraege = [str(w) for w in wert if isinstance(w, str | int | float) and str(w).strip()]
+            if eintraege:
+                bausteine.append({"art": "liste", "label": label, "wert": eintraege})
+    return bausteine
+
+
+def _ortsangabe(geometrie: dict | None, geo_status: str | None) -> str | None:
+    """Koordinaten lesbar: Punkt als Lat/Lng, Linie/Flaeche mit Bezugspunkt."""
+    if not geometrie:
+        return None
+    try:
+        lat, lng = ableite_punkt(geometrie)
+    except (ValueError, TypeError, KeyError):
+        return None
+    art = {"Point": "Punkt", "LineString": "Linie", "Polygon": "Fläche"}.get(geometrie.get("type", ""), "Geometrie")
+    status = {"geprueft": "geprüft", "ungeprueft": "ungeprüft"}.get(geo_status or "", "")
+    text = f"{art} {lat:.5f}, {lng:.5f}" if art == "Punkt" else f"{art}, Bezugspunkt {lat:.5f}, {lng:.5f}"
+    return f"{text} ({status})" if status else text
 
 
 def _kapitelpfade(abschnitte: list[dict]) -> list[str]:
@@ -47,6 +95,8 @@ def render_katplan_html(db: Session, user: User, plan: KatplanPlan, *,
     nach_uuid = {e["element_uuid"]: e for e in roh}
     for e in elemente:
         e["beschreibung_html"] = bereinige_beschreibung(nach_uuid[e["element_id"]].get("beschreibung_html"))
+        e["typdaten"] = typdaten_fuer_druck(e.get("daten") or {})
+        e["ortsangabe"] = _ortsangabe(e.get("geometry"), e.get("geo_status"))
         e["bilder"] = []
         for a in e["attachments"]:
             if a.get("vertraulich") or not (a.get("mime") or "").startswith("image/"):
@@ -82,6 +132,7 @@ def render_katplan_html(db: Session, user: User, plan: KatplanPlan, *,
         gefahrenarten=KATPLAN_GEFAHRENARTEN, now=datetime.now(UTC),
         format_local_datetime=format_local_datetime, logo=organisationslogo_data_uri(db, user.org) if user.org else "",
         plan_links=link_ansichten(db, user, kopf.get("links", [])),
+        phasenfarben=_PHASENFARBEN, beschreibung_plan=bereinige_beschreibung(kopf.get("beschreibung_html")),
     )
 
 

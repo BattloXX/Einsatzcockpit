@@ -5,7 +5,7 @@ import json
 import logging
 import secrets
 from datetime import UTC, datetime, timedelta
-from typing import Literal, cast
+from typing import Literal, TypedDict, cast
 from urllib.parse import urlencode
 
 from mcp.server.auth.provider import (
@@ -2030,27 +2030,36 @@ async def katplan_verknuepfungen(plan_id: int, element_id: str | None = None, fa
     return await _call_registered_tool("katplan_verknuepfungen", plan_id=plan_id, element_id=element_id, fassung=fassung, version_id=version_id)
 
 
+class KatplanAdresse(TypedDict, total=False):
+    """Adresse eines Katastrophenplan-Elements; alle Felder optional, Werte als Text."""
+
+    strasse: str
+    hausnummer: str
+    plz: str
+    ort: str
+
+
 @server.tool(name="katplan_element_entwurf_anlegen", description=TOOLS["katplan_element_entwurf_anlegen"].description)
 async def katplan_element_entwurf_anlegen(
     plan_id: int, typ: str, titel: str, beschreibung: str = "", kapitel_id: int | None = None,
     kapitel_titel: str | None = None, phasen: list[str] | None = None, prioritaet: int = 2,
-    daten: dict | None = None, tags: list[str] | None = None, adresse: dict | None = None,
+    daten: dict | None = None, tags: list[str] | None = None, adresse: KatplanAdresse | None = None,
     geometrie: dict | None = None, quelle_dokument_id: int | None = None, quelle_seiten: str | None = None,
-    ctx: Context | None = None,
+    verorten: bool = False, ctx: Context | None = None,
 ) -> dict[str, object]:
     return await _call_registered_tool(
         "katplan_element_entwurf_anlegen", plan_id=plan_id, typ=typ, titel=titel, beschreibung=beschreibung,
         kapitel_id=kapitel_id, kapitel_titel=kapitel_titel, phasen=phasen, prioritaet=prioritaet, daten=daten,
-        tags=tags, adresse=adresse, geometrie=geometrie, quelle_dokument_id=quelle_dokument_id,
-        quelle_seiten=quelle_seiten,
+        tags=tags, adresse=dict(adresse) if adresse is not None else None, geometrie=geometrie,
+        quelle_dokument_id=quelle_dokument_id, quelle_seiten=quelle_seiten, verorten=verorten,
     )
 
 
 @server.tool(name="katplan_element_entwurf_aendern", description=TOOLS["katplan_element_entwurf_aendern"].description)
 async def katplan_element_entwurf_aendern(plan_id: int, element_id: str, version: int, felder: dict,
-                                         ctx: Context | None = None) -> dict[str, object]:
+                                         verorten: bool = False, ctx: Context | None = None) -> dict[str, object]:
     return await _call_registered_tool("katplan_element_entwurf_aendern", plan_id=plan_id,
-                                       element_id=element_id, version=version, felder=felder)
+                                       element_id=element_id, version=version, felder=felder, verorten=verorten)
 
 
 @server.tool(name="katplan_anhang_upload_vorbereiten", description=TOOLS["katplan_anhang_upload_vorbereiten"].description)

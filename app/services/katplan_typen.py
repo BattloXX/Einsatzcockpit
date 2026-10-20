@@ -67,6 +67,14 @@ ELEMENT_VORLAGEN: dict[str, VorlageDef] = {
     ),
 }
 
+# Anzeigenamen der typspezifischen Felder (Druck, PDF, Review).
+FELD_LABELS = {
+    "kategorie": "Kategorie", "warnhinweis": "Warnhinweis", "schritte": "Schritte",
+    "erwartetes_ergebnis": "Erwartetes Ergebnis", "gefahren": "Gefahren", "kontrollhinweise": "Kontrollhinweise",
+    "zugaenglichkeit": "Zugänglichkeit", "raeumliche_hinweise": "Räumliche Hinweise", "ausloeser": "Auslöser",
+    "bedingungen": "Bedingungen", "bedarf": "Bedarf", "lagerort": "Lagerort", "hinweis": "Hinweis",
+}
+
 _LISTEN_FELDER = {
     "schritte": ("text", "erledigt_hinweis"),
     "gefahren": None,

@@ -75,16 +75,37 @@
       status();
 
       const button = element.querySelector('[data-kp-adress-suche]');
+      const eingabe = element.querySelector('[data-kp-adress-eingabe]');
       const treffer = element.querySelector('[data-kp-geo-treffer]');
-      button.addEventListener('click', async function () {
-        const form = element.closest('form');
-        const adresse = ['strasse', 'hausnummer', 'plz', 'ort'].map(function (name) {
-          return form.elements[name].value.trim();
-        }).filter(Boolean).join(' ');
-        button.disabled = true;
+      const form = element.closest('form');
+      const felder = ['strasse', 'hausnummer', 'plz', 'ort'];
+      let manuell = false;
+
+      // Suchtext aus den Adressfeldern; ohne Ort wird der Ort der Organisation ergaenzt.
+      function vorschlag() {
+        const wert = function (name) { return form.elements[name] ? form.elements[name].value.trim() : ''; };
+        const zeile1 = [wert('strasse'), wert('hausnummer')].filter(Boolean).join(' ');
+        const zeile2 = [wert('plz'), wert('ort') || eingabe.dataset.orgOrt || ''].filter(Boolean).join(' ');
+        return [zeile1, zeile2].filter(Boolean).join(', ');
+      }
+      eingabe.addEventListener('input', function () { manuell = true; });
+      felder.forEach(function (name) {
+        if (!form.elements[name]) return;
+        form.elements[name].addEventListener('input', function () {
+          if (!manuell) eingabe.value = vorschlag();
+        });
+      });
+
+      async function suchen() {
+        const q = eingabe.value.trim() || vorschlag();
         treffer.replaceChildren();
+        if (q.length < 3) {
+          treffer.textContent = 'Bitte mindestens 3 Zeichen eingeben.';
+          return;
+        }
+        button.disabled = true;
         try {
-          const antwort = await fetch('/katastrophenplaene/adress-suche?q=' + encodeURIComponent(adresse), {
+          const antwort = await fetch('/katastrophenplaene/adress-suche?q=' + encodeURIComponent(q), {
             signal: controller.signal
           });
           if (!antwort.ok) throw new Error('Adresssuche fehlgeschlagen.');
@@ -93,11 +114,16 @@
           daten.treffer.forEach(function (ort) {
             const auswahl = document.createElement('button');
             auswahl.type = 'button';
-            auswahl.className = 'btn';
+            auswahl.className = 'btn btn--ghost btn--sm';
             auswahl.textContent = ort.display_name;
             auswahl.addEventListener('click', function () {
               if (punkt) einsetzen(L.marker([ort.lat, ort.lng]), true);
               else map.setView([ort.lat, ort.lng], 16);
+              // Gewaehlte Adresse in die Felder uebernehmen; leere Teile der Auswahl lassen Eingaben stehen.
+              felder.forEach(function (name) {
+                if (ort[name] && form.elements[name]) form.elements[name].value = ort[name];
+              });
+              eingabe.value = ort.display_name;
               geprueft.checked = false;
               status();
               treffer.replaceChildren();
@@ -108,6 +134,14 @@
           if (fehler.name !== 'AbortError') treffer.textContent = 'Adresssuche fehlgeschlagen.';
         } finally {
           button.disabled = false;
+        }
+      }
+      button.addEventListener('click', suchen);
+      eingabe.addEventListener('keydown', function (event) {
+        // Enter sucht, statt das Elementformular abzusenden.
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          suchen();
         }
       });
       map.invalidateSize();

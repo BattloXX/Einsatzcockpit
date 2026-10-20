@@ -6,8 +6,6 @@ from datetime import date
 from functools import wraps
 from pathlib import Path
 
-from sqlalchemy import func
-
 from app.config import settings
 from app.core.audit import write_audit
 from app.core.permissions import KATPLAN_VERWALTER_ROLES
@@ -97,13 +95,59 @@ def _phasen(context: MCPContext, plan: KatplanPlan, namen: list[str]) -> set[int
         raise ValueError("Phasen müssen Namen mit 1 bis 120 Zeichen sein.")
     ids = set()
     for name in dict.fromkeys(n.strip() for n in namen):
-        phase = context.db.query(KatplanPhase).filter_by(org_id=plan.org_id, plan_id=plan.id).filter(
-            func.lower(KatplanPhase.name) == name.lower(),
-        ).first()
+        # In Python falten: SQL-LOWER() faltet unter SQLite keine Umlaute.
+        phase = next((p for p in context.db.query(KatplanPhase).filter_by(org_id=plan.org_id, plan_id=plan.id)
+                      if p.name.strip().casefold() == name.casefold()), None)
         if phase is None:
             phase = service.lege_phase_an(context.db, plan, context.user, name=name, quelle="mcp")
         ids.add(phase.id)
     return ids
+
+
+_ADRESS_FELDER = ("strasse", "hausnummer", "plz", "ort")
+_ADRESS_HINWEIS = ('adresse ist ein Objekt mit den Textfeldern strasse, hausnummer, plz und ort, '
+                   'z. B. {"strasse": "Eulentobel", "hausnummer": "7", "plz": "6922", "ort": "Wolfurt"}.')
+
+
+def _adresse(adresse: dict | None) -> dict[str, str]:
+    """Adresse pruefen: nur bekannte Schluessel mit Textwerten, leere Werte bleiben leer."""
+    if adresse is None:
+        return {}
+    if not isinstance(adresse, dict):
+        raise ValueError(_ADRESS_HINWEIS)
+    unbekannt = set(adresse) - set(_ADRESS_FELDER)
+    if unbekannt:
+        raise ValueError("Unbekannte Adressfelder: " + ", ".join(sorted(unbekannt)) + ". " + _ADRESS_HINWEIS)
+    if any(v is not None and not isinstance(v, str) for v in adresse.values()):
+        raise ValueError(_ADRESS_HINWEIS)
+    return {k: (adresse.get(k) or "").strip() for k in _ADRESS_FELDER if adresse.get(k) is not None}
+
+
+async def _verorten(context: MCPContext, typ: str, adresse: dict[str, str]) -> tuple[dict | None, dict, dict]:
+    """Adresse geokodieren; ohne Ort wird der Ort der Organisation verwendet.
+
+    Liefert (Punkt-Geometrie oder None, ergaenzte Adresse, Ergebnis-Info). Der Punkt ist immer
+    ungeprueft; fuer reine Linien-/Flaechentypen wird nicht verortet.
+    """
+    from app.services.geocoding import search_addresses
+    from app.services.katplan_typen import ELEMENT_TYPEN
+
+    if ELEMENT_TYPEN[typ].geometrie not in ("punkt", "beliebig"):
+        return None, adresse, {"verortet": False, "hinweis": "Dieser Typ braucht eine Linie oder Fläche."}
+    org_ort = (context.user.org.city or "").strip() if context.user.org else ""
+    zeile1 = " ".join(v for v in (adresse.get("strasse"), adresse.get("hausnummer")) if v)
+    zeile2 = " ".join(v for v in (adresse.get("plz"), adresse.get("ort") or org_ort) if v)
+    q = ", ".join(v for v in (zeile1, zeile2) if v)
+    if not zeile1 or len(q) < 3:
+        return None, adresse, {"verortet": False, "hinweis": "Für die Verortung mindestens die Straße angeben."}
+    treffer = await search_addresses(q, limit=1)
+    if not treffer:
+        return None, adresse, {"verortet": False, "suche": q, "hinweis": "Keine Adresse gefunden."}
+    t = treffer[0]
+    ergaenzt = {**adresse, **{k: t[k] for k in _ADRESS_FELDER if t.get(k) and not adresse.get(k)}}
+    return ({"type": "Point", "coordinates": [t["lng"], t["lat"]]}, ergaenzt,
+            {"verortet": True, "suche": q, "treffer": t["display_name"], "geo_status": "ungeprueft",
+             "hinweis": "Punkt aus der Adresse gesetzt; Lage vor Ort prüfen und im Editor als geprüft markieren."})
 
 
 def _werte(typ: str, *, titel: str, beschreibung: str, prioritaet: int, daten: dict,
@@ -114,8 +158,7 @@ def _werte(typ: str, *, titel: str, beschreibung: str, prioritaet: int, daten: d
         raise ValueError("Priorität muss 1, 2 oder 3 sein.")
     if not isinstance(tags, list) or any(not isinstance(t, str) for t in tags):
         raise ValueError("Tags müssen eine Textliste sein.")
-    if not isinstance(adresse, dict) or any(not isinstance(v, str) for v in adresse.values()):
-        raise ValueError("Adresse muss ein Objekt mit Textwerten sein.")
+    adresse = _adresse(adresse)
     if geometrie is not None and not isinstance(geometrie, dict):
         raise ValueError("Geometrie muss ein GeoJSON-Objekt sein.")
     return service.validiere_element_felder(
@@ -131,27 +174,38 @@ def _antwort(element: KatplanElement) -> dict[str, object]:
             "version": element.version, "hinweis": _HINWEIS}
 
 
-@_tool("katplan_element_entwurf_anlegen", "Legt einen KI-Entwurf nur im Arbeitsstand an; menschliche Freigabe nötig.")
+@_tool("katplan_element_entwurf_anlegen", (
+    "Legt einen KI-Entwurf nur im Arbeitsstand an; menschliche Freigabe nötig. " + _ADRESS_HINWEIS
+    + " verorten=true setzt aus der Adresse einen ungeprüften Punkt (ohne Ort wird der Ort der Organisation "
+    "verwendet); geometrie (GeoJSON) hat Vorrang. typ: info, massnahme, kontrollstelle, gefahrenbereich, "
+    "ablauf, ressource, medien, zustaendigkeit, objektverweis."
+))
 async def katplan_element_entwurf_anlegen(
     context: MCPContext, plan_id: int, typ: str, titel: str, beschreibung: str = "",
     kapitel_id: int | None = None, kapitel_titel: str | None = None, phasen: list[str] | None = None,
     prioritaet: int = 2, daten: dict | None = None, tags: list[str] | None = None,
     adresse: dict | None = None, geometrie: dict | None = None,
-    quelle_dokument_id: int | None = None, quelle_seiten: str | None = None,
+    quelle_dokument_id: int | None = None, quelle_seiten: str | None = None, verorten: bool = False,
 ) -> dict[str, object]:
     plan = _plan(context, plan_id)
+    from app.services.katplan_typen import ELEMENT_TYPEN
+    if typ not in ELEMENT_TYPEN:
+        raise ValueError("Unbekannter Elementtyp. Erlaubt: " + ", ".join(ELEMENT_TYPEN))
+    adresse_werte = _adresse(adresse)
+    verortung = None
+    if verorten and geometrie is None:
+        geometrie, adresse_werte, verortung = await _verorten(context, typ, adresse_werte)
     werte = _werte(typ, titel=titel, beschreibung=beschreibung, prioritaet=prioritaet,
                    daten=daten if daten is not None else {}, tags=tags if tags is not None else [],
-                   adresse=adresse if adresse is not None else {}, geometrie=geometrie)
+                   adresse=adresse_werte, geometrie=geometrie)
     validiere_element_quelle(context.db, plan, quelle_dokument_id, quelle_seiten or "")
     if kapitel_id is not None and kapitel_titel is not None:
         raise ValueError("Entweder kapitel_id oder kapitel_titel angeben.")
     _kapitel(context, plan, kapitel_id)
     if kapitel_titel is not None:
         titel_kapitel = kapitel_titel.strip()
-        kapitel = context.db.query(KatplanAbschnitt).filter_by(org_id=plan.org_id, plan_id=plan.id).filter(
-            func.lower(KatplanAbschnitt.titel) == titel_kapitel.lower(),
-        ).first()
+        kapitel = next((a for a in context.db.query(KatplanAbschnitt).filter_by(org_id=plan.org_id, plan_id=plan.id)
+                        if a.titel.strip().casefold() == titel_kapitel.casefold()), None)
         if kapitel is None:
             kapitel = service.lege_abschnitt_an(context.db, plan, context.user, titel=titel_kapitel, quelle="mcp")
         kapitel_id = kapitel.id
@@ -166,12 +220,20 @@ async def katplan_element_entwurf_anlegen(
     for pid in phase_ids:
         context.db.add(KatplanElementPhase(org_id=plan.org_id, element_id=element.id, phase_id=pid))
     service.aktualisiere_element_suchtext(element)
-    return _antwort(element)
+    antwort = _antwort(element)
+    if verortung is not None:
+        antwort["verortung"] = verortung
+    return antwort
 
 
-@_tool("katplan_element_entwurf_aendern", "Ändert erlaubte Entwurfsfelder mit Versionsprüfung nur im Arbeitsstand.")
+@_tool("katplan_element_entwurf_aendern", (
+    "Ändert erlaubte Entwurfsfelder mit Versionsprüfung nur im Arbeitsstand. felder darf enthalten: titel, "
+    "beschreibung, prioritaet, daten, tags, adresse, geometrie, kapitel_id, phasen, quelle_dokument_id, "
+    "quelle_seiten, gueltig_bis, pruefen_am. " + _ADRESS_HINWEIS + " Nur übergebene Adressfelder werden "
+    "geändert. verorten=true setzt aus der (neuen) Adresse einen ungeprüften Punkt."
+))
 async def katplan_element_entwurf_aendern(context: MCPContext, plan_id: int, element_id: str,
-                                         version: int, felder: dict) -> dict[str, object]:
+                                         version: int, felder: dict, verorten: bool = False) -> dict[str, object]:
     plan = _plan(context, plan_id)
     element = _element(context, plan, element_id)
     service.pruefe_version(element, version)
@@ -180,6 +242,18 @@ async def katplan_element_entwurf_aendern(context: MCPContext, plan_id: int, ele
     verboten = set(felder) - _FELDER
     if verboten:
         raise ValueError("Nicht erlaubte Felder: " + ", ".join(sorted(verboten)))
+    felder = dict(felder)
+    if "adresse" in felder:
+        # Teiladressen mit dem Bestand zusammenfuehren, damit {"hausnummer": "7"} die Straße nicht loescht.
+        bestand = {k: getattr(element, k) or "" for k in _ADRESS_FELDER}
+        felder["adresse"] = {**bestand, **_adresse(felder["adresse"])}
+    verortung = None
+    if verorten and "geometrie" not in felder:
+        adresse_neu = felder.get("adresse") or {k: getattr(element, k) or "" for k in _ADRESS_FELDER}
+        geom, ergaenzt, verortung = await _verorten(context, element.typ, adresse_neu)
+        if geom is not None:
+            felder["geometrie"] = geom
+            felder["adresse"] = ergaenzt
     # Nur uebergebene Felder validieren und schreiben; gepruefte Bestandsgeometrie bleibt erhalten.
     scalar = {"titel", "beschreibung", "prioritaet", "daten", "tags", "adresse", "geometrie"}
     werte = {}
@@ -233,7 +307,10 @@ async def katplan_element_entwurf_aendern(context: MCPContext, plan_id: int, ele
     element.aktualisiert_am, element.aktualisiert_von_id = _utcnow(), context.user.id
     service.aktualisiere_element_suchtext(element)
     service.markiere_ueberarbeitung(context.db, plan, context.user, quelle="mcp")
-    return _antwort(element)
+    antwort = _antwort(element)
+    if verortung is not None:
+        antwort["verortung"] = verortung
+    return antwort
 
 
 @_tool("katplan_anhang_upload_vorbereiten", "Bereitet einen kurzlebigen Upload für einen Anhang im Arbeitsstand vor.")

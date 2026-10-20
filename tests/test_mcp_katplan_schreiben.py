@@ -305,3 +305,67 @@ def test_vorschlaege_offen_kein_element_und_quellgrenzen(inhalte):
             schreiben(inhalte, NAMEN[4], elemente=[{"titel": "Falsch"}], **params)
     with pytest.raises(ValueError, match="30"):
         schreiben(inhalte, NAMEN[4], dokument_id=inhalte["dokument_id"], seiten_nr=1, elemente=[{}] * 31)
+
+
+def test_adresse_verorten_und_validierung(inhalte, monkeypatch):
+    from app.services import geocoding
+
+    suchen = []
+
+    async def suche(q, limit=5):
+        suchen.append(q)
+        return [{"display_name": "Eulentobel 7, 6922 Wolfurt", "strasse": "Eulentobel", "hausnummer": "7",
+                 "plz": "6922", "ort": "Wolfurt", "lat": 47.47, "lng": 9.75}]
+
+    monkeypatch.setattr(geocoding, "search_addresses", suche)
+    with TestingSession() as db:
+        set_tenant_context(db, None)
+        user = db.query(User).filter_by(username=inhalte["users"]["katplan_verwalter"]).one()
+        user.org.city = "Wolfurt"
+        db.commit()
+    neu = schreiben(inhalte, "katplan_element_entwurf_anlegen", typ="kontrollstelle", titel="Eulentobelbach",
+                    adresse={"strasse": "Eulentobel", "hausnummer": "7"}, verorten=True)
+    # Ohne Ort wird der Ort der Organisation fuer die Suche verwendet.
+    assert suchen == ["Eulentobel 7, Wolfurt"]
+    assert neu["verortung"]["verortet"] is True and neu["verortung"]["geo_status"] == "ungeprueft"
+    with TestingSession() as db:
+        set_tenant_context(db, inhalte["org_id"])
+        e = db.query(KatplanElement).filter_by(uuid=neu["element_id"]).one()
+        assert (e.strasse, e.hausnummer, e.plz, e.ort) == ("Eulentobel", "7", "6922", "Wolfurt")
+        assert e.geo_status == "ungeprueft" and json.loads(e.geometry_json)["type"] == "Point"
+    # Teiladresse aendert nur das uebergebene Feld.
+    geaendert = schreiben(inhalte, "katplan_element_entwurf_aendern", element_id=neu["element_id"],
+                          version=neu["version"], felder={"adresse": {"hausnummer": "9"}})
+    with TestingSession() as db:
+        set_tenant_context(db, inhalte["org_id"])
+        e = db.query(KatplanElement).filter_by(uuid=neu["element_id"]).one()
+        assert (e.strasse, e.hausnummer, e.ort) == ("Eulentobel", "9", "Wolfurt")
+    with pytest.raises(ValueError, match="Unbekannte Adressfelder: adresse"):
+        schreiben(inhalte, "katplan_element_entwurf_aendern", element_id=neu["element_id"],
+                  version=geaendert["version"], felder={"adresse": {"adresse": "Eulentobel 7"}})
+    # Reine Linien-/Flaechentypen werden nicht als Punkt verortet.
+    flaeche = schreiben(inhalte, "katplan_element_entwurf_anlegen", typ="gefahrenbereich", titel="Fläche",
+                        adresse={"strasse": "Eulentobel"}, verorten=True)
+    assert flaeche["verortung"]["verortet"] is False
+    # Lesetools liefern die Adresse auch strukturiert.
+    gelesen = rufe(inhalte, "katplan_element_lesen", "katplan_verwalter", plan_id=inhalte["plan_id"],
+                   element_id=neu["element_id"], fassung="arbeitsstand")
+    assert gelesen["address_parts"] == {"strasse": "Eulentobel", "hausnummer": "9", "plz": "6922", "ort": "Wolfurt"}
+
+
+def test_adresse_schema_fuer_ki_clients(client, inhalte):
+    with TestingSession() as db:
+        set_tenant_context(db, None)
+        user = db.query(User).filter_by(username=inhalte["users"]["katplan_verwalter"]).one()
+        ident = {"id": user.id, "org_id": user.org_id, "username": user.username}
+    token = _oauth_tokens(client, ident)["access_token"]
+    tools = {t["name"]: t for t in _rpc(_mcp(client, token, "tools/list", {}, 13))["result"]["tools"]}
+    schema = tools["katplan_element_entwurf_anlegen"]["inputSchema"]
+    adresse = schema["properties"]["adresse"]
+    if "anyOf" in adresse:
+        adresse = next(s for s in adresse["anyOf"] if s.get("type") != "null")
+    if "$ref" in adresse:
+        adresse = schema["$defs"][adresse["$ref"].rsplit("/", 1)[-1]]
+    assert set(adresse["properties"]) == {"strasse", "hausnummer", "plz", "ort"}
+    assert "verorten" in schema["properties"]
+    assert "verorten" in tools["katplan_element_entwurf_aendern"]["inputSchema"]["properties"]

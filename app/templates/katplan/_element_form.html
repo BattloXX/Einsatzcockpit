@@ -98,13 +98,24 @@
           data-lng="{{ user.org.fallback_lng if user.org.fallback_lng is not none else 9.7416 }}">
           <input type="hidden" name="geometry_json" value="{{ form.get('geometry_json', '') }}">
           <div id="kp-geo-karte-{{ element.id }}" class="kp-geo-karte" aria-label="Ort auf der Karte bearbeiten"></div>
-          <button type="button" class="btn" data-kp-adress-suche>Adresse auf Karte suchen</button>
-          <div data-kp-geo-treffer aria-live="polite"></div>
-          <label class="kp-chip">
-            <input class="form-control" type="checkbox" name="geo_geprueft" value="1" {% if form.get('geo_geprueft') %}checked{% endif %}>
+          {# Vorbelegung: Adresse des Elements, ohne Ort ergaenzt um den Ort der Organisation. #}
+          {% set adress_teile = [(form.get('strasse', '') ~ ' ' ~ form.get('hausnummer', ''))|trim,
+                                 (form.get('plz', '') ~ ' ' ~ (form.get('ort', '') or (user.org.city or '')))|trim] %}
+          <div class="kp-adress-suche">
+            <label>
+              Adresse suchen
+              <input class="form-control" type="search" data-kp-adress-eingabe autocomplete="off"
+                value="{{ adress_teile|select|join(', ') }}" data-org-ort="{{ user.org.city or '' }}"
+                placeholder="Straße Hausnummer, Ort">
+            </label>
+            <button type="button" class="btn btn--ghost" data-kp-adress-suche>Suchen</button>
+          </div>
+          <div class="kp-actions" data-kp-geo-treffer aria-live="polite"></div>
+          <label class="kp-check">
+            <input type="checkbox" name="geo_geprueft" value="1" {% if form.get('geo_geprueft') %}checked{% endif %}>
             Ort geprüft
           </label>
-          <p>Nur setzen, wenn die Position vor Ort oder anhand gesicherter Unterlagen bestätigt ist.</p>
+          <p class="kp-header__sub">Nur setzen, wenn die Position vor Ort oder anhand gesicherter Unterlagen bestätigt ist.</p>
           {% include "katplan/_geo_status.html" %}
         </div>
       {% endif %}

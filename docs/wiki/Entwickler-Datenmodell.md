@@ -200,7 +200,7 @@ pressure_log
 ```
 ai_prompt_version  [TenantScoped: org_id]
   id, org_id FK
-  prompt_key (report|task_suggestions|lage_hints|situation|mi_prioritize)
+  prompt_key (report|task_suggestions|lage_hints|situation|mi_prioritize|katplan_import|…)
   content (LONGTEXT), version_number
   created_by_user_id FK?, is_active
 ```
@@ -416,6 +416,53 @@ weather_reading
 ```
 
 Die Zeitreihe wird täglich um 03:30 (Europe/Vienna) bereinigt — Retention konfigurierbar via `WEATHER_READING_RETENTION_DAYS`.
+
+## Katastrophenpläne
+
+Details und Services: [Entwickler-Katastrophenplaene](Entwickler-Katastrophenplaene). Alle Tabellen sind TenantScoped (Migrationen 0294–0299).
+
+```
+katplan_plan              uuid, titel, gefahrenarten_json, beschreibung_html, geltungsbereich,
+                          verantwortliche_stelle, verantwortlich_kontakt_id, status (entwurf|
+                          in_pruefung|freigegeben|in_ueberarbeitung|archiviert),
+                          aktuelle_version_id, wiedervorlage_am, wiedervorlage_erinnert_am, version
+katplan_abschnitt         plan_id FK, parent_id FK? (Kapitelbaum), titel, beschreibung_html, sort
+katplan_phase             plan_id FK, name, beschreibung, ausloeser, farbe, sort
+katplan_element           plan_id FK, abschnitt_id FK?, uuid (stabil über Versionen), kennung, typ,
+                          titel, beschreibung_html, daten_json (typspezifisch), prioritaet,
+                          tags_json, vertraulich, gueltig_bis, pruefen_am,
+                          strasse/hausnummer/plz/ort, lat/lng, geometry_json,
+                          geo_status (keine|ungeprueft|geprueft), herkunft (manual|imported|
+                          ai_suggested), quelle_dokument_id (ohne FK), quelle_seiten,
+                          gsl_* (vorbereitet), suchtext, version
+katplan_element_phase     element_id FK, phase_id FK
+katplan_aenderung         Protokoll: entitaet, aktion, feld, alt, neu, element_id, user_id,
+                          quelle (ui|mcp), zeit
+katplan_pruefung          Workflowprotokoll: version_id?, aktion (eingereicht|zurueckgewiesen|
+                          freigegeben|archiviert|reaktiviert), kommentar, user_id, zeit
+katplan_version           plan_id FK, versionsnummer, plan_json (Kopf, Kapitel, Phasen,
+                          Links, Anhänge, Quellen), inhalt_hash, anzahl_elemente, aenderungsnotiz,
+                          freigegeben_am, freigegeben_von_id   ← unveränderlich
+katplan_version_element   version_id FK, element_uuid, Elementfelder als Snapshot,
+                          phasen_json, links_json, relationen_json, anhaenge_json, gsl_json
+katplan_link              plan_id, element_id? (null = Plan-Link), ziel_typ (kontakt|
+                          kontakt_organisation|objekt|fahrzeug|wasserstelle), ziel_id, rolle, hinweis
+katplan_relation          von_element_id FK, zu_element_uuid, art, hinweis
+katplan_anhang            plan_id, element_id?/abschnitt_id?, uuid, art (foto|datei|link|
+                          objekt_dokument), dateiname, pfad, thumb_pfad, mime, groesse_bytes,
+                          url, objekt_dokument_id, seiten, beschriftung, urheber,
+                          aufnahme_datum, vertraulich, sort,
+                          geloescht_am (soft delete, Versionen referenzieren weiter)
+katplan_dokument          plan_id FK, uuid, titel, pfad, seitenzahl, status, dokument_gruppe_id,
+                          versionsnummer, ist_aktuelle_version, archiviert, belegt_bytes,
+                          ki_status, ki_fehler, ki_analysiert_am
+katplan_dokument_seite    dokument_id FK, seiten_nr, einzel_pdf_pfad, bild_pfad, thumb_pfad,
+                          volltext, text_quelle, titel
+katplan_import_vorschlag  plan_id, dokument_id, seite_id?, seiten_nr, typ, titel,
+                          beschreibung_html, daten_json, kapitel, phase, Adresse,
+                          kontakte_json, objekt_name/objekt_id, status (offen|uebernommen|
+                          verworfen), element_id
+```
 
 ## Wichtige Indexe
 
