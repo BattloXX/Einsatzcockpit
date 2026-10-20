@@ -119,11 +119,11 @@ def pruefe_version(obj: KatplanPlan | KatplanElement, erwartet: int) -> None:
 
 
 
-def markiere_ueberarbeitung(db: Session, plan: KatplanPlan, user: User) -> None:
+def markiere_ueberarbeitung(db: Session, plan: KatplanPlan, user: User, *, quelle: str = "ui") -> None:
     """Inhaltsaenderungen schuetzen unabhaengig von der Kopfdaten-Version."""
     if plan.status == "freigegeben":
         protokolliere(db, plan, "plan", "geaendert", user, feld="status",
-                      alt=plan.status, neu="in_ueberarbeitung")
+                      alt=plan.status, neu="in_ueberarbeitung", quelle=quelle)
         plan.status = "in_ueberarbeitung"
 
 
@@ -268,7 +268,8 @@ def verschiebe_nachbar(db: Session, plan: KatplanPlan, user: User,
 def lege_element_an(db: Session, plan: KatplanPlan, user: User, *, typ: str, titel: str,
                     abschnitt_id: int | None = None, daten: dict | None = None,
                     beschreibung_html: str | None = None, herkunft: str = "manual",
-                    quelle_dokument_id: int | None = None, quelle_seiten: str | None = None) -> KatplanElement:
+                    quelle_dokument_id: int | None = None, quelle_seiten: str | None = None,
+                    quelle: str = "ui") -> KatplanElement:
     """Gemeinsame Anlage fuer Schnellerfassung und Uebernahme einer Quellseite."""
     from app.services.katplan_typen import ELEMENT_TYPEN
 
@@ -290,13 +291,13 @@ def lege_element_an(db: Session, plan: KatplanPlan, user: User, *, typ: str, tit
     aktualisiere_element_suchtext(element)
     db.add(element)
     db.flush()
-    protokolliere(db, plan, "element", "angelegt", user, element_id=element.id)
-    markiere_ueberarbeitung(db, plan, user)
+    protokolliere(db, plan, "element", "angelegt", user, element_id=element.id, quelle=quelle)
+    markiere_ueberarbeitung(db, plan, user, quelle=quelle)
     return element
 
 
 def lege_abschnitt_an(db: Session, plan: KatplanPlan, user: User, *, titel: str,
-                      parent_id: int | None = None) -> KatplanAbschnitt:
+                      parent_id: int | None = None, quelle: str = "ui") -> KatplanAbschnitt:
     """Gemeinsame Kapitelanlage fuer Editor und Import."""
     if plan.org_id != user.org_id or plan.status == "archiviert":
         raise ValueError("Dieser Plan kann nicht bearbeitet werden.")
@@ -314,17 +315,52 @@ def lege_abschnitt_an(db: Session, plan: KatplanPlan, user: User, *, titel: str,
                                 titel=titel, sort=max((a.sort for a in geschwister), default=0) + 10)
     db.add(abschnitt)
     db.flush()
-    protokolliere(db, plan, "abschnitt", "angelegt", user, neu=titel)
-    markiere_ueberarbeitung(db, plan, user)
+    protokolliere(db, plan, "abschnitt", "angelegt", user, neu=titel, quelle=quelle)
+    markiere_ueberarbeitung(db, plan, user, quelle=quelle)
     return abschnitt
 
 
-def lege_phase_an(db: Session, plan: KatplanPlan, user: User, *, name: str) -> KatplanPhase:
+def lege_phase_an(db: Session, plan: KatplanPlan, user: User, *, name: str, quelle: str = "ui") -> KatplanPhase:
     if plan.org_id != user.org_id or plan.status == "archiviert" or not name.strip() or len(name) > 120:
         raise ValueError("Ungültige Phase oder archivierter Plan.")
     phase = KatplanPhase(org_id=plan.org_id, plan_id=plan.id, name=name.strip())
     db.add(phase)
     db.flush()
-    protokolliere(db, plan, "phase", "angelegt", user, neu=phase.name)
-    markiere_ueberarbeitung(db, plan, user)
+    protokolliere(db, plan, "phase", "angelegt", user, neu=phase.name, quelle=quelle)
+    markiere_ueberarbeitung(db, plan, user, quelle=quelle)
     return phase
+
+
+def validiere_element_felder(typ: str, *, titel: str, prioritaet: int, daten: dict,
+                             tags: list[str], adresse: dict, beschreibung_html: str | None,
+                             geometrie: str | None, geo_geprueft: bool = False) -> dict[str, Any]:
+    """Gemeinsame Feldregeln des Editors und der MCP-Entwurfswerkzeuge."""
+    from app.services.katplan_geo_service import ableite_punkt, pruefe_geometrie
+    from app.services.katplan_typen import bereinige_daten
+
+    if not titel.strip() or len(titel.strip()) > 200:
+        raise ValueError("Titel: Bitte 1 bis 200 Zeichen eingeben.")
+    if not isinstance(daten, dict):
+        raise ValueError("Daten müssen ein JSON-Objekt sein.")
+    bereinigt = bereinige_daten(typ, daten)
+    if prioritaet not in (1, 2, 3):
+        raise ValueError("Priorität muss 1, 2 oder 3 sein.")
+    if len(tags) > 20 or any(len(t) > 50 for t in tags):
+        raise ValueError("Höchstens 20 Tags mit je 50 Zeichen eingeben.")
+    werte: dict[str, Any] = {
+        "titel": titel.strip(), "prioritaet": prioritaet,
+        "daten_json": json.dumps(bereinigt, ensure_ascii=False),
+        "tags_json": json.dumps(tags, ensure_ascii=False),
+        "beschreibung_html": bereinige_beschreibung(beschreibung_html),
+    }
+    for feld, maximum in (("strasse", 200), ("hausnummer", 20), ("plz", 10), ("ort", 100)):
+        wert = adresse.get(feld, "").strip()
+        if len(wert) > maximum:
+            raise ValueError(f"{feld}: höchstens {maximum} Zeichen.")
+        werte[feld] = wert or None
+    geom = pruefe_geometrie(typ, geometrie)
+    lat, lng = ableite_punkt(geom) if geom else (None, None)
+    werte.update(geometry_json=json.dumps(geom, sort_keys=True) if geom else None,
+                 lat=lat, lng=lng,
+                 geo_status=("geprueft" if geo_geprueft else "ungeprueft") if geom else "keine")
+    return werte

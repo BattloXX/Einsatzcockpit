@@ -234,6 +234,9 @@ def test_cancel_job_htmx_returns_partial_and_classic_redirects(client, monkeypat
     csrf = client.cookies.get("ec_csrf")
 
     htmx_job = _add_job(gw_id)
+    # Ein weiterer offener Auftrag sorgt dafuer, dass die Historie unabhaengig von der
+    # Testreihenfolge ein Formular (und damit ein CSRF-Feld) enthaelt.
+    _add_job(gw_id)
     htmx = client.post(
         f"/gateway/jobs/{htmx_job}/cancel",
         data={"_csrf": csrf},

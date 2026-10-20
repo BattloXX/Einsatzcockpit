@@ -63,11 +63,11 @@ def _neu(db: Session, plan: KatplanPlan, user: User, *, element: KatplanElement 
 
 
 def _geaendert(db: Session, plan: KatplanPlan, user: User, anhang: KatplanAnhang, aktion: str,
-               alt: str | None = None) -> None:
+               alt: str | None = None, *, quelle: str = "ui") -> None:
     protokolliere(db, plan, "anhang", aktion, user, feld=anhang.uuid,
                   alt=alt, neu=json.dumps(_protokoll_daten(anhang), ensure_ascii=False),
-                  element_id=anhang.element_id)
-    markiere_ueberarbeitung(db, plan, user)
+                  element_id=anhang.element_id, quelle=quelle)
+    markiere_ueberarbeitung(db, plan, user, quelle=quelle)
     plan.version += 1
     plan.aktualisiert_am = _utcnow()
     plan.aktualisiert_von_id = user.id
@@ -83,11 +83,12 @@ def _geaendert(db: Session, plan: KatplanPlan, user: User, anhang: KatplanAnhang
 def anhang_hochladen(db: Session, plan: KatplanPlan, user: User, datei_bytes: bytes,
                      dateiname: str, content_type: str | None, *, element: KatplanElement | None = None,
                      abschnitt: KatplanAbschnitt | None = None, beschriftung: str = "", urheber: str = "",
-                     aufnahme_datum: date | None = None, vertraulich: bool = False) -> KatplanAnhang:
+                     aufnahme_datum: date | None = None, vertraulich: bool = False,
+                     quelle: str = "ui") -> KatplanAnhang:
     anhang = _neu(db, plan, user, element=element, abschnitt=abschnitt, beschriftung=beschriftung,
                   urheber=urheber, aufnahme_datum=aufnahme_datum, vertraulich=vertraulich)
     store_upload_for_katplan_anhang(datei_bytes, dateiname, content_type, anhang, plan, db)
-    _geaendert(db, plan, user, anhang, "hochgeladen")
+    _geaendert(db, plan, user, anhang, "hochgeladen", quelle=quelle)
     return anhang
 
 
