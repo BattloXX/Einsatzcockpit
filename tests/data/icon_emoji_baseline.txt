@@ -1,8 +1,7 @@
 # Waechter tests/test_icon_waechter.py: noch nicht migrierte UI-Emojis je Datei.
 # Darf nur schrumpfen. Neu erzeugen: .venv/bin/python scripts/icon_inventar.py --baseline
 app/core/templating.py 4
-app/main.py 6
-app/middleware/csrf.py 2
+app/middleware/csrf.py 1
 app/models/major_incident.py 11
 app/models/objekt.py 8
 app/routers/api_v1.py 1
@@ -36,8 +35,6 @@ app/static/js/road_closure_address.js 4
 app/static/js/weather_layer.js 1
 app/templates/_macros/address_picker.html 1
 app/templates/_print_dialog.html 4
-app/templates/_profil_aktionen.html 6
-app/templates/admin/_layout.html 58
 app/templates/admin/_mail_eingang_content.html 1
 app/templates/admin/ai_prompts.html 1
 app/templates/admin/backup.html 3
@@ -52,7 +49,6 @@ app/templates/admin/foerder_pumpen.html 2
 app/templates/admin/foerder_pumpen_vorlagen.html 1
 app/templates/admin/foerder_schlaeuche.html 3
 app/templates/admin/gsl_einstellungen.html 9
-app/templates/admin/index.html 17
 app/templates/admin/konfig.html 2
 app/templates/admin/lage_hints.html 3
 app/templates/admin/medienverwaltung.html 8
@@ -75,7 +71,6 @@ app/templates/admin/vehicles.html 1
 app/templates/admin/wasserstellen.html 9
 app/templates/annotate/editor.html 11
 app/templates/archive/detail.html 20
-app/templates/base.html 60
 app/templates/breathing/_readiness_warning.html 1
 app/templates/breathing/board.html 26
 app/templates/einheit/einheit.html 17
@@ -173,7 +168,6 @@ app/templates/incident_major/public_verify.html 5
 app/templates/incident_major/ressourcen.html 2
 app/templates/incident_major/stab.html 9
 app/templates/incident_major/zeitreise.html 1
-app/templates/index.html 21
 app/templates/katplan/_anhaenge_anzeige.html 3
 app/templates/katplan/_baum.html 4
 app/templates/katplan/_design.html 1

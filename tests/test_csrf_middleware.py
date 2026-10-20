@@ -87,6 +87,9 @@ def test_formfeld_fehler_als_html_fuer_browser(client):
     assert r.status_code == 403
     assert "text/html" in r.headers["content-type"]
     assert "Kein Zugriff" in r.text
+    from app.core.icons import render_icon
+
+    assert str(render_icon("ban", size="lg")) in r.text
     assert not r.text.startswith('{"detail":')
 
 

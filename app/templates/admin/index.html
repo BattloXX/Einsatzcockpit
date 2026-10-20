@@ -44,27 +44,27 @@
     <a href="https://github.com/BattloXX/Einsatzcockpit/wiki"
        target="_blank" rel="noopener"
        class="btn btn-sm"
-       style="font-size:.8rem;">Vollständiges Wiki ↗</a>
+       style="font-size:.8rem;">Vollständiges Wiki {{ icon("external-link", size="xs") }}</a>
   </div>
   <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:8px;">
     {% set wiki_links = [
-      ('📖', 'Erste Schritte', 'Anwender-Erste-Schritte'),
-      ('🚨', 'Einsatz starten', 'Anwender-Einsatz-starten'),
-      ('🗂️', 'Kanban-Board', 'Anwender-Kanban-Board-bedienen'),
-      ('🔴', 'Atemschutz', 'Anwender-Atemschutzueberwachung'),
-      ('🏚️', 'Großschadenslage', 'Anwender-Grosschadenslage'),
-      ('🗺️', 'Lagekarte GSL', 'Anwender-Grosschadenslage-Karte'),
-      ('🎯', 'Taktische Karte', 'Anwender-Taktische-Lagekarte'),
-      ('⛅', 'Wetter', 'Anwender-Wetter'),
-      ('📢', 'Übergreifende Meldungen', 'Anwender-Uebergreifende-Meldungen'),
-      ('👥', 'GSL-Ressourcen', 'Anwender-GSL-Ressourcenverwaltung'),
-      ('📦', 'Geräteverleih', 'Anwender-Geraeteverleih'),
-      ('🚁', 'Drohne / UAS', 'Anwender-Drohne-UAS'),
-      ('🔑', 'Single Sign-On', 'Administration-Single-Sign-On'),
-      ('🛠️', 'Installation', 'Installation-App-Installation'),
-      ('💬', 'Fehler & Wünsche', 'Feedback-und-Support'),
+      ('book', 'Erste Schritte', 'Anwender-Erste-Schritte'),
+      ('urgent', 'Einsatz starten', 'Anwender-Einsatz-starten'),
+      ('folders', 'Kanban-Board', 'Anwender-Kanban-Board-bedienen'),
+      ('lungs', 'Atemschutz', 'Anwender-Atemschutzueberwachung'),
+      ('home-x', 'Großschadenslage', 'Anwender-Grosschadenslage'),
+      ('map', 'Lagekarte GSL', 'Anwender-Grosschadenslage-Karte'),
+      ('target', 'Taktische Karte', 'Anwender-Taktische-Lagekarte'),
+      ('cloud-rain', 'Wetter', 'Anwender-Wetter'),
+      ('speakerphone', 'Übergreifende Meldungen', 'Anwender-Uebergreifende-Meldungen'),
+      ('users', 'GSL-Ressourcen', 'Anwender-GSL-Ressourcenverwaltung'),
+      ('package', 'Geräteverleih', 'Anwender-Geraeteverleih'),
+      ('drone', 'Drohne / UAS', 'Anwender-Drohne-UAS'),
+      ('key', 'Single Sign-On', 'Administration-Single-Sign-On'),
+      ('tools', 'Installation', 'Installation-App-Installation'),
+      ('message', 'Fehler & Wünsche', 'Feedback-und-Support'),
     ] %}
-    {% for icon, label, slug in wiki_links %}
+    {% for icon_name, label, slug in wiki_links %}
     <a href="https://github.com/BattloXX/Einsatzcockpit/wiki/{{ slug }}"
        target="_blank" rel="noopener"
        style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;
@@ -73,9 +73,9 @@
               transition:background .12s,border-color .12s;"
        onmouseover="this.style.background='var(--surface-highest)';this.style.borderColor='var(--border-focus,#4a6fa5)'"
        onmouseout="this.style.background='var(--surface-high)';this.style.borderColor='var(--border)'">
-      <span style="font-size:1rem;flex-shrink:0;">{{ icon }}</span>
+      <span style="display:inline-flex;align-items:center;flex-shrink:0;">{{ icon(icon_name, size="sm") }}</span>
       <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ label }}</span>
-      <span style="margin-left:auto;font-size:.72rem;color:var(--text-muted);flex-shrink:0;">↗</span>
+      <span style="margin-left:auto;font-size:.72rem;color:var(--text-muted);flex-shrink:0;">{{ icon("external-link", size="xs") }}</span>
     </a>
     {% endfor %}
   </div>

@@ -264,7 +264,7 @@ class CSRFMiddleware:
                     context = {
                         "status": 403,
                         "title": "Kein Zugriff",
-                        "emoji": "⛔",
+                        "icon_name": "ban",
                         "detail": "CSRF-Token fehlt oder ungültig",
                         "authenticated": False,
                     }

@@ -1,10 +1,12 @@
 # Verwendete Tabler-Icons (Outline), ein Name pro Zeile. Nach Aenderung: npm run vendor
+address-book
 adjustments
 alarm
 alert-circle
 alert-triangle
 ambulance
 antenna
+apps
 archive
 arrow-back-up
 arrow-down
@@ -47,6 +49,7 @@ circle
 circle-check
 circle-dashed
 circle-x
+clipboard-check
 clipboard-list
 clock
 cloud
@@ -60,6 +63,7 @@ device-desktop
 device-floppy
 device-laptop
 device-mobile
+device-mobile-down
 device-mobile-message
 device-mobile-off
 device-tv
@@ -68,6 +72,7 @@ door
 dots
 dots-vertical
 download
+drone
 droplet
 droplet-half-2
 elevator
@@ -98,6 +103,7 @@ id
 inbox
 info-circle
 key
+layout-dashboard
 lifebuoy
 link
 lock
@@ -144,6 +150,7 @@ refresh
 repeat
 ripple
 robot
+rocket
 rotate
 route
 ruler
@@ -156,6 +163,7 @@ speakerphone
 square
 square-check
 star
+steering-wheel
 stopwatch
 sun
 sun-low
@@ -171,6 +179,8 @@ upload
 urgent
 user
 user-check
+user-cog
+user-plus
 users
 users-group
 wind

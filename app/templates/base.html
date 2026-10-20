@@ -78,62 +78,62 @@
     {% set _module_active = request.url.path.startswith('/mailing') or '/verwaltung/fahrten' in request.url.path or '/fahrtenbuch' in request.url.path or request.url.path.startswith('/kontakte') or request.url.path.startswith('/termine') or request.url.path.startswith('/teilnahme') or request.url.path.startswith('/probenplanung') or request.url.path.startswith('/planspiele') or request.url.path.startswith('/katastrophenplaene') or request.url.path.startswith('/atemschutz-pruefung') or request.url.path.startswith('/uas') or request.url.path.startswith('/objekte') or request.url.path.startswith('/strassensperren') or request.url.path.startswith('/nachschlagewerke') or request.url.path.startswith('/foerderstrecke') or '/statistik' in request.url.path %}
     <div class="topnav__links">
       {% if request.state.suche_aktiv %}
-      <a href="/suche" data-suche-link class="nav-link" aria-label="Suche" title="Suche (Strg+K)" style="min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;">🔍</a>
+      <a href="/suche" data-suche-link class="nav-link" aria-label="Suche" title="Suche (Strg+K)" style="min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;">{{ modul_icon("suche", size="sm") }}</a>
       {% endif %}
-      <a href="/" class="nav-link {% if request.url.path == '/' %}active{% endif %}">🎛 Konsole</a>
-      <a href="/lage" class="nav-link {% if request.url.path.startswith('/lage') %}active{% endif %}">🚨 Lage</a>
-      <a href="/archiv" class="nav-link {% if '/archiv' in request.url.path %}active{% endif %}">Archiv</a>
+      <a href="/" class="nav-link {% if request.url.path == '/' %}active{% endif %}">{{ modul_icon("uebersicht", size="sm") }} Konsole</a>
+      <a href="/lage" class="nav-link {% if request.url.path.startswith('/lage') %}active{% endif %}">{{ modul_icon("lage", size="sm") }} Lage</a>
+      <a href="/archiv" class="nav-link {% if '/archiv' in request.url.path %}active{% endif %}">{{ modul_icon("archiv", size="sm") }} Archiv</a>
       <div class="topnav__doku" x-data="{open:false}" @click.outside="open=false" style="position:relative;">
         <button type="button" class="nav-link nav-link--dropdown {% if _module_active %}active{% endif %}" @click="open=!open">
-          📦 Module <span style="font-size:.7rem; opacity:.7; margin-left:2px;">▾</span>
+          {{ modul_icon("module", size="sm") }} Module <span style="font-size:.7rem; opacity:.7; margin-left:2px;">{{ icon("chevron-down", size="xs") }}</span>
         </button>
         <div class="topnav__doku-panel" x-show="open" x-cloak
              style="position:absolute; top:calc(100% + 4px); left:0; z-index:200;
                     background:var(--surface-mid); border:1px solid var(--border); border-radius:.5rem;
                     min-width:230px; padding:8px 0; box-shadow:0 12px 32px rgba(0,0,0,.5);">
           {% if request.state.mailing_module_enabled %}
-          <a href="/mailing/" class="{% if request.url.path.startswith('/mailing') %}active{% endif %}">📧 Mailing</a>
+          <a href="/mailing/" class="{% if request.url.path.startswith('/mailing') %}active{% endif %}">{{ modul_icon("mailing", size="sm") }} Mailing</a>
           {% endif %}
           {% if is_fahrtenbuch %}
-          <a href="/verwaltung/fahrten" class="{% if '/verwaltung/fahrten' in request.url.path or '/fahrtenbuch' in request.url.path %}active{% endif %}">🚒 Fahrtenbuch</a>
+          <a href="/verwaltung/fahrten" class="{% if '/verwaltung/fahrten' in request.url.path or '/fahrtenbuch' in request.url.path %}active{% endif %}">{{ modul_icon("fahrtenbuch", size="sm") }} Fahrtenbuch</a>
           {% endif %}
           {% if request.state.probenplanung_enabled %}
-          <a href="/probenplanung" class="{% if request.url.path.startswith('/probenplanung') %}active{% endif %}">📅 Probenplan</a>
+          <a href="/probenplanung" class="{% if request.url.path.startswith('/probenplanung') %}active{% endif %}">{{ modul_icon("probenplan", size="sm") }} Probenplan</a>
           {% else %}
-          <a href="/termine" class="{% if request.url.path.startswith('/termine') or request.url.path.startswith('/teilnahme') %}active{% endif %}">📋 Teilnahme</a>
+          <a href="/termine" class="{% if request.url.path.startswith('/termine') or request.url.path.startswith('/teilnahme') %}active{% endif %}">{{ modul_icon("teilnahme", size="sm") }} Teilnahme</a>
           {% endif %}
           {% if is_as_pruefung %}
-          <a href="/atemschutz-pruefung" class="{% if request.url.path.startswith('/atemschutz-pruefung') %}active{% endif %}">🫁 Atemschutz-Geräteprüfung</a>
+          <a href="/atemschutz-pruefung" class="{% if request.url.path.startswith('/atemschutz-pruefung') %}active{% endif %}">{{ modul_icon("atemschutz", size="sm") }} Atemschutz-Geräteprüfung</a>
           {% endif %}
           {% if request.state.uas_module_enabled %}
-          <a href="/uas/einsaetze" class="{% if request.url.path.startswith('/uas') %}active{% endif %}">🚁 Drohne / UAS</a>
+          <a href="/uas/einsaetze" class="{% if request.url.path.startswith('/uas') %}active{% endif %}">{{ modul_icon("uas", size="sm") }} Drohne / UAS</a>
           {% endif %}
           {% if request.state.objekt_enabled %}
-          <a href="/objekte/" class="{% if request.url.path.startswith('/objekte') %}active{% endif %}">🏢 Objekte</a>
+          <a href="/objekte/" class="{% if request.url.path.startswith('/objekte') %}active{% endif %}">{{ modul_icon("objekte", size="sm") }} Objekte</a>
           {% endif %}
           {% if request.state.strassensperren_enabled %}
-          <a href="/strassensperren" class="{% if request.url.path.startswith('/strassensperren') %}active{% endif %}">🚧 Straßensperren</a>
+          <a href="/strassensperren" class="{% if request.url.path.startswith('/strassensperren') %}active{% endif %}">{{ modul_icon("strassensperren", size="sm") }} Straßensperren</a>
           {% endif %}
           {% if request.state.planspiel_enabled and ('admin' in user_roles or 'org_admin' in user_roles or 'system_admin' in user_roles or 'uebungsleiter' in user_roles or 'uebungsbeobachter' in user_roles) %}
-          <a href="/planspiele" class="{% if request.url.path.startswith('/planspiele') %}active{% endif %}">🎲 Planspiele</a>
+          <a href="/planspiele" class="{% if request.url.path.startswith('/planspiele') %}active{% endif %}">{{ modul_icon("planspiele", size="sm") }} Planspiele</a>
           {% endif %}
           {% if can_view_katplan(request) %}
-          <a href="/katastrophenplaene" class="{% if request.url.path.startswith('/katastrophenplaene') %}active{% endif %}">📘 Katastrophenpläne</a>
+          <a href="/katastrophenplaene" class="{% if request.url.path.startswith('/katastrophenplaene') %}active{% endif %}">{{ modul_icon("katplan", size="sm") }} Katastrophenpläne</a>
           {% endif %}
           {% if request.state.kontakte_enabled and can_view_kontakt_directory(request) %}
-          <a href="/kontakte" class="{% if request.url.path.startswith('/kontakte') %}active{% endif %}">👥 Kontakte</a>
+          <a href="/kontakte" class="{% if request.url.path.startswith('/kontakte') %}active{% endif %}">{{ modul_icon("kontakte", size="sm") }} Kontakte</a>
           {% endif %}
           {% if request.state.nachschlagewerke_enabled %}
-          <a href="/nachschlagewerke/" class="{% if request.url.path.startswith('/nachschlagewerke') %}active{% endif %}">📚 Nachschlagewerke</a>
+          <a href="/nachschlagewerke/" class="{% if request.url.path.startswith('/nachschlagewerke') %}active{% endif %}">{{ modul_icon("nachschlagewerke", size="sm") }} Nachschlagewerke</a>
           {% endif %}
           {% if request.state.foerderstrecke_enabled %}
-          <a href="/foerderstrecke/" class="{% if request.url.path.startswith('/foerderstrecke') %}active{% endif %}">🚰 Förderstrecke</a>
+          <a href="/foerderstrecke/" class="{% if request.url.path.startswith('/foerderstrecke') %}active{% endif %}">{{ modul_icon("foerderstrecke", size="sm") }} Förderstrecke</a>
           {% endif %}
-          <a href="/statistik" class="{% if '/statistik' in request.url.path %}active{% endif %}">📊 Statistik</a>
+          <a href="/statistik" class="{% if '/statistik' in request.url.path %}active{% endif %}">{{ modul_icon("statistik", size="sm") }} Statistik</a>
         </div>
       </div>
       {% if WEATHER_ENABLED %}
-      <a href="/wetter" class="nav-link {% if request.url.path.startswith('/wetter') %}active{% endif %}">🌦 Wetter</a>
+      <a href="/wetter" class="nav-link {% if request.url.path.startswith('/wetter') %}active{% endif %}">{{ modul_icon("wetter", size="sm") }} Wetter</a>
       {% endif %}
     </div>
     {% if incident is defined and incident and leader_candidates is defined %}
@@ -143,7 +143,7 @@
               title="Aktuellen Einsatzleiter anzeigen oder wechseln">
         <span style="font-size:.75rem; opacity:.7; margin-right:2px;">EL</span>
         <span>{% if incident.leader_member %}{{ incident.leader_member.full_name }}{% elif incident.incident_leader_name %}{{ incident.incident_leader_name }}{% elif incident.leader %}{{ incident.leader.display_name }}{% else %}— kein EL —{% endif %}</span>
-        <span style="font-size:.7rem; opacity:.7; margin-left:2px;">▾</span>
+        <span style="font-size:.7rem; opacity:.7; margin-left:2px;">{{ icon("chevron-down", size="xs") }}</span>
       </button>
       <div x-show="open" x-cloak
            style="position:absolute; top:calc(100% + 4px); right:0; z-index:200;
@@ -163,7 +163,7 @@
                          border:none; cursor:pointer; font-size:.88rem; transition:background .15s;"
                   onmouseover="this.style.background='var(--surface-high)'"
                   onmouseout="this.style.background='{% if not incident.incident_leader_member_id and not incident.incident_leader_name %}rgba(183,25,33,.15){% else %}none{% endif %}'">
-            {% if not incident.incident_leader_member_id and not incident.incident_leader_name %}✓ {% endif %}— kein EL —
+            {% if not incident.incident_leader_member_id and not incident.incident_leader_name %}{{ icon("check", size="xs") }} {% endif %}— kein EL —
           </button>
         </form>
         {% if el_member_candidates is defined and el_member_candidates %}
@@ -178,7 +178,7 @@
                          border:none; cursor:pointer; font-size:.88rem; transition:background .15s;"
                   onmouseover="this.style.background='var(--surface-high)'"
                   onmouseout="this.style.background='{% if incident.incident_leader_member_id == m.id %}rgba(183,25,33,.15){% else %}none{% endif %}'">
-            {% if incident.incident_leader_member_id == m.id %}✓ {% endif %}{{ m.full_name }}
+            {% if incident.incident_leader_member_id == m.id %}{{ icon("check", size="xs") }} {% endif %}{{ m.full_name }}
           </button>
         </form>
         {% endfor %}
@@ -197,15 +197,15 @@
                style="width:22px;height:22px;border-radius:50%;object-fit:cover;flex-shrink:0;">
           {% endif %}
           {{ user.display_name }}
-          <span style="font-size:.7rem; opacity:.7; margin-left:2px;">▾</span>
+          <span style="font-size:.7rem; opacity:.7; margin-left:2px;">{{ icon("chevron-down", size="xs") }}</span>
         </button>
         <div class="topnav__doku-panel" x-show="open" x-cloak
              style="position:absolute; top:calc(100% + 4px); right:0; z-index:200;
                     background:var(--surface-mid); border:1px solid var(--border); border-radius:.5rem;
                     min-width:190px; padding:8px 0; box-shadow:0 12px 32px rgba(0,0,0,.5);">
-          <a href="/profil" class="{% if request.url.path.startswith('/profil') %}active{% endif %}">👤 Profil bearbeiten</a>
+          <a href="/profil" class="{% if request.url.path.startswith('/profil') %}active{% endif %}">{{ modul_icon("profil", size="sm") }} Profil bearbeiten</a>
           {% if request.state.is_native_app %}
-          <a href="https://localhost/about.html">ℹ️ Über die App</a>
+          <a href="https://localhost/about.html">{{ modul_icon("ueber", size="sm") }} Über die App</a>
           {% endif %}
           {% if not request.state.is_device and not request.state.qr_incident_id and not request.state.qr_lage_id %}
           <div style="padding:8px 16px 4px;font-size:.7rem;font-weight:700;letter-spacing:.08em;color:var(--text-muted);text-transform:uppercase;border-top:1px solid var(--border);margin-top:4px;">Benutzer wechseln</div>
@@ -215,27 +215,27 @@
             <input type="hidden" name="user_id" value="{{ account.user_id }}">
             <input type="hidden" name="fcm_token" value="{{ request.query_params.get('fcm_token', '') }}">
             <button type="submit" style="display:block;width:100%;text-align:left;padding:7px 16px;background:none;color:var(--on-surface);border:none;cursor:pointer;font-size:.88rem;">
-              {% if account.is_active_account %}✓ {% endif %}{{ account.display_name }}<br>
+              {% if account.is_active_account %}{{ icon("check", size="xs") }} {% endif %}{{ account.display_name }}<br>
               <span style="font-size:.72rem;color:var(--text-muted);">{{ account.org_name }}</span>
             </button>
           </form>
           {% endfor %}
-          <a href="/benutzer/hinzufuegen">➕ Weiteren Benutzer anmelden</a>
+          <a href="/benutzer/hinzufuegen">{{ modul_icon("benutzer_hinzufuegen", size="sm") }} Weiteren Benutzer anmelden</a>
           <form method="post" action="/logout/alle">
             <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-            <button type="submit" style="display:block;width:100%;text-align:left;padding:8px 16px;background:none;color:var(--on-surface);border:none;cursor:pointer;font-size:.88rem;">🚪 Alle abmelden</button>
+            <button type="submit" style="display:block;width:100%;text-align:left;padding:8px 16px;background:none;color:var(--on-surface);border:none;cursor:pointer;font-size:.88rem;">{{ modul_icon("abmelden", size="sm") }} Alle abmelden</button>
           </form>
           {% endif %}
-          <a href="{% if request.state.is_native_app %}https://localhost/?native_logout=1{% else %}/logout{% endif %}">🚪 Abmelden</a>
+          <a href="{% if request.state.is_native_app %}https://localhost/?native_logout=1{% else %}/logout{% endif %}">{{ modul_icon("abmelden", size="sm") }} Abmelden</a>
         </div>
       </div>
       {% if is_admin or 'fahrtenbuch_admin' in user_roles %}
-      <a href="/admin" class="topnav__admin-link {% if '/admin' in request.url.path %}active{% endif %}">⚙ Verwaltung</a>
+      <a href="/admin" class="topnav__admin-link {% if '/admin' in request.url.path %}active{% endif %}">{{ modul_icon("verwaltung", size="sm") }} Verwaltung</a>
       {% endif %}
       <button type="button" class="btn btn--ghost btn--sm pwa-install-btn" style="display:none"
-              title="App auf Geraet installieren">📲 Installieren</button>
+              title="App auf Geraet installieren">{{ modul_icon("installieren", size="sm") }} Installieren</button>
       <button type="button" class="btn btn--ghost btn--sm pwa-install-ios" style="display:none"
-              title="App auf iPhone/iPad installieren">📲 Installieren</button>
+              title="App auf iPhone/iPad installieren">{{ modul_icon("installieren", size="sm") }} Installieren</button>
     </div>
   </nav>
 
@@ -254,66 +254,66 @@
         {% endif %}
         {{ user.display_name }}</span>
       <button type="button" class="mobile-menu__close" aria-label="Schliessen"
-              @click="mobileMenuOpen = false">×</button>
+              @click="mobileMenuOpen = false">{{ icon("x", size="sm") }}</button>
     </header>
     <nav class="mobile-menu__nav">
       {% if request.state.suche_aktiv %}
-      <a href="/suche" data-suche-link class="mobile-menu__link">🔍 Suche</a>
+      <a href="/suche" data-suche-link class="mobile-menu__link">{{ modul_icon("suche", size="sm") }} Suche</a>
       {% endif %}
-      <a href="/" class="mobile-menu__link {% if request.url.path == '/' %}active{% endif %}">🏠 Übersicht</a>
-      <a href="/lage" class="mobile-menu__link {% if request.url.path.startswith('/lage') %}active{% endif %}">🚨 Lage</a>
-      <a href="/archiv" class="mobile-menu__link {% if '/archiv' in request.url.path %}active{% endif %}">📚 Archiv</a>
+      <a href="/" class="mobile-menu__link {% if request.url.path == '/' %}active{% endif %}">{{ modul_icon("uebersicht", size="sm") }} Übersicht</a>
+      <a href="/lage" class="mobile-menu__link {% if request.url.path.startswith('/lage') %}active{% endif %}">{{ modul_icon("lage", size="sm") }} Lage</a>
+      <a href="/archiv" class="mobile-menu__link {% if '/archiv' in request.url.path %}active{% endif %}">{{ modul_icon("archiv", size="sm") }} Archiv</a>
       {% if WEATHER_ENABLED %}
-      <a href="/wetter" class="mobile-menu__link {% if request.url.path.startswith('/wetter') %}active{% endif %}">🌦 Wetter</a>
+      <a href="/wetter" class="mobile-menu__link {% if request.url.path.startswith('/wetter') %}active{% endif %}">{{ modul_icon("wetter", size="sm") }} Wetter</a>
       {% endif %}
       <div class="mobile-menu__group-hdr">Module</div>
       {% if request.state.mailing_module_enabled %}
-      <a href="/mailing/" class="mobile-menu__link {% if request.url.path.startswith('/mailing') %}active{% endif %}">📧 Mailing</a>
+      <a href="/mailing/" class="mobile-menu__link {% if request.url.path.startswith('/mailing') %}active{% endif %}">{{ modul_icon("mailing", size="sm") }} Mailing</a>
       {% endif %}
       {% if is_fahrtenbuch %}
-      <a href="/verwaltung/fahrten" class="mobile-menu__link {% if '/verwaltung/fahrten' in request.url.path or '/fahrtenbuch' in request.url.path %}active{% endif %}">🚒 Fahrtenbuch</a>
+      <a href="/verwaltung/fahrten" class="mobile-menu__link {% if '/verwaltung/fahrten' in request.url.path or '/fahrtenbuch' in request.url.path %}active{% endif %}">{{ modul_icon("fahrtenbuch", size="sm") }} Fahrtenbuch</a>
       {% endif %}
       {% if request.state.probenplanung_enabled %}
-      <a href="/probenplanung" class="mobile-menu__link {% if request.url.path.startswith('/probenplanung') %}active{% endif %}">📅 Probenplan</a>
+      <a href="/probenplanung" class="mobile-menu__link {% if request.url.path.startswith('/probenplanung') %}active{% endif %}">{{ modul_icon("probenplan", size="sm") }} Probenplan</a>
       {% else %}
-      <a href="/termine" class="mobile-menu__link {% if request.url.path.startswith('/termine') or request.url.path.startswith('/teilnahme') %}active{% endif %}">📋 Teilnahme</a>
+      <a href="/termine" class="mobile-menu__link {% if request.url.path.startswith('/termine') or request.url.path.startswith('/teilnahme') %}active{% endif %}">{{ modul_icon("teilnahme", size="sm") }} Teilnahme</a>
       {% endif %}
       {% if is_as_pruefung %}
-      <a href="/atemschutz-pruefung" class="mobile-menu__link {% if request.url.path.startswith('/atemschutz-pruefung') %}active{% endif %}">🫁 Atemschutz-Geräteprüfung</a>
+      <a href="/atemschutz-pruefung" class="mobile-menu__link {% if request.url.path.startswith('/atemschutz-pruefung') %}active{% endif %}">{{ modul_icon("atemschutz", size="sm") }} Atemschutz-Geräteprüfung</a>
       {% endif %}
       {% if request.state.uas_module_enabled %}
-      <a href="/uas/einsaetze" class="mobile-menu__link {% if request.url.path.startswith('/uas') %}active{% endif %}">🚁 Drohne / UAS</a>
+      <a href="/uas/einsaetze" class="mobile-menu__link {% if request.url.path.startswith('/uas') %}active{% endif %}">{{ modul_icon("uas", size="sm") }} Drohne / UAS</a>
       {% endif %}
       {% if request.state.objekt_enabled %}
-      <a href="/objekte/" class="mobile-menu__link {% if request.url.path.startswith('/objekte') %}active{% endif %}">🏢 Objekte</a>
+      <a href="/objekte/" class="mobile-menu__link {% if request.url.path.startswith('/objekte') %}active{% endif %}">{{ modul_icon("objekte", size="sm") }} Objekte</a>
       {% endif %}
       {% if request.state.strassensperren_enabled %}
-      <a href="/strassensperren" class="mobile-menu__link {% if request.url.path.startswith('/strassensperren') %}active{% endif %}">🚧 Straßensperren</a>
+      <a href="/strassensperren" class="mobile-menu__link {% if request.url.path.startswith('/strassensperren') %}active{% endif %}">{{ modul_icon("strassensperren", size="sm") }} Straßensperren</a>
       {% endif %}
       {% if request.state.planspiel_enabled and ('admin' in user_roles or 'org_admin' in user_roles or 'system_admin' in user_roles or 'uebungsleiter' in user_roles or 'uebungsbeobachter' in user_roles) %}
-      <a href="/planspiele" class="mobile-menu__link {% if request.url.path.startswith('/planspiele') %}active{% endif %}">🎲 Planspiele</a>
+      <a href="/planspiele" class="mobile-menu__link {% if request.url.path.startswith('/planspiele') %}active{% endif %}">{{ modul_icon("planspiele", size="sm") }} Planspiele</a>
       {% endif %}
       {% if can_view_katplan(request) %}
-      <a href="/katastrophenplaene" class="mobile-menu__link {% if request.url.path.startswith('/katastrophenplaene') %}active{% endif %}">📘 Katastrophenpläne</a>
+      <a href="/katastrophenplaene" class="mobile-menu__link {% if request.url.path.startswith('/katastrophenplaene') %}active{% endif %}">{{ modul_icon("katplan", size="sm") }} Katastrophenpläne</a>
       {% endif %}
       {% if request.state.kontakte_enabled and can_view_kontakt_directory(request) %}
-      <a href="/kontakte" class="mobile-menu__link {% if request.url.path.startswith('/kontakte') %}active{% endif %}">👥 Kontakte</a>
+      <a href="/kontakte" class="mobile-menu__link {% if request.url.path.startswith('/kontakte') %}active{% endif %}">{{ modul_icon("kontakte", size="sm") }} Kontakte</a>
       {% endif %}
       {% if request.state.nachschlagewerke_enabled %}
-      <a href="/nachschlagewerke/" class="mobile-menu__link {% if request.url.path.startswith('/nachschlagewerke') %}active{% endif %}">📚 Nachschlagewerke</a>
+      <a href="/nachschlagewerke/" class="mobile-menu__link {% if request.url.path.startswith('/nachschlagewerke') %}active{% endif %}">{{ modul_icon("nachschlagewerke", size="sm") }} Nachschlagewerke</a>
       {% endif %}
       {% if request.state.foerderstrecke_enabled %}
-      <a href="/foerderstrecke/" class="mobile-menu__link {% if request.url.path.startswith('/foerderstrecke') %}active{% endif %}">🚰 Förderstrecke</a>
+      <a href="/foerderstrecke/" class="mobile-menu__link {% if request.url.path.startswith('/foerderstrecke') %}active{% endif %}">{{ modul_icon("foerderstrecke", size="sm") }} Förderstrecke</a>
       {% endif %}
-      <a href="/statistik" class="mobile-menu__link {% if '/statistik' in request.url.path %}active{% endif %}">📊 Statistik</a>
+      <a href="/statistik" class="mobile-menu__link {% if '/statistik' in request.url.path %}active{% endif %}">{{ modul_icon("statistik", size="sm") }} Statistik</a>
     </nav>
     <footer class="mobile-menu__footer">
       {% with link_class = 'mobile-menu__link' %}{% include "_profil_aktionen.html" %}{% endwith %}
       <button type="button" class="btn btn--secondary btn--full pwa-install-btn" style="display:none">
-        📲 App installieren
+        {{ modul_icon("installieren", size="sm") }} App installieren
       </button>
       <button type="button" class="btn btn--secondary btn--full pwa-install-ios" style="display:none">
-        📲 App installieren
+        {{ modul_icon("installieren", size="sm") }} App installieren
       </button>
     </footer>
   </aside>
@@ -323,19 +323,19 @@
   <nav class="bottom-nav" aria-label="Schnellnavigation">
     <a href="/" class="bottom-nav__item {% if _p == '/' %}bottom-nav__item--active{% endif %}"
        {% if _p == '/' %}aria-current="page"{% endif %}>
-      <span class="bottom-nav__icon">🏠</span>
+      <span class="bottom-nav__icon">{{ modul_icon("uebersicht", size="md") }}</span>
       <span>Übersicht</span>
     </a>
     <a href="/lage" class="bottom-nav__item {% if _p.startswith('/lage') %}bottom-nav__item--active{% endif %}"
        {% if _p.startswith('/lage') %}aria-current="page"{% endif %}>
-      <span class="bottom-nav__icon">🚨</span>
+      <span class="bottom-nav__icon">{{ modul_icon("lage", size="md") }}</span>
       <span>Lage</span>
     </a>
     {% block bottom_nav_fab %}
     {% if darf_einsatz_anlegen %}
     <button type="button" class="bottom-nav__fab" aria-label="Neuen Einsatz starten"
             @click="if (!window.openActiveBoardLane || !window.openActiveBoardLane()) neuenEinsatzOeffnen()">
-      <span class="bottom-nav__fab-plus" aria-hidden="true">+</span>
+      <span class="bottom-nav__fab-plus" aria-hidden="true">{{ icon("plus", size="lg") }}</span>
       <span class="bottom-nav__fab-label">Einsatz</span>
     </button>
     {% endif %}
@@ -343,13 +343,13 @@
     {% if is_admin or 'fahrtenbuch_admin' in user_roles %}
     <a href="/admin" class="bottom-nav__item {% if '/admin' in _p %}bottom-nav__item--active{% endif %}"
        {% if '/admin' in _p %}aria-current="page"{% endif %}>
-      <span class="bottom-nav__icon">⚙</span>
+      <span class="bottom-nav__icon">{{ modul_icon("verwaltung", size="md") }}</span>
       <span>Verwaltung</span>
     </a>
     {% else %}
     <a href="/archiv" class="bottom-nav__item {% if '/archiv' in _p %}bottom-nav__item--active{% endif %}"
        {% if '/archiv' in _p %}aria-current="page"{% endif %}>
-      <span class="bottom-nav__icon">📚</span>
+      <span class="bottom-nav__icon">{{ modul_icon("archiv", size="md") }}</span>
       <span>Archiv</span>
     </a>
     {% endif %}
@@ -358,7 +358,7 @@
             @click="profilSheetOpen = true" aria-label="Profil und Konto">
       <span class="bottom-nav__icon">
         {% if user.avatar_path %}<img src="/profil/avatar/{{ user.avatar_path }}" alt="" class="bottom-nav__avatar">
-        {% else %}👤{% endif %}
+        {% else %}{{ modul_icon("profil", size="md") }}{% endif %}
       </span>
       <span>Profil</span>
     </button>
@@ -373,7 +373,7 @@
       {% if user.avatar_path %}
       <img src="/profil/avatar/{{ user.avatar_path }}" alt="" class="profil-sheet__avatar">
       {% else %}
-      <span class="profil-sheet__avatar-placeholder" aria-hidden="true">👤</span>
+      <span class="profil-sheet__avatar-placeholder">{{ modul_icon("profil", size="lg", label="Profilbild") }}</span>
       {% endif %}
       <span><strong>{{ user.display_name }}</strong>{% if _org_name %}<small>{{ _org_name }}</small>{% endif %}</span>
     </header>
@@ -385,12 +385,12 @@
     <div class="modal__content">
       <div class="modal__header">
         <h3 class="modal__title">App auf iPhone/iPad installieren</h3>
-        <button aria-label="Schließen" type="button" class="modal__close" data-ec-action="close-dialog" data-ec-dialog="iosInstallHint">×</button>
+        <button aria-label="Schließen" type="button" class="modal__close" data-ec-action="close-dialog" data-ec-dialog="iosInstallHint">{{ icon("x", size="sm") }}</button>
       </div>
       <div class="modal__body">
         <p>Auf iOS funktioniert die Installation nur über Safari:</p>
         <ol style="padding-left:1.2em; line-height:1.7;">
-          <li>Unten in der Safari-Leiste auf <strong>Teilen</strong> (⬆ Pfeil-aus-Box) tippen.</li>
+          <li>Unten in der Safari-Leiste auf <strong>Teilen</strong> ({{ icon("upload", size="sm") }} Pfeil-aus-Box) tippen.</li>
           <li>Im Menü <strong>„Zum Home-Bildschirm"</strong> wählen.</li>
           <li>Mit <strong>„Hinzufügen"</strong> bestätigen.</li>
         </ol>
@@ -416,7 +416,7 @@
     <template x-for="toast in toasts" :key="toast.id">
       <div class="toast" :class="'toast--' + toast.type" x-transition>
         <span x-text="toast.msg"></span>
-        <button aria-label="Schließen" @click="removeToast(toast.id)" class="toast__close">×</button>
+        <button aria-label="Schließen" @click="removeToast(toast.id)" class="toast__close">{{ icon("x", size="sm") }}</button>
       </div>
     </template>
   </div>

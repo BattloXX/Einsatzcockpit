@@ -19,8 +19,8 @@
   transition: background .12s;
 }
 .hilfe-cluster__hdr:hover { background: var(--surface-high); }
-.hilfe-cluster__icon { font-size: 1.25rem; margin-right: .5rem; }
-.hilfe-cluster__arrow { font-size: .85rem; opacity: .6; transition: transform .2s; flex-shrink: 0; }
+.hilfe-cluster__icon { display: inline-flex; align-items: center; vertical-align: middle; margin-right: .5rem; }
+.hilfe-cluster__arrow { display: inline-flex; align-items: center; opacity: .6; transition: transform .2s; flex-shrink: 0; }
 .hilfe-cluster__arrow--open { transform: rotate(90deg); }
 .hilfe-cluster__body { padding: 1.25rem; background: var(--surface-low); }
 .hilfe-topic { margin-bottom: 1.5rem; }
@@ -55,8 +55,8 @@
   <!-- ── Cluster 1: Erste Schritte ─────────────────────────────────────── -->
   <div class="hilfe-cluster">
     <button type="button" class="hilfe-cluster__hdr" @click="open = open === 'erste-schritte' ? null : 'erste-schritte'">
-      <span><span class="hilfe-cluster__icon">&#x1F680;</span> Erste Schritte</span>
-      <span class="hilfe-cluster__arrow" :class="open === 'erste-schritte' && 'hilfe-cluster__arrow--open'">&#x203A;</span>
+      <span><span class="hilfe-cluster__icon">{{ icon("rocket", size="sm") }}</span> Erste Schritte</span>
+      <span class="hilfe-cluster__arrow" :class="open === 'erste-schritte' && 'hilfe-cluster__arrow--open'">{{ icon("chevron-right", size="xs") }}</span>
     </button>
     <div class="hilfe-cluster__body" x-show="open === 'erste-schritte'" x-transition.opacity.duration.150ms>
 
@@ -74,8 +74,8 @@
         <h4>App als PWA installieren</h4>
         <p>Die App l&auml;sst sich wie eine native App auf Desktop und Mobilger&auml;te installieren:</p>
         <ul>
-          <li><strong>Chrome/Edge</strong>: Adressleiste → Installations-Symbol &#x2795; anklicken oder Meni&uuml; → „App installieren".</li>
-          <li><strong>Safari (iOS)</strong>: Teilen-Button &#x2B06; → „Zum Home-Bildschirm" → Hinzuf&uuml;gen.</li>
+          <li><strong>Chrome/Edge</strong>: Adressleiste → Installations-Symbol {{ icon("plus", size="sm") }} anklicken oder Meni&uuml; → „App installieren".</li>
+          <li><strong>Safari (iOS)</strong>: Teilen-Button {{ icon("upload", size="sm") }} → „Zum Home-Bildschirm" → Hinzuf&uuml;gen.</li>
         </ul>
         <p>Installierte Apps starten ohne Browser-Leiste und k&ouml;nnen Push-Benachrichtigungen empfangen. Die Anleitung findest du unter <a href="/app">App installieren</a>; Android kannst du direkt unter <a href="/app/android">/app/android</a> herunterladen.</p>
       </div>
@@ -109,8 +109,8 @@
   <!-- ── Cluster 2: Einsätze ───────────────────────────────────────────── -->
   <div class="hilfe-cluster">
     <button type="button" class="hilfe-cluster__hdr" @click="open = open === 'einsaetze' ? null : 'einsaetze'">
-      <span><span class="hilfe-cluster__icon">&#x1F6A8;</span> Eins&auml;tze</span>
-      <span class="hilfe-cluster__arrow" :class="open === 'einsaetze' && 'hilfe-cluster__arrow--open'">&#x203A;</span>
+      <span><span class="hilfe-cluster__icon">{{ modul_icon("lage", size="sm") }}</span> Eins&auml;tze</span>
+      <span class="hilfe-cluster__arrow" :class="open === 'einsaetze' && 'hilfe-cluster__arrow--open'">{{ icon("chevron-right", size="xs") }}</span>
     </button>
     <div class="hilfe-cluster__body" x-show="open === 'einsaetze'" x-transition.opacity.duration.150ms>
 
@@ -158,8 +158,8 @@
   <!-- ── Cluster 3: Großschadenslage ──────────────────────────────────── -->
   <div class="hilfe-cluster">
     <button type="button" class="hilfe-cluster__hdr" @click="open = open === 'gsl' ? null : 'gsl'">
-      <span><span class="hilfe-cluster__icon">&#x1F6A7;</span> Gro&szlig;schadenslage (GSL)</span>
-      <span class="hilfe-cluster__arrow" :class="open === 'gsl' && 'hilfe-cluster__arrow--open'">&#x203A;</span>
+      <span><span class="hilfe-cluster__icon">{{ modul_icon("lage", size="sm") }}</span> Gro&szlig;schadenslage (GSL)</span>
+      <span class="hilfe-cluster__arrow" :class="open === 'gsl' && 'hilfe-cluster__arrow--open'">{{ icon("chevron-right", size="xs") }}</span>
     </button>
     <div class="hilfe-cluster__body" x-show="open === 'gsl'" x-transition.opacity.duration.150ms>
 
@@ -209,7 +209,7 @@
 
       <div class="hilfe-topic">
         <h4>Drohne / UAS in der Lage</h4>
-        <p>Wenn das UAS-Modul aktiviert ist, erscheint im Incident-Dashboard der Button <strong>&#x1F681; Drohneneinsatz starten</strong>. Der Drohneneinsatz ist 1:1 mit dem Incident verkn&uuml;pft und enth&auml;lt Rollenbesetzung, Flugbuch, Checklisten und Karte.</p>
+        <p>Wenn das UAS-Modul aktiviert ist, erscheint im Incident-Dashboard der Button <strong>{{ modul_icon("uas", size="sm") }} Drohneneinsatz starten</strong>. Der Drohneneinsatz ist 1:1 mit dem Incident verkn&uuml;pft und enth&auml;lt Rollenbesetzung, Flugbuch, Checklisten und Karte.</p>
       </div>
 
     </div>
@@ -218,8 +218,8 @@
   <!-- ── Cluster 4: Verwaltung ─────────────────────────────────────────── -->
   <div class="hilfe-cluster">
     <button type="button" class="hilfe-cluster__hdr" @click="open = open === 'verwaltung' ? null : 'verwaltung'">
-      <span><span class="hilfe-cluster__icon">&#x2699;&#xFE0F;</span> Verwaltung</span>
-      <span class="hilfe-cluster__arrow" :class="open === 'verwaltung' && 'hilfe-cluster__arrow--open'">&#x203A;</span>
+      <span><span class="hilfe-cluster__icon">{{ modul_icon("verwaltung", size="sm") }}</span> Verwaltung</span>
+      <span class="hilfe-cluster__arrow" :class="open === 'verwaltung' && 'hilfe-cluster__arrow--open'">{{ icon("chevron-right", size="xs") }}</span>
     </button>
     <div class="hilfe-cluster__body" x-show="open === 'verwaltung'" x-transition.opacity.duration.150ms>
 
@@ -243,7 +243,7 @@
 
       <div class="hilfe-topic">
         <h4>Drohne / UAS – Verwaltung</h4>
-        <p><span class="hilfe-badge hilfe-badge--role">org_admin</span> Unter <strong>&#x1F681; Drohne / UAS</strong>:</p>
+        <p><span class="hilfe-badge hilfe-badge--role">org_admin</span> Unter <strong>{{ modul_icon("uas", size="sm") }} Drohne / UAS</strong>:</p>
         <ul>
           <li><strong>Eins&auml;tze</strong>: Alle Drohneneins&auml;tze mit CSV-Export und PDF-Berichten</li>
           <li><strong>Ger&auml;te</strong>: Ger&auml;teregister inkl. Versicherung, CE-Klasse, Wartungsplan</li>

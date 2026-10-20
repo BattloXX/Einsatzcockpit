@@ -74,7 +74,7 @@
 }
 .admin-nav__item:hover { background: rgba(255,255,255,.06); }
 .admin-nav__item.is-active { background: rgba(183,25,33,.15); color: var(--red-light, #f87171); }
-.admin-nav__icon { width: 22px; text-align: center; font-size: 1rem; flex-shrink: 0; }
+.admin-nav__icon { width: 22px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .admin-nav__subheading {
   margin-top: 10px; padding: 0 12px;
   font-size: .7rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
@@ -122,7 +122,7 @@
     background: var(--surface-low); color: var(--on-surface);
     font: inherit; font-size: .9rem; font-weight: 600; text-align: left;
   }
-  .admin-nav-trigger__icon { font-size: 1.15rem; line-height: 1; }
+  .admin-nav-trigger__icon { display: inline-flex; align-items: center; line-height: 1; }
   .admin-nav-backdrop {
     display: block; position: fixed; inset: 0; z-index: 1090;
     background: rgba(0,0,0,.62);
@@ -170,7 +170,7 @@
   .admin-nav__item {
     padding: 10px 12px; font-size: .88rem;
   }
-  .admin-nav__icon { font-size: .9rem; width: 18px; }
+  .admin-nav__icon { width: 20px; }
   .admin-nav__empty { padding: 24px 12px; color: var(--text-muted); text-align: center; }
   .admin-main { padding: 14px 16px 40px; }
 }
@@ -192,7 +192,7 @@
             aria-haspopup="true" aria-controls="adminNavPanel"
             :aria-expanded="navOpen.toString()"
             @click="navOpen = true; $nextTick(function() { scrollToActive(); })">
-      <span class="admin-nav-trigger__icon" aria-hidden="true">☰</span>
+      <span class="admin-nav-trigger__icon" aria-hidden="true">{{ icon("menu-2", size="sm") }}</span>
       <span>Verwaltungsmenü</span>
     </button>
 
@@ -206,7 +206,7 @@
       <header class="admin-nav-panel__hdr">
         <span>Verwaltungsmenü</span>
         <button type="button" class="admin-nav-panel__close" aria-label="Schliessen"
-                @click="navOpen = false">×</button>
+                @click="navOpen = false">{{ icon("x", size="sm") }}</button>
       </header>
       <div class="admin-nav-panel__search">
         <input type="search" class="form-input" placeholder="Menü durchsuchen"
@@ -216,30 +216,30 @@
       <nav class="admin-nav">
 
         <!-- Zurueck -->
-        <a href="/" class="admin-back-link">&#x2190; Zurück zu Einsätzen</a>
+        <a href="/" class="admin-back-link">{{ icon("arrow-left", size="sm") }} Zurück zu Einsätzen</a>
 
         <!-- Dashboard -->
         <a href="/admin"
            class="admin-nav__item {% if request.url.path == '/admin' or request.url.path == '/admin/' %}is-active{% endif %}">
-          <span class="admin-nav__icon">🏠</span>Dashboard
+          <span class="admin-nav__icon">{{ modul_icon("uebersicht", size="sm") }}</span>Dashboard
         </a>
 
         <!-- Hilfe -->
         <a href="/admin/hilfe"
            class="admin-nav__item {% if request.url.path == '/admin/hilfe' %}is-active{% endif %}">
-          <span class="admin-nav__icon">📖</span>Hilfe
+          <span class="admin-nav__icon">{{ modul_icon("hilfe", size="sm") }}</span>Hilfe
         </a>
 
         {% if not is_full_admin %}
         <a href="/admin/mitglieder"
            class="admin-nav__item {% if '/admin/mitglieder' in request.url.path %}is-active{% endif %}"
            {{ tip('Mannschaftsliste mit Qualifikationen') }}>
-          <span class="admin-nav__icon">👥</span>Mitglieder
+          <span class="admin-nav__icon">{{ icon("users", size="sm") }}</span>Mitglieder
         </a>
         <a href="/admin/qualifikationen"
            class="admin-nav__item {% if '/admin/qualifikationen' in request.url.path %}is-active{% endif %}"
            {{ tip('AGT, GK, MA u.a. — Codes für Mitglieder') }}>
-          <span class="admin-nav__icon">🎖️</span>Qualifikationen
+          <span class="admin-nav__icon">{{ icon("award", size="sm") }}</span>Qualifikationen
         </a>
         {% endif %}
 
@@ -248,45 +248,45 @@
         <button class="admin-nav__group-hdr" type="button" @click="toggle('stammdaten')"
                 :class="isMobile() && 'is-mobile-static'" :tabindex="isMobile() ? -1 : 0">
           <span>Stammdaten</span>
-          <span class="admin-nav__group-arrow" :class="groups.stammdaten && 'is-open'">›</span>
+          <span class="admin-nav__group-arrow" :class="groups.stammdaten && 'is-open'">{{ icon("chevron-right", size="xs") }}</span>
         </button>
         <div x-show="groups.stammdaten || isMobile()" x-transition.opacity.duration.120ms>
           <div class="admin-nav__group-items">
             <a href="/admin/fahrzeuge"
                class="admin-nav__item {% if '/admin/fahrzeuge' in request.url.path %}is-active{% endif %}"
                {{ tip('Eigene und fremde Ressourcen: Fahrzeuge, Geräte, Einheiten') }}>
-              <span class="admin-nav__icon">🚒</span>Ressourcen
+              <span class="admin-nav__icon">{{ icon("firetruck", size="sm") }}</span>Ressourcen
             </a>
             <a href="/admin/mitglieder"
                class="admin-nav__item {% if '/admin/mitglieder' in request.url.path %}is-active{% endif %}"
                {{ tip('Mannschaftsliste mit Qualifikationen') }}>
-              <span class="admin-nav__icon">👥</span>Mitglieder
+              <span class="admin-nav__icon">{{ icon("users", size="sm") }}</span>Mitglieder
             </a>
             <a href="/admin/gruppen"
                class="admin-nav__item {% if '/admin/gruppen' in request.url.path %}is-active{% endif %}"
                {{ tip('Benannte Empfaengergruppen (fuer SMS-Versand, Benachrichtigungen, etc.)') }}>
-              <span class="admin-nav__icon">🫂</span>Gruppen
+              <span class="admin-nav__icon">{{ icon("users-group", size="sm") }}</span>Gruppen
             </a>
             <a href="/admin/qualifikationen"
                class="admin-nav__item {% if '/admin/qualifikationen' in request.url.path %}is-active{% endif %}"
                {{ tip('AGT, GK, MA u.a. — Codes für Mitglieder') }}>
-              <span class="admin-nav__icon">🎖️</span>Qualifikationen
+              <span class="admin-nav__icon">{{ icon("award", size="sm") }}</span>Qualifikationen
             </a>
             <div class="admin-nav__subheading">Alarm-Reaktionen</div>
             <a href="/admin/alarmtypen"
                class="admin-nav__item {% if '/admin/alarmtypen' in request.url.path %}is-active{% endif %}"
                {{ tip('Bekannte Einsatzstichwörter und ihre Eigenschaften') }}>
-              <span class="admin-nav__icon">🚨</span>Alarmtypen
+              <span class="admin-nav__icon">{{ icon("urgent", size="sm") }}</span>Alarmtypen
             </a>
             <a href="/admin/ausrueckordnung"
                class="admin-nav__item {% if '/admin/ausrueckordnung' in request.url.path %}is-active{% endif %}"
                {{ tip('Welche Fahrzeuge rücken bei welchem Stichwort aus?') }}>
-              <span class="admin-nav__icon">📋</span>Ausrückordnung
+              <span class="admin-nav__icon">{{ icon("clipboard-list", size="sm") }}</span>Ausrückordnung
             </a>
             <a href="/admin/auftragsvorlagen"
                class="admin-nav__item {% if '/admin/auftragsvorlagen' in request.url.path or '/admin/meldungsvorlagen' in request.url.path or '/admin/lage-hinweise' in request.url.path or '/admin/default-meldungen' in request.url.path %}is-active{% endif %}"
                {{ tip('Auftrags- und Meldungsvorlagen, Lage-Hinweise und automatische Default-Meldungen pro Alarmstichwort') }}>
-              <span class="admin-nav__icon">📑</span>Einsatzvorlagen
+              <span class="admin-nav__icon">{{ icon("files", size="sm") }}</span>Einsatzvorlagen
             </a>
           </div>
         </div>
@@ -295,68 +295,68 @@
         <button class="admin-nav__group-hdr" type="button" @click="toggle('verwaltung')"
                 :class="isMobile() && 'is-mobile-static'" :tabindex="isMobile() ? -1 : 0">
           <span>Verwaltung</span>
-          <span class="admin-nav__group-arrow" :class="groups.verwaltung && 'is-open'">›</span>
+          <span class="admin-nav__group-arrow" :class="groups.verwaltung && 'is-open'">{{ icon("chevron-right", size="xs") }}</span>
         </button>
         <div x-show="groups.verwaltung || isMobile()" x-transition.opacity.duration.120ms>
           <div class="admin-nav__group-items">
             <a href="/admin/einsatz-import"
                class="admin-nav__item {% if '/admin/einsatz-import' in request.url.path %}is-active{% endif %}"
                {{ tip('Historische Leitstellen-Excel-Exporte importieren') }}>
-              <span class="admin-nav__icon">📥</span>Einsatz-Import
+              <span class="admin-nav__icon">{{ icon("inbox", size="sm") }}</span>Einsatz-Import
             </a>
             <a href="/admin/benutzer"
                class="admin-nav__item {% if '/admin/benutzer' in request.url.path %}is-active{% endif %}"
                {{ tip('Login-Accounts, Rollen, Passwörter') }}>
-              <span class="admin-nav__icon">🔑</span>Benutzer
+              <span class="admin-nav__icon">{{ icon("user-cog", size="sm") }}</span>Benutzer
             </a>
             <div class="admin-nav__subheading">Ausrüstung</div>
             <a href="/admin/verleih-artikel"
                class="admin-nav__item {% if '/admin/verleih' in request.url.path %}is-active{% endif %}"
                {{ tip('Geräteverleih Artikelstammdaten und Stücklisten') }}>
-              <span class="admin-nav__icon">📦</span>Geräteverleih
+              <span class="admin-nav__icon">{{ icon("package", size="sm") }}</span>Geräteverleih
             </a>
             <a href="/admin/wasserstellen"
                class="admin-nav__item {% if '/admin/wasserstellen' in request.url.path %}is-active{% endif %}"
                {{ tip('Löschwasser-Stammdaten: Hydranten, Saugstellen, Löschteiche — pflegen und aus CSV importieren') }}>
-              <span class="admin-nav__icon">🚰</span>Wasserstellen
+              <span class="admin-nav__icon">{{ icon("droplet", size="sm") }}</span>Wasserstellen
             </a>
             {% if request.state.foerderstrecke_enabled %}
             <a href="/admin/foerderpumpen"
                class="admin-nav__item {% if '/admin/foerderpumpen' in request.url.path or '/admin/foerderschlaeuche' in request.url.path or '/admin/foerderkalibrierung' in request.url.path %}is-active{% endif %}"
                {{ tip('Förderstrecke: eigene Pumpen mit Kennlinie und Schläuche verwalten, Vorlagen wie TS 1600/TS 1200 übernehmen, Übungsmessungen kalibrieren') }}>
-              <span class="admin-nav__icon">🧵</span>Förderstrecke
+              <span class="admin-nav__icon">{{ modul_icon("foerderstrecke", size="sm") }}</span>Förderstrecke
             </a>
             {% endif %}
             {% if request.state.probenplanung_enabled %}
             <div class="admin-nav__subheading">Probenplanung</div>
             <a href="/admin/probenplanung/probearten"
                class="admin-nav__item {% if '/admin/probenplanung/probearten' in request.url.path %}is-active{% endif %}">
-              <span class="admin-nav__icon">🗓</span>Probearten
+              <span class="admin-nav__icon">{{ icon("calendar-event", size="sm") }}</span>Probearten
             </a>
             <a href="/admin/probenplanung/vorlagen"
                class="admin-nav__item {% if '/admin/probenplanung/vorlagen' in request.url.path %}is-active{% endif %}">
-              <span class="admin-nav__icon">📋</span>Checklisten-Vorlagen
+              <span class="admin-nav__icon">{{ icon("clipboard-list", size="sm") }}</span>Checklisten-Vorlagen
             </a>
             <a href="/admin/probenplanung/oeffentlich"
                class="admin-nav__item {% if '/admin/probenplanung/oeffentlich' in request.url.path %}is-active{% endif %}">
-              <span class="admin-nav__icon">🌐</span>Öffentlicher Plan
+              <span class="admin-nav__icon">{{ icon("world", size="sm") }}</span>Öffentlicher Plan
             </a>
             {% endif %}
             <div class="admin-nav__subheading">Zugänge und Tokens</div>
             <a href="/admin/geraete-login"
                class="admin-nav__item {% if '/admin/geraete-login' in request.url.path or '/admin/api-keys' in request.url.path or '/admin/lagekarte-tokens' in request.url.path %}is-active{% endif %}"
                {{ tip('Geräte-Login-Token, API-Keys für externe Systeme und Lagekarte-Tokens verwalten') }}>
-              <span class="admin-nav__icon">🔐</span>Zugänge &amp; Tokens
+              <span class="admin-nav__icon">{{ icon("lock-password", size="sm") }}</span>Zugänge &amp; Tokens
             </a>
             <a href="/admin/push-nachrichten"
                class="admin-nav__item {% if '/admin/push-nachrichten' in request.url.path %}is-active{% endif %}"
                {{ tip('Manuelle Push-Nachrichten an alle oder einzelne Benutzer') }}>
-              <span class="admin-nav__icon">📣</span>Push-Nachrichten
+              <span class="admin-nav__icon">{{ icon("speakerphone", size="sm") }}</span>Push-Nachrichten
             </a>
             <a href="/admin/audit"
                class="admin-nav__item {% if '/admin/audit' in request.url.path %}is-active{% endif %}"
                {{ tip('Vollständiges Aktionsprotokoll') }}>
-              <span class="admin-nav__icon">📜</span>Audit-Log
+              <span class="admin-nav__icon">{{ icon("history", size="sm") }}</span>Audit-Log
             </a>
             {# Fuer system_admin liegt der Eintrag im Sysadmin-Block (Gruppe
                "Einstellungen") -- dort schaut der Sysadmin; hier nur fuer
@@ -365,24 +365,24 @@
             <a href="/admin/medien"
                class="admin-nav__item {% if '/admin/medien' in request.url.path %}is-active{% endif %}"
                {{ tip('Alle hochgeladenen Medien: Größe, Alter, Typ – sortierbar und filterbar') }}>
-              <span class="admin-nav__icon">🖼️</span>Medienverwaltung
+              <span class="admin-nav__icon">{{ icon("photo", size="sm") }}</span>Medienverwaltung
             </a>
             {% endif %}
             <a href="/admin/sms-senden"
                class="admin-nav__item {% if '/admin/sms-senden' in request.url.path or '/admin/sms-provider' in request.url.path or '/admin/sms-empfang' in request.url.path or '/admin/einsatzinfo-sms' in request.url.path %}is-active{% endif %}"
                {{ tip('SMS senden sowie Versandweg, Empfang und Einsatzinfo konfigurieren') }}>
-              <span class="admin-nav__icon">✉️</span>SMS
+              <span class="admin-nav__icon">{{ icon("mail", size="sm") }}</span>SMS
             </a>
             <a href="/infoscreen-alarm/verwaltung"
                class="admin-nav__item {% if '/infoscreen-alarm' in request.url.path or '/admin/settings/wetter/infoscreen' in request.url.path or '/admin/settings/statistik' in request.url.path %}is-active{% endif %}"
                {{ tip('Alarm-, Wetter- und Statistik-Infoscreens verwalten') }}>
-              <span class="admin-nav__icon">📺</span>Infoscreens
+              <span class="admin-nav__icon">{{ icon("device-tv", size="sm") }}</span>Infoscreens
             </a>
             {% if request.state.gateway_enabled %}
             <a href="/gateway"
                class="admin-nav__item {% if request.url.path.startswith('/gateway') %}is-active{% endif %}"
                {{ tip('Drucker-Gateway im Gerätehaus: Pairing, Drucker, Druckregeln und Druckverlauf') }}>
-              <span class="admin-nav__icon">🖨️</span>Gateway / Druck
+              <span class="admin-nav__icon">{{ icon("printer", size="sm") }}</span>Gateway / Druck
             </a>
             {% endif %}
           </div>
@@ -392,72 +392,72 @@
         <button class="admin-nav__group-hdr" type="button" @click="toggle('einstellungen')"
                 :class="isMobile() && 'is-mobile-static'" :tabindex="isMobile() ? -1 : 0">
           <span>Einstellungen</span>
-          <span class="admin-nav__group-arrow" :class="groups.einstellungen && 'is-open'">›</span>
+          <span class="admin-nav__group-arrow" :class="groups.einstellungen && 'is-open'">{{ icon("chevron-right", size="xs") }}</span>
         </button>
         <div x-show="groups.einstellungen || isMobile()" x-transition.opacity.duration.120ms>
           <div class="admin-nav__group-items">
             <a href="/admin/settings"
                class="admin-nav__item {% if request.url.path == '/admin/settings' %}is-active{% endif %}"
                {{ tip('Organisations-Stammdaten, Logo, Farbe') }}>
-              <span class="admin-nav__icon">🏛️</span>Organisation
+              <span class="admin-nav__icon">{{ icon("building-bank", size="sm") }}</span>Organisation
             </a>
             <a href="/admin/gsl-einstellungen"
                class="admin-nav__item {% if '/admin/gsl-einstellungen' in request.url.path %}is-active{% endif %}"
                {{ tip('GSL: Module, Lagemeldung, Geräteverleih je Org konfigurieren') }}>
-              <span class="admin-nav__icon">🚨</span>GSL-Einstellungen
+              <span class="admin-nav__icon">{{ icon("urgent", size="sm") }}</span>GSL-Einstellungen
             </a>
             <a href="/admin/settings/wetter"
                class="admin-nav__item {% if request.url.path == '/admin/settings/wetter' %}is-active{% endif %}"
                {{ tip('Wetterstation, Pegel, Warnungen und Wetter-Aktivierung') }}>
-              <span class="admin-nav__icon">🌦</span>Wetter
+              <span class="admin-nav__icon">{{ modul_icon("wetter", size="sm") }}</span>Wetter
             </a>
             <div class="admin-nav__subheading">Schnittstellen</div>
             <a href="/admin/sso"
                class="admin-nav__item {% if '/admin/sso' in request.url.path %}is-active{% endif %}"
                {{ tip('Microsoft 365 / Entra ID Single Sign-On konfigurieren') }}>
-              <span class="admin-nav__icon">🔑</span>SSO / Microsoft 365
+              <span class="admin-nav__icon">{{ icon("key", size="sm") }}</span>SSO / Microsoft 365
             </a>
             <a href="/admin/lis"
                class="admin-nav__item {% if '/admin/lis' in request.url.path %}is-active{% endif %}"
                {{ tip('Leitstellenanbindung (LIS/IPR): Verbindung ein-/ausschalten, Zugangsdaten hinterlegen') }}>
-              <span class="admin-nav__icon">📡</span>LIS-Anbindung
+              <span class="admin-nav__icon">{{ icon("antenna", size="sm") }}</span>LIS-Anbindung
             </a>
             <a href="/admin/dibos"
                class="admin-nav__item {% if '/admin/dibos' in request.url.path %}is-active{% endif %}"
                {{ tip('DIBOS EventHub / Elvis-Anbindung: rein lesendes Tracing, Zugangsdaten hinterlegen') }}>
-              <span class="admin-nav__icon">📻</span>DIBOS/Elvis-Tracing
+              <span class="admin-nav__icon">{{ icon("radio", size="sm") }}</span>DIBOS/Elvis-Tracing
             </a>
             <a href="/admin/mail"
                class="admin-nav__item {% if '/admin/mail' in request.url.path and not request.url.path.startswith('/admin/mail/eingang') %}is-active{% endif %}"
                {{ tip('Eigener SMTP-Server und/oder Office 365 / Microsoft Graph je Organisation') }}>
-              <span class="admin-nav__icon">✉️</span>Mail-Versand
+              <span class="admin-nav__icon">{{ icon("mail", size="sm") }}</span>Mail-Versand
             </a>
             <a href="/admin/mail/eingang"
                class="admin-nav__item {% if request.url.path.startswith('/admin/mail/eingang') %}is-active{% endif %}"
                {{ tip('Eingegangene Mails aller Empfangswege und was mit ihnen passiert ist') }}>
-              <span class="admin-nav__icon">📥</span>Posteingang
+              <span class="admin-nav__icon">{{ icon("inbox", size="sm") }}</span>Posteingang
               {% set mail_eingang_badge = mail_eingang_offene_count(user) %}
               {% if mail_eingang_badge %}<span class="badge">{{ mail_eingang_badge }}</span>{% endif %}
             </a>
             <a href="/admin/teams-alarmierung"
                class="admin-nav__item {% if '/admin/teams-alarmierung' in request.url.path %}is-active{% endif %}"
                {{ tip('Vollständige Alarmierung als Teams-Karte: Webhook-Basis-Modus + optionale Bot-Erweiterung mit Zusage/Absage') }}>
-              <span class="admin-nav__icon">💬</span>Teams-Einsatzinfo
+              <span class="admin-nav__icon">{{ icon("message", size="sm") }}</span>Teams-Einsatzinfo
             </a>
             <a href="/admin/einsatzinfo-mail"
                class="admin-nav__item {% if '/admin/einsatzinfo-mail' in request.url.path %}is-active{% endif %}"
                {{ tip('Automatische Einsatz-Mail bei Alarmeingang - Verteiler und Vorlagen wie bei der SMS-Einsatzinfo') }}>
-              <span class="admin-nav__icon">📧</span>Einsatzinfo-Mail
+              <span class="admin-nav__icon">{{ icon("mail", size="sm") }}</span>Einsatzinfo-Mail
             </a>
             <a href="/admin/wordpress-berichte"
                class="admin-nav__item {% if '/admin/wordpress-berichte' in request.url.path %}is-active{% endif %}"
                {{ tip('Automatische Website-Entwürfe beim Abschluss eines Einsatzes konfigurieren') }}>
-              <span class="admin-nav__icon">🌐</span>WordPress-Berichte
+              <span class="admin-nav__icon">{{ icon("world", size="sm") }}</span>WordPress-Berichte
             </a>
             <a href="/admin/org-backup"
                class="admin-nav__item {% if '/admin/org-backup' in request.url.path %}is-active{% endif %}"
                {{ tip('Alle Org-Daten als Archiv sichern (Download / Remote-Ziel)') }}>
-              <span class="admin-nav__icon">💾</span>Datensicherung
+              <span class="admin-nav__icon">{{ icon("device-floppy", size="sm") }}</span>Datensicherung
             </a>
             <a href="/admin/ki-anfragen"
                class="admin-nav__item {% if '/admin/ki-anfragen' in request.url.path %}is-active{% endif %}"
@@ -467,91 +467,91 @@
             <a href="/admin/systemstatus"
                class="admin-nav__item {% if '/admin/systemstatus' in request.url.path %}is-active{% endif %}"
                {{ tip('Status externer Gateways und Monitoring-Tokens verwalten') }}>
-              <span class="admin-nav__icon">🚦</span>Systemstatus
+              <span class="admin-nav__icon">{{ icon("traffic-lights", size="sm") }}</span>Systemstatus
             </a>
             {% if request.state.strassensperren_enabled %}
             <div class="admin-nav__subheading">Straßensperren</div>
             <a href="/strassensperren/infoscreen" target="_blank" rel="noopener"
                class="admin-nav__item"
                {{ tip('Interne Vollbildanzeige der aktuellen Straßensperren öffnen') }}>
-              <span class="admin-nav__icon">🖥️</span>Infoscreen
+              <span class="admin-nav__icon">{{ icon("device-desktop", size="sm") }}</span>Infoscreen
             </a>
             <a href="/admin/settings/strassensperren-infoscreen"
                class="admin-nav__item {% if request.url.path.startswith('/admin/settings/strassensperren-infoscreen') %}is-active{% endif %}"
                {{ tip('Externe Statusseiten und Infoscreens verwalten') }}>
-              <span class="admin-nav__icon">🔗</span>Externe Zugänge
+              <span class="admin-nav__icon">{{ icon("link", size="sm") }}</span>Externe Zugänge
             </a>
             <a href="/strassensperren/einstellungen"
                class="admin-nav__item {% if request.url.path.startswith('/strassensperren/einstellungen') %}is-active{% endif %}"
                {{ tip('Microsoft-Teams-Benachrichtigungen für Straßensperren konfigurieren') }}>
-              <span class="admin-nav__icon">💬</span>Teams
+              <span class="admin-nav__icon">{{ icon("message", size="sm") }}</span>Teams
             </a>
             {% endif %}
             {% if request.state.planspiel_enabled and ('org_admin' in user_role_codes or 'admin' in user_role_codes or 'system_admin' in user_role_codes or 'uebungsleiter' in user_role_codes) %}
             <div class="admin-nav__subheading">Planspiele</div>
-            <a href="/admin/settings/planspiele" class="admin-nav__item {% if request.url.path == '/admin/settings/planspiele' %}is-active{% endif %}"><span class="admin-nav__icon">⚙️</span>Einstellungen &amp; Adresspool</a>
-            <a href="/admin/settings/planspiele/szenarien" class="admin-nav__item {% if request.url.path.startswith('/admin/settings/planspiele/szenarien') %}is-active{% endif %}"><span class="admin-nav__icon">🎭</span>Szenariokatalog</a>
-            <a href="/admin/settings/planspiele/stichworte" class="admin-nav__item {% if request.url.path.startswith('/admin/settings/planspiele/stichworte') %}is-active{% endif %}"><span class="admin-nav__icon">📚</span>Stichwort-Referenz</a>
+            <a href="/admin/settings/planspiele" class="admin-nav__item {% if request.url.path == '/admin/settings/planspiele' %}is-active{% endif %}"><span class="admin-nav__icon">{{ icon("settings", size="sm") }}</span>Einstellungen &amp; Adresspool</a>
+            <a href="/admin/settings/planspiele/szenarien" class="admin-nav__item {% if request.url.path.startswith('/admin/settings/planspiele/szenarien') %}is-active{% endif %}"><span class="admin-nav__icon">{{ icon("masks-theater", size="sm") }}</span>Szenariokatalog</a>
+            <a href="/admin/settings/planspiele/stichworte" class="admin-nav__item {% if request.url.path.startswith('/admin/settings/planspiele/stichworte') %}is-active{% endif %}"><span class="admin-nav__icon">{{ icon("books", size="sm") }}</span>Stichwort-Referenz</a>
             {% endif %}
             {% if is_sysadmin %}
             <a href="/admin/ki-prompts"
                class="admin-nav__item {% if '/admin/ki-prompts' in request.url.path %}is-active{% endif %}"
                {{ tip('KI-System-Prompts verwalten und versionieren') }}>
-              <span class="admin-nav__icon">✨</span>KI-Prompts
+              <span class="admin-nav__icon">{{ icon("sparkles", size="sm") }}</span>KI-Prompts
             </a>
             <a href="/admin/system-einstellungen"
                class="admin-nav__item {% if '/admin/system-einstellungen' in request.url.path %}is-active{% endif %}"
                {{ tip('VAPID, Push-Konfiguration, globale Parameter') }}>
-              <span class="admin-nav__icon">⚙️</span>System
+              <span class="admin-nav__icon">{{ icon("settings", size="sm") }}</span>System
             </a>
             <a href="/admin/mail-weiterleitungen"
                class="admin-nav__item {% if '/admin/mail-weiterleitungen' in request.url.path %}is-active{% endif %}">
-              <span class="admin-nav__icon">✉️</span>Mail-Weiterleitungen
+              <span class="admin-nav__icon">{{ icon("mail", size="sm") }}</span>Mail-Weiterleitungen
             </a>
             <a href="/admin/system/server-log"
                class="admin-nav__item {% if '/admin/system/server-log' in request.url.path %}is-active{% endif %}"
                {{ tip('Live-Log des Server-Prozesses — Level-Filter, Auto-Refresh') }}>
-              <span class="admin-nav__icon">📋</span>Server-Log
+              <span class="admin-nav__icon">{{ icon("clipboard-list", size="sm") }}</span>Server-Log
             </a>
             <a href="/admin/seiten"
                class="admin-nav__item {% if '/admin/seiten' in request.url.path %}is-active{% endif %}"
                {{ tip('Öffentliche Seiten per WYSIWYG bearbeiten') }}>
-              <span class="admin-nav__icon">🌍</span>Seiten
+              <span class="admin-nav__icon">{{ icon("world", size="sm") }}</span>Seiten
             </a>
             <a href="/admin/system/update"
                class="admin-nav__item {% if '/admin/system/update' in request.url.path %}is-active{% endif %}"
                {{ tip('Neues Release per ZIP einspielen') }}>
-              <span class="admin-nav__icon">⬆️</span>System-Update
+              <span class="admin-nav__icon">{{ icon("upload", size="sm") }}</span>System-Update
             </a>
             <a href="/admin/backup"
                class="admin-nav__item {% if '/admin/backup' in request.url.path %}is-active{% endif %}"
                {{ tip('Stammdaten als JSON sichern oder wiederherstellen') }}>
-              <span class="admin-nav__icon">📦</span>Backup
+              <span class="admin-nav__icon">{{ icon("package", size="sm") }}</span>Backup
             </a>
             <a href="/admin/db-backups"
                class="admin-nav__item {% if '/admin/db-backups' in request.url.path %}is-active{% endif %}"
                {{ tip('Serverweite Datenbank-Dumps und deren Aufbewahrung verwalten') }}>
-              <span class="admin-nav__icon">🗄️</span>DB-Dumps
+              <span class="admin-nav__icon">{{ icon("archive", size="sm") }}</span>DB-Dumps
             </a>
             <a href="/admin/organisations"
                class="admin-nav__item {% if '/admin/organisations' in request.url.path %}is-active{% endif %}"
                {{ tip('Alle Organisationen verwalten (Multi-Org)') }}>
-              <span class="admin-nav__icon">🌐</span>Alle Orgs
+              <span class="admin-nav__icon">{{ icon("world", size="sm") }}</span>Alle Orgs
             </a>
             <a href="/admin/system/orgs"
                class="admin-nav__item {% if '/admin/system/orgs' in request.url.path %}is-active{% endif %}"
                {{ tip('KPI-Übersicht aller Orgs mit Schnellzugriff') }}>
-              <span class="admin-nav__icon">📊</span>System-Konsole
+              <span class="admin-nav__icon">{{ modul_icon("uebersicht", size="sm") }}</span>System-Konsole
             </a>
             <a href="/admin/system/quotas"
                class="admin-nav__item {% if '/admin/system/quotas' in request.url.path %}is-active{% endif %}"
                {{ tip('Speicher- und KI-Token-Quota je Organisation festlegen') }}>
-              <span class="admin-nav__icon">📦</span>Quota-Verwaltung
+              <span class="admin-nav__icon">{{ icon("package", size="sm") }}</span>Quota-Verwaltung
             </a>
             <a href="/admin/medien"
                class="admin-nav__item {% if '/admin/medien' in request.url.path %}is-active{% endif %}"
                {{ tip('Alle hochgeladenen Medien jeder Organisation: Größe, Alter, Typ – sortier- und filterbar (Org per Umschalter wählbar)') }}>
-              <span class="admin-nav__icon">🖼️</span>Medienverwaltung
+              <span class="admin-nav__icon">{{ icon("photo", size="sm") }}</span>Medienverwaltung
             </a>
             {% endif %}
           </div>
