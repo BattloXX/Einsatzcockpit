@@ -66,8 +66,8 @@
       <div class="portal-box__label">Portal-Link (für Bürger)</div>
       <div class="portal-url">{{ portal_url }}</div>
     </div>
-    <button onclick="navigator.clipboard.writeText('{{ portal_url }}').then(()=>this.textContent='✓ Kopiert')"
-            class="btn btn--ghost btn--sm">📋 Kopieren</button>
+    <button onclick="navigator.clipboard.writeText({{ portal_url|tojson|forceescape }}).then(()=>this.innerHTML=ecpIcon('check', {size: 'sm'})+' Kopiert')"
+            class="btn btn--ghost btn--sm">{{ icon("clipboard-list", size="sm") }} Kopieren</button>
     <button class="btn btn--ghost btn--sm"
             data-ec-action="open-dialog" data-ec-dialog="qr-modal">QR</button>
     <dialog id="qr-modal" class="mel-modal">
@@ -82,7 +82,7 @@
     <form method="post" action="/lage/{{ lage.id }}/meldungen/token" style="margin:0;">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <button type="submit" class="btn btn--secondary btn--sm">
-        {% if portal_url %}🔄 Link erneuern{% else %}🔗 Link erstellen{% endif %}
+        {% if portal_url %}{{ icon("refresh", size="sm") }} Link erneuern{% else %}{{ icon("link", size="sm") }} Link erstellen{% endif %}
       </button>
     </form>
     {% endif %}

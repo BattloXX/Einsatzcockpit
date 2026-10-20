@@ -30,20 +30,20 @@
 {% endif %}
 
 {% set _tab_labels = {
-  'board':      '📋 Board',
-  'dashboard':  '📊 Dashboard',
-  'stab':       '👥 Stab',
-  'lagedokument':'📝 Lagebericht',
-  'funkjournal':'📻 Funkjournal',
-  'meldungen':  '📥 Meldungen',
-  'zeitreise':  '🕐 Zeitreise',
-  'sektoren':   '🗂 Abschnitte',
-  'karte':      '🗺 Karte',
-  'ressourcen': '🚒 Ressourcen',
-  'verleih':    '📦 Geräteverleih',
-  'drohne':     '🚁 Drohne',
+  'board': ('Board', 'clipboard-list'),
+  'dashboard': ('Dashboard', 'layout-dashboard'),
+  'stab': ('Stab', 'users'),
+  'lagedokument': ('Lagebericht', 'note'),
+  'funkjournal': ('Funkjournal', 'radio'),
+  'meldungen': ('Meldungen', 'inbox'),
+  'zeitreise': ('Zeitreise', 'history'),
+  'sektoren': ('Abschnitte', 'folders'),
+  'karte': ('Karte', 'map'),
+  'ressourcen': ('Ressourcen', 'firetruck'),
+  'verleih': ('Geräteverleih', 'package'),
+  'drohne': ('Drohne', 'drone'),
 } %}
-{% set _tab_label = _tab_labels[_tab] if _tab in _tab_labels else 'Navigation' %}
+{% set _tab_label = _tab_labels[_tab] if _tab in _tab_labels else ('Navigation', 'menu-2') %}
 
 {% block bottom_nav_fab %}
 {% if can_edit and not (request.state.user and request.state.user.gsl_nur_lesen | default(false)) %}
@@ -60,13 +60,13 @@
   <div class="lage-ctx-bar" id="lageCtxBar"
        x-data="{lagNavOpen:false}" @click.outside="lagNavOpen=false">
     {% if lage.is_exercise %}
-    <div class="exercise-topbar">&#x26A0; ÜBUNG / SIMULATION &#x26A0;</div>
+    <div class="exercise-topbar">{{ icon("alert-triangle", size="sm") }} ÜBUNG / SIMULATION {{ icon("alert-triangle", size="sm") }}</div>
     {% endif %}
     {% if request.state.user and request.state.user.gsl_nur_lesen | default(false) %}
     <div class="exercise-topbar">Nur-Lese-Ansicht (Einheitenmodus)</div>
     {% endif %}
     <div class="lage-ctx-bar__head">
-      <a href="/lage" class="btn btn--ghost btn--sm" title="Alle Lagen">&#x2190; Lagen</a>
+      <a href="/lage" class="btn btn--ghost btn--sm" title="Alle Lagen">{{ icon("chevron-left", size="xs") }} Lagen</a>
       {# id-Wrapper: Refresh-Ziel fuer den lage_updated-OOB-Swap (_lage_kopf_oob.html) --
          Lage-Stammdaten koennen sich aendern, waehrend andere Nutzer bereits auf
          Board/Karte/etc. sind (siehe GSL-Reload-Audit 2026-07-16). #}
@@ -80,8 +80,8 @@
               @click="lagNavOpen=!lagNavOpen"
               :aria-expanded="lagNavOpen.toString()"
               aria-label="Lage-Navigation">
-        <span class="lage-burger-label">{{ _tab_label }}</span>
-        <span class="lage-burger-chevron" :class="lagNavOpen ? 'lage-burger-chevron--open' : ''">&#x25BE;</span>
+        <span class="lage-burger-label">{{ icon(_tab_label[1], size="sm") }} {{ _tab_label[0] }}</span>
+        <span class="lage-burger-chevron" :class="lagNavOpen ? 'lage-burger-chevron--open' : ''">{{ icon("chevron-down", size="xs") }}</span>
       </button>
     </div>
 
@@ -94,69 +94,69 @@
       <nav class="lage-ctx-bar__tabs" aria-label="Lage-Navigation">
         <a href="{{ _base }}"
            class="lage-tab {% if _tab == 'board' %}lage-tab--active{% endif %}">
-          📋 Board{% if open_count | default(0) %} ({{ open_count }}){% endif %}
+          {{ icon(_tab_labels["board"][1], size="sm") }} {{ _tab_labels["board"][0] }}{% if open_count | default(0) %} ({{ open_count }}){% endif %}
         </a>
         <a href="{{ _base }}/dashboard"
            class="lage-tab {% if _tab == 'dashboard' %}lage-tab--active{% endif %}">
-          📊 Dashboard
+          {{ icon(_tab_labels["dashboard"][1], size="sm") }} {{ _tab_labels["dashboard"][0] }}
         </a>
         {% if mi_features.stab %}
         <a href="{{ _base }}/stab"
            class="lage-tab {% if _tab == 'stab' or _tab == 'lagedokument' %}lage-tab--active{% endif %}">
-          👥 Stab
+          {{ icon(_tab_labels["stab"][1], size="sm") }} {{ _tab_labels["stab"][0] }}
         </a>
         {% endif %}
         {% if mi_features.funkjournal %}
         <a href="{{ _base }}/funkjournal"
            class="lage-tab {% if _tab == 'funkjournal' %}lage-tab--active{% endif %}">
-          📻 Funkjournal
+          {{ icon(_tab_labels["funkjournal"][1], size="sm") }} {{ _tab_labels["funkjournal"][0] }}
         </a>
         {% endif %}
         {% if mi_features.meldungen %}
         <a href="{{ _base }}/meldungen"
            class="lage-tab {% if _tab == 'meldungen' %}lage-tab--active{% endif %}">
-          📥 Meldungen{% if new_meldungen_count | default(0) %} ({{ new_meldungen_count }}){% endif %}
+          {{ icon(_tab_labels["meldungen"][1], size="sm") }} {{ _tab_labels["meldungen"][0] }}{% if new_meldungen_count | default(0) %} ({{ new_meldungen_count }}){% endif %}
         </a>
         {% endif %}
         {% if mi_features.zeitreise %}
         <a href="{{ _base }}/zeitreise"
            class="lage-tab {% if _tab == 'zeitreise' %}lage-tab--active{% endif %}">
-          🕐 Zeitreise
+          {{ icon(_tab_labels["zeitreise"][1], size="sm") }} {{ _tab_labels["zeitreise"][0] }}
         </a>
         {% endif %}
         {% if mi_features.sektoren %}
         <a href="{{ _base }}/sektoren"
            class="lage-tab {% if _tab == 'sektoren' %}lage-tab--active{% endif %}">
-          🗂 Abschnitte
+          {{ icon(_tab_labels["sektoren"][1], size="sm") }} {{ _tab_labels["sektoren"][0] }}
         </a>
         {% endif %}
         {% if mi_features.karte %}
         <a href="{{ _base }}/karte"
            class="lage-tab {% if _tab == 'karte' %}lage-tab--active{% endif %}">
-          🗺 Karte
+          {{ icon(_tab_labels["karte"][1], size="sm") }} {{ _tab_labels["karte"][0] }}
         </a>
         {% endif %}
         {% if mi_features.ressourcen %}
         <a href="{{ _base }}/ressourcen"
            class="lage-tab {% if _tab == 'ressourcen' %}lage-tab--active{% endif %}">
-          🚒 Ressourcen
+          {{ icon(_tab_labels["ressourcen"][1], size="sm") }} {{ _tab_labels["ressourcen"][0] }}
         </a>
         {% endif %}
         {% if mi_features.geraeteverleih %}
         <a href="{{ _base }}/verleih"
            class="lage-tab {% if _tab == 'verleih' %}lage-tab--active{% endif %}">
-          📦 Geräteverleih
+          {{ icon(_tab_labels["verleih"][1], size="sm") }} {{ _tab_labels["verleih"][0] }}
         </a>
         {% endif %}
         {% if request.state.uas_module_enabled %}
         <a href="/uas/incidents/{{ lage.id }}/einsatz/starten"
            class="lage-tab {% if _tab == 'drohne' %}lage-tab--active{% endif %}">
-          🚁 Drohne
+          {{ icon(_tab_labels["drohne"][1], size="sm") }} {{ _tab_labels["drohne"][0] }}
         </a>
         {% endif %}
         <a href="{{ _base }}/druck" target="_blank" rel="noopener"
            class="lage-tab">
-          🖨 Drucken
+          {{ icon("printer", size="sm") }} Drucken
         </a>
       </nav>
       {% block lage_actions %}{% endblock %}
@@ -167,69 +167,69 @@
          aria-label="Lage-Navigation mobil">
       <a href="{{ _base }}"
          class="lage-mobile-nav__item {% if _tab == 'board' %}lage-mobile-nav__item--active{% endif %}">
-        📋 Board{% if open_count | default(0) %} ({{ open_count }}){% endif %}
+        {{ icon(_tab_labels["board"][1], size="sm") }} {{ _tab_labels["board"][0] }}{% if open_count | default(0) %} ({{ open_count }}){% endif %}
       </a>
       <a href="{{ _base }}/dashboard"
          class="lage-mobile-nav__item {% if _tab == 'dashboard' %}lage-mobile-nav__item--active{% endif %}">
-        📊 Dashboard
+        {{ icon(_tab_labels["dashboard"][1], size="sm") }} {{ _tab_labels["dashboard"][0] }}
       </a>
       {% if mi_features.stab %}
       <a href="{{ _base }}/stab"
          class="lage-mobile-nav__item {% if _tab == 'stab' or _tab == 'lagedokument' %}lage-mobile-nav__item--active{% endif %}">
-        👥 Stab
+        {{ icon(_tab_labels["stab"][1], size="sm") }} {{ _tab_labels["stab"][0] }}
       </a>
       {% endif %}
       {% if mi_features.funkjournal %}
       <a href="{{ _base }}/funkjournal"
          class="lage-mobile-nav__item {% if _tab == 'funkjournal' %}lage-mobile-nav__item--active{% endif %}">
-        📻 Funkjournal
+        {{ icon(_tab_labels["funkjournal"][1], size="sm") }} {{ _tab_labels["funkjournal"][0] }}
       </a>
       {% endif %}
       {% if mi_features.meldungen %}
       <a href="{{ _base }}/meldungen"
          class="lage-mobile-nav__item {% if _tab == 'meldungen' %}lage-mobile-nav__item--active{% endif %}">
-        📥 Meldungen{% if new_meldungen_count | default(0) %} ({{ new_meldungen_count }}){% endif %}
+        {{ icon(_tab_labels["meldungen"][1], size="sm") }} {{ _tab_labels["meldungen"][0] }}{% if new_meldungen_count | default(0) %} ({{ new_meldungen_count }}){% endif %}
       </a>
       {% endif %}
       {% if mi_features.zeitreise %}
       <a href="{{ _base }}/zeitreise"
          class="lage-mobile-nav__item {% if _tab == 'zeitreise' %}lage-mobile-nav__item--active{% endif %}">
-        🕐 Zeitreise
+        {{ icon(_tab_labels["zeitreise"][1], size="sm") }} {{ _tab_labels["zeitreise"][0] }}
       </a>
       {% endif %}
       {% if mi_features.sektoren %}
       <a href="{{ _base }}/sektoren"
          class="lage-mobile-nav__item {% if _tab == 'sektoren' %}lage-mobile-nav__item--active{% endif %}">
-        🗂 Abschnitte
+        {{ icon(_tab_labels["sektoren"][1], size="sm") }} {{ _tab_labels["sektoren"][0] }}
       </a>
       {% endif %}
       {% if mi_features.karte %}
       <a href="{{ _base }}/karte"
          class="lage-mobile-nav__item {% if _tab == 'karte' %}lage-mobile-nav__item--active{% endif %}">
-        🗺 Karte
+        {{ icon(_tab_labels["karte"][1], size="sm") }} {{ _tab_labels["karte"][0] }}
       </a>
       {% endif %}
       {% if mi_features.ressourcen %}
       <a href="{{ _base }}/ressourcen"
          class="lage-mobile-nav__item {% if _tab == 'ressourcen' %}lage-mobile-nav__item--active{% endif %}">
-        🚒 Ressourcen
+        {{ icon(_tab_labels["ressourcen"][1], size="sm") }} {{ _tab_labels["ressourcen"][0] }}
       </a>
       {% endif %}
       {% if mi_features.geraeteverleih %}
       <a href="{{ _base }}/verleih"
          class="lage-mobile-nav__item {% if _tab == 'verleih' %}lage-mobile-nav__item--active{% endif %}">
-        📦 Geräteverleih
+        {{ icon(_tab_labels["verleih"][1], size="sm") }} {{ _tab_labels["verleih"][0] }}
       </a>
       {% endif %}
       {% if request.state.uas_module_enabled %}
       <a href="/uas/incidents/{{ lage.id }}/einsatz/starten"
          class="lage-mobile-nav__item {% if _tab == 'drohne' %}lage-mobile-nav__item--active{% endif %}">
-        🚁 Drohne
+        {{ icon(_tab_labels["drohne"][1], size="sm") }} {{ _tab_labels["drohne"][0] }}
       </a>
       {% endif %}
       <a href="{{ _base }}/druck" target="_blank" rel="noopener"
          class="lage-mobile-nav__item">
-        🖨 Drucken
+        {{ icon("printer", size="sm") }} Drucken
       </a>
     </nav>
   </div>

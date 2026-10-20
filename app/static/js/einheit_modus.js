@@ -107,7 +107,7 @@ function registriere() {
     get outboxText() {
       const anzahl = this.outboxListe.length;
       const fehler = this.outboxListe.filter((item) => ["fehler", "konflikt"].includes(item.status)).length;
-      return fehler ? `⚠ ${fehler} Fehler/Konflikt` : `⏳ ${anzahl} ausstehend`;
+      return fehler ? `${fehler} Fehler/Konflikt` : `${anzahl} ausstehend`;
     },
     // Noch nicht vom Server bestätigter Status des offenen Auftrags (letzter Outbox-Eintrag).
     get ausstehenderStatus() {
@@ -119,7 +119,7 @@ function registriere() {
     // Status, von dem der nächste Schritt ausgeht: ausstehender lokaler Status vor Serverstand.
     get wirksamerStatus() { return this.ausstehenderStatus || this.detail?.auftrag?.einheit_status; },
     statusLabel(status) {
-      // Label je Auftragsart (z. B. „Erkundet“) nur für den Status des geöffneten Auftrags.
+      // Label je Auftragsart (z. B. "Erkundet") nur für den Status des geöffneten Auftrags.
       if (status && this.detail?.auftrag && status === this.detail.auftrag.einheit_status) {
         return this.detail.auftrag.einheit_status_label;
       }
@@ -213,8 +213,8 @@ function registriere() {
         return "Foto auf diesem Gerät nicht mehr lesbar – bitte neu aufnehmen";
       }
       if (item.status === "fehler") return `Fehler: ${item.letzter_fehler || "unbekannt"}`;
-      if (item.status === "fehler_netz") return `↻ erneuter Versuch in ${this.retrySekunden(item)} s`;
-      return "⏳ nur auf diesem Gerät";
+      if (item.status === "fehler_netz") return `erneuter Versuch in ${this.retrySekunden(item)} s`;
+      return "nur auf diesem Gerät";
     },
 
     // Initialisierung und Navigation.

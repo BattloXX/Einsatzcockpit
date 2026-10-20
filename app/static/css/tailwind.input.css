@@ -3085,3 +3085,5 @@ button.htmx-request,
 @media print { .ecp-icon--muted { color: #555; } }
 
 .fehler__icon .ecp-icon { width: 48px; height: 48px; }
+/* Flex-Navigation: Leerzeichen zwischen Icon und Text fällt in Flex-Containern weg */
+.lage-tab, .lage-mobile-nav__item, .subtabnav__item, .incident-subnav__trigger, .incident-subnav__item { gap: .35em; }

@@ -11,6 +11,7 @@ in den Lagebericht-Editor (weiterhin technisch LageDokument/lagedokument) um:
 - Das Dashboard zeigt statt der alten KI-Karte einen schlichten Quick-Link
   auf den Lagebericht.
 """
+from app.core.icons import render_icon
 from app.core.security import hash_password
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
@@ -81,7 +82,7 @@ def test_seiten_titel_und_nav_zeigen_lagebericht_nicht_mehr_lagedokument(client,
     r = client.get(f"/lage/{lage_id}/lagedokument")
     assert r.status_code == 200
     assert "Testlage – Lagebericht" in r.text  # {% block title %}
-    assert '<div class="dash-section__title">📝 Lagebericht</div>' in r.text
+    assert f'<div class="dash-section__title">{render_icon("note", size="sm")} Lagebericht</div>' in r.text
     assert "placeholder: 'Lagebericht…'" in r.text
 
 

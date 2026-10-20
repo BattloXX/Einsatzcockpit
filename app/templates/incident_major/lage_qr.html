@@ -56,8 +56,8 @@
 <body onload="setTimeout(function(){ window.print(); }, 350)">
 
   <div class="print-toolbar">
-    <a href="/lage/{{ lage.id }}/bearbeiten" class="secondary">← Zurück</a>
-    <button type="button" onclick="window.print()">🖨 Drucken</button>
+    <a href="/lage/{{ lage.id }}/bearbeiten" class="secondary">{{ icon("chevron-left", size="xs") }} Zurück</a>
+    <button type="button" onclick="window.print()">{{ icon("printer", size="sm") }} Drucken</button>
   </div>
 
   <div class="sheet">

@@ -76,7 +76,7 @@
   background:rgba(242,176,46,.18); color:var(--yellow);
 }
 
-/* Auto-Auftrag „Lagemeldung anfordern" hervorheben */
+/* Auto-Auftrag "Lagemeldung anfordern" hervorheben */
 .fj-row--auto-auftrag td { background: rgba(212,34,37,.06); }
 .fj-row--auto-auftrag td:first-child { box-shadow: inset 3px 0 0 var(--red); }
 
@@ -104,7 +104,7 @@
   {# ── Eintrag hinzufügen ────────────────────────────────────────────────────── #}
   {% if can_note %}
   <div class="dash-section" style="--dash-accent:var(--red);" x-data="fjForm()">
-    <div class="dash-section__title">📻 Eintrag hinzufügen</div>
+    <div class="dash-section__title">{{ icon("radio", size="sm") }} Eintrag hinzufügen</div>
     <form hx-post="/lage/{{ lage.id }}/funkjournal"
           hx-swap="none"
           hx-sync="this:drop"
@@ -237,7 +237,7 @@
   <div class="modal__content" style="min-width:min(440px,95vw);">
     <div class="modal__header">
       <h3 class="modal__title">Lagemeldung erfassen</h3>
-      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" data-ec-dialog="fjLmDialog" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" data-ec-dialog="fjLmDialog" class="modal__close">{{ icon("x", size="sm") }}</button>
     </div>
     <form id="fjLmForm" hx-swap="none"
           hx-sync="this:drop"

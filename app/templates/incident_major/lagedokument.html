@@ -83,7 +83,7 @@
 {% block lage_content %}
 <div style="max-width:900px;margin:0 auto;">
   <div class="dash-section" style="--dash-accent:var(--red);">
-    <div class="dash-section__title">📝 Lagebericht</div>
+    <div class="dash-section__title">{{ icon("note", size="sm") }} Lagebericht</div>
     <p class="ld-meta">
       Gemeinsames Dokument für die zusammenfassende Lagedarstellung.
       {% if dokument.updated_at %}
@@ -95,7 +95,7 @@
     </p>
 
     {% if gespeichert %}
-    <div class="alert alert--success" style="margin-bottom:12px;">✓ Gespeichert.</div>
+    <div class="alert alert--success" style="margin-bottom:12px;">{{ icon("check", size="sm") }} Gespeichert.</div>
     {% endif %}
 
     {% if can_edit %}
@@ -107,8 +107,8 @@
       <input type="hidden" name="content_html" id="lagedokument-content-html">
       <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
         <button type="submit" class="btn btn--primary btn--sm">Speichern</button>
-        <button type="button" id="btn-lagedokument-drucken" class="btn btn--secondary btn--sm">🖨 Drucken</button>
-        <button type="button" id="btn-lagedokument-ki" class="btn btn--secondary btn--sm">✨ KI-Entwurf</button>
+        <button type="button" id="btn-lagedokument-drucken" class="btn btn--secondary btn--sm">{{ icon("printer", size="sm") }} Drucken</button>
+        <button type="button" id="btn-lagedokument-ki" class="btn btn--secondary btn--sm">{{ icon("sparkles", size="sm") }} KI-Entwurf</button>
         <span id="lagedokument-ki-fehler" style="font-size:.8rem;color:#f87171;"></span>
       </div>
     </form>
@@ -117,8 +117,8 @@
       {{ dokument.content_html|safe if dokument.content_html else '<p class="text-muted">Noch kein Inhalt.</p>'|safe }}
     </div></div>
     <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
-      <a href="/lage/{{ lage.id }}/lagedokument/druck" target="_blank" class="btn btn--secondary btn--sm">🖨 Drucken</a>
-      <button type="button" id="btn-lagedokument-ki-vorschau" class="btn btn--secondary btn--sm">✨ KI-Vorschlag anzeigen</button>
+      <a href="/lage/{{ lage.id }}/lagedokument/druck" target="_blank" class="btn btn--secondary btn--sm">{{ icon("printer", size="sm") }} Drucken</a>
+      <button type="button" id="btn-lagedokument-ki-vorschau" class="btn btn--secondary btn--sm">{{ icon("sparkles", size="sm") }} KI-Vorschlag anzeigen</button>
     </div>
     <div id="lagedokument-ki-vorschau-ergebnis" style="margin-top:8px;"></div>
     {% endif %}
@@ -182,7 +182,7 @@ document.getElementById('form-lagedokument').addEventListener('htmx:afterRequest
     banner.id = 'ld-saved-banner-js';
     banner.className = 'alert alert--success';
     banner.style.marginBottom = '12px';
-    banner.textContent = '✓ Gespeichert.';
+    banner.innerHTML = ecpIcon('check', {size: 'sm'}) + ' Gespeichert.';
     var form = document.getElementById('form-lagedokument');
     form.parentNode.insertBefore(banner, form);
   }
@@ -275,8 +275,8 @@ document.addEventListener('DOMContentLoaded', function () {
     kiBtn.addEventListener('click', function () {
       if (!_ldQuill) return;
       kiBtn.disabled = true;
-      var altText = kiBtn.textContent;
-      kiBtn.textContent = '✨ …';
+      var altText = kiBtn.innerHTML;
+      kiBtn.innerHTML = ecpIcon('sparkles', {size: 'sm'}) + ' …';
       kiFehler.textContent = '';
       requestKiEntwurf().then(function (html) {
         var tmp = document.createElement('div');
@@ -292,7 +292,7 @@ document.addEventListener('DOMContentLoaded', function () {
         kiFehler.textContent = 'KI-Entwurf konnte nicht geladen werden.';
       }).finally(function () {
         kiBtn.disabled = false;
-        kiBtn.textContent = altText;
+        kiBtn.innerHTML = altText;
       });
     });
   }
@@ -306,8 +306,8 @@ document.addEventListener('DOMContentLoaded', function () {
   if (!btn) return;
   btn.addEventListener('click', function () {
     btn.disabled = true;
-    var altText = btn.textContent;
-    btn.textContent = '✨ …';
+    var altText = btn.innerHTML;
+    btn.innerHTML = ecpIcon('sparkles', {size: 'sm'}) + ' …';
     fetch('/lage/{{ lage.id }}/lagebericht', {
       method: 'POST', credentials: 'same-origin',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -318,7 +318,7 @@ document.addEventListener('DOMContentLoaded', function () {
       out.textContent = 'KI-Vorschlag konnte nicht geladen werden.';
     }).finally(function () {
       btn.disabled = false;
-      btn.textContent = altText;
+      btn.innerHTML = altText;
     });
   });
 });
