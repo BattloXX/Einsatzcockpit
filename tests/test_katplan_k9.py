@@ -204,6 +204,17 @@ def test_sammel_und_verwerfen(db, daten):
         service.vorschlag_uebernehmen(db, plan, user, v, werte={})
 
 
+def test_sammel_fuehrt_umlaut_namen_zusammen(db, daten):
+    # SQL-LOWER() faltet unter SQLite keine Umlaute; Pilot erzeugte "Stufe 2 – Übergehen" sonst mehrfach.
+    plan, user, dokument = daten
+    vs = [vorschlag_anlegen(db, plan, dokument, kapitel=k, phase=p) for k, p in (
+        ("Überflutung", "Stufe 2 – Übergehen"), ("ÜBERFLUTUNG", "stufe 2 – übergehen"),
+        ("Überflutung ", "Stufe 2 – Übergehen"))]
+    assert service.sammel_uebernehmen(db, plan, user, [v.id for v in vs]) == 3
+    assert db.query(KatplanAbschnitt).filter_by(plan_id=plan.id).count() == 1
+    assert db.query(KatplanPhase).filter_by(plan_id=plan.id).count() == 1
+
+
 def ui_daten(info):
     with TestingSession() as db:
         set_tenant_context(db, info["org_id"])
@@ -400,3 +411,17 @@ def test_beschreibung_als_bearbeitbarer_text():
     assert text == "Engstelle beobachten\n• Auf Gasleitung achten\n• VKW & Bauhof"
     assert text_zu_html(text) == "<p>Engstelle beobachten</p><ul><li>Auf Gasleitung achten</li><li>VKW &amp; Bauhof</li></ul>"
     assert "<script>" not in text_zu_html("<script>alert(1)</script>")
+
+
+def test_vorschlag_mit_typdaten():
+    from app.services.katplan_ki_service import _parse_antwort
+
+    werte = _parse_antwort(json.dumps({"elemente": [
+        {"typ": "kontrollstelle", "titel": "Schacht", "daten": {
+            "kontrollhinweise": "Einlauf prüfen", "gefahren": ["Verklausung"], "fremd": "x"}},
+        {"typ": "ressource", "titel": "Material", "daten": {"bedarf": [{"bezeichnung": "Sandsäcke", "menge": "30"}]}},
+        {"typ": "info", "titel": "Ohne", "daten": "kein Objekt"},
+    ]}))
+    assert json.loads(werte[0]["daten_json"]) == {"gefahren": ["Verklausung"], "kontrollhinweise": "Einlauf prüfen"}
+    assert json.loads(werte[1]["daten_json"])["bedarf"] == [{"bezeichnung": "Sandsäcke", "menge": "30"}]
+    assert werte[2]["daten_json"] == "{}"

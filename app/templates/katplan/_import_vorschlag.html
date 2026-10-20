@@ -39,6 +39,17 @@
       <label>Beschreibung (eine Zeile je Absatz, Listenpunkte mit •)
         <textarea class="form-control" name="beschreibung_text" rows="{{ [3, (texte[v.id].count('\n') + 2)]|max }}">{{ texte[v.id] }}</textarea>
       </label>
+      {% set td = typdaten[v.id] if typdaten is defined else {} %}
+      {% if td %}
+        <div class="kp-box kp-box--info">
+          <p class="kp-box__title">Typspezifische Angaben (werden übernommen)</p>
+          {% for feld, wert in td.items() if wert %}
+            <p><strong>{{ feld|replace('_', ' ')|capitalize }}:</strong>
+              {% if wert is string or wert is not iterable or wert is mapping %}{{ wert }}{% else %}{% for eintrag in wert %}{% if eintrag is mapping %}{{ eintrag.values()|select|join(' · ') }}{% else %}{{ eintrag }}{% endif %}{% if not loop.last %}; {% endif %}{% endfor %}{% endif %}
+            </p>
+          {% endfor %}
+        </div>
+      {% endif %}
       {% for k in kontakte[v.id] %}
         <div class="kp-box kp-box--info">
           <p>{{ k.name }}{% if k.organisation %} · {{ k.organisation }}{% endif %}{% if k.rolle %} · {{ k.rolle }}{% endif %}{% if k.telefon %} · {{ k.telefon }}{% endif %}</p>

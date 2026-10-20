@@ -300,7 +300,14 @@ async def katplan_anhang_uebergeben(
     return {"anhang_id": anhang.id, "uuid": anhang.uuid, "mime": anhang.mime, "hinweis": _HINWEIS}
 
 
-@_tool("katplan_vorschlaege_aus_dokument", "Stellt bis 30 strukturierte Seitenvorschläge in die offene Review-Queue.")
+@_tool("katplan_vorschlaege_aus_dokument", (
+    "Stellt bis 30 strukturierte Seitenvorschläge in die offene Review-Queue; es entstehen keine Elemente. "
+    "Je Eintrag: typ, titel, beschreibung (Liste von Absätzen, Aufzählungspunkte mit •), kapitel, phase, "
+    "prioritaet (1-3), strasse/hausnummer/plz/ort oder adresse, kontakte [{name, organisation, telefon, rolle}], "
+    "objekt, begruendung und optional daten mit typspezifischen Feldern (z. B. kontrollstelle: gefahren [Text], "
+    "kontrollhinweise, zugaenglichkeit; ressource: bedarf [{bezeichnung, menge, einheit}], lagerort; "
+    "massnahme: schritte [{text}], erwartetes_ergebnis). Telefonnummern und Mengen nur wörtlich aus der Quelle."
+))
 async def katplan_vorschlaege_aus_dokument(context: MCPContext, plan_id: int, dokument_id: int,
                                           seiten_nr: int, elemente: list[dict]) -> dict[str, object]:
     plan = _plan(context, plan_id)

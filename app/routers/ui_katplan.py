@@ -1740,8 +1740,10 @@ def _import_kontext(db: Session, plan: KatplanPlan, user: User, quelle: int | No
             k["kontakt_name"] = ziel.anzeigename if ziel else None
         kontakte[v.id] = liste
     texte = {v.id: ki_service.html_zu_text(v.beschreibung_html) for v in vorschlaege}
+    typdaten = {v.id: json.loads(v.daten_json or "{}") for v in vorschlaege}
     return {"user": user, "plan": plan, "can_edit": True, "import_aktiv": True,
-            "vorschlaege": vorschlaege, "kontakte": kontakte, "texte": texte, "quelle_filter": quelle,
+            "vorschlaege": vorschlaege, "kontakte": kontakte, "texte": texte, "typdaten": typdaten,
+            "quelle_filter": quelle,
             "status_filter": status, "seite_filter": seite,
             "quellen": db.query(KatplanDokument).filter_by(org_id=plan.org_id, plan_id=plan.id).all(),
             **_editor_kontext(db, plan),

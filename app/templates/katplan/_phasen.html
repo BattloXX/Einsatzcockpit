@@ -1,5 +1,7 @@
 <h2 class="kp-section-title">Phasen verwalten</h2>
-{% for phase in phasen + [none] %}
+{# Neue Phase zuerst, damit sie ohne Scrollen erreichbar ist und nicht mit einer bestehenden verwechselt wird. #}
+{% set naechste_sort = ((phasen|map(attribute='sort')|max) + 10) if phasen else 10 %}
+{% for phase in [none] + phasen %}
   {% set pid = phase.id if phase else 0 %}
   {% set f = phase_form if phase_fehler_id|default(-1) == pid else phase %}
   {% set ziel = '/katastrophenplaene/' ~ plan.id ~ '/phasen' ~ ('/' ~ pid if pid else '') %}
@@ -29,7 +31,7 @@
       </label>
       <label>
         Reihenfolge
-        <input class="form-control" type="number" name="sort" value="{{ f.sort if f else 0 }}" required>
+        <input class="form-control" type="number" name="sort" value="{{ f.sort if f else naechste_sort }}" required>
       </label>
       <button type="submit" class="btn btn--primary">{{ 'Speichern' if phase else 'Phase anlegen' }}</button>
     </form>
