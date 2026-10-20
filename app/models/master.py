@@ -510,6 +510,9 @@ class OrgSettings(Base):
     alarm_infoscreen_wetter_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     # Großschadenslage-Sonderansicht am Infoscreen (bleibt, solange die GSL aktiv ist)
     alarm_infoscreen_gsl_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Zentrale Suche
+    suche_aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+
     # KI-Dokumentklassifizierung (Objektverwaltung): Opt-in je Org, zusaetzlich zum AI-Setup
     katplan_ki_import_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
     objekt_ki_klassifikation_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
