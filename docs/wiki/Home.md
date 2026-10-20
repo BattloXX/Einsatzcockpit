@@ -9,6 +9,7 @@ Digitales Einsatzleiter-Werkzeug für österreichische Feuerwehren — Multi-Use
 Eine Python-Webapp (FastAPI + HTMX + WebSocket), die ein bisheriges Single-File-HTML-Tool ersetzt und um echte Multi-User-Fähigkeit, Atemschutzüberwachung, Mannschaftsregister, Archiv, PDF-Export, vollständige Multi-Tenancy, Großschadenslage-Führung und Drohnen-Dokumentation erweitert.
 
 ### Kernfunktionen
+- [Katastrophenpläne](Anwender-Katastrophenplaene): Freigabe, Karte, Suche, Quellenvergleich und PDF-Offlinefassung
 - Echtzeit-Kanban-Board für mehrere Geräte gleichzeitig (WebSockets)
 - Automatische Einsatzanlage aus dem Alarmierungssystem (REST-API, idempotent)
 - Einsatzinfo: Alarmdaten, Anfahrt, Hydranten, Objektunterlagen und Gefahren auf einen Blick
@@ -109,6 +110,7 @@ unter [Server-Voraussetzungen](Installation-Server-Voraussetzungen).
 | [Mailing-Kampagnen](Anwender-Mailing-Kampagnen) | Vorlagen verwenden, Empfängerlisten aufbauen, Kampagnen planen/senden und Zustellung auswerten |
 | [Fahrtenbuch](Anwender-Fahrtenbuch) | Fahrt erfassen: Fahrzeug, Maschinist, km/BH, Seilwinde, Token/QR-Zugang |
 | [Objekte](Anwender-Objekte) | Objektdaten pflegen, PDF-Unterlagen klassifizieren, Einsatzansicht, Objektblatt-Druck |
+| [Katastrophenpläne](Anwender-Katastrophenplaene) | Pläne, Freigaben, Rechte, Quellen und Offline-PDF |
 | [Straßensperren & Anfahrtsrouting](Anwender-Strassensperren) | Sperren mit Karte pflegen, Status sehen und Anfahrt im Einsatz prüfen |
 | [MCP-Assistent](Anwender-MCP-Assistent) | KI-Anwendung sicher verbinden, Objektunterlagen übergeben und Fahrten auswerten |
 | [Externe Objektpflege](Anwender-Objektpflege) | Zentrale Kontakte ohne Login zur Objektprüfung einladen und Einreichungen prüfen |
@@ -148,6 +150,7 @@ unter [Server-Voraussetzungen](Installation-Server-Voraussetzungen).
 | [Datensicherung (Org, Self-Service)](Administration-Org-Datensicherung) | Eigene Org-Daten als Archiv herunterladen oder geplant an ein eigenes Ziel senden (SFTP/FTP/rclone); Restore in neue Org (Sysadmin) |
 | [Objektverwaltung](Administration-Objektverwaltung) | Modul aktivieren (System+Org), Rolle Objektverwalter, Kataloge, Alarm-Matching, Alarm-Infoscreen, KI-Klassifizierung |
 | [Alarm-Infoscreen](Administration-Alarm-Infoscreen) | Wandmonitor mit Token-URL, URL-Rotation, Wetter, GSL-Ansicht und Rückmeldungen |
+| [Katastrophenpläne](Administration-Katastrophenplaene) | Pläne, Freigaben, Rechte, Quellen und Offline-PDF |
 | [Straßensperren & Anfahrtsrouting](Administration-Strassensperren) | Modul, Rechte, Routing-Startpunkt und Routingdienst konfigurieren |
 | [Externe Objektpflege](Administration-Objektpflege) | Berechtigungen, Einladungslinks, Erinnerungen und extern sichtbarer Umfang |
 | [Kontaktverwaltung](Administration-Kontaktverwaltung) | Modul aktivieren (System+Org), Rollen, Kategorien, Einsatzinfo-Freigabe, BMA-Import-Verhalten, Offline-Sync-API |
@@ -162,6 +165,7 @@ unter [Server-Voraussetzungen](Installation-Server-Voraussetzungen).
 | [Architektur](Entwickler-Architektur) | Module, Schichten, Datenfluss, Multi-Tenancy |
 | [Sicherheit](Entwickler-Sicherheit) | Authentifizierung, CSRF, Tenant-Isolation, Medien und Rate-Limiting |
 | [MCP-Erweiterung](Entwickler-MCP-Erweiterung) | OAuth-Server, Tool-Registry, Live-Kontext und Testmuster |
+| [Katastrophenpläne](Entwickler-Katastrophenplaene) | Pläne, Freigaben, Rechte, Quellen und Offline-PDF |
 | [Straßensperren & Anfahrtsrouting](Entwickler-Strassensperren) | Architektur, Geometrie, Routing-Provider und Tests |
 | [Planspiele & Simulation](Entwickler-Planspiele) | Übungs-Guard, Übungsuhr, Worker mit Lease/Claim, Generator, Tests |
 | [Datenmodell](Entwickler-Datenmodell) | Tabellen, Beziehungen, Multi-Tenancy-Schema |

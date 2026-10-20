@@ -196,6 +196,8 @@ FEATURES: list[dict] = [
                 "wiki": "Anwender-Strassensperren",
                 "bullets": [
                     "Straßensperren mit Karte und Nachbarfreigaben",
+                    {"text": "Katastrophenpläne mit Freigabe, Karte, Suche und PDF",
+                     "wiki": "Anwender-Katastrophenplaene"},
                     {"text": "Anfahrtsrouting mit Umfahrung", "tag": "optional", "wiki": "Anwender-Strassensperren"},
                     {"text": "Wetter, Unwetterwarnungen und Radar", "wiki": "Anwender-Wetter"},
                     {"text": "Lokale Wetterstation", "tag": "optional", "wiki": "Administration-Wetterstation"},
@@ -257,6 +259,10 @@ ROADMAP: list[dict] = [
     {
         "status": "in_arbeit",
         "items": [
+            {
+                "title": "Katastrophenpläne – Pilot",
+                "text": "Hochwasser-Maßnahmenplan als erster Pilot für Freigabe, Karte, Quellen und Offline-PDF.",
+            },
             {
                 "title": "GSL-Einheitenansicht – Praxiserprobung",
                 "text": "Tests auf Fahrzeug-Tablets und Smartphones: Kamera, Upload im Funkloch, "

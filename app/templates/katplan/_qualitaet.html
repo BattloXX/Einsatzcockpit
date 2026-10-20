@@ -1,0 +1,7 @@
+{% if qs_summen is defined %}
+  <p class="kp-box" id="kp-qualitaet" {% if baum_oob|default(false) %}hx-swap-oob="outerHTML"{% endif %}>Qualität:
+    {% for h in qs_summen.values() %}
+      <a href="/katastrophenplaene/{{ plan.id }}/bearbeiten?element={{ h.element_id }}">{{ h.anzahl }} {{ h.text }}</a>{% if not loop.last %} · {% endif %}
+    {% else %}Keine offenen Hinweise{% endfor %}
+  </p>
+{% endif %}

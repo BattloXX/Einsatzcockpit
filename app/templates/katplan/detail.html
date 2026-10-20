@@ -34,6 +34,8 @@
         {% if historisch %}
           <p class="kp-box kp-box--info">Historische Version {{ leseversion.versionsnummer }} – aktuell gilt Version {{ aktuelle_version.versionsnummer if aktuelle_version else '-' }}</p>
         {% endif %}
+        {% if not arbeitsstand %}<a class="btn" href="/katastrophenplaene/{{ plan.id }}/pdf?version_id={{ leseversion.id }}">PDF / Offlinefassung</a>{% endif %}
+        {% if can_edit %}<a class="btn" href="/katastrophenplaene/{{ plan.id }}/pdf?entwurf=1">Entwurf als PDF</a>{% endif %}
         {% if arbeitsstand %}
           {% include "katplan/_arbeitsstand.html" %}
         {% else %}

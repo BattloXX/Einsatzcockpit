@@ -6,7 +6,7 @@ from html import escape
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse, Response
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -36,6 +36,7 @@ from app.models.katplan import (
     KatplanVersionElement,
 )
 from app.models.major_incident import AUFTRAGSART_LABEL, AUFTRAGSART_WERTE
+from app.models.master import FireDept
 from app.models.objekt import Objekt, ObjektDokument
 from app.models.user import User
 from app.routers.ui_objekt import _LESE_ROLLEN
@@ -43,6 +44,7 @@ from app.services import katplan_anhang_service as anhang_service
 from app.services import katplan_freigabe_service as freigabe_service
 from app.services import katplan_ki_service as ki_service
 from app.services import katplan_link_service as link_service
+from app.services import katplan_qs_service as qs_service
 from app.services import katplan_quelle_service as quelle_service
 from app.services import katplan_suche_service as suche_service
 from app.services.katplan_service import (
@@ -435,7 +437,9 @@ def liste(request: Request, gefahr: str = "", status: str = "", q: str = "", arc
         plaene = [plan for plan in plaene
                   if gefahr in (plan["gefahrenarten"] if isinstance(plan, dict) else plan.gefahrenarten)]
     context = {**_kontext(db, user), "plaene": plaene, "gefahr": gefahr,
-               "status": status, "q": q, "archiv": archiv, "versionen": versionen}
+               "status": status, "q": q, "archiv": archiv, "versionen": versionen,
+               "qs_anzahlen": {p.id: sum(qs_service.plan_zusammenfassung(db, p, now_local(user.org).date()).values())
+                               for p in plaene} if darf_bearbeiten(user) else {}}
     name = "_liste.html" if request.headers.get("HX-Request") == "true" else "index.html"
     return templates.TemplateResponse(request, f"katplan/{name}", context)
 
@@ -744,7 +748,19 @@ def _editor_kontext(db: Session, plan: KatplanPlan) -> dict[str, Any]:
         KatplanElementPhase.element_id.in_([e.id for e in elemente]),
         KatplanElementPhase.phase_id.in_([p.id for p in phasen]),
     ).all()
-    return {"baum": abschnitte_baum(db, plan), "typen": ELEMENT_TYPEN, "phasen": phasen,
+    heute = now_local(db.get(FireDept, plan.org_id)).date()
+    version_links = qs_service.freigabe_links(db, plan)
+    hinweise = {e.id: qs_service.element_hinweise(db, plan, e, heute=heute, version_links=version_links)
+                for e in elemente}
+    summen: dict[str, dict] = {}
+    for e in elemente:
+        for h in hinweise[e.id]:
+            if h["code"] not in summen:
+                summen[h["code"]] = {"text": h["text"], "anzahl": 0, "element_id": e.id}
+            summen[h["code"]]["anzahl"] += 1
+    return {"qs_hinweise": hinweise, "qs_summen": summen, "qs_symbole": qs_service.SYMBOLE,
+            "qs_anzahl": sum(h["anzahl"] for h in summen.values()),
+            "baum": abschnitte_baum(db, plan), "typen": ELEMENT_TYPEN, "phasen": phasen,
             "vorlagen": ELEMENT_VORLAGEN, "auftragsarten": AUFTRAGSART_LABEL,
             "ziel_plaene": db.query(KatplanPlan).filter(
                 KatplanPlan.org_id == plan.org_id, KatplanPlan.status != "archiviert",
@@ -1059,6 +1075,10 @@ def element_speichern(plan_id: int, eid: int, request: Request, db: Session = De
             db.add(KatplanElementPhase(org_id=user.org_id, element_id=element.id, phase_id=pid))
         protokolliere(db, plan, "element", "geaendert", user, feld="phasen",
                       alt=json.dumps(sorted(alte_ids)), neu=json.dumps(sorted(phase_ids)), element_id=element.id)
+    # Auch das bewusste Speichern unveraenderter KI-Angaben gilt als UI-Pruefung.
+    if element.herkunft == "ai_suggested":
+        protokolliere(db, plan, "element", "geaendert", user, feld="pruefung",
+                      neu="In der UI gespeichert", element_id=element.id)
     element.version += 1
     element.aktualisiert_am = datetime.now(UTC).replace(tzinfo=None)
     element.aktualisiert_von_id = user.id
@@ -1796,3 +1816,59 @@ def import_verwerfen(plan_id: int, vid: int, request: Request,
         return templates.TemplateResponse(request, "katplan/_import_ergebnis.html",
                                           {"fehler": str(exc)}, status_code=409)
     return templates.TemplateResponse(request, "katplan/_import_ergebnis.html", {"verworfen": True})
+
+
+@router.get("/{plan_id}/pdf")
+def pdf_export(plan_id: int, version_id: int | None = None, entwurf: int = 0,
+               db: Session = Depends(get_db), user: User = Depends(require_katplan_lesen)):
+    import re
+    import unicodedata
+
+    from app.services.katplan_mcp_service import fassung_laden
+    from app.services.katplan_pdf_service import render_katplan_pdf
+
+    plan = _sichtbarer_plan(db, plan_id, user)
+    if entwurf and not darf_bearbeiten(user):
+        raise HTTPException(403, "Keine Berechtigung für den Arbeitsstand.")
+    try:
+        kopf, _, vid, _ = fassung_laden(db, user, plan, "arbeitsstand" if entwurf else "freigegeben", version_id)
+        data = render_katplan_pdf(db, user, plan, version_id=version_id, entwurf=bool(entwurf))
+    except LookupError as exc:
+        raise HTTPException(404, "Nicht gefunden") from exc
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    version = db.get(KatplanVersion, vid) if vid else None
+    titel = unicodedata.normalize("NFKD", kopf["titel"]).encode("ascii", "ignore").decode()
+    slug = re.sub(r"[^a-z0-9]+", "-", titel.lower()).strip("-") or "plan"
+    nummer = str(version.versionsnummer) if version else "entwurf"
+    return Response(data, media_type="application/pdf", headers={
+        "Cache-Control": "no-store",
+        "Content-Disposition": f'attachment; filename="katastrophenplan_{slug}_v{nummer}.pdf"',
+    })
+
+
+@router.get("/{plan_id}/quellen/{dok_id}/vergleich")
+def quellen_vergleich(plan_id: int, dok_id: int, request: Request, mit: int | None = None,
+                      db: Session = Depends(get_db), user: User = Depends(require_katplan_bearbeiten)):
+    plan = _plan(db, plan_id, user)
+    try:
+        vergleich = quelle_service.vergleiche_quellen(db, plan, dok_id, mit)
+    except ValueError as exc:
+        raise HTTPException(404, "Nicht gefunden") from exc
+    return templates.TemplateResponse(request, "katplan/quellen_vergleich.html", {
+        "user": user, "plan": plan, "vergleich": vergleich,
+    })
+
+
+@router.post("/{plan_id}/quellen/{dok_id}/elemente/{eid}/umstellen")
+def quelle_umstellen(plan_id: int, dok_id: int, eid: int, db: Session = Depends(get_db),
+                     user: User = Depends(require_katplan_bearbeiten)):
+    plan = _plan(db, plan_id, user)
+    element = _objekt(db, KatplanElement, eid, plan, user)
+    try:
+        quelle_service.stelle_quelle_um(db, plan, user, dok_id, element)
+        db.commit()
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(404, "Nicht gefunden") from exc
+    return RedirectResponse(f"/katastrophenplaene/{plan.id}/bearbeiten?element={element.id}", status_code=303)
