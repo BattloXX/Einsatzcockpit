@@ -160,9 +160,9 @@ def test_col_body_liefert_zaehler_als_oob_fragment(db, incident):
     assert 'hx-swap-oob="true">3</span>' in html
     assert f'id="col-status-tasks-{col.id}" hx-swap-oob="true"' in html
     assert f'id="col-status-messages-{col.id}" hx-swap-oob="true"' in html
-    assert "🔴 1" in html
-    assert "🟡 1" in html
-    assert "🟢 1" in html
+    assert 'aria-label="Offen" title="Offen"></span> 1' in html
+    assert 'aria-label="In Arbeit" title="In Arbeit"></span> 1' in html
+    assert 'aria-label="Erledigt" title="Erledigt"></span> 1' in html
 
 
 def test_set_task_ampel_returns_assigned_vehicle_card_as_oob(db, incident, org, monkeypatch):

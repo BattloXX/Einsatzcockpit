@@ -1,6 +1,5 @@
 # Waechter tests/test_icon_waechter.py: noch nicht migrierte UI-Emojis je Datei.
 # Darf nur schrumpfen. Neu erzeugen: .venv/bin/python scripts/icon_inventar.py --baseline
-app/core/templating.py 4
 app/middleware/csrf.py 1
 app/models/major_incident.py 11
 app/models/objekt.py 8
@@ -22,12 +21,9 @@ app/services/weather_service.py 11
 app/static/js/address-autocomplete.js 1
 app/static/js/address-picker.js 5
 app/static/js/annotate.js 2
-app/static/js/app.js 4
 app/static/js/einheit_modus.js 4
 app/static/js/einsatz_info.js 9
-app/static/js/incident-board.js 4
 app/static/js/lagefuehrung.js 18
-app/static/js/media-viewer.js 4
 app/static/js/nachschlagewerke.js 1
 app/static/js/probe-appell.js 8
 app/static/js/rettungskarten_katalog.js 1
@@ -89,28 +85,10 @@ app/templates/incident/_alarm_confirm_fahrzeuge.html 1
 app/templates/incident/_alarm_confirm_ki.html 2
 app/templates/incident/_alarm_edit_modal.html 6
 app/templates/incident/_alarm_ki_triggered.html 2
-app/templates/incident/_col_body.html 1
-app/templates/incident/_dashboard_body.html 34
 app/templates/incident/_ei_objekt_section.html 7
-app/templates/incident/_header_alarm.html 1
-app/templates/incident/_header_lage_ticker.html 1
 app/templates/incident/_kontakte.html 2
-app/templates/incident/_lane_header.html 5
-app/templates/incident/_message_card.html 17
-app/templates/incident/_message_modal.html 15
-app/templates/incident/_message_status_pills.html 3
 app/templates/incident/_objekt_panel.html 7
-app/templates/incident/_person_card.html 9
-app/templates/incident/_person_modal.html 5
-app/templates/incident/_sidebar_lage_ticker.html 1
-app/templates/incident/_subnav.html 7
-app/templates/incident/_task_card.html 16
-app/templates/incident/_task_media.html 7
-app/templates/incident/_task_modal.html 5
-app/templates/incident/_task_status_pills.html 3
 app/templates/incident/_uebernahme_dialog.html 5
-app/templates/incident/_vehicle_card.html 2
-app/templates/incident/board.html 36
 app/templates/incident/dashboard.html 3
 app/templates/incident/funkjournal.html 5
 app/templates/incident/history.html 2

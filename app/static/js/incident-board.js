@@ -12,7 +12,7 @@ function openLagebild() {
 
 async function requestAiTaskSuggestions(incidentId) {
   const btn = document.getElementById('ki-tasks-btn');
-  if (btn) { btn.disabled = true; btn.textContent = '✨ …'; }
+  if (btn) { btn.disabled = true; btn.innerHTML = ecpIcon('sparkles', {size: 'sm'}) + ' …'; }
   try {
     const csrf = document.cookie.match(/(?:^|;\s*)ec_csrf=([^;]+)/)?.[1] || '';
     const fd = new FormData();
@@ -26,7 +26,7 @@ async function requestAiTaskSuggestions(incidentId) {
   } catch (e) {
     alert(e.message || 'Unbekannter Fehler');
   } finally {
-    if (btn) { btn.disabled = false; btn.innerHTML = '<span class="di-icon">✅</span> KI-Auftragsvorschläge'; }
+    if (btn) { btn.disabled = false; btn.innerHTML = '<span class="di-icon">' + ecpIcon('circle-check', {size: 'sm'}) + '</span> KI-Auftragsvorschläge'; }
   }
 }
 
@@ -43,7 +43,7 @@ async function regenerateLageHinweise(incidentId) {
   } catch (e) {
     alert(e.message || 'Unbekannter Fehler');
   } finally {
-    if (triggerBtn) { triggerBtn.disabled = false; triggerBtn.innerHTML = '<span class="di-icon">📋</span> KI-Hinweise neu laden'; }
+    if (triggerBtn) { triggerBtn.disabled = false; triggerBtn.innerHTML = '<span class="di-icon">' + ecpIcon('clipboard-list', {size: 'sm'}) + '</span> KI-Hinweise neu laden'; }
   }
 }
 
@@ -126,7 +126,7 @@ function wetterPanelError(el) {
   // einem fehlgeschlagenen Request (z. B. schlechte Verbindung) dauerhaft stehen.
   const span = document.createElement('span');
   span.style.cssText = 'font-size:.75rem;color:var(--text-muted);cursor:pointer;';
-  span.textContent = '⚠ Wetterdaten nicht geladen — tippen zum erneuten Versuch';
+  span.innerHTML = ecpIcon('alert-triangle', {size: 'sm'}) + ' Wetterdaten nicht geladen — tippen zum erneuten Versuch';
   span.onclick = () => { if (window.htmx) htmx.trigger(el, 'retry-wetter'); };
   el.innerHTML = '';
   el.appendChild(span);

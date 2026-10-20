@@ -64,14 +64,14 @@
       {% for m in vehicle.assigned_messages %}
       {% if not m.is_cancelled %}
       <div class="assigned-msg" data-uid="{{ m.id }}" data-kind="message" title="Meldung">
-        <span style="font-size:.65rem;opacity:.65;">📨</span>
+        <span style="font-size:.65rem;opacity:.65;">{{ icon("mail-forward", size="sm") }}</span>
         <span>{{ m.title }}</span>
       </div>
       {% endif %}
       {% endfor %}
       {% for p in vehicle.assigned_persons %}
       <div class="assigned-person person-status-{{ p.status or 'gefunden' }}" data-uid="{{ p.id }}" data-kind="person" title="Person"{% if p.status in ('abtransportiert', 'verstorben') %} style="opacity:.65;"{% endif %}>
-        <span style="font-size:.65rem;opacity:.65;">👤</span>
+        <span style="font-size:.65rem;opacity:.65;">{{ icon("user", size="sm") }}</span>
         <span>{{ p.name or p.person_group or 'Person' }}{% if p.location %} · {{ p.location }}{% endif %}</span>
       </div>
       {% endfor %}
@@ -84,7 +84,7 @@
       + Auftrag
     </button>
     <div class="header-dropdown card__vehicle-menu" x-data="{open:false}" @click.outside="open=false">
-      <button type="button" class="ec-icon-button" aria-label="Fahrzeugaktionen" aria-haspopup="menu" :aria-expanded="open.toString()" @click="open=!open">⋯</button>
+      <button type="button" class="ec-icon-button" aria-label="Fahrzeugaktionen" aria-haspopup="menu" :aria-expanded="open.toString()" @click="open=!open">{{ icon("dots", size="sm") }}</button>
       <div class="header-dropdown__menu" x-show="open" x-cloak x-transition.opacity.duration.150ms role="menu">
         <div class="dropdown-section-label">Aktionen</div>
         <button type="button" role="menuitem" class="dropdown-item"

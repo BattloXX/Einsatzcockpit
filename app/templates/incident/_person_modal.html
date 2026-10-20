@@ -3,7 +3,7 @@
     <h3 class="modal__title">Gerettete Person</h3>
     <p class="modal__subtitle">erfasst: {{ person.created_at|local_datetime }}</p>
   </div>
-  <button aria-label="Schließen" type="button" data-ec-action="close-dialog" data-ec-dialog="cardDetailModal" class="modal__close" title="Schließen">×</button>
+  <button aria-label="Schließen" type="button" data-ec-action="close-dialog" data-ec-dialog="cardDetailModal" class="modal__close" title="Schließen">{{ icon("x", size="sm") }}</button>
 </div>
 
 <div class="modal__body">
@@ -88,7 +88,7 @@
     <p class="form-label" style="margin-bottom:6px;">FOTOS / DOKUMENTE</p>
     {% if errors is defined and errors %}
     <div style="color:var(--color-danger,#dc2626); margin-bottom:8px; font-size:13px;">
-      {% for e in errors %}<div>⚠ {{ e }}</div>{% endfor %}
+      {% for e in errors %}<div>{{ icon("alert-triangle", size="sm") }} {{ e }}</div>{% endfor %}
     </div>
     {% endif %}
     {% if person.media %}
@@ -107,14 +107,14 @@
              @click="open({{ lb.i }})">
         {% set lb.i = lb.i + 1 %}
         {% if can_edit %}
-        <a href="/annotieren/person/{{ m.id }}" title="Bearbeiten" onclick="event.stopPropagation()"
-           style="position:absolute;top:2px;left:2px;background:rgba(0,0,0,0.75);border-radius:50%;width:18px;height:18px;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;line-height:1;">✏️</a>
+        <a href="/annotieren/person/{{ m.id }}" title="Bearbeiten" aria-label="Bearbeiten" onclick="event.stopPropagation()"
+           style="position:absolute;top:2px;left:2px;background:rgba(0,0,0,0.75);border-radius:50%;width:18px;height:18px;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;line-height:1;">{{ icon("pencil", size="sm") }}</a>
         {% endif %}
         {% else %}
         <a href="/medien/person/datei/{{ m.id }}" title="{{ m.original_filename }}"
            onclick='event.preventDefault(); openMediaViewer("/medien/person/datei/{{ m.id }}", "{{ m.kind }}", {{ m.original_filename|tojson }});'
            style="display:flex;flex-direction:column;align-items:center;justify-content:center;aspect-ratio:1;text-decoration:none;color:inherit;padding:4px;">
-          <span style="font-size:22px;">📄</span>
+          <span style="font-size:22px;">{{ icon("file-text", size="sm") }}</span>
           <span style="font-size:9px;">Datei</span>
         </a>
         {% endif %}
@@ -123,7 +123,7 @@
               hx-target="#cardDetailBody" hx-swap="innerHTML" style="margin:0;">
           <button aria-label="Schließen" type="submit"
                   style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,0.75);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:1;"
-                  title="Löschen">×</button>
+                  title="Löschen">{{ icon("x", size="sm") }}</button>
         </form>
         {% endif %}
       </div>
@@ -142,9 +142,9 @@
              onchange="compressAndSubmit(this)">
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
         <button type="button" class="btn btn--secondary btn--sm"
-                onclick="openCamera('personMediaInput_{{ person.id }}')">📷 Kamera</button>
+                onclick="openCamera('personMediaInput_{{ person.id }}')">{{ icon("camera", size="sm") }} Kamera</button>
         <button type="button" class="btn btn--secondary btn--sm"
-                onclick="openGallery('personMediaInput_{{ person.id }}')">🖼️ Galerie</button>
+                onclick="openGallery('personMediaInput_{{ person.id }}')">{{ icon("photo", size="sm") }} Galerie</button>
       </div>
       <p class="form-hint" style="margin-top:4px;">Bild max. 10 MB · PDF 20 MB. Bilder werden automatisch verkleinert.</p>
     </form>

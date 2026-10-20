@@ -10,6 +10,7 @@
       {% if can_edit %}
       {% set ps = person.status if person.status else 'gefunden' %}
       <span onclick="event.stopPropagation()" style="flex-shrink:0;">
+        {{ ps|person_status_dot }}
         <select name="status" class="form-select form-select--xs form-select--person-status-compact person-status-{{ ps }}"
                 title="{{ ps|person_status_label }}"
                 aria-label="{{ ps|person_status_label }}"
@@ -18,10 +19,10 @@
                 hx-include="this"
                 hx-swap="none"
                 onchange="this.className='form-select form-select--xs form-select--person-status-compact person-status-'+this.value">
-          <option value="gefunden" {% if ps=='gefunden' %}selected{% endif %}>🔴</option>
-          <option value="versorgt" {% if ps=='versorgt' %}selected{% endif %}>🟠</option>
-          <option value="abtransportiert" {% if ps=='abtransportiert' %}selected{% endif %}>🟢</option>
-          <option value="verstorben" {% if ps=='verstorben' %}selected{% endif %}>⚫</option>
+          <option value="gefunden" {% if ps=='gefunden' %}selected{% endif %}>Gefunden</option>
+          <option value="versorgt" {% if ps=='versorgt' %}selected{% endif %}>Versorgt</option>
+          <option value="abtransportiert" {% if ps=='abtransportiert' %}selected{% endif %}>Abtransportiert</option>
+          <option value="verstorben" {% if ps=='verstorben' %}selected{% endif %}>Verstorben</option>
         </select>
       </span>
       {% endif %}
@@ -35,21 +36,21 @@
       {% if show_gender and show_group %}, {% endif %}
       {% if show_group %}{{ person.person_group }}{% endif %}
       {% if person.age_range %}<span class="card__age" style="margin-left:4px;">{{ person.age_range }}</span>{% endif %}
-      {% if person.location %}<span style="margin-left:4px;">📍 {{ person.location }}</span>{% endif %}
+      {% if person.location %}<span style="margin-left:4px;">{{ icon("map-pin", size="sm") }} {{ person.location }}</span>{% endif %}
     </div>
     {% endif %}
     {% if person.media %}
     <div class="card__media">
       {% for m in person.media[:3] %}
         {% if m.kind == 'image' %}<img src="/medien/person/thumb/{{ m.id }}" alt="" loading="lazy">
-        {% elif m.kind == 'pdf' %}<span class="card__media-icon">📄</span>
-        {% else %}<span class="card__media-icon">🎬</span>{% endif %}
+        {% elif m.kind == 'pdf' %}<span class="card__media-icon">{{ icon("file-text", size="sm") }}</span>
+        {% else %}<span class="card__media-icon">{{ icon("movie", size="sm") }}</span>{% endif %}
       {% endfor %}
       {% if person.media|length > 3 %}<span class="card__media-more">+{{ person.media|length - 3 }}</span>{% endif %}
     </div>
     {% endif %}
     <div class="card__meta card__meta--compact">
-      {% if person.vehicle %}<span style="margin-right:6px;">🚒 {{ person.vehicle.master.display_label }}</span>{% endif %}
+      {% if person.vehicle %}<span style="margin-right:6px;">{{ icon("firetruck", size="sm") }} {{ person.vehicle.master.display_label }}</span>{% endif %}
       <span class="card__time">{{ person.created_at|local_time }}</span>
     </div>
   </div>
@@ -60,7 +61,7 @@
           hx-swap="none"
           style="margin:0;">
       <label class="card__camera" title="Foto aufnehmen" onclick="event.stopPropagation()">
-        📷<input type="file" name="files" accept="image/*" capture="environment" style="display:none"
+        {{ icon("camera", size="sm") }}<input type="file" name="files" accept="image/*" capture="environment" style="display:none"
                  onchange="compressAndSubmit(this)">
       </label>
     </form>

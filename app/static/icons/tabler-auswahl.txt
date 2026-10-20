@@ -91,6 +91,7 @@ flame
 flask
 folder-open
 folders
+grip-vertical
 hand-stop
 helicopter
 help-circle

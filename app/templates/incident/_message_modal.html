@@ -4,10 +4,10 @@
     <p class="modal__subtitle">
       angelegt: {{ msg.created_at|local_datetime }}
       {% if msg.due_at %}· fällig: {{ msg.due_at|local_time }}{% endif %}
-      {% if msg.is_done %}· <strong>✓ erledigt</strong>{% endif %}
+      {% if msg.is_done %}· <strong>{{ icon("check", size="sm") }} erledigt</strong>{% endif %}
     </p>
   </div>
-  <button aria-label="Schließen" type="button" data-ec-action="close-dialog" data-ec-dialog="cardDetailModal" class="modal__close" title="Schließen">×</button>
+  <button aria-label="Schließen" type="button" data-ec-action="close-dialog" data-ec-dialog="cardDetailModal" class="modal__close" title="Schließen">{{ icon("x", size="sm") }}</button>
 </div>
 
 <div class="modal__body">
@@ -22,12 +22,12 @@
               hx-trigger="change"
               hx-swap="none"
               onchange="this.className='form-select form-select--status status-'+this.value">
-        <option value="meldung"     {% if sl=='meldung'     or sl=='open'        %}selected{% endif %}>🔴 Meldung</option>
-        <option value="achtung"     {% if sl=='achtung'     or sl=='in_progress' %}selected{% endif %}>⚠️ Achtung</option>
-        <option value="hinweis"     {% if sl=='hinweis'     %}selected{% endif %}>💡 Hinweis</option>
-        <option value="information" {% if sl=='information' %}selected{% endif %}>ℹ️ Information</option>
-        <option value="erledigt"    {% if sl=='erledigt'    or sl=='done'        %}selected{% endif %}>✅ Erledigt</option>
-        <option value="storniert"   {% if sl=='storniert'   or sl=='cancelled'   %}selected{% endif %}>⚪ Storniert</option>
+        <option value="meldung"     {% if sl=='meldung'     or sl=='open'        %}selected{% endif %}>Meldung</option>
+        <option value="achtung"     {% if sl=='achtung'     or sl=='in_progress' %}selected{% endif %}>Achtung</option>
+        <option value="hinweis"     {% if sl=='hinweis'     %}selected{% endif %}>Hinweis</option>
+        <option value="information" {% if sl=='information' %}selected{% endif %}>Information</option>
+        <option value="erledigt"    {% if sl=='erledigt'    or sl=='done'        %}selected{% endif %}>Erledigt</option>
+        <option value="storniert"   {% if sl=='storniert'   or sl=='cancelled'   %}selected{% endif %}>Storniert</option>
       </select>
     </form>
   </div>
@@ -115,7 +115,7 @@
   <div id="msgMediaSection">
     {% if errors is defined and errors %}
     <div style="color:var(--color-danger,#dc2626); margin-bottom:8px; font-size:13px;">
-      {% for e in errors %}<div>⚠ {{ e }}</div>{% endfor %}
+      {% for e in errors %}<div>{{ icon("alert-triangle", size="sm") }} {{ e }}</div>{% endfor %}
     </div>
     {% endif %}
     {% if msg.media %}
@@ -134,14 +134,14 @@
              @click="open({{ lb.i }})">
         {% set lb.i = lb.i + 1 %}
         {% if can_edit %}
-        <a href="/annotieren/message/{{ m.id }}" title="Bearbeiten" onclick="event.stopPropagation()"
-           style="position:absolute;top:2px;left:2px;background:rgba(0,0,0,0.75);border-radius:50%;width:18px;height:18px;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;line-height:1;">✏️</a>
+        <a href="/annotieren/message/{{ m.id }}" title="Bearbeiten" aria-label="Bearbeiten" onclick="event.stopPropagation()"
+           style="position:absolute;top:2px;left:2px;background:rgba(0,0,0,0.75);border-radius:50%;width:18px;height:18px;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;line-height:1;">{{ icon("pencil", size="sm") }}</a>
         {% endif %}
         {% elif m.kind == 'pdf' %}
         <a href="/medien/meldung/datei/{{ m.id }}" title="{{ m.original_filename }}"
            onclick='event.preventDefault(); openMediaViewer("/medien/meldung/datei/{{ m.id }}", "pdf", {{ m.original_filename|tojson }});'
            style="display:flex;flex-direction:column;align-items:center;justify-content:center;aspect-ratio:1;text-decoration:none;color:inherit;padding:4px;">
-          <span style="font-size:22px;">📄</span>
+          <span style="font-size:22px;">{{ icon("file-text", size="sm") }}</span>
           <span style="font-size:9px;">PDF{% if m.pages %}<br>{{ m.pages }} S.{% endif %}</span>
         </a>
         {% elif m.kind == 'video' %}
@@ -151,17 +151,17 @@
           {% if m.thumb_path %}
           <img src="/medien/meldung/thumb/{{ m.id }}" alt="{{ m.original_filename }}"
                style="width:100%;aspect-ratio:1;object-fit:cover;display:block;">
-          <span style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:18px;">▶</span>
+          <span style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:18px;">{{ icon("player-play", size="sm") }}</span>
           {% else %}
           <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;aspect-ratio:1;padding:4px;">
-            <span style="font-size:22px;">🎬</span><span style="font-size:9px;">Video</span>
+            <span style="font-size:22px;">{{ icon("movie", size="sm") }}</span><span style="font-size:9px;">Video</span>
           </div>
           {% endif %}
         </a>
         {% elif m.kind == 'datei' %}
         <a href="/medien/meldung/datei/{{ m.id }}" title="{{ m.original_filename }} herunterladen"
            style="display:flex;flex-direction:column;align-items:center;justify-content:center;aspect-ratio:1;text-decoration:none;color:inherit;padding:4px;">
-          <span style="font-size:22px;">📎</span>
+          <span style="font-size:22px;">{{ icon("paperclip", size="sm") }}</span>
           <span style="font-size:9px;overflow:hidden;text-overflow:ellipsis;max-width:100%;white-space:nowrap;">{{ m.original_filename }}</span>
           <span style="font-size:9px;">{{ (m.bytes / 1024)|round(1) }} KB</span>
         </a>
@@ -171,7 +171,7 @@
               hx-target="#cardDetailBody" hx-swap="innerHTML" style="margin:0;">
           <button aria-label="Schließen" type="submit"
                   style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,0.75);color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:1;"
-                  title="Löschen">×</button>
+                  title="Löschen">{{ icon("x", size="sm") }}</button>
         </form>
         {% endif %}
       </div>
@@ -191,9 +191,9 @@
              onchange="compressAndSubmit(this)">
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
         <button type="button" class="btn btn--secondary btn--sm"
-                onclick="openCamera('msgMediaInput_{{ msg.id }}')">📷 Kamera</button>
+                onclick="openCamera('msgMediaInput_{{ msg.id }}')">{{ icon("camera", size="sm") }} Kamera</button>
         <button type="button" class="btn btn--secondary btn--sm"
-                onclick="openGallery('msgMediaInput_{{ msg.id }}')">🖼️ Galerie</button>
+                onclick="openGallery('msgMediaInput_{{ msg.id }}')">{{ icon("photo", size="sm") }} Galerie</button>
       </div>
       <p class="form-hint" style="margin-top:4px;">Bild max. 10 MB · PDF 20 MB · Video 50 MB · Datei 25 MB. Bilder werden automatisch verkleinert.</p>
     </form>
@@ -212,7 +212,7 @@
   {% if not msg.is_done %}
   <form method="post" action="/einsatz/{{ incident.id }}/meldung/{{ msg.id }}/erledigt" style="display:inline"
         onsubmit="document.getElementById('cardDetailModal').close()">
-    <button type="submit" class="btn btn--secondary" title="Meldung als erledigt markieren">✓ Erledigt</button>
+    <button type="submit" class="btn btn--secondary" title="Meldung als erledigt markieren">{{ icon("check", size="sm") }} Erledigt</button>
   </form>
   {% endif %}
 </div>
