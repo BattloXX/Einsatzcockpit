@@ -228,6 +228,7 @@ def _settings_context(request, db, user, org_id, **extra) -> dict:
         "probenplanung_sys_enabled": probenplanung_system_enabled(db),
         "planspiel_sys_enabled": planspiel_system_enabled(db),
         "katplan_sys_enabled": katplan_system_enabled(db),
+        "suche_sys_enabled": app_settings.SEARCH_ENABLED,
         "strassensperren_sys_enabled": strassensperren_system_enabled(db),
         "mcp_sys_enabled": module_flags.get("mcp_module_enabled") == "true",
         "timezones": common_timezones(),
@@ -289,6 +290,7 @@ def save_org_settings(
     strassensperren_modul_aktiv_raw: str = Form(""),
     planspiel_modul_aktiv_raw: str = Form(""),
     katplan_modul_aktiv_raw: str = Form(""),
+    suche_aktiv_raw: str = Form(""),
     routing_start_lat: str = Form(""),
     routing_start_lng: str = Form(""),
     routing_start_label: str = Form(""),
@@ -592,6 +594,23 @@ def save_org_settings(
                 org_id=effective_org_id,
                 user_id=user.id,
                 payload={"alt": old_planspiel, "neu": new_planspiel},
+                ip=request.client.host if request.client else None,
+            )
+
+    if app_settings.SEARCH_ENABLED:
+        old_suche = bool(org_s.suche_aktiv)
+        new_suche = suche_aktiv_raw in ("1", "true", "on")
+        org_s.suche_aktiv = new_suche
+        if old_suche != new_suche:
+            from app.core.audit import write_audit
+
+            if new_suche:
+                from app.services.suche.outbox import plane_neuaufbau
+
+                plane_neuaufbau(db, effective_org_id)
+            write_audit(
+                db, "suche.org_toggle", org_id=effective_org_id, user_id=user.id,
+                payload={"alt": old_suche, "neu": new_suche},
                 ip=request.client.host if request.client else None,
             )
 

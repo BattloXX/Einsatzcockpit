@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Suchindex · {{ brand }}{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="/static/css/suche.css?v={{ ASSET_VERSION }}">
+{% endblock %}
+{% block content %}
+<section class="suche-seite suche-admin">
+  <h1>Suchindex</h1>
+  {% include "suche/_admin_status.html" %}
+</section>
+{% endblock %}

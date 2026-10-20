@@ -95,6 +95,7 @@ jobs:
         run: |
           alembic upgrade head
           python -m app.seed_data
+          MARIADB_TEST_URL="$DATABASE_URL" pytest tests/mariadb -q -p no:xdist
 
   test:
     name: Tests (pytest)

@@ -29,7 +29,7 @@ from app.models.objekt import (
 )
 from app.models.suche import SearchDocument, SearchOutbox
 from app.services.suche.indexer import indexiere, neuaufbau
-from app.services.suche.quellen import adapter_fuer
+from app.services.suche.quellen import ADAPTER, adapter_fuer, lade_adapter
 
 logger = logging.getLogger(__name__)
 _OFFEN = ("pending", "retry")
@@ -37,6 +37,22 @@ _OFFEN = ("pending", "retry")
 
 def _jetzt() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
+
+
+def plane_neuaufbau(db: Session, org_id: int) -> int:
+    """Plant pro Indexquelle einen Auftrag, ohne die Transaktion zu committen."""
+    lade_adapter()
+    db.flush()
+    vorhanden = set(db.scalars(select(SearchOutbox.quell_id).where(
+        SearchOutbox.org_id == org_id, SearchOutbox.quelle == "neuaufbau",
+        SearchOutbox.status.in_(_OFFEN),
+    )))
+    jetzt = _jetzt()
+    quellen = set(ADAPTER) - vorhanden
+    for quelle in sorted(quellen):
+        db.add(SearchOutbox(org_id=org_id, quelle="neuaufbau", quell_id=quelle,
+                           status="pending", versuche=0, naechster_versuch_am=jetzt, erstellt_am=jetzt))
+    return len(quellen)
 
 
 def _wert(instanz: Any, name: str) -> Any:
@@ -131,6 +147,9 @@ def _index_ids(db: Session, org_id: int, quelle: str, feld: str, ident: str) -> 
 
 def loese_auf(db: Session, org_id: int, quelle: str, quell_id: str) -> list[tuple[str, str]]:
     """Liefert deduplizierte Adapter-Paare, ohne Index oder Outbox zu veraendern."""
+    if quelle == "neuaufbau":
+        adapter_fuer(quell_id)  # Unbekannte Quellen werden als fehlerhaft behandelt.
+        return [("neuaufbau", quell_id)]
     paare: set[tuple[str, str]] = set()
     if quelle in ("objekt", "objekt_dokument_seite", "katplan_seite", "katplan_element"):
         paare.add((quelle, quell_id))
@@ -191,7 +210,10 @@ def verarbeite_faellige(db: Session, limit: int = 50) -> int:
             aktiv = db.scalar(select(OrgSettings.suche_aktiv).where(OrgSettings.org_id == job.org_id))
             if aktiv and settings.SEARCH_INDEX_WORKER_ENABLED:
                 for quelle, quell_id in loese_auf(db, job.org_id, job.quelle, job.quell_id):
-                    indexiere(db, job.org_id, quelle, quell_id)
+                    if quelle == "neuaufbau":
+                        neuaufbau(db, job.org_id, quell_id)
+                    else:
+                        indexiere(db, job.org_id, quelle, quell_id)
             job.status = "done"
             job.gesperrt_bis = None
             db.commit()

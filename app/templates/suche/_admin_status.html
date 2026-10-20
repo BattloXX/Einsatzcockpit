@@ -1,0 +1,30 @@
+<div id="suche-admin-status" aria-live="polite">
+  <p>Zentrale Suche: <strong>{{ 'an' if aktiv else 'aus' }}</strong> · <a href="/admin/settings">Einstellungen</a></p>
+  <h2>Indexquellen</h2>
+  <div class="suche-tabelle" tabindex="0" role="region" aria-label="Indexquellen">
+    <table class="table">
+      <thead><tr><th>Quelle</th><th>Dokumente</th><th>Textabschnitte</th><th>Letzte Indexierung</th></tr></thead>
+      <tbody>{% for q in quellen %}<tr data-quelle="{{ q.quelle }}"><td>{{ q.label }}</td><td>{{ q.dokumente }}</td><td>{{ q.chunks }}</td><td>{{ q.stand|local_datetime if q.stand else '-' }}</td></tr>{% endfor %}</tbody>
+    </table>
+  </div>
+  <h2>Warteschlange</h2>
+  <p>Offen: {{ offen }} · Fehlgeschlagen: {{ failed }}</p>
+  <p>Ältester offener Auftrag: {{ aelteste|local_datetime if aelteste else '-' }}</p>
+  <div class="suche-schalter">
+    <form method="post" action="/einstellungen/suche/neuaufbau" hx-post="/einstellungen/suche/neuaufbau" hx-confirm="Index für alle Quellen neu aufbauen?" hx-target="#suche-admin-status" hx-swap="outerHTML">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <button type="submit" class="btn btn--primary">Index neu aufbauen</button>
+    </form>
+    <form method="post" action="/einstellungen/suche/fehler-zuruecksetzen" hx-post="/einstellungen/suche/fehler-zuruecksetzen" hx-target="#suche-admin-status" hx-swap="outerHTML">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <button type="submit" class="btn">Fehlgeschlagene erneut versuchen</button>
+    </form>
+  </div>
+  <h2>Letzte 10 Fehler</h2>
+  <div class="suche-tabelle" tabindex="0" role="region" aria-label="Letzte Fehler">
+    <table class="table">
+      <thead><tr><th>Quelle</th><th>ID</th><th>Versuche</th><th>Fehler</th></tr></thead>
+      <tbody>{% for job in fehler %}<tr><td>{{ job.quelle }}</td><td>{{ job.quell_id }}</td><td>{{ job.versuche }}</td><td>{{ (job.letzter_fehler or '')[:200] }}</td></tr>{% else %}<tr><td colspan="4">Keine Fehler vorhanden.</td></tr>{% endfor %}</tbody>
+    </table>
+  </div>
+</div>

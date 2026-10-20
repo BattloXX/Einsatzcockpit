@@ -110,6 +110,7 @@ unter [Server-Voraussetzungen](Installation-Server-Voraussetzungen).
 | [Mailing-Kampagnen](Anwender-Mailing-Kampagnen) | Vorlagen verwenden, Empfängerlisten aufbauen, Kampagnen planen/senden und Zustellung auswerten |
 | [Fahrtenbuch](Anwender-Fahrtenbuch) | Fahrt erfassen: Fahrzeug, Maschinist, km/BH, Seilwinde, Token/QR-Zugang |
 | [Objekte](Anwender-Objekte) | Objektdaten pflegen, PDF-Unterlagen klassifizieren, Einsatzansicht, Objektblatt-Druck |
+| [Zentrale Suche](Anwender-Suche) | Globale und kontextbezogene Suche, Filter und Indexstand |
 | [Katastrophenpläne](Anwender-Katastrophenplaene) | Pläne, Freigaben, Rechte, Quellen und Offline-PDF |
 | [Straßensperren & Anfahrtsrouting](Anwender-Strassensperren) | Sperren mit Karte pflegen, Status sehen und Anfahrt im Einsatz prüfen |
 | [MCP-Assistent](Anwender-MCP-Assistent) | KI-Anwendung sicher verbinden, Objektunterlagen übergeben und Fahrten auswerten |
@@ -150,6 +151,7 @@ unter [Server-Voraussetzungen](Installation-Server-Voraussetzungen).
 | [Datensicherung (Org, Self-Service)](Administration-Org-Datensicherung) | Eigene Org-Daten als Archiv herunterladen oder geplant an ein eigenes Ziel senden (SFTP/FTP/rclone); Restore in neue Org (Sysadmin) |
 | [Objektverwaltung](Administration-Objektverwaltung) | Modul aktivieren (System+Org), Rolle Objektverwalter, Kataloge, Alarm-Matching, Alarm-Infoscreen, KI-Klassifizierung |
 | [Alarm-Infoscreen](Administration-Alarm-Infoscreen) | Wandmonitor mit Token-URL, URL-Rotation, Wetter, GSL-Ansicht und Rückmeldungen |
+| [Zentrale Suche](Administration-Suche) | Org-Schalter, Suchindex, Neuaufbau und Fehlersuche |
 | [Katastrophenpläne](Administration-Katastrophenplaene) | Pläne, Freigaben, Rechte, Quellen und Offline-PDF |
 | [Straßensperren & Anfahrtsrouting](Administration-Strassensperren) | Modul, Rechte, Routing-Startpunkt und Routingdienst konfigurieren |
 | [Externe Objektpflege](Administration-Objektpflege) | Berechtigungen, Einladungslinks, Erinnerungen und extern sichtbarer Umfang |
@@ -165,6 +167,7 @@ unter [Server-Voraussetzungen](Installation-Server-Voraussetzungen).
 | [Architektur](Entwickler-Architektur) | Module, Schichten, Datenfluss, Multi-Tenancy |
 | [Sicherheit](Entwickler-Sicherheit) | Authentifizierung, CSRF, Tenant-Isolation, Medien und Rate-Limiting |
 | [MCP-Erweiterung](Entwickler-MCP-Erweiterung) | OAuth-Server, Tool-Registry, Live-Kontext und Testmuster |
+| [Zentrale Suche](Entwickler-Suche) | Neue Quellen, Outbox, Live-Rechte und MariaDB-Test |
 | [Katastrophenpläne](Entwickler-Katastrophenplaene) | Pläne, Freigaben, Rechte, Quellen und Offline-PDF |
 | [Straßensperren & Anfahrtsrouting](Entwickler-Strassensperren) | Architektur, Geometrie, Routing-Provider und Tests |
 | [Planspiele & Simulation](Entwickler-Planspiele) | Übungs-Guard, Übungsuhr, Worker mit Lease/Claim, Generator, Tests |
