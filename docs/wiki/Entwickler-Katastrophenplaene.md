@@ -62,6 +62,7 @@ Status: `entwurf` → `in_pruefung` → `freigegeben` → `in_ueberarbeitung` �
 | `katplan_link_service`, `katplan_ziel_service` | Live-Ziele mit Tenant- und Modulprüfung, Mutationen mit `quelle="ui"`/`"mcp"`, Telefonregel (`link_ansicht`), Snapshotvergleich „seit Freigabe geändert“ |
 | `katplan_geo_service` | Geometrieprüfung je Typ (über `road_closure_geo_service.validate_geometry`), Bezugspunkt |
 | `katplan_anhang_service` | Upload, Quota, Snapshots, geschützte Auslieferung |
+| `katplan_abgleich_service` | Rein lesender Arbeitsstand-Abgleich: exakte Dokumentabdeckung, alte Gruppenbezüge, fehlende Quellen, Dubletten und offene Vorschläge je Seite; zentraler Seitenparser aus `katplan_quelle_service` |
 | `katplan_quelle_service` + `pdf_seiten_pipeline` | Quellen hochladen und versionieren, Seiten zerlegen (Poppler/Tesseract, gemeinsam mit Objektdokumenten), Seitenvergleich `vergleiche_quellen` |
 | `katplan_quellbild_service` | pypdf-Bildextraktion (Originalindizes, ab 200 px, höchstens 20 Bilder), RGB-JPEG-Konvertierung, relative Ausschnitte und Vorschauen; robuste Parserwarnungen |
 | `katplan_verortung_service` | Lesende Kandidaten aus orggebundenen Links, Adresse und Titel; stabile IDs aus Quelle/Koordinaten, 25-m-Deduplizierung, Entfernung zum Org-Mittelpunkt und begrenzte Viewbox |
@@ -167,6 +168,7 @@ bei Trockenläufen auch das Anhangverzeichnis. Die Quota wird durch DB-Rollback 
 | `test_pdf_seiten_pipeline`, `test_katplan_k7b/k7c` | Seiten-Pipeline, Quellen, Seitenansicht |
 | `test_katplan_k8` | Suche |
 | `test_katplan_k9` | KI-Import und Review (KI gemockt) |
+| `test_mcp_katplan_m6` | Seitenparser, Abdeckung und fehlende Quellen, echte neue Quellversion, Titel-/Adressdubletten und Paarlimit, offene Vorschläge, Warnung ohne Blockade, Rechte/Tenant-/Plangrenzen, Audit und Server-Wrapper |
 | `test_mcp_katplan_m3` | Quellzuordnungen und Rollbacks, Seiten-URLs/Freigabe-ID, eingebettete Bilder und MCP-Content, Bild-/Seiten-/Ausschnitt-Anhänge, dateifreier Trockenlauf und Leserechte |
 | `test_mcp_katplan`, `test_mcp_katplan_schreiben` | MCP lesend/schreibend, Adresse und Verortung (Geokodierung gemockt), Schema |
 | `test_mcp_katplan_m5` | Serienkandidaten, Auswahl/Protokoll/Version, Rollback, Schutz geprüfter Orte, 30er-Limit, Mehrdeutigkeit, Stammdatenpunkte, Tenant-Grenzen und Nominatim-Parameter/HTTP-Wrapper |
@@ -192,3 +194,17 @@ laufen ausschließlich über `search_addresses` mit bestehender Drosselung.
 entscheidet; bei gleichwertigen Treffern über 200 m Abstand werden Kandidaten geliefert.
 `geometrie_von` beim Ändern nutzt `ziel_verfuegbar`/`ziel_laden`, lehnt fremde oder
 koordinatenlose Ziele sowie die Kombination mit `geometrie` ab.
+
+### MCP-Quellenabgleich (M6)
+
+`katplan_import_abgleichen` in `app/mcp/tools/katplan.py` nutzt den lesenden `_tool`-
+Decorator samt Audit sowie `pruefe_fassung(..., "arbeitsstand")`. Der Server-Wrapper
+ruft das registrierte Werkzeug auf. `katplan_abgleich_service.abgleich` prüft die
+sichtbare Quelle und filtert Elemente mit `sieht_vertraulich`; alle Abfragen sind nach
+Organisation und Plan begrenzt. `seiten_menge` verwendet `parse_seiten`.
+
+`moegliche_dubletten` vergleicht nur gleiche Typen: `SequenceMatcher` auf per `casefold`
+und Whitespace normalisierten Titeln (Schwelle 0.85) oder identische, nicht leere
+Straße/Hausnummer. Maximal 50 Paare werden ausgegeben. Vorschlagsimporte verwenden
+denselben Titelvergleich für das additive Antwortfeld `warnungen`. Es gibt weder
+automatisches Zusammenführen noch automatische Änderungen an Quellreferenzen.

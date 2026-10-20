@@ -292,3 +292,13 @@ async def katplan_quellseite_bilder(context: MCPContext, plan_id: int, dokument_
     return {"plan_id": plan_id, "dokument_id": dokument_id, "seiten_nr": seiten_nr,
             "bilder": [asdict(info) for info in infos], "seitenbild": bilder.seitenbild_info(seite),
             "vorschauen": vorschauen, "warnings": warnings}
+
+
+@_tool("katplan_import_abgleichen", "Gleicht eine Quelle mit dem Arbeitsstand ab: Seitenlücken, fehlende und "
+       "veraltete Quellbezüge, mögliche Dubletten und offene Vorschläge. Nur für Bearbeiter; rein lesend.")
+async def katplan_import_abgleichen(context: MCPContext, plan_id: int, dokument_id: int) -> dict[str, object]:
+    from app.services.katplan_abgleich_service import abgleich
+
+    daten.pruefe_fassung(context.user, "arbeitsstand")
+    plan = daten.plan_laden(context.db, context.user, plan_id)
+    return abgleich(context.db, plan, context.user, dokument_id)

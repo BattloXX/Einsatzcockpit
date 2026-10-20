@@ -166,3 +166,16 @@ keinen Punkt; eine einzige passende Hausnummer entscheidet eindeutig.
 `{"objekt_id": n}` oder `{"wasserstelle_id": n}` aus verfügbaren Stammdaten der eigenen
 Organisation. Die Modulprüfung entspricht den Verknüpfungszielen; fehlende Koordinaten
 werden abgewiesen. Jede Übernahme bleibt ungeprüft.
+
+### Quellenabgleich im Arbeitsstand
+
+`katplan_import_abgleichen(plan_id, dokument_id)` ist ein lesendes Werkzeug mit den
+üblichen Modul-, Tenant- und Auditprüfungen, benötigt aber Bearbeitungsrechte für den
+Arbeitsstand. Die Quelle muss zum Plan gehören und sichtbar sein. Vertrauliche Elemente
+unterliegen auch beim Abgleich der zentralen Sichtbarkeitsregel.
+
+Die Antwort enthält `quelle`, `seiten_ohne_element`, `elemente_ohne_quelle`,
+`veraltete_quellbezuege`, `dubletten` (maximal 50 Paare), `offene_vorschlaege`
+(je belegter Seite `{seiten_nr, anzahl}` mit Status `offen`) und `naechste_schritte`
+(maximal 30). Seitenbezüge zählen nur für die exakte Dokument-ID. Vorschlagsimporte
+melden Titelüberschneidungen in `warnungen`, ohne die Anlage zu blockieren.

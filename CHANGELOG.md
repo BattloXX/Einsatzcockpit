@@ -4,6 +4,11 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 
 ## Unreleased
 
+- **Katplan-MCP – Quellenabgleich**: Neues lesendes Werkzeug für Bearbeiter meldet
+  Seiten ohne Element, Elemente ohne Quelle, veraltete Quellbezüge, mögliche Dubletten
+  und offene Vorschläge je Seite mit nächsten Schritten. Vorschlagsimporte warnen vor
+  ähnlichen bestehenden Elementen, ohne die Review-Queue zu blockieren.
+
 - **Katplan-MCP – Serienverortung**: Bis 30 Elemente mit Ortskandidaten aus verknüpften
   Objekten/Wasserstellen, Adresse und Titel; begrenztes Suchgebiet um die Organisation,
   stabile Auswahl-IDs und Duplikatzusammenfassung. Ausgewählte Punkte bleiben ungeprüft,

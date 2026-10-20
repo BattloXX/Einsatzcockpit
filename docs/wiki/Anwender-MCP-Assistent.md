@@ -258,3 +258,17 @@ Auch `verorten=true` beim Anlegen/Ändern gibt bei mehreren gleichwertigen, mehr
 Mit `felder={"geometrie_von": {"wasserstelle_id": 7}}` oder `{"objekt_id": 7}` beim
 Ändern lässt sich ein vorhandener Stammdatenpunkt der eigenen Organisation übernehmen;
 das geht nicht zusammen mit `geometrie` und verlangt verfügbare Stammdaten mit Koordinaten.
+
+### Import mit der Quelle abgleichen
+
+Mit `katplan_import_abgleichen(plan_id=42, dokument_id=7)` prüft der Assistent den
+Arbeitsstand gegen genau diese Quelle. Das Werkzeug benötigt Bearbeitungsrechte und
+ändert keine Elemente. Es zeigt Seiten ohne verknüpftes Element mit Titel, Textauszug
+und geschützter Vorschau, Elemente ohne Quelle sowie Bezüge auf ältere Versionen
+derselben Quellgruppe. Alte Bezüge decken die Seiten der gewählten Version nicht ab.
+
+Zusätzlich erscheinen mögliche Dubletten (gleicher Typ und ähnlicher Titel oder gleiche
+Adresse), offene Import-Vorschläge je Seite und bis zu 30 nächste Schritte. Dubletten
+werden nur gemeldet; prüfen und zusammenführen erfolgt in der Oberfläche.
+`katplan_vorschlaege_aus_dokument` liefert unter `warnungen` Hinweise auf ähnliche
+bestehende Elemente desselben Typs. Die Vorschläge landen trotzdem in der Review-Queue.

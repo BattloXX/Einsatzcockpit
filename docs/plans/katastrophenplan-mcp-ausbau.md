@@ -183,3 +183,12 @@ ausdrücklich.
 - `verworfen` muss leer sein.
 - Danach mit M2–M5 die restlichen 14 Kontrollstellen verorten, Fotos zuordnen und Kontakte
   verknüpfen.
+
+## 4. Umsetzungsstand
+
+- M1: #637
+- M2 + M4: #638
+- M3: #639
+- M5: #640
+- M6: #641 – lesender Quellenabgleich und Dublettenwarnungen beim Vorschlagsimport.
+- Offen: erneuter Testlauf mit dem KI-Client.
