@@ -49,10 +49,16 @@ Für Katastrophenpläne müssen MCP und das Katastrophenplan-Modul auf System- u
 | `katplan_liste`, `katplan_lesen` | Sichtbare Pläne, Kopf und Gliederung |
 | `katplan_suchen`, `katplan_orte_suchen` | Text- und Umkreissuche |
 | `katplan_elemente`, `katplan_element_lesen` | Strukturierte Elemente |
+| `katplan_quellseite_bilder` | Sichtbare Quellen wie Dokumentauszug; maximal 20 eingebettete Bilder (ab 200 px), optional 8 JPEG-Vorschauen bis 512 px |
 | `katplan_dokument_auszug` | Quellseiten und kurzlebige PDF-Downloads mit erneuter Live-Rechteprüfung |
 | `katplan_verknuepfungen` | Live-Links sowie ausgehende und eingehende Beziehungen |
 
 Standard ist die freigegebene Fassung; Arbeitsstände sind nur für Planbearbeiter mit `fassung="arbeitsstand"` verfügbar. Vertrauliches sehen nur Planverwalter, Planfreigeber, Einsatzleiter und Admins. Ohne Kontaktverzeichnisrecht werden ausschließlich Dienstnummern einsatzrelevanter Kontakte angezeigt. Objektdetails erfordern zusätzlich das Objektmodul und dessen Leserecht. Alle erfolgreichen Katplan-Toolaufrufe werden mit `mcp.katplan_*` auditiert; Freigabewerkzeuge gibt es nicht.
+
+Quellreferenzen liefern höchstens 30 Seiten mit geschützten Bild-, Thumbnail- und Text-URLs.
+Bei Freigaben bleibt die URL über `version_id` an diese Fassung gebunden. Arbeitsquellen
+sind nur für Bearbeiter sichtbar; das Bilderwerkzeug verwendet dieselbe Sichtbarkeit wie
+`katplan_dokument_auszug`.
 
 Schreibende Werkzeuge verlangen `katplan_verwalter`, `katplan_freigeber` oder Admin und ändern nur den Arbeitsstand:
 
@@ -62,6 +68,8 @@ Schreibende Werkzeuge verlangen `katplan_verwalter`, `katplan_freigeber` oder Ad
 | `katplan_verknuepfung_setzen`, `katplan_verknuepfung_entfernen` | Idempotente Links auf Plan-/Elementebene, orggebundene Ziele, Telefonregel auch in Schreibantworten |
 | `katplan_beziehung_setzen`, `katplan_beziehung_entfernen` | Elementbeziehungen per Kennung im Plan oder UUID innerhalb der Organisation |
 | `katplan_stammdaten_aendern` | Teiländerungen am Plankopf mit `plan_version` aus dem Arbeitsstand, Kontakt nur aus eigener Organisation |
+| `katplan_quellseite_verknuepfen` | Bis 50 Quellzuordnungen; optionale Elementversion, Fehler je Eintrag, `streng` für vollständigen Abbruch, `pruefen` für Rollback |
+| `katplan_anhang_aus_quellseite` | Seite, eingebettetes Bild oder relativer Ausschnitt über Anhangspipeline mit Quota, Thumbnail und MCP-Protokoll; `pruefen` entfernt auch Dateien |
 | `katplan_anhang_upload_vorbereiten`, `katplan_anhang_uebergeben` | Fotos/PDFs über die Anhangspipeline (MIME-Prüfung, Quota, Vorschaubild) |
 | `katplan_vorschlaege_aus_dokument` | Strukturierte Vorschläge zu einer Quellseite in die Import-Prüfung (keine Elemente) |
 

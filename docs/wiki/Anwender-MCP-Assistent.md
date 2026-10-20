@@ -183,6 +183,25 @@ vorbehalten; freigegebene Versionen ändern sich nicht.
   Überarbeitung, die Freigabe bleibt beim Menschen.
   Verknüpfungen und Beziehungen setzen sowie Stammdaten ändern unterstützen
   `pruefen=true` als Trockenlauf mit Rollback; Stammdaten akzeptieren auch `streng=true`.
+- `katplan_quellseite_verknuepfen`: Bis 50 Zuordnungen als `zuordnungen` mit
+  `element_id` (UUID oder Kennung), `dokument_id`, `seiten` (z. B. `"3-4,7"`) und
+  optional `version`. `ergebnisse` meldet je Element `geaendert`, `unveraendert` oder
+  `fehler`. Gültige Einträge werden gespeichert; `streng=true` bricht bei einem Fehler
+  alles ab, `pruefen=true` prüft ohne Speicherung.
+- `katplan_quellseite_bilder`: Für `plan_id`, `dokument_id`, `seiten_nr` die eingebetteten
+  Bilder mit Index, Abmessungen, Format und Bytezahl ansehen. Mindestens 200 Pixel je
+  Achse, maximal 20 Bilder; `vorschau=true` liefert bis acht Bilder mit maximal 512 Pixeln.
+  `seitenbild` nennt die Größe des gerenderten Seitenbilds. Leser sehen nur freigegebene
+  Quellen; Bearbeiter auch Arbeitsquellen. `source_references.seiten_liste` enthält bis
+  30 geschützte Seiten-URLs (`thumb_url`, `seiten_url`, `text_url`), bei Freigaben mit
+  `version_id`; diese URLs benötigen eine Anmeldung.
+- `katplan_anhang_aus_quellseite`: Quellseite direkt als Foto an Plan oder `element_id`
+  übernehmen. `modus="seite"` nutzt das gerenderte Seitenbild, `modus="bild"` das zuvor
+  gewählte `bild_index`, `modus="ausschnitt"` einen relativen `rahmen=[x0,y0,x1,y1]`
+  zwischen 0 und 1 (mindestens 5 % je Achse). Standardbeschriftung:
+  `Quelle: <Dokumenttitel> v<Version>, S. <Seite>`; `beschriftung` und `vertraulich` sind
+  einstellbar. `pruefen=true` liefert die Vorschau des Ergebnisses und entfernt anschließend
+  Datenbankänderungen sowie erzeugte Bilddateien. Die menschliche Freigabe bleibt nötig.
 - `katplan_anhang_upload_vorbereiten` / `katplan_anhang_uebergeben`: Foto oder PDF an Plan oder
   Element. Kleine Dateien per `inhalt_base64` oder als ChatGPT-Anhang (`datei.download_url`),
   größere über den Upload-Link.

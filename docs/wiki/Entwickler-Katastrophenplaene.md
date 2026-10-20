@@ -63,6 +63,7 @@ Status: `entwurf` → `in_pruefung` → `freigegeben` → `in_ueberarbeitung` �
 | `katplan_geo_service` | Geometrieprüfung je Typ (über `road_closure_geo_service.validate_geometry`), Bezugspunkt |
 | `katplan_anhang_service` | Upload, Quota, Snapshots, geschützte Auslieferung |
 | `katplan_quelle_service` + `pdf_seiten_pipeline` | Quellen hochladen und versionieren, Seiten zerlegen (Poppler/Tesseract, gemeinsam mit Objektdokumenten), Seitenvergleich `vergleiche_quellen` |
+| `katplan_quellbild_service` | pypdf-Bildextraktion (Originalindizes, ab 200 px, höchstens 20 Bilder), RGB-JPEG-Konvertierung, relative Ausschnitte und Vorschauen; robuste Parserwarnungen |
 | `katplan_suche_service` | Kombinierte Suche (Freigabe/Arbeitsstand, LIKE mit Escape, Umkreis), auch für MCP |
 | `katplan_ki_service` | KI-Seitenanalyse, Parser (`_parse_antwort` inkl. `daten`), Kontakt-/Objektabgleich, Review-Übernahme |
 | `katplan_mcp_service` | Rechtegeprüfte Aufbereitung einer Fassung (`fassung_laden`, `element_dict`) |
@@ -103,6 +104,19 @@ Die PDF-Vorlage liegt in `app/templates/pdf/katplan.html`:
 - Typdaten nie als JSON ausgeben, sondern über `typdaten_fuer_druck`.
 
 ## MCP
+
+M3 ergänzt `katplan_quellseite_verknuepfen` (bis 50 Zuordnungen mit optionaler Version,
+Einzelfehlern, strengem Abbruch und Trockenlauf), `katplan_quellseite_bilder` und
+`katplan_anhang_aus_quellseite`. Gemeinsame Schreibhelfer aktualisieren Felder, Protokoll
+(`quelle="mcp"`), Suchtext, Überarbeitungsstatus und Elementversion wie beim Entwurfseditor.
+`parse_seiten` validiert auch gemischte Angaben (`3-4,7`); `source_references.seiten_liste`
+begrenzt die Ausgabe auf 30 Seiten mit geschützten URLs und optionaler Freigabe-ID.
+Die Bilderwerkzeuge nutzen die Sichtbarkeit von `katplan_dokument_auszug`, Schreibaufrufe
+zusätzlich Bearbeiterrechte. Der MCP-Content-Wrapper liefert JSON plus maximal acht
+JPEG-Vorschauen mit maximal 512 Pixeln. Anhänge entstehen über `anhang_hochladen` mit
+Quota und Thumbnail; bei Rollback werden die zuvor gesicherten Dateipfade entfernt,
+bei Trockenläufen auch das Anhangverzeichnis. Die Quota wird durch DB-Rollback zurückgesetzt.
+
 
 - Lesend in `app/mcp/tools/katplan.py`, schreibend in `app/mcp/tools/katplan_schreiben.py`.
   Für jedes Werkzeug gibt es einen `@server.tool`-Wrapper in `app/mcp/server.py`.
@@ -152,6 +166,7 @@ Die PDF-Vorlage liegt in `app/templates/pdf/katplan.html`:
 | `test_pdf_seiten_pipeline`, `test_katplan_k7b/k7c` | Seiten-Pipeline, Quellen, Seitenansicht |
 | `test_katplan_k8` | Suche |
 | `test_katplan_k9` | KI-Import und Review (KI gemockt) |
+| `test_mcp_katplan_m3` | Quellzuordnungen und Rollbacks, Seiten-URLs/Freigabe-ID, eingebettete Bilder und MCP-Content, Bild-/Seiten-/Ausschnitt-Anhänge, dateifreier Trockenlauf und Leserechte |
 | `test_mcp_katplan`, `test_mcp_katplan_schreiben` | MCP lesend/schreibend, Adresse und Verortung (Geokodierung gemockt), Schema |
 | `test_mcp_katplan_m2` | Verknüpfungen, Beziehungen, Telefonrechte, Plan-Stammdaten, Trockenlauf und HTTP-Wrapper |
 | `test_katplan_k12` | Qualitätshinweise, PDF (HTML über `render_katplan_html`, Typdaten), Quellenvergleich |

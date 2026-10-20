@@ -245,3 +245,50 @@ async def katplan_verknuepfungen(context: MCPContext, plan_id: int, element_id: 
             "elemente": [{k: e[k] for k in ("element_id", "kennung", "linked_entities", "relations")}
                          for e in ausgewählt],
             "eingehende_beziehungen": eingehend, "warnings": warnings}
+
+
+def _quellseite(context: MCPContext, plan_id: int, dokument_id: int, seiten_nr: int):
+    """Dieselbe Sichtbarkeit wie dokument_auszug, einschliesslich Arbeitsstandquellen."""
+    from app.services.katplan_quelle_service import quelle_der_seite
+
+    plan = daten.plan_laden(context.db, context.user, plan_id)
+    dokument = next((d for d in sichtbare_quellen(context.db, plan, context.user) if d.id == dokument_id), None)
+    if dokument is None:
+        raise ValueError("Nicht gefunden")
+    seite = quelle_der_seite(context.db, plan, dokument.id, seiten_nr)
+    if seite is None:
+        raise ValueError("Quellseite nicht gefunden.")
+    return plan, dokument, seite
+
+
+@_tool("katplan_quellseite_bilder", (
+    "Listet bis 20 eingebettete Quellbilder ab 200 px je Achse und die Seitenbildgröße. "
+    "vorschau=true liefert bis 8 JPEG-Vorschauen (maximal 512 px). Arbeitsquellen nur für Bearbeiter."
+))
+async def katplan_quellseite_bilder(context: MCPContext, plan_id: int, dokument_id: int,
+                                   seiten_nr: int, vorschau: bool = True) -> dict[str, object]:
+    import base64
+    from dataclasses import asdict
+    from io import BytesIO
+
+    from PIL import Image
+
+    from app.services import katplan_quellbild_service as bilder
+
+    _, _, seite = _quellseite(context, plan_id, dokument_id, seiten_nr)
+    warnings: list[str] = []
+    infos = bilder.eingebettete_bilder(seite, warnings=warnings)
+    vorschauen = []
+    if vorschau:
+        for info in infos[:8]:
+            try:
+                data, _ = bilder.bild_bytes(seite, info.index)
+                with Image.open(BytesIO(data)) as img:
+                    data = bilder.jpeg_bytes(img, 512)
+                vorschauen.append({"index": info.index, "bild_base64": base64.b64encode(data).decode("ascii"),
+                                   "bild_mime": "image/jpeg"})
+            except ValueError:
+                warnings.append(f"Bild {info.index}: Vorschau nicht verfügbar.")
+    return {"plan_id": plan_id, "dokument_id": dokument_id, "seiten_nr": seiten_nr,
+            "bilder": [asdict(info) for info in infos], "seitenbild": bilder.seitenbild_info(seite),
+            "vorschauen": vorschauen, "warnings": warnings}

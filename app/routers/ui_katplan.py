@@ -1565,8 +1565,7 @@ def quellen(plan_id: int, request: Request, db: Session = Depends(get_db),
 
 def _seitenbereich_enthaelt(bereich: str | None, nr: int) -> bool:
     try:
-        grenzen = (bereich or "").split("-")
-        return int(grenzen[0]) <= nr <= int(grenzen[-1])
+        return nr in quelle_service.parse_seiten(bereich or "")
     except ValueError:
         return False
 
