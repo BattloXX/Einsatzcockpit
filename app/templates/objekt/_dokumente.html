@@ -1,18 +1,18 @@
 <div class="card" style="padding:16px;"
      x-data="{ auswahl: [], toggle(id) { this.auswahl.includes(id) ? this.auswahl = this.auswahl.filter(x => x !== id) : this.auswahl.push(id) } }">
   <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
-    <h3 style="margin:0;">📄 Dokumente</h3>
+    <h3 style="margin:0;">{{ icon("file-text", size="md") }} Dokumente</h3>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       {% if ist_verwalter and ki_enabled and unklassifiziert > 0 %}
       <form hx-post="/objekte/{{ objekt.id }}/dokumente/ki-analyse"
             hx-target="#abschnitt-dokumente" hx-swap="innerHTML" style="display:inline;">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-        <button type="submit" class="btn btn--ghost btn--xs">✨ KI-Vorschläge für {{ unklassifiziert }} Seite(n)</button>
+        <button type="submit" class="btn btn--ghost btn--xs">{{ icon("sparkles", size="xs") }} KI-Vorschläge für {{ unklassifiziert }} Seite(n)</button>
       </form>
       {% endif %}
       {% if gesamt > 0 %}
       <button type="button" class="btn btn--ghost btn--xs"
-              onclick="ecpgPrint({document_type:'objekt_sammel', objekt_id:{{ objekt.id }}, artifact_ref:'einsatzdruck', title:'Einsatzdruck-Mappe', localUrl:'/objekte/{{ objekt.id }}/dokumente/sammel-pdf?nur_einsatzdruck=1'})">📄 "Bei Einsatz drucken"-Mappe</button>
+              onclick="ecpgPrint({document_type:'objekt_sammel', objekt_id:{{ objekt.id }}, artifact_ref:'einsatzdruck', title:'Einsatzdruck-Mappe', localUrl:'/objekte/{{ objekt.id }}/dokumente/sammel-pdf?nur_einsatzdruck=1'})">{{ icon("file-text", size="xs") }} "Bei Einsatz drucken"-Mappe</button>
       {% endif %}
     </div>
   </div>
@@ -21,14 +21,14 @@
   <div class="alert alert--success"
        hx-get="/objekte/{{ objekt.id }}/dokumente?ki_warte={{ ki_warte or 1 }}" hx-trigger="load delay:4s"
        hx-target="#abschnitt-dokumente" hx-swap="innerHTML">
-    ✨ KI analysiert die unklassifizierten Seiten … die Vorschläge erscheinen automatisch hier (kein Neuladen nötig).
+    {{ icon("sparkles", size="sm") }} KI analysiert die unklassifizierten Seiten … die Vorschläge erscheinen automatisch hier (kein Neuladen nötig).
   </div>
   {% endif %}
 
   {% if ist_verwalter and ki_vorschlaege %}
   <div class="card" style="padding:12px;margin-bottom:14px;border-left:4px solid #a78bfa;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-      <strong>✨ KI-Vorschläge ({{ ki_vorschlaege|length }})</strong>
+      <strong>{{ icon("sparkles", size="sm") }} KI-Vorschläge ({{ ki_vorschlaege|length }})</strong>
       <form hx-post="/objekte/{{ objekt.id }}/dokumente/ki-review/alle-uebernehmen"
             hx-target="#abschnitt-dokumente" hx-swap="innerHTML"
             hx-confirm="Alle {{ ki_vorschlaege|length }} Vorschläge übernehmen?" style="display:inline;">
@@ -55,7 +55,7 @@
           <form hx-post="/objekte/{{ objekt.id }}/dokumente/ki-review/{{ v.id }}/uebernehmen"
                 hx-target="#abschnitt-dokumente" hx-swap="innerHTML" style="display:inline;">
             <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-            <button type="submit" class="btn btn--primary btn--xs">✓ Übernehmen</button>
+            <button type="submit" class="btn btn--primary btn--xs">{{ icon("check", size="xs") }} Übernehmen</button>
           </form>
           <form hx-post="/objekte/{{ objekt.id }}/dokumente/ki-review/{{ v.id }}/verwerfen"
                 hx-target="#abschnitt-dokumente" hx-swap="innerHTML" style="display:inline;">
@@ -72,7 +72,7 @@
 
   {% if ist_verwalter and stammdaten_vorschlaege %}
   <div class="card" style="padding:12px;margin-bottom:14px;border-left:4px solid #34d399;">
-    <strong>🧾 KI-Stammdaten-Vorschläge aus Objektbeschreibung ({{ stammdaten_vorschlaege|length }})</strong>
+    <strong>{{ icon("sparkles", size="sm") }} KI-Stammdaten-Vorschläge aus Objektbeschreibung ({{ stammdaten_vorschlaege|length }})</strong>
     <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px;">
       {% for v in stammdaten_vorschlaege %}
       <div style="border:1px solid var(--border);border-radius:8px;padding:10px;">
@@ -103,7 +103,7 @@
           <form hx-post="/objekte/{{ objekt.id }}/dokumente/ki-review-stammdaten/{{ v.id }}/uebernehmen"
                 hx-target="#abschnitt-dokumente" hx-swap="innerHTML" style="display:inline;">
             <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-            <button type="submit" class="btn btn--primary btn--xs">✓ Übernehmen</button>
+            <button type="submit" class="btn btn--primary btn--xs">{{ icon("check", size="xs") }} Übernehmen</button>
           </form>
           <form hx-post="/objekte/{{ objekt.id }}/dokumente/ki-review-stammdaten/{{ v.id }}/verwerfen"
                 hx-target="#abschnitt-dokumente" hx-swap="innerHTML" style="display:inline;">
@@ -122,7 +122,7 @@
   <div class="alert alert--success" style="display:flex;align-items:center;gap:8px;"
        hx-get="/objekte/{{ objekt.id }}/dokumente" hx-trigger="every 3s"
        hx-target="#abschnitt-dokumente" hx-swap="innerHTML">
-    ⏳ Dokumente werden zerlegt und gerendert … die Ansicht aktualisiert sich automatisch.
+    {{ icon("hourglass", size="sm") }} Dokumente werden zerlegt und gerendert … die Ansicht aktualisiert sich automatisch.
   </div>
   {% endif %}
 
@@ -135,7 +135,7 @@
   {% if ist_verwalter and wartende_dokumente %}
   <section class="card" style="padding:12px;margin-bottom:14px;border-left:4px solid #f59e0b;">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
-      <strong>⏳ Wartende Dokumente (aus KI-Verbindung) <span class="badge-pill badge-pill--amber">{{ wartende_dokumente|length }}</span></strong>
+      <strong>{{ icon("hourglass", size="sm") }} Wartende Dokumente (aus KI-Verbindung) <span class="badge-pill badge-pill--amber">{{ wartende_dokumente|length }}</span></strong>
       <span class="text-muted" style="font-size:.85em;">Erst nach Freigabe in der Dokumentgalerie sichtbar</span>
     </div>
     <div style="display:flex;flex-direction:column;gap:10px;">
@@ -152,7 +152,7 @@
           <div style="display:flex;gap:6px;flex-wrap:wrap;">
             <form hx-post="/objekte/{{ objekt.id }}/dokumente/wartend/{{ d.id }}/freigeben" hx-target="#abschnitt-dokumente" hx-swap="innerHTML" style="display:inline;">
               <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-              <button type="submit" class="btn btn--primary btn--xs">✓ Freigeben</button>
+              <button type="submit" class="btn btn--primary btn--xs">{{ icon("check", size="xs") }} Freigeben</button>
             </form>
             <form hx-post="/objekte/{{ objekt.id }}/dokumente/wartend/{{ d.id }}/verwerfen" hx-target="#abschnitt-dokumente" hx-swap="innerHTML" hx-confirm="Dokument '{{ d.dateiname_original }}' wirklich verwerfen? Die Datei und alle Seiten werden entfernt." style="display:inline;">
               <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
@@ -222,7 +222,7 @@
     <form hx-post="/objekte/{{ objekt.id }}/dokumente/reindex" hx-target="#abschnitt-dokumente" hx-swap="innerHTML"
           hx-confirm="Volltext-Suche für alle Seiten dieses Objekts neu aufbauen?" style="display:inline;">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <button type="submit" class="btn btn--ghost btn--xs" title="Bestehende Dokumente für die Volltextsuche neu indexieren">🔎 Volltext neu indexieren</button>
+      <button type="submit" class="btn btn--ghost btn--xs" title="Bestehende Dokumente für die Volltextsuche neu indexieren">{{ icon("search", size="xs") }} Volltext neu indexieren</button>
     </form>
   </div>
   {% endif %}
@@ -241,7 +241,7 @@
         {# ?r={{ s.rotation }} = Cache-Buster: nach dem Drehen laedt das (serverseitig gedrehte) Thumb neu #}
         <img src="/objekt-medien/seite/{{ s.id }}/thumb?r={{ s.rotation }}" alt="Seite {{ s.seiten_nr }}" loading="lazy">
         {% else %}
-        <div class="objekt-seite-kachel__platzhalter">📄<br>S. {{ s.seiten_nr }}</div>
+        <div class="objekt-seite-kachel__platzhalter">{{ icon("file-text", size="lg") }}<br>S. {{ s.seiten_nr }}</div>
         {% endif %}
       </a>
       {% if ist_verwalter %}
@@ -251,14 +251,14 @@
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
         <input type="hidden" name="art" value="{{ filter_art }}">
         <input type="hidden" name="suche" value="{{ filter_suche }}">
-        <button type="submit" name="richtung" value="links" class="btn btn--ghost btn--xs" title="90° nach links drehen">↺</button>
-        <button type="submit" name="richtung" value="rechts" class="btn btn--ghost btn--xs" title="90° nach rechts drehen">↻</button>
+        <button type="submit" name="richtung" value="links" class="btn btn--ghost btn--xs" title="90° nach links drehen" aria-label="90° nach links drehen">{{ icon("rotate", size="xs") }}</button>
+        <button type="submit" name="richtung" value="rechts" class="btn btn--ghost btn--xs" title="90° nach rechts drehen" aria-label="90° nach rechts drehen">{{ icon("refresh", size="xs") }}</button>
         <button type="button" class="btn btn--ghost btn--xs" onclick="document.getElementById('seiteBearbeiten{{ s.id }}').showModal()">Bearbeiten</button>
       </form>
       <dialog class="modal" id="seiteBearbeiten{{ s.id }}">
         <div class="modal__content">
           <div class="modal__header"><h3>Dokumentseite bearbeiten</h3>
-            <button type="button" class="modal__close" aria-label="Schließen" onclick="this.closest('dialog').close()">×</button></div>
+            <button type="button" class="modal__close" aria-label="Schließen" onclick="this.closest('dialog').close()">{{ icon("x", size="xs") }}</button></div>
           <form hx-post="/objekte/{{ objekt.id }}/dokumente/seite/{{ s.id }}/bearbeiten"
                 hx-target="#abschnitt-dokumente" hx-swap="innerHTML">
             <div class="modal__body">
@@ -289,7 +289,7 @@
           {% if s.bei_einsatz_drucken %}<span class="badge-pill badge-pill--red" style="font-size:0.7em;">Einsatzdruck</span>{% endif %}
           {% if s.stand %}<span class="text-muted" style="font-size:0.75em;">{{ s.stand.strftime('%d.%m.%Y') }}</span>{% endif %}
           <button type="button" class="text-muted" style="font-size:0.75em;margin-left:auto;background:none;border:none;padding:0;cursor:pointer;font:inherit;" title="Einzelseite drucken (Station/lokal)"
-                  onclick="ecpgPrint({document_type:'objekt_dokument', artifact_ref:'{{ s.id }}', title:'Dokumentseite drucken', localUrl:'/objekt-medien/seite/{{ s.id }}/pdf'})">📄 PDF</button>
+                  onclick="ecpgPrint({document_type:'objekt_dokument', artifact_ref:'{{ s.id }}', title:'Dokumentseite drucken', localUrl:'/objekt-medien/seite/{{ s.id }}/pdf'})">{{ icon("file-text", size="sm") }} PDF</button>
         </div>
       </div>
     </div>

@@ -125,13 +125,13 @@
      @keydown.window.arrow-right="weiter()" @keydown.window.arrow-left="zurueck()"
      tabindex="0">
   <div class="objekt-viewer__top">
-    <a href="/objekte/{{ objekt.id }}?tab=dokumente" class="btn btn--ghost btn--xs objekt-viewer__back">← Alle Dokumente</a>
+    <a href="/objekte/{{ objekt.id }}?tab=dokumente" class="btn btn--ghost btn--xs objekt-viewer__back" aria-label="Alle Dokumente">{{ icon("chevron-left", size="xs") }} Alle Dokumente</a>
     {% if filter_art or filter_suche %}
     <span class="objekt-viewer__filter text-muted">
       <span class="objekt-viewer__filter-label">Filter:</span>
       {% if filter_art %}<span class="badge-pill badge-pill--green">{{ dokumentarten.get(filter_art, filter_art) }}</span>{% endif %}
       {% if filter_suche %}<span class="badge-pill badge-pill--amber">„{{ filter_suche }}"</span>{% endif %}
-      <a href="/objekte/{{ objekt.id }}/dokumente/viewer" class="text-muted" title="Filter zurücksetzen" style="text-decoration:none;">✕</a>
+      <a href="/objekte/{{ objekt.id }}/dokumente/viewer" class="text-muted" title="Filter zurücksetzen" style="text-decoration:none;" aria-label="Filter zurücksetzen">{{ icon("x", size="sm") }}</a>
     </span>
     {% endif %}
     <span class="text-muted objekt-viewer__pagecount" x-show="seiten.length > 0" x-text="(idx + 1) + ' / ' + seiten.length"></span>
@@ -139,14 +139,14 @@
       <input type="hidden" name="art" value="{{ filter_art }}">
       <input type="text" name="suche" value="{{ filter_suche }}" class="form-input"
              placeholder="In Dokumenten suchen …">
-      <button type="submit" class="btn btn--ghost btn--xs">🔎</button>
+      <button type="submit" class="btn btn--ghost btn--xs" aria-label="Suchen">{{ icon("search", size="xs") }}</button>
     </form>
     <div class="objekt-viewer__zoomctrls" x-show="seiten.length > 0">
-      <button type="button" class="btn btn--ghost btn--xs" @click="dreheLinks()" title="90° nach links drehen">↺</button>
-      <button type="button" class="btn btn--ghost btn--xs" @click="dreheRechts()" title="90° nach rechts drehen">↻</button>
-      <button type="button" class="btn btn--ghost btn--xs" @click="zoomOut()">−</button>
+      <button type="button" class="btn btn--ghost btn--xs" @click="dreheLinks()" title="90° nach links drehen" aria-label="90° nach links drehen">{{ icon("rotate", size="xs") }}</button>
+      <button type="button" class="btn btn--ghost btn--xs" @click="dreheRechts()" title="90° nach rechts drehen" aria-label="90° nach rechts drehen">{{ icon("refresh", size="xs") }}</button>
+      <button type="button" class="btn btn--ghost btn--xs" @click="zoomOut()" aria-label="Verkleinern">{{ icon("minus", size="xs") }}</button>
       <button type="button" class="btn btn--ghost btn--xs" @click="zoomIn()">+ Zoom</button>
-      <a :href="'/objekt-medien/seite/' + seiten[idx] + '/pdf'" target="_blank" class="btn btn--ghost btn--xs">📄 PDF</a>
+      <a :href="'/objekt-medien/seite/' + seiten[idx] + '/pdf'" target="_blank" class="btn btn--ghost btn--xs">{{ icon("file-text", size="xs") }} PDF</a>
     </div>
   </div>
 
@@ -162,7 +162,7 @@
        @touchmove="touchMove($event)"
        @touchend="touchEnd($event)"
        :class="{ 'objekt-viewer__stage--gezoomt': zoom > 1 }">
-    <button type="button" class="objekt-viewer__nav objekt-viewer__nav--links" @click="zurueck()" x-show="idx > 0 && zoom <= 1">‹</button>
+    <button type="button" class="objekt-viewer__nav objekt-viewer__nav--links" @click="zurueck()" x-show="idx > 0 && zoom <= 1" aria-label="Vorherige Seite">{{ icon("chevron-left", size="sm") }}</button>
     <div class="objekt-viewer__bildwrap">
       <template x-for="(sid, i) in seiten" :key="sid">
         <img x-show="i === idx"
@@ -177,7 +177,7 @@
              loading="lazy" alt="Dokumentseite">
       </template>
     </div>
-    <button type="button" class="objekt-viewer__nav objekt-viewer__nav--rechts" @click="weiter()" x-show="idx < seiten.length - 1 && zoom <= 1">›</button>
+    <button type="button" class="objekt-viewer__nav objekt-viewer__nav--rechts" @click="weiter()" x-show="idx < seiten.length - 1 && zoom <= 1" aria-label="Nächste Seite">{{ icon("chevron-right", size="sm") }}</button>
   </div>
   {% include "objekt/_viewer_info.html" %}
 </div>

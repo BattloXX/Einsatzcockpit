@@ -35,7 +35,7 @@
         {% for eintrag in stammdaten_diff %}
         <dt>{{ eintrag.feld }}</dt>
         <dd>
-          <span class="badge-pill badge-pill--amber">↔ Geändert</span>
+          <span class="badge-pill badge-pill--amber">{{ icon("arrows-sort", size="sm") }} Geändert</span>
           <span class="objekt-protokoll__old">{{ eintrag.vorher if eintrag.vorher is not none else '–' }}</span>
           →
           <span class="objekt-protokoll__new">{{ eintrag.jetzt if eintrag.jetzt is not none else '–' }}</span>
@@ -59,8 +59,8 @@
           {% endfor %}
         </div>
         <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;">
-          <label class="checkbox-label"><input id="kontakt-freigeben-{{ eintrag.vorschlag.id }}" type="checkbox" name="kontakt_freigeben" value="{{ eintrag.vorschlag.id }}" data-opposite="kontakt-verwerfen-{{ eintrag.vorschlag.id }}" onchange="if (this.checked) document.getElementById(this.dataset.opposite).checked = false"> ✓ Übernehmen</label>
-          <label class="checkbox-label"><input id="kontakt-verwerfen-{{ eintrag.vorschlag.id }}" type="checkbox" name="kontakt_verwerfen" value="{{ eintrag.vorschlag.id }}" data-opposite="kontakt-freigeben-{{ eintrag.vorschlag.id }}" onchange="if (this.checked) document.getElementById(this.dataset.opposite).checked = false"> ✕ Verwerfen</label>
+          <label class="checkbox-label"><input id="kontakt-freigeben-{{ eintrag.vorschlag.id }}" type="checkbox" name="kontakt_freigeben" value="{{ eintrag.vorschlag.id }}" data-opposite="kontakt-verwerfen-{{ eintrag.vorschlag.id }}" onchange="if (this.checked) document.getElementById(this.dataset.opposite).checked = false"> {{ icon("check", size="sm") }} Übernehmen</label>
+          <label class="checkbox-label"><input id="kontakt-verwerfen-{{ eintrag.vorschlag.id }}" type="checkbox" name="kontakt_verwerfen" value="{{ eintrag.vorschlag.id }}" data-opposite="kontakt-freigeben-{{ eintrag.vorschlag.id }}" onchange="if (this.checked) document.getElementById(this.dataset.opposite).checked = false"> {{ icon("x", size="sm") }} Verwerfen</label>
         </div>
         <p class="text-muted" style="margin:6px 0 0;font-size:.9rem;">Bitte genau eine Entscheidung treffen.</p>
       </div>
@@ -88,7 +88,7 @@
             {% endif %}
           </div>
           <div>
-            <strong>Neue Version <span class="badge-pill badge-pill--amber">↑ Vorgeschlagen</span></strong>
+            <strong>Neue Version <span class="badge-pill badge-pill--amber">{{ icon("upload", size="sm") }} Vorgeschlagen</span></strong>
             <div>Version {{ dokument.versionsnummer }} · {{ dokument.dateiname_original }}</div>
             <div class="text-muted">Hochgeladen: {{ dokument.hochgeladen_am|local_datetime }}</div>
             <div class="text-muted">Hochgeladen von: {{ eintrag.hochgeladen_von.username if eintrag.hochgeladen_von else 'Extern oder unbekannt' }}</div>
@@ -96,8 +96,8 @@
           </div>
         </div>
         <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;">
-          <label class="checkbox-label"><input id="dokument-freigeben-{{ dokument.id }}" type="checkbox" name="dokument_freigeben" value="{{ dokument.id }}" data-opposite="dokument-verwerfen-{{ dokument.id }}" onchange="if (this.checked) document.getElementById(this.dataset.opposite).checked = false"> ✓ Freigeben</label>
-          <label class="checkbox-label"><input id="dokument-verwerfen-{{ dokument.id }}" type="checkbox" name="dokument_verwerfen" value="{{ dokument.id }}" data-opposite="dokument-freigeben-{{ dokument.id }}" onchange="if (this.checked) document.getElementById(this.dataset.opposite).checked = false"> ✕ Verwerfen</label>
+          <label class="checkbox-label"><input id="dokument-freigeben-{{ dokument.id }}" type="checkbox" name="dokument_freigeben" value="{{ dokument.id }}" data-opposite="dokument-verwerfen-{{ dokument.id }}" onchange="if (this.checked) document.getElementById(this.dataset.opposite).checked = false"> {{ icon("check", size="sm") }} Freigeben</label>
+          <label class="checkbox-label"><input id="dokument-verwerfen-{{ dokument.id }}" type="checkbox" name="dokument_verwerfen" value="{{ dokument.id }}" data-opposite="dokument-freigeben-{{ dokument.id }}" onchange="if (this.checked) document.getElementById(this.dataset.opposite).checked = false"> {{ icon("x", size="sm") }} Verwerfen</label>
         </div>
         <p class="text-muted" style="margin:6px 0 0;font-size:.9rem;">Bitte genau eine Entscheidung treffen.</p>
       </div>
@@ -115,7 +115,7 @@
         <strong>{{ eintrag.dokument.dateiname_original if eintrag.dokument else 'Dokument nicht gefunden' }}</strong>
         <div class="text-muted">{{ eintrag.meldung.text or 'Als nicht mehr gültig gemeldet.' }}</div>
         {% if eintrag.dokument %}
-        <label class="checkbox-label" style="display:inline-block;margin-top:8px;"><input type="checkbox" name="dokument_archivieren" value="{{ eintrag.dokument.id }}"> ⓘ Dokument jetzt archivieren</label>
+        <label class="checkbox-label" style="display:inline-block;margin-top:8px;"><input type="checkbox" name="dokument_archivieren" value="{{ eintrag.dokument.id }}"> {{ icon("info-circle", size="sm") }} Dokument jetzt archivieren</label>
         {% endif %}
       </div>
       {% endfor %}
@@ -130,7 +130,7 @@
         <label class="form-label" for="revision_intervall_tage">Nächste Prüfung in Tagen</label>
         <input class="form-input" id="revision_intervall_tage" type="number" name="revision_intervall_tage" value="365" min="1">
       </div>
-      <button class="btn btn--primary">✓ Änderungen freigeben</button>
+      <button class="btn btn--primary">{{ icon("check", size="sm") }} Änderungen freigeben</button>
     </div>
   </form>
 
@@ -146,7 +146,7 @@
     </form>
     <form method="post" action="/objekte/{{ objekt.id }}/pflegeauftrag/{{ auftrag.id }}/review/verwerfen" style="margin-top:12px;" onsubmit="return confirm('Alle Änderungen dieses Pflegeauftrags wirklich verwerfen?')">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <button class="btn btn--danger">✕ Änderungen verwerfen</button>
+      <button class="btn btn--danger">{{ icon("x", size="sm") }} Änderungen verwerfen</button>
     </form>
   </div>
 </div>

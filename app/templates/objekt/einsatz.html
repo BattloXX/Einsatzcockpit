@@ -25,7 +25,7 @@
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <button type="button" class="btn btn--ghost"
-              onclick="ecpgPrint({document_type:'objektblatt', objekt_id:{{ objekt.id }}, title:'Objektblatt drucken', localUrl:'/objekte/{{ objekt.id }}/objektblatt.pdf?anhang=1'})">🖨 Objektblatt (PDF)</button>
+              onclick="ecpgPrint({document_type:'objektblatt', objekt_id:{{ objekt.id }}, title:'Objektblatt drucken', localUrl:'/objekte/{{ objekt.id }}/objektblatt.pdf?anhang=1'})">{{ icon("printer", size="sm") }} Objektblatt (PDF)</button>
       <a href="/objekte/{{ objekt.id }}" class="btn btn--ghost">Zur Objektpflege</a>
     </div>
   </div>
@@ -46,7 +46,7 @@
       <!-- Einsatzhistorie -->
       {% if verknuepfungen %}
       <div class="card" style="padding:14px;">
-        <h3 style="margin:0 0 10px;">🚨 Letzte Einsätze</h3>
+        <h3 style="margin:0 0 10px;">{{ icon("urgent", size="md") }} Letzte Einsätze</h3>
         <div style="display:flex;flex-direction:column;gap:6px;">
           {% for v in verknuepfungen %}
           {% set inc = incidents.get(v.incident_id) %}

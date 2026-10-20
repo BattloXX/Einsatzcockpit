@@ -1,8 +1,8 @@
 <div class="card" style="padding:16px;">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-    <h3 style="margin:0;">🗺️ Lagekarte</h3>
+    <h3 style="margin:0;">{{ icon("map", size="md") }} Lagekarte</h3>
     {% if ist_verwalter %}
-    <a href="/objekte/{{ objekt.id }}/karte" class="btn btn--ghost btn--xs">✎ Karte bearbeiten</a>
+    <a href="/objekte/{{ objekt.id }}/karte" class="btn btn--ghost btn--xs">{{ icon("pencil", size="xs") }} Karte bearbeiten</a>
     {% endif %}
   </div>
   <div id="objekt-karte-ro" class="objekt-karte-canvas objekt-karte-canvas--klein"></div>

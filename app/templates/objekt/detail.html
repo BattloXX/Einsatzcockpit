@@ -8,7 +8,7 @@
     <div>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <h1 style="margin:0;">{{ objekt.anzeige_nummer }} · {{ objekt.name }}</h1>
-        {% if objekt.entwurf_von_id %}<span class="badge-pill badge-pill--amber">✎ Arbeitskopie</span>
+        {% if objekt.entwurf_von_id %}<span class="badge-pill badge-pill--amber">{{ icon("pencil", size="sm") }} Arbeitskopie</span>
         {% elif objekt.status == 'freigegeben' %}<span class="badge-pill badge-pill--green">{{ status_labels[objekt.status] }}</span>
         {% elif objekt.status == 'entwurf' %}<span class="badge-pill badge-pill--gray">{{ status_labels[objekt.status] }}</span>
         {% elif objekt.status == 'archiviert' %}<span class="badge-pill badge-pill--gray">{{ status_labels[objekt.status] }}</span>
@@ -29,7 +29,7 @@
              sondern ueber Uebernehmen (Merge in die produktive Zeile) / Verwerfen. -->
         <form method="post" action="/objekte/{{ produktiv_objekt_id }}/uebernehmen" style="display:inline;">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-          <button type="submit" class="btn btn--primary">✓ Überarbeitung freigeben</button>
+          <button type="submit" class="btn btn--primary">{{ icon("check", size="sm") }} Überarbeitung freigeben</button>
         </form>
         <form method="post" action="/objekte/{{ produktiv_objekt_id }}/verwerfen" style="display:inline;"
               onsubmit="return confirm('Arbeitskopie verwerfen? Alle Änderungen seit der Überarbeitung gehen verloren, die freigegebene Version bleibt unverändert.')">
@@ -40,12 +40,12 @@
         <form method="post" action="/objekte/{{ objekt.id }}/status" style="display:inline;">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
           <input type="hidden" name="neuer_status" value="freigegeben">
-          <button type="submit" class="btn btn--primary">✓ Freigeben</button>
+          <button type="submit" class="btn btn--primary">{{ icon("check", size="sm") }} Freigeben</button>
         </form>
         {% elif objekt.status == 'freigegeben' %}
         <form method="post" action="/objekte/{{ objekt.id }}/ueberarbeiten" style="display:inline;">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-          <button type="submit" class="btn btn--ghost">✎ Überarbeiten</button>
+          <button type="submit" class="btn btn--ghost">{{ icon("pencil", size="sm") }} Überarbeiten</button>
         </form>
         {% endif %}
         {% if not objekt.entwurf_von_id %}
@@ -66,35 +66,35 @@
         {% endif %}
       {% endif %}
       <button type="button" class="btn btn--ghost"
-              onclick="ecpgPrint({document_type:'objektblatt', objekt_id:{{ produktiv_objekt_id }}, title:'Objektblatt drucken', localUrl:'/objekte/{{ produktiv_objekt_id }}/objektblatt.pdf?anhang=1'})">🖨 Objektblatt (PDF)</button>
-      <a href="/objekte/{{ produktiv_objekt_id }}/einsatz" class="btn btn--ghost">📱 Einsatzansicht</a>
+              onclick="ecpgPrint({document_type:'objektblatt', objekt_id:{{ produktiv_objekt_id }}, title:'Objektblatt drucken', localUrl:'/objekte/{{ produktiv_objekt_id }}/objektblatt.pdf?anhang=1'})">{{ icon("printer", size="sm") }} Objektblatt (PDF)</button>
+      <a href="/objekte/{{ produktiv_objekt_id }}/einsatz" class="btn btn--ghost">{{ icon("device-mobile", size="sm") }} Einsatzansicht</a>
       <a href="/objekte/" class="btn btn--ghost">Zurück</a>
     </div>
   </div>
 
   {% if objekt.entwurf_von_id %}
   <div class="alert alert--info" style="margin-bottom:12px;">
-    ✎ Sie bearbeiten eine <strong>Arbeitskopie</strong>. Produktiv (Matching, Einsatzansicht,
+    {{ icon("pencil", size="sm") }} Sie bearbeiten eine <strong>Arbeitskopie</strong>. Produktiv (Matching, Einsatzansicht,
     Objektblatt) bleibt weiterhin die zuletzt freigegebene Version aktiv, bis diese
     Überarbeitung freigegeben wird.
-    <a href="/objekte/{{ produktiv_objekt_id }}?fassung=produktiv">Produktive Version ansehen →</a>
+    <a href="/objekte/{{ produktiv_objekt_id }}?fassung=produktiv">Produktive Version ansehen {{ icon("chevron-right", size="sm") }}</a>
   </div>
   {% elif arbeitskopie and ist_verwalter %}
   <div class="alert alert--info" style="margin-bottom:12px;">
-    ℹ️ Für dieses Objekt läuft gerade eine Überarbeitung. Diese Ansicht zeigt den weiterhin
+    {{ icon("info-circle", size="sm") }} Für dieses Objekt läuft gerade eine Überarbeitung. Diese Ansicht zeigt den weiterhin
     aktiven, produktiven Stand.
-    <a href="/objekte/{{ objekt.id }}">Zur Arbeitskopie wechseln →</a>
+    <a href="/objekte/{{ objekt.id }}">Zur Arbeitskopie wechseln {{ icon("chevron-right", size="sm") }}</a>
   </div>
   {% endif %}
 
   {% if plan_hinweis %}
   <div class="alert alert--success" x-data="{ zu: true }" x-show="zu" style="margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;">
     <span>
-      {% if plan_hinweis == 'neu' %}📄 Neues Objekt aus Brandschutzplan-Upload angelegt (Entwurf) — die KI-Analyse läuft im Hintergrund und ergänzt Gefahren/BMA/Merkmale automatisch, sobald sie fertig ist.
-      {% else %}📄 Objekt um hochgeladenen Brandschutzplan ergänzt — die KI-Analyse läuft im Hintergrund weiter (siehe Dokumente-Tab).
+      {% if plan_hinweis == 'neu' %}{{ icon("file-text", size="sm") }} Neues Objekt aus Brandschutzplan-Upload angelegt (Entwurf) — die KI-Analyse läuft im Hintergrund und ergänzt Gefahren/BMA/Merkmale automatisch, sobald sie fertig ist.
+      {% else %}{{ icon("file-text", size="sm") }} Objekt um hochgeladenen Brandschutzplan ergänzt — die KI-Analyse läuft im Hintergrund weiter (siehe Dokumente-Tab).
       {% endif %}
     </span>
-    <button type="button" class="btn btn--ghost btn--xs" @click="zu = false">✕</button>
+    <button type="button" class="btn btn--ghost btn--xs" @click="zu = false" aria-label="Schließen">{{ icon("x", size="xs") }}</button>
   </div>
   {% endif %}
 
@@ -102,13 +102,13 @@
     <button type="button" class="objekt-tabs__btn" :class="{ 'is-active': tab === 'uebersicht' }"
             @click="tab = 'uebersicht'">Übersicht</button>
     <button type="button" class="objekt-tabs__btn" :class="{ 'is-active': tab === 'karte' }"
-            @click="tab = 'karte'; $dispatch('objekt-tab-karte')">🗺️ Lagekarte</button>
+            @click="tab = 'karte'; $dispatch('objekt-tab-karte')">{{ icon("map", size="sm") }} Lagekarte</button>
     <button type="button" class="objekt-tabs__btn" :class="{ 'is-active': tab === 'dokumente' }"
-            @click="tab = 'dokumente'; $dispatch('objekt-tab-dokumente')">📄 Dokumente{% if dokument_count %}
+            @click="tab = 'dokumente'; $dispatch('objekt-tab-dokumente')">{{ icon("file-text", size="sm") }} Dokumente{% if dokument_count %}
       <span class="objekt-tabs__badge">{{ dokument_count }}</span>{% endif %}</button>
     {% if kontakt_vollzugriff %}
     <button type="button" class="objekt-tabs__btn" :class="{ 'is-active': tab === 'datenpflege' }"
-            @click="tab = 'datenpflege'; $dispatch('objekt-tab-datenpflege')">🔄 Datenpflege{% if aktualitaet != 'aktuell' %}
+            @click="tab = 'datenpflege'; $dispatch('objekt-tab-datenpflege')">{{ icon("refresh", size="sm") }} Datenpflege{% if aktualitaet != 'aktuell' %}
       <span class="objekt-tabs__badge {% if aktualitaet == 'ueberfaellig' %}badge-pill--red{% else %}badge-pill--amber{% endif %}">!</span>{% endif %}</button>
     {% endif %}
   </nav>

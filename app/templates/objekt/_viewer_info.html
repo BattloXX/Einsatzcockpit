@@ -7,7 +7,7 @@
     <dialog class="modal" id="viewerSeiteBearbeiten{{ s.id }}">
       <div class="modal__content">
         <div class="modal__header"><h3>Dokumentseite bearbeiten</h3>
-          <button type="button" class="modal__close" aria-label="Schließen" onclick="this.closest('dialog').close()">×</button></div>
+          <button type="button" class="modal__close" aria-label="Schließen" onclick="this.closest('dialog').close()">{{ icon("x", size="xs") }}</button></div>
         <form hx-post="/objekte/{{ objekt.id }}/dokumente/seite/{{ s.id }}/bearbeiten"
               hx-target="#objekt-viewer-info" hx-swap="outerHTML">
           <div class="modal__body">
