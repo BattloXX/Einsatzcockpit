@@ -166,16 +166,29 @@ async def reverse_geocode(lat: float, lng: float) -> ReverseGeocodeResult | None
         return None
 
 
-async def search_addresses(query: str, limit: int = 5) -> list[dict]:
+async def search_addresses(
+    query: str, limit: int = 5, *,
+    viewbox: tuple[float, float, float, float] | None = None, bounded: bool = False,
+) -> list[dict]:
     """Interaktive Adresssuche (Objekt-Anlage): mehrere OSM-Kandidaten mit
     strukturierten Feldern (strasse/hausnummer/ort/plz + lat/lng).
 
+    Viewbox: (lng_min, lat_min, lng_max, lat_max); bounded begrenzt auf dieses Gebiet.
+    Kategorie, Typ und Name werden uebernommen, sofern Nominatim sie liefert.
     Gibt [] zurueck bei Fehler oder leerer Eingabe.
     """
     query = (query or "").strip()
     if len(query) < 3:
         return []
 
+    params = {
+        "q": query, "format": "jsonv2", "limit": str(max(1, min(limit, 10))), "addressdetails": "1",
+    }
+    if viewbox is not None:
+        lng_min, lat_min, lng_max, lat_max = viewbox
+        params["viewbox"] = f"{lng_min},{lat_max},{lng_max},{lat_min}"
+    if bounded:
+        params["bounded"] = "1"
     await _throttle()
     try:
         async with httpx.AsyncClient(
@@ -184,12 +197,7 @@ async def search_addresses(query: str, limit: int = 5) -> list[dict]:
         ) as client:
             resp = await client.get(
                 f"{settings.NOMINATIM_BASE_URL}/search",
-                params={
-                    "q": query,
-                    "format": "jsonv2",
-                    "limit": str(max(1, min(limit, 10))),
-                    "addressdetails": "1",
-                },
+                params=params,
             )
             resp.raise_for_status()
             data = resp.json()
@@ -211,6 +219,8 @@ async def search_addresses(query: str, limit: int = 5) -> list[dict]:
         except (KeyError, ValueError, TypeError):
             continue
         ergebnisse.append({
+            **{key: eintrag[source] for key, source in
+               (("kategorie", "category"), ("typ", "type"), ("name", "name")) if source in eintrag},
             "display_name": eintrag.get("display_name", ""),
             "strasse": strasse,
             "hausnummer": adr.get("house_number"),

@@ -2173,3 +2173,15 @@ async def katplan_anhang_aus_quellseite(
                                        dokument_id=dokument_id, seiten_nr=seiten_nr, element_id=element_id,
                                        modus=modus, bild_index=bild_index, rahmen=rahmen,
                                        beschriftung=beschriftung, vertraulich=vertraulich, pruefen=pruefen)
+
+
+@server.tool(name="katplan_elemente_verorten", description=TOOLS["katplan_elemente_verorten"].description)
+async def katplan_elemente_verorten(
+    plan_id: int, element_ids: list[str] | None = None, nur_ohne_ort: bool = True,
+    auswahl: dict[str, str] | None = None, pruefen: bool = False, ueberschreiben_geprueft: bool = False,
+    ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "katplan_elemente_verorten", plan_id=plan_id, element_ids=element_ids, nur_ohne_ort=nur_ohne_ort,
+        auswahl=auswahl, pruefen=pruefen, ueberschreiben_geprueft=ueberschreiben_geprueft,
+    )
