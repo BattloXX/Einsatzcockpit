@@ -10,7 +10,7 @@ import pytest
 from markupsafe import Markup
 
 from app.config import settings
-from app.core.icons import GROESSEN, icon_namen, render_icon, status_dot
+from app.core.icons import GROESSEN, MODUL_ICONS, icon_namen, modul_icon, render_icon, status_dot
 from app.core.templating import templates
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -118,3 +118,27 @@ def test_generated_js_names():
     data = json.loads(source.split("const icons = ", 1)[1].split(";\n", 1)[0])
     assert set(data) == selection()
     assert list(data) == sorted(data)
+
+
+def test_modul_icons():
+    assert set(MODUL_ICONS.values()) <= icon_namen()
+    for key, name in MODUL_ICONS.items():
+        assert modul_icon(key) == render_icon(name)
+    assert modul_icon("profil", "lg", "extra", "Profil") == render_icon("user", "lg", "extra", "Profil")
+    with pytest.raises(KeyError):
+        modul_icon("unbekannt")
+    assert templates.env.globals["modul_icon"] is modul_icon
+
+
+@pytest.mark.parametrize("template", [
+    "base.html", "index.html", "admin/_layout.html", "admin/index.html",
+    "_profil_aktionen.html", "errors/fehler.html", "hilfe.html",
+])
+def test_rahmen_ohne_emoji_auch_in_html_entities(template):
+    from html import unescape
+
+    from scripts.icon_inventar import EMOJI_RE, ZUORDNUNG
+
+    source = unescape((ROOT / "app/templates" / template).read_text())
+    remaining = {ch for ch in EMOJI_RE.findall(source) if ZUORDNUNG.get(ch) != "=text"}
+    assert remaining == set()

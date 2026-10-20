@@ -73,7 +73,7 @@
   {% elif active_major_incidents %}
   {% set lage = active_major_incidents[0] %}
   <div class="incident-standby incident-standby--lage">
-    <div class="incident-standby__icon">🚨</div>
+    <div class="incident-standby__icon">{{ modul_icon("lage", size="lg") }}</div>
     <div class="incident-standby__content">
       <div class="incident-standby__title">Einsatzstellen laufen über die Lage</div>
       <div class="incident-standby__sub"><a href="{{ lage.url }}">{{ lage.counts.neu + lage.counts.in_arbeit }} von {{ lage.counts.gesamt }} Einsatzstellen offen — zur Lage »</a></div>
@@ -81,7 +81,7 @@
   </div>
   {% else %}
   <div class="incident-standby">
-    <div class="incident-standby__icon">✅</div>
+    <div class="incident-standby__icon">{{ icon("circle-check", size="lg") }}</div>
     <div class="incident-standby__content">
       <div class="incident-standby__title">Kein aktiver Einsatz</div>
       <div class="incident-standby__sub">Alles ruhig — Einsätze werden automatisch per API angelegt oder können manuell gestartet werden.</div>
@@ -93,26 +93,26 @@
 <section class="section">
   <h3 class="section-title">Module</h3>
   <div class="module-grid">
-    <a href="/lage" class="module-btn"><span class="module-btn__icon">🚨</span><span class="module-btn__label">Lage</span></a>
+    <a href="/lage" class="module-btn"><span class="module-btn__icon">{{ modul_icon("lage", size="lg") }}</span><span class="module-btn__label">Lage</span></a>
     {% if request.state.probenplanung_enabled %}
-    <a href="/probenplanung" class="module-btn"><span class="module-btn__icon">📅</span><span class="module-btn__label">Probenplan</span></a>
+    <a href="/probenplanung" class="module-btn"><span class="module-btn__icon">{{ modul_icon("probenplan", size="lg") }}</span><span class="module-btn__label">Probenplan</span></a>
     {% endif %}
     {% if is_fahrtenbuch %}
-    <a href="/verwaltung/fahrten" class="module-btn"><span class="module-btn__icon">🚒</span><span class="module-btn__label">Fahrtenbuch</span></a>
+    <a href="/verwaltung/fahrten" class="module-btn"><span class="module-btn__icon">{{ modul_icon("fahrtenbuch", size="lg") }}</span><span class="module-btn__label">Fahrtenbuch</span></a>
     {% endif %}
     {% if request.state.objekt_enabled %}
-    <a href="/objekte/" class="module-btn"><span class="module-btn__icon">🏢</span><span class="module-btn__label">Objekte</span></a>
+    <a href="/objekte/" class="module-btn"><span class="module-btn__icon">{{ modul_icon("objekte", size="lg") }}</span><span class="module-btn__label">Objekte</span></a>
     {% endif %}
     {% if request.state.kontakte_enabled and can_view_kontakt_directory(request) %}
-    <a href="/kontakte" class="module-btn"><span class="module-btn__icon">👥</span><span class="module-btn__label">Kontakte</span></a>
+    <a href="/kontakte" class="module-btn"><span class="module-btn__icon">{{ modul_icon("kontakte", size="lg") }}</span><span class="module-btn__label">Kontakte</span></a>
     {% endif %}
-    {% if show_strassensperren %}<a href="/strassensperren" class="module-btn"><span class="module-btn__icon">🚧</span><span class="module-btn__label">Straßensperren</span>{% if sperren_kennzahlen %}<span class="module-btn__badge{% if sperren_kennzahlen.aktiv > 0 %} module-btn__badge--active{% endif %}">{{ sperren_kennzahlen.aktiv }} aktiv · {{ sperren_kennzahlen.geplant }} geplant</span>{% endif %}</a>{% endif %}
+    {% if show_strassensperren %}<a href="/strassensperren" class="module-btn"><span class="module-btn__icon">{{ modul_icon("strassensperren", size="lg") }}</span><span class="module-btn__label">Straßensperren</span>{% if sperren_kennzahlen %}<span class="module-btn__badge{% if sperren_kennzahlen.aktiv > 0 %} module-btn__badge--active{% endif %}">{{ sperren_kennzahlen.aktiv }} aktiv · {{ sperren_kennzahlen.geplant }} geplant</span>{% endif %}</a>{% endif %}
     {% if request.state.planspiel_enabled and (is_admin or 'uebungsleiter' in user_roles or 'uebungsbeobachter' in user_roles) %}
-    <a href="/planspiele" class="module-btn"><span class="module-btn__icon">🎲</span><span class="module-btn__label">Planspiele</span></a>
+    <a href="/planspiele" class="module-btn"><span class="module-btn__icon">{{ modul_icon("planspiele", size="lg") }}</span><span class="module-btn__label">Planspiele</span></a>
     {% endif %}
     {% if can_view_katplan(request) %}
     <a href="/katastrophenplaene" class="module-btn">
-      <span class="module-btn__icon">📘</span>
+      <span class="module-btn__icon">{{ modul_icon("katplan", size="lg") }}</span>
       <span class="module-btn__label">Katastrophenpläne</span>
       {% if katplan_badge and (katplan_badge.faellig or katplan_badge.in_pruefung) %}
         <span class="module-btn__badge module-btn__badge--active">{{ katplan_badge.faellig }} fällige Wiedervorlagen · {{ katplan_badge.in_pruefung }} in Prüfung</span>
@@ -120,32 +120,32 @@
     </a>
     {% endif %}
     {% if is_as_pruefung %}
-    <a href="/atemschutz-pruefung" class="module-btn"><span class="module-btn__icon">🫁</span><span class="module-btn__label">Atemschutzprüfung</span></a>
+    <a href="/atemschutz-pruefung" class="module-btn"><span class="module-btn__icon">{{ modul_icon("atemschutz", size="lg") }}</span><span class="module-btn__label">Atemschutzprüfung</span></a>
     {% endif %}
     {% if WEATHER_ENABLED %}
-    <a href="/wetter" class="module-btn"><span class="module-btn__icon">🌦</span><span class="module-btn__label">Wetter</span></a>
+    <a href="/wetter" class="module-btn"><span class="module-btn__icon">{{ modul_icon("wetter", size="lg") }}</span><span class="module-btn__label">Wetter</span></a>
     {% endif %}
     {% if not request.state.probenplanung_enabled %}
-    <a href="/termine" class="module-btn"><span class="module-btn__icon">📋</span><span class="module-btn__label">Teilnahme</span></a>
+    <a href="/termine" class="module-btn"><span class="module-btn__icon">{{ modul_icon("teilnahme", size="lg") }}</span><span class="module-btn__label">Teilnahme</span></a>
     {% endif %}
     {% if request.state.uas_module_enabled %}
-    <a href="/uas/einsaetze" class="module-btn"><span class="module-btn__icon">🚁</span><span class="module-btn__label">Drohne / UAS</span></a>
+    <a href="/uas/einsaetze" class="module-btn"><span class="module-btn__icon">{{ modul_icon("uas", size="lg") }}</span><span class="module-btn__label">Drohne / UAS</span></a>
     {% endif %}
     {% if request.state.nachschlagewerke_enabled %}
-    <a href="/nachschlagewerke/" class="module-btn"><span class="module-btn__icon">📚</span><span class="module-btn__label">Nachschlagewerke</span></a>
+    <a href="/nachschlagewerke/" class="module-btn"><span class="module-btn__icon">{{ modul_icon("nachschlagewerke", size="lg") }}</span><span class="module-btn__label">Nachschlagewerke</span></a>
     {% endif %}
     {% if request.state.foerderstrecke_enabled %}
-    <a href="/foerderstrecke/" class="module-btn"><span class="module-btn__icon">🚰</span><span class="module-btn__label">Förderstrecke</span></a>
+    <a href="/foerderstrecke/" class="module-btn"><span class="module-btn__icon">{{ modul_icon("foerderstrecke", size="lg") }}</span><span class="module-btn__label">Förderstrecke</span></a>
     {% endif %}
     {% if is_mailing %}
-    <a href="/mailing/" class="module-btn"><span class="module-btn__icon">📧</span><span class="module-btn__label">Mailing</span></a>
+    <a href="/mailing/" class="module-btn"><span class="module-btn__icon">{{ modul_icon("mailing", size="lg") }}</span><span class="module-btn__label">Mailing</span></a>
     {% endif %}
-    <a href="/statistik" class="module-btn"><span class="module-btn__icon">📊</span><span class="module-btn__label">Statistik</span></a>
-    <a href="/archiv" class="module-btn"><span class="module-btn__icon">🗄</span><span class="module-btn__label">Archiv</span></a>
+    <a href="/statistik" class="module-btn"><span class="module-btn__icon">{{ modul_icon("statistik", size="lg") }}</span><span class="module-btn__label">Statistik</span></a>
+    <a href="/archiv" class="module-btn"><span class="module-btn__icon">{{ modul_icon("archiv", size="lg") }}</span><span class="module-btn__label">Archiv</span></a>
     {% if is_admin %}
-    <a href="/admin" class="module-btn"><span class="module-btn__icon">⚙</span><span class="module-btn__label">Verwaltung</span></a>
+    <a href="/admin" class="module-btn"><span class="module-btn__icon">{{ modul_icon("verwaltung", size="lg") }}</span><span class="module-btn__label">Verwaltung</span></a>
     {% endif %}
-    <a href="https://github.com/BattloXX/Einsatzcockpit/wiki" target="_blank" rel="noopener" class="module-btn"><span class="module-btn__icon">❓</span><span class="module-btn__label">Hilfe</span></a>
+    <a href="https://github.com/BattloXX/Einsatzcockpit/wiki" target="_blank" rel="noopener" class="module-btn"><span class="module-btn__icon">{{ modul_icon("hilfe", size="lg") }}</span><span class="module-btn__label">Hilfe</span></a>
   </div>
 </section>
 
@@ -155,7 +155,7 @@
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <div class="modal__header">
       <h3>Neuer Einsatz</h3>
-      <button aria-label="Schließen" type="button" formnovalidate @click="$refs.newIncidentModal.close()" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" formnovalidate @click="$refs.newIncidentModal.close()" class="modal__close">{{ icon("x", size="sm") }}</button>
     </div>
     <div class="modal__body">
       <div class="form-group">

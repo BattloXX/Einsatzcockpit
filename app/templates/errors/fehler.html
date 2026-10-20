@@ -16,7 +16,7 @@
              onerror="this.style.display='none'" class="login-logo__img">
       </div>
 
-      <div style="font-size:3rem;line-height:1;margin:8px 0 4px;">{{ emoji }}</div>
+      <div class="fehler__icon" style="line-height:1;margin:8px 0 4px;">{{ icon(icon_name, size="lg") }}</div>
       <div style="font-size:.8rem;letter-spacing:.12em;color:var(--text-muted);text-transform:uppercase;">
         Fehler {{ status }}
       </div>
@@ -28,10 +28,10 @@
         <a href="{{ back_url }}" class="btn btn--primary btn--full">{{ back_label }}</a>
         {% endif %}
         {% if not authenticated %}
-        <a href="/login" class="btn btn--primary btn--full">&#x1F510; Zum Login</a>
+        <a href="/login" class="btn btn--primary btn--full">{{ icon("lock", size="sm") }} Zum Login</a>
         {% endif %}
-        <a href="/" class="btn btn--secondary btn--full">&#x1F3E0; Zur Startseite</a>
-        <a href="javascript:history.back()" class="btn btn--ghost btn--full">&#8592; Zurück</a>
+        <a href="/" class="btn btn--secondary btn--full">{{ modul_icon("uebersicht", size="sm") }} Zur Startseite</a>
+        <a href="javascript:history.back()" class="btn btn--ghost btn--full">{{ icon("arrow-left", size="sm") }} Zurück</a>
       </div>
     </div>
   </div>

@@ -1,6 +1,8 @@
 """Fehlerseiten & Login-Redirects: Browser (Accept: text/html) bekommt schöne
 HTML-Fehlerseiten bzw. wird bei geschützten Seiten zum Login geführt; API/Fetch
 (Accept: */*) behält das bisherige JSON-/Status-Verhalten."""
+import pytest
+
 HTML = {"accept": "text/html"}
 
 
@@ -52,3 +54,21 @@ def test_login_next_roundtrip_safe(client):
     assert _safe_next("https://evil.example/x") == "/"
     assert _safe_next("//evil.example") == "/"
     assert _safe_next("/einsatz/5/info") == "/einsatz/5/info"
+
+
+@pytest.mark.parametrize("status, name", [
+    (400, "alert-triangle"), (401, "lock"), (403, "ban"), (404, "search"),
+    (410, "hourglass"), (429, "hourglass"), (500, "alert-triangle"), (418, "alert-triangle"),
+])
+def test_error_icon_context(status, name):
+    from starlette.requests import Request
+
+    from app.core.icons import render_icon
+    from app.main import _render_error_page
+
+    request = Request({"type": "http", "method": "GET", "path": "/", "headers": []})
+    response = _render_error_page(request, status, "Testfehler", authenticated=True)
+    assert response.status_code == status
+    assert response.context["icon_name"] == name
+    assert "emoji" not in response.context
+    assert str(render_icon(name, size="lg")) in response.body.decode()

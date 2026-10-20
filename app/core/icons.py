@@ -15,6 +15,36 @@ _STATUS = frozenset({"rot", "orange", "gelb", "gruen", "blau", "grau", "schwarz"
 _warned: set[str] = set()
 
 
+MODUL_ICONS: dict[str, str] = {
+    "uebersicht": "layout-dashboard",
+    "lage": "urgent",
+    "module": "apps",
+    "mailing": "mail",
+    "fahrtenbuch": "steering-wheel",
+    "probenplan": "calendar",
+    "teilnahme": "clipboard-check",
+    "atemschutz": "lungs",
+    "uas": "drone",
+    "objekte": "building",
+    "strassensperren": "barrier-block",
+    "planspiele": "dice-5",
+    "katplan": "book-2",
+    "kontakte": "address-book",
+    "nachschlagewerke": "books",
+    "foerderstrecke": "fire-hydrant",
+    "statistik": "chart-bar",
+    "wetter": "cloud-rain",
+    "archiv": "archive",
+    "verwaltung": "settings",
+    "hilfe": "help-circle",
+    "suche": "search",
+    "profil": "user",
+    "benutzer_hinzufuegen": "user-plus",
+    "abmelden": "logout",
+    "installieren": "device-mobile-down",
+    "ueber": "info-circle",
+}
+
 @cache
 def _registry() -> dict[str, str]:
     icons = {}
@@ -67,3 +97,7 @@ def status_dot(status: str, label: str, cls: str = "") -> Markup:
         f'<span class="{classes}" role="img" aria-label="{escape(label)}" '
         f'title="{escape(label)}"></span>'
     )
+
+
+def modul_icon(key: str, size: str = "md", cls: str = "", label: str | None = None) -> Markup:
+    return render_icon(MODUL_ICONS[key], size=size, cls=cls, label=label)

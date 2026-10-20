@@ -952,15 +952,15 @@ app.include_router(ui_atemschutz_pruefung.router)
 app.include_router(ui_atemschutz_pruefung_admin.router)
 
 
-# Emoji + Titel je Status fuer die HTML-Fehlerseite (errors/fehler.html)
+# Icon-Name + Titel je Status fuer die HTML-Fehlerseite (errors/fehler.html)
 _ERROR_META = {
-    400: ("⚠️", "Ungültige Anfrage"),
-    401: ("\U0001f510", "Anmeldung erforderlich"),
-    403: ("⛔", "Kein Zugriff"),
-    404: ("\U0001f50d", "Nicht gefunden"),
-    410: ("⌛", "Nicht mehr verfügbar"),
-    429: ("⏳", "Zu viele Anfragen"),
-    500: ("⚠️", "Interner Fehler"),
+    400: ("alert-triangle", "Ungültige Anfrage"),
+    401: ("lock", "Anmeldung erforderlich"),
+    403: ("ban", "Kein Zugriff"),
+    404: ("search", "Nicht gefunden"),
+    410: ("hourglass", "Nicht mehr verfügbar"),
+    429: ("hourglass", "Zu viele Anfragen"),
+    500: ("alert-triangle", "Interner Fehler"),
 }
 
 
@@ -974,11 +974,12 @@ def _login_redirect(request: Request) -> RedirectResponse:
 def _render_error_page(request: Request, status: int, detail, *, authenticated: bool):
     from app.core.templating import templates
 
-    emoji, title = _ERROR_META.get(status, ("⚠️", "Fehler"))
+    icon_name, title = _ERROR_META.get(status, ("alert-triangle", "Fehler"))
     return templates.TemplateResponse(
         request,
         "errors/fehler.html",
-        {"status": status, "title": title, "emoji": emoji, "detail": detail or title, "authenticated": authenticated},
+        {"status": status, "title": title, "icon_name": icon_name,
+         "detail": detail or title, "authenticated": authenticated},
         status_code=status,
     )
 
