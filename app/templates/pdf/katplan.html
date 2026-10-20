@@ -2,55 +2,201 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8">
+  <title>{{ kopf.titel }}</title>
   <style>
-    @page { size: A4; margin: 18mm 15mm 22mm; @bottom-center { content: element(fuss); } }
-    body { font-family: sans-serif; font-size: 10pt; color: #20242b; overflow-wrap: anywhere; }
-    footer { position: running(fuss); font-size: 8pt; }
-    .seite::after { content: counter(page) " / " counter(pages); }
-    .deckblatt { page-break-after: always; }
-    .kapitel { page-break-before: always; }
-    h1, h2, h3 { color: #9f2025; }
+    @page {
+      size: A4;
+      margin: 16mm 15mm 20mm;
+      @bottom-left { content: element(fuss); }
+      @bottom-right { content: "Seite " counter(page) " / " counter(pages); font-size: 7.5pt; color: #6b7280; }
+    }
+    @page :first { @bottom-left { content: none; } @bottom-right { content: none; } }
+    html { font-family: "DejaVu Sans", "Helvetica", sans-serif; font-size: 9.5pt; color: #1f2933; line-height: 1.4; }
+    body { margin: 0; }
+    /* Silbentrennung statt Umbruch mitten im Wort; nur ueberlange Woerter (URLs) werden notfalls gebrochen. */
+    p, li, td, th, .text { hyphens: auto; overflow-wrap: break-word; word-break: normal; }
+    h1, h2, h3, h4 { color: #9f2025; margin: 0; line-height: 1.2; hyphens: manual; }
+    h2 { font-size: 15pt; margin: 0 0 4mm; padding-bottom: 1.5mm; border-bottom: 1.5pt solid #9f2025; break-after: avoid; }
+    h3 { font-size: 11pt; break-after: avoid; }
+    a { color: inherit; text-decoration: none; }
     table { border-collapse: collapse; width: 100%; }
-    td, th { border-bottom: 1px solid #ddd; padding: 5pt; text-align: left; vertical-align: top; }
-    pre { white-space: pre-wrap; overflow-wrap: anywhere; }
-    img { max-width: 100%; max-height: 180px; }
-    .wasserzeichen { position: fixed; top: 40%; left: 0; width: 100%; font-size: 36pt; color: #b91c1c; opacity: .22; text-align: center; transform: rotate(-30deg); }
+    th, td { text-align: left; vertical-align: top; padding: 1.4mm 2mm; border-bottom: .5pt solid #d8dde3; }
+    th { font-size: 7.5pt; text-transform: uppercase; letter-spacing: .04em; color: #6b7280; font-weight: 700; }
+    .fuss { position: running(fuss); font-size: 7.5pt; color: #6b7280; }
+    .muted { color: #6b7280; }
+    .klein { font-size: 8pt; }
+
+    /* Deckblatt */
+    .deckblatt { break-after: page; display: block; }
+    .deckblatt__logo { max-height: 22mm; max-width: 60mm; margin-bottom: 8mm; }
+    .deckblatt__org { font-size: 11pt; color: #6b7280; margin: 0 0 18mm; }
+    .deckblatt h1 { font-size: 26pt; margin-bottom: 5mm; }
+    .deckblatt__beschreibung { margin: 6mm 0 8mm; font-size: 10pt; }
+    .meta { width: auto; min-width: 110mm; margin-top: 8mm; }
+    .meta th { width: 45mm; border: none; padding-left: 0; }
+    .meta td { border: none; font-size: 10pt; }
+    .chips { margin: 0; padding: 0; }
+    .chip { display: inline-block; border: .7pt solid #9f2025; color: #9f2025; border-radius: 8pt;
+            padding: .4mm 2.4mm; margin: 0 1.5mm 1.5mm 0; font-size: 8pt; font-weight: 700; }
+    .chip--grau { border-color: #9ca3af; color: #4b5563; font-weight: 400; }
+    .entwurf-hinweis { margin-top: 10mm; padding: 3mm 4mm; border: 1pt solid #b91c1c; color: #b91c1c; font-weight: 700; }
+
+    /* Verzeichnis */
+    .toc { list-style: none; padding: 0; margin: 0 0 8mm; }
+    .toc li { margin: 0 0 1.5mm; }
+    .toc a::after { content: leader(".") target-counter(attr(href), page); color: #6b7280; }
+    .toc .toc__unter { padding-left: 6mm; font-size: 8.5pt; color: #4b5563; }
+
+    /* Phasen */
+    .phase-farbe { display: inline-block; width: 3mm; height: 3mm; border-radius: 1.5mm; margin-right: 1.5mm; vertical-align: middle; }
+
+    /* Kapitel und Elemente */
+    .kapitel { break-before: page; }
+    .element { border: .6pt solid #d8dde3; border-left: 2.5pt solid #9ca3af; border-radius: 2mm;
+               padding: 3mm 4mm; margin: 0 0 4mm; }
+    .element--prio-1 { border-left-color: #b91c1c; }
+    .element--prio-2 { border-left-color: #d97706; }
+    .element--prio-3 { border-left-color: #6b7280; }
+    .element__kopf { break-after: avoid; margin-bottom: 1.5mm; }
+    .element__kennung { font-family: "DejaVu Sans Mono", monospace; font-size: 8.5pt; color: #6b7280; margin-right: 1.5mm; }
+    .element__meta { font-size: 8pt; color: #4b5563; margin: 1mm 0 2mm; }
+    .element .text p { margin: 0 0 1.5mm; }
+    .element .text ul, .element .text ol { margin: 0 0 2mm; padding-left: 5mm; }
+    .baustein { margin: 2mm 0 0; break-inside: avoid; }
+    .baustein__label { font-size: 7.5pt; text-transform: uppercase; letter-spacing: .04em; color: #6b7280; font-weight: 700; margin-bottom: .8mm; }
+    .schritte { list-style: none; padding: 0; margin: 0; counter-reset: schritt; }
+    .schritte li { counter-increment: schritt; padding-left: 9mm; position: relative; margin-bottom: 1mm; }
+    .schritte li::before { content: "☐ " counter(schritt) "."; position: absolute; left: 0; color: #4b5563; }
+    .liste { margin: 0; padding-left: 5mm; }
+    .angaben { margin-top: 2mm; font-size: 8.5pt; }
+    .angaben th { width: 28mm; }
+    .kontakte td { font-size: 8.5pt; }
+    .telefon { white-space: nowrap; font-family: "DejaVu Sans Mono", monospace; font-size: 8pt; }
+    .bilder img { max-height: 45mm; max-width: 80mm; margin: 2mm 2mm 0 0; border-radius: 1mm; }
+
+    .wasserzeichen { position: fixed; top: 42%; left: -10mm; width: 210mm; text-align: center; font-size: 40pt;
+                     font-weight: 700; color: #b91c1c; opacity: .14; transform: rotate(-32deg); }
   </style>
 </head>
 <body>
-  <footer>{{ kopf.titel }} · Version {{ version.versionsnummer if version else 'Entwurf' }} · Seite <span class="seite"></span> · Druck: {{ format_local_datetime(now, org) }}</footer>
+  <div class="fuss">{{ kopf.titel }} · {{ 'Version ' ~ version.versionsnummer if version else 'ENTWURF' }} · Druck {{ format_local_datetime(now, org) }}</div>
   {% if entwurf %}<div class="wasserzeichen">ENTWURF – nicht freigegeben</div>{% endif %}
+
   <section class="deckblatt">
-    {% if logo %}<img src="{{ logo }}" alt="Organisationslogo">{% endif %}
-    <p>{{ org.name }}</p>
+    {% if logo %}<img class="deckblatt__logo" src="{{ logo }}" alt="Organisationslogo">{% endif %}
+    <p class="deckblatt__org">{{ org.name }}</p>
     <h1>{{ kopf.titel }}</h1>
-    <p>{% for g in kopf.gefahrenarten %}{{ gefahrenarten.get(g, g) }}{% if not loop.last %} · {% endif %}{% endfor %}</p>
-    <p>Version: {{ version.versionsnummer if version else 'Entwurf' }}</p>
-    {% if version %}<p>Freigegeben: {{ format_local_datetime(version.freigegeben_am, org) }} · {{ freigeber }}</p>{% endif %}
-    <p>Wiedervorlage: {{ kopf.wiedervorlage_am or '-' }}</p>
-    <p>Geltungsbereich: {{ kopf.geltungsbereich or '-' }}</p>
-    <p>Verantwortliche Stelle: {{ kopf.verantwortliche_stelle or '-' }}</p>
-    {% for link in plan_links %}<p>{{ link.rolle_label }}: {{ link.titel }}{% for t in link.telefone %} · {{ t.nummer }}{% endfor %}</p>{% endfor %}
+    <p class="chips">{% for g in kopf.gefahrenarten %}<span class="chip">{{ gefahrenarten.get(g, g) }}</span>{% endfor %}</p>
+    {% if beschreibung_plan %}<div class="deckblatt__beschreibung text">{{ beschreibung_plan|safe }}</div>{% endif %}
+    <table class="meta">
+      <tr><th>Fassung</th><td>{% if version %}Version {{ version.versionsnummer }}, freigegeben {{ format_local_datetime(version.freigegeben_am, org) }} von {{ freigeber }}{% else %}Arbeitsstand (nicht freigegeben){% endif %}</td></tr>
+      {% if kopf.geltungsbereich %}<tr><th>Geltungsbereich</th><td>{{ kopf.geltungsbereich }}</td></tr>{% endif %}
+      {% if kopf.verantwortliche_stelle %}<tr><th>Verantwortliche Stelle</th><td>{{ kopf.verantwortliche_stelle }}</td></tr>{% endif %}
+      {% if kopf.wiedervorlage_am %}<tr><th>Wiedervorlage</th><td>{{ kopf.wiedervorlage_am[8:10] ~ '.' ~ kopf.wiedervorlage_am[5:7] ~ '.' ~ kopf.wiedervorlage_am[0:4] if kopf.wiedervorlage_am is string else kopf.wiedervorlage_am.strftime('%d.%m.%Y') }}</td></tr>{% endif %}
+      <tr><th>Gedruckt</th><td>{{ format_local_datetime(now, org) }}</td></tr>
+    </table>
+    {% if plan_links %}
+      <h3 style="margin-top: 8mm">Ansprechstellen</h3>
+      <table class="kontakte">
+        {% for link in plan_links %}
+          <tr><td>{{ link.rolle_label }}</td><td><strong>{{ link.titel }}</strong>{% if link.untertitel %}<br><span class="muted">{{ link.untertitel }}</span>{% endif %}</td>
+            <td>{% for t in link.telefone %}<span class="telefon">{{ t.nummer }}</span>{% if t.label %} <span class="muted klein">{{ t.label }}</span>{% endif %}<br>{% endfor %}</td></tr>
+        {% endfor %}
+      </table>
+    {% endif %}
+    {% if entwurf %}<p class="entwurf-hinweis">Entwurf – dieser Stand ist nicht freigegeben und darf nicht als Einsatzunterlage verwendet werden.</p>{% endif %}
   </section>
-  <h2>Inhaltsverzeichnis</h2>
-  <ul>{% for name in kapitel %}<li><a href="#kapitel-{{ loop.index }}">{{ name }}</a></li>{% endfor %}</ul>
-  <h2>Phasenübersicht</h2>
-  {% for p in kopf.phasen %}<h3>{{ p.name }}</h3><p>{{ p.beschreibung or '' }}</p><p>Auslöser: {{ p.ausloeser or '-' }}</p>{% endfor %}
+
+  <section>
+    <h2>Inhaltsverzeichnis</h2>
+    <ul class="toc">
+      {% if kopf.phasen %}<li><a href="#phasen">Phasenübersicht</a></li>{% endif %}
+      {% for name, elemente in kapitel.items() %}
+        <li><a href="#kapitel-{{ loop.index }}">{{ name }}</a></li>
+        {% for e in elemente %}<li class="toc__unter"><a href="#element-{{ e.element_id }}">{{ e.kennung ~ ' · ' if e.kennung }}{{ e.title }}</a></li>{% endfor %}
+      {% endfor %}
+    </ul>
+
+    {% if kopf.phasen %}
+      <h2 id="phasen">Phasenübersicht</h2>
+      <table>
+        <tr><th>Phase</th><th>Beschreibung</th><th>Auslöser</th></tr>
+        {% for p in kopf.phasen %}
+          <tr>
+            <td><span class="phase-farbe" style="background: {{ phasenfarben.get(p.farbe, '#6b7280') }}"></span><strong>{{ p.name }}</strong></td>
+            <td>{{ p.beschreibung or '' }}</td>
+            <td>{{ p.ausloeser or '' }}</td>
+          </tr>
+        {% endfor %}
+      </table>
+    {% endif %}
+  </section>
+
   {% for name, elemente in kapitel.items() %}
     <section class="kapitel" id="kapitel-{{ loop.index }}">
       <h2>{{ name }}</h2>
       {% for e in elemente %}
-        <article>
-          <h3>{{ e.kennung }} · {{ e.title }}</h3>
-          <p>{{ e.type_label }} · Priorität {{ e.priority }} · Phasen: {{ e.phases|join(', ') or '-' }}</p>
-          {{ (e.beschreibung_html or '')|safe }}
-          <table>{% for feld, wert in e.daten.items() %}<tr><th>{{ feld }}</th><td>{% if wert is mapping or (wert is iterable and wert is not string) %}<pre>{{ wert|tojson(indent=2) }}</pre>{% else %}{{ wert }}{% endif %}</td></tr>{% endfor %}</table>
-          {% if e.address %}<p>Adresse: {{ e.address }}</p>{% endif %}
-          {% if e.geometry %}<p>Koordinaten ({{ e.geo_status }}): {{ e.geometry|tojson }}</p>{% endif %}
-          {% for link in e.linked_entities %}<p>{{ link.rolle_label }}: {{ link.titel }} · {{ link.untertitel }}{% for t in link.telefone %} · {{ t.nummer }}{% endfor %}</p>{% endfor %}
-          {% for q in e.source_references %}<p>Quelle: {{ q.titel }} · v{{ q.versionsnummer }} · Seiten {{ q.seiten or '-' }}</p>{% endfor %}
-          {% if e.attachments %}<h4>Anhänge</h4><ul>{% for a in e.attachments %}<li>{{ a.beschriftung or a.dateiname or a.art }}{% if a.url %} · {{ a.url }}{% endif %}</li>{% endfor %}</ul>{% endif %}
-          {% for bild in e.bilder %}<img src="{{ bild }}" alt="Anhang-Vorschaubild">{% endfor %}
+        <article class="element element--prio-{{ e.priority or 2 }}" id="element-{{ e.element_id }}">
+          <div class="element__kopf">
+            <h3>{% if e.kennung %}<span class="element__kennung">{{ e.kennung }}</span>{% endif %}{{ e.title }}</h3>
+            <div class="element__meta">
+              {{ e.type_label }} · Priorität {{ {1: 'hoch', 2: 'normal', 3: 'niedrig'}.get(e.priority, e.priority) }}
+              {% if e.phases %} · Phasen: {{ e.phases|join(', ') }}{% endif %}
+              {% if e.vertraulich %} · <strong>vertraulich</strong>{% endif %}
+              {% if e.review_status and e.review_status.herkunft == 'ai_suggested' %} · KI-Vorschlag{% endif %}
+            </div>
+          </div>
+          {% if e.beschreibung_html %}<div class="text">{{ e.beschreibung_html|safe }}</div>{% endif %}
+
+          {% for b in e.typdaten %}
+            <div class="baustein">
+              <div class="baustein__label">{{ b.label }}</div>
+              {% if b.art == 'text' %}
+                <div class="text">{{ b.wert }}</div>
+              {% elif b.art == 'schritte' %}
+                <ol class="schritte">{% for s in b.wert %}<li>{{ s.text }}{% if s.erledigt_hinweis %} <span class="muted klein">– erledigt, wenn: {{ s.erledigt_hinweis }}</span>{% endif %}</li>{% endfor %}</ol>
+              {% elif b.art == 'bedingungen' %}
+                <table><tr><th>Wenn</th><th>Dann</th></tr>{% for z in b.wert %}<tr><td>{{ z.wenn or '' }}</td><td>{{ z.dann or '' }}</td></tr>{% endfor %}</table>
+              {% elif b.art == 'bedarf' %}
+                <table><tr><th>Bezeichnung</th><th>Menge</th><th>Einheit</th></tr>{% for z in b.wert %}<tr><td>{{ z.bezeichnung }}</td><td>{{ z.menge or '' }}</td><td>{{ z.einheit or '' }}</td></tr>{% endfor %}</table>
+              {% else %}
+                <ul class="liste">{% for w in b.wert %}<li>{{ w }}</li>{% endfor %}</ul>
+              {% endif %}
+            </div>
+          {% endfor %}
+
+          {% if e.address or e.ortsangabe or e.source_references or e.gueltig_bis or e.pruefen_am %}
+            <table class="angaben">
+              {% if e.address %}<tr><th>Adresse</th><td>{{ e.address }}</td></tr>{% endif %}
+              {% if e.ortsangabe %}<tr><th>Ort</th><td>{{ e.ortsangabe }}</td></tr>{% endif %}
+              {% if e.gueltig_bis %}<tr><th>Gültig bis</th><td>{{ e.gueltig_bis[8:10] }}.{{ e.gueltig_bis[5:7] }}.{{ e.gueltig_bis[0:4] }}</td></tr>{% endif %}
+              {% if e.pruefen_am %}<tr><th>Prüfen am</th><td>{{ e.pruefen_am[8:10] }}.{{ e.pruefen_am[5:7] }}.{{ e.pruefen_am[0:4] }}</td></tr>{% endif %}
+              {% for q in e.source_references %}<tr><th>Quelle</th><td>{{ q.titel or 'Quelle' }}{% if q.versionsnummer %} (v{{ q.versionsnummer }}){% endif %}{% if q.seiten %}, Seite {{ q.seiten }}{% endif %}</td></tr>{% endfor %}
+            </table>
+          {% endif %}
+
+          {% if e.linked_entities %}
+            <div class="baustein">
+              <div class="baustein__label">Verknüpfungen</div>
+              <table class="kontakte">
+                {% for link in e.linked_entities %}
+                  <tr>
+                    <td>{{ link.rolle_label }}</td>
+                    <td><strong>{{ link.titel }}</strong>{% if link.untertitel %}<br><span class="muted">{{ link.untertitel }}</span>{% endif %}{% if link.hinweis %}<br><span class="klein">{{ link.hinweis }}</span>{% endif %}</td>
+                    <td>{% for t in link.telefone %}<span class="telefon">{{ t.nummer }}</span>{% if t.label %} <span class="muted klein">{{ t.label }}</span>{% endif %}<br>{% endfor %}</td>
+                  </tr>
+                {% endfor %}
+              </table>
+            </div>
+          {% endif %}
+
+          {% if e.attachments %}
+            <div class="baustein">
+              <div class="baustein__label">Anhänge</div>
+              <ul class="liste klein">{% for a in e.attachments %}<li>{{ a.beschriftung or a.dateiname or a.art }}{% if a.art == 'link' and a.url %} – {{ a.url }}{% endif %}</li>{% endfor %}</ul>
+              {% if e.bilder %}<div class="bilder">{% for bild in e.bilder %}<img src="{{ bild }}" alt="Anhang-Vorschaubild">{% endfor %}</div>{% endif %}
+            </div>
+          {% endif %}
         </article>
       {% endfor %}
     </section>

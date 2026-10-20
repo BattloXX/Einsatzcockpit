@@ -316,3 +316,22 @@ def test_pdf_kapitelreihenfolge():
         {"id": 3, "parent_id": 1, "titel": "Alarmierung", "sort": 10},
     ]
     assert _kapitelpfade(abschnitte) == ["Maßnahmen", "Maßnahmen > Alarmierung", "Problemstellen"]
+
+
+def test_pdf_typdaten_lesbar_statt_json():
+    from app.services.katplan_pdf_service import _ortsangabe, typdaten_fuer_druck
+
+    bausteine = typdaten_fuer_druck({
+        "schritte": [{"text": "Bauhof verständigen", "erledigt_hinweis": ""}, {"text": ""}],
+        "bedingungen": [{"wenn": "Pegel steigt", "dann": "Stufe 2"}],
+        "bedarf": [{"bezeichnung": "Sandsäcke", "menge": "30", "einheit": "Stk"}],
+        "gefahren": ["Verklausung", ""], "kontrollhinweise": "Rechen prüfen", "lagerort": "",
+    })
+    assert [(b["art"], b["label"]) for b in bausteine] == [
+        ("schritte", "Schritte"), ("bedingungen", "Bedingungen"), ("bedarf", "Bedarf"),
+        ("liste", "Gefahren"), ("text", "Kontrollhinweise"),
+    ]
+    assert bausteine[0]["wert"] == [{"text": "Bauhof verständigen", "erledigt_hinweis": ""}]
+    assert bausteine[3]["wert"] == ["Verklausung"]
+    assert _ortsangabe({"type": "Point", "coordinates": [9.75, 47.47]}, "geprueft") == "Punkt 47.47000, 9.75000 (geprüft)"
+    assert _ortsangabe(None, "keine") is None

@@ -122,6 +122,13 @@ def _relationen(db: Session, user: User, roh: list[dict], arbeit: bool) -> list[
     return result
 
 
+def _adresstext(e: dict) -> str | None:
+    """"Straße Hausnummer, PLZ Ort" ohne leere Teile."""
+    zeile1 = " ".join(str(e[k]) for k in ("strasse", "hausnummer") if e.get(k))
+    zeile2 = " ".join(str(e[k]) for k in ("plz", "ort") if e.get(k))
+    return ", ".join(t for t in (zeile1, zeile2) if t) or None
+
+
 def element_dict(db: Session, user: User, plan: KatplanPlan, e: dict, kopf: dict,
                  version_id: int | None) -> dict[str, Any]:
     warnings: list[str] = []
@@ -160,7 +167,8 @@ def element_dict(db: Session, user: User, plan: KatplanPlan, e: dict, kopf: dict
         "priority": e.get("prioritaet"), "tags": json.loads(e.get("tags_json") or "[]"),
         "phases": [p["name"] for p in kopf.get("phasen", []) if p["id"] in json.loads(e["phasen_json"])],
         "chapter": " > ".join(pfad) or None,
-        "address": " ".join(str(e[k]) for k in ("strasse", "hausnummer", "plz", "ort") if e.get(k)) or None,
+        "address": _adresstext(e),
+        "address_parts": {k: e.get(k) or "" for k in ("strasse", "hausnummer", "plz", "ort")},
         "geometry": geometry, "geo_status": e.get("geo_status"),
         "linked_entities": link_ansichten(db, user, json.loads(e["links_json"])),
         "relations": _relationen(db, user, json.loads(e["relationen_json"]), version_id is None),

@@ -8,6 +8,10 @@ Die Versionshistorie wird reverse-chronologisch geführt.
   Karte, Suche, Kontakte und Anhänge, versionierte PDF-Quellen mit Vergleich,
   KI-Import mit Review, MCP, Qualitätsstatus und PDF-Offlinefassung ergänzt.
   Rollen und Modulschalter, Wiedervorlage und Wiki-Dokumentation; Migrationen 0294–0299.
+  PDF-Offlinefassung überarbeitet: Typdaten als Checkliste und Tabellen statt JSON,
+  Silbentrennung statt Wortbruch, Verzeichnis mit Seitenzahlen. Adresssuche im Editor mit
+  Suchfeld, Org-Ort als Vorauswahl und Übernahme in die Adressfelder. MCP-Entwürfe nehmen
+  eine typisierte Adresse an und können sie mit `verorten` als ungeprüften Punkt setzen.
 
 - **Technik/Modernisierung**: 522 Routen mit synchroner DB-Session auf `def` im
   Threadpool umgestellt; Async-Brücke und Wächtertests verhindern neue Event-Loop-Blockaden.

@@ -37,7 +37,16 @@ Die Akzentfarbe der Organisation:
 
 ### Kontaktdaten
 
-Für Impressum und PDF-Berichte: E-Mail, Telefon, Adresse.
+Für Impressum und PDF-Berichte: E-Mail, Telefon, Adresse. Der **Ort** dient außerdem als
+Vorauswahl der Adresssuche in [Katastrophenplänen](Administration-Katastrophenplaene), wenn
+ein Element keinen Ort hat.
+
+### Module
+
+Optionale Module werden doppelt geschaltet: zuerst systemweit (System-Admin), dann je
+Organisation in deren Einstellungen. Ein Beispiel ist **Katastrophenpläne**: Modul und
+optional der **KI-Import für Planquellen**. Details stehen auf der jeweiligen Modulseite,
+z. B. [Katastrophenpläne](Administration-Katastrophenplaene).
 
 ### Footer-Text
 

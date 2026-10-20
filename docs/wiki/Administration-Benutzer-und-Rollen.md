@@ -66,6 +66,8 @@ Der Benutzer kann sich nicht mehr einloggen. Alle historischen Einträge (Audit-
 | **Fahrtenbuch-Administrator** | `fahrtenbuch_admin` | Fahrtenbuch-Verwaltung (Korrektur, Storno, Stammdaten) der eigenen Org, ohne sonstige Admin-Rechte. |
 | **Einsatzleiter** | `incident_leader` | Einsatz/Großschadenslage führen, Ressourcen, Aufträge und Meldungen steuern. |
 | **Objektverwalter** | `objekt_verwalter` | Objekte, Dokumente und Objekt-Lagekarten pflegen und freigeben. |
+| **Planverwalter** | `katplan_verwalter` | Katastrophenpläne im Arbeitsstand bearbeiten (Kapitel, Phasen, Elemente, Quellen, Anhänge, KI-Import-Review) und zur Freigabe einreichen. Siehe [Katastrophenpläne](Administration-Katastrophenplaene). |
+| **Planfreigeber** | `katplan_freigeber` | Wie Planverwalter, zusätzlich Pläne freigeben, zurückweisen, archivieren und reaktivieren; erhält Wiedervorlage-Mails. |
 | **AS-Überwacher** | `breathing_supervisor` | Atemschutzüberwachung — im Atemschutz-Modul gleichberechtigt mit Einsatzleiter/Bearbeiter, außerhalb davon ohne besondere Rechte. |
 | **Bearbeiter** | `recorder` | Erfasst Einträge, Meldungen, Ressourcen im laufenden Einsatz — aber keine Leitungsaktionen (Einsatz/Lage anlegen, abschließen, wiedereröffnen). |
 | **Nur Lesen** | `readonly` | Rein lesender Zugriff; darf zusätzlich Journal-/Log-Notizen ergänzen. |
@@ -115,6 +117,11 @@ Ein Benutzer kann **mehrere Rollen gleichzeitig** haben (z.B. `incident_leader` 
 | Objekte/Dokumente/Objekt-Lagekarte bearbeiten | ✓ | ✓ | – | – | ✓ | – | – | – |
 | Objekt löschen / Kataloge (Kategorien, Gefahren) pflegen | ✓ | ✓ | – | – | – | – | – | – |
 | Einsatz-Objekt-Verknüpfung bestätigen | ✓ | ✓ | – | ✓ | ✓ | – | – | – |
+| **— Katastrophenpläne —** (Spalten ohne die Planrollen; `katplan_verwalter`/`katplan_freigeber` siehe Tabelle darunter) | | | | | | | | |
+| Freigegebene Pläne, Versionen, Karte, Suche, PDF lesen | ✓ | ✓ | – | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Vertrauliche Inhalte sehen | ✓ | ✓ | – | ✓ | – | – | – | – |
+| Arbeitsstand bearbeiten, einreichen | ✓ | ✓ | – | – | – | – | – | – |
+| Freigeben, zurückweisen, archivieren | ✓ | ✓ | – | – | – | – | – | – |
 | **— Geräteverleih —** | | | | | | | | |
 | Ausleihen/Rückgabe (PIN/SMS) | ✓ | ✓ | – | – | – | – | ✓ | – |
 | Artikelstammdaten pflegen | ✓ | ✓ | – | – | – | – | – | – |
@@ -144,6 +151,15 @@ Ein Benutzer kann **mehrere Rollen gleichzeitig** haben (z.B. `incident_leader` 
 | LIS-Rohdaten-Diagnose | ✓ (nur System-Admin) | – | – | – | – | – | – | – |
 
 \* Technischer Hinweis: Bei zwei als „nur System-Admin" gedachten Aktionen (dauerhaftes Löschen von Einsätzen/Archiveinträgen) greift intern eine allgemeine Rollenprüfung, die aktuell auch `org_admin`/`admin` durchlässt. Organisatorisch sollten diese Aktionen dennoch System-Administratoren vorbehalten bleiben.
+
+#### Katastrophenplan-Rollen
+
+| Funktion | `katplan_verwalter` | `katplan_freigeber` |
+|---|---|---|
+| Freigegebene Pläne lesen, vertrauliche Inhalte sehen | ✓ | ✓ |
+| Arbeitsstand bearbeiten, Quellen/Anhänge/KI-Import, einreichen | ✓ | ✓ |
+| Freigeben, zurückweisen, archivieren, reaktivieren | – | ✓ |
+| Schreibende MCP-Werkzeuge (nur Arbeitsstand) | ✓ | ✓ |
 
 ### Rollen zuweisen
 
