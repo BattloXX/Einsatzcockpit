@@ -147,12 +147,12 @@ html.ei-druck-vorbereitung #einsatz-info-karte { height: 58mm !important; min-he
 
   <!-- Nur im Druck sichtbarer Kopf -->
   <div class="ei-print-header" aria-hidden="true">
-    <span>🚨 Einsatzinformation · {{ incident.alarm_type_code }} · Einsatz #{{ incident.lis_operation_number or incident.nummer or incident.id }}</span>
+    <span>{{ modul_icon("lage", size="sm") }} Einsatzinformation · {{ incident.alarm_type_code }} · Einsatz #{{ incident.lis_operation_number or incident.nummer or incident.id }}</span>
     <span id="ei-print-ts" style="font-weight:400;font-size:.85rem;"></span>
   </div>
 
   {% if incident.is_exercise %}
-  <div class="exercise-topbar" style="margin:0 0 12px;">⚠ ÜBUNG / SIMULATION ⚠</div>
+  <div class="exercise-topbar" style="margin:0 0 12px;">{{ icon("alert-triangle", size="sm") }} ÜBUNG / SIMULATION {{ icon("alert-triangle", size="sm") }}</div>
   {% endif %}
 
   <!-- Kopf (volle Breite) -->
@@ -175,24 +175,24 @@ html.ei-druck-vorbereitung #einsatz-info-karte { height: 58mm !important; min-he
         {% endif %}
         {% if incident.caller_name or incident.caller_phone %}
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px;">
-          {% if incident.caller_name %}<span>👤 {{ incident.caller_name }}</span>{% endif %}
+          {% if incident.caller_name %}<span>{{ icon("user", size="sm") }} {{ incident.caller_name }}</span>{% endif %}
           {% if incident.caller_phone %}
-          <a href="tel:{{ incident.caller_phone|tel }}" class="btn btn--primary objekt-einsatz-telbtn">📞 {{ incident.caller_phone }}</a>
+          <a href="tel:{{ incident.caller_phone|tel }}" class="btn btn--primary objekt-einsatz-telbtn">{{ icon("phone", size="sm") }} {{ incident.caller_phone }}</a>
           {% endif %}
         </div>
         {% endif %}
       </div>
       <div x-data="rsvpWidget({{ incident.id }})" x-init="init()" x-show="(zusagen + absagen) > 0" x-cloak
            style="display:flex;gap:6px;align-items:center;" title="Rückmeldungen (Zu-/Absagen)">
-        <span class="badge-pill badge-pill--green" x-text="'✅ ' + zusagen"></span>
-        <span class="badge-pill badge-pill--red" x-text="'❌ ' + absagen"></span>
+        <span class="badge-pill badge-pill--green">{{ icon("circle-check", size="sm") }} <span x-text="zusagen"></span></span>
+        <span class="badge-pill badge-pill--red">{{ icon("circle-x", size="sm") }} <span x-text="absagen"></span></span>
       </div>
       <div class="ei-noprint ei-kopf__aktionen">
         {% with active="info" %}{% include "incident/_subnav.html" %}{% endwith %}
         <button type="button" class="btn btn--secondary"
-                onclick="ecpgPrint({document_type:'einsatzinfo', incident_id:{{ incident.id }}, title:'Einsatzinfo drucken', localFn:'einsatzInfoDrucken'})">🖨 Drucken</button>
+                onclick="ecpgPrint({document_type:'einsatzinfo', incident_id:{{ incident.id }}, title:'Einsatzinfo drucken', localFn:'einsatzInfoDrucken'})">{{ icon("printer", size="sm") }} Drucken</button>
         {% if gmaps_url %}
-        <a href="{{ gmaps_url }}" target="_blank" rel="noopener" class="btn btn--secondary">🗺 Google Maps</a>
+        <a href="{{ gmaps_url }}" target="_blank" rel="noopener" class="btn btn--secondary">{{ icon("map", size="sm") }} Google Maps</a>
         {% endif %}
       </div>
     </div>
@@ -217,14 +217,14 @@ html.ei-druck-vorbereitung #einsatz-info-karte { height: 58mm !important; min-he
 
       <!-- Nächste Hydranten -->
       <div class="card" id="hydranten-card" style="padding:14px;">
-        <h3 style="margin:0 0 10px;">🚰 Nächste Hydranten</h3>
+        <h3 style="margin:0 0 10px;">{{ icon("fire-hydrant", size="md") }} Nächste Hydranten</h3>
         <div id="hydranten-liste"><span class="text-muted">Lade Löschwasser …</span></div>
       </div>
 
       <!-- Ausrückordnung -->
       {% if dispatch_vehicles %}
       <div class="card" style="padding:14px;">
-        <h3 style="margin:0 0 10px;">🚒 Ausrückordnung</h3>
+        <h3 style="margin:0 0 10px;">{{ icon("firetruck", size="md") }} Ausrückordnung</h3>
         <div style="display:flex;flex-wrap:wrap;gap:6px;">
           {% for v in dispatch_vehicles %}
           <span class="badge-pill badge-pill--gray" title="{{ v.name }}">{{ v.code }}</span>
@@ -249,13 +249,13 @@ html.ei-druck-vorbereitung #einsatz-info-karte { height: 58mm !important; min-he
 
         <!-- Gefahren der Nachbarobjekte (Umkreis) -->
         <div class="card" id="nachbar-gefahren-card" style="padding:14px;">
-          <h3 style="margin:0 0 10px;">⚠️ Gefahren in der Umgebung</h3>
+          <h3 style="margin:0 0 10px;">{{ icon("alert-triangle", size="md") }} Gefahren in der Umgebung</h3>
           <div id="nachbar-gefahren"><span class="text-muted">Lade Nachbar-Gefahren …</span></div>
         </div>
       {% endif %}
 
       <!-- Absprung ins Board -->
-      <a href="/einsatz/{{ incident.id }}" class="btn btn--primary btn--full ei-noprint">🖥 Zum Einsatz-Board</a>
+      <a href="/einsatz/{{ incident.id }}" class="btn btn--primary btn--full ei-noprint">{{ icon("device-desktop", size="sm") }} Zum Einsatz-Board</a>
     </div>
   </div>
 </div>

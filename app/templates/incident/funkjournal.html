@@ -131,11 +131,11 @@
           <label class="form-label" style="font-size:.72rem;">Richtung</label>
           <div class="btn-group">
             <button type="button" class="btn-group__btn btn-group__btn--in"
-                    :class="{ active: dir === 'in' }" @click="dir='in'">↓ Ein</button>
+                    :class="{ active: dir === 'in' }" @click="dir='in'">{{ icon("chevron-down", size="sm") }} Ein</button>
             <button type="button" class="btn-group__btn btn-group__btn--out"
-                    :class="{ active: dir === 'out' }" @click="dir='out'">↑ Aus</button>
+                    :class="{ active: dir === 'out' }" @click="dir='out'">{{ icon("chevron-up", size="sm") }} Aus</button>
             <button type="button" class="btn-group__btn btn-group__btn--int"
-                    :class="{ active: dir === 'int' }" @click="dir='int'">↔ Int</button>
+                    :class="{ active: dir === 'int' }" @click="dir='int'">{{ icon("chevron-right", size="sm") }} Int</button>
           </div>
         </div>
         <div>
@@ -156,7 +156,7 @@
                   :style="lageRel ? 'background:rgba(245,158,11,.25);color:#fbbf24;border-color:rgba(245,158,11,.5);font-weight:700;' : ''"
                   :class="lageRel ? '' : 'btn--ghost'"
                   style="white-space:nowrap;">
-            ⭐ Lagerelevant
+            {{ icon("star", size="xs") }} Lagerelevant
           </button>
         </div>
       </div>
@@ -233,7 +233,7 @@
         <td style="white-space:nowrap; color:var(--text-muted);">{{ c.ts|local_time }}</td>
         <td>
           <span class="dir-badge dir-{{ c.direction }}">
-            {% if c.direction == 'in' %}↓ Ein{% elif c.direction == 'out' %}↑ Aus{% else %}↔ Int{% endif %}
+            {% if c.direction == 'in' %}{{ icon("chevron-down", size="sm") }} Ein{% elif c.direction == 'out' %}{{ icon("chevron-up", size="sm") }} Aus{% else %}{{ icon("chevron-right", size="sm") }} Int{% endif %}
           </span>
         </td>
         <td style="color:var(--text-muted); white-space:nowrap;">{{ c.channel or '–' }}</td>
@@ -241,7 +241,7 @@
         <td class="fj-msg">
           {{ c.message }}
           {% if c.is_request %}<span class="fj-req-badge">Auftrag</span>{% endif %}
-          {% if c.is_lage_relevant %}<span class="fj-lage-badge">⭐ Lage</span>{% endif %}
+          {% if c.is_lage_relevant %}<span class="fj-lage-badge">{{ icon("star", size="sm") }} Lage</span>{% endif %}
         </td>
         <td style="color:var(--text-muted); font-size:.72rem; white-space:nowrap;">
           {{ c.author_name or '–' }}
@@ -255,8 +255,9 @@
                 hx-on::after-request="if(event.detail.successful){refreshFjList();}">
             <button type="submit" class="btn btn--xs fj-handle-btn
               {% if c.handled %}btn--ghost{% else %}btn--secondary{% endif %}"
+                aria-label="{% if c.handled %}Als offen markieren{% else %}Als erledigt markieren{% endif %}"
                 title="{% if c.handled %}Als offen markieren{% else %}Als erledigt markieren{% endif %}">
-              {% if c.handled %}↩{% else %}✓{% endif %}
+              {% if c.handled %}{{ icon("arrow-back-up", size="xs") }}{% else %}{{ icon("check", size="xs") }}{% endif %}
             </button>
           </form>
           <form style="display:inline;"
@@ -266,9 +267,10 @@
                 hx-on::after-request="if(event.detail.successful){refreshFjList();}">
             <button type="submit" class="btn btn--xs fj-handle-btn
               {% if c.is_lage_relevant %}btn--secondary{% else %}btn--ghost{% endif %}"
+                aria-label="{% if c.is_lage_relevant %}Lagerelevanz entfernen{% else %}Als lagerelevant markieren{% endif %}"
                 title="{% if c.is_lage_relevant %}Lagerelevanz entfernen{% else %}Als lagerelevant markieren{% endif %}"
                 style="margin-left:2px;">
-              ⭐
+              {{ icon("star", size="xs") }}
             </button>
           </form>
         </td>

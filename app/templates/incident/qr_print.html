@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <title>QR-Code Druckseite – Einsatz {{ incident.alarm_type_code }}</title>
   <style>
+    .ecp-icon{display:inline-block;vertical-align:-0.2em;flex-shrink:0}
     :root { color-scheme: light; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { background: #fff; color: #111; font-family: 'Inter', 'Segoe UI', system-ui, sans-serif; }
@@ -75,8 +76,8 @@
 <body onload="setTimeout(function(){ window.print(); }, 350)">
 
   <div class="print-toolbar">
-    <a href="/einsatz/{{ incident.id }}" class="secondary" title="Zurück zum Einsatz">← Einsatz</a>
-    <button type="button" onclick="window.print()" title="Druckdialog öffnen">🖨 Drucken</button>
+    <a href="/einsatz/{{ incident.id }}" class="secondary" title="Zurück zum Einsatz">{{ icon("chevron-left", size="sm") }} Einsatz</a>
+    <button type="button" onclick="window.print()" title="Druckdialog öffnen">{{ icon("printer", size="sm") }} Drucken</button>
   </div>
 
   <div class="sheet">

@@ -8,24 +8,24 @@
   <div class="card" style="padding:14px;">
     <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;">
       <div style="min-width:0;">
-        <strong>🏢 {{ o.name }}</strong>
+        <strong>{{ modul_icon("objekte", size="sm") }} {{ o.name }}</strong>
         {% if o.vulgoname %}<div class="text-muted" style="font-size:0.85em;">{{ o.vulgoname }}</div>{% endif %}
-        <span class="text-muted" style="font-size:.85rem;"> {% if o.adresse_zeile %}{{ o.adresse_zeile }}{% endif %}{% if o.bma and o.bma.bma_nummer %}{% if o.adresse_zeile %} · {% endif %}🔥 BMA {{ o.bma.bma_nummer }}{% endif %}{% if o.adresse_zeile or (o.bma and o.bma.bma_nummer) %} · {% endif %}{{ o.anzeige_nummer }}</span>
+        <span class="text-muted" style="font-size:.85rem;"> {% if o.adresse_zeile %}{{ o.adresse_zeile }}{% endif %}{% if o.bma and o.bma.bma_nummer %}{% if o.adresse_zeile %} · {% endif %}{{ icon("flame", size="sm") }} BMA {{ o.bma.bma_nummer }}{% endif %}{% if o.adresse_zeile or (o.bma and o.bma.bma_nummer) %} · {% endif %}{{ o.anzeige_nummer }}</span>
       </div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
         {% if v.status == 'vorschlag' %}<span class="badge-pill badge-pill--amber">Vorschlag{% if v.distanz_m %} · {{ v.distanz_m }} m{% endif %}</span>{% endif %}
         {% set bn = benachrichtigungen.get(o.id, {}) %}
-        {% if v.status == 'bestaetigt' and (bn.get('gesendet', 0) or bn.get('fehler', 0) or hat_empfaenger.get(o.id)) %}<span class="text-muted">{% if bn.get('gesendet', 0) %}✉️ {{ bn.get('gesendet') }} benachrichtigt{% endif %}{% if bn.get('fehler', 0) %} ⚠️ {{ bn.get('fehler') }} Fehler{% endif %}</span>{% endif %}
+        {% if v.status == 'bestaetigt' and (bn.get('gesendet', 0) or bn.get('fehler', 0) or hat_empfaenger.get(o.id)) %}<span class="text-muted">{% if bn.get('gesendet', 0) %}{{ icon("mail", size="sm") }} {{ bn.get('gesendet') }} benachrichtigt{% endif %}{% if bn.get('fehler', 0) %} {{ icon("alert-triangle", size="sm") }} {{ bn.get('fehler') }} Fehler{% endif %}</span>{% endif %}
         {% if darf_verknuepfen and v.status == 'vorschlag' %}
         <form hx-post="/objekte/einsatz-panel/{{ incident.id }}/{{ v.id }}/bestaetigen"
               hx-target="#ei-objekt-section" hx-swap="outerHTML" style="display:inline;margin:0;">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
           <input type="hidden" name="view" value="info">
-          <button type="submit" class="btn btn--sm btn--primary ei-noprint">✓ Bestätigen</button>
+          <button type="submit" class="btn btn--sm btn--primary ei-noprint">{{ icon("check", size="xs") }} Bestätigen</button>
         </form>
         {% endif %}
         <button type="button" class="btn btn--sm btn--ghost ei-noprint" title="Objektblatt drucken"
-                onclick="ecpgPrint({document_type:'objektblatt', objekt_id:{{ o.id }}, title:'Objektblatt drucken', localUrl:'/objekte/{{ o.id }}/objektblatt.pdf?anhang=1'})">🖨 Drucken</button>
+                onclick="ecpgPrint({document_type:'objektblatt', objekt_id:{{ o.id }}, title:'Objektblatt drucken', localUrl:'/objekte/{{ o.id }}/objektblatt.pdf?anhang=1'})">{{ icon("printer", size="xs") }} Drucken</button>
         <a href="/objekte/{{ o.id }}/einsatz?incident_id={{ incident.id }}" class="btn btn--sm btn--secondary ei-noprint">Objektinfo öffnen</a>
         {% if darf_verknuepfen %}
         {% if v.status == 'bestaetigt' %}
@@ -58,7 +58,7 @@
   <div class="card{{ ' ei-noprint' if verknuepfungen else '' }}" style="padding:14px;"
        x-data='{ q: "", kandidaten: [{% for o in kandidaten %}{ id: {{ o.id }}, n: {{ o.name|tojson }}, v: {{ o.vulgoname|tojson }}, l: {{ ((" · " ~ o.adresse_zeile) if o.adresse_zeile else "")|tojson }}, t: {{ (o.name ~ " " ~ (o.vulgoname or "") ~ " " ~ o.adresse_zeile ~ " " ~ (o.bma.bma_nummer if o.bma and o.bma.bma_nummer else "") ~ " " ~ o.anzeige_nummer)|lower|tojson }} }{{ "," if not loop.last }}{% endfor %}] }'>
     <div style="font-weight:600;margin-bottom:6px;">
-      {% if verknuepfungen %}Weiteres Objekt verknüpfen{% else %}🏢 Objekt manuell verknüpfen{% endif %}
+      {% if verknuepfungen %}Weiteres Objekt verknüpfen{% else %}{{ modul_icon("objekte", size="sm") }} Objekt manuell verknüpfen{% endif %}
     </div>
     {% if not verknuepfungen %}
     <p class="text-muted" style="margin:0 0 8px;font-size:.85rem;">Automatisch wurde kein Objekt zugeordnet. Objekt suchen und direkt verknüpfen:</p>

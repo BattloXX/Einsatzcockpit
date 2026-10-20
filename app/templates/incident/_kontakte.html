@@ -1,5 +1,5 @@
 <div id="einsatz-kontakte" class="card" style="padding:14px;">
-  <h3 style="margin-top:0;">📞 Einsatzkontakte</h3>
+  <h3 style="margin-top:0;">{{ modul_icon("kontakte", size="md") }} Einsatzkontakte</h3>
   {% for k in einsatzkontakte %}
   <div style="margin-bottom:12px;">
     <strong>{{ k.anzeigename }}</strong>
@@ -7,7 +7,7 @@
     {% if k.organisation %}<span class="text-muted"> · {{ k.organisation }}</span>{% endif %}
     {% if k.hinweis %}<div>{{ k.hinweis }}</div>{% endif %}
     <div style="display:flex;gap:6px;flex-wrap:wrap;">
-      {% for tel in k.telefone %}<a class="btn btn--primary btn--sm" href="tel:{{ tel.nummer|tel }}">📞 {{ tel.label or tel.nummer }}</a>{% endfor %}
+      {% for tel in k.telefone %}<a class="btn btn--primary btn--sm" href="tel:{{ tel.nummer|tel }}">{{ icon("phone", size="xs") }} {{ tel.label or tel.nummer }}</a>{% endfor %}
       {% if kontakte_vollzugriff %}<a class="btn btn--ghost btn--sm" href="/kontakte/{{ k.id }}">Kontakt öffnen</a>{% endif %}
       {% if kontakte_bearbeiten %}
       <form hx-post="/einsatz/{{ incident.id }}/kontakte/zuordnen" hx-target="#einsatz-kontakte" hx-swap="outerHTML">

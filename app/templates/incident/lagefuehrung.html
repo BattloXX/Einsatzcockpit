@@ -7,12 +7,12 @@
 {% endblock %}
 {% block content %}
 {% if incident.is_exercise %}
-<div class="exercise-topbar">⚠ ÜBUNG / SIMULATION ⚠</div>
+<div class="exercise-topbar">{{ icon("alert-triangle", size="sm") }} ÜBUNG / SIMULATION {{ icon("alert-triangle", size="sm") }}</div>
 {% endif %}
 <div class="page-content">
   <div class="page-header">
     <div>
-      <h1>🗺️ Lageführung</h1>
+      <h1>{{ icon("map", size="md") }} Lageführung</h1>
       <p class="text-muted">Einsatz #{{ incident.lis_operation_number or incident.nummer or incident.id }} — Fahrzeuge, Objekt und Einsatzort werden automatisch angezeigt. Zeichenwerkzeuge oben links auf der Karte.</p>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
@@ -22,7 +22,7 @@
         <option value="A3 landscape">A3 Querformat</option>
         <option value="A3 portrait">A3 Hochformat</option>
       </select>
-      <button type="button" id="lft-tool-druck" class="btn btn--ghost">🖨 Drucken</button>
+      <button type="button" id="lft-tool-druck" class="btn btn--ghost">{{ icon("printer", size="sm") }} Drucken</button>
       {% with active="lagefuehrung" %}{% include "incident/_subnav.html" %}{% endwith %}
     </div>
   </div>
@@ -45,7 +45,7 @@
   </div>
 
   <div class="objekt-karte-layout lft-karte-layout">
-    <button type="button" id="lft-sidebar-toggle" class="lft-sidebar-toggle" aria-expanded="false" aria-controls="lft-sidebar">🧰 Werkzeuge</button>
+    <button type="button" id="lft-sidebar-toggle" class="lft-sidebar-toggle" aria-expanded="false" aria-controls="lft-sidebar">{{ icon("box", size="sm") }} Werkzeuge</button>
     <aside class="card lft-sidebar" id="lft-sidebar" style="padding:12px;">
       <div class="lft-tabs" role="tablist">
         <button type="button" class="lft-tab lft-tab--aktiv" id="lft-tab-layer" data-lft-tab="layer" role="tab" aria-selected="true" aria-controls="lft-panel-layer" tabindex="0">Layer</button>
@@ -55,30 +55,30 @@
 
       <div class="lft-tab-panel" id="lft-panel-layer" data-lft-panel="layer" role="tabpanel" aria-labelledby="lft-tab-layer">
         <div class="lft-layer-gruppe">
-          <label><input type="checkbox" id="lft-layer-einsatzort" checked> 📍 Einsatzort</label>
-          <label><input type="checkbox" id="lft-layer-fahrzeuge" checked> 🚒 Fahrzeuge</label>
+          <label><input type="checkbox" id="lft-layer-einsatzort" checked> {{ icon("map-pin", size="sm") }} Einsatzort</label>
+          <label><input type="checkbox" id="lft-layer-fahrzeuge" checked> {{ icon("firetruck", size="sm") }} Fahrzeuge</label>
           {% if objekt_enabled %}
-          <label><input type="checkbox" id="lft-layer-objekt" checked> 🏢 Objekt</label>
+          <label><input type="checkbox" id="lft-layer-objekt" checked> {{ modul_icon("objekte", size="sm") }} Objekt</label>
           {% endif %}
-          <label><input type="checkbox" id="lft-layer-wasserstellen" checked> 💧 Wasserstellen</label>
+          <label><input type="checkbox" id="lft-layer-wasserstellen" checked> {{ icon("droplet", size="sm") }} Wasserstellen</label>
           {% if foerder_enabled %}
-          <label><input type="checkbox" id="lft-layer-foerderstrecke" checked> 🚰 Förderstrecke</label>
+          <label><input type="checkbox" id="lft-layer-foerderstrecke" checked> {{ modul_icon("foerderstrecke", size="sm") }} Förderstrecke</label>
           {% endif %}
-          <label><input type="checkbox" id="lft-layer-zeichnung" checked> ✏️ Zeichnungen</label>
-          <label><input type="checkbox" id="lft-layer-beschriftung" checked> 🏷️ Beschriftungen</label>
+          <label><input type="checkbox" id="lft-layer-zeichnung" checked> {{ icon("pencil", size="sm") }} Zeichnungen</label>
+          <label><input type="checkbox" id="lft-layer-beschriftung" checked> {{ icon("tag", size="sm") }} Beschriftungen</label>
         </div>
 
         {% if foerder_enabled %}
         <div class="lft-werkzeuge" style="border-top:1px solid var(--border);padding-top:10px;margin-top:6px;">
-          <label class="form-label">🚰 Wasserförderung / Förderstrecken</label>
+          <label class="form-label">{{ modul_icon("foerderstrecke", size="sm") }} Wasserförderung / Förderstrecken</label>
           {% for fs in foerderstrecken %}
           <div style="border:1px solid var(--border);border-radius:8px;padding:6px 8px;margin-bottom:6px;">
-            <div style="font-size:.85rem;font-weight:600;">🚰 {{ fs.name }}</div>
+            <div style="font-size:.85rem;font-weight:600;">{{ modul_icon("foerderstrecke", size="sm") }} {{ fs.name }}</div>
             <div style="font-size:.72rem;color:var(--text-muted);margin-bottom:4px;">
               Auftrag Wasserversorgung · {{ foerder_status_labels.get(fs.status, fs.status) }}
             </div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;">
-              <a class="btn btn--primary btn--xs" href="/foerderstrecke/{{ fs.id }}">Öffnen ▸</a>
+              <a class="btn btn--primary btn--xs" href="/foerderstrecke/{{ fs.id }}">Öffnen {{ icon("chevron-right", size="xs") }}</a>
               <a class="btn btn--ghost btn--xs" href="/foerderstrecke/{{ fs.id }}/pdf" target="_blank">PDF</a>
             </div>
           </div>
@@ -105,7 +105,7 @@
         <div class="lft-werkzeuge">
           <label class="form-label">Lage-Replay</label>
           <div class="lft-werkzeuge__grid">
-            <button type="button" class="btn btn--ghost btn--sm" id="lft-tool-replay">⏱ Replay</button>
+            <button type="button" class="btn btn--ghost btn--sm" id="lft-tool-replay">{{ icon("stopwatch", size="xs") }} Replay</button>
           </div>
         </div>
 
@@ -113,16 +113,16 @@
           <div class="lft-werkzeuge">
             <label class="form-label">Weitere Werkzeuge</label>
             <div class="lft-werkzeuge__grid">
-              <button type="button" class="btn btn--ghost btn--sm" id="lft-tool-text">📝 Text</button>
-              <button type="button" class="btn btn--ghost btn--sm" id="lft-tool-meldung">📢 Meldung</button>
-              <button type="button" class="btn btn--ghost btn--sm" id="lft-tool-distanzlinie">📏 Distanzlinie</button>
-              <button type="button" class="btn btn--ghost btn--sm" id="lft-tool-distanzkreis">⭕ Distanzkreis</button>
-              <button type="button" class="btn btn--ghost btn--sm" id="lft-tool-wind">🧭 Windrichtung</button>
-              <button type="button" class="btn btn--ghost btn--sm" id="lft-tool-snapshot">📸 Momentaufnahme</button>
+              <button type="button" class="btn btn--ghost btn--sm" id="lft-tool-text">{{ icon("note", size="xs") }} Text</button>
+              <button type="button" class="btn btn--ghost btn--sm" id="lft-tool-meldung">{{ icon("speakerphone", size="xs") }} Meldung</button>
+              <button type="button" class="btn btn--ghost btn--sm" id="lft-tool-distanzlinie">{{ icon("ruler", size="xs") }} Distanzlinie</button>
+              <button type="button" class="btn btn--ghost btn--sm" id="lft-tool-distanzkreis">{{ icon("circle-dashed", size="xs") }} Distanzkreis</button>
+              <button type="button" class="btn btn--ghost btn--sm" id="lft-tool-wind">{{ icon("compass", size="xs") }} Windrichtung</button>
+              <button type="button" class="btn btn--ghost btn--sm" id="lft-tool-snapshot">{{ icon("camera", size="xs") }} Momentaufnahme</button>
             </div>
             {% if request.state.nachschlagewerke_enabled %}
             <details class="lft-evak" style="margin-top:8px;">
-              <summary class="btn btn--ghost btn--sm" style="display:inline-block;">☣️ Evakuierungsradius</summary>
+              <summary class="btn btn--ghost btn--sm" style="display:inline-block;">{{ icon("biohazard", size="xs") }} Evakuierungsradius</summary>
               <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center;">
                 <button type="button" class="btn btn--ghost btn--xs" id="lft-evak-klein">Klein (50 m)</button>
                 <button type="button" class="btn btn--ghost btn--xs" id="lft-evak-gross">Groß (100 m)</button>
@@ -136,7 +136,7 @@
               <small class="form-hint">Preset wählen, dann auf die Karte klicken. ERG-2020-Richtwerte.</small>
             </details>
             <details class="lft-ausbreitung" style="margin-top:8px;">
-              <summary class="btn btn--ghost btn--sm" style="display:inline-block;">🌬 Ausbreitung (Wind)</summary>
+              <summary class="btn btn--ghost btn--sm" style="display:inline-block;">{{ icon("wind", size="xs") }} Ausbreitung (Wind)</summary>
               <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center;">
                 <label class="form-label" for="lft-plume-modell" style="margin:0;">Modell</label>
                 <select id="lft-plume-modell" class="form-input" style="width:auto;padding:4px 6px;">
@@ -213,12 +213,12 @@
       </details>
       <div id="lft-replay-panel" class="lft-replay-panel" hidden>
         <div class="lft-replay-panel__zeile">
-          <span>⏱ Replay</span>
+          <span>{{ icon("stopwatch", size="sm") }} Replay</span>
           <span id="lft-replay-zeit" class="lft-replay-panel__zeit"></span>
           <button type="button" class="btn btn--ghost btn--xs" id="lft-replay-exit">Beenden</button>
         </div>
         <div class="lft-replay-panel__zeile">
-          <button type="button" class="btn btn--ghost btn--xs" id="lft-replay-play">▶</button>
+          <button type="button" class="btn btn--ghost btn--xs" id="lft-replay-play" aria-label="Replay abspielen">{{ icon("player-play", size="xs") }}</button>
           <input type="range" id="lft-replay-slider" class="lft-replay-panel__slider" min="0" max="0" value="0">
         </div>
       </div>

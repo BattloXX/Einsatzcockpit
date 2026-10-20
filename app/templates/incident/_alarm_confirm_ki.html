@@ -4,7 +4,7 @@
     <div class="modal__title">KI-Auftragsvorschläge</div>
     <div class="modal__subtitle">Einsatz #{{ incident.id }}</div>
   </div>
-  <button aria-label="Schließen" class="modal__close" data-ec-action="close-dialog" data-ec-dialog="cardDetailModal">✕</button>
+  <button aria-label="Schließen" class="modal__close" data-ec-action="close-dialog" data-ec-dialog="cardDetailModal">{{ icon("x", size="sm") }}</button>
 </div>
 <div class="modal__body">
   {% if vehicles_added is not none %}
@@ -34,7 +34,7 @@
             hx-target="#cardDetailBody"
             hx-swap="innerHTML"
             hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'>
-      ✨ Ja, neu generieren
+      {{ icon("sparkles", size="sm") }} Ja, neu generieren
     </button>
   </div>
   {% else %}
