@@ -1,4 +1,5 @@
 {% if can_edit and plan.status != 'archiviert' %}
+  {% include "katplan/_import_status.html" %}
   <details>
     <summary>Neue Version hochladen</summary>
     {% with ersetzt = dokument %}{% include "katplan/_quelle_upload.html" %}{% endwith %}

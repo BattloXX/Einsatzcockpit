@@ -30,6 +30,10 @@
       </details>
       {% if can_edit and plan.status != 'archiviert' %}
         <section class="kp-box">
+          <h2 class="kp-box__title">KI-Vorschläge zu dieser Seite</h2>
+          <p><a href="/katastrophenplaene/{{ plan.id }}/import?quelle={{ dokument.id }}&amp;seite={{ seite.seiten_nr }}">{{ ki_seiten_anzahl }} offene Vorschläge prüfen</a></p>
+        </section>
+        <section class="kp-box">
           <h2 class="kp-box__title">Element aus dieser Seite anlegen</h2>
           <form method="post" action="/katastrophenplaene/{{ plan.id }}/quellen/{{ dokument.id }}/element" class="kp-form">
             <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">

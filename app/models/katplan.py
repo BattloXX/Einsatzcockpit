@@ -383,6 +383,9 @@ class KatplanDokument(TenantScoped, Base):
     belegt_bytes: Mapped[int] = mapped_column(sa.BigInteger, default=0)
     seitenzahl: Mapped[int] = mapped_column(sa.Integer)
     status: Mapped[str] = mapped_column(sa.String(20), default="neu")
+    ki_status: Mapped[str | None] = mapped_column(sa.String(20))
+    ki_fehler: Mapped[str | None] = mapped_column(sa.String(300))
+    ki_analysiert_am: Mapped[datetime | None] = mapped_column(sa.DateTime)
     fehler_text: Mapped[str | None] = mapped_column(sa.String(500))
     dokument_gruppe_id: Mapped[int | None] = mapped_column(
         sa.BigInteger, sa.ForeignKey("katplan_dokument.id", ondelete="SET NULL"))
@@ -413,3 +416,39 @@ class KatplanDokumentSeite(TenantScoped, Base):
     volltext: Mapped[str | None] = mapped_column(sa.Text)
     text_quelle: Mapped[str] = mapped_column(sa.String(10), default="none")
     titel: Mapped[str | None] = mapped_column(sa.String(200))
+
+
+class KatplanImportVorschlag(TenantScoped, Base):
+    __tablename__ = "katplan_import_vorschlag"
+    __table_args__ = (
+        sa.Index("ix_katplan_import_org_plan_status", "org_id", "plan_id", "status"),
+        sa.Index("ix_katplan_import_org_dokument", "org_id", "dokument_id"),
+    )
+
+    id: Mapped[int] = mapped_column(sa.BigInteger, primary_key=True, autoincrement=True)
+    plan_id: Mapped[int] = mapped_column(sa.BigInteger, sa.ForeignKey("katplan_plan.id", ondelete="CASCADE"))
+    dokument_id: Mapped[int] = mapped_column(sa.BigInteger, sa.ForeignKey("katplan_dokument.id", ondelete="CASCADE"))
+    seite_id: Mapped[int | None] = mapped_column(
+        sa.BigInteger, sa.ForeignKey("katplan_dokument_seite.id", ondelete="SET NULL"))
+    seiten_nr: Mapped[int] = mapped_column(sa.Integer)
+    reihenfolge: Mapped[int] = mapped_column(sa.Integer, default=0)
+    typ: Mapped[str] = mapped_column(sa.String(30))
+    titel: Mapped[str] = mapped_column(sa.String(200))
+    beschreibung_html: Mapped[str | None] = mapped_column(sa.Text)
+    daten_json: Mapped[str | None] = mapped_column(sa.Text)
+    kapitel: Mapped[str | None] = mapped_column(sa.String(200))
+    phase: Mapped[str | None] = mapped_column(sa.String(100))
+    prioritaet: Mapped[int | None] = mapped_column(sa.Integer)
+    strasse: Mapped[str | None] = mapped_column(sa.String(200))
+    hausnummer: Mapped[str | None] = mapped_column(sa.String(20))
+    plz: Mapped[str | None] = mapped_column(sa.String(10))
+    ort: Mapped[str | None] = mapped_column(sa.String(100))
+    kontakte_json: Mapped[str | None] = mapped_column(sa.Text)
+    objekt_name: Mapped[str | None] = mapped_column(sa.String(200))
+    objekt_id: Mapped[int | None] = mapped_column(sa.BigInteger)
+    begruendung: Mapped[str | None] = mapped_column(sa.String(300))
+    status: Mapped[str] = mapped_column(sa.String(20), default="offen")
+    element_id: Mapped[int | None] = mapped_column(sa.BigInteger)
+    erstellt_am: Mapped[datetime] = mapped_column(sa.DateTime, default=_utcnow)
+    entschieden_von_id: Mapped[int | None] = mapped_column(sa.BigInteger, sa.ForeignKey("user.id", ondelete="SET NULL"))
+    entschieden_am: Mapped[datetime | None] = mapped_column(sa.DateTime)

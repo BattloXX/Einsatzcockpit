@@ -511,6 +511,7 @@ class OrgSettings(Base):
     # Großschadenslage-Sonderansicht am Infoscreen (bleibt, solange die GSL aktiv ist)
     alarm_infoscreen_gsl_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     # KI-Dokumentklassifizierung (Objektverwaltung): Opt-in je Org, zusaetzlich zum AI-Setup
+    katplan_ki_import_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
     objekt_ki_klassifikation_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # Org-Standardvorlage fuer die Einsatzinfo an Objektkontakte
     objekt_kontakt_info_betreff: Mapped[str | None] = mapped_column(String(200), nullable=True)

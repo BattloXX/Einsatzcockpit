@@ -26,6 +26,7 @@ from app.models.katplan import (
     KatplanDokumentSeite,
     KatplanElement,
     KatplanElementPhase,
+    KatplanImportVorschlag,
     KatplanLink,
     KatplanPhase,
     KatplanPlan,
@@ -40,6 +41,7 @@ from app.models.user import User
 from app.routers.ui_objekt import _LESE_ROLLEN
 from app.services import katplan_anhang_service as anhang_service
 from app.services import katplan_freigabe_service as freigabe_service
+from app.services import katplan_ki_service as ki_service
 from app.services import katplan_link_service as link_service
 from app.services import katplan_quelle_service as quelle_service
 from app.services import katplan_suche_service as suche_service
@@ -49,7 +51,9 @@ from app.services.katplan_service import (
     abschnitte_baum,
     aktualisiere_element_suchtext,
     bereinige_beschreibung,
+    lege_abschnitt_an,
     lege_element_an,
+    lege_phase_an,
     loesche_abschnitt,
     markiere_ueberarbeitung,
     naechste_kennung,
@@ -59,7 +63,7 @@ from app.services.katplan_service import (
     verschiebe_nachbar,
 )
 from app.services.katplan_typen import ELEMENT_TYPEN, ELEMENT_VORLAGEN, bereinige_daten
-from app.services.katplan_ziel_service import ziel_suchen, ziel_verfuegbar
+from app.services.katplan_ziel_service import ziel_laden, ziel_suchen, ziel_verfuegbar
 from app.services.katplan_zugriff import (
     darf_bearbeiten,
     darf_freigeben,
@@ -816,14 +820,7 @@ def abschnitt_anlegen(plan_id: int, request: Request, titel: str = Form(""), par
         parent = _abschnitt_id(db, parent_id, plan, user)
     except ValueError as exc:
         return _antwort(request, db, user, plan, status=422, fehler=str(exc))
-    geschwister = db.query(KatplanAbschnitt).filter_by(
-        org_id=user.org_id, plan_id=plan.id, parent_id=parent,
-    ).all()
-    abschnitt = KatplanAbschnitt(org_id=user.org_id, plan_id=plan.id, parent_id=parent,
-                                titel=titel, sort=max((a.sort for a in geschwister), default=0) + 10)
-    db.add(abschnitt)
-    protokolliere(db, plan, "abschnitt", "angelegt", user, neu=titel)
-    markiere_ueberarbeitung(db, plan, user)
+    abschnitt = lege_abschnitt_an(db, plan, user, titel=titel, parent_id=parent)
     db.commit()
     return _antwort(request, db, user, plan, "_abschnitt_form.html", abschnitt=abschnitt)
 
@@ -888,16 +885,13 @@ def _phase_speichern(request: Request, db: Session, user: User, plan: KatplanPla
                         fehler=str(exc), phase_form=form, phase_fehler_id=phase.id if phase else 0)
     neu = phase is None
     if phase is None:
-        phase = KatplanPhase(org_id=user.org_id, plan_id=plan.id)
-        db.add(phase)
+        phase = lege_phase_an(db, plan, user, name=name)
     for feld, wert in werte.items():
         alt = getattr(phase, feld)
         if not neu and alt != wert:
             protokolliere(db, plan, "phase", "geaendert", user, feld=feld,
                           alt=str(alt) if alt is not None else None, neu=str(wert))
         setattr(phase, feld, wert)
-    if neu:
-        protokolliere(db, plan, "phase", "angelegt", user, neu=name)
     markiere_ueberarbeitung(db, plan, user)
     db.commit()
     return _antwort(request, db, user, plan, "_phasen.html", erfolg="Phase gespeichert.")
@@ -1443,6 +1437,7 @@ def _quellen_antwort(request: Request, db: Session, plan: KatplanPlan, user: Use
     return templates.TemplateResponse(request, "katplan/_quellen.html", {
         "user": user, "plan": plan, "quellen": quelle_service.sichtbare_quellen(db, plan, user),
         "fehler": fehler, "hinweis": hinweis, "can_edit": darf_bearbeiten(user),
+        **(_ki_kontext(db, plan) if darf_bearbeiten(user) else {}),
     }, status_code=status)
 
 
@@ -1578,6 +1573,7 @@ def quellen(plan_id: int, request: Request, db: Session = Depends(get_db),
     return templates.TemplateResponse(request, "katplan/quellen.html", {
         "user": user, "plan": plan, "can_edit": darf_bearbeiten(user),
         "quellen": quelle_service.sichtbare_quellen(db, plan, user),
+        **(_ki_kontext(db, plan) if darf_bearbeiten(user) else {}),
     })
 
 
@@ -1630,6 +1626,9 @@ def quelle_ansicht(plan_id: int, dok_id: int, request: Request, seite: int | Non
                "version_id": version_id, "version_query": f"?version_id={version_id}" if version_id else ""}
     if darf_bearbeiten(user):
         context.update(_editor_kontext(db, plan))
+        context["ki_seiten_anzahl"] = db.query(KatplanImportVorschlag).filter_by(
+            org_id=plan.org_id, plan_id=plan.id, dokument_id=dokument.id, seiten_nr=seite, status="offen",
+        ).count()
         elemente = db.query(KatplanElement).filter_by(
             org_id=plan.org_id, plan_id=plan.id, quelle_dokument_id=dokument.id,
         ).all()
@@ -1669,3 +1668,145 @@ def quelle_element_anlegen(plan_id: int, dok_id: int, request: Request, seite: i
 
         return Response(headers={"HX-Redirect": ziel})
     return RedirectResponse(ziel, status_code=303)
+
+
+def _ki_kontext(db: Session, plan: KatplanPlan) -> dict:
+    offene = db.query(KatplanImportVorschlag).filter_by(
+        org_id=plan.org_id, plan_id=plan.id, status="offen",
+    ).all()
+    return {"ki_enabled": ki_service.ki_import_enabled(plan.org_id, db),
+            "ki_offene": {dok_id: sum(v.dokument_id == dok_id for v in offene)
+                          for dok_id in {v.dokument_id for v in offene}}}
+
+
+@router.post("/{plan_id}/quellen/{dok_id}/ki-analyse")
+def quelle_ki_analyse(plan_id: int, dok_id: int, request: Request, background_tasks: BackgroundTasks,
+                      db: Session = Depends(get_db), user: User = Depends(require_katplan_bearbeiten)):
+    plan = _plan(db, plan_id, user)
+    dokument = _quelle(db, plan, dok_id)
+    if not ki_service.ki_import_enabled(plan.org_id, db):
+        return _quellen_antwort(request, db, plan, user, status=409, fehler="KI-Import ist nicht aktiviert.")
+    if (plan.status == "archiviert" or dokument.archiviert or dokument.status != "fertig"
+            or dokument.ki_status == "laeuft"):
+        return _quellen_antwort(request, db, plan, user, status=409,
+                                fehler="Quelle nicht bereit oder Analyse läuft bereits.")
+    dokument.ki_status, dokument.ki_fehler = "laeuft", None
+    db.commit()
+    background_tasks.add_task(ki_service.analysiere_quelle, dokument.id)
+    return _quellen_antwort(request, db, plan, user)
+
+
+@router.get("/{plan_id}/quellen/{dok_id}/ki-status")
+def quelle_ki_status(plan_id: int, dok_id: int, request: Request,
+                     db: Session = Depends(get_db), user: User = Depends(require_katplan_bearbeiten)):
+    plan = _plan(db, plan_id, user)
+    dokument = _quelle(db, plan, dok_id)
+    return templates.TemplateResponse(request, "katplan/_import_status.html", {
+        "plan": plan, "dokument": dokument, **_ki_kontext(db, plan),
+    })
+
+
+def _import_vorschlag(db: Session, plan: KatplanPlan, vid: int) -> KatplanImportVorschlag:
+    vorschlag = db.query(KatplanImportVorschlag).filter_by(
+        id=vid, org_id=plan.org_id, plan_id=plan.id,
+    ).one_or_none()
+    if vorschlag is None:
+        raise HTTPException(404, "Nicht gefunden")
+    return vorschlag
+
+
+def _import_kontext(db: Session, plan: KatplanPlan, user: User, quelle: int | None,
+                    status: str, seite: int | None) -> dict:
+    query = db.query(KatplanImportVorschlag).filter_by(org_id=plan.org_id, plan_id=plan.id)
+    if quelle is not None:
+        query = query.filter_by(dokument_id=quelle)
+    if status:
+        query = query.filter_by(status=status)
+    if seite is not None:
+        query = query.filter_by(seiten_nr=seite)
+    vorschlaege = query.order_by(KatplanImportVorschlag.dokument_id, KatplanImportVorschlag.seiten_nr,
+                                KatplanImportVorschlag.reihenfolge, KatplanImportVorschlag.id).all()
+    kontakte = {}
+    for v in vorschlaege:
+        liste = json.loads(v.kontakte_json or "[]")
+        for k in liste:
+            ziel = ziel_laden(db, plan.org_id, "kontakt", k["kontakt_id"]) if k.get("kontakt_id") else None
+            k["kontakt_name"] = ziel.anzeigename if ziel else None
+        kontakte[v.id] = liste
+    texte = {v.id: ki_service.html_zu_text(v.beschreibung_html) for v in vorschlaege}
+    return {"user": user, "plan": plan, "can_edit": True, "import_aktiv": True,
+            "vorschlaege": vorschlaege, "kontakte": kontakte, "texte": texte, "quelle_filter": quelle,
+            "status_filter": status, "seite_filter": seite,
+            "quellen": db.query(KatplanDokument).filter_by(org_id=plan.org_id, plan_id=plan.id).all(),
+            **_editor_kontext(db, plan),
+            "objekt_recht": has_role(user, *_LESE_ROLLEN) and ziel_verfuegbar(db, plan.org_id, "objekt"),
+            "kontakt_modul": ziel_verfuegbar(db, plan.org_id, "kontakt")}
+
+
+@router.get("/{plan_id}/import")
+def import_review(plan_id: int, request: Request, quelle: str = "", status: str = "offen",
+                  seite: int | None = None, db: Session = Depends(get_db),
+                  user: User = Depends(require_katplan_bearbeiten)):
+    plan = _plan(db, plan_id, user)
+    context = _import_kontext(db, plan, user, int(quelle) if quelle.isdigit() else None, status, seite)
+    return templates.TemplateResponse(request, "katplan/import.html", context)
+
+
+@router.post("/{plan_id}/import/sammel")
+def import_sammel(plan_id: int, request: Request, ids: list[int] = Form([]),
+                  db: Session = Depends(get_db), user: User = Depends(require_katplan_bearbeiten)):
+    plan = _plan(db, plan_id, user)
+    for vid in ids:
+        _import_vorschlag(db, plan, vid)
+    try:
+        anzahl = ki_service.sammel_uebernehmen(db, plan, user, ids)
+        db.commit()
+    except ValueError as exc:
+        db.rollback()
+        return templates.TemplateResponse(request, "katplan/_import_ergebnis.html",
+                                          {"fehler": str(exc)}, status_code=409)
+    context = _import_kontext(db, plan, user, None, "offen", None)
+    context["erfolg"] = f"{anzahl} Vorschläge übernommen."
+    return templates.TemplateResponse(request, "katplan/_import_liste.html", context)
+
+
+@router.post("/{plan_id}/import/{vid}/uebernehmen")
+def import_uebernehmen(plan_id: int, vid: int, request: Request,
+                       db: Session = Depends(get_db), user: User = Depends(require_katplan_bearbeiten)):
+    plan = _plan(db, plan_id, user)
+    vorschlag = _import_vorschlag(db, plan, vid)
+    form = run_async(request.form)
+    werte = {k: str(v) for k, v in form.items()}
+    if "beschreibung_text" in werte:
+        werte["beschreibung_html"] = ki_service.text_zu_html(werte.pop("beschreibung_text"))
+    try:
+        daten: dict[str, Any] = {**werte, "kontakt_ids": [int(str(v)) for v in form.getlist("kontakt_ids")],
+                                 "objekt_verknuepfen": werte.get("objekt_verknuepfen") == "1"}
+        for feld, neu in (("abschnitt_id", "neues_kapitel"), ("phase_id", "neue_phase")):
+            if werte.get(feld) == "neu":
+                daten[feld] = None
+                daten[neu] = werte.get(neu, "")
+            else:
+                daten[neu] = ""
+        element = ki_service.vorschlag_uebernehmen(db, plan, user, vorschlag, werte=daten)
+        db.commit()
+    except ValueError as exc:
+        db.rollback()
+        return templates.TemplateResponse(request, "katplan/_import_ergebnis.html",
+                                          {"fehler": str(exc)}, status_code=409)
+    return templates.TemplateResponse(request, "katplan/_import_ergebnis.html", {"plan": plan, "element": element})
+
+
+@router.post("/{plan_id}/import/{vid}/verwerfen")
+def import_verwerfen(plan_id: int, vid: int, request: Request,
+                     db: Session = Depends(get_db), user: User = Depends(require_katplan_bearbeiten)):
+    plan = _plan(db, plan_id, user)
+    vorschlag = _import_vorschlag(db, plan, vid)
+    try:
+        ki_service.vorschlag_verwerfen(db, plan, user, vorschlag)
+        db.commit()
+    except ValueError as exc:
+        db.rollback()
+        return templates.TemplateResponse(request, "katplan/_import_ergebnis.html",
+                                          {"fehler": str(exc)}, status_code=409)
+    return templates.TemplateResponse(request, "katplan/_import_ergebnis.html", {"verworfen": True})
