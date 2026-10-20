@@ -3,7 +3,7 @@
 
 {% block content %}
 {% if incident.is_exercise %}
-<div class="exercise-topbar">⚠ ÜBUNG / SIMULATION ⚠</div>
+<div class="exercise-topbar">{{ icon("alert-triangle", size="sm") }} ÜBUNG / SIMULATION {{ icon("alert-triangle", size="sm") }}</div>
 {% endif %}
 <style>
 .history-page { max-width: 860px; margin: 0 auto; padding: 0 1rem 3rem; }
@@ -60,7 +60,7 @@
 
 <div class="history-page">
   <div class="page-header">
-    <a href="/einsatz/{{ incident.id }}" class="btn btn--ghost">← Board</a>
+    <a href="/einsatz/{{ incident.id }}" class="btn btn--ghost">{{ icon("chevron-left", size="sm") }} Board</a>
     <h2>Verlauf – Einsatz {{ incident.alarm_type_code }} #{{ incident.lis_operation_number or incident.nummer or incident.id }}</h2>
   </div>
 

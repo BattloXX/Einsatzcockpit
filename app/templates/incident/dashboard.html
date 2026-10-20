@@ -6,6 +6,7 @@
   <title>Dashboard · {{ incident.alarm_type_code }} – {{ incident.address_street or ('Einsatz #' ~ incident.id) }}</title>
   <link href="/static/css/fonts.css?v={{ ASSET_VERSION }}" rel="stylesheet">
   <style>
+    .ecp-icon{display:inline-block;vertical-align:-0.2em;flex-shrink:0}
     /* ── Reset & Tokens ─────────────────────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -140,7 +141,6 @@
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    .hdr-incident__address::before { content: '📍 '; }
 
 
     /* Right side: EL + Timer + Clock */
@@ -716,6 +716,7 @@
 {% include "incident/_dashboard_body.html" %}
 </div><!-- /shell -->
 
+<script src="/static/js/icons.js?v={{ ASSET_VERSION }}"></script>
 <script>
   // ── Elapsed timer ─────────────────────────────────────────────────────
   // Elemente werden bei jedem WS-Swap ersetzt -> pro Tick frisch abfragen
@@ -795,7 +796,7 @@
       ticker.style.opacity = '0';
       setTimeout(() => {
         ticker.textContent = hints[lageTickerIdx];
-        if (barIcon) barIcon.textContent = hintsAI[lageTickerIdx] ? '✨' : '📢';
+        if (barIcon) barIcon.innerHTML = ecpIcon(hintsAI[lageTickerIdx] ? 'sparkles' : 'speakerphone', {size: 'sm'});
         ticker.style.opacity = '1';
       }, 380);
     }, 8000);

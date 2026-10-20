@@ -33,7 +33,7 @@
       </div>
       {% if incident.address_street %}
       <div class="hdr-incident__address">
-        {{ incident.address_street }} {{ incident.address_no or '' }}{% if incident.address_city %} &middot; {{ incident.address_city }}{% endif %}
+        {{ icon("map-pin", size="sm") }} {{ incident.address_street }} {{ incident.address_no or '' }}{% if incident.address_city %} &middot; {{ incident.address_city }}{% endif %}
       </div>
       {% endif %}
     </div>

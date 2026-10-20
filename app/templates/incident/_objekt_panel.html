@@ -1,5 +1,5 @@
 <div class="sidebar-box" id="objekt-panel">
-  <h3>🏢 Objekt</h3>
+  <h3>{{ modul_icon("objekte", size="md") }} Objekt</h3>
   {% if verknuepfungen %}
   <div style="display:flex;flex-direction:column;gap:8px;">
     {% for v in verknuepfungen %}
@@ -10,7 +10,7 @@
           <a href="/objekte/{{ o.id }}/einsatz?incident_id={{ incident.id }}" style="font-weight:600;">{{ o.name }}</a>
           {% if o.vulgoname %}<div class="text-muted" style="font-size:0.85em;">{{ o.vulgoname }}</div>{% endif %}
           <div class="text-muted" style="font-size:0.78em;">
-            {% if o.adresse_zeile %}{{ o.adresse_zeile }}{% endif %}{% if o.bma and o.bma.bma_nummer %}{% if o.adresse_zeile %} · {% endif %}🔥 BMA {{ o.bma.bma_nummer }}{% endif %}{% if o.adresse_zeile or (o.bma and o.bma.bma_nummer) %} · {% endif %}{{ o.anzeige_nummer }}
+            {% if o.adresse_zeile %}{{ o.adresse_zeile }}{% endif %}{% if o.bma and o.bma.bma_nummer %}{% if o.adresse_zeile %} · {% endif %}{{ icon("flame", size="sm") }} BMA {{ o.bma.bma_nummer }}{% endif %}{% if o.adresse_zeile or (o.bma and o.bma.bma_nummer) %} · {% endif %}{{ o.anzeige_nummer }}
           </div>
           <div class="text-muted" style="font-size:0.78em;">
             {{ quellen_labels.get(v.quelle, v.quelle) }}{% if v.distanz_m is not none %} ({{ v.distanz_m }} m){% endif %}
@@ -20,14 +20,14 @@
           <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;">
             {% for g in o.gefahren[:4] %}
             <span class="badge-pill badge-pill--red" style="font-size:0.7em;"
-                  title="{{ g.gefahr.name if g.gefahr else '' }}">{{ gefahr_piktogramme.get(g.gefahr.piktogramm_typ, '⚠️')[:2] if g.gefahr else '⚠️' }}</span>
+                  title="{{ g.gefahr.name if g.gefahr else '' }}">{{ icon({'ex': 'bomb', 'gas': 'flame', 'chemie': 'flask', 'hochspannung': 'bolt', 'pv': 'sun', 'nh3': 'snowflake', 'brandlast': 'flame'}.get(g.gefahr.piktogramm_typ, 'alert-triangle') if g.gefahr else 'alert-triangle', size="xs", label=g.gefahr.name if g.gefahr else 'Gefahr') }}</span>
             {% endfor %}
             {% if o.gefahren|length > 4 %}<span class="text-muted" style="font-size:0.7em;">+{{ o.gefahren|length - 4 }}</span>{% endif %}
           </div>
           {% endif %}
           {% set bn = benachrichtigungen.get(o.id, {}) %}
           {% if v.status == 'bestaetigt' and (bn.get('gesendet', 0) or bn.get('fehler', 0) or hat_empfaenger.get(o.id)) %}
-          <div class="text-muted" style="font-size:0.78em;margin-top:4px;">{% if bn.get('gesendet', 0) %}✉️ {{ bn.get('gesendet') }} benachrichtigt{% endif %}{% if bn.get('fehler', 0) %} ⚠️ {{ bn.get('fehler') }} Fehler{% endif %}</div>
+          <div class="text-muted" style="font-size:0.78em;margin-top:4px;">{% if bn.get('gesendet', 0) %}{{ icon("mail", size="sm") }} {{ bn.get('gesendet') }} benachrichtigt{% endif %}{% if bn.get('fehler', 0) %} {{ icon("alert-triangle", size="sm") }} {{ bn.get('fehler') }} Fehler{% endif %}</div>
           {% endif %}
         </div>
         <a href="/objekte/{{ o.id }}/einsatz?incident_id={{ incident.id }}" class="btn btn--primary btn--xs" style="flex-shrink:0;">Objektinfo</a>
@@ -38,7 +38,7 @@
         <form hx-post="/objekte/einsatz-panel/{{ incident.id }}/{{ v.id }}/bestaetigen"
               hx-target="#objekt-panel" hx-swap="outerHTML" style="display:inline;">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-          <button type="submit" class="btn btn--primary btn--xs">✓ Bestätigen</button>
+          <button type="submit" class="btn btn--primary btn--xs">{{ icon("check", size="xs") }} Bestätigen</button>
         </form>
         {% endif %}
         {% if v.status == 'bestaetigt' %}

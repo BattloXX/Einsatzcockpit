@@ -109,7 +109,7 @@
 {% endblock %}
 
 {% block content %}
-{% if incident.is_exercise %}<div class="exercise-topbar">⚠ ÜBUNG / SIMULATION ⚠</div>{% endif %}
+{% if incident.is_exercise %}<div class="exercise-topbar">{{ icon("alert-triangle", size="sm") }} ÜBUNG / SIMULATION {{ icon("alert-triangle", size="sm") }}</div>{% endif %}
 <div class="breathing-board">
 <div class="page-header">
   {% with active="atemschutz" %}{% include "incident/_subnav.html" %}{% endwith %}
@@ -148,40 +148,40 @@
         {{ {'bereit':'Bereit','im_einsatz':'Im Einsatz','rueckzug':'Rückzug!','zurueck':'Zurück','erholt':'Erholt'}[troop.status] }}
       </span>
       {% if troop.is_sicherheitstrupp %}
-      <span class="badge badge--unit">🛟 Sicherheitstrupp</span>
+      <span class="badge badge--unit">{{ icon("lifebuoy", size="sm") }} Sicherheitstrupp</span>
       {% endif %}
 
       {# Alle aktiven Warnungen, in absteigender Schwere. #}
       {% if 'max_exceeded' in active_warnings %}
         <span class="warn-badge warn-badge--max-time" id="warn-max-{{ troop.id }}">
-          ⚠ MAX-EINSATZZEIT
+          {{ icon("alert-triangle", size="sm") }} MAX-EINSATZZEIT
           <button type="button" class="btn btn--ghost btn--sm btn--ack"
-                  onclick="ackWarning(this,'/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/ack','max_time','warn-max-{{ troop.id }}')">✓ Quittieren</button>
+                  onclick="ackWarning(this,'/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/ack','max_time','warn-max-{{ troop.id }}')">{{ icon("check", size="xs") }} Quittieren</button>
         </span>
       {% endif %}
       {% if 'withdraw' in active_warnings %}
         <span class="warn-badge warn-badge--red" id="warn-withdraw-{{ troop.id }}">
-          ⚠ RÜCKZUGSDRUCK{% if warning_member %}: {{ warning_member.display_name }}{% endif %}
+          {{ icon("alert-triangle", size="sm") }} RÜCKZUGSDRUCK{% if warning_member %}: {{ warning_member.display_name }}{% endif %}
           <button type="button" class="btn btn--ghost btn--sm btn--ack"
-                  onclick="ackWarning(this,'/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/ack','withdraw','warn-withdraw-{{ troop.id }}')">✓ Quittieren</button>
+                  onclick="ackWarning(this,'/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/ack','withdraw','warn-withdraw-{{ troop.id }}')">{{ icon("check", size="xs") }} Quittieren</button>
         </span>
       {% endif %}
       {% if 'two_third_due' in active_warnings %}
         <span class="warn-badge warn-badge--one-third" id="warn-two-third-{{ troop.id }}">
-          ⚠ Lagemeldung fällig (2/3)
+          {{ icon("alert-triangle", size="sm") }} Lagemeldung fällig (2/3)
           <button type="button" class="btn btn--ghost btn--sm btn--ack"
-                  onclick="ackWarning(this,'/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/ack','two_third','warn-two-third-{{ troop.id }}')">✓ Quittieren</button>
+                  onclick="ackWarning(this,'/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/ack','two_third','warn-two-third-{{ troop.id }}')">{{ icon("check", size="xs") }} Quittieren</button>
         </span>
       {% endif %}
       {% if 'one_third_due' in active_warnings %}
         <span class="warn-badge warn-badge--one-third" id="warn-third-{{ troop.id }}">
-          ⚠ Lagemeldung fällig (1/3)
+          {{ icon("alert-triangle", size="sm") }} Lagemeldung fällig (1/3)
           <button type="button" class="btn btn--ghost btn--sm btn--ack"
-                  onclick="ackWarning(this,'/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/ack','one_third','warn-third-{{ troop.id }}')">✓ Quittieren</button>
+                  onclick="ackWarning(this,'/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/ack','one_third','warn-third-{{ troop.id }}')">{{ icon("check", size="xs") }} Quittieren</button>
         </span>
       {% endif %}
       {% if warning == 'yellow' %}
-        <span class="warn-badge warn-badge--yellow">⚠ 75%{% if warning_member %}: {{ warning_member.display_name }}{% endif %}</span>
+        <span class="warn-badge warn-badge--yellow">{{ icon("alert-triangle", size="sm") }} 75%{% if warning_member %}: {{ warning_member.display_name }}{% endif %}</span>
       {% endif %}
     </div>
 
@@ -235,7 +235,7 @@
       </svg>
       <div class="gauge-time" x-text="timeAgo"></div>
       <div class="gauge-labels">
-        <span style="color:#e53e3e">▼ {{ withdraw_press | int }} bar</span>
+        <span style="color:#e53e3e">{{ icon("chevron-down", size="sm") }} {{ withdraw_press | int }} bar</span>
         <span>{{ max_press | int }} bar</span>
       </div>
     </div>
@@ -358,7 +358,7 @@
     <!-- ── Lagemeldung (Freitext) ── -->
     {% if (can_edit is not defined or can_edit) and troop.status in ['bereit','im_einsatz','rueckzug'] %}
     <div class="mini-popup-wrap" style="margin-top:6px" @click.outside="meldungOpen = false" x-data="{meldungOpen:false}">
-      <button type="button" class="btn btn--ghost btn--sm" @click="meldungOpen = !meldungOpen">📢 Lagemeldung</button>
+      <button type="button" class="btn btn--ghost btn--sm" @click="meldungOpen = !meldungOpen">{{ icon("speakerphone", size="xs") }} Lagemeldung</button>
       <div x-show="meldungOpen" class="mini-popup">
         <form hx-post="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/meldung" hx-swap="none"
               @htmx:after-request="meldungOpen = false">
@@ -376,7 +376,7 @@
         <form hx-post="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/starten"
               hx-target="#readiness-start-{{ troop.id }}" hx-swap="outerHTML">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-          <button type="submit" class="btn btn--primary btn--sm">▶ Einsetzen</button>
+          <button type="submit" class="btn btn--primary btn--sm">{{ icon("player-play", size="xs") }} Einsetzen</button>
         </form>
       </div>
       {% elif troop.status == 'im_einsatz' %}
@@ -384,31 +384,31 @@
             hx-target="#troopsGrid" hx-select="#troopsGrid" hx-swap="outerHTML">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
         <input type="hidden" name="status" value="rueckzug">
-        <button type="submit" class="btn btn--danger btn--sm">⬅ Rückzug</button>
+        <button type="submit" class="btn btn--danger btn--sm">{{ icon("arrow-left", size="xs") }} Rückzug</button>
       </form>
       {% elif troop.status == 'rueckzug' %}
       <form hx-post="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/status"
             hx-target="#troopsGrid" hx-select="#troopsGrid" hx-swap="outerHTML">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
         <input type="hidden" name="status" value="zurueck">
-        <button type="submit" class="btn btn--warn btn--sm">✓ Zurück</button>
+        <button type="submit" class="btn btn--warn btn--sm">{{ icon("check", size="xs") }} Zurück</button>
       </form>
       {% elif troop.status == 'zurueck' %}
       <form hx-post="/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/status"
             hx-target="#troopsGrid" hx-select="#troopsGrid" hx-swap="outerHTML">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
         <input type="hidden" name="status" value="erholt">
-        <button type="submit" class="btn btn--success btn--sm">✓ Erholt</button>
+        <button type="submit" class="btn btn--success btn--sm">{{ icon("check", size="xs") }} Erholt</button>
       </form>
       {% endif %}
 
       {% if troop.status == 'erholt' %}
       <button type="button" class="btn btn--primary btn--sm"
-              data-ec-action="open-dialog" data-ec-dialog="redeployTroopModal-{{ troop.id }}">↻ Erneut einsetzen</button>
+              data-ec-action="open-dialog" data-ec-dialog="redeployTroopModal-{{ troop.id }}">{{ icon("refresh", size="xs") }} Erneut einsetzen</button>
       {% endif %}
 
       <button type="button" class="btn btn--ghost btn--sm" title="Trupp-Protokoll als PDF"
-         onclick="ecpgPrint({document_type:'troop_protokoll', incident_id:{{ incident.id }}, artifact_ref:'{{ troop.id }}', title:'Atemschutz-Protokoll drucken', localUrl:'/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/pdf'})">📄 PDF</button>
+         onclick="ecpgPrint({document_type:'troop_protokoll', incident_id:{{ incident.id }}, artifact_ref:'{{ troop.id }}', title:'Atemschutz-Protokoll drucken', localUrl:'/einsatz/{{ incident.id }}/atemschutz/{{ troop.id }}/pdf'})">{{ icon("file-text", size="xs") }} PDF</button>
     </div>
 
     <!-- ── Meldungen (pressure log history) ── -->
@@ -450,7 +450,7 @@
             <td>{{ deployment.lfd_nr }}</td>
             <td>{{ deployment.entry_at | local_datetime if deployment.entry_at else '–' }}</td>
             <td>{{ deployment.back_at | local_datetime if deployment.back_at else '–' }}</td>
-            <td>1/3 {{ '✓' if deployment.warn_one_third_acked_at else '–' }}, 2/3 {{ '✓' if deployment.warn_two_third_acked_at else '–' }}, Max {{ '✓' if deployment.warn_max_time_acked_at else '–' }}, Rückzug {{ '✓' if deployment.warn_withdraw_acked_at else '–' }}</td>
+            <td>1/3 {{ icon("check", size="xs", label="Quittiert") if deployment.warn_one_third_acked_at else '–' }}, 2/3 {{ icon("check", size="xs", label="Quittiert") if deployment.warn_two_third_acked_at else '–' }}, Max {{ icon("check", size="xs", label="Quittiert") if deployment.warn_max_time_acked_at else '–' }}, Rückzug {{ icon("check", size="xs", label="Quittiert") if deployment.warn_withdraw_acked_at else '–' }}</td>
           </tr>
           {% endfor %}
           </tbody>
@@ -517,7 +517,7 @@
           <select name="bottle_preset" class="form-select" x-model="bottlePreset" @change="onPresetChange()">
             <option value="">– bitte wählen –</option>
             {% for slug, label, dur in bottle_presets %}
-            <option value="{{ slug }}">{{ label }}{% if dur %} → {{ dur }} min{% endif %}</option>
+            <option value="{{ slug }}">{{ label }}{% if dur %} {{ dur }} min{% endif %}</option>
             {% endfor %}
           </select>
         </div>
@@ -919,10 +919,10 @@ function newTroopForm(initialMembers, initialBottlePreset) {
         + 'background:#7c1d1d;color:#fff;font-weight:600;font-size:.9rem;'
         + 'display:flex;align-items:center;justify-content:space-between;'
         + 'padding:10px 16px;gap:12px;box-shadow:0 2px 8px rgba(0,0,0,.4);';
-      b.innerHTML = '<span>⚠ Seite war ' + sec + ' Sek. nicht aktiv – Warnungen könnten verpasst worden sein!</span>'
+      b.innerHTML = '<span>' + ecpIcon('alert-triangle', {size: 'sm'}) + ' Seite war ' + sec + ' Sek. nicht aktiv – Warnungen könnten verpasst worden sein!</span>'
         + '<button aria-label="Schließen" onclick="document.getElementById(\'breathing-hidden-banner\').remove()"'
         + ' style="background:rgba(255,255,255,.2);border:none;color:#fff;'
-        + 'padding:4px 12px;border-radius:4px;cursor:pointer;font-weight:700;">✕</button>';
+        + 'padding:4px 12px;border-radius:4px;cursor:pointer;font-weight:700;">' + ecpIcon('x', {size: 'sm'}) + '</button>';
       document.body.prepend(b);
       setTimeout(function () { if (b && b.parentNode) b.remove(); }, 15000);
     }

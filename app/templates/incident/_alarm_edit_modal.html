@@ -10,7 +10,7 @@
       {% endif %}
     </div>
   </div>
-  <button aria-label="Schließen" class="modal__close" data-ec-action="close-dialog" data-ec-dialog="cardDetailModal">✕</button>
+  <button aria-label="Schließen" class="modal__close" data-ec-action="close-dialog" data-ec-dialog="cardDetailModal">{{ icon("x", size="sm") }}</button>
 </div>
 <div class="modal__body">
   {% if incident.address_street or incident.caller_name or incident.caller_phone %}
@@ -19,7 +19,7 @@
     <div style="display:flex;flex-direction:column;gap:6px;font-size:.9rem">
       {% if incident.address_street %}
       <span>
-        📍
+        {{ icon("map-pin", size="sm") }}
         {% if incident.lat is not none and incident.lng is not none %}
         <a href="https://maps.google.com/?q={{ incident.lat }},{{ incident.lng }}" target="_blank" rel="noopener"
            style="color:var(--color-primary,#3b82f6);text-decoration:none">
@@ -30,10 +30,10 @@
         {% endif %}
       </span>
       {% endif %}
-      {% if incident.caller_name %}<span>👤 {{ incident.caller_name }}</span>{% endif %}
+      {% if incident.caller_name %}<span>{{ icon("user", size="sm") }} {{ incident.caller_name }}</span>{% endif %}
       {% if incident.caller_phone %}
       <span>
-        📞
+        {{ icon("phone", size="sm") }}
         <a href="tel:{{ incident.caller_phone|tel }}" style="color:var(--color-primary,#3b82f6);text-decoration:none">
           {{ incident.caller_phone }}
         </a>
@@ -82,7 +82,7 @@
 
   <div x-data="{pinSaved: false}">
     <div class="form-group" style="margin-bottom:.5rem">
-      <label class="form-label">🔒 QR-Zugang PIN</label>
+      <label class="form-label">{{ icon("lock", size="sm") }} QR-Zugang PIN</label>
       <p style="font-size:.8rem; color:var(--text-muted); margin-bottom:.5rem;">
         {% if incident.access_pin_hash %}PIN ist gesetzt.{% else %}Kein PIN – QR-Zugang ohne PIN.{% endif %}
         Leer lassen zum Entfernen.
@@ -98,7 +98,7 @@
                inputmode="numeric" style="flex:1;">
         <button type="submit" class="btn btn--secondary btn--sm">PIN setzen</button>
       </div>
-      <p x-show="pinSaved" style="color:#22c55e; font-size:.8rem; margin-top:4px;">✓ PIN gespeichert</p>
+      <p x-show="pinSaved" style="color:#22c55e; font-size:.8rem; margin-top:4px;">{{ icon("check", size="sm") }} PIN gespeichert</p>
     </form>
   </div>
 </div>

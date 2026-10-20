@@ -25,7 +25,7 @@
 </head>
 <body>
   {% if incident.is_exercise %}
-  <div class="exercise-topbar" style="position:fixed;top:0;left:0;right:0;">⚠ ÜBUNG / SIMULATION ⚠</div>
+  <div class="exercise-topbar" style="position:fixed;top:0;left:0;right:0;">{{ icon("alert-triangle", size="sm") }} ÜBUNG / SIMULATION {{ icon("alert-triangle", size="sm") }}</div>
   {% endif %}
   <div class="pin-card">
     <h1>Einsatz {{ incident.alarm_type_code }}</h1>

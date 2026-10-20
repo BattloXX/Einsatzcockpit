@@ -4,7 +4,7 @@
     <div class="modal__title">Adresse &amp; Koordinaten</div>
     <div class="modal__subtitle">Einsatz #{{ incident.id }}</div>
   </div>
-  <button aria-label="Schließen" class="modal__close" data-ec-action="close-dialog" data-ec-dialog="cardDetailModal">✕</button>
+  <button aria-label="Schließen" class="modal__close" data-ec-action="close-dialog" data-ec-dialog="cardDetailModal">{{ icon("x", size="sm") }}</button>
 </div>
 <div class="modal__body">
   {% if saved %}
@@ -41,7 +41,7 @@
     <div style="margin-bottom:1rem">
       <button type="button" id="geocodeBtn" class="btn btn--secondary btn--sm"
               onclick="geocodeAddress({{ incident.id }})">
-        📍 Koordinaten automatisch suchen
+        {{ icon("map-pin", size="xs") }} Koordinaten automatisch suchen
       </button>
       <span id="geocodeStatus" style="margin-left:.5rem;font-size:.85rem;color:var(--text-muted)"></span>
     </div>
@@ -71,8 +71,8 @@
       <div style="display:flex;align-items:center;gap:6px;">
         <code id="geojsonFeedUrl" style="flex:1;font-size:.78rem;word-break:break-all;background:var(--surface-high);padding:5px 8px;border-radius:4px;">{{ request.base_url }}api/lagekarte/einsatz/{{ incident.id }}/fahrzeuge.geojson?token={{ auto_token }}</code>
         <button type="button" class="btn btn--ghost btn--xs"
-                onclick="navigator.clipboard.writeText(document.getElementById('geojsonFeedUrl').textContent.trim()).then(function(){var b=event.target;b.textContent='✓';setTimeout(function(){b.textContent='📋'},1500)})"
-                title="URL kopieren">📋</button>
+                onclick="var b=this;navigator.clipboard.writeText(document.getElementById('geojsonFeedUrl').textContent.trim()).then(function(){b.innerHTML=ecpIcon('check',{size:'xs'});setTimeout(function(){b.innerHTML=ecpIcon('clipboard-list',{size:'xs'})},1500)})"
+                aria-label="URL kopieren" title="URL kopieren">{{ icon("clipboard-list", size="xs") }}</button>
       </div>
       <small class="form-hint">In lagekarte.info → <em>Daten importieren → URL</em> eintragen, Auto-Reload 30–60 s.</small>
     </div>
@@ -196,11 +196,11 @@
         document.getElementById('addrLng').value = d.lng.toFixed(6);
         // Marker + Karte per input-change-Event aktualisieren
         document.getElementById('addrLat').dispatchEvent(new Event('change'));
-        status.textContent = '✓ ' + (d.display_name || 'gefunden');
+        status.textContent = (d.display_name || 'gefunden');
         status.style.color = 'var(--success)';
       })
       .catch(() => {
-        status.textContent = '✗ Adresse nicht gefunden — Marker bitte manuell setzen';
+        status.textContent = 'Adresse nicht gefunden — Marker bitte manuell setzen';
         status.style.color = 'var(--danger)';
       });
   };

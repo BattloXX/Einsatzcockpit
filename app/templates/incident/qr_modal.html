@@ -2,7 +2,7 @@
 {% block title %}QR-Code – Einsatz #{{ incident.id }}{% endblock %}
 {% block content %}
 <div class="page-header">
-  <a href="/einsatz/{{ incident.id }}" class="btn btn--ghost">← Zurück</a>
+  <a href="/einsatz/{{ incident.id }}" class="btn btn--ghost">{{ icon("chevron-left", size="sm") }} Zurück</a>
   <h2>QR-Code: Einsatz {{ incident.alarm_type_code }}</h2>
 </div>
 <div class="qr-page">
@@ -12,7 +12,7 @@
     <p class="qr-valid"><strong>Gültig bis Einsatzende.</strong></p>
     <a href="{{ qr_url }}" class="btn btn--ghost btn--sm" title="QR-Ziel-URL öffnen">Link kopieren</a>
     <button type="button" class="btn btn--primary btn--sm" title="QR-Druckseite (Station/lokal)"
-            onclick="ecpgPrint({document_type:'qr_einsatz', incident_id:{{ incident.id }}, title:'QR-Code drucken', localUrl:'/einsatz/{{ incident.id }}/qr/print'})">🖨 QR-Code drucken</button>
+            onclick="ecpgPrint({document_type:'qr_einsatz', incident_id:{{ incident.id }}, title:'QR-Code drucken', localUrl:'/einsatz/{{ incident.id }}/qr/print'})">{{ icon("printer", size="xs") }} QR-Code drucken</button>
   </div>
 </div>
 {% include "_print_dialog.html" %}

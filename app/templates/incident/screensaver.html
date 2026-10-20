@@ -87,9 +87,9 @@
 </head>
 <body>
   {% if incident.is_exercise %}
-  <div class="exercise-topbar" style="position:fixed;top:0;left:0;right:0;z-index:10;">⚠ ÜBUNG / SIMULATION ⚠</div>
+  <div class="exercise-topbar" style="position:fixed;top:0;left:0;right:0;z-index:10;">{{ icon("alert-triangle", size="sm") }} ÜBUNG / SIMULATION {{ icon("alert-triangle", size="sm") }}</div>
   {% endif %}
-  <a href="/einsatz/{{ incident.id }}/atemschutz" class="ss-back" id="ssBack">✕ Schließen</a>
+  <a href="/einsatz/{{ incident.id }}/atemschutz" class="ss-back" id="ssBack">{{ icon("x", size="sm") }} Schließen</a>
 
   <!-- Silent video: keeps screen awake on browsers without WakeLock support -->
   <video id="ssKeepAlive" autoplay loop muted playsinline

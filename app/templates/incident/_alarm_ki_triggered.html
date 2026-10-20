@@ -4,11 +4,11 @@
     <div class="modal__title">KI-Auftragsvorschläge</div>
     <div class="modal__subtitle">Einsatz #{{ incident.id }}</div>
   </div>
-  <button aria-label="Schließen" class="modal__close" data-ec-action="close-dialog" data-ec-dialog="cardDetailModal">✕</button>
+  <button aria-label="Schließen" class="modal__close" data-ec-action="close-dialog" data-ec-dialog="cardDetailModal">{{ icon("x", size="sm") }}</button>
 </div>
 <div class="modal__body">
   <div class="alert alert--success" style="margin-bottom:1.25rem">
-    ✨ KI-Auftragsvorschläge werden im Hintergrund generiert und erscheinen in Kürze auf dem Board.
+    {{ icon("sparkles", size="sm") }} KI-Auftragsvorschläge werden im Hintergrund generiert und erscheinen in Kürze auf dem Board.
   </div>
   <div class="modal__footer">
     <button class="btn btn--primary"
