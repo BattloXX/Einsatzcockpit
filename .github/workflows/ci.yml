@@ -72,7 +72,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       mariadb:
-        image: mariadb:10.11
+        image: mariadb:12.3
         env:
           MARIADB_ROOT_PASSWORD: root
           MARIADB_DATABASE: einsatzleiter_test

@@ -4,7 +4,7 @@
 
 ## Überblick
 
-Alle Tabellen haben: `id BIGINT PK AUTO_INCREMENT`, `created_at DATETIME UTC`. MariaDB 10.11, InnoDB, UTF8MB4.
+Alle Tabellen haben: `id BIGINT PK AUTO_INCREMENT`, `created_at DATETIME UTC`. MariaDB 12.3, InnoDB, UTF8MB4.
 
 `TenantScoped`-Modelle erhalten automatisch ein `org_id`-Feld und werden via SQLAlchemy `do_orm_execute`-Event auf die aktive Org gefiltert.
 

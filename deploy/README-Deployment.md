@@ -6,7 +6,7 @@ Vollständige Dokumentation: **[GitHub Wiki](../../wiki)**
 
 - Debian 12 Bookworm
 - CloudPanel installiert und konfiguriert
-- MariaDB 10.11+ (via CloudPanel)
+- MariaDB 12.3 (via CloudPanel; ab 10.11 lauffähig, aber nicht mehr getestet)
 - Python 3.12
 
 ## Systemabhängigkeiten (als root)
