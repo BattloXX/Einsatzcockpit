@@ -77,6 +77,9 @@
     </div>
     {% set _module_active = request.url.path.startswith('/mailing') or '/verwaltung/fahrten' in request.url.path or '/fahrtenbuch' in request.url.path or request.url.path.startswith('/kontakte') or request.url.path.startswith('/termine') or request.url.path.startswith('/teilnahme') or request.url.path.startswith('/probenplanung') or request.url.path.startswith('/planspiele') or request.url.path.startswith('/katastrophenplaene') or request.url.path.startswith('/atemschutz-pruefung') or request.url.path.startswith('/uas') or request.url.path.startswith('/objekte') or request.url.path.startswith('/strassensperren') or request.url.path.startswith('/nachschlagewerke') or request.url.path.startswith('/foerderstrecke') or '/statistik' in request.url.path %}
     <div class="topnav__links">
+      {% if request.state.suche_aktiv %}
+      <a href="/suche" data-suche-link class="nav-link" aria-label="Suche" title="Suche (Strg+K)" style="min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;">🔍</a>
+      {% endif %}
       <a href="/" class="nav-link {% if request.url.path == '/' %}active{% endif %}">🎛 Konsole</a>
       <a href="/lage" class="nav-link {% if request.url.path.startswith('/lage') %}active{% endif %}">🚨 Lage</a>
       <a href="/archiv" class="nav-link {% if '/archiv' in request.url.path %}active{% endif %}">Archiv</a>
@@ -254,6 +257,9 @@
               @click="mobileMenuOpen = false">×</button>
     </header>
     <nav class="mobile-menu__nav">
+      {% if request.state.suche_aktiv %}
+      <a href="/suche" data-suche-link class="mobile-menu__link">🔍 Suche</a>
+      {% endif %}
       <a href="/" class="mobile-menu__link {% if request.url.path == '/' %}active{% endif %}">🏠 Übersicht</a>
       <a href="/lage" class="mobile-menu__link {% if request.url.path.startswith('/lage') %}active{% endif %}">🚨 Lage</a>
       <a href="/archiv" class="mobile-menu__link {% if '/archiv' in request.url.path %}active{% endif %}">📚 Archiv</a>
@@ -448,6 +454,7 @@
   <script src="/static/js/htmx.min.js?v={{ ASSET_VERSION }}" defer></script>
   <script src="/static/js/sortable.min.js?v={{ ASSET_VERSION }}" defer></script>
   <script src="/static/js/ec_diag.js?v={{ ASSET_VERSION }}" defer></script>
+  <script src="/static/js/suche.js?v={{ ASSET_VERSION }}" defer></script>
   <script src="/static/js/app.js?v={{ ASSET_VERSION }}" defer></script>
   <script src="/static/js/alpine.min.js?v={{ ASSET_VERSION }}" defer></script>
   <script src="/static/js/sortable-glue.js?v={{ ASSET_VERSION }}" defer></script>

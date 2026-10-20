@@ -171,6 +171,9 @@
 {% endblock %}
 
 {% block lage_head_extras %}
+  {% if request.state.suche_aktiv %}
+  <a class="btn btn--ghost btn--sm" style="min-height:44px;" href="/suche?kontext=gsl&kontext_id={{ lage.id }}">Erweiterte Suche</a>
+  {% endif %}
   {# ── Board-Steuerung: Suche, Sektoren, Prio, Zähler ── #}
   <input type="search" id="board-search" placeholder="Suchen…"
          oninput="applyBoardFilters()"

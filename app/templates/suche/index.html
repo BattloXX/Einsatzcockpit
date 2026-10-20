@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Suche · {{ brand }}{% endblock %}
+{% block head_extra %}
+<link rel="stylesheet" href="/static/css/suche.css?v={{ ASSET_VERSION }}">
+{% endblock %}
+{% block content %}
+<section class="suche-seite">
+  <h1>Suche</h1>
+  {% if kontext != 'global' %}
+  <p class="suche-kontext">Suche in: {{ 'Lage' if kontext == 'gsl' else 'Einsatz' }} {{ kontext_name }}</p>
+  {% endif %}
+  <form id="suche-form" method="post" action="/suche/treffer"
+        hx-post="/suche/treffer"
+        hx-trigger="input changed delay:350ms from:#suche-q, submit, change from:.suche-filter"
+        hx-target="#suche-treffer" hx-sync="this:replace" hx-indicator="#suche-laden"
+        data-speicher-kontext="{{ kontext }}:{{ kontext_id or '' }}:{{ typ or '' }}">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <input type="hidden" name="kontext" value="{{ kontext }}">
+    <input type="hidden" name="kontext_id" value="{{ kontext_id or '' }}">
+    <label for="suche-q">Suchbegriffe</label>
+    <div class="suche-eingabe">
+      <input id="suche-q" class="form-control" name="q" type="search" autofocus maxlength="500"
+             enterkeyhint="search" autocomplete="off" placeholder="Was suchen Sie?">
+      <button class="btn btn--primary" type="submit">Suchen</button>
+    </div>
+    <fieldset class="suche-filterliste">
+      <legend>Typen eingrenzen (ohne Auswahl: alle)</legend>
+      {% for label, quellen in filter_gruppen %}
+      {% if label != 'GSL' or kontext == 'gsl' %}
+      <label class="suche-chip">
+        <input class="suche-filter" type="checkbox" name="typen" value="{{ quellen|join(',') }}"
+               {% if typ in quellen %}checked{% endif %}>
+        {{ label }}
+      </label>
+      {% endif %}
+      {% endfor %}
+    </fieldset>
+    <div class="suche-schalter">
+      <label class="suche-chip"><input class="suche-filter" type="checkbox" name="inkl_erledigt" value="true"> Erledigte/abgelaufene einbeziehen</label>
+      {% if kontext != 'global' %}
+      <label class="suche-chip"><input class="suche-filter" type="checkbox" name="ganze_org" value="true"> Ganze Organisation</label>
+      {% endif %}
+    </div>
+    <p id="suche-laden" class="htmx-indicator" role="status">Suche läuft ...</p>
+  </form>
+  <div id="suche-treffer" aria-live="polite" aria-atomic="true">
+    {% include "suche/_treffer.html" %}
+  </div>
+</section>
+{% endblock %}

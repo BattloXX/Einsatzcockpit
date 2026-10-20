@@ -1,0 +1,26 @@
+.suche-seite { max-width: 1040px; margin: 0 auto; padding: 1rem; overflow-wrap: anywhere; }
+.suche-seite h1 { font-size: 1.6rem; margin-bottom: 1rem; }
+.suche-eingabe { display: flex; gap: .75rem; margin: .5rem 0 1rem; }
+.suche-eingabe input { flex: 1; min-width: 0; }
+.suche-seite .btn, .suche-seite input[type="search"] { min-height: 44px; }
+.suche-filterliste, .suche-schalter, .suche-badges, .suche-kartenfuss { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.suche-filterliste { border: 0; padding: 0; margin: 0 0 .75rem; }
+.suche-filterliste legend { font-size: .85rem; color: var(--text-muted); margin-bottom: .5rem; }
+.suche-chip { display: inline-flex; align-items: center; gap: .5rem; min-height: 44px; padding: .5rem .75rem; border: 1px solid var(--border); border-radius: var(--radius-md, .5rem); background: var(--surface-high); cursor: pointer; }
+.suche-chip:has(input:checked) { border-color: var(--red); }
+.suche-seite input[type="checkbox"] { width: 1rem; height: 1rem; flex-shrink: 0; }
+.suche-kontext, .suche-badge, .suche-inaktuell { display: inline-block; border-radius: .5rem; padding: .25rem .5rem; background: var(--surface-high); font-size: .85rem; }
+.suche-inaktuell, .suche-stand { color: var(--text-muted); }
+.suche-karten { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin: 1rem 0; }
+.suche-karte { display: flex; flex-direction: column; min-width: 0; padding: 1rem; border: 1px solid var(--border); border-radius: var(--radius-md, .5rem); background: var(--surface-low); }
+.suche-karte h2 { font-size: 1.15rem; font-weight: 700; margin: .75rem 0; }
+.suche-karte p { margin-bottom: .75rem; }
+.suche-kartenfuss { justify-content: space-between; margin-top: auto; padding-top: .75rem; }
+.suche-warnung { color: var(--yellow); border: 1px solid var(--yellow); padding: .75rem; margin: .75rem 0; border-radius: .5rem; }
+.suche-hinweis { padding: .75rem; background: var(--surface-high); }
+.suche-auszug mark { color: var(--surface); background: var(--yellow); }
+@media (max-width: 760px) {
+  .suche-karten { grid-template-columns: minmax(0, 1fr); }
+  .suche-eingabe { flex-direction: column; }
+  .suche-seite { padding: .75rem; }
+}

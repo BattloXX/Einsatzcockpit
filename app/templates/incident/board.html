@@ -9,6 +9,9 @@
   {% with active="board", subnav_display="mobile", breathing_enabled=breathing_enabled %}{% include "incident/_subnav.html" %}{% endwith %}
   {% macro header_utility() %}
   <div class="incident-header__utility-actions"{% if weather_enabled %} x-data="{weatherOpen:false}"{% endif %}>
+    {% if request.state.suche_aktiv %}
+    <a class="btn btn--ghost btn--sm" style="min-height:44px;" href="/suche?kontext=einsatz&kontext_id={{ incident.id }}">Suchen</a>
+    {% endif %}
     {% if can_edit %}
     <button type="button" class="ec-chip" aria-label="Abschnitt hinzufügen"
             onclick="document.getElementById('addColumnDialog').showModal()">+ Abschnitt</button>

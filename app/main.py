@@ -124,6 +124,7 @@ from app.routers import (
     ui_sms,
     ui_sso,
     ui_stats,
+    ui_suche,
     ui_sysadmin,
     ui_teams_bot,
     ui_termin,
@@ -929,6 +930,7 @@ app.include_router(ui_kontakt.router)
 app.include_router(ui_einsatz_kontakte.router)
 app.include_router(ui_road_closure.router)
 app.include_router(ui_katplan.router)
+app.include_router(ui_suche.router)
 app.include_router(ui_planspiel.router)
 app.include_router(ui_planspiel_admin.router)
 app.include_router(ui_road_closure_admin.router)

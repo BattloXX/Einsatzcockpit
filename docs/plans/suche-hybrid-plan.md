@@ -187,8 +187,8 @@ Nicht Teil dieses Plans. Erst nach S8 und eigener Freigabe.
 | S1 | #642 | umgesetzt: Migration 0300, Modelle, Flags, Textsuche; MariaDB-10.11-Probe lokal ok |
 | S2 | #644 | umgesetzt: 4 Adapter, Indexer mit Hash, CLI `suche-neuaufbau` |
 | S3 | #646 | umgesetzt: after_flush-Erfassung, Leader-Worker mit Lease/Retry, Auffächern, stündlicher Abgleich; MariaDB-12.3-Probe ok |
-| S4 | (dieser PR) | umgesetzt: Vertrag, Live-Resolver, 7 Live-Anbieter, RRF, Geo; offen für S7: Einzelabfragen je Index-Treffer messen (p95) |
-| S5 | – | offen |
+| S4 | #647 | umgesetzt: Vertrag, Live-Resolver, 7 Live-Anbieter, RRF, Geo; offen für S7: Einzelabfragen je Index-Treffer messen (p95) |
+| S5 | (dieser PR) | umgesetzt: /suche, HTMX-Treffer, /api/suche, Lupe + Strg+K, Einstieg Einsatz/GSL; Browser-Check Desktop/mobil ok |
 | S6 | – | offen |
 | S7 | – | offen |
 | S8 | – | gesperrt (Entscheidung) |

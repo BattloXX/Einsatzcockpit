@@ -14,6 +14,7 @@ from fastapi import Depends, Header, HTTPException, Request
 from sqlalchemy.orm import Session
 from starlette.requests import HTTPConnection
 
+from app.config import settings
 from app.core.audit import write_audit
 from app.core.security import hash_api_key
 from app.core.tenant import set_tenant_context
@@ -163,6 +164,7 @@ def _set_module_states(request: HTTPConnection, org_id: int | None, db: Session)
             and org_s and org_s.strassensperren_modul_aktiv)
         request.state.planspiel_enabled = bool(
             "planspiel_module_enabled" in sys_on and org_s and org_s.planspiel_modul_aktiv)
+        request.state.suche_aktiv = bool(settings.SEARCH_ENABLED and org_s and org_s.suche_aktiv)
         request.state.katplan_enabled = bool(
             "katplan_module_enabled" in sys_on and org_s and org_s.katplan_modul_aktiv)
         # Atemschutz fehlt bewusst in der Bulk-Abfrage: fehlender System-Key
@@ -202,6 +204,7 @@ def _resolve_current_org(
     request.state.probenplanung_enabled = False
     request.state.strassensperren_enabled = False
     request.state.planspiel_enabled = False
+    request.state.suche_aktiv = False
     request.state.katplan_enabled = False
     request.state.breathing_module_enabled = True
 
