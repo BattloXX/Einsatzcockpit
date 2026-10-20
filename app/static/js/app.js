@@ -394,7 +394,7 @@ document.addEventListener('alpine:init', () => {
       if (diffMs < 0) {
         const overdue = Math.abs(diffMin);
         this.cls = 'lm-chip--red';
-        this.label = '⚠ Lagemeldung überfällig · seit ' + overdue + ' min (' + t + ')';
+        this.label = 'Lagemeldung überfällig · seit ' + overdue + ' min (' + t + ')';
       } else if (diffMin <= amberAt) {
         this.cls = 'lm-chip--amber';
         this.label = 'Lagemeldung fällig ' + t + ' · in ' + diffMin + ' min';
@@ -990,7 +990,7 @@ function incidentBoard(incidentId, alarm, startedAt) {
         + 'box-shadow:0 2px 8px rgba(0,0,0,.3);font-weight:600;'
       );
       banner.innerHTML = (
-        '<span>⏰ Dieser Einsatz läuft seit 48h — soll er offen bleiben?</span>'
+        '<span>' + ecpIcon('alarm', {size: 'sm'}) + ' Dieser Einsatz läuft seit 48h — soll er offen bleiben?</span>'
         + ' <button type="button" id="autocloseKeepOpenBtn" '
         + '  style="background:#fff;color:#e65100;border:none;padding:6px 14px;'
         + '  border-radius:4px;font-weight:700;cursor:pointer;">'
@@ -1039,7 +1039,8 @@ async function moveVehicle(vehicleId, columnId, incidentId) {
 function showTimerAlert(msg, level) {
   const div = document.createElement('div');
   div.className = `timer-alert timer-alert--${level}`;
-  div.innerHTML = `<strong>⏰ ${msg}</strong> <button onclick="this.parentNode.remove()">✕</button>`;
+  const escapedMsg = String(msg).replace(/[&<>"']/g, ch => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[ch]));
+  div.innerHTML = `<strong>${ecpIcon('alarm', {size: 'sm'})} ${escapedMsg}</strong> <button aria-label="Schließen" onclick="this.parentNode.remove()">${ecpIcon('x', {size: 'xs'})}</button>`;
   document.body.appendChild(div);
   try { new Audio('/static/audio/alert.mp3').play().catch(() => {}); } catch (_) {}
   setTimeout(() => div.remove(), 15000);

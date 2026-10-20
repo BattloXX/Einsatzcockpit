@@ -6,6 +6,25 @@ import vm from 'node:vm';
 const source = readFileSync(new URL('../../app/static/js/app.js', import.meta.url), 'utf8');
 const boardSource = source.slice(source.indexOf('function incidentBoard('), source.indexOf('async function moveVehicle('));
 
+test('Timer-Popup escaped Meldungstext und rendert Icons mit beschriftetem Schliessen-Button', () => {
+  const elements = [];
+  const context = vm.createContext({
+    document: {
+      createElement() { return {}; },
+      body: { appendChild(el) { elements.push(el); } },
+    },
+    setTimeout() {},
+  });
+  vm.runInContext(readFileSync(new URL('../../app/static/js/icons.js', import.meta.url), 'utf8'), context);
+  vm.runInContext(source.slice(source.indexOf('function showTimerAlert('), source.indexOf('let recognition =')), context);
+  context.showTimerAlert('<img src=x onerror="alert(1)"> & \'Text\'', 'warn');
+  const html = elements[0].innerHTML;
+  assert.ok(html.includes('&lt;img src=x onerror=&quot;alert(1)&quot;&gt; &amp; &#39;Text&#39;'));
+  assert.ok(!html.includes('<img'));
+  assert.ok(html.includes('ecp-icon--sm'));
+  assert.match(html, /<button aria-label="Schließen"[^>]*><svg class="ecp-icon ecp-icon--xs"/);
+});
+
 function setup() {
   const calls = [];
   const listeners = {};

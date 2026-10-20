@@ -105,15 +105,20 @@ def _unit_status_slug(value: str) -> str:
 
 
 _PERSON_STATUS_LABELS = {
-    "gefunden":         "🔴 Gefunden",
-    "versorgt":         "🟠 Versorgt",
-    "abtransportiert":  "🟢 Abtransportiert",
-    "verstorben":       "⚫ Verstorben",
+    "gefunden":         "Gefunden",
+    "versorgt":         "Versorgt",
+    "abtransportiert":  "Abtransportiert",
+    "verstorben":       "Verstorben",
 }
 
 
 def _person_status_label(value: str) -> str:
     return _PERSON_STATUS_LABELS.get(value, value)
+
+
+def _person_status_dot(value: str):
+    farbe = {"gefunden": "rot", "versorgt": "orange", "abtransportiert": "gruen", "verstorben": "schwarz"}
+    return status_dot(farbe.get(value, "grau"), _person_status_label(value))
 
 
 templates = Jinja2Templates(directory="app/templates")
@@ -141,6 +146,7 @@ templates.env.filters["from_json"] = _from_json
 templates.env.filters["action_label"] = _action_label
 templates.env.filters["unit_status_slug"] = _unit_status_slug
 templates.env.filters["person_status_label"] = _person_status_label
+templates.env.filters["person_status_dot"] = _person_status_dot
 templates.env.filters["tel"] = telefon_kompakt
 
 

@@ -29,7 +29,7 @@
           aria-controls="done-items-{{ col.id }}"
           :aria-expanded="open.toString()"
           @click="open = !open; sessionStorage.setItem('doneGroup-{{ col.id }}', open ? '1' : '0')">
-    <span aria-hidden="true">✓</span> {{ done_group.items|length }} erledigt
+    <span aria-hidden="true">{{ icon("check", size="sm") }}</span> {{ done_group.items|length }} erledigt
   </button>
   <div class="kanban-col__done-items" id="done-items-{{ col.id }}" x-show="open" x-cloak>
     {% for _kind, _item in done_group.items %}

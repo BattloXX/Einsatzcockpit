@@ -18,8 +18,8 @@
       <div class="media-viewer__toolbar">
         <span class="media-viewer__name" id="mediaViewerName"></span>
         <div class="media-viewer__actions">
-          <a id="mediaViewerDownload" href="#" download class="btn btn--secondary btn--sm" title="Datei herunterladen">⬇ Download</a>
-          <button type="button" class="media-viewer__close" aria-label="Schliessen">×</button>
+          <a id="mediaViewerDownload" href="#" download class="btn btn--secondary btn--sm" title="Datei herunterladen">${ecpIcon('download', {size: 'sm'})} Download</a>
+          <button type="button" class="media-viewer__close" aria-label="Schließen">${ecpIcon('x', {size: 'xs'})}</button>
         </div>
       </div>
       <div class="media-viewer__content" id="mediaViewerContent"></div>
@@ -155,10 +155,10 @@
       <div class="media-viewer__toolbar">
         <span class="media-viewer__name" id="imgLbName"></span>
         <div class="media-viewer__actions">
-          <a id="imgLbEdit" href="#" class="btn btn--secondary btn--sm" title="Bearbeiten" style="display:none;">✏️ Bearbeiten</a>
-          <button type="button" id="imgLbPrint" class="btn btn--secondary btn--sm" title="Bild drucken">🖨 Drucken</button>
-          <a id="imgLbDownload" href="#" download class="btn btn--secondary btn--sm" title="Herunterladen">⬇</a>
-          <button type="button" class="media-viewer__close" id="imgLbClose" aria-label="Schliessen">×</button>
+          <a id="imgLbEdit" href="#" class="btn btn--secondary btn--sm" title="Bearbeiten" style="display:none;">${ecpIcon('pencil', {size: 'sm'})} Bearbeiten</a>
+          <button type="button" id="imgLbPrint" class="btn btn--secondary btn--sm" title="Bild drucken">${ecpIcon('printer', {size: 'sm'})} Drucken</button>
+          <a id="imgLbDownload" href="#" download class="btn btn--secondary btn--sm" title="Herunterladen" aria-label="Herunterladen">${ecpIcon('download', {size: 'sm'})}</a>
+          <button type="button" class="media-viewer__close" id="imgLbClose" aria-label="Schließen">${ecpIcon('x', {size: 'xs'})}</button>
         </div>
       </div>
       <div class="media-viewer__content" id="imgLbContent" style="position:relative;">

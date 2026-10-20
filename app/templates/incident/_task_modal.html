@@ -6,7 +6,7 @@
       · angelegt/geändert: {{ task.created_at|local_datetime }}
     </p>
   </div>
-  <button aria-label="Schließen" type="button" data-ec-action="close-dialog" data-ec-dialog="cardDetailModal" class="modal__close">×</button>
+  <button aria-label="Schließen" type="button" data-ec-action="close-dialog" data-ec-dialog="cardDetailModal" class="modal__close">{{ icon("x", size="sm") }}</button>
 </div>
 
 <div class="modal__body">
@@ -21,10 +21,10 @@
               hx-trigger="change"
               hx-swap="none"
               onchange="this.className='form-select form-select--status status-'+this.value">
-        <option value="open" {% if sl=='open' %}selected{% endif %}>🔴 Offen</option>
-        <option value="in_progress" {% if sl=='in_progress' %}selected{% endif %}>🟡 In Arbeit</option>
-        <option value="done" {% if sl=='done' %}selected{% endif %}>🟢 Erledigt</option>
-        <option value="cancelled" {% if sl=='cancelled' %}selected{% endif %}>⚪ Storniert</option>
+        <option value="open" {% if sl=='open' %}selected{% endif %}>Offen</option>
+        <option value="in_progress" {% if sl=='in_progress' %}selected{% endif %}>In Arbeit</option>
+        <option value="done" {% if sl=='done' %}selected{% endif %}>Erledigt</option>
+        <option value="cancelled" {% if sl=='cancelled' %}selected{% endif %}>Storniert</option>
       </select>
     </form>
   </div>
@@ -51,7 +51,7 @@
         {% if task.due_at %}
         <span style="font-size:.78rem; color:var(--text-muted);">
           Aktiv: fällig um {{ task.due_at|local_time }}
-          {% if not task.popup_shown %}<span style="color:#fbbf24;">⏰</span>{% endif %}
+          {% if not task.popup_shown %}<span style="color:#fbbf24;">{{ icon("alarm", size="sm") }}</span>{% endif %}
         </span>
         {% endif %}
       </div>

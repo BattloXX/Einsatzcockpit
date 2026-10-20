@@ -21,7 +21,7 @@
     <div class="weather-popover">
       <button type="button" class="weather-chip" aria-label="Wetter öffnen"
               @click="weatherOpen=!weatherOpen" :aria-expanded="weatherOpen.toString()"
-              aria-controls="wetter-panel">🌦 <span id="weather-header-summary"
+              aria-controls="wetter-panel">{{ modul_icon("wetter", size="sm") }} <span id="weather-header-summary"
               hx-get="/einsatz/{{ incident.id }}/wetter/summary" hx-trigger="load, every 300s" hx-swap="innerHTML">Wetter</span></button>
       <template x-if="weatherOpen">
         <div id="wetter-panel" class="weather-popover__panel" role="dialog" aria-label="Wetter"
@@ -30,7 +30,7 @@
              data-no-error-toast
              hx-on::response-error="wetterPanelError(this)" hx-on::send-error="wetterPanelError(this)"
              x-init="$nextTick(() => { if (window.htmx) htmx.process($el); })">
-          <button type="button" class="weather-popover__close" aria-label="Wetter schließen" @click="weatherOpen=false">×</button>
+          <button type="button" class="weather-popover__close" aria-label="Wetter schließen" @click="weatherOpen=false">{{ icon("x", size="sm") }}</button>
           <span class="weather-popover__loading">Lade…</span>
         </div>
       </template>
@@ -41,16 +41,16 @@
       <button type="button" class="ec-icon-button" aria-label="Weitere Einsatzaktionen"
               :aria-expanded="open.toString()" aria-haspopup="menu"
               @click="open=!open"
-              {{ tip('Weitere Aktionen: KI, Drohne, QR-Code, PDF-Export') }}>⋯</button>
+              {{ tip('Weitere Aktionen: KI, Drohne, QR-Code, PDF-Export') }}>{{ icon("dots", size="sm") }}</button>
       <div class="header-dropdown__menu" x-show="open" x-cloak x-transition.opacity.duration.150ms role="menu">
         <div class="dropdown-section-label">Einsatzübersicht</div>
         <a href="/einsatz/{{ incident.id }}/dashboard" class="dropdown-item" target="_blank" rel="noopener noreferrer">
-          <span class="di-icon">📊</span> Lagemonitor
+          <span class="di-icon">{{ icon("chart-bar", size="sm") }}</span> Lagemonitor
         </a>
         {% if weather_enabled %}
         <button type="button" class="dropdown-item" @click="weatherOpen=true; open=false"
                 :aria-expanded="weatherOpen.toString()" aria-controls="wetter-panel">
-          <span class="di-icon">🌦</span> Wetter
+          <span class="di-icon">{{ modul_icon("wetter", size="sm") }}</span> Wetter
         </button>
         {% endif %}
         <hr class="dropdown-divider">
@@ -58,45 +58,45 @@
         <div class="dropdown-section-label">Einsatzwerkzeuge</div>
         {% if uas_einsatz_id %}
         <a href="/uas/einsatz/{{ uas_einsatz_id }}" class="dropdown-item">
-          <span class="di-icon">🚁</span> Drohneneinsatz öffnen
+          <span class="di-icon">{{ modul_icon("uas", size="sm") }}</span> Drohneneinsatz öffnen
         </a>
         {% elif can_start_uas %}
         <a href="/uas/incidents/{{ incident.id }}/einsatz/starten" class="dropdown-item">
-          <span class="di-icon">🚁</span> Drohne starten
+          <span class="di-icon">{{ modul_icon("uas", size="sm") }}</span> Drohne starten
         </a>
         {% endif %}
         {% if can_edit and ai_enabled %}
         <button class="dropdown-item" id="ki-dropdown-btn" @click="open=false; openLagebild()">
-          <span class="di-icon">✨</span> KI-Lagebild erzeugen
+          <span class="di-icon">{{ icon("sparkles", size="sm") }}</span> KI-Lagebild erzeugen
         </button>
         <button class="dropdown-item" id="ki-hints-btn" @click="open=false; regenerateLageHinweise({{ incident.id }})">
-          <span class="di-icon">📋</span> KI-Hinweise neu laden
+          <span class="di-icon">{{ icon("sparkles", size="sm") }}</span> KI-Hinweise neu laden
         </button>
         <button class="dropdown-item" id="ki-tasks-btn" @click="open=false; requestAiTaskSuggestions({{ incident.id }})">
-          <span class="di-icon">✅</span> KI-Auftragsvorschläge
+          <span class="di-icon">{{ icon("sparkles", size="sm") }}</span> KI-Auftragsvorschläge
         </button>
         {% endif %}
         <hr class="dropdown-divider">
         {% endif %}
         <div class="dropdown-section-label">Ausgabe</div>
         <a href="/einsatz/{{ incident.id }}/qr" class="dropdown-item">
-          <span class="di-icon">🔗</span> QR-Code anzeigen
+          <span class="di-icon">{{ icon("link", size="sm") }}</span> QR-Code anzeigen
         </a>
         <a href="/archiv/{{ incident.id }}/pdf" target="_blank" class="dropdown-item">
-          <span class="di-icon">📄</span> PDF exportieren
+          <span class="di-icon">{{ icon("file-text", size="sm") }}</span> PDF exportieren
         </a>
         {# Drucken immer verfügbar: lokal (Dieses Gerät) ohne Gateway, Stationsdrucker bei
            verbundenem Drucker. Kein Gate – sonst fehlt der lokale Druck (Muster info.html). #}
         <button type="button" class="dropdown-item"
                 onclick="ecpgPrint({document_type:'einsatzinfo', incident_id:{{ incident.id }}, title:'Einsatzinfo drucken'})">
-          <span class="di-icon">🖨️</span> Drucken
+          <span class="di-icon">{{ icon("printer", size="sm") }}</span> Drucken
         </button>
         {% if can_edit %}
         <hr class="dropdown-divider">
         <div class="dropdown-section-label dropdown-section-label--danger">Gefahrbereich</div>
         <button type="button" class="dropdown-item dropdown-item--danger"
                 @click="if(confirm('Einsatz wirklich abschließen?')) { fetch('/einsatz/{{ incident.id }}/abschliessen', {method:'POST'}); }">
-          <span class="di-icon">⚠</span> Einsatz abschließen
+          <span class="di-icon">{{ icon("alert-triangle", size="sm") }}</span> Einsatz abschließen
         </button>
         {% endif %}
       </div>
@@ -108,7 +108,7 @@
     <span class="live-status" :class="'live-status--' + liveStatusState"
           :title="connectionStatus + ' · Daten aktualisiert vor ' + lastUpdateAgeSec + ' Sek.'"
           aria-live="polite">
-      <span aria-hidden="true">●</span>
+      <span aria-hidden="true">{{ status_dot("gruen", "Verbunden") }}</span>
       <span x-text="liveStatusText">Live · vor 0 s</span>
       <span class="sr-only" x-text="connectionStatus">verbunden</span>
     </span>
@@ -127,7 +127,7 @@
       <button class="btn btn--sm btn--secondary" @click="open=!open; if(open) load()">
         <span class="badge-pill badge-pill--green" x-text="zusagen">0</span>
         <span class="badge-pill badge-pill--red" x-text="absagen">0</span>
-        <span class="dropdown-arrow" :class="open && 'open'">▾</span>
+        <span class="dropdown-arrow" :class="open && 'open'">{{ icon("chevron-down", size="sm") }}</span>
       </button>
       <div class="header-dropdown__menu" x-show="open" x-cloak x-transition.opacity.duration.150ms style="min-width:220px;">
         <template x-if="namen.length === 0">
@@ -135,7 +135,7 @@
         </template>
         <template x-for="n in namen" :key="n.name + n.status">
           <div class="dropdown-item" style="cursor:default;">
-            <span class="di-icon" x-text="n.status === 'zugesagt' ? '✅' : '❌'"></span>
+            <span class="di-icon"><span x-show="n.status === 'zugesagt'">{{ icon("circle-check", size="sm") }}</span><span x-show="n.status !== 'zugesagt'">{{ icon("circle-x", size="sm") }}</span></span>
             <span x-text="n.name"></span>
           </div>
         </template>
@@ -147,12 +147,12 @@
 
 {% if board_abgeschlossen %}
 <div class="alert alert--warn board-readonly-banner" role="status" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex-shrink:0;margin:8px 12px 0;padding:6px 12px;font-size:.85rem;">
-  <span style="flex:1;min-width:200px;">🔒 Einsatz abgeschlossen{% if incident.closed_at %} am {{ incident.closed_at|local_datetime }} Uhr{% endif %} – Nur-Ansicht, Änderungen sind nicht möglich.</span>
+  <span style="flex:1;min-width:200px;">{{ icon("lock", size="sm") }} Einsatz abgeschlossen{% if incident.closed_at %} am {{ incident.closed_at|local_datetime }} Uhr{% endif %} – Nur-Ansicht, Änderungen sind nicht möglich.</span>
   <a href="/archiv/{{ incident.id }}" class="btn btn--ghost btn--sm">← Archiv</a>
   {% if darf_wiedereroeffnen %}
   <form method="post" action="/einsatz/{{ incident.id }}/wiedereroeffnen" style="display:contents" onsubmit="return confirm('Diesen Einsatz wieder eröffnen? Er wird erneut als aktiver Einsatz geführt.');">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-    <button type="submit" class="btn btn--ghost btn--sm">↻ Wieder eröffnen</button>
+    <button type="submit" class="btn btn--ghost btn--sm">{{ icon("refresh", size="xs") }} Wieder eröffnen</button>
   </form>
   {% endif %}
 </div>
@@ -163,8 +163,9 @@
   <!-- Sidebar Toggle Button -->
   <button class="sidebar-toggle" @click="toggleSidebar()"
           :style="'left:' + (sidebarOpen ? 'var(--sidebar-w,300px)' : '0')"
-          :title="sidebarOpen ? 'Sidebar ausblenden' : 'Sidebar einblenden'">
-    <span x-text="sidebarOpen ? '◀' : '▶'"></span>
+          :title="sidebarOpen ? 'Sidebar ausblenden' : 'Sidebar einblenden'"
+          :aria-label="sidebarOpen ? 'Sidebar ausblenden' : 'Sidebar einblenden'">
+    <span x-show="sidebarOpen">{{ icon("chevron-left", size="sm") }}</span><span x-show="!sidebarOpen">{{ icon("chevron-right", size="sm") }}</span>
   </button>
 
   <!-- Sidebar -->
@@ -194,8 +195,8 @@
         <div class="input-row">
           <input type="text" name="title" placeholder="Auftrag..." class="form-input" id="taskInput"
                  required autocomplete="off">
-          <button type="button" class="btn btn--icon btn--mic" title="Sprachdiktat (Strg+M)"
-                  onclick="startVoice('taskInput')">🎤</button>
+          <button type="button" class="btn btn--icon btn--mic" title="Sprachdiktat (Strg+M)" aria-label="Sprachdiktat (Strg+M)"
+                  onclick="startVoice('taskInput')">{{ icon("microphone", size="sm") }}</button>
           <button type="submit" class="btn btn--primary btn--sm">+</button>
         </div>
         <input type="text" name="detail" placeholder="Zusatzinfo (optional)" class="form-input form-input--detail">
@@ -220,8 +221,8 @@
             @htmx:after-request="if(event.detail.successful){$el.reset();}">
         <div class="input-row">
           <input type="text" name="title" placeholder="Meldung..." class="form-input" id="msgInput" required autocomplete="off">
-          <button type="button" class="btn btn--icon btn--mic" title="Sprachdiktat (Strg+M)"
-                  onclick="startVoice('msgInput')">🎤</button>
+          <button type="button" class="btn btn--icon btn--mic" title="Sprachdiktat (Strg+M)" aria-label="Sprachdiktat (Strg+M)"
+                  onclick="startVoice('msgInput')">{{ icon("microphone", size="sm") }}</button>
         </div>
         <div class="input-row">
           <input type="number" name="due_after_min" placeholder="Erinnerung in Min." class="form-input" min="0" value="0">
@@ -277,7 +278,7 @@
   <div class="modal__content" style="min-width:min(400px,90vw);">
     <div class="modal__header">
       <h3 class="modal__title">Auftrag anlegen</h3>
-      <button aria-label="Schließen" type="button" @click="$el.closest('dialog').close()" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" @click="$el.closest('dialog').close()" class="modal__close">{{ icon("x", size="sm") }}</button>
     </div>
     <form hx-post="/einsatz/{{ incident.id }}/aufgabe" hx-target="#kanban" hx-swap="afterbegin"
           @htmx:after-request="if(event.detail.successful){$el.reset();vehicleId='';$el.closest('dialog').close();}">
@@ -294,8 +295,8 @@
         <div class="form-group">
           <div class="input-row">
             <input type="text" name="title" placeholder="Auftrag..." class="form-input" id="quickAddTaskTitle" required autocomplete="off">
-            <button type="button" class="btn btn--icon btn--mic" title="Sprachdiktat (Strg+M)"
-                    onclick="startVoice('quickAddTaskTitle')">🎤</button>
+            <button type="button" class="btn btn--icon btn--mic" title="Sprachdiktat (Strg+M)" aria-label="Sprachdiktat (Strg+M)"
+                    onclick="startVoice('quickAddTaskTitle')">{{ icon("microphone", size="sm") }}</button>
           </div>
         </div>
         <div class="form-group">
@@ -330,7 +331,7 @@
   <div class="modal__content" style="min-width:min(400px,90vw);">
     <div class="modal__header">
       <h3 class="modal__title">Meldung anlegen</h3>
-      <button aria-label="Schließen" type="button" @click="$el.closest('dialog').close()" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" @click="$el.closest('dialog').close()" class="modal__close">{{ icon("x", size="sm") }}</button>
     </div>
     <form hx-post="/einsatz/{{ incident.id }}/meldung" hx-target="#kanban" hx-swap="afterbegin"
           hx-encoding="multipart/form-data"
@@ -340,17 +341,17 @@
           <label class="form-label" style="font-size:.82rem;">Typ</label>
           <select name="status" class="form-select form-select--status status-meldung"
                   onchange="this.className='form-select form-select--status status-'+this.value">
-            <option value="meldung">🔴 Meldung</option>
-            <option value="achtung">⚠️ Achtung</option>
-            <option value="hinweis">💡 Hinweis</option>
-            <option value="information">ℹ️ Information</option>
+            <option value="meldung">Meldung</option>
+            <option value="achtung">Achtung</option>
+            <option value="hinweis">Hinweis</option>
+            <option value="information">Information</option>
           </select>
         </div>
         <div class="form-group">
           <div class="input-row">
             <input type="text" name="title" placeholder="Meldung..." class="form-input" id="quickAddMsgTitle" required autocomplete="off">
-            <button type="button" class="btn btn--icon btn--mic" title="Sprachdiktat (Strg+M)"
-                    onclick="startVoice('quickAddMsgTitle')">🎤</button>
+            <button type="button" class="btn btn--icon btn--mic" title="Sprachdiktat (Strg+M)" aria-label="Sprachdiktat (Strg+M)"
+                    onclick="startVoice('quickAddMsgTitle')">{{ icon("microphone", size="sm") }}</button>
           </div>
         </div>
         <div class="form-group">
@@ -377,9 +378,9 @@
                  onchange="compressFilesInPlace(this).then(function(){var p=document.getElementById('newMsgPreview');p.innerHTML='';Array.from(this.files).forEach(function(f){var s=document.createElement('span');s.style.cssText='display:inline-block;font-size:.75rem;background:var(--surface-high);border-radius:4px;padding:2px 6px;margin:2px';s.textContent=f.name;p.appendChild(s);})}.bind(this))">
           <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:4px;">
             <button type="button" class="btn btn--secondary btn--sm"
-                    onclick="openCamera('newMsgFiles')">📷 Kamera</button>
+                    onclick="openCamera('newMsgFiles')">{{ icon("camera", size="sm") }} Kamera</button>
             <button type="button" class="btn btn--secondary btn--sm"
-                    onclick="openGallery('newMsgFiles')">🖼️ Galerie</button>
+                    onclick="openGallery('newMsgFiles')">{{ icon("photo", size="sm") }} Galerie</button>
           </div>
           <div id="newMsgPreview" style="display:flex;flex-wrap:wrap;gap:2px;min-height:0;"></div>
           <p class="form-hint">Bild max. 10 MB · wird automatisch verkleinert</p>
@@ -398,7 +399,7 @@
   <div class="modal__content" style="min-width:min(380px,90vw);">
     <div class="modal__header">
       <h3 class="modal__title">Abschnitt hinzufügen</h3>
-      <button aria-label="Schließen" type="button" @click="$el.closest('dialog').close()" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" @click="$el.closest('dialog').close()" class="modal__close">{{ icon("x", size="sm") }}</button>
     </div>
     <form hx-post="/einsatz/{{ incident.id }}/abschnitt" hx-swap="none"
           @htmx:after-request="if(event.detail.successful){$el.reset();$el.closest('dialog').close();}">
@@ -418,10 +419,10 @@
         <div class="form-group">
           <label class="form-label">TYP DER SPALTE</label>
           <select name="column_kind" class="form-select">
-            <option value="vehicles">🚒 Einheiten-Spalte</option>
-            <option value="tasks">📋 Auftrags-Spalte</option>
-            <option value="messages">📢 Meldungs-Spalte</option>
-            <option value="rescued">🚑 Personen-Spalte</option>
+            <option value="vehicles">Einheiten-Spalte</option>
+            <option value="tasks">Auftrags-Spalte</option>
+            <option value="messages">Meldungs-Spalte</option>
+            <option value="rescued">Personen-Spalte</option>
           </select>
           <p class="form-hint" style="margin-top:4px;">Bestimmt welche Art von Karten in dieser Spalte angezeigt werden.</p>
         </div>
@@ -442,7 +443,7 @@
         <h3 class="modal__title">Einheit hinzufügen</h3>
         <p class="modal__subtitle">Vorschläge aus den Stammdaten oder neue Einheit anlegen</p>
       </div>
-      <button aria-label="Schließen" type="button" @click="$el.closest('dialog').close()" class="modal__close" title="Schließen">×</button>
+      <button aria-label="Schließen" type="button" @click="$el.closest('dialog').close()" class="modal__close" title="Schließen">{{ icon("x", size="sm") }}</button>
     </div>
     <div class="modal__body">
       <div class="form-group">
@@ -552,12 +553,12 @@
 <dialog class="modal" id="lagebildModal" x-data="aiLagebild({{ incident.id }})">
   <div class="modal__content">
     <div class="modal__header">
-      <h3>✨ KI-Lagebild</h3>
-      <button aria-label="Schließen" type="button" @click="$el.closest('dialog').close()" class="modal__close">×</button>
+      <h3>{{ icon("sparkles", size="md") }} KI-Lagebild</h3>
+      <button aria-label="Schließen" type="button" @click="$el.closest('dialog').close()" class="modal__close">{{ icon("x", size="sm") }}</button>
     </div>
     <div class="modal__body">
       <div x-show="loading" style="text-align:center; padding:24px; color:#a78bfa;">
-        ✨ Lagebild wird erzeugt…
+        {{ icon("sparkles", size="sm") }} Lagebild wird erzeugt…
       </div>
       <div x-show="error && !loading" x-text="error" style="color:#ef4444; padding:8px 0;"></div>
       <textarea x-show="text && !loading" x-model="text" class="form-input"
@@ -566,7 +567,7 @@
     <div class="modal__footer">
       <button type="button" @click="$el.closest('dialog').close()" class="btn btn--ghost">Schließen</button>
       <template x-if="text && !loading">
-        <button type="button" @click="copy()" class="btn btn--secondary">📋 Kopieren</button>
+        <button type="button" @click="copy()" class="btn btn--secondary">{{ icon("sparkles", size="sm") }} Kopieren</button>
       </template>
       <template x-if="text && !loading">
         <button type="button" @click="saveToJournal()" class="btn btn--primary">In Journal übernehmen</button>
@@ -581,7 +582,7 @@
   <div class="modal__content" x-data="personWizard()">
     <div class="modal__header">
       <h3>Gerettete Person erfassen</h3>
-      <button aria-label="Schließen" type="button" @click="$el.closest('dialog').close()" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" @click="$el.closest('dialog').close()" class="modal__close">{{ icon("x", size="sm") }}</button>
     </div>
     <form hx-post="/einsatz/{{ incident.id }}/person" hx-target="#kanban" hx-swap="afterbegin"
           @htmx:after-request="if(event.detail.successful){$el.reset();step=0;quickName='';$el.closest('dialog').close();}">

@@ -23,7 +23,7 @@
     <!-- Incident info -->
     <div class="hdr-incident">
       {% if incident.is_exercise %}
-      <div style="font-family:var(--font-mono);font-size:.7rem;font-weight:700;color:#fbbf24;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px;">⚠ ÜBUNG / SIMULATION ⚠</div>
+      <div style="font-family:var(--font-mono);font-size:.7rem;font-weight:700;color:#fbbf24;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px;">{{ icon("alert-triangle", size="sm") }} ÜBUNG / SIMULATION {{ icon("alert-triangle", size="sm") }}</div>
       {% endif %}
       <div class="hdr-incident__label">Einsatzgrund &amp; Ort</div>
       <div class="hdr-incident__title">
@@ -74,13 +74,13 @@
     <div class="hdr-block" style="min-width:9.5rem;">
       <div class="hdr-block__label">Wetter</div>
       <div class="hdr-block__value">
-        {% if dash_weather.temperature_c is not none %}🌡 {{ '%.0f'|format(dash_weather.temperature_c) }}&deg;C{% else %}–{% endif %}
+        {% if dash_weather.temperature_c is not none %}{{ icon("temperature", size="sm") }} {{ '%.0f'|format(dash_weather.temperature_c) }}&deg;C{% else %}–{% endif %}
       </div>
       {% if dash_weather.wind_speed_ms is not none %}
-      <div class="hdr-block__sub">💨 {{ '%.0f'|format(dash_weather.wind_speed_ms) }} m/s {{ dash_weather.wind_dir }}</div>
+      <div class="hdr-block__sub">{{ icon("wind", size="sm") }} {{ '%.0f'|format(dash_weather.wind_speed_ms) }} m/s {{ dash_weather.wind_dir }}</div>
       {% endif %}
       <div class="hdr-block__sub">
-        {% if dash_weather.rain_label %}🌧 {{ dash_weather.rain_label }}{% else %}☀ kein Regen{% endif %}
+        {% if dash_weather.rain_label %}{{ icon("cloud-rain", size="sm") }} {{ dash_weather.rain_label }}{% else %}{{ icon("sun", size="sm") }} kein Regen{% endif %}
       </div>
     </div>
     {% endif %}
@@ -89,7 +89,7 @@
     <div class="hdr-qr">
       <a href="/einsatz/{{ incident.id }}/qr" target="_blank" rel="noopener" title="QR-Code vergrößern">
         <img src="data:image/png;base64,{{ qr_img }}" alt="Login-QR">
-        <span class="hdr-qr__label">📱 Beitreten</span>
+        <span class="hdr-qr__label">{{ icon("device-mobile", size="sm") }} Beitreten</span>
       </a>
     </div>
     {% endif %}
@@ -104,7 +104,7 @@
 <script type="application/json" id="lageHintsData">{{ {"hints": (lage_hints|map(attribute="text")|list if lage_hints else []), "hintsAI": (lage_hints_ai if lage_hints_ai else [])}|tojson }}</script>
 {% if lage_hints %}
 <div class="lage-bar">
-  <span class="lage-bar__icon" id="lageBarIcon">{% if lage_hints_ai and lage_hints_ai[0] %}✨{% else %}📢{% endif %}</span>
+  <span class="lage-bar__icon" id="lageBarIcon">{% if lage_hints_ai and lage_hints_ai[0] %}{{ icon("sparkles", size="sm") }}{% else %}{{ icon("speakerphone", size="sm") }}{% endif %}</span>
   <span class="lage-bar__label">Lagehinweis</span>
   <span class="lage-bar__sep"></span>
   <span class="lage-bar__text" id="lageTicker">{{ lage_hints[0].text }}</span>
@@ -115,7 +115,7 @@
 {% if breathing_troops %}
 <div class="bs-strip">
   <div class="bs-strip__label">
-    <span style="font-size:1rem;">🔴</span> Atemschutz
+    <span style="font-size:1rem;">{{ status_dot("rot", "Atemschutz") }}</span> Atemschutz
   </div>
   {% for troop in breathing_troops %}
   {# Druckklasse berechnen (300-bar-Welt: ≥150 ok, ≥100 warn, <100 crit) #}
@@ -171,7 +171,7 @@
     <div class="panel-hd">
       <div class="panel-hd__top">
         <div class="panel-hd__title">
-          <span class="panel-hd__icon">🚒</span> Fahrzeuge / Abschnitte
+          <span class="panel-hd__icon">{{ icon("firetruck", size="md") }}</span> Fahrzeuge / Abschnitte
         </div>
         <span class="panel-badge panel-badge--green">{{ active_vehicles|length }}/{{ total_vehicles }} Fzg</span>
       </div>
@@ -184,7 +184,7 @@
       <div class="lane-group">
         <div class="lane-group__head">
           <span class="lane-group__title">
-            {% if lane.column.code == 'active' %}🚒{% else %}📍{% endif %}
+            {% if lane.column.code == 'active' %}{{ icon("firetruck", size="sm") }}{% else %}{{ icon("map-pin", size="sm") }}{% endif %}
             {{ lane.column.title }}
           </span>
           {% if lane.column.section_leader %}
@@ -222,7 +222,7 @@
       {% endfor %}
       {% if not any_shown %}
       <div class="empty-panel">
-        <div class="empty-icon">🚒</div>
+        <div class="empty-icon">{{ icon("firetruck", size="md") }}</div>
         Keine Fahrzeuge im Einsatz
       </div>
       {% endif %}
@@ -234,7 +234,7 @@
     <div class="panel-hd">
       <div class="panel-hd__top">
         <div class="panel-hd__title">
-          <span class="panel-hd__icon">📋</span> Aufträge
+          <span class="panel-hd__icon">{{ icon("clipboard-list", size="md") }}</span> Aufträge
         </div>
       </div>
       <div class="stat-row">
@@ -260,7 +260,7 @@
         {% for t in tasks_open %}
         {% set ts = t.status if t.status else 'open' %}
         <div class="item-row">
-          <span class="item-icon">{% if ts == 'in_progress' %}🟡{% elif ts == 'cancelled' %}⚪{% else %}🔴{% endif %}</span>
+          <span class="item-icon">{% if ts == 'in_progress' %}{{ status_dot("gelb", "In Arbeit") }}{% elif ts == 'cancelled' %}{{ status_dot("weiss", "Storniert") }}{% else %}{{ status_dot("rot", "Offen") }}{% endif %}</span>
           <div class="item-body">
             <div class="item-title">{{ t.title }}</div>
             <div class="item-meta">
@@ -277,7 +277,7 @@
 
         {% if not tasks_open and not tasks_done %}
         <div class="empty-panel">
-          <div class="empty-icon">✅</div>
+          <div class="empty-icon">{{ icon("circle-check", size="md") }}</div>
           Keine Aufträge
         </div>
         {% endif %}
@@ -292,7 +292,7 @@
         {% endif %}
         {% for t in tasks_done %}
         <div class="item-row item-row--done">
-          <span class="item-icon">✓</span>
+          <span class="item-icon">{{ icon("check", size="sm") }}</span>
           <div class="item-body">
             <div class="item-title">{{ t.title }}</div>
             {% if t.vehicle and t.vehicle.master %}
@@ -312,7 +312,7 @@
     <div class="panel-hd">
       <div class="panel-hd__top">
         <div class="panel-hd__title">
-          <span class="panel-hd__icon">📢</span> Meldungen
+          <span class="panel-hd__icon">{{ icon("speakerphone", size="md") }}</span> Meldungen
         </div>
       </div>
       <div class="stat-row">
@@ -338,7 +338,7 @@
         {% for m in msgs_open %}
         {% set ms = m.status if m.status else 'meldung' %}
         <div class="item-row">
-          <span class="item-icon">{% if ms == 'achtung' %}⚠️{% elif ms == 'hinweis' %}💡{% elif ms == 'information' %}ℹ️{% else %}🔴{% endif %}</span>
+          <span class="item-icon">{% if ms == 'achtung' %}{{ icon("alert-triangle", size="sm") }}{% elif ms == 'hinweis' %}{{ icon("bulb", size="sm") }}{% elif ms == 'information' %}{{ icon("info-circle", size="sm") }}{% else %}{{ status_dot("rot", "Meldung") }}{% endif %}</span>
           <div class="item-body">
             <div class="item-title">{{ m.title }}</div>
             <div class="item-meta">
@@ -347,7 +347,7 @@
                 <span class="v-badge v-badge--msg">{{ m.vehicle.master.display_label }}</span>
               {% endif %}
               {% if m.due_at %}
-                <span style="color:#fbbf24;">⏰ {{ m.due_at|local_time }}</span>
+                <span style="color:#fbbf24;">{{ icon("alarm", size="sm") }} {{ m.due_at|local_time }}</span>
               {% endif %}
             </div>
           </div>
@@ -356,7 +356,7 @@
 
         {% if not msgs_open and not msgs_done %}
         <div class="empty-panel">
-          <div class="empty-icon">💬</div>
+          <div class="empty-icon">{{ icon("message", size="md") }}</div>
           Keine Meldungen
         </div>
         {% endif %}
@@ -371,7 +371,7 @@
         {% endif %}
         {% for m in msgs_done %}
         <div class="item-row item-row--done">
-          <span class="item-icon">✓</span>
+          <span class="item-icon">{{ icon("check", size="sm") }}</span>
           <div class="item-body">
             <div class="item-title">{{ m.title }}</div>
           </div>
@@ -405,7 +405,7 @@
     <div class="panel-hd">
       <div class="panel-hd__top">
         <div class="panel-hd__title">
-          <span class="panel-hd__icon">🚁</span> Drohne
+          <span class="panel-hd__icon">{{ modul_icon("uas", size="md") }}</span> Drohne
         </div>
         <span class="uas-status-badge uas-status--{{ uas_einsatz.status }}">
           {% if uas_einsatz.status == 'im_einsatz' %}<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#5fcf8e;animation:blink 2s ease-in-out infinite;margin-right:3px;"></span>{% endif %}
@@ -414,7 +414,7 @@
       </div>
       {% if uas_einsatz.tetra_rufname %}
       <div class="uas-info-row" style="padding-top:.4rem;">
-        <span style="font-size:.8rem;color:var(--text-dim);">📡</span>
+        <span style="font-size:.8rem;color:var(--text-dim);">{{ icon("antenna", size="sm") }}</span>
         <span>Rufname: <strong>{{ uas_einsatz.tetra_rufname }}</strong></span>
       </div>
       {% endif %}
@@ -440,12 +440,12 @@
       {% endfor %}
       {% else %}
       <div class="empty-panel" style="min-height:40px;">
-        <div class="empty-icon" style="font-size:1.4rem;">🚁</div>
+        <div class="empty-icon" style="font-size:1.4rem;">{{ modul_icon("uas", size="md") }}</div>
         Kein Team zugewiesen
       </div>
       {% endif %}
       <a href="/uas/einsatz/{{ uas_einsatz.id }}" class="uas-link" target="_blank" rel="noopener">
-        <span>🔗</span> Drohneneinsatz öffnen
+        <span>{{ icon("link", size="sm") }}</span> Drohneneinsatz öffnen
       </a>
     </div>
   </div>
@@ -457,7 +457,7 @@
 <footer class="footer">
 
   <div class="ps-group ps-group--found">
-    <div class="ps-icon">🔍</div>
+    <div class="ps-icon">{{ icon("search", size="md") }}</div>
     <div class="ps-info">
       <div class="ps-label">Gefunden</div>
       <div class="ps-count">{{ '%02d'|format(person_stats['gefunden']|length) }}</div>
@@ -477,7 +477,7 @@
   </div>
 
   <div class="ps-group ps-group--treated">
-    <div class="ps-icon">🏥</div>
+    <div class="ps-icon">{{ icon("building-hospital", size="md") }}</div>
     <div class="ps-info">
       <div class="ps-label">Versorgt</div>
       <div class="ps-count">{{ '%02d'|format(person_stats['versorgt']|length) }}</div>
@@ -497,7 +497,7 @@
   </div>
 
   <div class="ps-group ps-group--transported">
-    <div class="ps-icon">🚑</div>
+    <div class="ps-icon">{{ icon("ambulance", size="md") }}</div>
     <div class="ps-info">
       <div class="ps-label">Abtransportiert</div>
       <div class="ps-count">{{ '%02d'|format(person_stats['abtransportiert']|length) }}</div>

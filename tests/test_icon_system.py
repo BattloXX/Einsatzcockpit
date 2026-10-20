@@ -96,6 +96,22 @@ def test_jinja_globals():
     assert "status-dot--rot" in templates.env.from_string('{{ status_dot("rot", "Stop") }}').render()
 
 
+@pytest.mark.parametrize("status,farbe,label", [
+    ("gefunden", "rot", "Gefunden"),
+    ("versorgt", "orange", "Versorgt"),
+    ("abtransportiert", "gruen", "Abtransportiert"),
+    ("verstorben", "schwarz", "Verstorben"),
+    ('<unbekannt>&"', "grau", '<unbekannt>&"'),
+])
+def test_person_status_filter(status, farbe, label):
+    assert templates.env.filters["person_status_label"](status) == label
+    rendered = templates.env.from_string('{{ status|person_status_dot }}').render(status=status)
+    dot = ET.fromstring(rendered)
+    assert dot.attrib["class"] == f"status-dot status-dot--{farbe}"
+    assert dot.attrib["aria-label"] == dot.attrib["title"] == label
+    assert "<unbekannt>" not in rendered
+
+
 def test_literal_icon_calls():
     # bis P8: Diese Templates importieren das alte Makro mit eigenen Namen.
     legacy = {

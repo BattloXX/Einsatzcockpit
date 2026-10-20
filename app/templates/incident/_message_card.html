@@ -16,16 +16,16 @@
     {% if can_edit %}
     <div class="header-dropdown card__status-menu" x-data="{open:false}" @click.outside="open=false" style="margin-top:5px;">
       <button type="button" class="ec-chip ec-chip--status status-{{ sl }}" aria-label="Meldungsstatus: {% if sl == 'achtung' or sl == 'in_progress' %}Achtung{% elif sl == 'hinweis' %}Hinweis{% elif sl == 'information' %}Information{% elif sl == 'erledigt' or sl == 'done' %}Erledigt{% elif sl == 'storniert' or sl == 'cancelled' %}Storniert{% else %}Meldung{% endif %}" aria-haspopup="menu" :aria-expanded="open.toString()" @click="open=!open">
-        {% if sl == 'achtung' or sl == 'in_progress' %}⚠️ Achtung{% elif sl == 'hinweis' %}💡 Hinweis{% elif sl == 'information' %}ℹ️ Information{% elif sl == 'erledigt' or sl == 'done' %}✅ Erledigt{% elif sl == 'storniert' or sl == 'cancelled' %}⚪ Storniert{% else %}🔴 Meldung{% endif %}
+        {% if sl == 'achtung' or sl == 'in_progress' %}{{ icon("alert-triangle", size="sm") }} Achtung{% elif sl == 'hinweis' %}{{ icon("bulb", size="sm") }} Hinweis{% elif sl == 'information' %}{{ icon("info-circle", size="sm") }} Information{% elif sl == 'erledigt' or sl == 'done' %}{{ icon("circle-check", size="sm") }} Erledigt{% elif sl == 'storniert' or sl == 'cancelled' %}{{ status_dot("weiss", "Storniert") }} Storniert{% else %}{{ status_dot("rot", "Meldung") }} Meldung{% endif %}
       </button>
       <div class="header-dropdown__menu" x-show="open" x-cloak x-transition.opacity.duration.150ms role="menu">
         <div class="dropdown-section-label">Meldungsstatus</div>
-        <button type="button" role="menuitem" class="dropdown-item" aria-label="Status auf Meldung setzen" hx-post="/einsatz/{{ incident.id }}/meldung/{{ msg.id }}/ampel" hx-vals='{"status":"meldung"}' hx-swap="none" @click="open=false">🔴 Meldung</button>
-        <button type="button" role="menuitem" class="dropdown-item" aria-label="Status auf Achtung setzen" hx-post="/einsatz/{{ incident.id }}/meldung/{{ msg.id }}/ampel" hx-vals='{"status":"achtung"}' hx-swap="none" @click="open=false">⚠️ Achtung</button>
-        <button type="button" role="menuitem" class="dropdown-item" aria-label="Status auf Hinweis setzen" hx-post="/einsatz/{{ incident.id }}/meldung/{{ msg.id }}/ampel" hx-vals='{"status":"hinweis"}' hx-swap="none" @click="open=false">💡 Hinweis</button>
-        <button type="button" role="menuitem" class="dropdown-item" aria-label="Status auf Information setzen" hx-post="/einsatz/{{ incident.id }}/meldung/{{ msg.id }}/ampel" hx-vals='{"status":"information"}' hx-swap="none" @click="open=false">ℹ️ Information</button>
-        <button type="button" role="menuitem" class="dropdown-item" aria-label="Status auf Erledigt setzen" hx-post="/einsatz/{{ incident.id }}/meldung/{{ msg.id }}/ampel" hx-vals='{"status":"erledigt"}' hx-swap="none" @click="open=false">✅ Erledigt</button>
-        <button type="button" role="menuitem" class="dropdown-item" aria-label="Status auf Storniert setzen" hx-post="/einsatz/{{ incident.id }}/meldung/{{ msg.id }}/ampel" hx-vals='{"status":"storniert"}' hx-swap="none" @click="open=false">⚪ Storniert</button>
+        <button type="button" role="menuitem" class="dropdown-item" aria-label="Status auf Meldung setzen" hx-post="/einsatz/{{ incident.id }}/meldung/{{ msg.id }}/ampel" hx-vals='{"status":"meldung"}' hx-swap="none" @click="open=false">{{ status_dot("rot", "Meldung") }} Meldung</button>
+        <button type="button" role="menuitem" class="dropdown-item" aria-label="Status auf Achtung setzen" hx-post="/einsatz/{{ incident.id }}/meldung/{{ msg.id }}/ampel" hx-vals='{"status":"achtung"}' hx-swap="none" @click="open=false">{{ icon("alert-triangle", size="sm") }} Achtung</button>
+        <button type="button" role="menuitem" class="dropdown-item" aria-label="Status auf Hinweis setzen" hx-post="/einsatz/{{ incident.id }}/meldung/{{ msg.id }}/ampel" hx-vals='{"status":"hinweis"}' hx-swap="none" @click="open=false">{{ icon("bulb", size="sm") }} Hinweis</button>
+        <button type="button" role="menuitem" class="dropdown-item" aria-label="Status auf Information setzen" hx-post="/einsatz/{{ incident.id }}/meldung/{{ msg.id }}/ampel" hx-vals='{"status":"information"}' hx-swap="none" @click="open=false">{{ icon("info-circle", size="sm") }} Information</button>
+        <button type="button" role="menuitem" class="dropdown-item" aria-label="Status auf Erledigt setzen" hx-post="/einsatz/{{ incident.id }}/meldung/{{ msg.id }}/ampel" hx-vals='{"status":"erledigt"}' hx-swap="none" @click="open=false">{{ icon("circle-check", size="sm") }} Erledigt</button>
+        <button type="button" role="menuitem" class="dropdown-item" aria-label="Status auf Storniert setzen" hx-post="/einsatz/{{ incident.id }}/meldung/{{ msg.id }}/ampel" hx-vals='{"status":"storniert"}' hx-swap="none" @click="open=false">{{ status_dot("weiss", "Storniert") }} Storniert</button>
       </div>
     </div>
     {% endif %}
@@ -33,11 +33,11 @@
     {% if msg.objekt_gefahr %}{% set glinks = gefahr_links(msg.objekt_gefahr) %}
     {% if glinks %}
     <div class="card__links" onclick="event.stopPropagation()" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;">
-      {% for l in glinks %}<a href="{{ l.url }}" target="_blank" rel="noopener" class="btn btn--ghost btn--xs">🔗 {{ l.label }}</a>{% endfor %}
+      {% for l in glinks %}<a href="{{ l.url }}" target="_blank" rel="noopener" class="btn btn--ghost btn--xs">{{ icon("link", size="xs") }} {{ l.label }}</a>{% endfor %}
     </div>
     {% endif %}{% endif %}
     {% if msg.due_at %}
-    <div class="card__due{% if is_overdue %} card__due--overdue{% endif %}">{% if is_overdue %}⚠️ Überfällig:{% else %}⏰ Fällig:{% endif %} {{ msg.due_at|local_time }}</div>
+    <div class="card__due{% if is_overdue %} card__due--overdue{% endif %}">{% if is_overdue %}{{ icon("alert-triangle", size="sm") }} Überfällig:{% else %}{{ icon("alarm", size="sm") }} Fällig:{% endif %} {{ msg.due_at|local_time }}</div>
     {% endif %}
     {% if msg.vehicle %}
     <div class="card__gk" style="font-size:.75rem;opacity:.7;">→ {{ msg.vehicle.master.display_label }}</div>
@@ -46,9 +46,9 @@
     <div class="card__media">
       {% for m in msg.media[:3] %}
         {% if m.kind == 'image' %}<img src="/medien/meldung/thumb/{{ m.id }}" alt="" loading="lazy">
-        {% elif m.kind == 'pdf' %}<span class="card__media-icon">📄</span>
-        {% elif m.kind == 'datei' %}<a class="card__media-icon" href="/medien/meldung/datei/{{ m.id }}" title="{{ m.original_filename }} herunterladen">📎</a>
-        {% else %}<span class="card__media-icon">🎬</span>{% endif %}
+        {% elif m.kind == 'pdf' %}<span class="card__media-icon">{{ icon("file-text", size="sm") }}</span>
+        {% elif m.kind == 'datei' %}<a class="card__media-icon" href="/medien/meldung/datei/{{ m.id }}" title="{{ m.original_filename }} herunterladen" aria-label="{{ m.original_filename }} herunterladen">{{ icon("paperclip", size="sm") }}</a>
+        {% else %}<span class="card__media-icon">{{ icon("movie", size="sm") }}</span>{% endif %}
       {% endfor %}
       {% if msg.media|length > 3 %}<span class="card__media-more">+{{ msg.media|length - 3 }}</span>{% endif %}
     </div>
@@ -62,7 +62,7 @@
           hx-swap="none"
           style="margin:0;">
       <label class="card__camera" title="Foto aufnehmen" onclick="event.stopPropagation()">
-        📷<input type="file" name="files" accept="image/*" capture="environment" style="display:none"
+        {{ icon("camera", size="sm") }}<input type="file" name="files" accept="image/*" capture="environment" style="display:none"
                  onchange="compressAndSubmit(this)">
       </label>
     </form>
