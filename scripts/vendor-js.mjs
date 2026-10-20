@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -65,6 +65,92 @@ export const mapping = [
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 
+function generateIcons(data) {
+  return `// Automatisch erzeugt von scripts/vendor-js.mjs – nicht von Hand ändern
+(function (root) {
+  'use strict';
+  const icons = ${JSON.stringify(data, null, 2)};
+  const sizes = {xs: 16, sm: 20, md: 24, lg: 32};
+  const statuses = new Set(['rot', 'orange', 'gelb', 'gruen', 'blau', 'grau', 'schwarz', 'weiss']);
+  const warned = new Set();
+  const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
+  const escape = value => String(value).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&#34;', "'": '&#39;'}[c]));
+  const classes = value => escape(String(value).trim().split(/\\s+/).filter(Boolean).join(' '));
+  function ecpIcon(name, {size = 'md', cls = '', label = null} = {}) {
+    if (!has(sizes, size)) throw new RangeError('Unbekannte Icon-Größe: ' + size);
+    if (!has(icons, name)) {
+      if (!warned.has(name)) {
+        console.warn('Unbekanntes Icon: ' + name);
+        warned.add(name);
+      }
+      name = 'help-square';
+    }
+    const css = classes('ecp-icon ecp-icon--' + size + ' ' + cls);
+    const aria = label === null ? 'aria-hidden="true"' : 'role="img" aria-label="' + escape(label) + '"';
+    const title = label === null ? '' : '<title>' + escape(label) + '</title>';
+    return '<svg class="' + css + '" width="' + sizes[size] + '" height="' + sizes[size] + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ' + aria + ' focusable="false">' + title + icons[name] + '</svg>';
+  }
+  function ecpStatusDot(status, label, cls = '') {
+    if (!statuses.has(status)) throw new RangeError('Unbekannter Status: ' + status);
+    return '<span class="' + classes('status-dot status-dot--' + status + ' ' + cls) + '" role="img" aria-label="' + escape(label) + '" title="' + escape(label) + '"></span>';
+  }
+  function ecpMarkerIcon(name, {color = '#d42225', size = 32, cls = ''} = {}) {
+    if (!root.L) return null;
+    if (!/^(?:#(?:[\\da-f]{3}|[\\da-f]{4}|[\\da-f]{6}|[\\da-f]{8})|var\\(--[a-zA-Z_][a-zA-Z0-9_-]*\\))$/i.test(color)) color = '#d42225';
+    if (typeof size !== 'number' || !Number.isFinite(size) || size <= 0) size = 32;
+    return root.L.divIcon({
+      className: 'ecp-map-marker-wrap',
+      html: '<div class="' + classes('ecp-map-marker ' + cls) + '" style="--marker-color:' + color + ';width:' + size + 'px;height:' + size + 'px">' + ecpIcon(name, {size: size >= 36 ? 'md' : 'sm'}) + '</div>',
+      iconSize: [size, size], iconAnchor: [size / 2, size / 2], popupAnchor: [0, -size / 2]
+    });
+  }
+  Object.assign(root, {ecpIcon, ecpStatusDot, ecpMarkerIcon});
+  if (typeof module !== 'undefined') module.exports = {ecpIcon, ecpStatusDot, ecpMarkerIcon};
+})(typeof window !== 'undefined' ? window : globalThis);
+`;
+}
+
+function vendorIcons(check, failures) {
+  const names = [...new Set(readFileSync(resolve(root, 'app/static/icons/tabler-auswahl.txt'), 'utf8')
+    .split(/\r?\n/).map(line => line.trim()).filter(line => line && !line.startsWith('#')))].sort();
+  const data = {};
+  const outputs = [];
+  for (const name of names) {
+    try {
+      if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name)) throw new Error('Ungültiger Name');
+      const svg = readFileSync(resolve(root, 'node_modules/@tabler/icons/icons/outline', name + '.svg'));
+      const inner = svg.toString('utf8').match(/<svg\b[^>]*>([\s\S]*?)<\/svg>/)[1]
+        .replace(/<path stroke="none" d="M0 0h24v24H0z" fill="none"\s*\/>/g, '')
+        .replace(/>\s+</g, '><').trim();
+      if (!inner) throw new Error('Leeres SVG');
+      data[name] = inner;
+      outputs.push(['app/static/icons/tabler/' + name + '.svg', svg]);
+    } catch (error) {
+      failures.push(`Unbekanntes oder ungültiges Icon ${name}: ${error.message}`);
+    }
+  }
+  outputs.push(['app/static/icons/tabler/LICENSE', readFileSync(resolve(root, 'node_modules/@tabler/icons/LICENSE'))]);
+  outputs.push(['app/static/js/icons.js', Buffer.from(generateIcons(data))]);
+  for (const [to, bytes] of outputs) {
+    try {
+      const target = resolve(root, to);
+      if (check) {
+        if (!bytes.equals(readFileSync(target))) failures.push(`${to} differs from icon selection`);
+      } else {
+        mkdirSync(dirname(target), {recursive: true});
+        writeFileSync(target, bytes);
+      }
+    } catch (error) {
+      failures.push(`${to}: ${error.message}`);
+    }
+  }
+  if (check) {
+    for (const file of readdirSync(resolve(root, 'app/static/icons/tabler'))) {
+      if (file.endsWith('.svg') && !names.includes(file.slice(0, -4))) failures.push(`Überzähliges Icon: ${file}`);
+    }
+  }
+}
+
 function main() {
   const args = process.argv.slice(2);
   if (args.some(arg => arg !== '--check')) {
@@ -89,6 +175,11 @@ function main() {
     } catch (error) {
       failures.push(`${to} (${pkg}/${from}): ${error.message}`);
     }
+  }
+  try {
+    vendorIcons(check, failures);
+  } catch (error) {
+    failures.push(`Icon-Vendoring: ${error.message}`);
   }
   if (failures.length) {
     console.error(failures.join('\n'));

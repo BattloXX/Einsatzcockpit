@@ -176,6 +176,7 @@ unter [Server-Voraussetzungen](Installation-Server-Voraussetzungen).
 | [REST-API](Entwickler-REST-API) | Endpoints, Payload-Validierung, Rate-Limiting, curl-Beispiele |
 | [WebSocket-Events](Entwickler-WebSocket-Events) | Event-Typen, Pub/Sub |
 | [Lokale Entwicklung](Entwickler-Lokale-Entwicklung) | uvicorn, Docker-Compose für DB, CSS-Build |
+| [Icons](Entwicklung-Icons) | Inline-SVG, Statuspunkte, Karten und Vendoring |
 | [Tests](Entwickler-Tests) | pytest, Fixtures, Multi-Tenancy-Tests, CI |
 | [Beitragen](Entwickler-Beitragen) | Branch-Strategie, PRs, Commits, Feature-Flag-Pattern |
 
