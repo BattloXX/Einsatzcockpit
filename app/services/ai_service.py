@@ -528,8 +528,12 @@ PROMPT_META: dict[str, dict] = {
             '"beschreibung": ["Absätze oder Aufzählungspunkte als Strings"], "kapitel": null, '
             '"phase": null, "prioritaet": null, "strasse": null, "hausnummer": null, '
             '"plz": null, "ort": null, "kontakte": [{"name": "", "organisation": "", '
-            '"telefon": "", "rolle": ""}], "objekt": null, "begruendung": ""}]}. '
-            "prioritaet nur 1, 2, 3 oder null. Bei Unsicherheit null/leer lassen."
+            '"telefon": "", "rolle": ""}], "objekt": null, "daten": {}, "begruendung": ""}]}. '
+            "prioritaet nur 1, 2, 3 oder null. Bei Unsicherheit null/leer lassen. "
+            "daten enthält optional typspezifische Felder (Listen als JSON-Listen): "
+            + "; ".join(f"{code}: {', '.join(typ.felder)}" for code, typ in ELEMENT_TYPEN.items() if typ.felder)
+            + ". Listenfelder: schritte [{text}], bedingungen [{wenn, dann}], bedarf [{bezeichnung, menge, einheit}], "
+            "gefahren [Text]. Was in daten steht (z. B. Schritte), nicht zusätzlich in beschreibung wiederholen."
         ),
         "variable_default": "Bilde zusammenhängende Maßnahmen und Problemstellen jeweils als eigenes Element ab.",
     },

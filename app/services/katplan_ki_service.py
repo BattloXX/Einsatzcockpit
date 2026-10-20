@@ -9,7 +9,6 @@ from html.parser import HTMLParser
 from typing import Any
 
 from PIL import Image
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.html_utils import sanitize_html
@@ -141,7 +140,10 @@ def _parse_antwort(text: str) -> list[dict]:
         prio = eintrag.get("prioritaet")
         werte["prioritaet"] = prio if type(prio) is int and prio in (1, 2, 3) else None
         werte["beschreibung_html"] = _beschreibung(eintrag.get("beschreibung"))
-        werte["daten_json"] = "{}"
+        # Typspezifische Felder optional; bereinige_daten verwirft Unbekanntes und begrenzt Freitexte.
+        daten = eintrag.get("daten")
+        werte["daten_json"] = json.dumps(
+            bereinige_daten(werte["typ"], daten) if isinstance(daten, dict) else {}, ensure_ascii=False)
         kontakte = eintrag.get("kontakte")
         werte["kontakte_json"] = json.dumps([
             {**{k: str(kontakt.get(k) or "")[:200] for k in ("name", "organisation", "telefon", "rolle")},
@@ -182,12 +184,13 @@ def _abgleichen(db: Session, vorschlag: KatplanImportVorschlag) -> None:
                 kontakt["kontakt_id"] = kandidaten[0].id
     vorschlag.kontakte_json = json.dumps(kontakte, ensure_ascii=False)
     if vorschlag.objekt_name and ziel_verfuegbar(db, vorschlag.org_id, "objekt"):
-        objekte = db.query(Objekt).filter(
-            Objekt.org_id == vorschlag.org_id, Objekt.status != "archiviert",
-            Objekt.entwurf_von_id.is_(None), func.lower(Objekt.name) == vorschlag.objekt_name.lower(),
-        ).all()
+        # Nur id/name laden und in Python falten (Umlaute, siehe _zuordnung).
+        gesucht = vorschlag.objekt_name.strip().casefold()
+        objekte = [oid for oid, name in db.query(Objekt.id, Objekt.name).filter(
+            Objekt.org_id == vorschlag.org_id, Objekt.status != "archiviert", Objekt.entwurf_von_id.is_(None),
+        ) if (name or "").strip().casefold() == gesucht]
         if len(objekte) == 1:
-            vorschlag.objekt_id = objekte[0].id
+            vorschlag.objekt_id = objekte[0]
 
 
 async def analysiere_quelle(dokument_id: int, *, max_seiten: int = 40) -> int:
@@ -287,9 +290,9 @@ def _zuordnung(db: Session, plan: KatplanPlan, user: User, werte: dict, *, phase
     name = str(werte.get(neu) or "").strip()
     if not name:
         return None
-    obj = db.query(modell).filter_by(org_id=plan.org_id, plan_id=plan.id).filter(
-        func.lower(KatplanPhase.name if phase else KatplanAbschnitt.titel) == name.lower(),
-    ).first()
+    # In Python vergleichen: SQL-LOWER() faltet unter SQLite keine Umlaute ("Übergehen" != "übergehen").
+    obj = next((o for o in db.query(modell).filter_by(org_id=plan.org_id, plan_id=plan.id).all()
+                if (o.name if phase else o.titel).strip().casefold() == name.casefold()), None)
     if obj is None:
         obj = lege_phase_an(db, plan, user, name=name) if phase else lege_abschnitt_an(db, plan, user, titel=name)
     return obj.id
