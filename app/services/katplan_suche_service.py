@@ -172,7 +172,7 @@ def suche(db: Session, user: User, *, q: str = "", plan_id: int | None = None,
             uid = element.uuid if isinstance(element, KatplanElement) else element.element_uuid
             url = (f"/katastrophenplaene/{plan.id}/bearbeiten?element={element.id}" if arbeit
                    else f"/katastrophenplaene/{plan.id}#element-{uid}")
-            treffer.append({"art": "element", "plan_id": plan.id, "plan_titel": kopf["titel"],
+            treffer.append({"art": "element", "element_id": uid, "plan_id": plan.id, "plan_titel": kopf["titel"],
                             "titel": element.titel, "kennung": element.kennung or "", "typ": element.typ,
                             "typ_label": (ELEMENT_TYPEN[element.typ].label
                                           if element.typ in ELEMENT_TYPEN else element.typ),
@@ -197,7 +197,7 @@ def suche(db: Session, user: User, *, q: str = "", plan_id: int | None = None,
                             "titel": seite.titel or f"{dok.titel}, Seite {seite.seiten_nr}", "kennung": "",
                             "typ": "", "typ_label": "Dokumentseite", "prioritaet": None, "vertraulich": False,
                             "ausschnitt": ausschnitt(seite.volltext, woerter), "url": url, "distanz_m": None,
-                            "dokument_titel": dok.titel, "seiten_nr": seite.seiten_nr})
+                            "dokument_id": dok.id, "dokument_titel": dok.titel, "seiten_nr": seite.seiten_nr})
 
     def rang(t: dict[str, Any]) -> tuple:
         relevanz = (0 if woerter and any(w in t["titel"].lower() for w in woerter)

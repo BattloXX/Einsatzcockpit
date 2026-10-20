@@ -32,6 +32,7 @@ from app.mcp.tools import einsatz as _einsatz  # noqa: F401 - registriert Einsat
 from app.mcp.tools import fahrtenbuch as _fahrtenbuch  # noqa: F401 - registriert Fahrtenbuch-Tools
 from app.mcp.tools import gsl as _gsl  # noqa: F401 - registriert GSL-Ressourcen-Tools
 from app.mcp.tools import gsl_lage as _gsl_lage  # noqa: F401 - registriert GSL-Lagebild-Tools
+from app.mcp.tools import katplan as _katplan  # noqa: F401 - registriert Katplan-Lesetools
 from app.mcp.tools import kontakt as _kontakt  # noqa: F401 - registriert Kontakt-Tools
 from app.mcp.tools import mitglieder as _mitglieder  # noqa: F401 - registriert Mitglieder-Lesetools
 from app.mcp.tools import objekt as _objekt  # noqa: F401 - registriert Objekt-Tools
@@ -1986,3 +1987,43 @@ async def kontakt_druckliste(
     return await _call_registered_tool(
         "kontakt_druckliste", profil_id=profil_id, einstellungen=einstellungen, seite=seite, limit=limit
     )
+
+
+@server.tool(name="katplan_liste", description=TOOLS["katplan_liste"].description)
+async def katplan_liste(gefahr: str = '', status: str = '', suchbegriff: str = '', fassung: str = "freigegeben", ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("katplan_liste", gefahr=gefahr, status=status, suchbegriff=suchbegriff, fassung=fassung)
+
+
+@server.tool(name="katplan_lesen", description=TOOLS["katplan_lesen"].description)
+async def katplan_lesen(plan_id: int, fassung: str = 'freigegeben', version_id: int | None = None, mit_elementen: bool = False, ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("katplan_lesen", plan_id=plan_id, fassung=fassung, version_id=version_id, mit_elementen=mit_elementen)
+
+
+@server.tool(name="katplan_suchen", description=TOOLS["katplan_suchen"].description)
+async def katplan_suchen(q: str = '', plan_id: int | None = None, gefahr: str = '', typ: str = '', prioritaet: int | None = None, phase: str = '', ort: str = '', nur_geprueft: bool = False, lat: float | None = None, lng: float | None = None, radius_m: float | None = None, fassung: str = 'freigegeben', limit: int = 50, ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("katplan_suchen", q=q, plan_id=plan_id, gefahr=gefahr, typ=typ, prioritaet=prioritaet, phase=phase, ort=ort, nur_geprueft=nur_geprueft, lat=lat, lng=lng, radius_m=radius_m, fassung=fassung, limit=limit)
+
+
+@server.tool(name="katplan_elemente", description=TOOLS["katplan_elemente"].description)
+async def katplan_elemente(plan_id: int, fassung: str = 'freigegeben', typ: str = '', phase: str = '', kapitel: str = '', limit: int = 100, ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("katplan_elemente", plan_id=plan_id, fassung=fassung, typ=typ, phase=phase, kapitel=kapitel, limit=limit)
+
+
+@server.tool(name="katplan_element_lesen", description=TOOLS["katplan_element_lesen"].description)
+async def katplan_element_lesen(plan_id: int, element_id: str, fassung: str = 'freigegeben', version_id: int | None = None, ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("katplan_element_lesen", plan_id=plan_id, element_id=element_id, fassung=fassung, version_id=version_id)
+
+
+@server.tool(name="katplan_orte_suchen", description=TOOLS["katplan_orte_suchen"].description)
+async def katplan_orte_suchen(lat: float, lng: float, radius_m: float = 1000, plan_id: int | None = None, typ: str = '', ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("katplan_orte_suchen", lat=lat, lng=lng, radius_m=radius_m, plan_id=plan_id, typ=typ)
+
+
+@server.tool(name="katplan_dokument_auszug", description=TOOLS["katplan_dokument_auszug"].description)
+async def katplan_dokument_auszug(plan_id: int, dokument_id: int, seite: int | None = None, von: int | None = None, bis: int | None = None, download: bool = False, ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("katplan_dokument_auszug", plan_id=plan_id, dokument_id=dokument_id, seite=seite, von=von, bis=bis, download=download)
+
+
+@server.tool(name="katplan_verknuepfungen", description=TOOLS["katplan_verknuepfungen"].description)
+async def katplan_verknuepfungen(plan_id: int, element_id: str | None = None, fassung: str = 'freigegeben', version_id: int | None = None, ctx: Context | None = None) -> dict[str, object]:
+    return await _call_registered_tool("katplan_verknuepfungen", plan_id=plan_id, element_id=element_id, fassung=fassung, version_id=version_id)

@@ -42,6 +42,18 @@ MCP-Antworten enthalten niemals Zugangstoken, Links, Token-Hashes oder PINs. Der
 
 Ist das Straßensperren-Modul aktiviert, erhalten alle Benutzer die lesenden Tools `strassensperren_liste`, `strassensperre_lesen`, `strassensperren_kataloge`, `strassensperren_suchen`, `strassensperren_im_gebiet`, `strassensperren_kennzahlen`, `einsatz_strassensperren`, `einsatz_anfahrtsroute_pruefen` und `strassensperren_entlang_route`. `objekt_verwalter` erhalten zusätzlich `strassensperre_anlegen`, `strassensperre_aktualisieren`, `strassensperre_deaktivieren`, `strassensperre_reaktivieren`, `strassensperre_beenden`, `strassensperre_teams_senden`, `strassensperre_freigabelink`, `strassensperre_geometrie_ermitteln`, `strassensperre_geometrie_bestaetigen`, `strassensperre_dokument_upload_vorbereiten`, `strassensperre_dokument_uebergeben` und `strassensperre_entwurf_aus_pdf`; Löschen ist per MCP nicht verfügbar. Erkennt das Anlegen eine wahrscheinliche Verlängerung, Änderung oder Dublette (gleicher Abschnitt mit überlappendem oder bis zu 14 Tage anschließendem Zeitraum oder gleiches Aktenzeichen), liefert es `possible_update` mit Kandidaten und fertigen `felder` für `strassensperre_aktualisieren`. Alternativ ersetzt `ersetzt_road_closure_id` die alte Sperre (sie wird deaktiviert und verlinkt), oder `als_neu_bestaetigt=true` legt bewusst zusätzlich an (`duplikat_bestaetigt` bleibt als Alias). Anlegen und relevante Adressänderungen liefern zusätzlich `adressvalidierung` mit dem OSM-Prüfstatus. Empfohlener Ablauf für eine behördliche Verordnung: `strassensperre_entwurf_aus_pdf` → Felder prüfen → `strassensperre_anlegen` (ermittelt den Abschnitt aus OSM) → bei Qualität ≠ hoch `strassensperre_geometrie_bestaetigen` → `strassensperre_dokument_uebergeben`. Erlaubte Werte liefert `strassensperren_kataloge`.
 
+Für Katastrophenpläne müssen MCP und das Katastrophenplan-Modul auf System- und Organisationsebene aktiv sein. Die folgenden Werkzeuge verlangen `KATPLAN_LESE_ROLLEN` (`readonly`, `recorder`, `breathing_supervisor`, `incident_leader`, `objekt_verwalter`, `katplan_verwalter`, `katplan_freigeber`; einschließlich Admins).
+
+| Werkzeuge | Zugriff |
+|-----------|---------|
+| `katplan_liste`, `katplan_lesen` | Sichtbare Pläne, Kopf und Gliederung |
+| `katplan_suchen`, `katplan_orte_suchen` | Text- und Umkreissuche |
+| `katplan_elemente`, `katplan_element_lesen` | Strukturierte Elemente |
+| `katplan_dokument_auszug` | Quellseiten und kurzlebige PDF-Downloads mit erneuter Live-Rechteprüfung |
+| `katplan_verknuepfungen` | Live-Links sowie ausgehende und eingehende Beziehungen |
+
+Standard ist die freigegebene Fassung; Arbeitsstände sind nur für Planbearbeiter mit `fassung="arbeitsstand"` verfügbar. Vertrauliches sehen nur Planverwalter, Planfreigeber, Einsatzleiter und Admins. Ohne Kontaktverzeichnisrecht werden ausschließlich Dienstnummern einsatzrelevanter Kontakte angezeigt. Objektdetails erfordern zusätzlich das Objektmodul und dessen Leserecht. Alle erfolgreichen Katplan-Toolaufrufe werden mit `mcp.katplan_*` auditiert; es gibt keine Schreib- oder Freigabewerkzeuge.
+
 ## Reverse-Proxy und Konfiguration
 
 Für `/mcp` ist Streaming erforderlich: `proxy_buffering off` sowie ausreichend hohe `proxy_read_timeout`- und `proxy_send_timeout`-Werte setzen. Das mitgelieferte [`deploy/nginx-snippet.conf`](../../deploy/nginx-snippet.conf) enthält die `/mcp`-Konfiguration. Die OAuth-Discovery und OAuth-Endpunkte dürfen nicht umgeleitet, geblockt oder von einem Login-Gateway abgefangen werden: `/.well-known/oauth-*`, `/authorize`, `/token`, `/register` und `/revoke` müssen die App erreichen.
