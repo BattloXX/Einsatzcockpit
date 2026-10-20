@@ -22,6 +22,7 @@ Die lesenden Einsatz-Werkzeuge liegen in `app/mcp/tools/einsatz.py`; gemeinsame,
 | Bereich | Werkzeuge | Rollen und Modul-Check |
 |---------|-----------|------------------------|
 | Allgemein | `mcp_whoami`, `organisation_lesen` | `readonly` |
+| Suche | `ecp_suchen` | alle Leserollen wie `ui_suche._leser` (Rang ≥ `readonly`), `SEARCH_ENABLED`, `SEARCH_MCP_ENABLED` und `OrgSettings.suche_aktiv` |
 | Objekte | `objekt_kataloge`, `objekt_suchen`, `objekt_lesen`, `objekt_duplikate_pruefen`, `objekt_anlegen`, `objekt_aktualisieren` | `objekt_verwalter`, Objekt-Modul |
 | Objekt-Dokumente | `objekt_dokument_upload_vorbereiten`, `objekt_dokument_uebergeben`, `objekt_dokumente_auflisten`, `objekt_dokument_seiten_klassifizieren`, `objekt_dokument_herunterladen` | `objekt_verwalter`, Objekt-Modul |
 | Kontakte | `kontakt_suchen`, `kontakt_duplikate_pruefen`, `kontakt_lesen`, `kontakt_kategorien`, `kontakt_anlegen`, `kontakt_aktualisieren`, `kontakt_archivieren`, `kontakt_zusammenfuehren` | `kontakt_verwalter` oder `objekt_verwalter`, Kontakte-Modul |
@@ -32,6 +33,8 @@ Die lesenden Einsatz-Werkzeuge liegen in `app/mcp/tools/einsatz.py`; gemeinsame,
 | Straßensperren-Geometrie & Verordnungen | `strassensperre_geometrie_ermitteln`, `strassensperre_geometrie_bestaetigen`, `strassensperre_entwurf_aus_pdf`, `strassensperre_dokument_upload_vorbereiten`, `strassensperre_dokument_uebergeben` | `objekt_verwalter`, Straßensperren-Modul; Uploads mit `zweck` `strassensperre`/`entwurf`, Downloads mit Token-Art `strassensperre` |
 
 `required_roles` wird mit `has_role(user, *required_roles)` geprüft: Bei mehreren Rollen genügt eine davon. `system_admin`, `admin` und `org_admin` bestehen die Prüfung ebenfalls. Kontakt-Werkzeuge prüfen ausschließlich das Kontakte-Modul; sie dürfen nicht an das Objekt-Modul gekoppelt werden.
+
+`ecp_suchen` verwendet dieselbe Abfrage-Engine wie `/api/suche`; Kontakte und Personendaten fehlen bewusst. Da `has_role` keine allgemeine Ranghierarchie abbildet, sind alle UI-Leserollen explizit registriert. `details_werkzeug` und `details_parameter` erscheinen nur für existierende Zielwerkzeuge, deren Live-Rollenprüfung (`load_live_context`) und `module_check` bestehen; der Suchtreffer bleibt auch ohne Detailverweis sichtbar.
 
 ## Pflichten für Handler
 

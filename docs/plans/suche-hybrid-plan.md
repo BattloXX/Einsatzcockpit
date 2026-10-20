@@ -188,7 +188,7 @@ Nicht Teil dieses Plans. Erst nach S8 und eigener Freigabe.
 | S2 | #644 | umgesetzt: 4 Adapter, Indexer mit Hash, CLI `suche-neuaufbau` |
 | S3 | #646 | umgesetzt: after_flush-Erfassung, Leader-Worker mit Lease/Retry, Auffächern, stündlicher Abgleich; MariaDB-12.3-Probe ok |
 | S4 | #647 | umgesetzt: Vertrag, Live-Resolver, 7 Live-Anbieter, RRF, Geo; offen für S7: Einzelabfragen je Index-Treffer messen (p95) |
-| S5 | (dieser PR) | umgesetzt: /suche, HTMX-Treffer, /api/suche, Lupe + Strg+K, Einstieg Einsatz/GSL; Browser-Check Desktop/mobil ok |
-| S6 | – | offen |
+| S5 | #648 | umgesetzt: /suche, HTMX-Treffer, /api/suche, Lupe + Strg+K, Einstieg Einsatz/GSL; Browser-Check Desktop/mobil ok |
+| S6 | (dieser PR) | umgesetzt: MCP `ecp_suchen` mit Feld-Whitelist, Detailwerkzeug-Verweisen und API-Parität |
 | S7 | – | offen |
 | S8 | – | gesperrt (Entscheidung) |

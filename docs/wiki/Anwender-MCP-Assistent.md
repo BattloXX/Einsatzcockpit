@@ -30,6 +30,7 @@ Beim Verbinden öffnet sich die Einsatzcockpit-Anmeldung. Melde dich mit deinem 
 
 Die verfügbaren Werkzeuge sind:
 
+- `ecp_suchen`: sucht mit denselben Leserollen wie die zentrale Oberfläche in Objekten, Objektdokumenten und freigegebenen Katastrophenplänen sowie live in Einsätzen, Straßensperren und Wasserstellen. Mit `kontext="gsl"` und `kontext_id` werden auch Einsatzstellen, Meldungen und Einheiten dieser Lage durchsucht. Voraussetzung ist die aktivierte Suche für die Organisation und MCP. Kontakte und Personendaten fehlen bewusst; Fundstellen enthalten absolute Links und bei ausreichender Berechtigung das passende Detailwerkzeug samt Parametern.
 - `mcp_whoami`: zeigt Benutzer, Organisation, Rollen, das verknüpfte Mitglied und die Einheiten, die man gerade als Gruppenkommandant führt.
 - `meine_einheiten`: listet die Einheiten, die man über das verknüpfte Mitglied gerade führt, mit offenen Aufträgen und Link zur Einheitenansicht.
 - `mitglieder_suchen`, `mitglied_lesen` und `mitglieder_kataloge`: suchen und lesen Mitglieder der eigenen Organisation (Telefon und E-Mail nur in `mitglied_lesen`), inklusive verknüpftem Benutzer und aktueller Gruppenkommandanten-Funktion, sowie Qualifikationen und Tags.

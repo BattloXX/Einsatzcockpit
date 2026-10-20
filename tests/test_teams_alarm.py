@@ -53,7 +53,10 @@ def _public_alarm(db, *, token: str, with_objekt: bool = False):
         token.encode()
     ).hexdigest()))
     if with_objekt:
-        objekt = Objekt(org_id=ORG_ID, nummer=9000 + incident.id, name="Testobjekt")
+        # Nummer nicht aus der Einsatz-ID ableiten: SQLite vergibt IDs geloeschter
+        # Einsaetze neu, liegengebliebene Testobjekte kollidierten dann (CI 2026-10-20).
+        objekt = Objekt(org_id=ORG_ID, nummer=__import__("random").randint(10**6, 2 * 10**9),
+                        name="Testobjekt")
         db.add(objekt)
         db.flush()
         db.add_all([
