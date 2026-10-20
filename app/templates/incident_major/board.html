@@ -366,7 +366,7 @@
           <label class="form-label">Typ</label>
           <select name="marker_type" class="form-input">
             {% for val, label in cross_marker_type_label.items() %}
-            <option value="{{ val }}">{{ cross_marker_type_icon[val] }} {{ label }}</option>
+            <option value="{{ val }}">{{ label }}</option>
             {% endfor %}
           </select>
         </div>

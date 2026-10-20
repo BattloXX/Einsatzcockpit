@@ -3080,6 +3080,7 @@ button.htmx-request,
 .status-dot--grau { background: var(--ampel-gray); }
 .status-dot--schwarz { background: var(--ampel-black); }
 .status-dot--weiss { background: #e5e7eb; border: 1px solid var(--border); }
+.ecp-map-marker__text { font-size: 16px; line-height: 1; }
 .ecp-map-marker-wrap { background: none; border: 0; }
 .ecp-map-marker { display: flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--marker-color, var(--red)); color: #fff; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.5); }
 @media print { .ecp-icon--muted { color: #555; } }

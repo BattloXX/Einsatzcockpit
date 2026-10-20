@@ -16,7 +16,7 @@ from datetime import datetime as _datetime
 from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 
-from app.core.icons import modul_icon, render_icon, status_dot
+from app.core.icons import cross_marker_icon, modul_icon, render_icon, status_dot
 from app.core.permissions import can_view_katplan_request, can_view_kontakt_directory_request
 from app.core.telefon import telefon_kompakt
 from app.core.timezones import (
@@ -123,6 +123,7 @@ def _person_status_dot(value: str):
 
 templates = Jinja2Templates(directory="app/templates")
 templates.env.globals["icon"] = render_icon
+templates.env.globals["cross_marker_icon"] = cross_marker_icon
 templates.env.globals["modul_icon"] = modul_icon
 templates.env.globals["status_dot"] = status_dot
 templates.env.globals["can_view_kontakt_directory"] = can_view_kontakt_directory_request

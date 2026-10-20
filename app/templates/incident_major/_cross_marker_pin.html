@@ -7,7 +7,7 @@
   </div>
   <button aria-label="Schließen" type="button"
           onclick="var t=this.closest('#site-panel-content')||this.closest('#siteDetailContent');if(t)htmx.ajax('GET','/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/panel',{target:t,swap:'innerHTML'})"
-          class="btn btn--xs btn--ghost" style="font-size:1rem;padding:0 6px;" title="Abbrechen">✕</button>
+          class="btn btn--xs btn--ghost" style="font-size:1rem;padding:0 6px;" title="Abbrechen">{{ icon("x", size="sm") }}</button>
 </div>
 
 <div style="padding:10px 14px;">

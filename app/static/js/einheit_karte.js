@@ -72,24 +72,28 @@ export function markerDarstellung(auftrag, nummer) {
   const klasse = `einheit-kartenmarker--${art}${erkundung ? " einheit-kartenmarker--erkundung" : ""}`;
   const bezeichnung = auftragBezeichnung(auftrag);
   let inhalt = String(nummer || "");
+  let iconName = null;
   let titel = `Auftrag: ${bezeichnung}`;
   let groesse = 28;
 
   if (art === "naechster") {
-    inhalt = "\u25b6";
+    iconName = "player-play";
+    inhalt = "";
     titel = `Nächster Auftrag: ${bezeichnung}`;
   } else if (art === "in_arbeit") {
-    inhalt = "\u25cf";
+    iconName = "player-record";
+    inhalt = "";
     titel = `In Arbeit: ${bezeichnung}`;
   } else if (art === "erkundung") {
     titel = `Erkundung: ${bezeichnung}`;
     groesse = 30;
   } else if (art === "fertig") {
-    inhalt = "\u2713";
+    iconName = "check";
+    inhalt = "";
     titel = `Fertig: ${bezeichnung}`;
     groesse = 24;
   }
-  return { klasse, inhalt, titel, groesse, anker: [groesse / 2, groesse / 2] };
+  return { klasse, inhalt, iconName, titel, groesse, anker: [groesse / 2, groesse / 2] };
 }
 
 export function navUrl(auftrag) {
@@ -121,7 +125,7 @@ export class EinheitKarte {
     return window.L.divIcon({
       className: `einheit-kartenmarker ${darstellung.klasse}`,
       html: `<span title="${esc(darstellung.titel)}" aria-label="${esc(darstellung.titel)}">`
-        + `${esc(darstellung.inhalt)}</span>`,
+        + `${darstellung.iconName ? ecpIcon(darstellung.iconName, {size: "xs"}) : esc(darstellung.inhalt)}</span>`,
       iconSize: [darstellung.groesse, darstellung.groesse],
       iconAnchor: darstellung.anker,
       popupAnchor: [0, -darstellung.groesse / 2],

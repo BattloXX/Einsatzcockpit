@@ -56,3 +56,27 @@ test('map markers work with Leaflet and sanitize colors and dimensions', () => {
     assert.deepEqual(ecpMarkerIcon('printer', {size: NaN}).iconSize, [32, 32]);
   } finally { delete globalThis.L; }
 });
+
+test('text markers escape HTML, ignore the icon name and keep centered anchors', () => {
+  globalThis.L = {divIcon: o => o};
+  try {
+    const marker = ecpMarkerIcon(null, {text: '<img onerror="x">&\'', size: 28});
+    assert.match(marker.html, /<span class="ecp-map-marker__text">&lt;img onerror=&#34;x&#34;&gt;&amp;&#39;<\/span>/);
+    assert.ok(!marker.html.includes('<svg'));
+    assert.deepEqual(marker.iconSize, [28, 28]);
+    assert.deepEqual(marker.iconAnchor, [14, 14]);
+    assert.match(ecpMarkerIcon('missing-text-only', {text: ''}).html, /ecp-map-marker__text"><\/span>/);
+  } finally { delete globalThis.L; }
+});
+
+test('marker borders accept only the complete whitelist', () => {
+  globalThis.L = {divIcon: o => o};
+  try {
+    for (const border of ['2px dashed rgba(255,255,255,.7)', '2px solid #fff', '1px solid rgb(50%, 0%, 0%)']) {
+      assert.ok(ecpMarkerIcon('map-pin', {border}).html.includes(';border:' + border + '"'));
+    }
+    for (const border of ['2px solid red;position:fixed', '" onload="x', 'url(/x)', '2px solid RED', '2px solid red\n', null, 2]) {
+      assert.ok(!ecpMarkerIcon('map-pin', {border}).html.includes(';border:'));
+    }
+  } finally { delete globalThis.L; }
+});

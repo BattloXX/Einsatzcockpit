@@ -101,3 +101,14 @@ def status_dot(status: str, label: str, cls: str = "") -> Markup:
 
 def modul_icon(key: str, size: str = "md", cls: str = "", label: str | None = None) -> Markup:
     return render_icon(MODUL_ICONS[key], size=size, cls=cls, label=label)
+
+
+def cross_marker_icon(marker_type: str, size: str = "sm") -> Markup:
+    from app.models.major_incident import CROSS_MARKER_TYPE_ICON, CROSS_MARKER_TYPE_ICON_NAME
+
+    name = CROSS_MARKER_TYPE_ICON_NAME.get(marker_type)
+    if name is not None:
+        return render_icon(name, size=size)
+    return Markup('<span class="ecp-fw-zeichen" aria-hidden="true">{}</span>').format(
+        CROSS_MARKER_TYPE_ICON.get(marker_type, "")
+    )

@@ -6,16 +6,16 @@
 {# ── Header (wie Einsatzstellen-Panel) ──────────────────────────────────────── #}
 <div style="padding:10px 14px 8px;border-bottom:1px solid var(--border);">
   <div style="display:flex;align-items:flex-start;gap:6px;">
-    <span style="font-size:1.2rem;flex-shrink:0;padding-top:2px;">{{ marker.type_icon }}</span>
+    <span style="font-size:1.2rem;flex-shrink:0;padding-top:2px;">{{ cross_marker_icon(marker.marker_type) }}</span>
     <div style="flex:1;min-width:0;">
       <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;" x-show="!editing">
         <span style="font-weight:700;font-size:.95rem;line-height:1.25;">{{ marker.title }}</span>
         {% if can_edit %}
         <button type="button" @click="editing=true"
-                class="btn btn--xs btn--ghost" title="Bearbeiten">✏️</button>
+                class="btn btn--xs btn--ghost" aria-label="Bearbeiten" title="Bearbeiten">{{ icon("pencil", size="sm") }}</button>
         {% endif %}
-        <button type="button" class="btn btn--xs btn--ghost" title="Drucken (Station/lokal)" style="text-decoration:none;"
-                onclick="ecpgPrint({document_type:'cross_karte', gsl_id:{{ lage.id }}, artifact_ref:'{{ marker.id }}', title:'Meldung drucken', localUrl:'/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/druck'})">🖨</button>
+        <button type="button" class="btn btn--xs btn--ghost" aria-label="Drucken" title="Drucken (Station/lokal)" style="text-decoration:none;"
+                onclick="ecpgPrint({document_type:'cross_karte', gsl_id:{{ lage.id }}, artifact_ref:'{{ marker.id }}', title:'Meldung drucken', localUrl:'/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/druck'})">{{ icon("printer", size="sm") }}</button>
       </div>
       <div style="font-size:.72rem;color:var(--text-muted);margin-top:2px;" x-show="!editing">
         {{ marker.type_label }}
@@ -59,7 +59,7 @@
     </div>
     <button aria-label="Schließen" type="button"
             onclick="(function(){var pw=document.getElementById('site-panel-wrap');if(pw)pw.classList.remove('open');var dm=document.getElementById('siteDetailModal');if(dm)dm.close();})()"
-            class="btn btn--xs btn--ghost" style="flex-shrink:0;font-size:1rem;padding:0 6px;" title="Schließen">✕</button>
+            class="btn btn--xs btn--ghost" style="flex-shrink:0;font-size:1rem;padding:0 6px;" title="Schließen">{{ icon("x", size="sm") }}</button>
   </div>
 </div>
 
@@ -92,17 +92,17 @@
        style="height:200px;border-radius:6px;border:1px solid var(--border);margin-bottom:6px;z-index:0;"></div>
   <div style="font-size:.7rem;color:var(--text-muted);margin-bottom:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
     {% if marker.address_line %}
-    <span>📍 {{ marker.address_line }}</span>
+    <span>{{ icon("map-pin", size="sm") }} {{ marker.address_line }}</span>
     {% endif %}
     <span style="font-family:monospace;">{{ "%.5f"|format(marker.lat) }}, {{ "%.5f"|format(marker.lng) }}</span>
     <a href="https://www.openstreetmap.org/?mlat={{ marker.lat }}&mlon={{ marker.lng }}&zoom=17"
-       target="_blank" rel="noopener" style="color:#93c5fd;text-decoration:none;">↗ OSM</a>
+       target="_blank" rel="noopener" style="color:#93c5fd;text-decoration:none;">{{ icon("external-link", size="sm") }} OSM</a>
     <a href="https://maps.google.com/?q={{ marker.lat }},{{ marker.lng }}"
-       target="_blank" rel="noopener" style="color:#93c5fd;text-decoration:none;">↗ Google Maps</a>
+       target="_blank" rel="noopener" style="color:#93c5fd;text-decoration:none;">{{ icon("external-link", size="sm") }} Google Maps</a>
     {% if can_edit %}
     <button type="button"
             onclick="var t=this.closest('#site-panel-content')||this.closest('#siteDetailContent');if(t)htmx.ajax('GET','/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/pin-picker',{target:t,swap:'innerHTML'})"
-            class="btn btn--xs btn--ghost" style="font-size:.7rem;padding:1px 6px;">📍 Pin korrigieren</button>
+            class="gap-1 btn btn--xs btn--ghost" style="font-size:.7rem;padding:1px 6px;">{{ icon("map-pin", size="sm") }} Pin korrigieren</button>
     {% endif %}
   </div>
   <script>
@@ -138,12 +138,12 @@
   {% else %}
   <div style="margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
     {% if marker.address_line %}
-    <span style="font-size:.78rem;color:var(--text-muted);">📍 {{ marker.address_line }}</span>
+    <span style="font-size:.78rem;color:var(--text-muted);">{{ icon("map-pin", size="sm") }} {{ marker.address_line }}</span>
     {% endif %}
     {% if can_edit %}
     <button type="button"
             onclick="var t=this.closest('#site-panel-content')||this.closest('#siteDetailContent');if(t)htmx.ajax('GET','/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/pin-picker',{target:t,swap:'innerHTML'})"
-            class="btn btn--xs btn--ghost">📍 Koordinaten per Pin setzen</button>
+            class="gap-1 btn btn--xs btn--ghost">{{ icon("map-pin", size="sm") }} Koordinaten per Pin setzen</button>
     {% endif %}
   </div>
   {% endif %}
@@ -175,8 +175,8 @@
                   border:1px solid var(--border);cursor:zoom-in;"
            {% if m.media_type == 'image' %}onclick="openImageLightbox([{src:'/annotieren/cross_marker/{{ m.id }}/bild'{% if can_edit %},edit:'/annotieren/cross_marker/{{ m.id }}'{% endif %}}])"{% else %}onclick='openMediaViewer("/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/medien/{{ m.id }}/bild", "image", {{ m.original_filename|tojson }})'{% endif %}>
       {% if can_edit and m.media_type == 'image' %}
-      <a href="/annotieren/cross_marker/{{ m.id }}" title="Bearbeiten" @click.stop
-         style="position:absolute;top:1px;left:1px;background:rgba(0,0,0,0.75);border-radius:50%;width:18px;height:18px;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;line-height:1;">✏️</a>
+      <a href="/annotieren/cross_marker/{{ m.id }}" aria-label="Bearbeiten" title="Bearbeiten" @click.stop
+         style="position:absolute;top:1px;left:1px;background:rgba(0,0,0,0.75);border-radius:50%;width:18px;height:18px;font-size:11px;display:flex;align-items:center;justify-content:center;text-decoration:none;line-height:1;">{{ icon("pencil", size="sm") }}</a>
       {% endif %}
       {% if can_edit %}
       <form hx-post="/lage/{{ lage.id }}/uebergreifend/{{ marker.id }}/medien/{{ m.id }}/loeschen"
@@ -185,7 +185,7 @@
             hx-on::after-request="if(event.detail.successful){this.closest('.cm-thumb').remove()}"
             style="margin:0;position:absolute;top:1px;right:1px;">
         <button aria-label="Schließen" type="submit" class="btn btn--xs btn--ghost"
-                style="background:rgba(0,0,0,.7);color:var(--red);padding:0 3px;font-size:.6rem;line-height:1.4;">✕</button>
+                style="background:rgba(0,0,0,.7);color:var(--red);padding:0 3px;font-size:.6rem;line-height:1.4;">{{ icon("x", size="sm") }}</button>
       </form>
       {% endif %}
     </div>
@@ -202,10 +202,10 @@
     <input type="file" name="file" id="cmFile-{{ marker.id }}" accept="image/*"
            style="display:none;" onchange="_cmPhoto(this,'{{ marker.id }}')">
     <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-      <button type="button" class="btn btn--secondary btn--sm"
-              onclick="openCamera('cmFile-{{ marker.id }}')">📷 Kamera</button>
-      <button type="button" class="btn btn--ghost btn--sm"
-              onclick="openGallery('cmFile-{{ marker.id }}')">🖼️ Galerie</button>
+      <button type="button" class="gap-1 btn btn--secondary btn--sm"
+              onclick="openCamera('cmFile-{{ marker.id }}')">{{ icon("camera", size="sm") }} Kamera</button>
+      <button type="button" class="gap-1 btn btn--ghost btn--sm"
+              onclick="openGallery('cmFile-{{ marker.id }}')">{{ icon("photo", size="sm") }} Galerie</button>
       <button type="submit" class="btn btn--primary btn--sm"
               id="cmUpBtn-{{ marker.id }}" style="display:none;">Hochladen</button>
     </div>
@@ -248,7 +248,7 @@
           hx-on::after-request="if(event.detail.successful){this.closest('div').remove()}"
           style="margin:0;">
       <button aria-label="Schließen" type="submit" class="btn btn--xs btn--ghost"
-              style="opacity:.5;padding:0 4px;font-size:.6rem;">✕</button>
+              style="opacity:.5;padding:0 4px;font-size:.6rem;">{{ icon("x", size="sm") }}</button>
     </form>
     {% endif %}
   </div>
@@ -265,7 +265,7 @@
     <input type="text" name="text" class="form-input"
            placeholder="Notiz / Meldung…" required maxlength="500"
            style="flex:1;font-size:.78rem;padding:4px 8px;">
-    <button type="submit" class="btn btn--xs btn--secondary">↵</button>
+    <button type="submit" aria-label="Notiz senden" class="btn btn--xs btn--secondary">{{ icon("corner-down-left", size="sm") }}</button>
   </form>
   {% endif %}
 </div>
