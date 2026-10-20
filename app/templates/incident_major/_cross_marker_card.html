@@ -10,7 +10,7 @@
 
     {# Titel-Zeile mit Icon, Titel, Typ-Subtitle und Löschen-Button #}
     <div style="display:flex;align-items:flex-start;gap:6px;margin-bottom:5px;">
-      <span style="font-size:.95rem;flex-shrink:0;padding-top:1px;">{{ marker.type_icon }}</span>
+      <span style="font-size:.95rem;flex-shrink:0;padding-top:1px;">{{ cross_marker_icon(marker.marker_type) }}</span>
       <div style="flex:1;min-width:0;">
         <div class="site-card__title" style="line-height:1.25;">{{ marker.title }}</div>
         <div style="font-size:.68rem;color:var(--text-muted);margin-top:1px;">{{ marker.type_label }}</div>
@@ -22,7 +22,7 @@
             hx-on::after-request="if(event.detail.successful){this.closest('.site-card').remove()}"
             style="margin:0;flex-shrink:0;">
         <button aria-label="Schließen" type="submit" class="btn btn--xs btn--ghost" title="Löschen"
-                style="opacity:.45;padding:0 5px;font-size:.65rem;line-height:1.6;">✕</button>
+                style="opacity:.45;padding:0 5px;font-size:.65rem;line-height:1.6;">{{ icon("x", size="sm") }}</button>
       </form>
       {% endif %}
     </div>
@@ -65,7 +65,7 @@
     {% endif %}
 
     {% if marker.media %}
-    <div style="font-size:.7rem;color:#a78bfa;margin-top:4px;" title="{{ marker.media|length }} Foto(s)">📷 {{ marker.media|length }}</div>
+    <div style="font-size:.7rem;color:#a78bfa;margin-top:4px;" title="{{ marker.media|length }} Foto(s)">{{ icon("camera", size="sm") }} {{ marker.media|length }}</div>
     {% endif %}
 
   </div>

@@ -12,12 +12,12 @@ Kontexte: `markup`, `js`, `python`, `css`, `option` (Emoji in `<option>` → ent
 
 | Kontext | Treffer |
 |---|---:|
-| markup | 840 |
+| markup | 802 |
 | python | 276 |
-| kommentar | 209 |
+| kommentar | 208 |
 | js | 61 |
 | extern | 60 |
-| css | 10 |
+| css | 9 |
 | option | 6 |
 
 ## Zuordnung
@@ -25,21 +25,21 @@ Kontexte: `markup`, `js`, `python`, `css`, `option` (Emoji in `<option>` → ent
 | Zeichen | Ziel | Treffer | migrieren* | Dateien (Auszug) |
 |---|---|---:|---:|---|
 | → | `=text` | 487 | 285 | `cli.py`, `config.py`, `core/crypto.py`, `core/dependencies.py` … (+169) |
-| ⚠ | `alert-triangle` | 79 | 71 | `models/objekt.py`, `routers/ui_incident.py`, `routers/ui_infoscreen_alarm.py`, `routers/ui_lagefuehrung.py` … (+37) |
+| ⚠ | `alert-triangle` | 78 | 70 | `models/objekt.py`, `routers/ui_incident.py`, `routers/ui_infoscreen_alarm.py`, `routers/ui_lagefuehrung.py` … (+36) |
 | ✓ | `check` | 65 | 55 | `cli.py`, `models/sms.py`, `routers/ui_archive.py`, `routers/ui_termin.py` … (+33) |
 | ← | `=text` | 47 | 45 | `static/css/tailwind.input.css`, `static/js/katplan_editor.js`, `templates/admin/device_token_detail.html`, `templates/admin/foerder_pumpe_form.html` … (+40) |
-| 📍 | `map-pin` | 37 | 37 | `models/major_incident.py`, `services/katplan_qs_service.py`, `services/katplan_typen.py`, `static/js/lagefuehrung.js` … (+17) |
-| 🖨 | `printer` | 34 | 34 | `routers/ui_druck.py`, `templates/_print_dialog.html`, `templates/archive/detail.html`, `templates/gateway/_druckhistorie.html` … (+22) |
+| 🖨 | `printer` | 31 | 31 | `routers/ui_druck.py`, `templates/_print_dialog.html`, `templates/archive/detail.html`, `templates/gateway/_druckhistorie.html` … (+20) |
 | 📄 | `file-text` | 31 | 31 | `services/katplan_qs_service.py`, `services/katplan_typen.py`, `services/site_pages.py`, `static/js/rettungskarten_katalog.js` … (+17) |
+| 📍 | `map-pin` | 28 | 28 | `models/major_incident.py`, `services/katplan_qs_service.py`, `services/katplan_typen.py`, `static/js/lagefuehrung.js` … (+15) |
 | ✗ | `x` | 25 | 13 | `cli.py`, `services/sms_inbox_service.py`, `static/js/address-picker.js`, `static/js/probe-appell.js` … (+4) |
-| ✕ | `x` | 21 | 21 | `static/js/annotate.js`, `static/js/lagefuehrung.js`, `templates/admin/device_tokens.html`, `templates/gateway/agent_detail.html` … (+10) |
 | 🚒 | `firetruck` | 19 | 15 | `routers/ui_teams_bot.py`, `services/alarm_outbox.py`, `services/gefahrgut_service.py`, `services/objekt_service.py` … (+13) |
 | ↔ | `=text` | 17 | 15 | `models/major_incident.py`, `models/master.py`, `models/objekt.py`, `routers/ui_major_incident.py` … (+12) |
-| ☰ | `menu-2` | 17 | 17 | `templates/admin/default_messages.html`, `templates/admin/dispatch_order.html`, `templates/admin/lage_hints.html`, `templates/admin/message_suggestions.html` … (+2) |
 | 🔥 | `flame` | 15 | 14 | `models/objekt.py`, `services/objekt_service.py`, `services/weather_service.py`, `static/js/lagefuehrung.js` … (+7) |
-| 📋 | `clipboard-list` | 15 | 15 | `services/incident_service.py`, `services/site_pages.py`, `templates/admin/device_tokens.html`, `templates/admin/foerder_pumpen.html` … (+8) |
-| 🌧 | `cloud-rain` | 14 | 13 | `static/js/weather_layer.js`, `templates/incident_major/karte.html`, `templates/objekt/infoscreen_alarm.html`, `templates/weather/_data_section.html` … (+1) |
+| ☰ | `menu-2` | 15 | 15 | `templates/admin/default_messages.html`, `templates/admin/dispatch_order.html`, `templates/admin/lage_hints.html`, `templates/admin/message_suggestions.html` … (+1) |
+| 📋 | `clipboard-list` | 14 | 14 | `services/incident_service.py`, `services/site_pages.py`, `templates/admin/device_tokens.html`, `templates/admin/foerder_pumpen.html` … (+7) |
 | ● | `=status` | 14 | 14 | `templates/admin/settings.html`, `templates/incident_major/karte.html`, `templates/katplan/_design.html`, `templates/pdf/foerderstrecke.html` |
+| ✕ | `x` | 13 | 13 | `static/js/annotate.js`, `static/js/lagefuehrung.js`, `templates/admin/device_tokens.html`, `templates/gateway/agent_detail.html` … (+6) |
+| 🌧 | `cloud-rain` | 13 | 13 | `static/js/weather_layer.js`, `templates/objekt/infoscreen_alarm.html`, `templates/weather/_data_section.html`, `templates/weather/index.html` |
 | 💧 | `droplet` | 12 | 11 | `models/major_incident.py`, `services/objekt_service.py`, `templates/foerderstrecke/maschinist.html`, `templates/foerderstrecke/wizard.html` … (+2) |
 | ↓ | `=text` | 12 | 12 | `routers/ui_major_incident.py`, `services/funkjournal_service.py`, `templates/admin/device_tokens.html`, `templates/admin/lage_hints.html` … (+8) |
 | 🔗 | `link` | 12 | 12 | `services/katplan_qs_service.py`, `static/js/nachschlagewerke.js`, `templates/admin/vehicles.html`, `templates/foerderstrecke/wizard.html` … (+8) |
@@ -53,18 +53,16 @@ Kontexte: `markup`, `js`, `python`, `css`, `option` (Emoji in `<option>` → ent
 | ✎ | `pencil` | 10 | 10 | `templates/admin/medienverwaltung.html`, `templates/gateway/detail.html`, `templates/objekt/_bma.html`, `templates/objekt/_gefahren.html` … (+4) |
 | ⚡ | `bolt` | 9 | 9 | `models/major_incident.py`, `models/objekt.py`, `services/objekt_service.py`, `services/weather_service.py` … (+3) |
 | ↑ | `=text` | 9 | 9 | `routers/ui_major_incident.py`, `services/funkjournal_service.py`, `templates/admin/lage_hints.html`, `templates/incident_major/_funkjournal_rows.html` … (+5) |
-| 📥 | `inbox` | 9 | 9 | `templates/admin/backup.html`, `templates/admin/einsatz_import.html`, `templates/admin/gsl_einstellungen.html`, `templates/admin/konfig.html` … (+3) |
-| ↗ | `external-link` | 9 | 9 | `templates/admin/dibos_einsaetze.html`, `templates/admin/page_edit.html`, `templates/admin/pages_list.html`, `templates/annotate/editor.html` … (+2) |
 | 🔎 | `zoom-in` | 9 | 9 | `templates/admin/members.html`, `templates/admin/wasserstellen.html`, `templates/gateway/detail.html`, `templates/nachschlagewerke/rettungskarten.html` … (+4) |
 | 📱 | `device-mobile` | 8 | 8 | `templates/admin/device_tokens.html`, `templates/incident_major/public_report.html`, `templates/incident_major/public_verify.html`, `templates/objekt/detail.html` |
 | ❄ | `snowflake` | 7 | 7 | `models/objekt.py`, `services/objekt_service.py`, `services/weather_service.py`, `templates/objekt/infoscreen_alarm.html` |
 | 🚨 | `urgent` | 7 | 6 | `routers/api_v1.py`, `services/teams_card.py`, `static/js/einsatz_info.js`, `templates/objekt/_einsaetze.html` … (+3) |
 | 🏢 | `building` | 7 | 7 | `services/katplan_typen.py`, `static/js/lagefuehrung.js`, `templates/gateway/druckregeln.html`, `templates/incident/lagefuehrung_druck.html` … (+3) |
-| ▲ | `chevron-up` | 7 | 7 | `templates/admin/device_tokens.html`, `templates/admin/medienverwaltung.html`, `templates/admin/members.html`, `templates/admin/wasserstellen.html` … (+2) |
-| ▼ | `chevron-down` | 7 | 7 | `templates/admin/device_tokens.html`, `templates/admin/medienverwaltung.html`, `templates/admin/members.html`, `templates/admin/wasserstellen.html` … (+2) |
+| ↗ | `external-link` | 7 | 7 | `templates/admin/dibos_einsaetze.html`, `templates/admin/page_edit.html`, `templates/admin/pages_list.html`, `templates/annotate/editor.html` … (+1) |
 | 🔑 | `key` | 6 | 6 | `services/objekt_service.py`, `templates/gateway/agent_detail.html`, `templates/gateway/detail.html`, `templates/objekt/infoscreen_alarm.html` … (+2) |
 | ➜ | `=fw` | 6 | 6 | `services/objekt_symbol_service.py`, `static/js/lagefuehrung.js`, `static/js/objekt_karte.js` |
 | ✉ | `mail` | 6 | 6 | `static/js/probe-appell.js`, `templates/gateway/druckregeln.html`, `templates/objekt/_kontakte.html`, `templates/probenplanung/teilnehmer_appell.html` |
+| 📥 | `inbox` | 6 | 6 | `templates/admin/backup.html`, `templates/admin/einsatz_import.html`, `templates/admin/gsl_einstellungen.html`, `templates/admin/konfig.html` … (+2) |
 | ⚙ | `settings` | 6 | 6 | `templates/gateway/_tabs.html`, `templates/gateway/agent_detail.html`, `templates/gateway/detail.html`, `templates/gateway/druckregeln.html` … (+1) |
 | 🏷 | `tag` | 6 | 5 | `templates/objekt/_merkmale.html`, `templates/pdf/_emoji_font_face.html`, `templates/pdf/lagebericht.html`, `templates/pdf/objektblatt.html` |
 | 🌦 | `cloud-rain` | 6 | 6 | `templates/objekt/infoscreen_alarm.html`, `templates/objekt/infoscreen_verwaltung.html`, `templates/weather/_data_section.html`, `templates/weather/index.html` |
@@ -75,20 +73,19 @@ Kontexte: `markup`, `js`, `python`, `css`, `option` (Emoji in `<option>` → ent
 | ↻ | `refresh` | 5 | 5 | `static/js/lagefuehrung.js`, `templates/admin/server_log.html`, `templates/archive/detail.html`, `templates/objekt/_dokumente.html` … (+1) |
 | 📢 | `speakerphone` | 5 | 5 | `static/js/lagefuehrung.js`, `templates/incident/lagefuehrung_druck.html` |
 | ▶ | `player-play` | 5 | 5 | `static/js/lagefuehrung.js`, `templates/foerderstrecke/maschinist.html`, `templates/media/gallery.html`, `templates/weather/index.html` |
+| ▲ | `chevron-up` | 5 | 5 | `templates/admin/device_tokens.html`, `templates/admin/medienverwaltung.html`, `templates/admin/members.html`, `templates/admin/wasserstellen.html` … (+1) |
+| ▼ | `chevron-down` | 5 | 5 | `templates/admin/device_tokens.html`, `templates/admin/medienverwaltung.html`, `templates/admin/members.html`, `templates/admin/wasserstellen.html` … (+1) |
 | 🎬 | `movie` | 5 | 5 | `templates/admin/medienverwaltung.html`, `templates/media/gallery.html`, `templates/pdf/_emoji_font_face.html`, `templates/pdf/incident_report.html` |
 | 🔒 | `lock` | 5 | 5 | `templates/admin/medienverwaltung.html`, `templates/objekt/kataloge.html`, `templates/verleih/_ausleihe_detail.html`, `templates/verleih/_ausleihe_form.html` |
 | 🗑 | `trash` | 5 | 5 | `templates/annotate/editor.html`, `templates/archive/detail.html`, `templates/gateway/agent_detail.html`, `templates/gateway/detail.html` … (+1) |
 | ☣ | `biohazard` | 4 | 4 | `models/major_incident.py`, `templates/nachschlagewerke/gefahrgut.html`, `templates/nachschlagewerke/gefahrgut_detail.html`, `templates/nachschlagewerke/start.html` |
 | 📦 | `package` | 4 | 4 | `services/katplan_typen.py`, `templates/admin/backup.html`, `templates/admin/gsl_einstellungen.html`, `templates/admin/konfig.html` |
-| ✏ | `pencil` | 4 | 3 | `services/road_closure_notify_service.py`, `templates/annotate/editor.html`, `templates/incident_major/_cross_marker_panel.html` |
 | 🫁 | `lungs` | 4 | 4 | `services/site_pages.py`, `templates/admin/settings.html`, `templates/archive/detail.html` |
 | 📎 | `paperclip` | 4 | 3 | `templates/admin/_mail_eingang_content.html`, `templates/katplan/_baum.html`, `templates/mailing/campaign_detail.html`, `templates/pdf/incident_report.html` |
 | 📡 | `antenna` | 4 | 4 | `templates/admin/device_tokens.html` |
 | 🚰 | `fire-hydrant` | 4 | 4 | `templates/admin/foerder_pumpen.html`, `templates/foerderstrecke/maschinist.html`, `templates/foerderstrecke/wizard.html`, `templates/public/alarm_summary.html` |
 | 🕐 | `clock` | 4 | 4 | `templates/admin/gsl_einstellungen.html`, `templates/admin/system_settings.html`, `templates/archive/detail.html` |
-| 🖼 | `photo` | 4 | 4 | `templates/admin/medienverwaltung.html`, `templates/admin/page_edit.html`, `templates/incident_major/_cross_marker_panel.html`, `templates/media/gallery.html` |
 | ▸ | `chevron-right` | 4 | 4 | `templates/foerderstrecke/wizard.html`, `templates/gateway/druckregeln.html`, `templates/weather/index.html` |
-| 📷 | `camera` | 4 | 4 | `templates/incident_major/_cross_marker_card.html`, `templates/incident_major/_cross_marker_panel.html`, `templates/incident_major/public_report.html`, `templates/verleih/_ausleihe_detail.html` |
 | 📜 | `history` | 4 | 4 | `templates/objekt/_protokoll.html`, `templates/objekt/changelog.html`, `templates/objekt/liste.html`, `templates/pdf/lagebericht.html` |
 | 🌊 | `ripple` | 3 | 3 | `models/major_incident.py`, `services/weather_service.py` |
 | 💥 | `bomb` | 3 | 3 | `models/objekt.py`, `services/objekt_service.py`, `templates/objekt/kataloge.html` |
@@ -100,6 +97,7 @@ Kontexte: `markup`, `js`, `python`, `css`, `option` (Emoji in `<option>` → ent
 | ⏸ | `player-pause` | 3 | 3 | `static/js/lagefuehrung.js`, `templates/weather/index.html` |
 | 🧵 | `messages` | 3 | 3 | `templates/admin/foerder_schlaeuche.html`, `templates/foerderstrecke/maschinist.html`, `templates/foerderstrecke/wizard.html` |
 | 🗂 | `folders` | 3 | 3 | `templates/admin/gsl_einstellungen.html`, `templates/admin/system_settings.html`, `templates/objekt/_einsatz_inhalt.html` |
+| 🖼 | `photo` | 3 | 3 | `templates/admin/medienverwaltung.html`, `templates/admin/page_edit.html`, `templates/media/gallery.html` |
 | 💾 | `device-floppy` | 3 | 3 | `templates/admin/medienverwaltung.html`, `templates/admin/org_backup.html`, `templates/admin/sysadmin_quotas.html` |
 | ✖ | `x` | 3 | 3 | `templates/annotate/editor.html`, `templates/gateway/_druckhistorie.html` |
 | 🧾 | `receipt` | 3 | 3 | `templates/archive/detail.html`, `templates/gateway/_druckhistorie.html`, `templates/objekt/_dokumente.html` |
@@ -111,6 +109,7 @@ Kontexte: `markup`, `js`, `python`, `css`, `option` (Emoji in `<option>` → ent
 | 🌨 | `cloud-snow` | 3 | 3 | `templates/objekt/infoscreen_alarm.html` |
 | 📅 | `calendar` | 3 | 3 | `templates/probenplanung/_dashboard_kachel.html`, `templates/termin/liste.html` |
 | 🅿 | `parking` | 2 | 2 | `services/objekt_service.py`, `templates/pdf/_emoji_font_face.html` |
+| ✏ | `pencil` | 2 | 1 | `services/road_closure_notify_service.py`, `templates/annotate/editor.html` |
 | 🔁 | `repeat` | 2 | 1 | `services/road_closure_notify_service.py`, `templates/gateway/agent_detail.html` |
 | 📨 | `mail-forward` | 2 | 1 | `services/site_pages.py`, `templates/mailing/lists_index.html` |
 | ○ | `=status` | 2 | 2 | `static/js/probe-appell.js`, `templates/probenplanung/teilnehmer_appell.html` |
@@ -130,6 +129,7 @@ Kontexte: `markup`, `js`, `python`, `css`, `option` (Emoji in `<option>` → ent
 | ▾ | `chevron-down` | 2 | 2 | `templates/gateway/druckregeln.html` |
 | △ | `=fw` | 2 | 2 | `templates/incident_major/druck_bericht.html`, `templates/incident_major/karte.html` |
 | ◇ | `=fw` | 2 | 2 | `templates/incident_major/druck_bericht.html`, `templates/incident_major/karte.html` |
+| 📷 | `camera` | 2 | 2 | `templates/incident_major/public_report.html`, `templates/verleih/_ausleihe_detail.html` |
 | 🔄 | `refresh` | 2 | 2 | `templates/objekt/_datenpflege.html`, `templates/objekt/detail.html` |
 | ⏳ | `hourglass` | 2 | 2 | `templates/objekt/_dokumente.html` |
 | ❌ | `circle-x` | 2 | 2 | `templates/objekt/infoscreen_alarm.html` |
@@ -182,7 +182,6 @@ Kontexte: `markup`, `js`, `python`, `css`, `option` (Emoji in `<option>` → ent
 | 🧩 | `puzzle` | 1 | 1 | `templates/gateway/detail.html` |
 | 🩸 | `droplet-half-2` | 1 | 1 | `templates/gateway/detail.html` |
 | 🔧 | `tool` | 1 | 1 | `templates/gateway/druckregeln.html` |
-| ↵ | `corner-down-left` | 1 | 1 | `templates/incident_major/_cross_marker_panel.html` |
 | ▣ | `=fw` | 1 | 1 | `templates/incident_major/karte.html` |
 | 🛡 | `shield` | 1 | 1 | `templates/incident_major/public_report.html` |
 | ✈ | `plane` | 1 | 1 | `templates/incident_major/public_report.html` |
@@ -216,7 +215,6 @@ Kontexte: `markup`, `js`, `python`, `css`, `option` (Emoji in `<option>` → ent
 |---|---:|
 | `app/templates/objekt/infoscreen_alarm.html` | 52 |
 | `app/templates/foerderstrecke/wizard.html` | 30 |
-| `app/templates/incident_major/karte.html` | 28 |
 | `app/templates/admin/device_tokens.html` | 20 |
 | `app/templates/archive/detail.html` | 20 |
 | `app/templates/gateway/detail.html` | 20 |
@@ -225,7 +223,6 @@ Kontexte: `markup`, `js`, `python`, `css`, `option` (Emoji in `<option>` → ent
 | `app/templates/gateway/druckregeln.html` | 18 |
 | `app/templates/objekt/_dokumente.html` | 16 |
 | `app/templates/gateway/agent_detail.html` | 15 |
-| `app/templates/incident_major/_cross_marker_panel.html` | 15 |
 | `app/templates/objekt/detail.html` | 13 |
 | `app/templates/annotate/editor.html` | 11 |
 | `app/templates/objekt/liste.html` | 11 |
@@ -253,6 +250,7 @@ Kontexte: `markup`, `js`, `python`, `css`, `option` (Emoji in `<option>` → ent
 | `app/templates/weather/index.html` | 8 |
 | `app/templates/objekt/pflege_review.html` | 7 |
 | `app/templates/pdf/incident_report.html` | 7 |
+| `app/templates/incident_major/karte.html` | 7 |
 | `app/templates/incident/lagefuehrung_druck.html` | 6 |
 | `app/templates/termin/detail.html` | 6 |
 | `app/templates/gateway/_druckhistorie.html` | 6 |
@@ -274,3 +272,4 @@ Kontexte: `markup`, `js`, `python`, `css`, `option` (Emoji in `<option>` → ent
 | `app/templates/incident_major/_stellen_multi_druck.html` | 4 |
 | `app/templates/_print_dialog.html` | 4 |
 | `app/templates/incident_major/druck.html` | 4 |
+| `app/templates/media/gallery.html` | 4 |

@@ -94,13 +94,15 @@ function generateIcons(data) {
     if (!statuses.has(status)) throw new RangeError('Unbekannter Status: ' + status);
     return '<span class="' + classes('status-dot status-dot--' + status + ' ' + cls) + '" role="img" aria-label="' + escape(label) + '" title="' + escape(label) + '"></span>';
   }
-  function ecpMarkerIcon(name, {color = '#d42225', size = 32, cls = ''} = {}) {
+  function ecpMarkerIcon(name, {color = '#d42225', size = 32, cls = '', text = null, border = ''} = {}) {
     if (!root.L) return null;
     if (!/^(?:#(?:[\\da-f]{3}|[\\da-f]{4}|[\\da-f]{6}|[\\da-f]{8})|var\\(--[a-zA-Z_][a-zA-Z0-9_-]*\\))$/i.test(color)) color = '#d42225';
     if (typeof size !== 'number' || !Number.isFinite(size) || size <= 0) size = 32;
+    const frame = typeof border === 'string' && border.length > 0 && !/[^a-z0-9 #().,%-]/.test(border) ? ';border:' + border : '';
+    const content = text === null ? ecpIcon(name, {size: size >= 36 ? 'md' : 'sm'}) : '<span class="ecp-map-marker__text">' + escape(text) + '</span>';
     return root.L.divIcon({
       className: 'ecp-map-marker-wrap',
-      html: '<div class="' + classes('ecp-map-marker ' + cls) + '" style="--marker-color:' + color + ';width:' + size + 'px;height:' + size + 'px">' + ecpIcon(name, {size: size >= 36 ? 'md' : 'sm'}) + '</div>',
+      html: '<div class="' + classes('ecp-map-marker ' + cls) + '" style="--marker-color:' + color + ';width:' + size + 'px;height:' + size + 'px' + frame + '">' + content + '</div>',
       iconSize: [size, size], iconAnchor: [size / 2, size / 2], popupAnchor: [0, -size / 2]
     });
   }

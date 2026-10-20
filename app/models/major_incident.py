@@ -1044,6 +1044,19 @@ CROSS_MARKER_TYPE_ICON: dict[str, str] = {
     "sonstiges": "📍",
 }
 
+CROSS_MARKER_TYPE_ICON_NAME: dict[str, str] = {
+    "unterfuehrung_geflutet": "flood",
+    "strasse_ueberflutet": "droplet",
+    "hangrutschung": "mountain",
+    "baum_umgestuerzt": "tree",
+    "vermurung_objekt": "home-x",
+    "strasse_gesperrt": "barrier-block",
+    "stromausfall": "bolt",
+    "pegel_messpunkt": "chart-line",
+    "gefahrenstoff": "biohazard",
+    "sonstiges": "map-pin",
+}
+
 CROSS_MARKER_STATUS_LABEL: dict[str, str] = {
     "unbestaetigt": "Unbestätigt",
     "aktiv": "Aktiv / Gefahr",
@@ -1092,6 +1105,10 @@ class CrossSiteMarker(Base):
     @property
     def type_icon(self) -> str:
         return CROSS_MARKER_TYPE_ICON.get(self.marker_type, "📍")
+
+    @property
+    def type_icon_name(self) -> str | None:
+        return CROSS_MARKER_TYPE_ICON_NAME.get(self.marker_type)
 
     @property
     def type_label(self) -> str:

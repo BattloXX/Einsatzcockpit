@@ -47,7 +47,9 @@ test("markerDarstellung nutzt kompakte, zugängliche Statusmarker", () => {
   const laufend = markerDarstellung(auftrag(2, { einheit_status: "in_arbeit" }), 2);
   const erkundung = markerDarstellung(auftrag(3, { auftragsart: "erkundung" }), 3);
   const offen = markerDarstellung(auftrag(4), 4);
-  assert.equal(naechster.inhalt, "▶");
+  assert.equal(naechster.iconName, "player-play");
+  assert.equal(laufend.iconName, "player-record");
+  assert.equal(markerDarstellung(auftrag(5, { beendet_at: "2026-10-20" }), null).iconName, "check");
   assert.match(naechster.titel, /Nächster Auftrag/);
   assert.match(laufend.titel, /In Arbeit/);
   assert.ok(laufend.groesse <= 34);
@@ -81,4 +83,24 @@ test("Entfernungsvorschlag verschiebt nie den nächsten Auftrag", () => {
   ];
   const ergebnis = berechneReihenfolge(liste, { lat: 47.5, lng: 9.5 });
   assert.equal(ergebnis[0].dispatch_id, 1);
+});
+
+test("Marker-HTML rendert Statusicons und entschärft Titel weiterhin", async () => {
+  const { EinheitKarte } = await import("../../app/static/js/einheit_karte.js");
+  const oldWindow = globalThis.window;
+  const oldIcon = globalThis.ecpIcon;
+  globalThis.window = { L: { divIcon: options => options } };
+  globalThis.ecpIcon = (name, {size}) => `<svg data-icon="${name}" data-size="${size}"></svg>`;
+  try {
+    const marker = EinheitKarte.prototype.icon(auftrag(1, { naechster: true, bezeichnung: '<img src="x">' }), 1);
+    assert.match(marker.html, /<svg data-icon="player-play" data-size="xs">/);
+    assert.ok(!marker.html.includes('<img'));
+    assert.match(marker.html, /&lt;img src=&quot;x&quot;&gt;/);
+    assert.deepEqual(marker.iconAnchor, [14, 14]);
+    const nummer = EinheitKarte.prototype.icon(auftrag(2), 2);
+    assert.match(nummer.html, />2<\/span>/);
+  } finally {
+    if (oldWindow === undefined) delete globalThis.window; else globalThis.window = oldWindow;
+    if (oldIcon === undefined) delete globalThis.ecpIcon; else globalThis.ecpIcon = oldIcon;
+  }
 });

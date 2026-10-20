@@ -92,6 +92,7 @@
   "flag": "<path d=\"M5 5a5 5 0 0 1 7 0a5 5 0 0 0 7 0v9a5 5 0 0 1 -7 0a5 5 0 0 0 -7 0v-9\" /><path d=\"M5 21v-7\" />",
   "flame": "<path d=\"M12 10.941c2.333 -3.308 .167 -7.823 -1 -8.941c0 3.395 -2.235 5.299 -3.667 6.706c-1.43 1.408 -2.333 3.294 -2.333 5.588c0 3.704 3.134 6.706 7 6.706c3.866 0 7 -3.002 7 -6.706c0 -1.712 -1.232 -4.403 -2.333 -5.588c-2.084 3.353 -3.257 3.353 -4.667 2.235\" />",
   "flask": "<path d=\"M9 3l6 0\" /><path d=\"M10 9l4 0\" /><path d=\"M10 3v6l-4 11a.7 .7 0 0 0 .5 1h11a.7 .7 0 0 0 .5 -1l-4 -11v-6\" />",
+  "flood": "<path d=\"M3 10l9 -7l9 7\" /><path d=\"M6 7.75v4.25m12 0v-4.25\" /><path d=\"M3 20.75a2.4 2.4 0 0 0 1 .25a2.4 2.4 0 0 0 2 -1a2.4 2.4 0 0 1 2 -1a2.4 2.4 0 0 1 2 1a2.4 2.4 0 0 0 2 1a2.4 2.4 0 0 0 2 -1a2.4 2.4 0 0 1 2 -1a2.4 2.4 0 0 1 2 1a2.4 2.4 0 0 0 2 1a2.4 2.4 0 0 0 1 -.25\" /><path d=\"M3 16.75a2.4 2.4 0 0 0 1 .25a2.4 2.4 0 0 0 2 -1a2.4 2.4 0 0 1 2 -1a2.4 2.4 0 0 1 2 1a2.4 2.4 0 0 0 2 1a2.4 2.4 0 0 0 2 -1a2.4 2.4 0 0 1 2 -1a2.4 2.4 0 0 1 2 1a2.4 2.4 0 0 0 2 1a2.4 2.4 0 0 0 1 -.25\" />",
   "folder-open": "<path d=\"M5 19l2.757 -7.351a1 1 0 0 1 .936 -.649h12.307a1 1 0 0 1 .986 1.164l-.996 5.211a2 2 0 0 1 -1.964 1.625h-14.026a2 2 0 0 1 -2 -2v-11a2 2 0 0 1 2 -2h4l3 3h7a2 2 0 0 1 2 2v2\" />",
   "folders": "<path d=\"M9 3h3l2 2h5a2 2 0 0 1 2 2v7a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-9a2 2 0 0 1 2 -2\" /><path d=\"M17 16v2a2 2 0 0 1 -2 2h-10a2 2 0 0 1 -2 -2v-9a2 2 0 0 1 2 -2h2\" />",
   "grip-vertical": "<path d=\"M8 5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0\" /><path d=\"M8 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0\" /><path d=\"M8 19a1 1 0 1 0 2 0a1 1 0 1 0 -2 0\" /><path d=\"M14 5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0\" /><path d=\"M14 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0\" /><path d=\"M14 19a1 1 0 1 0 2 0a1 1 0 1 0 -2 0\" />",
@@ -216,13 +217,15 @@
     if (!statuses.has(status)) throw new RangeError('Unbekannter Status: ' + status);
     return '<span class="' + classes('status-dot status-dot--' + status + ' ' + cls) + '" role="img" aria-label="' + escape(label) + '" title="' + escape(label) + '"></span>';
   }
-  function ecpMarkerIcon(name, {color = '#d42225', size = 32, cls = ''} = {}) {
+  function ecpMarkerIcon(name, {color = '#d42225', size = 32, cls = '', text = null, border = ''} = {}) {
     if (!root.L) return null;
     if (!/^(?:#(?:[\da-f]{3}|[\da-f]{4}|[\da-f]{6}|[\da-f]{8})|var\(--[a-zA-Z_][a-zA-Z0-9_-]*\))$/i.test(color)) color = '#d42225';
     if (typeof size !== 'number' || !Number.isFinite(size) || size <= 0) size = 32;
+    const frame = typeof border === 'string' && border.length > 0 && !/[^a-z0-9 #().,%-]/.test(border) ? ';border:' + border : '';
+    const content = text === null ? ecpIcon(name, {size: size >= 36 ? 'md' : 'sm'}) : '<span class="ecp-map-marker__text">' + escape(text) + '</span>';
     return root.L.divIcon({
       className: 'ecp-map-marker-wrap',
-      html: '<div class="' + classes('ecp-map-marker ' + cls) + '" style="--marker-color:' + color + ';width:' + size + 'px;height:' + size + 'px">' + ecpIcon(name, {size: size >= 36 ? 'md' : 'sm'}) + '</div>',
+      html: '<div class="' + classes('ecp-map-marker ' + cls) + '" style="--marker-color:' + color + ';width:' + size + 'px;height:' + size + 'px' + frame + '">' + content + '</div>',
       iconSize: [size, size], iconAnchor: [size / 2, size / 2], popupAnchor: [0, -size / 2]
     });
   }

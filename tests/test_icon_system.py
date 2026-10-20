@@ -158,3 +158,31 @@ def test_rahmen_ohne_emoji_auch_in_html_entities(template):
     source = unescape((ROOT / "app/templates" / template).read_text())
     remaining = {ch for ch in EMOJI_RE.findall(source) if ZUORDNUNG.get(ch) != "=text"}
     assert remaining == set()
+
+
+def test_cross_marker_icons(monkeypatch):
+    from app.core.icons import cross_marker_icon
+    from app.models.major_incident import (
+        CROSS_MARKER_TYPE_ICON,
+        CROSS_MARKER_TYPE_ICON_NAME,
+        CROSS_MARKER_TYPE_LABEL,
+        CrossSiteMarker,
+    )
+
+    fw_types = {"mure", "damm_deich", "bruecke_gesperrt", "verklausung"}
+    assert set(CROSS_MARKER_TYPE_ICON_NAME) == set(CROSS_MARKER_TYPE_LABEL) - fw_types
+    assert set(CROSS_MARKER_TYPE_ICON_NAME.values()) <= icon_namen()
+    assert templates.env.globals["cross_marker_icon"] is cross_marker_icon
+    for marker_type in CROSS_MARKER_TYPE_LABEL:
+        marker = CrossSiteMarker(marker_type=marker_type)
+        assert marker.type_icon == CROSS_MARKER_TYPE_ICON[marker_type]
+        if marker_type in fw_types:
+            assert marker.type_icon_name is None
+            assert str(cross_marker_icon(marker_type)) == (
+                '<span class="ecp-fw-zeichen" aria-hidden="true">'
+                + marker.type_icon + '</span>'
+            )
+        else:
+            assert cross_marker_icon(marker_type, "lg") == render_icon(marker.type_icon_name, "lg")
+    monkeypatch.setitem(CROSS_MARKER_TYPE_ICON, "mure", '<img src="x">&')
+    assert '&lt;img src=&#34;x&#34;&gt;&amp;' in cross_marker_icon("mure")
