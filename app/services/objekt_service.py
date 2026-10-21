@@ -627,6 +627,12 @@ STANDARD_GEFAHREN = [
     ("Ammoniak (NH3)", "nh3"),
     ("Hohe Brandlast", "brandlast"),
 ]
+STANDARD_MERKMAL_ICON_NAMEN = {
+    "schluesselbox": "key", "brandschutzplan": "book", "dlk_stellplatz": "firetruck",
+    "objektfunk": "radio", "tiefgarage": "parking", "pv": "solar-panel",
+    "feuerwehraufzug": "elevator", "sammelplatz": "users-group", "gas": "flame",
+    "sprinkler": "droplet",
+}
 STANDARD_MERKMALE = [
     ("schluesselbox", "Schlüsselbox", "🔑"),
     ("brandschutzplan", "Brandschutzplan vorhanden", "📕"),
@@ -756,7 +762,10 @@ def seed_objekt_kataloge(db: Session, org_id: int) -> None:
             .first()
         )
         if not merkmal_exists:
-            db.add(MerkmalKatalog(org_id=org_id, code=code, name=name, icon=icon, sort=i, aktiv=True))
+            db.add(MerkmalKatalog(
+                org_id=org_id, code=code, name=name, icon=icon,
+                icon_name=STANDARD_MERKMAL_ICON_NAMEN.get(code), sort=i, aktiv=True,
+            ))
     db.flush()
     seed_objekt_auswahl(db, org_id)
     from app.services.objekt_symbol_service import seed_objekt_symbole

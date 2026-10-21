@@ -44,9 +44,17 @@ def _baseline() -> dict[str, int]:
     eintraege: dict[str, int] = {}
     for zeile in inventar.BASELINE.read_text(encoding="utf-8").splitlines():
         if zeile and not zeile.startswith("#"):
-            pfad, anzahl = zeile.rsplit(" ", 1)
+            pfad, anzahl = zeile.split("#", 1)[0].strip().rsplit(" ", 1)
             eintraege[pfad] = int(anzahl)
     return eintraege
+
+
+def test_jede_ausnahme_ist_begruendet() -> None:
+    ohne = sorted(set(_baseline()) - set(inventar.AUSNAHME_GRUENDE))
+    assert not ohne, (
+        "Verbliebene Emojis ohne Begründung – migrieren oder in AUSNAHME_GRUENDE "
+        "(scripts/icon_inventar.py) begründen: " + ", ".join(ohne)
+    )
 
 
 def _eigene_frontend_dateien() -> list[Path]:

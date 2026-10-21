@@ -2,6 +2,7 @@
 
 import logging
 import re
+from collections.abc import Mapping
 from functools import cache
 from pathlib import Path
 
@@ -112,3 +113,23 @@ def cross_marker_icon(marker_type: str, size: str = "sm") -> Markup:
     return Markup('<span class="ecp-fw-zeichen" aria-hidden="true">{}</span>').format(
         CROSS_MARKER_TYPE_ICON.get(marker_type, "")
     )
+
+
+# Kuratierte Auswahl fuer Objektmerkmale; alle Namen werden lokal vendort.
+MERKMAL_ICON_NAMEN = (
+    "key", "book", "firetruck", "radio", "parking", "solar-panel", "sun",
+    "elevator", "users-group", "flame", "droplet", "lock", "door", "bolt",
+    "fire-extinguisher", "fire-hydrant", "map-pin", "alert-triangle", "info-circle",
+    "building", "home", "stairs", "ladder", "wind", "temperature", "plug",
+    "battery", "bell", "camera", "tag", "ruler", "car", "truck",
+)
+
+
+def merkmal_icon(merkmal: object, size: str = "sm") -> Markup:
+    name = merkmal.get("icon_name") if isinstance(merkmal, Mapping) else getattr(merkmal, "icon_name", None)
+    if name:
+        return render_icon(name, size=size)
+    legacy = merkmal.get("icon") if isinstance(merkmal, Mapping) else getattr(merkmal, "icon", None)
+    if legacy:
+        return Markup('<span class="ecp-legacy-zeichen" aria-hidden="true">{}</span>').format(legacy)
+    return render_icon("tag", size=size)

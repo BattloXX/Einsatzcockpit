@@ -163,12 +163,42 @@ def migrierbar_je_datei(treffer=None) -> Counter:
     return jedatei
 
 
+# Begruendung je Datei, die nach der Umstellung (P0-P11) bewusst Emojis behaelt.
+# Jeder Baseline-Eintrag braucht hier einen Grund (geprueft von tests/test_icon_waechter.py).
+_PIKTOGRAMM = "Gefahren-Piktogramme (fachliche Information, bleiben Emoji)"
+AUSNAHME_GRUENDE: dict[str, str] = {
+    "app/models/objekt.py": _PIKTOGRAMM,
+    "app/routers/ui_incident.py": _PIKTOGRAMM,
+    "app/routers/ui_infoscreen_alarm.py": _PIKTOGRAMM,
+    "app/routers/ui_lagefuehrung.py": _PIKTOGRAMM,
+    "app/static/js/einsatz_info.js": _PIKTOGRAMM,
+    "app/static/js/lagefuehrung.js": _PIKTOGRAMM,
+    "app/templates/objekt/_einsatz_inhalt.html": _PIKTOGRAMM,
+    "app/templates/objekt/_gefahren.html": _PIKTOGRAMM,
+    "app/templates/objekt/infoscreen_alarm.html": _PIKTOGRAMM,
+    "app/templates/pdf/objektblatt.html": _PIKTOGRAMM,
+    "app/services/objekt_service.py": "Seeds: Gefahren-Piktogramme und Merkmal-Altwerte (icon, neben icon_name)",
+    "app/models/major_incident.py": "CROSS_MARKER_TYPE_ICON: Emoji-Feld fuer JSON/Druck und Fachzeichen",
+    "app/services/katplan_typen.py": "typ_icon: Emoji-Feld fuer JSON-Kompatibilitaet neben icon_name",
+    "app/templates/incident_major/karte.html": "Kartenlegende: farbige Fachzeichen (legItem)",
+    "app/templates/weather/_data_section.html": "Trendpfeil im Fliesstext",
+    "app/templates/pdf/_emoji_font_face.html": "Jinja-Kommentar (Glyphenliste der PDF-Schrift)",
+    "app/services/incident_service.py": "Push-Benachrichtigungstexte (externer Kanal)",
+    "app/routers/api_v1.py": "Benachrichtigungstext der API (externer Kanal)",
+    "app/routers/ui_termin.py": "XLSX-Export (keine UI)",
+    "app/seed_data.py": "CLI-Ausgabe",
+}
+
+
 def baseline_schreiben(jedatei: Counter) -> None:
     kopf = (
-        "# Waechter tests/test_icon_waechter.py: noch nicht migrierte UI-Emojis je Datei.\n"
+        "# Waechter tests/test_icon_waechter.py: verbliebene Emojis je Datei mit Begruendung.\n"
         "# Darf nur schrumpfen. Neu erzeugen: .venv/bin/python scripts/icon_inventar.py --baseline\n"
+        "# Begruendungen stehen in AUSNAHME_GRUENDE in scripts/icon_inventar.py.\n"
     )
-    zeilen = [f"{f} {n}" for f, n in sorted(jedatei.items())]
+    zeilen = [
+        f"{f} {n}  # {AUSNAHME_GRUENDE.get(f, 'OHNE BEGRUENDUNG')}" for f, n in sorted(jedatei.items())
+    ]
     BASELINE.write_text(kopf + "\n".join(zeilen) + "\n", encoding="utf-8")
 
 

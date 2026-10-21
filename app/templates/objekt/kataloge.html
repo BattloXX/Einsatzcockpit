@@ -110,14 +110,14 @@
         {% set count = merkmal_verwendung.get(m.id, 0) %}
         <tr>
           <td>{{ m.sort }}</td>
-          <td>{{ m.icon or '–' }}</td>
+          <td>{{ merkmal_icon(m) }}</td>
           <td><strong>{{ m.name }}</strong></td>
           <td>{% if m.code %}<code>{{ m.code }}</code>{% else %}<span class="text-muted">–</span>{% endif %}</td>
           <td>{% if m.aktiv %}<span class="badge-pill badge-pill--green">aktiv</span>{% else %}<span class="badge-pill badge-pill--gray">inaktiv</span>{% endif %}</td>
           <td>{% if count > 0 %}<span class="badge-pill badge-pill--green">{{ count }}</span>{% else %}<span class="text-muted">–</span>{% endif %}</td>
           <td>
             <button class="btn btn--ghost btn--xs"
-                    onclick="openEditMerk({{ m.id }}, '{{ m.name|replace("'","\\'")|e }}', '{{ m.icon or '' }}', {{ m.sort }}, {{ m.aktiv|lower }})">Bearbeiten</button>
+                    onclick="openEditMerk({{ m.id }}, {{ m.name|tojson|forceescape }}, {{ (m.icon_name or '')|tojson|forceescape }}, {{ m.sort }}, {{ m.aktiv|lower }})">Bearbeiten</button>
             <form method="post" action="/objekte/kataloge/merkmale/{{ m.id }}/loeschen" style="display:inline"
                   onsubmit="return confirm('Merkmal {{ m.name }} löschen?')">
               <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
@@ -435,8 +435,11 @@
       <div class="modal__body">
         <div class="form-group"><label class="form-label">Name</label>
           <input type="text" name="name" class="form-input" required maxlength="100"></div>
-        <div class="form-group"><label class="form-label">Icon (Emoji)</label>
-          <input type="text" name="icon" class="form-input" maxlength="40" placeholder="Icon"></div>
+        <div class="form-group"><label class="form-label">Symbol</label>
+          <select name="icon_name" class="form-input" onchange="this.nextElementSibling.innerHTML = this.value ? ecpIcon(this.value, {size: 'sm'}) : ''">
+            <option value="">Standard / bisheriges Symbol</option>
+            {% for name in merkmal_icon_namen %}<option value="{{ name }}">{{ name }}</option>{% endfor %}
+          </select><span aria-hidden="true"></span></div>
         <div class="form-group"><label class="form-label">Sortierung</label>
           <input type="number" name="sort" class="form-input" value="0"></div>
       </div>
@@ -457,8 +460,11 @@
       <div class="modal__body">
         <div class="form-group"><label class="form-label">Name</label>
           <input type="text" name="name" id="em_name" class="form-input" required maxlength="100"></div>
-        <div class="form-group"><label class="form-label">Icon (Emoji)</label>
-          <input type="text" name="icon" id="em_icon" class="form-input" maxlength="40"></div>
+        <div class="form-group"><label class="form-label">Symbol</label>
+          <select name="icon_name" id="em_icon" class="form-input" onchange="this.nextElementSibling.innerHTML = this.value ? ecpIcon(this.value, {size: 'sm'}) : ''">
+            <option value="">Standard / bisheriges Symbol</option>
+            {% for name in merkmal_icon_namen %}<option value="{{ name }}">{{ name }}</option>{% endfor %}
+          </select><span aria-hidden="true"></span></div>
         <div class="form-group"><label class="form-label">Sortierung</label>
           <input type="number" name="sort" id="em_sort" class="form-input" value="0"></div>
         <div class="form-group">
@@ -514,7 +520,12 @@ function openEditGef(id, name, typ, sort, aktiv) {
 }
 function openEditMerk(id, name, icon, sort, aktiv) {
   document.getElementById('em_name').value = name;
-  document.getElementById('em_icon').value = icon;
+  var auswahl = document.getElementById('em_icon');
+  if (icon && !Array.from(auswahl.options).some(function (o) { return o.value === icon; })) {
+    auswahl.add(new Option(icon, icon));
+  }
+  auswahl.value = icon;
+  auswahl.dispatchEvent(new Event('change'));
   document.getElementById('em_sort').value = sort;
   document.getElementById('em_aktiv').checked = aktiv === true || aktiv === 'true';
   document.getElementById('editMerkForm').action = `/objekte/kataloge/merkmale/${id}/edit`;

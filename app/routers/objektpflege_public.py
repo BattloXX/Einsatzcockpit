@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 from starlette.templating import Jinja2Templates
 
-from app.core.icons import render_icon, status_dot
+from app.core.icons import merkmal_icon, render_icon, status_dot
 from app.db import get_db
 from app.models.kontakt import Kontakt
 from app.models.master import FireDept
@@ -59,6 +59,7 @@ from app.services.objekt_pflege_service import (
 public_router = APIRouter(tags=["objektpflege-public"])
 public_templates = Jinja2Templates(directory="app/templates")
 public_templates.env.globals["icon"] = render_icon
+public_templates.env.globals["merkmal_icon"] = merkmal_icon
 public_templates.env.globals["status_dot"] = status_dot
 _PUBLIC_HEADERS = {"Cache-Control": "private, no-store", "X-Robots-Tag": "noindex, nofollow",
                    "Referrer-Policy": "no-referrer"}
@@ -165,7 +166,9 @@ def pruefen(token: str, request: Request, db: Session = Depends(get_db)):
                                  MerkmalKatalog.org_id == auftrag.org_id).all())
         merkmale = [
             {
-                "name": f"{merkmal.icon} {merkmal.name}".strip() if merkmal.icon else merkmal.name,
+                "name": merkmal.name,
+                "icon_name": merkmal.icon_name,
+                "icon": merkmal.icon,
                 "hinweis": zuordnung.hinweis,
             }
             for zuordnung, merkmal in merkmale_roh

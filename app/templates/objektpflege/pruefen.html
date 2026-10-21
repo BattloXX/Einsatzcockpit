@@ -21,7 +21,7 @@
         <dt>Merkmale</dt>
         <dd>
           {% for merkmal in merkmale %}
-          {{ merkmal.name }}{% if merkmal.hinweis %} · {{ merkmal.hinweis }}{% endif %}{% if not loop.last %}<br>{% endif %}
+          {{ merkmal_icon(merkmal) }} {{ merkmal.name }}{% if merkmal.hinweis %} · {{ merkmal.hinweis }}{% endif %}{% if not loop.last %}<br>{% endif %}
           {% endfor %}
         </dd>
         {% endif %}

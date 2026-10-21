@@ -5,7 +5,7 @@
     {% for m in objekt.merkmale %}
     <div class="objekt-gefahr-chip">
       <span class="objekt-gefahr-chip__label">
-        {% if m.merkmal and m.merkmal.icon %}{{ m.merkmal.icon }}{% else %}{{ icon("tag", size="sm") }}{% endif %} {{ m.merkmal.name if m.merkmal else '?' }}
+        {{ merkmal_icon(m.merkmal) }} {{ m.merkmal.name if m.merkmal else '?' }}
       </span>
       {% if m.hinweis %}<span class="text-muted" style="font-size:0.85em;">{{ m.hinweis }}</span>{% endif %}
       {% if ist_verwalter %}
@@ -32,7 +32,7 @@
       <label class="form-label">Merkmal *</label>
       <select name="merkmal_id" class="form-input" required>
         {% for mk in merkmal_katalog %}
-        <option value="{{ mk.id }}">{{ mk.icon or '' }} {{ mk.name }}</option>
+        <option value="{{ mk.id }}">{{ mk.name }}</option>
         {% endfor %}
       </select>
     </div>

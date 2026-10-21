@@ -32,6 +32,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.config import settings
 from app.core.async_bridge import run_async
 from app.core.audit import write_audit
+from app.core.icons import MERKMAL_ICON_NAMEN, icon_namen
 from app.core.permissions import (
     can_view_kontakt_directory_request,
     is_objekt_verwalter,
@@ -562,6 +563,7 @@ def kataloge(
             "gefahr_piktogramme": lade_auswahl(db, user.org_id, AUSWAHL_PIKTOGRAMM),
             "merkmale": (db.query(MerkmalKatalog).order_by(MerkmalKatalog.sort, MerkmalKatalog.name).all()),
             "merkmal_verwendung": merkmal_verwendung,
+            "merkmal_icon_namen": MERKMAL_ICON_NAMEN,
             "auswahl": auswahl,
             "auswahl_verwendung": auswahl_verwendung,
             "auswahl_typen": _AUSWAHL_TYPEN,
@@ -2380,17 +2382,22 @@ def katalog_merkmal_neu(
     user: User = Depends(require_role("org_admin")),
     _guard: None = Depends(require_objekt_enabled),
     name: str = Form(...),
-    icon: str = Form(""),
+    icon_name: str = Form(""),
     sort: int = Form(0),
 ):
+    icon_name = icon_name.strip()
+    if icon_name and icon_name not in icon_namen():
+        raise HTTPException(status_code=400, detail="Unbekanntes Merkmal-Symbol")
     if not name.strip():
         raise HTTPException(status_code=400, detail="Name ist erforderlich")
-    existiert = db.query(MerkmalKatalog).filter(MerkmalKatalog.name == name.strip()).first()
+    existiert = db.query(MerkmalKatalog).filter(
+        MerkmalKatalog.name == name.strip(), MerkmalKatalog.org_id == user.org_id,
+    ).first()
     if existiert:
         return RedirectResponse(url="/objekte/kataloge?error=exists&tab=merkmale", status_code=303)
     db.add(
         MerkmalKatalog(
-            org_id=user.org_id, code=None, name=name.strip(), icon=icon.strip() or None, sort=sort, aktiv=True
+            org_id=user.org_id, code=None, name=name.strip(), icon_name=icon_name or None, sort=sort, aktiv=True
         )
     )
     db.commit()
@@ -2405,15 +2412,22 @@ def katalog_merkmal_edit(
     user: User = Depends(require_role("org_admin")),
     _guard: None = Depends(require_objekt_enabled),
     name: str = Form(...),
-    icon: str = Form(""),
+    icon_name: str = Form(""),
     sort: int = Form(0),
     aktiv: str = Form(""),
 ):
-    eintrag = db.query(MerkmalKatalog).filter(MerkmalKatalog.id == merkmal_id).first()
+    eintrag = db.query(MerkmalKatalog).filter(
+        MerkmalKatalog.id == merkmal_id, MerkmalKatalog.org_id == user.org_id,
+    ).first()
     if eintrag is None:
         raise HTTPException(status_code=404, detail="Merkmal nicht gefunden")
+    icon_name = icon_name.strip()
+    if icon_name and icon_name not in icon_namen():
+        raise HTTPException(status_code=400, detail="Unbekanntes Merkmal-Symbol")
     eintrag.name = name.strip()
-    eintrag.icon = icon.strip() or None
+    eintrag.icon_name = icon_name or None
+    if icon_name:
+        eintrag.icon = None
     eintrag.sort = sort
     eintrag.aktiv = bool(aktiv)
     db.commit()
@@ -2428,7 +2442,9 @@ def katalog_merkmal_loeschen(
     user: User = Depends(require_role("org_admin")),
     _guard: None = Depends(require_objekt_enabled),
 ):
-    eintrag = db.query(MerkmalKatalog).filter(MerkmalKatalog.id == merkmal_id).first()
+    eintrag = db.query(MerkmalKatalog).filter(
+        MerkmalKatalog.id == merkmal_id, MerkmalKatalog.org_id == user.org_id,
+    ).first()
     if eintrag is None:
         raise HTTPException(status_code=404, detail="Merkmal nicht gefunden")
     verwendet = db.query(ObjektMerkmal).filter(ObjektMerkmal.merkmal_id == eintrag.id).first()

@@ -452,6 +452,7 @@ class MerkmalKatalog(TenantScoped, Base):
     code: Mapped[str | None] = mapped_column(String(40), nullable=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     icon: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    icon_name: Mapped[str | None] = mapped_column(String(64), nullable=True)
     sort: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 

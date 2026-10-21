@@ -198,3 +198,7 @@ topology-star-3
 code
 heart
 server
+solar-panel
+stairs
+ladder
+truck

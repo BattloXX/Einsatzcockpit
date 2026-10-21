@@ -627,7 +627,7 @@ def test_lesen_liefert_erweiterte_objekt_und_kinddaten_ohne_benachrichtigungen(c
         objekt = db.get(Objekt, seed["objekt_id"])
         kategorie = ObjektKategorie(org_id=seed["org_id"], name="Industrie")
         gefahr = GefahrenKatalog(org_id=seed["org_id"], name="Chemie")
-        merkmal = MerkmalKatalog(org_id=seed["org_id"], name="Schluesselbox")
+        merkmal = MerkmalKatalog(org_id=seed["org_id"], name="Schluesselbox", icon_name="key")
         db.add_all([kategorie, gefahr, merkmal])
         db.flush()
         objekt.kategorie_id = kategorie.id
@@ -676,6 +676,9 @@ def test_lesen_liefert_erweiterte_objekt_und_kinddaten_ohne_benachrichtigungen(c
     assert gelesen["gefahren"][0]["stoffname"] == "Benzin"
     assert gelesen["gefahren"][0]["links"] == [{"label": "SDB", "url": "https://example.test/sdb"}]
     assert gelesen["merkmale"][0]["name"] == "Schluesselbox"
+    assert gelesen["merkmale"][0]["icon_name"] == "key"
+    kataloge = _rufe(client, token, "objekt_kataloge")
+    assert any(m["name"] == "Schluesselbox" and m["icon_name"] == "key" for m in kataloge["merkmale"])
     assert gelesen["merkmale"][0]["hinweis"] == "Beim Tor"
     assert gelesen["wohnanlage"] == {
         "wohneinheiten": 24, "geschosse": 6, "stiegen": 2, "hausverwaltung_kontakt_id": None,
