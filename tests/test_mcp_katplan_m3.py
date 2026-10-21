@@ -91,7 +91,8 @@ def test_sammelzuordnung_rollback(quelle, option):
 def test_quellreferenz_seiten_urls(quelle):
     schreiben(quelle, "katplan_quellseite_verknuepfen", zuordnungen=[zuordnung(quelle)])
     ref = lesen(quelle)["source_references"][0]
-    assert set(ref) == {"dokument_id", "titel", "versionsnummer", "seiten", "seiten_liste"}
+    assert set(ref) == {"dokument_id", "titel", "versionsnummer", "seiten", "seiten_liste", "original_url"}
+    assert ref["original_url"].endswith("/original#page=3")
     assert [s["seiten_nr"] for s in ref["seiten_liste"]] == [3, 4, 7]
     assert ref["seiten_liste"][0]["text_url"].endswith("/seite/3/text")
     freigabe = rufe(quelle, "katplan_element_lesen", plan_id=quelle["plan_id"], element_id="KS-01")

@@ -32,13 +32,23 @@
   </div>
   {% if element.quelle_dokument_id %}
     {% set q = quellen_nach_id.get(element.quelle_dokument_id) %}
-    <p>Quelle:
-      {% if q %}
-        <a href="/plaene/{{ plan.id }}/quellen/{{ element.quelle_dokument_id }}?{% if element.quelle_seiten %}seite={{ element.quelle_seiten.split('-')[0] }}&amp;{% endif %}{% if leseversion is defined %}version_id={{ leseversion.id }}{% endif %}">{{ q.titel }} (v{{ q.versionsnummer }}){% if element.quelle_seiten %}, S. {{ element.quelle_seiten }}{% endif %}</a>
-      {% else %}
-        Quelle nicht mehr verfügbar{% if element.quelle_seiten %}, S. {{ element.quelle_seiten }}{% endif %}
-      {% endif %}
-    </p>
+    {% set seiten = quellen_seiten.get(element.id, []) %}
+    {% if q %}
+      <a class="kp-chip" title="{{ q.titel }} (v{{ q.versionsnummer }}){% if element.quelle_seiten %}, S. {{ element.quelle_seiten }}{% endif %}" href="/plaene/{{ plan.id }}/quellen/{{ element.quelle_dokument_id }}?{% if seiten %}seite={{ seiten[0].nr }}&amp;{% endif %}{% if leseversion is defined %}version_id={{ leseversion.id }}{% endif %}">{{ icon("file-text") }} Quelle{% if element.quelle_seiten %} S. {{ element.quelle_seiten }}{% endif %}</a>
+    {% else %}
+      <p>Quelle nicht mehr verfügbar{% if element.quelle_seiten %}, S. {{ element.quelle_seiten }}{% endif %}</p>
+    {% endif %}
+    {% if seiten %}
+      <details>
+        <summary>Quellseiten anzeigen</summary>
+        <div class="kp-quellseiten">
+          {% for seite in seiten %}
+            <a href="{{ seite.seiten_url }}"><img src="{{ seite.thumb_url }}" loading="lazy" alt="Seite {{ seite.nr }}"><span>Seite {{ seite.nr }}</span></a>
+          {% endfor %}
+        </div>
+        <a href="{{ quellen_originale[element.id] }}">Original-PDF auf Seite {{ seiten[0].nr }} öffnen</a>
+      </details>
+    {% endif %}
   {% endif %}
   {% if element.strasse or element.ort or element.plz or element.hausnummer %}
     <p>{{ element.strasse or '' }} {{ element.hausnummer or '' }}, {{ element.plz or '' }} {{ element.ort or '' }}</p>

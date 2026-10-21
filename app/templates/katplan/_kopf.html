@@ -62,7 +62,7 @@
       </div>
       <div class="kp-row">
         <span class="kp-row__label">Zuletzt geprüft</span>
-        <span>{{ plan.zuletzt_geprueft_am.strftime('%d.%m.%Y') if plan.zuletzt_geprueft_am else '-' }} von {{ zuletzt_geprueft_von }}</span>
+        <span>{% if plan.zuletzt_geprueft_am %}{{ plan.zuletzt_geprueft_am.strftime('%d.%m.%Y') }}{% if zuletzt_geprueft_von and zuletzt_geprueft_von != '-' %} von {{ zuletzt_geprueft_von }}{% endif %}{% else %}-{% endif %}</span>
       </div>
       <div class="kp-row">
         <span class="kp-row__label">Überprüfung durch</span>

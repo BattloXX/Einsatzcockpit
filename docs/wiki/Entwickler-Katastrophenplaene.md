@@ -1,7 +1,12 @@
-# Katastrophenpläne (Entwicklung)
+# Einsatz- & Katastrophenpläne (Entwicklung)
 
 Planungsgrundlage: `docs/plans/katastrophenplan-plan.md` (Pakete K1–K13, Umsetzungsstand in §12),
+Ausbau zu Einsatzplänen: `docs/plans/einsatzplaene-ausbau.md` (Pakete E1–E6),
 Pilot-Auswertung: `docs/plans/katastrophenplan-pilot.md`.
+
+Router-Präfix ist `/plaene`; `ui_katplan.alt_router` leitet `/katastrophenplaene/...` mit 308
+weiter (Methode und Query bleiben erhalten). Interne Namen (`katplan_*`, Rollen-Codes,
+MCP-Werkzeuge) bleiben unverändert.
 
 ## Datenmodell und Migrationen
 
@@ -13,6 +18,13 @@ Pilot-Auswertung: `docs/plans/katastrophenplan-pilot.md`.
 | `0297_katplan_anhaenge` | `katplan_anhang` (Foto, Datei, Link, Objektdokument; soft delete) |
 | `0298_katplan_quellen` | `katplan_dokument` (versionierte PDF-Quellen, Gruppe/Versionsnummer), `katplan_dokument_seite` |
 | `0299_katplan_ki_import` | `OrgSettings.katplan_ki_import_enabled`, KI-Status je Quelle, `katplan_import_vorschlag` |
+| `0302_katplan_planart` | `katplan_plan.planart` (`alarm_einsatzplan`, `massnahmenplan`, `katastrophenplan`), Index `(org_id, planart)` |
+| `0303_katplan_pruefzyklus` | `pruef_verantwortlich_user_id`, `pruefintervall_monate`, `zuletzt_geprueft_am/_von_id`, `wiedervorlage_vorab_erinnert_am`, `wiedervorlage_eskaliert_am` |
+| `0304_katplan_akteure` | `katplan_akteur` (Katalog je Org), `akteure_json` an Element und Versionselement |
+
+Neue Migrationen, die Spalten an den Basistabellen ergänzen, in
+`tests/test_katplan_k1a.py::NACHFOLGE_MIGRATIONEN` eintragen; der Test vergleicht den
+Migrationsstand mit dem Modell.
 
 Alle Tabellen sind `TenantScoped` und in `_TENANT_TABLE_NAMES` eingetragen.
 
@@ -43,7 +55,13 @@ Alle Tabellen sind `TenantScoped` und in `_TENANT_TABLE_NAMES` eingetragen.
   `geometrie=null` entfernt Geometrie/Koordinaten (`geo_status="keine"`),
   `quelle_dokument_id=null` entfernt auch nicht explizit übergebene Quellseiten.
 - Inhaltsänderungen an einem freigegebenen Plan setzen `in_ueberarbeitung`
-  (`markiere_ueberarbeitung`).
+  (`markiere_ueberarbeitung`). Ausgenommen sind reine Prüfzyklus-Felder
+  (`wiedervorlage_am`, `pruefintervall_monate`, `pruef_verantwortlich_user_id`).
+- **Inhalts-Hash** der Freigabe: `wiedervorlage_am` und der Akteurskatalog im Kopf
+  (`kopf["akteure"]`, nur Anzeige) zählen nicht; die Zuordnung `akteure_json` je Element schon.
+  Alte Versionen ohne `planart`/`akteure` liest `lade_version` mit Standardwerten.
+- **Planart**: `PLANARTEN` in `katplan_typen` (Label, Kürzel, Icon, Prüfintervall,
+  Kapitel- und Phasenvorlage für die Neuanlage).
 
 Status: `entwurf` → `in_pruefung` → `freigegeben` → `in_ueberarbeitung` → … sowie `archiviert`.
 
@@ -58,7 +76,9 @@ Status: `entwurf` → `in_pruefung` → `freigegeben` → `in_ueberarbeitung` �
 | `katplan_flags`, `katplan_zugriff` | Modulschalter; Rollen (`darf_lesen/bearbeiten/freigeben`, `sieht_vertraulich`) und FastAPI-Dependencies |
 | `katplan_typen` | Typregister `ELEMENT_TYPEN` (Felder, Geometrieart), Vorlagen, `bereinige_daten`, `FELD_LABELS` |
 | `katplan_service` | Kennungen, Suchtext, Kapitelbaum, Sortierung, `lege_element_an`, `lege_abschnitt_an`, `lege_phase_an`, gemeinsame Feldvalidierung `validiere_element_felder`, `validiere_stammdaten` und `stammdaten_aendern` (UI und MCP), Protokoll |
-| `katplan_freigabe_service` | Snapshot, Workflow, Versionsvergleich, Wiedervorlage |
+| `katplan_freigabe_service` | Snapshot, Workflow, Versionsvergleich, Prüfzyklus (`pruefintervall`, `naechste_pruefung`, `ueberpruefung_bestaetigen`, `pruefe_wiedervorlagen` mit Stufen vorab/fällig/Eskalation) |
+| `katplan_akteur_service` | Akteurskatalog je Org (lazy Standardkatalog), `validiere_akteure` für UI und MCP, Anzeige-/Gliederungskontext |
+| `katplan_telefon_service` | Telefon-Assistent: Kontakttreffer über normalisierte Nummer (inkl. `0…` ↔ `+43…`), Entfernen der Nummer aus HTML und `daten_json` |
 | `katplan_link_service`, `katplan_ziel_service` | Live-Ziele mit Tenant- und Modulprüfung, Mutationen mit `quelle="ui"`/`"mcp"`, Telefonregel (`link_ansicht`), Snapshotvergleich „seit Freigabe geändert“ |
 | `katplan_geo_service` | Geometrieprüfung je Typ (über `road_closure_geo_service.validate_geometry`), Bezugspunkt |
 | `katplan_anhang_service` | Upload, Quota, Snapshots, geschützte Auslieferung |
@@ -69,7 +89,7 @@ Status: `entwurf` → `in_pruefung` → `freigegeben` → `in_ueberarbeitung` �
 | `katplan_suche_service` | Kombinierte Suche (Freigabe/Arbeitsstand, LIKE mit Escape, Umkreis), auch für MCP |
 | `katplan_ki_service` | KI-Seitenanalyse, Parser (`_parse_antwort` inkl. `daten`), Kontakt-/Objektabgleich, Review-Übernahme |
 | `katplan_mcp_service` | Rechtegeprüfte Aufbereitung einer Fassung (`fassung_laden`, `element_dict`) |
-| `katplan_qs_service` | Qualitätshinweise im Arbeitsstand einschließlich Telefonnummern trotz Kontaktlink (`freigabe_links` einmal je Plan laden) |
+| `katplan_qs_service` | Qualitätshinweise im Arbeitsstand, u. a. `telefon_im_text` (`telefonnummern_im_element` über Beschreibung und `daten_json`) und `massnahme_ohne_akteur` (`freigabe_links` einmal je Plan laden) |
 | `katplan_pdf_service` | PDF-Offlinefassung über `fassung_laden`; `typdaten_fuer_druck`, WeasyPrint mit xhtml2pdf-Fallback |
 
 ## Oberfläche
@@ -152,6 +172,8 @@ bei Trockenläufen auch das Anhangverzeichnis. Die Quota wird durch DB-Rollback 
   laden und einzeln ändern.
 - **`quelle_dokument_id`** hat bewusst keinen FK, weil Versionen alte Dokument-IDs
   referenzieren; die Prüfung erfolgt im Service.
+- **Erinnerungstests** filtern die Treffer von `pruefe_wiedervorlagen` auf den eigenen Plan:
+  Die xdist-Worker-DB enthält Pläne anderer Tests.
 - **KI-Prüfstatus** wird ohne eigene Spalte aus `katplan_aenderung` abgeleitet: Ein Eintrag
   `geaendert` mit `quelle="ui"` nach der Anlage gilt als Prüfung.
 

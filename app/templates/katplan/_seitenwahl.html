@@ -1,0 +1,10 @@
+<div class="kp-quellseiten" x-data="{ waehlen(nr, ergaenzen) { const feld = $el.closest('form').elements.quelle_seiten; feld.value = ergaenzen &amp;&amp; feld.value ? feld.value + ',' + nr : String(nr); feld.dispatchEvent(new Event('input', { bubbles: true })); } }">
+  {% for seite in seiten %}
+    <div>
+      <button type="button" class="btn btn--ghost" @click="waehlen({{ seite.nr }}, $event.shiftKey)">
+        <img src="{{ seite.thumb_url }}" loading="lazy" alt="Seite {{ seite.nr }}">Seite {{ seite.nr }}
+      </button>
+      <button type="button" class="btn btn--ghost" @click="waehlen({{ seite.nr }}, true)" aria-label="Seite {{ seite.nr }} ergänzen">+</button>
+    </div>
+  {% endfor %}
+</div>

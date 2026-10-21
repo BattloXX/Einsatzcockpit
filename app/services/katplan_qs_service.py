@@ -20,6 +20,7 @@ LABELS = {
     "ohne_geometrie": "ohne Geometrie", "geo_ungeprueft": "Ort ungeprüft",
     "link_ziel_fehlt": "Verknüpfungsziel fehlt", "kontakt_geaendert": "Kontakt seit Freigabe geändert",
     "pruefen_faellig": "Prüfung fällig", "gueltig_abgelaufen": "Gültigkeit abgelaufen",
+    "quelle_fehlt": "Maßnahme ohne Quellenangabe",
     "ki_ungeprueft": "KI ungeprüft", "quelle_neuer": "neuere Quelle verfügbar",
 }
 
@@ -30,7 +31,7 @@ SYMBOLE = {
     "ohne_geometrie": "map-pin", "geo_ungeprueft": "help-circle", "link_ziel_fehlt": "link",
     "kontakt_geaendert": "user",
     "pruefen_faellig": "alarm", "gueltig_abgelaufen": "hourglass", "ki_ungeprueft": "robot",
-    "quelle_neuer": "file-text",
+    "quelle_neuer": "file-text", "quelle_fehlt": "file-text",
 }
 
 
@@ -127,6 +128,10 @@ def element_hinweise(db: Session, plan: KatplanPlan, element: KatplanElement, *,
         KatplanAenderung.quelle == "ui", KatplanAenderung.zeit >= element.erstellt_am,
     ).first():
         codes.append("ki_ungeprueft")
+    if element.typ == "massnahme" and not element.quelle_dokument_id and db.query(KatplanDokument).filter_by(
+        org_id=plan.org_id, plan_id=plan.id, ist_aktuelle_version=True, archiviert=False,
+    ).first():
+        codes.append("quelle_fehlt")
     if element.quelle_dokument_id:
         quelle = db.query(KatplanDokument).filter_by(
             org_id=plan.org_id, plan_id=plan.id, id=element.quelle_dokument_id,

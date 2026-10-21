@@ -720,4 +720,8 @@
     .kp-suche .kp-filter { grid-template-columns: minmax(0, 1fr); }
   }
   @media (max-width: 760px) { .kp-planinhalt .kp-chips { flex-wrap: wrap; } }
+  .kp-quellseiten { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 12px; margin: 12px 0; }
+  .kp-quellseiten img { display: block; width: 100%; max-width: 160px; height: 150px; object-fit: contain; }
+  .kp-quellseiten .btn { white-space: normal; max-width: 100%; }
+  @media (max-width: 760px) { .kp-quellseiten { grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); } }
 </style>

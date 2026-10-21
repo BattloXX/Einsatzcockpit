@@ -40,7 +40,7 @@ Gegliedert wie Menü und Wiki: zuerst die Einsatzführung, dann die Module in de
 | **Echtzeit-Einsatzführung** | WebSocket-basiertes Board für Kräfte, Aufträge, Fahrzeuge und Meldungen; abgeschlossene Einsätze nur noch lesbar |
 | **Atemschutzüberwachung** | Rückzugsdruckberechnung, Zeitmessung und Warnungen |
 | **Lageführung** | Taktische Zeichen, Fahrzeug- und Objekt-Layer, Multi-User-Editing, Replay und Druck |
-| **Zentrale Suche** | Suche über Objekte, Objektdokumente, Katastrophenpläne, Einsätze, Kontakte, Straßensperren, Wasserstellen und GSL-Daten mit Rechteprüfung |
+| **Zentrale Suche** | Suche über Objekte, Objektdokumente, Einsatz- und Katastrophenpläne, Einsätze, Kontakte, Straßensperren, Wasserstellen und GSL-Daten mit Rechteprüfung |
 | **Wetter & lokale Stationen** | Nowcast, Warnungen, Radar und optionale Meteobridge-Anbindung |
 | **Archiv & Berichte** | Audit-Log, Zeitreise und PDF-Exporte |
 
@@ -48,7 +48,7 @@ Gegliedert wie Menü und Wiki: zuerst die Einsatzführung, dann die Module in de
 
 | Gruppe | Module |
 |--------|--------|
-| **Im Einsatz** | **Katastrophenpläne** (freigegebene Fassungen, Karte, PDF-Offlinefassung, KI-Import) · **Nachschlagewerke** (Gefahrgut, Rettungsdatenblätter) · **Kontakte** (Einsatztelefonlisten, Verzeichnisse) · **Straßensperren** (Karte, Nachbarfreigaben, optionale Anfahrtsprüfung) · **Förderstrecke** (Wasserförderung planen) |
+| **Im Einsatz** | **Einsatz- & Katastrophenpläne** (Alarm- und Einsatzpläne, Maßnahmen- und Katastrophenpläne; Akteure, Prüfzyklus, Quellen bis zur PDF-Seite, Karte, PDF-Offlinefassung, KI-Import) · **Nachschlagewerke** (Gefahrgut, Rettungsdatenblätter) · **Kontakte** (Einsatztelefonlisten, Verzeichnisse) · **Straßensperren** (Karte, Nachbarfreigaben, optionale Anfahrtsprüfung) · **Förderstrecke** (Wasserförderung planen) |
 | **Einsatzbegleitend** | **Fahrtenbuch** · **Atemschutz-Geräteprüfung** · **Drohne / UAS** (Dokumentation gemäß RL-UAS LFV Vorarlberg 2024) |
 | **Verwaltung & Planung** | **Objekte** (Einsatzunterlagen, Alarm-Matching, OCR-Suche, externe Objektpflege) · **Probenplan** (Jahresplanung, Appell, Nachbereitung, öffentlicher Kalender) · **Planspiele** (Übungsgenerator für Board und Großschadenslagen) · **Mailing** |
 | **Auswertung** | **Statistik** (Kennzahlen und Diagramme zu den Einsätzen) |
@@ -61,7 +61,7 @@ Gegliedert wie Menü und Wiki: zuerst die Einsatzführung, dann die Module in de
 | **Alarm-Integrationen** | REST-API, LIS/IPR, DIBOS, SMS, E-Mail, Teams sowie Print & Alarm Gateway und Windows-Druckagent |
 | **PWA & mobile Nutzung** | Offline-Betrieb, Push-Benachrichtigungen und QR-Schnellzugriff |
 | **Native Android-App** | Sideload-APK mit zuverlässigem Push, Live-Einsatzstatus, Homescreen-Widgets und Offline-Datenbestand für Objekte & Kontakte |
-| **MCP-Server** | OAuth-gesicherte KI-Anbindung für Einsätze, Großschadenslagen, Objekte, Kontakte, Katastrophenpläne, Straßensperren und Fahrtenbuch |
+| **MCP-Server** | OAuth-gesicherte KI-Anbindung für Einsätze, Großschadenslagen, Objekte, Kontakte, Einsatz- und Katastrophenpläne, Straßensperren und Fahrtenbuch |
 | **KI-Assistent** | Optionale Auftragsvorschläge, Lagebilder und Priorisierung per Anthropic Claude |
 | **Multi-Org-Support** | Mehrere Feuerwehren, gemeinsame Einsätze und strikt isolierte Stammdaten |
 

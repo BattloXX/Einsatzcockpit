@@ -193,7 +193,7 @@
               {% if e.ortsangabe %}<tr><th>Ort</th><td>{{ e.ortsangabe }}</td></tr>{% endif %}
               {% if e.gueltig_bis %}<tr><th>Gültig bis</th><td>{{ e.gueltig_bis[8:10] }}.{{ e.gueltig_bis[5:7] }}.{{ e.gueltig_bis[0:4] }}</td></tr>{% endif %}
               {% if e.pruefen_am %}<tr><th>Prüfen am</th><td>{{ e.pruefen_am[8:10] }}.{{ e.pruefen_am[5:7] }}.{{ e.pruefen_am[0:4] }}</td></tr>{% endif %}
-              {% for q in e.source_references %}<tr><th>Quelle</th><td>{{ q.titel or 'Quelle' }}{% if q.versionsnummer %} (v{{ q.versionsnummer }}){% endif %}{% if q.seiten %}, Seite {{ q.seiten }}{% endif %}</td></tr>{% endfor %}
+              {% for q in e.source_references %}<tr><th>Quelle</th><td>{{ q.titel or 'Quelle' }}{% if q.versionsnummer %} (v{{ q.versionsnummer }}){% endif %}{% if q.seiten %}, Seite {{ q.seiten }}{% endif %} <sup>[{{ q.nummer }}]</sup></td></tr>{% endfor %}
             </table>
           {% endif %}
 
@@ -223,5 +223,13 @@
       {% endfor %}
     </section>
   {% endfor %}
+  {% if quellenverzeichnis %}
+    <section>
+      <h2>Quellenverzeichnis</h2>
+      {% for q in quellenverzeichnis %}
+        <p>[{{ q.nummer }}] {{ q.titel or 'Quelle' }}{% if q.versionsnummer %}, Version {{ q.versionsnummer }}{% endif %}{% if q.herausgeber %}, {{ q.herausgeber }}{% endif %}{% if q.stand %}, Stand {{ q.stand }}{% endif %}{% if q.seiten %}, Seiten {{ q.seiten }}{% endif %}</p>
+      {% endfor %}
+    </section>
+  {% endif %}
 </body>
 </html>
