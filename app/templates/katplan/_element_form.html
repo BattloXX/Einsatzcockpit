@@ -53,7 +53,7 @@
         <legend class="kp-box__title">Quelle</legend>
         <div class="kp-form-grid">
           <label>Dokument
-            <select class="form-control" name="quelle_dokument_id">
+            <select class="form-control" name="quelle_dokument_id" @change="$el.form.querySelector('#kp-seitenwahl').replaceChildren()">
               <option value="">Keine Quelle</option>
               {% for q in quellen_nach_id.values() %}
                 {% if (q.ist_aktuelle_version and not q.archiviert) or form.get('quelle_dokument_id')|string == q.id|string %}
@@ -66,6 +66,10 @@
             <input class="form-control" name="quelle_seiten" maxlength="30" value="{{ form.get('quelle_seiten', '') }}">
           </label>
         </div>
+        <button type="button" class="btn btn--ghost" hx-get="/plaene/{{ plan.id }}/quellen/0/seitenwahl"
+          hx-on::config-request="const id = this.form.elements.quelle_dokument_id.value; if (!id) { event.preventDefault(); return; } event.detail.path = '/plaene/{{ plan.id }}/quellen/' + id + '/seitenwahl';"
+          hx-target="#kp-seitenwahl">Seite wählen</button>
+        <div id="kp-seitenwahl"></div>
         {% if element.quelle_dokument_id %}
           <a href="/plaene/{{ plan.id }}/quellen/{{ element.quelle_dokument_id }}{% if element.quelle_seiten %}?seite={{ element.quelle_seiten.split('-')[0] }}{% endif %}">Quelle anzeigen</a>
         {% endif %}

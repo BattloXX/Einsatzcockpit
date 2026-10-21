@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.permissions import can_view_kontakt_directory
 from app.core.templating import templates
 from app.core.timezones import format_local_datetime
-from app.models.katplan import KATPLAN_GEFAHRENARTEN, KatplanAnhang, KatplanPlan, KatplanVersion
+from app.models.katplan import KATPLAN_GEFAHRENARTEN, KatplanAnhang, KatplanDokument, KatplanPlan, KatplanVersion
 from app.models.user import User
 from app.services.katplan_geo_service import ableite_punkt
 from app.services.katplan_link_service import verstaendigungsliste
@@ -124,6 +124,21 @@ def render_katplan_html(db: Session, user: User, plan: KatplanPlan, *,
                 logger.warning("Anhang-Vorschaubild nicht verfügbar: %s", a["uuid"])
             if len(e["bilder"]) == 2:
                 break
+    quellenverzeichnis: dict[tuple, dict] = {}
+    dokumente = {q["id"]: q for q in kopf.get("quellen", [])}
+    for e in elemente:
+        for q in e["source_references"]:
+            key = (q["dokument_id"], q["seiten"])
+            if key not in quellenverzeichnis:
+                if q["dokument_id"] not in dokumente:
+                    dokument = db.query(KatplanDokument).filter_by(
+                        org_id=plan.org_id, plan_id=plan.id, id=q["dokument_id"],
+                    ).one_or_none()
+                    if dokument:
+                        dokumente[dokument.id] = {"herausgeber": dokument.herausgeber, "stand": dokument.stand}
+                quellenverzeichnis[key] = {**dokumente.get(q["dokument_id"], {}), **q,
+                                           "nummer": len(quellenverzeichnis) + 1}
+            q["nummer"] = quellenverzeichnis[key]["nummer"]
     version = db.query(KatplanVersion).filter_by(org_id=plan.org_id, plan_id=plan.id, id=vid).one_or_none()
     freigeber = db.query(User).filter_by(
         org_id=plan.org_id, id=version.freigegeben_von_id,
@@ -146,6 +161,7 @@ def render_katplan_html(db: Session, user: User, plan: KatplanPlan, *,
             db, kopf, [nach_uuid[e["element_id"]] for e in elemente],
             voll=can_view_kontakt_directory(user), user_rechte={"org_id": plan.org_id},
         ),
+        quellenverzeichnis=list(quellenverzeichnis.values()),
         auszug=katalog[akteur]["bezeichnung"] if akteur is not None else None,
         planart_label=PLANARTEN[kopf.get("planart", "katastrophenplan")].label,
         kopf=kopf, kapitel=kapitel, version=version, entwurf=entwurf, org=user.org,

@@ -4,6 +4,18 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 
 ## Unreleased
 
+- **Einsatz- & Katastrophenpläne** (bisher „Katastrophenpläne“, neue Adresse `/plaene`,
+  alte Links leiten weiter):
+  - Neue **Planart**: Alarm- und Einsatzplan, Maßnahmenplan, Katastrophenplan, mit Kapitel-
+    und Phasenvorlagen (Migration 0302).
+  - **Prüfzyklus**: verantwortliche Person, Intervall je Planart, „Überprüfung bestätigen“
+    ohne neue Version, Erinnerung vorab/fällig und Eskalation an Freigeber (Migration 0303).
+  - **Akteure**: Maßnahmen getrennt für Feuerwehr, Netzbetreiber, Behörde usw., Filter und
+    Gliederung nach Akteur, PDF-Auszug je Akteur, erweiterbarer Katalog (Migration 0304).
+  - **Zentrale Kontakte statt Telefonnummern im Text**: Erkennung in allen Feldern,
+    Assistent zum Verknüpfen oder Anlegen, Verständigungsliste nach Akteur.
+  - **Quellennachweise bis zur PDF-Seite**: Seitenvorschau, Original-PDF auf Seite,
+    Seitenauswahl im Editor, Quellenverzeichnis im PDF, Hinweis „Maßnahme ohne Quelle“.
 - **Suche**: Kontakte in der zentralen Suche (UI und MCP `ecp_suchen`) mit den Rechten
   des Kontaktmoduls: Verzeichnisrollen finden alle aktiven Kontakte (auch per
   Telefonnummer, Anruf-Link im Treffer), übrige Einsatzrollen nur die für den Einsatz

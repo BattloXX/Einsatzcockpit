@@ -52,7 +52,7 @@ Was man während des Einsatzes nachschlägt.
 
 | Modul | Bedienung | Einrichtung | Worum es geht |
 |---|---|---|---|
-| Katastrophenpläne | [Anleitung](Anwender-Katastrophenplaene) | [Admin](Administration-Katastrophenplaene) | Freigegebene Pläne mit Karte, Suche, Quellenvergleich und Offline-PDF |
+| Einsatz- & Katastrophenpläne | [Anleitung](Anwender-Katastrophenplaene) | [Admin](Administration-Katastrophenplaene) | Alarm- und Einsatz-, Maßnahmen- und Katastrophenpläne mit Akteuren, Prüfzyklus, Karte, Suche, Quellen und Offline-PDF |
 | Nachschlagewerke | [Anleitung](Anwender-Nachschlagewerke) | [Admin](Administration-Nachschlagewerke) | Gefahrgut nach UN-Nummer oder Stoff, Rettungsdatenblätter, Evakuierungsradius und Ausbreitung, offlinefähig |
 | Kontakte | [Anleitung](Anwender-Kontaktverwaltung) | [Admin](Administration-Kontaktverwaltung) | Zentrale Kontakte, Zuordnung zu Objekten, Einsatzinfo-Freigabe, Import/Export |
 | Straßensperren | [Anleitung](Anwender-Strassensperren) | [Admin](Administration-Strassensperren) | Sperren auf der Karte pflegen und die Anfahrt im Einsatz prüfen |
@@ -205,7 +205,7 @@ Standardweg, ohne Panel geht die manuelle Debian-Installation, containerisiert D
 | [Einsatz-Feed-Schema](Entwickler-Einsatz-Feed) | Pull-Endpunkte, Felder, ETag |
 | [MCP-Erweiterung](Entwickler-MCP-Erweiterung) | OAuth-Server, Tool-Registry, Tests |
 | [Zentrale Suche](Entwickler-Suche) | Neue Suchquellen anbinden |
-| [Katastrophenpläne](Entwickler-Katastrophenplaene) | Datenmodell, Freigaben, Offline-PDF |
+| [Einsatz- & Katastrophenpläne](Entwickler-Katastrophenplaene) | Datenmodell, Freigaben, Prüfzyklus, Offline-PDF |
 | [Straßensperren](Entwickler-Strassensperren) | Geometrie und Routing-Provider |
 | [Planspiele](Entwickler-Planspiele) | Übungsuhr, Worker, Generator |
 

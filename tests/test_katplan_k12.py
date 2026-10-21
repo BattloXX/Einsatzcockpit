@@ -76,6 +76,9 @@ def test_jeder_qs_code_einzeln(umgebung, code, monkeypatch):
             e.gueltig_bis = HEUTE - timedelta(days=1)
         elif code == "ki_ungeprueft":
             e.herkunft = "ai_suggested"
+        elif code == "quelle_fehlt":
+            e.typ = "massnahme"
+            _dokument(db, plan, 2)
         elif code == "quelle_neuer":
             alt = _dokument(db, plan)
             _dokument(db, plan, 2, alt.id)

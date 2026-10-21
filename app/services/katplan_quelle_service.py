@@ -292,6 +292,23 @@ def parse_seiten(seiten: str, seitenzahl: int | None = None, *, limit: int | Non
     return nummern
 
 
+def quellen_seiten(dokument: KatplanDokument, seiten: str, *,
+                   version_id: int | None = None, limit: int = 30) -> list[dict]:
+    """Validierte Seitenreferenzen mit einheitlichen, versionsgebundenen URLs."""
+    nummern = parse_seiten(seiten, dokument.seitenzahl, limit=limit)
+    suffix = f"?version_id={version_id}" if version_id is not None else ""
+    return [{"nr": nr, "seiten_nr": nr,
+             "thumb_url": f"/plaene/quelle/{dokument.uuid}/seite/{nr}/thumb{suffix}",
+             "seiten_url": f"/plaene/quelle/{dokument.uuid}/seite/{nr}/bild{suffix}",
+             "text_url": f"/plaene/quelle/{dokument.uuid}/seite/{nr}/text{suffix}"}
+            for nr in nummern]
+
+
+def original_url(dokument: KatplanDokument, nr: int, version_id: int | None = None) -> str:
+    suffix = f"?version_id={version_id}" if version_id is not None else ""
+    return f"/plaene/quelle/{dokument.uuid}/original{suffix}#page={nr}"
+
+
 def vergleiche_quellen(db: Session, plan: KatplanPlan, dokument_id: int,
                       mit: int | None = None) -> dict:
     """Vergleicht gleiche Seitennummern; aendert keine Referenzen."""

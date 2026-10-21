@@ -523,11 +523,29 @@ def _lade_version(db: Session, plan: KatplanPlan, vid: int | None = None):
         raise HTTPException(404, "Nicht gefunden") from exc
 
 
+def _quellen_seiten_kontext(db: Session, plan: KatplanPlan, elemente: list,
+                            version_id: int | None = None) -> dict:
+    dokumente = {d.id: d for d in db.query(KatplanDokument).filter_by(
+        org_id=plan.org_id, plan_id=plan.id).all()}
+    seiten, originale = {}, {}
+    for e in elemente:
+        d = dokumente.get(e.quelle_dokument_id)
+        try:
+            seiten[e.id] = quelle_service.quellen_seiten(
+                d, e.quelle_seiten or "", version_id=version_id, limit=4) if d else []
+        except ValueError:
+            seiten[e.id] = []
+        if d and seiten[e.id]:
+            originale[e.id] = quelle_service.original_url(d, seiten[e.id][0]["nr"], version_id)
+    return {"quellen_seiten": seiten, "quellen_originale": originale}
+
+
 def _lesekontext(db: Session, user: User, plan: KatplanPlan, vid: int | None = None) -> dict:
     version, daten, elemente = _lade_version(db, plan, vid)
     elemente = [e for e in elemente if sieht_vertraulich(user) or not e.vertraulich]
     return {"lesekopf": {**daten, "wiedervorlage_am": plan.wiedervorlage_am},
             "plan_daten": daten, "leseversion": version,
+            **_quellen_seiten_kontext(db, plan, elemente, version.id),
             **akteur_service.anzeige_kontext(daten.get("akteure", []), elemente),
             "quellen_nach_id": {q["id"]: q for q in daten.get("quellen", [])},
             **_link_kontext(db, user, plan, elemente, daten),
@@ -841,6 +859,7 @@ def _editor_kontext(db: Session, plan: KatplanPlan) -> dict[str, Any]:
     alle = akteur_service.katalog_daten(db, plan.org_id, {
         s for e in elemente for s in akteur_service.schluessel_lesen(e.akteure_json)})
     return {"akteure": katalog, **akteur_service.anzeige_kontext(alle, elemente),
+            **_quellen_seiten_kontext(db, plan, elemente),
             "qs_hinweise": hinweise, "qs_summen": summen, "qs_symbole": qs_service.SYMBOLE,
             "qs_anzahl": sum(h["anzahl"] for h in summen.values()),
             "baum": abschnitte_baum(db, plan), "typen": ELEMENT_TYPEN, "phasen": phasen,
@@ -1805,6 +1824,15 @@ def _seitentext_als_html(volltext: str | None) -> str:
         if punkte:
             teile.append("<ul>" + "".join(f"<li>{escape(t)}</li>" for t in punkte) + "</ul>")
     return "".join(teile)
+
+
+@router.get("/{plan_id}/quellen/{dok_id}/seitenwahl")
+def quelle_seitenwahl(plan_id: int, dok_id: int, request: Request, db: Session = Depends(get_db),
+                      user: User = Depends(require_katplan_bearbeiten)):
+    plan = _plan(db, plan_id, user)
+    dokument = _quelle(db, plan, dok_id)
+    seiten = quelle_service.quellen_seiten(dokument, f"1-{dokument.seitenzahl}", limit=dokument.seitenzahl)
+    return templates.TemplateResponse(request, "katplan/_seitenwahl.html", {"seiten": seiten})
 
 
 @router.get("/{plan_id}/quellen/{dok_id}")

@@ -9,7 +9,7 @@
 - [Lageführung](Anwender-Lagefuehrung)
 
 **Im Einsatz**
-- [Katastrophenpläne](Anwender-Katastrophenplaene)
+- [Einsatz- & Katastrophenpläne](Anwender-Katastrophenplaene)
 - [Nachschlagewerke](Anwender-Nachschlagewerke)
 - [Kontakte](Anwender-Kontaktverwaltung)
 - [Straßensperren](Anwender-Strassensperren)

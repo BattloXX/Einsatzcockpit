@@ -1,18 +1,22 @@
-# Katastrophenpläne (Administration)
+# Einsatz- & Katastrophenpläne (Administration)
 
-Anwender-Doku: [Katastrophenpläne](Anwender-Katastrophenplaene).
+Anwender-Doku: [Einsatz- & Katastrophenpläne](Anwender-Katastrophenplaene).
+Das Modul hieß bis Oktober 2026 „Katastrophenpläne“; intern (Rollen-Codes `katplan_*`,
+Einstellungen, MCP-Werkzeugnamen) bleiben die Namen gleich.
 
 ## Aktivierung
 
-1. **System** (nur `system_admin`): **Einstellungen → System → Katastrophenpläne**
-   (`katplan_module_enabled`).
-2. **Organisation** (Org-Admin): **Einstellungen → Katastrophenpläne → für diese
-   Organisation aktivieren** (`OrgSettings.katplan_modul_aktiv`).
+1. **System** (nur `system_admin`): **Einstellungen → System → Einsatz- &
+   Katastrophenpläne** (`katplan_module_enabled`).
+2. **Organisation** (Org-Admin): **Einstellungen → Einsatz- & Katastrophenpläne → für
+   diese Organisation aktivieren** (`OrgSettings.katplan_modul_aktiv`).
 
 Erst wenn beide Schalter aktiv sind, erscheinen Menüeintrag und Kachel. Alle Daten
 (Pläne, Quellen, Anhänge, Versionen) sind an die eigene Organisation gebunden.
 
-Datenbank: Migrationen **0294–0299** (`alembic upgrade head`).
+Datenbank: Migrationen **0294–0299** sowie **0302** (Planart), **0303** (Prüfzyklus) und
+**0304** (Akteure) (`alembic upgrade head`). Bestandspläne erhalten die Planart
+„Katastrophenplan“; die Planart lässt sich in den Stammdaten ändern.
 
 ## Rollen und Rechte
 
@@ -20,7 +24,7 @@ Datenbank: Migrationen **0294–0299** (`alembic upgrade head`).
 |-------|--------|
 | `readonly`, `recorder`, `breathing_supervisor`, `incident_leader`, `objekt_verwalter` | Freigegebene Pläne, Versionen, Suche, Karte, Quellen der Freigabe und PDF lesen |
 | `katplan_verwalter` (Planverwalter) | zusätzlich Arbeitsstand bearbeiten: Kapitel, Phasen, Elemente, Verknüpfungen, Anhänge, Quellen, KI-Import-Review; einreichen |
-| `katplan_freigeber` (Planfreigeber) | zusätzlich zurückweisen, freigeben, archivieren, reaktivieren; erhält die Wiedervorlage-Mail |
+| `katplan_freigeber` (Planfreigeber) | zusätzlich zurückweisen, freigeben, archivieren, reaktivieren, Akteurskatalog pflegen, jede Überprüfung bestätigen; erhält Eskalations-Mails |
 | `org_admin`, `admin`, `system_admin` | wie Planfreigeber |
 
 Rollen vergibt der Org-Admin unter **Benutzer → Rollen**
@@ -30,6 +34,20 @@ Rollen vergibt der Org-Admin unter **Benutzer → Rollen**
   freigeben.
 - Offene **Qualitätshinweise** werden angezeigt, sperren die Freigabe aber nicht.
 - Den **Arbeitsstand** sehen nur Planverwalter und Planfreigeber.
+- Die **Überprüfung bestätigen** darf die im Plan eingetragene prüfende Person, auch ohne
+  Freigaberolle, sowie jeder Planfreigeber.
+- **Neue Kontakte** aus dem Telefon-Assistenten anlegen dürfen nur Benutzer mit
+  Kontaktpflege-Recht (`kontakt_verwalter`, `objekt_verwalter`, Admins). Alle anderen
+  können nur bestehende Kontakte verknüpfen.
+
+## Akteure
+
+Unter **Einsatz- & Katastrophenpläne → Akteure verwalten** (`/plaene/akteure`,
+Planfreigeber) wird der Katalog der zuständigen Stellen gepflegt. Beim ersten Aufruf wird
+er mit Feuerwehr, Netzbetreiber, Behörde, Polizei, Rettungsdienst, Gemeinde/Bauhof und
+Sonstige befüllt. Eigene Einträge (z. B. „Wasserverband“) bekommen Bezeichnung, Farbe,
+Icon und Reihenfolge. Verwendete Akteure lassen sich nur deaktivieren, nicht löschen;
+freigegebene Versionen zeigen weiterhin die Bezeichnung zum Freigabezeitpunkt.
 
 ## Vertraulichkeit und Kontaktdaten
 
@@ -87,14 +105,26 @@ Planfreigebern und Admins. Schreibzugriffe ändern ausschließlich den Arbeitsst
 im Planprotokoll mit Herkunft `mcp` geführt. Kein Werkzeug kann einreichen oder freigeben.
 Details: [MCP-Server](Administration-MCP-Server).
 
-## Wiedervorlage
+## Prüfzyklus und Erinnerungen
 
-Unter **Stammdaten** des Plans wird ein Wiedervorlagedatum gesetzt. Einmal täglich prüft der
-Server fällige Pläne. Er schreibt eine Mail an alle aktiven Planfreigeber mit E-Mail-Adresse;
-fehlen solche, geht sie an die Org-Admins. Voraussetzung sind ein aktives Modul und eine
-funktionierende Mail-Konfiguration der Organisation
-([Mail-Versand](Administration-Mail-Versand)). In Liste und Kopf erscheint ein fälliger Termin
-rot. Nach der Überarbeitung den Termin neu setzen.
+Jeder Plan hat eine prüfende Person (ECP-Benutzer), ein Prüfintervall (Standard je Planart:
+AEP 12, Maßnahmen- und Katastrophenplan 24 Monate, je Plan überschreibbar, 1–60 Monate)
+und das Datum der nächsten Überprüfung. Freigabe und **Überprüfung bestätigen** setzen das
+Datum auf heute + Intervall.
+
+Einmal täglich prüft der Server die Termine und schreibt je Stufe genau eine Mail:
+
+| Stufe | Zeitpunkt | Empfänger |
+|---|---|---|
+| Vorab | 14 Tage vor dem Termin | prüfende Person |
+| Fällig | am Termin | prüfende Person |
+| Eskalation | 30 Tage nach dem Termin | Planfreigeber und prüfende Person |
+
+Fehlt die prüfende Person (oder hat sie keine E-Mail-Adresse), gehen Vorab- und
+Fälligkeits-Mails an die Planfreigeber, ersatzweise an die Org-Admins. Voraussetzung sind ein
+aktives Modul und eine funktionierende Mail-Konfiguration der Organisation
+([Mail-Versand](Administration-Mail-Versand)). In Liste, Kopf und Dashboard erscheinen fällige
+Überprüfungen rot.
 
 ## Speicher und Datensicherung
 
