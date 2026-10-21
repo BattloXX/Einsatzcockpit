@@ -6,7 +6,7 @@
   <div><p class="pt-header__eyebrow">Probenplanung · Veröffentlichung</p><h1>Öffentlicher Plan</h1><p class="pt-header__sub">Freigegebene Proben sicher lesbar und abonnierbar machen.</p></div>
 </header>
 {% with active_tab="oeffentlich" %}{% include "probenplanung/_tabs.html" %}{% endwith %}
-<section class="pt-card pt-card--info"><div class="pt-card__head"><span aria-hidden="true">🌐</span><h2>Freigabe</h2></div>
+<section class="pt-card pt-card--info"><div class="pt-card__head"><span aria-hidden="true">{{ icon("world", size="md") }}</span><h2>Freigabe</h2></div>
 <p>Jeder mit diesem Link kann freigegebene Proben ohne Anmeldung lesen und abonnieren. Ort und Information erscheinen nur bei ausdrücklicher Freigabe in der Probe.</p>
 <form method="post" action="/admin/probenplanung/oeffentlich/freigabe" class="pt-inline-form">
 <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
@@ -23,7 +23,7 @@
 <p>Webcal: <a href="{{ webcal_url }}">{{ webcal_url }}</a></p>
 </section>
 {% endif %}
-<section class="pt-card"><div class="pt-card__head"><span aria-hidden="true">🔗</span><h2>Neuen Link erzeugen</h2></div><form method="post" action="/admin/probenplanung/oeffentlich" class="pt-inline-form">
+<section class="pt-card"><div class="pt-card__head"><span aria-hidden="true">{{ icon("link", size="md") }}</span><h2>Neuen Link erzeugen</h2></div><form method="post" action="/admin/probenplanung/oeffentlich" class="pt-inline-form">
 <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
 <div class="form-group"><label for="token-bezeichnung">Bezeichnung</label><input class="form-input" id="token-bezeichnung" name="bezeichnung" maxlength="150"></div>
 <button class="btn btn--primary">Link erzeugen</button>

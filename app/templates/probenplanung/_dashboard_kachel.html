@@ -1,5 +1,5 @@
 <section class="panel" id="probenplanung-dashboard">
-  <div class="panel-hd"><div class="panel-hd__title"><span class="panel-hd__icon">📅</span> Nächste Vollprobe</div></div>
+  <div class="panel-hd"><div class="panel-hd__title"><span class="panel-hd__icon">{{ modul_icon("probenplan", size="lg") }}</span> Nächste Vollprobe</div></div>
   <div class="panel-body">
     {% if termin %}
       <p><strong>{{ termin.thema or termin.titel }}</strong></p>

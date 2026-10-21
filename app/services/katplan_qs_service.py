@@ -23,9 +23,11 @@ LABELS = {
 
 
 SYMBOLE = {
-    "telefon_im_text": "☎",
-    "ohne_geometrie": "📍", "geo_ungeprueft": "❔", "link_ziel_fehlt": "🔗", "kontakt_geaendert": "👤",
-    "pruefen_faellig": "⏰", "gueltig_abgelaufen": "⌛", "ki_ungeprueft": "🤖", "quelle_neuer": "📄",
+    "telefon_im_text": "phone",
+    "ohne_geometrie": "map-pin", "geo_ungeprueft": "help-circle", "link_ziel_fehlt": "link",
+    "kontakt_geaendert": "user",
+    "pruefen_faellig": "alarm", "gueltig_abgelaufen": "hourglass", "ki_ungeprueft": "robot",
+    "quelle_neuer": "file-text",
 }
 
 

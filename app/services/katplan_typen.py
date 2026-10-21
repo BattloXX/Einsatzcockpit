@@ -8,28 +8,32 @@ from typing import Any, Literal
 class TypDef:
     code: str
     label: str
-    icon: str
+    icon: str  # Kompatibles Emoji-Feld fuer bestehende JSON-Kartendaten.
+    icon_name: str
     felder: tuple[str, ...]
     geometrie: Literal["keine", "punkt", "linie_flaeche", "beliebig"]
 
 
 ELEMENT_TYPEN: dict[str, TypDef] = {
-    "info": TypDef("info", "Information / Hinweis", "ℹ️", ("kategorie", "warnhinweis"), "beliebig"),
+    "info": TypDef("info", "Information / Hinweis", "ℹ️", "info-circle", ("kategorie", "warnhinweis"), "beliebig"),
     "massnahme": TypDef(
-        "massnahme", "Maßnahme / Checkliste", "✅", ("schritte", "erwartetes_ergebnis"), "beliebig",
+        "massnahme", "Maßnahme / Checkliste", "✅", "circle-check", ("schritte", "erwartetes_ergebnis"), "beliebig",
     ),
     "kontrollstelle": TypDef(
-        "kontrollstelle", "Kontroll-/Gefahrenstelle", "📍",
+        "kontrollstelle", "Kontroll-/Gefahrenstelle", "📍", "map-pin",
         ("gefahren", "kontrollhinweise", "zugaenglichkeit"), "punkt",
     ),
     "gefahrenbereich": TypDef(
-        "gefahrenbereich", "Gefahrenbereich / Kontrollstrecke", "⚠️", ("raeumliche_hinweise",), "linie_flaeche",
+        "gefahrenbereich", "Gefahrenbereich / Kontrollstrecke", "⚠️", "alert-triangle",
+        ("raeumliche_hinweise",), "linie_flaeche",
     ),
-    "ablauf": TypDef("ablauf", "Ablauf / Entscheidungshilfe", "🔀", ("ausloeser", "bedingungen"), "keine"),
-    "ressource": TypDef("ressource", "Ressourcen-/Materialbedarf", "📦", ("bedarf", "lagerort"), "beliebig"),
-    "medien": TypDef("medien", "Dokument-/Medienverweis", "📄", (), "keine"),
-    "zustaendigkeit": TypDef("zustaendigkeit", "Kontakt-/Zuständigkeitsverweis", "👤", ("ausloeser",), "keine"),
-    "objektverweis": TypDef("objektverweis", "Objektverweis", "🏢", ("hinweis",), "punkt"),
+    "ablauf": TypDef(
+        "ablauf", "Ablauf / Entscheidungshilfe", "🔀", "arrows-shuffle", ("ausloeser", "bedingungen"), "keine",
+    ),
+    "ressource": TypDef("ressource", "Ressourcen-/Materialbedarf", "📦", "package", ("bedarf", "lagerort"), "beliebig"),
+    "medien": TypDef("medien", "Dokument-/Medienverweis", "📄", "file-text", (), "keine"),
+    "zustaendigkeit": TypDef("zustaendigkeit", "Kontakt-/Zuständigkeitsverweis", "👤", "user", ("ausloeser",), "keine"),
+    "objektverweis": TypDef("objektverweis", "Objektverweis", "🏢", "building", ("hinweis",), "punkt"),
 }
 
 

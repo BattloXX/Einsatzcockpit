@@ -5,7 +5,7 @@
     <input type="hidden" name="abschnitt_id" value="{{ abschnitt_id or '' }}">
     <select class="form-control" name="typ" aria-label="Elementtyp">
       {% for code, typ in typen.items() %}
-        <option value="{{ code }}">{{ typ.icon }} {{ typ.label }}</option>
+        <option value="{{ code }}">{{ typ.label }}</option>
       {% endfor %}
     </select>
     <select class="form-control" name="vorlage" aria-label="Elementvorlage">
@@ -22,7 +22,7 @@
   {% for k in knoten %}
     <li {% if k.abschnitt %}data-abschnitt-id="{{ k.abschnitt.id }}"{% endif %}>
       {% if k.abschnitt %}
-        <span class="kp-griff" aria-hidden="true">⋮⋮</span>
+        <span class="kp-griff" aria-hidden="true">{{ icon("grip-vertical", size="sm") }}</span>
         <a class="kp-kapitel" href="/katastrophenplaene/{{ plan.id }}/abschnitte/{{ k.abschnitt.id }}"
           hx-get="/katastrophenplaene/{{ plan.id }}/abschnitte/{{ k.abschnitt.id }}" hx-target="#kp-detail">{{ k.abschnitt.titel }}</a>
       {% else %}
@@ -31,16 +31,16 @@
       <ul class="kp-element-liste" data-abschnitt-id="{{ k.abschnitt.id if k.abschnitt else '' }}">
         {% for e in k.elemente %}
           <li data-element-id="{{ e.id }}" {% if aktiv_element_id|default(0) == e.id %}class="kp-aktiv"{% endif %}>
-            <span class="kp-griff" aria-hidden="true">⋮⋮</span>
+            <span class="kp-griff" aria-hidden="true">{{ icon("grip-vertical", size="sm") }}</span>
             <a href="/katastrophenplaene/{{ plan.id }}/elemente/{{ e.id }}" hx-get="/katastrophenplaene/{{ plan.id }}/elemente/{{ e.id }}"
               hx-target="#kp-detail" {% if aktiv_element_id|default(0) == e.id %}aria-current="true"{% endif %}>
-              {{ typen[e.typ].icon }} <span class="kp-mono">{{ e.kennung }}</span> {{ e.titel }}
+              {{ icon(typen[e.typ].icon_name, size="sm") }} <span class="kp-mono">{{ e.kennung }}</span> {{ e.titel }}
               {% for h in qs_hinweise.get(e.id, [])[:3] %}
-                <span class="kp-badge kp-badge--{{ h.farbe }}" title="{{ qs_hinweise[e.id]|map(attribute='text')|join(' · ') }}" aria-label="{{ h.text }}">{{ qs_symbole.get(h.code, "⚠") if qs_symbole is defined else "⚠" }}</span>
+                <span class="kp-badge kp-badge--{{ h.farbe }}" title="{{ qs_hinweise[e.id]|map(attribute='text')|join(' · ') }}" aria-label="{{ h.text }}">{{ icon(qs_symbole.get(h.code, "alert-triangle") if qs_symbole is defined else "alert-triangle", size="sm") }}</span>
               {% endfor %}
-              {% if element_anhaenge.get(e.id, []) %}<span title="Anhänge">📎 {{ element_anhaenge[e.id]|length }}</span>{% endif %}
-              {% if e.geometry_json %}<span title="Verortet">📍</span>{% endif %}
-              <span class="kp-prio-{{ e.prioritaet }}">P{{ e.prioritaet }}</span>
+              {% if element_anhaenge.get(e.id, []) %}<span title="Anhänge">{{ icon("paperclip", size="sm") }} {{ element_anhaenge[e.id]|length }}</span>{% endif %}
+              {% if e.geometry_json %}<span title="Verortet">{{ icon("map-pin", size="sm") }}</span>{% endif %}
+              <span class="kp-prio-{{ e.prioritaet }}">{{ status_dot({1: "rot", 2: "grau", 3: "grau"}.get(e.prioritaet, "grau"), "Priorität " ~ e.prioritaet) }} P{{ e.prioritaet }}</span>
             </a>
           </li>
         {% endfor %}

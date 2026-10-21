@@ -3,11 +3,11 @@
   {% if leseversion is defined %}data-phasen="{{ element.phasen_json }}"
   x-show="phase === null || JSON.parse($el.dataset.phasen).length === 0 || JSON.parse($el.dataset.phasen).includes(phase)"{% endif %}>
   <div class="kp-box__head">
-    <h3>{{ typen[element.typ].icon }} <span class="kp-mono">{{ element.kennung }}</span> · {{ element.titel }}</h3>
+    <h3>{{ icon(typen[element.typ].icon_name, size="md") }} <span class="kp-mono">{{ element.kennung }}</span> · {{ element.titel }}</h3>
   </div>
   <div class="kp-chips">
     <span>{{ typen[element.typ].label }}</span>
-    <span class="kp-prio-{{ element.prioritaet }}">Priorität {{ element.prioritaet }}</span>
+    <span class="kp-prio-{{ element.prioritaet }}">{{ status_dot({1: "rot", 2: "grau", 3: "grau"}.get(element.prioritaet, "grau"), "Priorität " ~ element.prioritaet) }} Priorität {{ element.prioritaet }}</span>
     {% if can_edit and (element_gsl[element.id].get('gsl_vorlage') if leseversion is defined else element.gsl_vorlage) %}
       <span class="kp-badge">GSL-Vorlage</span>
     {% endif %}

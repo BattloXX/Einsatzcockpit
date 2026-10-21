@@ -1,9 +1,9 @@
 {% if eintrag and eintrag.hat_pdf %}
 <div class="card" style="padding:16px;">
   <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
-    <strong style="flex:1;min-width:160px;">✅ {{ eintrag.anzeige_name }}</strong>
+    <strong style="flex:1;min-width:160px;">{{ icon("circle-check", size="sm") }} {{ eintrag.anzeige_name }}</strong>
     <a href="/nachschlagewerk-cache/rettungskarten/{{ eintrag.id }}/original.pdf" target="_blank"
-       rel="noopener" class="btn btn--primary btn--sm">📄 Rettungsdatenblatt öffnen</a>
+       rel="noopener" class="btn btn--primary btn--sm">{{ icon("file-text", size="xs") }} Rettungsdatenblatt öffnen</a>
   </div>
   <p class="text-muted" style="margin:0;">Gespeichert – ab jetzt auch offline verfügbar.</p>
 </div>
@@ -15,7 +15,7 @@
   {% if links %}
   <div style="display:flex;flex-wrap:wrap;gap:8px;">
     {% for l in links %}
-    <a href="{{ l.url }}" target="_blank" rel="noopener" class="btn btn--secondary btn--sm">🔗 {{ l.label }}</a>
+    <a href="{{ l.url }}" target="_blank" rel="noopener" class="btn btn--secondary btn--sm">{{ icon("external-link", size="xs") }} {{ l.label }}</a>
     {% endfor %}
   </div>
   {% endif %}

@@ -117,13 +117,9 @@
 .gwx-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 999px;
   font-family: var(--g-mono); font-size: .62rem; letter-spacing: .04em; text-transform: uppercase; font-weight: 600;
   border: 1px solid var(--g-line); color: var(--g-muted); }
-.gwx-chip__d { width: 6px; height: 6px; border-radius: 50%; background: var(--g-dim); }
 .gwx-chip--ok { color: var(--g-green); background: rgba(110,231,160,.10); border-color: rgba(110,231,160,.35); }
-.gwx-chip--ok .gwx-chip__d { background: var(--g-green); }
 .gwx-chip--warn { color: var(--g-amber); background: rgba(255,185,95,.10); border-color: rgba(255,185,95,.35); }
-.gwx-chip--warn .gwx-chip__d { background: var(--g-amber); }
 .gwx-chip--err { color: var(--g-red); background: rgba(255,180,171,.10); border-color: rgba(255,180,171,.35); }
-.gwx-chip--err .gwx-chip__d { background: var(--g-red); }
 .gwx-role { font-family: var(--g-mono); font-size: .6rem; letter-spacing: .06em; text-transform: uppercase;
   padding: 2px 7px; border: 1px solid var(--g-line); border-radius: 4px; color: var(--g-dim); }
 
@@ -207,7 +203,7 @@
 .gwx-simulation__card span { display: block; color: var(--g-muted); margin-top: 4px; }
 /* Tabs */
 .gwx-tabs { display: flex; gap: 4px; padding: 0 20px; background: var(--g-s1); border-bottom: 1px solid var(--g-line); }
-.gwx-tabs__item { padding: 10px 14px; color: var(--g-muted); text-decoration: none; border-bottom: 2px solid transparent; font-size: .82rem; font-weight: 600; }
+.gwx-tabs__item { display: inline-flex; align-items: center; gap: 6px; padding: 10px 14px; color: var(--g-muted); text-decoration: none; border-bottom: 2px solid transparent; font-size: .82rem; font-weight: 600; }
 .gwx-tabs__item:hover { color: var(--g-text); background: var(--g-s2); }
 .gwx-tabs__item--active { color: var(--g-primary); border-bottom-color: var(--g-primary-c); }
 </style>

@@ -533,6 +533,7 @@ def _kartenkontext(db: Session, user: User, plan: KatplanPlan, arbeitsstand: boo
         typ = ELEMENT_TYPEN[e["typ"]]
         eigenschaften = {"uuid": uuid, "kennung": e["kennung"], "titel": e["titel"],
                         "typ": e["typ"], "typ_label": typ.label, "typ_icon": typ.icon,
+                        "typ_icon_name": typ.icon_name,
                         "prioritaet": e["prioritaet"], "geo_status": e["geo_status"],
                         "phasen": json.loads(e["phasen_json"]),
                         "url": f"/katastrophenplaene/{plan.id}"

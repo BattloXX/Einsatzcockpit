@@ -30,7 +30,7 @@
   <form method="post" action="/katastrophenplaene/{{ plan.id }}/abschnitte/{{ abschnitt.id }}/verschieben"
     hx-post="/katastrophenplaene/{{ plan.id }}/abschnitte/{{ abschnitt.id }}/verschieben" hx-target="#kp-detail" class="kp-actions">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-    <button type="submit" name="richtung" value="hoch" class="btn" aria-label="Nach oben verschieben">↑</button>
-    <button type="submit" name="richtung" value="runter" class="btn" aria-label="Nach unten verschieben">↓</button>
+    <button type="submit" name="richtung" value="hoch" class="btn" aria-label="Nach oben verschieben">{{ icon("chevron-up", size="sm") }}</button>
+    <button type="submit" name="richtung" value="runter" class="btn" aria-label="Nach unten verschieben">{{ icon("chevron-down", size="sm") }}</button>
   </form>
 </section>

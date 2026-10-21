@@ -270,7 +270,8 @@ class CSRFMiddleware:
                     }
                     if path == "/fahrtenbuch" and fahrtenbuch_token:
                         context["back_url"] = f"/f/{fahrtenbuch_token}"
-                        context["back_label"] = "🚗 Neue Fahrt erfassen"
+                        context["back_label"] = "Neue Fahrt erfassen"
+                        context["back_icon_name"] = "car"
                     resp = templates.TemplateResponse(
                         request, "errors/fehler.html", context, status_code=403,
                     )

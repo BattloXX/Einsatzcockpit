@@ -5,6 +5,7 @@ from html.parser import HTMLParser
 
 import pytest
 
+from app.core.icons import render_icon
 from app.core.tenant import set_tenant_context
 from app.models.katplan import KatplanAbschnitt, KatplanAnhang, KatplanElement, KatplanPlan, KatplanVersion
 from app.models.master import FireDept, OrgSettings, SystemSettings
@@ -50,6 +51,7 @@ def freigeben(client, info):
 
 
 def test_elementformular_upload_version_und_baum(client, umgebung):
+    anhang_badge = f'{render_icon("paperclip", size="sm")} 1'
     login(client, umgebung)
     element = anlegen(client, umgebung, typ="info")
     path = basis(umgebung) + f"/elemente/{element.id}"
@@ -66,15 +68,15 @@ def test_elementformular_upload_version_und_baum(client, umgebung):
     a = objekte(umgebung, KatplanAnhang)[0]
     assert f'/anhang/{a.uuid}/thumb' in response.text
     assert re.search(r'id="kp-element-version" value="1" hx-swap-oob="outerHTML"', response.text)
-    assert "📎 1" in response.text
+    assert anhang_badge in response.text
     element = objekte(umgebung, KatplanElement)[0]
     assert post(client, path, **element_form(element, titel="Gespeichert")).status_code == 200
-    assert "📎 1" in client.get(basis(umgebung) + "/bearbeiten").text
+    assert anhang_badge in client.get(basis(umgebung) + "/bearbeiten").text
     assert post(client, basis(umgebung) + f"/anhaenge/{a.uuid}", beschriftung="Bild neu",
                 urheber="Anna", aufnahme_datum="2026-10-19", vertraulich="true").status_code == 200
     assert "Bild neu" in client.get(path).text
     response = post(client, basis(umgebung) + f"/anhaenge/{a.uuid}/loeschen")
-    assert response.status_code == 200 and "📎 1" not in response.text
+    assert response.status_code == 200 and anhang_badge not in response.text
 
 
 def test_uploadfehler_im_fragment(client, umgebung, monkeypatch):

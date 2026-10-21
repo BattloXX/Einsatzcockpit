@@ -7,7 +7,7 @@
     <a class="appell-back" href="/probenplanung/{{ termin.id }}">← Zur Probe</a>
     <div class="appell-header__title"><p>{{ termin.probeart.name if termin.probeart else termin.typ_label }} · Teilnehmer</p><h1>{{ termin.titel }}</h1></div>
     <div class="appell-stats" aria-live="polite">
-      <span data-stat="anwesend">{{ teilnahme_summary.anwesend }} ✓</span><span data-stat="entschuldigt">{{ teilnahme_summary.entschuldigt }} ✉</span><span data-stat="unentschuldigt">{{ teilnahme_summary.unentschuldigt }} ✗</span><span data-stat="offen">{{ offen }} offen</span>
+      <span data-stat="anwesend">{{ teilnahme_summary.anwesend }} {{ icon("check", size="sm", label="Anwesend") }}</span><span data-stat="entschuldigt">{{ teilnahme_summary.entschuldigt }} {{ icon("mail", size="sm", label="Entschuldigt") }}</span><span data-stat="unentschuldigt">{{ teilnahme_summary.unentschuldigt }} {{ icon("x", size="sm", label="Unentschuldigt") }}</span><span data-stat="offen">{{ offen }} offen</span>
     </div>
     <div class="appell-progress"><div role="progressbar" aria-label="Appellfortschritt" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ prozent }}"><i data-progress style="width:{{ prozent }}%"></i></div><strong data-percent>{{ prozent }} %</strong></div>
     <button class="appell-filter" type="button" aria-pressed="false" data-filter>Nur Offene (<span data-open-count>{{ offen }}</span>)</button>
@@ -20,12 +20,12 @@
   {% for item in teilnehmer %}
     {% set status = item.status %}
     <article class="appell-person appell-person--{{ status }}" data-person data-id="{{ item.member.id }}" data-name="{{ item.member.full_name }}" data-status="{{ status }}" data-position="{{ item.position }}" data-groups="{{ member_gruppen.get(item.member.id, [])|join(',') }}" data-letter="{{ item.member.lastname[:1]|upper }}">
-      <div class="appell-person__head"><span class="appell-current" hidden>Aktueller Aufruf</span><span class="appell-status" data-status-label>{% if status == 'anwesend' %}✓ ANWESEND{% elif status == 'entschuldigt' %}✉ ENTSCHULDIGT{% elif status == 'unentschuldigt' %}✗ UNENTSCHULDIGT{% else %}○ OFFEN{% endif %}</span></div>
+      <div class="appell-person__head"><span class="appell-current" hidden>Aktueller Aufruf</span><span class="appell-status" data-status-label>{% if status == 'anwesend' %}{{ icon("check", size="sm") }} ANWESEND{% elif status == 'entschuldigt' %}{{ icon("mail", size="sm") }} ENTSCHULDIGT{% elif status == 'unentschuldigt' %}{{ icon("x", size="sm") }} UNENTSCHULDIGT{% else %}{{ status_dot("grau", "Offen") }} OFFEN{% endif %}</span></div>
       <h2>{{ item.member.full_name }}</h2><p class="appell-position">Position {{ item.position }} von {{ gesamt }}</p>
       <div class="appell-actions" aria-label="Status für {{ item.member.full_name }}">
-        <button type="button" data-status-action="anwesend" {% if not can_edit %}disabled{% endif %} aria-label="{{ item.member.full_name }} als anwesend markieren">✓ <span>Anwesend</span></button>
-        <button type="button" data-status-action="entschuldigt" {% if not can_edit %}disabled{% endif %} aria-label="{{ item.member.full_name }} als entschuldigt markieren">✉ <span>Entschuldigt</span></button>
-        <button type="button" data-status-action="unentschuldigt" {% if not can_edit %}disabled{% endif %} aria-label="{{ item.member.full_name }} als unentschuldigt markieren">✗ <span>Fehlt</span></button>
+        <button type="button" data-status-action="anwesend" {% if not can_edit %}disabled{% endif %} aria-label="{{ item.member.full_name }} als anwesend markieren">{{ icon("check", size="sm") }} <span>Anwesend</span></button>
+        <button type="button" data-status-action="entschuldigt" {% if not can_edit %}disabled{% endif %} aria-label="{{ item.member.full_name }} als entschuldigt markieren">{{ icon("mail", size="sm") }} <span>Entschuldigt</span></button>
+        <button type="button" data-status-action="unentschuldigt" {% if not can_edit %}disabled{% endif %} aria-label="{{ item.member.full_name }} als unentschuldigt markieren">{{ icon("x", size="sm") }} <span>Fehlt</span></button>
       </div>
     </article>
   {% else %}<p class="appell-empty">Keine aktiven Mitglieder vorhanden.</p>{% endfor %}

@@ -53,8 +53,10 @@ def test_freigabe_vertraulichkeit_geometrien_und_felder(client, kartenplan):
     eigenschaften = daten[punkt.uuid]["properties"]
     assert eigenschaften["phasen"] == [phase.id]
     assert eigenschaften["geo_status"] == "geprueft"
+    assert eigenschaften["typ_icon"] == "📍"
+    assert eigenschaften["typ_icon_name"] == "map-pin"
     assert eigenschaften["url"] == basis(info) + f"#element-{punkt.uuid}"
-    assert set(eigenschaften) == {"uuid", "kennung", "titel", "typ", "typ_label", "typ_icon",
+    assert set(eigenschaften) == {"uuid", "kennung", "titel", "typ", "typ_label", "typ_icon", "typ_icon_name",
                                     "prioritaet", "geo_status", "phasen", "url"}
     with TestingSession() as db:
         set_tenant_context(db, None)

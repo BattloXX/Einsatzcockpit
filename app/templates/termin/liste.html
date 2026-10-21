@@ -44,7 +44,7 @@
           </div>
           <div style="font-size:.8rem;color:var(--text-muted);display:flex;gap:12px;flex-wrap:wrap;">
             <span>{{ inc.started_at|local_datetime }}</span>
-            {% if inc.address_street %}<span>📍 {{ inc.address_street }} {{ inc.address_no or '' }}{% if inc.address_city %}, {{ inc.address_city }}{% endif %}</span>{% endif %}
+            {% if inc.address_street %}<span>{{ icon("map-pin", size="sm") }} {{ inc.address_street }} {{ inc.address_no or '' }}{% if inc.address_city %}, {{ inc.address_city }}{% endif %}</span>{% endif %}
           </div>
         </div>
         <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
@@ -52,7 +52,7 @@
           {% elif inc.status == 'active' %}<span class="badge badge--active">Aktiv</span>
           {% else %}<span class="badge badge--closed">Abgeschlossen</span>{% endif %}
           <span style="font-size:.75rem;color:var(--text-muted);background:var(--surface-high);
-                       padding:2px 8px;border-radius:4px;">👥 Mannschaft</span>
+                       padding:2px 8px;border-radius:4px;">{{ icon("users", size="sm") }} Mannschaft</span>
         </div>
       </div>
     </a>
@@ -60,7 +60,7 @@
   </div>
   {% else %}
   <div style="text-align:center;padding:48px 16px;color:var(--text-muted);">
-    <div style="font-size:2.5rem;margin-bottom:12px;">🚨</div>
+    <div style="font-size:2.5rem;margin-bottom:12px;">{{ icon("urgent", size="lg") }}</div>
     <div>Keine Einsätze vorhanden.</div>
   </div>
   {% endif %}
@@ -85,7 +85,7 @@
           </div>
           <div style="font-size:.8rem;color:var(--text-muted);display:flex;gap:12px;flex-wrap:wrap;">
             <span>{{ inc.started_at|local_datetime }}</span>
-            {% if inc.address_street %}<span>📍 {{ inc.address_street }} {{ inc.address_no or '' }}{% if inc.address_city %}, {{ inc.address_city }}{% endif %}</span>{% endif %}
+            {% if inc.address_street %}<span>{{ icon("map-pin", size="sm") }} {{ inc.address_street }} {{ inc.address_no or '' }}{% if inc.address_city %}, {{ inc.address_city }}{% endif %}</span>{% endif %}
           </div>
         </div>
         <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
@@ -93,7 +93,7 @@
           {% elif inc.status == 'active' %}<span class="badge badge--active">Aktiv</span>
           {% else %}<span class="badge badge--closed">Abgeschlossen</span>{% endif %}
           <span style="font-size:.75rem;color:var(--text-muted);background:var(--surface-high);
-                       padding:2px 8px;border-radius:4px;">👥 Mannschaft</span>
+                       padding:2px 8px;border-radius:4px;">{{ icon("users", size="sm") }} Mannschaft</span>
         </div>
       </div>
     </a>
@@ -109,7 +109,7 @@
           <div style="font-weight:600;font-size:.95rem;margin-bottom:4px;">{{ t.titel }}</div>
           <div style="font-size:.8rem;color:var(--text-muted);display:flex;gap:12px;flex-wrap:wrap;">
             <span>{{ t.beginn|local_datetime }}</span>
-            {% if t.ort %}<span>📍 {{ t.ort }}</span>{% endif %}
+            {% if t.ort %}<span>{{ icon("map-pin", size="sm") }} {{ t.ort }}</span>{% endif %}
           </div>
         </div>
         <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
@@ -126,7 +126,7 @@
   </div>
   {% else %}
   <div style="text-align:center;padding:48px 16px;color:var(--text-muted);">
-    <div style="font-size:2.5rem;margin-bottom:12px;">📅</div>
+    <div style="font-size:2.5rem;margin-bottom:12px;">{{ icon("calendar", size="lg") }}</div>
     <div>Keine Termine oder Einsätze vorhanden.</div>
     {% if can_edit %}
     <div style="margin-top:12px;">
@@ -149,7 +149,7 @@
           <div style="font-weight:600;font-size:.95rem;margin-bottom:4px;">{{ t.titel }}</div>
           <div style="font-size:.8rem;color:var(--text-muted);display:flex;gap:12px;flex-wrap:wrap;">
             <span>{{ t.beginn|local_datetime }}</span>
-            {% if t.ort %}<span>📍 {{ t.ort }}</span>{% endif %}
+            {% if t.ort %}<span>{{ icon("map-pin", size="sm") }} {{ t.ort }}</span>{% endif %}
           </div>
         </div>
         <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
@@ -165,7 +165,7 @@
   </div>
   {% else %}
   <div style="text-align:center;padding:48px 16px;color:var(--text-muted);">
-    <div style="font-size:2.5rem;margin-bottom:12px;">📅</div>
+    <div style="font-size:2.5rem;margin-bottom:12px;">{{ icon("calendar", size="lg") }}</div>
     <div>Keine Termine vorhanden.</div>
     {% if can_edit %}
     <div style="margin-top:12px;">

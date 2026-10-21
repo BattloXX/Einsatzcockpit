@@ -191,12 +191,12 @@
         <img src="/medien/thumb/{{ m.id }}" alt="{{ m.original_filename }}"
              class="gallery-card__thumb" loading="lazy">
         {% else %}
-        <div class="gallery-card__placeholder">🎬<span>Video</span></div>
+        <div class="gallery-card__placeholder">{{ icon("movie", size="lg") }}<span>Video</span></div>
         {% endif %}
-        <span class="gallery-card__play">▶</span>
+        <span class="gallery-card__play">{{ icon("player-play", size="lg") }}</span>
       </div>
       {% elif m.kind == 'pdf' %}
-      <div class="gallery-card__placeholder">📄<span>PDF{% if m.pages %} · {{ m.pages }} S.{% endif %}</span></div>
+      <div class="gallery-card__placeholder">{{ icon("file-text", size="lg") }}<span>PDF{% if m.pages %} · {{ m.pages }} S.{% endif %}</span></div>
       {% endif %}
 
       <div class="gallery-card__info">
@@ -222,7 +222,7 @@
         <div style="margin-top:5px;">
           <a href="/einsatz/{{ inc.id }}" onclick="event.stopPropagation()"
              style="font-size:.7rem;color:var(--primary,#b71921);text-decoration:none;">
-            → Zur Karte im Board
+            {{ icon("chevron-right", size="sm") }} Zur Karte im Board
           </a>
         </div>
         {% endif %}
@@ -231,10 +231,10 @@
       <form method="post" action="/medien/datei/{{ m.id }}/loeschen"
             style="position:absolute;top:6px;right:6px;margin:0;"
             onsubmit="event.stopPropagation();return confirm('Datei unwiderruflich löschen?')">
-        <button aria-label="Schließen" type="submit"
+        <button aria-label="Datei löschen" type="submit"
                 onclick="event.stopPropagation()"
                 style="background:rgba(0,0,0,0.72);color:#fff;border:none;border-radius:50%;width:24px;height:24px;font-size:15px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;padding:0;"
-                title="Datei löschen">×</button>
+                title="Datei löschen">{{ icon("x", size="sm") }}</button>
       </form>
       {% endif %}
     </div>
@@ -244,22 +244,22 @@
   {% if total_pages > 1 %}
   <div class="gallery-pagination">
     {% if page > 1 %}
-    <a href="{{ page_url(page - 1) }}" class="btn btn--ghost btn--sm">← Zurück</a>
+    <a href="{{ page_url(page - 1) }}" class="btn btn--ghost btn--sm">{{ icon("chevron-left", size="xs") }} Zurück</a>
     {% else %}
-    <button class="btn btn--ghost btn--sm" disabled>← Zurück</button>
+    <button class="btn btn--ghost btn--sm" disabled>{{ icon("chevron-left", size="xs") }} Zurück</button>
     {% endif %}
     <span style="font-size:13px; color:var(--text-muted,#9ca3af);">Seite {{ page }} / {{ total_pages }}</span>
     {% if page < total_pages %}
-    <a href="{{ page_url(page + 1) }}" class="btn btn--ghost btn--sm">Weiter →</a>
+    <a href="{{ page_url(page + 1) }}" class="btn btn--ghost btn--sm">Weiter {{ icon("chevron-right", size="xs") }}</a>
     {% else %}
-    <button class="btn btn--ghost btn--sm" disabled>Weiter →</button>
+    <button class="btn btn--ghost btn--sm" disabled>Weiter {{ icon("chevron-right", size="xs") }}</button>
     {% endif %}
   </div>
   {% endif %}
 
   {% else %}
   <div class="gallery-empty">
-    <p style="font-size:40px; margin-bottom:12px;">🖼️</p>
+    <p style="font-size:40px; margin-bottom:12px;">{{ icon("photo", size="lg") }}</p>
     <p>Keine Medien gefunden.</p>
     {% if filter_incident_id or filter_von or filter_bis or filter_kind %}
     <p style="margin-top:8px;"><a href="/medien" class="btn btn--ghost btn--sm">Filter zurücksetzen</a></p>
@@ -269,11 +269,11 @@
 
   {# Lightbox overlay #}
   <div x-show="open" x-cloak class="lightbox-overlay" @click.self="close()">
-    <button @click="close()" class="lightbox-close" aria-label="Schließen">×</button>
+    <button @click="close()" class="lightbox-close" aria-label="Schließen">{{ icon("x", size="sm") }}</button>
     <button @click="prev()" x-show="current > 0"
-            class="lightbox-nav lightbox-nav--prev" aria-label="Zurück">‹</button>
+            class="lightbox-nav lightbox-nav--prev" aria-label="Zurück">{{ icon("chevron-left", size="sm") }}</button>
     <button @click="next()" x-show="current < items.length - 1"
-            class="lightbox-nav lightbox-nav--next" aria-label="Weiter">›</button>
+            class="lightbox-nav lightbox-nav--next" aria-label="Weiter">{{ icon("chevron-right", size="sm") }}</button>
 
     <template x-if="item && item.kind === 'image'">
       <img :src="'/medien/datei/' + item.id" :alt="item.filename" class="lightbox-media">

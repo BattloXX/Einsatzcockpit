@@ -6,6 +6,7 @@
 <meta name="robots" content="noindex,nofollow">
 <title>Maschinisten-Zettel — {{ strecke.name }}</title>
 <style>
+.ecp-icon{display:inline-block;vertical-align:-0.2em;flex-shrink:0}
   :root { color-scheme: light dark; }
   body { font-family: system-ui, -apple-system, Arial, sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; }
   header { background: #b71c1c; color: #fff; padding: 14px 16px; }
@@ -31,14 +32,14 @@
 </head>
 <body>
   <header>
-    <h1>🚰 Maschinisten-Zettel</h1>
+    <h1>{{ modul_icon("foerderstrecke", size="md") }} Maschinisten-Zettel</h1>
     <div class="sub">{{ strecke.name }} · Status: {{ strecke.status_label }}</div>
   </header>
   <div class="wrap">
     <div class="q">Förderziel: {{ '{:,}'.format(q_max_l_min | int).replace(',', '.') }} l/min</div>
     {% if gesamt_laenge_m %}
     <div style="font-size:.9rem;color:#cbd5e1;margin:-8px 0 12px;">Förderleitung gesamt:
-      <strong>{{ '{:,}'.format(gesamt_laenge_m | int).replace(',', '.') }} m</strong> · 💧 Wasserentnahme → 🎯 Verteiler</div>
+      <strong>{{ '{:,}'.format(gesamt_laenge_m | int).replace(',', '.') }} m</strong> · {{ icon("droplet", size="sm") }} Wasserentnahme → {{ icon("target", size="sm") }} Verteiler</div>
     {% endif %}
 
     {% if karte_png %}
@@ -68,14 +69,14 @@
         <div class="wert"><div class="l">Eingangsdruck (an dieser Pumpe)</div><div class="v">{{ sw.p_ein_bar if sw.p_ein_bar is not none else '—' }} bar</div></div>
       </div>
       {% if info.lat and info.lng %}
-      <a class="btn" href="https://www.openstreetmap.org/?mlat={{ info.lat }}&mlon={{ info.lng }}#map=17/{{ info.lat }}/{{ info.lng }}" target="_blank">📍 Standort auf Karte</a>
+      <a class="btn" href="https://www.openstreetmap.org/?mlat={{ info.lat }}&mlon={{ info.lng }}#map=17/{{ info.lat }}/{{ info.lng }}" target="_blank">{{ icon("map-pin", size="sm") }} Standort auf Karte</a>
       {% endif %}
       {% if info.laenge_m %}
-      <div class="nachbar">🧵 Leitung danach: <strong>{{ info.laenge_m | int }} m</strong>{% if info.schlauch %} ({{ info.schlauch }}){% endif %}</div>
+      <div class="nachbar">{{ icon("line", size="sm") }} Leitung danach: <strong>{{ info.laenge_m | int }} m</strong>{% if info.schlauch %} ({{ info.schlauch }}){% endif %}</div>
       {% endif %}
       <div class="nachbar">
-        {% if loop.index0 > 0 %}◀ Vorher: {{ stationswerte[loop.index0-1].name or ('Station ' ~ loop.index0) }}{% endif %}
-        {% if not loop.last %} · Nächste: {{ stationswerte[loop.index0+1].name or ('Station ' ~ (loop.index+1)) }} ▶{% endif %}
+        {% if loop.index0 > 0 %}{{ icon("chevron-left", size="sm") }} Vorher: {{ stationswerte[loop.index0-1].name or ('Station ' ~ loop.index0) }}{% endif %}
+        {% if not loop.last %} · Nächste: {{ stationswerte[loop.index0+1].name or ('Station ' ~ (loop.index+1)) }} {{ icon("chevron-right", size="sm") }}{% endif %}
       </div>
     </div>
     {% endfor %}
@@ -83,7 +84,7 @@
     {% if warnungen %}
     <div class="karte">
       <h2>Hinweise</h2>
-      {% for w in warnungen %}<div class="warn">⚠️ {{ w }}</div>{% endfor %}
+      {% for w in warnungen %}<div class="warn">{{ icon("alert-triangle", size="sm") }} {{ w }}</div>{% endfor %}
     </div>
     {% endif %}
 

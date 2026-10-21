@@ -106,6 +106,9 @@ def test_verleih_neu_form_liefert_einsatzstellen_mit_kontext_sortiert(client, se
 
 
 def test_verleih_karte_zeigt_einsatzstellenname(client, setup_db):
+    from app.core.icons import render_icon
+
+    ort_icon = str(render_icon("map-pin", size="sm"))
     lage_id, org_id = _user_lage("verleih_karte_site", "verleih-karte-site")
     db = SessionLocal()
     set_tenant_context(db, None)
@@ -124,8 +127,8 @@ def test_verleih_karte_zeigt_einsatzstellenname(client, setup_db):
     response = client.get(f"/lage/{lage_id}/verleih")
 
     assert response.status_code == 200
-    assert "📍 Straße überflutet" in response.text
-    assert "📍 Einsatzstelle" not in response.text
+    assert f"{ort_icon} Straße überflutet" in response.text
+    assert f"{ort_icon} Einsatzstelle" not in response.text
 
 
 def test_schnell_einsatzstelle_liefert_auswahl_kontext(client, setup_db):

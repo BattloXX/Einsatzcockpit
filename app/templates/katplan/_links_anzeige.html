@@ -1,9 +1,9 @@
-{% set icons = {'kontakt': '👤', 'kontakt_organisation': '🏛', 'objekt': '🏢', 'fahrzeug': '🚒', 'wasserstelle': '💧'} %}
+{% set icons = {'kontakt': 'user', 'kontakt_organisation': 'building-bank', 'objekt': 'building', 'fahrzeug': 'firetruck', 'wasserstelle': 'droplet'} %}
 {% for gruppe in links|groupby('rolle_label') %}
   <h4 class="kp-box__title">{{ gruppe.grouper }}</h4>
   {% for link in gruppe.list %}
     <div>
-      <span class="kp-badge">{{ icons.get(link.typ, '') }} {{ link.typ|replace('_', ' ') }}</span>
+      <span class="kp-badge">{% if link.typ in icons %}{{ icon(icons[link.typ], size="sm") }}{% endif %} {{ link.typ|replace('_', ' ') }}</span>
       {% if links_bearbeiten %}<span class="kp-badge">{{ link.rolle_label }}</span>{% endif %}
       {% if link.url %}
         <a href="{{ link.url }}">{{ link.titel }}</a>

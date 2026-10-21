@@ -21,8 +21,8 @@
         </div>
         <h1 style="font-size:1.4rem;font-weight:700;margin:0 0 8px;">{{ termin.titel }}</h1>
         <div style="font-size:.85rem;color:var(--text-muted);display:flex;flex-direction:column;gap:3px;">
-          <span>🗓 {{ termin.beginn|local_datetime }}{% if termin.ende %} – {{ termin.ende|local_time }}{% endif %}</span>
-          {% if termin.ort %}<span>📍 {{ termin.ort }}</span>{% endif %}
+          <span>{{ icon("calendar-event", size="sm") }} {{ termin.beginn|local_datetime }}{% if termin.ende %} – {{ termin.ende|local_time }}{% endif %}</span>
+          {% if termin.ort %}<span>{{ icon("map-pin", size="sm") }} {{ termin.ort }}</span>{% endif %}
           {% if termin.beschreibung %}<span style="margin-top:4px;color:var(--text);">{{ termin.beschreibung }}</span>{% endif %}
         </div>
       </div>
@@ -44,7 +44,7 @@
   <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;">
     <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
       <h2 style="font-size:1rem;font-weight:700;margin:0;">
-        👥 Teilnehmer
+        {{ icon("users", size="sm") }} Teilnehmer
         <span id="teilnehmer-count" style="font-size:.8rem;font-weight:400;color:var(--text-muted);">({{ teilnahmen|length }})</span>
       </h2>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -55,11 +55,11 @@
         </button>
         {% endif %}
         <a id="teilnahme-druck-link" href="/teilnahme/{{ termin.typ }}/{{ termin.id }}/druck" target="_blank"
-           class="btn btn--ghost btn--sm">🖨 Drucken</a>
+           class="btn btn--ghost btn--sm">{{ icon("printer", size="xs") }} Drucken</a>
         <button type="button" id="teilnahme-pdf-link" class="btn btn--ghost btn--sm"
-                onclick="ecpgPrint({document_type:'teilnahme', artifact_ref:'{{ termin.typ }}:{{ termin.id }}', title:'Teilnehmerliste drucken', localUrl:'/teilnahme/{{ termin.typ }}/{{ termin.id }}/export.pdf'})">📄 PDF</button>
+                onclick="ecpgPrint({document_type:'teilnahme', artifact_ref:'{{ termin.typ }}:{{ termin.id }}', title:'Teilnehmerliste drucken', localUrl:'/teilnahme/{{ termin.typ }}/{{ termin.id }}/export.pdf'})">{{ icon("file-text", size="xs") }} PDF</button>
         <a id="teilnahme-xlsx-link" href="/teilnahme/{{ termin.typ }}/{{ termin.id }}/export.xlsx"
-           class="btn btn--ghost btn--sm">📊 Excel</a>
+           class="btn btn--ghost btn--sm">{{ icon("chart-bar", size="xs") }} Excel</a>
       </div>
     </div>
 

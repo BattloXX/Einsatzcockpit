@@ -12,8 +12,8 @@
     {% if seite %}
       <h2 class="kp-section-title">Seite {{ seite.seiten_nr }} von {{ dokument.seitenzahl }}</h2>
       <nav class="kp-chips" aria-label="Blättern">
-        {% if seite.seiten_nr > 1 %}<a class="btn" href="?seite={{ seite.seiten_nr - 1 }}{% if version_id %}&amp;version_id={{ version_id }}{% endif %}">← Vorherige Seite</a>{% endif %}
-        {% if seite.seiten_nr < dokument.seitenzahl %}<a class="btn" href="?seite={{ seite.seiten_nr + 1 }}{% if version_id %}&amp;version_id={{ version_id }}{% endif %}">Nächste Seite →</a>{% endif %}
+        {% if seite.seiten_nr > 1 %}<a class="btn" href="?seite={{ seite.seiten_nr - 1 }}{% if version_id %}&amp;version_id={{ version_id }}{% endif %}">{{ icon("chevron-left", size="sm") }} Vorherige Seite</a>{% endif %}
+        {% if seite.seiten_nr < dokument.seitenzahl %}<a class="btn" href="?seite={{ seite.seiten_nr + 1 }}{% if version_id %}&amp;version_id={{ version_id }}{% endif %}">Nächste Seite {{ icon("chevron-right", size="sm") }}</a>{% endif %}
       </nav>
       <form method="get" class="kp-filter">
         {% if version_id %}<input type="hidden" name="version_id" value="{{ version_id }}">{% endif %}

@@ -36,11 +36,11 @@
 <div x-data="foerderPlaner()" @keydown.escape.window="kartenKleiner()">
   <div class="page-header" style="padding:14px 14px 0;">
     <div>
-      <h1>🚰 Förderstrecken-Planer</h1>
+      <h1>{{ modul_icon("foerderstrecke", size="md") }} Förderstrecken-Planer</h1>
       <p class="page-header__sub">Löschwasserförderung über lange Wegstrecke berechnen</p>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <a class="btn btn--secondary" href="/admin/foerderpumpen">🧵 Geräte verwalten</a>
+      <a class="btn btn--secondary" href="/admin/foerderpumpen">{{ icon("tool", size="sm") }} Geräte verwalten</a>
     </div>
   </div>
 
@@ -61,13 +61,13 @@
                 <option :value="e.id" x-text="e.name"></option>
               </template>
             </select>
-            <a class="btn btn--ghost btn--xs" x-show="incidentId" :href="'/einsatz/' + incidentId + '/lagefuehrung'" title="Zur Lageführung des Einsatzes">Einsatz ▸</a>
+            <a class="btn btn--ghost btn--xs" x-show="incidentId" :href="'/einsatz/' + incidentId + '/lagefuehrung'" title="Zur Lageführung des Einsatzes">Einsatz {{ icon("chevron-right", size="xs") }}</a>
           </div>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
           <button class="btn btn--primary btn--sm" @click="berechnen()" :disabled="rechnet">Berechnen</button>
           <button class="btn btn--secondary btn--sm" @click="speichern()">Speichern</button>
-          <button class="btn btn--ghost btn--sm" @click="zuruecksetzen()" title="Strecke/Route zurücksetzen, Pumpen-Konfiguration behalten">↺ Zurücksetzen</button>
+          <button class="btn btn--ghost btn--sm" @click="zuruecksetzen()" title="Strecke/Route zurücksetzen, Pumpen-Konfiguration behalten">{{ icon("rotate", size="xs") }} Zurücksetzen</button>
         </div>
         <p x-show="gespeichertHinweis" x-cloak class="text-muted" style="font-size:.75rem;margin:6px 0 0;color:#16a34a;" x-text="gespeichertHinweis"></p>
       </div>
@@ -151,7 +151,7 @@
 
       <!-- ── Standort-Assistent (Modus B) ── -->
       <div class="fs-panel" style="margin-top:12px;border-left:3px solid #7c3aed;">
-        <h3 style="margin:0 0 6px;font-size:.95rem;">🎯 Pumpenstandorte vorschlagen</h3>
+        <h3 style="margin:0 0 6px;font-size:.95rem;">{{ icon("target", size="md") }} Pumpenstandorte vorschlagen</h3>
         <p class="text-muted" style="font-size:.78rem;margin:0 0 8px;">
           Route zeichnen/ablaufen, Ziel-Fördermenge + Relaispumpe wählen → berechnet, wie viele
           Pumpen wo stehen müssen (Quellpumpe + Schlauch aus Station 1).
@@ -179,30 +179,30 @@
         <button type="button" class="btn btn--sm"
                 :class="routeModus ? 'btn--primary' : 'btn--secondary'"
                 @click="routeToggle()" :disabled="routeLaeuft"
-                x-text="routeLaeuft ? '… Route wird gesucht' : (routeModus ? (_routeStart ? '② Endpunkt tippen' : '① Startpunkt tippen') : '🛣️ Strecke: Start → Ende')"></button>
-        <button type="button" class="btn btn--secondary btn--sm" @click="meinStandort()">📍 Mein Standort</button>
+                >{{ icon("route", size="xs") }}<span x-text="routeLaeuft ? '… Route wird gesucht': (routeModus ? (_routeStart ? '② Endpunkt tippen': '① Startpunkt tippen') : 'Strecke: Start → Ende')"></span></button>
+        <button type="button" class="btn btn--secondary btn--sm" @click="meinStandort()">{{ icon("map-pin", size="xs") }} Mein Standort</button>
         <button type="button" class="btn btn--sm"
                 :class="platziereModus ? 'btn--primary' : 'btn--secondary'"
                 @click="platziereToggle()"
-                x-text="platziereModus ? '✓ Pumpen setzen (aktiv)' : '🚩 Pumpe auf Karte setzen'"></button>
+                ><span x-cloak x-show="platziereModus">{{ icon("check", size="xs") }}</span><span x-cloak x-show="!platziereModus">{{ icon("flag", size="xs") }}</span><span x-text="platziereModus ? 'Pumpen setzen (aktiv)': 'Pumpe auf Karte setzen'"></span></button>
         <button type="button" class="btn btn--sm"
                 :class="aufnahmeLaeuft ? 'btn--primary' : 'btn--secondary'"
                 @click="aufnahmeToggle()"
-                x-text="aufnahmeLaeuft ? '⏹ Aufnahme stoppen' : '⏺ Weg aufzeichnen'"></button>
+                ><span x-cloak x-show="aufnahmeLaeuft">{{ icon("player-stop", size="xs") }}</span><span x-cloak x-show="!aufnahmeLaeuft">{{ icon("player-record", size="xs") }}</span><span x-text="aufnahmeLaeuft ? 'Aufnahme stoppen': 'Weg aufzeichnen'"></span></button>
         <button type="button" class="btn btn--sm"
                 x-show="!routeGezeichnet"
                 :class="zielModus ? 'btn--primary' : 'btn--secondary'"
                 @click="zielToggle()"
-                x-text="zielModus ? '✓ Ziel setzen (aktiv)' : '🎯 Ziel/Verteiler setzen'"></button>
+                ><span x-cloak x-show="zielModus">{{ icon("check", size="xs") }}</span><span x-cloak x-show="!zielModus">{{ icon("target", size="xs") }}</span><span x-text="zielModus ? 'Ziel setzen (aktiv)': 'Ziel/Verteiler setzen'"></span></button>
         <button type="button" class="btn btn--ghost btn--sm" x-show="ziel && !routeGezeichnet" @click="zielEntfernen()">Ziel löschen</button>
         <button type="button" class="btn btn--sm"
                 :class="wasserstellenAn ? 'btn--primary' : 'btn--secondary'"
                 @click="wasserstellenToggle()"
-                x-text="wasserstellenAn ? '✓ Wasserstellen (an)' : '💧 Wasserstellen'"></button>
+                ><span x-cloak x-show="wasserstellenAn">{{ icon("check", size="xs") }}</span><span x-cloak x-show="!wasserstellenAn">{{ icon("droplet", size="xs") }}</span><span x-text="wasserstellenAn ? 'Wasserstellen (an)': 'Wasserstellen'"></span></button>
         <button type="button" class="btn btn--sm"
                 :class="kartenGross ? 'btn--primary' : 'btn--secondary'"
                 @click="kartenGrossToggle()"
-                x-text="kartenGross ? '⤡ Verkleinern' : '⤢ Karte vergrößern'"></button>
+                ><span x-cloak x-show="kartenGross">{{ icon("minimize", size="xs") }}</span><span x-cloak x-show="!kartenGross">{{ icon("maximize", size="xs") }}</span><span x-text="kartenGross ? 'Verkleinern': 'Karte vergrößern'"></span></button>
       </div>
       <p x-show="routeModus" class="text-muted" style="font-size:.78rem;margin:0 0 6px;color:#16a34a;">
         <span x-show="!_routeStart"><strong>① Startpunkt</strong> (Wasserentnahme) auf die Karte tippen.</span>
@@ -231,9 +231,9 @@
       </p>
       <div id="fs-map" class="fs-map"></div>
       <p class="text-muted" style="font-size:.78rem;margin:6px 0 8px;">
-        <strong>Förderleitung zeichnen</strong> (Linien-Werkzeug oben links) oder <strong>⏺ Weg aufzeichnen</strong>
-        (GPS ablaufen). Die gezeichnete Linie <strong>ist</strong> die Förderleitung – 💧 Start (Wasserentnahme)
-        und 🎯 Ende (Verteiler) werden markiert. Pumpen mit <strong>🚩 Pumpe auf Karte setzen</strong> auf die
+        <strong>Förderleitung zeichnen</strong> (Linien-Werkzeug oben links) oder <strong>{{ icon("player-record", size="sm") }} Weg aufzeichnen</strong>
+        (GPS ablaufen). Die gezeichnete Linie <strong>ist</strong> die Förderleitung – {{ icon("droplet", size="sm") }} Start (Wasserentnahme)
+        und {{ icon("target", size="sm") }} Ende (Verteiler) werden markiert. Pumpen mit <strong>{{ icon("flag", size="sm") }} Pumpe auf Karte setzen</strong> auf die
         Leitung setzen; Längen werden entlang der Strecke gemessen.
       </p>
       </div>
@@ -242,7 +242,7 @@
       <template x-if="standortHinweis">
         <div class="fs-panel" x-cloak style="margin-bottom:12px;border-left:4px solid;"
              :style="'border-left-color:' + (standortHinweis.machbar ? '#16a34a' : '#dc2626')">
-          <div style="font-weight:700;" x-text="(standortHinweis.machbar ? '✅ ' : '⚠️ ') + standortHinweis.titel"></div>
+          <div style="font-weight:700;" ><span x-cloak x-show="standortHinweis.machbar">{{ icon("circle-check", size="sm") }}</span><span x-cloak x-show="!standortHinweis.machbar">{{ icon("alert-triangle", size="sm") }}</span><span x-text="standortHinweis.titel"></span></div>
           <template x-if="standortHinweis.zeilen && standortHinweis.zeilen.length">
             <ul style="margin:6px 0 0;padding-left:18px;font-size:.85rem;">
               <template x-for="(z, zi) in standortHinweis.zeilen" :key="zi">
@@ -330,7 +330,7 @@
               <td>{{ status_labels.get(s.status, s.status) }}</td>
               <td style="text-align:right;">
                 <a class="btn btn--ghost btn--xs" href="/foerderstrecke/{{ s.id }}/pdf" target="_blank">PDF</a>
-                <button type="button" class="btn btn--ghost btn--xs" @click="maschinistenLink({{ s.id }})">🔗 Zettel</button>
+                <button type="button" class="btn btn--ghost btn--xs" @click="maschinistenLink({{ s.id }})">{{ icon("link", size="xs") }} Zettel</button>
                 <form method="post" action="/foerderstrecke/{{ s.id }}/loeschen" style="display:inline;" onsubmit="return confirm('Strecke löschen?');">
                   <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
                   <button class="btn btn--ghost btn--xs">Löschen</button>
@@ -557,7 +557,7 @@ function foerderPlaner() {
     async standorteVorschlagen() {
       if (!this.routeCoords || this.routeCoords.length < 2) {
         this.standortHinweis = { machbar: false, titel: "Noch keine Förderleitung",
-          zeilen: ["Zuerst 🛣️ Start→Ende routen oder die Leitung zeichnen/ablaufen."] };
+          zeilen: ["Zuerst Start→Ende routen oder die Leitung zeichnen/ablaufen."] };
         return;
       }
       // benötigte Konfiguration: Quellpumpe (Station 1) + Schlauch + Relaispumpe
@@ -760,7 +760,7 @@ function foerderPlaner() {
       if (this._einsatzMarker) { this.karte.removeLayer(this._einsatzMarker); this._einsatzMarker = null; }
       const einsatz = this.einsaetze.find(e => e.id === this.incidentId);
       if (!einsatz || einsatz.lat == null || einsatz.lng == null) return;
-      const icon = L.divIcon({ html: "<div style=\"font-size:22px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6));\">📍</div>",
+      const icon = L.divIcon({ html: ecpIcon('map-pin', {size: 'md'}),
         className: "", iconSize: null, iconAnchor: [11, 22] });
       this._einsatzMarker = L.marker([einsatz.lat, einsatz.lng], { icon }).addTo(this.karte)
         .bindTooltip("Einsatzort", { direction: "top", offset: [0, -16] });
@@ -780,7 +780,7 @@ function foerderPlaner() {
       if (!this._routeStart) {
         // erster Klick = Startpunkt (Wasserentnahme)
         this._routeStart = { lat: latlng.lat, lng: latlng.lng };
-        const icon = L.divIcon({ html: "<div style=\"font-size:20px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6));\">💧</div>",
+        const icon = L.divIcon({ html: ecpIcon('droplet', {size: 'md'}),
           className: "", iconSize: null, iconAnchor: [10, 20] });
         this._routePickMarker = L.marker([latlng.lat, latlng.lng], { icon }).addTo(this.karte)
           .bindTooltip("Start", { direction: "top", offset: [0, -14] });
@@ -858,7 +858,7 @@ function foerderPlaner() {
       if (this._zielMarker) { this.karte.removeLayer(this._zielMarker); this._zielMarker = null; }
       if (!this.ziel || this.ziel.lat == null) return;
       const self = this;
-      const icon = L.divIcon({ html: "<div style=\"font-size:22px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6));\">🎯</div>",
+      const icon = L.divIcon({ html: ecpIcon('target', {size: 'md'}),
         className: "", iconSize: null, iconAnchor: [11, 22] });
       const m = L.marker([this.ziel.lat, this.ziel.lng], { draggable: true, icon }).addTo(this.karte);
       m.bindTooltip("Ziel/Verteiler", { permanent: false, direction: "top", offset: [0, -16] });
@@ -970,7 +970,7 @@ function foerderPlaner() {
       if (this._startMarker) { this.karte.removeLayer(this._startMarker); this._startMarker = null; }
       if (this.routeGezeichnet && this.routeCoords && this.routeCoords.length >= 2) {
         const a = this.routeCoords[0];
-        const icon = L.divIcon({ html: "<div style=\"font-size:20px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6));\">💧</div>",
+        const icon = L.divIcon({ html: ecpIcon('droplet', {size: 'md'}),
           className: "", iconSize: null, iconAnchor: [10, 20] });
         this._startMarker = L.marker([a[0], a[1]], { icon }).addTo(this.karte)
           .bindTooltip("Start / Wasserentnahme", { direction: "top", offset: [0, -14] });
@@ -1071,10 +1071,10 @@ function foerderPlaner() {
       if (this.routeGezeichnet) {
         const platz = this.stationen.filter(s => s.s_m != null).slice().sort((a, b) => a.s_m - b.s_m);
         if (platz.length) {
-          if (platz[0].s_m > 1) segmente.push({ von: "💧 Start", bis: "P1", laenge: Math.round(platz[0].s_m) });
+          if (platz[0].s_m > 1) segmente.push({ von: "Start", bis: "P1", laenge: Math.round(platz[0].s_m) });
           for (let i = 0; i < platz.length; i++) {
             const endS = (i < platz.length - 1) ? platz[i + 1].s_m : total;
-            segmente.push({ von: "P" + (i + 1), bis: (i < platz.length - 1) ? "P" + (i + 2) : "🎯 Ziel",
+            segmente.push({ von: "P" + (i + 1), bis: (i < platz.length - 1) ? "P" + (i + 2) : "Ziel",
                             laenge: Math.max(0, Math.round(endS - platz[i].s_m)) });
           }
         }
@@ -1173,16 +1173,17 @@ function foerderPlaner() {
               || k.indexOf("bach") >= 0 || k.indexOf("see") >= 0) return "#0d9488";
           return "#0ea5e9";
         };
+        const escapeHtml = value => { const el = document.createElement("span"); el.textContent = String(value); return el.innerHTML; };
         (res.wasserstellen || []).forEach(w => {
           if (w.lat == null || w.lng == null) return;
           const c = farbe(w);
           const m = L.circleMarker([w.lat, w.lng],
             {radius:6, color:"#fff", weight:1.5, fillColor:c, fillOpacity:0.95});
-          let html = "<strong>💧 " + (w.bezeichnung || w.typ_label || "Wasserstelle") + "</strong>";
-          if (w.typ_label) html += "<br>" + w.typ_label;
+          let html = "<strong>" + ecpIcon("droplet", {size: "sm"}) + " " + escapeHtml(w.bezeichnung || w.typ_label || "Wasserstelle") + "</strong>";
+          if (w.typ_label) html += "<br>" + escapeHtml(w.typ_label);
           if (w.ergiebigkeit_l_min) html += "<br>Ergiebigkeit: " + w.ergiebigkeit_l_min.toLocaleString("de-DE") + " l/min";
-          if (w.status_label) html += "<br>Status: " + w.status_label;
-          if (w.hinweis) html += "<br><span style=\"color:#94a3b8;\">" + w.hinweis + "</span>";
+          if (w.status_label) html += "<br>Status: " + escapeHtml(w.status_label);
+          if (w.hinweis) html += "<br><span style=\"color:#94a3b8;\">" + escapeHtml(w.hinweis) + "</span>";
           m.bindPopup(html);
           gruppe.addLayer(m);
         });
