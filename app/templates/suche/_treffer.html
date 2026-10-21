@@ -19,7 +19,7 @@
 {% for t in ergebnis.treffer %}
 <article class="suche-karte">
   <div class="suche-badges">
-    <span class="suche-badge">{{ icon("zoom-in", size="sm") }} {{ typ_labels.get(t.quelle, t.quelle) }}</span>
+    <span class="suche-badge">{{ modul_icon("kontakte", size="sm") if t.quelle == "kontakt" else icon("zoom-in", size="sm") }} {{ typ_labels.get(t.quelle, t.quelle) }}</span>
     {% if t.ist_aktuell == false %}
     <span class="suche-inaktuell">nicht aktuell{% if t.status %} · {{ t.status }}{% endif %}</span>
     {% elif t.status %}<span class="suche-badge">{{ t.status }}</span>{% endif %}
@@ -30,6 +30,13 @@
   {% if t.fundstelle %}<p>{{ t.fundstelle }}</p>{% endif %}
   {% if t.distanz_m is not none %}<p>Entfernung: {{ t.distanz_m }} m</p>{% endif %}
   {% if t.stand %}<p class="suche-stand">Stand: {{ t.stand|local_datetime }}</p>{% endif %}
+  {% if t.quelle == "kontakt" and t.telefone %}
+  <div class="suche-telefone">
+    {% for tel in t.telefone %}
+    <a href="tel:{{ tel.nummer }}">{% if tel.label %}{{ tel.label }}: {% endif %}{{ tel.nummer }}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
   <div class="suche-kartenfuss">
     <div class="suche-badges">
       {% for grund in t.grund %}<span class="suche-badge">{{ 'Volltext' if grund == 'volltext' else grund }}</span>{% endfor %}

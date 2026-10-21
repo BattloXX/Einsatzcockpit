@@ -10,7 +10,7 @@ from app.services.suche.quellen import html_zu_text
 ERLAUBTE_TYPEN = (
     "objekt", "objekt_dokument_seite", "katplan_element", "katplan_seite",
     "gsl_stelle", "gsl_meldung", "gsl_einheit", "einsatz", "einsatz_meldung",
-    "strassensperre", "wasserstelle",
+    "strassensperre", "wasserstelle", "kontakt",
 )
 
 
@@ -66,6 +66,7 @@ class Treffer(BaseModel):
     lng: float | None = None
     distanz_m: int | None = None
     stand: datetime | None = None
+    telefone: list[dict[str, str]] = Field(default_factory=list)
 
     @field_validator("auszug")
     @classmethod

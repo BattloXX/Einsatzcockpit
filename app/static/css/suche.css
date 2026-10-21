@@ -30,3 +30,5 @@
 .suche-tabelle { width: 100%; max-width: 100%; overflow-x: auto; margin: .75rem 0; }
 .suche-tabelle table { width: 100%; min-width: 620px; }
 .suche-tabelle th, .suche-tabelle td { padding: .5rem; text-align: left; }
+.suche-telefone { display: flex; flex-wrap: wrap; gap: .75rem; }
+.suche-telefone a { display: inline-flex; align-items: center; min-height: 44px; padding: .5rem; }

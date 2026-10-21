@@ -15,6 +15,8 @@ from app.core.permissions import ROLES
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.mcp.registry import TOOLS
+from app.models.incident import Incident
+from app.models.kontakt import EinsatzKontakt, Kontakt, KontaktTelefon
 from app.models.major_incident import LageJournalEntry, MajorIncident
 from app.models.master import FireDept, OrgSettings, SystemSettings
 from app.models.objekt import Objekt
@@ -191,7 +193,7 @@ def test_serialisierung_teilweise_zeitzonen_und_auszug(client, umgebung, monkeyp
     zeit = datetime(2026, 10, 20, 12, tzinfo=timezone(timedelta(hours=2)))
     t = Treffer(quelle="objekt", quell_id=str(umgebung["objekt"]), titel="Brand", url="", stand=zeit)
     t.auszug = "a" * 500
-    monkeypatch.setattr("app.mcp.tools.suche.suche", lambda *_: SuchErgebnis(
+    monkeypatch.setattr("app.mcp.tools.suche.suche", lambda *_, **__: SuchErgebnis(
         treffer=[t], teilweise=True, hinweise=["Volltextsuche nicht verfügbar"], modi=["live"], index_stand=zeit,
     ))
     result = _suche(client, umgebung)
@@ -201,3 +203,62 @@ def test_serialisierung_teilweise_zeitzonen_und_auszug(client, umgebung, monkeyp
     assert result["index_stand"] == result["treffer"][0]["stand"] == "2026-10-20T10:00:00Z"
     assert len(result["treffer"][0]["auszug"]) == 300
     assert result["treffer"][0]["url"] == ""
+
+
+@pytest.fixture
+def kontakte(umgebung):
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        flag = db.query(SystemSettings).filter_by(key="kontakte_module_enabled").first()
+        if flag is None:
+            db.add(SystemSettings(key="kontakte_module_enabled", value="true"))
+        else:
+            flag.value = "true"
+        db.query(OrgSettings).filter_by(org_id=umgebung["org_id"]).one().kontakte_module_enabled = True
+        einsatz = Incident(primary_org_id=umgebung["org_id"], alarm_type_code="T1")
+        frei = Kontakt(org_id=umgebung["org_id"], anzeigename="Brand Bereitschaft", funktion="Gasnetz",
+                       telefone=[KontaktTelefon(org_id=umgebung["org_id"], nummer="06641234567",
+                                                verwendung="dienst")])
+        verzeichnis = Kontakt(org_id=umgebung["org_id"], anzeigename="Brand Beauftragter")
+        db.add_all([einsatz, frei, verzeichnis])
+        db.flush()
+        db.add(EinsatzKontakt(org_id=umgebung["org_id"], incident_id=einsatz.id, kontakt_id=frei.id))
+        db.commit()
+        return {"einsatz": einsatz.id, "frei": frei.id, "verzeichnis": verzeichnis.id}
+
+
+def _kontakttreffer(result):
+    assert "__fehler__" not in result, result
+    return {t["quell_id"]: t for t in result["treffer"] if t["quelle"] == "kontakt"}
+
+
+def test_kontakte_mit_verzeichnisrecht_ohne_telefonnummern(client, umgebung, kontakte):
+    _rolle(umgebung, "recorder")
+    result = _suche(client, umgebung, typen=["kontakt"])
+    treffer = _kontakttreffer(result)
+    assert set(treffer) == {str(kontakte["frei"]), str(kontakte["verzeichnis"])}
+    for t in treffer.values():
+        assert "telefone" not in t
+        assert t["details_werkzeug"] == "kontakt_lesen"
+        assert t["details_parameter"] == {"kontakt_id": int(t["quell_id"])}
+    assert "1234567" not in json.dumps(result)
+
+
+def test_kontakte_ohne_verzeichnisrecht(client, umgebung, kontakte):
+    _rolle(umgebung, "breathing_supervisor")
+    assert not _kontakttreffer(_suche(client, umgebung, typen=["kontakt"]))
+    treffer = _kontakttreffer(_suche(client, umgebung, typen=["kontakt"], kontext="einsatz",
+                                     kontext_id=kontakte["einsatz"]))
+    assert set(treffer) == {str(kontakte["frei"])}
+    assert "details_werkzeug" not in treffer[str(kontakte["frei"])]
+    _rolle(umgebung, "readonly")
+    assert not _kontakttreffer(_suche(client, umgebung, q="Bereitschaft", typen=["kontakt"]))
+
+
+def test_kontakte_modul_aus(client, umgebung, kontakte):
+    _rolle(umgebung, "recorder")
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        db.query(OrgSettings).filter_by(org_id=umgebung["org_id"]).one().kontakte_module_enabled = False
+        db.commit()
+    assert not _kontakttreffer(_suche(client, umgebung, typen=["kontakt"]))

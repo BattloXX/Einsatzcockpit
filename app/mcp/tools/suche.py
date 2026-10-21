@@ -7,12 +7,14 @@ from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.core.permissions import ROLES
+from app.core.permissions import KONTAKT_LESE_ROLLEN, ROLES, has_role
 from app.mcp.context import MCPContext, MCPPermissionError, load_live_context
 from app.mcp.registry import TOOLS, register_tool
+from app.mcp.tools.kontakt import kontakte_modul_aktiv
 from app.models.katplan import KatplanDokumentSeite
 from app.models.master import OrgSettings
 from app.models.objekt import ObjektDokumentSeite
+from app.services.kontakt_access_service import EINSATZ_KONTAKT_LESE_ROLLEN, KontaktZugriff
 from app.services.suche.abfrage import suche
 from app.services.suche.synonyme import entferne_telefonnummern
 from app.services.suche.vertrag import SuchAnfrage, Treffer
@@ -31,6 +33,7 @@ _DETAILS = {
     "einsatz_meldung": "einsatz_lesen",
     "strassensperre": "strassensperre_lesen",
     "wasserstelle": "wasserstelle_lesen",
+    "kontakt": "kontakt_lesen",
 }
 _FELDER = (
     "quelle", "quell_id", "titel", "untertitel", "auszug", "fundstelle", "status",
@@ -51,6 +54,17 @@ def _utc(wert: datetime | None) -> str | None:
     if wert.tzinfo is None:
         wert = wert.replace(tzinfo=UTC)
     return wert.astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+
+def _kontakt_zugriff(context: MCPContext, anfrage: SuchAnfrage) -> KontaktZugriff:
+    # MCP-Benutzer sind nie Geraet oder QR-Sitzung (load_live_context); Regeln wie in der Oberflaeche.
+    if anfrage.kontext == "gsl" or not kontakte_modul_aktiv(context.org_id, context.db):
+        return "keiner"
+    if has_role(context.user, *KONTAKT_LESE_ROLLEN):
+        return "voll"
+    if anfrage.kontext == "einsatz" and has_role(context.user, *EINSATZ_KONTAKT_LESE_ROLLEN):
+        return "einsatz"
+    return "keiner"
 
 
 def _details_erlaubt(context: MCPContext, name: str) -> bool:
@@ -92,7 +106,8 @@ def _parameter(context: MCPContext, t: Treffer, anfrage: SuchAnfrage) -> dict[st
     if t.quelle == "einsatz_meldung":
         return {"incident_id": anfrage.kontext_id}
     feld = {"objekt": "objekt_id", "einsatz": "incident_id",
-            "strassensperre": "road_closure_id", "wasserstelle": "wasserstelle_id"}.get(t.quelle)
+            "strassensperre": "road_closure_id", "wasserstelle": "wasserstelle_id",
+            "kontakt": "kontakt_id"}.get(t.quelle)
     return {feld: int(t.quell_id)} if feld else None
 
 
@@ -101,7 +116,8 @@ def _parameter(context: MCPContext, t: Treffer, anfrage: SuchAnfrage) -> dict[st
     description=(
         "Durchsucht Objekte, Objektdokumente, freigegebene Katastrophenplan-Elemente und -Quellseiten "
         "im Index sowie live Einsätze, Straßensperren und Wasserstellen; mit kontext=gsl auch "
-        "Einsatzstellen, Meldungen und Einheiten einer Lage. Liefert Fundstellen ohne Personendaten; "
+        "Einsatzstellen, Meldungen und Einheiten einer Lage. Kontakte nur mit Kontaktverzeichnis-Recht "
+        "(sonst im Einsatzkontext die für den Einsatz freigegebenen), stets ohne Telefonnummern. "
         "Details über die genannten Fach-Werkzeuge."
     ),
     required_roles=_LESE_ROLLEN,
@@ -125,7 +141,8 @@ async def ecp_suchen(
             fehler.setdefault(feld, eintrag["msg"])
         raise ValueError("; ".join(f"{feld}: {meldung}" for feld, meldung in fehler.items())) from None
     try:
-        ergebnis = suche(context.db, context.user, anfrage)
+        ergebnis = suche(context.db, context.user, anfrage,
+                          kontakt_zugriff=_kontakt_zugriff(context, anfrage))
     except PermissionError:
         raise ValueError("Kontext nicht gefunden.") from None
     treffer = []

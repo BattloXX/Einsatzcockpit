@@ -1,13 +1,66 @@
 """Kontaktanzeige im Einsatz: Einsatzrecht, Zuordnung und sparsame Feldausgabe."""
 
+from typing import Literal
+
 from fastapi import HTTPException, Request
 from sqlalchemy.orm import Session
 
-from app.core.permissions import can_access_incident, can_view_kontakt_directory_request
+from app.core.permissions import can_access_incident, can_view_kontakt_directory_request, has_role
 from app.models.incident import Incident, IncidentVehicle
-from app.models.kontakt import Kontakt
-from app.models.objekt import Objekt, ObjektEinsatz
+from app.models.kontakt import EinsatzKontakt, Kontakt
+from app.models.objekt import Objekt, ObjektEinsatz, ObjektKontakt
 from app.models.user import DeviceToken
+from app.services.suche.vertrag import SuchAnfrage
+
+KontaktZugriff = Literal["voll", "einsatz", "keiner"]
+EINSATZ_KONTAKT_LESE_ROLLEN = (
+    "readonly", "recorder", "breathing_supervisor", "incident_leader", "kontakt_verwalter", "objekt_verwalter",
+)
+
+
+def kontakt_zugriff_fuer_request(db: Session, request: Request, anfrage: SuchAnfrage) -> KontaktZugriff:
+    if (
+        not getattr(request.state, "kontakte_enabled", False)
+        or getattr(request.state, "is_device", False)
+        or getattr(request.state, "qr_lage_id", None) is not None
+        or anfrage.kontext == "gsl"
+    ):
+        return "keiner"
+    if can_view_kontakt_directory_request(request):
+        return "voll"
+    qr_incident_id = getattr(request.state, "qr_incident_id", None)
+    if (
+        anfrage.kontext == "einsatz"
+        and has_role(getattr(request.state, "user", None), *EINSATZ_KONTAKT_LESE_ROLLEN)
+        and (qr_incident_id is None or qr_incident_id == anfrage.kontext_id)
+    ):
+        return "einsatz"
+    return "keiner"
+
+
+def einsatz_kontakte(db: Session, incident: Incident) -> list[tuple[Kontakt, str | None]]:
+    """Aktive, explizit oder ueber bestaetigte Objekte freigegebene Kontakte."""
+    kontakte: dict[int, tuple[Kontakt, str | None]] = {}
+    for kontakt, hinweis in db.query(Kontakt, EinsatzKontakt.hinweis).join(
+        EinsatzKontakt, EinsatzKontakt.kontakt_id == Kontakt.id,
+    ).filter(
+        EinsatzKontakt.incident_id == incident.id,
+        Kontakt.org_id == EinsatzKontakt.org_id,
+        Kontakt.aktiv.is_(True), Kontakt.archiviert.is_(False),
+    ).all():
+        kontakte[kontakt.id] = (kontakt, hinweis)
+    for kontakt, name in db.query(Kontakt, Objekt.name).join(
+        ObjektKontakt, ObjektKontakt.kontakt_id == Kontakt.id,
+    ).join(Objekt, Objekt.id == ObjektKontakt.objekt_id).join(
+        ObjektEinsatz, ObjektEinsatz.objekt_id == Objekt.id,
+    ).filter(
+        ObjektEinsatz.incident_id == incident.id, ObjektEinsatz.status == "bestaetigt",
+        Objekt.org_id == ObjektEinsatz.org_id, ObjektKontakt.org_id == Objekt.org_id,
+        Kontakt.org_id == Objekt.org_id, ObjektKontakt.einsatz_sichtbar.is_(True),
+        Kontakt.aktiv.is_(True), Kontakt.archiviert.is_(False),
+    ).all():
+        kontakte.setdefault(kontakt.id, (kontakt, name))
+    return list(kontakte.values())
 
 
 def incident_for_contacts(db: Session, request: Request, incident_id: int) -> Incident:
