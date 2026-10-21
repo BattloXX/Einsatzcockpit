@@ -87,10 +87,18 @@ def _kapitelpfade(abschnitte: list[dict]) -> list[str]:
 
 
 def render_katplan_html(db: Session, user: User, plan: KatplanPlan, *,
-                       version_id: int | None = None, entwurf: bool = False) -> str:
+                       version_id: int | None = None, entwurf: bool = False,
+                       gliederung: str = "kapitel", akteur: str | None = None) -> str:
     kopf, elemente, vid, _ = fassung_laden(
         db, user, plan, "arbeitsstand" if entwurf else "freigegeben", version_id,
     )
+    if gliederung not in ("kapitel", "akteur"):
+        raise ValueError("Unbekannte Gliederung.")
+    katalog = {a["schluessel"]: a for a in kopf.get("akteure", [])}
+    if akteur is not None:
+        if akteur not in katalog:
+            raise ValueError(f"Unbekannter Akteur: {akteur}")
+        elemente = [e for e in elemente if any(a["schluessel"] == akteur for a in e["akteure"])]
     _, roh, _ = _rohdaten(db, plan, entwurf, vid)
     nach_uuid = {e["element_uuid"]: e for e in roh}
     for e in elemente:
@@ -126,7 +134,13 @@ def render_katplan_html(db: Session, user: User, plan: KatplanPlan, *,
     reihenfolge = {pfad: i for i, pfad in enumerate(pfade)}
     kapitel = {name: gruppen[name] for name in sorted(
         gruppen, key=lambda n: (n == "Ohne Kapitel", reihenfolge.get(n, len(reihenfolge)), n))}
+    if gliederung == "akteur":
+        kapitel = {a["bezeichnung"]: [e for e in elemente if any(
+            ea["schluessel"] == a["schluessel"] for ea in e["akteure"])] for a in katalog.values()}
+        kapitel["Ohne Akteur"] = [e for e in elemente if not e["akteure"]]
+        kapitel = {name: eintraege for name, eintraege in kapitel.items() if eintraege}
     return templates.env.get_template("pdf/katplan.html").render(
+        auszug=katalog[akteur]["bezeichnung"] if akteur is not None else None,
         planart_label=PLANARTEN[kopf.get("planart", "katastrophenplan")].label,
         kopf=kopf, kapitel=kapitel, version=version, entwurf=entwurf, org=user.org,
         freigeber=freigeber.display_name if freigeber else "Gelöschter Benutzer",
@@ -138,8 +152,10 @@ def render_katplan_html(db: Session, user: User, plan: KatplanPlan, *,
 
 
 def render_katplan_pdf(db: Session, user: User, plan: KatplanPlan, *,
-                      version_id: int | None = None, entwurf: bool = False) -> bytes:
-    html = render_katplan_html(db, user, plan, version_id=version_id, entwurf=entwurf)
+                      version_id: int | None = None, entwurf: bool = False,
+                      gliederung: str = "kapitel", akteur: str | None = None) -> bytes:
+    html = render_katplan_html(db, user, plan, version_id=version_id, entwurf=entwurf,
+                               gliederung=gliederung, akteur=akteur)
     try:
         from weasyprint import HTML
         return HTML(string=html).write_pdf()

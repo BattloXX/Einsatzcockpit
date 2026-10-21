@@ -1,7 +1,8 @@
 {% set daten = element_daten[element.id] %}
-<article id="element-{{ element.element_uuid if leseversion is defined else element.uuid }}" class="kp-box kp-box--prio-{{ element.prioritaet }}" data-element-id="{{ element.id }}"
-  {% if leseversion is defined %}data-phasen="{{ element.phasen_json }}"
-  x-show="phase === null || JSON.parse($el.dataset.phasen).length === 0 || JSON.parse($el.dataset.phasen).includes(phase)"{% endif %}>
+<article id="{% if akteur_gruppe is defined %}akteur-{{ akteur_gruppe }}-{% endif %}element-{{ element.element_uuid if leseversion is defined else element.uuid }}" class="kp-box kp-box--prio-{{ element.prioritaet }}" data-element-id="{{ element.id }}"
+  data-akteure="{{ (element.akteure_json or '[]')|forceescape }}"
+  data-phasen="{{ (element.phasen_json if leseversion is defined else element_phasen[element.id]|map(attribute='id')|list|tojson)|forceescape }}"
+  {% if akteur_filter_aktiv|default(false) %}x-show="(akteur === null || JSON.parse($el.dataset.akteure).includes(akteur)) &amp;&amp; (phase === null || JSON.parse($el.dataset.phasen).length === 0 || JSON.parse($el.dataset.phasen).includes(phase))"{% endif %}>
   <div class="kp-box__head">
     <h3>{{ icon(typen[element.typ].icon_name, size="md") }} <span class="kp-mono">{{ element.kennung }}</span> · {{ element.titel }}</h3>
   </div>
@@ -21,6 +22,9 @@
     {% endif %}
     {% for phase in element_phasen[element.id] %}
       <span class="kp-chip kp-farbe-{{ phase.farbe }}">{{ phase.name }}</span>
+    {% endfor %}
+    {% for a in element_akteure.get(element.id, []) %}
+      <span class="kp-chip kp-farbe-{{ a.farbe }}">{% if a.icon_name %}{{ icon(a.icon_name) }}{% endif %}{{ a.bezeichnung }}</span>
     {% endfor %}
     {% for tag in element_tags[element.id] %}
       <span class="kp-chip">{{ tag }}</span>

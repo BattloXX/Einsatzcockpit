@@ -134,6 +134,10 @@ def erstelle_snapshot(db: Session, plan: KatplanPlan, *, flush: bool = True) -> 
             KatplanElementPhase.phase_id.in_(phasen_ids),
         ).order_by(KatplanElementPhase.phase_id).all()])
         elemente.append(daten)
+    from app.services.katplan_akteur_service import katalog_daten, schluessel_lesen
+
+    verwendet = {s for e in elemente for s in schluessel_lesen(e.get("akteure_json"))}
+    kopf["akteure"] = katalog_daten(db, plan.org_id, verwendet)
     return kopf, elemente
 
 
@@ -178,6 +182,8 @@ def freigeben(db: Session, plan: KatplanPlan, user: User,
     # Nur die Verknuepfungsstruktur ist Planinhalt. Live-Stammdaten im historischen
     # Snapshot duerfen allein keine erneute Freigabe ermoeglichen.
     hash_daten[0].pop("wiedervorlage_am", None)
+    # Katalogdaten dienen nur der Anzeige; die Zuordnung steckt in akteure_json je Element.
+    hash_daten[0].pop("akteure", None)
     hash_daten[0]["links"] = _link_struktur(hash_daten[0].get("links", []))
     hash_daten[0]["anhaenge"] = [{f: a.get(f) for f in HASH_FELDER}
                                  for a in hash_daten[0]["anhaenge"]]
@@ -224,6 +230,7 @@ def lade_version(db: Session, plan: KatplanPlan, version_id: int | None = None
     ).all()
     kopf = json.loads(version.plan_json)
     kopf.setdefault("planart", "katastrophenplan")
+    kopf.setdefault("akteure", [])
     return version, kopf, elemente
 
 

@@ -1,4 +1,5 @@
-<div class="kp-planinhalt" x-data="{ phase: null }">
+{% set akteur_filter_aktiv = true %}
+<div class="kp-planinhalt" x-data="{ phase: null, akteur: null, gliederung: 'kapitel' }">
   <div class="kp-chips" aria-label="Phasenfilter">
     <button class="btn btn--ghost btn--sm" type="button" @click="phase = null" :aria-pressed="phase === null">Alle</button>
     {% for phase in plan_daten.get('phasen', []) %}
@@ -6,6 +7,7 @@
         @click="phase = {{ phase.id }}" :aria-pressed="phase === {{ phase.id }}">{{ phase.name }}</button>
     {% endfor %}
   </div>
+  {% include "katplan/_akteur_filter.html" %}
   {% macro verzeichnis(knoten) %}
     <ul>
       {% for k in knoten if k.abschnitt %}
@@ -16,6 +18,7 @@
       {% endfor %}
     </ul>
   {% endmacro %}
+  <div x-show="gliederung === 'kapitel'">
   <details class="kp-inhalt" open>
     <summary>Inhaltsverzeichnis</summary>
     <nav aria-label="Inhaltsverzeichnis">{{ verzeichnis(version_baum) }}</nav>
@@ -39,4 +42,6 @@
     {% endfor %}
   {% endmacro %}
   {{ inhalt(version_baum) }}
+  </div>
+  {% include "katplan/_nach_akteur.html" %}
 </div>

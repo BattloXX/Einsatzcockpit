@@ -1,0 +1,14 @@
+{% if vorkommende_akteure %}
+  <div class="kp-chips" aria-label="Akteurfilter">
+    <span>Akteur:</span>
+    <button class="btn btn--ghost btn--sm" type="button" @click="akteur = null" :aria-pressed="akteur === null">Alle</button>
+    {% for a in vorkommende_akteure %}
+      <button class="btn kp-chip kp-farbe-{{ a.farbe }}" type="button" @click='akteur = {{ a.schluessel|tojson }}' :aria-pressed='akteur === {{ a.schluessel|tojson }}'>{{ a.bezeichnung }}</button>
+    {% endfor %}
+  </div>
+  <div class="kp-chips" aria-label="Gliederung">
+    <span>Gliederung:</span>
+    <button class="btn btn--ghost btn--sm" type="button" @click="gliederung = 'kapitel'" :aria-pressed="gliederung === 'kapitel'">Kapitel</button>
+    <button class="btn btn--ghost btn--sm" type="button" @click="gliederung = 'akteur'" :aria-pressed="gliederung === 'akteur'">Akteur</button>
+  </div>
+{% endif %}

@@ -1,0 +1,12 @@
+<div x-show="gliederung === 'akteur'" x-cloak>
+  {% for gruppe in nach_akteur if gruppe.elemente %}
+    <section {% if gruppe.akteur %}x-show='akteur === null || akteur === {{ gruppe.akteur.schluessel|tojson }}'{% else %}x-show="akteur === null"{% endif %}>
+      <h2>{{ gruppe.akteur.bezeichnung if gruppe.akteur else 'Ohne Akteur' }}</h2>
+      {% for element in gruppe.elemente %}
+        {% with akteur_gruppe = gruppe.akteur.schluessel if gruppe.akteur else 'ohne' %}
+          {% include "katplan/_element_anzeige.html" %}
+        {% endwith %}
+      {% endfor %}
+    </section>
+  {% endfor %}
+</div>

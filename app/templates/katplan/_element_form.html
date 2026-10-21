@@ -37,6 +37,17 @@
         </label>
       </div>
       <fieldset>
+        <legend class="kp-box__title">Zuständig (Akteure)</legend>
+        <div class="kp-chips">
+          {% for a in akteure %}
+            <label class="kp-chip kp-check kp-farbe-{{ a.farbe }}">
+              <input type="checkbox" name="akteure" value="{{ a.schluessel }}" {% if a.schluessel in form.get('akteure', []) %}checked{% endif %}>
+              {% if a.icon_name %}{{ icon(a.icon_name) }}{% endif %}{{ a.bezeichnung }}
+            </label>
+          {% endfor %}
+        </div>
+      </fieldset>
+      <fieldset>
         <legend class="kp-box__title">Quelle</legend>
         <div class="kp-form-grid">
           <label>Dokument

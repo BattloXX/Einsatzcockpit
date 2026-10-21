@@ -188,6 +188,9 @@ def element_dict(db: Session, user: User, plan: KatplanPlan, e: dict, kopf: dict
         "daten": bereinige_daten(e["typ"], json.loads(e.get("daten_json") or "{}")),
         "priority": e.get("prioritaet"), "tags": json.loads(e.get("tags_json") or "[]"),
         "phases": [p["name"] for p in kopf.get("phasen", []) if p["id"] in json.loads(e["phasen_json"])],
+        "akteure": [{"schluessel": s, "bezeichnung": next((a["bezeichnung"] for a in kopf.get("akteure", [])
+                                                              if a["schluessel"] == s), s)}
+                    for s in json.loads(e.get("akteure_json") or "[]")],
         "chapter": " > ".join(pfad) or None,
         "address": _adresstext(e),
         "address_parts": {k: e.get(k) or "" for k in ("strasse", "hausnummer", "plz", "ort")},

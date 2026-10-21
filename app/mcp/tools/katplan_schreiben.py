@@ -25,6 +25,7 @@ from app.models.katplan import (
 )
 from app.services import katplan_mcp_service as lesedaten
 from app.services import katplan_service as service
+from app.services.katplan_akteur_service import validiere_akteure
 from app.services.katplan_anhang_service import anhang_hochladen
 from app.services.katplan_flags import katplan_effective_enabled
 from app.services.katplan_ki_service import _abgleichen, _parse_antwort, text_zu_html
@@ -35,7 +36,7 @@ from app.services.mcp_upload_service import effektives_limit, erstelle_upload, l
 
 _FELDER = {
     "titel", "beschreibung", "prioritaet", "daten", "tags", "adresse", "geometrie", "geometrie_von", "kapitel_id",
-    "phasen", "quelle_dokument_id", "quelle_seiten", "gueltig_bis", "pruefen_am",
+    "akteure", "phasen", "quelle_dokument_id", "quelle_seiten", "gueltig_bis", "pruefen_am",
 }
 _HINWEIS = "Nur Arbeitsstand: Ein Bearbeiter muss den Entwurf prüfen und ein Mensch muss ihn freigeben."
 
@@ -181,7 +182,7 @@ async def _verorten(context: MCPContext, typ: str, adresse: dict[str, str]) -> t
 
 def _werte(typ: str, *, titel: str, beschreibung: str, prioritaet: int, daten: dict,
            tags: list[str], adresse: dict, geometrie: dict | None,
-           verworfen: list[str] | None = None) -> dict:
+           verworfen: list[str] | None = None, akteure: list[str] | None = None) -> dict:
     if not isinstance(titel, str) or not isinstance(beschreibung, str):
         raise ValueError("Titel und Beschreibung müssen Text sein.")
     if type(prioritaet) is not int:
@@ -192,7 +193,7 @@ def _werte(typ: str, *, titel: str, beschreibung: str, prioritaet: int, daten: d
     if geometrie is not None and not isinstance(geometrie, dict):
         raise ValueError("Geometrie muss ein GeoJSON-Objekt sein.")
     return service.validiere_element_felder(
-        typ, titel=titel, prioritaet=prioritaet, daten=daten, verworfen=verworfen,
+        typ, titel=titel, prioritaet=prioritaet, daten=daten, verworfen=verworfen, akteure=akteure,
         tags=[t.strip() for t in tags if t.strip()], adresse=adresse,
         beschreibung_html=text_zu_html(beschreibung),
         geometrie=json.dumps(geometrie) if geometrie is not None else None,
@@ -205,6 +206,7 @@ def _feldwerte(context: MCPContext, element: KatplanElement) -> dict:
         "typ": element.typ, "titel": element.titel, "beschreibung": element.beschreibung_html,
         "prioritaet": element.prioritaet, "daten": json.loads(element.daten_json or "{}"),
         "tags": json.loads(element.tags_json or "[]"),
+        "akteure": json.loads(element.akteure_json or "[]"),
         "adresse": {k: getattr(element, k) or "" for k in _ADRESS_FELDER},
         "geometrie": (element.geometry_json, element.lat, element.lng, element.geo_status),
         "geometrie_von": (element.geometry_json, element.lat, element.lng, element.geo_status),
@@ -262,6 +264,7 @@ def _element_geaendert(context: MCPContext, plan: KatplanPlan, element: KatplanE
 
 
 _SCHREIB_HINWEIS = (
+    " akteure: Liste von Schlüsseln, Katalog über katplan_lesen; null leert die Zuordnung. "
     " Zahlen in daten-Textfeldern und Listen werden zu Text (500 wird zu \"500\"); bool ist kein Text. "
     "quelle_dokument_id verweist auf die Quelle, quelle_seiten enthält Seiten wie 3-4,7. "
     "quelle_dokument_id=null entfernt auch Seiten, sofern quelle_seiten nicht übergeben wird. "
@@ -287,7 +290,7 @@ async def katplan_element_entwurf_anlegen(
     prioritaet: int = 2, daten: dict | None = None, tags: list[str] | None = None,
     adresse: dict | None = None, geometrie: dict | None = None,
     quelle_dokument_id: int | None = None, quelle_seiten: str | None = None, verorten: bool = False,
-    streng: bool = False, pruefen: bool = False,
+    streng: bool = False, pruefen: bool = False, akteure: list[str] | None = None,
 ) -> dict[str, object]:
     plan = _plan(context, plan_id)
     from app.services.katplan_typen import ELEMENT_TYPEN
@@ -301,7 +304,8 @@ async def katplan_element_entwurf_anlegen(
         geometrie, adresse_werte, verortung = await _verorten(context, typ, adresse_werte)
     werte = _werte(typ, titel=titel, beschreibung=beschreibung, prioritaet=prioritaet,
                    daten=daten if daten is not None else {}, tags=tags if tags is not None else [],
-                   adresse=adresse_werte, geometrie=geometrie, verworfen=verworfen)
+                   adresse=adresse_werte, geometrie=geometrie, verworfen=verworfen,
+                   akteure=validiere_akteure(context.db, plan.org_id, akteure if akteure is not None else []))
     if streng and verworfen:
         raise ValueError("Nicht gespeichert: " + "; ".join(verworfen))
     validiere_element_quelle(context.db, plan, quelle_dokument_id, quelle_seiten or "")
@@ -339,7 +343,8 @@ async def katplan_element_entwurf_anlegen(
 
 @_tool("katplan_element_entwurf_aendern", (
     "Ändert erlaubte Entwurfsfelder mit Versionsprüfung nur im Arbeitsstand. felder darf enthalten: titel, "
-    "beschreibung, prioritaet, daten, tags, adresse, geometrie, geometrie_von, kapitel_id, phasen, quelle_dokument_id, "
+    "beschreibung, prioritaet, daten, tags, akteure, adresse, geometrie, geometrie_von, kapitel_id, phasen, "
+    "quelle_dokument_id, "
     "quelle_seiten, gueltig_bis, pruefen_am. "
     'geometrie_von: {"objekt_id": n} oder {"wasserstelle_id": n} übernimmt einen ungeprüften Stammdatenpunkt; '
     "nicht zusammen mit geometrie. " + _ADRESS_HINWEIS + " Nur übergebene Adressfelder werden "
@@ -413,6 +418,9 @@ async def katplan_element_entwurf_aendern(context: MCPContext, plan_id: int, ele
         for key in scalar & set(felder):
             for feld in mapping.get(key, (key,)):
                 werte[feld] = alle[feld]
+    if "akteure" in felder:
+        keys = validiere_akteure(context.db, plan.org_id, [] if felder["akteure"] is None else felder["akteure"])
+        werte["akteure_json"] = json.dumps(keys, ensure_ascii=False) if keys else None
     if "kapitel_id" in felder:
         werte["abschnitt_id"] = _kapitel(context, plan, None if felder["kapitel_id"] == "" else felder["kapitel_id"])
     for feld in ("gueltig_bis", "pruefen_am"):

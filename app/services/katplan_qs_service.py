@@ -14,6 +14,7 @@ from app.services.katplan_quelle_service import _gruppe
 from app.services.katplan_ziel_service import ziel_verfuegbar
 
 LABELS = {
+    "massnahme_ohne_akteur": "Maßnahme ohne zuständigen Akteur",
     "telefon_im_text": "Telefonnummer im Text trotz verknüpftem Kontakt",
     "ohne_geometrie": "ohne Geometrie", "geo_ungeprueft": "Ort ungeprüft",
     "link_ziel_fehlt": "Verknüpfungsziel fehlt", "kontakt_geaendert": "Kontakt seit Freigabe geändert",
@@ -23,6 +24,7 @@ LABELS = {
 
 
 SYMBOLE = {
+    "massnahme_ohne_akteur": "users",
     "telefon_im_text": "phone",
     "ohne_geometrie": "map-pin", "geo_ungeprueft": "help-circle", "link_ziel_fehlt": "link",
     "kontakt_geaendert": "user",
@@ -55,6 +57,9 @@ def element_hinweise(db: Session, plan: KatplanPlan, element: KatplanElement, *,
     if element.org_id != plan.org_id or element.plan_id != plan.id:
         raise ValueError("Element gehört nicht zu diesem Plan.")
     codes = []
+    if (element.typ == "massnahme" and plan.planart in ("alarm_einsatzplan", "massnahmenplan")
+            and not json.loads(element.akteure_json or "[]")):
+        codes.append("massnahme_ohne_akteur")
     if element.typ in ("kontrollstelle", "gefahrenbereich") and not (
         element.geometry_json or (element.lat is not None and element.lng is not None)
     ):

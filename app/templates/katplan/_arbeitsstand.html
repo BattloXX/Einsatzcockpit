@@ -1,3 +1,4 @@
+{% set akteur_filter_aktiv = true %}
 {% macro inhalt(knoten) %}
   {% for k in knoten %}
     <section>
@@ -19,7 +20,9 @@
     </section>
   {% endfor %}
 {% endmacro %}
-<div class="kp-planinhalt">
+<div class="kp-planinhalt" x-data="{ phase: null, akteur: null, gliederung: 'kapitel' }">
+  {% include "katplan/_akteur_filter.html" %}
   <a href="/plaene/{{ plan.id }}/bearbeiten" class="btn btn--primary">Bearbeiten</a>
-  {{ inhalt(baum) }}
+  <div x-show="gliederung === 'kapitel'">{{ inhalt(baum) }}</div>
+  {% include "katplan/_nach_akteur.html" %}
 </div>

@@ -19,6 +19,7 @@ from app.db import Base
 from app.models.katplan import (
     KatplanAbschnitt,
     KatplanAenderung,
+    KatplanAkteur,
     KatplanElement,
     KatplanElementPhase,
     KatplanPhase,
@@ -48,7 +49,7 @@ from app.services.katplan_zugriff import (
 )
 from tests.conftest import TestingSession
 
-MODELLE = (KatplanPlan, KatplanAbschnitt, KatplanPhase, KatplanElement,
+MODELLE = (KatplanAkteur, KatplanPlan, KatplanAbschnitt, KatplanPhase, KatplanElement,
            KatplanElementPhase, KatplanAenderung, KatplanPruefung)
 
 
@@ -165,7 +166,8 @@ def test_tenant_filter(db, org):
     abschnitt = KatplanAbschnitt(org_id=org.id, plan_id=plan.id, titel="Kapitel")
     phase = KatplanPhase(org_id=org.id, plan_id=plan.id, name="Warnung")
     element = KatplanElement(org_id=org.id, plan_id=plan.id, typ="info", titel="Hinweis")
-    db.add_all([abschnitt, phase, element])
+    db.add_all([abschnitt, phase, element,
+                KatplanAkteur(org_id=org.id, schluessel="test", bezeichnung="Test")])
     db.flush()
     db.add_all([
         KatplanElementPhase(org_id=org.id, element_id=element.id, phase_id=phase.id),
@@ -288,7 +290,7 @@ def test_seed_rollen():
 
 
 # Spaetere Migrationen, die Spalten an den Basistabellen ergaenzen.
-NACHFOLGE_MIGRATIONEN = ("0302_katplan_planart.py", "0303_katplan_pruefzyklus.py")
+NACHFOLGE_MIGRATIONEN = ("0302_katplan_planart.py", "0303_katplan_pruefzyklus.py", "0304_katplan_akteure.py")
 
 
 def _lade_migration(datei: str):
@@ -309,6 +311,7 @@ def test_migration_upgrade_downgrade():
                 conn.execute(sa.text(f"CREATE TABLE {tabelle} (id INTEGER PRIMARY KEY)"))
             migration.op = Operations(MigrationContext.configure(conn))
             migration.upgrade()
+            conn.execute(sa.text("CREATE TABLE katplan_version_element (id INTEGER PRIMARY KEY)"))
             for folge in nachfolger:
                 folge.op = migration.op
                 folge.upgrade()
@@ -331,6 +334,7 @@ def test_migration_upgrade_downgrade():
             assert "katplan_modul_aktiv" in {c["name"] for c in inspector.get_columns("org_settings")}
             for folge in reversed(nachfolger):
                 folge.downgrade()
+            conn.execute(sa.text("DROP TABLE katplan_version_element"))
             migration.downgrade()
             assert set(sa.inspect(conn).get_table_names()) == {"fire_dept", "user", "kontakt", "org_settings"}
             assert [c["name"] for c in sa.inspect(conn).get_columns("org_settings")] == ["id"]

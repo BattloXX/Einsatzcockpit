@@ -72,6 +72,17 @@ def baue_suchtext(element: KatplanElement, link_titel: list[str] | None = None) 
         except (ValueError, TypeError):
             continue
         teile.extend(_strings(daten))
+    from app.services.katplan_akteur_service import STANDARD_AKTEURE, schluessel_lesen
+
+    keys = schluessel_lesen(element.akteure_json)
+    labels = {s: b for s, b, _, _ in STANDARD_AKTEURE}
+    db = object_session(element)
+    if db is not None:
+        from app.models.katplan import KatplanAkteur
+
+        labels.update({a.schluessel: a.bezeichnung for a in db.query(KatplanAkteur).filter_by(org_id=element.org_id)})
+    teile.extend(keys)
+    teile.extend(labels.get(s, s) for s in keys)
     teile.extend([element.strasse or "", element.hausnummer or "", element.plz or "", element.ort or ""])
     if link_titel is None:
         db = object_session(element)
@@ -339,7 +350,8 @@ def lege_phase_an(db: Session, plan: KatplanPlan, user: User, *, name: str, quel
 def validiere_element_felder(typ: str, *, titel: str, prioritaet: int, daten: dict,
                              tags: list[str], adresse: dict, beschreibung_html: str | None,
                              geometrie: str | None, geo_geprueft: bool = False,
-                             verworfen: list[str] | None = None) -> dict[str, Any]:
+                             verworfen: list[str] | None = None,
+                             akteure: list[str] | None = None) -> dict[str, Any]:
     """Gemeinsame Feldregeln des Editors und der MCP-Entwurfswerkzeuge."""
     from app.services.katplan_geo_service import ableite_punkt, pruefe_geometrie
     from app.services.katplan_typen import bereinige_daten
@@ -359,6 +371,8 @@ def validiere_element_felder(typ: str, *, titel: str, prioritaet: int, daten: di
         "tags_json": json.dumps(tags, ensure_ascii=False),
         "beschreibung_html": bereinige_beschreibung(beschreibung_html),
     }
+    if akteure is not None:
+        werte["akteure_json"] = json.dumps(akteure, ensure_ascii=False) if akteure else None
     for feld, maximum in (("strasse", 200), ("hausnummer", 20), ("plz", 10), ("ort", 100)):
         wert = adresse.get(feld, "").strip()
         if len(wert) > maximum:
