@@ -1,5 +1,6 @@
 <!doctype html><html lang="de"><head><meta charset="utf-8"><title>Einsatzkontakte – {{ org.name }}</title>
 <style>
+{% include "pdf/_icon_styles.html" %}
 @page { size: {{ opts.papier }} {{ ('landscape' if opts.layout == 'kompakt' else 'portrait') if opts.ausrichtung == 'auto' else opts.ausrichtung }}; margin: 12mm 12mm 16mm;
 @bottom-left { content: '{{ jetzt.strftime("%d.%m.%Y %H:%M") }}'; font-size: 8pt; }
 @bottom-right { content: 'Seite ' counter(page) ' / ' counter(pages); font-size: 8pt; }

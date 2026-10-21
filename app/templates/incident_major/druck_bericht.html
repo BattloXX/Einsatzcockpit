@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{{ lage.name }} – Lagebericht</title>
 <style>
+{% include "pdf/_icon_styles.html" %}
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: "Arial", sans-serif; font-size: 11pt; color: #111;
@@ -110,7 +111,7 @@
 <body>
 
 <div class="no-print">
-  <button class="btn-print" onclick="window.print()">🖨 Drucken / PDF</button>
+  <button class="btn-print" onclick="window.print()">{{ icon("printer", size="xs") }} Drucken / PDF</button>
   <a href="/lage/{{ lage.id }}/druck" style="font-size:10pt;color:#3b82f6;">← Druckauswahl</a>
 </div>
 
@@ -118,7 +119,7 @@
 <div style="background:#1d4ed8;color:#fff;text-align:center;font-weight:800;font-size:12pt;padding:5px;letter-spacing:.1em;font-family:Arial,sans-serif;">TEST SYSTEM</div>
 {% endif %}
 {% if lage.is_exercise %}
-<div class="exercise-banner">⚠ ÜBUNG / SIMULATION – kein echter Einsatz ⚠</div>
+<div class="exercise-banner">{{ icon("alert-triangle", size="xs") }} ÜBUNG / SIMULATION – kein echter Einsatz {{ icon("alert-triangle", size="xs") }}</div>
 {% endif %}
 
 <div class="header">
@@ -252,7 +253,7 @@
 {% for m in cross_markers %}
 <div class="cross-row cross-row--{{ m.status }}">
   <div class="cross-row__header">
-    <div class="cross-row__title">{{ m.type_icon }} {{ m.title }}</div>
+    <div class="cross-row__title">{{ cross_marker_icon(m.marker_type, size="xs") }} {{ m.title }}</div>
     <span class="cross-row__badge">{{ m.status_label }}</span>
     <span class="cross-row__badge">{{ m.type_label }}</span>
   </div>
@@ -325,7 +326,7 @@
     <div class="journal-body">{{ entry.body_html | safe }}</div>
     {% endif %}
     {% if entry.measure %}
-    <div class="journal-measure">⚡ Veranlassung: {{ entry.measure }}</div>
+    <div class="journal-measure">{{ icon("bolt", size="xs") }} Veranlassung: {{ entry.measure }}</div>
     {% endif %}
   </div>
   {% endfor %}

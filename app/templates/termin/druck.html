@@ -3,6 +3,7 @@
 
 {% block head_extra %}
 <style>
+{% include "pdf/_icon_styles.html" %}
   @media print {
     .topnav, .bottom-nav, .mobile-menu, .ec-live, .no-print { display: none !important; }
     .main-content { padding: 0 !important; }
@@ -18,7 +19,7 @@
 <div style="max-width:850px;margin:0 auto;padding:20px;">
 
   <div class="no-print" style="margin-bottom:16px;display:flex;gap:10px;align-items:center;">
-    <button data-ec-action="print" class="btn btn--primary">🖨 Drucken</button>
+    <button data-ec-action="print" class="btn btn--primary">{{ icon("printer", size="xs") }} Drucken</button>
     <a href="#" onclick="window.close();return false;" class="btn btn--ghost">← Schliessen</a>
   </div>
 

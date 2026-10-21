@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{{ lage.name }} – Journaleintrag</title>
 <style>
+{% include "pdf/_icon_styles.html" %}
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: Arial, sans-serif; font-size: 11pt; color: #111;
          background: #fff; padding: 20px; max-width: 720px; }
@@ -38,8 +39,8 @@
 <body>
 
 <div class="no-print">
-  <button class="btn-print" onclick="window.print()">🖨 Drucken / PDF</button>
-  <a href="javascript:window.close()" style="font-size:10pt;color:#3b82f6;">✕ Schließen</a>
+  <button class="btn-print" onclick="window.print()">{{ icon("printer", size="xs") }} Drucken / PDF</button>
+  <a href="javascript:window.close()" style="font-size:10pt;color:#3b82f6;">{{ icon("x", size="xs") }} Schließen</a>
 </div>
 
 {% if TEST_SYSTEM %}
@@ -70,7 +71,7 @@
 {% endif %}
 
 {% if entry.measure %}
-<div class="measure">⚡ <strong>Veranlassung:</strong> {{ entry.measure }}</div>
+<div class="measure">{{ icon("bolt", size="xs") }} <strong>Veranlassung:</strong> {{ entry.measure }}</div>
 {% endif %}
 
 {% if entry.media %}

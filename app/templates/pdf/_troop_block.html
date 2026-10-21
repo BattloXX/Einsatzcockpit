@@ -49,7 +49,7 @@
     <tr>
       <td>{{ m.display_name }}</td>
       <td>{{ {'truppfuehrer':'Truppführer','truppmann':'Truppmann'}[m.role] }}</td>
-      <td>{% if m.member and m.member.is_agt %}✓{% else %}–{% endif %}</td>
+      <td>{% if m.member and m.member.is_agt %}{{ icon("check", size="xs") }}{% else %}–{% endif %}</td>
       <td>{{ m.start_press|int if m.start_press else '–' }} bar</td>
       <td>{{ m.withdraw_press|int if m.withdraw_press else '–' }} bar</td>
       <td>{{ m.back_press|int if m.back_press else '–' }} bar</td>
