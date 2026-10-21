@@ -23,6 +23,7 @@ from app.models.katplan import (
 )
 from app.models.kontakt import Kontakt
 from app.models.user import User
+from app.services.katplan_typen import PLANARTEN
 from app.services.katplan_ziel_service import _anzeige, ziel_laden
 
 _KENNUNG_PRAEFIXE = {
@@ -428,6 +429,28 @@ def validiere_stammdaten(*, titel: str, gefahrenarten: list[str], beschreibung_h
             "verantwortliche_stelle": verantwortliche_stelle.strip() or None,
             "wiedervorlage_am": termin, "pruefintervall_monate": intervall,
             "pruef_verantwortlich_user_id": person}
+
+
+def plan_anlegen(db: Session, user: User, *, werte: dict, quelle: str = "ui") -> KatplanPlan:
+    """Validierte Stammdaten und die Vorlage der Planart ohne Commit anlegen."""
+    person = werte.get("pruef_verantwortlich_user_id")
+    if person is not None and person not in {u.id for u in pruefverantwortliche(db, user.org_id)}:
+        raise ValueError("Benutzer nicht verfügbar.")
+    kontakt_id = werte.get("verantwortlich_kontakt_id")
+    if kontakt_id is not None and not db.query(Kontakt).filter_by(org_id=user.org_id, id=kontakt_id).first():
+        raise ValueError("Kontakt nicht verfügbar.")
+    werte = {**werte, "pruef_verantwortlich_user_id": person if person is not None else user.id}
+    plan = KatplanPlan(org_id=user.org_id, erstellt_von_id=user.id, aktualisiert_von_id=user.id, **werte)
+    db.add(plan)
+    db.flush()
+    protokolliere(db, plan, "plan", "angelegt", user, quelle=quelle)
+    vorlage = PLANARTEN[plan.planart]
+    for titel in vorlage.kapitel:
+        lege_abschnitt_an(db, plan, user, titel=titel, quelle=quelle)
+    for sort, (name, farbe) in enumerate(vorlage.phasen, 1):
+        phase = lege_phase_an(db, plan, user, name=name, quelle=quelle)
+        phase.farbe, phase.sort = farbe, sort * 10
+    return plan
 
 
 def stammdaten_aendern(db: Session, plan: KatplanPlan, user: User, *, version: int,

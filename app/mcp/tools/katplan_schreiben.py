@@ -54,7 +54,7 @@ def _tool(name: str, description: str, *, lesen: bool = False):
             try:
                 result = await handler(context, **kwargs)
                 write_audit(context.db, "mcp." + name, org_id=context.org_id, user_id=context.user.id,
-                            entity_type="katplan", entity_id=kwargs.get("plan_id"))
+                            entity_type="katplan", entity_id=kwargs.get("plan_id", result.get("plan_id")))
                 context.db.commit()
                 if not kwargs.get("pruefen"):
                     dateien.clear()
@@ -709,33 +709,17 @@ async def katplan_beziehung_entfernen(context: MCPContext, plan_id: int, element
     return {"entfernt": len(rows), "hinweis": _HINWEIS}
 
 
-@_tool("katplan_stammdaten_aendern", (
-    "Ändert nur übergebene Plan-Stammdaten im Arbeitsstand. version aus katplan_lesen(fassung=arbeitsstand), "
-    "Feld plan_version. felder: titel, planart (alarm_einsatzplan, massnahmenplan, katastrophenplan), "
-    "beschreibung (Text), gefahrenarten (Liste gültiger Codes), "
-    "geltungsbereich, verantwortliche_stelle, verantwortlich_kontakt_id, wiedervorlage_am (YYYY-MM-DD), "
-    "pruefintervall_monate (1..60), pruef_verantwortlich_user_id. "
-    "null oder leer leert optionale Felder; titel und planart sind Pflicht, gefahrenarten nur bei katastrophenplan. "
-    "Status bleibt menschlich. "
-    "Unbekannte Felder sind Fehler; streng=true erlaubt keinen Datenverlust; pruefen=true rollt zurück."
-))
-async def katplan_stammdaten_aendern(context: MCPContext, plan_id: int, version: int, felder: dict,
-                                    streng: bool = False, pruefen: bool = False) -> dict[str, object]:
-    plan = _plan(context, plan_id)
-    if version != plan.version:
-        raise ValueError(f"Versionskonflikt: Plan hat version {plan.version}, übergeben {version}. "
-                         'Mit katplan_lesen(fassung="arbeitsstand") neu lesen.')
-    mapping = {"beschreibung": "beschreibung_html", "gefahrenarten": "gefahrenarten_json"}
+_STAMMDATEN_MAPPING = {"beschreibung": "beschreibung_html", "gefahrenarten": "gefahrenarten_json"}
+
+
+def _stammdaten_werte(felder: dict, bestand: dict) -> dict:
+    """Gemeinsame Typpruefung und Normalisierung fuer Anlage und Teilaenderung."""
     erlaubt = {"planart", "titel", "beschreibung", "gefahrenarten", "geltungsbereich", "verantwortliche_stelle",
                "verantwortlich_kontakt_id", "wiedervorlage_am", "pruefintervall_monate", "pruef_verantwortlich_user_id"}
     if not isinstance(felder, dict):
         raise ValueError("felder muss ein Objekt sein.")
     if set(felder) - erlaubt:
         raise ValueError("Nicht erlaubte Felder: " + ", ".join(sorted(set(felder) - erlaubt)))
-    bestand: dict = {"planart": plan.planart, "titel": plan.titel, "gefahrenarten": plan.gefahrenarten,
-               "beschreibung_html": plan.beschreibung_html or "", "geltungsbereich": plan.geltungsbereich or "",
-               "verantwortliche_stelle": plan.verantwortliche_stelle or "",
-               "wiedervorlage_am": plan.wiedervorlage_am.isoformat() if plan.wiedervorlage_am else ""}
     for feld, wert in felder.items():
         if feld in ("pruefintervall_monate", "pruef_verantwortlich_user_id"):
             if wert not in (None, "") and type(wert) is not int:
@@ -756,9 +740,62 @@ async def katplan_stammdaten_aendern(context: MCPContext, plan_id: int, version:
         bestand["beschreibung_html" if feld == "beschreibung" else feld] = (
             text_zu_html(wert) if feld == "beschreibung" else wert)
     validiert = service.validiere_stammdaten(**bestand)
-    werte = {mapping.get(k, k): validiert[mapping.get(k, k)] for k in felder if k != "verantwortlich_kontakt_id"}
     if "verantwortlich_kontakt_id" in felder:
-        werte["verantwortlich_kontakt_id"] = felder["verantwortlich_kontakt_id"] or None
+        validiert["verantwortlich_kontakt_id"] = felder["verantwortlich_kontakt_id"] or None
+    return validiert
+
+
+@_tool("katplan_anlegen", (
+    "Legt einen Plan mit Kapitel- und Phasenvorlage in der eigenen Organisation an. "
+    "felder: titel und planart sind Pflicht (alarm_einsatzplan, massnahmenplan, katastrophenplan); "
+    "beschreibung (Text), gefahrenarten (gültige Codes; Pflicht bei katastrophenplan), geltungsbereich, "
+    "verantwortliche_stelle, verantwortlich_kontakt_id, wiedervorlage_am (YYYY-MM-DD), "
+    "pruefintervall_monate (1..60), pruef_verantwortlich_user_id sind optional. "
+    "Status ist immer Entwurf; die Freigabe bleibt menschlich. Danach Elemente mit "
+    "katplan_element_entwurf_anlegen und kapitel_id aus der Antwort ergänzen. "
+    "Unbekannte Felder sind Fehler; pruefen=true rollt zurück (gespeichert=false)."
+))
+async def katplan_anlegen(context: MCPContext, felder: dict, pruefen: bool = False) -> dict[str, object]:
+    werte = _stammdaten_werte(felder, {"titel": "", "planart": "", "gefahrenarten": []})
+    plan = service.plan_anlegen(context.db, context.user, werte=werte, quelle="mcp")
+    context.db.flush()
+    kopf, _, _, _ = lesedaten.fassung_laden(context.db, context.user, plan, "arbeitsstand")
+    kapitel = context.db.query(KatplanAbschnitt).filter_by(org_id=context.org_id, plan_id=plan.id).order_by(
+        KatplanAbschnitt.sort, KatplanAbschnitt.id).all()
+    phasen = context.db.query(KatplanPhase).filter_by(org_id=context.org_id, plan_id=plan.id).order_by(
+        KatplanPhase.sort, KatplanPhase.id).all()
+    antwort = {"plan_id": plan.id, "plan_version": plan.version, "status": plan.status,
+               "gespeichert": not pruefen, "plan": lesedaten.kopf_ansicht(kopf),
+               "kapitel": [{"id": k.id, "titel": k.titel} for k in kapitel], "phasen": [p.name for p in phasen],
+               "url": f"/plaene/{plan.id}", "hinweis": _HINWEIS}
+    if pruefen:
+        context.db.rollback()
+    return antwort
+
+
+@_tool("katplan_stammdaten_aendern", (
+    "Ändert nur übergebene Plan-Stammdaten im Arbeitsstand. version aus katplan_lesen(fassung=arbeitsstand), "
+    "Feld plan_version. felder: titel, planart (alarm_einsatzplan, massnahmenplan, katastrophenplan), "
+    "beschreibung (Text), gefahrenarten (Liste gültiger Codes), "
+    "geltungsbereich, verantwortliche_stelle, verantwortlich_kontakt_id, wiedervorlage_am (YYYY-MM-DD), "
+    "pruefintervall_monate (1..60), pruef_verantwortlich_user_id. "
+    "null oder leer leert optionale Felder; titel und planart sind Pflicht, gefahrenarten nur bei katastrophenplan. "
+    "Status bleibt menschlich. "
+    "Unbekannte Felder sind Fehler; streng=true erlaubt keinen Datenverlust; pruefen=true rollt zurück."
+))
+async def katplan_stammdaten_aendern(context: MCPContext, plan_id: int, version: int, felder: dict,
+                                    streng: bool = False, pruefen: bool = False) -> dict[str, object]:
+    plan = _plan(context, plan_id)
+    if version != plan.version:
+        raise ValueError(f"Versionskonflikt: Plan hat version {plan.version}, übergeben {version}. "
+                         'Mit katplan_lesen(fassung="arbeitsstand") neu lesen.')
+    bestand: dict = {"planart": plan.planart, "titel": plan.titel, "gefahrenarten": plan.gefahrenarten,
+               "beschreibung_html": plan.beschreibung_html or "", "geltungsbereich": plan.geltungsbereich or "",
+               "verantwortliche_stelle": plan.verantwortliche_stelle or "",
+               "wiedervorlage_am": plan.wiedervorlage_am.isoformat() if plan.wiedervorlage_am else ""}
+    validiert = _stammdaten_werte(felder, bestand)
+    mapping = _STAMMDATEN_MAPPING
+    werte = {mapping.get(k, k): validiert[mapping.get(k, k)] for k in felder}
     geaendert = service.stammdaten_aendern(context.db, plan, context.user, version=version, werte=werte, quelle="mcp")
     context.db.flush()
     kopf, _, _, _ = lesedaten.fassung_laden(context.db, context.user, plan, "arbeitsstand")

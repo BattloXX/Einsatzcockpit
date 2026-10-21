@@ -68,6 +68,7 @@ Schreibende Werkzeuge verlangen `katplan_verwalter`, `katplan_freigeber` oder Ad
 | `katplan_elemente_verorten` | Bis 30 Elemente: ohne `auswahl` nur Kandidaten, mit `{element_id: kandidat_id}` ungeprüfte Punkte; `pruefen` rollt zurück, geprüfte Orte brauchen `ueberschreiben_geprueft=true` und `nur_ohne_ort=false` |
 | `katplan_verknuepfung_setzen`, `katplan_verknuepfung_entfernen` | Idempotente Links auf Plan-/Elementebene, orggebundene Ziele, Telefonregel auch in Schreibantworten |
 | `katplan_beziehung_setzen`, `katplan_beziehung_entfernen` | Elementbeziehungen per Kennung im Plan oder UUID innerhalb der Organisation |
+| `katplan_anlegen` | Plan als Entwurf mit Kapitel-/Phasenvorlage anlegen; Titel und Planart erforderlich, Gefahrenarten bei Katastrophenplänen; `pruefen=true` als Trockenlauf, Freigabe durch Menschen |
 | `katplan_stammdaten_aendern` | Teiländerungen am Plankopf mit `plan_version` aus dem Arbeitsstand, Kontakt nur aus eigener Organisation |
 | `katplan_quellseite_verknuepfen` | Bis 50 Quellzuordnungen; optionale Elementversion, Fehler je Eintrag, `streng` für vollständigen Abbruch, `pruefen` für Rollback |
 | `katplan_anhang_aus_quellseite` | Seite, eingebettetes Bild oder relativer Ausschnitt über Anhangspipeline mit Quota, Thumbnail und MCP-Protokoll; `pruefen` entfernt auch Dateien |

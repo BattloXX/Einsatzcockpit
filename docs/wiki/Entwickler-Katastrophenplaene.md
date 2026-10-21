@@ -153,6 +153,12 @@ bei Trockenläufen auch das Anhangverzeichnis. Die Quota wird durch DB-Rollback 
   idempotent; nur ein übergebener abweichender Hinweis wird aktualisiert. Die Linkantwort
   läuft durch `katplan_mcp_service.link_ansichten` und damit dieselbe Telefonregel wie Lesen.
   Kennungen werden im Quellplan aufgelöst, Beziehungsziel-UUIDs orgweit.
+- `katplan_anlegen` und die UI verwenden `katplan_service.plan_anlegen` ohne eigenen Commit.
+  Der Service prüft Prüfverantwortliche und Kontakt innerhalb der Organisation und legt den
+  Entwurf samt Kapitel-/Phasenvorlage aus `katplan_typen.PLANARTEN` an. MCP protokolliert
+  mit Quelle `mcp` und verwendet dieselbe Feldnormalisierung wie Stammdatenänderungen.
+  Die Antwort enthält den Arbeitsstand-Kopf, Kapitel-IDs und Phasennamen; `pruefen=true`
+  rollt die Anlage vollständig zurück. Der Audit-Eintrag übernimmt die neue `plan_id`.
 - `katplan_stammdaten_aendern` validiert Teiländerungen mit dem Bestand und schreibt nur
   übergebene Felder über `stammdaten_aendern`. Letzteres prüft die Version, protokolliert
   je Feld, setzt Erinnerungen bei Terminänderung zurück und markiert Überarbeitung.
