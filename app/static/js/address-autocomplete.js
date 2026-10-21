@@ -115,7 +115,7 @@
           var badge = document.createElement('span');
           badge.style.cssText = 'font-size:.68rem;color:var(--text-muted,#7a87a8);flex-shrink:0;';
           badge.title = 'Aus bisherigen Einsätzen';
-          badge.textContent = '↺';
+          badge.innerHTML = ecpIcon('history', {size: 'xs'});
           li.appendChild(badge);
         }
 

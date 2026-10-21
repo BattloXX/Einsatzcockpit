@@ -34,7 +34,8 @@
           var a   = L.DomUtil.create('a', '', div);
           a.href  = '#';
           a.title = 'Wetter-Layer ein-/ausblenden';
-          a.innerHTML = '🌧';
+          a.setAttribute('aria-label', a.title);
+          a.innerHTML = ecpIcon('cloud-rain', {size: 'sm'});
           a.id    = 'weather-layer-btn';
           a.style.cssText = [
             'font-size:1.15rem', 'display:flex', 'align-items:center',
