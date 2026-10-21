@@ -48,7 +48,10 @@ def test_jeder_qs_code_einzeln(umgebung, code, monkeypatch):
         plan = db.get(KatplanPlan, umgebung["plan_id"])
         user = _user(db, umgebung)
         e = lege_element_an(db, plan, user, typ="info", titel="Test")
-        if code == "ohne_geometrie":
+        if code == "massnahme_ohne_akteur":
+            plan.planart = "alarm_einsatzplan"
+            e.typ = "massnahme"
+        elif code == "ohne_geometrie":
             e.typ = "kontrollstelle"
         elif code == "geo_ungeprueft":
             e.geo_status = "ungeprueft"

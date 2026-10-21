@@ -1,0 +1,38 @@
+<div id="kp-akteure">
+  {% if fehler %}<p role="alert">{{ fehler }}</p>{% endif %}
+  <div class="kp-table-wrap--scroll">
+    <table class="kp-table">
+      <thead><tr><th>Bezeichnung</th><th>Farbe</th><th>Icon</th><th>Aktiv</th><th>Sortierung</th><th>Aktionen</th></tr></thead>
+      <tbody>
+        {% for a in akteure %}
+          <tr>
+            <td><input form="akteur-{{ a.id }}" class="form-control" name="bezeichnung" value="{{ a.bezeichnung }}" required maxlength="80"></td>
+            <td><select form="akteur-{{ a.id }}" class="form-control" name="farbe">{% for f in farben %}<option value="{{ f }}" {% if f == a.farbe %}selected{% endif %}>{{ f }}</option>{% endfor %}</select></td>
+            <td><input form="akteur-{{ a.id }}" class="form-control" name="icon_name" value="{{ a.icon_name or '' }}" maxlength="40"></td>
+            <td><label class="kp-check"><input form="akteur-{{ a.id }}" type="checkbox" name="aktiv" value="1" {% if a.aktiv %}checked{% endif %}> Aktiv</label></td>
+            <td><input form="akteur-{{ a.id }}" class="form-control" type="number" name="sort" value="{{ a.sort }}"></td>
+            <td>
+              <form id="akteur-{{ a.id }}" method="post" action="/plaene/akteure" hx-post="/plaene/akteure" hx-target="#kp-akteure" hx-swap="outerHTML">
+                <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><input type="hidden" name="schluessel" value="{{ a.schluessel }}">
+                <button class="btn btn--sm" type="submit">Speichern</button>
+              </form>
+              <form method="post" action="/plaene/akteure/{{ a.id }}/loeschen" hx-post="/plaene/akteure/{{ a.id }}/loeschen" hx-target="#kp-akteure" hx-swap="outerHTML">
+                <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}"><button class="btn btn--sm" type="submit">Löschen</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <h2>Neuer Akteur</h2>
+  <form class="kp-form" method="post" action="/plaene/akteure" hx-post="/plaene/akteure" hx-target="#kp-akteure" hx-swap="outerHTML">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <label>Bezeichnung<input class="form-control" name="bezeichnung" required maxlength="80"></label>
+    <label>Farbe<select class="form-control" name="farbe">{% for f in farben %}<option value="{{ f }}" {% if f == 'grau' %}selected{% endif %}>{{ f }}</option>{% endfor %}</select></label>
+    <label>Icon<input class="form-control" name="icon_name" maxlength="40"></label>
+    <label class="kp-check"><input type="checkbox" name="aktiv" value="1" checked> Aktiv</label>
+    <label>Sortierung<input class="form-control" type="number" name="sort" value="0"></label>
+    <button class="btn btn--primary" type="submit">Anlegen</button>
+  </form>
+</div>

@@ -253,13 +253,13 @@ def test_migration_upgrade_downgrade_sqlite():
         inspector = sa.inspect(conn)
         for modell in (KatplanVersion, KatplanVersionElement):
             name = modell.__tablename__
-            # 0296 ergaenzt relationen_json; hier wird ausschliesslich 0295 geprueft.
+            # 0296 und 0304 ergaenzen Felder; hier wird ausschliesslich 0295 geprueft.
             erwartete_spalten = set(Base.metadata.tables[name].columns.keys())
             if modell is KatplanVersionElement:
-                erwartete_spalten.remove("relationen_json")
+                erwartete_spalten -= {"relationen_json", "akteure_json"}
             assert {c["name"] for c in inspector.get_columns(name)} == erwartete_spalten
             assert {c["name"]: c["nullable"] for c in inspector.get_columns(name)} == {
-                c.name: c.nullable for c in modell.__table__.columns if c.name != "relationen_json"}
+                c.name: c.nullable for c in modell.__table__.columns if c.name not in ("relationen_json", "akteure_json")}
             assert {tuple(i["column_names"]) for i in inspector.get_indexes(name)} == {
                 tuple(c.name for c in i.columns) for i in modell.__table__.indexes}
             assert {tuple(u["column_names"]) for u in inspector.get_unique_constraints(name)} == {

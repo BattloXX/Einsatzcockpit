@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Akteure verwalten{% endblock %}
+{% block head_extra %}{% include "katplan/_design.html" %}{% endblock %}
+{% block content %}
+<section class="kp-page">
+  <a href="/plaene">Pläne</a><h1>Akteure verwalten</h1>
+  <p>Icon: optionaler Name aus der vorhandenen Tabler-Auswahl, z. B. flame, bolt, building, shield, ambulance, home.</p>
+  {% include "katplan/_akteure_tabelle.html" %}
+</section>
+{% endblock %}

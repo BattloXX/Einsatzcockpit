@@ -118,6 +118,19 @@ class KatplanPhase(TenantScoped, Base):
     sort: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=0)
 
 
+class KatplanAkteur(TenantScoped, Base):
+    __tablename__ = "katplan_akteur"
+    __table_args__ = (sa.UniqueConstraint("org_id", "schluessel"),)
+
+    id: Mapped[int] = mapped_column(sa.BigInteger, primary_key=True, autoincrement=True)
+    schluessel: Mapped[str] = mapped_column(sa.String(40), nullable=False)
+    bezeichnung: Mapped[str] = mapped_column(sa.String(80), nullable=False)
+    farbe: Mapped[str] = mapped_column(sa.String(20), nullable=False, default="grau")
+    icon_name: Mapped[str | None] = mapped_column(sa.String(40), nullable=True)
+    sort: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=0)
+    aktiv: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, default=True)
+
+
 class KatplanElement(TenantScoped, Base):
     __tablename__ = "katplan_element"
     __table_args__ = (
@@ -142,6 +155,7 @@ class KatplanElement(TenantScoped, Base):
     daten_json: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     prioritaet: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=2)
     status: Mapped[str] = mapped_column(sa.String(20), nullable=False, default="entwurf")
+    akteure_json: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     tags_json: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     gueltig_bis: Mapped[date | None] = mapped_column(sa.Date, nullable=True)
     pruefen_am: Mapped[date | None] = mapped_column(sa.Date, nullable=True)
@@ -314,6 +328,7 @@ class KatplanVersionElement(TenantScoped, Base):
     beschreibung_html: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     daten_json: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     prioritaet: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=2)
+    akteure_json: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     tags_json: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     gueltig_bis: Mapped[date | None] = mapped_column(sa.Date, nullable=True)
     pruefen_am: Mapped[date | None] = mapped_column(sa.Date, nullable=True)

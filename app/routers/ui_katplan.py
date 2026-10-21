@@ -40,6 +40,7 @@ from app.models.master import FireDept
 from app.models.objekt import Objekt, ObjektDokument
 from app.models.user import User
 from app.routers.ui_objekt import _LESE_ROLLEN
+from app.services import katplan_akteur_service as akteur_service
 from app.services import katplan_anhang_service as anhang_service
 from app.services import katplan_freigabe_service as freigabe_service
 from app.services import katplan_ki_service as ki_service
@@ -527,6 +528,7 @@ def _lesekontext(db: Session, user: User, plan: KatplanPlan, vid: int | None = N
     elemente = [e for e in elemente if sieht_vertraulich(user) or not e.vertraulich]
     return {"lesekopf": {**daten, "wiedervorlage_am": plan.wiedervorlage_am},
             "plan_daten": daten, "leseversion": version,
+            **akteur_service.anzeige_kontext(daten.get("akteure", []), elemente),
             "quellen_nach_id": {q["id"]: q for q in daten.get("quellen", [])},
             **_link_kontext(db, user, plan, elemente, daten),
             **_anhaenge_kontext(db, user, plan, elemente, daten, version.id),
@@ -537,6 +539,53 @@ def _lesekontext(db: Session, user: User, plan: KatplanPlan, vid: int | None = N
             "element_gsl": {e.id: json.loads(e.gsl_json or "{}") for e in elemente},
             "element_phasen": {e.id: [p for p in daten.get("phasen", [])
                                       if p["id"] in json.loads(e.phasen_json)] for e in elemente}}
+
+
+@router.get("/akteure")
+def akteure_seite(request: Request, db: Session = Depends(get_db),
+                   user: User = Depends(require_katplan_freigeben)):
+    katalog = akteur_service.akteure(db, user.org_id, nur_aktive=False)
+    db.commit()
+    return templates.TemplateResponse(request, "katplan/akteure.html", {
+        **_kontext(db, user), "akteure": katalog, "farben": akteur_service.FARBEN})
+
+
+def _akteur_antwort(request: Request, db: Session, user: User, fehler: str | None = None):
+    return templates.TemplateResponse(request, "katplan/_akteure_tabelle.html", {
+        **_kontext(db, user), "akteure": akteur_service.akteure(db, user.org_id, nur_aktive=False),
+        "farben": akteur_service.FARBEN, "fehler": fehler}, status_code=422 if fehler else 200)
+
+
+@router.post("/akteure")
+def akteure_speichern(request: Request, db: Session = Depends(get_db),
+                      user: User = Depends(require_katplan_freigeben)):
+    form = run_async(request.form)
+    try:
+        akteur_service.akteur_speichern(
+            db, user.org_id, str(form.get("schluessel") or "") or None,
+            str(form.get("bezeichnung") or ""), str(form.get("farbe") or "grau"),
+            str(form.get("icon_name") or ""), bool(form.get("aktiv")), int(str(form.get("sort") or "0")))
+        db.commit()
+    except ValueError as exc:
+        db.rollback()
+        return _akteur_antwort(request, db, user, str(exc))
+    return _akteur_antwort(request, db, user)
+
+
+@router.post("/akteure/{akteur_id}/loeschen")
+def akteur_entfernen(akteur_id: int, request: Request, db: Session = Depends(get_db),
+                     user: User = Depends(require_katplan_freigeben)):
+    from app.models.katplan import KatplanAkteur
+
+    akteur = db.query(KatplanAkteur).filter_by(org_id=user.org_id, id=akteur_id).one_or_none()
+    if akteur is None:
+        raise HTTPException(404, "Nicht gefunden")
+    try:
+        akteur_service.akteur_loeschen(db, user.org_id, akteur.schluessel)
+        db.commit()
+    except ValueError as exc:
+        return _akteur_antwort(request, db, user, str(exc))
+    return _akteur_antwort(request, db, user)
 
 
 @router.get("/{plan_id}")
@@ -788,7 +837,11 @@ def _editor_kontext(db: Session, plan: KatplanPlan) -> dict[str, Any]:
             if h["code"] not in summen:
                 summen[h["code"]] = {"text": h["text"], "anzahl": 0, "element_id": e.id}
             summen[h["code"]]["anzahl"] += 1
-    return {"qs_hinweise": hinweise, "qs_summen": summen, "qs_symbole": qs_service.SYMBOLE,
+    katalog = akteur_service.akteure(db, plan.org_id)
+    alle = akteur_service.katalog_daten(db, plan.org_id, {
+        s for e in elemente for s in akteur_service.schluessel_lesen(e.akteure_json)})
+    return {"akteure": katalog, **akteur_service.anzeige_kontext(alle, elemente),
+            "qs_hinweise": hinweise, "qs_summen": summen, "qs_symbole": qs_service.SYMBOLE,
             "qs_anzahl": sum(h["anzahl"] for h in summen.values()),
             "baum": abschnitte_baum(db, plan), "typen": ELEMENT_TYPEN, "phasen": phasen,
             "vorlagen": ELEMENT_VORLAGEN, "auftragsarten": AUFTRAGSART_LABEL,
@@ -832,6 +885,7 @@ def _formular_element(db: Session, element: KatplanElement) -> dict[str, Any]:
     form["geometry_json"] = element.geometry_json or ""
     form["geo_geprueft"] = element.geo_status == "geprueft"
     form["version"] = element.version
+    form["akteure"] = akteur_service.schluessel_lesen(element.akteure_json)
     return form
 
 
@@ -1027,6 +1081,7 @@ def element_speichern(plan_id: int, eid: int, request: Request, db: Session = De
     form: dict[str, Any] = {k: str(v) for k, v in roh.items()}
     form["beschreibung_html"] = bereinige_beschreibung(form.get("beschreibung_html", "")) or ""
     form["phasen"] = [str(v) for v in roh.getlist("phasen")]
+    form["akteure"] = [str(v) for v in roh.getlist("akteure")]
     form["vertraulich"] = bool(roh.get("vertraulich"))
     form["gsl_vorlage"] = bool(roh.get("gsl_vorlage"))
     form["geo_geprueft"] = bool(roh.get("geo_geprueft"))
@@ -1047,6 +1102,7 @@ def element_speichern(plan_id: int, eid: int, request: Request, db: Session = De
             element.typ, titel=titel, prioritaet=int(form.get("prioritaet", "2")), daten=eingabe,
             tags=tags, adresse=form, beschreibung_html=form.get("beschreibung_html", ""),
             geometrie=form.get("geometry_json"), geo_geprueft=form["geo_geprueft"],
+            akteure=akteur_service.validiere_akteure(db, plan.org_id, form["akteure"]),
         )
         daten = json.loads(werte["daten_json"])
         phase_ids = {int(v) for v in form["phasen"]}
@@ -1206,7 +1262,7 @@ def element_duplizieren(plan_id: int, eid: int, request: Request, ziel_plan_id: 
         raise HTTPException(422, "In archivierte Pläne kann nicht dupliziert werden.")
     gleicher_plan = ziel.id == plan.id
     inhalt = {feld: getattr(quelle, feld) for feld in (
-        "typ", "beschreibung_html", "daten_json", "prioritaet", "status", "tags_json",
+        "typ", "beschreibung_html", "daten_json", "prioritaet", "status", "tags_json", "akteure_json",
         "gueltig_bis", "pruefen_am", "vertraulich", "strasse", "hausnummer", "plz", "ort",
         "lat", "lng", "geometry_json", "geo_status", "herkunft", "quelle_dokument_id", "quelle_seiten",
         "gsl_vorlage", "gsl_auftragsart", "gsl_prioritaet", "gsl_ressourcentypen_json",
@@ -1871,6 +1927,7 @@ def import_verwerfen(plan_id: int, vid: int, request: Request,
 
 @router.get("/{plan_id}/pdf")
 def pdf_export(plan_id: int, version_id: int | None = None, entwurf: int = 0,
+               gliederung: str = "kapitel", akteur: str | None = None,
                db: Session = Depends(get_db), user: User = Depends(require_katplan_lesen)):
     import re
     import unicodedata
@@ -1883,7 +1940,8 @@ def pdf_export(plan_id: int, version_id: int | None = None, entwurf: int = 0,
         raise HTTPException(403, "Keine Berechtigung für den Arbeitsstand.")
     try:
         kopf, _, vid, _ = fassung_laden(db, user, plan, "arbeitsstand" if entwurf else "freigegeben", version_id)
-        data = render_katplan_pdf(db, user, plan, version_id=version_id, entwurf=bool(entwurf))
+        data = render_katplan_pdf(db, user, plan, version_id=version_id, entwurf=bool(entwurf),
+                                gliederung=gliederung, akteur=akteur)
     except LookupError as exc:
         raise HTTPException(404, "Nicht gefunden") from exc
     except ValueError as exc:

@@ -36,6 +36,16 @@
         {% endif %}
         {% if not arbeitsstand %}<a class="btn" href="/plaene/{{ plan.id }}/pdf?version_id={{ leseversion.id }}">PDF / Offlinefassung</a>{% endif %}
         {% if can_edit %}<a class="btn" href="/plaene/{{ plan.id }}/pdf?entwurf=1">Entwurf als PDF</a>{% endif %}
+        {% if vorkommende_akteure %}
+          <label>PDF nach Akteur
+            <select class="form-control" onchange="if (this.value) window.location.href = this.value">
+              <option value="">Auswählen</option>
+              {% set pdf_basis = '/plaene/' ~ plan.id ~ '/pdf?' ~ ('entwurf=1' if arbeitsstand else 'version_id=' ~ leseversion.id) %}
+              <option value="{{ pdf_basis }}&amp;gliederung=akteur">Gliederung nach Akteur</option>
+              {% for a in vorkommende_akteure %}<option value="{{ pdf_basis }}&amp;akteur={{ a.schluessel|urlencode }}">Auszug für {{ a.bezeichnung }}</option>{% endfor %}
+            </select>
+          </label>
+        {% endif %}
         {% if arbeitsstand %}
           {% include "katplan/_arbeitsstand.html" %}
         {% else %}

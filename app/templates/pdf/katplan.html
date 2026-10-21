@@ -107,6 +107,7 @@
         {% endfor %}
       </table>
     {% endif %}
+    {% if auszug %}<p>Auszug für {{ auszug }}</p>{% endif %}
     {% if entwurf %}<p class="entwurf-hinweis">Entwurf – dieser Stand ist nicht freigegeben und darf nicht als Einsatzunterlage verwendet werden.</p>{% endif %}
   </section>
 
@@ -115,8 +116,9 @@
     <ul class="toc">
       {% if kopf.phasen %}<li><a href="#phasen">Phasenübersicht</a></li>{% endif %}
       {% for name, elemente in kapitel.items() %}
+        {% set gruppen_index = loop.index %}
         <li><a href="#kapitel-{{ loop.index }}">{{ name }}</a></li>
-        {% for e in elemente %}<li class="toc__unter"><a href="#element-{{ e.element_id }}">{{ e.kennung ~ ' · ' if e.kennung }}{{ e.title }}</a></li>{% endfor %}
+        {% for e in elemente %}<li class="toc__unter"><a href="#element-{{ gruppen_index }}-{{ e.element_id }}">{{ e.kennung ~ ' · ' if e.kennung }}{{ e.title }}</a></li>{% endfor %}
       {% endfor %}
     </ul>
 
@@ -136,14 +138,16 @@
   </section>
 
   {% for name, elemente in kapitel.items() %}
+    {% set gruppen_index = loop.index %}
     <section class="kapitel" id="kapitel-{{ loop.index }}">
       <h2>{{ name }}</h2>
       {% for e in elemente %}
-        <article class="element element--prio-{{ e.priority or 2 }}" id="element-{{ e.element_id }}">
+        <article class="element element--prio-{{ e.priority or 2 }}" id="element-{{ gruppen_index }}-{{ e.element_id }}">
           <div class="element__kopf">
             <h3>{% if e.kennung %}<span class="element__kennung">{{ e.kennung }}</span>{% endif %}{{ e.title }}</h3>
             <div class="element__meta">
               {{ e.type_label }} · Priorität {{ {1: 'hoch', 2: 'normal', 3: 'niedrig'}.get(e.priority, e.priority) }}
+              {% if e.akteure %} · Zuständig: {{ e.akteure|map(attribute="bezeichnung")|join(", ") }}{% endif %}
               {% if e.phases %} · Phasen: {{ e.phases|join(', ') }}{% endif %}
               {% if e.vertraulich %} · <strong>vertraulich</strong>{% endif %}
               {% if e.review_status and e.review_status.herkunft == 'ai_suggested' %} · KI-Vorschlag{% endif %}

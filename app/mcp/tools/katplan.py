@@ -85,7 +85,8 @@ async def katplan_liste(context: MCPContext, gefahr: str = "", status: str = "",
 
 
 @_tool("katplan_lesen", (
-    "Liest Kopf mit Planart-Code und Label, Kapitel, Phasen, Links, Anhänge und Quellen; optional bis 200 Elemente."
+    "Liest Kopf mit Planart-Code und Label, Akteurskatalog, Kapitel, Phasen, Links, Anhänge und Quellen; "
+    "optional bis 200 Elemente."
 ))
 async def katplan_lesen(context: MCPContext, plan_id: int, fassung: str = "freigegeben",
                         version_id: int | None = None, mit_elementen: bool = False) -> dict[str, object]:
@@ -126,6 +127,7 @@ async def katplan_lesen(context: MCPContext, plan_id: int, fassung: str = "freig
     return {"plan_id": plan.id, "plan_version_id": vid, "fassung": fassung,
             "plan_version": plan.version if vid is None else None,
             "kopf": daten.kopf_ansicht(kopf),
+            "akteure": [{k: a[k] for k in ("schluessel", "bezeichnung")} for a in kopf.get("akteure", [])],
             "kapitelbaum": kapitel, "phasen": kopf.get("phasen", []),
             "links": daten.link_ansichten(context.db, context.user, kopf.get("links", [])),
             "anhaenge": daten.anhang_ansichten(context.user, kopf.get("anhaenge", []), vid),
@@ -148,16 +150,18 @@ async def katplan_suchen(context: MCPContext, q: str = "", plan_id: int | None =
     return result
 
 
-@_tool("katplan_elemente", "Liest Elemente in Planreihenfolge, gefiltert nach Typ, Phase oder Kapitel. "
+@_tool("katplan_elemente", "Liest Elemente in Planreihenfolge, gefiltert nach Typ, Phase, Akteur oder Kapitel. "
        "Zum Schreiben version aus fassung=arbeitsstand verwenden, nicht element_version_id.")
 async def katplan_elemente(context: MCPContext, plan_id: int, fassung: str = "freigegeben",
-                           typ: str = "", phase: str = "", kapitel: str = "", limit: int = 100) -> dict[str, object]:
+                           typ: str = "", phase: str = "", kapitel: str = "", limit: int = 100,
+                           akteur: str = "") -> dict[str, object]:
     if not 1 <= limit <= 200:
         raise ValueError("limit muss zwischen 1 und 200 liegen.")
     _, kopf, elemente, vid, warnings = _fassung(context, plan_id, fassung)
     phase = next((p["name"] for p in kopf.get("phasen", []) if str(p["id"]) == phase), phase)
     kapitel = next((a["titel"] for a in kopf.get("abschnitte", []) if str(a["id"]) == kapitel), kapitel)
-    elemente = [e for e in elemente if (not typ or e["type"] == typ) and (not phase or phase in e["phases"])
+    elemente = [e for e in elemente if (not akteur or any(a["schluessel"] == akteur for a in e["akteure"]))
+                and (not typ or e["type"] == typ) and (not phase or phase in e["phases"])
                 and (not kapitel or kapitel in (e["chapter"] or "").split(" > ") or kapitel == e["chapter"])]
     if len(elemente) > limit:
         warnings.append("Elemente begrenzt.")
