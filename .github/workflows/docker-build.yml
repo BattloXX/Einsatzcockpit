@@ -46,7 +46,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Buildx einrichten
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Bei GHCR anmelden
         if: github.event_name != 'pull_request'
