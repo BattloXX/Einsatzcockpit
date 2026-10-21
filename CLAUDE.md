@@ -149,4 +149,4 @@ npm run test:js # Offline-Outbox des Einheitenmodus; nötig bei Änderungen an a
 - [ ] CSRF-Token (`_csrf`) in allen POST-Formularen
 - [ ] HTMX-Swap statt Reload, WebSocket-Broadcast für Multi-User-Sync
 - [ ] Alle Datetime-Ausgaben über `|local*` / `format_local_datetime(.., org)`
-- [ ] Neues Modul: Eintrag im Menü *Module* (`base.html`, Desktop + Mobil) **und** eine Kachel im Modul-Raster der Übersicht (`index.html`, gleiche Sichtbarkeitsbedingung) – geprüft von `tests/test_module_kacheln.py`
+- [ ] Neues Modul: Eintrag in `app/services/modul_navigation.py` (Gruppe + Sichtbarkeit) – Menü Desktop/Mobil und Kacheln der Übersicht rendern daraus; geprüft von `tests/test_modul_navigation.py` und `tests/test_module_kacheln.py`

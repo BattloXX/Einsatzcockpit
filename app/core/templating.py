@@ -27,6 +27,7 @@ from app.core.timezones import (
     to_org_tz,
 )
 from app.services.einheit_service import einheit_status_label
+from app.services.modul_navigation import modul_aktiv, modul_gruppen
 
 
 def _ctx_org(ctx):
@@ -350,3 +351,5 @@ except OSError:
     templates.env.globals["IMG_VERSION"] = "1"
 
 templates.env.globals["can_view_katplan"] = can_view_katplan_request
+templates.env.globals["modul_gruppen"] = modul_gruppen
+templates.env.globals["modul_aktiv"] = modul_aktiv

@@ -52,6 +52,11 @@ def _bottom_nav(html: str) -> str:
     return html[start:end]
 
 
+def _mobile_nav(html: str) -> str:
+    start = html.index('<nav class="mobile-menu__nav"')
+    return html[start:html.index("</nav>", start)]
+
+
 def test_incident_leader_sieht_fab(client):
     _login(client, _setup_user("incident_leader"))
 
@@ -62,6 +67,9 @@ def test_incident_leader_sieht_fab(client):
     assert "bottom-nav__fab" in nav
     assert 'aria-label="Neuen Einsatz starten"' in nav
     assert "neuenEinsatzOeffnen()" in nav
+    assert nav.index("bottom-nav__fab") < nav.index('aria-label="Menü öffnen"')
+    assert nav.index('aria-label="Menü öffnen"') < nav.index('aria-label="Profil und Konto"')
+    assert '@click="mobileMenuOpen = true"' in nav
 
 
 @pytest.mark.parametrize("role_code", ["readonly", "recorder"])
@@ -74,19 +82,30 @@ def test_nicht_admin_sieht_archiv_aber_keinen_fab(client, role_code):
     assert response.status_code == 200
     assert "bottom-nav__fab" not in nav
     assert "bottom-nav__item" in nav
-    assert 'href="/archiv"' in nav
+    assert 'aria-label="Menü öffnen"' in nav
+    assert '@click="mobileMenuOpen = true"' in nav
+    assert 'href="/archiv"' not in nav
     assert 'href="/admin"' not in nav
+    menue = _mobile_nav(response.text)
+    assert 'href="/archiv"' in menue
+    assert 'href="/admin"' not in menue
 
 
-def test_admin_sieht_verwaltung(client):
-    _login(client, _setup_user("admin"))
+@pytest.mark.parametrize("role_code", ["admin", "org_admin", "system_admin", "fahrtenbuch_admin"])
+def test_admin_sieht_verwaltung(client, role_code):
+    _login(client, _setup_user(role_code))
 
     response = client.get("/")
     nav = _bottom_nav(response.text)
 
     assert response.status_code == 200
-    assert 'href="/admin"' in nav
-    assert "Verwaltung" in nav
+    assert 'aria-label="Menü öffnen"' in nav
+    assert '@click="mobileMenuOpen = true"' in nav
+    assert 'href="/admin"' not in nav
+    menue = _mobile_nav(response.text)
+    assert 'href="/admin"' in menue
+    assert "Verwaltung" in menue
+    assert 'href="/archiv"' in menue
 
 
 def test_profil_sheet_vorhanden_und_wetter_nicht_in_bottom_nav(client):
