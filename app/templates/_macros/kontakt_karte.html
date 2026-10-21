@@ -1,0 +1,7 @@
+{% macro kontakt_karte(titel, untertitel, telefone, url=none, telefon_klasse="") %}
+  {% if url %}<a href="{{ url }}">{{ titel }}</a>{% else %}<strong>{{ titel }}</strong>{% endif %}
+  {% if untertitel %}<p>{{ untertitel }}</p>{% endif %}
+  {% for telefon in telefone %}
+    <a class="{{ telefon_klasse }}" href="tel:{{ telefon.nummer }}" aria-label="{{ titel }} anrufen: {{ telefon.nummer }}{% if telefon.label %} ({{ telefon.label }}){% endif %}">{{ icon("phone", size="sm") }} {{ telefon.nummer }}{% if telefon.label %} ({{ telefon.label }}){% endif %}</a>
+  {% endfor %}
+{% endmacro %}

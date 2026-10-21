@@ -1412,7 +1412,11 @@ def _link_kontext(db: Session, user: User, plan: KatplanPlan, version_elemente: 
             element_relationen.setdefault(relation.von_element_id, []).extend(_relation_ansichten(
                 db, user, plan, [{"id": relation.id, "zu_element_uuid": relation.zu_element_uuid,
                                   "art": relation.art, "hinweis": relation.hinweis}]))
-    return {"element_links": element_links, "element_relationen": element_relationen,
+    verstaendigung = link_service.verstaendigungsliste(
+        db, plan_daten or {}, [{"akteure_json": e.akteure_json, "links_json": e.links_json}
+                                for e in (version_elemente or [])], voll=voll, user_rechte=rechte,
+    )
+    return {"verstaendigung": verstaendigung, "element_links": element_links, "element_relationen": element_relationen,
             "plan_links": plan_links, "link_rollen": link_service.KATPLAN_LINK_ROLLEN,
             "relation_arten": link_service.KATPLAN_RELATION_ARTEN,
             "ziel_typen": {typ: label for typ, label in _ZIEL_TYPEN.items()
@@ -1425,6 +1429,90 @@ def _link_antwort(request: Request, db: Session, user: User, plan: KatplanPlan,
         **_kontext(db, user, plan), "element": element, "beziehung": beziehung,
         "fehler": fehler, "version_oob": element is not None,
     }, status_code=422 if fehler else 200)
+
+
+def _telefon_kontext(db: Session, user: User, plan: KatplanPlan, element: KatplanElement) -> dict:
+    from app.core.permissions import KONTAKT_VERWALTER_ROLES
+    from app.core.telefon import telefon_normalisiert
+    from app.services.katplan_telefon_service import kontakt_treffer
+
+    if plan.org_id is None:
+        raise HTTPException(403, "Organisation fehlt.")
+    return {"element": element, "telefon_karten": [
+        {"nummer": nummer, "normalisiert": telefon_normalisiert(nummer),
+         "treffer": kontakt_treffer(db, plan.org_id, nummer)
+         if ziel_verfuegbar(db, plan.org_id, "kontakt") else []}
+        for nummer in qs_service.telefonnummern_im_element(element)],
+        "kontakt_anlegen_erlaubt": has_role(user, *KONTAKT_VERWALTER_ROLES)}
+
+
+@router.get("/{plan_id}/elemente/{element_id}/telefon")
+def telefon_assistent(plan_id: int, element_id: int, request: Request, db: Session = Depends(get_db),
+                      user: User = Depends(require_katplan_bearbeiten)):
+    plan = _plan(db, plan_id, user)
+    if plan.status == "archiviert" or plan.org_id is None:
+        raise HTTPException(403, "Dieser Plan kann nicht bearbeitet werden.")
+    element = _objekt(db, KatplanElement, element_id, plan, user)
+    return templates.TemplateResponse(request, "katplan/_telefon_assistent.html", {
+        **_kontext(db, user, plan), **_telefon_kontext(db, user, plan, element)})
+
+
+@router.post("/{plan_id}/elemente/{element_id}/telefon")
+def telefon_umwandeln(plan_id: int, element_id: int, request: Request, nummer: str = Form(...),
+                      aktion: str = Form(...), version: int = Form(...), kontakt_id: int | None = Form(None),
+                      rolle: str = Form("zu_verstaendigen"), entfernen: bool = Form(False),
+                      anzeigename: str = Form(""), funktion: str = Form(""), organisation: str = Form(""),
+                      kontakt_nummer: str = Form(""), db: Session = Depends(get_db),
+                      user: User = Depends(require_katplan_bearbeiten)):
+    from app.core.permissions import KONTAKT_VERWALTER_ROLES
+    from app.services.katplan_telefon_service import nummer_entfernen
+    from app.services.kontakt_service import create_kontakt
+
+    plan = _plan(db, plan_id, user)
+    if plan.status == "archiviert" or plan.org_id is None:
+        raise HTTPException(403, "Dieser Plan kann nicht bearbeitet werden.")
+    element = _objekt(db, KatplanElement, element_id, plan, user)
+    if aktion == "anlegen" and not has_role(user, *KONTAKT_VERWALTER_ROLES):
+        raise HTTPException(403, "Kein Recht zum Anlegen – bitte Kontaktverwaltung ansprechen")
+    try:
+        pruefe_version(element, version)
+        if nummer not in qs_service.telefonnummern_im_element(element):
+            raise ValueError("Die Nummer ist im Element nicht mehr vorhanden.")
+        if rolle not in link_service.KATPLAN_LINK_ROLLEN or aktion not in ("anlegen", "verknuepfen"):
+            raise ValueError("Unbekannte Aktion oder Rolle.")
+        if not ziel_verfuegbar(db, plan.org_id, "kontakt"):
+            raise ValueError("Kontaktverwaltung nicht verfügbar.")
+        if aktion == "anlegen":
+            if not anzeigename.strip():
+                raise ValueError("Bitte einen Anzeigenamen eingeben.")
+            kontakt = create_kontakt(db, {
+                "typ": "person", "anzeigename": anzeigename, "funktion": funktion, "organisation": organisation,
+                "einsatzrelevant": True,
+            }, [{"nummer": kontakt_nummer or nummer, "verwendung": "dienst"}], [],
+                org_id=plan.org_id, user_id=user.id, commit=False)
+            kontakt_id = kontakt.id
+        if kontakt_id is None:
+            raise ValueError("Bitte einen Kontakt auswählen.")
+        if ziel_laden(db, plan.org_id, "kontakt", kontakt_id) is None:
+            raise ValueError("Kontakt nicht verfügbar.")
+        vorhanden = db.query(KatplanLink).filter_by(
+            org_id=plan.org_id, plan_id=plan.id, element_id=element.id,
+            ziel_typ="kontakt", ziel_id=kontakt_id, rolle=rolle,
+        ).first()
+        if not vorhanden:
+            link_service.link_anlegen(db, plan, user, element=element, ziel_typ="kontakt",
+                                      ziel_id=kontakt_id, rolle=rolle)
+        if entfernen:
+            nummer_entfernen(db, plan, element, user, nummer)
+        db.commit()
+    except (ValueError, KatplanKonflikt) as exc:
+        db.rollback()
+        return templates.TemplateResponse(request, "katplan/_telefon_assistent.html", {
+            **_kontext(db, user, plan), **_telefon_kontext(db, user, plan, element), "fehler": str(exc),
+        }, status_code=409 if isinstance(exc, KatplanKonflikt) else 422)
+    return _antwort(request, db, user, plan, "_telefon_assistent.html",
+                    **_telefon_kontext(db, user, plan, element), form=_formular_element(db, element),
+                    daten=json.loads(element.daten_json or "{}"), aktiv_element_id=element.id)
 
 
 @router.get("/{plan_id}/verknuepfungen/suche")

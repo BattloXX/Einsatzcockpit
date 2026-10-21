@@ -206,7 +206,7 @@ def test_http_registry_wrapper(client, inhalte):
                                         **argumente(inhalte)[index])
 
 
-def test_qs_telefon_nur_mit_kontaktlink(inhalte):
+def test_qs_telefon_mit_und_ohne_kontaktlink(inhalte):
     with TestingSession() as db:
         set_tenant_context(db, None)
         plan = db.get(KatplanPlan, inhalte["plan_id"])
@@ -216,6 +216,8 @@ def test_qs_telefon_nur_mit_kontaktlink(inhalte):
         for link in db.query(KatplanLink).filter_by(element_id=e.id, org_id=plan.org_id).all():
             db.delete(link)
         db.flush()
+        assert any(h["code"] == "telefon_im_text" for h in element_hinweise(db, plan, e, heute=date(2026, 10, 20)))
+        e.beschreibung_html = "<p>Bitte zentralen Kontakt verständigen.</p>"
         assert not any(h["code"] == "telefon_im_text" for h in element_hinweise(db, plan, e, heute=date(2026, 10, 20)))
 
 

@@ -3,6 +3,7 @@
 import json
 import re
 from collections import Counter
+from collections.abc import Iterator
 from datetime import date
 
 from sqlalchemy.orm import Session
@@ -15,7 +16,7 @@ from app.services.katplan_ziel_service import ziel_verfuegbar
 
 LABELS = {
     "massnahme_ohne_akteur": "Maßnahme ohne zuständigen Akteur",
-    "telefon_im_text": "Telefonnummer im Text trotz verknüpftem Kontakt",
+    "telefon_im_text": "Telefonnummer im Text – zentralen Kontakt verknüpfen",
     "ohne_geometrie": "ohne Geometrie", "geo_ungeprueft": "Ort ungeprüft",
     "link_ziel_fehlt": "Verknüpfungsziel fehlt", "kontakt_geaendert": "Kontakt seit Freigabe geändert",
     "pruefen_faellig": "Prüfung fällig", "gueltig_abgelaufen": "Gültigkeit abgelaufen",
@@ -34,13 +35,49 @@ SYMBOLE = {
 
 
 _TELEFON = re.compile(r"(?<![\d.])(?:\+|00)?\d[\d /-]{6,}\d")
-_DATUM = re.compile(r"\d{1,4}[-./]\d{1,2}[-./]\d{1,4}")
+_DATUM = re.compile(r"(?<!\d)\d{1,4}[-./]\d{1,2}[-./]\d{1,4}(?!\d)")
+
+
+def _telefonnummern_im_text(wert: str) -> Iterator[str]:
+    ohne_datum = _DATUM.sub(lambda m: "\n" * len(m.group()), wert)
+    for treffer in _TELEFON.finditer(ohne_datum):
+        nummer = treffer.group()
+        if sum(c.isdigit() for c in nummer) >= 8:
+            yield nummer
 
 
 def _hat_telefon(text: str) -> bool:
     """Mindestens acht Ziffern, keine Datumsangabe."""
-    return any(sum(c.isdigit() for c in m.group()) >= 8 and not _DATUM.fullmatch(m.group().strip())
-               for m in _TELEFON.finditer(text))
+    return next(_telefonnummern_im_text(text), None) is not None
+
+
+def string_werte(wert):
+    """String-Werte in stabiler Reihenfolge, auch in verschachtelten Typdaten."""
+    if isinstance(wert, str):
+        yield wert
+    elif isinstance(wert, dict):
+        for kind in wert.values():
+            yield from string_werte(kind)
+    elif isinstance(wert, list):
+        for kind in wert:
+            yield from string_werte(kind)
+
+
+def telefonnummern_im_element(element) -> list[str]:
+    """Originalschreibweisen aus Beschreibung und Typdaten, maximal zehn."""
+    from app.services.katplan_mcp_service import text
+
+    def feld(name):
+        return element.get(name) if isinstance(element, dict) else getattr(element, name, None)
+
+    nummern: list[str] = []
+    for wert in [text(feld("beschreibung_html")) or "", *string_werte(json.loads(feld("daten_json") or "{}"))]:
+        for nummer in _telefonnummern_im_text(wert):
+            if nummer not in nummern:
+                nummern.append(nummer)
+                if len(nummern) == 10:
+                    return nummern
+    return nummern
 
 
 def freigabe_links(db: Session, plan: KatplanPlan) -> dict[str, list[dict]]:
@@ -70,11 +107,8 @@ def element_hinweise(db: Session, plan: KatplanPlan, element: KatplanElement, *,
     if any(link_ansicht(db, link, voll=False)["fehlt"] or not ziel_verfuegbar(
         db, plan.org_id, link.ziel_typ) for link in links):
         codes.append("link_ziel_fehlt")
-    from app.services.katplan_mcp_service import text
-
-    if any(link.ziel_typ in ("kontakt", "kontakt_organisation") for link in links) and _hat_telefon(
-        text(element.beschreibung_html) or "",
-    ):
+    nummern = telefonnummern_im_element(element)
+    if nummern:
         codes.append("telefon_im_text")
     if version_links is None:
         version_links = freigabe_links(db, plan)
@@ -100,7 +134,8 @@ def element_hinweise(db: Session, plan: KatplanPlan, element: KatplanElement, *,
         if quelle and any(d.ist_aktuelle_version and not d.archiviert and d.versionsnummer > quelle.versionsnummer
                for d in _gruppe(db, plan, quelle)):
             codes.append("quelle_neuer")
-    return [{"code": code, "text": LABELS[code], "farbe": "amber"} for code in codes]
+    return [{"code": code, "text": LABELS[code], "farbe": "amber",
+             **({"nummern": nummern} if code == "telefon_im_text" else {})} for code in codes]
 
 
 def plan_zusammenfassung(db: Session, plan: KatplanPlan, heute: date) -> dict[str, int]:

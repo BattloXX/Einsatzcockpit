@@ -152,7 +152,8 @@ def test_freigabe_arbeitsstand_und_format(inhalte):
         assert set(e) == {"plan_id", "plan_version_id", "element_id", "element_version_id", "version", "type", "type_label",
                           "kennung", "title", "body", "daten", "priority", "tags", "akteure", "phases", "chapter", "address", "address_parts",
                           "geometry", "geo_status", "linked_entities", "relations", "attachments", "source_references",
-                          "review_status", "vertraulich", "gueltig_bis", "pruefen_am", "warnings"}
+                          "review_status", "vertraulich", "gueltig_bis", "pruefen_am", "warnings", "telefonnummern_im_text"}
+        assert e["telefonnummern_im_text"] == []
         assert e["source_references"][0]["titel"] == "Freigegebene Quelle"
         with pytest.raises(PermissionError):
             rufe(inhalte, "katplan_lesen", fassung="arbeitsstand", **args)

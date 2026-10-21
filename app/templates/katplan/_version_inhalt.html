@@ -45,3 +45,15 @@
   </div>
   {% include "katplan/_nach_akteur.html" %}
 </div>
+
+{% if plan_daten.get("planart") in ("alarm_einsatzplan", "massnahmenplan") and verstaendigung %}
+  <section class="kp-box" aria-label="Verständigungsliste">
+    <h2>Verständigungsliste</h2>
+    {% for gruppe, kontakte in verstaendigung.items() %}
+      <h3>{{ gruppe }}</h3>
+      {% with links = kontakte, links_bearbeiten = false %}
+        {% include "katplan/_links_anzeige.html" %}
+      {% endwith %}
+    {% endfor %}
+  </section>
+{% endif %}
