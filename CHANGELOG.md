@@ -4,6 +4,19 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 
 ## Unreleased
 
+- **Navigation**: Module nach Einsatznutzen gruppiert (Im Einsatz, Einsatzbegleitend,
+  Verwaltung & Planung, Auswertung), einheitlich in Desktop-Menü, Mobil-Menü und
+  Übersichtskacheln aus einer Quelle (`app/services/modul_navigation.py`). Profil ganz
+  rechts mit Hilfe-Link, Archiv ans Ende; mobil Kontoaktionen nur noch im Profil,
+  Bottom-Nav mit „Menü“ statt Verwaltung/Archiv.
+- **Icon-System**: Einheitliche Tabler-Icons statt Emoji in Navigation, Board, GSL,
+  Karten, Verwaltung, öffentlichen Seiten, PDF und Druck; Merkmal-Symbole in der
+  Datenbank (Migration 0301), Wächtertest gegen neue Emoji.
+- **Formulare**: Gemeinsame Personenauswahl für Fahrtenbuch und Atemschutz-Geräteprüfung,
+  responsives Atemschutzformular.
+- **Dokumentation**: Wiki-Startseite nach Menüstruktur neu aufgebaut, Seitenleiste,
+  neue Seiten zur Atemschutz-Geräteprüfung; README entsprechend gegliedert.
+
 - **Zentrale Suche**: Organisationsweite und kontextbezogene Suche über freigegebene
   Fachinhalte und Live-Daten mit Rechteprüfung. Org-Schalter, Indexstatus und
   asynchroner Neuaufbau, MariaDB-FULLTEXT-Test und Betriebsdokumentation ergänzt.

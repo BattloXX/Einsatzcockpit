@@ -31,26 +31,41 @@ Eine vollwertige Webapp, die Einsatzleitern und Schriftführern eine strukturier
 
 ## Features
 
+Gegliedert wie Menü und Wiki: zuerst die Einsatzführung, dann die Module in der Reihenfolge, in der man sie im Einsatz braucht.
+
+### Einsatz führen
+
 | Feature | Beschreibung |
 |---------|-------------|
-| **Echtzeit-Einsatzführung** | WebSocket-basiertes Kanban-Board für Kräfte, Aufgaben, Fahrzeuge und Meldungen |
-| **Großschadenslage & Stab** | Phasen-Kanban, Einsatzstellen, SKKM-Regelkreis, Ressourcen und Lagekarte |
-| **Lageführung** | Taktische Zeichen, Fahrzeug- und Objekt-Layer, Multi-User-Editing, Replay und Druck |
+| **Echtzeit-Einsatzführung** | WebSocket-basiertes Board für Kräfte, Aufträge, Fahrzeuge und Meldungen; abgeschlossene Einsätze nur noch lesbar |
 | **Atemschutzüberwachung** | Rückzugsdruckberechnung, Zeitmessung und Warnungen |
-| **Alarm-Integrationen** | REST-API, LIS/IPR, externer SMS-/E-Mail-Versand, Teams sowie Print & Alarm Gateway |
-| **Objekt- & Nachschlagewerke** | Einsatzunterlagen, Alarm-Matching, OCR-Suche, Gefahrgut und Rettungsdatenblätter |
-| **Straßensperren & Anfahrtsrouting** | Sperren mit Karte, Statusansicht und Nachbarfreigaben; optionale Anfahrtsprüfung je Einsatz mit Umfahrung und Warnung in Einsatzinfo bzw. Alarm-Infoscreen |
-| **MCP-Server** | OAuth-gesicherte KI-Anbindung für Objektentwürfe und Arbeitskopien, zentrale Kontaktpflege, fertig analysierte PDFs (Upload per curl) und lesende Fahrtenbuch-Auswertungen |
-| **Multi-Org-Support** | Mehrere Feuerwehren, gemeinsame Einsätze und strikt isolierte Stammdaten |
-| **Archiv & Berichte** | Audit-Log, Zeitreise, Statistik und PDF-Exporte |
+| **Lageführung** | Taktische Zeichen, Fahrzeug- und Objekt-Layer, Multi-User-Editing, Replay und Druck |
+| **Zentrale Suche** | Suche über Objekte, Objektdokumente, Katastrophenpläne, Einsätze, Straßensperren, Wasserstellen und GSL-Daten mit Rechteprüfung |
 | **Wetter & lokale Stationen** | Nowcast, Warnungen, Radar und optionale Meteobridge-Anbindung |
-| **UAS / Drohne** | BOS-Drohnendokumentation gemäß RL-UAS LFV Vorarlberg 2024 |
-| **PWA & mobile Nutzung** | Offline-Betrieb, Push-Benachrichtigungen und QR-Schnellzugriff |
-| **Native Android-App** | Sideload-APK mit zuverlässigem Push, Live-Einsatzstatus, Homescreen-Widgets und echtem Offline-Datenbestand für Objekte & Kontakte |
-| **Probenplan** | Jahresplanung für Übungen und Veranstaltungen mit Checklisten, Appell, Nachbereitung, Übungseinsatz und optionalem öffentlichem Kalender |
-| **KI-Assistent** | Optionale Auftragsvorschläge, Lagebilder und Priorisierung per Anthropic Claude |
+| **Archiv & Berichte** | Audit-Log, Zeitreise und PDF-Exporte |
 
-→ [Vollständige Feature-Liste im Wiki](docs/wiki/Home.md#kernfunktionen) · [Native Android-App im Wiki](docs/wiki/Anwender-Native-Android-App.md) · [Android-App-Repository](https://github.com/BattloXX/Einsatzcockpit-Android)
+### Module
+
+| Gruppe | Module |
+|--------|--------|
+| **Im Einsatz** | **Katastrophenpläne** (freigegebene Fassungen, Karte, PDF-Offlinefassung, KI-Import) · **Nachschlagewerke** (Gefahrgut, Rettungsdatenblätter) · **Kontakte** (Einsatztelefonlisten, Verzeichnisse) · **Straßensperren** (Karte, Nachbarfreigaben, optionale Anfahrtsprüfung) · **Förderstrecke** (Wasserförderung planen) |
+| **Einsatzbegleitend** | **Fahrtenbuch** · **Atemschutz-Geräteprüfung** · **Drohne / UAS** (Dokumentation gemäß RL-UAS LFV Vorarlberg 2024) |
+| **Verwaltung & Planung** | **Objekte** (Einsatzunterlagen, Alarm-Matching, OCR-Suche, externe Objektpflege) · **Probenplan** (Jahresplanung, Appell, Nachbereitung, öffentlicher Kalender) · **Planspiele** (Übungsgenerator für Board und Großschadenslagen) · **Mailing** |
+| **Auswertung** | **Statistik** (Kennzahlen und Diagramme zu den Einsätzen) |
+
+### Großschadenslage, Alarmierung und Anbindung
+
+| Feature | Beschreibung |
+|---------|-------------|
+| **Großschadenslage & Stab** | Phasen-Kanban, Einsatzstellen, SKKM-Regelkreis, Ressourcen, Lagekarte und Einheitenmodus für Fahrzeug-Tablets |
+| **Alarm-Integrationen** | REST-API, LIS/IPR, DIBOS, SMS, E-Mail, Teams sowie Print & Alarm Gateway und Windows-Druckagent |
+| **PWA & mobile Nutzung** | Offline-Betrieb, Push-Benachrichtigungen und QR-Schnellzugriff |
+| **Native Android-App** | Sideload-APK mit zuverlässigem Push, Live-Einsatzstatus, Homescreen-Widgets und Offline-Datenbestand für Objekte & Kontakte |
+| **MCP-Server** | OAuth-gesicherte KI-Anbindung für Einsätze, Großschadenslagen, Objekte, Kontakte, Katastrophenpläne, Straßensperren und Fahrtenbuch |
+| **KI-Assistent** | Optionale Auftragsvorschläge, Lagebilder und Priorisierung per Anthropic Claude |
+| **Multi-Org-Support** | Mehrere Feuerwehren, gemeinsame Einsätze und strikt isolierte Stammdaten |
+
+→ [Alle Funktionen im Wiki](https://github.com/BattloXX/Einsatzcockpit/wiki) · [Native Android-App im Wiki](docs/wiki/Anwender-Native-Android-App.md) · [Android-App-Repository](https://github.com/BattloXX/Einsatzcockpit-Android)
 
 ## Tech-Stack
 
@@ -137,16 +152,15 @@ Das Wiki ist die kanonische Quelle für Installation, Bedienung, Administration,
 
 | Einstieg | Inhalt |
 |----------|--------|
-| [Wiki-Startseite](docs/wiki/Home.md) | Vollständiger Index und Feature-Überblick |
-| [Erste Schritte](docs/wiki/Anwender-Erste-Schritte.md) | Login, Oberfläche und Tastaturkürzel |
-| [Probenplan](docs/wiki/Anwender-Probenplan.md) | Jahresplanung, Vorbereitung, Appell, Nachbereitung und öffentlicher Kalender |
-| [Administration](docs/wiki/Administration-Einstellungen.md) | Organisations- und Systemeinstellungen |
+| [Wiki-Startseite](https://github.com/BattloXX/Einsatzcockpit/wiki) | Einstieg nach Aufgabe, alle Module in Menü-Reihenfolge ([Quelle](docs/wiki/Home.md)) |
+| [Erste Schritte](docs/wiki/Anwender-Erste-Schritte.md) | Login, Oberfläche, Menü und Tastaturkürzel |
+| [Einsatz starten](docs/wiki/Anwender-Einsatz-starten.md) | Vom Alarm bis zum laufenden Einsatz |
+| [Großschadenslage](docs/wiki/Anwender-Grosschadenslage.md) | Stab, Einsatzstellen, Ressourcen und Einheitenansicht |
+| [Administration](docs/wiki/Administration-Einstellungen.md) | Organisations- und Systemeinstellungen, Modulschalter |
 | [Architektur](docs/wiki/Entwickler-Architektur.md) | Schichten, Module, Datenflüsse und Multi-Tenancy |
 | [REST-API](docs/wiki/Entwickler-REST-API.md) | Endpunkte, Payloads und externe Alarmierung |
 | [MCP-Server](docs/wiki/Administration-MCP-Server.md) | KI-Anwendungen, OAuth, Aktivierung und Betrieb |
 | [Einsatz-Feed](docs/wiki/Administration-Einsatz-Feed.md) | Lesende Pull-Schnittstelle für externe Systeme |
-| [Einsatz-Feed-Schema](docs/wiki/Entwickler-Einsatz-Feed.md) | Endpunkte, Felder, ETag und Änderungserkennung |
-| [MCP-Erweiterung](docs/wiki/Entwickler-MCP-Erweiterung.md) | Tools, Live-Rechte und Testmuster |
 | [Backup & Disaster-Recovery](docs/wiki/Betrieb-Backup-und-Disaster-Recovery.md) | Sicherungen, Restore-Probe, RPO und RTO |
 | [Fehlerbehebung](docs/wiki/Installation-Troubleshooting.md) | Häufige Installations- und Betriebsfehler |
 
@@ -155,7 +169,7 @@ Die Markdown-Quellen unter `docs/wiki/` werden automatisch ins GitHub Wiki gespi
 ## Tests
 
 ```bash
-pytest tests/ -v
+pytest -q -n auto
 pytest tests/test_breathing.py tests/test_payload_validation.py -v
 pytest --cov=app --cov-report=html tests/
 ```
