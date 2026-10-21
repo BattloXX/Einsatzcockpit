@@ -406,6 +406,20 @@ def suche_neuaufbau(org_id: int | None = None, alle: bool = False, quelle: str |
         db.close()
 
 
+def suche_vektor_init() -> None:
+    """Prueft VECTOR-Unterstuetzung und legt die konfigurierte Tabelle an."""
+    from app.services.suche.vektor import stelle_tabelle_sicher, tabellenname, vektor_faehig
+
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        if not vektor_faehig(db):
+            print("VECTOR wird von dieser Datenbank nicht unterstuetzt.")
+            return
+        stelle_tabelle_sicher(db)
+        db.commit()
+        print(f"Vektortabelle {tabellenname()} ist bereit.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="app.cli")
     sub = parser.add_subparsers(dest="command")
@@ -441,6 +455,7 @@ def main() -> None:
     org_wahl.add_argument("--org", type=int)
     org_wahl.add_argument("--alle", action="store_true")
     p_suche.add_argument("--quelle", choices=("objekt", "objekt_dokument_seite", "katplan_element", "katplan_seite"))
+    sub.add_parser("suche-vektor-init", help="Vektortabelle pruefen und anlegen")
 
     args = parser.parse_args()
     if args.command == "create-admin":
@@ -458,6 +473,8 @@ def main() -> None:
         sys.exit(restore_test(args.scratch_db))
     elif args.command == "suche-neuaufbau":
         suche_neuaufbau(args.org, args.alle, args.quelle)
+    elif args.command == "suche-vektor-init":
+        suche_vektor_init()
     elif args.command == "backup-upload":
         sys.exit(backup_upload(args.all))
     else:

@@ -45,6 +45,13 @@ class Settings(BaseSettings):
     SEARCH_ABGLEICH_MINUTEN: int = 60
     SEARCH_MCP_ENABLED: bool = True
     SEARCH_SEMANTIC_ENABLED: bool = False
+    SEARCH_EMBED_URL: str = "http://localhost:11434"
+    SEARCH_EMBED_MODEL: str = "embeddinggemma"
+    SEARCH_EMBED_DIM: int = 768
+    SEARCH_EMBED_QUERY_TIMEOUT_S: float = 2.0
+    SEARCH_EMBED_BATCH_TIMEOUT_S: float = 60.0
+    SEARCH_EMBED_BATCH: int = 16
+    SEARCH_SEMANTIC_MAX_DISTANZ: float = 0.6
 
     # Slow-Query-Logging: Queries oberhalb dieser Schwelle (ms) landen als
     # WARNING im Log ("einsatzleiter.slow_query") — Messbasis für gezielte
