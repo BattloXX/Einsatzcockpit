@@ -21,8 +21,8 @@ Feuerwehrspezifische Symbole ohne Tabler-Entsprechung bleiben unverändert. Funk
 | P7a–P7d | Objektverwaltung, Admin-Rest, Gateway/Förderstrecke/Termine, Katastrophenplan u. a. | #660, #661, #662 |
 | P8 | Öffentliche Seiten, Infoscreens, Wetter; Tailwind-CDN der Infoscreens durch lokalen Build ersetzt | #663 |
 | P9 | PDF/Druck, xhtml2pdf-Fallback ohne System-Icons, PDF-Tests | #664 |
-| P10 | Merkmal-Symbole: Migration 0301 `merkmal_katalog.icon_name`, Icon-Auswahl | folgt |
-| P11 | Aufräumen: CSS-Glyphe, begründete Ausnahmen, Doku | folgt |
+| P10 | Merkmal-Symbole: Migration 0301 `merkmal_katalog.icon_name`, Icon-Auswahl | #665 |
+| P11 | Aufräumen: CSS-Glyphe, begründete Ausnahmen, Doku | #665 |
 
 Ergebnis: Emoji-Baseline 1466 → 85 Treffer, alle mit Begründung (`AUSNAHME_GRUENDE`).
 Bewusst geblieben: Gefahren-Piktogramme (fachliche Information, inkl. Noto-Emoji-Schrift im
