@@ -17,9 +17,9 @@
   </div>
   <div class="lage-ctx-bar__tabs-row" style="flex-wrap:wrap;">
     <div style="display:flex;gap:6px;flex-wrap:wrap;flex:1;">
-      <a href="/archiv/{{ incident.id }}/pdf" target="_blank" class="btn btn--primary btn--sm">📄 PDF</a>
-      <a href="/einsatz/{{ incident.id }}/historie" class="btn btn--ghost btn--sm">🕐 Verlauf</a>
-      <a href="/einsatz/{{ incident.id }}" class="btn btn--ghost btn--sm">🖥 Board ansehen</a>
+      <a href="/archiv/{{ incident.id }}/pdf" target="_blank" class="btn btn--primary btn--sm">{{ icon("file-text", size="xs") }} PDF</a>
+      <a href="/einsatz/{{ incident.id }}/historie" class="btn btn--ghost btn--sm">{{ icon("clock", size="xs") }} Verlauf</a>
+      <a href="/einsatz/{{ incident.id }}" class="btn btn--ghost btn--sm">{{ icon("device-desktop", size="xs") }} Board ansehen</a>
       {% if can_edit and wp_report_available and incident.status == 'closed' %}
       <div id="webseiten-bericht-result" style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;">
         {% if incident.wp_report_post_id %}
@@ -45,14 +45,14 @@
       <form method="post" action="/einsatz/{{ incident.id }}/wiedereroeffnen" style="display:contents"
             onsubmit="return confirm('Diesen Einsatz wieder eröffnen? Er wird erneut als aktiver Einsatz geführt.');">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-        <button type="submit" class="btn btn--ghost btn--sm">↻ Öffnen</button>
+        <button type="submit" class="btn btn--ghost btn--sm">{{ icon("refresh", size="xs") }} Öffnen</button>
       </form>
       {% endif %}
       {% if can_delete %}
       <form method="post" action="/archiv/{{ incident.id }}/loeschen" style="display:contents"
             onsubmit="return confirm('Einsatz #{{ incident.id }} ({{ incident.alarm_type_code }}) ENDGÜLTIG löschen?\n\nAlle Daten, Aufträge, Meldungen und Medien werden unwiderruflich gelöscht.\nDiese Aktion kann nicht rückgängig gemacht werden!');">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-        <button type="submit" class="btn btn--danger btn--sm">🗑</button>
+        <button type="submit" aria-label="Einsatz löschen" class="btn btn--danger btn--sm">{{ icon("trash", size="xs") }}</button>
       </form>
       {% endif %}
     </div>
@@ -68,7 +68,7 @@
 </nav>
 <div class="detail-grid" style="margin-top:16px;">
   <div class="detail-box" data-tabgroup="stammdaten" :class="{'is-active': tab === 'stammdaten'}">
-    <h3>🧾 Stammdaten</h3>
+    <h3>{{ icon("receipt", size="md") }} Stammdaten</h3>
     <dl class="detail-list">
       <dt>Stichwort</dt><dd>{{ incident.alarm_type_code }}</dd>
       <dt>Start</dt><dd>{{ incident.started_at|local_datetime }} Uhr</dd>
@@ -83,7 +83,7 @@
   </div>
 
   <div class="detail-box" data-tabgroup="fahrzeuge" :class="{'is-active': tab === 'fahrzeuge'}">
-    <h3>🚒 Fahrzeuge ({{ incident.vehicles|length + extra_vehicles|length }})</h3>
+    <h3>{{ icon("firetruck", size="md") }} Fahrzeuge ({{ incident.vehicles|length + extra_vehicles|length }})</h3>
     {% set fahrten = fahrten_details|default({}) %}
     {% for v in incident.vehicles %}
     <div class="vehicle-row">
@@ -123,18 +123,18 @@
   </div>
 
   <div class="detail-box" data-tabgroup="stammdaten" :class="{'is-active': tab === 'stammdaten'}">
-    <h3>📋 Aufträge ({{ incident.tasks|length }})</h3>
+    <h3>{{ icon("clipboard-list", size="md") }} Aufträge ({{ incident.tasks|length }})</h3>
     {% for t in incident.tasks %}
     <div class="task-row {% if t.is_done %}task-row--done{% endif %}">
       <span>{{ t.title }}</span>
-      {% if t.is_done %}<span class="badge badge--done">✓</span>{% endif %}
+      {% if t.is_done %}<span class="badge badge--done">{{ icon("check", size="sm", label="Erledigt") }}</span>{% endif %}
     </div>
     {% endfor %}
   </div>
 
   {% if incident.rescued_persons %}
   <div class="detail-box" data-tabgroup="stammdaten" :class="{'is-active': tab === 'stammdaten'}">
-    <h3>🧍 Gerettete Personen ({{ incident.rescued_persons|length }})</h3>
+    <h3>{{ icon("user-check", size="md") }} Gerettete Personen ({{ incident.rescued_persons|length }})</h3>
     {% for p in incident.rescued_persons %}
     <div class="person-row">{{ p.gender }}, {{ p.person_group }}{% if p.name %}, {{ p.name }}{% endif %}{% if p.location %} – {{ p.location }}{% endif %}</div>
     {% endfor %}
@@ -143,7 +143,7 @@
 
   {% if incident.breathing_troops %}
   <div class="detail-box detail-box--full" data-tabgroup="stammdaten" :class="{'is-active': tab === 'stammdaten'}">
-    <h3>🫁 Atemschutz</h3>
+    <h3>{{ modul_icon("atemschutz", size="md") }} Atemschutz</h3>
     <table class="table">
       <thead><tr><th>Trupp</th><th>Auftrag</th><th>Standort</th><th>Status</th><th>Einsatzbeginn</th><th>Rückzug</th><th>Zurück</th><th>PDF</th></tr></thead>
       <tbody>
@@ -157,7 +157,7 @@
           <td>{{ t.withdraw_at|local_time if t.withdraw_at else '–' }}</td>
           <td>{{ t.back_at|local_time if t.back_at else '–' }}</td>
           <td><button type="button" class="btn btn--ghost btn--xs"
-            onclick="ecpgPrint({document_type:'troop_protokoll', incident_id:{{ incident.id }}, artifact_ref:'{{ t.id }}', title:'Atemschutz-Protokoll drucken', localUrl:'/einsatz/{{ incident.id }}/atemschutz/{{ t.id }}/pdf'})">📄 PDF</button></td>
+            onclick="ecpgPrint({document_type:'troop_protokoll', incident_id:{{ incident.id }}, artifact_ref:'{{ t.id }}', title:'Atemschutz-Protokoll drucken', localUrl:'/einsatz/{{ incident.id }}/atemschutz/{{ t.id }}/pdf'})">{{ icon("file-text", size="xs") }} PDF</button></td>
         </tr>
         {% endfor %}
       </tbody>
@@ -208,7 +208,7 @@
 
   {% if ai_enabled or incident.ai_report_draft %}
   <div class="detail-box detail-box--full" data-tabgroup="bericht" :class="{'is-active': tab === 'bericht'}">
-    <h3>✨ KI-Verlaufsbericht</h3>
+    <h3>{{ icon("sparkles", size="md") }} KI-Verlaufsbericht</h3>
     {% if incident.ai_report_draft %}
     <div id="ki-bericht-bereich">
       <form hx-post="/archiv/{{ incident.id }}/ki-bericht/speichern"
@@ -232,7 +232,7 @@
             hx-target="#ki-bericht-bereich"
             hx-swap="outerHTML"
             hx-indicator="#ki-bericht-spinner">
-      ✨ KI-Verlaufsbericht erzeugen
+      {{ icon("sparkles", size="sm") }} KI-Verlaufsbericht erzeugen
     </button>
     <span id="ki-bericht-spinner" class="htmx-indicator" style="margin-left:.5rem; font-size:.85em; color:var(--fg-muted);">Wird erzeugt…</span>
     {% endif %}
@@ -242,16 +242,16 @@
   <!-- Mannschaft -->
   <div class="detail-box detail-box--full" data-tabgroup="mannschaft" :class="{'is-active': tab === 'mannschaft'}">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
-      <h3 style="margin:0;">👥 Mannschaft</h3>
+      <h3 style="margin:0;">{{ icon("users", size="md") }} Mannschaft</h3>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
         {% if can_edit %}
         <button type="button" class="btn btn--primary btn--sm"
                 data-ec-action="open-dialog" data-ec-dialog="mannschaft-dialog">+ Teilnehmer</button>
         {% endif %}
-        <a id="teilnahme-druck-link" href="/teilnahme/einsatz/{{ incident.id }}/druck" target="_blank" class="btn btn--ghost btn--sm">🖨 Drucken</a>
+        <a id="teilnahme-druck-link" href="/teilnahme/einsatz/{{ incident.id }}/druck" target="_blank" class="btn btn--ghost btn--sm">{{ icon("printer", size="xs") }} Drucken</a>
         <button type="button" id="teilnahme-pdf-link" class="btn btn--ghost btn--sm"
-          onclick="ecpgPrint({document_type:'teilnahme', artifact_ref:'einsatz:{{ incident.id }}', title:'Teilnehmerliste drucken', localUrl:'/teilnahme/einsatz/{{ incident.id }}/export.pdf'})">📄 PDF</button>
-        <a id="teilnahme-xlsx-link" href="/teilnahme/einsatz/{{ incident.id }}/export.xlsx" class="btn btn--ghost btn--sm">📊 Excel</a>
+          onclick="ecpgPrint({document_type:'teilnahme', artifact_ref:'einsatz:{{ incident.id }}', title:'Teilnehmerliste drucken', localUrl:'/teilnahme/einsatz/{{ incident.id }}/export.pdf'})">{{ icon("file-text", size="xs") }} PDF</button>
+        <a id="teilnahme-xlsx-link" href="/teilnahme/einsatz/{{ incident.id }}/export.xlsx" class="btn btn--ghost btn--sm">{{ icon("chart-bar", size="xs") }} Excel</a>
       </div>
     </div>
     <div id="mannschaft-container"
@@ -275,7 +275,7 @@
             <td>{{ pruefung.eingesetzt_am.strftime('%d.%m.%Y') }}</td>
             <td>{% if pruefung.alles_ok %}<span class="badge badge--success">in Ordnung</span>{% else %}<span class="badge badge--error">Mangel</span>{% endif %}</td>
             <td><button type="button" class="btn btn--ghost btn--xs"
-              onclick="ecpgPrint({document_type:'as_pruefung', artifact_ref:'{{ pruefung.id }}', title:'Atemschutzprüfung drucken', localUrl:'/atemschutz-pruefung/{{ pruefung.id }}/pdf'})">📄 PDF</button></td>
+              onclick="ecpgPrint({document_type:'as_pruefung', artifact_ref:'{{ pruefung.id }}', title:'Atemschutzprüfung drucken', localUrl:'/atemschutz-pruefung/{{ pruefung.id }}/pdf'})">{{ icon("file-text", size="xs") }} PDF</button></td>
           </tr>
           {% else %}
           <tr><td colspan="5" class="text-muted">Keine Atemschutzprüfungen vorhanden.</td></tr>
@@ -286,7 +286,7 @@
   </div>
 
   <div class="detail-box detail-box--full" data-tabgroup="bericht" :class="{'is-active': tab === 'bericht'}">
-    <h3>🕐 Verlauf</h3>
+    <h3>{{ icon("clock", size="md") }} Verlauf</h3>
     <div class="log-list">
       {% for entry in verlauf %}
       <div class="log-entry{% if entry.level %} log-entry--{{ entry.level }}{% endif %}">

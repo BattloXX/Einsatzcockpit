@@ -52,48 +52,48 @@
 <div class="anno">
   <div class="anno__bar">
     <div class="anno__grp" aria-label="Werkzeug">
-      <button type="button" class="anno-btn" data-anno-tool="select" title="Auswahl / Verschieben">✥</button>
-      <button type="button" class="anno-btn is-active" data-anno-tool="pen" title="Stift (Freihand)">✏️</button>
-      <button type="button" class="anno-btn" data-anno-tool="arrow" title="Pfeil">↗</button>
-      <button type="button" class="anno-btn" data-anno-tool="line" title="Linie">／</button>
-      <button type="button" class="anno-btn" data-anno-tool="rect" title="Rechteck">▭</button>
-      <button type="button" class="anno-btn" data-anno-tool="ellipse" title="Ellipse">◯</button>
-      <button type="button" class="anno-btn" data-anno-tool="x" title="X-Markierung">✖</button>
-      <button type="button" class="anno-btn" data-anno-tool="text" title="Text">T</button>
-      <button type="button" class="anno-btn" data-anno-tool="eraser" title="Element löschen">⌫</button>
-      <button type="button" class="anno-btn" data-anno-panel="tz" title="Taktische Zeichen / Flächen"
+      <button type="button" class="anno-btn" data-anno-tool="select" aria-label="Auswahl / Verschieben" title="Auswahl / Verschieben">{{ icon("pointer", size="sm") }}</button>
+      <button type="button" class="anno-btn is-active" data-anno-tool="pen" aria-label="Stift (Freihand)" title="Stift (Freihand)">{{ icon("pencil", size="sm") }}</button>
+      <button type="button" class="anno-btn" data-anno-tool="arrow" aria-label="Pfeil" title="Pfeil">{{ icon("external-link", size="sm") }}</button>
+      <button type="button" class="anno-btn" data-anno-tool="line" aria-label="Linie" title="Linie">{{ icon("line", size="sm") }}</button>
+      <button type="button" class="anno-btn" data-anno-tool="rect" aria-label="Rechteck" title="Rechteck">{{ icon("square", size="sm") }}</button>
+      <button type="button" class="anno-btn" data-anno-tool="ellipse" aria-label="Ellipse" title="Ellipse">{{ icon("circle", size="sm") }}</button>
+      <button type="button" class="anno-btn" data-anno-tool="x" aria-label="X-Markierung" title="X-Markierung">{{ icon("x", size="sm") }}</button>
+      <button type="button" class="anno-btn" data-anno-tool="text" aria-label="Text" title="Text">T</button>
+      <button type="button" class="anno-btn" data-anno-tool="eraser" aria-label="Element löschen" title="Element löschen">{{ icon("eraser", size="sm") }}</button>
+      <button type="button" class="anno-btn" data-anno-panel="tz" aria-label="Taktische Zeichen / Flächen" title="Taktische Zeichen / Flächen"
               style="font-size:.92rem; font-weight:700; letter-spacing:.03em;">TZ</button>
     </div>
     <div class="anno__sep"></div>
     <div class="anno__grp" aria-label="Farbe">
-      <button type="button" class="anno-color" data-anno-color="#e11d1d" style="background:#e11d1d" title="Rot – Gefahr/Feuer"></button>
-      <button type="button" class="anno-color" data-anno-color="#2563eb" style="background:#2563eb" title="Blau – Wasser"></button>
-      <button type="button" class="anno-color" data-anno-color="#eab308" style="background:#eab308" title="Gelb – Hinweis"></button>
-      <button type="button" class="anno-color" data-anno-color="#16a34a" style="background:#16a34a" title="Grün – sicher"></button>
-      <button type="button" class="anno-color" data-anno-color="#111111" style="background:#111111" title="Schwarz"></button>
-      <button type="button" class="anno-color" data-anno-color="#ffffff" style="background:#ffffff;border-color:#888" title="Weiß"></button>
+      <button type="button" class="anno-color" data-anno-color="#e11d1d" style="background:#e11d1d" aria-label="Rot – Gefahr/Feuer" title="Rot – Gefahr/Feuer"></button>
+      <button type="button" class="anno-color" data-anno-color="#2563eb" style="background:#2563eb" aria-label="Blau – Wasser" title="Blau – Wasser"></button>
+      <button type="button" class="anno-color" data-anno-color="#eab308" style="background:#eab308" aria-label="Gelb – Hinweis" title="Gelb – Hinweis"></button>
+      <button type="button" class="anno-color" data-anno-color="#16a34a" style="background:#16a34a" aria-label="Grün – sicher" title="Grün – sicher"></button>
+      <button type="button" class="anno-color" data-anno-color="#111111" style="background:#111111" aria-label="Schwarz" title="Schwarz"></button>
+      <button type="button" class="anno-color" data-anno-color="#ffffff" style="background:#ffffff;border-color:#888" aria-label="Weiß" title="Weiß"></button>
     </div>
     <div class="anno__sep"></div>
     <div class="anno__grp" aria-label="Strichstärke">
-      <button type="button" class="anno-width" data-anno-width="4"  title="Dünn"><i style="width:6px;height:6px;"></i></button>
-      <button type="button" class="anno-width is-active" data-anno-width="9"  title="Mittel"><i style="width:11px;height:11px;"></i></button>
-      <button type="button" class="anno-width" data-anno-width="16" title="Dick"><i style="width:16px;height:16px;"></i></button>
+      <button type="button" class="anno-width" data-anno-width="4"  aria-label="Dünn" title="Dünn"><i style="width:6px;height:6px;"></i></button>
+      <button type="button" class="anno-width is-active" data-anno-width="9"  aria-label="Mittel" title="Mittel"><i style="width:11px;height:11px;"></i></button>
+      <button type="button" class="anno-width" data-anno-width="16" aria-label="Dick" title="Dick"><i style="width:16px;height:16px;"></i></button>
     </div>
     <div class="anno__sep"></div>
     <div class="anno__grp" aria-label="Textgröße">
-      <button type="button" class="anno-btn" data-anno-textsize="24" title="Text klein" style="font-size:.8rem;">T</button>
-      <button type="button" class="anno-btn is-active" data-anno-textsize="40" title="Text mittel">T</button>
-      <button type="button" class="anno-btn" data-anno-textsize="64" title="Text groß" style="font-size:1.4rem;">T</button>
+      <button type="button" class="anno-btn" data-anno-textsize="24" aria-label="Text klein" title="Text klein" style="font-size:.8rem;">T</button>
+      <button type="button" class="anno-btn is-active" data-anno-textsize="40" aria-label="Text mittel" title="Text mittel">T</button>
+      <button type="button" class="anno-btn" data-anno-textsize="64" aria-label="Text groß" title="Text groß" style="font-size:1.4rem;">T</button>
     </div>
     <div class="anno__sep"></div>
     <div class="anno__grp">
-      <button type="button" class="anno-btn" data-anno-action="undo" title="Rückgängig" disabled>↶</button>
-      <button type="button" class="anno-btn" data-anno-action="redo" title="Wiederholen" disabled>↷</button>
-      <button type="button" class="anno-btn" data-anno-action="clear" title="Alles löschen">🗑</button>
+      <button type="button" class="anno-btn" data-anno-action="undo" aria-label="Rückgängig" title="Rückgängig" disabled>{{ icon("arrow-back-up", size="sm") }}</button>
+      <button type="button" class="anno-btn" data-anno-action="redo" aria-label="Wiederholen" title="Wiederholen" disabled>{{ icon("arrow-forward-up", size="sm") }}</button>
+      <button type="button" class="anno-btn" data-anno-action="clear" aria-label="Alles löschen" title="Alles löschen">{{ icon("trash", size="sm") }}</button>
     </div>
     <div class="anno__spacer"></div>
     <span class="anno__status" id="anno-status">…</span>
-    <button type="button" class="btn btn--primary btn--sm" data-anno-action="done">✓ Fertig</button>
+    <button type="button" class="btn btn--primary btn--sm" data-anno-action="done">{{ icon("check", size="xs") }} Fertig</button>
   </div>
   <div class="anno__stagewrap"><div id="anno-stage"></div></div>
   <div id="anno-tz" class="anno-tz" style="display:none;"></div>

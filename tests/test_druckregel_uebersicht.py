@@ -152,7 +152,9 @@ def test_druckregel_uebersicht_und_simulation_route_sind_org_getrennt():
         params={"alarm_code": "F7", "uhrzeit": "10:00"},
     )
     assert simulation.status_code == 200
-    assert "✅ Übersichtsregel druckt:" in simulation.text
+    assert "Übersichtsregel druckt:" in simulation.text
+    assert '<svg class="ecp-icon ecp-icon--sm"' in simulation.text
+    assert "✅" not in simulation.text
 
     recorder_gateway = _setup("uebersicht_route_recorder", "recorder")
     _login(client, "uebersicht_route_recorder", "Test1234!")

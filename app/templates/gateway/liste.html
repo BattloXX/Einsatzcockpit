@@ -51,7 +51,7 @@
 <div class="gwl">
   <div class="gwl-bar">
     <div class="gwl-brand">
-      <div class="gwl-brand__icon">🖨️</div>
+      <div class="gwl-brand__icon">{{ icon("printer", size="lg") }}</div>
       <div>
         <div class="gwl-brand__t">Gateway / Druck</div>
         <div class="gwl-brand__s">PRINT &amp; ALARM GATEWAYS</div>
@@ -89,7 +89,7 @@
         <a class="gwl-card" href="/gateway/{{ gw.id }}">
           <div class="gwl-card__top">
             <div>
-              <div class="gwl-card__name">{{ '🪟' if gw.is_windows_agent else '🖨️' }} {{ gw.name }}</div>
+              <div class="gwl-card__name">{{ icon("brand-windows" if gw.is_windows_agent else "printer", size="md") }} {{ gw.name }}</div>
               <div class="gwl-card__loc">{{ "Windows-Druckagent · " if gw.is_windows_agent else "" }}{{ gw.standort or "Kein Standort" }}</div>
             </div>
             {% if gw.id in connected_ids %}

@@ -89,6 +89,7 @@ firetruck
 flag
 flame
 flask
+flood
 folder-open
 folders
 grip-vertical
@@ -106,6 +107,7 @@ info-circle
 key
 layout-dashboard
 lifebuoy
+line
 link
 lock
 lock-password
@@ -118,10 +120,12 @@ mail-opened
 map
 map-pin
 masks-theater
+maximize
 menu-2
 message
 messages
 microphone
+minimize
 minus
 mist
 mountain
@@ -188,4 +192,3 @@ wind
 world
 x
 zoom-in
-flood

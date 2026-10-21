@@ -142,7 +142,7 @@ def test_queue_als_neues_druckziel_zuordnen_und_redundanz(client, monkeypatch):
     routen = _routen(printer_id)
     assert [(r.gateway_id, r.priority, r.render_mode) for r in routen] == [(a, 10, "driver"), (b, 20, "pdf_direct")]
     seite = client.get(f"/gateway/{b}")
-    assert "🔁" in seite.text
+    assert 'title="Redundanz: Reihenfolge der Agents für dieses Druckziel"' in seite.text
     assert "1. PC A" in seite.text
 
     doppelt = client.post(f"/gateway/{b}/routes/add", data={

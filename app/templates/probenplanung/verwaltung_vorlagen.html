@@ -11,7 +11,7 @@
 </header>
 {% with active_tab="vorlagen" %}{% include "probenplanung/_tabs.html" %}{% endwith %}
 <section class="pt-card">
-  <div class="pt-card__head"><span aria-hidden="true">📋</span><h2>Neue Vorlage</h2></div>
+  <div class="pt-card__head"><span aria-hidden="true">{{ icon("clipboard-list", size="md") }}</span><h2>Neue Vorlage</h2></div>
   <form method="post" action="/admin/probenplanung/vorlagen" class="pt-form">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <div class="form-group"><label for="vorlage-name">Name</label><input class="form-input" id="vorlage-name" name="name" maxlength="150" required></div>

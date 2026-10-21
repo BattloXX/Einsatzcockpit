@@ -625,7 +625,7 @@
   function renderPicker(m) {
     var el = byId("anno-tz"); if (!el) { return; }
     el.innerHTML = '<div class="anno-tz__bar"><span class="anno-tz__title">Taktische Zeichen / Flächen</span>' +
-      '<button type="button" class="anno-tz__close" aria-label="Schließen" title="Schließen (Esc)">✕</button></div>' +
+      '<button type="button" class="anno-tz__close" aria-label="Schließen" title="Schließen (Esc)">' + ecpIcon('x', {size: 'sm'}) + '</button></div>' +
       '<input type="text" class="anno-tz__search" placeholder="Suchen …">';
     function section(titel, kind, items) {
       var box = document.createElement("div");
@@ -722,7 +722,7 @@
     setTool(cfg.canWrite ? "pen" : "select");
     aktualisiereButtons();
     setStatus(cfg.lockOther
-      ? ("⚠ wird gerade von " + (cfg.lockName || "jemand") + " bearbeitet")
+      ? ("Wird gerade von " + (cfg.lockName || "jemand") + " bearbeitet")
       : (cfg.canWrite ? "bereit" : "schreibgeschützt"));
   }
 

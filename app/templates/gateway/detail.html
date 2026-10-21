@@ -7,7 +7,7 @@
   {# ── Toolbar ── #}
   <div class="gwx-bar">
     <div class="gwx-brand">
-      <div class="gwx-brand__icon">🖨️</div>
+      <div class="gwx-brand__icon">{{ icon("printer", size="lg") }}</div>
       <div>
         <div class="gwx-brand__t">{{ gw.name }}</div>
         <div class="gwx-brand__s">{{ (gw.standort or 'PRINT & ALARM GATEWAY')|upper }}</div>
@@ -66,29 +66,29 @@
     {% set _pt = passthrough_status or {} %}
     <div class="gwx-tiles">
       <div class="gwx-tile">
-        <div class="gwx-tile__ic">🔌</div>
+        <div class="gwx-tile__ic">{{ icon("plug", size="lg") }}</div>
         <div><div class="gwx-tile__v">{{ 'Online' if connected else ('—' if not gw.is_paired else 'Offline') }}</div>
           <div class="gwx-tile__l">Verbindung</div></div>
       </div>
       <div class="gwx-tile">
-        <div class="gwx-tile__ic">🖨️</div>
+        <div class="gwx-tile__ic">{{ icon("printer", size="lg") }}</div>
         <div><div class="gwx-tile__v" style="color:{{ 'var(--g-green)' if _on.n == aktive_drucker|length and aktive_drucker else 'inherit' }};">{{ _on.n }}<span style="font-size:.9rem;color:var(--g-dim);"> / {{ aktive_drucker|length }}</span></div>
           <div class="gwx-tile__l">Drucker online</div></div>
       </div>
       <div class="gwx-tile">
-        <div class="gwx-tile__ic">📟</div>
+        <div class="gwx-tile__ic">{{ icon("device-mobile-message", size="lg") }}</div>
         <div><div class="gwx-tile__v">{{ 'Aktiv' if gw.serial_connected else '—' }}</div>
           <div class="gwx-tile__l">Alarmleitung</div></div>
       </div>
       {% if _pt.get('enabled') %}
       <div class="gwx-tile">
-        <div class="gwx-tile__ic">🔀</div>
+        <div class="gwx-tile__ic">{{ icon("arrows-shuffle", size="lg") }}</div>
         <div><div class="gwx-tile__v">{{ _pt.get('clients', 0) }}</div>
           <div class="gwx-tile__l">Fan-Out-Clients</div></div>
       </div>
       {% else %}
       <a class="gwx-tile" href="/gateway/{{ gw.id }}/druckregeln" style="text-decoration:none;color:inherit;">
-        <div class="gwx-tile__ic">⚙️</div>
+        <div class="gwx-tile__ic">{{ icon("settings", size="lg") }}</div>
         <div><div class="gwx-tile__v">{{ aktive_regeln|length }}<span style="font-size:.9rem;color:var(--g-dim);"> / {{ rules|length }}</span></div>
           <div class="gwx-tile__l">Regeln aktiv</div></div>
       </a>
@@ -97,7 +97,7 @@
          Aktiv = ok; Aus = REDIS_URL fehlt (bei -w 2 riskant); Fehler = konfiguriert, aber
          nicht verbunden. #}
       <div class="gwx-tile" title="{% if redis_status.connected %}Redis-Bus verbunden – Druckaufträge werden worker-übergreifend zugestellt.{% elif not redis_status.configured %}REDIS_URL nicht gesetzt – nur bei einem Worker (-w 1) unbedenklich; bei -w 2+ kann der Stationsdruck worker-abhängig fehlschlagen.{% else %}REDIS_URL gesetzt, aber keine Verbindung – Redis-Dienst prüfen.{% endif %}">
-        <div class="gwx-tile__ic">🧩</div>
+        <div class="gwx-tile__ic">{{ icon("puzzle", size="lg") }}</div>
         <div><div class="gwx-tile__v" style="color:{% if redis_status.connected %}var(--g-green){% elif not redis_status.configured %}var(--g-dim){% else %}#ffb4ab{% endif %};">
             {{ 'Aktiv' if redis_status.connected else ('Aus' if not redis_status.configured else 'Fehler') }}</div>
           <div class="gwx-tile__l">Redis-Bus</div></div>
@@ -109,14 +109,14 @@
       <div class="gwx-col-4">
         <div class="gwx-panel" id="kopplung" style="height:100%;">
           <div class="gwx-panel__hd">
-            <div class="gwx-panel__t">🔗 Kopplung</div>
+            <div class="gwx-panel__t">{{ icon("link", size="md") }} Kopplung</div>
           </div>
           <div class="gwx-panel__bd">
             <p style="font-size:.82rem;color:var(--g-muted);margin:0 0 12px;">
               Gateway per Einmal-Code sicher verbinden. Token bei Verdacht rotieren oder widerrufen.</p>
             <form method="post" action="/gateway/{{ gw.id }}/pair-code" style="margin-bottom:8px;">
               <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-              <button class="gwx-btn gwx-btn--primary" type="submit" style="width:100%; justify-content:center;">🔑 Pairing-Code erzeugen</button>
+              <button class="gwx-btn gwx-btn--primary" type="submit" style="width:100%; justify-content:center;">{{ icon("key", size="sm") }} Pairing-Code erzeugen</button>
             </form>
             {% if gw.is_paired %}
             <div class="gwx-btnrow" style="margin-top:8px;">
@@ -140,7 +140,7 @@
         <div class="gwx-panel" id="wut" style="height:100%;">
           <div class="gwx-panel__hd">
             <div>
-              <div class="gwx-panel__t">📟 Alarmleitung</div>
+              <div class="gwx-panel__t">{{ icon("device-mobile-message", size="md") }} Alarmleitung</div>
               <div class="gwx-panel__sub">W&amp;T Com-Server: serieller Alarm → Einsatz</div>
             </div>
           </div>
@@ -177,7 +177,7 @@
                   <input class="gwx-input gwx-input--mono" type="number" min="15" name="health_interval_s" value="{{ w.get('health_interval_s', 60) }}"></div>
               </div>
 
-              <div class="gwx-sechd">🔀 Serial-Fan-Out (W&amp;T-Strom durchschleifen)</div>
+              <div class="gwx-sechd">{{ icon("arrows-shuffle", size="md") }} Serial-Fan-Out (W&amp;T-Strom durchschleifen)</div>
               <p style="font-size:.8rem;color:var(--g-dim);margin:0 0 10px;">
                 Stellt den W&amp;T-Datenstrom 1:1 (nur Empfang) auf einem TCP-Port bereit, sodass sich
                 mehrere Clients gleichzeitig verbinden und dieselben Alarme erhalten. Nur im vertrauten
@@ -209,13 +209,13 @@
         <div class="gwx-panel" id="drucker">
           <div class="gwx-panel__hd">
             <div>
-              <div class="gwx-panel__t">🖨️ Drucker</div>
+              <div class="gwx-panel__t">{{ icon("printer", size="md") }} Drucker</div>
               <div class="gwx-panel__sub">Netzwerkdrucker am Standort · Name & Rolle frei wählbar</div>
             </div>
             <div class="gwx-inline">
               <form method="post" action="/gateway/{{ gw.id }}/discover">
                 <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-                <button class="gwx-btn gwx-btn--sm" type="submit">🔎 Netzwerk durchsuchen</button>
+                <button class="gwx-btn gwx-btn--sm" type="submit">{{ icon("zoom-in", size="xs") }} Netzwerk durchsuchen</button>
               </form>
             </div>
           </div>
@@ -224,7 +224,7 @@
               <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
               <input class="gwx-input" style="width:auto;" type="text" name="name" placeholder="Name (z. B. Florianstation)" required>
               <input class="gwx-input gwx-input--mono" style="width:auto;" type="text" name="ip" placeholder="IP-Adresse" required>
-              <button class="gwx-btn gwx-btn--primary gwx-btn--sm" type="submit">+ Per IP hinzufügen</button>
+              <button aria-label="Namen speichern" class="gwx-btn gwx-btn--primary gwx-btn--sm" type="submit">+ Per IP hinzufügen</button>
             </form>
 
             {% if not printers %}
@@ -239,7 +239,7 @@
                     <template x-if="!ren">
                       <div>
                         <div class="gwx-pcard__name">{{ p.name }}
-                          <button type="button" class="gwx-btn gwx-btn--sm" style="padding:1px 6px;" @click="ren=true" title="Umbenennen">✎</button>
+                          <button type="button" class="gwx-btn gwx-btn--sm" style="padding:1px 6px;" @click="ren=true" aria-label="Umbenennen" title="Umbenennen">{{ icon("pencil", size="xs") }}</button>
                         </div>
                         <div class="gwx-pcard__uri">{{ p.uri }}</div>
                       </div>
@@ -249,19 +249,19 @@
                         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
                         <input class="gwx-input" style="width:auto; padding:4px 8px;" type="text" name="name"
                                value="{{ p.name }}" required autofocus>
-                        <button class="gwx-btn gwx-btn--primary gwx-btn--sm" type="submit">✓</button>
-                        <button aria-label="Schließen" class="gwx-btn gwx-btn--sm" type="button" @click="ren=false">✕</button>
+                        <button aria-label="Namen speichern" class="gwx-btn gwx-btn--primary gwx-btn--sm" type="submit">{{ icon("check", size="xs") }}</button>
+                        <button aria-label="Schließen" class="gwx-btn gwx-btn--sm" type="button" @click="ren=false">{{ icon("x", size="xs") }}</button>
                       </form>
                     </template>
                   </div>
                   {% if p.reachable_derived %}
-                  <span class="gwx-chip gwx-chip--ok"><span class="gwx-chip__d"></span>erreichbar</span>
+                  <span class="gwx-chip gwx-chip--ok">{{ status_dot("gruen", "erreichbar") }}erreichbar</span>
                   {% elif p.reachable_derived == false %}
-                  <span class="gwx-chip gwx-chip--err"><span class="gwx-chip__d"></span>offline</span>
+                  <span class="gwx-chip gwx-chip--err">{{ status_dot("rot", "offline") }}offline</span>
                   {% elif p.aktiv %}
-                  <span class="gwx-chip"><span class="gwx-chip__d"></span>unbekannt</span>
+                  <span class="gwx-chip">{{ status_dot("grau", "unbekannt") }}unbekannt</span>
                   {% else %}
-                  <span class="gwx-chip gwx-chip--warn"><span class="gwx-chip__d"></span>Vorschlag</span>
+                  <span class="gwx-chip gwx-chip--warn">{{ status_dot("orange", "Vorschlag") }}Vorschlag</span>
                   {% endif %}
                 </div>
 
@@ -270,8 +270,8 @@
                   <span class="gwx-role">{{ 'Backup' if d.get('role')=='backup' else 'Standard' }}</span>
                   {% if d.get('duplex') and d.get('duplex') != 'off' %}<span class="gwx-role">Duplex</span>{% endif %}
                   {% if d.get('color') == 'monochrome' %}<span class="gwx-role">S/W</span>{% endif %}
-                  {% if p.status and p.status.get('toner_pct') is not none %}<span>🩸 {{ p.status.get('toner_pct') }} %</span>{% endif %}
-                  {% if p.checked_at_derived %}<span title="Zuletzt geprüft">🕓 {{ p.checked_at_derived|local_datetime }}</span>{% endif %}
+                  {% if p.status and p.status.get('toner_pct') is not none %}<span>{{ icon("droplet-half-2", size="sm") }} {{ p.status.get('toner_pct') }} %</span>{% endif %}
+                  {% if p.checked_at_derived %}<span title="Zuletzt geprüft">{{ icon("clock", size="sm") }} {{ p.checked_at_derived|local_datetime }}</span>{% endif %}
                 </div>
 
                 <template x-if="cfg">
@@ -302,7 +302,7 @@
                         </select></div>
                     </div>
                     <div class="gwx-btnrow" style="margin-top:10px;">
-                      <button class="gwx-btn gwx-btn--primary gwx-btn--sm" type="submit">Speichern</button>
+                      <button aria-label="Namen speichern" class="gwx-btn gwx-btn--primary gwx-btn--sm" type="submit">Speichern</button>
                       <button class="gwx-btn gwx-btn--sm" type="button" @click="cfg=false">Schließen</button>
                     </div>
                   </form>
@@ -314,7 +314,7 @@
                     <button class="gwx-btn gwx-btn--sm {{ 'gwx-btn--danger' if p.aktiv else 'gwx-btn--primary' }}" type="submit">
                       {{ 'Deaktivieren' if p.aktiv else 'Übernehmen' }}</button>
                   </form>
-                  <button class="gwx-btn gwx-btn--sm" type="button" @click="cfg=!cfg">⚙️ Optionen</button>
+                  <button class="gwx-btn gwx-btn--sm" type="button" @click="cfg=!cfg">{{ icon("settings", size="xs") }} Optionen</button>
                   <form method="post" action="/gateway/printers/{{ p.id }}/test">
                     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
                     <button class="gwx-btn gwx-btn--sm" type="submit" {{ 'disabled' if not p.aktiv }}>Testseite</button>
@@ -342,7 +342,7 @@
       <form method="post" action="/gateway/{{ gw.id }}/delete"
             onsubmit="return confirm('Dieses Gateway endgültig löschen?')">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-        <button class="gwx-btn gwx-btn--danger" type="submit">🗑 Gateway löschen</button>
+        <button class="gwx-btn gwx-btn--danger" type="submit">{{ icon("trash", size="sm") }} Gateway löschen</button>
       </form>
     </div>
   </div>

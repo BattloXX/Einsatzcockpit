@@ -12,6 +12,7 @@ from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.core.async_bridge import run_async
+from app.core.icons import render_icon
 from app.core.permissions import can_access_incident, has_role, same_org_or_system_admin
 from app.core.templating import templates
 from app.core.timezones import local_date_to_utc, now_local
@@ -355,7 +356,10 @@ def save_ai_report(incident_id: int, request: Request, db: Session = Depends(get
     incident.ai_report_draft = draft_text or None
     db.commit()
 
-    return HTMLResponse('<p style="color:var(--green); margin-top:.5rem;">✓ Entwurf gespeichert.</p>')
+    return HTMLResponse(
+        f'<p style="color:var(--green); margin-top:.5rem;">'
+        f'{render_icon("check", size="sm")} Entwurf gespeichert.</p>'
+    )
 
 
 @router.post("/archiv/{incident_id}/loeschen")

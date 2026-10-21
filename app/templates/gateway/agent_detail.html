@@ -8,7 +8,7 @@
 <div class="gwx">
   <div class="gwx-bar">
     <div class="gwx-brand">
-      <div class="gwx-brand__icon">🪟</div>
+      <div class="gwx-brand__icon">{{ icon("brand-windows", size="lg") }}</div>
       <div>
         <div class="gwx-brand__t">{{ gw.name }}</div>
         <div class="gwx-brand__s">{{ (gw.standort or 'WINDOWS-DRUCKAGENT')|upper }}</div>
@@ -22,7 +22,7 @@
       {% else %}
       <span class="gwx-pill gwx-pill--err"><span class="gwx-pill__d"></span>Offline</span>
       {% endif %}
-      {% if host.get('host') %}<span class="gwx-pill">💻 {{ host.get('host') }}</span>{% endif %}
+      {% if host.get('host') %}<span class="gwx-pill">{{ icon("device-laptop", size="sm") }} {{ host.get('host') }}</span>{% endif %}
       {% if gw.version %}<span class="gwx-pill">v{{ gw.version }}</span>{% endif %}
     </div>
     <div class="gwx-spacer"></div>
@@ -57,14 +57,14 @@
       {# ── Kopplung ── #}
       <div class="gwx-col-4">
         <div class="gwx-panel" id="kopplung" style="height:100%;">
-          <div class="gwx-panel__hd"><div class="gwx-panel__t">🔗 Kopplung</div></div>
+          <div class="gwx-panel__hd"><div class="gwx-panel__t">{{ icon("link", size="md") }} Kopplung</div></div>
           <div class="gwx-panel__bd">
             <p style="font-size:.82rem;color:var(--g-muted);margin:0 0 12px;">
               Jeder PC bekommt einen eigenen Code und ein eigenes Token. Der Agent läuft als
               Windows-Dienst und startet ohne Anmeldung.</p>
             <form method="post" action="/gateway/{{ gw.id }}/pair-code" style="margin-bottom:8px;">
               <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-              <button class="gwx-btn gwx-btn--primary" type="submit" style="width:100%; justify-content:center;">🔑 Pairing-Code erzeugen</button>
+              <button class="gwx-btn gwx-btn--primary" type="submit" style="width:100%; justify-content:center;">{{ icon("key", size="sm") }} Pairing-Code erzeugen</button>
             </form>
             {% if gw.is_paired %}
             <div class="gwx-btnrow" style="margin-top:8px;">
@@ -78,7 +78,7 @@
             {% if host %}
             <div class="gwx-pcard__meta" style="margin-top:12px;">
               {% if host.get('os') %}<span>{{ host.get('os') }}</span>{% endif %}
-              {% if info.get('reported_at') %}<span title="Letztes Inventar">🕓 {{ info.get('reported_at')[:16]|replace('T', ' ') }} UTC</span>{% endif %}
+              {% if info.get('reported_at') %}<span title="Letztes Inventar">{{ icon("clock", size="sm") }} {{ info.get('reported_at')[:16]|replace('T', ' ') }} UTC</span>{% endif %}
             </div>
             {% endif %}
           </div>
@@ -90,7 +90,7 @@
         <div class="gwx-panel" id="routen" style="height:100%;">
           <div class="gwx-panel__hd">
             <div>
-              <div class="gwx-panel__t">🎯 Druckziele dieses Agents</div>
+              <div class="gwx-panel__t">{{ icon("target", size="md") }} Druckziele dieses Agents</div>
               <div class="gwx-panel__sub">Kleinere Priorität = bevorzugt · fällt ein Agent aus oder ist sein Drucker nicht bereit, übernimmt der nächste</div>
             </div>
           </div>
@@ -110,30 +110,30 @@
                     <div class="gwx-pcard__uri">{{ r.local_queue }} · {{ render_modes.get(r.render_mode, r.render_mode) }} · Prio {{ r.priority }}</div>
                   </div>
                   {% if not r.aktiv %}
-                  <span class="gwx-chip"><span class="gwx-chip__d"></span>deaktiviert</span>
+                  <span class="gwx-chip">{{ status_dot("grau", "deaktiviert") }}deaktiviert</span>
                   {% elif r.ready %}
-                  <span class="gwx-chip gwx-chip--ok"><span class="gwx-chip__d"></span>bereit</span>
+                  <span class="gwx-chip gwx-chip--ok">{{ status_dot("gruen", "bereit") }}bereit</span>
                   {% elif rd.get('state') == 'identity_mismatch' %}
-                  <span class="gwx-chip gwx-chip--err" title="Die Warteschlange zeigt auf einen anderen Drucker als das Druckziel."><span class="gwx-chip__d"></span>anderer Drucker</span>
+                  <span class="gwx-chip gwx-chip--err" title="Die Warteschlange zeigt auf einen anderen Drucker als das Druckziel.">{{ status_dot("rot", "anderer Drucker") }}anderer Drucker</span>
                   {% elif rd.get('state') %}
-                  <span class="gwx-chip gwx-chip--err"><span class="gwx-chip__d"></span>nicht bereit</span>
+                  <span class="gwx-chip gwx-chip--err">{{ status_dot("rot", "nicht bereit") }}nicht bereit</span>
                   {% else %}
-                  <span class="gwx-chip"><span class="gwx-chip__d"></span>unbekannt</span>
+                  <span class="gwx-chip">{{ status_dot("grau", "unbekannt") }}unbekannt</span>
                   {% endif %}
                 </div>
                 <div class="gwx-pcard__meta">
                   {% if rd.get('detail') %}<span>{{ rd.get('detail') }}</span>{% endif %}
-                  {% if rd.get('checked_at') %}<span title="Zuletzt geprüft (UTC)">🕓 {{ rd.get('checked_at')[11:16] }} UTC</span>{% endif %}
-                  {% if r.identity %}<span class="gwx-mono" title="Gemeldete Druckeridentität">🆔 {{ r.identity.get('serial') or r.identity.get('uuid') or r.identity.get('mac') or r.identity.get('ip') }}</span>{% endif %}
+                  {% if rd.get('checked_at') %}<span title="Zuletzt geprüft (UTC)">{{ icon("clock", size="sm") }} {{ rd.get('checked_at')[11:16] }} UTC</span>{% endif %}
+                  {% if r.identity %}<span class="gwx-mono" title="Gemeldete Druckeridentität">{{ icon("id", size="sm") }} {{ r.identity.get('serial') or r.identity.get('uuid') or r.identity.get('mac') or r.identity.get('ip') }}</span>{% endif %}
                   {% if not r.identity_check %}<span class="gwx-role">ohne Identitäts-Check</span>{% endif %}
                 </div>
                 {% set alle = routen_je_drucker.get(r.printer_id, []) %}
                 {% if alle|length > 1 %}
                 <div class="gwx-pcard__meta" title="Redundanz: Reihenfolge der Agents für dieses Druckziel">
-                  <span>🔁</span>
+                  <span>{{ icon("repeat", size="sm") }}</span>
                   {% for andere in alle %}
                   {% set ag = gateways.get(andere.gateway_id) %}
-                  <span class="gwx-role" style="{{ 'font-weight:700;' if andere.id == r.id else '' }}">{{ loop.index }}. {{ ag.name if ag else '?' }}{% if andere.ready and andere.aktiv %} ✓{% else %} ✕{% endif %}</span>
+                  <span class="gwx-role" style="{{ 'font-weight:700;' if andere.id == r.id else '' }}">{{ loop.index }}. {{ ag.name if ag else '?' }}{% if andere.ready and andere.aktiv %} {{ icon("check", size="sm") }}{% else %} {{ icon("x", size="sm") }}{% endif %}</span>
                   {% endfor %}
                 </div>
                 {% endif %}
@@ -193,12 +193,12 @@
                 </template>
 
                 <div class="gwx-pcard__acts">
-                  <button class="gwx-btn gwx-btn--sm" type="button" @click="cfg=!cfg">⚙️ Einstellungen</button>
+                  <button class="gwx-btn gwx-btn--sm" type="button" @click="cfg=!cfg">{{ icon("settings", size="xs") }} Einstellungen</button>
                   {% if p and r.identity_check %}
                   <form method="post" action="/gateway/printers/{{ p.id }}/identity-reset"
                         onsubmit="return confirm('Gespeicherte Druckeridentität verwerfen (z. B. nach Drucker-Tausch)?')">
                     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-                    <button class="gwx-btn gwx-btn--sm" type="submit">🆔 Identität neu lernen</button>
+                    <button class="gwx-btn gwx-btn--sm" type="submit">{{ icon("id", size="xs") }} Identität neu lernen</button>
                   </form>
                   {% endif %}
                   <form method="post" action="/gateway/routes/{{ r.id }}/delete"
@@ -219,7 +219,7 @@
         <div class="gwx-panel" id="inventar">
           <div class="gwx-panel__hd">
             <div>
-              <div class="gwx-panel__t">🖨️ Windows-Drucker auf diesem PC</div>
+              <div class="gwx-panel__t">{{ icon("printer", size="md") }} Windows-Drucker auf diesem PC</div>
               <div class="gwx-panel__sub">Vom Agent gemeldet · Netzwerkdrucker als lokale TCP/IP-Warteschlange einrichten (keine Benutzer-Druckerfreigabe)</div>
             </div>
           </div>
@@ -234,12 +234,12 @@
                   {% for qu in queues %}
                   {% set caps = qu.get('capabilities') or {} %}
                   <tr>
-                    <td><strong>{{ qu.get('queue') }}</strong>{% if qu.get('status') == 'offline' %} <span class="gwx-chip gwx-chip--err"><span class="gwx-chip__d"></span>offline</span>{% endif %}</td>
+                    <td><strong>{{ qu.get('queue') }}</strong>{% if qu.get('status') == 'offline' %} <span class="gwx-chip gwx-chip--err">{{ status_dot("rot", "offline") }}offline</span>{% endif %}</td>
                     <td style="font-size:.8rem;">{{ qu.get('driver') or '–' }}<br><span class="gwx-mono">{{ qu.get('host') or qu.get('port') or '' }}</span></td>
                     <td style="font-size:.8rem;">{{ (caps.get('media') or [])|join(', ') }}{% if caps.get('duplex') %} · Duplex{% endif %}{% if caps.get('color') %} · Farbe{% endif %}</td>
                     <td>
                       {% if qu.get('queue') in gebundene_queues %}
-                      <span class="gwx-chip gwx-chip--ok"><span class="gwx-chip__d"></span>zugeordnet</span>
+                      <span class="gwx-chip gwx-chip--ok">{{ status_dot("gruen", "zugeordnet") }}zugeordnet</span>
                       {% else %}
                       <form method="post" action="/gateway/{{ gw.id }}/routes/add" class="gwx-inline" style="flex-wrap:wrap;" x-data="{ ziel:'neu' }">
                         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
@@ -247,7 +247,7 @@
                         <select name="ziel" x-model="ziel" style="width:auto;">
                           <option value="neu">Neues Druckziel</option>
                           {% for p in org_printers if p.aktiv %}
-                          <option value="{{ p.id }}">→ {{ p.name }}</option>
+                          <option value="{{ p.id }}">{{ p.name }}</option>
                           {% endfor %}
                         </select>
                         <input class="gwx-input" style="width:auto;" type="text" name="name" x-show="ziel === 'neu'" placeholder="Name, z. B. Kommandofunk" maxlength="150">
@@ -280,7 +280,7 @@
                   <select name="ziel">
                     <option value="neu">Neues Druckziel</option>
                     {% for p in org_printers if p.aktiv %}
-                    <option value="{{ p.id }}">→ {{ p.name }}</option>
+                    <option value="{{ p.id }}">{{ p.name }}</option>
                     {% endfor %}
                   </select></div>
                 <div class="gwx-field"><label class="gwx-label">Name (neues Druckziel)</label>
@@ -308,7 +308,7 @@
       <form method="post" action="/gateway/{{ gw.id }}/delete"
             onsubmit="return confirm('Diesen Druckagent endgültig löschen? Seine Zuordnungen werden entfernt.')">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-        <button class="gwx-btn gwx-btn--danger" type="submit">🗑 Druckagent löschen</button>
+        <button class="gwx-btn gwx-btn--danger" type="submit">{{ icon("trash", size="sm") }} Druckagent löschen</button>
       </form>
     </div>
   </div>

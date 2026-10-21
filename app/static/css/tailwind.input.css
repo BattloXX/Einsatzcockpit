@@ -3097,3 +3097,6 @@ button.htmx-request,
 .admin-main .badge-pill:has(> .ecp-icon),
 .admin-main .ws-coordbtn:has(> .ecp-icon) { display: inline-flex; align-items: center; gap: .35em; }
 .admin-main :is(h1, h2, h3):has(> .ecp-icon) { display: flex; align-items: center; gap: .35em; }
+
+/* Icon-Abstand im Probe-Appell und in der Gateway-Liste. */
+.appell-status, .appell-stats > span, .appell-actions button, .gwl-card__name { display: inline-flex; align-items: center; gap: .35em; }

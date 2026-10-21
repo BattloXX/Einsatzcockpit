@@ -13,13 +13,13 @@
   {% for ergebnis in ergebnisse %}
   <div class="gwx-simulation__card {{ 'gwx-simulation__card--ok' if ergebnis.greift else '' }}">
     {% if ergebnis.greift %}
-      <strong>✅ {{ ergebnis.rule.name }} druckt:</strong>
+      <strong>{{ icon("circle-check", size="sm") }} {{ ergebnis.rule.name }} druckt:</strong>
       {% for druck in ergebnis.druckt %}
         {{ druck.kopien }}× {{ druck.dokument }} ({{ druck.format }}) auf {{ druck.drucker|join(', ') }}{{ ';' if not loop.last }}
       {% endfor %}
       {% if ergebnis.objekt_inhalte %}<span>Objekt-Inhalte: {{ ergebnis.objekt_inhalte|join(', ') }}</span>{% endif %}
     {% else %}
-      <strong>⛔ {{ ergebnis.rule.name }}</strong> – {{ ergebnis.grund }}
+      <strong>{{ icon("ban", size="sm") }} {{ ergebnis.rule.name }}</strong> – {{ ergebnis.grund }}
     {% endif %}
   </div>
   {% else %}
