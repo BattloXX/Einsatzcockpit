@@ -139,7 +139,7 @@ def test_stammdaten_konflikt_und_feldprotokoll(client, umgebung):
     with TestingSession() as db:
         set_tenant_context(db, umgebung["org_id"])
         plan = db.get(KatplanPlan, umgebung["plan_id"])
-        assert plan.status == "in_ueberarbeitung" and plan.version == 2
+        assert plan.status == "freigegeben" and plan.version == 2
 
 
 def test_archivieren_reaktivieren_und_filter(client, umgebung):

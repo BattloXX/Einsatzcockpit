@@ -94,7 +94,8 @@
       <tr><th>Fassung</th><td>{% if version %}Version {{ version.versionsnummer }}, freigegeben {{ format_local_datetime(version.freigegeben_am, org) }} von {{ freigeber }}{% else %}Arbeitsstand (nicht freigegeben){% endif %}</td></tr>
       {% if kopf.geltungsbereich %}<tr><th>Geltungsbereich</th><td>{{ kopf.geltungsbereich }}</td></tr>{% endif %}
       {% if kopf.verantwortliche_stelle %}<tr><th>Verantwortliche Stelle</th><td>{{ kopf.verantwortliche_stelle }}</td></tr>{% endif %}
-      {% if kopf.wiedervorlage_am %}<tr><th>Wiedervorlage</th><td>{{ kopf.wiedervorlage_am[8:10] ~ '.' ~ kopf.wiedervorlage_am[5:7] ~ '.' ~ kopf.wiedervorlage_am[0:4] if kopf.wiedervorlage_am is string else kopf.wiedervorlage_am.strftime('%d.%m.%Y') }}</td></tr>{% endif %}
+      <tr><th>Zuletzt geprüft</th><td>{{ kopf.zuletzt_geprueft_am[8:10] ~ '.' ~ kopf.zuletzt_geprueft_am[5:7] ~ '.' ~ kopf.zuletzt_geprueft_am[0:4] if kopf.zuletzt_geprueft_am else '-' }}</td></tr>
+      {% if kopf.wiedervorlage_am %}<tr><th>Nächste Überprüfung</th><td>{{ kopf.wiedervorlage_am[8:10] ~ '.' ~ kopf.wiedervorlage_am[5:7] ~ '.' ~ kopf.wiedervorlage_am[0:4] if kopf.wiedervorlage_am is string else kopf.wiedervorlage_am.strftime('%d.%m.%Y') }}</td></tr>{% endif %}
       <tr><th>Gedruckt</th><td>{{ format_local_datetime(now, org) }}</td></tr>
     </table>
     {% if plan_links %}

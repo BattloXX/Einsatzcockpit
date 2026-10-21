@@ -73,14 +73,12 @@ async def katplan_liste(context: MCPContext, gefahr: str = "", status: str = "",
         if plan.aktuelle_version_id:
             v, kopf, elemente = lade_version(context.db, plan)
             version = {"id": v.id, "nummer": v.versionsnummer, "freigegeben_am": v.freigegeben_am.isoformat() + "Z"}
-            if not arbeit:
-                termin = kopf.get("wiedervorlage_am")
             anzahl = sum(not e.vertraulich or sieht_vertraulich(context.user) for e in elemente)
         result.append({"id": plan.id, "titel": p["titel"],
                        "planart": p["planart"], "planart_label": p["planart_label"],
                        "gefahrenarten": p["gefahrenarten"],
                        "status": plan_status, "aktuelle_version": version, "wiedervorlage_am": termin,
-                       "anzahl_elemente": anzahl,
+                       "anzahl_elemente": anzahl, **daten.pruefdaten(context.db, plan),
                        "warnings": (["Aktuelle Version und Elementzahl nicht vorhanden."] if version is None else [])
                        + (["wiedervorlage_am: nicht vorhanden."] if termin is None else [])})
     return {"plaene": result, "warnings": []}

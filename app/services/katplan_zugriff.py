@@ -11,6 +11,7 @@ from app.core.permissions import (
     has_role,
 )
 from app.db import get_db
+from app.models.katplan import KatplanPlan
 from app.models.user import User
 from app.services.katplan_flags import katplan_effective_enabled
 
@@ -25,6 +26,11 @@ def darf_bearbeiten(user: User | None) -> bool:
 
 def darf_freigeben(user: User | None) -> bool:
     return has_role(user, *KATPLAN_FREIGEBER_ROLES)
+
+
+def darf_ueberpruefung_bestaetigen(user: User | None, plan: KatplanPlan) -> bool:
+    return bool(user and user.org_id == plan.org_id and (
+        user.id == plan.pruef_verantwortlich_user_id or darf_freigeben(user)))
 
 
 def sieht_vertraulich(user: User | None) -> bool:

@@ -104,7 +104,7 @@
         {% if sperren_kennzahlen %}<span class="module-btn__badge{% if sperren_kennzahlen.aktiv > 0 %} module-btn__badge--active{% endif %}">{{ sperren_kennzahlen.aktiv }} aktiv · {{ sperren_kennzahlen.geplant }} geplant</span>{% endif %}
       {% elif e.key == 'katplan' %}
         {% if katplan_badge and (katplan_badge.faellig or katplan_badge.in_pruefung) %}
-          <span class="module-btn__badge module-btn__badge--active">{{ katplan_badge.faellig }} fällige Wiedervorlagen · {{ katplan_badge.in_pruefung }} in Prüfung</span>
+          <span class="module-btn__badge module-btn__badge--active">{{ katplan_badge.faellig }} fällige Überprüfungen · {{ katplan_badge.in_pruefung }} in Prüfung</span>
         {% endif %}
       {% endif %}
     </a>

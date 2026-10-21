@@ -2162,6 +2162,15 @@ async def katplan_stammdaten_aendern(
     )
 
 
+@server.tool(name="katplan_ueberpruefung_bestaetigen", description=TOOLS["katplan_ueberpruefung_bestaetigen"].description)
+async def katplan_ueberpruefung_bestaetigen(
+    plan_id: int, kommentar: str | None = None, version: int | None = None, ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool(
+        "katplan_ueberpruefung_bestaetigen", plan_id=plan_id, kommentar=kommentar, version=version,
+    )
+
+
 @server.tool(name="katplan_quellseite_verknuepfen", description=TOOLS["katplan_quellseite_verknuepfen"].description)
 async def katplan_quellseite_verknuepfen(plan_id: int, zuordnungen: list[dict], pruefen: bool = False,
                                         streng: bool = False, ctx: Context | None = None) -> dict[str, object]:
