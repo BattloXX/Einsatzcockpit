@@ -29,6 +29,11 @@ verschwindet, und Objekte zeigen im Reiter **Kontakte** keine Zuordnungsmöglich
 | `readonly`, `breathing_supervisor`, `fahrtenbuch_admin` ohne weitere Fachrolle | Nein; nur berechtigte Einsatzkontakte | Nein |
 
 Geräte- und QR-Sessions erhalten keinen Zugriff auf das zentrale Druckverzeichnis.
+In der [zentralen Suche](Anwender-Suche) gilt dieselbe Rollenmatrix: Wer Verzeichnisrechte hat,
+findet alle aktiven Kontakte. Die übrigen Einsatzrollen finden nur im Einsatzkontext die
+freigegebenen Einsatzkontakte, und zwar mit Dienstnummern. Kontakte werden dafür nicht
+indexiert, sondern bei jeder Suche live geprüft. Das MCP-Werkzeug `ecp_suchen` liefert
+Kontakte nach denselben Regeln, aber ohne Telefonnummern.
 Benutzer mit Verzeichnisrechten können ihre eigenen persönlichen Druckprofile verwalten.
 Details zur Ausgabe: [Einsatzkontakte drucken](Anwender-Kontaktverwaltung#einsatzkontakte-drucken).
 

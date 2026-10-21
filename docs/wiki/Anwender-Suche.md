@@ -19,9 +19,22 @@ und GSL-Stellen, Meldungen und Einheiten werden passend zum Kontext live abgefra
 Nummern, Präfixe und hinterlegte Synonyme wie BMZ helfen beim Finden. Bei Dokumenten
 zeigt die Fundstelle die Seite bzw. den Abschnitt. **Öffnen** führt zur Originalquelle.
 
-Kontakte und Personendaten sind keine Suchquellen. Arbeitskopien, Entwürfe, archivierte
+**Kontakte** erscheinen, wenn das Kontaktmodul aktiv ist, und folgen den Rechten des
+Kontaktmoduls:
+
+- **Verzeichnisrechte** (Schriftführer, Einsatzleiter, Objekt- und Kontaktverwaltung): Sie
+  finden alle aktiven Kontakte über Name, Funktion, Organisation, Kategorie, Erreichbarkeit
+  oder Telefonnummer. Inaktive Kontakte kommen mit **Erledigte einbeziehen** dazu. Der Treffer
+  zeigt die bevorzugte Nummer zum direkten Anrufen.
+- **Alle anderen Einsatzrollen**: Sie sehen nur in der Suche im Einsatzkontext die Kontakte,
+  die für diesen Einsatz freigegeben sind (Einsatzkontakte und einsatzsichtbare Kontakte
+  bestätigter Objekte), und davon nur die Dienstnummern.
+- **Keine Kontakte** gibt es in der GSL-Suche sowie für Geräte und QR-Zugänge zu einer Lage.
+
+Notizen, E-Mail-Adressen und Anschriften werden nie durchsucht oder angezeigt. Archivierte
+Kontakte, Arbeitskopien, Entwürfe, archivierte
 Pläne sowie nicht freigegebene oder abgelöste Objektdokumente werden nicht angeboten.
-Telefonnummern werden aus Indextexten entfernt. Vertrauliche Inhalte erscheinen nur
+Telefonnummern werden aus Indextexten und Auszügen entfernt. Vertrauliche Inhalte erscheinen nur
 mit entsprechender Berechtigung. Rechte und Freigaben werden bei jeder Suche neu geprüft.
 
 **Nicht aktuell** kennzeichnet einen Treffer, dessen fachlicher Status Aufmerksamkeit

@@ -16,7 +16,7 @@ Code ab und legt die Pakete fest, die nacheinander umgesetzt werden.
 | Änderungserkennung | Es gibt keine zentrale Stelle, an der alle Fachservices Änderungen melden. | Ein `after_flush`-Listener auf der Session schreibt Outbox-Zeilen in **derselben Transaktion** (nur für Whitelist-Modelle). Ein periodischer Abgleich (Hash/`aktualisiert_am`) dient als Sicherheitsnetz. Keine Änderungen in Dutzenden Services. |
 | OCR | Seitentexte stehen bereits in `objekt_dokument_seite.volltext` und `katplan_dokument_seite.volltext`. | Kein neues Chunking von PDFs nötig: **eine Seite = ein Chunk** (Seitenbezug bleibt exakt). Lange Seiten werden in Abschnitte von etwa 2.500 Zeichen mit Überlappung geteilt und behalten die Seitenzahl. |
 | Live-Daten | GSL (`IncidentSite`, `SiteLogEntry`, `LageJournalEntry`, `CommLogEntry`, `LageEinheit`), Einsätze, Straßensperren und Wasserstellen sind pro Lage bzw. Org klein und ändern sich laufend. | Diese Quellen werden **nicht indexiert**, sondern zur Suchzeit live per SQL abgefragt („strukturierte Anbieter“). Damit gibt es keinen veralteten Status. Der Index enthält nur ruhende Fachinhalte. |
-| MCP | Registry `register_tool(...)` mit `required_roles` und `module_check`. Adapter in `server.py` ruft `_call_registered_tool()` auf. Die Doku schließt Personendaten in Einsatz-Tools aus. | Ein lesendes Tool `ecp_suchen` nutzt denselben Query-Service wie die UI. Kontakte bleiben komplett draußen. |
+| MCP | Registry `register_tool(...)` mit `required_roles` und `module_check`. Adapter in `server.py` ruft `_call_registered_tool()` auf. Die Doku schließt Personendaten in Einsatz-Tools aus. | Ein lesendes Tool `ecp_suchen` nutzt denselben Query-Service wie die UI. Kontakte nur nach Paket K (siehe Regel 5), ohne Telefonnummern. |
 | Embeddings | Auf dem Server ist kein Embedding-Modell bekannt oder getestet. | Die semantische Stufe (Paket S8) bleibt gesperrt, bis Modell, Host und Dimension entschieden und gemessen sind. Alle Pakete davor funktionieren ohne Embeddings. |
 | Konfiguration | Modul-Schalter liegen als `OrgSettings`-Spalten vor, plus Systemflag in `SystemSettings` (`_set_module_states`). | Statt einer eigenen Tabelle `search_index_settings`: `.env`-Flags plus Org-Schalter `suche_aktiv` in `OrgSettings`. |
 
@@ -26,7 +26,12 @@ Code ab und legt die Pakete fest, die nacheinander umgesetzt werden.
 2. **Keine `search_index_settings`-Tabelle.** Konfiguration über `.env` und `OrgSettings`.
 3. **Vektortabelle außerhalb von Alembic.** Sie wird erst in S8 per CLI/Worker idempotent angelegt, wenn Flag und DB-Fähigkeit vorliegen. Name `search_vector_<modellkennung>`. Die Alembic-Kette bleibt auf älteren Versionen lauffähig; in Test, Produktion und CI (12.3) ist die Fähigkeit immer vorhanden.
 4. **Kein Cursor.** Ergebnisliste auf 50 begrenzt (Konzept erlaubt das für den MVP).
-5. **Kontakte nicht in der universellen Suche** (weder UI noch MCP). Dafür gibt es die Kontaktsuche mit eigener Berechtigung.
+5. **Kontakte live, nie im Index** (Paket K, Entscheidung 2026-10-21, ersetzt „Kontakte nie“). Kontakte stehen weder in `search_document` noch später in einer Vektortabelle; `live.suche_kontakte` fragt sie zur Suchzeit ab. Der Aufrufer bestimmt die Zugriffsstufe (`kontakt_zugriff_fuer_request` in der UI, `_kontakt_zugriff` im MCP), nie der Client:
+   - `voll`: Kontaktmodul aktiv und Verzeichnisrecht (`can_view_kontakt_directory_request` bzw. `KONTAKT_LESE_ROLLEN`). Gefunden werden alle aktiven, nicht archivierten Kontakte; die Suche geht auch über Telefonnummern.
+   - `einsatz`: Im Einsatzkontext mit Einsatzleserolle gibt es nur `EinsatzKontakt` und `einsatz_sichtbar`-Kontakte bestätigter Objekte, mit Dienstnummern und ohne Nummernsuche.
+   - `keiner`: GSL-Kontext, Geräte, QR-Lage, QR-Einsatz eines anderen Einsatzes und abgeschaltetes Modul. Das ist auch der Default von `suche()`.
+
+   Notizen, E-Mail, Adressen und Quellenfelder werden nie durchsucht. Im MCP gibt es keine Telefonnummern.
 6. **Historische Einsätze** zunächst nur live über `visible_incidents_q` (Stichwort, Adresse, Einsatzbericht-Text ohne Personen). Ein Index folgt nur bei Bedarf.
 
 ### FULLTEXT-Besonderheiten (MariaDB/InnoDB)
@@ -154,7 +159,7 @@ Jedes Paket ist ein PR mit eigenen Tests. Codex-Aufträge nennen nur gezielte Te
 ### S6 – MCP `ecp_suchen`
 - `app/mcp/tools/suche.py`, `register_tool(name="ecp_suchen", required_roles=("readonly",), module_check=<suche_aktiv und SEARCH_MCP_ENABLED>)`, Adapter in `server.py`.
 - Parameter wie API. Rückgabe knapp: `quelle`, `quell_id`, `titel`, `auszug` (max. 300 Zeichen), `fundstelle`, `status`, `stand`, `url`, plus Hinweis, welches Fach-Tool die Details liefert (`objekt_lesen`, `katplan_element_lesen`, `gsl_einsatzstelle_lesen`, …).
-- Live-Anbieter im MCP ohne Personen: dieselbe Whitelist; Kontakte nie.
+- Live-Anbieter im MCP: dieselbe Whitelist; Kontakte seit Paket K nach Regel 5, ohne `telefone`, Details über `kontakt_lesen`.
 - Doku-Tabelle in `docs/wiki/Entwickler-MCP-Erweiterung.md` ergänzen.
 - Tests: `tests/test_mcp_suche.py` (Rollenmatrix, Modul aus, Tenant, Ausgabefelder ohne Personen/Telefon, Parität zur API für dieselbe Anfrage).
 
@@ -192,3 +197,4 @@ Nicht Teil dieses Plans. Erst nach S8 und eigener Freigabe.
 | S6 | #649 | umgesetzt: MCP `ecp_suchen` mit Feld-Whitelist, Detailwerkzeug-Verweisen und API-Parität |
 | S7 | (dieser PR) | umgesetzt: Org-Schalter + Neuaufbau, Statusseite, MariaDB-FULLTEXT-Test in CI (lokal gegen 12.3 grün), Messskript, Wiki, CHANGELOG |
 | S8 | – | gesperrt (Entscheidung) |
+| K Kontakte | (dieser PR) | umgesetzt: Live-Anbieter mit drei Zugriffsstufen, UI mit `tel:`-Links, MCP ohne Nummern |

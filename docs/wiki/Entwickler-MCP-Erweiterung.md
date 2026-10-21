@@ -34,7 +34,7 @@ Die lesenden Einsatz-Werkzeuge liegen in `app/mcp/tools/einsatz.py`; gemeinsame,
 
 `required_roles` wird mit `has_role(user, *required_roles)` geprüft: Bei mehreren Rollen genügt eine davon. `system_admin`, `admin` und `org_admin` bestehen die Prüfung ebenfalls. Kontakt-Werkzeuge prüfen ausschließlich das Kontakte-Modul; sie dürfen nicht an das Objekt-Modul gekoppelt werden.
 
-`ecp_suchen` verwendet dieselbe Abfrage-Engine wie `/api/suche`; Kontakte und Personendaten fehlen bewusst. Da `has_role` keine allgemeine Ranghierarchie abbildet, sind alle UI-Leserollen explizit registriert. `details_werkzeug` und `details_parameter` erscheinen nur für existierende Zielwerkzeuge, deren Live-Rollenprüfung (`load_live_context`) und `module_check` bestehen; der Suchtreffer bleibt auch ohne Detailverweis sichtbar.
+`ecp_suchen` verwendet dieselbe Abfrage-Engine wie `/api/suche`. Kontakte gibt es nur nach den Regeln des Kontaktmoduls (Verzeichnisrolle: alle aktiven; sonst im Einsatzkontext die für den Einsatz freigegebenen), immer ohne Telefonnummern. Details liefert `kontakt_lesen`. Da `has_role` keine allgemeine Ranghierarchie abbildet, sind alle UI-Leserollen explizit registriert. `details_werkzeug` und `details_parameter` erscheinen nur für existierende Zielwerkzeuge, deren Live-Rollenprüfung (`load_live_context`) und `module_check` bestehen; der Suchtreffer bleibt auch ohne Detailverweis sichtbar.
 
 ## Pflichten für Handler
 

@@ -40,7 +40,7 @@ Gegliedert wie Menü und Wiki: zuerst die Einsatzführung, dann die Module in de
 | **Echtzeit-Einsatzführung** | WebSocket-basiertes Board für Kräfte, Aufträge, Fahrzeuge und Meldungen; abgeschlossene Einsätze nur noch lesbar |
 | **Atemschutzüberwachung** | Rückzugsdruckberechnung, Zeitmessung und Warnungen |
 | **Lageführung** | Taktische Zeichen, Fahrzeug- und Objekt-Layer, Multi-User-Editing, Replay und Druck |
-| **Zentrale Suche** | Suche über Objekte, Objektdokumente, Katastrophenpläne, Einsätze, Straßensperren, Wasserstellen und GSL-Daten mit Rechteprüfung |
+| **Zentrale Suche** | Suche über Objekte, Objektdokumente, Katastrophenpläne, Einsätze, Kontakte, Straßensperren, Wasserstellen und GSL-Daten mit Rechteprüfung |
 | **Wetter & lokale Stationen** | Nowcast, Warnungen, Radar und optionale Meteobridge-Anbindung |
 | **Archiv & Berichte** | Audit-Log, Zeitreise und PDF-Exporte |
 

@@ -4,6 +4,11 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 
 ## Unreleased
 
+- **Suche**: Kontakte in der zentralen Suche (UI und MCP `ecp_suchen`) mit den Rechten
+  des Kontaktmoduls: Verzeichnisrollen finden alle aktiven Kontakte (auch per
+  Telefonnummer, Anruf-Link im Treffer), übrige Einsatzrollen nur die für den Einsatz
+  freigegebenen Kontakte mit Dienstnummern. Kontakte werden live geprüft, nie indexiert;
+  MCP liefert keine Telefonnummern.
 - **Navigation**: Module nach Einsatznutzen gruppiert (Im Einsatz, Einsatzbegleitend,
   Verwaltung & Planung, Auswertung), einheitlich in Desktop-Menü, Mobil-Menü und
   Übersichtskacheln aus einer Quelle (`app/services/modul_navigation.py`). Profil ganz
