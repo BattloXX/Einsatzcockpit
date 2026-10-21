@@ -1226,6 +1226,48 @@ def move_to_pool(
 # ── Status setzen ─────────────────────────────────────────────────────────────
 
 
+def _pruefe_reaktivierung(db: Session, einheit: LageEinheit) -> None:
+    if einheit.resource_type == "verband":
+        raise ValueError("Aufgelöste Verbände können nicht reaktiviert werden")
+    if einheit.vehicle_id is not None:
+        duplicate = db.query(LageEinheit.id).filter(
+            LageEinheit.lage_id == einheit.lage_id,
+            LageEinheit.vehicle_id == einheit.vehicle_id,
+            LageEinheit.id != einheit.id,
+            LageEinheit.status != STATUS_ABGERUECKT,
+        ).first()
+        if duplicate:
+            raise ValueError("Fahrzeug ist bereits wieder in der Lage")
+
+
+def reaktiviere_einheit(
+    db: Session,
+    einheit_id: int,
+    lage_id: int,
+    *,
+    author_name: str | None = None,
+    user_id: int | None = None,
+) -> LageEinheit:
+    e = _get_einheit(db, einheit_id, lage_id)
+    if e.status != STATUS_ABGERUECKT:
+        raise ValueError("Einheit ist nicht abgerückt")
+    _pruefe_reaktivierung(db, e)
+    now = datetime.now(UTC)
+    e.status = STATUS_BEREITGESTELLT
+    e.status_at = now
+    e.arrived_at = now
+    e.released_at = None
+    e.sector_id = None
+    e.incident_site_id = None
+    _journal(
+        db, lage_id,
+        f"{e.label}: reaktiviert (Abgerückt → Bereitgestellt, Pool/Reserve)",
+        category="ressource", author_name=author_name, user_id=user_id,
+        einheit_id=e.id, ereignis_typ="status", quelle="manuell",
+    )
+    return e
+
+
 def set_status(
     db: Session,
     einheit_id: int,
@@ -1240,6 +1282,9 @@ def set_status(
 
     e = _get_einheit(db, einheit_id, lage_id)
     old_status = e.status
+    if old_status == STATUS_ABGERUECKT and status != STATUS_ABGERUECKT:
+        _pruefe_reaktivierung(db, e)
+        e.released_at = None
     e.status = status
     e.status_at = datetime.now(UTC)
 

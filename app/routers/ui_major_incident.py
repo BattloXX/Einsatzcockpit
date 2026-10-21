@@ -5266,6 +5266,33 @@ def lage_einheit_status(
     return Response(status_code=204)
 
 
+@router.post("/lage/{lage_id}/einheiten/{einheit_id}/reaktivieren")
+def lage_einheit_reaktivieren(
+    request: Request,
+    lage_id: int,
+    einheit_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder")),
+):
+    user = request.state.user
+    lage = _lage_or_404(lage_id, db)
+    _check_org_access(user, lage)
+
+    einheit = db.get(LageEinheit, einheit_id)
+    if not einheit or einheit.lage_id != lage_id:
+        raise HTTPException(status_code=404)
+    try:
+        resource_service.reaktiviere_einheit(
+            db, einheit_id, lage_id,
+            author_name=get_author_name(request), user_id=user.id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    db.commit()
+    run_async(broadcast_lage, lage_id, {"type": "ressource:changed", "einheit_id": einheit_id})
+    return Response(status_code=204)
+
+
 @router.post("/lage/{lage_id}/einheiten/{einheit_id}/sektor")
 def lage_einheit_sektor(
     request: Request,
