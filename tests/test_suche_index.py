@@ -6,15 +6,32 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import event, select
 
 from app.core.tenant import set_tenant_context
-from app.models.katplan import KatplanDokument, KatplanDokumentSeite, KatplanElement, KatplanPlan
+from app.models.katplan import (
+    KatplanDokument,
+    KatplanDokumentSeite,
+    KatplanElement,
+    KatplanLink,
+    KatplanPlan,
+    KatplanVersion,
+    KatplanVersionElement,
+)
 from app.models.kontakt import Kontakt, KontaktTelefon
 from app.models.master import FireDept, OrgSettings
 from app.models.objekt import (
-    GefahrenKatalog, MerkmalKatalog, Objekt, ObjektBMA, ObjektDokument, ObjektDokumentSeite,
-    ObjektGefahr, ObjektKategorie, ObjektKontakt, ObjektMerkmal, ObjektZusatzadresse,
+    GefahrenKatalog,
+    MerkmalKatalog,
+    Objekt,
+    ObjektBMA,
+    ObjektDokument,
+    ObjektDokumentSeite,
+    ObjektGefahr,
+    ObjektKategorie,
+    ObjektKontakt,
+    ObjektMerkmal,
+    ObjektZusatzadresse,
 )
 from app.models.suche import SearchChunk, SearchDocument
 from app.models.user import User
@@ -224,6 +241,123 @@ def test_katplan_snapshot_vertraulich_und_versionswechsel(daten):
         select(SearchChunk).where(SearchChunk.org_id == a.id)))
 
 
+def test_katplan_planart_akteure_und_links_ohne_telefonnummern(daten):
+    db, a, _, _ = daten
+    p, user, e = _katplan(db, a)
+    p.planart = "alarm_einsatzplan"
+    e.akteure_json = '["polizei", "unbekannt-x"]'
+    kontakt = Kontakt(org_id=a.id, anzeigename="Leitstelle +43 664 1234567",
+                      funktion="Bereitschaft +43 664 2345678")
+    db.add(kontakt)
+    db.flush()
+    db.add_all([
+        KontaktTelefon(org_id=a.id, kontakt_id=kontakt.id, nummer="+43 699 9876543"),
+        KatplanLink(org_id=a.id, plan_id=p.id, element_id=e.id, ziel_typ="kontakt",
+                    ziel_id=kontakt.id, rolle="zu_verstaendigen",
+                    hinweis="Lage melden +43 664 3456789"),
+    ])
+    v = freigeben(db, p, user)
+    db.flush()
+    snapshot = db.scalars(select(KatplanVersionElement).where(
+        KatplanVersionElement.version_id == v.id)).one()
+    assert "9876543" in snapshot.links_json
+    p.planart = "massnahmenplan"
+    e.akteure_json = '["feuerwehr"]'
+    kontakt.anzeigename = "ArbeitsstandKontakt"
+    db.flush()
+    ident = f"{p.id}:{e.uuid}"
+    assert indexiere(db, a.id, "katplan_element", ident) == "neu"
+    doc = _doc(db, a, "katplan_element", ident)
+    text = doc.chunks[0].text
+    assert text.startswith(doc.titel + "\n") and "\n\n" not in text
+    assert "Alarm- und Einsatzplan" in text.splitlines()
+    assert "alarm- und einsatzplan" in doc.search_keywords
+    assert "aep" in doc.search_keywords.split()
+    assert "Akteure: Polizei, unbekannt-x" in text
+    assert "polizei" in doc.search_keywords.split() and "unbekannt-x" in doc.search_keywords.split()
+    assert "Leitstelle [Tel.] Bereitschaft [Tel.] Lage melden [Tel.]" in text.splitlines()
+    for verboten in ("1234567", "2345678", "3456789", "9876543", "ArbeitsstandKontakt", "Maßnahmenplan"):
+        assert verboten.casefold() not in (text + doc.search_keywords).casefold()
+
+
+@pytest.mark.parametrize("planart,label,kuerzel", [
+    ("alarm_einsatzplan", "Alarm- und Einsatzplan", "aep"),
+    ("massnahmenplan", "Maßnahmenplan", "mp"),
+    ("katastrophenplan", "Katastrophenplan", "kp"),
+])
+def test_katplan_seite_planart_keywords(daten, planart, label, kuerzel):
+    db, a, _, _ = daten
+    p, user, _ = _katplan(db, a)
+    freigeben(db, p, user)
+    p.planart = planart
+    d = KatplanDokument(org_id=a.id, plan_id=p.id, titel="Quellplan", dateiname_original="plan.pdf",
+                        pfad="plan.pdf", groesse_bytes=10, seitenzahl=1)
+    db.add(d)
+    db.flush()
+    s = KatplanDokumentSeite(org_id=a.id, plan_id=p.id, dokument_id=d.id, seiten_nr=1,
+                             einzel_pdf_pfad="seite.pdf", volltext="Quelltext")
+    db.add(s)
+    db.flush()
+    assert indexiere(db, a.id, "katplan_seite", str(s.id)) == "neu"
+    doc = _doc(db, a, "katplan_seite", s.id)
+    assert label.casefold() in doc.search_keywords and kuerzel in doc.search_keywords.split()
+
+
+@pytest.mark.parametrize("roh", ["kaputt{", "null", "{}", '[null, 3, "falsch", {"snapshot": null}]', ""])
+def test_katplan_kaputte_akteure_und_links(daten, roh):
+    db, a, _, _ = daten
+    p, user, e = _katplan(db, a)
+
+    def setze_kaputtes_json(mapper, connection, snapshot):
+        snapshot.akteure_json = snapshot.links_json = roh
+
+    # Vor dem INSERT setzen: Freigegebene Snapshots lassen sich nicht mehr aendern.
+    event.listen(KatplanVersionElement, "before_insert", setze_kaputtes_json)
+    try:
+        v = freigeben(db, p, user)
+        db.flush()
+    finally:
+        event.remove(KatplanVersionElement, "before_insert", setze_kaputtes_json)
+    snapshot = db.scalars(select(KatplanVersionElement).where(
+        KatplanVersionElement.version_id == v.id)).one()
+    assert snapshot.akteure_json == snapshot.links_json == roh
+    doc = adapter_fuer("katplan_element").dokument(db, a.id, f"{p.id}:{e.uuid}")
+    assert doc is not None and doc.titel == "I1 Notfallhinweis"
+    assert doc.chunks[0].text.startswith(doc.titel + "\n")
+
+
+@pytest.mark.parametrize("plan_json,label", [
+    ("kaputt{", "Maßnahmenplan"), ("[]", "Maßnahmenplan"), ("{}", "Maßnahmenplan"),
+    ('{"planart": "unbekannt"}', None),
+    ('{"planart": [], "akteure": null}', "Maßnahmenplan"),
+    ('{"planart": {}, "akteure": [null, {"schluessel": []}]}', "Maßnahmenplan"),
+])
+def test_katplan_plan_snapshot_fallback(daten, plan_json, label):
+    db, a, _, _ = daten
+    p, user, e = _katplan(db, a)
+    p.planart = "massnahmenplan"
+    e.akteure_json = '["unbekannt-x"]'
+
+    def setze_plan_json(mapper, connection, snapshot):
+        snapshot.plan_json = plan_json
+
+    event.listen(KatplanVersion, "before_insert", setze_plan_json)
+    try:
+        v = freigeben(db, p, user)
+        db.flush()
+    finally:
+        event.remove(KatplanVersion, "before_insert", setze_plan_json)
+    assert v.plan_json == plan_json
+    doc = adapter_fuer("katplan_element").dokument(db, a.id, f"{p.id}:{e.uuid}")
+    assert doc is not None and doc.untertitel == p.titel
+    assert "Akteure: unbekannt-x" in doc.chunks[0].text
+    assert "unbekannt-x" in doc.keywords
+    if label:
+        assert label in doc.chunks[0].text and "mp" in doc.keywords.split()
+    else:
+        assert "Maßnahmenplan" not in doc.chunks[0].text and "mp" not in doc.keywords.split()
+
+
 def test_katplan_seite_archiv_und_planstatus(daten):
     db, a, _, _ = daten
     p, user, _ = _katplan(db, a)
@@ -285,7 +419,7 @@ def test_zerlege_text_grenzen_ueberlappung_und_html():
     chunks = zerlege_text(text, 100, 30)
     assert len(chunks) > 1 and all(len(c) <= 100 for c in chunks)
     assert set(" ".join(chunks).split()) == set(text.split())
-    for links, rechts in zip(chunks, chunks[1:]):
+    for links, rechts in zip(chunks, chunks[1:], strict=False):
         assert links.split()[-1] in rechts.split()[:4]
     assert zerlege_text("Erster Satz. Zweiter Satz. Dritter Satz.", 30, 0)[0] == "Erster Satz. Zweiter Satz."
     assert zerlege_text("Erster langer Absatz\n\nZweiter Absatz mit Text und mehr", 30, 0)[0] == "Erster langer Absatz"

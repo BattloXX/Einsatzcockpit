@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -28,7 +29,8 @@ from app.models.objekt import (
     ObjektMerkmal,
     ObjektZusatzadresse,
 )
-from app.services.katplan_typen import ELEMENT_TYPEN
+from app.services.katplan_akteur_service import schluessel_lesen
+from app.services.katplan_typen import ELEMENT_TYPEN, PLANARTEN
 from app.services.suche.quellen import (
     IndexChunk,
     IndexDokument,
@@ -184,12 +186,47 @@ def _json_text(roh: str | None) -> str:
     return _text(*(v for v in werte if type(v) in (str, int, float)))
 
 
-def _plantitel(version: KatplanVersion, plan: KatplanPlan) -> str:
+def _plandaten(version: KatplanVersion) -> dict[str, Any]:
     try:
-        daten = json.loads(version.plan_json)
+        daten = json.loads(version.plan_json or "{}")
     except ValueError:
-        return plan.titel
-    return daten["titel"] if isinstance(daten, dict) and isinstance(daten.get("titel"), str) else plan.titel
+        return {}
+    return daten if isinstance(daten, dict) else {}
+
+
+def _plantitel(daten: dict[str, Any], plan: KatplanPlan) -> str:
+    return daten["titel"] if isinstance(daten.get("titel"), str) else plan.titel
+
+
+def _akteurnamen(roh: str | None, daten: dict[str, Any]) -> list[str]:
+    katalog = daten.get("akteure", [])
+    if not isinstance(katalog, list):
+        katalog = []
+    namen = {a["schluessel"]: a["bezeichnung"] for a in katalog
+             if isinstance(a, dict) and isinstance(a.get("schluessel"), str)
+             and isinstance(a.get("bezeichnung"), str) and a["bezeichnung"].strip()}
+    return [namen.get(s, s) for s in schluessel_lesen(roh)]
+
+
+def _linktexte(roh: str | None) -> str:
+    try:
+        links = json.loads(roh or "[]")
+    except ValueError:
+        return ""
+    if not isinstance(links, list):
+        return ""
+    zeilen = []
+    for link in links:
+        if not isinstance(link, dict):
+            continue
+        snapshot = link.get("snapshot")
+        if not isinstance(snapshot, dict):
+            snapshot = {}
+        text = _text(*(w for w in (snapshot.get("titel"), snapshot.get("untertitel"), link.get("hinweis"))
+                       if isinstance(w, str)))
+        if text:
+            zeilen.append(text)
+    return entferne_telefonnummern("\n".join(zeilen))
 
 
 class KatplanElementAdapter:
@@ -208,14 +245,23 @@ class KatplanElementAdapter:
         if zeile is None:
             return None
         e, v, p = zeile
+        daten = _plandaten(v)
+        code = daten.get("planart") or p.planart
+        planart = PLANARTEN.get(code) if isinstance(code, str) else None
+        akteure = _akteurnamen(e.akteure_json, daten)
         titel = entferne_telefonnummern(_text(e.kennung, e.titel))
         typ = ELEMENT_TYPEN[e.typ].label if e.typ in ELEMENT_TYPEN else e.typ
-        text = "\n".join((typ, html_zu_text(e.beschreibung_html),
-                          _adresse(e.strasse, e.hausnummer, e.plz, e.ort),
-                          _json_text(e.daten_json), _json_text(e.tags_json)))
+        text = "\n".join(w for w in (
+            typ, planart.label if planart else "", html_zu_text(e.beschreibung_html),
+            _adresse(e.strasse, e.hausnummer, e.plz, e.ort),
+            _json_text(e.daten_json), _json_text(e.tags_json),
+            "Akteure: " + ", ".join(akteure) if akteure else "", _linktexte(e.links_json),
+        ) if w)
         return IndexDokument(
-            quell_id=f"{p.id}:{e.element_uuid}", titel=titel, untertitel=_plantitel(v, p),
-            keywords=_keywords(titel, typ, _json_text(e.tags_json)), chunks=[_chunk(titel, text)],
+            quell_id=f"{p.id}:{e.element_uuid}", titel=titel, untertitel=_plantitel(daten, p),
+            keywords=_keywords(titel, typ, _json_text(e.tags_json),
+                               planart.label if planart else None, planart.kuerzel if planart else None,
+                               *akteure), chunks=[_chunk(titel, text)],
             sichtbarkeit="vertraulich" if e.vertraulich else "standard", lat=e.lat, lng=e.lng,
             meta={"plan_id": p.id, "version_id": v.id, "element_uuid": e.element_uuid},
             geaendert_am=v.freigegeben_am,
@@ -247,8 +293,11 @@ class KatplanSeiteAdapter:
         if not (s.volltext or "").strip():
             return None
         titel = entferne_telefonnummern(s.titel or f"{d.titel}, Seite {s.seiten_nr}")
+        planart = PLANARTEN.get(p.planart)
         return IndexDokument(
-            quell_id=str(s.id), titel=titel, untertitel=p.titel, keywords=_keywords(titel, p.titel),
+            quell_id=str(s.id), titel=titel, untertitel=p.titel,
+            keywords=_keywords(titel, p.titel, planart.label if planart else None,
+                               planart.kuerzel if planart else None),
             chunks=[_chunk(titel, t, s.seiten_nr)
                     for t in zerlege_text(entferne_telefonnummern(s.volltext))],
             meta={"plan_id": p.id, "dokument_id": d.id, "seiten_nr": s.seiten_nr},
