@@ -3038,7 +3038,11 @@ button.htmx-request,
   border: 1px solid var(--border); border-radius: 999px; cursor: pointer; font-size: .8rem; white-space: nowrap;
   background: var(--surface-low); color: var(--text); }
 .ec-chip-toggle input:checked + span { background: var(--red); color: #fff; border-color: var(--red); font-weight: 700; }
-.ec-chip-toggle input:checked + span::before { content: "\2713\00a0"; }
+.ec-chip-toggle input:checked + span::before {
+  content: ""; display: inline-block; width: 1em; height: 1em; margin-right: .3em; background: currentColor;
+  -webkit-mask: url("/static/icons/tabler/check.svg") center / contain no-repeat;
+  mask: url("/static/icons/tabler/check.svg") center / contain no-repeat;
+}
 .ec-chip-toggle input:focus-visible + span { outline: 2px solid var(--red-light); outline-offset: 2px; }
 .module-btn__badge { margin-top: 4px; padding: 2px 8px; background: var(--surface-high); border-radius: 999px;
   font-size: .72rem; color: var(--text-muted); }

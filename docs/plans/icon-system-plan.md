@@ -1,12 +1,40 @@
 # ECP – Einheitliches Icon-System (Tabler Icons)
 
-Stand: 2026-10-20 · Status: in Umsetzung
+Stand: 2026-10-21 · Status: umgesetzt (P0–P11), Gerätetests offen
 
 ## Ziel
 
 Alle Icons des Einsatzcockpits werden durch ein konsistentes, geräteunabhängiges
 SVG-Icon-System auf Basis von [Tabler Icons](https://tabler.io/icons) (MIT) ersetzt.
 Feuerwehrspezifische Symbole ohne Tabler-Entsprechung bleiben unverändert. Funktionen, Statuslogik und Barrierefreiheit bleiben unverändert.
+
+## 0. Umsetzungsstand (2026-10-21)
+
+| Phase | Inhalt | PR |
+|---|---|---|
+| P0 | Inventar + Zuordnung (`scripts/icon_inventar.py`, `docs/icon-inventar.md`) | #651 |
+| P1+P2 | Fundament (Tabler 3.49.0, `icon()`, `icons.js`, Tokens) + Wächter | #652 |
+| P3 | Rahmen: Navigation, Übersicht, Admin-Menü, Fehlerseite, `modul_icon` | #653 |
+| P4a/P4b | Einsatzboard, Einsatzinfo, Funk, Lageführung, Atemschutz | #654, #655 |
+| P5a/P5b | GSL-Board, Tabs, Stab, Journale, Einheitenmodus | #656, #657 |
+| P6a/P6b | Kartenmarker (`ecpMarkerIcon`, Cross-Marker `type_icon_name`), übrige Karten | #658, #659 |
+| P7a–P7d | Objektverwaltung, Admin-Rest, Gateway/Förderstrecke/Termine, Katastrophenplan u. a. | #660, #661, #662 |
+| P8 | Öffentliche Seiten, Infoscreens, Wetter; Tailwind-CDN der Infoscreens durch lokalen Build ersetzt | #663 |
+| P9 | PDF/Druck, xhtml2pdf-Fallback ohne System-Icons, PDF-Tests | #664 |
+| P10 | Merkmal-Symbole: Migration 0301 `merkmal_katalog.icon_name`, Icon-Auswahl | folgt |
+| P11 | Aufräumen: CSS-Glyphe, begründete Ausnahmen, Doku | folgt |
+
+Ergebnis: Emoji-Baseline 1466 → 85 Treffer, alle mit Begründung (`AUSNAHME_GRUENDE`).
+Bewusst geblieben: Gefahren-Piktogramme (fachliche Information, inkl. Noto-Emoji-Schrift im
+Objektblatt-PDF), Feuerwehr-Fachzeichen ohne Tabler-Entsprechung, Kompatibilitätsfelder
+(`type_icon`, `typ_icon`, Merkmal-`icon`), Push-/API-/CLI-/XLSX-Texte.
+
+Abweichungen vom Entwurf: keine eigenen ECP-SVGs (User-Entscheid 2026-10-20); die DB-Umstellung
+betrifft nur Objektmerkmale (Kontakt-/Dokumentarten haben keine Symbole, Piktogramme bleiben).
+
+Offen: Gerätetest auf Android-App, iPad/iPhone Safari, Windows Edge/Chrome, Desktop Firefox
+(Board, GSL, Karten, Einheitenmodus, Infoscreens, PDF), Merkmal-Altwerte in Produktion nach
+Migration sichten (Katalogpflege, Spalte Icon).
 
 ## 1. Bestandsaufnahme (Messung 2026-10-20, `origin/main` 83fc795d)
 

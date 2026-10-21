@@ -1,22 +1,23 @@
-# Waechter tests/test_icon_waechter.py: noch nicht migrierte UI-Emojis je Datei.
+# Waechter tests/test_icon_waechter.py: verbliebene Emojis je Datei mit Begruendung.
 # Darf nur schrumpfen. Neu erzeugen: .venv/bin/python scripts/icon_inventar.py --baseline
-app/models/major_incident.py 11
-app/models/objekt.py 8
-app/routers/api_v1.py 1
-app/routers/ui_incident.py 2
-app/routers/ui_infoscreen_alarm.py 1
-app/routers/ui_lagefuehrung.py 2
-app/routers/ui_termin.py 3
-app/seed_data.py 1
-app/services/incident_service.py 3
-app/services/katplan_typen.py 8
-app/services/objekt_service.py 18
-app/static/js/einsatz_info.js 4
-app/static/js/lagefuehrung.js 1
-app/templates/incident_major/karte.html 7
-app/templates/objekt/_einsatz_inhalt.html 2
-app/templates/objekt/_gefahren.html 3
-app/templates/objekt/infoscreen_alarm.html 1
-app/templates/pdf/_emoji_font_face.html 6
-app/templates/pdf/objektblatt.html 2
-app/templates/weather/_data_section.html 1
+# Begruendungen stehen in AUSNAHME_GRUENDE in scripts/icon_inventar.py.
+app/models/major_incident.py 11  # CROSS_MARKER_TYPE_ICON: Emoji-Feld fuer JSON/Druck und Fachzeichen
+app/models/objekt.py 8  # Gefahren-Piktogramme (fachliche Information, bleiben Emoji)
+app/routers/api_v1.py 1  # Benachrichtigungstext der API (externer Kanal)
+app/routers/ui_incident.py 2  # Gefahren-Piktogramme (fachliche Information, bleiben Emoji)
+app/routers/ui_infoscreen_alarm.py 1  # Gefahren-Piktogramme (fachliche Information, bleiben Emoji)
+app/routers/ui_lagefuehrung.py 2  # Gefahren-Piktogramme (fachliche Information, bleiben Emoji)
+app/routers/ui_termin.py 3  # XLSX-Export (keine UI)
+app/seed_data.py 1  # CLI-Ausgabe
+app/services/incident_service.py 3  # Push-Benachrichtigungstexte (externer Kanal)
+app/services/katplan_typen.py 8  # typ_icon: Emoji-Feld fuer JSON-Kompatibilitaet neben icon_name
+app/services/objekt_service.py 18  # Seeds: Gefahren-Piktogramme und Merkmal-Altwerte (icon, neben icon_name)
+app/static/js/einsatz_info.js 4  # Gefahren-Piktogramme (fachliche Information, bleiben Emoji)
+app/static/js/lagefuehrung.js 1  # Gefahren-Piktogramme (fachliche Information, bleiben Emoji)
+app/templates/incident_major/karte.html 7  # Kartenlegende: farbige Fachzeichen (legItem)
+app/templates/objekt/_einsatz_inhalt.html 2  # Gefahren-Piktogramme (fachliche Information, bleiben Emoji)
+app/templates/objekt/_gefahren.html 3  # Gefahren-Piktogramme (fachliche Information, bleiben Emoji)
+app/templates/objekt/infoscreen_alarm.html 1  # Gefahren-Piktogramme (fachliche Information, bleiben Emoji)
+app/templates/pdf/_emoji_font_face.html 6  # Jinja-Kommentar (Glyphenliste der PDF-Schrift)
+app/templates/pdf/objektblatt.html 2  # Gefahren-Piktogramme (fachliche Information, bleiben Emoji)
+app/templates/weather/_data_section.html 1  # Trendpfeil im Fliesstext
