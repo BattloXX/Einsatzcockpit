@@ -12,7 +12,7 @@
       <h1>Auftragsvorlagen</h1>
       <p class="page-header__sub">Vorlage anlegen, dann Alarmstichwörter zuweisen und sortieren.</p>
     </div>
-    <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newSuggModal">+ Vorlage</button>
+    <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newSuggModal">{{ icon("plus", size="sm") }} Vorlage</button>
   </div>
 
   {% if saved %}<div class="alert alert--success">Gespeichert.</div>{% endif %}
@@ -64,7 +64,7 @@
     Stichwörter zuweisen: <em>{{ edit_suggestion.text[:70] }}{% if edit_suggestion.text|length > 70 %}…{% endif %}</em>
   </div>
   <p class="form-hint" style="margin-bottom:10px;">
-    Haken setzen = Vorlage erscheint bei diesem Stichwort. Reihenfolge (innerhalb der Vorlage) per Drag-Drop am ☰ ändern.
+    Haken setzen = Vorlage erscheint bei diesem Stichwort. Reihenfolge (innerhalb der Vorlage) per Drag-Drop am {{ icon("grip-vertical", size="sm") }} ändern.
   </p>
   <form method="post" action="/admin/auftragsvorlagen/{{ edit_suggestion.id }}/alarms"
         id="alarmEditForm" style="max-width:620px;">
@@ -80,7 +80,7 @@
         {% for code in edit_assigned_codes %}
         {% for atype in alarm_types if atype.code == code %}
         <tr data-code="{{ atype.code }}">
-          <td class="drag-handle" style="cursor:grab;font-size:1.2rem;color:#888;text-align:center;">☰</td>
+          <td class="drag-handle" style="cursor:grab;font-size:1.2rem;color:#888;text-align:center;">{{ icon("grip-vertical", size="sm") }}</td>
           <td><input type="checkbox" class="alarm-checkbox" checked></td>
           <td><strong>{{ atype.code }}</strong>{% if atype.label %}<span class="text-muted"> – {{ atype.label }}</span>{% endif %}</td>
         </tr>
@@ -88,7 +88,7 @@
         {% endfor %}
         {% for atype in alarm_types if atype.code not in edit_assigned_codes %}
         <tr data-code="{{ atype.code }}">
-          <td class="drag-handle" style="cursor:grab;font-size:1.2rem;color:#888;text-align:center;">☰</td>
+          <td class="drag-handle" style="cursor:grab;font-size:1.2rem;color:#888;text-align:center;">{{ icon("grip-vertical", size="sm") }}</td>
           <td><input type="checkbox" class="alarm-checkbox"></td>
           <td><strong>{{ atype.code }}</strong>{% if atype.label %}<span class="text-muted"> – {{ atype.label }}</span>{% endif %}</td>
         </tr>
@@ -174,7 +174,7 @@
   <div class="modal__content">
     <div class="modal__header">
       <h3>Neue Auftragsvorlage</h3>
-      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">{{ icon("x", size="sm") }}</button>
     </div>
     <form method="post" action="/admin/auftragsvorlagen/neu">
       <div class="modal__body">
@@ -197,7 +197,7 @@
   <div class="modal__content">
     <div class="modal__header">
       <h3>Auftragsvorlage bearbeiten</h3>
-      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">{{ icon("x", size="sm") }}</button>
     </div>
     <form method="post" id="editSuggForm">
       <div class="modal__body">

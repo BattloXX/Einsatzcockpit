@@ -286,7 +286,7 @@
     {# ── KI-Konfiguration (Anthropic Claude) ────────────────────────────── #}
     <section class="card mb-4">
       <div class="card-header">
-        <h2>✨ KI-Konfiguration (Anthropic Claude)</h2>
+        <h2>{{ icon("sparkles", size="md") }} KI-Konfiguration (Anthropic Claude)</h2>
       </div>
       <div class="card-body">
         <p class="text-muted" style="font-size:.85rem;margin-bottom:12px;">
@@ -345,7 +345,7 @@
 
         <p class="text-muted" style="font-size:.85rem; margin-top:8px;">
           System-Prompts werden auf der separaten Seite
-          <a href="/admin/ki-prompts">✨ KI-Prompts</a> verwaltet (mit Versionsverlauf).
+          <a href="/admin/ki-prompts">{{ icon("sparkles", size="sm") }} KI-Prompts</a> verwaltet (mit Versionsverlauf).
         </p>
       </div>
     </section>
@@ -372,7 +372,7 @@
                   <option value="false" {% if settings.get('mi_feature_stab','') == 'false' %}selected{% endif %}>Inaktiv (false)</option>
                 </select>
               </td>
-              <td data-label="Beschreibung"><small class="text-muted">👥 Stab – Stabsführung (S1–S6, Lageleitung)</small></td>
+              <td data-label="Beschreibung"><small class="text-muted">{{ icon("users", size="sm") }} Stab – Stabsführung (S1–S6, Lageleitung)</small></td>
             </tr>
             <tr>
               <td data-label="Einstellung"><code>mi_feature_funkjournal</code></td>
@@ -382,7 +382,7 @@
                   <option value="false" {% if settings.get('mi_feature_funkjournal','') == 'false' %}selected{% endif %}>Inaktiv (false)</option>
                 </select>
               </td>
-              <td data-label="Beschreibung"><small class="text-muted">📻 Funkjournal – Eingehende, ausgehende und interne Funkmeldungen</small></td>
+              <td data-label="Beschreibung"><small class="text-muted">{{ icon("radio", size="sm") }} Funkjournal – Eingehende, ausgehende und interne Funkmeldungen</small></td>
             </tr>
             <tr>
               <td data-label="Einstellung"><code>mi_feature_meldungen</code></td>
@@ -392,7 +392,7 @@
                   <option value="false" {% if settings.get('mi_feature_meldungen','') == 'false' %}selected{% endif %}>Inaktiv (false)</option>
                 </select>
               </td>
-              <td data-label="Beschreibung"><small class="text-muted">📥 Meldungen – Bürger-Meldungsportal und eingehende Schadensmeldungen</small></td>
+              <td data-label="Beschreibung"><small class="text-muted">{{ icon("inbox", size="sm") }} Meldungen – Bürger-Meldungsportal und eingehende Schadensmeldungen</small></td>
             </tr>
             <tr>
               <td data-label="Einstellung"><code>mi_feature_sektoren</code></td>
@@ -402,7 +402,7 @@
                   <option value="false" {% if settings.get('mi_feature_sektoren','') == 'false' %}selected{% endif %}>Inaktiv (false)</option>
                 </select>
               </td>
-              <td data-label="Beschreibung"><small class="text-muted">🗂 Abschnitte – Einsatzstellen in Abschnitte/Sektoren gliedern</small></td>
+              <td data-label="Beschreibung"><small class="text-muted">{{ icon("folders", size="sm") }} Abschnitte – Einsatzstellen in Abschnitte/Sektoren gliedern</small></td>
             </tr>
             <tr>
               <td data-label="Einstellung"><code>mi_feature_karte</code></td>
@@ -412,7 +412,7 @@
                   <option value="false" {% if settings.get('mi_feature_karte','') == 'false' %}selected{% endif %}>Inaktiv (false)</option>
                 </select>
               </td>
-              <td data-label="Beschreibung"><small class="text-muted">🗺 Karte – Geografische Übersichtskarte aller Einsatzstellen</small></td>
+              <td data-label="Beschreibung"><small class="text-muted">{{ icon("map", size="sm") }} Karte – Geografische Übersichtskarte aller Einsatzstellen</small></td>
             </tr>
             <tr>
               <td data-label="Einstellung"><code>mi_feature_zeitreise</code></td>
@@ -422,7 +422,7 @@
                   <option value="false" {% if settings.get('mi_feature_zeitreise','') == 'false' %}selected{% endif %}>Inaktiv (false)</option>
                 </select>
               </td>
-              <td data-label="Beschreibung"><small class="text-muted">🕐 Zeitreise – Chronologischer Ereignisverlauf der gesamten Lage</small></td>
+              <td data-label="Beschreibung"><small class="text-muted">{{ icon("clock", size="sm") }} Zeitreise – Chronologischer Ereignisverlauf der gesamten Lage</small></td>
             </tr>
             <tr>
               <td data-label="Einstellung"><code>mi_feature_ressourcen</code></td>
@@ -432,7 +432,7 @@
                   <option value="false" {% if settings.get('mi_feature_ressourcen','') == 'false' %}selected{% endif %}>Inaktiv (false)</option>
                 </select>
               </td>
-              <td data-label="Beschreibung"><small class="text-muted">🚒 Ressourcen – Übersicht aller zugewiesenen Einheiten und Kräfte</small></td>
+              <td data-label="Beschreibung"><small class="text-muted">{{ icon("firetruck", size="sm") }} Ressourcen – Übersicht aller zugewiesenen Einheiten und Kräfte</small></td>
             </tr>
           </tbody>
         </table>

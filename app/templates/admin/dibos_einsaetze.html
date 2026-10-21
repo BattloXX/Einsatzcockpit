@@ -84,7 +84,7 @@
               <span class="badge-pill badge-pill--gray">{{ i.status }}</span>
             {% endif %}
           </td>
-          <td data-label=""><a href="/einsatz/{{ i.id }}/info" {{ tip('Einsatzinformation öffnen') }}>Öffnen ↗</a></td>
+          <td data-label=""><a href="/einsatz/{{ i.id }}/info" {{ tip('Einsatzinformation öffnen') }}>Öffnen {{ icon("external-link", size="sm") }}</a></td>
         </tr>
         {% endfor %}
       </tbody>

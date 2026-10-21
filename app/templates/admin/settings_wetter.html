@@ -115,7 +115,7 @@
       <textarea id="wxPushUrl" readonly rows="3"
                 style="width:100%;font-family:var(--font-mono,monospace);font-size:.76rem;background:rgba(0,0,0,.25);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:.5rem;resize:vertical;">{{ public_base_url }}/api/v1/weather/ingest?token={{ new_station_token }}&temp=[th0temp-act]&hum=[th0hum-act]&wind=[wind0wind-act]&gust=[wind0gust-act]&dir=[wind0dir-act]&press=[thb0seapress-act]&rainrate=[rain0rate-act]&rainday=[rain0total-daysum]&dew=[th0dew-act]&solar=[sol0rad-act]&uv=[uv0index-act]&ts=[epoch]</textarea>
       <button type="button" class="btn btn--sm btn--primary" style="margin-top:.5rem;"
-              onclick="var t=document.getElementById('wxPushUrl');t.select();navigator.clipboard.writeText(t.value);this.textContent='Kopiert ✓';">
+              onclick="var t=document.getElementById('wxPushUrl');t.select();navigator.clipboard.writeText(t.value);this.textContent='Kopiert';">
         URL kopieren
       </button>
     </div>

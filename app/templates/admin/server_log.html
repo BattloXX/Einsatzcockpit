@@ -59,14 +59,14 @@
     </div>
 
     {# Manuell aktualisieren #}
-    <button class="btn btn--ghost btn--sm" onclick="fetchLog()">↻ Aktualisieren</button>
+    <button class="btn btn--ghost btn--sm" onclick="fetchLog()">{{ icon("refresh", size="xs") }} Aktualisieren</button>
 
     {# Trennlinie #}
     <div style="flex:1;"></div>
 
     {# Copy #}
     <button class="btn btn--ghost btn--sm" id="copyBtn" onclick="copyLog()">
-      📋 Kopieren
+      {{ icon("clipboard-list", size="xs") }} Kopieren
     </button>
 
     {# Download #}
@@ -74,7 +74,7 @@
        href="/admin/system/server-log/raw?n={{ n }}&level={{ level }}"
        class="btn btn--ghost btn--sm"
        download="server-log.txt">
-      ⬇ Download
+      {{ icon("download", size="xs") }} Download
     </a>
 
   </div>
@@ -173,8 +173,8 @@ async function copyLog() {
   try {
     await navigator.clipboard.writeText(text);
     const btn = document.getElementById('copyBtn');
-    btn.textContent = '✓ Kopiert';
-    setTimeout(() => { btn.textContent = '📋 Kopieren'; }, 2000);
+    btn.innerHTML = ecpIcon('circle-check', {size: 'xs'}) + ' Kopiert';
+    setTimeout(() => { btn.innerHTML = ecpIcon('clipboard-list', {size: 'xs'}) + ' Kopieren'; }, 2000);
   } catch (_) {
     alert('Kopieren fehlgeschlagen – bitte manuell markieren.');
   }

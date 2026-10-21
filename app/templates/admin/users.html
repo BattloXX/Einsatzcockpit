@@ -15,7 +15,7 @@
   <div style="display:flex;gap:8px;flex-wrap:wrap;">
     <a class="btn btn--ghost" href="/admin/benutzer/mail-vorschau">Mail-Vorschau</a>
     <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newUserModal"
-            {{ tip('Neuen Login-Account anlegen') }}>+ Benutzer</button>
+            {{ tip('Neuen Login-Account anlegen') }}>{{ icon("plus", size="sm") }} Benutzer</button>
   </div>
 </div>
 
@@ -114,7 +114,7 @@
         {% if u.email %}
         <button type="button" class="btn btn--ghost btn--xs"
                 onclick='if(confirm("Reset-Link an " + {{ u.email | tojson }} + " senden?")) postAction("/admin/benutzer/{{ u.id }}/reset-mail")'
-                {{ tip('Sendet einen Self-Service-Reset-Link an die hinterlegte E-Mail') }}>📧 Reset-Mail</button>
+                {{ tip('Sendet einen Self-Service-Reset-Link an die hinterlegte E-Mail') }}>{{ icon("mail", size="xs") }} Reset-Mail</button>
         {% endif %}
         {% if u.auth_provider == 'local' and u.email and not u.last_login_at %}
         <button type="button" class="btn btn--ghost btn--xs"
@@ -149,7 +149,7 @@
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <div class="modal__header">
       <h3>Neuer Benutzer</h3>
-      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">{{ icon("x", size="sm") }}</button>
     </div>
     <div class="modal__body">
       <div class="form-row">
@@ -225,7 +225,7 @@
 <dialog class="modal" id="editUserModal">
   <div class="modal__content">
     <div class="modal__header"><h3>Benutzer bearbeiten</h3>
-      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">×</button></div>
+      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">{{ icon("x", size="sm") }}</button></div>
     <form method="post" id="editUserForm">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div class="modal__body">

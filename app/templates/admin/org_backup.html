@@ -52,10 +52,10 @@
        sofort herunter. Ausgenommen sind server-gebundene Geheimnisse (SSO-/Mail-Secrets, API-Keys, Tokens).</p>
     <a class="btn btn--primary"
        href="/admin/org-backup/export.zip{% if is_sysadmin and org %}?org_id={{ org.id }}{% endif %}">
-      💾 Archiv herunterladen
+      {{ icon("download", size="sm") }} Archiv herunterladen
     </a>
     {% if is_sysadmin %}
-    <a class="btn" href="/admin/org-backup/restore" style="margin-left:8px;">♻️ Archiv wiederherstellen…</a>
+    <a class="btn" href="/admin/org-backup/restore" style="margin-left:8px;">{{ icon("recycle", size="sm") }} Archiv wiederherstellen…</a>
     {% endif %}
   </div>
 </section>
@@ -189,8 +189,8 @@
 
       <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;">
         <button class="btn btn--primary" type="submit">Speichern</button>
-        <button class="btn" type="submit" formaction="/admin/org-backup/test">🔌 Verbindung testen</button>
-        <button class="btn" type="submit" formaction="/admin/org-backup/run-now">⏱️ Jetzt sichern</button>
+        <button class="btn" type="submit" formaction="/admin/org-backup/test">{{ icon("plug", size="sm") }} Verbindung testen</button>
+        <button class="btn" type="submit" formaction="/admin/org-backup/run-now">{{ icon("stopwatch", size="sm") }} Jetzt sichern</button>
       </div>
     </form>
 

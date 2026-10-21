@@ -17,7 +17,7 @@
         &nbsp;{{ dt.user.username if dt.user else '–' }}
       </p>
     </div>
-    <a href="/admin/geraete-login" class="btn btn--ghost">← Zurück</a>
+    <a href="/admin/geraete-login" class="btn btn--ghost">{{ icon("chevron-left", size="sm") }} Zurück</a>
   </div>
 
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
@@ -41,7 +41,7 @@
       <h3 style="margin-bottom:10px;">Letzter Standort</h3>
       {% if dt.last_lat and dt.last_lng %}
       <p style="font-size:.85rem;color:var(--color-text-muted);margin-bottom:8px;">
-        📍 <strong>{{ '%.6f'|format(dt.last_lat) }}, {{ '%.6f'|format(dt.last_lng) }}</strong>
+        {{ icon("map-pin", size="sm") }} <strong>{{ '%.6f'|format(dt.last_lat) }}, {{ '%.6f'|format(dt.last_lng) }}</strong>
         &nbsp;·&nbsp;
         {% if dt.last_location_at %}
           {{ (dt.last_location_at|local).strftime('%d.%m.%Y %H:%M:%S') }}
@@ -52,7 +52,7 @@
       <div style="height:200px;display:flex;align-items:center;justify-content:center;
                   border:1px dashed var(--border);border-radius:6px;color:var(--color-text-muted);">
         <div style="text-align:center;">
-          <div style="font-size:2rem;margin-bottom:6px;">📵</div>
+          <div style="font-size:2rem;margin-bottom:6px;">{{ icon("device-mobile-off", size="lg") }}</div>
           <p>Noch kein Standort übermittelt.</p>
           <small>Die App überträgt den Standort automatisch wenn Dienst aktiv ist.</small>
         </div>

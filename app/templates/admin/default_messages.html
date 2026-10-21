@@ -12,7 +12,7 @@
       <h1>Default-Meldungen</h1>
       <p class="page-header__sub">Meldung anlegen, dann Alarmstichwörter zuweisen und Fälligkeitszeit festlegen.</p>
     </div>
-    <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newDmModal">+ Meldung</button>
+    <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newDmModal">{{ icon("plus", size="sm") }} Meldung</button>
   </div>
 
   {% if saved %}<div class="alert alert--success">Gespeichert.</div>{% endif %}
@@ -66,7 +66,7 @@
     Stichwörter zuweisen: <em>{{ edit_message.text[:70] }}{% if edit_message.text|length > 70 %}…{% endif %}</em>
   </div>
   <p class="form-hint" style="margin-bottom:10px;">
-    Haken setzen = Meldung erscheint bei diesem Stichwort. Fälligkeitszeit in Minuten angeben. Reihenfolge per Drag-Drop am ☰ ändern.
+    Haken setzen = Meldung erscheint bei diesem Stichwort. Fälligkeitszeit in Minuten angeben. Reihenfolge per Drag-Drop am {{ icon("grip-vertical", size="sm") }} ändern.
   </p>
   <form method="post" action="/admin/default-meldungen/{{ edit_message.id }}/alarms"
         id="dmAlarmEditForm" style="max-width:820px;">
@@ -83,7 +83,7 @@
         {% for code in edit_assigned_codes %}
         {% for atype in alarm_types if atype.code == code %}
         <tr data-code="{{ atype.code }}">
-          <td class="drag-handle" style="cursor:grab;font-size:1.2rem;color:#888;text-align:center;">☰</td>
+          <td class="drag-handle" style="cursor:grab;font-size:1.2rem;color:#888;text-align:center;">{{ icon("grip-vertical", size="sm") }}</td>
           <td><input type="checkbox" class="alarm-checkbox" checked></td>
           <td><strong>{{ atype.code }}</strong>{% if atype.label %}<span class="text-muted"> – {{ atype.label }}</span>{% endif %}</td>
           <td><input type="number" class="dm-due-min form-input" style="width:90px;"
@@ -93,7 +93,7 @@
         {% endfor %}
         {% for atype in alarm_types if atype.code not in edit_assigned_codes %}
         <tr data-code="{{ atype.code }}">
-          <td class="drag-handle" style="cursor:grab;font-size:1.2rem;color:#888;text-align:center;">☰</td>
+          <td class="drag-handle" style="cursor:grab;font-size:1.2rem;color:#888;text-align:center;">{{ icon("grip-vertical", size="sm") }}</td>
           <td><input type="checkbox" class="alarm-checkbox"></td>
           <td><strong>{{ atype.code }}</strong>{% if atype.label %}<span class="text-muted"> – {{ atype.label }}</span>{% endif %}</td>
           <td><input type="number" class="dm-due-min form-input" style="width:90px;" min="1" value="5"></td>
@@ -188,7 +188,7 @@
   <div class="modal__content">
     <div class="modal__header">
       <h3>Neue Default-Meldung</h3>
-      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">{{ icon("x", size="sm") }}</button>
     </div>
     <form method="post" action="/admin/default-meldungen/neu">
       <div class="modal__body">
@@ -211,7 +211,7 @@
   <div class="modal__content">
     <div class="modal__header">
       <h3>Default-Meldung bearbeiten</h3>
-      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">{{ icon("x", size="sm") }}</button>
     </div>
     <form method="post" id="editDmForm">
       <div class="modal__body">

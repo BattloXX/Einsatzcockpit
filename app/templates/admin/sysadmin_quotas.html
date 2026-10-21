@@ -37,13 +37,13 @@
     <h1>System-Konsole: Quota-Verwaltung</h1>
     <p class="page-header__sub">Speicher- und KI-Token-Kontingente je Organisation festlegen</p>
   </div>
-  <a href="/admin/system/orgs" class="btn btn--secondary">← System-Konsole</a>
+  <a href="/admin/system/orgs" class="btn btn--secondary">{{ icon("chevron-left", size="sm") }} System-Konsole</a>
 </div>
 
 {% if saved %}
 <div style="background:rgba(22,163,74,.15);border:1px solid #16a34a;color:var(--on-surface);
             padding:10px 14px;border-radius:.4rem;margin-bottom:16px;font-size:.88rem">
-  ✓ Quota gespeichert.
+  {{ icon("circle-check", size="sm") }} Quota gespeichert.
 </div>
 {% endif %}
 
@@ -64,7 +64,7 @@
       {# ── Speicher ─────────────────────────────────────────── #}
       <div>
         <div class="quota-block__label">
-          <span>💾 Speicher</span>
+          <span>{{ icon("device-floppy", size="sm") }} Speicher</span>
           {% if row.storage_pct is not none %}
             <span style="color:{% if row.storage_pct >= 90 %}var(--red-light,#f87171){% elif row.storage_pct >= 75 %}#d97706{% else %}var(--text-muted){% endif %}">{{ row.storage_pct }}%</span>
           {% endif %}
@@ -94,7 +94,7 @@
       {# ── KI-Token ─────────────────────────────────────────── #}
       <div style="margin-top:14px">
         <div class="quota-block__label">
-          <span>✨ KI-Token ({{ row.ai_month }})</span>
+          <span>{{ icon("sparkles", size="sm") }} KI-Token ({{ row.ai_month }})</span>
           {% if row.ai_pct is not none %}
             <span style="color:{% if row.ai_pct >= 90 %}var(--red-light,#f87171){% elif row.ai_pct >= 75 %}#d97706{% else %}var(--text-muted){% endif %}">{{ row.ai_pct }}%</span>
           {% endif %}

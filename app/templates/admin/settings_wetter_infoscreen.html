@@ -48,7 +48,7 @@
                 style="width:100%;font-family:var(--font-mono,monospace);font-size:.82rem;background:rgba(0,0,0,.25);color:var(--text-primary);border:1px solid var(--border);border-radius:4px;padding:.5rem;resize:vertical;">{{ new_dashboard_url }}</textarea>
       <div style="display:flex;align-items:flex-start;gap:1rem;margin-top:.5rem;flex-wrap:wrap;">
         <button type="button" class="btn btn--sm btn--primary"
-                onclick="var t=document.getElementById('wxDashUrl');t.select();navigator.clipboard.writeText(t.value);this.textContent='Kopiert ✓';">
+                onclick="var t=document.getElementById('wxDashUrl');t.select();navigator.clipboard.writeText(t.value);this.textContent='Kopiert';">
           URL kopieren
         </button>
         {% if dashboard_qr %}

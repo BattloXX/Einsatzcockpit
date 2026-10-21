@@ -22,9 +22,9 @@
           <td><code>{{ '/' if slug == 'landing' else '/' ~ slug }}</code></td>
           <td style="text-align:right;white-space:nowrap">
             {% if slug == 'landing' %}
-            <a href="/startseite/vorschau" target="_blank" class="btn btn--ghost btn--sm">Vorschau ↗</a>
+            <a href="/startseite/vorschau" target="_blank" class="btn btn--ghost btn--sm">Vorschau {{ icon("external-link", size="xs") }}</a>
             {% else %}
-            <a href="/{{ slug }}" target="_blank" class="btn btn--ghost btn--sm">Ansehen ↗</a>
+            <a href="/{{ slug }}" target="_blank" class="btn btn--ghost btn--sm">Ansehen {{ icon("external-link", size="xs") }}</a>
             {% endif %}
             <a href="/admin/seiten/{{ slug }}" class="btn btn--primary btn--sm">Bearbeiten</a>
           </td>

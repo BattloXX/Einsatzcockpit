@@ -11,7 +11,7 @@
     </div>
     {% if can_manage_members %}<div style="display:flex;gap:8px;">
       <button class="btn btn--secondary" data-ec-action="open-dialog" data-ec-dialog="excelImportModal">Excel importieren</button>
-      <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newMemberModal">+ Mitglied</button>
+      <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newMemberModal">{{ icon("plus", size="sm") }} Mitglied</button>
     </div>{% endif %}
   </div>
 
@@ -58,7 +58,7 @@
   <!-- Filter + Sort-Steuerung -->
   <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:12px 0;">
     <input type="search" id="memberFilter"
-           placeholder="🔎 Suchen: Name, Telefon, E-Mail, syBOS-ID oder Qualifikation (z. B. AGT)"
+           placeholder="Suchen: Name, Telefon, E-Mail, syBOS-ID oder Qualifikation (z. B. AGT)"
            class="form-input" style="flex:1; min-width:260px; max-width:520px;"
            oninput="applyMemberFilter()">
     <select id="memberStatusFilter" class="form-select" style="width:160px;" onchange="applyMemberFilter()">
@@ -82,12 +82,12 @@
     <thead>
       <tr>
         {% if can_manage_members %}<th style="width:32px"><input type="checkbox" id="selectAllMembers" onchange="toggleSelectAllMembers(this)"></th>{% endif %}
-        <th class="sortable" data-sort="name" onclick="sortMembers('name')">Name <span class="sort-ind"></span></th>
+        <th class="sortable" data-sort="name" onclick="sortMembers('name')">Name <span class="sort-ind">{{ icon("chevron-up", size="xs", cls="sort-ind__asc") }}{{ icon("chevron-down", size="xs", cls="sort-ind__desc") }}</span></th>
         <th>Qualifikationen</th>
-        <th class="sortable" data-sort="phone" onclick="sortMembers('phone')">Telefon <span class="sort-ind"></span></th>
-        <th class="sortable" data-sort="email" onclick="sortMembers('email')">E-Mail <span class="sort-ind"></span></th>
-        <th class="sortable" data-sort="sybos" onclick="sortMembers('sybos')">syBOS-ID <span class="sort-ind"></span></th>
-        <th class="sortable" data-sort="status" onclick="sortMembers('status')">Status <span class="sort-ind"></span></th>
+        <th class="sortable" data-sort="phone" onclick="sortMembers('phone')">Telefon <span class="sort-ind">{{ icon("chevron-up", size="xs", cls="sort-ind__asc") }}{{ icon("chevron-down", size="xs", cls="sort-ind__desc") }}</span></th>
+        <th class="sortable" data-sort="email" onclick="sortMembers('email')">E-Mail <span class="sort-ind">{{ icon("chevron-up", size="xs", cls="sort-ind__asc") }}{{ icon("chevron-down", size="xs", cls="sort-ind__desc") }}</span></th>
+        <th class="sortable" data-sort="sybos" onclick="sortMembers('sybos')">syBOS-ID <span class="sort-ind">{{ icon("chevron-up", size="xs", cls="sort-ind__asc") }}{{ icon("chevron-down", size="xs", cls="sort-ind__desc") }}</span></th>
+        <th class="sortable" data-sort="status" onclick="sortMembers('status')">Status <span class="sort-ind">{{ icon("chevron-up", size="xs", cls="sort-ind__asc") }}{{ icon("chevron-down", size="xs", cls="sort-ind__desc") }}</span></th>
         <th>Aktionen</th>
       </tr>
     </thead>
@@ -147,9 +147,6 @@
 <style>
   #membersTable th.sortable { cursor: pointer; user-select: none; }
   #membersTable th.sortable:hover { color: var(--red-light, #ff5252); }
-  #membersTable th .sort-ind { display:inline-block; width:10px; color: var(--text-muted); }
-  #membersTable th.sort-asc  .sort-ind::after { content: '▲'; color: var(--on-surface); }
-  #membersTable th.sort-desc .sort-ind::after { content: '▼'; color: var(--on-surface); }
 </style>
 
 {% if can_manage_members %}
@@ -158,7 +155,7 @@
   <form method="post" action="/admin/mitglieder/excel-import" enctype="multipart/form-data" class="modal__content">
     <div class="modal__header">
       <h3>Mannschaft aus Excel importieren</h3>
-      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">{{ icon("x", size="sm") }}</button>
     </div>
     <div class="modal__body">
       <p style="margin-bottom:8px;font-size:.85rem;color:var(--text-muted);">
@@ -192,7 +189,7 @@
   <form method="post" action="/admin/mitglieder/neu" class="modal__content">
     <div class="modal__header">
       <h3>Neues Mitglied</h3>
-      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">{{ icon("x", size="sm") }}</button>
     </div>
     <div class="modal__body">
       <div class="form-row">
@@ -228,7 +225,7 @@
   <div class="modal__content">
     <div class="modal__header">
       <h3>Mitglied bearbeiten</h3>
-      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">{{ icon("x", size="sm") }}</button>
     </div>
     <form method="post" id="editMemberForm">
       <div class="modal__body">
@@ -264,7 +261,7 @@
   <div class="modal__content">
     <div class="modal__header">
       <h3>Qualifikationen für <span id="qe_name"></span></h3>
-      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">{{ icon("x", size="sm") }}</button>
     </div>
     <form method="post" id="qualiEditorForm">
       <div class="modal__body">

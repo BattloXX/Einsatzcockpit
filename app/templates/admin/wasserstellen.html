@@ -14,23 +14,23 @@
       </p>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <button type="button" class="btn btn--secondary" onclick="wsExportCsv()">⭳ CSV</button>
+      <button type="button" class="btn btn--secondary" onclick="wsExportCsv()">{{ icon("download", size="sm") }} CSV</button>
       <button type="button" class="btn btn--secondary"
-              data-ec-action="open-dialog" data-ec-dialog="importModal">📥 Import</button>
-      <button type="button" class="btn btn--primary" onclick="wsBeginNew()">＋ Neue Wasserstelle</button>
+              data-ec-action="open-dialog" data-ec-dialog="importModal">{{ icon("upload", size="sm") }} Import</button>
+      <button type="button" class="btn btn--primary" onclick="wsBeginNew()">{{ icon("plus", size="sm") }} Neue Wasserstelle</button>
     </div>
   </div>
 
   {# ── Import-Rückmeldung ── #}
   {% if request.query_params.get('import_neu') is not none %}
   <div class="alert alert--success">
-    ✅ Import: <strong>{{ request.query_params.get('import_neu') }}</strong> neu,
+    {{ icon("circle-check", size="sm") }} Import: <strong>{{ request.query_params.get('import_neu') }}</strong> neu,
     <strong>{{ request.query_params.get('import_akt') }}</strong> aktualisiert,
     {{ request.query_params.get('import_skip') }} übersprungen.
   </div>
   {% elif request.query_params.get('import_fehler') %}
   <div class="alert alert--error">
-    ⚠️ Import fehlgeschlagen: keine gültigen Zeilen (erwartet GIS-Export … GRUPPE;UNTERGRUPP … RECHTSWERT;HOCHWERT).
+    {{ icon("alert-triangle", size="sm") }} Import fehlgeschlagen: keine gültigen Zeilen (erwartet GIS-Export … GRUPPE;UNTERGRUPP … RECHTSWERT;HOCHWERT).
   </div>
   {% endif %}
 
@@ -56,14 +56,14 @@
       </div>
     </div>
     <div class="ws-maphint" id="ws-maphint">
-      💡 In die Karte klicken setzt einen Pin für eine neue Wasserstelle. Marker anklicken zum Bearbeiten.
+      {{ icon("bulb", size="sm") }} In die Karte klicken setzt einen Pin für eine neue Wasserstelle. Marker anklicken zum Bearbeiten.
     </div>
   </div>
 
   {# ── Filter ── #}
   <div class="ws-filterbar">
     <input type="search" id="wsSearch" class="form-input" style="flex:1;min-width:220px;max-width:420px;"
-           placeholder="🔎 Suchen: Bezeichnung, Hinweis …" oninput="wsApplyFilter()">
+           placeholder="Suchen: Bezeichnung, Hinweis …" oninput="wsApplyFilter()">
     <select id="wsFilterTyp" class="form-select" style="width:170px;" onchange="wsApplyFilter()">
       <option value="">Alle Typen</option>
       {% for code, label in typen.items() %}
@@ -88,11 +88,11 @@
   <table class="table-admin table-admin--cards" id="wsTable">
     <thead>
       <tr>
-        <th class="sortable" data-sort="typ" onclick="wsSort('typ')">Typ <span class="sort-ind"></span></th>
-        <th class="sortable" data-sort="bez" onclick="wsSort('bez')">Bezeichnung <span class="sort-ind"></span></th>
-        <th class="sortable" data-sort="flow" data-num="1" onclick="wsSort('flow')" style="text-align:right;">Ergiebigkeit <span class="sort-ind"></span></th>
+        <th class="sortable" data-sort="typ" onclick="wsSort('typ')">Typ <span class="sort-ind">{{ icon("chevron-up", size="xs", cls="sort-ind__asc") }}{{ icon("chevron-down", size="xs", cls="sort-ind__desc") }}</span></th>
+        <th class="sortable" data-sort="bez" onclick="wsSort('bez')">Bezeichnung <span class="sort-ind">{{ icon("chevron-up", size="xs", cls="sort-ind__asc") }}{{ icon("chevron-down", size="xs", cls="sort-ind__desc") }}</span></th>
+        <th class="sortable" data-sort="flow" data-num="1" onclick="wsSort('flow')" style="text-align:right;">Ergiebigkeit <span class="sort-ind">{{ icon("chevron-up", size="xs", cls="sort-ind__asc") }}{{ icon("chevron-down", size="xs", cls="sort-ind__desc") }}</span></th>
         <th>Koordinaten</th>
-        <th class="sortable" data-sort="status" onclick="wsSort('status')">Zustand <span class="sort-ind"></span></th>
+        <th class="sortable" data-sort="status" onclick="wsSort('status')">Zustand <span class="sort-ind">{{ icon("chevron-up", size="xs", cls="sort-ind__asc") }}{{ icon("chevron-down", size="xs", cls="sort-ind__desc") }}</span></th>
         <th>Quelle</th>
         <th>Aktionen</th>
       </tr>
@@ -122,7 +122,7 @@
         <td data-label="Koordinaten" style="font-size:.8rem;color:var(--text-muted);white-space:nowrap;">
           {% if w.lat is not none and w.lng is not none %}
           <button type="button" class="ws-coordbtn" onclick="wsFocus({{ w.id }})" title="Auf Karte zeigen">
-            📍 {{ '%.5f'|format(w.lat) }}, {{ '%.5f'|format(w.lng) }}
+            {{ icon("map-pin", size="sm") }} {{ '%.5f'|format(w.lat) }}, {{ '%.5f'|format(w.lng) }}
           </button>
           {% else %}<span class="text-muted">— keine —</span>{% endif %}
         </td>
@@ -158,7 +158,7 @@
   <form method="post" action="/admin/wasserstellen/neu" class="modal__content">
     <div class="modal__header">
       <h3>Neue Wasserstelle</h3>
-      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">{{ icon("x", size="sm") }}</button>
     </div>
     <div class="modal__body">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
@@ -212,7 +212,7 @@
   <form method="post" id="editForm" class="modal__content">
     <div class="modal__header">
       <h3>Wasserstelle bearbeiten</h3>
-      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">{{ icon("x", size="sm") }}</button>
     </div>
     <div class="modal__body">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
@@ -265,7 +265,7 @@
   <form method="post" action="/admin/wasserstellen/import" enctype="multipart/form-data" class="modal__content">
     <div class="modal__header">
       <h3>CSV-Import</h3>
-      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">{{ icon("x", size="sm") }}</button>
     </div>
     <div class="modal__body">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
@@ -327,9 +327,6 @@
 
   #wsTable th.sortable { cursor:pointer; user-select:none; }
   #wsTable th.sortable:hover { color: var(--red-light, #ff5252); }
-  #wsTable th .sort-ind { display:inline-block; width:10px; color: var(--text-muted); }
-  #wsTable th.sort-asc  .sort-ind::after { content:'▲'; color: var(--on-surface); }
-  #wsTable th.sort-desc .sort-ind::after { content:'▼'; color: var(--on-surface); }
 
   /* Marker-Status-Modifikatoren (auf .hydrant-icon des Karten-Markers) */
   .hydrant-icon--st-wartung { box-shadow: 0 0 0 3px var(--yellow), 0 1px 2px rgba(0,0,0,.5); }

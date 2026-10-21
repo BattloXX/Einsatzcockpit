@@ -3088,3 +3088,12 @@ button.htmx-request,
 .fehler__icon .ecp-icon { width: 48px; height: 48px; }
 /* Flex-Navigation: Leerzeichen zwischen Icon und Text fällt in Flex-Containern weg */
 .lage-tab, .lage-mobile-nav__item, .subtabnav__item, .incident-subnav__trigger, .incident-subnav__item { gap: .35em; }
+
+/* Admin: SVG-Sortierpfeile folgen den bestehenden Sortierklassen. */
+.admin-main .sort-ind { display: inline-block; width: 16px; color: var(--on-surface); }
+.admin-main .sort-ind > .ecp-icon { display: none; }
+.admin-main th.sort-asc .sort-ind__asc,
+.admin-main th.sort-desc .sort-ind__desc { display: inline-block; }
+.admin-main .badge-pill:has(> .ecp-icon),
+.admin-main .ws-coordbtn:has(> .ecp-icon) { display: inline-flex; align-items: center; gap: .35em; }
+.admin-main :is(h1, h2, h3):has(> .ecp-icon) { display: flex; align-items: center; gap: .35em; }
