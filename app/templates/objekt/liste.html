@@ -67,7 +67,7 @@
       <select name="merkmal" class="form-input">
         <option value="">Alle</option>
         {% for m in merkmal_katalog %}
-        <option value="{{ m.id }}" {% if filter_merkmal == m.id %}selected{% endif %}>{{ m.icon or '' }} {{ m.name }}</option>
+        <option value="{{ m.id }}" {% if filter_merkmal == m.id %}selected{% endif %}>{{ m.name }}</option>
         {% endfor %}
       </select>
     </div>

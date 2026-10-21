@@ -108,7 +108,7 @@
 <h2>{{ icon("tag", size="xs") }} Merkmale</h2>
 <div>
   {% for m in objekt.merkmale %}
-  <span class="merkmal">{{ m.merkmal.icon or '' if m.merkmal else '' }} {{ m.merkmal.name if m.merkmal else '?' }}{% if m.hinweis %} ({{ m.hinweis }}){% endif %}</span>
+  <span class="merkmal">{{ merkmal_icon(m.merkmal) }} {{ m.merkmal.name if m.merkmal else '?' }}{% if m.hinweis %} ({{ m.hinweis }}){% endif %}</span>
   {% endfor %}
 </div>
 {% endif %}

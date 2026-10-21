@@ -246,7 +246,7 @@ def test_pruefen_zeigt_zusaetzliche_lesedaten(client):
     set_tenant_context(db, None)
     try:
         objekt = db.get(Objekt, objekt_id)
-        merkmal = MerkmalKatalog(org_id=objekt.org_id, name="Tiefgarage", icon="P")
+        merkmal = MerkmalKatalog(org_id=objekt.org_id, name="Tiefgarage", icon="P", icon_name="parking")
         weiterer = Kontakt(org_id=objekt.org_id, anzeigename="Weitere Person")
         gefahr = GefahrenKatalog(org_id=objekt.org_id, name="Chemie")
         db.add_all([merkmal, weiterer, gefahr])
@@ -274,5 +274,8 @@ def test_pruefen_zeigt_zusaetzliche_lesedaten(client):
         db.close()
     response = client.get(f"/objektpflege/{token}/pruefen")
     assert response.status_code == 200
+    from app.core.icons import render_icon
+    assert str(render_icon("parking", size="sm")) in response.text
+    assert "P Tiefgarage" not in response.text
     for text in ("Tiefgarage", "Innenhof", "Weitere Person", "SMS-Kreis", "Gefahrklasse", "Datenblatt"):
         assert text in response.text

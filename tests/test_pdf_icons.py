@@ -8,7 +8,7 @@ from types import SimpleNamespace as NS
 
 import pytest
 
-from app.core.icons import render_icon
+from app.core.icons import merkmal_icon, render_icon
 from app.core.templating import templates
 from app.core.timezones import format_local_datetime
 from app.models.incident import Task, TaskMedia
@@ -31,7 +31,7 @@ def _context(incident):
     objekt = NS(
         anzeige_nummer="1", name="Testobjekt", status="bestaetigt", gefahren=[],
         bma=NS(bma_nummer="123"), kontakte=[NS(zentraler_kontakt=None)],
-        merkmale=[NS(merkmal=NS(icon="", name="Testmerkmal"), hinweis="")],
+        merkmale=[NS(merkmal=NS(icon="", icon_name="key", name="Testmerkmal"), hinweis="")],
         wohnanlage=NS(wohneinheiten=4, geschosse=2, stiegen=1),
         zusatzadressen=[NS(bezeichnung="Zugang", strasse="Teststrasse")],
         anfahrtsweg="Zufahrt", informationen="Information", adresse_zeile="Teststrasse 1",
@@ -76,7 +76,11 @@ def test_objektblatt_behaelt_fachzeichen_und_db_icons(incident):
     ctx["objekt"].merkmale[0].merkmal.icon = "🔥"
     rendered = templates.env.get_template("pdf/objektblatt.html").render(**ctx)
     assert "⚡" in rendered
-    assert "🔥" in rendered
+    assert "🔥" not in rendered
+    assert str(merkmal_icon(ctx["objekt"].merkmale[0].merkmal)) in rendered
+    ctx["objekt"].merkmale[0].merkmal.icon_name = None
+    legacy = templates.env.get_template("pdf/objektblatt.html").render(**ctx)
+    assert '<span class="ecp-legacy-zeichen" aria-hidden="true">🔥</span>' in legacy
     assert "@font-face" in rendered
     assert "Noto Emoji" in rendered
 

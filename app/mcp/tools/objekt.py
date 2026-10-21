@@ -164,7 +164,10 @@ async def objekt_kataloge(context: MCPContext) -> dict[str, object]:
     return {
         "kategorien": [{"id": x.id, "name": x.name} for x in db.query(ObjektKategorie).filter_by(aktiv=True).all()],
         "gefahren": [{"id": x.id, "name": x.name} for x in db.query(GefahrenKatalog).filter_by(aktiv=True).all()],
-        "merkmale": [{"id": x.id, "name": x.name} for x in db.query(MerkmalKatalog).filter_by(aktiv=True).all()],
+        "merkmale": [
+            {"id": x.id, "name": x.name, "icon_name": x.icon_name}
+            for x in db.query(MerkmalKatalog).filter_by(aktiv=True).all()
+        ],
         "kontaktarten": lade_auswahl(db, org_id, AUSWAHL_KONTAKTART),
         "dokumentarten": lade_auswahl(db, org_id, AUSWAHL_DOKUMENTART),
     }
@@ -286,6 +289,7 @@ async def objekt_lesen(context: MCPContext, objekt_id: int, arbeitskopie: bool =
                 "id": m.id,
                 "merkmal_id": m.merkmal_id,
                 "name": m.merkmal.name if m.merkmal else None,
+                "icon_name": m.merkmal.icon_name if m.merkmal else None,
                 "hinweis": m.hinweis,
             }
             for m in objekt.merkmale
