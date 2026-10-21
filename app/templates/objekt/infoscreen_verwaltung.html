@@ -5,7 +5,7 @@
 <div style="max-width:900px;">
   <div class="page-header">
     <div>
-      <h1>📺 Alarm-Infoscreen</h1>
+      <h1>{{ icon("device-tv") }} Alarm-Infoscreen</h1>
       <p class="text-muted">Wandmonitor im Gerätehaus: zeigt bei Alarm die Einsatzmeldung, Fahrzeuge, Objekt, Gefahren und Karte</p>
     </div>
   </div>
@@ -174,7 +174,7 @@
           </label>
           {% endfor %}
           <label class="checkbox-label">
-            <input type="checkbox" name="zeigt_wetter" value="1" {% if t.zeigt_wetter %}checked{% endif %}> 🌦 Wetter
+            <input type="checkbox" name="zeigt_wetter" value="1" {% if t.zeigt_wetter %}checked{% endif %}> {{ icon("cloud-rain") }} Wetter
           </label>
         </div>
       </form>

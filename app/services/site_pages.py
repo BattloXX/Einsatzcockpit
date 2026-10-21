@@ -50,22 +50,22 @@ DEFAULT_HTML: dict[str, str] = {
     <h2>Gemacht für den Ernstfall</h2>
     <p class="lp-section__sub">Alles, was die Einsatzleitung im Ernstfall braucht – in einem Werkzeug.</p>
     <div class="lp-features">
-      <div class="lp-feature"><div class="lp-feature__icon">🚒</div>
+      <div class="lp-feature"><div class="lp-feature__icon"><span data-ecp-icon="firetruck"></span></div>
         <h3>Echtzeit-Fahrzeugübersicht</h3>
         <p>FMS-Status und Mannschaftsstärke jedes Fahrzeugs auf einen Blick – live synchronisiert.</p></div>
-      <div class="lp-feature"><div class="lp-feature__icon">📋</div>
+      <div class="lp-feature"><div class="lp-feature__icon"><span data-ecp-icon="clipboard-list"></span></div>
         <h3>Auftrags-Management</h3>
         <p>Übersichtliche Kanban-Boards: Aufträge zuweisen, priorisieren und den Fortschritt verfolgen.</p></div>
-      <div class="lp-feature"><div class="lp-feature__icon">📨</div>
+      <div class="lp-feature"><div class="lp-feature__icon"><span data-ecp-icon="mail-forward"></span></div>
         <h3>Echtzeit-Meldungen</h3>
         <p>Lagemeldungen und Statusupdates sekundenschnell direkt vom Einsatzort.</p></div>
-      <div class="lp-feature"><div class="lp-feature__icon">🫁</div>
+      <div class="lp-feature"><div class="lp-feature__icon"><span data-ecp-icon="lungs"></span></div>
         <h3>Atemschutz-Überwachung</h3>
         <p>Trupp- und Drucküberwachung mit lückenloser Erfassung der Atemschutzträger.</p></div>
-      <div class="lp-feature"><div class="lp-feature__icon">👥</div>
+      <div class="lp-feature"><div class="lp-feature__icon"><span data-ecp-icon="users"></span></div>
         <h3>Personen &amp; Patienten</h3>
         <p>Betroffene erfassen, Triage-Status und Transportkapazitäten jederzeit im Blick.</p></div>
-      <div class="lp-feature"><div class="lp-feature__icon">📄</div>
+      <div class="lp-feature"><div class="lp-feature__icon"><span data-ecp-icon="file-text"></span></div>
         <h3>Einsatzchronik &amp; PDF</h3>
         <p>Lückenlose, rechtssichere Protokollierung aller Schritte – auf Knopfdruck als PDF.</p></div>
     </div>

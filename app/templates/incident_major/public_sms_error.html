@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>SMS konnte nicht gesendet werden</title>
 <style>
+  .ecp-icon{display:inline-block;vertical-align:-0.2em;flex-shrink:0}.ecp-icon--xs{width:16px;height:16px}.ecp-icon--sm{width:20px;height:20px}.ecp-icon--md{width:24px;height:24px}.ecp-icon--lg{width:32px;height:32px}
   :root {
     --bg:#0b1326; --surface:#131b2e; --surface-2:#171f33; --border:#2e3347;
     --text:#dae2fd; --text-muted:#7a87a8;
@@ -48,12 +49,14 @@
   }
   .emergency__hint { font-size: .74rem; color: var(--text-muted); margin-top: 8px; }
   .footer { text-align: center; font-size: .72rem; color: var(--text-muted); margin-top: 18px; }
+  .header__icon .ecp-icon,.file-label__icon .ecp-icon{width:1em;height:1em}
+  .btn:has(>.ecp-icon),.emergency__btn:has(>.ecp-icon),.gps-btn:has(>.ecp-icon),.emergency-box__call:has(>.ecp-icon){gap:.35em}
 </style>
 </head>
 <body>
 <div class="card">
   <div class="header">
-    <div class="header__icon">⚠️</div>
+    <div class="header__icon">{{ icon("alert-triangle") }}</div>
     <div class="header__title">SMS konnte nicht gesendet werden</div>
   </div>
 
@@ -65,8 +68,8 @@
   <a href="/melden/{{ token }}" class="btn-back">← Erneut versuchen</a>
 
   <div class="emergency">
-    <div class="emergency__title">⚠ Notfall? Direkt anrufen:</div>
-    <a href="tel:122" class="emergency__btn">📞 122</a>
+    <div class="emergency__title">{{ icon("alert-triangle") }} Notfall? Direkt anrufen:</div>
+    <a href="tel:122" class="emergency__btn">{{ icon("phone") }} 122</a>
     <div class="emergency__hint">Feuerwehr-Notruf – für dringende Meldungen</div>
   </div>
 

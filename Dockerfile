@@ -3,8 +3,8 @@ FROM node:22-alpine AS frontend
 WORKDIR /build
 COPY package.json package-lock.json ./
 RUN npm ci
-COPY tailwind.config.js ./
-COPY app/static/css/tailwind.input.css app/static/css/fonts.css app/static/css/
+COPY tailwind.config.js tailwind.infoscreen.config.js ./
+COPY app/static/css/tailwind.input.css app/static/css/infoscreen.input.css app/static/css/fonts.css app/static/css/
 COPY app/static/js app/static/js
 COPY app/templates app/templates
 RUN npm run build
@@ -33,7 +33,7 @@ RUN apt-get update \
 
 WORKDIR /app
 COPY . .
-COPY --from=frontend /build/app/static/css/app.css app/static/css/app.css
+COPY --from=frontend /build/app/static/css/app.css /build/app/static/css/infoscreen.css app/static/css/
 RUN pip install --no-cache-dir -e . \
     && addgroup --system einsatzcockpit \
     && adduser --system --ingroup einsatzcockpit --home /app einsatzcockpit \

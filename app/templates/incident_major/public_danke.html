@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Meldung erhalten</title>
 <style>
+  .ecp-icon{display:inline-block;vertical-align:-0.2em;flex-shrink:0}.ecp-icon--xs{width:16px;height:16px}.ecp-icon--sm{width:20px;height:20px}.ecp-icon--md{width:24px;height:24px}.ecp-icon--lg{width:32px;height:32px}
   :root {
     --bg:#0b1326; --surface:#131b2e; --border:#2e3347;
     --text:#dae2fd; --text-muted:#7a87a8; --green:#18a957;
@@ -30,11 +31,12 @@
   h1 { font-size: 1.35rem; font-weight: 800; margin-bottom: 10px; color: var(--green); }
   p { font-size: .92rem; color: var(--text); line-height: 1.6; }
   .sub { font-size: .74rem; color: var(--text-muted); margin-top: 22px; letter-spacing: .03em; }
+  .icon .ecp-icon{width:1em;height:1em}
 </style>
 </head>
 <body>
 <div class="card">
-  <div class="icon">✅</div>
+  <div class="icon">{{ icon("circle-check") }}</div>
   <h1>Danke für Ihre Meldung!</h1>
   <p>Ihre Meldung wurde erfolgreich übermittelt und wird von der Einsatzleitung geprüft.</p>
   <p class="sub">{{ lage.name }} · {{ brand }}</p>

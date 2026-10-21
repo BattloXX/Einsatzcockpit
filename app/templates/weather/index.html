@@ -109,7 +109,7 @@
 
   {# ── Seitenheader ──────────────────────────────────────────────────────────── #}
   <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;">
-    <span style="font-size:1.25rem;font-weight:700;color:var(--text);">🌦 Wetter</span>
+    <span style="font-size:1.25rem;font-weight:700;color:var(--text);">{{ icon("cloud-rain") }} Wetter</span>
     <span style="font-size:.85rem;color:var(--text-muted);">{{ focus_label }}</span>
   </div>
 
@@ -122,9 +122,9 @@
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
       <span style="font-size:.75rem;color:var(--text-muted);font-weight:600;letter-spacing:.05em;">RADARKARTE</span>
       <div style="display:inline-flex;gap:4px;">
-        <button class="radar-tab-btn active" id="tab-radar" type="button">🌧 Radar</button>
+        <button class="radar-tab-btn active" id="tab-radar" type="button">{{ icon("cloud-rain") }} Radar</button>
         {% if windy_enabled %}
-        <button class="radar-tab-btn" id="tab-windy" type="button">🌬 Windy</button>
+        <button class="radar-tab-btn" id="tab-windy" type="button">{{ icon("wind") }} Windy</button>
         {% endif %}
       </div>
       <span id="radar-live-badge" style="font-size:.64rem;background:rgba(34,197,94,.14);color:#4ade80;
@@ -138,7 +138,7 @@
       <div style="background:var(--surface);border:1px solid var(--border);border-top:none;
                   border-radius:0 0 8px 8px;padding:12px 16px;display:flex;flex-direction:column;gap:8px;">
         <div style="display:flex;align-items:center;gap:10px;">
-          <button id="radar-play-btn" title="Abspielen / Pause">⏸</button>
+          <button id="radar-play-btn" aria-label="Abspielen / Pause" title="Abspielen / Pause">{{ icon("player-pause") }}</button>
           <div style="flex:1;display:flex;flex-direction:column;gap:5px;">
             <input type="range" id="radar-scrubber" min="0" max="11" value="11" step="1">
             <div style="display:flex;justify-content:space-between;font-size:.58rem;color:var(--text-muted);">
@@ -251,7 +251,7 @@
 
     var isLast = (idx === frames.length - 1);
     liveBadge.style.display = isLast ? '' : 'none';
-    timeLabel.textContent = fmtTime(f.time) + (f.nowcast ? ' ▸ Prognose' : '');
+    timeLabel.innerHTML = fmtTime(f.time) + (f.nowcast ? ' ' + ecpIcon("chevron-right", {size: "lg"}) + ' Prognose' : '');
   }
 
   function stopAnim() {
@@ -262,7 +262,7 @@
     stopAnim();
     isPlaying  = true;
     pauseTicks = 0;
-    playBtn.textContent = '⏸';
+    playBtn.innerHTML = ecpIcon('player-pause');
     if (!frames.length) { return; }
 
     var idx = 0;
@@ -323,7 +323,7 @@
   }, 300000);
 
   // ── Scrubber-Interaktion ────────────────────────────────────────────────────
-  function pauseOnScrub() { stopAnim(); isPlaying = false; playBtn.textContent = '▶'; }
+  function pauseOnScrub() { stopAnim(); isPlaying = false; playBtn.innerHTML = ecpIcon('player-play'); }
   scrubber.addEventListener('mousedown',  pauseOnScrub);
   scrubber.addEventListener('touchstart', pauseOnScrub, { passive: true });
   scrubber.addEventListener('input', function () { showFrame(parseInt(this.value, 10)); });
@@ -332,7 +332,7 @@
     if (isPlaying) {
       stopAnim();
       isPlaying = false;
-      playBtn.textContent = '▶';
+      playBtn.innerHTML = ecpIcon('player-play');
     } else {
       startAnim();
     }

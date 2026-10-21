@@ -4,47 +4,13 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=1920, height=1080, initial-scale=1.0"/>
 <title>Wetter-Monitor {{ org.name }} | {{ brand }}</title>
-<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="/static/css/infoscreen.css?v={{ ASSET_VERSION }}" rel="stylesheet">
 <link href="/static/css/fonts.css?v={{ ASSET_VERSION }}" rel="stylesheet"/>
-<script>
-  tailwind.config = {
-    darkMode: "class",
-    theme: {
-      extend: {
-        colors: {
-          "background":                "#0b1326",
-          "surface":                   "#0b1326",
-          "surface-container-lowest":  "#060e20",
-          "surface-container-low":     "#131b2e",
-          "surface-container":         "#171f33",
-          "surface-container-high":    "#222a3d",
-          "surface-container-highest": "#2d3449",
-          "on-surface":                "#dae2fd",
-          "on-surface-variant":        "#e4beba",
-          "primary":                   "#ffb3ac",
-          "primary-container":         "#d32f2f",
-          "on-primary-container":      "#fff2f0",
-          "secondary":                 "#bcc7de",
-          "tertiary":                  "#adc6ff",
-          "error":                     "#ffb4ab",
-          "error-container":           "#93000a",
-          "on-error-container":        "#ffdad6",
-          "outline":                   "#ab8985",
-          "outline-variant":           "#5b403d"
-        },
-        borderRadius: { DEFAULT:"0.125rem", lg:"0.25rem", xl:"0.5rem", full:"0.75rem" },
-        fontFamily: { sans:["Hanken Grotesk","sans-serif"], mono:["JetBrains Mono","monospace"] },
-        fontSize: {
-          "label-caps": ["12px",{lineHeight:"16px",letterSpacing:"0.05em",fontWeight:"600"}],
-          "body-sm":    ["14px",{lineHeight:"20px"}],
-          "headline-sm":["16px",{lineHeight:"24px",fontWeight:"600"}],
-          "headline-md":["20px",{lineHeight:"28px",fontWeight:"600"}]
-        }
-      }
-    }
-  }
-</script>
 <style>
+  .status-dot{display:inline-block;width:.75em;height:.75em;border-radius:50%;vertical-align:middle}.status-dot--gruen{background:#22c55e}.status-dot--rot{background:#ef4444}.status-dot--gelb{background:#facc15}.station-status{width:10px;height:10px}.station-status.status-dot--gruen{box-shadow:0 0 6px rgba(34,197,94,.7)}
+  span[style*="font-size:40px"]>.ecp-icon,span[style*="font-size:36px"]>.ecp-icon{width:1em;height:1em}
+  span[style*="font-size:10px"]>.ecp-icon,span[style*="font-size:9px"]>.ecp-icon{width:1em;height:1em}
+  .ecp-icon{display:inline-block;vertical-align:-0.2em;flex-shrink:0}.ecp-icon--xs{width:16px;height:16px}.ecp-icon--sm{width:20px;height:20px}.ecp-icon--md{width:24px;height:24px}.ecp-icon--lg{width:32px;height:32px}
   body {
     background-color:#0b1326; color:#dae2fd; overflow:hidden;
     width:1920px; min-height:1080px; font-family:"Hanken Grotesk",sans-serif;
@@ -164,7 +130,7 @@
       </div>
       {% if station and station.online %}
       <div class="flex items-center gap-4 px-5 py-3 rounded-xl bg-primary-container">
-        <span style="font-size:40px;line-height:1;">&#x1F321;&#xFE0F;</span>
+        <span style="font-size:40px;line-height:1;">{{ icon("temperature", size="lg") }}</span>
         <div>
           <span class="text-on-primary-container font-sans font-extrabold" style="font-size:58px;line-height:1;">
             {% if eff_temp is not none %}{{ "%.1f"|format(eff_temp) }}°{% else %}–{% endif %}
@@ -174,7 +140,7 @@
       </div>
       {% elif current %}
       <div class="flex items-center gap-4 px-5 py-3 rounded-xl bg-surface-container-highest">
-        <span style="font-size:40px;line-height:1;">&#x26C5;</span>
+        <span style="font-size:40px;line-height:1;">{{ icon("cloud", size="lg") }}</span>
         <div>
           <span class="text-on-surface font-sans font-extrabold" style="font-size:58px;line-height:1;">
             {% if eff_temp is not none %}{{ "%.1f"|format(eff_temp) }}°{% else %}–{% endif %}
@@ -184,7 +150,7 @@
       </div>
       {% else %}
       <div class="flex items-center gap-4 px-5 py-3 rounded-xl bg-surface-container-high">
-        <span style="font-size:40px;line-height:1;opacity:.5;">&#x2601;&#xFE0F;</span>
+        <span style="font-size:40px;line-height:1;opacity:.5;">{{ icon("cloud", size="lg") }}</span>
         <div>
           <span class="text-on-surface-variant font-sans font-extrabold" style="font-size:58px;line-height:1;">—°</span>
           <span class="font-mono text-label-caps text-on-surface-variant tracking-widest" style="display:block;font-size:10px;">KEINE DATEN</span>
@@ -199,7 +165,7 @@
       <span class="font-mono text-label-caps text-on-surface-variant tracking-widest">{{ brand }}</span>
       {% if station %}
       <span class="font-mono text-label-caps tracking-widest" style="font-size:10px;color:{% if station.online %}#22c55e{% else %}#ef4444{% endif %};">
-        &#x25cf; STATION {% if station.online %}ONLINE{% else %}OFFLINE{% endif %}{% if station.seen_label %} &bull; {{ station.seen_label }}{% endif %}
+        {{ status_dot("gruen" if station.online else "rot", "Station online" if station.online else "Station offline") }} STATION {% if station.online %}ONLINE{% else %}OFFLINE{% endif %}{% if station.seen_label %} &bull; {{ station.seen_label }}{% endif %}
       </span>
       {% endif %}
     </div>
@@ -243,7 +209,7 @@
         <span class="font-mono text-label-caps" style="color:#ffb3ac;opacity:.85;font-size:11px;">
           {% if eff_dew is not none %}TAUPUNKT {{ "%.1f"|format(eff_dew) }}&thinsp;°C{% else %}&nbsp;{% endif %}
         </span>
-        {% if h_temp and h_temp.min is not none %}<span class="font-mono text-label-caps text-on-surface-variant" style="font-size:10px;">&#x25B2;{{ "%.1f"|format(h_temp.max) }} &#x25BC;{{ "%.1f"|format(h_temp.min) }}°</span>{% endif %}
+        {% if h_temp and h_temp.min is not none %}<span class="font-mono text-label-caps text-on-surface-variant" style="font-size:10px;">{{ icon("chevron-up", size="lg") }}{{ "%.1f"|format(h_temp.max) }} {{ icon("chevron-down", size="lg") }}{{ "%.1f"|format(h_temp.min) }}°</span>{% endif %}
       </div>
     </div>
 
@@ -264,7 +230,7 @@
         <span class="font-mono text-label-caps" style="color:#adc6ff;opacity:.85;font-size:11px;">
           {% if eff_press is not none %}DRUCK {{ "%d"|format(eff_press|int) }}&thinsp;hPa{% else %}&nbsp;{% endif %}
         </span>
-        {% if h_hum and h_hum.min is not none %}<span class="font-mono text-label-caps text-on-surface-variant" style="font-size:10px;">&#x25B2;{{ "%.0f"|format(h_hum.max) }} &#x25BC;{{ "%.0f"|format(h_hum.min) }}%</span>{% endif %}
+        {% if h_hum and h_hum.min is not none %}<span class="font-mono text-label-caps text-on-surface-variant" style="font-size:10px;">{{ icon("chevron-up", size="lg") }}{{ "%.0f"|format(h_hum.max) }} {{ icon("chevron-down", size="lg") }}{{ "%.0f"|format(h_hum.min) }}%</span>{% endif %}
       </div>
     </div>
 
@@ -286,7 +252,7 @@
           {{ windrose(wind_dir_deg, 30) }}
           <span class="font-mono text-label-caps" style="color:#bcc7de;opacity:.85;font-size:11px;">{{ eff_dir }}</span>
         </div>
-        {% if h_wind and h_wind.min is not none %}<span class="font-mono text-label-caps text-on-surface-variant" style="font-size:10px;">&#x25B2;{{ "%.1f"|format(h_wind.max) }} &#x25BC;{{ "%.1f"|format(h_wind.min) }}&thinsp;m/s</span>{% endif %}
+        {% if h_wind and h_wind.min is not none %}<span class="font-mono text-label-caps text-on-surface-variant" style="font-size:10px;">{{ icon("chevron-up", size="lg") }}{{ "%.1f"|format(h_wind.max) }} {{ icon("chevron-down", size="lg") }}{{ "%.1f"|format(h_wind.min) }}&thinsp;m/s</span>{% endif %}
       </div>
     </div>
 
@@ -307,7 +273,7 @@
         <span class="font-mono text-label-caps" style="color:#ffb4ab;opacity:.85;font-size:11px;">
           {% if eff_gust is not none and eff_wind is not none and eff_wind > 0 %}FAKTOR {{ "%.1f"|format(eff_gust / eff_wind) }}x WIND{% else %}BÖEN{% endif %}
         </span>
-        {% if h_gust and h_gust.min is not none %}<span class="font-mono text-label-caps text-on-surface-variant" style="font-size:10px;">&#x25B2;{{ "%.1f"|format(h_gust.max) }} &#x25BC;{{ "%.1f"|format(h_gust.min) }}&thinsp;m/s</span>{% endif %}
+        {% if h_gust and h_gust.min is not none %}<span class="font-mono text-label-caps text-on-surface-variant" style="font-size:10px;">{{ icon("chevron-up", size="lg") }}{{ "%.1f"|format(h_gust.max) }} {{ icon("chevron-down", size="lg") }}{{ "%.1f"|format(h_gust.min) }}&thinsp;m/s</span>{% endif %}
       </div>
     </div>
 
@@ -342,7 +308,7 @@
                       stroke-linejoin="round" stroke-linecap="round"/>
           </svg>
           <span class="font-mono text-label-caps" style="color:#fbbf24;font-size:10px;">
-            &#x2600; {{ "%d"|format(h_solar.svg.latest|int) }}&thinsp;W/m²
+            {{ icon("sun", size="lg") }} {{ "%d"|format(h_solar.svg.latest|int) }}&thinsp;W/m²
             {% if eff_uv is not none %}&bull; UV {{ "%.0f"|format(eff_uv) }}{% endif %}
           </span>
           {% else %}
@@ -352,7 +318,7 @@
           </span>
           {% endif %}
         </div>
-        {% if h_rain and h_rain.min is not none %}<span class="font-mono text-label-caps text-on-surface-variant" style="font-size:10px;">&#x25B2;{{ "%.1f"|format(h_rain.max) }} &#x25BC;{{ "%.1f"|format(h_rain.min) }}&thinsp;mm</span>{% endif %}
+        {% if h_rain and h_rain.min is not none %}<span class="font-mono text-label-caps text-on-surface-variant" style="font-size:10px;">{{ icon("chevron-up", size="lg") }}{{ "%.1f"|format(h_rain.max) }} {{ icon("chevron-down", size="lg") }}{{ "%.1f"|format(h_rain.min) }}&thinsp;mm</span>{% endif %}
       </div>
     </div>
 
@@ -364,7 +330,7 @@
     <div class="col-span-2 bg-surface-container-low rounded-xl border border-outline-variant p-4 flex flex-col" style="min-height:0;">
       <div class="flex justify-between items-center mb-3">
         <h3 class="font-sans font-semibold text-on-surface flex items-center gap-2" style="font-size:18px;">
-          &#x1F327;&#xFE0F; Niederschlags-Nowcast (3&thinsp;h)
+          {{ icon("cloud-rain", size="lg") }} Niederschlags-Nowcast (3&thinsp;h)
         </h3>
         <div class="font-mono text-label-caps px-2 py-1 bg-surface-container-highest rounded text-on-surface-variant">
           {% if nowcast %}LIVE{% else %}KEINE DATEN{% endif %}
@@ -392,7 +358,7 @@
       {% else %}
       <div class="flex-1 flex items-center justify-center">
         <div class="text-center">
-          <span style="font-size:40px;line-height:1;opacity:.4;">&#x2601;&#xFE0F;</span>
+          <span style="font-size:40px;line-height:1;opacity:.4;">{{ icon("cloud", size="lg") }}</span>
           <p class="font-mono text-label-caps text-on-surface-variant mt-2 uppercase">Keine Nowcast-Daten</p>
         </div>
       </div>
@@ -409,7 +375,7 @@
       {% if warnings %}
       <div class="flex-shrink-0 rounded-xl p-4 flex flex-col border-2 border-error warn-pulse">
         <div class="flex items-center gap-4 mb-2">
-          <span style="font-size:40px;line-height:1;">&#x26A0;&#xFE0F;</span>
+          <span style="font-size:40px;line-height:1;">{{ icon("alert-triangle", size="lg") }}</span>
           <div>
             <h2 class="font-sans font-bold text-on-error-container" style="font-size:24px;line-height:1.1;">AMTLICHE WARNUNGEN</h2>
             <p class="font-mono text-label-caps text-on-error-container tracking-widest" style="font-size:10px;">
@@ -440,7 +406,7 @@
       <div class="flex-shrink-0 rounded-xl px-4 py-3 border border-outline-variant bg-surface-container-low">
         <div class="flex items-center justify-between mb-2">
           <div class="flex items-center gap-2">
-            <span style="font-size:20px;line-height:1;">&#x2705;</span>
+            <span style="font-size:20px;line-height:1;">{{ icon("circle-check", size="lg") }}</span>
             <span class="font-sans font-semibold text-on-surface" style="font-size:15px;">Keine aktiven Warnungen</span>
             <span class="font-mono text-label-caps text-on-surface-variant" style="font-size:9px;">ZAMG</span>
           </div>
@@ -456,9 +422,9 @@
           {% for day in daily_forecast.days %}
           <div class="flex-1 flex flex-col items-center gap-0.5" style="min-width:0;">
             <div class="font-mono text-label-caps text-on-surface-variant" style="font-size:8px;white-space:nowrap;">
-              {% if day.precip_mm is not none and day.precip_mm > 0.5 %}&#x1F327;{{ "%.0f"|format(day.precip_mm) }}mm
-              {% elif day.precip_mm is not none and day.precip_mm > 0 %}&#x1F4A7;spur
-              {% else %}&#x2600;{% endif %}
+              {% if day.precip_mm is not none and day.precip_mm > 0.5 %}{{ icon("cloud-rain", size="lg") }}{{ "%.0f"|format(day.precip_mm) }}mm
+              {% elif day.precip_mm is not none and day.precip_mm > 0 %}{{ icon("droplet", size="lg") }}spur
+              {% else %}{{ icon("sun", size="lg") }}{% endif %}
             </div>
             <div class="w-full flex gap-0.5 items-end" style="height:56px;">
               {% if day.temp_max_c is not none %}
@@ -503,7 +469,7 @@
           loading="eager" allowfullscreen></iframe>
         <div style="position:absolute;top:8px;left:8px;background:rgba(11,19,38,.90);border:1px solid rgba(91,64,61,.5);border-radius:6px;padding:4px 10px;pointer-events:none;">
           <span class="font-mono text-label-caps text-on-surface-variant" style="font-size:10px;">
-            &#x1F6F0; NIEDERSCHLAGS-RADAR{% if station and station.online %}&bull; <span style="color:#22c55e;">LIVE</span>{% endif %}
+            {{ icon("satellite", size="lg") }} NIEDERSCHLAGS-RADAR{% if station and station.online %}&bull; <span style="color:#22c55e;">LIVE</span>{% endif %}
           </span>
         </div>
         <div style="position:absolute;bottom:8px;right:8px;background:rgba(11,19,38,.90);border:1px solid rgba(91,64,61,.4);border-radius:6px;padding:5px 9px;">
@@ -519,7 +485,7 @@
         {% else %}
         <div class="flex items-center justify-center h-full bg-surface-container-low">
           <div class="text-center">
-            <span style="font-size:40px;line-height:1;opacity:.4;">&#x1F5FA;&#xFE0F;</span>
+            <span style="font-size:40px;line-height:1;opacity:.4;">{{ icon("map", size="lg") }}</span>
             <p class="font-mono text-label-caps text-on-surface-variant mt-3 uppercase">Kein Standort konfiguriert</p>
           </div>
         </div>
@@ -535,7 +501,7 @@
     {# Pegelstationen (Feature 4: HQ-Schwellen) #}
     <div class="col-span-2 bg-surface-container-high rounded-xl p-4 flex flex-col gap-2" style="min-height:0;">
       <h3 class="font-sans font-semibold text-on-surface flex items-center gap-2" style="font-size:18px;flex-shrink:0;">
-        &#x1F30A; Pegelst&auml;nde
+        {{ icon("ripple", size="lg") }} Pegelst&auml;nde
         <span class="font-mono text-label-caps text-on-surface-variant ml-auto" style="font-size:10px;">{{ history_hours }}h VERLAUF</span>
       </h3>
       {% if abfluss_views %}
@@ -584,7 +550,7 @@
             <span class="font-mono text-label-caps" style="color:{{ av.stufe_farbe }};font-size:10px;">
               {{ av.stufe_label }}{% if av.naechste_hq %} &bull; {{ av.naechste_hq }}{% endif %}
             </span>
-            {% if sl and sl.min is not none %}<span class="font-mono text-label-caps text-on-surface-variant" style="font-size:9px;">&#x25B2;{{ "%.1f"|format(sl.max) }} &#x25BC;{{ "%.1f"|format(sl.min) }}</span>{% endif %}
+            {% if sl and sl.min is not none %}<span class="font-mono text-label-caps text-on-surface-variant" style="font-size:9px;">{{ icon("chevron-up", size="lg") }}{{ "%.1f"|format(sl.max) }} {{ icon("chevron-down", size="lg") }}{{ "%.1f"|format(sl.min) }}</span>{% endif %}
           </div>
         </div>
         {% endfor %}
@@ -592,7 +558,7 @@
       {% else %}
       <div class="flex-1 flex items-center justify-center">
         <div class="text-center">
-          <span style="font-size:36px;line-height:1;opacity:.4;">&#x1F4A7;</span>
+          <span style="font-size:36px;line-height:1;opacity:.4;">{{ icon("droplet", size="lg") }}</span>
           <p class="font-mono text-label-caps text-on-surface-variant mt-2 uppercase">Keine Pegel konfiguriert</p>
         </div>
       </div>
@@ -606,8 +572,7 @@
           style="height:44px;flex-shrink:0;">
     <div class="flex items-center gap-8">
       <div class="flex items-center gap-2">
-        <span class="w-2.5 h-2.5 rounded-full {% if station and station.online %}bg-green-500{% else %}bg-yellow-400{% endif %}"
-              style="{% if station and station.online %}box-shadow:0 0 6px rgba(34,197,94,.7){% endif %}"></span>
+        {{ status_dot("gruen" if station and station.online else "gelb", "Station online" if station and station.online else ("Station offline" if station else "Keine Station"), cls="station-status") }}
         <span class="font-mono text-label-caps text-on-surface-variant">
           {% if station and station.online %}STATION ONLINE{% elif station %}STATION OFFLINE{% else %}KEINE STATION{% endif %}
         </span>

@@ -13,7 +13,7 @@
                 border:1px solid {{ 'rgba(239,68,68,.40)' if is_danger else 'rgba(249,115,22,.40)' }};
                 border-radius:4px;padding:5px 12px;font-size:.8rem;
                 color:{{ '#f87171' if is_danger else '#fb923c' }};">
-      <strong>{{ alert.icon or '⚠' }} {{ alert.label_de }}</strong>
+      <strong>{{ icon(alert.icon_name or 'alert-triangle') }} {{ alert.label_de }}</strong>
       <span style="opacity:.85;margin-left:6px;font-size:.73rem;">{{ alert.detail_de }}</span>
     </div>
     {% endfor %}
@@ -69,7 +69,7 @@
             {% if weather_values.gust.value is not none %}{{ '%.1f'|format(weather_values.gust.value) }}<span style="font-size:.9rem;font-weight:400;"> m/s</span>{% else %}–{% endif %}
           </div>
           <div style="font-size:.72rem;color:var(--text-muted);margin-top:5px;">
-            {% if gust >= 24.5 %}BF10+{% elif gust >= 17.2 %}BF8+ ⚡{% elif gust >= 10.8 %}BF6{% elif gust > 0 %}BF{{ (gust / 3.6 ** 0.5 * 0.5)|int }}{% endif %}
+            {% if gust >= 24.5 %}BF10+{% elif gust >= 17.2 %}BF8+ {{ icon("bolt") }}{% elif gust >= 10.8 %}BF6{% elif gust > 0 %}BF{{ (gust / 3.6 ** 0.5 * 0.5)|int }}{% endif %}
           </div>
           <div style="font-size:.61rem;color:var(--text-muted);border:1px solid var(--border);border-radius:999px;padding:2px 6px;display:inline-block;margin-top:6px;">{{ weather_values.gust.source }}</div>
         </div>
@@ -119,7 +119,7 @@
       </div>
       {% elif nowcast %}
       <div class="wetter-card" style="padding:14px 16px;font-size:.8rem;color:var(--text-muted);">
-        ✓ Kein Niederschlag in den nächsten ~3 h erwartet.
+        {{ icon("check") }} Kein Niederschlag in den nächsten ~3 h erwartet.
       </div>
       {% endif %}
 
@@ -128,7 +128,7 @@
       <div class="forecast-grid">
         {% for h in forecast.horizons %}
         {% set prec = h.precipitation_acc_mm or 0 %}
-        {% set fc_icon = "🌧" if prec > 5 else ("🌦" if prec > 1 else "☀️") %}
+        {% set fc_icon = "cloud-rain" if prec > 5 else ("cloud-rain" if prec > 1 else "sun") %}
         {% set temp_c  = h.temperature_c or 0 %}
         {% set tc = '#ef4444' if temp_c >= 30 else ('#f97316' if temp_c >= 25 else 'var(--text)') %}
         <div class="wetter-card" style="padding:14px 16px;display:flex;flex-direction:column;gap:5px;">
@@ -136,9 +136,9 @@
           <div style="font-size:1.9rem;font-weight:700;line-height:1;color:{{ tc }};">
             {% if h.temperature_c is not none %}{{ '%.0f'|format(h.temperature_c) }}°{% else %}–{% endif %}
           </div>
-          <div style="font-size:1.2rem;line-height:1;">{{ fc_icon }}</div>
+          <div style="font-size:1.2rem;line-height:1;">{{ icon(fc_icon) }}</div>
           <div style="font-size:.7rem;color:var(--text-muted);">
-            🌧 {{ '%.1f'|format(prec) }} mm{% if h.wind_speed_ms is not none %} · 💨 {{ '%.0f'|format(h.wind_speed_ms) }} m/s{% endif %}
+            {{ icon("cloud-rain") }} {{ '%.1f'|format(prec) }} mm{% if h.wind_speed_ms is not none %} · {{ icon("wind") }} {{ '%.0f'|format(h.wind_speed_ms) }} m/s{% endif %}
           </div>
         </div>
         {% endfor %}
@@ -154,7 +154,7 @@
           <span style="font-size:.68rem;font-weight:600;letter-spacing:.05em;color:var(--text);">
             WARNUNGEN{% if warn_views %} ({{ warn_views|length }}){% endif %}
           </span>
-          {% if warn_views %}<span style="color:#ef4444;font-size:1rem;">⚠</span>{% endif %}
+          {% if warn_views %}<span style="color:#ef4444;font-size:1rem;">{{ icon("alert-triangle") }}</span>{% endif %}
         </div>
         {% if warn_views %}
         <div style="display:flex;flex-direction:column;overflow-y:auto;max-height:520px;">
@@ -162,7 +162,7 @@
           <div style="border-left:3px solid {{ w.color }};padding:10px 13px 10px 14px;
                       {% if not loop.last %}border-bottom:1px solid var(--border);{% endif %}">
             <div style="font-size:.72rem;font-weight:700;color:{{ w.color }};margin-bottom:2px;">
-              ⚠ STUFE {{ w.level }} — {{ w.event_type|upper }}
+              {{ icon("alert-triangle") }} STUFE {{ w.level }} — {{ w.event_type|upper }}
             </div>
             <div style="font-size:.66rem;color:var(--text-muted);margin-bottom:3px;">{{ w.zeitraum }}</div>
             {% if w.text %}
@@ -172,7 +172,7 @@
           {% endfor %}
         </div>
         {% else %}
-        <div style="padding:16px 14px;font-size:.8rem;color:#4ade80;">✓ keine aktive Warnung</div>
+        <div style="padding:16px 14px;font-size:.8rem;color:#4ade80;">{{ icon("check") }} keine aktive Warnung</div>
         {% endif %}
       </div>
     </div>
@@ -192,7 +192,7 @@
 
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;gap:6px;">
           <div>
-            <a href="https://vowis.vorarlberg.at/stationsInfo/_Abfluss/ofwStation.aspx?hzbnr={{ av.hzbnr }}" target="_blank" rel="noopener" style="font-size:.82rem;font-weight:700;color:var(--text);text-decoration:none;">{{ av.name }} &#x2197;</a>
+            <a href="https://vowis.vorarlberg.at/stationsInfo/_Abfluss/ofwStation.aspx?hzbnr={{ av.hzbnr }}" target="_blank" rel="noopener" style="font-size:.82rem;font-weight:700;color:var(--text);text-decoration:none;">{{ av.name }} {{ icon("external-link") }}</a>
             {% if av.beschreibung %}
             <div style="font-size:.68rem;color:var(--text-muted);margin-top:1px;">{{ av.beschreibung }}</div>
             {% endif %}
@@ -231,12 +231,12 @@
 
         <div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px;">
           {% if av.naechste_hq %}
-          <span style="font-size:.68rem;color:var(--text-muted);">&#x2197; n&auml;chste Schwelle: <strong>{{ av.naechste_hq }}</strong></span>
+          <span style="font-size:.68rem;color:var(--text-muted);">↗ n&auml;chste Schwelle: <strong>{{ av.naechste_hq }}</strong></span>
           {% else %}
           <span></span>
           {% endif %}
           <span style="font-size:.62rem;color:var(--text-muted);">
-            {% if av.zeitstempel_label %}{{ av.zeitstempel_label }}{% elif av.fehler %}&#x26A0; {{ av.fehler }}{% endif %}
+            {% if av.zeitstempel_label %}{{ av.zeitstempel_label }}{% elif av.fehler %}{{ icon("alert-triangle") }} {{ av.fehler }}{% endif %}
           </span>
         </div>
 

@@ -130,7 +130,7 @@ class ScenarioAlert:
     level: str      # "warn" | "danger"
     label_de: str
     detail_de: str
-    icon: str = ""
+    icon_name: str = ""
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -763,7 +763,7 @@ def _storm_alerts(
                 level="danger",
                 label_de="Schwerer Sturm",
                 detail_de=f"Böe {active_gust:.0f} m/s (BF10+) – erhöhte Einsatzgefährdung",
-                icon="⚡",
+                icon_name="bolt",
             ))
         elif active_gust >= _BF8:
             alerts.append(ScenarioAlert(
@@ -771,7 +771,7 @@ def _storm_alerts(
                 level="warn",
                 label_de="Sturmwarnung",
                 detail_de=f"Böe {active_gust:.0f} m/s (BF8+) – Windgefahr beachten",
-                icon="⚡",
+                icon_name="bolt",
             ))
 
     if not alerts and forecast:
@@ -783,7 +783,7 @@ def _storm_alerts(
                     level="warn",
                     label_de=f"Sturm in {h.hours}h",
                     detail_de=f"Erwartete Böe {g:.0f} m/s (BF8+) in +{h.hours}h",
-                    icon="⚡",
+                    icon_name="bolt",
                 ))
                 break
 
@@ -808,7 +808,7 @@ def _wildfire_alerts(
             level="danger",
             label_de="Hohe Waldbrandgefahr",
             detail_de=f"{temp:.0f}°C, {hum:.0f}% RF – Brandbedingungen kritisch",
-            icon="🔥",
+            icon_name="flame",
         )]
     if temp >= _WILDFIRE_TEMP and hum <= _WILDFIRE_HUM_WARN and no_rain:
         return [ScenarioAlert(
@@ -816,7 +816,7 @@ def _wildfire_alerts(
             level="warn",
             label_de="Erhöhte Waldbrandgefahr",
             detail_de=f"{temp:.0f}°C, {hum:.0f}% RF – trockene Bedingungen",
-            icon="🔥",
+            icon_name="flame",
         )]
     return []
 
@@ -860,13 +860,13 @@ def _heavy_rain_alerts(
             key="rain", level="danger",
             label_de="Starkregen / Hochwassergefahr",
             detail_de=f"{detail} – Überflutung/Vermurung möglich",
-            icon="🌊",
+            icon_name="ripple",
         )]
     return [ScenarioAlert(
         key="rain", level="warn",
         label_de="Ergiebiger Regen",
         detail_de=f"{detail} – Niederschlag beobachten",
-        icon="🌊",
+        icon_name="ripple",
     )]
 
 
@@ -907,13 +907,13 @@ def _snow_alerts(
             key="snow", level="danger",
             label_de="Kräftiger Schneefall / Schneelast",
             detail_de=f"{temp:.0f}°C, {detail} – Dachlast/Verkehr beachten",
-            icon="❄️",
+            icon_name="snowflake",
         )]
     return [ScenarioAlert(
         key="snow", level="warn",
         label_de="Schneefall",
         detail_de=f"{temp:.0f}°C, {detail}",
-        icon="❄️",
+        icon_name="snowflake",
     )]
 
 
@@ -930,7 +930,7 @@ def _thunderstorm_alerts(
                 key="thunder", level=level,
                 label_de=f"Gewitter (Stufe {w.level})",
                 detail_de=(w.text[:90] if w.text else "Blitzschlag, Sturmböen, Starkregen möglich"),
-                icon="⛈️",
+                icon_name="cloud-storm",
             )]
     return []
 
@@ -957,7 +957,7 @@ def _ice_alerts(
         key="ice", level="warn",
         label_de="Glatteisgefahr",
         detail_de=f"{temp:.0f}°C bei Niederschlag – gefrierende Nässe möglich",
-        icon="🧊",
+        icon_name="snowflake",
     )]
 
 

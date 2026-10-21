@@ -906,7 +906,10 @@ def test_analyze_danger_sorted_first():
 
 def test_analyze_alerts_have_icons():
     alerts = analyze_weather(_make_current(gust=25.0), None)
-    assert all(a.icon for a in alerts)
+    from app.core.icons import icon_namen
+
+    assert alerts
+    assert {a.icon_name for a in alerts} <= icon_namen()
 
 
 # ── Provider-Auswahl (Kachelmann vs. ZAMG) ─────────────────────────────────────

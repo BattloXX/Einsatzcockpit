@@ -3,14 +3,14 @@
 {% for st in station_views %}
 <div style="border:1px solid rgba(255,255,255,.10);border-radius:8px;padding:9px 12px;margin-bottom:10px;background:rgba(255,255,255,.03);">
   <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">
-    <span style="font-size:.78rem;font-weight:700;color:var(--text-primary);">&#x1F4E1; {{ st.name }}</span>
+    <span style="font-size:.78rem;font-weight:700;color:var(--text-primary);">{{ icon("antenna") }} {{ st.name }}</span>
     {% if st.online %}
     <span style="display:inline-flex;align-items:center;gap:4px;font-size:.66rem;color:var(--ampel-gruen,#22c55e);">
-      <span style="width:8px;height:8px;border-radius:50%;background:var(--ampel-gruen,#22c55e);display:inline-block;"></span>Live
+      {{ status_dot("gruen", "Station online") }}Live
     </span>
     {% else %}
     <span style="display:inline-flex;align-items:center;gap:4px;font-size:.66rem;color:var(--text-muted);">
-      <span style="width:8px;height:8px;border-radius:50%;background:var(--text-muted);display:inline-block;"></span>Offline
+      {{ status_dot("grau", "Station offline") }}Offline
     </span>
     {% endif %}
     {% if st.seen_label %}<span style="font-size:.64rem;color:var(--text-muted);">&middot; {{ st.seen_label }}</span>{% endif %}
@@ -19,22 +19,22 @@
   {% if st.temp is not none or st.wind is not none or st.pressure is not none or st.rain_rate is not none %}
   <div style="display:flex;flex-wrap:wrap;gap:10px 14px;align-items:baseline;">
     {% if st.temp is not none %}
-    <span style="font-size:.85rem;">&#x1F321; <strong>{{ '%.1f'|format(st.temp) }}&nbsp;&deg;C</strong>{% if st.hum is not none %} <span style="color:var(--text-muted);font-size:.72rem;">{{ st.hum|int }}%</span>{% endif %}</span>
+    <span style="font-size:.85rem;">{{ icon("temperature") }} <strong>{{ '%.1f'|format(st.temp) }}&nbsp;&deg;C</strong>{% if st.hum is not none %} <span style="color:var(--text-muted);font-size:.72rem;">{{ st.hum|int }}%</span>{% endif %}</span>
     {% endif %}
     {% if st.wind is not none %}
-    <span style="font-size:.82rem;">&#x1F4A8; {{ '%.1f'|format(st.wind) }}&nbsp;m/s <span style="color:var(--text-muted);">{{ st.wind_dir }}</span>{% if st.gust is not none %}<span style="color:var(--text-muted);font-size:.72rem;"> &middot; B&ouml;e {{ '%.1f'|format(st.gust) }}</span>{% endif %}</span>
+    <span style="font-size:.82rem;">{{ icon("wind") }} {{ '%.1f'|format(st.wind) }}&nbsp;m/s <span style="color:var(--text-muted);">{{ st.wind_dir }}</span>{% if st.gust is not none %}<span style="color:var(--text-muted);font-size:.72rem;"> &middot; B&ouml;e {{ '%.1f'|format(st.gust) }}</span>{% endif %}</span>
     {% endif %}
     {% if st.pressure is not none %}
-    <span style="font-size:.78rem;color:var(--text-secondary,#cbd5e1);">&#x1F4C9; {{ '%.0f'|format(st.pressure) }}&nbsp;hPa</span>
+    <span style="font-size:.78rem;color:var(--text-secondary,#cbd5e1);">{{ icon("chart-line") }} {{ '%.0f'|format(st.pressure) }}&nbsp;hPa</span>
     {% endif %}
     {% if st.rain_rate is not none or st.rain_day is not none %}
-    <span style="font-size:.78rem;color:var(--text-secondary,#cbd5e1);">&#x1F327; {% if st.rain_rate is not none %}{{ '%.1f'|format(st.rain_rate) }}&nbsp;mm/h{% endif %}{% if st.rain_day is not none %} <span style="color:var(--text-muted);font-size:.72rem;">({{ '%.1f'|format(st.rain_day) }}&nbsp;mm heute)</span>{% endif %}</span>
+    <span style="font-size:.78rem;color:var(--text-secondary,#cbd5e1);">{{ icon("cloud-rain") }} {% if st.rain_rate is not none %}{{ '%.1f'|format(st.rain_rate) }}&nbsp;mm/h{% endif %}{% if st.rain_day is not none %} <span style="color:var(--text-muted);font-size:.72rem;">({{ '%.1f'|format(st.rain_day) }}&nbsp;mm heute)</span>{% endif %}</span>
     {% endif %}
     {% if st.dew is not none %}
     <span style="font-size:.76rem;color:var(--text-muted);">Taupunkt {{ '%.1f'|format(st.dew) }}&nbsp;&deg;C</span>
     {% endif %}
     {% if st.solar is not none %}
-    <span style="font-size:.76rem;color:var(--text-muted);">&#x2600; {{ '%.0f'|format(st.solar) }}&nbsp;W/m&sup2;</span>
+    <span style="font-size:.76rem;color:var(--text-muted);">{{ icon("sun") }} {{ '%.0f'|format(st.solar) }}&nbsp;W/m&sup2;</span>
     {% endif %}
     {% if st.uv is not none %}
     <span style="font-size:.76rem;color:var(--text-muted);">UV {{ '%.0f'|format(st.uv) }}</span>

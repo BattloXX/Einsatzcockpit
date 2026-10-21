@@ -113,16 +113,10 @@ def test_person_status_filter(status, farbe, label):
 
 
 def test_literal_icon_calls():
-    # bis P8: Diese Templates importieren das alte Makro mit eigenen Namen.
-    legacy = {
-        "public/ueber.html", "public/start.html", "public/_pub_nav.html",
-        "public/roadmap.html", "public/_pub_footer.html", "public/_macros.html",
-    }
     template_dir = ROOT / "app/templates"
     calls = []
     for path in template_dir.rglob("*.html"):
-        if path.relative_to(template_dir).as_posix() not in legacy:
-            calls.extend(re.findall(r'''\bicon\(\s*["']([^"']+)["']''', path.read_text()))
+        calls.extend(re.findall(r'''\bicon\(\s*["']([^"']+)["']''', path.read_text()))
     for path in (STATIC / "js").glob("*.js"):
         if path.name != "icons.js":
             calls.extend(re.findall(r'''\becp(?:Marker)?Icon\(\s*["']([^"']+)["']''', path.read_text()))
@@ -186,3 +180,15 @@ def test_cross_marker_icons(monkeypatch):
             assert cross_marker_icon(marker_type, "lg") == render_icon(marker.type_icon_name, "lg")
     monkeypatch.setitem(CROSS_MARKER_TYPE_ICON, "mure", '<img src="x">&')
     assert '&lt;img src=&#34;x&#34;&gt;&amp;' in cross_marker_icon("mure")
+
+
+@pytest.mark.parametrize("template", ["weather/infoscreen.html", "infoscreen/statistik.html"])
+def test_infoscreen_css_is_local_and_built(template):
+    source = (ROOT / "app/templates" / template).read_text()
+    assert '/static/css/infoscreen.css?v={{ ASSET_VERSION }}' in source
+    assert 'cdn.tailwindcss.com' not in source
+    assert 'tailwind.config' not in source
+    css = (STATIC / "css/infoscreen.css").read_text()
+    # Von beiden Seiten verwendete Theme-Werte, einschließlich des eigenen Radius.
+    for rule in ('.bg-surface-container', '.text-label-caps', '.rounded-full{border-radius:.75rem}'):
+        assert rule in css

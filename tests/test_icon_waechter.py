@@ -33,9 +33,6 @@ CDN_URL = re.compile(
 CDN_AUSNAHMEN = {
     # Captcha-Dienst, funktioniert nur online
     ("app/templates/public/_pub_contact.html", "challenges.cloudflare.com/turnstile"),
-    # Altlast: Infoscreens laden Tailwind per CDN statt app.css, separat zu lösen
-    ("app/templates/infoscreen/statistik.html", "cdn.tailwindcss.com"),
-    ("app/templates/weather/infoscreen.html", "cdn.tailwindcss.com"),
 }
 ICON_ONLY = re.compile(
     r"<(button|a)\b([^>]*)>\s*\{\{\s*icon\(([^)]*)\)\s*\}\}\s*</\1>",

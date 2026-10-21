@@ -8,6 +8,7 @@
   <title>{{ page_title }} – {{ brand }}</title>
   <link rel="stylesheet" href="/static/css/landing.css">
   <link rel="icon" type="image/x-icon" href="/static/img/favicon.ico">
+<style>.ecp-icon{display:inline-block;vertical-align:-0.2em;flex-shrink:0}.ecp-icon--xs{width:16px;height:16px}.ecp-icon--sm{width:20px;height:20px}.ecp-icon--md{width:24px;height:24px}.ecp-icon--lg{width:32px;height:32px}</style>
 </head>
 <body class="lp">
 
@@ -15,13 +16,17 @@
 
   {% if preview %}
   <div style="background:#1a2540;color:#dae2fd;text-align:center;padding:8px;font-size:.9rem;border-bottom:1px solid rgba(255,255,255,.1)">
-    👁 Vorschau – so sieht die Seite für nicht angemeldete Besucher aus.
+    {{ icon("eye") }} Vorschau – so sieht die Seite für nicht angemeldete Besucher aus.
     <a href="/admin/seiten/{{ page_slug }}" style="color:#ffb4ab;font-weight:600">Bearbeiten</a>
   </div>
   {% endif %}
 
   <main class="lp-cms">
-    {{ body_html | safe }}
+    {% set content = namespace(html=body_html) %}
+    {% for name in ('firetruck', 'clipboard-list', 'mail-forward', 'lungs', 'users', 'file-text') %}
+      {% set content.html = content.html.replace('<span data-ecp-icon="' ~ name ~ '"></span>', icon(name, size="lg")|string) %}
+    {% endfor %}
+    {{ content.html | safe }}
   </main>
 
   {% if contact %}

@@ -722,3 +722,7 @@ h1, h2, h3, .pub-h1, .pub-h2, .pub-h3 {
   .pub-card:hover { transform: none; }
   .pub-topo { background-attachment: scroll; }
 }
+
+/* Zentrale Icons auf eigenständigen öffentlichen Seiten. */
+.ecp-icon{display:inline-block;vertical-align:-0.2em;flex-shrink:0}
+.ecp-icon--xs{width:16px;height:16px}.ecp-icon--sm{width:20px;height:20px}.ecp-icon--md{width:24px;height:24px}.ecp-icon--lg{width:32px;height:32px}

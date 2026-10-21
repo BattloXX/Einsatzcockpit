@@ -1,6 +1,5 @@
 {# Wiederverwendbare Komponenten des oeffentlichen Bereichs.
    status_map = public_content.STATUS (wird vom Router in den Kontext gegeben). #}
-{% from "public/_icons.html" import icon %}
 
 {# ── Status-Badge (pulsierender Dot + Label) ─────────────────────────── #}
 {% macro status_badge(key, status_map, pulse=false) -%}
@@ -18,7 +17,7 @@
     <h3 class="pub-h3">{{ f.title }}</h3>
     <p class="pub-card__text">{{ f.tagline }}</p>
     <a class="pub-card__link" href="/funktionen#{{ f.anchor }}">
-      Details ansehen {{ icon("arrow") }}
+      Details ansehen {{ icon("arrow-right") }}
     </a>
   </article>
 {%- endmacro %}
@@ -59,7 +58,7 @@
       {% endif %}
       {% if f.wiki %}
       <a class="pub-card__link" style="margin-top:24px" href="{{ public_github_url ~ '/wiki/' ~ f.wiki }}" target="_blank" rel="noopener">
-        Ausführlich im Wiki {{ icon("arrow") }}
+        Ausführlich im Wiki {{ icon("arrow-right") }}
       </a>
       {% endif %}
     </div>

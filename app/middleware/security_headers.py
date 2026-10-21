@@ -47,13 +47,13 @@ _CSP_ALARM_INFOSCREEN_BASE = _CSP_BASE.replace(
     "frame-src 'self' https://embed.windy.com",
     "frame-src 'self' https:",
 )
-# Wetter-/Statistik-Infoscreen: standalone FullHD-Seiten mit Tailwind CDN
+# Wetter-/Statistik-Infoscreen: standalone FullHD-Seiten mit lokal gebautem Tailwind
 # (Fonts sind lokal, siehe fonts.css)
 _CSP_INFOSCREEN_BASE = (
     "default-src 'self'; "
     "img-src 'self' data: blob:; "
     "style-src 'self' 'unsafe-inline'; "
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com; "
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
     "font-src 'self' data:; "
     "connect-src 'self'; "
     "frame-src https://embed.windy.com; "
