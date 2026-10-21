@@ -8,6 +8,7 @@ from typing import Literal
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.models.master import OrgSettings
 from app.models.suche import SearchChunk, SearchDocument, SearchOutbox
 from app.models.user import User
@@ -15,10 +16,12 @@ from app.services.hydrant_service import _haversine_m
 from app.services.katplan_suche_service import ausschnitt
 from app.services.katplan_zugriff import sieht_vertraulich
 from app.services.kontakt_access_service import KontaktZugriff
-from app.services.suche import live, resolver
+from app.services.suche import embedding, live, resolver
+from app.services.suche.embedding import EmbeddingProvider
 from app.services.suche.quellen import html_zu_text
 from app.services.suche.synonyme import suchwoerter
 from app.services.suche.textsuche import Kandidat, volltext_kandidaten
+from app.services.suche.vektor import knn, vektor_faehig
 from app.services.suche.vertrag import SuchAnfrage, SuchErgebnis, Treffer
 
 logger = logging.getLogger(__name__)
@@ -50,7 +53,7 @@ def fusioniere(listen: list[list[Treffer]]) -> list[Treffer]:
 
 
 def _index_treffer(db: Session, user: User, kandidaten: list[Kandidat], woerter: list[str],
-                   grund: Literal["exakt", "volltext"]) -> list[Treffer]:
+                   grund: Literal["exakt", "volltext", "semantisch"]) -> list[Treffer]:
     beste: dict[int, Kandidat] = {}
     for k in sorted(kandidaten, key=lambda k: k.rang):
         bisher = beste.get(k.document_id)
@@ -77,9 +80,13 @@ def _index_treffer(db: Session, user: User, kandidaten: list[Kandidat], woerter:
             if chunk.abschnitt:
                 teile.append(f"Abschnitt {chunk.abschnitt}")
             fundstelle = ", ".join(teile) or None
+        klartext = html_zu_text(text)
+        auszug = ausschnitt(klartext, woerter)
+        if grund == "semantisch" and not auszug:
+            auszug = klartext[:300]
         treffer.append(Treffer(
             quelle=d.quelle, quell_id=d.quell_id, titel=d.titel, untertitel=d.untertitel,
-            auszug=ausschnitt(html_zu_text(text), woerter), fundstelle=fundstelle,
+            auszug=auszug, fundstelle=fundstelle,
             status=aktuell.status, ist_aktuell=aktuell.ist_aktuell, grund=[grund],
             url=aktuell.url, lat=d.lat, lng=d.lng, stand=d.quelle_geaendert_am or d.indexiert_am,
         ))
@@ -144,8 +151,8 @@ def suche(db: Session, user: User, anfrage: SuchAnfrage, *,
                and (anfrage.kontext == "global" or anfrage.ganze_org or q in anfrage.typen)]
     try:
         with db.begin_nested():
-            settings = db.scalar(select(OrgSettings).where(OrgSettings.org_id == org_id))
-            index_aktiv = bool(settings and settings.suche_aktiv)
+            org_settings = db.scalar(select(OrgSettings).where(OrgSettings.org_id == org_id))
+            index_aktiv = bool(org_settings and org_settings.suche_aktiv)
         if not index_aktiv:
             ergebnis.hinweise.append("Suchindex für diese Organisation nicht aktiv")
             quellen = []
@@ -170,6 +177,22 @@ def suche(db: Session, user: User, anfrage: SuchAnfrage, *,
                 listen.append(treffer)
         except Exception:
             fehler("Volltextsuche")
+        try:
+            if (settings.SEARCH_SEMANTIC_ENABLED and len(anfrage.q) >= 3
+                    and not embedding.breaker_offen() and vektor_faehig(db)):
+                ergebnis.modi.append("semantisch")
+                with db.begin_nested():
+                    vektor = EmbeddingProvider().embed_anfrage(anfrage.q)
+                    nachbarn = knn(db, org_id, vektor, quellen, anfrage.limit * 5)
+                    kandidaten = [
+                        Kandidat(document_id, chunk_id, rang)
+                        for rang, (document_id, chunk_id, distanz) in enumerate(
+                            sorted(nachbarn, key=lambda n: n[2]), 1,
+                        ) if distanz <= settings.SEARCH_SEMANTIC_MAX_DISTANZ
+                    ]
+                    listen.append(_index_treffer(db, user, kandidaten, woerter, "semantisch"))
+        except Exception:
+            fehler("Semantik")
     kontext_typen = {"strassensperre", "wasserstelle"}
     if anfrage.kontext == "gsl":
         kontext_typen.update(("gsl_stelle", "gsl_meldung", "gsl_einheit"))

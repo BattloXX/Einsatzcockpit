@@ -38,6 +38,8 @@ Die lesenden Einsatz-Werkzeuge liegen in `app/mcp/tools/einsatz.py`; gemeinsame,
 
 ## Pflichten für Handler
 
+`ecp_suchen` reicht das bestehende Trefferfeld `grund` unverändert als Liste mit `exakt`, `volltext`, `live` oder `semantisch` durch; die Vektorstufe ergänzt keine Ausgabefelder.
+
 - Jede Abfrage und jedes Objekt strikt mit `context.org_id` scopen; bei Worker-Threads den Tenant-Kontext vor dem Zugriff setzen.
 - Keine Freigabe auslösen und außerhalb einer erfolgreichen Transaktion nichts committen. Bei mehreren Änderungen atomar arbeiten und bei Fehlern rollbacken.
 - Objekt-Änderungen mit `quelle="mcp"` markieren und einen passenden `objekt.mcp_*`-Audit-Eintrag schreiben; Kontaktänderungen über `kontakt_service` ausführen und mit `kontakt.mcp_*` auditieren.
