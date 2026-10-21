@@ -174,6 +174,17 @@ vorbehalten; freigegebene Versionen ändern sich nicht.
   gelten im selben Plan, UUIDs auch planübergreifend innerhalb der Organisation.
   Arten: `siehe_auch`, `folgt_auf`, `abhaengig_von`, `eskaliert_zu`. Ohne `art` werden beim
   Entfernen alle Beziehungen zum Ziel entfernt. Setzen ist idempotent.
+- `katplan_anlegen`: `felder` benötigt `titel` und `planart` (`alarm_einsatzplan`,
+  `massnahmenplan`, `katastrophenplan`); bei Katastrophenplänen zusätzlich `gefahrenarten`.
+  Optional: `beschreibung` als Text, `geltungsbereich`, `verantwortliche_stelle`,
+  `verantwortlich_kontakt_id`, `wiedervorlage_am` (YYYY-MM-DD), `pruefintervall_monate` (1..60)
+  und `pruef_verantwortlich_user_id`. Kontakte und Prüfverantwortliche müssen aus der eigenen
+  Organisation stammen. Ohne Intervall gilt der Standard der Planart, ohne Prüfverantwortlichen
+  der aufrufende Benutzer. Die Antwort enthält `plan_id`, `plan_version`, `plan`, `kapitel`
+  mit IDs, `phasen` und `url`. Elemente danach mit `katplan_element_entwurf_anlegen` und
+  einer `kapitel_id` aus der Antwort ergänzen. Der Status ist immer Entwurf, die Freigabe
+  bleibt beim Menschen. `pruefen=true` validiert mit Rollback (`gespeichert=false`);
+  die zurückgegebenen IDs werden dabei nicht gespeichert.
 - `katplan_stammdaten_aendern`: `version` aus `katplan_lesen(fassung="arbeitsstand")["plan_version"]`
   verwenden. `felder` darf `titel`, `beschreibung` (Text), `gefahrenarten` (Liste von Codes),
   `geltungsbereich`, `verantwortliche_stelle`, `verantwortlich_kontakt_id` und

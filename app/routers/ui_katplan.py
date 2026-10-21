@@ -59,6 +59,7 @@ from app.services.katplan_service import (
     loesche_abschnitt,
     markiere_ueberarbeitung,
     naechste_kennung,
+    plan_anlegen,
     protokolliere,
     pruefe_version,
     pruefverantwortliche,
@@ -490,21 +491,11 @@ def anlegen(request: Request, daten: Stammdaten = Depends(), db: Session = Depen
     if daten.fehler:
         return templates.TemplateResponse(request, "katplan/formular.html", {
             **_kontext(db, user), "form": daten.form, "fehler": daten.fehler}, status_code=422)
-    person = daten.werte.get("pruef_verantwortlich_user_id")
-    if person is not None and person not in {u.id for u in pruefverantwortliche(db, user.org_id)}:
+    try:
+        plan = plan_anlegen(db, user, werte=daten.werte)
+    except ValueError as exc:
         return templates.TemplateResponse(request, "katplan/formular.html", {
-            **_kontext(db, user), "form": daten.form, "fehler": "Benutzer nicht verfügbar."}, status_code=422)
-    daten.werte["pruef_verantwortlich_user_id"] = person if person is not None else user.id
-    plan = KatplanPlan(org_id=user.org_id, erstellt_von_id=user.id, aktualisiert_von_id=user.id, **daten.werte)
-    db.add(plan)
-    db.flush()
-    protokolliere(db, plan, "plan", "angelegt", user)
-    vorlage = PLANARTEN[plan.planart]
-    for titel in vorlage.kapitel:
-        lege_abschnitt_an(db, plan, user, titel=titel)
-    for sort, (name, farbe) in enumerate(vorlage.phasen, 1):
-        phase = lege_phase_an(db, plan, user, name=name)
-        phase.farbe, phase.sort = farbe, sort * 10
+            **_kontext(db, user), "form": daten.form, "fehler": str(exc)}, status_code=422)
     db.commit()
     return RedirectResponse(f"/plaene/{plan.id}", status_code=303)
 

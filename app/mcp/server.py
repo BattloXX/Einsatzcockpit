@@ -2152,6 +2152,13 @@ async def katplan_beziehung_entfernen(
     )
 
 
+@server.tool(name="katplan_anlegen", description=TOOLS["katplan_anlegen"].description)
+async def katplan_anlegen(
+    felder: dict, pruefen: bool = False, ctx: Context | None = None,
+) -> dict[str, object]:
+    return await _call_registered_tool("katplan_anlegen", felder=felder, pruefen=pruefen)
+
+
 @server.tool(name="katplan_stammdaten_aendern", description=TOOLS["katplan_stammdaten_aendern"].description)
 async def katplan_stammdaten_aendern(
     plan_id: int, version: int, felder: dict, streng: bool = False, pruefen: bool = False,

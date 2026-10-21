@@ -4,6 +4,8 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 
 ## Unreleased
 
+- **MCP**: `katplan_anlegen` legt Pläne als Entwurf mit Kapitel-/Phasenvorlage, gemeinsamer UI-Validierung und optionalem Trockenlauf an.
+
 - **Einsatz- & Katastrophenpläne** (bisher „Katastrophenpläne“, neue Adresse `/plaene`,
   alte Links leiten weiter):
   - Neue **Planart**: Alarm- und Einsatzplan, Maßnahmenplan, Katastrophenplan, mit Kapitel-
