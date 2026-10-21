@@ -71,7 +71,7 @@
 
   {% if is_sysadmin %}
   <form method="get" action="/verwaltung/fahrten" class="fb-orgbar">
-    <span class="fb-orgbar__label">&#128737; Sysadmin – Organisation:</span>
+    <span class="fb-orgbar__label">{{ icon("shield", size="xs") }} Sysadmin – Organisation:</span>
     <select name="org" class="form-control form-control--sm" onchange="this.form.submit()">
       {% for o in sysadmin_orgs %}
       <option value="{{ o.id }}" {% if acting_org and o.id == acting_org.id %}selected{% endif %}>{{ o.name }}</option>
@@ -143,7 +143,7 @@
       <label><input type="checkbox" id="fb-check-all" style="width:18px;height:18px;cursor:pointer;"> Alle auf dieser Seite</label>
       <span class="fb-bulkbar__count" id="fb-check-count">0 markiert</span>
       <span class="fb-bulkbar__spacer"></span>
-      <button type="submit" class="btn btn--danger btn--sm" id="fb-delete-btn" disabled>&#128465; Markierte löschen</button>
+      <button type="submit" class="btn btn--danger btn--sm" id="fb-delete-btn" disabled>{{ icon("trash", size="sm") }} Markierte löschen</button>
     </div>
   {% endif %}
 
@@ -183,7 +183,7 @@
           <td>{{ f.fahrttyp.label }}</td>
           <td style="color:var(--text-muted);">{{ f.zweck.name if f.zweck else '—' }}</td>
           <td>
-            {% if f.schaden_vorhanden %}<span class="fb-warn-icon" title="Schaden">&#9888;</span>{% endif %}
+            {% if f.schaden_vorhanden %}<span class="fb-warn-icon" title="Schaden">{{ icon("alert-triangle", size="xs") }}</span>{% endif %}
             {% if f.status.value != 'aktiv' %}<span class="fb-badge fb-badge--gray">{{ f.status.value }}</span>{% endif %}
             {% if f.nicht_statistikrelevant %}<span class="fb-badge fb-badge--gray" title="nicht statistikrelevant">n.s.</span>{% endif %}
           </td>
@@ -227,7 +227,7 @@
         <div>
           <div class="fb-mcard__label">Status</div>
           <div class="fb-mcard__value">
-            {% if f.schaden_vorhanden %}<span class="fb-warn-icon">&#9888;</span>{% endif %}
+            {% if f.schaden_vorhanden %}<span class="fb-warn-icon">{{ icon("alert-triangle", size="xs") }}</span>{% endif %}
             {% if f.status.value != 'aktiv' %}<span class="fb-badge fb-badge--gray">{{ f.status.value }}</span>{% else %}<span class="fb-badge fb-badge--gray" style="color:var(--green);border-color:rgba(24,169,87,.3);background:rgba(24,169,87,.15);">aktiv</span>{% endif %}
           </div>
         </div>
@@ -247,11 +247,11 @@
   {% if gesamt > pro_seite %}
   <div style="display:flex;gap:.5rem;margin-top:1rem;justify-content:center;">
     {% if seite > 1 %}
-    <a href="?{{ request.query_string.decode() }}&seite={{ seite - 1 }}" class="btn btn--ghost btn--sm">&#8592; Zurück</a>
+    <a href="?{{ request.query_string.decode() }}&seite={{ seite - 1 }}" class="btn btn--ghost btn--sm">{{ icon("arrow-left", size="sm") }} Zurück</a>
     {% endif %}
     <span style="padding:.4rem .75rem;font-size:.85rem;">{{ seite }} / {{ ((gesamt - 1) // pro_seite + 1) }}</span>
     {% if seite * pro_seite < gesamt %}
-    <a href="?{{ request.query_string.decode() }}&seite={{ seite + 1 }}" class="btn btn--ghost btn--sm">Weiter &#8594;</a>
+    <a href="?{{ request.query_string.decode() }}&seite={{ seite + 1 }}" class="btn btn--ghost btn--sm">Weiter {{ icon("arrow-right", size="sm") }}</a>
     {% endif %}
   </div>
   {% endif %}

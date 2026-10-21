@@ -2,6 +2,7 @@
 {% block title %}Fahrt erfassen{% endblock %}
 
 {% block head_extra %}
+<script src="/static/js/person_select_flyout.js?v={{ ASSET_VERSION }}" defer></script>
 {% include "_fab_styles.html" %}
 {% endblock %}
 
@@ -15,7 +16,7 @@
         {% if org and org.logo_path %}
         <img src="{{ org.logo_path }}" alt="{{ org.name }}" class="fab-header__logo" onerror="this.style.display='none'">
         {% else %}
-        <span class="fab-header__emoji">&#x1F697;</span>
+        <span class="fab-header__emoji">{{ modul_icon("fahrtenbuch", size="lg") }}</span>
         {% endif %}
         <div style="min-width:0;">
           {% if org %}
@@ -25,7 +26,7 @@
         </div>
       </div>
       {% if not token_org %}
-      <a href="/" class="btn btn--ghost btn--sm" style="flex-shrink:0;margin-top:.2rem;">&#8592; Zurück</a>
+      <a href="/" class="btn btn--ghost btn--sm" style="flex-shrink:0;margin-top:.2rem;">{{ icon("arrow-left", size="sm") }} Zurück</a>
       {% endif %}
     </div>
     <p class="fab-header__sub">Fahrzeugbewegungen, km-Stände und Betriebsstunden lückenlos digital erfassen.</p>
@@ -35,18 +36,18 @@
 
   {% if doppelfahrt_warnung %}
   <div class="alert alert--warn" style="margin-bottom:1rem;" id="doppelfahrt-hinweis">
-    &#9888; Für dieses Fahrzeug wurde in den letzten Minuten bereits eine Fahrt erfasst.
+    {{ icon("alert-triangle", size="xs") }} Für dieses Fahrzeug wurde in den letzten Minuten bereits eine Fahrt erfasst.
   </div>
   {% endif %}
 
   <div class="alert alert--info" style="margin-bottom:1rem;display:none;" id="draft-hinweis">
-    &#8635; Ein nicht gespeicherter Entwurf ist vorhanden.
+    {{ icon("refresh", size="xs") }} Ein nicht gespeicherter Entwurf ist vorhanden.
     <button type="button" class="btn btn--ghost btn--sm" id="draft-restore-button" style="margin-left:.5rem;">Entwurf wiederherstellen</button>
     <a href="#" id="draft-discard-link" style="margin-left:.5rem;">Verwerfen</a>
   </div>
 
   <div class="alert alert--warn" style="margin-bottom:1rem;display:none;" id="auto-reload-hinweis" role="status">
-    &#8635; Das Formular wird in Kürze automatisch aktualisiert, damit die Daten aktuell bleiben. Deine Eingaben bleiben erhalten; ausgewählte Fotos müssen danach neu angehängt werden.
+    {{ icon("refresh", size="xs") }} Das Formular wird in Kürze automatisch aktualisiert, damit die Daten aktuell bleiben. Deine Eingaben bleiben erhalten; ausgewählte Fotos müssen danach neu angehängt werden.
   </div>
 
   <form method="post" action="/fahrtenbuch" enctype="multipart/form-data"
@@ -61,7 +62,7 @@
     {# 1. Fahrzeug & Maschinist #}
     <div class="fab-card">
       <div class="fab-card__head">
-        <span class="fab-card__icon">&#x1F692;</span>
+        <span class="fab-card__icon">{{ icon("firetruck", size="sm") }}</span>
         <h2 class="fab-card__title">Fahrzeug &amp; Maschinist</h2>
       </div>
       <div class="fab-card__body">
@@ -87,7 +88,7 @@
         {# Dynamische Fahrzeug-Felder (Maschinist/km/BH/2. Maschinist/Seilwinde).
            Das Partial erwartet die Variable "fahrzeug"; beim Vorauswählen per Link
            heißt sie hier preset_fahrzeug. Ohne dieses Mapping bliebe der Block leer
-           (Felder „fielen weg"), obwohl das Fahrzeug gewählt ist. #}
+           (Felder "fielen weg"), obwohl das Fahrzeug gewählt ist. #}
         <div id="fahrzeug-felder">
           {% if preset_fahrzeug %}
             {% with fahrzeug = preset_fahrzeug %}
@@ -101,7 +102,7 @@
     {# 2. Ziel & Zweck #}
     <div class="fab-card fab-card--ziel">
       <div class="fab-card__head">
-        <span class="fab-card__icon">&#x1F4CD;</span>
+        <span class="fab-card__icon">{{ icon("map-pin", size="sm") }}</span>
         <h2 class="fab-card__title">Ziel &amp; Zweck</h2>
       </div>
       <div class="fab-card__body">
@@ -149,7 +150,7 @@
     {# 3. Schaden #}
     <div class="fab-card fab-card--schaden" x-data="{schaden: {{ 'true' if form_daten.get('schaden_vorhanden') else 'false' }}}" :class="{'is-active': schaden}">
       <div class="fab-card__head">
-        <span class="fab-card__icon">&#9888;</span>
+        <span class="fab-card__icon">{{ icon("alert-triangle", size="xs") }}</span>
         <h2 class="fab-card__title">Schaden / Defekt?</h2>
       </div>
       <div class="fab-card__body">
@@ -195,7 +196,7 @@
     {# 4. Bemerkung #}
     <div class="fab-card fab-card--zeit">
       <div class="fab-card__head">
-        <span class="fab-card__icon">&#x1F4AC;</span>
+        <span class="fab-card__icon">{{ icon("message", size="sm") }}</span>
         <h2 class="fab-card__title">Bemerkung</h2>
       </div>
       <div class="fab-card__body">
@@ -262,95 +263,8 @@ function fahrtForm() {
     }
   };
 }
-function personSelectFlyout(options) {
-  const collator = new Intl.Collator('de', { sensitivity: 'base' });
-  const normalize = (value) => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleUpperCase('de-DE');
-  const sorted = (options.people || []).slice().sort((a, b) => collator.compare(a.lastname || '', b.lastname || '') || collator.compare(a.firstname || '', b.firstname || ''));
-  const groups = {};
-  sorted.forEach((person) => {
-    const letter = normalize(person.lastname || person.name).charAt(0) || '#';
-    (groups[letter] ||= []).push(person);
-  });
-  return {
-    title: options.title, people: sorted, groups, query: '', open: false,
-    memberId: options.initialId || '', selectedName: options.initialName || '', invalid: false,
-    uid: 'person-select-' + Math.random().toString(36).slice(2),
-    letters: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split(''),
-    get availableLetters() { return Object.keys(this.groups).sort(collator.compare); },
-    get filtered() {
-      const needle = normalize(this.query).replace(/\s+/g, ' ').trim();
-      if (!needle) return this.people;
-      return this.people.filter((person) => normalize([person.firstname, person.lastname, person.name].join(' ')).includes(needle));
-    },
-    init() {
-      this.$el.addEventListener('person-select-restore', () => {
-        const id = this.$el.querySelector('input[name$="_member_id"]')?.value || '';
-        const name = this.$el.querySelector('input[name$="_name"]')?.value || '';
-        if (id || name) { this.memberId = id; this.selectedName = name; this.invalid = !id; }
-      });
-    },
-    openFlyout() { this.open = true; this.query = ''; this.invalid = false; this.$nextTick(() => this.$refs.search?.focus()); },
-    close() { this.open = false; },
-    jump(letter) { document.getElementById(this.uid + '-' + letter)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); },
-    select(person) {
-      this.memberId = person.id; this.selectedName = person.name; this.invalid = false; this.close();
-      this.$nextTick(() => {
-        // Hidden inputs loesen selbst kein Form-Event aus: explizit signalisieren,
-        // damit die bestehende Entwurfsicherung die ID sofort mitspeichert.
-        this.$el.querySelector('input[name$="_member_id"]')?.dispatchEvent(new Event('change', { bubbles: true }));
-        this.$el.querySelector('.person-select__trigger')?.focus();
-      });
-    },
-  };
-}
-function maschinistAutocomplete(prefix, initialName, initialId) {
-  return {
-    query: initialName || '',
-    memberId: initialId || '',
-    // Name, der zum aktuell ausgewaehlten Member gehoert – weicht die Eingabe davon ab,
-    // gilt sie als "nicht in der Mannschaftsliste".
-    selectedName: initialId ? (initialName || '') : '',
-    open: false,
-    // Gelbe Warnung: es steht ein Name da, der zu KEINEM Mitglied aus der Liste passt.
-    // Erst nach dem Verlassen des Feldes (open=false) anzeigen, nicht schon beim Tippen.
-    get warn() {
-      return this.query.trim().length > 0 && !this.memberId && !this.open;
-    },
-    init() {
-      this.$el.addEventListener('member-selected', (e) => {
-        this.memberId = e.detail.id;
-        this.selectedName = e.detail.name;
-        this.query = e.detail.name;
-        this.open = false;
-      });
-      this.$watch('query', (val) => {
-        // Sobald der Text vom ausgewaehlten Namen abweicht, ist die Member-Zuordnung ungueltig.
-        if (!val || val !== this.selectedName) this.memberId = '';
-      });
-    },
-    select(id, name) {
-      this.memberId = id;
-      this.selectedName = name;
-      this.query = name;
-      this.open = false;
-    }
-  };
-}
-document.addEventListener('pointerdown', function(e) {
-  const item = e.target.closest('.autocomplete-item');
-  if (!item) return;
-  e.preventDefault();
-  const container = item.closest('[x-data]');
-  if (!container) return;
-  container.dispatchEvent(new CustomEvent('member-selected', {
-    detail: { id: item.dataset.memberId, name: item.dataset.name }
-  }));
-}, { passive: false });
-
 // Alpine nach HTMX-Swap der dynamischen Felder re-initialisieren.
-// Ohne dies wird die maschinistAutocomplete-Komponente in den nachgeladenen
-// Fahrzeug-/Zweck-Feldern nie initialisiert → der member-selected-Listener
-// fehlt → Antippen eines Vorschlags füllt Name/member_id nicht (v.a. mobil).
+// Dies initialisiert auch die Personenauswahl in nachgeladenen Feldern.
 document.body.addEventListener('htmx:afterSwap', function(ev) {
   const t = ev.detail && ev.detail.target;
   if (!t) return;
@@ -485,7 +399,7 @@ document.body.addEventListener('htmx:afterSwap', function(ev) {
       applyDraftTo(formEl);
       const hint = document.getElementById('draft-hinweis');
       if (hint) {
-        hint.innerHTML = '&#8635; Entwurf wiederhergestellt (deine letzten, nicht gespeicherten Eingaben).';
+        hint.innerHTML = ecpIcon('refresh', {size: 'xs'}) + ' Entwurf wiederhergestellt (deine letzten, nicht gespeicherten Eingaben).';
       }
     });
   }

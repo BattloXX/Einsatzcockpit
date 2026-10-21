@@ -21,6 +21,7 @@ from app.db import get_db
 from app.models.atemschutz_pruefung import AtemschutzGeraet, AtemschutzPruefung
 from app.models.incident import Incident
 from app.models.master import Member, MemberQualification, OrgSettings, Qualification
+from app.routers.ui_fahrtenbuch import _personen_fuer_client
 from app.services.atemschutz_pruefung_service import melde_defekt_background
 
 router = APIRouter()
@@ -101,7 +102,7 @@ def pruefung_formular(request: Request, token: str, db: Session = Depends(get_db
         "org": org_settings,
         "token": token,
         "geraete": _aktive_geraete(org_settings.org_id, db),
-        "agt_members": _agt_members(org_settings.org_id, db),
+        "personen": _personen_fuer_client(_agt_members(org_settings.org_id, db)),
         "now": datetime.now(UTC),
         "form_daten": {},
         "fehler": None,
@@ -148,7 +149,7 @@ def pruefung_speichern(
             "org": org_settings,
             "token": token,
             "geraete": _aktive_geraete(org_id, db),
-            "agt_members": _agt_members(org_id, db),
+            "personen": _personen_fuer_client(_agt_members(org_id, db)),
             "now": datetime.now(UTC),
             "form_daten": dict(form),
             "fehler": text,

@@ -42,7 +42,7 @@
     </form>
     {% if org and org.fahrtenbuch_token %}
     <p style="margin-top:.6rem;font-size:.8rem;color:var(--red-light);">
-      &#9888; Token rotieren macht den alten Link ungültig — alle ausgegebenen Links müssen neu verteilt werden.
+      {{ icon("alert-triangle", size="xs") }} Token rotieren macht den alten Link ungültig — alle ausgegebenen Links müssen neu verteilt werden.
     </p>
     {% endif %}
   </div>
@@ -58,7 +58,7 @@
       einen QR-Code generieren, der beim Scannen das Fahrzeug im Formular vorausfüllt.
       Der QR-Code wird als PNG heruntergeladen.
     </p>
-    <a href="/admin/fahrtenbuch/fahrzeuge" class="btn btn--ghost btn--sm">&#x2192; Zu Fahrzeug-Einstellungen</a>
+    <a href="/admin/fahrtenbuch/fahrzeuge" class="btn btn--ghost btn--sm">{{ icon("arrow-right", size="sm") }} Zu Fahrzeug-Einstellungen</a>
   </div>
 </div>
 </div>
