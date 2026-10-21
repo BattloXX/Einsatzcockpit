@@ -7,7 +7,7 @@
       <h1>Alarmtypen</h1>
       <p class="page-header__sub">Bekannte Einsatzstichwörter und ihre Eigenschaften</p>
     </div>
-    <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newAtModal">+ Alarmtyp anlegen</button>
+    <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newAtModal">{{ icon("plus", size="sm") }} Alarmtyp anlegen</button>
   </div>
 
   {% if saved %}<div class="alert alert--success">Gespeichert.</div>{% endif %}
@@ -47,7 +47,7 @@
   <div class="modal__content">
     <div class="modal__header">
       <h3>Neuer Alarmtyp</h3>
-      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">{{ icon("x", size="sm") }}</button>
     </div>
     <form method="post" action="/admin/alarmtypen/neu">
       <div class="modal__body">
@@ -93,7 +93,7 @@
   <div class="modal__content">
     <div class="modal__header">
       <h3>Alarmtyp bearbeiten</h3>
-      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">{{ icon("x", size="sm") }}</button>
     </div>
     <form method="post" id="editAtForm">
       <div class="modal__body">

@@ -53,7 +53,7 @@
       <p class="page-header__sub">Eigene Einheiten und Ressourcen aus Fremdorganisationen</p>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <button class="btn btn--ghost" data-ec-action="open-dialog" data-ec-dialog="mergeVehiclesModal">🔗 Fahrzeuge zusammenführen</button>
+      <button class="btn btn--ghost" data-ec-action="open-dialog" data-ec-dialog="mergeVehiclesModal">{{ icon("link", size="sm") }} Fahrzeuge zusammenführen</button>
       <button class="btn btn--ghost" data-ec-action="open-dialog" data-ec-dialog="newExternalModal">
         + Fremdorganisation
       </button>
@@ -188,7 +188,7 @@
 
 <dialog class="modal" id="mergeVehiclesModal">
   <div class="modal__content">
-    <div class="modal__header"><h3>Fahrzeuge zusammenführen</h3><button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">×</button></div>
+    <div class="modal__header"><h3>Fahrzeuge zusammenführen</h3><button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">{{ icon("x", size="sm") }}</button></div>
     <form id="mergeVehiclesForm" onsubmit="return previewVehicleMerge(event)">
       <div class="modal__body">
         {% for field, label in [('mergeWinner', 'Bleibt erhalten'), ('mergeLoser', 'Wird zusammengeführt')] %}
@@ -208,7 +208,7 @@
   <div class="modal__content">
     <div class="modal__header">
       <h3>Eigene Ressource anlegen</h3>
-      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">{{ icon("x", size="sm") }}</button>
     </div>
     <form method="post" action="/admin/fahrzeuge/neu">
       <div class="modal__body">
@@ -284,7 +284,7 @@
   <div class="modal__content">
     <div class="modal__header">
       <h3>Ressource bearbeiten</h3>
-      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">{{ icon("x", size="sm") }}</button>
     </div>
     <form method="post" id="editVehicleForm">
       <div class="modal__body">
@@ -350,7 +350,7 @@
   <div class="modal__content">
     <div class="modal__header">
       <h3>Fremdorganisation anlegen</h3>
-      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">{{ icon("x", size="sm") }}</button>
     </div>
     <form method="post" action="/admin/fahrzeuge/neu-extern">
       <div class="modal__body">
@@ -409,7 +409,7 @@
   <div class="modal__content">
     <div class="modal__header">
       <h3>Fremdorganisation bearbeiten</h3>
-      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">{{ icon("x", size="sm") }}</button>
     </div>
     <form method="post" id="editExternalForm">
       <div class="modal__body">

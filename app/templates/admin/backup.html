@@ -8,7 +8,7 @@
 
   <div class="admin-grid">
     <div class="admin-card">
-      <div class="admin-card__icon">📦</div>
+      <div class="admin-card__icon">{{ icon("package", size="lg") }}</div>
       <div class="admin-card__title">JSON-Export (Stammdaten)</div>
       <div class="admin-card__desc">Exportiert alle Stammdaten (Fahrzeuge, Mitglieder, Qualifikationen, Alarmtypen, Auftragsvorlagen, Lage-Hinweise, Ausrückordnung) als JSON-Datei.</div>
       <div style="margin-top:16px">
@@ -17,7 +17,7 @@
     </div>
 
     <div class="admin-card">
-      <div class="admin-card__icon">📥</div>
+      <div class="admin-card__icon">{{ icon("inbox", size="lg") }}</div>
       <div class="admin-card__title">JSON-Import (Restore)</div>
       <div class="admin-card__desc">Importiert Stammdaten aus einem zuvor erstellten JSON-Export. Bestehende Datensätze werden aktualisiert (Upsert).</div>
       <div style="margin-top:16px">
@@ -33,7 +33,7 @@
     </div>
 
     <div class="admin-card">
-      <div class="admin-card__icon">🗄️</div>
+      <div class="admin-card__icon">{{ icon("archive", size="lg") }}</div>
       <div class="admin-card__title">MariaDB-Dump</div>
       <div class="admin-card__desc">Für vollständige DB-Backups (inkl. Einsatzdaten) das CloudPanel-Backup-Tool verwenden. Die JSON-Export-Funktion hier deckt nur Stammdaten ab.</div>
     </div>

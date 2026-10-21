@@ -18,7 +18,7 @@
       <p class="page-header__sub">Basiert auf Vorlage <code>{{ pumpe.vorlage_key }}</code> — frei anpassbar</p>
       {% endif %}
     </div>
-    <a class="btn btn--secondary" href="/admin/foerderpumpen">← Zurück</a>
+    <a class="btn btn--secondary" href="/admin/foerderpumpen">{{ icon("chevron-left", size="sm") }} Zurück</a>
   </div>
 
   {% if fehler %}
@@ -151,16 +151,16 @@
                 <tr>
                   <td><input type="text" inputmode="decimal" class="form-input" x-model="pt.q"></td>
                   <td><input type="text" inputmode="decimal" class="form-input" x-model="pt.h"></td>
-                  <td><button type="button" class="btn btn--ghost btn--xs" @click="removePoint(si, pi)">×</button></td>
+                  <td><button type="button" class="btn btn--ghost btn--xs" aria-label="Punkt entfernen" @click="removePoint(si, pi)">{{ icon("x", size="xs") }}</button></td>
                 </tr>
               </template>
             </tbody>
           </table>
-          <button type="button" class="btn btn--ghost btn--xs" style="margin-top:6px;" @click="addPoint(si)">＋ Punkt</button>
+          <button type="button" class="btn btn--ghost btn--xs" style="margin-top:6px;" @click="addPoint(si)">{{ icon("plus", size="xs") }} Punkt</button>
         </div>
       </template>
 
-      <button type="button" class="btn btn--secondary btn--sm" @click="addStage()">＋ Drehzahlstufe</button>
+      <button type="button" class="btn btn--secondary btn--sm" @click="addStage()">{{ icon("plus", size="xs") }} Drehzahlstufe</button>
     </div>
 
     <div style="display:flex;gap:8px;">

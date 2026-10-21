@@ -87,11 +87,11 @@
   </div>
   <div class="page-header__actions">
     {% if slug == 'landing' %}
-    <a href="/startseite/vorschau" target="_blank" class="btn btn--ghost">Vorschau ↗</a>
+    <a href="/startseite/vorschau" target="_blank" class="btn btn--ghost">Vorschau {{ icon("external-link", size="sm") }}</a>
     {% else %}
-    <a href="/{{ slug }}" target="_blank" class="btn btn--ghost">Ansehen ↗</a>
+    <a href="/{{ slug }}" target="_blank" class="btn btn--ghost">Ansehen {{ icon("external-link", size="sm") }}</a>
     {% endif %}
-    <a href="/admin/seiten" class="btn btn--ghost">← Übersicht</a>
+    <a href="/admin/seiten" class="btn btn--ghost">{{ icon("chevron-left", size="sm") }} Übersicht</a>
   </div>
 </div>
 
@@ -114,7 +114,7 @@
 
 <section class="gallery">
   <div class="gallery__head">
-    <h2>🖼 Bildergalerie</h2>
+    <h2>{{ icon("photo", size="md") }} Bildergalerie</h2>
     <button type="button" id="btn-upload" class="btn btn--ghost btn--sm">Bild hochladen</button>
     <button type="button" id="btn-refresh" class="btn btn--ghost btn--sm">Aktualisieren</button>
   </div>
@@ -280,7 +280,7 @@
       copyBtn.addEventListener('click', async () => {
         await copyLink(img.url);
         const old = copyBtn.textContent;
-        copyBtn.textContent = '✓ kopiert';
+        copyBtn.textContent = 'kopiert';
         setTimeout(() => { copyBtn.textContent = old; }, 1200);
       });
       actions.appendChild(insertBtn);

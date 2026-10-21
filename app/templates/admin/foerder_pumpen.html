@@ -7,14 +7,14 @@
 
   <div class="page-header">
     <div>
-      <h1>🚰 Pumpen (Förderstrecke)</h1>
+      <h1>{{ modul_icon("foerderstrecke", size="md") }} Pumpen (Förderstrecke)</h1>
       <p class="page-header__sub">
         {{ pumpen|length }} Pumpentyp{{ '' if pumpen|length == 1 else 'en' }} im Katalog dieser Organisation
       </p>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <a class="btn btn--secondary" href="/admin/foerderpumpen/vorlagen">📋 Aus Vorlage</a>
-      <a class="btn btn--primary" href="/admin/foerderpumpen/neu">＋ Eigene Pumpe</a>
+      <a class="btn btn--secondary" href="/admin/foerderpumpen/vorlagen">{{ icon("clipboard-list", size="sm") }} Aus Vorlage</a>
+      <a class="btn btn--primary" href="/admin/foerderpumpen/neu">{{ icon("plus", size="sm") }} Eigene Pumpe</a>
     </div>
   </div>
 

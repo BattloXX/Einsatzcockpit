@@ -6,7 +6,7 @@
   {% include "admin/_foerder_tabs.html" %}
   <div class="page-header">
     <div>
-      <h1>🎯 Kalibrierung</h1>
+      <h1>{{ icon("target", size="md") }} Kalibrierung</h1>
       <p class="page-header__sub">Schlauch-k-Werte aus Übungsmessungen verbessern</p>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -41,7 +41,7 @@
           <td style="display:flex;gap:6px;flex-wrap:wrap;">
             <form method="post" action="/admin/foerderkalibrierung/vorschlag/{{ v.id }}/uebernehmen">
               <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-              <button class="btn btn--primary btn--xs">✓ Übernehmen</button>
+              <button class="btn btn--primary btn--xs">{{ icon("circle-check", size="xs") }} Übernehmen</button>
             </form>
             <form method="post" action="/admin/foerderkalibrierung/vorschlag/{{ v.id }}/verwerfen">
               <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
@@ -102,7 +102,7 @@
         <td>
           <form method="post" action="/admin/foerderkalibrierung/messung/{{ m.id }}/loeschen" onsubmit="return confirm('Messung löschen?');">
             <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-            <button class="btn btn--ghost btn--xs">×</button>
+            <button class="btn btn--ghost btn--xs" aria-label="Messung löschen">{{ icon("trash", size="xs") }}</button>
           </form>
         </td>
       </tr>

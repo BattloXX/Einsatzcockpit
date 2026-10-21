@@ -28,7 +28,7 @@ th.sortable a:hover { text-decoration:underline; }
 <div class="page-content">
   <div class="page-header">
     <div>
-      <h1>🖼️ Medienverwaltung</h1>
+      <h1>{{ icon("photo", size="md") }} Medienverwaltung</h1>
       <p class="page-header__sub">Alle hochgeladenen Medien der Organisation – Größe, Alter, Typ.</p>
     </div>
   </div>
@@ -51,7 +51,7 @@ th.sortable a:hover { text-decoration:underline; }
 
   <div class="mv-storage">
     <div>
-      <div style="font-size:.7rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);">💾 Speicher belegt</div>
+      <div style="font-size:.7rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);">{{ icon("device-floppy", size="sm") }} Speicher belegt</div>
       <div style="font-size:.9rem;margin-top:2px;">
         {{ storage.used_bytes|filesizeformat(true) }}
         {% if storage.quota_bytes is not none %}
@@ -103,7 +103,7 @@ th.sortable a:hover { text-decoration:underline; }
   {% macro sort_link(col, label) %}
   {% set new_dir = 'asc' if (sort == col and dir == 'desc') else 'desc' %}
   <a href="/admin/medien?org={{ current_org_id }}&sort={{ col }}&dir={{ new_dir }}&typ={{ typ|urlencode }}&q={{ q|urlencode }}&von={{ von|urlencode }}&bis={{ bis|urlencode }}&nur_bearbeitet={{ nur_bearbeitet }}">
-    {{ label }}{% if sort == col %} {{ '▲' if dir == 'asc' else '▼' }}{% endif %}
+    {{ label }}{% if sort == col %} {{ icon('chevron-up' if dir == 'asc' else 'chevron-down', size='sm') }}{% endif %}
   </a>
   {% endmacro %}
 
@@ -142,7 +142,7 @@ th.sortable a:hover { text-decoration:underline; }
           {% if r.thumb_url %}
           <img class="mv-thumb" loading="lazy" alt="{{ r.original_filename }}" src="{{ r.thumb_url }}">
           {% else %}
-          <div class="mv-thumb-placeholder">{{ '📄' if r.kind in ('pdf', 'datei') else '🎬' }}</div>
+          <div class="mv-thumb-placeholder">{{ icon('file-text' if r.kind in ('pdf', 'datei') else 'movie', size='lg') }}</div>
           {% endif %}
         </td>
         <td data-label="Dateiname">{{ r.original_filename }}</td>
@@ -157,7 +157,7 @@ th.sortable a:hover { text-decoration:underline; }
         </td>
         <td data-label="Hochgeladen von">{{ r.uploader_name }}</td>
         <td data-label="Status">
-          {% if r.annotated %}<span class="badge-pill badge-pill--green" title="Bearbeitet">✎ bearbeitet</span>{% endif %}
+          {% if r.annotated %}<span class="badge-pill badge-pill--green" title="Bearbeitet">{{ icon("pencil", size="sm") }} bearbeitet</span>{% endif %}
         </td>
         <td data-label="Aktionen">
           <a href="{{ r.file_url }}" target="_blank" rel="noopener" class="btn btn--ghost btn--sm">Ansehen</a>
@@ -169,7 +169,7 @@ th.sortable a:hover { text-decoration:underline; }
           </form>
           {% elif r.hinweis %}
           <div class="text-muted" style="font-size:.72rem;max-width:180px;">
-            🔒 {{ r.hinweis }}{% if r.context_url %} – <a href="{{ r.context_url }}">im Objekt öffnen</a>{% endif %}
+            {{ icon("lock", size="sm") }} {{ r.hinweis }}{% if r.context_url %} – <a href="{{ r.context_url }}">im Objekt öffnen</a>{% endif %}
           </div>
           {% endif %}
         </td>

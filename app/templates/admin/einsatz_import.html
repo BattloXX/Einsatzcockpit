@@ -2,7 +2,7 @@
 {% block title %}Einsatz-Import – Verwaltung{% endblock %}
 {% block admin_content %}
 <div class="page-header">
-  <div><h1>📥 Einsatz-Import</h1><p class="muted">Historische Leitstellen-Exporte einlesen</p></div>
+  <div><h1>{{ icon("inbox", size="md") }} Einsatz-Import</h1><p class="muted">Historische Leitstellen-Exporte einlesen</p></div>
 </div>
 
 {% if org_missing or request.query_params.get('error') == 'org_missing' %}

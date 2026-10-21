@@ -7,23 +7,23 @@
 
   <div class="page-header">
     <div>
-      <h1>🧵 Schläuche (Förderstrecke)</h1>
+      <h1>{{ modul_icon("foerderstrecke", size="md") }} Schläuche (Förderstrecke)</h1>
       <p class="page-header__sub">
         {{ schlaeuche|length }} Schlauchtyp{{ '' if schlaeuche|length == 1 else 'en' }} im Katalog dieser Organisation
       </p>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <button type="button" class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="schlauchNeuModal">＋ Eigener Schlauch</button>
+      <button type="button" class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="schlauchNeuModal">{{ icon("plus", size="sm") }} Eigener Schlauch</button>
     </div>
   </div>
 
   {% if request.query_params.get('fehler') %}
-  <div class="alert alert--error">⚠️ Eingabe unvollständig oder ungültig (Kürzel, Durchmesser &gt; 0, k-Wert ≥ 0 erforderlich).</div>
+  <div class="alert alert--error">{{ icon("alert-triangle", size="sm") }} Eingabe unvollständig oder ungültig (Kürzel, Durchmesser &gt; 0, k-Wert ≥ 0 erforderlich).</div>
   {% endif %}
 
   {# ── Vorlagen-Leiste ── #}
   <div class="card" style="padding:14px;margin-bottom:14px;">
-    <div style="font-size:.85rem;color:var(--text-muted);margin-bottom:8px;">📋 Aus Vorlage übernehmen (editierbare Kopie):</div>
+    <div style="font-size:.85rem;color:var(--text-muted);margin-bottom:8px;">{{ icon("clipboard-list", size="sm") }} Aus Vorlage übernehmen (editierbare Kopie):</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       {% for key, v in vorlagen.items() %}
       <form method="post" action="/admin/foerderschlaeuche/aus-vorlage/{{ key }}">
@@ -84,7 +84,7 @@
   <form method="post" action="/admin/foerderschlaeuche/neu" class="modal__content">
     <div class="modal__header">
       <h3>Neuer Schlauchtyp</h3>
-      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">{{ icon("x", size="sm") }}</button>
     </div>
     <div class="modal__body">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
@@ -133,7 +133,7 @@
   <form method="post" action="/admin/foerderschlaeuche/{{ s.id }}/bearbeiten" class="modal__content">
     <div class="modal__header">
       <h3>Schlauch bearbeiten: {{ s.kuerzel }}</h3>
-      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">{{ icon("x", size="sm") }}</button>
     </div>
     <div class="modal__body">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">

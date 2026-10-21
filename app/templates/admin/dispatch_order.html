@@ -78,7 +78,7 @@
     Bearbeiten: {{ edit_alarm.label or edit_alarm.code }} ({{ edit_alarm.code }})
   </div>
   <p class="form-hint" style="margin-bottom:10px;">
-    Haken setzen = Fahrzeug rückt aus. Per Drag-Drop am Handle (☰) die Reihenfolge ändern.
+    Haken setzen = Fahrzeug rückt aus. Per Drag-Drop am Handle ({{ icon("grip-vertical", size="sm") }}) die Reihenfolge ändern.
   </p>
 
   <form method="post" action="/admin/ausrueckordnung/{{ edit_alarm.code }}?variant={{ variant }}"
@@ -99,7 +99,7 @@
         {% for vid in checked_ids %}
         {% for v in vehicles if v.id == vid %}
         <tr data-vid="{{ v.id }}">
-          <td class="drag-handle" style="cursor:grab; font-size:1.2rem;">☰</td>
+          <td class="drag-handle" style="cursor:grab; font-size:1.2rem;">{{ icon("grip-vertical", size="sm") }}</td>
           <td><input type="checkbox" class="dispatch-checkbox" checked></td>
           <td>
             <span style="border-left:4px solid {{ v.dept.color }};padding-left:6px;">
@@ -115,7 +115,7 @@
         {# … dann die übrigen (unchecked) #}
         {% for v in vehicles if v.id not in checked_ids %}
         <tr data-vid="{{ v.id }}">
-          <td class="drag-handle" style="cursor:grab; font-size:1.2rem;">☰</td>
+          <td class="drag-handle" style="cursor:grab; font-size:1.2rem;">{{ icon("grip-vertical", size="sm") }}</td>
           <td><input type="checkbox" class="dispatch-checkbox"></td>
           <td>
             <span style="border-left:4px solid {{ v.dept.color }};padding-left:6px;">

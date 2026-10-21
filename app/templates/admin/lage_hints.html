@@ -12,7 +12,7 @@
       <h1>Lage-Hinweise</h1>
       <p class="page-header__sub">Hinweis anlegen, dann Alarmstichwörter zuweisen. Ohne Zuweisung erscheint ein Hinweis bei jedem Alarmstichwort.</p>
     </div>
-    <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newHintModal">+ Hinweis</button>
+    <button class="btn btn--primary" data-ec-action="open-dialog" data-ec-dialog="newHintModal">{{ icon("plus", size="sm") }} Hinweis</button>
   </div>
 
   {% if saved %}<div class="alert alert--success">Gespeichert.</div>{% endif %}
@@ -45,10 +45,10 @@
         </td>
         <td>
           <form method="post" action="/admin/lage-hinweise/{{ h.id }}/order/up" style="display:inline">
-            <button class="btn btn--ghost btn--xs" type="submit">↑</button>
+            <button class="btn btn--ghost btn--xs" type="submit" aria-label="Nach oben">{{ icon("chevron-up", size="xs") }}</button>
           </form>
           <form method="post" action="/admin/lage-hinweise/{{ h.id }}/order/down" style="display:inline">
-            <button class="btn btn--ghost btn--xs" type="submit">↓</button>
+            <button class="btn btn--ghost btn--xs" type="submit" aria-label="Nach unten">{{ icon("chevron-down", size="xs") }}</button>
           </form>
         </td>
         <td>
@@ -74,7 +74,7 @@
   </div>
   <p class="form-hint" style="margin-bottom:10px;">
     Haken setzen = Hinweis erscheint bei diesem Stichwort. Ohne Haken erscheint der Hinweis bei <strong>jedem</strong> Stichwort (global).
-    Reihenfolge per Drag-Drop am ☰ ändern.
+    Reihenfolge per Drag-Drop am {{ icon("grip-vertical", size="sm") }} ändern.
   </p>
   <form method="post" action="/admin/lage-hinweise/{{ edit_hint.id }}/alarms"
         id="hintAlarmForm" style="max-width:620px;">
@@ -90,7 +90,7 @@
         {% for code in edit_assigned_codes %}
         {% for atype in alarm_types if atype.code == code %}
         <tr data-code="{{ atype.code }}">
-          <td class="drag-handle" style="cursor:grab;font-size:1.2rem;color:#888;text-align:center;">☰</td>
+          <td class="drag-handle" style="cursor:grab;font-size:1.2rem;color:#888;text-align:center;">{{ icon("grip-vertical", size="sm") }}</td>
           <td><input type="checkbox" class="alarm-checkbox" checked></td>
           <td><strong>{{ atype.code }}</strong>{% if atype.label %}<span class="text-muted"> – {{ atype.label }}</span>{% endif %}</td>
         </tr>
@@ -98,7 +98,7 @@
         {% endfor %}
         {% for atype in alarm_types if atype.code not in edit_assigned_codes %}
         <tr data-code="{{ atype.code }}">
-          <td class="drag-handle" style="cursor:grab;font-size:1.2rem;color:#888;text-align:center;">☰</td>
+          <td class="drag-handle" style="cursor:grab;font-size:1.2rem;color:#888;text-align:center;">{{ icon("grip-vertical", size="sm") }}</td>
           <td><input type="checkbox" class="alarm-checkbox"></td>
           <td><strong>{{ atype.code }}</strong>{% if atype.label %}<span class="text-muted"> – {{ atype.label }}</span>{% endif %}</td>
         </tr>
@@ -184,7 +184,7 @@
   <div class="modal__content">
     <div class="modal__header">
       <h3>Neuer Lage-Hinweis</h3>
-      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">{{ icon("x", size="sm") }}</button>
     </div>
     <form method="post" action="/admin/lage-hinweise/neu">
       <div class="modal__body">
@@ -207,7 +207,7 @@
   <div class="modal__content">
     <div class="modal__header">
       <h3>Lage-Hinweis bearbeiten</h3>
-      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">×</button>
+      <button aria-label="Schließen" type="button" data-ec-action="close-dialog" class="modal__close">{{ icon("x", size="sm") }}</button>
     </div>
     <form method="post" id="editHintForm">
       <div class="modal__body">

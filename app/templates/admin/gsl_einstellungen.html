@@ -32,20 +32,20 @@
       </div>
       <div style="padding:16px;display:grid;grid-template-columns:1fr 1fr;gap:10px;">
         {% set flags = [
-          ("mi_feature_stab", "Stab (SKKM-Besetzungstafel)", "👥"),
-          ("mi_feature_funkjournal", "Funkjournal", "📻"),
-          ("mi_feature_meldungen", "Bürgermeldungen", "📥"),
-          ("mi_feature_sektoren", "Abschnitte / Sektoren", "🗂"),
-          ("mi_feature_karte", "Lagekarte", "🗺"),
-          ("mi_feature_zeitreise", "Zeitreise (Audit-Replay)", "🕐"),
-          ("mi_feature_ressourcen", "Ressourcenmanagement", "🚒"),
-          ("mi_feature_uebergreifend", "Übergreifende Meldungen", "⚠️"),
-          ("mi_feature_geraeteverleih", "Geräteverleih", "📦"),
+          ("mi_feature_stab", "Stab (SKKM-Besetzungstafel)", "users"),
+          ("mi_feature_funkjournal", "Funkjournal", "radio"),
+          ("mi_feature_meldungen", "Bürgermeldungen", "inbox"),
+          ("mi_feature_sektoren", "Abschnitte / Sektoren", "folders"),
+          ("mi_feature_karte", "Lagekarte", "map"),
+          ("mi_feature_zeitreise", "Zeitreise (Audit-Replay)", "clock"),
+          ("mi_feature_ressourcen", "Ressourcenmanagement", "firetruck"),
+          ("mi_feature_uebergreifend", "Übergreifende Meldungen", "alert-triangle"),
+          ("mi_feature_geraeteverleih", "Geräteverleih", "package"),
         ] %}
-        {% for key, label, icon in flags %}
+        {% for key, label, icon_name in flags %}
         <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:8px;border-radius:8px;border:1px solid var(--border);">
           <input type="checkbox" name="{{ key }}" value="1" {% if org_flags.get(key, True) %}checked{% endif %} style="width:18px;height:18px;">
-          <span>{{ icon }} {{ label }}</span>
+          <span>{{ icon(icon_name, size="sm") }} {{ label }}</span>
         </label>
         {% endfor %}
       </div>

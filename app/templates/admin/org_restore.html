@@ -18,7 +18,7 @@
 {% if summary %}
 <section class="card mb-4">
   <div class="card-body" style="padding:20px;">
-    <h2 style="margin-top:0;">✓ Wiederherstellung abgeschlossen</h2>
+    <h2 style="margin-top:0;">{{ icon("circle-check", size="md") }} Wiederherstellung abgeschlossen</h2>
     <p>
       {% if summary.replaced %}Organisation <strong>{{ summary.org_name }}</strong> (ID {{ summary.org_id }}) <strong>ersetzt</strong>{% else %}Neue Organisation <strong>{{ summary.org_name }}</strong> (ID {{ summary.org_id }}, Slug <code>{{ summary.slug }}</code>) angelegt{% endif %}
       aus Quell-Org {{ summary.source_org_id }} — <strong>{{ summary.rows_total }}</strong> Datensätze,
