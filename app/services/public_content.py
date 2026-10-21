@@ -7,8 +7,7 @@ nicht hart in Markup"). Die Status-Tags (Verfuegbar/Beta/In Arbeit/Geplant) sind
 bewusst hier zentral, damit sie vor Veroeffentlichung leicht mit dem echten Stand
 abgeglichen werden koennen.
 
-Die Icon-Namen verweisen auf das SVG-Set in
-``templates/public/_icons.html`` (Makro ``icon(name)``).
+Die Icon-Namen verweisen auf das globale Icon-System (``icon(name)``).
 """
 
 from __future__ import annotations
@@ -66,7 +65,7 @@ FEATURES: list[dict] = [
         "anchor": "einsatzboard",
         "title": "Einsatzboard",
         "status": "verfuegbar",
-        "icon": "dashboard",
+        "icon": "layout-dashboard",
         "image": "/seite/bild/Protokollierung.png",
         "tagline": "Die gesamte Einsatzführung in einer gemeinsamen, aktuellen Übersicht.",
         "intro": "Auf dem Einsatzboard führt die Einsatzleitung Aufträge, Meldungen und Kräfte "
@@ -103,7 +102,7 @@ FEATURES: list[dict] = [
         "anchor": "grossschadenslage",
         "title": "Großschadenslage (GSL)",
         "status": "verfuegbar",
-        "icon": "hub",
+        "icon": "topology-star-3",
         "image": "/seite/bild/Grossschadenslage.png",
         "tagline": "Auch komplexe Lagen strukturiert führen – von der Einsatzleitung bis zur einzelnen Einheit.",
         "intro": "Für ausgedehnte oder parallele Ereignisse bringt die GSL klare Abläufe in die "
@@ -140,7 +139,7 @@ FEATURES: list[dict] = [
         "anchor": "verwaltung",
         "title": "Verwaltung & Einsatzvorbereitung",
         "status": "verfuegbar",
-        "icon": "clipboard",
+        "icon": "clipboard-list",
         "image": "/seite/bild/Objektverwaltung.png",
         "tagline": "Objekte, Kontakte, Übungen, Fahrzeuge und Infrastruktur – gut vorbereitet in den nächsten Einsatz.",
         "intro": "Gute Vorbereitung spart im Einsatz wertvolle Zeit. Einsatzcockpit bündelt die "

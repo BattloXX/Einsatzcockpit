@@ -210,12 +210,13 @@ def test_strassensperren_infoscreen_csp_erlaubt_same_origin_iframe(monkeypatch):
     assert h["x-frame-options"] == "SAMEORIGIN"
 
 
-def test_statistik_infoscreen_csp_erlaubt_tailwind_und_kartenkacheln(monkeypatch):
+def test_statistik_infoscreen_csp_nutzt_lokale_assets(monkeypatch):
     from app.config import settings
     monkeypatch.setattr(settings, "TRUSTED_FRAME_ANCESTORS", "")
     h = _security_headers_for("/infoscreen/statistik/tok")
     csp = h["content-security-policy"]
-    assert "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.tailwindcss.com" in csp
+    assert "script-src 'self' 'unsafe-inline' 'unsafe-eval';" in csp
+    assert "cdn.tailwindcss.com" not in csp
     # Kartenkacheln laufen seit dem same-origin-Tile-Proxy (app/routers/ui_map_tiles.py)
     # ueber 'self' statt einer externen OSM-Domain in der CSP.
     assert "https://tile.openstreetmap.org" not in csp

@@ -196,3 +196,9 @@ a { color: inherit; }
   .lp-hero__cta { flex-direction: column; align-items: stretch; }
   .lp-hero__cta .lp-btn { width: 100%; }
 }
+
+/* Zentrale Icons auf eigenständigen öffentlichen Seiten. */
+.ecp-icon{display:inline-block;vertical-align:-0.2em;flex-shrink:0}
+.ecp-icon--xs{width:16px;height:16px}.ecp-icon--sm{width:20px;height:20px}.ecp-icon--md{width:24px;height:24px}.ecp-icon--lg{width:32px;height:32px}
+
+.lp-feature__icon .ecp-icon{width:1em;height:1em}

@@ -11,8 +11,6 @@ app/seed_data.py 1
 app/services/incident_service.py 3
 app/services/katplan_typen.py 8
 app/services/objekt_service.py 18
-app/services/site_pages.py 6
-app/services/weather_service.py 11
 app/static/js/einsatz_info.js 4
 app/static/js/lagefuehrung.js 1
 app/templates/incident/lagefuehrung_druck.html 6
@@ -25,14 +23,9 @@ app/templates/incident_major/druck.html 4
 app/templates/incident_major/druck_bericht.html 4
 app/templates/incident_major/karte.html 7
 app/templates/incident_major/karte_druck.html 2
-app/templates/incident_major/public_danke.html 1
-app/templates/incident_major/public_report.html 9
-app/templates/incident_major/public_sms_error.html 3
-app/templates/incident_major/public_verify.html 5
 app/templates/objekt/_einsatz_inhalt.html 2
 app/templates/objekt/_gefahren.html 3
-app/templates/objekt/infoscreen_alarm.html 52
-app/templates/objekt/infoscreen_verwaltung.html 2
+app/templates/objekt/infoscreen_alarm.html 1
 app/templates/pdf/_emoji_font_face.html 6
 app/templates/pdf/_troop_block.html 1
 app/templates/pdf/foerderstrecke.html 5
@@ -41,8 +34,5 @@ app/templates/pdf/katplan.html 1
 app/templates/pdf/lagebericht.html 6
 app/templates/pdf/objektblatt.html 10
 app/templates/pdf/troop_protocol.html 2
-app/templates/public/alarm_summary.html 2
-app/templates/public/page.html 1
 app/templates/termin/druck.html 1
-app/templates/weather/_data_section.html 11
-app/templates/weather/index.html 8
+app/templates/weather/_data_section.html 1

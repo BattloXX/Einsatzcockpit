@@ -30,3 +30,22 @@ def test_public_pages_and_feature_anchors(client):
     functions = client.get("/funktionen")
     for anchor in ("einsatzinfo", "einsatzboard", "grossschadenslage", "verwaltung", "schnittstellen"):
         assert f'id="{anchor}"' in functions.text
+
+
+def test_public_content_icons_are_vendored():
+    from app.core.icons import icon_namen
+    from app.services.public_content import PRINCIPLES
+
+    assert {item["icon"] for item in [*FEATURES, *PRINCIPLES]} <= icon_namen()
+
+
+def test_cms_default_icons_render_without_evaluating_saved_jinja():
+    from app.core.templating import templates
+    from app.services.site_pages import DEFAULT_HTML
+
+    template = templates.get_template("public/page.html")
+    html = template.render(body_html=DEFAULT_HTML["landing"], preview=False, contact=False)
+    assert html.count('<svg class="ecp-icon ecp-icon--lg"') == 6
+    assert 'data-ecp-icon=' not in html
+    saved = template.render(body_html='{{ 7 * 7 }} 🫁', preview=False, contact=False)
+    assert '{{ 7 * 7 }} 🫁' in saved

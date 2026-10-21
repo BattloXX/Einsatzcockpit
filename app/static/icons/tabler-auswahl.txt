@@ -192,3 +192,9 @@ wind
 world
 x
 zoom-in
+brand-github
+satellite
+topology-star-3
+code
+heart
+server

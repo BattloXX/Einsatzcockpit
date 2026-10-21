@@ -1,5 +1,4 @@
 {% extends "public/base.html" %}
-{% from "public/_icons.html" import icon %}
 {% from "public/_macros.html" import feature_card, terminal_panel %}
 
 {% block page_title %}Das digitale Cockpit für den Feuerwehreinsatz{% endblock %}
@@ -19,7 +18,7 @@
       <div class="pub-hero__actions">
         <a class="pub-btn pub-btn--primary pub-btn--lg" href="/funktionen">Funktionen entdecken</a>
         <a class="pub-btn pub-btn--outline pub-btn--lg" href="{{ public_github_url }}" target="_blank" rel="noopener">
-          {{ icon("github") }} Auf GitHub ansehen
+          {{ icon("brand-github") }} Auf GitHub ansehen
         </a>
       </div>
     </div>
@@ -70,7 +69,7 @@
         Infrastruktur betreibbar.</p>
       <div style="margin-top:28px">
         <a class="pub-btn pub-btn--primary" href="{{ public_github_url }}" target="_blank" rel="noopener">
-          {{ icon("github") }} Zum GitHub-Repository
+          {{ icon("brand-github") }} Zum GitHub-Repository
         </a>
       </div>
     </div>
