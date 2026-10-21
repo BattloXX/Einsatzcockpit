@@ -30,6 +30,7 @@ from app.models.objekt import (
 from app.models.suche import SearchDocument, SearchOutbox
 from app.services.suche.indexer import indexiere, neuaufbau
 from app.services.suche.quellen import ADAPTER, adapter_fuer, lade_adapter
+from app.services.suche.vektor_sync import plane_fehlende, synchronisiere_vektoren
 
 logger = logging.getLogger(__name__)
 _OFFEN = ("pending", "retry")
@@ -147,6 +148,8 @@ def _index_ids(db: Session, org_id: int, quelle: str, feld: str, ident: str) -> 
 
 def loese_auf(db: Session, org_id: int, quelle: str, quell_id: str) -> list[tuple[str, str]]:
     """Liefert deduplizierte Adapter-Paare, ohne Index oder Outbox zu veraendern."""
+    if quelle == "vektor":
+        return [("vektor", quell_id)]
     if quelle == "neuaufbau":
         adapter_fuer(quell_id)  # Unbekannte Quellen werden als fehlerhaft behandelt.
         return [("neuaufbau", quell_id)]
@@ -212,6 +215,9 @@ def verarbeite_faellige(db: Session, limit: int = 50) -> int:
                 for quelle, quell_id in loese_auf(db, job.org_id, job.quelle, job.quell_id):
                     if quelle == "neuaufbau":
                         neuaufbau(db, job.org_id, quell_id)
+                    elif quelle == "vektor":
+                        if settings.SEARCH_SEMANTIC_ENABLED:
+                            synchronisiere_vektoren(db, job.org_id, int(quell_id))
                     else:
                         indexiere(db, job.org_id, quelle, quell_id)
             job.status = "done"
@@ -246,6 +252,9 @@ def abgleich(db: Session) -> None:
     org_ids = db.scalars(select(OrgSettings.org_id).where(OrgSettings.suche_aktiv.is_(True))).all()
     for org_id in org_ids:
         neuaufbau(db, org_id)
+        if settings.SEARCH_SEMANTIC_ENABLED:
+            plane_fehlende(db, org_id)
+            db.commit()
 
 
 def _iteration(mit_abgleich: bool) -> None:

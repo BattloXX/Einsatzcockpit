@@ -12,7 +12,7 @@ from app.config import settings
 from app.core.tenant import set_tenant_context
 from app.models.master import FireDept
 from app.models.suche import SearchChunk, SearchDocument
-from app.services.suche import vektor
+from app.services.suche import embedding, vektor, vektor_sync
 
 
 @pytest.mark.skipif(not os.environ.get("MARIADB_TEST_URL"), reason="MARIADB_TEST_URL nicht gesetzt")
@@ -67,6 +67,33 @@ def test_suche_vektor(monkeypatch):
             assert vektor.lade_hashes(db, doc.org_id, doc.id) == {}
             vektor.loesche_dokument(db, docs[1].org_id, docs[1].id)
             assert vektor.lade_hashes(db, docs[1].org_id, docs[1].id) == {}
+
+            def embed(self, paare):
+                return [[1.0, 0.0, 0.0] if text == "Zufahrt" else [0.0, 1.0, 0.0]
+                        for titel, text in paare]
+
+            monkeypatch.setattr(embedding.EmbeddingProvider, "embed_dokumente", embed)
+            doc = SearchDocument(org_id=org_ids[0], quelle="katplan_element", quell_id=uuid4().hex,
+                                 titel="Synchronisation", inhalt_hash="e" * 64)
+            doc.chunks = [SearchChunk(org_id=org_ids[0], chunk_nr=i, text=inhalt, inhalt_hash=hashwert * 64)
+                          for i, (inhalt, hashwert) in enumerate([("Zufahrt", "f"), ("Sammelplatz", "a")])]
+            db.add(doc)
+            db.flush()
+            assert vektor_sync.synchronisiere_vektoren(db, doc.org_id, doc.id) == "synchron"
+            db.commit()
+            treffer = vektor.knn(db, doc.org_id, [1, 0, 0], ["katplan_element"], 2)
+            assert [t[1] for t in treffer] == [c.id for c in doc.chunks]
+            assert [t[2] for t in treffer] == pytest.approx([0, 1], abs=1e-5)
+            chunk = doc.chunks[0]
+            chunk.text = "Zufahrt geaendert"
+            chunk.inhalt_hash = "b" * 64
+            db.flush()
+            assert vektor_sync.synchronisiere_vektoren(db, doc.org_id, doc.id) == "synchron"
+            db.commit()
+            assert vektor.lade_hashes(db, doc.org_id, doc.id)[chunk.id] == "b" * 64
+            treffer = vektor.knn(db, doc.org_id, [1, 0, 0], ["katplan_element"], 2)
+            assert {t[1] for t in treffer} == {c.id for c in doc.chunks}
+            assert [t[2] for t in treffer] == pytest.approx([1, 1], abs=1e-5)
     finally:
         try:
             with Session(engine) as db:

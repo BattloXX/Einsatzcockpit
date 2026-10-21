@@ -420,6 +420,28 @@ def suche_vektor_init() -> None:
         print(f"Vektortabelle {tabellenname()} ist bereit.")
 
 
+def suche_vektor_aufbau(org_id: int | None = None) -> None:
+    """Plant den Vektoraufbau; Embeddings erstellt ausschliesslich der Worker."""
+    from sqlalchemy import select
+
+    from app.models.master import OrgSettings
+    from app.models.suche import SearchDocument
+    from app.services.suche.vektor import stelle_tabelle_sicher
+    from app.services.suche.vektor_sync import plane_vektor_job
+
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        stelle_tabelle_sicher(db)
+        dokumente = select(SearchDocument).join(
+            OrgSettings, OrgSettings.org_id == SearchDocument.org_id,
+        ).where(OrgSettings.suche_aktiv.is_(True))
+        if org_id is not None:
+            dokumente = dokumente.where(SearchDocument.org_id == org_id)
+        anzahl = sum(plane_vektor_job(db, doc.org_id, doc.id) for doc in db.scalars(dokumente))
+        db.commit()
+        print(f"{anzahl} Vektor-Jobs geplant.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="app.cli")
     sub = parser.add_subparsers(dest="command")
@@ -456,6 +478,8 @@ def main() -> None:
     org_wahl.add_argument("--alle", action="store_true")
     p_suche.add_argument("--quelle", choices=("objekt", "objekt_dokument_seite", "katplan_element", "katplan_seite"))
     sub.add_parser("suche-vektor-init", help="Vektortabelle pruefen und anlegen")
+    p_vektor = sub.add_parser("suche-vektor-aufbau", help="Vektor-Jobs fuer Suchdokumente planen")
+    p_vektor.add_argument("--org", type=int)
 
     args = parser.parse_args()
     if args.command == "create-admin":
@@ -475,6 +499,8 @@ def main() -> None:
         suche_neuaufbau(args.org, args.alle, args.quelle)
     elif args.command == "suche-vektor-init":
         suche_vektor_init()
+    elif args.command == "suche-vektor-aufbau":
+        suche_vektor_aufbau(args.org)
     elif args.command == "backup-upload":
         sys.exit(backup_upload(args.all))
     else:
