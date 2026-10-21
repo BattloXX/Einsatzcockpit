@@ -4,9 +4,6 @@
 {% block content %}
 {% set user_roles = user.roles|map(attribute='code')|list %}
 {% set is_admin = ('admin' in user_roles or 'org_admin' in user_roles or 'system_admin' in user_roles) %}
-{% set is_fahrtenbuch = request.state.fahrtenbuch_modul_aktiv and ('fahrtenbuch_admin' in user_roles or 'incident_leader' in user_roles or 'recorder' in user_roles or is_admin) %}
-{% set is_mailing = request.state.mailing_module_enabled and ('mailing_admin' in user_roles or 'mailing_sender' in user_roles or is_admin) %}
-{% set is_as_pruefung = request.state.atemschutz_pruefung_modul_aktiv %}
 <div class="page-header">
   <h2 class="page-title">Übersicht</h2>
   {% if darf_einsatz_anlegen %}
@@ -94,55 +91,30 @@
   <h3 class="section-title">Module</h3>
   <div class="module-grid">
     <a href="/lage" class="module-btn"><span class="module-btn__icon">{{ modul_icon("lage", size="lg") }}</span><span class="module-btn__label">Lage</span></a>
-    {% if request.state.probenplanung_enabled %}
-    <a href="/probenplanung" class="module-btn"><span class="module-btn__icon">{{ modul_icon("probenplan", size="lg") }}</span><span class="module-btn__label">Probenplan</span></a>
-    {% endif %}
-    {% if is_fahrtenbuch %}
-    <a href="/verwaltung/fahrten" class="module-btn"><span class="module-btn__icon">{{ modul_icon("fahrtenbuch", size="lg") }}</span><span class="module-btn__label">Fahrtenbuch</span></a>
-    {% endif %}
-    {% if request.state.objekt_enabled %}
-    <a href="/objekte/" class="module-btn"><span class="module-btn__icon">{{ modul_icon("objekte", size="lg") }}</span><span class="module-btn__label">Objekte</span></a>
-    {% endif %}
-    {% if request.state.kontakte_enabled and can_view_kontakt_directory(request) %}
-    <a href="/kontakte" class="module-btn"><span class="module-btn__icon">{{ modul_icon("kontakte", size="lg") }}</span><span class="module-btn__label">Kontakte</span></a>
-    {% endif %}
-    {% if show_strassensperren %}<a href="/strassensperren" class="module-btn"><span class="module-btn__icon">{{ modul_icon("strassensperren", size="lg") }}</span><span class="module-btn__label">Straßensperren</span>{% if sperren_kennzahlen %}<span class="module-btn__badge{% if sperren_kennzahlen.aktiv > 0 %} module-btn__badge--active{% endif %}">{{ sperren_kennzahlen.aktiv }} aktiv · {{ sperren_kennzahlen.geplant }} geplant</span>{% endif %}</a>{% endif %}
-    {% if request.state.planspiel_enabled and (is_admin or 'uebungsleiter' in user_roles or 'uebungsbeobachter' in user_roles) %}
-    <a href="/planspiele" class="module-btn"><span class="module-btn__icon">{{ modul_icon("planspiele", size="lg") }}</span><span class="module-btn__label">Planspiele</span></a>
-    {% endif %}
-    {% if can_view_katplan(request) %}
-    <a href="/katastrophenplaene" class="module-btn">
-      <span class="module-btn__icon">{{ modul_icon("katplan", size="lg") }}</span>
-      <span class="module-btn__label">Katastrophenpläne</span>
-      {% if katplan_badge and (katplan_badge.faellig or katplan_badge.in_pruefung) %}
-        <span class="module-btn__badge module-btn__badge--active">{{ katplan_badge.faellig }} fällige Wiedervorlagen · {{ katplan_badge.in_pruefung }} in Prüfung</span>
-      {% endif %}
-    </a>
-    {% endif %}
-    {% if is_as_pruefung %}
-    <a href="/atemschutz-pruefung" class="module-btn"><span class="module-btn__icon">{{ modul_icon("atemschutz", size="lg") }}</span><span class="module-btn__label">Atemschutzprüfung</span></a>
-    {% endif %}
-    {% if WEATHER_ENABLED %}
+    {% set gruppen = modul_gruppen(request, user) %}
+    {% if WEATHER_ENABLED and not (gruppen|selectattr('key', 'equalto', 'einsatz')|list) %}
     <a href="/wetter" class="module-btn"><span class="module-btn__icon">{{ modul_icon("wetter", size="lg") }}</span><span class="module-btn__label">Wetter</span></a>
     {% endif %}
-    {% if not request.state.probenplanung_enabled %}
-    <a href="/termine" class="module-btn"><span class="module-btn__icon">{{ modul_icon("teilnahme", size="lg") }}</span><span class="module-btn__label">Teilnahme</span></a>
+    {% for gruppe in gruppen %}
+    {% for e in gruppe.eintraege %}
+    <a href="{{ e.href }}" class="module-btn">
+      <span class="module-btn__icon">{{ modul_icon(e.icon, size="lg") }}</span>
+      <span class="module-btn__label">{% if e.key == 'atemschutz_pruefung' %}Atemschutzprüfung{% else %}{{ e.label }}{% endif %}</span>
+      {% if e.key == 'strassensperren' %}
+        {% if sperren_kennzahlen %}<span class="module-btn__badge{% if sperren_kennzahlen.aktiv > 0 %} module-btn__badge--active{% endif %}">{{ sperren_kennzahlen.aktiv }} aktiv · {{ sperren_kennzahlen.geplant }} geplant</span>{% endif %}
+      {% elif e.key == 'katplan' %}
+        {% if katplan_badge and (katplan_badge.faellig or katplan_badge.in_pruefung) %}
+          <span class="module-btn__badge module-btn__badge--active">{{ katplan_badge.faellig }} fällige Wiedervorlagen · {{ katplan_badge.in_pruefung }} in Prüfung</span>
+        {% endif %}
+      {% endif %}
+    </a>
+    {% endfor %}
+    {% if WEATHER_ENABLED and gruppe.key == 'einsatz' %}
+    <a href="/wetter" class="module-btn"><span class="module-btn__icon">{{ modul_icon("wetter", size="lg") }}</span><span class="module-btn__label">Wetter</span></a>
     {% endif %}
-    {% if request.state.uas_module_enabled %}
-    <a href="/uas/einsaetze" class="module-btn"><span class="module-btn__icon">{{ modul_icon("uas", size="lg") }}</span><span class="module-btn__label">Drohne / UAS</span></a>
-    {% endif %}
-    {% if request.state.nachschlagewerke_enabled %}
-    <a href="/nachschlagewerke/" class="module-btn"><span class="module-btn__icon">{{ modul_icon("nachschlagewerke", size="lg") }}</span><span class="module-btn__label">Nachschlagewerke</span></a>
-    {% endif %}
-    {% if request.state.foerderstrecke_enabled %}
-    <a href="/foerderstrecke/" class="module-btn"><span class="module-btn__icon">{{ modul_icon("foerderstrecke", size="lg") }}</span><span class="module-btn__label">Förderstrecke</span></a>
-    {% endif %}
-    {% if is_mailing %}
-    <a href="/mailing/" class="module-btn"><span class="module-btn__icon">{{ modul_icon("mailing", size="lg") }}</span><span class="module-btn__label">Mailing</span></a>
-    {% endif %}
-    <a href="/statistik" class="module-btn"><span class="module-btn__icon">{{ modul_icon("statistik", size="lg") }}</span><span class="module-btn__label">Statistik</span></a>
+    {% endfor %}
     <a href="/archiv" class="module-btn"><span class="module-btn__icon">{{ modul_icon("archiv", size="lg") }}</span><span class="module-btn__label">Archiv</span></a>
-    {% if is_admin %}
+    {% if is_admin or 'fahrtenbuch_admin' in user_roles %}
     <a href="/admin" class="module-btn"><span class="module-btn__icon">{{ modul_icon("verwaltung", size="lg") }}</span><span class="module-btn__label">Verwaltung</span></a>
     {% endif %}
     <a href="https://github.com/BattloXX/Einsatzcockpit/wiki" target="_blank" rel="noopener" class="module-btn"><span class="module-btn__icon">{{ modul_icon("hilfe", size="lg") }}</span><span class="module-btn__label">Hilfe</span></a>
