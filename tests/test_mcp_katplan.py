@@ -30,6 +30,7 @@ from tests.test_mcp_strassensperren import _rpc, _rufe
 NAMEN = {
     "katplan_liste", "katplan_lesen", "katplan_suchen", "katplan_elemente", "katplan_element_lesen",
     "katplan_orte_suchen", "katplan_dokument_auszug", "katplan_verknuepfungen",
+    "katplan_ueberpruefung_bestaetigen",
 }
 
 

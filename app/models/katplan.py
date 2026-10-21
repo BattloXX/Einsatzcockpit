@@ -55,6 +55,16 @@ class KatplanPlan(TenantScoped, Base):
     )
     status: Mapped[str] = mapped_column(sa.String(20), nullable=False, default="entwurf")
     aktuelle_version_id: Mapped[int | None] = mapped_column(sa.BigInteger, nullable=True)
+    pruef_verantwortlich_user_id: Mapped[int | None] = mapped_column(
+        sa.BigInteger, sa.ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+    zuletzt_geprueft_von_id: Mapped[int | None] = mapped_column(
+        sa.BigInteger, sa.ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+    pruefintervall_monate: Mapped[int | None] = mapped_column(sa.Integer, nullable=True)
+    zuletzt_geprueft_am: Mapped[date | None] = mapped_column(sa.Date, nullable=True)
+    wiedervorlage_vorab_erinnert_am: Mapped[date | None] = mapped_column(sa.Date, nullable=True)
+    wiedervorlage_eskaliert_am: Mapped[date | None] = mapped_column(sa.Date, nullable=True)
     wiedervorlage_am: Mapped[date | None] = mapped_column(sa.Date, nullable=True)
     wiedervorlage_erinnert_am: Mapped[date | None] = mapped_column(sa.Date, nullable=True)
     version: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=0)

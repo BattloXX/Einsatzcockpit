@@ -1,10 +1,11 @@
 """Freigabeworkflow und unveraenderliche, tenantgebundene Snapshots."""
 
+import calendar
 import difflib
 import hashlib
 import json
 import re
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 from sqlalchemy import func
@@ -32,6 +33,44 @@ from app.services.katplan_anhang_service import HASH_FELDER, anhang_snapshot
 from app.services.katplan_link_service import link_snapshot
 from app.services.katplan_link_service import links_aus_version as links_aus_version
 from app.services.katplan_service import _HTMLText, protokolliere
+
+
+def pruefintervall(plan: KatplanPlan) -> int:
+    from app.services.katplan_typen import PLANARTEN
+
+    art = PLANARTEN.get(plan.planart)
+    return plan.pruefintervall_monate or (art.pruefintervall_monate if art else 24)
+
+
+def naechste_pruefung(von: date, monate: int) -> date:
+    jahr, monat = divmod(von.year * 12 + von.month - 1 + monate, 12)
+    monat += 1
+    return date(jahr, monat, min(von.day, calendar.monthrange(jahr, monat)[1]))
+
+
+def _setze_geprueft(plan: KatplanPlan, user: User, heute: date) -> None:
+    plan.zuletzt_geprueft_am = heute
+    plan.zuletzt_geprueft_von_id = user.id
+    plan.wiedervorlage_am = naechste_pruefung(heute, pruefintervall(plan))
+    plan.wiedervorlage_erinnert_am = None
+    plan.wiedervorlage_vorab_erinnert_am = None
+    plan.wiedervorlage_eskaliert_am = None
+
+
+def ueberpruefung_bestaetigen(db: Session, plan: KatplanPlan, user: User,
+                             kommentar: str | None = None) -> None:
+    if not plan.aktuelle_version_id:
+        raise ValueError("Nur freigegebene Pläne können als überprüft bestätigt werden.")
+    if plan.status != "freigegeben":
+        raise ValueError("Der Plan hat unveröffentlichte Änderungen – bitte zuerst freigeben.")
+    if kommentar and len(kommentar) > 2000:
+        raise ValueError("Der Kommentar darf höchstens 2000 Zeichen enthalten.")
+    db.add(KatplanPruefung(org_id=plan.org_id, plan_id=plan.id, aktion="ueberprueft",
+                         version_id=plan.aktuelle_version_id, kommentar=kommentar, user_id=user.id))
+    protokolliere(db, plan, "plan", "ueberprueft", user, neu=kommentar)
+    _setze_geprueft(plan, user, now_local(db.get(FireDept, plan.org_id) if plan.org_id else None).date())
+    plan.version += 1
+    plan.aktualisiert_am, plan.aktualisiert_von_id = _utcnow(), user.id
 
 
 def _json(wert: Any) -> str:
@@ -138,6 +177,7 @@ def freigeben(db: Session, plan: KatplanPlan, user: User,
     hash_daten = json.loads(json.dumps([kopf, elemente], default=lambda d: d.isoformat()))
     # Nur die Verknuepfungsstruktur ist Planinhalt. Live-Stammdaten im historischen
     # Snapshot duerfen allein keine erneute Freigabe ermoeglichen.
+    hash_daten[0].pop("wiedervorlage_am", None)
     hash_daten[0]["links"] = _link_struktur(hash_daten[0].get("links", []))
     hash_daten[0]["anhaenge"] = [{f: a.get(f) for f in HASH_FELDER}
                                  for a in hash_daten[0]["anhaenge"]]
@@ -166,7 +206,7 @@ def freigeben(db: Session, plan: KatplanPlan, user: User,
     for daten in elemente:
         db.add(KatplanVersionElement(org_id=plan.org_id, version_id=version.id, **daten))
     plan.aktuelle_version_id = version.id
-    plan.wiedervorlage_erinnert_am = None
+    _setze_geprueft(plan, user, now_local(db.get(FireDept, plan.org_id) if plan.org_id else None).date())
     _wechsel(db, plan, user, "freigegeben", "freigegeben", aenderungsnotiz, version.id)
     return version
 
@@ -294,13 +334,28 @@ def pruefe_wiedervorlagen(db: Session) -> list[dict]:
     heute_org: dict[int | None, date] = {}
     for plan in db.query(KatplanPlan).filter(
         KatplanPlan.wiedervorlage_am.is_not(None), KatplanPlan.status != "archiviert",
-        KatplanPlan.wiedervorlage_erinnert_am.is_(None),
+        KatplanPlan.wiedervorlage_eskaliert_am.is_(None),
     ).all():
         if plan.org_id not in heute_org:
             heute_org[plan.org_id] = now_local(db.get(FireDept, plan.org_id) if plan.org_id else None).date()
         heute = heute_org[plan.org_id]
-        if plan.wiedervorlage_am and plan.wiedervorlage_am <= heute:
+        termin = plan.wiedervorlage_am
+        if termin is None:
+            continue
+        if heute >= termin + timedelta(days=30) and plan.wiedervorlage_eskaliert_am is None:
+            art = "eskalation"
+            plan.wiedervorlage_eskaliert_am = heute
+            plan.wiedervorlage_erinnert_am = plan.wiedervorlage_erinnert_am or heute
+        elif heute >= termin and plan.wiedervorlage_erinnert_am is None:
+            art = "faellig"
             plan.wiedervorlage_erinnert_am = heute
-            treffer.append({"org_id": plan.org_id, "plan_id": plan.id, "titel": plan.titel,
-                            "wiedervorlage_am": plan.wiedervorlage_am.isoformat()})
+        elif (heute >= termin - timedelta(days=14) and plan.wiedervorlage_vorab_erinnert_am is None
+              and plan.wiedervorlage_erinnert_am is None):
+            art = "vorab"
+            plan.wiedervorlage_vorab_erinnert_am = heute
+        else:
+            continue
+        treffer.append({"org_id": plan.org_id, "plan_id": plan.id, "titel": plan.titel,
+                        "wiedervorlage_am": termin.isoformat(), "art": art,
+                        "verantwortlich_user_id": plan.pruef_verantwortlich_user_id})
     return treffer

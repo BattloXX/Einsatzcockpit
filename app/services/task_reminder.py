@@ -214,12 +214,23 @@ async def _check_katplan_wiedervorlagen() -> None:
                 empfaenger = [u for u in users if "katplan_freigeber" in u.role_codes]
                 if not empfaenger:
                     empfaenger = [u for u in users if u.role_codes & {"org_admin", "admin"}]
+                person = db.query(User).filter_by(org_id=org_id, id=item["verantwortlich_user_id"]).first()
+                verantwortlich = [u for u in users if u.id == item["verantwortlich_user_id"]]
+                if item["art"] == "eskalation":
+                    empfaenger = list({u.id: u for u in [*empfaenger, *verantwortlich]}.values())
+                elif verantwortlich:
+                    empfaenger = verantwortlich
+                betreff = {"vorab": "Überprüfung in 14 Tagen", "faellig": "Überprüfung fällig",
+                           "eskalation": "Überprüfung überfällig"}[item["art"]]
+                termin = datetime.fromisoformat(item["wiedervorlage_am"]).strftime("%d.%m.%Y")
                 smtp_cfg = mail_service._org_smtp_cfg(db, org_id) or mail_service.get_smtp_cfg(db)
                 link = f"{settings.effective_public_base_url.rstrip('/')}/plaene/{item['plan_id']}"
                 for user in empfaenger:
                     msg = mail_service._build_message(
-                        to=user.email or "", subject=f"Überprüfung fällig: {item['titel']}",
-                        body_txt=f"Der Plan {item['titel']} ist zur Überprüfung fällig.\n\n{link}",
+                        to=user.email or "", subject=f"{betreff}: {item['titel']}",
+                        body_txt=(f"Plan: {item['titel']}\nNächste Überprüfung: {termin}\n"
+                                  f"Verantwortliche Person: {person.display_name if person else 'Nicht zugeordnet'}"
+                                  f"\n\n{link}"),
                         smtp_cfg=smtp_cfg,
                     )
                     nachrichten.append({"org_id": org_id, "msg": msg, "smtp_cfg": smtp_cfg})

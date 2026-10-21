@@ -60,6 +60,7 @@ from app.services.katplan_service import (
     naechste_kennung,
     protokolliere,
     pruefe_version,
+    pruefverantwortliche,
     sortiere_baum,
     stammdaten_aendern,
     validiere_element_felder,
@@ -71,6 +72,7 @@ from app.services.katplan_ziel_service import ziel_laden, ziel_suchen, ziel_verf
 from app.services.katplan_zugriff import (
     darf_bearbeiten,
     darf_freigeben,
+    darf_ueberpruefung_bestaetigen,
     require_katplan_bearbeiten,
     require_katplan_freigeben,
     require_katplan_lesen,
@@ -101,6 +103,11 @@ def _plan(db: Session, plan_id: int, user: User) -> KatplanPlan:
     return plan
 
 
+def _benutzername(db: Session, user_id: int | None, org_id: int | None) -> str:
+    person = db.query(User).filter_by(id=user_id, org_id=org_id).first() if user_id else None
+    return person.display_name if person else "-"
+
+
 def _kontext(db: Session, user: User, plan: KatplanPlan | None = None) -> dict[str, Any]:
     protokoll = []
     aktuelle_version = None
@@ -123,6 +130,10 @@ def _kontext(db: Session, user: User, plan: KatplanPlan | None = None) -> dict[s
     return {"user": user, "plan": plan, "gefahrenarten": KATPLAN_GEFAHRENARTEN, "planarten": PLANARTEN,
             "status_labels": KATPLAN_STATUS_LABELS, "can_edit": darf_bearbeiten(user),
             "can_release": darf_freigeben(user), "protokoll": protokoll,
+            "can_confirm_review": bool(plan and darf_ueberpruefung_bestaetigen(user, plan)),
+            "pruef_benutzer": pruefverantwortliche(db, user.org_id),
+            "pruef_verantwortlich": _benutzername(db, plan.pruef_verantwortlich_user_id, plan.org_id) if plan else None,
+            "zuletzt_geprueft_von": _benutzername(db, plan.zuletzt_geprueft_von_id, plan.org_id) if plan else None,
             "aktuelle_version": aktuelle_version, "freigegeben_von": freigegeben_von,
             "heute": now_local(user.org).date(),
             **(_editor_kontext(db, plan) if plan and darf_bearbeiten(user) else {}),
@@ -135,18 +146,22 @@ class Stammdaten:
         self, planart: str = Form("katastrophenplan"), titel: str = Form(""), gefahrenarten: list[str] = Form([]),
         beschreibung_html: str = Form(""), geltungsbereich: str = Form(""),
         verantwortliche_stelle: str = Form(""), wiedervorlage_am: str = Form(""),
+        pruef_verantwortlich_user_id: str = Form(""), pruefintervall_monate: str = Form(""),
     ):
         self.form = {"planart": planart, "titel": titel, "gefahrenarten": gefahrenarten,
                      "beschreibung_html": bereinige_beschreibung(beschreibung_html) or "",
                      "geltungsbereich": geltungsbereich,
-                     "verantwortliche_stelle": verantwortliche_stelle, "wiedervorlage_am": wiedervorlage_am}
+                     "verantwortliche_stelle": verantwortliche_stelle, "wiedervorlage_am": wiedervorlage_am,
+                     "pruef_verantwortlich_user_id": pruef_verantwortlich_user_id,
+                     "pruefintervall_monate": pruefintervall_monate}
         self.fehler: str | None = None
         self.werte = {}
         try:
             self.werte = validiere_stammdaten(
                 planart=planart, titel=titel, gefahrenarten=gefahrenarten, beschreibung_html=beschreibung_html,
                 geltungsbereich=geltungsbereich, verantwortliche_stelle=verantwortliche_stelle,
-                wiedervorlage_am=wiedervorlage_am)
+                wiedervorlage_am=wiedervorlage_am, pruefintervall_monate=pruefintervall_monate,
+                pruef_verantwortlich_user_id=pruef_verantwortlich_user_id)
         except ValueError as exc:
             self.fehler = str(exc)
 
@@ -406,7 +421,8 @@ def anhang_loeschen(plan_id: int, uuid: str, request: Request,
 
 
 @router.get("")
-def liste(request: Request, gefahr: str = "", status: str = "", q: str = "", archiv: int = 0, planart: str = "",
+def liste(request: Request, gefahr: str = "", status: str = "", q: str = "", archiv: int = 0,
+          planart: str = "", pruefung: str = "",
           db: Session = Depends(get_db), user: User = Depends(require_katplan_lesen)):
     query = db.query(KatplanPlan).filter(KatplanPlan.org_id == user.org_id)
     if not darf_bearbeiten(user):
@@ -419,6 +435,8 @@ def liste(request: Request, gefahr: str = "", status: str = "", q: str = "", arc
         query = query.filter(KatplanPlan.id == -1)
     if q.strip() and darf_bearbeiten(user):
         query = query.filter(KatplanPlan.titel.ilike(f"%{q.strip()}%"))
+    if pruefung == "faellig":
+        query = query.filter(KatplanPlan.wiedervorlage_am <= now_local(user.org).date())
     plaene: list[Any] = query.order_by(KatplanPlan.aktualisiert_am.desc()).all()
     version_ids = [p.aktuelle_version_id for p in plaene if p.aktuelle_version_id]
     versionen = {v.id: v for v in db.query(KatplanVersion).filter(
@@ -432,9 +450,8 @@ def liste(request: Request, gefahr: str = "", status: str = "", q: str = "", arc
                 continue
             daten = json.loads(v.plan_json)
             daten.setdefault("planart", "katastrophenplan")
-            termin = daten.get("wiedervorlage_am")
             leseliste.append({**daten, "id": plan.id, "status": "freigegeben",
-                              "wiedervorlage_am": date.fromisoformat(termin) if termin else None,
+                              "wiedervorlage_am": plan.wiedervorlage_am,
                               "aktualisiert_am": v.freigegeben_am})
         plaene = leseliste
         if q.strip():
@@ -445,7 +462,7 @@ def liste(request: Request, gefahr: str = "", status: str = "", q: str = "", arc
         plaene = [plan for plan in plaene
                   if gefahr in (plan["gefahrenarten"] if isinstance(plan, dict) else plan.gefahrenarten)]
     context = {**_kontext(db, user), "plaene": plaene, "gefahr": gefahr, "planart": planart,
-               "status": status, "q": q, "archiv": archiv, "versionen": versionen,
+               "status": status, "q": q, "archiv": archiv, "pruefung": pruefung, "versionen": versionen,
                "qs_anzahlen": {p.id: sum(qs_service.plan_zusammenfassung(db, p, now_local(user.org).date()).values())
                                for p in plaene} if darf_bearbeiten(user) else {}}
     name = "_liste.html" if request.headers.get("HX-Request") == "true" else "index.html"
@@ -463,7 +480,7 @@ async def adress_suche(q: str = "", user: User = Depends(require_katplan_lesen))
 def neu(request: Request, planart: str = "katastrophenplan", db: Session = Depends(get_db),
         user: User = Depends(require_katplan_bearbeiten)):
     return templates.TemplateResponse(request, "katplan/formular.html", {
-        **_kontext(db, user), "form": {"planart": planart}})
+        **_kontext(db, user), "form": {"planart": planart, "pruef_verantwortlich_user_id": user.id}})
 
 
 @router.post("/neu")
@@ -472,6 +489,11 @@ def anlegen(request: Request, daten: Stammdaten = Depends(), db: Session = Depen
     if daten.fehler:
         return templates.TemplateResponse(request, "katplan/formular.html", {
             **_kontext(db, user), "form": daten.form, "fehler": daten.fehler}, status_code=422)
+    person = daten.werte.get("pruef_verantwortlich_user_id")
+    if person is not None and person not in {u.id for u in pruefverantwortliche(db, user.org_id)}:
+        return templates.TemplateResponse(request, "katplan/formular.html", {
+            **_kontext(db, user), "form": daten.form, "fehler": "Benutzer nicht verfügbar."}, status_code=422)
+    daten.werte["pruef_verantwortlich_user_id"] = person if person is not None else user.id
     plan = KatplanPlan(org_id=user.org_id, erstellt_von_id=user.id, aktualisiert_von_id=user.id, **daten.werte)
     db.add(plan)
     db.flush()
@@ -503,8 +525,7 @@ def _lade_version(db: Session, plan: KatplanPlan, vid: int | None = None):
 def _lesekontext(db: Session, user: User, plan: KatplanPlan, vid: int | None = None) -> dict:
     version, daten, elemente = _lade_version(db, plan, vid)
     elemente = [e for e in elemente if sieht_vertraulich(user) or not e.vertraulich]
-    termin = daten.get("wiedervorlage_am")
-    return {"lesekopf": {**daten, "wiedervorlage_am": date.fromisoformat(termin) if termin else None},
+    return {"lesekopf": {**daten, "wiedervorlage_am": plan.wiedervorlage_am},
             "plan_daten": daten, "leseversion": version,
             "quellen_nach_id": {q["id"]: q for q in daten.get("quellen", [])},
             **_link_kontext(db, user, plan, elemente, daten),
@@ -674,7 +695,8 @@ def stammdaten(plan_id: int, request: Request, db: Session = Depends(get_db),
                user: User = Depends(require_katplan_bearbeiten)):
     plan = _plan(db, plan_id, user)
     form = {feld: getattr(plan, feld) or "" for feld in (
-        "planart", "titel", "beschreibung_html", "geltungsbereich", "verantwortliche_stelle", "wiedervorlage_am")}
+        "planart", "titel", "beschreibung_html", "geltungsbereich", "verantwortliche_stelle", "wiedervorlage_am",
+        "pruefintervall_monate", "pruef_verantwortlich_user_id")}
     form["gefahrenarten"] = plan.gefahrenarten
     return templates.TemplateResponse(request, "katplan/_formular.html", {
         **_kontext(db, user, plan), "form": form, "formular_version": plan.version})
@@ -695,7 +717,12 @@ def speichern(plan_id: int, request: Request, version: int = Form(-1), daten: St
         return templates.TemplateResponse(request, "katplan/_formular.html", {
             **_kontext(db, user, plan), "form": daten.form, "fehler": fehler,
             "formular_version": version}, status_code=status_code)
-    stammdaten_aendern(db, plan, user, version=version, werte=daten.werte)
+    try:
+        stammdaten_aendern(db, plan, user, version=version, werte=daten.werte)
+    except ValueError as exc:
+        return templates.TemplateResponse(request, "katplan/_formular.html", {
+            **_kontext(db, user, plan), "form": daten.form, "fehler": str(exc),
+            "formular_version": version}, status_code=422)
     db.commit()
     return templates.TemplateResponse(request, "katplan/_kopf.html", {
         **_kopfkontext(db, user, plan), "protokoll_oob": True})
@@ -1224,6 +1251,26 @@ def _workflow(request: Request, db: Session, user: User, plan_id: int, aktion: s
         db.rollback()
         return templates.TemplateResponse(request, "katplan/_kopf.html", {
             **_kopfkontext(db, user, plan), "fehler": str(exc)}, status_code=422)
+    db.commit()
+    return templates.TemplateResponse(request, "katplan/_kopf.html", {
+        **_kopfkontext(db, user, plan), "protokoll_oob": True})
+
+
+@router.post("/{plan_id}/ueberpruefung")
+def ueberpruefung(plan_id: int, request: Request, kommentar: str = Form(""), version: int = Form(-1),
+                 db: Session = Depends(get_db), user: User = Depends(require_katplan_lesen)):
+    plan = _plan(db, plan_id, user)
+    if not darf_ueberpruefung_bestaetigen(user, plan):
+        raise HTTPException(403, "Keine Berechtigung")
+    try:
+        if version != -1:
+            pruefe_version(plan, version)
+        freigabe_service.ueberpruefung_bestaetigen(db, plan, user, kommentar or None)
+    except (ValueError, KatplanKonflikt) as exc:
+        db.rollback()
+        return templates.TemplateResponse(request, "katplan/_kopf.html", {
+            **_kopfkontext(db, user, plan), "fehler": str(exc)},
+            status_code=409 if isinstance(exc, KatplanKonflikt) else 422)
     db.commit()
     return templates.TemplateResponse(request, "katplan/_kopf.html", {
         **_kopfkontext(db, user, plan), "protokoll_oob": True})

@@ -46,12 +46,26 @@
         <input name="geltungsbereich" maxlength="300" value="{{ form.get('geltungsbereich', '') }}" class="form-control">
       </label>
       <label>
-        Verantwortliche Stelle
+        Verantwortliche Stelle (extern)
         <input name="verantwortliche_stelle" maxlength="200" value="{{ form.get('verantwortliche_stelle', '') }}" class="form-control">
       </label>
       <label>
-        Wiedervorlage
+        Nächste Überprüfung
         <input type="date" name="wiedervorlage_am" value="{{ form.get('wiedervorlage_am', '') }}" class="form-control">
+      </label>
+      <label>
+        Überprüfung durch
+        <select name="pruef_verantwortlich_user_id" class="form-control">
+          <option value="">Keine Zuordnung</option>
+          {% for person in pruef_benutzer %}
+            <option value="{{ person.id }}" {% if form.get('pruef_verantwortlich_user_id', '')|string == person.id|string %}selected{% endif %}>{{ person.display_name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        Prüfintervall (Monate)
+        <input type="number" name="pruefintervall_monate" min="1" max="60" value="{{ form.get('pruefintervall_monate', '') }}"
+          placeholder="{{ planarten.get(form.get('planart', 'katastrophenplan'), planarten['katastrophenplan']).pruefintervall_monate }}" class="form-control">
       </label>
     </div>
     <div class="kp-actions">

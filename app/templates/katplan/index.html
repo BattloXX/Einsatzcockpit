@@ -50,6 +50,13 @@
           {% endfor %}
         </select>
       </label>
+      <label>
+        Überprüfung
+        <select name="pruefung" class="form-control">
+          <option value="">Alle</option>
+          <option value="faellig" {% if pruefung == 'faellig' %}selected{% endif %}>Fällig</option>
+        </select>
+      </label>
       {% if can_edit %}
         <label>
           <input type="checkbox" name="archiv" value="1" {% if archiv == 1 %}checked{% endif %}>

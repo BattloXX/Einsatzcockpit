@@ -10,7 +10,7 @@
             <th>Gefahrenarten</th>
             <th>Status</th>
             {% if can_edit %}<th>Version</th><th>Qualität</th>{% endif %}
-            <th>Wiedervorlage</th>
+            <th>Nächste Überprüfung</th>
             <th>Zuletzt geändert</th>
           </tr>
         </thead>
@@ -73,7 +73,7 @@
               </div>
             {% endif %}
             <div>
-              <div class="kp-mcard__label">Wiedervorlage</div>
+              <div class="kp-mcard__label">Nächste Überprüfung</div>
               <div class="kp-mono">
                 {% if plan.wiedervorlage_am and plan.wiedervorlage_am <= heute %}
                   <span class="kp-badge kp-badge--red">{{ plan.wiedervorlage_am.strftime('%d.%m.%Y') }}</span>

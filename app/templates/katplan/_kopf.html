@@ -1,7 +1,7 @@
 {% include "katplan/_design.html" %}
 {% set kopf = lesekopf if lesekopf is defined else plan %}
 {% set status_farben = {'entwurf': 'gray', 'in_pruefung': 'amber', 'freigegeben': 'green', 'in_ueberarbeitung': 'blue', 'archiviert': 'gray'} %}
-<div id="kp-kopf" class="kp-kopf" hx-on::before-swap="if (event.detail.xhr.status === 422) { event.detail.shouldSwap = true; event.detail.isError = false; }">
+<div id="kp-kopf" class="kp-kopf" hx-on::before-swap="if (event.detail.xhr.status === 409 || event.detail.xhr.status === 422) { event.detail.shouldSwap = true; event.detail.isError = false; }">
   <header class="kp-header">
     <div>
       <div class="kp-header__title">
@@ -57,16 +57,24 @@
         <span class="kp-row__value">{{ kopf.geltungsbereich or '-' }}</span>
       </div>
       <div class="kp-row">
-        <span class="kp-row__label">Verantwortliche Stelle</span>
+        <span class="kp-row__label">Verantwortliche Stelle (extern)</span>
         <span class="kp-row__value">{{ kopf.verantwortliche_stelle or '-' }}</span>
       </div>
       <div class="kp-row">
-        <span class="kp-row__label">Wiedervorlage</span>
+        <span class="kp-row__label">Zuletzt geprüft</span>
+        <span>{{ plan.zuletzt_geprueft_am.strftime('%d.%m.%Y') if plan.zuletzt_geprueft_am else '-' }} von {{ zuletzt_geprueft_von }}</span>
+      </div>
+      <div class="kp-row">
+        <span class="kp-row__label">Überprüfung durch</span>
+        <span>{{ pruef_verantwortlich }}</span>
+      </div>
+      <div class="kp-row">
+        <span class="kp-row__label">Nächste Überprüfung</span>
         <span class="kp-mono">
-          {% if kopf.wiedervorlage_am and kopf.wiedervorlage_am <= heute %}
-            <span class="kp-badge kp-badge--red">{{ kopf.wiedervorlage_am.strftime('%d.%m.%Y') }}</span>
+          {% if plan.wiedervorlage_am and plan.wiedervorlage_am <= heute %}
+            <span class="kp-badge kp-badge--red">{{ plan.wiedervorlage_am.strftime('%d.%m.%Y') }}</span>
           {% else %}
-            {{ kopf.wiedervorlage_am.strftime('%d.%m.%Y') if kopf.wiedervorlage_am else '-' }}
+            {{ plan.wiedervorlage_am.strftime('%d.%m.%Y') if plan.wiedervorlage_am else '-' }}
           {% endif %}
         </span>
       </div>
@@ -78,6 +86,20 @@
     </section>
     <section class="kp-sidecard">
       <h2 class="kp-box__title">Freigabe</h2>
+      {% if plan.status == 'freigegeben' and can_confirm_review %}
+        <details>
+          <summary class="btn btn--ghost btn--sm">Überprüfung bestätigen</summary>
+          <form method="post" action="/plaene/{{ plan.id }}/ueberpruefung" class="kp-form"
+            hx-post="/plaene/{{ plan.id }}/ueberpruefung" hx-target="#kp-kopf" hx-swap="outerHTML">
+            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+            <input type="hidden" name="version" value="{{ plan.version }}">
+            <label>Kommentar (optional)<textarea name="kommentar" maxlength="2000" class="form-control"></textarea></label>
+            <button type="submit" class="btn btn--primary">Überprüft – keine Änderung</button>
+          </form>
+        </details>
+      {% elif plan.status == 'in_ueberarbeitung' %}
+        <p>Änderungen offen – Überprüfung über neue Freigabe abschließen</p>
+      {% endif %}
       {% if fehler %}
         <p role="alert" class="kp-box kp-box--danger">{{ fehler }}</p>
       {% endif %}

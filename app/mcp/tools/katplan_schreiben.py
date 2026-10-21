@@ -9,7 +9,7 @@ from pathlib import Path
 
 from app.config import settings
 from app.core.audit import write_audit
-from app.core.permissions import KATPLAN_VERWALTER_ROLES
+from app.core.permissions import KATPLAN_LESE_ROLLEN, KATPLAN_VERWALTER_ROLES
 from app.mcp.context import MCPContext, MCPPermissionError
 from app.mcp.registry import register_tool
 from app.mcp.tools.objekt_dokumente import _decode_inhalt
@@ -29,7 +29,7 @@ from app.services.katplan_anhang_service import anhang_hochladen
 from app.services.katplan_flags import katplan_effective_enabled
 from app.services.katplan_ki_service import _abgleichen, _parse_antwort, text_zu_html
 from app.services.katplan_quelle_service import validiere_element_quelle
-from app.services.katplan_zugriff import darf_bearbeiten
+from app.services.katplan_zugriff import darf_bearbeiten, darf_lesen, darf_ueberpruefung_bestaetigen
 from app.services.mcp_datei_url_service import lade_datei_von_url
 from app.services.mcp_upload_service import effektives_limit, erstelle_upload, lade_upload_fuer_uebergabe
 
@@ -40,11 +40,11 @@ _FELDER = {
 _HINWEIS = "Nur Arbeitsstand: Ein Bearbeiter muss den Entwurf prüfen und ein Mensch muss ihn freigeben."
 
 
-def _tool(name: str, description: str):
+def _tool(name: str, description: str, *, lesen: bool = False):
     def decorator(handler):
         @wraps(handler)
         async def aufruf(context: MCPContext, **kwargs) -> dict[str, object]:
-            if not darf_bearbeiten(context.user):
+            if not (darf_lesen(context.user) if lesen else darf_bearbeiten(context.user)):
                 raise MCPPermissionError("Keine Berechtigung")
             if context.org_id != context.user.org_id or not katplan_effective_enabled(context.org_id, context.db):
                 raise MCPPermissionError("Werkzeug nicht verfügbar")
@@ -72,7 +72,8 @@ def _tool(name: str, description: str):
                     # Nur leere Anhangsverzeichnisse entfernen; geteilte Ordner bleiben.
                     with contextlib.suppress(OSError):
                         verzeichnis.rmdir()
-        return register_tool(name=name, description=description, required_roles=tuple(KATPLAN_VERWALTER_ROLES),
+        return register_tool(name=name, description=description,
+                             required_roles=tuple(KATPLAN_LESE_ROLLEN if lesen else KATPLAN_VERWALTER_ROLES),
                              module_check=katplan_effective_enabled)(aufruf)
     return decorator
 
@@ -703,7 +704,8 @@ async def katplan_beziehung_entfernen(context: MCPContext, plan_id: int, element
     "Ändert nur übergebene Plan-Stammdaten im Arbeitsstand. version aus katplan_lesen(fassung=arbeitsstand), "
     "Feld plan_version. felder: titel, planart (alarm_einsatzplan, massnahmenplan, katastrophenplan), "
     "beschreibung (Text), gefahrenarten (Liste gültiger Codes), "
-    "geltungsbereich, verantwortliche_stelle, verantwortlich_kontakt_id, wiedervorlage_am (YYYY-MM-DD). "
+    "geltungsbereich, verantwortliche_stelle, verantwortlich_kontakt_id, wiedervorlage_am (YYYY-MM-DD), "
+    "pruefintervall_monate (1..60), pruef_verantwortlich_user_id. "
     "null oder leer leert optionale Felder; titel und planart sind Pflicht, gefahrenarten nur bei katastrophenplan. "
     "Status bleibt menschlich. "
     "Unbekannte Felder sind Fehler; streng=true erlaubt keinen Datenverlust; pruefen=true rollt zurück."
@@ -716,7 +718,7 @@ async def katplan_stammdaten_aendern(context: MCPContext, plan_id: int, version:
                          'Mit katplan_lesen(fassung="arbeitsstand") neu lesen.')
     mapping = {"beschreibung": "beschreibung_html", "gefahrenarten": "gefahrenarten_json"}
     erlaubt = {"planart", "titel", "beschreibung", "gefahrenarten", "geltungsbereich", "verantwortliche_stelle",
-               "verantwortlich_kontakt_id", "wiedervorlage_am"}
+               "verantwortlich_kontakt_id", "wiedervorlage_am", "pruefintervall_monate", "pruef_verantwortlich_user_id"}
     if not isinstance(felder, dict):
         raise ValueError("felder muss ein Objekt sein.")
     if set(felder) - erlaubt:
@@ -726,6 +728,11 @@ async def katplan_stammdaten_aendern(context: MCPContext, plan_id: int, version:
                "verantwortliche_stelle": plan.verantwortliche_stelle or "",
                "wiedervorlage_am": plan.wiedervorlage_am.isoformat() if plan.wiedervorlage_am else ""}
     for feld, wert in felder.items():
+        if feld in ("pruefintervall_monate", "pruef_verantwortlich_user_id"):
+            if wert not in (None, "") and type(wert) is not int:
+                raise ValueError(f"{feld} muss eine Ganzzahl oder null sein.")
+            bestand[feld] = wert
+            continue
         if feld == "verantwortlich_kontakt_id":
             if wert not in (None, "") and type(wert) is not int:
                 raise ValueError("verantwortlich_kontakt_id muss eine Kontakt-ID oder null sein.")
@@ -927,3 +934,24 @@ async def katplan_elemente_verorten(
     if pruefen:
         context.db.rollback()
     return antwort
+
+
+@_tool("katplan_ueberpruefung_bestaetigen", (
+    "Bestätigt die Überprüfung eines freigegebenen Plans ohne neue Version. "
+    "Nur verantwortliche Person oder Freigeber; Kommentar optional (maximal 2000 Zeichen). "
+    "version dient dem Schutz vor gleichzeitigen Änderungen."
+), lesen=True)
+async def katplan_ueberpruefung_bestaetigen(context: MCPContext, plan_id: int,
+                                           kommentar: str | None = None,
+                                           version: int | None = None) -> dict[str, object]:
+    from app.services.katplan_freigabe_service import ueberpruefung_bestaetigen
+
+    plan = _plan(context, plan_id)
+    if not darf_ueberpruefung_bestaetigen(context.user, plan):
+        raise MCPPermissionError("Keine Berechtigung")
+    if version is not None:
+        service.pruefe_version(plan, version)
+    ueberpruefung_bestaetigen(context.db, plan, context.user, kommentar)
+    context.db.flush()
+    return {"plan_id": plan.id, "plan_version": plan.version, "status": plan.status,
+            **lesedaten.pruefdaten(context.db, plan)}

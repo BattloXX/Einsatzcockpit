@@ -196,6 +196,6 @@ def test_badge_nur_fuer_berechtigte(client, freigegeben):
         db.commit()
     login(client, info, "katplan_freigeber")
     page = client.get("/")
-    assert "1 fällige Wiedervorlagen · 1 in Prüfung" in page.text
+    assert "1 fällige Überprüfungen · 1 in Prüfung" in page.text
     login(client, info, "readonly")
-    assert "fällige Wiedervorlagen" not in client.get("/").text
+    assert "fällige Überprüfungen" not in client.get("/").text

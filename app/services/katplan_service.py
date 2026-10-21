@@ -372,10 +372,25 @@ def validiere_element_felder(typ: str, *, titel: str, prioritaet: int, daten: di
     return werte
 
 
+def pruefverantwortliche(db: Session, org_id: int | None) -> list[User]:
+    return [u for u in db.query(User).filter_by(org_id=org_id, active=True).order_by(User.display_name).all()
+            if u.role_codes & {"katplan_verwalter", "katplan_freigeber", "org_admin", "admin"}]
+
+
 def validiere_stammdaten(*, titel: str, gefahrenarten: list[str], beschreibung_html: str = "",
                          geltungsbereich: str = "", verantwortliche_stelle: str = "",
-                         wiedervorlage_am: str = "", planart: str = "katastrophenplan") -> dict:
+                         wiedervorlage_am: str = "", planart: str = "katastrophenplan",
+                         pruefintervall_monate: str | int | None = None,
+                         pruef_verantwortlich_user_id: str | int | None = None) -> dict:
     """Gemeinsame Formularvalidierung; Fehlerprioritaet der Oberflaeche beibehalten."""
+    try:
+        intervall = int(pruefintervall_monate) if pruefintervall_monate not in (None, "") else None
+        person = int(pruef_verantwortlich_user_id) if pruef_verantwortlich_user_id not in (None, "") else None
+    except (ValueError, TypeError):
+        raise ValueError("Bitte gültige Prüfdaten eingeben.") from None
+    if intervall is not None and (isinstance(pruefintervall_monate, bool)
+                                  or str(intervall) != str(pruefintervall_monate) or not 1 <= intervall <= 60):
+        raise ValueError("Das Prüfintervall muss zwischen 1 und 60 Monaten liegen.")
     fehler = None
     termin = None
     try:
@@ -397,7 +412,8 @@ def validiere_stammdaten(*, titel: str, gefahrenarten: list[str], beschreibung_h
             "beschreibung_html": bereinige_beschreibung(beschreibung_html),
             "geltungsbereich": geltungsbereich.strip() or None,
             "verantwortliche_stelle": verantwortliche_stelle.strip() or None,
-            "wiedervorlage_am": termin}
+            "wiedervorlage_am": termin, "pruefintervall_monate": intervall,
+            "pruef_verantwortlich_user_id": person}
 
 
 def stammdaten_aendern(db: Session, plan: KatplanPlan, user: User, *, version: int,
@@ -407,24 +423,34 @@ def stammdaten_aendern(db: Session, plan: KatplanPlan, user: User, *, version: i
     if plan.org_id != user.org_id or plan.status == "archiviert":
         raise ValueError("Dieser Plan kann nicht bearbeitet werden.")
     erlaubt = {"planart", "titel", "gefahrenarten_json", "beschreibung_html", "geltungsbereich",
-               "verantwortliche_stelle", "wiedervorlage_am", "verantwortlich_kontakt_id"}
+               "verantwortliche_stelle", "wiedervorlage_am", "verantwortlich_kontakt_id",
+               "pruefintervall_monate", "pruef_verantwortlich_user_id"}
     if set(werte) - erlaubt:
         raise ValueError("Nicht erlaubte Stammdatenfelder.")
     kontakt_id = werte.get("verantwortlich_kontakt_id")
     if kontakt_id is not None and not db.query(Kontakt).filter_by(org_id=plan.org_id, id=kontakt_id).first():
         raise ValueError("Kontakt nicht verfügbar.")
+    person = werte.get("pruef_verantwortlich_user_id")
+    if person is not None and person not in {u.id for u in pruefverantwortliche(db, plan.org_id)}:
+        raise ValueError("Benutzer nicht verfügbar.")
+    intervall = werte.get("pruefintervall_monate")
+    if intervall is not None and (type(intervall) is not int or not 1 <= intervall <= 60):
+        raise ValueError("Das Prüfintervall muss zwischen 1 und 60 Monaten liegen.")
     geaendert = []
     for feld, wert in werte.items():
         alt = getattr(plan, feld)
         if alt != wert:
             if feld == "wiedervorlage_am":
                 plan.wiedervorlage_erinnert_am = None
+                plan.wiedervorlage_vorab_erinnert_am = None
+                plan.wiedervorlage_eskaliert_am = None
             setattr(plan, feld, wert)
             geaendert.append(feld)
             protokolliere(db, plan, "plan", "geaendert", user, feld=feld,
                           alt=str(alt) if alt is not None else None,
                           neu=str(wert) if wert is not None else None, quelle=quelle)
-    markiere_ueberarbeitung(db, plan, user, quelle=quelle)
+    if set(geaendert) - {"wiedervorlage_am", "pruefintervall_monate", "pruef_verantwortlich_user_id"}:
+        markiere_ueberarbeitung(db, plan, user, quelle=quelle)
     plan.version += 1
     plan.aktualisiert_am, plan.aktualisiert_von_id = _utcnow(), user.id
     return geaendert

@@ -215,7 +215,7 @@ def test_wiedervorlage_org_zeitzone_einmal_und_archiv(db, org, monkeypatch):
     monkeypatch.setattr(service, "now_local", lambda o: lokal if o.id == org.id else None)
     plan.wiedervorlage_am = lokal.date()
     db.add_all([KatplanPlan(org_id=org.id, titel="Archiv", status="archiviert", wiedervorlage_am=lokal.date()),
-                KatplanPlan(org_id=org.id, titel="Später", wiedervorlage_am=lokal.date() + timedelta(days=1))])
+                KatplanPlan(org_id=org.id, titel="Später", wiedervorlage_am=lokal.date() + timedelta(days=15))])
     db.flush()
     assert [t["plan_id"] for t in service.pruefe_wiedervorlagen(db)] == [plan.id]
     assert plan.wiedervorlage_erinnert_am == lokal.date()

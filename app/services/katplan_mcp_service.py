@@ -10,7 +10,7 @@ from app.core.permissions import can_view_kontakt_directory, has_role
 from app.core.timezones import now_local
 from app.models.katplan import KatplanDokument, KatplanElement, KatplanPlan, KatplanVersionElement
 from app.models.user import User
-from app.services.katplan_freigabe_service import erstelle_snapshot, lade_version
+from app.services.katplan_freigabe_service import erstelle_snapshot, lade_version, pruefintervall
 from app.services.katplan_link_service import links_aus_version
 from app.services.katplan_quelle_service import parse_seiten
 from app.services.katplan_service import _HTMLText
@@ -220,6 +220,8 @@ def fassung_laden(db: Session, user: User, plan: KatplanPlan, fassung: str,
         raise LookupError("Nicht gefunden")
     arbeit = pruefe_fassung(user, fassung)
     kopf, roh, vid = _rohdaten(db, plan, arbeit, version_id)
+    kopf.update(pruefdaten(db, plan))
+    kopf["wiedervorlage_am"] = kopf["naechste_pruefung"]
     elemente = [element_dict(db, user, plan, e, kopf, vid) for e in roh
                 if not e["vertraulich"] or sieht_vertraulich(user)]
     warnings = [f"{key}: nicht vorhanden." for key in (
@@ -229,10 +231,20 @@ def fassung_laden(db: Session, user: User, plan: KatplanPlan, fassung: str,
     return kopf, elemente, vid, warnings
 
 
+def pruefdaten(db: Session, plan: KatplanPlan) -> dict:
+    person = db.query(User).filter_by(org_id=plan.org_id, id=plan.pruef_verantwortlich_user_id).first()
+    return {"zuletzt_geprueft_am": plan.zuletzt_geprueft_am.isoformat() if plan.zuletzt_geprueft_am else None,
+            "naechste_pruefung": plan.wiedervorlage_am.isoformat() if plan.wiedervorlage_am else None,
+            "pruefintervall_monate": pruefintervall(plan),
+            "pruef_verantwortlich": person.display_name if person else None}
+
+
 def kopf_ansicht(kopf: dict) -> dict:
     """Gleicher Plankopf fuer Lese- und Schreibantworten, ohne Transaktionsabschluss."""
     planart = kopf.get("planart", "katastrophenplan")
     return {"planart": planart, "planart_label": PLANARTEN[planart].label,
             **{k: kopf.get(k) for k in ("uuid", "titel", "gefahrenarten", "geltungsbereich",
-                                       "verantwortliche_stelle", "verantwortlich_kontakt_id", "wiedervorlage_am")},
+                                       "verantwortliche_stelle", "verantwortlich_kontakt_id", "wiedervorlage_am",
+                                       "zuletzt_geprueft_am", "naechste_pruefung",
+                                       "pruefintervall_monate", "pruef_verantwortlich")},
             "body": text(kopf.get("beschreibung_html"))}
