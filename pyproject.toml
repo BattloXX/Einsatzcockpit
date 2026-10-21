@@ -64,7 +64,7 @@ dependencies = [
     # Excel-Import (Mannschaftsliste)
     "openpyxl>=3.1",
     # KI-Integration (Anthropic Claude)
-    "anthropic>=0.50",
+    "anthropic>=0.50,<2",
     # Geodienste: Point-in-Polygon (GSL Abschnittszuweisung)
     "shapely>=2.0",
     # Koordinatentransformation (LIS-Fahrzeugpositionen EPSG:31254 -> WGS84)
