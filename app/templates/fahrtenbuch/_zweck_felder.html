@@ -30,26 +30,9 @@
 {% endif %}
 
 {% if zweck.verlangt_ausbildner %}
-<div class="form-group" x-data="maschinistAutocomplete('ausbildner')">
-  <label class="form-label" for="ausbildner_name">Ausbildner *</label>
-  <input type="hidden" name="ausbildner_member_id" :value="memberId">
-  <div style="position:relative;">
-    <input type="text" name="ausbildner_name" id="ausbildner_name"
-           class="form-control form-control--lg"
-           placeholder="Name tippen…" required autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false"
-           x-model="query"
-           hx-get="/fahrtenbuch/hx/maschinist"
-           hx-target="#ausbildner-suggestions"
-           hx-trigger="input changed delay:200ms"
-           hx-include="[name='ausbildner_name']"
-           hx-vals='js:{t:window.FAB_TOKEN||""}'
-           :class="warn ? 'fb-input-warn' : ''"
-           @focus="open=true" @blur="setTimeout(()=>open=false,150)" @input="open=true">
-    <div id="ausbildner-suggestions" x-show="open" style="position:absolute;z-index:50;width:100%;background:var(--surface-mid);border:1px solid var(--border);border-radius:.4rem;"></div>
-  </div>
-  <p class="fb-name-warn" x-show="warn" x-cloak>&#9888; Name nicht in der Mannschaftsliste – bitte den passenden Namen aus der Vorschlagsliste auswählen.</p>
-  <p style="font-size:.78rem;color:var(--text-muted);margin:.3rem 0 0;">Anfangsbuchstaben eingeben und den richtigen Namen aus der Liste auswählen – nur so wird die Fahrt korrekt zugeordnet.</p>
-</div>
+{% with person_field='ausbildner', person_label='Ausbildner', person_title='Ausbildner auswählen', person_required=true, person_name=form_daten.get('ausbildner_name', ''), person_id=form_daten.get('ausbildner_member_id', ''), person_placeholder='Ausbildner auswählen', personen=personen %}
+  {% include "components/person_select_flyout.html" %}
+{% endwith %}
 {% endif %}
 
 {% set beide_fuehrungsrollen = zweck.verlangt_gruppenkommandant and (zweck.optional_einsatzleiter or (fahrzeug and fahrzeug.einsatzleiter_abfrage)) %}

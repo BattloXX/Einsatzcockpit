@@ -566,6 +566,77 @@ def test_zweck_felder_kein_einsatzleiter_bei_zweck_flag_ohne_gk(client: TestClie
     assert "einsatzleiter_name" not in r.text
 
 
+@pytest.mark.parametrize("pfad", ["/fahrtenbuch/hx/zweck-felder", "/verwaltung/fahrten/hx/zweck-felder"])
+def test_zweck_felder_ausbildner_verwendet_pflicht_personenauswahl(client, db_session, org, zweck, pfad):
+    _login(client, db_session, org, f"fb_ausbildner_picker_{pfad.split('/')[1]}", role_code="fahrtenbuch_admin")
+    zweck.verlangt_ausbildner = True
+    db_session.commit()
+
+    response = client.get(f"{pfad}?zweck_id={zweck.id}")
+
+    assert response.status_code == 200
+    assert 'class="person-select" data-required="true"' in response.text
+    assert 'name="ausbildner_member_id"' in response.text
+    assert 'name="ausbildner_name"' in response.text
+    assert "maschinistAutocomplete" not in response.text
+
+
+@pytest.mark.parametrize("required", [True, False])
+@pytest.mark.parametrize("freitext_label", ["", "Person nicht in der Liste"])
+def test_personenauswahl_optionale_aktionen(required, freitext_label):
+    from app.core.templating import templates
+
+    html = templates.env.get_template("components/person_select_flyout.html").render(
+        person_field="testperson", person_label="Person", person_title="Person auswählen",
+        person_required=required, person_name="Leitner Anna", person_id="123",
+        person_placeholder="Person auswählen", personen=[], person_freitext_label=freitext_label,
+    )
+
+    assert ('@click="clearSelection()"' in html) is (not required)
+    assert ('@click="clearSelection(true)"' in html) is bool(freitext_label)
+    assert ('class="person-flyout__footer"' in html) is bool(freitext_label)
+    if freitext_label:
+        assert freitext_label in html
+
+
+def test_fahrtenbuch_neu_laedt_gemeinsames_personenauswahl_skript(client, db_session, org, fahrzeug):
+    _login(client, db_session, org, "fb_picker_skript")
+
+    response = client.get(f"/fahrtenbuch/neu?fahrzeug={fahrzeug.id}")
+
+    assert response.status_code == 200
+    assert '/static/js/person_select_flyout.js' in response.text
+    assert response.text.index('/static/js/person_select_flyout.js') < response.text.index('/static/js/alpine.min.js')
+    assert "function personSelectFlyout" not in response.text
+    assert "maschinistAutocomplete" not in response.text
+    assert 'name="seilwinde_bediener_member_id"' in response.text
+    assert "Auswahl entfernen" in response.text
+
+
+def test_fahrtenbuch_post_ausbildner_speichert_kanonischen_namen(client, db_session, org, fahrzeug, zweck):
+    _login(client, db_session, org, "fb_ausbildner_post")
+    member = Member(org_id=org.id, firstname="Anna", lastname="Leitner", active=True)
+    zweck.verlangt_ausbildner = True
+    db_session.add(member)
+    db_session.commit()
+
+    response = client.post("/fahrtenbuch", data={
+        "_csrf": client.cookies.get("ec_csrf"),
+        "fahrzeug_id": str(fahrzeug.id),
+        "zweck_id": str(zweck.id),
+        "maschinist_name": "Test Fahrer",
+        "km_stand_neu": "1010",
+        "ausbildner_member_id": str(member.id),
+        "ausbildner_name": "Veralteter Name",
+        "doppelfahrt_bestaetigt": "on",
+    }, follow_redirects=False)
+
+    assert response.status_code == 200
+    assert "Fahrt gespeichert" in response.text
+    fahrt = db_session.query(Fahrt).filter(Fahrt.ausbildner_member_id == member.id).one()
+    assert fahrt.ausbildner_name == "Leitner Anna"
+
+
 def test_zweck_felder_zeigt_fuehrungsrollen_auswahl_bei_gk_und_zweck_flag(client: TestClient, db_session, org):
     """GK erforderlich + optional_einsatzleiter zeigt die kombinierte Fuehrungsrollen-Auswahl."""
     _login(client, db_session, org, "el_zweck_gk_tester")

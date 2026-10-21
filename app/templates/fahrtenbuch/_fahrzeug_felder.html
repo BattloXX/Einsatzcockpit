@@ -28,7 +28,7 @@
   <div id="km-check" style="margin-top:.3rem;">
     {% if fehler == 'km_warnung_nicht_bestaetigt' %}
     <div style="font-size:.85rem;padding:.3rem .5rem;background:rgba(245,158,11,.12);border-radius:.3rem;">
-      <span style="color:#f59e0b;display:block;">&#9888; km-Wert wirkt hoch, bitte prüfen.</span>
+      <span style="color:#f59e0b;display:flex;align-items:center;gap:.35rem;">{{ icon("alert-triangle", size="xs") }} km-Wert wirkt hoch, bitte prüfen.</span>
       <label style="display:flex;align-items:center;gap:.4rem;margin-top:.4rem;cursor:pointer;">
         <input type="checkbox" name="km_warnung_bestaetigt" value="on" style="width:18px;height:18px;">
         Geprüft &amp; korrekt
@@ -61,7 +61,7 @@
   <div id="bh-check" style="margin-top:.3rem;">
     {% if fehler == 'bh_warnung_nicht_bestaetigt' %}
     <div style="font-size:.85rem;padding:.3rem .5rem;background:rgba(245,158,11,.12);border-radius:.3rem;">
-      <span style="color:#f59e0b;display:block;">&#9888; BH-Wert wirkt hoch, bitte prüfen.</span>
+      <span style="color:#f59e0b;display:flex;align-items:center;gap:.35rem;">{{ icon("alert-triangle", size="xs") }} BH-Wert wirkt hoch, bitte prüfen.</span>
       <label style="display:flex;align-items:center;gap:.4rem;margin-top:.4rem;cursor:pointer;">
         <input type="checkbox" name="bh_warnung_bestaetigt" value="on" style="width:18px;height:18px;">
         Geprüft &amp; korrekt
@@ -102,7 +102,7 @@
     <div id="sw-check" style="margin-top:.3rem;">
       {% if fehler == 'seilwinde_warnung_nicht_bestaetigt' %}
       <div style="font-size:.85rem;padding:.3rem .5rem;background:rgba(245,158,11,.12);border-radius:.3rem;">
-        <span style="color:#f59e0b;display:block;">&#9888; Seilwinden-BH-Wert wirkt hoch, bitte prüfen.</span>
+        <span style="color:#f59e0b;display:flex;align-items:center;gap:.35rem;">{{ icon("alert-triangle", size="xs") }} Seilwinden-BH-Wert wirkt hoch, bitte prüfen.</span>
         <label style="display:flex;align-items:center;gap:.4rem;margin-top:.4rem;cursor:pointer;">
           <input type="checkbox" name="seilwinde_warnung_bestaetigt" value="on" style="width:18px;height:18px;">
           Geprüft &amp; korrekt
@@ -111,26 +111,9 @@
       {% endif %}
     </div>
   </div>
-  <div class="form-group" x-data="maschinistAutocomplete('seilwinde', '{{ form_daten.get('seilwinde_bediener_name', '') }}', '{{ form_daten.get('seilwinde_bediener_member_id', '') }}')">
-    <label class="form-label" for="seilwinde_bediener_name">Bediener (optional)</label>
-    <input type="hidden" name="seilwinde_bediener_member_id" :value="memberId">
-    <div style="position:relative;">
-      <input type="text" name="seilwinde_bediener_name" id="seilwinde_bediener_name"
-             class="form-control"
-             placeholder="Name tippen (optional)" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false"
-             x-model="query"
-             hx-get="/fahrtenbuch/hx/maschinist"
-             hx-target="#seilwinde-suggestions"
-             hx-trigger="input changed delay:200ms"
-             hx-include="[name='seilwinde_bediener_name']"
-             hx-vals='js:{t:window.FAB_TOKEN||""}'
-             :class="warn ? 'fb-input-warn' : ''"
-             @focus="open=true" @blur="setTimeout(()=>open=false,150)" @input="open=true">
-      <div id="seilwinde-suggestions" x-show="open" style="position:absolute;z-index:50;width:100%;background:var(--surface-mid);border:1px solid var(--border);border-radius:.4rem;"></div>
-    </div>
-    <p class="fb-name-warn" x-show="warn" x-cloak>&#9888; Name nicht in der Mannschaftsliste – bitte den passenden Namen aus der Vorschlagsliste auswählen.</p>
-    <p style="font-size:.78rem;color:var(--text-muted);margin:.3rem 0 0;">Anfangsbuchstaben eingeben und den richtigen Namen aus der Liste auswählen – nur so wird die Fahrt korrekt zugeordnet.</p>
-  </div>
+  {% with person_field='seilwinde_bediener', person_label='Bediener (optional)', person_title='Seilwinden-Bediener auswählen', person_required=false, person_name=form_daten.get('seilwinde_bediener_name', ''), person_id=form_daten.get('seilwinde_bediener_member_id', ''), person_placeholder='Bediener auswählen (optional)', personen=personen %}
+    {% include "components/person_select_flyout.html" %}
+  {% endwith %}
 
   <div class="form-group">
     <label class="form-label" for="seilwinde_zuege">Anzahl Züge</label>

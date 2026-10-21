@@ -235,6 +235,10 @@ body.mobile-menu-open { overflow: hidden; }
 .topnav .btn--ghost:hover { background: rgba(255,255,255,.12); color: #fff; border-color: rgba(255,255,255,.5); }
 /* Dropdown menu still dark */
 .topnav .nav-link--dropdown { color: rgba(255,255,255,.8); }
+/* Module-Button wie die uebrigen Topnav-Links: gleiche Hoehe/Ausrichtung (Wrapper als
+   Flex-Item statt Inline-Box mit Grundlinien-Versatz), weisse Schrift bei Hover/aktiv. */
+.topnav__doku { display: flex; }
+.topnav .nav-link--dropdown:hover, .topnav .nav-link--dropdown.active { color: #fff; }
 /* Einsatzleiter selector */
 .topnav__leader-btn { font-size: .82rem; display: flex; align-items: center; gap: 4px; }
 

@@ -47,7 +47,7 @@
       <p class="ap-header__sub">Alle erfassten Pr&uuml;fprotokolle</p>
     </div>
     {% if ap_token %}
-    <a href="/ap/{{ ap_token }}" class="btn btn--primary btn--sm">+ Pr&uuml;fung erfassen</a>
+    <a href="/ap/{{ ap_token }}" class="btn btn--primary btn--sm">{{ icon("plus", size="sm") }} Pr&uuml;fung erfassen</a>
     {% endif %}
   </div>
   {% include "atemschutz_pruefung/_tabs.html" %}

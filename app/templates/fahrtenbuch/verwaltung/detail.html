@@ -55,7 +55,7 @@
 
   <div class="fd-header">
     <div class="fd-header__left">
-      <a href="/verwaltung/fahrten{{ org_q }}" class="btn btn--ghost btn--sm">&#8592; Liste</a>
+      <a href="/verwaltung/fahrten{{ org_q }}" class="btn btn--ghost btn--sm">{{ icon("arrow-left", size="sm") }} Liste</a>
       <div>
         <div class="fd-header__title">
           <h1>Fahrt #{{ fahrt.id }}</h1>
@@ -66,7 +66,7 @@
     </div>
     {% if fahrt.fahrzeug %}
     <div class="fd-vehicle-chip">
-      <span style="font-size:1.5rem;">&#x1F692;</span>
+      <span style="font-size:1.5rem;">{{ icon("firetruck", size="sm") }}</span>
       <div>
         <div class="fd-vehicle-chip__label">Fahrzeug</div>
         <div class="fd-vehicle-chip__value">{{ fahrt.fahrzeug.code }}{% if fahrt.fahrzeug.kennzeichen %} ({{ fahrt.fahrzeug.kennzeichen }}){% endif %}</div>
@@ -167,7 +167,7 @@
 
       {% if fahrt.schaden_vorhanden %}
       <div class="fd-card fd-card--schaden">
-        <div class="fd-card__head"><h3 class="fd-card__title" style="color:var(--red-light);">&#9888; Schaden gemeldet</h3></div>
+        <div class="fd-card__head"><h3 class="fd-card__title" style="color:var(--red-light);">{{ icon("alert-triangle", size="xs") }} Schaden gemeldet</h3></div>
         <div class="fd-row"><span class="fd-row__label">Betriebsfähig</span><span class="fd-row__value">{% if fahrt.schaden_betriebsfaehig %}Ja{% else %}Nein{% endif %}</span></div>
         {% if fahrt.schaden_beschreibung %}<p style="margin:.75rem 0 0;font-size:.88rem;">{{ fahrt.schaden_beschreibung }}</p>{% endif %}
 
@@ -245,7 +245,7 @@
   {% if fahrt.status.value == 'aktiv' and can_edit %}
   <div class="fd-actions">
     <div class="fd-actions__group">
-      <a href="/verwaltung/fahrten/{{ fahrt.id }}/korrektur{{ org_q }}" class="btn btn--ghost btn--sm">&#9998; Korrigieren</a>
+      <a href="/verwaltung/fahrten/{{ fahrt.id }}/korrektur{{ org_q }}" class="btn btn--ghost btn--sm">{{ icon("pencil", size="sm") }} Korrigieren</a>
       <form method="post" action="/verwaltung/fahrten/{{ fahrt.id }}/statistikflag{{ org_q }}">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
         <button type="submit" class="btn btn--ghost btn--sm">
