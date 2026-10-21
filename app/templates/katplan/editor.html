@@ -15,7 +15,7 @@
 {% block content %}
   {% set status_farben = {'entwurf': 'gray', 'in_pruefung': 'amber', 'freigegeben': 'green', 'in_ueberarbeitung': 'blue', 'archiviert': 'gray'} %}
   <section class="kp-page">
-    <a class="btn btn--ghost btn--sm" href="/katastrophenplaene/{{ plan.id }}">{{ icon("chevron-left", size="xs") }} Zurück zum Plan</a>
+    <a class="btn btn--ghost btn--sm" href="/plaene/{{ plan.id }}">{{ icon("chevron-left", size="xs") }} Zurück zum Plan</a>
     <header class="kp-header">
       <h1>{{ plan.titel }} bearbeiten</h1>
       <span id="kp-editor-status" class="kp-status kp-status--{{ status_farben.get(plan.status, 'gray') }}">{{ status_labels[plan.status] }}</span>

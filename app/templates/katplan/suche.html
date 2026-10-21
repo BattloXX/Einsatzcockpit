@@ -1,15 +1,15 @@
 {% extends "base.html" %}
-{% block title %}Inhalte suchen · Katastrophenpläne{% endblock %}
+{% block title %}Inhalte suchen · Einsatz- &amp; Katastrophenpläne{% endblock %}
 {% block head_extra %}
   {% include "katplan/_design.html" %}
   <script src="/static/js/katplan_suche.js" defer></script>
 {% endblock %}
 {% block content %}
   <section class="kp-page kp-suche">
-    <a class="btn btn--ghost btn--sm" href="/katastrophenplaene">{{ icon("chevron-left", size="xs") }} Katastrophenpläne</a>
-    <h1>In Katastrophenplänen suchen</h1>
-    <form id="kp-suchformular" method="get" action="/katastrophenplaene/suche" class="kp-filter"
-          hx-get="/katastrophenplaene/suche" hx-target="#kp-suche-treffer" hx-swap="outerHTML"
+    <a class="btn btn--ghost btn--sm" href="/plaene">{{ icon("chevron-left", size="xs") }} Pläne</a>
+    <h1>In Einsatz- &amp; Katastrophenplänen suchen</h1>
+    <form id="kp-suchformular" method="get" action="/plaene/suche" class="kp-filter"
+          hx-get="/plaene/suche" hx-target="#kp-suche-treffer" hx-swap="outerHTML"
           hx-trigger="input changed delay:400ms from:input[name=q], change" hx-push-url="true">
       <label>Suchbegriffe
         <input class="form-control" type="search" name="q" value="{{ form.get('q', '') }}" placeholder="Alle Wörter müssen vorkommen">
@@ -69,7 +69,7 @@
         </select>
       </label>
       <button class="btn btn--primary btn--sm" type="submit">Suchen</button>
-      <a href="/katastrophenplaene/suche" class="btn btn--ghost btn--sm">Zurücksetzen</a>
+      <a href="/plaene/suche" class="btn btn--ghost btn--sm">Zurücksetzen</a>
     </form>
     {% include "katplan/_suche_treffer.html" %}
   </section>

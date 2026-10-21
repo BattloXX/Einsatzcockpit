@@ -210,8 +210,8 @@
       {% if org %}<input type="hidden" name="org_id" value="{{ org.id }}">{% endif %}
       <div class="form-group" style="display:flex;align-items:flex-start;gap:1.5rem;flex-wrap:wrap">
         <div style="flex:1;min-width:260px">
-          <label style="font-weight:600">Katastrophenpläne</label>
-          <p class="form-hint" style="margin-top:.25rem">Katastrophen- und Maßnahmenpläne nativ erfassen, freigeben und durchsuchen.</p>
+          <label style="font-weight:600">Einsatz- &amp; Katastrophenpläne</label>
+          <p class="form-hint" style="margin-top:.25rem">Alarm- und Einsatzpläne, Maßnahmen- und Katastrophenpläne nativ erfassen, freigeben und durchsuchen.</p>
         </div>
         <label class="toggle-label" style="display:flex;align-items:center;gap:.5rem;cursor:pointer">
           <input type="checkbox" name="enabled_raw" value="1" {% if _katplan_sys_on %}checked{% endif %} onchange="this.form.submit()">
@@ -649,17 +649,17 @@
           <input type="checkbox" name="suche_aktiv_raw" value="1" {% if org_settings and org_settings.suche_aktiv %}checked{% endif %} {% if not suche_sys_enabled %}disabled{% endif %}>
           Zentrale Suche für diese Organisation aktivieren
         </label>
-        <small class="form-hint">Durchsucht Objekte, Objektdokumente und freigegebene Katastrophenpläne über einen Index, dazu live Einsätze, Sperren, Wasserstellen und GSL. Kontakte sind nicht enthalten.</small>
+        <small class="form-hint">Durchsucht Objekte, Objektdokumente und freigegebene Einsatz- und Katastrophenpläne über einen Index, dazu live Einsätze, Sperren, Wasserstellen und GSL. Kontakte sind nicht enthalten.</small>
         {% if suche_sys_enabled %}<a href="/einstellungen/suche">Indexstatus und Neuaufbau</a>{% else %}<p class="form-hint">Systemweit deaktiviert - bitte System-Admin kontaktieren.</p>{% endif %}
       </div>
-      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">Katastrophenpläne</h3>
+      <h3 style="margin-top:1.5rem;margin-bottom:.75rem;font-size:1rem;font-weight:600">Einsatz- &amp; Katastrophenpläne</h3>
       {% set _katplan_org_on = (org_settings.katplan_modul_aktiv) if org_settings else false %}
       <div class="form-group">
         <label style="display:flex;align-items:center;gap:.5rem;{% if not katplan_sys_enabled %}opacity:.5;cursor:not-allowed{% endif %}">
           <input type="checkbox" name="katplan_modul_aktiv_raw" value="1" {% if _katplan_org_on %}checked{% endif %} {% if not katplan_sys_enabled %}disabled title="Systemweit deaktiviert - bitte System-Admin kontaktieren"{% endif %}>
-          Katastrophenpläne für diese Organisation aktivieren
+          Einsatz- &amp; Katastrophenpläne für diese Organisation aktivieren
         </label>
-        <small class="form-hint">Katastrophen- und Maßnahmenpläne nativ erfassen, freigeben und durchsuchen.</small>
+        <small class="form-hint">Alarm- und Einsatzpläne, Maßnahmen- und Katastrophenpläne nativ erfassen, freigeben und durchsuchen.</small>
       </div>
       <div class="form-group">
         <label style="display:flex;align-items:center;gap:.5rem;font-weight:400;">

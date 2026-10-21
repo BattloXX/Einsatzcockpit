@@ -121,7 +121,7 @@ def test_ki_nur_ui_speichern_bestaetigt_und_ui_zeigt_qs(client, umgebung):
         assert "ki_ungeprueft" in {h["code"] for h in qs.element_hinweise(db, plan, element, heute=HEUTE)}
     page = client.get(basis(umgebung) + f"/bearbeiten?element={e.id}")
     assert page.status_code == 200 and "KI ungeprüft" in page.text and "Qualität:" in page.text
-    assert "2 Hinweise" in client.get("/katastrophenplaene").text
+    assert "2 Hinweise" in client.get("/plaene").text
     response = post(client, basis(umgebung) + f"/elemente/{e.id}", **element_form(e))
     assert response.status_code == 200
     assert 'id="kp-qualitaet"' in response.text
@@ -274,7 +274,7 @@ def test_quellenvergleich_und_umstellen(client, quellen):
 def test_public_katplan_bullet(client):
     response = client.get("/funktionen")
     assert response.status_code == 200
-    assert "Katastrophenpläne mit Freigabe, Karte, Suche und PDF" in response.text
+    assert "Maßnahmen- und Katastrophenpläne mit Freigabe, Karte, Suche und PDF" in response.text
     assert "Anwender-Katastrophenplaene" in response.text
 
 

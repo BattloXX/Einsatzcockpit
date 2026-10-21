@@ -10,7 +10,7 @@
       <tbody>
         {% for dokument in quellen %}
           <tr>
-            <td><a href="/katastrophenplaene/{{ plan.id }}/quellen/{{ dokument.id }}">{{ dokument.titel }}</a>{% if dokument.archiviert %} · archiviert{% endif %}</td>
+            <td><a href="/plaene/{{ plan.id }}/quellen/{{ dokument.id }}">{{ dokument.titel }}</a>{% if dokument.archiviert %} · archiviert{% endif %}</td>
             <td>{{ dokument.herausgeber or '-' }}</td>
             <td>{{ dokument.stand.strftime('%d.%m.%Y') if dokument.stand else '-' }}</td>
             <td>{{ dokument.seitenzahl }}</td>
@@ -27,7 +27,7 @@
   <div class="kp-mobile-list">
     {% for dokument in quellen %}
       <article class="kp-mcard">
-        <a class="kp-mcard__title" href="/katastrophenplaene/{{ plan.id }}/quellen/{{ dokument.id }}">{{ dokument.titel }}</a>
+        <a class="kp-mcard__title" href="/plaene/{{ plan.id }}/quellen/{{ dokument.id }}">{{ dokument.titel }}</a>
         <p>{{ dokument.herausgeber or '-' }} · {{ dokument.stand.strftime('%d.%m.%Y') if dokument.stand else '-' }}</p>
         <p>{{ dokument.seitenzahl }} Seiten · v{{ dokument.versionsnummer }}{% if dokument.versionsnummer > 1 %} (ersetzt v{{ dokument.versionsnummer - 1 }}){% endif %}{% if dokument.archiviert %} · archiviert{% endif %}</p>
         {% with quelle_status_statisch = true %}{% include "katplan/_quelle_status.html" %}{% endwith %}

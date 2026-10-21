@@ -204,7 +204,7 @@ def test_duplizieren_inhalte_phasen_und_zielplan(client, umgebung):
         assert db.query(KatplanElementPhase).filter_by(element_id=kopie.id).one().phase_id == phase.id
     ziel_id, org = weiterer_plan(umgebung, status="freigegeben")
     response = post(client, path, ziel_plan_id=ziel_id)
-    assert response.status_code == 200 and f'/katastrophenplaene/{ziel_id}/bearbeiten' in response.text
+    assert response.status_code == 200 and f'/plaene/{ziel_id}/bearbeiten' in response.text
     with TestingSession() as db:
         set_tenant_context(db, org)
         kopie = db.query(KatplanElement).filter_by(plan_id=ziel_id).one()
@@ -281,7 +281,7 @@ def test_quill_beschreibungen_aller_formulare(client, umgebung, html, erwartet):
 
 def test_editor_assets_und_formulare(client, umgebung):
     login(client, umgebung)
-    for pfad in (basis(umgebung), basis(umgebung) + "/bearbeiten", "/katastrophenplaene/neu"):
+    for pfad in (basis(umgebung), basis(umgebung) + "/bearbeiten", "/plaene/neu"):
         text = client.get(pfad).text
         for datei in ("katplan_editor.js", "quill.min.js", "sortable.min.js", "quill.snow.css"):
             assert datei in text

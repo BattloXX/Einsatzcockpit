@@ -96,7 +96,7 @@ def test_mandant_und_fehlende_freigabe(client, umgebung, suffix):
         db.commit()
         fremd_id = fremd.id
     login(client, umgebung)
-    assert client.get(f"/katastrophenplaene/{fremd_id}" + suffix).status_code == 404
+    assert client.get(f"/plaene/{fremd_id}" + suffix).status_code == 404
 
 
 def test_html_filter_reiter_assets_und_unverortete(client, kartenplan):

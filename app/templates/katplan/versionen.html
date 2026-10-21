@@ -8,14 +8,14 @@
     </header>
     {% from "_tabnav.html" import tabnav %}
     {% set tabs = [
-    {'label': 'Plan', 'href': '/katastrophenplaene/' ~ plan.id, 'active': false},
-    {'label': 'Karte', 'href': '/katastrophenplaene/' ~ plan.id ~ '/karte', 'active': false},
-    {'label': 'Versionen', 'href': '/katastrophenplaene/' ~ plan.id ~ '/versionen', 'active': true}
+    {'label': 'Plan', 'href': '/plaene/' ~ plan.id, 'active': false},
+    {'label': 'Karte', 'href': '/plaene/' ~ plan.id ~ '/karte', 'active': false},
+    {'label': 'Versionen', 'href': '/plaene/' ~ plan.id ~ '/versionen', 'active': true}
     ] %}
     {% if can_edit %}
-      {% set tabs = tabs + [{'label': 'Protokoll', 'href': '/katastrophenplaene/' ~ plan.id ~ '#kp-protokoll', 'active': false}] %}
+      {% set tabs = tabs + [{'label': 'Protokoll', 'href': '/plaene/' ~ plan.id ~ '#kp-protokoll', 'active': false}] %}
     {% endif %}
-    {% set tabs = tabs + [{'label': 'Quellen', 'href': '/katastrophenplaene/' ~ plan.id ~ '/quellen', 'active': false}] %}
+    {% set tabs = tabs + [{'label': 'Quellen', 'href': '/plaene/' ~ plan.id ~ '/quellen', 'active': false}] %}
     {{ tabnav(tabs) }}
 
     <div class="kp-card kp-table-wrap">
@@ -39,13 +39,13 @@
               <td data-label="Änderungsnotiz">{{ version.aenderungsnotiz or '-' }}</td>
               <td data-label="Elementanzahl">{{ version.anzahl_elemente }}</td>
               <td data-label="Aktionen">
-                <a href="/katastrophenplaene/{{ plan.id }}/versionen/{{ version.id }}">Ansehen</a>
-                <a href="/katastrophenplaene/{{ plan.id }}/pdf?version_id={{ version.id }}">PDF / Offlinefassung</a>
+                <a href="/plaene/{{ plan.id }}/versionen/{{ version.id }}">Ansehen</a>
+                <a href="/plaene/{{ plan.id }}/pdf?version_id={{ version.id }}">PDF / Offlinefassung</a>
                 {% if not loop.first %}
-                  <a href="/katastrophenplaene/{{ plan.id }}/vergleich?von={{ versionen_liste[loop.index0 - 1][0].id }}&amp;nach={{ version.id }}">Vergleichen mit vorheriger</a>
+                  <a href="/plaene/{{ plan.id }}/vergleich?von={{ versionen_liste[loop.index0 - 1][0].id }}&amp;nach={{ version.id }}">Vergleichen mit vorheriger</a>
                 {% endif %}
                 {% if can_edit %}
-                  <a href="/katastrophenplaene/{{ plan.id }}/vergleich?von={{ version.id }}&amp;nach=arbeitsstand">Mit Arbeitsstand vergleichen</a>
+                  <a href="/plaene/{{ plan.id }}/vergleich?von={{ version.id }}&amp;nach=arbeitsstand">Mit Arbeitsstand vergleichen</a>
                 {% endif %}
               </td>
             </tr>
@@ -80,16 +80,16 @@
           </div>
           <p class="kp-freitext">{{ version.aenderungsnotiz or '-' }}</p>
           <div class="kp-actions">
-            <a class="btn btn--ghost btn--sm" href="/katastrophenplaene/{{ plan.id }}/pdf?version_id={{ version.id }}">PDF / Offlinefassung</a>
-            <a class="btn btn--ghost btn--sm" href="/katastrophenplaene/{{ plan.id }}/versionen/{{ version.id }}">Ansehen</a>
+            <a class="btn btn--ghost btn--sm" href="/plaene/{{ plan.id }}/pdf?version_id={{ version.id }}">PDF / Offlinefassung</a>
+            <a class="btn btn--ghost btn--sm" href="/plaene/{{ plan.id }}/versionen/{{ version.id }}">Ansehen</a>
             {% if not loop.first %}
               <a class="btn btn--ghost btn--sm"
-                href="/katastrophenplaene/{{ plan.id }}/vergleich?von={{ versionen_liste[loop.index0 - 1][0].id }}&amp;nach={{ version.id }}">
+                href="/plaene/{{ plan.id }}/vergleich?von={{ versionen_liste[loop.index0 - 1][0].id }}&amp;nach={{ version.id }}">
                 Vergleichen mit vorheriger
               </a>
             {% endif %}
             {% if can_edit %}
-              <a class="btn btn--ghost btn--sm" href="/katastrophenplaene/{{ plan.id }}/vergleich?von={{ version.id }}&amp;nach=arbeitsstand">
+              <a class="btn btn--ghost btn--sm" href="/plaene/{{ plan.id }}/vergleich?von={{ version.id }}&amp;nach=arbeitsstand">
                 Mit Arbeitsstand vergleichen
               </a>
             {% endif %}

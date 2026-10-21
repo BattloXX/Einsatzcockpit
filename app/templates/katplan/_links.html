@@ -11,14 +11,14 @@
       {% if element %}<input form="" type="hidden" name="element_id" value="{{ element.id }}">{% endif %}
       <label>Zieltyp
         <select form="" name="ziel_typ" class="form-control"
-          hx-get="/katastrophenplaene/{{ plan.id }}/verknuepfungen/suche" hx-trigger="change"
+          hx-get="/plaene/{{ plan.id }}/verknuepfungen/suche" hx-trigger="change"
           hx-include="closest .kp-form" hx-target="#{{ links_ziel }}-treffer">
           {% for code, label in ziel_typen.items() %}<option value="{{ code }}">{{ label }}</option>{% endfor %}
         </select>
       </label>
       <label>Suche
         <input form="" class="form-control" type="search" name="q" placeholder="Mindestens 2 Zeichen"
-          hx-get="/katastrophenplaene/{{ plan.id }}/verknuepfungen/suche" hx-trigger="input changed delay:300ms, search"
+          hx-get="/plaene/{{ plan.id }}/verknuepfungen/suche" hx-trigger="input changed delay:300ms, search"
           hx-include="closest .kp-form" hx-target="#{{ links_ziel }}-treffer">
       </label>
     </div>

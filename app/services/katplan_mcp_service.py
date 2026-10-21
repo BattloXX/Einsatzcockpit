@@ -14,7 +14,7 @@ from app.services.katplan_freigabe_service import erstelle_snapshot, lade_versio
 from app.services.katplan_link_service import links_aus_version
 from app.services.katplan_quelle_service import parse_seiten
 from app.services.katplan_service import _HTMLText
-from app.services.katplan_typen import ELEMENT_TYPEN, bereinige_daten
+from app.services.katplan_typen import ELEMENT_TYPEN, PLANARTEN, bereinige_daten
 from app.services.katplan_ziel_service import ziel_verfuegbar
 from app.services.katplan_zugriff import darf_bearbeiten, darf_lesen, sieht_vertraulich
 
@@ -66,7 +66,7 @@ def anhang_ansichten(user: User, anhaenge: list[dict], version_id: int | None) -
             continue
         item = {**{k: a.get(k) for k in (
             "uuid", "art", "beschriftung", "dateiname", "mime", "url", "vertraulich", "seiten")},
-            "download_url": f"/katastrophenplaene/anhang/{a['uuid']}" + (
+            "download_url": f"/plaene/anhang/{a['uuid']}" + (
                 f"?version_id={version_id}" if version_id is not None else ""),
             "download_hinweis": "Geschützte Anhang-URL; Planquellen über katplan_dokument_auszug(download=True)."}
         if a["art"] == "link":
@@ -171,7 +171,7 @@ def element_dict(db: Session, user: User, plan: KatplanPlan, e: dict, kopf: dict
                 warnings.append("Ungültiger Seitenbereich der Quellreferenz.")
             suffix = f"?version_id={version_id}" if version_id is not None else ""
             for nr in nummern:
-                basis = f"/katastrophenplaene/quelle/{dokument.uuid}/seite/{nr}"
+                basis = f"/plaene/quelle/{dokument.uuid}/seite/{nr}"
                 seiten_liste.append({"seiten_nr": nr, "thumb_url": basis + "/thumb" + suffix,
                                      "seiten_url": basis + "/bild" + suffix, "text_url": basis + "/text" + suffix})
         quellen.append({"dokument_id": e["quelle_dokument_id"], "titel": q.get("titel"),
@@ -231,6 +231,8 @@ def fassung_laden(db: Session, user: User, plan: KatplanPlan, fassung: str,
 
 def kopf_ansicht(kopf: dict) -> dict:
     """Gleicher Plankopf fuer Lese- und Schreibantworten, ohne Transaktionsabschluss."""
-    return {**{k: kopf.get(k) for k in ("uuid", "titel", "gefahrenarten", "geltungsbereich",
+    planart = kopf.get("planart", "katastrophenplan")
+    return {"planart": planart, "planart_label": PLANARTEN[planart].label,
+            **{k: kopf.get(k) for k in ("uuid", "titel", "gefahrenarten", "geltungsbereich",
                                        "verantwortliche_stelle", "verantwortlich_kontakt_id", "wiedervorlage_am")},
             "body": text(kopf.get("beschreibung_html"))}

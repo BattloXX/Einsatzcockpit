@@ -17,6 +17,10 @@ KATPLAN_STATUS_LABELS = {
     "entwurf": "Entwurf", "in_pruefung": "In Prüfung", "freigegeben": "Freigegeben",
     "in_ueberarbeitung": "In Überarbeitung", "archiviert": "Archiviert",
 }
+KATPLAN_PLANARTEN = {
+    "alarm_einsatzplan": "Alarm- und Einsatzplan", "massnahmenplan": "Maßnahmenplan",
+    "katastrophenplan": "Katastrophenplan",
+}
 KATPLAN_GEFAHRENARTEN = {
     "hochwasser": "Hochwasser", "sturm": "Sturm", "blackout": "Blackout/Stromausfall",
     "evakuierung": "Evakuierung", "schnee": "Schneedruck/Lawine", "hitze": "Hitze/Trockenheit",
@@ -35,11 +39,13 @@ class KatplanPlan(TenantScoped, Base):
     __tablename__ = "katplan_plan"
     __table_args__ = (
         sa.Index("ix_katplan_plan_org_status", "org_id", "status"),
+        sa.Index("ix_katplan_plan_org_planart", "org_id", "planart"),
     )
 
     id: Mapped[int] = mapped_column(sa.BigInteger, primary_key=True, autoincrement=True)
     uuid: Mapped[str] = mapped_column(sa.String(36), nullable=False, unique=True, default=lambda: str(uuid4()))
     titel: Mapped[str] = mapped_column(sa.String(200), nullable=False)
+    planart: Mapped[str] = mapped_column(sa.String(30), nullable=False, default="katastrophenplan")
     beschreibung_html: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     gefahrenarten_json: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     geltungsbereich: Mapped[str | None] = mapped_column(sa.String(300), nullable=True)

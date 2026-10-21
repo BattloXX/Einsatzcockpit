@@ -1,5 +1,5 @@
-<form method="post" action="/katastrophenplaene/{{ plan.id }}/quellen" enctype="multipart/form-data"
-  hx-post="/katastrophenplaene/{{ plan.id }}/quellen" hx-encoding="multipart/form-data" hx-target="#kp-quellen" hx-swap="outerHTML" class="kp-form">
+<form method="post" action="/plaene/{{ plan.id }}/quellen" enctype="multipart/form-data"
+  hx-post="/plaene/{{ plan.id }}/quellen" hx-encoding="multipart/form-data" hx-target="#kp-quellen" hx-swap="outerHTML" class="kp-form">
   <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
   {% if ersetzt %}<input type="hidden" name="ersetzt_dokument_id" value="{{ ersetzt.id }}">{% endif %}
   <label>PDF-Datei <input class="form-control" type="file" name="datei" accept="application/pdf" required></label>

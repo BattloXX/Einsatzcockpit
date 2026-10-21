@@ -126,7 +126,7 @@ def test_links_routen_validierung_und_schreibrechte(client, umgebung):
     assert post(client, path, url="https://example.org/plan", beschriftung="Plan").status_code == 200
     a = objekte(umgebung, KatplanAnhang)[0]
     assert a.art == "link"
-    assert client.get(f"/katastrophenplaene/anhang/{a.uuid}").status_code == 404
+    assert client.get(f"/plaene/anhang/{a.uuid}").status_code == 404
     assert post(client, path + f"/{a.uuid}", beschriftung="Neu", urheber="Anna",
                 aufnahme_datum="2026-10-19", sort=4).status_code == 200
     assert objekte(umgebung, KatplanAnhang)[0].aufnahme_datum == date(2026, 10, 19)
@@ -174,7 +174,7 @@ def test_objektdokument_validierung_und_redirect(client, umgebung):
             assert post(client, path, objekt_dokument_id=did, seiten=seiten).status_code == 422
         assert post(client, path, objekt_dokument_id=did, seiten="2-3").status_code == 200
         a = objekte(umgebung, KatplanAnhang)[0]
-        url = f"/katastrophenplaene/anhang/{a.uuid}"
+        url = f"/plaene/anhang/{a.uuid}"
         assert client.get(url, follow_redirects=False).status_code == 404  # Nur Katplan-Verwalter.
         # Kombinierte Rollen fuer Arbeitsstand und Objekt-Leserecht.
         with TestingSession() as db:
@@ -255,7 +255,7 @@ def test_download_header(client, umgebung, data, name, mime, disposition):
     login(client, umgebung)
     assert upload(client, umgebung, data(), name, mime).status_code == 200
     a = objekte(umgebung, KatplanAnhang)[0]
-    response = client.get(f"/katastrophenplaene/anhang/{a.uuid}")
+    response = client.get(f"/plaene/anhang/{a.uuid}")
     assert response.status_code == 200
     assert response.headers["content-disposition"].startswith(disposition + ";")
     assert response.headers["x-content-type-options"] == "nosniff"
@@ -273,7 +273,7 @@ def test_download_rechte_freigabe_soft_delete_und_pfadschutz(client, umgebung, s
     login(client, umgebung)
     assert upload(client, umgebung).status_code == 200
     draft = objekte(umgebung, KatplanAnhang)[2]
-    url = lambda x: f"/katastrophenplaene/anhang/{x.uuid}"
+    url = lambda x: f"/plaene/anhang/{x.uuid}"
     assert client.get(url(draft)).status_code == 200
     login(client, umgebung, "readonly")
     assert client.get(url(a)).status_code == 200
@@ -370,7 +370,7 @@ def test_vertrauliches_element_und_historische_datei(client, umgebung):
         db.commit()
     assert upload(client, umgebung, element_id=element.id).status_code == 200
     anhang = objekte(umgebung, KatplanAnhang)[0]
-    url = f"/katastrophenplaene/anhang/{anhang.uuid}"
+    url = f"/plaene/anhang/{anhang.uuid}"
     login(client, umgebung, "katplan_freigeber")
     assert post(client, basis(umgebung) + "/freigeben").status_code == 200
     v1 = lade_plan(umgebung).aktuelle_version_id

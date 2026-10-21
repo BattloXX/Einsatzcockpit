@@ -14,7 +14,7 @@
         </select>
       </label>
       <label>Hinweis<input form="" class="form-control" name="hinweis" maxlength="300"></label>
-      <button type="button" class="btn" hx-post="/katastrophenplaene/{{ plan.id }}/elemente/{{ element.id }}/beziehungen"
+      <button type="button" class="btn" hx-post="/plaene/{{ plan.id }}/elemente/{{ element.id }}/beziehungen"
         hx-include="closest .kp-form" hx-target="#kp-beziehungen-{{ element.id }}" hx-swap="outerHTML">Verknüpfen</button>
     </div>
   {% else %}<p>Keine Treffer.</p>{% endfor %}

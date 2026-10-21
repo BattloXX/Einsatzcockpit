@@ -18,7 +18,10 @@
           {% for plan in plaene %}
             {% set farbe = status_farben.get(plan.status, 'gray') %}
             <tr>
-              <td><a class="kp-link" href="/katastrophenplaene/{{ plan.id }}">{{ plan.titel }}</a></td>
+              <td><a class="kp-link" href="/plaene/{{ plan.id }}">{{ plan.titel }}</a>
+                {% set art = planarten[plan.planart] %}
+                <span class="kp-badge kp-badge--gray" title="{{ art.label }}">{{ icon(art.icon_name, size="sm") }} {{ art.kuerzel }}</span>
+              </td>
               <td>
                 <div class="kp-chips">
                   {% for code in plan.gefahrenarten %}
@@ -50,10 +53,12 @@
         {% set farbe = status_farben.get(plan.status, 'gray') %}
         <article class="kp-mcard kp-mcard--{{ farbe }}">
           <div class="kp-mcard__top">
-            <a class="kp-link kp-mcard__title" href="/katastrophenplaene/{{ plan.id }}">{{ plan.titel }}</a>
+            <a class="kp-link kp-mcard__title" href="/plaene/{{ plan.id }}">{{ plan.titel }}</a>
             <span class="kp-badge kp-badge--{{ farbe }}">{{ status_labels.get(plan.status, plan.status) }}</span>
           </div>
           <div class="kp-chips">
+            {% set art = planarten[plan.planart] %}
+            <span class="kp-badge kp-badge--gray" title="{{ art.label }}">{{ icon(art.icon_name, size="sm") }} {{ art.kuerzel }}</span>
             {% for code in plan.gefahrenarten %}
               <span class="kp-badge kp-badge--gray">{{ gefahrenarten.get(code, code) }}</span>
             {% endfor %}

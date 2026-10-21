@@ -1,4 +1,4 @@
-"""Liste und Stammdaten der Katastrophenplaene."""
+"""Liste und Stammdaten der Einsatz- und Katastrophenplaene."""
 
 import json
 from datetime import UTC, date, datetime
@@ -66,7 +66,7 @@ from app.services.katplan_service import (
     validiere_stammdaten,
     verschiebe_nachbar,
 )
-from app.services.katplan_typen import ELEMENT_TYPEN, ELEMENT_VORLAGEN, bereinige_daten
+from app.services.katplan_typen import ELEMENT_TYPEN, ELEMENT_VORLAGEN, PLANARTEN, bereinige_daten
 from app.services.katplan_ziel_service import ziel_laden, ziel_suchen, ziel_verfuegbar
 from app.services.katplan_zugriff import (
     darf_bearbeiten,
@@ -78,7 +78,18 @@ from app.services.katplan_zugriff import (
 )
 from app.services.media_service import _storage_root
 
-router = APIRouter(prefix="/katastrophenplaene", tags=["Katastrophenplaene"])
+router = APIRouter(prefix="/plaene", tags=["Einsatz- und Katastrophenplaene"])
+alt_router = APIRouter(prefix="/katastrophenplaene", include_in_schema=False)
+
+
+@alt_router.api_route("", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+@alt_router.api_route("/{rest:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+def alte_adresse(request: Request, rest: str = "") -> RedirectResponse:
+    """Alte Links (/katastrophenplaene/...) dauerhaft auf /plaene weiterleiten."""
+    ziel = "/plaene" + (f"/{rest}" if rest else "")
+    if request.url.query:
+        ziel += f"?{request.url.query}"
+    return RedirectResponse(ziel, status_code=308)
 
 
 def _plan(db: Session, plan_id: int, user: User) -> KatplanPlan:
@@ -109,7 +120,7 @@ def _kontext(db: Session, user: User, plan: KatplanPlan | None = None) -> dict[s
         ).filter(KatplanAenderung.plan_id == plan.id).order_by(
             KatplanAenderung.zeit.desc(), KatplanAenderung.id.desc(),
         ).limit(50).all()
-    return {"user": user, "plan": plan, "gefahrenarten": KATPLAN_GEFAHRENARTEN,
+    return {"user": user, "plan": plan, "gefahrenarten": KATPLAN_GEFAHRENARTEN, "planarten": PLANARTEN,
             "status_labels": KATPLAN_STATUS_LABELS, "can_edit": darf_bearbeiten(user),
             "can_release": darf_freigeben(user), "protokoll": protokoll,
             "aktuelle_version": aktuelle_version, "freigegeben_von": freigegeben_von,
@@ -121,11 +132,11 @@ def _kontext(db: Session, user: User, plan: KatplanPlan | None = None) -> dict[s
 
 class Stammdaten:
     def __init__(
-        self, titel: str = Form(""), gefahrenarten: list[str] = Form([]),
+        self, planart: str = Form("katastrophenplan"), titel: str = Form(""), gefahrenarten: list[str] = Form([]),
         beschreibung_html: str = Form(""), geltungsbereich: str = Form(""),
         verantwortliche_stelle: str = Form(""), wiedervorlage_am: str = Form(""),
     ):
-        self.form = {"titel": titel, "gefahrenarten": gefahrenarten,
+        self.form = {"planart": planart, "titel": titel, "gefahrenarten": gefahrenarten,
                      "beschreibung_html": bereinige_beschreibung(beschreibung_html) or "",
                      "geltungsbereich": geltungsbereich,
                      "verantwortliche_stelle": verantwortliche_stelle, "wiedervorlage_am": wiedervorlage_am}
@@ -133,7 +144,7 @@ class Stammdaten:
         self.werte = {}
         try:
             self.werte = validiere_stammdaten(
-                titel=titel, gefahrenarten=gefahrenarten, beschreibung_html=beschreibung_html,
+                planart=planart, titel=titel, gefahrenarten=gefahrenarten, beschreibung_html=beschreibung_html,
                 geltungsbereich=geltungsbereich, verantwortliche_stelle=verantwortliche_stelle,
                 wiedervorlage_am=wiedervorlage_am)
         except ValueError as exc:
@@ -162,7 +173,7 @@ def _anhaenge_kontext(db: Session, user: User, plan: KatplanPlan,
             if daten.get("vertraulich") and not sieht_vertraulich(user):
                 continue
             a = dateien.get(daten["uuid"])
-            url = "/katastrophenplaene/anhang/" + daten["uuid"]
+            url = "/plaene/anhang/" + daten["uuid"]
             suffix = f"?version_id={version_id}" if version_id is not None else ""
             dokument = dokumente.get(daten.get("objekt_dokument_id") or 0)
             result.append({**daten, "datei_url": url + suffix, "thumb_url": url + "/thumb" + suffix,
@@ -395,7 +406,7 @@ def anhang_loeschen(plan_id: int, uuid: str, request: Request,
 
 
 @router.get("")
-def liste(request: Request, gefahr: str = "", status: str = "", q: str = "", archiv: int = 0,
+def liste(request: Request, gefahr: str = "", status: str = "", q: str = "", archiv: int = 0, planart: str = "",
           db: Session = Depends(get_db), user: User = Depends(require_katplan_lesen)):
     query = db.query(KatplanPlan).filter(KatplanPlan.org_id == user.org_id)
     if not darf_bearbeiten(user):
@@ -420,6 +431,7 @@ def liste(request: Request, gefahr: str = "", status: str = "", q: str = "", arc
             if v is None:
                 continue
             daten = json.loads(v.plan_json)
+            daten.setdefault("planart", "katastrophenplan")
             termin = daten.get("wiedervorlage_am")
             leseliste.append({**daten, "id": plan.id, "status": "freigegeben",
                               "wiedervorlage_am": date.fromisoformat(termin) if termin else None,
@@ -427,10 +439,12 @@ def liste(request: Request, gefahr: str = "", status: str = "", q: str = "", arc
         plaene = leseliste
         if q.strip():
             plaene = [p for p in plaene if q.strip().casefold() in p["titel"].casefold()]
+    if planart:
+        plaene = [p for p in plaene if (p["planart"] if isinstance(p, dict) else p.planart) == planart]
     if gefahr:
         plaene = [plan for plan in plaene
                   if gefahr in (plan["gefahrenarten"] if isinstance(plan, dict) else plan.gefahrenarten)]
-    context = {**_kontext(db, user), "plaene": plaene, "gefahr": gefahr,
+    context = {**_kontext(db, user), "plaene": plaene, "gefahr": gefahr, "planart": planart,
                "status": status, "q": q, "archiv": archiv, "versionen": versionen,
                "qs_anzahlen": {p.id: sum(qs_service.plan_zusammenfassung(db, p, now_local(user.org).date()).values())
                                for p in plaene} if darf_bearbeiten(user) else {}}
@@ -446,8 +460,10 @@ async def adress_suche(q: str = "", user: User = Depends(require_katplan_lesen))
 
 
 @router.get("/neu")
-def neu(request: Request, db: Session = Depends(get_db), user: User = Depends(require_katplan_bearbeiten)):
-    return templates.TemplateResponse(request, "katplan/formular.html", {**_kontext(db, user), "form": {}})
+def neu(request: Request, planart: str = "katastrophenplan", db: Session = Depends(get_db),
+        user: User = Depends(require_katplan_bearbeiten)):
+    return templates.TemplateResponse(request, "katplan/formular.html", {
+        **_kontext(db, user), "form": {"planart": planart}})
 
 
 @router.post("/neu")
@@ -460,8 +476,14 @@ def anlegen(request: Request, daten: Stammdaten = Depends(), db: Session = Depen
     db.add(plan)
     db.flush()
     protokolliere(db, plan, "plan", "angelegt", user)
+    vorlage = PLANARTEN[plan.planart]
+    for titel in vorlage.kapitel:
+        lege_abschnitt_an(db, plan, user, titel=titel)
+    for sort, (name, farbe) in enumerate(vorlage.phasen, 1):
+        phase = lege_phase_an(db, plan, user, name=name)
+        phase.farbe, phase.sort = farbe, sort * 10
     db.commit()
-    return RedirectResponse(f"/katastrophenplaene/{plan.id}", status_code=303)
+    return RedirectResponse(f"/plaene/{plan.id}", status_code=303)
 
 
 def _sichtbarer_plan(db: Session, plan_id: int, user: User) -> KatplanPlan:
@@ -536,7 +558,7 @@ def _kartenkontext(db: Session, user: User, plan: KatplanPlan, arbeitsstand: boo
                         "typ_icon_name": typ.icon_name,
                         "prioritaet": e["prioritaet"], "geo_status": e["geo_status"],
                         "phasen": json.loads(e["phasen_json"]),
-                        "url": f"/katastrophenplaene/{plan.id}"
+                        "url": f"/plaene/{plan.id}"
                                + (suffix if arbeitsstand else "") + f"#element-{uuid}"}
         geometrie = json.loads(e["geometry_json"]) if e["geometry_json"] else None
         if geometrie is None and e["lat"] is not None and e["lng"] is not None:
@@ -548,7 +570,7 @@ def _kartenkontext(db: Session, user: User, plan: KatplanPlan, arbeitsstand: boo
     return {"karten_geojson": {"type": "FeatureCollection", "features": features},
             "karten_unverortet": unverortet, "karten_phasen": kopf.get("phasen", []),
             "karten_titel": kopf["titel"], "karten_suffix": suffix,
-            "karten_url": f"/katastrophenplaene/{plan.id}/karte" + suffix}
+            "karten_url": f"/plaene/{plan.id}/karte" + suffix}
 
 
 def _kopfkontext(db: Session, user: User, plan: KatplanPlan) -> dict:
@@ -652,7 +674,7 @@ def stammdaten(plan_id: int, request: Request, db: Session = Depends(get_db),
                user: User = Depends(require_katplan_bearbeiten)):
     plan = _plan(db, plan_id, user)
     form = {feld: getattr(plan, feld) or "" for feld in (
-        "titel", "beschreibung_html", "geltungsbereich", "verantwortliche_stelle", "wiedervorlage_am")}
+        "planart", "titel", "beschreibung_html", "geltungsbereich", "verantwortliche_stelle", "wiedervorlage_am")}
     form["gefahrenarten"] = plan.gefahrenarten
     return templates.TemplateResponse(request, "katplan/_formular.html", {
         **_kontext(db, user, plan), "form": form, "formular_version": plan.version})
@@ -1253,7 +1275,7 @@ def _relation_ansichten(db: Session, user: User, plan: KatplanPlan, relationen: 
             titel, kennung = snapshot.titel, snapshot.kennung
         ergebnis.append({**relation, "titel": titel, "kennung": kennung,
                          "plan_titel": plan_titel if ziel_plan.id != plan.id else "",
-                         "url": (f"/katastrophenplaene/{ziel.plan_id}" if ziel.plan_id != plan.id else "")
+                         "url": (f"/plaene/{ziel.plan_id}" if ziel.plan_id != plan.id else "")
                                 + f"#element-{uuid}"})
     return ergebnis
 
@@ -1648,7 +1670,7 @@ def quelle_element_anlegen(plan_id: int, dok_id: int, request: Request, seite: i
         db.rollback()
         raise HTTPException(422, str(exc)) from exc
     db.commit()
-    ziel = f"/katastrophenplaene/{plan.id}/bearbeiten?element={element.id}"
+    ziel = f"/plaene/{plan.id}/bearbeiten?element={element.id}"
     if request.headers.get("HX-Request"):
         from fastapi.responses import Response
 
@@ -1853,4 +1875,4 @@ def quelle_umstellen(plan_id: int, dok_id: int, eid: int, db: Session = Depends(
     except ValueError as exc:
         db.rollback()
         raise HTTPException(404, "Nicht gefunden") from exc
-    return RedirectResponse(f"/katastrophenplaene/{plan.id}/bearbeiten?element={element.id}", status_code=303)
+    return RedirectResponse(f"/plaene/{plan.id}/bearbeiten?element={element.id}", status_code=303)

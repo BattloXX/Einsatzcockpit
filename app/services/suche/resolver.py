@@ -60,7 +60,7 @@ def pruefe(db: Session, user: User, quelle: str, quell_id: str, meta: dict) -> R
             return None
         if meta.get("version_id") != version.id:
             return None
-        return ResolverErgebnis(f"/katastrophenplaene/{plan.id}#element-{uuid}", "Freigegeben")
+        return ResolverErgebnis(f"/plaene/{plan.id}#element-{uuid}", "Freigegeben")
     if quelle == "katplan_seite":
         zeile = db.execute(_katplan_seiten(org_id).where(KatplanDokumentSeite.id == quell_id)).first()
         if zeile is None:
@@ -68,7 +68,7 @@ def pruefe(db: Session, user: User, quelle: str, quell_id: str, meta: dict) -> R
         seite, dokument, plan = zeile
         if dokument.id not in {d.id for d in sichtbare_quellen(db, plan, user)}:
             return None
-        url = f"/katastrophenplaene/{plan.id}/quellen/{dokument.id}?seite={seite.seiten_nr}"
+        url = f"/plaene/{plan.id}/quellen/{dokument.id}?seite={seite.seiten_nr}"
         if not darf_bearbeiten(user):
             url += f"&version_id={plan.aktuelle_version_id}"
         return ResolverErgebnis(url, "Freigegeben")

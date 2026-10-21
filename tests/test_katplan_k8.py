@@ -74,7 +74,7 @@ def test_freigabe_arbeitsstand_und_snapshot_kopf(daten):
     for rolle in ("readonly", "katplan_verwalter"):
         alt = suchen(daten, rolle, q="alter")
         assert alt["gesamt"] == 1 and alt["treffer"][0]["plan_titel"] == daten["titel"]
-        assert alt["treffer"][0]["url"] == f'/katastrophenplaene/{daten["plan_id"]}#element-{daten["uuid"]}'
+        assert alt["treffer"][0]["url"] == f'/plaene/{daten["plan_id"]}#element-{daten["uuid"]}'
         assert suchen(daten, rolle, q="neuer")["gesamt"] == 0
         assert suchen(daten, rolle, q="alter", gefahr="hochwasser")["gesamt"] == 1
         assert suchen(daten, rolle, q="alter", gefahr="sturm")["gesamt"] == 0
@@ -204,13 +204,13 @@ def test_dokumentseiten_nur_sichtbare_quellen(client, daten):
                                    seiten_nr=1, einzel_pdf_pfad="neu-seite.pdf", volltext="Pegelprognose"))
         db.commit()
     login(client, daten, "readonly")
-    html = client.get("/katastrophenplaene/suche", params={"q": "<b>"}, headers={"HX-Request": "true"}).text
+    html = client.get("/plaene/suche", params={"q": "<b>"}, headers={"HX-Request": "true"}).text
     assert "<mark>&lt;b&gt;</mark>" in html and "<b>" not in html
     result = suchen(daten, q="pegelprognose")
     assert result["gesamt"] == 1
     seite = result["treffer"][0]
     assert seite["art"] == "seite" and seite["seiten_nr"] == 1
-    assert seite["url"] == f'/katastrophenplaene/{daten["plan_id"]}/quellen/{dok_id}?seite=1&version_id={vid}'
+    assert seite["url"] == f'/plaene/{daten["plan_id"]}/quellen/{dok_id}?seite=1&version_id={vid}'
     assert suchen(daten, "incident_leader", q="pegelprognose")["gesamt"] == 2
     assert suchen(daten, "fremd", q="pegelprognose")["gesamt"] == 0
     assert suchen(daten, "katplan_verwalter", q="pegelprognose")["gesamt"] == 1
@@ -227,7 +227,7 @@ def test_dokumentseiten_nur_sichtbare_quellen(client, daten):
 
 def test_route_vollseite_fragment_markierung_und_hinweise(client, daten):
     login(client, daten, "readonly")
-    path = "/katastrophenplaene/suche"
+    path = "/plaene/suche"
     leer = client.get(path)
     assert leer.status_code == 200 and "Bitte Suchbegriffe" in leer.text
     assert 'name="arbeitsstand"' not in leer.text
@@ -245,8 +245,8 @@ def test_route_vollseite_fragment_markierung_und_hinweise(client, daten):
     assert "<b>" not in client.get(path, params={"q": "<b>"}).text
     login(client, daten)
     assert 'name="arbeitsstand"' in client.get(path).text
-    for path in ("/katastrophenplaene", f'/katastrophenplaene/{daten["plan_id"]}'):
-        assert 'action="/katastrophenplaene/suche"' in client.get(path).text
+    for path in ("/plaene", f'/plaene/{daten["plan_id"]}'):
+        assert 'action="/plaene/suche"' in client.get(path).text
 
 
 def test_relevanz_titel_vor_kennung_vor_text(daten):

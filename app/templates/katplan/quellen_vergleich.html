@@ -3,7 +3,7 @@
 {% block head_extra %}{% include "katplan/_design.html" %}{% endblock %}
 {% block content %}
   <section class="kp-page">
-    <a class="btn" href="/katastrophenplaene/{{ plan.id }}/quellen">Zurück zu Quellen</a>
+    <a class="btn" href="/plaene/{{ plan.id }}/quellen">Zurück zu Quellen</a>
     <h1>{{ vergleich.neu.titel }}: v{{ vergleich.alt.versionsnummer }} → v{{ vergleich.neu.versionsnummer }}</h1>
     {% for s in vergleich.seiten %}
       <article class="kp-box">
@@ -16,9 +16,9 @@
     <h2>Betroffene Elemente</h2>
     {% for e in vergleich.elemente %}
       <article class="kp-box">
-        <a href="/katastrophenplaene/{{ plan.id }}/bearbeiten?element={{ e.id }}">{{ e.kennung }} · {{ e.titel }}</a>
+        <a href="/plaene/{{ plan.id }}/bearbeiten?element={{ e.id }}">{{ e.kennung }} · {{ e.titel }}</a>
         <p>Seiten {{ e.quelle_seiten }} · Inhalt und Seitenbezug fachlich prüfen.</p>
-          <form method="post" action="/katastrophenplaene/{{ plan.id }}/quellen/{{ vergleich.neu.id }}/elemente/{{ e.id }}/umstellen">
+          <form method="post" action="/plaene/{{ plan.id }}/quellen/{{ vergleich.neu.id }}/elemente/{{ e.id }}/umstellen">
             <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
             <button class="btn" type="submit">Quelle auf v{{ vergleich.neu.versionsnummer }} umstellen</button>
           </form>

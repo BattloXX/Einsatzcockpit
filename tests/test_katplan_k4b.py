@@ -171,7 +171,7 @@ def test_beziehungen_anderer_plan_und_fremde_org(client, verknuepfungen):
     assert response.status_code == 200 and "Nachbarplan" in response.text
     assert 'id="kp-element-version"' in response.text
     page = client.get(basis(info))
-    assert f'href="/katastrophenplaene/{ziel_plan}#element-{ziel_uuid}"' in page.text
+    assert f'href="/plaene/{ziel_plan}#element-{ziel_uuid}"' in page.text
     assert f'id="element-{element.uuid}"' in page.text
     with TestingSession() as db:
         set_tenant_context(db, info["org_id"])
@@ -181,7 +181,7 @@ def test_beziehungen_anderer_plan_und_fremde_org(client, verknuepfungen):
     assert post(client, basis(info) + "/freigeben").status_code == 200
     login(client, info, "readonly")
     page = client.get(basis(info))
-    assert f'href="/katastrophenplaene/{ziel_plan}#element-{ziel_uuid}"' in page.text
+    assert f'href="/plaene/{ziel_plan}#element-{ziel_uuid}"' in page.text
     assert f'id="element-{element.uuid}"' in page.text
     login(client, info, "katplan_freigeber")
     assert post(client, path, zu_element_uuid=fremd_uuid, art="siehe_auch").status_code in (404, 422)

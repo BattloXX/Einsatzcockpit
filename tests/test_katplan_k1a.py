@@ -287,11 +287,21 @@ def test_seed_rollen():
     assert {"katplan_verwalter", "katplan_freigeber"} <= {rolle["code"] for rolle in ROLES}
 
 
-def test_migration_upgrade_downgrade():
-    pfad = Path(__file__).resolve().parents[1] / "alembic/versions/0294_katplan_basis.py"
-    spec = importlib.util.spec_from_file_location("katplan_migration", pfad)
+# Spaetere Migrationen, die Spalten an den Basistabellen ergaenzen.
+NACHFOLGE_MIGRATIONEN = ("0302_katplan_planart.py",)
+
+
+def _lade_migration(datei: str):
+    pfad = Path(__file__).resolve().parents[1] / "alembic/versions" / datei
+    spec = importlib.util.spec_from_file_location(f"katplan_migration_{datei[:4]}", pfad)
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)
+    return migration
+
+
+def test_migration_upgrade_downgrade():
+    migration = _lade_migration("0294_katplan_basis.py")
+    nachfolger = [_lade_migration(datei) for datei in NACHFOLGE_MIGRATIONEN]
     engine = sa.create_engine("sqlite://")
     try:
         with engine.begin() as conn:
@@ -299,6 +309,9 @@ def test_migration_upgrade_downgrade():
                 conn.execute(sa.text(f"CREATE TABLE {tabelle} (id INTEGER PRIMARY KEY)"))
             migration.op = Operations(MigrationContext.configure(conn))
             migration.upgrade()
+            for folge in nachfolger:
+                folge.op = migration.op
+                folge.upgrade()
             inspector = sa.inspect(conn)
             assert migration.revision == "0294"
             assert migration.down_revision == "0293"
@@ -316,6 +329,8 @@ def test_migration_upgrade_downgrade():
                     if isinstance(u, sa.UniqueConstraint)
                 }
             assert "katplan_modul_aktiv" in {c["name"] for c in inspector.get_columns("org_settings")}
+            for folge in reversed(nachfolger):
+                folge.downgrade()
             migration.downgrade()
             assert set(sa.inspect(conn).get_table_names()) == {"fire_dept", "user", "kontakt", "org_settings"}
             assert [c["name"] for c in sa.inspect(conn).get_columns("org_settings")] == ["id"]

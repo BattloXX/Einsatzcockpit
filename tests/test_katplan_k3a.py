@@ -305,7 +305,7 @@ def test_erinnerungsmail_empfaenger_modul_und_tagesmarker(client, umgebung, monk
         assert liefern.await_count == 1
         args = liefern.await_args.args
         assert args[1] == umgebung["org_id"] and args[2]["To"] == erwartet
-        assert args[2]["Subject"] == f"Wiedervorlage Katastrophenplan: {umgebung['titel']}"
+        assert args[2]["Subject"] == f"Überprüfung fällig: {umgebung['titel']}"
         assert basis(umgebung) in args[2].get_content()
     else:
         liefern.assert_not_awaited()

@@ -22,7 +22,7 @@ from app.models.katplan import (
 from app.models.user import User
 from app.services.katplan_quelle_service import sichtbare_quellen
 from app.services.katplan_service import _HTMLText
-from app.services.katplan_typen import ELEMENT_TYPEN
+from app.services.katplan_typen import ELEMENT_TYPEN, PLANARTEN
 from app.services.katplan_zugriff import darf_bearbeiten, darf_lesen, sieht_vertraulich
 from app.services.road_closure_geo_service import bbox, distance_point_to_geometry_m, validate_geometry
 
@@ -48,9 +48,10 @@ def sichtbare_plaene(db: Session, user: User, arbeitsstand: bool = False) -> lis
     )}
     result = []
     for plan in plaene:
+        daten: dict[str, Any]
         version = versionen.get(plan.aktuelle_version_id or 0)
         if arbeit:
-            daten = {"titel": plan.titel, "gefahrenarten": plan.gefahrenarten,
+            daten = {"planart": plan.planart, "titel": plan.titel, "gefahrenarten": plan.gefahrenarten,
                      "phasen": [{"id": p.id, "name": p.name} for p in db.query(KatplanPhase).filter_by(
                          org_id=user.org_id, plan_id=plan.id).order_by(KatplanPhase.sort, KatplanPhase.id)]}
         elif version is not None and version.plan_id == plan.id:
@@ -58,6 +59,8 @@ def sichtbare_plaene(db: Session, user: User, arbeitsstand: bool = False) -> lis
         else:
             continue
         result.append({"id": plan.id, "plan": plan, "version_id": plan.aktuelle_version_id,
+                       "planart": daten.get("planart", "katastrophenplan"),
+                       "planart_label": PLANARTEN[daten.get("planart", "katastrophenplan")].label,
                        "titel": daten.get("titel", ""), "gefahrenarten": daten.get("gefahrenarten", []),
                        "phasen": daten.get("phasen", [])})
     return sorted(result, key=lambda p: (p["titel"].lower(), p["id"]))
@@ -170,9 +173,10 @@ def suche(db: Session, user: User, *, q: str = "", plan_id: int | None = None,
                 if distanz is None:
                     continue
             uid = element.uuid if isinstance(element, KatplanElement) else element.element_uuid
-            url = (f"/katastrophenplaene/{plan.id}/bearbeiten?element={element.id}" if arbeit
-                   else f"/katastrophenplaene/{plan.id}#element-{uid}")
+            url = (f"/plaene/{plan.id}/bearbeiten?element={element.id}" if arbeit
+                   else f"/plaene/{plan.id}#element-{uid}")
             treffer.append({"art": "element", "element_id": uid, "plan_id": plan.id, "plan_titel": kopf["titel"],
+                            "planart_label": kopf["planart_label"],
                             "titel": element.titel, "kennung": element.kennung or "", "typ": element.typ,
                             "typ_label": (ELEMENT_TYPEN[element.typ].label
                                           if element.typ in ELEMENT_TYPEN else element.typ),
@@ -190,10 +194,11 @@ def suche(db: Session, user: User, *, q: str = "", plan_id: int | None = None,
             seiten = seiten.filter(func.lower(KatplanDokumentSeite.volltext).like(_like(wort), escape="\\"))
         for seite in seiten:
             dok = dokumente[seite.dokument_id]
-            url = f"/katastrophenplaene/{plan.id}/quellen/{dok.id}?seite={seite.seiten_nr}"
+            url = f"/plaene/{plan.id}/quellen/{dok.id}?seite={seite.seiten_nr}"
             if not darf_bearbeiten(user):
                 url += f"&version_id={kopf['version_id']}"
             treffer.append({"art": "seite", "plan_id": plan.id, "plan_titel": kopf["titel"],
+                            "planart_label": kopf["planart_label"],
                             "titel": seite.titel or f"{dok.titel}, Seite {seite.seiten_nr}", "kennung": "",
                             "typ": "", "typ_label": "Dokumentseite", "prioritaet": None, "vertraulich": False,
                             "ausschnitt": ausschnitt(seite.volltext, woerter), "url": url, "distanz_m": None,

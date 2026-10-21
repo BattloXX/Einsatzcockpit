@@ -15,7 +15,7 @@ from app.services.katplan_geo_service import ableite_punkt
 from app.services.katplan_mcp_service import _rohdaten, fassung_laden, link_ansichten
 from app.services.katplan_quelle_service import absolute_pfad
 from app.services.katplan_service import bereinige_beschreibung
-from app.services.katplan_typen import FELD_LABELS
+from app.services.katplan_typen import FELD_LABELS, PLANARTEN
 from app.services.kontakt_druck_service import organisationslogo_data_uri
 
 logger = logging.getLogger(__name__)
@@ -127,6 +127,7 @@ def render_katplan_html(db: Session, user: User, plan: KatplanPlan, *,
     kapitel = {name: gruppen[name] for name in sorted(
         gruppen, key=lambda n: (n == "Ohne Kapitel", reihenfolge.get(n, len(reihenfolge)), n))}
     return templates.env.get_template("pdf/katplan.html").render(
+        planart_label=PLANARTEN[kopf.get("planart", "katastrophenplan")].label,
         kopf=kopf, kapitel=kapitel, version=version, entwurf=entwurf, org=user.org,
         freigeber=freigeber.display_name if freigeber else "Gelöschter Benutzer",
         gefahrenarten=KATPLAN_GEFAHRENARTEN, now=datetime.now(UTC),

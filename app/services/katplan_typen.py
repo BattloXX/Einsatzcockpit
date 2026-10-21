@@ -5,6 +5,35 @@ from typing import Any, Literal
 
 
 @dataclass(frozen=True)
+class PlanartDef:
+    code: str
+    label: str
+    kuerzel: str
+    icon_name: str
+    pruefintervall_monate: int
+    kapitel: tuple[str, ...]
+    phasen: tuple[tuple[str, str], ...]
+
+
+PLANARTEN: dict[str, PlanartDef] = {
+    "alarm_einsatzplan": PlanartDef(
+        "alarm_einsatzplan", "Alarm- und Einsatzplan", "AEP", "bell", 12,
+        ("Alarmierung", "Erstmaßnahmen", "Einsatzdurchführung", "Verständigungen",
+         "Objekt- und Anfahrtsinformationen", "Abschluss"),
+        (("Alarmstufe 1", "gelb"), ("Alarmstufe 2", "orange"), ("Alarmstufe 3", "rot")),
+    ),
+    "massnahmenplan": PlanartDef(
+        "massnahmenplan", "Maßnahmenplan", "MP", "clipboard-list", 24,
+        ("Lage und Auslöser", "Maßnahmen", "Verständigungen", "Ressourcen"),
+        (("Vorwarnung", "gelb"), ("Alarm", "rot"), ("Entwarnung", "gruen")),
+    ),
+    "katastrophenplan": PlanartDef(
+        "katastrophenplan", "Katastrophenplan", "KP", "alert-triangle", 24, (), (),
+    ),
+}
+
+
+@dataclass(frozen=True)
 class TypDef:
     code: str
     label: str

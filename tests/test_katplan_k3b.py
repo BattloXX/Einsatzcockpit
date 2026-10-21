@@ -51,10 +51,10 @@ def test_leser_bleibt_bei_snapshot_und_liste_filtert_snapshot(client, freigegebe
     assert info["titel"] in page.text and "Brücke" in page.text and "Alter Absatz" in page.text
     assert "Unveröffentlichter Titel" not in page.text and "Unveröffentlichtes Element" not in page.text
     assert "Protokoll</button>" not in page.text and "GSL-Vorlage" not in page.text
-    liste = client.get("/katastrophenplaene?q=" + info["titel"] + "&gefahr=hochwasser")
+    liste = client.get("/plaene?q=" + info["titel"] + "&gefahr=hochwasser")
     assert info["titel"] in liste.text and "Unveröffentlichter Titel" not in liste.text
-    assert info["titel"] not in client.get("/katastrophenplaene?gefahr=sturm").text
-    assert info["titel"] in client.get("/katastrophenplaene?status=freigegeben").text
+    assert info["titel"] not in client.get("/plaene?gefahr=sturm").text
+    assert info["titel"] in client.get("/plaene?status=freigegeben").text
     login(client, info)
     arbeit = client.get(path)
     assert "Unveröffentlichter Titel" in arbeit.text and "Unveröffentlichtes Element" in arbeit.text
@@ -62,7 +62,7 @@ def test_leser_bleibt_bei_snapshot_und_liste_filtert_snapshot(client, freigegebe
     assert "Unveröffentlichte Änderungen seit Version 1" in arbeit.text
     frei = client.get(path + "?ansicht=freigabe")
     assert info["titel"] in frei.text and "Unveröffentlichtes Element" not in frei.text.split('id="kp-protokoll"')[0]
-    assert "Version: 1" in client.get("/katastrophenplaene").text
+    assert "Version: 1" in client.get("/plaene").text
 
 
 def test_vertraulichkeit_und_filter_verzeichnis(client, freigegeben):

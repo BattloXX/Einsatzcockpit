@@ -1,4 +1,4 @@
-"""Lesende MCP-Werkzeuge fuer freigegebene Katastrophenplaene."""
+"""Lesende MCP-Werkzeuge fuer freigegebene Einsatz- und Katastrophenplaene."""
 
 from functools import wraps
 
@@ -52,15 +52,19 @@ def _element(elemente: list[dict], element_id: str) -> dict:
     return e
 
 
-@_tool("katplan_liste", "Listet sichtbare Katastrophenpläne und aktuelle Freigaben.")
+@_tool("katplan_liste", (
+    "Listet sichtbare Einsatz- und Katastrophenpläne und aktuelle Freigaben mit Planart-Code und Label; "
+    "optionaler Filter planart (alarm_einsatzplan, massnahmenplan, katastrophenplan)."
+))
 async def katplan_liste(context: MCPContext, gefahr: str = "", status: str = "",
-                        suchbegriff: str = "", fassung: str = "freigegeben") -> dict[str, object]:
+                        suchbegriff: str = "", fassung: str = "freigegeben", planart: str = "") -> dict[str, object]:
     arbeit = daten.pruefe_fassung(context.user, fassung)
     result = []
     for p in suche_service.sichtbare_plaene(context.db, context.user, arbeit):
         plan = p["plan"]
         plan_status = plan.status if arbeit else "freigegeben"
         if (gefahr and gefahr not in p["gefahrenarten"] or status and status != plan_status
+                or planart and planart != p["planart"]
                 or suchbegriff.casefold() not in p["titel"].casefold()):
             continue
         version = None
@@ -72,7 +76,9 @@ async def katplan_liste(context: MCPContext, gefahr: str = "", status: str = "",
             if not arbeit:
                 termin = kopf.get("wiedervorlage_am")
             anzahl = sum(not e.vertraulich or sieht_vertraulich(context.user) for e in elemente)
-        result.append({"id": plan.id, "titel": p["titel"], "gefahrenarten": p["gefahrenarten"],
+        result.append({"id": plan.id, "titel": p["titel"],
+                       "planart": p["planart"], "planart_label": p["planart_label"],
+                       "gefahrenarten": p["gefahrenarten"],
                        "status": plan_status, "aktuelle_version": version, "wiedervorlage_am": termin,
                        "anzahl_elemente": anzahl,
                        "warnings": (["Aktuelle Version und Elementzahl nicht vorhanden."] if version is None else [])
@@ -80,7 +86,9 @@ async def katplan_liste(context: MCPContext, gefahr: str = "", status: str = "",
     return {"plaene": result, "warnings": []}
 
 
-@_tool("katplan_lesen", "Liest Kopf, Kapitel, Phasen, Links, Anhänge und Quellen; optional bis 200 Elemente.")
+@_tool("katplan_lesen", (
+    "Liest Kopf mit Planart-Code und Label, Kapitel, Phasen, Links, Anhänge und Quellen; optional bis 200 Elemente."
+))
 async def katplan_lesen(context: MCPContext, plan_id: int, fassung: str = "freigegeben",
                         version_id: int | None = None, mit_elementen: bool = False) -> dict[str, object]:
     plan, kopf, elemente, vid, warnings = _fassung(context, plan_id, fassung, version_id)

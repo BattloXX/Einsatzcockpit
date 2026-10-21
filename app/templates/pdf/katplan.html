@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8">
-  <title>{{ kopf.titel }}</title>
+  <title>{{ planart_label }}: {{ kopf.titel }}</title>
   <style>
 {% include "pdf/_icon_styles.html" %}
     @page {
@@ -87,7 +87,7 @@
   <section class="deckblatt">
     {% if logo %}<img class="deckblatt__logo" src="{{ logo }}" alt="Organisationslogo">{% endif %}
     <p class="deckblatt__org">{{ org.name }}</p>
-    <h1>{{ kopf.titel }}</h1>
+    <h1>{{ planart_label }}: {{ kopf.titel }}</h1>
     <p class="chips">{% for g in kopf.gefahrenarten %}<span class="chip">{{ gefahrenarten.get(g, g) }}</span>{% endfor %}</p>
     {% if beschreibung_plan %}<div class="deckblatt__beschreibung text">{{ beschreibung_plan|safe }}</div>{% endif %}
     <table class="meta">
