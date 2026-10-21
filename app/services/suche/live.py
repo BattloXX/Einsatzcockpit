@@ -5,12 +5,14 @@ from datetime import UTC, datetime
 from math import cos, radians
 from typing import cast
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.core.permissions import STRASSENSPERREN_LESE_ROLLEN, can_access_incident, has_role
 from app.core.queries import visible_incidents_q
+from app.core.telefon import telefon_normalisiert
 from app.models.incident import Incident, Message, Task
+from app.models.kontakt import Kontakt, KontaktKategorie, KontaktKategorieZuordnung, KontaktTelefon
 from app.models.major_incident import (
     CommLogEntry,
     IncidentSite,
@@ -25,6 +27,7 @@ from app.models.user import User
 from app.models.wasserstelle import Wasserstelle
 from app.services.hydrant_service import _haversine_m
 from app.services.katplan_suche_service import ausschnitt
+from app.services.kontakt_access_service import KontaktZugriff, einsatz_kontakte
 from app.services.major_incident_service import PHASE_LABELS
 from app.services.mi_feature_service import get_mi_features
 from app.services.road_closure_flags import strassensperren_effective_enabled
@@ -275,3 +278,72 @@ ANBIETER = {
     "strassensperre": suche_sperren,
     "wasserstelle": suche_wasserstellen,
 }
+
+
+def suche_kontakte(db: Session, user: User, anfrage: SuchAnfrage, woerter: list[str],
+                   zugriff: KontaktZugriff) -> list[Treffer]:
+    if zugriff == "keiner" or anfrage.kontext == "gsl" or (zugriff == "einsatz" and anfrage.kontext != "einsatz"):
+        return []
+    nummer = telefon_normalisiert(anfrage.q)
+    ist_nummer = nummer.lstrip("+").isdigit() and sum(c.isdigit() for c in nummer) >= 6
+    exakte_ids: set[int] = set()
+    if zugriff == "einsatz":
+        pruefe_kontext(db, user, anfrage)
+        einsatz = visible_incidents_q(db, user).filter(Incident.id == anfrage.kontext_id).first()
+        if einsatz is None or ist_nummer:
+            return []
+        kontakte = [k for k, _ in einsatz_kontakte(db, einsatz) if k.org_id == user.org_id]
+    else:
+        basis = db.query(Kontakt).filter(Kontakt.org_id == user.org_id, Kontakt.archiviert.is_(False))
+        if not anfrage.inkl_erledigt:
+            basis = basis.filter(Kontakt.aktiv.is_(True))
+        kategorien = db.query(KontaktKategorieZuordnung.kontakt_id).join(
+            KontaktKategorie, KontaktKategorie.id == KontaktKategorieZuordnung.kategorie_id,
+        ).filter(
+            KontaktKategorieZuordnung.org_id == user.org_id, KontaktKategorie.org_id == user.org_id,
+            func.lower(KontaktKategorie.name).contains(woerter[0] if woerter else "", autoescape=True),
+        )
+        kontakte = basis.filter(or_(
+            *(func.lower(feld).contains(woerter[0] if woerter else "", autoescape=True) for feld in (
+                Kontakt.anzeigename, Kontakt.vorname, Kontakt.nachname, Kontakt.funktion,
+                Kontakt.organisation, Kontakt.erreichbarkeit,
+            )), Kontakt.id.in_(kategorien),
+        )).order_by(Kontakt.id).limit(anfrage.limit * 6).all()
+        if ist_nummer:
+            # Nationale und internationale oesterreichische Schreibweise abgleichen.
+            suchnummer = nummer[3:] if nummer.startswith("+43") else nummer
+            if suchnummer.startswith("0"):
+                suchnummer = suchnummer[1:]
+            nummern = db.query(KontaktTelefon.kontakt_id).filter(
+                KontaktTelefon.org_id == user.org_id,
+                or_(KontaktTelefon.nummer_normalisiert == nummer,
+                    KontaktTelefon.nummer_normalisiert.endswith(suchnummer, autoescape=True)),
+            )
+            exakt = basis.filter(Kontakt.id.in_(nummern)).order_by(Kontakt.id).limit(anfrage.limit * 6).all()
+            exakte_ids = {k.id for k in exakt}
+            kontakte = list({k.id: k for k in [*kontakte, *exakt]}.values())
+    treffer = []
+    relevante_ids = {str(k.id) for k in kontakte if k.einsatzrelevant}
+    for k in kontakte:
+        text = _text(k.anzeigename, k.vorname, k.nachname, k.funktion, k.organisation,
+                     *(z.kategorie.name for z in k.kategorien if z.kategorie.org_id == user.org_id), k.erreichbarkeit)
+        if k.id not in exakte_ids and not _passt(text, woerter):
+            continue
+        telefone = [tel for tel in k.telefone if tel.aktiv and tel.org_id == user.org_id
+                    and (zugriff == "voll" or tel.verwendung == "dienst")]
+        if zugriff == "voll":
+            telefone.sort(key=lambda tel: not tel.bevorzugt)
+        treffer.append(Treffer(
+            quelle="kontakt", quell_id=str(k.id), titel=k.anzeigename,
+            untertitel=" · ".join(w for w in (k.funktion, k.organisation) if w) or None,
+            auszug=_auszug(text, woerter), status="Aktiv" if k.aktiv else "Inaktiv",
+            ist_aktuell=k.aktiv, stand=k.aktualisiert_am,
+            grund=["exakt", "live"] if k.id in exakte_ids else ["live"],
+            url=f"/kontakte/{k.id}" if zugriff == "voll" else f"/einsatz/{anfrage.kontext_id}#einsatz-kontakte",
+            telefone=[{"nummer": tel.nummer, "label": tel.label or ""} for tel in telefone[:2]],
+        ))
+    # Titelrang bleibt vorrangig; bei gleichem Rang einsatzrelevante Kontakte zuerst.
+    return sorted(treffer, key=lambda t: (
+        not _passt(t.titel, [normalisiere(anfrage.q)]), t.quell_id not in relevante_ids,
+        -(t.stand.replace(tzinfo=UTC).timestamp() if t.stand else 0), t.quell_id,
+    ))[:anfrage.limit * 3]

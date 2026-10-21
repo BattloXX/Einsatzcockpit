@@ -16,6 +16,7 @@ from app.models.incident import Incident
 from app.models.major_incident import MajorIncident
 from app.models.user import User
 from app.services.katplan_suche_service import markiere
+from app.services.kontakt_access_service import kontakt_zugriff_fuer_request
 from app.services.suche.abfrage import suche
 from app.services.suche.live import pruefe_kontext
 from app.services.suche.vertrag import SuchAnfrage, SuchErgebnis
@@ -28,9 +29,10 @@ TYP_LABELS = {
     "katplan_element": "Planelement", "katplan_seite": "Planseite",
     "gsl_stelle": "Einsatzstelle", "gsl_meldung": "Meldung", "gsl_einheit": "Einheit",
     "einsatz": "Einsatz", "einsatz_meldung": "Einsatzmeldung",
-    "strassensperre": "Straßensperre", "wasserstelle": "Wasserstelle",
+    "strassensperre": "Straßensperre", "wasserstelle": "Wasserstelle", "kontakt": "Kontakt",
 }
 FILTER_GRUPPEN = (
+    ("Kontakte", ("kontakt",)),
     ("Objekte", ("objekt", "objekt_dokument_seite")),
     ("Pläne", ("katplan_element", "katplan_seite")),
     ("Einsätze", ("einsatz", "einsatz_meldung")),
@@ -80,10 +82,12 @@ def index(request: Request, kontext: Literal["global", "einsatz", "gsl"] = "glob
     elif kontext == "einsatz":
         incident = db.get(Incident, kontext_id)
         kontext_name = f"#{kontext_id} {incident.alarm_type_code}" if incident else ""
+    kontakt_zugriff = kontakt_zugriff_fuer_request(db, request, anfrage)
+    filter_gruppen = [g for g in FILTER_GRUPPEN if g[0] != "Kontakte" or kontakt_zugriff != "keiner"]
     return templates.TemplateResponse(request, "suche/index.html", {
         "user": user, "q": "", "ergebnis": SuchErgebnis(), "fehler": None,
         "kontext": kontext, "kontext_id": kontext_id, "kontext_name": kontext_name,
-        "typ": typ, "filter_gruppen": FILTER_GRUPPEN, "typ_labels": TYP_LABELS, "markiere": markiere,
+        "typ": typ, "filter_gruppen": filter_gruppen, "typ_labels": TYP_LABELS, "markiere": markiere,
     })
 
 
@@ -109,7 +113,7 @@ def treffer(request: Request, user: User = Depends(_leser), db: Session = Depend
             "Koordinaten und Radius (1 bis 5000 m) müssen gemeinsam gesetzt sein."
         ))
     try:
-        ergebnis = suche(db, user, anfrage)
+        ergebnis = suche(db, user, anfrage, kontakt_zugriff=kontakt_zugriff_fuer_request(db, request, anfrage))
     except PermissionError:
         raise HTTPException(status_code=404, detail="Suchkontext nicht verfügbar") from None
     return _partial(request, user, q, ergebnis)
@@ -120,7 +124,8 @@ def treffer(request: Request, user: User = Depends(_leser), db: Session = Depend
 def api_suche(request: Request, anfrage: SuchAnfrage,
               user: User = Depends(_leser), db: Session = Depends(get_db)):
     try:
-        return suche(db, user, anfrage).model_dump(mode="json")
+        kontakt_zugriff = kontakt_zugriff_fuer_request(db, request, anfrage)
+        return suche(db, user, anfrage, kontakt_zugriff=kontakt_zugriff).model_dump(mode="json")
     except PermissionError:
         raise HTTPException(status_code=404, detail="Suchkontext nicht verfügbar") from None
 

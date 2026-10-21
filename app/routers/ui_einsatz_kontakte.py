@@ -17,12 +17,16 @@ from app.models.kontakt import EinsatzKontakt
 from app.models.user import User
 from app.routers.ui_kontakt import require_kontakte_enabled
 from app.services import kontakt_service
-from app.services.kontakt_access_service import contact_summary, incident_for_contacts
+from app.services.kontakt_access_service import (
+    EINSATZ_KONTAKT_LESE_ROLLEN,
+    contact_summary,
+    incident_for_contacts,
+)
 
 router = APIRouter(
     prefix="/einsatz/{incident_id}/kontakte", tags=["kontakte"], dependencies=[Depends(require_kontakte_enabled)]
 )
-_READ = ("readonly", "recorder", "breathing_supervisor", "incident_leader", "kontakt_verwalter", "objekt_verwalter")
+_READ = EINSATZ_KONTAKT_LESE_ROLLEN
 _WRITE = ("recorder", "incident_leader", "kontakt_verwalter")
 
 

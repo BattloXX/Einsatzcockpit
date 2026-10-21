@@ -335,7 +335,7 @@ def test_index_inaktiv_live_bleibt(daten):
 
 @pytest.mark.parametrize("werte", [
     {"q": " "}, {"q": "x" * 501}, {"limit": 51}, {"limit": 0}, {"radius_m": 12},
-    {"typen": ["kontakt"]}, {"kontext": "einsatz"}, {"kontext": "gsl"},
+    {"typen": ["ungueltig"]}, {"kontext": "einsatz"}, {"kontext": "gsl"},
     {"lat": 91, "lng": 0, "radius_m": 1}, {"lat": 0, "lng": 181, "radius_m": 1},
     {"lat": 0, "lng": 0, "radius_m": 5001}, {"lat": float("nan"), "lng": 0, "radius_m": 1},
 ])

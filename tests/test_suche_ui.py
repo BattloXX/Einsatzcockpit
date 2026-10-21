@@ -120,7 +120,7 @@ def test_xss_index_und_query(client, umgebung, monkeypatch):
     # Defense in depth: auch rohe Auszuege duerfen nur mark-Tags erzeugen.
     treffer = Treffer(quelle="objekt", quell_id="1", titel="Test", url="")
     treffer.auszug = '<script>alert(1)</script> Brand'
-    monkeypatch.setattr("app.routers.ui_suche.suche", lambda *_: SuchErgebnis(treffer=[treffer]))
+    monkeypatch.setattr("app.routers.ui_suche.suche", lambda *_, **__: SuchErgebnis(treffer=[treffer]))
     result = post(client)
     assert '&lt;script&gt;' in result.text and '<mark>Brand</mark>' in result.text
     assert '<script>alert' not in result.text

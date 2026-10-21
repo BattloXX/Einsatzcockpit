@@ -14,6 +14,7 @@ from app.models.user import User
 from app.services.hydrant_service import _haversine_m
 from app.services.katplan_suche_service import ausschnitt
 from app.services.katplan_zugriff import sieht_vertraulich
+from app.services.kontakt_access_service import KontaktZugriff
 from app.services.suche import live, resolver
 from app.services.suche.quellen import html_zu_text
 from app.services.suche.synonyme import suchwoerter
@@ -119,7 +120,8 @@ def _geo(treffer: list[Treffer], anfrage: SuchAnfrage) -> list[Treffer]:
     return ergebnis
 
 
-def suche(db: Session, user: User, anfrage: SuchAnfrage) -> SuchErgebnis:
+def suche(db: Session, user: User, anfrage: SuchAnfrage, *,
+          kontakt_zugriff: KontaktZugriff = "keiner") -> SuchErgebnis:
     start = perf_counter()
     ergebnis = SuchErgebnis()
     org_id = user.org_id
@@ -185,6 +187,15 @@ def suche(db: Session, user: User, anfrage: SuchAnfrage) -> SuchErgebnis:
                 listen.append(anbieter(db, user, anfrage, woerter))
         except Exception:
             fehler(quelle)
+    if (anfrage.kontext != "gsl" and (not anfrage.typen or "kontakt" in anfrage.typen)
+            and kontakt_zugriff != "keiner"):
+        if "live" not in ergebnis.modi:
+            ergebnis.modi.append("live")
+        try:
+            with db.begin_nested():
+                listen.append(live.suche_kontakte(db, user, anfrage, woerter, kontakt_zugriff))
+        except Exception:
+            fehler("Kontakte")
     ergebnis.treffer = _geo(fusioniere(listen), anfrage)[:anfrage.limit]
     try:
         with db.begin_nested():
