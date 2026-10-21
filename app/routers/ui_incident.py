@@ -3284,7 +3284,7 @@ def save_lagebild_journal(
     msg = Message(
         incident_id=incident_id,
         column_id=msgs_col.id if msgs_col else None,
-        title="✨ KI-Lagebild",
+        title="KI-Lagebild",
         detail=text,
         status="information",
         author_name=get_author_name(request),

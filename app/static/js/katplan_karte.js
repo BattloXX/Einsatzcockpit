@@ -171,7 +171,8 @@
         titel.textContent = [daten.kennung, daten.titel].filter(Boolean).join(' · ');
         box.appendChild(titel);
         const typ = document.createElement('p');
-        typ.textContent = daten.typ_icon + ' ' + daten.typ_label;
+        typ.innerHTML = ecpIcon(daten.typ_icon_name, {size: 'sm'});
+        typ.appendChild(document.createTextNode(' ' + daten.typ_label));
         box.appendChild(typ);
         if (daten.geo_status !== 'geprueft') {
           const badge = document.createElement('p');

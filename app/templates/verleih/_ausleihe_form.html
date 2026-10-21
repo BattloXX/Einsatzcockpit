@@ -32,7 +32,7 @@
     <!-- PIN -->
     <div class="vl-panel" style="border-color:rgba(242,176,46,.35);">
       <label class="vl-field-label" style="color:var(--yellow);">
-        🔒 PIN <span style="font-weight:400;text-transform:none;color:var(--text-muted);">(optional – fuer Rueckgabe-Abgleich)</span>
+        {{ icon("lock", size="sm") }} PIN <span style="font-weight:400;text-transform:none;color:var(--text-muted);">(optional – fuer Rueckgabe-Abgleich)</span>
       </label>
       <input type="text" name="pin" class="form-input" maxlength="6" pattern="[0-9]*" inputmode="numeric"
              placeholder="z.B. 123456" style="max-width:140px;font-family:'JetBrains Mono',monospace;letter-spacing:.2em;">
@@ -60,8 +60,8 @@
               <strong x-text="selectedSite ? selectedSite.bezeichnung + duplicateSuffix(selectedSite) : ''"></strong>
               <small x-text="selectedSite && selectedSite.adresse ? selectedSite.adresse : ''"></small>
             </span>
-            <span class="vl-site-picker__clear" x-show="selectedSite" x-cloak @click.stop="clearSite()" aria-label="Einsatzstelle entfernen">×</span>
-            <span aria-hidden="true">⌄</span>
+            <span class="vl-site-picker__clear" x-show="selectedSite" x-cloak @click.stop="clearSite()" aria-label="Einsatzstelle entfernen">{{ icon("x", size="sm") }}</span>
+            <span aria-hidden="true">{{ icon("chevron-down", size="sm") }}</span>
           </button>
           <div class="vl-site-picker__menu" x-show="sitePickerOpen" x-cloak>
             <input type="search" class="form-input vl-site-picker__search" x-ref="siteSearch" x-model="siteSearch"
@@ -163,10 +163,10 @@
                        x-model="row.artikel_nr"
                        @input="onArtikelNrInput(idx, $event.target.value)">
                 <button type="button" class="btn btn--ghost btn--xs" style="padding:3px 7px;font-size:.8rem;"
-                        :title="barcodeApiAvailable ? 'Barcode/QR-Code scannen' : 'Kamera-Scan nicht unterstuetzt'"
+                        aria-label="Barcode/QR-Code scannen" :title="barcodeApiAvailable ? 'Barcode/QR-Code scannen' : 'Kamera-Scan nicht unterstuetzt'"
                         :disabled="!barcodeApiAvailable"
                         @click="triggerScan(idx)">
-                  &#128247;
+                  {{ icon("camera", size="xs") }}
                 </button>
                 <input type="hidden" :name="'pos_artikel_id[]'" x-model="row.artikel_id">
               </div>
@@ -175,7 +175,7 @@
             <div x-show="row.artikel_id && row.verfuegbarkeit === 'ausgeliehen' && !row.ist_mengenartikel"
                  x-cloak
                  style="font-size:.72rem;color:#fbbf24;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);border-radius:5px;padding:3px 8px;margin-top:2px;">
-              &#9888; Dieser Artikel ist bereits als ausgeliehen markiert
+              {{ icon("alert-triangle", size="sm") }} Dieser Artikel ist bereits als ausgeliehen markiert
             </div>
             <div style="display:flex;gap:4px;align-items:center;">
               <span style="font-size:.75rem;color:var(--text-muted);flex:1;">Menge</span>
@@ -211,7 +211,7 @@
       <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:7px 10px;border:1px dashed var(--border);border-radius:8px;font-size:.82rem;color:var(--text-muted);">
         <input type="file" name="fotos" accept="image/*" multiple style="display:none;"
                @change="fotoCount = $event.target.files.length">
-        &#128247; Fotos aufnehmen / auswahlen
+        {{ icon("camera", size="sm") }} Fotos aufnehmen / auswahlen
         <span x-show="fotoCount > 0" style="font-size:.8rem;background:rgba(34,197,94,.15);color:#4ade80;padding:1px 8px;border-radius:8px;" x-text="fotoCount + ' Foto(s)'"></span>
       </label>
     </div>

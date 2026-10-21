@@ -209,7 +209,7 @@ def generierte_links(
     eri = ericard_url(un, gefahrnummer)
     if eri:
         # Zuerst: die einsatztaktisch wichtigste Karte (Sofortmaßnahmen für Einsatzkräfte)
-        links.append({"label": f"🚒 ERICard UN {_un_vierstellig(un)}", "url": eri})
+        links.append({"label": f"ERICard UN {_un_vierstellig(un)}", "url": eri})
     if key:
         links.append({
             "label": f"BAM Gefahrgut UN {key}",

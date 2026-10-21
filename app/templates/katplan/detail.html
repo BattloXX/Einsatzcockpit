@@ -10,7 +10,7 @@
 {% endblock %}
 {% block content %}
   <section class="kp-page" x-data="{ reiter: window.location.hash === '#kp-protokoll' ? 'protokoll' : 'plan' }">
-    <a class="btn btn--ghost btn--sm" href="/katastrophenplaene">← Katastrophenpläne</a>
+    <a class="btn btn--ghost btn--sm" href="/katastrophenplaene">{{ icon("chevron-left", size="xs") }} Katastrophenpläne</a>
     <form method="get" action="/katastrophenplaene/suche" class="kp-filter">
       <label>Inhalte suchen
         <input class="form-control" type="search" name="q" placeholder="Elemente und Dokumentseiten durchsuchen">

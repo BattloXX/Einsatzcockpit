@@ -80,7 +80,7 @@
     <div style="display:flex;gap:.4rem;">
       <button type="submit" class="btn btn--primary btn--sm">Anzeigen</button>
       <a href="/statistik/fahrtenbuch" class="btn btn--ghost btn--sm">Reset</a>
-      <button type="button" class="btn btn--ghost btn--sm" onclick="printBericht()" title="Berichtsdruck (Querformat) – alle Fahrzeuge, Maschinisten gesamt und je Fahrzeug">🖨️ Bericht drucken</button>
+      <button type="button" class="btn btn--ghost btn--sm" onclick="printBericht()" title="Berichtsdruck (Querformat) – alle Fahrzeuge, Maschinisten gesamt und je Fahrzeug">{{ icon("printer", size="xs") }} Bericht drucken</button>
     </div>
   </div>
 </form>
@@ -141,8 +141,8 @@
           {% for jahr in matrix_jahre %}<option value="{{ jahr }}" {% if jahr == matrix_jahr %}selected{% endif %}>{{ jahr }}</option>{% endfor %}
         </select>
       </form>
-      <a class="btn btn--ghost btn--sm" href="/statistik/fahrtenbuch/maschinisten.xlsx?jahr={{ matrix_jahr }}">⬇ Excel</a>
-      <button type="button" class="btn btn--primary btn--sm" onclick="printMaschinistenMatrix()">🖨️ A3 farbig drucken</button>
+      <a class="btn btn--ghost btn--sm" href="/statistik/fahrtenbuch/maschinisten.xlsx?jahr={{ matrix_jahr }}">{{ icon("download", size="xs") }} Excel</a>
+      <button type="button" class="btn btn--primary btn--sm" onclick="printMaschinistenMatrix()">{{ icon("printer", size="xs") }} A3 farbig drucken</button>
     </div>
     <div class="matrix-wrap">
       <table class="matrix-table">

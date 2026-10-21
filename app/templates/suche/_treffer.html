@@ -19,7 +19,7 @@
 {% for t in ergebnis.treffer %}
 <article class="suche-karte">
   <div class="suche-badges">
-    <span class="suche-badge">🔎 {{ typ_labels.get(t.quelle, t.quelle) }}</span>
+    <span class="suche-badge">{{ icon("zoom-in", size="sm") }} {{ typ_labels.get(t.quelle, t.quelle) }}</span>
     {% if t.ist_aktuell == false %}
     <span class="suche-inaktuell">nicht aktuell{% if t.status %} · {{ t.status }}{% endif %}</span>
     {% elif t.status %}<span class="suche-badge">{{ t.status }}</span>{% endif %}

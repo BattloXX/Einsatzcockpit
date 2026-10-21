@@ -10,7 +10,7 @@
       {% if e.gefahrnummer %}<span class="badge-pill badge-pill--amber" title="Gefahrnummer (Kemler)">GN {{ e.gefahrnummer }}</span>{% endif %}
       {% if e.klasse %}<span class="badge-pill badge-pill--gray">Kl. {{ e.klasse }}</span>{% endif %}
       {% if e.verpackungsgruppe %}<span class="badge-pill badge-pill--gray">VG {{ e.verpackungsgruppe }}</span>{% endif %}
-      <span aria-hidden="true" style="opacity:.5;">›</span>
+      <span aria-hidden="true" style="opacity:.5;">{{ icon("chevron-right", size="sm") }}</span>
     </a>
     {% endfor %}
   </div>

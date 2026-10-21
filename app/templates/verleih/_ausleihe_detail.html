@@ -8,8 +8,8 @@
       </span>
     </div>
     <div style="display:flex;gap:6px;align-items:center;">
-      <button type="button" class="btn btn--ghost btn--xs" title="Verleihschein drucken"
-         onclick="ecpgPrint({document_type:'verleih_schein', gsl_id:{{ lage.id }}, artifact_ref:'{{ a.id }}', title:'Verleihschein drucken', localUrl:'/lage/{{ lage.id }}/verleih/{{ a.id }}/drucken'})">&#128438;</button>
+      <button type="button" class="btn btn--ghost btn--xs" aria-label="Verleihschein drucken" title="Verleihschein drucken"
+         onclick="ecpgPrint({document_type:'verleih_schein', gsl_id:{{ lage.id }}, artifact_ref:'{{ a.id }}', title:'Verleihschein drucken', localUrl:'/lage/{{ lage.id }}/verleih/{{ a.id }}/drucken'})">{{ icon("printer", size="xs") }}</button>
       <button type="button" class="btn btn--ghost btn--xs" aria-label="Verleihdetails schließen" onclick="closeVerleihPanel()">x</button>
     </div>
   </div>
@@ -26,7 +26,7 @@
         <span style="color:var(--text-muted);">Telefon</span><br>
         <a href="tel:{{ a.telefon|tel }}" style="font-weight:700;color:var(--text);text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
           {{ a.telefon }}
-          <span style="font-size:.8rem;background:rgba(34,197,94,.15);color:#4ade80;padding:1px 7px;border-radius:8px;">📞 anrufen</span>
+          <span style="font-size:.8rem;background:rgba(34,197,94,.15);color:#4ade80;padding:1px 7px;border-radius:8px;">{{ icon("phone", size="sm") }} anrufen</span>
         </a>
       </div>
       {% endif %}
@@ -50,7 +50,7 @@
                 hx-get="/lage/{{ lage.id }}/stellen/{{ site.id }}"
                 hx-target="#siteDetailContent"
                 hx-swap="innerHTML">
-          📍 {{ site.bezeichnung }}
+          {{ icon("map-pin", size="xs") }} {{ site.bezeichnung }}
         </button>
         {% if site.strasse or site.hausnr or site.ort %}
         <div style="margin-top:2px;color:var(--text-muted);font-size:.78rem;">
@@ -65,7 +65,7 @@
     <div class="vl-panel" style="border-color:rgba(242,176,46,.35);">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
         <div>
-          <div class="vl-field-label" style="color:var(--yellow);margin-bottom:4px;">🔒 PIN</div>
+          <div class="vl-field-label" style="color:var(--yellow);margin-bottom:4px;">{{ icon("lock", size="sm") }} PIN</div>
           {% if a.pin %}
           <span style="font-size:1.4rem;font-family:'JetBrains Mono',monospace;font-weight:700;letter-spacing:.2em;color:var(--yellow);">{{ a.pin }}</span>
           {% else %}
@@ -179,10 +179,10 @@
                          :name="'pos_artikel_nr[]'"
                          x-model="row.artikel_nr">
                   <button type="button" class="btn btn--ghost btn--xs" style="padding:3px 7px;font-size:.8rem;"
-                          :title="addScanAvailable ? 'Barcode/QR-Code scannen' : 'Kamera-Scan nicht unterstuetzt'"
+                          aria-label="Barcode/QR-Code scannen" :title="addScanAvailable ? 'Barcode/QR-Code scannen' : 'Kamera-Scan nicht unterstuetzt'"
                           :disabled="!addScanAvailable"
                           @click="triggerAddScan(idx)">
-                    &#128247;
+                    {{ icon("camera", size="xs") }}
                   </button>
                   <input type="hidden" :name="'pos_artikel_id[]'" x-model="row.artikel_id">
                 </div>
@@ -348,7 +348,7 @@
           <input type="file" name="foto" accept="image/*" capture="environment"
                  style="display:none;"
                  onchange="htmx.trigger(this.closest('form'),'submit')">
-          📷 Foto aufnehmen / auswählen
+          {{ icon("camera", size="sm") }} Foto aufnehmen / auswählen
         </label>
       </form>
       {% endif %}

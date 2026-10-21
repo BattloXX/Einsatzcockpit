@@ -89,7 +89,7 @@
       var lang = e.pdf_sprache && e.pdf_sprache !== 'DE'
         ? ' <span class="text-muted" style="font-size:.85em;">(' + esc(e.pdf_sprache) + ')</span>' : '';
       aktion = '<a href="/nachschlagewerke/rettungskarten/katalog/' + e.id + '/oeffnen" ' +
-        'target="_blank" rel="noopener" class="btn btn--primary btn--xs">📄 Öffnen' + lang + '</a>';
+        'target="_blank" rel="noopener" class="btn btn--primary btn--xs">' + ecpIcon('file-text', {size: 'xs'}) + ' Öffnen' + lang + '</a>';
     } else {
       aktion = '<span class="text-muted" style="font-size:.9em;">kein Rettungsblatt</span>';
     }

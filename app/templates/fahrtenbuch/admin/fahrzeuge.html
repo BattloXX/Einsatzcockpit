@@ -32,15 +32,15 @@
 <div class="page-header" style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;">
   <div>
     <h1>Fahrzeuge – Fahrtenbuch-Einstellungen</h1>
-    <p class="page-header__sub">km/BH-Zähler, Warnschwellen, QR-Codes je Fahrzeug <span id="sort-saved">&#10003; Reihenfolge gespeichert</span></p>
+    <p class="page-header__sub">km/BH-Zähler, Warnschwellen, QR-Codes je Fahrzeug <span id="sort-saved">{{ icon("check", size="sm") }} Reihenfolge gespeichert</span></p>
   </div>
   <form method="post" action="/admin/fahrtenbuch/fahrzeuge/export-links{{ org_q }}" style="flex-shrink:0;">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <button type="submit" class="btn btn--ghost btn--sm" title="Excel mit allen Fahrzeugen und ihren direkten Fahrtenbuch-Links">
-      &#11015; Fahrzeuge inkl. Link exportieren
+      {{ icon("download", size="xs") }} Fahrzeuge inkl. Link exportieren
     </button>
   </form>
-  <a href="/admin/fahrzeuge" class="btn btn--ghost btn--sm">Fahrzeuge zusammenführen → Ressourcen</a>
+  <a href="/admin/fahrzeuge" class="btn btn--ghost btn--sm">Fahrzeuge zusammenführen {{ icon("chevron-right", size="xs") }} Ressourcen</a>
 </div>
 
 {% if saved %}
@@ -60,8 +60,8 @@
   {% for fz in fahrzeuge %}
   <details class="fz-card" data-id="{{ fz.id }}">
     <summary style="padding:.85rem 1rem;cursor:pointer;font-weight:600;display:flex;align-items:center;gap:.5rem;list-style:none;">
-      <span class="drag-handle" title="Reihenfolge ändern">&#8942;&#8942;</span>
-      <span style="font-size:1rem;">&#x1F697;</span>
+      <span class="drag-handle" title="Reihenfolge ändern">{{ icon("grip-vertical", size="sm") }}</span>
+      <span style="font-size:1rem;">{{ icon("car", size="sm") }}</span>
       <span>{{ fz.code }}</span>
       {% if fz.kennzeichen %}<span style="color:var(--text-muted);font-weight:400;font-size:.9rem;">{{ fz.kennzeichen }}</span>{% endif %}
       <span style="margin-left:auto;display:flex;gap:.4rem;font-weight:400;">
@@ -71,7 +71,7 @@
         {% if fz.einsatzleiter_abfrage %}<span class="badge badge--blue">EL</span>{% endif %}
         {% if fz.qr_token %}<span class="badge badge--success">QR</span>{% endif %}
       </span>
-      <span style="font-size:.8rem;color:var(--text-muted);margin-left:.25rem;">&#9660;</span>
+      <span style="font-size:.8rem;color:var(--text-muted);margin-left:.25rem;">{{ icon("chevron-down", size="sm") }}</span>
     </summary>
     <div style="padding:1rem;border-top:1px solid var(--border);">
       <form method="post" action="/admin/fahrzeuge/{{ fz.id }}/fahrtenbuch{{ org_q }}"
@@ -235,9 +235,9 @@ document.addEventListener('click', function(e) {
   if (!btn) return;
   var link = btn.dataset.link || '';
   function done() {
-    var orig = btn.textContent;
-    btn.textContent = 'Kopiert ✓';
-    setTimeout(function() { btn.textContent = orig; }, 1500);
+    var orig = btn.innerHTML;
+    btn.innerHTML = 'Kopiert ' + ecpIcon('check', {size: 'xs'});
+    setTimeout(function() { btn.innerHTML = orig; }, 1500);
   }
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(link).then(done).catch(function() {

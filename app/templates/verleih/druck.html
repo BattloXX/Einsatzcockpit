@@ -6,6 +6,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Verleihschein – {{ a.name }}</title>
 <style>
+  .ecp-icon { display:inline-block;flex-shrink:0;vertical-align:-.2em; }
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: Arial, Helvetica, sans-serif; font-size: 11pt; color: #111; background: #fff; }
 
@@ -99,7 +100,7 @@
 <body>
 
 <div class="topbar">
-  <div class="topbar__title">&#128438; Verleihschein</div>
+  <div class="topbar__title">{{ icon("printer", size="md") }} Verleihschein</div>
   <button class="topbar__btn" onclick="window.print()">Drucken</button>
   <button class="topbar__btn" onclick="window.close()">Schließen</button>
 </div>
@@ -183,7 +184,7 @@
 
   <!-- Rückgabe-Hinweis -->
   <div class="hinweis">
-    <div class="hinweis__title">&#9888; Wichtiger Hinweis zur Rückgabe</div>
+    <div class="hinweis__title">{{ icon("alert-triangle", size="sm") }} Wichtiger Hinweis zur Rückgabe</div>
     <div class="hinweis__text">
       Das ausgeliehene Material ist nach Abschluss der Arbeiten
       <strong>unverzüglich und vollständig</strong> an die Feuerwehr

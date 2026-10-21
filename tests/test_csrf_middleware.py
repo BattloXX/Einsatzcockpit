@@ -101,6 +101,8 @@ def test_formfeld_fehler_ohne_html_accept_bleibt_json(client):
 
 
 def test_fahrtenbuch_csrf_fehler_enthaelt_ruecksprung(client):
+    from app.core.icons import render_icon
+
     _csrf_cookie(client)
     r = client.post(
         "/fahrtenbuch",
@@ -110,6 +112,8 @@ def test_fahrtenbuch_csrf_fehler_enthaelt_ruecksprung(client):
     assert r.status_code == 403
     assert 'href="/f/abc123"' in r.text
     assert "Neue Fahrt erfassen" in r.text
+    assert str(render_icon("car", size="sm")) in r.text
+    assert "🚗" not in r.text
 
 
 def test_andere_csrf_fehler_enthalten_keinen_fahrtenbuch_ruecksprung(client):

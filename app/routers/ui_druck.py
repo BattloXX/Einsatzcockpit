@@ -12,8 +12,10 @@ from types import SimpleNamespace
 from typing import cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from markupsafe import escape
 from sqlalchemy.orm import Session
 
+from app.core.icons import render_icon
 from app.core.permissions import require_role
 from app.db import get_db
 from app.models.gateway import (
@@ -204,9 +206,10 @@ def _fehler_seite(text: str, *, status: int) -> Response:
     html = (
         "<!doctype html><meta charset='utf-8'>"
         "<title>Druck nicht möglich</title>"
+        "<style>.ecp-icon{display:inline-block;flex-shrink:0;vertical-align:-.2em}</style>"
         "<body style='font-family:system-ui,sans-serif;background:#081425;color:#d8e3fb;"
         "display:flex;min-height:90vh;align-items:center;justify-content:center;text-align:center;padding:24px'>"
-        f"<div><div style='font-size:2.2rem;margin-bottom:10px'>🖨️</div>"
-        f"<p style='max-width:36rem;line-height:1.5'>{text}</p></div></body>"
+        f"<div><div style='font-size:2.2rem;margin-bottom:10px'>{render_icon('printer', size='lg')}</div>"
+        f"<p style='max-width:36rem;line-height:1.5'>{escape(text)}</p></div></body>"
     )
     return Response(content=html, media_type="text/html", status_code=status)

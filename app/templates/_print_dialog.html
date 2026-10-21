@@ -20,8 +20,8 @@
 
     {# Zielauswahl – nur sichtbar, wenn ein Gateway mit Druckern verfügbar ist #}
     <div class="ecpg-target" id="ecpgTarget">
-      <button type="button" class="ecpg-target__btn" data-target="station" id="ecpgTgtStation">🖨️ Stationsdrucker</button>
-      <button type="button" class="ecpg-target__btn" data-target="local" id="ecpgTgtLocal">💻 Dieses Gerät</button>
+      <button type="button" class="ecpg-target__btn" data-target="station" id="ecpgTgtStation">{{ icon("printer", size="sm") }} Stationsdrucker</button>
+      <button type="button" class="ecpg-target__btn" data-target="local" id="ecpgTgtLocal">{{ icon("device-laptop", size="sm") }} Dieses Gerät</button>
     </div>
 
     {# Pane: Stationsdrucker (Gateway) #}
@@ -97,7 +97,7 @@
   .ecpg-hint{font-size:.86em;color:var(--text-muted,#c2c6d6);margin:14px 0 0;line-height:1.4}
   .ecpg-target{display:flex;gap:5px;margin:2px 0 16px;background:var(--surface,#081425);
     padding:4px;border-radius:9px;border:1px solid var(--border,#424754)}
-  .ecpg-target__btn{flex:1;padding:9px 10px;border:1px solid transparent;border-radius:6px;
+  .ecpg-target__btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;flex:1;padding:9px 10px;border:1px solid transparent;border-radius:6px;
     background:transparent;color:var(--text-muted,#c2c6d6);cursor:pointer;font-size:.88rem;font-weight:600;
     transition:background .12s,color .12s}
   .ecpg-target__btn.is-active{background:var(--surface-high,#2a3548);color:var(--text,#d8e3fb);
@@ -188,10 +188,7 @@
     if(!connected){ msg.textContent='Hinweis: Gateway aktuell offline – der Auftrag wird nachgeholt.'; }
     const sel = document.getElementById('ecpgPrinter');
     window._ecpgPrinters = printers;
-    sel.innerHTML = printers.map(p=>{
-      const dot = p.reachable === true ? '🟢 ' : (p.reachable === false ? '🔴 ' : '');
-      return `<option value="${p.id}">${dot}${p.name}</option>`;
-    }).join('');
+    sel.replaceChildren(...printers.map(p => new Option(p.name, String(p.id))));
     const last = localStorage.getItem('ecpg_last_printer');
     if(last){ sel.value = last; }
     sel.onchange = function(){ updatePrinterHint(); updateFormatOptions(); updateColorOptions(); };

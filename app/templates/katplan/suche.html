@@ -6,7 +6,7 @@
 {% endblock %}
 {% block content %}
   <section class="kp-page kp-suche">
-    <a class="btn btn--ghost btn--sm" href="/katastrophenplaene">← Katastrophenpläne</a>
+    <a class="btn btn--ghost btn--sm" href="/katastrophenplaene">{{ icon("chevron-left", size="xs") }} Katastrophenpläne</a>
     <h1>In Katastrophenplänen suchen</h1>
     <form id="kp-suchformular" method="get" action="/katastrophenplaene/suche" class="kp-filter"
           hx-get="/katastrophenplaene/suche" hx-target="#kp-suche-treffer" hx-swap="outerHTML"

@@ -4,10 +4,10 @@
 <div class="page-content">
   <div class="page-header">
     <div>
-      <h1>🚑 Rettungsdatenblätter</h1>
+      <h1>{{ icon("ambulance", size="md") }} Rettungsdatenblätter</h1>
       <p class="text-muted">Rettungskarten für die technische Rettung – Suche nach Hersteller und Modell</p>
     </div>
-    <div><a href="/nachschlagewerke/" class="btn btn--ghost">← Nachschlagewerke</a></div>
+    <div><a href="/nachschlagewerke/" class="btn btn--ghost">{{ icon("chevron-left", size="sm") }} Nachschlagewerke</a></div>
   </div>
 
   <!-- Katalog-Livesuche (Euro NCAP / CTIF Euro Rescue) -->
@@ -37,7 +37,7 @@
       {% if e.kraftstoff %}<span class="badge-pill badge-pill--gray">{{ e.kraftstoff }}</span>{% endif %}
       {% if e.hat_pdf %}
       <a href="/nachschlagewerk-cache/rettungskarten/{{ e.id }}/original.pdf" target="_blank"
-         rel="noopener" class="btn btn--secondary btn--xs">📄 PDF öffnen</a>
+         rel="noopener" class="btn btn--secondary btn--xs">{{ icon("file-text", size="xs") }} PDF öffnen</a>
       {% endif %}
     </div>
     {% endfor %}
@@ -66,7 +66,7 @@
           <input type="number" id="rk-b" name="baujahr_von" class="form-input" min="1950" max="2100" placeholder="optional">
         </div>
         <div class="form-group" style="margin:0;">
-          <button type="submit" class="btn btn--primary btn--full">🔎 Suchen &amp; laden</button>
+          <button type="submit" class="btn btn--primary btn--full">{{ icon("zoom-in", size="sm") }} Suchen &amp; laden</button>
         </div>
       </form>
       <div id="rk-result" style="margin-top:12px;"></div>

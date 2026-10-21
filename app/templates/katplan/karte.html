@@ -33,7 +33,7 @@
           <fieldset class="kp-chips">
             <legend class="sr-only">Typ</legend>
             {% for code, typ in typen.items() %}
-              <label><input type="checkbox" data-kp-filter-typ value="{{ code }}" checked> {{ typ.icon }} {{ typ.label }}</label>
+              <label><input type="checkbox" data-kp-filter-typ value="{{ code }}" checked> {{ icon(typ.icon_name, size="md") }} {{ typ.label }}</label>
             {% endfor %}
           </fieldset>
         </details>

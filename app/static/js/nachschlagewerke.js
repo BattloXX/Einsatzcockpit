@@ -80,7 +80,7 @@
     if (e.links && e.links.length) {
       links = '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;">';
       e.links.forEach(function (l) {
-        links += '<a href="' + esc(l.url) + '" target="_blank" rel="noopener" class="btn btn--secondary btn--xs">🔗 ' + esc(l.label) + '</a>';
+        links += '<a href="' + esc(l.url) + '" target="_blank" rel="noopener" class="btn btn--secondary btn--xs">' + ecpIcon('external-link', {size: 'xs'}) + ' ' + esc(l.label) + '</a>';
       });
       links += '</div>';
     }
