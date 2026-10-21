@@ -215,11 +215,11 @@ async def _check_katplan_wiedervorlagen() -> None:
                 if not empfaenger:
                     empfaenger = [u for u in users if u.role_codes & {"org_admin", "admin"}]
                 smtp_cfg = mail_service._org_smtp_cfg(db, org_id) or mail_service.get_smtp_cfg(db)
-                link = f"{settings.effective_public_base_url.rstrip('/')}/katastrophenplaene/{item['plan_id']}"
+                link = f"{settings.effective_public_base_url.rstrip('/')}/plaene/{item['plan_id']}"
                 for user in empfaenger:
                     msg = mail_service._build_message(
-                        to=user.email or "", subject=f"Wiedervorlage Katastrophenplan: {item['titel']}",
-                        body_txt=f"Der Katastrophenplan {item['titel']} ist zur Wiedervorlage fällig.\n\n{link}",
+                        to=user.email or "", subject=f"Überprüfung fällig: {item['titel']}",
+                        body_txt=f"Der Plan {item['titel']} ist zur Überprüfung fällig.\n\n{link}",
                         smtp_cfg=smtp_cfg,
                     )
                     nachrichten.append({"org_id": org_id, "msg": msg, "smtp_cfg": smtp_cfg})

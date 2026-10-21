@@ -25,7 +25,7 @@
     if (q.length < 3) return;
     timer = setTimeout(async function () {
       try {
-        const response = await fetch('/katastrophenplaene/adress-suche?q=' + encodeURIComponent(q));
+        const response = await fetch('/plaene/adress-suche?q=' + encodeURIComponent(q));
         if (!response.ok) throw new Error('Adresssuche fehlgeschlagen');
         const data = await response.json();
         if (aktuell !== lauf) return;

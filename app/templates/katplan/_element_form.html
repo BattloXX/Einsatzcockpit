@@ -1,11 +1,11 @@
 <section class="kp-box kp-editor-form">
   <h2 class="kp-section-title">{{ icon(typen[element.typ].icon_name, size="md") }} {{ typen[element.typ].label }}</h2>
   {% if fehler %}
-    <a href="/katastrophenplaene/{{ plan.id }}/elemente/{{ element.id }}" hx-get="/katastrophenplaene/{{ plan.id }}/elemente/{{ element.id }}" hx-target="#kp-detail">Aktuellen Stand laden</a>
+    <a href="/plaene/{{ plan.id }}/elemente/{{ element.id }}" hx-get="/plaene/{{ plan.id }}/elemente/{{ element.id }}" hx-target="#kp-detail">Aktuellen Stand laden</a>
   {% endif %}
   <script type="application/json" id="kp-element-daten">{{ daten|tojson }}</script>
-  <form method="post" action="/katastrophenplaene/{{ plan.id }}/elemente/{{ element.id }}"
-    hx-post="/katastrophenplaene/{{ plan.id }}/elemente/{{ element.id }}" hx-target="#kp-detail" class="kp-form kp-form--contents" x-data="{ daten: {} }"
+  <form method="post" action="/plaene/{{ plan.id }}/elemente/{{ element.id }}"
+    hx-post="/plaene/{{ plan.id }}/elemente/{{ element.id }}" hx-target="#kp-detail" class="kp-form kp-form--contents" x-data="{ daten: {} }"
     x-init="daten = JSON.parse($el.previousElementSibling.textContent)" @submit="$refs.daten.value = JSON.stringify(daten)">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <input type="hidden" name="version" id="kp-element-version" value="{{ form.get('version', element.version) }}">
@@ -54,7 +54,7 @@
           </label>
         </div>
         {% if element.quelle_dokument_id %}
-          <a href="/katastrophenplaene/{{ plan.id }}/quellen/{{ element.quelle_dokument_id }}{% if element.quelle_seiten %}?seite={{ element.quelle_seiten.split('-')[0] }}{% endif %}">Quelle anzeigen</a>
+          <a href="/plaene/{{ plan.id }}/quellen/{{ element.quelle_dokument_id }}{% if element.quelle_seiten %}?seite={{ element.quelle_seiten.split('-')[0] }}{% endif %}">Quelle anzeigen</a>
         {% endif %}
       </fieldset>
       {% set beschreibung = form.get('beschreibung_html', '') %}
@@ -198,14 +198,14 @@
   {% with anhang_element_id = element.id %}
     {% include "katplan/_anhaenge.html" %}
   {% endwith %}
-  <form method="post" action="/katastrophenplaene/{{ plan.id }}/elemente/{{ element.id }}/loeschen"
-    hx-post="/katastrophenplaene/{{ plan.id }}/elemente/{{ element.id }}/loeschen" hx-target="#kp-detail" hx-confirm="Element löschen?">
+  <form method="post" action="/plaene/{{ plan.id }}/elemente/{{ element.id }}/loeschen"
+    hx-post="/plaene/{{ plan.id }}/elemente/{{ element.id }}/loeschen" hx-target="#kp-detail" hx-confirm="Element löschen?">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <button type="submit" class="btn btn--ghost kp-delete">Element löschen</button>
   </form>
 
-  <form method="post" action="/katastrophenplaene/{{ plan.id }}/elemente/{{ element.id }}/verschieben"
-    hx-post="/katastrophenplaene/{{ plan.id }}/elemente/{{ element.id }}/verschieben" hx-target="#kp-detail" class="kp-actions">
+  <form method="post" action="/plaene/{{ plan.id }}/elemente/{{ element.id }}/verschieben"
+    hx-post="/plaene/{{ plan.id }}/elemente/{{ element.id }}/verschieben" hx-target="#kp-detail" class="kp-actions">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <button type="submit" name="richtung" value="hoch" class="btn" aria-label="Nach oben verschieben">{{ icon("chevron-up", size="sm") }}</button>
     <button type="submit" name="richtung" value="runter" class="btn" aria-label="Nach unten verschieben">{{ icon("chevron-down", size="sm") }}</button>
@@ -213,8 +213,8 @@
 
   <details>
     <summary class="kp-box__title">Duplizieren</summary>
-    <form method="post" action="/katastrophenplaene/{{ plan.id }}/elemente/{{ element.id }}/duplizieren"
-      hx-post="/katastrophenplaene/{{ plan.id }}/elemente/{{ element.id }}/duplizieren" hx-target="#kp-detail" class="kp-form">
+    <form method="post" action="/plaene/{{ plan.id }}/elemente/{{ element.id }}/duplizieren"
+      hx-post="/plaene/{{ plan.id }}/elemente/{{ element.id }}/duplizieren" hx-target="#kp-detail" class="kp-form">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <label>
         Zielplan

@@ -105,7 +105,7 @@
         }
         button.disabled = true;
         try {
-          const antwort = await fetch('/katastrophenplaene/adress-suche?q=' + encodeURIComponent(q), {
+          const antwort = await fetch('/plaene/adress-suche?q=' + encodeURIComponent(q), {
             signal: controller.signal
           });
           if (!antwort.ok) throw new Error('Adresssuche fehlgeschlagen.');

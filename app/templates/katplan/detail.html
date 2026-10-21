@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ lesekopf.titel if lesekopf is defined else plan.titel }} · Katastrophenpläne{% endblock %}
+{% block title %}{{ lesekopf.titel if lesekopf is defined else plan.titel }} · Einsatz- &amp; Katastrophenpläne{% endblock %}
 {% block head_extra %}
   {% include "katplan/_design.html" %}
   {% include "katplan/_karten_assets.html" %}
@@ -10,8 +10,8 @@
 {% endblock %}
 {% block content %}
   <section class="kp-page" x-data="{ reiter: window.location.hash === '#kp-protokoll' ? 'protokoll' : 'plan' }">
-    <a class="btn btn--ghost btn--sm" href="/katastrophenplaene">{{ icon("chevron-left", size="xs") }} Katastrophenpläne</a>
-    <form method="get" action="/katastrophenplaene/suche" class="kp-filter">
+    <a class="btn btn--ghost btn--sm" href="/plaene">{{ icon("chevron-left", size="xs") }} Pläne</a>
+    <form method="get" action="/plaene/suche" class="kp-filter">
       <label>Inhalte suchen
         <input class="form-control" type="search" name="q" placeholder="Elemente und Dokumentseiten durchsuchen">
       </label>
@@ -22,10 +22,10 @@
       {% include "katplan/_kopf.html" %}
       <div role="tablist" aria-label="Planansicht" class="tabnav">
         <button type="button" role="tab" :aria-selected="reiter === 'plan'" @click="reiter = 'plan'" class="tabnav__item">Plan</button>
-        <a class="tabnav__item" href="{{ karten_url|default("/katastrophenplaene/" ~ plan.id ~ "/karte") }}">Karte</a>
-        <a class="tabnav__item" href="/katastrophenplaene/{{ plan.id }}/versionen">Versionen</a>
-        <a class="tabnav__item" href="/katastrophenplaene/{{ plan.id }}/quellen">Quellen</a>
-        {% if can_edit %}<a class="tabnav__item" href="/katastrophenplaene/{{ plan.id }}/import">Import</a>{% endif %}
+        <a class="tabnav__item" href="{{ karten_url|default("/plaene/" ~ plan.id ~ "/karte") }}">Karte</a>
+        <a class="tabnav__item" href="/plaene/{{ plan.id }}/versionen">Versionen</a>
+        <a class="tabnav__item" href="/plaene/{{ plan.id }}/quellen">Quellen</a>
+        {% if can_edit %}<a class="tabnav__item" href="/plaene/{{ plan.id }}/import">Import</a>{% endif %}
         {% if can_edit %}
           <button type="button" role="tab" :aria-selected="reiter === 'protokoll'" @click="reiter = 'protokoll'" class="tabnav__item">Protokoll</button>
         {% endif %}
@@ -34,8 +34,8 @@
         {% if historisch %}
           <p class="kp-box kp-box--info">Historische Version {{ leseversion.versionsnummer }} – aktuell gilt Version {{ aktuelle_version.versionsnummer if aktuelle_version else '-' }}</p>
         {% endif %}
-        {% if not arbeitsstand %}<a class="btn" href="/katastrophenplaene/{{ plan.id }}/pdf?version_id={{ leseversion.id }}">PDF / Offlinefassung</a>{% endif %}
-        {% if can_edit %}<a class="btn" href="/katastrophenplaene/{{ plan.id }}/pdf?entwurf=1">Entwurf als PDF</a>{% endif %}
+        {% if not arbeitsstand %}<a class="btn" href="/plaene/{{ plan.id }}/pdf?version_id={{ leseversion.id }}">PDF / Offlinefassung</a>{% endif %}
+        {% if can_edit %}<a class="btn" href="/plaene/{{ plan.id }}/pdf?entwurf=1">Entwurf als PDF</a>{% endif %}
         {% if arbeitsstand %}
           {% include "katplan/_arbeitsstand.html" %}
         {% else %}

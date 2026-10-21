@@ -1,8 +1,8 @@
 {% include "katplan/_design.html" %}
 <div id="kp-kopf" class="kp-box"
   hx-on::before-swap="if (event.detail.xhr.status === 409 || event.detail.xhr.status === 422) { event.detail.shouldSwap = true; event.detail.isError = false; }">
-  <form method="post" action="/katastrophenplaene/{{ (plan.id|string) + '/stammdaten' if plan else 'neu' }}" class="kp-form"
-    {% if plan %}hx-post="/katastrophenplaene/{{ plan.id }}/stammdaten" hx-target="#kp-kopf" hx-swap="outerHTML"{% endif %}>
+  <form method="post" action="/plaene/{{ (plan.id|string) + '/stammdaten' if plan else 'neu' }}" class="kp-form"
+    {% if plan %}hx-post="/plaene/{{ plan.id }}/stammdaten" hx-target="#kp-kopf" hx-swap="outerHTML"{% endif %}>
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     {% if plan %}
       <input type="hidden" name="version" value="{{ formular_version }}">
@@ -10,16 +10,25 @@
     {% if fehler %}
       <p role="alert" class="kp-error">{{ fehler }}</p>
       {% if plan %}
-        <a href="/katastrophenplaene/{{ plan.id }}/stammdaten" hx-get="/katastrophenplaene/{{ plan.id }}/stammdaten" hx-target="#kp-kopf" hx-swap="outerHTML">Aktuellen Stand laden</a>
+        <a href="/plaene/{{ plan.id }}/stammdaten" hx-get="/plaene/{{ plan.id }}/stammdaten" hx-target="#kp-kopf" hx-swap="outerHTML">Aktuellen Stand laden</a>
       {% endif %}
     {% endif %}
+    <label>
+      Planart (Pflichtfeld)
+      <select name="planart" required class="form-control">
+        {% for code, art in planarten.items() %}
+          <option value="{{ code }}" {% if form.get('planart', 'katastrophenplan') == code %}selected{% endif %}>{{ art.label }}</option>
+        {% endfor %}
+      </select>
+    </label>
     <h2 class="kp-box__title">Grunddaten</h2>
     <label>
       Titel (Pflichtfeld)
       <input name="titel" maxlength="200" required value="{{ form.get('titel', '') }}" class="form-control">
     </label>
     <fieldset>
-      <legend class="kp-box__title">Gefahrenarten (mindestens eine)</legend>
+      <legend class="kp-box__title">Gefahrenarten</legend>
+      <p>Bei Katastrophenplänen mindestens eine Gefahrenart auswählen; bei Alarm- und Einsatzplänen sowie Maßnahmenplänen optional.</p>
       <div class="kp-chips">
         {% for code, label in gefahrenarten.items() %}
           <label class="kp-chip">
@@ -48,9 +57,9 @@
     <div class="kp-actions">
       <button type="submit" class="btn btn--primary">{{ 'Speichern' if plan else 'Plan anlegen' }}</button>
       {% if plan %}
-        <a href="/katastrophenplaene/{{ plan.id }}" hx-get="/katastrophenplaene/{{ plan.id }}" hx-select="#kp-kopf" hx-target="#kp-kopf" hx-swap="outerHTML" class="btn">Abbrechen</a>
+        <a href="/plaene/{{ plan.id }}" hx-get="/plaene/{{ plan.id }}" hx-select="#kp-kopf" hx-target="#kp-kopf" hx-swap="outerHTML" class="btn">Abbrechen</a>
       {% else %}
-        <a href="/katastrophenplaene" class="btn">Abbrechen</a>
+        <a href="/plaene" class="btn">Abbrechen</a>
       {% endif %}
     </div>
   </form>

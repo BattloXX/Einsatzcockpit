@@ -563,7 +563,7 @@ async def katplan_vorschlaege_aus_dokument(context: MCPContext, plan_id: int, do
     service.protokolliere(context.db, plan, "plan", "import_vorschlaege", context.user,
                           neu=f"{len(werte)} Vorschläge, Quelle {dokument_id}, Seite {seiten_nr}", quelle="mcp")
     return {"anzahl": len(werte), "warnungen": warnungen,
-            "ui_link": f"/katastrophenplaene/{plan.id}/import?quelle={dokument_id}&seite={seiten_nr}",
+            "ui_link": f"/plaene/{plan.id}/import?quelle={dokument_id}&seite={seiten_nr}",
             "hinweis": _HINWEIS}
 
 
@@ -701,9 +701,11 @@ async def katplan_beziehung_entfernen(context: MCPContext, plan_id: int, element
 
 @_tool("katplan_stammdaten_aendern", (
     "Ändert nur übergebene Plan-Stammdaten im Arbeitsstand. version aus katplan_lesen(fassung=arbeitsstand), "
-    "Feld plan_version. felder: titel, beschreibung (Text), gefahrenarten (Liste gültiger Codes), "
+    "Feld plan_version. felder: titel, planart (alarm_einsatzplan, massnahmenplan, katastrophenplan), "
+    "beschreibung (Text), gefahrenarten (Liste gültiger Codes), "
     "geltungsbereich, verantwortliche_stelle, verantwortlich_kontakt_id, wiedervorlage_am (YYYY-MM-DD). "
-    "null oder leer leert optionale Felder; titel und gefahrenarten sind Pflicht. Status bleibt menschlich. "
+    "null oder leer leert optionale Felder; titel und planart sind Pflicht, gefahrenarten nur bei katastrophenplan. "
+    "Status bleibt menschlich. "
     "Unbekannte Felder sind Fehler; streng=true erlaubt keinen Datenverlust; pruefen=true rollt zurück."
 ))
 async def katplan_stammdaten_aendern(context: MCPContext, plan_id: int, version: int, felder: dict,
@@ -713,13 +715,13 @@ async def katplan_stammdaten_aendern(context: MCPContext, plan_id: int, version:
         raise ValueError(f"Versionskonflikt: Plan hat version {plan.version}, übergeben {version}. "
                          'Mit katplan_lesen(fassung="arbeitsstand") neu lesen.')
     mapping = {"beschreibung": "beschreibung_html", "gefahrenarten": "gefahrenarten_json"}
-    erlaubt = {"titel", "beschreibung", "gefahrenarten", "geltungsbereich", "verantwortliche_stelle",
+    erlaubt = {"planart", "titel", "beschreibung", "gefahrenarten", "geltungsbereich", "verantwortliche_stelle",
                "verantwortlich_kontakt_id", "wiedervorlage_am"}
     if not isinstance(felder, dict):
         raise ValueError("felder muss ein Objekt sein.")
     if set(felder) - erlaubt:
         raise ValueError("Nicht erlaubte Felder: " + ", ".join(sorted(set(felder) - erlaubt)))
-    bestand: dict = {"titel": plan.titel, "gefahrenarten": plan.gefahrenarten,
+    bestand: dict = {"planart": plan.planart, "titel": plan.titel, "gefahrenarten": plan.gefahrenarten,
                "beschreibung_html": plan.beschreibung_html or "", "geltungsbereich": plan.geltungsbereich or "",
                "verantwortliche_stelle": plan.verantwortliche_stelle or "",
                "wiedervorlage_am": plan.wiedervorlage_am.isoformat() if plan.wiedervorlage_am else ""}

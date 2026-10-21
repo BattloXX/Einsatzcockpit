@@ -30,7 +30,7 @@
     {% set q = quellen_nach_id.get(element.quelle_dokument_id) %}
     <p>Quelle:
       {% if q %}
-        <a href="/katastrophenplaene/{{ plan.id }}/quellen/{{ element.quelle_dokument_id }}?{% if element.quelle_seiten %}seite={{ element.quelle_seiten.split('-')[0] }}&amp;{% endif %}{% if leseversion is defined %}version_id={{ leseversion.id }}{% endif %}">{{ q.titel }} (v{{ q.versionsnummer }}){% if element.quelle_seiten %}, S. {{ element.quelle_seiten }}{% endif %}</a>
+        <a href="/plaene/{{ plan.id }}/quellen/{{ element.quelle_dokument_id }}?{% if element.quelle_seiten %}seite={{ element.quelle_seiten.split('-')[0] }}&amp;{% endif %}{% if leseversion is defined %}version_id={{ leseversion.id }}{% endif %}">{{ q.titel }} (v{{ q.versionsnummer }}){% if element.quelle_seiten %}, S. {{ element.quelle_seiten }}{% endif %}</a>
       {% else %}
         Quelle nicht mehr verfügbar{% if element.quelle_seiten %}, S. {{ element.quelle_seiten }}{% endif %}
       {% endif %}
@@ -43,7 +43,7 @@
     {% include "katplan/_geo_status.html" %}
   {% endif %}
   {% if element.geometry_json %}
-    <a href="/katastrophenplaene/{{ plan.id }}/karte#element-{{ element.element_uuid if leseversion is defined else element.uuid }}">Auf Karte zeigen</a>
+    <a href="/plaene/{{ plan.id }}/karte#element-{{ element.element_uuid if leseversion is defined else element.uuid }}">Auf Karte zeigen</a>
   {% endif %}
   {% for feld, label in [('gueltig_bis', 'Gültig bis'), ('pruefen_am', 'Prüfen am')] %}
     {% if element[feld] %}

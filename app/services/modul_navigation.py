@@ -36,8 +36,8 @@ def modul_gruppen(request, user) -> list[ModulGruppe]:
     gruppen = [
         ("einsatz", "Im Einsatz", (
             (
-                ModulEintrag("katplan", "Katastrophenpläne", "/katastrophenplaene", "katplan",
-                             ("/katastrophenplaene",)),
+                ModulEintrag("katplan", "Einsatz- & Katastrophenpläne", "/plaene", "katplan",
+                             ("/plaene",)),
                 can_view_katplan_request(request),
             ),
             (

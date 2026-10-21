@@ -6,8 +6,8 @@
     <header class="kp-header"><h1>{{ dokument.titel }} (v{{ dokument.versionsnummer }})</h1></header>
     {% include "katplan/_quellen_tabs.html" %}
     <nav class="kp-chips" aria-label="Quellnavigation">
-      <a class="btn" href="/katastrophenplaene/{{ plan.id }}/quellen/{{ dokument.id }}{{ version_query }}">Alle Seiten</a>
-      <a class="btn" href="/katastrophenplaene/quelle/{{ dokument.uuid }}/original{{ version_query }}" download>Download Original</a>
+      <a class="btn" href="/plaene/{{ plan.id }}/quellen/{{ dokument.id }}{{ version_query }}">Alle Seiten</a>
+      <a class="btn" href="/plaene/quelle/{{ dokument.uuid }}/original{{ version_query }}" download>Download Original</a>
     </nav>
     {% if seite %}
       <h2 class="kp-section-title">Seite {{ seite.seiten_nr }} von {{ dokument.seitenzahl }}</h2>
@@ -21,9 +21,9 @@
         <button class="btn" type="submit">Anzeigen</button>
       </form>
       {% if seite.bild_pfad %}
-        <img class="kp-seitenbild" src="/katastrophenplaene/quelle/{{ dokument.uuid }}/seite/{{ seite.seiten_nr }}/bild{{ version_query }}" alt="Seite {{ seite.seiten_nr }}">
+        <img class="kp-seitenbild" src="/plaene/quelle/{{ dokument.uuid }}/seite/{{ seite.seiten_nr }}/bild{{ version_query }}" alt="Seite {{ seite.seiten_nr }}">
       {% endif %}
-      <a href="/katastrophenplaene/quelle/{{ dokument.uuid }}/seite/{{ seite.seiten_nr }}/pdf{{ version_query }}" target="_blank" rel="noopener">Seite als PDF öffnen</a>
+      <a href="/plaene/quelle/{{ dokument.uuid }}/seite/{{ seite.seiten_nr }}/pdf{{ version_query }}" target="_blank" rel="noopener">Seite als PDF öffnen</a>
       <details class="kp-box">
         <summary>Volltext</summary>
         <div class="kp-freitext">{{ seite.volltext or 'Kein Volltext verfügbar.' }}</div>
@@ -31,11 +31,11 @@
       {% if can_edit and plan.status != 'archiviert' %}
         <section class="kp-box">
           <h2 class="kp-box__title">KI-Vorschläge zu dieser Seite</h2>
-          <p><a href="/katastrophenplaene/{{ plan.id }}/import?quelle={{ dokument.id }}&amp;seite={{ seite.seiten_nr }}">{{ ki_seiten_anzahl }} offene Vorschläge prüfen</a></p>
+          <p><a href="/plaene/{{ plan.id }}/import?quelle={{ dokument.id }}&amp;seite={{ seite.seiten_nr }}">{{ ki_seiten_anzahl }} offene Vorschläge prüfen</a></p>
         </section>
         <section class="kp-box">
           <h2 class="kp-box__title">Element aus dieser Seite anlegen</h2>
-          <form method="post" action="/katastrophenplaene/{{ plan.id }}/quellen/{{ dokument.id }}/element" class="kp-form">
+          <form method="post" action="/plaene/{{ plan.id }}/quellen/{{ dokument.id }}/element" class="kp-form">
             <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
             <input type="hidden" name="seite" value="{{ seite.seiten_nr }}">
             <label>Typ <select class="form-control" name="typ">{% for code, typ in typen.items() %}<option value="{{ code }}" {% if code == 'info' %}selected{% endif %}>{{ typ.label }}</option>{% endfor %}</select></label>
@@ -49,7 +49,7 @@
         <h2 class="kp-box__title">Bereits verknüpfte Elemente dieser Seite</h2>
         <ul>
           {% for e in verknuepfte_elemente %}
-            <li><a href="{% if can_edit %}/katastrophenplaene/{{ plan.id }}/bearbeiten?element={{ e.id }}{% else %}/katastrophenplaene/{{ plan.id }}{% if version_id %}/versionen/{{ version_id }}{% endif %}#element-{{ e.element_uuid }}{% endif %}">{{ e.kennung }} {{ e.titel }}</a></li>
+            <li><a href="{% if can_edit %}/plaene/{{ plan.id }}/bearbeiten?element={{ e.id }}{% else %}/plaene/{{ plan.id }}{% if version_id %}/versionen/{{ version_id }}{% endif %}#element-{{ e.element_uuid }}{% endif %}">{{ e.kennung }} {{ e.titel }}</a></li>
           {% else %}<li>Keine Elemente verknüpft.</li>{% endfor %}
         </ul>
       </section>
@@ -57,7 +57,7 @@
       <div class="kp-seitenraster">
         {% for s in seiten %}
           <a class="kp-box" href="?seite={{ s.seiten_nr }}{% if version_id %}&amp;version_id={{ version_id }}{% endif %}">
-            {% if s.thumb_pfad %}<img loading="lazy" src="/katastrophenplaene/quelle/{{ dokument.uuid }}/seite/{{ s.seiten_nr }}/thumb{{ version_query }}" alt="Vorschau Seite {{ s.seiten_nr }}">{% endif %}
+            {% if s.thumb_pfad %}<img loading="lazy" src="/plaene/quelle/{{ dokument.uuid }}/seite/{{ s.seiten_nr }}/thumb{{ version_query }}" alt="Vorschau Seite {{ s.seiten_nr }}">{% endif %}
             <span>Seite {{ s.seiten_nr }}{% if s.titel %}: {{ s.titel }}{% endif %}</span>
           </a>
         {% else %}<p>Seiten werden nach der Verarbeitung angezeigt.</p>{% endfor %}

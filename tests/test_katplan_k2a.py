@@ -16,7 +16,7 @@ from tests.test_katplan_k1b import login, post, umgebung  # noqa: F401
 
 
 def basis(info):
-    return f'/katastrophenplaene/{info["plan_id"]}'
+    return f'/plaene/{info["plan_id"]}'
 
 
 def objekte(info, modell):
@@ -214,7 +214,7 @@ def test_plan_und_org_isolation_aller_objekte(client, umgebung):
         assert post(client, path + f"/elemente/{eigenes.id}", **element_form(eigenes, phasen=[pid])).status_code == 404
         assert post(client, path + f"/elemente/{eigenes.id}", **element_form(eigenes, abschnitt_id=aid)).status_code == 404
     fremd_plan = ids[1][0]
-    assert client.get(f"/katastrophenplaene/{fremd_plan}/bearbeiten").status_code == 404
+    assert client.get(f"/plaene/{fremd_plan}/bearbeiten").status_code == 404
 
 
 @pytest.mark.parametrize("typ", ELEMENT_TYPEN)

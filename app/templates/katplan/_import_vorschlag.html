@@ -8,8 +8,8 @@
     {% if v.begruendung %}<p class="kp-header__sub">{{ v.begruendung }}</p>{% endif %}
     {% set kapitel = abschnitte|selectattr('titel', 'equalto', v.kapitel)|list %}
     {% set phase = phasen|selectattr('name', 'equalto', v.phase)|list %}
-    <form method="post" action="/katastrophenplaene/{{ plan.id }}/import/{{ v.id }}/uebernehmen" class="kp-form"
-      hx-post="/katastrophenplaene/{{ plan.id }}/import/{{ v.id }}/uebernehmen" hx-target="#kp-vorschlag-{{ v.id }}" hx-swap="outerHTML"
+    <form method="post" action="/plaene/{{ plan.id }}/import/{{ v.id }}/uebernehmen" class="kp-form"
+      hx-post="/plaene/{{ plan.id }}/import/{{ v.id }}/uebernehmen" hx-target="#kp-vorschlag-{{ v.id }}" hx-swap="outerHTML"
       x-data="{ kapitel: '{{ 'neu' if v.kapitel and not kapitel else (kapitel[0].id if kapitel else '') }}', phase: '{{ 'neu' if v.phase and not phase else (phase[0].id if phase else '') }}' }">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <div class="kp-form-grid">
@@ -72,8 +72,8 @@
         <button class="btn" type="submit" form="kp-verwerfen-{{ v.id }}">Verwerfen</button>
       </div>
     </form>
-    <form id="kp-verwerfen-{{ v.id }}" method="post" action="/katastrophenplaene/{{ plan.id }}/import/{{ v.id }}/verwerfen"
-      hx-post="/katastrophenplaene/{{ plan.id }}/import/{{ v.id }}/verwerfen" hx-target="#kp-vorschlag-{{ v.id }}" hx-swap="outerHTML" hx-confirm="Vorschlag verwerfen?">
+    <form id="kp-verwerfen-{{ v.id }}" method="post" action="/plaene/{{ plan.id }}/import/{{ v.id }}/verwerfen"
+      hx-post="/plaene/{{ plan.id }}/import/{{ v.id }}/verwerfen" hx-target="#kp-vorschlag-{{ v.id }}" hx-swap="outerHTML" hx-confirm="Vorschlag verwerfen?">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     </form>
   {% else %}
@@ -81,6 +81,6 @@
       <h4>{{ v.titel }}</h4>
       <span class="kp-badge {{ 'kp-badge--green' if v.status == 'uebernommen' else 'kp-badge--gray' }}">{{ 'übernommen' if v.status == 'uebernommen' else v.status }}</span>
     </div>
-    {% if v.element_id %}<a href="/katastrophenplaene/{{ plan.id }}/bearbeiten?element={{ v.element_id }}">Element öffnen</a>{% endif %}
+    {% if v.element_id %}<a href="/plaene/{{ plan.id }}/bearbeiten?element={{ v.element_id }}">Element öffnen</a>{% endif %}
   {% endif %}
 </article>

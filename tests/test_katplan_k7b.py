@@ -237,7 +237,7 @@ def test_auslieferung_rechte_versionen_status_und_neuverarbeitung(client, umgebu
     response = upload(client, umgebung)
     assert response.status_code == 200 and 'hx-trigger="every 2s"' in response.text
     alt = objekte(umgebung, KatplanDokument)[0]
-    url = f"/katastrophenplaene/quelle/{alt.uuid}"
+    url = f"/plaene/quelle/{alt.uuid}"
     status = basis(umgebung) + f"/quellen/{alt.id}/status"
     r = client.get(status)
     assert "fertig" in r.text and "every 2s" not in r.text
@@ -260,7 +260,7 @@ def test_auslieferung_rechte_versionen_status_und_neuverarbeitung(client, umgebu
     login(client, umgebung)
     assert upload(client, umgebung, ersetzt_dokument_id=alt.id).status_code == 200
     neu = objekte(umgebung, KatplanDokument)[-1]
-    neu_url = f"/katastrophenplaene/quelle/{neu.uuid}"
+    neu_url = f"/plaene/quelle/{neu.uuid}"
     login(client, umgebung, "readonly")
     assert client.get(url + "/original").status_code == 200
     assert client.get(neu_url + "/original").status_code == 404

@@ -197,7 +197,7 @@ def test_objektdokument_suche_und_leserecht(client, umgebung, dokumente):
     login(client, umgebung)
     page = client.get(path + "?ansicht=freigabe")
     assert "Objektdokument (keine Berechtigung)" in page.text
-    assert f'href="/katastrophenplaene/anhang/{a.uuid}' not in page.text
+    assert f'href="/plaene/anhang/{a.uuid}' not in page.text
     with TestingSession() as db:
         set_tenant_context(db, None)
         user = db.query(User).filter_by(username=umgebung["users"]["katplan_verwalter"]).one()
@@ -236,7 +236,7 @@ def test_historische_urls_und_planbindung(client, umgebung):
         db.commit()
         fremde_vid = version.id
     login(client, umgebung, "readonly")
-    url = f"/katastrophenplaene/anhang/{a.uuid}"
+    url = f"/plaene/anhang/{a.uuid}"
     assert client.get(url + f"?version_id={v1}").status_code == 200
     assert client.get(url + f"/thumb?version_id={v1}").status_code == 200
     assert client.get(url).status_code == 404

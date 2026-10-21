@@ -19,7 +19,7 @@
       </p>
     </div>
     {% if can_edit %}
-      <a href="/katastrophenplaene/{{ plan.id }}/stammdaten" hx-get="/katastrophenplaene/{{ plan.id }}/stammdaten" hx-target="#kp-kopf"
+      <a href="/plaene/{{ plan.id }}/stammdaten" hx-get="/plaene/{{ plan.id }}/stammdaten" hx-target="#kp-kopf"
         hx-swap="outerHTML" class="btn btn--ghost btn--sm">Stammdaten bearbeiten</a>
     {% endif %}
   </header>
@@ -40,6 +40,10 @@
     </section>
     <section class="kp-sidecard">
       <h2 class="kp-box__title">Stammdaten</h2>
+      <div class="kp-row">
+        <span class="kp-row__label">Planart</span>
+        <span class="kp-row__value">{{ planarten[kopf.planart].label }}</span>
+      </div>
       <div class="kp-row">
         <span class="kp-row__label">Gefahrenarten</span>
         <div class="kp-chips">
@@ -80,9 +84,9 @@
       {% if can_edit %}
         {% if aktuelle_version %}
           <nav class="kp-chips" aria-label="Fassung">
-            <a class="btn btn--ghost btn--sm" href="/katastrophenplaene/{{ plan.id }}?ansicht=freigabe"
+            <a class="btn btn--ghost btn--sm" href="/plaene/{{ plan.id }}?ansicht=freigabe"
               {% if not arbeitsstand %}aria-current="page"{% endif %}>Freigegebene Fassung</a>
-            <a class="btn btn--ghost btn--sm" href="/katastrophenplaene/{{ plan.id }}?ansicht=arbeitsstand"
+            <a class="btn btn--ghost btn--sm" href="/plaene/{{ plan.id }}?ansicht=arbeitsstand"
               {% if arbeitsstand %}aria-current="page"{% endif %}>Arbeitsstand</a>
           </nav>
           {% if plan.status in ['in_ueberarbeitung', 'in_pruefung'] %}
@@ -99,8 +103,8 @@
       {% endif %}
       <div class="kp-actions">
         {% if can_edit and plan.status in ['entwurf', 'in_ueberarbeitung'] %}
-          <form method="post" action="/katastrophenplaene/{{ plan.id }}/einreichen"
-            hx-post="/katastrophenplaene/{{ plan.id }}/einreichen" hx-target="#kp-kopf" hx-swap="outerHTML">
+          <form method="post" action="/plaene/{{ plan.id }}/einreichen"
+            hx-post="/plaene/{{ plan.id }}/einreichen" hx-target="#kp-kopf" hx-swap="outerHTML">
             <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
             <label class="kp-field">Kommentar (optional)<input class="form-control" name="kommentar"></label>
             <button type="submit" class="btn btn--ghost btn--sm">Zur Prüfung einreichen</button>
@@ -108,24 +112,24 @@
         {% endif %}
         {% if can_release and plan.status in ['entwurf', 'in_pruefung', 'in_ueberarbeitung'] %}
           <p>Es gibt {{ qs_anzahl|default(0) }} offene Hinweise.</p>
-          <form method="post" action="/katastrophenplaene/{{ plan.id }}/freigeben"
-            hx-post="/katastrophenplaene/{{ plan.id }}/freigeben" hx-target="#kp-kopf" hx-swap="outerHTML">
+          <form method="post" action="/plaene/{{ plan.id }}/freigeben"
+            hx-post="/plaene/{{ plan.id }}/freigeben" hx-target="#kp-kopf" hx-swap="outerHTML">
             <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
             <label class="kp-field">Änderungsnotiz (optional)<textarea class="form-control" name="aenderungsnotiz" maxlength="2000"></textarea></label>
             <button type="submit" class="btn btn--primary btn--sm">Freigeben</button>
           </form>
         {% endif %}
         {% if can_release and plan.status == 'in_pruefung' %}
-          <form method="post" action="/katastrophenplaene/{{ plan.id }}/zurueckweisen"
-            hx-post="/katastrophenplaene/{{ plan.id }}/zurueckweisen" hx-target="#kp-kopf" hx-swap="outerHTML">
+          <form method="post" action="/plaene/{{ plan.id }}/zurueckweisen"
+            hx-post="/plaene/{{ plan.id }}/zurueckweisen" hx-target="#kp-kopf" hx-swap="outerHTML">
             <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
             <label class="kp-field">Kommentar zur Zurückweisung<textarea class="form-control" name="kommentar" required></textarea></label>
             <button type="submit" class="btn btn--ghost btn--sm">Zurückweisen</button>
           </form>
         {% endif %}
         {% if can_release %}
-          <form method="post" action="/katastrophenplaene/{{ plan.id }}/{{ 'reaktivieren' if plan.status == 'archiviert' else 'archivieren' }}"
-            hx-post="/katastrophenplaene/{{ plan.id }}/{{ 'reaktivieren' if plan.status == 'archiviert' else 'archivieren' }}" hx-target="#kp-kopf" hx-swap="outerHTML">
+          <form method="post" action="/plaene/{{ plan.id }}/{{ 'reaktivieren' if plan.status == 'archiviert' else 'archivieren' }}"
+            hx-post="/plaene/{{ plan.id }}/{{ 'reaktivieren' if plan.status == 'archiviert' else 'archivieren' }}" hx-target="#kp-kopf" hx-swap="outerHTML">
             <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
             <button type="submit" class="btn btn--ghost btn--sm">{{ 'Reaktivieren' if plan.status == 'archiviert' else 'Archivieren' }}</button>
           </form>

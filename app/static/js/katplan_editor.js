@@ -71,7 +71,7 @@
     listen.forEach(function (liste) { liste.kpSortable.option('disabled', true); });
     const token = baum.querySelector('input[name="_csrf"]').value;
     try {
-      const antwort = await fetch('/katastrophenplaene/' + baum.dataset.planId + '/sortierung', {
+      const antwort = await fetch('/plaene/' + baum.dataset.planId + '/sortierung', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': token, 'HX-Request': 'true' },
         body: JSON.stringify(stand(baum))

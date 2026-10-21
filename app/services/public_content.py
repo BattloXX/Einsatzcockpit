@@ -195,7 +195,8 @@ FEATURES: list[dict] = [
                 "wiki": "Anwender-Strassensperren",
                 "bullets": [
                     "Straßensperren mit Karte und Nachbarfreigaben",
-                    {"text": "Katastrophenpläne mit Freigabe, Karte, Suche und PDF",
+                    {"text": "Alarm- und Einsatzpläne, Maßnahmen- und Katastrophenpläne "
+                             "mit Freigabe, Karte, Suche und PDF",
                      "wiki": "Anwender-Katastrophenplaene"},
                     {"text": "Anfahrtsrouting mit Umfahrung", "tag": "optional", "wiki": "Anwender-Strassensperren"},
                     {"text": "Wetter, Unwetterwarnungen und Radar", "wiki": "Anwender-Wetter"},

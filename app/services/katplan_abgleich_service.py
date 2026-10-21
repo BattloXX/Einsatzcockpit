@@ -70,7 +70,7 @@ def abgleich(db: Session, plan: KatplanPlan, user: User, dokument_id: int) -> di
         ohne_element.append({
             "seiten_nr": nr, "titel": seite.titel if seite else None,
             "textauszug": (seite.volltext or "")[:200] if seite else "",
-            "thumb_url": f"/katastrophenplaene/quelle/{dokument.uuid}/seite/{nr}/thumb",
+            "thumb_url": f"/plaene/quelle/{dokument.uuid}/seite/{nr}/thumb",
         })
     gruppe = dokument.dokument_gruppe_id or dokument.id
     alt = {d.id: d for d in dokumente if (d.dokument_gruppe_id or d.id) == gruppe

@@ -66,22 +66,22 @@ def form(**kwargs):
 
 def test_modul_aus_und_menue(client, umgebung):
     login(client, umgebung)
-    page = client.get("/katastrophenplaene")
+    page = client.get("/plaene")
     assert page.status_code == 200
-    assert page.text.count('href="/katastrophenplaene"') >= 2
-    assert 'href="/katastrophenplaene"' in client.get("/").text
+    assert page.text.count('href="/plaene"') >= 2
+    assert 'href="/plaene"' in client.get("/").text
     with TestingSession() as db:
         set_tenant_context(db, None)
         db.query(SystemSettings).filter_by(key="katplan_module_enabled").one().value = "false"
         db.commit()
-    assert client.get("/katastrophenplaene").status_code == 404
-    assert 'href="/katastrophenplaene"' not in client.get("/").text
+    assert client.get("/plaene").status_code == 404
+    assert 'href="/plaene"' not in client.get("/").text
 
 
 def test_anlegen_sanitizing_und_protokoll(client, umgebung):
     login(client, umgebung)
-    assert client.get("/katastrophenplaene/neu").status_code == 200
-    response = post(client, "/katastrophenplaene/neu", **form(
+    assert client.get("/plaene/neu").status_code == 200
+    response = post(client, "/plaene/neu", **form(
         beschreibung_html='<p>Inhalt</p><script>alert(1)</script><img src=x onerror="alert(1)">',
         geltungsbereich="Gemeinde", verantwortliche_stelle="Bauhof", wiedervorlage_am="2026-11-01"))
     assert response.status_code == 303
@@ -95,26 +95,26 @@ def test_anlegen_sanitizing_und_protokoll(client, umgebung):
         assert db.query(KatplanAenderung).filter_by(plan_id=plan_id).one().aktion == "angelegt"
     detail = client.get(response.headers["location"])
     assert detail.status_code == 200
-    assert f'href="/katastrophenplaene/{plan_id}/bearbeiten"' in detail.text and "Bauhof" in detail.text
+    assert f'href="/plaene/{plan_id}/bearbeiten"' in detail.text and "Bauhof" in detail.text
     assert "angelegt" in detail.text and umgebung["users"]["katplan_verwalter"] in detail.text
 
 
 def test_leser_sieht_keine_entwuerfe(client, umgebung):
     login(client, umgebung, "readonly")
-    response = client.get("/katastrophenplaene")
+    response = client.get("/plaene")
     assert response.status_code == 200
     assert umgebung["titel"] not in response.text
     assert "Noch keine freigegebenen Pläne" in response.text
-    assert client.get("/katastrophenplaene/neu").status_code == 403
-    assert post(client, "/katastrophenplaene/neu", **form()).status_code == 403
-    assert client.get(f'/katastrophenplaene/{umgebung["plan_id"]}').status_code == 404
+    assert client.get("/plaene/neu").status_code == 403
+    assert post(client, "/plaene/neu", **form()).status_code == 403
+    assert client.get(f'/plaene/{umgebung["plan_id"]}').status_code == 404
     for suffix in ("stammdaten", "archivieren", "reaktivieren"):
-        assert post(client, f'/katastrophenplaene/{umgebung["plan_id"]}/{suffix}', **form(version=0)).status_code == 403
+        assert post(client, f'/plaene/{umgebung["plan_id"]}/{suffix}', **form(version=0)).status_code == 403
 
 
 def test_stammdaten_konflikt_und_feldprotokoll(client, umgebung):
     login(client, umgebung)
-    path = f'/katastrophenplaene/{umgebung["plan_id"]}/stammdaten'
+    path = f'/plaene/{umgebung["plan_id"]}/stammdaten'
     assert 'name="version" value="0"' in client.get(path).text
     data = form(beschreibung_html="<p>Neu</p>", geltungsbereich="Bezirk",
                 verantwortliche_stelle="Leitstelle", wiedervorlage_am="2026-11-02")
@@ -144,16 +144,16 @@ def test_stammdaten_konflikt_und_feldprotokoll(client, umgebung):
 
 def test_archivieren_reaktivieren_und_filter(client, umgebung):
     login(client, umgebung)
-    path = f'/katastrophenplaene/{umgebung["plan_id"]}'
+    path = f'/plaene/{umgebung["plan_id"]}'
     assert post(client, path + "/archivieren").status_code == 403
     login(client, umgebung, "katplan_freigeber")
     assert post(client, path + "/archivieren").status_code == 200
-    assert umgebung["titel"] not in client.get("/katastrophenplaene").text
-    response = client.get("/katastrophenplaene?archiv=1&status=archiviert&gefahr=hochwasser&q=Entwurf",
+    assert umgebung["titel"] not in client.get("/plaene").text
+    response = client.get("/plaene?archiv=1&status=archiviert&gefahr=hochwasser&q=Entwurf",
                           headers={"HX-Request": "true"})
     assert umgebung["titel"] in response.text and "<body" not in response.text
-    assert umgebung["titel"] not in client.get("/katastrophenplaene?archiv=1&gefahr=sturm").text
-    assert umgebung["titel"] not in client.get("/katastrophenplaene?archiv=1&q=unfindbar").text
+    assert umgebung["titel"] not in client.get("/plaene?archiv=1&gefahr=sturm").text
+    assert umgebung["titel"] not in client.get("/plaene?archiv=1&q=unfindbar").text
     assert post(client, path + "/reaktivieren").status_code == 200
     with TestingSession() as db:
         set_tenant_context(db, umgebung["org_id"])
@@ -164,8 +164,8 @@ def test_archivieren_reaktivieren_und_filter(client, umgebung):
 
 def test_org_isolation(client, umgebung):
     login(client, umgebung, "fremd")
-    path = f'/katastrophenplaene/{umgebung["plan_id"]}'
-    assert umgebung["titel"] not in client.get("/katastrophenplaene").text
+    path = f'/plaene/{umgebung["plan_id"]}'
+    assert umgebung["titel"] not in client.get("/plaene").text
     assert client.get(path).status_code == 404
     assert client.get(path + "/stammdaten").status_code == 404
     assert post(client, path + "/stammdaten", **form(version=0)).status_code == 404
@@ -202,10 +202,10 @@ def test_systemschalter_nur_system_admin(client, umgebung):
                                       form(gefahrenarten=["unbekannt"]), form(wiedervorlage_am="kaputt")])
 def test_validierungsfehler(client, umgebung, data):
     login(client, umgebung)
-    response = post(client, "/katastrophenplaene/neu", **data)
+    response = post(client, "/plaene/neu", **data)
     assert response.status_code == 422
     assert 'role="alert"' in response.text and '<form' in response.text
-    response = post(client, f'/katastrophenplaene/{umgebung["plan_id"]}/stammdaten', version=0, **data)
+    response = post(client, f'/plaene/{umgebung["plan_id"]}/stammdaten', version=0, **data)
     assert response.status_code == 422
     assert 'role="alert"' in response.text
 
@@ -219,7 +219,7 @@ def test_org_schalter_nur_bei_aktivem_system_speichern(client, umgebung):
         set_tenant_context(db, None)
         assert not db.query(OrgSettings).filter_by(org_id=umgebung["org_id"]).one().katplan_modul_aktiv
         assert db.query(AuditLog).filter_by(action="katplan.org_toggle", org_id=umgebung["org_id"]).count() == 1
-    assert client.get("/katastrophenplaene").status_code == 404
+    assert client.get("/plaene").status_code == 404
     response = post(client, path, org_name="Katplan UI", katplan_modul_aktiv_raw="1")
     assert response.status_code in (200, 303)
     with TestingSession() as db:

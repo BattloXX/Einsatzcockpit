@@ -2,8 +2,8 @@
   {% include "katplan/_design.html" %}
   {% if erfolg %}<p role="status">{{ erfolg }}</p>{% endif %}
   {% if plan.status != 'archiviert' %}
-    <form id="kp-import-sammel" method="post" action="/katastrophenplaene/{{ plan.id }}/import/sammel"
-      hx-post="/katastrophenplaene/{{ plan.id }}/import/sammel" hx-target="#kp-import-liste" hx-swap="outerHTML"
+    <form id="kp-import-sammel" method="post" action="/plaene/{{ plan.id }}/import/sammel"
+      hx-post="/plaene/{{ plan.id }}/import/sammel" hx-target="#kp-import-liste" hx-swap="outerHTML"
       hx-confirm="Ausgewählte Vorschläge mit ihren Vorschlagswerten übernehmen? Kontakte und Objekte werden dabei nicht verknüpft.">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
       <button class="btn btn--primary" type="submit">Ausgewählte übernehmen</button>
@@ -13,7 +13,7 @@
     {% set dokument = quellen_nach_id[gruppe.grouper] %}
     <h2>{{ dokument.titel }}</h2>
     {% for seitengruppe in gruppe.list|groupby('seiten_nr') %}
-      <h3><a href="/katastrophenplaene/{{ plan.id }}/quellen/{{ dokument.id }}?seite={{ seitengruppe.grouper }}">Seite {{ seitengruppe.grouper }}</a></h3>
+      <h3><a href="/plaene/{{ plan.id }}/quellen/{{ dokument.id }}?seite={{ seitengruppe.grouper }}">Seite {{ seitengruppe.grouper }}</a></h3>
       {% for v in seitengruppe.list %}{% include "katplan/_import_vorschlag.html" %}{% endfor %}
     {% endfor %}
   {% else %}<p class="kp-empty">Keine Vorschläge für diesen Filter.</p>{% endfor %}

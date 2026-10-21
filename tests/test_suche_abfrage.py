@@ -150,7 +150,7 @@ def test_vertraulich_und_versionswechsel(daten):
     result = _suche(db, leiter, "I1")
     assert result.treffer[0].grund[0] == "exakt"
     assert "exakt" in _suche(db, leiter, "I", typen=["katplan_element"]).treffer[0].grund
-    assert result.treffer[0].url == f"/katastrophenplaene/{plan.id}#element-{element.uuid}"
+    assert result.treffer[0].url == f"/plaene/{plan.id}#element-{element.uuid}"
     plan.status = "in_pruefung"
     element.titel = "Neuer Stand"
     db.flush()
@@ -426,7 +426,7 @@ def test_katplan_quellseite_live_sichtbar(daten):
     result = _suche(db, user, "EinzigartigerQuelltext")
     assert len(result.treffer) == 1
     assert result.treffer[0].url == (
-        f"/katastrophenplaene/{plan.id}/quellen/{dokument.id}?seite=1&version_id={plan.aktuelle_version_id}"
+        f"/plaene/{plan.id}/quellen/{dokument.id}?seite=1&version_id={plan.aktuelle_version_id}"
     )
     dokument.archiviert = True
     assert not _suche(db, user, "EinzigartigerQuelltext").treffer

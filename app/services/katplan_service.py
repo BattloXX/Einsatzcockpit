@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, object_session
 from app.core.html_utils import sanitize_html
 from app.models.katplan import (
     KATPLAN_GEFAHRENARTEN,
+    KATPLAN_PLANARTEN,
     KatplanAbschnitt,
     KatplanAenderung,
     KatplanElement,
@@ -373,7 +374,7 @@ def validiere_element_felder(typ: str, *, titel: str, prioritaet: int, daten: di
 
 def validiere_stammdaten(*, titel: str, gefahrenarten: list[str], beschreibung_html: str = "",
                          geltungsbereich: str = "", verantwortliche_stelle: str = "",
-                         wiedervorlage_am: str = "") -> dict:
+                         wiedervorlage_am: str = "", planart: str = "katastrophenplan") -> dict:
     """Gemeinsame Formularvalidierung; Fehlerprioritaet der Oberflaeche beibehalten."""
     fehler = None
     termin = None
@@ -383,13 +384,16 @@ def validiere_stammdaten(*, titel: str, gefahrenarten: list[str], beschreibung_h
         fehler = "Bitte ein gültiges Wiedervorlagedatum eingeben."
     if not titel.strip() or len(titel.strip()) > 200:
         fehler = "Bitte einen Titel mit höchstens 200 Zeichen eingeben."
-    if not gefahrenarten or any(code not in KATPLAN_GEFAHRENARTEN for code in gefahrenarten):
+    if (planart == "katastrophenplan" and not gefahrenarten
+            or any(code not in KATPLAN_GEFAHRENARTEN for code in gefahrenarten)):
         fehler = "Bitte mindestens eine gültige Gefahrenart auswählen."
     if len(geltungsbereich) > 300 or len(verantwortliche_stelle) > 200:
         fehler = "Geltungsbereich (300) oder verantwortliche Stelle (200) ist zu lang."
+    if planart not in KATPLAN_PLANARTEN:
+        fehler = "Bitte eine gültige Planart wählen."
     if fehler:
         raise ValueError(fehler)
-    return {"titel": titel.strip(), "gefahrenarten_json": json.dumps(sorted(set(gefahrenarten))),
+    return {"planart": planart, "titel": titel.strip(), "gefahrenarten_json": json.dumps(sorted(set(gefahrenarten))),
             "beschreibung_html": bereinige_beschreibung(beschreibung_html),
             "geltungsbereich": geltungsbereich.strip() or None,
             "verantwortliche_stelle": verantwortliche_stelle.strip() or None,
@@ -402,7 +406,7 @@ def stammdaten_aendern(db: Session, plan: KatplanPlan, user: User, *, version: i
     pruefe_version(plan, version)
     if plan.org_id != user.org_id or plan.status == "archiviert":
         raise ValueError("Dieser Plan kann nicht bearbeitet werden.")
-    erlaubt = {"titel", "gefahrenarten_json", "beschreibung_html", "geltungsbereich",
+    erlaubt = {"planart", "titel", "gefahrenarten_json", "beschreibung_html", "geltungsbereich",
                "verantwortliche_stelle", "wiedervorlage_am", "verantwortlich_kontakt_id"}
     if set(werte) - erlaubt:
         raise ValueError("Nicht erlaubte Stammdatenfelder.")

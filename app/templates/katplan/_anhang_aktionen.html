@@ -1,7 +1,7 @@
 <details>
   <summary>Bearbeiten</summary>
-  <form method="post" action="/katastrophenplaene/{{ plan.id }}/anhaenge/{{ anhang.uuid }}"
-    hx-post="/katastrophenplaene/{{ plan.id }}/anhaenge/{{ anhang.uuid }}" hx-target="#{{ anhang_ziel }}" hx-swap="outerHTML" class="kp-form">
+  <form method="post" action="/plaene/{{ plan.id }}/anhaenge/{{ anhang.uuid }}"
+    hx-post="/plaene/{{ plan.id }}/anhaenge/{{ anhang.uuid }}" hx-target="#{{ anhang_ziel }}" hx-swap="outerHTML" class="kp-form">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
     <input type="hidden" name="sort" value="{{ anhang.sort }}">
     <label>Beschriftung<input class="form-control" name="beschriftung" maxlength="300" value="{{ anhang.beschriftung or '' }}"></label>
@@ -11,8 +11,8 @@
     <button type="submit" class="btn">Speichern</button>
   </form>
 </details>
-<form method="post" action="/katastrophenplaene/{{ plan.id }}/anhaenge/{{ anhang.uuid }}/loeschen"
-  hx-post="/katastrophenplaene/{{ plan.id }}/anhaenge/{{ anhang.uuid }}/loeschen" hx-target="#{{ anhang_ziel }}" hx-swap="outerHTML" hx-confirm="Anhang entfernen?">
+<form method="post" action="/plaene/{{ plan.id }}/anhaenge/{{ anhang.uuid }}/loeschen"
+  hx-post="/plaene/{{ plan.id }}/anhaenge/{{ anhang.uuid }}/loeschen" hx-target="#{{ anhang_ziel }}" hx-swap="outerHTML" hx-confirm="Anhang entfernen?">
   <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
   <button type="submit" class="btn btn--ghost">Entfernen</button>
 </form>

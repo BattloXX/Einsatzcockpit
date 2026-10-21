@@ -19,8 +19,8 @@
         {% if objektmodul %}<button type="button" class="btn" role="tab" :aria-selected="art === 'objekt'" @click="art = 'objekt'">Objektdokument</button>{% endif %}
       </div>
       {% for art in ['datei', 'link', 'objekt'] if art != 'objekt' or objektmodul %}
-        <form method="post" action="/katastrophenplaene/{{ plan.id }}/anhaenge" enctype="multipart/form-data"
-          hx-post="/katastrophenplaene/{{ plan.id }}/anhaenge" hx-encoding="multipart/form-data"
+        <form method="post" action="/plaene/{{ plan.id }}/anhaenge" enctype="multipart/form-data"
+          hx-post="/plaene/{{ plan.id }}/anhaenge" hx-encoding="multipart/form-data"
           hx-target="#{{ anhang_ziel }}" hx-swap="outerHTML" class="kp-form" x-show="art === '{{ art }}'"
           {% if art == 'datei' %}data-kp-mehrfach-upload{% endif %}>
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
@@ -35,7 +35,7 @@
           {% else %}
             <label>Objektdokument suchen
               <input class="form-control" type="search" name="q" placeholder="Objekt oder Dokument, mindestens 2 Zeichen"
-                hx-get="/katastrophenplaene/{{ plan.id }}/objektdokumente/suche" hx-trigger="input changed delay:300ms, search"
+                hx-get="/plaene/{{ plan.id }}/objektdokumente/suche" hx-trigger="input changed delay:300ms, search"
                 hx-target="#{{ anhang_ziel }}-objekttreffer" hx-swap="innerHTML">
             </label>
             <div id="{{ anhang_ziel }}-objekttreffer"></div>

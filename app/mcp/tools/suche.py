@@ -114,8 +114,9 @@ def _parameter(context: MCPContext, t: Treffer, anfrage: SuchAnfrage) -> dict[st
 @register_tool(
     name="ecp_suchen",
     description=(
-        "Durchsucht Objekte, Objektdokumente, freigegebene Katastrophenplan-Elemente und -Quellseiten "
-        "im Index sowie live Einsätze, Straßensperren und Wasserstellen; mit kontext=gsl auch "
+        "Durchsucht Objekte, Objektdokumente, freigegebene Elemente und Quellseiten aus "
+        "Einsatz- und Katastrophenplänen im Index sowie live Einsätze, Straßensperren und "
+        "Wasserstellen; mit kontext=gsl auch "
         "Einsatzstellen, Meldungen und Einheiten einer Lage. Kontakte nur mit Kontaktverzeichnis-Recht "
         "(sonst im Einsatzkontext die für den Einsatz freigegebenen), stets ohne Telefonnummern. "
         "Details über die genannten Fach-Werkzeuge."

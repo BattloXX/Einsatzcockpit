@@ -8,7 +8,8 @@ from app.models.suche import SearchChunk, SearchDocument, SearchOutbox
 
 QUELLEN_LABELS = {
     "objekt": "Objekte", "objekt_dokument_seite": "Objektdokumentseiten",
-    "katplan_element": "Katastrophenplan-Elemente", "katplan_seite": "Katastrophenplan-Seiten",
+    "katplan_element": "Plan-Elemente (Einsatz-/Katastrophenpläne)",
+    "katplan_seite": "Plan-Quellseiten (Einsatz-/Katastrophenpläne)",
 }
 
 

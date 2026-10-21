@@ -10,13 +10,13 @@
       </p>
       {% if relation.hinweis %}<p>{{ relation.hinweis }}</p>{% endif %}
       <input form="" type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <button type="button" class="btn btn--ghost btn--sm kp-delete kp-delete--kompakt" hx-post="/katastrophenplaene/{{ plan.id }}/beziehungen/{{ relation.id }}/loeschen"
+      <button type="button" class="btn btn--ghost btn--sm kp-delete kp-delete--kompakt" hx-post="/plaene/{{ plan.id }}/beziehungen/{{ relation.id }}/loeschen"
         hx-include="closest .kp-form" hx-target="#kp-beziehungen-{{ element.id }}" hx-swap="outerHTML">Entfernen</button>
     </div>
   {% endfor %}
   <label>Suche nach Kennung oder Titel
     <input form="" class="form-control" type="search" name="q" placeholder="Mindestens 2 Zeichen"
-      hx-get="/katastrophenplaene/{{ plan.id }}/elemente/{{ element.id }}/beziehungen/suche"
+      hx-get="/plaene/{{ plan.id }}/elemente/{{ element.id }}/beziehungen/suche"
       hx-trigger="input changed delay:300ms, search" hx-target="#kp-beziehungen-{{ element.id }}-treffer">
   </label>
   <div id="kp-beziehungen-{{ element.id }}-treffer"></div>

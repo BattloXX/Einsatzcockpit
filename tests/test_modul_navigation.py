@@ -47,7 +47,7 @@ def test_admin_alle_module_in_reihenfolge(rolle):
         "Im Einsatz", "Einsatzbegleitend", "Verwaltung & Planung", "Auswertung"
     ]
     assert [[eintrag.href for eintrag in gruppe.eintraege] for gruppe in gruppen] == [
-        ["/katastrophenplaene", "/nachschlagewerke/", "/kontakte", "/strassensperren", "/foerderstrecke/"],
+        ["/plaene", "/nachschlagewerke/", "/kontakte", "/strassensperren", "/foerderstrecke/"],
         ["/verwaltung/fahrten", "/atemschutz-pruefung", "/uas/einsaetze"],
         ["/objekte/", "/probenplanung", "/planspiele", "/mailing/"],
         ["/statistik"],

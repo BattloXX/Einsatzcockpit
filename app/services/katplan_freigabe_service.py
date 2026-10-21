@@ -48,7 +48,8 @@ def erstelle_snapshot(db: Session, plan: KatplanPlan, *, flush: bool = True) -> 
     if flush:
         db.flush()
     kopf = {feld: getattr(plan, feld) for feld in (
-        "uuid", "titel", "beschreibung_html", "geltungsbereich", "verantwortliche_stelle", "verantwortlich_kontakt_id")}
+        "uuid", "planart", "titel", "beschreibung_html", "geltungsbereich",
+        "verantwortliche_stelle", "verantwortlich_kontakt_id")}
     kopf["gefahrenarten"] = plan.gefahrenarten
     kopf["wiedervorlage_am"] = plan.wiedervorlage_am.isoformat() if plan.wiedervorlage_am else None
     for name, modell, felder in (
@@ -181,7 +182,9 @@ def lade_version(db: Session, plan: KatplanPlan, version_id: int | None = None
     elemente = db.query(KatplanVersionElement).filter_by(org_id=plan.org_id, version_id=version.id).order_by(
         KatplanVersionElement.sort, KatplanVersionElement.element_uuid,
     ).all()
-    return version, json.loads(version.plan_json), elemente
+    kopf = json.loads(version.plan_json)
+    kopf.setdefault("planart", "katastrophenplan")
+    return version, kopf, elemente
 
 
 def version_baum(plan_daten: dict, elemente: list[KatplanVersionElement], *,
