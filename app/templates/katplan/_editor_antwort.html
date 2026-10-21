@@ -9,6 +9,11 @@
 {# Statische Includes, damit test_css_klassen_definiert die Fragmente diesem Stylesheet zuordnen kann #}
 {% if partial == "_element_form.html" %}
   {% include "katplan/_element_form.html" %}
+{% elif partial == "_telefon_assistent.html" %}
+  {% include "katplan/_telefon_assistent.html" %}
+  <div id="kp-detail" hx-swap-oob="innerHTML">
+    {% include "katplan/_element_form.html" %}
+  </div>
 {% elif partial == "_abschnitt_form.html" %}
   {% include "katplan/_abschnitt_form.html" %}
 {% elif partial == "_phasen.html" %}

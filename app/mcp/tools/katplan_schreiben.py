@@ -264,6 +264,7 @@ def _element_geaendert(context: MCPContext, plan: KatplanPlan, element: KatplanE
 
 
 _SCHREIB_HINWEIS = (
+    " Telefonnummern nicht in Texte schreiben, sondern zentrale Kontakte mit katplan_verknuepfung_setzen verknüpfen. "
     " akteure: Liste von Schlüsseln, Katalog über katplan_lesen; null leert die Zuordnung. "
     " Zahlen in daten-Textfeldern und Listen werden zu Text (500 wird zu \"500\"); bool ist kein Text. "
     "quelle_dokument_id verweist auf die Quelle, quelle_seiten enthält Seiten wie 3-4,7. "

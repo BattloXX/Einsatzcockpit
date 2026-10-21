@@ -59,13 +59,7 @@ def test_jeder_qs_code_einzeln(umgebung, code, monkeypatch):
             db.add(KatplanLink(org_id=plan.org_id, plan_id=plan.id, element_id=e.id,
                               ziel_typ="kontakt", ziel_id=9999999, rolle="zustaendig"))
         elif code == "telefon_im_text":
-            kontakt = Kontakt(org_id=plan.org_id, anzeigename="Kontakt")
-            db.add(kontakt)
-            db.flush()
-            db.add(KatplanLink(org_id=plan.org_id, plan_id=plan.id, element_id=e.id,
-                              ziel_typ="kontakt", ziel_id=kontakt.id, rolle="info"))
             e.beschreibung_html = "<p>Telefon +43 555 123456</p>"
-            monkeypatch.setattr(qs, "ziel_verfuegbar", lambda *args: True)
         elif code == "kontakt_geaendert":
             kontakt = Kontakt(org_id=plan.org_id, anzeigename="Alter Name")
             db.add(kontakt)
@@ -88,7 +82,10 @@ def test_jeder_qs_code_einzeln(umgebung, code, monkeypatch):
             e.quelle_dokument_id = alt.id
         db.flush()
         hinweise = qs.element_hinweise(db, plan, e, heute=HEUTE)
-        assert hinweise == [{"code": code, "text": qs.LABELS[code], "farbe": "amber"}]
+        erwartet = {"code": code, "text": qs.LABELS[code], "farbe": "amber"}
+        if code == "telefon_im_text":
+            erwartet["nummern"] = ["+43 555 123456"]
+        assert hinweise == [erwartet]
 
 
 def test_qs_grenzen_summen_freigabe_und_snapshot(umgebung):

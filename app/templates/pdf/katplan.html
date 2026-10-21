@@ -137,6 +137,21 @@
     {% endif %}
   </section>
 
+  {% if verstaendigung %}
+    <section>
+      <h2>Verständigungsliste</h2>
+      {% for gruppe, kontakte in verstaendigung.items() %}
+        <h3>{{ gruppe }}</h3>
+        <table class="kontakte">
+          {% for link in kontakte %}
+            <tr><td>{{ link.rolle_label }}</td><td><strong>{{ link.titel }}</strong>{% if link.untertitel %}<br><span class="muted">{{ link.untertitel }}</span>{% endif %}</td>
+              <td>{% for t in link.telefone %}<span class="telefon">{{ t.nummer }}</span>{% if t.label %} <span class="muted klein">{{ t.label }}</span>{% endif %}<br>{% endfor %}</td></tr>
+          {% endfor %}
+        </table>
+      {% endfor %}
+    </section>
+  {% endif %}
+
   {% for name, elemente in kapitel.items() %}
     {% set gruppen_index = loop.index %}
     <section class="kapitel" id="kapitel-{{ loop.index }}">

@@ -13,7 +13,9 @@
     <div class="kp-form kp-editor-fields">
       {% if qs_hinweise.get(element.id) %}
         <div class="kp-box"><h3 class="kp-box__title">Qualität</h3>
-          <ul>{% for h in qs_hinweise[element.id] %}<li>{{ h.text }}</li>{% endfor %}</ul>
+          <ul>{% for h in qs_hinweise[element.id] %}<li>{{ h.text }}{% if h.code == "telefon_im_text" %}
+            <button type="button" class="btn btn--ghost btn--sm" hx-get="/plaene/{{ plan.id }}/elemente/{{ element.id }}/telefon"
+              hx-target="#kp-telefon" hx-swap="outerHTML">Kontakt verknüpfen</button>{% endif %}</li>{% endfor %}</ul>
         </div>
       {% endif %}
       <h3 class="kp-box__title">Grunddaten</h3>

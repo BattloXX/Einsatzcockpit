@@ -136,7 +136,12 @@ def _adresstext(e: dict) -> str | None:
 
 def element_dict(db: Session, user: User, plan: KatplanPlan, e: dict, kopf: dict,
                  version_id: int | None) -> dict[str, Any]:
+    from app.services.katplan_qs_service import telefonnummern_im_element
+
+    telefonnummern = telefonnummern_im_element(e)
     warnings: list[str] = []
+    if telefonnummern:
+        warnings.append("Telefonnummern bitte als zentrale Kontakte verknüpfen (katplan_verknuepfung_setzen)")
     geometry = json.loads(e["geometry_json"]) if e.get("geometry_json") else None
     if geometry is None and e.get("lat") is not None and e.get("lng") is not None:
         geometry = {"type": "Point", "coordinates": [e["lng"], e["lat"]]}
@@ -201,6 +206,7 @@ def element_dict(db: Session, user: User, plan: KatplanPlan, e: dict, kopf: dict
         "source_references": quellen,
         "review_status": {"herkunft": e.get("herkunft"), "geo_status": e.get("geo_status"),
                           "pruefen_am_ueberschritten": ueberfaellig},
+        "telefonnummern_im_text": telefonnummern,
         "vertraulich": e["vertraulich"],
         "gueltig_bis": str(e["gueltig_bis"]) if e.get("gueltig_bis") else None,
         "pruefen_am": str(datum) if datum else None,

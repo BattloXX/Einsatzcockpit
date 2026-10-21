@@ -1,0 +1,46 @@
+{% include "katplan/_design.html" %}
+<section id="kp-telefon" class="kp-box" role="dialog" aria-label="Zentrale Kontakte verknüpfen"
+  hx-on::before-swap="if ([409, 422].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false; }">
+  <h2 class="kp-box__title">Zentrale Kontakte verknüpfen</h2>
+  {% if fehler %}<p role="alert">{{ fehler }}</p>{% endif %}
+  {% for karte in telefon_karten %}
+    <article class="kp-box">
+      <h3 class="kp-box__title">{{ karte.normalisiert }}</h3>
+      {% if karte.treffer %}
+        <form method="post" action="/plaene/{{ plan.id }}/elemente/{{ element.id }}/telefon" class="kp-form"
+          hx-post="/plaene/{{ plan.id }}/elemente/{{ element.id }}/telefon" hx-target="#kp-telefon" hx-swap="outerHTML">
+          <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          <input type="hidden" name="version" value="{{ element.version }}">
+          <input type="hidden" name="nummer" value="{{ karte.nummer }}">
+          <input type="hidden" name="aktion" value="verknuepfen">
+          {% for kontakt in karte.treffer %}
+            <label><input class="form-control" type="radio" name="kontakt_id" value="{{ kontakt.id }}" required {% if loop.first %}checked{% endif %}>
+              {{ kontakt.anzeigename }}{% if kontakt.funktion %} · {{ kontakt.funktion }}{% endif %}{% if kontakt.organisation %} · {{ kontakt.organisation }}{% endif %}</label>
+          {% endfor %}
+          <label>Rolle<select class="form-control" name="rolle">{% for key, label in link_rollen.items() %}<option value="{{ key }}" {% if key == "zu_verstaendigen" %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+          <label><input class="form-control" type="checkbox" name="entfernen" value="true" checked> Nummer aus dem Text entfernen</label>
+          <button type="submit" class="btn btn--primary">Mit bestehendem Kontakt verknüpfen</button>
+        </form>
+      {% else %}<p>Keine bestehenden Kontakte gefunden.</p>{% endif %}
+      {% if kontakt_anlegen_erlaubt %}
+        <details><summary>Neuen Kontakt anlegen</summary>
+          <form method="post" action="/plaene/{{ plan.id }}/elemente/{{ element.id }}/telefon" class="kp-form"
+            hx-post="/plaene/{{ plan.id }}/elemente/{{ element.id }}/telefon" hx-target="#kp-telefon" hx-swap="outerHTML">
+            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+            <input type="hidden" name="version" value="{{ element.version }}">
+            <input type="hidden" name="nummer" value="{{ karte.nummer }}">
+            <input type="hidden" name="aktion" value="anlegen">
+            <label>Anzeigename<input class="form-control" name="anzeigename" required></label>
+            <label>Funktion<input class="form-control" name="funktion"></label>
+            <label>Organisation<input class="form-control" name="organisation"></label>
+            <label>Nummer<input class="form-control" name="kontakt_nummer" value="{{ karte.nummer }}" required></label>
+            <label>Rolle<select class="form-control" name="rolle">{% for key, label in link_rollen.items() %}<option value="{{ key }}" {% if key == "zu_verstaendigen" %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+            <label><input class="form-control" type="checkbox" name="entfernen" value="true" checked> Nummer aus dem Text entfernen</label>
+            <button type="submit" class="btn btn--primary">Neuen Kontakt anlegen</button>
+          </form>
+        </details>
+      {% else %}<p>Kein Recht zum Anlegen – bitte Kontaktverwaltung ansprechen</p>{% endif %}
+    </article>
+  {% else %}<p>Keine Telefonnummern mehr im Text.</p>{% endfor %}
+  <button type="button" class="btn btn--ghost" onclick="this.closest('#kp-telefon').replaceChildren()">Schließen</button>
+</section>

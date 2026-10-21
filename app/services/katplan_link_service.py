@@ -171,3 +171,28 @@ def links_aus_version(db: Session, version_element_links: str | list[dict], *, v
                            telefone=snapshot.get("telefone", []) if voll else [])
         ergebnis.append(ansicht)
     return ergebnis
+
+
+def verstaendigungsliste(db: Session, plan_daten: dict, elemente: list[dict], *, voll: bool,
+                         user_rechte: dict[str, Any]) -> dict[str, list[dict]]:
+    """Ziele einmal je Fassung, mit Akteursnamen aus derselben Fassung."""
+    if plan_daten.get("planart") not in ("alarm_einsatzplan", "massnahmenplan"):
+        return {}
+    katalog = {a["schluessel"]: a["bezeichnung"] for a in plan_daten.get("akteure", [])}
+    gruppen: dict[str, list[dict]] = {}
+    gesehen: set[tuple[str, int]] = set()
+    for element in [*elemente, {"links": plan_daten.get("links", [])}]:
+        akteure = json.loads(element.get("akteure_json") or "[]")
+        gruppe = " / ".join(katalog.get(a, a) for a in akteure) or "Allgemein"
+        links = element.get("links", [])
+        if "links_json" in element:
+            links = json.loads(element["links_json"] or "[]")
+        for link in links:
+            key = (link["ziel_typ"], link["ziel_id"])
+            if (key in gesehen or link["ziel_typ"] not in ("kontakt", "kontakt_organisation")
+                    or link["rolle"] not in ("zu_verstaendigen", "verantwortlich")):
+                continue
+            gesehen.add(key)
+            ansicht = links_aus_version(db, [link], voll=voll, user_rechte=user_rechte)[0]
+            gruppen.setdefault(gruppe, []).append(ansicht)
+    return gruppen

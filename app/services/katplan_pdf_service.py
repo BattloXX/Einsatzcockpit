@@ -7,11 +7,13 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
+from app.core.permissions import can_view_kontakt_directory
 from app.core.templating import templates
 from app.core.timezones import format_local_datetime
 from app.models.katplan import KATPLAN_GEFAHRENARTEN, KatplanAnhang, KatplanPlan, KatplanVersion
 from app.models.user import User
 from app.services.katplan_geo_service import ableite_punkt
+from app.services.katplan_link_service import verstaendigungsliste
 from app.services.katplan_mcp_service import _rohdaten, fassung_laden, link_ansichten
 from app.services.katplan_quelle_service import absolute_pfad
 from app.services.katplan_service import bereinige_beschreibung
@@ -140,6 +142,10 @@ def render_katplan_html(db: Session, user: User, plan: KatplanPlan, *,
         kapitel["Ohne Akteur"] = [e for e in elemente if not e["akteure"]]
         kapitel = {name: eintraege for name, eintraege in kapitel.items() if eintraege}
     return templates.env.get_template("pdf/katplan.html").render(
+        verstaendigung=verstaendigungsliste(
+            db, kopf, [nach_uuid[e["element_id"]] for e in elemente],
+            voll=can_view_kontakt_directory(user), user_rechte={"org_id": plan.org_id},
+        ),
         auszug=katalog[akteur]["bezeichnung"] if akteur is not None else None,
         planart_label=PLANARTEN[kopf.get("planart", "katastrophenplan")].label,
         kopf=kopf, kapitel=kapitel, version=version, entwurf=entwurf, org=user.org,
