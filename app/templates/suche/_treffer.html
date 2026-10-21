@@ -39,7 +39,7 @@
   {% endif %}
   <div class="suche-kartenfuss">
     <div class="suche-badges">
-      {% for grund in t.grund %}<span class="suche-badge">{{ 'Volltext' if grund == 'volltext' else grund }}</span>{% endfor %}
+      {% for grund in t.grund %}<span class="suche-badge">{{ 'Volltext' if grund == 'volltext' else 'Semantisch' if grund == 'semantisch' else grund }}</span>{% endfor %}
     </div>
     {% if t.url %}<a class="btn btn--ghost" href="{{ t.url }}">Öffnen</a>{% endif %}
   </div>

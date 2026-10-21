@@ -60,7 +60,7 @@ class Treffer(BaseModel):
     fundstelle: str | None = None
     status: str | None = None
     ist_aktuell: bool | None = None
-    grund: list[Literal["exakt", "volltext", "live"]] = Field(default_factory=list)
+    grund: list[Literal["exakt", "volltext", "live", "semantisch"]] = Field(default_factory=list)
     url: str
     lat: float | None = None
     lng: float | None = None

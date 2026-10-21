@@ -4,6 +4,11 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 
 ## Unreleased
 
+- **Semantische Suche**: Optionale lokale Ollama-Embeddings mit `embeddinggemma`,
+  Vektortabellen je Modell/Dimension, eigener Vektor-Outbox und Distanzschwellwert;
+  Evaluationsskript mit Recall/MRR je Fragengruppe und Review-CSV sowie Betriebsdoku.
+  Die Eval-Messung auf dem Testsystem steht noch aus.
+
 - **MCP**: `katplan_anlegen` legt Pläne als Entwurf mit Kapitel-/Phasenvorlage, gemeinsamer UI-Validierung und optionalem Trockenlauf an.
 
 - **Einsatz- & Katastrophenpläne** (bisher „Katastrophenpläne“, neue Adresse `/plaene`,

@@ -17,14 +17,14 @@ Code ab und legt die Pakete fest, die nacheinander umgesetzt werden.
 | OCR | Seitentexte stehen bereits in `objekt_dokument_seite.volltext` und `katplan_dokument_seite.volltext`. | Kein neues Chunking von PDFs nötig: **eine Seite = ein Chunk** (Seitenbezug bleibt exakt). Lange Seiten werden in Abschnitte von etwa 2.500 Zeichen mit Überlappung geteilt und behalten die Seitenzahl. |
 | Live-Daten | GSL (`IncidentSite`, `SiteLogEntry`, `LageJournalEntry`, `CommLogEntry`, `LageEinheit`), Einsätze, Straßensperren und Wasserstellen sind pro Lage bzw. Org klein und ändern sich laufend. | Diese Quellen werden **nicht indexiert**, sondern zur Suchzeit live per SQL abgefragt („strukturierte Anbieter“). Damit gibt es keinen veralteten Status. Der Index enthält nur ruhende Fachinhalte. |
 | MCP | Registry `register_tool(...)` mit `required_roles` und `module_check`. Adapter in `server.py` ruft `_call_registered_tool()` auf. Die Doku schließt Personendaten in Einsatz-Tools aus. | Ein lesendes Tool `ecp_suchen` nutzt denselben Query-Service wie die UI. Kontakte nur nach Paket K (siehe Regel 5), ohne Telefonnummern. |
-| Embeddings | Auf dem Server ist kein Embedding-Modell bekannt oder getestet. | Die semantische Stufe (Paket S8) bleibt gesperrt, bis Modell, Host und Dimension entschieden und gemessen sind. Alle Pakete davor funktionieren ohne Embeddings. |
+| Embeddings | S8 nutzt Ollama mit `embeddinggemma`, zunächst 768 Dimensionen. | Implementiert; Eval-Messung und Kalibrierung auf dem Testsystem stehen aus. Die semantische Stufe bleibt standardmäßig ausgeschaltet. |
 | Konfiguration | Modul-Schalter liegen als `OrgSettings`-Spalten vor, plus Systemflag in `SystemSettings` (`_set_module_states`). | Statt einer eigenen Tabelle `search_index_settings`: `.env`-Flags plus Org-Schalter `suche_aktiv` in `OrgSettings`. |
 
 ### Abweichungen vom Konzept (bewusst)
 
 1. **Kein Index für Live-Quellen.** GSL, Einsätze, Sperren und Wasserstellen werden immer live abgefragt. Das Konzept verlangt ohnehin die Live-Verifikation. Ein zusätzlicher Index brächte nur Veralterung und Personendaten-Risiko.
 2. **Keine `search_index_settings`-Tabelle.** Konfiguration über `.env` und `OrgSettings`.
-3. **Vektortabelle außerhalb von Alembic.** Sie wird erst in S8 per CLI/Worker idempotent angelegt, wenn Flag und DB-Fähigkeit vorliegen. Name `search_vector_<modellkennung>`. Die Alembic-Kette bleibt auf älteren Versionen lauffähig; in Test, Produktion und CI (12.3) ist die Fähigkeit immer vorhanden.
+3. **Vektortabelle außerhalb von Alembic.** Sie wird in S8 per CLI/Worker idempotent angelegt, wenn Flag und DB-Fähigkeit vorliegen. Name `search_vector_<modell>_<dim>`. Die Alembic-Kette bleibt auf älteren Versionen lauffähig; in Test, Produktion und CI (12.3) ist die Fähigkeit immer vorhanden.
 4. **Kein Cursor.** Ergebnisliste auf 50 begrenzt (Konzept erlaubt das für den MVP).
 5. **Kontakte live, nie im Index** (Paket K, Entscheidung 2026-10-21, ersetzt „Kontakte nie“). Kontakte stehen weder in `search_document` noch später in einer Vektortabelle; `live.suche_kontakte` fragt sie zur Suchzeit ab. Der Aufrufer bestimmt die Zugriffsstufe (`kontakt_zugriff_fuer_request` in der UI, `_kontakt_zugriff` im MCP), nie der Client:
    - `voll`: Kontaktmodul aktiv und Verzeichnisrecht (`can_view_kontakt_directory_request` bzw. `KONTAKT_LESE_ROLLEN`). Gefunden werden alle aktiven, nicht archivierten Kontakte; die Suche geht auch über Telefonnummern.
@@ -168,20 +168,34 @@ Jedes Paket ist ein PR mit eigenen Tests. Codex-Aufträge nennen nur gezielte Te
 - CI-Job „Migration (MariaDB)“: nach `alembic upgrade head` einen kleinen pytest-Lauf `tests/mariadb/test_suche_fulltext.py` (Marker, nur mit `MARIADB_TEST_URL`), der echte FULLTEXT-Treffer, Boolean-Escaping und `EXPLAIN` mit FULLTEXT-Index prüft.
 - Wiki: Bedienhilfe „Suche“, Admin „Suchindex“, Entwickler-Abschnitt (neue Quelle anbinden), CHANGELOG „Unreleased“, `.env.example`.
 
-### S8 – Semantische Stufe (gesperrt bis Entscheidung)
-Vorbedingungen, die der Nutzer entscheidet:
-- Embedding-Modell und Host (z. B. lokaler Ollama/TEI-Dienst auf dem Testserver), gemessene Dimension, Latenz und RAM.
-- Testkorpus mit mindestens 100 realen Fragen und Soll-Treffern (anonymisiert), Basiswert mit FULLTEXT aus S7.
+### S8 – Semantische Stufe (S8a–d umgesetzt, Messung offen)
 
-Umfang danach: `embedding_provider.py` (HTTP, Timeout 2 s, Batch, Circuit-Breaker), Fähigkeitsprüfung beim Start (`CREATE TABLE`-Probe mit `VECTOR` in einer temporären Tabelle statt Versionsvergleich), Tabelle `search_vector_<modell>` mit `VECTOR(n)` und `VECTOR INDEX … DISTANCE=cosine`, Backfill über die Outbox, Vektorstufe in RRF mit `limit*5` Kandidaten und Org-Filter, Evaluationsskript (Recall@10 FT vs. hybrid). Testsystem zuerst, Produktiv nur nach Messung.
+Ollama liefert mit `embeddinggemma` lokale Embeddings (Standard 768 Dimensionen;
+Matryoshka-Kürzung konfigurierbar). `embedding.py` kapselt HTTP, Query-Timeout 2 s,
+Batch und Circuit-Breaker. `vektor.py` prüft die DB-Fähigkeit mit einer temporären
+`VECTOR`-Tabelle und verwaltet `search_vector_<modell>_<dim>` außerhalb von Alembic
+mit Cosinus-Index. Modell-/Dimensionswechsel benötigen eine neue Tabelle und Backfill.
+
+Eine eigene Outbox-Quelle `vektor` synchronisiert geänderte Chunks anhand ihres Hashes;
+Provider-Ausfälle gehen in Retry und blockieren die Textindexierung nicht. Backfill über
+`suche-vektor-init` und `suche-vektor-aufbau`. Die Vektorstufe bringt bis zu `limit*5`
+Kandidaten mit explizitem Org-Filter in die RRF-Fusion und nutzt die bestehenden
+Sichtbarkeitsprüfungen. `SEARCH_SEMANTIC_MAX_DISTANZ` begrenzt die Cosinus-Distanz
+(Standard 0,6; auf dem Testsystem zu kalibrieren).
+
+`scripts/suche_eval.py` vergleicht Volltext und Hybrid, optional eine auf semantische
+Treffer gefilterte Hybrid-Sicht. Die 100 Fragen werden je Gruppe und insgesamt über
+Recall@N, MRR und p50/p95 ausgewertet; optionale Review-CSV für Soll-Titel-Labels.
+Ohne Soll-Titel gilt nur der schwächere Quellentyp-Treffer. Live-Quellen bleiben ohne
+Embeddings und werden gesondert ausgewiesen. Testsystem zuerst, Produktiv nur nach Messung.
 
 ### S9 – KI-Antworten (optional, separat)
 Nicht Teil dieses Plans. Erst nach S8 und eigener Freigabe.
 
 ## 4. Offene Entscheidungen
 
-1. Embedding-Modell und Host für S8 (blockiert nur S8).
-2. Testfragen-Korpus für die Abnahme (Recall@10).
+1. Ollama-Host für Test/Produktion sowie Dimension und Distanzschwellwert nach S8-Evaluation.
+2. Soll-Titel-Labeling des vorhandenen 100-Fragen-Korpus und Eval-Messung auf dem Testsystem.
 3. Ob Leserollen ohne Objektmodul-Rolle Objekttreffer im Einsatzkontext sehen dürfen (Annahme: gleiche Regel wie Objektanzeige im Einsatz).
 
 ## 5. Umsetzungsstand
@@ -196,5 +210,5 @@ Nicht Teil dieses Plans. Erst nach S8 und eigener Freigabe.
 | S5 | #648 | umgesetzt: /suche, HTMX-Treffer, /api/suche, Lupe + Strg+K, Einstieg Einsatz/GSL; Browser-Check Desktop/mobil ok |
 | S6 | #649 | umgesetzt: MCP `ecp_suchen` mit Feld-Whitelist, Detailwerkzeug-Verweisen und API-Parität |
 | S7 | (dieser PR) | umgesetzt: Org-Schalter + Neuaufbau, Statusseite, MariaDB-FULLTEXT-Test in CI (lokal gegen 12.3 grün), Messskript, Wiki, CHANGELOG |
-| S8 | – | gesperrt (Entscheidung) |
+| S8 | – | umgesetzt (S8a–d), Eval-Messung auf Testsystem offen |
 | K Kontakte | (dieser PR) | umgesetzt: Live-Anbieter mit drei Zugriffsstufen, UI mit `tel:`-Links, MCP ohne Nummern |

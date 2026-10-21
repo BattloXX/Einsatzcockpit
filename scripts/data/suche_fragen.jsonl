@@ -1,0 +1,100 @@
+{"nr": 1, "gruppe": "objekt", "erwartete_quelle": "objekt", "frage": "Wo finde ich den Feuerwehrplan von Rattpack Werk 2?"}
+{"nr": 2, "gruppe": "objekt", "erwartete_quelle": "objekt", "frage": "Welche Informationen haben wir zur Brandmeldeanlage bei Rattpack in der Dammstraße?"}
+{"nr": 3, "gruppe": "objekt", "erwartete_quelle": "objekt", "frage": "Was ist beim Objekt Rattpack Werk 1 in der Achstraße hinterlegt?"}
+{"nr": 4, "gruppe": "objekt", "erwartete_quelle": "objekt", "frage": "Wo befindet sich die Feuerwehrzufahrt zum Gewerbepark Wolfurt?"}
+{"nr": 5, "gruppe": "objekt", "erwartete_quelle": "objekt", "frage": "Gibt es einen Einsatzplan für das Bürogebäude Doppelmayr BG 2?"}
+{"nr": 6, "gruppe": "objekt", "erwartete_quelle": "objekt", "frage": "Welche Gefahrenhinweise sind beim Holzbau Berchtold hinterlegt?"}
+{"nr": 7, "gruppe": "objekt", "erwartete_quelle": "objekt", "frage": "Welche Informationen gibt es zum Objekt cubus in der Wälderstraße?"}
+{"nr": 8, "gruppe": "objekt", "erwartete_quelle": "objekt", "frage": "Was müssen wir bei einem Brand im Hotel Sternen beachten?"}
+{"nr": 9, "gruppe": "objekt", "erwartete_quelle": "objekt", "frage": "Welche Objektdokumente sind für Haberkorn Wolfurt vorhanden?"}
+{"nr": 10, "gruppe": "objekt", "erwartete_quelle": "objekt", "frage": "Wo finde ich Informationen zum Meusburger Gewerbepark Holzriedstraße 29?"}
+{"nr": 11, "gruppe": "objekt", "erwartete_quelle": "objekt", "frage": "Was wissen wir über das LTW-Werk in der Achstraße 53?"}
+{"nr": 12, "gruppe": "objekt", "erwartete_quelle": "objekt", "frage": "Welche Unterlagen sind für die Mittelschule Wolfurt vorhanden?"}
+{"nr": 13, "gruppe": "objekt", "erwartete_quelle": "objekt", "frage": "Gibt es Einsatzinformationen zur Volksschule Mähdle?"}
+{"nr": 14, "gruppe": "objekt", "erwartete_quelle": "objekt", "frage": "Welche Besonderheiten sind beim ÖBB-Übernachtungsgebäude zu beachten?"}
+{"nr": 15, "gruppe": "objekt", "erwartete_quelle": "objekt", "frage": "Was ist zum Objekt Sozialdienste Wolfurt dokumentiert?"}
+{"nr": 16, "gruppe": "objekt", "erwartete_quelle": "objekt", "frage": "Welche Sicherheitsinformationen sind für Rädler Baustoffe hinterlegt?"}
+{"nr": 17, "gruppe": "objekt", "erwartete_quelle": "objekt", "frage": "Welche Gebäude haben wir in der Konrad-Doppelmayr-Straße erfasst?"}
+{"nr": 18, "gruppe": "objekt", "erwartete_quelle": "objekt", "frage": "Wo finde ich den Plan der Moosbrugger Halle 1?"}
+{"nr": 19, "gruppe": "objekt", "erwartete_quelle": "objekt", "frage": "Welche Objekte befinden sich an der Achstraße?"}
+{"nr": 20, "gruppe": "objekt", "erwartete_quelle": "objekt", "frage": "Welche Informationen gibt es zum ehemaligen Gmeiner-Kartonagen-Gebäude in Unterlinden?"}
+{"nr": 21, "gruppe": "hochwasserplan", "erwartete_quelle": "katplan_element", "frage": "Welche Stellen müssen wir bei Hochwasser zuerst kontrollieren?"}
+{"nr": 22, "gruppe": "hochwasserplan", "erwartete_quelle": "katplan_element", "frage": "Was muss bei Doppelmayr an der Bildsteinerstraße kontrolliert werden?"}
+{"nr": 23, "gruppe": "hochwasserplan", "erwartete_quelle": "katplan_element", "frage": "Wo müssen bei Doppelmayr Sandsäcke vor Türen gelegt werden?"}
+{"nr": 24, "gruppe": "hochwasserplan", "erwartete_quelle": "katplan_element", "frage": "Was ist beim Rickenbach auf Höhe Rickenbacherstraße 9 zu beachten?"}
+{"nr": 25, "gruppe": "hochwasserplan", "erwartete_quelle": "katplan_element", "frage": "Wo verlaufen gefährdete Gasleitungen entlang des Rickenbachs?"}
+{"nr": 26, "gruppe": "hochwasserplan", "erwartete_quelle": "katplan_element", "frage": "Welcher Rechen beim Doppelmayr-Bürogebäude kann durch Treibgut verstopfen?"}
+{"nr": 27, "gruppe": "hochwasserplan", "erwartete_quelle": "katplan_element", "frage": "Welche Kontrollpunkte gibt es am Himmelreichsbach?"}
+{"nr": 28, "gruppe": "hochwasserplan", "erwartete_quelle": "katplan_element", "frage": "Wo liegt der Einlauf beim Eulentobelbach und wie groß ist er?"}
+{"nr": 29, "gruppe": "hochwasserplan", "erwartete_quelle": "katplan_element", "frage": "Was müssen wir beim Ippachbach am Frickenescherweg kontrollieren?"}
+{"nr": 30, "gruppe": "hochwasserplan", "erwartete_quelle": "katplan_element", "frage": "Welche Gefahr besteht beim Abpumpen von Grundwasser am Schützenheim?"}
+{"nr": 31, "gruppe": "hochwasserplan", "erwartete_quelle": "katplan_element", "frage": "Was sieht der Hochwasserplan für die erste Alarmphase vor?"}
+{"nr": 32, "gruppe": "hochwasserplan", "erwartete_quelle": "katplan_element", "frage": "Wen müssen wir verständigen, wenn ein Bach über die Ufer tritt?"}
+{"nr": 33, "gruppe": "hochwasserplan", "erwartete_quelle": "katplan_element", "frage": "Wann muss die gesamte Feuerwehr alarmiert werden?"}
+{"nr": 34, "gruppe": "hochwasserplan", "erwartete_quelle": "katplan_element", "frage": "Welche zusätzlichen Kräfte können wir bei einem größeren Hochwasser anfordern?"}
+{"nr": 35, "gruppe": "hochwasserplan", "erwartete_quelle": "katplan_element", "frage": "Wo sind die Sandsäcke für Hochwassereinsätze gelagert?"}
+{"nr": 36, "gruppe": "hochwasserplan", "erwartete_quelle": "katplan_element", "frage": "Wie viele Tauchpumpen sind laut Maßnahmenplan vorhanden?"}
+{"nr": 37, "gruppe": "hochwasserplan", "erwartete_quelle": "katplan_element", "frage": "Welche Schmutzwasserpumpen und Nasssauger sind erfasst?"}
+{"nr": 38, "gruppe": "hochwasserplan", "erwartete_quelle": "katplan_element", "frage": "Wer ist bei der Gemeinde für Hochwassermaßnahmen zuständig?"}
+{"nr": 39, "gruppe": "hochwasserplan", "erwartete_quelle": "katplan_element", "frage": "Welche Maßnahmen sind bei drohendem Übergehen eines Gewässers vorgesehen?"}
+{"nr": 40, "gruppe": "hochwasserplan", "erwartete_quelle": "katplan_element", "frage": "Welche Hochwasser-Kontrollstellen sind als nachrangig eingestuft?"}
+{"nr": 41, "gruppe": "gasplan", "erwartete_quelle": "katplan_element", "frage": "Was müssen wir bei einem beschädigten Erdgasrohr unternehmen?"}
+{"nr": 42, "gruppe": "gasplan", "erwartete_quelle": "katplan_element", "frage": "Wie erfolgt die Alarmierung des Gas-Störfalldienstes?"}
+{"nr": 43, "gruppe": "gasplan", "erwartete_quelle": "katplan_element", "frage": "Was bedeutet die Störungskategorie GV3?"}
+{"nr": 44, "gruppe": "gasplan", "erwartete_quelle": "katplan_element", "frage": "Was ist der Unterschied zwischen GV4 und GV5?"}
+{"nr": 45, "gruppe": "gasplan", "erwartete_quelle": "katplan_element", "frage": "Wer muss bei einer längerfristigen Gasversorgungsunterbrechung informiert werden?"}
+{"nr": 46, "gruppe": "gasplan", "erwartete_quelle": "katplan_element", "frage": "Wie wird bei einem Gasaustritt im Freien der Gefahrenbereich festgelegt?"}
+{"nr": 47, "gruppe": "gasplan", "erwartete_quelle": "katplan_element", "frage": "Welche Geräte dürfen in explosionsgefährdeten Bereichen eingesetzt werden?"}
+{"nr": 48, "gruppe": "gasplan", "erwartete_quelle": "katplan_element", "frage": "Was ist bei Gasgeruch in einem Gebäude zu beachten?"}
+{"nr": 49, "gruppe": "gasplan", "erwartete_quelle": "katplan_element", "frage": "Welche Informationen müssen bei einer Gasstörung protokolliert werden?"}
+{"nr": 50, "gruppe": "gasplan", "erwartete_quelle": "katplan_element", "frage": "Wer darf Absperrungen und Reparaturen an Gasleitungen durchführen?"}
+{"nr": 51, "gruppe": "gasplan", "erwartete_quelle": "katplan_element", "frage": "Wo finde ich den Alarm- und Einsatzplan für das Erdgasnetz?"}
+{"nr": 52, "gruppe": "gasplan", "erwartete_quelle": "katplan_element", "frage": "Was bedeuten die Kategorien GN1 bis GN4?"}
+{"nr": 53, "gruppe": "gasplan", "erwartete_quelle": "katplan_element", "frage": "Welche besonderen Gefahren bestehen bei einem Schaden an der Bodensee-Seeleitung?"}
+{"nr": 54, "gruppe": "gasplan", "erwartete_quelle": "katplan_element", "frage": "Wer veranlasst bei einem Gasaustritt im Bodensee die Sperrung des Schiffsverkehrs?"}
+{"nr": 55, "gruppe": "gasplan", "erwartete_quelle": "katplan_element", "frage": "Welche Absperreinrichtungen gibt es bei der ZMS Leiblach und der Station Mehrerau?"}
+{"nr": 56, "gruppe": "gasplan", "erwartete_quelle": "katplan_element", "frage": "Welche Ausrüstung muss der Gas-Störfalldienst bereithalten?"}
+{"nr": 57, "gruppe": "gasplan", "erwartete_quelle": "katplan_element", "frage": "Wo trifft sich das Krisenteam bei einem Schaden an der Seeleitung?"}
+{"nr": 58, "gruppe": "gasplan", "erwartete_quelle": "katplan_element", "frage": "Wie wird die Erdgasversorgung bei einem Ausfall der Seeleitung möglicherweise aufrechterhalten?"}
+{"nr": 59, "gruppe": "gasplan", "erwartete_quelle": "katplan_element", "frage": "Welche Explosionsgrenzen sind für Erdgas H angegeben?"}
+{"nr": 60, "gruppe": "gasplan", "erwartete_quelle": "katplan_element", "frage": "Wer verschickt bei einem Gasstörfall die Abschlussinformation?"}
+{"nr": 61, "gruppe": "sperre", "erwartete_quelle": "strassensperre", "frage": "Welche Straßen in Wolfurt sind derzeit gesperrt?"}
+{"nr": 62, "gruppe": "sperre", "erwartete_quelle": "strassensperre", "frage": "Wie lange dauert die Sperre beim Rebberg und der Hofsteigstraße?"}
+{"nr": 63, "gruppe": "sperre", "erwartete_quelle": "strassensperre", "frage": "Welche Einschränkungen bestehen durch den Nahwärmeausbau in Unterhub?"}
+{"nr": 64, "gruppe": "sperre", "erwartete_quelle": "strassensperre", "frage": "Ab wann ist Unterlinden wegen der Leitungsverlegung gesperrt?"}
+{"nr": 65, "gruppe": "sperre", "erwartete_quelle": "strassensperre", "frage": "Bis wann gilt die geplante Sperre der Unterlinden?"}
+{"nr": 66, "gruppe": "sperre", "erwartete_quelle": "strassensperre", "frage": "Wo befindet sich die Baustelle in der Moosmahdgasse?"}
+{"nr": 67, "gruppe": "sperre", "erwartete_quelle": "strassensperre", "frage": "Welche Ausnahmen gelten während der Sperre der Moosmahdgasse?"}
+{"nr": 68, "gruppe": "sperre", "erwartete_quelle": "strassensperre", "frage": "Warum war der Kellaweg zwischen Hausnummer 1 und 4 gesperrt?"}
+{"nr": 69, "gruppe": "sperre", "erwartete_quelle": "strassensperre", "frage": "Welche Einschränkungen bestehen auf dem Güterweg Meschen–Staudach?"}
+{"nr": 70, "gruppe": "sperre", "erwartete_quelle": "strassensperre", "frage": "Welche Straßensperren könnten unsere Anfahrt zu einem Einsatz erschweren?"}
+{"nr": 71, "gruppe": "wasserstelle", "erwartete_quelle": "wasserstelle", "frage": "Wo befinden sich Löschwasserentnahmestellen in der Achstraße?"}
+{"nr": 72, "gruppe": "wasserstelle", "erwartete_quelle": "wasserstelle", "frage": "Gibt es einen Hydranten in der Nähe der Achstraße 38?"}
+{"nr": 73, "gruppe": "wasserstelle", "erwartete_quelle": "wasserstelle", "frage": "Welche Wasserstellen gibt es beim Rickenbach?"}
+{"nr": 74, "gruppe": "wasserstelle", "erwartete_quelle": "wasserstelle", "frage": "Wo befindet sich der Löschteich bei der Alten Schmiede?"}
+{"nr": 75, "gruppe": "wasserstelle", "erwartete_quelle": "wasserstelle", "frage": "Welche Saugstellen sind entlang der Bregenzerach erfasst?"}
+{"nr": 76, "gruppe": "wasserstelle", "erwartete_quelle": "wasserstelle", "frage": "Wo liegt die Wasserentnahmestelle bei der Betonstiege an der Bregenzerach?"}
+{"nr": 77, "gruppe": "wasserstelle", "erwartete_quelle": "wasserstelle", "frage": "Gibt es eine Saugstelle beim Frickenesch?"}
+{"nr": 78, "gruppe": "wasserstelle", "erwartete_quelle": "wasserstelle", "frage": "Welche Löschwasserversorgung ist beim Kellaweg dokumentiert?"}
+{"nr": 79, "gruppe": "wasserstelle", "erwartete_quelle": "wasserstelle", "frage": "Wo finde ich den Überflurhydranten bei der Bahnhofstraße 18a?"}
+{"nr": 80, "gruppe": "wasserstelle", "erwartete_quelle": "wasserstelle", "frage": "Welche Wasserstellen sind als defekt oder in Wartung gekennzeichnet?"}
+{"nr": 81, "gruppe": "einsatz", "erwartete_quelle": "einsatz", "frage": "Wann hatten wir zuletzt einen Brandmeldeanlagen-Einsatz?"}
+{"nr": 82, "gruppe": "einsatz", "erwartete_quelle": "einsatz", "frage": "Welche Einsätze gab es in der Konrad-Doppelmayr-Straße?"}
+{"nr": 83, "gruppe": "einsatz", "erwartete_quelle": "einsatz", "frage": "Welche technischen Einsätze fanden auf der Bildsteiner Straße statt?"}
+{"nr": 84, "gruppe": "einsatz", "erwartete_quelle": "einsatz", "frage": "Wann wurde ein Einsatz auf der Senderstraße abgearbeitet?"}
+{"nr": 85, "gruppe": "einsatz", "erwartete_quelle": "einsatz", "frage": "Welche Einsätze hatten das Alarmstichwort geringer technischer Einsatz?"}
+{"nr": 86, "gruppe": "einsatz", "erwartete_quelle": "einsatz", "frage": "Welche Übungseinsätze wurden zum Thema Hochwasser durchgeführt?"}
+{"nr": 87, "gruppe": "einsatz", "erwartete_quelle": "einsatz", "frage": "Bei welchen Übungseinsätzen war ein Keller überflutet?"}
+{"nr": 88, "gruppe": "einsatz", "erwartete_quelle": "einsatz", "frage": "Welche Testeinsätze wurden für Industriebrände angelegt?"}
+{"nr": 89, "gruppe": "einsatz", "erwartete_quelle": "einsatz", "frage": "Gab es Übungseinsätze mit starker Rauchentwicklung in der Dammstraße?"}
+{"nr": 90, "gruppe": "einsatz", "erwartete_quelle": "einsatz", "frage": "Welche Einsätze sind unter der Alarmstufe F14 erfasst?"}
+{"nr": 91, "gruppe": "kontakt", "erwartete_quelle": "kontakt", "frage": "Wie erreiche ich den Bauhof Wolfurt im Einsatzfall?"}
+{"nr": 92, "gruppe": "kontakt", "erwartete_quelle": "kontakt", "frage": "Wer ist als Wassermeister beim Bauhof hinterlegt?"}
+{"nr": 93, "gruppe": "kontakt", "erwartete_quelle": "kontakt", "frage": "Welche Ansprechpartner der Gemeinde sind im Hochwasserplan verknüpft?"}
+{"nr": 94, "gruppe": "kontakt", "erwartete_quelle": "kontakt", "frage": "Wer ist für Gewässer, Katastrophen und Pläne im Bauamt zuständig?"}
+{"nr": 95, "gruppe": "kontakt", "erwartete_quelle": "kontakt", "frage": "Wer ist bei einem drohenden Hochwasser als Bürgermeisterin zu verständigen?"}
+{"nr": 96, "gruppe": "kontakt", "erwartete_quelle": "kontakt", "frage": "Welche Kontakte sind für eine Alarmierung der Gemeindeführung vorgesehen?"}
+{"nr": 97, "gruppe": "kontakt", "erwartete_quelle": "kontakt", "frage": "Welche externen Stellen müssen wir bei einem Hochwasser kontaktieren?"}
+{"nr": 98, "gruppe": "kontakt", "erwartete_quelle": "kontakt", "frage": "Wer ist für die ÖBB-Unterführung in der Kesselstraße zuständig?"}
+{"nr": 99, "gruppe": "kontakt", "erwartete_quelle": "kontakt", "frage": "Welche Kontaktdaten gibt es zur ASFINAG für die Autobahnunterführung?"}
+{"nr": 100, "gruppe": "kontakt", "erwartete_quelle": "kontakt", "frage": "Welche Personen oder Organisationen sind mit dem Erdgas-Einsatzplan verknüpft?"}

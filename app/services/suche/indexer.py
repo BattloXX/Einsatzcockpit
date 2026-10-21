@@ -10,8 +10,11 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.models.suche import SearchChunk, SearchDocument
+from app.services.suche import vektor
 from app.services.suche.quellen import ADAPTER, IndexDokument, adapter_fuer, lade_adapter
+from app.services.suche.vektor_sync import plane_vektor_job, stelle_chunk_sicher
 
 
 def inhalt_hash(dok: IndexDokument) -> str:
@@ -29,15 +32,24 @@ def _dokumente(org_id: int, quelle: str):
 
 def _loesche_chunks(db: Session, doc: SearchDocument) -> None:
     # Explizites ORM-Loeschen funktioniert auch auf SQLite ohne FK-Pragma.
-    for chunk in db.scalars(select(SearchChunk).where(
+    chunks = list(db.scalars(select(SearchChunk).where(
         SearchChunk.org_id == doc.org_id, SearchChunk.document_id == doc.id,
-    )):
+    )))
+    if vektor.vektor_faehig(db):
+        vektor.stelle_tabelle_sicher(db)
+        vektor.loesche_chunks(db, doc.org_id, [chunk.id for chunk in chunks])
+    for chunk in chunks:
         db.delete(chunk)
     db.flush()
     db.expire(doc, ["chunks"])
 
 
 def _loesche(db: Session, doc: SearchDocument) -> None:
+    if vektor.vektor_faehig(db):
+        vektor.stelle_tabelle_sicher(db)
+        vektor.loesche_dokument(db, doc.org_id, doc.id)
+    if settings.SEARCH_SEMANTIC_ENABLED:
+        plane_vektor_job(db, doc.org_id, doc.id)
     _loesche_chunks(db, doc)
     db.delete(doc)
     db.flush()
@@ -76,6 +88,9 @@ def indexiere(db: Session, org_id: int, quelle: str, quell_id: str) -> str:
         inhalt_hash=hashlib.sha256(c.text.encode()).hexdigest(),
     ) for nr, c in enumerate(dok.chunks)]
     db.flush()
+    stelle_chunk_sicher(db, doc)
+    if settings.SEARCH_SEMANTIC_ENABLED:
+        plane_vektor_job(db, org_id, doc.id)
     return ergebnis
 
 
