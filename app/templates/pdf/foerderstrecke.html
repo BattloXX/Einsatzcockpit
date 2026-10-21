@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <style>
+{% include "pdf/_icon_styles.html" %}
   @page { size: A4; margin: 1.4cm 1.2cm; }
   body { font-family: "DejaVu Sans", Arial, sans-serif; color: #111; font-size: 10.5px; }
   h1 { font-size: 17px; margin: 0 0 2px; }
@@ -10,6 +11,7 @@
   .kopf { display: flex; justify-content: space-between; align-items: flex-start; }
   .meta { color: #555; font-size: 9.5px; }
   .q { font-size: 22px; font-weight: bold; }
+  .pumpen-legende .status-dot { background: currentColor; }
   .ampel { display:inline-block; width:12px; height:12px; border-radius:50%; margin-right:5px; }
   table { width: 100%; border-collapse: collapse; margin-top: 4px; }
   th, td { border: 1px solid #ccc; padding: 3px 5px; text-align: left; font-size: 9.5px; }
@@ -48,9 +50,9 @@
   {% if karte_png %}
   <img class="karte" src="{{ karte_png }}" alt="Wegstrecke mit Pumpenstandorten">
   <p class="muted" style="font-size:8.5px; margin:3px 0 0;">
-    <span style="color:#16a34a;">●</span> Quellpumpe &nbsp;
-    <span style="color:#7c3aed;">●</span> Verstärker/Relais &nbsp;
-    <span style="color:#ea580c;">●</span> Ziel/Verteiler &nbsp;
+    <span class="pumpen-legende" style="color:#16a34a;">{{ status_dot("gruen", "Quellpumpe") }}</span> Quellpumpe &nbsp;
+    <span class="pumpen-legende" style="color:#7c3aed;">{{ status_dot("blau", "Verstärker/Relais") }}</span> Verstärker/Relais &nbsp;
+    <span class="pumpen-legende" style="color:#ea580c;">{{ status_dot("orange", "Ziel/Verteiler") }}</span> Ziel/Verteiler &nbsp;
     <span style="color:#2563eb;">▬</span> Wegstrecke
   </p>
   {% endif %}
@@ -62,7 +64,7 @@
   {% if gesamt_laenge_m %}
   <p class="muted" style="margin:0 0 4px;"><strong>Förderleitung gesamt:</strong>
     {{ '{:,}'.format(gesamt_laenge_m | int).replace(',', '.') }} m
-    (💧 Wasserentnahme → 🎯 Verteiler)</p>
+    ({{ icon("droplet", size="xs") }} Wasserentnahme → {{ icon("target", size="xs") }} Verteiler)</p>
   {% endif %}
   <table>
     <thead>

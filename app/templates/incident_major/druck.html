@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{{ lage.name }} – Druckauswahl</title>
 <style>
+{% include "pdf/_icon_styles.html" %}
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: Arial, Helvetica, sans-serif; font-size: 10.5pt; color: #111; background: #f9fafb; }
 
@@ -116,12 +117,13 @@
 
   @media print { body { display: none; } }
 </style>
+<script src="/static/js/icons.js"></script>
 </head>
 <body x-data="printCenter()">
 
 <div class="topbar">
   <a href="/lage/{{ lage.id }}">← Board</a>
-  <div class="topbar__title">🖨 Druckauswahl · {{ lage.name }}</div>
+  <div class="topbar__title">{{ icon("printer", size="xs") }} Druckauswahl · {{ lage.name }}</div>
 </div>
 
 <div class="container">
@@ -201,7 +203,7 @@
             <span class="badge" x-text="site.phase"></span>
             <span x-show="site.sector" class="badge" x-text="site.sector"></span>
             <span x-show="site.addr" x-text="site.addr"></span>
-            <span x-show="site.resCount > 0" x-text="'🚒 ' + site.resCount"></span>
+            <span x-show="site.resCount > 0">{{ icon("firetruck", size="xs") }} <span x-text="site.resCount"></span></span>
           </div>
         </div>
       </div>
@@ -244,7 +246,7 @@
         <input type="checkbox" class="site-item__check" :checked="selectedCrossIds.includes(cm.id)"
                @click.stop="toggleCross(cm.id)">
         <div class="cross-item__body">
-          <div class="cross-item__title" x-text="cm.icon + ' ' + cm.title"></div>
+          <div class="cross-item__title"><template x-if="cm.icon_name"><span x-html="ecpIcon(cm.icon_name, {size: 'xs'})"></span></template><span x-show="!cm.icon_name" x-text="cm.icon"></span> <span x-text="cm.title"></span></div>
           <div class="cross-item__meta">
             <span class="badge" x-text="cm.status"></span>
             <span class="badge" x-text="cm.type"></span>
@@ -269,12 +271,12 @@
     <span x-text="selectedCrossIds.length"></span> Meldungen)
   </div>
   <button type="button" class="btn btn--secondary" onclick="ecpgPrint({document_type:'gsl_bericht', gsl_id:{{ lage.id }}, title:'GSL-Gesamtbericht drucken', localUrl:'/lage/{{ lage.id }}/druck/bericht'})">
-    📋 Gesamtprotokoll
+    {{ icon("clipboard-list", size="xs") }} Gesamtprotokoll
   </button>
   <button type="button" class="btn btn--primary"
     :disabled="selectedIds.length + selectedCrossIds.length === 0"
     @click="printSelected()">
-    🖨 Ausgewählte drucken
+    {{ icon("printer", size="xs") }} Ausgewählte drucken
     (<span x-text="selectedIds.length + selectedCrossIds.length"></span> Seiten)
   </button>
 </div>

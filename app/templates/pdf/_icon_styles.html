@@ -1,0 +1,20 @@
+{# Gemeinsame Regeln ohne app.css fuer WeasyPrint und Browser-Druck. #}
+  .ecp-icon { display: inline-block; vertical-align: -0.15em; width: 1em; height: 1em; }
+  .ecp-icon--xs { width: 10pt; height: 10pt; }
+  .ecp-icon--sm { width: 12pt; height: 12pt; }
+  .ecp-icon--md { width: 16pt; height: 16pt; }
+  .ecp-icon--lg { width: 20pt; height: 20pt; }
+  .status-dot { display: inline-block; width: .75em; height: .75em; border-radius: 50%; vertical-align: middle; background: #6b7280; }
+  .status-dot--rot { background: #c62828; }
+  .status-dot--orange { background: #e65100; }
+  .status-dot--gelb { background: #f2b02e; }
+  .status-dot--gruen { background: #2e7d32; }
+  .status-dot--blau { background: #1565c0; }
+  .status-dot--grau { background: #6b7280; }
+  .status-dot--schwarz { background: #333333; }
+  .status-dot--weiss { background: #e5e7eb; border: 1px solid #999; }
+  .ecp-map-marker-wrap { background: none; border: 0; }
+  .ecp-map-marker { position: relative; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--marker-color, #333); color: #fff; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.5); }
+  .ecp-map-marker__warning { position: absolute; right: -5px; top: -5px; color: #111; background: #fff; }
+  .ecp-map-marker__text { font-size: 16px; line-height: 1; }
+  @media print { .ecp-icon { color: #333; } }

@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <style>
+{% include "pdf/_icon_styles.html" %}
   @page {
     size: A4 portrait;
     margin: 20mm 15mm 22mm 15mm;
@@ -76,7 +77,7 @@
         {% if not t.mitglied_id %}<span style="font-size:8pt;color:#888;"> (Gast)</span>{% endif %}
       </td>
       {% if is_einsatz %}
-      <td style="text-align:center;">{{ '&#10003;' if t.ausgerueckt else '' }}</td>
+      <td style="text-align:center;">{{ icon("check", size="xs") if t.ausgerueckt else "" }}</td>
       <td>{{ t.funktion.name if t.funktion else '' }}</td>
       <td>{{ t.fahrzeug.display_label if t.fahrzeug else '' }}</td>
       {% else %}

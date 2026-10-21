@@ -2,13 +2,13 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-{% include "pdf/_emoji_font_face.html" %}
 <style>
+{% include "pdf/_icon_styles.html" %}
   @page {
     size: A4 portrait;
     margin: 20mm 15mm 18mm 15mm;
   }
-  body { font-family: 'Helvetica Neue', Arial, 'Noto Emoji', sans-serif; font-size: 10pt; color: #111; }
+  body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 10pt; color: #111; }
   h1 { font-size: 16pt; color: #d42225; margin-bottom: 4pt; }
   h2 { font-size: 12pt; border-bottom: 2px solid #d42225; padding-bottom: 3pt; margin-top: 12pt; }
   table { width: 100%; border-collapse: collapse; margin: 6pt 0; }
@@ -35,7 +35,7 @@
 <div style="background:#1d4ed8;color:#fff;text-align:center;font-weight:800;font-size:12pt;padding:5px;letter-spacing:.1em;font-family:Arial,sans-serif;">TEST SYSTEM</div>
 {% endif %}
 {% if incident.is_exercise %}
-<div class="exercise-banner">⚠ ÜBUNG / SIMULATION – KEIN ECHTEINSATZ ⚠</div>
+<div class="exercise-banner">{{ icon("alert-triangle", size="xs") }} ÜBUNG / SIMULATION – KEIN ECHTEINSATZ {{ icon("alert-triangle", size="xs") }}</div>
 {% endif %}
 
 <div class="header-box">
@@ -47,14 +47,14 @@
 </div>
 
 {% if karte_datauri %}
-<h2>🗺 Kartenausschnitt</h2>
+<h2>{{ icon("map", size="xs") }} Kartenausschnitt</h2>
 <div class="karte"><img src="{{ karte_datauri }}" alt="Lagekarte"></div>
 <p style="font-size:7.5pt;color:#666;">Vereinfachte Druckdarstellung — taktische Zeichen als
   Farbpunkte approximiert, siehe Legende.</p>
 {% endif %}
 
 {% if zeichen_legende %}
-<h2>🏷 Legende</h2>
+<h2>{{ icon("tag", size="xs") }} Legende</h2>
 <div class="legende">
   <span class="legende__eintrag"><span class="legende__farbe" style="background:#d42225"></span> Einsatzort</span>
   <span class="legende__eintrag"><span class="legende__farbe" style="background:#2563eb"></span> Objekt</span>
@@ -65,7 +65,7 @@
 </div>
 {% endif %}
 
-<h2>🚒 Kräfteübersicht</h2>
+<h2>{{ icon("firetruck", size="xs") }} Kräfteübersicht</h2>
 {% if vehicles_positions %}
 <table>
   <tr><th>Fahrzeug</th><th>Status</th><th>Hinzugefügt</th></tr>
@@ -81,7 +81,7 @@
 <p style="color:#888; font-size:9pt; font-style:italic;">Keine Fahrzeuge zugeordnet.</p>
 {% endif %}
 
-<h2>📜 Chronologie</h2>
+<h2>{{ icon("history", size="xs") }} Chronologie</h2>
 {% if events %}
 <table>
   <tr><th style="width:80pt;">Zeit</th><th>Eintrag</th></tr>

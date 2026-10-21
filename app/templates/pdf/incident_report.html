@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 {% include "pdf/_emoji_font_face.html" %}
 <style>
+{% include "pdf/_icon_styles.html" %}
   @page {
     size: A4 portrait;
     margin: 20mm 15mm 18mm 15mm;
@@ -72,7 +73,7 @@
 <div style="background:#1d4ed8;color:#fff;text-align:center;font-weight:800;font-size:12pt;padding:5px;letter-spacing:.1em;font-family:Arial,sans-serif;">TEST SYSTEM</div>
 {% endif %}
 {% if incident.is_exercise %}
-<div class="exercise-banner">⚠ ÜBUNG / SIMULATION – KEIN ECHTEINSATZ ⚠</div>
+<div class="exercise-banner">{{ icon("alert-triangle", size="xs") }} ÜBUNG / SIMULATION – KEIN ECHTEINSATZ {{ icon("alert-triangle", size="xs") }}</div>
 {% endif %}
 
 <div class="pdf-footer">
@@ -138,7 +139,7 @@
         {% if o.gefahren %}
         <div class="obj-meta" style="margin-top:5pt;font-weight:700;color:#d42225;">Objektgefahren:</div>
         {% for g in o.gefahren %}
-        <div class="obj-gefahr">&#9888; {{ g.name }}{% if g.detail %} <span style="color:#555;">({{ g.detail }})</span>{% endif %}</div>
+        <div class="obj-gefahr">{{ icon("alert-triangle", size="xs") }} {{ g.name }}{% if g.detail %} <span style="color:#555;">({{ g.detail }})</span>{% endif %}</div>
         {% endfor %}
         {% endif %}
       </td>
@@ -228,7 +229,7 @@
           {% endif %}
         {% else %}
         <div class="media-link">
-          {% if m.kind == 'pdf' %}📄{% elif m.kind == 'datei' %}📎{% else %}🎬{% endif %}
+          {% if m.kind == 'pdf' %}{{ icon("file-text", size="xs") }}{% elif m.kind == 'datei' %}{{ icon("paperclip", size="xs") }}{% else %}{{ icon("movie", size="xs") }}{% endif %}
           {% if media_exists(m) %}
           <a href="{{ (base_url or '').rstrip('/') }}/medien/datei/{{ m.id }}">{{ m.original_filename }}</a>
           <span style="color:#999;">(Login erforderlich)</span>
@@ -269,7 +270,7 @@
           {% endif %}
         {% else %}
         <div class="media-link">
-          {% if m.kind == 'pdf' %}📄{% else %}🎬{% endif %}
+          {% if m.kind == 'pdf' %}{{ icon("file-text", size="xs") }}{% else %}{{ icon("movie", size="xs") }}{% endif %}
           {% if media_exists(m) %}
           <a href="{{ (base_url or '').rstrip('/') }}/medien/meldung/datei/{{ m.id }}">{{ m.original_filename }}</a>
           <span style="color:#999;">(Login erforderlich)</span>

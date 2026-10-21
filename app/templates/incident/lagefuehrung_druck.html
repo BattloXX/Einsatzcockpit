@@ -12,6 +12,7 @@
 {% set format_names = {'A4 portrait': 'A4 Hochformat', 'A4 landscape': 'A4 Querformat', 'A3 portrait': 'A3 Hochformat', 'A3 landscape': 'A3 Querformat'} %}
 {% set fmt_name = format_names.get(fmt, fmt) %}
 <style>
+{% include "pdf/_icon_styles.html" %}
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   @page { size: {{ fmt }}; margin: 10mm; }
   body { font-family: Arial, Helvetica, sans-serif; background: #fff; color: #111; }
@@ -72,7 +73,7 @@
 
 <div class="no-print print-bar">
   <a href="/einsatz/{{ incident.id }}/lagefuehrung" class="print-btn" style="text-decoration:none;background:#374151;">← Lagekarte</a>
-  <button class="print-btn" onclick="window.print()">🖨 Drucken</button>
+  <button class="print-btn" onclick="window.print()">{{ icon("printer", size="xs") }} Drucken</button>
   <span>{{ fmt_name }} · Einsatz #{{ incident.lis_operation_number or incident.nummer or incident.id }}</span>
 </div>
 
@@ -81,7 +82,7 @@
 <div style="background:#1d4ed8;color:#fff;text-align:center;font-weight:800;font-size:12pt;padding:5px;letter-spacing:.1em;font-family:Arial,sans-serif;">TEST SYSTEM</div>
 {% endif %}
 {% if incident.is_exercise %}
-<div class="exercise-banner">⚠ ÜBUNG / SIMULATION – KEIN ECHTFALL</div>
+<div class="exercise-banner">{{ icon("alert-triangle", size="xs") }} ÜBUNG / SIMULATION – KEIN ECHTFALL</div>
 {% endif %}
 
 <div class="karte-kopf">
@@ -109,6 +110,7 @@
 </div>{# /print-content #}
 
 <script src="/static/js/leaflet.min.js"></script>
+<script src="/static/js/icons.js"></script>
 <script src="/static/js/map-config.js"></script>
 <script>
 (function () {
@@ -153,7 +155,7 @@
   if (hasLayer.einsatzort) {
     {% if incident.lat is not none and incident.lng is not none %}
     var einsatzortMarker = L.marker([{{ incident.lat }}, {{ incident.lng }}], {
-      icon: divIcon('<div style="font-size:22px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6));">📍</div>', [14, 28])
+      icon: ecpMarkerIcon('map-pin')
     }).addTo(map);
     bindLabel(einsatzortMarker, 'Einsatzort');
     {% endif %}
@@ -178,9 +180,12 @@
   if (hasLayer.objekt) {
     fetches.push(fetch(apiBase + '/objekte.json').then(function (r) { return r.json(); }).then(function (liste) {
       (liste || []).forEach(function (o) {
-        var warn = (o.gefahren && o.gefahren.length) ? '⚠' : '';
+        var objectIcon = ecpMarkerIcon('building', { color: '#2563eb' });
+        if (o.gefahren && o.gefahren.length) {
+          objectIcon.options.html = objectIcon.options.html.replace('</div>', ecpIcon('alert-triangle', { size: 'xs', cls: 'ecp-map-marker__warning' }) + '</div>');
+        }
         var m = L.marker([o.lat, o.lng], {
-          icon: divIcon('<div style="font-size:22px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6));">🏢' + warn + '</div>', [14, 28])
+          icon: objectIcon
         }).addTo(map);
         bindLabel(m, escapeHtml(o.name || 'Objekt') + (o.vulgoname ? ' <small>' + escapeHtml(o.vulgoname) + '</small>' : '') + (o.gefahren && o.gefahren.length ? ' · ' + o.gefahren.map(function (g) { return g.piktogramm + ' ' + escapeHtml(g.name); }).join(', ') : ''));
       });
@@ -247,7 +252,7 @@
               return L.marker(latlng, { icon: divIcon('<img src="' + tzIconUrl(f.zeichen_key) + '" alt="" style="width:32px;height:32px;transform:rotate(' + rot + 'deg) scale(' + scale + ');transform-origin:center center;">', [16, 16]) });
             }
             if (f.typ === 'meldung') {
-              return L.marker(latlng, { icon: divIcon('<div style="font-size:22px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.6));">📢</div>', [14, 28]) });
+              return L.marker(latlng, { icon: ecpMarkerIcon('speakerphone') });
             }
             if (f.typ === 'text') { return L.marker(latlng, { icon: divIcon('', [0, 0]) }); }
             if (f.typ === 'distanz' && f.props && f.props.kind === 'kreis') {

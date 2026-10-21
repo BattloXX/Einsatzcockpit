@@ -12,6 +12,7 @@
 {% set format_names = {'A4 portrait': 'A4 Hochformat', 'A4 landscape': 'A4 Querformat', 'A3 portrait': 'A3 Hochformat', 'A3 landscape': 'A3 Querformat'} %}
 {% set fmt_name = format_names.get(fmt, fmt) %}
 <style>
+{% include "pdf/_icon_styles.html" %}
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   @page { size: {{ fmt }}; margin: 10mm; }
   body { font-family: Arial, Helvetica, sans-serif; background: #fff; color: #111; }
@@ -65,7 +66,7 @@
 
 <div class="no-print print-bar">
   <a href="/lage/{{ lage.id }}/karte" class="print-btn" style="text-decoration:none;background:#374151;">← Karte</a>
-  <button class="print-btn" onclick="window.print()">🖨 Drucken</button>
+  <button class="print-btn" onclick="window.print()">{{ icon("printer", size="xs") }} Drucken</button>
   <span>{{ fmt_name }} · {{ lage.name }}</span>
 </div>
 
@@ -74,7 +75,7 @@
 <div style="background:#1d4ed8;color:#fff;text-align:center;font-weight:800;font-size:12pt;padding:5px;letter-spacing:.1em;font-family:Arial,sans-serif;">TEST SYSTEM</div>
 {% endif %}
 {% if lage.is_exercise %}
-<div class="exercise-banner">⚠ ÜBUNG / SIMULATION – KEIN ECHTFALL</div>
+<div class="exercise-banner">{{ icon("alert-triangle", size="xs") }} ÜBUNG / SIMULATION – KEIN ECHTFALL</div>
 {% endif %}
 
 <div id="karte-map"></div>
@@ -92,6 +93,7 @@
 </div>{# /print-content #}
 
 <script src="/static/js/leaflet.min.js"></script>
+<script src="/static/js/icons.js"></script>
 <script src="/static/js/map-config.js"></script>
 <script>
 (function () {
@@ -146,12 +148,9 @@
   // ── Übergreifende Meldungen ───────────────────────────────────────────────
   var CROSS_MARKERS = {{ cross_markers_json | safe }};
   CROSS_MARKERS.forEach(function(m) {
-    var icon = L.divIcon({
-      className: '',
-      html: '<div style="background:' + m.status_color + ';border-radius:50%;width:28px;height:28px;'
-          + 'display:flex;align-items:center;justify-content:center;font-size:14px;'
-          + 'border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);">' + m.type_icon + '</div>',
-      iconSize: [28, 28], iconAnchor: [14, 14],
+    var icon = ecpMarkerIcon(m.type_icon_name, {
+      color: m.status_color, size: 28,
+      text: m.type_icon_name ? null : m.type_icon,
     });
     L.marker([m.lat, m.lng], { icon: icon })
      .bindTooltip('<b>' + m.title + '</b><br>' + m.type_label + ' · ' + m.status_label, { direction: 'top', opacity: 0.9 })

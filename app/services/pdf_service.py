@@ -19,13 +19,25 @@ logger = logging.getLogger("einsatzleiter.pdf")
 _FONT_FACE_RE = re.compile(r"@font-face\s*\{.*?\}", re.DOTALL)
 
 
+def strip_icons_for_xhtml2pdf(html_str: str) -> str:
+    """Nur System-Icons entfernen; Fachzeichen und andere SVGs erhalten."""
+    def replace_icon(match: re.Match[str]) -> str:
+        classes = re.search(r"(?:^|\s)class\s*=\s*([\"'])(.*?)\1", match[1], re.DOTALL | re.IGNORECASE)
+        if classes and "ecp-icon" in classes[2].split():
+            return ""
+        return match[0]
+
+    return re.sub(r"<svg\b([^>]*)>.*?</svg\s*>", replace_icon, html_str, flags=re.DOTALL | re.IGNORECASE)
+
+
 def strip_font_face_for_xhtml2pdf(html_str: str) -> str:
     """xhtml2pdf/reportlab kann @font-face mit data:-URIs nicht laden (versucht
     das Base64 als Dateipfad zu oeffnen -> TTFError, siehe Vorfall 2026-07-06,
     Emoji-Icons in Objektblatt/Einsatz-PDF). xhtml2pdf ist ohnehin nur der
     Fallback fuer den seltenen Fall, dass WeasyPrint/GTK fehlt -- dann lieber
-    ohne Emoji-Icons (wie zuvor) statt PDF-Generierung komplett abbrechen."""
-    return _FONT_FACE_RE.sub("", html_str)
+    ohne Emoji-Icons (wie zuvor) statt PDF-Generierung komplett abbrechen.
+    System-SVGs werden hier ebenfalls fuer alle Fallback-Aufrufer entfernt."""
+    return strip_icons_for_xhtml2pdf(_FONT_FACE_RE.sub("", html_str))
 
 
 def _media_b64_uri(media) -> str:
@@ -369,7 +381,7 @@ def render_as_pruefung_pdf(pruefungen: list, user=None, base_url: str = "") -> b
         logger.warning("WeasyPrint fehlgeschlagen (Atemschutz-Prüf-PDF), Fallback auf xhtml2pdf: %s", exc)
         from xhtml2pdf import pisa  # noqa: PLC0415
         buf = io.BytesIO()
-        pisa.CreatePDF(io.StringIO(html_str), dest=buf)
+        pisa.CreatePDF(io.StringIO(strip_font_face_for_xhtml2pdf(html_str)), dest=buf)
         return buf.getvalue()
 
 
@@ -402,7 +414,7 @@ def render_teilnahme_pdf(
     except OSError:
         from xhtml2pdf import pisa  # noqa: PLC0415
         buf = io.BytesIO()
-        pisa.CreatePDF(io.StringIO(html_str), dest=buf)
+        pisa.CreatePDF(io.StringIO(strip_font_face_for_xhtml2pdf(html_str)), dest=buf)
         return buf.getvalue()
 
 

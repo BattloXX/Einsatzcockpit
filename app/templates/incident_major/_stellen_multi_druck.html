@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="/static/css/leaflet.min.css">
 {% endif %}
 <style>
+{% include "pdf/_icon_styles.html" %}
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   @page { size: A4 portrait; margin: 14mm 16mm; }
   body { font-family: Arial, Helvetica, sans-serif; font-size: 10.5pt; color: #111; background: #fff; }
@@ -101,7 +102,7 @@
 
 <div class="no-print print-bar">
   <a href="/lage/{{ lage.id }}/druck" class="print-btn" style="text-decoration:none;background:#374151;">← Druckauswahl</a>
-  <button class="print-btn" onclick="window.print()">🖨 Drucken</button>
+  <button class="print-btn" onclick="window.print()">{{ icon("printer", size="xs") }} Drucken</button>
   <span>
     {% set total = sites|length + cross_markers|length %}
     {{ total }} Seite{{ 'n' if total != 1 else '' }}:
@@ -116,7 +117,7 @@
 
 {% if lage.is_exercise %}
 <div class="no-print" style="background:#fef9c3;border-bottom:2px solid #fde68a;padding:6px 16px;text-align:center;color:#92400e;font-weight:700;">
-  ⚠ ÜBUNG / SIMULATION – KEIN ECHTFALL
+  {{ icon("alert-triangle", size="xs") }} ÜBUNG / SIMULATION – KEIN ECHTFALL
 </div>
 {% endif %}
 
@@ -125,7 +126,7 @@
 <div class="print-page">
 
   {% if lage.is_exercise %}
-  <div class="exercise-banner">⚠ ÜBUNG / SIMULATION – KEIN ECHTFALL</div>
+  <div class="exercise-banner">{{ icon("alert-triangle", size="xs") }} ÜBUNG / SIMULATION – KEIN ECHTFALL</div>
   {% endif %}
 
   <div class="hdr">
@@ -252,12 +253,12 @@
 <div class="print-page">
 
   {% if lage.is_exercise %}
-  <div class="exercise-banner">⚠ ÜBUNG / SIMULATION – KEIN ECHTFALL</div>
+  <div class="exercise-banner">{{ icon("alert-triangle", size="xs") }} ÜBUNG / SIMULATION – KEIN ECHTFALL</div>
   {% endif %}
 
   <div class="hdr hdr--cross">
     <div class="hdr__lage">{{ lage.name }} · Übergreifende Meldung</div>
-    <div class="hdr__title">{{ marker.type_icon }} {{ marker.title }}</div>
+    <div class="hdr__title">{{ cross_marker_icon(marker.marker_type, size="xs") }} {{ marker.title }}</div>
     <div class="hdr__sub">{{ marker.type_label }}</div>
     <div class="hdr__meta">
       <span>Erfasst: {{ marker.created_at|local_datetime }}</span>

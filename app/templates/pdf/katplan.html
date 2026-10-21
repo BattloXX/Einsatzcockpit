@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <title>{{ kopf.titel }}</title>
   <style>
+{% include "pdf/_icon_styles.html" %}
     @page {
       size: A4;
       margin: 16mm 15mm 20mm;
@@ -66,7 +67,8 @@
     .baustein__label { font-size: 7.5pt; text-transform: uppercase; letter-spacing: .04em; color: #6b7280; font-weight: 700; margin-bottom: .8mm; }
     .schritte { list-style: none; padding: 0; margin: 0; counter-reset: schritt; }
     .schritte li { counter-increment: schritt; padding-left: 9mm; position: relative; margin-bottom: 1mm; }
-    .schritte li::before { content: "☐ " counter(schritt) "."; position: absolute; left: 0; color: #4b5563; }
+    .schritt-checkbox { position: absolute; left: 0; color: #4b5563; }
+    .schritte li::before { content: counter(schritt) "."; position: absolute; left: 4mm; color: #4b5563; }
     .liste { margin: 0; padding-left: 5mm; }
     .angaben { margin-top: 2mm; font-size: 8.5pt; }
     .angaben th { width: 28mm; }
@@ -154,7 +156,7 @@
               {% if b.art == 'text' %}
                 <div class="text">{{ b.wert }}</div>
               {% elif b.art == 'schritte' %}
-                <ol class="schritte">{% for s in b.wert %}<li>{{ s.text }}{% if s.erledigt_hinweis %} <span class="muted klein">– erledigt, wenn: {{ s.erledigt_hinweis }}</span>{% endif %}</li>{% endfor %}</ol>
+                <ol class="schritte">{% for s in b.wert %}<li><span class="schritt-checkbox">{{ icon("square", size="xs") }}</span>{{ s.text }}{% if s.erledigt_hinweis %} <span class="muted klein">– erledigt, wenn: {{ s.erledigt_hinweis }}</span>{% endif %}</li>{% endfor %}</ol>
               {% elif b.art == 'bedingungen' %}
                 <table><tr><th>Wenn</th><th>Dann</th></tr>{% for z in b.wert %}<tr><td>{{ z.wenn or '' }}</td><td>{{ z.dann or '' }}</td></tr>{% endfor %}</table>
               {% elif b.art == 'bedarf' %}

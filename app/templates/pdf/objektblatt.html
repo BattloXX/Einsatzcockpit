@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 {% include "pdf/_emoji_font_face.html" %}
 <style>
+{% include "pdf/_icon_styles.html" %}
   @page { size: A4 portrait; margin: 14mm 12mm; }
   body { font-family: Helvetica, Arial, 'Noto Emoji', sans-serif; font-size: 10pt; color: #111; }
   .kopf { border-bottom: 3px solid #b71921; padding-bottom: 6px; margin-bottom: 10px; }
@@ -57,7 +58,7 @@
 </div>
 
 {% if objekt.gefahren %}
-<h2>⚠ Gefahren</h2>
+<h2>{{ icon("alert-triangle", size="xs") }} Gefahren</h2>
 <div class="gefahr-leiste">
   {% for g in objekt.gefahren %}
   <span class="gefahr">{{ gefahr_piktogramme.get(g.gefahr.piktogramm_typ, '⚠')[:2] if g.gefahr else '⚠' }}
@@ -71,7 +72,7 @@
 
 {% if objekt.bma %}
 {% set bma = objekt.bma %}
-<h2>🔥 BMA &amp; Schlüssel</h2>
+<h2>{{ icon("flame", size="xs") }} BMA &amp; Schlüssel</h2>
 <div class="bma-block">
   <table class="daten">
     {% if bma.bma_nummer %}<tr><td class="k">BMA-Nr. / Zusatz</td><td><b>{{ bma.bma_nummer }}</b>{% if bma.rfl_nummer %} · RFL {{ bma.rfl_nummer }}{% endif %}</td></tr>{% endif %}
@@ -88,7 +89,7 @@
 {% endif %}
 
 {% if mit_kontakten and objekt.kontakte %}
-<h2>📞 Kontakte</h2>
+<h2>{{ icon("phone", size="xs") }} Kontakte</h2>
 <table class="daten">
   {% for k in objekt.kontakte if k.zentraler_kontakt %}
   <tr>
@@ -104,7 +105,7 @@
 {% endif %}
 
 {% if objekt.merkmale %}
-<h2>🏷 Merkmale</h2>
+<h2>{{ icon("tag", size="xs") }} Merkmale</h2>
 <div>
   {% for m in objekt.merkmale %}
   <span class="merkmal">{{ m.merkmal.icon or '' if m.merkmal else '' }} {{ m.merkmal.name if m.merkmal else '?' }}{% if m.hinweis %} ({{ m.hinweis }}){% endif %}</span>
@@ -114,7 +115,7 @@
 
 {% if objekt.wohnanlage %}
 {% set wa = objekt.wohnanlage %}
-<h2>🏘 Wohnanlage</h2>
+<h2>{{ icon("buildings", size="xs") }} Wohnanlage</h2>
 <table class="daten">
   {% if wa.wohneinheiten is not none %}<tr><td class="k">Wohneinheiten</td><td>{{ wa.wohneinheiten }}</td></tr>{% endif %}
   {% if wa.geschosse is not none %}<tr><td class="k">Geschosse</td><td>{{ wa.geschosse }}</td></tr>{% endif %}
@@ -125,7 +126,7 @@
 {% endif %}
 
 {% if objekt.zusatzadressen %}
-<h2>🚪 Zugänge / Stiegen</h2>
+<h2>{{ icon("door", size="xs") }} Zugänge / Stiegen</h2>
 <table class="daten">
   {% for z in objekt.zusatzadressen %}
   <tr><td class="k">{{ z.bezeichnung }}</td>
@@ -135,12 +136,12 @@
 {% endif %}
 
 {% if objekt.anfahrtsweg %}
-<h2>🚒 Anfahrtsweg</h2>
+<h2>{{ icon("firetruck", size="xs") }} Anfahrtsweg</h2>
 <div style="white-space:pre-wrap;">{{ objekt.anfahrtsweg }}</div>
 {% endif %}
 
 {% if objekt.informationen %}
-<h2>ℹ Informationen</h2>
+<h2>{{ icon("info-circle", size="xs") }} Informationen</h2>
 <div style="white-space:pre-wrap;">{{ objekt.informationen }}</div>
 {% endif %}
 
@@ -148,7 +149,7 @@
   <tr>
     <td style="width:75%;vertical-align:top;">
       {% if karte_datauri %}
-      <h2>🗺 Lagekarte</h2>
+      <h2>{{ icon("map", size="xs") }} Lagekarte</h2>
       <div class="karte"><img src="{{ karte_datauri }}" alt="Objektkarte"></div>
       {% if symbol_legende %}
       <div class="legende">

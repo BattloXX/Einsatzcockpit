@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="/static/css/leaflet.min.css">
   {% endif %}
   <style>
+{% include "pdf/_icon_styles.html" %}
     *, *:before, *:after {
       box-sizing: border-box;
       margin: 0;
@@ -183,7 +184,7 @@
 
 <div class="no-print print-bar">
   <a href="/lage/{{ lage.id }}/druck" class="print-btn" style="text-decoration:none;background:#374151;">← Druckauswahl</a>
-  <button class="print-btn" onclick="window.print()">🖨 Drucken</button>
+  <button class="print-btn" onclick="window.print()">{{ icon("printer", size="xs") }} Drucken</button>
   <span>A4 Hochformat · Einsatzstelle #{{ site.id }}</span>
   <span style="margin-left:auto;color:#6b7280;">{{ lage.name }}</span>
 </div>
@@ -194,7 +195,7 @@
 
 <div class="page">
   {% if lage.is_exercise %}
-  <div class="exercise-banner">⚠ ÜBUNG / SIMULATION – KEIN ECHTFALL</div>
+  <div class="exercise-banner">{{ icon("alert-triangle", size="xs") }} ÜBUNG / SIMULATION – KEIN ECHTFALL</div>
   {% endif %}
 
   {# ── Header ── #}

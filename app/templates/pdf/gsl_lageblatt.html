@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <style>
+{% include "pdf/_icon_styles.html" %}
   @page { size: A4 portrait; margin: 14mm 12mm; }
   body { font-family: Helvetica, Arial, sans-serif; font-size: 10pt; color: #111; }
   .kopf { border-bottom: 3px solid #b71921; padding-bottom: 6px; margin-bottom: 10px; }
@@ -19,7 +20,7 @@
 <body>
   <div class="kopf">
     {% if qr_datauri %}<div class="qr"><img src="{{ qr_datauri }}" alt="QR-Code Lageboard" style="width:28mm;height:28mm;"><br>Scannen → PIN eingeben → Lageboard</div>{% endif %}
-    <h1>&#x1F5FA; GSL-Lageblatt</h1>
+    <h1>{{ icon("map", size="sm") }} GSL-Lageblatt</h1>
     <div class="meta">
       {% if org %}{{ org.name }} · {% endif %}Stand: {{ now_str or '' }}
     </div>
