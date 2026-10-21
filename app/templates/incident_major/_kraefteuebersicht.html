@@ -8,6 +8,12 @@
 .dispatch-site-badge--green { background:rgba(24,169,87,.2); color:var(--green); }
 .dispatch-site-badge--done { background:rgba(24,169,87,.16); color:var(--green); }
 .dispatch-site-badge--red { background:rgba(216,48,48,.2); color:var(--red-light); }
+@media (max-width:760px) {
+  .res-abgerueckt .res-table thead { display:none; }
+  .res-abgerueckt .res-table tr { display:flex; flex-wrap:wrap; }
+  .res-abgerueckt .res-table td { min-width:0; max-width:100%; overflow-wrap:anywhere; }
+  .res-abgerueckt .res-table td:first-child { flex-basis:100%; }
+}
 </style>
 
 {# ── Einheiten-Karte (Makro) ──────────────────────────────────────────────── #}
@@ -222,7 +228,7 @@
   <div class="res-section" style="opacity:.65;">
     <div class="res-section__title">ABGERÜCKT ({{ kue.abgerueckt|length }})</div>
     <table class="res-table">
-      <thead><tr><th>Einheit</th><th>Typ</th><th>Abschnitt</th><th>Abgerückt</th></tr></thead>
+      <thead><tr><th>Einheit</th><th>Typ</th><th>Abschnitt</th><th>Abgerückt</th><th>Aktion</th></tr></thead>
       <tbody>
         {% for e in kue.abgerueckt %}
         <tr>
@@ -235,6 +241,17 @@
           </td>
           <td style="color:var(--text-muted);font-size:.75rem;white-space:nowrap;">
             {{ e.released_at|local_time if e.released_at else '–' }}
+          </td>
+          <td>
+            {% if can_edit and not e.verband_id and e.resource_type != 'verband' %}
+            <form hx-post="/lage/{{ lage.id }}/einheiten/{{ e.id }}/reaktivieren" hx-swap="none"
+                  hx-confirm="{{ e.label }} reaktivieren?"
+                  hx-on::after-request="if(event.detail.successful) htmx.trigger(document.body,'ressourceChanged')"
+                  style="margin:0;">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              <button type="submit" class="btn btn--xs btn--secondary">Reaktivieren</button>
+            </form>
+            {% endif %}
           </td>
         </tr>
         {% endfor %}
