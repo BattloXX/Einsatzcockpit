@@ -12,16 +12,28 @@ Bei Problemen: [Troubleshooting](Installation-Troubleshooting)
 
 ## Übersicht der Bereiche
 
-Nach dem Login erscheint die **Startseite** mit:
+Nach dem Login erscheint die **Übersicht** mit den laufenden Einsätzen und darunter den Kacheln
+aller Module, die für dich freigeschaltet sind.
 
-| Bereich | Erreichbar über | Beschreibung |
-|---------|----------------|-------------|
-| **Aktive Einsätze** | Startseite / `/` | Alle laufenden Einsätze als Kacheln |
-| **Einsatz-Board** | Klick auf Einsatz | Kanban-Board mit Fahrzeugen und Aufträgen |
-| **Atemschutz** | Board → Tab „Atemschutz" | AS-Überwachung für diesen Einsatz |
-| **Archiv** | Menü → Archiv | Abgeschlossene Einsätze, PDF-Download |
-| **Statistik** | Menü → Statistik | Auswertungen (nur Admin/EL) |
-| **Admin** | Menü → Admin | Benutzer, Fahrzeuge, API-Keys (nur Admin) |
+**Kopfzeile am PC:** Suche · Konsole · Lage · **Module ▾** · Wetter · Archiv, rechts Verwaltung
+(nur Admins), App installieren und dein Profil (Profil bearbeiten, Hilfe, Benutzer wechseln, Abmelden).
+
+**Am Handy:** Die Leiste unten führt zu Übersicht, Lage, neuem Einsatz, **Menü** und Profil. Im
+Menü stehen alle Bereiche und Module, im Profil die Kontoaktionen.
+
+Die Module sind im Menü und auf den Kacheln gleich geordnet, zuerst das, was man im Einsatz braucht:
+
+| Gruppe | Module |
+|---|---|
+| **Im Einsatz** | [Katastrophenpläne](Anwender-Katastrophenplaene), [Nachschlagewerke](Anwender-Nachschlagewerke), [Kontakte](Anwender-Kontaktverwaltung), [Straßensperren](Anwender-Strassensperren), [Förderstrecke](Anwender-Foerderstrecken-Planer) |
+| **Einsatzbegleitend** | [Fahrtenbuch](Anwender-Fahrtenbuch), [Atemschutz-Geräteprüfung](Anwender-Atemschutz-Geraetepruefung), [Drohne / UAS](Anwender-Drohne-UAS) |
+| **Verwaltung & Planung** | [Objekte](Anwender-Objekte), [Probenplan](Anwender-Probenplan), [Planspiele](Anwender-Planspiele), [Mailing](Anwender-Mailing-Kampagnen) |
+| **Auswertung** | [Statistik](Administration-Statistik-Dashboard) |
+
+Welche Module du siehst, hängt davon ab, was deine Organisation aktiviert hat und welche Rollen du
+hast. Ein laufender Einsatz öffnet sich mit einem Klick auf seine Kachel im
+[Einsatzboard](Anwender-Kanban-Board-bedienen); die [Atemschutzüberwachung](Anwender-Atemschutzueberwachung)
+ist dort ein eigener Reiter.
 
 ## Rollen und was sie dürfen
 

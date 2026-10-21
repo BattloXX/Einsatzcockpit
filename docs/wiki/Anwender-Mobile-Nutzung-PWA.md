@@ -36,7 +36,7 @@ Hintergrund weiter (erkennbar an der dauerhaften Benachrichtigung „SMS-Gateway
 
 ### Über die App
 
-Im Nutzer-Menü (Profil-Dropdown bzw. mobiles Menü) erscheint innerhalb der nativen Android-App
+Im Profil (Profil-Dropdown am PC bzw. Profil in der unteren Leiste am Handy) erscheint innerhalb der nativen Android-App
 der Eintrag **„Über die App"**. Dort werden die installierte und die aktuell verfügbare
 App-Version angezeigt, ein Update kann direkt heruntergeladen werden (wie beim SMS-Gateway-Status),
 und ist dieses Gerät als SMS-Gateway konfiguriert, führt ein Button direkt zum
