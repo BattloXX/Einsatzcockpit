@@ -1,6 +1,6 @@
 <div class="card" style="padding:16px;" x-data="{ edit: false }">
   <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;">
-    <h3 style="margin:0;">🔔 Benachrichtigung</h3>
+    <h3 style="margin:0;">{{ icon("bell", size="md") }} Benachrichtigung</h3>
     {% if ist_verwalter %}<button type="button" class="btn btn--ghost btn--xs" @click="edit = !edit">Bearbeiten</button>{% endif %}
   </div>
 

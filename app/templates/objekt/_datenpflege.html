@@ -1,7 +1,7 @@
 <div class="card" style="padding:16px;">
   <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
     <div>
-      <h3 style="margin:0 0 6px;">🔄 Datenpflege</h3>
+      <h3 style="margin:0 0 6px;">{{ icon("refresh", size="md") }} Datenpflege</h3>
       {% if aktualitaet == 'ueberfaellig' %}<span class="badge-pill badge-pill--red">{{ aktualitaet_labels[aktualitaet] }}</span>
       {% elif aktualitaet in ('bald_faellig', 'freigabe_erforderlich', 'pruefung_laeuft') %}<span class="badge-pill badge-pill--amber">{{ aktualitaet_labels[aktualitaet] }}</span>
       {% elif aktualitaet == 'aktuell' %}<span class="badge-pill badge-pill--green">{{ aktualitaet_labels[aktualitaet] }}</span>

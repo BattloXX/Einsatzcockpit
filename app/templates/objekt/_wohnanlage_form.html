@@ -42,7 +42,7 @@
         <label class="form-label">Hinweise</label>
         <textarea name="hinweise" class="form-input" rows="3">{{ wa.hinweise or '' if wa else '' }}</textarea>
         <p class="form-hint" style="color:#fbbf24;">
-          ⚠️ DSGVO: Nur einsatztaktische Hinweise — sparsam und sachlich formulieren.
+          {{ icon("alert-triangle", size="sm") }} DSGVO: Nur einsatztaktische Hinweise — sparsam und sachlich formulieren.
           Keine Gesundheitsdaten oder Personenlisten (z. B. „3. OG: Bewohner mit Gehhilfe" statt Namen/Diagnosen).
         </p>
       </div>

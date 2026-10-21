@@ -1,11 +1,11 @@
 <div class="card" style="padding:16px;">
-  <h3 style="margin-top:0;">🏷️ Objektmerkmale</h3>
+  <h3 style="margin-top:0;">{{ icon("tag", size="md") }} Objektmerkmale</h3>
   {% if objekt.merkmale %}
   <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
     {% for m in objekt.merkmale %}
     <div class="objekt-gefahr-chip">
       <span class="objekt-gefahr-chip__label">
-        {{ m.merkmal.icon or '🏷️' if m.merkmal else '🏷️' }} {{ m.merkmal.name if m.merkmal else '?' }}
+        {% if m.merkmal and m.merkmal.icon %}{{ m.merkmal.icon }}{% else %}{{ icon("tag", size="sm") }}{% endif %} {{ m.merkmal.name if m.merkmal else '?' }}
       </span>
       {% if m.hinweis %}<span class="text-muted" style="font-size:0.85em;">{{ m.hinweis }}</span>{% endif %}
       {% if ist_verwalter %}
@@ -13,7 +13,7 @@
             hx-target="#abschnitt-merkmale" hx-swap="innerHTML"
             hx-confirm="Merkmal entfernen?" style="display:inline;">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-        <button aria-label="Schließen" type="submit" class="objekt-gefahr-chip__del" title="Entfernen">×</button>
+        <button aria-label="Schließen" type="submit" class="objekt-gefahr-chip__del" title="Entfernen">{{ icon("x", size="xs") }}</button>
       </form>
       {% endif %}
     </div>

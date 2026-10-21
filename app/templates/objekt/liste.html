@@ -15,7 +15,7 @@
     'sort': key,
     'richtung': next_richtung
   } %}
-  <a class="objekt-sort-link" href="/objekte/?{{ params|urlencode }}">{{ label }}{% if sort == key %} {{ '▲' if richtung == 'asc' else '▼' }}{% endif %}</a>
+  <a class="objekt-sort-link" href="/objekte/?{{ params|urlencode }}">{{ label }}{% if sort == key %} {{ icon("chevron-up" if richtung == "asc" else "chevron-down", size="sm") }}{% endif %}</a>
 {% endmacro %}
 <style>
   .objekt-sort-link { color: inherit; text-decoration: none; cursor: pointer; white-space: nowrap; }
@@ -23,17 +23,17 @@
 <div class="page-content">
   <div class="page-header">
     <div>
-      <h1>🏢 Objekte</h1>
+      <h1>{{ modul_icon("objekte", size="md") }} Objekte</h1>
       <p class="text-muted">Einsatzrelevante Objekte mit BMA-Daten, Gefahren und Unterlagen</p>
     </div>
     <div style="display:flex;gap:8px;">
-      {% if can_view_kontakt_directory(request) %}<a href="/objekte/changelog" class="btn btn--ghost">📜 Änderungsprotokoll</a>{% endif %}
+      {% if can_view_kontakt_directory(request) %}<a href="/objekte/changelog" class="btn btn--ghost">{{ icon("history", size="sm") }} Änderungsprotokoll</a>{% endif %}
       {% if is_admin %}
       <a href="/objekte/kataloge" class="btn btn--ghost">Kataloge</a>
       {% endif %}
       {% if ist_verwalter %}
-      <a href="/objekte/bma-import" class="btn btn--ghost">🔥 BMA-Import</a>
-      <a href="/objekte/dokument-upload" class="btn btn--ghost">📄 Unterlagen hochladen</a>
+      <a href="/objekte/bma-import" class="btn btn--ghost">{{ icon("flame", size="sm") }} BMA-Import</a>
+      <a href="/objekte/dokument-upload" class="btn btn--ghost">{{ icon("file-text", size="sm") }} Unterlagen hochladen</a>
       <a href="/objekte/neu" class="btn btn--primary">+ Neues Objekt</a>
       {% endif %}
     </div>
@@ -130,9 +130,9 @@
         <td>
           {% if o.bma %}<span class="badge-pill badge-pill--amber" title="Brandmeldeanlage vorhanden">BMA</span>{% endif %}
           {% if o.bma and o.bma.schluesselsafe_vorhanden %}<span class="badge-pill badge-pill--green" title="Schlüsselsafe/FSD vorhanden">FSD</span>{% endif %}
-          {% if o.hat_merkmal('schluesselbox') %}<span class="badge-pill badge-pill--green" title="Schlüsselbox vorhanden">🔑</span>{% endif %}
+          {% if o.hat_merkmal('schluesselbox') %}<span class="badge-pill badge-pill--green" title="Schlüsselbox vorhanden">{{ icon("key", size="sm") }}</span>{% endif %}
           {% if o.hat_merkmal('brandschutzplan') %}<span class="badge-pill badge-pill--red" title="Brandschutzplan vorhanden">BSP</span>{% endif %}
-          {% if o.gefahren %}<span class="badge-pill badge-pill--red" title="{{ o.gefahren|length }} Gefahr(en) erfasst">⚠ {{ o.gefahren|length }}</span>{% endif %}
+          {% if o.gefahren %}<span class="badge-pill badge-pill--red" title="{{ o.gefahren|length }} Gefahr(en) erfasst">{{ icon("alert-triangle", size="sm") }} {{ o.gefahren|length }}</span>{% endif %}
           {% if not o.bma and not o.merkmale and not o.gefahren %}<span class="text-muted">–</span>{% endif %}
         </td>
         <td>
@@ -175,14 +175,14 @@
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
         <input type="hidden" name="objekt_ids" :value="auswahl.join(',')">
         <label class="checkbox-label"><input type="checkbox" name="mit_anhang" value="1"> inkl. „Bei Einsatz drucken"-Anhänge</label>
-        <button type="submit" class="btn btn--primary">🖨 Mappe drucken</button>
+        <button type="submit" class="btn btn--primary">{{ icon("printer", size="sm") }} Mappe drucken</button>
       </form>
       {% if ist_verwalter %}
       <form method="post" action="/objekte/bulk-freigeben"
             @submit="if (!confirm('Ausgewählte Entwurf-Objekte (' + auswahl.length + ') freigeben? Sie werden damit produktiv (Matching, Sync, Einsatzansicht).')) $event.preventDefault()">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
         <input type="hidden" name="objekt_ids" :value="auswahl.join(',')">
-        <button type="submit" class="btn btn--primary">✓ Freigeben</button>
+        <button type="submit" class="btn btn--primary">{{ icon("check", size="sm") }} Freigeben</button>
       </form>
       {% endif %}
       {% if is_admin %}
@@ -190,7 +190,7 @@
             @submit="if (!confirm('Ausgewählte Objekte (' + auswahl.length + ') unwiderruflich löschen? Alle Daten inkl. Dokumente gehen verloren.')) $event.preventDefault()">
         <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
         <input type="hidden" name="objekt_ids" :value="auswahl.join(',')">
-        <button type="submit" class="btn btn--danger">🗑 Löschen</button>
+        <button type="submit" class="btn btn--danger">{{ icon("trash", size="sm") }} Löschen</button>
       </form>
       {% endif %}
     </div>

@@ -3,7 +3,7 @@
 {% block content %}
 <div class="page-content" style="max-width:720px;">
   <div class="page-header">
-    <div><h1>📄 Objektunterlagen hochladen</h1></div>
+    <div><h1>{{ icon("file-text", size="md") }} Objektunterlagen hochladen</h1></div>
     <a href="/objekte/" class="btn btn--ghost">Zurück zur Liste</a>
   </div>
   <div class="card" style="padding:20px;">
@@ -23,7 +23,7 @@
   {% if ergebnisse %}
   <div class="card" style="padding:20px;margin-top:16px;">
     <h2>Ergebnisse</h2>
-    <ul>{% for e in ergebnisse %}<li>{% if e.ok %}✓{% else %}✗{% endif %} {{ e.dateiname }}: {{ e.meldung }}</li>{% endfor %}</ul>
+    <ul>{% for e in ergebnisse %}<li>{% if e.ok %}{{ icon("check", size="sm") }}{% else %}{{ icon("x", size="sm") }}{% endif %} {{ e.dateiname }}: {{ e.meldung }}</li>{% endfor %}</ul>
     {% if bma_queue_relevant %}
     <a href="/objekte/bma-import" class="btn btn--primary">Zu den BMA-Vorschlägen</a>
     {% endif %}

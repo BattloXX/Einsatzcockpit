@@ -22,7 +22,7 @@
       {% if gefahr_links %}{% set links = gefahr_links(g) %}
       {% if links %}
       <span style="display:flex;flex-wrap:wrap;gap:6px;margin-top:2px;">
-        {% for l in links %}<a href="{{ l.url }}" target="_blank" rel="noopener" class="btn btn--ghost btn--xs">🔗 {{ l.label }}</a>{% endfor %}
+        {% for l in links %}<a href="{{ l.url }}" target="_blank" rel="noopener" class="btn btn--ghost btn--xs">{{ icon("link", size="xs") }} {{ l.label }}</a>{% endfor %}
       </span>
       {% endif %}{% endif %}
     </div>
@@ -35,7 +35,7 @@
 {% if objekt.bma %}
 {% set bma = objekt.bma %}
 <div class="card objekt-einsatz-bma" style="padding:14px;margin-bottom:12px;">
-  <h3 style="margin:0 0 10px;">🔥 BMA &amp; Schlüssel</h3>
+  <h3 style="margin:0 0 10px;">{{ icon("flame", size="md") }} BMA &amp; Schlüssel</h3>
   <dl class="objekt-dl">
     {% if bma.bma_nummer %}<dt>BMA-Nr.</dt><dd><strong>{{ bma.bma_nummer }}</strong>{% if bma.rfl_nummer %} · RFL {{ bma.rfl_nummer }}{% endif %}</dd>{% endif %}
     {% if bma.bmz_standort %}<dt>BMZ</dt><dd>{{ bma.bmz_standort }}</dd>{% endif %}
@@ -55,7 +55,7 @@
 {% if dok_zaehler.get('bma_melderplan', 0) > 0 %}
 <a href="/objekte/{{ objekt.id }}/dokumente/viewer?art=bma_melderplan"
    class="card objekt-einsatz-kachel objekt-einsatz-kachel--melderplan">
-  <span style="font-size:1.6em;">🗂️</span>
+  <span style="font-size:1.6em;">{{ icon("folders", size="sm") }}</span>
   <div>
     <strong>Melderpläne / Laufkarten öffnen</strong>
     <div class="text-muted" style="font-size:0.85em;">{{ dok_zaehler.get('bma_melderplan') }} Seiten — im Viewer nach Melderlinie suchen</div>
@@ -66,7 +66,7 @@
 <!-- 4) Kontakte -->
 {% if einsatzkontakte %}
 <div class="card" style="padding:14px;margin-bottom:12px;">
-  <h3 style="margin:0 0 10px;">📞 Kontakte</h3>
+  <h3 style="margin:0 0 10px;">{{ modul_icon("kontakte", size="md") }} Kontakte</h3>
   <div style="display:flex;flex-direction:column;gap:10px;">
     {% for k in einsatzkontakte %}
     <div>
@@ -75,7 +75,7 @@
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">
         {% for tel in k.telefone %}
-        <a href="tel:{{ tel.nummer|tel }}" class="btn btn--primary objekt-einsatz-telbtn">📞 {% if tel.label %}{{ tel.label }}: {% endif %}{{ tel.nummer }}</a>
+        <a href="tel:{{ tel.nummer|tel }}" class="btn btn--primary objekt-einsatz-telbtn">{{ icon("phone", size="sm") }} {% if tel.label %}{{ tel.label }}: {% endif %}{{ tel.nummer }}</a>
         {% endfor %}
       </div>
     </div>
@@ -105,7 +105,7 @@
                    .then((d) => { this.treffer = d.treffer || []; this.geladen = true; this.laeuft = false; })
                    .catch(() => { this.laeuft = false; });
                } }">
-  <h3 style="margin:0 0 10px;">📄 Dokumente</h3>
+  <h3 style="margin:0 0 10px;">{{ icon("file-text", size="md") }} Dokumente</h3>
   <div class="ei-noprint" style="display:flex;gap:6px;margin-bottom:10px;">
     <input type="text" x-model="q" @keydown.enter.prevent="suchen()" class="form-input" style="flex:1;padding:6px 10px;"
            placeholder="In Dokumenten suchen (Raum, Melderlinie, Text …)">
@@ -131,7 +131,7 @@
   </template>
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;">
     <a href="/objekte/{{ objekt.id }}/dokumente/viewer" class="objekt-einsatz-kachel card" style="margin:0;">
-      <span style="font-size:1.3em;">📂</span>
+      <span style="font-size:1.3em;">{{ icon("folder-open", size="sm") }}</span>
       <div>
         <strong>Alle Dokumente ansehen</strong>
         <div class="text-muted" style="font-size:0.8em;">{{ dok_gesamt }} Seiten im Viewer öffnen</div>
@@ -140,7 +140,7 @@
     {% for code, label in dokumentarten.items() %}
     {% if dok_zaehler.get(code, 0) > 0 %}
     <a href="/objekte/{{ objekt.id }}/dokumente/viewer?art={{ code }}" class="objekt-einsatz-kachel card" style="margin:0;">
-      <span style="font-size:1.3em;">📄</span>
+      <span style="font-size:1.3em;">{{ icon("file-text", size="sm") }}</span>
       <div>
         <strong>{{ label }}</strong>
         <div class="text-muted" style="font-size:0.8em;">{{ dok_zaehler.get(code) }} Seiten</div>
@@ -156,11 +156,11 @@
 {% if objekt.anfahrtsweg or objekt.informationen %}
 <div class="card" style="padding:14px;margin-bottom:12px;">
   {% if objekt.anfahrtsweg %}
-  <h3 style="margin:0 0 6px;">🚒 Anfahrtsweg</h3>
+  <h3 style="margin:0 0 6px;">{{ icon("firetruck", size="md") }} Anfahrtsweg</h3>
   <p style="white-space:pre-wrap;margin:0 0 12px;">{{ objekt.anfahrtsweg }}</p>
   {% endif %}
   {% if objekt.informationen %}
-  <h3 style="margin:0 0 6px;">ℹ️ Informationen</h3>
+  <h3 style="margin:0 0 6px;">{{ icon("info-circle", size="md") }} Informationen</h3>
   <p style="white-space:pre-wrap;margin:0;">{{ objekt.informationen }}</p>
   {% endif %}
 </div>

@@ -1,5 +1,5 @@
 <div class="card objekt-gefahr-card" style="padding:16px;">
-  <h3 style="margin-top:0;">⚠️ Gefahren</h3>
+  <h3 style="margin-top:0;">{{ icon("alert-triangle", size="md") }} Gefahren</h3>
   {% if objekt.gefahren %}
   <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:12px;">
     {% for g in objekt.gefahren %}
@@ -14,12 +14,12 @@
         {% if g.gefahrklasse %}<span class="badge-pill badge-pill--gray">Kl. {{ g.gefahrklasse }}</span>{% endif %}
         {% if ist_verwalter %}
         <span style="margin-left:auto;display:flex;gap:6px;">
-          <button type="button" class="btn btn--ghost btn--xs" @click="edit = !edit">✎</button>
+          <button type="button" class="btn btn--ghost btn--xs" @click="edit = !edit" aria-label="Bearbeiten">{{ icon("pencil", size="xs") }}</button>
           <form hx-post="/objekte/{{ objekt.id }}/gefahren/{{ g.id }}/loeschen"
                 hx-target="#abschnitt-gefahren" hx-swap="innerHTML"
                 hx-confirm="Gefahr entfernen?" style="display:inline;">
             <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-            <button aria-label="Schließen" type="submit" class="btn btn--danger btn--xs" title="Entfernen">×</button>
+            <button aria-label="Schließen" type="submit" class="btn btn--danger btn--xs" title="Entfernen">{{ icon("x", size="xs") }}</button>
           </form>
         </span>
         {% endif %}
@@ -30,7 +30,7 @@
       {% if links %}
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;">
         {% for l in links %}
-        <a href="{{ l.url }}" target="_blank" rel="noopener" class="btn btn--ghost btn--xs">🔗 {{ l.label }}</a>
+        <a href="{{ l.url }}" target="_blank" rel="noopener" class="btn btn--ghost btn--xs">{{ icon("link", size="xs") }} {{ l.label }}</a>
         {% endfor %}
       </div>
       {% endif %}
@@ -47,7 +47,7 @@
         <div style="display:grid;grid-template-columns:0.7fr auto 2fr;gap:8px;align-items:end;">
           <div class="form-group" style="margin:0;"><label class="form-label">UN-Nr.</label>
             <input type="text" name="un_nummer" class="form-input" maxlength="10" x-model="un"></div>
-          <button type="button" class="btn btn--ghost btn--xs" @click="anreichern()" :disabled="laeuft">🔎 Anreichern</button>
+          <button type="button" class="btn btn--ghost btn--xs" @click="anreichern()" :disabled="laeuft">{{ icon("search", size="xs") }} Anreichern</button>
           <div class="form-group" style="margin:0;"><label class="form-label">Stoffname</label>
             <input type="text" name="stoffname" class="form-input" maxlength="200" x-model="stoffname"></div>
         </div>
@@ -65,7 +65,7 @@
             <div style="display:flex;gap:6px;margin-bottom:4px;">
               <input type="text" name="link_label" class="form-input" style="flex:1;" placeholder="Bezeichnung" x-model="l.label">
               <input type="text" name="link_url" class="form-input" style="flex:2;" placeholder="https://…" x-model="l.url">
-              <button aria-label="Schließen" type="button" class="btn btn--ghost btn--xs" @click="links.splice(i,1)">×</button>
+              <button aria-label="Schließen" type="button" class="btn btn--ghost btn--xs" @click="links.splice(i,1)">{{ icon("x", size="xs") }}</button>
             </div>
           </template>
           <button type="button" class="btn btn--ghost btn--xs" @click="links.push({label:'',url:''})">+ Link</button>
@@ -103,7 +103,7 @@
         <label class="form-label">UN-Nr.</label>
         <input type="text" name="un_nummer" class="form-input" maxlength="10" placeholder="1203" x-model="un">
       </div>
-      <button type="button" class="btn btn--ghost btn--xs" @click="anreichern()" :disabled="laeuft">🔎 Anreichern</button>
+      <button type="button" class="btn btn--ghost btn--xs" @click="anreichern()" :disabled="laeuft">{{ icon("search", size="xs") }} Anreichern</button>
     </div>
     <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;margin-top:8px;">
       <div class="form-group" style="margin:0;"><label class="form-label">Stoffname</label>
@@ -121,7 +121,7 @@
         <div style="display:flex;gap:6px;margin-bottom:4px;">
           <input type="text" name="link_label" class="form-input" style="flex:1;" placeholder="Bezeichnung" x-model="l.label">
           <input type="text" name="link_url" class="form-input" style="flex:2;" placeholder="https://…" x-model="l.url">
-          <button aria-label="Schließen" type="button" class="btn btn--ghost btn--xs" @click="links.splice(i,1)">×</button>
+          <button aria-label="Schließen" type="button" class="btn btn--ghost btn--xs" @click="links.splice(i,1)">{{ icon("x", size="xs") }}</button>
         </div>
       </template>
       <button type="button" class="btn btn--ghost btn--xs" @click="links.push({label:'',url:''})">+ Link</button>

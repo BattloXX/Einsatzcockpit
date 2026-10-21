@@ -12,110 +12,106 @@ Kontexte: `markup`, `js`, `python`, `css`, `option` (Emoji in `<option>` → ent
 
 | Kontext | Treffer |
 |---|---:|
-| markup | 802 |
+| markup | 692 |
 | python | 276 |
 | kommentar | 208 |
 | extern | 60 |
 | js | 28 |
-| css | 9 |
+| css | 8 |
 | option | 6 |
 
 ## Zuordnung
 
 | Zeichen | Ziel | Treffer | migrieren* | Dateien (Auszug) |
 |---|---|---:|---:|---|
-| → | `=text` | 487 | 285 | `cli.py`, `config.py`, `core/crypto.py`, `core/dependencies.py` … (+169) |
-| ⚠ | `alert-triangle` | 74 | 66 | `models/objekt.py`, `routers/ui_incident.py`, `routers/ui_infoscreen_alarm.py`, `routers/ui_lagefuehrung.py` … (+36) |
-| ✓ | `check` | 60 | 50 | `cli.py`, `models/sms.py`, `routers/ui_archive.py`, `routers/ui_termin.py` … (+31) |
-| ← | `=text` | 47 | 45 | `static/css/tailwind.input.css`, `static/js/katplan_editor.js`, `templates/admin/device_token_detail.html`, `templates/admin/foerder_pumpe_form.html` … (+40) |
-| 🖨 | `printer` | 31 | 31 | `routers/ui_druck.py`, `templates/_print_dialog.html`, `templates/archive/detail.html`, `templates/gateway/_druckhistorie.html` … (+20) |
-| 📄 | `file-text` | 31 | 31 | `services/katplan_qs_service.py`, `services/katplan_typen.py`, `services/site_pages.py`, `static/js/rettungskarten_katalog.js` … (+17) |
-| 📍 | `map-pin` | 25 | 25 | `models/major_incident.py`, `services/katplan_qs_service.py`, `services/katplan_typen.py`, `templates/_macros/address_picker.html` … (+14) |
-| ✗ | `x` | 21 | 9 | `cli.py`, `services/sms_inbox_service.py`, `static/js/probe-appell.js`, `templates/admin/push_notifications.html` … (+2) |
-| 🚒 | `firetruck` | 18 | 14 | `routers/ui_teams_bot.py`, `services/alarm_outbox.py`, `services/gefahrgut_service.py`, `services/objekt_service.py` … (+12) |
-| ↔ | `=text` | 17 | 15 | `models/major_incident.py`, `models/master.py`, `models/objekt.py`, `routers/ui_major_incident.py` … (+12) |
+| → | `=text` | 485 | 283 | `cli.py`, `config.py`, `core/crypto.py`, `core/dependencies.py` … (+168) |
+| ⚠ | `alert-triangle` | 71 | 63 | `models/objekt.py`, `routers/ui_incident.py`, `routers/ui_infoscreen_alarm.py`, `routers/ui_lagefuehrung.py` … (+34) |
+| ✓ | `check` | 49 | 39 | `cli.py`, `models/sms.py`, `routers/ui_archive.py`, `routers/ui_termin.py` … (+25) |
+| ← | `=text` | 44 | 42 | `static/js/katplan_editor.js`, `templates/admin/device_token_detail.html`, `templates/admin/foerder_pumpe_form.html`, `templates/admin/foerder_pumpen_vorlagen.html` … (+37) |
+| 🖨 | `printer` | 28 | 28 | `routers/ui_druck.py`, `templates/_print_dialog.html`, `templates/archive/detail.html`, `templates/gateway/_druckhistorie.html` … (+17) |
+| 📍 | `map-pin` | 24 | 24 | `models/major_incident.py`, `services/katplan_qs_service.py`, `services/katplan_typen.py`, `templates/_macros/address_picker.html` … (+13) |
+| ✗ | `x` | 20 | 8 | `cli.py`, `services/sms_inbox_service.py`, `static/js/probe-appell.js`, `templates/admin/push_notifications.html` … (+1) |
+| 📄 | `file-text` | 18 | 18 | `services/katplan_qs_service.py`, `services/katplan_typen.py`, `services/site_pages.py`, `static/js/rettungskarten_katalog.js` … (+10) |
+| 🚒 | `firetruck` | 17 | 13 | `routers/ui_teams_bot.py`, `services/alarm_outbox.py`, `services/gefahrgut_service.py`, `services/objekt_service.py` … (+11) |
+| ↔ | `=text` | 16 | 14 | `models/major_incident.py`, `models/master.py`, `models/objekt.py`, `routers/ui_major_incident.py` … (+11) |
 | ☰ | `menu-2` | 15 | 15 | `templates/admin/default_messages.html`, `templates/admin/dispatch_order.html`, `templates/admin/lage_hints.html`, `templates/admin/message_suggestions.html` … (+1) |
-| 🔥 | `flame` | 14 | 13 | `models/objekt.py`, `services/objekt_service.py`, `services/weather_service.py`, `templates/gateway/druckregeln.html` … (+6) |
 | 📋 | `clipboard-list` | 14 | 14 | `services/incident_service.py`, `services/site_pages.py`, `templates/admin/device_tokens.html`, `templates/admin/foerder_pumpen.html` … (+7) |
 | ● | `=status` | 14 | 14 | `templates/admin/settings.html`, `templates/incident_major/karte.html`, `templates/katplan/_design.html`, `templates/pdf/foerderstrecke.html` |
 | 💧 | `droplet` | 12 | 11 | `models/major_incident.py`, `services/objekt_service.py`, `templates/foerderstrecke/maschinist.html`, `templates/foerderstrecke/wizard.html` … (+2) |
 | ↓ | `=text` | 12 | 12 | `routers/ui_major_incident.py`, `services/funkjournal_service.py`, `templates/admin/device_tokens.html`, `templates/admin/lage_hints.html` … (+8) |
-| 🔗 | `link` | 12 | 12 | `services/katplan_qs_service.py`, `static/js/nachschlagewerke.js`, `templates/admin/vehicles.html`, `templates/foerderstrecke/wizard.html` … (+8) |
-| 🗺 | `map` | 12 | 11 | `services/teams_card.py`, `templates/admin/gsl_einstellungen.html`, `templates/admin/system_settings.html`, `templates/gateway/druckregeln.html` … (+8) |
 | 🌧 | `cloud-rain` | 12 | 12 | `templates/objekt/infoscreen_alarm.html`, `templates/weather/_data_section.html`, `templates/weather/index.html` |
 | ⇒ | `=text` | 11 | 4 | `config.py`, `models/master.py`, `routers/api_weather.py`, `routers/ui_settings.py` … (+4) |
-| ✕ | `x` | 11 | 11 | `static/js/annotate.js`, `templates/admin/device_tokens.html`, `templates/gateway/agent_detail.html`, `templates/gateway/detail.html` … (+5) |
 | 🎯 | `target` | 11 | 10 | `templates/admin/foerder_kalibrierung.html`, `templates/foerderstrecke/maschinist.html`, `templates/foerderstrecke/wizard.html`, `templates/gateway/agent_detail.html` … (+2) |
-| 📞 | `phone` | 11 | 10 | `templates/incident_major/public_report.html`, `templates/incident_major/public_sms_error.html`, `templates/incident_major/public_verify.html`, `templates/objekt/_einsatz_inhalt.html` … (+5) |
-| ✨ | `sparkles` | 10 | 10 | `routers/ui_incident.py`, `templates/admin/ai_prompts.html`, `templates/admin/sysadmin_quotas.html`, `templates/admin/system_settings.html` … (+2) |
+| 🔥 | `flame` | 10 | 9 | `models/objekt.py`, `services/objekt_service.py`, `services/weather_service.py`, `templates/gateway/druckregeln.html` … (+2) |
+| 🔗 | `link` | 10 | 10 | `services/katplan_qs_service.py`, `static/js/nachschlagewerke.js`, `templates/admin/vehicles.html`, `templates/foerderstrecke/wizard.html` … (+6) |
 | ✅ | `circle-check` | 10 | 8 | `services/katplan_typen.py`, `services/road_closure_notify_service.py`, `templates/admin/wasserstellen.html`, `templates/foerderstrecke/wizard.html` … (+4) |
 | 👥 | `users` | 10 | 10 | `services/site_pages.py`, `templates/admin/gsl_einstellungen.html`, `templates/admin/settings.html`, `templates/admin/system_settings.html` … (+4) |
-| ✎ | `pencil` | 10 | 10 | `templates/admin/medienverwaltung.html`, `templates/gateway/detail.html`, `templates/objekt/_bma.html`, `templates/objekt/_gefahren.html` … (+4) |
 | ⚡ | `bolt` | 9 | 9 | `models/major_incident.py`, `models/objekt.py`, `services/objekt_service.py`, `services/weather_service.py` … (+3) |
-| ↑ | `=text` | 9 | 9 | `routers/ui_major_incident.py`, `services/funkjournal_service.py`, `templates/admin/lage_hints.html`, `templates/incident_major/_funkjournal_rows.html` … (+5) |
-| 🔎 | `zoom-in` | 9 | 9 | `templates/admin/members.html`, `templates/admin/wasserstellen.html`, `templates/gateway/detail.html`, `templates/nachschlagewerke/rettungskarten.html` … (+4) |
-| 📱 | `device-mobile` | 8 | 8 | `templates/admin/device_tokens.html`, `templates/incident_major/public_report.html`, `templates/incident_major/public_verify.html`, `templates/objekt/detail.html` |
+| ↑ | `=text` | 8 | 8 | `routers/ui_major_incident.py`, `services/funkjournal_service.py`, `templates/admin/lage_hints.html`, `templates/incident_major/_funkjournal_rows.html` … (+4) |
+| 🗺 | `map` | 8 | 7 | `services/teams_card.py`, `templates/admin/gsl_einstellungen.html`, `templates/admin/system_settings.html`, `templates/gateway/druckregeln.html` … (+4) |
 | ❄ | `snowflake` | 7 | 7 | `models/objekt.py`, `services/objekt_service.py`, `services/weather_service.py`, `templates/objekt/infoscreen_alarm.html` |
-| ↗ | `external-link` | 7 | 7 | `templates/admin/dibos_einsaetze.html`, `templates/admin/page_edit.html`, `templates/admin/pages_list.html`, `templates/annotate/editor.html` … (+1) |
-| 🚨 | `urgent` | 6 | 5 | `routers/api_v1.py`, `services/teams_card.py`, `templates/objekt/_einsaetze.html`, `templates/objekt/einsatz.html` … (+2) |
-| 🏢 | `building` | 6 | 6 | `services/katplan_typen.py`, `templates/gateway/druckregeln.html`, `templates/incident/lagefuehrung_druck.html`, `templates/katplan/_links_anzeige.html` … (+2) |
-| 🔑 | `key` | 6 | 6 | `services/objekt_service.py`, `templates/gateway/agent_detail.html`, `templates/gateway/detail.html`, `templates/objekt/infoscreen_alarm.html` … (+2) |
+| ✨ | `sparkles` | 7 | 7 | `routers/ui_incident.py`, `templates/admin/ai_prompts.html`, `templates/admin/sysadmin_quotas.html`, `templates/admin/system_settings.html` … (+1) |
+| 📱 | `device-mobile` | 7 | 7 | `templates/admin/device_tokens.html`, `templates/incident_major/public_report.html`, `templates/incident_major/public_verify.html` |
 | ➜ | `=fw` | 6 | 6 | `services/objekt_symbol_service.py`, `static/js/lagefuehrung.js`, `static/js/objekt_karte.js` |
-| ✉ | `mail` | 6 | 6 | `static/js/probe-appell.js`, `templates/gateway/druckregeln.html`, `templates/objekt/_kontakte.html`, `templates/probenplanung/teilnehmer_appell.html` |
+| ✕ | `x` | 6 | 6 | `static/js/annotate.js`, `templates/admin/device_tokens.html`, `templates/gateway/agent_detail.html`, `templates/gateway/detail.html` … (+2) |
 | 📥 | `inbox` | 6 | 6 | `templates/admin/backup.html`, `templates/admin/einsatz_import.html`, `templates/admin/gsl_einstellungen.html`, `templates/admin/konfig.html` … (+2) |
+| ↗ | `external-link` | 6 | 6 | `templates/admin/dibos_einsaetze.html`, `templates/admin/page_edit.html`, `templates/admin/pages_list.html`, `templates/annotate/editor.html` |
 | ⚙ | `settings` | 6 | 6 | `templates/gateway/_tabs.html`, `templates/gateway/agent_detail.html`, `templates/gateway/detail.html`, `templates/gateway/druckregeln.html` … (+1) |
-| 🏷 | `tag` | 6 | 5 | `templates/objekt/_merkmale.html`, `templates/pdf/_emoji_font_face.html`, `templates/pdf/lagebericht.html`, `templates/pdf/objektblatt.html` |
+| 📞 | `phone` | 6 | 5 | `templates/incident_major/public_report.html`, `templates/incident_major/public_sms_error.html`, `templates/incident_major/public_verify.html`, `templates/pdf/_emoji_font_face.html` … (+2) |
 | 🌦 | `cloud-rain` | 6 | 6 | `templates/objekt/infoscreen_alarm.html`, `templates/objekt/infoscreen_verwaltung.html`, `templates/weather/_data_section.html`, `templates/weather/index.html` |
 | 🚧 | `barrier-block` | 5 | 2 | `models/major_incident.py`, `services/road_closure_notify_service.py`, `templates/incident_major/public_report.html` |
 | ☀ | `sun` | 5 | 5 | `models/objekt.py`, `services/objekt_service.py`, `templates/objekt/infoscreen_alarm.html`, `templates/weather/_data_section.html` |
+| 🏢 | `building` | 5 | 5 | `services/katplan_typen.py`, `templates/gateway/druckregeln.html`, `templates/incident/lagefuehrung_druck.html`, `templates/katplan/_links_anzeige.html` … (+1) |
 | ⛈ | `cloud-storm` | 5 | 5 | `services/weather_service.py`, `templates/objekt/infoscreen_alarm.html` |
-| ▲ | `chevron-up` | 5 | 5 | `templates/admin/device_tokens.html`, `templates/admin/medienverwaltung.html`, `templates/admin/members.html`, `templates/admin/wasserstellen.html` … (+1) |
-| ▼ | `chevron-down` | 5 | 5 | `templates/admin/device_tokens.html`, `templates/admin/medienverwaltung.html`, `templates/admin/members.html`, `templates/admin/wasserstellen.html` … (+1) |
+| ✉ | `mail` | 5 | 5 | `static/js/probe-appell.js`, `templates/gateway/druckregeln.html`, `templates/probenplanung/teilnehmer_appell.html` |
 | 🎬 | `movie` | 5 | 5 | `templates/admin/medienverwaltung.html`, `templates/media/gallery.html`, `templates/pdf/_emoji_font_face.html`, `templates/pdf/incident_report.html` |
-| 🔒 | `lock` | 5 | 5 | `templates/admin/medienverwaltung.html`, `templates/objekt/kataloge.html`, `templates/verleih/_ausleihe_detail.html`, `templates/verleih/_ausleihe_form.html` |
-| 🗑 | `trash` | 5 | 5 | `templates/annotate/editor.html`, `templates/archive/detail.html`, `templates/gateway/agent_detail.html`, `templates/gateway/detail.html` … (+1) |
+| 🔎 | `zoom-in` | 5 | 5 | `templates/admin/members.html`, `templates/admin/wasserstellen.html`, `templates/gateway/detail.html`, `templates/nachschlagewerke/rettungskarten.html` … (+1) |
 | ☣ | `biohazard` | 4 | 4 | `models/major_incident.py`, `templates/nachschlagewerke/gefahrgut.html`, `templates/nachschlagewerke/gefahrgut_detail.html`, `templates/nachschlagewerke/start.html` |
+| 🚨 | `urgent` | 4 | 3 | `routers/api_v1.py`, `services/teams_card.py`, `templates/public/alarm_summary.html`, `templates/termin/liste.html` |
 | 📦 | `package` | 4 | 4 | `services/katplan_typen.py`, `templates/admin/backup.html`, `templates/admin/gsl_einstellungen.html`, `templates/admin/konfig.html` |
+| 🔑 | `key` | 4 | 4 | `services/objekt_service.py`, `templates/gateway/agent_detail.html`, `templates/gateway/detail.html`, `templates/objekt/infoscreen_alarm.html` |
 | 🫁 | `lungs` | 4 | 4 | `services/site_pages.py`, `templates/admin/settings.html`, `templates/archive/detail.html` |
 | 📎 | `paperclip` | 4 | 3 | `templates/admin/_mail_eingang_content.html`, `templates/katplan/_baum.html`, `templates/mailing/campaign_detail.html`, `templates/pdf/incident_report.html` |
 | 📡 | `antenna` | 4 | 4 | `templates/admin/device_tokens.html` |
+| ▲ | `chevron-up` | 4 | 4 | `templates/admin/device_tokens.html`, `templates/admin/medienverwaltung.html`, `templates/admin/members.html`, `templates/admin/wasserstellen.html` |
+| ▼ | `chevron-down` | 4 | 4 | `templates/admin/device_tokens.html`, `templates/admin/medienverwaltung.html`, `templates/admin/members.html`, `templates/admin/wasserstellen.html` |
 | 🚰 | `fire-hydrant` | 4 | 4 | `templates/admin/foerder_pumpen.html`, `templates/foerderstrecke/maschinist.html`, `templates/foerderstrecke/wizard.html`, `templates/public/alarm_summary.html` |
 | 🕐 | `clock` | 4 | 4 | `templates/admin/gsl_einstellungen.html`, `templates/admin/system_settings.html`, `templates/archive/detail.html` |
-| ↻ | `refresh` | 4 | 4 | `templates/admin/server_log.html`, `templates/archive/detail.html`, `templates/objekt/_dokumente.html`, `templates/objekt/viewer.html` |
+| 🗑 | `trash` | 4 | 4 | `templates/annotate/editor.html`, `templates/archive/detail.html`, `templates/gateway/agent_detail.html`, `templates/gateway/detail.html` |
 | ▶ | `player-play` | 4 | 4 | `templates/foerderstrecke/maschinist.html`, `templates/media/gallery.html`, `templates/weather/index.html` |
 | ▸ | `chevron-right` | 4 | 4 | `templates/foerderstrecke/wizard.html`, `templates/gateway/druckregeln.html`, `templates/weather/index.html` |
-| 📜 | `history` | 4 | 4 | `templates/objekt/_protokoll.html`, `templates/objekt/changelog.html`, `templates/objekt/liste.html`, `templates/pdf/lagebericht.html` |
 | 🌊 | `ripple` | 3 | 3 | `models/major_incident.py`, `services/weather_service.py` |
-| 💥 | `bomb` | 3 | 3 | `models/objekt.py`, `services/objekt_service.py`, `templates/objekt/kataloge.html` |
 | 🧪 | `flask` | 3 | 3 | `models/objekt.py`, `services/objekt_service.py`, `templates/gateway/druckregeln.html` |
 | 👤 | `user` | 3 | 3 | `services/katplan_qs_service.py`, `services/katplan_typen.py`, `templates/katplan/_links_anzeige.html` |
 | 🔀 | `arrows-shuffle` | 3 | 3 | `services/katplan_typen.py`, `templates/gateway/detail.html` |
 | 📻 | `radio` | 3 | 3 | `services/objekt_service.py`, `templates/admin/gsl_einstellungen.html`, `templates/admin/system_settings.html` |
 | 🖥 | `device-desktop` | 3 | 1 | `services/teams_card.py`, `templates/archive/detail.html` |
 | 🧵 | `messages` | 3 | 3 | `templates/admin/foerder_schlaeuche.html`, `templates/foerderstrecke/maschinist.html`, `templates/foerderstrecke/wizard.html` |
-| 🗂 | `folders` | 3 | 3 | `templates/admin/gsl_einstellungen.html`, `templates/admin/system_settings.html`, `templates/objekt/_einsatz_inhalt.html` |
 | 🖼 | `photo` | 3 | 3 | `templates/admin/medienverwaltung.html`, `templates/admin/page_edit.html`, `templates/media/gallery.html` |
 | 💾 | `device-floppy` | 3 | 3 | `templates/admin/medienverwaltung.html`, `templates/admin/org_backup.html`, `templates/admin/sysadmin_quotas.html` |
+| 🔒 | `lock` | 3 | 3 | `templates/admin/medienverwaltung.html`, `templates/verleih/_ausleihe_detail.html`, `templates/verleih/_ausleihe_form.html` |
 | ✖ | `x` | 3 | 3 | `templates/annotate/editor.html`, `templates/gateway/_druckhistorie.html` |
-| 🧾 | `receipt` | 3 | 3 | `templates/archive/detail.html`, `templates/gateway/_druckhistorie.html`, `templates/objekt/_dokumente.html` |
 | 📊 | `chart-bar` | 3 | 3 | `templates/archive/detail.html`, `templates/gateway/druckregeln.html`, `templates/termin/detail.html` |
-| ↺ | `rotate` | 3 | 3 | `templates/foerderstrecke/wizard.html`, `templates/objekt/_dokumente.html`, `templates/objekt/viewer.html` |
 | 🕓 | `clock` | 3 | 3 | `templates/gateway/agent_detail.html`, `templates/gateway/detail.html` |
 | 🚑 | `ambulance` | 3 | 3 | `templates/nachschlagewerke/rettungskarten.html`, `templates/nachschlagewerke/start.html`, `templates/objekt/infoscreen_alarm.html` |
-| 🏘 | `buildings` | 3 | 3 | `templates/objekt/_wohnanlage.html`, `templates/pdf/_emoji_font_face.html`, `templates/pdf/objektblatt.html` |
-| 🚪 | `door` | 3 | 3 | `templates/objekt/_zusatzadressen.html`, `templates/pdf/_emoji_font_face.html`, `templates/pdf/objektblatt.html` |
 | 🌨 | `cloud-snow` | 3 | 3 | `templates/objekt/infoscreen_alarm.html` |
+| 🏷 | `tag` | 3 | 2 | `templates/pdf/_emoji_font_face.html`, `templates/pdf/lagebericht.html`, `templates/pdf/objektblatt.html` |
 | 📅 | `calendar` | 3 | 3 | `templates/probenplanung/_dashboard_kachel.html`, `templates/termin/liste.html` |
+| 💥 | `bomb` | 2 | 2 | `models/objekt.py`, `services/objekt_service.py` |
 | 🅿 | `parking` | 2 | 2 | `services/objekt_service.py`, `templates/pdf/_emoji_font_face.html` |
 | ✏ | `pencil` | 2 | 1 | `services/road_closure_notify_service.py`, `templates/annotate/editor.html` |
 | 🔁 | `repeat` | 2 | 1 | `services/road_closure_notify_service.py`, `templates/gateway/agent_detail.html` |
 | 📨 | `mail-forward` | 2 | 1 | `services/site_pages.py`, `templates/mailing/lists_index.html` |
 | ○ | `=status` | 2 | 2 | `static/js/probe-appell.js`, `templates/probenplanung/teilnehmer_appell.html` |
 | 💻 | `device-laptop` | 2 | 2 | `templates/_print_dialog.html`, `templates/gateway/agent_detail.html` |
+| 🗂 | `folders` | 2 | 2 | `templates/admin/gsl_einstellungen.html`, `templates/admin/system_settings.html` |
+| ✎ | `pencil` | 2 | 2 | `templates/admin/medienverwaltung.html`, `templates/gateway/detail.html` |
 | 🔌 | `plug` | 2 | 2 | `templates/admin/org_backup.html`, `templates/gateway/detail.html` |
+| ↻ | `refresh` | 2 | 2 | `templates/admin/server_log.html`, `templates/archive/detail.html` |
 | ⬇ | `download` | 2 | 2 | `templates/admin/server_log.html`, `templates/stats/fahrtenbuch.html` |
 | 🗓 | `calendar-event` | 2 | 2 | `templates/admin/settings.html`, `templates/termin/detail.html` |
 | ▭ | `square` | 2 | 2 | `templates/annotate/editor.html`, `templates/incident_major/karte.html` |
+| 🧾 | `receipt` | 2 | 2 | `templates/archive/detail.html`, `templates/gateway/_druckhistorie.html` |
 | ② | `=text` | 2 | 2 | `templates/foerderstrecke/wizard.html` |
 | ① | `=text` | 2 | 2 | `templates/foerderstrecke/wizard.html` |
 | 🛣 | `route` | 2 | 2 | `templates/foerderstrecke/wizard.html` |
@@ -128,11 +124,11 @@ Kontexte: `markup`, `js`, `python`, `css`, `option` (Emoji in `<option>` → ent
 | △ | `=fw` | 2 | 2 | `templates/incident_major/druck_bericht.html`, `templates/incident_major/karte.html` |
 | ◇ | `=fw` | 2 | 2 | `templates/incident_major/druck_bericht.html`, `templates/incident_major/karte.html` |
 | 📷 | `camera` | 2 | 2 | `templates/incident_major/public_report.html`, `templates/verleih/_ausleihe_detail.html` |
-| 🔄 | `refresh` | 2 | 2 | `templates/objekt/_datenpflege.html`, `templates/objekt/detail.html` |
-| ⏳ | `hourglass` | 2 | 2 | `templates/objekt/_dokumente.html` |
 | ❌ | `circle-x` | 2 | 2 | `templates/objekt/infoscreen_alarm.html` |
 | 🌫 | `mist` | 2 | 2 | `templates/objekt/infoscreen_alarm.html` |
 | 🌡 | `temperature` | 2 | 2 | `templates/objekt/infoscreen_alarm.html` |
+| 🏘 | `buildings` | 2 | 2 | `templates/pdf/_emoji_font_face.html`, `templates/pdf/objektblatt.html` |
+| 🚪 | `door` | 2 | 2 | `templates/pdf/_emoji_font_face.html`, `templates/pdf/objektblatt.html` |
 | ⏸ | `player-pause` | 2 | 2 | `templates/weather/index.html` |
 | 🚗 | `car` | 1 | 1 | `middleware/csrf.py` |
 | ⛰ | `mountain` | 1 | 1 | `models/major_incident.py` |
@@ -174,6 +170,7 @@ Kontexte: `markup`, `js`, `python`, `css`, `option` (Emoji in `<option>` → ent
 | ↷ | `arrow-forward-up` | 1 | 1 | `templates/annotate/editor.html` |
 | 🧍 | `user-check` | 1 | 1 | `templates/archive/detail.html` |
 | ◀ | `chevron-left` | 1 | 1 | `templates/foerderstrecke/maschinist.html` |
+| ↺ | `rotate` | 1 | 1 | `templates/foerderstrecke/wizard.html` |
 | ⏹ | `player-stop` | 1 | 1 | `templates/foerderstrecke/wizard.html` |
 | ✔ | `check` | 1 | 1 | `templates/gateway/_druckhistorie.html` |
 | ⛔ | `ban` | 1 | 1 | `templates/gateway/_druckregel_simulation.html` |
@@ -187,19 +184,16 @@ Kontexte: `markup`, `js`, `python`, `css`, `option` (Emoji in `<option>` → ent
 | 📑 | `files` | 1 | 1 | `templates/katplan/_anhaenge_anzeige.html` |
 | 🏛 | `building-bank` | 1 | 1 | `templates/katplan/_links_anzeige.html` |
 | 📚 | `books` | 1 | 1 | `templates/nachschlagewerke/start.html` |
-| 🔔 | `bell` | 1 | 1 | `templates/objekt/_benachrichtigung.html` |
-| 📂 | `folder-open` | 1 | 1 | `templates/objekt/_einsatz_inhalt.html` |
-| 🔍 | `search` | 1 | 1 | `templates/objekt/formular.html` |
 | 🙋 | `hand-stop` | 1 | 1 | `templates/objekt/infoscreen_alarm.html` |
 | 🏠 | `home` | 1 | 1 | `templates/objekt/infoscreen_alarm.html` |
 | 🌤 | `sun-low` | 1 | 1 | `templates/objekt/infoscreen_alarm.html` |
 | ⛅ | `cloud` | 1 | 1 | `templates/objekt/infoscreen_alarm.html` |
 | ☁ | `cloud` | 1 | 1 | `templates/objekt/infoscreen_alarm.html` |
 | 📺 | `device-tv` | 1 | 1 | `templates/objekt/infoscreen_verwaltung.html` |
-| ⓘ | `info-circle` | 1 | 1 | `templates/objekt/pflege_review.html` |
 | ▬ | `=fw` | 1 | 1 | `templates/pdf/foerderstrecke.html` |
 | ↳ | `=text` | 1 | 1 | `templates/pdf/incident_report.html` |
 | ☐ | `square` | 1 | 1 | `templates/pdf/katplan.html` |
+| 📜 | `history` | 1 | 1 | `templates/pdf/lagebericht.html` |
 | 🌐 | `world` | 1 | 1 | `templates/probenplanung/verwaltung_oeffentlich.html` |
 | 👁 | `eye` | 1 | 1 | `templates/public/page.html` |
 | ⌄ | `chevron-down` | 1 | 1 | `templates/verleih/_ausleihe_form.html` |
@@ -219,15 +213,11 @@ Kontexte: `markup`, `js`, `python`, `css`, `option` (Emoji in `<option>` → ent
 | `app/templates/gateway/detail.html` | 20 |
 | `app/services/objekt_service.py` | 18 |
 | `app/templates/gateway/druckregeln.html` | 18 |
-| `app/templates/objekt/_dokumente.html` | 16 |
 | `app/templates/gateway/agent_detail.html` | 15 |
-| `app/templates/objekt/detail.html` | 13 |
 | `app/templates/annotate/editor.html` | 11 |
-| `app/templates/objekt/liste.html` | 11 |
 | `app/templates/weather/_data_section.html` | 11 |
 | `app/models/major_incident.py` | 11 |
 | `app/services/weather_service.py` | 11 |
-| `app/templates/objekt/_einsatz_inhalt.html` | 11 |
 | `app/templates/probenplanung/teilnehmer_appell.html` | 10 |
 | `app/templates/pdf/objektblatt.html` | 10 |
 | `app/templates/incident_major/public_report.html` | 9 |
@@ -242,10 +232,8 @@ Kontexte: `markup`, `js`, `python`, `css`, `option` (Emoji in `<option>` → ent
 | `app/templates/foerderstrecke/maschinist.html` | 8 |
 | `app/models/objekt.py` | 8 |
 | `app/services/katplan_typen.py` | 8 |
-| `app/templates/objekt/_gefahren.html` | 8 |
 | `app/templates/admin/medienverwaltung.html` | 8 |
 | `app/templates/weather/index.html` | 8 |
-| `app/templates/objekt/pflege_review.html` | 7 |
 | `app/templates/pdf/incident_report.html` | 7 |
 | `app/templates/incident_major/karte.html` | 7 |
 | `app/templates/incident/lagefuehrung_druck.html` | 6 |
@@ -258,12 +246,10 @@ Kontexte: `markup`, `js`, `python`, `css`, `option` (Emoji in `<option>` → ent
 | `app/templates/incident_major/public_verify.html` | 5 |
 | `app/templates/katplan/_links_anzeige.html` | 5 |
 | `app/templates/pdf/foerderstrecke.html` | 5 |
-| `app/templates/objekt/viewer.html` | 5 |
 | `app/templates/admin/page_edit.html` | 4 |
 | `app/templates/incident_major/druck_bericht.html` | 4 |
 | `app/templates/katplan/_baum.html` | 4 |
 | `app/templates/verleih/_ausleihe_detail.html` | 4 |
-| `app/templates/objekt/kataloge.html` | 4 |
 | `app/static/js/einsatz_info.js` | 4 |
 | `app/templates/incident_major/_stellen_multi_druck.html` | 4 |
 | `app/templates/_print_dialog.html` | 4 |
@@ -272,3 +258,11 @@ Kontexte: `markup`, `js`, `python`, `css`, `option` (Emoji in `<option>` → ent
 | `app/templates/admin/org_backup.html` | 4 |
 | `app/routers/ui_termin.py` | 3 |
 | `app/templates/admin/sysadmin_quotas.html` | 3 |
+| `app/templates/probenplanung/_probeart_formular.html` | 3 |
+| `app/templates/incident_major/_journal_entry_druck.html` | 3 |
+| `app/templates/nachschlagewerke/start.html` | 3 |
+| `app/routers/ui_incident.py` | 3 |
+| `app/templates/admin/foerder_schlaeuche.html` | 3 |
+| `app/templates/incident_major/public_sms_error.html` | 3 |
+| `app/templates/objekt/_gefahren.html` | 3 |
+| `app/templates/gateway/liste.html` | 3 |

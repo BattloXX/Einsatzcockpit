@@ -1,10 +1,10 @@
 <div class="card" style="padding:16px;">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-    <h3 style="margin:0;">🏘️ Wohnanlage</h3>
+    <h3 style="margin:0;">{{ icon("buildings", size="md") }} Wohnanlage</h3>
     {% if ist_verwalter %}
     <button class="btn btn--ghost btn--xs"
             hx-get="/objekte/{{ objekt.id }}/wohnanlage/bearbeiten"
-            hx-target="#abschnitt-wohnanlage" hx-swap="innerHTML">✎ Bearbeiten</button>
+            hx-target="#abschnitt-wohnanlage" hx-swap="innerHTML">{{ icon("pencil", size="xs") }} Bearbeiten</button>
     {% endif %}
   </div>
   {% if objekt.wohnanlage %}

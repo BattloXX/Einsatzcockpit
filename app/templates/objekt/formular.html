@@ -34,8 +34,8 @@
         <input type="text" class="form-input" style="flex:1;min-width:0;"
                x-model="suchtext" @keydown.enter.prevent="suchen()"
                placeholder="z. B. Hofsteigstraße 30 Wolfurt">
-        <button type="button" class="btn btn--secondary" @click="suchen()" :disabled="laden"
-                x-text="laden ? 'Suche …' : '🔍 Suchen'"></button>
+        <button type="button" class="btn btn--secondary" @click="suchen()" :disabled="laden">
+          <span x-show="!laden" x-cloak>{{ icon("search", size="sm") }}</span><span x-text="laden ? 'Suche …' : 'Suchen'"></span></button>
       </div>
       <template x-if="fehler">
         <p class="form-hint" style="color:var(--red-light,#f87171);" x-text="fehler"></p>
@@ -78,7 +78,7 @@
     <input type="hidden" name="lng" x-model="lng">
     <template x-if="lat && lng">
       <p class="form-hint" style="color:#16a34a;">
-        ✓ Koordinaten validiert (<span x-text="parseFloat(lat).toFixed(5)"></span>, <span x-text="parseFloat(lng).toFixed(5)"></span>)
+        {{ icon("check", size="sm") }} Koordinaten validiert (<span x-text="parseFloat(lat).toFixed(5)"></span>, <span x-text="parseFloat(lng).toFixed(5)"></span>)
       </p>
     </template>
     <template x-if="!(lat && lng)">

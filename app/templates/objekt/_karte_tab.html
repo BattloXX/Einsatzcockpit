@@ -1,8 +1,8 @@
 <div class="card" style="padding:16px;">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
-    <h3 style="margin:0;">🗺️ Lagekarte</h3>
+    <h3 style="margin:0;">{{ icon("map", size="md") }} Lagekarte</h3>
     {% if ist_verwalter %}
-    <a href="/objekte/{{ objekt.id }}/karte" class="btn btn--ghost btn--xs" target="_blank" rel="noopener">↗ Vollbild-Editor</a>
+    <a href="/objekte/{{ objekt.id }}/karte" class="btn btn--ghost btn--xs" target="_blank" rel="noopener">{{ icon("external-link", size="xs") }} Vollbild-Editor</a>
     {% endif %}
   </div>
 
@@ -12,7 +12,7 @@
     <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">
       {% for v in fehlende_kartensymbole %}
       <button type="button" class="btn btn--ghost btn--xs oks-fehlend-chip" data-typ="{{ v.typ }}"
-              title="{{ v.hinweis }}">📍 {{ v.label }}</button>
+              title="{{ v.hinweis }}">{{ icon("map-pin", size="xs") }} {{ v.label }}</button>
       {% endfor %}
     </div>
     <p class="form-hint" style="margin:6px 0 0;">Chip anklicken wählt das passende Symbol in der Palette aus - danach auf die Karte klicken zum Platzieren.</p>
