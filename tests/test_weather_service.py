@@ -12,7 +12,6 @@ from app.services.weather_service import (
     ForecastResult,
     NowcastResult,
     NowcastStep,
-    ScenarioAlert,
     WeatherWarning,
     _cache,
     _cache_key,
@@ -29,7 +28,6 @@ from app.services.weather_service import (
     get_warnings,
     has_cached,
 )
-
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -55,6 +53,15 @@ NWP_V10M = [-2.0] * 24
 NWP_UGUST = [2.0] * 24
 NWP_VGUST = [-4.0] * 24
 NWP_T2M = [14.0] * 24
+
+
+@pytest.fixture
+def forecast_clock(monkeypatch):
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return _BASE.astimezone(tz)
+    monkeypatch.setattr(weather_service, "datetime", Clock)
 
 
 def _make_geosphere_response(params_data: dict, timestamps: list[str]) -> dict:
@@ -372,7 +379,7 @@ async def test_get_current_caches_result():
 # ── get_forecast ───────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_get_forecast_parses_horizons():
+async def test_get_forecast_parses_horizons(forecast_clock):
     mock_resp = _mock_httpx_response(_nwp_response())
     mock_client = AsyncMock()
     mock_client.get = AsyncMock(return_value=mock_resp)
@@ -387,12 +394,14 @@ async def test_get_forecast_parses_horizons():
     assert len(result.horizons) == 2
     h6 = result.horizons[0]
     assert h6.hours == 6
-    assert h6.precipitation_acc_mm == pytest.approx(NWP_RR_ACC[6])
+    assert h6.precipitation_acc_mm == pytest.approx(NWP_RR_ACC[16] - NWP_RR_ACC[10])
     assert h6.temperature_c == pytest.approx(14.0)
+    assert h6.complete
+    assert result.reference_time == _BASE
 
 
 @pytest.mark.asyncio
-async def test_get_forecast_horizon_beyond_data():
+async def test_get_forecast_horizon_beyond_data(forecast_clock):
     mock_resp = _mock_httpx_response(_nwp_response())
     mock_client = AsyncMock()
     mock_client.get = AsyncMock(return_value=mock_resp)
@@ -684,8 +693,7 @@ async def test_get_current_falls_back_to_openmeteo():
 
 
 @pytest.mark.asyncio
-async def test_get_forecast_falls_back_to_openmeteo():
-    hours = list(range(25))
+async def test_get_forecast_falls_back_to_openmeteo(forecast_clock):
     prec = [0.1] * 25      # mm/h each hour
     openmeteo_data = {
         "hourly": {
@@ -693,6 +701,7 @@ async def test_get_forecast_falls_back_to_openmeteo():
             "wind_speed_10m": [36.0] * 25,   # km/h
             "wind_gusts_10m": [54.0] * 25,   # km/h
             "precipitation": prec,
+            "time": [(_BASE + timedelta(hours=i)).isoformat() for i in range(25)],
         }
     }
 
@@ -717,8 +726,8 @@ async def test_get_forecast_falls_back_to_openmeteo():
     assert len(result.horizons) == 2
     h6 = result.horizons[0]
     assert h6.hours == 6
-    # accumulated: sum of prec[0..6] = 7 * 0.1 = 0.7
-    assert h6.precipitation_acc_mm == pytest.approx(0.7, rel=1e-3)
+    # Genau sechs zukünftige Intervalle; der Wert bei ref gehört zur Vergangenheit.
+    assert h6.precipitation_acc_mm == pytest.approx(0.6, rel=1e-3)
     assert h6.wind_speed_ms == pytest.approx(36.0 / 3.6, rel=1e-3)
 
 
@@ -953,3 +962,71 @@ async def test_get_forecast_uses_kachelmann_when_configured():
         result = await get_forecast(LAT, LNG)
     assert result is not None
     assert result.source == "kachelmann"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("provider", ["openmeteo", "geosphere", "kachelmann"])
+@pytest.mark.parametrize("missing", [False, True])
+async def test_forecast_timestamp_windows(provider, missing, monkeypatch):
+    """Alle Adapter: versetzter Start, Zwischenmaximum, volle/fehlende Intervalle."""
+    from app.services import kachelmann_service, weather_openmeteo
+
+    ref = _BASE + timedelta(minutes=30)
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return ref.astimezone(tz)
+
+    monkeypatch.setattr(weather_service, "datetime", Clock)
+    monkeypatch.setattr(kachelmann_service, "datetime", Clock)
+    times = [(_BASE + timedelta(hours=i)).isoformat() for i in range(27)]
+    prec = [2.0] * 27
+    gust = [3.6] * 27
+    gust[2] = 36.0
+    if missing:
+        # Eine echte Zeitlücke statt nur eines NULL-Wertes.
+        del times[3]
+        del prec[3]
+        del gust[3]
+    if provider == "openmeteo":
+        payload = {"hourly": {
+            "time": times, "precipitation": prec, "snowfall": prec,
+            "temperature_2m": [10] * len(times), "wind_speed_10m": [3.6] * len(times),
+            "wind_gusts_10m": gust,
+        }}
+        fetch = AsyncMock(return_value=payload)
+        monkeypatch.setattr(weather_openmeteo, "fetch_hourly", fetch)
+        result = await weather_service._openmeteo_forecast(LAT, LNG, (1, 3, 6, 12, 24))
+        # Zusatzstunde für das angeschnittene Intervall am Horizontende.
+        assert fetch.await_args.args[2] == 26
+    elif provider == "geosphere":
+        payload = _make_geosphere_response({
+            "rr_acc": [2.0 * (datetime.fromisoformat(t) - _BASE).total_seconds() / 3600 for t in times],
+            "t2m": [10] * len(times), "u10m": [1] * len(times), "v10m": [0] * len(times),
+            "ugust": [v / 3.6 for v in gust], "vgust": [0] * len(times),
+        }, times)
+        monkeypatch.setattr(weather_service, "_geosphere_get", AsyncMock(return_value=payload))
+        result = await weather_service._fetch_geosphere_nwp(LAT, LNG, (1, 3, 6, 12, 24))
+    else:
+        result = kachelmann_service._parse_forecast({"hourly": [
+            {"dateTime": t, "precCurrent": p, "temp": 10, "windSpeed": 1, "windGust": g / 3.6}
+            for t, p, g in zip(times, prec, gust, strict=True)
+        ]}, (1, 3, 6, 12, 24))
+    assert result.reference_time == ref
+    assert [h.hours for h in result.horizons] == [1, 3, 6, 12, 24]
+    assert result.horizons[0].precipitation_mm == pytest.approx(2)
+    h6 = result.horizons[2]
+    assert h6.complete is (not missing)
+    if missing:
+        assert h6.precipitation_mm is None
+    else:
+        assert h6.precipitation_mm == pytest.approx(12)
+        assert result.horizons[-1].precipitation_mm == pytest.approx(48)
+        assert h6.temperature_min_c == h6.temperature_max_c == 10
+    assert h6.precipitation_acc_mm == h6.precipitation_mm
+    assert h6.gust_max_ms == pytest.approx(10)
+    assert h6.gust_max_at == _BASE + timedelta(hours=2)
+    if provider == "openmeteo":
+        assert h6.snowfall_cm == (None if missing else 12)
+    else:
+        assert h6.snowfall_cm is None

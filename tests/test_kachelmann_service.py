@@ -1,4 +1,5 @@
 """Tests für kachelmann_service.py — HTTP-Antworten gemockt."""
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -6,6 +7,15 @@ import pytest
 from app.services import kachelmann_service
 
 LAT, LNG = 47.466, 9.745
+
+
+@pytest.fixture
+def forecast_clock(monkeypatch):
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 6, 15, tzinfo=UTC).astimezone(tz)
+    monkeypatch.setattr(kachelmann_service, "datetime", Clock)
 
 
 def _mock_httpx_response(json_data: dict):
@@ -166,9 +176,9 @@ async def test_fetch_current_none_on_unexpected_shape():
 # ── fetch_forecast ────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_fetch_forecast_accumulates_precipitation():
+async def test_fetch_forecast_accumulates_precipitation(forecast_clock):
     hourly = [
-        {"time": f"2026-06-15T{h:02d}:00:00+00:00",
+        {"time": (datetime(2026, 6, 15, tzinfo=UTC) + timedelta(hours=h)).isoformat(),
          "temperature": 14.0 + h * 0.1,
          "windSpeed": 4.0,
          "windGust": 7.0,
@@ -189,8 +199,8 @@ async def test_fetch_forecast_accumulates_precipitation():
     assert len(result.horizons) == 3
     h6 = result.horizons[0]
     assert h6.hours == 6
-    # akkumuliert: Summe prec[0..6] = 7 * 1.0
-    assert h6.precipitation_acc_mm == pytest.approx(7.0, rel=1e-3)
+    # Sechs zukünftige Stunden, ohne das vergangene Intervall bei ref.
+    assert h6.precipitation_acc_mm == pytest.approx(6.0, rel=1e-3)
     assert h6.temperature_c == pytest.approx(14.6, rel=1e-3)
     assert h6.wind_speed_ms == pytest.approx(4.0)
 
@@ -227,7 +237,12 @@ async def test_fetch_current_real_wrapped_shape():
 
 
 @pytest.mark.asyncio
-async def test_fetch_forecast_real_data_shape():
+async def test_fetch_forecast_real_data_shape(monkeypatch):
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 6, 16, 9, tzinfo=UTC).astimezone(tz)
+    monkeypatch.setattr(kachelmann_service, "datetime", Clock)
     """Echte /forecast-Struktur: data-Liste, flache Werte, precCurrent + windSpeed."""
     rows = [
         {"dateTime": f"2026-06-16T{9 + h:02d}:00:00+00:00",
@@ -248,13 +263,15 @@ async def test_fetch_forecast_real_data_shape():
     assert result is not None
     h6 = result.horizons[0]
     assert h6.hours == 6
-    # precCurrent=2.0 je Stunde, akkumuliert bis index 6 = 7 * 2.0
-    assert h6.precipitation_acc_mm == pytest.approx(14.0, rel=1e-3)
+    # Sechs Intervalle mit jeweils 2 mm.
+    assert h6.precipitation_acc_mm == pytest.approx(12.0, rel=1e-3)
     assert h6.wind_speed_ms == pytest.approx(1.5)
-    # +24h liegt jenseits der 15er-Reihe → auf letzten Schritt geclamped (Werte vorhanden)
+    # +24h liegt jenseits der Reihe: kein Clamping und keine Teilsumme.
     h24 = result.horizons[2]
-    assert h24.temperature_c is not None
-    assert h24.wind_speed_ms is not None
+    assert h24.temperature_c is None
+    assert h24.precipitation_mm is None
+    assert not h24.complete
+    assert h24.wind_speed_ms is None
 
 
 @pytest.mark.asyncio

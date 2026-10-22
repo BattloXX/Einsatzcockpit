@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 import time
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -25,9 +26,10 @@ import httpx
 from app.config import settings
 from app.services.weather_service import (
     CurrentWeather,
-    ForecastHorizon,
     ForecastResult,
+    _hourly_series,
     _safe_float,
+    _series_horizons,
 )
 
 logger = logging.getLogger("einsatzleiter.weather")
@@ -245,39 +247,25 @@ def _parse_forecast(data: dict, horizons: tuple[int, ...]) -> ForecastResult | N
     if not rows:
         return None
 
-    # Die Reihe startet zur nächsten vollen Stunde und umfasst typ. 24 Schritte.
-    # Listenindex ≈ Stunde ab jetzt; für Horizonte jenseits der Reihe (z.B. +24h bei
-    # 24 Schritten) wird auf den letzten verfügbaren Schritt geclamped.
-    horizons_out: list[ForecastHorizon] = []
-    for h in horizons:
-        idx = min(h, len(rows) - 1)
-        # akkumulierter Niederschlag bis zum Horizont (Summe precCurrent je Stunde)
-        acc = 0.0
-        have_prec = False
-        for i in range(idx + 1):
-            p = _pick_num(rows[i], "precCurrent", "prec", "prec1h", "precipitation", "rr", "rain")
-            if p is not None:
-                acc += p
-                have_prec = True
-
-        row = rows[idx]
-        temp = _pick_num(row, "temp", "temperature", "t2m")
-        wind = _norm_wind_ms(_pick_num(row, "windSpeed", "windspeed", "wind", "ff"))
-        gust = _norm_wind_ms(_pick_num(row, "windGust", "windGust3h", "gust", "fx"))
-
-        horizons_out.append(ForecastHorizon(
-            hours=h,
-            precipitation_acc_mm=acc if have_prec else None,
-            temperature_c=temp,
-            wind_speed_ms=wind,
-            gust_speed_ms=gust,
-        ))
-
-    # Wenn gar keine verwertbaren Werte → None (Fallback)
-    if all(
-        h.precipitation_acc_mm is None and h.temperature_c is None and h.wind_speed_ms is None
-        for h in horizons_out
+    ref = datetime.now(UTC)
+    times = [row.get("dateTime", row.get("time", row.get("timestamp"))) for row in rows]
+    series = {}
+    for target, aliases in (
+        ("precipitation", ("precCurrent", "prec", "prec1h", "precipitation", "rr", "rain")),
+        ("temperature", ("temp", "temperature", "t2m")),
+        ("wind", ("windSpeed", "windspeed", "wind", "ff")),
+        ("gust", ("windGust", "gust", "fx")),
+        ("humidity", ("humidityRelative", "relativeHumidity")),
+        ("direction", ("windDirection",)),
     ):
+        values = [_pick_num(row, *aliases) for row in rows]
+        if target in {"wind", "gust"}:
+            values = [_norm_wind_ms(v) for v in values]
+        series[target] = _hourly_series(times, values)
+    # precCurrent wird als stündlicher Intervallwert am Intervallende behandelt.
+    # windGust3h ist kein Stundenwert und wird daher nicht als Ersatz verwendet.
+    if not any(value is not None for values in series.values() for _, value in values):
         return None
-
-    return ForecastResult(horizons=horizons_out, source=_SOURCE)
+    return ForecastResult(
+        horizons=_series_horizons(series, ref, horizons), source=_SOURCE, reference_time=ref,
+    )
