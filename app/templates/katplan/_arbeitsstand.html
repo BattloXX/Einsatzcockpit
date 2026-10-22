@@ -1,28 +1,8 @@
 {% set akteur_filter_aktiv = true %}
-{% macro inhalt(knoten) %}
-  {% for k in knoten %}
-    <section>
-      {% if k.abschnitt %}
-        <h2>{{ k.abschnitt.titel }}</h2>
-        {% if k.abschnitt.beschreibung_html %}
-          <div>{{ k.abschnitt.beschreibung_html|safe }}</div>
-        {% endif %}
-        {% with anhaenge = kapitel_anhaenge.get(k.abschnitt.id, []), anhang_bearbeiten = false %}
-            {% include "katplan/_anhaenge_anzeige.html" %}
-          {% endwith %}
-      {% elif k.elemente %}
-        <h2>Ohne Kapitel</h2>
-      {% endif %}
-      {% for element in k.elemente %}
-        {% include "katplan/_element_anzeige.html" %}
-      {% endfor %}
-      {{ inhalt(k.kinder) }}
-    </section>
-  {% endfor %}
-{% endmacro %}
+{% from "katplan/_version_inhalt.html" import phasenleiste, kapitelansicht with context %}
 <div class="kp-planinhalt" x-data="{ phase: null, akteur: null, gliederung: 'kapitel' }">
+  {{ phasenleiste() }}
   {% include "katplan/_akteur_filter.html" %}
-  <a href="/plaene/{{ plan.id }}/bearbeiten" class="btn btn--primary">Bearbeiten</a>
-  <div x-show="gliederung === 'kapitel'">{{ inhalt(baum) }}</div>
+  {{ kapitelansicht(baum) }}
   {% include "katplan/_nach_akteur.html" %}
 </div>

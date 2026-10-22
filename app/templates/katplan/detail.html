@@ -10,14 +10,14 @@
 {% endblock %}
 {% block content %}
   <section class="kp-page" x-data="{ reiter: window.location.hash === '#kp-protokoll' ? 'protokoll' : 'plan' }">
-    <a class="btn btn--ghost btn--sm" href="/plaene">{{ icon("chevron-left", size="xs") }} Pläne</a>
-    <form method="get" action="/plaene/suche" class="kp-filter">
-      <label>Inhalte suchen
-        <input class="form-control" type="search" name="q" placeholder="Elemente und Dokumentseiten durchsuchen">
-      </label>
-      <input type="hidden" name="plan_id" value="{{ plan.id }}">
-      <button class="btn btn--primary btn--sm" type="submit">Suchen</button>
-    </form>
+    <div class="kp-topbar">
+      <a class="btn btn--ghost btn--sm" href="/plaene">{{ icon("chevron-left", size="xs") }} Pläne</a>
+      <form method="get" action="/plaene/suche" class="kp-plansuche">
+        <input class="form-control" type="search" name="q" placeholder="Im Plan suchen" aria-label="Im Plan suchen">
+        <input type="hidden" name="plan_id" value="{{ plan.id }}">
+        <button class="btn btn--ghost btn--sm" type="submit" aria-label="Im Plan suchen">{{ icon("search") }}</button>
+      </form>
+    </div>
     <div class="kp-grid kp-detail-grid">
       {% include "katplan/_kopf.html" %}
       <div role="tablist" aria-label="Planansicht" class="tabnav">
@@ -34,6 +34,7 @@
         {% if historisch %}
           <p class="kp-box kp-box--info">Historische Version {{ leseversion.versionsnummer }} – aktuell gilt Version {{ aktuelle_version.versionsnummer if aktuelle_version else '-' }}</p>
         {% endif %}
+        <div class="kp-actions kp-toolbar" role="group" aria-label="Planaktionen">
         {% if not arbeitsstand %}<a class="btn" href="/plaene/{{ plan.id }}/pdf?version_id={{ leseversion.id }}" onclick="event.preventDefault(); openMediaViewer(this.href, 'pdf', this.textContent);">PDF / Offlinefassung</a>{% endif %}
         {% if can_edit %}<a class="btn" href="/plaene/{{ plan.id }}/pdf?entwurf=1" onclick="event.preventDefault(); openMediaViewer(this.href, 'pdf', this.textContent);">Entwurf als PDF</a>{% endif %}
         {% if vorkommende_akteure %}
@@ -46,6 +47,8 @@
             </select>
           </label>
         {% endif %}
+          {% if arbeitsstand and can_edit %}<a href="/plaene/{{ plan.id }}/bearbeiten" class="btn btn--primary">Bearbeiten</a>{% endif %}
+        </div>
         {% if arbeitsstand %}
           {% include "katplan/_arbeitsstand.html" %}
         {% else %}

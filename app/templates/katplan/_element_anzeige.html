@@ -4,7 +4,16 @@
   data-phasen="{{ (element.phasen_json if leseversion is defined else element_phasen[element.id]|map(attribute='id')|list|tojson)|forceescape }}"
   {% if akteur_filter_aktiv|default(false) %}x-show="(akteur === null || JSON.parse($el.dataset.akteure).includes(akteur)) &amp;&amp; (phase === null || JSON.parse($el.dataset.phasen).length === 0 || JSON.parse($el.dataset.phasen).includes(phase))"{% endif %}>
   <div class="kp-box__head">
-    <h3>{{ icon(typen[element.typ].icon_name, size="md") }} <span class="kp-mono">{{ element.kennung }}</span> · {{ element.titel }}</h3>
+    <h3>{{ icon(typen[element.typ].icon_name, size="md") }} <span class="kp-mono">{{ element.kennung }}</span> · {{ element.titel }} {{ status_dot({1: "rot", 2: "grau", 3: "grau"}.get(element.prioritaet, "grau"), "Priorität " ~ element.prioritaet) }}</h3>
+    {% if element.quelle_dokument_id %}
+      {% set q = quellen_nach_id.get(element.quelle_dokument_id) %}
+      {% set seiten = quellen_seiten.get(element.id, []) %}
+      {% if q %}
+        <a class="kp-chip" title="{{ q.titel }} (v{{ q.versionsnummer }}){% if element.quelle_seiten %}, S. {{ element.quelle_seiten }}{% endif %}" href="/plaene/{{ plan.id }}/quellen/{{ element.quelle_dokument_id }}?{% if seiten %}seite={{ seiten[0].nr }}&amp;{% endif %}{% if leseversion is defined %}version_id={{ leseversion.id }}{% endif %}">{{ icon("file-text") }} {% if element.quelle_seiten %}S. {{ element.quelle_seiten }}{% else %}Quelle{% endif %}</a>
+      {% else %}
+        <p>Quelle nicht mehr verfügbar{% if element.quelle_seiten %}, S. {{ element.quelle_seiten }}{% endif %}</p>
+      {% endif %}
+    {% endif %}
     {% if kann_uebernehmen %}
       <button type="button" class="btn btn--ghost btn--sm"
         hx-get="/plaene/{{ plan.id }}/elemente/{{ element.id }}/uebernehmen{% if leseversion is defined %}?version_id={{ leseversion.id }}{% endif %}"
@@ -12,8 +21,16 @@
     {% endif %}
   </div>
   <div class="kp-chips">
-    <span>{{ typen[element.typ].label }}</span>
-    <span class="kp-prio-{{ element.prioritaet }}">{{ status_dot({1: "rot", 2: "grau", 3: "grau"}.get(element.prioritaet, "grau"), "Priorität " ~ element.prioritaet) }} Priorität {{ element.prioritaet }}</span>
+    <span class="kp-chip">{{ typen[element.typ].label }}</span>
+    {% for phase in element_phasen[element.id] %}
+      <span class="kp-chip kp-farbe-{{ phase.farbe }}">{{ phase.name }}</span>
+    {% endfor %}
+    {% for a in element_akteure.get(element.id, []) %}
+      <span class="kp-chip kp-farbe-{{ a.farbe }}">{% if a.icon_name %}{{ icon(a.icon_name) }}{% endif %}{{ a.bezeichnung }}</span>
+    {% endfor %}
+    {% for tag in element_tags[element.id] %}
+      <span class="kp-chip">{{ tag }}</span>
+    {% endfor %}
     {% if can_edit and (element_gsl[element.id].get('gsl_vorlage') if leseversion is defined else element.gsl_vorlage) %}
       <span class="kp-badge">GSL-Vorlage</span>
     {% endif %}
@@ -25,24 +42,8 @@
     {% if element.vertraulich %}
       <span class="kp-badge kp-badge--amber">vertraulich</span>
     {% endif %}
-    {% for phase in element_phasen[element.id] %}
-      <span class="kp-chip kp-farbe-{{ phase.farbe }}">{{ phase.name }}</span>
-    {% endfor %}
-    {% for a in element_akteure.get(element.id, []) %}
-      <span class="kp-chip kp-farbe-{{ a.farbe }}">{% if a.icon_name %}{{ icon(a.icon_name) }}{% endif %}{{ a.bezeichnung }}</span>
-    {% endfor %}
-    {% for tag in element_tags[element.id] %}
-      <span class="kp-chip">{{ tag }}</span>
-    {% endfor %}
   </div>
   {% if element.quelle_dokument_id %}
-    {% set q = quellen_nach_id.get(element.quelle_dokument_id) %}
-    {% set seiten = quellen_seiten.get(element.id, []) %}
-    {% if q %}
-      <a class="kp-chip" title="{{ q.titel }} (v{{ q.versionsnummer }}){% if element.quelle_seiten %}, S. {{ element.quelle_seiten }}{% endif %}" href="/plaene/{{ plan.id }}/quellen/{{ element.quelle_dokument_id }}?{% if seiten %}seite={{ seiten[0].nr }}&amp;{% endif %}{% if leseversion is defined %}version_id={{ leseversion.id }}{% endif %}">{{ icon("file-text") }} Quelle{% if element.quelle_seiten %} S. {{ element.quelle_seiten }}{% endif %}</a>
-    {% else %}
-      <p>Quelle nicht mehr verfügbar{% if element.quelle_seiten %}, S. {{ element.quelle_seiten }}{% endif %}</p>
-    {% endif %}
     {% if seiten %}
       <details>
         <summary>Quellseiten anzeigen</summary>
@@ -56,25 +57,30 @@
       </details>
     {% endif %}
   {% endif %}
-  {% if element.strasse or element.ort or element.plz or element.hausnummer %}
-    <p>{{ element.strasse or '' }} {{ element.hausnummer or '' }}, {{ element.plz or '' }} {{ element.ort or '' }}</p>
-  {% endif %}
-  {% if typen[element.typ].geometrie != 'keine' %}
-    {% include "katplan/_geo_status.html" %}
-  {% endif %}
-  {% if element.geometry_json %}
-    <a class="btn btn--ghost btn--sm" href="/plaene/{{ plan.id }}/karte#element-{{ element.element_uuid if leseversion is defined else element.uuid }}">Auf Karte zeigen</a>
-  {% endif %}
-  {% for feld, label in [('gueltig_bis', 'Gültig bis'), ('pruefen_am', 'Prüfen am')] %}
-    {% if element[feld] %}
-      <div class="kp-row">
-        <span class="kp-row__label">{{ label }}</span>
-        <span class="kp-row__value kp-mono">{{ element[feld].strftime('%d.%m.%Y') }}</span>
-      </div>
+  <div class="kp-elementmeta">
+    {% if element.strasse or element.ort or element.plz or element.hausnummer %}
+      <p>{{ element.strasse or '' }} {{ element.hausnummer or '' }}, {{ element.plz or '' }} {{ element.ort or '' }}</p>
     {% endif %}
-  {% endfor %}
+    {% if typen[element.typ].geometrie != 'keine' %}
+      {% include "katplan/_geo_status.html" %}
+    {% endif %}
+    {% if element.geometry_json %}
+      <a class="btn btn--ghost btn--sm" href="/plaene/{{ plan.id }}/karte#element-{{ element.element_uuid if leseversion is defined else element.uuid }}">Auf Karte zeigen</a>
+    {% endif %}
+    {% for feld, label in [('gueltig_bis', 'Gültig bis'), ('pruefen_am', 'Prüfen am')] %}
+      {% if element[feld] %}
+        <div class="kp-row">
+          <span class="kp-row__label">{{ label }}</span>
+          <span class="kp-row__value kp-mono">{{ element[feld].strftime('%d.%m.%Y') }}</span>
+        </div>
+      {% endif %}
+    {% endfor %}
+  </div>
   {% if element.beschreibung_html %}
-    <div>{{ element.beschreibung_html|safe }}</div>
+    <div x-data="{ mehr: false, lang: false, beobachter: null, destroy() { this.beobachter?.disconnect() } }" x-init="$nextTick(() => { beobachter = new ResizeObserver(() => { if (!mehr) lang = $refs.text.scrollHeight > $refs.text.clientHeight + 1 }); beobachter.observe($refs.text) })">
+      <div x-ref="text" class="kp-beschreibung" :class="{ 'kp-beschreibung--kurz': !mehr }">{{ element.beschreibung_html|safe }}</div>
+      <button x-cloak x-show="lang || mehr" type="button" class="btn btn--ghost btn--sm" @click="mehr = !mehr" :aria-expanded="mehr" x-text="mehr ? 'Weniger' : 'Mehr'"></button>
+    </div>
   {% endif %}
   {% for feld in typen[element.typ].felder %}
     {% set wert = daten.get(feld) %}

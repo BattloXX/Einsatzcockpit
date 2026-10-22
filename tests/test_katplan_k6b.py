@@ -140,7 +140,7 @@ def test_lesesicht_ebenen_vertraulich_und_vergleich(client, umgebung):
     assert "Dateidownload" in html and " KB" in html
     assert "Geheime Aufnahme" not in html
     assert html.index('id="kp-unterlagen"') < html.index("Planunterlage") < html.index('class="kp-planinhalt"')
-    assert html.index("Kapitel Nord</h2>") < html.index("Kapitelunterlage") < html.index('data-element-id=')
+    assert html.index("<summary>Kapitel Nord ") < html.index("Kapitelunterlage") < html.index('data-element-id=')
     assert 'rel="noopener noreferrer" target="_blank"' in html
     login(client, umgebung)
     assert post(client, path + "/anhaenge", url="https://example.org/neu").status_code == 200

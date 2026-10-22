@@ -1,34 +1,29 @@
-{% set akteur_filter_aktiv = true %}
-<div class="kp-planinhalt" x-data="{ phase: null, akteur: null, gliederung: 'kapitel' }">
-  <div class="kp-chips" aria-label="Phasenfilter">
-    <button class="btn btn--ghost btn--sm" type="button" @click="phase = null" :aria-pressed="phase === null">Alle</button>
-    {% for phase in plan_daten.get('phasen', []) %}
-      <button class="btn kp-chip kp-farbe-{{ phase.farbe }}" type="button"
-        @click="phase = {{ phase.id }}" :aria-pressed="phase === {{ phase.id }}">{{ phase.name }}</button>
+{% macro phasenleiste() %}
+  <div class="kp-chips kp-phasenleiste" aria-label="Phasenfilter">
+    <button class="btn btn--ghost btn--sm" type="button" @click="phase = null" :aria-pressed="phase === null">Alle <span class="kp-badge">{{ element_anzahl }}</span></button>
+    {% for p in anzeige_phasen %}
+      <button class="btn kp-chip kp-farbe-{{ p.farbe }}" type="button"
+        @click="phase = {{ p.id }}" :aria-pressed="phase === {{ p.id }}">{{ p.name }} <span class="kp-badge">{{ phasen_anzahl[p.id] }}</span></button>
     {% endfor %}
   </div>
-  {% include "katplan/_akteur_filter.html" %}
-  {% macro verzeichnis(knoten) %}
-    <ul>
-      {% for k in knoten if k.abschnitt %}
-        <li>
-          <a class="kp-link" href="#kapitel-{{ k.abschnitt.id }}">{{ k.abschnitt.titel }}</a>
-          {{ verzeichnis(k.kinder) }}
-        </li>
-      {% endfor %}
-    </ul>
-  {% endmacro %}
-  <div x-show="gliederung === 'kapitel'">
-  <details class="kp-inhalt" open>
-    <summary>Inhaltsverzeichnis</summary>
-    <nav aria-label="Inhaltsverzeichnis">{{ verzeichnis(version_baum) }}</nav>
-  </details>
-  {% macro inhalt(knoten, tiefe=0) %}
+{% endmacro %}
+{% macro verzeichnis(knoten) %}
+  <ul>
     {% for k in knoten %}
-      <section>
+      {% if k.abschnitt %}
+        <li><a class="kp-link" href="#kapitel-{{ k.abschnitt.id }}" @click="(() => { for (let k = document.getElementById('kapitel-{{ k.abschnitt.id }}'); k; k = k.parentElement.closest('.kp-lesekapitel')) k.open = true })()">{{ k.abschnitt.titel }}</a>{{ verzeichnis(k.kinder) }}</li>
+      {% endif %}
+    {% endfor %}
+  </ul>
+{% endmacro %}
+{% macro inhalt(knoten) %}
+  {% for k in knoten if k.abschnitt or k.elemente or k.kinder %}
+    <details open class="kp-lesekapitel" {% if k.abschnitt %}id="kapitel-{{ k.abschnitt.id }}"{% endif %}
+      data-filter-elemente="{{ k.filter_elemente|tojson|forceescape }}"
+      x-show="(phase === null &amp;&amp; akteur === null) || JSON.parse($el.dataset.filterElemente).some(e =&gt; (akteur === null || e.akteure.includes(akteur)) &amp;&amp; (phase === null || e.phasen.length === 0 || e.phasen.includes(phase)))">
+      <summary>{{ k.abschnitt.titel if k.abschnitt else 'Ohne Kapitel' }} <span class="kp-badge">{{ k.filter_elemente|length }} Elemente</span></summary>
+      <div class="kp-kapitelinhalt">
         {% if k.abschnitt %}
-          {% set ebene = [tiefe + 2, 6]|min %}
-          <h{{ ebene }} id="kapitel-{{ k.abschnitt.id }}">{{ k.abschnitt.titel }}</h{{ ebene }}>
           <div>{{ (k.abschnitt.beschreibung_html or '')|safe }}</div>
           {% with anhaenge = kapitel_anhaenge.get(k.abschnitt.id, []), anhang_bearbeiten = false %}
             {% include "katplan/_anhaenge_anzeige.html" %}
@@ -37,12 +32,30 @@
         {% for element in k.elemente %}
           {% include "katplan/_element_anzeige.html" %}
         {% endfor %}
-        {{ inhalt(k.kinder, tiefe + 1) }}
-      </section>
-    {% endfor %}
-  {% endmacro %}
-  {{ inhalt(version_baum) }}
+        {{ inhalt(k.kinder) }}
+      </div>
+    </details>
+  {% endfor %}
+{% endmacro %}
+{% macro kapitelansicht(baum) %}
+  <div x-show="gliederung === 'kapitel'">
+    <div class="kp-actions kp-toolbar" aria-label="Kapitelaktionen">
+      <button class="btn btn--ghost btn--sm" type="button" @click="$el.closest('.kp-planinhalt').querySelectorAll('.kp-lesekapitel').forEach(k => k.open = true)">Alle aufklappen</button>
+      <button class="btn btn--ghost btn--sm" type="button" @click="$el.closest('.kp-planinhalt').querySelectorAll('.kp-lesekapitel').forEach(k => k.open = false)">Alle zuklappen</button>
+    </div>
+    <details open class="kp-inhalt" x-data="{ breit: window.innerWidth >= 760 }" :open="breit" @resize.window="breit = window.innerWidth >= 760">
+      <summary><span class="kp-inhalt__desktop">Inhaltsverzeichnis</span><span class="kp-inhalt__mobil">Inhalt</span></summary>
+      <nav aria-label="Inhaltsverzeichnis">{{ verzeichnis(baum) }}</nav>
+    </details>
+    {{ inhalt(baum) }}
   </div>
+{% endmacro %}
+{% if leseversion is defined %}
+{% set akteur_filter_aktiv = true %}
+<div class="kp-planinhalt" x-data="{ phase: null, akteur: null, gliederung: 'kapitel' }">
+  {{ phasenleiste() }}
+  {% include "katplan/_akteur_filter.html" %}
+  {{ kapitelansicht(version_baum) }}
   {% include "katplan/_nach_akteur.html" %}
 </div>
 
@@ -59,3 +72,5 @@
 {% endif %}
 
 {% include "katplan/_uebernahme_dialog.html" %}
+
+{% endif %}

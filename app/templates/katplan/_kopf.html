@@ -22,158 +22,168 @@
       <a href="/plaene/{{ plan.id }}/stammdaten" hx-get="/plaene/{{ plan.id }}/stammdaten" hx-target="#kp-kopf"
         hx-swap="outerHTML" class="btn btn--ghost btn--sm">Stammdaten bearbeiten</a>
     {% endif %}
+    {% if can_edit %}<div class="kp-kopf-qualitaet">{% include "katplan/_qualitaet.html" %}</div>{% endif %}
   </header>
   <aside class="kp-grid__side">
-    {% if karten_geojson is defined and karten_geojson.features %}
-      <section class="kp-sidecard">
-        <h2 class="kp-box__title">Übersichtskarte</h2>
-        {% with karten_mini = true %}
-          {% include "katplan/_plankarte.html" %}
-        {% endwith %}
-        <a class="btn btn--ghost btn--sm" href="{{ karten_url }}">Große Karte</a>
-      </section>
-    {% endif %}
-    <section class="kp-sidecard">
-      {% with element = none %}
-        {% include "katplan/_links.html" %}
-      {% endwith %}
-    </section>
-    <section class="kp-sidecard">
-      <h2 class="kp-box__title">Stammdaten</h2>
-      <div class="kp-row">
-        <span class="kp-row__label">Planart</span>
-        <span class="kp-row__value">{{ planarten[kopf.planart].label }}</span>
-      </div>
-      <div class="kp-row">
-        <span class="kp-row__label">Gefahrenarten</span>
-        <div class="kp-chips">
-          {% for code in kopf.gefahrenarten %}
-            <span class="kp-badge kp-badge--gray">{{ gefahrenarten.get(code, code) }}</span>
-          {% endfor %}
-        </div>
-      </div>
-      <div class="kp-row">
-        <span class="kp-row__label">Geltungsbereich</span>
-        <span class="kp-row__value">{{ kopf.geltungsbereich or '-' }}</span>
-      </div>
-      <div class="kp-row">
-        <span class="kp-row__label">Verantwortliche Stelle (extern)</span>
-        <span class="kp-row__value">{{ kopf.verantwortliche_stelle or '-' }}</span>
-      </div>
-      <div class="kp-row">
-        <span class="kp-row__label">Zuletzt geprüft</span>
-        <span class="kp-row__value">{% if plan.zuletzt_geprueft_am %}{{ plan.zuletzt_geprueft_am.strftime('%d.%m.%Y') }}{% if zuletzt_geprueft_von and zuletzt_geprueft_von != '-' %} von {{ zuletzt_geprueft_von }}{% endif %}{% else %}-{% endif %}</span>
-      </div>
-      <div class="kp-row">
-        <span class="kp-row__label">Überprüfung durch</span>
-        <span class="kp-row__value">{{ pruef_verantwortlich }}</span>
-      </div>
-      <div class="kp-row">
-        <span class="kp-row__label">Nächste Überprüfung</span>
-        <span class="kp-row__value kp-mono">
-          {% if plan.wiedervorlage_am and plan.wiedervorlage_am <= heute %}
-            <span class="kp-badge kp-badge--red">{{ plan.wiedervorlage_am.strftime('%d.%m.%Y') }}</span>
-          {% else %}
-            {{ plan.wiedervorlage_am.strftime('%d.%m.%Y') if plan.wiedervorlage_am else '-' }}
+    <details open class="kp-basisdaten" x-data="{ breit: window.innerWidth >= 760 }" :open="breit" @resize.window="breit = window.innerWidth >= 760">
+      <summary>Zuständigkeiten und Stammdaten</summary>
+      <div class="kp-basisdaten__inhalt">
+        <section class="kp-sidecard">
+          {% with element = none %}
+            {% include "katplan/_links.html" %}
+          {% endwith %}
+        </section>
+        <section class="kp-sidecard">
+          <h2 class="kp-box__title">Stammdaten</h2>
+          <div class="kp-row">
+            <span class="kp-row__label">Planart</span>
+            <span class="kp-row__value">{{ planarten[kopf.planart].label }}</span>
+          </div>
+          <div class="kp-row">
+            <span class="kp-row__label">Gefahrenarten</span>
+            <div class="kp-row__value kp-chips">
+              {% for code in kopf.gefahrenarten %}
+                <span class="kp-badge kp-badge--gray">{{ gefahrenarten.get(code, code) }}</span>
+              {% endfor %}
+            </div>
+          </div>
+          <div class="kp-row">
+            <span class="kp-row__label">Geltungsbereich</span>
+            <span class="kp-row__value">{{ kopf.geltungsbereich or '-' }}</span>
+          </div>
+          <div class="kp-row">
+            <span class="kp-row__label">Verantwortliche Stelle (extern)</span>
+            <span class="kp-row__value">{{ kopf.verantwortliche_stelle or '-' }}</span>
+          </div>
+          <div class="kp-row">
+            <span class="kp-row__label">Zuletzt geprüft</span>
+            <span class="kp-row__value">{% if plan.zuletzt_geprueft_am %}{{ plan.zuletzt_geprueft_am.strftime('%d.%m.%Y') }}{% if zuletzt_geprueft_von and zuletzt_geprueft_von != '-' %} von {{ zuletzt_geprueft_von }}{% endif %}{% else %}-{% endif %}</span>
+          </div>
+          <div class="kp-row">
+            <span class="kp-row__label">Überprüfung durch</span>
+            <span class="kp-row__value">{{ pruef_verantwortlich }}</span>
+          </div>
+          <div class="kp-row">
+            <span class="kp-row__label">Nächste Überprüfung</span>
+            <span class="kp-row__value kp-mono">
+              {% if plan.wiedervorlage_am and plan.wiedervorlage_am <= heute %}
+                <span class="kp-badge kp-badge--red">{{ plan.wiedervorlage_am.strftime('%d.%m.%Y') }}</span>
+              {% else %}
+                {{ plan.wiedervorlage_am.strftime('%d.%m.%Y') if plan.wiedervorlage_am else '-' }}
+              {% endif %}
+            </span>
+          </div>
+          <div class="kp-row">
+            <span class="kp-row__label">Zuletzt geändert</span>
+            <span class="kp-row__value kp-mono">{{ (leseversion.freigegeben_am if leseversion is defined else plan.aktualisiert_am)|local_datetime }}</span>
+          </div>
+          {% if kopf.beschreibung_html %}
+            <h3 class="kp-box__title">Beschreibung</h3>
+            <div>{{ kopf.beschreibung_html|safe }}</div>
           {% endif %}
-        </span>
+        </section>
       </div>
-      <div class="kp-row">
-        <span class="kp-row__label">Zuletzt geändert</span>
-        <span class="kp-mono">{{ (leseversion.freigegeben_am if leseversion is defined else plan.aktualisiert_am)|local_datetime }}</span>
-      </div>
-      <div>{{ (kopf.beschreibung_html or '')|safe }}</div>
-    </section>
-    <section class="kp-sidecard">
-      <h2 class="kp-box__title">Freigabe</h2>
-      {% if plan.status == 'freigegeben' and can_confirm_review %}
-        <details>
-          <summary class="btn btn--ghost btn--sm">Überprüfung bestätigen</summary>
-          <form method="post" action="/plaene/{{ plan.id }}/ueberpruefung" class="kp-form"
-            hx-post="/plaene/{{ plan.id }}/ueberpruefung" hx-target="#kp-kopf" hx-swap="outerHTML">
-            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-            <input type="hidden" name="version" value="{{ plan.version }}">
-            <label>Kommentar (optional)<textarea name="kommentar" maxlength="2000" class="form-control"></textarea></label>
-            <button type="submit" class="btn btn--primary">Überprüft – keine Änderung</button>
-          </form>
-        </details>
-      {% elif plan.status == 'in_ueberarbeitung' %}
-        <p>Änderungen offen – Überprüfung über neue Freigabe abschließen</p>
+    </details>
+    <div class="kp-side-extra">
+      {% if karten_geojson is defined and karten_geojson.features %}
+        <section class="kp-sidecard">
+          <h2 class="kp-box__title">Übersichtskarte</h2>
+          {% with karten_mini = true %}
+            {% include "katplan/_plankarte.html" %}
+          {% endwith %}
+          <a class="btn btn--ghost btn--sm" href="{{ karten_url }}">Große Karte</a>
+        </section>
       {% endif %}
-      {% if fehler %}
-        <p role="alert" class="kp-box kp-box--danger">{{ fehler }}</p>
-      {% endif %}
-      {% if can_edit %}
-        {% if aktuelle_version %}
-          <nav class="kp-chips" aria-label="Fassung">
-            <a class="btn btn--ghost btn--sm" href="/plaene/{{ plan.id }}?ansicht=freigabe"
-              {% if not arbeitsstand %}aria-current="page"{% endif %}>Freigegebene Fassung</a>
-            <a class="btn btn--ghost btn--sm" href="/plaene/{{ plan.id }}?ansicht=arbeitsstand"
-              {% if arbeitsstand %}aria-current="page"{% endif %}>Arbeitsstand</a>
-          </nav>
-          {% if plan.status in ['in_ueberarbeitung', 'in_pruefung'] %}
-            <p class="kp-box kp-box--warn">Unveröffentlichte Änderungen seit Version {{ aktuelle_version.versionsnummer }}</p>
-          {% endif %}
+      <section class="kp-sidecard" id="kp-unterlagen">
+        <h2 class="kp-box__title">Unterlagen</h2>
+        {% if can_edit and leseversion is not defined %}
+          {% include "katplan/_anhaenge.html" %}
         {% else %}
-          <p class="kp-header__sub">Arbeitsstand</p>
+          {% with anhaenge = plan_anhaenge, anhang_bearbeiten = false %}
+            {% include "katplan/_anhaenge_anzeige.html" %}
+          {% endwith %}
         {% endif %}
-      {% endif %}
-      {% if aktuelle_version %}
-        <p class="kp-header__sub">
-          Freigegebene Version {{ aktuelle_version.versionsnummer }} vom {{ aktuelle_version.freigegeben_am|local_datetime }} ({{ freigegeben_von }})
-        </p>
-      {% endif %}
-      {% if can_edit and qs_summen.get("telefon_im_text") %}
-        <p class="kp-box kp-box--warn">{{ qs_summen["telefon_im_text"].anzahl }} Elemente enthalten Telefonnummern im Text. Empfehlung: zentrale Kontakte verknüpfen.
-          <a class="btn btn--ghost btn--sm" href="/plaene/{{ plan.id }}/bearbeiten#kp-qualitaet">Zur QS-Liste</a></p>
-      {% endif %}
-      <div class="kp-actions">
-        {% if can_edit and plan.status in ['entwurf', 'in_ueberarbeitung'] %}
-          <form method="post" action="/plaene/{{ plan.id }}/einreichen"
-            hx-post="/plaene/{{ plan.id }}/einreichen" hx-target="#kp-kopf" hx-swap="outerHTML">
-            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-            <label class="kp-field">Kommentar (optional)<input class="form-control" name="kommentar"></label>
-            <button type="submit" class="btn btn--ghost btn--sm">Zur Prüfung einreichen</button>
-          </form>
+      </section>
+      <section class="kp-sidecard">
+        <h2 class="kp-box__title">Freigabe</h2>
+        {% if plan.status == 'freigegeben' and can_confirm_review %}
+          <details>
+            <summary class="btn btn--ghost btn--sm">Überprüfung bestätigen</summary>
+            <form method="post" action="/plaene/{{ plan.id }}/ueberpruefung" class="kp-form"
+              hx-post="/plaene/{{ plan.id }}/ueberpruefung" hx-target="#kp-kopf" hx-swap="outerHTML">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              <input type="hidden" name="version" value="{{ plan.version }}">
+              <label>Kommentar (optional)<textarea name="kommentar" maxlength="2000" class="form-control"></textarea></label>
+              <button type="submit" class="btn btn--primary">Überprüft – keine Änderung</button>
+            </form>
+          </details>
+        {% elif plan.status == 'in_ueberarbeitung' %}
+          <p>Änderungen offen – Überprüfung über neue Freigabe abschließen</p>
         {% endif %}
-        {% if can_release and plan.status in ['entwurf', 'in_pruefung', 'in_ueberarbeitung'] %}
-          <p>Es gibt {{ qs_anzahl|default(0) }} offene Hinweise.</p>
-          <form method="post" action="/plaene/{{ plan.id }}/freigeben"
-            hx-post="/plaene/{{ plan.id }}/freigeben" hx-target="#kp-kopf" hx-swap="outerHTML">
-            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-            <label class="kp-field">Änderungsnotiz (optional)<textarea class="form-control" name="aenderungsnotiz" maxlength="2000"></textarea></label>
-            <button type="submit" class="btn btn--primary btn--sm">Freigeben</button>
-          </form>
+        {% if fehler %}
+          <p role="alert" class="kp-box kp-box--danger">{{ fehler }}</p>
         {% endif %}
-        {% if can_release and plan.status == 'in_pruefung' %}
-          <form method="post" action="/plaene/{{ plan.id }}/zurueckweisen"
-            hx-post="/plaene/{{ plan.id }}/zurueckweisen" hx-target="#kp-kopf" hx-swap="outerHTML">
-            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-            <label class="kp-field">Kommentar zur Zurückweisung<textarea class="form-control" name="kommentar" required></textarea></label>
-            <button type="submit" class="btn btn--ghost btn--sm">Zurückweisen</button>
-          </form>
+        {% if can_edit %}
+          {% if aktuelle_version %}
+            <nav class="kp-chips" aria-label="Fassung">
+              <a class="btn btn--ghost btn--sm" href="/plaene/{{ plan.id }}?ansicht=freigabe"
+                {% if not arbeitsstand %}aria-current="page"{% endif %}>Freigegebene Fassung</a>
+              <a class="btn btn--ghost btn--sm" href="/plaene/{{ plan.id }}?ansicht=arbeitsstand"
+                {% if arbeitsstand %}aria-current="page"{% endif %}>Arbeitsstand</a>
+            </nav>
+            {% if plan.status in ['in_ueberarbeitung', 'in_pruefung'] %}
+              <p class="kp-box kp-box--warn">Unveröffentlichte Änderungen seit Version {{ aktuelle_version.versionsnummer }}</p>
+            {% endif %}
+          {% else %}
+            <p class="kp-header__sub">Arbeitsstand</p>
+          {% endif %}
         {% endif %}
-        {% if can_release %}
-          <form method="post" action="/plaene/{{ plan.id }}/{{ 'reaktivieren' if plan.status == 'archiviert' else 'archivieren' }}"
-            hx-post="/plaene/{{ plan.id }}/{{ 'reaktivieren' if plan.status == 'archiviert' else 'archivieren' }}" hx-target="#kp-kopf" hx-swap="outerHTML">
-            <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-            <button type="submit" class="btn btn--ghost btn--sm">{{ 'Reaktivieren' if plan.status == 'archiviert' else 'Archivieren' }}</button>
-          </form>
+        {% if aktuelle_version %}
+          <p class="kp-header__sub">
+            Freigegebene Version {{ aktuelle_version.versionsnummer }} vom {{ aktuelle_version.freigegeben_am|local_datetime }} ({{ freigegeben_von }})
+          </p>
         {% endif %}
-      </div>
-    </section>
-    <section class="kp-sidecard" id="kp-unterlagen">
-      <h2 class="kp-box__title">Unterlagen</h2>
-      {% if can_edit and leseversion is not defined %}
-        {% include "katplan/_anhaenge.html" %}
-      {% else %}
-        {% with anhaenge = plan_anhaenge, anhang_bearbeiten = false %}
-          {% include "katplan/_anhaenge_anzeige.html" %}
-        {% endwith %}
-      {% endif %}
-    </section>
+        {% if can_edit and qs_summen.get("telefon_im_text") %}
+          <p class="kp-box kp-box--warn">{{ qs_summen["telefon_im_text"].anzahl }} Elemente enthalten Telefonnummern im Text. Empfehlung: zentrale Kontakte verknüpfen.
+            <a class="btn btn--ghost btn--sm" href="/plaene/{{ plan.id }}/bearbeiten#kp-qualitaet">Zur QS-Liste</a></p>
+        {% endif %}
+        <div class="kp-actions">
+          {% if can_edit and plan.status in ['entwurf', 'in_ueberarbeitung'] %}
+            <form method="post" action="/plaene/{{ plan.id }}/einreichen"
+              hx-post="/plaene/{{ plan.id }}/einreichen" hx-target="#kp-kopf" hx-swap="outerHTML">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              <label class="kp-field">Kommentar (optional)<input class="form-control" name="kommentar"></label>
+              <button type="submit" class="btn btn--ghost btn--sm">Zur Prüfung einreichen</button>
+            </form>
+          {% endif %}
+          {% if can_release and plan.status in ['entwurf', 'in_pruefung', 'in_ueberarbeitung'] %}
+            <p>Es gibt {{ qs_anzahl|default(0) }} offene Hinweise.</p>
+            <form method="post" action="/plaene/{{ plan.id }}/freigeben"
+              hx-post="/plaene/{{ plan.id }}/freigeben" hx-target="#kp-kopf" hx-swap="outerHTML">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              <label class="kp-field">Änderungsnotiz (optional)<textarea class="form-control" name="aenderungsnotiz" maxlength="2000"></textarea></label>
+              <button type="submit" class="btn btn--primary btn--sm">Freigeben</button>
+            </form>
+          {% endif %}
+          {% if can_release and plan.status == 'in_pruefung' %}
+            <form method="post" action="/plaene/{{ plan.id }}/zurueckweisen"
+              hx-post="/plaene/{{ plan.id }}/zurueckweisen" hx-target="#kp-kopf" hx-swap="outerHTML">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              <label class="kp-field">Kommentar zur Zurückweisung<textarea class="form-control" name="kommentar" required></textarea></label>
+              <button type="submit" class="btn btn--ghost btn--sm">Zurückweisen</button>
+            </form>
+          {% endif %}
+          {% if can_release %}
+            <form method="post" action="/plaene/{{ plan.id }}/{{ 'reaktivieren' if plan.status == 'archiviert' else 'archivieren' }}"
+              hx-post="/plaene/{{ plan.id }}/{{ 'reaktivieren' if plan.status == 'archiviert' else 'archivieren' }}" hx-target="#kp-kopf" hx-swap="outerHTML">
+              <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+              <button type="submit" class="btn btn--ghost btn--sm">{{ 'Reaktivieren' if plan.status == 'archiviert' else 'Archivieren' }}</button>
+            </form>
+          {% endif %}
+        </div>
+      </section>
+    </div>
   </aside>
-  {% if can_edit %}{% include "katplan/_qualitaet.html" %}{% endif %}
 </div>
 {% if protokoll_oob %}
   {% include "katplan/_protokoll.html" %}
