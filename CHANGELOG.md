@@ -4,6 +4,11 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 
 ## Unreleased
 
+- **Wetterbetrieb**: Optionaler gemeinsamer Redis-JSON-Cache mit Worker-Sperren,
+  lokalem Fallback bei Ausfall und getrennten Kachelmann-Caches je Organisation.
+  Eigene TTL für aktuelle Daten, begrenzte HTTP-Wiederholungen, strukturierte
+  Providerwechsel-Logs ohne Zugangsdaten und flüchtige Gesundheitszähler.
+
 - **Wetterdarstellung**: Aktuell, Kurzfristig (1/3/6 h), Prognose (12/24 h und Tag)
   und amtliche Warnungen getrennt. Böenspitzen mit Org-Lokalzeit und km/h,
   Datenstand mit Quelle, Modell, Alter, Frische und Ersatzquelle; unvollständige

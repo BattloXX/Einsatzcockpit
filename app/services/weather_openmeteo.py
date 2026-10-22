@@ -10,6 +10,7 @@ from typing import Any
 import httpx
 
 from app.config import settings
+from app.services import weather_http
 
 logger = logging.getLogger("einsatzleiter.weather")
 
@@ -20,11 +21,11 @@ async def _fetch(lat: float, lng: float, params: dict[str, Any], model: str | No
         params["models"] = model
     try:
         async with httpx.AsyncClient(timeout=settings.WEATHER_HTTP_TIMEOUT) as client:
-            response = await client.get(settings.OPENMETEO_BASE_URL, params=params)
+            response = await weather_http.get(client, settings.OPENMETEO_BASE_URL, params=params)
             response.raise_for_status()
             return response.json()
     except Exception as exc:
-        logger.warning("Open-Meteo-Abfrage fehlgeschlagen: %s", exc)
+        logger.warning("Open-Meteo-Abfrage fehlgeschlagen: %s", type(exc).__name__)
         return None
 
 

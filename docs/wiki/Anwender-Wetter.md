@@ -108,7 +108,28 @@ Die Quelle wird in der Systemadmin-Konsole konfiguriert (API-Keys in den System-
 
 ## Datenschutz & Caching
 
-- Wetterdaten werden serverseitig gecacht (15–30 min je nach Endpunkt)
+- Wetterdaten werden serverseitig gecacht: aktuell und Nowcast 5 Minuten,
+  Prognose 30 Minuten, Tagesprognose 60 Minuten, Warnungen 5 Minuten.
+  Konfiguration: `WEATHER_CACHE_TTL_CURRENT`, `WEATHER_CACHE_TTL_NOWCAST`,
+  `WEATHER_CACHE_TTL_NWP`, `WEATHER_DAILY_TTL` (Env-Alias `WEATHER_CACHE_TTL_DAILY`),
+  `WEATHER_CACHE_TTL_WARN`. Bestehende Namen und Standardwerte bleiben gültig.
+- Mit `REDIS_URL` teilen Worker einen JSON-Cache und Sperren (`wx:`-Präfix).
+  Ohne Redis oder bei Redis-Fehlern läuft der lokale Cache weiter; Redis-Ausfälle
+  werden höchstens einmal pro Minute protokolliert. Kachelmann-Ergebnisse sind
+  nach Organisation getrennt. API-Schlüssel werden nicht im Wettercache gespeichert.
+  Der ursprüngliche Abrufzeitpunkt bleibt erhalten, damit die Frische korrekt angezeigt wird.
+- `WEATHER_HTTP_RETRIES=1` erlaubt einen zusätzlichen Versuch (maximal 2),
+  nur bei Timeout, Verbindungsfehlern und HTTP 5xx. HTTP 4xx einschließlich 429
+  werden nicht wiederholt. `WEATHER_RETRY_BACKOFF_S=0.5` begrenzt die Pause
+  (maximal 2 Sekunden), `WEATHER_HTTP_TIMEOUT=8` jeden Versuch.
+  Pro HTTP-Abfrage gilt zusätzlich ein Gesamtbudget aus Versuchen und Pausen.
+- `WEATHER_LOCK_TTL_S=120` begrenzt Sperrdauer und Wartezeit zwischen Workern.
+  Das Abrufbudget liegt bei 90 % der Sperrdauer. Bei erschöpftem Budget werden
+  keine weiteren Provider gestartet; Daten können dann vorübergehend fehlen.
+  Bei einer Redis-Störung ist die Deduplizierung nur innerhalb eines Workers möglich.
+- `weather_health.provider_health()` liefert letzte Erfolge/Fehler, Latenzen und Zähler.
+  Die Diagnose belegt nur vier Provider-Einträge im Speicher; gemeinsame Redis-Zähler
+  verfallen nach 24 Stunden ohne Aktualisierung. Es entstehen keine Datenbanktabellen.
 - Es werden **keine personenbezogenen Daten** an Wetterdienste übermittelt — nur Koordinaten des Einsatzorts
 - Die ZAMG-Daten (GeoSphere Austria) stehen unter **CC BY 4.0**
 

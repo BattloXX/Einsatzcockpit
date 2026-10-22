@@ -1,24 +1,26 @@
 """Weather data service — GeoSphere Austria Data Hub (primary) + Open-Meteo (fallback).
 
 Provides: Nowcast (15-min precipitation), current conditions, NWP forecasts (+6/+12/+24h).
-All external calls are cached in-process per configured TTL to respect rate limits.
+Weather results use configured TTLs, optionally shared through Redis across workers.
 Attribution (CC BY 4.0 required): use GEOSPHERE_ATTRIBUTION in any UI showing this data.
 """
 import asyncio
 import logging
 import math
+import time
 from collections.abc import Awaitable, Callable
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from functools import wraps
 from inspect import signature
-from typing import Any, Literal
+from typing import Any, Literal, cast
 from weakref import WeakKeyDictionary
 
 import httpx
 
 from app.config import settings
-from app.services import weather_openmeteo
+from app.services import shared_cache, weather_health, weather_http, weather_openmeteo
 from app.services.weather_thresholds import (
     BF8 as _BF8,
 )
@@ -91,6 +93,7 @@ _cache: dict[str, tuple[Any, float]] = {}
 
 
 _flights: WeakKeyDictionary = WeakKeyDictionary()
+_request: ContextVar[tuple[str, int | None]] = ContextVar("weather_request", default=("current", None))
 
 
 def _single_flight[**P, T](fn: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[T]]:
@@ -105,9 +108,42 @@ def _single_flight[**P, T](fn: Callable[P, Awaitable[T]]) -> Callable[P, Awaitab
         locks = _flights.setdefault(asyncio.get_running_loop(), {})
         lock = locks.setdefault(key, asyncio.Lock())
         async with lock:
-            return await fn(*args, **kwargs)
+            kind = (fn.__name__.removeprefix("get_").replace("daily_forecast", "daily")
+                    .replace("warnings_result", "warnings"))
+            context = _request.set((kind, bound.arguments.get("org_id")))
+            try:
+                if not settings.REDIS_URL or not settings.WEATHER_ENABLED:
+                    return await fn(*args, **kwargs)
+                # Konfigurationswechsel und Organisationen erhalten eigene Worker-Sperren.
+                try:
+                    async with shared_cache.lock(_flight_cache_key(kind, bound.arguments)):
+                        async with asyncio.timeout(settings.WEATHER_LOCK_TTL_S * 0.9):
+                            return await fn(*args, **kwargs)
+                except TimeoutError:
+                    weather_health.log_failure("geosphere", kind, "timeout")
+                    if kind == "warnings":
+                        return cast(T, WarningsResult("unavailable", [], error="timeout"))
+                    return cast(T, None)
+            finally:
+                _request.reset(context)
 
     return wrapped
+
+
+def _flight_cache_key(kind: str, arguments: Any) -> str:
+    """Sperren teilen dieselbe Identität wie Ergebnisse, auch ohne Org-Key."""
+    org_id = arguments.get("org_id")
+    if kind == "warnings":
+        resource = f"warn:{settings.GEOSPHERE_WARN_URL}:org{org_id}"
+    else:
+        order = _provider_order(kind, org_id)
+        resource = {"current": "current", "forecast": "nwp", "nowcast": "nowcast", "daily": "daily7"}[kind]
+        if kind in {"current", "forecast"} and "kachelmann" in order:
+            resource += f"_k{org_id}"
+        if kind == "forecast":
+            resource += "_h" + "-".join(str(hour) for hour in arguments["horizons"])
+        resource = _provider_resource(resource, kind, order)
+    return _cache_key(resource, arguments["lat"], arguments["lng"])
 
 
 def _cache_key(resource: str, lat: float, lng: float) -> str:
@@ -127,6 +163,26 @@ def _cache_get(key: str) -> Any | None:
 
 def _cache_set(key: str, value: Any, ttl: int | None) -> None:
     _cache[key] = (value, datetime.now(UTC).timestamp() + ttl if ttl is not None else math.inf)
+
+
+async def _shared_cache_get(key: str) -> Any | None:
+    local = _cache_get(key)
+    if local is not None or not settings.REDIS_URL:
+        return local
+    # Auch synchrone Leser erhalten den Wert; Rest-TTL keinesfalls neu starten.
+    started = datetime.now(UTC).timestamp()
+    entry = await shared_cache.get_entry(key)
+    if entry is None:
+        return None
+    value, remaining = entry
+    _cache[key] = (value, started + remaining)
+    return value
+
+
+async def _shared_cache_set(key: str, value: Any, ttl: int | None) -> None:
+    _cache_set(key, value, ttl)
+    if settings.REDIS_URL:
+        await shared_cache.set(key, value, ttl if ttl is not None else settings.WEATHER_WARN_STALE_S)
 
 
 def has_cached(lat: float, lng: float) -> bool:
@@ -181,6 +237,8 @@ def _set_meta(result: Any, kind: str, lat: float, lng: float, provider: str, ord
         is_fallback=bool(order and provider != order[0]),
     )
     _refresh_meta(result, kind)
+    if result.meta.is_fallback:
+        weather_health.log_failure(order[0], kind, "fallback", provider)
 
 
 @dataclass
@@ -374,7 +432,7 @@ async def _geosphere_get(mode: str, resource: str, params: dict) -> dict | None:
             headers={"User-Agent": "Einsatzcockpit/2.x (weather)"},
             timeout=settings.WEATHER_HTTP_TIMEOUT,
         ) as client:
-            resp = await client.get(url, params=params)
+            resp = await weather_http.get(client, url, params=params)
             resp.raise_for_status()
             return resp.json()
     except httpx.TimeoutException:
@@ -389,7 +447,7 @@ async def _geosphere_get(mode: str, resource: str, params: dict) -> dict | None:
             params.get("lat_lon", ""),
         )
     except Exception as exc:
-        logger.warning("GeoSphere Fehler: %s", exc)
+        logger.warning("GeoSphere Fehler: %s", type(exc).__name__)
     return None
 
 
@@ -452,11 +510,21 @@ def _provider_resource(resource: str, kind: str, order: list[str]) -> str:
 
 async def _provider_fetch(provider: str, fn: Callable[..., Awaitable[Any]], *args: Any, **kwargs: Any) -> Any:
     """Auch fehlerhafte Provider-Antworten dürfen den nächsten Fallback nicht verhindern."""
+    kind, org_id = _request.get()
+    started = time.monotonic()
+    reason = "unavailable"
     try:
-        return await fn(*args, **kwargs)
-    except Exception:
-        logger.warning("Wetterprovider %s fehlgeschlagen", provider, exc_info=True)
-        return None
+        result = await fn(*args, **kwargs)
+    except Exception as exc:
+        result = None
+        reason = "timeout" if isinstance(exc, (TimeoutError, httpx.TimeoutException)) else "provider_error"
+    await weather_health.record(provider, result is not None, (time.monotonic() - started) * 1000, reason)
+    if result is None:
+        order = _provider_order(kind, org_id)
+        index = order.index(provider) if provider in order else len(order)
+        fallback = order[index + 1] if index + 1 < len(order) else None
+        weather_health.log_failure(provider, kind, reason, fallback)
+    return result
 
 
 # ── Nowcast ────────────────────────────────────────────────────────────────────
@@ -473,7 +541,7 @@ async def get_nowcast(lat: float, lng: float) -> NowcastResult | None:
         return None
 
     key = _cache_key(_provider_resource("nowcast", "nowcast", _provider_order("nowcast")), lat, lng)
-    cached = _cache_get(key)
+    cached = await _shared_cache_get(key)
     if cached is not None:
         return _refresh_meta(cached, "nowcast")
 
@@ -493,7 +561,7 @@ async def get_nowcast(lat: float, lng: float) -> NowcastResult | None:
 
     if result is not None:
         _set_meta(result, "nowcast", lat, lng, provider, order)
-        _cache_set(key, result, settings.WEATHER_CACHE_TTL_NOWCAST)
+        await _shared_cache_set(key, result, settings.WEATHER_CACHE_TTL_NOWCAST)
     return result
 
 
@@ -615,7 +683,7 @@ async def get_current(lat: float, lng: float, org_id: int | None = None) -> Curr
     use_kachelmann = "kachelmann" in order
     resource = f"current_k{org_id}" if use_kachelmann else "current"
     key = _cache_key(_provider_resource(resource, "current", order), lat, lng)
-    cached = _cache_get(key)
+    cached = await _shared_cache_get(key)
     if cached is not None:
         return _refresh_meta(cached, "current")
 
@@ -636,7 +704,7 @@ async def get_current(lat: float, lng: float, org_id: int | None = None) -> Curr
 
     if result is not None:
         _set_meta(result, "current", lat, lng, provider, order)
-        _cache_set(key, result, settings.WEATHER_CACHE_TTL_NOWCAST)
+        await _shared_cache_set(key, result, settings.WEATHER_CACHE_TTL_CURRENT)
     return result
 
 
@@ -731,7 +799,7 @@ async def get_forecast(
     horizon_key = "-".join(str(hour) for hour in horizons)
     resource = f"nwp_k{org_id}" if use_kachelmann else "nwp"
     key = _cache_key(_provider_resource(f"{resource}_h{horizon_key}", "forecast", order), lat, lng)
-    cached = _cache_get(key)
+    cached = await _shared_cache_get(key)
     if cached is not None:
         return _refresh_meta(cached, "forecast")
 
@@ -754,7 +822,7 @@ async def get_forecast(
 
     if result is not None:
         _set_meta(result, "forecast", lat, lng, provider, order)
-        _cache_set(key, result, settings.WEATHER_CACHE_TTL_NWP)
+        await _shared_cache_set(key, result, settings.WEATHER_CACHE_TTL_NWP)
     return result
 
 
@@ -944,24 +1012,28 @@ async def get_warnings_result(lat: float, lng: float, org_id: int | None = None)
     if not await asyncio.to_thread(_warnings_enabled, org_id):
         return WarningsResult("disabled", [])
     key = _cache_key(f"warn:{settings.GEOSPHERE_WARN_URL}:org{org_id}", lat, lng)
-    good = _cache_get(key + ":good")
-    cached = _cache_get(key)
+    good = await _shared_cache_get(key + ":good")
+    cached = await _shared_cache_get(key)
     if cached is not None:
         if cached.error is not None:
             return _warning_failure(cached, good)
         return cached
     now = datetime.now(UTC)
+    started = time.monotonic()
     try:
         warnings = await _fetch_geosphere_warnings(lat, lng)
     except (httpx.HTTPError, ValueError, TypeError, KeyError, AttributeError) as exc:
-        logger.warning("Amtliche Warnungen nicht verfügbar: %s", exc)
-        failure = WarningsResult("unavailable", [], now, error=str(exc) or type(exc).__name__)
-        _cache_set(key, failure, settings.WEATHER_WARN_ERROR_TTL_S)
+        weather_health.log_failure("geosphere", "warnings", "unavailable")
+        await weather_health.record("geosphere", False, (time.monotonic() - started) * 1000)
+        error = type(exc).__name__ if settings.REDIS_URL else (str(exc) or type(exc).__name__)
+        failure = WarningsResult("unavailable", [], now, error=error)
+        await _shared_cache_set(key, failure, settings.WEATHER_WARN_ERROR_TTL_S)
         return _warning_failure(failure, good)
+    await weather_health.record("geosphere", True, (time.monotonic() - started) * 1000)
     result = WarningsResult("ok_with_warnings" if warnings else "ok_no_warnings", warnings, now, now)
-    _cache_set(key, result, settings.WEATHER_CACHE_TTL_WARN)
+    await _shared_cache_set(key, result, settings.WEATHER_CACHE_TTL_WARN)
     # Letzten Erfolg bis zum Cache-Reset behalten; die Nutzungsgrenze prüft _warning_failure.
-    _cache_set(key + ":good", result, None)
+    await _shared_cache_set(key + ":good", result, None)
     return result
 
 
@@ -982,7 +1054,7 @@ async def _fetch_geosphere_warnings(lat: float, lng: float) -> list[WeatherWarni
             resp.raise_for_status()
             data = resp.json()
     except (httpx.HTTPError, ValueError) as exc:
-        logger.warning("GeoSphere Warn-API Fehler: %s", exc)
+        logger.warning("GeoSphere Warn-API Fehler: %s", type(exc).__name__)
         raise
 
     if not isinstance(data, dict) or not isinstance(data.get("properties"), dict):
@@ -1316,7 +1388,7 @@ async def get_daily_forecast(lat: float, lng: float, org_id: int | None = None) 
     order = _provider_order("daily", org_id)
     # Daily verwendet keine Org-Schlüssel: identische Providerdaten teilen den Cache.
     key = _cache_key(_provider_resource("daily7", "daily", order), lat, lng)
-    cached = _cache_get(key)
+    cached = await _shared_cache_get(key)
     if cached is not None:
         return _refresh_meta(cached, "daily")
     for provider in order:
@@ -1324,7 +1396,7 @@ async def get_daily_forecast(lat: float, lng: float, org_id: int | None = None) 
         result = await _provider_fetch(provider, _openmeteo_daily, lat, lng, model=model)
         if result is not None:
             _set_meta(result, "daily", lat, lng, provider, order)
-            _cache_set(key, result, settings.WEATHER_DAILY_TTL)
+            await _shared_cache_set(key, result, settings.WEATHER_DAILY_TTL)
             return result
     return None
 
