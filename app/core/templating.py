@@ -138,6 +138,19 @@ templates.env.globals["merkmal_icon"] = merkmal_icon
 templates.env.globals["cross_marker_icon"] = cross_marker_icon
 templates.env.globals["modul_icon"] = modul_icon
 templates.env.globals["status_dot"] = status_dot
+
+
+def _kann_objekt_verknuepfen(request) -> bool:
+    """ECP-01: Objekt-Auswahl in den Erstellen-Dialogen nur bei aktivem Objektmodul und passender Berechtigung."""
+    from app.services.objekt_service import darf_objekt_verknuepfen
+
+    return bool(
+        getattr(request.state, "objekt_enabled", False)
+        and darf_objekt_verknuepfen(getattr(request.state, "user", None))
+    )
+
+
+templates.env.globals["kann_objekt_verknuepfen"] = _kann_objekt_verknuepfen
 templates.env.globals["can_view_kontakt_directory"] = can_view_kontakt_directory_request
 templates.env.globals["einheit_status_label"] = einheit_status_label
 templates.env.filters["ms_to_kmh"] = ms_to_kmh

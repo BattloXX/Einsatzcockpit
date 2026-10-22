@@ -147,6 +147,7 @@
         <label>Meldung</label>
         <input type="text" name="report_text" class="form-input" placeholder="Weitere Angaben zur Meldung...">
       </div>
+      {% with picker_key = 'neuer-einsatz', picker_incident_id = none %}{% include "incident/_objekt_picker.html" %}{% endwith %}
       <div class="form-group form-group--checkbox">
         <label>
           <input type="checkbox" name="is_exercise" id="newIncIsExercise" value="true"> Übung / Simulation

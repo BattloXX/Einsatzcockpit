@@ -476,6 +476,39 @@ def index(request: Request, db: Session = Depends(get_db)):
 
 # ── Einsatz starten (manuell) ─────────────────────────────────────────────────
 
+def _objekt_beim_anlegen_pruefen(db: Session, request: Request, objekt_id: int | None):
+    """ECP-01: gewaehltes Objekt VOR dem Anlegen pruefen (Modul, Berechtigung, Mandant), damit bei einem
+    Fehler nichts halb angelegt wird und die Eingaben im Dialog erhalten bleiben."""
+    if not objekt_id:
+        return None
+    from app.services.objekt_service import darf_objekt_verknuepfen, objekt_fuer_verknuepfung
+
+    user = request.state.user
+    if not getattr(request.state, "objekt_enabled", False):
+        raise HTTPException(400, detail="Die Objektverwaltung ist nicht aktiv.")
+    if not darf_objekt_verknuepfen(user):
+        raise HTTPException(403, detail="Keine Berechtigung, ein Objekt zu verknüpfen.")
+    objekt = objekt_fuer_verknuepfung(db, user, objekt_id)
+    if objekt is None:
+        raise HTTPException(404, detail="Objekt nicht gefunden.")
+    return objekt
+
+
+def _objekt_beim_anlegen_verknuepfen(
+    db: Session, request: Request, background_tasks: BackgroundTasks, incident_id: int, objekt,
+) -> None:
+    """ECP-01: dieselbe Verknuepfung wie im Bearbeiten-Dialog der Einsatzinfo (Objektgefahren-Meldungen,
+    Kontakt-Benachrichtigung, Autodruck, Board-Reload)."""
+    if objekt is None:
+        return
+    from app.services.objekt_service import objekt_verknuepfen_manuell, objekt_verknuepfung_nachlauf
+
+    user = request.state.user
+    if objekt_verknuepfen_manuell(db, user, incident_id, objekt):
+        db.commit()
+        objekt_verknuepfung_nachlauf(background_tasks, incident_id, user.id)
+
+
 @router.post("/einsatz/neu")
 def new_incident(
     request: Request,
@@ -490,11 +523,13 @@ def new_incident(
     confirm_real_incident: bool = Form(False),
     lat: str = Form(""),
     lng: str = Form(""),
+    objekt_id: int | None = Form(None),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin")),
 ):
     if not is_exercise and not confirm_real_incident:
         raise HTTPException(400, detail="Bitte bestätigen, dass dies ein echter Einsatz ist.")
+    gewaehltes_objekt = _objekt_beim_anlegen_pruefen(db, request, objekt_id)
 
     from app.routers.api_v1 import _geocode_incident
 
@@ -619,6 +654,9 @@ def new_incident(
             address_no or None,
             address_city or None,
         )
+
+    # ECP-01: im Dialog gewaehltes Objekt zuerst verknuepfen; das automatische Matching legt es nicht doppelt an
+    _objekt_beim_anlegen_verknuepfen(db, request, background_tasks, incident.id, gewaehltes_objekt)
 
     # Objekt-Matching (BMA-Nr./Adresse; Geo-Stufe folgt nach Geocoding)
     from app.services.objekt_matching_service import match_incident_background
@@ -1842,15 +1880,17 @@ def set_incident_leader(
 
 @router.post("/einsatz/{incident_id}/aufgabe", response_class=HTMLResponse)
 def create_task(
-    incident_id: int, request: Request,
+    incident_id: int, request: Request, background_tasks: BackgroundTasks,
     title: str = Form(...), detail: str = Form(""),
     column_id: int | None = Form(None),
     vehicle_id: int | None = Form(None),
     note: str = Form(""),
+    objekt_id: int | None = Form(None),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "recorder")),
 ):
     incident = _incident_or_404(incident_id, db)
+    gewaehltes_objekt = _objekt_beim_anlegen_pruefen(db, request, objekt_id)
     task = add_task(
         db, incident, title, detail or None,
         user_id=request.state.user.id, column_id=column_id,
@@ -1865,6 +1905,7 @@ def create_task(
                            user_id=request.state.user.id, author_name=get_author_name(request)))
     prepend_card(db, task.column_id, "task", task.id)
     db.commit()
+    _objekt_beim_anlegen_verknuepfen(db, request, background_tasks, incident_id, gewaehltes_objekt)
     run_async(manager.broadcast, incident_id, {
         "type": "task_created", "task_id": task.id, "column_id": task.column_id,
         "vehicle_uid": task.vehicle_id,
@@ -2358,16 +2399,18 @@ def reorder_columns_endpoint(
 
 @router.post("/einsatz/{incident_id}/meldung")
 async def create_message(
-    incident_id: int, request: Request,
+    incident_id: int, request: Request, background_tasks: BackgroundTasks,
     title: str = Form(...), detail: str = Form(""),
     status: str = Form("meldung"),
     due_after_min: int = Form(0),
     vehicle_id: int | None = Form(None),
+    objekt_id: int | None = Form(None),
     files: list[UploadFile] = File(default=[]),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "recorder")),
 ):
     incident = _incident_or_404(incident_id, db)
+    gewaehltes_objekt = _objekt_beim_anlegen_pruefen(db, request, objekt_id)
     from app.services.incident_service import add_message
     msg = add_message(
         db, incident, title=title, detail=detail, status=status,
@@ -2375,6 +2418,7 @@ async def create_message(
         author_name=get_author_name(request), user_id=request.state.user.id,
     )
     db.commit()
+    _objekt_beim_anlegen_verknuepfen(db, request, background_tasks, incident_id, gewaehltes_objekt)
     # Optional: Dateien direkt beim Anlegen anhängen
     errors: list[str] = []
     if files:

@@ -3074,54 +3074,12 @@ def einsatz_manuell_verknuepfen(
     objekt_id: int = Form(...),
     view: str = Form(""),
 ):
-    from app.models.incident import Incident
-    from app.models.objekt import OBJEKT_EINSATZ_BESTAETIGT, ObjektEinsatz
-    from app.services.objekt_matching_service import erzeuge_gefahren_meldungen
+    from app.services.objekt_service import objekt_verknuepfen_manuell, objekt_verknuepfung_nachlauf
 
     objekt = _objekt_or_404(db, objekt_id, user)
-    existiert = (
-        db.query(ObjektEinsatz)
-        .filter(ObjektEinsatz.incident_id == incident_id, ObjektEinsatz.objekt_id == objekt.id)
-        .first()
-    )
-    if not existiert:
-        db.add(
-            ObjektEinsatz(
-                org_id=objekt.org_id,
-                objekt_id=objekt.id,
-                incident_id=incident_id,
-                quelle="manuell",
-                status=OBJEKT_EINSATZ_BESTAETIGT,
-                bestaetigt_von_id=user.id,
-            )
-        )
-        write_audit(
-            db,
-            "objekt.einsatz_verknuepft",
-            org_id=user.org_id,
-            user_id=user.id,
-            entity_type="objekt",
-            entity_id=objekt.id,
-            incident_id=incident_id,
-            payload={"quelle": "manuell"},
-        )
-        # Objektgefahren als Board-Meldungen (idempotent) + Board neu laden
-        incident = db.get(Incident, incident_id)
-        if incident is not None:
-            erzeuge_gefahren_meldungen(db, incident, objekt)
+    if objekt_verknuepfen_manuell(db, user, incident_id, objekt):
         db.commit()
-        from app.services.objekt_kontakt_notify import dispatch_objekt_einsatzinfo
-
-        background_tasks.add_task(dispatch_objekt_einsatzinfo, incident_id, triggered_by_user_id=user.id)
-        from app.services.print_dispatcher import autoprint_incident_updated_background
-
-        background_tasks.add_task(autoprint_incident_updated_background, incident_id)
-        try:
-            from app.services.broadcast import manager
-
-            run_async(manager.broadcast, incident_id, {"type": "objektgefahren"})
-        except Exception:
-            pass
+        objekt_verknuepfung_nachlauf(background_tasks, incident_id, user.id)
     return templates.TemplateResponse(
         request,
         _panel_template(view),
