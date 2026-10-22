@@ -518,6 +518,16 @@ _SESSION_SKIP_PREFIXES = ("/static/", "/.well-known/")
 _SESSION_SKIP_PATHS = ("/sw.js", "/favicon.ico")
 
 
+def _melde_widerrufene_session(request: Request, db, device_token_id: int | None) -> None:
+    """SEC-01: Geräte-Session mit widerrufenem Token aggregiert protokollieren."""
+    from app.models.user import DeviceToken
+    from app.services import device_auth_failure_service as dat
+
+    token = db.get(DeviceToken, device_token_id) if device_token_id else None
+    request.state.auth_error = dat.CLIENT_CODE[dat.REASON_SESSION_REVOKED]
+    dat.record_failure(request, dat.REASON_SESSION_REVOKED, "session", device_token=token)
+
+
 # Session middleware – inject request.state.user + sliding-window token refresh
 @app.middleware("http")
 async def session_middleware(request: Request, call_next):
@@ -611,6 +621,7 @@ async def session_middleware(request: Request, call_next):
                     # Geraet" zurueck.
                     if not pruefe_geraete_session(db, user_id, is_device, device_token_id):
                         user = None
+                        _melde_widerrufene_session(request, db, device_token_id)
                     else:
                         request.state.device_token_id = device_token_id
                 elif user and not is_device:
@@ -1056,7 +1067,8 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 </body></html>""",
             status_code=403,
         )
-    return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
+    return JSONResponse({"detail": exc.detail}, status_code=exc.status_code,
+                        headers=getattr(exc, "headers", None))
 
 
 @app.get("/sw.js", include_in_schema=False)

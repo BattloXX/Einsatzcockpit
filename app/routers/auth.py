@@ -118,14 +118,18 @@ def device_login(
 ):
     """Token-basierter Auto-Login für registrierte Geräte."""
     token_hash = hash_api_key(token)
-    dt = db.query(DeviceToken).filter(
-        DeviceToken.token_hash == token_hash,
-        DeviceToken.revoked_at.is_(None),
-    ).first()
+    from app.services import device_auth_failure_service as dat
+
+    dt = db.query(DeviceToken).filter(DeviceToken.token_hash == token_hash).first()
     if not dt:
+        dat.record_failure(request, dat.REASON_UNKNOWN, "device_login", token_hash=token_hash)
+        return RedirectResponse("/login?error=device_invalid", status_code=302)
+    if dt.revoked_at is not None:
+        dat.record_failure(request, dat.REASON_REVOKED, "device_login", device_token=dt)
         return RedirectResponse("/login?error=device_invalid", status_code=302)
     user = db.get(User, dt.user_id)
     if not user or not user.active:
+        dat.record_failure(request, dat.REASON_USER_INACTIVE, "device_login", device_token=dt)
         return RedirectResponse("/login?error=device_invalid", status_code=302)
 
     now = datetime.now(UTC)

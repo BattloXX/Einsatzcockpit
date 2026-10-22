@@ -14,6 +14,7 @@
  *   ELNative.batterySaverActive         – getter: aktueller Energiesparmodus-Status
  *   ELNative.isTracking                 – getter: GPS-Tracking läuft gerade
  *   ELNative.isNative                   – getter, jedes Mal frisch gegen window.Capacitor geprüft
+ *   ELNative.accessInvalid              – getter: Fehlercode, wenn der Gerätezugang endgültig ungültig ist
  */
 (function () {
   'use strict';
@@ -26,6 +27,63 @@
       typeof window.Capacitor.isNativePlatform === 'function' &&
       window.Capacitor.isNativePlatform()
     );
+  }
+
+  // ─── Ungültiger Gerätezugang (SEC-02) ───────────────────────────────────────
+  // Der Server antwortet mit 401 und Header X-ECP-Auth-Error, wenn der Gerätezugang
+  // endgültig ungültig ist (widerrufen, unbekannt/ersetzt, Benutzer gesperrt). Dann
+  // stoppen alle automatischen Anfragen; Netzwerkfehler und 5xx bleiben temporär.
+  const _ACCESS_INVALID_CODES = ['device_revoked', 'device_unknown', 'user_inactive'];
+  let _accessInvalid = null;
+
+  function _authErrorCode(resp) {
+    const code = resp && resp.headers ? resp.headers.get('X-ECP-Auth-Error') : null;
+    return resp && resp.status === 401 && _ACCESS_INVALID_CODES.indexOf(code) !== -1 ? code : null;
+  }
+
+  function _handleAccessInvalid(code) {
+    if (_accessInvalid) return;
+    _accessInvalid = code;
+    if (_dutyPollId) { clearInterval(_dutyPollId); _dutyPollId = null; }
+    try { stopLocation(); } catch (_) {}
+    window.dispatchEvent(new CustomEvent('ec:device-access-invalid', { detail: { code } }));
+    _showAccessInvalidBanner();
+  }
+
+  function _showAccessInvalidBanner() {
+    if (document.getElementById('ec-device-access-invalid')) return;
+    const box = document.createElement('div');
+    box.id = 'ec-device-access-invalid';
+    box.setAttribute('role', 'alertdialog');
+    box.setAttribute('aria-live', 'assertive');
+    box.style.cssText = 'position:fixed;inset:0;z-index:100000;display:flex;align-items:center;'
+      + 'justify-content:center;padding:24px;background:rgba(0,0,0,.72);';
+    const card = document.createElement('div');
+    card.style.cssText = 'max-width:420px;width:100%;background:var(--surface,#fff);color:var(--text,#111);'
+      + 'border-radius:12px;padding:24px;text-align:center;';
+    const p = document.createElement('p');
+    p.style.cssText = 'margin:0 0 16px;font-size:1.05rem;line-height:1.4;';
+    p.textContent = 'Der Gerätezugang ist abgelaufen oder wurde deaktiviert. Bitte das Gerät erneut verbinden.';
+    const btn = document.createElement('a');
+    btn.href = '/geraet-login-pin';
+    btn.className = 'btn btn--primary';
+    btn.style.cssText = 'display:inline-block;min-height:44px;padding:10px 20px;';
+    btn.textContent = 'Erneut verbinden';
+    card.appendChild(p);
+    card.appendChild(btn);
+    box.appendChild(card);
+    document.body.appendChild(box);
+  }
+
+  // Geräte-Merkmale für Diagnose und Admin-Übersicht (nur was tatsächlich bekannt ist)
+  function _deviceHeaders() {
+    const h = { 'X-Requested-With': 'XMLHttpRequest' };
+    try {
+      if (window.Capacitor && typeof window.Capacitor.getPlatform === 'function') {
+        h['X-ECP-Platform'] = window.Capacitor.getPlatform();
+      }
+    } catch (_) {}
+    return h;
   }
 
   // ─── GPS-Intervalle & Energiesparmodus ──────────────────────────────────────
@@ -107,11 +165,18 @@
         const registrationResult = new Promise((resolve) => {
           PushNotifications.addListener('registration', async (reg) => {
             try {
+              if (_accessInvalid) { resolve({ ok: false, error: 'Gerätezugang ungültig' }); return; }
               const res = await fetch('/api/v1/device/fcm-token', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                headers: Object.assign({ 'Content-Type': 'application/json' }, _deviceHeaders()),
                 body: JSON.stringify({ token: reg.value, platform: 'android' }),
               });
+              const invalid = _authErrorCode(res);
+              if (invalid) {
+                _handleAccessInvalid(invalid);
+                resolve({ ok: false, error: 'Gerätezugang ungültig' });
+                return;
+              }
               if (res.ok) {
                 _fcmRegistered = true;
                 resolve({ ok: true });
@@ -358,10 +423,14 @@
     if (_lastSentLat !== null && _gpsDistance(lat, lng, _lastSentLat, _lastSentLng) < 10) return;
     _lastSentLat = lat;
     _lastSentLng = lng;
+    if (_accessInvalid) return;
     fetch('/api/v1/device/location', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+      headers: Object.assign({ 'Content-Type': 'application/json' }, _deviceHeaders()),
       body: JSON.stringify({ lat, lng, accuracy }),
+    }).then((resp) => {
+      const invalid = _authErrorCode(resp);
+      if (invalid) _handleAccessInvalid(invalid);
     }).catch(() => {});
   }
 
@@ -482,12 +551,12 @@
 
   // ─── Dienst-Status pollen & Tracking automatisch steuern ────────────────────
   async function _pollDutyState() {
-    if (!_isNative()) return;
+    if (!_isNative() || _accessInvalid) return;
     try {
-      const resp = await fetch('/api/v1/device/duty-state', {
-        headers: { 'X-Requested-With': 'XMLHttpRequest' },
-      });
-      if (!resp.ok) return; // Netzwerkfehler: vorherigen Zustand behalten
+      const resp = await fetch('/api/v1/device/duty-state', { headers: _deviceHeaders() });
+      const invalid = _authErrorCode(resp);
+      if (invalid) { _handleAccessInvalid(invalid); return; }
+      if (!resp.ok) return; // temporärer Fehler (Netz, 5xx): vorherigen Zustand behalten
       const data = await resp.json();
       if (data.should_track) startLocation();
       else stopLocation();
@@ -496,6 +565,7 @@
 
   let _dutyPollId = null;
   function _startDutyPoll() {
+    if (_accessInvalid) return;
     if (_dutyPollId) clearInterval(_dutyPollId);
     _dutyPollId = setInterval(() => {
       if (document.visibilityState === 'visible') _pollDutyState();
@@ -557,5 +627,6 @@
     setBatterySaver(on) { _setBatterySaver(on); },
     get batterySaverActive() { return _batterySaver; },
     get isTracking() { return _isTracking; },
+    get accessInvalid() { return _accessInvalid; },
   };
 })();

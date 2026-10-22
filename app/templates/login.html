@@ -34,6 +34,8 @@
       {% set qerr = request.query_params.get('error') %}
       {% if qerr == 'qr_invalid' %}
       <div class="alert alert--error">QR-Code ungültig oder abgelaufen.</div>
+      {% elif qerr == 'device_invalid' %}
+      <div class="alert alert--error">Der Gerätezugang ist abgelaufen oder wurde deaktiviert. Bitte das Gerät über den Administrator erneut verbinden.</div>
       {% elif qerr == 'incident_closed' %}
       <div class="alert alert--warn">Der Einsatz ist bereits abgeschlossen.</div>
       {% elif qerr == 'sso_disabled' %}
