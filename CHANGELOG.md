@@ -4,6 +4,11 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 
 ## Unreleased
 
+- **Wetter**: Kennzahlen für Regen, Sturm, Schnee/Glätte, Gewitter und Hochwasser-Kontext;
+  Prognosefenster 1/3/6/12/24 Stunden, Spitzen mit Zeitpunkt und keine Bewertung
+  bei unvollständigen Daten. Gemeinsame Hinweisschwellen und km/h-Templatefilter;
+  Schwellen der Alarm-Engine bleiben unverändert.
+
 - **Semantische Suche**: Optionale lokale Ollama-Embeddings mit `embeddinggemma`,
   Vektortabellen je Modell/Dimension, eigener Vektor-Outbox und Distanzschwellwert;
   Evaluationsskript mit Recall/MRR je Fragengruppe und Review-CSV sowie Betriebsdoku.
