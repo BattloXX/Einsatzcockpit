@@ -12,7 +12,7 @@
           hx-get="/plaene/suche" hx-target="#kp-suche-treffer" hx-swap="outerHTML"
           hx-trigger="input changed delay:400ms from:input[name=q], change" hx-push-url="true">
       <label>Suchbegriffe
-        <input class="form-control" type="search" name="q" value="{{ form.get('q', '') }}" placeholder="Alle Wörter müssen vorkommen">
+        <input class="form-control" type="search" name="q" value="{{ form.get('q', '') }}" placeholder="Begriff, Kennung oder Synonym">
       </label>
       {% include "katplan/_suche_plaene.html" %}
       <label>Gefahrenart

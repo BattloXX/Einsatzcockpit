@@ -1,5 +1,6 @@
 """Abfragevertrag, Live-Rechte, veralteter Index und hybride Rangbildung."""
 
+import json
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from uuid import uuid4
@@ -12,12 +13,18 @@ from app.core.tenant import set_tenant_context
 from app.models.incident import Incident, IncidentOrg, Message, Task
 from app.models.katplan import KatplanDokument, KatplanDokumentSeite, KatplanElement, KatplanPlan
 from app.models.major_incident import (
-    CommLogEntry, IncidentSite, LageEinheit, LageJournalEntry, MajorIncident, SiteLogEntry, SitePhase,
+    CommLogEntry,
+    IncidentSite,
+    LageEinheit,
+    LageJournalEntry,
+    MajorIncident,
+    SiteLogEntry,
+    SitePhase,
 )
 from app.models.master import FireDept, OrgSettings, SystemSettings
 from app.models.objekt import Objekt, ObjektBMA, ObjektDokument, ObjektDokumentSeite
 from app.models.road_closure import RoadClosure
-from app.models.suche import SearchDocument, SearchOutbox
+from app.models.suche import SearchChunk, SearchDocument, SearchOutbox
 from app.models.user import User
 from app.models.wasserstelle import Wasserstelle
 from app.services.katplan_freigabe_service import freigeben
@@ -497,3 +504,103 @@ def test_gsl_braucht_board_leserolle(daten):
     with pytest.raises(PermissionError):
         _suche(db, _user(a, "fahrtenbuch_admin"), kontext="gsl", kontext_id=lage.id)
     assert _suche(db, _user(a, "recorder"), kontext="gsl", kontext_id=lage.id).treffer
+
+
+def test_katplan_planfilter_schliesst_andere_quellen_aus(daten):
+    db, a, _, o, user = daten
+    plaene = []
+    for _ in range(2):
+        plan, freigeber, element = _plan(db, a)
+        element.vertraulich = False
+        element.titel = "Fabrik Alarm"
+        freigeben(db, plan, freigeber)
+        plaene.append((plan, element))
+    o.name = "Fabrik Alarm"
+    db.add(Wasserstelle(org_id=a.id, bezeichnung="Fabrik Alarm"))
+    db.flush()
+    neuaufbau(db, a.id)
+    plan, element = plaene[0]
+    result = _suche(db, user, "Fabrik", plan_id=plan.id)
+    assert [(t.quelle, t.quell_id) for t in result.treffer] == [
+        ("katplan_element", f"{plan.id}:{element.uuid}"),
+    ]
+    assert not result.teilweise
+    assert not _suche(db, user, "Fabrik", plan_id=-1).treffer
+
+
+@pytest.mark.parametrize("filter,erwartet", [
+    ({"typ": "info"}, True), ({"typ": "massnahme"}, False),
+    ({"prioritaet": 1}, True), ({"prioritaet": 2}, False),
+    ({"phase_id": 17}, True), ({"phase_id": "17"}, True), ({"phase_id": 18}, False),
+    ({"typ": "info", "prioritaet": 1, "phase_id": 17}, True),
+    ({"quelle_art": "katplan_element"}, True), ({"quelle_art": "katplan_seite"}, False),
+])
+def test_katplan_metafilter_und_altbestand(daten, filter, erwartet):
+    db, a, _, _, user = daten
+    plan, freigeber, element = _plan(db, a)
+    element.vertraulich = False
+    freigeben(db, plan, freigeber)
+    db.flush()
+    indexiere(db, a.id, "katplan_element", f"{plan.id}:{element.uuid}")
+    doc = db.scalar(select(SearchDocument).where(SearchDocument.org_id == a.id))
+    meta = json.loads(doc.meta_json)
+    meta.update(typ="info", prioritaet=1, phase_ids=[17])
+    doc.meta_json = json.dumps(meta)
+    result = _suche(db, user, "Geheimlager", plan_id=plan.id, filter=filter)
+    assert bool(result.treffer) == erwartet
+    assert not result.teilweise
+    for feld in ("typ", "prioritaet", "phase_ids"):
+        meta.pop(feld)
+    doc.meta_json = json.dumps(meta)
+    alt = _suche(db, user, "Geheimlager", plan_id=plan.id, filter=filter)
+    assert bool(alt.treffer) == (filter.get("quelle_art", "katplan_element") == "katplan_element")
+
+
+@pytest.mark.parametrize("q,kennung,titel", [
+    ("A-01", "A-01", "Fabrik Alarm"), ("A-0", "A-01", "Fabrik Alarm"),
+    ("Z-01", "Z-01", "Fabrik Alarm"), ("Z-0", "Z-01", "Fabrik Alarm"),
+    ("Alarm Fabrik", "A-01", "Fabrik Alarm"), ("Brücke Alarm", "A-01", "Alarm Brücke"),
+])
+def test_katplan_kennung_und_titel_exakt_vorn(daten, q, kennung, titel):
+    db, a, _, o, user = daten
+    o.informationen = "A-01 Alarm Fabrik"
+    plan, freigeber, element = _plan(db, a)
+    element.vertraulich = False
+    element.kennung, element.titel = kennung, titel
+    freigeben(db, plan, freigeber)
+    db.flush()
+    neuaufbau(db, a.id)
+    result = _suche(db, user, q)
+    assert result.treffer[0].quell_id == f"{plan.id}:{element.uuid}"
+    assert "exakt" in result.treffer[0].grund
+    assert not result.teilweise
+
+
+def test_bester_chunk_bleibt_beim_filtern(daten):
+    db, a, _, _, user = daten
+    plan, freigeber, element = _plan(db, a)
+    element.vertraulich = False
+    freigeben(db, plan, freigeber)
+    db.flush()
+    indexiere(db, a.id, "katplan_element", f"{plan.id}:{element.uuid}")
+    doc = db.scalar(select(SearchDocument).where(SearchDocument.org_id == a.id))
+    chunk = SearchChunk(org_id=a.id, document_id=doc.id, chunk_nr=1,
+                        text="Titel\nBester Abschnitt Geheimlager", abschnitt="Zwei", inhalt_hash="b" * 64)
+    db.add(chunk)
+    db.flush()
+    kandidaten = [abfrage.Kandidat(doc.id, None, 1), abfrage.Kandidat(doc.id, chunk.id, 2),
+                  abfrage.Kandidat(doc.id, doc.chunks[0].id, 3)]
+    result = abfrage._index_treffer(db, user, kandidaten, ["geheimlager"], "volltext",
+                                   SuchAnfrage(q="Geheimlager", plan_id=plan.id))
+    assert len(result) == 1 and result[0].fundstelle == "Abschnitt Zwei"
+    assert "Bester Abschnitt" in result[0].auszug
+    exakt = result[0].model_copy(update={"auszug": "Falscher Abschnitt", "grund": ["exakt"]})
+    assert fusioniere([[exakt], result])[0].auszug == result[0].auszug
+
+
+def test_anfrage_neue_felder_abwaertskompatibel():
+    alt = SuchAnfrage(q="Alarm")
+    assert alt.plan_id is None and alt.filter == {}
+    neu = SuchAnfrage(q="Alarm", plan_id=7, filter={"typ": "info"})
+    assert neu.plan_id == 7 and neu.filter == {"typ": "info"}
+    assert alt.filter == {}

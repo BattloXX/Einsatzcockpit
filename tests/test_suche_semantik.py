@@ -1,5 +1,6 @@
 """S8c: Semantische Kandidaten, hybride Fusion und Ausgabe ohne Vektordatenbank."""
 
+import json
 from types import SimpleNamespace
 from unittest.mock import Mock
 from uuid import uuid4
@@ -76,7 +77,7 @@ def test_hybrid_fusion_und_unveraenderte_frage(daten, monkeypatch):
     assert [t.quell_id for t in result.treffer] == [gemeinsam.quell_id, semantisch.quell_id]
     assert result.treffer[0].grund == ["volltext", "semantisch"]
     assert result.treffer[1].grund == ["semantisch"]
-    assert result.treffer[1].auszug.startswith("Hier versammelt")
+    assert "Hier versammelt" in result.treffer[1].auszug
     assert 0 < len(result.treffer[1].auszug) <= 300
     assert result.modi == ["exakt", "volltext", "semantisch"]
     assert not result.teilweise
@@ -204,3 +205,26 @@ async def test_mcp_grund_unveraendert_ohne_neue_felder(daten, monkeypatch):
     assert result["modi"] == ergebnis.modi
     assert result["treffer"][0]["grund"] == ["semantisch"]
     assert set(result["treffer"][0]) == set(mcp_suche._FELDER)
+
+
+@pytest.mark.parametrize("grund", ["volltext", "semantisch"])
+def test_katplan_filter_auf_allen_indexstufen(daten, monkeypatch, grund):
+    eigen, anderer_plan, andere_quelle = daten.docs
+    anderer_plan.org_id = daten.user.org_id
+    anderer_plan.chunks[0].org_id = daten.user.org_id
+    for doc, plan_id in ((eigen, 7), (anderer_plan, 8)):
+        doc.quelle = "katplan_element"
+        doc.meta_json = json.dumps({"plan_id": plan_id, "typ": "info", "prioritaet": 1, "phase_ids": [17]})
+    andere_quelle.org_id = daten.user.org_id
+    andere_quelle.chunks[0].org_id = daten.user.org_id
+    daten.db.flush()
+    kandidaten = [Kandidat(d.id, d.chunks[0].id, r) for r, d in enumerate(daten.docs, 1)]
+    monkeypatch.setattr(abfrage, "volltext_kandidaten", lambda *_, **__: kandidaten if grund == "volltext" else [])
+    daten.knn.return_value = [_nachbar(d) for d in daten.docs] if grund == "semantisch" else []
+    anfrage = SuchAnfrage(q="Unbekannte Frage", plan_id=7,
+                          filter={"typ": "info", "prioritaet": 1, "phase_id": 17})
+    result = abfrage.suche(daten.db, daten.user, anfrage)
+    assert [t.quell_id for t in result.treffer] == [eigen.quell_id]
+    assert result.treffer[0].grund == [grund] and not result.teilweise
+    anfrage.filter["phase_id"] = 18
+    assert not abfrage.suche(daten.db, daten.user, anfrage).treffer

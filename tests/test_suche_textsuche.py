@@ -242,3 +242,51 @@ def test_migration_sqlite_upgrade_downgrade():
             assert set(sa.inspect(conn).get_table_names()) == {"fire_dept", "org_settings"}
             assert [s["name"] for s in sa.inspect(conn).get_columns("org_settings")] == ["id"]
     engine.dispose()
+
+
+@pytest.mark.parametrize("wort,synonym", [
+    ("Hochwasser", "überflutung"), ("HQ", "überschwemmung"),
+    ("Ueberflutung", "hochwasser"), ("Überschwemmung", "hq"),
+    ("Blackout", "stromausfall"), ("Stromausfall", "blackout"),
+    ("Evakuierung", "räumung"), ("Raeumung", "evakuierung"),
+    ("Sammelplatz", "treffpunkt"), ("Treffpunkt", "sammelplatz"),
+    ("Einsatzleiter", "el"), ("EL", "einsatzleitung"),
+    ("KatS", "katastrophenschutz"), ("Kat-Schutz", "kats"),
+    ("Fdl", "fahrdienstleiter"), ("Fahrdienstleiter", "fdl"),
+    ("Oberleitung", "fahrleitung"), ("Fahrleitung", "oberleitung"),
+])
+def test_katplan_synonyme(wort, synonym):
+    assert normalisiere(synonym) in expandiere([wort])
+
+
+def test_katplan_markierung_praefix_synonym_und_html():
+    from app.services.katplan_suche_service import markiere
+
+    assert str(markiere("Stromausfallplan", "Blackout")) == "<mark>Stromausfallplan</mark>"
+    assert str(markiere("RÄUMUNGSPLAN & <script>", "raeumung")) == (
+        "<mark>RÄUMUNGSPLAN</mark> &amp; &lt;script&gt;"
+    )
+    assert str(markiere("Überflutung UEBERFLUTUNG", "HQ")) == (
+        "<mark>Überflutung</mark> <mark>UEBERFLUTUNG</mark>"
+    )
+    assert str(markiere("Fahrstraße Strasse", "strass")) == "Fahrstraße <mark>Strasse</mark>"
+    assert str(markiere('<b> & "Alarm"', '<b>')) == '<mark>&lt;b&gt;</mark> &amp; &quot;Alarm&quot;'
+    assert str(markiere("<b>&", "")) == "&lt;b&gt;&amp;"
+
+
+def test_katplan_ausschnitt_dichtestes_fenster():
+    from app.services.katplan_suche_service import ausschnitt
+
+    text = "Alarm einzeln " + "Fülltext " * 80 + "Alarm Sammelplatz Stromausfallplan Ende"
+    snippet = ausschnitt(text, ["alarm", "treffpunkt", "blackout"])
+    assert "Alarm Sammelplatz Stromausfallplan" in snippet
+    assert "einzeln" not in snippet and snippet.startswith("... ")
+    assert ausschnitt("kurzer Text", []) == "kurzer Text"
+    assert ausschnitt(None, ["alarm"]) == ""
+    assert ausschnitt("a " * 200, ["fehlt"]) == "a " * 100 + " ..."
+    assert "Alarm Sammelplatz" in ausschnitt(text, ["alarm", "treffpunkt"], laenge=80)
+
+
+def test_katplan_synonyme_im_boolean_query():
+    assert "katastrophenschutz*" in baue_boolean_query(["Kat-Schutz"])[0]
+    assert "ueberschwemmung*" in baue_boolean_query(["Hochwasser"])[0]

@@ -1,7 +1,7 @@
 """Validierter Anfrage- und Ergebnisvertrag der zentralen Suche."""
 
 from datetime import datetime
-from typing import Literal, Self
+from typing import Any, Literal, Self
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -19,6 +19,8 @@ class SuchAnfrage(BaseModel):
     kontext: Literal["global", "einsatz", "gsl"] = "global"
     kontext_id: int | None = None
     typen: list[str] = Field(default_factory=list)
+    plan_id: int | None = None
+    filter: dict[str, Any] = Field(default_factory=dict)
     inkl_erledigt: bool = False
     ganze_org: bool = False
     lat: float | None = Field(default=None, ge=-90, le=90, allow_inf_nan=False)
@@ -49,6 +51,12 @@ class SuchAnfrage(BaseModel):
         if gesetzt not in (0, 3):
             raise ValueError("Koordinaten und Radius nur gemeinsam")
         return self
+
+
+class PlanSuchAnfrage(SuchAnfrage):
+    """Interne Plansuche mit bis zu 100 Treffern; globale API bleibt bei 50."""
+
+    limit: int = Field(default=100, ge=1, le=100)
 
 
 class Treffer(BaseModel):

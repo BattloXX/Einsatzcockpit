@@ -10,19 +10,41 @@
     <p class="kp-empty">Bitte Suchbegriffe eingeben oder einen Filter auswählen.</p>
   {% else %}
     <p>{{ gesamt }} Treffer{% if abgeschnitten %}. Die Liste wurde gekürzt. Bitte die Suche eingrenzen.{% endif %}</p>
-    {% for t in treffer %}
-      <article class="kp-box">
-        <div class="kp-chips">
-          <span class="kp-badge">{{ t.typ_label }}</span>
-          {% if t.vertraulich %}<span class="kp-badge">vertraulich</span>{% endif %}
-          {% if t.prioritaet %}<span class="kp-badge">Priorität {{ t.prioritaet }}</span>{% endif %}
-          {% if t.distanz_m is not none %}<span class="kp-badge">{{ t.distanz_m|round|int }} m</span>{% endif %}
-        </div>
-        <h2><a class="kp-link" href="{{ t.url }}">{{ t.titel }}</a></h2>
-        <p>{{ t.plan_titel }}{% if t.kennung %} · <span class="kp-mono">{{ t.kennung }}</span>{% endif %}</p>
-        {% if t.art == 'seite' %}<p>{{ t.dokument_titel }} · Seite {{ t.seiten_nr }}</p>{% endif %}
-        <p>{{ t.ausschnitt_html }}</p>
-      </article>
+    <div class="kp-chips" aria-label="Treffer filtern">
+      {% for code, anzahl in facetten.typ.items() %}
+        <button type="button" class="btn btn--ghost btn--sm" data-kp-facette="typ" data-wert="{{ code }}" aria-pressed="{{ 'true' if form.get('typ') == code else 'false' }}">{{ typen[code].label if code in typen else code }} <span class="badge">{{ anzahl }}</span></button>
+      {% endfor %}
+      {% for pid, anzahl in facetten.plan.items() %}
+        {% for p in plaene if p.id == pid %}
+          <button type="button" class="btn btn--ghost btn--sm" data-kp-facette="plan_id" data-wert="{{ pid }}" aria-pressed="{{ 'true' if form.get('plan_id') == pid|string else 'false' }}">{{ p.titel }} <span class="badge">{{ anzahl }}</span></button>
+        {% endfor %}
+      {% endfor %}
+    </div>
+    {% for gruppe in gruppen %}
+      <section class="kp-suchgruppe">
+        <h2><a class="kp-link" href="/plaene/{{ gruppe.plan_id }}{% if form.get('arbeitsstand') == '1' %}?ansicht=arbeitsstand{% endif %}">{{ gruppe.plan_titel }}</a></h2>
+        {% for label, liste in [('Elemente', gruppe.elemente), ('Dokumentseiten', gruppe.seiten)] %}
+          {% if liste %}<h3>{{ label }}</h3>{% endif %}
+          {% for t in liste %}
+            <article class="kp-box">
+              <div class="kp-chips">
+                <span class="badge">{{ t.typ_label }}</span>
+                {% if t.phase_label %}<span class="badge">{{ t.phase_label }}</span>{% endif %}
+                {% if t.vertraulich %}<span class="badge">vertraulich</span>{% endif %}
+                {% if t.prioritaet %}<span class="badge">Priorität {{ t.prioritaet }}</span>{% endif %}
+                {% if t.distanz_m is not none %}<span class="badge">{{ t.distanz_m|round|int }} m</span>{% endif %}
+              </div>
+              <h4><a class="kp-link" href="{{ t.url }}">{% if t.kennung %}<span class="kp-mono">{{ t.kennung }}</span> · {% endif %}{{ t.titel }}</a></h4>
+              <p>{{ t.ausschnitt_html }}</p>
+              {% if t.art == 'seite' %}
+                <div class="kp-chips">
+                  {% for seite in t.seiten %}<a class="btn btn--ghost btn--sm" href="{{ seite.url }}">Seite {{ seite.seiten_nr }}</a>{% endfor %}
+                </div>
+              {% endif %}
+            </article>
+          {% endfor %}
+        {% endfor %}
+      </section>
     {% else %}
       <p class="kp-empty">Keine passenden Inhalte gefunden.</p>
     {% endfor %}
