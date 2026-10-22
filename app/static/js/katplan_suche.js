@@ -2,6 +2,13 @@
 (function () {
   const form = document.getElementById('kp-suchformular');
   if (!form) return;
+  document.addEventListener('click', function (event) {
+    const chip = event.target.closest('[data-kp-facette]');
+    if (!chip) return;
+    const feld = form.elements[chip.dataset.kpFacette];
+    feld.value = feld.value === chip.dataset.wert ? '' : chip.dataset.wert;
+    feld.dispatchEvent(new Event('change', { bubbles: true }));
+  });
   const adresse = document.getElementById('kp-suche-adresse');
   const auswahl = document.getElementById('kp-suche-adressen');
   const hinweis = document.getElementById('kp-suche-geo-hinweis');

@@ -1,0 +1,13 @@
+{% if q|trim %}
+  <ul class="kp-dropdown-liste" aria-label="Suchtreffer im Plan">
+    {% for t in treffer %}
+      <li>
+        <a class="kp-link" href="{{ t.url }}">
+          {% if t.kennung %}<span class="kp-mono">{{ t.kennung }}</span> {% endif %}{{ t.titel }}
+        </a>
+        <div class="kp-chips"><span class="badge">{{ t.typ_label }}</span>{% if t.phase_label %}<span class="badge">{{ t.phase_label }}</span>{% endif %}</div>
+        <p>{{ t.ausschnitt_html }}</p>
+      </li>
+    {% else %}<li>Keine passenden Inhalte gefunden.</li>{% endfor %}
+  </ul>
+{% endif %}

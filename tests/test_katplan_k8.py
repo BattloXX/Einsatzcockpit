@@ -116,7 +116,8 @@ def test_und_sonderzeichen_leere_suche_und_limit(daten):
     for q in ("%", "_", "100%", "a_b"):
         assert suchen(daten, q=q)["gesamt"] == 1
     assert suchen(daten, q="a%b")["gesamt"] == 0
-    assert suchen(daten, q="   ") == {"treffer": [], "gesamt": 0, "abgeschnitten": False}
+    assert suchen(daten, q="   ") == {"treffer": [], "gesamt": 0, "abgeschnitten": False,
+                                        "facetten": {"typ": {}, "phase": {}, "plan": {}}, "gruppen": []}
     result = suchen(daten, q="wasser", limit=1)
     assert result["gesamt"] == 2 and result["abgeschnitten"] and len(result["treffer"]) == 1
     assert result["treffer"][0]["prioritaet"] == 1

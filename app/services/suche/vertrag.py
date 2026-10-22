@@ -53,6 +53,12 @@ class SuchAnfrage(BaseModel):
         return self
 
 
+class PlanSuchAnfrage(SuchAnfrage):
+    """Interne Plansuche mit bis zu 100 Treffern; globale API bleibt bei 50."""
+
+    limit: int = Field(default=100, ge=1, le=100)
+
+
 class Treffer(BaseModel):
     quelle: str
     quell_id: str

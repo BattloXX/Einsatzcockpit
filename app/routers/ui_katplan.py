@@ -5,7 +5,7 @@ from datetime import UTC, date, datetime
 from html import escape
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, RedirectResponse, Response
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import or_
@@ -279,6 +279,22 @@ def suche(request: Request, db: Session = Depends(get_db), user: User = Depends(
     fragment = request.headers.get("HX-Request") == "true"
     return templates.TemplateResponse(request, "katplan/_suche_treffer.html" if fragment else "katplan/suche.html",
                                       {**context, "fragment": fragment})
+
+
+@router.get("/{plan_id}/suche-treffer")
+def suche_dropdown(plan_id: int, request: Request, q: str = Query(default="", max_length=500), ansicht: str = "",
+                   db: Session = Depends(get_db), user: User = Depends(require_katplan_lesen)):
+    plan = _sichtbarer_plan(db, plan_id, user)
+    arbeit = ansicht == "arbeitsstand" and darf_bearbeiten(user)
+    ergebnis = suche_service.suche(db, user, q=q, plan_id=plan.id, arbeitsstand=arbeit, limit=8) if q.strip() else {
+        "treffer": [],
+    }
+    for t in ergebnis["treffer"]:
+        if arbeit and t["art"] == "element":
+            t["url"] = f"/plaene/{plan.id}?ansicht=arbeitsstand#element-{t['element_id']}"
+    return templates.TemplateResponse(request, "katplan/_suche_dropdown.html", {
+        "user": user, "q": q, **ergebnis,
+    })
 
 
 @router.get("/{plan_id}/objektdokumente/suche")

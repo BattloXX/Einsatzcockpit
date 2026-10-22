@@ -7,15 +7,21 @@
   <script src="/static/js/quill.min.js" defer></script>
   <script src="/static/js/sortable.min.js" defer></script>
   <script src="/static/js/katplan_editor.js" defer></script>
+  <script src="/static/js/katplan_livesuche.js" defer></script>
 {% endblock %}
 {% block content %}
   <section class="kp-page" x-data="{ reiter: window.location.hash === '#kp-protokoll' ? 'protokoll' : 'plan' }">
     <div class="kp-topbar">
       <a class="btn btn--ghost btn--sm" href="/plaene">{{ icon("chevron-left", size="xs") }} Pläne</a>
-      <form method="get" action="/plaene/suche" class="kp-plansuche">
-        <input class="form-control" type="search" name="q" placeholder="Im Plan suchen" aria-label="Im Plan suchen">
+      <form method="get" action="/plaene/suche" class="kp-plansuche" data-kp-livesuche>
+        <input class="form-control" type="search" name="q" placeholder="Im Plan suchen" aria-label="Im Plan suchen"
+               hx-get="/plaene/{{ plan.id }}/suche-treffer" hx-trigger="input changed delay:300ms"
+               hx-target="#kp-suche-dropdown" hx-include="closest form" hx-sync="this:replace"
+               aria-controls="kp-suche-dropdown" aria-expanded="false" autocomplete="off">
+        {% if arbeitsstand %}<input type="hidden" name="ansicht" value="arbeitsstand"><input type="hidden" name="arbeitsstand" value="1">{% endif %}
         <input type="hidden" name="plan_id" value="{{ plan.id }}">
         <button class="btn btn--ghost btn--sm" type="submit" aria-label="Im Plan suchen">{{ icon("search") }}</button>
+        <div id="kp-suche-dropdown" class="kp-suche-dropdown" aria-live="polite" hidden></div>
       </form>
     </div>
     <div class="kp-grid kp-detail-grid">

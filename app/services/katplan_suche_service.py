@@ -10,6 +10,7 @@ from markupsafe import Markup
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.models.katplan import (
     KatplanDokumentSeite,
     KatplanElement,
@@ -19,6 +20,7 @@ from app.models.katplan import (
     KatplanVersion,
     KatplanVersionElement,
 )
+from app.models.master import OrgSettings
 from app.models.user import User
 from app.services.katplan_quelle_service import sichtbare_quellen
 from app.services.katplan_service import _HTMLText
@@ -150,6 +152,46 @@ def _distanz(element: KatplanElement | KatplanVersionElement, lat: float, lng: f
     return distanz if distanz <= radius else None
 
 
+def zentrale_suche_aktiv(db: Session, user: User) -> bool:
+    if not settings.SEARCH_ENABLED or user.org_id is None:
+        return False
+    org = db.query(OrgSettings).filter_by(org_id=user.org_id).one_or_none()
+    return bool(org and org.suche_aktiv)
+
+
+def _ergebnis(treffer: list[dict[str, Any]], limit: int, q: str) -> dict[str, Any]:
+    """Facetten vor Begrenzung zaehlen; Dokumentseiten nur in der Anzeige buendeln."""
+    facetten: dict[str, dict[Any, int]] = {"typ": {}, "phase": {}, "plan": {}}
+    for t in treffer:
+        for art, werte in (("typ", [t["typ"]] if t["typ"] else []),
+                           ("plan", [t["plan_id"]]), ("phase", t.get("phase_ids", []))):
+            for wert in werte:
+                facetten[art][wert] = facetten[art].get(wert, 0) + 1
+        t["ausschnitt_html"] = markiere(t["ausschnitt"], q)
+    sichtbar = treffer[:max(0, limit)]
+    gruppen: dict[int, dict[str, Any]] = {}
+    dokumente: dict[tuple[int, int], dict[str, Any]] = {}
+    for t in sichtbar:
+        gruppe = gruppen.setdefault(t["plan_id"], {
+            "plan_id": t["plan_id"], "plan_titel": t["plan_titel"], "elemente": [], "seiten": [],
+        })
+        if t["art"] == "element":
+            gruppe["elemente"].append(t)
+        else:
+            key = (t["plan_id"], t["dokument_id"])
+            if key not in dokumente:
+                dokumente[key] = {**t, "seiten": []}
+                gruppe["seiten"].append(dokumente[key])
+            dokumente[key]["seiten"].append(t)
+    for dokument in dokumente.values():
+        dokument["seiten"].sort(key=lambda t: t["seiten_nr"])
+        dokument["titel"] = dokument["dokument_titel"] + ", Seiten " + ", ".join(
+            str(t["seiten_nr"]) for t in dokument["seiten"])
+        dokument["url"] = dokument["seiten"][0]["url"]
+    return {"treffer": sichtbar, "gesamt": len(treffer), "abgeschnitten": len(treffer) > max(0, limit),
+            "facetten": facetten, "gruppen": list(gruppen.values())}
+
+
 def suche(db: Session, user: User, *, q: str = "", plan_id: int | None = None,
           gefahr: str = "", typ: str = "", prioritaet: int | None = None, phase: str = "",
           ort: str = "", nur_geprueft: bool = False, lat: float | None = None,
@@ -164,8 +206,24 @@ def suche(db: Session, user: User, *, q: str = "", plan_id: int | None = None,
         raise ValueError("Bitte gültige Koordinaten und einen Radius bis 50 km eingeben.")
     if not woerter and not any((plan_id is not None, gefahr, typ, prioritaet is not None,
                                phase and plan_id is not None, ort, nur_geprueft, umkreis)):
-        return {"treffer": [], "gesamt": 0, "abgeschnitten": False}
+        return _ergebnis([], limit, q)
     arbeit = arbeitsstand and darf_bearbeiten(user)
+    # Lokale Imports: die Engine verwendet ihrerseits ausschnitt() aus diesem Modul.
+    from app.services.suche import abfrage
+    from app.services.suche.vertrag import PlanSuchAnfrage
+
+    engine = None
+    if (woerter and not arbeitsstand and not any((ort, umkreis, nur_geprueft))
+            and zentrale_suche_aktiv(db, user)):
+        filter_werte = {k: v for k, v in {
+            "typ": typ or None, "prioritaet": prioritaet,
+            "phase_id": phase if phase and plan_id is not None else None,
+        }.items() if v is not None}
+        engine = abfrage.suche(db, user, PlanSuchAnfrage(
+            q=q, plan_id=plan_id, typen=["katplan_element", "katplan_seite"],
+            filter=filter_werte, limit=100,
+        ))
+    engine_map = {(t.quelle, t.quell_id): t for t in engine.treffer} if engine is not None else {}
     treffer: list[dict[str, Any]] = []
     for kopf in sichtbare_plaene(db, user, arbeit):
         plan = kopf["plan"]
@@ -177,7 +235,11 @@ def suche(db: Session, user: User, *, q: str = "", plan_id: int | None = None,
             KatplanVersionElement.version_id == kopf["version_id"])
         if not sieht_vertraulich(user):
             query = query.filter(model.vertraulich.is_(False))
-        for wort in woerter:
+        if engine is not None:
+            uuids = [key.partition(":")[2] for quelle, key in engine_map
+                     if quelle == "katplan_element" and key.partition(":")[0] == str(plan.id)]
+            query = query.filter(KatplanVersionElement.element_uuid.in_(uuids))
+        for wort in ([] if engine is not None else woerter):
             query = query.filter(func.lower(model.suchtext).like(_like(wort), escape="\\"))
         if typ:
             query = query.filter(model.typ == typ)
@@ -205,13 +267,21 @@ def suche(db: Session, user: User, *, q: str = "", plan_id: int | None = None,
             uid = element.uuid if isinstance(element, KatplanElement) else element.element_uuid
             url = (f"/plaene/{plan.id}/bearbeiten?element={element.id}" if arbeit
                    else f"/plaene/{plan.id}#element-{uid}")
+            ids = (json.loads(element.phasen_json) if isinstance(element, KatplanVersionElement)
+                   else [str(z.phase_id) for z in db.query(KatplanElementPhase).filter_by(
+                       org_id=user.org_id, element_id=element.id)])
+            engine_treffer = engine_map.get(("katplan_element", f"{plan.id}:{uid}"))
             treffer.append({"art": "element", "element_id": uid, "plan_id": plan.id, "plan_titel": kopf["titel"],
                             "planart_label": kopf["planart_label"],
                             "titel": element.titel, "kennung": element.kennung or "", "typ": element.typ,
                             "typ_label": (ELEMENT_TYPEN[element.typ].label
                                           if element.typ in ELEMENT_TYPEN else element.typ),
                             "prioritaet": element.prioritaet, "vertraulich": element.vertraulich,
-                            "ausschnitt": ausschnitt(_klartext(element, woerter), woerter),
+                            "phase_ids": [str(i) for i in ids],
+                            "phase_label": ", ".join(p["name"] for p in kopf["phasen"]
+                                                     if str(p["id"]) in {str(i) for i in ids}),
+                            "ausschnitt": (engine_treffer.auszug if engine_treffer else
+                                           ausschnitt(_klartext(element, woerter), woerter)),
                             "url": url, "distanz_m": distanz})
         if not mit_quellen or not woerter or any((ort, umkreis, typ, prioritaet is not None, phase, nur_geprueft)):
             continue
@@ -220,18 +290,25 @@ def suche(db: Session, user: User, *, q: str = "", plan_id: int | None = None,
             KatplanDokumentSeite.org_id == user.org_id, KatplanDokumentSeite.plan_id == plan.id,
             KatplanDokumentSeite.dokument_id.in_(dokumente),
         )
-        for wort in woerter:
+        if engine is not None:
+            seiten = seiten.filter(KatplanDokumentSeite.id.in_(
+                [key for quelle, key in engine_map if quelle == "katplan_seite"]))
+        for wort in ([] if engine is not None else woerter):
             seiten = seiten.filter(func.lower(KatplanDokumentSeite.volltext).like(_like(wort), escape="\\"))
         for seite in seiten:
             dok = dokumente[seite.dokument_id]
             url = f"/plaene/{plan.id}/quellen/{dok.id}?seite={seite.seiten_nr}"
             if not darf_bearbeiten(user):
                 url += f"&version_id={kopf['version_id']}"
+            engine_seite = engine_map.get(("katplan_seite", str(seite.id)))
             treffer.append({"art": "seite", "plan_id": plan.id, "plan_titel": kopf["titel"],
                             "planart_label": kopf["planart_label"],
                             "titel": seite.titel or f"{dok.titel}, Seite {seite.seiten_nr}", "kennung": "",
                             "typ": "", "typ_label": "Dokumentseite", "prioritaet": None, "vertraulich": False,
-                            "ausschnitt": ausschnitt(seite.volltext, woerter), "url": url, "distanz_m": None,
+                            "phase_ids": [], "phase_label": "",
+                            "ausschnitt": (engine_seite.auszug if engine_seite else
+                                           ausschnitt(seite.volltext, woerter)),
+                            "url": url, "distanz_m": None,
                             "dokument_id": dok.id, "dokument_titel": dok.titel, "seiten_nr": seite.seiten_nr})
 
     def rang(t: dict[str, Any]) -> tuple:
@@ -240,6 +317,9 @@ def suche(db: Session, user: User, *, q: str = "", plan_id: int | None = None,
         return (t["distanz_m"] if umkreis else relevanz, t["prioritaet"] or 99,
                 t["plan_titel"].lower(), t["titel"].lower(), t["url"])
 
-    treffer.sort(key=rang)
-    limit = max(0, limit)
-    return {"treffer": treffer[:limit], "gesamt": len(treffer), "abgeschnitten": len(treffer) > limit}
+    if engine is not None:
+        raenge = {t.url: i for i, t in enumerate(engine.treffer)}
+        treffer.sort(key=lambda t: raenge.get(t["url"], 100))
+    else:
+        treffer.sort(key=rang)
+    return _ergebnis(treffer, limit, q)
