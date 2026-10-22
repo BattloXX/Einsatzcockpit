@@ -82,6 +82,7 @@ from app.models.major_incident import (
     SiteResourceAssignment,
     StaffAssignment,
     StaffFunction,
+    site_map_color,
 )
 from app.models.master import FireDept, Member, VehicleMaster
 from app.models.user import User
@@ -2330,12 +2331,7 @@ def lage_dashboard(
             "lat": s.lat,
             "lng": s.lng,
             "phase": s.phase.value,
-            "color": (
-                "#ef4444" if SITE_PRIORITY_COLOR.get(s.priority) == "red"  # type: ignore[arg-type]
-                else "#f97316" if SITE_PRIORITY_COLOR.get(s.priority) == "orange"  # type: ignore[arg-type]
-                else "#eab308" if SITE_PRIORITY_COLOR.get(s.priority) == "yellow"  # type: ignore[arg-type]
-                else "#6b7280"
-            ),
+            "color": site_map_color(s),
         }
         for s in lage.sites
         if s.lat and s.lng and s.phase != SitePhase.abgebrochen
@@ -4588,17 +4584,7 @@ def lage_karte(
     lage = _lage_or_404(lage_id, db)
     _check_org_access(user, lage)
 
-    def _site_color(s: IncidentSite) -> str:
-        c = SITE_PRIORITY_COLOR.get(s.priority) if s.priority else None
-        if c == "red":
-            return "#ef4444"
-        if c == "orange":
-            return "#f97316"
-        if c == "yellow":
-            return "#eab308"
-        if s.phase == SitePhase.erledigt:
-            return "#22c55e"
-        return "#6b7280"
+    _site_color = site_map_color
 
     _prio_letter = {
         SitePriority.sofort: "S",
@@ -4702,17 +4688,7 @@ def build_karte_context(db: Session, lage, min_lat: float, min_lng: float,
     if fmt not in _KARTE_VALID_FMTS:
         fmt = "A4 portrait"
 
-    def _site_color(s: IncidentSite) -> str:
-        c = SITE_PRIORITY_COLOR.get(s.priority) if s.priority else None
-        if c == "red":
-            return "#ef4444"
-        if c == "orange":
-            return "#f97316"
-        if c == "yellow":
-            return "#eab308"
-        if s.phase == SitePhase.erledigt:
-            return "#22c55e"
-        return "#6b7280"
+    _site_color = site_map_color
 
     _prio_letter = {
         SitePriority.sofort: "S", SitePriority.dringend: "D",
@@ -4808,17 +4784,7 @@ def lage_karte_sites(
     user = request.state.user
     lage = _lage_or_404(lage_id, db)
     _check_org_access(user, lage)
-    def site_color(site: IncidentSite) -> str:
-        color = SITE_PRIORITY_COLOR.get(site.priority) if site.priority else None
-        if color == "red":
-            return "#ef4444"
-        if color == "orange":
-            return "#f97316"
-        if color == "yellow":
-            return "#eab308"
-        if site.phase == SitePhase.fertig_gemeldet:
-            return "#0d9488"
-        return "#22c55e" if site.phase == SitePhase.erledigt else "#6b7280"
+    site_color = site_map_color
 
     priority_letters = {
         SitePriority.sofort: "S", SitePriority.dringend: "D",

@@ -799,6 +799,20 @@
     if (sv) sv.style.display = '';
     if (st) st.style.display = 'none';
 
+    if (colorMode === 'priority') {
+      // Prioritaet nicht nur ueber Farbe: Buchstabe im Marker + Text in der Legende
+      var prioItems = [['#d42225', 'S', 'Sofort'], ['#e67e22', 'D', 'Dringend'],
+                       ['#f2b02e', 'N', 'Normal'], ['#6b7280', 'A', 'Aufschiebbar']];
+      var phtml = '<span style="font-size:.68rem;color:var(--text-muted);margin-right:4px;">Priorit\u00e4t:</span>';
+      prioItems.forEach(function(p) {
+        phtml += '<div class="karte-legend__item">' +
+          '<div class="karte-legend__dot" style="background:' + p[0] + ';"></div>' +
+          '<span>' + p[1] + ' ' + p[2] + '</span></div>';
+      });
+      legend.innerHTML = phtml;
+      legend.style.display = 'flex';
+      return;
+    }
     if (colorMode !== 'sector' || SECTORS.length === 0) {
       legend.style.display = 'none';
       return;
@@ -1303,10 +1317,10 @@
             if (s.id === msg.site_id) { s.sector_id = msg.sector_id != null ? msg.sector_id : null; }
           });
           refreshMarkerColors();
-        } else if (msg.type === 'site_phase_changed' || msg.type === 'site_updated') {
+        } else if (msg.type === 'site_phase_changed' || msg.type === 'site_updated' || msg.type === 'site_prio_changed') {
           // Bestehende Marker aktualisieren (Phase/Sektor) ohne Reload.
           refreshSitesAndSectors().catch(function() {});
-        } else if (msg.type === 'site_created' && msg.site_id) {
+        } else if (msg.type === 'site_created') {
           refreshSitesAndSectors().catch(function() {});
         } else if (msg.type === 'section:changed') {
           refreshSitesAndSectors().catch(function() {});
