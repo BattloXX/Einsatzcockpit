@@ -430,6 +430,10 @@ def auftraege_fuer_einheit(db: Session, ctx: EinheitKontext) -> dict:
     if ctx.vehicle:
         fahrzeug = ctx.vehicle.code or ctx.vehicle.name
     naechster_dispatch = weitere_dispatches[0] if weitere_dispatches else None
+    # GSL-06: vereinfachter Status (Einsatzbereit / Auf Anfahrt / Am Einsatzort) wie beim Fahrzeugstatus
+    from app.services.resource_service import einheit_ampel
+
+    ampel = einheit_ampel(ctx.einheit.status, aktiv, ctx.einheit.status_at)
 
     def auftragsdaten_mit_rang(dispatch: EinheitSiteDispatch, rang: int) -> dict:
         daten = _auftragsdaten(dispatch)
@@ -447,6 +451,10 @@ def auftraege_fuer_einheit(db: Session, ctx: EinheitKontext) -> dict:
             "is_exercise": ctx.lage.is_exercise,
             "offen": len(aktiv),
             "erledigt": len(abgeschlossen),
+            "ampel": {
+                "code": ampel["code"], "label": ampel["label"], "css": ampel["css"],
+                "seit": _iso_z(ampel["seit"]) if ampel["seit"] else None,
+            },
         },
         "kategorien": {
             "aktuell": auftragsdaten_mit_rang(aktuell_dispatch, 1) if aktuell_dispatch else None,

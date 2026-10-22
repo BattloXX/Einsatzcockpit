@@ -113,6 +113,11 @@
                 <span x-text="online ? 'Online' : 'Offline'"></span>
               </span>
         <span x-text="syncText"></span>
+        {# GSL-06: Einheitenstatus wie beim Fahrzeug - Farbe plus Bezeichnung, wechselt mit den Auftragsstatus #}
+        <span class="einheit-chip" x-show="kopf.ampel && kopf.ampel.code" x-cloak
+              :class="kopf.ampel && kopf.ampel.css" :data-ampel="kopf.ampel && kopf.ampel.code"
+              :style="kopf.ampel && kopf.ampel.css ? 'color:#fff;font-weight:600' : ''"
+              x-text="kopf.ampel ? kopf.ampel.label + (kopf.ampel.seit ? ' · seit ' + zeit(kopf.ampel.seit) : '') : ''"></span>
         <span x-text="(kopf.offen || 0) + ' offen · ' + (kopf.erledigt || 0) + ' erledigt'"></span>
         <button type="button" class="einheit-chip einheit-chip--button"
                 :class="outboxListe.length ? 'einheit-chip--warn' : ''"

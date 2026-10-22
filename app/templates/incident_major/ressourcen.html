@@ -93,6 +93,14 @@
   display: flex; align-items: center; gap: 4px;
 }
 .einh-card__since { font-size: .65rem; color: var(--text-muted); margin-left: auto; font-family: 'JetBrains Mono', monospace; }
+.einh-card--fremd { border-style: dashed; }
+.einh-card__fremd { font-size: .6rem; font-weight: 700; padding: 1px 6px; border-radius: 999px; white-space: nowrap;
+  background: rgba(122,135,168,.22); color: var(--text-muted); }
+.res-filter { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0 0 10px; }
+.res-filter .btn[aria-pressed="true"] { background: var(--red); color: #fff; }
+.res-filter__hint { font-size: .75rem; color: var(--text-muted); }
+[data-res-filter="eigene"] .einh-card[data-eigen="0"],
+[data-res-filter="fremde"] .einh-card[data-eigen="1"] { display: none; }
 .einh-card__zugang { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }
 .einh-card__zugang .btn { display:inline-flex; align-items:center; gap:4px; min-height:32px; }
 .einh-card__actions {
@@ -108,6 +116,9 @@
 .estatus--bereitgestellt { background: rgba(24,169,87,.16);  color: var(--green); }
 .estatus--im_einsatz     { background: rgba(242,176,46,.18); color: var(--yellow); }
 .estatus--abgerueckt     { background: rgba(122,135,168,.18); color: var(--text-muted); }
+/* GSL-06: Ampelfarben wie beim Fahrzeugstatus (.unit-status-* setzt die Hintergrundfarbe) */
+.estatus--ampel { color: #fff; font-size: .68rem; padding: 3px 10px; }
+.estatus--ampel small { font-weight: 500; opacity: .9; }
 
 /* ── Abgerückt ───────────────────────────────────────────────────────────── */
 .res-abgerueckt { padding: 14px 16px 0; max-width: 900px; }
@@ -257,11 +268,23 @@
 
 {# ── Tab 1: Ressourcenübersicht ───────────────────────────────────────────── #}
 <div x-show="tab==='uebersicht'">
-  <div id="kraefteuebersicht-container"
-       hx-get="/lage/{{ lage.id }}/ressourcen/kraefteuebersicht"
-       hx-trigger="every 30s, ressourceChanged from:body"
-       hx-swap="innerHTML">
-    {% include "incident_major/_kraefteuebersicht.html" %}
+  {# GSL-07: standardmaessig nur eigene Einheiten; fremde gezielt einblenden (reine Anzeige, nichts wird veraendert) #}
+  <div x-data="ressourcenFilter({{ lage.id }})" :data-res-filter="modus" @htmx:after-settle.window="zaehle()">
+    <div class="res-filter" role="group" aria-label="Einheiten filtern">
+      <button type="button" class="btn btn--sm btn--ghost" :aria-pressed="modus === 'eigene'" @click="setze('eigene')">Eigene</button>
+      <button type="button" class="btn btn--sm btn--ghost" :aria-pressed="modus === 'alle'" @click="setze('alle')">Alle</button>
+      <button type="button" class="btn btn--sm btn--ghost" :aria-pressed="modus === 'fremde'" @click="setze('fremde')">Fremde (<span x-text="fremde"></span>)</button>
+      <span class="res-filter__hint" x-show="modus === 'eigene' && fremde > 0" x-cloak>
+        <span x-text="fremde"></span> fremde Einheiten ausgeblendet -
+        <a href="#" @click.prevent="setze('alle')">einblenden</a>
+      </span>
+    </div>
+    <div id="kraefteuebersicht-container"
+         hx-get="/lage/{{ lage.id }}/ressourcen/kraefteuebersicht"
+         hx-trigger="every 30s, ressourceChanged from:body"
+         hx-swap="innerHTML">
+      {% include "incident_major/_kraefteuebersicht.html" %}
+    </div>
   </div>
 </div>
 
@@ -312,6 +335,7 @@
 @media(max-width:760px) { .ressource-karte__sheet { width:100vw; }.ressource-karte__tabs { top:59px; overflow-x:auto; flex-wrap:nowrap; }.ressource-karte__tabs .btn,.res-journal__chips .btn { min-height:48px; white-space:nowrap; }.ressource-karte__actions { padding:8px 0; }.res-journal__entry { grid-template-columns:1fr; }.res-journal__storno { flex-direction:column; }.res-journal__storno .btn { min-height:48px; } }
 @media(max-width:480px) { .ressource-karte__head { padding:10px; }.ressource-karte__tabs { top:51px; padding:8px 10px; }.ressource-karte__content { padding:10px; }.ressource-karte__grid { grid-template-columns:1fr; gap:3px; }.ressource-karte__grid dt { margin-top:7px; }.ressource-karte__grid dd { padding-bottom:3px; } }
 </style>
+<script src="/static/js/ressourcen_filter.js?v={{ ASSET_VERSION }}"></script>
 <script src="/static/js/ressourcen_karte.js"></script>
 <script src="/static/js/ressourcen_zugang.js"></script>
 {% if org_members %}
