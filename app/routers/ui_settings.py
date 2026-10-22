@@ -959,9 +959,32 @@ def _weather_settings_context(request, db, user, org_id, **extra) -> dict:
     base_url = (app_settings.PUBLIC_BASE_URL or app_settings.APP_BASE_URL).rstrip("/")
     alert_rules = _alert_rules_for_template(db, effective_org_id)
     alert_logs = _alert_logs_for_template(db, effective_org_id)
+    from app.services import shared_cache, weather_health
     from app.services.weather_alert_service import RULE_DEFAULTS, RULE_LABELS
 
+    health = run_async(weather_health.provider_health)
+    for row in health.values():
+        for key in ("last_success_at", "last_error_at"):
+            row[key] = datetime.fromisoformat(row[key]) if row.get(key) else None
+    warning_result = weather_service.WarningsResult("unavailable", [])
+    if not weather_service._warnings_enabled(effective_org_id):
+        warning_result = weather_service.WarningsResult("disabled", [])
+    elif org and org.fallback_lat is not None and org.fallback_lng is not None:
+        warning_result = run_async(weather_service.get_warnings_result,
+                                   org.fallback_lat, org.fallback_lng, org_id=effective_org_id)
+    diagnostics = {
+        "health": health, "cache_mode": run_async(shared_cache.mode),
+        "warnings_result": warning_result,
+        "config": {name: getattr(app_settings, name) for name in (
+            "WEATHER_ENABLED", "WEATHER_HTTP_TIMEOUT", "WEATHER_HTTP_RETRIES",
+            "WEATHER_LOCK_TTL_S", "WEATHER_CACHE_TTL_CURRENT", "WEATHER_CACHE_TTL_NOWCAST",
+            "WEATHER_CACHE_TTL_NWP", "WEATHER_CACHE_TTL_WARN", "WEATHER_DAILY_TTL",
+            "WEATHER_FALLBACK_OPENMETEO", "WEATHER_OPENMETEO_GEOSPHERE_ENABLED",
+            "WEATHER_OPENMETEO_MODEL", "WEATHER_COMPARE_WARN_PRECIP_MM", "WEATHER_COMPARE_WARN_GUST_MS",
+        )},
+    }
     ctx = {
+        "weather_diagnostics": diagnostics,
         "user": user,
         "org": org,
         "org_settings": org_settings,
@@ -974,7 +997,8 @@ def _weather_settings_context(request, db, user, org_id, **extra) -> dict:
         "public_base_url": base_url,
         "kachelmann_is_configured": kachelmann_service.is_configured(effective_org_id),
         "weather_provider_orders": {
-            label: weather_service._provider_order(kind, effective_org_id) if app_settings.WEATHER_ENABLED else []
+            label: weather_service._provider_order(kind, effective_org_id)
+            if app_settings.WEATHER_ENABLED and (not org_settings or org_settings.weather_enabled is not False) else []
             for kind, label in (
                 ("current", "Aktuelles Wetter"), ("nowcast", "Nowcast"),
                 ("forecast", "Vorhersage"), ("daily", "Tagesvorhersage"),

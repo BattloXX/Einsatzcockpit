@@ -1,0 +1,25 @@
+<style>
+.weather-compare {width:100%;border-collapse:collapse;table-layout:fixed;margin-top:12px}
+.weather-compare th,.weather-compare td {text-align:left;padding:8px;overflow-wrap:anywhere;border-bottom:1px solid var(--border)}
+@media(max-width:760px) {.weather-compare {font-size:.78rem}.weather-compare th,.weather-compare td {padding:6px 3px}}
+</style>
+{% if comparison %}
+<p>{{ focus_label }} · Gemeinsames Gültigkeitsfenster: {{ comparison.window_start|local_datetime }} – {{ comparison.window_end|local_datetime }} (Org-Zeitzone)</p>
+<table class="weather-compare">
+  <caption>Vollständige Stundenreihen am selben Standort</caption>
+  <thead><tr><th>Anbieter / Modell</th><th>Niederschlag (Summe)</th><th>Böenmaximum</th></tr></thead>
+  <tbody>
+  {% for row in comparison.providers %}
+  <tr><th>{{ row.provider }}{% if row.provider == 'open-meteo' %} (best_match){% elif row.provider == 'open-meteo-geosphere' %} (geosphere_seamless){% endif %}</th>
+    <td>{{ '%.1f mm'|format(row.precipitation_mm) if row.precipitation_mm is not none else 'Nicht vollständig' }}</td>
+    <td>{{ '%.1f m/s'|format(row.gust_max_ms) if row.gust_max_ms is not none else 'Nicht vollständig' }}</td></tr>
+  {% endfor %}
+  <tr><th>Differenz (max – min)</th>
+    <td>{{ '%.1f mm'|format(comparison.differences.precipitation_mm) if comparison.differences.precipitation_mm is not none else 'Nicht vergleichbar' }}</td>
+    <td>{{ '%.1f m/s'|format(comparison.differences.gust_max_ms) if comparison.differences.gust_max_ms is not none else 'Nicht vergleichbar' }}</td></tr>
+  </tbody>
+</table>
+{% if comparison.deviation_hint %}<p role="status">{{ icon("alert-triangle") }} {{ comparison.deviation_hint }}</p>{% endif %}
+{% for item in comparison.excluded %}<p style="overflow-wrap:anywhere">{{ item.provider }}: {{ item.reason }}</p>{% endfor %}
+<p class="form-hint">GeoSphere direkt und Open-Meteo-GeoSphere können dieselbe Modellgrundlage nutzen. Unterschiede sind keine Genauigkeitsbewertung. Dieser Vergleich löst keine Alarme aus.</p>
+{% else %}<p>Kein Standort für den Vergleich verfügbar.</p>{% endif %}

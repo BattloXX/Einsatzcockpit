@@ -4,6 +4,12 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 
 ## Unreleased
 
+- **Wetter Phase 6**: Gemeinsame Radar-Animation für Wetterseite und GSL-Lagekarte,
+  einzeln schaltbare Wetterebenen, Windpfeil am Fokuspunkt und gelieferte Warnpolygone.
+  Modellvergleich lädt beim Öffnen, vergleicht vollständige gemeinsame Stundenfenster
+  und zeigt absolute Abweichungen ohne Alarmwirkung. Admin-Diagnose mit Providerzustand,
+  Cache-Modus und Betriebswerten ohne Zugangsdaten; neue `WEATHER_COMPARE_WARN_*`-Schwellen.
+
 - **Wetterbetrieb**: Optionaler gemeinsamer Redis-JSON-Cache mit Worker-Sperren,
   lokalem Fallback bei Ausfall und getrennten Kachelmann-Caches je Organisation.
   Eigene TTL für aktuelle Daten, begrenzte HTTP-Wiederholungen, strukturierte

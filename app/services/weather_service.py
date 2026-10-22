@@ -302,6 +302,7 @@ class ForecastResult:
     reference_time: datetime | None = None
     meta: DataMeta | None = None
     precipitation_hourly: HourlySeries = field(default_factory=list)
+    gust_hourly: HourlySeries = field(default_factory=list)
 
 
 @dataclass
@@ -330,6 +331,7 @@ class WeatherWarning:
     valid_from: datetime
     valid_to: datetime
     region: str = ""
+    geometry: dict | None = None
 
 
 WarningStatus = Literal["ok_no_warnings", "ok_with_warnings", "unavailable", "stale", "disabled"]
@@ -893,7 +895,7 @@ async def _openmeteo_forecast(
     return ForecastResult(
         horizons=_series_horizons(series, ref, horizons),
         source="open-meteo-geosphere" if model else "openmeteo", reference_time=ref,
-        precipitation_hourly=series["precipitation"],
+        precipitation_hourly=series["precipitation"], gust_hourly=series["gust"],
     )
 
 
@@ -930,7 +932,7 @@ async def _fetch_geosphere_nwp(
     }
     return ForecastResult(
         horizons=_series_horizons(series, ref, horizons), source="geosphere_nwp",
-        reference_time=ref, precipitation_hourly=series["precipitation"],
+        reference_time=ref, precipitation_hourly=series["precipitation"], gust_hourly=series["gust"],
     )
 
 
@@ -1095,6 +1097,9 @@ async def _fetch_geosphere_warnings(lat: float, lng: float) -> list[WeatherWarni
                 valid_from=valid_from or now,
                 valid_to=valid_to or now,
                 region=region,
+                geometry=next((g for g in (raw_item.get("geometry"),
+                    props.get("location", {}).get("geometry"), data.get("geometry"))
+                    if isinstance(g, dict) and g.get("type") in {"Polygon", "MultiPolygon"}), None),
             ))
         except Exception as exc:
             logger.warning("Warnung konnte nicht geparst werden: %s — %s", item, exc)

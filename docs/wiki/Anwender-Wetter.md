@@ -144,3 +144,41 @@ In der Großschadenslage-Lagekarte kann das **Niederschlagsradar-Overlay** (Rain
 - Farbskala: blau (leicht) → rot (stark)
 
 Hinweis: Das Radar-Overlay benötigt eine aktive Internetverbindung und ist nicht für den Offline-Betrieb verfügbar.
+
+## Karte und Modellvergleich
+
+Auf der GSL-Lagekarte schaltet der bestehende Wetterknopf die Wetterebenen ein.
+Radar, amtliche Warnungen und Wind am Fokuspunkt sind im kleinen Leaflet-Layer-Menü
+getrennt schaltbar. Radar hat Abspielen/Pause und einen Zeitregler, wie auf `/wetter`.
+Warnungen erscheinen als Polygone, wenn GeoSphere eine Gebietsgeometrie liefert,
+sonst als Marker am Fokuspunkt. Marker stellen keine Gebietsgrenzen dar.
+Der Windpfeil zeigt die Strömungsrichtung am Fokuspunkt, sein Tooltip die Herkunft
+in Grad, verfügbare Wind-/Böenwerte, Gültigkeitszeit und Datenstand. Es gibt keine
+flächigen Modellkarten oder aus Einzelpunkten interpolierte Wetterfelder.
+
+Unter **Modellvergleich (6 Stunden)** auf `/wetter` werden Daten erst beim Öffnen
+abgerufen. Verglichen werden GeoSphere NWP direkt, Open-Meteo GeoSphere
+(`geosphere_seamless`), Open-Meteo Standard (`best_match`) und Kachelmann, wenn für
+die eigene Organisation konfiguriert. Alle Abfragen beziehen sich auf denselben
+Standort. Das gemeinsame Fenster beginnt zur nächsten vollen UTC-Stunde und wird
+in der Org-Zeitzone angezeigt. Jede Stunde muss je Größe vollständig vorliegen:
+Niederschlag als Fenstersumme in mm, Böen als Maximum in m/s. Fehlende Reihen
+werden mit Begründung ausgeschlossen. Eine Differenz (Maximum minus Minimum)
+entsteht erst bei mindestens zwei vollständigen Anbietern je Größe.
+
+Große absolute Abweichungen erzeugen einen Hinweis, standardmäßig über 5 mm bzw.
+5 m/s. GeoSphere direkt und Open-Meteo GeoSphere können dieselbe Modellgrundlage
+haben. Der Vergleich liefert keine Genauigkeitswerte oder Wahrscheinlichkeiten
+und beeinflusst keine Wetteralarme.
+
+## Lizenz und Attribution
+
+- GeoSphere Austria: **CC BY 4.0**, Quellenangabe beibehalten; siehe
+  [GeoSphere Data Hub](https://data.hub.geosphere.at/legal) und jeweilige Datensatzlizenz.
+- Open-Meteo: Daten unter CC BY 4.0; die freie API ist für nicht kommerzielle Nutzung
+  mit Aufruflimits vorgesehen. Kommerzielle Nutzung benötigt einen passenden Tarif.
+  [Aktuelle Nutzungsbedingungen](https://open-meteo.com/en/terms) beachten.
+- Radar: **RainViewer**, sichtbare Quellenangabe mit Link auf
+  [RainViewer](https://www.rainviewer.com/). Der öffentliche Dienst richtet sich an
+  persönliche, Bildungs- und kleine Community-Projekte, ohne garantierte Verfügbarkeit;
+  für andere Nutzung gelten die [API-Bedingungen](https://www.rainviewer.com/api.html).

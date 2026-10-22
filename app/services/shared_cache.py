@@ -167,3 +167,14 @@ async def lock(key: str) -> AsyncIterator[None]:
                 await connection.eval(_RELEASE, 1, redis_key, token)
             except Exception:
                 redis_error()
+
+
+async def mode() -> str:
+    """Tatsächlich erreichbaren Cache anzeigen, niemals die Verbindungs-URL."""
+    try:
+        connection = client()
+        if connection is not None and await connection.ping():
+            return "Redis"
+    except Exception:
+        redis_error()
+    return "Lokal (Redis-Fallback)" if settings.REDIS_URL else "Lokal"

@@ -43,14 +43,37 @@
 <div class="alert alert--error mb-4">Kachelmann-Test fehlgeschlagen: {{ request.query_params.get('kachelmann_error') }}</div>
 {% endif %}
 
-<div x-data="{tab: ['wetterstation', 'pegel', 'warnungen', 'kachelmann'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'integration'}">
+<div x-data="{tab: ['wetterstation', 'pegel', 'warnungen', 'kachelmann', 'diagnose'].includes(location.hash.slice(1)) ? location.hash.slice(1) : 'integration'}">
   <nav class="tabnav mb-4" aria-label="Wetter-Einstellungen">
     <button type="button" class="tabnav__item" :class="{'tabnav__item--active': tab === 'integration'}" @click="tab = 'integration'">Wetter-Integration</button>
     <button type="button" class="tabnav__item" :class="{'tabnav__item--active': tab === 'wetterstation'}" @click="tab = 'wetterstation'">Wetterstation</button>
     <button type="button" class="tabnav__item" :class="{'tabnav__item--active': tab === 'pegel'}" @click="tab = 'pegel'">Pegelmessstationen</button>
     <button type="button" class="tabnav__item" :class="{'tabnav__item--active': tab === 'warnungen'}" @click="tab = 'warnungen'">Wetterwarnungen</button>
     <button type="button" class="tabnav__item" :class="{'tabnav__item--active': tab === 'kachelmann'}" @click="tab = 'kachelmann'">Kachelmann</button>
+    <button type="button" class="tabnav__item" :class="{'tabnav__item--active': tab === 'diagnose'}" @click="tab = 'diagnose'">Diagnose</button>
   </nav>
+
+<section class="card mb-4" id="diagnose" x-show="tab === 'diagnose'">
+  <div class="card-header"><h2>{{ icon("cloud-rain") }} Wetter-Diagnose</h2></div>
+  <div class="card-body" style="overflow-wrap:anywhere">
+    <p>Cache: {{ weather_diagnostics.cache_mode }}</p>
+    <p>Kachelmann für diese Organisation konfiguriert: {{ 'Ja' if kachelmann_is_configured else 'Nein' }}</p>
+    {% with warnings_result=weather_diagnostics.warnings_result %}{% include "weather/_warnstatus.html" %}{% endwith %}
+    <h3>Aktive Reihenfolge je Datenart</h3>
+    {% for kind, providers in weather_provider_orders.items() %}<p>{{ kind }}: {{ providers|join(' → ') if providers else 'Keine aktive Quelle' }}</p>{% endfor %}
+    <p>Amtliche Warnungen: GeoSphere (wenn aktiviert)</p>
+    <h3>Provider-Zustand (serverweit)</h3>
+    {% for provider, row in weather_diagnostics.health.items() %}
+    <div style="margin-bottom:14px">
+      <strong>{{ provider }}</strong>
+      <p>Letzter Erfolg: {{ row.last_success_at|local_datetime if row.last_success_at else 'Noch keiner' }} · Letzter Fehler: {{ row.last_error_at|local_datetime if row.last_error_at else 'Keiner' }}</p>
+      <p>Fehlercode: {{ row.last_error or 'Keiner' }} · Latenz: {{ row.last_latency_ms }} ms · Erfolge: {{ row.success_count }} · Fehler: {{ row.error_count }}</p>
+    </div>
+    {% else %}<p>Noch keine Provider-Abfragen erfasst.</p>{% endfor %}
+    <h3>Konfiguration</h3>
+    {% for name, value in weather_diagnostics.config.items() %}<p><code>{{ name }}</code>: {{ value }}</p>{% endfor %}
+  </div>
+</section>
 
 {# ── Wetter aktivieren/deaktivieren ─────────────────────────────────────── #}
 <section class="card mb-4" id="integration" x-show="tab === 'integration'">

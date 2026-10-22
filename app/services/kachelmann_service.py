@@ -270,5 +270,5 @@ def _parse_forecast(data: dict, horizons: tuple[int, ...]) -> ForecastResult | N
         return None
     return ForecastResult(
         horizons=_series_horizons(series, ref, horizons), source=_SOURCE, reference_time=ref,
-        precipitation_hourly=series["precipitation"],
+        precipitation_hourly=series["precipitation"], gust_hourly=series["gust"],
     )
