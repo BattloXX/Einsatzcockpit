@@ -1,0 +1,69 @@
+<section id="kp-uebernahme-inhalt" class="card kp-box" aria-labelledby="kp-uebernahme-titel">
+  <div class="kp-box__head">
+    <h2 id="kp-uebernahme-titel">In Einsatz übernehmen</h2>
+    <button type="button" class="btn btn--ghost btn--sm" aria-label="Schließen" onclick="this.closest('dialog').close()">{{ icon("x") }}</button>
+  </div>
+  {% if fehler %}<p role="alert">{{ fehler }}</p>{% endif %}
+  {% if ergebnis %}
+    <p role="status">{{ 'Auftrag' if ergebnis.art == 'auftrag' else 'Meldung' }} erfolgreich übernommen.</p>
+    <a class="btn btn--primary" href="/einsatz/{{ ergebnis.incident_id }}">Einsatz öffnen</a>
+    {% if ergebnis.fehler %}
+      <p>Dateien konnten teilweise nicht übernommen werden:</p>
+      <ul>{% for fehler in ergebnis.fehler %}<li>{{ fehler }}</li>{% endfor %}</ul>
+    {% endif %}
+  {% elif vorgabe %}
+    {% if not kandidaten %}<p>Kein aktiver Einsatz</p>{% endif %}
+    {% set werte = eingabe if eingabe is defined else dict(art='auftrag', incident_id='', titel=vorgabe.titel, text=vorgabe.text, meldung_status='meldung', anhang_uuids=vorgabe.anhaenge|map(attribute='uuid')|list, quellseiten=vorgabe.quellseiten|map(attribute='nr')|map('string')|list) %}
+    {% set url = '/plaene/' ~ plan.id ~ '/elemente/' ~ element.id ~ '/uebernehmen' ~ ('?version_id=' ~ leseversion.id if leseversion else '') %}
+    <form method="post" action="{{ url }}" hx-post="{{ url }}" hx-target="#kp-uebernahme-inhalt" hx-swap="outerHTML"
+      hx-disabled-elt="find button[type='submit']" class="kp-form" x-data="{{ dict(art=werte.art)|tojson|forceescape }}">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <fieldset>
+        <legend class="form-label">Übernehmen als</legend>
+        {% for art, label in [('auftrag', 'Auftrag'), ('meldung', 'Meldung')] %}
+          <label><input type="radio" name="art" value="{{ art }}" x-model="art" {% if werte.art == art %}checked{% endif %}> {{ label }}</label>
+        {% endfor %}
+      </fieldset>
+      <label class="form-label" x-show="art === 'meldung'">Meldungsstatus
+        <select class="form-control" name="meldung_status">
+          {% for status, label in [('meldung', 'Meldung'), ('achtung', 'Achtung'), ('hinweis', 'Hinweis'), ('information', 'Information')] %}
+            <option value="{{ status }}" {% if werte.meldung_status == status %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="form-label">Einsatz
+        <select class="form-control" name="incident_id" required>
+          {% for einsatz in kandidaten %}
+            <option value="{{ einsatz.id }}" {% if werte.incident_id == einsatz.id|string %}selected{% endif %}>{{ einsatz.nummer or einsatz.id }} · {{ einsatz.reason or einsatz.alarm_type_code }} · {{ einsatz.address_street or '' }} {{ einsatz.address_no or '' }} {{ einsatz.address_city or '' }}{% if einsatz.is_exercise %} · Übung{% endif %}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="form-label">Titel<input class="form-control" name="titel" value="{{ werte.titel }}" maxlength="500" required></label>
+      <label class="form-label">Text<textarea class="form-control" name="text" rows="9">{{ werte.text }}</textarea></label>
+      {% if vorgabe.anhaenge %}
+        <fieldset><legend class="form-label">Anhänge</legend>
+          {% for anhang in vorgabe.anhaenge %}
+            <label class="kp-uebernahme-auswahl"><input type="checkbox" name="anhang_uuids" value="{{ anhang.uuid }}" {% if anhang.uuid in werte.anhang_uuids %}checked{% endif %}>
+              {% if anhang.art == 'foto' %}<img src="/plaene/anhang/{{ anhang.uuid }}/thumb{% if leseversion %}?version_id={{ leseversion.id }}{% endif %}" alt="" width="64" height="64" loading="lazy">{% endif %}
+              {{ anhang.name }}
+            </label>
+          {% endfor %}
+        </fieldset>
+      {% endif %}
+      {% if vorgabe.quellseiten %}
+        <fieldset><legend class="form-label">Quellseiten</legend>
+          {% for seite in vorgabe.quellseiten %}
+            <label class="kp-uebernahme-auswahl"><input type="checkbox" name="quellseiten" value="{{ seite.nr }}" {% if seite.nr|string in werte.quellseiten %}checked{% endif %}>
+              <img src="/plaene/quelle/{{ seite.dokument_uuid }}/seite/{{ seite.nr }}/thumb{% if leseversion %}?version_id={{ leseversion.id }}{% endif %}" alt="" width="64" height="64" loading="lazy">{{ seite.name }}
+            </label>
+          {% endfor %}
+        </fieldset>
+      {% endif %}
+      <div class="kp-actions">
+        <button type="submit" class="btn btn--primary" {% if not kandidaten %}disabled{% endif %}>Übernehmen</button>
+        <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Abbrechen</button>
+      </div>
+    </form>
+  {% endif %}
+  {% if ergebnis or not vorgabe %}<button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Schließen</button>{% endif %}
+</section>
