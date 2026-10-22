@@ -7,13 +7,20 @@ Attribution (CC BY 4.0 required): use GEOSPHERE_ATTRIBUTION in any UI showing th
 import logging
 import math
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
 
 from app.config import settings
 from app.services import weather_openmeteo
+from app.services.weather_timeseries import (
+    HourlySeries,
+    accumulated_to_interval,
+    value_at,
+    window_max,
+    window_sum,
+)
 
 logger = logging.getLogger("einsatzleiter.weather")
 
@@ -98,12 +105,19 @@ class ForecastHorizon:
     wind_direction_deg: float | None = None
     snowfall_cm: float | None = None
     weather_code: float | None = None
+    precipitation_mm: float | None = None
+    gust_max_ms: float | None = None
+    gust_max_at: datetime | None = None
+    complete: bool = True
+    temperature_min_c: float | None = None
+    temperature_max_c: float | None = None
 
 
 @dataclass
 class ForecastResult:
     horizons: list[ForecastHorizon]
     source: str = "geosphere_nwp"
+    reference_time: datetime | None = None
 
 
 @dataclass
@@ -114,6 +128,7 @@ class DailyForecastDay:
     precip_mm: float | None = None
     wind_max_ms: float | None = None   # m/s
     weather_code: float | None = None
+    gust_max_ms: float | None = None
 
 
 @dataclass
@@ -566,45 +581,73 @@ async def get_forecast(
     return result
 
 
+def _hourly_series(times: list, values: list, factor: float = 1) -> HourlySeries:
+    """Parst jeden Zeitstempel einzeln, damit ungültige Zeiten keine Werte verschieben."""
+    series: HourlySeries = []
+    for i, raw in enumerate(times):
+        parsed = _parse_timestamps([raw])
+        if parsed:
+            value = _safe_float(values[i]) if i < len(values) else None
+            series.append((parsed[0].astimezone(UTC), value * factor if value is not None else None))
+    return series
+
+
+def _series_horizons(
+    series: dict[str, HourlySeries], ref: datetime, horizons: tuple[int, ...],
+) -> list[ForecastHorizon]:
+    """Gemeinsame Fenster; optionale, nicht gelieferte Variablen bleiben None."""
+    result = []
+    for hours in horizons:
+        at = ref + timedelta(hours=hours)
+        rain, rain_ok = window_sum(series.get("precipitation", []), ref, hours)
+        gust, gust_at, gust_ok = window_max(series.get("gust", []), ref, hours)
+        temperatures = series.get("temperature", [])
+        high, _, temp_ok = window_max(temperatures, ref, hours)
+        low_neg, _, _ = window_max([(t, -v if v is not None else None) for t, v in temperatures], ref, hours)
+        _, _, wind_ok = window_max(series.get("wind", []), ref, hours)
+        snow_series = series.get("snowfall", [])
+        snow, snow_ok = window_sum(snow_series, ref, hours)
+        complete = rain_ok and gust_ok and temp_ok and wind_ok
+        if any(v is not None for _, v in snow_series):
+            complete = complete and snow_ok
+        result.append(ForecastHorizon(
+            hours=hours, precipitation_acc_mm=rain, precipitation_mm=rain,
+            temperature_c=value_at(temperatures, at),
+            wind_speed_ms=value_at(series.get("wind", []), at),
+            gust_speed_ms=value_at(series.get("gust", []), at),
+            humidity_pct=value_at(series.get("humidity", []), at),
+            wind_direction_deg=value_at(series.get("direction", []), at),
+            weather_code=value_at(series.get("code", []), at),
+            snowfall_cm=snow if any(v is not None for _, v in snow_series) else None,
+            gust_max_ms=gust, gust_max_at=gust_at, complete=complete,
+            temperature_min_c=-low_neg if low_neg is not None else None,
+            temperature_max_c=high,
+        ))
+    return result
+
+
 async def _openmeteo_forecast(
     lat: float, lng: float, horizons: tuple[int, ...], model: str | None = None
 ) -> ForecastResult | None:
     """Open-Meteo hourly fallback for multi-horizon forecast."""
-    data = await weather_openmeteo.fetch_hourly(lat, lng, max(horizons) + 1, model=model)
+    data = await weather_openmeteo.fetch_hourly(lat, lng, max(horizons) + 2, model=model)
     if data is None:
         return None
 
-    h_data = data.get("hourly", {})
-    t2m = h_data.get("temperature_2m", [])
-    ws = h_data.get("wind_speed_10m", [])    # km/h
-    wg = h_data.get("wind_gusts_10m", [])    # km/h
-    prec = h_data.get("precipitation", [])   # mm/h
-
-    result_horizons: list[ForecastHorizon] = []
-    for h in horizons:
-        ws_kmh = _safe_float(ws[h]) if h < len(ws) else None
-        wg_kmh = _safe_float(wg[h]) if h < len(wg) else None
-        acc = sum(_safe_float(p) or 0.0 for p in prec[: h + 1]) if prec else None
-        if model and (len(prec) < h + 1 or any(_safe_float(p) is None for p in prec[:h + 1])):
-            acc = None
-        def _at_openmeteo(name: str, index: int = h) -> float | None:
-            values = h_data.get(name, [])
-            return _safe_float(values[index]) if index < len(values) else None
-
-        result_horizons.append(ForecastHorizon(
-            hours=h,
-            humidity_pct=_at_openmeteo("relative_humidity_2m"),
-            wind_direction_deg=_at_openmeteo("wind_direction_10m"),
-            snowfall_cm=_at_openmeteo("snowfall"),
-            weather_code=_at_openmeteo("weather_code"),
-            precipitation_acc_mm=acc,
-            temperature_c=_safe_float(t2m[h]) if h < len(t2m) else None,
-            wind_speed_ms=ws_kmh / 3.6 if ws_kmh is not None else None,
-            gust_speed_ms=wg_kmh / 3.6 if wg_kmh is not None else None,
-        ))
-
+    ref = datetime.now(UTC)
+    hourly = data.get("hourly", {})
+    series = {
+        target: _hourly_series(hourly.get("time", []), hourly.get(name, []), factor)
+        for target, name, factor in (
+            ("temperature", "temperature_2m", 1), ("wind", "wind_speed_10m", 1 / 3.6),
+            ("gust", "wind_gusts_10m", 1 / 3.6), ("precipitation", "precipitation", 1),
+            ("humidity", "relative_humidity_2m", 1), ("direction", "wind_direction_10m", 1),
+            ("snowfall", "snowfall", 1), ("code", "weather_code", 1),
+        )
+    }
     return ForecastResult(
-        horizons=result_horizons, source="open-meteo-geosphere" if model else "openmeteo"
+        horizons=_series_horizons(series, ref, horizons),
+        source="open-meteo-geosphere" if model else "openmeteo", reference_time=ref,
     )
 
 
@@ -624,31 +667,25 @@ async def _fetch_geosphere_nwp(
         return None
 
     feature = features[0]
-    rr_acc = _extract_param_data(feature, "rr_acc")
-    u10m = _extract_param_data(feature, "u10m")
-    v10m = _extract_param_data(feature, "v10m")
-    ugust = _extract_param_data(feature, "ugust")
-    vgust = _extract_param_data(feature, "vgust")
-    t2m = _extract_param_data(feature, "t2m")
+    ref = datetime.now(UTC)
+    times = data.get("timestamps", [])
 
-    result_horizons: list[ForecastHorizon] = []
-    for h in horizons:
-        def _at(lst: list, idx: int) -> float | None:
-            return _safe_float(lst[idx]) if idx < len(lst) else None
+    def parameter(name: str) -> HourlySeries:
+        return _hourly_series(times, _extract_param_data(feature, name))
 
-        u_h = _at(u10m, h)
-        v_h = _at(v10m, h)
-        ug_h = _at(ugust, h)
-        vg_h = _at(vgust, h)
-        result_horizons.append(ForecastHorizon(
-            hours=h,
-            precipitation_acc_mm=_at(rr_acc, h),
-            temperature_c=_at(t2m, h),
-            wind_speed_ms=_wind_speed_from_uv(u_h, v_h),
-            gust_speed_ms=_wind_speed_from_uv(ug_h, vg_h),
-        ))
+    def vector(u: str, v: str) -> HourlySeries:
+        return [(t, _wind_speed_from_uv(a, b))
+                for (t, a), (_, b) in zip(parameter(u), parameter(v), strict=True)]
 
-    return ForecastResult(horizons=result_horizons, source="geosphere_nwp")
+    series = {
+        "precipitation": accumulated_to_interval(parameter("rr_acc")),
+        "temperature": parameter("t2m"),
+        "wind": vector("u10m", "v10m"), "gust": vector("ugust", "vgust"),
+    }
+    return ForecastResult(
+        horizons=_series_horizons(series, ref, horizons), source="geosphere_nwp",
+        reference_time=ref,
+    )
 
 
 # ── Warnings (GeoSphere Warn-API) ─────────────────────────────────────────────
@@ -1075,6 +1112,7 @@ async def _openmeteo_daily(lat: float, lng: float, model: str | None = None) -> 
     temp_min = daily.get("temperature_2m_min", [])
     precip = daily.get("precipitation_sum", [])
     codes = daily.get("weather_code", [])
+    gusts = daily.get("wind_gusts_10m_max", [])
     wind_max = daily.get("wind_gusts_10m_max" if model else "wind_speed_10m_max", [])  # km/h
 
     days: list[DailyForecastDay] = []
@@ -1091,6 +1129,7 @@ async def _openmeteo_daily(lat: float, lng: float, model: str | None = None) -> 
             temp_max_c=temp_max[i] if i < len(temp_max) else None,
             temp_min_c=temp_min[i] if i < len(temp_min) else None,
             precip_mm=precip[i] if i < len(precip) else None,
+            gust_max_ms=(gusts[i] / 3.6) if i < len(gusts) and gusts[i] is not None else None,
             wind_max_ms=(wind_max[i] / 3.6) if (i < len(wind_max) and wind_max[i] is not None) else None,
         ))
 

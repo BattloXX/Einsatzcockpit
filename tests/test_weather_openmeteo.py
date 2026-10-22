@@ -1,4 +1,5 @@
 """Open-Meteo-Adapter und konfigurierbare Provider-Ketten."""
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -75,7 +76,8 @@ async def test_client_parameters(kind, model, http_mock):
     if kind == "daily":
         assert params["timezone"] == "Europe/Vienna"
         assert params["forecast_days"] == 7
-        assert ("wind_gusts_10m_max" in params[key]) == bool(model)
+        assert "wind_gusts_10m_max" in params[key]
+        assert "weather_code" in params[key]
     else:
         assert params["timezone"] == "UTC"
 
@@ -104,9 +106,15 @@ async def test_current_model_values_and_missing_variables(http_mock):
 
 
 @pytest.mark.asyncio
-async def test_hourly_missing_precipitation_is_not_zero(http_mock):
+async def test_hourly_missing_precipitation_is_not_zero(http_mock, monkeypatch):
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 10, 22, 10, tzinfo=UTC).astimezone(tz)
+    monkeypatch.setattr(weather_service, "datetime", Clock)
     _, payload, _, _ = http_mock
     payload["hourly"] = {
+        "time": ["2026-10-22T10:00", "2026-10-22T11:00", "2026-10-22T12:00"],
         "temperature_2m": [1, 2, 3], "precipitation": [0, None, 1],
         "wind_speed_10m": [36] * 3, "relative_humidity_2m": [70] * 3,
         "snowfall": [0, 1, 2], "weather_code": [1, 2, 3],
@@ -115,7 +123,8 @@ async def test_hourly_missing_precipitation_is_not_zero(http_mock):
     assert result.source == "open-meteo-geosphere"
     assert result.horizons[0].precipitation_acc_mm == 0
     assert result.horizons[1].precipitation_acc_mm is None
-    assert result.horizons[1].snowfall_cm == 2
+    assert result.horizons[1].snowfall_cm == 3
+    assert not result.horizons[1].complete
     assert result.horizons[1].humidity_pct == 70
     assert result.horizons[1].wind_speed_ms == 10
     assert result.horizons[1].wind_direction_deg is None
@@ -243,3 +252,20 @@ async def test_enabled_model_result_source(kind, monkeypatch, http_mock):
     assert result.source == "open-meteo-geosphere"
     assert len(calls) == 1
     assert calls[0][1]["models"] == MODEL
+
+
+@pytest.mark.asyncio
+async def test_daily_standard_wind_gust_and_code_are_separate(http_mock):
+    _, payload, _, _ = http_mock
+    payload["daily"] = {
+        "time": ["2026-10-25"], "wind_speed_10m_max": [36],
+        "wind_gusts_10m_max": [72], "weather_code": [61], "precipitation_sum": [4],
+    }
+    result = await weather_service._openmeteo_daily(LAT, LNG)
+    assert result.source == "openmeteo"
+    day = result.days[0]
+    assert day.date_label == "So 25.10."
+    assert day.wind_max_ms == 10
+    assert day.gust_max_ms == 20
+    assert day.precip_mm == 4
+    assert day.weather_code == 61

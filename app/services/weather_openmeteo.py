@@ -30,8 +30,7 @@ async def _fetch(lat: float, lng: float, params: dict[str, Any], model: str | No
 
 async def fetch_hourly(lat: float, lng: float, hours: int, model: str | None = None) -> dict | None:
     variables = "temperature_2m,wind_speed_10m,wind_gusts_10m,precipitation"
-    if model:
-        variables += ",relative_humidity_2m,wind_direction_10m,snowfall,weather_code"
+    variables += ",relative_humidity_2m,wind_direction_10m,snowfall,weather_code"
     return await _fetch(lat, lng, {
         "hourly": variables,
         "forecast_hours": hours,
@@ -42,7 +41,7 @@ async def fetch_hourly(lat: float, lng: float, hours: int, model: str | None = N
 
 async def fetch_daily(lat: float, lng: float, model: str | None = None) -> dict | None:
     variables = "temperature_2m_max,temperature_2m_min,precipitation_sum,"
-    variables += "wind_gusts_10m_max,weather_code" if model else "wind_speed_10m_max"
+    variables += "wind_gusts_10m_max,weather_code" if model else "wind_speed_10m_max,wind_gusts_10m_max,weather_code"
     return await _fetch(lat, lng, {
         "daily": variables,
         "forecast_days": 7,
