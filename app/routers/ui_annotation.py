@@ -182,7 +182,7 @@ def _incident_write_or_403(db: Session, user: User, incident) -> None:  # type: 
 
 @router.get("/api/uebernahme/objekte")
 def uebernahme_objekte(
-    incident_id: int = Query(...),
+    incident_id: int | None = Query(None),
     db: Session = Depends(get_db),
     user: User = Depends(require_role(*_EDIT_ROLLEN)),
 ):
@@ -192,12 +192,13 @@ def uebernahme_objekte(
     verknuepft = {
         r[0] for r in db.query(ObjektEinsatz.objekt_id)
         .filter(ObjektEinsatz.incident_id == incident_id).all()
-    }
+    } if incident_id is not None else set()
     objekte = nur_produktiv(db.query(Objekt)).filter(Objekt.org_id == user.org_id).all()
     objekte.sort(key=lambda o: (0 if o.id in verknuepft else 1, (o.name or "").lower()))
     return {"objekte": [
         {"id": o.id, "name": f"{o.anzeige_nummer} {o.name}", "vulgoname": o.vulgoname,
-         "verknuepft": o.id in verknuepft}
+         "verknuepft": o.id in verknuepft, "adresse": o.adresse_zeile,
+         "bma": o.bma.bma_nummer if o.bma and o.bma.bma_nummer else None}
         for o in objekte
     ]}
 

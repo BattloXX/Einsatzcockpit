@@ -302,6 +302,7 @@
         <div class="form-group">
           <input type="text" name="detail" placeholder="Zusatzinfo (optional)" class="form-input">
         </div>
+        {% with picker_key = 'auftrag-' ~ incident.id, picker_incident_id = incident.id %}{% include "incident/_objekt_picker.html" %}{% endwith %}
         <div class="form-group">
           <label class="form-label" style="font-size:.82rem;">Einheit (optional)</label>
           <select id="quickAddTaskVehicleSelect" name="vehicle_id" class="form-select" x-model="vehicleId">
@@ -354,6 +355,7 @@
                     onclick="startVoice('quickAddMsgTitle')">{{ icon("microphone", size="sm") }}</button>
           </div>
         </div>
+        {% with picker_key = 'meldung-' ~ incident.id, picker_incident_id = incident.id %}{% include "incident/_objekt_picker.html" %}{% endwith %}
         <div class="form-group">
           <label class="form-label" style="font-size:.82rem;">Einheit (optional)</label>
           <select id="quickAddMsgVehicleSelect" name="vehicle_id" class="form-select" x-model="vehicleId">

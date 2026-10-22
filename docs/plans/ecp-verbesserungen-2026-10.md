@@ -99,3 +99,15 @@ Pro Block: ID / Status / Ursache / Loesung / Dateien / Datenbank / Tests / Hinwe
 | Datenbank | keine |
 | Tests | 9 neue Tests (Inhalt, Ausschluss unbestaetigter/nicht freigegebener Objekte, deterministische Hinweise, Prompt mit/ohne Objekt, Hintergrundlauf bei KI-Ausfall, Lagebild) |
 | Hinweise | Wird ein Objekt erst nach der KI-Generierung verknuepft, wirkt es bei der naechsten Generierung (Button Neu erzeugen oder Alarmstufe aendern). Dokumentinhalte (OCR-Volltext) fliessen bewusst nicht ein, nur Dokumentnamen. |
+
+## ECP-01 – Objektinformationen beim Erstellen
+
+| Feld | Inhalt |
+|---|---|
+| Status | Erledigt (Sichtpruefung am Geraet offen). Auslegung: siehe Hinweise |
+| Ursache | Das Verknuepfen eines Objekts gab es nur in der Einsatzinfo bzw. im Board-Objektpanel, also erst nach dem Anlegen. Die Dialoge „Neuer Einsatz“, „Meldung anlegen“ und „Auftrag anlegen“ hatten keine Objektauswahl. |
+| Loesung | Eine gemeinsame Komponente (`incident/_objekt_picker.html` + `objekt_picker.js`, Datenquelle `/api/uebernahme/objekte`, Suche nach Name, Vulgoname, Adresse und BMA-Nr.) in allen drei Dialogen. Die drei Routen nehmen `objekt_id` entgegen, pruefen Modul, Berechtigung (Einsatzleiter, Objektverwalter, Admins) und Mandant **vor** dem Anlegen und verknuepfen danach ueber denselben Service wie die Einsatzinfo (`objekt_service.objekt_verknuepfen_manuell`: bestaetigt/manuell, Audit, Objektgefahren-Meldungen, Kontakt-Benachrichtigung, Autodruck, Board-Reload). Die Einsatzinfo-Route nutzt jetzt denselben Service. Die Auswahl bleibt bis zu 10 Minuten in der Sitzung erhalten (Eingabefehler, erneutes Oeffnen). Ohne Berechtigung oder aktives Modul erscheint das Feld nicht. Bei „Neuer Einsatz“ entsteht die Verknuepfung vor dem automatischen Matching und damit vor den KI-Vorschlaegen (ECP-07). |
+| Dateien | `app/services/objekt_service.py`, `app/routers/ui_incident.py`, `ui_objekt.py`, `ui_annotation.py`, `app/core/templating.py`, `app/templates/incident/_objekt_picker.html`, `index.html`, `incident/board.html`, `base.html`, `app/static/js/objekt_picker.js`, `tests/test_objekt_beim_anlegen.py`, `tests/js/objekt_picker.test.mjs` |
+| Datenbank | keine |
+| Tests | 7 Python-Tests (Verknuepfung bei Einsatz/Auftrag/Meldung, Gefahrenmeldung, fremdes Objekt → 404 ohne Anlage, fehlende Berechtigung → 403 ohne Anlage, Sichtbarkeit, API), 5 Node-Tests |
+| Hinweise | Im Datenmodell hat nur der **Einsatz** eine Objektverknuepfung; Meldungen und Auftraege besitzen keine eigene (`Message.objekt_gefahr_id` ist nur fuer automatische Gefahrenmeldungen). Eine bei Meldung oder Auftrag gewaehlte Auswahl verknuepft daher das Objekt mit dem Einsatz (wie „Weiteres Objekt verknuepfen“ in der Einsatzinfo). Eine eigene Objektspalte je Meldung/Auftrag wurde bewusst nicht angelegt (keine Datenbankaenderung ohne Bedarf). Soll sie kuenftig gewuenscht sein, ist das eine eigene Erweiterung. |

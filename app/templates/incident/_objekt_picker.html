@@ -1,0 +1,30 @@
+{# Objekt-Auswahl fuer Erstellen-Dialoge (ECP-01) - eine Komponente fuer Einsatz, Meldung und Auftrag.
+   Variablen: picker_key (eindeutig je Dialog), picker_incident_id (optional, sortiert verknuepfte zuerst).
+   Sendet das Feld objekt_id; verknuepft wird erst serverseitig beim Anlegen (wie im Bearbeiten-Dialog der Einsatzinfo). #}
+{% if kann_objekt_verknuepfen(request) %}
+<div class="form-group" x-data='objektPicker({{ picker_key|tojson }}, {{ (picker_incident_id|default(none))|tojson }})'
+     @reset.window="if ($event.target.contains && $event.target.contains($el)) zuruecksetzen()">
+  <label class="form-label" style="font-size:.82rem;">Objekt (optional)</label>
+  <input type="hidden" name="objekt_id" :value="auswahl ? auswahl.id : ''">
+  <div x-show="auswahl" x-cloak style="display:flex;align-items:center;gap:8px;">
+    <span class="badge-pill badge-pill--blue" style="font-size:.85rem;" x-text="auswahl ? auswahl.name : ''"></span>
+    <button type="button" class="btn btn--ghost btn--sm" aria-label="Objekt entfernen" @click="entferne()">{{ icon("x", size="xs") }}</button>
+  </div>
+  <div x-show="!auswahl" @click.outside="offen = false">
+    <input type="text" class="form-input" x-model="suche" @focus="offen = true; ladeObjekte()" @input="offen = true; ladeObjekte()"
+           placeholder="Objekt suchen (Name, Adresse, BMA-Nr.) ..." autocomplete="off" aria-label="Objekt suchen">
+    <div x-show="offen" x-cloak
+         style="max-height:180px;overflow:auto;margin-top:6px;display:flex;flex-direction:column;gap:4px;">
+      <template x-for="o in treffer" :key="o.id">
+        <button type="button" class="btn btn--secondary btn--sm" style="text-align:left;display:block;" @click="waehle(o)">
+          <span x-text="o.name"></span>
+          <span x-show="o.adresse" class="text-muted" style="font-size:.85em;display:block;" x-text="o.adresse"></span>
+        </button>
+      </template>
+      <div x-show="ladend" class="text-muted" style="font-size:.82rem;">Lade Objekte ...</div>
+      <div x-show="fehler" class="text-muted" style="font-size:.82rem;" x-text="fehler"></div>
+      <div x-show="geladen && treffer.length === 0" class="text-muted" style="font-size:.82rem;">Kein passendes Objekt.</div>
+    </div>
+  </div>
+</div>
+{% endif %}

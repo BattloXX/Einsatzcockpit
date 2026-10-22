@@ -940,3 +940,102 @@ def build_sync_manifest(db: Session, org_id: int, *, include_drafts: bool = Fals
             for o in objekte
         ],
     }
+
+
+# ── ECP-01: Objekt manuell mit einem Einsatz verknuepfen (Einsatzinfo, Board, Erstellen-Dialoge) ──
+OBJEKT_VERKNUEPFEN_ROLLEN = ("incident_leader", "objekt_verwalter")
+
+
+def darf_objekt_verknuepfen(user) -> bool:
+    """Gleiche Berechtigung wie das Verknuepfen in der Einsatzinfo (Einsatzleiter, Objektverwalter, Admins)."""
+    from app.core.permissions import has_role
+
+    return has_role(user, *OBJEKT_VERKNUEPFEN_ROLLEN)
+
+
+def objekt_verknuepfen_manuell(db: Session, user, incident_id: int, objekt) -> bool:
+    """Legt die bestaetigte manuelle Verknuepfung Einsatz-Objekt an (idempotent), schreibt das Audit-Protokoll
+    und erzeugt die Objektgefahren-Meldungen. Kein Commit. True, wenn die Verknuepfung neu entstanden ist.
+    Der Aufrufer stoesst danach `objekt_verknuepfung_nachlauf` an."""
+    from app.core.audit import write_audit
+    from app.models.incident import Incident
+    from app.models.objekt import OBJEKT_EINSATZ_BESTAETIGT, ObjektEinsatz
+    from app.services.objekt_matching_service import erzeuge_gefahren_meldungen
+
+    existiert = (
+        db.query(ObjektEinsatz)
+        .filter(ObjektEinsatz.incident_id == incident_id, ObjektEinsatz.objekt_id == objekt.id)
+        .first()
+    )
+    if existiert:
+        if existiert.status != OBJEKT_EINSATZ_BESTAETIGT:
+            existiert.status = OBJEKT_EINSATZ_BESTAETIGT
+            existiert.bestaetigt_von_id = user.id
+            db.flush()
+            incident = db.get(Incident, incident_id)
+            if incident is not None:
+                erzeuge_gefahren_meldungen(db, incident, objekt)
+            return True
+        return False
+    db.add(
+        ObjektEinsatz(
+            org_id=objekt.org_id,
+            objekt_id=objekt.id,
+            incident_id=incident_id,
+            quelle="manuell",
+            status=OBJEKT_EINSATZ_BESTAETIGT,
+            bestaetigt_von_id=user.id,
+        )
+    )
+    write_audit(
+        db,
+        "objekt.einsatz_verknuepft",
+        org_id=user.org_id,
+        user_id=user.id,
+        entity_type="objekt",
+        entity_id=objekt.id,
+        incident_id=incident_id,
+        payload={"quelle": "manuell"},
+    )
+    incident = db.get(Incident, incident_id)
+    if incident is not None:
+        erzeuge_gefahren_meldungen(db, incident, objekt)
+    return True
+
+
+def objekt_verknuepfung_nachlauf(background_tasks, incident_id: int, user_id: int | None) -> None:
+    """Benachrichtigung der Objektkontakte, Autodruck und Board-Reload nach einer neuen Verknuepfung."""
+    from app.core.async_bridge import run_async
+    from app.services.objekt_kontakt_notify import dispatch_objekt_einsatzinfo
+    from app.services.print_dispatcher import autoprint_incident_updated_background
+
+    background_tasks.add_task(dispatch_objekt_einsatzinfo, incident_id, triggered_by_user_id=user_id)
+    background_tasks.add_task(autoprint_incident_updated_background, incident_id)
+    try:
+        from app.services.broadcast import manager
+
+        run_async(manager.broadcast, incident_id, {"type": "objektgefahren"})
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).exception(
+            "Board-Reload nach Objektverknuepfung fehlgeschlagen (Einsatz %s)", incident_id,
+        )
+
+
+def objekt_fuer_verknuepfung(db: Session, user, objekt_id: int):
+    """Produktives Objekt der eigenen Org (wie die Objektliste der Einsatzansichten); None, wenn nicht erlaubt."""
+    from app.core.permissions import has_role
+    from app.models.objekt import OBJEKT_STATUS_ARCHIVIERT, OBJEKT_STATUS_ENTWURF, Objekt
+
+    objekt = nur_produktiv(db.query(Objekt)).filter(Objekt.id == objekt_id).first()
+    if objekt is None:
+        return None
+    if not user.is_system_admin and objekt.org_id != user.org_id:
+        return None
+    # Entwuerfe nur fuer Verwalter (wie die Objektseite), archivierte Objekte nie
+    if objekt.status == OBJEKT_STATUS_ARCHIVIERT:
+        return None
+    if objekt.status == OBJEKT_STATUS_ENTWURF and not has_role(user, "objekt_verwalter"):
+        return None
+    return objekt
