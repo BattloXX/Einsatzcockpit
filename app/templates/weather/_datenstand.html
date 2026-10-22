@@ -1,0 +1,13 @@
+{% if datenstand %}
+<div class="weather-datenstand" style="display:flex;flex-wrap:wrap;gap:5px 12px;font-size:.68rem;color:var(--text-muted);overflow-wrap:anywhere;">
+  {% for d in datenstand %}
+  <span style="display:inline-flex;flex-wrap:wrap;gap:4px;align-items:center;">
+    {{ d.label }} · {{ 'Messung' if d.kind == 'measured' else ('Amtliche Warninformationen' if d.kind == 'official' else 'Vorhersage (Modell)') }}:
+    {{ d.provider }}{% if d.model %} · {{ d.model }}{% endif %}
+    · {% if d.age_minutes is not none %}vor {{ d.age_minutes }} min{% else %}Alter unbekannt{% endif %}
+    <span style="border:1px solid currentColor;border-radius:4px;padding:1px 4px;">{{ {'fresh': 'Frisch', 'aging': 'Älter', 'stale': 'Veraltet', 'ok_no_warnings': 'Aktuell', 'ok_with_warnings': 'Aktuell', 'unavailable': 'Nicht verfügbar', 'disabled': 'Deaktiviert'}.get(d.freshness, d.freshness) }}</span>
+    {% if d.is_fallback %}<strong style="border:1px solid currentColor;border-radius:4px;padding:1px 4px;">Ersatzquelle</strong>{% endif %}
+  </span>
+  {% endfor %}
+</div>
+{% endif %}

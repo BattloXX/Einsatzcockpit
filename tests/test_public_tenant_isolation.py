@@ -1385,3 +1385,57 @@ def test_public_weather_warning_status_uses_token_org(client, setup_db, monkeypa
     assert b.json()["warnings_status"] == "ok_no_warnings"
     fetch.assert_awaited_once()
     weather_service._cache.clear()
+
+
+def test_public_weather_presentation_scoped_by_token(client, setup_db, monkeypatch):
+    """Auch neue Prognose-/Quellenfelder bleiben je Wetter- und Alarmtoken getrennt."""
+    from datetime import UTC, datetime
+    from unittest.mock import AsyncMock
+    from uuid import uuid4
+
+    from app.config import settings
+    from app.routers import ui_infoscreen_alarm
+    from app.services import weather_service as ws
+    from tests.test_weather_public_json import _make_org_with_token, _make_station
+
+    tokens = [_make_org_with_token(), _make_org_with_token()]
+    alarm_tokens = []
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        for _, org_id in tokens:
+            org = db.get(FireDept, org_id)
+            org.fallback_lat, org.fallback_lng = 47.4, 9.7
+            raw = uuid4().hex
+            db.add(AlarmInfoscreenToken(org_id=org_id, token_hash=hash_api_key(raw), aktiv=True, name=raw))
+            alarm_tokens.append(raw)
+        db.commit()
+    for _, org_id in tokens:
+        _make_station(org_id, lat=47.4, lng=9.7)
+    monkeypatch.setattr(settings, "WEATHER_ENABLED", True)
+    ui_infoscreen_alarm._wetter_cache.clear()
+    at = datetime.now(UTC)
+
+    async def forecast(lat, lng, org_id=None):
+        return ws.ForecastResult(
+            [ws.ForecastHorizon(3, precipitation_mm=float(org_id), gust_max_ms=0.0, gust_max_at=at)],
+            meta=ws.DataMeta("openmeteo", f"Modell Org {org_id}", lat, lng, None, at, at, "forecast"),
+        )
+
+    monkeypatch.setattr(ws, "get_forecast", forecast)
+    monkeypatch.setattr(ws, "get_current", AsyncMock(return_value=ws.CurrentWeather(temperature_c=12)))
+    monkeypatch.setattr(ws, "get_daily_forecast", AsyncMock(return_value=None))
+    monkeypatch.setattr(ws, "get_warnings_result", AsyncMock(return_value=ws.WarningsResult("ok_no_warnings", [])))
+    for (token, org_id), alarm in zip(tokens, alarm_tokens, strict=True):
+        for path in (f"/wetter/oeffentlich/{token}.json", f"/infoscreen/alarm/{alarm}/wetter.json"):
+            response = client.get(path)
+            assert response.status_code == 200, response.text[:200]
+            data = response.json()
+            window = next(h for h in data["prognose_kurz"] if h["hours"] == 3)
+            assert window["precipitation_mm"] == float(org_id)
+            assert window["gust_max_ms"] == 0.0
+            assert any(d["model"] == f"Modell Org {org_id}" for d in data["datenstand"])
+            other_org = next(other for _, other in tokens if other != org_id)
+            assert f"Modell Org {other_org}" not in response.text
+            if "alarm/" in path:
+                assert {"temp": 12, "wind": None, "code": None}.items() <= data.items()
+    ui_infoscreen_alarm._wetter_cache.clear()

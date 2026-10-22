@@ -6,23 +6,9 @@
 
   {% include "weather/_warnstatus.html" %}
 
-  {# ── Szenario-Alarme ──────────────────────────────────────────────────────── #}
-  {% if scenarios %}
-  <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:2px;">
-    {% for alert in scenarios %}
-    {% set is_danger = alert.level == "danger" %}
-    <div style="background:{{ 'rgba(239,68,68,.12)' if is_danger else 'rgba(249,115,22,.12)' }};
-                border:1px solid {{ 'rgba(239,68,68,.40)' if is_danger else 'rgba(249,115,22,.40)' }};
-                border-radius:4px;padding:5px 12px;font-size:.8rem;
-                color:{{ '#f87171' if is_danger else '#fb923c' }};">
-      <strong>{{ icon(alert.icon_name or 'alert-triangle') }} {{ alert.label_de }}</strong>
-      <span style="opacity:.85;margin-left:6px;font-size:.73rem;">{{ alert.detail_de }}</span>
-    </div>
-    {% endfor %}
-  </div>
-  {% endif %}
-
   {# ── Eigene Wetterstation (Ist-Stand) ──────────────────────────────────────── #}
+  <h2>Aktuell</h2>
+  {% include "weather/_datenstand.html" %}
   {% include "weather/_station_card.html" %}
 
   {% if no_location %}
@@ -71,7 +57,7 @@
             {% if weather_values.gust.value is not none %}{{ '%.1f'|format(weather_values.gust.value) }}<span style="font-size:.9rem;font-weight:400;"> m/s</span>{% else %}–{% endif %}
           </div>
           <div style="font-size:.72rem;color:var(--text-muted);margin-top:5px;">
-            {% if gust >= 24.5 %}BF10+{% elif gust >= 17.2 %}BF8+ {{ icon("bolt") }}{% elif gust >= 10.8 %}BF6{% elif gust > 0 %}BF{{ (gust / 3.6 ** 0.5 * 0.5)|int }}{% endif %}
+            {% if weather_values.gust.value is not none %}{{ '%.1f'|format(weather_values.gust.value|ms_to_kmh) }} km/h · {% endif %}{% if gust >= 24.5 %}BF10+{% elif gust >= 17.2 %}BF8+ {{ icon("bolt") }}{% elif gust >= 10.8 %}BF6{% elif gust > 0 %}BF{{ (gust / 3.6 ** 0.5 * 0.5)|int }}{% endif %}
           </div>
           <div style="font-size:.61rem;color:var(--text-muted);border:1px solid var(--border);border-radius:999px;padding:2px 6px;display:inline-block;margin-top:6px;">{{ weather_values.gust.source }}</div>
         </div>
@@ -125,27 +111,32 @@
       </div>
       {% endif %}
 
-      {# ── Vorhersage-Karten +6/+12/+24h ────────────────────────────────────── #}
-      {% if forecast and forecast.horizons %}
-      <div class="forecast-grid">
-        {% for h in forecast.horizons %}
-        {% set prec = h.precipitation_acc_mm or 0 %}
-        {% set fc_icon = "cloud-rain" if prec > 5 else ("cloud-rain" if prec > 1 else "sun") %}
-        {% set temp_c  = h.temperature_c or 0 %}
-        {% set tc = '#ef4444' if temp_c >= 30 else ('#f97316' if temp_c >= 25 else 'var(--text)') %}
-        <div class="wetter-card" style="padding:14px 16px;display:flex;flex-direction:column;gap:5px;">
-          <div style="font-size:.62rem;color:var(--text-muted);font-weight:600;letter-spacing:.05em;">IN {{ h.hours }}H</div>
-          <div style="font-size:1.9rem;font-weight:700;line-height:1;color:{{ tc }};">
-            {% if h.temperature_c is not none %}{{ '%.0f'|format(h.temperature_c) }}°{% else %}–{% endif %}
+      <section aria-label="Kurzfristig">
+        <h2>Kurzfristig</h2>
+        {% set horizon_hours = (1,3,6) %}
+        {% include "weather/_horizons.html" %}
+        {% if indicators is defined and indicators.heavy_rain.peak_mmh is not none %}
+        <p>Spitzenintensität: {{ '%.1f'|format(indicators.heavy_rain.peak_mmh) }} mm/h{% if indicators.heavy_rain.peak_at %} · {{ indicators.heavy_rain.peak_at|local_datetime }}{% endif %}</p>
+        {% endif %}
+      </section>
+      <section aria-label="Prognose">
+        <h2>Prognose</h2>
+        {% set horizon_hours = (12,24) %}
+        {% include "weather/_horizons.html" %}
+        {% if daily_forecast %}
+        <h3>Tagesprognose</h3>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;">
+          {% for day in daily_forecast.days %}
+          <div style="min-width:0;overflow-wrap:anywhere;">
+            <strong>{{ day.date_label }}</strong>
+            {% if day.temp_min_c is not none %}{{ '%.1f'|format(day.temp_min_c) }} °C{% endif %}
+            {% if day.temp_max_c is not none %}bis {{ '%.1f'|format(day.temp_max_c) }} °C{% endif %}
+            · {% if day.precip_mm is not none %}{{ '%.1f'|format(day.precip_mm) }} mm{% else %}Daten unvollständig{% endif %}
           </div>
-          <div style="font-size:1.2rem;line-height:1;">{{ icon(fc_icon) }}</div>
-          <div style="font-size:.7rem;color:var(--text-muted);">
-            {{ icon("cloud-rain") }} {{ '%.1f'|format(prec) }} mm{% if h.wind_speed_ms is not none %} · {{ icon("wind") }} {{ '%.0f'|format(h.wind_speed_ms) }} m/s{% endif %}
-          </div>
+          {% endfor %}
         </div>
-        {% endfor %}
-      </div>
-      {% endif %}
+        {% endif %}
+      </section>
 
     </div>{# end left column #}
 
@@ -154,19 +145,20 @@
       <div class="wetter-card" style="display:flex;flex-direction:column;overflow:hidden;">
         <div style="padding:12px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
           <span style="font-size:.68rem;font-weight:600;letter-spacing:.05em;color:var(--text);">
-            WARNUNGEN{% if warn_views %} ({{ warn_views|length }}){% endif %}
+            Warnungen · Amtliche Warnungen{% if warn_views %} ({{ warn_views|length }}){% endif %}
           </span>
           {% if warn_views %}<span style="color:#ef4444;font-size:1rem;">{{ icon("alert-triangle") }}</span>{% endif %}
         </div>
+        {% include "weather/_internal_hints.html" %}
         {% if warn_views %}
         <div style="display:flex;flex-direction:column;overflow-y:auto;max-height:520px;">
           {% for w in warn_views %}
           <div style="border-left:3px solid {{ w.color }};padding:10px 13px 10px 14px;
                       {% if not loop.last %}border-bottom:1px solid var(--border);{% endif %}">
             <div style="font-size:.72rem;font-weight:700;color:{{ w.color }};margin-bottom:2px;">
-              {{ icon("alert-triangle") }} STUFE {{ w.level }} — {{ w.event_type|upper }}
+              {{ icon("alert-triangle") }} STUFE {{ w.level }} — {{ w.event_type }}
             </div>
-            <div style="font-size:.66rem;color:var(--text-muted);margin-bottom:3px;">{{ w.zeitraum }}</div>
+            <div style="font-size:.66rem;color:var(--text-muted);margin-bottom:3px;">{{ w.valid_from|local_datetime }} – {{ w.valid_to|local_datetime }}</div>
             {% if w.text %}
             <div style="font-size:.72rem;color:var(--text-muted);line-height:1.4;">{{ w.text[:110] }}{% if w.text|length > 110 %}…{% endif %}</div>
             {% endif %}
@@ -187,7 +179,7 @@
     <div style="font-size:.68rem;font-weight:600;letter-spacing:.05em;color:var(--text-muted);margin-bottom:8px;">
       PEGELMESSSTATIONEN
     </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;">
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr));gap:10px;">
       {% for av in abfluss_views %}
       <div class="wetter-card" style="padding:14px 16px;border-left:3px solid {{ av.stufe_farbe }};">
 

@@ -91,7 +91,7 @@ def test_infoscreen_and_public_json_warning_status(client, setup_db, monkeypatch
     last = datetime(2026, 10, 22, 10, tzinfo=UTC)
     mock = AsyncMock(return_value=ws.WarningsResult(status, [], last, last))
     monkeypatch.setattr(ws, "get_warnings_result", mock)
-    for fn in ["get_current", "get_nowcast", "get_daily_forecast"]:
+    for fn in ["get_current", "get_nowcast", "get_daily_forecast", "get_forecast"]:
         monkeypatch.setattr(ws, fn, AsyncMock(return_value=None))
     response = client.get(f"/wetter/oeffentlich/{token}.json")
     assert response.status_code == 200
