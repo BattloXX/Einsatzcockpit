@@ -5,8 +5,9 @@ import logging
 from time import perf_counter
 from typing import Literal
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.config import settings
 from app.models.master import OrgSettings
@@ -44,16 +45,39 @@ def fusioniere(listen: list[list[Treffer]]) -> list[Treffer]:
                 treffer[key] = t.model_copy(deep=True)
             else:
                 bisher = treffer[key]
+                bester_auszug = "volltext" in t.grund and "volltext" not in bisher.grund
                 bisher.grund = list(dict.fromkeys([*bisher.grund, *t.grund]))
-                if not bisher.auszug and t.auszug:
+                if (bester_auszug or not bisher.auszug) and t.auszug:
                     bisher.auszug, bisher.fundstelle = t.auszug, t.fundstelle
     return sorted(treffer.values(), key=lambda t: (
         "exakt" not in t.grund, -scores[(t.quelle, t.quell_id)], t.quelle, t.quell_id,
     ))
 
 
+def _passt_filter(quelle: str, meta: dict, anfrage: SuchAnfrage) -> bool:
+    katplan = quelle in ("katplan_element", "katplan_seite")
+    if anfrage.plan_id is not None and (not katplan or meta.get("plan_id") != anfrage.plan_id):
+        return False
+    quelle_art = anfrage.filter.get("quelle_art")
+    if quelle_art is not None and quelle != quelle_art:
+        return False
+    for feld in ("typ", "prioritaet", "phase_id"):
+        wert = anfrage.filter.get(feld)
+        schluessel = "phase_ids" if feld == "phase_id" else feld
+        # Altbestand ohne die neuen Metadaten bleibt bis zum Reindex auffindbar.
+        if wert is None or schluessel not in meta:
+            continue
+        if feld == "phase_id":
+            if str(wert) not in {str(p) for p in meta[schluessel]}:
+                return False
+        elif str(meta[schluessel]) != str(wert):
+            return False
+    return True
+
+
 def _index_treffer(db: Session, user: User, kandidaten: list[Kandidat], woerter: list[str],
-                   grund: Literal["exakt", "volltext", "semantisch"]) -> list[Treffer]:
+                   grund: Literal["exakt", "volltext", "semantisch"],
+                   anfrage: SuchAnfrage | None = None) -> list[Treffer]:
     beste: dict[int, Kandidat] = {}
     for k in sorted(kandidaten, key=lambda k: k.rang):
         bisher = beste.get(k.document_id)
@@ -66,7 +90,10 @@ def _index_treffer(db: Session, user: User, kandidaten: list[Kandidat], woerter:
         ))
         if d is None or (d.sichtbarkeit == "vertraulich" and not sieht_vertraulich(user)):
             continue
-        aktuell = resolver.pruefe(db, user, d.quelle, d.quell_id, json.loads(d.meta_json or "{}"))
+        meta = json.loads(d.meta_json or "{}")
+        if anfrage is not None and not _passt_filter(d.quelle, meta, anfrage):
+            continue
+        aktuell = resolver.pruefe(db, user, d.quelle, d.quell_id, meta)
         if aktuell is None:
             continue
         query = select(SearchChunk).where(SearchChunk.org_id == user.org_id, SearchChunk.document_id == d.id)
@@ -94,21 +121,32 @@ def _index_treffer(db: Session, user: User, kandidaten: list[Kandidat], woerter:
 
 
 def _exakt(db: Session, user: User, anfrage: SuchAnfrage, woerter: list[str], quellen: list[str]) -> list[Treffer]:
-    bedingungen = []
+    bedingungen: list[ColumnElement[bool]] = []
     if "objekt" in quellen and anfrage.q.isdecimal():
         bedingungen.append((SearchDocument.quelle == "objekt")
                            & SearchDocument.titel.startswith(anfrage.q + " ", autoescape=True))
     if "katplan_element" in quellen:
         bedingungen.append((SearchDocument.quelle == "katplan_element")
                            & SearchDocument.titel.istartswith(anfrage.q, autoescape=True))
+    if woerter:
+        titel = func.lower(SearchDocument.titel)
+        for umlaut, ersatz in (("ä", "ae"), ("ö", "oe"), ("ü", "ue"), ("ß", "ss")):
+            titel = func.replace(titel, umlaut, ersatz)
+        bedingungen.append(and_(
+            SearchDocument.quelle.in_([q for q in quellen if q.startswith("katplan_")]),
+            *(titel.contains(w, autoescape=True) for w in woerter),
+        ))
     treffer = []
     if bedingungen:
         dokumente = db.scalars(select(SearchDocument).where(
             SearchDocument.org_id == user.org_id, or_(*bedingungen),
-        ).order_by(SearchDocument.id).limit(anfrage.limit * 6)).all()
+        ).order_by(case((SearchDocument.titel.istartswith(anfrage.q, autoescape=True), 0), else_=1),
+                   SearchDocument.id).limit(anfrage.limit * 6)).all()
         kandidaten = [Kandidat(d.id, None, r) for r, d in enumerate(dokumente, 1)]
-        treffer = _index_treffer(db, user, kandidaten, woerter, "exakt")
-    if (not anfrage.typen or "einsatz" in anfrage.typen) and anfrage.kontext != "gsl":
+        treffer = _index_treffer(db, user, kandidaten, woerter, "exakt", anfrage)
+    if (anfrage.plan_id is None and _passt_filter("einsatz", {}, anfrage)
+            and (not anfrage.typen or "einsatz" in anfrage.typen)
+            and anfrage.kontext != "gsl"):
         treffer.extend(live.suche_einsaetze(db, user, anfrage, woerter, nur_exakt=True))
     return treffer
 
@@ -170,10 +208,10 @@ def suche(db: Session, user: User, anfrage: SuchAnfrage, *,
             ergebnis.modi.append("volltext")
             with db.begin_nested():
                 kandidaten = volltext_kandidaten(db, org_id, woerter, quellen=quellen, limit=anfrage.limit * 3)
-                treffer = _index_treffer(db, user, kandidaten, woerter, "volltext")
+                treffer = _index_treffer(db, user, kandidaten, woerter, "volltext", anfrage)
                 if len(_geo(treffer, anfrage)) < anfrage.limit:
                     kandidaten = volltext_kandidaten(db, org_id, woerter, quellen=quellen, limit=anfrage.limit * 6)
-                    treffer = _index_treffer(db, user, kandidaten, woerter, "volltext")
+                    treffer = _index_treffer(db, user, kandidaten, woerter, "volltext", anfrage)
                 listen.append(treffer)
         except Exception:
             fehler("Volltextsuche")
@@ -190,7 +228,7 @@ def suche(db: Session, user: User, anfrage: SuchAnfrage, *,
                             sorted(nachbarn, key=lambda n: n[2]), 1,
                         ) if distanz <= settings.SEARCH_SEMANTIC_MAX_DISTANZ
                     ]
-                    listen.append(_index_treffer(db, user, kandidaten, woerter, "semantisch"))
+                    listen.append(_index_treffer(db, user, kandidaten, woerter, "semantisch", anfrage))
         except Exception:
             fehler("Semantik")
     kontext_typen = {"strassensperre", "wasserstelle"}
@@ -201,7 +239,9 @@ def suche(db: Session, user: User, anfrage: SuchAnfrage, *,
         if anfrage.kontext == "einsatz":
             kontext_typen.add("einsatz_meldung")
     for quelle, anbieter in live.ANBIETER.items():
-        if quelle not in kontext_typen or (anfrage.typen and quelle not in anfrage.typen):
+        if (anfrage.plan_id is not None or quelle not in kontext_typen
+                or (anfrage.typen and quelle not in anfrage.typen)
+                or not _passt_filter(quelle, {}, anfrage)):
             continue
         if "live" not in ergebnis.modi:
             ergebnis.modi.append("live")
@@ -210,7 +250,8 @@ def suche(db: Session, user: User, anfrage: SuchAnfrage, *,
                 listen.append(anbieter(db, user, anfrage, woerter))
         except Exception:
             fehler(quelle)
-    if (anfrage.kontext != "gsl" and (not anfrage.typen or "kontakt" in anfrage.typen)
+    if (anfrage.plan_id is None and _passt_filter("kontakt", {}, anfrage)
+            and anfrage.kontext != "gsl" and (not anfrage.typen or "kontakt" in anfrage.typen)
             and kontakt_zugriff != "keiner"):
         if "live" not in ergebnis.modi:
             ergebnis.modi.append("live")

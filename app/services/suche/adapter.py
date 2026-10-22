@@ -263,7 +263,9 @@ class KatplanElementAdapter:
                                planart.label if planart else None, planart.kuerzel if planart else None,
                                *akteure), chunks=[_chunk(titel, text)],
             sichtbarkeit="vertraulich" if e.vertraulich else "standard", lat=e.lat, lng=e.lng,
-            meta={"plan_id": p.id, "version_id": v.id, "element_uuid": e.element_uuid},
+            meta={"plan_id": p.id, "version_id": v.id, "element_uuid": e.element_uuid,
+                  "typ": e.typ, "prioritaet": e.prioritaet,
+                  "phase_ids": json.loads(e.phasen_json), "gefahrenarten": daten.get("gefahrenarten", [])},
             geaendert_am=v.freigegeben_am,
         )
 
@@ -300,7 +302,9 @@ class KatplanSeiteAdapter:
                                planart.kuerzel if planart else None),
             chunks=[_chunk(titel, t, s.seiten_nr)
                     for t in zerlege_text(entferne_telefonnummern(s.volltext))],
-            meta={"plan_id": p.id, "dokument_id": d.id, "seiten_nr": s.seiten_nr},
+            # Seiten besitzen keinen Elementtyp, keine Prioritaet und keine Phasenzuordnung.
+            meta={"plan_id": p.id, "dokument_id": d.id, "seiten_nr": s.seiten_nr,
+                  "gefahrenarten": p.gefahrenarten},
         )
 
 

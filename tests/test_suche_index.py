@@ -13,7 +13,9 @@ from app.models.katplan import (
     KatplanDokument,
     KatplanDokumentSeite,
     KatplanElement,
+    KatplanElementPhase,
     KatplanLink,
+    KatplanPhase,
     KatplanPlan,
     KatplanVersion,
     KatplanVersionElement,
@@ -224,7 +226,10 @@ def test_katplan_snapshot_vertraulich_und_versionswechsel(daten):
     assert "Geheim" not in text and "geheim" not in text
     assert "Sammelpunkt & Zufahrt" in text and "Lagerhalle" in text and "Hochwasser" in text
     assert "12" in text and "1.5" in text
-    assert json.loads(doc.meta_json) == {"plan_id": p.id, "version_id": v.id, "element_uuid": e.uuid}
+    assert json.loads(doc.meta_json) == {
+        "plan_id": p.id, "version_id": v.id, "element_uuid": e.uuid,
+        "typ": "info", "prioritaet": 2, "phase_ids": [], "gefahrenarten": [],
+    }
     e.titel = "ArbeitsstandNeu"
     p.titel = "ArbeitsplanNeu"
     db.flush()
@@ -374,6 +379,9 @@ def test_katplan_seite_archiv_und_planstatus(daten):
     assert indexiere(db, a.id, adapter.quelle, str(s.id)) == "neu"
     doc = _doc(db, a, adapter.quelle)
     assert doc.titel == "Quellplan, Seite 2"
+    meta = json.loads(doc.meta_json)
+    assert meta["seiten_nr"] == 2 and meta["dokument_id"] == d.id
+    assert meta["plan_id"] == p.id and meta["gefahrenarten"] == p.gefahrenarten
     assert len(doc.chunks) > 1 and {c.seite for c in doc.chunks} == {2}
     assert all(c.text.startswith(doc.titel + "\n") for c in doc.chunks)
     d.archiviert = True
@@ -442,3 +450,24 @@ def test_cli_org_direkt(daten, monkeypatch, capsys):
     assert f"Org {a.id}, Quelle objekt: neu=1" in capsys.readouterr().out
     assert _doc(db, a).quelle == "objekt"
     assert db.scalars(select(SearchDocument).where(SearchDocument.org_id == b.id)).all() == []
+
+
+def test_katplan_meta_stammt_aus_snapshot(daten):
+    db, a, _, _ = daten
+    p, user, e = _katplan(db, a)
+    p.gefahrenarten_json = '["hochwasser"]'
+    phase = KatplanPhase(org_id=a.id, plan_id=p.id, name="Vorwarnung")
+    db.add(phase)
+    db.flush()
+    db.add(KatplanElementPhase(org_id=a.id, element_id=e.id, phase_id=phase.id))
+    e.prioritaet = 1
+    freigeben(db, p, user)
+    db.flush()
+    p.gefahrenarten_json = '["blackout"]'
+    e.typ, e.prioritaet = "massnahme", 3
+    ident = f"{p.id}:{e.uuid}"
+    indexiere(db, a.id, "katplan_element", ident)
+    meta = json.loads(_doc(db, a, "katplan_element", ident).meta_json)
+    assert meta["typ"] == "info" and meta["prioritaet"] == 1
+    assert meta["phase_ids"] == [phase.id] and meta["gefahrenarten"] == ["hochwasser"]
+    assert indexiere(db, a.id, "katplan_element", ident) == "unveraendert"

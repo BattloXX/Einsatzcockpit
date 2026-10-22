@@ -25,6 +25,7 @@ from app.services.katplan_service import _HTMLText
 from app.services.katplan_typen import ELEMENT_TYPEN, PLANARTEN
 from app.services.katplan_zugriff import darf_bearbeiten, darf_lesen, sieht_vertraulich
 from app.services.road_closure_geo_service import bbox, distance_point_to_geometry_m, validate_geometry
+from app.services.suche.synonyme import expandiere, normalisiere
 
 
 def _like(wort: str) -> str:
@@ -66,11 +67,43 @@ def sichtbare_plaene(db: Session, user: User, arbeitsstand: bool = False) -> lis
     return sorted(result, key=lambda p: (p["titel"].lower(), p["id"]))
 
 
-def ausschnitt(text: str | None, woerter: list[str]) -> str:
+def _suchmuster(woerter: list[str]) -> re.Pattern[str]:
+    alternativen = []
+    for wort in sorted(expandiere(woerter), key=len, reverse=True):
+        if not wort:
+            continue
+        # Normalisierte Schreibweise und Umlaute treffen denselben Originaltext.
+        muster = re.escape(normalisiere(wort))
+        for ersatz, zeichen in (("ae", "ä"), ("oe", "ö"), ("ue", "ü"), ("ss", "ß")):
+            muster = muster.replace(ersatz, f"(?:{ersatz}|{zeichen})")
+        anfang = r"\b" if wort[0].isalnum() else ""
+        ende = r"\w*" if wort[-1].isalnum() else ""
+        alternativen.append(anfang + muster + ende)
+    return re.compile("|".join(alternativen) if alternativen else r"(?!)", re.IGNORECASE)
+
+
+def ausschnitt(text: str | None, woerter: list[str], laenge: int = 200) -> str:
+    """Fenster mit den meisten verschiedenen Suchwoertern samt Synonymen."""
     text = " ".join((text or "").split())
-    pos = text.lower().find(woerter[0]) if woerter else 0
-    start = max(0, pos - 70)
-    return ("... " if start else "") + text[start:start + 200] + (" ..." if len(text) > start + 200 else "")
+    funde = sorted((m.start(), m.end(), i) for i, wort in enumerate(dict.fromkeys(woerter))
+                   for m in _suchmuster([wort]).finditer(text))
+    start = 0
+    bester_rang = (0, 0)
+    links = 0
+    anzahl: dict[int, int] = {}
+    for rechts, (_pos, ende, gruppe) in enumerate(funde):
+        anzahl[gruppe] = anzahl.get(gruppe, 0) + 1
+        while links < rechts and ende - funde[links][0] > laenge:
+            alt = funde[links][2]
+            anzahl[alt] -= 1
+            if not anzahl[alt]:
+                del anzahl[alt]
+            links += 1
+        rang = (len(anzahl), rechts - links + 1)
+        if rang > bester_rang:
+            bester_rang = rang
+            start = max(0, funde[links][0] - min(70, max(0, laenge - (ende - funde[links][0]))))
+    return ("... " if start else "") + text[start:start + laenge] + (" ..." if len(text) > start + laenge else "")
 
 
 def _klartext(element: KatplanElement | KatplanVersionElement, woerter: list[str]) -> str:
@@ -87,10 +120,7 @@ def _klartext(element: KatplanElement | KatplanVersionElement, woerter: list[str
 
 def markiere(text: str, q: str) -> Markup:
     """Nur erzeugte mark-Tags sind HTML; auch Suchbegriffe bleiben Text."""
-    woerter = sorted(set(q.lower().split()), key=len, reverse=True)
-    if not woerter:
-        return Markup(escape(text))
-    muster = re.compile("|".join(re.escape(w) for w in woerter), re.IGNORECASE)
+    muster = _suchmuster(q.split())
     teile = []
     start = 0
     for match in muster.finditer(text):

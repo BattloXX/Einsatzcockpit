@@ -23,6 +23,14 @@ SYNONYME: tuple[frozenset[str], ...] = (
     frozenset({"pv", "photovoltaik", "pv-anlage"}),
     frozenset({"gas", "erdgas"}),
     frozenset({"stiege", "treppenhaus"}),
+    frozenset({"hochwasser", "überflutung", "überschwemmung", "hq"}),
+    frozenset({"blackout", "stromausfall"}),
+    frozenset({"evakuierung", "räumung"}),
+    frozenset({"sammelplatz", "treffpunkt"}),
+    frozenset({"einsatzleiter", "el", "einsatzleitung"}),
+    frozenset({"katastrophenschutz", "kats", "kat-schutz", "katschutz"}),
+    frozenset({"fdl", "fahrdienstleiter"}),
+    frozenset({"oberleitung", "fahrleitung"}),
 )
 
 
@@ -31,8 +39,9 @@ def expandiere(woerter: list[str]) -> list[str]:
     ergebnis = list(dict.fromkeys(normalisiere(w) for w in woerter))
     for wort in list(ergebnis):
         for gruppe in SYNONYME:
-            if wort in gruppe:
-                for synonym in sorted(gruppe):
+            normalisierte_gruppe = {normalisiere(w) for w in gruppe}
+            if wort in normalisierte_gruppe:
+                for synonym in sorted(normalisierte_gruppe):
                     if synonym not in ergebnis:
                         ergebnis.append(synonym)
     return ergebnis

@@ -212,3 +212,33 @@ Nicht Teil dieses Plans. Erst nach S8 und eigener Freigabe.
 | S7 | (dieser PR) | umgesetzt: Org-Schalter + Neuaufbau, Statusseite, MariaDB-FULLTEXT-Test in CI (lokal gegen 12.3 grün), Messskript, Wiki, CHANGELOG |
 | S8 | – | umgesetzt (S8a–d), Eval-Messung auf Testsystem offen |
 | K Kontakte | (dieser PR) | umgesetzt: Live-Anbieter mit drei Zugriffsstufen, UI mit `tel:`-Links, MCP ohne Nummern |
+
+
+## Katplan-Meta-Felder: Reindex noetig
+
+Paket 5a ergänzt bei `katplan_element` die Snapshot-Werte `typ`, `prioritaet`,
+`phase_ids` (numerische IDs aus `phasen_json`) und `gefahrenarten` aus `plan_json`.
+`katplan_seite` enthält `plan_id`, `dokument_id`, `seiten_nr` und die vorhandenen
+Plan-Gefahrenarten. Seiten haben keine eigene Typ-/Prioritäts-/Phasenzuordnung;
+diese Meta-Felder bleiben dort aus. `filter.quelle_art` erwartet den Adapternamen
+`katplan_element` bzw. `katplan_seite` (auch andere zentrale Quellnamen sind möglich).
+
+Vorhandene Indexdokumente brauchen einen Neuaufbau. Im Repo-Verzeichnis ausführen
+(`<ORG_ID>` durch die numerische Organisations-ID ersetzen):
+
+```bash
+.venv/bin/python -m app.cli suche-neuaufbau --org <ORG_ID> --quelle katplan_element
+.venv/bin/python -m app.cli suche-neuaufbau --org <ORG_ID> --quelle katplan_seite
+```
+
+Alternativ ersetzt `--alle` das Argument `--org <ORG_ID>` für alle Organisationen
+mit aktivem Suchindex. Die CLI ruft `indexer.neuaufbau()` auf, vergleicht den Hash
+(einschließlich Meta) und committet pro Quelle. Fachänderungen lösen weiterhin die
+Outbox aus; `outbox.plane_neuaufbau()` stellt einen kompletten Neuaufbau in die
+Worker-Warteschlange. Der periodische Abgleich ruft ebenfalls `neuaufbau()` auf.
+Ein Code-Update allein erzeugt keine Änderungs-Outbox für jedes Bestandsdokument.
+
+Bis zum Neuaufbau lassen `typ`, `prioritaet` und `phase_id` Dokumente ohne das
+jeweilige Meta-Feld durch; vorhandene Werte (auch eine leere Phasenliste) werden
+gefiltert. `plan_id` bleibt strikt und schließt andere Quellen aus. Rechte und
+Freigabestand werden weiterhin durch den Live-Resolver geprüft.
