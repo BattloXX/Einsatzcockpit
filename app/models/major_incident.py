@@ -149,6 +149,27 @@ SITE_PRIORITY_COLOR = {
     SitePriority.aufschiebbar: "muted",
 }
 
+# Kartenfarben je Prioritaet - identisch zu den Board-Prioritaetsbalken (.prio-bar--*)
+SITE_PRIORITY_HEX = {
+    "red": "#d42225",
+    "orange": "#e67e22",
+    "yellow": "#f2b02e",
+    "muted": "#6b7280",
+}
+
+
+def site_map_color(site: IncidentSite) -> str:
+    """Markerfarbe einer Einsatzstelle auf der Lagekarte (Prioritaet vor Phase)."""
+    key = SITE_PRIORITY_COLOR.get(site.priority) if site.priority else None
+    if key in ("red", "orange", "yellow"):
+        return SITE_PRIORITY_HEX[key]
+    if site.phase == SitePhase.fertig_gemeldet:
+        return "#0d9488"
+    if site.phase == SitePhase.erledigt:
+        return "#22c55e"
+    return SITE_PRIORITY_HEX["muted"]
+
+
 SITE_PRIORITY_LABEL = {
     SitePriority.sofort: "Sofort",
     SitePriority.dringend: "Dringend",

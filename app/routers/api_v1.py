@@ -793,6 +793,12 @@ async def create_incident_api(
         _mi_site, _mi_lage, _mi_lage_created = (
             run_side_effect("gsl_trigger", _mi_trigger) or (None, None, False)
         )
+        if _mi_site is not None and _mi_site.id is not None:
+            # GSL-01: offene Boards/Karten sehen die neue Einsatzstelle ohne Reload
+            _site_lage = _mi_lage or db.get(MajorIncident, _mi_site.major_incident_id)
+            if _site_lage is not None:
+                from app.services import gsl_broadcast
+                await gsl_broadcast.stelle_angelegt(db, _site_lage, _mi_site.id)
         if _mi_lage_created:
             # _mi_lage_created kann nur True sein, wenn _handle_major_incident_trigger()
             # den handle_alarm_trigger()-Zweig genommen hat -- der liefert lage garantiert
@@ -1195,7 +1201,7 @@ def lage_alarm(
     run_async(notify_gsl_live, db, lage, org_id=lage.org_id, reason="counts", background_tasks=background_tasks)
 
     background_tasks.add_task(
-        broadcast_lage, lage.id, {"type": "site_created"}
+        broadcast_lage, lage.id, {"type": "site_created", "site_id": site.id}
     )
     background_tasks.add_task(
         _enrich_site_from_alarm,

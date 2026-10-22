@@ -571,6 +571,10 @@ def new_incident(
                 )
                 db.commit()
                 _lage_redirect = f"/lage/{lage.id}"
+                if _site is not None:
+                    # GSL-01: offene Boards sehen die neue Einsatzstelle ohne Reload
+                    from app.services import gsl_broadcast as _gsl_broadcast
+                    run_async(_gsl_broadcast.stelle_angelegt, db, lage, _site.id)
                 if _created:
                     from app.services.gsl_notify import notify_gsl_created
                     run_async(notify_gsl_created,
@@ -582,7 +586,7 @@ def new_incident(
                 if active_lage:
                     org_settings = db.query(_OrgSettings).filter(_OrgSettings.org_id == user.org_id).first()
                     if not org_settings or org_settings.mi_auto_adopt:
-                        _adopt_incident_as_site(
+                        _adopted_site = _adopt_incident_as_site(
                             db, active_lage, incident_id=incident.id,
                             external_key=f"ui_{incident.id}", alarm_type_code=alarm_type_code,
                             org_id=user.org_id, ort=address_city or None,
@@ -590,6 +594,9 @@ def new_incident(
                             lat=incident.lat, lng=incident.lng, einsatzgrund=report_text or None,
                         )
                         db.commit()
+                        if _adopted_site is not None:
+                            from app.services import gsl_broadcast as _gsl_broadcast
+                            run_async(_gsl_broadcast.stelle_angelegt, db, active_lage, _adopted_site.id)
         except Exception:
             _log.exception(
                 "GSL-Trigger für Einsatz %d fehlgeschlagen – Einsatz bleibt erhalten",
