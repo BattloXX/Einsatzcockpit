@@ -117,6 +117,12 @@
   {# ── Daten-Sektion (HTMX auto-refresh alle 5 min) ──────────────────────────── #}
   {% include "weather/_data_section.html" %}
 
+  <details class="wetter-card" style="padding:12px;min-width:0"
+           hx-get="/wetter/vergleich" hx-trigger="toggle[this.open] once" hx-target="#wetter-vergleich">
+    <summary style="cursor:pointer">Modellvergleich (6 Stunden)</summary>
+    <div id="wetter-vergleich" aria-live="polite">Vergleich wird beim Öffnen geladen.</div>
+  </details>
+
   {# ── Radar / Windy (bleibt beim HTMX-Refresh erhalten) ────────────────────── #}
   {% if lat is not none and lng is not none %}
   <div>
@@ -186,6 +192,7 @@
 {% if lat is not none and lng is not none %}
 <script src="/static/js/leaflet.min.js"></script>
 <script src="/static/js/map-config.js?v={{ ASSET_VERSION }}"></script>
+<script src="/static/js/weather_radar.js?v={{ ASSET_VERSION }}"></script>
 <script>
 (function () {
   'use strict';
@@ -199,145 +206,9 @@
   L.circleMarker([LAT, LNG], {
     radius: 8, fillColor: '#3b82f6', fillOpacity: 0.85,
     color: '#1d4ed8', weight: 2,
-  }).bindTooltip('{{ focus_label|e }}').addTo(map);
+  }).bindTooltip({{ focus_label|tojson }}).addTo(map);
 
-  // ── Radar-Variablen ─────────────────────────────────────────────────────────
-  var radarHost     = 'https://tilecache.rainviewer.com';
-  var frames        = [];   // [{time, path, nowcast}]
-  var currentFrame  = -1;
-  var frameLayers   = {};   // path -> L.tileLayer
-  var animTimer     = null;
-  var isPlaying     = true;
-  var pauseTicks    = 0;
-  var PAUSE_TICKS   = 3;   // 3 × 650 ms = ~2 s Pause am letzten Frame
-
-  var scrubber    = document.getElementById('radar-scrubber');
-  var playBtn     = document.getElementById('radar-play-btn');
-  var timeLabel   = document.getElementById('radar-time-label');
-  var liveBadge   = document.getElementById('radar-live-badge');
-  var loadingInfo = document.getElementById('radar-loading');
-  var slabelStart = document.getElementById('slabel-start');
-  var slabelMid   = document.getElementById('slabel-mid');
-  var slabelEnd   = document.getElementById('slabel-end');
-
-  function pad(n) { return (n < 10 ? '0' : '') + n; }
-  function fmtTime(ts) {
-    var d = new Date(ts * 1000);
-    return pad(d.getHours()) + ':' + pad(d.getMinutes());
-  }
-
-  function showFrame(idx) {
-    if (!frames.length) { return; }
-    idx = Math.max(0, Math.min(idx, frames.length - 1));
-    currentFrame = idx;
-    scrubber.value = idx;
-
-    var f = frames[idx];
-    // maxNativeZoom: 6 verhindert die "Zoom Level Not Supported"-Kacheln
-    if (!frameLayers[f.path]) {
-      frameLayers[f.path] = L.tileLayer(
-        radarHost + f.path + '/256/{z}/{x}/{y}/2/1_1.png',
-        {
-          opacity:       0,
-          zIndex:        5,
-          maxNativeZoom: 6,
-          maxZoom:       18,
-          attribution:   'Radar: RainViewer',
-        }
-      ).addTo(map);
-    }
-    Object.keys(frameLayers).forEach(function (p) {
-      frameLayers[p].setOpacity(p === f.path ? 0.6 : 0);
-    });
-
-    var isLast = (idx === frames.length - 1);
-    liveBadge.style.display = isLast ? '' : 'none';
-    timeLabel.innerHTML = fmtTime(f.time) + (f.nowcast ? ' ' + ecpIcon("chevron-right", {size: "lg"}) + ' Prognose' : '');
-  }
-
-  function stopAnim() {
-    if (animTimer) { clearInterval(animTimer); animTimer = null; }
-  }
-
-  function startAnim() {
-    stopAnim();
-    isPlaying  = true;
-    pauseTicks = 0;
-    playBtn.innerHTML = ecpIcon('player-pause');
-    if (!frames.length) { return; }
-
-    var idx = 0;
-    animTimer = setInterval(function () {
-      if (idx >= frames.length) {
-        // Pause am letzten Frame, dann von vorne
-        if (pauseTicks < PAUSE_TICKS) { pauseTicks++; return; }
-        pauseTicks = 0;
-        idx = 0;
-      }
-      showFrame(idx++);
-    }, 650);
-  }
-
-  function loadFrames() {
-    fetch('https://api.rainviewer.com/public/weather-maps.json')
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (d) {
-        loadingInfo.style.display = 'none';
-        if (!d) { timeLabel.textContent = 'Radar nicht verfügbar'; return; }
-        radarHost = d.host || radarHost;
-
-        var past    = (d.radar && d.radar.past)    || [];
-        var nowcast = (d.radar && d.radar.nowcast) || [];
-        frames = past.slice(-8).map(function (f) {
-          return { time: f.time, path: f.path, nowcast: false };
-        }).concat(nowcast.map(function (f) {
-          return { time: f.time, path: f.path, nowcast: true };
-        }));
-
-        if (!frames.length) { timeLabel.textContent = 'Kein Radarbild verfügbar'; return; }
-
-        scrubber.max = frames.length - 1;
-        slabelStart.textContent = fmtTime(frames[0].time);
-        var mid = Math.floor(frames.length / 2);
-        if (frames.length > 2) { slabelMid.textContent = fmtTime(frames[mid].time); }
-        slabelEnd.textContent = 'jetzt';
-
-        // Letzten Frame zeigen, dann Animation starten
-        showFrame(frames.length - 1);
-        startAnim();
-      })
-      .catch(function () {
-        loadingInfo.style.display = 'none';
-        timeLabel.textContent = 'Radar konnte nicht geladen werden';
-      });
-  }
-
-  loadFrames();
-
-  // Alle 5 min neue Frames
-  setInterval(function () {
-    Object.keys(frameLayers).forEach(function (p) { map.removeLayer(frameLayers[p]); });
-    frameLayers = {};
-    frames = [];
-    loadingInfo.style.display = '';
-    loadFrames();
-  }, 300000);
-
-  // ── Scrubber-Interaktion ────────────────────────────────────────────────────
-  function pauseOnScrub() { stopAnim(); isPlaying = false; playBtn.innerHTML = ecpIcon('player-play'); }
-  scrubber.addEventListener('mousedown',  pauseOnScrub);
-  scrubber.addEventListener('touchstart', pauseOnScrub, { passive: true });
-  scrubber.addEventListener('input', function () { showFrame(parseInt(this.value, 10)); });
-
-  playBtn.addEventListener('click', function () {
-    if (isPlaying) {
-      stopAnim();
-      isPlaying = false;
-      playBtn.innerHTML = ecpIcon('player-play');
-    } else {
-      startAnim();
-    }
-  });
+  var radar = window.WeatherRadar.create(map, document);
 
   // ── Tab-Umschalter ──────────────────────────────────────────────────────────
   var tabRadar   = document.getElementById('tab-radar');
@@ -352,13 +223,12 @@
     tabRadar.classList.add('active');
     if (tabWindy) { tabWindy.classList.remove('active'); }
     setTimeout(function () { map.invalidateSize(); }, 50);
-    if (!isPlaying) { /* Scrubber aktiv – nicht neu starten */ }
-    else { startAnim(); }
+    radar.resume();
   }
 
   function selectWindy() {
     if (!windyView) { return; }
-    stopAnim();
+    radar.stop();
     radarView.style.display = 'none';
     windyView.style.display = '';
     tabRadar.classList.remove('active');

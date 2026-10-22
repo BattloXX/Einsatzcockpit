@@ -333,6 +333,8 @@ class Settings(BaseSettings):
     WEATHER_MAX_AGE_NOWCAST_S: int = 900
     WEATHER_MAX_AGE_FORECAST_S: int = 3600
     WEATHER_MAX_AGE_DAILY_S: int = 7200
+    WEATHER_COMPARE_WARN_PRECIP_MM: float = Field(default=5, ge=0)
+    WEATHER_COMPARE_WARN_GUST_MS: float = Field(default=5, ge=0)
     WEATHER_HTTP_TIMEOUT: int = 8
     WEATHER_HTTP_RETRIES: int = Field(default=1, ge=0, le=2)
     WEATHER_RETRY_BACKOFF_S: float = Field(default=0.5, ge=0, le=2)

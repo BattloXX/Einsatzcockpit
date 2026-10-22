@@ -252,3 +252,21 @@ Die letzten 20 Versandvorgänge sind direkt in der Einstellungsseite unter der R
 | Tauwetter feuert nie | Keine Pegelmessstation konfiguriert oder Pegel nicht steigend |
 | Teams-Test schlägt fehl | Webhook-URL abgelaufen (in Teams neu erzeugen) |
 | Mail-Test schlägt fehl | SMTP-Konfiguration prüfen (Einstellungen → System → Mail) |
+
+## Wetter-Diagnose
+
+Unter **Administration → Wetter → Diagnose** sehen Administratoren die aktive
+Anbieterreihenfolge je Datenart, den Status der amtlichen Warnungen und ob
+Kachelmann für die ausgewählte Organisation konfiguriert ist. Die Provider-Diagnose
+zeigt serverweite flüchtige Zähler, letzten Erfolg/Fehler, Fehlercode und letzte
+Latenz. Ohne Abfragen sind noch keine Werte vorhanden; dies ist keine
+Verfügbarkeitshistorie. Redis-Zähler verfallen nach 24 Stunden.
+
+Der Cache-Modus wird anhand der Erreichbarkeit als Redis, Lokal oder lokaler
+Redis-Fallback angezeigt. Die Diagnose enthält ausgewählte Betriebswerte,
+keine API-Schlüssel oder Redis-Verbindungsdaten. Warnstatus und aktive Quellen
+beziehen sich auf die ausgewählte Organisation; Zustandszähler gelten serverweit.
+
+`WEATHER_COMPARE_WARN_PRECIP_MM=5` und `WEATHER_COMPARE_WARN_GUST_MS=5` steuern
+Hinweise im Modellvergleich bei größeren absoluten Differenzen. Diese Einstellungen
+verändern keine Alarmschwellen und erzeugen keine Benachrichtigungen.

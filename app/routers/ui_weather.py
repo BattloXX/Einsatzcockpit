@@ -794,12 +794,18 @@ def gsl_wetter_focus(
     if lat is None or lng is None:
         return JSONResponse({"lat": None, "lng": None, "radius_km": settings.WEATHER_RADIUS_KM, "label": ""})
 
-    return JSONResponse({
-        "lat": lat,
-        "lng": lng,
-        "radius_km": settings.WEATHER_RADIUS_KM,
-        "label": label,
-    })
+    from app.core.async_bridge import run_async
+
+    current = run_async(weather_service.get_current, lat, lng, org_id=lage.org_id)
+    wind = {}
+    if current is not None:
+        wind = {"wind_dir_deg": current.wind_direction_deg,
+                "wind_ms": current.wind_speed_ms, "gust_max_ms": current.gust_speed_ms,
+                "time": current.meta.valid_at if current.meta else None, "datenstand": current.meta}
+    return JSONResponse(jsonable_encoder({
+        "lat": lat, "lng": lng, "radius_km": settings.WEATHER_RADIUS_KM,
+        "label": label, **wind,
+    }))
 
 
 # ── Warnzonen als GeoJSON ─────────────────────────────────────────────────────
@@ -814,7 +820,7 @@ async def gsl_wetter_warnungen_geojson(
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
 ):
-    """GeoJSON: aktive Warnungen als Punkt-Features (Zentrum = Schwerpunkt)."""
+    """GeoJSON: gelieferte Warngebiete, sonst Punkt am Schwerpunkt."""
     user = request.state.user
     lage = _lage_or_404(lage_id, db)
     _check_org(user, lage.org_id)
@@ -848,7 +854,7 @@ async def gsl_wetter_warnungen_geojson(
     features = [
         {
             "type": "Feature",
-            "geometry": {"type": "Point", "coordinates": [lng, lat]},
+            "geometry": w.geometry or {"type": "Point", "coordinates": [lng, lat]},
             "properties": {
                 "level":       w.level,
                 "event_type":  w.event_type,
@@ -1094,6 +1100,24 @@ async def wetter_index(
             "enable_station_history": True,
         },
     )
+
+
+@router.get("/wetter/vergleich", response_class=HTMLResponse, include_in_schema=False)
+def wetter_vergleich(
+    request: Request,
+    db: Session = Depends(get_db),
+    _=Depends(require_role("incident_leader", "admin", "org_admin", "recorder", "readonly")),
+):
+    from app.core.async_bridge import run_async
+    from app.services.weather_compare import compare
+
+    user = request.state.user
+    if not settings.WEATHER_ENABLED or not _org_weather_enabled(user.org_id, db):
+        raise HTTPException(status_code=404)
+    lat, lng, label = _resolve_menu_standort(user, db)
+    result = run_async(compare, lat, lng, 6, user.org_id) if lat is not None and lng is not None else None
+    return templates.TemplateResponse(request, "weather/_vergleich.html",
+                                      {"user": user, "comparison": result, "focus_label": label})
 
 
 @router.get(
