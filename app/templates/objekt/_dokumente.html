@@ -40,7 +40,7 @@
       {% for v in ki_vorschlaege %}
       <div style="display:flex;gap:10px;align-items:flex-start;border:1px solid var(--border);border-radius:8px;padding:8px;">
         {% if v.seite and v.seite.thumb_pfad %}
-        <img src="/objekt-medien/seite/{{ v.seite_id }}/thumb" alt="" style="width:56px;border-radius:4px;background:#fff;">
+        <img src="/objekt-medien/seite/{{ v.seite_id }}/thumb" alt="" loading="lazy" decoding="async" style="width:56px;border-radius:4px;background:#fff;">
         {% endif %}
         <div style="flex:1;min-width:0;">
           <div>
@@ -78,7 +78,7 @@
       <div style="border:1px solid var(--border);border-radius:8px;padding:10px;">
         <div style="display:flex;gap:10px;align-items:flex-start;">
           {% if v.seite and v.seite.thumb_pfad %}
-          <img src="/objekt-medien/seite/{{ v.seite_id }}/thumb" alt="" style="width:56px;border-radius:4px;background:#fff;">
+          <img src="/objekt-medien/seite/{{ v.seite_id }}/thumb" alt="" loading="lazy" decoding="async" style="width:56px;border-radius:4px;background:#fff;">
           {% endif %}
           <div style="flex:1;min-width:0;font-size:0.9em;">
             {% if v.informationen_text %}<div><strong>Objekt-Infos:</strong> {{ v.informationen_text }}</div>{% endif %}
@@ -164,7 +164,7 @@
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
           {% for s in d.seiten %}
           <div style="display:flex;gap:6px;align-items:flex-start;max-width:250px;min-width:160px;">
-            {% if s.thumb_pfad %}<img src="/objekt-medien/seite/{{ s.id }}/thumb?r={{ s.rotation }}" alt="Vorschau Seite {{ s.seiten_nr }}" loading="lazy" style="width:44px;border-radius:4px;background:#fff;">{% endif %}
+            {% if s.thumb_pfad %}<img src="/objekt-medien/seite/{{ s.id }}/thumb?r={{ s.rotation }}" alt="Vorschau Seite {{ s.seiten_nr }}" loading="lazy" decoding="async" style="width:44px;border-radius:4px;background:#fff;">{% endif %}
             <div style="font-size:.85em;min-width:0;">S. {{ s.seiten_nr }} · <strong>{{ dokumentarten.get(s.dokumentart, 'Unklassifiziert') }}</strong>{% if s.titel %}<div class="text-muted">{{ s.titel }}</div>{% endif %}</div>
           </div>
           {% endfor %}
@@ -239,7 +239,7 @@
       <a href="/objekte/{{ objekt.id }}/dokumente/viewer?seite={{ s.id }}&art={{ filter_art }}&suche={{ filter_suche }}">
         {% if s.thumb_pfad %}
         {# ?r={{ s.rotation }} = Cache-Buster: nach dem Drehen laedt das (serverseitig gedrehte) Thumb neu #}
-        <img src="/objekt-medien/seite/{{ s.id }}/thumb?r={{ s.rotation }}" alt="Seite {{ s.seiten_nr }}" loading="lazy">
+        <img src="/objekt-medien/seite/{{ s.id }}/thumb?r={{ s.rotation }}" alt="Seite {{ s.seiten_nr }}" loading="lazy" decoding="async">
         {% else %}
         <div class="objekt-seite-kachel__platzhalter">{{ icon("file-text", size="lg") }}<br>S. {{ s.seiten_nr }}</div>
         {% endif %}

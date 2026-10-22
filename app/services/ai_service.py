@@ -167,6 +167,15 @@ class AIServiceError(Exception):
     """Raised when the AI provider call fails; never exposes raw provider errors."""
 
 
+def _first_text(response: Any) -> str:
+    """Liefert den ersten Text-Block und überspringt etwa Thinking-Blöcke."""
+    for block in response.content:
+        text = getattr(block, "text", None)
+        if isinstance(text, str):
+            return text
+    raise AIServiceError("KI-Dienst hat keine Textantwort geliefert.")
+
+
 def is_enabled() -> bool:
     """Return True when AI is enabled and an API key is configured (DB overrides env vars)."""
     cfg = _get_ai_cfg()
@@ -289,7 +298,7 @@ async def _complete(
         except Exception:
             pass
 
-    return response.content[0].text  # type: ignore[union-attr]
+    return _first_text(response)
 
 
 async def _complete_vision(
@@ -405,7 +414,7 @@ async def _complete_vision(
         except Exception:
             pass
 
-    return response.content[0].text  # type: ignore[union-attr]
+    return _first_text(response)
 
 
 async def complete(
