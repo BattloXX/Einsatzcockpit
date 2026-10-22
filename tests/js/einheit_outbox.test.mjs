@@ -257,3 +257,13 @@ test("leeres Foto wird nicht gesendet und lesbar als Fehler markiert", async () 
   await warteAuf(async () => (await o.liste())[0]?.status === "fehler");
   assert.equal((await o.liste())[0].letzter_fehler, "foto_daten_fehlen"); assert.equal(env.anfragen.length, 0);
 });
+
+test("zufallsUuid liefert auch ohne crypto.randomUUID eine gueltige v4-UUID", async () => {
+  const { zufallsUuid } = await import("../../app/static/js/einheit_outbox.js");
+  const v4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+  const mitGetRandomValues = { getRandomValues(bytes) { bytes.fill(255); return bytes; } };
+  assert.match(zufallsUuid(mitGetRandomValues), v4);
+  assert.match(zufallsUuid(undefined), v4);
+  assert.equal(zufallsUuid({ randomUUID: () => "fest" }), "fest");
+  assert.notEqual(zufallsUuid(undefined), zufallsUuid(undefined));
+});

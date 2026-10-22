@@ -1,10 +1,27 @@
 /* Persistente Offline-Outbox fuer den Einheitenmodus; bewusst ohne DOM-Zugriffe. */
+
+// crypto.randomUUID gibt es erst ab Chrome/WebView 92 (und nur in sicheren Kontexten); aeltere
+// Android-Tablets brauchen den Fallback, sonst scheitert jede Meldung schon beim Erfassen.
+export function zufallsUuid(kryptografie = globalThis.crypto) {
+  if (kryptografie && typeof kryptografie.randomUUID === "function") return kryptografie.randomUUID();
+  const bytes = new Uint8Array(16);
+  if (kryptografie && typeof kryptografie.getRandomValues === "function") {
+    kryptografie.getRandomValues(bytes);
+  } else {
+    for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+  }
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 export function createOutbox({
   indexedDB,
   fetch,
   now = () => new Date(),
   sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-  uuid = () => crypto.randomUUID(),
+  uuid = () => zufallsUuid(),
   csrfToken = () => "",
   simEinheitId = null,
   benutzerEinheitId = null,

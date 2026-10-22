@@ -145,7 +145,7 @@
       {% if qr.status == "kein_zugang" %}<button class="btn btn--primary" hx-post="{{ basis }}/zugang/qr/ausstellen" hx-target="#ressourceKarteBody" hx-swap="innerHTML">QR-Code ausstellen</button>{% endif %}
       {% if qr.status == "aktiv" %}
       <button type="button" class="btn btn--secondary" data-qr-zeigen>QR anzeigen</button>
-      <button type="button" class="btn btn--secondary"
+      <button type="button" class="btn btn--secondary" data-qr-drucken
               onclick="ecpgPrint({
                 document_type:'gsl_einheit_qr', gsl_id:{{ lage.id }},
                 title:{{ ('QR-Zugang ' ~ einheit.label ~ ' drucken')|tojson|forceescape }},
