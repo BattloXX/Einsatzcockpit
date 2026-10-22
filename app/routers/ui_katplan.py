@@ -614,7 +614,33 @@ def detail(plan_id: int, request: Request, ansicht: str = "", db: Session = Depe
     if not arbeitsstand:
         context.update(_lesekontext(db, user, plan, kann_uebernehmen=context["kann_uebernehmen"]))
     context.update(_kartenkontext(db, user, plan, arbeitsstand))
+    _inhalt_zaehler(context, arbeitsstand=arbeitsstand)
     return templates.TemplateResponse(request, "katplan/detail.html", context)
+
+
+def _inhalt_zaehler(context: dict, *, arbeitsstand: bool = False) -> None:
+    # Nur Elemente der angezeigten Fassung zählen, einschließlich Unterkapiteln.
+    baum = context["baum" if arbeitsstand else "version_baum"]
+
+    def zaehlen(knoten):
+        elemente = []
+        for k in knoten:
+            eigene = [{"phasen": [p.id if arbeitsstand else p["id"]
+                                    for p in context["element_phasen"][e.id]],
+                       "akteure": json.loads(e.akteure_json or "[]")}
+                      for e in k["elemente"]]
+            k["filter_elemente"] = eigene + zaehlen(k["kinder"])
+            elemente.extend(k["filter_elemente"])
+        return elemente
+
+    elemente = zaehlen(baum)
+    phasen = context["phasen"] if arbeitsstand else context["plan_daten"].get("phasen", [])
+    context["anzeige_phasen"] = phasen
+    context["element_anzahl"] = len(elemente)
+    context["phasen_anzahl"] = {
+        (p.id if arbeitsstand else p["id"]): sum(
+            not e["phasen"] or (p.id if arbeitsstand else p["id"]) in e["phasen"]
+            for e in elemente) for p in phasen}
 
 
 def _ist_arbeitsstand(user: User, plan: KatplanPlan, ansicht: str) -> bool:
@@ -710,9 +736,9 @@ def historische_version(plan_id: int, vid: int, request: Request, db: Session = 
                         user: User = Depends(require_katplan_lesen)):
     plan = _sichtbarer_plan(db, plan_id, user)
     context = _kontext(db, user, plan)
-    return templates.TemplateResponse(request, "katplan/detail.html", {
-        **context, **_lesekontext(db, user, plan, vid, kann_uebernehmen=context["kann_uebernehmen"]),
-        "historisch": True})
+    context.update(_lesekontext(db, user, plan, vid, kann_uebernehmen=context["kann_uebernehmen"]))
+    _inhalt_zaehler(context)
+    return templates.TemplateResponse(request, "katplan/detail.html", {**context, "historisch": True})
 
 
 @router.get("/{plan_id}/vergleich")

@@ -51,7 +51,7 @@ def test_chip_vorschau_original_arbeitsstand_und_leseversion(client, quelle):
         response = client.get(basis(quelle) + suffix)
         assert response.status_code == 200
         assert 'class="kp-chip" title="E5 Handbuch (v1), S. 13-14"' in response.text
-        assert "Quelle S. 13-14" in response.text
+        assert re.search(r">\s*S\. 13-14</a>", response.text)
         article = re.search(r"<article\b.*?</article>", response.text, re.S)[0]
         assert article.count('loading="lazy"') == 2
         for nr in (13, 14):
@@ -78,7 +78,7 @@ def test_ungueltige_seiten_und_vorschau_limit(client, quelle):
     login(client, quelle)
     response = client.get(basis(quelle) + "?ansicht=arbeitsstand")
     assert response.status_code == 200
-    assert "Quelle S. kaputt" in response.text
+    assert re.search(r">\s*S\. kaputt</a>", response.text)
     assert f'/quelle/{quelle["uuid"]}/seite/' not in response.text
     with TestingSession() as db:
         set_tenant_context(db, None)

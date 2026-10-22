@@ -7,6 +7,8 @@
   {% if fehler %}<p role="alert" class="kp-error">{{ fehler }}</p>{% endif %}
   {% include "katplan/_links_anzeige.html" %}
   {% if links_bearbeiten %}
+    <details>
+      <summary>{{ 'Verknüpfung hinzufügen' if element else 'Zuständigkeit hinzufügen' }}</summary>
     <div class="kp-form" id="{{ links_ziel }}-suche">
       {% if element %}<input form="" type="hidden" name="element_id" value="{{ element.id }}">{% endif %}
       <label>Zieltyp
@@ -23,5 +25,6 @@
       </label>
     </div>
     <div id="{{ links_ziel }}-treffer"></div>
+    </details>
   {% endif %}
 </section>
