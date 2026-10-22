@@ -323,6 +323,7 @@ class Settings(BaseSettings):
     WEATHER_NOWCAST_RESOURCE: str = "nowcast-v1-15min-1km"
     WEATHER_NWP_RESOURCE: str = "nwp-v1-1h-2500m"
     WEATHER_STATION_RESOURCE: str = "tawes-v1-10min"
+    WEATHER_CACHE_TTL_CURRENT: int = 300  # 5 min
     WEATHER_CACHE_TTL_NOWCAST: int = 300  # 5 min
     WEATHER_CACHE_TTL_NWP: int = 1800  # 30 min
     WEATHER_CACHE_TTL_WARN: int = 300  # 5 min
@@ -333,6 +334,9 @@ class Settings(BaseSettings):
     WEATHER_MAX_AGE_FORECAST_S: int = 3600
     WEATHER_MAX_AGE_DAILY_S: int = 7200
     WEATHER_HTTP_TIMEOUT: int = 8
+    WEATHER_HTTP_RETRIES: int = Field(default=1, ge=0, le=2)
+    WEATHER_RETRY_BACKOFF_S: float = Field(default=0.5, ge=0, le=2)
+    WEATHER_LOCK_TTL_S: float = Field(default=120, ge=1, le=300)
     WEATHER_RADIUS_KM: int = 15
     WEATHER_FALLBACK_OPENMETEO: bool = True
     OPENMETEO_BASE_URL: str = "https://api.open-meteo.com/v1/forecast"
@@ -342,7 +346,9 @@ class Settings(BaseSettings):
     WEATHER_PRIORITY_NOWCAST: str = "geosphere,open-meteo"
     WEATHER_PRIORITY_FORECAST: str = "kachelmann,geosphere,open-meteo"
     WEATHER_PRIORITY_DAILY: str = "open-meteo"
-    WEATHER_DAILY_TTL: int = 3600
+    WEATHER_DAILY_TTL: int = Field(
+        default=3600, validation_alias=AliasChoices("WEATHER_DAILY_TTL", "WEATHER_CACHE_TTL_DAILY"),
+    )
     # Windy.com Vollkarte als zusätzlicher Radar-Tab per <iframe> (extern → Datenschutz).
     WEATHER_WINDY_ENABLED: bool = True
 

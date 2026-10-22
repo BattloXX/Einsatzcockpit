@@ -24,6 +24,7 @@ from typing import Any
 import httpx
 
 from app.config import settings
+from app.services import weather_http
 from app.services.weather_service import (
     CurrentWeather,
     ForecastResult,
@@ -62,7 +63,8 @@ def _get_api_key(org_id: int | None) -> str | None:
             finally:
                 db.close()
         except Exception as exc:
-            logger.warning("Kachelmann-Key konnte nicht aus OrgSettings gelesen werden (org=%s): %s", org_id, exc)
+            logger.warning("Kachelmann-Key konnte nicht aus OrgSettings gelesen werden (org=%s): %s",
+                           org_id, type(exc).__name__)
 
     if value is None:
         logger.debug("Kein Kachelmann-API-Key fuer Org %s – Wetterdaten kommen von ZAMG/GeoSphere.", org_id)
@@ -106,25 +108,25 @@ async def _get(path: str, org_id: int | None, params: dict | None = None) -> dic
             },
             timeout=settings.WEATHER_HTTP_TIMEOUT,
         ) as client:
-            resp = await client.get(url, params=dict(params or {}, units="metric"))
+            resp = await weather_http.get(client, url, params=dict(params or {}, units="metric"))
             resp.raise_for_status()
             data = resp.json()
             return data if isinstance(data, dict) else None
     except httpx.TimeoutException:
-        logger.warning("Kachelmann Timeout: %s", path)
+        logger.warning("Kachelmann Timeout: %s", path.split("?", 1)[0])
     except httpx.HTTPStatusError as exc:
         status = exc.response.status_code
         if status in (401, 403):
             logger.warning(
                 "Kachelmann HTTP %s bei %s – API-Key ungültig oder Abo deckt den Endpunkt "
-                "nicht ab. Es wird auf ZAMG/GeoSphere zurückgegriffen.", status, path,
+                "nicht ab. Es wird auf ZAMG/GeoSphere zurückgegriffen.", status, path.split("?", 1)[0],
             )
         elif status == 429:
-            logger.warning("Kachelmann HTTP 429 bei %s – Rate-Limit erreicht.", path)
+            logger.warning("Kachelmann HTTP 429 bei %s – Rate-Limit erreicht.", path.split("?", 1)[0])
         else:
-            logger.warning("Kachelmann HTTP %s: %s", status, path)
+            logger.warning("Kachelmann HTTP %s: %s", status, path.split("?", 1)[0])
     except Exception as exc:
-        logger.warning("Kachelmann Fehler: %s (%s)", exc, path)
+        logger.warning("Kachelmann Fehler: %s", type(exc).__name__)
     return None
 
 
