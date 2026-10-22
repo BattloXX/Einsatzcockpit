@@ -34,6 +34,7 @@ from app.models.incident import (
     PERSON_STATUS_VALUES,
     UNIT_STATUS_VALUES,
     Incident,
+    IncidentChange,
     IncidentColumn,
     IncidentCommLog,
     IncidentLog,
@@ -1193,6 +1194,74 @@ def board_kopfleiste_fragment(
     })
 
 
+# ECP-04: Anzeigenamen der vorhandenen Fahrzeugstatus in der Ausrückordnung (Farben: .unit-status-*)
+_AUSRUECK_STATUS_LABEL = {
+    "Einsatzbereit": "Einsatzbereit",
+    "Einsatz übernommen": "Auf Anfahrt",
+    "Am Einsatzort": "Am Einsatzort",
+}
+
+
+def _ausrueckordnung_eintraege(db: Session, incident: Incident) -> list[dict]:
+    """Fahrzeuge des Alarmstichworts samt aktuellem Status aus dem Einsatz (keine neue Statuslogik).
+
+    Fahrzeuge ohne Zuordnung im Einsatz oder mit unbekanntem Status bleiben neutral.
+    """
+    alarm = (
+        get_alarm_type_by_code(db, incident.primary_org_id, incident.alarm_type_code)  # type: ignore[arg-type]
+        if incident.alarm_type_code else None
+    )
+    if not alarm:
+        return []
+    fahrzeuge = (
+        db.query(VehicleMaster)
+        .join(AlarmDispatchVehicle, AlarmDispatchVehicle.vehicle_master_id == VehicleMaster.id)
+        .filter(AlarmDispatchVehicle.alarm_type_id == alarm.id)
+        .order_by(AlarmDispatchVehicle.display_order)
+        .all()
+    )
+    im_einsatz = {
+        v.vehicle_master_id: v
+        for v in db.query(IncidentVehicle).filter(
+            IncidentVehicle.incident_id == incident.id, IncidentVehicle.removed_at.is_(None),
+        )
+    }
+    seit: dict[int, datetime] = {}
+    if im_einsatz:
+        zeilen = (
+            db.query(IncidentChange.entity_id, func.max(IncidentChange.ts))
+            .filter(
+                IncidentChange.incident_id == incident.id,
+                IncidentChange.action == "vehicle.status_set",
+                IncidentChange.entity_type == "incident_vehicle",
+                IncidentChange.entity_id.in_([v.id for v in im_einsatz.values()]),
+            )
+            .group_by(IncidentChange.entity_id)
+            .all()
+        )
+        seit = {entity_id: ts for entity_id, ts in zeilen}
+    eintraege = []
+    for fahrzeug in fahrzeuge:
+        zugeordnet = im_einsatz.get(fahrzeug.id)
+        status = zugeordnet.unit_status if zugeordnet else None
+        label = _AUSRUECK_STATUS_LABEL.get(status) if status else None
+        eintraege.append({
+            "code": fahrzeug.code,
+            "name": fahrzeug.name,
+            "status": status,
+            "label": label or status or "Kein Status",
+            "slug": _unit_status_slug_fuer_ausrueckung(status) if status and label else "",
+            "seit": seit.get(zugeordnet.id) if zugeordnet else None,
+        })
+    return eintraege
+
+
+def _unit_status_slug_fuer_ausrueckung(status: str) -> str:
+    from app.core.templating import _unit_status_slug
+
+    return _unit_status_slug(status)
+
+
 @router.get("/einsatz/{incident_id}/info", response_class=HTMLResponse)
 def incident_info(incident_id: int, request: Request, db: Session = Depends(get_db)):
     """Einsatzinformation: vorgeschaltete Übersicht mit Karte, Objektinfo (inkl.
@@ -1204,20 +1273,8 @@ def incident_info(incident_id: int, request: Request, db: Session = Depends(get_
     if not can_access_incident(user, incident):
         raise HTTPException(403, "Kein Zugriff auf diesen Einsatz")
 
-    # Ausrückordnung: Fahrzeuge des Alarmstichworts (nur Anzeige)
-    alarm = (
-        get_alarm_type_by_code(db, incident.primary_org_id, incident.alarm_type_code)  # type: ignore[arg-type]
-        if incident.alarm_type_code else None
-    )
-    dispatch_vehicles = []
-    if alarm:
-        dispatch_vehicles = (
-            db.query(VehicleMaster)
-            .join(AlarmDispatchVehicle, AlarmDispatchVehicle.vehicle_master_id == VehicleMaster.id)
-            .filter(AlarmDispatchVehicle.alarm_type_id == alarm.id)
-            .order_by(AlarmDispatchVehicle.display_order)
-            .all()
-        )
+    # Ausrückordnung: Fahrzeuge des Alarmstichworts mit aktuellem Status (nur Anzeige)
+    dispatch_vehicles = _ausrueckordnung_eintraege(db, incident)
 
     # Gematchte Objekte (bestaetigt + Vorschlaege) – nur wenn Objekt-Modul aktiv
     objekt_verknuepfungen: list = []
@@ -1245,6 +1302,21 @@ def incident_info(incident_id: int, request: Request, db: Session = Depends(get_
         "objekt_enabled": objekt_enabled,
         "gmaps_url": gmaps_url,
         "route_neu_allowed": has_role(user, "objekt_verwalter", "incident_leader", "org_admin", "admin"),
+    })
+
+
+@router.get("/einsatz/{incident_id}/ausrueckordnung", response_class=HTMLResponse)
+def incident_ausrueckordnung(incident_id: int, request: Request, db: Session = Depends(get_db)):
+    """Nur die Ausrückordnung (Live-Aktualisierung der Einsatzinformation)."""
+    user = getattr(request.state, "user", None)
+    if not user:
+        return Response("Nicht eingeloggt", status_code=401)
+    incident = _incident_or_404(incident_id, db)
+    if not can_access_incident(user, incident):
+        raise HTTPException(403, "Kein Zugriff auf diesen Einsatz")
+    return templates.TemplateResponse(request, "incident/_ausrueckordnung.html", {
+        "incident": incident,
+        "dispatch_vehicles": _ausrueckordnung_eintraege(db, incident),
     })
 
 

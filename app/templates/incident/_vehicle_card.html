@@ -4,8 +4,7 @@
      hx-get="/einsatz/{{ incident.id }}/fahrzeug/{{ vehicle.id }}/detail"
      hx-target="#cardDetailBody"
      hx-swap="innerHTML"
-     hx-trigger="click[!event.target.closest('select,input,button,label,.assigned-task,.assigned-msg,.assigned-person')]"
-     hx-on::after-swap="document.getElementById('cardDetailModal').showModal()">
+     hx-trigger="click[!event.target.closest('select,input,button,label,.assigned-task,.assigned-msg,.assigned-person')]">
   <div class="card__body">
     <div class="card__title card__title--vehicle">
       {% if vehicle.master.taktisches_zeichen %}
@@ -26,8 +25,7 @@
       <button type="button" class="ec-chip" aria-label="Gruppenkommandant: {{ gk_name or 'nicht gesetzt' }}. Details öffnen"
               hx-get="/einsatz/{{ incident.id }}/fahrzeug/{{ vehicle.id }}/detail"
               hx-target="#cardDetailBody"
-              hx-swap="innerHTML"
-              hx-on::after-swap="document.getElementById('cardDetailModal').showModal()">
+              hx-swap="innerHTML">
         {% if gk_name %}GK: {{ gk_name }}{% else %}+ GK{% endif %}
       </button>
     </div>

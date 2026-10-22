@@ -221,15 +221,13 @@ html.ei-druck-vorbereitung #einsatz-info-karte { height: 58mm !important; min-he
         <div id="hydranten-liste"><span class="text-muted">Lade Löschwasser …</span></div>
       </div>
 
-      <!-- Ausrückordnung -->
+      <!-- Ausrückordnung (Status farbig, aktualisiert sich selbst) -->
       {% if dispatch_vehicles %}
-      <div class="card" style="padding:14px;">
-        <h3 style="margin:0 0 10px;">{{ icon("firetruck", size="md") }} Ausrückordnung</h3>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;">
-          {% for v in dispatch_vehicles %}
-          <span class="badge-pill badge-pill--gray" title="{{ v.name }}">{{ v.code }}</span>
-          {% endfor %}
-        </div>
+      <div id="ausrueckordnung" class="card" style="padding:14px;"
+           hx-get="/einsatz/{{ incident.id }}/ausrueckordnung"
+           hx-trigger="every 15s [document.visibilityState === 'visible'], ec:resync from:window, visibilitychange[document.visibilityState === 'visible'] from:document"
+           hx-swap="innerHTML">
+        {% include "incident/_ausrueckordnung.html" %}
       </div>
       {% endif %}
 

@@ -1,0 +1,16 @@
+{# Ausrückordnung der Einsatzinformation (ECP-04). Variablen: dispatch_vehicles = [{code, name, status, label, slug, seit}]
+   Farben: vorhandene Klassen .unit-status-* (rot = Einsatzbereit, orange = Auf Anfahrt, grün = Am Einsatzort).
+   Die Statusbezeichnung steht immer als Text im Chip, die Farbe ist nur Zusatz. #}
+<h3 style="margin:0 0 10px;">{{ icon("firetruck", size="md") }} Ausrückordnung</h3>
+<div style="display:flex;flex-wrap:wrap;gap:6px;">
+  {% for v in dispatch_vehicles %}
+  <span class="badge-pill {% if v.slug %}unit-status-{{ v.slug }}{% else %}badge-pill--gray{% endif %}"
+        style="{% if v.slug %}color:#fff;{% endif %}display:inline-flex;align-items:center;gap:6px;"
+        title="{{ v.name }}{% if v.status %} - Status: {{ v.status }}{% endif %}"
+        data-fahrzeug-status="{{ v.status or '' }}">
+    <strong>{{ v.code }}</strong>
+    <span>{{ v.label }}</span>
+    {% if v.seit %}<span style="opacity:.85;font-size:.85em;">seit {{ v.seit|local_time }}</span>{% endif %}
+  </span>
+  {% endfor %}
+</div>

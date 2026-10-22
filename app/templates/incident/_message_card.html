@@ -7,8 +7,7 @@
      hx-get="/einsatz/{{ incident.id }}/meldung/{{ msg.id }}/detail"
      hx-target="#cardDetailBody"
      hx-swap="innerHTML"
-     hx-trigger="click[!event.target.closest('select,input,button,a')]"
-     hx-on::after-swap="document.getElementById('cardDetailModal').showModal()">
+     hx-trigger="click[!event.target.closest('select,input,button,a')]">
   <div class="card__body">
     <div class="card__title">
       {{ msg.title }}
