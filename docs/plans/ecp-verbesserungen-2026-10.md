@@ -148,6 +148,7 @@ Pro Block: ID / Status / Ursache / Loesung / Dateien / Datenbank / Tests / Hinwe
 | Hinweise | Die Ableitung ist eine reine Anzeige. Der Ressourcenstatus (`im_einsatz`/`abgerueckt`) wird weiterhin nur manuell bzw. beim ersten Auftragsstart gesetzt. |
 
 ## GSL-07 – Standardmäßig nur eigene Ressourcen
+## GSL-04 – Bürgerportal-Link erneuern
 
 | Feld | Inhalt |
 |---|---|
@@ -158,3 +159,33 @@ Pro Block: ID / Status / Ursache / Loesung / Dateien / Datenbank / Tests / Hinwe
 | Datenbank | keine |
 | Tests | 2 neue Tests (Eigen/Fremd-Erkennung, Standardfilter und Reine-Anzeige-Garantie) |
 | Hinweise | Es gibt keine `org_id` an der Einheit; die Erkennung nutzt Fahrzeug-Organisation, `is_from_org` und die Beschriftung. Fremde Einheiten in Abschnitten werden ebenfalls ausgeblendet (Abschnittsköpfe bleiben stehen). |
+| Ursache | „Link erneuern“ schickte direkt ein Formular ab: ein Klick ersetzte den Token sofort, der bisherige Link und QR-Code waren ungültig. Das Audit unterschied nicht zwischen Erstellen und Erneuern, enthielt keine `org_id`, und die Service-Funktion `rotate_public_token` blieb ungenutzt. |
+| Lösung | Bei vorhandenem Link öffnet der Button einen Bestätigungsdialog („sofort ungültig“, Hinweis auf verteilte Links/gedruckte QR-Codes). Erst „Ja, Link erneuern“ sendet `bestaetigt=1`; der Absende-Knopf sperrt sich nach dem ersten Klick. Der Server erneuert einen bestehenden Link **nie** ohne diese Bestätigung. Audit `token_created`/`token_rotated` mit `org_id`, Lagejournal-Eintrag bei Erneuerung, Rückmeldung mit dem neuen, kopierbaren Link. Die Route nutzt jetzt `rotate_public_token` (32 Byte). |
+| Dateien | `app/routers/ui_major_incident.py`, `app/services/major_incident_service.py`, `app/templates/incident_major/meldungen.html`, `tests/test_gsl_portal_link_erneuern.py` |
+| Datenbank | keine |
+| Tests | 4 neue Tests |
+| Hinweise | Ein serverseitiger Zeit-Sperrzeitraum für Erneuerungen wurde nicht ergänzt (würde ein neues Feld brauchen); Mehrfach-Erneuerung wird durch Dialog, Bestätigungspflicht und gesperrten Knopf verhindert. |
+
+## GSL-05 – „Status eintragen“ als Button
+
+| Feld | Inhalt |
+|---|---|
+| Status | Erledigt (Sichtprüfung am Tablet offen) |
+| Ursache | Der Knopf (`btn--xs btn--secondary`) im Einsatzstellen-Detail der Führung war sehr klein und im Formular neben dem Auswahlfeld kaum als Schaltfläche erkennbar. Er steht nicht in der Einheitenansicht, dort wird der Status über den Weiter-Knopf gesetzt (siehe GSL-03/06). |
+| Lösung | Haupt-Button (`btn--primary`, mit Haken-Icon, Mindesthöhe 44 px), Auswahl- und Textfeld ebenfalls 44 px hoch, umbrechend für Tablets; während der Anfrage gesperrt (`hx-disabled-elt`), danach Toast „Status eingetragen“ und das aktualisierte Detail. Statusdialog und Route unverändert. |
+| Dateien | `app/templates/incident_major/_site_detail.html`, `tests/test_gsl_kleinkram.py` |
+| Datenbank | keine |
+| Tests | 1 Test |
+| Hinweise | – |
+
+## ECP-03 – Spaltenname als Tooltip
+
+| Feld | Inhalt |
+|---|---|
+| Status | Erledigt |
+| Ursache | `.kanban-col__title` kürzt mit `overflow:hidden; text-overflow:ellipsis` ohne Möglichkeit, den vollständigen Namen zu lesen. |
+| Lösung | Neues `titel-tooltips.js` setzt an Spaltentitel und Lane-Tabs (`data-tip-bei-kuerzung`) die vorhandene Tooltip-Komponente (`data-tip`: Hover und Tastaturfokus per CSS, Long-Press auf Touchgeräten über `tooltips.js`), und zwar nur, wenn der Text tatsächlich abgeschnitten ist; Aktualisierung bei Resize, Laden und HTMX-Settle (z. B. nach Umbenennen). Spaltenbreiten und Layout bleiben unverändert; der Tooltip-Träger ist ein Wrapper ohne `overflow:hidden`, damit er nicht abgeschnitten wird. |
+| Dateien | `app/static/js/titel-tooltips.js`, `app/templates/incident/_lane_header.html`, `board.html`, `base.html`, `tests/js/titel_tooltips.test.mjs`, `tests/test_gsl_kleinkram.py` |
+| Datenbank | keine |
+| Tests | 3 Node-Tests, 1 Python-Test |
+| Hinweise | Das Tooltip-CSS positioniert über dem Element; in einem sehr schmalen Spaltenkopf kann der Tooltip an den Bildschirmrand stoßen (reines Darstellungsdetail). |

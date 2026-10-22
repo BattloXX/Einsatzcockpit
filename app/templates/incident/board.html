@@ -262,7 +262,7 @@
   <!-- Tablet-Fallback: Jede Spalte bleibt wie im mobilen Auswähler einzeln adressierbar. -->
   <nav class="board-tabs" role="tablist" aria-label="Spalten">
     {% for col in incident.columns %}
-    <button class="board-tab{% if loop.first %} active{% endif %}" data-lane="col-{{ col.id }}" type="button">{{ col.title }}</button>
+    <button class="board-tab{% if loop.first %} active{% endif %}" data-lane="col-{{ col.id }}" type="button" data-tip-bei-kuerzung>{{ col.title }}</button>
     {% endfor %}
   </nav>
 
