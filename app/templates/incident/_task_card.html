@@ -8,8 +8,10 @@
      hx-on::after-swap="document.getElementById('cardDetailModal').showModal()"
      style="cursor:pointer">
   {% if task.source == 'ai_suggestion' %}
-  <div class="card__ai-bar" style="background:rgba(139,92,246,.15); border-bottom:1px solid rgba(139,92,246,.3); padding:3px 8px; font-size:.7rem; color:#a78bfa; display:flex; align-items:center; justify-content:space-between; gap:6px;">
-    <span>{{ icon("sparkles", size="sm") }} KI-Vorschlag</span>
+  {# ECP-07: aus hinterlegten Objektgefahren erzeugte Auftraege (Titel beginnt mit ACHTUNG) deutlich hervorheben #}
+  {% set objekt_gefahr = (task.title or '').startswith('ACHTUNG') %}
+  <div class="card__ai-bar" style="{% if objekt_gefahr %}background:rgba(212,34,37,.18); border-bottom:1px solid rgba(212,34,37,.5); color:var(--red);{% else %}background:rgba(139,92,246,.15); border-bottom:1px solid rgba(139,92,246,.3); color:#a78bfa;{% endif %} padding:3px 8px; font-size:.7rem; display:flex; align-items:center; justify-content:space-between; gap:6px;">
+    <span>{% if objekt_gefahr %}{{ icon("alert-triangle", size="sm") }} Objektgefahr (Objektverwaltung){% else %}{{ icon("sparkles", size="sm") }} KI-Vorschlag{% endif %}</span>
     {% if can_edit %}
     <span style="display:flex; gap:4px;" onclick="event.stopPropagation()">
       <button class="btn btn--xs btn--primary" aria-label="KI-Vorschlag annehmen"

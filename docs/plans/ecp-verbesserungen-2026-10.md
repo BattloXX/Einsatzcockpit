@@ -87,3 +87,15 @@ Pro Block: ID / Status / Ursache / Loesung / Dateien / Datenbank / Tests / Hinwe
 | Datenbank | keine |
 | Tests | 5 Python-Tests, 1 Node-Test; `npm run test:js` 70 grün |
 | Hinweise | Für die Ursachenklärung am Tablet: WebView-Version (chrome://version bzw. Android System WebView) und Remote-Konsole prüfen. Der „Öffnen“-Link ist wie bisher nur für Administratoren verfügbar (Simulation `?sim=`). |
+
+## ECP-07 – Objektinformationen in KI-Vorschlaegen
+
+| Feld | Inhalt |
+|---|---|
+| Status | Erledigt (Praxistest mit echtem KI-Modell und echten Objekten offen) |
+| Ursache | `suggest_tasks`, `generate_lage_hints` und der Lagebild-Kontext bekamen nur Meldungstext, Stichwort und Adresse; verknuepfte Objekte (Gefahren, Hinweise, BMA, Zufahrt) flossen nirgends ein. |
+| Loesung | Neuer Service `objekt_ki_kontext`: laedt nur **bestaetigt** verknuepfte, **freigegebene** Objekte (max. 3) und baut daraus einen begrenzten Textblock (Name, Nummer, Art, Adresse, Gefahren mit UN-/Gefahrnummer/Klasse/Detail, Hinweise, Zufahrt, BMZ/FBF/Schluesselsafe, Besonderheiten, hinterlegte Plaene). Keine Kontakte und keine Benachrichtigungsadressen. Der Block wird mit Regeln an Auftragsvorschlaege, Lagehinweise und Lagebild angehaengt („nur diese Fakten, nichts erfinden, Objektname nennen, ACHTUNG fuer Sicherheitskritisches“); ohne Objekt bleibt der Prompt unveraendert. Zusaetzlich werden Objektgefahren **deterministisch** (ohne KI) als erster Lagehinweis bzw. als erster Auftrag „ACHTUNG Objektgefahren: ...“ erzeugt, auch wenn das Modell ausfaellt oder sie auslaesst. Auftragskarten mit diesem Titel erscheinen rot als „Objektgefahr (Objektverwaltung)“. Die Hintergrundaufgaben laufen nach dem Objekt-Matching (Reihenfolge der BackgroundTasks), manuelle Neugenerierung liest den aktuellen Objektstand. |
+| Dateien | `app/services/objekt_ki_kontext.py`, `ai_service.py`, `incident_service.py`, `app/routers/ui_incident.py`, `api_v1.py`, `app/templates/incident/_task_card.html`, `tests/test_objekt_ki_kontext.py` |
+| Datenbank | keine |
+| Tests | 9 neue Tests (Inhalt, Ausschluss unbestaetigter/nicht freigegebener Objekte, deterministische Hinweise, Prompt mit/ohne Objekt, Hintergrundlauf bei KI-Ausfall, Lagebild) |
+| Hinweise | Wird ein Objekt erst nach der KI-Generierung verknuepft, wirkt es bei der naechsten Generierung (Button Neu erzeugen oder Alarmstufe aendern). Dokumentinhalte (OCR-Volltext) fliessen bewusst nicht ein, nur Dokumentnamen. |

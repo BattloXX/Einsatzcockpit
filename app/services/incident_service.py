@@ -258,6 +258,12 @@ def collect_situation_context(incident_id: int, db: Session) -> dict[str, Any]:
         ],
         "gerettete_personen_anzahl": len(incident.rescued_persons),
     }
+    from app.services.objekt_ki_kontext import objekt_ki_kontext
+
+    objekt_kontext = objekt_ki_kontext(db, incident_id)
+    if objekt_kontext:
+        # ECP-07: nur hinterlegte Objektfakten, Gefahren/Hinweise sind als SICHERHEITSKRITISCH markiert
+        data["objekt_informationen"] = objekt_kontext.text
     return _strip_persons(data)
 
 

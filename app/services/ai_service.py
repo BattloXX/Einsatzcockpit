@@ -597,13 +597,22 @@ def _get_active_variable(prompt_key: str, org_id: int | None = None) -> str | No
         return None
 
 
+def _mit_objektkontext(user_msg: str, objekt_kontext: str | None) -> str:
+    """Haengt vorhandene Objektinformationen samt Verwendungsregeln an (ECP-07); ohne Objekt unveraendert."""
+    if not objekt_kontext:
+        return user_msg
+    from app.services.objekt_ki_kontext import KI_REGELN
+
+    return f"{user_msg}\n\n{KI_REGELN}\n{objekt_kontext}"
+
+
 async def suggest_tasks(
-    meldung: str, einsatzart: str, org_id: int | None = None,
+    meldung: str, einsatzart: str, org_id: int | None = None, objekt_kontext: str | None = None,
 ) -> list[dict]:
     """Return 3–5 first-response task suggestions for an incoming alarm."""
     variable = _get_active_variable("suggest", org_id) or _SUGGEST_VARIABLE_DEFAULT
     system = _assemble_prompt(_SUGGEST_FIXED_PREFIX, _SUGGEST_FIXED_SUFFIX, variable)
-    user_msg = f"Alarmmeldung: {meldung}\nEinsatzart: {einsatzart}"
+    user_msg = _mit_objektkontext(f"Alarmmeldung: {meldung}\nEinsatzart: {einsatzart}", objekt_kontext)
     try:
         raw = await complete(system, user_msg, feature="suggest", fast=True, max_tokens=600, org_id=org_id)
     except AIServiceError:
@@ -701,11 +710,14 @@ async def generate_report_draft(
 
 async def generate_lage_hints(
     meldung: str, alarm_type: str, address: str, org_id: int | None = None,
+    objekt_kontext: str | None = None,
 ) -> list[str]:
     """Return 3–6 tactical hint strings for the incident ticker."""
     variable = _get_active_variable("hints", org_id) or _HINTS_VARIABLE_DEFAULT
     system = _assemble_prompt(_HINTS_FIXED_PREFIX, _HINTS_FIXED_SUFFIX, variable)
-    user_msg = f"Alarmstichwort: {alarm_type}\nMeldung: {meldung}\nAdresse: {address}"
+    user_msg = _mit_objektkontext(
+        f"Alarmstichwort: {alarm_type}\nMeldung: {meldung}\nAdresse: {address}", objekt_kontext,
+    )
     try:
         raw = await complete(system, user_msg, feature="hints", fast=True, max_tokens=400, org_id=org_id)
     except AIServiceError:
@@ -737,6 +749,10 @@ async def generate_situation_brief(
         f"Live-Einsatzdaten (JSON):\n"
         f"{_json.dumps(safe_context, ensure_ascii=False, indent=2)}"
     )
+    if safe_context.get("objekt_informationen"):
+        from app.services.objekt_ki_kontext import KI_REGELN
+
+        user_msg += f"\n\n{KI_REGELN}"
     return await complete(system, user_msg, feature="situation", fast=True, max_tokens=600, org_id=org_id)
 
 
