@@ -18,10 +18,13 @@
           {{ icon("link", size="sm") }} <a class="kp-link" href="{{ anhang.url }}" rel="noopener noreferrer" target="_blank">{{ anhang.beschriftung or anhang.url }}</a>
         {% elif anhang.art == 'objekt_dokument' %}
           {{ icon("files", size="sm") }} {% if anhang.objekt_recht %}
-            <a class="kp-link" href="{{ anhang.datei_url }}">Objektdokument {{ anhang.dokument_name }}{% if anhang.seiten %}, S. {{ anhang.seiten|replace('-', '–') }}{% endif %}</a>
+            <a class="kp-link" href="{{ anhang.datei_url }}" onclick='event.preventDefault(); openMediaViewer(this.href, "pdf", {{ anhang.dokument_name|tojson }});'>Objektdokument {{ anhang.dokument_name }}{% if anhang.seiten %}, S. {{ anhang.seiten|replace('-', '–') }}{% endif %}</a>
           {% else %}Objektdokument (keine Berechtigung){% endif %}
         {% else %}
-          {{ icon("file-text", size="sm") }} <a class="kp-link" href="{{ anhang.datei_url }}" download>{{ anhang.beschriftung or anhang.dateiname }}</a>
+          {% set mime = (anhang.mime or '')|lower %}
+          {% set endung = (anhang.dateiname or '').lower().rsplit('.', 1)[-1] %}
+          {% set kind = 'pdf' if mime == 'application/pdf' or endung == 'pdf' else 'image' if mime.startswith('image/') or endung in ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'bmp', 'svg'] else '' %}
+          {{ icon("file-text", size="sm") }} <a class="kp-link" href="{{ anhang.datei_url }}" {% if kind %}onclick='event.preventDefault(); openMediaViewer(this.href, {{ kind|tojson }}, {{ (anhang.beschriftung or anhang.dateiname)|tojson }});'{% else %}download{% endif %}>{{ anhang.beschriftung or anhang.dateiname }}</a>
         {% endif %}
         {% if anhang.groesse %}<span class="kp-mono">{{ anhang.groesse }}</span>{% endif %}
         {% if anhang.vertraulich %}<span class="kp-badge kp-badge--amber">vertraulich</span>{% endif %}

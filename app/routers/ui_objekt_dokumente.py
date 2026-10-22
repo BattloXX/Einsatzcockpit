@@ -752,7 +752,7 @@ def dokument_original(
     return FileResponse(
         pfad, media_type="application/pdf",
         filename=dokument.dateiname_original,
-        content_disposition_type="inline",
+        content_disposition_type="attachment" if request.query_params.get("download") == "1" else "inline",
     )
 
 

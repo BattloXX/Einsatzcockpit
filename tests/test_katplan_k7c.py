@@ -59,6 +59,12 @@ def test_seitenraster_einzelseite_fallback_und_tenant(client, umgebung):
     assert raster.status_code == 200
     assert 'class="kp-seitenraster"' in raster.text and 'loading="lazy"' in raster.text
     assert '?seite=1' in raster.text and '?seite=2' in raster.text
+    parser = Bereiche()
+    parser.feed(client.get(path + "?seite=1").text)
+    for art, kind in (("bild", "image"), ("pdf", "pdf")):
+        link = next(a for a in parser.links if a.get("href") == f"/plaene/quelle/{dokument.uuid}/seite/1/{art}")
+        assert f"openMediaViewer(this.href, '{kind}'," in link["onclick"]
+        assert "target" not in link
     with TestingSession() as db:
         set_tenant_context(db, umgebung["org_id"])
         seite = db.query(KatplanDokumentSeite).filter_by(dokument_id=dokument.id, seiten_nr=1).one()
@@ -148,6 +154,12 @@ def test_quellenformular_herkunft_und_versionstitel(client, umgebung, monkeypatc
     html = client.get(basis(umgebung) + f"/versionen/{version_id}").text
     assert "Planquelle (v1), S. 1-2" in html and "Nachträglich geändert" not in html
     assert f'version_id={version_id}' in html and "aus Dokument übernommen" in html
+    parser = Bereiche()
+    parser.feed(html)
+    for art, kind in (("bild", "image"), ("pdf", "pdf")):
+        link = next(a for a in parser.links if a.get("href") ==
+                    f"/plaene/quelle/{dokument.uuid}/seite/1/{art}?version_id={version_id}")
+        assert f"openMediaViewer(this.href, '{kind}'," in link["onclick"]
     assert client.get(quelle_path(umgebung, dokument) + f"?seite=1&version_id={version_id}").status_code == 200
     assert client.get(quelle_path(umgebung, neu) + f"?version_id={version_id}").status_code == 404
     from app.routers import ui_katplan

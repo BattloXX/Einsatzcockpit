@@ -329,7 +329,8 @@ def anhang_datei(uuid: str, request: Request, version_id: int | None = None,
         dokument = db.query(ObjektDokument).filter_by(id=anhang.objekt_dokument_id, org_id=user.org_id).first()
         if dokument is None:
             raise HTTPException(404, "Nicht gefunden")
-        return RedirectResponse(f"/objekt-medien/dokument/{dokument.id}/original", status_code=303)
+        suffix = "?download=1" if request.query_params.get("download") == "1" else ""
+        return RedirectResponse(f"/objekt-medien/dokument/{dokument.id}/original{suffix}", status_code=303)
     rel = anhang.thumb_pfad if thumb else anhang.pfad
     if anhang.art not in ("foto", "datei") or not rel:
         raise HTTPException(404, "Nicht gefunden")
@@ -339,6 +340,8 @@ def anhang_datei(uuid: str, request: Request, version_id: int | None = None,
         raise HTTPException(404, "Nicht gefunden")
     mime = "image/jpeg" if thumb else anhang.mime or "application/octet-stream"
     disposition = "inline" if anhang.art == "foto" or mime == "application/pdf" else "attachment"
+    if request.query_params.get("download") == "1":
+        disposition = "attachment"
     return FileResponse(path, media_type=mime, filename=anhang.dateiname or "datei",
                         content_disposition_type=disposition, headers={"X-Content-Type-Options": "nosniff"})
 
@@ -1733,22 +1736,24 @@ def _quelle_auslieferung(db: Session, user: User, uuid: str,
     return plan, dokument
 
 
-def _quelle_datei(relativ: str | None, mime: str, dateiname: str):
+def _quelle_datei(relativ: str | None, mime: str, dateiname: str, download: bool = False):
     try:
         path = quelle_service.absolute_pfad(relativ) if relativ else None
     except ValueError as exc:
         raise HTTPException(404, "Nicht gefunden") from exc
     if path is None or not path.is_file():
         raise HTTPException(404, "Nicht gefunden")
-    return FileResponse(path, media_type=mime, filename=dateiname, content_disposition_type="inline",
+    return FileResponse(path, media_type=mime, filename=dateiname,
+                        content_disposition_type="attachment" if download else "inline",
                         headers={"X-Content-Type-Options": "nosniff"})
 
 
 @router.get("/quelle/{uuid}/original")
-def quelle_original(uuid: str, version_id: int | None = None, db: Session = Depends(get_db),
+def quelle_original(uuid: str, request: Request, version_id: int | None = None, db: Session = Depends(get_db),
                     user: User = Depends(require_katplan_lesen)):
     _, dokument = _quelle_auslieferung(db, user, uuid, version_id)
-    return _quelle_datei(dokument.pfad, "application/pdf", dokument.dateiname_original)
+    return _quelle_datei(dokument.pfad, "application/pdf", dokument.dateiname_original,
+                         download=request.query_params.get("download") == "1")
 
 
 @router.get("/quelle/{uuid}/seite/{nr}/bild")
@@ -1773,7 +1778,8 @@ def quelle_seite(uuid: str, nr: int, request: Request, version_id: int | None = 
         "thumb": (seite.thumb_pfad, "image/jpeg", "jpg"),
         "pdf": (seite.einzel_pdf_pfad, "application/pdf", "pdf"),
     }[art]
-    return _quelle_datei(pfad, mime, f"seite_{nr}.{suffix}")
+    return _quelle_datei(pfad, mime, f"seite_{nr}.{suffix}",
+                         download=request.query_params.get("download") == "1")
 
 
 @router.get("/{plan_id}/quellen")
@@ -2033,7 +2039,7 @@ def import_verwerfen(plan_id: int, vid: int, request: Request,
 
 
 @router.get("/{plan_id}/pdf")
-def pdf_export(plan_id: int, version_id: int | None = None, entwurf: int = 0,
+def pdf_export(plan_id: int, request: Request, version_id: int | None = None, entwurf: int = 0,
                gliederung: str = "kapitel", akteur: str | None = None,
                db: Session = Depends(get_db), user: User = Depends(require_katplan_lesen)):
     import re
@@ -2057,9 +2063,10 @@ def pdf_export(plan_id: int, version_id: int | None = None, entwurf: int = 0,
     titel = unicodedata.normalize("NFKD", kopf["titel"]).encode("ascii", "ignore").decode()
     slug = re.sub(r"[^a-z0-9]+", "-", titel.lower()).strip("-") or "plan"
     nummer = str(version.versionsnummer) if version else "entwurf"
+    disposition = "attachment" if request.query_params.get("download") == "1" else "inline"
     return Response(data, media_type="application/pdf", headers={
         "Cache-Control": "no-store",
-        "Content-Disposition": f'attachment; filename="katastrophenplan_{slug}_v{nummer}.pdf"',
+        "Content-Disposition": f'{disposition}; filename="katastrophenplan_{slug}_v{nummer}.pdf"',
     })
 
 

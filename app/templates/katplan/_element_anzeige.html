@@ -43,10 +43,10 @@
         <summary>Quellseiten anzeigen</summary>
         <div class="kp-quellseiten">
           {% for seite in seiten %}
-            <a href="{{ seite.seiten_url }}"><img src="{{ seite.thumb_url }}" loading="lazy" alt="Seite {{ seite.nr }}"><span>Seite {{ seite.nr }}</span></a>
+            <a href="{{ seite.seiten_url }}" onclick="event.preventDefault(); openMediaViewer(this.href, 'image', this.querySelector('img').alt);"><img src="{{ seite.thumb_url }}" loading="lazy" alt="Seite {{ seite.nr }}"><span>Seite {{ seite.nr }}</span></a>
           {% endfor %}
         </div>
-        <a class="btn btn--ghost btn--sm" href="{{ quellen_originale[element.id] }}">Original-PDF auf Seite {{ seiten[0].nr }} öffnen</a>
+        <a class="btn btn--ghost btn--sm" href="{{ seiten[0].seiten_url|replace('/bild', '/pdf') }}" onclick="event.preventDefault(); openMediaViewer(this.href, 'pdf', this.textContent);">Original-PDF auf Seite {{ seiten[0].nr }} öffnen</a>
       </details>
     {% endif %}
   {% endif %}

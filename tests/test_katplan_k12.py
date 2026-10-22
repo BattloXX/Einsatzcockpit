@@ -159,6 +159,11 @@ def test_pdf_html_rechte_snapshot_und_download(client, inhalte):
     assert response.content.startswith(b"%PDF")
     assert response.headers["cache-control"] == "no-store"
     assert '_v2.pdf"' in response.headers["content-disposition"]
+    assert response.headers["content-disposition"].startswith("inline;")
+    download = client.get(basis(inhalte) + "/pdf?download=1")
+    assert download.status_code == 200
+    assert download.headers["content-disposition"].startswith("attachment;")
+    assert download.content.startswith(b"%PDF")
     pdf_text = " ".join(p.extract_text() or "" for p in PdfReader(io.BytesIO(response.content)).pages)
     assert "Nur neuer Arbeitsstand" not in pdf_text and "Geheimtext" not in pdf_text
     assert client.get(basis(inhalte) + "/pdf?entwurf=1").status_code == 403

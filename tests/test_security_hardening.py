@@ -246,6 +246,21 @@ def test_default_route_csp_ohne_konfiguration_bleibt_streng(monkeypatch):
     assert h["x-frame-options"] == "DENY"
 
 
+def test_katplan_medien_same_origin_editor_weiter_gesperrt(monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "TRUSTED_FRAME_ANCESTORS", "")
+    for path in ("/plaene/quelle/x/seite/1/pdf", "/plaene/anhang/x", "/plaene/1/pdf",
+                 "/objekt-medien/dokument/1/original"):
+        h = _security_headers_for(path)
+        assert h["x-frame-options"] == "SAMEORIGIN"
+        assert "frame-ancestors 'self'" in h["content-security-policy"]
+    for path in ("/plaene/1/bearbeiten", "/plaene/1/pdf/weiter", "/objekt-medien/dokument/1/bearbeiten"):
+        h = _security_headers_for(path)
+        assert h["x-frame-options"] == "DENY"
+        assert "frame-ancestors 'none'" in h["content-security-policy"]
+
+
 def test_turnstile_csp_nur_bei_konfiguriertem_site_key(monkeypatch):
     from app.config import settings
 

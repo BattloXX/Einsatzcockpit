@@ -34,11 +34,11 @@
         {% if historisch %}
           <p class="kp-box kp-box--info">Historische Version {{ leseversion.versionsnummer }} – aktuell gilt Version {{ aktuelle_version.versionsnummer if aktuelle_version else '-' }}</p>
         {% endif %}
-        {% if not arbeitsstand %}<a class="btn" href="/plaene/{{ plan.id }}/pdf?version_id={{ leseversion.id }}">PDF / Offlinefassung</a>{% endif %}
-        {% if can_edit %}<a class="btn" href="/plaene/{{ plan.id }}/pdf?entwurf=1">Entwurf als PDF</a>{% endif %}
+        {% if not arbeitsstand %}<a class="btn" href="/plaene/{{ plan.id }}/pdf?version_id={{ leseversion.id }}" onclick="event.preventDefault(); openMediaViewer(this.href, 'pdf', this.textContent);">PDF / Offlinefassung</a>{% endif %}
+        {% if can_edit %}<a class="btn" href="/plaene/{{ plan.id }}/pdf?entwurf=1" onclick="event.preventDefault(); openMediaViewer(this.href, 'pdf', this.textContent);">Entwurf als PDF</a>{% endif %}
         {% if vorkommende_akteure %}
           <label>PDF nach Akteur
-            <select class="form-control" onchange="if (this.value) window.location.href = this.value">
+            <select class="form-control" onchange="if (this.value) openMediaViewer(this.value, 'pdf', this.options[this.selectedIndex].text)">
               <option value="">Auswählen</option>
               {% set pdf_basis = '/plaene/' ~ plan.id ~ '/pdf?' ~ ('entwurf=1' if arbeitsstand else 'version_id=' ~ leseversion.id) %}
               <option value="{{ pdf_basis }}&amp;gliederung=akteur">Gliederung nach Akteur</option>

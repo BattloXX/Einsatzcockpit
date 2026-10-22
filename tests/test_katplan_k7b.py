@@ -242,12 +242,20 @@ def test_auslieferung_rechte_versionen_status_und_neuverarbeitung(client, umgebu
     r = client.get(status)
     assert "fertig" in r.text and "every 2s" not in r.text
     assert client.get(url + "/original").content == _pdf_bytes()
+    original_download = client.get(url + "/original?download=1")
+    assert original_download.status_code == 200
+    assert original_download.headers["content-disposition"].startswith("attachment;")
+    assert original_download.content == _pdf_bytes()
     assert client.get(url + "/seite/1/text").json() == {"volltext": TEXT, "text_quelle": "pdf"}
     for art, mime in (("bild", "image/png"), ("thumb", "image/jpeg"), ("pdf", "application/pdf")):
         r = client.get(url + f"/seite/1/{art}")
         assert r.status_code == 200 and r.headers["content-type"] == mime
         assert r.headers["x-content-type-options"] == "nosniff"
         assert r.headers["content-disposition"].startswith("inline")
+        download = client.get(url + f"/seite/1/{art}?download=1")
+        assert download.status_code == 200
+        assert download.headers["content-disposition"].startswith("attachment;")
+        assert download.content == r.content
         assert client.get(url + f"/seite/3/{art}").status_code == 404
     login(client, umgebung, "readonly")
     assert client.get(url + "/original").status_code == client.get(status).status_code == 404
