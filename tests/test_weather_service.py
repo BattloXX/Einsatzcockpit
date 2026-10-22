@@ -441,6 +441,9 @@ async def test_get_warnings_returns_empty_list_on_timeout():
         mock_cls.return_value.__aexit__ = AsyncMock(return_value=False)
         result = await get_warnings(LAT, LNG)
     assert result == []
+    status = await weather_service.get_warnings_result(LAT, LNG)
+    assert status.status == "unavailable"
+    assert status.error
 
 
 def _zamg_warn(warnstufeid: int, warntypid: int, begin, end, text=""):
@@ -637,8 +640,8 @@ async def test_get_nowcast_empty_features_returns_none():
 
 
 @pytest.mark.asyncio
-async def test_get_nowcast_missing_parameter_uses_zero():
-    # rr missing from parameters → precipitation should default to 0.0
+async def test_get_nowcast_missing_parameter_is_unknown():
+    # Fehlende Niederschlagswerte sind keine gemessene Trockenheit.
     resp = _make_geosphere_response({"t2m": NOWCAST_T2M}, NOWCAST_TIMESTAMPS)
     mock_resp = _mock_httpx_response(resp)
     mock_client = AsyncMock()
@@ -650,8 +653,9 @@ async def test_get_nowcast_missing_parameter_uses_zero():
         result = await get_nowcast(LAT, LNG)
 
     assert result is not None
-    assert all(s.precipitation_mm == 0.0 for s in result.steps)
-    assert result.total_mm == 0.0
+    assert all(s.precipitation_mm is None for s in result.steps)
+    assert result.total_mm is None
+    assert result.peak_mm is None
 
 
 # ── Open-Meteo fallbacks ──────────────────────────────────────────────────────
@@ -752,13 +756,13 @@ def _make_forecast(gust_ms: float = 5.0) -> ForecastResult:
 
 def test_analyze_no_alerts_in_mild_conditions():
     result = analyze_weather(_make_current(), _make_forecast())
-    assert result == []
+    assert [a.key for a in result] == ["data_quality"]
 
 
 def test_analyze_storm_warn_at_bf8():
     current = _make_current(gust=17.2)
     alerts = analyze_weather(current, None)
-    assert len(alerts) == 1
+    assert [a.key for a in alerts] == ["storm", "data_quality"]
     assert alerts[0].key == "storm"
     assert alerts[0].level == "warn"
 
@@ -766,7 +770,7 @@ def test_analyze_storm_warn_at_bf8():
 def test_analyze_storm_danger_at_bf10():
     current = _make_current(gust=25.0)
     alerts = analyze_weather(current, None)
-    assert len(alerts) == 1
+    assert [a.key for a in alerts] == ["storm", "data_quality"]
     assert alerts[0].key == "storm"
     assert alerts[0].level == "danger"
 
@@ -776,7 +780,7 @@ def test_analyze_storm_upcoming_from_forecast():
     current = _make_current(gust=5.0)
     forecast = _make_forecast(gust_ms=18.0)
     alerts = analyze_weather(current, forecast)
-    assert len(alerts) == 1
+    assert [a.key for a in alerts] == ["storm", "data_quality"]
     assert alerts[0].key == "storm"
     assert alerts[0].level == "warn"
     assert "6h" in alerts[0].label_de
@@ -800,7 +804,7 @@ def test_analyze_wildfire_warn():
 
 def test_analyze_wildfire_danger():
     current = _make_current(temp=33.0, hum=18.0, gust=5.0)
-    alerts = analyze_weather(current, None)
+    alerts = analyze_weather(current, None, _nowcast(0.0))
     assert any(a.key == "wildfire" and a.level == "danger" for a in alerts)
 
 

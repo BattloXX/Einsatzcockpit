@@ -4,6 +4,8 @@
      hx-trigger="every 300s"
      hx-swap="outerHTML">
 
+  {% include "weather/_warnstatus.html" %}
+
   {# ── Szenario-Alarme ──────────────────────────────────────────────────────── #}
   {% if scenarios %}
   <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:2px;">
@@ -171,8 +173,7 @@
           </div>
           {% endfor %}
         </div>
-        {% else %}
-        <div style="padding:16px 14px;font-size:.8rem;color:#4ade80;">{{ icon("check") }} keine aktive Warnung</div>
+
         {% endif %}
       </div>
     </div>

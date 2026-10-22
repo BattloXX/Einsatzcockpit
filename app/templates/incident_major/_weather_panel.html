@@ -1,3 +1,4 @@
+{% include "weather/_warnstatus.html" %}
 {% set _has_pegel = abfluss_views is defined and abfluss_views and abfluss_views|length > 0 %}
 {% from "weather/_risk_badges.html" import frost_ice_badges %}
 
@@ -9,12 +10,12 @@
   <button type="button" @click="_setTab('wetter')"
           :style="_t==='wetter' ? 'background:var(--surface-high);color:var(--text);box-shadow:var(--shadow-card);' : 'background:transparent;color:var(--text-muted);'"
           style="border:none;border-radius:var(--radius-md, .5rem);padding:5px 15px;font-size:.76rem;font-weight:700;cursor:pointer;transition:all .12s;line-height:1.3;white-space:nowrap;">
-    &#x2601; Wetter
+    {{ icon("cloud") }} Wetter
   </button>
   <button type="button" @click="_setTab('pegel')"
           :style="_t==='pegel' ? 'background:var(--surface-high);color:var(--text);box-shadow:var(--shadow-card);' : 'background:transparent;color:var(--text-muted);'"
           style="border:none;border-radius:var(--radius-md, .5rem);padding:5px 15px;font-size:.76rem;font-weight:700;cursor:pointer;transition:all .12s;line-height:1.3;white-space:nowrap;">
-    &#x1F30A; Pegel
+    {{ icon("ripple") }} Pegel
   </button>
 </div>
 <div x-show="_t==='wetter'" style="display:block;">
@@ -26,7 +27,7 @@
 {# ── Wetter-Inhalt ─────────────────────────────────────────────────────────── #}
 {% if no_location %}
 <span style="font-size:.75rem;color:var(--text-muted);">Standortkoordinaten fehlen &ndash; Wetterdaten nicht verf&uuml;gbar.</span>
-{% elif not nowcast and not current and not forecast %}
+{% elif not nowcast and not current and not forecast and not warn_views %}
 <span style="font-size:.75rem;color:var(--text-muted);">Wetterdaten derzeit nicht verf&uuml;gbar.</span>
 {% else %}
 
@@ -35,10 +36,10 @@
 
   {% if not current_values_duplicate_station and (current or weather_values.temp.value is not none or weather_values.wind.value is not none) %}
     {% if weather_values.temp.value is not none %}
-    <span style="font-size:.83rem;display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap;">&#x1F321; <strong>{{ '%.1f'|format(weather_values.temp.value) }} &deg;C</strong>{% if weather_values.humidity.value is not none %} <span style="color:var(--text-muted);font-size:.74rem;">{{ weather_values.humidity.value|int }}%</span>{% endif %}<span style="font-size:.59rem;color:var(--text-muted);border:1px solid var(--border);border-radius:999px;padding:1px 5px;">{{ weather_values.temp.source }}</span>{{ frost_ice_badges(weather_values.temp.value, weather_values.dewpoint.value) }}</span>
+    <span style="font-size:.83rem;display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap;">{{ icon("temperature") }} <strong>{{ '%.1f'|format(weather_values.temp.value) }} &deg;C</strong>{% if weather_values.humidity.value is not none %} <span style="color:var(--text-muted);font-size:.74rem;">{{ weather_values.humidity.value|int }}%</span>{% endif %}<span style="font-size:.59rem;color:var(--text-muted);border:1px solid var(--border);border-radius:999px;padding:1px 5px;">{{ weather_values.temp.source }}</span>{{ frost_ice_badges(weather_values.temp.value, weather_values.dewpoint.value) }}</span>
     {% endif %}
     {% if weather_values.wind.value is not none %}
-    <span style="font-size:.81rem;display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap;">&#x1F4A8; {{ '%.1f'|format(weather_values.wind.value) }} m/s <span style="color:var(--text-muted);">{{ weather_values.wind_dir.value or wind_dir_label }}</span>{% if weather_values.gust.value is not none %}<span style="color:var(--text-muted);font-size:.75rem;"> &middot; B&ouml;e {{ '%.1f'|format(weather_values.gust.value) }} m/s</span>{% endif %}<span style="font-size:.59rem;color:var(--text-muted);border:1px solid var(--border);border-radius:999px;padding:1px 5px;">{{ weather_values.wind.source }}</span></span>
+    <span style="font-size:.81rem;display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap;">{{ icon("wind") }} {{ '%.1f'|format(weather_values.wind.value) }} m/s <span style="color:var(--text-muted);">{{ weather_values.wind_dir.value or wind_dir_label }}</span>{% if weather_values.gust.value is not none %}<span style="color:var(--text-muted);font-size:.75rem;"> &middot; B&ouml;e {{ '%.1f'|format(weather_values.gust.value) }} m/s</span>{% endif %}<span style="font-size:.59rem;color:var(--text-muted);border:1px solid var(--border);border-radius:999px;padding:1px 5px;">{{ weather_values.wind.source }}</span></span>
     {% endif %}
   {% endif %}
 
@@ -63,7 +64,7 @@
   <span style="color:var(--border);user-select:none;">&#x2502;</span>
   {% for h in forecast.horizons %}
   <span style="background:var(--surface-high);border:1px solid var(--border);border-radius:var(--radius-md, .5rem);padding:2px 8px;font-size:.71rem;white-space:nowrap;">
-    <span style="color:var(--text-muted);">+{{ h.hours }}h</span>{% if h.temperature_c is not none %} {{ '%.0f'|format(h.temperature_c) }}&deg;C{% endif %}{% if h.precipitation_acc_mm is not none %} &middot; &#x1F327;{{ '%.1f'|format(h.precipitation_acc_mm) }}mm{% endif %}{% if h.wind_speed_ms is not none %} &middot; &#x1F4A8;{{ '%.0f'|format(h.wind_speed_ms) }}m/s{% endif %}
+    <span style="color:var(--text-muted);">+{{ h.hours }}h</span>{% if h.temperature_c is not none %} {{ '%.0f'|format(h.temperature_c) }}&deg;C{% endif %}{% if h.precipitation_acc_mm is not none %} &middot; {{ icon("cloud-rain") }}{{ '%.1f'|format(h.precipitation_acc_mm) }}mm{% endif %}{% if h.wind_speed_ms is not none %} &middot; {{ icon("wind") }}{{ '%.0f'|format(h.wind_speed_ms) }}m/s{% endif %}
   </span>
   {% endfor %}
   {% endif %}
@@ -75,15 +76,11 @@
 <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:4px;">
   {% for w in warn_views %}
   <div style="border-left:3px solid {{ w.color }};padding:3px 9px;background:{{ w.color }}11;border-radius:0 var(--radius-md, .5rem) var(--radius-md, .5rem) 0;">
-    <span style="font-size:.74rem;font-weight:600;color:{{ w.color }};">&#x26A0; Stufe {{ w.level }} &ndash; {{ w.event_type }}</span>
+    <span style="font-size:.74rem;font-weight:600;color:{{ w.color }};">{{ icon("alert-triangle") }} Stufe {{ w.level }} &ndash; {{ w.event_type }}</span>
     <span style="font-size:.67rem;color:var(--text-muted);margin-left:5px;">{{ w.zeitraum }}</span>
     {% if w.text %}<span style="font-size:.64rem;color:var(--text-muted);margin-left:4px;">{{ w.text[:70] }}{% if w.text|length > 70 %}&hellip;{% endif %}</span>{% endif %}
   </div>
   {% endfor %}
-</div>
-{% else %}
-<div style="margin-bottom:4px;">
-  <span style="background:rgba(24,169,87,.14);color:var(--green);border:1px solid rgba(24,169,87,.3);padding:2px 8px;border-radius:999px;font-size:.74rem;font-weight:600;">&#x2713; keine aktive Warnung</span>
 </div>
 {% endif %}
 
@@ -131,7 +128,7 @@
     {% if av.zeitstempel_label %}
     <div style="font-size:.60rem;color:var(--text-muted);margin-top:3px;">{{ av.zeitstempel_label }} &middot; vowis.vorarlberg.at</div>
     {% elif av.fehler %}
-    <div style="font-size:.60rem;color:var(--text-muted);margin-top:3px;">&#x26A0; {{ av.fehler }}</div>
+    <div style="font-size:.60rem;color:var(--text-muted);margin-top:3px;">{{ icon("alert-triangle") }} {{ av.fehler }}</div>
     {% endif %}
 
   </div>

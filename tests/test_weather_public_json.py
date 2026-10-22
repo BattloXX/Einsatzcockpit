@@ -178,9 +178,11 @@ def test_public_json_liefert_warnungen_und_vorhersage(client, setup_db, monkeypa
 
     now = datetime.now(UTC)
 
-    async def _fake_warnings(lat, lng):
-        return [WeatherWarning(level=2, event_type="wind", text="Sturmwarnung",
-                                valid_from=now - timedelta(hours=1), valid_to=now + timedelta(hours=5))]
+    async def _fake_warnings(lat, lng, org_id=None):
+        return weather_service.WarningsResult("ok_with_warnings", [WeatherWarning(
+            level=2, event_type="wind", text="Sturmwarnung",
+            valid_from=now - timedelta(hours=1), valid_to=now + timedelta(hours=5),
+        )], now, now)
 
     async def _fake_forecast(lat, lng):
         return DailyForecast(days=[
@@ -188,7 +190,7 @@ def test_public_json_liefert_warnungen_und_vorhersage(client, setup_db, monkeypa
                               precip_mm=0.5, wind_max_ms=5.0),
         ])
 
-    monkeypatch.setattr(weather_service, "get_warnings", _fake_warnings)
+    monkeypatch.setattr(weather_service, "get_warnings_result", _fake_warnings)
     monkeypatch.setattr(weather_service, "get_daily_forecast", _fake_forecast)
     assert ui_weather.weather_service is weather_service  # gleiche Modul-Referenz wie gepatcht
 
@@ -196,6 +198,8 @@ def test_public_json_liefert_warnungen_und_vorhersage(client, setup_db, monkeypa
     assert r.status_code == 200, r.text[:300]
     data = r.json()
 
+    assert data["warnings_status"] == "ok_with_warnings"
+    assert data["warnings_last_success_at"] == now.isoformat()
     assert len(data["warnungen"]) == 1
     assert data["warnungen"][0]["event_type"] == "wind"
     assert data["warnungen"][0]["text"] == "Sturmwarnung"

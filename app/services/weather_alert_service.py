@@ -94,6 +94,7 @@ class WeatherPicture:
     pegel_trend: str | None = None         # 'steigend'|'fallend'|'stabil' für 'tauwetter'
     provider_data_available: bool = True
     assembled_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    warnings_status: str = "ok_no_warnings"
 
 
 _STATION_STALE_MIN = 15
@@ -106,7 +107,7 @@ async def build_weather_picture(org_settings, db) -> WeatherPicture:
     import asyncio
 
     from app.models.weather import WeatherStation
-    from app.services.weather_service import get_current, get_forecast, get_nowcast, get_warnings
+    from app.services import weather_service
 
     stations = (
         db.query(WeatherStation)
@@ -132,15 +133,16 @@ async def build_weather_picture(org_settings, db) -> WeatherPicture:
     current = forecast = nowcast = None
     warnings: list = []
     provider_data_available = True
+    warnings_status = "ok_no_warnings"
     if lat is not None and lng is not None:
-        current, nowcast, forecast, warnings = await asyncio.gather(  # type: ignore[assignment]
-            get_current(lat, lng, org_id=org_settings.org_id),
-            get_nowcast(lat, lng),
-            get_forecast(lat, lng, horizons=(6, 12, 24), org_id=org_settings.org_id),
-            get_warnings(lat, lng),
+        current, nowcast, forecast, warning_result = await asyncio.gather(  # type: ignore[assignment]
+            weather_service.get_current(lat, lng, org_id=org_settings.org_id),
+            weather_service.get_nowcast(lat, lng),
+            weather_service.get_forecast(lat, lng, horizons=(6, 12, 24), org_id=org_settings.org_id),
+            weather_service.get_warnings_result(lat, lng, org_id=org_settings.org_id),
             return_exceptions=True,
         )
-        results = (current, nowcast, forecast, warnings)
+        results = (current, nowcast, forecast, warning_result)
         provider_data_available = not any(isinstance(value, Exception) for value in results)
         if not provider_data_available:
             logger.warning("Wetteranbieter für Org %s nicht vollständig verfügbar", org_settings.org_id)
@@ -150,8 +152,11 @@ async def build_weather_picture(org_settings, db) -> WeatherPicture:
             nowcast = None
         if isinstance(forecast, Exception):
             forecast = None
-        if isinstance(warnings, Exception):
-            warnings = []
+        if isinstance(warning_result, weather_service.WarningsResult):
+            warnings = warning_result.warnings
+            warnings_status = warning_result.status
+        if warnings_status in {"unavailable", "stale", "disabled"}:
+            provider_data_available = False
 
     from app.services.bodensee_service import get_surface_temp_c
     bodensee_temp_c = get_surface_temp_c(org_settings, db)
@@ -164,6 +169,7 @@ async def build_weather_picture(org_settings, db) -> WeatherPicture:
         warnings=warnings if isinstance(warnings, list) else [],
         bodensee_temp_c=bodensee_temp_c,
         provider_data_available=provider_data_available,
+        warnings_status=warnings_status,
     )
 
 
@@ -570,7 +576,7 @@ def _eval_tauwetter(rule, pic: WeatherPicture) -> RuleResult:
 
 def _eval_downburst(rule, pic: WeatherPicture) -> RuleResult:
     min_level   = int(_p(rule, "min_level"))
-    HEAVY_TYPES = {"THUNDERSTORM", "THUNDER", "WIND", "STORM"}
+    HEAVY_TYPES = {"THUNDERSTORM", "THUNDER", "GEWITTER", "WIND", "STORM", "STURM"}
 
     active = [w for w in pic.warnings
               if w.event_type.upper() in HEAVY_TYPES and w.level >= min_level]
@@ -608,6 +614,8 @@ _EVALUATORS = {
 
 def evaluate_rule(rule, pic: WeatherPicture) -> RuleResult:
     """Bewertet eine einzelne Regel anhand des Wetterbilds."""
+    if rule.key in {"amtlich", "gewitter", "downburst"} and pic.warnings_status in {"stale", "unavailable", "disabled"}:
+        return RuleResult("unavailable", "Amtliche Warninformationen nicht aktuell verfügbar", {})
     fn = _EVALUATORS.get(rule.key)
     if fn is None:
         return RuleResult("none", "", {})

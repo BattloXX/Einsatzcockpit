@@ -372,6 +372,9 @@
     <div class="col-span-3 flex flex-col gap-3" style="grid-row:2/4;min-height:0;">
 
       {# Warnungen – auto-Höhe (1 Warnung ≈ 80px, 4 Warnungen ≈ 280px) #}
+      {% with user=namespace(org=org) %}
+      {% include "weather/_warnstatus.html" %}
+      {% endwith %}
       {% if warnings %}
       <div class="flex-shrink-0 rounded-xl p-4 flex flex-col border-2 border-error warn-pulse">
         <div class="flex items-center gap-4 mb-2">
@@ -379,7 +382,7 @@
           <div>
             <h2 class="font-sans font-bold text-on-error-container" style="font-size:24px;line-height:1.1;">AMTLICHE WARNUNGEN</h2>
             <p class="font-mono text-label-caps text-on-error-container tracking-widest" style="font-size:10px;">
-              {{ warnings|length }} AKTIVE WARNUNG{{ 'EN' if warnings|length > 1 else '' }} &bull; ZAMG / GEOSPHERE AUSTRIA
+              {{ warnings|length }} {{ 'VERALTETE' if warnings_result.status == 'stale' else 'AKTIVE' }} WARNUNG{{ 'EN' if warnings|length > 1 else '' }} &bull; ZAMG / GEOSPHERE AUSTRIA
             </p>
           </div>
         </div>
@@ -406,8 +409,8 @@
       <div class="flex-shrink-0 rounded-xl px-4 py-3 border border-outline-variant bg-surface-container-low">
         <div class="flex items-center justify-between mb-2">
           <div class="flex items-center gap-2">
-            <span style="font-size:20px;line-height:1;">{{ icon("circle-check", size="lg") }}</span>
-            <span class="font-sans font-semibold text-on-surface" style="font-size:15px;">Keine aktiven Warnungen</span>
+
+            <span class="font-sans font-semibold text-on-surface" style="font-size:15px;">Tagesvorschau</span>
             <span class="font-mono text-label-caps text-on-surface-variant" style="font-size:9px;">ZAMG</span>
           </div>
           <span class="font-mono text-label-caps text-on-surface-variant px-2 py-0.5 bg-surface-container-highest rounded" style="font-size:9px;">7-TAGE-VORSCHAU</span>
