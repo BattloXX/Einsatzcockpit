@@ -796,6 +796,13 @@ function incidentBoard(incidentId, alarm, startedAt) {
           }
           break;
         case 'column_renamed':
+          // Struktur-Swap wie bei Anlegen/Loeschen: vollstaendiger Neuaufbau aller Spalten
+          // statt OOB-Einzelspalte, danach Tabs/Dropdown mit dem neuen Titel nachziehen.
+          Promise.resolve(this._swapKanban(incidentId)).then(() => {
+            if (window.syncLaneTabs) window.syncLaneTabs();
+            if (window.buildLaneDropdown) window.buildLaneDropdown();
+          });
+          break;
         case 'column_updated':
           this._swapColumn(incidentId, ev.column_id);
           break;
