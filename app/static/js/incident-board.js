@@ -379,6 +379,13 @@ function lageTicker(hints, aiFlags) {
   }
   // Für Re-Aufbau nach gezieltem HTMX-Swap der Kopfleiste (enthält #mobile-lane-select)
   window.buildLaneDropdown = buildLaneDropdown;
+  // Tab-Beschriftungen (Tablet-Fallback) aus den aktuellen Spaltentiteln nachziehen
+  window.syncLaneTabs = function() {
+    document.querySelectorAll('.board-tab[data-lane]').forEach(function(tab) {
+      var col = document.querySelector('.kanban-col[data-lane="' + tab.dataset.lane + '"] .kanban-col__title');
+      if (col) tab.textContent = col.textContent.trim();
+    });
+  };
   // Für Re-Anwendung nach Spalten-Swaps: eine gespeicherte, inzwischen entfernte
   // Lane fällt sauber auf die erste noch vorhandene Spalte zurück.
   window.reapplyMobileLane = function () {
