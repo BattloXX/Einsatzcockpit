@@ -159,6 +159,7 @@ document.addEventListener('alpine:init', () => {
       // Exponentielles Backoff + Jitter statt fix 3s, damit eine flackernde
       // Verbindung nicht in einer engen Reconnect-Schleife hängt.
       let reconnectAttempt = 0;
+      let pingTimer = null;
       const connect = () => {
         const ws = new WebSocket(url);
         ws.onmessage = (e) => {
@@ -190,6 +191,8 @@ document.addEventListener('alpine:init', () => {
         };
         ws.onclose = () => {
           window.__ecGlobalWsOpen = false;
+          clearInterval(pingTimer);
+          window.dispatchEvent(new CustomEvent('ec:ws-state', { detail: { open: false } }));
           reconnectAttempt++;
           const backoff = Math.min(1000 * 2 ** reconnectAttempt, 15000);
           setTimeout(connect, backoff + Math.random() * 500);
@@ -197,9 +200,12 @@ document.addEventListener('alpine:init', () => {
         ws.onopen = () => {
           window.__ecGlobalWsOpen = true;
           reconnectAttempt = 0;
+          window.dispatchEvent(new CustomEvent('ec:ws-state', { detail: { open: true } }));
         };
         this._ws = ws;
-        setInterval(() => ws.readyState === 1 && ws.send('ping'), 30000);
+        // je Verbindung genau ein Ping-Intervall (vorher: pro Reconnect ein weiteres, nie beendetes)
+        clearInterval(pingTimer);
+        pingTimer = setInterval(() => ws.readyState === 1 && ws.send('ping'), 30000);
       };
       connect();
     },
@@ -522,7 +528,10 @@ function incidentBoard(incidentId, alarm, startedAt) {
       this._connectWS(incidentId);
       if (document.getElementById('kanban')) this._setupKeyboard(incidentId);
       this._trackOpenModalEntity();
-      window.addEventListener('ec:resync', () => this._resyncBoard(incidentId));
+      window.addEventListener('ec:resync', (e) => {
+        if (e.detail) e.detail.handled = true;
+        this._resyncBoard(incidentId);
+      });
       this._keepaliveTimer = setInterval(() => {
         fetch('/api/v1/live/state', { credentials: 'same-origin', headers: { 'X-EC-Client': this._clientId } })
           .then((response) => { if (response.ok) this._bumpLastUpdate(); });
@@ -1191,7 +1200,7 @@ document.addEventListener('htmx:timeout', (e) => {
 document.addEventListener('DOMContentLoaded', () => {
   window.addEventListener('online', () => {
     // Board-Seiten gleichen ihre Fragmente ab; andere Seiten tun bewusst nichts.
-    window.dispatchEvent(new CustomEvent('ec:resync'));
+    window.dispatchEvent(new CustomEvent('ec:resync', { detail: { source: 'online', handled: false } }));
   });
 });
 

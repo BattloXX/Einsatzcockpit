@@ -15,6 +15,8 @@
  *   ELNative.isTracking                 – getter: GPS-Tracking läuft gerade
  *   ELNative.isNative                   – getter, jedes Mal frisch gegen window.Capacitor geprüft
  *   ELNative.accessInvalid              – getter: Fehlercode, wenn der Gerätezugang endgültig ungültig ist
+ *   ELNative.refresh()                  – Pull-to-Refresh der App: Resync der Seite (ec:resync) statt Reload
+ *   ELNative.ptrBlocked(target)         – true, wenn Pull-to-Refresh gerade nicht erlaubt ist
  */
 (function () {
   'use strict';
@@ -84,6 +86,102 @@
       }
     } catch (_) {}
     return h;
+  }
+
+  // ─── Pull-to-Refresh (APP-01) ───────────────────────────────────────────────
+  // Die Android-App legt ein SwipeRefreshLayout um die WebView. Die Seite entscheidet, ob die
+  // Geste gerade erlaubt ist (window.ECPtr = native Schnittstelle, nur in der App vorhanden) und
+  // fuehrt die Aktualisierung ueber die vorhandenen Resync-Funktionen aus (Event "ec:resync"),
+  // statt die Seite hart neu zu laden. Seiten ohne Resync-Handler werden neu geladen, sofern kein
+  // Formular ungespeicherte Eingaben enthaelt.
+  // Blockiert, wenn die Beruehrung innerhalb dieser Elemente beginnt (Karte, Editor, Drag-Zone)
+  const _PTR_TARGET_SELECTOR = '.leaflet-container, [data-no-ptr], .cm-editor, .ql-editor, .sortable-chosen, .sortable-ghost';
+  // Blockiert, sobald eines dieser Elemente sichtbar ist (Dialog, Overlay, laufendes Ziehen)
+  const _PTR_OVERLAY_SELECTOR = 'dialog[open], .modal--open, .person-flyout-backdrop, .sortable-chosen';
+
+  function _visible(el) {
+    return !!(el && (el.offsetParent !== null || (el.getClientRects && el.getClientRects().length > 0)));
+  }
+
+  function _formDirty() {
+    const fields = document.querySelectorAll('input, textarea, select');
+    for (let i = 0; i < fields.length; i++) {
+      const f = fields[i];
+      if (f.type === 'hidden' || f.type === 'submit' || f.type === 'button' || f.disabled) continue;
+      if (f.type === 'checkbox' || f.type === 'radio') {
+        if (f.checked !== f.defaultChecked) return true;
+      } else if (f.tagName === 'SELECT') {
+        for (let j = 0; j < f.options.length; j++) {
+          if (f.options[j].selected !== f.options[j].defaultSelected) return true;
+        }
+      } else if (f.value !== f.defaultValue && f.value !== '') {
+        return true;
+      }
+    }
+    const editable = document.querySelectorAll('[contenteditable="true"]');
+    for (let i = 0; i < editable.length; i++) {
+      if ((editable[i].textContent || '').trim() !== '') return true;
+    }
+    return false;
+  }
+
+  /** true, wenn Pull-to-Refresh jetzt nicht ausgeloest werden darf (Karte, Drag, Dialog, Eingaben, gescrollt). */
+  function ptrBlocked(target) {
+    try {
+      if ((window.scrollY || 0) > 0 || (document.scrollingElement && document.scrollingElement.scrollTop > 0)) return true;
+      const overlays = document.querySelectorAll(_PTR_OVERLAY_SELECTOR);
+      for (let i = 0; i < overlays.length; i++) {
+        if (_visible(overlays[i])) return true;
+      }
+      for (let el = target; el && el !== document.documentElement; el = el.parentElement) {
+        if (el.matches && el.matches(_PTR_TARGET_SELECTOR)) return true;
+        if (el.scrollTop > 0) return true;
+      }
+      return _formDirty();
+    } catch (_) {
+      return true; // im Zweifel nie eine Eingabe gefaehrden
+    }
+  }
+
+  function _pushPtrState(event) {
+    if (window.ECPtr && typeof window.ECPtr.setBlocked === 'function') {
+      window.ECPtr.setBlocked(ptrBlocked(event && event.target));
+    }
+  }
+  document.addEventListener('touchstart', _pushPtrState, { passive: true, capture: true });
+  document.addEventListener('focusin', _pushPtrState, { passive: true });
+
+  /** Aktualisiert die Seite; meldet das Ende an die App (ECPtr.done/failed). */
+  async function refresh() {
+    const ptr = window.ECPtr;
+    const done = () => { if (ptr && ptr.done) ptr.done(); };
+    const failed = (msg) => { if (ptr && ptr.failed) ptr.failed(msg); };
+    if (navigator.onLine === false) {
+      failed('Keine Internetverbindung – Aktualisierung nicht möglich.');
+      return false;
+    }
+    try {
+      const detail = { source: 'pull', handled: false, promises: [] };
+      window.dispatchEvent(new CustomEvent('ec:resync', { detail }));
+      if (detail.handled) {
+        await Promise.race([
+          Promise.allSettled(detail.promises),
+          new Promise((resolve) => setTimeout(resolve, 1500)),
+        ]);
+        done();
+        return true;
+      }
+      if (_formDirty()) {
+        failed('Ungespeicherte Eingaben – bitte zuerst speichern.');
+        return false;
+      }
+      done();
+      window.location.reload();
+      return true;
+    } catch (e) {
+      failed('Aktualisierung fehlgeschlagen.');
+      return false;
+    }
   }
 
   // ─── GPS-Intervalle & Energiesparmodus ──────────────────────────────────────
@@ -628,5 +726,7 @@
     get batterySaverActive() { return _batterySaver; },
     get isTracking() { return _isTracking; },
     get accessInvalid() { return _accessInvalid; },
+    refresh,
+    ptrBlocked,
   };
 })();

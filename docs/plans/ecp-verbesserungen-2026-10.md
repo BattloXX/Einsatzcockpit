@@ -62,3 +62,16 @@ Pro Block: ID / Status / Ursache / Loesung / Dateien / Datenbank / Tests / Hinwe
 | Datenbank | Migration `0305`: Tabelle `device_auth_failure`, Spalten `device_token.last_failed_at`, `fail_count`, `platform`, `os_version`, `device_model` (alle nullable bzw. mit Default; rein additiv, bestehende Daten unveraendert) |
 | Tests | 12 neue Tests (alle Gruende, Aggregation, kein Volltoken in DB und Log, Sitzung, Admin-Filter, Org-Isolation, Web-Layer) |
 | Hinweise | Zaehler im Prozessspeicher: nach Neustart kann die letzte Minute fehlen. Das Token steht beim QR-Login (`/geraet-login?token=`) im Query-String und damit im Gunicorn-Access-Log; Hinweis fuer SEC-03. „Abgelaufen" gibt es im Datenmodell nicht (kein `expires_at`): ein Token ist aktiv, widerrufen oder durch eine neue PIN ersetzt (dann „unbekannt"). `revoke_device_token` sperrt weiterhin auch den Geraete-Benutzer; Entkopplung wurde nicht geaendert. |
+
+## APP-01 / APP-02 – Pull-to-Refresh und Verbindungsverlust
+
+| Feld | Inhalt |
+|---|---|
+| Status | Teilweise: Web-Layer und native App-Seite implementiert und gebaut (Debug-APK), Geraetetest offen |
+| Ursache | Im Web-Layer gab es kein Pull-to-Refresh. Der Verbindungsstatus war nur auf Board/Lage/Einheit sichtbar, die globale WebSocket loeste nach Reconnect keinen Resync aus und legte bei jedem Reconnect ein weiteres, nie beendetes Ping-Intervall an (Leak). |
+| Loesung | `ELNative.refresh()` loest `ec:resync` mit `source: pull` aus (Board, Lage, Einheit nutzen ihre vorhandenen Resync-Funktionen); Seiten ohne Handler werden neu geladen, ausser ein Formular hat ungespeicherte Eingaben (dann Hinweis). `ELNative.ptrBlocked()` sperrt die Geste bei Karte, Dialog/Overlay, Drag-and-Drop, Editoren, gescrolltem Container und Eingaben; die App liest den Zustand ueber `window.ECPtr`. Offline: Hinweis statt Aktualisierung. Neues `conn-status.js` (Banner „Keine Verbindung ... Stand HH:MM:SS" bzw. „Verbindung unterbrochen"), kurze WebSocket-Abrisse (< 8 s) bleiben unsichtbar, ein einziger Resync pro Wiederherstellung, kein Polling. Ping-Leak der globalen WebSocket behoben. |
+| Dateien (ECP) | `app/static/js/native-bridge.js`, `conn-status.js`, `app.js`, `lage_board.js`, `einheit_modus.js`, `sw.js`, `app/templates/base.html`, `tests/js/native_bridge.test.mjs`, `tests/js/conn_status.test.mjs`, `tests/test_app_web_layer.py` |
+| Dateien (Android) | `scripts/MainActivity.java` (SwipeRefreshLayout), `scripts/prepare-android.sh`; PR BattloXX/Einsatzcockpit-Android#62 |
+| Datenbank | keine |
+| Tests | 2 + 2 Node-Testdateien (6 Tests), 5 Python-Tests; Debug-APK baut lokal |
+| Hinweise | Die Geste wird beim Beruehren (touchstart) fuer den naechsten Zug festgelegt. Nicht abgedeckt: Offline-Outbox-Konflikte bei abgelaufenem Token (siehe SEC-02: der Einheitenmodus meldet 401 weiterhin als Zugang beendet). |
