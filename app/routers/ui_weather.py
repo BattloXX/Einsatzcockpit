@@ -5,6 +5,7 @@ import math
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy.orm import Session
 
@@ -16,6 +17,7 @@ from app.models.major_incident import MajorIncident
 from app.services import weather_service
 from app.services.weather_focus import resolve_weather_focus
 from app.services.weather_history_service import get_weather_history
+from app.services.weather_presentation import presentation
 
 router = APIRouter()
 logger = logging.getLogger("einsatzleiter.weather")
@@ -25,6 +27,8 @@ _TREND_DE = {
     "decreasing": "abnehmend",
     "stable":     "gleichbleibend",
 }
+
+_panel_summaries: dict[tuple[int | None, float, float], tuple[datetime, dict]] = {}
 
 _WIND_DIR_LABELS = ["N", "NO", "O", "SO", "S", "SW", "W", "NW"]
 
@@ -253,6 +257,8 @@ def _build_warning_views(warnings: list) -> list[dict]:
             "text": w.text or "",
             "color": weather_service._WARN_LEVEL_COLORS.get(w.level, "#6b7280"),
             "zeitraum": _warn_zeitraum(w.valid_from, w.valid_to),
+            "valid_from": w.valid_from,
+            "valid_to": w.valid_to,
         })
     return views
 
@@ -674,6 +680,20 @@ async def _render_weather_panel(
         and weather_values["temp"]["source"] == "Lokale Wetterstation"
         and weather_values["wind"]["source"] == "Lokale Wetterstation"
     )
+    view = presentation(station_current or current, forecast, nowcast, warning_result)
+    ctx.update(view)
+    for key, (created, _) in list(_panel_summaries.items()):
+        if datetime.now(UTC) - created >= timedelta(minutes=5):
+            del _panel_summaries[key]
+    _panel_summaries[(org_id, lat, lng)] = (
+        datetime.now(UTC), {**view, "warnings_result": warning_result},
+    )
+    if template_name == "weather/_data_section.html":
+        try:
+            ctx["daily_forecast"] = await weather_service.get_daily_forecast(lat, lng, org_id=org_id)
+        except Exception:
+            logger.warning("Tagesprognose nicht verfügbar", exc_info=True)
+            ctx["daily_forecast"] = None
     ctx.update(extra_ctx)
     return templates.TemplateResponse(request, template_name, ctx)
 
@@ -941,6 +961,10 @@ async def einsatz_wetter_summary(request: Request, incident_id: int, db: Session
         return HTMLResponse("Wetter")
     current = await weather_service.get_current(lat, lng, org_id=org_id)
     label = f"{current.temperature_c:.0f}°C" if current and current.temperature_c is not None else "Wetter"
+    cached = _panel_summaries.get((org_id, lat, lng))
+    if cached and datetime.now(UTC) - cached[0] < timedelta(minutes=5):
+        return templates.TemplateResponse(request, "weather/_summary.html",
+                                          {**cached[1], "label": label, "user": user})
     return HTMLResponse(label)
 
 
@@ -1002,11 +1026,12 @@ async def wetter_index(
     _ = weather_service.has_cached(lat, lng)
 
     _menu_org_id = getattr(user, "org_id", None)
-    nowcast, current, forecast, warning_result = await asyncio.gather(
+    nowcast, current, forecast, warning_result, daily = await asyncio.gather(
         weather_service.get_nowcast(lat, lng),
         weather_service.get_current(lat, lng, org_id=_menu_org_id),
         weather_service.get_forecast(lat, lng, org_id=_menu_org_id),
         weather_service.get_warnings_result(lat, lng, org_id=_menu_org_id),
+        weather_service.get_daily_forecast(lat, lng, org_id=_menu_org_id),
         return_exceptions=True,
     )
     for name, val in [("nowcast", nowcast), ("current", current),
@@ -1050,11 +1075,13 @@ async def wetter_index(
             "current": current,
             "wind_dir_label": _wind_dir_label(current.wind_direction_deg if current else None),  # type: ignore[union-attr]
             "forecast": forecast,
+            "daily_forecast": daily if not isinstance(daily, BaseException) else None,
             "warnings_result": warning_result,
             "warnings": warnings,
             "warn_views": _build_warning_views(warnings),  # type: ignore[arg-type]
             "top_warning": top_warning,
             "warn_color": warn_color,
+            **presentation(station_current or current, forecast, nowcast, warning_result),
             "scenarios": scenarios,
             "attribution": _build_attribution(current, forecast, nowcast, warnings, station_current),
             "user": user,
@@ -1342,22 +1369,26 @@ async def weather_infoscreen(
     current = None
     nowcast = None
     daily_forecast = None
+    forecast = None
     if lat is not None and lng is not None:
         results = await asyncio.gather(
             weather_service.get_warnings_result(lat, lng, org_id=org.id),
             weather_service.get_current(lat, lng, org_id=org.id),
             weather_service.get_nowcast(lat, lng),
             weather_service.get_daily_forecast(lat, lng),
+            weather_service.get_forecast(lat, lng, org_id=org.id),
             return_exceptions=True,
         )
         warning_result = _normalise_warning_result(results[0])
         warnings = warning_result.warnings
-        if not isinstance(results[1], Exception):
+        if not isinstance(results[1], BaseException):
             current = results[1]
-        if not isinstance(results[2], Exception):
+        if not isinstance(results[2], BaseException):
             nowcast = results[2]
-        if not isinstance(results[3], Exception):
+        if not isinstance(results[3], BaseException):
             daily_forecast = results[3]
+        if not isinstance(results[4], BaseException):
+            forecast = results[4]
 
     now_utc = datetime.now(UTC)
     active_warnings = [w for w in warnings if w.valid_from <= now_utc]
@@ -1418,6 +1449,7 @@ async def weather_infoscreen(
         request,
         "weather/infoscreen.html",
         {
+            **presentation(station_current or current, forecast, nowcast, warning_result),
             "org": org,
             "org_settings": org_settings,
             "station": station_views[0] if station_views else None,
@@ -1540,19 +1572,23 @@ async def weather_public_json(
     warning_result = weather_service.WarningsResult(
         "unavailable" if _org_weather_enabled(org.id, db) else "disabled", [],
     )
+    forecast = None
     warn_views: list[dict] = []
     vorhersage_tage: list[dict] = []
     if lat is not None and lng is not None:
         results = await asyncio.gather(
             weather_service.get_warnings_result(lat, lng, org_id=org.id),
             weather_service.get_daily_forecast(lat, lng),
+            weather_service.get_forecast(lat, lng, org_id=org.id),
             return_exceptions=True,
         )
         warnings: list = []
         daily_forecast: weather_service.DailyForecast | None = None
         warning_result = _normalise_warning_result(results[0])
         warnings = warning_result.warnings
-        if not isinstance(results[1], Exception):
+        if not isinstance(results[2], BaseException):
+            forecast = results[2]
+        if not isinstance(results[1], BaseException):
             daily_forecast = results[1]  # type: ignore[assignment]
 
         now_utc = datetime.now(UTC)
@@ -1570,7 +1606,13 @@ async def weather_public_json(
                     "wind_max_kmh": wind_kmh,
                 })
 
-    return JSONResponse({
+    view = presentation(_station_current_weather(station_views), forecast, None, warning_result)
+    return JSONResponse(jsonable_encoder({
+        "prognose_kurz": view["prognose_kurz"],
+        "datenstand": view["datenstand"],
+        "interne_hinweise": view["internal_hints"],
+        "frost": view["frost"],
+        "glaette": view["ice"],
         "org_name": org.name,
         "station_name": primary["name"],
         "gemessen_um": (
@@ -1608,4 +1650,4 @@ async def weather_public_json(
         "warnings_last_success_at": _warning_success_iso(warning_result),
         "warnungen": warn_views,
         "vorhersage": vorhersage_tage,
-    })
+    }))

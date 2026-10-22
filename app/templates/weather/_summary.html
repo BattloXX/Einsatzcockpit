@@ -1,0 +1,14 @@
+<span style="display:inline-flex;flex-wrap:wrap;gap:4px;max-width:min(70vw,440px);white-space:normal;font-size:.7rem;">
+  <strong>{{ label }}</strong>
+  {% for h in prognose_kurz if h.hours in (3,6) %}
+  <span>+{{ h.hours }} h: {% if h.precipitation_mm is not none %}{{ '%.1f'|format(h.precipitation_mm) }} mm{% else %}–{% endif %}
+  / {% if h.gust_max_kmh is not none %}{{ '%.1f'|format(h.gust_max_kmh) }} km/h{% else %}–{% endif %}{% if not h.complete %} · Daten unvollständig{% endif %}</span>
+  {% endfor %}
+  <span data-warnings-status="{{ warnings_result.status }}">Amtliche Warnungen: {{ {'ok_no_warnings': 'keine aktiv', 'ok_with_warnings': 'aktiv', 'stale': 'veraltet', 'unavailable': 'nicht verfügbar', 'disabled': 'deaktiviert'}.get(warnings_result.status, warnings_result.status) }}</span>
+  {% if internal_hints %}
+  <span>Interne Hinweise – keine amtliche Warnung: {% for h in internal_hints %}{{ h.label }}: {{ h.rating }}{% if not loop.last %}, {% endif %}{% endfor %}</span>
+  {% endif %}
+  {% for d in datenstand if d.label == 'Stundenprognose' %}
+  <span title="{{ d.model or '' }} · {{ d.freshness }}">{{ d.provider }} · vor {{ d.age_minutes }} min{% if d.is_fallback %} · Ersatzquelle{% endif %}</span>
+  {% endfor %}
+</span>

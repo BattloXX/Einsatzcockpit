@@ -1,0 +1,19 @@
+{% if indicators is defined %}
+<div style="font-size:.75rem;overflow-wrap:anywhere;">
+  <strong>Interne Hinweise – keine amtliche Warnung</strong>
+  <div style="display:flex;flex-wrap:wrap;gap:6px;">
+    {% for alert in scenarios|default([]) if alert.key == 'wildfire' %}
+    <span style="border:1px solid #f97316;border-radius:4px;padding:3px 6px;">
+      {{ icon(alert.icon_name or 'alert-triangle') }} {{ alert.label_de }} · mögliche Gefahr: {{ alert.detail_de }}
+    </span>
+    {% endfor %}
+    {% for h in internal_hints %}
+    <span style="border:1px solid #f97316;border-radius:4px;padding:3px 6px;">{{ icon("alert-triangle") }} {{ h.label }}: {{ h.rating }}</span>
+    {% endfor %}
+  </div>
+  {% if not internal_hints and not (scenarios|default([])|selectattr('key', 'equalto', 'wildfire')|list) %}<span>Keine bewertbaren kritischen Hinweise.</span>{% endif %}
+  {% if indicators.heavy_rain.status == 'unvollständig' or indicators.storm.status == 'unvollständig' %}
+  <span>Daten unvollständig – keine vollständige Bewertung möglich.</span>
+  {% endif %}
+</div>
+{% endif %}

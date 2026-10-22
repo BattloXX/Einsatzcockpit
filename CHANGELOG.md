@@ -4,6 +4,12 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 
 ## Unreleased
 
+- **Wetterdarstellung**: Aktuell, Kurzfristig (1/3/6 h), Prognose (12/24 h und Tag)
+  und amtliche Warnungen getrennt. Böenspitzen mit Org-Lokalzeit und km/h,
+  Datenstand mit Quelle, Modell, Alter, Frische und Ersatzquelle; unvollständige
+  Fenster werden gekennzeichnet. Board/GSL und Infoscreen zeigen Kurzprognosen,
+  öffentliche JSON-Endpunkte erhalten zusätzliche Prognose- und Datenstandsfelder.
+
 - **Wetter**: Kennzahlen für Regen, Sturm, Schnee/Glätte, Gewitter und Hochwasser-Kontext;
   Prognosefenster 1/3/6/12/24 Stunden, Spitzen mit Zeitpunkt und keine Bewertung
   bei unvollständigen Daten. Gemeinsame Hinweisschwellen und km/h-Templatefilter;

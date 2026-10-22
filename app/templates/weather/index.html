@@ -15,7 +15,7 @@
 }
 .wetter-main-grid {
   display: grid;
-  grid-template-columns: 1fr 296px;
+  grid-template-columns: minmax(0,1fr) 296px;
   gap: 16px;
   align-items: start;
 }
@@ -29,6 +29,7 @@
   grid-template-columns: repeat(3, 1fr);
   gap: 10px;
 }
+.wetter-main-grid > *, .metric-grid > * { min-width: 0; overflow-wrap: anywhere; }
 .wetter-card {
   background: var(--surface);
   border: 1px solid var(--border);

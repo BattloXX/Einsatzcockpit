@@ -37,11 +37,11 @@ Im laufenden Einsatz erscheint rechts im Board ein **Wetter-Panel** mit:
 
 | Bereich | Inhalt |
 |---------|--------|
-| **Nowcast (15 min)** | Aktuell gemessene Werte: Temperatur, Wind, Böen, Niederschlag, Sicht |
+| **Nowcast (15 min)** | Modellvorhersage für Niederschlag in den nächsten rund 3 Stunden |
 | **Ist-Werte** | Aktuelle Messwerte der nächsten Wetterstation |
-| **Vorhersage** | +6h / +12h / +24h (Temperatur, Niederschlag, Wind) |
+| **Kurzprognose** | Niederschlagssumme und Böenmaximum für +3/+6 h; GSL zusätzlich +12 h |
 | **Unwetterwarnungen** | Amtliche ZAMG-Warnungen für den Einsatzort |
-| **Szenarien** | Sturm- und Waldbrand-Indikatoren (farblich hervorgehoben) |
+| **Interne Hinweise** | Mögliche Gefahren aus Kennzahlen; keine amtlichen Warnungen |
 
 Das Wetter-Panel zeigt Daten für den **Einsatzort** (Adresse / Koordinaten des Einsatzes). Ist keine Adresse hinterlegt, wird der Org-Standort als Fallback verwendet.
 
@@ -52,6 +52,25 @@ Das Wetter-Panel zeigt Daten für den **Einsatzort** (Adresse / Koordinaten des 
 **URL:** `/wetter`
 
 Die globale Wetter-Seite zeigt Wetterdaten für den **Org-Standort** (konfiguriert in Einstellungen → Organisation → Standort). Sie eignet sich als Überblick ohne aktiven Einsatz.
+
+Die Abschnitte **Aktuell**, **Kurzfristig** (+1/+3/+6 h), **Prognose** (+12/+24 h
+und Tagesprognose) und **Warnungen** unterscheiden Messungen, Modellvorhersagen
+und amtliche Warninformationen. Regenwerte sind Fenstersummen in mm, Böen sind
+Maxima des jeweiligen Fensters in m/s und km/h. Spitzenzeiten erscheinen in der
+Zeitzone der Organisation (einschließlich Sommer-/Winterzeit).
+
+Der **Datenstand** nennt Quelle, Modell bzw. Station, Alter in Minuten und Frische.
+**Ersatzquelle** bedeutet, dass der bevorzugte Anbieter ausgefallen ist. Ein Strich
+steht für fehlende Werte; **0.0 mm** bedeutet eine vorhandene Prognose ohne Regen.
+Unvollständige oder veraltete Fenster erlauben keine vollständige Bewertung.
+
+Der Infoscreen zeigt den Kurzfristblock nur, wenn alle drei Fenster vollständig
+vorliegen. Seine Frost-/Glättehinweise stammen aus der gemeinsamen Kennzahlenlogik.
+Die öffentlichen JSON-Endpunkte ergänzen `prognose_kurz`, `datenstand`,
+`interne_hinweise`, `frost` und `glaette`; bisherige Felder bleiben erhalten.
+Die Board-Kopfzeile übernimmt die Kurzprognose aus dem zuletzt geladenen Panel
+(für höchstens fünf Minuten); sie ruft dafür keine weiteren Prognosen ab.
+
 
 ---
 
@@ -65,14 +84,12 @@ Zusätzlich: **Radar-Overlay** auf der Lagekarte (Niederschlagsradar via RainVie
 
 ## Szenario-Indikatoren
 
-Zwei Szenarien werden automatisch berechnet und farblich hervorgehoben:
-
-| Szenario | Kriterien | Farbe |
-|----------|-----------|-------|
-| **Sturm** | Windböen ≥ 60 km/h oder Warnstufe „Sturm" | Orange / Rot |
-| **Waldbrand** | Hohe Temperatur + geringe Luftfeuchtigkeit + Wind + wenig Niederschlag | Rot |
-
-Ist ein Szenario aktiv, erscheint ein auffälliges Banner im Wetter-Panel.
+Interne Hinweise zu Starkregen, Sturm, Schnee, Glätte und Gewitter erscheinen als
+„mögliche Gefahr“, wenn die erforderlichen Daten vollständig und ausreichend frisch
+sind. Fehlende Messfenster oder Modellwerte werden als **Daten unvollständig**
+gekennzeichnet; daraus folgt keine Entwarnung. Die Hinweise sind **keine amtlichen
+Warnungen** und lösen keinen zusätzlichen SMS-/Teams-Versand aus. Für Hochwasser
+sind Niederschläge nur Kontext; Pegel und amtliche Informationen bleiben maßgeblich.
 
 ---
 

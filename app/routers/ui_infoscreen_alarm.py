@@ -670,10 +670,28 @@ async def infoscreen_wetter(
     def _r(v):  # type: ignore[no-untyped-def]
         return round(v) if isinstance(v, (int, float)) else None
 
+    from app.services.weather_presentation import presentation
+
+    # Zusatzdaten dürfen die bisherigen Ist-Werte bei Ausfall nicht unterdrücken.
+    try:
+        forecast = await weather_service.get_forecast(lat, lng, org_id=org.id)
+    except Exception:
+        forecast = None
+    try:
+        warnings = await weather_service.get_warnings_result(lat, lng, org_id=org.id)
+    except Exception:
+        warnings = weather_service.WarningsResult("unavailable", [])
+    view = presentation(current, forecast, None, warnings)
     daten = {
         "temp": _r(current.temperature_c),
         "wind": _r(current.wind_speed_ms * 3.6) if current.wind_speed_ms is not None else None,
         "code": None,
+        "prognose_kurz": view["prognose_kurz"],
+        "datenstand": view["datenstand"],
+        "warnings_status": warnings.status,
+        "interne_hinweise": view["internal_hints"],
+        "frost": view["frost"],
+        "glaette": view["ice"],
     }
     _wetter_cache[org.id] = (now, daten)
     return daten

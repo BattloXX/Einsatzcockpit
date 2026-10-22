@@ -1,0 +1,15 @@
+{% if prognose_kurz %}
+<div class="forecast-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:8px;min-width:0;">
+  {% for h in prognose_kurz if h.hours in horizon_hours %}
+  <div class="wetter-card" data-horizon="{{ h.hours }}" style="padding:10px;min-width:0;overflow-wrap:anywhere;">
+    <strong>+{{ h.hours }} h{% if h.hours == 24 %} · Tag{% endif %}</strong>
+    {% if h.temperature_c is not none %}<div>{{ '%.1f'|format(h.temperature_c) }} °C</div>{% endif %}
+    {% if h.wind_speed_ms is not none %}<div>Wind: {{ '%.1f'|format(h.wind_speed_ms) }} m/s · {{ '%.1f'|format(h.wind_speed_ms|ms_to_kmh) }} km/h</div>{% endif %}
+    <div>{{ icon("cloud-rain") }} Niederschlag: {% if h.precipitation_mm is not none %}{{ '%.1f'|format(h.precipitation_mm) }} mm{% else %}–{% endif %}</div>
+    <div>{{ icon("wind") }} Böenmaximum: {% if h.gust_max_ms is not none %}{{ '%.1f'|format(h.gust_max_ms) }} m/s · {{ '%.1f'|format(h.gust_max_kmh) }} km/h{% else %}–{% endif %}</div>
+    {% if h.gust_max_at %}<div>Spitze: {{ h.gust_max_at|local_datetime }}</div>{% endif %}
+    {% if not h.complete %}<strong>Daten unvollständig</strong>{% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}

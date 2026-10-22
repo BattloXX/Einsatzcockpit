@@ -45,7 +45,7 @@
 
   {% if nowcast and nowcast_bars %}
   <span style="color:var(--border);user-select:none;">&#x2502;</span>
-  <div style="display:flex;align-items:center;gap:5px;">
+  <div style="display:flex;align-items:center;flex-wrap:wrap;gap:5px;">
     <span style="font-size:.62rem;color:var(--text-muted);font-weight:600;letter-spacing:.04em;">NOWCAST{% if trend_de %} &middot; {{ trend_de }}{% endif %}</span>
     <div style="display:flex;align-items:flex-end;height:22px;gap:1px;">
       {% for bar in nowcast_bars %}
@@ -60,16 +60,13 @@
   <span style="font-size:.74rem;color:var(--text-muted);">Kein Niederschlag in 3 h</span>
   {% endif %}
 
-  {% if forecast and forecast.horizons %}
-  <span style="color:var(--border);user-select:none;">&#x2502;</span>
-  {% for h in forecast.horizons %}
-  <span style="background:var(--surface-high);border:1px solid var(--border);border-radius:var(--radius-md, .5rem);padding:2px 8px;font-size:.71rem;white-space:nowrap;">
-    <span style="color:var(--text-muted);">+{{ h.hours }}h</span>{% if h.temperature_c is not none %} {{ '%.0f'|format(h.temperature_c) }}&deg;C{% endif %}{% if h.precipitation_acc_mm is not none %} &middot; {{ icon("cloud-rain") }}{{ '%.1f'|format(h.precipitation_acc_mm) }}mm{% endif %}{% if h.wind_speed_ms is not none %} &middot; {{ icon("wind") }}{{ '%.0f'|format(h.wind_speed_ms) }}m/s{% endif %}
-  </span>
-  {% endfor %}
-  {% endif %}
 
 </div>
+
+{% set horizon_hours = (3,6,12) if lage_id is defined else (3,6) %}
+{% include "weather/_horizons.html" %}
+{% include "weather/_internal_hints.html" %}
+{% include "weather/_datenstand.html" %}
 
 {# ── Warnungen horizontal nebeneinander ─────────────────────────────────────── #}
 {% if warn_views %}
@@ -77,7 +74,7 @@
   {% for w in warn_views %}
   <div style="border-left:3px solid {{ w.color }};padding:3px 9px;background:{{ w.color }}11;border-radius:0 var(--radius-md, .5rem) var(--radius-md, .5rem) 0;">
     <span style="font-size:.74rem;font-weight:600;color:{{ w.color }};">{{ icon("alert-triangle") }} Stufe {{ w.level }} &ndash; {{ w.event_type }}</span>
-    <span style="font-size:.67rem;color:var(--text-muted);margin-left:5px;">{{ w.zeitraum }}</span>
+    <span style="font-size:.67rem;color:var(--text-muted);margin-left:5px;">{{ w.valid_from|local_datetime }} – {{ w.valid_to|local_datetime }}</span>
     {% if w.text %}<span style="font-size:.64rem;color:var(--text-muted);margin-left:4px;">{{ w.text[:70] }}{% if w.text|length > 70 %}&hellip;{% endif %}</span>{% endif %}
   </div>
   {% endfor %}
@@ -93,12 +90,12 @@
 </div>{# end wetter tab content #}
 <div x-show="_t==='pegel'" style="display:none;">
 
-  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:6px;margin-bottom:4px;">
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,255px),1fr));gap:6px;margin-bottom:4px;">
   {% for av in abfluss_views %}
   <div style="background:var(--surface-high);border-left:3px solid {{ av.stufe_farbe }};border-radius:0 var(--radius-md, .5rem) var(--radius-md, .5rem) 0;padding:8px 11px;">
 
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-      <a href="https://vowis.vorarlberg.at/stationsInfo/_Abfluss/ofwStation.aspx?hzbnr={{ av.hzbnr }}" target="_blank" rel="noopener" style="font-size:.80rem;font-weight:700;color:var(--text);text-decoration:none;">{{ av.name }} &#x2197;</a>
+      <a href="https://vowis.vorarlberg.at/stationsInfo/_Abfluss/ofwStation.aspx?hzbnr={{ av.hzbnr }}" target="_blank" rel="noopener" style="font-size:.80rem;font-weight:700;color:var(--text);text-decoration:none;">{{ av.name }} {{ icon("external-link") }}</a>
       <span style="font-size:.69rem;font-weight:700;color:{{ av.stufe_farbe }};background:{{ av.stufe_farbe }}22;padding:1px 9px;border-radius:999px;white-space:nowrap;border:1px solid {{ av.stufe_farbe }}44;">{{ av.stufe_label }}</span>
     </div>
 
