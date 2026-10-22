@@ -1118,7 +1118,11 @@ if ('serviceWorker' in navigator) {
 /* ─── Card-Detail Modal: open on any swap into #cardDetailBody ───── */
 document.addEventListener('htmx:afterSwap', (e) => {
   if (e.detail && e.detail.target && e.detail.target.id === 'cardDetailBody') {
-    document.getElementById('cardDetailModal')?.showModal();
+    const modal = document.getElementById('cardDetailModal');
+    // ECP-06: nie einen leeren Dialog oeffnen (verdunkelt sonst nur den Bildschirm) und einen
+    // bereits offenen nicht erneut (showModal wirft dann einen Fehler und der Handler bricht ab)
+    if (!modal || modal.open || !e.detail.target.textContent.trim()) return;
+    modal.showModal();
   }
 });
 

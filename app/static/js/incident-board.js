@@ -286,7 +286,8 @@ function lageTicker(hints, aiFlags) {
   history.replaceState(null, '', location.pathname);
   document.addEventListener('DOMContentLoaded', function () {
     var once = function () {
-      document.getElementById('cardDetailModal').showModal();
+      var modal = document.getElementById('cardDetailModal');
+      if (modal && !modal.open) modal.showModal();
       document.body.removeEventListener('htmx:afterSwap', once);
     };
     document.body.addEventListener('htmx:afterSwap', once);

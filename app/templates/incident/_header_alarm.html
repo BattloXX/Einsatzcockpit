@@ -4,7 +4,6 @@
   <span class="alarm-badge alarm-badge--{{ incident.alarm_type_code[:1]|lower }}" style="cursor:pointer"
         hx-get="/einsatz/{{ incident.id }}/alarm/bearbeiten"
         hx-target="#cardDetailBody" hx-swap="innerHTML"
-        hx-on::after-swap="document.getElementById('cardDetailModal').showModal()"
         title="Alarmstufe / Einsatzgrund bearbeiten">{{ incident.alarm_type_code }}</span>
   {% else %}
   <span class="alarm-badge alarm-badge--{{ incident.alarm_type_code[:1]|lower }}">{{ incident.alarm_type_code }}</span>
@@ -22,7 +21,6 @@
   <span class="incident-header__address" style="cursor:pointer"
         hx-get="/einsatz/{{ incident.id }}/adresse/bearbeiten"
         hx-target="#cardDetailBody" hx-swap="innerHTML"
-        hx-on::after-swap="document.getElementById('cardDetailModal').showModal()"
         title="Adresse / Koordinaten bearbeiten">
     {{ incident.address_street }} {{ incident.address_no or '' }}{% if incident.address_city %}, {{ incident.address_city }}{% endif %} {{ icon("map-pin", size="sm") }}
   </span>

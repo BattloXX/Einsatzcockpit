@@ -111,3 +111,26 @@ Pro Block: ID / Status / Ursache / Loesung / Dateien / Datenbank / Tests / Hinwe
 | Datenbank | keine |
 | Tests | 7 Python-Tests (Verknuepfung bei Einsatz/Auftrag/Meldung, Gefahrenmeldung, fremdes Objekt → 404 ohne Anlage, fehlende Berechtigung → 403 ohne Anlage, Sichtbarkeit, API), 5 Node-Tests |
 | Hinweise | Im Datenmodell hat nur der **Einsatz** eine Objektverknuepfung; Meldungen und Auftraege besitzen keine eigene (`Message.objekt_gefahr_id` ist nur fuer automatische Gefahrenmeldungen). Eine bei Meldung oder Auftrag gewaehlte Auswahl verknuepft daher das Objekt mit dem Einsatz (wie „Weiteres Objekt verknuepfen“ in der Einsatzinfo). Eine eigene Objektspalte je Meldung/Auftrag wurde bewusst nicht angelegt (keine Datenbankaenderung ohne Bedarf). Soll sie kuenftig gewuenscht sein, ist das eine eigene Erweiterung. |
+## ECP-04 – Ausrückordnung mit farbigen Fahrzeugstatus
+
+| Feld | Inhalt |
+|---|---|
+| Status | Erledigt (Sichtprüfung am Gerät offen) |
+| Ursache | Die Ausrückordnung der Einsatzinformation zeigte nur graue Fahrzeugcodes aus dem Alarmstichwort, ohne Bezug zu den Fahrzeugen im Einsatz und ohne Live-Aktualisierung. |
+| Lösung | `_ausrueckordnung_eintraege` verbindet die Fahrzeuge des Stichworts mit den Einsatzfahrzeugen (`vehicle_master_id`) und nutzt den vorhandenen `unit_status` und die vorhandenen Farbklassen `.unit-status-*` (rot Einsatzbereit, orange Auf Anfahrt = „Einsatz übernommen“, grün Am Einsatzort). Jeder Chip zeigt Code, Statusbezeichnung und „seit HH:MM“ (letzte Statusänderung aus `IncidentChange`). Nicht zugeordnete Fahrzeuge („Kein Status“) und unbekannte Status sind neutral grau. Die Karte aktualisiert sich selbst (alle 15 s bei sichtbarem Tab, bei `ec:resync` und beim Zurückkehren in den Tab) über `GET /einsatz/{id}/ausrueckordnung`; keine neue Statusverwaltung. |
+| Dateien | `app/routers/ui_incident.py`, `app/templates/incident/info.html`, `_ausrueckordnung.html`, `tests/test_ausrueckordnung_status.py` |
+| Datenbank | keine |
+| Tests | 4 neue Tests (Farbe und Bezeichnung je Status, neutrale Darstellung, Aktualisierung nach Statuswechsel mit Zeit, Zugriffsschutz) |
+| Hinweise | Die Einsatzinformation hat keine eigene WebSocket-Verbindung; die Aktualisierung erfolgt deshalb per Abfrage (15 s). |
+
+## ECP-06 – Tablet wird unter „Aufträge“ dunkel
+
+| Feld | Inhalt |
+|---|---|
+| Status | Teilweise: Absicherung umgesetzt und getestet, die genaue Auslösung auf dem Tablet wurde nicht reproduziert und ist am Gerät zu bestätigen |
+| Ursache | Nicht eindeutig belegt. Im Code fiel auf: Jede Aufgaben-, Meldungs-, Personen- und Fahrzeugkarte öffnete das gemeinsame Detail-Modal zusätzlich über einen eigenen `hx-on::after-swap`-Handler, obwohl ein zentraler Handler dies bereits tut. htmx löst `htmx:afterSwap` an jedem getauschten Element aus und das Ereignis steigt zur Karte auf; ein Modal ohne Inhalt (kein Schließen-Knopf) bleibt als Abdunklung stehen, auf Tablets gibt es keine Escape-Taste. Ein Browser-Nachbau mit htmx 2.0.11 löste das für `outerHTML`-Tausch nicht aus, daher keine abschließende Aussage. |
+| Lösung | Die fünf redundanten Handler sind entfernt; das Modal öffnet nur noch zentral, nie leer und nie doppelt (auch Deep-Link). Neues `overlay-guard.js`: ein offenes leeres Detail-Modal wird nach Rückkehr in die App, Seitenwiederherstellung, Größenänderung und jedem HTMX-Settle geschlossen; ein Tipp auf die abgedunkelte Fläche schließt das Detail-Modal (außer bei ungespeicherten Eingaben); ein bei breitem Fenster (≥ 901 px) noch „offenes“ Mobil-Menü wird zurückgesetzt. |
+| Dateien | `app/templates/incident/_task_card.html`, `_message_card.html`, `_person_card.html`, `_vehicle_card.html`, `_header_alarm.html`, `app/static/js/app.js`, `incident-board.js`, `overlay-guard.js`, `app/templates/base.html`, `tests/test_overlay_haertung.py`, `tests/js/overlay_guard.test.mjs` |
+| Datenbank | keine |
+| Tests | 3 Python- und 5 Node-Tests |
+| Hinweise | Am Tablet prüfen: Aufträge antippen, Status wechseln, Auftrag per anderem Gerät ändern, Tablet drehen, App in den Hintergrund und zurück. Tritt es weiter auf: Browser-Konsole bzw. WebView-Version notieren und prüfen, ob ein Element mit `position:fixed` über der Seite liegt. |

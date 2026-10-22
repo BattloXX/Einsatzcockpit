@@ -5,7 +5,6 @@
      hx-target="#cardDetailBody"
      hx-swap="innerHTML"
      hx-trigger="click[!event.target.closest('select,input,button')]"
-     hx-on::after-swap="document.getElementById('cardDetailModal').showModal()"
      style="cursor:pointer">
   {% if task.source == 'ai_suggestion' %}
   {# ECP-07: aus hinterlegten Objektgefahren erzeugte Auftraege (Titel beginnt mit ACHTUNG) deutlich hervorheben #}

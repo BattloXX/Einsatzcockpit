@@ -3,8 +3,7 @@
      hx-get="/einsatz/{{ incident.id }}/person/{{ person.id }}/detail"
      hx-target="#cardDetailBody"
      hx-swap="innerHTML"
-     hx-trigger="click[!event.target.closest('select,input,button,a')]"
-     hx-on::after-swap="document.getElementById('cardDetailModal').showModal()">
+     hx-trigger="click[!event.target.closest('select,input,button,a')]">
   <div class="card__body card__body--rescue">
     <div class="card__title card__title--person" style="display:flex;align-items:center;gap:6px;">
       {% if can_edit %}
