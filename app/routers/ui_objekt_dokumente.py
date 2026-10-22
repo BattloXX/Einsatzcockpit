@@ -687,7 +687,9 @@ def seite_thumb(
     pfad = absolute_pfad(seite.thumb_pfad)
     if not pfad.exists():
         raise HTTPException(status_code=404, detail="Datei fehlt")
-    return _bild_response(pfad, "image/jpeg", seite.rotation)
+    rotation = seite.rotation
+    db.close()
+    return _bild_response(pfad, "image/jpeg", rotation)
 
 
 @router.get("/objekt-medien/seite/{seite_id}/bild")
@@ -704,7 +706,9 @@ def seite_bild(
     pfad = absolute_pfad(seite.bild_pfad)
     if not pfad.exists():
         raise HTTPException(status_code=404, detail="Datei fehlt")
-    return _bild_response(pfad, "image/png", seite.rotation)
+    rotation = seite.rotation
+    db.close()
+    return _bild_response(pfad, "image/png", rotation)
 
 
 @router.get("/objekt-medien/seite/{seite_id}/pdf")
@@ -721,10 +725,12 @@ def seite_pdf(
     pfad = absolute_pfad(seite.einzel_pdf_pfad)
     if not pfad.exists():
         raise HTTPException(status_code=404, detail="Datei fehlt")
+    dateiname = f"seite_{seite.seiten_nr:04d}.pdf"
+    db.close()
     # content_disposition_type="inline": direkt im Browser-PDF-Viewer anzeigen
     return FileResponse(
         pfad, media_type="application/pdf",
-        filename=f"seite_{seite.seiten_nr:04d}.pdf",
+        filename=dateiname,
         content_disposition_type="inline",
     )
 
@@ -749,9 +755,11 @@ def dokument_original(
     pfad = absolute_pfad(dokument.pfad)
     if not pfad.exists():
         raise HTTPException(status_code=404, detail="Datei fehlt")
+    dateiname = dokument.dateiname_original
+    db.close()
     return FileResponse(
         pfad, media_type="application/pdf",
-        filename=dokument.dateiname_original,
+        filename=dateiname,
         content_disposition_type="attachment" if request.query_params.get("download") == "1" else "inline",
     )
 
@@ -780,9 +788,11 @@ def symbol_bild(
     pfad = symbol_bild_absolut(symbol.bild_pfad)
     if not pfad.exists():
         raise HTTPException(status_code=404, detail="Datei fehlt")
+    media_type = bild_media_type(symbol.bild_pfad)
+    db.close()
     return FileResponse(
         pfad,
-        media_type=bild_media_type(symbol.bild_pfad),
+        media_type=media_type,
         headers={"Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'"},
     )
 

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -102,6 +103,7 @@ def ai_enabled(monkeypatch):
 
 def _make_mock_client(text: str) -> MagicMock:
     mock_content = MagicMock()
+    mock_content.type = "text"
     mock_content.text = text
     mock_response = MagicMock()
     mock_response.content = [mock_content]
@@ -110,6 +112,30 @@ def _make_mock_client(text: str) -> MagicMock:
     mock_client = MagicMock()
     mock_client.messages.create = AsyncMock(return_value=mock_response)
     return mock_client
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("vision", [False, True], ids=["text", "vision"])
+@pytest.mark.parametrize("antwort", ["thinking_text", "thinking", "text"])
+async def test_complete_textbloecke(ai_enabled, vision, antwort):
+    mock_client = _make_mock_client("ok")
+    response = mock_client.messages.create.return_value
+    if antwort == "thinking_text":
+        response.content.insert(0, SimpleNamespace(type="thinking"))
+    elif antwort == "thinking":
+        response.content = [SimpleNamespace(type="thinking")]
+
+    with patch("anthropic.AsyncAnthropic", return_value=mock_client):
+        if antwort == "thinking":
+            with pytest.raises(AIServiceError, match=r"^KI-Dienst hat keine Textantwort geliefert\.$"):
+                if vision:
+                    await ai_service._complete_vision("sys", "user", [b"bild"])
+                else:
+                    await ai_service._complete("sys", "user")
+        elif vision:
+            assert await ai_service._complete_vision("sys", "user", [b"bild"]) == "ok"
+        else:
+            assert await ai_service._complete("sys", "user") == "ok"
 
 
 @pytest.mark.asyncio
