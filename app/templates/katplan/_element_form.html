@@ -1,7 +1,7 @@
 <section class="kp-box kp-editor-form">
   <h2 class="kp-section-title">{{ icon(typen[element.typ].icon_name, size="md") }} {{ typen[element.typ].label }}</h2>
   {% if fehler %}
-    <a href="/plaene/{{ plan.id }}/elemente/{{ element.id }}" hx-get="/plaene/{{ plan.id }}/elemente/{{ element.id }}" hx-target="#kp-detail">Aktuellen Stand laden</a>
+    <a class="btn btn--ghost btn--sm" href="/plaene/{{ plan.id }}/elemente/{{ element.id }}" hx-get="/plaene/{{ plan.id }}/elemente/{{ element.id }}" hx-target="#kp-detail">Aktuellen Stand laden</a>
   {% endif %}
   <script type="application/json" id="kp-element-daten">{{ daten|tojson }}</script>
   <form method="post" action="/plaene/{{ plan.id }}/elemente/{{ element.id }}"
@@ -71,7 +71,7 @@
           hx-target="#kp-seitenwahl">Seite wählen</button>
         <div id="kp-seitenwahl"></div>
         {% if element.quelle_dokument_id %}
-          <a href="/plaene/{{ plan.id }}/quellen/{{ element.quelle_dokument_id }}{% if element.quelle_seiten %}?seite={{ element.quelle_seiten.split('-')[0] }}{% endif %}">Quelle anzeigen</a>
+          <a class="btn btn--ghost btn--sm" href="/plaene/{{ plan.id }}/quellen/{{ element.quelle_dokument_id }}{% if element.quelle_seiten %}?seite={{ element.quelle_seiten.split('-')[0] }}{% endif %}">Quelle anzeigen</a>
         {% endif %}
       </fieldset>
       {% set beschreibung = form.get('beschreibung_html', '') %}

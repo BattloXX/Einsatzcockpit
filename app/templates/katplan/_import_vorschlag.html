@@ -81,6 +81,6 @@
       <h4>{{ v.titel }}</h4>
       <span class="kp-badge {{ 'kp-badge--green' if v.status == 'uebernommen' else 'kp-badge--gray' }}">{{ 'übernommen' if v.status == 'uebernommen' else v.status }}</span>
     </div>
-    {% if v.element_id %}<a href="/plaene/{{ plan.id }}/bearbeiten?element={{ v.element_id }}">Element öffnen</a>{% endif %}
+    {% if v.element_id %}<a class="btn btn--ghost btn--sm" href="/plaene/{{ plan.id }}/bearbeiten?element={{ v.element_id }}">Element öffnen</a>{% endif %}
   {% endif %}
 </article>

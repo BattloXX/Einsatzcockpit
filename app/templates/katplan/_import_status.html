@@ -10,6 +10,6 @@
   {% if dokument.ki_status %}<span class="kp-badge">KI: {{ dokument.ki_status }}</span>{% endif %}
   {% if dokument.ki_fehler %}<p class="kp-error">{{ dokument.ki_fehler }}</p>{% endif %}
   {% if ki_offene.get(dokument.id, 0) %}
-    <a href="/plaene/{{ plan.id }}/import?quelle={{ dokument.id }}">{{ ki_offene[dokument.id] }} offene Vorschläge prüfen</a>
+    <a class="btn btn--ghost btn--sm" href="/plaene/{{ plan.id }}/import?quelle={{ dokument.id }}">{{ ki_offene[dokument.id] }} offene Vorschläge prüfen</a>
   {% endif %}
 </div>

@@ -13,7 +13,7 @@
     {% set dokument = quellen_nach_id[gruppe.grouper] %}
     <h2>{{ dokument.titel }}</h2>
     {% for seitengruppe in gruppe.list|groupby('seiten_nr') %}
-      <h3><a href="/plaene/{{ plan.id }}/quellen/{{ dokument.id }}?seite={{ seitengruppe.grouper }}">Seite {{ seitengruppe.grouper }}</a></h3>
+      <h3><a class="btn btn--ghost btn--sm" href="/plaene/{{ plan.id }}/quellen/{{ dokument.id }}?seite={{ seitengruppe.grouper }}">Seite {{ seitengruppe.grouper }}</a></h3>
       {% for v in seitengruppe.list %}{% include "katplan/_import_vorschlag.html" %}{% endfor %}
     {% endfor %}
   {% else %}<p class="kp-empty">Keine Vorschläge für diesen Filter.</p>{% endfor %}

@@ -5,7 +5,7 @@
   {% for relation in element_relationen.get(element.id, []) %}
     <div class="kp-form">
       <p><span class="kp-badge">{{ relation_arten[relation.art] }}</span>
-        <a href="{{ relation.url }}">{{ relation.kennung }} {{ relation.titel }}</a>
+        <a class="kp-link" href="{{ relation.url }}">{{ relation.kennung }} {{ relation.titel }}</a>
         {% if relation.plan_titel %} · {{ relation.plan_titel }}{% endif %}
       </p>
       {% if relation.hinweis %}<p>{{ relation.hinweis }}</p>{% endif %}

@@ -16,7 +16,7 @@
     <h2>Betroffene Elemente</h2>
     {% for e in vergleich.elemente %}
       <article class="kp-box">
-        <a href="/plaene/{{ plan.id }}/bearbeiten?element={{ e.id }}">{{ e.kennung }} · {{ e.titel }}</a>
+        <a class="kp-link" href="/plaene/{{ plan.id }}/bearbeiten?element={{ e.id }}">{{ e.kennung }} · {{ e.titel }}</a>
         <p>Seiten {{ e.quelle_seiten }} · Inhalt und Seitenbezug fachlich prüfen.</p>
           <form method="post" action="/plaene/{{ plan.id }}/quellen/{{ vergleich.neu.id }}/elemente/{{ e.id }}/umstellen">
             <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">

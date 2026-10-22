@@ -12,7 +12,7 @@
     <ul>
       {% for k in knoten if k.abschnitt %}
         <li>
-          <a href="#kapitel-{{ k.abschnitt.id }}">{{ k.abschnitt.titel }}</a>
+          <a class="kp-link" href="#kapitel-{{ k.abschnitt.id }}">{{ k.abschnitt.titel }}</a>
           {{ verzeichnis(k.kinder) }}
         </li>
       {% endfor %}
