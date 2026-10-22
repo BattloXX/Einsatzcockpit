@@ -75,3 +75,15 @@ Pro Block: ID / Status / Ursache / Loesung / Dateien / Datenbank / Tests / Hinwe
 | Datenbank | keine |
 | Tests | 2 + 2 Node-Testdateien (6 Tests), 5 Python-Tests; Debug-APK baut lokal |
 | Hinweise | Die Geste wird beim Beruehren (touchstart) fuer den naechsten Zug festgelegt. Nicht abgedeckt: Offline-Outbox-Konflikte bei abgelaufenem Token (siehe SEC-02: der Einheitenmodus meldet 401 weiterhin als Zugang beendet). |
+
+## GSL-03 – Einheitenansicht auf Android-Tablets
+
+| Feld | Inhalt |
+|---|---|
+| Status | Teilweise: Code-Ursachen behoben und getestet, Gerätetest auf dem Tablet offen (WebView-Version und Konsole des betroffenen Geräts sind unbekannt, die Ursache wurde nicht auf einem Gerät reproduziert) |
+| Ursache | (1) `init()` startete das erste Laden, bevor die Outbox existierte: schlug der erste Abruf fehl, fehlte der lokale Zustands-Cache und die Seite blieb leer; ein Fehler in `createOutbox` hätte `init()` komplett abgebrochen. (2) `crypto.randomUUID` fehlt in WebViews < 92: jede Meldung scheiterte schon beim Erfassen. (3) Eine abgelaufene Anmeldung (401) wurde als Netzwerkfehler behandelt: keine Meldung, 30-s-Polling lief weiter. (4) Leere Seite ohne Hinweis, wenn weder Server noch Cache Daten liefern. |
+| Lösung | Outbox wird vor dem ersten Laden erzeugt (Fehler dabei lassen die Ansicht nutzbar), `zufallsUuid()` mit `getRandomValues`-Fallback, Zustände `geladen`/`ladeFehler` mit sichtbarem Hinweis und „Erneut versuchen“, bei abgelaufener Anmeldung Hinweis „Zugangslink bzw. QR-Code erneut öffnen“ und keine weiteren automatischen Abfragen. Zugangslink, SMS, QR und A4-Druck pro Einheit existierten bereits (Ressourcenkarte, Tab Zugang). Neu sind die Schnellaktionen SMS, Link kopieren, QR anzeigen, QR drucken und Einheitenansicht öffnen direkt an der Einheitenkarte der Ressourcenübersicht; sie öffnen den Zugang-Tab und lösen dort die vorhandene Aktion aus (gleiche Berechtigung, Bestätigung bei aktiver Sitzung, Protokollierung). |
+| Dateien | `app/static/js/einheit_modus.js`, `einheit_outbox.js`, `ressourcen_karte.js`, `app/templates/einheit/einheit.html`, `app/templates/incident_major/_kraefteuebersicht.html`, `_ressource_karte_zugang.html`, `ressourcen.html`, `tests/test_einheit_tablet_zugang.py`, `tests/js/einheit_outbox.test.mjs` |
+| Datenbank | keine |
+| Tests | 5 Python-Tests, 1 Node-Test; `npm run test:js` 70 grün |
+| Hinweise | Für die Ursachenklärung am Tablet: WebView-Version (chrome://version bzw. Android System WebView) und Remote-Konsole prüfen. Der „Öffnen“-Link ist wie bisher nur für Administratoren verfügbar (Simulation `?sim=`). |

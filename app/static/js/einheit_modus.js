@@ -59,6 +59,7 @@ function registriere() {
     gezeigteHinweise: new Set(), geladenAb: new Date().toISOString(),
     karte: null, kartenMarker: null, uebersichtKarte: null, fertigeAufKarte: false,
     standortHinweis: "", standort: null, zugangBeendet: false,
+    geladen: false, ladeFehler: "",
     nummerHinweis: false, nummerGeschlossen: false, nummerCodeGesendet: false,
     nummerTelefon: "", nummerCode: "", nummerMaske: "", nummerMeldung: "",
     verleihAktiv: false, materialKatalog: [], materialPositionen: [{ bezeichnung: "", menge: 1 }],
@@ -248,17 +249,24 @@ function registriere() {
           void this.laden(true);
         }
       });
+      try {
+        this.outbox = createOutbox({
+          indexedDB: window.indexedDB,
+          fetch: window.fetch.bind(window),
+          csrfToken: () => decodeURIComponent(cookie("ec_csrf")),
+          simEinheitId: this.simulation ? this.simEinheitId : null,
+          benutzerEinheitId: this.benutzerEinheitId,
+          dbName: this.outboxName(),
+          onTerminal: () => { void this.zugangBeenden(); },
+        });
+      } catch (error) {
+        // Ohne Outbox bleibt die Ansicht benutzbar (nur ohne Offline-Speicher), statt leer zu bleiben.
+        console.warn("Einheiten-Outbox konnte nicht erstellt werden", error);
+        this.outbox = null;
+      }
+      // Outbox zuerst: das erste Laden braucht sie fuer den lokalen Zustands-Cache (Offline-Start) und zum Speichern.
       const erstesLaden = this.laden();
-      this.outbox = createOutbox({
-        indexedDB: window.indexedDB,
-        fetch: window.fetch.bind(window),
-        csrfToken: () => decodeURIComponent(cookie("ec_csrf")),
-        simEinheitId: this.simulation ? this.simEinheitId : null,
-        benutzerEinheitId: this.benutzerEinheitId,
-        dbName: this.outboxName(),
-        onTerminal: () => { void this.zugangBeenden(); },
-      });
-      this.outbox.onChange(() => {
+      this.outbox?.onChange(() => {
         void this.outboxAktualisieren();
         void this.laden(true);
       });
@@ -270,6 +278,7 @@ function registriere() {
       } catch (error) { /* Privater Browsermodus darf die Ansicht nicht blockieren. */ }
       void (async () => {
         try {
+          if (!this.outbox) throw new Error("Outbox nicht verfuegbar");
           await this.outbox.bereinigen();
           await this.outboxAktualisieren();
           this.geseheneVersionen = await this.outbox.metaLaden("gesehene_versionen") || {};
@@ -304,6 +313,8 @@ function registriere() {
     },
     async laden(leise = false) {
       if (leise && Date.now() - this.lastLoad < 1000) return;
+      // Abgelaufene Anmeldung: automatische Abfragen hoeren auf, bis der Nutzer erneut versucht oder sich neu anmeldet
+      if (leise && this.ladeFehler === "anmeldung") return;
       this.lastLoad = Date.now();
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 15000);
@@ -317,14 +328,17 @@ function registriere() {
         if (response.status === 401) {
           const data = await response.json().catch(() => null);
           if (/^zugang_(widerrufen|abgelaufen|ungueltig)$/.test(data?.code || "")) await this.zugangBeenden();
+          else this.ladeFehler = "anmeldung";
         }
-        if (!response.ok) throw new Error("netzwerk");
+        if (!response.ok) throw new Error(response.status === 401 ? "anmeldung" : "netzwerk");
         // Antwort aus dem Service-Worker-Cache: wie offline behandeln, nicht als frisch anzeigen.
         if (response.headers.get("X-EC-Offline") === "1") throw new Error("offline");
         const data = await response.json();
         this.etag = response.headers.get("ETag") || data.etag;
         this.zustand(data);
         this.online = true;
+        this.geladen = true;
+        this.ladeFehler = "";
         this.syncText = `Sync ${this.zeit(data.server_time)}`;
         if (this.outbox) {
           try {
@@ -338,12 +352,15 @@ function registriere() {
           const cached = this.outbox ? await this.outbox.zustandLaden() : null;
           if (cached?.data) {
             this.zustand(cached.data);
+            this.geladen = true;
             this.syncText = `Offline – Stand ${this.zeit(cached.at)}`;
           }
         } catch (cacheError) {
           console.warn("Einheiten-Zustand konnte nicht lokal geladen werden", cacheError);
         } finally {
           this.online = false;
+          // Sichtbarer Hinweis statt leerer Seite: nur wenn weder Server noch lokaler Stand etwas lieferten
+          if (this.ladeFehler !== "anmeldung" && !this.geladen) this.ladeFehler = "laden";
         }
       } finally {
         clearTimeout(timeout);

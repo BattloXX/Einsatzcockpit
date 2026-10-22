@@ -140,6 +140,13 @@
     <button type="button" class="btn btn--ghost btn--sm" @click="hinweisBanner = ''">OK</button>
   </div>
 
+  <div class="einheit-warning einheit-warning--alarm" role="alert" x-show="ladeFehler" x-cloak>
+    <span x-text="ladeFehler === 'anmeldung'
+      ? 'Die Anmeldung ist abgelaufen oder wurde beendet. Bitte den Zugangslink bzw. QR-Code der Einheit erneut öffnen.'
+      : 'Die Einheitenansicht konnte nicht geladen werden. Bitte Verbindung prüfen.'"></span>
+    <button type="button" class="btn btn--ghost btn--sm" @click="laden()">Erneut versuchen</button>
+  </div>
+
   {% if gk_zugang %}
   <section class="einheit-warning einheit-warning--stack" x-show="nummerHinweis && !nummerGeschlossen" x-cloak>
     <div><strong>Mobilnummer für Einsatzbenachrichtigungen hinterlegen</strong></div>
