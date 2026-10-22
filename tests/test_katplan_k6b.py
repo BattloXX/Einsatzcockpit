@@ -24,6 +24,7 @@ class Bereiche(HTMLParser):
         self.form = False
         self.ids = []
         self.felder = []
+        self.links = []
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
@@ -34,6 +35,8 @@ class Bereiche(HTMLParser):
             assert not self.form, "Anhangsverwaltung im Hauptformular"
         if tag == "input":
             self.felder.append(attrs)
+        if tag == "a":
+            self.links.append(attrs)
         if "id" in attrs:
             self.ids.append(attrs["id"])
 
@@ -127,7 +130,13 @@ def test_lesesicht_ebenen_vertraulich_und_vergleich(client, umgebung):
     page = client.get(path)
     assert page.status_code == 200
     html = page.text
-    assert "Galeriefoto" in html and 'data-kp-lightbox' in html and " download>" in html
+    assert "Galeriefoto" in html and 'data-kp-lightbox' in html
+    parser = Bereiche()
+    parser.feed(html)
+    anhang = next(a for a in objekte(umgebung, KatplanAnhang) if a.dateiname == "ablauf.pdf")
+    pdf_link = next(a for a in parser.links if a.get("href", "").startswith(f"/plaene/anhang/{anhang.uuid}"))
+    assert 'openMediaViewer(this.href, "pdf",' in pdf_link["onclick"]
+    assert "download" not in pdf_link and "target" not in pdf_link
     assert "Dateidownload" in html and " KB" in html
     assert "Geheime Aufnahme" not in html
     assert html.index('id="kp-unterlagen"') < html.index("Planunterlage") < html.index('class="kp-planinhalt"')

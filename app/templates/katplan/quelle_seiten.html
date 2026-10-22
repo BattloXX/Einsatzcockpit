@@ -21,9 +21,9 @@
         <button class="btn" type="submit">Anzeigen</button>
       </form>
       {% if seite.bild_pfad %}
-        <img class="kp-seitenbild" src="/plaene/quelle/{{ dokument.uuid }}/seite/{{ seite.seiten_nr }}/bild{{ version_query }}" alt="Seite {{ seite.seiten_nr }}">
+        <a href="/plaene/quelle/{{ dokument.uuid }}/seite/{{ seite.seiten_nr }}/bild{{ version_query }}" onclick="event.preventDefault(); openMediaViewer(this.href, 'image', this.querySelector('img').alt);"><img class="kp-seitenbild" src="/plaene/quelle/{{ dokument.uuid }}/seite/{{ seite.seiten_nr }}/bild{{ version_query }}" alt="Seite {{ seite.seiten_nr }}"></a>
       {% endif %}
-      <a class="btn btn--ghost btn--sm" href="/plaene/quelle/{{ dokument.uuid }}/seite/{{ seite.seiten_nr }}/pdf{{ version_query }}" target="_blank" rel="noopener">Seite als PDF öffnen</a>
+      <a class="btn btn--ghost btn--sm" href="/plaene/quelle/{{ dokument.uuid }}/seite/{{ seite.seiten_nr }}/pdf{{ version_query }}" onclick="event.preventDefault(); openMediaViewer(this.href, 'pdf', this.textContent);">Seite als PDF öffnen</a>
       <details class="kp-box">
         <summary>Volltext</summary>
         <div class="kp-freitext">{{ seite.volltext or 'Kein Volltext verfügbar.' }}</div>

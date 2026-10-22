@@ -143,7 +143,8 @@ def test_links_routen_validierung_und_schreibrechte(client, umgebung):
     assert objekte(umgebung, KatplanAnhang) == []
 
 
-def test_objektdokument_validierung_und_redirect(client, umgebung):
+def test_objektdokument_validierung_und_redirect(client, umgebung, storage, monkeypatch):
+    monkeypatch.setattr(settings, "TRUSTED_FRAME_ANCESTORS", "")
     login(client, umgebung)
     with TestingSession() as db:
         set_tenant_context(db, None)
@@ -185,6 +186,18 @@ def test_objektdokument_validierung_und_redirect(client, umgebung):
         login(client, umgebung)
         result = client.get(url, follow_redirects=False)
         assert result.status_code == 303 and result.headers["location"] == f"/objekt-medien/dokument/{did}/original"
+        from app.services.objekt_dokument_service import absolute_pfad
+        pfad = absolute_pfad("plan.pdf")
+        pfad.parent.mkdir(parents=True, exist_ok=True)
+        pfad.write_bytes(pdf())
+        inline = client.get(url)
+        assert inline.status_code == 200
+        assert inline.headers["content-disposition"].startswith("inline;")
+        assert inline.headers["x-frame-options"] == "SAMEORIGIN"
+        download = client.get(url + "?download=1")
+        assert download.status_code == 200
+        assert download.headers["content-disposition"].startswith("attachment;")
+        assert download.content == inline.content
         assert client.get(url + "/thumb").status_code == 404
         with TestingSession() as db:
             set_tenant_context(db, None)
@@ -259,6 +272,10 @@ def test_download_header(client, umgebung, data, name, mime, disposition):
     assert response.status_code == 200
     assert response.headers["content-disposition"].startswith(disposition + ";")
     assert response.headers["x-content-type-options"] == "nosniff"
+    download = client.get(f"/plaene/anhang/{a.uuid}?download=1")
+    assert download.status_code == 200
+    assert download.headers["content-disposition"].startswith("attachment;")
+    assert download.content == response.content
 
 
 def test_download_rechte_freigabe_soft_delete_und_pfadschutz(client, umgebung, storage):

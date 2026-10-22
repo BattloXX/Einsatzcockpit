@@ -213,6 +213,7 @@
       dialog.querySelector('[data-schliessen]').addEventListener('click', function () { dialog.close(); });
       dialog.querySelector('[data-zurueck]').addEventListener('click', function () { zeigen(-1); });
       dialog.querySelector('[data-weiter]').addEventListener('click', function () { zeigen(1); });
+      dialog.addEventListener('click', function (e) { if (e.target === dialog) dialog.close(); });
       dialog.addEventListener('close', function () { if (ausloeser) ausloeser.focus(); });
       dialog.addEventListener('keydown', function (e) {
         if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {

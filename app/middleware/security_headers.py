@@ -109,6 +109,14 @@ def _is_embeddable_route(path: str) -> bool:
     # In-App-Media-Viewer (Lightbox) bindet PDFs/Videos per <iframe>/<video> ein
     if "/medien/" in path and "/datei/" in path:
         return True
+    if path.startswith(("/plaene/quelle/", "/plaene/anhang/")):
+        return True
+    teile = path.strip("/").split("/")
+    if len(teile) == 3 and teile[0] == "plaene" and teile[1].isdigit() and teile[2] == "pdf":
+        return True
+    if (len(teile) == 4 and teile[:2] == ["objekt-medien", "dokument"]
+            and teile[2].isdigit() and teile[3] == "original"):
+        return True
     return False
 
 
