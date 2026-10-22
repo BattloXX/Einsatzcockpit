@@ -321,90 +321,23 @@ async def store_upload(
     org_id: int | None = None,
 ) -> UploadResult:
     """Validiert + verarbeitet einen Upload und legt einen TaskMedia-Eintrag an."""
-    raw = await file.read()
-    if not raw:
-        raise HTTPException(400, "Leere Datei.")
+    return await store_bytes_for_task(
+        await file.read(), file.filename, file.content_type, task, db, org_id, user=user,
+    )
 
-    mime = _detect_mime(raw)
-    if mime is None:
-        # Magic-Byte-Erkennung schlug fehl – Client-Content-Type nur als Hint,
-        # niemals als Sicherheits-Entscheidung verwenden.
-        client_ct = (file.content_type or "").lower().split(";")[0].strip()
-        if client_ct in ALLOWED_MIMES:
-            mime = client_ct
-        else:
-            raise HTTPException(415, "Dateityp konnte nicht erkannt werden und ist nicht erlaubt.")
-    if mime not in ALLOWED_MIMES:
-        raise HTTPException(415, f"Dateityp '{mime}' wird nicht unterstuetzt.")
 
-    kind = _kind_for_mime(mime)
-    if not kind:
-        raise HTTPException(415, f"Dateityp '{mime}' wird nicht unterstuetzt.")
-
-    if len(raw) > _size_limit_for_kind(kind):
-        limit_mb = _size_limit_for_kind(kind) // (1024 * 1024)
-        raise HTTPException(413, f"Datei zu gross. Limit fuer {kind}: {limit_mb} MB.")
-
-    if kind == "image" and mime in {"image/heic", "image/heif"} and not _HEIC_OK:
-        raise HTTPException(
-            415, "HEIC-Dateien werden auf diesem Server nicht unterstuetzt (pillow-heif fehlt).",
-        )
-
-    dest_dir = _task_dir(task.incident_id, task.id, org_id)
-    storage_root = _storage_root().resolve()
-    warnings: list[str] = []
-
-    if kind == "image":
-        main_p, thumb_p, w, h, out_mime = await asyncio.to_thread(_process_image, raw, dest_dir)
-        stored_bytes = main_p.stat().st_size
-        _reserve(db, org_id, stored_bytes)
-        media = TaskMedia(
-            task_id=task.id, incident_id=task.incident_id,
-            uploaded_by_user_id=user.id,
-            kind="image",
-            original_filename=file.filename or "image",
-            storage_path=str(main_p.resolve().relative_to(storage_root)).replace("\\", "/"),
-            thumb_path=str(thumb_p.resolve().relative_to(storage_root)).replace("\\", "/"),
-            mime_type=out_mime, bytes=stored_bytes,
-            width=w, height=h,
-        )
-    elif kind == "pdf":
-        main_p, thumb_p, pages = await asyncio.to_thread(  # type: ignore[assignment]
-            _process_pdf, raw, dest_dir, file.filename or "document.pdf",  # type: ignore[arg-type]
-        )
-        stored_bytes = main_p.stat().st_size
-        _reserve(db, org_id, stored_bytes)
-        media = TaskMedia(
-            task_id=task.id, incident_id=task.incident_id,
-            uploaded_by_user_id=user.id,
-            kind="pdf",
-            original_filename=file.filename or "document.pdf",
-            storage_path=str(main_p.resolve().relative_to(storage_root)).replace("\\", "/"),
-            thumb_path=str(thumb_p.resolve().relative_to(storage_root)).replace("\\", "/") if thumb_p else None,
-            mime_type="application/pdf", bytes=stored_bytes,
-            pages=pages,
-        )
-    else:  # video
-        main_p, thumb_p, w, h, dur = await asyncio.to_thread(  # type: ignore[arg-type,assignment]
-            _process_video, raw, dest_dir,  # type: ignore[arg-type]
-        )
-        stored_bytes = main_p.stat().st_size
-        _reserve(db, org_id, stored_bytes)
-        media = TaskMedia(
-            task_id=task.id, incident_id=task.incident_id,
-            uploaded_by_user_id=user.id,
-            kind="video",
-            original_filename=file.filename or "video.mp4",
-            storage_path=str(main_p.resolve().relative_to(storage_root)).replace("\\", "/"),
-            thumb_path=str(thumb_p.resolve().relative_to(storage_root)).replace("\\", "/") if thumb_p else None,
-            mime_type="video/mp4", bytes=stored_bytes,
-            width=w, height=h, duration_s=dur,
-        )
-        if thumb_p is None:
-            warnings.append("Video-Vorschaubild konnte nicht erzeugt werden.")
-
-    db.add(media)
-    db.flush()
+async def store_bytes_for_task(
+    raw: bytes, filename: str | None, content_type: str | None,
+    task: Task, db: Session, org_id: int | None, *, user: User,
+    allow_datei: bool = False,
+) -> UploadResult:
+    """Bytes-Gegenstueck zu store_upload, mit derselben Verarbeitung und Quota."""
+    media = await _store_bytes_for_card(
+        raw, filename, content_type, task, db, org_id, user, allow_datei,
+    )
+    assert isinstance(media, TaskMedia)
+    warnings = (["Video-Vorschaubild konnte nicht erzeugt werden."]
+                if media.kind == "video" and media.thumb_path is None else [])
     return UploadResult(media=media, warnings=warnings)
 
 
@@ -435,6 +368,19 @@ async def store_bytes_for_message(
     ``allow_datei`` (mail intake) everything else is retained as a download-only
     ``datei`` attachment; otherwise unsupported types are rejected with 415.
     """
+    media = await _store_bytes_for_card(
+        raw, filename, content_type, msg, db, org_id, user, allow_datei,
+    )
+    assert isinstance(media, MessageMedia)
+    return media
+
+
+async def _store_bytes_for_card(
+    raw: bytes, filename: str | None, content_type: str | None,
+    msg: Message | Task, db: Session, org_id: int | None,
+    user: User | None, allow_datei: bool,
+) -> MessageMedia | TaskMedia:
+    """Gemeinsame Verarbeitung fuer Meldungs- und Auftragsmedien."""
     if not raw:
         raise HTTPException(400, "Leere Datei.")
     mime = _detect_mime(raw)
@@ -455,61 +401,76 @@ async def store_bytes_for_message(
     if kind == "image" and mime in {"image/heic", "image/heif"} and not _HEIC_OK:
         raise HTTPException(415, "HEIC-Dateien werden auf diesem Server nicht unterstuetzt (pillow-heif fehlt).")
     safe_filename = _safe_filename(filename)
-    dest_dir = _entity_dir(msg.incident_id, "msg", msg.id, org_id)
+    is_task = isinstance(msg, Task)
+    media_class = TaskMedia if is_task else MessageMedia
+    binding = {"task_id" if is_task else "message_id": msg.id}
+    dest_dir = (_task_dir(msg.incident_id, msg.id, org_id) if is_task
+                else _entity_dir(msg.incident_id, "msg", msg.id, org_id))
     storage_root = _storage_root().resolve()
-    if kind == "image":
-        main_p, thumb_p, w, h, out_mime = await asyncio.to_thread(_process_image, raw, dest_dir)
-        stored_bytes = main_p.stat().st_size
-        _reserve(db, org_id, stored_bytes)
-        media = MessageMedia(
-            message_id=msg.id, incident_id=msg.incident_id,
-            uploaded_by_user_id=user.id if user else None, kind="image",
-            original_filename=safe_filename,
-            storage_path=str(main_p.resolve().relative_to(storage_root)).replace("\\", "/"),
-            thumb_path=str(thumb_p.resolve().relative_to(storage_root)).replace("\\", "/"),
-            mime_type=out_mime, bytes=stored_bytes, width=w, height=h,
-        )
-    elif kind == "pdf":
-        main_p, thumb_p, pages = await asyncio.to_thread(  # type: ignore[assignment]
-            _process_pdf, raw, dest_dir, safe_filename,  # type: ignore[arg-type]
-        )
-        stored_bytes = main_p.stat().st_size
-        _reserve(db, org_id, stored_bytes)
-        media = MessageMedia(
-            message_id=msg.id, incident_id=msg.incident_id,
-            uploaded_by_user_id=user.id if user else None, kind="pdf",
-            original_filename=safe_filename,
-            storage_path=str(main_p.resolve().relative_to(storage_root)).replace("\\", "/"),
-            thumb_path=str(thumb_p.resolve().relative_to(storage_root)).replace("\\", "/") if thumb_p else None,
-            mime_type="application/pdf", bytes=stored_bytes, pages=pages,
-        )
-    elif kind == "video":
-        main_p, thumb_p, w, h, dur = await asyncio.to_thread(  # type: ignore[arg-type,assignment]
-            _process_video, raw, dest_dir,  # type: ignore[arg-type]
-        )
-        stored_bytes = main_p.stat().st_size
-        _reserve(db, org_id, stored_bytes)
-        media = MessageMedia(
-            message_id=msg.id, incident_id=msg.incident_id,
-            uploaded_by_user_id=user.id if user else None, kind="video",
-            original_filename=safe_filename,
-            storage_path=str(main_p.resolve().relative_to(storage_root)).replace("\\", "/"),
-            thumb_path=str(thumb_p.resolve().relative_to(storage_root)).replace("\\", "/") if thumb_p else None,
-            mime_type="video/mp4", bytes=stored_bytes, width=w, height=h, duration_s=dur,
-        )
-    else:
-        suffix = Path(safe_filename).suffix.lower()
-        stored_name = f"{uuid.uuid4().hex}{suffix if suffix and len(suffix) <= 16 else '.bin'}"
-        main_p = dest_dir / stored_name
-        await asyncio.to_thread(main_p.write_bytes, raw)
-        _reserve(db, org_id, len(raw))
-        media = MessageMedia(
-            message_id=msg.id, incident_id=msg.incident_id,
-            uploaded_by_user_id=user.id if user else None, kind="datei",
-            original_filename=safe_filename,
-            storage_path=str(main_p.resolve().relative_to(storage_root)).replace("\\", "/"),
-            thumb_path=None, mime_type=_file_mime(raw, safe_filename, content_type), bytes=len(raw),
-        )
+    main_p = thumb_p = None
+    try:
+        if kind == "image":
+            main_p, thumb_p, w, h, out_mime = await asyncio.to_thread(_process_image, raw, dest_dir)
+            assert main_p is not None
+            stored_bytes = main_p.stat().st_size
+            _reserve(db, org_id, stored_bytes)
+            media = media_class(
+                **binding, incident_id=msg.incident_id,
+                uploaded_by_user_id=user.id if user else None, kind="image",
+                original_filename=safe_filename,
+                storage_path=str(main_p.resolve().relative_to(storage_root)).replace("\\", "/"),
+                thumb_path=str(thumb_p.resolve().relative_to(storage_root)).replace("\\", "/"),
+                mime_type=out_mime, bytes=stored_bytes, width=w, height=h,
+            )
+        elif kind == "pdf":
+            main_p, thumb_p, pages = await asyncio.to_thread(  # type: ignore[assignment]
+                _process_pdf, raw, dest_dir, safe_filename,  # type: ignore[arg-type]
+            )
+            assert main_p is not None
+            stored_bytes = main_p.stat().st_size
+            _reserve(db, org_id, stored_bytes)
+            media = media_class(
+                **binding, incident_id=msg.incident_id,
+                uploaded_by_user_id=user.id if user else None, kind="pdf",
+                original_filename=safe_filename,
+                storage_path=str(main_p.resolve().relative_to(storage_root)).replace("\\", "/"),
+                thumb_path=str(thumb_p.resolve().relative_to(storage_root)).replace("\\", "/") if thumb_p else None,
+                mime_type="application/pdf", bytes=stored_bytes, pages=pages,
+            )
+        elif kind == "video":
+            main_p, thumb_p, w, h, dur = await asyncio.to_thread(  # type: ignore[arg-type,assignment]
+                _process_video, raw, dest_dir,  # type: ignore[arg-type]
+            )
+            assert main_p is not None
+            stored_bytes = main_p.stat().st_size
+            _reserve(db, org_id, stored_bytes)
+            media = media_class(
+                **binding, incident_id=msg.incident_id,
+                uploaded_by_user_id=user.id if user else None, kind="video",
+                original_filename=safe_filename,
+                storage_path=str(main_p.resolve().relative_to(storage_root)).replace("\\", "/"),
+                thumb_path=str(thumb_p.resolve().relative_to(storage_root)).replace("\\", "/") if thumb_p else None,
+                mime_type="video/mp4", bytes=stored_bytes, width=w, height=h, duration_s=dur,
+            )
+        else:
+            file_mime = _file_mime(raw, safe_filename, content_type)
+            suffix = Path(safe_filename).suffix.lower()
+            stored_name = f"{uuid.uuid4().hex}{suffix if suffix and len(suffix) <= 16 else '.bin'}"
+            main_p = dest_dir / stored_name
+            await asyncio.to_thread(main_p.write_bytes, raw)
+            _reserve(db, org_id, len(raw))
+            media = media_class(
+                **binding, incident_id=msg.incident_id,
+                uploaded_by_user_id=user.id if user else None, kind="datei",
+                original_filename=safe_filename,
+                storage_path=str(main_p.resolve().relative_to(storage_root)).replace("\\", "/"),
+                thumb_path=None, mime_type=file_mime, bytes=len(raw),
+            )
+    except (HTTPException, OSError):
+        for path in (main_p, thumb_p):
+            if path is not None:
+                path.unlink(missing_ok=True)
+        raise
     db.add(media)
     db.flush()
     return media
