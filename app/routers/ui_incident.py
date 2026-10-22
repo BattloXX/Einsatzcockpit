@@ -131,8 +131,15 @@ async def _trigger_ai_task_suggestions(
     """Background: KI-Auftragsvorschläge generieren und an Board broadcasten."""
     from app.db import SessionLocal
     from app.services.ai_service import suggest_tasks
+    from app.services.objekt_ki_kontext import gefahren_auftraege, lade_objekt_kontext
 
-    suggestions = await suggest_tasks(meldung, einsatzart, org_id=org_id)
+    # ECP-07: verknuepfte Objektinformationen einbeziehen; Objektgefahren erscheinen zusaetzlich
+    # deterministisch als erste Auftraege (auch wenn das Modell sie nicht nennt oder ausfaellt)
+    objekt_kontext = await lade_objekt_kontext(incident_id)
+    suggestions = await suggest_tasks(
+        meldung, einsatzart, org_id=org_id, objekt_kontext=objekt_kontext.text or None,
+    )
+    suggestions = [*gefahren_auftraege(objekt_kontext), *suggestions]
     if not suggestions:
         return
     from app.core.tenant import set_tenant_context
@@ -3327,19 +3334,25 @@ async def regenerate_lage_hints(
     if not ai_is_enabled():
         raise HTTPException(503, "KI-Dienst ist nicht aktiviert.")
 
+    from app.services.objekt_ki_kontext import gefahren_hinweise, objekt_ki_kontext
+
     incident = _incident_or_404(incident_id, db)
     address = " ".join(filter(None, [
         incident.address_street, incident.address_no, incident.address_city,
     ]))
+    objekt_kontext = objekt_ki_kontext(db, incident_id)
     try:
         hints = await generate_lage_hints(
             incident.report_text or "",
             incident.alarm_type_code or "",
             address,
             org_id=incident.primary_org_id,
+            objekt_kontext=objekt_kontext.text or None,
         )
     except AIServiceError as exc:
         raise HTTPException(503, str(exc)) from exc
+    # Objektgefahren stehen immer vorn (hinterlegte Daten, nicht vom Modell abhaengig)
+    hints = [*gefahren_hinweise(objekt_kontext), *hints][:8]
 
     incident.ai_lage_hints = _json.dumps(hints, ensure_ascii=False)
     user_id = getattr(getattr(request.state, "user", None), "id", None)

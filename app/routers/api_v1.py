@@ -345,8 +345,14 @@ async def _enrich_with_ai_suggestions(
     from app.db import SessionLocal
     from app.models.incident import Incident, Task
     from app.services.ai_service import suggest_tasks
+    from app.services.objekt_ki_kontext import gefahren_auftraege, lade_objekt_kontext
 
-    suggestions = await suggest_tasks(meldung, einsatzart, org_id=org_id)
+    # ECP-07: Objektinformationen einbeziehen, Objektgefahren zusaetzlich deterministisch vorn
+    objekt_kontext = await lade_objekt_kontext(incident_id)
+    suggestions = await suggest_tasks(
+        meldung, einsatzart, org_id=org_id, objekt_kontext=objekt_kontext.text or None,
+    )
+    suggestions = [*gefahren_auftraege(objekt_kontext), *suggestions]
     if not suggestions:
         return
 
@@ -398,8 +404,13 @@ async def _enrich_with_ai_hints(
     from app.db import SessionLocal
     from app.models.incident import Incident
     from app.services.ai_service import generate_lage_hints
+    from app.services.objekt_ki_kontext import gefahren_hinweise, lade_objekt_kontext
 
-    hints = await generate_lage_hints(meldung, alarm_type, address, org_id=org_id)
+    objekt_kontext = await lade_objekt_kontext(incident_id)
+    hints = await generate_lage_hints(
+        meldung, alarm_type, address, org_id=org_id, objekt_kontext=objekt_kontext.text or None,
+    )
+    hints = [*gefahren_hinweise(objekt_kontext), *hints][:8]
     if not hints:
         return
 
