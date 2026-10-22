@@ -5,6 +5,11 @@
   {% if akteur_filter_aktiv|default(false) %}x-show="(akteur === null || JSON.parse($el.dataset.akteure).includes(akteur)) &amp;&amp; (phase === null || JSON.parse($el.dataset.phasen).length === 0 || JSON.parse($el.dataset.phasen).includes(phase))"{% endif %}>
   <div class="kp-box__head">
     <h3>{{ icon(typen[element.typ].icon_name, size="md") }} <span class="kp-mono">{{ element.kennung }}</span> · {{ element.titel }}</h3>
+    {% if kann_uebernehmen %}
+      <button type="button" class="btn btn--ghost btn--sm"
+        hx-get="/plaene/{{ plan.id }}/elemente/{{ element.id }}/uebernehmen{% if leseversion is defined %}?version_id={{ leseversion.id }}{% endif %}"
+        hx-target="#kp-uebernahme-inhalt" hx-swap="outerHTML">{{ icon("copy") }} In Einsatz übernehmen</button>
+    {% endif %}
   </div>
   <div class="kp-chips">
     <span>{{ typen[element.typ].label }}</span>

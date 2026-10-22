@@ -48,6 +48,7 @@ from app.services import katplan_link_service as link_service
 from app.services import katplan_qs_service as qs_service
 from app.services import katplan_quelle_service as quelle_service
 from app.services import katplan_suche_service as suche_service
+from app.services import katplan_uebernahme_service as uebernahme_service
 from app.services.katplan_service import (
     KatplanKonflikt,
     abschnitte_baum,
@@ -130,6 +131,7 @@ def _kontext(db: Session, user: User, plan: KatplanPlan | None = None) -> dict[s
             KatplanAenderung.zeit.desc(), KatplanAenderung.id.desc(),
         ).limit(50).all()
     return {"user": user, "plan": plan, "gefahrenarten": KATPLAN_GEFAHRENARTEN, "planarten": PLANARTEN,
+            "kann_uebernehmen": bool(plan and uebernahme_service.kandidaten_einsaetze(db, user)),
             "status_labels": KATPLAN_STATUS_LABELS, "can_edit": darf_bearbeiten(user),
             "can_release": darf_freigeben(user), "protokoll": protokoll,
             "can_confirm_review": bool(plan and darf_ueberpruefung_bestaetigen(user, plan)),
@@ -534,10 +536,13 @@ def _quellen_seiten_kontext(db: Session, plan: KatplanPlan, elemente: list,
     return {"quellen_seiten": seiten, "quellen_originale": originale}
 
 
-def _lesekontext(db: Session, user: User, plan: KatplanPlan, vid: int | None = None) -> dict:
+def _lesekontext(db: Session, user: User, plan: KatplanPlan, vid: int | None = None,
+                 *, kann_uebernehmen: bool | None = None) -> dict:
     version, daten, elemente = _lade_version(db, plan, vid)
     elemente = [e for e in elemente if sieht_vertraulich(user) or not e.vertraulich]
-    return {"lesekopf": {**daten, "wiedervorlage_am": plan.wiedervorlage_am},
+    if kann_uebernehmen is None:
+        kann_uebernehmen = bool(uebernahme_service.kandidaten_einsaetze(db, user))
+    return {"kann_uebernehmen": kann_uebernehmen, "lesekopf": {**daten, "wiedervorlage_am": plan.wiedervorlage_am},
             "plan_daten": daten, "leseversion": version,
             **_quellen_seiten_kontext(db, plan, elemente, version.id),
             **akteur_service.anzeige_kontext(daten.get("akteure", []), elemente),
@@ -607,7 +612,7 @@ def detail(plan_id: int, request: Request, ansicht: str = "", db: Session = Depe
     arbeitsstand = _ist_arbeitsstand(user, plan, ansicht)
     context = {**_kontext(db, user, plan), "arbeitsstand": arbeitsstand}
     if not arbeitsstand:
-        context.update(_lesekontext(db, user, plan))
+        context.update(_lesekontext(db, user, plan, kann_uebernehmen=context["kann_uebernehmen"]))
     context.update(_kartenkontext(db, user, plan, arbeitsstand))
     return templates.TemplateResponse(request, "katplan/detail.html", context)
 
@@ -657,8 +662,10 @@ def _kartenkontext(db: Session, user: User, plan: KatplanPlan, arbeitsstand: boo
 
 def _kopfkontext(db: Session, user: User, plan: KatplanPlan) -> dict:
     arbeitsstand = _ist_arbeitsstand(user, plan, "")
-    return {**_kontext(db, user, plan), "arbeitsstand": arbeitsstand,
-            **(_lesekontext(db, user, plan) if not arbeitsstand else {}),
+    context = _kontext(db, user, plan)
+    return {**context, "arbeitsstand": arbeitsstand,
+            **(_lesekontext(db, user, plan, kann_uebernehmen=context["kann_uebernehmen"])
+               if not arbeitsstand else {}),
             **_kartenkontext(db, user, plan, arbeitsstand)}
 
 
@@ -694,7 +701,7 @@ def versionen(plan_id: int, request: Request, db: Session = Depends(get_db),
         KatplanPruefung.zeit.desc(), KatplanPruefung.id.desc()).all()
     context = {**_kontext(db, user, plan), "versionen_liste": zeilen, "pruefungen": pruefungen}
     if not darf_bearbeiten(user):
-        context.update(_lesekontext(db, user, plan))
+        context.update(_lesekontext(db, user, plan, kann_uebernehmen=context["kann_uebernehmen"]))
     return templates.TemplateResponse(request, "katplan/versionen.html", context)
 
 
@@ -702,8 +709,10 @@ def versionen(plan_id: int, request: Request, db: Session = Depends(get_db),
 def historische_version(plan_id: int, vid: int, request: Request, db: Session = Depends(get_db),
                         user: User = Depends(require_katplan_lesen)):
     plan = _sichtbarer_plan(db, plan_id, user)
+    context = _kontext(db, user, plan)
     return templates.TemplateResponse(request, "katplan/detail.html", {
-        **_kontext(db, user, plan), **_lesekontext(db, user, plan, vid), "historisch": True})
+        **context, **_lesekontext(db, user, plan, vid, kann_uebernehmen=context["kann_uebernehmen"]),
+        "historisch": True})
 
 
 @router.get("/{plan_id}/vergleich")
@@ -747,7 +756,7 @@ def vergleich(plan_id: int, request: Request, von: int | None = None, nach: str 
     context = {**_kontext(db, user, plan), "vergleich": diff, "element_namen": namen,
                "von_label": f"Version {alt.versionsnummer}", "nach_label": nach_label}
     if not darf_bearbeiten(user):
-        context.update(_lesekontext(db, user, plan))
+        context.update(_lesekontext(db, user, plan, kann_uebernehmen=context["kann_uebernehmen"]))
     return templates.TemplateResponse(request, "katplan/vergleich.html", context)
 
 
@@ -1442,6 +1451,78 @@ def _link_antwort(request: Request, db: Session, user: User, plan: KatplanPlan,
         **_kontext(db, user, plan), "element": element, "beziehung": beziehung,
         "fehler": fehler, "version_oob": element is not None,
     }, status_code=422 if fehler else 200)
+
+
+def _uebernahme_antwort(plan_id: int, element_id: int, request: Request, db: Session, user: User,
+                        *, speichern: bool = False):
+    kontext: dict[str, Any] = {"user": user, "kandidaten": [], "vorgabe": None}
+    status = 200
+    ergebnis = None
+    if speichern:
+        form = run_async(request.form)
+        kontext["eingabe"] = {
+            "art": str(form.get("art", "auftrag")), "incident_id": str(form.get("incident_id", "")),
+            "titel": str(form.get("titel", "")), "text": str(form.get("text", "")),
+            "meldung_status": str(form.get("meldung_status", "meldung")),
+            "anhang_uuids": form.getlist("anhang_uuids"), "quellseiten": form.getlist("quellseiten"),
+        }
+    try:
+        if not has_role(user, "incident_leader", "admin", "recorder"):
+            raise HTTPException(403, "Keine Einsatzrolle.")
+        plan = _sichtbarer_plan(db, plan_id, user)
+        version_id = request.query_params.get("version_id")
+        try:
+            vid = int(version_id) if version_id else None
+        except ValueError as exc:
+            raise HTTPException(422, "Ungültige Version.") from exc
+        version = None
+        if vid is not None or not darf_bearbeiten(user):
+            version, _, elemente = _lade_version(db, plan, vid)
+            element = next((e for e in elemente if e.id == element_id), None)
+        else:
+            element = db.query(KatplanElement).filter_by(
+                id=element_id, plan_id=plan.id, org_id=user.org_id).one_or_none()
+        if element is None:
+            raise HTTPException(404, "Planmassnahme nicht gefunden.")
+        vorgabe = uebernahme_service.vorschlag(db, user, plan, element, version)
+        kontext.update(plan=plan, element=element, vorgabe=vorgabe, leseversion=version,
+                       kandidaten=uebernahme_service.kandidaten_einsaetze(db, user))
+        if speichern:
+            eingabe = kontext["eingabe"]
+            try:
+                incident_id = int(eingabe["incident_id"])
+                seiten = [int(nr) for nr in eingabe["quellseiten"]]
+            except ValueError as exc:
+                raise HTTPException(422, "Einsatz oder Quellseiten ungültig.") from exc
+            if eingabe["meldung_status"] not in ("meldung", "achtung", "hinweis", "information"):
+                raise HTTPException(422, "Meldungsstatus ungültig.")
+            ergebnis = uebernahme_service.uebernehmen(
+                db, user, plan, element, incident_id, art=eingabe["art"],
+                titel=eingabe["titel"], text=eingabe["text"],
+                anhang_uuids=eingabe["anhang_uuids"], quellseiten_nrs=seiten,
+                meldung_status=eingabe["meldung_status"], leseversion=version)
+    except HTTPException as exc:
+        if speichern:
+            db.rollback()
+        kontext["fehler"] = exc.detail
+        status = exc.status_code
+    if ergebnis is not None:
+        # uebernehmen() hat bereits committed.
+        run_async(uebernahme_service.broadcast_uebernahme, ergebnis)
+        kontext["ergebnis"] = ergebnis
+    return templates.TemplateResponse(request, "katplan/_uebernahme.html", kontext, status_code=status)
+
+
+@router.get("/{plan_id}/elemente/{element_id}/uebernehmen")
+def uebernahme_dialog(plan_id: int, element_id: int, request: Request, db: Session = Depends(get_db),
+                      user: User = Depends(require_katplan_lesen)):
+    return _uebernahme_antwort(plan_id, element_id, request, db, user)
+
+
+@router.post("/{plan_id}/elemente/{element_id}/uebernehmen")
+def uebernahme_speichern(plan_id: int, element_id: int, request: Request, db: Session = Depends(get_db),
+                         user: User = Depends(require_katplan_lesen)):
+    return _uebernahme_antwort(plan_id, element_id, request, db, user, speichern=True)
 
 
 def _telefon_kontext(db: Session, user: User, plan: KatplanPlan, element: KatplanElement) -> dict:

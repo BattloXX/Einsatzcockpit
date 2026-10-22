@@ -1,0 +1,9 @@
+{% if kann_uebernehmen %}
+  <dialog id="kp-uebernahme-dialog" aria-label="In Einsatz übernehmen"
+    style="width: min(44rem, calc(100vw - 2rem)); max-height: 90vh; overflow-y: auto; padding: 0; border: 0; border-radius: 0.5rem"
+    onclick="if (event.target === this) { const r = this.getBoundingClientRect(); if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) this.close(); }"
+    hx-on::before-swap="if ([403, 404, 409, 422].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false; }"
+    hx-on::after-swap="if (!this.open) this.showModal()">
+    <div id="kp-uebernahme-inhalt"></div>
+  </dialog>
+{% endif %}
