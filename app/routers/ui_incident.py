@@ -2884,13 +2884,16 @@ def set_vehicle_unit_status(
     vehicle = db.get(IncidentVehicle, vehicle_id)
     if not vehicle:
         return Response(status_code=404)
+    status_vorher = vehicle.unit_status
     try:
         set_unit_status(db, vehicle, unit_status, user_id=request.state.user.id)
     except ValueError:
         return Response(status_code=422)
     db.commit()
-    from app.services.lis.lis_sync import push_vehicle_status_to_lis
-    background_tasks.add_task(push_vehicle_status_to_lis, vehicle.id, unit_status)
+    if vehicle.unit_status != status_vorher:
+        # ECP-05: nur tatsaechliche Statusaenderungen ans LIS uebertragen
+        from app.services.lis.lis_sync import push_vehicle_status_to_lis
+        background_tasks.add_task(push_vehicle_status_to_lis, vehicle.id, unit_status)
     run_async(manager.broadcast, incident_id, {
         "type": "vehicle_updated", "kind": "vehicle", "uid": vehicle.id, "column_id": vehicle.column_id,
     })
@@ -3637,7 +3640,7 @@ def move_card_endpoint(
         return Response("Verschieben abgelehnt", status_code=409)
     if kind == "vehicle":
         moved_vehicle = db.get(IncidentVehicle, uid)
-        if moved_vehicle:
+        if moved_vehicle and moved_vehicle.unit_status != vehicle_status_before:
             from app.services.lis.lis_sync import push_vehicle_status_to_lis
             background_tasks.add_task(push_vehicle_status_to_lis, moved_vehicle.id, moved_vehicle.unit_status)
     if zone_order and column_id:

@@ -1632,3 +1632,106 @@ def test_vehicle_location_deduplicates_with_and_without_major_incident():
     finally:
         db.rollback()
         db.close()
+
+
+# ── ECP-05: Status nur bei Aenderung ans LIS, begrenzter Retry, Poll-Schutzfenster ──
+
+def _push_setup(monkeypatch, fail_times=0):
+    import app.db as appdb
+    from app.models.lis import OrgLisConfig
+
+    monkeypatch.setattr(appdb, "SessionLocal", TestingSession)
+    lis_sync._lokal_gepushter_status.clear()
+    db = _session()
+    incident, _, iv = _make_incident_with_vehicle(db, ORG_ID, lis_reference_id="ecp05_fzg")
+    iv.lis_operation_unit_id = "unit-ecp05"
+    cfg = db.query(OrgLisConfig).filter(OrgLisConfig.org_id == ORG_ID).first() or OrgLisConfig(org_id=ORG_ID)
+    cfg.enabled = True
+    cfg.push_vehicle_status = True
+    cfg.base_url = "https://lis.invalid"
+    cfg.organization_id = "org-guid"
+    cfg.username = "user"
+    cfg.password_enc = "encrypted"
+    db.add(cfg)
+    db.commit()
+    iv_id = iv.id
+    db.close()
+
+    calls = []
+    state = {"fails": fail_times}
+
+    class FakeLisClient:
+        def __init__(self, *a, **kw):
+            pass
+
+        async def get_operation_unit_status_types(self):
+            return [{"Label": "S4 Anfahrt", "Id": "s4"}, {"Label": "S5 Am Einsatzort", "Id": "s5"}]
+
+        async def set_operation_unit_status(self, unit_id, status_id):
+            if state["fails"] > 0:
+                state["fails"] -= 1
+                raise LisClientError("boom")
+            calls.append((unit_id, status_id))
+
+    async def _kein_warten(_):
+        return None
+
+    monkeypatch.setattr(lis_sync, "LisClient", FakeLisClient)
+    monkeypatch.setattr(lis_sync.asyncio, "sleep", _kein_warten)
+    monkeypatch.setattr("app.core.crypto.decrypt_secret", lambda value: "password")
+    return iv_id, calls
+
+
+def test_push_identischer_status_wird_nicht_erneut_gesendet(monkeypatch):
+    iv_id, calls = _push_setup(monkeypatch)
+    asyncio.run(lis_sync.push_vehicle_status_to_lis(iv_id, "Am Einsatzort"))
+    asyncio.run(lis_sync.push_vehicle_status_to_lis(iv_id, "Am Einsatzort"))
+    assert calls == [("unit-ecp05", "s5")]
+    asyncio.run(lis_sync.push_vehicle_status_to_lis(iv_id, "Einsatz übernommen"))
+    assert calls[-1] == ("unit-ecp05", "s4") and len(calls) == 2
+
+
+def test_push_wiederholt_bei_fehler_begrenzt_und_protokolliert(monkeypatch):
+    iv_id, calls = _push_setup(monkeypatch, fail_times=2)
+    asyncio.run(lis_sync.push_vehicle_status_to_lis(iv_id, "Am Einsatzort"))
+    assert calls == [("unit-ecp05", "s5")]
+    db = _session()
+    try:
+        from app.models.incident import IncidentChange
+        iv = db.get(IncidentVehicle, iv_id)
+        assert db.query(IncidentChange).filter(
+            IncidentChange.action == "lis.status_pushed", IncidentChange.incident_id == iv.incident_id,
+        ).count() == 1
+    finally:
+        db.close()
+
+
+def test_push_gibt_nach_maximalen_versuchen_auf(monkeypatch):
+    iv_id, calls = _push_setup(monkeypatch, fail_times=99)
+    asyncio.run(lis_sync.push_vehicle_status_to_lis(iv_id, "Am Einsatzort"))
+    assert calls == []
+    assert iv_id not in lis_sync._lokal_gepushter_status
+
+
+def test_poll_ueberschreibt_frisch_gepushten_lokalen_status_nicht():
+    lis_sync._lokal_gepushter_status.clear()
+    db = _session()
+    try:
+        org = db.get(FireDept, ORG_ID)
+        incident, _, iv = _make_incident_with_vehicle(db, ORG_ID, lis_reference_id="ecp05_poll")
+        iv.unit_status = "Am Einsatzort"
+        db.flush()
+        lis_sync._lokal_gepushter_status[iv.id] = ("S5", lis_sync.time.monotonic())
+        unit = {"Id": "u1", "ReferenceId": "ecp05_poll", "UnitType": {"Type": "Vehicle"},
+                "OperationUnitStatusType": {"Label": "S4 - zum Einsatzort"}}
+        lis_sync._sync_vehicle_status(db, org, incident, [unit])
+        assert iv.unit_status == "Am Einsatzort"
+        # Nach Ablauf des Schutzfensters gewinnt das LIS wieder
+        lis_sync._lokal_gepushter_status[iv.id] = ("S5", lis_sync.time.monotonic() - 999)
+        lis_sync._sync_vehicle_status(db, org, incident, [unit])
+        assert iv.unit_status == "Einsatz übernommen"
+        assert iv.id not in lis_sync._lokal_gepushter_status
+    finally:
+        db.rollback()
+        db.close()
+        lis_sync._lokal_gepushter_status.clear()
