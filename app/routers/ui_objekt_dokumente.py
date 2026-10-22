@@ -13,7 +13,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.audit import write_audit
-from app.core.permissions import is_objekt_verwalter, require_role, require_role_or_device
+from app.core.permissions import EINSATZ_LESE_ROLLEN, is_objekt_verwalter, require_role, require_role_or_device
 from app.core.templating import templates
 from app.db import get_db
 from app.models.objekt import (
@@ -24,7 +24,7 @@ from app.models.objekt import (
     ObjektDokumentSeite,
 )
 from app.models.user import User
-from app.routers.ui_objekt import _LESE_ROLLEN, _objekt_or_404, require_objekt_enabled
+from app.routers.ui_objekt import _objekt_or_404, require_objekt_enabled
 from app.services.objekt_dokument_service import (
     ObjektDokumentFehler,
     absolute_pfad,
@@ -202,7 +202,7 @@ def dokumente_partial(
     objekt_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role(*_LESE_ROLLEN)),
+    user: User = Depends(require_role(*EINSATZ_LESE_ROLLEN)),
     _guard: None = Depends(require_objekt_enabled),
     art: str = "",
     suche: str = "",
@@ -281,7 +281,7 @@ def dokumente_suche_json(
     objekt_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role(*_LESE_ROLLEN)),
+    user: User = Depends(require_role(*EINSATZ_LESE_ROLLEN)),
     _guard: None = Depends(require_objekt_enabled),
     q: str = "",
 ):
@@ -569,7 +569,7 @@ def dokumente_sammel_pdf(
     objekt_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role(*_LESE_ROLLEN)),
+    user: User = Depends(require_role(*EINSATZ_LESE_ROLLEN)),
     _guard: None = Depends(require_objekt_enabled),
     art: str = "",
     nur_einsatzdruck: int = 0,
@@ -610,7 +610,7 @@ def dokumente_viewer(
     objekt_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role(*_LESE_ROLLEN)),
+    user: User = Depends(require_role(*EINSATZ_LESE_ROLLEN)),
     _guard: None = Depends(require_objekt_enabled),
     seite: int = 0,
     art: str = "",
@@ -678,7 +678,7 @@ def seite_thumb(
     seite_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role(*_LESE_ROLLEN)),
+    user: User = Depends(require_role(*EINSATZ_LESE_ROLLEN)),
     _guard: None = Depends(require_objekt_enabled),
 ):
     seite = _seite_fuer_user(db, seite_id, user)
@@ -695,7 +695,7 @@ def seite_bild(
     seite_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role(*_LESE_ROLLEN)),
+    user: User = Depends(require_role(*EINSATZ_LESE_ROLLEN)),
     _guard: None = Depends(require_objekt_enabled),
 ):
     seite = _seite_fuer_user(db, seite_id, user)
@@ -712,7 +712,7 @@ def seite_pdf(
     seite_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role(*_LESE_ROLLEN)),
+    user: User = Depends(require_role(*EINSATZ_LESE_ROLLEN)),
     _guard: None = Depends(require_objekt_enabled),
 ):
     seite = _seite_fuer_user(db, seite_id, user)
@@ -734,7 +734,7 @@ def dokument_original(
     dokument_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role(*_LESE_ROLLEN)),
+    user: User = Depends(require_role(*EINSATZ_LESE_ROLLEN)),
     _guard: None = Depends(require_objekt_enabled),
 ):
     dokument = (
@@ -761,7 +761,7 @@ def symbol_bild(
     symbol_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role(*_LESE_ROLLEN)),
+    user: User = Depends(require_role(*EINSATZ_LESE_ROLLEN)),
     _guard: None = Depends(require_objekt_enabled),
 ):
     """Liefert ein hochgeladenes Karten-Symbolbild (org-scoped).
@@ -1156,7 +1156,7 @@ def ki_stammdaten_vorschlag_verwerfen(
 def objekte_sync_manifest(
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role_or_device(*_LESE_ROLLEN)),
+    user: User = Depends(require_role_or_device(*EINSATZ_LESE_ROLLEN)),
     _guard: None = Depends(require_objekt_enabled),
 ):
     """Manifest fuer das Offline-Precaching (Android-App/PWA).

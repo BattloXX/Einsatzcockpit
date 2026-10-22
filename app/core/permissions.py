@@ -23,6 +23,9 @@ ROLES = {
     "uebungsbeobachter": 20,
 }
 
+# Einsatzbezogene Lesewege: alle Benutzerrollen; Geraete/QR bleiben separat geprueft.
+EINSATZ_LESE_ROLLEN = tuple(code for code in ROLES if code != "system_admin")
+
 # Roles that bypass all org-scoping checks
 SUPERADMIN_ROLES = {"system_admin"}
 

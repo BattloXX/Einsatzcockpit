@@ -5,7 +5,12 @@ from typing import Literal
 from fastapi import HTTPException, Request
 from sqlalchemy.orm import Session
 
-from app.core.permissions import can_access_incident, can_view_kontakt_directory_request, has_role
+from app.core.permissions import (
+    EINSATZ_LESE_ROLLEN,
+    can_access_incident,
+    can_view_kontakt_directory_request,
+    has_role,
+)
 from app.models.incident import Incident, IncidentVehicle
 from app.models.kontakt import EinsatzKontakt, Kontakt
 from app.models.objekt import Objekt, ObjektEinsatz, ObjektKontakt
@@ -13,9 +18,7 @@ from app.models.user import DeviceToken
 from app.services.suche.vertrag import SuchAnfrage
 
 KontaktZugriff = Literal["voll", "einsatz", "keiner"]
-EINSATZ_KONTAKT_LESE_ROLLEN = (
-    "readonly", "recorder", "breathing_supervisor", "incident_leader", "kontakt_verwalter", "objekt_verwalter",
-)
+EINSATZ_KONTAKT_LESE_ROLLEN = EINSATZ_LESE_ROLLEN
 
 
 def kontakt_zugriff_fuer_request(db: Session, request: Request, anfrage: SuchAnfrage) -> KontaktZugriff:
