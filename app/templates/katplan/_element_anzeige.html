@@ -47,6 +47,7 @@
           {% endfor %}
         </div>
         <a class="btn btn--ghost btn--sm" href="{{ quellen_originale[element.id] }}" onclick="event.preventDefault(); openMediaViewer(this.href, 'pdf', this.textContent);">Original-PDF auf Seite {{ seiten[0].nr }} öffnen</a>
+        <a class="btn btn--ghost btn--sm" href="{{ seiten[0].seiten_url|replace('/bild', '/pdf') }}" onclick="event.preventDefault(); openMediaViewer(this.href, 'pdf', this.textContent);">Seite {{ seiten[0].nr }} als PDF</a>
       </details>
     {% endif %}
   {% endif %}
