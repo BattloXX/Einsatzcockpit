@@ -231,6 +231,16 @@ function registriere() {
         this.mobil = window.matchMedia("(max-width: 760px)").matches;
       });
       window.addEventListener("offline", () => { this.online = false; });
+      // Pull-to-Refresh der Android-App und Wiederverbindung der globalen WebSocket:
+      // "online" und "visibilitychange" laden bereits selbst, daher hier nur diese beiden Quellen.
+      window.addEventListener("ec:resync", (event) => {
+        const quelle = event.detail && event.detail.source;
+        if (quelle !== "pull" && quelle !== "ws-reconnect") return;
+        event.detail.handled = true;
+        if (!this.zugangBeendet) void this.flush();
+        const geladen = this.laden(true);
+        if (event.detail.promises) event.detail.promises.push(geladen);
+      });
       document.addEventListener("visibilitychange", () => {
         if (document.hidden) this.uebersichtKarte?.stoppeStandort();
         if (!document.hidden) {

@@ -279,13 +279,13 @@
       const lageId = getLageId();
       initBoard();
       initWs(lageId);
-      window.addEventListener('ec:resync', () => resyncBoard(lageId));
+      window.addEventListener('ec:resync', (e) => { if (e.detail) e.detail.handled = true; resyncBoard(lageId); });
     });
   } else {
     const lageId = getLageId();
     initBoard();
     initWs(lageId);
-    window.addEventListener('ec:resync', () => resyncBoard(lageId));
+    window.addEventListener('ec:resync', (e) => { if (e.detail) e.detail.handled = true; resyncBoard(lageId); });
   }
 
   document.body.addEventListener('htmx:afterSwap',    scheduleInit);

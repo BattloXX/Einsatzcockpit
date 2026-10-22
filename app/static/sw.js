@@ -27,6 +27,7 @@ const OPTIONAL_PRECACHE = [
   '/static/js/chart.umd.min.js',
   '/static/js/leaflet.min.js',
   '/static/js/stats_karte.js',
+  '/static/js/conn-status.js',
 ];
 const CORE_READY_KEY = '/__precache-core-ready__';
 
