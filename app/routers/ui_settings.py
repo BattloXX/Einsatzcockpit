@@ -954,7 +954,7 @@ def _weather_settings_context(request, db, user, org_id, **extra) -> dict:
         if effective_org_id
         else []
     )
-    from app.services import kachelmann_service
+    from app.services import kachelmann_service, weather_service
 
     base_url = (app_settings.PUBLIC_BASE_URL or app_settings.APP_BASE_URL).rstrip("/")
     alert_rules = _alert_rules_for_template(db, effective_org_id)
@@ -973,6 +973,13 @@ def _weather_settings_context(request, db, user, org_id, **extra) -> dict:
         "weather_db_enabled": bool(app_settings.WEATHER_DATABASE_URL),
         "public_base_url": base_url,
         "kachelmann_is_configured": kachelmann_service.is_configured(effective_org_id),
+        "weather_provider_orders": {
+            label: weather_service._provider_order(kind, effective_org_id) if app_settings.WEATHER_ENABLED else []
+            for kind, label in (
+                ("current", "Aktuelles Wetter"), ("nowcast", "Nowcast"),
+                ("forecast", "Vorhersage"), ("daily", "Tagesvorhersage"),
+            )
+        },
         "alert_rules": alert_rules,
         "alert_logs": alert_logs,
         "rule_labels": RULE_LABELS,

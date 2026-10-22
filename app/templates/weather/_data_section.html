@@ -98,7 +98,7 @@
             NOWCAST ({{ nowcast_bars|length }}×15 min){% if trend_de %} <span style="font-weight:400;">· {{ trend_de }}</span>{% endif %}
           </span>
           <span style="font-size:.7rem;color:var(--text-muted);">
-            Gesamt {{ '%.1f'|format(nowcast.total_mm) }} mm
+            Gesamt {% if nowcast.total_mm is not none %}{{ '%.1f'|format(nowcast.total_mm) }} mm{% else %}Keine Niederschlagsdaten{% endif %}
             {% if peak_label %} · Peak <strong style="color:#93c5fd;">{{ peak_label }}</strong>{% endif %}
           </span>
         </div>

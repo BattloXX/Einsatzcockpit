@@ -343,7 +343,7 @@
              style="height:{{ [bar.h, 2]|max }}px;background:{{ bar.color }};min-width:0;"
              title="{{ bar.label }}"></div>
         {% endfor %}
-        {% if nowcast.peak_mm < 0.05 %}
+        {% if nowcast.peak_mm is not none and nowcast.peak_mm < 0.05 %}
         <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div class="text-center bg-surface-container-low/80 rounded px-4 py-2">
             <span class="font-sans font-semibold text-on-surface block" style="font-size:18px;">Trocken</span>

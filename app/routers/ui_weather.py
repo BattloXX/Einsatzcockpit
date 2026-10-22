@@ -53,6 +53,7 @@ _SOURCE_LABELS = {
     "geosphere": "GeoSphere Austria (ZAMG)",
     "geosphere_nwp": "GeoSphere Austria (ZAMG)",
     "openmeteo": "Open-Meteo",
+    "open-meteo-geosphere": "Open-Meteo / GeoSphere Austria",
     "station": "Lokale Wetterstation",
 }
 
@@ -193,10 +194,13 @@ def _org_weather_enabled(org_id: int | None, db: Session) -> bool:
 
 def _build_nowcast_bars(now: weather_service.NowcastResult) -> list[dict]:
     """Pre-computes bar chart data for the Nowcast sparkline in the template."""
-    max_rr = max((s.precipitation_mm for s in now.steps), default=0.0) or 0.1
+    max_rr = max((s.precipitation_mm for s in now.steps if s.precipitation_mm is not None), default=0.0) or 0.1
     bars = []
     for i, step in enumerate(now.steps):
         rr = step.precipitation_mm
+        if rr is None:
+            bars.append({"h": 2, "color": "transparent", "label": f"+{i * 15} min: keine Daten"})
+            continue
         h = max(int(rr / max_rr * 34), 2)
         if rr >= 2.0:
             color = "#1d4ed8"
@@ -245,7 +249,7 @@ def _build_warning_views(warnings: list) -> list[dict]:
 
 def _peak_label(now: weather_service.NowcastResult) -> str | None:
     """Returns human-readable time to peak, or None if no precipitation."""
-    if now.peak_mm < 0.05 or now.peak_at is None:
+    if now.peak_mm is None or now.peak_mm < 0.05 or now.peak_at is None:
         return None
     delta_min = int((now.peak_at - datetime.now(UTC)).total_seconds() / 60)
     delta_min = max(delta_min, 0)

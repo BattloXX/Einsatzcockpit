@@ -78,6 +78,16 @@
         </div>
       </div>
     </form>
+    <h3 style="margin-top:1.5rem">Aktive Datenquellen</h3>
+    <p class="form-hint">Reihenfolge der Abfragen; bei Ausfall wird die nächste Quelle verwendet.</p>
+    <dl>
+      {% for label, providers in weather_provider_orders.items() %}
+      <div style="margin-top:.75rem;overflow-wrap:anywhere">
+        <dt style="font-weight:600">{{ label }}</dt>
+        <dd>{{ providers | join(" → ") if providers else "Keine aktive Quelle" }}</dd>
+      </div>
+      {% endfor %}
+    </dl>
   </div>
 </section>
 
