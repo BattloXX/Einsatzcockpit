@@ -34,6 +34,7 @@ from app.core.async_bridge import run_async
 from app.core.audit import write_audit
 from app.core.icons import MERKMAL_ICON_NAMEN, icon_namen
 from app.core.permissions import (
+    EINSATZ_LESE_ROLLEN,
     can_view_kontakt_directory_request,
     is_objekt_verwalter,
     require_kontakt_directory,
@@ -585,7 +586,7 @@ def kataloge(
 def karten_symbole_json(
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role(*_LESE_ROLLEN)),
+    user: User = Depends(require_role(*EINSATZ_LESE_ROLLEN)),
     _guard: None = Depends(require_objekt_enabled),
 ):
     """Org-Symbolkatalog fuer das client-seitige Rendering (objekt_karte.js)."""
@@ -2748,7 +2749,7 @@ def karte_readonly_partial(
     objekt_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role(*_LESE_ROLLEN)),
+    user: User = Depends(require_role(*EINSATZ_LESE_ROLLEN)),
     _guard: None = Depends(require_objekt_enabled),
 ):
     objekt = _objekt_or_404(db, objekt_id, user)
@@ -2783,7 +2784,7 @@ def karten_objekte_json(
     objekt_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role(*_LESE_ROLLEN)),
+    user: User = Depends(require_role(*EINSATZ_LESE_ROLLEN)),
     _guard: None = Depends(require_objekt_enabled),
 ):
     objekt = _objekt_or_404(db, objekt_id, user)
@@ -2804,7 +2805,7 @@ async def objekt_hydranten(
     objekt_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role(*_LESE_ROLLEN)),
+    user: User = Depends(require_role(*EINSATZ_LESE_ROLLEN)),
     _guard: None = Depends(require_objekt_enabled),
 ):
     """Löschwasser-Entnahmestellen (OSM/OSMHydrant) um die Objektkoordinaten."""
@@ -3051,7 +3052,7 @@ def einsatz_panel(
     incident_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role(*_LESE_ROLLEN)),
+    user: User = Depends(require_role(*EINSATZ_LESE_ROLLEN)),
     _guard: None = Depends(require_objekt_enabled),
     view: str = "",
 ):
@@ -3350,7 +3351,7 @@ def einsatz_fragment(
     objekt_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role(*_LESE_ROLLEN)),
+    user: User = Depends(require_role(*EINSATZ_LESE_ROLLEN)),
     _guard: None = Depends(require_objekt_enabled),
 ):
     """Kompakter Objekt-Einsatzinhalt (ohne eigene Lagekarte) fuer die HTMX-Einbettung
@@ -3369,7 +3370,7 @@ def einsatzansicht(
     objekt_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role(*_LESE_ROLLEN)),
+    user: User = Depends(require_role(*EINSATZ_LESE_ROLLEN)),
     _guard: None = Depends(require_objekt_enabled),
 ):
     from app.models.incident import Incident
@@ -3419,7 +3420,7 @@ def objektblatt_pdf(
     objekt_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role(*_LESE_ROLLEN)),
+    user: User = Depends(require_role(*EINSATZ_LESE_ROLLEN)),
     _guard: None = Depends(require_objekt_enabled),
     anhang: int = 0,
     hinweise: int = 0,
