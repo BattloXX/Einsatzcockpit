@@ -51,7 +51,7 @@
       <div style="width:5px;height:{{ (bar.h * 22 // 34) or 1 }}px;background:{{ bar.color }};border-radius:1px 1px 0 0;flex-shrink:0;" title="{{ bar.label }}"></div>
       {% endfor %}
     </div>
-    <span style="font-size:.68rem;color:var(--text-muted);">{{ '%.1f'|format(nowcast.total_mm) }} mm{% if peak_label %} &middot; <strong style="color:#93c5fd;">{{ peak_label }}</strong>{% endif %}</span>
+    <span style="font-size:.68rem;color:var(--text-muted);">{% if nowcast.total_mm is not none %}{{ '%.1f'|format(nowcast.total_mm) }} mm{% else %}Keine Niederschlagsdaten{% endif %}{% if peak_label %} &middot; <strong style="color:#93c5fd;">{{ peak_label }}</strong>{% endif %}</span>
     <span style="font-size:.59rem;color:var(--text-muted);border:1px solid var(--border);border-radius:999px;padding:1px 5px;">{{ weather_values.rain.forecast_label|default(weather_values.rain.source) }}</span>
   </div>
   {% elif nowcast %}

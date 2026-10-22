@@ -1619,7 +1619,7 @@ async def _build_dashboard_context(
                     nowcast = None
                 if current or nowcast:
                     rain_label = None
-                    if nowcast and nowcast.peak_mm >= 0.05:
+                    if nowcast and nowcast.peak_mm is not None and nowcast.peak_mm >= 0.05:
                         peak = _peak_label(nowcast)
                         rain_label = f"{nowcast.peak_mm:.1f} mm{(' ' + peak) if peak else ''}"
                     dash_weather = {

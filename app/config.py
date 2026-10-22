@@ -329,6 +329,14 @@ class Settings(BaseSettings):
     WEATHER_HTTP_TIMEOUT: int = 8
     WEATHER_RADIUS_KM: int = 15
     WEATHER_FALLBACK_OPENMETEO: bool = True
+    OPENMETEO_BASE_URL: str = "https://api.open-meteo.com/v1/forecast"
+    WEATHER_OPENMETEO_GEOSPHERE_ENABLED: bool = False
+    WEATHER_OPENMETEO_MODEL: str = "geosphere_seamless"
+    WEATHER_PRIORITY_CURRENT: str = "kachelmann,geosphere,open-meteo"
+    WEATHER_PRIORITY_NOWCAST: str = "geosphere,open-meteo"
+    WEATHER_PRIORITY_FORECAST: str = "kachelmann,geosphere,open-meteo"
+    WEATHER_PRIORITY_DAILY: str = "open-meteo"
+    WEATHER_DAILY_TTL: int = 3600
     # Windy.com Vollkarte als zusätzlicher Radar-Tab per <iframe> (extern → Datenschutz).
     WEATHER_WINDY_ENABLED: bool = True
 
