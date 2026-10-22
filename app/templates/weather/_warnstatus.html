@@ -1,0 +1,14 @@
+{% if warnings_result is defined %}
+<div role="status" data-warnings-status="{{ warnings_result.status }}"
+     style="display:flex;align-items:center;gap:6px;padding:8px;font-size:.8rem;{% if warnings_result.status == 'stale' %}border:2px solid #f97316;font-weight:600;{% else %}color:var(--text-muted);{% endif %}">
+  {% if warnings_result.status == "ok_no_warnings" %}
+    {{ icon("check") }} Keine aktiven amtlichen Warnungen
+  {% elif warnings_result.status == "unavailable" %}
+    {{ icon("alert-triangle") }} Amtliche Wetterwarnungen derzeit nicht verfügbar
+  {% elif warnings_result.status == "stale" %}
+    {{ icon("alert-triangle") }} Warninformationen veraltet – letzte erfolgreiche Abfrage: {{ warnings_result.last_success_at|local_datetime }}
+  {% elif warnings_result.status == "disabled" %}
+    Amtliche Wetterwarnungen deaktiviert
+  {% endif %}
+</div>
+{% endif %}

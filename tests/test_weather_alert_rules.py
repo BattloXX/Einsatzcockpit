@@ -307,7 +307,8 @@ def test_station_north_zero_direction_is_not_replaced_by_provider_value():
 
 
 @pytest.mark.asyncio
-async def test_weather_picture_prefers_fresh_station_and_passes_org_id(monkeypatch):
+@pytest.mark.parametrize("status", ["ok_no_warnings", "unavailable", "stale", "disabled"])
+async def test_weather_picture_prefers_fresh_station_and_passes_org_id(monkeypatch, status):
     from app.services import bodensee_service, weather_service
     from app.services.weather_alert_service import build_weather_picture
 
@@ -331,12 +332,15 @@ async def test_weather_picture_prefers_fresh_station_and_passes_org_id(monkeypat
     monkeypatch.setattr(weather_service, "get_current", current)
     monkeypatch.setattr(weather_service, "get_forecast", forecast)
     monkeypatch.setattr(weather_service, "get_nowcast", AsyncMock(return_value=None))
-    monkeypatch.setattr(weather_service, "get_warnings", AsyncMock(return_value=[]))
+    monkeypatch.setattr(weather_service, "get_warnings_result",
+                        AsyncMock(return_value=weather_service.WarningsResult(status, [])))
     monkeypatch.setattr(bodensee_service, "get_surface_temp_c", lambda *args: None)
 
     picture = await build_weather_picture(SimpleNamespace(org_id=42), db)
 
     assert picture.station is fresh
+    assert picture.warnings_status == status
+    assert picture.provider_data_available == (status == "ok_no_warnings")
     current.assert_awaited_once_with(47.1, 9.1, org_id=42)
     forecast.assert_awaited_once_with(47.1, 9.1, horizons=(6, 12, 24), org_id=42)
 
@@ -497,3 +501,20 @@ def test_state_machine_dedup_hash():
     rule = _rule()
     d = apply_state_machine(rule, result, state)
     assert d.notify is False
+
+
+@pytest.mark.parametrize("key", ["amtlich", "gewitter", "downburst"])
+@pytest.mark.parametrize("status", ["stale", "unavailable", "disabled"])
+@pytest.mark.parametrize("old_state", ["none", "vorwarnung", "akut"])
+def test_warning_outage_never_clears_or_escalates(key, status, old_state):
+    # Selbst ein altes schweres Warnsignal darf bei Ausfall keinen neuen Zustand setzen.
+    pic = empty_pic(warnings_status=status, warnings=[FakeWarning(4, "Gewitter")])
+    rule = FakeRule(key)
+    state = FakeState(state=old_state, below_threshold_cycles=1, above_threshold_cycles=1)
+    result = evaluate_rule(rule, pic)
+    assert result.state == "unavailable"
+    decision = apply_state_machine(rule, result, state)
+    assert decision.new_state == old_state
+    assert not decision.notify
+    assert state.below_threshold_cycles == 1
+    assert state.above_threshold_cycles == 1

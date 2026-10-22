@@ -277,7 +277,8 @@ def test_station_current_triggers_storm_scenario():
     """Wenn Böe >= BF8 aus lokaler Station, wird Sturmwarnung erzeugt."""
     from app.routers.ui_weather import _station_current_weather
     from app.services.weather_service import analyze_weather
-    views = [{"online": True, "temp": 15.0, "wind": 15.0, "gust": 20.0, "hum": 60.0, "rain_rate": None}]
+    views = [{"online": True, "temp": 15.0, "wind": 15.0, "gust": 20.0, "hum": 60.0,
+              "rain_rate": None, "measured_at": datetime.now(UTC)}]
     station_current = _station_current_weather(views)
     alerts = analyze_weather(station_current, None, None, None)
     keys = [a.key for a in alerts]

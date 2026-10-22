@@ -180,18 +180,28 @@ def test_provider_order_unknown_logged_once(monkeypatch, caplog):
     assert caplog.text.count("Unbekannter Wetterprovider") == 1
 
 
+def _provider_result(kind):
+    return {
+        "current": weather_service.CurrentWeather(),
+        "nowcast": weather_service.NowcastResult([], 0, None, 0, "stable", "test"),
+        "forecast": weather_service.ForecastResult([]),
+        "daily": weather_service.DailyForecast([]),
+    }[kind]
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("kind", ["current", "nowcast", "forecast", "daily"])
 async def test_disabled_geosphere_model_never_called(kind, monkeypatch):
     monkeypatch.setattr(settings, f"WEATHER_PRIORITY_{kind.upper()}", "open-meteo-geosphere,open-meteo")
     adapter_name = {"current": "current", "nowcast": "nowcast", "forecast": "forecast", "daily": "daily"}[kind]
     function = getattr(weather_service, "get_daily_forecast" if kind == "daily" else f"get_{kind}")
-    sentinel = object()
+    sentinel = _provider_result(kind)
     with patch.object(weather_service, f"_openmeteo_{adapter_name}", new=AsyncMock(return_value=sentinel)) as adapter:
         assert await function(LAT, LNG) is sentinel
         assert await function(LAT, LNG) is sentinel
         assert adapter.await_count == 1
         assert adapter.await_args.kwargs.get("model") is None
+        assert not sentinel.meta.is_fallback
 
 
 @pytest.mark.asyncio
@@ -200,12 +210,13 @@ async def test_enabled_model_and_fallback_order(kind, monkeypatch):
     monkeypatch.setattr(settings, "WEATHER_OPENMETEO_GEOSPHERE_ENABLED", True)
     monkeypatch.setattr(settings, f"WEATHER_PRIORITY_{kind.upper()}", "open-meteo-geosphere,open-meteo")
     function = getattr(weather_service, "get_daily_forecast" if kind == "daily" else f"get_{kind}")
-    sentinel = object()
+    sentinel = _provider_result(kind)
     with patch.object(weather_service, f"_openmeteo_{kind}", new=AsyncMock(side_effect=[None, sentinel])) as adapter:
         assert await function(LAT, LNG) is sentinel
         assert adapter.await_count == 2
         assert adapter.await_args_list[0].kwargs["model"] == MODEL
         assert adapter.await_args_list[1].kwargs.get("model") is None
+        assert sentinel.meta.is_fallback
 
 
 @pytest.mark.asyncio

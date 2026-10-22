@@ -4,11 +4,16 @@ Provides: Nowcast (15-min precipitation), current conditions, NWP forecasts (+6/
 All external calls are cached in-process per configured TTL to respect rate limits.
 Attribution (CC BY 4.0 required): use GEOSPHERE_ATTRIBUTION in any UI showing this data.
 """
+import asyncio
 import logging
 import math
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from functools import wraps
+from inspect import signature
+from typing import Any, Literal
+from weakref import WeakKeyDictionary
 
 import httpx
 
@@ -31,8 +36,28 @@ GEOSPHERE_ATTRIBUTION = "GeoSphere Austria (CC BY 4.0)"
 _cache: dict[str, tuple[Any, float]] = {}
 
 
+_flights: WeakKeyDictionary = WeakKeyDictionary()
+
+
+def _single_flight[**P, T](fn: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[T]]:
+    """Gleichzeitige Abfragen je Argumentkombination und Event-Loop bündeln."""
+    sig = signature(fn)
+
+    @wraps(fn)
+    async def wrapped(*args: P.args, **kwargs: P.kwargs) -> T:
+        bound = sig.bind(*args, **kwargs)
+        bound.apply_defaults()
+        key = (fn.__name__, repr(bound.arguments))
+        locks = _flights.setdefault(asyncio.get_running_loop(), {})
+        lock = locks.setdefault(key, asyncio.Lock())
+        async with lock:
+            return await fn(*args, **kwargs)
+
+    return wrapped
+
+
 def _cache_key(resource: str, lat: float, lng: float) -> str:
-    return f"{resource}:{round(lat, 3)}:{round(lng, 3)}"
+    return f"{resource}:{lat!r}:{lng!r}"
 
 
 def _cache_get(key: str) -> Any | None:
@@ -46,8 +71,8 @@ def _cache_get(key: str) -> Any | None:
     return value
 
 
-def _cache_set(key: str, value: Any, ttl: int) -> None:
-    _cache[key] = (value, datetime.now(UTC).timestamp() + ttl)
+def _cache_set(key: str, value: Any, ttl: int | None) -> None:
+    _cache[key] = (value, datetime.now(UTC).timestamp() + ttl if ttl is not None else math.inf)
 
 
 def has_cached(lat: float, lng: float) -> bool:
@@ -57,10 +82,52 @@ def has_cached(lat: float, lng: float) -> bool:
 
 def get_cached_nowcast(lat: float, lng: float) -> NowcastResult | None:
     """Returns cached NowcastResult without triggering a fetch."""
-    return _cache_get(_cache_key(_provider_resource("nowcast", "nowcast", _provider_order("nowcast")), lat, lng))
+    result = _cache_get(_cache_key(_provider_resource("nowcast", "nowcast", _provider_order("nowcast")), lat, lng))
+    return _refresh_meta(result, "nowcast") if result is not None else None
 
 
 # ── Data structures ───────────────────────────────────────────────────────────
+
+@dataclass
+class DataMeta:
+    provider: str
+    model_or_station: str | None
+    lat: float | None
+    lng: float | None
+    run_time: datetime | None
+    valid_at: datetime | None
+    fetched_at: datetime
+    kind: Literal["measured", "forecast", "nowcast"]
+    freshness: Literal["fresh", "aging", "stale"] = "fresh"
+    unit: str | None = None  # Mehrere Messgrößen: Einheiten stehen an den Feldern.
+    is_fallback: bool = False
+
+
+def _refresh_meta(result: Any, kind: str) -> Any:
+    if result.meta is not None:
+        maximum = getattr(settings, f"WEATHER_MAX_AGE_{kind.upper()}_S")
+        age = (datetime.now(UTC) - result.meta.fetched_at).total_seconds()
+        result.meta.freshness = "stale" if age > maximum else ("aging" if age > maximum / 2 else "fresh")
+    return result
+
+
+def _set_meta(result: Any, kind: str, lat: float, lng: float, provider: str, order: list[str]) -> None:
+    now = datetime.now(UTC)
+    previous = result.meta
+    result.meta = DataMeta(
+        provider=provider,
+        model_or_station=(settings.WEATHER_OPENMETEO_MODEL if provider == "open-meteo-geosphere"
+                          else (settings.WEATHER_NOWCAST_RESOURCE if kind == "nowcast"
+                                else settings.WEATHER_NWP_RESOURCE)
+                          if provider == "geosphere" else "best_match" if provider == "open-meteo" else None),
+        lat=lat, lng=lng, run_time=previous.run_time if previous else None,
+        valid_at=((previous.valid_at if previous else None) or getattr(result, "reference_time", None) or
+                  (result.steps[0].timestamp if kind == "nowcast" and result.steps else None)), fetched_at=now,
+        kind="nowcast" if kind == "nowcast" else "forecast",
+        is_fallback=bool(order and provider != order[0]),
+    )
+    _refresh_meta(result, kind)
+
 
 @dataclass
 class NowcastStep:
@@ -79,6 +146,7 @@ class NowcastResult:
     total_mm: float | None
     trend: str          # "increasing" | "decreasing" | "stable"
     source: str         # "geosphere" | "openmeteo" | "open-meteo-geosphere"
+    meta: DataMeta | None = None
 
 
 @dataclass
@@ -92,6 +160,8 @@ class CurrentWeather:
     source: str = ""
     snowfall_cm: float | None = None
     weather_code: float | None = None
+    precipitation_rate_mmh: float | None = None
+    meta: DataMeta | None = None
 
 
 @dataclass
@@ -118,6 +188,7 @@ class ForecastResult:
     horizons: list[ForecastHorizon]
     source: str = "geosphere_nwp"
     reference_time: datetime | None = None
+    meta: DataMeta | None = None
 
 
 @dataclass
@@ -135,6 +206,7 @@ class DailyForecastDay:
 class DailyForecast:
     days: list[DailyForecastDay]
     source: str = "openmeteo"
+    meta: DataMeta | None = None
 
 
 @dataclass
@@ -145,6 +217,18 @@ class WeatherWarning:
     valid_from: datetime
     valid_to: datetime
     region: str = ""
+
+
+WarningStatus = Literal["ok_no_warnings", "ok_with_warnings", "unavailable", "stale", "disabled"]
+
+
+@dataclass
+class WarningsResult:
+    status: WarningStatus
+    warnings: list[WeatherWarning]
+    fetched_at: datetime | None = None
+    last_success_at: datetime | None = None
+    error: str | None = None
 
 
 @dataclass
@@ -311,8 +395,18 @@ def _provider_resource(resource: str, kind: str, order: list[str]) -> str:
     return f"{resource}:{suffix}"
 
 
+async def _provider_fetch(provider: str, fn: Callable[..., Awaitable[Any]], *args: Any, **kwargs: Any) -> Any:
+    """Auch fehlerhafte Provider-Antworten dürfen den nächsten Fallback nicht verhindern."""
+    try:
+        return await fn(*args, **kwargs)
+    except Exception:
+        logger.warning("Wetterprovider %s fehlgeschlagen", provider, exc_info=True)
+        return None
+
+
 # ── Nowcast ────────────────────────────────────────────────────────────────────
 
+@_single_flight
 async def get_nowcast(lat: float, lng: float) -> NowcastResult | None:
     """15-min precipitation nowcast for the next ~3 h.
 
@@ -326,20 +420,24 @@ async def get_nowcast(lat: float, lng: float) -> NowcastResult | None:
     key = _cache_key(_provider_resource("nowcast", "nowcast", _provider_order("nowcast")), lat, lng)
     cached = _cache_get(key)
     if cached is not None:
-        return cached
+        return _refresh_meta(cached, "nowcast")
 
     result = None
-    for provider in _provider_order("nowcast"):
+    order = _provider_order("nowcast")
+    for provider in order:
         if provider == "geosphere":
-            result = await _fetch_geosphere_nowcast(lat, lng)
+            result = await _provider_fetch(provider, _fetch_geosphere_nowcast, lat, lng)
         elif provider == "open-meteo-geosphere":
-            result = await _openmeteo_nowcast(lat, lng, model=settings.WEATHER_OPENMETEO_MODEL)
+            result = await _provider_fetch(
+                provider, _openmeteo_nowcast, lat, lng, model=settings.WEATHER_OPENMETEO_MODEL,
+            )
         else:
-            result = await _openmeteo_nowcast(lat, lng)
+            result = await _provider_fetch(provider, _openmeteo_nowcast, lat, lng)
         if result is not None:
             break
 
     if result is not None:
+        _set_meta(result, "nowcast", lat, lng, provider, order)
         _cache_set(key, result, settings.WEATHER_CACHE_TTL_NOWCAST)
     return result
 
@@ -372,7 +470,7 @@ async def _fetch_geosphere_nowcast(lat: float, lng: float) -> NowcastResult | No
     for i, ts in enumerate(timestamps):
         steps.append(NowcastStep(
             timestamp=ts,
-            precipitation_mm=_safe_float(rr[i] if i < len(rr) else None) or 0.0,
+            precipitation_mm=_safe_float(rr[i] if i < len(rr) else None),
             temperature_c=_safe_float(t2m[i] if i < len(t2m) else None),
             wind_speed_ms=_safe_float(ff[i] if i < len(ff) else None),
             gust_speed_ms=_safe_float(fx[i] if i < len(fx) else None),
@@ -382,13 +480,15 @@ async def _fetch_geosphere_nowcast(lat: float, lng: float) -> NowcastResult | No
         return None
 
     prec = [s.precipitation_mm for s in steps if s.precipitation_mm is not None]
+    complete = len(prec) == len(steps)
     peak_mm = max(prec, default=0.0)
-    peak_idx = prec.index(peak_mm) if peak_mm > 0 else None
+    peak_idx = (next((i for i, step in enumerate(steps) if step.precipitation_mm == peak_mm), None)
+                if peak_mm > 0 else None)
     return NowcastResult(
         steps=steps,
-        peak_mm=peak_mm,
-        peak_at=steps[peak_idx].timestamp if peak_idx is not None else None,
-        total_mm=sum(prec),
+        peak_mm=peak_mm if complete else None,
+        peak_at=steps[peak_idx].timestamp if complete and peak_idx is not None else None,
+        total_mm=sum(prec) if complete else None,
         trend=_compute_trend(prec),
         source="geosphere",
     )
@@ -417,7 +517,7 @@ async def _openmeteo_nowcast(lat: float, lng: float, model: str | None = None) -
         precipitation = _safe_float(prec_data[i] if i < len(prec_data) else None)
         steps.append(NowcastStep(
             timestamp=ts,
-            precipitation_mm=precipitation if model else (precipitation or 0.0),
+            precipitation_mm=precipitation,
             temperature_c=_safe_float(t_data[i] if i < len(t_data) else None),
             wind_speed_ms=ws_kmh / 3.6 if ws_kmh is not None else None,
             gust_speed_ms=wg_kmh / 3.6 if wg_kmh is not None else None,
@@ -445,6 +545,7 @@ async def _openmeteo_nowcast(lat: float, lng: float, model: str | None = None) -
 
 # ── Current conditions ────────────────────────────────────────────────────────
 
+@_single_flight
 async def get_current(lat: float, lng: float, org_id: int | None = None) -> CurrentWeather | None:
     """Current weather conditions (temperature, wind, gust, humidity).
 
@@ -461,22 +562,25 @@ async def get_current(lat: float, lng: float, org_id: int | None = None) -> Curr
     key = _cache_key(_provider_resource(resource, "current", order), lat, lng)
     cached = _cache_get(key)
     if cached is not None:
-        return cached
+        return _refresh_meta(cached, "current")
 
     result: CurrentWeather | None = None
     for provider in order:
         if provider == "kachelmann":
-            result = await kachelmann_service.fetch_current(lat, lng, org_id=org_id)
+            result = await _provider_fetch(provider, kachelmann_service.fetch_current, lat, lng, org_id=org_id)
         elif provider == "geosphere":
-            result = await _fetch_current_from_nwp(lat, lng)
+            result = await _provider_fetch(provider, _fetch_current_from_nwp, lat, lng)
         elif provider == "open-meteo-geosphere":
-            result = await _openmeteo_current(lat, lng, model=settings.WEATHER_OPENMETEO_MODEL)
+            result = await _provider_fetch(
+                provider, _openmeteo_current, lat, lng, model=settings.WEATHER_OPENMETEO_MODEL,
+            )
         else:
-            result = await _openmeteo_current(lat, lng)
+            result = await _provider_fetch(provider, _openmeteo_current, lat, lng)
         if result is not None:
             break
 
     if result is not None:
+        _set_meta(result, "current", lat, lng, provider, order)
         _cache_set(key, result, settings.WEATHER_CACHE_TTL_NOWCAST)
     return result
 
@@ -490,7 +594,7 @@ async def _openmeteo_current(lat: float, lng: float, model: str | None = None) -
     c = data.get("current", {})
     ws_kmh = _safe_float(c.get("wind_speed_10m"))
     wg_kmh = _safe_float(c.get("wind_gusts_10m"))
-    return CurrentWeather(
+    result = CurrentWeather(
         temperature_c=_safe_float(c.get("temperature_2m")),
         humidity_pct=_safe_float(c.get("relative_humidity_2m")),
         wind_speed_ms=ws_kmh / 3.6 if ws_kmh is not None else None,
@@ -501,6 +605,12 @@ async def _openmeteo_current(lat: float, lng: float, model: str | None = None) -
         weather_code=_safe_float(c.get("weather_code")),
         source="open-meteo-geosphere" if model else "openmeteo",
     )
+    _set_meta(result, "current", lat, lng, "open-meteo-geosphere" if model else "open-meteo", [])
+    raw_time = c.get("time")
+    times = _parse_timestamps([raw_time]) if isinstance(raw_time, str) else []
+    if result.meta is not None:
+        result.meta.valid_at = times[0] if times else None
+    return result
 
 
 async def _fetch_current_from_nwp(lat: float, lng: float) -> CurrentWeather | None:
@@ -526,7 +636,7 @@ async def _fetch_current_from_nwp(lat: float, lng: float) -> CurrentWeather | No
     ug0 = _first(_extract_param_data(feature, "ugust"))
     vg0 = _first(_extract_param_data(feature, "vgust"))
 
-    return CurrentWeather(
+    result = CurrentWeather(
         temperature_c=_first(_extract_param_data(feature, "t2m")),
         wind_speed_ms=_wind_speed_from_uv(u0, v0),
         gust_speed_ms=_wind_speed_from_uv(ug0, vg0),
@@ -534,10 +644,17 @@ async def _fetch_current_from_nwp(lat: float, lng: float) -> CurrentWeather | No
         humidity_pct=_first(_extract_param_data(feature, "rh2m")),
         source="geosphere_nwp",
     )
+    _set_meta(result, "current", lat, lng, "geosphere", [])
+    raw_time = next(iter(data.get("timestamps", [])), None)
+    times = _parse_timestamps([raw_time]) if isinstance(raw_time, str) else []
+    if result.meta is not None:
+        result.meta.valid_at = times[0] if times else None
+    return result
 
 
 # ── NWP Forecast ──────────────────────────────────────────────────────────────
 
+@_single_flight
 async def get_forecast(
     lat: float,
     lng: float,
@@ -561,22 +678,27 @@ async def get_forecast(
     key = _cache_key(_provider_resource(f"{resource}_h{horizon_key}", "forecast", order), lat, lng)
     cached = _cache_get(key)
     if cached is not None:
-        return cached
+        return _refresh_meta(cached, "forecast")
 
     result: ForecastResult | None = None
     for provider in order:
         if provider == "kachelmann":
-            result = await kachelmann_service.fetch_forecast(lat, lng, horizons, org_id=org_id)
+            result = await _provider_fetch(
+                provider, kachelmann_service.fetch_forecast, lat, lng, horizons, org_id=org_id,
+            )
         elif provider == "geosphere":
-            result = await _fetch_geosphere_nwp(lat, lng, horizons)
+            result = await _provider_fetch(provider, _fetch_geosphere_nwp, lat, lng, horizons)
         elif provider == "open-meteo-geosphere":
-            result = await _openmeteo_forecast(lat, lng, horizons, model=settings.WEATHER_OPENMETEO_MODEL)
+            result = await _provider_fetch(
+                provider, _openmeteo_forecast, lat, lng, horizons, model=settings.WEATHER_OPENMETEO_MODEL,
+            )
         else:
-            result = await _openmeteo_forecast(lat, lng, horizons)
+            result = await _provider_fetch(provider, _openmeteo_forecast, lat, lng, horizons)
         if result is not None:
             break
 
     if result is not None:
+        _set_meta(result, "forecast", lat, lng, provider, order)
         _cache_set(key, result, settings.WEATHER_CACHE_TTL_NWP)
     return result
 
@@ -738,19 +860,58 @@ def _parse_warn_time(epoch: Any, text: Any) -> datetime | None:
     return None
 
 
-async def get_warnings(lat: float, lng: float) -> list[WeatherWarning]:
-    """Active weather warnings from GeoSphere Warn-API for the given location."""
+def _warnings_enabled(org_id: int | None) -> bool:
+    """Org-Flag auch bei direkten Service-Aufrufen berücksichtigen."""
     if not settings.WEATHER_ENABLED:
-        return []
+        return False
+    if org_id is None:
+        return True
+    from app.db import SessionLocal
+    from app.models.master import OrgSettings
 
-    key = _cache_key("warn", lat, lng)
+    with SessionLocal() as db:
+        row = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
+        return row is None or row.weather_enabled is not False
+
+
+def _warning_failure(cached: WarningsResult, good: WarningsResult | None) -> WarningsResult:
+    now = datetime.now(UTC)
+    if good and good.last_success_at and (now - good.last_success_at).total_seconds() <= settings.WEATHER_WARN_STALE_S:
+        return WarningsResult("stale", good.warnings, cached.fetched_at, good.last_success_at, cached.error)
+    return WarningsResult("unavailable", [], cached.fetched_at,
+                          good.last_success_at if good else None, cached.error)
+
+
+@_single_flight
+async def get_warnings_result(lat: float, lng: float, org_id: int | None = None) -> WarningsResult:
+    """Erfolg, Ausfall und Last-Known-Good getrennt halten; Ausfälle nur kurz cachen."""
+    if not await asyncio.to_thread(_warnings_enabled, org_id):
+        return WarningsResult("disabled", [])
+    key = _cache_key(f"warn:{settings.GEOSPHERE_WARN_URL}:org{org_id}", lat, lng)
+    good = _cache_get(key + ":good")
     cached = _cache_get(key)
     if cached is not None:
+        if cached.error is not None:
+            return _warning_failure(cached, good)
         return cached
-
-    result = await _fetch_geosphere_warnings(lat, lng)
+    now = datetime.now(UTC)
+    try:
+        warnings = await _fetch_geosphere_warnings(lat, lng)
+    except (httpx.HTTPError, ValueError, TypeError, KeyError, AttributeError) as exc:
+        logger.warning("Amtliche Warnungen nicht verfügbar: %s", exc)
+        failure = WarningsResult("unavailable", [], now, error=str(exc) or type(exc).__name__)
+        _cache_set(key, failure, settings.WEATHER_WARN_ERROR_TTL_S)
+        return _warning_failure(failure, good)
+    result = WarningsResult("ok_with_warnings" if warnings else "ok_no_warnings", warnings, now, now)
     _cache_set(key, result, settings.WEATHER_CACHE_TTL_WARN)
+    # Letzten Erfolg bis zum Cache-Reset behalten; die Nutzungsgrenze prüft _warning_failure.
+    _cache_set(key + ":good", result, None)
     return result
+
+
+async def get_warnings(lat: float, lng: float, org_id: int | None = None) -> list[WeatherWarning]:
+    """Kompatible Listen-Schnittstelle; Statusbewertung über get_warnings_result."""
+    return (await get_warnings_result(lat, lng, org_id)).warnings
 
 
 async def _fetch_geosphere_warnings(lat: float, lng: float) -> list[WeatherWarning]:
@@ -764,19 +925,17 @@ async def _fetch_geosphere_warnings(lat: float, lng: float) -> list[WeatherWarni
             resp = await client.get(url, params={"lat": lat, "lon": lng, "lang": "de"})
             resp.raise_for_status()
             data = resp.json()
-    except httpx.TimeoutException:
-        logger.warning("GeoSphere Warn-API Timeout: lat=%s lng=%s", lat, lng)
-        return []
-    except httpx.HTTPStatusError as exc:
-        logger.warning("GeoSphere Warn-API HTTP %s", exc.response.status_code)
-        return []
-    except Exception as exc:
+    except (httpx.HTTPError, ValueError) as exc:
         logger.warning("GeoSphere Warn-API Fehler: %s", exc)
-        return []
+        raise
 
-    props = data.get("properties", {})
+    if not isinstance(data, dict) or not isinstance(data.get("properties"), dict):
+        raise ValueError("Ungültige Warnantwort: properties fehlt")
+    props = data["properties"]
     region = props.get("location", {}).get("properties", {}).get("name", "")
-    raw_list = props.get("warnings", [])
+    raw_list = props.get("warnings")
+    if not isinstance(raw_list, list):
+        raise ValueError("Ungültige Warnantwort: warnings fehlt")
 
     now = datetime.now(UTC)
     warnings: list[WeatherWarning] = []
@@ -796,7 +955,9 @@ async def _fetch_geosphere_warnings(lat: float, lng: float) -> list[WeatherWarni
             # deutsches Format "DD.MM.YYYY HH:MM" (Europe/Vienna) bzw. ISO.
             valid_from = _parse_warn_time(rawinfo.get("start"), item.get("begin"))  # type: ignore[union-attr]
             valid_to = _parse_warn_time(rawinfo.get("end"), item.get("end"))  # type: ignore[union-attr]
-            if valid_to is not None and valid_to < now:
+            if valid_from is None or valid_to is None:
+                raise ValueError("Warnungszeitraum fehlt")
+            if valid_to < now:
                 continue   # already expired
 
             warnings.append(WeatherWarning(
@@ -809,6 +970,7 @@ async def _fetch_geosphere_warnings(lat: float, lng: float) -> list[WeatherWarni
             ))
         except Exception as exc:
             logger.warning("Warnung konnte nicht geparst werden: %s — %s", item, exc)
+            raise ValueError("Ungültiger Warneintrag") from exc
 
     return sorted(warnings, key=lambda w: -w.level)
 
@@ -890,12 +1052,12 @@ def _wildfire_alerts(
     forecast: ForecastResult | None,  # noqa: ARG001  (reserved for future use)
     nowcast: NowcastResult | None,
 ) -> list[ScenarioAlert]:
-    if not current or current.temperature_c is None or current.humidity_pct is None:
+    if not current or current.temperature_c is None or current.humidity_pct is None or not nowcast:
         return []
 
     temp = current.temperature_c
     hum = current.humidity_pct
-    no_rain = nowcast is None or (nowcast.total_mm is not None and nowcast.total_mm < _WILDFIRE_NO_RAIN)
+    no_rain = nowcast is not None and nowcast.total_mm is not None and nowcast.total_mm < _WILDFIRE_NO_RAIN
 
     if temp >= _WILDFIRE_TEMP and hum <= _WILDFIRE_HUM_DANGER:
         return [ScenarioAlert(
@@ -1066,6 +1228,30 @@ def analyze_weather(
 
     Danger-Alarme werden vor warn-Alarmen einsortiert.
     """
+    incomplete = any(value is None for value in (current, forecast, nowcast))
+    if current and any(value is None for value in (
+        current.temperature_c, current.humidity_pct, current.wind_speed_ms, current.gust_speed_ms,
+    )):
+        incomplete = True
+    if forecast and (not forecast.horizons or any(
+        h.precipitation_acc_mm is None or h.gust_speed_ms is None for h in forecast.horizons
+    )):
+        incomplete = True
+    if current and current.meta and _refresh_meta(current, "current").meta.freshness == "stale":
+        current = None
+        incomplete = True
+    if nowcast and (nowcast.total_mm is None or
+                    (nowcast.meta and _refresh_meta(nowcast, "nowcast").meta.freshness == "stale")):
+        nowcast = None
+        incomplete = True
+    if forecast:
+        if forecast.meta and _refresh_meta(forecast, "forecast").meta.freshness == "stale":
+            forecast = None
+            incomplete = True
+        elif any(not h.complete for h in forecast.horizons):
+            incomplete = True
+            forecast = ForecastResult([h for h in forecast.horizons if h.complete], forecast.source,
+                                      forecast.reference_time, forecast.meta)
     alerts = (
         _storm_alerts(current, forecast)
         + _wildfire_alerts(current, forecast, nowcast)
@@ -1074,6 +1260,9 @@ def analyze_weather(
         + _thunderstorm_alerts(warnings)
         + _ice_alerts(current, nowcast)
     )
+    if incomplete:
+        alerts.append(ScenarioAlert("data_quality", "warn", "Daten unvollständig",
+                                    "Fehlende oder veraltete Daten werden nicht bewertet.", "alert-triangle"))
     return sorted(alerts, key=lambda a: 0 if a.level == "danger" else 1)
 
 
@@ -1082,6 +1271,7 @@ def analyze_weather(
 _WEEKDAYS_DE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
 
 
+@_single_flight
 async def get_daily_forecast(lat: float, lng: float) -> DailyForecast | None:
     """7-Tage-Tagesvorhersage über die konfigurierte Provider-Kette und Cache-TTL."""
     if not settings.WEATHER_ENABLED:
@@ -1091,11 +1281,12 @@ async def get_daily_forecast(lat: float, lng: float) -> DailyForecast | None:
     key = _cache_key(_provider_resource("daily7", "daily", order), lat, lng)
     cached = _cache_get(key)
     if cached is not None:
-        return cached
+        return _refresh_meta(cached, "daily")
     for provider in order:
         model = settings.WEATHER_OPENMETEO_MODEL if provider == "open-meteo-geosphere" else None
-        result = await _openmeteo_daily(lat, lng, model=model)
+        result = await _provider_fetch(provider, _openmeteo_daily, lat, lng, model=model)
         if result is not None:
+            _set_meta(result, "daily", lat, lng, provider, order)
             _cache_set(key, result, settings.WEATHER_DAILY_TTL)
             return result
     return None

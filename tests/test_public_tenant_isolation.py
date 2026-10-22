@@ -12,25 +12,19 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from app.core.security import hash_api_key
+from app.core.crypto import encrypt_secret
+from app.core.security import (
+    generate_api_key,
+    hash_api_key,
+    sign_mail_inbound_webhook_org,
+    sign_mailing_track_token,
+    sign_mailing_webhook_org,
+)
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
+from app.models.api_message import ApiMessage, ApiMessageRecipient
 from app.models.incident import Incident
-from app.models.master import FireDept, Member, OrgSettings, SystemSettings, VehicleMaster
-from app.models.objekt import (
-    AlarmInfoscreenToken,
-    OBJEKT_STATUS_FREIGEGEBEN,
-    Objekt,
-    ObjektEinsatz,
-    ObjektKartenObjekt,
-    ObjektKontakt,
-    ObjektMerkmal,
-    ObjektPflegeauftrag,
-    MerkmalKatalog,
-)
-from app.models.teams_bot import AlarmToken
-from app.models.stats import StatistikDashboardToken
-from app.models.wasserstelle import Wasserstelle
+from app.models.kontakt import Kontakt
 from app.models.mailing import (
     MailingCampaign,
     MailingConfig,
@@ -40,19 +34,25 @@ from app.models.mailing import (
     MailingSuppressionEntry,
     MailingTemplate,
 )
-from app.models.user import ApiKey
-from app.models.api_message import ApiMessage, ApiMessageRecipient
-from app.models.kontakt import Kontakt
-from app.models.road_closure import RoadClosure, RoadClosureShare
-from app.models.sms import SmsGroup
-from app.core.crypto import encrypt_secret
-from app.core.security import (
-    generate_api_key,
-    sign_mail_inbound_webhook_org,
-    sign_mailing_track_token,
-    sign_mailing_webhook_org,
+from app.models.master import FireDept, Member, OrgSettings, SystemSettings, VehicleMaster
+from app.models.objekt import (
+    OBJEKT_STATUS_FREIGEGEBEN,
+    AlarmInfoscreenToken,
+    MerkmalKatalog,
+    Objekt,
+    ObjektEinsatz,
+    ObjektKartenObjekt,
+    ObjektKontakt,
+    ObjektMerkmal,
+    ObjektPflegeauftrag,
 )
 from app.models.org_mail import OrgMailEingang, OrgResendConfig
+from app.models.road_closure import RoadClosure, RoadClosureShare
+from app.models.sms import SmsGroup
+from app.models.stats import StatistikDashboardToken
+from app.models.teams_bot import AlarmToken
+from app.models.user import ApiKey
+from app.models.wasserstelle import Wasserstelle
 from app.services import kontakt_service
 from app.services.objekt_pflege_service import erstelle_pflegeauftrag
 
@@ -67,11 +67,13 @@ def test_mcp_upload_token_kann_keinen_fremden_upload_oeffnen(client):
     try:
         upload_a = MCPUpload(
             upload_id="a" * 32, token_hash=hash_api_key("upload-token-a"), org_id=ORG_A,
-            user_id=1, objekt_id=1, dateiname="a.pdf", expires_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(minutes=5),
+            user_id=1, objekt_id=1, dateiname="a.pdf",
+            expires_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(minutes=5),
         )
         upload_b = MCPUpload(
             upload_id="b" * 32, token_hash=hash_api_key("upload-token-b"), org_id=org_b_id,
-            user_id=1, objekt_id=1, dateiname="b.pdf", expires_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(minutes=5),
+            user_id=1, objekt_id=1, dateiname="b.pdf",
+            expires_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(minutes=5),
         )
         db.add_all([upload_a, upload_b])
         db.commit()
@@ -366,7 +368,10 @@ def test_mailing_tracking_token_cannot_mutate_other_org(client):
 
 
 def _svix(secret: bytes, body: bytes, event_id: str):
-    import base64, hashlib, hmac, time
+    import base64
+    import hashlib
+    import hmac
+    import time
 
     stamp = str(int(time.time()))
     signature = base64.b64encode(
@@ -376,7 +381,8 @@ def _svix(secret: bytes, body: bytes, event_id: str):
 
 
 def test_mailing_webhook_secret_and_org_token_are_both_required(client, monkeypatch):
-    import base64, json
+    import base64
+    import json
 
     org_b_id = _setup_zwei_orgs()
     db = SessionLocal()
@@ -507,7 +513,8 @@ def test_system_resend_inbound_address_cannot_write_to_foreign_org(client, monke
 
     monkeypatch.setattr("app.routers.mail_inbound_webhook.fetch_inbound_background", no_background)
     body = json.dumps({"type": "email.received", "data": {"email_id": "central-own", "to": [address_a]}}).encode()
-    assert client.post("/mail/webhook/resend-inbound", content=body, headers=_svix(secret, body, "central-own")).status_code == 200
+    response = client.post("/mail/webhook/resend-inbound", content=body, headers=_svix(secret, body, "central-own"))
+    assert response.status_code == 200
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
@@ -734,21 +741,29 @@ def test_gk_token_zeigt_nur_seine_org_daten(client):
         db.add_all([lage, fremde_lage])
         db.flush()
         einheit = LageEinheit(lage_id=lage.id, label="GK Einheit A", status="bereitgestellt", resource_type="fahrzeug")
-        fremde_einheit = LageEinheit(lage_id=fremde_lage.id, label="GEHEIME GK EINHEIT B", status="bereitgestellt", resource_type="fahrzeug")
+        fremde_einheit = LageEinheit(
+            lage_id=fremde_lage.id, label="GEHEIME GK EINHEIT B", status="bereitgestellt", resource_type="fahrzeug",
+        )
         db.add_all([einheit, fremde_einheit])
         db.flush()
         from app.models.major_incident import LageEinheitLeader
-        leader = LageEinheitLeader(einheit_id=einheit.id, person_name="GK A", phone_e164="+436641234567", phone_version=1, start_at=gk_zugang_service._now(), rolle="fuehrer")
+        leader = LageEinheitLeader(einheit_id=einheit.id, person_name="GK A",
+                                  phone_e164="+436641234567", phone_version=1,
+                                  start_at=gk_zugang_service._now(), rolle="fuehrer")
         db.add(leader)
         db.flush()
         einheit.leader_assignment_id = leader.id
-        token = gk_zugang_service.stelle_zugang_aus(db, lage, einheit, user_id=None, grund="test").link.rsplit("#", 1)[1]
+        token = gk_zugang_service.stelle_zugang_aus(
+            db, lage, einheit, user_id=None, grund="test",
+        ).link.rsplit("#", 1)[1]
         db.commit()
     finally:
         db.close()
     csrf = client.get("/gk").cookies.get("ec_csrf")
     response = client.post("/gk/pruefen", json={"token": token}, headers={"X-CSRF-Token": csrf})
-    assert response.json() == {"ok": True, "lage": "GK Lage A", "einheit": "GK Einheit A", "pin_noetig": False, "typ": "personal"}
+    assert response.json() == {
+        "ok": True, "lage": "GK Lage A", "einheit": "GK Einheit A", "pin_noetig": False, "typ": "personal",
+    }
 
 
 def test_gk_manipulierte_sitzungs_org_zeigt_keine_fremde_org_daten(client):
@@ -1120,6 +1135,7 @@ def test_foerderstrecke_unbekannter_token_404(client):
 def test_probenplan_und_ics_token_isolieren_org_und_fremde_verknuepfungen(client):
     import hashlib
     import secrets
+
     from app.models.probenplanung import Probeart, ProbePublicToken
     from app.models.teilnahme import Termin
     from tests.test_probenplanung_checkliste import _flags
@@ -1336,3 +1352,36 @@ def test_druckagent_token_least_keine_jobs_fremder_org(client):
                                   "payload": {"job_id": job_id, "lease_token": "x"}}))
         assert _recv(ws, "intent_result")["payload"]["ok"] is False
     assert _laden(job_id).lease_gateway_id is None
+
+
+def test_public_weather_warning_status_uses_token_org(client, setup_db, monkeypatch):
+    """Token A nutzt auch bei gleichen Koordinaten ausschließlich den Org-Status A."""
+    from unittest.mock import AsyncMock
+
+    from app.config import settings
+    from app.services import weather_service
+    from tests.test_weather_public_json import _make_org_with_token, _make_station
+
+    token_a, org_a = _make_org_with_token()
+    token_b, org_b = _make_org_with_token()
+    for org_id in (org_a, org_b):
+        _make_station(org_id, lat=47.466, lng=9.745)
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        db.add(OrgSettings(org_id=org_a, weather_enabled=False))
+        db.add(OrgSettings(org_id=org_b, weather_enabled=True))
+        db.commit()
+    monkeypatch.setattr(settings, "WEATHER_ENABLED", True)
+    weather_service._cache.clear()
+    fetch = AsyncMock(return_value=[])
+    monkeypatch.setattr(weather_service, "_fetch_geosphere_warnings", fetch)
+    monkeypatch.setattr(weather_service, "get_daily_forecast", AsyncMock(return_value=None))
+    a = client.get(f"/wetter/oeffentlich/{token_a}.json")
+    assert a.status_code == 200
+    assert a.json()["warnings_status"] == "disabled"
+    fetch.assert_not_awaited()
+    b = client.get(f"/wetter/oeffentlich/{token_b}.json")
+    assert b.status_code == 200
+    assert b.json()["warnings_status"] == "ok_no_warnings"
+    fetch.assert_awaited_once()
+    weather_service._cache.clear()
