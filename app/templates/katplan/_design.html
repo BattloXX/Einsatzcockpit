@@ -54,6 +54,7 @@
     align-items: end;
   }
   .kp-filter {
+    gap: .75rem;
     padding: 1rem;
     margin-bottom: 1rem;
     background: var(--surface-low);
@@ -69,6 +70,9 @@
     text-transform: uppercase;
     letter-spacing: .05em;
     color: var(--text-muted);
+  }
+  .kp-filter label {
+    font-size: .68rem;
   }
   .kp-form .form-control, .kp-filter .form-control {
     font-size: .875rem;
@@ -149,10 +153,18 @@
     background: var(--surface-high);
     color: var(--text-muted);
   }
-  .kp-badge, .kp-status {
+  .kp-badge, .kp-status, a.kp-chip {
     font-family: 'JetBrains Mono', monospace;
     text-transform: uppercase;
     letter-spacing: .03em;
+    white-space: nowrap;
+  }
+  a.kp-chip {
+    text-decoration: none;
+  }
+  a.kp-chip:hover {
+    background: var(--surface-highest);
+    color: var(--on-surface);
   }
   .kp-status {
     padding: 2px 12px;
@@ -162,6 +174,10 @@
     color: var(--text-muted);
     border-color: color-mix(in srgb, var(--text-muted) 35%, var(--border));
     background: color-mix(in srgb, var(--text-muted) 15%, var(--surface-low));
+  }
+  .kp-badge--gray {
+    border-color: var(--border);
+    background: var(--surface-high);
   }
   .kp-mcard--gray {
     --kp-accent: var(--text-muted);
@@ -332,10 +348,14 @@
     border-bottom: none;
   }
   .kp-row__label {
+    flex: 0 0 auto;
+    max-width: 45%;
+    overflow-wrap: normal;
     font-size: .82rem;
     color: var(--text-muted);
   }
   .kp-row__value {
+    overflow-wrap: anywhere;
     font-size: .9rem;
     font-weight: 600;
     text-align: right;

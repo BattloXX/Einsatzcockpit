@@ -1,7 +1,7 @@
 {% if qs_summen is defined %}
   <p class="kp-box" id="kp-qualitaet" {% if baum_oob|default(false) %}hx-swap-oob="outerHTML"{% endif %}>Qualität:
     {% for code, h in qs_summen.items() %}
-      <a href="/plaene/{{ plan.id }}/bearbeiten?element={{ h.element_id }}">{{ icon(qs_symbole[code]) }} {{ h.anzahl }} {{ h.text }}</a>{% if not loop.last %} · {% endif %}
+      <a class="btn btn--ghost btn--sm" href="/plaene/{{ plan.id }}/bearbeiten?element={{ h.element_id }}">{{ icon(qs_symbole[code]) }} {{ h.anzahl }} {{ h.text }}</a>{% if not loop.last %} · {% endif %}
     {% else %}Keine offenen Hinweise{% endfor %}
   </p>
 {% endif %}

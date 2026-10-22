@@ -46,7 +46,7 @@
             <a href="{{ seite.seiten_url }}"><img src="{{ seite.thumb_url }}" loading="lazy" alt="Seite {{ seite.nr }}"><span>Seite {{ seite.nr }}</span></a>
           {% endfor %}
         </div>
-        <a href="{{ quellen_originale[element.id] }}">Original-PDF auf Seite {{ seiten[0].nr }} öffnen</a>
+        <a class="btn btn--ghost btn--sm" href="{{ quellen_originale[element.id] }}">Original-PDF auf Seite {{ seiten[0].nr }} öffnen</a>
       </details>
     {% endif %}
   {% endif %}
@@ -57,7 +57,7 @@
     {% include "katplan/_geo_status.html" %}
   {% endif %}
   {% if element.geometry_json %}
-    <a href="/plaene/{{ plan.id }}/karte#element-{{ element.element_uuid if leseversion is defined else element.uuid }}">Auf Karte zeigen</a>
+    <a class="btn btn--ghost btn--sm" href="/plaene/{{ plan.id }}/karte#element-{{ element.element_uuid if leseversion is defined else element.uuid }}">Auf Karte zeigen</a>
   {% endif %}
   {% for feld, label in [('gueltig_bis', 'Gültig bis'), ('pruefen_am', 'Prüfen am')] %}
     {% if element[feld] %}
@@ -124,7 +124,7 @@
     {% include "katplan/_links_anzeige.html" %}
   {% endif %}
   {% for relation in element_relationen.get(element.id, []) %}
-    <p>{{ relation_arten[relation.art] }}: <a href="{{ relation.url }}">{{ relation.kennung }} {{ relation.titel }}</a>
+    <p>{{ relation_arten[relation.art] }}: <a class="kp-link" href="{{ relation.url }}">{{ relation.kennung }} {{ relation.titel }}</a>
       {% if relation.plan_titel %} · {{ relation.plan_titel }}{% endif %}
       {% if relation.hinweis %} · {{ relation.hinweis }}{% endif %}
     </p>

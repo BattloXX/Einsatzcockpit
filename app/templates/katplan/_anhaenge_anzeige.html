@@ -15,13 +15,13 @@
     {% for anhang in anhaenge if anhang.art != 'foto' %}
       <li data-anhang="{{ anhang.uuid }}">
         {% if anhang.art == 'link' %}
-          {{ icon("link", size="sm") }} <a href="{{ anhang.url }}" rel="noopener noreferrer" target="_blank">{{ anhang.beschriftung or anhang.url }}</a>
+          {{ icon("link", size="sm") }} <a class="kp-link" href="{{ anhang.url }}" rel="noopener noreferrer" target="_blank">{{ anhang.beschriftung or anhang.url }}</a>
         {% elif anhang.art == 'objekt_dokument' %}
           {{ icon("files", size="sm") }} {% if anhang.objekt_recht %}
-            <a href="{{ anhang.datei_url }}">Objektdokument {{ anhang.dokument_name }}{% if anhang.seiten %}, S. {{ anhang.seiten|replace('-', '–') }}{% endif %}</a>
+            <a class="kp-link" href="{{ anhang.datei_url }}">Objektdokument {{ anhang.dokument_name }}{% if anhang.seiten %}, S. {{ anhang.seiten|replace('-', '–') }}{% endif %}</a>
           {% else %}Objektdokument (keine Berechtigung){% endif %}
         {% else %}
-          {{ icon("file-text", size="sm") }} <a href="{{ anhang.datei_url }}" download>{{ anhang.beschriftung or anhang.dateiname }}</a>
+          {{ icon("file-text", size="sm") }} <a class="kp-link" href="{{ anhang.datei_url }}" download>{{ anhang.beschriftung or anhang.dateiname }}</a>
         {% endif %}
         {% if anhang.groesse %}<span class="kp-mono">{{ anhang.groesse }}</span>{% endif %}
         {% if anhang.vertraulich %}<span class="kp-badge kp-badge--amber">vertraulich</span>{% endif %}

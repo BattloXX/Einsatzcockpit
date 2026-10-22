@@ -30,7 +30,7 @@
         {% with karten_mini = true %}
           {% include "katplan/_plankarte.html" %}
         {% endwith %}
-        <a href="{{ karten_url }}">Große Karte</a>
+        <a class="btn btn--ghost btn--sm" href="{{ karten_url }}">Große Karte</a>
       </section>
     {% endif %}
     <section class="kp-sidecard">
@@ -62,15 +62,15 @@
       </div>
       <div class="kp-row">
         <span class="kp-row__label">Zuletzt geprüft</span>
-        <span>{% if plan.zuletzt_geprueft_am %}{{ plan.zuletzt_geprueft_am.strftime('%d.%m.%Y') }}{% if zuletzt_geprueft_von and zuletzt_geprueft_von != '-' %} von {{ zuletzt_geprueft_von }}{% endif %}{% else %}-{% endif %}</span>
+        <span class="kp-row__value">{% if plan.zuletzt_geprueft_am %}{{ plan.zuletzt_geprueft_am.strftime('%d.%m.%Y') }}{% if zuletzt_geprueft_von and zuletzt_geprueft_von != '-' %} von {{ zuletzt_geprueft_von }}{% endif %}{% else %}-{% endif %}</span>
       </div>
       <div class="kp-row">
         <span class="kp-row__label">Überprüfung durch</span>
-        <span>{{ pruef_verantwortlich }}</span>
+        <span class="kp-row__value">{{ pruef_verantwortlich }}</span>
       </div>
       <div class="kp-row">
         <span class="kp-row__label">Nächste Überprüfung</span>
-        <span class="kp-mono">
+        <span class="kp-row__value kp-mono">
           {% if plan.wiedervorlage_am and plan.wiedervorlage_am <= heute %}
             <span class="kp-badge kp-badge--red">{{ plan.wiedervorlage_am.strftime('%d.%m.%Y') }}</span>
           {% else %}
@@ -125,7 +125,7 @@
       {% endif %}
       {% if can_edit and qs_summen.get("telefon_im_text") %}
         <p class="kp-box kp-box--warn">{{ qs_summen["telefon_im_text"].anzahl }} Elemente enthalten Telefonnummern im Text. Empfehlung: zentrale Kontakte verknüpfen.
-          <a href="/plaene/{{ plan.id }}/bearbeiten#kp-qualitaet">Zur QS-Liste</a></p>
+          <a class="btn btn--ghost btn--sm" href="/plaene/{{ plan.id }}/bearbeiten#kp-qualitaet">Zur QS-Liste</a></p>
       {% endif %}
       <div class="kp-actions">
         {% if can_edit and plan.status in ['entwurf', 'in_ueberarbeitung'] %}

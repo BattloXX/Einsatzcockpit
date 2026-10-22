@@ -10,7 +10,7 @@
     {% if fehler %}
       <p role="alert" class="kp-error">{{ fehler }}</p>
       {% if plan %}
-        <a href="/plaene/{{ plan.id }}/stammdaten" hx-get="/plaene/{{ plan.id }}/stammdaten" hx-target="#kp-kopf" hx-swap="outerHTML">Aktuellen Stand laden</a>
+        <a class="btn btn--ghost btn--sm" href="/plaene/{{ plan.id }}/stammdaten" hx-get="/plaene/{{ plan.id }}/stammdaten" hx-target="#kp-kopf" hx-swap="outerHTML">Aktuellen Stand laden</a>
       {% endif %}
     {% endif %}
     <label>

@@ -32,7 +32,7 @@
         {% for e in k.elemente %}
           <li data-element-id="{{ e.id }}" {% if aktiv_element_id|default(0) == e.id %}class="kp-aktiv"{% endif %}>
             <span class="kp-griff" aria-hidden="true">{{ icon("grip-vertical", size="sm") }}</span>
-            <a href="/plaene/{{ plan.id }}/elemente/{{ e.id }}" hx-get="/plaene/{{ plan.id }}/elemente/{{ e.id }}"
+            <a class="kp-link" href="/plaene/{{ plan.id }}/elemente/{{ e.id }}" hx-get="/plaene/{{ plan.id }}/elemente/{{ e.id }}"
               hx-target="#kp-detail" {% if aktiv_element_id|default(0) == e.id %}aria-current="true"{% endif %}>
               {{ icon(typen[e.typ].icon_name, size="sm") }} <span class="kp-mono">{{ e.kennung }}</span> {{ e.titel }}
               {% for h in qs_hinweise.get(e.id, [])[:3] %}

@@ -63,7 +63,7 @@
       <h2 class="kp-box__title">Nicht verortete Elemente: {{ karten_unverortet|length }}</h2>
       <ul>
         {% for element in karten_unverortet %}
-          <li><a href="{{ element.url }}">{{ element.kennung or '' }} {{ element.titel }}</a></li>
+          <li><a class="kp-link" href="{{ element.url }}">{{ element.kennung or '' }} {{ element.titel }}</a></li>
         {% endfor %}
       </ul>
     </section>
