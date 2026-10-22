@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -171,6 +171,13 @@ class DeviceToken(Base):
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     app_version: Mapped[str | None] = mapped_column(String(30), nullable=True)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # SEC-01: Fehlversuche mit ungueltigem Zugang (aggregiert, Details in DeviceAuthFailure)
+    last_failed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    fail_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False, server_default="0")
+    # Von der App gemeldete Geraetemerkmale (nur was tatsaechlich uebermittelt wird)
+    platform: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    os_version: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    device_model: Mapped[str | None] = mapped_column(String(80), nullable=True)
     # Standort-Tracking (A2)
     last_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
     last_lng: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -200,6 +207,35 @@ class DeviceToken(Base):
     @property
     def is_active(self) -> bool:
         return self.revoked_at is None
+
+
+class DeviceAuthFailure(Base):
+    """Aggregierte Fehlversuche mit ungueltigem/widerrufenem Geraetezugang (SEC-01).
+
+    Eine Zeile je (token_hash_prefix, reason, channel); wiederholte Versuche erhoehen nur
+    ``count``/``last_at``. Gespeichert wird nie das Token selbst, nur ein kurzer Hash-Praefix.
+    """
+    __tablename__ = "device_auth_failure"
+    __table_args__ = (UniqueConstraint("token_hash_prefix", "reason", "channel", name="uq_device_auth_failure"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    device_token_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("device_token.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    token_hash_prefix: Mapped[str] = mapped_column(String(12), nullable=False, default="")
+    # unknown | revoked | user_inactive | session_revoked
+    reason: Mapped[str] = mapped_column(String(30), nullable=False)
+    # bearer | device_login | session
+    channel: Mapped[str] = mapped_column(String(20), nullable=False)
+    count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    first_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    last_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    app_version: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    platform: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+    device_token: Mapped[DeviceToken | None] = relationship("DeviceToken", foreign_keys=[device_token_id])
 
 
 class FcmToken(Base):

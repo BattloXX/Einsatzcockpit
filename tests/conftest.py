@@ -93,6 +93,8 @@ def reset_lis_in_memory_state():
     lis_sync._lokal_gepushter_status.clear()
     lis_loop._org_clients.clear()
     lis_loop._last_started_at.clear()
+    from app.services import device_auth_failure_service
+    device_auth_failure_service.reset_state()
     yield
     lis_sync._tasks_retry_after.clear()
     lis_sync._released_vehicle_misses.clear()

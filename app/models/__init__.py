@@ -260,6 +260,7 @@ from app.models.uas import (
 from app.models.user import (
     ApiKey,
     AuditLog,
+    DeviceAuthFailure,
     DeviceToken,
     FcmToken,
     PushLog,
@@ -315,6 +316,7 @@ __all__ = [
     "ApiKey",
     "AuditLog",
     "PushSubscription",
+    "DeviceAuthFailure",
     "DeviceToken",
     "FcmToken",
     "PushLog",

@@ -116,6 +116,13 @@
 
   <!-- Einheit-Geräte-Tabelle -->
   <h2 style="font-size:1.05rem;font-weight:600;margin:0 0 10px;">{{ icon("device-mobile", size="md") }} Einheit-Geräte</h2>
+  <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;" role="group" aria-label="Geräte filtern">
+    {% for key, label in [('alle', 'Alle'), ('aktiv', 'Aktiv'), ('widerrufen', 'Widerrufen'), ('auffaellig', 'Auffällig')] %}
+    <a href="/admin/geraete-login{% if key != 'alle' %}?filter={{ key }}{% endif %}"
+       class="btn btn--sm {% if geraete_filter == key %}btn--primary{% else %}btn--ghost{% endif %}"
+       {% if geraete_filter == key %}aria-current="true"{% endif %}>{{ label }} ({{ filter_anzahl[key] }})</a>
+    {% endfor %}
+  </div>
   {% if tokens %}
   <div style="overflow-x:auto;margin-bottom:32px;">
     <table class="table-admin" style="min-width:600px;">
@@ -126,7 +133,8 @@
           {% if is_sysadmin %}<th>Organisation</th>{% endif %}
           <th>GSL-Profil</th>
           <th>Fahrzeug</th>
-          <th style="width:130px;">App-Version</th>
+          <th style="width:130px;">App / Gerät</th>
+          <th style="width:130px;">Fehlversuche</th>
           <th style="width:130px;">Erstellt</th>
           <th style="width:130px;">Zuletzt genutzt</th>
           <th style="width:90px;">Status</th>
@@ -185,6 +193,15 @@
           </td>
           <td style="white-space:nowrap;font-size:.85rem;color:var(--color-text-muted);">
             {{ dt.app_version or '–' }}
+            {% if dt.platform or dt.os_version or dt.device_model %}
+            <br><small>{{ [dt.platform, dt.os_version, dt.device_model]|select|join(' · ') }}</small>
+            {% endif %}
+          </td>
+          <td style="white-space:nowrap;font-size:.85rem;">
+            {% if dt.fail_count %}
+              <span class="badge-pill badge-pill--red" title="Fehlgeschlagene Zugriffsversuche mit diesem Zugang">{{ dt.fail_count }}</span>
+              {% if dt.last_failed_at %}<br><small class="text-muted">zuletzt {{ dt.last_failed_at|local_datetime }}</small>{% endif %}
+            {% else %}<span class="text-muted">–</span>{% endif %}
           </td>
           <td style="white-space:nowrap;font-size:.85rem;color:var(--color-text-muted);">
             {{ (dt.created_at|local).strftime('%d.%m.%Y') }}
@@ -197,7 +214,8 @@
             {% if dt.is_active %}
               <span class="badge-pill badge-pill--green" style="font-size:.8rem;">Aktiv</span>
             {% else %}
-              <span class="badge-pill badge-pill--gray" style="font-size:.8rem;">Widerrufen</span>
+              <span class="badge-pill badge-pill--gray" style="font-size:.8rem;"
+                    {% if dt.revoked_at %}title="Deaktiviert am {{ dt.revoked_at|local_datetime }}"{% endif %}>Widerrufen</span>
             {% endif %}
           </td>
           <td style="white-space:nowrap;">
@@ -210,7 +228,8 @@
               <button class="btn btn--ghost btn--sm" {{ tip('Anmeldung sofort sperren') }}>Widerrufen</button>
             </form>
             {% else %}
-            <form method="post" action="/admin/geraete-login/{{ dt.id }}/reaktivieren" style="display:inline;">
+            <form method="post" action="/admin/geraete-login/{{ dt.id }}/reaktivieren" style="display:inline;"
+                  data-label="{{ dt.label }}" onsubmit="return confirm('Zugang von &quot;' + this.dataset.label + '&quot; wieder freigeben?')">
               <button class="btn btn--ghost btn--sm" {{ tip('Token reaktivieren') }}>Reaktivieren</button>
             </form>
             {% endif %}
@@ -231,6 +250,11 @@
     <p class="text-muted">Noch keine Einheit-Geräte registriert.</p>
   </div>
   {% endif %}
+
+  <!-- Fehlgeschlagene Zugriffe (SEC-01) -->
+  <h2 style="font-size:1.05rem;font-weight:600;margin:0 0 10px;">{{ icon("shield", size="md") }} Fehlgeschlagene Geräte-Zugriffe</h2>
+  <p class="page-header__sub" style="margin-bottom:10px;">Geräte, die mit abgelaufenen, widerrufenen oder ersetzten Zugangsdaten anfragen. Wiederholte Versuche werden zusammengefasst; Tokens werden nie gespeichert.</p>
+  {% include "admin/_auth_failures.html" %}
 
   <!-- SMS-Gateway-Tokens-Tabelle -->
   <h2 style="font-size:1.05rem;font-weight:600;margin:0 0 10px;">{{ icon("antenna", size="md") }} SMS-Gateways (Android)</h2>

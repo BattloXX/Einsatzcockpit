@@ -1,0 +1,53 @@
+{# Fehlversuche mit ungueltigem Geraetezugang (SEC-01/04). Variablen: auth_failures, is_sysadmin (optional) #}
+{% set grund_label = {
+  'unknown': 'Token unbekannt (z. B. durch neue PIN ersetzt)',
+  'revoked': 'Zugang widerrufen',
+  'user_inactive': 'Benutzer gesperrt',
+  'session_revoked': 'Geräte-Sitzung widerrufen'
+} %}
+{% set kanal_label = {'bearer': 'App (API)', 'device_login': 'Geräte-Login', 'session': 'Sitzung'} %}
+{% if auth_failures %}
+<div style="overflow-x:auto;margin-bottom:32px;">
+  <table class="table-admin" style="min-width:700px;">
+    <thead>
+      <tr>
+        <th>Gerät</th>
+        <th>Grund</th>
+        <th>Kanal</th>
+        <th style="width:90px;">Versuche</th>
+        <th style="width:140px;">Erster</th>
+        <th style="width:140px;">Letzter</th>
+        <th>Herkunft</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for f in auth_failures %}
+      <tr>
+        <td>
+          {% if f.device_token %}
+            <a href="/admin/geraete-login/{{ f.device_token.id }}" style="font-weight:600;color:inherit;">{{ f.device_token.label }}</a>
+            {% if f.device_token.platform or f.device_token.os_version or f.device_token.device_model %}
+            <br><small class="text-muted">{{ [f.device_token.platform, f.device_token.os_version, f.device_token.device_model]|select|join(' · ') }}</small>
+            {% endif %}
+          {% else %}
+            <span class="text-muted">Nicht zuordenbar</span>
+            <br><small class="text-muted" style="font-family:monospace;">Hash {{ f.token_hash_prefix[:6] }}…</small>
+          {% endif %}
+        </td>
+        <td>{{ grund_label.get(f.reason, f.reason) }}</td>
+        <td>{{ kanal_label.get(f.channel, f.channel) }}</td>
+        <td><span class="badge-pill {% if f.count >= 10 %}badge-pill--red{% else %}badge-pill--gray{% endif %}">{{ f.count }}</span></td>
+        <td style="white-space:nowrap;font-size:.85rem;">{{ f.first_at|local_datetime }}</td>
+        <td style="white-space:nowrap;font-size:.85rem;">{{ f.last_at|local_datetime }}</td>
+        <td style="font-size:.8rem;color:var(--color-text-muted);">
+          {{ f.ip or '–' }}{% if f.app_version %} · App {{ f.app_version }}{% endif %}
+          {% if f.user_agent %}<br><span title="{{ f.user_agent }}">{{ f.user_agent[:40] }}{% if f.user_agent|length > 40 %}…{% endif %}</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="text-muted" style="margin-bottom:32px;">Keine fehlgeschlagenen Zugriffe protokolliert.</p>
+{% endif %}

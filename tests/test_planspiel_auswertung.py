@@ -176,7 +176,8 @@ def test_planspiel_einsaetze_nicht_in_einsatzstatistik(client):
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
-        stats = get_stats(db, user.org_id, date.today() - timedelta(days=1), date.today())
+        # +1 Tag: zwischen 22 und 24 Uhr UTC ist es in der Org-Zeitzone (Wien) bereits der Folgetag
+        stats = get_stats(db, user.org_id, date.today() - timedelta(days=1), date.today() + timedelta(days=1))
         assert stats.total == 0 and stats.total_exercises == 1
     finally:
         db.close()

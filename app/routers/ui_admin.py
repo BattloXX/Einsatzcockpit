@@ -48,6 +48,7 @@ from app.models.password_reset import PasswordResetToken
 from app.models.user import (
     ApiKey,
     AuditLog,
+    DeviceAuthFailure,
     DeviceToken,
     FcmDeliveryLog,
     FcmToken,
@@ -3087,6 +3088,50 @@ def send_push_notification(
 
 # ── Geräte-Login ──────────────────────────────────────────────────────────────
 
+def _geraete_filter_kontext(db: Session, user, tokens: list, filter_name: str):
+    """SEC-04: Filter nach Zustand ("auffaellig" = es gab Fehlversuche) und Fehlversuchsliste."""
+    if filter_name not in ("alle", "aktiv", "widerrufen", "auffaellig"):
+        filter_name = "alle"
+    anzahl = {
+        "alle": len(tokens),
+        "aktiv": sum(1 for t in tokens if t.is_active),
+        "widerrufen": sum(1 for t in tokens if not t.is_active),
+        "auffaellig": sum(1 for t in tokens if (t.fail_count or 0) > 0),
+    }
+    if filter_name == "aktiv":
+        tokens = [t for t in tokens if t.is_active]
+    elif filter_name == "widerrufen":
+        tokens = [t for t in tokens if not t.is_active]
+    elif filter_name == "auffaellig":
+        tokens = [t for t in tokens if (t.fail_count or 0) > 0]
+    return tokens, {
+        "geraete_filter": filter_name,
+        "filter_anzahl": anzahl,
+        "auth_failures": _auth_failures_query(db, user).limit(100).all(),
+    }
+
+
+def _auth_failures_query(db: Session, user, device_token_id: int | None = None):
+    """Fehlversuche mit ungültigem Gerätezugang (SEC-01/04), nach Org begrenzt.
+
+    Fehlversuche mit komplett unbekanntem Token lassen sich keiner Org zuordnen und sind
+    deshalb nur für System-Admins sichtbar.
+    """
+    from sqlalchemy.orm import joinedload
+
+    q = (
+        db.query(DeviceAuthFailure)
+        .outerjoin(DeviceToken, DeviceAuthFailure.device_token_id == DeviceToken.id)
+        .outerjoin(User, DeviceToken.user_id == User.id)
+        .options(joinedload(DeviceAuthFailure.device_token))
+    )
+    if device_token_id is not None:
+        q = q.filter(DeviceAuthFailure.device_token_id == device_token_id)
+    if not has_role(user, "system_admin"):
+        q = q.filter(User.org_id == user.org_id)
+    return q.order_by(DeviceAuthFailure.last_at.desc())
+
+
 @router.get("/geraete-login", response_class=HTMLResponse)
 def device_tokens_list(
     request: Request,
@@ -3104,6 +3149,7 @@ def device_tokens_list(
         .order_by(DeviceToken.created_at.desc())
         .all()
     )
+    tokens, sec_kontext = _geraete_filter_kontext(db, user, tokens, request.query_params.get("filter", "alle"))
     gateway_tokens = (
         _org_filter(
             db.query(SmsGatewayToken),
@@ -3129,6 +3175,7 @@ def device_tokens_list(
     return templates.TemplateResponse(request, "admin/device_tokens.html", {
         "user": user,
         "tokens": tokens,
+        **sec_kontext,
         "gateway_tokens": gateway_tokens,
         "connected_gateway_ids": connected_gateway_ids,
         "roles": roles,
@@ -3160,9 +3207,11 @@ def device_token_detail(
         .first()
     )
     _assert_device_token_access(dt, request.state.user)
+    assert dt is not None
     return templates.TemplateResponse(request, "admin/device_token_detail.html", {
         "user": request.state.user,
         "dt": dt,
+        "auth_failures": _auth_failures_query(db, request.state.user, dt.id).limit(50).all(),
     })
 
 
@@ -3338,9 +3387,11 @@ def _render_device_tokens_page(request, db, current_user, *, new_token=None, new
         .order_by(VehicleMaster.name)
         .all()
     )
+    all_tokens, sec_kontext = _geraete_filter_kontext(db, current_user, all_tokens, "alle")
     return templates.TemplateResponse(request, "admin/device_tokens.html", {
         "user": current_user,
         "tokens": all_tokens,
+        **sec_kontext,
         "gateway_tokens": gateway_tokens,
         "connected_gateway_ids": connected_gateway_ids,
         "roles": roles_all,

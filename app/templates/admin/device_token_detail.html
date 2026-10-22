@@ -28,6 +28,9 @@
         <tr><td style="padding:4px 0;color:var(--color-text-muted)">Login-User</td><td>{{ dt.user.username if dt.user else '–' }}</td></tr>
         <tr><td style="padding:4px 0;color:var(--color-text-muted)">Fahrzeug</td><td>{{ dt.vehicle.display_label if dt.vehicle else '–' }}</td></tr>
         <tr><td style="padding:4px 0;color:var(--color-text-muted)">App-Version</td><td>{{ dt.app_version or '–' }}</td></tr>
+        <tr><td style="padding:4px 0;color:var(--color-text-muted)">Gerät</td><td>{{ [dt.platform, dt.os_version, dt.device_model]|select|join(' · ') or '–' }}</td></tr>
+        <tr><td style="padding:4px 0;color:var(--color-text-muted)">Status</td><td>{% if dt.is_active %}Aktiv{% else %}Widerrufen{% if dt.revoked_at %} am {{ dt.revoked_at|local_datetime }}{% endif %}{% endif %}</td></tr>
+        <tr><td style="padding:4px 0;color:var(--color-text-muted)">Fehlversuche</td><td>{{ dt.fail_count or 0 }}{% if dt.last_failed_at %} (zuletzt {{ dt.last_failed_at|local_datetime }}){% endif %}</td></tr>
         <tr><td style="padding:4px 0;color:var(--color-text-muted)">Rollen</td><td>{{ dt.user.roles|map(attribute='label')|join(', ') if dt.user else '–' }}</td></tr>
         <tr><td style="padding:4px 0;color:var(--color-text-muted)">Erstellt</td><td>{{ (dt.created_at|local).strftime('%d.%m.%Y %H:%M') }}</td></tr>
         <tr><td style="padding:4px 0;color:var(--color-text-muted)">Zuletzt genutzt</td>
@@ -60,6 +63,9 @@
       {% endif %}
     </div>
   </div>
+
+  <h2 style="font-size:1.05rem;font-weight:600;margin:0 0 10px;">Fehlgeschlagene Zugriffe</h2>
+  {% include "admin/_auth_failures.html" %}
 </div>
 {% endblock %}
 

@@ -18,6 +18,7 @@ from app.core.security import hash_api_key, sign_native_link_token
 from app.db import get_db
 from app.models.master import VehicleMaster
 from app.models.user import DeviceToken, FcmDeliveryLog, FcmToken, User
+from app.services import device_auth_failure_service as dat
 from app.services import push_service
 from app.services.einsatz_live_service import build_live_state
 from app.services.gsl_live_service import build_gsl_live_state, build_my_lage_queue
@@ -31,28 +32,79 @@ log = logging.getLogger(__name__)
 
 
 def _resolve_user_via_bearer_token(request: Request, db: Session) -> User | None:
-    """Authentifiziert ein Gerät über dessen langlebigen Pairing-Token."""
+    """Authentifiziert ein Gerät über dessen langlebigen Pairing-Token.
+
+    Ungültige Zugänge (unbekannt, widerrufen, Benutzer gesperrt) werden aggregiert protokolliert
+    (SEC-01) und im Request als ``auth_error`` vermerkt, damit die 401-Antwort dem Client den
+    Grund per Header ``X-ECP-Auth-Error`` mitteilen kann (SEC-02).
+    """
     authorization = request.headers.get("Authorization", "")
     if not authorization.startswith("Bearer "):
         return None
     raw_token = authorization.removeprefix("Bearer ").strip()
     if not raw_token:
         return None
-    device_token = db.query(DeviceToken).filter(
-        DeviceToken.token_hash == hash_api_key(raw_token),
-        DeviceToken.revoked_at.is_(None),
-    ).first()
+    token_hash = hash_api_key(raw_token)
+    device_token = db.query(DeviceToken).filter(DeviceToken.token_hash == token_hash).first()
     if not device_token:
+        _auth_fehler(request, dat.REASON_UNKNOWN, token_hash=token_hash)
+        return None
+    if device_token.revoked_at is not None:
+        _auth_fehler(request, dat.REASON_REVOKED, device_token=device_token)
         return None
     user = db.get(User, device_token.user_id)
     if not user or not user.active:
+        _auth_fehler(request, dat.REASON_USER_INACTIVE, device_token=device_token)
         return None
     device_token.last_used_at = datetime.now(UTC).replace(tzinfo=None)
+    request.state.bearer_device_token_id = device_token.id
+    _merke_geraetemerkmale(request, device_token)
     return user
 
 
-def _get_device_token(user_id: int, db: Session) -> DeviceToken | None:
-    """Gibt das aktive DeviceToken des Users zurück (neuestes nicht-widerrufenes)."""
+def _auth_fehler(
+    request: Request, reason: str, *, token_hash: str | None = None, device_token: DeviceToken | None = None,
+) -> None:
+    request.state.auth_error = dat.CLIENT_CODE[reason]
+    dat.record_failure(request, reason, "bearer", token_hash=token_hash, device_token=device_token)
+
+
+def _merke_geraetemerkmale(request: Request, device_token: DeviceToken) -> None:
+    """Übernimmt Plattform/OS/Modell nur, wenn die App sie tatsächlich mitsendet."""
+    for feld, header, query, grenze in (
+        ("platform", "X-ECP-Platform", "platform", 20),
+        ("os_version", "X-ECP-OS-Version", "os_version", 40),
+        ("device_model", "X-ECP-Device-Model", "device_model", 80),
+    ):
+        wert = request.headers.get(header) or request.query_params.get(query)
+        if wert and wert.strip():
+            setattr(device_token, feld, wert.strip()[:grenze])
+
+
+def _unauthorized(request: Request) -> HTTPException:
+    """401 wie bisher (Body unverändert), zusätzlich mit Fehlercode für die App."""
+    code = getattr(request.state, "auth_error", None)
+    headers = {dat.AUTH_ERROR_HEADER: code} if code else None
+    return HTTPException(status_code=401, detail="Nicht eingeloggt", headers=headers)
+
+
+def _get_device_token(user_id: int, db: Session, request: Request | None = None) -> DeviceToken | None:
+    """Gibt das aktive DeviceToken des Users zurück.
+
+    Mit ``request`` zählt zuerst das tatsächlich verwendete Gerät (Bearer-Token bzw.
+    Geräte-Session); nur ohne Bezug gilt das neueste nicht-widerrufene Token des Users.
+    """
+    token_id = None
+    if request is not None:
+        token_id = getattr(request.state, "bearer_device_token_id", None) or getattr(
+            request.state, "device_token_id", None
+        )
+    if token_id is not None:
+        gewaehlt = db.query(DeviceToken).filter(
+            DeviceToken.id == token_id, DeviceToken.user_id == user_id, DeviceToken.revoked_at.is_(None),
+        ).first()
+        if gewaehlt is not None:
+            return gewaehlt
     return (
         db.query(DeviceToken)
         .filter(DeviceToken.user_id == user_id, DeviceToken.revoked_at.is_(None))
@@ -80,7 +132,7 @@ def sync_kontakte(
         user = _resolve_user_via_bearer_token(request, db)
         bearer_authenticated = user is not None
     if not user:
-        raise HTTPException(status_code=401, detail="Nicht eingeloggt")
+        raise _unauthorized(request)
     if not _can_read_kontakte(user) or (not bearer_authenticated and not can_view_kontakt_directory_request(request)):
         raise HTTPException(status_code=403, detail="Keine Berechtigung")
     if user.org_id is None:
@@ -109,14 +161,14 @@ def register_fcm_token(request: Request, db: Session = Depends(get_db)):
     if not user:
         user = _resolve_user_via_bearer_token(request, db)
     if not user:
-        raise HTTPException(status_code=401, detail="Nicht eingeloggt")
+        raise _unauthorized(request)
     data = run_async(request.json)
     token = (data.get("token") or "").strip()
     platform = (data.get("platform") or "android").strip()[:20]
     if not token:
         raise HTTPException(status_code=400, detail="token fehlt")
 
-    device_token = _get_device_token(user.id, db)
+    device_token = _get_device_token(user.id, db, request)
     app_version = data.get("app_version")
     if device_token and isinstance(app_version, str) and (app_version := app_version.strip()):
         device_token.app_version = app_version
@@ -140,7 +192,7 @@ def get_fcm_token_status(
     if not user:
         user = _resolve_user_via_bearer_token(request, db)
     if not user:
-        raise HTTPException(status_code=401, detail="Nicht eingeloggt")
+        raise _unauthorized(request)
 
     token = (token or "").strip()
     if not token:
@@ -179,7 +231,7 @@ def unregister_fcm_token(request: Request, db: Session = Depends(get_db)):
     """
     user = getattr(request.state, "user", None)
     if not user:
-        raise HTTPException(status_code=401, detail="Nicht eingeloggt")
+        raise _unauthorized(request)
     data = run_async(request.json)
     token = (data.get("token") or "").strip()
     if token:
@@ -204,7 +256,7 @@ async def create_native_link(request: Request):
     """
     user = getattr(request.state, "user", None)
     if not user:
-        raise HTTPException(status_code=401, detail="Nicht eingeloggt")
+        raise _unauthorized(request)
     data = await request.json()
     path = (data.get("path") or "").strip()
     parsed = urlsplit(path)
@@ -228,7 +280,7 @@ def update_location(request: Request, background_tasks: BackgroundTasks, db: Ses
     """
     user = getattr(request.state, "user", None)
     if not user:
-        raise HTTPException(status_code=401, detail="Nicht eingeloggt")
+        raise _unauthorized(request)
     data = run_async(request.json)
     try:
         lat = float(data["lat"])
@@ -236,7 +288,7 @@ def update_location(request: Request, background_tasks: BackgroundTasks, db: Ses
     except (KeyError, TypeError, ValueError):
         raise HTTPException(status_code=400, detail="lat/lng fehlen oder ungültig")
 
-    device_token = _get_device_token(user.id, db)
+    device_token = _get_device_token(user.id, db, request)
     if not device_token:
         raise HTTPException(status_code=404, detail="Kein registriertes Gerät")
 
@@ -308,7 +360,7 @@ def get_vehicles(request: Request, db: Session = Depends(get_db)):
         user = _resolve_user_via_bearer_token(request, db)
         bearer_authenticated = user is not None
     if not user:
-        raise HTTPException(status_code=401, detail="Nicht eingeloggt")
+        raise _unauthorized(request)
 
     if bearer_authenticated:
         db.commit()
@@ -326,7 +378,7 @@ def get_vehicles(request: Request, db: Session = Depends(get_db)):
         .order_by(VehicleMaster.display_order)
         .all()
     )
-    device_token = _get_device_token(user.id, db)
+    device_token = _get_device_token(user.id, db, request)
     device_vehicle = None
     if device_token and device_token.vehicle_master_id:
         device_vehicle = (
@@ -352,11 +404,11 @@ def set_duty(request: Request, db: Session = Depends(get_db)):
     """
     user = getattr(request.state, "user", None)
     if not user:
-        raise HTTPException(status_code=401, detail="Nicht eingeloggt")
+        raise _unauthorized(request)
     data = run_async(request.json)
     active = bool(data.get("active", False))
 
-    device_token = _get_device_token(user.id, db)
+    device_token = _get_device_token(user.id, db, request)
     if not device_token:
         raise HTTPException(status_code=404, detail="Kein registriertes Gerät")
 
@@ -381,9 +433,9 @@ def get_duty_state(
         user = _resolve_user_via_bearer_token(request, db)
         bearer_authenticated = user is not None
     if not user:
-        raise HTTPException(status_code=401, detail="Nicht eingeloggt")
+        raise _unauthorized(request)
 
-    device_token = _get_device_token(user.id, db)
+    device_token = _get_device_token(user.id, db, request)
     if device_token and app_version and (app_version := app_version.strip()):
         device_token.app_version = app_version
     if bearer_authenticated or app_version:
@@ -451,7 +503,7 @@ def acknowledge_push(request: Request, db: Session = Depends(get_db)):
     if not user:
         user = getattr(request.state, "user", None)
     if not user:
-        raise HTTPException(status_code=401, detail="Nicht eingeloggt")
+        raise _unauthorized(request)
 
     data = run_async(request.json)
     try:
