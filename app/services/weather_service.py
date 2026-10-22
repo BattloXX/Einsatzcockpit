@@ -8,7 +8,7 @@ import asyncio
 import logging
 import math
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from functools import wraps
 from inspect import signature
@@ -19,6 +19,60 @@ import httpx
 
 from app.config import settings
 from app.services import weather_openmeteo
+from app.services.weather_thresholds import (
+    BF8 as _BF8,
+)
+from app.services.weather_thresholds import (
+    BF10 as _BF10,
+)
+from app.services.weather_thresholds import (
+    ICE_MIN_RAIN as _ICE_MIN_RAIN,
+)
+from app.services.weather_thresholds import (
+    ICE_TEMP_HIGH as _ICE_TEMP_HIGH,
+)
+from app.services.weather_thresholds import (
+    ICE_TEMP_LOW as _ICE_TEMP_LOW,
+)
+from app.services.weather_thresholds import (
+    RAIN_FC6_DANGER as _RAIN_FC6_DANGER,
+)
+from app.services.weather_thresholds import (
+    RAIN_FC6_WARN as _RAIN_FC6_WARN,
+)
+from app.services.weather_thresholds import (
+    RAIN_NOWCAST_DANGER as _RAIN_NOWCAST_DANGER,
+)
+from app.services.weather_thresholds import (
+    RAIN_NOWCAST_WARN as _RAIN_NOWCAST_WARN,
+)
+from app.services.weather_thresholds import (
+    SNOW_FC6_DANGER as _SNOW_FC6_DANGER,
+)
+from app.services.weather_thresholds import (
+    SNOW_FC6_WARN as _SNOW_FC6_WARN,
+)
+from app.services.weather_thresholds import (
+    SNOW_NOWCAST_DANGER as _SNOW_NOWCAST_DANGER,
+)
+from app.services.weather_thresholds import (
+    SNOW_NOWCAST_WARN as _SNOW_NOWCAST_WARN,
+)
+from app.services.weather_thresholds import (
+    SNOW_TEMP_MAX as _SNOW_TEMP_MAX,
+)
+from app.services.weather_thresholds import (
+    WILDFIRE_HUM_DANGER as _WILDFIRE_HUM_DANGER,
+)
+from app.services.weather_thresholds import (
+    WILDFIRE_HUM_WARN as _WILDFIRE_HUM_WARN,
+)
+from app.services.weather_thresholds import (
+    WILDFIRE_NO_RAIN as _WILDFIRE_NO_RAIN,
+)
+from app.services.weather_thresholds import (
+    WILDFIRE_TEMP as _WILDFIRE_TEMP,
+)
 from app.services.weather_timeseries import (
     HourlySeries,
     accumulated_to_interval,
@@ -189,6 +243,7 @@ class ForecastResult:
     source: str = "geosphere_nwp"
     reference_time: datetime | None = None
     meta: DataMeta | None = None
+    precipitation_hourly: HourlySeries = field(default_factory=list)
 
 
 @dataclass
@@ -658,14 +713,14 @@ async def _fetch_current_from_nwp(lat: float, lng: float) -> CurrentWeather | No
 async def get_forecast(
     lat: float,
     lng: float,
-    horizons: tuple[int, ...] = (6, 12, 24),
+    horizons: tuple[int, ...] = (1, 3, 6, 12, 24),
     org_id: int | None = None,
 ) -> ForecastResult | None:
     """NWP multi-horizon forecast: accumulated precipitation, wind, temperature.
 
     Primary: Kachelmann (wenn org-spezifischer Key gesetzt), sonst GeoSphere NWP.
     Fallback: Open-Meteo hourly.
-    horizons: list of hours from now (default +6, +12, +24).
+    horizons: list of hours from now (default +1, +3, +6, +12, +24).
     """
     if not settings.WEATHER_ENABLED:
         return None
@@ -770,6 +825,7 @@ async def _openmeteo_forecast(
     return ForecastResult(
         horizons=_series_horizons(series, ref, horizons),
         source="open-meteo-geosphere" if model else "openmeteo", reference_time=ref,
+        precipitation_hourly=series["precipitation"],
     )
 
 
@@ -806,7 +862,7 @@ async def _fetch_geosphere_nwp(
     }
     return ForecastResult(
         horizons=_series_horizons(series, ref, horizons), source="geosphere_nwp",
-        reference_time=ref,
+        reference_time=ref, precipitation_hourly=series["precipitation"],
     )
 
 
@@ -977,31 +1033,6 @@ async def _fetch_geosphere_warnings(lat: float, lng: float) -> list[WeatherWarni
 
 # ── Scenario analysis (Storm / Wildfire) ─────────────────────────────────────
 
-_BF8 = 17.2    # m/s — Beaufort 8: storm begins, twigs break
-_BF10 = 24.5   # m/s — Beaufort 10: whole gale, trees uprooted
-
-_WILDFIRE_TEMP = 30.0   # °C threshold
-_WILDFIRE_HUM_WARN = 30.0   # % — warn level
-_WILDFIRE_HUM_DANGER = 20.0  # % — danger level
-_WILDFIRE_NO_RAIN = 0.5  # mm — nowcast total below this = "no rain"
-
-# Starkregen / Hochwasser — Schwellwerte
-_RAIN_NOWCAST_WARN = 15.0    # mm Summe im ~3h-Nowcast
-_RAIN_NOWCAST_DANGER = 30.0
-_RAIN_FC6_WARN = 25.0        # mm akkumuliert bis +6h
-_RAIN_FC6_DANGER = 40.0
-
-# Schneefall / Schneelast — Schwellwerte (Niederschlag als Schnee bei Temp ≤ Grenze)
-_SNOW_TEMP_MAX = 1.0         # °C — darunter fällt Niederschlag als Schnee
-_SNOW_NOWCAST_WARN = 3.0     # mm Wasseräquivalent / ~3h  (≈ 3 cm Neuschnee)
-_SNOW_NOWCAST_DANGER = 8.0   # mm  (≈ 8–10 cm Neuschnee)
-_SNOW_FC6_WARN = 8.0         # mm akkumuliert bis +6h
-_SNOW_FC6_DANGER = 15.0
-
-# Glatteis / gefrierender Regen — Temperaturfenster
-_ICE_TEMP_LOW = -1.0
-_ICE_TEMP_HIGH = 1.0
-_ICE_MIN_RAIN = 0.2          # mm Niederschlag im Nowcast nötig
 
 
 def _storm_alerts(
@@ -1011,7 +1042,7 @@ def _storm_alerts(
     alerts: list[ScenarioAlert] = []
     active_gust = None
     if current:
-        active_gust = current.gust_speed_ms or current.wind_speed_ms
+        active_gust = current.gust_speed_ms if current.gust_speed_ms is not None else current.wind_speed_ms
 
     if active_gust is not None:
         if active_gust >= _BF10:
@@ -1033,8 +1064,10 @@ def _storm_alerts(
 
     if not alerts and forecast:
         for h in forecast.horizons:
-            g = h.gust_speed_ms or h.wind_speed_ms or 0.0
-            if g >= _BF8:
+            g = h.gust_max_ms if h.gust_max_ms is not None else (
+                h.gust_speed_ms if h.gust_speed_ms is not None else h.wind_speed_ms
+            )
+            if g is not None and g >= _BF8:
                 alerts.append(ScenarioAlert(
                     key="storm",
                     level="warn",
@@ -1084,8 +1117,10 @@ def _fc_acc_at(forecast: ForecastResult | None, hours: int) -> float | None:
         return None
     best = None
     for h in forecast.horizons:
-        if h.hours <= hours and h.precipitation_acc_mm is not None:
-            best = h.precipitation_acc_mm
+        if h.hours <= hours:
+            value = h.precipitation_mm if h.precipitation_mm is not None else h.precipitation_acc_mm
+            if value is not None:
+                best = value
     return best
 
 
@@ -1234,7 +1269,8 @@ def analyze_weather(
     )):
         incomplete = True
     if forecast and (not forecast.horizons or any(
-        h.precipitation_acc_mm is None or h.gust_speed_ms is None for h in forecast.horizons
+        (h.precipitation_mm is None and h.precipitation_acc_mm is None)
+        or (h.gust_max_ms is None and h.gust_speed_ms is None) for h in forecast.horizons
     )):
         incomplete = True
     if current and current.meta and _refresh_meta(current, "current").meta.freshness == "stale":
@@ -1272,12 +1308,13 @@ _WEEKDAYS_DE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
 
 
 @_single_flight
-async def get_daily_forecast(lat: float, lng: float) -> DailyForecast | None:
+async def get_daily_forecast(lat: float, lng: float, org_id: int | None = None) -> DailyForecast | None:
     """7-Tage-Tagesvorhersage über die konfigurierte Provider-Kette und Cache-TTL."""
     if not settings.WEATHER_ENABLED:
         return None
 
-    order = _provider_order("daily")
+    order = _provider_order("daily", org_id)
+    # Daily verwendet keine Org-Schlüssel: identische Providerdaten teilen den Cache.
     key = _cache_key(_provider_resource("daily7", "daily", order), lat, lng)
     cached = _cache_get(key)
     if cached is not None:

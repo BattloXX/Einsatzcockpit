@@ -31,6 +31,11 @@ from app.services.modul_navigation import modul_aktiv, modul_gruppen
 
 
 def _ctx_org(ctx):
+    if ctx:
+        for key in ("org_settings", "org"):
+            explicit_org = ctx.get(key)
+            if explicit_org is not None and getattr(explicit_org, "timezone", None):
+                return explicit_org
     user = ctx.get("user") if ctx else None
     return getattr(user, "org", None) if user else None
 
@@ -122,6 +127,11 @@ def _person_status_dot(value: str):
     return status_dot(farbe.get(value, "grau"), _person_status_label(value))
 
 
+def ms_to_kmh(value: float | None) -> float | None:
+    """Windgeschwindigkeit umrechnen; fehlende Werte bleiben fehlend."""
+    return value * 3.6 if value is not None else None
+
+
 templates = Jinja2Templates(directory="app/templates")
 templates.env.globals["icon"] = render_icon
 templates.env.globals["merkmal_icon"] = merkmal_icon
@@ -130,6 +140,7 @@ templates.env.globals["modul_icon"] = modul_icon
 templates.env.globals["status_dot"] = status_dot
 templates.env.globals["can_view_kontakt_directory"] = can_view_kontakt_directory_request
 templates.env.globals["einheit_status_label"] = einheit_status_label
+templates.env.filters["ms_to_kmh"] = ms_to_kmh
 templates.env.filters["local"] = _local
 templates.env.filters["local_time"] = _local_time
 templates.env.filters["local_datetime"] = _local_datetime
