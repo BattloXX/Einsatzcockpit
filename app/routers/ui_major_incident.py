@@ -102,6 +102,7 @@ from app.services.einheit_service import (
     ERLAUBTE_UEBERGAENGE_ERKUNDUNG,
     EinheitKonflikt,
     einheit_geraet_nur_lesen,
+    einheit_status_label,
 )
 from app.services.major_incident_service import (
     PHASE_LABELS,
@@ -3970,6 +3971,110 @@ def lage_druck(
     })
 
 
+def _bericht_dokumentation(db: Session, lage) -> dict:
+    """DOC-01: Ressourcenuebersicht, Auftragsverlauf, Statushistorie und Ressourcenjournal fuer den GSL-Bericht.
+
+    Nur vorhandene Daten (Zeitstempel aus den Dispositionen, Chronik der Einsatzstellen, Ressourcenjournal); keine
+    nachtraeglich berechneten oder ergaenzten Werte.
+    """
+    from app.models.major_incident import EinheitSiteDispatch, SiteLogEntry
+
+    einheiten = list(lage.einheiten)
+    nach_id = {e.id: e for e in einheiten}
+    sektor = {sec.id: sec.name for sec in lage.sectors}
+    dispatches = (
+        db.query(EinheitSiteDispatch)
+        .join(IncidentSite, IncidentSite.id == EinheitSiteDispatch.site_id)
+        .filter(IncidentSite.major_incident_id == lage.id)
+        .order_by(EinheitSiteDispatch.dispatched_at)
+        .all()
+    )
+    offen_je_einheit: dict[int, list] = {}
+    for d in dispatches:
+        if d.withdrawn_at is None and d.beendet_at is None:
+            offen_je_einheit.setdefault(d.einheit_id, []).append(d)
+
+    ressourcen = []
+    for e in sorted(einheiten, key=lambda x: (x.resource_type or "", x.label or "")):
+        ampel = resource_service.einheit_ampel(e.status, offen_je_einheit.get(e.id, []), e.status_at)
+        fuehrer = e.leader.display_name if e.leader is not None and e.leader.end_at is None else e.commander_label
+        ressourcen.append({
+            "label": e.label,
+            "typ": {"extern": "Extern", "material": "Material", "verband": "Verband"}.get(e.resource_type, "Fahrzeug"),
+            "organisation": " ".join(x for x in (e.bos, e.org_name) if x) or None,
+            "status": ampel["label"],
+            "status_seit": ampel["seit"],
+            "abschnitt": sektor.get(e.sector_id),
+            "fuehrer": fuehrer,
+            "angefordert": e.requested_at,
+            "eingetroffen": e.arrived_at,
+            "eingesetzt": e.committed_at,
+            "abgerueckt": e.released_at,
+        })
+
+    verlauf = []
+    for site in sorted(lage.sites, key=lambda x: (x.priority.value if x.priority else 99, x.sort_index, x.id)):
+        zeilen = []
+        for d in dispatches:
+            if d.site_id != site.id:
+                continue
+            einheit = nach_id.get(d.einheit_id)
+            zeilen.append({
+                "einheit": einheit.label if einheit else f"Einheit #{d.einheit_id}",
+                "auftrag": d.auftrag,
+                "art": AUFTRAGSART_LABEL.get(d.auftragsart, d.auftragsart),
+                "status": einheit_status_label(d.auftragsart, d.einheit_status),
+                "disponiert": d.dispatched_at,
+                "von": d.author_name,
+                "bestaetigt": d.bestaetigt_at,
+                "vor_ort": d.vor_ort_at,
+                "beendet": d.beendet_at,
+                "beendet_grund": d.beendet_grund,
+                "zurueckgezogen": d.withdrawn_at,
+                "zurueckgezogen_grund": d.withdrawn_grund,
+                "abgezogen": d.abgezogen_at,
+            })
+        if zeilen:
+            verlauf.append({"site": site, "zeilen": zeilen})
+
+    site_name = {s.id: s.bezeichnung for s in lage.sites}
+    chronik = []
+    if site_name:
+        for e in (
+            db.query(SiteLogEntry)
+            .filter(SiteLogEntry.incident_site_id.in_(site_name))
+            .order_by(SiteLogEntry.ts)
+        ):
+            einheit = nach_id.get(e.einheit_id) if e.einheit_id else None
+            chronik.append({
+                "ts": e.erfasst_at or e.ts,
+                "stelle": site_name.get(e.incident_site_id, "–"),
+                "art": SITE_LOG_KIND_LABEL.get(e.kind, e.kind),
+                "einheit": einheit.label if einheit else None,
+                "text": e.text,
+                "autor": e.author_name,
+            })
+
+    ressourcenjournal = [
+        {"ts": j.ts, "typ": j.ereignis_typ, "text": j.text, "autor": j.author_name,
+         "einheit": nach_id[j.einheit_id].label if j.einheit_id in nach_id else None}
+        for j in (
+            db.query(LageJournalEntry)
+            .filter(
+                LageJournalEntry.major_incident_id == lage.id,
+                LageJournalEntry.category.in_(resource_service.RESSOURCE_CATEGORIES),
+            )
+            .order_by(LageJournalEntry.ts)
+        )
+    ]
+    return {
+        "ressourcen_uebersicht": ressourcen,
+        "auftragsverlauf": verlauf,
+        "stellen_chronik": chronik,
+        "ressourcenjournal": ressourcenjournal,
+    }
+
+
 def build_bericht_context(db: Session, lage) -> dict:
     """Baut den Template-Kontext für den GSL-Gesamtbericht (druck_bericht.html).
 
@@ -3991,11 +4096,11 @@ def build_bericht_context(db: Session, lage) -> dict:
     for a in active_staff:
         staff_by_fn[a.function].append(a)
 
+    # DOC-01: vollstaendiges Funkjournal in zeitlicher Reihenfolge (frueher nur die letzten 50)
     comms = (
         db.query(CommLogEntry)
         .filter(CommLogEntry.major_incident_id == lage.id)
-        .order_by(CommLogEntry.ts.desc())
-        .limit(50)
+        .order_by(CommLogEntry.ts)
         .all()
     )
 
@@ -4016,7 +4121,9 @@ def build_bericht_context(db: Session, lage) -> dict:
     from app.services.qr_service import generate_qr_datauri
 
     qr_url = lage_qr_login_url(db, lage)
+    dokumentation = _bericht_dokumentation(db, lage)
     return {
+        **dokumentation,
         "lage": lage,
         "active_sites": active_sites,
         "done_sites": done_sites,
