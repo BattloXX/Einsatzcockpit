@@ -44,7 +44,8 @@
               {{ tip('Weitere Aktionen: KI, Drohne, QR-Code, PDF-Export') }}>{{ icon("dots", size="sm") }}</button>
       <div class="header-dropdown__menu" x-show="open" x-cloak x-transition.opacity.duration.150ms role="menu">
         <div class="dropdown-section-label">Einsatzübersicht</div>
-        <a href="/einsatz/{{ incident.id }}/dashboard" class="dropdown-item" target="_blank" rel="noopener noreferrer">
+        <a href="/einsatz/{{ incident.id }}/dashboard" class="dropdown-item" target="_blank" rel="noopener noreferrer"
+           x-show="!window.matchMedia('(max-width: 768px)').matches" x-cloak>
           <span class="di-icon">{{ icon("chart-bar", size="sm") }}</span> Lagemonitor
         </a>
         {% if weather_enabled %}
