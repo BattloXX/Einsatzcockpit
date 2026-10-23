@@ -72,7 +72,7 @@ Historische Agent-Fundstellen:
 ## Tests und Grenzen
 
 Erfolgreich lokal:
-- 192 ausgewaehlte Cloud-Tests: Presence, Migration, Gateway-UI, WebSocket, Lease/Redundanz,
+- 193 ausgewaehlte Cloud-Tests: Presence, Migration, Gateway-UI, WebSocket, Lease/Redundanz,
   Legacy-Dispatch, Druckregeln, Public-Tenant-Isolation und Routenkonventionen.
 - 68 .NET-Tests, darunter numerischer Cloud-Vertrag, regelmaessige Heartbeats, Receiver-Fehler,
   Reconnect und Neustart der Connection-Lifecycle.
@@ -82,7 +82,10 @@ Erfolgreich lokal:
 - Migration upgrade/downgrade/upgrade mit erhaltenem Gateway und Token-Hash erfolgreich.
 
 Der Worker-B-Test startet einen **separaten Python-Prozess**, der keine lokale Socket-Registry
-von Worker A besitzt. Ein weiterer HTTP-Test prueft die Diagnose mit leerer lokaler Registry.
+von Worker A besitzt. Zusaetzlich startet ein Test eine eigene HTTP-App mit authentifiziertem Testbenutzer in
+Prozess B, waehrend der Agent-WebSocket in Prozess A offen ist. Die echte Diagnoseantwort
+muss Online und Verbunden zeigen. Cookies werden dabei nur ueber stdin uebergeben.
+Ein weiterer HTTP-Test prueft die Diagnose mit leerer lokaler Registry.
 Das alte-Disconnect-Rennen wird mit einer neuen Verbindungszuordnung eines anderen Workers
 und anschliessendem realen Ende des alten Test-WebSockets nachgestellt; Status und Broadcasts
 werden geprueft. Zwei gleichzeitig verbundene Agents und Tokenrotation/-widerruf sind abgedeckt.
@@ -160,3 +163,14 @@ verweist fuer diesen weiteren Bugfix auf einen neueren Release als 2026.10.23.
 - `tests/Einsatzcockpit.PrintAgent.Tests/ProtocolConnectionTests.cs`
 - `tests/Tray.Smoke.ps1`
 
+
+
+## Abschliessende CI-Nachweise
+
+- Finaler Agent-Code mit Ping/Pong: https://github.com/BattloXX/Einsatzcockpit-Windows-Gateway/actions/runs/39982831332
+  erfolgreich unter Linux und Windows, einschliesslich echtem Tray-Prozessstart ohne Schreibrechte.
+- Cloud-Implementierung mit aktualisiertem Downloadhinweis: https://github.com/BattloXX/Einsatzcockpit/actions/runs/39982815227
+  erfolgreich: vollstaendige Python-Tests, Ruff, Mypy, MariaDB-Migration, Board-Playwright und JS.
+- Der zusaetzlich danach ergaenzte echte HTTP-Prozess-B-Test wurde zusammen mit den bisherigen
+  ausgewaehlten Regressionen lokal geprueft: 193 bestanden. Der Testnachtrag aendert keinen
+  produktiven Python- oder Agent-Code; dessen neue CI wird im PR angezeigt.

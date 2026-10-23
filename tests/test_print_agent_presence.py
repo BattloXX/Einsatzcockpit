@@ -1,4 +1,5 @@
 """Presence ueber Workergrenzen, Reconnect-Fencing und Tokenwiderruf."""
+import json
 import subprocess
 import sys
 from datetime import timedelta
@@ -163,3 +164,36 @@ def test_http_diagnostic_without_registry_and_no_secret_disclosure(client):
         db.commit()
     assert "Keine aktive WebSocket-Verbindung" in client.get(f"/gateway/{gateway_id}?diagnose=1").text
     assert client.get(f"/gateway/{gateway_id + 99999}?diagnose=1").status_code == 404
+
+
+def test_real_http_worker_b_while_websocket_is_on_worker_a(client):
+    from app.core.security import hash_api_key
+    from tests.test_print_agent_ui import _admin, _agent
+
+    _admin(client, "presence_http_process")
+    gateway_id = _agent()
+    token = "presence-test-" + uuid4().hex
+    with session() as db:
+        gw = db.get(Gateway, gateway_id)
+        gw.device_token_hash = hash_api_key(token)
+        db.commit()
+    with client.websocket_connect("/ws/print-agent", headers=_auth(token)) as socket:
+        _recv(socket, "config_sync")
+        # Eigene HTTP-App/Registry in Prozess B; Test-Cookies nur ueber stdin, nie argv.
+        worker = """
+import json
+import sys
+from fastapi.testclient import TestClient
+from app.main import app
+request = json.load(sys.stdin)
+with TestClient(app) as http:
+    http.cookies.update(request["cookies"])
+    response = http.get(request["path"])
+    assert response.status_code == 200, response.status_code
+    assert "<dd>Online</dd>" in response.text
+    assert "Verbunden" in response.text
+    assert response.headers["cache-control"] == "no-store"
+"""
+        subprocess.run([sys.executable, "-c", worker], check=True, timeout=30,
+                       input=json.dumps({"cookies": dict(client.cookies),
+                                         "path": f"/gateway/{gateway_id}?diagnose=1"}), text=True)
