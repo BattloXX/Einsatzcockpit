@@ -339,6 +339,10 @@ _css_path = _os.path.join(_os.path.dirname(__file__), "..", "static", "css", "ap
 templates.env.globals["CSS_VERSION"] = _LazyAssetVersion(
     lambda: _os.path.getmtime(_css_path)
 )
+_weather_css_path = _os.path.join(_os.path.dirname(_css_path), "weather_forecast.css")
+templates.env.globals["WEATHER_CSS_VERSION"] = _LazyAssetVersion(
+    lambda: _os.path.getmtime(_weather_css_path)
+)
 
 # Cache-Busting für JS/Scripts: max(mtime) über alle app/static/js/*.js-Dateien.
 # Ohne Versions-Query behielt der Service Worker (stale-while-revalidate, sw.js)

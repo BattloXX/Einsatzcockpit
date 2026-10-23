@@ -7,7 +7,7 @@
   {% include "weather/_warnstatus.html" %}
 
   {# ── Eigene Wetterstation (Ist-Stand) ──────────────────────────────────────── #}
-  <h2>Aktuell</h2>
+  <h2 class="weather-section-title">{{ icon("temperature", size="xs") }} Aktuell</h2>
   {% include "weather/_datenstand.html" %}
   {% include "weather/_station_card.html" %}
 
@@ -111,32 +111,34 @@
       </div>
       {% endif %}
 
-      <section aria-label="Kurzfristig">
-        <h2>Kurzfristig</h2>
+      <section class="weather-forecast-section" aria-label="Kurzfristig">
+        <div class="weather-section-heading">
+          <h2 class="weather-section-title">{{ icon("clock", size="xs") }} Kurzfristig</h2>
+          <span class="weather-section-subtitle">Nächste 1–6 Stunden</span>
+        </div>
         {% set horizon_hours = (1,3,6) %}
         {% include "weather/_horizons.html" %}
         {% if indicators is defined and indicators.heavy_rain.peak_mmh is not none %}
-        <p>Spitzenintensität: {{ '%.1f'|format(indicators.heavy_rain.peak_mmh) }} mm/h{% if indicators.heavy_rain.peak_at %} · {{ indicators.heavy_rain.peak_at|local_datetime }}{% endif %}</p>
+        <p class="weather-forecast-note">{{ icon("cloud-rain", size="xs") }} Spitzenintensität: {{ '%.1f'|format(indicators.heavy_rain.peak_mmh) }} mm/h{% if indicators.heavy_rain.peak_at %} · {{ indicators.heavy_rain.peak_at|local_datetime }}{% endif %}</p>
         {% endif %}
       </section>
-      <section aria-label="Prognose">
-        <h2>Prognose</h2>
+      <section class="weather-forecast-section" aria-label="Prognose">
+        <div class="weather-section-heading">
+          <h2 class="weather-section-title">{{ icon("chart-line", size="xs") }} Prognose</h2>
+          <span class="weather-section-subtitle">Nächste 12–24 Stunden</span>
+        </div>
         {% set horizon_hours = (12,24) %}
         {% include "weather/_horizons.html" %}
-        {% if daily_forecast %}
-        <h3>Tagesprognose</h3>
-        <div style="display:flex;flex-wrap:wrap;gap:8px;">
-          {% for day in daily_forecast.days %}
-          <div style="min-width:0;overflow-wrap:anywhere;">
-            <strong>{{ day.date_label }}</strong>
-            {% if day.temp_min_c is not none %}{{ '%.1f'|format(day.temp_min_c) }} °C{% endif %}
-            {% if day.temp_max_c is not none %}bis {{ '%.1f'|format(day.temp_max_c) }} °C{% endif %}
-            · {% if day.precip_mm is not none %}{{ '%.1f'|format(day.precip_mm) }} mm{% else %}Daten unvollständig{% endif %}
-          </div>
-          {% endfor %}
-        </div>
-        {% endif %}
       </section>
+      {% if daily_forecast and daily_forecast.days %}
+      <section class="weather-forecast-section" aria-label="Tagesprognose">
+        <div class="weather-section-heading">
+          <h2 class="weather-section-title">{{ icon("calendar", size="xs") }} Tagesprognose</h2>
+          <span class="weather-section-subtitle">Temperatur &amp; Niederschlag pro Tag</span>
+        </div>
+        {% include "weather/_daily_forecast.html" %}
+      </section>
+      {% endif %}
 
     </div>{# end left column #}
 

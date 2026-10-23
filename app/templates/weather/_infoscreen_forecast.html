@@ -1,0 +1,54 @@
+{% macro horizons_table(hours) %}
+<table class="weather-monitor-forecast-table">
+  <thead><tr><th scope="col">Zeitraum</th><th scope="col">Temp.</th><th scope="col">Niederschlag</th><th scope="col">Wind &amp; Böen</th></tr></thead>
+  <tbody>
+    {% for h in prognose_kurz if h.hours in hours %}
+    <tr data-horizon="{{ h.hours }}">
+      <th scope="row">+{{ h.hours }} h</th>
+      <td>{% if h.temperature_c is not none %}{{ '%.1f'|format(h.temperature_c) }} °C{% else %}–{% endif %}</td>
+      <td class="weather-monitor-rain">{% if h.precipitation_mm is not none %}{{ '%.1f'|format(h.precipitation_mm) }} mm{% else %}–{% endif %}</td>
+      <td class="weather-monitor-wind">
+        <strong>Böen: {% if h.gust_max_ms is not none %}{{ '%.1f'|format(h.gust_max_ms) }} m/s · {{ '%.1f'|format(h.gust_max_kmh) }} km/h{% else %}–{% endif %}</strong>
+        {% if h.wind_speed_ms is not none %}<span>Wind: {{ '%.1f'|format(h.wind_speed_ms) }} m/s · {{ '%.1f'|format(h.wind_speed_ms|ms_to_kmh) }} km/h</span>{% endif %}
+        {% if h.gust_max_at %}<span>Spitze: {{ h.gust_max_at|local_datetime }}</span>{% endif %}
+        {% if not h.complete %}<span class="weather-forecast-incomplete">{{ icon("alert-triangle", size="xs") }} Daten unvollständig</span>{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endmacro %}
+
+{% set complete_short = prognose_kurz|selectattr('hours', 'in', (1,3,6))|list %}
+{% if complete_short and complete_short|selectattr('complete')|list|length == 3 %}
+<section class="weather-forecast-section" aria-label="Kurzfristig">
+  <div class="weather-section-heading">
+    <h2 class="weather-section-title">{{ icon("clock", size="xs") }} Kurzfristig</h2>
+    <span class="weather-section-subtitle">Nächste 1–6 Stunden</span>
+  </div>
+  {{ horizons_table((1,3,6)) }}
+</section>
+{% endif %}
+<section class="weather-forecast-section" aria-label="Prognose">
+  <div class="weather-section-heading">
+    <h2 class="weather-section-title">{{ icon("chart-line", size="xs") }} Prognose</h2>
+    <span class="weather-section-subtitle">Nächste 12–24 Stunden</span>
+  </div>
+  {{ horizons_table((12,24)) }}
+</section>
+<section class="weather-forecast-section" aria-label="Tagesprognose">
+  <div class="weather-section-heading">
+    <h2 class="weather-section-title">{{ icon("calendar", size="xs") }} Tagesprognose</h2>
+    <span class="weather-section-subtitle">{{ daily_forecast.days[:7]|length if daily_forecast else 0 }} Tage</span>
+  </div>
+  {% if daily_forecast and daily_forecast.days %}
+    {% with daily_forecast=namespace(days=daily_forecast.days[:7]) %}
+    {% include "weather/_daily_forecast.html" %}
+    {% endwith %}
+  {% else %}
+  <p class="weather-forecast-note">Tagesprognose derzeit nicht verfügbar.</p>
+  {% endif %}
+</section>
+<div class="weather-monitor-sources">
+  {% include "weather/_datenstand.html" %}
+</div>

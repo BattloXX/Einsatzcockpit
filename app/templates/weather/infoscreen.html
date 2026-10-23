@@ -6,6 +6,7 @@
 <title>Wetter-Monitor {{ org.name }} | {{ brand }}</title>
 <link href="/static/css/infoscreen.css?v={{ ASSET_VERSION }}" rel="stylesheet">
 <link href="/static/css/fonts.css?v={{ ASSET_VERSION }}" rel="stylesheet"/>
+<link href="/static/css/weather_forecast.css?v={{ WEATHER_CSS_VERSION }}" rel="stylesheet">
 <style>
   .status-dot{display:inline-block;width:.75em;height:.75em;border-radius:50%;vertical-align:middle}.status-dot--gruen{background:#22c55e}.status-dot--rot{background:#ef4444}.status-dot--gelb{background:#facc15}.station-status{width:10px;height:10px}.station-status.status-dot--gruen{box-shadow:0 0 6px rgba(34,197,94,.7)}
   span[style*="font-size:40px"]>.ecp-icon,span[style*="font-size:36px"]>.ecp-icon{width:1em;height:1em}
@@ -13,7 +14,7 @@
   .ecp-icon{display:inline-block;vertical-align:-0.2em;flex-shrink:0}.ecp-icon--xs{width:16px;height:16px}.ecp-icon--sm{width:20px;height:20px}.ecp-icon--md{width:24px;height:24px}.ecp-icon--lg{width:32px;height:32px}
   body {
     background-color:#0b1326; color:#dae2fd; overflow:hidden;
-    width:1920px; min-height:1080px; font-family:"Hanken Grotesk",sans-serif;
+    width:100%; margin:0; font-family:"Hanken Grotesk",sans-serif;
   }
   .val-xxl { font-size:96px; line-height:1; font-weight:800; }
   .unit-xl  { font-size:48px; line-height:1; font-weight:700; }
@@ -26,17 +27,84 @@
   .bar-enter { animation:bar-grow 0.6s ease-out both; }
   @keyframes bar-grow { from{transform:scaleY(0);transform-origin:bottom;} }
   .sparkline-bg { position:absolute;bottom:0;left:0;width:100%;height:55%;pointer-events:none; }
-  main > * { min-width:0; }
+  .weather-infoscreen-frame {
+    --text:#dae2fd; --text-muted:#a1aec9; --border:#2e3347; --surface-low:#131b2e;
+    display:grid; grid-template-rows:88px minmax(0,1fr) 36px; width:100%; height:100dvh;
+  }
+  .weather-infoscreen-frame [hidden] { display:none !important; }
+  .weather-infoscreen-frame > header { min-width:0; gap:20px; }
+  .weather-infoscreen-frame > header > div { min-width:0; }
+  .weather-monitor-main { display:grid; grid-template-rows:172px minmax(0,1fr); gap:12px; padding:12px; min-height:0; }
+  .weather-monitor-metrics { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:12px; }
+  .weather-monitor-metrics > div { min-width:0; padding:12px; }
+  .weather-monitor-metrics .val-xxl { font-size:72px; }
+  .weather-monitor-metrics .unit-xl { font-size:32px; }
+  .weather-monitor-metrics .ecp-icon--lg { width:16px; height:16px; }
+  .weather-monitor-content { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.15fr) minmax(0,1.2fr); gap:12px; min-height:0; }
+  .weather-monitor-content > * { min-width:0; min-height:0; }
+  .weather-monitor-observed { display:grid; grid-template-rows:240px minmax(0,1fr); gap:12px; }
+  .weather-monitor-nowcast, .weather-monitor-levels { min-height:0; padding:12px; }
+  .weather-monitor-nowcast h3, .weather-monitor-levels h3 { font-size:16px !important; }
+  .weather-monitor-nowcast h3 > .ecp-icon, .weather-monitor-levels h3 > .ecp-icon { width:20px; height:20px; }
+  .weather-monitor-nowcast-chart { min-height:80px; }
+  .weather-monitor-levels { display:flex; flex-direction:column; gap:10px; }
+  .weather-monitor-level-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); grid-auto-rows:minmax(0,1fr); gap:8px; min-height:0; flex:1; }
+  .weather-monitor-level-grid > div { min-width:0; padding:10px; }
+  .weather-monitor-level-grid .ecp-icon--lg { width:14px; height:14px; }
+  .weather-monitor-level-name { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; overflow-wrap:anywhere; }
+  .weather-monitor-forecast { display:flex; flex-direction:column; gap:10px; padding:12px; border:1px solid var(--border); border-radius:8px; background:#131b2e; }
+  .weather-monitor-forecast-table { width:100%; border-collapse:collapse; table-layout:fixed; font-variant-numeric:tabular-nums; }
+  .weather-monitor-forecast-table th, .weather-monitor-forecast-table td { text-align:left; padding:6px 5px; border-bottom:1px solid var(--border); vertical-align:top; font-size:12px; overflow-wrap:anywhere; }
+  .weather-monitor-forecast-table thead th { font-size:10px; font-weight:500; color:var(--text-muted); padding-top:0; }
+  .weather-monitor-forecast-table th:first-child { width:12%; }
+  .weather-monitor-forecast-table th:nth-child(2) { width:14%; }
+  .weather-monitor-forecast-table th:nth-child(3) { width:20%; }
+  .weather-monitor-rain { color:#93c5fd; font-weight:700; }
+  .weather-monitor-wind > * { display:block; }
+  .weather-monitor-wind strong { font-size:12px; font-weight:600; }
+  .weather-monitor-wind > span { font-size:10px; line-height:1.4; color:var(--text-muted); }
+  .weather-monitor-wind > .weather-forecast-incomplete { display:flex; color:#f2b02e; }
+  .weather-monitor-forecast .weather-daily-grid { grid-template-columns:repeat(4,minmax(0,1fr)); }
+  .weather-monitor-forecast .weather-daily-card { padding:7px 8px; gap:4px; background:#171f33; }
+  .weather-monitor-sources { margin-top:auto; padding-top:8px; border-top:1px solid var(--border); }
+  .weather-monitor-sources .weather-datenstand { font-size:10px !important; line-height:1.35; gap:4px !important; }
+  .weather-monitor-context { display:flex; flex-direction:column; gap:10px; }
+  .weather-monitor-context > [data-warnings-status] { flex:none; padding:8px !important; border-radius:6px; background:#131b2e; }
+  .weather-monitor-context > [data-warnings-status="ok_with_warnings"] { display:none !important; }
+  .weather-monitor-warnings { flex:none; display:grid; gap:8px; padding:12px; background:#291b2b; border:1px solid #8b4548; border-radius:8px; }
+  .weather-monitor-page-label { color:var(--text-muted); font-size:10px; white-space:nowrap; }
+  .weather-monitor-warning-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); grid-auto-rows:1fr; gap:8px; }
+  .weather-monitor-warnings[data-two-rows] .weather-monitor-warning-grid { grid-template-rows:repeat(2,minmax(0,1fr)); height:228px; }
+  .weather-monitor-warning { display:flex; flex-direction:column; gap:4px; min-width:0; padding:8px 10px; border-left:4px solid; background:#171f33; border-radius:4px; }
+  .weather-monitor-warning strong { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; font-size:13px; line-height:1.3; overflow-wrap:anywhere; }
+  .weather-monitor-warning p { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; margin:0; font-size:12px; line-height:1.4; }
+  .weather-monitor-warning > span { margin-top:auto; font-size:10px; line-height:1.4; color:var(--text-muted); }
+  .weather-monitor-hints { flex:none; padding:10px 12px; border:1px solid var(--border); border-radius:8px; background:#131b2e; }
+  .weather-monitor-hints strong { display:block; margin-bottom:4px; }
+  .weather-monitor-hints .ecp-icon { width:16px; height:16px; }
+  .weather-monitor-radar { flex:1; min-height:240px; position:relative; }
+  .weather-infoscreen-frame > footer { gap:16px; min-width:0; padding:0 20px; }
+  .weather-infoscreen-frame > footer .text-label-caps { font-size:10px; }
+  .weather-infoscreen-frame > footer > .flex { min-width:0; gap:16px; }
   @media (max-width:760px) {
-    body { width:100%; min-height:100vh; overflow:auto; }
-    .weather-infoscreen-frame { width:100% !important; height:auto !important; min-height:100vh; }
-    header, footer { height:auto !important; padding:12px !important; gap:12px; flex-wrap:wrap; }
-    header .flex, footer .flex { flex-wrap:wrap; gap:8px; }
-    main { grid-template-columns:minmax(0,1fr) !important; grid-template-rows:auto !important; }
-    main > * { grid-column:auto !important; grid-row:auto !important; overflow-wrap:anywhere; }
-    .val-xxl { font-size:64px; }
-    .unit-xl { font-size:32px; }
-    .weather-datenstand { min-width:0; }
+    body { overflow:auto; }
+    .weather-infoscreen-frame { height:auto; min-height:100vh; grid-template-rows:auto auto auto; }
+    .weather-infoscreen-frame > header, .weather-infoscreen-frame > footer { padding:12px; gap:12px; flex-wrap:wrap; }
+    .weather-infoscreen-frame > header .flex, .weather-infoscreen-frame > footer .flex { flex-wrap:wrap; gap:8px; }
+    .weather-monitor-main, .weather-monitor-content { display:flex; flex-direction:column; }
+    .weather-monitor-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .weather-monitor-metrics .val-xxl { font-size:40px; }
+    .weather-monitor-metrics .unit-xl { font-size:20px; }
+    .weather-monitor-metrics .text-label-caps { font-size:9px; letter-spacing:0; }
+    .weather-monitor-observed { grid-template-rows:240px auto; }
+    .weather-monitor-forecast .weather-daily-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .weather-monitor-forecast-table th, .weather-monitor-forecast-table td { font-size:10px; padding:5px 3px; }
+    .weather-monitor-forecast-table thead th { font-size:8px; }
+    .weather-monitor-wind strong { font-size:10px; }
+    .weather-monitor-warning-grid { grid-template-columns:minmax(0,1fr); }
+    .weather-monitor-warnings[data-two-rows] .weather-monitor-warning-grid { grid-template-rows:none; height:auto; }
+    .weather-monitor-radar { flex:auto; height:320px; }
+    .weather-monitor-level-grid { grid-auto-rows:minmax(120px,auto); }
   }
   ::-webkit-scrollbar { display:none; }
 </style>
@@ -110,18 +178,18 @@
 {% endif %}
 {% endmacro %}
 
-<div class="weather-infoscreen-frame flex flex-col bg-background" style="height:1080px;width:1920px;">
+<div class="weather-infoscreen-frame bg-background">
 
   {# ── HEADER ──────────────────────────────────────────────────────────────── #}
   <header class="flex items-center justify-between px-8 bg-surface-container border-b border-outline-variant shadow-md"
-          style="height:116px;flex-shrink:0;">
+          style="min-height:0;">
     <div class="flex items-center gap-5">
       {% set _logo = org.logo_path or '/static/img/logo_einsatzcockpit.png' %}
       <img src="{{ _logo }}" alt="{{ org.name }}" class="object-contain"
-           style="max-height:60px;max-width:140px;" onerror="this.style.display='none'">
+           style="max-height:48px;max-width:140px;" onerror="this.style.display='none'">
       <div class="flex flex-col">
         <span class="font-mono text-label-caps text-primary tracking-widest uppercase">{{ org.name }}</span>
-        <h1 class="font-sans text-on-surface font-extrabold" style="font-size:32px;line-height:1.15;">Wetter-Monitor</h1>
+        <h1 class="font-sans text-on-surface font-extrabold" style="font-size:26px;line-height:1.15;">Wetter-Monitor</h1>
         <span class="font-mono text-label-caps text-on-surface-variant" style="font-size:10px;opacity:.7;">
           VERLAUF {{ history_hours }}h
           {% if station and station.online %}&bull; LIVE: {{ station.name }}{% endif %}
@@ -134,13 +202,13 @@
     <div class="flex items-center gap-8">
       <div class="text-right">
         <div class="font-mono text-label-caps text-on-surface-variant tracking-wide" id="hdr-date">–</div>
-        <div class="font-sans text-on-surface font-bold" style="font-size:62px;line-height:1;" id="hdr-time">–</div>
+        <div class="font-sans text-on-surface font-bold" style="font-size:44px;line-height:1;" id="hdr-time">–</div>
       </div>
       {% if station and station.online %}
       <div class="flex items-center gap-4 px-5 py-3 rounded-xl bg-primary-container">
         <span style="font-size:40px;line-height:1;">{{ icon("temperature", size="lg") }}</span>
         <div>
-          <span class="text-on-primary-container font-sans font-extrabold" style="font-size:58px;line-height:1;">
+          <span class="text-on-primary-container font-sans font-extrabold" style="font-size:40px;line-height:1;">
             {% if eff_temp is not none %}{{ "%.1f"|format(eff_temp) }}°{% else %}–{% endif %}
           </span>
           <span class="font-mono text-label-caps text-on-primary-container tracking-widest" style="display:block;font-size:10px;">LIVE &bull; {{ station.name }}</span>
@@ -150,7 +218,7 @@
       <div class="flex items-center gap-4 px-5 py-3 rounded-xl bg-surface-container-highest">
         <span style="font-size:40px;line-height:1;">{{ icon("cloud", size="lg") }}</span>
         <div>
-          <span class="text-on-surface font-sans font-extrabold" style="font-size:58px;line-height:1;">
+          <span class="text-on-surface font-sans font-extrabold" style="font-size:40px;line-height:1;">
             {% if eff_temp is not none %}{{ "%.1f"|format(eff_temp) }}°{% else %}–{% endif %}
           </span>
           <span class="font-mono text-label-caps text-on-surface-variant tracking-widest" style="display:block;font-size:10px;">GEOSPHERE AUSTRIA</span>
@@ -160,7 +228,7 @@
       <div class="flex items-center gap-4 px-5 py-3 rounded-xl bg-surface-container-high">
         <span style="font-size:40px;line-height:1;opacity:.5;">{{ icon("cloud", size="lg") }}</span>
         <div>
-          <span class="text-on-surface-variant font-sans font-extrabold" style="font-size:58px;line-height:1;">—°</span>
+          <span class="text-on-surface-variant font-sans font-extrabold" style="font-size:40px;line-height:1;">—°</span>
           <span class="font-mono text-label-caps text-on-surface-variant tracking-widest" style="display:block;font-size:10px;">KEINE DATEN</span>
         </div>
       </div>
@@ -180,13 +248,8 @@
   </header>
 
   {# ── MAIN ─────────────────────────────────────────────────────────────────── #}
-  <main class="flex-1 p-3 gap-3 overflow-hidden"
-        style="display:grid;grid-template-columns:repeat(5,1fr);grid-template-rows:204px 1fr 232px;">
-
-    {# ═══════════════════════════════════════════════════════════════════════
-       ROW 1: 5 Metrik-Karten mit Sparklines, Trends, Min/Max
-       ═══════════════════════════════════════════════════════════════════════ #}
-
+  <main class="weather-monitor-main">
+    <div class="weather-monitor-metrics">
     {# Temperatur (Feature 8: Frost/Glatteis-Indikator) #}
     {% set h_temp = metric_history.get("temp") %}
     <div class="rounded-xl p-4 flex flex-col justify-between shadow relative overflow-hidden bg-surface-container-high"
@@ -330,12 +393,11 @@
       </div>
     </div>
 
-    {# ═══════════════════════════════════════════════════════════════════════
-       ROW 2: Nowcast (links) + Warnungen / 7-Tage-Vorschau (rechts)
-       ═══════════════════════════════════════════════════════════════════════ #}
-
+    </div>
+    <div class="weather-monitor-content">
+      <div class="weather-monitor-observed">
     {# Nowcast #}
-    <div class="col-span-2 bg-surface-container-low rounded-xl border border-outline-variant p-4 flex flex-col" style="min-height:0;">
+    <div class="weather-monitor-nowcast bg-surface-container-low rounded-xl border border-outline-variant p-4 flex flex-col" style="min-height:0;">
       <div class="flex justify-between items-center mb-3">
         <h3 class="font-sans font-semibold text-on-surface flex items-center gap-2" style="font-size:18px;">
           {{ icon("cloud-rain", size="lg") }} Niederschlags-Nowcast (3&thinsp;h)
@@ -345,10 +407,10 @@
         </div>
       </div>
       {% if nowcast and nowcast_bars %}
-      <div class="flex-1 relative flex items-end justify-between gap-1 border-b-2 border-outline-variant pb-2">
+      <div class="weather-monitor-nowcast-chart flex-1 relative flex items-end justify-between gap-1 border-b-2 border-outline-variant pb-2">
         {% for bar in nowcast_bars %}
         <div class="flex-1 bar-enter rounded-t"
-             style="height:{{ [bar.h, 2]|max }}px;background:{{ bar.color }};min-width:0;"
+             style="height:{{ [bar.h * 4, 2]|max }}px;background:{{ bar.color }};min-width:0;"
              title="{{ bar.label }}"></div>
         {% endfor %}
         {% if nowcast.peak_mm is not none and nowcast.peak_mm < 0.05 %}
@@ -373,118 +435,87 @@
       {% endif %}
     </div>
 
-    {# ═══════════════════════════════════════════════════════════════════════
-       RECHTE SPALTE (col 3–5, Zeilen 2+3): Warnungen / Vorschau + Radar
-       Der Warnbereich wächst/schrumpft dynamisch, der Radar füllt den Rest.
-       ═══════════════════════════════════════════════════════════════════════ #}
-    <div class="col-span-3 flex flex-col gap-3" style="grid-row:2/4;min-height:0;">
-
-      {# Warnungen – auto-Höhe (1 Warnung ≈ 80px, 4 Warnungen ≈ 280px) #}
-      {% with user=namespace(org=org) %}
-      {% include "weather/_warnstatus.html" %}
-      {% endwith %}
-      {% if warnings %}
-      <div class="flex-shrink-0 rounded-xl p-4 flex flex-col border-2 border-error warn-pulse">
-        <div class="flex items-center gap-4 mb-2">
-          <span style="font-size:40px;line-height:1;">{{ icon("alert-triangle", size="lg") }}</span>
-          <div>
-            <h2 class="font-sans font-bold text-on-error-container" style="font-size:24px;line-height:1.1;">AMTLICHE WARNUNGEN</h2>
-            <p class="font-mono text-label-caps text-on-error-container tracking-widest" style="font-size:10px;">
-              {{ warnings|length }} {{ 'VERALTETE' if warnings_result.status == 'stale' else 'AKTIVE' }} WARNUNG{{ 'EN' if warnings|length > 1 else '' }} &bull; ZAMG / GEOSPHERE AUSTRIA
-            </p>
+    {# Pegelstationen (Feature 4: HQ-Schwellen) #}
+    <div class="weather-monitor-levels bg-surface-container-high rounded-xl" data-monitor-pages style="min-height:0;">
+      <h3 class="font-sans font-semibold text-on-surface flex items-center gap-2" style="font-size:18px;flex-shrink:0;">
+        {{ icon("ripple", size="lg") }} Pegelst&auml;nde
+        <span class="font-mono text-label-caps text-on-surface-variant ml-auto" style="font-size:10px;">{{ history_hours }}h VERLAUF</span>
+      </h3>
+      {% if abfluss_views %}
+      <div class="weather-monitor-page-label" data-monitor-page-label>1–{{ [4, abfluss_views|length]|min }} / {{ abfluss_views|length }}</div>
+      {% for group in abfluss_views|batch(4) %}
+      <div class="weather-monitor-level-grid" data-monitor-page
+           data-label="{{ loop.index0 * 4 + 1 }}–{{ loop.index0 * 4 + group|length }} / {{ abfluss_views|length }}"{% if not loop.first %} hidden{% endif %}>
+        {% for av in group %}
+        {% set sl = abfluss_sparklines.get(av.hzbnr) if abfluss_sparklines else None %}
+        <div class="bg-surface-container-highest rounded-lg p-3 relative overflow-hidden"
+             style="border-bottom:4px solid {{ av.stufe_farbe }};">
+          {# Sparkline mit HQ-Markierungen #}
+          {% if sl and sl.points %}
+          <svg style="position:absolute;bottom:0;left:0;width:100%;height:52%;pointer-events:none;"
+               preserveAspectRatio="none" viewBox="0 0 {{ sl.width }} {{ sl.height }}">
+            <defs>
+              <linearGradient id="pgg{{ av.hzbnr }}" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="{{ av.stufe_farbe }}" stop-opacity="0.35"/>
+                <stop offset="100%" stop-color="{{ av.stufe_farbe }}" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <polygon points="{{ sl.points }} {{ sl.width }},{{ sl.height }} 0,{{ sl.height }}"
+                     fill="url(#pgg{{ av.hzbnr }})"/>
+            <polyline points="{{ sl.points }}" fill="none" stroke="{{ av.stufe_farbe }}"
+                      stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" opacity="0.75"/>
+            {# Feature 4: HQ-Schwellen als horizontale gestrichelte Linien #}
+            {% for hq_k, lbl, hq_color in [("hq1","HQ1","#eab308"),("hq10","HQ10","#f97316"),("hq100","HQ100","#ef4444")] %}
+            {% if sl.get(hq_k ~ "_pct") is not none and 0 <= sl.get(hq_k ~ "_pct") <= 1 %}
+            {% set y_pos = sl.height - sl.get(hq_k ~ "_pct") * (sl.height - 4) - 2 %}
+            <line x1="0" x2="{{ sl.width }}"
+                  y1="{{ y_pos }}" y2="{{ y_pos }}"
+                  stroke="{{ hq_color }}" stroke-width="0.8" stroke-dasharray="3,2" opacity="0.85"/>
+            <text x="{{ sl.width - 2 }}" y="{{ y_pos - 1 }}" text-anchor="end"
+                  font-size="5" fill="{{ hq_color }}" font-family="JetBrains Mono">{{ lbl }}</text>
+            {% endif %}
+            {% endfor %}
+          </svg>
+          {% endif %}
+          {# Inhalt #}
+          <span class="weather-monitor-level-name font-mono text-label-caps text-on-surface-variant block mb-0.5 relative z-10" style="font-size:10px;" title="{{ av.name }}">{{ av.name|upper }}</span>
+          <div class="flex items-end gap-1 relative z-10">
+            <span class="font-sans font-bold text-on-surface" style="font-size:36px;line-height:1;">
+              {{ "%.1f"|format(av.wert) if av.wert is not none else "—" }}
+            </span>
+            <span class="font-sans text-on-surface-variant mb-0.5" style="font-size:16px;">m&sup3;/s</span>
+            {% if sl and sl.trend %}<span class="mb-1 ml-1">{{ trend_arrow(sl.trend, av.stufe_farbe) }}</span>{% endif %}
+          </div>
+          <div class="flex items-center justify-between relative z-10 mt-0.5">
+            <span class="font-mono text-label-caps" style="color:{{ av.stufe_farbe }};font-size:10px;">
+              {{ av.stufe_label }}{% if av.naechste_hq %} &bull; {{ av.naechste_hq }}{% endif %}
+            </span>
+            {% if sl and sl.min is not none %}<span class="font-mono text-label-caps text-on-surface-variant" style="font-size:9px;">{{ icon("chevron-up", size="lg") }}{{ "%.1f"|format(sl.max) }} {{ icon("chevron-down", size="lg") }}{{ "%.1f"|format(sl.min) }}</span>{% endif %}
           </div>
         </div>
-        <div class="flex flex-col gap-1.5">
-          {% for w in warn_views[:4] %}
-          <div class="flex items-center justify-between px-3 py-2 rounded-lg border-l-8"
-               style="background:rgba(0,0,0,.2);border-color:{{ w.color }};">
-            <div class="flex flex-col gap-0.5">
-              <span class="font-sans font-semibold text-on-error-container" style="font-size:14px;">
-                {{ w.event_type }}{% if w.level %} &ndash; Stufe {{ w.level }}{% endif %}
-              </span>
-              {% if w.text %}<span class="font-sans text-on-error-container" style="font-size:12px;opacity:.9;">{{ w.text[:140] }}</span>{% endif %}
-              <span class="font-mono text-on-error-container" style="font-size:10px;opacity:.75;">{{ w.valid_from|local_datetime }} – {{ w.valid_to|local_datetime }}</span>
-            </div>
-            <span class="font-sans font-black text-on-error-container ml-3" style="font-size:32px;">!</span>
-          </div>
-          {% endfor %}
+        {% endfor %}
+      </div>
+      {% endfor %}
+      {% else %}
+      <div class="flex-1 flex items-center justify-center">
+        <div class="text-center">
+          <span style="font-size:36px;line-height:1;opacity:.4;">{{ icon("droplet", size="lg") }}</span>
+          <p class="font-mono text-label-caps text-on-surface-variant mt-2 uppercase">Keine Pegel konfiguriert</p>
         </div>
       </div>
       {% endif %}
-
-      {# 7-Tage-Vorschau – kompakt, nur wenn keine Warnungen #}
-        {% set complete_short = prognose_kurz|selectattr('hours', 'in', (1,3,6))|list %}
-        {% if complete_short and complete_short|selectattr('complete')|list|length == 3 %}
-        <section aria-label="Kurzfristig">
-          <h2>Kurzfristig</h2>
-          {% set horizon_hours = (1,3,6) %}
-          {% include "weather/_horizons.html" %}
-        </section>
-        {% endif %}
-        {% include "weather/_internal_hints.html" %}
-        {% include "weather/_datenstand.html" %}
-      {% if not warnings %}
-      <div class="flex-shrink-0 rounded-xl px-4 py-3 border border-outline-variant bg-surface-container-low">
-        <div class="flex items-center justify-between mb-2">
-          <div class="flex items-center gap-2">
-
-            <span class="font-sans font-semibold text-on-surface" style="font-size:15px;">Tagesvorschau</span>
-            <span class="font-mono text-label-caps text-on-surface-variant" style="font-size:9px;">ZAMG</span>
-          </div>
-          <span class="font-mono text-label-caps text-on-surface-variant px-2 py-0.5 bg-surface-container-highest rounded" style="font-size:9px;">7-TAGE-VORSCHAU</span>
-        </div>
-        {% if daily_forecast and daily_forecast.days %}
-        {% set all_max = daily_forecast.days | map(attribute='temp_max_c') | reject('none') | list %}
-        {% set all_min = daily_forecast.days | map(attribute='temp_min_c') | reject('none') | list %}
-        {% set t_max = (all_max | max) if all_max else 30 %}
-        {% set t_min = (all_min | min) if all_min else 0 %}
-        {% set t_span = ((t_max - t_min) or 10) %}
-        <div class="flex gap-1.5 items-end">
-          {% for day in daily_forecast.days %}
-          <div class="flex-1 flex flex-col items-center gap-0.5" style="min-width:0;">
-            <div class="font-mono text-label-caps text-on-surface-variant" style="font-size:8px;white-space:nowrap;">
-              {% if day.precip_mm is not none and day.precip_mm > 0.5 %}{{ icon("cloud-rain", size="lg") }}{{ "%.0f"|format(day.precip_mm) }}mm
-              {% elif day.precip_mm is not none and day.precip_mm > 0 %}{{ icon("droplet", size="lg") }}spur
-              {% else %}{{ icon("sun", size="lg") }}{% endif %}
-            </div>
-            <div class="w-full flex gap-0.5 items-end" style="height:56px;">
-              {% if day.temp_max_c is not none %}
-              {% set max_h = ((day.temp_max_c - t_min) / t_span * 50)|int + 4 %}
-              <div class="flex-1 rounded-t" style="height:{{ [max_h,4]|max }}px;background:#ffb3ac;min-width:0;"></div>
-              {% endif %}
-              {% if day.temp_min_c is not none %}
-              {% set min_h = ((day.temp_min_c - t_min) / t_span * 50)|int + 4 %}
-              <div class="flex-1 rounded-t" style="height:{{ [min_h,4]|max }}px;background:#bcc7de;min-width:0;"></div>
-              {% endif %}
-            </div>
-            <div class="font-mono text-on-surface-variant" style="font-size:9px;text-align:center;white-space:nowrap;">
-              {% if day.temp_max_c is not none %}<span style="color:#ffb3ac;">{{ "%.0f"|format(day.temp_max_c) }}°</span>{% endif %}
-              {% if day.temp_min_c is not none %}<span style="color:#bcc7de;">{{ "%.0f"|format(day.temp_min_c) }}°</span>{% endif %}
-            </div>
-            <div class="font-mono font-bold text-on-surface" style="font-size:{% if loop.first %}11px{% else %}9px{% endif %};">{{ day.date_label }}</div>
-            {% if loop.first %}<span class="font-mono text-label-caps" style="font-size:7px;color:#22c55e;">HEUTE</span>{% endif %}
-          </div>
-          {% endfor %}
-        </div>
-        <div class="flex items-center gap-3 mt-1.5 pt-1.5 border-t border-outline-variant">
-          <div class="flex items-center gap-1"><div style="width:8px;height:8px;background:#ffb3ac;border-radius:1px;"></div><span class="font-mono text-label-caps text-on-surface-variant" style="font-size:8px;">MAX</span></div>
-          <div class="flex items-center gap-1"><div style="width:8px;height:8px;background:#bcc7de;border-radius:1px;"></div><span class="font-mono text-label-caps text-on-surface-variant" style="font-size:8px;">MIN</span></div>
-          <span class="font-mono text-label-caps text-on-surface-variant" style="font-size:8px;margin-left:auto;">Open-Meteo CC BY 4.0</span>
-        </div>
-        {% else %}
-        <div class="flex items-center gap-6 py-1">
-          {% if eff_temp is not none %}<div class="text-center"><span class="font-mono text-label-caps text-on-surface-variant" style="font-size:9px;">TEMP</span><div class="font-sans font-bold text-on-surface" style="font-size:22px;">{{ "%.1f"|format(eff_temp) }}°C</div></div>{% endif %}
-          {% if eff_wind is not none %}<div class="text-center"><span class="font-mono text-label-caps text-on-surface-variant" style="font-size:9px;">WIND</span><div class="font-sans font-bold text-on-surface" style="font-size:22px;">{{ "%.1f"|format(eff_wind) }}m/s</div></div>{% endif %}
-          {% if eff_hum is not none %}<div class="text-center"><span class="font-mono text-label-caps text-on-surface-variant" style="font-size:9px;">FEUCHTE</span><div class="font-sans font-bold text-on-surface" style="font-size:22px;">{{ "%d"|format(eff_hum|int) }}%</div></div>{% endif %}
-        </div>
-        {% endif %}
+    </div>
       </div>
-      {% endif %}
-
+      <div class="weather-monitor-forecast">
+        {% include "weather/_infoscreen_forecast.html" %}
+      </div>
+      <div class="weather-monitor-context">
+        {% include "weather/_infoscreen_warnings.html" %}
       {# Radar – füllt den verbleibenden Platz der rechten Spalte #}
-      <div class="flex-1 min-h-0 rounded-xl overflow-hidden border border-outline-variant" style="position:relative;">
+      <div class="weather-monitor-radar rounded-xl overflow-hidden border border-outline-variant" style="position:relative;">
         {% if map_lat is not none and map_lng is not none %}
         <iframe
+          title="Niederschlagsradar"
           src="https://embed.windy.com/embed2.html?lat={{ map_lat }}&lon={{ map_lng }}&detailLat={{ map_lat }}&detailLon={{ map_lng }}&zoom=8&level=surface&overlay=rain&type=map&menu=false&message=false&marker=false&calendar=now&pressure=false&detail=false&radarRange=-1"
           style="width:100%;height:100%;border:none;display:block;"
           loading="eager" allowfullscreen></iframe>
@@ -513,84 +544,14 @@
         {% endif %}
       </div>
 
-    </div>{# Ende rechte Spalte #}
-
-    {# ═══════════════════════════════════════════════════════════════════════
-       ROW 3 LINKS: Pegelstationen mit HQ-Markierungen
-       ═══════════════════════════════════════════════════════════════════════ #}
-
-    {# Pegelstationen (Feature 4: HQ-Schwellen) #}
-    <div class="col-span-2 bg-surface-container-high rounded-xl p-4 flex flex-col gap-2" style="min-height:0;">
-      <h3 class="font-sans font-semibold text-on-surface flex items-center gap-2" style="font-size:18px;flex-shrink:0;">
-        {{ icon("ripple", size="lg") }} Pegelst&auml;nde
-        <span class="font-mono text-label-caps text-on-surface-variant ml-auto" style="font-size:10px;">{{ history_hours }}h VERLAUF</span>
-      </h3>
-      {% if abfluss_views %}
-      <div class="flex-1 grid gap-2" style="grid-template-columns:repeat({% if abfluss_views|length > 2 %}3{% else %}{{ abfluss_views|length }}{% endif %},1fr);align-content:start;min-height:0;">
-        {% for av in abfluss_views[:4] %}
-        {% set sl = abfluss_sparklines.get(av.hzbnr) if abfluss_sparklines else None %}
-        <div class="bg-surface-container-highest rounded-lg p-3 relative overflow-hidden"
-             style="border-bottom:4px solid {{ av.stufe_farbe }};">
-          {# Sparkline mit HQ-Markierungen #}
-          {% if sl and sl.points %}
-          <svg style="position:absolute;bottom:0;left:0;width:100%;height:52%;pointer-events:none;"
-               preserveAspectRatio="none" viewBox="0 0 {{ sl.width }} {{ sl.height }}">
-            <defs>
-              <linearGradient id="pgg{{ loop.index }}" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stop-color="{{ av.stufe_farbe }}" stop-opacity="0.35"/>
-                <stop offset="100%" stop-color="{{ av.stufe_farbe }}" stop-opacity="0"/>
-              </linearGradient>
-            </defs>
-            <polygon points="{{ sl.points }} {{ sl.width }},{{ sl.height }} 0,{{ sl.height }}"
-                     fill="url(#pgg{{ loop.index }})"/>
-            <polyline points="{{ sl.points }}" fill="none" stroke="{{ av.stufe_farbe }}"
-                      stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" opacity="0.75"/>
-            {# Feature 4: HQ-Schwellen als horizontale gestrichelte Linien #}
-            {% for hq_k, lbl, hq_color in [("hq1","HQ1","#eab308"),("hq10","HQ10","#f97316"),("hq100","HQ100","#ef4444")] %}
-            {% if sl.get(hq_k ~ "_pct") is not none and 0 <= sl.get(hq_k ~ "_pct") <= 1 %}
-            {% set y_pos = sl.height - sl.get(hq_k ~ "_pct") * (sl.height - 4) - 2 %}
-            <line x1="0" x2="{{ sl.width }}"
-                  y1="{{ y_pos }}" y2="{{ y_pos }}"
-                  stroke="{{ hq_color }}" stroke-width="0.8" stroke-dasharray="3,2" opacity="0.85"/>
-            <text x="{{ sl.width - 2 }}" y="{{ y_pos - 1 }}" text-anchor="end"
-                  font-size="5" fill="{{ hq_color }}" font-family="JetBrains Mono">{{ lbl }}</text>
-            {% endif %}
-            {% endfor %}
-          </svg>
-          {% endif %}
-          {# Inhalt #}
-          <span class="font-mono text-label-caps text-on-surface-variant block mb-0.5 relative z-10" style="font-size:10px;">{{ av.name|upper }}</span>
-          <div class="flex items-end gap-1 relative z-10">
-            <span class="font-sans font-bold text-on-surface" style="font-size:36px;line-height:1;">
-              {{ "%.1f"|format(av.wert) if av.wert is not none else "—" }}
-            </span>
-            <span class="font-sans text-on-surface-variant mb-0.5" style="font-size:16px;">m&sup3;/s</span>
-            {% if sl and sl.trend %}<span class="mb-1 ml-1">{{ trend_arrow(sl.trend, av.stufe_farbe) }}</span>{% endif %}
-          </div>
-          <div class="flex items-center justify-between relative z-10 mt-0.5">
-            <span class="font-mono text-label-caps" style="color:{{ av.stufe_farbe }};font-size:10px;">
-              {{ av.stufe_label }}{% if av.naechste_hq %} &bull; {{ av.naechste_hq }}{% endif %}
-            </span>
-            {% if sl and sl.min is not none %}<span class="font-mono text-label-caps text-on-surface-variant" style="font-size:9px;">{{ icon("chevron-up", size="lg") }}{{ "%.1f"|format(sl.max) }} {{ icon("chevron-down", size="lg") }}{{ "%.1f"|format(sl.min) }}</span>{% endif %}
-          </div>
-        </div>
-        {% endfor %}
       </div>
-      {% else %}
-      <div class="flex-1 flex items-center justify-center">
-        <div class="text-center">
-          <span style="font-size:36px;line-height:1;opacity:.4;">{{ icon("droplet", size="lg") }}</span>
-          <p class="font-mono text-label-caps text-on-surface-variant mt-2 uppercase">Keine Pegel konfiguriert</p>
-        </div>
-      </div>
-      {% endif %}
     </div>
 
   </main>
 
   {# ── FOOTER ───────────────────────────────────────────────────────────────── #}
   <footer class="flex items-center justify-between px-8 bg-surface-container-lowest border-t border-outline-variant"
-          style="height:44px;flex-shrink:0;">
+          style="min-height:0;">
     <div class="flex items-center gap-8">
       <div class="flex items-center gap-2">
         {{ status_dot("gruen" if station and station.online else "gelb", "Station online" if station and station.online else ("Station offline" if station else "Keine Station"), cls="station-status") }}
@@ -617,6 +578,19 @@
 <script>
 (function() {
   "use strict";
+  // Bei mehr als vier Einträgen alle Seiten im festen Bildschirmbereich zeigen.
+  document.querySelectorAll("[data-monitor-pages]").forEach(function(group) {
+    var pages = group.querySelectorAll("[data-monitor-page]");
+    var label = group.querySelector("[data-monitor-page-label]");
+    if (pages.length < 2) return;
+    var index = 0;
+    setInterval(function() {
+      pages[index].hidden = true;
+      index = (index + 1) % pages.length;
+      pages[index].hidden = false;
+      if (label) label.textContent = pages[index].dataset.label;
+    }, 15000);
+  });
   var DAYS   = ["Sonntag","Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag"];
   var MONTHS = ["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
   function updateClock() {

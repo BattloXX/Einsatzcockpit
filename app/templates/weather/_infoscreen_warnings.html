@@ -1,0 +1,26 @@
+{% with user=namespace(org=org) %}
+{% include "weather/_warnstatus.html" %}
+{% endwith %}
+{% if warn_views %}
+<section class="weather-monitor-warnings" aria-label="Amtliche Warnungen" data-monitor-pages{% if warn_views|length > 2 %} data-two-rows{% endif %}>
+  <div class="weather-section-heading">
+    <h2 class="weather-section-title">{{ icon("alert-triangle", size="sm") }} Amtliche Warnungen</h2>
+    <span class="weather-monitor-page-label" data-monitor-page-label>1–{{ [4, warn_views|length]|min }} / {{ warn_views|length }}</span>
+  </div>
+  {% for group in warn_views|batch(4) %}
+  <div class="weather-monitor-warning-grid" data-monitor-page
+       data-label="{{ loop.index0 * 4 + 1 }}–{{ loop.index0 * 4 + group|length }} / {{ warn_views|length }}"{% if not loop.first %} hidden{% endif %}>
+    {% for w in group %}
+    <article class="weather-monitor-warning" style="border-left-color:{{ w.color }};">
+      <strong style="color:{{ w.color }};" title="{{ w.event_type }} · Stufe {{ w.level }}">{{ w.event_type }} · Stufe {{ w.level }}</strong>
+      {% if w.text %}<p title="{{ w.text }}">{{ w.text }}</p>{% endif %}
+      <span>{{ w.valid_from|local_datetime }} – {{ w.valid_to|local_datetime }}</span>
+    </article>
+    {% endfor %}
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+<div class="weather-monitor-hints">
+  {% include "weather/_internal_hints.html" %}
+</div>
