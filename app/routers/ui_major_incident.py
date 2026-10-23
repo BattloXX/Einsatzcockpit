@@ -3482,6 +3482,7 @@ def meldungen_list(
         "new_meldungen_count": new_count,
         "can_edit": _can_edit(user),
         "can_manage": _can_manage(user),
+        "token_hinweis": request.query_params.get("token", ""),
         "portal_url": str(request.base_url).rstrip("/") + f"/melden/{lage.public_token}"
                       if lage.public_token else None,
         "mi_features": _get_mi_features(db, lage.org_id),
@@ -3492,20 +3493,38 @@ def meldungen_list(
 def meldungen_token_gen(
     request: Request,
     lage_id: int,
+    bestaetigt: str = Form(""),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "org_admin")),
 ):
-    import secrets
+    from app.services.lage_journal_service import journal_eintrag_anlegen
+    from app.services.major_incident_service import rotate_public_token
+
     user = request.state.user
     lage = _lage_or_404(lage_id, db)
     _check_org_access(user, lage)
 
-    lage.public_token = secrets.token_urlsafe(32)
-    lage.public_token_expires_at = None  # kein Ablauf
-    write_audit(db, "major_incident.token_generated", user_id=user.id,
-                payload={"lage_id": lage_id})
+    erneuert = bool(lage.public_token)
+    if erneuert and bestaetigt != "1":
+        # GSL-04: ein bestehender Link wird nie durch einen einzelnen Klick ersetzt; ohne Bestaetigung
+        # aendert sich nichts (auch nicht bei doppelt abgeschickten oder nachgebauten Anfragen).
+        return RedirectResponse(f"/lage/{lage_id}/meldungen?token=bestaetigung", status_code=303)
+
+    rotate_public_token(db, lage)
+    write_audit(
+        db, "major_incident.token_rotated" if erneuert else "major_incident.token_created",
+        user_id=user.id, org_id=lage.org_id, payload={"lage_id": lage_id, "alter_link_ungueltig": erneuert},
+    )
+    if erneuert:
+        journal_eintrag_anlegen(
+            db, lage, text="Bürgerportal-Link erneuert - der bisherige Link und QR-Code sind ungültig",
+            category="sonstiges", body_html="", partner_from="", partner_to="", measure="",
+            user_id=user.id, author_name=getattr(user, "display_name", None) or user.username,
+        )
     db.commit()
-    return RedirectResponse(f"/lage/{lage_id}/meldungen", status_code=303)
+    return RedirectResponse(
+        f"/lage/{lage_id}/meldungen?token={'erneuert' if erneuert else 'erstellt'}", status_code=303,
+    )
 
 
 @router.get("/lage/{lage_id}/meldungen/{report_id}/foto")

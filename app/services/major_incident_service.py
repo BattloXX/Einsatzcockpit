@@ -209,7 +209,7 @@ def close_lage(
 
 def rotate_public_token(db: Session, lage: MajorIncident) -> MajorIncident:
     """Generiert einen neuen Bürger-Token (alter Link wird ungültig)."""
-    lage.public_token = secrets.token_urlsafe(24)
+    lage.public_token = secrets.token_urlsafe(32)
     lage.public_token_expires_at = None
     return lage
 

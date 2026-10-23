@@ -3,7 +3,8 @@
   <span class="kanban-col__drag-handle" title="Spalte verschieben" aria-label="Spalte verschieben">{{ icon("grip-vertical", size="sm") }}</span>
   <div class="kanban-col__header-content">
     <div class="kanban-col__header-row">
-      <span class="kanban-col__title">{{ col.title }}</span>
+      {# ECP-03: Tooltip mit vollem Namen nur bei abgeschnittenem Titel (titel-tooltips.js); der Wrapper hat kein overflow:hidden, damit der Tooltip nicht abgeschnitten wird #}
+      <span data-tip-bei-kuerzung style="flex:1;min-width:0;display:flex;"><span class="kanban-col__title">{{ col.title }}</span></span>
       <span class="kanban-col__count" id="col-count-{{ col.id }}">{{ col_count }}</span>
       {% if can_edit %}
         {% if col.column_kind in ('vehicles', 'neighbor') %}

@@ -79,14 +79,38 @@
     <span class="portal-box__hint">Kein aktiver Portal-Link.</span>
     {% endif %}
     {% if can_manage %}
-    <form method="post" action="/lage/{{ lage.id }}/meldungen/token" style="margin:0;">
+    {% if portal_url %}
+    {# GSL-04: Erneuern nur nach ausdruecklicher Bestaetigung, der bisherige Link wird ungueltig #}
+    <button type="button" class="btn btn--secondary btn--sm"
+            data-ec-action="open-dialog" data-ec-dialog="token-erneuern-modal">{{ icon("refresh", size="sm") }} Link erneuern</button>
+    <dialog id="token-erneuern-modal" class="mel-modal" aria-labelledby="token-erneuern-titel" style="max-width:min(420px,92vw);">
+      <h3 id="token-erneuern-titel" style="margin:0 0 8px;font-size:1rem;">Portal-Link wirklich erneuern?</h3>
+      <p style="font-size:.85rem;margin:0 0 6px;">Der bisherige Link und der QR-Code werden dadurch <strong>sofort ungültig</strong>. Bereits verteilte Links und ausgedruckte QR-Codes funktionieren nicht mehr.</p>
+      <p style="font-size:.78rem;margin:0 0 12px;color:var(--text-muted);">Der neue Link wird danach hier angezeigt und kann kopiert werden.</p>
+      <form method="post" action="/lage/{{ lage.id }}/meldungen/token" style="margin:0;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;"
+            onsubmit="var b=this.querySelector('[data-token-bestaetigen]'); if (b.disabled) return false; b.disabled=true;">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <input type="hidden" name="bestaetigt" value="1">
+        <button type="button" class="btn btn--ghost btn--sm" data-ec-action="close-dialog">Abbrechen</button>
+        <button type="submit" class="btn btn--danger btn--sm" data-token-bestaetigen>Ja, Link erneuern</button>
+      </form>
+    </dialog>
+    {% else %}
+    <form method="post" action="/lage/{{ lage.id }}/meldungen/token" style="margin:0;"
+          onsubmit="var b=this.querySelector('button[type=submit]'); if (b.disabled) return false; b.disabled=true;">
       <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-      <button type="submit" class="btn btn--secondary btn--sm">
-        {% if portal_url %}{{ icon("refresh", size="sm") }} Link erneuern{% else %}{{ icon("link", size="sm") }} Link erstellen{% endif %}
-      </button>
+      <button type="submit" class="btn btn--secondary btn--sm">{{ icon("link", size="sm") }} Link erstellen</button>
     </form>
     {% endif %}
+    {% endif %}
   </div>
+  {% if token_hinweis == 'erneuert' %}
+  <div class="alert alert--success" role="status" style="margin:0 0 12px;">Der Portal-Link wurde erneuert. Der bisherige Link ist ungültig; der neue Link steht oben und kann kopiert werden.</div>
+  {% elif token_hinweis == 'erstellt' %}
+  <div class="alert alert--success" role="status" style="margin:0 0 12px;">Der Portal-Link wurde erstellt.</div>
+  {% elif token_hinweis == 'bestaetigung' %}
+  <div class="alert alert--error" role="alert" style="margin:0 0 12px;">Der Link wurde nicht erneuert, weil die Bestätigung fehlte.</div>
+  {% endif %}
 
   {# ── Meldungsliste ───────────────────────────────────────────────────────── #}
   {% if reports %}

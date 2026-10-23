@@ -520,19 +520,22 @@
         </form>
       </details>
       {% if not dispatch.beendet_at %}
-      <form style="width:100%;display:flex;gap:4px;flex-wrap:wrap;" hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/einheit/{{ dispatch.id }}/status"
+      <form style="width:100%;display:flex;gap:8px;flex-wrap:wrap;align-items:stretch;" hx-post="/lage/{{ lage.id }}/stellen/{{ site.id }}/einheit/{{ dispatch.id }}/status"
             hx-target="#siteDetailContent"
             hx-swap="innerHTML"
-            hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'>
-        <select name="status" class="form-select form-select--sm" required onchange="this.form.querySelector('[name=grund]').required=this.value==='nicht_durchfuehrbar'">
+            hx-disabled-elt="find button[type='submit']"
+            hx-vals='{"_csrf":"{{ request.state.csrf_token }}"}'
+            hx-on::after-request="if (event.detail.successful && window.Alpine) { var r = document.querySelector('[x-data=&quot;appState()&quot;]'); if (r) Alpine.$data(r).addToast('Status eingetragen', 'info'); }">
+        <select name="status" class="form-select" style="min-height:44px;flex:1 1 180px;" required onchange="this.form.querySelector('[name=grund]').required=this.value==='nicht_durchfuehrbar'">
           <option value="">Status (per Funk)</option>
           {% set transitions = erlaubte_uebergaenge_erkundung if dispatch.auftragsart == 'erkundung' else erlaubte_uebergaenge %}
           {% for next_status in transitions[dispatch.einheit_status] %}
           <option value="{{ next_status }}">{{ einheit_status_label(dispatch.auftragsart, next_status) }}</option>
           {% endfor %}
         </select>
-        <input type="text" name="grund" class="form-input" placeholder="Grund bei nicht durchführbar">
-        <button type="submit" class="btn btn--xs btn--secondary" title="Per Funk gemeldeten Status für die Einheit eintragen">Status eintragen</button>
+        <input type="text" name="grund" class="form-input" style="min-height:44px;flex:1 1 160px;" placeholder="Grund bei nicht durchführbar">
+        {# GSL-05: gut sichtbarer Haupt-Button mit Touchflaeche >= 44 px; waehrend der Anfrage gesperrt (kein Doppel-Eintrag) #}
+        <button type="submit" class="btn btn--primary" style="min-height:44px;padding:0 18px;font-weight:600;" title="Per Funk gemeldeten Status für die Einheit eintragen">{{ icon("check", size="sm") }} Status eintragen</button>
       </form>
       {% endif %}
       {% endif %}
