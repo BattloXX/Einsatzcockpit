@@ -1,0 +1,30 @@
+<div class="weather-daily-grid">
+  {% for day in daily_forecast.days %}
+  <div class="weather-forecast-card weather-daily-card">
+    <div class="weather-forecast-card__header">
+      <h3 class="weather-forecast-card__horizon">{{ day.date_label }}</h3>
+    </div>
+    <dl class="weather-forecast-metrics weather-daily-temperatures">
+      <div>
+        <dt>Min.</dt>
+        <dd>{% if day.temp_min_c is not none %}{{ '%.1f'|format(day.temp_min_c) }} °C{% else %}–{% endif %}</dd>
+      </div>
+      <div>
+        <dt>Max.</dt>
+        <dd>{% if day.temp_max_c is not none %}{{ '%.1f'|format(day.temp_max_c) }} °C{% else %}–{% endif %}</dd>
+      </div>
+    </dl>
+    <dl class="weather-forecast-metrics">
+      <div class="weather-daily-rain">
+        <dt>{{ icon("cloud-rain", size="xs", label="Niederschlag") }}</dt>
+        <dd class="weather-forecast-rain">{% if day.precip_mm is not none %}{{ '%.1f'|format(day.precip_mm) }} mm{% else %}–{% endif %}</dd>
+      </div>
+    </dl>
+    {% if day.precip_mm is none or day.temp_min_c is none or day.temp_max_c is none %}
+    <div class="weather-forecast-card__footer">
+      <span class="weather-forecast-incomplete">{{ icon("alert-triangle", size="xs") }} Daten unvollständig</span>
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>

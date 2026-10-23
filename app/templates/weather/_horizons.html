@@ -1,14 +1,35 @@
 {% if prognose_kurz %}
-<div class="forecast-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:8px;min-width:0;">
+<div class="weather-forecast-grid">
   {% for h in prognose_kurz if h.hours in horizon_hours %}
-  <div class="wetter-card" data-horizon="{{ h.hours }}" style="padding:10px;min-width:0;overflow-wrap:anywhere;">
-    <strong>+{{ h.hours }} h{% if h.hours == 24 %} · Tag{% endif %}</strong>
-    {% if h.temperature_c is not none %}<div>{{ '%.1f'|format(h.temperature_c) }} °C</div>{% endif %}
-    {% if h.wind_speed_ms is not none %}<div>Wind: {{ '%.1f'|format(h.wind_speed_ms) }} m/s · {{ '%.1f'|format(h.wind_speed_ms|ms_to_kmh) }} km/h</div>{% endif %}
-    <div>{{ icon("cloud-rain") }} Niederschlag: {% if h.precipitation_mm is not none %}{{ '%.1f'|format(h.precipitation_mm) }} mm{% else %}–{% endif %}</div>
-    <div>{{ icon("wind") }} Böenmaximum: {% if h.gust_max_ms is not none %}{{ '%.1f'|format(h.gust_max_ms) }} m/s · {{ '%.1f'|format(h.gust_max_kmh) }} km/h{% else %}–{% endif %}</div>
-    {% if h.gust_max_at %}<div>Spitze: {{ h.gust_max_at|local_datetime }}</div>{% endif %}
-    {% if not h.complete %}<strong>Daten unvollständig</strong>{% endif %}
+  <div class="weather-forecast-card" data-horizon="{{ h.hours }}">
+    <div class="weather-forecast-card__header">
+      <h3 class="weather-forecast-card__horizon">+{{ h.hours }} h</h3>
+      {% if h.temperature_c is not none %}
+      <div class="weather-forecast-card__temperature" aria-label="Temperatur">{{ '%.1f'|format(h.temperature_c) }} <span class="weather-forecast-card__unit">°C</span></div>
+      {% endif %}
+    </div>
+    <dl class="weather-forecast-metrics">
+      <div>
+        <dt>{{ icon("cloud-rain", size="xs") }} Niederschlag</dt>
+        <dd class="weather-forecast-rain">{% if h.precipitation_mm is not none %}{{ '%.1f'|format(h.precipitation_mm) }} mm{% else %}–{% endif %}</dd>
+      </div>
+      <div>
+        <dt>{{ icon("wind", size="xs") }} Böenmaximum</dt>
+        <dd>{% if h.gust_max_ms is not none %}{{ '%.1f'|format(h.gust_max_ms) }} m/s · {{ '%.1f'|format(h.gust_max_kmh) }} km/h{% else %}–{% endif %}</dd>
+      </div>
+      {% if h.wind_speed_ms is not none %}
+      <div class="weather-forecast-wind">
+        <dt>{{ icon("wind", size="xs") }} Wind</dt>
+        <dd>{{ '%.1f'|format(h.wind_speed_ms) }} m/s · {{ '%.1f'|format(h.wind_speed_ms|ms_to_kmh) }} km/h</dd>
+      </div>
+      {% endif %}
+    </dl>
+    {% if h.gust_max_at or not h.complete %}
+    <div class="weather-forecast-card__footer">
+      {% if h.gust_max_at %}<span>Spitze: {{ h.gust_max_at|local_datetime }}</span>{% endif %}
+      {% if not h.complete %}<span class="weather-forecast-incomplete">{{ icon("alert-triangle", size="xs") }} Daten unvollständig</span>{% endif %}
+    </div>
+    {% endif %}
   </div>
   {% endfor %}
 </div>
