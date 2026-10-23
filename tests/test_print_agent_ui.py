@@ -80,12 +80,29 @@ def test_gateway_anlegen_als_windows_agent(client):
         assert db.get(Gateway, gw_id).kind == GATEWAY_KIND_WINDOWS_AGENT
     finally:
         db.close()
-    seite = client.get(f"/gateway/{gw_id}?pairing_code=ABCD1234")
+    seite = client.post(f"/gateway/{gw_id}/pair-code", data={"_csrf": csrf}, follow_redirects=False)
     assert seite.status_code == 200
-    assert "EinsatzcockpitPrintAgent.exe pair --url" in seite.text
-    assert "--code ABCD1234" in seite.text
+    assert '.\\install.ps1 -CloudUrl "' in seite.text
+    assert '-PairingCode "' in seite.text
+    assert "location" not in seite.headers
+    assert seite.headers["cache-control"] == "no-store"
+    assert seite.headers["referrer-policy"] == "no-referrer"
+    assert "Installieren.cmd" in seite.text
+    assert "2026.10.17" in seite.text
+    assert "EinsatzcockpitPrintAgent.exe pair --url" not in seite.text
+    assert "--PairingCode" not in seite.text
     # Linux-Gateway-Abschnitte (Alarmleitung) erscheinen nicht.
     assert "Alarmleitung" not in seite.text
+
+    token_seite = client.post(f"/gateway/{gw_id}/rotate-token", data={"_csrf": csrf}, follow_redirects=False)
+    assert token_seite.status_code == 200
+    assert "location" not in token_seite.headers
+    assert "Neues Device-Token" in token_seite.text
+    assert token_seite.headers["cache-control"] == "no-store"
+    # Ein spaeterer GET zeigt die Geheimnisse nicht erneut.
+    erneut = client.get(f"/gateway/{gw_id}")
+    assert "Neues Device-Token" not in erneut.text
+    assert "Pairing-Code (10 min" not in erneut.text
 
     unbekannt = client.post("/gateway/create", data={"name": "X", "kind": "boese", "_csrf": csrf},
                             follow_redirects=False)
@@ -265,3 +282,30 @@ def test_druckregeln_zeigen_drucker_aller_gateways(client, monkeypatch):
     seite = client.get(f"/gateway/{gw_linux}/druckregeln")
     assert seite.status_code == 200
     assert name in seite.text
+
+
+def test_windows_agent_pairing_api_contract_and_single_use(client, caplog):
+    from app.services.gateway_service import erzeuge_pairing_code
+
+    gw_id = _agent("Pairing-API")
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        gw = db.get(Gateway, gw_id)
+        code = erzeuge_pairing_code(db, gw)
+        db.commit()
+    finally:
+        db.close()
+
+    response = client.post("/api/v1/gateway/pair", json={"code": code.lower()})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["gateway_id"] == gw_id
+    assert isinstance(data["gateway_id"], int)
+    assert data["device_token"]
+    assert data["name"].startswith("Pairing-API")
+    assert client.post("/api/v1/gateway/pair", json={"code": code}).status_code == 401
+    assert client.post("/api/v1/gateway/pair", json={"code": "WRONG123"}).status_code == 401
+    assert client.post("/api/v1/gateway/pair", json={}).status_code == 400
+    assert code not in caplog.text
+    assert data["device_token"] not in caplog.text

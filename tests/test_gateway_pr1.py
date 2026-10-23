@@ -3,10 +3,10 @@ serieller Ingest, printer_report, Tenant-Isolation."""
 # ruff: noqa: E402  # App-Imports erst nach Registrierung des SQLite-BigInteger-Compilers.
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import MagicMock
-import uuid
 
 import pytest
 from sqlalchemy import BigInteger, create_engine
@@ -157,6 +157,19 @@ def test_pairing_expired_code_fails(db):
     gw.pairing_expires_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=1)
     db.flush()
     assert gw_svc.pair_gateway(db, code) is None
+
+
+def test_windows_agent_pairing_code_is_single_use(db):
+    gw = _make_gateway(db)
+    gw.kind = "windows_agent"
+    code = gw_svc.erzeuge_pairing_code(db, gw)
+    db.flush()
+    first = gw_svc.pair_gateway(db, code.lower())
+    assert first is not None
+    token_hash = gw.device_token_hash
+    db.flush()
+    assert gw_svc.pair_gateway(db, code) is None
+    assert gw.device_token_hash == token_hash
 
 
 def test_rotate_and_revoke(db):

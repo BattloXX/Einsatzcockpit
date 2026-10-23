@@ -95,7 +95,10 @@ def _historie_context(db: Session, gw: Gateway) -> dict:
 
 # ── Windows-Druckagent ─────────────────────────────────────────────────────────
 
-def _agent_detail(request: Request, db: Session, user: User, gw: Gateway) -> HTMLResponse:
+def _agent_detail(
+    request: Request, db: Session, user: User, gw: Gateway,
+    *, pairing_code: str | None = None, device_token: str | None = None,
+) -> HTMLResponse:
     """Detailseite eines Windows-Druckagents: Inventar, Routen, Redundanz, Historie."""
     from app.models.gateway import RENDER_MODES, PrinterAgentRoute
     from app.routers.ws import gateway_online_id
@@ -141,7 +144,9 @@ def _agent_detail(request: Request, db: Session, user: User, gw: Gateway) -> HTM
         "printers": org_printers,
         "jobs": jobs,
         "cloud_url": str(request.base_url).rstrip("/"),
-    })
+        "pairing_code": pairing_code,
+        "device_token": device_token,
+    }, headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
 
 
 async def _agent_config_push(db: Session, gw: Gateway) -> None:
@@ -546,6 +551,9 @@ def gateway_pair_code(
     from app.services.gateway_service import erzeuge_pairing_code
     code = erzeuge_pairing_code(db, gw)
     db.commit()
+    if gw.is_windows_agent:
+        # Keine Secrets in URLs: weder Access-Logs noch Referrer/Browser-History.
+        return _agent_detail(request, db, user, gw, pairing_code=code)
     # Code nur einmalig anzeigen (per Query, da nur Hash gespeichert wird)
     return RedirectResponse(f"/gateway/{gw.id}?pairing_code={code}", status_code=303)
 
@@ -562,6 +570,8 @@ def gateway_rotate(
     from app.services.gateway_service import rotate_token
     token = rotate_token(db, gw)
     db.commit()
+    if gw.is_windows_agent:
+        return _agent_detail(request, db, user, gw, device_token=token)
     return RedirectResponse(f"/gateway/{gw.id}?device_token={token}", status_code=303)
 
 
