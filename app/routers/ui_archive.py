@@ -195,6 +195,19 @@ def archive_list(
         sort = "datum_desc"
     incidents = incidents_query.order_by(*sortierungen[sort]).all()
 
+    # Einsaetze und Grossschadenslagen in einer Liste; bei Datumssortierung gemischt nach Beginn,
+    # sonst folgen die Lagen (neueste zuerst) auf die sortierten Einsaetze.
+    eintraege = [{"inc": inc, "lage": None} for inc in incidents]
+    lagen_eintraege = [{"inc": None, "lage": lage} for lage in lagen]
+    if sort in ("datum_desc", "datum_asc"):
+        eintraege = sorted(
+            eintraege + lagen_eintraege,
+            key=lambda e: ((e["inc"] or e["lage"]).started_at is not None, (e["inc"] or e["lage"]).started_at),
+            reverse=(sort == "datum_desc"),
+        )
+    else:
+        eintraege += lagen_eintraege
+
     uas_incident_ids: set[int] = set()
     if getattr(request.state, "uas_module_enabled", False) and user.org_id:
         from app.models.uas import UASEinsatz
@@ -207,6 +220,7 @@ def archive_list(
 
     return templates.TemplateResponse(request, "archive/list.html", {
         "user": user, "incidents": incidents, "uas_incident_ids": uas_incident_ids, "lagen": lagen,
+        "eintraege": eintraege,
         "filter": {
             "jahr": ausgewaehltes_jahr, "von": von, "bis": bis, "sort": sort,
         },
