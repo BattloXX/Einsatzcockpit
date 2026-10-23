@@ -4,6 +4,48 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 
 ## Unreleased
 
+- **ECP-Verbesserungen (Oktober 2026)**, Details je ID in `docs/plans/ecp-verbesserungen-2026-10.md`:
+  - **Einsatzboard**: Spalten-Umbenennen lädt das Kanban neu und zieht Lane-Tabs nach,
+    Diagnoseskript `scripts/spalten_diagnose.py` (ECP-02, Ursache am Gerät nicht reproduziert);
+    Spaltennamen mit Tooltip (ECP-03); Ausrückordnung mit farbigem Fahrzeugstatus und Zeit
+    (ECP-04); Detail-Modal lässt keinen dunklen Backdrop mehr zurück (ECP-06, gehärtet).
+  - **LIS**: Fahrzeugstatus nur bei Änderung, begrenzter Retry, 30-s-Schutzfenster gegen
+    Poll-Rückkopplung, Audit `lis.status_pushed` (ECP-05).
+  - **Objekte**: Objektauswahl beim neuen Einsatz; bei Meldung und Auftrag werden
+    Objektdokument-Seiten wie beim Bearbeiten übernommen, statt das Objekt zu verknüpfen
+    (ECP-01). Objektinfos und Gefahren fließen in KI-Auftragsvorschläge, Lagehinweise und
+    Lagebild ein, Gefahren werden deterministisch hervorgehoben (ECP-07).
+  - **GSL**: Neue Einsatzstellen live im Board, einheitliche Prioritätsfarben und Legende
+    auf der Lagekarte (GSL-01/02); Einheitenansicht robuster mit sichtbaren Ladefehlern und
+    Zugang-Schnellaktionen in der Kräfteübersicht (GSL-03); Bürgerportal-Link nur nach
+    Bestätigung erneuern (GSL-04); größerer „Status eintragen“-Button (GSL-05);
+    Einheitenstatus wie Fahrzeugstatus (GSL-06) und standardmäßig nur eigene Einheiten
+    (GSL-07). Einheiten-Tablets öffnen die Lage zuerst in der Einheitenansicht mit Wechsel
+    zur Gesamtansicht (Cookie 12 h).
+  - **PDF/Archiv**: Einsatz-PDF und GSL-Bericht vollständiger mit Seitenumbruch, Verläufen
+    und Objektdaten (DOC-01); Gesamt-PDF der Großschadenslage im Archiv; Archivliste läuft
+    auch unter SQLite.
+  - **Gerätezugang**: Ungültige Gerätezugänge werden mit Code (`device_revoked`,
+    `device_unknown`, `user_inactive`) beantwortet und aggregiert protokolliert, Geräteverwaltung
+    mit Fehlversuchen, Grund, Gerätetyp und Filtern (SEC-01/02/04, Migration 0305);
+    rückwirkende Auswertung per `scripts/geraete_zugriffe_auswerten.py` (SEC-03).
+  - **App**: Pull-to-Refresh-Schnittstelle, Verbindungsstatus-Banner, Ping-Intervall-Leak
+    behoben (APP-01/02). Android 2026.10.23: natives Pull-to-Refresh, Stopp der
+    Wiederholungen bei ungültigem Zugang; Gerätetests offen.
+
+- **Wetter 2.0 (Phasen 1–3)**: Open-Meteo-Client, GeoSphere-Modell, konfigurierbare
+  Providerreihenfolge, zeitstempelbasierte Prognosesummen und Böenmaxima, Warnstatus mit
+  Datenqualität ohne Entwarnung bei Ausfall.
+
+- **Pläne – Bedienung**: Maßnahmen lassen sich als Auftrag oder Meldung in einen Einsatz
+  übernehmen, Lightbox statt neuem Fenster, Aktionslinks im Fahrtenbuch-Design, neu
+  geordnete Planstartseite, Plan-Suche über die zentrale Hybrid-Engine; Suchindex enthält
+  Planart, Akteure und Verknüpfungen.
+
+- **Korrekturen**: Abgerückte Einheiten in der Kräfteübersicht reaktivierbar; Objekt-,
+  Dokument- und Kontakt-Lesewege für alle Einsatzrollen; KI-Antwort ohne ThinkingBlock
+  stürzt nicht mehr ab, DB-Session wird vor Medien-Streaming freigegeben.
+
 - **Wetter Phase 6**: Gemeinsame Radar-Animation für Wetterseite und GSL-Lagekarte,
   einzeln schaltbare Wetterebenen, Windpfeil am Fokuspunkt und gelieferte Warnpolygone.
   Modellvergleich lädt beim Öffnen, vergleicht vollständige gemeinsame Stundenfenster
