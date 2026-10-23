@@ -1,3 +1,12 @@
+> **Release-Nachtrag:** Der Windows-Fix ist als [v2026.10.23.1](https://github.com/BattloXX/Einsatzcockpit-Windows-Gateway/releases/tag/v2026.10.23.1)
+> veroeffentlicht. Agent-PR #5 ist zusammengefuehrt. Die [Tag-Pipeline](https://github.com/BattloXX/Einsatzcockpit-Windows-Gateway/actions/runs/39994121153)
+> ist erfolgreich, einschliesslich Linux-/Windows-Tests, PowerShell 5.1/7 und echtem Tray-Starttest.
+> Das oeffentliche ZIP wurde heruntergeladen und auf SHA256, CRC sowie korrekte Installationsdateien geprueft.
+> SHA256: `979debfaccc19314d6089ce961d4ac45e9d06e8c525062e0d8e68a524e39a6fa`.
+> Cloud-PR #715 mit Migrationen 0306/0307 bleibt separat und wurde nicht durch diesen Windows-Release deployt.
+> Fruehere Angaben zu einem noch notwendigen Agent-Release sind durch diesen Nachtrag aktualisiert;
+> die physische Abnahme auf KDOF1 bleibt erforderlich.
+
 # Windows-Druckagent: Offline-Status und fehlendes Tray-Symbol
 
 Stand 23.10.2026. Die folgenden Ursachen sind am Code und in Regressionstests bestaetigt.
