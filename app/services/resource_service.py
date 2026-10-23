@@ -49,6 +49,57 @@ VALID_STATUSES = {
     STATUS_ABGERUECKT,
 }
 
+# ── GSL-06: vereinfachte Statusanzeige wie beim Fahrzeugstatus im normalen Einsatz ─────────────
+# Aus den vorhandenen Werten abgeleitet (kein neues Statusmodell): Rot = Einsatzbereit, Orange = Auf Anfahrt,
+# Gruen = Am Einsatzort / Im Einsatz. Die Farben nutzen dieselben Klassen wie die Fahrzeuge (.unit-status-*).
+AMPEL_CSS = {
+    "einsatzbereit": "unit-status-einsatzbereit",
+    "anfahrt": "unit-status-einsatz-uebernommen",
+    "am_einsatzort": "unit-status-am-einsatzort",
+    "im_einsatz": "unit-status-am-einsatzort",
+}
+AMPEL_LABEL = {
+    "einsatzbereit": "Einsatzbereit",
+    "anfahrt": "Auf Anfahrt",
+    "am_einsatzort": "Am Einsatzort",
+    "im_einsatz": "Im Einsatz",
+    "angefordert": "Angefordert",
+    "abgerueckt": "Abgerückt",
+}
+
+
+def einheit_ampel(ressource_status: str | None, dispatches=(), status_at: datetime | None = None) -> dict:
+    """Vereinfachter Einheitenstatus aus Ressourcenstatus und aktiven Auftraegen.
+
+    Vor Ort/in Arbeit -> Am Einsatzort (gruen), Anfahrt -> Auf Anfahrt (orange), Ressource im Einsatz ohne
+    Auftrag -> Im Einsatz (gruen), sonst Einsatzbereit (rot). Angefordert und Abgerueckt bleiben neutral.
+    ``dispatches`` sind die offenen EinheitSiteDispatch-Zeilen, ``seit`` der Zeitpunkt der letzten Aenderung.
+    """
+    if ressource_status in (STATUS_ANGEFORDERT, STATUS_ABGERUECKT):
+        code = ressource_status
+        css = ""
+        seit = status_at
+    else:
+        stati = {d.einheit_status: d for d in dispatches}
+        vor_ort = [d for k, d in stati.items() if k in ("vor_ort", "in_arbeit")]
+        anfahrt = stati.get("anfahrt")
+        if vor_ort:
+            code, seit = "am_einsatzort", max((d.status_at for d in vor_ort if d.status_at), default=status_at)
+        elif anfahrt is not None:
+            code, seit = "anfahrt", anfahrt.status_at or status_at
+        elif ressource_status == STATUS_IM_EINSATZ:
+            code, seit = "im_einsatz", status_at
+        else:
+            code, seit = "einsatzbereit", status_at
+        css = AMPEL_CSS[code]
+    return {
+        "code": code,
+        "label": AMPEL_LABEL.get(code, STATUS_LABEL.get(ressource_status or "", code)),
+        "css": css,
+        "seit": seit,
+    }
+
+
 STATUS_LABEL = {
     STATUS_ANGEFORDERT: "Angefordert",
     STATUS_BEREITGESTELLT: "Bereitgestellt",
@@ -1830,6 +1881,38 @@ def rotate_gsl_leadership(
 # ── Kräfteübersicht ───────────────────────────────────────────────────────────
 
 
+def eigene_einheit_ids(db: Session, lage: MajorIncident) -> set[int]:
+    """IDs der Einheiten der eigenen Organisation (GSL-07).
+
+    Eigen sind automatisch uebernommene Org-Fahrzeuge (``is_from_org``) und Einheiten mit Fahrzeug der eigenen
+    Org. Fremd sind externe Kraefte, Fahrzeuge anderer Organisationen/Fremdfahrzeuge sowie Einheiten, die mit einer
+    anderen Organisation beschriftet sind. Nur Anzeige - Zuweisungen werden nie veraendert.
+    """
+    from app.models.master import VehicleMaster
+
+    einheiten = list(lage.einheiten)
+    fahrzeug_ids = {e.vehicle_id for e in einheiten if e.vehicle_id}
+    fahrzeuge: dict[int, Any] = {}
+    if fahrzeug_ids:
+        fahrzeuge = {
+            v.id: v for v in db.query(VehicleMaster)
+            .execution_options(include_all_tenants=True)
+            .filter(VehicleMaster.id.in_(fahrzeug_ids))
+        }
+    eigene: set[int] = set()
+    for e in einheiten:
+        if e.resource_type == "extern":
+            continue
+        fahrzeug = fahrzeuge.get(e.vehicle_id) if e.vehicle_id else None
+        if fahrzeug is not None:
+            if fahrzeug.dept_id == lage.org_id and not fahrzeug.is_external:
+                eigene.add(e.id)
+            continue
+        if e.is_from_org or not (e.org_name or "").strip():
+            eigene.add(e.id)
+    return eigene
+
+
 def kraefteuebersicht(db: Session, lage: MajorIncident) -> dict[str, Any]:
     """Vollständiges S2-Lagebild: Pool + Abschnitte + Leiter aller Ebenen."""
     einheiten = lage.einheiten
@@ -1910,6 +1993,7 @@ def kraefteuebersicht(db: Session, lage: MajorIncident) -> dict[str, Any]:
         "total": len(eigenstaendige),
         "reserve_count": len(pool),
         "im_einsatz_count": sum(1 for e in eigenstaendige if e.status == STATUS_IM_EINSATZ),
+        "eigene_ids": eigene_einheit_ids(db, lage),
         "dispatched_sites_by_einheit": dispatched_sites_by_einheit,
         "active_dispatched_sites_by_einheit": active_dispatched_sites_by_einheit,
         "letzte_rueckmeldung_by_einheit": letzte_rueckmeldung_by_einheit,

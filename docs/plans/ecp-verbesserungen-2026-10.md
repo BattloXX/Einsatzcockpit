@@ -134,3 +134,27 @@ Pro Block: ID / Status / Ursache / Loesung / Dateien / Datenbank / Tests / Hinwe
 | Datenbank | keine |
 | Tests | 3 Python- und 5 Node-Tests |
 | Hinweise | Am Tablet prüfen: Aufträge antippen, Status wechseln, Auftrag per anderem Gerät ändern, Tablet drehen, App in den Hintergrund und zurück. Tritt es weiter auf: Browser-Konsole bzw. WebView-Version notieren und prüfen, ob ein Element mit `position:fixed` über der Seite liegt. |
+
+## GSL-06 – Einheitenstatus wie Fahrzeugstatus
+
+| Feld | Inhalt |
+|---|---|
+| Status | Erledigt (Sichtprüfung am Tablet offen) |
+| Ursache | In der GSL gibt es drei getrennte Statusmodelle (Ressourcenstatus, Auftragsstatus je Einsatzstelle, Fahrzeugstatus im normalen Einsatz). Die Ressourcenübersicht zeigte nur den Ressourcenstatus (angefordert / bereitgestellt / im Einsatz / abgerückt) in anderen Farben, die Einheitenansicht gar keinen Gesamtstatus; der Auftragsstatus stand nur in Auftrags-Badges. |
+| Lösung | Kein neues Statusmodell: `resource_service.einheit_ampel` leitet aus Ressourcenstatus und offenen Aufträgen die drei Fahrzeug-Zustände ab: vor Ort / in Arbeit → **Am Einsatzort** (grün), Anfahrt → **Auf Anfahrt** (orange), sonst **Einsatzbereit** (rot), Ressource im Einsatz ohne Auftrag → **Im Einsatz** (grün); angefordert und abgerückt bleiben neutral. Der höchste Fortschritt aller offenen Aufträge zählt; Zeitpunkt der letzten Änderung wird angezeigt. Dieselben Farbklassen wie bei Fahrzeugen (`.unit-status-*`). Anzeige in der Ressourcenübersicht (Chip mit Bezeichnung und „seit“, Ressourcenstatus als Tooltip) und im Kopf der Einheitenansicht (`kopf.ampel`). Die Änderung läuft weiter über den vorhandenen Weiter-Button der Einheit bzw. die Funk-Meldung der Führung; Synchronisierung über die vorhandenen Events (`site:card_changed`, `einheit:changed`). Zuweisungen und Übergangsregeln sind unverändert. |
+| Dateien | `app/services/resource_service.py`, `einheit_service.py`, `app/templates/incident_major/_kraefteuebersicht.html`, `ressourcen.html`, `app/templates/einheit/einheit.html`, `tests/test_gsl_einheitenstatus_filter.py` |
+| Datenbank | keine |
+| Tests | 5 neue Tests (Ableitung, Priorität, neutrale Zustände, Einheiten-API, Kräfteübersicht) |
+| Hinweise | Die Ableitung ist eine reine Anzeige. Der Ressourcenstatus (`im_einsatz`/`abgerueckt`) wird weiterhin nur manuell bzw. beim ersten Auftragsstart gesetzt. |
+
+## GSL-07 – Standardmäßig nur eigene Ressourcen
+
+| Feld | Inhalt |
+|---|---|
+| Status | Erledigt |
+| Ursache | Die Ressourcenübersicht zeigte alle Einheiten der Lage ohne Filter; fremde Einheiten (externe Kräfte, Fahrzeuge anderer Organisationen) waren nicht gekennzeichnet. |
+| Lösung | `eigene_einheit_ids` bestimmt je Einheit „eigen“ (automatisch übernommene Org-Fahrzeuge, Fahrzeug der eigenen Organisation, unbeschriftetes Material/Verband) bzw. „fremd“ (extern, Fahrzeug einer anderen Organisation oder Fremdfahrzeug, mit anderer Organisation beschriftet). Karten tragen `data-eigen`, fremde zusätzlich ein Label „Fremd“ und gestrichelten Rand. Filterleiste Eigene (Standard) / Alle / Fremde (n) mit Hinweis „n fremde Einheiten ausgeblendet – einblenden“; die Wahl bleibt in der Sitzung je Lage erhalten. Der Filter blendet nur per CSS aus: keine Anfragen, keine Änderung von Zuweisungen. |
+| Dateien | `app/services/resource_service.py`, `app/templates/incident_major/_kraefteuebersicht.html`, `ressourcen.html`, `app/static/js/ressourcen_filter.js`, `tests/test_gsl_einheitenstatus_filter.py` |
+| Datenbank | keine |
+| Tests | 2 neue Tests (Eigen/Fremd-Erkennung, Standardfilter und Reine-Anzeige-Garantie) |
+| Hinweise | Es gibt keine `org_id` an der Einheit; die Erkennung nutzt Fahrzeug-Organisation, `is_from_org` und die Beschriftung. Fremde Einheiten in Abschnitten werden ebenfalls ausgeblendet (Abschnittsköpfe bleiben stehen). |
