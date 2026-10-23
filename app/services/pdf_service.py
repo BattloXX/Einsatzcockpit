@@ -207,6 +207,82 @@ def _load_pdf_context(incident: Incident) -> tuple:
         db.close()
 
 
+def _load_pdf_zusatz(incident: Incident) -> dict:
+    """DOC-01: zusaetzliche Dokumentationsdaten als einfache Dicts (keine ORM-Objekte).
+
+    Nur vorhandene Angaben: Einsatzart des Stichworts, Ersteller von Auftraegen, Statusverlauf der Fahrzeuge
+    (aus dem Aenderungsprotokoll) und das Funkjournal. Fehler fuehren zu leeren Abschnitten, nie zu einem
+    fehlenden PDF.
+    """
+    import json as _json
+
+    from app.models.incident import IncidentChange, IncidentCommLog, IncidentVehicle, Task
+    from app.models.user import User
+    from app.services.alarm_service import get_alarm_type_by_code
+
+    leer: dict = {"einsatzart": None, "ersteller": {}, "fahrzeug_status": [], "funkjournal": []}
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    try:
+        alarm = (
+            get_alarm_type_by_code(db, incident.primary_org_id, incident.alarm_type_code)
+            if incident.primary_org_id and incident.alarm_type_code else None
+        )
+        einsatzart = {"code": incident.alarm_type_code, "label": alarm.label if alarm else None,
+                      "kategorie": alarm.category if alarm else None}
+
+        user_ids = {
+            t.created_by_user_id for t in db.query(Task).filter(Task.incident_id == incident.id)
+            if t.created_by_user_id
+        }
+        namen = {
+            u.id: (u.display_name or u.username)
+            for u in db.query(User).filter(User.id.in_(user_ids)).execution_options(include_all_tenants=True)
+        } if user_ids else {}
+        ersteller = {
+            t.id: namen.get(t.created_by_user_id)
+            for t in db.query(Task).filter(Task.incident_id == incident.id) if t.created_by_user_id
+        }
+
+        label = {
+            v.id: (v.vehicle_master.display_label if v.vehicle_master else f"Fahrzeug #{v.id}")
+            for v in db.query(IncidentVehicle).filter(IncidentVehicle.incident_id == incident.id)
+        }
+        fahrzeug_status = []
+        for c in (
+            db.query(IncidentChange)
+            .filter(IncidentChange.incident_id == incident.id, IncidentChange.action == "vehicle.status_set")
+            .order_by(IncidentChange.ts)
+        ):
+            try:
+                vorher = (_json.loads(c.before_json) if c.before_json else {}).get("unit_status")
+                nachher = (_json.loads(c.after_json) if c.after_json else {}).get("unit_status")
+            except (ValueError, TypeError):
+                vorher = nachher = None
+            if nachher:
+                fahrzeug_status.append({
+                    "ts": c.ts, "fahrzeug": label.get(c.entity_id, f"Fahrzeug #{c.entity_id}"),
+                    "vorher": vorher, "nachher": nachher,
+                })
+
+        funkjournal = [
+            {
+                "ts": e.ts, "richtung": e.direction, "kanal": e.channel, "partner": e.partner,
+                "text": e.message, "anfrage": e.is_request, "lagerelevant": e.is_lage_relevant,
+                "autor": e.author_name,
+            }
+            for e in db.query(IncidentCommLog).filter(IncidentCommLog.incident_id == incident.id)
+            .order_by(IncidentCommLog.ts)
+        ]
+        return {"einsatzart": einsatzart, "ersteller": ersteller,
+                "fahrzeug_status": fahrzeug_status, "funkjournal": funkjournal}
+    except Exception:
+        logger.exception("PDF-Zusatzdaten laden fehlgeschlagen (Einsatz %s)", incident.id)
+        return leer
+    finally:
+        db.close()
+
+
 def _load_incident_objekte(db, incident: Incident) -> list[dict]:
     """Lädt die mit dem Einsatz verknüpften Objekte für den Ausdruck.
 
@@ -274,12 +350,31 @@ def _load_incident_objekte(db, incident: Incident) -> list[dict]:
         if o.ort:
             adresse = (adresse + ", " + o.ort).strip(", ")
 
+        # DOC-01: Hinweise, Zufahrt und hinterlegte Plaene (nur tatsaechlich vorhandene Angaben)
+        from app.models.objekt import ObjektDokument
+
+        plaene = [
+            d.dateiname_original
+            for d in db.query(ObjektDokument)
+            .filter(
+                ObjektDokument.objekt_id == o.id,
+                ObjektDokument.ist_aktuelle_version.is_(True),
+                ObjektDokument.freigabe_status == "freigegeben",
+            )
+            .order_by(ObjektDokument.hochgeladen_am.desc())
+            .execution_options(include_all_tenants=True)
+            .all()
+        ]
+
         ergebnis.append({
             "name": o.name,
             "vulgoname": o.vulgoname,
             "nummer": o.anzeige_nummer,
             "adresse": adresse,
             "bma": (o.bma.bma_nummer if o.bma else None),
+            "informationen": o.informationen,
+            "anfahrtsweg": o.anfahrtsweg,
+            "plaene": plaene,
             "status": oe.status,
             "quelle": oe.quelle,
             "distanz_m": oe.distanz_m,
@@ -298,6 +393,7 @@ def render_incident_pdf(
 ) -> bytes:
     template = templates.env.get_template("pdf/incident_report.html")
     primary_org, teilnahmen, journal, objekte = _load_pdf_context(incident)
+    zusatz = _load_pdf_zusatz(incident)
     assigned_vehicle_ids = {v.vehicle_master_id for v in incident.vehicles}
     fahrten_details, extra_vehicles = load_fahrtenbuch_report(
         incident.id, assigned_vehicle_ids,
@@ -310,6 +406,7 @@ def render_incident_pdf(
         teilnahmen=teilnahmen,
         journal=journal,
         objekte=objekte,
+        zusatz=zusatz,
         fahrten_details=fahrten_details,
         extra_vehicles=extra_vehicles,
         now=datetime.now(UTC),

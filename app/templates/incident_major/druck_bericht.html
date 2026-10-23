@@ -6,6 +6,13 @@
 <title>{{ lage.name }} – Lagebericht</title>
 <style>
 {% include "pdf/_icon_styles.html" %}
+  /* DOC-01: A4 mit Seitenzaehler und Lagename in der Fusszeile (Druck/PDF) */
+  @page {
+    size: A4 portrait;
+    margin: 15mm 12mm 17mm 12mm;
+    @bottom-left { content: "{{ lage.name|replace('"', '')|replace('\\', '') }}"; font-size: 8pt; color: #666; }
+    @bottom-right { content: "Seite " counter(page) " / " counter(pages); font-size: 8pt; color: #666; }
+  }
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: "Arial", sans-serif; font-size: 11pt; color: #111;
@@ -70,6 +77,21 @@
   .cross-row__desc   { font-size: 9pt; color: #444; margin-top: 2px; }
   .cross-row__addr   { font-size: 8.5pt; color: #555; margin-top: 1px; }
   .cross-row__note   { font-size: 8pt; color: #555; margin-top: 3px; font-style: italic; }
+
+  /* DOC-01: Dokumentationstabellen - Kopf wiederholt sich je Seite, Zeilen werden nicht getrennt */
+  .doc-table { width: 100%; border-collapse: collapse; font-size: 8pt; table-layout: fixed; margin: 4px 0 8px; }
+  .doc-table thead { display: table-header-group; }
+  .doc-table tr { page-break-inside: avoid; }
+  .doc-table th { text-align: left; padding: 3px 5px; border-bottom: 1px solid #111; font-size: 7.5pt;
+                  background: #f3f4f6; }
+  .doc-table td { padding: 3px 5px; border-bottom: 1px solid #e5e7eb; vertical-align: top;
+                  overflow-wrap: anywhere; word-wrap: break-word; }
+  .doc-sub { font-size: 9pt; font-weight: 700; margin: 8px 0 2px; page-break-after: avoid; }
+  h2 { page-break-after: avoid; }
+  .comm-table { table-layout: fixed; }
+  .comm-table thead { display: table-header-group; }
+  .comm-table tr { page-break-inside: avoid; }
+  .comm-table td { overflow-wrap: anywhere; word-wrap: break-word; }
 
   /* Comm table */
   .comm-table { width: 100%; border-collapse: collapse; font-size: 8.5pt; }
@@ -239,6 +261,8 @@
 <div class="site-row site-row--done">
   <div class="site-row__header">
     <div class="site-row__title">{{ site.bezeichnung }}</div>
+    {% if site.priority %}<span class="site-row__badge">{{ prio_label[site.priority] }}</span>{% endif %}
+    <span class="site-row__badge">{{ phase_labels[site.phase] }}</span>
     {% if site.einsatzgrund %}
     <span style="font-size:9pt;color:#555;">{{ site.einsatzgrund }}</span>
     {% endif %}
@@ -271,10 +295,118 @@
 {% endfor %}
 {% endif %}
 
+
+{# ── DOC-01: Ressourcenuebersicht, Auftragsverlauf, Statushistorie, Ressourcenjournal ── #}
+{% if ressourcen_uebersicht %}
+<div class="page-break">
+<h2>Ressourcenübersicht ({{ ressourcen_uebersicht|length }})</h2>
+<table class="doc-table">
+  <thead><tr>
+    <th style="width:17%;">Einheit</th><th style="width:8%;">Typ</th><th style="width:14%;">Organisation</th>
+    <th style="width:15%;">Status</th><th style="width:11%;">Abschnitt</th><th style="width:13%;">Führer</th>
+    <th style="width:22%;">Zeiten</th>
+  </tr></thead>
+  <tbody>
+  {% for r in ressourcen_uebersicht %}
+  <tr>
+    <td><strong>{{ r.label }}</strong></td>
+    <td>{{ r.typ }}</td>
+    <td>{{ r.organisation or '–' }}</td>
+    <td>{{ r.status }}{% if r.status_seit %}<br><span style="color:#777;">seit {{ r.status_seit|local_datetime }}</span>{% endif %}</td>
+    <td>{{ r.abschnitt or '–' }}</td>
+    <td>{{ r.fuehrer or '–' }}</td>
+    <td style="font-size:7pt;">
+      {% if r.angefordert %}angefordert {{ r.angefordert|local_datetime }}<br>{% endif %}
+      {% if r.eingetroffen %}eingetroffen {{ r.eingetroffen|local_datetime }}<br>{% endif %}
+      {% if r.eingesetzt %}eingesetzt {{ r.eingesetzt|local_datetime }}<br>{% endif %}
+      {% if r.abgerueckt %}abgerückt {{ r.abgerueckt|local_datetime }}{% endif %}
+      {% if not (r.angefordert or r.eingetroffen or r.eingesetzt or r.abgerueckt) %}–{% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+
+{% if auftragsverlauf %}
+<div class="page-break">
+<h2>Auftragsverlauf je Einsatzstelle</h2>
+{% for v in auftragsverlauf %}
+<div class="doc-sub">{{ v.site.bezeichnung }}
+  <span style="font-weight:400;color:#555;">· {{ phase_labels[v.site.phase] }}{% if v.site.priority %} · {{ prio_label[v.site.priority] }}{% endif %}</span></div>
+<table class="doc-table">
+  <thead><tr>
+    <th style="width:14%;">Einheit</th><th style="width:26%;">Auftrag</th><th style="width:12%;">Status</th>
+    <th style="width:16%;">Disponiert</th><th style="width:16%;">Vor Ort</th><th style="width:16%;">Ende / Rückzug</th>
+  </tr></thead>
+  <tbody>
+  {% for z in v.zeilen %}
+  <tr>
+    <td>{{ z.einheit }}</td>
+    <td>{{ z.art }}{% if z.auftrag %}: {{ z.auftrag }}{% endif %}</td>
+    <td>{{ z.status }}</td>
+    <td>{{ z.disponiert|local_datetime }}{% if z.von %}<br><span style="color:#777;">{{ z.von }}</span>{% endif %}{% if z.bestaetigt %}<br><span style="color:#777;">bestätigt {{ z.bestaetigt|local_time }}</span>{% endif %}</td>
+    <td>{{ z.vor_ort|local_datetime if z.vor_ort else '–' }}</td>
+    <td>
+      {% if z.beendet %}beendet {{ z.beendet|local_datetime }}{% if z.beendet_grund %}<br>{{ z.beendet_grund }}{% endif %}{% endif %}
+      {% if z.zurueckgezogen %}zurückgezogen {{ z.zurueckgezogen|local_datetime }}{% if z.zurueckgezogen_grund %}<br>{{ z.zurueckgezogen_grund }}{% endif %}{% endif %}
+      {% if z.abgezogen %}abgezogen {{ z.abgezogen|local_datetime }}{% endif %}
+      {% if not (z.beendet or z.zurueckgezogen or z.abgezogen) %}–{% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endfor %}
+</div>
+{% endif %}
+
+{% if stellen_chronik %}
+<div class="page-break">
+<h2>Statushistorie und Lagemeldungen der Einsatzstellen ({{ stellen_chronik|length }})</h2>
+<table class="doc-table">
+  <thead><tr>
+    <th style="width:15%;">Zeit</th><th style="width:17%;">Einsatzstelle</th><th style="width:10%;">Art</th>
+    <th style="width:12%;">Einheit</th><th>Inhalt</th>
+  </tr></thead>
+  <tbody>
+  {% for c in stellen_chronik %}
+  <tr>
+    <td style="white-space:nowrap;">{{ c.ts|local_datetime }}</td>
+    <td>{{ c.stelle }}</td>
+    <td>{{ c.art }}</td>
+    <td>{{ c.einheit or '–' }}</td>
+    <td>{{ c.text }}{% if c.autor %}<br><span style="color:#888;">↳ {{ c.autor }}</span>{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+
+{% if ressourcenjournal %}
+<div class="page-break">
+<h2>Ressourcenjournal ({{ ressourcenjournal|length }})</h2>
+<table class="doc-table">
+  <thead><tr><th style="width:16%;">Zeit</th><th style="width:14%;">Einheit</th><th>Ereignis</th></tr></thead>
+  <tbody>
+  {% for j in ressourcenjournal %}
+  <tr>
+    <td style="white-space:nowrap;">{{ j.ts|local_datetime }}</td>
+    <td>{{ j.einheit or '–' }}</td>
+    <td>{{ j.text }}{% if j.autor %}<br><span style="color:#888;">↳ {{ j.autor }}</span>{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+
 {# ── Funkjournal ── #}
 {% if comms %}
 <div class="page-break">
-  <h2>Funkjournal (letzte {{ comms|length }} Einträge)</h2>
+  <h2>Funkjournal ({{ comms|length }} Einträge)</h2>
   <table class="comm-table">
     <thead>
       <tr>
@@ -287,9 +419,9 @@
       </tr>
     </thead>
     <tbody>
-      {% for c in comms|reverse %}
+      {% for c in comms %}
       <tr>
-        <td style="white-space:nowrap;">{{ c.ts|local_time }}</td>
+        <td style="white-space:nowrap;">{{ c.ts|local_datetime }}</td>
         <td>{% if c.direction == 'in' %}↓ Ein{% elif c.direction == 'out' %}↑ Aus{% else %}↔ Int{% endif %}</td>
         <td>{{ c.channel or '–' }}</td>
         <td>{{ c.partner or '–' }}</td>

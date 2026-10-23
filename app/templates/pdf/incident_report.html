@@ -26,16 +26,23 @@
   h2 { font-size: 12pt; border-bottom: 2px solid #d42225; padding-bottom: 3pt; margin-top: 12pt; }
   h3 { font-size: 10pt; margin: 6pt 0 3pt; }
   table { width: 100%; border-collapse: collapse; margin: 6pt 0; }
+  /* DOC-01: Tabellenkopf wiederholt sich auf jeder Seite, Zeilen werden nicht mitten im Text getrennt,
+     lange Woerter/URLs brechen um statt abgeschnitten zu werden. */
+  thead { display: table-header-group; }
+  tr { page-break-inside: avoid; }
+  td, th { overflow-wrap: anywhere; word-wrap: break-word; }
+  h2 { page-break-after: avoid; }
   th { background: #d42225; color: white; padding: 4pt 6pt; text-align: left; font-size: 9pt; }
   td { padding: 3pt 6pt; border-bottom: 1px solid #e0e0e0; font-size: 9pt; }
   tr:nth-child(even) td { background: #f9f9f9; }
-  .header-box { background: #d42225; color: #fff; border: 2px solid #d42225; padding: 8pt 12pt;
-                margin-bottom: 12pt;
-                display: flex; justify-content: space-between; align-items: center; gap: 12pt; }
-  .header-box__main { flex: 1; }
+  /* Kopfbereich als Tabelle statt Flexbox (zuverlaessig in WeasyPrint und im xhtml2pdf-Fallback) */
+  .header-box { background: #d42225; color: #fff; border: 2px solid #d42225; margin: 0 0 12pt; }
+  .header-box td { background: transparent !important; border: none; color: #fff; padding: 8pt 12pt;
+                   vertical-align: middle; font-size: 10pt; }
+  .header-box__main { width: auto; }
   .header-box .meta { color: rgba(255,255,255,.88); }
   .header-box .alarm-badge { color: #fff; }
-  .header-box__brand { flex: 0 0 auto; text-align: center; }
+  .header-box__brand { width: 70pt; text-align: center; }
   .header-box__brand img { height: 48pt; width: auto; display: block; margin: 0 auto 2pt; }
   .header-box__brand .source-url { font-size: 7.5pt; color: #fff; font-weight: 700;
                                    letter-spacing: .02em; }
@@ -48,8 +55,15 @@
   .done { text-decoration: line-through; color: #888; }
   .pdf-footer { position: running(pdf-footer); }
   .media-row td { padding: 4pt 6pt 8pt; background: #fafafa; border-bottom: 1px solid #e0e0e0; }
-  .media-thumbs { display: flex; flex-wrap: wrap; gap: 6pt; margin: 3pt 0 0; }
-  .media-thumbs img { height: 80pt; width: auto; max-width: 120pt; object-fit: contain; border: 1px solid #ddd; border-radius: 3pt; }
+  .media-thumbs { margin: 3pt 0 0; }
+  .media-thumbs img { height: 80pt; width: auto; max-width: 120pt; object-fit: contain; border: 1px solid #ddd;
+                      border-radius: 3pt; display: inline-block; margin: 0 6pt 6pt 0; }
+  .media-thumbs .media-link { display: block; }
+  /* Tabellen mit Freitext: feste Spaltenbreiten, damit lange Eintraege umbrechen statt ueber den Rand zu laufen */
+  .tabelle-fest { table-layout: fixed; }
+  .einsatzdaten th { width: 22%; background: #f2f2f2; color: #111; border-bottom: 1px solid #e0e0e0; }
+  .einsatzdaten td { width: 28%; }
+  .sub-tabelle th { background: #7a7a7a; }
   .media-link { font-size: 8pt; color: #555; }
   .media-link a { color: #d42225; }
   .objekt-block { border: 1px solid #d42225; border-radius: 4pt; margin: 6pt 0; padding: 0;
@@ -80,8 +94,8 @@
   Erstellt mit {{ brand }} – https://{{ brand_domain }}/
 </div>
 
-<div class="header-box">
-  <div class="header-box__main">
+<table class="header-box"><tr>
+  <td class="header-box__main">
     <div class="alarm-badge">{{ incident.alarm_type_code }}</div>
     <div><strong>{{ incident.address_street or '' }} {{ incident.address_no or '' }}{% if incident.address_city %}, {{ incident.address_city }}{% endif %}</strong></div>
     <div class="meta">{{ incident.report_text or '' }}</div>
@@ -90,12 +104,12 @@
     {% elif incident.leader %}
     <div class="meta" style="margin-top:4pt;">Einsatzleiter: <strong>{{ incident.leader.display_name }}</strong></div>
     {% endif %}
-  </div>
-  <div class="header-box__brand">
+  </td>
+  <td class="header-box__brand">
     <img src="{{ (base_url or '').rstrip('/') }}/static/img/logo_einsatzcockpit.png" alt="{{ brand }}">
     <div class="source-url">{{ brand_domain }}</div>
-  </div>
-  <div style="text-align:right">
+  </td>
+  <td style="text-align:right">
     {% if qr_datauri %}
     <div style="margin-bottom:4pt;">
       <img src="{{ qr_datauri }}" alt="QR-Code Einsatzboard" style="width:25mm;height:25mm;">
@@ -120,8 +134,32 @@
     <div>Ende: {{ incident.closed_at|local_time }} Uhr</div>
     {% endif %}
     <div class="meta">Erstellt: {{ now|local_datetime }}</div>
-  </div>
-</div>
+  </td>
+</tr></table>
+
+{# DOC-01: Einsatzdaten auf einen Blick - nur Angaben, die tatsaechlich vorhanden sind #}
+<h2>Einsatzdaten</h2>
+<table class="einsatzdaten">
+  <tr>
+    <th>Einsatznummer</th><td>{{ incident.lis_operation_number or incident.nummer or incident.id }}{% if incident.lis_operation_number and incident.nummer %} <span class="meta">(intern {{ incident.nummer }})</span>{% endif %}</td>
+    <th>Einsatzart</th><td>{{ incident.alarm_type_code }}{% if zusatz and zusatz.einsatzart and zusatz.einsatzart.label %} – {{ zusatz.einsatzart.label }}{% endif %}</td>
+  </tr>
+  <tr>
+    <th>Alarmierungsgrund</th><td>{{ incident.reason or '–' }}</td>
+    <th>Status</th><td>{{ 'Abgeschlossen' if incident.status == 'closed' else ('Laufend' if incident.status == 'active' else incident.status) }}{% if incident.is_exercise %} · Übung{% endif %}</td>
+  </tr>
+  <tr>
+    <th>Adresse</th><td colspan="3">{{ incident.address_street or '' }} {{ incident.address_no or '' }}{% if incident.address_city %}, {{ incident.address_city }}{% endif %}{% if not (incident.address_street or incident.address_city) %}–{% endif %}</td>
+  </tr>
+  <tr>
+    <th>Alarmierung</th><td>{{ incident.started_at|local_datetime }} Uhr</td>
+    <th>Einsatzende</th><td>{% if incident.closed_at %}{{ incident.closed_at|local_datetime }} Uhr{% else %}–{% endif %}</td>
+  </tr>
+  <tr>
+    <th>Einsatzleiter</th>
+    <td colspan="3">{% if incident.leader_member %}{{ incident.leader_member.full_name }}{% elif incident.incident_leader_name %}{{ incident.incident_leader_name }}{% elif incident.leader %}{{ incident.leader.display_name }}{% else %}–{% endif %}</td>
+  </tr>
+</table>
 
 {% if objekte %}
 <h2>Objekt{{ 'e' if objekte|length != 1 else '' }} am Einsatzort <span style="font-size:9pt;font-weight:normal;color:#666;">({{ objekte|length }})</span></h2>
@@ -136,6 +174,9 @@
         {% else %}<span class="obj-tag obj-tag--vor">Vorschlag{% if o.quelle == 'geo' and o.distanz_m is not none %} · {{ o.distanz_m }} m{% endif %}</span>{% endif %}
         {% if o.adresse %}<div class="obj-meta">{{ o.adresse }}</div>{% endif %}
         {% if o.bma %}<div class="obj-meta">BMA/RFL-Nr.: <strong>{{ o.bma }}</strong></div>{% endif %}
+        {% if o.informationen %}<div class="obj-meta" style="margin-top:4pt;"><strong>Hinweise:</strong> {{ o.informationen }}</div>{% endif %}
+        {% if o.anfahrtsweg %}<div class="obj-meta"><strong>Zufahrt:</strong> {{ o.anfahrtsweg }}</div>{% endif %}
+        {% if o.plaene %}<div class="obj-meta"><strong>Hinterlegte Pläne:</strong> {{ o.plaene|join('; ') }}</div>{% endif %}
         {% if o.gefahren %}
         <div class="obj-meta" style="margin-top:5pt;font-weight:700;color:#d42225;">Objektgefahren:</div>
         {% for g in o.gefahren %}
@@ -155,7 +196,7 @@
 <h2>Fahrzeuge</h2>
 {% set fahrten = fahrten_details|default({}) %}
 <table>
-  <tr><th>Fahrzeug</th><th>Organisation</th><th>Spalte</th><th>Fahrer</th><th>Gruppenkommandant</th><th style="width:55pt;text-align:right;">km</th></tr>
+  <thead><tr><th>Fahrzeug</th><th>Organisation</th><th>Spalte</th><th>Fahrer</th><th>Gruppenkommandant</th><th style="width:55pt;text-align:right;">km</th></tr></thead>
   {% for v in incident.vehicles %}
   {% set fahrt = fahrten.get(v.vehicle_master_id) %}
   {% set board_gk = v.commander.full_name if v.commander else v.commander_name %}
@@ -205,19 +246,34 @@
   {% endif %}
 </table>
 
+{% if zusatz and zusatz.fahrzeug_status %}
+<h3>Statusverlauf der Fahrzeuge</h3>
+<table class="sub-tabelle">
+  <thead><tr><th style="width:62pt;">Zeit</th><th>Fahrzeug</th><th>Status</th></tr></thead>
+  {% for st in zusatz.fahrzeug_status %}
+  <tr>
+    <td style="white-space:nowrap;">{{ (st.ts|local).strftime('%d.%m. %H:%M:%S') }}</td>
+    <td>{{ st.fahrzeug }}</td>
+    <td>{% if st.vorher %}{{ st.vorher }} → {% endif %}<strong>{{ st.nachher }}</strong></td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
 <h2>Aufträge</h2>
-<table>
-  <tr><th>Auftrag</th><th>Fahrzeug</th><th>Status</th><th>Erledigt</th></tr>
+<table class="tabelle-fest">
+  <thead><tr><th>Auftrag</th><th style="width:70pt;">Fahrzeug</th><th style="width:88pt;">Angelegt</th><th style="width:56pt;">Status</th><th style="width:44pt;">Erledigt</th></tr></thead>
   {% for t in incident.tasks %}
   <tr>
     <td class="{% if t.is_done %}done{% endif %}">{{ t.title }}{% if t.detail %}<br><span style="font-size:8pt;color:#555;">{{ t.detail }}</span>{% endif %}</td>
     <td>{{ t.vehicle.vehicle_master.display_label if t.vehicle else '–' }}</td>
+    <td style="font-size:8pt;">{{ t.created_at|local_time }} Uhr{% set von = zusatz.ersteller.get(t.id) if zusatz else None %}{% if von %}<br>{{ von }}{% endif %}{% if t.source == 'ai_suggestion' %}<br><span style="color:#777;">KI-Vorschlag</span>{% elif t.lis_task_id %}<br><span style="color:#777;">aus LIS</span>{% endif %}</td>
     <td>{% if t.is_done %}Erledigt{% elif t.is_cancelled %}Abgebrochen{% else %}Offen{% endif %}</td>
-    <td>{{ t.done_at|local_time if t.done_at else '–' }}</td>
+    <td>{% if t.is_done and t.done_at %}{{ t.done_at|local_time }}{% elif t.is_cancelled and t.cancelled_at %}{{ t.cancelled_at|local_time }}{% else %}–{% endif %}</td>
   </tr>
   {% if t.media %}
   <tr class="media-row">
-    <td colspan="4">
+    <td colspan="5">
       <div class="media-thumbs">
         {% for m in t.media %}
         {% if m.kind == 'image' %}
@@ -248,17 +304,19 @@
 
 {% if incident.messages %}
 <h2>Meldungen</h2>
-<table>
-  <tr><th>Meldung</th><th>Status</th><th>Zeitpunkt</th></tr>
+<table class="tabelle-fest">
+  <thead><tr><th>Meldung</th><th style="width:70pt;">Von</th><th style="width:50pt;">Status</th><th style="width:44pt;">Zeit</th><th style="width:44pt;">Erledigt</th></tr></thead>
   {% for msg in incident.messages %}
   <tr>
     <td class="{% if msg.is_done %}done{% endif %}">{{ msg.title }}{% if msg.detail %}<br><span style="font-size:8pt;color:#555;">{{ msg.detail }}</span>{% endif %}</td>
+    <td style="font-size:8pt;">{% if msg.lis_task_id %}LIS{% elif msg.author_name %}{{ msg.author_name }}{% else %}–{% endif %}{% if msg.objekt_gefahr_id %}<br><span style="color:#777;">Objektgefahr</span>{% endif %}</td>
     <td>{{ msg.status }}</td>
     <td>{{ msg.created_at|local_time }}</td>
+    <td>{{ msg.done_at|local_time if msg.is_done and msg.done_at else '–' }}</td>
   </tr>
   {% if msg.media %}
   <tr class="media-row">
-    <td colspan="3">
+    <td colspan="5">
       <div class="media-thumbs">
         {% for m in msg.media %}
         {% if m.kind == 'image' %}
@@ -291,7 +349,7 @@
 {% if incident.rescued_persons %}
 <h2>Gerettete Personen</h2>
 <table>
-  <tr><th>Name</th><th>Status</th><th>Einheit</th><th>Geschlecht</th><th>Gruppe</th><th>Alter</th><th>Fundort</th></tr>
+  <thead><tr><th>Name</th><th>Status</th><th>Einheit</th><th>Geschlecht</th><th>Gruppe</th><th>Alter</th><th>Fundort</th></tr></thead>
   {% for p in incident.rescued_persons %}
   <tr>
     <td>{{ p.name or '–' }}</td>
@@ -307,13 +365,13 @@
 {% if teilnahmen %}
 <h2>Mannschaft / Teilnehmer <span style="font-size:9pt;font-weight:normal;color:#666;">({{ teilnahmen|length }})</span></h2>
 <table>
-  <tr>
+  <thead><tr>
     <th style="width:24pt;">#</th>
     <th>Name</th>
     <th style="width:100pt;">Funktion</th>
     <th style="width:90pt;">Fahrzeug</th>
     <th>Notiz</th>
-  </tr>
+  </tr></thead>
   {% for t in teilnahmen %}
   <tr>
     <td>{{ loop.index }}</td>
@@ -356,10 +414,25 @@
 <p style="font-size:9.5pt; line-height:1.6; white-space:pre-wrap; margin:4pt 0 8pt;">{{ incident.ai_report_draft }}</p>
 {% endif %}
 
+{% if zusatz and zusatz.funkjournal %}
+<h2>Funkjournal / Lagemeldungen <span style="font-size:9pt;font-weight:normal;color:#666;">({{ zusatz.funkjournal|length }} Einträge)</span></h2>
+<table class="tabelle-fest">
+  <thead><tr><th style="width:62pt;">Zeit</th><th style="width:34pt;">Richtung</th><th style="width:90pt;">Partner / Kanal</th><th>Inhalt</th></tr></thead>
+  {% for f in zusatz.funkjournal %}
+  <tr>
+    <td style="white-space:nowrap;">{{ (f.ts|local).strftime('%d.%m. %H:%M:%S') }}</td>
+    <td>{{ {'in': 'ein', 'out': 'aus', 'int': 'intern'}.get(f.richtung, f.richtung) }}</td>
+    <td>{{ f.partner or '–' }}{% if f.kanal %}<br><span style="font-size:7.5pt;color:#777;">{{ f.kanal }}</span>{% endif %}</td>
+    <td>{{ f.text }}{% if f.anfrage %} <strong>(Anfrage)</strong>{% endif %}{% if f.lagerelevant %} <span style="font-size:7.5pt;color:#d42225;">Lage-relevant</span>{% endif %}{% if f.autor %}<br><span style="font-size:7.5pt;color:#888;">↳ {{ f.autor }}</span>{% endif %}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
 <h2>Einsatzverlauf / Journal{% if journal %} <span style="font-size:9pt;font-weight:normal;color:#666;">({{ journal|length }} Einträge)</span>{% endif %}</h2>
 {% if journal %}
-<table>
-  <tr><th style="width:80pt;">Zeit</th><th>Eintrag</th></tr>
+<table class="tabelle-fest">
+  <thead><tr><th style="width:80pt;">Zeit</th><th>Eintrag</th></tr></thead>
   {% set ns = namespace(last_date='') %}
   {% for e in journal %}
   {% set entry_date = (e.ts|local).strftime('%d.%m.%Y') %}
