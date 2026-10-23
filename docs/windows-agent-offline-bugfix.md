@@ -116,7 +116,12 @@ isoliert; die getestete Legacy-Statusuebergangspruefung bleibt unveraendert.
    Inventar alleine ist weiterhin kein Online-Nachweis.
 
 Produktive KDOF1-Abnahme und ein neuer oeffentlicher Release sind damit noch nicht automatisch
-als erledigt behauptet. Code und Regressionen sind fuer Review/Windows-CI vorbereitet.
+als erledigt behauptet. Code und Regressionen stehen in Cloud-PR #715 und Agent-PR #5. Die GitHub-CI des Agenten
+(39980130644) und der Cloud (39980067513, Container 39980067550) ist erfolgreich,
+einschliesslich des echten Windows-Tray-Starttests mit verweigerten Schreibrechten.
+Ein Abschlussnachtrag nutzt vorhandenes Ping/Pong nach jedem Heartbeat, um gesunde
+Verbindungen auch bei pausiertem Lease-Polling zu bestaetigen; die Installationsanleitung
+verweist fuer diesen weiteren Bugfix auf einen neueren Release als 2026.10.23.
 
 ## Geaenderte Dateien dieses Bugfixes
 
