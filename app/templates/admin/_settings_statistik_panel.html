@@ -63,6 +63,10 @@
       Das Dashboard ist eine <strong>passwortfreie Vollbild-Ansicht</strong> f&uuml;r FullHD-Infoscreens (1920&times;1080).
       Der Zugriff ist ausschlie&szlig;lich mit einem Dashboard-Token in der URL m&ouml;glich.
       Es zeigt Einsatzkennzahlen, Einsatzorte und Fuhrparkdaten und aktualisiert sich automatisch alle 5 Minuten.
+      Zwei Ansichten wechseln alle 30 Sekunden; der Wechsel ist in der Fußzeile pausierbar.
+      Für einen festen Bildschirm kann die URL um <code>?rotate=0</code> ergänzt werden,
+      für ein anderes Wechselintervall beispielsweise um <code>?interval=60</code> (Sekunden).
+      Die Anzeige skaliert auch auf 4K.
     </div>
 
     {% if dashboard_tokens %}

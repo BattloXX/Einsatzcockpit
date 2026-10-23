@@ -51,7 +51,7 @@ Gegliedert wie Menü und Wiki: zuerst die Einsatzführung, dann die Module in de
 | **Im Einsatz** | **Einsatz- & Katastrophenpläne** (Alarm- und Einsatzpläne, Maßnahmen- und Katastrophenpläne; Akteure, Prüfzyklus, Quellen bis zur PDF-Seite, Karte, PDF-Offlinefassung, KI-Import) · **Nachschlagewerke** (Gefahrgut, Rettungsdatenblätter) · **Kontakte** (Einsatztelefonlisten, Verzeichnisse) · **Straßensperren** (Karte, Nachbarfreigaben, optionale Anfahrtsprüfung) · **Förderstrecke** (Wasserförderung planen) |
 | **Einsatzbegleitend** | **Fahrtenbuch** · **Atemschutz-Geräteprüfung** · **Drohne / UAS** (Dokumentation gemäß RL-UAS LFV Vorarlberg 2024) |
 | **Verwaltung & Planung** | **Objekte** (Einsatzunterlagen, Alarm-Matching, OCR-Suche, externe Objektpflege) · **Probenplan** (Jahresplanung, Appell, Nachbereitung, öffentlicher Kalender) · **Planspiele** (Übungsgenerator für Board und Großschadenslagen) · **Mailing** |
-| **Auswertung** | **Statistik** (Kennzahlen und Diagramme zu den Einsätzen) |
+| **Auswertung** | **Statistik** (Kennzahlen und Diagramme zu den Einsätzen; [Statistik-Infoscreen](docs/statistik-infoscreen.md)) |
 
 ### Großschadenslage, Alarmierung und Anbindung
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from math import isfinite
 from statistics import median
 from typing import Any
@@ -51,6 +51,7 @@ def _incident_scope(q, db: Session, org_id: int, user=None):
 
 def _merge_fleet_by_code(
     fleet: Iterable[VehicleMaster], usage: dict[int, dict[str, Any]],
+    incident_ids: dict[int, set[int]] | None = None,
 ) -> list[dict[str, Any]]:
     groups: dict[str, list[VehicleMaster]] = {}
     for vehicle in fleet:
@@ -66,7 +67,11 @@ def _merge_fleet_by_code(
             "id": lead.id,
             "code": lead.code,
             "name": lead.name,
-            "anzahl_einsaetze": sum(usage.get(v.id, {}).get("count", 0) for v in vehicles),
+            "anzahl_einsaetze": (
+                len(set().union(*(incident_ids.get(v.id, set()) for v in vehicles)))
+                if incident_ids is not None
+                else sum(usage.get(v.id, {}).get("count", 0) for v in vehicles)
+            ),
             "km_aktuell": max((v.km_aktuell or 0) for v in vehicles),
             "betriebsstunden_aktuell": max(
                 float(v.betriebsstunden_aktuell or 0) for v in vehicles
@@ -77,13 +82,15 @@ def _merge_fleet_by_code(
 
 
 def get_stats(
-    db: Session, org_id: int, von: date, bis: date, user=None,
+    db: Session, org_id: int, von: date, bis: date, user=None, *, as_of: datetime | None = None,
 ) -> StatsResult:
     org = db.query(FireDept).filter(FireDept.id == org_id).first()
     start = local_date_to_utc(von.isoformat(), org=org)
     end = local_date_to_utc(bis.isoformat(), end=True, org=org)
 
     q = db.query(Incident).filter(Incident.started_at >= start, Incident.started_at <= end)
+    if as_of is not None:
+        q = q.filter(Incident.started_at <= as_of)
     incidents_all = _incident_scope(q, db, org_id, user).order_by(Incident.started_at.desc()).all()
     exercises = [i for i in incidents_all if i.is_exercise]
     incidents = [i for i in incidents_all if not i.is_exercise]
@@ -208,7 +215,7 @@ def get_stats(
         .order_by(VehicleMaster.display_order, VehicleMaster.code)
         .all()
     )
-    fleet_stats = _merge_fleet_by_code(fleet, usage)
+    fleet_stats = _merge_fleet_by_code(fleet, usage, usage_incidents)
 
     return StatsResult(
         total=len(incidents), total_exercises=len(exercises),

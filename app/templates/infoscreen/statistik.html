@@ -2,157 +2,104 @@
 <html lang="de" class="dark">
 <head>
 <meta charset="utf-8"/>
-<meta name="viewport" content="width=1920, height=1080, initial-scale=1.0"/>
-<title>Einsatzstatistik {{ org.name }}</title>
-<link href="/static/css/infoscreen.css?v={{ ASSET_VERSION }}" rel="stylesheet">
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="referrer" content="same-origin"/>
+<title>Einsatzstatistik {{ org.name }} | {{ brand }}</title>
+<link href="/static/css/infoscreen.css?v={{ ASSET_VERSION }}" rel="stylesheet"/>
 <link href="/static/css/fonts.css?v={{ ASSET_VERSION }}" rel="stylesheet"/>
 <link href="/static/css/leaflet.min.css?v={{ ASSET_VERSION }}" rel="stylesheet"/>
-<script src="/static/js/chart.umd.min.js?v={{ ASSET_VERSION }}"></script>
-<script src="/static/js/leaflet.min.js?v={{ ASSET_VERSION }}"></script>
-<script src="/static/js/map-config.js?v={{ ASSET_VERSION }}"></script>
-<style>
-  * { box-sizing:border-box; }
-  body {
-    margin:0; background-color:#0b1326; color:#dae2fd; overflow:hidden;
-    width:1920px; min-height:1080px; font-family:"Hanken Grotesk",sans-serif;
-  }
-  .bar-enter { animation:bar-grow 0.6s ease-out both; }
-  @keyframes bar-grow { from{transform:scaleY(0);transform-origin:bottom;} }
-  .stats-map { height:100%; min-height:0; border-radius:0.5rem; z-index:0; }
-  .chart-wrap { position:relative; height:100%; min-height:0; }
-  .fleet-list { overflow:hidden; }
-  .fleet-row:last-child { border-bottom:0; }
-  ::-webkit-scrollbar { display:none; }
-</style>
+<link href="/static/css/stats_infoscreen.css?v={{ ASSET_VERSION }}" rel="stylesheet"/>
+<script defer src="/static/js/chart.umd.min.js?v={{ ASSET_VERSION }}"></script>
+<script defer src="/static/js/leaflet.min.js?v={{ ASSET_VERSION }}"></script>
+<script defer src="/static/js/leaflet.markercluster.js?v={{ ASSET_VERSION }}"></script>
+<script defer src="/static/js/map-config.js?v={{ ASSET_VERSION }}"></script>
+<script defer src="/static/js/stats_karte.js?v={{ ASSET_VERSION }}"></script>
+<script defer src="/static/js/stats_infoscreen.js?v={{ ASSET_VERSION }}"></script>
 </head>
 <body>
-<div class="flex flex-col bg-background" style="height:1080px;width:1920px;">
-  <header class="flex items-center justify-between px-8 bg-surface-container border-b border-outline-variant shadow-md"
-          style="height:116px;flex-shrink:0;">
+<div id="stats-frame" class="stats-frame flex flex-col bg-background" data-preferences="stats-screen-{{ org.id }}">
+  <header class="stats-header flex items-center justify-between px-8 bg-surface-container border-b border-outline-variant shadow-md">
     <div class="flex items-center gap-5">
-      {% set _logo = org.logo_path or '/static/img/logo_einsatzcockpit.png' %}
-      <img src="{{ _logo }}" alt="{{ org.name }}" class="object-contain"
-           style="max-height:60px;max-width:140px;" onerror="this.style.display='none'">
-      <div class="flex flex-col">
-        <span class="font-mono text-label-caps text-primary tracking-widest uppercase">{{ org.name }}</span>
-        <h1 class="font-sans text-on-surface font-extrabold" style="font-size:32px;line-height:1.15;">Einsatzstatistik</h1>
-        <span class="font-mono text-label-caps text-on-surface-variant" style="font-size:10px;opacity:.7;">
-          ZEITRAUM {{ von }} BIS {{ bis }} &bull; AUTOMATISCHE AKTUALISIERUNG
-        </span>
+      <img src="{{ org.logo_path or '/static/img/logo_einsatzcockpit.png' }}" alt="{{ org.name }}" class="stats-logo object-contain" onerror="this.style.display='none'"/>
+      <div>
+        <span class="font-mono text-primary tracking-widest uppercase stats-org">{{ org.name }}</span>
+        <h1 class="font-sans text-on-surface font-extrabold">Einsatzstatistik</h1>
+        <div id="stats-period" class="stats-subtitle font-mono text-on-surface-variant">Jahr {{ data.year }} · laufendes Jahr</div>
       </div>
     </div>
-    <div class="text-right">
-      <div class="font-mono text-label-caps text-on-surface-variant tracking-wide" id="hdr-date">-</div>
-      <div class="font-sans text-on-surface font-bold" style="font-size:62px;line-height:1;" id="hdr-time">-</div>
+    <div class="stats-clock text-right">
+      <div id="hdr-date" class="font-mono text-on-surface-variant">–</div>
+      <div id="hdr-time" class="font-sans text-on-surface font-bold">–</div>
+    </div>
+    <div class="stats-brand text-right">
+      <img src="/static/img/logo_einsatzcockpit.png" alt="{{ brand }}" onerror="this.style.display='none'"/>
+      <span class="font-mono text-on-surface-variant">{{ brand }}</span>
     </div>
   </header>
 
-  <main class="flex flex-col gap-4 px-8 py-5" style="height:964px;flex-shrink:0;">
-    <section class="grid grid-cols-5 gap-4" style="height:132px;flex-shrink:0;">
-      {% for value,label in [(stats.total,'Einsaetze'),(stats.fire_count,'Brand'),(stats.technical_count,'Technisch'),(stats.avg_duration_min if stats.avg_duration_min is not none else '-','Median Dauer min'),(stats.median_alarm_to_scene_min if stats.median_alarm_to_scene_min is not none else '-','Median Alarmierung bis Einsatzort min')] %}
-      <div class="flex flex-col justify-center rounded-xl bg-surface-container border border-outline-variant px-6 shadow-md">
-        <strong class="font-sans text-on-surface font-extrabold" style="font-size:48px;line-height:1;">{{ value }}</strong>
-        <span class="mt-2 font-mono text-label-caps text-on-surface-variant uppercase">{{ label }}</span>
-      </div>
+  <main class="stats-main">
+    <section class="stats-kpis" aria-label="Einsatzkennzahlen">
+      {% for key,label,unit,accent in [
+        ('total','Einsätze gesamt','','#bcc7de'),
+        ('fire','Brandeinsätze','','#f87171'),
+        ('technical','Technische Einsätze','','#60a5fa'),
+        ('current_month','Aktueller Monat','','#adc6ff'),
+        ('monthly_average','Ø Einsätze / Monat','','#bcc7de'),
+        ('duration','Median Einsatzdauer','min','#ffb3ac'),
+        ('arrival','Alarmierung → Einsatzort','min','#ffb3ac')
+      ] %}
+      <article class="stats-kpi rounded-xl bg-surface-container-high shadow" style="--accent:{{ accent }}">
+        <div class="stats-kpi-label font-mono text-on-surface-variant">{{ label }}</div>
+        <div class="stats-kpi-reading"><strong data-kpi="{{ key }}">{{ data.kpis[key] if data.kpis[key] is not none else '–' }}</strong><span>{{ unit }}</span></div>
+        <div class="stats-kpi-note" id="note-{{ key }}">{% if key == 'arrival' %}Median{% else %}&nbsp;{% endif %}</div>
+      </article>
       {% endfor %}
     </section>
 
-    <section class="grid gap-4 min-h-0" style="grid-template-columns:1.5fr 1fr 1fr;height:644px;">
-      <article class="flex flex-col min-h-0 rounded-xl bg-surface-container border border-outline-variant p-5 shadow-md">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="font-sans text-headline-md text-on-surface">Einsatzorte</h2>
-          <span class="font-mono text-label-caps text-on-surface-variant">{{ stats.map_markers|length }} MARKER</span>
-        </div>
-        <div id="stats-map" class="stats-map flex-1"></div>
-      </article>
+    <div class="stats-views">
+      <section id="stats-overview" class="stats-view stats-overview is-active" aria-label="Einsatzübersicht">
+        <article class="stats-panel bg-surface-container rounded-xl shadow-md">
+          <div class="stats-panel-heading"><h2>Einsatzorte</h2><span id="map-count">–</span></div>
+          <div id="stats-map" aria-label="Ungefähre Einsatzorte auf OpenStreetMap"></div>
+          <div class="stats-panel-note"><span id="map-note">Ungefähre Orte · Raster ca. 1 km</span><span class="stats-legend"><i class="fire"></i> Brand <i class="technical"></i> Technisch</span></div>
+        </article>
+        <article class="stats-panel bg-surface-container rounded-xl shadow-md">
+          <div class="stats-panel-heading"><h2>Einsatzarten</h2><span>Alarmstichworte</span></div>
+          <div class="stats-ring"><canvas id="stats-category-chart" role="img" aria-label="Einsatzarten nach Häufigkeit"></canvas><span class="stats-empty" id="alarm-empty" hidden>Keine Einsätze vorhanden</span></div>
+          <div id="alarm-legend" class="alarm-legend"></div>
+        </article>
+        <article class="stats-panel bg-surface-container rounded-xl shadow-md">
+          <div class="stats-panel-heading"><h2>Fuhrpark</h2><span>Beteiligungen</span></div>
+          <div id="fleet-list" class="fleet-list"></div>
+          <p class="stats-panel-note">Je Fahrzeug und Einsatz einmal gezählt</p>
+        </article>
+      </section>
 
-      <article class="flex flex-col min-h-0 rounded-xl bg-surface-container border border-outline-variant p-5 shadow-md">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="font-sans text-headline-md text-on-surface">Verteilung</h2>
-          <span class="font-mono text-label-caps text-on-surface-variant">NACH EINSATZART</span>
-        </div>
-        <div class="chart-wrap flex-1"><canvas id="stats-category-chart"></canvas></div>
-      </article>
-
-      <article class="fleet-list flex flex-col min-h-0 rounded-xl bg-surface-container border border-outline-variant p-5 shadow-md">
-        <div class="flex items-center justify-between mb-2">
-          <h2 class="font-sans text-headline-md text-on-surface">Fuhrpark</h2>
-          <span class="font-mono text-label-caps text-on-surface-variant">AKTUELL</span>
-        </div>
-        <div class="min-h-0 overflow-hidden">
-          {% for row in stats.vehicle_fleet_stats %}
-          <div class="fleet-row flex items-center justify-between gap-4 py-3 border-b border-outline-variant">
-            <div class="flex items-baseline gap-3">
-              <strong class="font-sans text-on-surface font-extrabold" style="font-size:32px;line-height:1;">{{ row.anzahl_einsaetze }}</strong>
-              <span class="font-mono text-label-caps text-on-surface-variant">EINSAETZE</span>
-            </div>
-            <div class="text-right">
-              <strong class="block font-mono text-headline-sm text-tertiary">{{ row.code }}</strong>
-              {% if row.km_aktuell > 0 or row.betriebsstunden_aktuell > 0 %}<span class="font-mono text-body-sm text-on-surface-variant">{% if row.km_aktuell > 0 %}{{ row.km_aktuell }} km{% endif %}{% if row.km_aktuell > 0 and row.betriebsstunden_aktuell > 0 %} &bull; {% endif %}{% if row.betriebsstunden_aktuell > 0 %}{{ row.betriebsstunden_aktuell }} h{% endif %}</span>{% endif %}
-            </div>
-          </div>
-          {% else %}
-          <div class="flex h-full items-center justify-center text-on-surface-variant">Keine Fuhrparkdaten vorhanden.</div>
-          {% endfor %}
-        </div>
-      </article>
-    </section>
-
-    <footer class="flex items-center justify-between gap-6 rounded-xl bg-surface-container-low border border-outline-variant px-5 shadow-md"
-            style="height:116px;flex-shrink:0;">
-      <div class="min-w-0 flex-1">
-        <div class="font-mono text-label-caps text-primary mb-2">LETZTE EINSAETZE</div>
-        <div class="flex gap-6 overflow-hidden">
-          {% for incident in recent_incidents %}
-          <span class="font-mono text-body-sm text-on-surface whitespace-nowrap">
-            <strong class="text-tertiary">{{ incident.started_at|local_datetime }}</strong>
-            {{ incident.alarm_type_code }} {{ incident.address_street or '' }} {{ incident.address_no or '' }}, {{ incident.address_city or '' }}
-          </span>
-          {% else %}
-          <span class="font-mono text-body-sm text-on-surface-variant">Keine Einsaetze im Zeitraum.</span>
-          {% endfor %}
-        </div>
-      </div>
-      <div class="flex items-center gap-4" style="flex-shrink:0;">
-        <span class="font-mono text-label-caps text-on-surface-variant" id="footer-refresh">Naechste Aktualisierung in 5:00</span>
-        <div class="h-1.5 rounded-full overflow-hidden" style="width:130px;background:rgba(255,255,255,.08);">
-          <div id="footer-bar" class="bar-enter h-full bg-primary rounded-full" style="width:100%;transition:width 1s linear;"></div>
-        </div>
-      </div>
-    </footer>
+      <section id="stats-development" class="stats-view stats-development" aria-label="Statistische Entwicklung" aria-hidden="true" inert>
+        <article class="stats-panel stats-month-panel bg-surface-container rounded-xl shadow-md">
+          <div class="stats-panel-heading"><h2>Monatliche Einsatzentwicklung <span id="month-year">{{ data.year }}</span></h2><span class="stats-legend"><i class="fire"></i> Brand <i class="technical"></i> Technisch <i class="other"></i> Sonstige</span></div>
+          <div class="stats-chart"><canvas id="stats-month-chart" role="img" aria-label="Einsätze von Jänner bis Dezember, gestapelt nach Kategorie"></canvas></div>
+          <p class="stats-panel-note" id="month-note">Aktueller Monat hervorgehoben · künftige Monate offen</p>
+        </article>
+        {% for id,title in [('time','Tageszeit'),('weekday','Wochentage'),('duration','Einsatzdauer')] %}
+        <article class="stats-panel bg-surface-container rounded-xl shadow-md">
+          <div class="stats-panel-heading"><h2>{{ title }}</h2><span id="{{ id }}-samples"></span></div>
+          <div class="stats-chart"><canvas id="stats-{{ id }}-chart" role="img" aria-label="Einsätze nach {{ title }}"></canvas><span class="stats-empty" id="{{ id }}-empty" hidden>Keine auswertbaren Daten</span></div>
+        </article>
+        {% endfor %}
+      </section>
+    </div>
   </main>
+
+  <footer class="stats-footer bg-surface-container-low border-t border-outline-variant">
+    <div class="stats-view-controls" aria-label="Ansicht wählen">
+      <button type="button" id="view-overview" aria-pressed="true">1 · Einsatzübersicht</button>
+      <button type="button" id="view-development" aria-pressed="false">2 · Entwicklung</button>
+      <button type="button" id="rotation-toggle" aria-pressed="true">Wechsel · 30 s</button>
+    </div>
+    <div class="stats-data-status"><span id="refresh-status" class="stats-status-dot" aria-hidden="true">{{ status_dot("gruen", "Daten aktuell") }}</span><span id="last-update">Datenstand –</span><span id="refresh-label">Aktualisierung alle 5 Min.</span></div>
+  </footer>
 </div>
-
-<script type="application/json" id="stats-map-data">{{ stats.map_markers|tojson }}</script>
-<script type="application/json" id="stats-chart-data">{{ {'categories':[stats.fire_count,stats.technical_count,stats.other_count], 'by_alarm_type':stats.by_alarm_type}|tojson }}</script>
-<script src="/static/js/stats_karte.js?v={{ ASSET_VERSION }}"></script>
-<script>
-(function() {
-  "use strict";
-  var DAYS   = ["Sonntag","Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag"];
-  var MONTHS = ["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
-  function updateClock() {
-    var now = new Date();
-    document.getElementById("hdr-time").textContent =
-      String(now.getHours()).padStart(2,"0") + ":" + String(now.getMinutes()).padStart(2,"0") + ":" + String(now.getSeconds()).padStart(2,"0");
-    document.getElementById("hdr-date").textContent =
-      DAYS[now.getDay()] + ", " + now.getDate() + ". " + MONTHS[now.getMonth()] + " " + now.getFullYear();
-  }
-  setInterval(updateClock, 1000);
-  updateClock();
-
-  var TOTAL = 300, remaining = TOTAL;
-  var bar = document.getElementById("footer-bar");
-  var label = document.getElementById("footer-refresh");
-  function tick() {
-    remaining--;
-    if (remaining <= 0) { location.reload(); return; }
-    bar.style.width = (remaining / TOTAL * 100) + "%";
-    var m = Math.floor(remaining / 60), s = String(remaining % 60).padStart(2,"0");
-    label.textContent = "Naechste Aktualisierung in " + m + ":" + s;
-  }
-  setInterval(tick, 1000);
-})();
-</script>
+<script type="application/json" id="stats-infoscreen-data">{{ data|tojson }}</script>
 </body>
 </html>

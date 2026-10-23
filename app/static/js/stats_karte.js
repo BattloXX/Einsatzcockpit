@@ -57,27 +57,35 @@
   var segmentCountPlugin = {
     id: "statsSegmentCount",
     afterDatasetsDraw: function (chart) {
+      var config = chart.options.plugins.statsSegmentCount || {};
+      var size = config.fontSize || 11;
       var ctx = chart.ctx;
       var values = chart.data.datasets[0].data;
       var total = values.reduce(function (sum, value) { return sum + value; }, 0);
       if (!total) return;
       ctx.save();
       ctx.fillStyle = "#ffffff";
-      ctx.font = "600 11px JetBrains Mono, monospace";
+      ctx.font = "700 " + size + "px Hanken Grotesk, sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       chart.getDatasetMeta(0).data.forEach(function (arc, index) {
         var point = arc.tooltipPosition();
         var percent = Math.round(values[index] * 1000 / total) / 10;
-        if (percent < 4) return;
-        ctx.fillText(chart.data.labels[index], point.x, point.y - 7);
-        ctx.fillText(values[index], point.x, point.y + 7);
+        if (percent < (config.minPercent || 4)) return;
+        if (config.autoContrast) {
+          var color = chart.data.datasets[0].backgroundColor[index].replace("#", "");
+          var brightness = .299 * parseInt(color.slice(0, 2), 16) + .587 * parseInt(color.slice(2, 4), 16) + .114 * parseInt(color.slice(4, 6), 16);
+          ctx.fillStyle = brightness > 155 ? "#0b1326" : "#ffffff";
+        }
+        ctx.fillText(chart.data.labels[index], point.x, point.y - size * .6);
+        ctx.fillText(values[index], point.x, point.y + size * .6);
       });
       ctx.restore();
     }
   };
 
   function renderStats() {
+    if (document.getElementById("stats-infoscreen-data")) return;
     cleanupStats();
 
     var mapElement = document.getElementById("stats-map");
@@ -152,6 +160,7 @@
     chart("stats-vehicle-chart", {type: "bar", data: {labels: data.vehicles.map(function (row) { return row.code; }), datasets: [{data: data.vehicles.map(function (row) { return row.count; }), backgroundColor: "#1877f2"}]}, options: {indexAxis: "y", plugins: {legend: {display: false}}}});
   }
 
+  window.ECPStats = {family: family, alarmColors: alarmColors, segmentCountPlugin: segmentCountPlugin};
   document.addEventListener("DOMContentLoaded", renderStats);
   document.body.addEventListener("htmx:afterSwap", function (event) {
     if (event.detail.target.id === "stats-content") renderStats();
