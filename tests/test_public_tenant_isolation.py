@@ -978,24 +978,22 @@ def _setup_statistik_tokens(org_b_id: int) -> None:
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
-        if (
-            not db.query(Incident)
+        marker_incident = (db.query(Incident)
             .filter(
                 Incident.primary_org_id == org_b_id,
                 Incident.address_street == "Geheime Adresse der Org B",
             )
             .first()
-        ):
-            db.add(
-                Incident(
-                    primary_org_id=org_b_id,
-                    alarm_type_code="B3",
-                    status="active",
-                    address_street="Geheime Adresse der Org B",
-                    address_no="42",
-                    started_at=datetime.now(UTC).replace(tzinfo=None),
-                )
+        )
+        if marker_incident is None:
+            marker_incident = Incident(
+                primary_org_id=org_b_id, alarm_type_code="B3", status="active",
+                address_street="Geheime Adresse der Org B", address_no="42",
+                started_at=datetime.now(UTC).replace(tzinfo=None),
             )
+            db.add(marker_incident)
+        marker_incident.lat = 48.88321
+        marker_incident.lng = 12.33456
         for org_id, raw in ((ORG_A, STATS_TOKEN_A), (org_b_id, STATS_TOKEN_B)):
             settings_row = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
             if settings_row is None:
@@ -1021,7 +1019,15 @@ def test_statistik_infoscreen_token_sieht_keine_fremde_org(client):
     assert "Geheime Adresse der Org B" not in response_a.text
     response_b = client.get(f"/infoscreen/statistik/{STATS_TOKEN_B}")
     assert response_b.status_code == 200
-    assert "Geheime Adresse der Org B" in response_b.text
+    assert "Geheime Adresse der Org B" not in response_b.text
+    # Auch im eingebetteten HTML-JSON keine Adressen; nur gerundete Orte.
+    data_a = client.get(f"/infoscreen/statistik/{STATS_TOKEN_A}/daten")
+    data_b = client.get(f"/infoscreen/statistik/{STATS_TOKEN_B}/daten")
+    assert data_a.status_code == data_b.status_code == 200
+    assert not any(row["lat"] == 48.88 for row in data_a.json()["map"])
+    assert any(row["lat"] == 48.88 for row in data_b.json()["map"])
+    assert "Geheime Adresse" not in data_b.text
+    assert data_b.headers["cache-control"] == "no-store"
 
 
 def test_statistik_infoscreen_token_statuscodes(client):
@@ -1029,6 +1035,7 @@ def test_statistik_infoscreen_token_statuscodes(client):
     _setup_statistik_tokens(org_b_id)
     unknown = client.get("/infoscreen/statistik/unbekannt", follow_redirects=False)
     assert unknown.status_code in (302, 401)
+    assert client.get("/infoscreen/statistik/unbekannt/daten", follow_redirects=False).status_code == 401
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
@@ -1037,7 +1044,52 @@ def test_statistik_infoscreen_token_statuscodes(client):
         db.commit()
         disabled = client.get(f"/infoscreen/statistik/{STATS_TOKEN_A}", follow_redirects=False)
         assert disabled.status_code == 403
+        assert client.get(f"/infoscreen/statistik/{STATS_TOKEN_A}/daten").status_code == 403
     finally:
+        settings_row.statistik_infoscreen_enabled = True
+        db.commit()
+        db.close()
+
+
+def test_statistik_infoscreen_cache_org_trennung_und_token_widerruf(client, monkeypatch):
+    from app.routers import ui_infoscreen_stats
+
+    org_b_id = _setup_zwei_orgs()
+    _setup_statistik_tokens(org_b_id)
+    cache = {}
+
+    async def read(key):
+        return cache.get(key)
+
+    async def write(key, value, ttl):
+        assert ttl == 300
+        cache[key] = value
+
+    monkeypatch.setattr(ui_infoscreen_stats.shared_cache, "get", read)
+    monkeypatch.setattr(ui_infoscreen_stats.shared_cache, "set", write)
+    for raw in (STATS_TOKEN_A, STATS_TOKEN_B):
+        assert client.get(f"/infoscreen/statistik/{raw}/daten").status_code == 200
+    assert len(cache) == 2
+    assert any(f":org:{ORG_A}:" in key for key in cache)
+    assert any(f":org:{org_b_id}:" in key for key in cache)
+
+    db = SessionLocal()
+    set_tenant_context(db, None)
+    raw = "stats-cache-revoked-token"
+    token = StatistikDashboardToken(org_id=ORG_A, token_hash=hash_api_key(raw), label="Cache-Test")
+    db.add(token)
+    db.commit()
+    try:
+        assert client.get(f"/infoscreen/statistik/{raw}/daten").status_code == 200
+        db.delete(token)
+        db.commit()
+        assert client.get(f"/infoscreen/statistik/{raw}/daten", follow_redirects=False).status_code == 401
+        settings_row = db.query(OrgSettings).filter(OrgSettings.org_id == ORG_A).one()
+        settings_row.statistik_infoscreen_enabled = False
+        db.commit()
+        assert client.get(f"/infoscreen/statistik/{STATS_TOKEN_A}/daten").status_code == 403
+    finally:
+        settings_row = db.query(OrgSettings).filter(OrgSettings.org_id == ORG_A).one()
         settings_row.statistik_infoscreen_enabled = True
         db.commit()
         db.close()
