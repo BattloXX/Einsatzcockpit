@@ -144,7 +144,9 @@ logger = logging.getLogger("einsatzleiter")
 # Laute Drittanbieter-Logger dämpfen: WeasyPrint subsettet bei JEDEM PDF-Druck Fonts
 # über fontTools, das dabei hunderte DEBUG/INFO-Zeilen erzeugt (Prod-Log 2026-07-08).
 # Auf WARNING setzen (deckt via Logger-Hierarchie auch fontTools.subset/.ttLib/.timer ab).
-for _noisy in ("fontTools", "weasyprint", "PIL", "pdf2image"):
+# Ebenso die "HTTP Request: ... 200 OK"-Zeilen von httpx/httpcore und das uvicorn-Access-Log,
+# die den Log-Puffer fluten; Fehler (WARNING+) bleiben sichtbar.
+for _noisy in ("fontTools", "weasyprint", "PIL", "pdf2image", "httpx", "httpcore", "uvicorn.access"):
     logging.getLogger(_noisy).setLevel(logging.WARNING)
 
 
