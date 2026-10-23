@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     ALARM_MAP_TTL_DAYS: int = 365
     # Die oeffentliche No-Login-Seite zeigt mehr Daten und laeuft frueher ab.
     ALARM_LINK_TTL_DAYS: int = 30
-    APP_VERSION: str = "2026.10.21"
+    APP_VERSION: str = "2026.10.23"
     ICONS_STRICT: bool = False
     DEBUG: bool = False
     # Pytest setzt dies vor dem App-Import: Lifespan startet dann keine produktiven
