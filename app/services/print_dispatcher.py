@@ -13,7 +13,7 @@ import uuid
 from typing import TYPE_CHECKING, NamedTuple
 
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
 
 from app.models.gateway import (
     JOB_DONE,
@@ -1037,6 +1037,7 @@ def _seiten_for_elements(db: Session, objekt_id: int, elements: list[str]):
         return []
     return (
         db.query(ObjektDokumentSeite)
+        .options(defer(ObjektDokumentSeite.volltext))
         .join(ObjektDokument, ObjektDokumentSeite.dokument_id == ObjektDokument.id)
         .filter(
             ObjektDokumentSeite.objekt_id == objekt_id,

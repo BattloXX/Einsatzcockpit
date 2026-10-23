@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 from PIL import Image
-from sqlalchemy import BigInteger, create_engine
+from sqlalchemy import BigInteger, create_engine, event, inspect
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import sessionmaker
 
@@ -58,7 +58,23 @@ def test_uebernahme_erzeugt_media_und_herkunft(db, tmp_path):
     task = Task(incident_id=1, title="Angriff"); db.add(task); db.flush()
     user = SimpleNamespace(id=7)
 
-    erstellt = uebernehme_seiten(db, "task", task, [seite.id], user, ORG)
+    seite.volltext = "PDF-Textlayer " * 1000
+    db.flush()
+    seite_id = seite.id
+    db.expunge(seite)
+    geladen = []
+
+    def merke_seite(session, obj):
+        if isinstance(obj, ObjektDokumentSeite):
+            geladen.append(obj)
+
+    event.listen(db, "loaded_as_persistent", merke_seite)
+    try:
+        erstellt = uebernehme_seiten(db, "task", task, [seite_id], user, ORG)
+    finally:
+        event.remove(db, "loaded_as_persistent", merke_seite)
+    assert len(geladen) == 1
+    assert "volltext" in inspect(geladen[0]).unloaded
     db.commit()
 
     assert len(erstellt) == 1

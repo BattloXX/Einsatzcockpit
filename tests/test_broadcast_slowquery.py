@@ -1,6 +1,7 @@
 """WS-Broadcast parallel mit Timeout (Audit B6) + Slow-Query-Logging (B7)."""
 import asyncio
 import logging
+from pathlib import Path
 
 import pytest
 
@@ -101,3 +102,33 @@ def test_slow_query_logging_schwelle_null_deaktiviert(caplog):
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
     assert not caplog.records
+
+
+def test_slow_query_logging_aufrufer_vor_gekuerztem_sql(caplog, monkeypatch):
+    from sqlalchemy import create_engine, text
+
+    from app import db
+
+    engine = create_engine("sqlite:///:memory:")
+    db.register_slow_query_logging(engine, threshold_ms=10)
+    zeiten = iter([0.0, 1.0])
+    monkeypatch.setattr(db.time, "monotonic", lambda: next(zeiten))
+    statement = "SELECT 1 /* " + "x" * 600 + " */"
+    namespace = {"text": text, "statement": statement}
+    app_pfad = Path(db.__file__).resolve().parent
+    # Zwei App-Frames: Der naechste Aufrufer muss gewinnen; SQLAlchemy und
+    # app/db.py liegen im echten Stack noch naeher an der Warnung.
+    exec(compile("def innen(conn):\n    conn.execute(text(statement))\n",
+                 str(app_pfad / "services" / "slowquery_test.py"), "exec"), namespace)
+    exec(compile("def aussen(conn):\n    innen(conn)\n",
+                 str(app_pfad / "routers" / "slowquery_test.py"), "exec"), namespace)
+
+    with engine.connect() as conn:
+        with caplog.at_level(logging.WARNING, logger="einsatzleiter.slow_query"):
+            namespace["aussen"](conn)
+
+    meldung, = [r.message for r in caplog.records if r.name == "einsatzleiter.slow_query"]
+    assert meldung == (
+        "Langsame Query: 1000 ms aus app/services/slowquery_test.py:2 — " + statement[:500]
+    )
+    engine.dispose()

@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import BigInteger, create_engine
+from sqlalchemy import BigInteger, create_engine, event, inspect
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import sessionmaker
 from starlette.requests import Request
@@ -118,6 +118,47 @@ def test_manifest_seiten_urls(sync_db):
     # Seite 2: nur Einzel-PDF (kein Rendering)
     urls2 = seiten[1]["urls"]
     assert len(urls2) == 1 and urls2[0].endswith("/pdf")
+
+
+def test_manifest_laedt_keinen_volltext_bei_gleicher_ausgabe(sync_db):
+    db, org_a_id, _, _ = sync_db
+    # Referenzausgabe mit vollstaendig geladenen Seiten.
+    seiten = db.query(ObjektDokumentSeite).all()
+    for seite in seiten:
+        seite.volltext = "PDF-Textlayer " * 1000
+    db.flush()
+    erwartet = build_sync_manifest(db, org_a_id)
+    db.expunge_all()
+    geladen = []
+
+    def merke_seite(session, obj):
+        if isinstance(obj, ObjektDokumentSeite):
+            geladen.append(obj)
+
+    event.listen(db, "loaded_as_persistent", merke_seite)
+    try:
+        assert build_sync_manifest(db, org_a_id) == erwartet
+    finally:
+        event.remove(db, "loaded_as_persistent", merke_seite)
+    assert len(geladen) == 2
+    assert all("volltext" in inspect(seite).unloaded for seite in geladen)
+
+
+def test_druckseiten_laeden_keinen_volltext_bei_gleicher_ausgabe(sync_db):
+    from app.services.print_dispatcher import _seiten_for_elements
+
+    db, _, _, objekt_id = sync_db
+    seiten = db.query(ObjektDokumentSeite).order_by(ObjektDokumentSeite.seiten_nr).all()
+    for seite in seiten:
+        seite.volltext = "PDF-Textlayer " * 1000
+    db.flush()
+    erwartet = [(s.id, s.einzel_pdf_pfad, s.dokumentart, s.seiten_nr) for s in seiten[:1]]
+    db.expunge_all()
+
+    geladen = _seiten_for_elements(db, objekt_id, ["bma_melderplan"])
+
+    assert [(s.id, s.einzel_pdf_pfad, s.dokumentart, s.seiten_nr) for s in geladen] == erwartet
+    assert all("volltext" in inspect(seite).unloaded for seite in geladen)
 
 
 def test_manifest_org_isolation(sync_db):

@@ -1,5 +1,7 @@
 import logging
 import time
+import traceback
+from pathlib import Path
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
@@ -40,8 +42,16 @@ def register_slow_query_logging(target_engine, threshold_ms: int) -> None:
             return
         elapsed_ms = (time.monotonic() - starts.pop()) * 1000
         if elapsed_ms >= threshold_ms:
+            aufrufer = ""
+            app_pfad = Path(__file__).resolve().parent
+            for frame in reversed(traceback.extract_stack()):
+                pfad = Path(frame.filename).resolve()
+                if pfad == app_pfad / "db.py" or not pfad.is_relative_to(app_pfad):
+                    continue
+                aufrufer = f" aus {pfad.relative_to(app_pfad.parent)}:{frame.lineno}"
+                break
             _slow_query_logger.warning(
-                "Langsame Query: %.0f ms — %s", elapsed_ms, statement[:500],
+                "Langsame Query: %.0f ms%s — %s", elapsed_ms, aufrufer, statement[:500],
             )
 
 
