@@ -414,6 +414,45 @@ def gateway_detail(
     })
 
 
+@router.post("/{gateway_id:int}/offline-alarme", response_class=HTMLResponse)
+def gateway_offline_alarme(
+    gateway_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    _guard: None = Depends(require_gateway_enabled),
+    enabled: bool = Form(False),
+):
+    from app.core.audit import write_audit
+    from app.models.dienst_monitor import DienstStatus
+
+    gw = _gw_or_404(db, user.org_id, gateway_id)
+    if gw.offline_alert_enabled != enabled:
+        gw.offline_alert_enabled = enabled
+        # Auswahlwechsel ist keine Erholung. Alte Claims/Timer duerfen weder eine
+        # falsche Entwarnung noch einen sofortigen Alarm der neuen Auswahl ausloesen.
+        monitor = db.query(DienstStatus).filter(
+            DienstStatus.org_id == gw.org_id, DienstStatus.key == "print_gateway",
+        ).with_for_update().first()
+        if monitor is not None:
+            monitor.state = "unknown"
+            monitor.since = datetime.now(UTC).replace(tzinfo=None)
+            monitor.down_since = None
+            monitor.outage_notified_at = None
+            monitor.last_repeat_at = None
+            monitor.last_error = None
+            monitor.fail_cycles = 0
+            monitor.ok_cycles = 0
+        write_audit(db, "gateway.offline_alarm_geaendert", org_id=gw.org_id, user_id=user.id,
+                    entity_type="gateway", entity_id=gw.id, payload={"enabled": enabled})
+        db.commit()
+    if request.headers.get("HX-Request") == "true":
+        return templates.TemplateResponse(request, "gateway/_offline_alert_settings.html", {
+            "gw": gw, "alert_settings_saved": True,
+        })
+    return RedirectResponse(f"/gateway/{gw.id}#offline-alarme", status_code=303)
+
+
 @router.get("/{gateway_id:int}/historie", response_class=HTMLResponse)
 def gateway_historie(
     gateway_id: int,

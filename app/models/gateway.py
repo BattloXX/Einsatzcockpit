@@ -245,6 +245,7 @@ class Gateway(TenantScoped, Base):
         String(20), nullable=False, default=GATEWAY_KIND_LINUX, server_default=GATEWAY_KIND_LINUX
     )
     agent_info: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    offline_alert_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="1")
 
     # Device-Token (SHA256-Hash, hash_api_key) – gesetzt nach Pairing, rotierbar.
     device_token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)

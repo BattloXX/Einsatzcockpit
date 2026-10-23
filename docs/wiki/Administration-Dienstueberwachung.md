@@ -9,7 +9,7 @@ erreichbar.
 
 | Dienst | Prüfung |
 |--------|---------|
-| Print-Gateway | Jedes gekoppelte Gateway wird einzeln geprüft. Es muss sich innerhalb seines Health-Intervalls über `last_seen_at` gemeldet haben. Als Toleranz gelten mindestens 180 Sekunden beziehungsweise das Dreifache des konfigurierten Intervalls. |
+| Print-Gateway | Jedes gekoppelte, für Offline-Alarme ausgewählte Gateway wird einzeln geprüft. Windows-Agents benötigen eine gültige workerübergreifende Presence; für Linux-Gateways gilt die folgende Heartbeat-Prüfung. Es muss sich innerhalb seines Health-Intervalls über `last_seen_at` gemeldet haben. Als Toleranz gelten mindestens 180 Sekunden beziehungsweise das Dreifache des konfigurierten Intervalls. |
 | SMS-Gateway | Jeder aktive Gateway-Token wird einzeln geprüft. Eine bestehende Verbindung oder ein Heartbeat innerhalb der letzten zehn Minuten gilt als erreichbar. Eine konfigurierte EUS-Anbindung ist ein zusätzliches, funktionierendes Teil, wird aber nicht aktiv auf Erreichbarkeit geprüft. |
 | Alarm-Outbox | Meldet eine Störung, wenn ein Alarmierungsjob länger als zwei Minuten offen ist oder innerhalb der letzten 24 Stunden fehlgeschlagen ist. |
 | Alarm seriell (W&T) | Jede konfigurierte W&T-Verbindung wird einzeln geprüft. Das zugehörige Gateway muss über `last_seen_at` frisch sein und die serielle Verbindung als verbunden melden. |
@@ -18,6 +18,26 @@ erreichbar.
 Der Dienst ist OK, wenn kein Gerät ausgefallen und mindestens eines OK ist. Sind nur
 einige Geräte ausgefallen, liegt eine Teilstörung vor; sind alle ausgefallen, liegt ein
 Vollausfall vor. Die Detailzeilen nennen den Zustand und Grund jedes einzelnen Geräts.
+
+## Druck-Gateways für Offline-Alarme auswählen
+
+Unter **Gateway / Druck → gewünschtes Gateway → Offline-Alarme** kann ein Org-Admin
+**Bei Offline alarmieren** ein- oder ausschalten. Das gilt für Linux-Druckgateways und
+Windows-Druckagenten. Die Voreinstellung ist **ein**, auch bei bereits vorhandenen Gateways.
+
+Für nur gelegentlich eingeschaltete PCs das Häkchen entfernen und speichern. Ihr echter
+Online-/Offline-Status bleibt auf der Gateway-Seite sichtbar. Sie werden aber nicht in die
+Print-Gateway-Ausfallbewertung einbezogen und lösen darüber weder SMS, Teams, E-Mail noch
+Wiederholungen oder Entwarnungen aus. Die Gateway-Übersicht zeigt **Offline-Alarme aus**.
+Auch die geschützten Uptime-Endpunkte bewerten beim Print-Gateway nur die ausgewählten Geräte.
+Ist keines ausgewählt, erscheint **Keine überwachten Gateways**; es gibt keinen Ausfallalarm.
+Eine konfigurierte serielle W&T-Alarmleitung bleibt unabhängig davon überwacht.
+
+Empfänger und Kanäle werden weiterhin zentral auf dieser Systemstatus-Seite konfiguriert.
+Die Überwachung muss dort aktiviert sein. Karenz und Wiederholung gelten weiterhin;
+ein Auswahlwechsel startet die Karenz der Print-Gateway-Gruppe neu und erzeugt keine
+Entwarnung durch bloßes Abschalten eines ausgefallenen Geräts. Die Änderung gilt ab dem
+nächsten Monitorlauf und kann bereits versandte Meldungen nicht zurückholen.
 
 ## Zustände
 

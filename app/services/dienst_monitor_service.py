@@ -44,6 +44,9 @@ class Entscheidung:
 
 
 def _gateway_frisch(gateway, now: datetime) -> bool:
+    if gateway.is_windows_agent:
+        from app.services.print_agent_presence import online
+        return online(gateway, now)
     config = gateway.wut_config or {}
     try:
         interval = max(15, int(config.get("health_interval_s", 60)))
@@ -51,6 +54,21 @@ def _gateway_frisch(gateway, now: datetime) -> bool:
         interval = 60
     last_seen = _naive_utc(gateway.last_seen_at)
     return bool(last_seen and now - last_seen <= timedelta(seconds=max(180, 3 * interval)))
+
+
+def _print_gateway_teil(gateway, now: datetime, org) -> DienstTeil:
+    from app.core.timezones import format_local_datetime
+
+    frisch = _gateway_frisch(gateway, now)
+    if gateway.is_windows_agent:
+        detail = ("Gueltige WebSocket-Verbindung."
+                  if frisch else "Keine gueltige WebSocket-Verbindung; letzter Heartbeat: "
+                  f"{format_local_datetime(gateway.agent_heartbeat_at, org) or 'nie'}.")
+    else:
+        detail = ("Frischer Heartbeat." if frisch else
+                  f"Kein frischer Heartbeat ({gateway.standort or 'ohne Standort'}, zuletzt "
+                  f"{format_local_datetime(gateway.last_seen_at, org) or 'nie'}).")
+    return DienstTeil(f"gateway:{gateway.id}", gateway.name, "ok" if frisch else "down", detail)
 
 
 def aggregiere(teile: tuple[DienstTeil, ...]) -> str:
@@ -64,7 +82,6 @@ def aggregiere(teile: tuple[DienstTeil, ...]) -> str:
 
 
 def pruefe_dienste(db: Session, org_id: int, now: datetime | None = None) -> list[DienstCheck]:
-    from app.core.timezones import format_local_datetime
     from app.models.dibos import OrgDibosConfig
     from app.models.gateway import Gateway
     from app.models.incident import IncidentAlarmJob
@@ -78,34 +95,24 @@ def pruefe_dienste(db: Session, org_id: int, now: datetime | None = None) -> lis
     org = db.get(FireDept, org_id)
     gateways = db.query(Gateway).filter(Gateway.org_id == org_id).execution_options(include_all_tenants=True).all()
     paired = [g for g in gateways if g.device_token_hash is not None]
-    if not paired:
-        print_check = DienstCheck("print_gateway", "unknown", "Kein Print-Gateway eingerichtet.", False)
+    monitored = [g for g in paired if g.offline_alert_enabled]
+    if not monitored:
+        detail = ("Ausfallalarmierung fuer alle Print-Gateways deaktiviert."
+                  if paired else "Kein Print-Gateway eingerichtet.")
+        print_check = DienstCheck("print_gateway", "unknown", detail, False)
     else:
-        print_teile = tuple(
-            DienstTeil(
-                ref=f"gateway:{g.id}",
-                name=g.name,
-                state="ok" if _gateway_frisch(g, jetzt) else "down",
-                detail=(
-                    "Frischer Heartbeat."
-                    if _gateway_frisch(g, jetzt)
-                    else f"Kein frischer Heartbeat ({g.standort or 'ohne Standort'}, zuletzt "
-                    f"{format_local_datetime(g.last_seen_at, org) or 'nie'})."
-                ),
-            )
-            for g in paired
-        )
+        print_teile = tuple(_print_gateway_teil(g, jetzt, org) for g in monitored)
         print_state = aggregiere(print_teile)
         print_down = [t for t in print_teile if t.state == "down"]
         if print_state == "ok":
-            print_detail = "Alle Print-Gateways melden frische Heartbeats."
+            print_detail = "Alle fuer Ausfallalarme ausgewaehlten Print-Gateways sind erreichbar."
         elif print_state == "down":
             namen = ", ".join(t.name for t in print_down)
-            print_detail = f"Kein Print-Gateway meldet einen frischen Heartbeat. Betroffen: {namen}."
+            print_detail = f"Kein ueberwachtes Print-Gateway ist erreichbar. Betroffen: {namen}."
         else:
             namen = ", ".join(t.name for t in print_down)
             print_detail = (
-                f"{len(print_down)} von {len(print_teile)} Print-Gateways ohne frischen Heartbeat: {namen}."
+                f"{len(print_down)} von {len(print_teile)} ueberwachten Print-Gateways nicht erreichbar: {namen}."
             )
         print_check = DienstCheck("print_gateway", print_state, print_detail, True, print_teile)
 
