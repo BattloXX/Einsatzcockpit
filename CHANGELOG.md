@@ -1,8 +1,46 @@
 # Versionshistorie
 
-Die Versionshistorie wird reverse-chronologisch geführt.
+Die Versionshistorie wird reverse-chronologisch geführt. Jede Version nennt oben die Zusammenfassung der Release-Notes und darunter unter „Details“ die ausführlichen Einträge. Versionen vor 2026.10.06 stehen in der Tabelle am Ende.
 
 ## Unreleased
+
+Keine offenen Änderungen.
+
+## 2026.10.23 (2026-10-23)
+
+### Verbesserungen und Fehlerbehebungen im Einsatz
+
+- **Einsatzboard:** Spalten-Umbenennen lädt das Kanban neu und zieht die Tabs nach; Ausrückordnung mit farbigem Fahrzeugstatus; das Detailfenster dunkelt die Oberfläche nicht mehr dauerhaft ab; Spaltennamen mit Tooltip.
+- **LIS:** Fahrzeugstatus wird nur bei Änderung gesendet, mit begrenztem Retry und Schutzfenster gegen Rückkopplung beim Poll.
+- **Objekte:** Objektauswahl beim Anlegen eines Einsatzes; bei Meldung und Auftrag lassen sich Objektdokumente wie beim Bearbeiten übernehmen. Objektinformationen und Gefahren fließen in KI-Auftragsvorschläge, Lagehinweise und Lagebild ein.
+- **Großschadenslage:** Neue Einsatzstellen erscheinen live im Board; einheitliche Prioritätsfarben mit Legende auf der Lagekarte; Einheitenstatus wie Fahrzeugstatus (Rot/Orange/Grün), standardmäßig nur eigene Einheiten; Bürgerportal-Link nur nach Bestätigung erneuern; größerer Status-Button.
+- **Tablet und Einheitenansicht:** Ladefehler sichtbar, robuster Start, Schnellaktionen (Link, SMS, QR) in der Kräfteübersicht. Einheiten-Tablets öffnen die Lage zuerst in der Einheitenansicht, der Wechsel zur Gesamtansicht erfolgt per Link.
+- **Archiv und PDF:** Einsatz-PDF und GSL-Bericht vollständiger (Seitenumbruch, Verläufe, Objekt); Gesamt-PDF der Großschadenslage im Archiv.
+- **Gerätezugang:** Ungültige Gerätezugänge werden erkannt, aggregiert protokolliert und in der Geräteverwaltung angezeigt (Fehlversuche, Grund, Gerätetyp, Filter); rückwirkende Auswertung per Skript.
+- **App:** Pull-to-Refresh-Schnittstelle, Verbindungsstatus-Banner, Ping-Intervall-Leak behoben. Die Android-App 2026.10.23 bringt natives Pull-to-Refresh und stoppt Wiederholungen bei ungültigem Gerätezugang.
+
+### Wetter 2.0
+
+- Open-Meteo- und GeoSphere-Provider, zeitstempelbasierte Summen und Böenmaxima, Warnstatus mit Datenqualität, Kennzahlen mit Horizonten 1/3/6/12/24 h, Radar-Animation, Modellvergleich, gemeinsamer Cache und Admin-Diagnose.
+
+### Einsatz- und Katastrophenpläne
+
+- Planart, Prüfzyklus mit verantwortlicher Person, rollenbezogene Maßnahmen mit Akteuren, zentrale Kontakte, Quellennachweise bis zur PDF-Seite; Maßnahmen als Auftrag oder Meldung in den Einsatz übernehmen; Plan-Suche, Lightbox, neue Startseite; Anlegen per MCP.
+
+### Suche
+
+- Kontakte und Pläne (Planart, Akteure, Links) in der zentralen Suche; semantische Suche mit Vektorstufe.
+
+### Weitere Korrekturen
+
+- Abgerückte Einheiten in der Kräfteübersicht reaktivierbar; Lesewege für Objekte, Dokumente und Kontakte für alle Einsatzrollen; KI-Antwort ohne ThinkingBlock stürzt nicht mehr ab.
+
+### Hinweise zum Update
+
+- Neue Datenbank-Migrationen 0302–0305 (Planart, Prüfzyklus, Akteure, Geräte-Fehlversuche): `alembic upgrade head` ausführen, beim In-App-Update geschieht das automatisch.
+- Die Android-App 2026.10.23 ist separat veröffentlicht; Gerätetests stehen noch aus.
+
+### Details
 
 - **ECP-Verbesserungen (Oktober 2026)**, Details je ID in `docs/plans/ecp-verbesserungen-2026-10.md`:
   - **Einsatzboard**: Spalten-Umbenennen lädt das Kanban neu und zieht Lane-Tabs nach,
@@ -37,15 +75,6 @@ Die Versionshistorie wird reverse-chronologisch geführt.
   Providerreihenfolge, zeitstempelbasierte Prognosesummen und Böenmaxima, Warnstatus mit
   Datenqualität ohne Entwarnung bei Ausfall.
 
-- **Pläne – Bedienung**: Maßnahmen lassen sich als Auftrag oder Meldung in einen Einsatz
-  übernehmen, Lightbox statt neuem Fenster, Aktionslinks im Fahrtenbuch-Design, neu
-  geordnete Planstartseite, Plan-Suche über die zentrale Hybrid-Engine; Suchindex enthält
-  Planart, Akteure und Verknüpfungen.
-
-- **Korrekturen**: Abgerückte Einheiten in der Kräfteübersicht reaktivierbar; Objekt-,
-  Dokument- und Kontakt-Lesewege für alle Einsatzrollen; KI-Antwort ohne ThinkingBlock
-  stürzt nicht mehr ab, DB-Session wird vor Medien-Streaming freigegeben.
-
 - **Wetter Phase 6**: Gemeinsame Radar-Animation für Wetterseite und GSL-Lagekarte,
   einzeln schaltbare Wetterebenen, Windpfeil am Fokuspunkt und gelieferte Warnpolygone.
   Modellvergleich lädt beim Öffnen, vergleicht vollständige gemeinsame Stundenfenster
@@ -68,12 +97,10 @@ Die Versionshistorie wird reverse-chronologisch geführt.
   bei unvollständigen Daten. Gemeinsame Hinweisschwellen und km/h-Templatefilter;
   Schwellen der Alarm-Engine bleiben unverändert.
 
-- **Semantische Suche**: Optionale lokale Ollama-Embeddings mit `embeddinggemma`,
-  Vektortabellen je Modell/Dimension, eigener Vektor-Outbox und Distanzschwellwert;
-  Evaluationsskript mit Recall/MRR je Fragengruppe und Review-CSV sowie Betriebsdoku.
-  Die Eval-Messung auf dem Testsystem steht noch aus.
-
-- **MCP**: `katplan_anlegen` legt Pläne als Entwurf mit Kapitel-/Phasenvorlage, gemeinsamer UI-Validierung und optionalem Trockenlauf an.
+- **Pläne – Bedienung**: Maßnahmen lassen sich als Auftrag oder Meldung in einen Einsatz
+  übernehmen, Lightbox statt neuem Fenster, Aktionslinks im Fahrtenbuch-Design, neu
+  geordnete Planstartseite, Plan-Suche über die zentrale Hybrid-Engine; Suchindex enthält
+  Planart, Akteure und Verknüpfungen.
 
 - **Einsatz- & Katastrophenpläne** (bisher „Katastrophenpläne“, neue Adresse `/plaene`,
   alte Links leiten weiter):
@@ -87,11 +114,64 @@ Die Versionshistorie wird reverse-chronologisch geführt.
     Assistent zum Verknüpfen oder Anlegen, Verständigungsliste nach Akteur.
   - **Quellennachweise bis zur PDF-Seite**: Seitenvorschau, Original-PDF auf Seite,
     Seitenauswahl im Editor, Quellenverzeichnis im PDF, Hinweis „Maßnahme ohne Quelle“.
+
+- **MCP**: `katplan_anlegen` legt Pläne als Entwurf mit Kapitel-/Phasenvorlage, gemeinsamer UI-Validierung und optionalem Trockenlauf an.
+
+- **Semantische Suche**: Optionale lokale Ollama-Embeddings mit `embeddinggemma`,
+  Vektortabellen je Modell/Dimension, eigener Vektor-Outbox und Distanzschwellwert;
+  Evaluationsskript mit Recall/MRR je Fragengruppe und Review-CSV sowie Betriebsdoku.
+  Die Eval-Messung auf dem Testsystem steht noch aus.
+
 - **Suche**: Kontakte in der zentralen Suche (UI und MCP `ecp_suchen`) mit den Rechten
   des Kontaktmoduls: Verzeichnisrollen finden alle aktiven Kontakte (auch per
   Telefonnummer, Anruf-Link im Treffer), übrige Einsatzrollen nur die für den Einsatz
   freigegebenen Kontakte mit Dienstnummern. Kontakte werden live geprüft, nie indexiert;
   MCP liefert keine Telefonnummern.
+
+- **Korrekturen**: Abgerückte Einheiten in der Kräfteübersicht reaktivierbar; Objekt-,
+  Dokument- und Kontakt-Lesewege für alle Einsatzrollen; KI-Antwort ohne ThinkingBlock
+  stürzt nicht mehr ab, DB-Session wird vor Medien-Streaming freigegeben.
+
+## 2026.10.21 (2026-10-21)
+
+### Katastrophenpläne (neues Modul)
+
+- Arbeitsstand und unveränderliche Freigaben mit Versionen, Kapitel, Phasen und Elementen; Verortung auf der Plankarte, Verknüpfungen zu Kontakten, Objekten und Wasserstellen, Anhänge.
+- Versionierte PDF-Planquellen mit Vergleich, KI-Import mit Review, Qualitätsstatus, Wiedervorlage und lesbare PDF-Offlinefassung mit Verzeichnis.
+- Adresssuche im Editor mit dem Ort der Organisation als Vorauswahl.
+- MCP: Pläne lesen und durchsuchen, Entwürfe anlegen und ändern, Verknüpfungen setzen, Quellseiten und Bilder übernehmen, Serienverortung und Abgleich des Arbeitsstands mit einer Quelle.
+
+### Zentrale Suche
+
+- Suche über die Lupe, `/` oder Strg+K: Objekte, Objektdokumente, Katastrophenpläne, Einsätze, Straßensperren, Wasserstellen und GSL-Daten mit Rechteprüfung, im Einsatz und in der GSL auf den jeweiligen Kontext bezogen.
+- Org-Schalter, Indexstatus und Neuaufbau in der Verwaltung; MCP-Werkzeug `ecp_suchen`.
+
+### Navigation und Oberfläche
+
+- Module nach Einsatznutzen gruppiert: Im Einsatz (Katastrophenpläne, Nachschlagewerke, Kontakte, Straßensperren, Förderstrecke), Einsatzbegleitend (Fahrtenbuch, Atemschutz-Geräteprüfung, UAS), Verwaltung & Planung (Objekte, Probenplan, Planspiele, Mailing), Auswertung (Statistik). Gleiche Reihenfolge im Desktop-Menü, im Mobil-Menü und auf der Übersicht.
+- Kopfzeile aufgeräumt: Profil ganz rechts mit Hilfe-Link, Archiv ans Ende. Mobil sind die Kontoaktionen nur noch im Profil, die untere Leiste hat jetzt „Menü“.
+- Einheitliche Icons (Tabler) statt Emoji in der gesamten App, auf öffentlichen Seiten, Infoscreens, PDFs und Ausdrucken.
+- Gemeinsame Personenauswahl für Fahrtenbuch und Atemschutz-Geräteprüfung, Atemschutzformular für Handy und Tablet.
+
+### Leitstellennummer (GSL)
+
+- Einsatzstellen-Detail, GSL-Druck, Suche und MCP verwenden ausschließlich die echte Leitstellennummer.
+
+### Dokumentation
+
+- Wiki-Startseite nach Menüstruktur neu aufgebaut, mit Einstieg nach Aufgabe und Seitenleiste auf jeder Seite; neue Seiten zur Atemschutz-Geräteprüfung; README entsprechend gegliedert.
+
+### Technik
+
+- MariaDB 12.3 für Docker, E2E und CI.
+- Aktualisierte GitHub Actions und Abhängigkeiten.
+
+### Update-Hinweis
+
+- Neue Datenbank-Migrationen 0294–0301 (Katastrophenpläne, Suchindex, Icon-Namen): nach dem Update `alembic upgrade head` ausführen, beim In-App-Update geschieht das automatisch.
+
+### Details
+
 - **Navigation**: Module nach Einsatznutzen gruppiert (Im Einsatz, Einsatzbegleitend,
   Verwaltung & Planung, Auswertung), einheitlich in Desktop-Menü, Mobil-Menü und
   Übersichtskacheln aus einer Quelle (`app/services/modul_navigation.py`). Profil ganz
@@ -146,6 +226,69 @@ Die Versionshistorie wird reverse-chronologisch geführt.
   Suchfeld, Org-Ort als Vorauswahl und Übernahme in die Adressfelder. MCP-Entwürfe nehmen
   eine typisierte Adresse an und können sie mit `verorten` als ungeprüften Punkt setzen.
 
+## 2026.10.19 (2026-10-19)
+
+### Planspiele (neues Modul)
+
+- Übungsgenerator für Einsatzboard und Großschadenslagen: Szenariokatalog, Ortswahl mit OSM-Import (robust mit Timeout und Wiederholung), Ereignis-Engine mit Regie-Cockpit, GSL-Unwettergenerator, Allein-Betrieb mit Auswertung.
+- Ortschaft-Filter, abwechslungsreichere GSL-Meldungen, wiederverwendbare Vorlagen, Design wie das Fahrtenbuch, Kachel auf der Übersicht.
+
+### Großschadenslagen (GSL)
+
+- Erkundungsablauf im Einheitenmodus: Erkundet → disponieren, Kommentar und Foto, nächster Auftrag mit Adresse; Einheiten werden nach Abschluss automatisch von der Einsatzstelle abgezogen.
+- Lagemeldungs-Timer startet erst, wenn eine Einheit übernommen hat bzw. vor Ort ist.
+- Zeitreise mit Filtern (neueste oben), Abschnitte-Grid, Disposition nach Abschnitten gruppiert.
+- Neues Einsatzstellen-Blatt mit automatischem Druck bei Disposition; Druckregel „Einsatz angelegt“ getrennt nach normal und GSL.
+- Login mit verknüpftem Mitglied öffnet für Gruppenkommandanten direkt die Einheitenansicht („Meine Einheiten“).
+- iPhone-Foto-Upload im Einheitenmodus repariert; Nummernabfrage nur ohne hinterlegte Mobilnummer.
+
+### Einsatzboard und Alarmierung
+
+- Abgeschlossene Einsätze sind im Board nur noch lesbar; Änderungen werden serverseitig gesperrt.
+- Einsatzinfo-Mail als zusätzlicher Kanal analog zur SMS-Einsatzinfo, mit HTML-Layout, Karte und Vorschau.
+- Ausschlussbegriffe je Organisation (z. B. „bereits erledigt“): keine SMS, Teams, Mail und Push.
+- DIBOS: Einsätze nach automatischer Wiedereröffnung wieder automatisch schließen.
+- SMS-Einzelversand wird auf mehrere Android-Gateways verteilt.
+- Funkjournal, Einsatzleiter-Wechsel und Atemschutz-Übersicht aktualisieren sich ohne Neuladen der Seite, auch für andere Nutzer; ein frei eingegebener Einsatzleiter wird in der Kopfzeile angezeigt; Funkjournal mit Suchfeld.
+
+### Druck
+
+- Druckregeln je Alarmstufe mit Abweichungen, Objekt-Inhalten und Übersichtsmatrix.
+- Windows-Druckagent: Lease-Zustellung, Redundanz und sichere Druckübergabe; Agent-Typ, Inventar, Routen mit Priorität und Bereitschaftsanzeige im Druckdialog.
+- Druckregel „E-Mail eingegangen“; Mail-Zuordnung auch über die Leitstellennummer.
+
+### Benutzer, Kontakte und Mail
+
+- Einladung per gebrandeter Mail statt Klartext-Passwort, App-Links (inkl. Auto-Update-APK), SSO-Hinweis beim Passwort-Reset, Bestätigung nach Passwortänderung, Mail-Vorschau mit Testversand.
+- Benutzer lassen sich mit Mitgliedern verknüpfen; globale Eindeutigkeit wird vor der Anlage geprüft.
+- Kontakte: gefilterte Einsatztelefonlisten und Verzeichnisse mit Druckvorschau, PDF und Organisationslogo; Leser und Einheiten sehen nur Einsatzkontakte.
+- Mail-Eingang: Freigabeliste mit mehreren Zeilen; „Alle“ ohne Auth-Pflicht.
+
+### KI-Anbindung (MCP-Server)
+
+- Einsätze lesen (Einheiten, Aufträge, Meldungen, Verlauf, Objekte, Downloads) sowie Aufträge und Meldungen anlegen.
+- GSL vollständig: Lagebild lesen, Einsatzstellen führen, Journale, Bürgermeldungen, Medien herunterladen und Fotos hochladen.
+- Objektdokumente lesen (Seitenbild und OCR), PDF-Übergabe aus ChatGPT.
+- Benutzer und Mitglieder verwalten und sicher abgleichen, `meine_einheiten`.
+
+### Technik und Sicherheit
+
+- Event-Loop entlastet: 522 Routen mit Datenbankzugriff laufen jetzt im Threadpool statt auf der Event-Loop, sodass WebSockets, Alarmierung und DIBOS-Polling nicht mehr durch langsame Abfragen gebremst werden. Wächtertests verhindern Rückfälle.
+- SSO-Token-Prüfung mit PyJWT statt des kaum noch gepflegten python-jose; strengere Ruff-Prüfungen.
+- CSP-Messmodus (`CSP_REPORT_ONLY`) als Vorstufe für eine strengere Content-Security-Policy.
+- Frontend-Bibliotheken über npm nachvollziehbar und von Dependabot überwacht; aktualisiert u. a. Alpine 3.17, htmx 2.0.11, Konva 10, Geoman 2.20 (behebt lodash-Sicherheitsmeldung).
+- Objektliste mit Spalte „Aktualisiert“, Datumsfilter und Sortierung nach allen Spalten; diverse Layout-Korrekturen (Einsatzinfo auf Tablet-Breite, Abschnitts-Badges, Nur-Ansicht-Banner).
+
+### Hinweise zum Update
+
+- Datenbank-Migrationen 0279–0293: `alembic upgrade head` ausführen.
+- Beim Update „Abhängigkeiten installieren“ aktivieren (neu: PyJWT, entfernt: python-jose, apscheduler). PyJWT ist meist schon über andere Pakete vorhanden.
+- Neu in `.env` (alle optional): `INVITE_TTL_HOURS` (Gültigkeit von Einladungslinks, Standard 168), `ANDROID_APP_REPO` und `ANDROID_APK_PRAEFIX` (App-Links/Auto-Update-APK), `CSP_REPORT_ONLY` (Standard `false`). Siehe `.env.example`.
+- Kein Node.js auf dem Server nötig; die Frontend-Dateien sind im Release enthalten.
+- Nach dem Update kurz prüfen: SSO-Login, PIN-/Passwort-Login, ein Probealarm über das Gateway, eine Foto-Annotation mit Text (Konva 10).
+
+### Details
+
 - **Technik/Modernisierung**: 522 Routen mit synchroner DB-Session auf `def` im
   Threadpool umgestellt; Async-Brücke und Wächtertests verhindern neue Event-Loop-Blockaden.
   Ruff um `ASYNC`, `DTZ`, `B`, `S110` und `T20` mit Bestandsbaseline erweitert,
@@ -176,6 +319,53 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 - **MCP**: Einsatzleiter, Schriftführer und Admins können Aufträge und Meldungen im sichtbaren, offenen Einsatzboard anlegen; Erstellung, Fachverlauf und Live-Aktualisierung entsprechen dem Board.
 
 - Gateway-Druckregel „E-Mail eingegangen“ mit sicherem Deckblatt und optionalen PDF-/Bildanhängen ergänzt.
+
+- Neu: MCP-Assistenten können sichtbare Einsätze datensparsam lesen, einschließlich Lagebild, Einheiten, Aufträgen, Meldungen, Verlauf und verknüpften Objekten; freigegebene Objekt-Dokumente sowie Auftrags- und Meldungsmedien werden über kurzlebige, live geprüfte Download-Links bereitgestellt.
+
+## 2026.10.12 (2026-10-12)
+
+### Großschadenslagen (GSL): Einheitenmodus und Gruppenkommandanten
+
+- Fahrzeug-Tablets erhalten einen eigenen Einheitenmodus: Aufträge empfangen, Status melden, Lagemeldungen, Fotos und Funkjournal, auch offline mit eigener Warteschlange.
+- Ressourcenkarte je Einheit mit Gruppenkommandant (Telefon, Stellvertreter), Journal und Einsätzen. „Einheit hinzufügen“ erfasst Funkruf, Status, Abschnitt, Bereitstellungsraum, Gruppenkommandant und Stärke in einem Schritt.
+- Persönlicher, widerrufbarer Zugangslink für Gruppenkommandanten sowie QR-Zugang mit A4-Ausdruck über den Standard-Druckdialog (optional mit SMS-PIN). Die Mobilnummer wird per SMS-Code bestätigt; Auftrags-SMS (neu, geändert, zurückgezogen) mit eigenem Übungsschalter.
+- Automatisches Einsatzboard: Erkundung/Abarbeitung folgt der Phase, „Fertig gemeldet“ und Einsatzabschluss. Einheitenkarte mit nächstem Auftrag, Navigation und eigenem Standort; mobile Führungsübersicht mit Aufmerksamkeitsliste und Kartenfiltern.
+- Einsatzstellen anlegen mit Karte, Adresssuche und Adressprüfung; ein gesetzter Pin füllt Straße, Hausnummer und Ort. Abschnitte zeigen ihre Einsatzstellen mit Status und Einheiten.
+- Material vor Ort: an Einsatzstellen belassenes Material wird als Verleih geführt (Board, Tablet, Verleih-Ansicht).
+
+### Straßensperren (neues Modul)
+
+- Sperren mit Karte, Zeichnen und Adressabschnitt verwalten; der Abschnitt wird im OSM-Straßennetz ermittelt und mit Qualität bewertet. Behördliche Verordnungen als PDF anhängen, Entwurf direkt aus dem PDF.
+- Verlängerungen und ersetzende Verordnungen werden erkannt statt als Dublette angelegt.
+- Freigabe an Nachbarwehren, öffentliche Freigabelinks, Statusseite und Infoscreen mit widerrufbaren Zugängen.
+- Microsoft-Teams-Meldungen mit Adaptive Card und Kartenbild über eine Warteschlange mit Wiederholungen.
+- Optional: Anfahrtsprüfung je Einsatz gegen aktive Sperren (ORS/OSRM), Anzeige in Einsatzinfo und Alarm-Infoscreen. Standardmäßig aus.
+
+### Mail-Eingang
+
+- Eigene Empfangsadresse je Organisation über Resend sowie Abruf per IMAP oder Office 365. Eingehende Mails landen im Posteingang und werden passenden Einsätzen als Meldung zugeordnet (auch nachträglich).
+- Weiterleitungen mit Originalabsender und Druckregel „E-Mail eingegangen“ mit Deckblatt und Anhängen.
+
+### KI-Anbindung (MCP-Server)
+
+- Neue Werkzeuge für Straßensperren, GSL-Ressourcen und Einheiten-Disposition, Wasserstellen, Organisationsdaten, Original-Objektdokumente und strukturierten Kontakt-Import. Zugangstokens, Links und PINs werden nie ausgegeben.
+
+### Weitere Verbesserungen
+
+- PIN-Login findet Mobilnummern unabhängig von nationaler oder internationaler Schreibweise.
+- LIS: Neuanlage scheitert nicht mehr an doppelten Alarm-Aufträgen; manuell wiedereröffnete Einsätze werden von LIS/DIBOS nicht erneut geschlossen.
+- Tablet: Upload- und Speicherfehler werden sichtbar angezeigt.
+- Administration: Rechtevergabe abgesichert, Rollen `org_admin` und `admin` zusammengelegt, Benutzer lassen sich wieder endgültig löschen.
+- Objekte: Einsatzdruck bleibt bei Sammelzuweisung erhalten, Dokumentseiten lassen sich einzeln bearbeiten.
+- Kontakte: strukturierte Daten im Browser bearbeiten und sicher importieren; Kontaktformular fällt auf Resend zurück, wenn SMTP fehlt.
+
+### Hinweise zum Update
+
+- Datenbank-Migrationen 0257–0278: `alembic upgrade head` ausführen.
+- Neu in `.env`: `GSL_ZUGANG_KEY` (empfohlen; leer leitet die Zugangslinks aus `SECRET_KEY` ab, eine Rotation entwertet sie dann), `MAIL_INBOUND_DOMAIN`, `MAIL_ZUORDNUNG_LOOP_*` sowie optional `EINSATZ_ROUTING_*` (standardmäßig aus). Siehe `.env.example`.
+
+### Details
+
 - Resend-Posteingang je Organisation mit signiertem Webhook, sicherem Abruf und Aufbewahrung ergänzt.
 - Resend-Eingang ordnet wartende, freigegebene Mails innerhalb des Rückblickfensters automatisch neu angelegten Einsätzen zu; Posteingang-Zähler und Live-Aktualisierung ergänzt.
 
@@ -212,6 +402,47 @@ Die Versionshistorie wird reverse-chronologisch geführt.
   Aktualisierung mit fertigen Feldern angeboten oder die alte Sperre nachvollziehbar ersetzt
   (MCP `possible_update`, `ersetzt_road_closure_id`, `als_neu_bestaetigt`).
 
+- Neu: System-Admins können eingehende Mails bestimmter Adressen (z. B. info@) an andere Adressen weiterleiten (inline oder als EML, mit Retry, Schleifenschutz und Protokoll ohne Inhalt).
+
+## 2026.10.06 (2026-10-06)
+
+### Alarmierung zuverlässiger
+
+- Einsätze aus DIBOS werden schneller angelegt und nicht mehr still ohne Alarmierung verloren. Push, SMS und Teams laufen über eine absturzsichere Alarm-Warteschlange mit automatischen Wiederholungen.
+- Ist beim Alarm kein SMS-Gateway verbunden, wird die Einsatzinfo-SMS bis zu 60 Minuten lang nachgesendet. Wird ein Einsatz kurz nach der Anlage verknüpft und war noch nicht alarmiert, wird die Alarmierung nachgeholt.
+- Gründe, warum ein Kanal nicht alarmiert hat (z. B. Übung), stehen jetzt im Einsatzprotokoll. F30 wird grundsätzlich nicht alarmiert.
+- DIBOS dient als Rückfallebene für LIS (Fahrzeuge, Objektzuordnung, automatisches Schließen); die LIS-Synchronisierung wurde anhand echter Einsatzdaten verbessert.
+
+### Android-App und Widgets
+
+- Das Einsatz-Widget zeigt Karte, Objekt, Meldungstext, Großschadenslagen und Übungen und wird auch für normal angemeldete Handys ohne Gerätekopplung befüllt.
+- Standortberechtigung wird vorab angefragt statt erst im Einsatz. In der Geräteübersicht ist die installierte App-Version sichtbar.
+- Objekte und Kontakte stehen offline zuverlässiger bereit; der Synchronisierungsfortschritt wird laufend angezeigt.
+
+### KI-Anbindung (MCP-Server)
+
+- Einsatzcockpit lässt sich über einen OAuth-gesicherten MCP-Server mit KI-Assistenten verbinden: Objekte und Kontakte als Entwurf pflegen, Objektunterlagen übergeben, Fahrtenbuch auswerten. Freigaben bleiben immer beim Menschen in der Oberfläche.
+
+### Einsatz-Feed für externe Systeme
+
+- Neue, rein lesende Schnittstelle `/api/v1/feed` mit eigenen API-Key-Berechtigungen, optionaler IP-Freigabeliste und ohne Personendaten.
+
+### Weitere Verbesserungen
+
+- Einsatzboard: Personen verschwinden beim Verschieben nicht mehr, gerettete Personen bleiben als Karte sichtbar, Fahrzeuge von Partnerorganisationen führen nicht mehr zu Fehlern (auch in Archiv und PDF).
+- Login: Links auf Einsatzseiten führen nach der Anmeldung zum ursprünglichen Ziel.
+- Fahrtenbuch: Führungsrolle über das Personen-Menü wählbar; das Gerätefahrzeug wird bei neuen Fahrten vorausgewählt.
+- Externe Objektpflege: Notizfeld, vollständigere Lesedaten und verbesserte mobile Darstellung.
+
+### Hinweise zum Update
+
+- Datenbank-Migrationen 0249–0256: `alembic upgrade head` ausführen.
+- Die Anwendung läuft jetzt mit einem einzelnen Worker (`-w 1`, siehe `deploy/einsatzleiter.service` bzw. Docker), damit SMS-Gateway-Verbindungen und Hintergrundaufgaben konsistent bleiben.
+
+Die ausführlichen Einzeleinträge dieser Version stehen in der Tabelle „Ältere Versionen“.
+
+## Wichtige Update-Hinweise
+
 > **Achtung beim Update auf 2026.10.06:** Die Datenbank-Migrationen 0249–0256 müssen mit
 > `alembic upgrade head` eingespielt werden. Die Anwendung läuft jetzt mit genau einem Worker
 > (`-w 1`, siehe `deploy/einsatzleiter.service` bzw. Docker), weil SMS-Gateway-Verbindungen und
@@ -224,6 +455,8 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 > Kanäle bei Übungen weiter nutzen will, muss sie in den Organisationseinstellungen unter
 > „Übungseinsätze: externe Aktionen“ bewusst wieder freigeben. Realeinsätze sind nicht
 > betroffen und verhalten sich unverändert.
+
+## Ältere Versionen
 
 | Version | Datum | Highlights |
 |---------|-------|------------|
@@ -273,9 +506,3 @@ Die Versionshistorie wird reverse-chronologisch geführt.
 | **2.3.0** | 2026-06-13 | Großschadenslage-Karte: Abschnitte live ohne Reload, Pin-Modus mit Reverse Geocoding, Geoman-Toolbar auf Deutsch; Stab: BMI SKKM-Einsatzjournal als erstes Tab; Dashboard: Abschnitt-Polygone auf Mini-Karte |
 | **2.2.0** | 2026-06-11 | Multi-Tenancy vollständig (12 PRs): Row-Level-Isolation, Org-Onboarding, KI je Org, Speicher-Quotas, Einladungsmodell, Auto-Schließen, Rate-Limiting, API-Härtung, System-Konsole, Migration-Runbook |
 | **2.0.0** | 2026-05-23 | Media-Upload + Galerie, System-Admin-Rolle, Zeitzone je Org, ZIP-Update, Python 3.14 |
-| **1.0.0** | 2026-05-22 | Initiale Webapp (FastAPI + HTMX, WebSocket, Atemschutz, PWA, QR-Code) |
-# Unreleased
-
-- Neu: MCP-Assistenten können sichtbare Einsätze datensparsam lesen, einschließlich Lagebild, Einheiten, Aufträgen, Meldungen, Verlauf und verknüpften Objekten; freigegebene Objekt-Dokumente sowie Auftrags- und Meldungsmedien werden über kurzlebige, live geprüfte Download-Links bereitgestellt.
-- Neu: System-Admins können eingehende Mails bestimmter Adressen (z. B. info@) an andere Adressen weiterleiten (inline oder als EML, mit Retry, Schleifenschutz und Protokoll ohne Inhalt).
-
