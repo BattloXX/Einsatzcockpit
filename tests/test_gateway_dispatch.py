@@ -155,12 +155,18 @@ async def test_dispatch_job_commits_sent_before_await_no_status_overwrite(monkey
     import app.routers.ws as ws
     import app.services.print_dispatcher as pd
     from app.core.tenant import set_tenant_context
-    from app.models.gateway import JOB_QUEUED, JOB_SENT, PrintJob
+    from app.models.gateway import JOB_QUEUED, JOB_SENT, Gateway, Printer, PrintJob
     from tests.conftest import TestingSession
 
     db = TestingSession()
     set_tenant_context(db, None)
-    job = PrintJob(org_id=1, gateway_id=1, printer_id=1, document_type="einsatzinfo",
+    gateway = Gateway(org_id=1, name="Legacy-Race-" + uuid.uuid4().hex)
+    db.add(gateway)
+    db.flush()
+    printer = Printer(org_id=1, gateway_id=gateway.id, name="Legacy-Ziel", uri="ipp://example.test")
+    db.add(printer)
+    db.flush()
+    job = PrintJob(org_id=1, gateway_id=gateway.id, printer_id=printer.id, document_type="einsatzinfo",
                    idempotency_key="race-" + uuid.uuid4().hex, status=JOB_QUEUED)
     db.add(job)
     db.commit()

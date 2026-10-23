@@ -130,6 +130,8 @@ def route_kandidaten(db: Session, printer: Printer, now: datetime | None = None)
             Gateway.kind == GATEWAY_KIND_WINDOWS_AGENT,
             Gateway.device_token_hash.isnot(None),
             Gateway.status == GATEWAY_STATUS_ONLINE,
+            Gateway.agent_connection_id.isnot(None),
+            Gateway.agent_presence_expires_at > zeit,
             Gateway.last_seen_at >= zeit - timedelta(seconds=AGENT_ONLINE_S),
         )
         .execution_options(include_all_tenants=True)

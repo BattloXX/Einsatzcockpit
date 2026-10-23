@@ -101,8 +101,6 @@ def _agent_detail(
 ) -> HTMLResponse:
     """Detailseite eines Windows-Druckagents: Inventar, Routen, Redundanz, Historie."""
     from app.models.gateway import RENDER_MODES, PrinterAgentRoute
-    from app.routers.ws import gateway_online_id
-
     eigene = (
         db.query(PrinterAgentRoute)
         .filter(PrinterAgentRoute.gateway_id == gw.id)
@@ -128,10 +126,37 @@ def _agent_detail(
         db.query(PrintJob).filter(PrintJob.gateway_id == gw.id)
         .order_by(PrintJob.erstellt_am.desc()).limit(30).all()
     )
-    return templates.TemplateResponse(request, "gateway/agent_detail.html", {
+    from app.services import print_agent_presence, print_agent_service
+    now = print_agent_presence.utc()
+    connected = print_agent_presence.online(gw, now)
+    heartbeat = gw.agent_heartbeat_at
+    age = max(0, int((now - print_agent_presence.utc(heartbeat)).total_seconds())) if heartbeat else None
+    active_routes = [route for route in eigene if route.aktiv]
+    ready_ids = {route.id for printer in org_printers
+                 for route in print_agent_service.route_kandidaten(db, printer, now)} if connected else set()
+    ready = sum(route.id in ready_ids for route in active_routes)
+    cause = None
+    if not gw.is_paired:
+        cause = "Nicht gekoppelt oder Device-Token widerrufen"
+    elif not connected:
+        cause = "Keine aktive WebSocket-Verbindung"
+        if age is not None:
+            cause += f"; letzter Heartbeat vor {age} Sekunden"
+    elif not active_routes:
+        cause = "Agent verbunden, aber noch kein Druckziel zugeordnet"
+    elif not ready:
+        cause = "Agent verbunden, aber kein Drucker bereit"
+    diagnostic = {"heartbeat_age_s": age, "cause": cause,
+                  "readiness": "Bereit" if connected and active_routes and ready == len(active_routes)
+                  else "Eingeschränkt" if connected and (ready or not active_routes) else "Fehler"}
+    diagnostic_only = request.query_params.get("diagnose") == "1"
+    template = "gateway/_agent_diagnose.html" if diagnostic_only else "gateway/agent_detail.html"
+    return templates.TemplateResponse(request, template, {
         "user": user,
         "gw": gw,
-        "connected": gateway_online_id(gw.id, user.org_id),
+        "connected": connected,
+        "diagnostic": diagnostic,
+        "diagnostic_only": diagnostic_only,
         "routen": eigene,
         "routen_je_drucker": routen_je_drucker,
         "printer_by_id": printer_by_id,

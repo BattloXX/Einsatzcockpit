@@ -67,6 +67,8 @@ def _agent(db, org_id, name, *, online=True, seen=NOW):
         org_id=org_id, name=name, kind=GATEWAY_KIND_WINDOWS_AGENT,
         device_token_hash=f"{name}-{uuid4().hex}",
         status=GATEWAY_STATUS_ONLINE if online else GATEWAY_STATUS_OFFLINE, last_seen_at=seen,
+        agent_connection_id=uuid4().hex if online else None,
+        agent_presence_expires_at=seen + timedelta(seconds=90) if online else None,
     )
     db.add(gateway)
     db.flush()
@@ -322,6 +324,7 @@ def test_lease_ablauf_beim_dritten_versuch_failed(db):
     job = _job(db, printer)
     zeit = NOW
     for versuch in range(svc.MAX_AGENT_ATTEMPTS):
+        a.agent_presence_expires_at = zeit + timedelta(seconds=90)
         assert svc.lease_jobs(db, a, 1, zeit)
         zeit += timedelta(seconds=svc.LEASE_TTL_S + 1)
         a.last_seen_at = zeit

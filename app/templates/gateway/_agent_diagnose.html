@@ -1,0 +1,21 @@
+{% if diagnostic_only %}
+<span id="agent-status-pill" hx-swap-oob="true" class="gwx-pill {{ 'gwx-pill--ok' if connected else 'gwx-pill--err' if gw.is_paired else '' }}"><span class="gwx-pill__d"></span>{{ 'Online' if connected else 'Offline' if gw.is_paired else 'Nicht gekoppelt' }}</span>
+{% endif %}
+<div id="agent-diagnose" class="gwx-panel" style="margin-bottom:16px;"
+     hx-get="/gateway/{{ gw.id }}?diagnose=1" hx-trigger="every 15s" hx-swap="outerHTML">
+  <div class="gwx-panel__hd"><div class="gwx-panel__t">Verbindungsdiagnose</div>
+    <button type="button" class="gwx-btn gwx-btn--sm" hx-get="/gateway/{{ gw.id }}?diagnose=1" hx-target="#agent-diagnose" hx-swap="outerHTML">Verbindung prüfen</button>
+  </div>
+  <div class="gwx-panel__bd">
+    <dl class="gwx-formgrid">
+      <div><dt>Agent-Status</dt><dd>{{ 'Online' if connected else 'Offline' if gw.is_paired else 'Nicht gekoppelt' }}</dd></div>
+      <div><dt>Live-WebSocket</dt><dd>{{ 'Verbunden' if connected else 'Getrennt' }} (workerübergreifend, maximal 90 Sekunden ohne Lebenszeichen)</dd></div>
+      <div><dt>Letzter Heartbeat</dt><dd>{{ (gw.agent_heartbeat_at | local_datetime) if gw.agent_heartbeat_at else 'Noch nicht empfangen' }}{% if diagnostic.heartbeat_age_s is not none %} · vor {{ diagnostic.heartbeat_age_s }} Sekunden{% endif %}</dd></div>
+      <div><dt>Letzte Verbindung</dt><dd>{{ (gw.agent_connected_at | local_datetime) if gw.agent_connected_at else 'Noch nicht erfasst' }}</dd></div>
+      <div><dt>Letztes Druckerinventar</dt><dd>{{ (gw.agent_info or {}).get('reported_at') or 'Noch nicht empfangen' }} (UTC)</dd></div>
+      <div><dt>Agent-Version</dt><dd>{{ gw.version or 'Unbekannt' }}</dd></div>
+      <div><dt>Druckbereitschaft</dt><dd>{{ diagnostic.readiness }}</dd></div>
+    </dl>
+    {% if diagnostic.cause %}<p role="status">{{ diagnostic.cause }}</p>{% endif %}
+  </div>
+</div>

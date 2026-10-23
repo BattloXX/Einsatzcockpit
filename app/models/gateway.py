@@ -255,6 +255,11 @@ class Gateway(TenantScoped, Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default=GATEWAY_STATUS_UNPAIRED)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     version: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # Befristete, workeruebergreifende Windows-Agent-Verbindung (keine Secrets).
+    agent_connection_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    agent_connected_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    agent_heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    agent_presence_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # W&T-Verbindungsstatus (aus serial_status-Meldung des Gateways)
     serial_connected: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # W&T-Com-Server-Konfiguration: {host, port, datagram_strategy, idle_ms, charset,

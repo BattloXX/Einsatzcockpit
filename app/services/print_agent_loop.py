@@ -23,7 +23,9 @@ def _sweep_und_empfaenger() -> tuple[dict, dict[int, tuple[int, list[int]]]]:
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
+        from app.services import print_agent_presence
         ergebnis = print_agent_service.sweep(db)
+        ergebnis["offline_agents"] = print_agent_presence.expire(db)
         empfaenger: dict[int, tuple[int, list[int]]] = {}
         for job_id, org_id in ergebnis["requeued"]:
             job = db.get(PrintJob, job_id)
@@ -42,6 +44,8 @@ async def print_agent_sweep_iteration() -> dict:
     from app.services.print_dispatcher import dispatch_fallback_for_failed_job
 
     ergebnis, empfaenger = await asyncio.to_thread(_sweep_und_empfaenger)
+    for org_id, gateway_id in ergebnis.get("offline_agents", []):
+        await broadcast_org(org_id, {"type": "gateway_status", "gateway_id": gateway_id, "online": False})
     for job_id, (org_id, gateway_ids) in empfaenger.items():
         await broadcast_org(org_id, {"type": "print_job_status", "job_id": job_id, "status": JOB_QUEUED})
         await notify_agents_job_available(org_id, gateway_ids, [job_id])

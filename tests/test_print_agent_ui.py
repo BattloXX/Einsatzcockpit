@@ -1,5 +1,5 @@
 """Admin-UI für Windows-Druckagents: Anlegen, Inventar, Routen, Erreichbarkeit im Druckdialog."""
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from app.core.tenant import set_tenant_context
@@ -32,7 +32,8 @@ def _agent(name="PC A", queues=None, online=True) -> int:
         gw = Gateway(
             org_id=ORG_ID, name=name + " " + uuid4().hex[:4], kind=GATEWAY_KIND_WINDOWS_AGENT,
             device_token_hash="ui-" + uuid4().hex, status=GATEWAY_STATUS_ONLINE if online else "offline",
-            last_seen_at=_jetzt(),
+            last_seen_at=_jetzt(), agent_connection_id=uuid4().hex if online else None,
+            agent_presence_expires_at=_jetzt() + timedelta(seconds=90) if online else None,
             agent_info={"host": {"host": "KOMMANDOFUNK-1", "os": "Windows 11"}, "queues": queues or [{
                 "queue": "Kyocera Kommandofunk", "driver": "Kyocera TASKalfa", "host": "10.0.0.50",
                 "identity": {"ip": "10.0.0.50"}, "capabilities": {"media": ["A4", "A3"], "duplex": True},

@@ -16,11 +16,11 @@
     </div>
     <div class="gwx-pills">
       {% if connected %}
-      <span class="gwx-pill gwx-pill--ok"><span class="gwx-pill__d"></span>Online</span>
+      <span id="agent-status-pill" class="gwx-pill gwx-pill--ok"><span class="gwx-pill__d"></span>Online</span>
       {% elif not gw.is_paired %}
-      <span class="gwx-pill"><span class="gwx-pill__d"></span>Nicht gekoppelt</span>
+      <span id="agent-status-pill" class="gwx-pill"><span class="gwx-pill__d"></span>Nicht gekoppelt</span>
       {% else %}
-      <span class="gwx-pill gwx-pill--err"><span class="gwx-pill__d"></span>Offline</span>
+      <span id="agent-status-pill" class="gwx-pill gwx-pill--err"><span class="gwx-pill__d"></span>Offline</span>
       {% endif %}
       {% if host.get('host') %}<span class="gwx-pill">{{ icon("device-laptop", size="sm") }} {{ host.get('host') }}</span>{% endif %}
       {% if gw.version %}<span class="gwx-pill">v{{ gw.version }}</span>{% endif %}
@@ -78,6 +78,8 @@
           Dienstkonto und Windows-Passwort sind für lokale TCP/IP-Drucker nicht erforderlich.</p>
       </div>
     </div>
+
+    {% include "gateway/_agent_diagnose.html" %}
 
     <div class="gwx-grid">
       {# ── Kopplung ── #}

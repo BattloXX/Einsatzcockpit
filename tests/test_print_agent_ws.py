@@ -43,7 +43,8 @@ def _anlegen(org_id: int, *, kind=GATEWAY_KIND_WINDOWS_AGENT, routen=True) -> di
     try:
         gw = Gateway(org_id=org_id, name="Kommandofunk PC A", kind=kind,
                      device_token_hash=hash_api_key(token), status=GATEWAY_STATUS_ONLINE,
-                     last_seen_at=_jetzt())
+                     last_seen_at=_jetzt(), agent_connection_id=uuid4().hex,
+                     agent_presence_expires_at=_jetzt() + timedelta(seconds=90))
         db.add(gw)
         db.flush()
         printer = Printer(org_id=org_id, gateway_id=gw.id, name="Kommandofunk", uri="agent://kf", aktiv=True)
