@@ -10,7 +10,7 @@ kein erneutes PDF-Rendering nötig.
 """
 from __future__ import annotations
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
 
 from app.models.incident import MessageMedia, TaskMedia
 from app.models.media_annotation import MediaAnnotation
@@ -43,6 +43,7 @@ def uebernehme_seiten(
     ids = list(dict.fromkeys(seiten_ids))[:MAX_SEITEN]  # dedup + Deckel
     rows = (
         db.query(ObjektDokumentSeite)
+        .options(defer(ObjektDokumentSeite.volltext))
         .filter(ObjektDokumentSeite.id.in_(ids))
         .all()
     )

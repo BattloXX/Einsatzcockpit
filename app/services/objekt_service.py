@@ -10,7 +10,7 @@ from collections import Counter
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
 
 # Kompatibler Re-Export: bma_sync.py und die Tests importieren telefon_normalisiert
 # weiterhin von hier, die Implementierung liegt seit dem Refactoring in app/core/telefon.py.
@@ -897,6 +897,7 @@ def build_sync_manifest(db: Session, org_id: int, *, include_drafts: bool = Fals
     if objekt_ids:
         seiten = (
             db.query(ObjektDokumentSeite)
+            .options(defer(ObjektDokumentSeite.volltext))
             .join(ObjektDokument, ObjektDokumentSeite.dokument_id == ObjektDokument.id)
             .filter(
                 ObjektDokumentSeite.objekt_id.in_(objekt_ids),
