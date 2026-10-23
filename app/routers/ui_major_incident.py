@@ -324,6 +324,9 @@ def lage_board(
     user = request.state.user
     lage = _lage_or_404(lage_id, db, eager_sites=True)
     _check_org_access(user, lage)
+    from app.services.einheit_service import einheit_zuerst_umleiten
+    if (umleitung := einheit_zuerst_umleiten(request, db, lage_id)) is not None:
+        return umleitung
 
     sites_by_phase = _sites_by_phase(lage)
     dispatch_counts_by_site = resource_service.get_dispatch_counts_for_sites(

@@ -47,6 +47,27 @@
     </label>
   </div>
 
+  {% if lagen %}
+  {# Grossschadenslagen: Gesamt-PDF (Lagebericht mit Einsatzstellen, Ressourcen, Journalen) fuers Archiv #}
+  <div style="max-width:1100px;margin:0 auto;padding:16px 16px 0;display:flex;flex-direction:column;gap:10px;">
+    <h3 style="margin:0;font-size:1rem;">Großschadenslagen <span style="font-size:.78rem;font-weight:400;color:var(--text-muted);">({{ lagen|length }})</span></h3>
+    {% for lage in lagen %}
+    <div class="card archive-card" style="padding:12px 16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;"
+         x-show="!search || {{ (lage.name ~ ' ' ~ lage.status.value)|lower|tojson }}.includes(search.toLowerCase())">
+      <div style="flex:1;min-width:200px;">
+        <strong>{{ lage.name }}</strong>{% if lage.is_exercise %} <span class="badge-pill badge-pill--amber">Übung</span>{% endif %}
+        <div style="font-size:.78rem;color:var(--text-muted);">
+          {{ lage.started_at|local_datetime }}{% if lage.ended_at %} bis {{ lage.ended_at|local_datetime }}{% endif %}
+          · {{ 'abgeschlossen' if lage.status.value == 'closed' else 'laufend' }}
+        </div>
+      </div>
+      <a href="/archiv/gsl/{{ lage.id }}/pdf" target="_blank" rel="noopener" class="btn btn--secondary btn--sm">{{ icon("file-text", size="xs") }} Gesamt-PDF</a>
+      <a href="/lage/{{ lage.id }}" class="btn btn--ghost btn--sm">Öffnen</a>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
   <div style="max-width:1100px;margin:0 auto;padding:16px;display:flex;flex-direction:column;gap:10px;">
     <p style="font-size:.78rem;color:var(--text-muted);margin:0;">
       {{ incidents|length }} Einsatz{% if incidents|length != 1 %}e{% endif %}

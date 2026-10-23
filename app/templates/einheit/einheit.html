@@ -134,7 +134,7 @@
       <a href="/einheit?einheit={{ einheit.id }}"{% if einheit.id == benutzer_einheit_id %} class="is-active"{% endif %}>{{ einheit.label }} · {{ einheit.lage_name }}</a>
       {% endfor %}
       {% if not gk_zugang %}
-      <a href="/lage/{{ lage_id }}">Gesamtansicht</a>
+      <a href="/lage/{{ lage_id }}?gesamt=1">Gesamtansicht</a>
       {% endif %}
     </nav>
   </header>

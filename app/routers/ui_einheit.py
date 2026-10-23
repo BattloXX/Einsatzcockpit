@@ -193,14 +193,22 @@ def _einheit_seite(request: Request, db: Session, start_dispatch_id: int | None 
     })
 
 
+def _einheit_start(antwort):
+    """Zurueck in der Einheitenansicht: die Wahl "Gesamtansicht" wird zurueckgesetzt."""
+    from app.services.einheit_service import GESAMTANSICHT_COOKIE
+
+    antwort.delete_cookie(GESAMTANSICHT_COOKIE)
+    return antwort
+
+
 @router.get("", response_class=HTMLResponse)
 def einheit_seite(request: Request, db: Session = Depends(get_db)):
-    return _einheit_seite(request, db)
+    return _einheit_start(_einheit_seite(request, db))
 
 
 @router.get("/auftrag/{dispatch_id}", response_class=HTMLResponse)
 def einheit_auftrag_seite(dispatch_id: int, request: Request, db: Session = Depends(get_db)):
-    return _einheit_seite(request, db, dispatch_id)
+    return _einheit_start(_einheit_seite(request, db, dispatch_id))
 
 
 def _fehler(status: int, code: str, details: dict | None = None) -> NoReturn:

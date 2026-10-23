@@ -91,6 +91,31 @@ def ist_einheit_geraet(request: HTTPConnection, db: Session) -> bool:
     return request.state.ist_einheit_geraet
 
 
+GESAMTANSICHT_COOKIE = "ec_gesamt"
+
+
+def einheit_zuerst_umleiten(request: HTTPConnection, db: Session, lage_id: int):
+    """Einheiten-Tablets oeffnen die Grossschadenslage zuerst in der Einheitenansicht.
+
+    Die Gesamtansicht ist ueber den Link "Gesamtansicht" erreichbar (``?gesamt=1``, danach merkt sich ein
+    Cookie die Wahl fuer diese Lage), bis die Einheitenansicht wieder geoeffnet wird. Liefert eine Weiterleitung
+    oder None.
+    """
+    from fastapi.responses import RedirectResponse
+
+    if getattr(request.state, "user", None) is None or not ist_einheit_geraet(request, db):
+        return None
+    if request.query_params.get("gesamt") == "1":
+        antwort = RedirectResponse(f"/lage/{lage_id}", status_code=302)
+        antwort.set_cookie(
+            GESAMTANSICHT_COOKIE, str(lage_id), max_age=12 * 3600, httponly=True, samesite="lax",
+        )
+        return antwort
+    if request.cookies.get(GESAMTANSICHT_COOKIE) == str(lage_id):
+        return None
+    return RedirectResponse("/einheit", status_code=302)
+
+
 def einheit_geraet_nur_lesen(
     request: HTTPConnection,
     db: Session = Depends(get_db),

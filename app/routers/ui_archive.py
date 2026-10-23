@@ -5,10 +5,11 @@ Org-Scoping:
 - Endpoints können nur eigene oder mitwirkende Org-Einsätze abrufen.
 """
 import logging
+import re
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
-from sqlalchemy import func, or_, text
+from sqlalchemy import extract, func, or_, text
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.core.async_bridge import run_async
@@ -18,6 +19,7 @@ from app.core.templating import templates
 from app.core.timezones import local_date_to_utc, now_local
 from app.db import get_db
 from app.models.incident import Incident, IncidentOrg, IncidentVehicle
+from app.models.major_incident import MajorIncident
 from app.models.master import VehicleMaster
 from app.models.wordpress_report import WordPressReportConfig
 from app.services.ai_service import AIServiceError, generate_report_draft
@@ -134,35 +136,45 @@ def archive_list(
 
     jahre = [
         row[0]
-        for row in basis_query.with_entities(func.year(Incident.started_at))
+        for row in basis_query.with_entities(extract("year", Incident.started_at))
         .filter(Incident.started_at.isnot(None))
         .distinct()
-        .order_by(func.year(Incident.started_at).desc())
+        .order_by(extract("year", Incident.started_at).desc())
         .all()
         if row[0] is not None
     ]
     jahre_optionen = sorted(set(jahre) | {aktuelles_jahr}, reverse=True)
 
     incidents_query = basis_query
+    zeit_von = zeit_bis = None  # gleicher Zeitraum fuer Einsaetze und Grossschadenslagen
     if von or bis:
         if von:
             von_utc = local_date_to_utc(von, org=user.org)
             if von_utc:
-                incidents_query = incidents_query.filter(Incident.started_at >= von_utc)
+                zeit_von = von_utc
         if bis:
             bis_utc = local_date_to_utc(bis, end=True, org=user.org)
             if bis_utc:
-                incidents_query = incidents_query.filter(Incident.started_at <= bis_utc)
+                zeit_bis = bis_utc
     elif ausgewaehltes_jahr != "alle":
-        jahr_von = local_date_to_utc(f"{ausgewaehltes_jahr}-01-01", org=user.org)
-        jahr_bis = local_date_to_utc(
-            f"{ausgewaehltes_jahr}-12-31", end=True, org=user.org
+        zeit_von = local_date_to_utc(f"{ausgewaehltes_jahr}-01-01", org=user.org)
+        zeit_bis = local_date_to_utc(f"{ausgewaehltes_jahr}-12-31", end=True, org=user.org)
+    if zeit_von:
+        incidents_query = incidents_query.filter(Incident.started_at >= zeit_von)
+    if zeit_bis:
+        incidents_query = incidents_query.filter(Incident.started_at <= zeit_bis)
+
+    # Grossschadenslagen der eigenen Organisation (System-Admins: alle) fuer das Gesamt-PDF
+    lagen_query = db.query(MajorIncident)
+    if "system_admin" not in {r.code for r in user.roles}:
+        lagen_query = lagen_query.filter(MajorIncident.org_id == user.org_id) if user.org_id else lagen_query.filter(
+            MajorIncident.id == None  # noqa: E711
         )
-        if jahr_von and jahr_bis:
-            incidents_query = incidents_query.filter(
-                Incident.started_at >= jahr_von,
-                Incident.started_at <= jahr_bis,
-            )
+    if zeit_von:
+        lagen_query = lagen_query.filter(MajorIncident.started_at >= zeit_von)
+    if zeit_bis:
+        lagen_query = lagen_query.filter(MajorIncident.started_at <= zeit_bis)
+    lagen = lagen_query.order_by(MajorIncident.started_at.desc()).all()
 
     duration_expr = func.timestampdiff(
         text("SECOND"), Incident.started_at, Incident.closed_at
@@ -194,12 +206,38 @@ def archive_list(
         }
 
     return templates.TemplateResponse(request, "archive/list.html", {
-        "user": user, "incidents": incidents, "uas_incident_ids": uas_incident_ids,
+        "user": user, "incidents": incidents, "uas_incident_ids": uas_incident_ids, "lagen": lagen,
         "filter": {
             "jahr": ausgewaehltes_jahr, "von": von, "bis": bis, "sort": sort,
         },
         "jahre_optionen": jahre_optionen,
     })
+
+
+@router.get("/archiv/gsl/{lage_id}/pdf")
+def download_gsl_pdf(lage_id: int, request: Request, db: Session = Depends(get_db)):
+    """GSL-Gesamt-PDF fuers Archiv: derselbe Bericht wie der Lagebericht-Druck (A4, vollstaendig)."""
+    user = getattr(request.state, "user", None)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    lage = db.get(MajorIncident, lage_id)
+    if lage is None or not same_org_or_system_admin(user, lage.org_id):
+        raise HTTPException(404)
+    from types import SimpleNamespace
+
+    from app.routers.ui_major_incident import build_bericht_context
+    from app.services.print_artifact_service import _html_to_pdf
+
+    ctx = build_bericht_context(db, lage)
+    ctx["user"] = SimpleNamespace(org=user.org)
+    html_str = templates.env.get_template("incident_major/druck_bericht.html").render(**ctx)
+    pdf_bytes = _html_to_pdf(html_str, str(request.base_url))
+    name = re.sub(r"[^A-Za-z0-9_-]+", "_", lage.name or "lage").strip("_") or "lage"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="gsl_{lage.id}_{name}.pdf"'},
+    )
 
 
 @router.get("/archiv/{incident_id}", response_class=HTMLResponse)
