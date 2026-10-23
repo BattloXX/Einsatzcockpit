@@ -102,7 +102,12 @@
           </div>
           <div class="gwl-card__meta">
             <span>{{ 'v' ~ gw.version if gw.version else 'Version —' }}</span>
+            {% if not gw.offline_alert_enabled %}<span>Offline-Alarme aus</span>{% endif %}
+            {% if gw.is_windows_agent %}
+            <span>Heartbeat: {{ (gw.agent_heartbeat_at | local_datetime) if gw.agent_heartbeat_at else 'noch nicht empfangen' }}</span>
+            {% else %}
             <span>{{ ('Zuletzt ' ~ (gw.last_seen_at | local_datetime)) if gw.last_seen_at else 'Nie gesehen' }}</span>
+            {% endif %}
           </div>
         </a>
         {% endfor %}

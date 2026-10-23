@@ -95,11 +95,12 @@ def _historie_context(db: Session, gw: Gateway) -> dict:
 
 # ── Windows-Druckagent ─────────────────────────────────────────────────────────
 
-def _agent_detail(request: Request, db: Session, user: User, gw: Gateway) -> HTMLResponse:
+def _agent_detail(
+    request: Request, db: Session, user: User, gw: Gateway,
+    *, pairing_code: str | None = None, device_token: str | None = None,
+) -> HTMLResponse:
     """Detailseite eines Windows-Druckagents: Inventar, Routen, Redundanz, Historie."""
     from app.models.gateway import RENDER_MODES, PrinterAgentRoute
-    from app.routers.ws import gateway_online_id
-
     eigene = (
         db.query(PrinterAgentRoute)
         .filter(PrinterAgentRoute.gateway_id == gw.id)
@@ -125,10 +126,37 @@ def _agent_detail(request: Request, db: Session, user: User, gw: Gateway) -> HTM
         db.query(PrintJob).filter(PrintJob.gateway_id == gw.id)
         .order_by(PrintJob.erstellt_am.desc()).limit(30).all()
     )
-    return templates.TemplateResponse(request, "gateway/agent_detail.html", {
+    from app.services import print_agent_presence, print_agent_service
+    now = print_agent_presence.utc()
+    connected = print_agent_presence.online(gw, now)
+    heartbeat = gw.agent_heartbeat_at
+    age = max(0, int((now - print_agent_presence.utc(heartbeat)).total_seconds())) if heartbeat else None
+    active_routes = [route for route in eigene if route.aktiv]
+    ready_ids = {route.id for printer in org_printers
+                 for route in print_agent_service.route_kandidaten(db, printer, now)} if connected else set()
+    ready = sum(route.id in ready_ids for route in active_routes)
+    cause = None
+    if not gw.is_paired:
+        cause = "Nicht gekoppelt oder Device-Token widerrufen"
+    elif not connected:
+        cause = "Keine aktive WebSocket-Verbindung"
+        if age is not None:
+            cause += f"; letzter Heartbeat vor {age} Sekunden"
+    elif not active_routes:
+        cause = "Agent verbunden, aber noch kein Druckziel zugeordnet"
+    elif not ready:
+        cause = "Agent verbunden, aber kein Drucker bereit"
+    diagnostic = {"heartbeat_age_s": age, "cause": cause,
+                  "readiness": "Bereit" if connected and active_routes and ready == len(active_routes)
+                  else "Eingeschränkt" if connected and (ready or not active_routes) else "Fehler"}
+    diagnostic_only = request.query_params.get("diagnose") == "1"
+    template = "gateway/_agent_diagnose.html" if diagnostic_only else "gateway/agent_detail.html"
+    return templates.TemplateResponse(request, template, {
         "user": user,
         "gw": gw,
-        "connected": gateway_online_id(gw.id, user.org_id),
+        "connected": connected,
+        "diagnostic": diagnostic,
+        "diagnostic_only": diagnostic_only,
         "routen": eigene,
         "routen_je_drucker": routen_je_drucker,
         "printer_by_id": printer_by_id,
@@ -141,7 +169,9 @@ def _agent_detail(request: Request, db: Session, user: User, gw: Gateway) -> HTM
         "printers": org_printers,
         "jobs": jobs,
         "cloud_url": str(request.base_url).rstrip("/"),
-    })
+        "pairing_code": pairing_code,
+        "device_token": device_token,
+    }, headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
 
 
 async def _agent_config_push(db: Session, gw: Gateway) -> None:
@@ -384,6 +414,45 @@ def gateway_detail(
     })
 
 
+@router.post("/{gateway_id:int}/offline-alarme", response_class=HTMLResponse)
+def gateway_offline_alarme(
+    gateway_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("org_admin", "admin")),
+    _guard: None = Depends(require_gateway_enabled),
+    enabled: bool = Form(False),
+):
+    from app.core.audit import write_audit
+    from app.models.dienst_monitor import DienstStatus
+
+    gw = _gw_or_404(db, user.org_id, gateway_id)
+    if gw.offline_alert_enabled != enabled:
+        gw.offline_alert_enabled = enabled
+        # Auswahlwechsel ist keine Erholung. Alte Claims/Timer duerfen weder eine
+        # falsche Entwarnung noch einen sofortigen Alarm der neuen Auswahl ausloesen.
+        monitor = db.query(DienstStatus).filter(
+            DienstStatus.org_id == gw.org_id, DienstStatus.key == "print_gateway",
+        ).with_for_update().first()
+        if monitor is not None:
+            monitor.state = "unknown"
+            monitor.since = datetime.now(UTC).replace(tzinfo=None)
+            monitor.down_since = None
+            monitor.outage_notified_at = None
+            monitor.last_repeat_at = None
+            monitor.last_error = None
+            monitor.fail_cycles = 0
+            monitor.ok_cycles = 0
+        write_audit(db, "gateway.offline_alarm_geaendert", org_id=gw.org_id, user_id=user.id,
+                    entity_type="gateway", entity_id=gw.id, payload={"enabled": enabled})
+        db.commit()
+    if request.headers.get("HX-Request") == "true":
+        return templates.TemplateResponse(request, "gateway/_offline_alert_settings.html", {
+            "gw": gw, "alert_settings_saved": True,
+        })
+    return RedirectResponse(f"/gateway/{gw.id}#offline-alarme", status_code=303)
+
+
 @router.get("/{gateway_id:int}/historie", response_class=HTMLResponse)
 def gateway_historie(
     gateway_id: int,
@@ -546,6 +615,9 @@ def gateway_pair_code(
     from app.services.gateway_service import erzeuge_pairing_code
     code = erzeuge_pairing_code(db, gw)
     db.commit()
+    if gw.is_windows_agent:
+        # Keine Secrets in URLs: weder Access-Logs noch Referrer/Browser-History.
+        return _agent_detail(request, db, user, gw, pairing_code=code)
     # Code nur einmalig anzeigen (per Query, da nur Hash gespeichert wird)
     return RedirectResponse(f"/gateway/{gw.id}?pairing_code={code}", status_code=303)
 
@@ -562,6 +634,8 @@ def gateway_rotate(
     from app.services.gateway_service import rotate_token
     token = rotate_token(db, gw)
     db.commit()
+    if gw.is_windows_agent:
+        return _agent_detail(request, db, user, gw, device_token=token)
     return RedirectResponse(f"/gateway/{gw.id}?device_token={token}", status_code=303)
 
 

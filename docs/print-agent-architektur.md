@@ -296,3 +296,37 @@ Statusmeldungen gehen über eine lokale Outbox mit `id` und werden wiederholt, b
 3. Der Agent meldet sein Inventar. In der UI wird die Queue einem Druckziel zugeordnet (neu oder bestehend), mit Priorität 10 für PC A und 20 für PC B.
 4. Regeln und Druckdialog verwenden das Druckziel wie jeden anderen Drucker.
 5. Rückweg: Routen deaktivieren. Das Druckziel fällt dann auf den Push-Pfad zurück, falls ihm ein Linux-Gateway zugeordnet ist.
+
+
+## Presence und Windows-Verbindung: Korrektur Oktober 2026
+
+Fuer Windows-Agents gilt jetzt eine gemeinsame, befristete DB-Presence (Migration 0306):
+`agent_connection_id`, `agent_connected_at`, `agent_heartbeat_at`, `agent_presence_expires_at`.
+Authentifizierter Verbindungsaufbau beansprucht eine neue Connection-ID. Hello und Heartbeat
+verlaengern diese Verbindung um 90 Sekunden; Inventar und Readiness verlaengern sie nicht.
+Ein bedingtes UPDATE bindet Heartbeat/Disconnect an Org, Gateway und Connection-ID.
+Ein alter Disconnect kann damit keine neuere Verbindung auf einem anderen Worker beenden.
+Der Sweep entfernt abgelaufene Sessions atomar; ein konkurrierender frischer Heartbeat gewinnt.
+Nach Worker-Absturz ist die Anzeige spaetestens nach 90 Sekunden offline.
+
+Die lokale `_print_agents`-Registry ist nur fuer Socket-Zustellung und Prozessdiagnose zustaendig.
+Detailseite, Liste und Lease-Kandidaten verwenden die gemeinsame Presence. Redis bleibt fuer
+Broadcasts und Zustellung zwischen Workern erhalten; Presence ist auch bei Redis-Ausfall
+workeruebergreifend. Ohne Bus koennen Push-Hinweise fehlen, der Agent pollt Leases weiter.
+Die lokale Funktion `connected_print_agent_ids` ist keine globale Presence-Abfrage.
+
+Tokenrotation, Widerruf und neues Pairing loeschen eine alte Presence sofort. Aktive Sockets
+pruefen Authentifizierung und Eigentum an jeder Nachricht und bei Leerlauf alle 30 Sekunden.
+Verbindungs-IDs werden nicht an Benutzer ausgeliefert. Diagnoseabfragen behalten Admin-Rolle,
+Organisationsgrenze und `no-store`/`no-referrer`; Inventar kann auch bei Offline bestehen bleiben.
+Die Detaildiagnose aktualisiert sich alle 15 Sekunden ohne Vollreload.
+
+Der Agent muss numerische Cloud-IDs lesen und bei Jobmeldungen numerisch zuruecksenden.
+Ein nur geoeffneter Socket zaehlt lokal erst nach gueltigem `config_sync` als verbunden.
+Empfangsfehler werden protokolliert und sofort mit dem Heartbeat-Task gemeinsam beendet;
+Reconnect sendet Hello und Inventar erneut. Ein Dienststart ist kein Verbindungsnachweis.
+
+Deployment: Zuerst Migration 0306 ausfuehren, dann alle Cloud-Worker neu starten (alte
+Sockets muessen neu verbinden). Danach einen neuen Windows-Agent-Release mit Protokoll-,
+Reconnect- und Tray-Korrektur installieren. Token und Dienstkonto LocalSystem beibehalten.
+KDOF1 muss danach per aktueller Diagnose und Testdruck vor Ort abgenommen werden.

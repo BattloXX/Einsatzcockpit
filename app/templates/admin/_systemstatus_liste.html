@@ -6,7 +6,7 @@
     <div class="card-body">
       <h3>{{ labels.get(check.key, check.key) }}</h3>
       {% if zustand == 'nicht_konfiguriert' %}
-      <span class="badge">Nicht eingerichtet</span>
+      <span class="badge">{{ "Keine überwachten Gateways" if check.key == "print_gateway" else "Nicht eingerichtet" }}</span>
       {% elif zustand == 'teilweise' %}
       <span class="badge badge--warn">Teilstörung</span>
       {% if row.down_since %}<p>Seit {{ row.down_since|local_datetime }}</p>{% endif %}

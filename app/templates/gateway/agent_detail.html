@@ -16,11 +16,11 @@
     </div>
     <div class="gwx-pills">
       {% if connected %}
-      <span class="gwx-pill gwx-pill--ok"><span class="gwx-pill__d"></span>Online</span>
+      <span id="agent-status-pill" class="gwx-pill gwx-pill--ok"><span class="gwx-pill__d"></span>Online</span>
       {% elif not gw.is_paired %}
-      <span class="gwx-pill"><span class="gwx-pill__d"></span>Nicht gekoppelt</span>
+      <span id="agent-status-pill" class="gwx-pill"><span class="gwx-pill__d"></span>Nicht gekoppelt</span>
       {% else %}
-      <span class="gwx-pill gwx-pill--err"><span class="gwx-pill__d"></span>Offline</span>
+      <span id="agent-status-pill" class="gwx-pill gwx-pill--err"><span class="gwx-pill__d"></span>Offline</span>
       {% endif %}
       {% if host.get('host') %}<span class="gwx-pill">{{ icon("device-laptop", size="sm") }} {{ host.get('host') }}</span>{% endif %}
       {% if gw.version %}<span class="gwx-pill">v{{ gw.version }}</span>{% endif %}
@@ -34,24 +34,56 @@
 
   <div class="gwx-body">
     {% set q = request.query_params %}
-    {% if q.get('pairing_code') %}
+    {% if pairing_code %}
     <div class="gwx-alert gwx-alert--info">
       <strong>Pairing-Code (10 min gültig):</strong>
-      <code style="font-size:1.3em; letter-spacing:2px;">{{ q.get('pairing_code') }}</code><br>
-      Auf dem Windows-PC als Administrator ausführen:<br>
-      <code style="word-break:break-all;">EinsatzcockpitPrintAgent.exe pair --url {{ cloud_url }} --code {{ q.get('pairing_code') }}</code>
+      <code style="font-size:1.3em; letter-spacing:2px;">{{ pairing_code }}</code><br>
+      Im entpackten, korrigierten Windows-Paket PowerShell als Administrator öffnen und ausführen:<br>
+      <code style="word-break:break-all;">.\install.ps1 -CloudUrl "{{ cloud_url }}" -PairingCode "{{ pairing_code }}"</code><br>
+      Nur einen Bindestrich vor PowerShell-Parametern verwenden. Der Code ist kein Windows-Passwort.
     </div>
     {% endif %}
-    {% if q.get('device_token') %}
+    {% if device_token %}
     <div class="gwx-alert gwx-alert--info">
       <strong>Neues Device-Token (nur jetzt sichtbar):</strong>
-      <code style="word-break:break-all;">{{ q.get('device_token') }}</code>
+      <code style="word-break:break-all;">{{ device_token }}</code>
     </div>
     {% endif %}
     {% if q.get('saved') %}<div class="gwx-alert gwx-alert--ok">Gespeichert – der Agent erhält die neue Konfiguration sofort.</div>{% endif %}
     {% if q.get('route_deleted') %}<div class="gwx-alert gwx-alert--ok">Zuordnung entfernt.</div>{% endif %}
     {% if q.get('error') == 'queue' %}<div class="gwx-alert gwx-alert--err">Bitte eine Windows-Warteschlange wählen.</div>{% endif %}
     {% if q.get('error') == 'route_doppelt' %}<div class="gwx-alert gwx-alert--err">Dieser Agent ist dem Druckziel bereits zugeordnet.</div>{% endif %}
+
+    <div class="gwx-panel" style="margin-bottom:16px;">
+      <div class="gwx-panel__hd"><div class="gwx-panel__t">Windows-Druckagent installieren</div></div>
+      <div class="gwx-panel__bd">
+        <ol style="padding-left:20px; margin:0;">
+          <li><a href="https://github.com/BattloXX/Einsatzcockpit-Windows-Gateway/releases/latest" target="_blank" rel="noopener">Windows-x64-ZIP herunterladen</a>
+            und vollständig entpacken. Das Paket <strong>2026.10.17</strong> enthält Installations- und Pairing-Fehler;
+            eine Version mit <code>Installieren.cmd</code> verwenden.
+            <strong>Auch 2026.10.23 benötigt noch die zusätzliche Korrektur für Online-Status und Tray;
+            dafür einen neueren Bugfix-Release verwenden.</strong></li>
+          <li>Netzwerkdrucker als lokale Windows-Warteschlange mit TCP/IP-Anschluss einrichten.</li>
+          <li>Hier einen Pairing-Code erzeugen (einmal verwendbar, 10 Minuten gültig).</li>
+          <li><code>Installieren.cmd</code> per Rechtsklick <strong>als Administrator ausführen</strong> und den Code eingeben.
+            Für diese Cloud alternativ in einer Administrator-PowerShell im entpackten Ordner:
+            <code>.\install.ps1 -CloudUrl "{{ cloud_url }}"</code> – der Code wird verdeckt abgefragt.</li>
+          <li>Die Meldung „mit Einsatzcockpit verbunden“ abwarten, diese Seite neu laden und unten die Windows-Warteschlange
+            einem Druckziel zuordnen. Anschließend beim Druckziel eine Testseite drucken und den Ausdruck kontrollieren.</li>
+        </ol>
+        <p style="margin:12px 0 0;">Bei anderem Cloud-Host immer den PowerShell-Befehl mit der hier angezeigten URL verwenden.
+          Bei abgelaufenem oder bereits verwendetem Code einen neuen erzeugen.
+          Bei „Offline“ HTTPS/WSS über Port 443, Proxy und den Tray-Status prüfen.
+          Bei blockiertem Skript im entpackten Ordner
+          <code>powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -CloudUrl "{{ cloud_url }}"</code>
+          ausführen (organisationsweite Richtlinien gelten weiterhin).
+          Dienstkonto und Windows-Passwort sind für lokale TCP/IP-Drucker nicht erforderlich.</p>
+      </div>
+    </div>
+
+    {% include "gateway/_agent_diagnose.html" %}
+
+    {% include "gateway/_offline_alert_settings.html" %}
 
     <div class="gwx-grid">
       {# ── Kopplung ── #}

@@ -19,6 +19,50 @@ Web-UI: [Print & Alarm Gateway (Administration)](Administration-Print-Alarm-Gate
 
 ---
 
+## Windows-Druckagent (ohne Docker)
+
+Fuer reine Windows-Druckplaetze gibt es den
+[Windows-Druckagent](https://github.com/BattloXX/Einsatzcockpit-Windows-Gateway/releases).
+**2026.10.17-win-x64 ist fuer Erstinstallationen fehlerhaft.** Die folgenden Schritte
+benoetigen ein neueres, korrigiertes ZIP mit `Installieren.cmd` und `Install.Common.ps1`.
+Der korrigierte Release ist **2026.10.23**. Das neue ZIP herunterladen; bereits
+heruntergeladene Pakete der Version 2026.10.17 bleiben unveraendert.
+
+1. Windows x64, Administratorrechte, Spooler und ausgehendes HTTPS/WSS (443) sicherstellen.
+   Fuer Kartendruck Microsoft Edge installieren. .NET ist im ZIP enthalten.
+2. Netzwerkdrucker als lokale TCP/IP-Warteschlange einrichten und Windows-Testseite drucken.
+3. ZIP vollstaendig entpacken. In **Gateway / Druck** den Typ **Windows-Druckagent**
+   anlegen und **Pairing-Code erzeugen** (zehn Minuten, einmal verwendbar).
+4. `Installieren.cmd` per Rechtsklick **als Administrator ausfuehren**, Code verdeckt eingeben.
+   Standard-Cloud: `https://einsatzcockpit.com`. Fuer andere Cloud-Adressen oder alternativ
+   Administrator-PowerShell im entpackten Ordner verwenden:
+
+   ```powershell
+   .\install.ps1 -CloudUrl "https://einsatzcockpit.com" -PairingCode "<PAIRING-CODE>"
+   ```
+
+   Ohne `-PairingCode` wird der Code abgefragt. `-Code` ist ein Alias.
+   **Ein Bindestrich** vor PowerShell-Parametern; keine Positionsargumente.
+   Code und Windows-Dienstpasswort sind getrennte Eingaben. Standard ist LocalSystem
+   ohne Passwort. Bei blockiertem Skript pro Prozess starten:
+
+   ```powershell
+   powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -CloudUrl "https://einsatzcockpit.com"
+   ```
+
+5. Erfolgsmeldung mit bestaetigter Cloud-Verbindung abwarten. Im Einsatzcockpit die Seite
+   neu laden, Inventar einer Druckroute zuordnen und am Druckziel eine Testseite drucken.
+
+Bei ungueltigem, abgelaufenem oder bereits verwendetem Code einen neuen erzeugen.
+Bei Offline-Status Cloud-Adresse, HTTPS/WSS 443, Proxy und Tray-Status pruefen.
+Nur bei ausdruecklichem `-ServiceAccount 'DOMAIN\svc-druck'` wird gegebenenfalls ein
+Windows-Passwort verlangt; das Konto braucht das Recht „Als Dienst anmelden“.
+Updates mit `.\install.ps1` und Deinstallation mit `.\install.ps1 -Uninstall` erhalten
+Token und Auftragsdaten. Neuinstallation auf demselben PC benoetigt keinen neuen Code.
+Bereits produktiv gekoppelte Agents bleiben gekoppelt.
+
+Die folgenden Docker-Schritte betreffen das Linux-Gateway.
+
 ## Voraussetzungen
 
 | Anforderung | Details |
