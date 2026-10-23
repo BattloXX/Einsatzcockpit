@@ -189,3 +189,15 @@ Pro Block: ID / Status / Ursache / Loesung / Dateien / Datenbank / Tests / Hinwe
 | Datenbank | keine |
 | Tests | 3 Node-Tests, 1 Python-Test |
 | Hinweise | Das Tooltip-CSS positioniert über dem Element; in einem sehr schmalen Spaltenkopf kann der Tooltip an den Bildschirmrand stoßen (reines Darstellungsdetail). |
+
+## DOC-01 – Einsatzarchiv und PDF auf Vollständigkeit
+
+| Feld | Inhalt |
+|---|---|
+| Status | Teilweise: Einsatz-PDF und GSL-Bericht ergänzt und getestet. Offen: GSL-Lagen im Einsatzarchiv (es gibt kein GSL-Archiv-PDF), Anhänge werden weiterhin nur als Bild eingebettet bzw. als Login-Link referenziert |
+| Ursache | Einsatz-PDF: keine Einsatzdaten-Übersicht (Einsatzart, Grund, Status), bei Aufträgen/Meldungen weder Ersteller/Quelle noch Anlegezeit, kein Fahrzeug-Statusverlauf, Objekt ohne Hinweise/Zufahrt/Pläne, kein Funkjournal; Tabellenköpfe wiederholten sich nicht, Flexbox im Kopf, lange Wörter liefen über den Rand. GSL-Bericht: keine A4-Seitenregeln/Seitenzähler, Funkjournal hart auf 50 Einträge begrenzt, keine Ressourcenübersicht, kein Auftragsverlauf, keine Statushistorie. |
+| Lösung | Einsatz-PDF: Abschnitt Einsatzdaten, Ersteller/Quelle/Zeiten bei Aufträgen und Meldungen, Statusverlauf der Fahrzeuge (aus dem Änderungsprotokoll), Funkjournal/Lagemeldungen, Objekt mit Hinweisen/Zufahrt/Plänen, Kopf als Tabelle, `thead` mit Wiederholung, keine Zeilentrennung, feste Spaltenbreiten und Umbruch langer Wörter. Das Journal war bereits vollständig und chronologisch (ohne Deckel). GSL-Bericht: A4 mit Seitenzähler und Fußzeile, vollständiges Funkjournal chronologisch, Ressourcenübersicht (Status wie GSL-06, Zeiten), Auftragsverlauf je Einsatzstelle (alle Zeitpunkte, Rückzug mit Grund), Statushistorie/Lagemeldungen der Einsatzstellen, Ressourcenjournal; erledigte Stellen mit Priorität und Phase. Es werden nur vorhandene Zeitstempel und Texte übernommen, nichts berechnet oder ergänzt. |
+| Dateien | `app/services/pdf_service.py`, `app/templates/pdf/incident_report.html`, `app/routers/ui_major_incident.py`, `app/templates/incident_major/druck_bericht.html`, `tests/test_pdf_einsatzdokumentation.py`, `tests/test_pdf_gsl_bericht.py` |
+| Datenbank | keine |
+| Tests | 9 neue Tests (Inhalt, Umbruch mit 120/80 Einträgen, Kopfwiederholung, Randprüfung über den WeasyPrint-Boxbaum, Seitenzähler) |
+| Hinweise | Historische Daten stammen aus Dispositionen, Chronik und Journal (keine aktuellen Stammdaten). Fahrzeugnamen im Statusverlauf nutzen die aktuelle Fahrzeugbezeichnung. Datenschutz: keine zusätzlichen Personendaten außer den ohnehin erfassten Autoren/Führern. |
