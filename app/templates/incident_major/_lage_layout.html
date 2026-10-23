@@ -66,7 +66,12 @@
     <div class="exercise-topbar">Nur-Lese-Ansicht (Einheitenmodus)</div>
     {% endif %}
     <div class="lage-ctx-bar__head">
+      {% if request.state.ist_einheit_geraet %}
+      {# Einheiten-Tablet: Rueckweg in die Einheitenansicht (Startansicht dieses Geraets) #}
+      <a href="/einheit" class="btn btn--primary btn--sm" title="Zurück zur Einheitenansicht">{{ icon("device-mobile", size="xs") }} Einheitenansicht</a>
+      {% else %}
       <a href="/lage" class="btn btn--ghost btn--sm" title="Alle Lagen">{{ icon("chevron-left", size="xs") }} Lagen</a>
+      {% endif %}
       {# id-Wrapper: Refresh-Ziel fuer den lage_updated-OOB-Swap (_lage_kopf_oob.html) --
          Lage-Stammdaten koennen sich aendern, waehrend andere Nutzer bereits auf
          Board/Karte/etc. sind (siehe GSL-Reload-Audit 2026-07-16). #}

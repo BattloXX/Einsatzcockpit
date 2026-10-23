@@ -62,6 +62,10 @@ def test_einheit_geraet_darf_gesamtansicht_lesen_aber_nicht_bedienen(client, set
     user_id, token_id, lage_id, site_id = _anlegen("einheit", geraet=True)
     _als_geraet(client, user_id, token_id)
 
+    # Einheiten-Tablets starten in der Einheitenansicht; die Gesamtansicht folgt ueber ?gesamt=1
+    erst = client.get(f"/lage/{lage_id}", follow_redirects=False)
+    assert erst.status_code == 302 and erst.headers["location"] == "/einheit"
+    assert client.get(f"/lage/{lage_id}?gesamt=1", follow_redirects=False).status_code == 302
     board = client.get(f"/lage/{lage_id}", follow_redirects=False)
     assert board.status_code == 200
     assert "Nur-Lese-Ansicht (Einheitenmodus)" in board.text

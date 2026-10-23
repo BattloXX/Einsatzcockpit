@@ -3,12 +3,16 @@
      post_url     – Ziel-URL für die Übernahme (POST, Form seiten_ids)
      swap_target  – hx-target für das Ergebnis-Partial
      incident_id  – Einsatz-ID für die Objekt-Vorauswahl
+     vorauswahl   – optional: statt zu posten, die gewählten Seiten im Formular merken (Feld seiten_ids im
+                    umgebenden <form>); beim Anlegen werden sie vom Server übernommen (ECP-01)
    Der Dialog ist ein eigener Top-Layer-<dialog> (showModal) → immer zentriert,
    auch aus einem bereits offenen Modal heraus. #}
-<div style="margin-top:6px;" x-data="{
-  objekte: [], obj: null, dokumente: [], auswahl: [], suche: '', dokSuche: '', laden: false,
+<div style="margin-top:6px;" @reset.window="if ($event.target.contains && $event.target.contains($el)) zuruecksetzen()" x-data="{
+  objekte: [], obj: null, dokumente: [], auswahl: [], suche: '', dokSuche: '', laden: false, gewaehlt: 0,
+  vorauswahl: {{ 'true' if vorauswahl else 'false' }},
   open() {
-    this.obj = null; this.dokumente = []; this.auswahl = []; this.dokSuche = '';
+    this.obj = null; this.dokumente = []; this.dokSuche = '';
+    if (!this.vorauswahl) this.auswahl = [];
     try { this.$refs.dlg.showModal(); } catch (e) {}
     if (!this.objekte.length) {
       this.laden = true;
@@ -32,9 +36,17 @@
     if (this.dokAktiv(dok)) { this.auswahl = this.auswahl.filter(x => !ids.includes(x)); }
     else { ids.forEach(id => { if (this.auswahl.indexOf(id) < 0) this.auswahl.push(id); }); }
   },
+  merken() {
+    const feld = this.$root.closest('form')?.querySelector('[name=seiten_ids]');
+    if (feld) feld.value = this.auswahl.join(',');
+    this.gewaehlt = this.auswahl.length;
+    this.close();
+  },
+  zuruecksetzen() { this.auswahl = []; this.gewaehlt = 0; },
   vorschau(dok, idx) { openImageLightbox(dok.seiten.map(s => ({ src: s.bild })), idx || 0); }
 }">
-  <button type="button" class="btn btn--secondary btn--sm" @click="open()">{{ icon("folder-open", size="xs") }} Aus Objekt übernehmen</button>
+  <button type="button" class="btn btn--secondary btn--sm" @click="open()">{{ icon("folder-open", size="xs") }} Aus Objekt übernehmen<template x-if="vorauswahl && gewaehlt"><span> (<span x-text="gewaehlt"></span> Seite(n) gewählt)</span></template></button>
+  {% if vorauswahl %}<input type="hidden" name="seiten_ids" value="">{% endif %}
 
   <dialog x-ref="dlg" @cancel.prevent="close()" @click.self="close()"
           style="max-width:min(960px,96vw);width:96vw;max-height:90dvh;padding:0;">
@@ -106,6 +118,11 @@
       </div>
 
       <div style="padding:12px 16px;border-top:1px solid var(--border-color,#374151);display:flex;justify-content:flex-end;">
+        {% if vorauswahl %}
+        <button type="button" class="btn btn--primary btn--sm" @click="merken()">
+          Auswählen (<span x-text="auswahl.length"></span>)
+        </button>
+        {% else %}
         <form hx-post="{{ post_url }}" hx-target="{{ swap_target }}" hx-swap="innerHTML"
               @htmx:after-request="if ($event.detail.successful) { close(); }">
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
@@ -114,6 +131,7 @@
             Übernehmen (<span x-text="auswahl.length"></span>)
           </button>
         </form>
+        {% endif %}
       </div>
     </div>
   </dialog>

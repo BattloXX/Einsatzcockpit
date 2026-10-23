@@ -510,6 +510,30 @@ def _objekt_beim_anlegen_verknuepfen(
         objekt_verknuepfung_nachlauf(background_tasks, incident_id, user.id)
 
 
+def _seiten_ids_pruefen(request: Request, seiten_ids: str) -> list[int]:
+    """ECP-01: vorab gewaehlte Objekt-Dokumentseiten (wie "Aus Objekt uebernehmen" beim Bearbeiten) pruefen."""
+    teile = [t for t in (seiten_ids or "").split(",") if t.strip()]
+    if not teile:
+        return []
+    if not getattr(request.state, "objekt_enabled", False):
+        raise HTTPException(400, detail="Die Objektverwaltung ist nicht aktiv.")
+    try:
+        return [int(t) for t in teile]
+    except ValueError:
+        raise HTTPException(400, detail="Ungültige Seitenauswahl") from None
+
+
+def _objektseiten_uebernehmen(db: Session, request: Request, host_typ: str, host, seiten: list[int]) -> None:
+    """Kopiert die gewaehlten Seiten nach dem Anlegen an Meldung/Auftrag (Tenant-Grenze im Service)."""
+    if not seiten:
+        return
+    from app.services.takeover_service import uebernehme_seiten
+
+    user = request.state.user
+    uebernehme_seiten(db, host_typ, host, seiten, user, user.org_id)
+    db.commit()
+
+
 @router.post("/einsatz/neu")
 def new_incident(
     request: Request,
@@ -1952,17 +1976,17 @@ def set_incident_leader(
 
 @router.post("/einsatz/{incident_id}/aufgabe", response_class=HTMLResponse)
 def create_task(
-    incident_id: int, request: Request, background_tasks: BackgroundTasks,
+    incident_id: int, request: Request,
     title: str = Form(...), detail: str = Form(""),
     column_id: int | None = Form(None),
     vehicle_id: int | None = Form(None),
     note: str = Form(""),
-    objekt_id: int | None = Form(None),
+    seiten_ids: str = Form(""),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "recorder")),
 ):
     incident = _incident_or_404(incident_id, db)
-    gewaehltes_objekt = _objekt_beim_anlegen_pruefen(db, request, objekt_id)
+    seiten = _seiten_ids_pruefen(request, seiten_ids)
     task = add_task(
         db, incident, title, detail or None,
         user_id=request.state.user.id, column_id=column_id,
@@ -1977,7 +2001,7 @@ def create_task(
                            user_id=request.state.user.id, author_name=get_author_name(request)))
     prepend_card(db, task.column_id, "task", task.id)
     db.commit()
-    _objekt_beim_anlegen_verknuepfen(db, request, background_tasks, incident_id, gewaehltes_objekt)
+    _objektseiten_uebernehmen(db, request, "task", task, seiten)
     run_async(manager.broadcast, incident_id, {
         "type": "task_created", "task_id": task.id, "column_id": task.column_id,
         "vehicle_uid": task.vehicle_id,
@@ -2471,18 +2495,18 @@ def reorder_columns_endpoint(
 
 @router.post("/einsatz/{incident_id}/meldung")
 async def create_message(
-    incident_id: int, request: Request, background_tasks: BackgroundTasks,
+    incident_id: int, request: Request,
     title: str = Form(...), detail: str = Form(""),
     status: str = Form("meldung"),
     due_after_min: int = Form(0),
     vehicle_id: int | None = Form(None),
-    objekt_id: int | None = Form(None),
+    seiten_ids: str = Form(""),
     files: list[UploadFile] = File(default=[]),
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "recorder")),
 ):
     incident = _incident_or_404(incident_id, db)
-    gewaehltes_objekt = _objekt_beim_anlegen_pruefen(db, request, objekt_id)
+    seiten = _seiten_ids_pruefen(request, seiten_ids)
     from app.services.incident_service import add_message
     msg = add_message(
         db, incident, title=title, detail=detail, status=status,
@@ -2490,7 +2514,7 @@ async def create_message(
         author_name=get_author_name(request), user_id=request.state.user.id,
     )
     db.commit()
-    _objekt_beim_anlegen_verknuepfen(db, request, background_tasks, incident_id, gewaehltes_objekt)
+    _objektseiten_uebernehmen(db, request, "message", msg, seiten)
     # Optional: Dateien direkt beim Anlegen anhängen
     errors: list[str] = []
     if files:

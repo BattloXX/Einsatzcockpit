@@ -212,3 +212,13 @@ Pro Block: ID / Status / Ursache / Loesung / Dateien / Datenbank / Tests / Hinwe
 | Datenbank | keine |
 | Tests | 4 neue Tests |
 | Hinweise | Einschränkung: Geräte hinter gleicher (z. B. Mobilfunk-/NAT-)IP sind oft nicht eindeutig; Geräte ohne frühere Anmeldung derselben IP bleiben unzuordenbar. Der Query-String-Token von `/geraet-login` steht im Access-Log (Gunicorn `--access-logfile -`); empfohlen: Log-Rotation/Zugriff beschränken oder Query-String im Proxy schwärzen. Für künftige Ereignisse gilt SEC-01 (Tabelle `device_auth_failure`). |
+
+## Nachtrag 2026-10-23 – ECP-01 neu, Einheitenansicht zuerst, GSL-Gesamt-PDF im Archiv
+
+| Punkt | Umsetzung |
+|---|---|
+| ECP-01 (korrigiert) | Beim Anlegen von **Meldung** und **Auftrag** wird kein Objekt mehr verknüpft, sondern wie beim Bearbeiten ein **Objektdokument** übernommen: derselbe Dialog „Aus Objekt übernehmen“ (`_uebernahme_dialog.html`) im Vorauswahl-Modus merkt die gewählten Seiten im Formular (`seiten_ids`); `create_task`/`create_message` kopieren sie nach dem Anlegen über `takeover_service.uebernehme_seiten` (Tenant-Grenze, max. 20 Seiten, Herkunft wie beim Bearbeiten). Ungültige Auswahl → 400 ohne Anlage. Beim **Neuen Einsatz** bleibt die Objektauswahl, das Objekt wird mit dem Einsatz verknüpft. Die Picker-Komponente wird nur noch dort genutzt. |
+| Einheitenansicht zuerst | Einheiten-Tablets (Geräteprofil Einheit) werden beim Öffnen der Großschadenslage (`/lage/{id}`, auch über die Lagenübersicht und den Startseiten-Hinweis) zuerst in die Einheitenansicht geleitet. Der Link „Gesamtansicht“ in der Einheitenansicht (`?gesamt=1`) schaltet per Cookie für 12 h auf die Gesamtansicht um; dort führt ein Button „Einheitenansicht“ zurück und setzt die Wahl zurück. Andere Benutzer sind nicht betroffen. |
+| GSL-Gesamt-PDF | Im Einsatzarchiv gibt es einen Abschnitt „Großschadenslagen“ (gleicher Zeitraumfilter, nur eigene Organisation, System-Admins alle) mit Button „Gesamt-PDF“ (`/archiv/gsl/{id}/pdf`): derselbe vollständige Lagebericht wie der Druck (siehe DOC-01). Außerdem wurde die MySQL-spezifische `year()`-Abfrage der Archivliste durch `extract` ersetzt (läuft nun auch unter SQLite). |
+| Tests | `tests/test_objekt_beim_anlegen.py` (angepasst), `tests/test_einheit_zuerst.py` (4), `tests/test_archiv_gsl_pdf.py` (3) |
+| Hinweise | Gerätetest: Tablet mit Geräteprofil Einheit; GSL öffnen → Einheitenansicht, „Gesamtansicht“, „Einheitenansicht“ zurück. Der Start über `/` hängt weiter an der Fahrzeugzuordnung des Geräts; ohne Fahrzeug greift die Weiterleitung erst beim Öffnen der GSL. |

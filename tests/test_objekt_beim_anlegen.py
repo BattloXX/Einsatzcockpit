@@ -142,47 +142,89 @@ def test_fremdes_objekt_wird_abgelehnt_und_es_entsteht_kein_einsatz(client, date
         assert db.query(Incident).filter(Incident.address_street == strasse).count() == 0
 
 
-def test_auftrag_und_meldung_verknuepfen_objekt_beim_anlegen(client, daten):
+def _objektseite(daten, tmp_path, monkeypatch, org_id=None):
+    from PIL import Image
+
+    from app.config import settings
+    from app.models.objekt import ObjektDokument, ObjektDokumentSeite
+
+    monkeypatch.setattr(settings, "OBJEKT_MEDIA_DIR", str(tmp_path / "objekt"))
+    monkeypatch.setattr(settings, "MEDIA_STORAGE_DIR", str(tmp_path / "media"))
+    org_id = org_id or daten["org"]
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        dok = ObjektDokument(org_id=org_id, objekt_id=daten["objekt"], dateiname_original="Plan.pdf", pfad="x.pdf")
+        db.add(dok)
+        db.flush()
+        rel = f"{org_id}/{daten['objekt']}/u/seite_0001.png"
+        quelle = tmp_path / "objekt" / rel
+        quelle.parent.mkdir(parents=True, exist_ok=True)
+        Image.new("RGB", (200, 200), "white").save(quelle, "PNG")
+        seite = ObjektDokumentSeite(org_id=org_id, objekt_id=daten["objekt"], dokument_id=dok.id,
+                                    seiten_nr=1, bild_pfad=rel)
+        db.add(seite)
+        db.commit()
+        return seite.id
+
+
+def test_auftrag_und_meldung_uebernehmen_gewaehlte_objektseiten_beim_anlegen(client, daten, tmp_path, monkeypatch):
+    from app.models.incident import MessageMedia, TaskMedia
+
+    seite = _objektseite(daten, tmp_path, monkeypatch)
     _login(client, daten["leiter"])
     csrf = client.cookies.get("ec_csrf")
     inc = daten["incident"]
     auftrag = client.post(f"/einsatz/{inc}/aufgabe", data={
-        "_csrf": csrf, "title": "Gas absperren", "objekt_id": str(daten["objekt"])})
+        "_csrf": csrf, "title": "Gas absperren", "seiten_ids": str(seite)})
     assert auftrag.status_code == 200
-    assert [v.objekt_id for v in _verknuepfungen(inc)] == [daten["objekt"]]
-    # zweite Anlage mit demselben Objekt: idempotent, keine zweite Verknuepfung
     meldung = client.post(f"/einsatz/{inc}/meldung", data={
-        "_csrf": csrf, "title": "Halle brennt", "objekt_id": str(daten["objekt"])})
+        "_csrf": csrf, "title": "Halle brennt", "seiten_ids": str(seite)})
     assert meldung.status_code == 200
-    assert len(_verknuepfungen(inc)) == 1
     with SessionLocal() as db:
         set_tenant_context(db, None)
-        assert db.query(Task).filter(Task.incident_id == inc, Task.title == "Gas absperren").count() == 1
-        assert db.query(Message).filter(Message.incident_id == inc, Message.title == "Halle brennt").count() == 1
-
-
-def test_ohne_berechtigung_wird_nichts_angelegt_und_kein_objekt_verknuepft(client, daten):
-    _login(client, daten["schreiber"])
-    csrf = client.cookies.get("ec_csrf")
-    inc = daten["incident"]
-    antwort = client.post(f"/einsatz/{inc}/aufgabe", data={
-        "_csrf": csrf, "title": "Ohne Recht", "objekt_id": str(daten["objekt"])})
-    assert antwort.status_code == 403
+        task = db.query(Task).filter(Task.incident_id == inc, Task.title == "Gas absperren").one()
+        msg = db.query(Message).filter(Message.incident_id == inc, Message.title == "Halle brennt").one()
+        assert db.query(TaskMedia).filter(TaskMedia.task_id == task.id).count() == 1
+        assert db.query(MessageMedia).filter(MessageMedia.message_id == msg.id).count() == 1
+    # das Objekt selbst wird dabei nicht verknuepft
     assert _verknuepfungen(inc) == []
+
+
+def test_fremde_objektseite_wird_nicht_uebernommen(client, daten, tmp_path, monkeypatch):
+    from app.models.incident import TaskMedia
+
     with SessionLocal() as db:
         set_tenant_context(db, None)
-        assert db.query(Task).filter(Task.incident_id == inc, Task.title == "Ohne Recht").count() == 0
-    # ohne Objekt darf der Protokollant weiterhin Auftraege anlegen
-    ok = client.post(f"/einsatz/{inc}/aufgabe", data={"_csrf": csrf, "title": "Normal"})
-    assert ok.status_code == 200
+        andere = db.get(Objekt, daten["fremdes"]).org_id
+    seite = _objektseite({**daten, "objekt": daten["fremdes"]}, tmp_path, monkeypatch, org_id=andere)
+    _login(client, daten["leiter"])
+    csrf = client.cookies.get("ec_csrf")
+    r = client.post(f"/einsatz/{daten['incident']}/aufgabe", data={
+        "_csrf": csrf, "title": "Fremd", "seiten_ids": str(seite)})
+    assert r.status_code == 200
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        task = db.query(Task).filter(Task.title == "Fremd").one()
+        assert db.query(TaskMedia).filter(TaskMedia.task_id == task.id).count() == 0
 
 
-def test_objektauswahl_nur_bei_berechtigung_und_aktivem_modul(client, daten):
+def test_ungueltige_seitenauswahl_legt_nichts_an(client, daten):
+    _login(client, daten["leiter"])
+    csrf = client.cookies.get("ec_csrf")
+    r = client.post(f"/einsatz/{daten['incident']}/aufgabe", data={
+        "_csrf": csrf, "title": "Kaputt", "seiten_ids": "abc"})
+    assert r.status_code == 400
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        assert db.query(Task).filter(Task.title == "Kaputt").count() == 0
+
+
+def test_objekt_auswahl_nur_beim_neuen_einsatz_dokumentuebernahme_bei_meldung_und_auftrag(client, daten):
     _login(client, daten["leiter"])
     assert 'aria-label="Objekt suchen"' in client.get("/").text
-    assert 'aria-label="Objekt suchen"' in client.get(f"/einsatz/{daten['incident']}").text
-    _login(client, daten["schreiber"])
-    assert 'aria-label="Objekt suchen"' not in client.get(f"/einsatz/{daten['incident']}").text
+    board = client.get(f"/einsatz/{daten['incident']}").text
+    assert 'aria-label="Objekt suchen"' not in board
+    assert board.count('name="seiten_ids"') >= 2  # Auftrag- und Meldungsdialog
     with SessionLocal() as db:
         set_tenant_context(db, None)
         db.query(OrgSettings).filter(OrgSettings.org_id == daten["org"]).one().objekt_module_enabled = False
