@@ -201,3 +201,14 @@ Pro Block: ID / Status / Ursache / Loesung / Dateien / Datenbank / Tests / Hinwe
 | Datenbank | keine |
 | Tests | 9 neue Tests (Inhalt, Umbruch mit 120/80 Einträgen, Kopfwiederholung, Randprüfung über den WeasyPrint-Boxbaum, Seitenzähler) |
 | Hinweise | Historische Daten stammen aus Dispositionen, Chronik und Journal (keine aktuellen Stammdaten). Fahrzeugnamen im Statusverlauf nutzen die aktuelle Fahrzeugbezeichnung. Datenschutz: keine zusätzlichen Personendaten außer den ohnehin erfassten Autoren/Führern. |
+## SEC-03 – Rückwirkende Analyse ungültiger Tokens
+
+| Feld | Inhalt |
+|---|---|
+| Status | Erledigt (Werkzeug); die Auswertung der Produktiv-Logs ist ein manueller Schritt |
+| Ursache | Vor SEC-01 wurden ungültige Gerätezugriffe nicht protokolliert. Vorhanden sind nur Gunicorn-Access-Logs (journald: IP, Pfad, Status, User-Agent) und Audit-Einträge erfolgreicher Geräte-Logins (`auth.device_login` mit IP und Gerätebezeichnung). Das Token selbst steht nicht im Log (Ausnahme: der Query-String von `/geraet-login?token=`). |
+| Lösung | `scripts/geraete_zugriffe_auswerten.py` (nur lesend) wertet Logzeilen aus (401 auf `/api/v1/device/*`, Redirect-Ziel `/login?error=device_invalid`), gruppiert nach IP und User-Agent mit Anzahl und Zeitraum und ordnet **nur dann** einem Gerät zu, wenn die IP in früheren erfolgreichen Anmeldungen genau einem Gerät gehörte; sonst „nicht zuordenbar“ mit Begründung. Token im Query-String werden beim Einlesen verworfen. Aufruf: `journalctl -u einsatzleiter --since "<Datum>" \| .venv/bin/python scripts/geraete_zugriffe_auswerten.py`. |
+| Dateien | `app/services/geraete_zugriff_analyse.py`, `scripts/geraete_zugriffe_auswerten.py`, `tests/test_geraete_zugriff_analyse.py` |
+| Datenbank | keine |
+| Tests | 4 neue Tests |
+| Hinweise | Einschränkung: Geräte hinter gleicher (z. B. Mobilfunk-/NAT-)IP sind oft nicht eindeutig; Geräte ohne frühere Anmeldung derselben IP bleiben unzuordenbar. Der Query-String-Token von `/geraet-login` steht im Access-Log (Gunicorn `--access-logfile -`); empfohlen: Log-Rotation/Zugriff beschränken oder Query-String im Proxy schwärzen. Für künftige Ereignisse gilt SEC-01 (Tabelle `device_auth_failure`). |
