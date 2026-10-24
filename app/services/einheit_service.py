@@ -1,6 +1,7 @@
 """Geschäftslogik für Statusmeldungen im GSL-Einheitenmodus."""
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal
@@ -191,6 +192,8 @@ KONFLIKT_MELDUNGEN = {
     "ungueltiger_uebergang": "Dieser Statusübergang ist nicht erlaubt.",
     "aktiver_auftrag": "Die Einheit hat bereits einen aktiven Auftrag.",
     "stelle_in_erkundung": "Die Einsatzstelle ist noch in Erkundung – zuerst Erkundung abschließen.",
+    "auftrag_geaendert": "Der Auftrag wurde geändert. Bitte den aktuellen Auftrag prüfen.",
+    "status_geaendert": "Der Bearbeitungsstand wurde inzwischen geändert. Bitte den Auftrag prüfen.",
 }
 
 
@@ -385,9 +388,11 @@ def auftrag_laden(db: Session, ctx: EinheitKontext, dispatch_id: int) -> Einheit
 
 def _auftragsdaten(dispatch: EinheitSiteDispatch) -> dict:
     site = dispatch.site
+    from app.services.einheit_karten_service import hat_zielkoordinaten
     from app.services.gsl_live_service import _combined_site_address
+    from app.services.site_log_service import schnellmeldungen
     adresse = _combined_site_address(site)
-    hat_koordinaten = site.lat is not None and site.lng is not None
+    hat_koordinaten = hat_zielkoordinaten(site)
     nav_url = None
     if hat_koordinaten:
         nav_url = f"https://www.google.com/maps/dir/?api=1&destination={site.lat},{site.lng}"
@@ -409,6 +414,7 @@ def _auftragsdaten(dispatch: EinheitSiteDispatch) -> dict:
         "phase": site.phase.value,
         "auftrag": dispatch.auftrag,
         "auftragsart": dispatch.auftragsart,
+        "schnellmeldungen": schnellmeldungen(dispatch.auftragsart),
         "auftragsart_label": AUFTRAGSART_LABEL.get(dispatch.auftragsart, "Abarbeitung"),
         "einheit_status": dispatch.einheit_status,
         "einheit_status_label": einheit_status_label(dispatch.auftragsart, dispatch.einheit_status),
@@ -418,11 +424,26 @@ def _auftragsdaten(dispatch: EinheitSiteDispatch) -> dict:
         "status_at": _iso_z(dispatch.status_at),
         "abgezogen_at": _iso_z(dispatch.abgezogen_at),
         "geaendert_at": _iso_z(dispatch.geaendert_at),
+        "bestaetigt_at": _iso_z(dispatch.bestaetigt_at),
+        "withdrawn_at": _iso_z(dispatch.withdrawn_at),
+        "beendet_at": _iso_z(dispatch.beendet_at),
+        "erlaubte_status": erlaubte_status(dispatch),
         "gmaps_url": (
             f"https://maps.google.com/?q={site.lat},{site.lng}"
             if site.lat is not None and site.lng is not None else None
         ),
     }
+
+
+def erlaubte_status(dispatch: EinheitSiteDispatch) -> list[str]:
+    """Dieselbe Statusfreigabe in Vorschau und offline verfügbarem Listenstand."""
+    if dispatch.withdrawn_at is not None or dispatch.beendet_at is not None:
+        return []
+    matrix = ERLAUBTE_UEBERGAENGE_ERKUNDUNG if dispatch.auftragsart == "erkundung" else ERLAUBTE_UEBERGAENGE
+    erlaubt = matrix.get(dispatch.einheit_status, frozenset())
+    if dispatch.auftragsart == "abarbeitung" and dispatch.site.phase in {SitePhase.eingegangen, SitePhase.erkundung}:
+        erlaubt = erlaubt - {"in_arbeit", "abgeschlossen"}
+    return sorted(erlaubt)
 
 
 def auftraege_fuer_einheit(db: Session, ctx: EinheitKontext) -> dict:
@@ -506,10 +527,22 @@ def setze_einheit_status(
     unterbrechen: bool = False,
     erfasst_at: datetime | None = None,
     anzeige_quelle: str | None = None,
+    auftrag_version: int | None = None,
+    ausgangsstatus: str | None = None,
+    aktiver_dispatch_id: int | None = None,
+    erkundungsergebnis_pruefen: Callable[[], None] | None = None,
 ) -> dict:
     """Wendet einen erlaubten Einheiten-Statuswechsel an, ohne zu committen."""
+    # Alle Statusschreiber einer Einheit verwenden denselben Mutex in MariaDB.
+    # Snapshot-Konflikte werden am Transaktionsrand mit neuem Read View wiederholt.
+    resource_service.sperre_einheitenstatus(db, ctx.einheit)
+    db.query(EinheitSiteDispatch).filter(
+        EinheitSiteDispatch.id == dispatch.id,
+    ).populate_existing().with_for_update().one()
     if dispatch.withdrawn_at is not None:
         raise EinheitKonflikt("auftrag_zurueckgezogen")
+    if auftrag_version is not None and auftrag_version != dispatch.version:
+        raise EinheitKonflikt("auftrag_geaendert", {"dispatch_id": dispatch.id, "version": dispatch.version})
     alter_status = dispatch.einheit_status
     erster_einsatzbeginn = (
         neuer_status in {"anfahrt", "vor_ort", "in_arbeit"}
@@ -523,6 +556,8 @@ def setze_einheit_status(
             "phase_geaendert": False, "unterbrochen_dispatch_id": None,
             "alle_einheiten_fertig": _alle_einheiten_fertig(db, dispatch.site_id),
         }
+    if ausgangsstatus is not None and ausgangsstatus != alter_status:
+        raise EinheitKonflikt("status_geaendert", {"dispatch_id": dispatch.id, "einheit_status": alter_status})
     uebergaenge = ERLAUBTE_UEBERGAENGE_ERKUNDUNG if dispatch.auftragsart == "erkundung" else ERLAUBTE_UEBERGAENGE
     if neuer_status not in uebergaenge.get(alter_status, frozenset()):
         raise EinheitKonflikt("ungueltiger_uebergang")
@@ -535,6 +570,9 @@ def setze_einheit_status(
         raise EinheitKonflikt("stelle_in_erkundung")
     if neuer_status == "nicht_durchfuehrbar" and not (grund and grund.strip()):
         raise ValueError("Grund für nicht durchführbar erforderlich")
+    if neuer_status == "abgeschlossen" and dispatch.auftragsart == "erkundung" and erkundungsergebnis_pruefen:
+        # Erst nach Sperre, Versions- und Übergangsprüfung; kein Abschluss ohne passenden Bericht.
+        erkundungsergebnis_pruefen()
 
     now = datetime.now(UTC)
     unterbrochen_dispatch_id = None
@@ -551,15 +589,17 @@ def setze_einheit_status(
                 dispatch_aktiv_filter(),
                 EinheitSiteDispatch.einheit_status.in_(EINHEIT_STATUS_AKTIV),
             )
-            .first()
+            .populate_existing().with_for_update().first()
         )
         if anderer:
-            if not unterbrechen:
+            if not unterbrechen or (aktiver_dispatch_id is not None and aktiver_dispatch_id != anderer.id):
                 raise EinheitKonflikt("aktiver_auftrag", {
                     "dispatch_id": anderer.id, "site_id": anderer.site_id,
                     "bezeichnung": anderer.site.bezeichnung,
                 })
             anderer.einheit_status = "bestaetigt"
+            if anderer.bestaetigt_at is None:
+                anderer.bestaetigt_at = now
             anderer.status_at = now
             anderer.letzte_rueckmeldung_at = now
             if ctx.einheit.incident_site_id == anderer.site_id:
@@ -589,7 +629,7 @@ def setze_einheit_status(
         ctx.einheit.incident_site_id = site.id
         ctx.einheit.sector_id = site.sector_id
     elif neuer_status in EINHEIT_STATUS_BEENDET or neuer_status == "bestaetigt":
-        if ctx.einheit.incident_site_id == site.id:
+        if alter_status in EINHEIT_STATUS_AKTIV and ctx.einheit.incident_site_id == site.id:
             ctx.einheit.incident_site_id = None
     if ctx.einheit.status == STATUS_BEREITGESTELLT:
         ctx.einheit.status = STATUS_IM_EINSATZ

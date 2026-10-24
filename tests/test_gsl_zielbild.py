@@ -94,15 +94,33 @@ def test_zielbild_erkundung_abarbeitung_abschluss_und_wiedereroeffnen(client, se
     assert detail.status_code == 200
     assert "in_arbeit" not in detail.json()["auftrag"]["erlaubte_status"]
 
+    ohne_ergebnis = client.post(
+        f"/einheit/api/auftrag/{erkundung_id}/status",
+        json={"status": "abgeschlossen", "client_uuid": str(uuid4())},
+        headers=_h(client),
+    )
+    assert ohne_ergebnis.status_code == 422
+    assert _phase(site_id) == SitePhase.erkundung
+    assert _journal_count(site_id, "erkundet") == 0
+    ergebnis_uuid = str(uuid4())
+    ergebnis = client.post(
+        f"/einheit/api/auftrag/{erkundung_id}/meldung",
+        json={"art": "lagemeldung", "client_uuid": ergebnis_uuid, "erkundungsergebnis": True,
+              "schnellmeldung": "massnahmen_erforderlich", "text": "Keller überflutet. Auspumpen erforderlich."},
+        headers=_h(client),
+    )
+    assert ergebnis.status_code == 200, ergebnis.text
     erkundung_uuid = str(uuid4())
+    abschluss_payload = {"status": "abgeschlossen", "client_uuid": erkundung_uuid,
+                         "ergebnis_client_uuid": ergebnis_uuid}
     abgeschlossen = client.post(
         f"/einheit/api/auftrag/{erkundung_id}/status",
-        json={"status": "abgeschlossen", "client_uuid": erkundung_uuid},
+        json=abschluss_payload,
         headers=_h(client),
     )
     replay = client.post(
         f"/einheit/api/auftrag/{erkundung_id}/status",
-        json={"status": "abgeschlossen", "client_uuid": erkundung_uuid},
+        json=abschluss_payload,
         headers=_h(client),
     )
     assert abgeschlossen.status_code == replay.status_code == 200

@@ -83,7 +83,8 @@ self.addEventListener('message', e => {
     const keys = await cache.keys();
     await Promise.all(keys.filter(request => {
       const path = new URL(request.url).pathname;
-      return path === '/einheit' || path.startsWith('/einheit/api/') || path.startsWith('/einheit/medien/');
+      return /^\/einheit(?:\/auftrag\/\d+)?$/.test(path)
+        || path.startsWith('/einheit/api/') || path.startsWith('/einheit/medien/');
     }).map(request => cache.delete(request)));
   }));
 });
@@ -124,9 +125,19 @@ self.addEventListener('fetch', e => {
     e.respondWith(
       fetch(e.request).then(async res => {
         if (res.ok) await caches.open(BOARD_CACHE).then(cache => cache.put(e.request, res.clone()));
+        else if ([401, 403, 404, 409].includes(res.status)) {
+          await caches.open(BOARD_CACHE).then(cache => cache.delete(e.request));
+        }
         return res;
       }).catch(async () => {
-        const cached = await caches.match(e.request, { cacheName: BOARD_CACHE });
+        let cached = await caches.match(e.request, { cacheName: BOARD_CACHE });
+        // history.pushState öffnet Aufträge ohne HTML-Request. Beim Offline-Neustart derselben
+        // Detail-URL genügt die bereits besuchte Einheiten-Shell; Auftragsdaten bleiben separat geprüft.
+        if (!cached && e.request.mode === 'navigate' && /^\/einheit\/auftrag\/\d+$/.test(url.pathname)) {
+          const shell = new URL(e.request.url);
+          shell.pathname = '/einheit'; // Einheiten-/Simulationsauswahl im Query unverändert lassen.
+          cached = await caches.match(shell.href, { cacheName: BOARD_CACHE });
+        }
         if (!cached) return new Response('Offline', { status: 503, headers: { 'X-EC-Offline': '1' } });
         const headers = new Headers(cached.headers); headers.set('X-EC-Offline', '1');
         return new Response(await cached.blob(), { status: cached.status, statusText: cached.statusText, headers });

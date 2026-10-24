@@ -13,6 +13,12 @@
 
   <div class="site-card__body">
     <div class="site-card__title">{{ site.bezeichnung }}</div>
+    {% for entry in (dringende_meldungen_by_site|default({})).get(site.id, []) %}
+    <div class="site-card__hint einheit-meldung--{{ meldung_hervorhebung(entry.text) }}"
+         style="border-left:4px solid {% if meldung_hervorhebung(entry.text) == 'gefahr' %}var(--red){% else %}var(--orange){% endif %};padding:6px 8px;font-weight:700;white-space:pre-wrap;">
+      {{ icon("alert-triangle", size="sm") }} {{ entry.text }}{% if entry.author_name %} · {{ entry.author_name }}{% endif %}
+    </div>
+    {% endfor %}
 
     {% if site.strasse or site.ort %}
     <div class="site-card__addr">

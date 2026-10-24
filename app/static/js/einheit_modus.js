@@ -1,15 +1,20 @@
-import { createOutbox } from "/static/js/einheit_outbox.js";
-import { EinheitKarte, markerDarstellung, markerIcon } from "/static/js/einheit_karte.js";
+import { createOutbox, zufallsUuid } from "/static/js/einheit_outbox.js";
+import { EinheitKarte, markerDarstellung, markerIcon, hatKoordinaten, zielhinweiseLayer } from "/static/js/einheit_karte.js";
 import { istGeaendert, vergleicheZustand } from "/static/js/einheit_aenderungen.js";
 import { auftragsartAnzeige, prioritaetAnzeige } from "/static/js/einheit_darstellung.js";
+import { auftragsfuehrung } from "/static/js/einheit_ablauf.js";
+import { meldungsverlauf } from "/static/js/einheit_verlauf.js";
+
+import { kartenziel } from "/static/js/einheit_kartenziel.js";
+import { gefahrenHinweise, mobileBedienung } from "/static/js/einheit_bedienung.js";
 
 const STATUS_LABEL = {
   zugewiesen: "Zugewiesen",
-  bestaetigt: "Auftrag bestätigt",
+  bestaetigt: "Übernommen / bestätigt",
   anfahrt: "Anfahrt",
   vor_ort: "Vor Ort",
   in_arbeit: "In Arbeit",
-  abgeschlossen: "Auftrag abgeschlossen",
+  abgeschlossen: "Fertig gemeldet",
   nicht_durchfuehrbar: "Nicht durchführbar",
 };
 
@@ -17,11 +22,18 @@ const KONFLIKT_TEXTE = {
   auftrag_zurueckgezogen: "Auftrag wurde zurückgezogen – Status nicht übernommen",
   ungueltiger_uebergang: "Statuswechsel nicht möglich",
   kein_einheitenkontext: "Gerät ist keiner aktiven Einheit mehr zugeordnet",
+  einheit_gewechselt: "Einheitenzuordnung geändert – alte Übermittlung nicht gesendet",
   simulation_nur_lesend: "Simulation in Echtlage nur lesend",
   nicht_gefunden: "Auftrag nicht mehr vorhanden",
   client_uuid_vergeben: "Doppelte Aktion",
   aktiver_auftrag: "Anderer Auftrag läuft noch",
   stelle_in_erkundung: "Einsatzstelle ist noch in Erkundung – Abarbeitung erst nach Bewertung",
+  auftrag_geaendert: "Auftrag geändert – bitte aktuellen Auftrag prüfen und neu entscheiden",
+  status_geaendert: "Bearbeitungsstand geändert – bitte aktuellen Auftrag prüfen",
+  erkundungsergebnis_erforderlich: "Erkundungsergebnis fehlt oder gehört zu einem älteren Auftrag – Auftrag prüfen und Ergebnis neu erfassen",
+  schnellmeldung_ungueltig: "Schnellmeldung passt nicht zum aktuellen Auftrag – bitte Auftrag prüfen",
+  text_ungueltig: "Meldung ist leer oder zu lang (höchstens 4.000 Zeichen)",
+  grund_erforderlich: "Bitte begründen, warum der Auftrag nicht durchführbar ist",
 };
 
 const HINWEIS_TEXTE = {
@@ -41,17 +53,25 @@ const cookie = (name) => document.cookie.split(";")
 function registriere() {
   Alpine.data("einheitModus", (config) => ({
     ...config,
+    ...meldungsverlauf(config),
+    ...kartenziel(),
+    ...mobileBedienung(),
     lageId: config.lage_id,
     einheitId: config.einheit_id,
     simEinheitId: config.sim_einheit_id,
     benutzerEinheitId: config.benutzer_einheit_id,
     startDispatchId: config.start_dispatch_id,
     kopf: {}, aktuell: null, weitere: [], abgeschlossen: [], zurueckgezogen: [], detail: null,
+    detailAnfrage: 0, zustandAnfrage: 0, detailZielId: null, detailLaden: false, statusSpeichern: false, navigationBenutzt: false,
+    statusTippSperreId: null, statusTippTimer: null, ergebnisSpeichern: false, ergebnisLaden: false, ergebnisLadeToken: 0,
+    aktionsFehler: "", meldungAuftrag: null, meldungSpeichern: false, meldungLaden: false, meldungToken: 0,
+    schnellmeldung: "", erkundungAuswahl: "", fotoSpeichern: false, meldungFotosVorhanden: false,
     kannRessourcePflegen: false, ressource: { personal: {}, ausstattung: [] }, neueAusstattung: {}, neuePerson: {},
     online: navigator.onLine, syncText: "", outboxVerfuegbar: false,
-    outboxListe: [], verlauf: [],
-    flyout: null, konfliktEintrag: null, meldungText: "", felder: {}, grund: "", fotoKommentar: "",
-    erkundungLage: "", erkundungMassnahmen: "",
+    outboxListe: [], verlauf: [], outboxAnfrage: 0, retryAnfrage: 0,
+    flyout: null, konfliktEintrag: null, statusDialogAuftrag: null, meldungText: "", felder: {}, grund: "", fotoKommentar: "",
+    erkundungLage: "", erkundungMassnahmen: "", ergebnisEntwurfHinweis: "",
+    statusMeldungText: "", statusMeldungFelder: {}, statusMeldungFotos: [],
     entwurfHinweis: false, auftragGeaendert: false, hinweisBanner: "", hinweisRot: false,
     neuIds: [], etag: null,
     ws: null, wsTimer: null, wsVersuche: 0, pollTimer: null, retryTimer: null, lastLoad: 0, outbox: null,
@@ -69,9 +89,19 @@ function registriere() {
     letzterZustand: null, geseheneVersionen: {},
 
     // Abgeleitete Anzeigezustände.
+    get detailGefahren() { return gefahrenHinweise(this.detail); },
+    get zentralerVerlauf() { return this.verlaufEintraege(null).reverse(); },
+    get stellenVerlauf() { return this.verlaufEintraege(this.detail?.auftrag?.dispatch_id); },
+    get eigeneUebermittlungen() {
+      return this.outboxListe.filter(item => item.einheit_id === this.einheitId
+        || (item.einheit_id == null && this.auftragZurAktion(item)));
+    },
     get naechster() { return this.weitere[0] || null; },
     get fokusAuftrag() { return this.aktuell || this.naechster; },
     get weitereAuftraege() { return this.aktuell ? this.weitere : this.weitere.slice(1); },
+    get kartenZiel() { return this.ermittleKartenZiel(); },
+    get kartenHinweise() { return this.ermittleKartenHinweise(); },
+    get kartenSperrenText() { return this.ermittleKartenSperrenText(); },
     get kartenAuftraege() {
       return [this.aktuell, ...this.weitere, ...(this.fertigeAufKarte ? this.abgeschlossen : [])].filter(Boolean);
     },
@@ -87,8 +117,48 @@ function registriere() {
         .find((auftrag) => auftrag?.dispatch_id === item.dispatch_id) || null;
     },
     get dialogAuftrag() {
-      if (this.flyout === "verwerfen_bestaetigen") return this.auftragZurAktion(this.konfliktEintrag);
+      if (["verwerfen_bestaetigen", "aktiver_auftrag"].includes(this.flyout)) return this.auftragZurAktion(this.konfliktEintrag);
+      if (["abschluss_bestaetigen", "unterbrechen_bestaetigen", "nicht_durchfuehrbar"].includes(this.flyout)) {
+        return this.statusDialogAuftrag;
+      }
+      if (["lagemeldung", "massnahmen", "note"].includes(this.flyout)) return this.meldungAuftrag;
       return this.detail?.auftrag || null;
+    },
+    get meldungsZiele() { return [this.aktuell, ...this.weitere, ...this.abgeschlossen, ...this.zurueckgezogen].filter(Boolean); },
+    get schnellmeldungsAuswahl() { return this.meldungAuftrag?.schnellmeldungen || []; },
+    get kannMeldungSenden() {
+      return this.schreibbar && !this.zugangBeendet && this.outboxVerfuegbar && this.meldungAuftrag
+        && ["lagemeldung", "massnahmen", "note"].includes(this.flyout)
+        && !this.meldungSpeichern && !this.meldungLaden
+        && (this.schnellmeldung || this.meldungText.trim() || Object.values(this.felder).some(v => v?.trim()));
+    },
+    get erkundungErgebnisGueltig() {
+      return (this.statusDialogAuftrag?.schnellmeldungen || []).some(m => m.code === this.erkundungAuswahl)
+        && (this.erkundungAuswahl === "keine_massnahmen"
+          || (this.erkundungLage + this.erkundungMassnahmen).replace(/[^\p{L}\p{N}]/gu, "").length >= 3);
+    },
+    get diktatVerfuegbar() { return Boolean(window.SpeechRecognition || window.webkitSpeechRecognition); },
+    get statusDialogVeraltet() {
+      if (!["abschluss_bestaetigen", "unterbrechen_bestaetigen", "nicht_durchfuehrbar"].includes(this.flyout)) return false;
+      const original = this.statusDialogAuftrag;
+      const aktuell = this.detail?.auftrag;
+      const ziel = { abschluss_bestaetigen: "abgeschlossen", unterbrechen_bestaetigen: "bestaetigt",
+        nicht_durchfuehrbar: "nicht_durchfuehrbar" }[this.flyout];
+      return Boolean(original && (original.dispatch_id !== aktuell?.dispatch_id || original.version !== aktuell?.version
+        || original.einheit_status !== aktuell?.einheit_status || aktuell?.withdrawn_at || aktuell?.beendet_at
+        || !this.erlaubteStatus.includes(ziel)));
+    },
+    get laufenderAuftrag() {
+      return [this.aktuell, ...this.weitere].find((auftrag) => auftrag
+        && ["anfahrt", "vor_ort", "in_arbeit"].includes(this.lokalerStatus(auftrag) || auftrag.einheit_status)) || null;
+    },
+    get kannStatusMelden() {
+      return this.schreibbar && !this.zugangBeendet && !this.detailLaden && !this.statusSpeichern
+        && !this.ergebnisSpeichern && !this.ergebnisLaden && this.statusTippSperreId !== this.detail?.auftrag?.dispatch_id
+        && !this.ausstehenderStatus && !this.detail?.auftrag?.withdrawn_at && !this.detail?.auftrag?.beendet_at;
+    },
+    get konfliktAktiverName() {
+      return this.konfliktEintrag?.konflikt_details?.bezeichnung || this.laufenderAuftrag?.bezeichnung || 'Laufender Auftrag';
     },
     get verbindungsText() {
       if (this.zugangBeendet) return "Zugang beendet";
@@ -105,35 +175,46 @@ function registriere() {
         && item.dispatch_id === auftrag.dispatch_id && ["ausstehend", "fehler_netz"].includes(item.status));
       return eintraege.length ? eintraege[eintraege.length - 1].payload.status : null;
     },
+    bearbeitungsstand(auftrag) {
+      if (auftrag?.withdrawn_at) return "Zurückgezogen";
+      const status = auftrag?.einheit_status;
+      if (["anfahrt", "vor_ort", "in_arbeit"].includes(status)) return `Aktiv · ${STATUS_LABEL[status]}`;
+      if (status === "abgeschlossen") return auftrag.auftragsart === "erkundung" ? "Erkundet" : "Fertig gemeldet";
+      return STATUS_LABEL[status] || auftrag?.einheit_status_label || "";
+    },
     get istErkundung() { return this.detail?.auftrag?.auftragsart === "erkundung"; },
-    get erlaubteStatus() { return this.detail?.auftrag?.erlaubte_status || []; },
-    get primaererStatus() {
-      if (this.istErkundung) return this.erlaubteStatus.includes("abgeschlossen") ? "abgeschlossen" : null;
-      if (["zugewiesen", "bestaetigt", "anfahrt", "vor_ort"].includes(this.wirksamerStatus)) {
-        return this.erlaubteStatus.includes("in_arbeit") ? "in_arbeit" : null;
-      }
-      return this.wirksamerStatus === "in_arbeit" && this.erlaubteStatus.includes("abgeschlossen")
-        ? "abgeschlossen" : null;
+    get erlaubteStatus() {
+      const erlaubt = this.detail?.auftrag?.erlaubte_status;
+      return Array.isArray(erlaubt) ? erlaubt : [];
     },
-    get primaererText() {
-      if (this.primaererStatus === "in_arbeit") return "In Arbeit setzen";
-      if (this.primaererStatus === "abgeschlossen") {
-        return this.istErkundung ? "Erkundung abschließen" : "Fertig melden";
-      }
-      return "";
+    get statusKonflikt() {
+      return this.outboxListe.filter((item) => item.typ === "status" && item.status === "konflikt"
+        && item.dispatch_id === this.detail?.auftrag?.dispatch_id).slice(-1)[0];
     },
+    get hauptAktion() {
+      return auftragsfuehrung(this.detail?.auftrag, {
+        schreibbar: this.schreibbar && !this.zugangBeendet, ausstehend: this.ausstehenderStatus,
+        konflikt: this.statusKonflikt && this.statusKonflikt.client_uuid !== this.gepruefterKonfliktId,
+      });
+    },
+    get primaererStatus() { return this.hauptAktion.status; },
+    get primaererText() { return this.hauptAktion.text; },
+    gepruefterKonfliktId: null,
     get zwischenStatus() {
-      return ["bestaetigt", "anfahrt", "vor_ort"].filter((status) => this.erlaubteStatus.includes(status));
+      return ["bestaetigt", "anfahrt", "vor_ort", "in_arbeit", "abgeschlossen"]
+        .filter((status) => status !== this.primaererStatus && this.erlaubteStatus.includes(status));
+    },
+    statusAktion(status) {
+      return { bestaetigt: "Bearbeitung unterbrechen", anfahrt: "Anfahrt melden", vor_ort: "Vor Ort melden",
+        in_arbeit: "In Arbeit setzen", abgeschlossen: this.istErkundung ? "Erkundung abschließen" : "Fertig melden" }[status];
     },
     get ohneKartenposition() {
-      return [this.aktuell, ...this.weitere, ...this.abgeschlossen]
-        .filter((auftrag) => auftrag && !auftrag.hat_koordinaten).length;
+      return this.kartenAuftraege.filter(auftrag => !hatKoordinaten(auftrag)).length;
     },
     get schreibbar() { return Boolean(config.schreibbar); },
     get hatKoordinaten() {
       const stelle = this.detail?.stelle;
-      return stelle?.lat != null && stelle?.lng != null
-        && Number.isFinite(Number(stelle.lat)) && Number.isFinite(Number(stelle.lng));
+      return hatKoordinaten(stelle);
     },
     get osmUrl() {
       const stelle = this.detail?.stelle;
@@ -143,10 +224,13 @@ function registriere() {
     },
     get outboxText() {
       if (!this.outboxVerfuegbar) return "Übermittlungen nicht verfügbar";
-      const anzahl = this.outboxListe.length;
-      const fehler = this.outboxListe.filter((item) => ["fehler", "konflikt"].includes(item.status)).length;
+      if (this.statusSpeichern || this.ergebnisSpeichern || this.meldungSpeichern || this.fotoSpeichern) return "Wird gespeichert …";
+      const anzahl = this.eigeneUebermittlungen.length;
+      const fehler = this.eigeneUebermittlungen.filter((item) => ["fehler", "konflikt"].includes(item.status)).length;
       if (fehler) return `${fehler} Übermittlungen prüfen`;
-      return anzahl ? `${anzahl} noch nicht übermittelt` : "Alles übermittelt";
+      if (anzahl) return `${anzahl} noch nicht übermittelt`;
+      return this.verlauf.some(item => item.server_bestaetigt_at && item.einheit_id === this.einheitId)
+        ? "Alles übermittelt" : "Keine offenen Übermittlungen";
     },
     // Noch nicht vom Server bestätigter Status des offenen Auftrags (letzter Outbox-Eintrag).
     get ausstehenderStatus() {
@@ -168,16 +252,19 @@ function registriere() {
     bereichSichtbar(bereich) { return this.aktiverBereich === bereich; },
     get flyoutTitel() {
       return {
-        lagemeldung: "Lagemeldung", massnahmen: "Maßnahme", note: "Notiz", foto: "Foto erfassen",
+        lagemeldung: "Meldung an Einsatzleitung", massnahmen: "Maßnahme", note: "Notiz", foto: "Foto erfassen",
         material: "Material vor Ort belassen", nicht_durchfuehrbar: "Nicht durchführbar",
-        abschluss_bestaetigen: this.istErkundung ? "Erkundung abschließen" : "Bestätigen",
+        abschluss_bestaetigen: this.istErkundung ? "Erkundungsergebnis" : "Fertig melden",
+        unterbrechen_bestaetigen: "Bearbeitung unterbrechen", aktiver_auftrag: "Auftrag wechseln?",
       }[this.flyout] || "";
     },
 
     // Hilfsfunktionen für API und Darstellung.
     headers() {
-      if (this.simulation) return { "X-EC-Einheit-Sim": String(this.simEinheitId) };
-      return this.benutzerEinheitId ? { "X-EC-Einheit": String(this.benutzerEinheitId) } : {};
+      const headers = { "X-EC-Einheit-Kontext": String(this.einheitId) };
+      if (this.simulation) headers["X-EC-Einheit-Sim"] = String(this.simEinheitId);
+      else if (this.benutzerEinheitId) headers["X-EC-Einheit"] = String(this.benutzerEinheitId);
+      return headers;
     },
     async outboxAusfuehren(aktion) {
       if (!this.outbox) {
@@ -235,34 +322,40 @@ function registriere() {
       return prioritaetAnzeige(priority).chipKlasse;
     },
     prioLabel(priority) { return prioritaetAnzeige(priority).label; },
-    konfliktText(code) { return KONFLIKT_TEXTE[code] || `Konflikt: ${code || "unbekannt"}`; },
+    konfliktText(code) { return KONFLIKT_TEXTE[code] || "Übermittlung nicht übernommen – bitte Auftrag prüfen"; },
     hinweisText(hinweis) { return HINWEIS_TEXTE[hinweis] || ""; },
     typLabel(typ) {
-      return { material: "Material", material_foto: "Material-Foto", material_zurueck: "Material zurück" }[typ] || typ;
+      return { meldung: "Meldung", foto: "Foto", status: "Status", material: "Material",
+        material_foto: "Material-Foto", material_zurueck: "Material zurück",
+        ressource_personal: "Personal", ressource_ausstattung: "Ausstattung" }[typ] || "Übermittlung";
+    },
+    rueckmeldungText(item) {
+      return item.antwort?.meldung_text || [item.payload?.schnellmeldung_label, item.payload?.text,
+        ...Object.values(item.payload?.felder || {})].filter(Boolean).join("\n");
     },
     retrySekunden(item) {
       if (!item.naechster_versuch_at) return 0;
       return Math.max(0, Math.ceil((new Date(item.naechster_versuch_at) - Date.now()) / 1000));
     },
     outboxStatus(item) {
-      if (item.status === "blockiert_zugang") return "Zugang beendet – nicht übermittelt";
+      if (item.status === "blockiert_zugang") return "Nur lokal gespeichert · Zugang beendet · keine Serverbestätigung";
       if (item.status === "konflikt") return this.konfliktText(item.letzter_fehler);
       if (item.status === "fehler" && item.letzter_fehler === "foto_daten_fehlen") {
-        return "Foto auf diesem Gerät nicht mehr lesbar – bitte neu aufnehmen";
+        return "Übertragung fehlgeschlagen – Foto auf diesem Gerät nicht mehr lesbar. Bitte neu aufnehmen.";
       }
-      if (item.status === "fehler") return `Fehler: ${item.letzter_fehler || "unbekannt"}`;
-      if (item.status === "fehler_netz") return `erneuter Versuch in ${this.retrySekunden(item)} s`;
-      return "nur auf diesem Gerät";
+      if (item.status === "fehler") return KONFLIKT_TEXTE[item.letzter_fehler] || "Übertragung fehlgeschlagen – bitte erneut senden";
+      if (item.status === "fehler_netz") return `Übertragung fehlgeschlagen · nur lokal gespeichert · erneuter Versuch in ${this.retrySekunden(item)} s`;
+      return "Nur lokal gespeichert · noch nicht übermittelt · nur auf diesem Gerät";
     },
 
     // Initialisierung und Navigation.
     async init() {
+      this.bedienungInitialisieren();
       navigator.storage?.persist?.().catch(() => {});
       window.addEventListener("popstate", () => { void this.navigiereZuPfad(); });
       window.addEventListener("online", () => {
         this.online = true;
-        if (!this.zugangBeendet) void this.flush();
-        void this.laden(true);
+        if (!this.zugangBeendet) void this.flush(true);
         this.verbinden();
       });
       window.addEventListener("resize", () => {
@@ -275,15 +368,13 @@ function registriere() {
         const quelle = event.detail && event.detail.source;
         if (quelle !== "pull" && quelle !== "ws-reconnect") return;
         event.detail.handled = true;
-        if (!this.zugangBeendet) void this.flush();
-        const geladen = this.laden(true);
+        const geladen = this.flush(true);
         if (event.detail.promises) event.detail.promises.push(geladen);
       });
       document.addEventListener("visibilitychange", () => {
-        if (document.hidden) this.uebersichtKarte?.stoppeStandort();
+        if (document.hidden) this.standortBeenden();
         if (!document.hidden) {
-          if (!this.zugangBeendet) void this.flush();
-          void this.laden(true);
+          if (!this.zugangBeendet) void this.flush(true);
         }
       });
       try {
@@ -293,6 +384,7 @@ function registriere() {
           csrfToken: () => decodeURIComponent(cookie("ec_csrf")),
           simEinheitId: this.simulation ? this.simEinheitId : null,
           benutzerEinheitId: this.benutzerEinheitId,
+          einheitId: this.einheitId,
           dbName: this.outboxName(),
           onTerminal: () => { void this.zugangBeenden(); },
         });
@@ -303,9 +395,14 @@ function registriere() {
       }
       // Outbox zuerst: das erste Laden braucht sie fuer den lokalen Zustands-Cache (Offline-Start) und zum Speichern.
       const erstesLaden = this.laden();
-      this.outbox?.onChange(() => {
+      this.outbox?.onChange((neu) => {
+        if (Array.isArray(neu)) {
+          const eintraege = new Map([...this.outboxListe, ...neu].map(item => [item.client_uuid, item]));
+          this.outboxListe = [...eintraege.values()].sort((a, b) => a.seq - b.seq);
+        }
         void this.outboxAktualisieren();
-        void this.laden(true);
+        // Auch die Bestätigung unmittelbar nach dem lokalen Einreihen muss frisch geladen werden.
+        void this.laden();
       });
       void (async () => {
         try {
@@ -322,17 +419,22 @@ function registriere() {
         }
       })();
       await erstesLaden;
-      await this.navigiereZuPfad();
+      if (!this.navigationBenutzt) await this.navigiereZuPfad();
       this.verbinden();
       this.pollTimer = setInterval(() => this.laden(true), 30000);
     },
     waehleBereich(bereich) {
       if (!["einsaetze", "karte", "meldungen"].includes(bereich)) return;
-      if (this.detail) this.zurueck();
+      this.navigationBenutzt = true;
+      if (this.detail || this.detailLaden) this.zurueck();
+      if (bereich !== "karte") this.standortBeenden();
       this.aktiverBereich = bereich;
+      if (bereich === "meldungen") void this.verlaufLaden();
       this.$nextTick(() => {
-        if (bereich === "karte") this.uebersichtKarteAktualisieren();
-        else this.uebersichtKarte?.stoppeStandort();
+        if (bereich === "karte") {
+          this.uebersichtKarteAktualisieren();
+          if (!this.kartenLaden) void this.kartenZielLaden(true);
+        }
       });
     },
     async navigiereZuPfad() {
@@ -342,10 +444,12 @@ function registriere() {
       else if (this.startDispatchId && !this.detail) await this.oeffne(this.startDispatchId, false);
     },
     async laden(leise = false) {
+      if (this.zugangBeendet) return false;
       if (leise && Date.now() - this.lastLoad < 1000) return;
       // Abgelaufene Anmeldung: automatische Abfragen hoeren auf, bis der Nutzer erneut versucht oder sich neu anmeldet
-      if (leise && this.ladeFehler === "anmeldung") return;
+      if (leise && ["anmeldung", "kontext"].includes(this.ladeFehler)) return false;
       this.lastLoad = Date.now();
+      const anfrage = ++this.zustandAnfrage;
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 15000);
       try {
@@ -354,27 +458,44 @@ function registriere() {
         const response = await fetch("/einheit/api/zustand", {
           headers, credentials: "same-origin", signal: controller.signal,
         });
+        if (anfrage !== this.zustandAnfrage) return;
         if (response.status === 304) {
+          if (this.aktiverBereich === "meldungen") void this.verlaufLaden();
+          // Straßensperren haben einen eigenen Lebenszyklus und sind nicht Teil des Auftrags-ETags.
+          if (this.aktiverBereich === "karte" && !this.detail) void this.kartenZielLaden(true);
           this.online = true;
           this.ladeFehler = "";
           this.syncText = `Zuletzt abgeglichen: ${this.zeit(new Date().toISOString())}`;
-          return;
+          await this.detailAktualisieren();
+          return true;
         }
-        if (response.status === 401) {
+        if ([401, 403, 409].includes(response.status)) {
           const data = await response.json().catch(() => null);
-          if (/^zugang_(widerrufen|abgelaufen|ungueltig)$/.test(data?.code || "")) await this.zugangBeenden();
-          else this.ladeFehler = "anmeldung";
+          if (response.status === 401 || ["kein_einheitenkontext", "einheit_gewechselt"].includes(data?.code)) {
+            this.ladeFehler = response.status === 401 || window.EINHEIT_PRINCIPAL ? "anmeldung" : "kontext";
+            await this.zugangBeenden();
+            return false;
+          }
         }
         if (!response.ok) throw new Error(response.status === 401 ? "anmeldung" : "netzwerk");
         // Antwort aus dem Service-Worker-Cache: wie offline behandeln, nicht als frisch anzeigen.
         if (response.headers.get("X-EC-Offline") === "1") throw new Error("offline");
         const data = await response.json();
+        if (anfrage !== this.zustandAnfrage) return;
+        if (data.kopf?.einheit_id !== this.einheitId || data.kopf?.lage_id !== this.lageId) {
+          this.ladeFehler = "kontext";
+          await this.zugangBeenden();
+          return false;
+        }
         this.etag = response.headers.get("ETag") || data.etag;
         this.zustand(data);
+        if (this.aktiverBereich === "meldungen") void this.verlaufLaden();
         this.online = true;
         this.geladen = true;
         this.ladeFehler = "";
         this.syncText = `Zuletzt abgeglichen: ${this.zeit(data.server_time)}`;
+        await this.detailAktualisieren();
+        if (anfrage !== this.zustandAnfrage) return;
         if (this.outbox) {
           try {
             await this.outbox.zustandSpeichern({ data, at: new Date().toISOString() });
@@ -382,10 +503,13 @@ function registriere() {
             console.warn("Einheiten-Zustand konnte nicht lokal gespeichert werden", cacheError);
           }
         }
+        return true;
       } catch (error) {
+        if (anfrage !== this.zustandAnfrage) return;
         try {
           const cached = this.outbox ? await this.outbox.zustandLaden() : null;
-          if (cached?.data) {
+          if (anfrage !== this.zustandAnfrage) return;
+          if (cached?.data?.kopf?.einheit_id === config.einheit_id && cached?.data?.kopf?.lage_id === config.lage_id) {
             this.zustand(cached.data);
             this.geladen = true;
             this.syncText = `Datenstand: ${this.zeit(cached.at)}`;
@@ -397,6 +521,7 @@ function registriere() {
           // Sichtbarer Hinweis statt leerer Seite: nur wenn weder Server noch lokaler Stand etwas lieferten
           if (this.ladeFehler !== "anmeldung" && !this.geladen) this.ladeFehler = "laden";
         }
+        return false;
       } finally {
         clearTimeout(timeout);
       }
@@ -404,7 +529,7 @@ function registriere() {
     zustand(data) {
       const aenderungen = this.letzterZustand
         ? vergleicheZustand(this.letzterZustand, data) : null;
-      const vorher = new Set(this.weitere.map((item) => item.dispatch_id));
+      const vorher = new Set([this.aktuell, ...this.weitere].filter(Boolean).map((item) => item.dispatch_id));
       this.kopf = data.kopf || {};
       this.aktuell = data.kategorien?.aktuell || null;
       this.weitere = data.kategorien?.weitere || [];
@@ -420,13 +545,14 @@ function registriere() {
       this.$nextTick(() => {
         if (this.aktiverBereich === "karte") {
           this.uebersichtKarteAktualisieren();
+          void this.kartenZielLaden(true);
         }
       });
       const neu = this.weitere
         .filter((item) => vorher.size && !vorher.has(item.dispatch_id))
         .map((item) => item.dispatch_id);
       if (neu.length) {
-        this.neuIds.push(...neu);
+        this.neuIds = [...new Set([...this.neuIds, ...neu])];
         new Audio("/static/audio/alert.mp3").play().catch(() => {});
       }
       if (aenderungen?.reihenfolgeGeaendert) {
@@ -456,44 +582,65 @@ function registriere() {
         });
       }
       this.uebersichtKarte.aktualisieren([this.aktuell, ...this.weitere, ...this.abgeschlossen].filter(Boolean), {
-        fertige: this.fertigeAufKarte, standort: this.standort,
+        fertige: this.fertigeAufKarte, standort: this.standort, ausgewaehlt: this.kartenZiel?.dispatch_id,
       });
+      this.uebersichtKarte.hinweise(this.kartenHinweise);
+      void this.kartenZielLaden();
     },
     markerHervorheben(dispatchId) { this.uebersichtKarte?.hervorheben(dispatchId); },
-    markerAusgewaehlt(dispatchId) {
-      const element = document.querySelector(`[data-dispatch-id="${dispatchId}"]`);
-      element?.scrollIntoView({ behavior: "smooth", block: "center" });
-      element?.classList.add("einheit-card--neu");
-      setTimeout(() => element?.classList.remove("einheit-card--neu"), 1200);
-    },
+    markerAusgewaehlt(dispatchId) { this.kartenZielWaehlen(dispatchId); },
     meinStandort() {
       if (!this.uebersichtKarte) this.uebersichtKarteAktualisieren();
+      this.standortHinweis = "Standort wird nur auf diesem Gerät angezeigt.";
       this.uebersichtKarte?.starteStandort(() => {
+        this.standort = null;
         this.standortHinweis = "Standort nicht verfügbar – Karte funktioniert weiter";
       }, (standort) => {
         this.standort = standort;
         this.uebersichtKarteAktualisieren();
       });
     },
-    async oeffne(id, push = true) {
+    async detailAktualisieren() {
+      const id = this.detail?.auftrag?.dispatch_id;
+      if (id && (!this.detailLaden || this.detailZielId === id)) await this.oeffne(id, false, true);
+    },
+    async oeffne(id, push = true, aktualisieren = false) {
+      this.standortBeenden();
+      if (push) this.navigationBenutzt = true;
       id = Number(id);
+      const anfrage = ++this.detailAnfrage;
+      this.detailZielId = id;
+      this.detailLaden = true;
+      const vorher = this.detail?.auftrag;
+      if (vorher?.dispatch_id !== id) this.auftragGeaendert = false;
       this.neuIds = this.neuIds.filter((neuId) => neuId !== id);
       try {
         const response = await fetch(`/einheit/api/auftrag/${id}`, {
           headers: this.headers(), credentials: "same-origin",
         });
+        if (anfrage !== this.detailAnfrage) return;
+        if ([401, 403, 404].includes(response.status)) {
+          this.detail = null;
+          this.hinweisBanner = "Auftrag nicht mehr verfügbar – bitte Übersicht prüfen";
+          return;
+        }
         if (!response.ok) throw new Error("offline");
         const ausCache = response.headers.get("X-EC-Offline") === "1";
-        const versionVorher = this.detail?.auftrag?.version;
-        this.detail = await response.json();
+        const daten = await response.json();
+        if (anfrage !== this.detailAnfrage) return;
+        this.detail = daten;
+        void this.verlaufLaden(id);
         this.detail.offline = ausCache;
-        this.auftragGeaendert = Boolean(versionVorher && versionVorher !== this.detail.auftrag.version);
-        await this.markiereGesehen(this.detail.auftrag);
+        this.auftragGeaendert = Boolean(vorher?.dispatch_id === id && vorher.version !== this.detail.auftrag.version)
+          || istGeaendert(this.detail.auftrag, this.geseheneVersionen[id]);
+        if (!aktualisieren) await this.markiereGesehen(this.detail.auftrag);
+        if (!aktualisieren) this.gepruefterKonfliktId = this.statusKonflikt?.client_uuid || null;
         this.karteAktualisieren();
         if (push) {
           history.pushState({}, "", this.einheitUrl(`/einheit/auftrag/${id}`));
         }
       } catch (error) {
+        if (anfrage !== this.detailAnfrage) return;
         // Offline: Basisdaten aus dem zuletzt geladenen Zustand anzeigen.
         const auftrag = [this.aktuell, ...this.weitere, ...this.abgeschlossen, ...this.zurueckgezogen]
           .find((item) => item?.dispatch_id === id);
@@ -505,6 +652,12 @@ function registriere() {
         }
         if (auftrag && push) {
           history.pushState({}, "", this.einheitUrl(`/einheit/auftrag/${id}`));
+        }
+        if (auftrag) void this.verlaufLaden(id);
+      } finally {
+        if (anfrage === this.detailAnfrage) {
+          this.detailLaden = false;
+          this.konfliktPruefen();
         }
       }
     },
@@ -522,6 +675,9 @@ function registriere() {
       } catch (error) { /* Sichtbarkeitsmarker sind eine Komfortfunktion. */ }
     },
     zurueck() {
+      this.detailAnfrage += 1;
+      this.detailZielId = null;
+      this.detailLaden = false;
       this.detail = null;
       history.pushState({}, "", this.einheitUrl("/einheit"));
     },
@@ -554,122 +710,299 @@ function registriere() {
           icon: markerIcon(auftrag, null), title: markerDarstellung(auftrag, null).titel,
         }).addTo(this.karte);
         this.kartenMarker.getElement()?.setAttribute("aria-label", markerDarstellung(auftrag, null).titel);
+        this.detailHinweise = zielhinweiseLayer(this.karte, this.detail, this.detailHinweise);
         requestAnimationFrame(() => this.karte.invalidateSize());
       });
     },
 
     // Erfassen von Status, Meldung und Foto.
     async naechsterStatus() {
-      const status = this.primaererStatus;
-      if (!status) return;
-      if (status === "abgeschlossen") {
-        this.flyout = "abschluss_bestaetigen";
+      if (!this.kannStatusMelden || this.hauptAktion.art === "warten") return;
+      if (this.hauptAktion.art === "pruefen") {
+        await this.oeffne(this.detail.auftrag.dispatch_id, false);
         return;
       }
+      const status = this.primaererStatus;
+      if (!status) return;
       await this.statusErfassen(status);
     },
+    statusTippenSperren(id) {
+      this.statusTippSperreId = id;
+      clearTimeout(this.statusTippTimer);
+      this.statusTippTimer = setTimeout(() => { this.statusTippSperreId = null; }, 800);
+    },
+    async statusDialogOeffnen(art, rueckmeldung = null) {
+      if (!this.kannStatusMelden || this.flyout) return;
+      this.aktionsFehler = "";
+      this.statusDialogAuftrag = reineDaten(this.detail.auftrag);
+      this.statusMeldungText = rueckmeldung?.text || "";
+      this.statusMeldungFelder = rueckmeldung?.felder || {};
+      this.statusMeldungFotos = rueckmeldung?.fotos || [];
+      this.flyout = art;
+      if (art === "nicht_durchfuehrbar") this.grund = "";
+      if (art !== "abschluss_bestaetigen" || !this.istErkundung) return;
+      const id = this.statusDialogAuftrag.dispatch_id;
+      const token = ++this.ergebnisLadeToken;
+      this.ergebnisLaden = true;
+      this.erkundungAuswahl = "";
+      this.erkundungLage = "";
+      this.erkundungMassnahmen = "";
+      this.ergebnisEntwurfHinweis = "";
+      const entwurf = await this.outboxAusfuehren((outbox) => outbox.entwurfLaden(`${id}:erkundung`));
+      if (token !== this.ergebnisLadeToken) return;
+      this.ergebnisLaden = false;
+      if (this.flyout !== art || this.statusDialogAuftrag?.dispatch_id !== id) return;
+      if (entwurf) {
+        this.erkundungAuswahl = entwurf.auswahl || "";
+        this.erkundungLage = entwurf.lage || "";
+        this.erkundungMassnahmen = entwurf.massnahmen || "";
+        this.ergebnisEntwurfHinweis = entwurf.version === this.statusDialogAuftrag.version
+          ? "Erkundungsergebnis wiederhergestellt" : "Entwurf zu einem älteren Auftrag – bitte prüfen";
+      }
+    },
+    flyoutSchliessen() {
+      if (this.statusSpeichern || this.ergebnisSpeichern || this.meldungSpeichern || this.fotoSpeichern) return;
+      this.flyout = null;
+      this.meldungToken += 1;
+      this.meldungLaden = false;
+      this.ergebnisLadeToken += 1;
+      this.ergebnisLaden = false;
+      this.statusDialogAuftrag = null;
+      this.aktionsFehler = "";
+    },
+    async ergebnisEntwurfSpeichern() {
+      const auftrag = this.statusDialogAuftrag;
+      if (!auftrag || this.ergebnisSpeichern) return;
+      await this.outboxAusfuehren((outbox) => outbox.entwurfSpeichern(`${auftrag.dispatch_id}:erkundung`, {
+        version: auftrag.version, auswahl: this.erkundungAuswahl, lage: this.erkundungLage, massnahmen: this.erkundungMassnahmen,
+      }));
+    },
     async statusErfassen(status, unterbrechen = false) {
+      if (!this.kannStatusMelden || !this.erlaubteStatus.includes(status)) return;
       if (status === "nicht_durchfuehrbar" && !this.grund.trim()) return;
+      if (status === "abgeschlossen") {
+        await this.statusDialogOeffnen("abschluss_bestaetigen");
+        return;
+      }
+      if (status === "bestaetigt" && ["anfahrt", "vor_ort", "in_arbeit"].includes(this.detail.auftrag.einheit_status)) {
+        await this.statusDialogOeffnen("unterbrechen_bestaetigen");
+        return;
+      }
+      const anderer = this.laufenderAuftrag;
+      if (!unterbrechen && ["anfahrt", "vor_ort", "in_arbeit"].includes(status)
+        && anderer && anderer.dispatch_id !== this.detail.auftrag.dispatch_id) {
+        this.konfliktEintrag = {
+          typ: "status", dispatch_id: this.detail.auftrag.dispatch_id, einheit_id: this.einheitId,
+          auftrag_version: this.detail.auftrag.version,
+          payload: { status, ausgangsstatus: this.detail.auftrag.einheit_status },
+          konflikt_details: { dispatch_id: anderer.dispatch_id, bezeichnung: anderer.bezeichnung },
+        };
+        this.flyout = "aktiver_auftrag";
+        return;
+      }
       await this.statusInOutbox(status, unterbrechen);
     },
     async statusInOutbox(status, unterbrechen = false) {
-      await this.outboxErfassen({
-        typ: "status", dispatch_id: this.detail.auftrag.dispatch_id, einheit_id: this.einheitId,
-        auftrag_version: this.detail.auftrag.version,
-        payload: reineDaten({ status, grund: this.grund || undefined, unterbrechen: unterbrechen || undefined }),
-      });
-      // Die Anzeige "nur auf diesem Gerät" kommt aus ausstehenderStatus (Outbox), nicht aus detail.
-      this.grund = "";
-      this.flyout = null;
+      if (!this.kannStatusMelden || !this.erlaubteStatus.includes(status) || this.statusDialogVeraltet) return;
+      const auftrag = this.statusDialogAuftrag || this.detail.auftrag;
+      if (!auftrag || auftrag.dispatch_id !== this.detail.auftrag.dispatch_id) return;
+      this.statusSpeichern = true;
+      this.aktionsFehler = "";
+      const kontext = { dispatch_id: auftrag.dispatch_id, einheit_id: this.einheitId, auftrag_version: auftrag.version };
+      try {
+        const paket = [];
+        if (["abgeschlossen", "nicht_durchfuehrbar"].includes(status)) {
+          if (this.statusMeldungText.trim() || Object.values(this.statusMeldungFelder).some(v => v?.trim())) {
+            paket.push({ ...kontext, typ: "meldung", payload: reineDaten({ art: "lagemeldung",
+              text: this.statusMeldungText, felder: this.statusMeldungFelder }) });
+          }
+          const input = this.$refs.statusFotos;
+          if (input?.files?.length && window.compressFilesInPlace) await window.compressFilesInPlace(input);
+          for (const file of [...this.statusMeldungFotos, ...Array.from(input?.files || [])]) {
+            paket.push({ ...kontext, typ: "foto", blob: file, dateiname: file.name, payload: {} });
+          }
+        }
+        if (this.statusDialogVeraltet || !this.schreibbar || this.zugangBeendet) return;
+        paket.push({ ...kontext, typ: "status", payload: reineDaten({ status, grund: this.grund || undefined,
+          unterbrechen: unterbrechen || undefined, ausgangsstatus: auftrag.einheit_status }) });
+        const gespeichert = await this.outboxAusfuehren(outbox => outbox.erfassenPaket(paket));
+        if (!gespeichert) { this.aktionsFehler = this.hinweisBanner; return; }
+        this.statusTippenSperren(auftrag.dispatch_id);
+        await this.outboxAktualisieren();
+        this.grund = "";
+        this.statusMeldungText = "";
+        this.statusMeldungFotos = [];
+        this.statusDialogAuftrag = null;
+        this.flyout = null;
+      } catch { this.aktionsFehler = "Rückmeldung konnte nicht gespeichert werden. Eingaben bleiben erhalten."; }
+      finally { this.statusSpeichern = false; }
     },
     async erkundungAbschliessen() {
+      if (!this.kannStatusMelden || this.statusDialogVeraltet || !this.erkundungErgebnisGueltig
+        || !this.erlaubteStatus.includes("abgeschlossen")) return;
+      const auftrag = reineDaten(this.statusDialogAuftrag);
+      if (!auftrag) return;
+      this.ergebnisSpeichern = true;
+      this.aktionsFehler = "";
       const lage = this.erkundungLage.trim();
       const massnahmen = this.erkundungMassnahmen.trim();
-      if (lage || massnahmen) {
-        const teile = [];
-        if (lage) teile.push(`Erkundung: ${lage}`);
-        if (massnahmen) teile.push(`Notwendige Maßnahmen: ${massnahmen}`);
-        await this.outboxErfassen({
-          typ: "meldung", dispatch_id: this.detail.auftrag.dispatch_id, einheit_id: this.einheitId,
-          auftrag_version: this.detail.auftrag.version,
-          payload: reineDaten({
-            art: "lagemeldung", text: teile.join("\n"), felder: { lage, massnahmen },
-          }),
+      const kontext = { dispatch_id: auftrag.dispatch_id, einheit_id: this.einheitId, auftrag_version: auftrag.version };
+      const paket = [];
+      try {
+        const ergebnisUuid = zufallsUuid();
+        paket.push({ ...kontext, typ: "meldung", client_uuid: ergebnisUuid,
+          payload: { art: "lagemeldung", schnellmeldung: this.erkundungAuswahl, erkundungsergebnis: true,
+            schnellmeldung_label: auftrag.schnellmeldungen.find(m => m.code === this.erkundungAuswahl)?.label,
+            text: [lage, massnahmen ? `Notwendige Maßnahmen: ${massnahmen}` : ""].filter(Boolean).join("\n") },
         });
-      }
-      const input = this.$refs.erkundungFotos;
-      if (input?.files?.length) {
-        if (window.compressFilesInPlace) await window.compressFilesInPlace(input);
-        for (const file of input.files) {
-          await this.outboxErfassen({
-            typ: "foto", dispatch_id: this.detail.auftrag.dispatch_id, einheit_id: this.einheitId,
-            auftrag_version: this.detail.auftrag.version, blob: file, dateiname: file.name,
-            payload: { kommentar: "Erkundung" },
-          });
+        const input = this.$refs.erkundungFotos;
+        if (input?.files?.length) {
+          if (window.compressFilesInPlace) await window.compressFilesInPlace(input);
+          for (const file of input.files) {
+            paket.push({ ...kontext, typ: "foto", blob: file, dateiname: file.name,
+              payload: { kommentar: "Erkundung" },
+            });
+          }
         }
+        if (this.statusDialogVeraltet) return;
+        paket.push({ ...kontext, typ: "status", payload: { status: "abgeschlossen",
+          ausgangsstatus: auftrag.einheit_status, ergebnis_client_uuid: ergebnisUuid } });
+        const gespeichert = await this.outboxAusfuehren((outbox) => outbox.erfassenPaket(paket));
+        if (!gespeichert) { this.aktionsFehler = this.hinweisBanner; return; }
+        this.statusTippenSperren(auftrag.dispatch_id);
+        await this.outboxAktualisieren();
+        await this.outboxAusfuehren((outbox) => outbox.entwurfLoeschen(`${auftrag.dispatch_id}:erkundung`));
+        this.erkundungLage = "";
+        this.erkundungMassnahmen = "";
+        if (input) input.value = "";
+        this.statusDialogAuftrag = null;
+        this.flyout = null;
+      } catch (error) {
+        console.warn("Erkundungsergebnis konnte nicht gespeichert werden", error);
+        this.hinweisBanner = "Erkundungsergebnis konnte nicht gespeichert werden. Eingaben bleiben erhalten.";
+        this.aktionsFehler = this.hinweisBanner;
+      } finally {
+        this.ergebnisSpeichern = false;
       }
-      this.erkundungLage = "";
-      this.erkundungMassnahmen = "";
-      if (input) input.value = "";
-      await this.statusInOutbox("abgeschlossen");
     },
-    async oeffneMeldung(art) {
+    async oeffneMeldung(art = "lagemeldung", ziel = this.detail?.auftrag || this.fokusAuftrag) {
+      if (!this.schreibbar || this.zugangBeendet || !ziel || this.meldungSpeichern || this.meldungLaden) return;
+      const token = ++this.meldungToken;
+      this.meldungAuftrag = reineDaten(ziel);
       this.flyout = art;
+      this.aktionsFehler = "";
       this.entwurfHinweis = false;
-      const key = `${this.detail.auftrag.dispatch_id}:${art}`;
-      const entwurf = await this.outboxAusfuehren((outbox) => outbox.entwurfLaden(key));
+      this.meldungText = "";
+      this.schnellmeldung = "";
+      this.meldungFotosVorhanden = false;
+      this.felder = {};
+      this.meldungLaden = true;
+      const entwurf = await this.outboxAusfuehren(outbox => outbox.entwurfLaden(`${ziel.dispatch_id}:${art}`));
+      if (token !== this.meldungToken) return;
+      this.meldungLaden = false;
       if (entwurf) {
         this.meldungText = entwurf.text || "";
         this.felder = entwurf.felder || {};
+        this.schnellmeldung = this.schnellmeldungsAuswahl.some(m => m.code === entwurf.schnellmeldung) ? entwurf.schnellmeldung : "";
         this.entwurfHinweis = true;
       }
-      this.$nextTick(() => this.$refs.meldung?.focus());
+    },
+    async meldungsZielWechseln(id) {
+      if (this.meldungFotosVorhanden || this.meldungSpeichern || this.meldungLaden) return;
+      const token = ++this.meldungToken;
+      const art = this.flyout;
+      const ziel = this.meldungsZiele.find(a => a.dispatch_id === Number(id));
+      const speichern = this.entwurfSpeichern();
+      this.meldungLaden = true;
+      const gespeichert = await speichern;
+      if (token !== this.meldungToken || this.flyout !== art) return;
+      this.meldungLaden = false;
+      if (!gespeichert) {
+        if (this.$refs.meldungZiel) this.$refs.meldungZiel.value = String(this.meldungAuftrag.dispatch_id);
+        this.aktionsFehler = this.hinweisBanner;
+        return;
+      }
+      await this.oeffneMeldung(art, ziel);
+      if (this.$refs.meldungFotos) this.$refs.meldungFotos.value = "";
     },
     async entwurfSpeichern() {
-      if (!this.detail || !this.flyout) return;
-      await this.outboxAusfuehren((outbox) => outbox.entwurfSpeichern(`${this.detail.auftrag.dispatch_id}:${this.flyout}`, reineDaten({
-        text: this.meldungText, felder: this.felder,
+      if (!this.meldungAuftrag || !this.flyout || this.meldungLaden || this.meldungSpeichern) return false;
+      const gespeichert = await this.outboxAusfuehren(outbox => outbox.entwurfSpeichern(
+        `${this.meldungAuftrag.dispatch_id}:${this.flyout}`, reineDaten({
+        text: this.meldungText, felder: this.felder, schnellmeldung: this.schnellmeldung,
       })));
+      return gespeichert !== null;
+    },
+    async schnellmeldungWaehlen(meldung) {
+      if (this.meldungSpeichern || this.meldungLaden) return;
+      if (meldung.aktion !== "meldung") {
+        const ziel = this.meldungAuftrag;
+        const speichern = this.entwurfSpeichern();
+        this.meldungSpeichern = true;
+        const rueckmeldung = { text: this.meldungText, felder: reineDaten(this.felder), fotos: [] };
+        try {
+          if (!await speichern) { this.aktionsFehler = this.hinweisBanner; return; }
+          const input = this.$refs.meldungFotos;
+          if (input?.files?.length && window.compressFilesInPlace) await window.compressFilesInPlace(input);
+          rueckmeldung.fotos = Array.from(input?.files || []);
+        } catch { this.aktionsFehler = "Fotos konnten nicht vorbereitet werden. Eingaben bleiben erhalten."; return; }
+        finally { this.meldungSpeichern = false; }
+        this.flyoutSchliessen();
+        await this.oeffne(ziel.dispatch_id, false);
+        if (this.detail?.auftrag?.dispatch_id === ziel.dispatch_id) {
+          const art = meldung.aktion === "abgeschlossen" ? "abschluss_bestaetigen" : "nicht_durchfuehrbar";
+          await this.statusDialogOeffnen(art, rueckmeldung);
+        }
+        return;
+      }
+      this.schnellmeldung = this.schnellmeldung === meldung.code ? "" : meldung.code;
+      await this.entwurfSpeichern();
     },
     async meldungErfassen() {
-      if (!this.meldungText.trim()) return;
+      if (!this.kannMeldungSenden) return;
+      this.meldungSpeichern = true;
+      this.aktionsFehler = "";
+      const auftrag = reineDaten(this.meldungAuftrag);
       const art = this.flyout;
-      await this.outboxErfassen({
-        typ: "meldung", dispatch_id: this.detail.auftrag.dispatch_id, einheit_id: this.einheitId,
-        auftrag_version: this.detail.auftrag.version,
-        payload: reineDaten({ art, text: this.meldungText, felder: this.felder }),
-      });
-      await this.outboxAusfuehren((outbox) => outbox.entwurfLoeschen(`${this.detail.auftrag.dispatch_id}:${art}`));
-      this.meldungText = "";
-      this.felder = {};
-      this.flyout = null;
+      const kontext = { dispatch_id: auftrag.dispatch_id, einheit_id: this.einheitId, auftrag_version: auftrag.version };
+      try {
+        const paket = [{ ...kontext, typ: "meldung", payload: reineDaten({ art,
+          schnellmeldung_label: auftrag.schnellmeldungen?.find(m => m.code === this.schnellmeldung)?.label,
+          schnellmeldung: this.schnellmeldung || undefined, text: this.meldungText, felder: this.felder }) }];
+        const input = this.$refs.meldungFotos;
+        if (input?.files?.length) {
+          if (window.compressFilesInPlace) await window.compressFilesInPlace(input);
+          for (const file of input.files) paket.push({ ...kontext, typ: "foto", blob: file, dateiname: file.name, payload: {} });
+        }
+        const gespeichert = await this.outboxAusfuehren(outbox => outbox.erfassenPaket(paket));
+        if (!gespeichert) { this.aktionsFehler = this.hinweisBanner; return; }
+        await this.outboxAusfuehren(outbox => outbox.entwurfLoeschen(`${auftrag.dispatch_id}:${art}`));
+        this.meldungText = "";
+        this.felder = {};
+        this.flyout = null;
+        await this.outboxAktualisieren();
+      } catch {
+        this.aktionsFehler = "Meldung konnte nicht gespeichert werden. Eingaben bleiben erhalten.";
+      } finally { this.meldungSpeichern = false; }
     },
-    async fotoErfassen() {
-      const input = this.$refs.foto;
-      if (!input?.files?.length) return;
-      if (window.compressFilesInPlace) await window.compressFilesInPlace(input);
-      for (const file of input.files) {
-        await this.outboxErfassen({
-          typ: "foto", dispatch_id: this.detail.auftrag.dispatch_id, einheit_id: this.einheitId,
-          auftrag_version: this.detail.auftrag.version, blob: file, dateiname: file.name,
-          payload: { kommentar: this.fotoKommentar },
-        });
-      }
-      this.flyout = null;
+    async fotosErfassen(input, kommentar = "") {
+      if (!input?.files?.length || this.fotoSpeichern || !this.schreibbar || this.zugangBeendet) return;
+      const auftrag = reineDaten(this.detail?.auftrag);
+      if (!auftrag) return;
+      this.fotoSpeichern = true;
+      try {
+        if (window.compressFilesInPlace) await window.compressFilesInPlace(input);
+        const paket = Array.from(input.files, file => ({
+          typ: "foto", dispatch_id: auftrag.dispatch_id, einheit_id: this.einheitId,
+          auftrag_version: auftrag.version, blob: file, dateiname: file.name, payload: { kommentar },
+        }));
+        const gespeichert = await this.outboxAusfuehren(outbox => outbox.erfassenPaket(paket));
+        if (gespeichert) { input.value = ""; this.flyout = null; }
+      } catch { this.aktionsFehler = "Fotos konnten nicht gespeichert werden. Bitte erneut versuchen."; }
+      finally { this.fotoSpeichern = false; }
     },
-    async fotoDirektErfassen() {
-      const input = this.$refs.fotoDirekt;
-      if (!input?.files?.length) return;
-      if (window.compressFilesInPlace) await window.compressFilesInPlace(input);
-      for (const file of input.files) {
-        await this.outboxErfassen({
-          typ: "foto", dispatch_id: this.detail.auftrag.dispatch_id, einheit_id: this.einheitId,
-          auftrag_version: this.detail.auftrag.version, blob: file, dateiname: file.name,
-          payload: { kommentar: "" },
-        });
-      }
-      input.value = "";
-    },
+    async fotoErfassen() { await this.fotosErfassen(this.$refs.foto, this.fotoKommentar); },
+    async fotoDirektErfassen() { await this.fotosErfassen(this.$refs.fotoDirekt); },
     materialPositionHinzufuegen() {
       this.materialPositionen.push({ bezeichnung: "", menge: 1 });
     },
@@ -770,13 +1103,16 @@ function registriere() {
 
     // Outbox, Rückoff und Konfliktauflösung.
     async outboxAktualisieren() {
+      const anfrage = ++this.outboxAnfrage;
       const daten = await this.outboxAusfuehren(async (outbox) => ({
         liste: await outbox.liste(), verlauf: await outbox.verlauf(20),
       }));
+      if (anfrage !== this.outboxAnfrage) return;
       this.outboxVerfuegbar = Boolean(daten);
       if (!daten) return;
       this.outboxListe = daten.liste;
       this.verlauf = daten.verlauf;
+      void this.verlaufFotosAktualisieren();
       // Hinweise nur einmal und nur für Bestätigungen seit dem Laden der Seite zeigen.
       for (const item of this.verlauf) {
         const hinweis = this.hinweisText(item.antwort?.hinweis);
@@ -788,7 +1124,7 @@ function registriere() {
       this.retryPlanen();
     },
     konfliktPruefen() {
-      if (this.flyout === "aktiver_auftrag" || !this.detail) return;
+      if (this.flyout || !this.detail) return;
       const eintrag = this.outboxListe.find((item) => item.typ === "status"
         && item.status === "konflikt" && item.letzter_fehler === "aktiver_auftrag"
         && item.dispatch_id === this.detail.auftrag.dispatch_id);
@@ -799,31 +1135,48 @@ function registriere() {
     },
     async konfliktEntscheiden(unterbrechen) {
       const eintrag = this.konfliktEintrag;
-      if (!eintrag) return;
-      await this.outboxAusfuehren((outbox) => outbox.verwerfen(eintrag.client_uuid));
+      if (!eintrag || this.statusSpeichern) return;
+      this.statusSpeichern = true;
+      if (unterbrechen) {
+        const neu = await this.outboxErfassen({
+          typ: "status", dispatch_id: eintrag.dispatch_id, einheit_id: this.einheitId,
+          auftrag_version: eintrag.auftrag_version,
+          payload: { ...reineDaten(eintrag.payload), unterbrechen: true,
+            aktiver_dispatch_id: eintrag.konflikt_details?.dispatch_id },
+        });
+        if (!neu) { this.statusSpeichern = false; return; }
+        this.statusTippenSperren(eintrag.dispatch_id);
+      }
+      if (eintrag.client_uuid) await this.outboxAusfuehren((outbox) => outbox.verwerfen(eintrag.client_uuid));
       this.konfliktEintrag = null;
       this.flyout = null;
-      if (unterbrechen) await this.statusInOutbox(eintrag.payload.status, true);
-      else this.hinweisBanner = "Status nicht geändert";
+      this.statusSpeichern = false;
+      if (!unterbrechen) this.hinweisBanner = "Status nicht geändert";
+      await this.outboxAktualisieren();
     },
     retryPlanen() {
+      const anfrage = ++this.retryAnfrage;
       clearTimeout(this.retryTimer);
       if (!this.outbox) return;
       void this.outbox.naechsterVersuchIn().then((wartezeit) => {
-        if (wartezeit === null) return;
+        if (anfrage !== this.retryAnfrage || wartezeit === null || this.zugangBeendet) return;
         this.retryTimer = setTimeout(() => { void this.flush(); }, wartezeit);
       }).catch((error) => console.warn("Einheiten-Outbox nicht verfuegbar", error));
     },
-    async flush() {
+    async flush(abgleichen = false) {
       if (this.zugangBeendet || !this.outbox) return;
-      const erfolg = await this.outboxAusfuehren((outbox) => outbox.flush());
+      if (abgleichen && !await this.laden()) return;
+      if (this.zugangBeendet) return;
+      const erfolg = await this.outboxAusfuehren((outbox) => outbox.flush({ wiederverbunden: abgleichen }));
       if (erfolg === null) return;
       await this.outboxAktualisieren();
     },
     async erneut(id) { await this.outboxAusfuehren((outbox) => outbox.erneutSenden(id)); },
     // Nicht übermittelte Meldung als Text kopieren, damit nichts verloren geht (z. B. für Funk/Messenger).
     async kopieren(item) {
-      const text = [item.typ, "Auftrag " + item.dispatch_id, this.zeit(item.erfasst_at), item.payload?.text || ""]
+      const auftrag = this.auftragZurAktion(item);
+      const text = [this.typLabel(item.typ), auftrag?.bezeichnung || "Eigener Auftrag",
+        this.zeit(item.erfasst_at), this.rueckmeldungText(item)]
         .filter(Boolean).join(" · ");
       try {
         await navigator.clipboard.writeText(text);
@@ -846,11 +1199,24 @@ function registriere() {
     async zugangBeenden() {
       if (this.zugangBeendet) return;
       this.zugangBeendet = true;
+      this.zustandAnfrage += 1;
+      this.detailAnfrage += 1;
+      this.detailLaden = false;
+      this.retryAnfrage += 1;
+      clearTimeout(this.retryTimer);
       await this.outboxAusfuehren((outbox) => outbox.blockiereZugang());
+      this.standortBeenden();
+      this.kartenAnfrage += 1;
+      this.kartenDaten = null;
+      this.uebersichtKarte?.aktualisieren([]);
+      this.uebersichtKarte?.hinweise(null);
+      await this.outbox?.metaSpeichern(this.kartenCacheKey(), null).catch(() => {});
+      await this.verlaufZugangBeenden().catch(() => {});
       await this.outboxAusfuehren((outbox) => outbox.zustandLeeren());
       await this.outboxAktualisieren();
       const offen = this.outboxListe.filter((item) => item.status === "blockiert_zugang").length;
-      this.hinweisBanner = `Zugang beendet - ${offen} Meldungen nicht übermittelt. Bitte Einsatzleitung informieren.`;
+      const begriff = offen === 1 ? "Übermittlung" : "Übermittlungen";
+      this.hinweisBanner = `Zugang beendet – ${offen} ${begriff} ohne Serverbestätigung. Bitte Einsatzleitung informieren.`;
       this.swCacheLeeren();
       clearTimeout(this.wsTimer);
       this.ws?.close();
@@ -887,8 +1253,7 @@ function registriere() {
       ws.addEventListener("open", () => {
         this.online = true;
         this.wsVersuche = 0;
-        void this.flush();
-        void this.laden(true);
+        void this.flush(true);
         // Der Server beantwortet den Klartext "ping" mit "pong" (app/routers/ws.py).
         const ping = setInterval(() => {
           if (ws.readyState === WebSocket.OPEN) ws.send("ping");
@@ -905,8 +1270,7 @@ function registriere() {
           const betrifftStelle = ["site:card_changed", "site_phase_changed"].includes(nachricht.type)
             && [this.aktuell, ...this.weitere].some((item) => item?.site_id === nachricht.site_id);
           if (betrifftEinheit || betrifftStelle) {
-            void this.laden(true);
-            if (this.detail?.auftrag?.dispatch_id) void this.oeffne(this.detail.auftrag.dispatch_id, false);
+            void this.laden(); // Ereignis nicht durch die Polling-Drossel verlieren; Detail bleibt ein lesender Refresh.
           }
         } catch (error) {
           // Ungültige WebSocket-Nachrichten beeinflussen die Tablet-Ansicht nicht.

@@ -40,6 +40,53 @@ test("Eintrag ueberlebt Neustart und Sequenz bleibt monoton", async () => {
   const neu = await eintrag(b); assert.equal(neu.seq, 2);
 });
 
+test("unlesbares Foto verhindert das gesamte Erkundungspaket vor dem ersten Versand", async () => {
+  const env = umgebung(); const o = createOutbox(env.basis);
+  await assert.rejects(o.erfassenPaket([
+    { typ: "meldung", dispatch_id: 1, payload: { text: "Ergebnis" } },
+    { typ: "foto", dispatch_id: 1, blob: { arrayBuffer() { throw new Error("Datei nicht lesbar"); } } },
+    { typ: "status", dispatch_id: 1, payload: { status: "abgeschlossen" } },
+  ]), /Datei nicht lesbar/);
+  assert.deepEqual(await o.liste(), []);
+  assert.equal(env.anfragen.length, 0);
+});
+
+test("abgebrochene Paket-Transaktion hinterlässt weder Teilergebnis noch Abschluss", async () => {
+  const env = umgebung([], { uuid: () => "gleiche-id", fetch: () => new Promise(() => {}) });
+  const o = createOutbox(env.basis);
+  await assert.rejects(o.erfassenPaket([
+    { typ: "meldung", dispatch_id: 1 }, { typ: "status", dispatch_id: 1, payload: { status: "abgeschlossen" } },
+  ]));
+  assert.deepEqual(await o.liste(), []);
+  const gespeichert = await o.erfassen({ typ: "status", dispatch_id: 1, payload: { status: "bestaetigt" } });
+  assert.equal(gespeichert.seq, 1);
+});
+
+test("Ergebnis, Foto und Abschluss sind vor jedem POST vollständig gespeichert", async () => {
+  const env = umgebung(); let o; let nummer = 0;
+  const basis = { ...env.basis, fetch: async () => {
+    assert.equal((await o.liste()).length + (await o.verlauf()).length, 3);
+    return ok(++nummer);
+  } };
+  o = createOutbox(basis);
+  const daten = { dispatch_id: 1, einheit_id: 9, auftrag_version: 2 };
+  const paket = await o.erfassenPaket([
+    { ...daten, typ: "meldung", payload: { text: "Ergebnis" } },
+    { ...daten, typ: "foto", blob: new Blob(["foto"], { type: "image/jpeg" }) },
+    { ...daten, typ: "status", payload: { status: "abgeschlossen", ausgangsstatus: "vor_ort" } },
+  ]);
+  assert.deepEqual(paket.map(item => item.seq), [1, 2, 3]);
+  assert.equal(new Set(paket.map(item => item.client_uuid)).size, 3);
+  await warteAuf(async () => (await o.verlauf()).length === 3);
+});
+
+test("paralleles Erfassen in zwei Tabs vergibt eindeutige Sequenzen", async () => {
+  const env = umgebung([], { fetch: () => new Promise(() => {}) });
+  const a = createOutbox(env.basis); const b = createOutbox(env.basis);
+  await Promise.all([eintrag(a, "status", 1), eintrag(b, "status", 2)]);
+  assert.deepEqual((await a.liste()).map(item => item.seq), [1, 2]);
+});
+
 test("blockierte oder haengende IndexedDB-Open-Anfragen werden mit Timeout abgebrochen", async () => {
   const blockiert = { open() { const request = {}; queueMicrotask(() => request.onblocked()); return request; } };
   const haengt = { open() { return {}; } };
@@ -121,6 +168,21 @@ test("403 kein_einheitenkontext bleibt Konflikt ohne Auto-Retry", async () => {
   const env = umgebung([antwort(403, { code: "kein_einheitenkontext" })]); const o = createOutbox(env.basis);
   await eintrag(o); await warteAuf(async () => (await o.liste())[0]?.status === "konflikt"); await o.flush();
   assert.equal(env.anfragen.length, 1); assert.equal((await o.liste())[0].status, "konflikt");
+});
+
+test("Aktivkonflikt bewahrt die konkret zu unterbrechende Disposition und Originalversion", async () => {
+  const env = umgebung([antwort(409, { code: "aktiver_auftrag", details: { dispatch_id: 17, bezeichnung: "Schule" } })]);
+  const o = createOutbox(env.basis);
+  await o.erfassen({ typ: "status", dispatch_id: 8, einheit_id: 1, auftrag_version: 3,
+    payload: { status: "anfahrt", ausgangsstatus: "bestaetigt" } });
+  await warteAuf(async () => (await o.liste())[0]?.status === "konflikt");
+  const [item] = await o.liste();
+  assert.deepEqual(item.konflikt_details, { dispatch_id: 17, bezeichnung: "Schule" });
+  assert.equal(item.auftrag_version, 3);
+  assert.equal(item.payload.ausgangsstatus, "bestaetigt");
+  const body = JSON.parse(env.anfragen[0].body);
+  assert.equal(body.auftrag_version, 3);
+  assert.equal(body.ausgangsstatus, "bestaetigt");
 });
 
 test("terminale Zugangssperre behaelt Eintraege und stoppt Flush", async () => {
@@ -266,4 +328,181 @@ test("zufallsUuid liefert auch ohne crypto.randomUUID eine gueltige v4-UUID", as
   assert.match(zufallsUuid(undefined), v4);
   assert.equal(zufallsUuid({ randomUUID: () => "fest" }), "fest");
   assert.notEqual(zufallsUuid(undefined), zufallsUuid(undefined));
+});
+
+test("Ergebnisreferenz und UUID bleiben beim Offline-Neustart und Versand erhalten", async () => {
+  const env = umgebung([new Error("offline")]);
+  const erste = createOutbox({ ...env.basis, dbName: "ergebnis-referenz" });
+  const ergebnisUuid = "11111111-1111-4111-8111-111111111111";
+  await erste.erfassenPaket([
+    { typ: "meldung", dispatch_id: 1, client_uuid: ergebnisUuid,
+      payload: { art: "lagemeldung", schnellmeldung: "keine_massnahmen", erkundungsergebnis: true } },
+    { typ: "status", dispatch_id: 1, payload: { status: "abgeschlossen", ergebnis_client_uuid: ergebnisUuid } },
+  ]);
+  await warteAuf(async () => (await erste.liste())[0]?.status === "fehler_netz");
+  const neu = createOutbox({ ...env.basis, dbName: "ergebnis-referenz" });
+  const liste = await neu.liste();
+  assert.equal(liste[0].client_uuid, ergebnisUuid);
+  assert.equal(liste[1].payload.ergebnis_client_uuid, ergebnisUuid);
+  await neu.erneutSenden(liste[0].client_uuid);
+  await warteAuf(async () => (await neu.liste()).length === 0);
+  const bodies = env.anfragen.map(r => typeof r.body === "string" ? JSON.parse(r.body) : null);
+  assert.equal(bodies.at(-1).ergebnis_client_uuid, ergebnisUuid);
+  assert.equal(bodies.at(-2).client_uuid, ergebnisUuid);
+});
+
+test("Foto-Vorschau bleibt lokal; bestätigter Verlauf behält Erfassungszeit und Inhalt ohne Binärdaten", async () => {
+  let verbunden = false;
+  const env = umgebung([], { fetch: async () => { if (!verbunden) throw new Error("offline"); return ok(); } });
+  const o = createOutbox(env.basis);
+  const [meldung, foto] = await o.erfassenPaket([
+    { typ: "meldung", dispatch_id: 1, einheit_id: 9, payload: { art: "note", text: "Ergebnis" } },
+    { typ: "foto", dispatch_id: 1, einheit_id: 9, blob: new Blob(["bild"], { type: "image/png" }), dateiname: "bild.png" },
+  ]);
+  await warteAuf(async () => (await o.liste()).every(e => e.status === "fehler_netz"));
+  const bild = await o.fotoVorschau(foto.client_uuid);
+  assert.equal(bild.type, "image/png");
+  assert.equal(await bild.text(), "bild");
+  assert.equal((await o.liste())[0].blob_daten, undefined);
+  verbunden = true;
+  await o.erneutSenden(meldung.client_uuid);
+  await o.erneutSenden(foto.client_uuid);
+  await warteAuf(async () => (await o.liste()).length === 0);
+  const history = await o.verlauf();
+  const text = history.find(e => e.client_uuid === meldung.client_uuid);
+  assert.equal(text.einheit_id, 9);
+  assert.equal(text.erfasst_at, meldung.erfasst_at);
+  assert.equal(text.payload.text, "Ergebnis");
+  const receiptFoto = history.find(e => e.client_uuid === foto.client_uuid);
+  assert.equal(receiptFoto.blob_daten, undefined);
+  assert.equal(receiptFoto.blob, undefined);
+});
+
+test("hängender POST wird begrenzt und mit derselben UUID wiederholbar", async () => {
+  let abgebrochen = false;
+  const env = umgebung([(_url, init) => {
+    init.signal.addEventListener("abort", () => { abgebrochen = true; });
+    return new Promise(() => {});
+  }, ok(2)], { requestTimeoutMs: 10 });
+  const o = createOutbox(env.basis);
+  const item = await eintrag(o);
+  await warteAuf(async () => (await o.liste())[0]?.status === "fehler_netz");
+  assert.equal(abgebrochen, true);
+  env.vor(2000);
+  await o.flush();
+  assert.equal((await o.liste()).length, 0);
+  assert.equal(JSON.parse(env.anfragen[1].body).client_uuid, item.client_uuid);
+});
+
+test("auch ein hängender JSON-Antwortkörper wird nicht als Erfolg bestätigt", async () => {
+  const env = umgebung([{ ok: true, status: 200, headers: new Headers(), json: () => new Promise(() => {}) }],
+    { requestTimeoutMs: 10 });
+  const o = createOutbox(env.basis);
+  await eintrag(o);
+  await warteAuf(async () => (await o.liste())[0]?.status === "fehler_netz");
+  assert.equal((await o.verlauf()).length, 0);
+});
+
+test("aktive Foto-Wiederholung erzeugt keinen sofortigen Retry-Kreislauf", async () => {
+  let antworten;
+  const env = umgebung([new Error("offline"), () => new Promise(resolve => { antworten = resolve; })]);
+  const o = createOutbox(env.basis);
+  await o.erfassen({ typ: "foto", dispatch_id: 1, einheit_id: 9, blob: new Blob(["bild"]) });
+  await warteAuf(async () => (await o.liste())[0]?.status === "fehler_netz");
+  env.vor(2000); await o.flush();
+  await warteAuf(() => env.anfragen.length === 2);
+  assert.equal(await o.naechsterVersuchIn(), null);
+  antworten(ok(2));
+  await warteAuf(async () => (await o.liste()).length === 0);
+});
+
+test("Zugangsende hält auch verspätete Antworten und manuelles Wiederholen gesperrt", async () => {
+  for (const spaet of [ok(1), antwort(503), new Error("offline")]) {
+    let antworten, ablehnen;
+    const env = umgebung([() => new Promise((resolve, reject) => { antworten = resolve; ablehnen = reject; })]);
+    const o = createOutbox(env.basis);
+    const item = await eintrag(o);
+    await warteAuf(() => env.anfragen.length === 1);
+    await o.blockiereZugang();
+    if (spaet instanceof Error) ablehnen(spaet); else antworten(spaet);
+    await leer(); await leer();
+    assert.equal((await o.liste())[0]?.status, "blockiert_zugang");
+    assert.equal((await o.verlauf()).length, 0);
+    await o.erneutSenden(item.client_uuid);
+    assert.equal((await o.liste())[0]?.status, "blockiert_zugang");
+    assert.equal(await o.naechsterVersuchIn(), null);
+    assert.equal(env.anfragen.length, 1);
+  }
+});
+
+test("zwei Tabs erhalten nur eine lokale Quittung zur selben Serveraktion", async () => {
+  const offen = [];
+  const env = umgebung([], { fetch: async () => new Promise(resolve => offen.push(resolve)) });
+  const a = createOutbox(env.basis), b = createOutbox(env.basis);
+  await eintrag(a);
+  await warteAuf(() => offen.length === 1);
+  const zweiter = b.flush();
+  await warteAuf(() => offen.length === 2);
+  offen.forEach(resolve => resolve(ok(7)));
+  await zweiter;
+  await warteAuf(async () => (await a.liste()).length === 0);
+  await leer();
+  assert.equal((await a.verlauf()).length, 1);
+});
+
+test("Einheitenwechsel sendet weder fremde noch kontextlose alte Ressourcenpflege", async () => {
+  const env = umgebung([new Error("offline"), new Error("offline")]);
+  const alt = createOutbox({ ...env.basis, einheitId: 9 });
+  await alt.erfassen({ typ: "ressource_personal", einheit_id: 9, payload: { gesamt: 7 } });
+  await warteAuf(async () => (await alt.liste())[0]?.status === "fehler_netz");
+  // Alteintrag ohne Einheit: auch dafür ist die aktuelle Zuordnung kein Sendebeweis.
+  const legacy = createOutbox(env.basis);
+  await legacy.erfassen({ typ: "ressource_personal", payload: { gesamt: 8 } });
+  await warteAuf(async () => (await legacy.liste()).length === 2);
+  const anzahl = env.anfragen.length;
+  env.vor(2000);
+  const neu = createOutbox({ ...env.basis, einheitId: 10 });
+  await neu.flush();
+  assert.equal(env.anfragen.length, anzahl);
+  assert.ok((await neu.liste()).every(e => e.status === "konflikt" && e.letzter_fehler === "einheit_gewechselt"));
+});
+
+test("CSRF-Abgleich ist wiederholbar, Berechtigungsfehler bleiben Konflikte", async () => {
+  let token = "alt";
+  const env = umgebung([antwort(403, { detail: "CSRF-Token fehlt oder ungültig" }), ok(2)]);
+  const o = createOutbox({ ...env.basis, einheitId: 9, csrfToken: () => token });
+  const item = await eintrag(o);
+  await warteAuf(async () => (await o.liste())[0]?.status === "fehler_netz");
+  token = "neu"; env.vor(2000); await o.flush();
+  assert.equal((await o.liste()).length, 0);
+  assert.equal(env.anfragen[1].headers["X-CSRF-Token"], "neu");
+  assert.equal(env.anfragen[1].headers["X-EC-Einheit-Kontext"], "9");
+  assert.equal(JSON.parse(env.anfragen[1].body).client_uuid, item.client_uuid);
+});
+
+test("bestätigte Wiederverbindung wiederholt Netzrückstände sofort, keine fachlichen Konflikte", async () => {
+  const env = umgebung([new Error("offline"), antwort(409, { code: "auftrag_geaendert" }), ok(3)]);
+  const o = createOutbox(env.basis);
+  const netz = await eintrag(o, "status", 1);
+  await warteAuf(async () => (await o.liste())[0]?.status === "fehler_netz");
+  await eintrag(o, "status", 2);
+  await warteAuf(async () => (await o.liste()).some(item => item.status === "konflikt"));
+  await o.flush({ wiederverbunden: true }); // Die 2-s-Rückoff-Frist wurde noch nicht erreicht.
+  assert.equal((await o.liste()).length, 1);
+  assert.equal((await o.liste())[0].status, "konflikt");
+  assert.equal(JSON.parse(env.anfragen[2].body).client_uuid, netz.client_uuid);
+});
+
+test("onChange liefert neue Einträge erst nach lokalem Commit, noch vor dem ersten POST", async () => {
+  const env = umgebung([], { fetch: () => new Promise(() => {}) });
+  const o = createOutbox(env.basis);
+  let neu;
+  o.onChange(items => { if (items) neu = items; });
+  const item = await o.erfassen({ typ: "foto", dispatch_id: 1, einheit_id: 9, blob: new Blob(["bild"]) });
+  assert.equal(neu[0].client_uuid, item.client_uuid);
+  assert.equal(neu[0].hat_foto, true);
+  assert.equal(neu[0].blob_daten, undefined);
+  assert.equal(neu[0].status, "ausstehend");
+  assert.equal((await o.liste())[0].client_uuid, neu[0].client_uuid);
+  assert.equal((await o.verlauf()).length, 0);
 });

@@ -139,7 +139,8 @@ def test_einheit_template_behaelt_erkundungsabschluss():
     root = Path(__file__).parents[1]
     template = (root / "app/templates/einheit/einheit.html").read_text()
     javascript = (root / "app/static/js/einheit_modus.js").read_text()
-    assert "Lage vor Ort (optional)" in template
+    assert "Erkundungsergebnis (Pflichtfeld)" in template
+    assert "!erkundungErgebnisGueltig" in template
     assert "Notwendige Maßnahmen (optional)" in template
     assert 'x-ref="erkundungFotos"' in template
     assert ':disabled="!erkundungLage.trim() || !erkundungMassnahmen.trim()"' not in template

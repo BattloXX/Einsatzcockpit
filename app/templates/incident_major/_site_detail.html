@@ -25,6 +25,9 @@
 .site-log__kind--massnahmen  { color: var(--text); }
 .site-log__kind--media { color: #c4b5fd; }
 .site-log__entry--lagemeldung { background: rgba(24,169,87,.08); border-left: 3px solid var(--green); padding-left: 8px; }
+.site-log__entry--gefahr { background: rgba(212,34,37,.12); border-left: 4px solid var(--red); }
+.site-log__entry--unterstuetzung { background: rgba(230,126,34,.12); border-left: 4px solid var(--orange); }
+.site-log__text { white-space: pre-wrap; overflow-wrap: anywhere; }
 .log-typebadge {
   font-size: .58rem; font-weight: 700; padding: 1px 7px; border-radius: 999px;
   margin-right: 5px; white-space: nowrap; vertical-align: middle; text-transform: uppercase;
@@ -610,7 +613,7 @@
   <div class="site-log">
     <div class="res-section__title">Verlauf</div>
     {% for entry in site.log_entries|reverse %}
-    <div class="site-log__entry{% if entry.kind == 'lagemeldung' %} site-log__entry--lagemeldung{% endif %}">
+    <div class="site-log__entry{% if entry.kind == 'lagemeldung' %} site-log__entry--lagemeldung{% endif %}{% if meldung_hervorhebung(entry.text) %} site-log__entry--{{ meldung_hervorhebung(entry.text) }}{% endif %}">
       <span class="site-log__time">{{ entry.ts|local_time }}</span>
       <span class="site-log__text site-log__kind--{{ entry.kind }}">
         {% if site_log_kind_label and entry.kind in site_log_kind_label and entry.kind != 'note' %}

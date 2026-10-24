@@ -6,13 +6,14 @@ Pool = sector_id IS NULL (Reserve im SKKM-Sinne).
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Literal
 
 from sqlalchemy import and_, case, func
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import Session, joinedload, lazyload
 
 from app.core.audit import write_audit
 from app.core.telefon import telefon_maske, telefon_zu_e164_at
@@ -806,7 +807,15 @@ def ziehe_fertige_einheit_ab(
     einheit = dispatch.einheit
     site = dispatch.site or db.get(IncidentSite, dispatch.site_id)
     if einheit and einheit.incident_site_id == dispatch.site_id:
-        einheit.incident_site_id = None
+        anderer_aktiv = db.query(EinheitSiteDispatch.id).filter(
+            EinheitSiteDispatch.einheit_id == einheit.id,
+            EinheitSiteDispatch.id != dispatch.id,
+            EinheitSiteDispatch.site_id == dispatch.site_id,
+            dispatch_aktiv_filter(),
+            EinheitSiteDispatch.einheit_status.in_(EINHEIT_STATUS_AKTIV),
+        ).first()
+        if not anderer_aktiv:
+            einheit.incident_site_id = None
     label = einheit.label if einheit else "Einheit"
     site_name = site.bezeichnung if site else str(dispatch.site_id)
     text = f'{label} von "{site_name}" abgezogen'
@@ -827,6 +836,38 @@ def ziehe_fertige_einheit_ab(
     return True
 
 
+class StatusTransaktionBelegt(RuntimeError):
+    """Statusabgleich nach wiederholtem konkurrierendem Schreiben erforderlich."""
+
+
+def status_transaktion[T](db: Session, ausfuehren: Callable[[], T]) -> T:
+    """Nur am Transaktionsrand: komplette Statusmutation einschließlich Commit wiederholen.
+
+    MariaDB-Snapshot-Konflikte erfordern einen neuen Read View, keinen Statement-Retry.
+    Der Callback darf keine externen Effekte (Versand, Dateien, Broadcasts) auslösen.
+    """
+    for versuch in range(3):
+        try:
+            ergebnis = ausfuehren()
+            db.commit()
+            return ergebnis
+        except OperationalError as exc:
+            if exc.orig is None or not exc.orig.args or exc.orig.args[0] not in {1020, 1205, 1213}:
+                raise
+            db.rollback()
+            if versuch == 2:
+                raise StatusTransaktionBelegt from exc
+    raise AssertionError("Status-Transaktion ohne Ergebnis")
+
+
+def sperre_einheitenstatus(db: Session, einheit: LageEinheit) -> None:
+    """Serialisiert Statuswechsel je Einheit bis zum Commit, auch vom GSL-Board."""
+    db.flush()
+    db.query(LageEinheit).options(lazyload("*")).filter(
+        LageEinheit.id == einheit.id,
+    ).populate_existing().with_for_update().one()
+
+
 def set_vor_ort_at_site(
     db: Session,
     einheit_id: int,
@@ -843,6 +884,7 @@ def set_vor_ort_at_site(
     der Caller muss dann resolve_vor_ort_conflict() aufrufen nach Nutzerbestätigung.
     """
     e = _get_einheit(db, einheit_id, lage_id)
+    sperre_einheitenstatus(db, e)
     site = db.get(IncidentSite, site_id)
     if not site or site.major_incident_id != lage_id:
         raise ValueError("Einsatzstelle nicht gefunden")
@@ -856,7 +898,7 @@ def set_vor_ort_at_site(
             dispatch_aktiv_filter(),
             EinheitSiteDispatch.einheit_status.in_(EINHEIT_STATUS_AKTIV),
         )
-        .first()
+        .populate_existing().with_for_update().first()
     )
     if conflict:
         return None, conflict
@@ -868,7 +910,9 @@ def set_vor_ort_at_site(
             EinheitSiteDispatch.site_id == site_id,
             dispatch_aktiv_filter(),
         )
-        .first()
+        .order_by(case((EinheitSiteDispatch.einheit_status.in_(EINHEIT_STATUS_AKTIV), 0), else_=1),
+                  EinheitSiteDispatch.id)
+        .populate_existing().with_for_update().first()
     )
     if not dispatch:
         now_d = datetime.now(UTC)
@@ -925,6 +969,8 @@ def resolve_vor_ort_conflict(
 ) -> EinheitSiteDispatch:
     """Zieht Einheit von bisheriger Vor-Ort-Stelle ab und setzt Vor-Ort an new_site_id."""
     now = datetime.now(UTC)
+    e = _get_einheit(db, einheit_id, lage_id)
+    sperre_einheitenstatus(db, e)
     db.flush()
     old_dispatches = (
         db.query(EinheitSiteDispatch)
@@ -934,9 +980,8 @@ def resolve_vor_ort_conflict(
             dispatch_aktiv_filter(),
             EinheitSiteDispatch.einheit_status.in_(EINHEIT_STATUS_AKTIV),
         )
-        .all()
+        .populate_existing().with_for_update().all()
     )
-    e = _get_einheit(db, einheit_id, lage_id)
     for d in old_dispatches:
         d.withdrawn_at = now
         old_site = db.get(IncidentSite, d.site_id)

@@ -10,9 +10,13 @@
 <script type="importmap">
   {"imports": {
     "/static/js/einheit_outbox.js": "/static/js/einheit_outbox.js?v={{ ASSET_VERSION }}",
+    "/static/js/einheit_kartenziel.js": "/static/js/einheit_kartenziel.js?v={{ ASSET_VERSION }}",
     "/static/js/einheit_karte.js": "/static/js/einheit_karte.js?v={{ ASSET_VERSION }}",
     "/static/js/einheit_aenderungen.js": "/static/js/einheit_aenderungen.js?v={{ ASSET_VERSION }}",
-    "/static/js/einheit_darstellung.js": "/static/js/einheit_darstellung.js?v={{ ASSET_VERSION }}"
+    "/static/js/einheit_darstellung.js": "/static/js/einheit_darstellung.js?v={{ ASSET_VERSION }}",
+    "/static/js/einheit_ablauf.js": "/static/js/einheit_ablauf.js?v={{ ASSET_VERSION }}",
+    "/static/js/einheit_bedienung.js": "/static/js/einheit_bedienung.js?v={{ ASSET_VERSION }}",
+    "/static/js/einheit_verlauf.js": "/static/js/einheit_verlauf.js?v={{ ASSET_VERSION }}"
   }}
 </script>
 <script type="module" src="/static/js/einheit_modus.js?v={{ ASSET_VERSION }}"></script>
@@ -37,6 +41,7 @@
   'start_dispatch_id': start_dispatch_id,
 } %}
 <div class="fab-page einheit-page"
+     :data-dialog-offen="Boolean(flyout)"
      data-lage-id="{{ lage_id or '' }}"
      data-einheit-id="{{ einheit_id or '' }}"
      x-data="einheitModus({{ einheit_config|tojson|forceescape }})">
@@ -66,6 +71,7 @@
   </div>
   {% else %}
 
+  <div class="einheit-inhalt" :inert="flyout ? true : null">
   {# ── Simulation ─────────────────────────────────────────────────────── #}
   {% if simulation %}
   <div class="einheit-simulation">
@@ -82,10 +88,8 @@
   {% endif %}
 
   {% if gk_zugang %}
-  <div class="einheit-simulation">
+  <div class="einheit-zugangsinfo">
     <strong>{% if zugang_qr %}QR-Zugang - {{ fahrzeug }}{% else %}Gruppenkommandant-Zugang - {{ gk_name }}{% endif %}</strong>
-    <button type="button" class="btn btn--ghost btn--sm"
-            @click="lokaleDatenLoeschen()">Abmelden</button>
   </div>
   {% endif %}
 
@@ -107,7 +111,7 @@
         </div>
       </div>
       <div class="einheit-meta" aria-live="polite">
-        <span :class="online ? 'einheit-online' : 'einheit-offline'" x-text="verbindungsText"></span>
+        <span :class="online && !zugangBeendet ? 'einheit-online' : 'einheit-offline'" x-text="verbindungsText"></span>
         <span class="einheit-sub" x-show="syncText" x-text="syncText"></span>
         <strong x-text="(kopf.offen || 0) + ((kopf.offen || 0) === 1 ? ' offener Auftrag' : ' offene Aufträge')"></strong>
         <button type="button" class="einheit-chip einheit-chip--button"
@@ -115,16 +119,45 @@
                 @click="waehleBereich('meldungen')" x-text="outboxText"></button>
       </div>
     </div>
-    <nav class="einheit-umschalter">
-      <button type="button" class="btn btn--ghost" x-show="detail" @click="zurueck()">
-        {{ icon("arrow-left", size="sm") }} Zurück
+    <nav class="einheit-umschalter" aria-label="Weitere Funktionen">
+      <button type="button" class="btn btn--ghost" x-show="detail" @click="waehleBereich('einsaetze')">
+        {{ icon("arrow-left", size="sm") }} Zur Einsatzübersicht
       </button>
-      {% for einheit in benutzer_einheiten|default([]) %}
-      <a href="/einheit?einheit={{ einheit.id }}"{% if einheit.id == benutzer_einheit_id %} class="is-active"{% endif %}>{{ einheit.label }} · {{ einheit.lage_name }}</a>
-      {% endfor %}
-      {% if not gk_zugang %}
-      <a href="/lage/{{ lage_id }}?gesamt=1">Gesamtansicht</a>
-      {% endif %}
+      <details class="einheit-mehr">
+        <summary>Weitere Funktionen</summary>
+        <div class="einheit-mehr__inhalt">
+          {% for einheit in benutzer_einheiten|default([]) %}
+          <a href="/einheit?einheit={{ einheit.id }}"{% if einheit.id == benutzer_einheit_id %} class="is-active"{% endif %}>{{ einheit.label }} · {{ einheit.lage_name }}</a>
+          {% endfor %}
+          {% if not gk_zugang %}
+          <a class="btn btn--ghost" href="/lage/{{ lage_id }}?gesamt=1">Gesamtansicht</a>
+          {% else %}
+          <button type="button" class="btn btn--ghost" @click="lokaleDatenLoeschen()">Abmelden</button>
+          {% endif %}
+          <p>Du kannst alle Aufträge öffnen und mehrere übernehmen. Übernehmen bestätigt den Empfang.
+             Anfahrt, Vor Ort und In Arbeit zeigen die aktive Bearbeitung.</p>
+  {% if gk_zugang %}
+  <section class="einheit-warning einheit-warning--stack" x-show="nummerHinweis && !nummerGeschlossen" x-cloak>
+    <div><strong>Mobilnummer für Einsatzbenachrichtigungen hinterlegen</strong></div>
+    <p x-show="!nummerCodeGesendet">Die Nummer wird erst nach Bestätigung per SMS gespeichert.</p>
+    <label class="sr-only" for="gkNummer">Mobilnummer</label>
+    <input id="gkNummer" class="form-input" type="tel" inputmode="tel" autocomplete="tel"
+           x-model="nummerTelefon" x-show="!nummerCodeGesendet" placeholder="z. B. 0664 1234567">
+    <button type="button" class="btn btn--secondary"  x-show="!nummerCodeGesendet"
+            @click="nummerAnfordern()">Code senden</button>
+    <template x-if="nummerCodeGesendet"><div>
+      <p x-text="'Code gesendet an ' + (nummerMaske || 'die Mobilnummer')"></p>
+      <label class="sr-only" for="gkCode">Bestätigungscode</label>
+      <input id="gkCode" class="form-input" type="text" inputmode="numeric" autocomplete="one-time-code"
+             x-model="nummerCode" placeholder="Bestätigungscode">
+      <button type="button" class="btn btn--secondary"  @click="nummerBestaetigen()">Bestätigen</button>
+    </div></template>
+    <p x-show="nummerMeldung" x-text="nummerMeldung"></p>
+    <button type="button" class="btn btn--ghost btn--sm" @click="nummerGeschlossen = true">Schließen</button>
+  </section>
+  {% endif %}
+        </div>
+      </details>
     </nav>
   </header>
 
@@ -146,33 +179,17 @@
   <div class="einheit-warning einheit-warning--alarm" role="alert" x-show="ladeFehler" x-cloak>
     <span x-text="ladeFehler === 'anmeldung'
       ? 'Die Anmeldung ist abgelaufen oder wurde beendet. Bitte den Zugangslink bzw. QR-Code der Einheit erneut öffnen.'
+      : ladeFehler === 'kontext' ? 'Die Einheitenzuordnung wurde geändert. Bitte die Ansicht neu laden. Alte Übermittlungen bleiben lokal gespeichert.'
       : 'Die Einheitenansicht konnte nicht geladen werden. Bitte Verbindung prüfen.'"></span>
-    <button type="button" class="btn btn--ghost btn--sm" @click="laden()">Erneut versuchen</button>
+    <button type="button" class="btn btn--ghost btn--sm" @click="ladeFehler === 'kontext' ? location.reload() : laden()"
+            x-text="ladeFehler === 'kontext' ? 'Ansicht neu laden' : 'Erneut versuchen'"></button>
   </div>
 
-  {% if gk_zugang %}
-  <section class="einheit-warning einheit-warning--stack" x-show="nummerHinweis && !nummerGeschlossen" x-cloak>
-    <div><strong>Mobilnummer für Einsatzbenachrichtigungen hinterlegen</strong></div>
-    <p x-show="!nummerCodeGesendet">Die Nummer wird erst nach Bestätigung per SMS gespeichert.</p>
-    <label class="sr-only" for="gkNummer">Mobilnummer</label>
-    <input id="gkNummer" class="form-input" type="tel" inputmode="tel" autocomplete="tel"
-           x-model="nummerTelefon" x-show="!nummerCodeGesendet" placeholder="z. B. 0664 1234567">
-    <button type="button" class="btn btn--primary" style="min-height:44px" x-show="!nummerCodeGesendet"
-            @click="nummerAnfordern()">Code senden</button>
-    <template x-if="nummerCodeGesendet"><div>
-      <p x-text="'Code gesendet an ' + (nummerMaske || 'die Mobilnummer')"></p>
-      <label class="sr-only" for="gkCode">Bestätigungscode</label>
-      <input id="gkCode" class="form-input" type="text" inputmode="numeric" autocomplete="one-time-code"
-             x-model="nummerCode" placeholder="Bestätigungscode">
-      <button type="button" class="btn btn--primary" style="min-height:44px" @click="nummerBestaetigen()">Bestätigen</button>
-    </div></template>
-    <p x-show="nummerMeldung" x-text="nummerMeldung"></p>
-    <button type="button" class="btn btn--ghost btn--sm" @click="nummerGeschlossen = true">Schließen</button>
-  </section>
-  {% endif %}
+
 
   {# Eine Liste eigener Aufträge; Reihenfolge und Status kommen unverändert vom Server. #}
   {% from "einheit/_einsatzkarte.html" import einsatzkarte with context %}
+
   <div class="einheit-bereiche" x-show="!detail" x-cloak>
     <section class="einheit-bereich" x-show="bereichSichtbar('einsaetze')" aria-label="Einsätze">
       <template x-for="auftrag in fokusAuftrag ? [fokusAuftrag] : []" :key="auftrag.dispatch_id">
@@ -198,7 +215,7 @@
             <span>
               <span class="einheit-chip einheit-prioritaet" :class="prioClass(auftrag.priority)"
                     x-text="'Priorität: ' + prioLabel(auftrag.priority)"></span>
-              <span class="einheit-chip einheit-chip--status" x-text="auftrag.einheit_status_label"></span>
+              <span class="einheit-chip einheit-chip--status" x-text="bearbeitungsstand(auftrag)"></span>
               <span class="einheit-chip einheit-chip--neu" x-show="istGeaendert(auftrag)">GEÄNDERT</span>
             </span>
           </button>
@@ -229,7 +246,7 @@
           <label>Führung <input class="form-control" type="number" min="0" x-model.number="ressource.personal.fuehrung"></label>
           <label>AGT <input class="form-control" type="number" min="0" x-model.number="ressource.personal.agt"></label>
           <label>Sanitäter <input class="form-control" type="number" min="0" x-model.number="ressource.personal.sanitaeter"></label>
-          <button type="button" class="btn btn--primary" @click="personalSpeichern()">Personal speichern</button>
+          <button type="button" class="btn btn--secondary" @click="personalSpeichern()">Personal speichern</button>
         </div>
         <div class="einheit-formular" x-show="ressource.personal_modus === 'liste'">
           <template x-for="person in ressource.personal.personen || []" :key="person.id">
@@ -243,7 +260,7 @@
             <option value="mannschaft">Mannschaft</option><option value="fuehrung">Führung</option>
             <option value="agt">AGT</option><option value="sanitaeter">Sanitäter</option>
           </select>
-          <button type="button" class="btn btn--primary" @click="personHinzufuegen()">Person hinzufügen</button>
+          <button type="button" class="btn btn--secondary" @click="personHinzufuegen()">Person hinzufügen</button>
         </div>
         <hr>
         <p class="fab-subcard__title">Ausstattung</p>
@@ -264,7 +281,7 @@
         <div class="einheit-formular">
           <input class="form-control" x-model="neueAusstattung.bezeichnung" placeholder="Ausstattung hinzufügen">
           <input class="form-control" type="number" min="1" x-model.number="neueAusstattung.menge" placeholder="Menge">
-          <button type="button" class="btn btn--primary" @click="ausstattungHinzufuegen()">Hinzufügen</button>
+          <button type="button" class="btn btn--secondary" @click="ausstattungHinzufuegen()">Hinzufügen</button>
         </div>
       </details>
     </section>
@@ -275,8 +292,48 @@
         <div class="einheit-kartenaktionen">
           <button type="button" class="btn btn--ghost" @click="meinStandort()">{{ icon("map-pin", size="sm") }} Mein Standort</button>
           <button type="button" class="btn btn--ghost" @click="uebersichtKarte?.zentrieren()">Zentrieren</button>
-          <label><input type="checkbox" x-model="fertigeAufKarte"
+          <button type="button" class="btn btn--ghost" @click="standortBeenden()" x-show="standort || uebersichtKarte?.watchId != null">Standort aus</button>
+          <button type="button" class="btn btn--ghost" @click="uebersichtKarte?.alleZeigen()">Alle Einsatzstellen zeigen</button>
+          <button type="button" class="btn btn--ghost" @click="waehleBereich('einsaetze')">Zur Einsatzübersicht</button>
+          <label class="einheit-checkbox"><input type="checkbox" x-model="fertigeAufKarte"
                         @change="uebersichtKarteAktualisieren()"> Fertige einblenden</label>
+        </div>
+        <div class="einheit-kartenlayout">
+        <article class="fab-subcard einheit-kartenziel" x-show="kartenZiel" aria-label="Gewähltes Kartenziel"
+                 :class="'einheit-prio--' + (kartenZiel?.priority || 'keine')">
+          <p class="fab-subcard__title" x-text="kartenZiel?.aktuell ? 'Aktueller Auftrag' : kartenZiel?.naechster ? 'Nächster Auftrag' : 'Gewählter Auftrag'"></p>
+          <div class="einheit-card__fuss">
+            {{ auftragsart("kartenZiel?.auftragsart") }}
+            <span class="einheit-chip" :class="prioClass(kartenZiel?.priority)" x-text="'Priorität: ' + prioLabel(kartenZiel?.priority)"></span>
+            <span class="einheit-chip" x-text="kartenZiel?.einheit_status_label"></span>
+          </div>
+          <h3 x-text="kartenZiel?.bezeichnung || 'Einsatzstelle'"></h3>
+          <p class="einheit-address" x-text="kartenZiel?.adresse || 'Keine Adresse hinterlegt'"></p>
+          <p x-text="kartenZiel?.auftrag || 'Kein zusätzlicher Auftragstext'"></p>
+          <p class="einheit-warning" x-show="kartenZiel && !hatKartenkoordinaten(kartenZiel)">Keine Kartenposition – Navigation über die Adresse, sofern vorhanden.</p>
+          <div class="einheit-gefahren" x-show="(kartenHinweise?.gefahren || []).length">
+            <strong>{{ icon("alert-triangle", size="sm") }} Gefahren am Ziel</strong>
+            <template x-for="gefahr in kartenHinweise?.gefahren || []" :key="gefahr.id">
+              <p x-text="gefahr.title + ' · ' + gefahr.abstand_m + ' m'"></p>
+            </template>
+          </div>
+          <p role="status" x-text="kartenSperrenText"></p>
+          <template x-for="sperre in kartenHinweise?.strassensperren || []" :key="sperre.id">
+            <p class="einheit-warning" x-text="sperre.title + ' · ' + sperre.restriction_label"></p>
+          </template>
+          <p class="einheit-sub">Externe Navigation berücksichtigt ECP-Straßensperren nicht automatisch. Zufahrt prüfen.</p>
+          <a class="btn btn--primary btn--lg einheit-action" :href="navigationUrl(kartenZiel)"
+             x-show="navigationUrl(kartenZiel)" target="_blank" rel="noopener">{{ icon("compass", size="sm") }} Navigation starten</a>
+          <p class="einheit-sub" x-show="kartenZiel && !navigationUrl(kartenZiel)">Navigation nicht verfügbar – Adresse oder Kartenposition fehlt.</p>
+          <button type="button" class="btn btn--ghost einheit-action" @click="oeffne(kartenZiel.dispatch_id)">Auftrag öffnen</button>
+        </article>
+        <div class="einheit-kartenlayout__karte">
+        <p class="einheit-sub" x-show="!kartenAuftraege.length">Keine eigenen Aufträge auf der Karte.</p>
+        <p class="einheit-sub" x-show="standortHinweis" x-text="standortHinweis"></p>
+        <span class="einheit-chip" x-show="ohneKartenposition"
+              x-text="ohneKartenposition + ' ohne Kartenposition'"></span>
+        <div x-ref="uebersichtKarte" class="einheit-karte"></div>
+        </div>
         </div>
         <div class="einheit-kartenlegende" aria-label="Kartenlegende">
           <div>{{ auftragsart("'erkundung'") }} {{ auftragsart("'abarbeitung'") }}</div>
@@ -289,20 +346,23 @@
           <p class="einheit-sub">
             {{ icon("player-record", size="sm") }} Aktuell · {{ icon("player-play", size="sm") }} Nächster · 1, 2, 3 Reihenfolge · Linie = Luftlinie, keine Route
           </p>
-          <p class="einheit-sub">{{ icon("check", size="sm") }} Beendet: gestrichelter Markerring</p>
+          <p class="einheit-sub">{{ icon("check", size="sm") }} Beendet: gestrichelter Markerring · Zahl am Marker: mehrere Aufträge an derselben Position</p>
+          <p class="einheit-sub">! = Gefahr · Rote gestrichelte Linie / × = Sperre am gewählten Ziel</p>
         </div>
-        <p class="einheit-sub" x-show="standortHinweis" x-text="standortHinweis"></p>
-        <span class="einheit-chip" x-show="ohneKartenposition"
-              x-text="ohneKartenposition + ' ohne Kartenposition'"></span>
-        <div x-ref="uebersichtKarte" class="einheit-karte"></div>
         <ul class="einheit-kartenliste" aria-label="Aufträge auf der Karte">
           <template x-for="auftrag in kartenAuftraege" :key="auftrag.dispatch_id">
-            <li>
+            <li :class="{ 'einheit-kartenliste--auswahl': kartenZiel?.dispatch_id === auftrag.dispatch_id }">
+              <strong x-show="auftrag.aktuell">Aktueller Auftrag</strong>
               {{ auftragsart("auftrag.auftragsart") }}
               <span class="einheit-chip einheit-prioritaet" :class="prioClass(auftrag.priority)"
                     x-text="'Priorität: ' + prioLabel(auftrag.priority)"></span>
-              <span x-text="auftrag.bezeichnung"></span>
-              <span class="einheit-sub" x-show="!auftrag.hat_koordinaten">Keine Kartenposition</span>
+              <strong x-text="auftrag.bezeichnung"></strong>
+              <span class="einheit-address" x-text="auftrag.adresse"></span>
+              <span class="einheit-sub" x-text="auftrag.einheit_status_label"></span>
+              <span class="einheit-sub" x-show="!hatKartenkoordinaten(auftrag)">Keine Kartenposition</span>
+              <button type="button" class="btn btn--ghost" @click="kartenZielWaehlen(auftrag.dispatch_id, true)"
+                      :aria-pressed="kartenZiel?.dispatch_id === auftrag.dispatch_id"
+                      :aria-label="'Ziel wählen: ' + (auftrag.bezeichnung || 'Einsatzstelle')">Ziel wählen</button>
               <button type="button" class="btn btn--ghost" @click="oeffne(auftrag.dispatch_id)"
                       :aria-label="'Auftrag öffnen: ' + (auftrag.bezeichnung || 'Einsatzstelle')">Auftrag öffnen</button>
             </li>
@@ -311,7 +371,13 @@
       </section>
     <section class="fab-card einheit-bereich" x-show="bereichSichtbar('meldungen')" aria-label="Meldungen">
       <h2 class="fab-card__title">Meldungen</h2>
-      <p class="einheit-sub">Lagemeldungen, Fotos und die Chronik findest du im jeweiligen Auftrag.</p>
+      <button type="button" class="btn btn--primary btn--lg einheit-action" x-show="fokusAuftrag && schreibbar"
+              @click="oeffneMeldung('lagemeldung', fokusAuftrag)">Meldung an Einsatzleitung</button>
+      {% set verlauf_titel = 'Wichtige Meldungen der eigenen Einheit' %}
+      {% set verlauf_bereich = 'zentral' %}
+      {% set verlauf_ziel = 'null' %}
+      {% set verlauf_liste = 'zentralerVerlauf' %}
+      {% include "einheit/_meldungsverlauf.html" %}
       <button type="button" class="btn btn--ghost einheit-action" x-show="fokusAuftrag"
               @click="oeffne(fokusAuftrag.dispatch_id)">Aktuellen bzw. nächsten Auftrag öffnen</button>
       <h3 class="fab-subcard__title">Übermittlungen</h3>
@@ -320,9 +386,20 @@
   </div>
 
   {# ── Detail ─────────────────────────────────────────────────────────── #}
-  <section x-show="detail" x-cloak>
+  <section data-einheit-detail x-show="detail" :aria-hidden="flyout ? 'true' : null" x-cloak>
+    <p class="einheit-warning" x-show="detail?.auftrag?.withdrawn_at">Auftrag zurückgezogen – keine Statusaktion möglich.</p>
     <div class="einheit-warning" x-show="detail?.offline">
       Offline – angezeigt wird der zuletzt geladene Stand.
+    </div>
+    {% include "einheit/_auftragsfuehrung.html" %}
+    <div class="einheit-detailaktionen" x-show="schreibbar">
+      <button type="button" class="btn btn--secondary einheit-action" :disabled="meldungSpeichern || meldungLaden"
+              @click="oeffneMeldung()">Meldung an Einsatzleitung</button>
+      <input x-ref="fotoDirekt" class="sr-only" type="file" accept="image/*" capture="environment"
+             @change="fotoDirektErfassen()">
+      <button type="button" class="btn btn--ghost" :disabled="fotoSpeichern" @click="$refs.fotoDirekt.click()">
+        {{ icon("camera", size="sm") }} Foto
+      </button>
     </div>
     <div class="fab-grid">
       <main class="fab-grid__main">
@@ -335,6 +412,18 @@
                   x-text="'Priorität: ' + prioLabel(detail?.stelle?.priority)"></span>
           </div>
           <div class="einheit-address" x-text="detail?.stelle?.adresse"></div>
+          <section id="einheit-gefahren" class="einheit-detailgefahren" x-show="detailGefahren.length" aria-label="Gefahren am Einsatzort">
+            <h3>{{ icon("alert-triangle", size="sm") }} Gefahren am Einsatzort</h3>
+            <ul>
+              <template x-for="gefahr in detailGefahren" :key="gefahr.key">
+                <li>
+                  <strong x-text="gefahr.titel"></strong>
+                  <span x-show="gefahr.text" x-text="' · ' + gefahr.text"></span>
+                  <span class="einheit-sub" x-text="' (' + gefahr.quelle + ')'"></span>
+                </li>
+              </template>
+            </ul>
+          </section>
           <section class="einheit-einsatzkarte" x-show="hatKoordinaten" x-cloak>
             <div class="einheit-einsatzkarte__kopf">
               <strong>{{ icon("map-pin", size="sm") }} Einsatzort</strong>
@@ -342,8 +431,9 @@
             </div>
             <div class="einheit-einsatzkarte__karte" x-ref="einsatzKarte"></div>
           </section>
-          <p class="einheit-sub" x-show="detail?.stelle?.lat"
-             x-text="detail?.stelle?.lat + ', ' + detail?.stelle?.lng"></p>
+          <p class="einheit-warning" x-show="detail && !hatKoordinaten">Keine Kartenposition – Adresse zur Navigation verwenden, sofern vorhanden.</p>
+          <a class="btn btn--ghost btn--lg einheit-action" :href="navigationUrl(detail?.stelle)"
+             x-show="navigationUrl(detail?.stelle)" target="_blank" rel="noopener">{{ icon("compass", size="sm") }} Navigation starten</a>
           <p x-text="detail?.stelle?.einsatzgrund"></p>
 
           <div class="einheit-warning" x-show="auftragGeaendert">Auftrag wurde geändert – bitte prüfen</div>
@@ -363,16 +453,9 @@
               </div>
             </template>
           </div>
-
-          <div class="fab-subcard" x-show="(detail?.gefahren || []).length">
-            <p class="fab-subcard__title">{{ icon("alert-triangle", size="sm") }} Gefahren in der Nähe</p>
-            <template x-for="item in detail?.gefahren || []">
-              <div class="einheit-zeile">
-                <span x-text="item.title + ' (' + item.type_label + ')'"></span>
-                <span class="einheit-sub" x-text="item.abstand_m + ' m'"></span>
-              </div>
-            </template>
-          </div>
+          <p class="einheit-sub" x-show="detail?.andere_einheiten_eingeschraenkt">
+            Dein Zugang zeigt nur Informationen der eigenen Einheit. Weitere Einheiten bitte bei der Einsatzleitung erfragen.
+          </p>
 
           <div class="fab-subcard">
             <p class="fab-subcard__title">{{ icon("barrier-block", size="sm") }} Straßensperren am Ziel</p>
@@ -382,18 +465,35 @@
                 <span class="einheit-sub" x-text="item.restriction_label"></span>
               </div>
             </template>
-            <p class="einheit-sub" x-show="!(detail?.strassensperren || []).length">Keine bekannten Sperren am Ziel.</p>
+            <p class="einheit-sub" x-show="detail?.strassensperren_status === 'verfuegbar' && !detail.strassensperren.length">
+              Keine bekannten Sperren am Ziel.
+            </p>
+            <p class="einheit-sub" x-show="detail?.strassensperren_status !== 'verfuegbar'">Sperren am Ziel nicht verfügbar.</p>
             <div class="einheit-warning" x-text="detail?.navigation_hinweis"
                  x-show="detail?.navigation_hinweis"></div>
           </div>
 
           <div class="fab-subcard" x-show="(detail?.objekte || []).length">
             <p class="fab-subcard__title">Objektinformationen</p>
-            <template x-for="objekt in detail?.objekte || []">
-              <a class="btn btn--ghost einheit-objekt" :href="objekt.url">
-                <span x-text="objekt.bezeichnung"></span>
-                <span class="einheit-sub" x-text="objekt.adresse"></span>
-              </a>
+            <template x-for="objekt in detail?.objekte || []" :key="objekt.id">
+              <article class="einheit-objekt">
+                <strong x-text="objekt.bezeichnung"></strong>
+                <p class="einheit-sub" x-text="objekt.adresse"></p>
+                <p class="einheit-log__text" x-text="objekt.informationen" x-show="objekt.informationen"></p>
+                <p class="einheit-log__text" x-show="objekt.anfahrtsweg"><strong>Zufahrt: </strong><span x-text="objekt.anfahrtsweg"></span></p>
+                <template x-for="(hinweis, index) in objekt.hinweise || []" :key="index">
+                  <p><strong x-text="hinweis.name + ': '"></strong><span x-text="hinweis.text"></span></p>
+                </template>
+
+                <div class="einheit-thumbs">
+                  <template x-for="seite in objekt.seiten || []" :key="seite.id">
+                    <a class="btn btn--ghost einheit-plan" :href="einheitUrl(seite.url)" target="_blank" rel="noopener">
+                      <img x-show="seite.thumb_url" :src="seite.thumb_url ? einheitUrl(seite.thumb_url) : null" alt="" loading="lazy">
+                      <span x-text="seite.titel"></span>
+                    </a>
+                  </template>
+                </div>
+              </article>
             </template>
           </div>
 
@@ -401,8 +501,8 @@
             <p class="fab-subcard__title">Fotos zur Einsatzstelle</p>
             <div class="einheit-thumbs">
               <template x-for="foto in detail?.fotos || []" :key="foto.id">
-                <a :href="foto.url + (simulation ? '?sim=' + simEinheitId : '')" target="_blank" rel="noopener">
-                  <img :src="foto.thumb_url + (simulation ? '?sim=' + simEinheitId : '')"
+                <a :href="einheitUrl(foto.url)" target="_blank" rel="noopener">
+                  <img :src="einheitUrl(foto.thumb_url)"
                        :alt="foto.kommentar || 'Foto'" loading="lazy">
                 </a>
               </template>
@@ -435,67 +535,62 @@
             </template>
           </div>
 
-          <div class="fab-subcard" x-show="(detail?.chronik || []).length">
-            <p class="fab-subcard__title">Chronik</p>
-            <p class="einheit-sub">Meldungen zur Einsatzstelle – können mehrere Aufträge betreffen.</p>
-            <template x-for="item in detail?.chronik || []">
-              <div class="einheit-log" :class="item.eigene ? 'einheit-log--own' : ''">
-                <small class="einheit-sub"
-                       x-text="zeit(item.ts) + ' · ' + item.kind_label + (item.author_name ? ' · ' + item.author_name : '')"></small>
-                <div class="einheit-log__text" x-text="item.text"></div>
-              </div>
-            </template>
-          </div>
+          {% set verlauf_titel = 'Verlauf der Einsatzstelle' %}
+          {% set verlauf_bereich = 'stelle' %}
+          {% set verlauf_ziel = 'detail?.auftrag?.dispatch_id' %}
+          {% set verlauf_liste = 'stellenVerlauf' %}
+          {% include "einheit/_meldungsverlauf.html" %}
         </article>
       </main>
 
       <aside class="fab-grid__side" x-show="schreibbar">
         <div class="fab-actions einheit-aktionen">
-          <div class="einheit-status-aktuell">
-            <span class="einheit-sub">Status</span>
-            <strong x-text="statusLabel(wirksamerStatus)"></strong>
-            <span class="einheit-status-pending" x-show="ausstehenderStatus">{{ icon("hourglass", size="sm") }} nur auf diesem Gerät</span>
-          </div>
-          <button type="button" class="btn btn--primary btn--lg einheit-action"
-                  x-show="primaererText" :disabled="primaererStatus === 'abgeschlossen' && ausstehenderStatus"
-                  @click="naechsterStatus()" x-text="primaererText"></button>
-          <div class="einheit-zwischenaktionen" x-show="zwischenStatus.length">
+          <details x-show="zwischenStatus.length">
+            <summary>Weitere Status</summary>
+            <div class="einheit-zwischenaktionen">
             <template x-for="status in zwischenStatus" :key="status">
-              <button type="button" class="btn btn--ghost btn--sm" @click="statusErfassen(status)" x-text="statusLabel(status)"></button>
+              <button type="button" class="btn btn--ghost btn--sm" :disabled="!kannStatusMelden"
+                      @click="statusErfassen(status)" x-text="statusAktion(status)"></button>
             </template>
-          </div>
-          <button type="button" class="btn btn--ghost einheit-action einheit-action--gefahr"
-                  x-show="erlaubteStatus.includes('nicht_durchfuehrbar')" @click="flyout = 'nicht_durchfuehrbar'">Nicht durchführbar</button>
-          <div class="einheit-actions-row">
-            <input x-ref="fotoDirekt" class="sr-only" type="file" accept="image/*" capture="environment"
-                   @change="fotoDirektErfassen()">
-            <button type="button" class="btn btn--ghost" @click="$refs.fotoDirekt.click()">{{ icon("camera", size="sm") }} Foto</button>
-            <button type="button" class="btn btn--ghost" @click="oeffneMeldung('lagemeldung')">{{ icon("note", size="sm") }} Lagemeldung</button>
-            <button type="button" class="btn btn--ghost" @click="oeffneMeldung('massnahmen')">{{ icon("tools", size="sm") }} Maßnahme</button>
-            <button type="button" class="btn btn--ghost" @click="oeffneMeldung('note')">{{ icon("note", size="sm") }} Notiz</button>
-            <button type="button" class="btn btn--ghost" x-show="verleihAktiv && schreibbar" @click="flyout = 'material'">{{ icon("package", size="sm") }} Material</button>
-            <a class="btn btn--ghost" :href="detail?.auftrag?.nav_url || detail?.auftrag?.gmaps_url"
-               target="_blank" rel="noopener"
-               x-show="detail?.auftrag?.nav_url || detail?.auftrag?.gmaps_url">{{ icon("compass", size="sm") }} Navigation</a>
-          </div>
+            </div>
+          </details>
+          <details class="einheit-nebenaktionen">
+            <summary>Weitere Aktionen</summary>
+            <div class="einheit-actions-row">
+              <button type="button" class="btn btn--ghost einheit-action--gefahr"
+                      x-show="erlaubteStatus.includes('nicht_durchfuehrbar')" :disabled="!kannStatusMelden"
+                      @click="statusDialogOeffnen('nicht_durchfuehrbar')">Nicht durchführbar</button>
+              <button type="button" class="btn btn--ghost" @click="oeffneMeldung('lagemeldung')">{{ icon("note", size="sm") }} Lagemeldung</button>
+              <button type="button" class="btn btn--ghost" @click="oeffneMeldung('massnahmen')">{{ icon("tools", size="sm") }} Maßnahme</button>
+              <button type="button" class="btn btn--ghost" @click="oeffneMeldung('note')">{{ icon("note", size="sm") }} Notiz</button>
+              <button type="button" class="btn btn--ghost" x-show="verleihAktiv && schreibbar" @click="flyout = 'material'">{{ icon("package", size="sm") }} Material</button>
+            </div>
+          </details>
         </div>
       </aside>
     </div>
   </section>
 
+  </div>{# Standardinhalt bleibt während eines Dialogs ohne Tastatur-/Touch-Fokus. #}
   {# ── Flyouts (Erfassen und Bestätigen) ──────────────────────────────── #}
   <div class="person-flyout-backdrop" x-show="flyout" x-cloak>
-    <section class="person-flyout" role="dialog" aria-modal="true">
+    <section class="person-flyout" role="dialog" aria-modal="true" x-ref="dialog"
+             aria-labelledby="einheit-dialog-titel" aria-describedby="einheit-dialog-auftrag" @keydown.tab="dialogTab($event)">
       <header class="person-flyout__header">
-        <h2 x-text="flyoutTitel || 'Bestätigen'"></h2>
-        <button type="button" class="person-flyout__close" @click="flyout = null">&times;</button>
+        <h2 id="einheit-dialog-titel" x-ref="dialogTitel" tabindex="-1" x-text="flyoutTitel || 'Bestätigen'"></h2>
+        <button type="button" class="person-flyout__close" aria-label="Schließen"
+                :disabled="statusSpeichern || ergebnisSpeichern || meldungSpeichern || fotoSpeichern" @click="flyoutSchliessen()">&times;</button>
       </header>
-      <div class="einheit-flyout-body">
-        <div class="einheit-uebermittlung__kopf" x-show="dialogAuftrag">
+      <p class="einheit-warning einheit-dialogfehler" role="alert" x-show="aktionsFehler" x-text="aktionsFehler"></p>
+      <div id="einheit-dialog-auftrag" class="einheit-dialogauftrag" x-show="dialogAuftrag">
+        <div class="einheit-uebermittlung__kopf">
           {{ auftragsart("dialogAuftrag?.auftragsart") }}
-          <span x-text="dialogAuftrag?.bezeichnung"></span>
+          <strong x-text="dialogAuftrag?.bezeichnung"></strong>
         </div>
-
+        <p class="einheit-sub" x-text="dialogAuftrag?.adresse"></p>
+        <p class="einheit-status-pending" x-show="!online">Offline · Eingaben werden nur lokal gespeichert</p>
+      </div>
+      <div class="einheit-flyout-body">
         <template x-if="flyout === 'foto'">
           <div class="einheit-formular">
             <input x-ref="foto" class="form-control" type="file" accept="image/*" capture="environment" multiple>
@@ -536,10 +631,31 @@
 
         <template x-if="['lagemeldung', 'massnahmen', 'note'].includes(flyout)">
           <div class="einheit-formular">
+            <label for="meldung-ziel">Einsatz</label>
+            <select id="meldung-ziel" x-ref="meldungZiel" class="form-control" :value="meldungAuftrag?.dispatch_id"
+                    :disabled="meldungSpeichern || meldungLaden || meldungFotosVorhanden" @change="meldungsZielWechseln($event.target.value)">
+              <template x-for="ziel in meldungsZiele" :key="ziel.dispatch_id">
+                <option :value="ziel.dispatch_id" x-text="ziel.bezeichnung + (ziel.adresse ? ' · ' + ziel.adresse : '')"></option>
+              </template>
+            </select>
+            <div class="einheit-schnellmeldungen" x-show="flyout === 'lagemeldung'">
+              <template x-for="meldung in schnellmeldungsAuswahl" :key="meldung.code">
+                <button type="button" class="btn btn--secondary einheit-action"
+                        :class="{'einheit-schnellmeldung--aktiv': schnellmeldung === meldung.code}"
+                        :aria-pressed="schnellmeldung === meldung.code"
+                        :disabled="meldungSpeichern || meldungLaden || !schreibbar || zugangBeendet
+                          || (meldung.aktion !== 'meldung' && !meldungAuftrag?.erlaubte_status?.includes(meldung.aktion))"
+                        @click="schnellmeldungWaehlen(meldung)" x-text="meldung.label"></button>
+              </template>
+            </div>
             <div class="einheit-warning" x-show="auftragGeaendert">Auftrag wurde geändert – bitte prüfen</div>
             <div class="einheit-sub" x-show="entwurfHinweis">Entwurf wiederhergestellt</div>
-            <textarea class="form-control einheit-textarea" x-ref="meldung" x-model="meldungText"
+            <label for="einheit-meldung-text">Ergänzung (optional bei Schnellmeldung)</label>
+            <textarea id="einheit-meldung-text" class="form-control einheit-textarea" x-ref="meldung" x-model="meldungText"
+                      :disabled="meldungSpeichern || meldungLaden"
                       @input="entwurfSpeichern()" placeholder="Text eingeben oder diktieren"></textarea>
+            <button type="button" class="btn btn--ghost" x-show="diktatVerfuegbar" :disabled="meldungSpeichern || meldungLaden"
+                    onclick="startVoice('einheit-meldung-text')">{{ icon("microphone", size="sm") }} Diktieren</button>
             <details x-show="flyout === 'lagemeldung'">
               <summary>Strukturierte Angaben (optional)</summary>
               <input class="form-control" x-model="felder.lage" @input="entwurfSpeichern()" placeholder="Lage vor Ort">
@@ -550,34 +666,59 @@
               <input class="form-control" x-model="felder.fortschritt" @input="entwurfSpeichern()"
                      placeholder="Aktueller Fortschritt">
             </details>
-            <button type="button" class="btn btn--primary btn--lg einheit-action" @click="meldungErfassen()">
-              Erfassen
-            </button>
+            <label for="meldung-fotos">Fotos (optional)</label>
+            <input id="meldung-fotos" x-ref="meldungFotos" class="form-control" type="file" accept="image/*"
+                   @change="meldungFotosVorhanden = Boolean($event.target.files.length)"
+                   capture="environment" multiple :disabled="meldungSpeichern || meldungLaden">
+            <p class="einheit-sub">Fotos werden diesem Einsatz zugeordnet. Offline bleibt die Meldung bis zum Versand auf diesem Gerät.</p>
           </div>
         </template>
 
         <template x-if="flyout === 'nicht_durchfuehrbar'">
           <div class="einheit-formular">
-            <textarea class="form-control" x-model="grund" placeholder="Grund (Pflichtfeld)"></textarea>
-            <button type="button" class="btn btn--danger btn--lg einheit-action" :disabled="!grund.trim()"
+            <textarea id="einheit-grund" class="form-control" x-model="grund" placeholder="Grund (Pflichtfeld)"
+                      :disabled="statusSpeichern"></textarea>
+            <button type="button" class="btn btn--ghost" x-show="diktatVerfuegbar" :disabled="statusSpeichern"
+                    onclick="startVoice('einheit-grund')">{{ icon("microphone", size="sm") }} Diktieren</button>
+            {% include "einheit/_status_rueckmeldung.html" %}
+            <p class="einheit-warning" x-show="statusDialogVeraltet">Auftrag oder Status geändert – bitte aktuellen Stand prüfen.</p>
+            <button type="button" class="btn btn--danger btn--lg einheit-action"
+                    :disabled="!grund.trim() || !kannStatusMelden || statusDialogVeraltet"
                     @click="statusErfassen('nicht_durchfuehrbar')">Als nicht durchführbar melden</button>
           </div>
         </template>
 
         <template x-if="flyout === 'abschluss_bestaetigen'">
           <div class="einheit-formular">
+            <p class="einheit-warning" x-show="statusDialogVeraltet">Auftrag geändert – Dialog schließen und aktuellen Auftrag prüfen.</p>
             <template x-if="istErkundung">
               <div class="einheit-formular">
-                <label for="erkundung-lage">Lage vor Ort (optional)</label>
+                <p class="einheit-sub">Ergebnis auswählen. Bei Maßnahmen, Gefahr oder weiterer Erkundung kurz beschreiben, was festgestellt wurde oder benötigt wird.</p>
+                <label for="erkundung-ergebnis">Erkundungsergebnis (Pflichtfeld)</label>
+                <select id="erkundung-ergebnis" class="form-control" x-model="erkundungAuswahl"
+                        :disabled="ergebnisSpeichern || ergebnisLaden" @change="ergebnisEntwurfSpeichern()">
+                  <option value="">Ergebnis auswählen</option>
+                  <template x-for="meldung in statusDialogAuftrag?.schnellmeldungen || []" :key="meldung.code">
+                    <option :value="meldung.code" x-text="meldung.label"></option>
+                  </template>
+                </select>
+                <p class="einheit-sub" x-show="ergebnisLaden">Erkundungsergebnis wird geladen.</p>
+                <p class="einheit-sub" x-show="ergebnisEntwurfHinweis" x-text="ergebnisEntwurfHinweis"></p>
+                <label for="erkundung-lage">Lage vor Ort</label>
                 <textarea class="form-control einheit-textarea" x-model="erkundungLage"
+                          :disabled="ergebnisSpeichern || ergebnisLaden" @input="ergebnisEntwurfSpeichern()"
                           id="erkundung-lage" placeholder="Lage vor Ort"></textarea>
+                <button type="button" class="btn btn--ghost" x-show="diktatVerfuegbar" :disabled="ergebnisSpeichern || ergebnisLaden"
+                        onclick="startVoice('erkundung-lage')">{{ icon("microphone", size="sm") }} Diktieren</button>
                 <label for="erkundung-massnahmen">Notwendige Maßnahmen (optional)</label>
                 <textarea class="form-control einheit-textarea" x-model="erkundungMassnahmen"
+                          :disabled="ergebnisSpeichern || ergebnisLaden" @input="ergebnisEntwurfSpeichern()"
                           id="erkundung-massnahmen" placeholder="Notwendige Maßnahmen"></textarea>
                 <label for="erkundung-fotos">Fotos (optional)</label>
                 <input x-ref="erkundungFotos" class="form-control" type="file" accept="image/*"
-                       capture="environment" multiple id="erkundung-fotos">
+                       :disabled="ergebnisSpeichern || ergebnisLaden" capture="environment" multiple id="erkundung-fotos">
                 <button type="button" class="btn btn--primary btn--lg einheit-action"
+                        :disabled="!kannStatusMelden || statusDialogVeraltet || !erkundungErgebnisGueltig"
                         @click="erkundungAbschliessen()">Erkundung abschließen</button>
               </div>
             </template>
@@ -585,20 +726,33 @@
               <div>
                 <p>Auftrag für diese Einsatzstelle als abgeschlossen melden?
                    Die Einsatzleitung entscheidet über den Abschluss der Einsatzstelle.</p>
+                {% include "einheit/_status_rueckmeldung.html" %}
                 <button type="button" class="btn btn--primary btn--lg einheit-action"
-                        @click="statusInOutbox('abgeschlossen')">Auftrag abgeschlossen</button>
+                        :disabled="!kannStatusMelden || statusDialogVeraltet"
+                        @click="statusInOutbox('abgeschlossen')">Fertig melden</button>
               </div>
             </template>
           </div>
         </template>
 
+        <template x-if="flyout === 'unterbrechen_bestaetigen'">
+          <div class="einheit-formular">
+            <p>Die aktive Bearbeitung dieses Auftrags unterbrechen? Der Auftrag bleibt übernommen.</p>
+            <p class="einheit-warning" x-show="statusDialogVeraltet">Auftrag oder Status geändert – bitte aktuellen Stand prüfen.</p>
+            <button type="button" class="btn btn--primary einheit-action"
+                    :disabled="!kannStatusMelden || statusDialogVeraltet"
+                    @click="statusInOutbox('bestaetigt')">Bearbeitung unterbrechen</button>
+          </div>
+        </template>
+
         <template x-if="flyout === 'aktiver_auftrag'">
           <div class="einheit-formular">
-            <p x-text="(aktuell?.bezeichnung || 'Der laufende Auftrag') + ' unterbrechen und hierher wechseln?'"></p>
+            <p><strong x-text="konfliktAktiverName"></strong> unterbrechen und zu <strong x-text="dialogAuftrag?.bezeichnung"></strong> wechseln?</p>
+            <p class="einheit-sub">Der bisherige Auftrag bleibt übernommen. Priorität und Reihenfolge bleiben erhalten.</p>
             <button type="button" class="btn btn--primary btn--lg einheit-action"
-                    @click="konfliktEntscheiden(true)">Unterbrechen und wechseln</button>
+                    :disabled="statusSpeichern" @click="konfliktEntscheiden(true)">Unterbrechen und wechseln</button>
             <button type="button" class="btn btn--ghost einheit-action"
-                    @click="konfliktEntscheiden(false)">Nein, Status nicht ändern</button>
+                    :disabled="statusSpeichern" @click="konfliktEntscheiden(false)">Nein, Status nicht ändern</button>
           </div>
         </template>
 
@@ -610,6 +764,10 @@
         </template>
 
       </div>
+      <footer class="einheit-meldung-footer" x-show="['lagemeldung', 'massnahmen', 'note'].includes(flyout)">
+        <button type="button" class="btn btn--primary btn--lg einheit-action" :disabled="!kannMeldungSenden"
+                @click="meldungErfassen()">Erfassen</button>
+      </footer>
     </section>
   </div>
 

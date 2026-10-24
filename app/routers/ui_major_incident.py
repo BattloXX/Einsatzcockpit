@@ -112,6 +112,7 @@ from app.services.major_incident_service import (
     get_active_lage,
     lage_einrichten,
 )
+from app.services.site_log_service import dringende_meldungen_fuer_stellen
 
 router = APIRouter(dependencies=[Depends(einheit_geraet_nur_lesen)])
 
@@ -379,6 +380,7 @@ def lage_board(
         "sites_by_phase": sites_by_phase,
         "dispatch_counts_by_site": dispatch_counts_by_site,
         "einheiten_chips_by_site": einheiten_chips_by_site,
+        "dringende_meldungen_by_site": dringende_meldungen_fuer_stellen(db, [site.id for site in lage.sites]),
         "phase_order": PHASE_ORDER,
         "phase_labels": PHASE_LABELS,
         "prio_color": SITE_PRIORITY_COLOR,
@@ -837,6 +839,7 @@ def site_card_partial(
         "can_manage": _can_manage(user),
         "dispatch_counts": dispatch_counts,
         "einheiten_chips": einheiten_chips,
+        "dringende_meldungen_by_site": dringende_meldungen_fuer_stellen(db, [site.id]),
         "material_open_counts_by_site": material_open_counts_for_sites(db, [site.id]),
     })
 
@@ -888,6 +891,7 @@ def phase_column_partial(
         "sectors_by_id": sectors_by_id,
         "dispatch_counts_by_site": dispatch_counts_by_site,
         "einheiten_chips_by_site": einheiten_chips_by_site,
+        "dringende_meldungen_by_site": dringende_meldungen_fuer_stellen(db, [site.id for site in sites]),
         "material_open_counts_by_site": material_open_counts_by_site,
         "can_edit": _can_edit(user),
         "can_manage": _can_manage(user),
@@ -1060,6 +1064,7 @@ def _site_detail_html_with_oob(request: Request, db: Session, lage, site, user) 
         "can_manage": _can_manage(user),
         "dispatch_counts": dispatch_counts,
         "einheiten_chips": einheiten_chips,
+        "dringende_meldungen_by_site": dringende_meldungen_fuer_stellen(db, [site.id]),
         "material_open_counts_by_site": material_open_counts_for_sites(db, [site.id]),
     }
     card_html = templates.env.get_template(
@@ -1232,15 +1237,16 @@ def site_einheit_status_setzen(
         raise HTTPException(status_code=404)
     dispatch = _dispatch_fuer_stelle_oder_404(db, dispatch_id, site_id)
     try:
-        result = einheit_service.melde_status_per_funk(
+        result = resource_service.status_transaktion(db, lambda: einheit_service.melde_status_per_funk(
             db, user, dispatch, status, author_name=get_author_name(request), grund=grund,
-        )
+        ))
+    except resource_service.StatusTransaktionBelegt:
+        raise HTTPException(status_code=503, detail="Gleichzeitiger Statuswechsel – bitte erneut versuchen.")
     except EinheitKonflikt as exc:
         raise HTTPException(status_code=409, detail=einheit_service.KONFLIKT_MELDUNGEN.get(
             exc.code, "Status kann nicht gesetzt werden."))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    db.commit()
     run_async(gsl_broadcast.einheit_status_geaendert,
         db, lage, site_id, dispatch_id, dispatch.einheit_id, result,
     )
@@ -1266,29 +1272,40 @@ def site_einheit_vor_ort(
     if not site or site.major_incident_id != lage_id:
         raise HTTPException(status_code=404)
 
-    if confirmed:
-        resource_service.resolve_vor_ort_conflict(
-            db, einheit_id, lage_id, site_id,
-            author_name=get_author_name(request), user_id=user.id,
-        )
+    def anwenden():
+        if confirmed:
+            dispatch = resource_service.resolve_vor_ort_conflict(
+                db, einheit_id, lage_id, site_id,
+                author_name=get_author_name(request), user_id=user.id,
+            )
+        else:
+            dispatch, conflict = resource_service.set_vor_ort_at_site(
+                db, einheit_id, lage_id, site_id,
+                author_name=get_author_name(request), user_id=user.id,
+            )
+            if conflict:
+                return None, conflict
         einheit = db.get(LageEinheit, einheit_id)
+        text = "Einheit verlegt (Abzug bestätigt)" if confirmed else "Einheit vor Ort"
         db.add(SiteLogEntry(
             incident_site_id=site_id,
             kind="resource",
-            text=f"Einheit verlegt (Abzug bestätigt): {einheit.label}",  # type: ignore[union-attr]
+            text=f"{text}: {einheit.label}",  # type: ignore[union-attr]
             user_id=user.id,
             author_name=get_author_name(request),
         ))
         lagemeldung_service.sync_timer(site, db)
-        db.commit()
+        return dispatch, None
+
+    try:
+        dispatch, conflict = resource_service.status_transaktion(db, anwenden)
+    except resource_service.StatusTransaktionBelegt:
+        raise HTTPException(status_code=503, detail="Gleichzeitiger Statuswechsel – bitte erneut versuchen.")
+
+    if confirmed:
         run_async(broadcast_lage, lage_id, {"type": "site:card_changed", "site_id": site_id})
         html = _site_detail_html_with_oob(request, db, lage, site, user)
         return HTMLResponse(content=html, headers={"HX-Retarget": "#siteDetailContent", "HX-Reswap": "innerHTML"})
-
-    dispatch, conflict = resource_service.set_vor_ort_at_site(
-        db, einheit_id, lage_id, site_id,
-        author_name=get_author_name(request), user_id=user.id,
-    )
 
     if conflict:
         einheit = db.get(LageEinheit, einheit_id)
@@ -1311,16 +1328,6 @@ def site_einheit_vor_ort(
             },
         )
 
-    einheit = db.get(LageEinheit, einheit_id)
-    db.add(SiteLogEntry(
-        incident_site_id=site_id,
-        kind="resource",
-        text=f"Einheit vor Ort: {einheit.label}",  # type: ignore[union-attr]
-        user_id=user.id,
-        author_name=get_author_name(request),
-    ))
-    lagemeldung_service.sync_timer(site, db)
-    db.commit()
     if dispatch and getattr(dispatch, "neu_angelegt", False):
         from app.services.print_dispatcher import autoprint_gsl_stelle_disponiert_background
         background_tasks.add_task(autoprint_gsl_stelle_disponiert_background, dispatch.id)

@@ -8,10 +8,10 @@ import json
 import math
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
-from typing import Any, NoReturn
+from typing import Any, Literal, NoReturn
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
@@ -37,17 +37,15 @@ from app.models.major_incident import (
     LageEinheitPerson,
     SiteLogEntry,
     SiteMedia,
-    SitePhase,
     VehiclePosition,
 )
 from app.models.master import FireDept, VehicleMaster
+from app.models.objekt import ObjektDokumentSeite
 from app.models.user import AuditLog, DeviceToken
 from app.models.verleih import VerleihAusleihe, VerleihFoto
-from app.services import gk_nummer_service, gk_zugang_service, ressource_pflege_service
+from app.services import gk_nummer_service, gk_zugang_service, resource_service, ressource_pflege_service
 from app.services.broadcast import broadcast_lage
 from app.services.einheit_service import (
-    ERLAUBTE_UEBERGAENGE,
-    ERLAUBTE_UEBERGAENGE_ERKUNDUNG,
     EinheitKonflikt,
     EinheitKontext,
     EinheitKontextFehler,
@@ -65,7 +63,13 @@ from app.services.einheit_service import (
 from app.services.gk_zugang_service import ZugangFehlergrund
 from app.services.gsl_live_notify import notify_gsl_live
 from app.services.lage_media_service import site_media_path, site_thumb_path, speichere_site_foto
-from app.services.site_log_service import add_site_log, format_lagemeldung, normalisiere_user_kind
+from app.services.site_log_service import (
+    add_site_log,
+    format_lagemeldung,
+    format_schnellmeldung,
+    meldung_hervorhebung,
+    normalisiere_user_kind,
+)
 
 router = APIRouter(prefix="/einheit", tags=["einheit"])
 
@@ -232,7 +236,7 @@ def _antwort_exc(exc: HTTPException) -> JSONResponse:
     return JSONResponse(exc.detail, status_code=exc.status_code)
 
 
-def einheit_kontext(request: Request, db: Session = Depends(get_db)) -> EinheitKontext:
+def _einheit_kontext_aufloesen(request: Request, db: Session) -> EinheitKontext:
     """Loest Tablet- bzw. explizit erlaubte Admin-Simulationen auf."""
     user = getattr(request.state, "user", None)
     # Simulation deliberately precedes all other principals. An anonymous GK
@@ -331,6 +335,15 @@ def einheit_kontext(request: Request, db: Session = Depends(get_db)) -> EinheitK
     _fehler(403, "kein_einheitenkontext")
 
 
+def einheit_kontext(request: Request, db: Session = Depends(get_db)) -> EinheitKontext:
+    ctx = _einheit_kontext_aufloesen(request, db)
+    # Optionale Vorbedingung; Berechtigungen kommen weiterhin allein aus dem geprüften Kontext.
+    erwartet = request.headers.get("X-EC-Einheit-Kontext")
+    if erwartet is not None and erwartet != str(ctx.einheit.id):
+        _fehler(409, "einheit_gewechselt")
+    return ctx
+
+
 def _schreibbar(ctx: EinheitKontext) -> None:
     if ctx.simulation and not ctx.lage.is_exercise:
         _fehler(403, "simulation_nur_lesend")
@@ -368,6 +381,16 @@ def _zeit(value: str | None) -> tuple[datetime | None, str | None]:
     return parsed, None
 
 
+def _aktion_passt(row: EinheitAktion, ctx: EinheitKontext, dispatch_id: int | None, aktion: str) -> bool:
+    if (row.org_id != ctx.org_id or row.einheit_id != ctx.einheit.id or row.dispatch_id != dispatch_id
+            or row.aktion != aktion or row.quelle != ctx.quelle):
+        return False
+    if ctx.simulation or ctx.quelle == "benutzer":
+        return True
+    return (row.device_token_id == (ctx.device_token.id if ctx.device_token else None)
+            and row.zugang_id == (ctx.zugang.id if ctx.zugang else None))
+
+
 def fuehre_aktion_aus(
     db: Session,
     ctx: EinheitKontext,
@@ -384,13 +407,7 @@ def fuehre_aktion_aus(
         _fehler(422, "client_uuid_ungueltig")
     vorhanden = db.query(EinheitAktion).filter(EinheitAktion.client_uuid == client_uuid).first()
     if vorhanden:
-        gleich = (
-            vorhanden.device_token_id == (ctx.device_token.id if ctx.device_token else None)
-            and vorhanden.zugang_id == (ctx.zugang.id if ctx.zugang else None)
-        )
-        if ctx.simulation or ctx.quelle == "benutzer":
-            gleich = vorhanden.quelle == ctx.quelle and vorhanden.einheit_id == ctx.einheit.id
-        if not gleich:
+        if not _aktion_passt(vorhanden, ctx, dispatch_id, aktion):
             return {"code": "client_uuid_vergeben"}, 409
         return json.loads(vorhanden.antwort_json or "{}"), 409 if vorhanden.ergebnis == "konflikt" else 200
     try:
@@ -427,6 +444,8 @@ def fuehre_aktion_aus(
         db.rollback()
         replay = db.query(EinheitAktion).filter(EinheitAktion.client_uuid == client_uuid).first()
         if replay:
+            if not _aktion_passt(replay, ctx, dispatch_id, aktion):
+                return {"code": "client_uuid_vergeben"}, 409
             return json.loads(replay.antwort_json or "{}"), 409 if replay.ergebnis == "konflikt" else 200
         raise
     return antwort, status
@@ -466,7 +485,7 @@ def zustand(request: Request, ctx: EinheitKontext = Depends(einheit_kontext), db
             if auftrag:
                 site = stellen[auftrag["site_id"]]
                 auftrag["gefahren"] = _gefahren_an_stelle(site, marker)
-                auftrag["gefahren_verfuegbar"] = site.lat is not None and site.lng is not None
+                auftrag["gefahren_verfuegbar"] = auftrag["hat_koordinaten"]
     from app.services import verleih_service as verleih_svc
     from app.services.mi_feature_service import get_mi_features
 
@@ -694,6 +713,24 @@ def ressource_ausstattung(
     return JSONResponse(answer, status_code=code)
 
 
+@router.get("/api/meldungen")
+def meldungen_verlauf(
+    dispatch_id: int | None = None, cursor: str | None = None, mit_status: bool = False,
+    limit: int = Query(30, ge=1, le=100),
+    ctx: EinheitKontext = Depends(einheit_kontext), db: Session = Depends(get_db),
+):
+    from app.services.einheit_verlauf_service import meldungsverlauf
+
+    try:
+        dispatch = auftrag_laden(db, ctx, dispatch_id) if dispatch_id is not None else None
+        data = meldungsverlauf(db, ctx, dispatch=dispatch, cursor=cursor, limit=limit, mit_status=mit_status)
+    except LookupError:
+        raise HTTPException(status_code=404)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Ungültige Verlaufsauswahl")
+    return JSONResponse(data, headers={"Cache-Control": "no-store"})
+
+
 @router.get("/api/auftrag/{dispatch_id}")
 def auftrag_detail(dispatch_id: int, ctx: EinheitKontext = Depends(einheit_kontext), db: Session = Depends(get_db)):
     try:
@@ -702,18 +739,6 @@ def auftrag_detail(dispatch_id: int, ctx: EinheitKontext = Depends(einheit_konte
         raise HTTPException(status_code=404)
     site = dispatch.site
     auftrag = _auftragsdaten(dispatch)
-    uebergaenge = (
-        ERLAUBTE_UEBERGAENGE_ERKUNDUNG
-        if dispatch.auftragsart == "erkundung"
-        else ERLAUBTE_UEBERGAENGE
-    )
-    erlaubte_status = uebergaenge.get(dispatch.einheit_status, frozenset())
-    if (
-        dispatch.auftragsart == "abarbeitung"
-        and site.phase in {SitePhase.eingegangen, SitePhase.erkundung}
-    ):
-        erlaubte_status = erlaubte_status - {"in_arbeit", "abgeschlossen"}
-    auftrag["erlaubte_status"] = sorted(erlaubte_status)
     out: dict[str, Any] = {
         "auftrag": auftrag,
         "stelle": {
@@ -782,9 +807,13 @@ def auftrag_detail(dispatch_id: int, ctx: EinheitKontext = Depends(einheit_konte
         # GK sees only their own dispatch; labels and status of other units are
         # operationally sensitive and not needed to execute that dispatch.
         out["andere_einheiten"] = []
+    out["andere_einheiten_eingeschraenkt"] = ctx.quelle == "zugang"
     logs = (
         db.query(SiteLogEntry)
-        .filter(SiteLogEntry.incident_site_id == site.id)
+        .filter(
+            SiteLogEntry.incident_site_id == site.id,
+            *([SiteLogEntry.einheit_id == ctx.einheit.id] if ctx.quelle == "zugang" else []),
+        )
         .order_by(SiteLogEntry.ts.desc())
         .limit(50)
         .all()
@@ -794,6 +823,7 @@ def auftrag_detail(dispatch_id: int, ctx: EinheitKontext = Depends(einheit_konte
             "ts": _iso_z(x.ts),
             "kind": x.kind,
             "kind_label": SITE_LOG_KIND_LABEL.get(x.kind, x.kind),
+            "hervorhebung": meldung_hervorhebung(x.text),
             "text": x.text,
             "author_name": x.author_name,
             "eigene": x.einheit_id == ctx.einheit.id,
@@ -821,25 +851,13 @@ def auftrag_detail(dispatch_id: int, ctx: EinheitKontext = Depends(einheit_konte
         }
         for x in media
     ]
-    out["objekte"] = []
-    if site.incident_id:
-        from app.models.incident import Incident
+    from app.services.einheit_vorschau_service import objektvorschau
 
-        incident = db.get(Incident, site.incident_id)
-        if incident:
-            out["objekte"] = [
-                {
-                    "id": link.objekt.id,
-                    "bezeichnung": link.objekt.name,
-                    "adresse": link.objekt.adresse_zeile,
-                    "status": link.status,  # bestaetigt | vorschlag
-                    "url": f"/objekte/{link.objekt.id}",
-                }
-                for link in incident.objekt_links
-            ]
+    out["objekte"] = objektvorschau(db, ctx, dispatch)
     out["gefahren"] = _gefahren(db, ctx, site)
-    out["strassensperren"] = _sperren(db, ctx, site)
-    out["navigation_hinweis"] = "Externe Navigation berücksichtigt keine ECP-Straßensperren."
+    from app.services.einheit_karten_service import ziel_sperren
+
+    out.update(ziel_sperren(db, ctx.org_id, site))
     return out
 
 
@@ -856,7 +874,9 @@ def _gefahren_marker(db: Session, ctx: EinheitKontext) -> list[CrossSiteMarker]:
 
 
 def _gefahren_an_stelle(site: IncidentSite, marker_liste: list[CrossSiteMarker]) -> list[dict]:
-    if site.lat is None or site.lng is None:
+    from app.services.einheit_karten_service import hat_zielkoordinaten
+
+    if site.lat is None or site.lng is None or not hat_zielkoordinaten(site):
         return []
     result = []
     for marker in marker_liste:
@@ -868,6 +888,7 @@ def _gefahren_an_stelle(site: IncidentSite, marker_liste: list[CrossSiteMarker])
         if abstand <= 300:
             result.append(
                 {
+                    "id": marker.id, "lat": marker.lat, "lng": marker.lng,
                     "title": marker.title,
                     "type_label": marker.type_label,
                     "status_label": marker.status_label,
@@ -878,19 +899,9 @@ def _gefahren_an_stelle(site: IncidentSite, marker_liste: list[CrossSiteMarker])
 
 
 def _sperren(db: Session, ctx: EinheitKontext, site: IncidentSite) -> list[dict]:
-    if site.lat is None or site.lng is None:
-        return []
-    try:
-        from app.services.road_closure_flags import strassensperren_effective_enabled
+    from app.services.einheit_karten_service import ziel_sperren
 
-        if not strassensperren_effective_enabled(ctx.org_id, db):
-            return []
-        from app.services.road_closure_incident_service import relevant_closures
-
-        rows, _ = relevant_closures(db, ctx.org_id, None, (site.lat, site.lng))
-        return [{"title": x.title, "restriction_label": x.restriction_label} for x in rows]
-    except Exception:
-        return []
+    return ziel_sperren(db, ctx.org_id, site)["strassensperren"]
 
 
 @router.post("/api/auftrag/{dispatch_id}/status")
@@ -906,7 +917,28 @@ async def status(
         raise HTTPException(status_code=404)
     erfasst, hinweis = _zeit(body.get("erfasst_at"))
 
+    def ergebnis_pruefen() -> None:
+        if not isinstance(body.get("ergebnis_client_uuid"), str):
+            _fehler(422, "erkundungsergebnis_erforderlich")
+        ergebnis = db.query(EinheitAktion).filter(
+            EinheitAktion.client_uuid == body.get("ergebnis_client_uuid"),
+            EinheitAktion.org_id == ctx.org_id,
+            EinheitAktion.einheit_id == ctx.einheit.id,
+            EinheitAktion.dispatch_id == dispatch.id,
+            EinheitAktion.ergebnis == "ok",
+            EinheitAktion.entity_type == "site_log",
+            EinheitAktion.aktion == "lagemeldung",
+        ).first()
+        antwort = json.loads(ergebnis.antwort_json or "{}") if ergebnis else {}
+        if (not ergebnis or not antwort.get("erkundungsergebnis") or antwort.get("auftrag_version") != dispatch.version
+                or not db.get(SiteLogEntry, ergebnis.entity_id)):
+            _fehler(422, "erkundungsergebnis_erforderlich")
+
     def run() -> dict:
+        if body.get("status") == "nicht_durchfuehrbar" and (
+            not isinstance(body.get("grund"), str) or not body["grund"].strip()
+        ):
+            _fehler(422, "grund_erforderlich")
         result = setze_einheit_status(
             db,
             ctx,
@@ -916,7 +948,11 @@ async def status(
             author_name=_autor(request, ctx),
             grund=body.get("grund"),
             unterbrechen=bool(body.get("unterbrechen")),
+            auftrag_version=body.get("auftrag_version"),
+            ausgangsstatus=body.get("ausgangsstatus"),
+            aktiver_dispatch_id=body.get("aktiver_dispatch_id"),
             erfasst_at=erfasst,
+            erkundungsergebnis_pruefen=ergebnis_pruefen,
         )
         answer = {
             "ok": True,
@@ -931,15 +967,12 @@ async def status(
         return answer
 
     try:
-        answer, code = fuehre_aktion_aus(
-            db,
-            ctx,
-            client_uuid=body.get("client_uuid"),
-            aktion="status",
-            erfasst_at=erfasst,
-            dispatch_id=dispatch.id,
-            ausfuehren=run,
-        )
+        answer, code = resource_service.status_transaktion(db, lambda: fuehre_aktion_aus(
+            db, ctx, client_uuid=body.get("client_uuid"), aktion="status", erfasst_at=erfasst,
+            dispatch_id=dispatch.id, ausfuehren=run,
+        ))
+    except resource_service.StatusTransaktionBelegt:
+        return JSONResponse({"code": "status_abgleich_noetig"}, status_code=503)
     except HTTPException as exc:
         return _antwort_exc(exc)
     if code == 200 and answer.get("ok"):
@@ -950,6 +983,9 @@ async def status(
             dispatch.id,
             dispatch.site.phase.value if answer.get("phase_geaendert") else None,
         )
+        if answer.get("unterbrochen_dispatch_id"):
+            alter = auftrag_laden(db, ctx, answer["unterbrochen_dispatch_id"])
+            await _senden(ctx.lage.id, alter.site_id, ctx.einheit.id, alter.id)
         if answer.get("phase_geaendert"):
             await notify_gsl_live(db, ctx.lage, org_id=ctx.lage.org_id, reason="counts")
     return JSONResponse(answer, status_code=code)
@@ -967,16 +1003,36 @@ async def meldung(
     except LookupError:
         raise HTTPException(status_code=404)
     felder = body.get("felder") or {}
-    if not isinstance(felder, dict):
+    if not isinstance(body.get("art", ""), str):
+        return JSONResponse({"code": "art_ungueltig"}, status_code=400)
+    if not isinstance(felder, dict) or any(v is not None and not isinstance(v, str) for v in felder.values()):
         return JSONResponse({"code": "felder_ungueltig"}, status_code=400)
-    text = (body.get("text") or format_lagemeldung(felder)).strip()
-    if not text or len(text) > 4000:
+    if body.get("text") is not None and not isinstance(body["text"], str):
         return JSONResponse({"code": "text_ungueltig"}, status_code=400)
-    if dispatch.withdrawn_at is not None:
-        text += " (nach Rückzug eingegangen)"
+    ergebnis = body.get("erkundungsergebnis") is True
     erfasst, korr = _zeit(body.get("erfasst_at"))
 
     def run() -> dict:
+        text = (body.get("text") or "").strip()
+        strukturiert = format_lagemeldung(felder)
+        if body.get("schnellmeldung") or ergebnis:
+            if ergebnis and body.get("schnellmeldung") != "keine_massnahmen" and sum(
+                c.isalnum() for c in text + "".join(v or "" for v in felder.values())
+            ) < 3:
+                _fehler(422, "erkundungsergebnis_erforderlich")
+            try:
+                text = format_schnellmeldung(dispatch.auftragsart, body.get("schnellmeldung"),
+                                            "\n".join(filter(None, [text, strukturiert])), ergebnis=ergebnis)
+            except ValueError as exc:
+                _fehler(422, str(exc))
+            if body.get("art") != "lagemeldung":
+                _fehler(422, "schnellmeldung_ungueltig")
+        else:
+            text = "\n".join(filter(None, [text, strukturiert]))
+        if not text or len(text) > 4000:
+            _fehler(400, "text_ungueltig")
+        if dispatch.withdrawn_at is not None:
+            text += "\n(nach Rückzug eingegangen)"
         entry = add_site_log(
             db,
             dispatch.site,
@@ -987,6 +1043,7 @@ async def meldung(
             einheit_id=ctx.einheit.id,
             erfasst_at=erfasst,
         )
+        db.flush()  # Chronik-ID vor der Aktionsantwort sichern (auch bei Notiz/Maßnahme).
         dispatch.letzte_rueckmeldung_at = datetime.now(UTC)
         write_audit(
             db,
@@ -1008,6 +1065,9 @@ async def meldung(
             "ok": True,
             "entity_id": entry.id,
             "entity_type": "site_log",
+            "erkundungsergebnis": ergebnis,
+            "hervorhebung": meldung_hervorhebung(text),
+            "meldung_text": text,
             "server_time": _iso_z(datetime.now(UTC)),
             "auftrag_version": dispatch.version,
         }
@@ -1061,12 +1121,7 @@ async def foto(
         return JSONResponse({"code": "client_uuid_ungueltig"}, status_code=422)
     existing = db.query(EinheitAktion).filter(EinheitAktion.client_uuid == client_uuid).first()
     if existing:
-        same = (
-            existing.device_token_id == (ctx.device_token.id if ctx.device_token else None)
-            and existing.zugang_id == (ctx.zugang.id if ctx.zugang else None)
-        )
-        if ctx.simulation or ctx.quelle == "benutzer":
-            same = existing.quelle == ctx.quelle and existing.einheit_id == ctx.einheit.id
+        same = _aktion_passt(existing, ctx, dispatch.id, "foto")
         return JSONResponse(
             json.loads(existing.antwort_json or "{}") if same else {"code": "client_uuid_vergeben"},
             status_code=(409 if not same or existing.ergebnis == "konflikt" else 200),
@@ -1094,6 +1149,7 @@ async def foto(
         if log:
             log.text += " (nach Rückzug eingegangen)"
     dispatch.letzte_rueckmeldung_at = datetime.now(UTC)
+    db.flush()  # Foto-ID vor der Verknüpfung im bestehenden Aktionsprotokoll sichern.
     action = EinheitAktion(
         client_uuid=client_uuid,
         org_id=ctx.org_id,
@@ -1280,12 +1336,7 @@ async def material_foto(
         return JSONResponse({"code": "client_uuid_ungueltig"}, status_code=422)
     existing = db.query(EinheitAktion).filter(EinheitAktion.client_uuid == client_uuid).first()
     if existing:
-        same = (
-            existing.device_token_id == (ctx.device_token.id if ctx.device_token else None)
-            and existing.zugang_id == (ctx.zugang.id if ctx.zugang else None)
-        )
-        if ctx.simulation or ctx.quelle == "benutzer":
-            same = existing.quelle == ctx.quelle and existing.einheit_id == ctx.einheit.id
+        same = _aktion_passt(existing, ctx, dispatch.id, "material_foto")
         return JSONResponse(
             json.loads(existing.antwort_json or "{}") if same else {"code": "client_uuid_vergeben"},
             status_code=409 if not same or existing.ergebnis == "konflikt" else 200,
@@ -1395,6 +1446,8 @@ async def material_zurueck(
 
 @router.get("/api/karte")
 def karte(ctx: EinheitKontext = Depends(einheit_kontext), db: Session = Depends(get_db)):
+    from app.services.einheit_karten_service import hat_zielkoordinaten
+
     rows = (
         db.query(EinheitSiteDispatch)
         .join(IncidentSite)
@@ -1424,6 +1477,7 @@ def karte(ctx: EinheitKontext = Depends(einheit_kontext), db: Session = Depends(
             },
         }
         for d in rows
+        if hat_zielkoordinaten(d.site)
     ]
     if ctx.vehicle:
         pos = (
@@ -1445,7 +1499,7 @@ def karte(ctx: EinheitKontext = Depends(einheit_kontext), db: Session = Depends(
 
 def _medium(media_id: int, thumb: bool, ctx: EinheitKontext, db: Session):
     media = db.get(SiteMedia, media_id)
-    if not media:
+    if not media or (ctx.quelle == "zugang" and media.einheit_id != ctx.einheit.id):
         raise HTTPException(status_code=404)
     allowed = (
         db.query(EinheitSiteDispatch.id)
@@ -1453,6 +1507,7 @@ def _medium(media_id: int, thumb: bool, ctx: EinheitKontext, db: Session):
         .filter(
             EinheitSiteDispatch.einheit_id == ctx.einheit.id,
             EinheitSiteDispatch.site_id == media.incident_site_id,
+            EinheitSiteDispatch.withdrawn_at.is_(None),
             IncidentSite.major_incident_id == ctx.lage.id,
         )
         .first()
@@ -1463,6 +1518,33 @@ def _medium(media_id: int, thumb: bool, ctx: EinheitKontext, db: Session):
     if not path.exists():
         raise HTTPException(status_code=404)
     return FileResponse(str(path), media_type="image/jpeg", headers={"Cache-Control": "no-cache"})
+
+
+@router.get("/medien/auftrag/{dispatch_id}/plan/{seite_id}/{format}")
+def auftrag_plan(
+    dispatch_id: int, seite_id: int, format: Literal["pdf", "bild", "thumb"],
+    ctx: EinheitKontext = Depends(einheit_kontext), db: Session = Depends(get_db),
+):
+    from app.services.einheit_vorschau_service import einsatzobjekte, einsatzseiten
+    from app.services.objekt_dokument_service import absolute_pfad
+
+    try:
+        dispatch = auftrag_laden(db, ctx, dispatch_id)
+    except LookupError:
+        raise HTTPException(status_code=404)
+    objekte = einsatzobjekte(db, ctx, dispatch)
+    seite = einsatzseiten(db, ctx, [objekt.id for objekt in objekte]).filter(ObjektDokumentSeite.id == seite_id).first()
+    if not seite:
+        raise HTTPException(status_code=404)
+    relativ = {"pdf": seite.einzel_pdf_pfad, "bild": seite.bild_pfad, "thumb": seite.thumb_pfad}[format]
+    if not relativ or not absolute_pfad(relativ).is_file():
+        raise HTTPException(status_code=404)
+    pfad = absolute_pfad(relativ)
+    if format != "pdf":
+        from app.routers.ui_objekt_dokumente import _bild_response
+        return _bild_response(pfad, "image/jpeg" if format == "thumb" else "image/png", seite.rotation)
+    return FileResponse(pfad, media_type="application/pdf", headers={"Cache-Control": "no-cache"},
+                        content_disposition_type="inline")
 
 
 def _verleih_medium(foto_id: int, thumb: bool, ctx: EinheitKontext, db: Session):

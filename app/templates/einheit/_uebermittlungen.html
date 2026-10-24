@@ -1,35 +1,27 @@
-        <button type="button" class="btn btn--primary einheit-action"
-                :disabled="zugangBeendet || !outboxVerfuegbar" @click="flush()">Jetzt synchronisieren</button>
+        <button type="button" class="btn btn--ghost einheit-action"
+                :disabled="zugangBeendet || !outboxVerfuegbar" @click="flush(true)">Jetzt synchronisieren</button>
         <p class="einheit-warning" x-show="!outboxVerfuegbar">Lokale Übermittlungen sind derzeit nicht verfügbar.</p>
-        <p class="einheit-sub" x-show="outboxVerfuegbar && !outboxListe.length">Alle Einträge wurden übermittelt.</p>
-        <template x-for="item in outboxListe" :key="item.client_uuid">
+        <p class="einheit-sub" x-show="outboxVerfuegbar && !eigeneUebermittlungen.length">Keine offenen Übermittlungen.</p>
+        <template x-for="item in eigeneUebermittlungen" :key="item.client_uuid">
           <article class="fab-subcard">
             <div class="einheit-uebermittlung__kopf" x-show="auftragZurAktion(item)">
               {{ auftragsart("auftragZurAktion(item)?.auftragsart") }}
               <span x-text="auftragZurAktion(item)?.bezeichnung"></span>
             </div>
-            <strong x-text="typLabel(item.typ) + ' · Auftrag ' + item.dispatch_id + ' · ' + zeit(item.erfasst_at)"></strong>
+            <strong x-text="typLabel(item.typ) + ' · ' + zeit(item.erfasst_at)"></strong>
             <p>
               <span x-show="item.status === 'fehler_netz'">{{ icon("refresh", size="xs") }}</span>
               <span x-show="!['blockiert_zugang', 'konflikt', 'fehler', 'fehler_netz'].includes(item.status)">{{ icon("hourglass", size="xs") }}</span>
               <span x-text="outboxStatus(item)"></span>
             </p>
-            <textarea class="form-control" readonly x-show="item.payload?.text"
-                      x-text="item.payload?.text"></textarea>
             <div class="einheit-actions-row">
+              <button type="button" class="btn btn--ghost" x-show="item.status === 'konflikt' && item.dispatch_id"
+                      @click="oeffne(item.dispatch_id)">Auftrag prüfen</button>
               <button type="button" class="btn btn--ghost" x-show="item.status !== 'ausstehend' && item.status !== 'blockiert_zugang'"
-                      @click="erneut(item.client_uuid)">Erneut senden</button>
+                      :disabled="zugangBeendet" @click="erneut(item.client_uuid)">Erneut senden</button>
               <button type="button" class="btn btn--ghost" x-show="['konflikt', 'fehler', 'blockiert_zugang'].includes(item.status)"
                       @click="kopieren(item)">Kopieren</button>
               <button type="button" class="btn btn--ghost" @click="verwerfen(item.client_uuid)">Verwerfen</button>
             </div>
           </article>
-        </template>
-        <h3 class="fab-subcard__title">Zuletzt übermittelt</h3>
-        <template x-for="item in verlauf" :key="item.id">
-          <div class="einheit-uebermittlung__kopf">
-            <span>{{ icon("check", size="xs") }} <span x-text="'übermittelt ' + zeit(item.server_bestaetigt_at) + ' · ' + typLabel(item.typ)"></span></span>
-            <span x-show="auftragZurAktion(item)">{{ auftragsart("auftragZurAktion(item)?.auftragsart") }}</span>
-            <span class="einheit-sub" x-text="hinweisText(item.antwort?.hinweis)"></span>
-          </div>
         </template>
