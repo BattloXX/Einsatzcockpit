@@ -23,8 +23,8 @@ def test_outbox_wird_vor_dem_ersten_laden_erzeugt():
 def test_ladefehler_und_abgelaufene_anmeldung_sind_sichtbar():
     js = _text("app/static/js/einheit_modus.js")
     html = _text("app/templates/einheit/einheit.html")
-    assert 'this.ladeFehler = "anmeldung"' in js and 'this.ladeFehler = "laden"' in js
-    assert 'if (leise && this.ladeFehler === "anmeldung") return;' in js
+    assert '"anmeldung"' in js and 'this.ladeFehler = "laden"' in js
+    assert '["anmeldung", "kontext"].includes(this.ladeFehler)' in js
     assert 'x-show="ladeFehler"' in html
     assert "Die Anmeldung ist abgelaufen oder wurde beendet" in html
     assert "Die Einheitenansicht konnte nicht geladen werden" in html

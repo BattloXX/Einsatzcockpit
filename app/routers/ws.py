@@ -16,7 +16,7 @@ from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from app.core.permissions import can_access_incident
+from app.core.permissions import can_access_incident, has_role
 from app.core.security import hash_api_key, pruefe_geraete_session, unsign_session
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
@@ -99,6 +99,7 @@ def get_passthrough_status(org_id: int | None) -> dict | None:
 # Close-Codes per RFC6455 (4000-4999 ist Application-Range)
 WS_CLOSE_UNAUTHORIZED = 4401
 WS_CLOSE_FORBIDDEN = 4403
+_LAGE_AUTH_CHECK_SECONDS = 25.0
 
 
 def _resolve_user(websocket: WebSocket) -> User | None:
@@ -225,7 +226,7 @@ async def incident_ws(websocket: WebSocket, incident_id: int):
 
 @router.websocket("/ws/lage/{lage_id}")
 async def lage_ws(websocket: WebSocket, lage_id: int):
-    """WebSocket-Kanal für eine Großschadenslage – org-gebunden."""
+    """Org-gebundener Lagekanal mit erneuter Zugangsprüfung, auch bei stillen Clients."""
     user = _resolve_user(websocket)
     if user is None:
         await websocket.close(code=WS_CLOSE_UNAUTHORIZED)
@@ -235,11 +236,9 @@ async def lage_ws(websocket: WebSocket, lage_id: int):
     set_tenant_context(db, None)
     try:
         lage = db.get(MajorIncident, lage_id)
-        if lage is None or lage.org_id != user.org_id:
-            from app.core.permissions import has_role
-            if not (lage and has_role(user, "system_admin")):
-                await websocket.close(code=WS_CLOSE_FORBIDDEN)
-                return
+        if lage is None or (lage.org_id != user.org_id and not has_role(user, "system_admin")):
+            await websocket.close(code=WS_CLOSE_FORBIDDEN)
+            return
     finally:
         db.close()
 
@@ -247,7 +246,22 @@ async def lage_ws(websocket: WebSocket, lage_id: int):
     await manager.connect(channel, websocket)
     try:
         while True:
-            data = await websocket.receive_text()
+            try:
+                data = await asyncio.wait_for(websocket.receive_text(), timeout=_LAGE_AUTH_CHECK_SECONDS)
+            except TimeoutError:
+                data = None
+            # Frische Session: Gerätewiderruf, deaktivierter Benutzer und Org-/Rollenwechsel
+            # müssen auch einen bereits im Lagekanal registrierten Socket beenden.
+            aktuell = _resolve_user(websocket)
+            code = None
+            if aktuell is None:
+                code = WS_CLOSE_UNAUTHORIZED
+            elif aktuell.org_id != lage.org_id and not has_role(aktuell, "system_admin"):
+                code = WS_CLOSE_FORBIDDEN
+            if code is not None:
+                await websocket.send_json({"type": "zugang:widerrufen"})
+                await websocket.close(code=code)
+                break
             if data == "ping":
                 await websocket.send_text("pong")
     except WebSocketDisconnect:

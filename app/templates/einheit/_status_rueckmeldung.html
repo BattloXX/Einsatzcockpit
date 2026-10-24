@@ -1,0 +1,12 @@
+<div class="einheit-formular">
+  <label for="status-meldung-text">Ergänzung (optional)</label>
+  <textarea id="status-meldung-text" class="form-control" x-model="statusMeldungText"
+            :disabled="statusSpeichern" placeholder="Ergänzende Rückmeldung"></textarea>
+  <button type="button" class="btn btn--ghost" x-show="diktatVerfuegbar" :disabled="statusSpeichern"
+          onclick="startVoice('status-meldung-text')">{{ icon("microphone", size="sm") }} Diktieren</button>
+  <p class="einheit-sub" x-show="statusMeldungFotos.length"
+     x-text="statusMeldungFotos.length + ' Foto(s) aus der Meldung übernommen'"></p>
+  <label for="status-meldung-fotos">Fotos (optional)</label>
+  <input id="status-meldung-fotos" x-ref="statusFotos" class="form-control" type="file" accept="image/*"
+         capture="environment" multiple :disabled="statusSpeichern">
+</div>

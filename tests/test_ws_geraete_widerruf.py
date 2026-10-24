@@ -69,3 +69,33 @@ def test_einheit_geraet_wird_im_schreibenden_lagedokument_ws_abgelehnt(client, s
         with client.websocket_connect(f"/ws/lagedokument/{lage_id}"):
             pass
     assert error.value.code == 4403
+
+
+@pytest.mark.parametrize("profil", ["einheit", "fuehrung"])
+@pytest.mark.parametrize("aenderung", ["widerrufen", "inaktiv", "organisation"])
+def test_geraetezugriff_wird_nach_verbindungsaufbau_erneut_geprueft(client, setup_db, profil, aenderung):
+    from app.services.broadcast import LAGE_WS_OFFSET, manager
+
+    user_id, token_id, lage_id = _geraet(profil)
+    client.cookies.set("session", sign_session(user_id, device=True, device_token_id=token_id))
+    with client.websocket_connect(f"/ws/lage/{lage_id}") as websocket:
+        websocket.send_text("ping")
+        assert websocket.receive_text() == "pong"
+        with SessionLocal() as db:
+            set_tenant_context(db, None)
+            if aenderung == "widerrufen":
+                db.get(DeviceToken, token_id).revoked_at = datetime.now(UTC)
+            elif aenderung == "inaktiv":
+                db.get(User, user_id).active = False
+            else:
+                org = FireDept(slug="ws-neu-" + uuid4().hex, name="Neue Organisation")
+                db.add(org)
+                db.flush()
+                db.get(User, user_id).org_id = org.id
+            db.commit()
+        websocket.send_text("ping")
+        assert websocket.receive_json() == {"type": "zugang:widerrufen"}
+        with pytest.raises(WebSocketDisconnect) as error:
+            websocket.receive_text()
+        assert error.value.code == (4403 if aenderung == "organisation" else 4401)
+    assert not manager._connections.get(LAGE_WS_OFFSET + lage_id)

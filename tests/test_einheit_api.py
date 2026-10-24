@@ -148,6 +148,16 @@ def _h(client, **kw):
     return headers
 
 
+def _erkundungsergebnis(client, dispatch_id):
+    ergebnis_uuid = str(uuid4())
+    result = client.post(f"/einheit/api/auftrag/{dispatch_id}/meldung", headers=_h(client), json={
+        "client_uuid": ergebnis_uuid, "art": "lagemeldung", "schnellmeldung": "keine_massnahmen",
+        "erkundungsergebnis": True,
+    })
+    assert result.status_code == 200, result.text
+    return ergebnis_uuid
+
+
 def test_zustand_liefert_etag_und_304(client, setup_db):
     x = _daten()
     _device(client, x)
@@ -249,7 +259,8 @@ def test_abarbeitung_ist_auf_dem_tablet_waehrend_erkundung_gesperrt(client, setu
         db.close()
     response = client.post(
         f"/einheit/api/auftrag/{x['d1']}/status",
-        json={"status": "abgeschlossen", "client_uuid": str(uuid4())}, headers=_h(client),
+        json={"status": "abgeschlossen", "client_uuid": str(uuid4()),
+              "ergebnis_client_uuid": _erkundungsergebnis(client, x["d1"])}, headers=_h(client),
     )
     assert response.status_code == 200
 
@@ -326,7 +337,7 @@ def test_foto_uuid_medien_und_karte(client, setup_db, monkeypatch, tmp_path):
         and client.get(f"/einheit/medien/{r.json()['entity_id']}").status_code == 200
     )
     db = _db()
-    media = db.query(SiteMedia).one()
+    media = db.query(SiteMedia).filter_by(incident_site_id=x["a"]).one()
     assert media.einheit_id == x["e1"] and media.kommentar == "Keller"
     other = SiteMedia(
         incident_site_id=x["b"], stored_filename="x.jpg", original_filename="x", media_type="image", bytes=1

@@ -1,25 +1,31 @@
 <style>
 /* GSL-Einheitenmodus: Ergänzungen zum Fahrtenbuch-Layout (_fab_styles.html). */
 [x-cloak]{display:none !important;}
+/* Die Einheitenansicht hat eigene Offline-Hinweise; der globale Banner darf keine Touch-Aktion überdecken. */
+body:has(.einheit-page) #ec-conn-banner{display:none;}
+.einheit-page{--text-muted:var(--on-surface-variant);--border:#6b7893;
+  --einheit-warntext:#fbbf24;--einheit-gefahrtext:#ffb4b4;--einheit-priorot:#ff8b8b;
+  --einheit-priogelb:#f5df61;--einheit-online:#6de09c;
+  color:var(--text);font-size:1rem;line-height:1.5;overflow-wrap:anywhere;}
 
 .einheit-meta{display:flex;flex-wrap:wrap;gap:.5rem 1rem;align-items:center;justify-content:flex-end;
   max-width:28rem;font-size:.9rem;color:var(--text-muted);}
 .einheit-meta strong{color:var(--text);}
-.einheit-online{color:#35b56a;font-weight:700;}
-.einheit-offline{color:#f59e0b;font-weight:700;}
-.einheit-sub{font-size:.85rem;color:var(--text-muted);}
+.einheit-online{color:var(--einheit-online);font-weight:700;}
+.einheit-offline{color:var(--einheit-warntext);font-weight:700;}
+.einheit-sub{font-size:.95rem;color:var(--text-muted);}
 
 .einheit-umschalter{display:flex;gap:.25rem;margin-top:.75rem;flex-wrap:wrap;}
 .einheit-umschalter a{padding:.55rem .9rem;min-height:48px;display:inline-flex;align-items:center;border:1px solid var(--border);border-radius:999px;color:var(--text);font-weight:600;}
 .einheit-umschalter a.is-active{background:var(--red);border-color:var(--red);color:#fff;}
 
 /* Chips: Priorität, Status, NEU, Outbox */
-.einheit-chip{display:inline-flex;align-items:center;border:1px solid var(--border);border-radius:999px;padding:.25rem .6rem;font-size:.75rem;font-weight:700;background:var(--surface);text-transform:none;}
+.einheit-chip{display:inline-flex;align-items:center;border:1px solid var(--border);border-radius:999px;padding:.25rem .6rem;font-size:.875rem;font-weight:700;background:var(--surface);text-transform:none;}
 .einheit-chip--button{min-width:48px;min-height:48px;cursor:pointer;white-space:normal;text-align:left;}
-.einheit-chip--warn{border-color:#f59e0b;color:#fbbf24;}
-.einheit-chip--red{border-color:#d83030;color:#ff8b8b;}
-.einheit-chip--orange{border-color:#f59e0b;color:#fbbf24;}
-.einheit-chip--yellow{border-color:#d6b000;color:#f5df61;}
+.einheit-chip--warn{border-color:#f59e0b;color:var(--einheit-warntext);}
+.einheit-chip--red{border-color:#d83030;color:var(--einheit-priorot);}
+.einheit-chip--orange{border-color:#f59e0b;color:var(--einheit-warntext);}
+.einheit-chip--yellow{border-color:#d6b000;color:var(--einheit-priogelb);}
 .einheit-chip--muted{color:var(--text-muted);}
 .einheit-chip--status{border-color:var(--outline);}
 .einheit-chip--neu{background:#f59e0b;border-color:#f59e0b;color:#111;}
@@ -37,10 +43,11 @@
 .einheit-prio--aufschiebbar,.einheit-prio--keine{--fab-accent:var(--outline);}
 
 .einheit-address{font-size:1.1rem;font-weight:700;margin:.35rem 0;}
-.einheit-auftrag{background:var(--surface);border-left:3px solid var(--red-light);padding:.6rem .75rem;margin:.6rem 0;font-weight:600;white-space:pre-wrap;}
+.einheit-auftrag{background:var(--surface);border-left:3px solid var(--red-light);padding:.6rem .75rem;margin:.6rem 0;font-weight:600;white-space:pre-wrap;overflow-wrap:anywhere;}
 .einheit-zeile{display:flex;justify-content:space-between;gap:.75rem;padding:.35rem 0;border-bottom:1px solid var(--border);}
 .einheit-zeile:last-child{border-bottom:0;}
-.einheit-objekt{display:flex;flex-direction:column;align-items:flex-start;width:100%;margin-top:.35rem;}
+.einheit-objekt{display:flex;flex-direction:column;align-items:flex-start;width:100%;min-width:0;margin-top:.35rem;overflow-wrap:anywhere;}
+.einheit-plan{display:flex;flex-direction:column;gap:.5rem;max-width:100%;overflow-wrap:anywhere;}
 .einheit-einsatzkarte{margin:.85rem 0;border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden;background:var(--surface);}
 .einheit-einsatzkarte__kopf{display:flex;justify-content:space-between;align-items:center;gap:.75rem;padding:.6rem .75rem;font-size:.9rem;}
 .einheit-einsatzkarte__kopf a{color:#93c5fd;font-size:.82rem;text-decoration:none;white-space:nowrap;}
@@ -57,11 +64,31 @@
 .einheit-kartenmarker--naechster .einheit-marker__punkt,
 .einheit-kartenmarker--in_arbeit .einheit-marker__punkt{outline:2px solid #fff;outline-offset:2px;}
 .einheit-kartenmarker--fertig .einheit-marker__punkt{border-style:dashed;}
+.einheit-kartenmarker--in_arbeit .einheit-marker__punkt{width:56px;height:56px;outline:4px solid #fff;outline-offset:3px;}
+.einheit-kartenmarker--in_arbeit .einheit-marker__beschriftung{left:28px;top:60px;}
+.einheit-kartenmarker--auswahl .einheit-marker__punkt{box-shadow:0 0 0 7px #475569,0 2px 8px #000;}
+.einheit-marker__anzahl{position:absolute;right:-8px;top:-10px;min-width:24px;min-height:24px;border-radius:12px;background:var(--surface);color:var(--text);text-align:center;font-weight:800;}
+.einheit-kartenziel{border-left:5px solid var(--fab-accent);overflow-wrap:anywhere;}
+.einheit-kartenlayout{display:grid;gap:1rem;min-width:0;}
+.einheit-kartenlayout__karte{display:flex;flex-direction:column;gap:.5rem;min-width:0;}
+.einheit-kartenlayout__karte .einheit-karte{flex:1;}
+.einheit-kartenziel h3{margin:.75rem 0 .35rem;}
+.einheit-kartenziel .einheit-action{margin-top:.5rem;}
+.einheit-kartenziel .einheit-gefahren{border-left:4px solid #d83030;background:rgba(216,48,48,.12);padding:.6rem;margin:.6rem 0;}
+.einheit-kartenliste--auswahl{background:var(--surface);outline:2px solid var(--text);outline-offset:2px;}
+.einheit-kartenliste li{padding:.75rem;margin-bottom:.5rem;border-radius:var(--radius-sm);}
+.einheit-kartenliste .einheit-address{flex-basis:100%;font-size:1rem;overflow-wrap:anywhere;}
+.einheit-kartenpopup__auftrag{border-bottom:1px solid var(--border);padding:.5rem 0;}
+.einheit-gefahrmarker span,.einheit-sperrmarker span{display:grid;place-items:center;width:48px;height:48px;box-sizing:border-box;border:3px solid #d83030;background:var(--surface);color:var(--einheit-priorot);font-weight:900;font-size:1.6rem;border-radius:6px;}
+.einheit-page .leaflet-control-zoom.leaflet-bar a{width:48px;height:48px;line-height:48px;}
+.einheit-page .leaflet-container a.leaflet-popup-close-button{min-width:48px;min-height:48px;line-height:48px;}
+.einheit-page .einheit-kartenaktionen label{min-height:48px;}
+.einheit-page .leaflet-popup-content{margin-right:48px;}
 .einheit-marker__beschriftung{position:absolute;left:24px;top:52px;transform:translateX(-50%);display:flex;
   align-items:center;flex-direction:column;gap:2px;width:max-content;max-width:220px;pointer-events:none;}
-.einheit-marker__beschriftung .einheit-artchip{background:var(--surface);font-size:.72rem;padding:.2rem .4rem;}
+.einheit-marker__beschriftung .einheit-artchip{background:var(--surface);font-size:.875rem;padding:.2rem .4rem;}
 .einheit-marker__prioritaet,.einheit-marker__status{display:flex;align-items:center;gap:.25rem;
-  background:var(--surface);color:var(--text);padding:.1rem .3rem;border-radius:3px;font-size:.7rem;}
+  background:var(--surface);color:var(--text);padding:.1rem .3rem;border-radius:3px;font-size:.875rem;}
 .einheit-marker__prioritaet{border-left:3px solid var(--fab-accent,var(--outline));}
 .einheit-kartenlegende{margin:.75rem 0;}
 .einheit-kartenlegende > div{display:flex;flex-wrap:wrap;gap:.5rem;}
@@ -82,7 +109,7 @@
 .einheit-gruppe h3{margin:.25rem 0 .4rem;font-size:.9rem;color:var(--text-muted);}
 .einheit-zwischenaktionen{display:flex;gap:.4rem;flex-wrap:wrap;}
 .einheit-zwischenaktionen .btn{min-height:40px;}
-.einheit-warning--alarm{background:rgba(216,48,48,.17);border-color:#d83030;color:#ffb4b4;}
+.einheit-warning--alarm{background:rgba(216,48,48,.17);border-color:#d83030;color:var(--einheit-gefahrtext);}
 .einheit-tabbar{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.5rem;margin-bottom:1rem;}
 .einheit-tabbar button{display:flex;gap:.4rem;align-items:center;justify-content:center;min-height:48px;
   min-width:48px;padding:.6rem;border:1px solid var(--border);border-radius:var(--radius-sm);
@@ -108,7 +135,7 @@
 .einheit-einsatzkarte-neu__adresse{margin:.2rem 0 .5rem;}
 .einheit-einsatzkarte-neu__auftrag{margin:.6rem 0;white-space:pre-wrap;}
 .einheit-einsatzkarte-neu__gefahren{border-left:3px solid var(--danger);padding:.5rem .65rem;
-  margin:.75rem 0;background:rgba(216,48,48,.12);color:#ffb4b4;}
+  margin:.75rem 0;background:rgba(216,48,48,.12);color:var(--einheit-gefahrtext);}
 .einheit-einsatzkarte-neu__gefahren strong{display:flex;align-items:center;gap:.35rem;}
 .einheit-einsatzkarte-neu__gefahren ul{list-style:disc;padding-left:1.2rem;margin:.35rem 0 0;}
 .einheit-einsatzkarte-neu__status{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin:.75rem 0;}
@@ -121,13 +148,20 @@
 .einheit-page .einheit-liste__eintrag{flex-wrap:wrap;gap:.5rem;overflow-wrap:anywhere;}
 
 /* Aktionen: große Touch-Flächen */
+.einheit-fuehrung{position:sticky;top:.5rem;z-index:15;background:var(--surface-mid);padding:.75rem;margin-bottom:1rem;}
+.einheit-fuehrung__layout{display:grid;gap:.6rem;min-width:0;}
+.einheit-fuehrung .einheit-status-aktuell{background:none;border:0;padding:0;overflow-wrap:anywhere;}
+.einheit-fuehrung__hauptaktion{min-width:0;}
+.einheit-fuehrung__hauptaktion p{margin:.35rem 0 0;}
+.einheit-page .fab-grid__side{position:static;}
+@media (min-width:760px){.einheit-fuehrung__layout{grid-template-columns:minmax(0,1fr) minmax(16rem,1fr);align-items:center;}}
 .einheit-aktionen{display:flex;flex-direction:column;gap:.6rem;}
-.einheit-action{min-height:56px;width:100%;}
-.einheit-action--gefahr{border-color:#d83030;color:#ff8b8b;}
+.einheit-page .einheit-action{min-height:56px;width:100%;}
+.einheit-action--gefahr{border-color:#d83030;color:var(--einheit-priorot);}
 .einheit-actions-row{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;}
 .einheit-actions-row .btn{min-height:52px;}
 .einheit-status-aktuell{display:flex;flex-direction:column;gap:.15rem;padding:.6rem .75rem;border:1px solid var(--border);border-radius:var(--radius-md);background:var(--surface);}
-.einheit-status-pending{color:#f59e0b;font-weight:700;font-size:.85rem;}
+.einheit-status-pending{color:var(--einheit-warntext);font-weight:700;font-size:.95rem;}
 
 .einheit-warning{display:flex;justify-content:space-between;align-items:center;gap:.75rem;background:rgba(245,158,11,.12);border:1px solid #f59e0b;padding:.6rem .75rem;border-radius:var(--radius-sm);margin:.6rem 0;}
 
@@ -180,8 +214,8 @@
   /* Die gesamte Aktionsleiste darf Einsatzdaten und Karte nicht überdecken. */
   .fab-actions{position:static;background:none;padding:0;margin:.75rem 0 0;}
   .einheit-einsatzkarte__karte{height:230px;}
-  .einheit-karte{min-height:320px;}
-  .einheit-kartenaktionen .btn{min-height:40px;padding:.4rem .6rem;font-size:.85rem;}
+  .einheit-karte{min-height:420px;}
+  .einheit-kartenaktionen .btn{min-height:48px;padding:.4rem .6rem;font-size:.85rem;}
   .einheit-zeile{align-items:flex-start;}
   .einheit-zeile > :last-child{flex-shrink:0;}
   .person-flyout-backdrop{align-items:flex-end;}
@@ -190,5 +224,111 @@
 
 @media (min-width:980px){
   .einheit-weitere__karten{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .einheit-kartenlayout{grid-template-columns:minmax(0,.9fr) minmax(0,1.2fr);align-items:stretch;}
 }
+.einheit-schnellmeldungen{display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));}
+.einheit-schnellmeldungen .btn{min-width:48px;min-height:48px;white-space:normal;text-align:left;}
+.einheit-schnellmeldung--aktiv{outline:3px solid var(--text);outline-offset:1px;font-weight:700;}
+.einheit-formular select,.einheit-formular input[type=file]{min-height:48px;}
+.einheit-meldung-footer{flex-shrink:0;padding:.75rem 1rem calc(.75rem + env(safe-area-inset-bottom));border-top:1px solid var(--border);}
+.einheit-meldung-footer .btn{width:100%;}
+.einheit-meldung--gefahr{border-left:4px solid var(--red);background:rgba(212,34,37,.12);}
+.einheit-meldung--unterstuetzung{border-left:4px solid var(--orange);background:rgba(230,126,34,.12);}
+.einheit-verlauf{margin-top:1rem;}
+.einheit-verlauf__liste{list-style:none;margin:0;padding:0;display:grid;gap:.65rem;}
+.einheit-verlauf__eintrag{padding:.8rem;border:1px solid var(--border);border-left:4px solid var(--border);border-radius:var(--radius-md);min-width:0;}
+.einheit-verlauf__kopf{display:flex;flex-wrap:wrap;gap:.4rem 1rem;font-size:.85rem;}
+.einheit-verlauf__kopf time{color:var(--text-muted);}
+.einheit-verlauf__ort{font-weight:700;margin:.4rem 0 0;overflow-wrap:anywhere;}
+.einheit-verlauf__bezug{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;margin:.25rem 0;overflow-wrap:anywhere;}
+.einheit-verlauf__text{white-space:pre-wrap;overflow-wrap:anywhere;margin:.5rem 0;}
+.einheit-verlauf__status{font-weight:600;font-size:.85rem;margin:.4rem 0;}
+.einheit-verlauf__eintrag--kompakt{padding:.45rem .65rem;font-size:.9rem;}
+.einheit-verlauf__eintrag--kompakt .einheit-verlauf__bezug{-webkit-line-clamp:1;}
+.einheit-verlauf__foto{display:block;max-width:100%;width:160px;min-height:48px;object-fit:cover;border-radius:var(--radius-sm);}
+.einheit-verlauf__foto img{max-width:100%;max-height:180px;object-fit:cover;}
+.einheit-verlauf__kennzeichnung{font-weight:700;margin:.4rem 0;}
+.einheit-meldung--auftrag,.einheit-meldung--aenderung{border-left-color:var(--accent);}
+.einheit-meldung--rueckfrage{border-left-color:var(--yellow);background:rgba(242,176,46,.1);}
+.einheit-meldung--rueckzug,.einheit-verlauf__eintrag--fehler{border-left-color:var(--red);}
+.einheit-verlauf__status--fehler{color:var(--einheit-priorot);}
+.einheit-verlauf__eintrag.einheit-meldung--gefahr{border-left-color:var(--red);}
+.einheit-verlauf__eintrag.einheit-meldung--unterstuetzung{border-left-color:var(--orange);}
+/* Standardbedienung: gleiche Aktionen auf Telefon und Fahrzeugtablet. */
+.einheit-page :focus-visible{outline:3px solid var(--accent-light);outline-offset:3px;}
+.einheit-page .btn{font-size:1rem;line-height:1.4;}
+.einheit-page .btn--ghost{color:var(--text);}
+.einheit-page .btn--primary:hover{background:var(--red-dark);}
+.einheit-page .einheit-action--gefahr{color:var(--einheit-priorot);}
+.einheit-page :is(input:not([type=checkbox]):not([type=radio]):not(.sr-only),select,textarea){
+  min-height:48px;min-width:0;max-width:100%;font-size:1rem;line-height:1.5;}
+.einheit-page :is(input,textarea)::placeholder{color:var(--text-muted);opacity:1;}
+.einheit-page textarea.form-control{min-height:6rem;}
+.einheit-page .einheit-textarea{min-height:8rem;}
+.einheit-page label{font-size:1rem;}
+.einheit-page .einheit-artchip,.einheit-page .einheit-einsatzkarte-neu__rang,.einheit-page .fab-header__eyebrow{font-size:.875rem;}
+.einheit-page input[type=file]::file-selector-button{min-height:48px;padding:.5rem .75rem;margin-right:.5rem;
+  background:var(--surface-high);color:var(--text);border:1px solid var(--border);border-radius:var(--radius-sm);font:inherit;}
+.einheit-page .einheit-checkbox{min-height:48px;}
+.einheit-page .einheit-checkbox input{width:24px;height:24px;flex-shrink:0;}
+.einheit-page .einheit-tabbar button[aria-selected="true"]{background:var(--surface-high);border:1px solid var(--red);
+  box-shadow:inset 0 -3px var(--red);color:var(--text);}
+.einheit-page :is(.einheit-umschalter a,.einheit-einsatzkarte__kopf a,.einheit-simulation__ende,.einheit-thumbs a){
+  display:inline-flex;align-items:center;min-height:48px;min-width:48px;white-space:normal;}
+.einheit-page .einheit-einsatzkarte__kopf a{color:var(--accent-light);font-size:1rem;text-decoration:underline;}
+.einheit-page .einheit-einsatzkarte__karte{height:320px;}
+.einheit-page .leaflet-container .leaflet-control-attribution{display:flex;align-items:center;flex-wrap:wrap;gap:.2rem;
+  max-width:100%;background:var(--surface);color:var(--text);font-size:.875rem;line-height:1.4;}
+.einheit-page .leaflet-control-attribution a{display:inline-flex;align-items:center;min-width:48px;min-height:48px;
+  padding:0 .25rem;color:var(--accent-light);}
+.einheit-einsatzkarte__kopf{flex-wrap:wrap;}
+.einheit-fuehrung__auftrag{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;}
+.einheit-fuehrung__name{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.einheit-gefahrenleiste{display:flex;align-items:flex-start;gap:.5rem;min-width:48px;min-height:48px;padding:.5rem;
+  margin-top:.6rem;border:2px solid var(--danger);border-radius:var(--radius-sm);color:var(--einheit-gefahrtext);background:var(--surface);font-size:1rem;
+  max-height:26dvh;overflow:auto;scrollbar-gutter:stable;}
+.einheit-gefahrenleiste .ecp-icon{margin-top:.2rem;}
+.einheit-detailgefahren{border:2px solid var(--danger);background:rgba(216,48,48,.12);padding:.75rem;
+  margin:.75rem 0;color:var(--einheit-gefahrtext);scroll-margin-top:22rem;border-radius:var(--radius-sm);}
+.einheit-detailgefahren h3{font-weight:700;}
+.einheit-detailgefahren ul{margin:.5rem 0 0;padding-left:1.2rem;list-style:disc;}
+.einheit-detailgefahren li + li{margin-top:.5rem;}
+.einheit-detailaktionen{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.5rem;margin:0 0 1rem;}
+.einheit-mehr{flex:1 1 12rem;min-width:0;}
+.einheit-mehr summary,.einheit-nebenaktionen summary{cursor:pointer;border:1px solid var(--border);border-radius:var(--radius-sm);padding:.65rem .75rem;}
+.einheit-mehr__inhalt{display:grid;gap:.75rem;padding:.75rem 0;}
+.einheit-nebenaktionen[open] .einheit-actions-row{margin-top:.6rem;}
+.einheit-zugangsinfo{padding:.5rem 0;color:var(--text-muted);}
+body:has(.einheit-page[data-dialog-offen="true"]){overflow:hidden;}
+.einheit-page .person-flyout{max-height:calc(100dvh - 2rem);}
+.einheit-page .person-flyout__header{flex-shrink:0;}
+.einheit-page .person-flyout__close{background:var(--surface-high);color:var(--text);border:1px solid var(--border);border-radius:var(--radius-sm);}
+.einheit-page .einheit-flyout-body{min-height:0;overscroll-behavior:contain;}
+.einheit-dialogauftrag{flex-shrink:0;padding:.5rem 1rem;border-bottom:1px solid var(--border);overflow-wrap:anywhere;}
+.einheit-dialogauftrag .einheit-uebermittlung__kopf{padding:0;}
+.einheit-dialogfehler{flex-shrink:0;margin:.5rem 1rem;}
+.einheit-meldung-footer{flex-shrink:0;}
+@media (min-width:760px){.einheit-detailgefahren{scroll-margin-top:17rem;}}
+@media (max-width:760px){
+  .einheit-page .einheit-tabbar button{flex-direction:column;gap:.15rem;white-space:nowrap;overflow-wrap:normal;}
+  .einheit-page .person-flyout-backdrop{padding:.5rem;}
+  .einheit-page .person-flyout{height:auto;max-height:calc(100dvh - 1rem);border-radius:var(--radius-md);}
+  .einheit-page .einheit-umschalter{display:flex;}
+}
+/* Die Darstellung folgt der vorhandenen Geräteeinstellung, ohne zusätzlichen Bedienmodus. */
+@media (prefers-color-scheme:light){
+  body:has(.einheit-page){background:#edf1f8;}
+  .einheit-page{--surface:#fff;--surface-low:#f1f4f9;--surface-mid:#fff;--surface-high:#e6ebf3;--surface-highest:#d8e0ec;
+    --on-surface:#16243b;--on-surface-variant:#394a64;--text:var(--on-surface);--text-muted:var(--on-surface-variant);
+    --border:#69758c;--outline:#69758c;--accent-light:#1754a3;--bg:var(--surface);--bg2:var(--surface-low);--bg3:var(--surface-high);
+    --einheit-warntext:#853c00;--einheit-gefahrtext:#8b1717;--einheit-priorot:#991b1b;--einheit-priogelb:#665000;--einheit-online:#146c37;}
+  .einheit-page .einheit-art--erkundung{--einheit-art-text:#8e3b00;}
+  .einheit-page .einheit-art--abarbeitung{--einheit-art-text:#145bbb;}
+  .einheit-page .einheit-art--unbekannt{--einheit-art-text:var(--text-muted);}
+}
+@media (prefers-contrast:more){
+  .einheit-page .btn,.einheit-page summary,.einheit-page .form-control{border-width:2px;border-color:currentColor;}
+  .einheit-page .fab-card{border-top-width:2px;border-right-width:2px;border-bottom-width:2px;}
+}
+@media (prefers-reduced-motion:reduce){.einheit-page *{scroll-behavior:auto;transition:none;animation:none;}}
 </style>

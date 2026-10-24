@@ -159,7 +159,8 @@ def seite(client, browser):
             if url.path == "/einheit/api/zustand":
                 state["zustand"] += 1
             headers = {k: v for k, v in request.headers.items()
-                       if k in {"if-none-match", "x-ec-einheit", "x-ec-einheit-sim", "x-csrf-token", "content-type"}}
+                       if k in {"if-none-match", "x-ec-einheit", "x-ec-einheit-sim", "x-csrf-token", "content-type",
+                                "x-ec-einheit-kontext"}}
             response = client.request(request.method, url.path + ("?" + url.query if url.query else ""),
                                       headers=headers, content=request.post_data_buffer)
             route.fulfill(status=response.status_code, headers={
@@ -215,7 +216,7 @@ def test_browser_alle_offenen_auftraege_einmal_und_gleiche_navigation(client, se
     page.screenshot(path=str(tmp_path / "einheit-tablet.png"), full_page=True)
     for dispatch_id in ids["offen"]:
         page.locator(f'[data-dispatch-id="{dispatch_id}"] button').click()
-        expect(page.get_by_role("button", name="Lagemeldung", exact=True)).to_be_visible()
+        expect(page.get_by_role("button", name="Meldung an Einsatzleitung", exact=True)).to_be_visible()
         expect(page.get_by_role("button", name="Foto", exact=True)).to_be_visible()
         page.get_by_role("tab", name="Einsätze", exact=True).click()
         expect(karten).to_have_count(3)
@@ -260,7 +261,7 @@ def test_browser_offline_gefahren_lokaler_status_und_wiederverbindung_mit_304(cl
     expect(page.locator(".einheit-meta")).to_contain_text("1 noch nicht übermittelt")
     page.get_by_role("tab", name="Einsätze", exact=True).click()
     page.locator(f'[data-dispatch-id="{ids["d1"]}"] button').click()
-    expect(page.get_by_role("button", name="Lagemeldung", exact=True)).to_be_visible()
+    expect(page.get_by_role("button", name="Meldung an Einsatzleitung", exact=True)).to_be_visible()
     assert not errors
 
 
@@ -285,7 +286,7 @@ def test_browser_leerstand_behaelt_archiv_und_auftragsaktionen(client, setup_db,
     expect(page.get_by_text("Erkundet", exact=True)).to_be_visible()
     expect(page.locator(".einheit-liste[open]").get_by_text("Nicht durchführbar", exact=True)).to_be_visible()
     page.locator(".einheit-liste[open] button").first.click()
-    expect(page.get_by_role("button", name="Lagemeldung", exact=True)).to_be_visible()
+    expect(page.get_by_role("button", name="Meldung an Einsatzleitung", exact=True)).to_be_visible()
     page.get_by_role("tab", name="Einsätze", exact=True).click()
     page.get_by_text("Zurückgezogen (1)", exact=True).click()
     expect(page.locator(".einheit-liste[open] button")).to_have_count(3)
@@ -357,8 +358,11 @@ def test_browser_art_in_detail_dialog_marker_meldungen_und_archiv(
     assert beschriftung and attribution and beschriftung["y"] + beschriftung["height"] <= attribution["y"]
     page.screenshot(path=str(tmp_path / f"auftragsart-{auftragsart}-detail.png"), full_page=True, animations="disabled")
     expect(page.get_by_text("Stellenmeldung ohne eindeutigen Auftragsbezug", exact=True)).to_be_visible()
-    assert page.locator(".einheit-log .einheit-artchip").count() == 0
-    page.get_by_role("button", name="Lagemeldung", exact=True).click()
+    stellenmeldung = page.locator('[data-einheit-verlauf="stelle"] li').filter(
+        has=page.get_by_text("Stellenmeldung ohne eindeutigen Auftragsbezug", exact=True),
+    )
+    assert stellenmeldung.locator(".einheit-artchip").count() == 0
+    page.get_by_role("button", name="Meldung an Einsatzleitung", exact=True).click()
     dialog = page.locator(".einheit-page").get_by_role("dialog")
     expect(dialog.locator(".einheit-artchip")).to_have_text(label)
     state["schreiben_offline"] = True
@@ -371,7 +375,10 @@ def test_browser_art_in_detail_dialog_marker_meldungen_und_archiv(
     state["schreiben_offline"] = False
     meldungen.get_by_role("button", name="Erneut senden", exact=True).click()
     expect(meldungen.locator("article")).to_have_count(0)
-    expect(meldungen.locator(".einheit-artchip")).to_have_text(label)
+    bestaetigte_meldung = meldungen.locator('[data-einheit-verlauf="zentral"] li').filter(
+        has=page.get_by_text("Neue Lagemeldung zur Schule", exact=True),
+    )
+    expect(bestaetigte_meldung.locator(".einheit-artchip")).to_have_text(label)
     page.get_by_role("tab", name="Karte", exact=True).click()
     legende = page.get_by_label("Kartenlegende", exact=True)
     expect(legende.locator(".einheit-artchip")).to_have_text(["ERKUNDUNG", "AUFTRAG"])
@@ -382,11 +389,13 @@ def test_browser_art_in_detail_dialog_marker_meldungen_und_archiv(
     marker = page.locator("[x-ref=uebersichtKarte] .einheit-kartenmarker").first
     expect(marker.locator(".einheit-artchip")).to_have_text(label)
     expect(marker.locator(".einheit-marker__punkt")).to_have_css("border-top-color", "rgb(216, 48, 48)")
-    # Bei deckungsgleichen Einsatzorten ist der zuletzt gezeichnete Marker anklickbar;
-    # alle einzelnen Aufträge bleiben zusätzlich in der Liste erreichbar.
-    page.locator("[x-ref=uebersichtKarte] .einheit-kartenmarker").last.click(position={"x": 24, "y": 24})
+    # Deckungsgleiche Einsatzorte zeigen alle Aufträge im gemeinsamen Popup.
+    marker.click(position={"x": 24, "y": 24})
     popup = page.locator(".einheit-kartenpopup")
-    expect(popup.locator(".einheit-artchip")).to_have_text("AUFTRAG" if auftragsart == "erkundung" else "ERKUNDUNG")
+    expect(popup.locator(".einheit-artchip")).to_have_text([
+        label, "AUFTRAG" if auftragsart == "erkundung" else "ERKUNDUNG",
+    ])
+    expect(popup).to_contain_text("2 Aufträge an dieser Position")
     expect(popup).to_contain_text("Priorität: Sofort")
     expect(popup).to_have_css("opacity", "1")
     page.screenshot(path=str(tmp_path / f"auftragsart-{auftragsart}-karte.png"), full_page=True, animations="disabled")
@@ -449,6 +458,7 @@ def test_browser_dringlichkeit_fuer_beide_arten_unabhaengig(client, setup_db, se
         ))
         db.commit()
     page, _, errors = seite
+    page.emulate_media(color_scheme="dark")  # Bisherige Dringlichkeitsfarben im dunklen ECP-Schema.
     page.goto("https://ecp.test/einheit")
     karten = page.locator("[data-einheit-auftrag]").filter(has=page.get_by_role("heading", name="Schule", exact=True))
     expect(karten).to_have_count(2)
@@ -461,4 +471,268 @@ def test_browser_dringlichkeit_fuer_beide_arten_unabhaengig(client, setup_db, se
     expect(marker).to_have_count(2)
     for eintrag in marker.locator(".einheit-marker__punkt").all():
         expect(eintrag).to_have_css("border-top-color", farbe)
+    assert not errors
+
+
+def _csrf_im_browser(page, client):
+    page.context.add_cookies([{
+        "name": "ec_csrf", "value": client.cookies.get("ec_csrf"), "url": "https://ecp.test",
+    }])
+
+
+@pytest.mark.parametrize("width,height", [(360, 800), (1024, 768)])
+def test_browser_mehrfachuebernahme_mit_bestehendem_aktiven_auftrag(client, setup_db, seite, width, height, tmp_path):
+    from playwright.sync_api import expect
+
+    ids = _bestand(client)
+    a, b, aktiv = ids["offen"]
+    with _db() as db:
+        d = db.get(EinheitSiteDispatch, aktiv)
+        d.einheit_status = "in_arbeit"
+        d.site.priority = SitePriority.normal
+        db.get(LageEinheit, ids["e1"]).incident_site_id = d.site_id
+        db.commit()
+    page, state, errors = seite
+    page.set_viewport_size({"width": width, "height": height})
+    _csrf_im_browser(page, client)
+    page.goto("https://ecp.test/einheit")
+    for dispatch_id in (a, b):
+        page.locator(f'[data-einheit-auftrag][data-dispatch-id="{dispatch_id}"] button').click()
+        uebernehmen = page.get_by_role("button", name="Auftrag übernehmen", exact=True)
+        expect(uebernehmen).to_be_enabled()
+        expect(page.get_by_role("button", name="Meldung an Einsatzleitung", exact=True)).to_be_visible()
+        uebernehmen.click()
+        expect(page.get_by_role("button", name="Anfahrt melden", exact=True)).to_be_enabled()
+        expect(page.locator(".einheit-status-aktuell")).to_contain_text("Übernommen / bestätigt")
+        assert page.locator('.person-flyout-backdrop:visible').count() == 0
+        page.get_by_role("tab", name="Einsätze", exact=True).click()
+    with _db() as db:
+        assert [db.get(EinheitSiteDispatch, d).einheit_status for d in ids["offen"]] == [
+            "bestaetigt", "bestaetigt", "in_arbeit",
+        ]
+        assert [db.get(EinheitSiteDispatch, d).reihenfolge for d in ids["offen"]] == [1, 2, 3]
+        dringend = IncidentSite(org_id=db.get(IncidentSite, ids["a"]).org_id, major_incident_id=ids["lage"],
+                                bezeichnung="Neuer dringender Auftrag", priority=SitePriority.sofort)
+        db.add(dringend)
+        db.flush()
+        db.add(EinheitSiteDispatch(einheit_id=ids["e1"], site_id=dringend.id, dispatched_at=datetime.now(UTC)))
+        db.commit()
+    page.evaluate("Alpine.$data(document.querySelector('.einheit-page')).laden()")
+    expect(page.locator('[data-hervorgehoben="true"]')).to_contain_text("Ohne Position")
+    expect(page.get_by_text(
+        "Neuer Auftrag mit höherer Priorität: Neuer dringender Auftrag", exact=True,
+    )).to_be_visible()
+    page.screenshot(path=str(tmp_path / f"mehrfachuebernahme-{width}.png"), full_page=True, animations="disabled")
+    # Vorschau des bestätigten Auftrags und bewusste Entscheidung vor jedem Wechsel.
+    page.locator(f'[data-einheit-auftrag][data-dispatch-id="{b}"] button').click()
+    page.get_by_role("button", name="Anfahrt melden", exact=True).click()
+    dialog = page.locator(".einheit-page").get_by_role("dialog")
+    expect(dialog).to_contain_text("Ohne Position")
+    expect(dialog).to_contain_text("B")
+    posts_vorher = len(state["posts"])
+    dialog.get_by_role("button", name="Nein, Status nicht ändern", exact=True).click()
+    assert len(state["posts"]) == posts_vorher
+    page.get_by_role("button", name="Anfahrt melden", exact=True).click()
+    dialog.get_by_role("button", name="Unterbrechen und wechseln", exact=True).click()
+    expect(page.locator(".einheit-status-aktuell")).to_contain_text("Aktiv · Anfahrt")
+    with _db() as db:
+        assert db.get(EinheitSiteDispatch, aktiv).einheit_status == "bestaetigt"
+        assert db.get(EinheitSiteDispatch, b).einheit_status == "anfahrt"
+        assert db.get(LageEinheit, ids["e1"]).incident_site_id == ids["b"]
+    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth") and not errors
+
+
+def test_browser_offline_zwei_uebernahmen_reload_und_spaetere_synchronisation(client, setup_db, seite):
+    from playwright.sync_api import expect
+
+    ids = _bestand(client)
+    page, state, errors = seite
+    _csrf_im_browser(page, client)
+    page.goto("https://ecp.test/einheit")
+    expect(page.locator("[data-einheit-auftrag]")).to_have_count(3)
+    page.wait_for_function("Alpine.$data(document.querySelector('.einheit-page')).outboxVerfuegbar")
+    state["offline"] = True
+    for dispatch_id in ids["offen"][:2]:
+        page.locator(f'[data-einheit-auftrag][data-dispatch-id="{dispatch_id}"] button').click()
+        button = page.get_by_role("button", name="Auftrag übernehmen", exact=True)
+        expect(button).to_be_enabled()
+        button.click()
+        expect(page.locator(".einheit-status-aktuell")).to_contain_text("nur auf diesem Gerät")
+        page.get_by_role("tab", name="Einsätze", exact=True).click()
+    page.reload()
+    expect(page.locator(".einheit-meta")).to_contain_text("2 noch nicht übermittelt")
+    with _db() as db:
+        assert all(db.get(EinheitSiteDispatch, d).einheit_status == "zugewiesen" for d in ids["offen"])
+    state["offline"] = False
+    page.get_by_role("tab", name="Meldungen", exact=True).click()
+    erneut = page.get_by_role("button", name="Erneut senden", exact=True)
+    expect(erneut).to_have_count(2)
+    erneut.first.click()
+    expect(erneut).to_have_count(1)
+    erneut.first.click()
+    expect(page.locator(".einheit-meta")).to_contain_text("Alles übermittelt")
+    with _db() as db:
+        assert [db.get(EinheitSiteDispatch, d).einheit_status for d in ids["offen"]] == [
+            "bestaetigt", "bestaetigt", "zugewiesen",
+        ]
+        assert db.get(LageEinheit, ids["e1"]).incident_site_id is None
+    assert not errors
+
+
+def test_browser_geaenderten_auftrag_pruefen_und_rueckzug_im_offenen_detail(client, setup_db, seite):
+    from playwright.sync_api import expect
+
+    ids = _bestand(client)
+    page, state, errors = seite
+    _csrf_im_browser(page, client)
+    page.goto("https://ecp.test/einheit")
+    page.locator(f'[data-einheit-auftrag][data-dispatch-id="{ids["d1"]}"] button').click()
+    state["schreiben_offline"] = True
+    page.get_by_role("button", name="Auftrag übernehmen", exact=True).click()
+    expect(page.locator(".einheit-status-aktuell")).to_contain_text("nur auf diesem Gerät")
+    with _db() as db:
+        d = db.get(EinheitSiteDispatch, ids["d1"])
+        d.auftrag, d.version = "Neuer Auftrag – zuerst Nordtor prüfen", 2
+        db.commit()
+    page.evaluate("Alpine.$data(document.querySelector('.einheit-page')).laden()")
+    expect(page.locator(".einheit-auftrag")).to_have_text("Neuer Auftrag – zuerst Nordtor prüfen")
+    expect(page.get_by_text("Auftrag wurde geändert – bitte prüfen", exact=True)).to_be_visible()
+    state["schreiben_offline"] = False
+    page.get_by_role("tab", name="Meldungen", exact=True).click()
+    page.get_by_role("button", name="Erneut senden", exact=True).click()
+    expect(page.locator('[data-einheit-verlauf="zentral"]').get_by_text(
+        "Auftrag geändert – bitte aktuellen Auftrag prüfen und neu entscheiden", exact=True,
+    )).to_be_visible()
+    with _db() as db:
+        assert db.get(EinheitSiteDispatch, ids["d1"]).einheit_status == "zugewiesen"
+    page.get_by_role("button", name="Auftrag prüfen", exact=True).click()
+    page.get_by_role("button", name="Auftrag übernehmen", exact=True).click()
+    expect(page.locator(".einheit-status-aktuell")).to_contain_text("Übernommen / bestätigt")
+    with _db() as db:
+        db.get(EinheitSiteDispatch, ids["d1"]).withdrawn_at = datetime.now(UTC)
+        db.commit()
+    page.evaluate("Alpine.$data(document.querySelector('.einheit-page')).laden()")
+    expect(page.get_by_text("Auftrag zurückgezogen – keine Statusaktion möglich.", exact=True)).to_be_visible()
+    expect(page.get_by_role("button", name="Anfahrt melden", exact=True)).not_to_be_visible()
+    assert not errors
+
+
+def test_browser_verspaetete_vorschau_ersetzt_keine_neuere_auswahl(client, setup_db, seite):
+    from playwright.sync_api import expect
+
+    ids = _bestand(client)
+    a, b = ids["offen"][:2]
+    daten = client.get(f"/einheit/api/auftrag/{a}").json()
+    page, _, errors = seite
+    gehalten = []
+    page.route(f"**/einheit/api/auftrag/{a}", lambda route: gehalten.append(route))
+    page.goto("https://ecp.test/einheit")
+    page.wait_for_function("Alpine.$data(document.querySelector('.einheit-page')).geladen")
+    page.evaluate(f"""() => {{
+        const c = Alpine.$data(document.querySelector('.einheit-page'));
+        void c.oeffne({a}); void c.oeffne({b});
+    }}""")
+    expect(page.locator(".einheit-auftrag")).to_have_text("Zufahrt freimachen.")
+    assert len(gehalten) == 1
+    gehalten[0].fulfill(json=daten)
+    expect(page.locator(".einheit-auftrag")).to_have_text("Zufahrt freimachen.")
+    assert not errors
+
+
+def test_browser_objekthinweise_zufahrt_und_plan_sind_vor_uebernahme_lesbar(
+    client, setup_db, seite, tmp_path, monkeypatch,
+):
+    from playwright.sync_api import expect
+
+    from app.config import settings
+    from tests.test_einheit_vorschau import _plaene
+
+    ids = _bestand(client)
+    monkeypatch.setattr(settings, "OBJEKT_MEDIA_DIR", str(tmp_path))
+    _plaene(ids, tmp_path)
+    with _db() as db:
+        db.get(EinheitSiteDispatch, ids["d1"]).auftrag = "Vollständiger Auftrag " + "Wichtiger Abschnitt. " * 30
+        db.commit()
+    page, state, errors = seite
+    page.goto("https://ecp.test/einheit")
+    page.locator(f'[data-einheit-auftrag][data-dispatch-id="{ids["d1"]}"] button').click()
+    expect(page.locator(".einheit-auftrag")).to_have_text("Vollständiger Auftrag " + "Wichtiger Abschnitt. " * 30)
+    expect(page.get_by_text("Schlüssel bei der BMZ", exact=True)).to_be_visible()
+    expect(page.get_by_text("Zufahrt über Nordtor", exact=True)).to_be_visible()
+    gefahren = page.get_by_role("region", name="Gefahren am Einsatzort")
+    objektgefahr = gefahren.get_by_role("listitem").filter(has=page.get_by_text("Gasflaschen", exact=True))
+    expect(objektgefahr).to_contain_text("Im Keller")
+    expect(objektgefahr).to_contain_text("Schulgebäude")
+    plan = page.get_by_role("link", name="Brandschutzplan 0", exact=True)
+    expect(plan).to_be_visible()
+    assert client.get(plan.get_attribute("href")).status_code == 200
+    expect(page.get_by_role("button", name="Auftrag übernehmen", exact=True)).to_be_enabled()
+    page.screenshot(path=str(tmp_path / "mehrfach-vorschau.png"), full_page=True, animations="disabled")
+    assert not state["posts"] and not errors
+
+
+def test_browser_neuer_serverstand_ersetzt_auch_laufende_aeltere_detailabfrage(client, setup_db, seite):
+    from playwright.sync_api import expect
+
+    from tests.test_einheit_mehrfachuebernahme import _status
+
+    ids = _bestand(client)
+    dispatch_id = ids["d1"]
+    alt = client.get(f"/einheit/api/auftrag/{dispatch_id}").json()
+    page, _, errors = seite
+    page.goto("https://ecp.test/einheit")
+    page.locator(f'[data-einheit-auftrag][data-dispatch-id="{dispatch_id}"] button').click()
+    expect(page.get_by_role("button", name="Auftrag übernehmen", exact=True)).to_be_enabled()
+    gehalten = []
+
+    def verzoegern(route):
+        if not gehalten:
+            gehalten.append(route)
+        else:
+            route.fallback()
+
+    page.route(f"**/einheit/api/auftrag/{dispatch_id}", verzoegern)
+    page.evaluate(f"void Alpine.$data(document.querySelector('.einheit-page')).oeffne({dispatch_id}, false, true)")
+    page.wait_for_function("Alpine.$data(document.querySelector('.einheit-page')).detailLaden")
+    assert _status(client, dispatch_id, "bestaetigt").status_code == 200
+    page.evaluate("Alpine.$data(document.querySelector('.einheit-page')).laden()")
+    expect(page.get_by_role("button", name="Anfahrt melden", exact=True)).to_be_enabled()
+    assert len(gehalten) == 1
+    gehalten[0].fulfill(json=alt)
+    page.evaluate("() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))")
+    expect(page.locator(".einheit-status-aktuell")).to_contain_text("Übernommen / bestätigt")
+    assert not errors
+
+
+def test_browser_geaenderter_auftrag_wird_nicht_aus_altem_abschlussdialog_beendet(client, setup_db, seite):
+    from playwright.sync_api import expect
+
+    ids = _bestand(client)
+    page, state, errors = seite
+    _csrf_im_browser(page, client)
+    page.goto("https://ecp.test/einheit")
+    page.locator(f'[data-einheit-auftrag][data-dispatch-id="{ids["d1"]}"] button').click()
+    page.get_by_text("Weitere Status", exact=True).click()
+    page.get_by_role("button", name="Erkundung abschließen", exact=True).click()
+    dialog = page.locator(".einheit-page").get_by_role("dialog")
+    with _db() as db:
+        d = db.get(EinheitSiteDispatch, ids["d1"])
+        d.version, d.auftrag = 2, "Zusätzliche Erkundung am Nordtor"
+        db.commit()
+    page.evaluate("Alpine.$data(document.querySelector('.einheit-page')).laden()")
+    expect(dialog.get_by_text(
+        "Auftrag geändert – Dialog schließen und aktuellen Auftrag prüfen.", exact=True,
+    )).to_be_visible()
+    expect(dialog.get_by_role("button", name="Erkundung abschließen", exact=True)).to_be_disabled()
+    assert not state["posts"]
+    dialog.locator(".person-flyout__close").click()
+    expect(page.locator(".einheit-auftrag")).to_have_text("Zusätzliche Erkundung am Nordtor")
+    page.get_by_role("button", name="Erkundung abschließen", exact=True).click()
+    dialog.get_by_label("Erkundungsergebnis (Pflichtfeld)").select_option("keine_massnahmen")
+    dialog.get_by_role("button", name="Erkundung abschließen", exact=True).click()
+    page.wait_for_function("""Alpine.$data(document.querySelector('.einheit-page'))
+        .detail?.auftrag?.einheit_status === 'abgeschlossen'""")
+    with _db() as db:
+        assert db.get(EinheitSiteDispatch, ids["d1"]).einheit_status == "abgeschlossen"
+        assert db.get(EinheitSiteDispatch, ids["d1"]).version == 2
     assert not errors

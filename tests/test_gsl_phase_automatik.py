@@ -20,7 +20,7 @@ from app.services.einheit_service import (
 )
 from app.services.gsl_phase_automatik import aktualisiere_site_phase, einsatz_abschliessen, einsatz_wiedereroeffnen
 from tests.conftest import TestingSession
-from tests.test_einheit_api import _als, _daten as _api_daten, _device, _h
+from tests.test_einheit_api import _als, _daten as _api_daten, _device, _erkundungsergebnis, _h
 from tests.test_gsl_fuehrung_einheiten import _mit_rolle, _post
 
 
@@ -334,9 +334,11 @@ def test_tablet_api_finished_erkundung_becomes_bewertet(client):
     query = db.query(EinheitSiteDispatch).filter(EinheitSiteDispatch.site_id == x["a"])
     query.filter(EinheitSiteDispatch.id != x["d1"]).update({"withdrawn_at": datetime.now(UTC)})
     db.commit(); db.close(); _device(client, x)
+    ergebnis_uuid = _erkundungsergebnis(client, x["d1"])
     r = client.post(
         f"/einheit/api/auftrag/{x['d1']}/status",
-        json={"status": "abgeschlossen", "client_uuid": str(uuid4())}, headers=_h(client),
+        json={"status": "abgeschlossen", "client_uuid": str(uuid4()),
+              "ergebnis_client_uuid": ergebnis_uuid}, headers=_h(client),
     )
     assert r.status_code == 200
     erneut = client.post(

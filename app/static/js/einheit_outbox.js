@@ -25,18 +25,27 @@ export function createOutbox({
   csrfToken = () => "",
   simEinheitId = null,
   benutzerEinheitId = null,
+  einheitId = null,
   dbName = "ec-einheit",
   openTimeoutMs = 4000,
+  requestTimeoutMs = 15000,
+  fotoTimeoutMs = 60000,
   onTerminal = () => {},
 }) {
   const listeners = new Set();
   const inBearbeitung = new Set();
+  const laufendeAnfragen = new Map();
   let dbPromise;
   let statusKette = Promise.resolve();
   let terminal = false;
 
-  function melden() {
-    for (const listener of listeners) listener();
+  function melden(neu = null) {
+    for (const listener of listeners) listener(neu);
+  }
+
+  function hintergrund(promise) {
+    // Ein Speicherausfall nach dem POST ist keine Serverquittung. Ansicht neu lesen, Originaleintrag behalten.
+    void promise.catch(() => melden());
   }
 
   function db() {
@@ -98,7 +107,7 @@ export function createOutbox({
       let wert;
       transaktion.oncomplete = () => resolve(wert);
       transaktion.onerror = () => reject(transaktion.error);
-      transaktion.onabort = () => reject(transaktion.error);
+      transaktion.onabort = () => reject(transaktion.error || new Error("Lokales Speichern wurde abgebrochen"));
       wert = arbeit(transaktion, (neu) => { wert = neu; });
     });
   }
@@ -158,6 +167,7 @@ export function createOutbox({
     const headers = { "X-CSRF-Token": csrfToken() };
     if (simEinheitId !== null && simEinheitId !== undefined) headers["X-EC-Einheit-Sim"] = String(simEinheitId);
     if (benutzerEinheitId !== null && benutzerEinheitId !== undefined) headers["X-EC-Einheit"] = String(benutzerEinheitId);
+    if (einheitId != null) headers["X-EC-Einheit-Kontext"] = String(einheitId);
     return headers;
   }
 
@@ -166,24 +176,37 @@ export function createOutbox({
   }
 
   async function setze(eintrag, aenderung) {
-    const aktuell = await lesen("outbox", eintrag.client_uuid);
-    if (!aktuell) return null;
-    const neu = { ...aktuell, ...aenderung };
-    await speichern("outbox", neu);
+    let neu = null;
+    await mitStore(["outbox"], "readwrite", tx => {
+      const store = tx.objectStore("outbox"), request = store.get(eintrag.client_uuid);
+      request.onsuccess = () => {
+        const aktuell = request.result;
+        if (!aktuell || aktuell.status === "blockiert_zugang") return;
+        neu = { ...aktuell, ...aenderung };
+        store.put(neu);
+      };
+    });
     melden();
     return neu;
   }
 
   async function bestaetigen(eintrag, antwort) {
     await mitStore(["outbox", "verlauf"], "readwrite", (tx) => {
-      tx.objectStore("outbox").delete(eintrag.client_uuid);
-      tx.objectStore("verlauf").add({
+      const store = tx.objectStore("outbox"), request = store.get(eintrag.client_uuid);
+      request.onsuccess = () => {
+        if (terminal || !request.result || request.result.status === "blockiert_zugang") return;
+        store.delete(eintrag.client_uuid);
+        tx.objectStore("verlauf").add({
         client_uuid: eintrag.client_uuid,
         typ: eintrag.typ,
         dispatch_id: eintrag.dispatch_id,
+        einheit_id: eintrag.einheit_id,
+        erfasst_at: eintrag.erfasst_at,
+        payload: ["meldung", "foto", "status"].includes(eintrag.typ) ? eintrag.payload : undefined,
         server_bestaetigt_at: now().toISOString(),
         antwort,
-      });
+        });
+      };
     });
     const eintraege = await alle("verlauf");
     if (eintraege.length > 200) {
@@ -196,71 +219,97 @@ export function createOutbox({
   }
 
   async function senden(eintrag) {
-    if (inBearbeitung.has(eintrag.client_uuid)) return "blockiert";
+    if (terminal || inBearbeitung.has(eintrag.client_uuid)) return "blockiert";
     inBearbeitung.add(eintrag.client_uuid);
     try {
       // Ein anderer Flush kann seit seinem Snapshot bereits erfolgreich gewesen sein.
       const aktuell = await lesen("outbox", eintrag.client_uuid);
-      if (!aktuell || !faellig(aktuell)) return "blockiert";
+      if (terminal || !aktuell || !faellig(aktuell)) return "blockiert";
       eintrag = aktuell;
+      if (einheitId != null && eintrag.einheit_id !== einheitId) {
+        await setze(eintrag, { status: "konflikt", letzter_fehler: "einheit_gewechselt", naechster_versuch_at: null });
+        return "weiter";
+      }
       let response;
+      let antwort = null;
+      const controller = new AbortController();
+      laufendeAnfragen.set(eintrag.client_uuid, controller);
+      let timer;
       try {
-        const url = eintrag.typ.startsWith("ressource_")
-          ? `/einheit/api/ressource/${eintrag.typ.slice("ressource_".length)}`
-          : `/einheit/api/auftrag/${eintrag.dispatch_id}/${eintrag.typ}`;
-        if (eintrag.typ === "foto" || eintrag.typ === "material_foto") {
-          let datei = null;
-          try { datei = await fotoDatei(eintrag); } catch { datei = null; }
-          if (!datei?.size) {
-            await setze(eintrag, { status: "fehler", letzter_fehler: "foto_daten_fehlen", naechster_versuch_at: null });
-            return "weiter";
+        const begrenzt = async () => {
+          const url = eintrag.typ.startsWith("ressource_")
+            ? `/einheit/api/ressource/${eintrag.typ.slice("ressource_".length)}`
+            : `/einheit/api/auftrag/${eintrag.dispatch_id}/${eintrag.typ}`;
+          if (eintrag.typ === "foto" || eintrag.typ === "material_foto") {
+            let datei = null;
+            try { datei = await fotoDatei(eintrag); } catch { datei = null; }
+            if (!datei?.size) {
+              await setze(eintrag, { status: "fehler", letzter_fehler: "foto_daten_fehlen", naechster_versuch_at: null });
+              return "weiter";
+            }
+            const form = new FormData();
+            form.append("file", datei, eintrag.dateiname || "foto");
+            form.append("client_uuid", eintrag.client_uuid);
+            form.append("erfasst_at", eintrag.erfasst_at);
+            if (eintrag.typ === "foto") form.append("kommentar", eintrag.payload?.kommentar || "");
+            if (eintrag.typ === "material_foto") form.append("material_client_uuid", eintrag.payload?.material_client_uuid || "");
+            form.append("_csrf", csrfToken());
+            response = await fetch(url, { method: "POST", headers: header(), body: form,
+              credentials: "same-origin", signal: controller.signal });
+          } else {
+            response = await fetch(url, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", ...header() },
+              body: JSON.stringify({
+                client_uuid: eintrag.client_uuid, erfasst_at: eintrag.erfasst_at,
+                auftrag_version: eintrag.auftrag_version, ...eintrag.payload,
+              }),
+              credentials: "same-origin",
+              signal: controller.signal,
+            });
           }
-          const form = new FormData();
-          form.append("file", datei, eintrag.dateiname || "foto");
-          form.append("client_uuid", eintrag.client_uuid);
-          form.append("erfasst_at", eintrag.erfasst_at);
-          if (eintrag.typ === "foto") form.append("kommentar", eintrag.payload?.kommentar || "");
-          if (eintrag.typ === "material_foto") form.append("material_client_uuid", eintrag.payload?.material_client_uuid || "");
-          form.append("_csrf", csrfToken());
-          response = await fetch(url, { method: "POST", headers: header(), body: form, credentials: "same-origin" });
-        } else {
-          response = await fetch(url, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", ...header() },
-            body: JSON.stringify({
-              client_uuid: eintrag.client_uuid, erfasst_at: eintrag.erfasst_at,
-              auftrag_version: eintrag.auftrag_version, ...eintrag.payload,
-            }),
-            credentials: "same-origin",
-          });
-        }
+          try { antwort = await response.json(); } catch { antwort = null; }
+        };
+        await Promise.race([begrenzt(), new Promise((_, reject) => {
+          controller.signal.addEventListener("abort", () => reject(new Error("uebertragung_unbestaetigt")), { once: true });
+          const dauer = ["foto", "material_foto"].includes(eintrag.typ) ? fotoTimeoutMs : requestTimeoutMs;
+          timer = setTimeout(() => controller.abort(), dauer);
+          timer?.unref?.(); // Node-Tests dürfen durch absichtlich offene Requests nicht künstlich warten.
+        })]);
       } catch (error) {
+        if (terminal) return "blockiert";
         const versuche = eintrag.versuche + 1;
         await setze(eintrag, {
           status: "fehler_netz", versuche, letzter_fehler: error?.message || "netzwerkfehler",
           naechster_versuch_at: new Date(now().getTime() + rueckoff(versuche)).toISOString(),
         });
         return "blockiert";
+      } finally {
+        clearTimeout(timer);
+        laufendeAnfragen.delete(eintrag.client_uuid);
       }
-      let antwort;
-      try { antwort = await response.json(); } catch { antwort = null; }
-      if (response.ok && response.headers.get("X-EC-Offline") !== "1" && antwort?.aktion_id) {
+      if (terminal) return "blockiert";
+      if (!response) return "weiter"; // Ein lokal unlesbares Foto wurde bereits als Fehler markiert.
+      if (response.ok && response.headers.get("X-EC-Offline") !== "1" && antwort?.aktion_id && antwort.ok !== false) {
         await bestaetigen(eintrag, antwort);
-        if (eintrag.typ === "material") void fotoSpurFlushen();
+        if (eintrag.typ === "material") hintergrund(fotoSpurFlushen());
         return "weiter";
       }
       const code = antwort?.code || `http_${response.status}`;
-      if (response.status === 401 && /^zugang_(widerrufen|abgelaufen|ungueltig)$/.test(code)) {
+      if (response.status === 401) {
         await blockiereZugang();
         onTerminal(code);
         return "blockiert";
       }
-      if (response.status === 409 || response.status === 403 || response.status === 404) {
-        await setze(eintrag, { status: "konflikt", letzter_fehler: code, naechster_versuch_at: null });
-        if (eintrag.typ === "material") void fotoSpurFlushen();
+      const csrfAbgleich = response.status === 403 && antwort?.detail === "CSRF-Token fehlt oder ungültig";
+      if (!csrfAbgleich && (response.status === 409 || response.status === 403 || response.status === 404)) {
+        await setze(eintrag, {
+          status: "konflikt", letzter_fehler: code, konflikt_details: antwort?.details || null, naechster_versuch_at: null,
+        });
+        if (eintrag.typ === "material") hintergrund(fotoSpurFlushen());
         return "weiter";
       }
-      if (response.status >= 500 || response.status === 408 || response.status === 429 || response.ok) {
+      if (csrfAbgleich || response.status >= 500 || response.status === 408 || response.status === 429 || response.ok) {
         const versuche = eintrag.versuche + 1;
         await setze(eintrag, {
           status: "fehler_netz", versuche, letzter_fehler: code,
@@ -269,7 +318,7 @@ export function createOutbox({
         return "blockiert";
       }
       await setze(eintrag, { status: "fehler", letzter_fehler: code, naechster_versuch_at: null });
-      if (eintrag.typ === "material") void fotoSpurFlushen();
+      if (eintrag.typ === "material") hintergrund(fotoSpurFlushen());
       return "weiter";
     } finally {
       inBearbeitung.delete(eintrag.client_uuid);
@@ -313,7 +362,7 @@ export function createOutbox({
   async function flush() {
     if (terminal) return;
     // Fotos warten nie auf die Statusspur und umgekehrt nicht auf haengende Uploads.
-    void fotoSpurFlushen();
+    hintergrund(fotoSpurFlushen());
     const lauf = statusKette.then(statusSpurenFlushen);
     statusKette = lauf.catch(() => undefined);
     return lauf;
@@ -321,6 +370,7 @@ export function createOutbox({
 
   async function blockiereZugang() {
     terminal = true;
+    for (const controller of laufendeAnfragen.values()) controller.abort();
     const eintraege = await alle("outbox");
     await mitStore(["outbox"], "readwrite", (tx) => {
       for (const eintrag of eintraege) {
@@ -344,36 +394,82 @@ export function createOutbox({
     });
   }
 
-  return {
-    async erfassen({ typ, dispatch_id, einheit_id, auftrag_version, payload = {}, blob = null, dateiname = null }) {
+  async function erfassenPaket(daten) {
+    const eintraege = [];
+    for (const { typ, dispatch_id, einheit_id, auftrag_version, client_uuid = uuid(), payload = {}, blob = null, dateiname = null } of daten) {
       if (!new Set(["status", "meldung", "foto", "material", "material_zurueck", "material_foto", "ressource_personal", "ressource_ausstattung"]).has(typ)) {
         throw new Error("ungueltiger_typ");
       }
       // Fotodaten sofort einlesen, solange die Datei aus dem Auswahldialog noch lesbar ist.
       const blob_daten = blob ? await blob.arrayBuffer() : null;
       const blob_typ = blob ? (blob.type || "image/jpeg") : null;
-      const alte = await lesen("meta", "seq");
-      const seq = (alte || 0) + 1;
-      const eintrag = {
-        client_uuid: uuid(), typ, dispatch_id, einheit_id, auftrag_version, payload, blob_daten, blob_typ, dateiname,
-        erfasst_at: now().toISOString(), seq, versuche: 0, status: "ausstehend", letzter_fehler: null,
+      eintraege.push({
+        client_uuid, typ, dispatch_id, einheit_id, auftrag_version, payload, blob_daten, blob_typ, dateiname,
+        erfasst_at: now().toISOString(), versuche: 0, status: "ausstehend", letzter_fehler: null,
         naechster_versuch_at: null,
+      });
+    }
+    if (!eintraege.length) return [];
+    // Ergebnis, Fotos und Abschluss sind vor dem ersten Versand vollständig lokal gesichert.
+    // Auch die Sequenz wird innerhalb derselben Transaktion vergeben (mehrere Tabs).
+    await mitStore(["outbox", "meta"], "readwrite", (tx) => {
+      const meta = tx.objectStore("meta");
+      const request = meta.get("seq");
+      request.onsuccess = () => {
+        try {
+          let seq = request.result || 0;
+          for (const eintrag of eintraege) {
+            eintrag.seq = ++seq;
+            if (terminal) Object.assign(eintrag, { status: "blockiert_zugang", letzter_fehler: "zugang_beendet" });
+            tx.objectStore("outbox").add(eintrag);
+          }
+          meta.put(seq, "seq");
+        } catch { tx.abort(); }
       };
-      await mitStore(["outbox", "meta"], "readwrite", (tx) => { tx.objectStore("outbox").add(eintrag); tx.objectStore("meta").put(seq, "seq"); });
-      melden();
-      void flush();
+    });
+    melden(eintraege.map(kopieOhneBlob)); // Erst nach dauerhaftem Commit, noch vor dem ersten POST sichtbar.
+    hintergrund(flush());
+    return eintraege;
+  }
+
+  return {
+    async erfassen(daten) {
+      const [eintrag] = await erfassenPaket([daten]);
       return eintrag;
     },
-    async flush() { return flush(); },
+    erfassenPaket,
+    async flush({ wiederverbunden = false } = {}) {
+      if (terminal) return;
+      if (wiederverbunden) {
+        await mitStore(["outbox"], "readwrite", tx => {
+          const store = tx.objectStore("outbox"), request = store.getAll();
+          request.onsuccess = () => {
+            for (const item of request.result) {
+              if (item.status === "fehler_netz" && !inBearbeitung.has(item.client_uuid)) {
+                store.put({ ...item, status: "ausstehend", naechster_versuch_at: null });
+              }
+            }
+          };
+        });
+      }
+      return flush();
+    },
     blockiereZugang,
     bereinigen,
     async erneutSenden(client_uuid) {
+      if (terminal) return;
       const eintrag = await lesen("outbox", client_uuid);
+      if (eintrag?.status === "blockiert_zugang") return;
       if (eintrag) await setze(eintrag, { status: "ausstehend", naechster_versuch_at: null });
       await flush();
     },
     async verwerfen(client_uuid) { await mitStore(["outbox"], "readwrite", (tx) => tx.objectStore("outbox").delete(client_uuid)); melden(); },
     async liste() { return (await alle("outbox")).sort((a, b) => a.seq - b.seq).map(kopieOhneBlob); },
+    async fotoVorschau(client_uuid) {
+      const eintrag = await lesen("outbox", client_uuid);
+      return eintrag?.typ === "foto" && eintrag.blob_daten
+        ? new Blob([eintrag.blob_daten], { type: eintrag.blob_typ || "image/jpeg" }) : null;
+    },
     async verlauf(limit = 200) { return (await alle("verlauf")).sort((a, b) => b.id - a.id).slice(0, limit); },
     async zaehler() {
       const items = await alle("outbox");
@@ -393,8 +489,10 @@ export function createOutbox({
     async metaSpeichern(key, value) { await speichern("meta", value, key); },
     async metaLaden(key) { return lesen("meta", key); },
     async naechsterVersuchIn() {
+      if (terminal) return null;
       const zeit = now().getTime();
-      const werte = (await alle("outbox")).filter((x) => x.status === "fehler_netz" && x.naechster_versuch_at)
+      const werte = (await alle("outbox")).filter((x) => x.status === "fehler_netz"
+        && x.naechster_versuch_at && !inBearbeitung.has(x.client_uuid))
         .map((x) => Math.max(0, zeitwert(x.naechster_versuch_at) - zeit));
       return werte.length ? Math.min(...werte) : null;
     },

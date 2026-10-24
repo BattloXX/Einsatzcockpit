@@ -32,7 +32,7 @@
      x-text="auftrag.gefahren_verfuegbar ? 'Keine bekannten Gefahren im Umkreis' : 'Gefahren am Ziel nicht verfügbar'"></p>
   <p class="einheit-sub" x-show="!auftrag.hat_koordinaten">Keine Kartenposition – Navigation über die Adresse, soweit vorhanden.</p>
   <div class="einheit-einsatzkarte-neu__status">
-    <span class="einheit-chip einheit-chip--status" x-text="auftrag.einheit_status_label"></span>
+    <span class="einheit-chip einheit-chip--status" x-text="bearbeitungsstand(auftrag)"></span>
     <span class="einheit-status-pending" x-show="lokalerStatus(auftrag)"
           x-text="lokalerStatus(auftrag) ? statusLabel(lokalerStatus(auftrag)) + ' – noch nicht übermittelt' : ''"></span>
   </div>

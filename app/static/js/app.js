@@ -1073,7 +1073,7 @@ function startVoice(targetInputId) {
     return;
   }
   const input = document.getElementById(targetInputId);
-  if (!input) return;
+  if (!input || input.disabled) return;
 
   if (recognition) { recognition.stop(); recognition = null; return; }
 
@@ -1086,8 +1086,10 @@ function startVoice(targetInputId) {
   if (btn) btn.classList.add('recording');
 
   recognition.onresult = (e) => {
+    if (!input.isConnected || input.disabled) return;
     const transcript = Array.from(e.results).map(r => r[0].transcript).join('');
     input.value = transcript;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
   };
   recognition.onend = () => {
     recognition = null;

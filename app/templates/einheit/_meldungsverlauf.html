@@ -1,0 +1,47 @@
+<section class="einheit-verlauf" aria-label="{{ verlauf_titel }}" data-einheit-verlauf="{{ verlauf_bereich }}">
+  <h3 class="fab-subcard__title">{{ verlauf_titel }}</h3>
+  <p class="einheit-sub" x-show="verlaufStand({{ verlauf_ziel }}).laden" role="status">Meldungen werden geladen.</p>
+  <p class="einheit-warning" x-show="verlaufStand({{ verlauf_ziel }}).offline">Offline – zuletzt geladener Verlauf. Lokale Meldungen sind noch nicht übermittelt.</p>
+  <p class="einheit-warning" x-show="verlaufStand({{ verlauf_ziel }}).fehler" x-text="verlaufStand({{ verlauf_ziel }}).fehler"></p>
+  <p class="einheit-sub" x-show="!{{ verlauf_liste }}.length && !verlaufStand({{ verlauf_ziel }}).laden">Noch keine Meldungen.</p>
+  <ol class="einheit-verlauf__liste">
+    <template x-for="item in {{ verlauf_liste }}" :key="item.id">
+      <li class="einheit-verlauf__eintrag" :class="[
+          item.kompakt ? 'einheit-verlauf__eintrag--kompakt' : '',
+          item.hervorhebung ? 'einheit-meldung--' + item.hervorhebung : '',
+          item.fehler ? 'einheit-verlauf__eintrag--fehler' : '']">
+        <div class="einheit-verlauf__kopf">
+          <time :datetime="item.ts" x-text="verlaufDatum(item.ts)"></time>
+          <strong x-text="item.absender"></strong>
+        </div>
+        <p class="einheit-verlauf__kennzeichnung" x-show="verlaufKennzeichnung(item)" x-text="verlaufKennzeichnung(item)"></p>
+        <p class="einheit-verlauf__ort" x-text="item.stelle"></p>
+        <template x-if="item.dispatch_id && item.auftragsart">
+          <span>{{ auftragsart("item.auftragsart") }}</span>
+        </template>
+        <p class="einheit-sub einheit-verlauf__bezug" x-text="item.bezug"></p>
+        <p class="einheit-verlauf__text" x-show="verlaufInhalt(item)" x-text="verlaufInhalt(item)"></p>
+        <template x-if="item.foto">
+          <a class="einheit-verlauf__foto" :href="einheitUrl(item.foto.url)" target="_blank" rel="noopener">
+            <img :src="einheitUrl(item.foto.thumb_url)" :alt="item.text || 'Foto zur Einsatzstelle'" loading="lazy">
+          </a>
+        </template>
+        <template x-if="item.hat_foto && meldungsFotoURLs[item.client_uuid]">
+          <img class="einheit-verlauf__foto" :src="meldungsFotoURLs[item.client_uuid]" alt="Foto auf diesem Gerät">
+        </template>
+        <p class="einheit-sub" x-show="item.hat_foto && !meldungsFotoURLs[item.client_uuid]">Foto auf diesem Gerät gespeichert.</p>
+        <p class="einheit-verlauf__status" x-show="item.eigene" :class="{'einheit-verlauf__status--fehler': item.fehler}"
+           x-text="verlaufStatus(item)"></p>
+        <button type="button" class="btn btn--ghost" @click="verlaufOeffnen(item)"
+                x-text="item.dispatch_id ? 'Auftrag öffnen' : 'Einsatzstelle öffnen'"></button>
+      </li>
+    </template>
+  </ol>
+  <div class="einheit-actions-row">
+    <button type="button" class="btn btn--ghost" :disabled="verlaufStand({{ verlauf_ziel }}).laden || zugangBeendet"
+            @click="verlaufLaden({{ verlauf_ziel }})">Meldungen aktualisieren</button>
+    <button type="button" class="btn btn--ghost" x-show="verlaufStand({{ verlauf_ziel }}).cursor"
+            :disabled="verlaufStand({{ verlauf_ziel }}).laden || zugangBeendet"
+            @click="verlaufLaden({{ verlauf_ziel }}, true)">Ältere Meldungen laden</button>
+  </div>
+</section>

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { berechneReihenfolge, esc, markerArt, markerDarstellung, navUrl } from "../../app/static/js/einheit_karte.js";
+import { berechneReihenfolge, esc, hatKoordinaten, markerArt, markerDarstellung, navUrl } from "../../app/static/js/einheit_karte.js";
 
 const auftrag = (id, extra = {}) => ({
   dispatch_id: id, rang: id, auftragsart: "abarbeitung", priority: "normal", lat: 47 + id / 100, lng: 13, ...extra,
@@ -65,6 +65,21 @@ test("navUrl nutzt Koordinaten, Adresse oder null", () => {
   assert.match(navUrl(auftrag(1)), /destination=47.01,13/);
   assert.match(navUrl({ adresse: "Hauptstraße 1" }), /Hauptstra%C3%9Fe/);
   assert.equal(navUrl({}), null);
+});
+
+test("Koordinatenprüfung akzeptiert Nullmeridian und verwirft ungültige Alt-/Offline-Daten", () => {
+  for (const ort of [{ lat: 0, lng: 0 }, { lat: -90, lng: 180 }, { lat: "47.5", lng: "9" }]) {
+    assert.equal(hatKoordinaten(ort), true);
+  }
+  for (const ort of [null, {}, { lat: null, lng: 0 }, { lat: "", lng: 0 }, { lat: " ", lng: 0 },
+    { lat: false, lng: 0 }, { lat: [], lng: 0 }, { lat: NaN, lng: 0 }, { lat: Infinity, lng: 0 },
+    { lat: 91, lng: 0 }, { lat: 0, lng: -181 }]) {
+    assert.equal(hatKoordinaten(ort), false);
+  }
+  assert.equal(navUrl({ lat: 91, lng: 12, adresse: "A & B", nav_url: "javascript:alert(1)" }),
+    "https://www.google.com/maps/dir/?api=1&destination=A%20%26%20B");
+  assert.equal(navUrl({ nav_url: "javascript:alert(1)" }), null);
+  assert.equal(navUrl({ adresse: " " }), null);
 });
 
 test("nächste oder laufende Erkundung behält ihre Hervorhebung", () => {

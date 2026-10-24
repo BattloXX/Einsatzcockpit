@@ -1,0 +1,29 @@
+<section class="fab-card einheit-fuehrung" aria-label="Auftragsbearbeitung"
+         x-ref="auftragsfuehrung" tabindex="-1"
+         :class="prioritaetAnzeige(detail?.auftrag?.priority).klasse">
+  <div class="einheit-fuehrung__layout">
+    <div class="einheit-status-aktuell" aria-live="polite">
+      <div class="einheit-fuehrung__auftrag">
+        {{ auftragsart("detail?.auftrag?.auftragsart") }}
+        <strong class="einheit-fuehrung__name" x-text="detail?.auftrag?.bezeichnung || 'Auftrag'"></strong>
+      </div>
+      <span class="einheit-sub" x-text="'Einheitenstatus: ' + (kopf.ampel?.label || 'Nicht verfügbar')"></span>
+      <span>Auftrag: <strong x-text="bearbeitungsstand(detail?.auftrag)"></strong></span>
+      <span class="einheit-status-pending" x-show="!online || detail?.offline">Offline · letzter geladener Stand</span>
+      <span class="einheit-status-pending" x-show="ausstehenderStatus"
+            x-text="'Lokal vorgemerkt: ' + statusLabel(ausstehenderStatus) + ' – noch nicht übermittelt · nur auf diesem Gerät'"></span>
+    </div>
+    <div class="einheit-fuehrung__hauptaktion">
+      <button type="button" class="btn btn--primary btn--lg einheit-action" data-einheit-hauptaktion
+              :disabled="!kannStatusMelden || hauptAktion.art === 'warten' || Boolean(flyout)"
+              aria-describedby="einheit-aktionshinweis" @click="naechsterStatus()" x-text="primaererText"></button>
+      <p id="einheit-aktionshinweis" class="einheit-sub" x-show="hauptAktion.hinweis" x-text="hauptAktion.hinweis"></p>
+      <p class="einheit-status-pending" role="alert" x-show="aktionsFehler" x-text="aktionsFehler"></p>
+    </div>
+  </div>
+  <a class="einheit-gefahrenleiste" href="#einheit-gefahren" x-show="detailGefahren.length"
+     :aria-label="'Gefahren am Einsatzort anzeigen (' + detailGefahren.length + ')'">
+    {{ icon("alert-triangle", size="sm") }}
+    <span><strong>Gefahren: </strong><span x-text="detailGefahren.map(g => g.titel).join(' · ')"></span></span>
+  </a>
+</section>

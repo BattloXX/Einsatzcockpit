@@ -28,6 +28,7 @@ from app.core.timezones import (
 )
 from app.services.einheit_service import einheit_status_label
 from app.services.modul_navigation import modul_aktiv, modul_gruppen
+from app.services.site_log_service import meldung_hervorhebung
 
 
 def _ctx_org(ctx):
@@ -153,6 +154,7 @@ def _kann_objekt_verknuepfen(request) -> bool:
 templates.env.globals["kann_objekt_verknuepfen"] = _kann_objekt_verknuepfen
 templates.env.globals["can_view_kontakt_directory"] = can_view_kontakt_directory_request
 templates.env.globals["einheit_status_label"] = einheit_status_label
+templates.env.globals["meldung_hervorhebung"] = meldung_hervorhebung
 templates.env.filters["ms_to_kmh"] = ms_to_kmh
 templates.env.filters["local"] = _local
 templates.env.filters["local_time"] = _local_time
