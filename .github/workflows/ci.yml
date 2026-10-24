@@ -122,6 +122,8 @@ jobs:
         with: { python-version: "3.14", cache: pip }
       - run: pip install -e ".[dev]"
       - run: playwright install --with-deps chromium
+      - name: Einheitenübersicht auf Smartphone und Tablet
+        run: pytest -q tests/test_einheit_uebersicht.py
       - name: Board-Stack konfigurieren und starten
         run: |
           cat > .env.board-e2e <<'EOF'

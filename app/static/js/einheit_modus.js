@@ -1,6 +1,7 @@
 import { createOutbox } from "/static/js/einheit_outbox.js";
-import { EinheitKarte } from "/static/js/einheit_karte.js";
+import { EinheitKarte, markerDarstellung, markerIcon } from "/static/js/einheit_karte.js";
 import { istGeaendert, vergleicheZustand } from "/static/js/einheit_aenderungen.js";
+import { auftragsartAnzeige, prioritaetAnzeige } from "/static/js/einheit_darstellung.js";
 
 const STATUS_LABEL = {
   zugewiesen: "Zugewiesen",
@@ -11,8 +12,6 @@ const STATUS_LABEL = {
   abgeschlossen: "Auftrag abgeschlossen",
   nicht_durchfuehrbar: "Nicht durchführbar",
 };
-
-const PRIO_LABEL = { sofort: "Sofort", dringend: "Dringend", normal: "Normal", aufschiebbar: "Aufschiebbar" };
 
 const KONFLIKT_TEXTE = {
   auftrag_zurueckgezogen: "Auftrag wurde zurückgezogen – Status nicht übernommen",
@@ -49,7 +48,7 @@ function registriere() {
     startDispatchId: config.start_dispatch_id,
     kopf: {}, aktuell: null, weitere: [], abgeschlossen: [], zurueckgezogen: [], detail: null,
     kannRessourcePflegen: false, ressource: { personal: {}, ausstattung: [] }, neueAusstattung: {}, neuePerson: {},
-    online: navigator.onLine, syncText: "", outboxOffen: false,
+    online: navigator.onLine, syncText: "", outboxVerfuegbar: false,
     outboxListe: [], verlauf: [],
     flyout: null, konfliktEintrag: null, meldungText: "", felder: {}, grund: "", fotoKommentar: "",
     erkundungLage: "", erkundungMassnahmen: "",
@@ -65,12 +64,47 @@ function registriere() {
     verleihAktiv: false, materialKatalog: [], materialPositionen: [{ bezeichnung: "", menge: 1 }],
     materialName: "", materialTelefon: "", materialSmsSenden: true, materialPinSenden: false,
     materialNotizen: "",
-    aktiverBereich: "uebersicht",
+    aktiverBereich: "einsaetze",
     mobil: window.matchMedia("(max-width: 760px)").matches,
     letzterZustand: null, geseheneVersionen: {},
 
     // Abgeleitete Anzeigezustände.
     get naechster() { return this.weitere[0] || null; },
+    get fokusAuftrag() { return this.aktuell || this.naechster; },
+    get weitereAuftraege() { return this.aktuell ? this.weitere : this.weitere.slice(1); },
+    get kartenAuftraege() {
+      return [this.aktuell, ...this.weitere, ...(this.fertigeAufKarte ? this.abgeschlossen : [])].filter(Boolean);
+    },
+    auftragsartAnzeige,
+    prioritaetAnzeige,
+    auftragsartIcon(wert) {
+      // Iconname stammt ausschließlich aus der festen Anzeigezuordnung, niemals aus Auftrags-/Meldungstext.
+      return window.ecpIcon(auftragsartAnzeige(wert).icon, { size: "sm" });
+    },
+    auftragZurAktion(item) {
+      if (item?.dispatch_id == null) return null;
+      return [this.aktuell, ...this.weitere, ...this.abgeschlossen, ...this.zurueckgezogen]
+        .find((auftrag) => auftrag?.dispatch_id === item.dispatch_id) || null;
+    },
+    get dialogAuftrag() {
+      if (this.flyout === "verwerfen_bestaetigen") return this.auftragZurAktion(this.konfliktEintrag);
+      return this.detail?.auftrag || null;
+    },
+    get verbindungsText() {
+      if (this.zugangBeendet) return "Zugang beendet";
+      if (this.ladeFehler === "anmeldung") return "Anmeldung abgelaufen";
+      if (!this.geladen && !this.ladeFehler) return "Verbindung wird geprüft";
+      return this.online ? "Verbunden" : "Offline – letzter verfügbarer Stand";
+    },
+    auftragKurztext(auftrag) {
+      const text = (auftrag.auftrag || auftrag.einsatzgrund || "Kein zusätzlicher Auftragstext").trim();
+      return text.length > 240 ? `${text.slice(0, 240)}…` : text;
+    },
+    lokalerStatus(auftrag) {
+      const eintraege = this.outboxListe.filter((item) => item.typ === "status"
+        && item.dispatch_id === auftrag.dispatch_id && ["ausstehend", "fehler_netz"].includes(item.status));
+      return eintraege.length ? eintraege[eintraege.length - 1].payload.status : null;
+    },
     get istErkundung() { return this.detail?.auftrag?.auftragsart === "erkundung"; },
     get erlaubteStatus() { return this.detail?.auftrag?.erlaubte_status || []; },
     get primaererStatus() {
@@ -97,7 +131,9 @@ function registriere() {
     },
     get schreibbar() { return Boolean(config.schreibbar); },
     get hatKoordinaten() {
-      return Number.isFinite(Number(this.detail?.stelle?.lat)) && Number.isFinite(Number(this.detail?.stelle?.lng));
+      const stelle = this.detail?.stelle;
+      return stelle?.lat != null && stelle?.lng != null
+        && Number.isFinite(Number(stelle.lat)) && Number.isFinite(Number(stelle.lng));
     },
     get osmUrl() {
       const stelle = this.detail?.stelle;
@@ -106,9 +142,11 @@ function registriere() {
         : "#";
     },
     get outboxText() {
+      if (!this.outboxVerfuegbar) return "Übermittlungen nicht verfügbar";
       const anzahl = this.outboxListe.length;
       const fehler = this.outboxListe.filter((item) => ["fehler", "konflikt"].includes(item.status)).length;
-      return fehler ? `${fehler} Fehler/Konflikt` : `${anzahl} ausstehend`;
+      if (fehler) return `${fehler} Übermittlungen prüfen`;
+      return anzahl ? `${anzahl} noch nicht übermittelt` : "Alles übermittelt";
     },
     // Noch nicht vom Server bestätigter Status des offenen Auftrags (letzter Outbox-Eintrag).
     get ausstehenderStatus() {
@@ -127,7 +165,7 @@ function registriere() {
       return STATUS_LABEL[status] || status || "";
     },
     istGeaendert(auftrag) { return istGeaendert(auftrag, this.geseheneVersionen[auftrag?.dispatch_id]); },
-    bereichSichtbar(bereich) { return !this.mobil || this.aktiverBereich === bereich; },
+    bereichSichtbar(bereich) { return this.aktiverBereich === bereich; },
     get flyoutTitel() {
       return {
         lagemeldung: "Lagemeldung", massnahmen: "Maßnahme", note: "Notiz", foto: "Foto erfassen",
@@ -194,10 +232,9 @@ function registriere() {
       }).format(new Date(value)) : "";
     },
     prioClass(priority) {
-      const farbe = { sofort: "red", dringend: "orange", normal: "yellow", aufschiebbar: "muted" }[priority] || "muted";
-      return `einheit-chip--${farbe}`;
+      return prioritaetAnzeige(priority).chipKlasse;
     },
-    prioLabel(priority) { return PRIO_LABEL[priority] || "ohne Priorität"; },
+    prioLabel(priority) { return prioritaetAnzeige(priority).label; },
     konfliktText(code) { return KONFLIKT_TEXTE[code] || `Konflikt: ${code || "unbekannt"}`; },
     hinweisText(hinweis) { return HINWEIS_TEXTE[hinweis] || ""; },
     typLabel(typ) {
@@ -270,12 +307,6 @@ function registriere() {
         void this.outboxAktualisieren();
         void this.laden(true);
       });
-      try {
-        const gespeichert = localStorage.getItem(`${this.outboxName()}:bereich`);
-        if (["uebersicht", "karte", "auftraege"].includes(gespeichert)) {
-          this.aktiverBereich = gespeichert;
-        }
-      } catch (error) { /* Privater Browsermodus darf die Ansicht nicht blockieren. */ }
       void (async () => {
         try {
           if (!this.outbox) throw new Error("Outbox nicht verfuegbar");
@@ -296,10 +327,9 @@ function registriere() {
       this.pollTimer = setInterval(() => this.laden(true), 30000);
     },
     waehleBereich(bereich) {
+      if (!["einsaetze", "karte", "meldungen"].includes(bereich)) return;
+      if (this.detail) this.zurueck();
       this.aktiverBereich = bereich;
-      try {
-        localStorage.setItem(`${this.outboxName()}:bereich`, bereich);
-      } catch (error) { /* optional */ }
       this.$nextTick(() => {
         if (bereich === "karte") this.uebersichtKarteAktualisieren();
         else this.uebersichtKarte?.stoppeStandort();
@@ -324,7 +354,12 @@ function registriere() {
         const response = await fetch("/einheit/api/zustand", {
           headers, credentials: "same-origin", signal: controller.signal,
         });
-        if (response.status === 304) return;
+        if (response.status === 304) {
+          this.online = true;
+          this.ladeFehler = "";
+          this.syncText = `Zuletzt abgeglichen: ${this.zeit(new Date().toISOString())}`;
+          return;
+        }
         if (response.status === 401) {
           const data = await response.json().catch(() => null);
           if (/^zugang_(widerrufen|abgelaufen|ungueltig)$/.test(data?.code || "")) await this.zugangBeenden();
@@ -339,7 +374,7 @@ function registriere() {
         this.online = true;
         this.geladen = true;
         this.ladeFehler = "";
-        this.syncText = `Sync ${this.zeit(data.server_time)}`;
+        this.syncText = `Zuletzt abgeglichen: ${this.zeit(data.server_time)}`;
         if (this.outbox) {
           try {
             await this.outbox.zustandSpeichern({ data, at: new Date().toISOString() });
@@ -353,7 +388,7 @@ function registriere() {
           if (cached?.data) {
             this.zustand(cached.data);
             this.geladen = true;
-            this.syncText = `Offline – Stand ${this.zeit(cached.at)}`;
+            this.syncText = `Datenstand: ${this.zeit(cached.at)}`;
           }
         } catch (cacheError) {
           console.warn("Einheiten-Zustand konnte nicht lokal geladen werden", cacheError);
@@ -383,7 +418,7 @@ function registriere() {
       this.materialKatalog = data.material_katalog || [];
       if (this.aktuell) this.aktuell.aktuell = true;
       this.$nextTick(() => {
-        if (!this.mobil || this.aktiverBereich === "karte") {
+        if (this.aktiverBereich === "karte") {
           this.uebersichtKarteAktualisieren();
         }
       });
@@ -456,22 +491,20 @@ function registriere() {
         await this.markiereGesehen(this.detail.auftrag);
         this.karteAktualisieren();
         if (push) {
-          const query = this.simulation ? `?sim=${this.simEinheitId}` : "";
-          history.pushState({}, "", `/einheit/auftrag/${id}${query}`);
+          history.pushState({}, "", this.einheitUrl(`/einheit/auftrag/${id}`));
         }
       } catch (error) {
         // Offline: Basisdaten aus dem zuletzt geladenen Zustand anzeigen.
         const auftrag = [this.aktuell, ...this.weitere, ...this.abgeschlossen, ...this.zurueckgezogen]
           .find((item) => item?.dispatch_id === id);
         if (auftrag && this.detail?.auftrag?.dispatch_id !== id) {
-          this.detail = { auftrag, stelle: auftrag, offline: true };
+          this.detail = { auftrag, stelle: auftrag, gefahren: auftrag.gefahren || [], offline: true };
           this.karteAktualisieren();
         } else if (this.detail) {
           this.detail.offline = true;
         }
         if (auftrag && push) {
-          const query = this.simulation ? `?sim=${this.simEinheitId}` : "";
-          history.pushState({}, "", `/einheit/auftrag/${id}${query}`);
+          history.pushState({}, "", this.einheitUrl(`/einheit/auftrag/${id}`));
         }
       }
     },
@@ -490,8 +523,14 @@ function registriere() {
     },
     zurueck() {
       this.detail = null;
-      const query = this.simulation ? `?sim=${this.simEinheitId}` : "";
-      history.pushState({}, "", `/einheit${query}`);
+      history.pushState({}, "", this.einheitUrl("/einheit"));
+    },
+    einheitUrl(pfad) {
+      const query = new URLSearchParams();
+      if (this.simulation) query.set("sim", this.simEinheitId);
+      else if (this.benutzerEinheitId) query.set("einheit", this.benutzerEinheitId);
+      const parameter = query.toString();
+      return `${pfad}${parameter ? `?${parameter}` : ""}`;
     },
     karteAktualisieren() {
       if (!this.hatKoordinaten) return;
@@ -500,6 +539,7 @@ function registriere() {
         return;
       }
       const stelle = this.detail.stelle;
+      const auftrag = { ...this.detail.auftrag, ...stelle };
       const latlng = [Number(stelle.lat), Number(stelle.lng)];
       this.$nextTick(() => {
         const element = this.$refs.einsatzKarte;
@@ -510,9 +550,10 @@ function registriere() {
         }
         this.karte.setView(latlng, 17);
         if (this.kartenMarker) this.kartenMarker.remove();
-        this.kartenMarker = window.L.circleMarker(latlng, {
-          radius: 9, color: "#fff", weight: 2, fillColor: "#b71921", fillOpacity: 1,
+        this.kartenMarker = window.L.marker(latlng, {
+          icon: markerIcon(auftrag, null), title: markerDarstellung(auftrag, null).titel,
         }).addTo(this.karte);
+        this.kartenMarker.getElement()?.setAttribute("aria-label", markerDarstellung(auftrag, null).titel);
         requestAnimationFrame(() => this.karte.invalidateSize());
       });
     },
@@ -732,6 +773,7 @@ function registriere() {
       const daten = await this.outboxAusfuehren(async (outbox) => ({
         liste: await outbox.liste(), verlauf: await outbox.verlauf(20),
       }));
+      this.outboxVerfuegbar = Boolean(daten);
       if (!daten) return;
       this.outboxListe = daten.liste;
       this.verlauf = daten.verlauf;
@@ -871,7 +913,7 @@ function registriere() {
         }
       });
       ws.addEventListener("close", () => {
-        this.online = false;
+        // Ein ausgefallener Live-Kanal bedeutet bei erfolgreichem HTTP-Abgleich nicht "offline".
         if (this.zugangBeendet) return;
         clearTimeout(this.wsTimer);
         // Wiederverbinden mit wachsendem Abstand (1 s, 2 s, 4 s … max. 30 s).

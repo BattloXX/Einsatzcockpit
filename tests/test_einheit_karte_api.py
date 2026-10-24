@@ -128,3 +128,21 @@ def test_permissions_policy_erlaubt_standort_nur_eigener_origin(client, setup_db
     # vorher war Geolocation per geolocation=() auf allen Seiten gesperrt.
     policy = client.get("/login").headers["Permissions-Policy"]
     assert "geolocation=(self)" in policy and "payment=()" in policy
+
+
+def test_geojson_liefert_bestehende_auftragsart_ohne_zweite_klassifikation(client, setup_db):
+    x = _daten()
+    with _db() as db:
+        db.get(EinheitSiteDispatch, x["d1"]).auftragsart = "erkundung"
+        bestehender = EinheitSiteDispatch(
+            einheit_id=x["e1"], site_id=x["a"], dispatched_at=datetime.now(UTC),
+        )
+        db.add(bestehender)
+        db.commit()
+        default_id = bestehender.id
+    _device(client, x)
+    features = client.get("/einheit/api/karte").json()["features"]
+    assert {f["properties"]["dispatch_id"]: f["properties"]["auftragsart"] for f in features} == {
+        x["d1"]: "erkundung", default_id: "abarbeitung",
+    }
+    assert client.get(f"/einheit/api/auftrag/{x['d2']}").status_code == 404

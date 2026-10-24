@@ -2,18 +2,20 @@
 /* GSL-Einheitenmodus: Ergänzungen zum Fahrtenbuch-Layout (_fab_styles.html). */
 [x-cloak]{display:none !important;}
 
-.einheit-meta{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;justify-content:flex-end;font-size:.82rem;color:var(--text-muted);}
+.einheit-meta{display:flex;flex-wrap:wrap;gap:.5rem 1rem;align-items:center;justify-content:flex-end;
+  max-width:28rem;font-size:.9rem;color:var(--text-muted);}
+.einheit-meta strong{color:var(--text);}
 .einheit-online{color:#35b56a;font-weight:700;}
 .einheit-offline{color:#f59e0b;font-weight:700;}
 .einheit-sub{font-size:.85rem;color:var(--text-muted);}
 
 .einheit-umschalter{display:flex;gap:.25rem;margin-top:.75rem;flex-wrap:wrap;}
-.einheit-umschalter a{padding:.55rem .9rem;min-height:44px;display:inline-flex;align-items:center;border:1px solid var(--border);border-radius:999px;color:var(--text);font-weight:600;}
+.einheit-umschalter a{padding:.55rem .9rem;min-height:48px;display:inline-flex;align-items:center;border:1px solid var(--border);border-radius:999px;color:var(--text);font-weight:600;}
 .einheit-umschalter a.is-active{background:var(--red);border-color:var(--red);color:#fff;}
 
 /* Chips: Priorität, Status, NEU, Outbox */
 .einheit-chip{display:inline-flex;align-items:center;border:1px solid var(--border);border-radius:999px;padding:.25rem .6rem;font-size:.75rem;font-weight:700;background:var(--surface);text-transform:none;}
-.einheit-chip--button{min-height:40px;cursor:pointer;}
+.einheit-chip--button{min-width:48px;min-height:48px;cursor:pointer;white-space:normal;text-align:left;}
 .einheit-chip--warn{border-color:#f59e0b;color:#fbbf24;}
 .einheit-chip--red{border-color:#d83030;color:#ff8b8b;}
 .einheit-chip--orange{border-color:#f59e0b;color:#fbbf24;}
@@ -42,21 +44,35 @@
 .einheit-einsatzkarte{margin:.85rem 0;border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden;background:var(--surface);}
 .einheit-einsatzkarte__kopf{display:flex;justify-content:space-between;align-items:center;gap:.75rem;padding:.6rem .75rem;font-size:.9rem;}
 .einheit-einsatzkarte__kopf a{color:#93c5fd;font-size:.82rem;text-decoration:none;white-space:nowrap;}
-.einheit-einsatzkarte__karte{height:220px;z-index:0;}
+.einheit-einsatzkarte__karte{height:240px;z-index:0;}
 .einheit-uebersichtskarte{margin-top:1rem;}
 .einheit-kartenaktionen{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.5rem;}
 .einheit-kartenaktionen .btn{min-height:44px;}
 .einheit-karte{min-height:420px;width:100%;border:1px solid var(--border);
   border-radius:var(--radius-md);overflow:hidden;z-index:0;}
-.einheit-kartenmarker span{display:flex;width:28px;height:28px;box-sizing:border-box;align-items:center;
-  justify-content:center;border-radius:50%;text-align:center;background:#fff;color:#172033;
-  border:2px solid #475569;font-size:12px;font-weight:700;
-  box-shadow:0 1px 4px #0006;}
-.einheit-kartenmarker--naechster span{background:#b71921;color:#fff;border-color:#fff;}
-.einheit-kartenmarker--in_arbeit span{background:#f59e0b;color:#111827;}
-.einheit-kartenmarker--erkundung span{border-style:dashed;}
-.einheit-kartenmarker--fertig span{width:24px;height:24px;background:#94a3b8;color:#fff;
-  border-color:#64748b;font-size:11px;}
+.einheit-kartenmarker{background:none;border:0;font-family:inherit;}
+.einheit-marker__punkt{display:flex;width:48px;height:48px;box-sizing:border-box;align-items:center;
+  justify-content:center;border-radius:50%;background:var(--surface-mid);color:var(--einheit-art-text,var(--text));
+  border:4px solid var(--fab-accent,var(--outline));box-shadow:0 1px 4px #0008;}
+.einheit-kartenmarker--naechster .einheit-marker__punkt,
+.einheit-kartenmarker--in_arbeit .einheit-marker__punkt{outline:2px solid #fff;outline-offset:2px;}
+.einheit-kartenmarker--fertig .einheit-marker__punkt{border-style:dashed;}
+.einheit-marker__beschriftung{position:absolute;left:24px;top:52px;transform:translateX(-50%);display:flex;
+  align-items:center;flex-direction:column;gap:2px;width:max-content;max-width:220px;pointer-events:none;}
+.einheit-marker__beschriftung .einheit-artchip{background:var(--surface);font-size:.72rem;padding:.2rem .4rem;}
+.einheit-marker__prioritaet,.einheit-marker__status{display:flex;align-items:center;gap:.25rem;
+  background:var(--surface);color:var(--text);padding:.1rem .3rem;border-radius:3px;font-size:.7rem;}
+.einheit-marker__prioritaet{border-left:3px solid var(--fab-accent,var(--outline));}
+.einheit-kartenlegende{margin:.75rem 0;}
+.einheit-kartenlegende > div{display:flex;flex-wrap:wrap;gap:.5rem;}
+.einheit-kartenliste{list-style:none;padding:0;margin:1rem 0 0;}
+.einheit-kartenliste li{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;
+  padding:.75rem 0;border-bottom:1px solid var(--border);overflow-wrap:anywhere;}
+.einheit-kartenpopup .leaflet-popup-content-wrapper,.einheit-kartenpopup .leaflet-popup-tip{
+  background:var(--surface-mid);color:var(--text);}
+.einheit-kartenpopup .leaflet-popup-content{overflow-wrap:anywhere;}
+.einheit-kartenpopup button,.einheit-kartenpopup a{display:inline-flex;align-items:center;min-height:48px;}
+.einheit-kartenpopup__aktionen{display:flex;flex-direction:column;gap:.5rem;}
 .einheit-standortmarker span{display:block;width:16px;height:16px;box-sizing:border-box;border:2px solid #fff;
   border-radius:50%;background:#2563eb;box-shadow:0 1px 4px #0008;}
 
@@ -67,7 +83,42 @@
 .einheit-zwischenaktionen{display:flex;gap:.4rem;flex-wrap:wrap;}
 .einheit-zwischenaktionen .btn{min-height:40px;}
 .einheit-warning--alarm{background:rgba(216,48,48,.17);border-color:#d83030;color:#ffb4b4;}
-.einheit-tabbar{display:none;}
+.einheit-tabbar{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.5rem;margin-bottom:1rem;}
+.einheit-tabbar button{display:flex;gap:.4rem;align-items:center;justify-content:center;min-height:48px;
+  min-width:48px;padding:.6rem;border:1px solid var(--border);border-radius:var(--radius-sm);
+  background:var(--surface);color:var(--text);font:inherit;font-weight:700;}
+.einheit-tabbar button[aria-selected="true"]{background:var(--red);border-color:var(--red);color:#fff;}
+
+/* Eine gemeinsame Auftragsliste auf Smartphone und Tablet. Art und Priorität bleiben getrennt. */
+.einheit-bereiche{display:block;}
+.einheit-einsatzkarte-neu{min-width:0;overflow-wrap:anywhere;}
+.einheit-art--erkundung{--einheit-art:var(--orange);--einheit-art-text:#ffbf84;}
+.einheit-art--abarbeitung{--einheit-art:var(--blue);--einheit-art-text:#a8cdff;}
+.einheit-art--unbekannt{--einheit-art:var(--outline);--einheit-art-text:var(--text-muted);}
+.einheit-einsatzkarte-neu--fokus{border-width:2px;border-left-width:6px;box-shadow:var(--shadow-card);}
+.einheit-einsatzkarte-neu--fokus .einheit-address{font-size:1.35rem;}
+.einheit-einsatzkarte-neu__kopf{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;}
+.einheit-einsatzkarte-neu__rang{flex-basis:100%;margin:0;font-size:.85rem;font-weight:700;color:var(--text-muted);}
+.einheit-artchip{display:inline-flex;align-items:center;gap:.35rem;max-width:100%;border:1px solid var(--einheit-art);
+  border-radius:var(--radius-sm);padding:.3rem .5rem;color:var(--einheit-art-text);font-size:.85rem;font-weight:700;}
+.einheit-artchip > span:first-child{display:inline-flex;flex-shrink:0;}
+.einheit-detail__art{margin-bottom:.75rem;}
+.einheit-uebermittlung__kopf{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;padding:.4rem 0;
+  overflow-wrap:anywhere;}
+.einheit-einsatzkarte-neu__adresse{margin:.2rem 0 .5rem;}
+.einheit-einsatzkarte-neu__auftrag{margin:.6rem 0;white-space:pre-wrap;}
+.einheit-einsatzkarte-neu__gefahren{border-left:3px solid var(--danger);padding:.5rem .65rem;
+  margin:.75rem 0;background:rgba(216,48,48,.12);color:#ffb4b4;}
+.einheit-einsatzkarte-neu__gefahren strong{display:flex;align-items:center;gap:.35rem;}
+.einheit-einsatzkarte-neu__gefahren ul{list-style:disc;padding-left:1.2rem;margin:.35rem 0 0;}
+.einheit-einsatzkarte-neu__status{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin:.75rem 0;}
+.einheit-weitere{margin-top:1.25rem;}
+.einheit-weitere__karten{display:grid;gap:.85rem;margin-top:.6rem;}
+.einheit-ressourcen{margin-top:1rem;}
+.einheit-ressourcen summary{font-weight:700;cursor:pointer;}
+.einheit-page .btn,.einheit-page .person-flyout__close{min-width:48px;min-height:48px;white-space:normal;}
+.einheit-page summary{min-height:48px;padding:.75rem 0;}
+.einheit-page .einheit-liste__eintrag{flex-wrap:wrap;gap:.5rem;overflow-wrap:anywhere;}
 
 /* Aktionen: große Touch-Flächen */
 .einheit-aktionen{display:flex;flex-direction:column;gap:.6rem;}
@@ -109,7 +160,7 @@
 
 @media (max-width:760px){
   .fab-page{padding:1rem .75rem calc(5.5rem + env(safe-area-inset-bottom));}
-  .einheit-meta{justify-content:flex-start;}
+  .einheit-meta{justify-content:flex-start;width:100%;}
   .fab-header__top{flex-direction:column;gap:.75rem;}
   .fab-header__brand{width:100%;align-items:flex-start;}
   .fab-header__brand > div{min-width:0;}
@@ -120,7 +171,7 @@
   .einheit-umschalter{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;}
   .einheit-umschalter a{justify-content:center;padding:.55rem .45rem;text-align:center;}
   .einheit-actions-row{grid-template-columns:1fr;}
-  .einheit-tabbar{position:fixed;z-index:20;left:0;right:0;bottom:0;display:grid;grid-template-columns:repeat(3,1fr);gap:1px;padding:6px max(.5rem, env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) max(.5rem, env(safe-area-inset-left));background:var(--surface);border-top:1px solid var(--border);}
+  .einheit-tabbar{position:fixed;z-index:20;left:0;right:0;bottom:0;margin:0;display:grid;grid-template-columns:repeat(3,1fr);gap:1px;padding:6px max(.5rem, env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) max(.5rem, env(safe-area-inset-left));background:var(--surface);border-top:1px solid var(--border);}
   .einheit-tabbar button{min-height:48px;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--text);font:inherit;font-weight:700;}
   .einheit-tabbar button[aria-selected="true"]{background:var(--red);color:#fff;}
   .einheit-auftraege{padding-bottom:1rem;}
@@ -128,7 +179,7 @@
   .einheit-material-position .btn{grid-column:1 / -1;}
   /* Die gesamte Aktionsleiste darf Einsatzdaten und Karte nicht überdecken. */
   .fab-actions{position:static;background:none;padding:0;margin:.75rem 0 0;}
-  .einheit-einsatzkarte__karte{height:190px;}
+  .einheit-einsatzkarte__karte{height:230px;}
   .einheit-karte{min-height:320px;}
   .einheit-kartenaktionen .btn{min-height:40px;padding:.4rem .6rem;font-size:.85rem;}
   .einheit-zeile{align-items:flex-start;}
@@ -137,11 +188,7 @@
   .person-flyout{width:100%;max-height:88vh;border-radius:var(--radius-lg) var(--radius-lg) 0 0;}
 }
 
-@media (min-width:1024px), (min-width:900px) and (orientation:landscape){
-  .einheit-bereiche{display:grid;grid-template-columns:minmax(0,1fr) minmax(22rem,.8fr);gap:1rem;}
-  .einheit-bereiche .fab-grid__main,.einheit-bereiche .fab-grid__side{display:contents;}
-  .einheit-bereiche .einheit-bereich:first-child{grid-column:1 / -1;}
-  .einheit-uebersichtskarte{grid-column:1;}
-  .einheit-auftraege{grid-column:2;grid-row:2;}
+@media (min-width:980px){
+  .einheit-weitere__karten{grid-template-columns:repeat(2,minmax(0,1fr));}
 }
 </style>

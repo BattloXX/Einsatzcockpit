@@ -1,0 +1,47 @@
+{% from "einheit/_auftragsart.html" import auftragsart %}
+{% macro einsatzkarte(hervorgehoben=false) %}
+<article class="fab-card einheit-einsatzkarte-neu{% if hervorgehoben %} einheit-einsatzkarte-neu--fokus{% endif %}"
+         :class="prioritaetAnzeige(auftrag.priority).klasse"
+         :data-dispatch-id="auftrag.dispatch_id" data-einheit-auftrag
+         data-hervorgehoben="{{ 'true' if hervorgehoben else 'false' }}">
+  <div class="einheit-einsatzkarte-neu__kopf">
+    {% if hervorgehoben %}
+    <p class="einheit-einsatzkarte-neu__rang" x-text="aktuell ? 'Aktueller Auftrag' : 'Nächster Auftrag'"></p>
+    {% else %}
+    <p class="einheit-einsatzkarte-neu__rang" x-show="auftrag.naechster">Nächster Auftrag</p>
+    {% endif %}
+    {{ auftragsart("auftrag.auftragsart") }}
+    <span class="einheit-chip einheit-chip--neu" x-show="neuIds.includes(auftrag.dispatch_id)">Neu</span>
+    <span class="einheit-chip einheit-chip--neu" x-show="istGeaendert(auftrag)">Geändert</span>
+    <span class="einheit-chip einheit-prioritaet" :class="prioClass(auftrag.priority)"
+          x-text="'Priorität: ' + prioLabel(auftrag.priority)"></span>
+  </div>
+  <h3 class="einheit-address" x-text="auftrag.bezeichnung || 'Einsatzstelle'"></h3>
+  <p class="einheit-einsatzkarte-neu__adresse" x-show="auftrag.adresse && auftrag.adresse !== auftrag.bezeichnung"
+     x-text="auftrag.adresse"></p>
+  <p class="einheit-einsatzkarte-neu__auftrag" x-text="auftragKurztext(auftrag)"></p>
+  <div class="einheit-einsatzkarte-neu__gefahren" x-show="auftrag.gefahren?.length">
+    <strong>{{ icon("alert-triangle", size="sm") }} Gefahren am Ziel</strong>
+    <ul>
+      <template x-for="(gefahr, index) in auftrag.gefahren || []" :key="index">
+        <li x-text="gefahr.title + ' · ' + gefahr.type_label"></li>
+      </template>
+    </ul>
+  </div>
+  <p class="einheit-sub" x-show="!auftrag.gefahren?.length"
+     x-text="auftrag.gefahren_verfuegbar ? 'Keine bekannten Gefahren im Umkreis' : 'Gefahren am Ziel nicht verfügbar'"></p>
+  <p class="einheit-sub" x-show="!auftrag.hat_koordinaten">Keine Kartenposition – Navigation über die Adresse, soweit vorhanden.</p>
+  <div class="einheit-einsatzkarte-neu__status">
+    <span class="einheit-chip einheit-chip--status" x-text="auftrag.einheit_status_label"></span>
+    <span class="einheit-status-pending" x-show="lokalerStatus(auftrag)"
+          x-text="lokalerStatus(auftrag) ? statusLabel(lokalerStatus(auftrag)) + ' – noch nicht übermittelt' : ''"></span>
+  </div>
+  <div class="einheit-actions-row">
+    <button type="button" class="btn {{ 'btn--primary' if hervorgehoben else 'btn--ghost' }}"
+            :aria-label="'Auftrag öffnen: ' + (auftrag.bezeichnung || 'Einsatzstelle')"
+            @click="oeffne(auftrag.dispatch_id)">Auftrag öffnen</button>
+    <a class="btn btn--ghost" :href="auftrag.nav_url || auftrag.gmaps_url" target="_blank" rel="noopener"
+       x-show="auftrag.nav_url || auftrag.gmaps_url">{{ icon("compass", size="sm") }} Navigation starten</a>
+  </div>
+</article>
+{% endmacro %}

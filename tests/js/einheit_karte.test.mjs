@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { berechneReihenfolge, esc, markerArt, markerDarstellung, navUrl } from "../../app/static/js/einheit_karte.js";
 
 const auftrag = (id, extra = {}) => ({
-  dispatch_id: id, rang: id, priority: "normal", lat: 47 + id / 100, lng: 13, ...extra,
+  dispatch_id: id, rang: id, auftragsart: "abarbeitung", priority: "normal", lat: 47 + id / 100, lng: 13, ...extra,
 });
 
 test("berechneReihenfolge nutzt ohne Standort die Serverränge", () => {
@@ -37,22 +37,25 @@ test("Aufträge mit Reihenfolge behalten ihre relative Reihenfolge", () => {
 test("markerArt unterscheidet Kartenstatus", () => {
   assert.equal(markerArt(auftrag(1, { naechster: true })), "naechster");
   assert.equal(markerArt(auftrag(1, { einheit_status: "in_arbeit" })), "in_arbeit");
-  assert.equal(markerArt(auftrag(1, { auftragsart: "erkundung" })), "erkundung");
+  assert.equal(markerArt(auftrag(1, { auftragsart: "erkundung" })), "offen");
   assert.equal(markerArt(auftrag(1, { einheit_status: "abgeschlossen" })), "fertig");
   assert.equal(markerArt(auftrag(1, { zurueckgezogen: true })), "zurueckgezogen");
 });
 
-test("markerDarstellung nutzt kompakte, zugängliche Statusmarker", () => {
+test("markerDarstellung trennt Art, Status und Priorität bei mindestens 48px Touchfläche", () => {
   const naechster = markerDarstellung(auftrag(1, { naechster: true, adresse: "Hauptstraße 1" }), 1);
   const laufend = markerDarstellung(auftrag(2, { einheit_status: "in_arbeit" }), 2);
   const erkundung = markerDarstellung(auftrag(3, { auftragsart: "erkundung" }), 3);
   const offen = markerDarstellung(auftrag(4), 4);
-  assert.equal(naechster.iconName, "player-play");
-  assert.equal(laufend.iconName, "player-record");
-  assert.equal(markerDarstellung(auftrag(5, { beendet_at: "2026-10-20" }), null).iconName, "check");
+  assert.equal(naechster.iconName, "tools");
+  assert.equal(naechster.statusIconName, "player-play");
+  assert.equal(laufend.iconName, "tools");
+  assert.equal(laufend.statusIconName, "player-record");
+  assert.equal(erkundung.iconName, "search");
+  assert.equal(markerDarstellung(auftrag(5, { beendet_at: "2026-10-20" }), null).statusIconName, "check");
   assert.match(naechster.titel, /Nächster Auftrag/);
   assert.match(laufend.titel, /In Arbeit/);
-  assert.ok(laufend.groesse <= 34);
+  assert.ok(laufend.groesse >= 48);
   assert.deepEqual(laufend.anker, [laufend.groesse / 2, laufend.groesse / 2]);
   assert.match(erkundung.klasse, /--erkundung/);
   assert.equal(offen.inhalt, "4");
@@ -85,22 +88,50 @@ test("Entfernungsvorschlag verschiebt nie den nächsten Auftrag", () => {
   assert.equal(ergebnis[0].dispatch_id, 1);
 });
 
-test("Marker-HTML rendert Statusicons und entschärft Titel weiterhin", async () => {
+test("Marker-HTML rendert Art und Status separat und entschärft Titel weiterhin", async () => {
   const { EinheitKarte } = await import("../../app/static/js/einheit_karte.js");
   const oldWindow = globalThis.window;
   const oldIcon = globalThis.ecpIcon;
-  globalThis.window = { L: { divIcon: options => options } };
   globalThis.ecpIcon = (name, {size}) => `<svg data-icon="${name}" data-size="${size}"></svg>`;
+  globalThis.window = { L: { divIcon: options => options }, ecpIcon: globalThis.ecpIcon };
   try {
     const marker = EinheitKarte.prototype.icon(auftrag(1, { naechster: true, bezeichnung: '<img src="x">' }), 1);
     assert.match(marker.html, /<svg data-icon="player-play" data-size="xs">/);
+    assert.match(marker.html, /<svg data-icon="tools" data-size="sm">/);
+    assert.match(marker.html, />AUFTRAG<\/span>/);
     assert.ok(!marker.html.includes('<img'));
     assert.match(marker.html, /&lt;img src=&quot;x&quot;&gt;/);
-    assert.deepEqual(marker.iconAnchor, [14, 14]);
+    assert.deepEqual(marker.iconAnchor, [24, 24]);
     const nummer = EinheitKarte.prototype.icon(auftrag(2), 2);
-    assert.match(nummer.html, />2<\/span>/);
+    assert.match(nummer.html, />2 · Offen<\/span>/);
+    const popup = EinheitKarte.prototype.popup(auftrag(3, {
+      auftragsart: "erkundung", auftragsart_label: "Falsches Altlabel", priority: "sofort",
+      bezeichnung: '<img src="x">', adresse: '<script>alert(1)</script>',
+    }));
+    assert.match(popup, /ERKUNDUNG/);
+    assert.match(popup, /data-icon="search"/);
+    assert.match(popup, /Priorität: Sofort/);
+    assert.ok(!popup.includes("Falsches Altlabel"));
+    assert.ok(!popup.includes("<img") && !popup.includes("<script"));
   } finally {
     if (oldWindow === undefined) delete globalThis.window; else globalThis.window = oldWindow;
     if (oldIcon === undefined) delete globalThis.ecpIcon; else globalThis.ecpIcon = oldIcon;
   }
+});
+
+test("alle Art-/Prioritätskombinationen und Alt-Payloads behalten ihre unabhängige Markierung", () => {
+  for (const auftragsart of ["erkundung", "abarbeitung"]) {
+    for (const priority of ["sofort", "dringend", "normal", "aufschiebbar"]) {
+      for (const status of [{}, { naechster: true }, { aktuell: true }, { beendet_at: "2026-10-24" }]) {
+        const daten = markerDarstellung(auftrag(1, { auftragsart, priority, ...status }), 1);
+        assert.match(daten.klasse, new RegExp(`einheit-prio--${priority}`));
+        assert.match(daten.klasse, new RegExp(`einheit-art--${auftragsart}`));
+        assert.equal(daten.iconName, auftragsart === "erkundung" ? "search" : "tools");
+      }
+    }
+  }
+  const alt = markerDarstellung({ priority: "sofort", auftragsart_label: "Erkundung", einsatzgrund: "Erkunden" }, 1);
+  assert.equal(alt.label, "ART UNBEKANNT");
+  assert.equal(alt.iconName, "help-circle");
+  assert.match(alt.klasse, /einheit-prio--sofort/);
 });
