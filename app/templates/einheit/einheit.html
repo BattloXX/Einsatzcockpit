@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Meine Einsätze{% endblock %}
+{% block title %}Einsätze{% endblock %}
 
 {% block head_extra %}
 {% include "_fab_styles.html" %}
@@ -11,7 +11,8 @@
   {"imports": {
     "/static/js/einheit_outbox.js": "/static/js/einheit_outbox.js?v={{ ASSET_VERSION }}",
     "/static/js/einheit_karte.js": "/static/js/einheit_karte.js?v={{ ASSET_VERSION }}",
-    "/static/js/einheit_aenderungen.js": "/static/js/einheit_aenderungen.js?v={{ ASSET_VERSION }}"
+    "/static/js/einheit_aenderungen.js": "/static/js/einheit_aenderungen.js?v={{ ASSET_VERSION }}",
+    "/static/js/einheit_darstellung.js": "/static/js/einheit_darstellung.js?v={{ ASSET_VERSION }}"
   }}
 </script>
 <script type="module" src="/static/js/einheit_modus.js?v={{ ASSET_VERSION }}"></script>
@@ -22,6 +23,7 @@
 {% endblock %}
 
 {% block content %}
+{% from "einheit/_auftragsart.html" import auftragsart %}
 {# GSL-Einheitenmodus: Auftragsansicht für Fahrzeug-Tablets (Plan 6.2–6.5).
    Rendert aus /einheit/api/zustand (Alpine, einheit_modus.js); Schreibaktionen
    laufen ausschließlich über die Offline-Outbox (einheit_outbox.js). #}
@@ -37,8 +39,7 @@
 <div class="fab-page einheit-page"
      data-lage-id="{{ lage_id or '' }}"
      data-einheit-id="{{ einheit_id or '' }}"
-     x-data="einheitModus({{ einheit_config|tojson|forceescape }})"
-     x-init="init()">
+     x-data="einheitModus({{ einheit_config|tojson|forceescape }})">
 
   {% if simulation_fehler %}
   <div class="fab-card">
@@ -102,34 +103,22 @@
           <div class="fab-header__eyebrow">
             {% if is_exercise %}ÜBUNG<span x-show="kopf.lage_name"> · </span>{% endif %}<span x-text="kopf.lage_name || ''"></span>
           </div>
-          <h1 class="fab-header__title">{{ fahrzeug }}</h1>
+          <h1 class="fab-header__title" x-text="kopf.einheit_label || {{ einheit_label|tojson|forceescape }}">{{ einheit_label }}</h1>
         </div>
       </div>
-      <div class="einheit-meta">
-        <span :class="online ? 'einheit-online' : 'einheit-offline'"
-              >
-                <span x-show="online" x-cloak>{{ status_dot("gruen", "Online") }}</span>
-                <span x-show="!online" x-cloak>{{ status_dot("orange", "Offline") }}</span>
-                <span x-text="online ? 'Online' : 'Offline'"></span>
-              </span>
-        <span x-text="syncText"></span>
-        {# GSL-06: Einheitenstatus wie beim Fahrzeug - Farbe plus Bezeichnung, wechselt mit den Auftragsstatus #}
-        <span class="einheit-chip" x-show="kopf.ampel && kopf.ampel.code" x-cloak
-              :class="kopf.ampel && kopf.ampel.css" :data-ampel="kopf.ampel && kopf.ampel.code"
-              :style="kopf.ampel && kopf.ampel.css ? 'color:#fff;font-weight:600' : ''"
-              x-text="kopf.ampel ? kopf.ampel.label + (kopf.ampel.seit ? ' · seit ' + zeit(kopf.ampel.seit) : '') : ''"></span>
-        <span x-text="(kopf.offen || 0) + ' offen · ' + (kopf.erledigt || 0) + ' erledigt'"></span>
+      <div class="einheit-meta" aria-live="polite">
+        <span :class="online ? 'einheit-online' : 'einheit-offline'" x-text="verbindungsText"></span>
+        <span class="einheit-sub" x-show="syncText" x-text="syncText"></span>
+        <strong x-text="(kopf.offen || 0) + ((kopf.offen || 0) === 1 ? ' offener Auftrag' : ' offene Aufträge')"></strong>
         <button type="button" class="einheit-chip einheit-chip--button"
                 :class="outboxListe.length ? 'einheit-chip--warn' : ''"
-                @click="outboxOffen = true">
-                  <span x-show="outboxListe.some(item => ['fehler', 'konflikt'].includes(item.status))" x-cloak>{{ icon("alert-triangle", size="xs") }}</span>
-                  <span x-show="!outboxListe.some(item => ['fehler', 'konflikt'].includes(item.status))" x-cloak>{{ icon("hourglass", size="xs") }}</span>
-                  <span x-text="outboxText"></span>
-                </button>
+                @click="waehleBereich('meldungen')" x-text="outboxText"></button>
       </div>
     </div>
     <nav class="einheit-umschalter">
-      <a href="#" class="is-active" @click.prevent="zurueck()">Meine Einsätze</a>
+      <button type="button" class="btn btn--ghost" x-show="detail" @click="zurueck()">
+        {{ icon("arrow-left", size="sm") }} Zurück
+      </button>
       {% for einheit in benutzer_einheiten|default([]) %}
       <a href="/einheit?einheit={{ einheit.id }}"{% if einheit.id == benutzer_einheit_id %} class="is-active"{% endif %}>{{ einheit.label }} · {{ einheit.lage_name }}</a>
       {% endfor %}
@@ -138,6 +127,15 @@
       {% endif %}
     </nav>
   </header>
+
+  <nav class="einheit-tabbar" role="tablist" aria-label="Bereiche">
+    <button id="einheit-tab-einsaetze" type="button" role="tab" :aria-selected="aktiverBereich === 'einsaetze'"
+            @click="waehleBereich('einsaetze')">{{ icon("clipboard-list", size="sm") }} Einsätze</button>
+    <button id="einheit-tab-karte" type="button" role="tab" :aria-selected="aktiverBereich === 'karte'"
+            @click="waehleBereich('karte')">{{ icon("map", size="sm") }} Karte</button>
+    <button id="einheit-tab-meldungen" type="button" role="tab" :aria-selected="aktiverBereich === 'meldungen'"
+            @click="waehleBereich('meldungen')">{{ icon("messages", size="sm") }} Meldungen</button>
+  </nav>
 
   <div class="einheit-warning" :class="hinweisRot ? 'einheit-warning--alarm' : ''" x-show="hinweisBanner" x-cloak>
     <span x-text="hinweisBanner"></span>
@@ -173,99 +171,59 @@
   </section>
   {% endif %}
 
-  {# ── Übersicht ──────────────────────────────────────────────────────── #}
-  <div class="fab-grid einheit-bereiche" x-show="!detail">
-    <main class="fab-grid__main">
-      <section class="einheit-bereich" x-show="bereichSichtbar('uebersicht')">
-      <template x-if="aktuell">
-        <article class="fab-card einheit-card einheit-card--aktuell"
-                 :class="'einheit-prio--' + (aktuell.priority || 'keine')"
-                 @click="oeffne(aktuell.dispatch_id)">
-          <div class="fab-card__head">
-            <span class="fab-card__icon">{{ icon("map-pin", size="sm") }}</span>
-            <h2 class="fab-card__title">Aktueller Einsatz</h2>
-            <span class="einheit-chip" :class="prioClass(aktuell.priority)"
-                  x-text="prioLabel(aktuell.priority)"></span>
-          </div>
-          <div class="einheit-address" x-text="aktuell.bezeichnung"></div>
-          <p class="einheit-sub" x-text="aktuell.adresse"></p>
-          <p class="einheit-sub" x-show="!aktuell.hat_koordinaten"
-             >{{ icon("map-pin", size="sm") }} <span x-text="'keine Kartenposition – Adresse: ' + (aktuell.adresse || 'keine Angabe')"></span></p>
-          <p class="einheit-sub" x-text="aktuell.einsatzgrund"></p>
-          <div class="einheit-auftrag" x-show="aktuell.auftrag" x-text="aktuell.auftrag"></div>
-          <div class="einheit-card__fuss">
-            <span class="einheit-chip einheit-chip--status" x-text="aktuell.einheit_status_label"></span>
-            <span class="einheit-sub" x-text="'zugewiesen ' + zeit(aktuell.dispatched_at)"></span>
-          </div>
-          <div class="einheit-actions-row">
-            <button type="button" class="btn btn--primary" @click.stop="oeffne(aktuell.dispatch_id)">Öffnen</button>
-            <a class="btn btn--ghost" :href="aktuell.nav_url" target="_blank" rel="noopener"
-               x-show="aktuell.nav_url" @click.stop>Navigation</a>
-          </div>
-        </article>
+  {# Eine Liste eigener Aufträge; Reihenfolge und Status kommen unverändert vom Server. #}
+  {% from "einheit/_einsatzkarte.html" import einsatzkarte with context %}
+  <div class="einheit-bereiche" x-show="!detail" x-cloak>
+    <section class="einheit-bereich" x-show="bereichSichtbar('einsaetze')" aria-label="Einsätze">
+      <template x-for="auftrag in fokusAuftrag ? [fokusAuftrag] : []" :key="auftrag.dispatch_id">
+        {{ einsatzkarte(true) }}
       </template>
-      <template x-if="!aktuell">
-        <article class="fab-card">
-          <div class="fab-card__head">
-            <span class="fab-card__icon">{{ icon("clipboard-list", size="sm") }}</span>
-            <h2 class="fab-card__title"
-                x-text="naechster ? 'Nächster Auftrag' : 'Keine Aufträge – Einheit bereit'"></h2>
-          </div>
-          <template x-if="naechster">
-            <div>
-              <div class="einheit-address" x-text="naechster.bezeichnung"></div>
-              <p class="einheit-sub" x-text="naechster.adresse"></p>
-              <div class="einheit-auftrag" x-show="naechster.auftrag" x-text="naechster.auftrag"></div>
-              <button type="button" class="btn btn--primary btn--lg einheit-action"
-                      @click="oeffne(naechster.dispatch_id)">Auftrag öffnen</button>
-              <a class="btn btn--ghost einheit-action" :href="naechster.nav_url" target="_blank" rel="noopener"
-                 x-show="naechster.nav_url">{{ icon("compass", size="sm") }} Navigation starten</a>
-              <p class="einheit-sub" x-show="weitere.length > 1"
-                 x-text="(weitere.length - 1) + ' weitere offene Aufträge'"></p>
-            </div>
+      <p class="fab-card" x-show="geladen && !fokusAuftrag">Keine offenen Aufträge</p>
+      <section class="einheit-weitere" x-show="weitereAuftraege.length" aria-label="Weitere Aufträge">
+        <h2 class="fab-card__title">Weitere Aufträge</h2>
+        <div class="einheit-weitere__karten">
+          <template x-for="auftrag in weitereAuftraege" :key="auftrag.dispatch_id">
+            {{ einsatzkarte() }}
           </template>
-        </article>
-      </template>
-      {# Nur neben einem laufenden Auftrag – ohne ihn zeigt die große Karte oben bereits den nächsten Auftrag. #}
-      <div class="fab-subcard" x-show="aktuell && naechster">
-        <p class="fab-subcard__title">Nächster Auftrag</p>
-        <strong x-text="naechster?.bezeichnung"></strong>
-        <span class="einheit-chip einheit-chip--status" x-text="naechster?.einheit_status_label"></span>
-        <p class="einheit-sub" x-show="naechster?.adresse" x-text="naechster?.adresse"></p>
-        <div class="einheit-auftrag" x-show="naechster?.auftrag" x-text="naechster?.auftrag"></div>
-        <div class="einheit-actions-row">
-          <button type="button" class="btn btn--primary" @click="oeffne(naechster.dispatch_id)">Öffnen</button>
-          <a class="btn btn--ghost" :href="naechster?.nav_url" target="_blank" rel="noopener" x-show="naechster?.nav_url">Navigation</a>
         </div>
-        <p class="einheit-sub" x-text="weitere.length > 1 ? (weitere.length - 1) + ' weitere offene Aufträge' : ''"></p>
-      </div>
       </section>
-      <section class="fab-card einheit-uebersichtskarte einheit-bereich" x-show="bereichSichtbar('karte')">
-        <div class="fab-card__head">
-          <span class="fab-card__icon">{{ icon("map", size="sm") }}</span><h2 class="fab-card__title">Karte</h2>
-        </div>
-        <div class="einheit-kartenaktionen">
-          <button type="button" class="btn btn--ghost" @click="meinStandort()">{{ icon("map-pin", size="sm") }} Mein Standort</button>
-          <button type="button" class="btn btn--ghost" @click="uebersichtKarte?.zentrieren()">Zentrieren</button>
-          <label><input type="checkbox" x-model="fertigeAufKarte"
-                        @change="uebersichtKarteAktualisieren()"> Fertige einblenden</label>
-        </div>
-        <p class="einheit-sub">
-          {{ status_dot("orange", "In Arbeit") }} In Arbeit · {{ icon("player-play", size="sm") }} Nächster · 1, 2, 3 Reihenfolge · gestrichelt = Erkundung · Linie = Luftlinie, keine Route
-        </p>
-        <p class="einheit-sub" x-show="standortHinweis" x-text="standortHinweis"></p>
-        <span class="einheit-chip" x-show="ohneKartenposition"
-              x-text="ohneKartenposition + ' ohne Kartenposition'"></span>
-        <div x-ref="uebersichtKarte" class="einheit-karte"></div>
-      </section>
-    </main>
-
-    <aside class="fab-grid__side">
-      <section class="fab-card einheit-bereich" x-show="kannRessourcePflegen && bereichSichtbar('uebersicht')" x-cloak>
-        <div class="fab-card__head">
-          <span class="fab-card__icon">{{ icon("tools", size="sm") }}</span>
-          <h2 class="fab-card__title">Meine Einheit</h2>
-        </div>
+      <details class="einheit-liste" x-show="abgeschlossen.length">
+        <summary x-text="'Beendet (' + abgeschlossen.length + ')'"></summary>
+        <template x-for="auftrag in abgeschlossen" :key="auftrag.dispatch_id">
+          <button type="button" class="einheit-liste__eintrag" @click="oeffne(auftrag.dispatch_id)">
+            <span>
+              {{ auftragsart("auftrag.auftragsart") }}
+              <span x-text="auftrag.bezeichnung"></span>
+            </span>
+            <span>
+              <span class="einheit-chip einheit-prioritaet" :class="prioClass(auftrag.priority)"
+                    x-text="'Priorität: ' + prioLabel(auftrag.priority)"></span>
+              <span class="einheit-chip einheit-chip--status" x-text="auftrag.einheit_status_label"></span>
+              <span class="einheit-chip einheit-chip--neu" x-show="istGeaendert(auftrag)">GEÄNDERT</span>
+            </span>
+          </button>
+        </template>
+      </details>
+      <details class="einheit-liste" x-show="zurueckgezogen.length">
+        <summary x-text="'Zurückgezogen (' + zurueckgezogen.length + ')'"></summary>
+        <template x-for="auftrag in zurueckgezogen" :key="auftrag.dispatch_id">
+          <button type="button" class="einheit-liste__eintrag" @click="oeffne(auftrag.dispatch_id)">
+            <span>
+              {{ auftragsart("auftrag.auftragsart") }}
+              <span x-text="auftrag.bezeichnung"></span>
+            </span>
+            <span>
+              <span class="einheit-chip einheit-prioritaet" :class="prioClass(auftrag.priority)"
+                    x-text="'Priorität: ' + prioLabel(auftrag.priority)"></span>
+              <span class="einheit-chip einheit-chip--status" x-text="auftrag.einheit_status_label"></span>
+              <span class="einheit-chip einheit-chip--neu" x-show="istGeaendert(auftrag)">GEÄNDERT</span>
+            </span>
+          </button>
+        </template>
+      </details>
+      <details class="fab-card einheit-ressourcen" x-show="kannRessourcePflegen" x-cloak>
+        <summary>Meine Einheit – Personal und Ausstattung</summary>
+        <h2 class="fab-subcard__title">Personal</h2>
         <div class="einheit-formular" x-show="ressource.personal_modus === 'summe'">
           <label>Gesamtstärke <input class="form-control" type="number" min="0" x-model.number="ressource.personal.gesamt"></label>
           <label>Führung <input class="form-control" type="number" min="0" x-model.number="ressource.personal.fuehrung"></label>
@@ -308,114 +266,57 @@
           <input class="form-control" type="number" min="1" x-model.number="neueAusstattung.menge" placeholder="Menge">
           <button type="button" class="btn btn--primary" @click="ausstattungHinzufuegen()">Hinzufügen</button>
         </div>
-      </section>
-      <section class="einheit-bereich einheit-auftraege" x-show="bereichSichtbar('auftraege')">
-      <h2 class="fab-card__title">Aufträge</h2>
-      <template x-if="aktuell"><div class="einheit-gruppe"><h3>Aktuell</h3>
-        <button type="button" class="einheit-liste__eintrag" :data-dispatch-id="aktuell.dispatch_id"
-                @click="oeffne(aktuell.dispatch_id)">
-          <span>
-            <span class="einheit-chip"
-                  >
-                    <span x-show="aktuell.auftragsart === 'erkundung'">{{ icon("search", size="sm") }}</span>
-                    <span x-text="aktuell.auftragsart === 'erkundung' ? 'Erkundung' : 'Abarbeitung'"></span>
-                  </span>
-            <span x-text="aktuell.rang + '. ' + aktuell.bezeichnung"></span>
-          </span>
-          <span>
-            <span class="einheit-chip" :class="prioClass(aktuell.priority)" x-text="prioLabel(aktuell.priority)"></span>
-            <span class="einheit-chip einheit-chip--status" x-text="aktuell.einheit_status_label"></span>
-            <span class="einheit-chip einheit-chip--neu" x-show="istGeaendert(aktuell)">GEÄNDERT</span>
-          </span>
-        </button></div></template>
-      <template x-if="naechster"><div class="einheit-gruppe"><h3>Nächster</h3>
-        <button type="button" class="einheit-liste__eintrag" :data-dispatch-id="naechster.dispatch_id" @click="oeffne(naechster.dispatch_id)">
-          <span>
-            <span class="einheit-chip"
-                  >
-                    <span x-show="naechster.auftragsart === 'erkundung'">{{ icon("search", size="sm") }}</span>
-                    <span x-text="naechster.auftragsart === 'erkundung' ? 'Erkundung' : 'Abarbeitung'"></span>
-                  </span>
-            <span x-text="naechster.rang + '. ' + naechster.bezeichnung"></span>
-          </span>
-          <span>
-            <span class="einheit-chip" :class="prioClass(naechster.priority)" x-text="prioLabel(naechster.priority)"></span>
-            <span class="einheit-chip einheit-chip--status" x-text="naechster.einheit_status_label"></span>
-            <span class="einheit-chip einheit-chip--neu" x-show="istGeaendert(naechster)">GEÄNDERT</span>
-          </span>
-        </button></div></template>
-      <div class="einheit-gruppe" x-show="weitere.length > 1"><h3>Weitere offene</h3>
-      <template x-for="(auftrag, index) in weitere.slice(1)" :key="auftrag.dispatch_id">
-        <article class="fab-card einheit-card einheit-card--kompakt"
-                 :data-dispatch-id="auftrag.dispatch_id"
-                 :class="['einheit-prio--' + (auftrag.priority || 'keine'),
-                          neuIds.includes(auftrag.dispatch_id) ? 'einheit-card--neu' : '']"
-                 @mouseenter="markerHervorheben(auftrag.dispatch_id)" @click="oeffne(auftrag.dispatch_id)">
-          <div class="einheit-card__kopf">
-            <strong x-text="(auftrag.rang || index + 1) + '. ' + auftrag.bezeichnung"></strong>
-            <span class="einheit-chip"
-                  >
-                    <span x-show="auftrag.auftragsart === 'erkundung'">{{ icon("search", size="sm") }}</span>
-                    <span x-text="auftrag.auftragsart === 'erkundung' ? 'Erkundung' : 'Abarbeitung'"></span>
-                  </span>
-            <span class="einheit-chip einheit-chip--neu" x-show="neuIds.includes(auftrag.dispatch_id)">NEU</span>
-            <span class="einheit-chip einheit-chip--neu" x-show="istGeaendert(auftrag)">GEÄNDERT</span>
-          </div>
-          <div class="einheit-sub" x-text="auftrag.adresse"></div>
-          <div class="einheit-sub" x-show="!auftrag.hat_koordinaten"
-               >{{ icon("map-pin", size="sm") }} <span x-text="'keine Kartenposition – Adresse: ' + (auftrag.adresse || 'keine Angabe')"></span></div>
-          <div class="einheit-card__fuss">
-            <span class="einheit-chip" :class="prioClass(auftrag.priority)"
-                  x-text="prioLabel(auftrag.priority)"></span>
-            <span class="einheit-chip einheit-chip--status" x-text="auftrag.einheit_status_label"></span>
-            <span class="einheit-sub" x-text="zeit(auftrag.dispatched_at)"></span>
-          </div>
-        </article>
-      </template>
-      </div>
-
-      <details class="einheit-liste" x-show="abgeschlossen.length">
-        <summary x-text="'Fertig (' + abgeschlossen.length + ')'"></summary>
-        <template x-for="auftrag in abgeschlossen" :key="auftrag.dispatch_id">
-          <button type="button" class="einheit-liste__eintrag" @click="oeffne(auftrag.dispatch_id)">
-            <span>
-              <span class="einheit-chip"
-                    >
-                      <span x-show="auftrag.auftragsart === 'erkundung'">{{ icon("search", size="sm") }}</span>
-                      <span x-text="auftrag.auftragsart === 'erkundung' ? 'Erkundung' : 'Abarbeitung'"></span>
-                    </span>
-              <span x-text="auftrag.bezeichnung"></span>
-            </span>
-            <span>
-              <span class="einheit-chip" :class="prioClass(auftrag.priority)" x-text="prioLabel(auftrag.priority)"></span>
-              <span class="einheit-chip einheit-chip--status" x-text="auftrag.einheit_status_label"></span>
-              <span class="einheit-chip einheit-chip--neu" x-show="istGeaendert(auftrag)">GEÄNDERT</span>
-            </span>
-          </button>
-        </template>
       </details>
-      <details class="einheit-liste" x-show="zurueckgezogen.length">
-        <summary x-text="'Zurückgezogen (' + zurueckgezogen.length + ')'"></summary>
-        <template x-for="auftrag in zurueckgezogen" :key="auftrag.dispatch_id">
-          <button type="button" class="einheit-liste__eintrag" @click="oeffne(auftrag.dispatch_id)">
-            <span>
-              <span class="einheit-chip"
-                    >
-                      <span x-show="auftrag.auftragsart === 'erkundung'">{{ icon("search", size="sm") }}</span>
-                      <span x-text="auftrag.auftragsart === 'erkundung' ? 'Erkundung' : 'Abarbeitung'"></span>
-                    </span>
+    </section>
+      <section class="fab-card einheit-uebersichtskarte einheit-bereich" x-show="bereichSichtbar('karte')">
+        <div class="fab-card__head">
+          <span class="fab-card__icon">{{ icon("map", size="sm") }}</span><h2 class="fab-card__title">Karte</h2>
+        </div>
+        <div class="einheit-kartenaktionen">
+          <button type="button" class="btn btn--ghost" @click="meinStandort()">{{ icon("map-pin", size="sm") }} Mein Standort</button>
+          <button type="button" class="btn btn--ghost" @click="uebersichtKarte?.zentrieren()">Zentrieren</button>
+          <label><input type="checkbox" x-model="fertigeAufKarte"
+                        @change="uebersichtKarteAktualisieren()"> Fertige einblenden</label>
+        </div>
+        <div class="einheit-kartenlegende" aria-label="Kartenlegende">
+          <div>{{ auftragsart("'erkundung'") }} {{ auftragsart("'abarbeitung'") }}</div>
+          <p class="einheit-sub">Symbol und Klartext = Auftragsart · Rand und Prioritätsangabe = Dringlichkeit</p>
+          <div>
+            <template x-for="prioritaet in ['sofort', 'dringend', 'normal', 'aufschiebbar']" :key="prioritaet">
+              <span class="einheit-chip" :class="prioClass(prioritaet)" x-text="'Priorität: ' + prioLabel(prioritaet)"></span>
+            </template>
+          </div>
+          <p class="einheit-sub">
+            {{ icon("player-record", size="sm") }} Aktuell · {{ icon("player-play", size="sm") }} Nächster · 1, 2, 3 Reihenfolge · Linie = Luftlinie, keine Route
+          </p>
+          <p class="einheit-sub">{{ icon("check", size="sm") }} Beendet: gestrichelter Markerring</p>
+        </div>
+        <p class="einheit-sub" x-show="standortHinweis" x-text="standortHinweis"></p>
+        <span class="einheit-chip" x-show="ohneKartenposition"
+              x-text="ohneKartenposition + ' ohne Kartenposition'"></span>
+        <div x-ref="uebersichtKarte" class="einheit-karte"></div>
+        <ul class="einheit-kartenliste" aria-label="Aufträge auf der Karte">
+          <template x-for="auftrag in kartenAuftraege" :key="auftrag.dispatch_id">
+            <li>
+              {{ auftragsart("auftrag.auftragsart") }}
+              <span class="einheit-chip einheit-prioritaet" :class="prioClass(auftrag.priority)"
+                    x-text="'Priorität: ' + prioLabel(auftrag.priority)"></span>
               <span x-text="auftrag.bezeichnung"></span>
-            </span>
-            <span>
-              <span class="einheit-chip" :class="prioClass(auftrag.priority)" x-text="prioLabel(auftrag.priority)"></span>
-              <span class="einheit-chip einheit-chip--status" x-text="auftrag.einheit_status_label"></span>
-              <span class="einheit-chip einheit-chip--neu" x-show="istGeaendert(auftrag)">GEÄNDERT</span>
-            </span>
-          </button>
-        </template>
-      </details>
+              <span class="einheit-sub" x-show="!auftrag.hat_koordinaten">Keine Kartenposition</span>
+              <button type="button" class="btn btn--ghost" @click="oeffne(auftrag.dispatch_id)"
+                      :aria-label="'Auftrag öffnen: ' + (auftrag.bezeichnung || 'Einsatzstelle')">Auftrag öffnen</button>
+            </li>
+          </template>
+        </ul>
       </section>
-    </aside>
+    <section class="fab-card einheit-bereich" x-show="bereichSichtbar('meldungen')" aria-label="Meldungen">
+      <h2 class="fab-card__title">Meldungen</h2>
+      <p class="einheit-sub">Lagemeldungen, Fotos und die Chronik findest du im jeweiligen Auftrag.</p>
+      <button type="button" class="btn btn--ghost einheit-action" x-show="fokusAuftrag"
+              @click="oeffne(fokusAuftrag.dispatch_id)">Aktuellen bzw. nächsten Auftrag öffnen</button>
+      <h3 class="fab-subcard__title">Übermittlungen</h3>
+      {% include "einheit/_uebermittlungen.html" %}
+    </section>
   </div>
 
   {# ── Detail ─────────────────────────────────────────────────────────── #}
@@ -426,11 +327,12 @@
     <div class="fab-grid">
       <main class="fab-grid__main">
         <article class="fab-card" :class="'einheit-prio--' + (detail?.stelle?.priority || 'keine')">
+          <div class="einheit-detail__art">{{ auftragsart("detail?.auftrag?.auftragsart") }}</div>
           <div class="fab-card__head">
             <span class="fab-card__icon">{{ icon("map-pin", size="sm") }}</span>
             <h2 class="fab-card__title" x-text="detail?.stelle?.bezeichnung"></h2>
-            <span class="einheit-chip" :class="prioClass(detail?.stelle?.priority)"
-                  x-text="prioLabel(detail?.stelle?.priority)"></span>
+            <span class="einheit-chip einheit-prioritaet" :class="prioClass(detail?.stelle?.priority)"
+                  x-text="'Priorität: ' + prioLabel(detail?.stelle?.priority)"></span>
           </div>
           <div class="einheit-address" x-text="detail?.stelle?.adresse"></div>
           <section class="einheit-einsatzkarte" x-show="hatKoordinaten" x-cloak>
@@ -496,7 +398,7 @@
           </div>
 
           <div class="fab-subcard" x-show="(detail?.fotos || []).length">
-            <p class="fab-subcard__title">Fotos</p>
+            <p class="fab-subcard__title">Fotos zur Einsatzstelle</p>
             <div class="einheit-thumbs">
               <template x-for="foto in detail?.fotos || []" :key="foto.id">
                 <a :href="foto.url + (simulation ? '?sim=' + simEinheitId : '')" target="_blank" rel="noopener">
@@ -535,6 +437,7 @@
 
           <div class="fab-subcard" x-show="(detail?.chronik || []).length">
             <p class="fab-subcard__title">Chronik</p>
+            <p class="einheit-sub">Meldungen zur Einsatzstelle – können mehrere Aufträge betreffen.</p>
             <template x-for="item in detail?.chronik || []">
               <div class="einheit-log" :class="item.eigene ? 'einheit-log--own' : ''">
                 <small class="einheit-sub"
@@ -580,12 +483,6 @@
     </div>
   </section>
 
-  <nav class="einheit-tabbar" role="tablist" aria-label="Bereiche" x-show="!detail">
-    <button type="button" role="tab" :aria-selected="aktiverBereich === 'uebersicht'" @click="waehleBereich('uebersicht')">Übersicht</button>
-    <button type="button" role="tab" :aria-selected="aktiverBereich === 'karte'" @click="waehleBereich('karte')">Karte</button>
-    <button type="button" role="tab" :aria-selected="aktiverBereich === 'auftraege'" @click="waehleBereich('auftraege')">Aufträge</button>
-  </nav>
-
   {# ── Flyouts (Erfassen und Bestätigen) ──────────────────────────────── #}
   <div class="person-flyout-backdrop" x-show="flyout" x-cloak>
     <section class="person-flyout" role="dialog" aria-modal="true">
@@ -594,6 +491,10 @@
         <button type="button" class="person-flyout__close" @click="flyout = null">&times;</button>
       </header>
       <div class="einheit-flyout-body">
+        <div class="einheit-uebermittlung__kopf" x-show="dialogAuftrag">
+          {{ auftragsart("dialogAuftrag?.auftragsart") }}
+          <span x-text="dialogAuftrag?.bezeichnung"></span>
+        </div>
 
         <template x-if="flyout === 'foto'">
           <div class="einheit-formular">
@@ -708,46 +609,6 @@
           </div>
         </template>
 
-      </div>
-    </section>
-  </div>
-
-  {# ── Outbox: ausstehende und bestätigte Übermittlungen ──────────────── #}
-  <div class="person-flyout-backdrop" x-show="outboxOffen" x-cloak>
-    <section class="person-flyout" role="dialog" aria-modal="true">
-      <header class="person-flyout__header">
-        <h2>Übermittlungen</h2>
-        <button type="button" class="person-flyout__close" @click="outboxOffen = false">&times;</button>
-      </header>
-      <div class="einheit-flyout-body">
-        <button type="button" class="btn btn--primary einheit-action" :disabled="zugangBeendet" @click="flush()">Jetzt synchronisieren</button>
-        <p class="einheit-sub" x-show="!outboxListe.length">Alle Einträge wurden übermittelt.</p>
-        <template x-for="item in outboxListe" :key="item.client_uuid">
-          <article class="fab-subcard">
-            <strong x-text="typLabel(item.typ) + ' · Auftrag ' + item.dispatch_id + ' · ' + zeit(item.erfasst_at)"></strong>
-            <p>
-              <span x-show="item.status === 'fehler_netz'">{{ icon("refresh", size="xs") }}</span>
-              <span x-show="!['blockiert_zugang', 'konflikt', 'fehler', 'fehler_netz'].includes(item.status)">{{ icon("hourglass", size="xs") }}</span>
-              <span x-text="outboxStatus(item)"></span>
-            </p>
-            <textarea class="form-control" readonly x-show="item.payload?.text"
-                      x-text="item.payload?.text"></textarea>
-            <div class="einheit-actions-row">
-              <button type="button" class="btn btn--ghost" x-show="item.status !== 'ausstehend' && item.status !== 'blockiert_zugang'"
-                      @click="erneut(item.client_uuid)">Erneut senden</button>
-              <button type="button" class="btn btn--ghost" x-show="['konflikt', 'fehler', 'blockiert_zugang'].includes(item.status)"
-                      @click="kopieren(item)">Kopieren</button>
-              <button type="button" class="btn btn--ghost" @click="verwerfen(item.client_uuid)">Verwerfen</button>
-            </div>
-          </article>
-        </template>
-        <h3 class="fab-subcard__title">Zuletzt übermittelt</h3>
-        <template x-for="item in verlauf" :key="item.id">
-          <div class="einheit-zeile">
-            <span>{{ icon("check", size="xs") }} <span x-text="'übermittelt ' + zeit(item.server_bestaetigt_at) + ' · ' + typLabel(item.typ)"></span></span>
-            <span class="einheit-sub" x-text="hinweisText(item.antwort?.hinweis)"></span>
-          </div>
-        </template>
       </div>
     </section>
   </div>

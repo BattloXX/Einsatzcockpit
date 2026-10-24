@@ -452,6 +452,21 @@ async def _senden(lage_id: int, site_id: int, einheit_id: int, dispatch_id: int,
 @router.get("/api/zustand")
 def zustand(request: Request, ctx: EinheitKontext = Depends(einheit_kontext), db: Session = Depends(get_db)):
     data = auftraege_fuer_einheit(db, ctx)
+    # Gleiche Gefahrenquelle wie im Detail, gebündelt für die eigenen offenen Aufträge.
+    offene = [data["kategorien"]["aktuell"], *data["kategorien"]["weitere"]]
+    site_ids = {auftrag["site_id"] for auftrag in offene if auftrag}
+    if site_ids:
+        stellen = {
+            site.id: site for site in db.query(IncidentSite).filter(
+                IncidentSite.major_incident_id == ctx.lage.id, IncidentSite.id.in_(site_ids),
+            ).all()
+        }
+        marker = _gefahren_marker(db, ctx)
+        for auftrag in offene:
+            if auftrag:
+                site = stellen[auftrag["site_id"]]
+                auftrag["gefahren"] = _gefahren_an_stelle(site, marker)
+                auftrag["gefahren_verfuegbar"] = site.lat is not None and site.lng is not None
     from app.services import verleih_service as verleih_svc
     from app.services.mi_feature_service import get_mi_features
 
@@ -461,6 +476,7 @@ def zustand(request: Request, ctx: EinheitKontext = Depends(einheit_kontext), db
     data["kann_ressource_pflegen"] = (
         data["schreibbar"]
         and ctx.quelle in {"zugang", "benutzer"}
+        and not (ctx.zugang and ctx.zugang.typ == "qr")
         and gk_zugang_service.org_einstellungen(db, ctx.org_id).gk_zugang_ressource_pflegen
     )
     data["ressource"] = _ressourcen_daten(db, ctx)
@@ -830,12 +846,20 @@ def auftrag_detail(dispatch_id: int, ctx: EinheitKontext = Depends(einheit_konte
 def _gefahren(db: Session, ctx: EinheitKontext, site: IncidentSite) -> list[dict]:
     if site.lat is None or site.lng is None:
         return []
+    return _gefahren_an_stelle(site, _gefahren_marker(db, ctx))
+
+
+def _gefahren_marker(db: Session, ctx: EinheitKontext) -> list[CrossSiteMarker]:
+    return db.query(CrossSiteMarker).filter(
+        CrossSiteMarker.major_incident_id == ctx.lage.id, CrossSiteMarker.status != "behoben",
+    ).order_by(CrossSiteMarker.id).all()
+
+
+def _gefahren_an_stelle(site: IncidentSite, marker_liste: list[CrossSiteMarker]) -> list[dict]:
+    if site.lat is None or site.lng is None:
+        return []
     result = []
-    for marker in (
-        db.query(CrossSiteMarker)
-        .filter(CrossSiteMarker.major_incident_id == ctx.lage.id, CrossSiteMarker.status != "behoben")
-        .all()
-    ):
+    for marker in marker_liste:
         if marker.lat is None or marker.lng is None:
             continue
         abstand = math.hypot(
@@ -1393,6 +1417,7 @@ def karte(ctx: EinheitKontext = Depends(einheit_kontext), db: Session = Depends(
                 "site_id": d.site_id,
                 "bezeichnung": d.site.bezeichnung,
                 "einheit_status": d.einheit_status,
+                "auftragsart": d.auftragsart,
                 "priority": d.site.priority.name if d.site.priority else None,
                 "reihenfolge": d.reihenfolge,
                 "aktuell": d.site_id == ctx.einheit.incident_site_id,

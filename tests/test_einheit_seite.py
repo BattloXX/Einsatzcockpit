@@ -106,9 +106,10 @@ def test_einheit_template_und_javascript_sind_lesbar():
 
 def test_einheit_template_enthaelt_kompakte_kartenlegende():
     template = (Path(__file__).parents[1] / "app/templates/einheit/einheit.html").read_text()
-    assert '{{ status_dot("orange", "In Arbeit") }} In Arbeit' in template
+    assert '{{ icon("player-record", size="sm") }} Aktuell' in template
     assert '{{ icon("player-play", size="sm") }} Nächster · 1, 2, 3 Reihenfolge' in template
-    assert "gestrichelt = Erkundung · Linie = Luftlinie, keine Route" in " ".join(template.split())
+    assert "Rand und Prioritätsangabe = Dringlichkeit" in template
+    assert "Linie = Luftlinie, keine Route" in template
 
 
 def test_einheit_outbox_import_ist_versioniert():
@@ -134,14 +135,10 @@ def test_einheit_template_enthaelt_material_flyout():
     assert "typ: \"material\"" in (Path(__file__).parents[1] / "app/static/js/einheit_modus.js").read_text()
 
 
-def test_einheit_template_zeigt_naechsten_auftrag_und_erkundungsabschluss():
+def test_einheit_template_behaelt_erkundungsabschluss():
     root = Path(__file__).parents[1]
     template = (root / "app/templates/einheit/einheit.html").read_text()
     javascript = (root / "app/static/js/einheit_modus.js").read_text()
-    subcard = template[template.index('class="fab-subcard" x-show="aktuell && naechster"'):]
-    assert 'x-show="naechster?.adresse"' in subcard
-    assert 'x-text="naechster?.adresse"' in subcard
-    assert 'x-show="naechster?.auftrag"' in subcard
     assert "Lage vor Ort (optional)" in template
     assert "Notwendige Maßnahmen (optional)" in template
     assert 'x-ref="erkundungFotos"' in template

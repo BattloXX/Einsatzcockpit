@@ -1,4 +1,5 @@
 /* Karte der Einheitenansicht; die Sortierhelfer bleiben bewusst DOM-frei. */
+import { auftragsartAnzeige, prioritaetAnzeige } from "./einheit_darstellung.js";
 
 function esc(wert) {
   return String(wert ?? "").replace(/[&<>"']/g, (z) => (
@@ -54,10 +55,9 @@ export function markerArt(auftrag) {
   if (auftrag.withdrawn_at || auftrag.zurueckgezogen) return "zurueckgezogen";
   if (auftrag.einheit_status === "abgeschlossen" || auftrag.einheit_status === "nicht_durchfuehrbar"
     || auftrag.beendet_at) return "fertig";
-  // Laufender und nächster Auftrag haben Vorrang; die Erkundung bleibt über eine Zusatzklasse erkennbar.
+  // Statuskennzeichnung bleibt unabhängig von der farbigen Auftragsart.
   if (laeuft(auftrag)) return "in_arbeit";
   if (auftrag.naechster) return "naechster";
-  if (auftrag.auftragsart === "erkundung") return "erkundung";
   return "offen";
 }
 
@@ -68,32 +68,43 @@ function auftragBezeichnung(auftrag) {
 
 export function markerDarstellung(auftrag, nummer) {
   const art = markerArt(auftrag);
-  const erkundung = auftrag.auftragsart === "erkundung";
-  const klasse = `einheit-kartenmarker--${art}${erkundung ? " einheit-kartenmarker--erkundung" : ""}`;
+  const typ = auftragsartAnzeige(auftrag.auftragsart);
+  const prioritaet = prioritaetAnzeige(auftrag.priority);
+  const klasse = `einheit-kartenmarker--${art} ${typ.klasse} ${prioritaet.klasse}`;
   const bezeichnung = auftragBezeichnung(auftrag);
-  let inhalt = String(nummer || "");
-  let iconName = null;
-  let titel = `Auftrag: ${bezeichnung}`;
-  let groesse = 28;
-
+  let statusIconName = null;
+  let statusText = auftrag.einheit_status_label || "Offen";
   if (art === "naechster") {
-    iconName = "player-play";
-    inhalt = "";
-    titel = `Nächster Auftrag: ${bezeichnung}`;
+    statusIconName = "player-play";
+    statusText = "Nächster Auftrag";
   } else if (art === "in_arbeit") {
-    iconName = "player-record";
-    inhalt = "";
-    titel = `In Arbeit: ${bezeichnung}`;
-  } else if (art === "erkundung") {
-    titel = `Erkundung: ${bezeichnung}`;
-    groesse = 30;
+    statusIconName = "player-record";
+    statusText = `Aktuell · ${auftrag.einheit_status_label || "In Arbeit"}`;
   } else if (art === "fertig") {
-    iconName = "check";
-    inhalt = "";
-    titel = `Fertig: ${bezeichnung}`;
-    groesse = 24;
+    statusIconName = "check";
+    statusText = auftrag.einheit_status_label || "Fertig";
   }
-  return { klasse, inhalt, iconName, titel, groesse, anker: [groesse / 2, groesse / 2] };
+  const titel = `${typ.label} · ${statusText} · Priorität: ${prioritaet.label} · ${bezeichnung}`;
+  return {
+    klasse, inhalt: String(nummer || ""), iconName: typ.icon, label: typ.label,
+    statusIconName, statusText, prioritaet, titel, groesse: 48, anker: [24, 24],
+  };
+}
+
+export function markerIcon(auftrag, nummer) {
+  const d = markerDarstellung(auftrag, nummer);
+  const status = d.statusIconName ? window.ecpIcon(d.statusIconName, { size: "xs" }) : "";
+  return window.L.divIcon({
+    className: `einheit-kartenmarker ${d.klasse}`,
+    html: `<span class="einheit-marker__punkt" aria-label="${esc(d.titel)}">`
+      + window.ecpIcon(d.iconName, { size: "sm" })
+      + `</span><span class="einheit-marker__beschriftung">`
+      + `<span class="einheit-artchip">${esc(d.label)}</span>`
+      + `<span class="einheit-marker__prioritaet">Priorität: ${esc(d.prioritaet.label)}</span>`
+      + `<span class="einheit-marker__status">${status}${esc(d.inhalt ? d.inhalt + ' · ' : '')}${esc(d.statusText)}</span>`
+      + `</span>`,
+    iconSize: [d.groesse, d.groesse], iconAnchor: d.anker, popupAnchor: [0, -24],
+  });
 }
 
 export function navUrl(auftrag) {
@@ -121,15 +132,7 @@ export class EinheitKarte {
   }
 
   icon(auftrag, nummer) {
-    const darstellung = markerDarstellung(auftrag, nummer);
-    return window.L.divIcon({
-      className: `einheit-kartenmarker ${darstellung.klasse}`,
-      html: `<span title="${esc(darstellung.titel)}" aria-label="${esc(darstellung.titel)}">`
-        + `${darstellung.iconName ? ecpIcon(darstellung.iconName, {size: "xs"}) : esc(darstellung.inhalt)}</span>`,
-      iconSize: [darstellung.groesse, darstellung.groesse],
-      iconAnchor: darstellung.anker,
-      popupAnchor: [0, -darstellung.groesse / 2],
-    });
+    return markerIcon(auftrag, nummer);
   }
 
   aktualisieren(auftraege, { fertige = false, standort = null } = {}) {
@@ -153,7 +156,8 @@ export class EinheitKarte {
       const marker = window.L.marker(latlng, {
         icon: this.icon(auftrag, offen ? nummer : null), title: darstellung.titel, alt: darstellung.titel,
       }).addTo(this.layer);
-      marker.bindPopup(this.popup(auftrag));
+      marker.bindPopup(this.popup(auftrag), { className: "einheit-kartenpopup" });
+      marker.getElement()?.setAttribute("aria-label", darstellung.titel);
       marker.on("click", () => this.onSelect(auftrag));
       this.marker.set(Number(auftrag.dispatch_id), marker);
     }
@@ -162,7 +166,7 @@ export class EinheitKarte {
     }
     // Nur neu einpassen, wenn sich die Marker ändern – sonst springt die Karte bei jedem Abruf/Standort-Update.
     const signatur = punkte.map((p) => p.join(",")).join(";");
-    if (punkte.length && signatur !== this.signatur) this.map.fitBounds(punkte, { padding: [28, 28], maxZoom: 14 });
+    if (punkte.length && signatur !== this.signatur) this.map.fitBounds(punkte, { padding: [80, 90], maxZoom: 14 });
     this.signatur = signatur;
     this.zeigeStandort();
     requestAnimationFrame(() => this.map.invalidateSize());
@@ -172,12 +176,17 @@ export class EinheitKarte {
     const nav = navUrl(auftrag);
     const titel = auftrag.bezeichnung || auftrag.einsatzgrund || "Auftrag";
     const vorschlag = auftrag.vorschlag_entfernung ? "<p>Vorschlag (Entfernung)</p>" : "";
-    const details = `${auftrag.priority || "ohne Priorität"} · ${auftrag.auftragsart_label || ""}`
-      + ` · ${auftrag.einheit_status_label || ""}`;
+    const typ = auftragsartAnzeige(auftrag.auftragsart);
+    const prioritaet = prioritaetAnzeige(auftrag.priority);
+    const artchip = `<span class="einheit-artchip ${typ.klasse}">`
+      + window.ecpIcon(typ.icon, { size: "sm" }) + esc(typ.label) + "</span>";
+    const priochip = `<span class="einheit-chip ${prioritaet.chipKlasse}">Priorität: ${esc(prioritaet.label)}</span>`;
     const navigation = nav
-      ? ` <a href="${esc(nav)}" target="_blank" rel="noopener">Navigation starten</a>` : "";
-    return `<strong>${esc(titel)}</strong><br>${esc(auftrag.adresse)}<br>${esc(details)}${vorschlag}`
-      + `<p><button type="button" data-dispatch-id="${esc(auftrag.dispatch_id)}">Auftrag öffnen</button>`
+      ? `<a class="btn btn--ghost" href="${esc(nav)}" target="_blank" rel="noopener">Navigation starten</a>` : "";
+    return `${artchip}<br><strong>${esc(titel)}</strong><br>${esc(auftrag.adresse)}<br>${priochip}`
+      + `<br>${esc(auftrag.einheit_status_label)}${vorschlag}`
+      + `<p class="einheit-kartenpopup__aktionen"><button type="button" class="btn btn--ghost"`
+      + ` data-dispatch-id="${esc(auftrag.dispatch_id)}">Auftrag öffnen</button>`
       + `${navigation}</p>`;
   }
 

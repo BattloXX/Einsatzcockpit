@@ -19,13 +19,19 @@ GK-Link und QR-Zugang sehen und bearbeiten ausschließlich die eigene Einheit. P
 
 ## Bereiche und Ansicht
 
-Die Bereiche heißen **Übersicht**, **Karte** und **Aufträge**. Auf dem Smartphone werden sie über die Tab-Leiste gewechselt; auf breiteren Tabletansichten stehen Liste und Karte nebeneinander.
+Die Bereiche heißen **Einsätze**, **Karte** und **Meldungen**. Sie werden auf Smartphone und Tablet über dieselben beschrifteten Schaltflächen gewechselt. Auf breiten Tablets stehen weitere Auftragskarten nebeneinander.
 
 | Bereich | Inhalt |
 |---|---|
-| **Übersicht** | Aktueller und nächster Auftrag, Meldungen und die Daten der eigenen Einheit. |
+| **Einsätze** | Aktueller Auftrag als große Karte, sonst der nächste. Alle weiteren offenen Aufträge folgen als kompakte Karten; beendete und zurückgezogene Aufträge lassen sich aufklappen. |
 | **Karte** | Aufträge der eigenen Einheit, Standortfunktion und Navigation. |
-| **Aufträge** | Auftragsgruppen **Aktuell**, **Nächster**, **Weitere offene**, **Fertig** und **Zurückgezogen**. |
+| **Meldungen** | Noch nicht übermittelte und zuletzt übermittelte Einträge, Synchronisieren sowie Fehler- und Konfliktbehandlung. Lagemeldungen, Fotos und die Chronik stehen weiterhin im jeweiligen Auftrag zur Verfügung. |
+
+Jede offene Auftragskarte zeigt Art, Einsatzstelle/Adresse, kurzen Auftragstext, bekannte Gefahren am Ziel und Bearbeitungsstand. **ERKUNDUNG** erscheint orange mit Lupe, **AUFTRAG** blau mit Werkzeug. Dieselbe Kennzeichnung steht im Detail, in Dialogen, auf Kartenmarkern und bei eindeutig zugeordneten Übermittlungen. **Auftrag öffnen** zeigt den vollständigen Auftrag und alle bisherigen Aktionen. Öffnen bestätigt oder startet keinen Auftrag.
+
+Auftragsart und Dringlichkeit sind unabhängig: Die Art färbt das Symbol und die Artbeschriftung, die Priorität den Kartenrand beziehungsweise Markerring. **Priorität: Sofort / Dringend / Normal / Aufschiebbar** steht zusätzlich als Text dabei. Fehlt die gespeicherte Art oder ist sie unbekannt, erscheint neutral **ART UNBEKANNT**; die Ansicht errät keine Art aus Auftragstext oder Status. Bestehende gespeicherte Auftragsarten werden unverändert verwendet.
+
+Im Kopf stehen der Name der Einheit, offene Aufträge sowie Verbindung und letzter Abgleich. **Noch nicht übermittelt** kennzeichnet lokale Änderungen. Bei fehlender Kartenposition oder älterem Offline-Stand können Gefahrenhinweise unvollständig sein; die Ansicht zeigt dies ausdrücklich an. Freigegebene Personal- und Ausstattungspflege bleibt unter **Meine Einheit – Personal und Ausstattung** erreichbar.
 
 Neue Aufträge tragen **NEU**, geänderte **GEÄNDERT**. Im Detail weist „Auftrag wurde geändert – bitte prüfen“ auf einen geänderten Auftragstext hin. Bei einer neuen Reihenfolge erscheint ein Hinweisbanner; Priorität und von der Leitstelle vorgegebene Reihenfolge bleiben maßgeblich.
 
@@ -48,18 +54,24 @@ Bei Bedarf kann ein Auftrag als **Nicht durchführbar** gemeldet werden; dafür 
 
 | Kartenelement | Bedeutung |
 |---|---|
+| Orange Lupe mit **ERKUNDUNG** | Erkundungsauftrag. |
+| Blaues Werkzeug mit **AUFTRAG** | Abarbeitungsauftrag. |
+| Farbig umrandeter Marker und **Priorität: …** | Dringlichkeit, unabhängig von der Auftragsart. |
 | **● In Arbeit** | Laufender Auftrag der Einheit. |
 | **▶ Nächster** | Vom System als nächster Auftrag geführter Auftrag. |
 | Nummern | Weitere offene Aufträge in der angezeigten Reihenfolge. |
-| Gestrichelte Verbindung / Kennzeichnung | Erkundungsauftrag. |
+| Haken und gestrichelter Markerring | Beendeter Auftrag, falls eingeblendet. |
+| Gestrichelte Verbindung | Luftlinie zwischen offenen Aufträgen, keine befahrbare Route. |
 
-Mit **Fertige einblenden** werden abgeschlossene Aufträge auf der Karte ergänzt. **Mein Standort** fragt die Position erst nach einem Klick im Browser ab; sie wird weder gespeichert noch an den Server gesendet. **Zentrieren** richtet die Karte auf diesen Standort aus. **Navigation starten** öffnet die für den Auftrag hinterlegte Navigation beziehungsweise Google Maps oder die Zieladresse.
+Die Liste unter der Karte macht alle angezeigten Aufträge einzeln erreichbar, auch ohne Kartenposition oder bei überlagerten Markern derselben Einsatzstelle. Mit **Fertige einblenden** werden abgeschlossene Aufträge auf der Karte ergänzt. **Mein Standort** fragt die Position erst nach einem Klick im Browser ab; sie wird weder gespeichert noch an den Server gesendet. **Zentrieren** richtet die Karte auf diesen Standort aus. **Navigation starten** öffnet die für den Auftrag hinterlegte Navigation beziehungsweise Google Maps oder die Zieladresse.
 
 ## Offline arbeiten
 
 Statuswechsel, Meldungen, Fotos und Materialvorgänge werden zunächst in einer Offline-Outbox auf diesem Gerät gespeichert. Nicht bestätigte Einträge sind mit **„nur auf diesem Gerät“** gekennzeichnet. Eine Erfolgsmeldung bedeutet erst dann eine Übermittlung, wenn der Server den Vorgang bestätigt hat.
 
-Unter **Übermittlungen** können Sie **Jetzt synchronisieren**, erneut senden, bei Fehlern oder Konflikten kopieren sowie Einträge verwerfen. Offline zeigt die Seite den zuletzt geladenen Stand.
+Unter **Meldungen → Übermittlungen** können Sie **Jetzt synchronisieren**, erneut senden, bei Fehlern oder Konflikten kopieren sowie Einträge verwerfen. Offline zeigt die Seite den zuletzt geladenen Stand.
+
+Lokale und zuletzt übermittelte Einträge zeigen die Auftragsart, wenn der verknüpfte Auftrag im berechtigten Datenbestand vorliegt. Chronik und Fotogalerie gehören dagegen zur **Einsatzstelle** und können mehrere Aufträge betreffen; sie erhalten keine aus dem gerade geöffneten Auftrag abgeleitete Artkennzeichnung.
 
 ## Simulation
 

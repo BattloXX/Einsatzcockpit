@@ -1,0 +1,6 @@
+{% macro auftragsart(wert) %}
+<span class="einheit-artchip" :class="auftragsartAnzeige({{ wert }}).klasse">
+  <span x-html="auftragsartIcon({{ wert }})"></span>
+  <span x-text="auftragsartAnzeige({{ wert }}).label"></span>
+</span>
+{% endmacro %}
