@@ -142,6 +142,20 @@ from app.services.suche.outbox import registriere_listener
 registriere_listener()
 
 logger = logging.getLogger("einsatzleiter")
+loop_lag_logger = logging.getLogger("einsatzleiter.loop_lag")
+
+
+async def _loop_lag_monitor() -> None:
+    """Misst pro Worker den Verzug; normale Schleifendurchlaeufe bleiben still."""
+    if settings.LOOP_LAG_WARN_MS <= 0:
+        return
+    loop = asyncio.get_running_loop()
+    while True:
+        expected = loop.time() + 1.0
+        await asyncio.sleep(1.0)
+        lag_ms = (loop.time() - expected) * 1000
+        if lag_ms > settings.LOOP_LAG_WARN_MS:
+            loop_lag_logger.warning("Event-Loop-Verzug: %.0f ms (PID %s)", lag_ms, os.getpid())
 
 # Laute Drittanbieter-Logger dämpfen: WeasyPrint subsettet bei JEDEM PDF-Druck Fonts
 # über fontTools, das dabei hunderte DEBUG/INFO-Zeilen erzeugt (Prod-Log 2026-07-08).
@@ -341,6 +355,9 @@ async def lifespan(app: FastAPI):
     # jeder Gunicorn-Worker DIBOS/LIS und sendet SMS/Teams-Nachversand doppelt.
     leader = LeaderLock(settings.LEADER_LOCK_PATH)
     background_tasks: list[asyncio.Task] = []
+    # Jede Worker-Loop ueberwachen, unabhaengig vom Leader-Lock.
+    if settings.LOOP_LAG_WARN_MS > 0:
+        background_tasks.append(asyncio.create_task(_loop_lag_monitor()))
     leader_watcher: asyncio.Task | None = None
     try:
         acquired = not settings.TESTING and leader.try_acquire()
@@ -388,8 +405,10 @@ async def lifespan(app: FastAPI):
         for t in [*background_tasks, *([leader_watcher] if leader_watcher else [])]:
             try:
                 await t
-            except asyncio.CancelledError, Exception:
-                pass
+            except asyncio.CancelledError:
+                continue
+            except Exception:
+                logger.warning("Hintergrund-Task beim Beenden fehlgeschlagen", exc_info=True)
         try:
             leader.release()
         except Exception:
