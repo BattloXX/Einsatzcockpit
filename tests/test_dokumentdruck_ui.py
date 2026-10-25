@@ -148,7 +148,8 @@ def test_stationsauftrag_status_und_doppelklick(viewer_seite, client, dokumente,
     # erneute Vorbereitung freigeben, statt einen alten Token wiederzuverwenden.
     from pypdf import PdfWriter
 
-    path = dokumente["dateien"][0]["path"]
+    current_url = page.evaluate("documentViewerSelection().document.url")
+    path = next(datei["path"] for datei in dokumente["dateien"] if datei["uuid"] in current_url)
     writer = PdfWriter(clone_from=io.BytesIO(path.read_bytes()))
     writer.add_metadata({"/Title": "Geänderte Unterlage"})
     stream = io.BytesIO()
