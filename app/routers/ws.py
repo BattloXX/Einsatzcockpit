@@ -37,6 +37,8 @@ router = APIRouter()
 # mitgefuehrt, damit dispatch_sms() nach SmsGatewayToken.priority sortieren kann statt
 # rein nach Verbindungszeit.
 _sms_gateways: dict[int, list[tuple[int, WebSocket]]] = defaultdict(list)
+SMS_GATEWAY_IDLE_PING_S = 30.0
+SMS_GATEWAY_DEAD_AFTER_S = 120.0
 # job_id → asyncio.Future für sms.result-Rückmeldung
 _sms_pending: dict[str, asyncio.Future] = {}
 # org_id -> zuletzt fuer eine Einzel-SMS ausgewaehltes Gateway.
@@ -426,33 +428,58 @@ async def sms_gateway_ws(websocket: WebSocket):
     Auth per Bearer-Token (Authorization-Header oder ?token=).
     Der Container verbindet sich ausgehend und bleibt persistent verbunden.
     """
-    token = _resolve_sms_gateway_token(websocket)
+    token = await asyncio.to_thread(_resolve_sms_gateway_token, websocket)
     if token is None:
         await websocket.close(code=WS_CLOSE_UNAUTHORIZED)
         return
 
     org_id = token.org_id
     token_id = token.id
-    _touch_sms_gateway_token(token_id)
+    await asyncio.to_thread(_touch_sms_gateway_token, token_id)
 
     await websocket.accept()
+    connected_at = last_received = time.monotonic()
+    # Registry vor dem ersten await aktualisieren: auch parallele Reconnects
+    # koennen damit nur einen Slot je Token belegen.
+    replaced = [ws for tid, ws in _sms_gateways[org_id] if tid == token_id]
+    for old in replaced:
+        _discard_gateway(org_id, old)
     _sms_gateways[org_id].append((token_id, websocket))
     logger.info(
         "SMS-Gateway verbunden (org_id=%s, token_id=%s, aktive=%d)",
         org_id, token_id, len(_sms_gateways[org_id]),
     )
-    _start_sms_nachversand(org_id)
-
-    # Teilt der App mit, ob SMS-Empfang für diese Org aktiv ist – nur dann fordert
-    # die App RECEIVE_SMS an und registriert ihren Empfangs-Receiver.
-    await websocket.send_text(json.dumps({
-        "type": "config", "receive_enabled": _sms_receive_enabled(org_id),
-    }))
-
     try:
+        for old in replaced:
+            try:
+                await old.close(code=1012, reason="replaced")
+            except Exception as exc:
+                logger.warning(
+                    "SMS-Gateway ersetzt, Schliessen fehlgeschlagen (org_id=%s, token_id=%s, %s): %s",
+                    org_id, token_id, type(exc).__name__, exc,
+                )
+        _start_sms_nachversand(org_id)
+
+        # RECEIVE_SMS nur anfordern, wenn der Empfang fuer diese Org aktiv ist.
+        await websocket.send_text(json.dumps({
+            "type": "config", "receive_enabled": await asyncio.to_thread(_sms_receive_enabled, org_id),
+        }))
         while True:
-            raw = await websocket.receive_text()
-            _heartbeat_sms_gateway_token(token_id)
+            try:
+                raw = await asyncio.wait_for(websocket.receive_text(), timeout=SMS_GATEWAY_IDLE_PING_S)
+            except TimeoutError:
+                if time.monotonic() - last_received > SMS_GATEWAY_DEAD_AFTER_S:
+                    await websocket.close(code=4408, reason="idle timeout")
+                    logger.info(
+                        "SMS-Gateway getrennt (org_id=%s, token_id=%s, code=4408, "
+                        "reason=idle timeout, duration_s=%.1f)",
+                        org_id, token_id, time.monotonic() - connected_at,
+                    )
+                    break
+                await websocket.send_text(json.dumps({"type": "ping"}))
+                continue
+            last_received = time.monotonic()
+            await asyncio.to_thread(_heartbeat_sms_gateway_token, token_id)
             try:
                 msg = json.loads(raw)
             except json.JSONDecodeError:
@@ -472,7 +499,7 @@ async def sms_gateway_ws(websocket: WebSocket):
                 from_number = msg.get("from", "")
                 text = msg.get("text", "")
                 if from_number:
-                    inbox_id = record_inbound_sms(org_id, token_id, from_number, text)
+                    inbox_id = await asyncio.to_thread(record_inbound_sms, org_id, token_id, from_number, text)
                     asyncio.create_task(process_inbound_sms(inbox_id))
                 ack_id = msg.get("id")
                 if ack_id:
@@ -480,8 +507,17 @@ async def sms_gateway_ws(websocket: WebSocket):
             else:
                 logger.debug("SMS-Gateway unbekannter Typ: %s", msg_type)
 
-    except WebSocketDisconnect:
-        logger.info("SMS-Gateway getrennt (org_id=%s)", org_id)
+    except WebSocketDisconnect as exc:
+        logger.info(
+            "SMS-Gateway getrennt (org_id=%s, token_id=%s, code=%s, reason=%s, duration_s=%.1f)",
+            org_id, token_id, exc.code, getattr(exc, "reason", ""), time.monotonic() - connected_at,
+        )
+    except Exception as exc:
+        logger.warning(
+            "SMS-Gateway Fehler (org_id=%s, token_id=%s, duration_s=%.1f, %s): %s",
+            org_id, token_id, time.monotonic() - connected_at, type(exc).__name__, exc,
+        )
+        raise
     finally:
         _discard_gateway(org_id, websocket)
 
@@ -1238,7 +1274,8 @@ async def _agent_job_status(websocket: WebSocket, org_id: int, gateway_id: int, 
     jid = p.get("job_id")
     ergebnis = None
     if isinstance(jid, int):
-        ergebnis = _agent_call(
+        ergebnis = await asyncio.to_thread(
+            _agent_call,
             gateway_id, print_agent_service.apply_agent_status, jid, str(p.get("lease_token") or ""),
             str(p.get("status") or ""), p.get("phase"), p.get("spool_ref"), p.get("error"),
             connection_id=connection_id, token_hash=token_hash,
@@ -1268,7 +1305,7 @@ async def print_agent_ws(websocket: WebSocket):
 
     from app.services import print_agent_presence, print_agent_service
 
-    gateway = _resolve_gateway(websocket)
+    gateway = await asyncio.to_thread(_resolve_gateway, websocket)
     if gateway is None or not gateway.is_windows_agent:
         logger.warning("agent_authentication_failed at=%s", datetime.now(UTC).isoformat())
         await websocket.close(code=WS_CLOSE_UNAUTHORIZED)
@@ -1278,14 +1315,19 @@ async def print_agent_ws(websocket: WebSocket):
 
     connection_id = uuid4().hex
     token_hash = gateway.device_token_hash
-    with SessionLocal() as db:
-        set_tenant_context(db, None)
-        if not print_agent_presence.begin(db, org_id, gateway_id, token_hash, connection_id):
-            await websocket.close(code=WS_CLOSE_UNAUTHORIZED)
-            return
+    def begin_connection():
+        with SessionLocal() as db:
+            set_tenant_context(db, None)
+            return print_agent_presence.begin(db, org_id, gateway_id, token_hash, connection_id)
 
-    def agent_call(fn, *args):
-        return _agent_call(gateway_id, fn, *args, connection_id=connection_id, token_hash=token_hash)
+    if not await asyncio.to_thread(begin_connection):
+        await websocket.close(code=WS_CLOSE_UNAUTHORIZED)
+        return
+
+    async def agent_call(fn, *args):
+        return await asyncio.to_thread(
+            _agent_call, gateway_id, fn, *args, connection_id=connection_id, token_hash=token_hash,
+        )
 
     def connection_state():
         with SessionLocal() as db:
@@ -1297,9 +1339,12 @@ async def print_agent_ws(websocket: WebSocket):
 
     try:
         await websocket.accept()
-    except Exception:
-        _mark_agent_offline(org_id, gateway_id, connection_id)
+    except Exception as exc:
+        logger.warning("agent_accept_failed org_id=%s gateway_id=%s exception=%s: %s",
+                       org_id, gateway_id, type(exc).__name__, exc)
+        await asyncio.to_thread(_mark_agent_offline, org_id, gateway_id, connection_id)
         raise
+    connected_at = time.monotonic()
     _print_agents[org_id].append((gateway_id, websocket))
     _print_agent_sessions[websocket] = (org_id, gateway_id, connection_id, token_hash)
     logger.info("agent_authentication_succeeded org_id=%s gateway_id=%s connection_id=%s at=%s",
@@ -1312,7 +1357,7 @@ async def print_agent_ws(websocket: WebSocket):
         await websocket.send_text(json.dumps(nachricht, ensure_ascii=False, default=str))
 
     async def config_senden() -> None:
-        await senden("config_sync", agent_call(print_agent_service.agent_config_sync) or {})
+        await senden("config_sync", await agent_call(print_agent_service.agent_config_sync) or {})
 
     try:
         await broadcast_org(org_id, {"type": "gateway_status", "gateway_id": gateway_id, "online": True})
@@ -1321,14 +1366,14 @@ async def print_agent_ws(websocket: WebSocket):
             try:
                 raw = await asyncio.wait_for(websocket.receive_text(), timeout=30)
             except TimeoutError:
-                reason = connection_state()
+                reason = await asyncio.to_thread(connection_state)
                 if reason == "connected":
                     continue
                 logger.warning("agent_%s org_id=%s gateway_id=%s connection_id=%s at=%s",
                                reason, org_id, gateway_id, connection_id, datetime.now(UTC).isoformat())
                 await websocket.close(code=4408 if reason == "heartbeat_overdue" else 4401)
                 break
-            reason = connection_state()
+            reason = await asyncio.to_thread(connection_state)
             if reason != "connected":
                 logger.warning("agent_%s org_id=%s gateway_id=%s connection_id=%s at=%s",
                                reason, org_id, gateway_id, connection_id, datetime.now(UTC).isoformat())
@@ -1349,42 +1394,42 @@ async def print_agent_ws(websocket: WebSocket):
             elif mtype in ("pong", "ack"):
                 pass
             elif mtype == "heartbeat":
-                agent_call(touch, True)
+                await agent_call(touch, True)
             elif mtype == "hello":
-                agent_call(touch)
+                await agent_call(touch)
                 logger.info("agent_hello org_id=%s gateway_id=%s connection_id=%s at=%s",
                             org_id, gateway_id, connection_id, datetime.now(UTC).isoformat())
-                abandon = agent_call(_agent_hello, p) or []
+                abandon = await agent_call(_agent_hello, p) or []
                 await config_senden()
                 for eintrag in abandon:
                     await senden("abandon", eintrag)
             elif mtype == "inventory":
-                agent_call(print_agent_service.inventar_speichern, p)
+                await agent_call(print_agent_service.inventar_speichern, p)
                 await broadcast_org(org_id, {"type": "printer_report", "gateway_id": gateway_id})
             elif mtype == "readiness":
                 routen = [eintrag for eintrag in (p.get("routes") or []) if isinstance(eintrag, dict)]
-                agent_call(print_agent_service.route_readiness_aktualisieren, routen)
+                await agent_call(print_agent_service.route_readiness_aktualisieren, routen)
                 await broadcast_org(org_id, {"type": "printer_report", "gateway_id": gateway_id})
             elif mtype == "lease_request":
                 try:
                     anzahl = max(0, min(int(p.get("max") or 1), 10))
                 except (TypeError, ValueError):
                     anzahl = 1
-                grants = agent_call(print_agent_service.lease_jobs, anzahl) or []
+                grants = await agent_call(print_agent_service.lease_jobs, anzahl) or []
                 await senden("lease_grant", {"jobs": grants}, rid)
                 for grant in grants:
                     await broadcast_org(org_id, {"type": "print_job_status", "job_id": grant["job_id"],
                                                  "status": "sent"})
             elif mtype == "lease_renew":
                 leases = [eintrag for eintrag in (p.get("leases") or []) if isinstance(eintrag, dict)]
-                ungueltig = agent_call(print_agent_service.renew, leases) or []
+                ungueltig = await agent_call(print_agent_service.renew, leases) or []
                 for job_id in ungueltig:
                     await senden("abandon", {"job_id": job_id, "reason": "invalid_lease"})
             elif mtype == "print_intent":
                 jid = p.get("job_id")
                 ok, grund = False, "unknown"
                 if isinstance(jid, int):
-                    antwort = agent_call(print_agent_service.print_intent, jid,
+                    antwort = await agent_call(print_agent_service.print_intent, jid,
                                           str(p.get("lease_token") or ""))
                     if antwort is not None:
                         ok, grund = antwort
@@ -1398,9 +1443,15 @@ async def print_agent_ws(websocket: WebSocket):
                 log_fn("Windows-Druckagent %s: %s", gateway_id, str(p.get("message", ""))[:1000])
             else:
                 logger.debug("Windows-Druckagent unbekannter Typ: %s", mtype)
-    except WebSocketDisconnect:
-        logger.info("agent_disconnected org_id=%s gateway_id=%s connection_id=%s at=%s",
-                    org_id, gateway_id, connection_id, datetime.now(UTC).isoformat())
+    except WebSocketDisconnect as exc:
+        logger.info("agent_disconnected org_id=%s gateway_id=%s connection_id=%s at=%s "
+                    "code=%s reason=%s duration_s=%.1f",
+                    org_id, gateway_id, connection_id, datetime.now(UTC).isoformat(),
+                    exc.code, getattr(exc, "reason", ""), time.monotonic() - connected_at)
+    except Exception as exc:
+        logger.warning("agent_error org_id=%s gateway_id=%s connection_id=%s duration_s=%.1f exception=%s: %s",
+                       org_id, gateway_id, connection_id, time.monotonic() - connected_at, type(exc).__name__, exc)
+        raise
     finally:
         _discard_print_agent(org_id, websocket)
         if _mark_agent_offline(org_id, gateway_id, connection_id):

@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     # Index-/N+1-Optimierungen. 0 = deaktiviert.
     SLOW_QUERY_LOG_MS: int = 300
 
+    # Event-Loop-Verzug oberhalb dieser Schwelle (ms) protokollieren. 0 = aus.
+    LOOP_LAG_WARN_MS: int = 1000
+
     # Redis Pub/Sub-Bus für worker-übergreifende WebSocket-Zustellung. Leer = aus:
     # dann läuft alles In-Process (korrekt bei -w 1). Bei -w 2+ (siehe
     # deploy/einsatzleiter.service) MUSS dies gesetzt sein, sonst erreichen Broadcasts

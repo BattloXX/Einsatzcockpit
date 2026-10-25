@@ -16,6 +16,26 @@ redundant. Das Modell ist aber allgemein gehalten:
 
 Das Linux-Gateway (`/ws/gateway`, Push-Zustellung) bleibt unverändert.
 
+## Keepalive und Reconnect-Diagnose
+
+Die WebSocket-Handler fuer SMS-Gateway und Windows-Druckagent fuehren synchrone
+DB-Aufrufe mit `asyncio.to_thread()` aus, damit langsame Queries und Row-Locks die
+Event-Loop und deren Keepalive nicht blockieren. Docker und systemd verwenden
+`app.uvicorn_worker.TolerantUvicornWorker`: WebSocket-Protokoll-Ping alle 20 Sekunden,
+Pong-Timeout 60 Sekunden. Die Presence-/Lease-Fristen des Druckagents gelten weiterhin.
+
+Beim SMS-Gateway ersetzt eine neue Verbindung alle lokalen Sockets derselben
+Token-ID (Close-Code 1012, Grund `replaced`). Nach 30 Sekunden ohne Nachricht sendet
+der Server einen JSON-`ping`; jede empfangene Nachricht setzt die Frist zurueck.
+Nach mehr als 120 Sekunden ohne Nachricht wird der Socket mit 4408 geschlossen und
+aus der Registry entfernt. Beide Handler protokollieren bei Disconnect den Close-Code,
+Grund und die Verbindungsdauer; sonstige Handler-Fehler erscheinen mit Exception-Typ.
+
+Jeder Worker misst sekündlich den Event-Loop-Verzug. Der Logger
+`einsatzleiter.loop_lag` meldet nur Verzoegerungen oberhalb von `LOOP_LAG_WARN_MS`
+(Default 1000 ms, `0` deaktiviert den Monitor). Solche Warnungen helfen, gleichzeitige
+Reconnects mehrerer Gateways mit einer blockierten Event-Loop abzugleichen.
+
 ## Begriffe
 
 | Begriff | Umsetzung |
