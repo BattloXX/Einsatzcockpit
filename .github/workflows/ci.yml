@@ -128,6 +128,7 @@ jobs:
           tests/test_einheit_rueckmeldungen_ui.py tests/test_einheit_verlauf_ui.py tests/test_einheit_karte_ui.py tests/test_einheit_bedienung_ui.py
           tests/test_einheit_offline_ui.py tests/test_einheit_sync_ui.py tests/test_einheit_gesamtabnahme_ui.py
       - name: Board-Stack konfigurieren und starten
+        id: board-stack
         run: |
           cat > .env.board-e2e <<'EOF'
           DATABASE_URL=mysql+pymysql://einsatzleiter:testpass@db:3306/einsatzleiter
@@ -157,5 +158,5 @@ jobs:
           BOOTSTRAP_ADMIN_USER: e2e-admin
           BOOTSTRAP_ADMIN_PASSWORD: e2e-board-password
         run: pytest e2e/test_board_kein_reload.py::test_board_bleibt_bei_updates_und_reconnect_montiert -q
-      - if: always()
+      - if: always() && steps.board-stack.outcome != 'skipped'
         run: docker compose -p ec-board-e2e --env-file .env.board-e2e -f e2e/docker-compose.board.yml down -v
