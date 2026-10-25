@@ -882,6 +882,7 @@ function registriere() {
         if (input) input.value = "";
         this.statusDialogAuftrag = null;
         this.flyout = null;
+        this.waehleBereich("einsaetze");
       } catch (error) {
         console.warn("Erkundungsergebnis konnte nicht gespeichert werden", error);
         this.hinweisBanner = "Erkundungsergebnis konnte nicht gespeichert werden. Eingaben bleiben erhalten.";

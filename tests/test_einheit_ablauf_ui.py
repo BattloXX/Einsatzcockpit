@@ -31,6 +31,7 @@ def _oeffnen(page, client, ids):
     _csrf_im_browser(page, client)
     page.goto("https://ecp.test/einheit")
     page.locator(f'[data-einheit-auftrag][data-dispatch-id="{ids["d1"]}"] button').click()
+    page.wait_for_url(f"https://ecp.test/einheit/auftrag/{ids['d1']}")
     return page.locator("[data-einheit-hauptaktion]")
 
 
@@ -70,7 +71,7 @@ def test_browser_ergebnisdialog_oeffnet_auch_bei_hintergrundabgleich_waehrend_de
 
 @pytest.mark.parametrize("art", ["abarbeitung", "erkundung"])
 @pytest.mark.parametrize("breite,hoehe", [(360, 800), (1024, 768)])
-def test_browser_vollstaendige_gefuehrte_folge_bleibt_im_auftrag(
+def test_browser_gefuehrte_folge_mit_rueckkehr_nach_erkundung(
     client, setup_db, seite, art, breite, hoehe, tmp_path,
 ):
     from playwright.sync_api import expect
@@ -119,13 +120,19 @@ def test_browser_vollstaendige_gefuehrte_folge_bleibt_im_auftrag(
     )
     expect(abschluss).to_be_enabled()
     abschluss.evaluate("button => { button.click(); button.click(); }")
-    expect(haupt).to_have_text("Erkundet" if art == "erkundung" else "Fertig gemeldet")
-    expect(haupt).to_be_disabled()
-    assert page.url == pfad
+    expect(dialog).not_to_be_visible()
+    if art == "erkundung":
+        page.wait_for_url("https://ecp.test/einheit")
+        expect(page.locator(".einheit-auftrag")).not_to_be_visible()
+        expect(page.get_by_role("tab", name="Einsätze", exact=True)).to_have_attribute("aria-selected", "true")
+        page.wait_for_function("Alpine.$data(document.querySelector('.einheit-page')).outboxListe.length === 0")
+    else:
+        expect(haupt).to_have_text("Fertig gemeldet")
+        expect(haupt).to_be_disabled()
+        assert page.url == pfad
     status_url = f"/einheit/api/auftrag/{ids['d1']}/status"
     assert state["posts"].count(status_url) == (4 if art == "erkundung" else 5)
     if art == "erkundung":
-        page.wait_for_function("Alpine.$data(document.querySelector('.einheit-page')).outboxListe.length === 0")
         assert state["posts"].count(f"/einheit/api/auftrag/{ids['d1']}/meldung") == 1
         assert state["posts"].count(f"/einheit/api/auftrag/{ids['d1']}/foto") == 1
     assert all(url.startswith(f"/einheit/api/auftrag/{ids['d1']}/") for url in state["posts"])
@@ -211,6 +218,7 @@ def test_browser_ergebnis_speicherfehler_bewahrt_eingaben_und_wiederholung_speic
     expect(lage).to_have_value("Ergebnis bleibt erhalten")
     assert dialog.locator("#erkundung-fotos").evaluate("input => input.files.length") == 1
     assert page.evaluate("Alpine.$data(document.querySelector('.einheit-page')).outboxListe.length") == 0
+    assert page.url.endswith(f"/einheit/auftrag/{ids['d1']}")
     assert not state["posts"]
     state["schreiben_offline"] = True
     page.evaluate("""() => {
@@ -218,6 +226,8 @@ def test_browser_ergebnis_speicherfehler_bewahrt_eingaben_und_wiederholung_speic
     }""")
     speichern.evaluate("button => { button.click(); button.click(); }")
     expect(dialog).not_to_be_visible()
+    page.wait_for_url("https://ecp.test/einheit")
+    expect(page.locator(".einheit-auftrag")).not_to_be_visible()
     paket = page.evaluate("Alpine.$data(document.querySelector('.einheit-page')).outboxListe")
     assert [item["typ"] for item in paket] == ["meldung", "foto", "status"]
     assert len({item["client_uuid"] for item in paket}) == 3

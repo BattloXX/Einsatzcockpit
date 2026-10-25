@@ -90,6 +90,8 @@ def test_ergebnis_pflicht_und_offline_abschluss_mit_fotos_ueberlebt_neuladen(cli
     with _db() as db:
         assert db.get(EinheitSiteDispatch, ids["d1"]).einheit_status == "vor_ort"
     page.reload()
+    page.wait_for_url("https://ecp.test/einheit")
+    page.locator(f'[data-einheit-auftrag][data-dispatch-id="{ids["d1"]}"] button').click()
     expect(haupt).to_have_text("Übermittlung ausstehend")
     state["schreiben_offline"] = False
     page.get_by_role("tab", name="Meldungen", exact=True).click()

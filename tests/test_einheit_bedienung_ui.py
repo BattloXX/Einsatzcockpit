@@ -66,9 +66,9 @@ def test_standardansichten_haben_eine_hauptaktion_grosse_touchflaechen_und_lesba
             return r.getClientRects().length === 1; })""")  # Jeder Bereichsname bleibt in einer Zeile lesbar.
     _eine_hauptaktion(page)
     _touchpruefung(page)
-    expect(page.get_by_role("link", name="Gesamtansicht", exact=True)).not_to_be_visible()
+    expect(page.get_by_role("link", name="Gesamtansicht", exact=True)).to_have_count(0)
     page.get_by_text("Weitere Funktionen", exact=True).click()
-    expect(page.get_by_role("link", name="Gesamtansicht", exact=True)).to_be_visible()
+    expect(page.get_by_role("link", name="Gesamtansicht", exact=True)).to_have_count(0)
     _touchpruefung(page)
     page.get_by_text("Weitere Funktionen", exact=True).click()
     page.locator(f'[data-einheit-auftrag][data-dispatch-id="{ids["d1"]}"] button').click()
