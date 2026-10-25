@@ -130,6 +130,7 @@ jobs:
           tests/test_einsatzwissen_ui.py
           tests/test_dokumentviewer_ui.py
           tests/test_dokumentdruck_ui.py
+          tests/test_einsatz_dokumente_ui.py
       - name: Board-Stack konfigurieren und starten
         id: board-stack
         run: |

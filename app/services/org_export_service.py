@@ -75,11 +75,13 @@ AREA_ROOTS: dict[str, set[str]] = {
         "atemschutz_pruefung", "atemschutz_pruef_benachrichtigung",
         "lagefuehrung_feature", "lagefuehrung_event", "lagefuehrung_berechtigung",
         "lagefuehrung_snapshot",
+        "einsatz_dokument", "einsatz_dokument_fassung", "einsatz_dokument_empfaenger",
     },
     "gsl": {
         "major_incident", "incident_site", "gsl_staff_role", "gsl_staff_assignment",
         "lage_dokument", "cross_site_marker", "cross_marker_media", "site_media",
         "lage_journal_media", "vehicle_position",
+        "einsatz_dokument", "einsatz_dokument_fassung", "einsatz_dokument_empfaenger",
     },
     "objekte": {
         "objekt", "objekt_auswahl", "objekt_bma", "objekt_change", "objekt_dokument",
@@ -236,6 +238,21 @@ def collect_ids(db: Session, org_id: int, areas: set[str] | None = None) -> dict
             if ids - vorher:
                 collected[table.name] = vorher | ids
                 geaendert = True
+    if areas is not None:
+        # Eine Fassung kann zugleich in normalen Einsätzen und GSL liegen.
+        # Partielle Backups dürfen nur Zuordnungen zu mitgesicherten Zielen enthalten.
+        dokument = md.tables["einsatz_dokument"]
+        docs = set(db.execute(select(dokument.c.id).where(
+            dokument.c.org_id == org_id,
+            or_(dokument.c.incident_id.in_(collected.get("incident", set())),
+                dokument.c.lage_id.in_(collected.get("major_incident", set()))),
+        )).scalars())
+        collected["einsatz_dokument"] = docs
+        collected["einsatz_dokument_fassung"] = set(db.execute(
+            select(dokument.c.fassung_id).where(dokument.c.id.in_(docs))).scalars())
+        empfaenger = md.tables["einsatz_dokument_empfaenger"]
+        collected["einsatz_dokument_empfaenger"] = set(db.execute(
+            select(empfaenger.c.id).where(empfaenger.c.dokument_id.in_(docs))).scalars())
     return collected
 
 

@@ -76,6 +76,7 @@ from app.routers import (
     ui_dokumentdruck,
     ui_druck,
     ui_einheit,
+    ui_einsatz_dokumente,
     ui_einsatz_import,
     ui_einsatz_kontakte,
     ui_einsatzinfo_mail,
@@ -961,6 +962,7 @@ app.include_router(ui_foerderstrecke.public_router)
 app.include_router(ui_gateway.router)
 app.include_router(ui_druck.router)
 app.include_router(ui_dokumentdruck.router)
+app.include_router(ui_einsatz_dokumente.router)
 app.include_router(ui_infoscreen_alarm.router)
 app.include_router(ui_infoscreen_stats.router)
 app.include_router(ui_verleih.router)

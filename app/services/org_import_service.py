@@ -7,8 +7,8 @@ umgeschrieben; Verweise auf globale/geteilte Tabellen (role, qualification, ...)
 unveraendert (deren IDs sind instanzstabil).
 
 Ablauf:
-1. Einzel-Pass in FK-topologischer Reihenfolge (Base.metadata.sorted_tables): Eltern vor
-   Kind, sodass die meisten FKs sofort aufgeloest werden koennen.
+1. Einzel-Pass in Reihenfolge der verpflichtenden FKs: Eltern vor Kind.
+   Nullable Rückverweise werden beim Sortieren ausgelassen.
 2. Vorwaerts-/zyklische Verweise (der bekannte GSL-Zyklus) werden zunaechst auf NULL
    gesetzt und nach dem Pass per Fixup-UPDATE korrekt verknuepft (diese Spalten sind
    nullable).
@@ -132,6 +132,23 @@ def _delete_org_data(db: Session, org_id: int) -> None:
                 db.execute(table.delete().where(sa.or_(*conds)))
 
 
+def _import_reihenfolge(tabellen: list) -> list:
+    """GSL-Zyklen nur an nullable Rückverweisen auftrennen, nie an Pflicht-FKs."""
+    offen = {t.name: t for t in tabellen}
+    result = []
+    while offen:
+        bereit = [t for t in offen.values() if not any(
+            not fk.parent.nullable and fk.parent.name != _scope_col(t)
+            and fk.column.table.name in offen and fk.column.table.name != t.name
+            for fk in t.foreign_keys)]
+        if not bereit:
+            raise ValueError("Archiv enthält einen nicht auflösbaren Zyklus verpflichtender Verweise.")
+        for table in bereit:
+            result.append(table)
+            del offen[table.name]
+    return result
+
+
 def import_org(db: Session, zip_path: Path, ziel_org_id: int, replace: bool = False) -> dict:
     """Importiert das Archiv in ziel_org_id (mit ID-Remapping). Gibt eine Zusammenfassung.
 
@@ -152,8 +169,8 @@ def import_org(db: Session, zip_path: Path, ziel_org_id: int, replace: bool = Fa
                 daten[tname] = [json.loads(x) for x in
                                 zf.read(name).decode("utf-8").splitlines() if x]
 
-        tabellen = [t for t in md.sorted_tables
-                    if t.name in daten and t.name not in EXCLUDE_TABLES]
+        tabellen = _import_reihenfolge([t for t in md.tables.values()
+                                      if t.name in daten and t.name not in EXCLUDE_TABLES])
         idmap: dict[str, dict] = {t.name: {} for t in tabellen}
         fixups: list[tuple] = []
         neu_rows: dict[str, list[tuple]] = {t.name: [] for t in tabellen}
@@ -175,7 +192,7 @@ def import_org(db: Session, zip_path: Path, ziel_org_id: int, replace: bool = Fa
                     old_pk = row.get(pkname) if pkname else None
                     values: dict = {}
                     for column in table.columns:
-                        if column.name == pkname:
+                        if column.name == pkname and pkname != scope:
                             continue
                         values[column.name] = _py_value(column, row.get(column.name))
                     if scope and scope in values:

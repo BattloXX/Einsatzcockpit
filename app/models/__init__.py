@@ -12,6 +12,7 @@ from app.models.dienst_monitor import (  # noqa: F401 -- registriert ORM-Modelle
     DienstMonitorToken,
     DienstStatus,
 )
+from app.models.einsatz_dokument import EinsatzDokument, EinsatzDokumentEmpfaenger, EinsatzDokumentFassung  # noqa: F401
 from app.models.einsatzinfo_mail import (
     MailEinsatzinfoLog,
     MailEinsatzinfoLogRecipient,

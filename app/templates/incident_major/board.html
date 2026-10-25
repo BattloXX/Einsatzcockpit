@@ -219,6 +219,10 @@
 {% endblock %}
 
 {% block lage_content %}
+<details style="margin:.5rem 1rem;padding:.5rem;border:1px solid var(--border);border-radius:8px;">
+  <summary style="min-height:44px;cursor:pointer;">Dokumente</summary>
+  <div hx-get="/einsatz-dokumente/liste/lage/{{ lage.id }}" hx-trigger="load, dokumente-aktualisiert from:body" hx-swap="innerHTML">Dokumente werden geladen.</div>
+</details>
 <div class="lage-wrap">
   {# ── Wetter-Panel ── #}
   {% if weather_enabled %}

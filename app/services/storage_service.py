@@ -216,6 +216,8 @@ def reconcile_storage(db: Session, org_id: int) -> int:
             "  SELECT COALESCE(groesse_bytes, 0) FROM katplan_anhang WHERE org_id = :oid"
             "  UNION ALL"
             "  SELECT COALESCE(size_bytes, 0) FROM probe_media WHERE org_id = :oid"
+            "  UNION ALL"
+            "  SELECT LENGTH(inhalt) FROM einsatz_dokument_fassung WHERE org_id = :oid"
             ") AS t"
         ),
         {"oid": org_id},

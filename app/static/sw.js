@@ -84,7 +84,8 @@ self.addEventListener('message', e => {
     await Promise.all(keys.filter(request => {
       const path = new URL(request.url).pathname;
       return /^\/einheit(?:\/auftrag\/\d+)?$/.test(path)
-        || path.startsWith('/einheit/api/') || path.startsWith('/einheit/medien/');
+        || path.startsWith('/einheit/api/') || path.startsWith('/einheit/medien/')
+        || path.startsWith('/einsatz-dokumente/');
     }).map(request => cache.delete(request)));
   }));
 });
@@ -102,6 +103,8 @@ self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   // Never intercept WebSocket or API calls
   if (url.pathname.startsWith('/ws/') || url.pathname.startsWith('/api/')) return;
+  // Aktuelle Freigabe bei JEDEM Abruf; keine Offlinekopie von Einsatzunterlagen.
+  if (url.pathname.startsWith('/einsatz-dokumente/') || url.pathname.startsWith('/einheit/api/dokumente')) return;
 
   // Cross-origin requests (inkl. Kartenkacheln) — Browser direkt zugreifen lassen
   if (url.origin !== location.origin) return;

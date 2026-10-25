@@ -1,0 +1,52 @@
+<section class="ed-liste" data-dv-group>
+  <h2>Dokumente</h2>
+  <p>Die übernommene Fassung bleibt erhalten. Eine Auftragszuordnung allein gibt sie nicht für Einheiten frei.</p>
+  {% for dokument in dokumente %}
+  {% set quelle = json_laden(dokument.quelle_json) %}
+  {% set url = '/einsatz-dokumente/datei/' ~ dokument.id %}
+  <article style="border:1px solid var(--border);border-radius:8px;padding:1rem;margin:.75rem 0;overflow-wrap:anywhere;">
+    <h3>{{ dokument.titel }}{% if dokument.vertraulich %} · vertraulich{% endif %}</h3>
+    <dl class="ed-meta">
+      <div><dt>Quelle</dt><dd>{{ quelle.quelle }}</dd></div>
+      <div><dt>Dokumenttyp</dt><dd>{{ quelle.typ }}</dd></div>
+      <div><dt>Übernommen</dt><dd>{{ dokument.uebernommen_am|local_datetime }}</dd></div>
+      <div><dt>Übernommene Seiten</dt><dd>{{ dokument.seiten }} ({{ dokument.seitenzahl }} Seiten)</dd></div>
+      <div><dt>Version</dt><dd>Freigabe {{ quelle.freigabe }} · Quellversion {{ quelle.quellversion }} · Einsatzfassung #{{ dokument.fassung_id }}</dd></div>
+      <div><dt>Zugehöriger Auftrag</dt><dd>{{ auftrag_titel.get(dokument.task_id or dokument.site_id, 'Keiner') }}</dd></div>
+      <div><dt>Zugeordnete Einheiten</dt><dd>{% for e in dokument.empfaenger %}{{ einheit_titel.get(e.einheit_id, 'Entfernte Einheit') }}{% if not loop.last %}, {% endif %}{% else %}Keine{% endfor %}
+        {% if dokument.auftrag_freigegeben %} · Für aktive Einheiten des Auftrags freigegeben{% endif %}</dd></div>
+    </dl>
+    <div style="display:flex;flex-wrap:wrap;gap:.5rem;margin:.5rem 0;">
+      <a class="btn" href="{{ url }}" data-dv-document data-dv-title="{{ dokument.titel }}" data-dv-selection-url="{{ url }}">Anzeigen</a>
+      <button type="button" class="btn" data-ed-print="{{ url }}" data-ed-title="{{ dokument.titel }}">Drucken</button>
+      <a class="btn btn--ghost" href="/einsatz-dokumente/quelle/{{ dokument.id }}" target="_blank" rel="noopener">Verknüpfung öffnen</a>
+    </div>
+    {% if can_edit_documents %}
+    <details><summary style="min-height:44px;cursor:pointer;">Auftrag und Freigaben bearbeiten</summary>
+      <form method="post" action="/einsatz-dokumente/{{ dokument.id }}/zuordnung"
+        hx-post="/einsatz-dokumente/{{ dokument.id }}/zuordnung" hx-target="closest .ed-liste" hx-swap="outerHTML">
+        <input type="hidden" name="_csrf" value="{{ request.cookies.get('ec_csrf', '') }}">
+        <input type="hidden" name="revision" value="{{ dokument.revision }}">
+        <label>Auftrag <select class="form-control" name="auftrag_id"><option value="">Keiner</option>
+          {% for auftrag in auftraege %}<option value="{{ auftrag.id }}" {% if auftrag.id == (dokument.task_id or dokument.site_id) %}selected{% endif %}>{{ auftrag.titel }}</option>{% endfor %}</select></label>
+        {% if art == 'lage' %}
+        <fieldset><legend>Ausdrückliche Freigaben</legend>
+          {% for einheit in einheiten %}<label style="display:flex;gap:.5rem;align-items:center;min-height:44px;">
+            <input type="checkbox" name="einheit_ids" value="{{ einheit.id }}" {% if einheit.id in dokument.empfaenger|map(attribute='einheit_id')|list %}checked{% endif %}>{{ einheit.titel }}</label>{% endfor %}
+          <label style="display:flex;gap:.5rem;align-items:center;min-height:44px;"><input type="checkbox" name="auftrag_freigeben" value="true" {% if dokument.auftrag_freigegeben %}checked{% endif %}>Für alle aktuell und künftig aktiven Einheiten dieses Auftrags freigeben</label>
+        </fieldset>
+        {% if dokument.vertraulich %}<label><input type="checkbox" name="vertraulich_bestaetigt" value="true">Ich bestätige die Weitergabe dieser vertraulichen Unterlage an die ausgewählten Empfänger.</label>{% endif %}
+        {% endif %}
+        <button class="btn btn--primary" type="submit">Zuordnung speichern</button>
+      </form>
+    </details>
+    <form method="post" action="/einsatz-dokumente/{{ dokument.id }}/entfernen" style="margin-top:.5rem;"
+      hx-post="/einsatz-dokumente/{{ dokument.id }}/entfernen" hx-target="closest .ed-liste" hx-swap="outerHTML"
+      hx-confirm="Dokument aus dem Einsatz entfernen und alle Freigaben widerrufen? Die Übernahme bleibt protokolliert.">
+      <input type="hidden" name="_csrf" value="{{ request.cookies.get('ec_csrf', '') }}">
+      <input type="hidden" name="revision" value="{{ dokument.revision }}"><button class="btn btn--ghost" type="submit">Entfernen</button>
+    </form>
+    {% endif %}
+  </article>
+  {% else %}<p>Noch keine Dokumente übernommen.</p>{% endfor %}
+</section>

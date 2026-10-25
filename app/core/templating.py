@@ -17,7 +17,11 @@ from fastapi.templating import Jinja2Templates
 from jinja2 import pass_context
 
 from app.core.icons import cross_marker_icon, merkmal_icon, modul_icon, render_icon, status_dot
-from app.core.permissions import can_view_katplan_request, can_view_kontakt_directory_request
+from app.core.permissions import (
+    can_transfer_documents_request,
+    can_view_katplan_request,
+    can_view_kontakt_directory_request,
+)
 from app.core.telefon import telefon_kompakt
 from app.core.timezones import (
     format_local_datetime,
@@ -153,6 +157,7 @@ def _kann_objekt_verknuepfen(request) -> bool:
 
 templates.env.globals["kann_objekt_verknuepfen"] = _kann_objekt_verknuepfen
 templates.env.globals["can_view_kontakt_directory"] = can_view_kontakt_directory_request
+templates.env.globals["can_transfer_documents"] = can_transfer_documents_request
 templates.env.globals["einheit_status_label"] = einheit_status_label
 templates.env.globals["meldung_hervorhebung"] = meldung_hervorhebung
 templates.env.filters["ms_to_kmh"] = ms_to_kmh

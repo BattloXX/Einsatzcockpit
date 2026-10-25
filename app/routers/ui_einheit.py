@@ -344,6 +344,33 @@ def einheit_kontext(request: Request, db: Session = Depends(get_db)) -> EinheitK
     return ctx
 
 
+@router.get("/api/dokumente", response_class=HTMLResponse)
+def einheit_dokumente(request: Request, ctx: EinheitKontext = Depends(einheit_kontext),
+                     db: Session = Depends(get_db)):
+    # Dieselben geprüften Kontextparameter für Viewer-/Druckabrufe beibehalten.
+    from urllib.parse import urlencode
+
+    from app.services.einsatz_dokument_service import fuer_einheit
+    parameter = {k: request.query_params[k] for k in ("sim", "einheit") if k in request.query_params}
+    return templates.TemplateResponse(request, "einsatz_dokumente/_einheit.html", {
+        "dokumente": fuer_einheit(db, ctx).order_by("id").all(),
+        "kontext_query": "?" + urlencode(parameter) if parameter else "",
+    }, headers={"Cache-Control": "no-store"})
+
+
+@router.get("/api/dokumente/{dokument_id}/pdf")
+def einheit_dokument_pdf(dokument_id: int, request: Request, ctx: EinheitKontext = Depends(einheit_kontext),
+                        db: Session = Depends(get_db)):
+    from app.models.einsatz_dokument import EinsatzDokument
+    from app.services.dokumentviewer_service import viewer_auswahl
+    from app.services.einsatz_dokument_service import fuer_einheit, pdf_daten
+
+    dokument = fuer_einheit(db, ctx).filter(EinsatzDokument.id == dokument_id).first()
+    if dokument is None:
+        raise HTTPException(404, "Dokument nicht freigegeben.")
+    return viewer_auswahl(pdf_daten(db, dokument), request.query_params)
+
+
 def _schreibbar(ctx: EinheitKontext) -> None:
     if ctx.simulation and not ctx.lage.is_exercise:
         _fehler(403, "simulation_nur_lesend")

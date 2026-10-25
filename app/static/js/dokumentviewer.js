@@ -234,7 +234,8 @@
         this.selected = parsePages(this.state.selection === null ? String(this.state.page) : this.state.selection, this.count);
         output.textContent = `Ausgewählt: ${compressPages(this.selected)} (${this.selected.length} ${this.selected.length === 1 ? 'Seite' : 'Seiten'})`;
         this.$('[data-dv-action="print"]').disabled = false;
-        this.$('[data-dv-action="add"]').disabled = typeof this.options.onAdd !== 'function';
+        this.$('[data-dv-action="add"]').disabled = typeof this.options.onAdd !== 'function' &&
+          !(root.openDocumentTransfer && root.documentTransferSupported?.(this.item.url));
         this.selectionUrl = null;
         if (this.item.kind !== 'image' && this.item.selectionUrl) {
           const url = localUrl(this.item.selectionUrl);
@@ -315,6 +316,10 @@
       if (action === 'print') return this.print();
       if (action === 'add') {
         if (this.selected.length && typeof this.options.onAdd === 'function') this.options.onAdd(this.selection());
+        else if (this.selected.length && root.openDocumentTransfer && root.documentTransferSupported?.(this.item.url)) {
+          root.openDocumentTransfer({items: this.items, index: this.index,
+            pages: compressPages(this.selected), page: this.state.page});
+        }
         return;
       }
       if (action === 'zoom-in') this.state.zoom = Math.min(5, this.state.zoom + .25);

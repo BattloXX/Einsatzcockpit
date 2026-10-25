@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Einsatz #{{ incident.lis_operation_number or incident.nummer or incident.id }} – Archiv{% endblock %}
 {% block content %}
+<p style="margin:1rem;"><a class="btn" href="/einsatz-dokumente/einsatz/{{ incident.id }}">Dokumente des Einsatzes öffnen</a></p>
 <div class="lage-ctx-bar" style="position:static;">
   {% if incident.is_exercise %}
   <div class="exercise-topbar">&#x26A0; ÜBUNG / SIMULATION &#x26A0;</div>
