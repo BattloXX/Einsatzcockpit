@@ -1427,6 +1427,12 @@ async def print_agent_ws(websocket: WebSocket):
                     await senden("abandon", {"job_id": job_id, "reason": "invalid_lease"})
             elif mtype == "print_intent":
                 jid = p.get("job_id")
+                # v2026.10.23.1 sendet nur beim Intent noch String-IDs.
+                # Dezimale BigInteger-IDs akzeptieren; Token-/Eigentumsprüfung bleibt unverändert.
+                if isinstance(jid, str) and jid.isascii() and jid.isdecimal() and len(jid) <= 19:
+                    numeric_id = int(jid)
+                    if 0 < numeric_id <= 9223372036854775807:
+                        jid = numeric_id
                 ok, grund = False, "unknown"
                 if isinstance(jid, int):
                     antwort = await agent_call(print_agent_service.print_intent, jid,
