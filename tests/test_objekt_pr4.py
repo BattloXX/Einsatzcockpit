@@ -156,7 +156,11 @@ def test_eus_feature_punkt_dict_wird_als_punkt_erkannt(pr4_db):
 
 
 def test_karten_isolation(pr4_db):
-    db, org_a_id, org_b_id, _ = pr4_db
+    db, org_a_id, org_b_id, objekt = pr4_db
+    # Auch einzeln bzw. auf einem eigenen xdist-Worker einen eigenen Prüfbestand anlegen.
+    set_tenant_context(db, org_a_id)
+    db.add(ObjektKartenObjekt(org_id=org_a_id, objekt_id=objekt.id, typ="fsd", lat=47, lng=9))
+    db.commit()
     set_tenant_context(db, org_b_id)
     assert db.query(ObjektKartenObjekt).count() == 0
     set_tenant_context(db, org_a_id)

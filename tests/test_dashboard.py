@@ -129,7 +129,7 @@ def test_dashboard_zeigt_standby_und_blendet_deaktivierte_module_aus(client, mon
         assert f'<span class="module-btn__label">{label}</span>' in response.text
     for label in (
         "Fahrtenbuch", "Objekte", "Atemschutzprüfung", "Wetter", "Drohne / UAS",
-        "Nachschlagewerke", "Förderstrecke",
+        "Einsatzwissen", "Förderstrecke",
     ):
         assert f'<span class="module-btn__label">{label}</span>' not in response.text
 
@@ -147,7 +147,7 @@ def test_dashboard_zeigt_aktiven_einsatz_und_aktivierte_module(client, monkeypat
     assert 'class="incident-standby"' not in response.text
     for label in (
         "Fahrtenbuch", "Objekte", "Atemschutzprüfung", "Wetter", "Drohne / UAS",
-        "Nachschlagewerke", "Förderstrecke",
+        "Einsatzwissen", "Förderstrecke",
     ):
         assert f'<span class="module-btn__label">{label}</span>' in response.text
 

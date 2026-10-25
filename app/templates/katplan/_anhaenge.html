@@ -5,7 +5,7 @@
 {% set anhaenge = element_anhaenge.get(eid, []) if eid else (kapitel_anhaenge.get(aid, []) if aid else plan_anhaenge) %}
 {% set anhang_bearbeiten = true %}
 <section id="{{ anhang_ziel }}" class="kp-form kp-anhaenge" data-kp-anhaenge
-  hx-on::before-swap="if ([413, 415, 422].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false; }">
+  hx-on::before-swap="if ([409, 413, 415, 422].includes(event.detail.xhr.status)) { event.detail.shouldSwap = true; event.detail.isError = false; }">
   <h3 class="kp-box__title">Anhänge</h3>
   {% if anhang_fehler %}<p role="alert" class="kp-error">{{ anhang_fehler }}</p>{% endif %}
   {% include "katplan/_anhaenge_anzeige.html" %}
@@ -24,6 +24,7 @@
           hx-target="#{{ anhang_ziel }}" hx-swap="outerHTML" class="kp-form" x-show="art === '{{ art }}'"
           {% if art == 'datei' %}data-kp-mehrfach-upload{% endif %}>
           <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+          <input type="hidden" name="version" value="{{ plan.version }}">
           {% if eid %}<input type="hidden" name="element_id" value="{{ eid }}">{% endif %}
           {% if aid %}<input type="hidden" name="abschnitt_id" value="{{ aid }}">{% endif %}
           {% if art == 'datei' %}
@@ -47,6 +48,24 @@
         </form>
       {% endfor %}
     </div>
+  </details>
+  <details>
+    <summary>Vorhandenes Dokument mehrfach zuordnen</summary>
+    <form method="post" action="/plaene/{{ plan.id }}/dokumente/referenzieren"
+      hx-post="/plaene/{{ plan.id }}/dokumente/referenzieren" hx-target="#{{ anhang_ziel }}" hx-swap="outerHTML" class="kp-form">
+      <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+      <input type="hidden" name="version" value="{{ plan.version }}">
+      {% if eid %}<input type="hidden" name="element_id" value="{{ eid }}">{% endif %}
+      {% if aid %}<input type="hidden" name="abschnitt_id" value="{{ aid }}">{% endif %}
+      <label>Dokument<select name="referenz" class="form-control" required>
+        <option value="">Bitte wählen</option>
+        {% for d in dokumentbibliothek %}<option value="{{ d.referenz }}">{{ d.titel }} · Eintrag {{ d.plan_id }}{% if d.vertraulich %} · vertraulich{% endif %}</option>{% endfor %}
+      </select></label>
+      <label>Seitenbereich (optional)<input name="seiten" class="form-control" maxlength="30" placeholder="z. B. 3-5,8"></label>
+      <label>Beschriftung (optional)<input name="beschriftung" class="form-control" maxlength="300"></label>
+      <p>Die Originaldatei bleibt zentral gespeichert. Jede Zuordnung wird gesondert geprüft und freigegeben.</p>
+      <button type="submit" class="btn">Zuordnen</button>
+    </form>
   </details>
   <p role="status" data-kp-upload-status aria-live="polite"></p>
 </section>

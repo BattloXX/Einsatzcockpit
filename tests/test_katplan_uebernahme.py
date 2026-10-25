@@ -59,9 +59,9 @@ def uebernehmen(db, basis, **kwargs):
     return service.uebernehmen(db, user, plan, element, incident.id, **daten)
 
 
-def foto(db, basis, *, vertraulich=False):
+def foto(db, basis, *, vertraulich=False, farbe="red"):
     plan, element, user, _ = basis
-    return anhang_service.anhang_hochladen(db, plan, user, png(), "sperre.png", "image/png",
+    return anhang_service.anhang_hochladen(db, plan, user, png(farbe), "sperre.png", "image/png",
                                           element=element, vertraulich=vertraulich)
 
 
@@ -196,7 +196,7 @@ def test_snapshot_unveraendert_soft_delete_und_elementbindung(db, org, basis, st
 @pytest.mark.parametrize("art,modell", [("auftrag", TaskMedia), ("meldung", MessageMedia)])
 def test_teilfehler_rest_gespeichert(db, basis, storage, art, modell):
     kaputt = foto(db, basis)
-    gut = foto(db, basis)
+    gut = foto(db, basis, farbe="blue")
     (storage / kaputt.pfad).unlink()
     ergebnis = uebernehmen(db, basis, art=art, anhang_uuids=[kaputt.uuid, gut.uuid])
     assert ergebnis.medien_anzahl == 1 and len(ergebnis.fehler) == 1

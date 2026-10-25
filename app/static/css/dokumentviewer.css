@@ -27,7 +27,7 @@
 .dv-body { display: flex; flex: 1 1 auto; min-height: 0; min-width: 0; position: relative; }
 .dv-stage { flex: 1 1 auto; min-width: 0; overflow: auto; background: #30343b; overscroll-behavior: contain; }
 .dv-paper { width: max-content; min-width: 100%; min-height: 100%; padding: 16px; display: flex;
-  justify-content: center; align-items: center; transform-origin: center; }
+  flex-direction: column; gap: 16px; justify-content: flex-start; align-items: center; transform-origin: center; }
 .dv-paper canvas { background: white; flex-shrink: 0; box-shadow: 0 2px 12px #0005; max-width: none; }
 .dv-documents, .dv-thumbnails { width: 210px; flex-shrink: 0; overflow: auto; padding: .5rem;
   border-right: 1px solid var(--border, #555); background: var(--surface-low, #151d2b); }
@@ -53,3 +53,6 @@
   .dv-selection-fields { right: auto; left: 0; }
 }
 @media print { body > *:not(.dv) { display: none !important; } }
+
+.dv-page-slot { position: relative; flex-shrink: 0; background: white; color: #222; overflow-anchor: none; }
+.dv-stage { scrollbar-gutter: stable; overflow-anchor: none; }

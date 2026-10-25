@@ -3,16 +3,40 @@
   <form method="post" action="/plaene/{{ plan.id }}/anhaenge/{{ anhang.uuid }}"
     hx-post="/plaene/{{ plan.id }}/anhaenge/{{ anhang.uuid }}" hx-target="#{{ anhang_ziel }}" hx-swap="outerHTML" class="kp-form">
     <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
-    <input type="hidden" name="sort" value="{{ anhang.sort }}">
+    <input type="hidden" name="version" value="{{ plan.version }}">
+    <label>Reihenfolge<input class="form-control" type="number" name="sort" value="{{ anhang.sort }}"></label>
     <label>Beschriftung<input class="form-control" name="beschriftung" maxlength="300" value="{{ anhang.beschriftung or '' }}"></label>
     <label>Urheber<input class="form-control" name="urheber" maxlength="150" value="{{ anhang.urheber or '' }}"></label>
     <label>Aufnahmedatum<input class="form-control" type="date" name="aufnahme_datum" value="{{ anhang.aufnahme_datum or '' }}"></label>
     <label><input type="checkbox" name="vertraulich" value="true" {% if anhang.vertraulich %}checked{% endif %}> Vertraulich</label>
+    <label>Prüfdatum<input class="form-control" type="date" name="pruefdatum" value="{{ anhang.pruefdatum or '' }}"></label>
+    <label>Gültig bis<input class="form-control" type="date" name="gueltig_bis" value="{{ anhang.gueltig_bis or '' }}"></label>
+    <label>Prüfintervall (Monate)<input class="form-control" type="number" name="pruefintervall_monate" min="1" max="60" value="{{ anhang.pruefintervall_monate or '' }}"></label>
+    <label>Zuständige Person<select name="zustaendig_user_id" class="form-control">
+      <option value="">Nicht zugeordnet</option>
+      {% for person in dokument_zustaendige %}<option value="{{ person.id }}" {% if person.id == anhang.zustaendig_user_id %}selected{% endif %}>{{ person.display_name }}</option>{% endfor %}
+    </select></label>
     <button type="submit" class="btn">Speichern</button>
   </form>
 </details>
 <form method="post" action="/plaene/{{ plan.id }}/anhaenge/{{ anhang.uuid }}/loeschen"
   hx-post="/plaene/{{ plan.id }}/anhaenge/{{ anhang.uuid }}/loeschen" hx-target="#{{ anhang_ziel }}" hx-swap="outerHTML" hx-confirm="Anhang entfernen?">
   <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+  <input type="hidden" name="version" value="{{ plan.version }}">
   <button type="submit" class="btn btn--ghost">Entfernen</button>
 </form>
+
+{% if anhang.art in ['datei', 'foto'] %}
+<details>
+  <summary>Dokument austauschen</summary>
+  <form method="post" action="/plaene/{{ plan.id }}/anhaenge/{{ anhang.uuid }}/ersetzen" enctype="multipart/form-data"
+    hx-post="/plaene/{{ plan.id }}/anhaenge/{{ anhang.uuid }}/ersetzen" hx-encoding="multipart/form-data"
+    hx-target="#{{ anhang_ziel }}" hx-swap="outerHTML" class="kp-form">
+    <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+    <input type="hidden" name="version" value="{{ plan.version }}">
+    <label>Neue Datei<input class="form-control" type="file" name="datei" required></label>
+    <p>Ersetzt diese Zuordnung im Arbeitsstand. Andere Zuordnungen und bisherige Freigaben behalten das bisherige Original. Prüfangaben müssen für die neue Datei neu erfasst werden.</p>
+    <button type="submit" class="btn">Austauschen</button>
+  </form>
+</details>
+{% endif %}

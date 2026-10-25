@@ -29,6 +29,7 @@ from app.mcp.context import MCPPermissionError, load_live_context
 from app.mcp.registry import TOOLS
 from app.mcp.tools import benutzer as _benutzer  # noqa: F401 - registriert Benutzer-Lesetools
 from app.mcp.tools import einsatz as _einsatz  # noqa: F401 - registriert Einsatz-Lesetools
+from app.mcp.tools import einsatzwissen as _einsatzwissen  # noqa: F401 - Wissenspflege
 from app.mcp.tools import fahrtenbuch as _fahrtenbuch  # noqa: F401 - registriert Fahrtenbuch-Tools
 from app.mcp.tools import gsl as _gsl  # noqa: F401 - registriert GSL-Ressourcen-Tools
 from app.mcp.tools import gsl_lage as _gsl_lage  # noqa: F401 - registriert GSL-Lagebild-Tools
@@ -2219,3 +2220,50 @@ async def katplan_elemente_verorten(
 @server.tool(name="katplan_import_abgleichen", description=TOOLS["katplan_import_abgleichen"].description)
 async def katplan_import_abgleichen(plan_id: int, dokument_id: int, ctx: Context | None = None) -> dict[str, object]:
     return await _call_registered_tool("katplan_import_abgleichen", plan_id=plan_id, dokument_id=dokument_id)
+
+
+@server.tool(name="einsatzwissen_kategorien", description=TOOLS["einsatzwissen_kategorien"].description)
+async def einsatzwissen_kategorien() -> dict:
+    return await _call_registered_tool("einsatzwissen_kategorien")
+
+
+@server.tool(name="katplan_dokumentbibliothek", description=TOOLS["katplan_dokumentbibliothek"].description)
+async def katplan_dokumentbibliothek() -> dict:
+    return await _call_registered_tool("katplan_dokumentbibliothek")
+
+
+@server.tool(name="katplan_dokument_referenzieren", description=TOOLS["katplan_dokument_referenzieren"].description)
+async def katplan_dokument_referenzieren(plan_id: int, version: int, referenz: str, element_id: str | None = None, seiten: str = "", beschriftung: str = "") -> dict:
+    return await _call_registered_tool("katplan_dokument_referenzieren", plan_id=plan_id, version=version, referenz=referenz, element_id=element_id, seiten=seiten, beschriftung=beschriftung)
+
+
+@server.tool(name="katplan_dokument_pflegen", description=TOOLS["katplan_dokument_pflegen"].description)
+async def katplan_dokument_pflegen(plan_id: int, version: int, anhang_uuid: str, felder: dict) -> dict:
+    return await _call_registered_tool("katplan_dokument_pflegen", plan_id=plan_id, version=version, anhang_uuid=anhang_uuid, felder=felder)
+
+
+@server.tool(name="katplan_pruefstatus", description=TOOLS["katplan_pruefstatus"].description)
+async def katplan_pruefstatus(plan_id: int, fassung: str = "freigegeben") -> dict:
+    return await _call_registered_tool("katplan_pruefstatus", plan_id=plan_id, fassung=fassung)
+
+
+@server.tool(name="einsatz_dokumente_auflisten", description=TOOLS["einsatz_dokumente_auflisten"].description)
+async def einsatz_dokumente_auflisten(art: str, einsatz_id: int) -> dict:
+    return await _call_registered_tool("einsatz_dokumente_auflisten", art=art, einsatz_id=einsatz_id)
+
+
+@server.tool(name="einsatz_dokument_zuordnen", description=TOOLS["einsatz_dokument_zuordnen"].description)
+async def einsatz_dokument_zuordnen(daten: dict) -> dict:
+    return await _call_registered_tool("einsatz_dokument_zuordnen", daten=daten)
+
+
+@server.tool(name="dokumentdruck_vorbereiten", description=TOOLS["dokumentdruck_vorbereiten"].description)
+async def dokumentdruck_vorbereiten(documents: list[dict], format: str = "original", orientation: str = "original") -> dict:
+    return await _call_registered_tool("dokumentdruck_vorbereiten", documents=documents, format=format, orientation=orientation)
+
+
+@server.tool(name="katplan_dokument_zusammenfassung", description=TOOLS["katplan_dokument_zusammenfassung"].description)
+async def katplan_dokument_zusammenfassung(plan_id: int, dokument_id: int,
+                                          von: int = 1, bis: int | None = None) -> dict:
+    return await _call_registered_tool("katplan_dokument_zusammenfassung", plan_id=plan_id,
+                                       dokument_id=dokument_id, von=von, bis=bis)

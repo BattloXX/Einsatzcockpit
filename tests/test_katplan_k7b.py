@@ -124,7 +124,8 @@ def test_quota_fehler_und_cleanup(db, org, storage):
     assert [p.name for p in (storage / dokument.pfad).parent.iterdir()] == ["original.pdf"]
     assert usage(db, org.id) == dokument.belegt_bytes == dokument.groesse_bytes
     with pytest.raises(HTTPException) as exc:
-        service.quelle_hochladen(db, plan, user, _pdf_bytes(), "test.pdf", titel="Weitere")
+        service.quelle_hochladen(db, plan, user, _pdf_bytes(), "test.pdf", titel="Weitere",
+                                 ersetzt_dokument_id=dokument.id)
     assert exc.value.status_code == 413
     assert len(list(storage.rglob("original.pdf"))) == 1
 
@@ -315,9 +316,10 @@ def test_migration_0298_up_down_sqlite():
             for model in (KatplanDokument, KatplanDokumentSeite):
                 assert {c["name"]: c["nullable"] for c in inspector.get_columns(model.__tablename__)} == {
                     c.name: c.nullable for c in model.__table__.columns
-                    if c.name not in {"ki_status", "ki_fehler", "ki_analysiert_am"}}
+                    if c.name not in {"ki_status", "ki_fehler", "ki_analysiert_am", "datei_hash"}}
                 assert {tuple(i["column_names"]) for i in inspector.get_indexes(model.__tablename__)} == {
-                    tuple(c.name for c in i.columns) for i in model.__table__.indexes}
+                    tuple(c.name for c in i.columns) for i in model.__table__.indexes
+                    if i.name != "ix_katplan_dokument_datei_hash"}
             assert {fk["constrained_columns"][0]: fk["options"].get("ondelete")
                     for fk in inspector.get_foreign_keys("katplan_dokument")} == {
                 "org_id": "SET NULL", "plan_id": "CASCADE", "dokument_gruppe_id": "SET NULL",

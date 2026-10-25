@@ -7,6 +7,7 @@ from urllib.parse import urlsplit
 import pytest
 from pypdf import PdfReader
 
+from tests.test_dokumentviewer import dokument_pdf
 from tests.test_dokumentviewer import dokumente as dokumente
 from tests.test_einheit_uebersicht import browser as browser
 from tests.test_katplan_k1b import login
@@ -60,7 +61,8 @@ def gezeichnet(page, nummer, anzahl=12):
     from playwright.sync_api import expect
 
     expect(page.locator('#documentViewer [data-dv-count]')).to_have_text(f"von {anzahl}")
-    expect(page.locator('#documentViewer .dv-paper canvas')).to_have_attribute(
+    canvas = page.locator('#documentViewer .dv-page-slot[data-active] canvas, #documentViewer .dv-paper > canvas')
+    expect(canvas).to_have_attribute(
         "aria-label", f"Seite {nummer} von {anzahl}")
     page.wait_for_function(
         "n => document.querySelector('#documentViewer').dataset.renderedPage === String(n)", arg=nummer)
@@ -195,4 +197,68 @@ def test_bisherige_mediaaufrufe_und_explizite_startseite(viewer_seite, dokumente
     gezeichnet(page, 1, 1)
     expect(page.locator('[data-dv-edit]')).to_have_attribute('href', 'https://ecp.test/annotieren/incident/1')
     assert page.evaluate("document.querySelectorAll('#documentViewer').length") == 1
+    assert not errors
+
+
+@pytest.mark.parametrize("breite,hoehe", [(1440, 900), (1024, 768), (390, 844)])
+def test_pdf_mehrseitig_scrollen_aktualisiert_seite_und_auswahl(viewer_seite, breite, hoehe):
+    page, errors = viewer_seite
+    page.set_viewport_size({"width": breite, "height": hoehe})
+    page.locator('[data-dv-document][data-dv-kind="pdf"]').first.click()
+    gezeichnet(page, 1)
+    assert page.locator('.dv-page-slot').count() == 12
+    stage = page.locator('.dv-stage')
+    assert stage.evaluate('(e) => e.scrollHeight > e.clientHeight * 3')
+    # Nativer Scrollbereich, kein Klick auf eine Navigationstaste.
+    stage.evaluate('''e => {
+      const paper = e.querySelector('.dv-paper'), slot = e.querySelector('[data-page="5"]');
+      e.scrollTop = slot.offsetTop - paper.offsetTop - 16;
+    }''')
+    gezeichnet(page, 5)
+    assert page.evaluate('documentViewerSelection().page') == 5
+    assert page.evaluate('documentViewerSelection().pages') == [5]
+    stage.hover()
+    page.mouse.wheel(0, 700)
+    page.wait_for_function('documentViewerSelection().page > 5')
+    assert page.locator('.dv-paper canvas').count() < 12
+    page.get_by_role('spinbutton', name='Sprung zu Seite').fill('2')
+    page.get_by_role('spinbutton', name='Sprung zu Seite').press('Tab')
+    gezeichnet(page, 2)
+    assert not errors
+
+
+@pytest.mark.parametrize("breite,hoehe", [(1440, 900), (1024, 768), (390, 844)])
+def test_dokumentpflege_referenz_metadaten_und_austausch(viewer_seite, client, dokumente, breite, hoehe):
+    from playwright.sync_api import expect
+
+    page, errors = viewer_seite
+    login(client, dokumente, "katplan_verwalter")
+    page.set_viewport_size({"width": breite, "height": hoehe})
+    page.goto(f'https://ecp.test/plaene/{dokumente["plan_id"]}/bearbeiten?element={dokumente["element_id"]}')
+    section = page.locator(f'#kp-anhaenge-element-{dokumente["element_id"]}')
+    section.get_by_text('Vorhandenes Dokument mehrfach zuordnen', exact=True).click()
+    section.locator('select[name="referenz"]').select_option('anhang:' + dokumente['dateien'][0]['uuid'])
+    section.locator('input[name="seiten"]').last.fill('3-5')
+    section.locator('form[action$="/referenzieren"] input[name="beschriftung"]').fill('Zusätzlicher Quellenbezug')
+    section.get_by_role('button', name='Zuordnen', exact=True).click()
+    ref = section.locator('li[data-anhang]').filter(has=page.get_by_role('link', name='Zusätzlicher Quellenbezug'))
+    expect(ref).to_have_count(1)
+    ref.get_by_text('Bearbeiten', exact=True).click()
+    ref.get_by_label('Reihenfolge', exact=True).fill('-10')
+    ref.get_by_label('Prüfdatum', exact=True).fill('2026-10-25')
+    ref.get_by_label('Gültig bis', exact=True).fill('2027-10-25')
+    ref.get_by_label('Prüfintervall (Monate)', exact=True).fill('12')
+    ref.get_by_role('button', name='Speichern', exact=True).click()
+    expect(ref).to_contain_text('Geprüft: 2026-10-25')
+    expect(ref).to_contain_text('Nächste Prüfung: 2027-10-25')
+    ref.get_by_text('Dokument austauschen', exact=True).click()
+    ref.locator('input[type="file"]').set_input_files({
+        'name': 'ersatz.pdf', 'mimeType': 'application/pdf', 'buffer': dokument_pdf(2)})
+    ref.get_by_role('button', name='Austauschen', exact=True).click()
+    expect(section).not_to_contain_text('Geprüft: 2026-10-25')
+    expect(section.locator('li[data-anhang]').filter(
+        has=page.get_by_role('link', name='Zusätzlicher Quellenbezug'))).to_have_count(1)
+    assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), page.evaluate('''() =>
+      [...document.querySelectorAll('body *')].filter(e => e.getBoundingClientRect().right > innerWidth + 2)
+        .slice(-20).map(e => [e.tagName, e.className, Math.round(e.getBoundingClientRect().width)])''')
     assert not errors

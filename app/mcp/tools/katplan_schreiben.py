@@ -873,7 +873,6 @@ async def katplan_anhang_aus_quellseite(
 ) -> dict[str, object]:
     from app.mcp.tools.katplan import _quellseite
     from app.services import katplan_quellbild_service as bilder
-    from app.services.katplan_quelle_service import absolute_pfad
 
     plan = _plan(context, plan_id)
     _, dokument, seite = _quellseite(context, plan_id, dokument_id, seiten_nr)
@@ -894,9 +893,7 @@ async def katplan_anhang_aus_quellseite(
                     if beschriftung is None else beschriftung)
     anhang = anhang_hochladen(context.db, plan, context.user, data, "quellseite.jpg", "image/jpeg",
                               element=element, beschriftung=beschriftung, vertraulich=vertraulich, quelle="mcp")
-    # Pfade vor Rollback sichern; keine Quota-Freigabe nach Rollback (bereits zurueckgesetzt).
-    pfade = [absolute_pfad(p) for p in (anhang.pfad, anhang.thumb_pfad) if p]
-    context.db.info["katplan_mcp_dateien"].extend(pfade)
+    # Die Upload-Pipeline registriert ausschließlich neu erzeugte Dateien zum Rollback.
     context.db.flush()
     antwort: dict[str, object] = {"anhang_id": anhang.id, "uuid": anhang.uuid, "mime": anhang.mime,
                                   "beschriftung": anhang.beschriftung, "gespeichert": not pruefen,

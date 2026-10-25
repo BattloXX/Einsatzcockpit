@@ -125,6 +125,10 @@
       this.dialog.addEventListener('fullscreenchange', () => this.render());
       this.resize = new ResizeObserver(() => { clearTimeout(this.resizeTimer); this.resizeTimer = setTimeout(() => this.render(), 100); });
       this.resize.observe(this.stage);
+      this.stage.addEventListener('scroll', () => {
+        cancelAnimationFrame(this.scrollFrame);
+        this.scrollFrame = requestAnimationFrame(() => this.syncScrollPage());
+      }, {passive: true});
       this.touch();
     }
     status(message) { this.$('[data-dv-status]').textContent = message; }
@@ -153,10 +157,13 @@
     stopDocument() {
       this.renderGeneration++;
       this.renderTask?.cancel(); this.renderTask = null;
+      this.pageObserver?.disconnect();
+      for (const task of this.pageTasks?.values() || []) task.cancel();
+      this.pageTasks = new Map(); this.layoutKey = null;
       this.observer?.disconnect();
       if (this.loading) { this.loading.destroy().catch(() => {}); this.loading = null; }
       else if (this.pdf) this.pdf.destroy().catch(() => {});
-      this.pdf = null; this.image = null;
+      this.pdf = null; this.image = null; this.pageSlots = [];
     }
     async load(index) {
       if (index < 0 || index >= this.items.length) return;
@@ -221,7 +228,7 @@
       this.$('[data-dv-action="document-next"]').disabled = this.index >= this.items.length - 1;
       this.$('[data-dv-action="page-prev"]').disabled = disabled || this.state.page <= 1;
       this.$('[data-dv-action="page-next"]').disabled = disabled || this.state.page >= this.count;
-      const page = this.$('[data-dv-page]'); page.value = disabled ? '' : this.state.page; page.max = this.count; page.disabled = disabled;
+      const page = this.$('[data-dv-page]'); if (document.activeElement !== page) page.value = disabled ? '' : this.state.page; page.max = this.count; page.disabled = disabled;
       this.$('[data-dv-count]').textContent = `von ${this.count || '…'}`;
       this.$('[data-dv-zoom]').textContent = `${Math.round(this.state.zoom * 100)} %`;
       this.$('[data-dv-selection]').disabled = disabled;
@@ -252,6 +259,12 @@
       } catch (error) { this.selected = []; output.textContent = error.message; }
     }
     async render() {
+      if (this.pdf) {
+        const generation = this.generation;
+        try { await this.renderContinuous(); }
+        catch (_) { if (this.pdf && generation === this.generation) this.status('Seiten konnten nicht geladen werden. Bitte das Original öffnen.'); }
+        return;
+      }
       if (!this.count || !this.dialog.open || !this.stage.clientWidth) return;
       const generation = ++this.renderGeneration, documentGeneration = this.generation;
       this.renderTask?.cancel();
@@ -295,11 +308,105 @@
         if (error.name !== 'RenderingCancelledException' && generation === this.renderGeneration) this.status('Diese Seite konnte nicht dargestellt werden. Bitte eine andere Seite wählen oder das Original öffnen.');
       }
     }
+    async renderContinuous() {
+      if (!this.count || !this.dialog.open || !this.stage.clientWidth) return;
+      const key = `${this.generation}:${this.stage.clientWidth}:${this.stage.clientHeight}:${this.state.zoom}:${this.state.rotation}`;
+      if (key === this.layoutKey) return;
+      this.layoutKey = key;
+      const generation = ++this.renderGeneration, documentGeneration = this.generation;
+      this.pageObserver?.disconnect();
+      for (const task of this.pageTasks?.values() || []) task.cancel();
+      this.pageTasks = new Map();
+      const first = await this.pdf.getPage(1);
+      if (generation !== this.renderGeneration || documentGeneration !== this.generation) return;
+      const viewport = first.getViewport({scale: 1, rotation: (first.rotate + this.state.rotation) % 360});
+      const fit = Math.min((this.stage.clientWidth - 32) / viewport.width, (this.stage.clientHeight - 32) / viewport.height);
+      const scale = Math.max(.05, fit) * this.state.zoom;
+      const fragment = document.createDocumentFragment();
+      this.pageSlots = [];
+      // Seitengrößen vor dem Scrollen bestimmen, damit gemischte Hoch-/Querformate nicht springen.
+      const views = [];
+      for (let start = 1; start <= this.count; start += 20) {
+        const pages = await Promise.all(Array.from({length: Math.min(20, this.count - start + 1)},
+          (_, offset) => this.pdf.getPage(start + offset)));
+        if (generation !== this.renderGeneration) return;
+        views.push(...pages.map(page => page.getViewport({scale, rotation: (page.rotate + this.state.rotation) % 360})));
+      }
+      for (let nr = 1; nr <= this.count; nr++) {
+        const slot = document.createElement('div'); slot.className = 'dv-page-slot'; slot.dataset.page = nr;
+        slot.style.width = `${views[nr - 1].width}px`; slot.style.height = `${views[nr - 1].height}px`;
+        slot.setAttribute('aria-label', `Seite ${nr} von ${this.count}`);
+        fragment.appendChild(slot); this.pageSlots.push(slot);
+      }
+      this.paper.replaceChildren(fragment);
+      const renderPage = async slot => {
+        if (generation !== this.renderGeneration || slot.childElementCount || this.pageTasks.has(slot)) return;
+        const pdf = this.pdf;
+        // Markieren, bevor getPage aufgelöst wird: Observer dürfen keine Doppelarbeit starten.
+        this.pageTasks.set(slot, {cancel() {}});
+        try {
+          const page = await pdf.getPage(Number(slot.dataset.page));
+          if (generation !== this.renderGeneration) return;
+          const view = page.getViewport({scale, rotation: (page.rotate + this.state.rotation) % 360});
+          slot.style.width = `${view.width}px`; slot.style.height = `${view.height}px`;
+          const density = Math.min(root.devicePixelRatio || 1, 2, Math.sqrt(16000000 / (view.width * view.height)));
+          const canvas = document.createElement('canvas');
+          canvas.setAttribute('aria-label', slot.getAttribute('aria-label'));
+          canvas.width = Math.max(1, Math.floor(view.width * density)); canvas.height = Math.max(1, Math.floor(view.height * density));
+          canvas.style.width = `${view.width}px`; canvas.style.height = `${view.height}px`;
+          slot.replaceChildren(canvas);
+          const task = page.render({canvasContext: canvas.getContext('2d'), viewport: view,
+            transform: [density, 0, 0, density, 0, 0]});
+          this.pageTasks.set(slot, task); await task.promise;
+          if (generation === this.renderGeneration) {
+            slot.dataset.rendered = 'true'; this.syncScrollPage();
+          }
+        } catch (error) {
+          if (generation === this.renderGeneration && error.name !== 'RenderingCancelledException') {
+            slot.textContent = 'Seite konnte nicht dargestellt werden. Original öffnen oder erneut laden.';
+          }
+        } finally {
+          if (generation === this.renderGeneration) this.pageTasks.delete(slot);
+        }
+      };
+      this.pageObserver = new IntersectionObserver(entries => {
+        if (generation !== this.renderGeneration) return;
+        for (const entry of entries) {
+          if (entry.isIntersecting) renderPage(entry.target);
+          else {
+            this.pageTasks.get(entry.target)?.cancel(); this.pageTasks.delete(entry.target);
+            // Canvas-Speicher für lange Lehrbehelfe außerhalb des Sichtbereichs freigeben.
+            for (const canvas of entry.target.querySelectorAll('canvas')) { canvas.width = 0; canvas.height = 0; }
+            entry.target.replaceChildren(); delete entry.target.dataset.rendered;
+          }
+        }
+      }, {root: this.stage, rootMargin: '100% 0px'});
+      this.pageSlots.forEach(slot => this.pageObserver.observe(slot));
+      this.scrollToPage(); await renderPage(this.pageSlots[this.state.page - 1]);
+      this.dialog.dataset.rotation = this.state.rotation;
+    }
+    scrollToPage() {
+      const slot = this.pageSlots?.[this.state.page - 1];
+      if (slot) this.stage.scrollTo({top: slot.offsetTop - this.paper.offsetTop - 16, left: 0, behavior: 'instant'});
+    }
+    syncScrollPage() {
+      if (!this.pdf || !this.pageSlots?.length) return;
+      const top = this.stage.getBoundingClientRect().top + Math.min(80, this.stage.clientHeight / 3);
+      const slot = this.pageSlots.find(slot => slot.getBoundingClientRect().bottom > top) || this.pageSlots.at(-1);
+      const changed = this.state.page !== Number(slot.dataset.page);
+      this.state.page = Number(slot.dataset.page);
+      this.pageSlots.forEach(item => item.toggleAttribute('data-active', item === slot));
+      if (slot.dataset.rendered) this.dialog.dataset.renderedPage = this.state.page;
+      if (changed) this.update();
+      try { sessionStorage.setItem(this.key, String(this.state.page)); } catch (_) { /* privater Browser */ }
+    }
     goPage(page) {
       if (!this.count || !Number.isInteger(page) || page < 1 || page > this.count) {
         this.status(`Bitte eine Seite zwischen 1 und ${this.count || 1} eingeben.`); return;
       }
-      this.state.page = page; this.stage.scrollTo(0, 0); this.status(''); this.update(); this.render();
+      this.state.page = page; this.status(''); this.update();
+      if (this.pdf) { this.scrollToPage(); this.syncScrollPage(); }
+      else { this.stage.scrollTo(0, 0); this.render(); }
     }
     action(action) {
       if (action === 'close') return this.close();
