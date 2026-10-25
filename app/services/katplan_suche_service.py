@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models.katplan import (
+    KatplanDokument,
     KatplanDokumentSeite,
     KatplanElement,
     KatplanElementPhase,
@@ -23,7 +24,7 @@ from app.models.katplan import (
 from app.models.master import OrgSettings
 from app.models.user import User
 from app.services.einsatzwissen_kategorien import metadaten
-from app.services.katplan_quelle_service import sichtbare_quellen
+from app.services.katplan_quelle_service import quellen_ids_aus_version, sichtbare_quellen
 from app.services.katplan_service import _HTMLText
 from app.services.katplan_typen import ELEMENT_TYPEN, PLANARTEN
 from app.services.katplan_zugriff import darf_bearbeiten, darf_lesen, sieht_vertraulich
@@ -200,7 +201,8 @@ def suche(db: Session, user: User, *, q: str = "", plan_id: int | None = None,
           gefahr: str = "", typ: str = "", prioritaet: int | None = None, phase: str = "",
           ort: str = "", nur_geprueft: bool = False, lat: float | None = None,
           lng: float | None = None, radius_m: float | None = None, arbeitsstand: bool = False,
-          mit_quellen: bool = True, limit: int = 100) -> dict[str, Any]:
+          mit_quellen: bool = True, limit: int = 100,
+          nur_freigegebene_quellen: bool = False) -> dict[str, Any]:
     woerter = q.lower().split()
     ort = ort.strip().lower()
     umkreis = any(v is not None for v in (lat, lng, radius_m))
@@ -290,6 +292,11 @@ def suche(db: Session, user: User, *, q: str = "", plan_id: int | None = None,
         if not mit_quellen or not woerter or any((ort, umkreis, typ, prioritaet is not None, phase, nur_geprueft)):
             continue
         dokumente = {d.id: d for d in sichtbare_quellen(db, plan, user)}
+        if not arbeit and nur_freigegebene_quellen:
+            freigegebene_ids = quellen_ids_aus_version(db, plan, kopf["version_id"], user)
+            dokumente = {d.id: d for d in db.query(KatplanDokument).filter(
+                KatplanDokument.org_id == user.org_id, KatplanDokument.plan_id == plan.id,
+                KatplanDokument.id.in_(freigegebene_ids))}
         seiten = db.query(KatplanDokumentSeite).filter(
             KatplanDokumentSeite.org_id == user.org_id, KatplanDokumentSeite.plan_id == plan.id,
             KatplanDokumentSeite.dokument_id.in_(dokumente),
@@ -302,7 +309,7 @@ def suche(db: Session, user: User, *, q: str = "", plan_id: int | None = None,
         for seite in seiten:
             dok = dokumente[seite.dokument_id]
             url = f"/plaene/{plan.id}/quellen/{dok.id}?seite={seite.seiten_nr}"
-            if not darf_bearbeiten(user):
+            if not darf_bearbeiten(user) or (not arbeit and nur_freigegebene_quellen):
                 url += f"&version_id={kopf['version_id']}"
             engine_seite = engine_map.get(("katplan_seite", str(seite.id)))
             treffer.append({"art": "seite", "plan_id": plan.id, "plan_titel": kopf["titel"],

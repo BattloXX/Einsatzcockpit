@@ -13,6 +13,7 @@
   <section class="kp-page" x-data="{ reiter: window.location.hash === '#kp-protokoll' ? 'protokoll' : 'plan' }">
     <div class="kp-topbar">
       <a class="btn btn--ghost btn--sm" href="/plaene">{{ icon("chevron-left", size="xs") }} Pläne</a>
+      {% if not arbeitsstand %}<a class="btn" href="/einsatzwissen/{{ plan.id }}">Kompakte Einsatzansicht</a>{% endif %}
       <form method="get" action="/plaene/suche" class="kp-plansuche" data-kp-livesuche>
         <input class="form-control" type="search" name="q" placeholder="Im Plan suchen" aria-label="Im Plan suchen"
                hx-get="/plaene/{{ plan.id }}/suche-treffer" hx-trigger="input changed delay:300ms"

@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}{{ lesekopf.titel }} · Einsatzwissen{% endblock %}
+{% block head_extra %}
+  {% include "katplan/_design.html" %}
+  <link rel="stylesheet" href="/static/css/einsatzwissen.css">
+{% endblock %}
+{% block content %}
+<main class="kp-page ew-page ew-einsatz" data-ew-plan="{{ plan.id }}">
+  <a class="btn" href="/einsatzwissen">{{ icon('chevron-left') }} Einsatzwissen</a>
+  <header class="kp-header ew-bereich">
+    <div><h1>{{ lesekopf.titel }}</h1><p>Freigegeben · Version {{ leseversion.versionsnummer }} · {{ leseversion.freigegeben_am|local_datetime }}</p>
+      {% if wissen_meta.kurzbeschreibung %}<p>{{ wissen_meta.kurzbeschreibung }}</p>{% endif %}
+    </div>
+    <div class="kp-actions">
+      <form method="post" action="/einsatzwissen/{{ plan.id }}/favorit">
+        <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+        <input type="hidden" name="aktiv" value="{{ 'false' if ist_favorit else 'true' }}">
+        <button class="btn" type="submit" aria-pressed="{{ 'true' if ist_favorit else 'false' }}">{{ 'Favorit entfernen' if ist_favorit else 'Als Favorit merken' }}</button>
+      </form>
+      <a class="btn" href="/plaene/{{ plan.id }}/pdf?version_id={{ leseversion.id }}" data-dv-document data-dv-title="{{ lesekopf.titel }}" data-dv-selection-url="/plaene/{{ plan.id }}/pdf?version_id={{ leseversion.id }}">Plan drucken / PDF</a>
+      <a class="btn" href="/plaene/{{ plan.id }}?ansicht=freigabe">Vollständiger Plan</a>
+    </div>
+  </header>
+  {% if plan.wiedervorlage_am and plan.wiedervorlage_am <= heute %}
+    <p class="ew-hinweis" role="status">Prüfung fällig – Inhalte können veraltet sein. Stand vor Verwendung prüfen.</p>
+  {% endif %}
+  <nav class="ew-kategorien ew-sprung" aria-label="Bereiche des Wissenseintrags">
+    {% for b in bereiche %}<a href="#ew-{{ b.id }}">{{ loop.index }}. {{ b.titel }}</a>{% endfor %}
+  </nav>
+  {% for b in bereiche %}
+    <section id="ew-{{ b.id }}" class="ew-bereich" aria-labelledby="ew-titel-{{ b.id }}">
+      <h2 id="ew-titel-{{ b.id }}">{{ loop.index }}. {{ b.titel }}</h2>
+      {% if b.id == 'sicherheit' %}
+        {% for g in plan_daten.get('gefahrenarten', []) %}<strong class="kp-chip">{{ gefahrenarten.get(g, g) }}</strong>{% endfor %}
+      {% endif %}
+      {% for element in b.elemente %}{% include "katplan/_element_anzeige.html" %}{% endfor %}
+      {% if not b.elemente and b.id in ['sofort', 'sicherheit', 'massnahmen'] %}<p class="ew-leer">Keine gesonderten Angaben hinterlegt.</p>{% endif %}
+      {% if b.id == 'dokumente' %}
+        <div data-dv-group>
+          {% with anhaenge=plan_anhaenge, anhang_bearbeiten=false %}{% include "katplan/_anhaenge_anzeige.html" %}{% endwith %}
+          {% for liste in kapitel_anhaenge.values() %}
+            {% with anhaenge=liste, anhang_bearbeiten=false %}{% include "katplan/_anhaenge_anzeige.html" %}{% endwith %}
+          {% endfor %}
+          {% for liste in element_anhaenge.values() %}
+            {% with anhaenge=liste, anhang_bearbeiten=false %}{% include "katplan/_anhaenge_anzeige.html" %}{% endwith %}
+          {% endfor %}
+          {% for q in plan_daten.get('quellen', []) %}
+            {% set url='/plaene/quelle/' ~ q.uuid ~ '/original?version_id=' ~ leseversion.id %}
+            <p><a class="btn" href="{{ url }}" data-dv-document data-dv-title="{{ q.titel }}" data-dv-selection-url="{{ url }}">{{ q.titel }} · Version {{ q.versionsnummer }}</a></p>
+          {% endfor %}
+        </div>
+      {% elif b.id == 'kontakte' %}
+        {% with links=plan_links, links_bearbeiten=false %}{% include "katplan/_links_anzeige.html" %}{% endwith %}
+        {% for liste in element_links.values() %}
+          {% with links=liste, links_bearbeiten=false %}{% include "katplan/_links_anzeige.html" %}{% endwith %}
+        {% endfor %}
+      {% elif b.id == 'verwandt' %}
+        <div class="ew-langtext">{{ (plan_daten.get('beschreibung_html') or '')|safe }}</div>
+        {% for kapitel in plan_daten.get('abschnitte', []) if kapitel.get('beschreibung_html') %}
+          <h3>{{ kapitel.titel }}</h3><div>{{ kapitel.beschreibung_html|safe }}</div>
+        {% endfor %}
+        {% for liste in element_relationen.values() %}{% for r in liste %}
+          <p><a class="btn" href="{{ r.url }}">{{ relation_arten[r.art] }}: {{ r.titel }}{% if r.plan_titel %} · {{ r.plan_titel }}{% endif %}</a></p>
+        {% endfor %}{% endfor %}
+        <a class="btn" href="/einsatzwissen?kategorie=fuehrungswissen">Führungswissen öffnen</a>
+      {% endif %}
+    </section>
+  {% endfor %}
+  <section class="ew-bereich" aria-label="Offlineverfügbarkeit">
+    <h2>Kerninhalte bei Verbindungsabbruch</h2>
+    <p>Freigegebene Sofortmaßnahmen, Gefahren und weitere Maßnahmen für höchstens 15 Minuten in diesem Tab bereithalten. Vertrauliche Inhalte, Dokumente und Kontakte erfordern eine Verbindung.</p>
+    <div class="kp-actions"><button class="btn" type="button" data-ew-save="{{ plan.id }}">Kerninhalte lokal bereithalten</button>
+      <a class="btn" href="/static/einsatzwissen-offline.html">Lokale Kerninhalte öffnen</a></div>
+    <p data-ew-status role="status" aria-live="polite"></p>
+  </section>
+  {% include "katplan/_uebernahme_dialog.html" %}
+</main>
+{% endblock %}

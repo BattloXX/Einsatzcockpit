@@ -41,11 +41,12 @@ def test_uebersicht_mobil_und_tablet(client, umgebung, browser, breite, hoehe, t
     try:
         page.goto("https://ecp.test/einsatzwissen")
         expect(page.get_by_role("heading", name="Einsatzwissen", exact=True)).to_be_visible()
-        expect(page.locator(".ew-kategorien a")).to_have_count(7)
+        kategorien = page.get_by_role("navigation", name="Kategorien in Einsatzwissen")
+        expect(kategorien.locator("a")).to_have_count(7)
         assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
         assert all(box["height"] >= 44 for box in page.locator(".ew-kategorien a").evaluate_all(
             "elements => elements.map(e => ({height: e.getBoundingClientRect().height}))"))
-        page.get_by_role("link", name="Führungswissen").click()
+        kategorien.get_by_role("link", name="Führungswissen").click()
         page.get_by_role("searchbox").fill("Funkordnung")
         page.get_by_role("button", name="Suchen", exact=True).click()
         expect(page.locator(".ew-titel")).to_have_text(["Wissenseintrag"])

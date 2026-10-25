@@ -8,7 +8,8 @@
   <div class="ew-karten">
     {% for eintrag in eintraege %}
       <article class="ew-karte">
-        <a class="kp-link ew-titel" href="/plaene/{{ eintrag.id }}?ansicht={{ 'arbeitsstand' if arbeitsstand else 'freigabe' }}">{{ eintrag.titel }}</a>
+        <a class="kp-link ew-titel" href="{{ '/plaene/' ~ eintrag.id ~ '?ansicht=arbeitsstand' if arbeitsstand else '/einsatzwissen/' ~ eintrag.id }}">{{ eintrag.titel }}</a>
+        {% if eintrag.id in favorit_ids %}<strong>Favorit</strong>{% endif %}
         <div class="kp-chips">
           <span class="kp-badge kp-badge--gray">{{ kategorien[eintrag.kategorie] }}</span>
           {% if eintrag.unterkategorie %}<span>{{ eintrag.unterkategorie }}</span>{% endif %}
@@ -31,6 +32,13 @@
       {% endif %}
     </div>
   </header>
+  <nav class="ew-kategorien" aria-label="Schnellzugriff">
+    <a href="/einsatzwissen?auswahl=favoriten">Favoriten</a>
+    <a href="/einsatzwissen?auswahl=zuletzt">Zuletzt verwendet</a>
+    <a href="/einsatzwissen?auswahl=haeufig">Häufig benötigte Einsatzpläne</a>
+    <a href="/einsatzwissen?kategorie=fuehrungswissen">Führungswissen öffnen</a>
+    <a href="/static/einsatzwissen-offline.html">Lokale Kerninhalte</a>
+  </nav>
   <nav class="ew-kategorien" aria-label="Kategorien in Einsatzwissen">
     <a href="/einsatzwissen?fassung={{ 'arbeitsstand' if arbeitsstand else 'freigabe' }}" {% if not kategorie %}aria-current="page"{% endif %}>Alle Kategorien</a>
     {% for code, label in kategorien.items() %}
@@ -39,8 +47,14 @@
   </nav>
   <form method="get" action="/einsatzwissen" class="kp-filter ew-suche" role="search">
     <input type="hidden" name="kategorie" value="{{ kategorie }}">
+    <input type="hidden" name="auswahl" value="{{ auswahl }}">
     <label>Suche
       <input class="form-control" type="search" name="q" maxlength="500" value="{{ q }}" placeholder="Titel, Schlagwort, Maßnahme oder Dokumentseite">
+    </label>
+    <label>Gefahrenart
+      <select class="form-control" name="gefahr"><option value="">Alle Gefahrenarten</option>
+        {% for code, label in gefahrenarten.items() %}<option value="{{ code }}" {% if code == gefahr %}selected{% endif %}>{{ label }}</option>{% endfor %}
+      </select>
     </label>
     <label>Unterkategorie
       <select class="form-control" name="unterkategorie">
@@ -72,7 +86,9 @@
       {% else %}<p>Das Nachschlagewerk ist für diesen Zugang nicht aktiviert oder nicht freigegeben.</p>{% endif %}
     </section>
   {% endif %}
-  {% if not q and not kategorie and not unterkategorie %}
+  {% if not q and not kategorie and not unterkategorie and not auswahl and not gefahr %}
+    {% if favoriten %}<section class="ew-bereich" aria-label="Favoriten"><h2>Favoriten</h2>{{ karten(favoriten) }}</section>{% endif %}
+    {% if haeufig %}<section class="ew-bereich" aria-label="Häufig benötigte Einsatzpläne"><h2>Häufig benötigte Einsatzpläne</h2>{{ karten(haeufig) }}</section>{% endif %}
     <section class="ew-bereich" aria-labelledby="ew-zuletzt">
       <h2 id="ew-zuletzt">Zuletzt verwendet</h2>
       {% if zuletzt %}{{ karten(zuletzt) }}{% else %}<p>Noch keine Einträge geöffnet.</p>{% endif %}
@@ -86,9 +102,10 @@
     {% if inhalte %}
       <h3>Treffer in Maßnahmen und Dokumentseiten</h3>
       <ul class="ew-inhalte">
-        {% for treffer in inhalte %}<li><a class="kp-link" href="{{ treffer.url }}">{{ treffer.plan_titel }} · {{ treffer.titel }}</a><p>{{ treffer.ausschnitt }}</p></li>{% endfor %}
+        {% for treffer in inhalte %}<li><a class="kp-link" href="{{ ('/einsatzwissen/' ~ treffer.plan_id ~ '#element-' ~ treffer.element_id) if treffer.art == 'element' and not arbeitsstand else treffer.url }}">{{ treffer.plan_titel }} · {{ treffer.titel }}</a><small>{{ treffer.typ_label }}{% if treffer.art == 'seite' %} · Seite {{ treffer.seiten_nr }}{% endif %}</small><p>{{ treffer.ausschnitt_html }}</p></li>{% endfor %}
       </ul>
     {% endif %}
+    {% if suche_begrenzt %}<p>Die Inhaltssuche zeigt höchstens 100 Treffer. Bitte Suchbegriff eingrenzen oder die erweiterte Suche verwenden.</p>{% endif %}
   </section>
 </section>
 {% endblock %}

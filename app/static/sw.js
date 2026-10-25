@@ -2,7 +2,7 @@
 // Cache-Namen bei jedem Deploy mit spürbaren JS/CSS-Änderungen erhöhen (v1 -> v2 -> ...):
 // der activate-Handler löscht dann automatisch alle Caches mit altem Namen, statt dass
 // veraltete Board-Skripte unbegrenzt im Cache liegen bleiben ("F5 nötig nach Update").
-const CACHE = 'ec-v20';
+const CACHE = 'ec-v21';
 const BOARD_CACHE = 'ec-board-v4';
 // Objektverwaltung: Offline-Precache der Android-App (objekt_offline_sync.js
 // befuellt ihn; Version 2 entfernt alte Kontaktseiten mit zu weiten Rechten)
@@ -21,6 +21,9 @@ const CORE_PRECACHE = [
   '/static/js/sortable.min.js',
   '/static/manifest.webmanifest',
   '/login',
+  '/static/einsatzwissen-offline.html',
+  '/static/js/einsatzwissen_offline.js',
+  '/static/css/einsatzwissen.css',
 ];
 const OPTIONAL_PRECACHE = [
   '/static/css/leaflet.min.css',
@@ -108,6 +111,15 @@ self.addEventListener('fetch', e => {
 
   // Cross-origin requests (inkl. Kartenkacheln) — Browser direkt zugreifen lassen
   if (url.origin !== location.origin) return;
+
+  // Einsatzwissen: keine impliziten HTML-/Dokumentkopien oder alten Cache-Fallbacks.
+  // Offline sind ausschließlich explizit freigegebene Kerntexte im eigenen Speicher lesbar.
+  if (/^\/(einsatzwissen|plaene|katastrophenplaene)(\/|$)/.test(url.pathname)) {
+    e.respondWith(fetch(new Request(e.request, {cache: 'no-store'})).catch(() => new Response(
+      '<!doctype html><html lang="de"><meta name="viewport" content="width=device-width"><title>Offline · Einsatzwissen</title><p>Keine Verbindung.</p><a href="/static/einsatzwissen-offline.html">Lokale Kerninhalte öffnen</a></html>',
+      {status: 503, headers: {'Content-Type': 'text/html; charset=utf-8', 'X-Offline': '1'}})));
+    return;
+  }
 
   // Block mutating requests offline — return 503 with X-Offline header
   if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(e.request.method)) {

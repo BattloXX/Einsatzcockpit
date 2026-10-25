@@ -245,6 +245,8 @@ class KatplanNutzung(TenantScoped, Base):
     user_id: Mapped[int] = mapped_column(sa.BigInteger, sa.ForeignKey("user.id", ondelete="CASCADE"))
     plan_id: Mapped[int] = mapped_column(sa.BigInteger, sa.ForeignKey("katplan_plan.id", ondelete="CASCADE"))
     zuletzt_am: Mapped[datetime] = mapped_column(sa.DateTime, nullable=False, default=_utcnow)
+    favorit: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, default=False, server_default=sa.false())
+    aufrufe: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=0, server_default="0")
 
 
 class KatplanRelation(TenantScoped, Base):

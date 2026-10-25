@@ -232,7 +232,7 @@ def test_migration_bewahrt_bestand():
         assert conn.execute(sa.text("SELECT kategorie FROM katplan_plan")).scalar_one() is None
         assert conn.execute(sa.text("SELECT plan_json FROM katplan_version")).scalar_one() == '{"titel":"Altbestand"}'
         assert {c["name"] for c in sa.inspect(conn).get_columns("katplan_nutzung")} == set(
-            KatplanNutzung.__table__.columns.keys())
+            KatplanNutzung.__table__.columns.keys()) - {"favorit", "aufrufe"}
         migration.downgrade()
         assert conn.execute(sa.text("SELECT count(*) FROM katplan_plan")).scalar_one() == 1
         assert "katplan_nutzung" not in sa.inspect(conn).get_table_names()

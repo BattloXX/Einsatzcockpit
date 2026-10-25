@@ -135,6 +135,10 @@ def test_seiten_zusammenfassung_und_links(client, index, monkeypatch, engine):
     dropdown = client.get(f'/plaene/{index["plan_id"]}/suche-treffer?q=Wasserstand')
     assert dropdown.status_code == 200
     assert f'/quellen/{did}?seite=' in dropdown.text
+    wissen = client.get('/einsatzwissen?q=Wasserstand')
+    assert wissen.status_code == 200
+    assert f'/quellen/{did}?seite=7&amp;version_id={vid}' in wissen.text
+    assert 'Dokumentseite · Seite 7' in wissen.text
 
 
 def test_dropdown_rechte_arbeitsstand_und_limit(client, index):

@@ -157,6 +157,7 @@ Das Wiki ist die kanonische Quelle für Installation, Bedienung, Administration,
 | [Einsatz starten](docs/wiki/Anwender-Einsatz-starten.md) | Vom Alarm bis zum laufenden Einsatz |
 | [Großschadenslage](docs/wiki/Anwender-Grosschadenslage.md) | Stab, Einsatzstellen, Ressourcen und Einheitenansicht |
 | [Einsatzwissen – Phase 1](docs/einsatzwissen-phase1.md) | Bestandsaufnahme, Kategorien, Datenmodell, Kompatibilität und Migration |
+| [Einsatzwissen – Phase 6](docs/einsatzwissen-phase6.md) | Kompakte Einsatzansicht, Schnellzugriff, Suche, lokale Kerninhalte und mobile Abnahme |
 | [Dokumentenviewer – Phase 2](docs/dokumentviewer-phase2.md) | Gemeinsame PDF-/Bildanzeige, Dokumentfolgen, Seitenauswahl und Integration |
 | [Dokumentendruck – Phase 3](docs/dokumentdruck-phase3.md) | Seitenauswahl und Dokumentpakete, lokaler Druck, vorhandene Stationsdrucker und Status |
 | [Dokumente im Einsatz – Phase 4](docs/einsatzdokumente-phase4.md) | Unveränderliche Übernahmen, Auftrag und Einheitenfreigaben, Board, Archiv und Backup |

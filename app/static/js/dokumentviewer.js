@@ -113,6 +113,9 @@
         this.state.selection = event.target.value; this.updateSelection();
       });
       this.dialog.addEventListener('cancel', event => { event.preventDefault(); this.close(); });
+      root.addEventListener('popstate', () => {
+        if (this.dialog.open) this.close(false);
+      });
       this.dialog.addEventListener('close', () => { if (!this.dialog.open) this.cleanup(); });
       this.dialog.addEventListener('keydown', event => {
         if (/INPUT|TEXTAREA|SELECT/.test(event.target.tagName)) return;
@@ -140,7 +143,11 @@
       });
       this.$('.dv-documents').hidden = true;
       this.$('.dv-thumbnails').hidden = true;
-      if (!this.dialog.open) this.dialog.showModal();
+      if (!this.dialog.open) {
+        this.historyId = Date.now() + Math.random();
+        history.pushState({...history.state, documentViewer: this.historyId}, '');
+        this.dialog.showModal();
+      }
       await this.load(Math.max(0, Math.min(index, this.items.length - 1)));
     }
     stopDocument() {
@@ -420,10 +427,11 @@
       this.dialog.querySelectorAll('.dv-print').forEach(frame => frame.remove());
       this.states.clear(); this.options = {};
     }
-    close() {
+    close(updateHistory = true) {
       if (document.fullscreenElement === this.shell) document.exitFullscreen().catch(() => {});
       this.cleanup();
       this.dialog.close(); this.opener?.focus();
+      if (updateHistory && history.state?.documentViewer === this.historyId) history.back();
     }
   }
   root.openDocumentViewer = function (items, index, options) {

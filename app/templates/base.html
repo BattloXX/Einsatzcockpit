@@ -51,7 +51,7 @@
   </script>
   {% block head_extra %}{% endblock %}
 </head>
-<body data-document-transfer="{{ 'true' if can_transfer_documents(request) else 'false' }}" data-kontakt-cache-owner="{{ user.id if user else 0 }}:{{ user.org_id if user else 0 }}:{{ 1 if can_view_kontakt_directory(request) else 0 }}:{{ request.state.device_token_id or 0 }}:{{ request.state.qr_incident_id or 0 }}:{{ request.state.qr_lage_id or 0 }}" x-data="appState()" @incident-created.window="onIncidentCreated($event.detail)"
+<body data-ew-owner="{{ user.id if user else 0 }}:{{ user.org_id if user else 0 }}:{{ user.roles|map(attribute='code')|sort|join(',') if user else '' }}:{{ 1 if can_view_katplan(request) else 0 }}:{{ request.state.device_token_id or 0 }}:{{ request.state.qr_incident_id or 0 }}:{{ request.state.qr_lage_id or 0 }}" data-document-transfer="{{ 'true' if can_transfer_documents(request) else 'false' }}" data-kontakt-cache-owner="{{ user.id if user else 0 }}:{{ user.org_id if user else 0 }}:{{ 1 if can_view_kontakt_directory(request) else 0 }}:{{ request.state.device_token_id or 0 }}:{{ request.state.qr_incident_id or 0 }}:{{ request.state.qr_lage_id or 0 }}" x-data="appState()" @incident-created.window="onIncidentCreated($event.detail)"
       :class="{ 'mobile-menu-open': mobileMenuOpen || profilSheetOpen }">
 
   {% if user %}
@@ -386,6 +386,7 @@
   <script src="/static/js/pwa-install.js?v={{ ASSET_VERSION }}" defer></script>
   <script src="/static/js/tooltips.js?v={{ ASSET_VERSION }}" defer></script>
   <script src="/static/js/csrf.js?v={{ ASSET_VERSION }}" defer></script>
+  <script src="/static/js/einsatzwissen_offline.js?v={{ ASSET_VERSION }}" defer></script>
   <script src="/static/js/map-config.js?v={{ ASSET_VERSION }}"></script>
   {% block scripts %}{% endblock %}
 </body>
