@@ -7,27 +7,149 @@ from typing import Literal
 from urllib.parse import urlsplit
 from uuid import uuid4
 
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.models.katplan import (
     KatplanAbschnitt,
     KatplanAnhang,
+    KatplanDokument,
     KatplanElement,
     KatplanPlan,
     KatplanVersion,
     KatplanVersionElement,
     _utcnow,
 )
+from app.models.master import OrgSettings
 from app.models.objekt import ObjektDokument
 from app.models.user import User
-from app.services.katplan_service import markiere_ueberarbeitung, protokolliere
+from app.services.katplan_service import KatplanKonflikt, markiere_ueberarbeitung, protokolliere, pruefe_version
 from app.services.katplan_ziel_service import ziel_laden, ziel_verfuegbar
-from app.services.katplan_zugriff import sieht_vertraulich
+from app.services.katplan_zugriff import darf_bearbeiten, sieht_vertraulich
 from app.services.media_service import delete_katplan_anhang_dateien, store_upload_for_katplan_anhang
 
+PFLEGE_FELDER = ("pruefdatum", "gueltig_bis", "pruefintervall_monate", "zustaendig_user_id")
 SNAPSHOT_FELDER = ("uuid", "art", "beschriftung", "dateiname", "mime", "url",
-                   "objekt_dokument_id", "seiten", "vertraulich")
-HASH_FELDER = ("uuid", "art", "beschriftung", "url", "objekt_dokument_id", "seiten", "vertraulich")
+                   "objekt_dokument_id", "seiten", "vertraulich", "sort", *PFLEGE_FELDER)
+HASH_FELDER = ("uuid", "art", "beschriftung", "url", "objekt_dokument_id", "seiten", "vertraulich",
+               "sort", *PFLEGE_FELDER)
+
+
+def dokument_pruefstatus(daten: dict, heute: date) -> dict:
+    from app.services.katplan_freigabe_service import naechste_pruefung
+
+    pruefdatum = daten.get("pruefdatum")
+    gueltig = daten.get("gueltig_bis")
+    if isinstance(pruefdatum, str):
+        pruefdatum = date.fromisoformat(pruefdatum)
+    if isinstance(gueltig, str):
+        gueltig = date.fromisoformat(gueltig)
+    intervall = daten.get("pruefintervall_monate")
+    termin = naechste_pruefung(pruefdatum, intervall) if pruefdatum and intervall else None
+    return {"naechste_pruefung": termin.isoformat() if termin else None,
+            "pruefung_faellig": bool(termin and termin <= heute),
+            "pruefangabe_fehlt": not pruefdatum,
+            "gueltigkeit_abgelaufen": bool(gueltig and gueltig < heute)}
+
+
+def pflege_version(db: Session, plan: KatplanPlan, user: User, version: int) -> None:
+    """Gemeinsamer Schreibschutz für Web und MCP, einschließlich konkurrierender Anfragen."""
+    if not darf_bearbeiten(user):
+        raise ValueError("Keine Berechtigung zur Dokumentenpflege.")
+    try:
+        _bindung(db, plan, user)
+        db.refresh(plan, with_for_update=True)
+    except OperationalError as exc:
+        # MariaDB kann unter REPEATABLE READ bereits das sperrende Neulesen ablehnen.
+        # Der Aufrufer rollt zurück und zeigt denselben Konflikt wie bei alter Planversion.
+        if getattr(exc.orig, "args", (None,))[0] in (1020, 1205, 1213):
+            raise KatplanKonflikt("Der Arbeitsstand wird gleichzeitig geändert. Bitte neu laden.") from exc
+        raise
+    _bindung(db, plan, user)
+    pruefe_version(plan, version)
+
+
+def dokumentbibliothek(db: Session, user: User) -> list[dict]:
+    if not darf_bearbeiten(user):
+        return []
+    query = db.query(KatplanAnhang).join(KatplanPlan, KatplanPlan.id == KatplanAnhang.plan_id).filter(
+        KatplanAnhang.org_id == user.org_id, KatplanPlan.org_id == user.org_id,
+        KatplanPlan.status != "archiviert", KatplanAnhang.geloescht_am.is_(None),
+        KatplanAnhang.art.in_(["datei", "foto"]),
+    ).order_by(KatplanAnhang.id)
+    result, gesehen = [], set()
+    for a in query:
+        element = db.query(KatplanElement).filter_by(
+            org_id=user.org_id, id=a.element_id).first() if a.element_id else None
+        if (a.vertraulich or element and element.vertraulich) and not sieht_vertraulich(user):
+            continue
+        if a.pfad in gesehen:
+            continue
+        gesehen.add(a.pfad)
+        result.append({"referenz": f"anhang:{a.uuid}", "titel": a.beschriftung or a.dateiname,
+                       "plan_id": a.plan_id, "vertraulich": a.vertraulich or bool(element and element.vertraulich)})
+    for d in db.query(KatplanDokument).join(KatplanPlan, KatplanPlan.id == KatplanDokument.plan_id).filter(
+        KatplanDokument.org_id == user.org_id, KatplanPlan.org_id == user.org_id,
+        KatplanPlan.status != "archiviert", KatplanDokument.archiviert.is_(False),
+        KatplanDokument.ist_aktuelle_version.is_(True),
+    ).order_by(KatplanDokument.id):
+        result.append({"referenz": f"quelle:{d.uuid}", "titel": d.titel,
+                       "plan_id": d.plan_id, "vertraulich": False})
+    return result
+
+
+def dokument_referenzieren(db: Session, plan: KatplanPlan, user: User, referenz: str, *,
+                           element: KatplanElement | None = None, abschnitt: KatplanAbschnitt | None = None,
+                           beschriftung: str = "", seiten: str = "", quelle: str = "ui") -> KatplanAnhang:
+    """Neue Zuordnung auf unveränderliche Bytes; kein Kopieren und kein Überschreiben."""
+    from app.services.dokumentviewer_service import seiten_auswahl
+    from app.services.katplan_quelle_service import absolute_pfad
+
+    _bindung(db, plan, user, element, abschnitt)
+    eintrag = next((a for a in dokumentbibliothek(db, user) if a["referenz"] == referenz), None)
+    if eintrag is None:
+        raise ValueError("Dokument nicht verfügbar.")
+    art, uid = referenz.split(":", 1)
+    original: KatplanAnhang | KatplanDokument
+    if art == "anhang":
+        original = db.query(KatplanAnhang).filter_by(org_id=plan.org_id, uuid=uid).one()
+    else:
+        original = db.query(KatplanDokument).filter_by(org_id=plan.org_id, uuid=uid).one()
+    neu = _neu(db, plan, user, element=element, abschnitt=abschnitt,
+               beschriftung=beschriftung or eintrag["titel"] or "Dokument",
+               vertraulich=eintrag["vertraulich"])
+    if isinstance(original, KatplanAnhang):
+        for feld in ("art", "mime", "dateiname", "pfad", "thumb_pfad", "breite", "hoehe",
+                     "groesse_bytes", "datei_hash", "seiten", *PFLEGE_FELDER):
+            setattr(neu, feld, getattr(original, feld))
+    else:
+        neu.art, neu.mime = "datei", "application/pdf"
+        neu.dateiname, neu.pfad = original.dateiname_original, original.pfad
+        neu.groesse_bytes = original.groesse_bytes
+    if not neu.pfad or not absolute_pfad(neu.pfad).is_file():
+        raise ValueError("Dokumentdatei nicht verfügbar.")
+    bereich = seiten or neu.seiten or ""
+    if bereich:
+        if neu.mime != "application/pdf":
+            raise ValueError("Seitenbereiche sind nur für PDF-Dokumente möglich.")
+        import io
+
+        from pypdf import PdfReader
+        from pypdf.errors import PyPdfError
+
+        try:
+            count = len(PdfReader(io.BytesIO(absolute_pfad(neu.pfad).read_bytes())).pages)
+            seiten_auswahl(bereich, count)
+        except (OSError, ValueError, PyPdfError) as exc:
+            raise ValueError("Dokument oder Seitenbereich ist ungültig.") from exc
+        if len(bereich) > 30:
+            raise ValueError("Seitenbereich darf höchstens 30 Zeichen enthalten.")
+        neu.seiten = bereich
+    db.add(neu)
+    db.flush()
+    _geaendert(db, plan, user, neu, "referenziert",
+               alt=json.dumps({"quellreferenz": referenz}, ensure_ascii=False), quelle=quelle)
+    return neu
 
 
 def _bindung(db: Session, plan: KatplanPlan, user: User, element: KatplanElement | None = None,
@@ -36,6 +158,7 @@ def _bindung(db: Session, plan: KatplanPlan, user: User, element: KatplanElement
         raise ValueError("Dieser Plan kann nicht bearbeitet werden.")
     if getattr(user, "org_id", plan.org_id) != plan.org_id:
         raise ValueError("Benutzer gehört nicht zu diesem Plan.")
+    db.query(OrgSettings).filter_by(org_id=plan.org_id).with_for_update().first()
     for obj in (element, abschnitt):
         if obj is not None and (obj.plan_id != plan.id or obj.org_id != plan.org_id or obj in db.deleted):
             raise ValueError("Element/Kapitel gehört nicht zu diesem Plan.")
@@ -147,13 +270,29 @@ def _pruefe_anhang(db: Session, plan: KatplanPlan, user: User, anhang: KatplanAn
 
 def anhang_aendern(db: Session, plan: KatplanPlan, user: User, anhang: KatplanAnhang, *,
                    beschriftung: str, urheber: str, aufnahme_datum: date | None,
-                   vertraulich: bool, sort: int) -> None:
+                   vertraulich: bool, sort: int, pflege: dict | None = None, quelle: str = "ui") -> None:
     _pruefe_anhang(db, plan, user, anhang)
     _metadaten(beschriftung, urheber, aufnahme_datum)
+    pflege = pflege or {}
+    if set(pflege) - set(PFLEGE_FELDER):
+        raise ValueError("Unbekannte Prüfangabe.")
+    for feld in ("pruefdatum", "gueltig_bis"):
+        if pflege.get(feld) is not None and not isinstance(pflege[feld], date):
+            raise ValueError("Ungültiges Datum.")
+    intervall = pflege.get("pruefintervall_monate")
+    if intervall is not None and (type(intervall) is not int or not 1 <= intervall <= 60):
+        raise ValueError("Prüfintervall muss zwischen 1 und 60 Monaten liegen.")
+    person = pflege.get("zustaendig_user_id")
+    if person is not None and (type(person) is not int or not db.query(User.id).filter_by(
+        org_id=plan.org_id, id=person, active=True,
+    ).first()):
+        raise ValueError("Zuständige Person nicht verfügbar.")
     alt = json.dumps(_protokoll_daten(anhang), ensure_ascii=False)
     anhang.beschriftung, anhang.urheber, anhang.aufnahme_datum = beschriftung, urheber, aufnahme_datum
     anhang.vertraulich, anhang.sort = vertraulich, sort
-    _geaendert(db, plan, user, anhang, "geaendert", alt)
+    for feld, wert in pflege.items():
+        setattr(anhang, feld, wert)
+    _geaendert(db, plan, user, anhang, "geaendert", alt, quelle=quelle)
 
 
 def _protokoll_daten(anhang: KatplanAnhang) -> dict:
@@ -162,7 +301,8 @@ def _protokoll_daten(anhang: KatplanAnhang) -> dict:
 
 
 def anhang_snapshot(anhang: KatplanAnhang) -> dict:
-    return {feld: getattr(anhang, feld) for feld in SNAPSHOT_FELDER}
+    return {feld: wert.isoformat() if isinstance(wert := getattr(anhang, feld), date) else wert
+            for feld in SNAPSHOT_FELDER}
 
 
 def anhaenge_aus_version(db: Session, plan: KatplanPlan, version_id: int) -> list[dict]:

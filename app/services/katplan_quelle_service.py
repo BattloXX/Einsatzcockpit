@@ -1,5 +1,6 @@
 """Versionierte PDF-Planquellen mit tenantgebundener Seitenverarbeitung."""
 
+import hashlib
 import json
 import logging
 import re
@@ -13,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models.katplan import (
+    KatplanAnhang,
     KatplanDokument,
     KatplanDokumentSeite,
     KatplanElement,
@@ -21,7 +23,7 @@ from app.models.katplan import (
     KatplanVersionElement,
     _utcnow,
 )
-from app.models.master import SystemSettings
+from app.models.master import OrgSettings, SystemSettings
 from app.models.user import User
 from app.services import pdf_seiten_pipeline as pipeline
 from app.services.katplan_service import markiere_ueberarbeitung, protokolliere
@@ -30,6 +32,37 @@ from app.services.media_service import _detect_mime
 from app.services.storage_service import release_storage, reserve_storage
 
 logger = logging.getLogger(__name__)
+
+
+def erkenne_ueberschriften(pfad: Path, seiten) -> dict[int, str]:
+    """PDF-Lesezeichen bevorzugen, sonst ausdrücklich erkennbare Textüberschriften."""
+    from pypdf import PdfReader
+    from pypdf.errors import PdfReadError
+
+    titel: dict[int, str] = {}
+    try:
+        reader = PdfReader(pfad)
+
+        def lesen(knoten):
+            for eintrag in knoten:
+                if isinstance(eintrag, list):
+                    lesen(eintrag)
+                else:
+                    nr = reader.get_destination_page_number(eintrag)
+                    if nr is not None and 0 <= nr < len(reader.pages):
+                        titel.setdefault(nr + 1, str(eintrag.title)[:200])
+
+        lesen(reader.outline)
+    except (OSError, ValueError, KeyError, TypeError, PdfReadError, RecursionError):
+        logger.info("PDF-Lesezeichen konnten nicht ausgewertet werden")
+    for seite in seiten:
+        for zeile in (seite.volltext or "").splitlines()[:12]:
+            zeile = zeile.strip()
+            if 4 <= len(zeile) <= 160 and (re.match(r"^\d+(?:\.\d+)*[.)]?\s+\S", zeile)
+                                         or zeile.isupper() and any(c.isalpha() for c in zeile)):
+                titel.setdefault(seite.seiten_nr, zeile)
+                break
+    return titel
 
 
 def absolute_pfad(relativ: str) -> Path:
@@ -82,6 +115,7 @@ def quelle_hochladen(db: Session, plan: KatplanPlan, user: User, data: bytes, da
                      titel: str, herausgeber: str = "", stand: date | None = None,
                      ersetzt_dokument_id: int | None = None) -> KatplanDokument:
     _bindung(plan, user)
+    db.info["katplan_quelle_verarbeiten"] = False
     titel = titel.strip()
     if not titel or len(titel) > 200 or len(herausgeber) > 200:
         raise ValueError("Titel ist erforderlich; Titel und Herausgeber dürfen höchstens 200 Zeichen enthalten.")
@@ -95,6 +129,18 @@ def quelle_hochladen(db: Session, plan: KatplanPlan, user: User, data: bytes, da
         )
     except pipeline.PdfFehler as exc:
         raise HTTPException(exc.status_code, exc.detail) from exc
+    digest = hashlib.sha256(data).hexdigest()
+    db.query(OrgSettings).filter_by(org_id=plan.org_id).with_for_update().first()
+    if ersetzt_dokument_id is None:
+        bestand = db.query(KatplanDokument).filter_by(
+            org_id=plan.org_id, plan_id=plan.id, datei_hash=digest, archiviert=False,
+            ist_aktuelle_version=True,
+        ).with_for_update().first()
+        if bestand is not None and absolute_pfad(bestand.pfad).is_file():
+            if (bestand.titel, bestand.herausgeber, bestand.stand) != (titel, herausgeber, stand):
+                raise ValueError("Dieses PDF ist bereits als Quelle vorhanden. Vorhandene Quelle zuordnen "
+                                 "oder ausdrücklich eine neue Quellversion anlegen.")
+            return bestand
     vorher = _dokument(db, plan, ersetzt_dokument_id) if ersetzt_dokument_id is not None else None
     gruppe = _gruppe(db, plan, vorher) if vorher else []
     uid = str(uuid4())
@@ -109,6 +155,7 @@ def quelle_hochladen(db: Session, plan: KatplanPlan, user: User, data: bytes, da
             org_id=plan.org_id, plan_id=plan.id, uuid=uid, titel=titel,
             dateiname_original=Path(dateiname.replace("\\", "/")).name[:255] or "original.pdf",
             pfad=relativ, groesse_bytes=len(data), belegt_bytes=len(data), seitenzahl=seitenzahl,
+            datei_hash=digest,
             herausgeber=herausgeber, stand=stand, hochgeladen_von_id=user.id,
             dokument_gruppe_id=(vorher.dokument_gruppe_id or vorher.id) if vorher else None,
             versionsnummer=max((d.versionsnummer for d in gruppe), default=0) + 1,
@@ -123,6 +170,7 @@ def quelle_hochladen(db: Session, plan: KatplanPlan, user: User, data: bytes, da
     for alt in gruppe:
         alt.ist_aktuelle_version = False
     _geaendert(db, plan, user, dokument, "neue Quellversion" if vorher else "hochgeladen")
+    db.info["katplan_quelle_verarbeiten"] = True
     return dokument
 
 
@@ -160,6 +208,7 @@ def verarbeite_quelle(dokument_id: int, render_func: pipeline.RenderFunc | None 
         neu_belegt = sum(e.bytes_belegt for e in ergebnisse)
         reserve_storage(db, org_id, neu_belegt)
         basis = dokument.pfad.rsplit("/", 1)[0]
+        ueberschriften = erkenne_ueberschriften(dest_dir / "original.pdf", ergebnisse)
         for e in ergebnisse:
             db.add(KatplanDokumentSeite(
                 org_id=org_id, plan_id=dokument.plan_id, dokument_id=dokument.id, seiten_nr=e.seiten_nr,
@@ -167,6 +216,7 @@ def verarbeite_quelle(dokument_id: int, render_func: pipeline.RenderFunc | None 
                 bild_pfad=f"{basis}/{e.bild_name}" if e.bild_name else None,
                 thumb_pfad=f"{basis}/{e.thumb_name}" if e.thumb_name else None,
                 volltext=e.volltext, text_quelle=e.text_quelle,
+                titel=ueberschriften.get(e.seiten_nr),
             ))
         dokument.belegt_bytes = dokument.groesse_bytes + neu_belegt
         dokument.status = "fertig"
@@ -201,6 +251,7 @@ def quellen_ids_aus_version(db: Session, plan: KatplanPlan, version_id: int,
 
 def quelle_entfernen(db: Session, plan: KatplanPlan, user: User, dokument: KatplanDokument) -> None:
     _bindung(plan, user)
+    db.query(OrgSettings).filter_by(org_id=plan.org_id).with_for_update().first()
     _dokument(db, plan, dokument.id)
     gruppe_ids = {d.id for d in _gruppe(db, plan, dokument)}
     referenziert = db.query(KatplanElement).filter(
@@ -211,6 +262,9 @@ def quelle_entfernen(db: Session, plan: KatplanPlan, user: User, dokument: Katpl
         gruppe_ids & quellen_ids_aus_version(db, plan, v.id)
         for v in db.query(KatplanVersion).filter_by(org_id=plan.org_id, plan_id=plan.id)
     )
+    referenziert = referenziert or db.query(KatplanAnhang.id).filter_by(
+        org_id=plan.org_id, pfad=dokument.pfad,
+    ).first() is not None
     _geaendert(db, plan, user, dokument, "entfernt")
     if referenziert:
         dokument.archiviert = True

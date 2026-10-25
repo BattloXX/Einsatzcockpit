@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+from urllib.parse import urlsplit
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -50,8 +51,16 @@ class Auftrag(BaseModel):
     request_id: UUID
 
 
+def _einsatzfassungen_pruefen(request: Request, user: User, paket: dict) -> None:
+    if any(urlsplit(ref["url"]).path.startswith("/einsatz-dokumente/") for ref in paket["documents"]):
+        from app.services.einsatz_dokument_service import vollzugang
+
+        vollzugang(request, user)
+
+
 @router.post("/vorbereiten")
-def vorbereiten(daten: Auswahl, db: Session = Depends(get_db), user: User = Depends(_user)):
+def vorbereiten(daten: Auswahl, request: Request, db: Session = Depends(get_db), user: User = Depends(_user)):
+    _einsatzfassungen_pruefen(request, user, daten.model_dump())
     _, paket = service.zusammenstellen(db, user, daten.model_dump(), vorbereiten=True)
     token = service.versiegeln(user, paket)
     hinweis = ("Originale Seitengrößen bleiben erhalten. Stationsdruck erhält 6,35 mm Sicherheitsrand."
@@ -62,8 +71,10 @@ def vorbereiten(daten: Auswahl, db: Session = Depends(get_db), user: User = Depe
 
 
 @router.get("/pdf")
-def pdf(paket: str, download: bool = False, db: Session = Depends(get_db), user: User = Depends(_user)):
+def pdf(paket: str, request: Request, download: bool = False,
+        db: Session = Depends(get_db), user: User = Depends(_user)):
     manifest = service.entsiegeln(user, paket)
+    _einsatzfassungen_pruefen(request, user, manifest)
     data, _ = service.zusammenstellen(db, user, manifest)
     return Response(data, media_type="application/pdf", headers={
         "Content-Disposition": ('attachment' if download else 'inline') + '; filename="ECP-Druckauswahl.pdf"',
@@ -81,10 +92,11 @@ def drucker(db: Session = Depends(get_db), user: User = Depends(_user)):
 
 
 @router.post("/auftrag")
-def auftrag(daten: Auftrag, db: Session = Depends(get_db), user: User = Depends(_user)):
+def auftrag(daten: Auftrag, request: Request, db: Session = Depends(get_db), user: User = Depends(_user)):
     if not service.station_erlaubt(db, user):
         raise HTTPException(403, "Keine Berechtigung für Stationsdruck.")
     manifest = service.entsiegeln(user, daten.token)
+    _einsatzfassungen_pruefen(request, user, manifest)
     _, paket = service.zusammenstellen(db, user, manifest)
     # Bestehende CUPS-Clients besitzen keinen Fit-Schalter. Daher Inhalt vektoriell
     # innerhalb desselben Papierformats einpassen; ein A3-Plan bleibt A3.

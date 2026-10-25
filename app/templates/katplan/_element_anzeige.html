@@ -14,6 +14,10 @@
         <p>Quelle nicht mehr verfügbar{% if element.quelle_seiten %}, S. {{ element.quelle_seiten }}{% endif %}</p>
       {% endif %}
     {% endif %}
+    {% if leseversion is defined and can_transfer_documents(request) %}
+      <button type="button" class="btn btn--ghost btn--sm"
+        data-ed-collection="/einsatz-dokumente/sammlung/{{ plan.id }}/{{ element.element_uuid }}?version_id={{ leseversion.id }}">Dokumentensammlung zum Einsatz hinzufügen</button>
+    {% endif %}
     {% if kann_uebernehmen %}
       <button type="button" class="btn btn--ghost btn--sm"
         hx-get="/plaene/{{ plan.id }}/elemente/{{ element.id }}/uebernehmen{% if leseversion is defined %}?version_id={{ leseversion.id }}{% endif %}"

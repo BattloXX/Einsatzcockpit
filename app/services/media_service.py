@@ -16,6 +16,7 @@ Org-Check, damit Multi-Tenant-Isolation gewahrt bleibt.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import io
 import logging
 import mimetypes
@@ -869,6 +870,29 @@ def store_upload_for_katplan_anhang(
         raise ValueError("Dateityp nicht erlaubt")
     if len(raw) > _size_limit_for_kind(kind):
         raise HTTPException(413, "Datei zu gross.")
+    from app.models.katplan import KatplanAnhang, KatplanDokument
+    from app.models.master import OrgSettings
+
+    # Organisation sperren: gleichzeitige Uploads gleicher Bytes teilen dieselbe Datei.
+    db.query(OrgSettings).filter_by(org_id=plan.org_id).with_for_update().first()
+    digest = hashlib.sha256(raw).hexdigest()
+    bestand = db.query(KatplanAnhang).filter_by(org_id=plan.org_id, datei_hash=digest).with_for_update().first()
+    anhang.datei_hash = digest
+    if bestand and bestand.pfad and (_storage_root() / bestand.pfad).is_file():
+        for feld in ("art", "mime", "pfad", "thumb_pfad", "breite", "hoehe", "groesse_bytes"):
+            setattr(anhang, feld, getattr(bestand, feld))
+        anhang.dateiname = name
+        db.add(anhang)
+        db.flush()
+        return
+    if mime == "application/pdf":
+        quelle = db.query(KatplanDokument).filter_by(org_id=plan.org_id, datei_hash=digest).first()
+        if quelle is not None and (_storage_root() / quelle.pfad).is_file():
+            anhang.art, anhang.mime, anhang.dateiname = "datei", mime, name
+            anhang.pfad, anhang.groesse_bytes = quelle.pfad, quelle.groesse_bytes
+            db.add(anhang)
+            db.flush()
+            return
     root = _storage_root().resolve()
     dest = root / str(plan.org_id) / "katplan" / plan.uuid / anhang.uuid
     dest.resolve().relative_to(root)
@@ -899,6 +923,8 @@ def store_upload_for_katplan_anhang(
         anhang.groesse_bytes = size
         db.add(anhang)
         db.flush()
+        if "katplan_mcp_dateien" in db.info:
+            db.info["katplan_mcp_dateien"].extend(p for p in (main, thumb) if p)
     except Exception:
         shutil.rmtree(dest)
         if reserved:
@@ -908,6 +934,16 @@ def store_upload_for_katplan_anhang(
 
 def delete_katplan_anhang_dateien(anhang, db: Session) -> None:
     """Dateien sicher entfernen und den gesamten belegten Storage freigeben."""
+    from app.models.katplan import KatplanAnhang, KatplanDokument
+
+    if not anhang.pfad:
+        return
+    # Auch Soft-Deletes behalten Dateien für unveränderliche Freigaben.
+    if (db.query(KatplanAnhang.id).filter(
+        KatplanAnhang.org_id == anhang.org_id, KatplanAnhang.pfad == anhang.pfad,
+        KatplanAnhang.id != anhang.id,
+    ).first() or db.query(KatplanDokument.id).filter_by(org_id=anhang.org_id, pfad=anhang.pfad).first()):
+        return
     root = _storage_root().resolve()
     paths = [(root / rel).resolve() for rel in (anhang.pfad, anhang.thumb_pfad) if rel]
     for path in paths:

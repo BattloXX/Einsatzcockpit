@@ -155,6 +155,8 @@
     try {
       for (let index = 0; index < dateien.length; index += 1) {
         grunddaten.set('datei', dateien[index]);
+        const version = document.getElementById(zielId)?.querySelector('input[name="version"]');
+        if (version) grunddaten.set('version', version.value);
         status(index + '/' + dateien.length + ' hochgeladen');
         const antwort = await fetch(form.action, {
           method: 'POST', body: grunddaten,

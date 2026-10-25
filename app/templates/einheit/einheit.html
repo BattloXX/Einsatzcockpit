@@ -569,6 +569,11 @@
     </div>
   </section>
 
+  <section class="fab-card" aria-label="Dokumente">
+    <h2 class="fab-card__title">Dokumente</h2>
+    <div hx-get="/einheit/api/dokumente{% if simulation %}?sim={{ sim_einheit_id }}{% elif benutzer_einheit_id %}?einheit={{ benutzer_einheit_id }}{% endif %}"
+      hx-trigger="load, every 30s, dokumente-aktualisiert from:body" hx-swap="innerHTML">Freigegebene Unterlagen werden geladen.</div>
+  </section>
   </div>{# Standardinhalt bleibt während eines Dialogs ohne Tastatur-/Touch-Fokus. #}
   {# ── Flyouts (Erfassen und Bestätigen) ──────────────────────────────── #}
   <div class="person-flyout-backdrop" x-show="flyout" x-cloak>

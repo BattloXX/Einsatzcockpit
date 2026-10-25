@@ -245,6 +245,8 @@ class KatplanNutzung(TenantScoped, Base):
     user_id: Mapped[int] = mapped_column(sa.BigInteger, sa.ForeignKey("user.id", ondelete="CASCADE"))
     plan_id: Mapped[int] = mapped_column(sa.BigInteger, sa.ForeignKey("katplan_plan.id", ondelete="CASCADE"))
     zuletzt_am: Mapped[datetime] = mapped_column(sa.DateTime, nullable=False, default=_utcnow)
+    favorit: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, default=False, server_default=sa.false())
+    aufrufe: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=0, server_default="0")
 
 
 class KatplanRelation(TenantScoped, Base):
@@ -399,6 +401,13 @@ class KatplanAnhang(TenantScoped, Base):
     thumb_pfad: Mapped[str | None] = mapped_column(sa.String(500), nullable=True)
     mime: Mapped[str | None] = mapped_column(sa.String(100), nullable=True)
     groesse_bytes: Mapped[int] = mapped_column(sa.BigInteger, nullable=False, default=0)
+    datei_hash: Mapped[str | None] = mapped_column(sa.String(64), nullable=True, index=True)
+    pruefdatum: Mapped[date | None] = mapped_column(sa.Date, nullable=True)
+    gueltig_bis: Mapped[date | None] = mapped_column(sa.Date, nullable=True)
+    pruefintervall_monate: Mapped[int | None] = mapped_column(sa.Integer, nullable=True)
+    zustaendig_user_id: Mapped[int | None] = mapped_column(
+        sa.BigInteger, sa.ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
     breite: Mapped[int | None] = mapped_column(sa.Integer, nullable=True)
     hoehe: Mapped[int | None] = mapped_column(sa.Integer, nullable=True)
     url: Mapped[str | None] = mapped_column(sa.String(1000), nullable=True)
@@ -426,6 +435,7 @@ class KatplanDokument(TenantScoped, Base):
     titel: Mapped[str] = mapped_column(sa.String(200))
     dateiname_original: Mapped[str] = mapped_column(sa.String(255))
     pfad: Mapped[str] = mapped_column(sa.String(500))
+    datei_hash: Mapped[str | None] = mapped_column(sa.String(64), nullable=True, index=True)
     groesse_bytes: Mapped[int] = mapped_column(sa.BigInteger)
     belegt_bytes: Mapped[int] = mapped_column(sa.BigInteger, default=0)
     seitenzahl: Mapped[int] = mapped_column(sa.Integer)

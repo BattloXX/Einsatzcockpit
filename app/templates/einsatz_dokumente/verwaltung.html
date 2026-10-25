@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}Dokumente im Einsatz{% endblock %}
+{% block content %}
+<div style="padding:1rem;max-width:1100px;margin:auto;">
+  <a class="btn btn--ghost" href="{{ '/einsatz/' if art == 'einsatz' else '/lage/' }}{{ ident }}">Zurück zum Einsatzboard</a>
+  {% include "einsatz_dokumente/_liste.html" %}
+</div>
+{% endblock %}

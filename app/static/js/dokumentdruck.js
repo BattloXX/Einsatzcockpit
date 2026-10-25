@@ -224,6 +224,8 @@
     const url = new URL(value, location.href);
     return url.origin === location.origin && (
       /^\/plaene\/(?:anhang\/[\w-]+|quelle\/[\w-]+\/(?:original|seite\/[1-9]\d*\/(?:pdf|bild))|[1-9]\d*\/pdf)$/.test(url.pathname) ||
-      /^\/objekt-medien\/(?:dokument\/[1-9]\d*\/original|seite\/[1-9]\d*\/pdf)$/.test(url.pathname));
+      /^\/objekt-medien\/(?:dokument\/[1-9]\d*\/original|seite\/[1-9]\d*\/pdf)$/.test(url.pathname) ||
+      /^\/einsatz-dokumente\/datei\/[1-9]\d*$/.test(url.pathname) ||
+      /^\/nachschlagewerk-cache\/rettungskarten\/[1-9]\d*\/original.pdf$/.test(url.pathname));
   };
 })(window);

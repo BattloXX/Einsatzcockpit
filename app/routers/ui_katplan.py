@@ -215,11 +215,12 @@ def _anhaenge_kontext(db: Session, user: User, plan: KatplanPlan,
             url = "/plaene/anhang/" + daten["uuid"]
             suffix = f"?version_id={version_id}" if version_id is not None else ""
             dokument = dokumente.get(daten.get("objekt_dokument_id") or 0)
-            result.append({**daten, "datei_url": url + suffix, "thumb_url": url + "/thumb" + suffix,
+            result.append({**daten, **anhang_service.dokument_pruefstatus(daten, now_local().date()),
+                           "datei_url": url + suffix, "thumb_url": url + "/thumb" + suffix,
                            "groesse": f"{a.groesse_bytes / 1024:.1f} KB" if a and a.groesse_bytes else "",
                            "urheber": a.urheber if a else "",
                            "aufnahme_datum": a.aufnahme_datum if a else None,
-                           "sort": a.sort if a else 0,
+                           "sort": daten.get("sort", a.sort if a else 0),
                            "objekt_recht": objekt_recht and dokument is not None,
                            "dokument_name": dokument.dateiname_original if dokument else "Dokument"})
         return result
@@ -244,6 +245,9 @@ def _anhaenge_kontext(db: Session, user: User, plan: KatplanPlan,
             kapitel_map.setdefault(a["abschnitt_id"], []).extend(ansichten([a]))
     return {"element_anhaenge": element_map, "kapitel_anhaenge": kapitel_map,
             "plan_anhaenge": ansichten([a for a in plan_roh if not a.get("abschnitt_id")]),
+            "dokumentbibliothek": anhang_service.dokumentbibliothek(db, user) if version_id is None else [],
+            "dokument_zustaendige": db.query(User).filter_by(org_id=plan.org_id, active=True).order_by(
+                User.display_name).all() if version_id is None else [],
             "objektmodul": ziel_verfuegbar(db, plan.org_id, "objekt")}
 
 
@@ -392,7 +396,12 @@ def anhang_datei(uuid: str, request: Request, version_id: int | None = None,
     if request.query_params.get("download") == "1":
         disposition = "attachment"
     if any(k in request.query_params for k in ("seiten", "auswahl")) and mime == "application/pdf":
-        return viewer_auswahl(path, request.query_params)
+        bereich = referenz.get("seiten") if referenz else anhang.seiten
+        return viewer_auswahl(pdf_auszug(path, bereich) if bereich else path, request.query_params)
+    if request.query_params.get("auszug") == "1" and mime == "application/pdf":
+        bereich = referenz.get("seiten") if referenz else anhang.seiten
+        if bereich:
+            return viewer_auswahl(pdf_auszug(path, bereich), request.query_params)
     return FileResponse(path, media_type=mime, filename=anhang.dateiname or "datei",
                         content_disposition_type=disposition, headers={"X-Content-Type-Options": "nosniff"})
 
@@ -402,10 +411,12 @@ def anhang_anlegen(plan_id: int, request: Request, datei: UploadFile | None = Fi
                    url: str = Form(""), objekt_dokument_id: int | None = Form(None),
                    element_id: int | None = Form(None), abschnitt_id: int | None = Form(None),
                    beschriftung: str = Form(""), urheber: str = Form(""), aufnahme_datum: str = Form(""),
-                   vertraulich: bool = Form(False), seiten: str = Form(""),
+                   vertraulich: bool = Form(False), seiten: str = Form(""), version: int | None = Form(None),
                    db: Session = Depends(get_db), user: User = Depends(require_katplan_bearbeiten)):
     plan = _plan(db, plan_id, user)
     try:
+        if version is not None:
+            anhang_service.pflege_version(db, plan, user, version)
         if sum((datei is not None, bool(url), objekt_dokument_id is not None)) != 1:
             raise ValueError("Bitte genau eine Datei, einen Link oder ein Objektdokument angeben.")
         element = db.query(KatplanElement).filter_by(
@@ -427,9 +438,10 @@ def anhang_anlegen(plan_id: int, request: Request, datei: UploadFile | None = Fi
         else:
             anhang_service.link_hinzufuegen(db, plan, user, url, **kwargs)
         db.commit()
-    except ValueError as exc:
+    except (ValueError, KatplanKonflikt) as exc:
         db.rollback()
-        return _anhang_antwort(request, db, user, plan, element_id, abschnitt_id, str(exc), 422)
+        return _anhang_antwort(request, db, user, plan, element_id, abschnitt_id, str(exc),
+                               409 if isinstance(exc, KatplanKonflikt) else 422)
     except HTTPException as exc:
         db.rollback()
         if exc.status_code not in (413, 415, 422):
@@ -442,32 +454,95 @@ def anhang_anlegen(plan_id: int, request: Request, datei: UploadFile | None = Fi
 def anhang_bearbeiten(plan_id: int, uuid: str, request: Request, beschriftung: str = Form(""),
                       urheber: str = Form(""), aufnahme_datum: str = Form(""),
                       vertraulich: bool = Form(False), sort: int = Form(0),
+                      version: int | None = Form(None), pruefdatum: str | None = Form(None),
+                      gueltig_bis: str | None = Form(None), pruefintervall_monate: str | None = Form(None),
+                      zustaendig_user_id: str | None = Form(None),
                       db: Session = Depends(get_db), user: User = Depends(require_katplan_bearbeiten)):
     plan = _plan(db, plan_id, user)
     anhang = _anhang(db, plan, uuid)
     try:
+        if version is not None:
+            anhang_service.pflege_version(db, plan, user, version)
+        pflege = {}
+        for feld, roh in (("pruefdatum", pruefdatum), ("gueltig_bis", gueltig_bis),
+                          ("pruefintervall_monate", pruefintervall_monate), ("zustaendig_user_id", zustaendig_user_id)):
+            if roh is not None:
+                pflege[feld] = (date.fromisoformat(roh) if feld in ("pruefdatum", "gueltig_bis") else int(roh)) \
+                    if roh else None
         anhang_service.anhang_aendern(db, plan, user, anhang, beschriftung=beschriftung,
                                      urheber=urheber, aufnahme_datum=date.fromisoformat(aufnahme_datum)
-                                     if aufnahme_datum else None, vertraulich=vertraulich, sort=sort)
+                                     if aufnahme_datum else None, vertraulich=vertraulich, sort=sort, pflege=pflege)
         db.commit()
-    except ValueError as exc:
+    except (ValueError, KatplanKonflikt) as exc:
         db.rollback()
-        return _anhang_antwort(request, db, user, plan, anhang.element_id, anhang.abschnitt_id, str(exc), 422)
+        return _anhang_antwort(request, db, user, plan, anhang.element_id, anhang.abschnitt_id, str(exc),
+                               409 if isinstance(exc, KatplanKonflikt) else 422)
     return _anhang_antwort(request, db, user, plan, anhang.element_id, anhang.abschnitt_id)
 
 
+@router.post("/{plan_id}/dokumente/referenzieren")
+def dokument_referenzieren(plan_id: int, request: Request, referenz: str = Form(...), version: int = Form(...),
+                           element_id: int | None = Form(None), abschnitt_id: int | None = Form(None),
+                           seiten: str = Form(""), beschriftung: str = Form(""),
+                           db: Session = Depends(get_db), user: User = Depends(require_katplan_bearbeiten)):
+    plan = _plan(db, plan_id, user)
+    try:
+        anhang_service.pflege_version(db, plan, user, version)
+        element = _objekt(db, KatplanElement, element_id, plan, user) if element_id else None
+        abschnitt = _objekt(db, KatplanAbschnitt, abschnitt_id, plan, user) if abschnitt_id else None
+        anhang_service.dokument_referenzieren(db, plan, user, referenz, element=element, abschnitt=abschnitt,
+                                              seiten=seiten, beschriftung=beschriftung)
+        db.commit()
+    except (ValueError, KatplanKonflikt) as exc:
+        db.rollback()
+        return _anhang_antwort(request, db, user, plan, element_id, abschnitt_id, str(exc),
+                               409 if isinstance(exc, KatplanKonflikt) else 422)
+    return _anhang_antwort(request, db, user, plan, element_id, abschnitt_id)
+
+
+@router.post("/{plan_id}/anhaenge/{uuid}/ersetzen")
+def dokument_ersetzen(plan_id: int, uuid: str, request: Request, version: int = Form(...),
+                      datei: UploadFile = File(...), db: Session = Depends(get_db),
+                      user: User = Depends(require_katplan_bearbeiten)):
+    plan = _plan(db, plan_id, user)
+    alt = _anhang(db, plan, uuid)
+    eid, aid = alt.element_id, alt.abschnitt_id
+    try:
+        anhang_service.pflege_version(db, plan, user, version)
+        if alt.art not in ("datei", "foto"):
+            raise ValueError("Nur Dateien und Fotos können ausgetauscht werden.")
+        element = _objekt(db, KatplanElement, eid, plan, user) if eid else None
+        abschnitt = _objekt(db, KatplanAbschnitt, aid, plan, user) if aid else None
+        neu = anhang_service.anhang_hochladen(db, plan, user, run_async(datei.read),
+            datei.filename or "datei", datei.content_type, element=element, abschnitt=abschnitt,
+            beschriftung=alt.beschriftung, urheber=alt.urheber, vertraulich=alt.vertraulich)
+        neu.sort = alt.sort
+        anhang_service.anhang_entfernen(db, plan, user, alt)
+        protokolliere(db, plan, "anhang", "ersetzt", user, feld=neu.uuid, alt=uuid, neu=neu.uuid)
+        db.commit()
+    except (ValueError, HTTPException, KatplanKonflikt) as exc:
+        db.rollback()
+        return _anhang_antwort(request, db, user, plan, eid, aid,
+                               str(exc.detail) if isinstance(exc, HTTPException) else str(exc),
+                               409 if isinstance(exc, KatplanKonflikt) else 422)
+    return _anhang_antwort(request, db, user, plan, eid, aid)
+
+
 @router.post("/{plan_id}/anhaenge/{uuid}/loeschen")
-def anhang_loeschen(plan_id: int, uuid: str, request: Request,
+def anhang_loeschen(plan_id: int, uuid: str, request: Request, version: int | None = Form(None),
                     db: Session = Depends(get_db), user: User = Depends(require_katplan_bearbeiten)):
     plan = _plan(db, plan_id, user)
     anhang = _anhang(db, plan, uuid)
     element_id, abschnitt_id = anhang.element_id, anhang.abschnitt_id
     try:
+        if version is not None:
+            anhang_service.pflege_version(db, plan, user, version)
         anhang_service.anhang_entfernen(db, plan, user, anhang)
         db.commit()
-    except ValueError as exc:
+    except (ValueError, KatplanKonflikt) as exc:
         db.rollback()
-        return _anhang_antwort(request, db, user, plan, element_id, abschnitt_id, str(exc), 422)
+        return _anhang_antwort(request, db, user, plan, element_id, abschnitt_id, str(exc),
+                               409 if isinstance(exc, KatplanKonflikt) else 422)
     except HTTPException as exc:
         db.rollback()
         if exc.status_code not in (413, 415, 422):
@@ -1839,7 +1914,8 @@ def quelle_hochladen(plan_id: int, request: Request, background_tasks: Backgroun
         db.rollback()
         return _quellen_antwort(request, db, plan, user, status=422, fehler=str(exc))
     db.commit()
-    background_tasks.add_task(quelle_service.verarbeite_quelle, dokument.id)
+    if db.info.pop("katplan_quelle_verarbeiten", False):
+        background_tasks.add_task(quelle_service.verarbeite_quelle, dokument.id)
     return _quellen_antwort(request, db, plan, user)
 
 

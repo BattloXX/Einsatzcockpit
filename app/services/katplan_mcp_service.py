@@ -60,17 +60,21 @@ def link_ansichten(db: Session, user: User, links: list[dict]) -> list[dict]:
 
 
 def anhang_ansichten(user: User, anhaenge: list[dict], version_id: int | None) -> list[dict]:
+    from app.services.katplan_anhang_service import dokument_pruefstatus
+
     result = []
     for a in anhaenge:
         if a.get("vertraulich") and not sieht_vertraulich(user):
             continue
         item = {**{k: a.get(k) for k in (
-            "uuid", "art", "beschriftung", "dateiname", "mime", "url", "vertraulich", "seiten")},
+            "uuid", "art", "beschriftung", "dateiname", "mime", "url", "vertraulich", "seiten",
+            "sort", "pruefdatum", "gueltig_bis", "pruefintervall_monate", "zustaendig_user_id")},
             "download_url": f"/plaene/anhang/{a['uuid']}" + (
                 f"?version_id={version_id}" if version_id is not None else ""),
             "download_hinweis": "Geschützte Anhang-URL; Planquellen über katplan_dokument_auszug(download=True)."}
         if a["art"] == "link":
             item["download_url"] = a.get("url")
+        item.update(dokument_pruefstatus(a, now_local().date()))
         item["warnings"] = [f"{k}: nicht vorhanden." for k, v in item.items() if v is None]
         result.append(item)
     return result

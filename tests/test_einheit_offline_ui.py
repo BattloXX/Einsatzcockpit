@@ -83,6 +83,7 @@ def offline_browser(client, browser):
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))
     origin = f"http://127.0.0.1:{sock.getsockname()[1]}"
+    state["origin"] = origin
     server = uvicorn.Server(uvicorn.Config(proxy, log_level="error", lifespan="off", timeout_graceful_shutdown=1))
     thread = threading.Thread(target=server.run, kwargs={"sockets": [sock]}, daemon=True)
     thread.start()

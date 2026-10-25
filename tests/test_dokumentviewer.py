@@ -20,8 +20,10 @@ from tests.test_katplan_k1b import umgebung as basis_umgebung  # noqa: F401
 from tests.test_katplan_k6a import png
 
 
-def dokument_pdf(anzahl=12):
+def dokument_pdf(anzahl=12, kennung=""):
     writer = PdfWriter()
+    if kennung:
+        writer.add_metadata({"/Subject": kennung})
     font = writer._add_object(DictionaryObject({NameObject("/Type"): NameObject("/Font"),
         NameObject("/Subtype"): NameObject("/Type1"), NameObject("/BaseFont"): NameObject("/Helvetica")}))
     for nr in range(anzahl):
@@ -51,7 +53,7 @@ def dokumente(basis_umgebung, tmp_path, monkeypatch):  # noqa: F811
         dateien = []
         for i in range(4):
             bild = i == 3
-            anhang = anhaenge.anhang_hochladen(db, plan, user, png() if bild else dokument_pdf(),
+            anhang = anhaenge.anhang_hochladen(db, plan, user, png() if bild else dokument_pdf(kennung=str(i)),
                 f"datei-{i}.png" if bild else f"datei-{i}.pdf", "image/png" if bild else "application/pdf",
                 element=element, beschriftung=f"Unterlage {i + 1}")
             dateien.append({"uuid": anhang.uuid, "path": tmp_path / anhang.pfad})

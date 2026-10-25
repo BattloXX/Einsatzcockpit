@@ -32,9 +32,9 @@ from tests.test_katplan_k2a import anlegen, basis, objekte
 from tests.test_katplan_k3a import arbeitsstand, lade_plan
 
 
-def png():
+def png(farbe="red"):
     out = io.BytesIO()
-    Image.new("RGB", (24, 16), "red").save(out, "PNG")
+    Image.new("RGB", (24, 16), farbe).save(out, "PNG")
     return out.getvalue()
 
 
@@ -348,9 +348,11 @@ def test_migration_0297_up_down_sqlite():
             assert migration.revision == "0297" and migration.down_revision == "0296"
             inspector = sa.inspect(conn)
             assert {c["name"]: c["nullable"] for c in inspector.get_columns("katplan_anhang")} == {
-                c.name: c.nullable for c in KatplanAnhang.__table__.columns}
+                c.name: c.nullable for c in KatplanAnhang.__table__.columns
+                if c.name not in {"datei_hash", "pruefdatum", "gueltig_bis", "pruefintervall_monate", "zustaendig_user_id"}}
             assert {tuple(i["column_names"]) for i in inspector.get_indexes("katplan_anhang")} == {
-                tuple(c.name for c in i.columns) for i in KatplanAnhang.__table__.indexes}
+                tuple(c.name for c in i.columns) for i in KatplanAnhang.__table__.indexes
+                if i.name != "ix_katplan_anhang_datei_hash"}
             fks = inspector.get_foreign_keys("katplan_anhang")
             assert "objekt_dokument_id" not in {c for fk in fks for c in fk["constrained_columns"]}
             assert {fk["constrained_columns"][0]: fk["options"].get("ondelete") for fk in fks} == {

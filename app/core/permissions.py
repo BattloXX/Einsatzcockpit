@@ -320,6 +320,16 @@ def can_view_katplan_request(request: Request) -> bool:
     )
 
 
+def can_transfer_documents_request(request: Request) -> bool:
+    user = getattr(request.state, "user", None)
+    return bool(user and user.active and user.org_id
+                and has_role(user, "incident_leader", "admin", "org_admin", "recorder")
+                and not getattr(user, "gsl_nur_lesen", False)
+                and not getattr(request.state, "is_device", False)
+                and not getattr(request.state, "qr_incident_id", None)
+                and not getattr(request.state, "qr_lage_id", None))
+
+
 def can_view_nachschlagewerke_request(request: Request) -> bool:
     return bool(getattr(request.state, "nachschlagewerke_enabled", False)) and has_role(
         getattr(request.state, "user", None), *NACHSCHLAGEWERKE_LESE_ROLLEN,

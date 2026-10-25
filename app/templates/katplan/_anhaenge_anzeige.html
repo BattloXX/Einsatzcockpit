@@ -25,8 +25,14 @@
           {% set mime = (anhang.mime or '')|lower %}
           {% set endung = (anhang.dateiname or '').lower().rsplit('.', 1)[-1] %}
           {% set kind = 'pdf' if mime == 'application/pdf' or endung == 'pdf' else 'image' if mime.startswith('image/') or endung in ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'bmp', 'svg'] else '' %}
-          {{ icon("file-text", size="sm") }} <a class="kp-link" href="{{ anhang.datei_url }}" {% if kind %}data-dv-document data-dv-kind="{{ kind }}" data-dv-title="{{ anhang.beschriftung or anhang.dateiname }}" data-dv-selection-url="{{ anhang.datei_url }}"{% else %}download{% endif %}>{{ anhang.beschriftung or anhang.dateiname }}</a>
+          {{ icon("file-text", size="sm") }} <a class="kp-link" href="{{ anhang.datei_url }}{{ ('&' if '?' in anhang.datei_url else '?') ~ 'auszug=1' if anhang.seiten else '' }}" {% if kind %}data-dv-document data-dv-kind="{{ kind }}" data-dv-title="{{ anhang.beschriftung or anhang.dateiname }}" data-dv-selection-url="{{ anhang.datei_url }}{{ ('&' if '?' in anhang.datei_url else '?') ~ 'auszug=1' if anhang.seiten else '' }}" data-dv-original="{{ anhang.datei_url }}"{% else %}download{% endif %}>{{ anhang.beschriftung or anhang.dateiname }}</a>
         {% endif %}
+        {% if anhang.pruefung_faellig %}<span class="kp-badge kp-badge--amber">Dokumentprüfung fällig</span>{% endif %}
+        {% if anhang.gueltigkeit_abgelaufen %}<span class="kp-badge kp-badge--amber">Gültigkeit abgelaufen</span>{% endif %}
+        {% if anhang.naechste_pruefung %}<span>Nächste Prüfung: {{ anhang.naechste_pruefung }}</span>{% endif %}
+        {% if anhang.seiten %}<span>Quelle: S. {{ anhang.seiten }}</span>{% endif %}
+        {% if anhang.pruefdatum %}<span>Geprüft: {{ anhang.pruefdatum }}</span>{% endif %}
+        {% if anhang.gueltig_bis %}<span>Gültig bis: {{ anhang.gueltig_bis }}</span>{% endif %}
         {% if anhang.groesse %}<span class="kp-mono">{{ anhang.groesse }}</span>{% endif %}
         {% if anhang.vertraulich %}<span class="kp-badge kp-badge--amber">vertraulich</span>{% endif %}
         {% if anhang_bearbeiten %}{% include "katplan/_anhang_aktionen.html" %}{% endif %}

@@ -37,6 +37,8 @@
       {% if e.kraftstoff %}<span class="badge-pill badge-pill--gray">{{ e.kraftstoff }}</span>{% endif %}
       {% if e.hat_pdf %}
       <a href="/nachschlagewerk-cache/rettungskarten/{{ e.id }}/original.pdf" target="_blank"
+         data-dv-document data-dv-title="{{ e.anzeige_name }}"
+         data-dv-selection-url="/nachschlagewerk-cache/rettungskarten/{{ e.id }}/original.pdf"
          rel="noopener" class="btn btn--secondary btn--xs">{{ icon("file-text", size="xs") }} PDF öffnen</a>
       {% endif %}
     </div>

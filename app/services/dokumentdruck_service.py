@@ -96,6 +96,25 @@ def quell_datei(db: Session, user: User, url: str,
                                           druckzeit=druckzeit)
         else:
             raise HTTPException(422, "Diese Dokumentreferenz wird nicht unterstützt.")
+    elif match := re.fullmatch(r"/einsatz-dokumente/datei/([1-9]\d*)", path):
+        from app.services.dokumentviewer_service import viewer_auswahl
+        from app.services.einsatz_dokument_service import dokument, pdf_daten
+
+        einsatzdok = dokument(db, user, int(match[1]))
+        response = viewer_auswahl(pdf_daten(db, einsatzdok), params)
+    elif match := re.fullmatch(r"/nachschlagewerk-cache/rettungskarten/([1-9]\d*)/original.pdf", path):
+        from app.routers import ui_nachschlagewerke as nw
+        from app.services.nachschlagewerk_service import nachschlagewerke_effective_enabled
+
+        nw.require_role(*nw._LESE_ROLLEN)(request)
+        if not nachschlagewerke_effective_enabled(user.org_id, db):
+            raise HTTPException(404, "Nicht gefunden")
+        rettungskarte = nw.rettungskarten_pdf(request, int(match[1]), db, user, None)
+        response = rettungskarte
+        if any(k in params for k in ("seiten", "auswahl")):
+            from app.services.dokumentviewer_service import viewer_auswahl
+
+            response = viewer_auswahl(Path(rettungskarte.path), params)
     elif match := re.fullmatch(r"/objekt-medien/(?:dokument/([1-9]\d*)/original|seite/([1-9]\d*)/pdf)", path):
         from app.core.permissions import EINSATZ_LESE_ROLLEN, require_role
         from app.routers import ui_objekt_dokumente as obj

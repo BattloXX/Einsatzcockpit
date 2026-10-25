@@ -456,6 +456,9 @@ def delete_incident(incident_id: int, request: Request, db: Session = Depends(ge
         payload={"alarm_type": incident.alarm_type_code, "started_at": str(incident.started_at)},
     )
     db.flush()
+    from app.services.einsatz_dokument_service import endgueltig_entfernen
+
+    endgueltig_entfernen(db, incident.id)
     db.delete(incident)
     db.commit()
 

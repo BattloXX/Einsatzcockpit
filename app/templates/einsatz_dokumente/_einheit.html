@@ -1,0 +1,8 @@
+<div data-dv-group>
+  {% for dokument in dokumente %}
+  {% set url = '/einheit/api/dokumente/' ~ dokument.id ~ '/pdf' ~ kontext_query %}
+  <p><a class="btn btn--primary" style="min-height:48px;white-space:normal;overflow-wrap:anywhere;" href="{{ url }}"
+    data-dv-document data-dv-title="{{ dokument.titel }}" data-dv-selection-url="{{ url }}">{{ icon("file-text", size="sm") }} {{ dokument.titel }} öffnen</a>
+    <small>{{ dokument.seitenzahl }} Seiten · übernommene Fassung</small></p>
+  {% else %}<p>Für deine Einheit sind derzeit keine Dokumente freigegeben.</p>{% endfor %}
+</div>
