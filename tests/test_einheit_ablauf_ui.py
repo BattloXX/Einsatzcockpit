@@ -34,6 +34,40 @@ def _oeffnen(page, client, ids):
     return page.locator("[data-einheit-hauptaktion]")
 
 
+def test_browser_ergebnisdialog_oeffnet_auch_bei_hintergrundabgleich_waehrend_des_tipps(
+    client, setup_db, seite,
+):
+    from playwright.sync_api import expect
+
+    ids = _vorbereiten(client, art="erkundung", status="vor_ort")
+    page, state, errors = seite
+    haupt = _oeffnen(page, client, ids)
+    expect(haupt).to_have_text("Erkundungsergebnis erfassen")
+    expect(haupt).to_be_enabled()
+    gehalten = []
+    page.route(f"**/einheit/api/auftrag/{ids['d1']}", lambda route: gehalten.append(route))
+
+    # Der automatische Abgleich beginnt zwischen Drücken und Loslassen.
+    # Ein bereits geladener Auftrag muss dabei weiter bedienbar bleiben.
+    haupt.scroll_into_view_if_needed()
+    box = haupt.bounding_box()
+    page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+    page.mouse.down()
+    page.evaluate(f"void Alpine.$data(document.querySelector('.einheit-page')).oeffne({ids['d1']}, false, true)")
+    page.wait_for_function("Alpine.$data(document.querySelector('.einheit-page')).detailLaden")
+    page.mouse.up()
+
+    try:
+        dialog = page.get_by_role("dialog")
+        expect(dialog).to_have_accessible_name("Erkundungsergebnis")
+        expect(dialog.get_by_label("Erkundungsergebnis (Pflichtfeld)")).to_be_enabled()
+        assert len(gehalten) == 1 and not state["posts"] and not errors
+    finally:
+        page.unroute(f"**/einheit/api/auftrag/{ids['d1']}")
+        for route in gehalten:
+            route.fallback()
+
+
 @pytest.mark.parametrize("art", ["abarbeitung", "erkundung"])
 @pytest.mark.parametrize("breite,hoehe", [(360, 800), (1024, 768)])
 def test_browser_vollstaendige_gefuehrte_folge_bleibt_im_auftrag(

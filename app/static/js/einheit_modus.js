@@ -63,6 +63,7 @@ function registriere() {
     startDispatchId: config.start_dispatch_id,
     kopf: {}, aktuell: null, weitere: [], abgeschlossen: [], zurueckgezogen: [], detail: null,
     detailAnfrage: 0, zustandAnfrage: 0, detailZielId: null, detailLaden: false, statusSpeichern: false, navigationBenutzt: false,
+    detailHintergrundabgleich: false,
     statusTippSperreId: null, statusTippTimer: null, ergebnisSpeichern: false, ergebnisLaden: false, ergebnisLadeToken: 0,
     aktionsFehler: "", meldungAuftrag: null, meldungSpeichern: false, meldungLaden: false, meldungToken: 0,
     schnellmeldung: "", erkundungAuswahl: "", fotoSpeichern: false, meldungFotosVorhanden: false,
@@ -153,7 +154,8 @@ function registriere() {
         && ["anfahrt", "vor_ort", "in_arbeit"].includes(this.lokalerStatus(auftrag) || auftrag.einheit_status)) || null;
     },
     get kannStatusMelden() {
-      return this.schreibbar && !this.zugangBeendet && !this.detailLaden && !this.statusSpeichern
+      return this.schreibbar && !this.zugangBeendet && (!this.detailLaden || this.detailHintergrundabgleich)
+        && !this.statusSpeichern
         && !this.ergebnisSpeichern && !this.ergebnisLaden && this.statusTippSperreId !== this.detail?.auftrag?.dispatch_id
         && !this.ausstehenderStatus && !this.detail?.auftrag?.withdrawn_at && !this.detail?.auftrag?.beendet_at;
     },
@@ -610,8 +612,10 @@ function registriere() {
       id = Number(id);
       const anfrage = ++this.detailAnfrage;
       this.detailZielId = id;
-      this.detailLaden = true;
       const vorher = this.detail?.auftrag;
+      // Automatisches Nachladen darf einen laufenden Tipp auf den geladenen Auftrag nicht unterbrechen.
+      this.detailHintergrundabgleich = aktualisieren && vorher?.dispatch_id === id;
+      this.detailLaden = true;
       if (vorher?.dispatch_id !== id) this.auftragGeaendert = false;
       this.neuIds = this.neuIds.filter((neuId) => neuId !== id);
       try {
@@ -657,6 +661,7 @@ function registriere() {
       } finally {
         if (anfrage === this.detailAnfrage) {
           this.detailLaden = false;
+          this.detailHintergrundabgleich = false;
           this.konfliktPruefen();
         }
       }
