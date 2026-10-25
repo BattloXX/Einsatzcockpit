@@ -174,6 +174,14 @@ node --check app/static/js/katplan_editor.js
 git diff --check
 ```
 
+Die erste Pull-Request-Browser-CI verwendete Chromium Headless Shell 156 und
+scheiterte nach erfolgreichem Favoriten-POST an der über `route.fulfill`
+vermittelten Formularweiterleitung. Der Fehler wurde mit denselben Bibliotheks-
+und Browserversionen lokal reproduziert; reguläres Chromium führte dieselben
+unveränderten Tests erfolgreich aus. Die gemeinsame Browserfixture verwendet
+nun mit `channel="chromium"` reguläres Chromium im Headless-Modus, entsprechend
+der lokalen Geräteabnahme. Produktcode und Testschritte bleiben erhalten.
+
 ## Bekannte Grenzen und Betrieb
 
 - Die lokale Ollama-Infrastruktur liefert Embeddings. Generativer Import verwendet

@@ -107,7 +107,10 @@ def browser():
     playwright = pytest.importorskip("playwright.sync_api")
     with playwright.sync_playwright() as runner:
         try:
-            browser = runner.chromium.launch(executable_path=os.environ.get("ECP_PLAYWRIGHT_EXECUTABLE"))
+            # Reguläres Chromium im Headless-Modus wie bei der lokalen Geräteabnahme.
+            # Headless Shell 156 verwirft via route.fulfill bediente Formular-Redirects.
+            browser = runner.chromium.launch(channel="chromium",
+                                            executable_path=os.environ.get("ECP_PLAYWRIGHT_EXECUTABLE"))
         except playwright.Error as error:
             if "Executable doesn't exist" in str(error):
                 pytest.skip("Playwright Chromium nicht installiert")
