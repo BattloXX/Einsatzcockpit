@@ -36,6 +36,12 @@
         <section class="kp-sidecard">
           <h2 class="kp-box__title">Stammdaten</h2>
           <div class="kp-row">
+            <span class="kp-row__label">Einsatzwissen</span>
+            <span class="kp-row__value">{{ wissen_kategorien[wissen_meta.kategorie] }}{% if wissen_meta.unterkategorie %} · {{ wissen_meta.unterkategorie }}{% endif %}</span>
+          </div>
+          {% if wissen_meta.kurzbeschreibung %}<p>{{ wissen_meta.kurzbeschreibung }}</p>{% endif %}
+          {% if wissen_meta.schlagwoerter %}<p>{{ wissen_meta.schlagwoerter|join(' · ') }}</p>{% endif %}
+          <div class="kp-row">
             <span class="kp-row__label">Planart</span>
             <span class="kp-row__value">{{ planarten[kopf.planart].label }}</span>
           </div>

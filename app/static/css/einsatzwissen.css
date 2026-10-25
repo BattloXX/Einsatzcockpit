@@ -1,0 +1,24 @@
+.ew-page { overflow-wrap: anywhere; }
+.ew-kategorien { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1rem 0; }
+.ew-kategorien a { display: flex; align-items: center; gap: .5rem; padding: .65rem .85rem;
+  min-height: 44px; box-sizing: border-box; border: 1px solid var(--border); border-radius: var(--radius-lg);
+  color: var(--text); background: var(--surface-low); text-decoration: none; }
+.ew-kategorien a[aria-current] { border-color: var(--red-light); font-weight: 700; }
+.ew-kategorien a:focus-visible, .ew-titel:focus-visible { outline: 2px solid var(--red-light); outline-offset: 3px; }
+.ew-kategorien span, .ew-tags, .ew-karte small { color: var(--text-muted); font-size: .85rem; }
+.ew-karten { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: .75rem; }
+.ew-karte { min-width: 0; padding: 1rem; background: var(--surface-low);
+  border: 1px solid var(--border); border-radius: var(--radius-lg); }
+.ew-titel { display: flex; align-items: center; min-height: 44px; font-size: 1.05rem; }
+.ew-karte p { margin: .5rem 0; }
+.ew-bereich { margin: 1.5rem 0; }
+.ew-bereich h2 { margin-bottom: .75rem; font-size: 1.2rem; }
+.ew-suche { grid-template-columns: minmax(180px, 2fr) repeat(2, minmax(140px, 1fr)) auto; }
+.ew-inhalte { padding-left: 1.25rem; }
+.ew-inhalte li { margin: .75rem 0; }
+@media (max-width: 900px) { .ew-suche { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 480px) {
+  .ew-page { padding: .75rem .5rem 2rem; }
+  .ew-suche { grid-template-columns: minmax(0, 1fr); }
+  .ew-kategorien a { flex: 1 1 auto; min-width: max-content; font-size: .9rem; }
+}

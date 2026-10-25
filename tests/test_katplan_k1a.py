@@ -290,7 +290,8 @@ def test_seed_rollen():
 
 
 # Spaetere Migrationen, die Spalten an den Basistabellen ergaenzen.
-NACHFOLGE_MIGRATIONEN = ("0302_katplan_planart.py", "0303_katplan_pruefzyklus.py", "0304_katplan_akteure.py")
+NACHFOLGE_MIGRATIONEN = ("0302_katplan_planart.py", "0303_katplan_pruefzyklus.py", "0304_katplan_akteure.py",
+                        "0308_einsatzwissen.py")
 
 
 def _lade_migration(datei: str):

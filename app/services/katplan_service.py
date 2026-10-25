@@ -23,6 +23,7 @@ from app.models.katplan import (
 )
 from app.models.kontakt import Kontakt
 from app.models.user import User
+from app.services.einsatzwissen_kategorien import KATEGORIEN
 from app.services.katplan_typen import PLANARTEN
 from app.services.katplan_ziel_service import _anzeige, ziel_laden
 
@@ -396,7 +397,9 @@ def validiere_stammdaten(*, titel: str, gefahrenarten: list[str], beschreibung_h
                          geltungsbereich: str = "", verantwortliche_stelle: str = "",
                          wiedervorlage_am: str = "", planart: str = "katastrophenplan",
                          pruefintervall_monate: str | int | None = None,
-                         pruef_verantwortlich_user_id: str | int | None = None) -> dict:
+                         pruef_verantwortlich_user_id: str | int | None = None,
+                         kategorie: str | None = None, unterkategorie: str | None = None,
+                         schlagwoerter: str | None = None, kurzbeschreibung: str | None = None) -> dict:
     """Gemeinsame Formularvalidierung; Fehlerprioritaet der Oberflaeche beibehalten."""
     try:
         intervall = int(pruefintervall_monate) if pruefintervall_monate not in (None, "") else None
@@ -423,7 +426,23 @@ def validiere_stammdaten(*, titel: str, gefahrenarten: list[str], beschreibung_h
         fehler = "Bitte eine gültige Planart wählen."
     if fehler:
         raise ValueError(fehler)
-    return {"planart": planart, "titel": titel.strip(), "gefahrenarten_json": json.dumps(sorted(set(gefahrenarten))),
+    zusatz = {}
+    if kategorie is not None:
+        if kategorie and kategorie not in KATEGORIEN:
+            raise ValueError("Bitte eine gültige Kategorie wählen.")
+        zusatz["kategorie"] = kategorie or None
+    for feld, wert, maximum in (("unterkategorie", unterkategorie, 100), ("kurzbeschreibung", kurzbeschreibung, 500)):
+        if wert is not None:
+            if len(wert.strip()) > maximum:
+                raise ValueError(f"{feld}: höchstens {maximum} Zeichen.")
+            zusatz[feld] = wert.strip() or None
+    if schlagwoerter is not None:
+        tags = list(dict.fromkeys(t.strip() for t in schlagwoerter.split(",") if t.strip()))
+        if len(tags) > 20 or any(len(t) > 50 for t in tags):
+            raise ValueError("Höchstens 20 Schlagwörter mit je 50 Zeichen eingeben.")
+        zusatz["schlagwoerter_json"] = json.dumps(tags, ensure_ascii=False) if tags else None
+    return {**zusatz, "planart": planart, "titel": titel.strip(),
+            "gefahrenarten_json": json.dumps(sorted(set(gefahrenarten))),
             "beschreibung_html": bereinige_beschreibung(beschreibung_html),
             "geltungsbereich": geltungsbereich.strip() or None,
             "verantwortliche_stelle": verantwortliche_stelle.strip() or None,
@@ -461,7 +480,8 @@ def stammdaten_aendern(db: Session, plan: KatplanPlan, user: User, *, version: i
         raise ValueError("Dieser Plan kann nicht bearbeitet werden.")
     erlaubt = {"planart", "titel", "gefahrenarten_json", "beschreibung_html", "geltungsbereich",
                "verantwortliche_stelle", "wiedervorlage_am", "verantwortlich_kontakt_id",
-               "pruefintervall_monate", "pruef_verantwortlich_user_id"}
+               "pruefintervall_monate", "pruef_verantwortlich_user_id", "kategorie", "unterkategorie",
+               "schlagwoerter_json", "kurzbeschreibung"}
     if set(werte) - erlaubt:
         raise ValueError("Nicht erlaubte Stammdatenfelder.")
     kontakt_id = werte.get("verantwortlich_kontakt_id")

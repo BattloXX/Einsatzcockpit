@@ -57,6 +57,9 @@ KATPLAN_LESE_ROLLEN = (
     "katplan_verwalter", "katplan_freigeber",
 )
 KATPLAN_VERTRAULICH_ROLES = KATPLAN_VERWALTER_ROLES | {"incident_leader"}
+NACHSCHLAGEWERKE_LESE_ROLLEN = (
+    "readonly", "recorder", "breathing_supervisor", "incident_leader", "fahrtenbuch_admin", "objekt_verwalter",
+)
 PLANSPIEL_LEITER_ROLES = {"system_admin", "admin", "org_admin", "uebungsleiter"}
 PLANSPIEL_LESE_ROLLEN = ("uebungsleiter", "uebungsbeobachter")
 PROBEN_EDIT_ROLES = {"system_admin", "admin", "org_admin", "probenverwalter", "incident_leader", "recorder"}
@@ -314,4 +317,10 @@ def can_view_katplan_request(request: Request) -> bool:
 
     return bool(getattr(request.state, "katplan_enabled", False)) and darf_lesen(
         getattr(request.state, "user", None)
+    )
+
+
+def can_view_nachschlagewerke_request(request: Request) -> bool:
+    return bool(getattr(request.state, "nachschlagewerke_enabled", False)) and has_role(
+        getattr(request.state, "user", None), *NACHSCHLAGEWERKE_LESE_ROLLEN,
     )

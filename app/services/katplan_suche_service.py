@@ -22,6 +22,7 @@ from app.models.katplan import (
 )
 from app.models.master import OrgSettings
 from app.models.user import User
+from app.services.einsatzwissen_kategorien import metadaten
 from app.services.katplan_quelle_service import sichtbare_quellen
 from app.services.katplan_service import _HTMLText
 from app.services.katplan_typen import ELEMENT_TYPEN, PLANARTEN
@@ -55,6 +56,9 @@ def sichtbare_plaene(db: Session, user: User, arbeitsstand: bool = False) -> lis
         version = versionen.get(plan.aktuelle_version_id or 0)
         if arbeit:
             daten = {"planart": plan.planart, "titel": plan.titel, "gefahrenarten": plan.gefahrenarten,
+                     "kategorie": plan.kategorie, "unterkategorie": plan.unterkategorie,
+                     "kurzbeschreibung": plan.kurzbeschreibung,
+                     "schlagwoerter": json.loads(plan.schlagwoerter_json or "[]"),
                      "phasen": [{"id": p.id, "name": p.name} for p in db.query(KatplanPhase).filter_by(
                          org_id=user.org_id, plan_id=plan.id).order_by(KatplanPhase.sort, KatplanPhase.id)]}
         elif version is not None and version.plan_id == plan.id:
@@ -65,7 +69,7 @@ def sichtbare_plaene(db: Session, user: User, arbeitsstand: bool = False) -> lis
                        "planart": daten.get("planart", "katastrophenplan"),
                        "planart_label": PLANARTEN[daten.get("planart", "katastrophenplan")].label,
                        "titel": daten.get("titel", ""), "gefahrenarten": daten.get("gefahrenarten", []),
-                       "phasen": daten.get("phasen", [])})
+                       "phasen": daten.get("phasen", []), **metadaten(daten)})
     return sorted(result, key=lambda p: (p["titel"].lower(), p["id"]))
 
 

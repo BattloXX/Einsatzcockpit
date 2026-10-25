@@ -78,6 +78,7 @@ from app.routers import (
     ui_einsatz_import,
     ui_einsatz_kontakte,
     ui_einsatzinfo_mail,
+    ui_einsatzwissen,
     ui_fahrtenbuch,
     ui_fahrtenbuch_admin,
     ui_foerderstrecke,
@@ -942,6 +943,7 @@ app.include_router(ui_kontakt_druck.router)
 app.include_router(ui_kontakt.router)
 app.include_router(ui_einsatz_kontakte.router)
 app.include_router(ui_road_closure.router)
+app.include_router(ui_einsatzwissen.router)
 app.include_router(ui_katplan.router)
 app.include_router(ui_katplan.alt_router)
 app.include_router(ui_suche.router)

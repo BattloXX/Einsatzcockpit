@@ -47,6 +47,10 @@ class KatplanPlan(TenantScoped, Base):
     titel: Mapped[str] = mapped_column(sa.String(200), nullable=False)
     planart: Mapped[str] = mapped_column(sa.String(30), nullable=False, default="katastrophenplan")
     beschreibung_html: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    kategorie: Mapped[str | None] = mapped_column(sa.String(30), nullable=True)
+    unterkategorie: Mapped[str | None] = mapped_column(sa.String(100), nullable=True)
+    schlagwoerter_json: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
+    kurzbeschreibung: Mapped[str | None] = mapped_column(sa.String(500), nullable=True)
     gefahrenarten_json: Mapped[str | None] = mapped_column(sa.Text, nullable=True)
     geltungsbereich: Mapped[str | None] = mapped_column(sa.String(300), nullable=True)
     verantwortliche_stelle: Mapped[str | None] = mapped_column(sa.String(200), nullable=True)
@@ -229,6 +233,18 @@ class KatplanLink(TenantScoped, Base):
     erstellt_von_id: Mapped[int | None] = mapped_column(
         sa.BigInteger, sa.ForeignKey("user.id", ondelete="SET NULL"), nullable=True
     )
+
+
+class KatplanNutzung(TenantScoped, Base):
+    """Ein letzter Zugriff pro Benutzer und bestehendem Plan, ohne Inhaltskopie."""
+
+    __tablename__ = "katplan_nutzung"
+    __table_args__ = (sa.UniqueConstraint("org_id", "user_id", "plan_id", name="uq_katplan_nutzung"),)
+
+    id: Mapped[int] = mapped_column(sa.BigInteger, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(sa.BigInteger, sa.ForeignKey("user.id", ondelete="CASCADE"))
+    plan_id: Mapped[int] = mapped_column(sa.BigInteger, sa.ForeignKey("katplan_plan.id", ondelete="CASCADE"))
+    zuletzt_am: Mapped[datetime] = mapped_column(sa.DateTime, nullable=False, default=_utcnow)
 
 
 class KatplanRelation(TenantScoped, Base):

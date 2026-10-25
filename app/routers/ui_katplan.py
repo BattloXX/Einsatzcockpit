@@ -49,6 +49,7 @@ from app.services import katplan_qs_service as qs_service
 from app.services import katplan_quelle_service as quelle_service
 from app.services import katplan_suche_service as suche_service
 from app.services import katplan_uebernahme_service as uebernahme_service
+from app.services.einsatzwissen_kategorien import KATEGORIEN, metadaten
 from app.services.katplan_service import (
     KatplanKonflikt,
     abschnitte_baum,
@@ -131,6 +132,10 @@ def _kontext(db: Session, user: User, plan: KatplanPlan | None = None) -> dict[s
             KatplanAenderung.zeit.desc(), KatplanAenderung.id.desc(),
         ).limit(50).all()
     return {"user": user, "plan": plan, "gefahrenarten": KATPLAN_GEFAHRENARTEN, "planarten": PLANARTEN,
+            "wissen_kategorien": KATEGORIEN,
+            "wissen_meta": metadaten({"planart": plan.planart, "kategorie": plan.kategorie,
+                                      "unterkategorie": plan.unterkategorie, "kurzbeschreibung": plan.kurzbeschreibung,
+                                      "schlagwoerter": json.loads(plan.schlagwoerter_json or "[]")}) if plan else {},
             "kann_uebernehmen": bool(plan and uebernahme_service.kandidaten_einsaetze(db, user)),
             "status_labels": KATPLAN_STATUS_LABELS, "can_edit": darf_bearbeiten(user),
             "can_release": darf_freigeben(user), "protokoll": protokoll,
@@ -147,17 +152,28 @@ def _kontext(db: Session, user: User, plan: KatplanPlan | None = None) -> dict[s
 
 class Stammdaten:
     def __init__(
-        self, planart: str = Form("katastrophenplan"), titel: str = Form(""), gefahrenarten: list[str] = Form([]),
+        self, request: Request, planart: str = Form("katastrophenplan"), titel: str = Form(""),
+        gefahrenarten: list[str] = Form([]),
         beschreibung_html: str = Form(""), geltungsbereich: str = Form(""),
         verantwortliche_stelle: str = Form(""), wiedervorlage_am: str = Form(""),
         pruef_verantwortlich_user_id: str = Form(""), pruefintervall_monate: str = Form(""),
+        kategorie: str | None = Form(None), unterkategorie: str | None = Form(None),
+        schlagwoerter: str | None = Form(None), kurzbeschreibung: str | None = Form(None),
     ):
+        roh = run_async(request.form)
+        # Leere neue Felder ausdrücklich löschen; alte Clients lassen sie unverändert.
+        kategorie = "" if "kategorie" in roh and kategorie is None else kategorie
+        unterkategorie = "" if "unterkategorie" in roh and unterkategorie is None else unterkategorie
+        schlagwoerter = "" if "schlagwoerter" in roh and schlagwoerter is None else schlagwoerter
+        kurzbeschreibung = "" if "kurzbeschreibung" in roh and kurzbeschreibung is None else kurzbeschreibung
         self.form = {"planart": planart, "titel": titel, "gefahrenarten": gefahrenarten,
                      "beschreibung_html": bereinige_beschreibung(beschreibung_html) or "",
                      "geltungsbereich": geltungsbereich,
                      "verantwortliche_stelle": verantwortliche_stelle, "wiedervorlage_am": wiedervorlage_am,
                      "pruef_verantwortlich_user_id": pruef_verantwortlich_user_id,
-                     "pruefintervall_monate": pruefintervall_monate}
+                     "pruefintervall_monate": pruefintervall_monate,
+                     "kategorie": kategorie or "", "unterkategorie": unterkategorie or "",
+                     "schlagwoerter": schlagwoerter or "", "kurzbeschreibung": kurzbeschreibung or ""}
         self.fehler: str | None = None
         self.werte = {}
         try:
@@ -165,7 +181,9 @@ class Stammdaten:
                 planart=planart, titel=titel, gefahrenarten=gefahrenarten, beschreibung_html=beschreibung_html,
                 geltungsbereich=geltungsbereich, verantwortliche_stelle=verantwortliche_stelle,
                 wiedervorlage_am=wiedervorlage_am, pruefintervall_monate=pruefintervall_monate,
-                pruef_verantwortlich_user_id=pruef_verantwortlich_user_id)
+                pruef_verantwortlich_user_id=pruef_verantwortlich_user_id,
+                kategorie=kategorie, unterkategorie=unterkategorie,
+                schlagwoerter=schlagwoerter, kurzbeschreibung=kurzbeschreibung)
         except ValueError as exc:
             self.fehler = str(exc)
 
@@ -500,10 +518,11 @@ async def adress_suche(q: str = "", user: User = Depends(require_katplan_lesen))
 
 
 @router.get("/neu")
-def neu(request: Request, planart: str = "katastrophenplan", db: Session = Depends(get_db),
+def neu(request: Request, planart: str = "katastrophenplan", kategorie: str = "", db: Session = Depends(get_db),
         user: User = Depends(require_katplan_bearbeiten)):
     return templates.TemplateResponse(request, "katplan/formular.html", {
-        **_kontext(db, user), "form": {"planart": planart, "pruef_verantwortlich_user_id": user.id}})
+        **_kontext(db, user), "form": {"planart": planart, "kategorie": kategorie,
+                                     "pruef_verantwortlich_user_id": user.id}})
 
 
 @router.post("/neu")
@@ -559,6 +578,7 @@ def _lesekontext(db: Session, user: User, plan: KatplanPlan, vid: int | None = N
     if kann_uebernehmen is None:
         kann_uebernehmen = bool(uebernahme_service.kandidaten_einsaetze(db, user))
     return {"kann_uebernehmen": kann_uebernehmen, "lesekopf": {**daten, "wiedervorlage_am": plan.wiedervorlage_am},
+            "wissen_meta": metadaten(daten),
             "plan_daten": daten, "leseversion": version,
             **_quellen_seiten_kontext(db, plan, elemente, version.id),
             **akteur_service.anzeige_kontext(daten.get("akteure", []), elemente),
@@ -631,6 +651,10 @@ def detail(plan_id: int, request: Request, ansicht: str = "", db: Session = Depe
         context.update(_lesekontext(db, user, plan, kann_uebernehmen=context["kann_uebernehmen"]))
     context.update(_kartenkontext(db, user, plan, arbeitsstand))
     _inhalt_zaehler(context, arbeitsstand=arbeitsstand)
+    from app.services.einsatzwissen_service import merke_zugriff
+
+    merke_zugriff(db, user, plan)
+    db.commit()
     return templates.TemplateResponse(request, "katplan/detail.html", context)
 
 
@@ -808,7 +832,8 @@ def stammdaten(plan_id: int, request: Request, db: Session = Depends(get_db),
     plan = _plan(db, plan_id, user)
     form = {feld: getattr(plan, feld) or "" for feld in (
         "planart", "titel", "beschreibung_html", "geltungsbereich", "verantwortliche_stelle", "wiedervorlage_am",
-        "pruefintervall_monate", "pruef_verantwortlich_user_id")}
+        "pruefintervall_monate", "pruef_verantwortlich_user_id", "kategorie", "unterkategorie", "kurzbeschreibung")}
+    form["schlagwoerter"] = ", ".join(json.loads(plan.schlagwoerter_json or "[]"))
     form["gefahrenarten"] = plan.gefahrenarten
     return templates.TemplateResponse(request, "katplan/_formular.html", {
         **_kontext(db, user, plan), "form": form, "formular_version": plan.version})

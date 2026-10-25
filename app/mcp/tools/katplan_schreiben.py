@@ -709,13 +709,15 @@ async def katplan_beziehung_entfernen(context: MCPContext, plan_id: int, element
     return {"entfernt": len(rows), "hinweis": _HINWEIS}
 
 
-_STAMMDATEN_MAPPING = {"beschreibung": "beschreibung_html", "gefahrenarten": "gefahrenarten_json"}
+_STAMMDATEN_MAPPING = {"beschreibung": "beschreibung_html", "gefahrenarten": "gefahrenarten_json",
+                      "schlagwoerter": "schlagwoerter_json"}
 
 
 def _stammdaten_werte(felder: dict, bestand: dict) -> dict:
     """Gemeinsame Typpruefung und Normalisierung fuer Anlage und Teilaenderung."""
     erlaubt = {"planart", "titel", "beschreibung", "gefahrenarten", "geltungsbereich", "verantwortliche_stelle",
-               "verantwortlich_kontakt_id", "wiedervorlage_am", "pruefintervall_monate", "pruef_verantwortlich_user_id"}
+               "verantwortlich_kontakt_id", "wiedervorlage_am", "pruefintervall_monate", "pruef_verantwortlich_user_id",
+               "kategorie", "unterkategorie", "kurzbeschreibung", "schlagwoerter"}
     if not isinstance(felder, dict):
         raise ValueError("felder muss ein Objekt sein.")
     if set(felder) - erlaubt:
@@ -751,6 +753,9 @@ def _stammdaten_werte(felder: dict, bestand: dict) -> dict:
     "beschreibung (Text), gefahrenarten (gültige Codes; Pflicht bei katastrophenplan), geltungsbereich, "
     "verantwortliche_stelle, verantwortlich_kontakt_id, wiedervorlage_am (YYYY-MM-DD), "
     "pruefintervall_monate (1..60), pruef_verantwortlich_user_id sind optional. "
+    "Einsatzwissen-Metadaten: kategorie (einsatzplaene, fuehrungswissen, fachwissen, katastrophenschutz, "
+    "sondereinsatzmittel, nachschlagewerk), unterkategorie, kurzbeschreibung (500 Zeichen), "
+    "schlagwoerter (kommagetrennter Text, höchstens 20 mit je 50 Zeichen). "
     "Status ist immer Entwurf; die Freigabe bleibt menschlich. Danach Elemente mit "
     "katplan_element_entwurf_anlegen und kapitel_id aus der Antwort ergänzen. "
     "Unbekannte Felder sind Fehler; pruefen=true rollt zurück (gespeichert=false)."
@@ -779,6 +784,7 @@ async def katplan_anlegen(context: MCPContext, felder: dict, pruefen: bool = Fal
     "beschreibung (Text), gefahrenarten (Liste gültiger Codes), "
     "geltungsbereich, verantwortliche_stelle, verantwortlich_kontakt_id, wiedervorlage_am (YYYY-MM-DD), "
     "pruefintervall_monate (1..60), pruef_verantwortlich_user_id. "
+    "Einsatzwissen: kategorie, unterkategorie, kurzbeschreibung, schlagwoerter (kommagetrennter Text). "
     "null oder leer leert optionale Felder; titel und planart sind Pflicht, gefahrenarten nur bei katastrophenplan. "
     "Status bleibt menschlich. "
     "Unbekannte Felder sind Fehler; streng=true erlaubt keinen Datenverlust; pruefen=true rollt zurück."

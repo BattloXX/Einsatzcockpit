@@ -88,7 +88,8 @@ def erstelle_snapshot(db: Session, plan: KatplanPlan, *, flush: bool = True) -> 
         db.flush()
     kopf = {feld: getattr(plan, feld) for feld in (
         "uuid", "planart", "titel", "beschreibung_html", "geltungsbereich",
-        "verantwortliche_stelle", "verantwortlich_kontakt_id")}
+        "verantwortliche_stelle", "verantwortlich_kontakt_id", "kategorie", "unterkategorie", "kurzbeschreibung")}
+    kopf["schlagwoerter"] = json.loads(plan.schlagwoerter_json or "[]")
     kopf["gefahrenarten"] = plan.gefahrenarten
     kopf["wiedervorlage_am"] = plan.wiedervorlage_am.isoformat() if plan.wiedervorlage_am else None
     for name, modell, felder in (

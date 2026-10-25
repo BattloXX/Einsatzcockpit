@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Einsatzwissen{% endblock %}
+{% block head_extra %}
+  {% include "katplan/_design.html" %}
+  <link rel="stylesheet" href="/static/css/einsatzwissen.css">
+{% endblock %}
+{% macro karten(eintraege) %}
+  <div class="ew-karten">
+    {% for eintrag in eintraege %}
+      <article class="ew-karte">
+        <a class="kp-link ew-titel" href="/plaene/{{ eintrag.id }}?ansicht={{ 'arbeitsstand' if arbeitsstand else 'freigabe' }}">{{ eintrag.titel }}</a>
+        <div class="kp-chips">
+          <span class="kp-badge kp-badge--gray">{{ kategorien[eintrag.kategorie] }}</span>
+          {% if eintrag.unterkategorie %}<span>{{ eintrag.unterkategorie }}</span>{% endif %}
+        </div>
+        {% if eintrag.kurzbeschreibung %}<p>{{ eintrag.kurzbeschreibung }}</p>{% endif %}
+        {% if eintrag.schlagwoerter %}<p class="ew-tags">{{ eintrag.schlagwoerter|join(' · ') }}</p>{% endif %}
+        <small>{{ eintrag.planart_label }} · {{ 'Arbeitsstand' if arbeitsstand else 'Freigegeben' }}</small>
+      </article>
+    {% endfor %}
+  </div>
+{% endmacro %}
+{% block content %}
+<section class="kp-page ew-page">
+  <header class="kp-header">
+    <div><h1>Einsatzwissen</h1><p>Pläne, Führungswissen und Nachschlagewerke für den Einsatz.</p></div>
+    <div class="kp-actions">
+      {% if plaene_aktiv %}<a class="btn btn--sm" href="/plaene">Alle bisherigen Pläne</a>{% endif %}
+      {% if can_edit %}
+        <a class="btn btn--primary btn--sm" href="/plaene/neu?planart={{ 'katastrophenplan' if kategorie == 'katastrophenschutz' else 'massnahmenplan' }}&amp;kategorie={{ kategorie }}">+ Neuer Eintrag</a>
+      {% endif %}
+    </div>
+  </header>
+  <nav class="ew-kategorien" aria-label="Kategorien in Einsatzwissen">
+    <a href="/einsatzwissen?fassung={{ 'arbeitsstand' if arbeitsstand else 'freigabe' }}" {% if not kategorie %}aria-current="page"{% endif %}>Alle Kategorien</a>
+    {% for code, label in kategorien.items() %}
+      <a href="/einsatzwissen?kategorie={{ code }}&amp;fassung={{ 'arbeitsstand' if arbeitsstand else 'freigabe' }}" {% if kategorie == code %}aria-current="page"{% endif %}>{{ label }} <span>{{ anzahlen[code] }}</span></a>
+    {% endfor %}
+  </nav>
+  <form method="get" action="/einsatzwissen" class="kp-filter ew-suche" role="search">
+    <input type="hidden" name="kategorie" value="{{ kategorie }}">
+    <label>Suche
+      <input class="form-control" type="search" name="q" maxlength="500" value="{{ q }}" placeholder="Titel, Schlagwort, Maßnahme oder Dokumentseite">
+    </label>
+    <label>Unterkategorie
+      <select class="form-control" name="unterkategorie">
+        <option value="">Alle Unterkategorien</option>
+        {% for wert in unterkategorien %}<option {% if wert == unterkategorie %}selected{% endif %}>{{ wert }}</option>{% endfor %}
+      </select>
+    </label>
+    {% if can_edit %}
+      <label>Fassung
+        <select class="form-control" name="fassung">
+          <option value="freigabe" {% if not arbeitsstand %}selected{% endif %}>Freigegebene Inhalte</option>
+          <option value="arbeitsstand" {% if arbeitsstand %}selected{% endif %}>Arbeitsstände</option>
+        </select>
+      </label>
+    {% endif %}
+    <button class="btn btn--primary" type="submit">Suchen</button>
+  </form>
+  {% if plaene_aktiv %}
+    <p><a class="kp-link" href="/plaene/suche?q={{ q|urlencode }}{% if arbeitsstand %}&amp;arbeitsstand=1{% endif %}">Erweiterte Suche in Maßnahmen und Dokumentseiten</a></p>
+  {% endif %}
+  {% if (not kategorie or kategorie == 'nachschlagewerk') %}
+    <section class="ew-bereich" aria-label="Nachschlagewerk">
+      {% if nachschlagewerk_aktiv %}
+        <div class="kp-actions">
+          <a class="btn" href="/nachschlagewerke/">Nachschlagewerk öffnen</a>
+          <a class="btn" href="/nachschlagewerke/gefahrgut?q={{ q|urlencode }}">Gefahrgut / UN-Nummern</a>
+          <a class="btn" href="/nachschlagewerke/rettungskarten">Rettungskarten</a>
+        </div>
+      {% else %}<p>Das Nachschlagewerk ist für diesen Zugang nicht aktiviert oder nicht freigegeben.</p>{% endif %}
+    </section>
+  {% endif %}
+  {% if not q and not kategorie and not unterkategorie %}
+    <section class="ew-bereich" aria-labelledby="ew-zuletzt">
+      <h2 id="ew-zuletzt">Zuletzt verwendet</h2>
+      {% if zuletzt %}{{ karten(zuletzt) }}{% else %}<p>Noch keine Einträge geöffnet.</p>{% endif %}
+    </section>
+  {% endif %}
+  <section class="ew-bereich" aria-labelledby="ew-ergebnis">
+    <h2 id="ew-ergebnis">{{ 'Suchergebnisse' if q else ('Arbeitsstände' if arbeitsstand else 'Freigegebene Inhalte') }}{% if kategorie %} · {{ kategorien[kategorie] }}{% endif %}</h2>
+    {% if eintraege %}{{ karten(eintraege) }}{% else %}
+      <p>{{ 'Keine passenden Arbeitsstände.' if arbeitsstand else 'Noch keine freigegebenen Pläne oder keine passenden Einträge.' }}</p>
+    {% endif %}
+    {% if inhalte %}
+      <h3>Treffer in Maßnahmen und Dokumentseiten</h3>
+      <ul class="ew-inhalte">
+        {% for treffer in inhalte %}<li><a class="kp-link" href="{{ treffer.url }}">{{ treffer.plan_titel }} · {{ treffer.titel }}</a><p>{{ treffer.ausschnitt }}</p></li>{% endfor %}
+      </ul>
+    {% endif %}
+  </section>
+</section>
+{% endblock %}
