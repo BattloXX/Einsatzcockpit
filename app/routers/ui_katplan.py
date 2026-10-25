@@ -2208,11 +2208,18 @@ def import_verwerfen(plan_id: int, vid: int, request: Request,
 def pdf_export(plan_id: int, request: Request, version_id: int | None = None, entwurf: int = 0,
                gliederung: str = "kapitel", akteur: str | None = None,
                db: Session = Depends(get_db), user: User = Depends(require_katplan_lesen)):
+    return plan_pdf_antwort(plan_id, request, version_id, entwurf, gliederung, akteur, db, user)
+
+
+def plan_pdf_antwort(plan_id: int, request: Request, version_id: int | None, entwurf: int,
+                     gliederung: str, akteur: str | None, db: Session, user: User,
+                     *, druckzeit: datetime | None = None):
     import re
     import unicodedata
+    from hashlib import sha256
 
     from app.services.katplan_mcp_service import fassung_laden
-    from app.services.katplan_pdf_service import render_katplan_pdf
+    from app.services.katplan_pdf_service import render_katplan_html, render_katplan_pdf
 
     plan = _sichtbarer_plan(db, plan_id, user)
     if entwurf and not darf_bearbeiten(user):
@@ -2220,7 +2227,13 @@ def pdf_export(plan_id: int, request: Request, version_id: int | None = None, en
     try:
         kopf, _, vid, _ = fassung_laden(db, user, plan, "arbeitsstand" if entwurf else "freigegeben", version_id)
         data = render_katplan_pdf(db, user, plan, version_id=version_id, entwurf=bool(entwurf),
-                                gliederung=gliederung, akteur=akteur)
+                                gliederung=gliederung, akteur=akteur, druckzeit=druckzeit)
+        # Der zentrale Druck prüft die vollständige Vorlage mit fester Druckzeit.
+        # PDF-Renderer können bei identischer Vorlage variable Binärmetadaten liefern.
+        fingerprint = sha256(render_katplan_html(
+            db, user, plan, version_id=version_id, entwurf=bool(entwurf),
+            gliederung=gliederung, akteur=akteur, druckzeit=druckzeit,
+        ).encode()).hexdigest() if druckzeit else None
     except LookupError as exc:
         raise HTTPException(404, "Nicht gefunden") from exc
     except ValueError as exc:
@@ -2231,11 +2244,15 @@ def pdf_export(plan_id: int, request: Request, version_id: int | None = None, en
     nummer = str(version.versionsnummer) if version else "entwurf"
     disposition = "attachment" if request.query_params.get("download") == "1" else "inline"
     if any(k in request.query_params for k in ("seiten", "auswahl")):
-        return viewer_auswahl(data, request.query_params)
-    return Response(data, media_type="application/pdf", headers={
-        "Cache-Control": "no-store",
-        "Content-Disposition": f'{disposition}; filename="katastrophenplan_{slug}_v{nummer}.pdf"',
-    })
+        response = viewer_auswahl(data, request.query_params)
+    else:
+        response = Response(data, media_type="application/pdf", headers={
+            "Cache-Control": "no-store",
+            "Content-Disposition": f'{disposition}; filename="katastrophenplan_{slug}_v{nummer}.pdf"',
+        })
+    if fingerprint:
+        response.headers["X-ECP-Document-Fingerprint"] = fingerprint
+    return response
 
 
 @router.get("/{plan_id}/quellen/{dok_id}/vergleich")

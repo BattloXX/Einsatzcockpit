@@ -78,6 +78,7 @@ DOC_FAHRTENBUCH_BERICHT = "fahrtenbuch_bericht"  # Fahrtenbuch-Statistik-Bericht
 DOC_MASCHINISTEN_MATRIX = "maschinisten_matrix"  # Jahresmatrix Maschinist x Fahrzeug
 DOC_GSL_EINHEIT_QR = "gsl_einheit_qr"  # QR-Zugang einer GSL-Einheit (gsl_id + "einheit:generation")
 DOC_MAIL_EINGANG = "mail_eingang"  # Eingangsmail (artifact_ref = org_mail_eingang.id)
+DOC_DOKUMENTPAKET = "dokumentpaket"  # Berechtigte Viewer-Auswahl in options.document_packet
 # Hinweis: „mannschaft" wird über DOC_TEILNAHME (artifact_ref = "einsatz:<id>") abgedeckt.
 
 # Leaflet-Karten – am Stationsdrucker über Gateway-Headless-Chromium gerendert
@@ -113,6 +114,7 @@ DOCUMENT_TYPE_LABELS = {
     DOC_MASCHINISTEN_MATRIX: "Maschinisten-Matrix",
     DOC_GSL_EINHEIT_QR: "GSL – Einheiten-QR-Zugang",
     DOC_MAIL_EINGANG: "E-Mail eingegangen",
+    DOC_DOKUMENTPAKET: "Dokumentenauswahl",
     DOC_LAGE_KARTE: "Lagekarte",
     DOC_SITE_KARTE: "Einsatzstellen-Blatt",
     DOC_CROSS_KARTE: "Meldungs-Druck",

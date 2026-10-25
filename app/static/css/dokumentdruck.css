@@ -1,0 +1,33 @@
+.dp { width: min(740px, calc(100vw - 16px)); max-height: calc(100dvh - 16px); margin: auto;
+  border: 1px solid var(--border); border-radius: 12px; padding: 1rem; overflow: auto;
+  color: var(--text); background: var(--surface); }
+.dp::backdrop { background: #0009; }
+.dp .dp-close { display: flex; align-items: center; justify-content: space-between; }
+.dp h2 { font-size: 1.25rem; font-weight: 700; }
+.dp label { display: grid; gap: .3rem; margin: .6rem 0; font-size: .9rem; }
+.dp fieldset label, .dp [data-dp-documents] label {
+  display: flex; align-items: center; gap: .5rem; min-height: 44px; cursor: pointer; }
+.dp input:not([type=radio]):not([type=checkbox]), .dp select, .dp button, .dp a {
+  min-height: 44px; box-sizing: border-box; color: inherit; border: 1px solid var(--border);
+  border-radius: 6px; background: var(--surface-low); padding: .5rem; max-width: 100%; font-size: 16px; }
+.dp button, .dp a { cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.dp input[type=radio], .dp input[type=checkbox] { width: 22px; height: 22px; flex-shrink: 0; }
+.dp input[type=number] { width: 100px; }
+.dp .dp-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
+.dp [hidden] { display: none !important; }
+.dp [data-dp-documents] ol { list-style: none; margin: 0; padding: 0; }
+.dp [data-dp-documents] li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(100px, 160px) 44px 44px;
+  align-items: center; gap: .3rem; margin: .5rem 0; padding: .3rem; border: 1px solid var(--border); border-radius: 6px; }
+.dp [data-dp-documents] label { overflow-wrap: anywhere; min-width: 0; }
+.dp .dp-actions, .dp .dp-links { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .75rem; }
+.dp [data-dp-status], .dp [data-dp-printer-note], .dp [data-dp-station-note], .dp [data-dp-format-note] {
+  margin: .6rem 0; font-size: .85rem; overflow-wrap: anywhere; }
+.dp [data-dp-submit] { background: var(--red); color: white; }
+.dp button:disabled { opacity: .5; cursor: default; }
+.dp :focus-visible { outline: 2px solid var(--red-light); outline-offset: 2px; }
+.dp-print-frame { position: fixed; width: 1px; height: 1px; bottom: 0; right: 0; opacity: 0; pointer-events: none; }
+@media (max-width: 520px) {
+  .dp .dp-options { grid-template-columns: minmax(0, 1fr); }
+  .dp [data-dp-documents] li { grid-template-columns: minmax(0, 1fr) 44px 44px; }
+  .dp [data-dp-documents] label { grid-column: 1 / -1; }
+}

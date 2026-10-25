@@ -20,6 +20,7 @@ from app.core.permissions import require_role
 from app.core.templating import templates
 from app.db import get_db
 from app.models.gateway import (
+    DOC_DOKUMENTPAKET,
     DOC_OBJEKT_DOKUMENT,
     DOCUMENT_TYPE_LABELS,
     GATEWAY_KIND_LABELS,
@@ -1263,7 +1264,7 @@ async def manual_print(
 
     Zugriff: recorder+ (jeder mit Bezug zum Einsatz/GSL/Objekt). Der Bezug wird
     org-scoped geprüft (Tenant-Listener greift auf print_job/printer)."""
-    if document_type not in DOCUMENT_TYPE_LABELS:
+    if document_type == DOC_DOKUMENTPAKET or document_type not in DOCUMENT_TYPE_LABELS:
         return JSONResponse({"ok": False, "error": "Unbekannter Dokumenttyp"}, status_code=400)
     printer = db.get(Printer, printer_id)
     if printer is None or printer.org_id != user.org_id or not printer.aktiv:

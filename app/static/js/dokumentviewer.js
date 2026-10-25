@@ -64,7 +64,7 @@
             ${button('page-prev', 'Vorherige Seite', 'arrow-left')}
             <label class="dv-page">Seite <input data-dv-page type="number" min="1" inputmode="numeric" aria-label="Sprung zu Seite"> <span data-dv-count></span></label>
             ${button('page-next', 'Nächste Seite', 'arrow-right')}
-            ${button('print', 'Ausgewählte Seiten drucken', 'printer')}
+            ${button('print', 'Drucken', 'printer')}
             <button type="button" data-dv-action="add" disabled title="Einsatzübernahme für diese Auswahl ist noch nicht verfügbar." aria-label="Zum Einsatz hinzufügen">${icon('copy')}</button>
             ${button('close', 'Dokumentenviewer schließen', 'x')}
           </div>
@@ -327,6 +327,16 @@
     print() {
       if (!this.selected.length) return;
       if (!this.dialog.dispatchEvent(new CustomEvent('documentviewer:print', {bubbles: true, cancelable: true, detail: this.selection()}))) return;
+      if (root.openDocumentPrint && root.documentPrintSupported(this.item.url)) {
+        const selections = {};
+        for (const item of this.items) {
+          const identity = new URL(item.url); identity.hash = '';
+          const state = this.states.get(`ecp-dv-page:${this.owner}:${identity.href}`);
+          if (state?.selection) selections[item.url] = state.selection;
+        }
+        return root.openDocumentPrint({items: this.items, index: this.index, page: this.state.page,
+          selection: this.state.selection, selections});
+      }
       if (this.item.kind === 'image') return root.printImage(this.item.url);
       const url = this.selectionUrl || (this.selected.length === this.count ? this.item.url : null);
       if (!url) { this.status('Für diesen Dateilink ist nur der Druck des gesamten Originals verfügbar.'); return; }

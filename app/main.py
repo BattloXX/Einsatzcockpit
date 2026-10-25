@@ -73,6 +73,7 @@ from app.routers import (
     ui_db_backup,
     ui_dibos,
     ui_dienst_monitor,
+    ui_dokumentdruck,
     ui_druck,
     ui_einheit,
     ui_einsatz_import,
@@ -959,6 +960,7 @@ app.include_router(ui_foerderstrecke.router)
 app.include_router(ui_foerderstrecke.public_router)
 app.include_router(ui_gateway.router)
 app.include_router(ui_druck.router)
+app.include_router(ui_dokumentdruck.router)
 app.include_router(ui_infoscreen_alarm.router)
 app.include_router(ui_infoscreen_stats.router)
 app.include_router(ui_verleih.router)

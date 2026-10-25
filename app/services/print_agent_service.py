@@ -201,6 +201,11 @@ def enqueue_for_agents(db: Session, job: PrintJob, now: datetime | None = None) 
 def _grant(job: PrintJob, route: PrinterAgentRoute, token: str) -> dict:
     from app.services.print_artifact_service import artifact_url, is_html_render
 
+    options = dict(route.options or {})
+    if job.document_type == "dokumentpaket":
+        # Bestehender Windows-Treiber liest diese Optionen auf Routenebene.
+        # Nur für diesen Auftrag, niemals die gespeicherte Route verändern.
+        options.update(orientation="auto", scaling="fit", collate=True)
     return {
         "job_id": job.id,
         "lease_token": token,
@@ -209,13 +214,14 @@ def _grant(job: PrintJob, route: PrinterAgentRoute, token: str) -> dict:
         "document_type": job.document_type,
         "artifact_url": artifact_url(job),
         "render_kind": "html" if is_html_render(job) else "pdf",
-        "options": job.options or {},
+        "options": ({k: v for k, v in (job.options or {}).items() if k in ("copies", "duplex", "color", "media")}
+                    if job.document_type == "dokumentpaket" else job.options or {}),
         "route": {
             "route_id": route.id,
             "printer_id": route.printer_id,
             "local_queue": route.local_queue,
             "render_mode": route.render_mode,
-            "options": route.options or {},
+            "options": options,
         },
     }
 

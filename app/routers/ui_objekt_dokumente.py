@@ -6,6 +6,7 @@ Datei-Auslieferung ausschliesslich ueber /objekt-medien/* mit Org-Check
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, Response
@@ -743,6 +744,17 @@ def dokument_original(
     user: User = Depends(require_role(*EINSATZ_LESE_ROLLEN)),
     _guard: None = Depends(require_objekt_enabled),
 ):
+    pfad, dateiname = dokument_original_datei(db, dokument_id, user)
+    db.close()
+    return FileResponse(
+        pfad, media_type="application/pdf",
+        filename=dateiname,
+        content_disposition_type="attachment" if request.query_params.get("download") == "1" else "inline",
+    )
+
+
+def dokument_original_datei(db: Session, dokument_id: int, user: User) -> tuple[Path, str]:
+    """Gemeinsamer Dateizugriff, ohne die aufrufende Session zu schließen."""
     dokument = (
         db.query(ObjektDokument)
         .filter(ObjektDokument.id == dokument_id)
@@ -755,13 +767,7 @@ def dokument_original(
     pfad = absolute_pfad(dokument.pfad)
     if not pfad.exists():
         raise HTTPException(status_code=404, detail="Datei fehlt")
-    dateiname = dokument.dateiname_original
-    db.close()
-    return FileResponse(
-        pfad, media_type="application/pdf",
-        filename=dateiname,
-        content_disposition_type="attachment" if request.query_params.get("download") == "1" else "inline",
-    )
+    return pfad, dokument.dateiname_original
 
 
 @router.get("/objekt-medien/symbol/{symbol_id}")

@@ -27,7 +27,8 @@ def viewer_seite(client, browser, dokumente):
         };
         window.printRequests = [];
         document.addEventListener('documentviewer:print', event => {
-          window.printRequests.push(event.detail); event.preventDefault();
+          window.printRequests.push(event.detail);
+          if (!window.allowDocumentPrint) event.preventDefault();
         });
     """)
 
@@ -42,8 +43,10 @@ def viewer_seite(client, browser, dokumente):
             else:
                 route.fulfill(status=404)
         else:
-            response = client.get(url.path + ("?" + url.query if url.query else ""),
-                                  headers={k: v for k, v in route.request.headers.items() if k in ("range",)})
+            response = client.request(route.request.method, url.path + ("?" + url.query if url.query else ""),
+                                      content=route.request.post_data_buffer,
+                                      headers={k: v for k, v in route.request.headers.items()
+                                               if k in ("range", "content-type", "x-csrf-token")})
             headers = {k: v for k, v in response.headers.items() if k not in ("content-length", "content-encoding")}
             route.fulfill(status=response.status_code, body=response.content, headers=headers)
 
@@ -115,11 +118,11 @@ def test_vier_dokumente_seitenwahl_und_sitzung(viewer_seite, client, dokumente, 
     url = urlsplit(page.locator('[data-dv-excerpt]').get_attribute('href'))
     response = client.get(url.path + '?' + url.query)
     assert len(PdfReader(io.BytesIO(response.content)).pages) == 5
-    page.get_by_role("button", name="Ausgewählte Seiten drucken").click()
+    page.get_by_role("button", name="Drucken", exact=True).click()
     assert page.evaluate('printRequests[0].pages') == [3, 4, 5, 9, 10]
     expect(page.get_by_role('button', name='Zum Einsatz hinzufügen')).to_be_disabled()
     auswahl.fill('99')
-    expect(page.get_by_role("button", name="Ausgewählte Seiten drucken")).to_be_disabled()
+    expect(page.get_by_role("button", name="Drucken", exact=True)).to_be_disabled()
     page.get_by_role("button", name="Aktuelle Seite", exact=True).click()
     expect(auswahl).to_have_value('9')
     page.get_by_role("button", name="Gesamtes Dokument", exact=True).click()
