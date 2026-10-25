@@ -40,6 +40,7 @@ from app.models.foerderstrecke import (
 from app.models.gateway import (
     AlarmIngest,
     Gateway,
+    GatewayMessage,
     Printer,
     PrinterAgentRoute,
     PrintJob,
@@ -468,6 +469,7 @@ __all__ = [
     "FoerderMaschinistToken",
     "HoehenCache",
     "Gateway",
+    "GatewayMessage",
     "Printer",
     "PrinterAgentRoute",
     "PrintJob",

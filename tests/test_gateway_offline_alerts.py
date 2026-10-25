@@ -43,6 +43,7 @@ def gateway(db, org_id, *, name="Wichtig", kind="linux", online=False, enabled=T
                   last_seen_at=now if online else now - timedelta(hours=1),
                   status="online" if online else "offline", offline_alert_enabled=enabled)
     if online and kind == "windows_agent":
+        row.agent_connection_token_hash = row.device_token_hash
         row.agent_connection_id = uuid4().hex
         row.agent_presence_expires_at = now + timedelta(seconds=90)
     db.add(row)

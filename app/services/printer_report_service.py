@@ -42,7 +42,7 @@ def apply_printer_status(gateway_id: int, org_id: int, payload: dict) -> None:
     try:
         printers = (
             db.query(Printer)
-            .filter(Printer.gateway_id == gateway_id, Printer.id.in_(list(by_id)))
+            .filter(Printer.org_id == org_id, Printer.gateway_id == gateway_id, Printer.id.in_(list(by_id)))
             .all()
         )
         for p in printers:
@@ -78,7 +78,7 @@ def apply_printer_report(gateway_id: int, org_id: int, payload: dict) -> None:
     try:
         existing = (
             db.query(Printer)
-            .filter(Printer.gateway_id == gateway_id)
+            .filter(Printer.org_id == org_id, Printer.gateway_id == gateway_id)
             .all()
         )
         for entry in entries:

@@ -1,21 +1,10 @@
-"""Redis Pub/Sub-Bus für worker-übergreifende WebSocket-Zustellung.
+"""Redis-Hinweisbus mit Wiederverbindung; Gateway-Zustellung liegt dauerhaft in der DB.
 
-Problem: Bei mehreren Gunicorn/Uvicorn-Workern (deploy/einsatzleiter.service: -w 2)
-hält jeder Worker seine eigenen In-Process-Socket-Registries (ConnectionManager,
-_print_gateways). NGINX (ip_hash) pinnt eine WS-Verbindung auf genau einen Worker.
-Ein Broadcast oder ein Gateway-Druckauftrag, der auf einem anderen Worker entsteht,
-erreicht den Ziel-Socket dann nicht.
-
-Lösung: Jede worker-übergreifend zuzustellende Nachricht wird auf einen Redis-Kanal
-publiziert; jeder Worker abonniert die Kanäle und stellt eingehende Nachrichten an
-seine EIGENEN lokalen Sockets zu. So erreicht ein Publish von Worker A die Sockets
-auf allen Workern – und exakt einmal je Worker (Redis liefert an jeden Abonnenten,
-inkl. des Publishers selbst).
-
-Ohne REDIS_URL ist der Bus inaktiv (``enabled()`` False) → die Aufrufer fallen auf
-die direkte In-Process-Zustellung zurück (Dev / -w 1 bleiben unverändert, keine neue
-Abhängigkeit zur Laufzeit nötig).
+Publisher liefert ausschliesslich ueber den Subscriber zu. Adressierte Gateway-Hinweise
+verweisen auf eine atomar geclaimte DB-Nachricht; lokaler Send plus eigenes Redis-Echo
+koennen deshalb keine zweite Socket-Zustellung erzeugen.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -28,12 +17,13 @@ from app.config import settings
 logger = logging.getLogger("einsatzleiter.ws_bus")
 
 # Kanäle
-CH_WS = "ec:ws"   # Browser-Broadcasts (ConnectionManager: Einsatz/Lage/Org)
-CH_GW = "ec:gw"   # Print-&-Alarm-Gateway-Ebene (print_job, command, config_sync, job_status)
-CH_LAGEDOKUMENT = "ec:lagedokument"              # Yjs-Sync-Updates (Lagedokument-Inhalt)
+CH_WS = "ec:ws"  # Browser-Broadcasts (ConnectionManager: Einsatz/Lage/Org)
+CH_GW = "ec:gw"  # Print-&-Alarm-Gateway-Ebene (print_job, command, config_sync, job_status)
+CH_LAGEDOKUMENT = "ec:lagedokument"  # Yjs-Sync-Updates (Lagedokument-Inhalt)
 CH_LAGEDOKUMENT_AWARENESS = "ec:lagedokument-aw"  # Yjs-Awareness (Presence/Cursor)
 
 _redis = None
+_subscribed = False
 _pubsub_task: asyncio.Task | None = None
 _handlers: dict[str, Callable[[dict], Awaitable[None]]] = {}
 
@@ -50,7 +40,7 @@ def status() -> dict:
     läuft (start() war erfolgreich). Spiegelt den Zustand DIESES Workers – da alle
     Worker denselben Redis nutzen, ist er repräsentativ."""
     running = _pubsub_task is not None and not _pubsub_task.done()
-    return {"configured": enabled(), "connected": bool(_redis is not None and running)}
+    return {"configured": enabled(), "connected": bool(_redis is not None and running and _subscribed)}
 
 
 def register(channel: str, handler: Callable[[dict], Awaitable[None]]) -> None:
@@ -61,38 +51,79 @@ def register(channel: str, handler: Callable[[dict], Awaitable[None]]) -> None:
     _handlers[channel] = handler
 
 
-async def publish(channel: str, message: dict) -> None:
-    """Publiziert eine Nachricht auf einen Kanal (No-Op ohne Redis)."""
+async def publish(channel: str, message: dict) -> bool:
+    """False bei Transportfehler; kein erfolgreicher Publish wird vorgetaeuscht."""
     if _redis is None:
-        return
+        return False
     try:
         await _redis.publish(channel, json.dumps(message, ensure_ascii=False, default=str))
+        return True
     except Exception:
-        logger.exception("ws_bus: publish fehlgeschlagen (channel=%s)", channel)
+        logger.warning("ws_bus: publish fehlgeschlagen (channel=%s)", channel)
+        return False
+
+
+async def _connect():
+    global _redis, _subscribed
+    import redis.asyncio as aioredis
+
+    client = aioredis.from_url(
+        settings.REDIS_URL,
+        encoding="utf-8",
+        decode_responses=True,
+        health_check_interval=5,
+        socket_connect_timeout=2,
+        socket_timeout=5,
+    )
+    pubsub = None
+    try:
+        pubsub = client.pubsub()
+        await pubsub.subscribe(*(list(_handlers) or [CH_WS, CH_GW]))
+    except Exception:
+        if pubsub is not None:
+            await pubsub.aclose()
+        await client.aclose()
+        raise
+    _redis = client
+    _subscribed = True
+    return pubsub
 
 
 async def start() -> None:
-    """Verbindet zu Redis und startet die Subscriber-Schleife (im lifespan)."""
-    global _redis, _pubsub_task
-    if not enabled():
-        logger.info("ws_bus: REDIS_URL nicht gesetzt – In-Process-Modus (nur bei -w 1 korrekt).")
+    global _pubsub_task
+    if not enabled() or (_pubsub_task is not None and not _pubsub_task.done()):
         return
+    pubsub = None
     try:
-        import redis.asyncio as aioredis  # noqa: PLC0415
-        _redis = aioredis.from_url(
-            settings.REDIS_URL, encoding="utf-8", decode_responses=True,
-            health_check_interval=30,
-        )
-        pubsub = _redis.pubsub()
-        channels = list(_handlers.keys()) or [CH_WS, CH_GW]
-        await pubsub.subscribe(*channels)
-        _pubsub_task = asyncio.create_task(_reader(pubsub))
-        logger.info("ws_bus: verbunden mit Redis, Kanäle=%s", channels)
+        pubsub = await _connect()
     except Exception:
-        # Redis darf den Start nicht blockieren – bei Ausfall lieber degradiert
-        # (In-Process) laufen als gar nicht.
-        logger.exception("ws_bus: Redis-Start fehlgeschlagen – In-Process-Fallback.")
-        _redis = None
+        logger.warning("ws_bus: Redis nicht erreichbar; Wiederverbindung folgt")
+    _pubsub_task = asyncio.create_task(_supervise(pubsub))
+
+
+async def _supervise(pubsub) -> None:
+    global _redis, _subscribed
+    delay = 0.1
+    while True:
+        try:
+            if pubsub is None:
+                pubsub = await _connect()
+            delay = 0.1
+            await _reader(pubsub)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.warning("ws_bus: Verbindung unterbrochen; erneutes Subscribe folgt")
+        finally:
+            _subscribed = False
+            if pubsub is not None:
+                await pubsub.aclose()
+                pubsub = None
+            if _redis is not None:
+                await _redis.aclose()
+                _redis = None
+        await asyncio.sleep(delay)
+        delay = min(delay * 2, 5)
 
 
 async def _reader(pubsub) -> None:
@@ -106,7 +137,7 @@ async def _reader(pubsub) -> None:
                 continue
             try:
                 payload = json.loads(msg.get("data"))
-            except (json.JSONDecodeError, TypeError):
+            except json.JSONDecodeError, TypeError:
                 continue
             try:
                 await handler(payload)
@@ -120,12 +151,13 @@ async def _reader(pubsub) -> None:
 
 async def stop() -> None:
     """Beendet Subscriber-Task und Redis-Verbindung (im lifespan-Shutdown)."""
-    global _pubsub_task, _redis
+    global _pubsub_task, _redis, _subscribed
+    _subscribed = False
     if _pubsub_task is not None:
         _pubsub_task.cancel()
         try:
             await _pubsub_task
-        except (asyncio.CancelledError, Exception):
+        except asyncio.CancelledError, Exception:
             pass
         _pubsub_task = None
     if _redis is not None:

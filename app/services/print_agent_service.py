@@ -131,6 +131,7 @@ def route_kandidaten(db: Session, printer: Printer, now: datetime | None = None)
             Gateway.device_token_hash.isnot(None),
             Gateway.status == GATEWAY_STATUS_ONLINE,
             Gateway.agent_connection_id.isnot(None),
+            Gateway.agent_connection_token_hash == Gateway.device_token_hash,
             Gateway.agent_presence_expires_at > zeit,
             Gateway.last_seen_at >= zeit - timedelta(seconds=AGENT_ONLINE_S),
         )

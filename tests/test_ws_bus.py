@@ -75,18 +75,15 @@ async def test_broadcast_mit_bus_publiziert_und_liefert(monkeypatch):
 
 # ── Bus-Handler (CH_GW): Gateway-Ebene ──────────────────────────────────────────
 
-async def test_bus_gw_job_status_loest_future_auf():
+async def test_unaddressed_legacy_status_cannot_resolve_another_workers_future():
     import app.routers.ws as ws
-    key = "999991"
-    fut = asyncio.get_event_loop().create_future()
-    ws._job_pending[key] = fut
+    future = asyncio.get_running_loop().create_future()
+    ws._job_pending["999991"] = future
     try:
-        await ws._bus_gateway_deliver({
-            "kind": "job_status", "job_id": 999991, "payload": {"status": "done"},
-        })
-        assert fut.done() and fut.result()["status"] == "done"
+        await ws._bus_gateway_deliver({"kind": "job_status", "job_id": 999991, "payload": {"status": "done"}})
+        assert not future.done()
     finally:
-        ws._job_pending.pop(key, None)
+        ws._job_pending.pop("999991", None)
 
 
 async def test_bus_dispatch_no_gateway_raises(monkeypatch):
@@ -97,32 +94,17 @@ async def test_bus_dispatch_no_gateway_raises(monkeypatch):
         await ws.dispatch_print_job(773001, 1, {"job_id": 1})
 
 
-async def test_bus_dispatch_cross_worker_done(monkeypatch):
-    """Worker-übergreifend: print_job → lokales Gateway → job_status via Bus → Future."""
+async def test_addressed_dispatch_and_publisher_echo_deliver_once(monkeypatch):
     import app.routers.ws as ws
-    org_id, job_id = 773002, 91
-    monkeypatch.setattr(ws.ws_bus, "enabled", lambda: True)
-    monkeypatch.setattr(ws, "gateway_online", lambda o: True)
+    from app.services import gateway_routing as routing
+    from tests.gateway_helpers import CaptureSocket, bind, cleanup
+    from tests.test_gateway_dispatch import make_job
+    connection, socket = bind("linux", socket=CaptureSocket(reply=True))
+    job_id = make_job(connection)
     _route_publish_to_handlers(monkeypatch)
-
-    class _GwWS:
-        def __init__(self) -> None:
-            self.sent: list[str] = []
-
-        async def send_text(self, payload: str) -> None:
-            self.sent.append(payload)
-            # Wie der echte ws-Handler nach der Gateway-Antwort: job_status auf den Bus.
-            await ws.ws_bus.publish(ws.ws_bus.CH_GW, {
-                "kind": "job_status", "org_id": org_id, "job_id": job_id,
-                "payload": {"job_id": job_id, "status": "done"},
-            })
-
-    gw = _GwWS()
-    ws._print_gateways[org_id] = [(1, gw)]
     try:
-        result = await ws.dispatch_print_job(org_id, job_id, {"job_id": job_id}, timeout=2.0)
-        assert result["status"] == "done"
-        assert gw.sent, "Gateway hätte den print_job erhalten müssen"
+        result = await ws.dispatch_print_job(1, job_id, {"job_id": job_id}, timeout=2)
+        assert result["status"] == "done" and len(socket.sent) == 1
+        assert routing._sockets
     finally:
-        ws._print_gateways.pop(org_id, None)
-        ws._job_pending.pop(str(job_id), None)
+        cleanup(connection)

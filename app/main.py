@@ -340,6 +340,8 @@ async def lifespan(app: FastAPI):
     from app.services import ws_bus
 
     await ws_bus.start()
+    from app.services import gateway_routing
+    await gateway_routing.start()
 
     # Bootstrap admin on first start
     _bootstrap_admin()
@@ -395,6 +397,7 @@ async def lifespan(app: FastAPI):
         await mcp_session_context.__aexit__(None, None, None)
         from app.services import ws_bus
 
+        await gateway_routing.stop()
         await ws_bus.stop()
         from app.services.teams_alarm_service import aclose_teams_client
 

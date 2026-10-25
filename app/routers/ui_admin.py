@@ -3457,6 +3457,10 @@ def revoke_gateway_token(
     _assert_gateway_token_access(gw, request.state.user)
     assert gw is not None
     gw.revoked_at = datetime.now(UTC)
+    gw.connection_token_hash = None
+    gw.connection_id = None
+    gw.worker_id = None
+    gw.presence_expires_at = None
     write_audit(db, "admin.sms_gateway_token.revoked", user_id=request.state.user.id,
                 entity_type="sms_gateway_token", entity_id=token_id,
                 payload={"label": gw.label})

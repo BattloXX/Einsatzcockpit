@@ -103,9 +103,10 @@ def pair_gateway(db: Session, code: str) -> tuple[Gateway, str] | None:
     gw.pairing_code_hash = None
     gw.pairing_expires_at = None
     gw.status = GATEWAY_STATUS_OFFLINE  # verbindet sich gleich per WSS
-    if gw.is_windows_agent:
-        gw.agent_connection_id = None
-        gw.agent_presence_expires_at = None
+    gw.agent_connection_id = None
+    gw.agent_connection_token_hash = None
+    gw.agent_worker_id = None
+    gw.agent_presence_expires_at = None
     return gw, raw_token
 
 
@@ -113,10 +114,11 @@ def rotate_token(db: Session, gateway: Gateway) -> str:
     """Rotiert das Device-Token (altes wird ungültig). Gibt neues Klartext-Token zurück."""
     raw_token = generate_gateway_token()
     gateway.device_token_hash = hash_api_key(raw_token)
-    if gateway.is_windows_agent:
-        gateway.agent_connection_id = None
-        gateway.agent_presence_expires_at = None
-        gateway.status = GATEWAY_STATUS_OFFLINE
+    gateway.agent_connection_id = None
+    gateway.agent_connection_token_hash = None
+    gateway.agent_worker_id = None
+    gateway.agent_presence_expires_at = None
+    gateway.status = GATEWAY_STATUS_OFFLINE
     return raw_token
 
 
@@ -124,9 +126,10 @@ def revoke_token(gateway: Gateway) -> None:
     """Widerruft das Device-Token – Gateway muss neu gekoppelt werden."""
     gateway.device_token_hash = None
     gateway.status = GATEWAY_STATUS_UNPAIRED
-    if gateway.is_windows_agent:
-        gateway.agent_connection_id = None
-        gateway.agent_presence_expires_at = None
+    gateway.agent_connection_id = None
+    gateway.agent_connection_token_hash = None
+    gateway.agent_worker_id = None
+    gateway.agent_presence_expires_at = None
 
 
 # ── Status-Ableitung ───────────────────────────────────────────────────────────
@@ -135,12 +138,8 @@ def derive_status(gateway: Gateway, *, connected: bool | None = None) -> str:
     """Bestimmt den Anzeigestatus. connected: Live-WS-Info (optional)."""
     if not gateway.device_token_hash:
         return GATEWAY_STATUS_UNPAIRED
-    if gateway.is_windows_agent:
-        from app.services.print_agent_presence import online
-        return GATEWAY_STATUS_ONLINE if online(gateway) else GATEWAY_STATUS_OFFLINE
-    if connected:
-        return GATEWAY_STATUS_ONLINE
-    return GATEWAY_STATUS_OFFLINE
+    from app.services.gateway_presence import online
+    return GATEWAY_STATUS_ONLINE if online(gateway) else GATEWAY_STATUS_OFFLINE
 
 
 def _status_datetime(value: object) -> datetime | None:

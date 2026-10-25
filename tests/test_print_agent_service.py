@@ -34,7 +34,7 @@ from app.models.gateway import (
 from app.services import print_agent_service as svc
 from tests.conftest import TEST_DB_URL
 
-NOW = datetime(2026, 1, 1, 12, 0)
+NOW = datetime(2026, 1, 1, 12, 0)  # noqa: DTZ001 -- DB-Zeitstempel sind naive UTC.
 _org_ids = itertools.count(992000 + (uuid4().int % 5000) * 10)
 _engine = None
 
@@ -70,6 +70,7 @@ def _agent(db, org_id, name, *, online=True, seen=NOW):
         agent_connection_id=uuid4().hex if online else None,
         agent_presence_expires_at=seen + timedelta(seconds=90) if online else None,
     )
+    gateway.agent_connection_token_hash = gateway.device_token_hash
     db.add(gateway)
     db.flush()
     return gateway

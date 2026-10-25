@@ -317,6 +317,11 @@ class SmsGatewayToken(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    connection_token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    connection_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    worker_id: Mapped[str | None] = mapped_column(String(96), nullable=True)
+    connected_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    presence_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # Niedriger Wert = wird zuerst versucht (siehe ws.py::dispatch_sms). Neue Gateways
     # starten gleichrangig (100); Admin ordnet sie per Auf/Ab-Pfeil.
