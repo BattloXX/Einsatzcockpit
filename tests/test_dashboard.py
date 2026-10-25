@@ -6,11 +6,13 @@ from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.incident import Incident
 from app.models.major_incident import (
-    IncidentSite, MajorIncident, MajorIncidentStatus, SitePhase,
+    IncidentSite,
+    MajorIncident,
+    MajorIncidentStatus,
+    SitePhase,
 )
 from app.models.master import FireDept, OrgSettings, SystemSettings
 from app.models.user import Role, User, UserRole
-
 
 SYSTEM_MODULE_FLAGS = (
     "uas_module_enabled",

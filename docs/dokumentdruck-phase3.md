@@ -165,6 +165,14 @@ Die genannten Testläufe überschneiden sich teilweise. Bestehende Warnungen
 betreffen unter anderem SQLAlchemy-/pypdf-Abkündigungen und die lokale
 WeasyPrint-Fontbibliothek; es gab keine fehlgeschlagenen Tests.
 
+Nach dem Push zeigte die Browser-CI einen Fehler in der Testzuordnung: Der
+Änderungsfall bearbeitete den ersten Upload statt des tatsächlich geöffneten
+Dokuments. Der Test ermittelt die Datei nun über die aktive Viewer-Referenz;
+dadurch hängt er nicht von der Reihenfolge der freigegebenen Dokumente ab.
+Die vollständige Python-CI fand außerdem noch eine Dashboard-Erwartung auf den
+alten Modulnamen „Nachschlagewerke“. Sie prüft nun den gemeinsamen Einstieg
+„Einsatzwissen“ sowohl bei aktivierten als auch deaktivierten Modulen.
+
 Reproduzierbare Prüfbefehle (eigene Workerkennung verhindert Konflikte mit anderen
 lokalen SQLite-Testläufen):
 
