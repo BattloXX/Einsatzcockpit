@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import HTTPException, UploadFile
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -262,97 +263,118 @@ def verarbeite_dokument(
     render_func: RenderFunc | None = None,
     ocr_func: OcrFunc | None = None,
 ) -> None:
-    """Hintergrund-Verarbeitung: Split (pypdf) + Rasterung (pdf2image) + Thumbs + Volltext.
+    """Dokument einmal beanspruchen, ohne DB-Transaktion rendern, kurz abschliessen.
 
-    Laeuft mit eigener Session (Muster _geocode_incident). Idempotent genug:
-    bei Fehlern wird status=fehler gesetzt; vorhandene Seiten-Zeilen des
-    Dokuments werden vorab entfernt. Je Seite wird der Volltext (PDF-Textlayer,
-    sonst OCR) fuer die Suche indexiert.
+    Statuspruefung unter Zeilensperre verhindert parallele Worker desselben PDFs.
+    Nach dem Rendern wird die Zeile in einer neuen Transaktion gesperrt gelesen.
+    Ein MariaDB-Lesekonflikt wiederholt die ganze DB-Transaktion, inklusive Quota
+    und Seiten, genau einmal mit frischer Session (kein erneutes Rendern).
     """
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
 
-    render = render_func or _render_page_png_poppler
-    ocr = ocr_func or _ocr_tesseract
-
     db = SessionLocal()
-    set_tenant_context(db, None)
+    dest_dir: Path | None = None
+    beansprucht = False
     try:
-        dokument = db.get(ObjektDokument, dokument_id)
-        if dokument is None:
-            return
-        dokument.status = DOKUMENT_STATUS_VERARBEITUNG
-        db.commit()
-
-        original = absolute_pfad(dokument.pfad)
-        dest_dir = original.parent
-        org_id = dokument.org_id
-
-        # Alte Seiten-Zeilen entfernen (Neuverarbeitung)
-        db.query(ObjektDokumentSeite).filter(
-            ObjektDokumentSeite.dokument_id == dokument.id
-        ).delete()
-        db.commit()
-
-        ergebnisse = pdf_seiten_pipeline.zerlege_pdf(
-            original, dest_dir, render_func=render, ocr_func=ocr,
-            dpi=settings.OBJEKT_SEITE_RENDER_DPI, thumb_groesse=settings.MEDIA_THUMB_SIZE,
-            log_kontext=f"Dokument {dokument.id}",
-        )
-        neu_belegt = 0
-        basis_pfad = dokument.pfad.rsplit('/', 1)[0]
-        for ergebnis in ergebnisse:
-            neu_belegt += ergebnis.bytes_belegt
-            db.add(ObjektDokumentSeite(
-                org_id=org_id,
-                objekt_id=dokument.objekt_id,
-                dokument_id=dokument.id,
-                seiten_nr=ergebnis.seiten_nr,
-                einzel_pdf_pfad=f"{basis_pfad}/{ergebnis.einzel_pdf_name}",
-                bild_pfad=f"{basis_pfad}/{ergebnis.bild_name}" if ergebnis.bild_name else None,
-                thumb_pfad=f"{basis_pfad}/{ergebnis.thumb_name}" if ergebnis.thumb_name else None,
-                volltext=ergebnis.volltext,
-                text_quelle=ergebnis.text_quelle,
-            ))
-
-        # Quota fuer abgeleitete Dateien reservieren (Entscheidung: zaehlt zur Org-Quota)
-        if org_id is not None and neu_belegt > 0:
+        for versuch in range(2):
+            set_tenant_context(db, None)
             try:
-                reserve_storage(db, org_id, neu_belegt)
-            except HTTPException:
-                logger.warning(
-                    "Quota beim Zerlegen ueberschritten (Dokument %d) — Renderings verworfen",
-                    dokument.id,
-                )
-                pdf_seiten_pipeline.entferne_seitendateien(dest_dir)
+                dokument = db.query(ObjektDokument).filter_by(id=dokument_id).with_for_update().first()
+                if dokument is None or dokument.status not in (DOKUMENT_STATUS_NEU, DOKUMENT_STATUS_FEHLER):
+                    return
+                org_id, objekt_id = dokument.org_id, dokument.objekt_id
+                pfad = dokument.pfad
+                original = absolute_pfad(pfad)
+                dest_dir = original.parent
+                dokument.status = DOKUMENT_STATUS_VERARBEITUNG
+                dokument.fehler_text = None
+                for seite in db.query(ObjektDokumentSeite).filter_by(
+                    org_id=org_id, dokument_id=dokument_id,
+                ).all():
+                    db.delete(seite)
+                if org_id is not None:
+                    release_storage(db, org_id, max(0, dokument.belegt_bytes - dokument.groesse_bytes))
+                dokument.belegt_bytes = dokument.groesse_bytes
+                db.commit()
+                beansprucht = True
+                break
+            except OperationalError as exc:
                 db.rollback()
-                dokument = db.get(ObjektDokument, dokument_id)
-                if dokument is not None:
-                    db.query(ObjektDokumentSeite).filter(
-                        ObjektDokumentSeite.dokument_id == dokument.id
-                    ).delete()
-                    dokument.status = DOKUMENT_STATUS_FEHLER
-                    dokument.fehler_text = "Speicher-Kontingent der Organisation erschoepft"
-                    db.commit()
+                if versuch or not _ist_lesekonflikt(exc):
+                    raise
+                logger.warning("Lesekonflikt beim Start von Dokument %d; neue Transaktion", dokument_id)
+                db.close()
+                db = SessionLocal()
+        # Keine ORM-Zugriffe nach commit(): expire_on_commit wuerde hier bereits
+        # vor dem minutenlangen Rendern einen neuen REPEATABLE-READ-Snapshot oeffnen.
+        db.close()
+        assert dest_dir is not None
+        pdf_seiten_pipeline.entferne_seitendateien(dest_dir)
+        ergebnisse = pdf_seiten_pipeline.zerlege_pdf(
+            original, dest_dir, render_func=render_func or _render_page_png_poppler,
+            ocr_func=ocr_func or _ocr_tesseract,
+            dpi=settings.OBJEKT_SEITE_RENDER_DPI, thumb_groesse=settings.MEDIA_THUMB_SIZE,
+            log_kontext=f"Dokument {dokument_id}",
+        )
+        neu_belegt = sum(e.bytes_belegt for e in ergebnisse)
+        for versuch in range(2):
+            db = SessionLocal()
+            set_tenant_context(db, org_id)
+            try:
+                dokument = db.query(ObjektDokument).filter_by(
+                    id=dokument_id, org_id=org_id,
+                ).with_for_update().first()
+                if dokument is None:
+                    pdf_seiten_pipeline.entferne_seitendateien(dest_dir)
+                    return
+                if org_id is not None:
+                    reserve_storage(db, org_id, neu_belegt)
+                basis = pfad.rsplit("/", 1)[0]
+                for e in ergebnisse:
+                    db.add(ObjektDokumentSeite(
+                        org_id=org_id, objekt_id=objekt_id, dokument_id=dokument_id,
+                        seiten_nr=e.seiten_nr, einzel_pdf_pfad=f"{basis}/{e.einzel_pdf_name}",
+                        bild_pfad=f"{basis}/{e.bild_name}" if e.bild_name else None,
+                        thumb_pfad=f"{basis}/{e.thumb_name}" if e.thumb_name else None,
+                        volltext=e.volltext, text_quelle=e.text_quelle,
+                    ))
+                dokument.belegt_bytes = dokument.groesse_bytes + neu_belegt
+                dokument.status = DOKUMENT_STATUS_FERTIG
+                dokument.fehler_text = None
+                db.commit()
                 return
-
-        dokument.belegt_bytes = dokument.groesse_bytes + neu_belegt
-        dokument.status = DOKUMENT_STATUS_FERTIG
-        dokument.fehler_text = None
-        db.commit()
+            except OperationalError as exc:
+                db.rollback()
+                if versuch or not _ist_lesekonflikt(exc):
+                    raise
+                logger.warning("Lesekonflikt beim Abschluss von Dokument %d; neue Transaktion", dokument_id)
+            finally:
+                db.close()
     except Exception as exc:
         logger.exception("Dokument-Verarbeitung fehlgeschlagen (Dokument %d)", dokument_id)
+        db.rollback()
+        db.close()
+        if beansprucht and dest_dir is not None:
+            pdf_seiten_pipeline.entferne_seitendateien(dest_dir)
+        db = SessionLocal()
+        set_tenant_context(db, None)
         try:
-            db.rollback()
-            dokument = db.get(ObjektDokument, dokument_id)
-            if dokument is not None:
+            dokument = db.query(ObjektDokument).filter_by(id=dokument_id).with_for_update().first()
+            erwarteter_status = DOKUMENT_STATUS_VERARBEITUNG if beansprucht else DOKUMENT_STATUS_NEU
+            if dokument is not None and dokument.status == erwarteter_status:
                 dokument.status = DOKUMENT_STATUS_FEHLER
-                dokument.fehler_text = str(exc)[:500]
+                dokument.fehler_text = str(exc.detail if isinstance(exc, HTTPException) else exc)[:500]
                 db.commit()
         except Exception:
-            pass
+            db.rollback()
+            logger.exception("Fehlerstatus konnte nicht gespeichert werden (Dokument %d)", dokument_id)
     finally:
         db.close()
+
+
+def _ist_lesekonflikt(exc: OperationalError) -> bool:
+    return bool(exc.orig is not None and exc.orig.args and exc.orig.args[0] == 1020)
 
 
 def _analyse_seiten_validieren(

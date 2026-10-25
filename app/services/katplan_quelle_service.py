@@ -10,6 +10,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import HTTPException
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -180,57 +181,102 @@ def verarbeite_quelle(dokument_id: int, render_func: pipeline.RenderFunc | None 
     from app.db import SessionLocal
 
     db = SessionLocal()
-    set_tenant_context(db, None)
-    dest_dir = None
+    dest_dir: Path | None = None
+    beansprucht = False
     try:
-        dokument = db.get(KatplanDokument, dokument_id)
-        if dokument is None or dokument.org_id is None:
-            return
-        org_id = dokument.org_id
-        set_tenant_context(db, org_id)
-        dest_dir = absolute_pfad(dokument.pfad).parent
-        dokument.status, dokument.fehler_text = "verarbeitung", None
-        for seite in db.query(KatplanDokumentSeite).filter_by(
-            org_id=org_id, plan_id=dokument.plan_id, dokument_id=dokument.id,
-        ).all():
-            db.delete(seite)
+        for versuch in range(2):
+            set_tenant_context(db, None)
+            try:
+                dokument = db.query(KatplanDokument).filter_by(id=dokument_id).with_for_update().first()
+                if dokument is None or dokument.org_id is None or dokument.status == "verarbeitung":
+                    return
+                org_id, plan_id = dokument.org_id, dokument.plan_id
+                pfad = dokument.pfad
+                original = absolute_pfad(pfad)
+                dest_dir = original.parent
+                dokument.status = "verarbeitung"
+                dokument.fehler_text = None
+                for seite in db.query(KatplanDokumentSeite).filter_by(
+                    org_id=org_id, dokument_id=dokument_id,
+                ).all():
+                    db.delete(seite)
+                if org_id is not None:
+                    release_storage(db, org_id, max(0, dokument.belegt_bytes - dokument.groesse_bytes))
+                dokument.belegt_bytes = dokument.groesse_bytes
+                db.commit()
+                beansprucht = True
+                break
+            except OperationalError as exc:
+                db.rollback()
+                if versuch or not (exc.orig is not None and exc.orig.args and exc.orig.args[0] == 1020):
+                    raise
+                logger.warning("Lesekonflikt beim Start von Dokument %d; neue Transaktion", dokument_id)
+                db.close()
+                db = SessionLocal()
+        # Keine ORM-Zugriffe nach commit(): expire_on_commit wuerde hier bereits
+        # vor dem minutenlangen Rendern einen neuen REPEATABLE-READ-Snapshot oeffnen.
+        db.close()
+        assert dest_dir is not None
         pipeline.entferne_seitendateien(dest_dir)
-        release_storage(db, org_id, max(0, dokument.belegt_bytes - dokument.groesse_bytes))
-        dokument.belegt_bytes = dokument.groesse_bytes
-        db.commit()
         ergebnisse = pipeline.zerlege_pdf(
-            dest_dir / "original.pdf", dest_dir,
-            render_func=render_func or pipeline.render_seite_png_poppler,
+            original, dest_dir, render_func=render_func or pipeline.render_seite_png_poppler,
             ocr_func=ocr_func or pipeline.ocr_tesseract,
             dpi=settings.OBJEKT_SEITE_RENDER_DPI, thumb_groesse=settings.MEDIA_THUMB_SIZE,
-            log_kontext=f"Planquelle {dokument.id}",
+            log_kontext=f"Planquelle {dokument_id}",
         )
         neu_belegt = sum(e.bytes_belegt for e in ergebnisse)
-        reserve_storage(db, org_id, neu_belegt)
-        basis = dokument.pfad.rsplit("/", 1)[0]
-        ueberschriften = erkenne_ueberschriften(dest_dir / "original.pdf", ergebnisse)
-        for e in ergebnisse:
-            db.add(KatplanDokumentSeite(
-                org_id=org_id, plan_id=dokument.plan_id, dokument_id=dokument.id, seiten_nr=e.seiten_nr,
-                einzel_pdf_pfad=f"{basis}/{e.einzel_pdf_name}",
-                bild_pfad=f"{basis}/{e.bild_name}" if e.bild_name else None,
-                thumb_pfad=f"{basis}/{e.thumb_name}" if e.thumb_name else None,
-                volltext=e.volltext, text_quelle=e.text_quelle,
-                titel=ueberschriften.get(e.seiten_nr),
-            ))
-        dokument.belegt_bytes = dokument.groesse_bytes + neu_belegt
-        dokument.status = "fertig"
-        db.commit()
+        ueberschriften = erkenne_ueberschriften(original, ergebnisse)
+        for versuch in range(2):
+            db = SessionLocal()
+            set_tenant_context(db, org_id)
+            try:
+                dokument = db.query(KatplanDokument).filter_by(
+                    id=dokument_id, org_id=org_id,
+                ).with_for_update().first()
+                if dokument is None:
+                    pipeline.entferne_seitendateien(dest_dir)
+                    return
+                if org_id is not None:
+                    reserve_storage(db, org_id, neu_belegt)
+                basis = pfad.rsplit("/", 1)[0]
+                for e in ergebnisse:
+                    db.add(KatplanDokumentSeite(
+                        org_id=org_id, plan_id=plan_id, dokument_id=dokument_id,
+                        seiten_nr=e.seiten_nr, einzel_pdf_pfad=f"{basis}/{e.einzel_pdf_name}",
+                        bild_pfad=f"{basis}/{e.bild_name}" if e.bild_name else None,
+                        thumb_pfad=f"{basis}/{e.thumb_name}" if e.thumb_name else None,
+                        volltext=e.volltext, text_quelle=e.text_quelle, titel=ueberschriften.get(e.seiten_nr),
+                    ))
+                dokument.belegt_bytes = dokument.groesse_bytes + neu_belegt
+                dokument.status = "fertig"
+                dokument.fehler_text = None
+                db.commit()
+                return
+            except OperationalError as exc:
+                db.rollback()
+                if versuch or not (exc.orig is not None and exc.orig.args and exc.orig.args[0] == 1020):
+                    raise
+                logger.warning("Lesekonflikt beim Abschluss von Dokument %d; neue Transaktion", dokument_id)
+            finally:
+                db.close()
     except Exception as exc:
-        logger.exception("Planquelle %s konnte nicht verarbeitet werden", dokument_id)
+        logger.exception("Planquelle %d konnte nicht verarbeitet werden", dokument_id)
         db.rollback()
-        if dest_dir is not None:
+        db.close()
+        if beansprucht and dest_dir is not None:
             pipeline.entferne_seitendateien(dest_dir)
-        dokument = db.get(KatplanDokument, dokument_id)
-        if dokument is not None:
-            dokument.status = "fehler"
-            dokument.fehler_text = str(exc.detail if isinstance(exc, HTTPException) else exc)[:500]
-            db.commit()
+        db = SessionLocal()
+        set_tenant_context(db, None)
+        try:
+            dokument = db.query(KatplanDokument).filter_by(id=dokument_id).with_for_update().first()
+            erwarteter_status = "verarbeitung" if beansprucht else "neu"
+            if dokument is not None and dokument.status == erwarteter_status:
+                dokument.status = "fehler"
+                dokument.fehler_text = str(exc.detail if isinstance(exc, HTTPException) else exc)[:500]
+                db.commit()
+        except Exception:
+            db.rollback()
+            logger.exception("Fehlerstatus konnte nicht gespeichert werden (Dokument %d)", dokument_id)
     finally:
         db.close()
 

@@ -147,9 +147,12 @@
             <div class="text-muted" style="font-size:.85em;margin-top:2px;">
               Version {{ d.versionsnummer }} · {% if d.dokument_gruppe_id %}ersetzt Version {{ d.versionsnummer - 1 }}{% else %}neues Dokument{% endif %} · {{ d.seitenzahl }} Seite(n)
             </div>
+            {% if d.status == 'fehler' %}<p role="status">Fehler: {{ d.fehler_text or 'Verarbeitung fehlgeschlagen' }}</p>
+            {% elif d.status != 'fertig' %}<p role="status">{{ d.status }}</p>{% endif %}
             <div class="text-muted" style="font-size:.85em;">Hochgeladen von {{ wartende_hochladende.get(d.hochgeladen_von_id).display_name if wartende_hochladende.get(d.hochgeladen_von_id) else 'KI-Verbindung' }} am {{ d.hochgeladen_am|local_datetime }}</div>
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            {% if d.status == 'fehler' %}{% include "objekt/_dokument_erneut.html" %}{% endif %}
             <form hx-post="/objekte/{{ objekt.id }}/dokumente/wartend/{{ d.id }}/freigeben" hx-target="#abschnitt-dokumente" hx-swap="innerHTML" style="display:inline;">
               <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
               <button type="submit" class="btn btn--primary btn--xs">{{ icon("check", size="xs") }} Freigeben</button>
@@ -360,6 +363,7 @@
           <td>{{ d.hochgeladen_am|local_datetime }}</td>
           <td>
             {% if ist_verwalter %}
+            {% if d.status == 'fehler' %}{% include "objekt/_dokument_erneut.html" %}{% endif %}
             <form hx-post="/objekte/{{ objekt.id }}/dokumente/{{ d.id }}/loeschen"
                   hx-target="#abschnitt-dokumente" hx-swap="innerHTML"
                   hx-confirm="Dokument '{{ d.dateiname_original }}' samt allen Seiten löschen?" style="display:inline;">

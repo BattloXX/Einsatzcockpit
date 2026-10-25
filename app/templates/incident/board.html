@@ -3,10 +3,7 @@
 {% block title %}{{ incident.alarm_type_code }} – Einsatz #{{ incident.id }}{% endblock %}
 
 {% block content %}
-<details style="margin:.5rem 1rem;padding:.5rem;border:1px solid var(--border);border-radius:8px;">
-  <summary style="min-height:44px;cursor:pointer;">Dokumente</summary>
-  <div hx-get="/einsatz-dokumente/liste/einsatz/{{ incident.id }}" hx-trigger="load, dokumente-aktualisiert from:body" hx-swap="innerHTML">Dokumente werden geladen.</div>
-</details>
+{% with art="einsatz", ident=incident.id %}{% include "einsatz_dokumente/_board_dialog.html" %}{% endwith %}
 <!-- Incident Header -->
 <div class="incident-header" x-data="headerState('{{ incident.started_at|local_iso }}')">
   {% include "incident/_header_alarm.html" %}
@@ -42,12 +39,13 @@
     {% endif %}
 
     <div class="header-dropdown" x-data="{open:false}" @click.outside="open=false">
-      <button type="button" class="ec-icon-button" aria-label="Weitere Einsatzaktionen"
+      <button type="button" class="ec-icon-button" style="min-width:44px;min-height:44px;" aria-label="Weitere Einsatzaktionen"
               :aria-expanded="open.toString()" aria-haspopup="menu"
               @click="open=!open"
-              {{ tip('Weitere Aktionen: KI, Drohne, QR-Code, PDF-Export') }}>{{ icon("dots", size="sm") }}</button>
+              {{ tip('Weitere Aktionen: Dokumente, KI, Drohne, QR-Code, PDF-Export') }}>{{ icon("dots", size="sm") }}</button>
       <div class="header-dropdown__menu" x-show="open" x-cloak x-transition.opacity.duration.150ms role="menu">
         <div class="dropdown-section-label">Einsatzübersicht</div>
+        {% include "einsatz_dokumente/_board_menuepunkt.html" %}
         <a href="/einsatz/{{ incident.id }}/dashboard" class="dropdown-item" target="_blank" rel="noopener noreferrer"
            x-show="!window.matchMedia('(max-width: 1180px), (pointer: coarse)').matches" x-cloak>
           <span class="di-icon">{{ icon("chart-bar", size="sm") }}</span> Lagemonitor

@@ -47,7 +47,7 @@ def viewer_seite(client, browser, dokumente):
             response = client.request(route.request.method, url.path + ("?" + url.query if url.query else ""),
                                       content=route.request.post_data_buffer,
                                       headers={k: v for k, v in route.request.headers.items()
-                                               if k in ("range", "content-type", "x-csrf-token")})
+                                               if k in ("range", "content-type", "x-csrf-token", "hx-request")})
             headers = {k: v for k, v in response.headers.items() if k not in ("content-length", "content-encoding")}
             route.fulfill(status=response.status_code, body=response.content, headers=headers)
 

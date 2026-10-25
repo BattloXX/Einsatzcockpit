@@ -87,3 +87,63 @@ def test_mehrfachauswahl_und_massnahmensammlung(viewer_seite, client, dokumente,
     dialog.locator('[data-ed-submit]').click()
     expect(dialog.locator('[data-ed-status]')).to_contain_text('2 Dokument(e) übernommen')
     assert not errors
+
+
+@pytest.mark.parametrize("width,height", [(1440, 900), (1024, 768), (390, 844)])
+@pytest.mark.parametrize("art,key,prefix,menue", [
+    ("einsatz", "incident", "/einsatz", "Weitere Einsatzaktionen"),
+    ("lage", "lage", "/lage", "Weitere Lageaktionen"),
+])
+def test_board_dokumentfenster_lazy_refresh_zuordnung_und_escape(
+    viewer_seite, client, dokumente, einsatz, width, height, art, key, prefix, menue,
+):
+    from playwright.sync_api import expect
+
+    from tests.test_einsatz_dokumente import uebernehmen
+
+    page, errors = viewer_seite
+    login(client, dokumente, "org_admin")
+    result = uebernehmen(client, dokumente, einsatz, art=art, einsatz_id=einsatz[key])
+    assert result.status_code == 200, result.text
+    ident = result.json()["ids"][0]
+    page.context.add_cookies([{"name": "ec_csrf", "value": client.cookies.get("ec_csrf"), "url": "https://ecp.test"}])
+    path = f'/einsatz-dokumente/liste/{art}/{einsatz[key]}'
+    requests = []
+    page.on("request", lambda r: requests.append(r.url) if path in r.url else None)
+    page.set_viewport_size({"width": width, "height": height})
+    page.goto(f'https://ecp.test{prefix}/{einsatz[key]}')
+    page.wait_for_load_state("networkidle")
+    assert requests == []
+    dialog = page.locator('#einsatzDokumenteDialog')
+    expect(dialog).not_to_be_visible()
+    trigger = page.get_by_role("button", name=menue, exact=True)
+    assert trigger.bounding_box()["height"] >= 44
+    trigger.click()
+    button = page.get_by_role("menuitem", name="Dokumente", exact=True)
+    expect(button).to_be_visible()
+    assert button.bounding_box()["height"] >= 44
+    with page.expect_response(lambda r: path in r.url):
+        button.click()
+    expect(dialog).to_be_visible()
+    expect(dialog.get_by_role("heading", name="Unterlage 1", exact=True)).to_be_visible()
+    assert dialog.evaluate("e => e.scrollWidth <= e.clientWidth")
+    assert dialog.get_by_role("button", name="Dokumente schließen").bounding_box()["height"] >= 44
+    dialog.get_by_text("Auftrag und Freigaben bearbeiten", exact=True).click()
+    dialog.locator('[name="auftrag_id"]').select_option(str(einsatz["task" if art == "einsatz" else "site"]))
+    with page.expect_response(lambda r: f'/einsatz-dokumente/{ident}/zuordnung' in r.url):
+        dialog.get_by_role("button", name="Zuordnung speichern", exact=True).click()
+    expect(dialog.get_by_text("Zugehöriger Auftrag", exact=True).locator("..")).to_contain_text("Wasserentnahme")
+    with page.expect_response(lambda r: path in r.url):
+        page.evaluate("document.body.dispatchEvent(new CustomEvent('dokumente-aktualisiert', {bubbles:true}))")
+    assert len(requests) == 2
+    page.keyboard.press("Escape")
+    expect(dialog).not_to_be_visible()
+    page.evaluate("document.body.dispatchEvent(new CustomEvent('dokumente-aktualisiert', {bubbles:true}))")
+    page.wait_for_timeout(100)
+    assert len(requests) == 2
+    page.get_by_role("button", name=menue, exact=True).click()
+    with page.expect_response(lambda r: path in r.url):
+        page.get_by_role("menuitem", name="Dokumente", exact=True).click()
+    dialog.get_by_role("button", name="Dokumente schließen").click()
+    expect(dialog).not_to_be_visible()
+    assert not errors

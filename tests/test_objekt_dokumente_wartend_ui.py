@@ -244,3 +244,75 @@ def test_fremde_und_pflegeauftrag_dokumente_sind_nicht_freigebbar_und_csrf_ist_p
     ).status_code == 404
     assert client.post(url, data={"_csrf": csrf}).status_code == 200
     assert client.post(url, data={"_csrf": csrf}).status_code in (400, 404)
+
+
+def test_fehler_erneut_verarbeiten_prueft_rechte_org_status_und_csrf(client, monkeypatch):
+    from unittest.mock import Mock
+
+    org_id, _, objekt_id = _setup("erneut_verwalter", nummer=9730)
+    ident, _ = _wartendes_dokument(org_id, objekt_id)
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        dokument = db.get(ObjektDokument, ident)
+        dokument.status, dokument.fehler_text = "fehler", "Record has changed since last read"
+        db.commit()
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        fremde_org = FireDept(slug="erneut-fremd", name="Fremde Organisation")
+        db.add(fremde_org)
+        db.flush()
+        fremdes_objekt = Objekt(org_id=fremde_org.id, nummer=9734, name="Fremdes Objekt")
+        db.add(fremdes_objekt)
+        db.flush()
+        fremdes_dokument = _dokument(db, fremde_org.id, fremdes_objekt.id, "fremd-retry.pdf")
+        fremdes_dokument.status = "fehler"
+        db.commit()
+        fremd_id, fremd_objekt_id = fremdes_dokument.id, fremdes_objekt.id
+    worker = Mock()
+    monkeypatch.setattr("app.routers.ui_objekt_dokumente.verarbeite_dokument", worker)
+    _login(client, "erneut_verwalter")
+    url = f"/objekte/{objekt_id}/dokumente/{ident}/erneut"
+    assert "Erneut verarbeiten" in client.get(f"/objekte/{objekt_id}/dokumente").text
+    assert client.post(url).status_code == 403
+    assert client.post(f"/objekte/{fremd_objekt_id}/dokumente/{fremd_id}/erneut",
+                       data={"_csrf": client.cookies.get("ec_csrf")}).status_code == 404
+    # Gleicher Dokument-ID darf ueber ein anderes Objekt nicht erreichbar sein.
+    _, _, anderes_objekt = _setup("erneut_anderes_objekt", nummer=9731)
+    csrf = client.cookies.get("ec_csrf")
+    assert client.post(f"/objekte/{anderes_objekt}/dokumente/{ident}/erneut", data={"_csrf": csrf}).status_code == 404
+    response = client.post(url, data={"_csrf": csrf})
+    assert response.status_code == 200
+    assert "every 3s" in response.text
+    assert "Erneut verarbeiten" not in response.text
+    worker.assert_called_once_with(ident)
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        assert db.get(ObjektDokument, ident).status == "neu"
+        assert db.get(ObjektDokument, ident).fehler_text is None
+    assert client.post(url, data={"_csrf": csrf}).status_code == 409
+    worker.assert_called_once()
+    _setup("erneut_readonly", "readonly", nummer=9732)
+    _login(client, "erneut_readonly")
+    assert client.post(url, data={"_csrf": client.cookies.get("ec_csrf")}).status_code == 403
+
+
+def test_upload_committet_bevor_der_worker_mit_eigener_session_startet(client, monkeypatch):
+    from tests.test_objekt_pr3 import _test_pdf
+
+    org_id, _, objekt_id = _setup("upload_reihenfolge", nummer=9733)
+    aufrufe = []
+
+    def worker(ident):
+        with SessionLocal() as db:
+            set_tenant_context(db, org_id)
+            dokument = db.get(ObjektDokument, ident)
+            assert dokument is not None and dokument.status == "neu"
+            assert dokument.belegt_bytes == len(_test_pdf(2))
+            aufrufe.append(ident)
+
+    monkeypatch.setattr("app.routers.ui_objekt_dokumente.verarbeite_dokument", worker)
+    _login(client, "upload_reihenfolge")
+    response = client.post(f"/objekte/{objekt_id}/dokumente/upload",
+        data={"_csrf": client.cookies.get("ec_csrf")}, files={"dateien": ("plan.pdf", _test_pdf(2), "application/pdf")})
+    assert response.status_code == 200, response.text
+    assert len(aufrufe) == 1

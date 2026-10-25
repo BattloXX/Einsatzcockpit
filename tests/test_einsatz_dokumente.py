@@ -479,3 +479,47 @@ def test_freigegebenes_planpdf_und_unveraenderliche_provenienz(client, dokumente
         fassung.inhalt = b"geaendert"
         with pytest.raises(RuntimeError, match="unveränderlich"):
             db.flush()
+
+
+@pytest.mark.parametrize("art,key,prefix", [("einsatz", "incident", "/einsatz"), ("lage", "lage", "/lage")])
+def test_board_dokumente_nur_im_menue_und_lazy_dialog(client, dokumente, einsatz, art, key, prefix):
+    import re
+    from html import unescape
+
+    login(client, dokumente, "org_admin")
+    ident = einsatz[key]
+    response = client.get(f"{prefix}/{ident}")
+    assert response.status_code == 200, response.text[:500]
+    html = response.text
+    assert not re.search(r"<summary[^>]*>\s*Dokumente\s*</summary>", html)
+    menu = re.search(
+        r'<div[^>]*role="menu"[^>]*>.*?(<button[^>]*data-ec-dialog="einsatzDokumenteDialog".*?</button>)',
+        html, re.S,
+    ).group(1)
+    assert 'data-ec-dialog="einsatzDokumenteDialog"' in menu
+    assert 'role="menuitem"' in menu and '<svg' in menu and ' Dokumente' in menu
+    dialog = re.search(r'<dialog[^>]*id="einsatzDokumenteDialog"[^>]*>(.*?)</dialog>', html, re.S).group(0)
+    assert 'aria-labelledby="einsatzDokumenteTitel"' in dialog
+    assert 'data-ec-action="close-dialog"' in dialog
+    assert f'hx-get="/einsatz-dokumente/liste/{art}/{ident}"' in dialog
+    trigger = unescape(re.search(r'hx-trigger="([^"]+)"', dialog).group(1))
+    assert "load" not in trigger
+    assert "einsatz-dokumente-oeffnen from:body" in trigger
+    assert "dokumente-aktualisiert" in trigger
+    assert f'href="/einsatz-dokumente/{art}/{ident}"' in dialog
+
+
+@pytest.mark.parametrize("art,key,model", [("einsatz", "incident", Incident), ("lage", "lage", MajorIncident)])
+def test_dokumentfenster_geschlossener_einsaetze_ohne_schreibaktionen(client, dokumente, einsatz, art, key, model):
+    login(client, dokumente, "org_admin")
+    ident = uebernehmen(client, dokumente, einsatz, art=art, einsatz_id=einsatz[key]).json()["ids"][0]
+    with TestingSession() as db:
+        set_tenant_context(db, None)
+        db.get(model, einsatz[key]).status = "closed"
+        db.commit()
+    response = client.get(f'/einsatz-dokumente/liste/{art}/{einsatz[key]}')
+    assert response.status_code == 200
+    assert "Verknüpfung öffnen" in response.text
+    assert f'/einsatz-dokumente/{ident}/zuordnung' not in response.text
+    assert f'/einsatz-dokumente/{ident}/entfernen' not in response.text
+    assert form(client, f'/einsatz-dokumente/{ident}/entfernen', revision=1).status_code in (403, 409)
