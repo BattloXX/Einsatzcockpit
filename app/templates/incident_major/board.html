@@ -171,6 +171,15 @@
 {% endblock %}
 
 {% block lage_head_extras %}
+  <div class="header-dropdown" x-data="{open:false}" @click.outside="open=false" @keydown.escape="open=false">
+    <button type="button" class="ec-icon-button" style="min-width:44px;min-height:44px;"
+            aria-label="Weitere Lageaktionen" aria-haspopup="menu" :aria-expanded="open.toString()" @click="open=!open">
+      {{ icon("dots", size="sm") }}
+    </button>
+    <div class="header-dropdown__menu" x-show="open" x-cloak role="menu">
+      {% include "einsatz_dokumente/_board_menuepunkt.html" %}
+    </div>
+  </div>
   {% if request.state.suche_aktiv %}
   <a class="btn btn--ghost btn--sm" style="min-height:44px;" href="/suche?kontext=gsl&kontext_id={{ lage.id }}">Erweiterte Suche</a>
   {% endif %}
@@ -219,10 +228,7 @@
 {% endblock %}
 
 {% block lage_content %}
-<details style="margin:.5rem 1rem;padding:.5rem;border:1px solid var(--border);border-radius:8px;">
-  <summary style="min-height:44px;cursor:pointer;">Dokumente</summary>
-  <div hx-get="/einsatz-dokumente/liste/lage/{{ lage.id }}" hx-trigger="load, dokumente-aktualisiert from:body" hx-swap="innerHTML">Dokumente werden geladen.</div>
-</details>
+{% with art="lage", ident=lage.id %}{% include "einsatz_dokumente/_board_dialog.html" %}{% endwith %}
 <div class="lage-wrap">
   {# ── Wetter-Panel ── #}
   {% if weather_enabled %}

@@ -328,3 +328,44 @@ def test_migration_0298_up_down_sqlite():
             assert set(sa.inspect(conn).get_table_names()) == tables
     finally:
         engine.dispose()
+
+
+def test_quelle_keine_render_transaktion_doppelstart_und_1020_retry(db, org, storage, monkeypatch):
+    from sqlalchemy.exc import OperationalError
+
+    _, _, dokument = quelle(db, org)
+    db.commit()
+    ident = dokument.id
+    db.commit()
+    sessions = []
+    abschluesse = []
+    zweiter_render = Mock(return_value=None)
+
+    def session():
+        result = TestingSession()
+        sessions.append(result)
+        return result
+
+    def render(*_):
+        assert all(not s.in_transaction() for s in sessions)
+        service.verarbeite_quelle(ident, zweiter_render)
+        return png()
+
+    def konflikt(conn, cursor, statement, parameters, context, executemany):
+        if statement.startswith("UPDATE katplan_dokument SET") and "fertig" in parameters:
+            abschluesse.append(sessions[-1])
+            if len(abschluesse) == 1:
+                raise OperationalError(statement, parameters, Exception(1020, "Record has changed since last read"))
+
+    monkeypatch.setattr("app.db.SessionLocal", session)
+    sa.event.listen(db.get_bind(), "before_cursor_execute", konflikt)
+    try:
+        service.verarbeite_quelle(ident, render)
+    finally:
+        sa.event.remove(db.get_bind(), "before_cursor_execute", konflikt)
+    zweiter_render.assert_not_called()
+    assert len(abschluesse) == 2 and abschluesse[0] is not abschluesse[1]
+    db.expire_all()
+    assert dokument.status == "fertig", dokument.fehler_text
+    assert db.query(KatplanDokumentSeite).filter_by(dokument_id=ident).count() == 2
+    assert usage(db, org.id) == dokument.belegt_bytes

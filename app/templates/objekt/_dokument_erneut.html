@@ -1,0 +1,5 @@
+<form hx-post="/objekte/{{ objekt.id }}/dokumente/{{ d.id }}/erneut"
+      hx-target="#abschnitt-dokumente" hx-swap="innerHTML" style="display:inline;">
+  <input type="hidden" name="_csrf" value="{{ request.state.csrf_token }}">
+  <button type="submit" class="btn btn--ghost" style="min-height:44px;">{{ icon("refresh", size="sm") }} Erneut verarbeiten</button>
+</form>

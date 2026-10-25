@@ -1,0 +1,15 @@
+<dialog class="modal ed-board-dialog" id="einsatzDokumenteDialog" aria-labelledby="einsatzDokumenteTitel">
+  <div class="modal__content">
+    <div class="modal__header">
+      <h2 id="einsatzDokumenteTitel">Dokumente im Einsatz</h2>
+      <button type="button" class="modal__close" data-ec-action="close-dialog"
+              aria-label="Dokumente schließen">{{ icon("x", size="sm") }}</button>
+    </div>
+    <div class="modal__body">
+      <a class="btn btn--ghost" href="/einsatz-dokumente/{{ art }}/{{ ident }}">Dokumente in Vollansicht öffnen</a>
+      <div id="einsatzDokumenteListe" hx-get="/einsatz-dokumente/liste/{{ art }}/{{ ident }}"
+           hx-trigger="einsatz-dokumente-oeffnen from:body, dokumente-aktualisiert[document.getElementById('einsatzDokumenteDialog').open] from:body"
+           hx-swap="innerHTML" aria-live="polite">Dokumente werden geladen.</div>
+    </div>
+  </div>
+</dialog>

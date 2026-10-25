@@ -1,0 +1,6 @@
+<button type="button" class="dropdown-item" role="menuitem" style="min-height:44px;"
+        data-ec-action="open-dialog" data-ec-dialog="einsatzDokumenteDialog"
+        aria-haspopup="dialog" aria-controls="einsatzDokumenteDialog"
+        @click="open=false; $dispatch('einsatz-dokumente-oeffnen')">
+  <span class="di-icon">{{ icon("file-text", size="sm") }}</span> Dokumente
+</button>

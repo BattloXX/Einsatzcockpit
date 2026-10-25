@@ -169,6 +169,7 @@ def _galerie_context(
 
     ist_verwalter = is_objekt_verwalter(user)
     wartende_dokumente = hole_wartende_dokumente(db, objekt) if ist_verwalter else []
+    in_verarbeitung = in_verarbeitung or any(d.status in ("neu", "verarbeitung") for d in wartende_dokumente)
     hochladende_ids = {d.hochgeladen_von_id for d in wartende_dokumente if d.hochgeladen_von_id}
     hochladende = {
         hochladender.id: hochladender
@@ -258,6 +259,32 @@ async def dokumente_upload(
     ctx = _galerie_context(request, db, user, objekt)
     ctx["upload_fehler"] = fehler
     return templates.TemplateResponse(request, "objekt/_dokumente.html", ctx)
+
+
+@router.post("/objekte/{objekt_id}/dokumente/{dokument_id}/erneut", response_class=HTMLResponse)
+def dokument_erneut_verarbeiten(
+    objekt_id: int,
+    dokument_id: int,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role("objekt_verwalter")),
+    _guard: None = Depends(require_objekt_enabled),
+):
+    objekt = _objekt_or_404(db, objekt_id, user)
+    dokument = db.query(ObjektDokument).filter_by(
+        id=dokument_id, objekt_id=objekt.id, org_id=user.org_id,
+    ).with_for_update().first()
+    if dokument is None or dokument.pflegeauftrag_id is not None or dokument.freigabe_status == "verworfen":
+        raise HTTPException(404, "Dokument nicht gefunden")
+    if dokument.status != "fehler":
+        raise HTTPException(409, "Nur fehlerhafte Dokumente können erneut verarbeitet werden.")
+    dokument.status, dokument.fehler_text = "neu", None
+    db.commit()
+    background_tasks.add_task(verarbeite_dokument, dokument_id)
+    return templates.TemplateResponse(
+        request, "objekt/_dokumente.html", _galerie_context(request, db, user, objekt),
+    )
 
 
 @router.post("/objekte/{objekt_id}/dokumente/reindex", response_class=HTMLResponse)
