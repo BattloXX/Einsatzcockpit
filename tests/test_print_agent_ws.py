@@ -117,7 +117,8 @@ def test_agent_token_auf_linux_kanal_und_umgekehrt_abgelehnt(client):
             ws.receive_text()
 
 
-def test_kompletter_lease_ablauf_ueber_websocket(client):
+@pytest.mark.parametrize("string_intent_id", [False, True])
+def test_kompletter_lease_ablauf_ueber_websocket(client, string_intent_id):
     daten = _anlegen(993103)
     job_id = _job(daten)
     with client.websocket_connect("/ws/print-agent", headers=_auth(daten["token"])) as ws:
@@ -135,8 +136,16 @@ def test_kompletter_lease_ablauf_ueber_websocket(client):
         assert grant["job_id"] == job_id
         assert grant["artifact_url"].startswith("http") or "/api/v1/print/" in grant["artifact_url"]
 
+        ws.send_text(json.dumps({"type": "print_intent", "rid": "wrong-token", "payload": {
+            "job_id": str(job_id) if string_intent_id else job_id, "lease_token": "wrong-token"}}))
+        rejected = _recv(ws, "intent_result")
+        assert rejected["rid"] == "wrong-token"
+        assert rejected["payload"]["ok"] is False and rejected["payload"]["reason"] == "not_owner"
+        assert _laden(job_id).phase == "leased"
+
         ws.send_text(json.dumps({"type": "print_intent", "rid": "r2",
-                                 "payload": {"job_id": job_id, "lease_token": grant["lease_token"]}}))
+                                 "payload": {"job_id": str(job_id) if string_intent_id else job_id,
+                                             "lease_token": grant["lease_token"]}}))
         intent = _recv(ws, "intent_result")
         assert (intent["rid"], intent["payload"]["ok"]) == ("r2", True)
 
@@ -158,6 +167,18 @@ def test_kompletter_lease_ablauf_ueber_websocket(client):
         assert db.get(Gateway, daten["gateway_id"]).agent_info["host"] == {"host": "PC-A"}
     finally:
         db.close()
+
+
+@pytest.mark.parametrize("job_id", ["", "1.0", "-1", "1e0", "１２３", "9223372036854775808"])
+def test_ungueltige_string_intent_id_wird_nicht_zu_bigint_konvertiert(client, job_id):
+    daten = _anlegen(993120, routen=False)
+    with client.websocket_connect("/ws/print-agent", headers=_auth(daten["token"])) as ws:
+        _recv(ws, "config_sync")
+        ws.send_text(json.dumps({"type": "print_intent", "rid": "invalid-id", "payload": {
+            "job_id": job_id, "lease_token": "token"}}))
+        result = _recv(ws, "intent_result")
+        assert result["rid"] == "invalid-id"
+        assert result["payload"]["ok"] is False and result["payload"]["reason"] == "unknown"
 
 
 def test_veraltete_statusmeldung_wird_bestaetigt_aber_nicht_angewendet(client):
