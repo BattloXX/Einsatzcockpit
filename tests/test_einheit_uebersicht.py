@@ -730,8 +730,10 @@ def test_browser_geaenderter_auftrag_wird_nicht_aus_altem_abschlussdialog_beende
     page.get_by_role("button", name="Erkundung abschließen", exact=True).click()
     dialog.get_by_label("Erkundungsergebnis (Pflichtfeld)").select_option("keine_massnahmen")
     dialog.get_by_role("button", name="Erkundung abschließen", exact=True).click()
+    page.wait_for_url("https://ecp.test/einheit")
     page.wait_for_function("""Alpine.$data(document.querySelector('.einheit-page'))
-        .detail?.auftrag?.einheit_status === 'abgeschlossen'""")
+        .outboxListe.length === 0""")
+    expect(page.locator(".einheit-auftrag")).not_to_be_visible()
     with _db() as db:
         assert db.get(EinheitSiteDispatch, ids["d1"]).einheit_status == "abgeschlossen"
         assert db.get(EinheitSiteDispatch, ids["d1"]).version == 2

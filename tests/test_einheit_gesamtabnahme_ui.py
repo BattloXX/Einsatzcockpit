@@ -208,7 +208,10 @@ def test_gesamte_einsatzfolge_mit_drei_auftraegen_und_el_abgleich(
     dialog.get_by_label("Notwendige Maßnahmen (optional)", exact=True).fill("Wasser abpumpen.")
     dialog.get_by_role("button", name="Erkundung abschließen", exact=True).click()
     expect(dialog).not_to_be_visible()
-    expect(page.locator("[data-einheit-hauptaktion]")).to_have_text("Erkundet")
+    page.wait_for_function("location.pathname === '/einheit'")
+    expect(page.locator(".einheit-auftrag")).not_to_be_visible()
+    if profil == "simulation":
+        assert page.url.endswith(f"/einheit?sim={ids['e1']}")
     _gesendet(page)
     _projektionen(leitung, ids, ids["a"], "Erkundet", SitePhase.bewertet, "im_einsatz")
     # 7: Bereits bestätigte Abarbeitung aktivieren, keine zweite primäre Bearbeitung.

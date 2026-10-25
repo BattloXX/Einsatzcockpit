@@ -129,9 +129,7 @@
           {% for einheit in benutzer_einheiten|default([]) %}
           <a href="/einheit?einheit={{ einheit.id }}"{% if einheit.id == benutzer_einheit_id %} class="is-active"{% endif %}>{{ einheit.label }} · {{ einheit.lage_name }}</a>
           {% endfor %}
-          {% if not gk_zugang %}
-          <a class="btn btn--ghost" href="/lage/{{ lage_id }}?gesamt=1">Gesamtansicht</a>
-          {% else %}
+          {% if gk_zugang %}
           <button type="button" class="btn btn--ghost" @click="lokaleDatenLoeschen()">Abmelden</button>
           {% endif %}
           <p>Du kannst alle Aufträge öffnen und mehrere übernehmen. Übernehmen bestätigt den Empfang.

@@ -195,8 +195,12 @@ def test_erkundungsabschluss_offline_nach_neustart_mit_ergebnis_und_foto(
     })
     dialog.get_by_role("button", name="Erkundung abschließen", exact=True).click()
     expect(dialog).not_to_be_visible()
+    page.wait_for_function("location.pathname === '/einheit'")
+    expect(page.locator(".einheit-auftrag")).not_to_be_visible()
     _gesendet(page, 3)
     page.reload()
+    expect(page.locator('[data-einheit-auftrag]')).to_have_count(3)
+    _auftrag(page, ids["d1"])
     expect(page.locator('[data-einheit-hauptaktion]')).to_have_text("Übermittlung ausstehend")
     if geaendert:
         with _db() as db:

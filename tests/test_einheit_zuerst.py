@@ -1,4 +1,4 @@
-"""Einheiten-Tablets oeffnen die GSL zuerst in der Einheitenansicht, die Gesamtansicht danach per Link."""
+"""Einheiten-Tablets oeffnen die GSL zuerst in der Einheitenansicht."""
 from app.core.security import sign_session
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
@@ -38,11 +38,14 @@ def test_gesamtansicht_per_link_und_rueckweg(client, setup_db):
     assert client.get(f"/lage/{x['lage']}", follow_redirects=False).status_code == 302
 
 
-def test_einheitenansicht_verlinkt_gesamtansicht_mit_parameter(client, setup_db):
+def test_einheitenansicht_verlinkt_keine_gesamtansicht(client, setup_db):
     x = _daten()
     _geraet_mit_leserecht(x)
     _device(client, x)
-    assert f'href="/lage/{x["lage"]}?gesamt=1"' in client.get("/einheit").text
+    response = client.get("/einheit")
+    assert response.status_code == 200
+    assert "Gesamtansicht" not in response.text
+    assert f'href="/lage/{x["lage"]}?gesamt=1"' not in response.text
 
 
 def test_normale_benutzer_sehen_das_board_direkt(client, setup_db):
