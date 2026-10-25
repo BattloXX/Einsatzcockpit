@@ -122,11 +122,14 @@ jobs:
         with: { python-version: "3.14", cache: pip }
       - run: pip install -e ".[dev]"
       - run: playwright install --with-deps chromium
-      - name: Einheitenübersicht und Auftragsbearbeitung auf Smartphone und Tablet
+      - name: Einheitenansicht und Einsatzwissen auf Smartphone und Tablet
         run: >-
           pytest -q tests/test_einheit_uebersicht.py tests/test_einheit_ablauf_ui.py
           tests/test_einheit_rueckmeldungen_ui.py tests/test_einheit_verlauf_ui.py tests/test_einheit_karte_ui.py tests/test_einheit_bedienung_ui.py
           tests/test_einheit_offline_ui.py tests/test_einheit_sync_ui.py tests/test_einheit_gesamtabnahme_ui.py
+          tests/test_einsatzwissen_ui.py
+          tests/test_dokumentviewer_ui.py
+          tests/test_dokumentdruck_ui.py
       - name: Board-Stack konfigurieren und starten
         id: board-stack
         run: |

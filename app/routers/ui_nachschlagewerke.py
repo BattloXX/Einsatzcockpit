@@ -24,7 +24,7 @@ from fastapi.responses import (
 )
 from sqlalchemy.orm import Session
 
-from app.core.permissions import require_role
+from app.core.permissions import NACHSCHLAGEWERKE_LESE_ROLLEN, require_role
 from app.core.templating import templates
 from app.db import get_db
 from app.models.user import User
@@ -41,10 +41,7 @@ router = APIRouter(prefix="/nachschlagewerke", tags=["nachschlagewerke"])
 cache_router = APIRouter(tags=["nachschlagewerke"])
 
 # Alle Rollen der Org duerfen das Nachschlagewerk lesen.
-_LESE_ROLLEN = (
-    "readonly", "recorder", "breathing_supervisor", "incident_leader",
-    "fahrtenbuch_admin", "objekt_verwalter",
-)
+_LESE_ROLLEN = NACHSCHLAGEWERKE_LESE_ROLLEN
 
 
 def require_nachschlagewerke_enabled(request: Request) -> None:

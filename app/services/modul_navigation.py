@@ -6,6 +6,7 @@ from app.core.permissions import (
     STRASSENSPERREN_LESE_ROLLEN,
     can_view_katplan_request,
     can_view_kontakt_directory_request,
+    can_view_nachschlagewerke_request,
     has_role,
 )
 
@@ -36,14 +37,9 @@ def modul_gruppen(request, user) -> list[ModulGruppe]:
     gruppen = [
         ("einsatz", "Im Einsatz", (
             (
-                ModulEintrag("katplan", "Einsatz- & Katastrophenpläne", "/plaene", "katplan",
-                             ("/plaene",)),
-                can_view_katplan_request(request),
-            ),
-            (
-                ModulEintrag("nachschlagewerke", "Nachschlagewerke", "/nachschlagewerke/", "nachschlagewerke",
-                             ("/nachschlagewerke",)),
-                getattr(request.state, "nachschlagewerke_enabled", False),
+                ModulEintrag("katplan", "Einsatzwissen", "/einsatzwissen", "katplan",
+                             ("/einsatzwissen", "/plaene", "/nachschlagewerke")),
+                can_view_katplan_request(request) or can_view_nachschlagewerke_request(request),
             ),
             (
                 ModulEintrag("kontakte", "Kontakte", "/kontakte", "kontakte", ("/kontakte",)),

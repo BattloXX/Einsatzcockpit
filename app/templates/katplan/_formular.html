@@ -22,6 +22,25 @@
       </select>
     </label>
     <h2 class="kp-box__title">Grunddaten</h2>
+    <div class="kp-form-grid">
+      <label>Kategorie in Einsatzwissen
+        <select name="kategorie" class="form-control">
+          <option value="">Automatisch nach Planart</option>
+          {% for code, label in wissen_kategorien.items() %}
+            <option value="{{ code }}" {% if form.get('kategorie') == code %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Unterkategorie
+        <input name="unterkategorie" maxlength="100" value="{{ form.get('unterkategorie', '') }}" class="form-control">
+      </label>
+    </div>
+    <label>Kurzbeschreibung
+      <textarea name="kurzbeschreibung" maxlength="500" class="form-control">{{ form.get('kurzbeschreibung', '') }}</textarea>
+    </label>
+    <label>Schlagwörter (mit Komma trennen)
+      <input name="schlagwoerter" value="{{ form.get('schlagwoerter', '') }}" class="form-control" placeholder="z. B. Führung, Checkliste">
+    </label>
     <label>
       Titel (Pflichtfeld)
       <input name="titel" maxlength="200" required value="{{ form.get('titel', '') }}" class="form-control">

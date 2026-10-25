@@ -14,6 +14,7 @@ from app.models.gateway import (
     DOC_ALARM_ROHTEXT,
     DOC_AS_PRUEFUNG,
     DOC_CROSS_KARTE,
+    DOC_DOKUMENTPAKET,
     DOC_EINSATZINFO,
     DOC_FAHRTENBUCH_BERICHT,
     DOC_GSL_BERICHT,
@@ -75,6 +76,15 @@ def verify_artifact_token(job_id: int, token: str) -> int | None:
 def render_job_pdf(db, job: PrintJob, base_url: str = "") -> bytes:
     """Rendert das PDF für einen Druckauftrag anhand document_type."""
     base_url = base_url or settings.effective_public_base_url
+    if job.document_type == DOC_DOKUMENTPAKET:
+        from fastapi import HTTPException
+
+        from app.services.dokumentdruck_service import render_druckjob
+
+        try:
+            return render_druckjob(db, job)
+        except HTTPException as exc:
+            raise ArtifactError(str(exc.detail)) from exc
 
     if job.document_type == DOC_EINSATZINFO:
         return _render_einsatzinfo(db, job, base_url)

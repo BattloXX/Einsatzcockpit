@@ -90,7 +90,8 @@ def _kapitelpfade(abschnitte: list[dict]) -> list[str]:
 
 def render_katplan_html(db: Session, user: User, plan: KatplanPlan, *,
                        version_id: int | None = None, entwurf: bool = False,
-                       gliederung: str = "kapitel", akteur: str | None = None) -> str:
+                       gliederung: str = "kapitel", akteur: str | None = None,
+                       druckzeit: datetime | None = None) -> str:
     kopf, elemente, vid, _ = fassung_laden(
         db, user, plan, "arbeitsstand" if entwurf else "freigegeben", version_id,
     )
@@ -166,7 +167,7 @@ def render_katplan_html(db: Session, user: User, plan: KatplanPlan, *,
         planart_label=PLANARTEN[kopf.get("planart", "katastrophenplan")].label,
         kopf=kopf, kapitel=kapitel, version=version, entwurf=entwurf, org=user.org,
         freigeber=freigeber.display_name if freigeber else "Gelöschter Benutzer",
-        gefahrenarten=KATPLAN_GEFAHRENARTEN, now=datetime.now(UTC),
+        gefahrenarten=KATPLAN_GEFAHRENARTEN, now=druckzeit or datetime.now(UTC),
         format_local_datetime=format_local_datetime, logo=organisationslogo_data_uri(db, user.org) if user.org else "",
         plan_links=link_ansichten(db, user, kopf.get("links", [])),
         phasenfarben=_PHASENFARBEN, beschreibung_plan=bereinige_beschreibung(kopf.get("beschreibung_html")),
@@ -175,9 +176,10 @@ def render_katplan_html(db: Session, user: User, plan: KatplanPlan, *,
 
 def render_katplan_pdf(db: Session, user: User, plan: KatplanPlan, *,
                       version_id: int | None = None, entwurf: bool = False,
-                      gliederung: str = "kapitel", akteur: str | None = None) -> bytes:
+                      gliederung: str = "kapitel", akteur: str | None = None,
+                      druckzeit: datetime | None = None) -> bytes:
     html = render_katplan_html(db, user, plan, version_id=version_id, entwurf=entwurf,
-                               gliederung=gliederung, akteur=akteur)
+                               gliederung=gliederung, akteur=akteur, druckzeit=druckzeit)
     try:
         from weasyprint import HTML
         return HTML(string=html).write_pdf()

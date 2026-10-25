@@ -135,6 +135,7 @@ def create_print_job(
     created_by_id: int | None = None,
     fallback_of_job_id: int | None = None,
     idempotenz_zusatz: str | None = None,
+    request_key: str | None = None,
 ) -> tuple[PrintJob, bool]:
     """Legt einen Druckauftrag an. Gibt (job, created) zurück.
 
@@ -149,7 +150,9 @@ def create_print_job(
         fallback_of=fallback_of_job_id,
         idempotenz_zusatz=idempotenz_zusatz,
     )
-    if source != JOB_SOURCE_MANUAL:
+    if request_key is not None:
+        key = "manual-request:" + hashlib.sha256(f"{org_id}:{created_by_id}:{request_key}".encode()).hexdigest()
+    if source != JOB_SOURCE_MANUAL or request_key is not None:
         existing = (
             db.query(PrintJob)
             .filter(PrintJob.idempotency_key == key)
@@ -214,7 +217,8 @@ async def dispatch_job(db: Session, job: PrintJob) -> dict:
         "document_type": job.document_type,
         "printer_id": job.printer_id,
         "artifact_url": artifact_url(job),
-        "options": job.options or {},
+        "options": ({k: v for k, v in (job.options or {}).items() if k in ("copies", "duplex", "color", "media")}
+                    if job.document_type == "dokumentpaket" else job.options or {}),
     }
     # Leaflet-Karten: artifact_url zeigt auf eine HTML-Seite; das Gateway rendert sie
     # per Headless-Chromium (JS/Tiles) statt eine PDF herunterzuladen. Die Seitengröße

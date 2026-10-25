@@ -5,6 +5,13 @@ import { fileURLToPath } from 'node:url';
 // Only SHA-256 matches from npm tarballs are mapped. The separately minified
 // leaflet.min.js and leaflet.min.css differ from leaflet@1.9.4 and stay untouched.
 export const mapping = [
+  { pkg: 'pdfjs-dist', from: 'legacy/build/pdf.min.mjs', to: 'app/static/vendor/pdfjs/6.4.299/pdf.min.js' },
+  { pkg: 'pdfjs-dist', from: 'legacy/build/pdf.worker.min.mjs', to: 'app/static/vendor/pdfjs/6.4.299/pdf.worker.min.js' },
+  { pkg: 'pdfjs-dist', from: 'LICENSE', to: 'app/static/vendor/pdfjs/6.4.299/LICENSE' },
+  ...['cmaps', 'standard_fonts', 'wasm', 'iccs'].flatMap(directory =>
+    readdirSync(new URL(`../node_modules/pdfjs-dist/${directory}/`, import.meta.url))
+      .filter(file => !file.endsWith('.map')).map(file => ({pkg: 'pdfjs-dist', from: `${directory}/${file}`,
+        to: `app/static/vendor/pdfjs/6.4.299/${directory}/${file}`}))),
   { pkg: 'htmx.org', from: 'dist/htmx.min.js', to: 'app/static/js/htmx.min.js' },
   { pkg: 'alpinejs', from: 'dist/cdn.min.js', to: 'app/static/js/alpine.min.js' },
   { pkg: 'sortablejs', from: 'Sortable.min.js', to: 'app/static/js/sortable.min.js' },

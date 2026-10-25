@@ -6,11 +6,13 @@ from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.incident import Incident
 from app.models.major_incident import (
-    IncidentSite, MajorIncident, MajorIncidentStatus, SitePhase,
+    IncidentSite,
+    MajorIncident,
+    MajorIncidentStatus,
+    SitePhase,
 )
 from app.models.master import FireDept, OrgSettings, SystemSettings
 from app.models.user import Role, User, UserRole
-
 
 SYSTEM_MODULE_FLAGS = (
     "uas_module_enabled",
@@ -129,7 +131,7 @@ def test_dashboard_zeigt_standby_und_blendet_deaktivierte_module_aus(client, mon
         assert f'<span class="module-btn__label">{label}</span>' in response.text
     for label in (
         "Fahrtenbuch", "Objekte", "Atemschutzprüfung", "Wetter", "Drohne / UAS",
-        "Nachschlagewerke", "Förderstrecke",
+        "Einsatzwissen", "Förderstrecke",
     ):
         assert f'<span class="module-btn__label">{label}</span>' not in response.text
 
@@ -147,7 +149,7 @@ def test_dashboard_zeigt_aktiven_einsatz_und_aktivierte_module(client, monkeypat
     assert 'class="incident-standby"' not in response.text
     for label in (
         "Fahrtenbuch", "Objekte", "Atemschutzprüfung", "Wetter", "Drohne / UAS",
-        "Nachschlagewerke", "Förderstrecke",
+        "Einsatzwissen", "Förderstrecke",
     ):
         assert f'<span class="module-btn__label">{label}</span>' in response.text
 

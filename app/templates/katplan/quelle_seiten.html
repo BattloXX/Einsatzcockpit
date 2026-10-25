@@ -6,6 +6,8 @@
     <header class="kp-header"><h1>{{ dokument.titel }} (v{{ dokument.versionsnummer }})</h1></header>
     {% include "katplan/_quellen_tabs.html" %}
     <nav class="kp-chips" aria-label="Quellnavigation">
+      {% set viewer_url = '/plaene/quelle/' ~ dokument.uuid ~ '/original' ~ version_query %}
+      <a class="btn" href="{{ viewer_url }}" data-dv-document data-dv-title="{{ dokument.titel }}" data-dv-selection-url="{{ viewer_url }}" data-dv-page="{{ seite.seiten_nr if seite else '' }}">Im Dokumentenviewer öffnen</a>
       <a class="btn" href="/plaene/{{ plan.id }}/quellen/{{ dokument.id }}{{ version_query }}">Alle Seiten</a>
       <a class="btn" href="/plaene/quelle/{{ dokument.uuid }}/original{{ version_query }}" download>Download Original</a>
     </nav>

@@ -184,45 +184,4 @@
     }
   }, true);
 
-  let dialog;
-  let fotos = [];
-  let index = 0;
-  let ausloeser;
-  function zeigen(schritt) {
-    index = (index + schritt + fotos.length) % fotos.length;
-    const link = fotos[index];
-    dialog.querySelector('img').src = link.href;
-    dialog.querySelector('img').alt = link.querySelector('img').alt;
-    dialog.querySelector('p').textContent = link.querySelector('img').alt;
-  }
-  document.addEventListener('click', function (event) {
-    const link = event.target.closest('[data-kp-lightbox]');
-    if (!link) return;
-    event.preventDefault();
-    ausloeser = link;
-    fotos = Array.from(link.closest('.kp-fotogalerie').querySelectorAll('[data-kp-lightbox]'));
-    index = fotos.indexOf(link);
-    if (!dialog) {
-      dialog = document.createElement('dialog');
-      dialog.className = 'kp-lightbox';
-      dialog.setAttribute('aria-label', 'Fotogalerie');
-      dialog.innerHTML = '<button type="button" class="btn" data-schliessen>Schließen (Esc)</button>' +
-        '<img alt=""><p></p><div><button type="button" class="btn" data-zurueck aria-label="Vorheriges Foto">←</button> ' +
-        '<button type="button" class="btn" data-weiter aria-label="Nächstes Foto">→</button></div>';
-      document.body.appendChild(dialog);
-      dialog.querySelector('[data-schliessen]').addEventListener('click', function () { dialog.close(); });
-      dialog.querySelector('[data-zurueck]').addEventListener('click', function () { zeigen(-1); });
-      dialog.querySelector('[data-weiter]').addEventListener('click', function () { zeigen(1); });
-      dialog.addEventListener('click', function (e) { if (e.target === dialog) dialog.close(); });
-      dialog.addEventListener('close', function () { if (ausloeser) ausloeser.focus(); });
-      dialog.addEventListener('keydown', function (e) {
-        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-          e.preventDefault();
-          zeigen(e.key === 'ArrowLeft' ? -1 : 1);
-        }
-      });
-    }
-    zeigen(0);
-    dialog.showModal();
-  });
 })();

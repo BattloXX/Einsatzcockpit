@@ -48,7 +48,7 @@ Gegliedert wie Menü und Wiki: zuerst die Einsatzführung, dann die Module in de
 
 | Gruppe | Module |
 |--------|--------|
-| **Im Einsatz** | **Einsatz- & Katastrophenpläne** (Alarm- und Einsatzpläne, Maßnahmen- und Katastrophenpläne; Akteure, Prüfzyklus, Quellen bis zur PDF-Seite, Karte, PDF-Offlinefassung, KI-Import) · **Nachschlagewerke** (Gefahrgut, Rettungsdatenblätter) · **Kontakte** (Einsatztelefonlisten, Verzeichnisse) · **Straßensperren** (Karte, Nachbarfreigaben, optionale Anfahrtsprüfung) · **Förderstrecke** (Wasserförderung planen) |
+| **Im Einsatz** | **Einsatzwissen** (Einsatzpläne, Führungswissen, Fachwissen & Lehrbehelfe, Katastrophenschutz, Sondereinsatzmittel und Nachschlagewerk; bestehende Planarten, Freigaben, Akteure, Prüfzyklus, PDF-Quellen, Karte, Offlinefassung und KI-Import) · **Kontakte** (Einsatztelefonlisten, Verzeichnisse) · **Straßensperren** (Karte, Nachbarfreigaben, optionale Anfahrtsprüfung) · **Förderstrecke** (Wasserförderung planen) |
 | **Einsatzbegleitend** | **Fahrtenbuch** · **Atemschutz-Geräteprüfung** · **Drohne / UAS** (Dokumentation gemäß RL-UAS LFV Vorarlberg 2024) |
 | **Verwaltung & Planung** | **Objekte** (Einsatzunterlagen, Alarm-Matching, OCR-Suche, externe Objektpflege) · **Probenplan** (Jahresplanung, Appell, Nachbereitung, öffentlicher Kalender) · **Planspiele** (Übungsgenerator für Board und Großschadenslagen) · **Mailing** |
 | **Auswertung** | **Statistik** (Kennzahlen und Diagramme zu den Einsätzen; [Statistik-Infoscreen](docs/statistik-infoscreen.md)) |
@@ -156,6 +156,9 @@ Das Wiki ist die kanonische Quelle für Installation, Bedienung, Administration,
 | [Erste Schritte](docs/wiki/Anwender-Erste-Schritte.md) | Login, Oberfläche, Menü und Tastaturkürzel |
 | [Einsatz starten](docs/wiki/Anwender-Einsatz-starten.md) | Vom Alarm bis zum laufenden Einsatz |
 | [Großschadenslage](docs/wiki/Anwender-Grosschadenslage.md) | Stab, Einsatzstellen, Ressourcen und Einheitenansicht |
+| [Einsatzwissen – Phase 1](docs/einsatzwissen-phase1.md) | Bestandsaufnahme, Kategorien, Datenmodell, Kompatibilität und Migration |
+| [Dokumentenviewer – Phase 2](docs/dokumentviewer-phase2.md) | Gemeinsame PDF-/Bildanzeige, Dokumentfolgen, Seitenauswahl und Integration |
+| [Dokumentendruck – Phase 3](docs/dokumentdruck-phase3.md) | Seitenauswahl und Dokumentpakete, lokaler Druck, vorhandene Stationsdrucker und Status |
 | [Administration](docs/wiki/Administration-Einstellungen.md) | Organisations- und Systemeinstellungen, Modulschalter |
 | [Architektur](docs/wiki/Entwickler-Architektur.md) | Schichten, Module, Datenflüsse und Multi-Tenancy |
 | [REST-API](docs/wiki/Entwickler-REST-API.md) | Endpunkte, Payloads und externe Alarmierung |

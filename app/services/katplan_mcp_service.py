@@ -246,8 +246,10 @@ def pruefdaten(db: Session, plan: KatplanPlan) -> dict:
 
 def kopf_ansicht(kopf: dict) -> dict:
     """Gleicher Plankopf fuer Lese- und Schreibantworten, ohne Transaktionsabschluss."""
+    from app.services.einsatzwissen_kategorien import metadaten
+
     planart = kopf.get("planart", "katastrophenplan")
-    return {"planart": planart, "planart_label": PLANARTEN[planart].label,
+    return {"planart": planart, "planart_label": PLANARTEN[planart].label, **metadaten(kopf),
             **{k: kopf.get(k) for k in ("uuid", "titel", "gefahrenarten", "geltungsbereich",
                                        "verantwortliche_stelle", "verantwortlich_kontakt_id", "wiedervorlage_am",
                                        "zuletzt_geprueft_am", "naechste_pruefung",

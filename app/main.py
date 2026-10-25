@@ -73,11 +73,13 @@ from app.routers import (
     ui_db_backup,
     ui_dibos,
     ui_dienst_monitor,
+    ui_dokumentdruck,
     ui_druck,
     ui_einheit,
     ui_einsatz_import,
     ui_einsatz_kontakte,
     ui_einsatzinfo_mail,
+    ui_einsatzwissen,
     ui_fahrtenbuch,
     ui_fahrtenbuch_admin,
     ui_foerderstrecke,
@@ -942,6 +944,7 @@ app.include_router(ui_kontakt_druck.router)
 app.include_router(ui_kontakt.router)
 app.include_router(ui_einsatz_kontakte.router)
 app.include_router(ui_road_closure.router)
+app.include_router(ui_einsatzwissen.router)
 app.include_router(ui_katplan.router)
 app.include_router(ui_katplan.alt_router)
 app.include_router(ui_suche.router)
@@ -957,6 +960,7 @@ app.include_router(ui_foerderstrecke.router)
 app.include_router(ui_foerderstrecke.public_router)
 app.include_router(ui_gateway.router)
 app.include_router(ui_druck.router)
+app.include_router(ui_dokumentdruck.router)
 app.include_router(ui_infoscreen_alarm.router)
 app.include_router(ui_infoscreen_stats.router)
 app.include_router(ui_verleih.router)

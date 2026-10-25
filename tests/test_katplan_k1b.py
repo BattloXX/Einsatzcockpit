@@ -68,14 +68,15 @@ def test_modul_aus_und_menue(client, umgebung):
     login(client, umgebung)
     page = client.get("/plaene")
     assert page.status_code == 200
-    assert page.text.count('href="/plaene"') >= 2
-    assert 'href="/plaene"' in client.get("/").text
+    assert 'href="/plaene"' in page.text
+    assert 'href="/einsatzwissen"' in page.text
+    assert 'href="/einsatzwissen"' in client.get("/").text
     with TestingSession() as db:
         set_tenant_context(db, None)
         db.query(SystemSettings).filter_by(key="katplan_module_enabled").one().value = "false"
         db.commit()
     assert client.get("/plaene").status_code == 404
-    assert 'href="/plaene"' not in client.get("/").text
+    assert 'href="/einsatzwissen"' not in client.get("/").text
 
 
 def test_anlegen_sanitizing_und_protokoll(client, umgebung):

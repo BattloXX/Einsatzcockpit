@@ -1,12 +1,12 @@
 {% extends "base.html" %}
-{% block title %}Einsatz- &amp; Katastrophenpläne{% endblock %}
+{% block title %}Pläne · Einsatzwissen{% endblock %}
 {% block head_extra %}
   {% include "katplan/_design.html" %}
 {% endblock %}
 {% block content %}
   <section class="kp-page">
     <div class="kp-header">
-      <h1>Einsatz- &amp; Katastrophenpläne</h1>
+      <div><a class="kp-link" href="/einsatzwissen">Einsatzwissen</a><h1>Einsatz- &amp; Katastrophenpläne</h1></div>
       {% if can_release %}<a class="btn btn--sm" href="/plaene/akteure">Akteure verwalten</a>{% endif %}
       {% if can_edit %}
         <a href="/plaene/neu" class="btn btn--primary btn--sm">+ Neuer Plan</a>
