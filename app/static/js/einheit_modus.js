@@ -1205,6 +1205,8 @@ function registriere() {
     async zugangBeenden() {
       if (this.zugangBeendet) return;
       this.zugangBeendet = true;
+      // Auch Abbrüche über Outbox/WebSocket zeigen dieselbe Meldung wie das Laden (Reihenfolge ist zeitabhängig).
+      if (!this.ladeFehler) this.ladeFehler = "anmeldung";
       this.zustandAnfrage += 1;
       this.detailAnfrage += 1;
       this.detailLaden = false;
