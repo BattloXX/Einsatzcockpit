@@ -1,0 +1,55 @@
+.dv { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0;
+  padding: 0; border: 0; background: var(--surface, #101827); color: var(--text, #eee); }
+.dv[open] { display: flex; flex-direction: column; }
+.dv-shell { display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0;
+  background: var(--surface, #101827); color: var(--text, #eee); }
+.dv::backdrop { background: #000b; }
+.dv *, .dv *::before, .dv *::after { box-sizing: border-box; }
+.dv-toolbar, .dv-tools, .dv-controls { display: flex; gap: .4rem; align-items: center; flex-wrap: wrap; }
+.dv-toolbar, .dv-tools { padding: .4rem .65rem; border-bottom: 1px solid var(--border, #555); flex-shrink: 0; }
+.dv-heading { min-width: 120px; flex: 1 1 180px; overflow: hidden; }
+.dv-heading h2 { font-weight: 700; font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dv-heading [data-dv-position] { font-size: .8rem; color: var(--text-muted, #ccc); }
+.dv button, .dv a, .dv summary { min-width: 44px; min-height: 44px; display: inline-flex;
+  align-items: center; justify-content: center; padding: .5rem; border-radius: 6px;
+  background: var(--surface-high, #263244); color: inherit; border: 1px solid var(--border, #555);
+  cursor: pointer; text-decoration: none; font-size: .85rem; }
+.dv button:disabled { opacity: .4; cursor: default; }
+.dv :focus-visible { outline: 2px solid var(--red-light, #e55858); outline-offset: 2px; }
+.dv button[aria-current] { border-color: var(--red-light, #e55858); }
+.dv input { min-height: 44px; border: 1px solid var(--border, #555); border-radius: 5px;
+  padding: .4rem; background: var(--surface-low, #151d2b); color: inherit; font-size: 16px; max-width: 100%; }
+.dv-page { display: inline-flex; gap: .25rem; align-items: center; font-size: .85rem; }
+.dv-page input { width: 64px; }
+.dv-page span { white-space: nowrap; }
+.dv-status { margin: 0; padding: .2rem .75rem; font-size: .85rem; flex-shrink: 0; }
+.dv-status:empty { padding: 0; }
+.dv-body { display: flex; flex: 1 1 auto; min-height: 0; min-width: 0; position: relative; }
+.dv-stage { flex: 1 1 auto; min-width: 0; overflow: auto; background: #30343b; overscroll-behavior: contain; }
+.dv-paper { width: max-content; min-width: 100%; min-height: 100%; padding: 16px; display: flex;
+  justify-content: center; align-items: center; transform-origin: center; }
+.dv-paper canvas { background: white; flex-shrink: 0; box-shadow: 0 2px 12px #0005; max-width: none; }
+.dv-documents, .dv-thumbnails { width: 210px; flex-shrink: 0; overflow: auto; padding: .5rem;
+  border-right: 1px solid var(--border, #555); background: var(--surface-low, #151d2b); }
+.dv aside[hidden], .dv [hidden] { display: none !important; }
+.dv-documents ol { list-style: none; padding: 0; margin: 0; }
+.dv-documents button, .dv-thumbnails button { width: 100%; margin-bottom: .5rem; text-align: left;
+  white-space: normal; overflow-wrap: anywhere; justify-content: flex-start; }
+.dv-thumbnails button { flex-direction: column; align-items: center; }
+.dv-thumbnails canvas { width: 100px; min-height: 100px; object-fit: contain; }
+.dv-selection { margin-left: auto; position: relative; }
+.dv-selection-fields { display: flex; flex-wrap: wrap; gap: .5rem; width: min(420px, calc(100vw - 24px));
+  padding: .75rem; position: absolute; right: 0; top: 100%; z-index: 4;
+  background: var(--surface, #101827); border: 1px solid var(--border, #555); box-shadow: 0 4px 20px #0006; }
+.dv-selection label, .dv-selection [data-dv-selected] { width: 100%; display: grid; gap: .3rem; font-size: .85rem; }
+.dv-print { position: fixed; right: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+@media (max-width: 760px) {
+  .dv-toolbar { gap: .2rem; }
+  .dv-heading { flex-basis: calc(100% - 50px); }
+  .dv-controls { gap: .2rem; }
+  .dv-tools { gap: .2rem; }
+  .dv-documents, .dv-thumbnails { position: absolute; left: 0; top: 0; bottom: 0; z-index: 3; width: min(210px, 70vw); }
+  .dv-selection { margin-left: 0; flex-basis: 100%; }
+  .dv-selection-fields { right: auto; left: 0; }
+}
+@media print { body > *:not(.dv) { display: none !important; } }

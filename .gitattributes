@@ -1,2 +1,4 @@
 # Umsetzungsdokumentation wird von mehreren PRs am Ende ergaenzt: beide Seiten behalten
 docs/plans/ecp-verbesserungen-2026-10.md merge=union
+# Fremdlizenzen bleiben bytegleich mit den geprueften npm-Artefakten.
+app/static/vendor/pdfjs/**/LICENSE* -whitespace

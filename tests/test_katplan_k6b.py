@@ -135,7 +135,8 @@ def test_lesesicht_ebenen_vertraulich_und_vergleich(client, umgebung):
     parser.feed(html)
     anhang = next(a for a in objekte(umgebung, KatplanAnhang) if a.dateiname == "ablauf.pdf")
     pdf_link = next(a for a in parser.links if a.get("href", "").startswith(f"/plaene/anhang/{anhang.uuid}"))
-    assert 'openMediaViewer(this.href, "pdf",' in pdf_link["onclick"]
+    assert "data-dv-document" in pdf_link
+    assert pdf_link["data-dv-kind"] == "pdf"
     assert "download" not in pdf_link and "target" not in pdf_link
     assert "Dateidownload" in html and " KB" in html
     assert "Geheime Aufnahme" not in html

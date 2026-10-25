@@ -1,5 +1,5 @@
 {% set daten = element_daten[element.id] %}
-<article id="{% if akteur_gruppe is defined %}akteur-{{ akteur_gruppe }}-{% endif %}element-{{ element.element_uuid if leseversion is defined else element.uuid }}" class="kp-box kp-box--prio-{{ element.prioritaet }}" data-element-id="{{ element.id }}"
+<article id="{% if akteur_gruppe is defined %}akteur-{{ akteur_gruppe }}-{% endif %}element-{{ element.element_uuid if leseversion is defined else element.uuid }}" class="kp-box kp-box--prio-{{ element.prioritaet }}" data-element-id="{{ element.id }}" data-dv-group
   data-akteure="{{ (element.akteure_json or '[]')|forceescape }}"
   data-phasen="{{ (element.phasen_json if leseversion is defined else element_phasen[element.id]|map(attribute='id')|list|tojson)|forceescape }}"
   {% if akteur_filter_aktiv|default(false) %}x-show="(akteur === null || JSON.parse($el.dataset.akteure).includes(akteur)) &amp;&amp; (phase === null || JSON.parse($el.dataset.phasen).length === 0 || JSON.parse($el.dataset.phasen).includes(phase))"{% endif %}>
@@ -52,7 +52,11 @@
             <a href="{{ seite.seiten_url }}" onclick="event.preventDefault(); openMediaViewer(this.href, 'image', this.querySelector('img').alt);"><img src="{{ seite.thumb_url }}" loading="lazy" alt="Seite {{ seite.nr }}"><span>Seite {{ seite.nr }}</span></a>
           {% endfor %}
         </div>
-        <a class="btn btn--ghost btn--sm" href="{{ quellen_originale[element.id] }}" onclick="event.preventDefault(); openMediaViewer(this.href, 'pdf', this.textContent);">Original-PDF auf Seite {{ seiten[0].nr }} öffnen</a>
+        <a class="btn btn--ghost btn--sm" href="{{ quellen_originale[element.id] }}" data-dv-document data-dv-title="{{ q.titel }}" data-dv-selection-url="{{ quellen_originale[element.id] }}" data-dv-page="{{ seiten[0].nr }}">Original-PDF auf Seite {{ seiten[0].nr }} öffnen</a>
+        {% if element.quelle_seiten %}
+          {% set auszug_url = '/plaene/quelle/' ~ q.uuid ~ '/original?seiten=' ~ element.quelle_seiten ~ ('&version_id=' ~ leseversion.id if leseversion is defined else '') %}
+          <a class="btn btn--ghost btn--sm" href="{{ auszug_url }}" data-dv-document data-dv-title="{{ q.titel }} · Auszug {{ element.quelle_seiten }}" data-dv-selection-url="{{ auszug_url }}" data-dv-original="{{ quellen_originale[element.id] }}">Dokumentenauszug öffnen</a>
+        {% endif %}
         <a class="btn btn--ghost btn--sm" href="{{ seiten[0].seiten_url|replace('/bild', '/pdf') }}" onclick="event.preventDefault(); openMediaViewer(this.href, 'pdf', this.textContent);">Seite {{ seiten[0].nr }} als PDF</a>
       </details>
     {% endif %}

@@ -3,6 +3,7 @@
 import json
 from datetime import UTC, date, datetime
 from html import escape
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Request, UploadFile
@@ -49,6 +50,7 @@ from app.services import katplan_qs_service as qs_service
 from app.services import katplan_quelle_service as quelle_service
 from app.services import katplan_suche_service as suche_service
 from app.services import katplan_uebernahme_service as uebernahme_service
+from app.services.dokumentviewer_service import pdf_auszug, viewer_auswahl
 from app.services.einsatzwissen_kategorien import KATEGORIEN, metadaten
 from app.services.katplan_service import (
     KatplanKonflikt,
@@ -345,6 +347,7 @@ def anhang_datei(uuid: str, request: Request, version_id: int | None = None,
     if not bearbeiten and (plan.status == "archiviert" or not plan.aktuelle_version_id):
         raise HTTPException(404, "Nicht gefunden")
     nur_version = not bearbeiten or anhang.geloescht_am is not None or version_id is not None
+    referenz = None
     if nur_version:
         vid = version_id if version_id is not None else plan.aktuelle_version_id
         referenz = next((a for a in anhang_service.anhaenge_aus_version(db, plan, vid)
@@ -362,9 +365,19 @@ def anhang_datei(uuid: str, request: Request, version_id: int | None = None,
         from app.models.objekt import ObjektDokument
         if not has_role(user, *_LESE_ROLLEN) or not ziel_verfuegbar(db, user.org_id, "objekt"):
             raise HTTPException(404, "Nicht gefunden")
-        dokument = db.query(ObjektDokument).filter_by(id=anhang.objekt_dokument_id, org_id=user.org_id).first()
+        objekt_id = referenz.get("objekt_dokument_id") if referenz else anhang.objekt_dokument_id
+        dokument = db.query(ObjektDokument).filter_by(id=objekt_id, org_id=user.org_id).first()
         if dokument is None:
             raise HTTPException(404, "Nicht gefunden")
+        if request.query_params.get("auszug") == "1" or any(k in request.query_params for k in ("seiten", "auswahl")):
+            from app.services.objekt_dokument_service import absolute_pfad
+
+            path = absolute_pfad(dokument.pfad)
+            if not path.is_file():
+                raise HTTPException(404, "Datei fehlt")
+            bereich = referenz.get("seiten") if referenz else anhang.seiten
+            data = pdf_auszug(path, bereich) if bereich else path.read_bytes()
+            return viewer_auswahl(data, request.query_params)
         suffix = "?download=1" if request.query_params.get("download") == "1" else ""
         return RedirectResponse(f"/objekt-medien/dokument/{dokument.id}/original{suffix}", status_code=303)
     rel = anhang.thumb_pfad if thumb else anhang.pfad
@@ -378,6 +391,8 @@ def anhang_datei(uuid: str, request: Request, version_id: int | None = None,
     disposition = "inline" if anhang.art == "foto" or mime == "application/pdf" else "attachment"
     if request.query_params.get("download") == "1":
         disposition = "attachment"
+    if any(k in request.query_params for k in ("seiten", "auswahl")) and mime == "application/pdf":
+        return viewer_auswahl(path, request.query_params)
     return FileResponse(path, media_type=mime, filename=anhang.dateiname or "datei",
                         content_disposition_type=disposition, headers={"X-Content-Type-Options": "nosniff"})
 
@@ -1900,6 +1915,9 @@ def _quelle_datei(relativ: str | None, mime: str, dateiname: str, download: bool
 def quelle_original(uuid: str, request: Request, version_id: int | None = None, db: Session = Depends(get_db),
                     user: User = Depends(require_katplan_lesen)):
     _, dokument = _quelle_auslieferung(db, user, uuid, version_id)
+    if any(k in request.query_params for k in ("seiten", "auswahl")):
+        antwort = _quelle_datei(dokument.pfad, "application/pdf", dokument.dateiname_original)
+        return viewer_auswahl(Path(antwort.path), request.query_params)
     return _quelle_datei(dokument.pfad, "application/pdf", dokument.dateiname_original,
                          download=request.query_params.get("download") == "1")
 
@@ -2212,6 +2230,8 @@ def pdf_export(plan_id: int, request: Request, version_id: int | None = None, en
     slug = re.sub(r"[^a-z0-9]+", "-", titel.lower()).strip("-") or "plan"
     nummer = str(version.versionsnummer) if version else "entwurf"
     disposition = "attachment" if request.query_params.get("download") == "1" else "inline"
+    if any(k in request.query_params for k in ("seiten", "auswahl")):
+        return viewer_auswahl(data, request.query_params)
     return Response(data, media_type="application/pdf", headers={
         "Cache-Control": "no-store",
         "Content-Disposition": f'{disposition}; filename="katastrophenplan_{slug}_v{nummer}.pdf"',

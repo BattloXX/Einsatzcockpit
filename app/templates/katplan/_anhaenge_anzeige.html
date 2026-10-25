@@ -2,7 +2,7 @@
   <div class="kp-fotogalerie">
     {% for anhang in anhaenge if anhang.art == 'foto' %}
       <figure data-anhang="{{ anhang.uuid }}">
-        <a href="{{ anhang.datei_url }}" data-kp-lightbox>
+        <a href="{{ anhang.datei_url }}" data-kp-lightbox data-dv-document data-dv-kind="image" data-dv-title="{{ anhang.beschriftung or anhang.dateiname }}">
           <img src="{{ anhang.thumb_url }}" alt="{{ anhang.beschriftung or anhang.dateiname }}" loading="lazy">
         </a>
         <figcaption>{{ anhang.beschriftung or anhang.dateiname }}</figcaption>
@@ -18,13 +18,14 @@
           {{ icon("link", size="sm") }} <a class="kp-link" href="{{ anhang.url }}" rel="noopener noreferrer" target="_blank">{{ anhang.beschriftung or anhang.url }}</a>
         {% elif anhang.art == 'objekt_dokument' %}
           {{ icon("files", size="sm") }} {% if anhang.objekt_recht %}
-            <a class="kp-link" href="{{ anhang.datei_url }}" onclick='event.preventDefault(); openMediaViewer(this.href, "pdf", {{ anhang.dokument_name|tojson }});'>Objektdokument {{ anhang.dokument_name }}{% if anhang.seiten %}, S. {{ anhang.seiten|replace('-', '–') }}{% endif %}</a>
+            {% set viewer_url = anhang.datei_url ~ (('&' if '?' in anhang.datei_url else '?') ~ 'auszug=1' if anhang.seiten else '') %}
+            <a class="kp-link" href="{{ viewer_url }}" data-dv-document data-dv-title="{{ anhang.beschriftung or anhang.dokument_name }}" data-dv-selection-url="{{ viewer_url }}" data-dv-original="{{ anhang.datei_url }}">Objektdokument {{ anhang.dokument_name }}{% if anhang.seiten %}, S. {{ anhang.seiten|replace('-', '–') }}{% endif %}</a>
           {% else %}Objektdokument (keine Berechtigung){% endif %}
         {% else %}
           {% set mime = (anhang.mime or '')|lower %}
           {% set endung = (anhang.dateiname or '').lower().rsplit('.', 1)[-1] %}
           {% set kind = 'pdf' if mime == 'application/pdf' or endung == 'pdf' else 'image' if mime.startswith('image/') or endung in ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'bmp', 'svg'] else '' %}
-          {{ icon("file-text", size="sm") }} <a class="kp-link" href="{{ anhang.datei_url }}" {% if kind %}onclick='event.preventDefault(); openMediaViewer(this.href, {{ kind|tojson }}, {{ (anhang.beschriftung or anhang.dateiname)|tojson }});'{% else %}download{% endif %}>{{ anhang.beschriftung or anhang.dateiname }}</a>
+          {{ icon("file-text", size="sm") }} <a class="kp-link" href="{{ anhang.datei_url }}" {% if kind %}data-dv-document data-dv-kind="{{ kind }}" data-dv-title="{{ anhang.beschriftung or anhang.dateiname }}" data-dv-selection-url="{{ anhang.datei_url }}"{% else %}download{% endif %}>{{ anhang.beschriftung or anhang.dateiname }}</a>
         {% endif %}
         {% if anhang.groesse %}<span class="kp-mono">{{ anhang.groesse }}</span>{% endif %}
         {% if anhang.vertraulich %}<span class="kp-badge kp-badge--amber">vertraulich</span>{% endif %}

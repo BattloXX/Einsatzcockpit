@@ -91,7 +91,7 @@ def test_foto_pipeline_quota_metadaten_und_entfernen(db, org, storage):
     service.anhang_entfernen(db, plan, user, a)
     assert not path.exists() and not thumb.exists() and usage(db, org.id) == 0
     assert db.query(KatplanAnhang).filter_by(id=a.id).first() is None
-    assert {p.aktion for p in db.query(KatplanAenderung).filter_by(entitaet="anhang")} == {
+    assert {p.aktion for p in db.query(KatplanAenderung).filter_by(entitaet="anhang", plan_id=plan.id)} == {
         "hochgeladen", "geaendert", "entfernt"}
 
 

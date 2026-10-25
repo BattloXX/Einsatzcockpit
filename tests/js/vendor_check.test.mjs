@@ -9,6 +9,16 @@ test('all mapped vendor targets exist', () => {
   }
 });
 
+test('PDF.js verwendet dieselbe feste Version für Paket, Viewer und unveränderliche Assetpfade', async () => {
+  const {readFileSync} = await import('node:fs');
+  const project = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url)));
+  const installed = JSON.parse(readFileSync(new URL('../../node_modules/pdfjs-dist/package.json', import.meta.url)));
+  assert.equal(project.devDependencies['pdfjs-dist'], installed.version);
+  const source = readFileSync(new URL('../../app/static/js/dokumentviewer.js', import.meta.url), 'utf8');
+  assert.ok(source.includes(`/static/vendor/pdfjs/${installed.version}/`));
+  assert.ok(mapping.filter(item => item.pkg === 'pdfjs-dist').every(item => item.to.includes(`/${installed.version}/`)));
+});
+
 test('selected Tabler icons and license exist', async () => {
   const { readFileSync, readdirSync } = await import('node:fs');
   const directory = new URL('../../app/static/icons/tabler/', import.meta.url);

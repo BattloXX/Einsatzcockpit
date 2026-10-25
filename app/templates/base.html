@@ -7,6 +7,7 @@
   <title>{% block title %}{{ brand }}{% endblock %}</title>
   <link rel="stylesheet" href="/static/css/app.css?v={{ CSS_VERSION }}">
   <link rel="stylesheet" href="/static/css/tooltips.css?v={{ CSS_VERSION }}">
+  <link rel="stylesheet" href="/static/css/dokumentviewer.css?v={{ DOCUMENTVIEWER_CSS_VERSION }}">
   <link rel="stylesheet" href="/static/css/weather_forecast.css?v={{ WEATHER_CSS_VERSION }}">
   <style>[x-cloak]{display:none!important}</style>
   <style>
@@ -377,6 +378,7 @@
   {# Objektverwaltung PR9: Offline-Precaching (laeuft nur in der Android-App) #}
   <script src="/static/js/objekt_offline_sync.js?v={{ ASSET_VERSION }}" defer></script>
   {% endif %}
+  <script src="/static/js/dokumentviewer.js?v={{ ASSET_VERSION }}" defer></script>
   <script src="/static/js/media-viewer.js?v={{ ASSET_VERSION }}" defer></script>
   <script src="/static/js/pwa-install.js?v={{ ASSET_VERSION }}" defer></script>
   <script src="/static/js/tooltips.js?v={{ ASSET_VERSION }}" defer></script>

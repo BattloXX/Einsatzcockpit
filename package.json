@@ -25,6 +25,7 @@
     "leaflet": "1.9.4",
     "leaflet.markercluster": "1.5.3",
     "lib0": "0.2.119",
+    "pdfjs-dist": "6.4.299",
     "quill": "2.0.3",
     "quill-cursors": "5.0.0",
     "sortablejs": "1.15.7",
