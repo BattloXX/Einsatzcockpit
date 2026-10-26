@@ -88,25 +88,32 @@ def end(connection: presence.Connection) -> bool:
         return presence.end(db, connection.kind, connection.org_id, connection.gateway_id, connection.connection_id)
 
 
+def enqueue_in(db, connection: presence.Connection, message: dict, ttl: float, job_key: str | None) -> str:
+    """Aufrufende Geschaeftstransaktion besitzt den Commit."""
+    now = presence.utc()
+    item = GatewayMessage(
+        id=uuid4().hex,
+        org_id=connection.org_id,
+        gateway_kind=connection.kind,
+        gateway_id=connection.gateway_id,
+        connection_id=connection.connection_id,
+        worker_id=connection.worker_id,
+        message=message,
+        job_key=job_key,
+        state="queued",
+        created_at=now,
+        expires_at=now + timedelta(seconds=ttl),
+    )
+    db.add(item)
+    db.flush()
+    return item.id
+
+
 def _enqueue(connection: presence.Connection, message: dict, ttl: float, job_key: str | None) -> str:
     with _db() as db:
-        now = presence.utc()
-        item = GatewayMessage(
-            id=uuid4().hex,
-            org_id=connection.org_id,
-            gateway_kind=connection.kind,
-            gateway_id=connection.gateway_id,
-            connection_id=connection.connection_id,
-            worker_id=connection.worker_id,
-            message=message,
-            job_key=job_key,
-            state="queued",
-            created_at=now,
-            expires_at=now + timedelta(seconds=ttl),
-        )
-        db.add(item)
+        item_id = enqueue_in(db, connection, message, ttl, job_key)
         db.commit()
-        return item.id
+        return item_id
 
 
 async def send(connection: presence.Connection, message: dict, *, ttl: float = 30, job_key: str | None = None) -> str:

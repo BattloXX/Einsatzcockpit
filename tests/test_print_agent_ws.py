@@ -211,7 +211,7 @@ def test_fehlschlag_nach_uebergabe_loest_ersatzdruck_aus(client, monkeypatch):
         _recv(ws, "intent_result")
         ws.send_text(json.dumps({"type": "job_status", "id": "f", "payload": {
             "job_id": job_id, "lease_token": token, "status": "failed", "phase": "submitting",
-            "error": "Queue fehlt"}}))
+            "error": "Queue fehlt", "not_submitted": True}}))
         _recv(ws, "ack")
     assert _laden(job_id).status == JOB_FAILED
     assert aufrufe == [job_id]

@@ -225,6 +225,8 @@ def test_create_print_job_race_liefert_bestehenden_job():
     existing = MagicMock(id=77)
     abfrage = fake_db.query.return_value.filter.return_value.execution_options.return_value
     abfrage.first.side_effect = [None, existing]
+    locked = fake_db.query.return_value.filter.return_value.with_for_update.return_value.execution_options.return_value
+    locked.first.return_value = existing
     fake_db.flush.side_effect = IntegrityError("insert", {}, Exception("unique"))
 
     job, created = disp.create_print_job(

@@ -30,7 +30,7 @@ def make_job(connection):
 async def test_dispatch_no_gateway_raises():
     import app.routers.ws as ws
 
-    with pytest.raises(RuntimeError, match="Kein Gateway"):
+    with pytest.raises(RuntimeError, match="Druckauftrag"):
         await ws.dispatch_print_job(770001, 1, {"job_id": 1})
 
 
@@ -53,8 +53,8 @@ async def test_dead_target_never_sends_to_another_gateway():
     other, other_socket = bind("linux", socket=CaptureSocket(reply=True))
     job_id = make_job(dead)
     try:
-        with pytest.raises(RuntimeError):
-            await ws.dispatch_print_job(1, job_id, {"job_id": job_id}, timeout=2)
+        result = await ws.dispatch_print_job(1, job_id, {"job_id": job_id}, timeout=2)
+        assert result["status"] == "uncertain"
         assert not other_socket.sent
         assert not ws.gateway_online_id(dead.gateway_id, 1)
         assert ws.gateway_online_id(other.gateway_id, 1)
@@ -173,8 +173,15 @@ async def test_dispatch_job_commits_sent_before_await_no_status_overwrite(monkey
     db.commit()
 
     async def fake_dispatch(org_id, job_id, payload, timeout=20.0):  # noqa: ASYNC109
+        from app.services.linux_print_service import prepare
+        prepare(org_id, job_id, payload)
         return {"job_id": job_id, "status": "done"}
 
+    # Echte Presence fuer den atomaren Claim, der jetzt die Vorab-Transaktion besitzt.
+    from app.services import gateway_routing
+    gateway.device_token_hash = uuid.uuid4().hex
+    db.commit()
+    gateway_routing.begin("linux", 1, gateway.id, gateway.device_token_hash)
     monkeypatch.setattr(ws, "dispatch_print_job", fake_dispatch)
     monkeypatch.setattr("app.services.print_artifact_service.artifact_url", lambda j: "http://x/a")
 

@@ -41,6 +41,15 @@ class CaptureSocket:
             else:
                 job = str(message.get("id"))
                 result = {"job_id": int(job), "status": "done"}
+                from app.routers.ws import _apply_job_status
+                payload = message.get("payload") or {}
+                if payload.get("requires_intent"):
+                    from app.services.linux_print_service import print_intent
+                    assert await asyncio.to_thread(print_intent, self.connection, self.token_hash,
+                        int(job), payload["dispatch_token"], payload["generation"])
+                await asyncio.to_thread(_apply_job_status, int(job), "done", None,
+                    org_id=self.connection.org_id, gateway_id=self.connection.gateway_id,
+                    connection=self.connection, token_hash=self.token_hash)
                 await asyncio.to_thread(routing.record_result, self.connection, self.token_hash, job, result)
 
     async def close(self, code=1000):

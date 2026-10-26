@@ -1,15 +1,14 @@
 from __future__ import annotations
 
-import asyncio
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from threading import Barrier
-import uuid
 
 import pytest
 
 from app.core.tenant import set_tenant_context
-from app.models.gateway import JOB_CANCELED, JOB_DONE, JOB_FAILED, JOB_SENT, PrintJob
+from app.models.gateway import JOB_CANCELED, JOB_DONE, JOB_SENT, JOB_UNCERTAIN, PrintJob
 from tests.conftest import TestingSession
 
 
@@ -57,7 +56,7 @@ def test_watchdog_warns_young_stale_and_escalates_old(monkeypatch, caplog):
 
     assert won == [old]
     assert _status(young) == (JOB_SENT, None)
-    assert _status(old)[0] == JOB_FAILED
+    assert _status(old)[0] == JOB_UNCERTAIN
     assert "40 Minuten" in (_status(old)[1] or "")
     assert _status(done) == (JOB_DONE, None)
     assert _status(canceled) == (JOB_CANCELED, None)
@@ -84,7 +83,7 @@ def test_escalate_stale_job_parallel_exactly_one_winner():
         results = list(pool.map(lambda _n: attempt(), range(2)))
 
     assert sorted(results) == [False, True]
-    assert _status(job_id) == (JOB_FAILED, "Watchdog")
+    assert _status(job_id) == (JOB_UNCERTAIN, "Watchdog")
 
 
 @pytest.mark.asyncio
@@ -112,8 +111,7 @@ async def test_watchdog_broadcasts_before_fallback(monkeypatch):
         ("broadcast", 7, {
             "type": "print_job_status",
             "job_id": 123,
-            "status": "failed",
+            "status": "uncertain",
             "gateway_id": 9,
         }),
-        ("fallback", 123),
     ]

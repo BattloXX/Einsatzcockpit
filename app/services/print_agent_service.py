@@ -191,11 +191,13 @@ def route_gateway_ids(db: Session, org_id: int | None, printer_id: int | None) -
 
 def enqueue_for_agents(db: Session, job: PrintJob, now: datetime | None = None) -> list[int]:
     """Stellt einen Job auf Lease-Zustellung um und gibt die zu benachrichtigenden Agents zurück."""
-    job.delivery = DELIVERY_LEASE
-    job.status = JOB_QUEUED
-    job.phase = None
-    job.queued_at = _jetzt(now)
+    # Ein wiederholter UI-/Event-Aufruf darf keine aktive oder unklare Lease zuruecksetzen.
+    db.query(PrintJob).filter(PrintJob.id == job.id, PrintJob.org_id == job.org_id,
+        PrintJob.status == JOB_QUEUED, PrintJob.delivery != DELIVERY_LEASE).update(
+        {"delivery": DELIVERY_LEASE, "queued_at": _jetzt(now)}, synchronize_session=False)
     db.commit()
+    db.refresh(job)
+
     return route_gateway_ids(db, job.org_id, job.printer_id)
 
 
@@ -242,6 +244,7 @@ def lease_jobs(db: Session, gateway: Gateway, max_n: int, now: datetime | None =
             PrintJob.printer_id.in_(list(routen)),
         )
         .order_by(PrintJob.queued_at, PrintJob.id)
+        .with_for_update(skip_locked=True)
         .limit(20)
         .execution_options(include_all_tenants=True)
         .all()
@@ -376,7 +379,7 @@ def print_intent(db: Session, gateway: Gateway, job_id: int, token: str,
 
 def apply_agent_status(db: Session, gateway: Gateway, job_id: int, token: str, status: str,
                        phase: str | None, spool_ref: str | None, error: str | None,
-                       now: datetime | None = None) -> dict:
+                       now: datetime | None = None, *, not_submitted: bool = False) -> dict:
     """Wendet eine job_status-Meldung des Agents an (Fencing über den Lease-Token).
 
     Ergebnis: {"result": applied|stale|ignored, "status", "fallback", "requeued",
@@ -417,11 +420,12 @@ def apply_agent_status(db: Session, gateway: Gateway, job_id: int, token: str, s
             werte.update(status=JOB_QUEUED, phase=None, queued_at=zeit, lease_gateway_id=None,
                          lease_token=None, lease_expires_at=None)
             erneut_einreihen = True
-        else:
-            # Vor der Übergabe nach zu vielen Versuchen oder vom Spooler sicher abgelehnt:
-            # es wurde nichts gedruckt, der Ersatzdrucker der Regel darf einspringen.
+        elif job.phase in VOR_UEBERGABE or (job.phase == PHASE_SUBMITTING and phase == PHASE_SUBMITTING
+                                            and not_submitted and not job.spool_ref):
             werte["status"] = JOB_FAILED
             ersatzdruck = True
+        else:
+            werte.update(status=JOB_UNCERTAIN, error=fehler or FEHLER_UNKLAR)
     else:
         return ergebnis
 
@@ -433,6 +437,8 @@ def apply_agent_status(db: Session, gateway: Gateway, job_id: int, token: str, s
             PrintJob.lease_gateway_id == gateway.id,
             PrintJob.lease_token == token,
             PrintJob.status.notin_(AGENT_ENDZUSTAENDE),
+            PrintJob.phase == job.phase,
+            PrintJob.lease_generation == job.lease_generation,
         )
         .update(werte, synchronize_session=False)
     )

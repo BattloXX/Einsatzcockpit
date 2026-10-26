@@ -4,6 +4,7 @@ import asyncio
 import threading
 
 import fakeredis
+import pytest
 
 from app.services import gateway_routing as routing
 from app.services import ws_bus
@@ -16,14 +17,15 @@ async def until(condition, timeout=8):  # noqa: ASYNC109
             await asyncio.sleep(0.02)
 
 
-async def test_redis_tcp_restart_resubscribes_and_db_queue_still_delivers(monkeypatch):
+@pytest.mark.parametrize("kind", ["linux", "windows_agent"])
+async def test_redis_tcp_restart_resubscribes_and_db_queue_still_delivers(monkeypatch, kind):
     server = fakeredis.TcpFakeServer(("127.0.0.1", 0))
     server.daemon_threads = True
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     address = server.server_address
     monkeypatch.setattr(ws_bus.settings, "REDIS_URL", f"redis://127.0.0.1:{address[1]}/0")
-    connection, socket = bind("linux")
+    connection, socket = bind(kind)
     try:
         await ws_bus.start()
         first = routing._enqueue(connection, {"type": "before"}, 20, None)
@@ -60,7 +62,8 @@ async def test_redis_tcp_restart_resubscribes_and_db_queue_still_delivers(monkey
         thread.join(timeout=2)
 
 
-async def test_real_redis_container_restart(monkeypatch):
+@pytest.mark.parametrize("kind", ["linux", "windows_agent"])
+async def test_real_redis_container_restart(monkeypatch, kind):
     """Opt-in gegen einen ausschliesslich fuer diesen Test angelegten Redis-Container."""
     import os
     import subprocess
@@ -74,7 +77,7 @@ async def test_real_redis_container_restart(monkeypatch):
     assert container.startswith("ecp-phase2-test-")
     assert url.startswith("redis://127.0.0.1:")
     monkeypatch.setattr(ws_bus.settings, "REDIS_URL", url)
-    connection, socket = bind("linux")
+    connection, socket = bind(kind)
     probes = []
     channel = "ec:phase2-test-probe"
 

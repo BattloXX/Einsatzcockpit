@@ -240,6 +240,7 @@ class Gateway(TenantScoped, Base):
     """Ein Gateway-Container je Standort. Gehoert zu genau einer Org."""
     __tablename__ = "gateway"
 
+    print_protocol: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(150), nullable=False)
     standort: Mapped[str | None] = mapped_column(String(200), nullable=True)
@@ -405,6 +406,7 @@ class PrintJob(TenantScoped, Base):
     delivery: Mapped[str] = mapped_column(
         String(10), nullable=False, default=DELIVERY_PUSH, server_default=DELIVERY_PUSH
     )
+    push_route_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     lease_gateway_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("gateway.id", ondelete="SET NULL"), nullable=True
     )

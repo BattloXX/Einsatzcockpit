@@ -17,6 +17,7 @@ def _job(document_type: str, status: str = JOB_SENT):
     job = PrintJob(
         org_id=1, gateway_id=1, document_type=document_type, status=status,
         idempotency_key="render-failure-" + uuid.uuid4().hex,
+        lease_token="v2-preflight", phase="prepared",
     )
     db.add(job)
     db.commit()

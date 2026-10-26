@@ -106,7 +106,7 @@ async def test_target_connection_org_and_publisher_echo_are_fenced(monkeypatch):
 
 @pytest.mark.parametrize("kind", ["sms", "linux", "windows_agent"])
 def test_real_socket_on_worker_a_dispatch_on_process_b(client, kind):
-    data = _anlegen(998901, kind="linux" if kind == "sms" else kind, routen=False)
+    data = _anlegen(998901, kind="linux" if kind == "sms" else kind, routen=kind == "windows_agent")
     if kind == "sms":
         with SessionLocal() as db:
             set_tenant_context(db, None)
@@ -116,7 +116,7 @@ def test_real_socket_on_worker_a_dispatch_on_process_b(client, kind):
             gid = row.id
     else:
         gid = data["gateway_id"]
-    job_id = _job(data, enqueue=False)
+    job_id = _job(data, enqueue=kind == "windows_agent")
     endpoint = {"sms": "/ws/sms-gateway", "linux": "/ws/gateway", "windows_agent": "/ws/print-agent"}[kind]
     code = """
 import asyncio,json,sys
@@ -133,6 +133,9 @@ print(json.dumps(asyncio.run(run())),flush=True)
 """
     with client.websocket_connect(endpoint, headers=_auth(data["token"])) as socket:
         _recv(socket, "config" if kind == "sms" else "config_sync")
+        if kind == "linux":
+            socket.send_json({"type": "hello", "payload": {"capabilities": ["print-status-v2"]}})
+            _recv(socket, "config_sync")
         process = subprocess.Popen(
             [sys.executable, "-c", code],
             stdin=subprocess.PIPE,
@@ -147,9 +150,28 @@ print(json.dumps(asyncio.run(run())),flush=True)
             if kind == "sms":
                 socket.send_json({"type": "sms.result", "id": message["id"], "ok": True})
             elif kind == "linux":
+                payload = message["payload"]
+                assert payload["requires_intent"]
+                socket.send_json({"type": "print_intent", "rid": "linux-intent", "payload": {
+                    "job_id": job_id, "dispatch_token": payload["dispatch_token"],
+                    "generation": payload["generation"]}})
+                assert _recv(socket, "intent_result")["payload"]["ok"]
                 socket.send_json({"type": "job_status", "payload": {"job_id": job_id, "status": "done"}})
             else:
                 assert message["payload"]["job_ids"] == [job_id]
+                socket.send_json({"type": "lease_request", "rid": "lease", "payload": {"max": 1}})
+                grant = _recv(socket, "lease_grant")["payload"]["jobs"][0]
+                assert grant["job_id"] == job_id
+                socket.send_json({"type": "print_intent", "rid": "intent", "payload": {
+                    "job_id": job_id, "lease_token": grant["lease_token"]}})
+                assert _recv(socket, "intent_result")["payload"]["ok"]
+                socket.send_json({"type": "job_status", "id": "complete", "payload": {
+                    "job_id": job_id, "lease_token": grant["lease_token"], "status": "done", "phase": "spooled"}})
+                _recv(socket, "ack")
+                from app.models.gateway import PrintJob
+                with SessionLocal() as db:
+                    set_tenant_context(db, None)
+                    assert db.get(PrintJob, job_id).status == "done"
             output, error = process.communicate(timeout=20)
             assert process.returncode == 0, error
             result = json.loads(output)

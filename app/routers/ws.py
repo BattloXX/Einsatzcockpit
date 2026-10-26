@@ -693,13 +693,13 @@ def _gateway_config_sync(gateway_id: int) -> dict:
 def _apply_job_status(job_id: int, status: str, error: str | None, *,
                       org_id: int | None = None, gateway_id: int | None = None,
                       connection: gateway_presence.Connection | None = None,
-                      token_hash: str | None = None) -> int | None:
+                      token_hash: str | None = None, not_submitted: bool = False) -> int | None:
     """Schreibt job_status vom Gateway in die DB.
 
     Gibt org_id zurueck, wenn der Statusuebergang tatsaechlich vollzogen wurde, sonst
     None (unbekannter Status, Job weg, oder Job bereits in einem Terminal-Status).
     """
-    from app.models.gateway import JOB_STATUS_LABELS, JOB_TERMINAL, PrintJob
+    from app.models.gateway import JOB_STATUS_LABELS, JOB_TERMINAL, JOB_UNCERTAIN, Gateway, PrintJob
 
     if connection is not None and (connection.kind != "linux" or connection.org_id != org_id
                                    or connection.gateway_id != gateway_id):
@@ -716,15 +716,27 @@ def _apply_job_status(job_id: int, status: str, error: str | None, *,
             connection.connection_id, lock=True,
         ) != "connected":
             return None
-        job = db.get(PrintJob, job_id)
-        if job is None or job.status in JOB_TERMINAL:
+        job = db.query(PrintJob).filter(PrintJob.id == job_id).with_for_update().first()
+        if job is None or job.status in JOB_TERMINAL | {JOB_UNCERTAIN}:
             return None
         if org_id is not None and (job.org_id != org_id or job.gateway_id != gateway_id):
             return None
+        if status not in ("sent", "printing", "done", "failed", "canceled", "uncertain"):
+            return None
+        if job.lease_token and job.phase in ("prepared", "received") and status in ("printing", "done"):
+            return None
+        if status == "failed" and connection is not None:
+            gw = db.query(Gateway).filter(Gateway.org_id == org_id, Gateway.id == gateway_id).one()
+            if not (gw.print_protocol >= 2 and not_submitted and job.phase != "spooled"):
+                status = "uncertain"
         expected = job.status
         if expected == "printing" and status == "sent":
             return None
         values: dict[Any, Any] = {"status": status}
+        if status in ("printing", "done"):
+            values["phase"] = "spooled"
+        if status in ("sent", "printing"):
+            values["lease_expires_at"] = gateway_presence.utc() + timedelta(minutes=10)
         if error:
             values["error"] = error[:500]
         changed = db.query(PrintJob).filter(PrintJob.id == job_id, PrintJob.org_id == job.org_id,
@@ -796,7 +808,8 @@ async def print_gateway_ws(websocket: WebSocket):
 
         # config_sync sofort pushen
         await websocket.send_text(json.dumps({
-            "type": "config_sync", "payload": await asyncio.to_thread(_gateway_config_sync, gateway_id),
+            "type": "config_sync", "capabilities": ["print-status-ack-v1"],
+            "payload": await asyncio.to_thread(_gateway_config_sync, gateway_id),
         }, ensure_ascii=False))
         while True:
             try:
@@ -819,8 +832,11 @@ async def print_gateway_ws(websocket: WebSocket):
             mtype = msg.get("type")
             if mtype == "ping":
                 await websocket.send_text(json.dumps({"type": "pong"}))
-            elif mtype in ("pong", "ack"):
+            elif mtype == "pong":
                 pass
+            elif mtype == "ack":
+                from app.services.linux_print_service import receive_ack
+                await asyncio.to_thread(receive_ack, connection, gateway.device_token_hash, str(msg.get("id") or ""))
             elif mtype == "log_event":
                 p = msg.get("payload") or {}
                 level = str(p.get("level") or "info").lower()
@@ -830,11 +846,28 @@ async def print_gateway_ws(websocket: WebSocket):
                 await asyncio.to_thread(gateway_routing.touch, connection, gateway.device_token_hash)
                 await asyncio.to_thread(_linux_update, connection, gateway.device_token_hash,
                                         "version", (msg.get("payload") or {}).get("version"))
+                protocol = 2 if "print-status-v2" in ((msg.get("payload") or {}).get("capabilities") or []) else 1
+                await asyncio.to_thread(
+                    _linux_update, connection, gateway.device_token_hash, "print_protocol", protocol)
                 await websocket.send_text(json.dumps({
-                    "type": "config_sync", "payload": await asyncio.to_thread(_gateway_config_sync, gateway_id),
+                    "type": "config_sync", "capabilities": ["print-status-ack-v1"],
+                    "payload": await asyncio.to_thread(_gateway_config_sync, gateway_id),
                 }, ensure_ascii=False))
             elif mtype == "heartbeat":
                 await asyncio.to_thread(gateway_routing.touch, connection, gateway.device_token_hash)
+            elif mtype == "print_intent":
+                from app.services.linux_print_service import print_intent
+                p = msg.get("payload") or {}
+                allowed = await asyncio.to_thread(print_intent, connection, gateway.device_token_hash,
+                    p.get("job_id"), p.get("dispatch_token"), p.get("generation"))
+                await websocket.send_json({"type": "intent_result", "rid": msg.get("rid"), "payload": {"ok": allowed}})
+            elif mtype == "refresh_artifact":
+                from app.services.linux_print_service import refresh_artifact
+                p = msg.get("payload") or {}
+                url = await asyncio.to_thread(refresh_artifact, connection, gateway.device_token_hash, p.get("job_id"))
+                if url:
+                    await websocket.send_json({"type": "print_job_refresh", "payload": {
+                        "job_id": p.get("job_id"), "artifact_url": url}})
             elif mtype == "job_status":
                 p = msg.get("payload") or {}
                 jid = p.get("job_id")
@@ -847,7 +880,13 @@ async def print_gateway_ws(websocket: WebSocket):
                 if isinstance(jid, int) and await asyncio.to_thread(_print_target, org_id, jid, gateway_id) is not None:
                     o = await asyncio.to_thread(_apply_job_status, jid, p.get("status", ""), p.get("error"),
                                                 org_id=org_id, gateway_id=gateway_id, connection=connection,
-                                                token_hash=gateway.device_token_hash)
+                                                token_hash=gateway.device_token_hash,
+                                                not_submitted=p.get("not_submitted") is True)
+                    from app.services.linux_print_service import snapshot
+                    current = await asyncio.to_thread(snapshot, org_id, jid)
+                    await websocket.send_json({"type": "job_status_ack", "payload": {
+                        "job_id": jid, "status": p.get("status"), "cloud_status": current["status"]}})
+                    p = {**p, "status": current["status"]}
                     await asyncio.to_thread(gateway_routing.record_result, connection,
                                             gateway.device_token_hash, str(jid), p)
                     _log_gateway_job_status(
@@ -1057,17 +1096,8 @@ async def push_gateway_command(org_id: int, message: dict) -> bool:
 
 
 async def dispatch_print_job(org_id: int, job_id: int, payload: dict, timeout: float = 20.0) -> dict:
-    gateway_id = await asyncio.to_thread(_print_target, org_id, job_id)
-    connections = await asyncio.to_thread(gateway_routing.targets, "linux", org_id, gateway_id) if gateway_id else []
-    if not connections:
-        raise RuntimeError(f"Kein Gateway fuer Druckauftrag {job_id} (org_id={org_id}) verbunden")
-    connection = connections[0]
-    item_id = await gateway_routing.send(connection,
-        {"type": "print_job", "id": str(job_id), "payload": payload}, ttl=timeout, job_key=str(job_id))
-    try:
-        return await gateway_routing.wait_result(item_id, org_id, timeout)
-    except TimeoutError:
-        return {"job_id": job_id, "status": "sent", "note": "timeout_waiting_status"}
+    from app.services.linux_print_service import dispatch
+    return await dispatch(org_id, job_id, payload, wait_seconds=timeout)
 
 
 async def _dispatch_print_job_local(org_id: int, job_id: int, payload: dict, timeout: float) -> dict:
@@ -1179,6 +1209,8 @@ async def notify_agents_job_available(org_id: int, gateway_ids: list[int], job_i
 
 async def _agent_job_status(websocket: WebSocket, org_id: int, gateway_id: int, msg: dict,
                             *, connection_id: str | None = None, token_hash: str | None = None) -> None:
+    from functools import partial
+
     from app.models.gateway import JOB_SENT
     from app.services import print_agent_service
 
@@ -1188,7 +1220,8 @@ async def _agent_job_status(websocket: WebSocket, org_id: int, gateway_id: int, 
     if isinstance(jid, int):
         ergebnis = await asyncio.to_thread(
             _agent_call,
-            gateway_id, print_agent_service.apply_agent_status, jid, str(p.get("lease_token") or ""),
+            gateway_id, partial(print_agent_service.apply_agent_status, not_submitted=p.get("not_submitted") is True),
+            jid, str(p.get("lease_token") or ""),
             str(p.get("status") or ""), p.get("phase"), p.get("spool_ref"), p.get("error"),
             connection_id=connection_id, token_hash=token_hash,
         )

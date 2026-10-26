@@ -344,6 +344,8 @@ async def lifespan(app: FastAPI):
     await gateway_routing.start()
     from app.services import sms_outbox
     await sms_outbox.start()
+    from app.services import linux_print_service
+    await linux_print_service.start()
 
     # Bootstrap admin on first start
     _bootstrap_admin()
@@ -399,6 +401,7 @@ async def lifespan(app: FastAPI):
         await mcp_session_context.__aexit__(None, None, None)
         from app.services import ws_bus
 
+        await linux_print_service.stop()
         await sms_outbox.stop()
         await gateway_routing.stop()
         await ws_bus.stop()

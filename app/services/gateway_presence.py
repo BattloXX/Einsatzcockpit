@@ -112,6 +112,8 @@ def begin(
     values["connection_token_hash" if kind == SMS else "agent_connection_token_hash"] = token_hash
     if kind != SMS:
         values.update(last_seen_at=moment, status="online")
+        if kind == "linux":
+            values["print_protocol"] = 1
     else:
         values["last_used_at"] = moment
         values["sms_protocol"] = 1

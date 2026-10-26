@@ -85,7 +85,6 @@ def _eskalations_context(job_ids: list[int]) -> list[tuple[int, int, int]]:
 
 async def _watchdog_iteration() -> None:
     from app.services.broadcast import broadcast_org
-    from app.services.print_dispatcher import dispatch_fallback_for_failed_job
 
     job_ids = await asyncio.to_thread(_pruefe_haengende_jobs)
     contexts = await asyncio.to_thread(_eskalations_context, job_ids)
@@ -93,10 +92,9 @@ async def _watchdog_iteration() -> None:
         await broadcast_org(org_id, {
             "type": "print_job_status",
             "job_id": job_id,
-            "status": "failed",
+            "status": "uncertain",
             "gateway_id": gateway_id,
         })
-        await dispatch_fallback_for_failed_job(job_id)
 
 
 async def print_job_watchdog_loop() -> None:
