@@ -260,3 +260,33 @@ P1.1/P1.2 anschließen.
 4. Danach erst die physische Abnahme aus Phase 6 (Modem, CUPS, zwei Windows-PCs).
 
 Reihenfolge für Codex: P0.1/P0.4 (Suite grün) → P0.2/P0.3 → P1.1–P1.3 → P3.1 → P2.1–P2.3 → P1.4–P1.7 → P3.3–P3.8 → P2.4/P2.5.
+
+---
+
+## Umsetzungsstand (26.10.2026)
+
+Alle Pakete umgesetzt; volle Cloud-Suite nach jedem Paket grün (zuletzt 6520 passed),
+`ruff check app/` und `mypy app/` sauber, `alembic heads` = `0317`.
+
+| Paket | Commit | Anmerkung |
+| --- | --- | --- |
+| P0.1/P0.4 | `a6a2c0bd`, `740b0a1d`, `f7447279` | 18 Regressionen behoben; Dokumentdruck nur Fixtures |
+| P0.2 | `953f3621` | lokaler Broadcast-Fallback |
+| P0.3 | `ff17754d` | `DB_POOL_SIZE`/`DB_MAX_OVERFLOW`, Startwarnung, max. 8 parallele SMS-Drives |
+| P1.1 | `e82520c2` | Migration `0316` |
+| P1.2 | `a14b44f7` | Migration `0317`; Dedup nur noch im 30-s-Fenster |
+| P1.3 | `76ac08c2` | Merge-on-save, Join- und Reconnect-Sync |
+| P1.4 | `31c4d903` | Presence 45 s, Locks 15 s per Lua |
+| P1.5/P1.6 | `16e246af` | `org_job_state` |
+| P1.7 | `a6dae1a5` | |
+| P2.1 | `59c66042` | MariaDB-Test nur in CI (`MARIADB_TEST_URL`) |
+| P2.2 | `c3ffe8cd` | `RECEIPT_TIMEOUT_S = 10`, SMS-TTL 60 s; P3.6 entfällt (Cloud-Ping nach 30 s) |
+| P2.3 | `5cda457e` | Index `SmsDispatchJob(status, finished_at)` als Empfehlung offen |
+| P2.4 | `78ebd408` | Guard `tests/test_no_new_module_state.py` |
+| P2.5 | `d5c657e9` | `main` per Merge statt Rebase (kein Force-Push) |
+| P3.1 | Linux `fd2051d` | 73 Tests |
+| P3.3–P3.5 | Android `41431e2` | 11 Unit-Tests |
+| P3.7/P3.8 | Windows `ce146ea` | 103 Tests, Windows-Build geprüft |
+
+Offen: physische Abnahme (Modem, CUPS, zwei Windows-PCs), MariaDB-Lauf von
+`tests/mariadb/`, `e2e/multi_worker` mit 2 und 4 Workern, produktive Freigabe.
