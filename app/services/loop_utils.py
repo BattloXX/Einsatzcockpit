@@ -10,10 +10,32 @@ Intervall: Frühwarnung dafür, dass ein Loop nicht mehr hinterherkommt
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Coroutine, Iterator
 from contextlib import contextmanager
+from typing import Any
+
+
+def start_loop_task(
+    task: asyncio.Task | None, factory: Callable[[], Coroutine[Any, Any, None]],
+) -> asyncio.Task:
+    """Behält nur einen laufenden Task des aktuellen Loops; fremde Tasks verwerfen."""
+    if task is None or task.done() or task.get_loop() is not asyncio.get_running_loop():
+        return asyncio.create_task(factory())
+    return task
+
+
+async def stop_loop_task(task: asyncio.Task | None) -> None:
+    """Cancel und Await sind nur für Tasks des aktuellen Loops zulässig."""
+    if task is None or task.get_loop() is not asyncio.get_running_loop():
+        return
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
 
 
 @contextmanager

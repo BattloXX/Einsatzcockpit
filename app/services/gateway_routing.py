@@ -21,6 +21,7 @@ from app.db import SessionLocal
 from app.models.gateway import GatewayMessage
 from app.services import gateway_presence as presence
 from app.services import ws_bus
+from app.services.loop_utils import start_loop_task, stop_loop_task
 
 logger = logging.getLogger("einsatzleiter.gateway_routing")
 POLL_S = 0.5
@@ -323,19 +324,13 @@ async def _poll() -> None:
 
 async def start() -> None:
     global _task
-    if _task is None or _task.done():
-        _task = asyncio.create_task(_poll())
+    _task = start_loop_task(_task, _poll)
 
 
 async def stop() -> None:
     global _task
-    if _task is not None:
-        _task.cancel()
-        try:
-            await _task
-        except asyncio.CancelledError:
-            pass
-        _task = None
+    task, _task = _task, None
+    await stop_loop_task(task)
     for socket in list(_sockets.values()):
         await asyncio.to_thread(end, socket.connection)
     _sockets.clear()

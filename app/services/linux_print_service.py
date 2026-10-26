@@ -18,6 +18,7 @@ from app.models.gateway import Gateway, GatewayMessage, PrintJob
 from app.services import gateway_presence as presence
 from app.services import gateway_routing as routing
 from app.services import ws_bus
+from app.services.loop_utils import start_loop_task, stop_loop_task
 
 logger = logging.getLogger("einsatzleiter.linux_print")
 _task: asyncio.Task | None = None
@@ -252,19 +253,14 @@ async def _loop():
 
 async def start():
     global _task
-    if not settings.TESTING and (_task is None or _task.done()):
-        _task = asyncio.create_task(_loop())
+    if not settings.TESTING:
+        _task = start_loop_task(_task, _loop)
 
 
 async def stop():
     global _task
-    if _task:
-        _task.cancel()
-        try:
-            await _task
-        except asyncio.CancelledError:
-            pass
-        _task = None
+    task, _task = _task, None
+    await stop_loop_task(task)
 
 
 def receive_ack(connection, token_hash, job_id):
