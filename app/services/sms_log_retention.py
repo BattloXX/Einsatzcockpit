@@ -11,6 +11,7 @@ from app.models.master import FireDept
 from app.models.org_sms import OrgSmsConfig
 from app.models.sms import SmsDispatchJob, SmsLog, SmsLogRecipient
 from app.services.citizen_verification_service import purge_citizen_verifications
+from app.services.gateway_routing import purge_old_messages
 
 logger = logging.getLogger("einsatzleiter.sms_log_retention")
 
@@ -170,6 +171,10 @@ def _seconds_until_next() -> float:
 async def sms_log_retention_loop() -> None:
     while True:
         await asyncio.sleep(_seconds_until_next())
+        try:
+            await asyncio.to_thread(purge_old_messages)
+        except Exception:
+            logger.exception("Fehler bei der Gateway-Nachrichten-Retention")
         try:
             deleted = await asyncio.to_thread(purge_all_sms_logs)
             if deleted:

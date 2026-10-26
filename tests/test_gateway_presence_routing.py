@@ -13,12 +13,62 @@ from starlette.websockets import WebSocketDisconnect
 from app.core.security import hash_api_key
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
-from app.models.gateway import Gateway
+from app.models.gateway import Gateway, GatewayMessage
 from app.models.user import SmsGatewayToken
 from app.services import gateway_presence as presence
 from app.services import gateway_routing as routing
 from tests.gateway_helpers import CaptureSocket, bind, cleanup
 from tests.test_print_agent_ws import _anlegen, _auth, _job, _recv
+
+
+@pytest.fixture
+def retention_messages(monkeypatch):
+    now = presence.utc()
+    monkeypatch.setattr(presence, "utc", lambda: now)
+    rows = []
+    for i in range(106):
+        rows.append(GatewayMessage(
+            id=uuid4().hex, org_id=1 + i % 2, gateway_kind="sms", gateway_id=1,
+            connection_id=uuid4().hex,
+            worker_id="other-worker" if i == 105 else presence.worker_id(),
+            message={}, state="queued", expires_at=now + timedelta(hours=1),
+            created_at=now - timedelta(days=1, seconds=1) if i < 103 else (
+                now - timedelta(days=1) if i == 103 else now
+            ),
+        ))
+    with routing._db() as db:
+        db.add_all(rows)
+        db.commit()
+        ids = [row.id for row in rows]
+    yield ids
+    with routing._db() as db:
+        for org_id in (1, 2):
+            db.query(GatewayMessage).filter(
+                GatewayMessage.org_id == org_id, GatewayMessage.id.in_(ids)
+            ).delete(synchronize_session=False)
+        db.commit()
+
+
+def test_due_only_returns_own_ids_without_deleting(retention_messages):
+    ids = retention_messages
+    due = routing._due()
+    assert due and set(due) <= set(ids[:-1])
+    assert len(due) <= 100
+    with routing._db() as db:
+        assert db.query(GatewayMessage).filter(GatewayMessage.id.in_(ids)).execution_options(
+            include_all_tenants=True
+        ).count() == len(ids)
+
+
+def test_purge_old_messages_keeps_boundary_and_fresh_rows(retention_messages):
+    ids = retention_messages
+    assert routing.purge_old_messages() == 103
+    with routing._db() as db:
+        remaining = db.query(GatewayMessage.id).filter(GatewayMessage.id.in_(ids)).execution_options(
+            include_all_tenants=True
+        ).all()
+        assert {row[0] for row in remaining} == set(ids[103:])
+    assert routing.purge_old_messages() == 0
 
 
 @pytest.mark.parametrize("kind,ttl", [("sms", 60), ("linux", 90), ("windows_agent", 90)])

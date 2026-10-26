@@ -37,6 +37,7 @@ ACTIVE = ("claimed", "dispatched", "acknowledged")
 LEASE_S = 60
 RECEIPT_TIMEOUT_S = 10
 MAX_PARALLEL_DRIVES = 8
+PROJECTION_WINDOW_S = 3600
 MAX_IN_FLIGHT = 7
 _task: asyncio.Task | None = None
 
@@ -831,6 +832,10 @@ async def send(org_id, phone, text, *, job_key, ctx, preferred=None, recipient_i
 async def run_once():
     await asyncio.to_thread(sweep)
     now = presence.utc()
+    projection_due = or_(
+        Job.status.notin_(TERMINAL),
+        Job.finished_at >= now - timedelta(seconds=PROJECTION_WINDOW_S),
+    )
     with database() as db:
         jobs = (
             db.query(Job.org_id, Job.id)
@@ -845,7 +850,7 @@ async def run_once():
         projections = (
             db.query(Job.org_id, Job.id)
             .join(SmsLogRecipient, SmsLogRecipient.dispatch_job_id == Job.id)
-            .filter(SmsLogRecipient.dispatch_status != Job.status)
+            .filter(projection_due, SmsLogRecipient.dispatch_status != Job.status)
             .execution_options(include_all_tenants=True)
             .limit(100)
             .all()
@@ -855,7 +860,7 @@ async def run_once():
         projections += (
             db.query(Job.org_id, Job.id)
             .join(ApiMessageRecipient, ApiMessageRecipient.dispatch_job_id == Job.id)
-            .filter(Job.status.in_(TERMINAL), ApiMessageRecipient.status != Job.status)
+            .filter(projection_due, Job.status.in_(TERMINAL), ApiMessageRecipient.status != Job.status)
             .execution_options(include_all_tenants=True)
             .limit(100)
             .all()

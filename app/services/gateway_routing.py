@@ -269,20 +269,32 @@ async def wait_result(item_id: str, org_id: int, timeout: float) -> dict:  # noq
             await asyncio.sleep(0.05)
 
 
+def purge_old_messages() -> int:
+    """Leader-Wartung: alte Transportnachrichten in kleinen Transaktionen loeschen."""
+    cutoff = presence.utc() - timedelta(days=1)
+    total = 0
+    while True:
+        # Systemwartung: explizite Tenant-IDs fuer Mutationen, nie ungefiltertes Tenant-UPDATE.
+        with _db() as db:
+            old = (
+                db.query(GatewayMessage.id, GatewayMessage.org_id)
+                .filter(GatewayMessage.created_at < cutoff)
+                .execution_options(include_all_tenants=True)
+                .limit(100)
+                .all()
+            )
+            if not old:
+                return total
+            for item_id, org_id in old:
+                total += db.query(GatewayMessage).filter(
+                    GatewayMessage.id == item_id, GatewayMessage.org_id == org_id
+                ).delete()
+            db.commit()
+
+
 def _due() -> list[str]:
     with _db() as db:
         now = presence.utc()
-        # Systemwartung: explizite Tenant-IDs fuer Mutationen, nie ungefiltertes Tenant-UPDATE.
-        old = (
-            db.query(GatewayMessage.id, GatewayMessage.org_id)
-            .filter(GatewayMessage.created_at < now - timedelta(days=1))
-            .execution_options(include_all_tenants=True)
-            .limit(100)
-            .all()
-        )
-        for item_id, org_id in old:
-            db.query(GatewayMessage).filter(GatewayMessage.id == item_id, GatewayMessage.org_id == org_id).delete()
-        db.commit()
         return [
             row[0]
             for row in db.query(GatewayMessage.id)

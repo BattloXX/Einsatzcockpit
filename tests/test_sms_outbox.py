@@ -80,6 +80,78 @@ def sms_state():
         db.commit()
 
 
+@pytest.mark.parametrize("target", ["sms_log", "api_message"])
+@pytest.mark.parametrize("status", outbox.TERMINAL)
+@pytest.mark.parametrize("age_s", [0, outbox.PROJECTION_WINDOW_S, outbox.PROJECTION_WINDOW_S + 1])
+async def test_run_once_terminal_projection_window(monkeypatch, target, status, age_s):
+    from app.models.api_message import ApiMessage, ApiMessageRecipient
+    from app.models.sms import SmsLog, SmsLogRecipient
+
+    now = presence.utc()
+    monkeypatch.setattr(presence, "utc", lambda: now)
+    jid = outbox.ensure(1, "projection-window", "+43660000", "Alarm", ["gateway"])
+    with outbox.database() as db:
+        job = db.get(Job, jid)
+        job.status, job.finished_at = status, now - timedelta(seconds=age_s)
+        if target == "sms_log":
+            parent = SmsLog(org_id=1, source="manual", text="Alarm", sent_at=now, recipient_count=1)
+            db.add(parent)
+            db.flush()
+            recipient = SmsLogRecipient(
+                sms_log_id=parent.id, phone_number=job.phone, sent_at=now,
+                dispatch_job_id=jid, dispatch_status="queued", provider="ausstehend", success=False,
+            )
+        else:
+            parent = ApiMessage(org_id=1, api_key_id=1, external_key=uuid4().hex, kanal="sms", recipient_count=1)
+            db.add(parent)
+            db.flush()
+            recipient = ApiMessageRecipient(
+                org_id=1, message_id=parent.id, ziel=job.phone, dispatch_job_id=jid, status="sending",
+            )
+        db.add(recipient)
+        db.commit()
+        recipient_id, model = recipient.id, type(recipient)
+    projected = []
+    original_project = outbox.project
+
+    def project(org_id, job_id):
+        projected.append((org_id, job_id))
+        original_project(org_id, job_id)
+
+    monkeypatch.setattr(outbox, "project", project)
+    await outbox.run_once()
+    expected = age_s <= outbox.PROJECTION_WINDOW_S
+    assert projected == ([(1, jid)] if expected else [])
+    with outbox.database() as db:
+        recipient = db.get(model, recipient_id)
+        actual = recipient.dispatch_status if target == "sms_log" else recipient.status
+        assert actual == (status if expected else "queued" if target == "sms_log" else "sending")
+
+
+async def test_run_once_projects_old_nonterminal_job():
+    from app.models.sms import SmsLog, SmsLogRecipient
+
+    now = presence.utc()
+    jid = outbox.ensure(1, "old-projection", "+43660000", "Alarm", ["gateway"])
+    with outbox.database() as db:
+        job = db.get(Job, jid)
+        job.created_at = now - timedelta(days=90)
+        job.next_attempt_at = now + timedelta(minutes=5)
+        log = SmsLog(org_id=1, source="manual", text="Alarm", sent_at=job.created_at, recipient_count=1)
+        db.add(log)
+        db.flush()
+        recipient = SmsLogRecipient(
+            sms_log_id=log.id, phone_number=job.phone, sent_at=log.sent_at,
+            dispatch_job_id=jid, dispatch_status="claimed", provider="sendet", success=False,
+        )
+        db.add(recipient)
+        db.commit()
+        recipient_id = recipient.id
+    await outbox.run_once()
+    with outbox.database() as db:
+        assert db.get(SmsLogRecipient, recipient_id).dispatch_status == "queued"
+
+
 def expire(jid, org=1):
     with outbox.database() as db:
         db.query(Job).filter(Job.org_id == org, Job.id == jid).update(
