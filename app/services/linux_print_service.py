@@ -173,10 +173,31 @@ def reconcile():
             db.commit()
 
 
-async def run_once():
-    await asyncio.to_thread(reconcile)
+def pending():
+    from app.models.gateway import PrinterAgentRoute
+    from app.services.print_agent_service import enqueue_for_agents
+
     with database() as db:
-        jobs = (
+        legacy = (
+            db.query(PrintJob.org_id, PrintJob.id)
+            .join(PrinterAgentRoute, PrinterAgentRoute.printer_id == PrintJob.printer_id)
+            .filter(
+                PrintJob.status == "queued",
+                PrintJob.delivery == "push",
+                PrinterAgentRoute.org_id == PrintJob.org_id,
+                PrinterAgentRoute.aktiv.is_(True),
+            )
+            .execution_options(include_all_tenants=True)
+            .distinct()
+            .limit(100)
+            .all()
+        )
+        for org, jid in legacy:
+            job = db.query(PrintJob).filter(PrintJob.org_id == org, PrintJob.id == jid).first()
+            if job is not None:
+                enqueue_for_agents(db, job)
+        # Offline-Ziele duerfen den Auswahlblock nicht vor erreichbaren Zielen fuellen.
+        return (
             db.query(PrintJob.org_id, PrintJob.id)
             .join(Gateway, PrintJob.gateway_id == Gateway.id)
             .filter(
@@ -184,13 +205,38 @@ async def run_once():
                 PrintJob.delivery == "push",
                 Gateway.kind == "linux",
                 Gateway.org_id == PrintJob.org_id,
+                Gateway.status == "online",
+                Gateway.agent_connection_id.isnot(None),
+                Gateway.agent_worker_id.isnot(None),
+                Gateway.agent_presence_expires_at > presence.utc(),
+                Gateway.device_token_hash.isnot(None),
+                Gateway.agent_connection_token_hash == Gateway.device_token_hash,
             )
             .execution_options(include_all_tenants=True)
+            .order_by(PrintJob.id)
             .limit(100)
             .all()
         )
+
+
+async def run_once():
+    await asyncio.to_thread(reconcile)
+    jobs = await asyncio.to_thread(pending)
     for org, jid in jobs:
-        await dispatch(org, jid, wait_seconds=0)
+        try:
+            await dispatch(org, jid, wait_seconds=0)
+        except Exception:
+            logger.exception("Linux-Auftragsvorbereitung fehlgeschlagen org=%s job=%s", org, jid)
+            with database() as db:
+                db.query(PrintJob).filter(
+                    PrintJob.org_id == org,
+                    PrintJob.id == jid,
+                    PrintJob.status == "queued",
+                    PrintJob.push_route_id.is_(None),
+                ).update(
+                    {"status": "failed", "error": "Druckauftragsvorbereitung fehlgeschlagen"}, synchronize_session=False
+                )
+                db.commit()
 
 
 async def _loop():

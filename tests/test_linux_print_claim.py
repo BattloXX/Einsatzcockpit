@@ -155,3 +155,38 @@ async def test_manual_resolution_creates_exactly_one_durable_reprint(gateway, mo
         assert db.get(PrintJob, jid).status == "canceled"
         assert db.query(PrintJob).filter_by(org_id=1, fallback_of_job_id=jid).count() == 1
         assert db.query(PrintJob).filter_by(org_id=1, fallback_of_job_id=jid).one().status == "queued"
+
+
+async def test_offline_backlog_cannot_starve_reachable_organisation(gateway):
+    offline, _ = gateway
+    routing.end(offline)
+    for _ in range(105):
+        make_job(offline)
+    active, peer = bind("linux", 2, socket=CaptureSocket(reply=True))
+    jid = make_job(active)
+    try:
+        await service.run_once()
+        assert service.snapshot(2, jid)["status"] == "done"
+        assert len(peer.sent) == 1
+    finally:
+        cleanup(active)
+
+
+async def test_invalid_job_does_not_stop_other_jobs(gateway, monkeypatch):
+    c, socket = gateway
+    socket.reply = True
+    bad, good = make_job(c), make_job(c)
+    from app.services import print_artifact_service
+
+    original = print_artifact_service.artifact_url
+
+    def artifact(job):
+        if job.id == bad:
+            raise ValueError("invalid source")
+        return original(job)
+
+    monkeypatch.setattr(print_artifact_service, "artifact_url", artifact)
+    await service.run_once()
+    assert service.snapshot(1, bad)["status"] == "failed"
+    assert service.snapshot(1, good)["status"] == "done"
+    assert len(socket.sent) == 1

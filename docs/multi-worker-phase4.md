@@ -29,7 +29,12 @@ Der neue, in jedem Worker laufende Linux-Loop prüft die Queue alle zwei Sekunde
 Windows-Zustellung wird bereits bei Jobanlage als `delivery=lease` gespeichert;
 deshalb kann auch ein Absturz vor der nachfolgenden Dispatch-Funktion den
 Windows-Auftrag nicht stranden lassen. Für bestehende Windows-Routen bleibt das
-Lease-Polling der eigentliche Zustellmechanismus.
+Lease-Polling der eigentliche Zustellmechanismus. Ältere noch als Push gespeicherte
+Windows-Aufträge werden unabhängig von der Linux-Gateway-Presence umgestellt.
+Die begrenzte Linux-Auswahl berücksichtigt nur erreichbare Ziele; ein großer Offline-
+Rückstau einer Organisation blockiert keine erreichbare andere Organisation.
+Ein einzelner Vorbereitungsfehler stoppt die übrige Queue nicht. Ein sicherer Fehler
+wird dabei nur gespeichert, solange noch kein Transport angelegt wurde.
 
 Ein ungesendeter Linux-Transport läuft nach 30 Sekunden ab. Nur wenn sein Status
 noch atomar als `queued` beziehungsweise nie gesendetes `expired` nachweisbar ist,
@@ -148,7 +153,7 @@ Spooler-/Druckweg-Abfragen. Dazu kommen Regressionen und Migrationstests.
 
 ## Teststrategie und Abnahme
 
-Ergebnis der Abschlussprüfung: **303 Cloud-Tests bestanden**; zwei opt-in Redis-Fälle
+Ergebnis der Abschlussprüfung: **305 Cloud-Tests bestanden**; zwei opt-in Redis-Fälle
 werden im Standardlauf übersprungen. Separat bestehen **vier Redis-Neustarttests**
 (einschließlich echtem Container-Neustart für beide Gatewaytypen) und **fünf MariaDB-
 Integrationstests**. Die Clients bestehen mit **49 Linux-Tests** und **88 Windows-Tests**;
