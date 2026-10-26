@@ -27,6 +27,9 @@ _REAL_ASYNC_CLIENT = httpx.AsyncClient
 _TEST_ORG_ID = 1  # FF Wolfurt (seeded, siehe test_pin_login.py)
 
 
+pytestmark = pytest.mark.usefixtures("sms_outbox_state")
+
+
 def _set_org_sms_config(**kwargs) -> None:
     """Legt fuer _TEST_ORG_ID eine OrgSmsConfig-Zeile an/aktualisiert sie."""
     from datetime import UTC, datetime
@@ -109,20 +112,16 @@ async def test_send_sms_without_fallback_does_not_call_gateway(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_send_sms_eus_falls_back_to_gateway(monkeypatch):
-    monkeypatch.setattr(
-        "app.services.sms_service.send_via_eus",
-        AsyncMock(side_effect=EusSmsError("HTTP 500")),
-    )
-    gateway = AsyncMock(return_value={"ok": True, "gateway_token_id": 17})
-    monkeypatch.setattr("app.routers.ws.dispatch_sms", gateway)
-    ctx = SmsContext(1, ["eus", "gateway"], _cfg())
-    result = await send_sms(1, "+436601234", "Text", ctx=ctx)
-    assert result
-    assert result.provider == "gateway"
-    assert result.gateway_token_id == 17
-    gateway.assert_awaited_once()
-    assert ctx.providers_used == {"eus", "gateway"}
+async def test_send_sms_eus_unknown_response_does_not_fall_back(monkeypatch):
+    from tests.gateway_helpers import CaptureSocket, bind, cleanup
+    c, socket = bind(socket=CaptureSocket(reply=True))
+    monkeypatch.setattr("app.services.sms_service.send_via_eus", AsyncMock(side_effect=EusSmsError("HTTP 500")))
+    try:
+        result = await send_sms(1, "+436601234", "Text", ctx=SmsContext(1, ["eus", "gateway"], _cfg()))
+        assert not result and result.status == "uncertain"
+        assert not socket.sent
+    finally:
+        cleanup(c)
 
 
 class _Client:

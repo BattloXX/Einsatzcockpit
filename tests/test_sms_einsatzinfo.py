@@ -1,8 +1,9 @@
 """Tests fuer SMS-Einsatzinfo-Dienst und SMS-Gruppen-Modul."""
+
 from __future__ import annotations
 
-import os
 import asyncio
+import os
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -14,17 +15,25 @@ os.environ.setdefault("SECRET_KEY", "test-secret-key-fuer-tests-mindestens-32-ze
 os.environ.setdefault("DEBUG", "true")
 # ── render_template ────────────────────────────────────────────────────────────
 
+pytestmark = pytest.mark.usefixtures("sms_outbox_state")
+
+
 def test_render_template_basic():
     from app.services.sms_dispatch_service import render_template
-    result = render_template("Einsatz {stichwort}: {adresse}", {
-        "stichwort": "B2",
-        "adresse": "Hauptstrasse 1, Wolfurt",
-    })
+
+    result = render_template(
+        "Einsatz {stichwort}: {adresse}",
+        {
+            "stichwort": "B2",
+            "adresse": "Hauptstrasse 1, Wolfurt",
+        },
+    )
     assert result == "Einsatz B2: Hauptstrasse 1, Wolfurt"
 
 
 def test_render_template_all_placeholders():
     from app.services.sms_dispatch_service import render_template
+
     tpl = "{stichwort} {adresse} {ort} {meldung} {einsatzgrund} {datum} {zeit} {leitstellennummer}"
     ctx = {
         "stichwort": "T1",
@@ -47,10 +56,14 @@ def test_render_template_all_placeholders():
 def test_render_template_missing_key_is_empty():
     """Fehlende Platzhalter werden still durch leeren String ersetzt (kein KeyError)."""
     from app.services.sms_dispatch_service import render_template
-    result = render_template("Einsatz {stichwort}: {adresse} - {unbekannt}", {
-        "stichwort": "F2",
-        "adresse": "Testgasse 1",
-    })
+
+    result = render_template(
+        "Einsatz {stichwort}: {adresse} - {unbekannt}",
+        {
+            "stichwort": "F2",
+            "adresse": "Testgasse 1",
+        },
+    )
     assert "F2" in result
     assert "{unbekannt}" not in result  # kein KeyError, leerer String statt Platzhalter
     assert "Testgasse 1" in result
@@ -58,6 +71,7 @@ def test_render_template_missing_key_is_empty():
 
 def test_default_template_has_placeholders():
     from app.services.sms_dispatch_service import default_einsatzinfo_template
+
     tpl = default_einsatzinfo_template()
     assert "{stichwort}" in tpl
     assert "{adresse}" in tpl or "{meldung}" in tpl
@@ -67,8 +81,8 @@ def test_default_template_has_placeholders():
 @pytest.mark.asyncio
 async def test_nachversand_sendet_offene_empfaenger_nur_einmal(monkeypatch):
     """Gleichzeitiger Connect- und Loop-Trigger duerfen nicht doppelt senden."""
-    from app.db import SessionLocal
     from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
     from app.models.sms import SmsLog, SmsLogRecipient
     from app.services import sms_dispatch_service as svc
     from app.services.sms_service import SmsContext
@@ -77,36 +91,49 @@ async def test_nachversand_sendet_offene_empfaenger_nur_einmal(monkeypatch):
     set_tenant_context(db, None)
     try:
         now = datetime.now(UTC).replace(tzinfo=None)
-        log = SmsLog(org_id=1, sent_at=now, source="alarm", alarm_type_code="B2",
-                     text="Einsatz B2", recipient_count=1, success_count=0)
-        db.add(log); db.flush()
+        log = SmsLog(
+            org_id=1,
+            sent_at=now,
+            source="alarm",
+            alarm_type_code="B2",
+            text="Einsatz B2",
+            recipient_count=1,
+            success_count=0,
+        )
+        db.add(log)
+        db.flush()
         log_id = log.id
-        db.add(SmsLogRecipient(sms_log_id=log_id, phone_number="+43660123456", name="Test",
-                               success=False, sent_at=now, provider="ausstehend"))
+        db.add(
+            SmsLogRecipient(
+                sms_log_id=log_id,
+                phone_number="+43660123456",
+                name="Test",
+                success=False,
+                sent_at=now,
+                provider="ausstehend",
+            )
+        )
         db.commit()
     finally:
         db.close()
 
-    jobs_seen: list[list[tuple[str, str]]] = []
+    from tests.gateway_helpers import CaptureSocket, bind, cleanup
 
-    async def fake_send(_org_id, jobs, ctx=None, on_result=None):
-        jobs_seen.append(jobs)
-        results = [svc.SmsSendResult(phone, True, datetime.now(UTC).replace(tzinfo=None), "gateway")
-                   for phone, *_ in jobs]
-        for result in results:
-            await on_result(result)
-        return results
+    c, socket = bind(socket=CaptureSocket(reply=True))
+    monkeypatch.setattr("app.services.sms_service.resolve_sms_config", lambda *_args: SmsContext(1, ["gateway"], None))
+    try:
+        await asyncio.gather(svc.retry_pending_einsatzinfo(1), svc.retry_pending_einsatzinfo(1))
+        await svc.retry_pending_einsatzinfo(1)
+        assert len(socket.sent) == 1
+        assert socket.sent[0]["text"] == "Einsatz B2"
+        from app.services.sms_outbox import Job, database
 
-    monkeypatch.setattr("app.services.sms_service.sms_available", lambda *_args: True)
-    monkeypatch.setattr("app.services.sms_service.resolve_sms_config",
-                        lambda *_args: SmsContext(1, ["gateway"], None))
-    monkeypatch.setattr(svc, "send_bulk_detailed", fake_send)
-    await asyncio.gather(svc.retry_pending_einsatzinfo(1), svc.retry_pending_einsatzinfo(1))
-
-    assert len(jobs_seen) == 1
-    phone, text, job_id = jobs_seen[0][0]
-    assert (phone, text) == ("+43660123456", "[Nachgesendet] Einsatz B2")
-    assert job_id.startswith("alarm-") and job_id.removeprefix("alarm-").isdigit()
+        with database() as outbox_db:
+            job = outbox_db.query(Job).filter(Job.org_id == 1).one()
+            assert job.status == "sent"
+            assert job.job_key.startswith(f"alarm:{log_id}:")  # ohne incident_id: Quelle/Log/Telefon
+    finally:
+        cleanup(c)
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
@@ -118,8 +145,8 @@ async def test_nachversand_sendet_offene_empfaenger_nur_einmal(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_nachversand_verwirft_abgelaufene_empfaenger(monkeypatch):
-    from app.db import SessionLocal
     from app.core.tenant import set_tenant_context
+    from app.db import SessionLocal
     from app.models.sms import SmsLog, SmsLogRecipient
     from app.services import sms_dispatch_service as svc
 
@@ -127,12 +154,28 @@ async def test_nachversand_verwirft_abgelaufene_empfaenger(monkeypatch):
     set_tenant_context(db, None)
     try:
         old = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=61)
-        log = SmsLog(org_id=1, sent_at=old, source="alarm", alarm_type_code="B2",
-                     text="Einsatz B2", recipient_count=1, success_count=0)
-        db.add(log); db.flush()
+        log = SmsLog(
+            org_id=1,
+            sent_at=old,
+            source="alarm",
+            alarm_type_code="B2",
+            text="Einsatz B2",
+            recipient_count=1,
+            success_count=0,
+        )
+        db.add(log)
+        db.flush()
         log_id = log.id
-        db.add(SmsLogRecipient(sms_log_id=log_id, phone_number="+43660123457", name="Alt",
-                               success=False, sent_at=old, provider="ausstehend"))
+        db.add(
+            SmsLogRecipient(
+                sms_log_id=log_id,
+                phone_number="+43660123457",
+                name="Alt",
+                success=False,
+                sent_at=old,
+                provider="ausstehend",
+            )
+        )
         db.commit()
     finally:
         db.close()
@@ -152,6 +195,7 @@ async def test_nachversand_verwirft_abgelaufene_empfaenger(monkeypatch):
 
 
 # ── collect_einsatzinfo_recipients ─────────────────────────────────────────────
+
 
 def _make_member(mid, phone="+43660123456", active=True):
     m = MagicMock()
@@ -201,7 +245,6 @@ def test_collect_deduplicates_by_phone(monkeypatch):
     from app.services.sms_dispatch_service import collect_einsatzinfo_recipients
 
     phone = "+4366012345678"
-    member1 = _make_member(1, phone)
     member2 = _make_member(2, phone)  # gleiche Nummer
 
     grp = _make_group(10, [phone])
@@ -291,6 +334,7 @@ def test_collect_group_expansion():
 
 # ── dispatch_einsatzinfo Gating ────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_dispatch_skips_when_disabled():
     """Kein Versand wenn einsatzinfo_sms_enabled == False."""
@@ -303,15 +347,20 @@ async def test_dispatch_skips_when_disabled():
     mock_db.query.return_value.filter.return_value.first.return_value = org_settings
 
     # Gateway verbunden simulieren: patch an der Quelle (app.routers.ws)
-    with patch("app.routers.ws.is_sms_gateway_connected", return_value=True), \
-         patch("app.services.sms_dispatch_service.SessionLocal", return_value=mock_db), \
-         patch("app.services.sms_dispatch_service.set_tenant_context"), \
-         patch("app.services.sms_dispatch_service.send_bulk_detailed", new_callable=AsyncMock) as mock_send, \
-         patch("app.services.sms_dispatch_service.write_audit"):
+    with (
+        patch("app.routers.ws.is_sms_gateway_connected", return_value=True),
+        patch("app.services.sms_dispatch_service.SessionLocal", return_value=mock_db),
+        patch("app.services.sms_dispatch_service.set_tenant_context"),
+        patch("app.services.sms_dispatch_service.send_bulk_detailed", new_callable=AsyncMock) as mock_send,
+        patch("app.services.sms_dispatch_service.write_audit"),
+    ):
         await svc.dispatch_einsatzinfo(
-            org_id=1, alarm_type_code="B2",
-            address="Teststr. 1", ort="Wolfurt",
-            meldung="Test", einsatzgrund=None,
+            org_id=1,
+            alarm_type_code="B2",
+            address="Teststr. 1",
+            ort="Wolfurt",
+            meldung="Test",
+            einsatzgrund=None,
             is_exercise=False,
         )
         mock_send.assert_not_called()
@@ -329,15 +378,20 @@ async def test_dispatch_skips_exercise_when_not_configured():
     mock_db = MagicMock()
     mock_db.query.return_value.filter.return_value.first.return_value = org_settings
 
-    with patch("app.routers.ws.is_sms_gateway_connected", return_value=True), \
-         patch("app.services.sms_dispatch_service.SessionLocal", return_value=mock_db), \
-         patch("app.services.sms_dispatch_service.set_tenant_context"), \
-         patch("app.services.sms_dispatch_service.send_bulk_detailed", new_callable=AsyncMock) as mock_send, \
-         patch("app.services.sms_dispatch_service.write_audit"):
+    with (
+        patch("app.routers.ws.is_sms_gateway_connected", return_value=True),
+        patch("app.services.sms_dispatch_service.SessionLocal", return_value=mock_db),
+        patch("app.services.sms_dispatch_service.set_tenant_context"),
+        patch("app.services.sms_dispatch_service.send_bulk_detailed", new_callable=AsyncMock) as mock_send,
+        patch("app.services.sms_dispatch_service.write_audit"),
+    ):
         await svc.dispatch_einsatzinfo(
-            org_id=1, alarm_type_code="T1",
-            address="Test", ort="Wolfurt",
-            meldung=None, einsatzgrund=None,
+            org_id=1,
+            alarm_type_code="T1",
+            address="Test",
+            ort="Wolfurt",
+            meldung=None,
+            einsatzgrund=None,
             is_exercise=True,
         )
         mock_send.assert_not_called()
@@ -349,13 +403,18 @@ async def test_dispatch_sends_nothing_without_gateway():
     from app.services import sms_dispatch_service as svc
 
     # Die Empfaenger werden inzwischen fuer den Nachversand persistent vorbereitet.
-    with patch("app.routers.ws.is_sms_gateway_connected", return_value=False), \
-         patch("app.services.sms_dispatch_service.send_bulk_detailed", new_callable=AsyncMock) as mock_send, \
-         patch("app.services.sms_dispatch_service.SessionLocal") as mock_session:
+    with (
+        patch("app.routers.ws.is_sms_gateway_connected", return_value=False),
+        patch("app.services.sms_dispatch_service.send_bulk_detailed", new_callable=AsyncMock) as mock_send,
+        patch("app.services.sms_dispatch_service.SessionLocal") as mock_session,
+    ):
         await svc.dispatch_einsatzinfo(
-            org_id=1, alarm_type_code="F1",
-            address="Test", ort="Wolfurt",
-            meldung=None, einsatzgrund=None,
+            org_id=1,
+            alarm_type_code="F1",
+            address="Test",
+            ort="Wolfurt",
+            meldung=None,
+            einsatzgrund=None,
             is_exercise=False,
         )
         mock_send.assert_not_called()
@@ -397,23 +456,34 @@ async def test_dispatch_exercise_sends_when_configured():
     sent_texts: list[str] = []
 
     async def fake_send_bulk(org_id, jobs, ctx=None):
-        for _, text, _job_id in jobs:
+        for _, text, *_ in jobs:
             sent_texts.append(text)
-        return [SimpleNamespace(phone_number=phone, success=True, sent_at=MagicMock())
-                for phone, *_ in jobs]
+        return [
+            SimpleNamespace(phone_number=phone, success=True, sent_at=MagicMock(), job_id=None) for phone, *_ in jobs
+        ]
 
-    with patch("app.routers.ws.is_sms_gateway_connected", return_value=True), \
-         patch("app.services.sms_dispatch_service.SessionLocal", return_value=mock_db), \
-         patch("app.services.sms_dispatch_service.set_tenant_context"), \
-         patch("app.services.sms_dispatch_service.collect_einsatzinfo_recipients",
-               return_value={"+4366099999": member}), \
-         patch("app.services.sms_dispatch_service.send_bulk_detailed", side_effect=fake_send_bulk), \
-         patch("app.services.sms_dispatch_service.write_audit"), \
-         patch("app.services.sms_dispatch_service.SmsLog"):
+    with (
+        patch("app.routers.ws.is_sms_gateway_connected", return_value=True),
+        patch("app.services.sms_dispatch_service.SessionLocal", return_value=mock_db),
+        patch("app.services.sms_dispatch_service.set_tenant_context"),
+        patch("app.services.sms_dispatch_service.collect_einsatzinfo_recipients", return_value={"+4366099999": member}),
+        patch("app.services.sms_dispatch_service.send_bulk_detailed", side_effect=fake_send_bulk),
+        patch("app.services.sms_dispatch_service.write_audit"),
+        patch(
+            "app.services.sms_outbox.queue_log",
+            side_effect=lambda db, log, recipients, ctx: [(phone, log.text, "render-test", 1) for phone in recipients],
+        ),
+        patch("app.services.sms_dispatch_service.SmsLog") as mock_log,
+    ):
+        mock_log.side_effect = lambda **kwargs: SimpleNamespace(id=1, **kwargs)
+
         await svc.dispatch_einsatzinfo(
-            org_id=1, alarm_type_code="T1",
-            address="Hauptstr. 1", ort="Wolfurt",
-            meldung="Test", einsatzgrund=None,
+            org_id=1,
+            alarm_type_code="T1",
+            address="Hauptstr. 1",
+            ort="Wolfurt",
+            meldung="Test",
+            einsatzgrund=None,
             is_exercise=True,
         )
 
@@ -430,9 +500,7 @@ async def test_dispatch_renders_leitstellennummer():
     org_settings = MagicMock()
     org_settings.einsatzinfo_sms_enabled = True
     org_settings.einsatzinfo_sms_send_exercise = False
-    org_settings.einsatzinfo_sms_template = (
-        "Einsatz {stichwort} Nr {leitstellennummer}: {adresse}"
-    )
+    org_settings.einsatzinfo_sms_template = "Einsatz {stichwort} Nr {leitstellennummer}: {adresse}"
 
     alarm_type = MagicMock()
     alarm_type.id = 42
@@ -455,29 +523,42 @@ async def test_dispatch_renders_leitstellennummer():
     sent_texts: list[str] = []
 
     async def fake_send_bulk(org_id, jobs, ctx=None):
-        sent_texts.extend(text for _, text, _job_id in jobs)
-        return [SimpleNamespace(phone_number=phone, success=True, sent_at=MagicMock())
-            for phone, *_ in jobs]
+        sent_texts.extend(text for _, text, *_ in jobs)
+        return [
+            SimpleNamespace(phone_number=phone, success=True, sent_at=MagicMock(), job_id=None) for phone, *_ in jobs
+        ]
 
-    with patch("app.routers.ws.is_sms_gateway_connected", return_value=True), \
-         patch("app.services.sms_dispatch_service.SessionLocal", return_value=mock_db), \
-         patch("app.services.sms_dispatch_service.set_tenant_context"), \
-         patch("app.services.sms_dispatch_service.collect_einsatzinfo_recipients",
-               return_value={"+4366099999": member}), \
-         patch("app.services.sms_dispatch_service.send_bulk_detailed", side_effect=fake_send_bulk), \
-         patch("app.services.sms_dispatch_service.write_audit"), \
-         patch("app.services.sms_dispatch_service.SmsLog"):
+    with (
+        patch("app.routers.ws.is_sms_gateway_connected", return_value=True),
+        patch("app.services.sms_dispatch_service.SessionLocal", return_value=mock_db),
+        patch("app.services.sms_dispatch_service.set_tenant_context"),
+        patch("app.services.sms_dispatch_service.collect_einsatzinfo_recipients", return_value={"+4366099999": member}),
+        patch("app.services.sms_dispatch_service.send_bulk_detailed", side_effect=fake_send_bulk),
+        patch("app.services.sms_dispatch_service.write_audit"),
+        patch(
+            "app.services.sms_outbox.queue_log",
+            side_effect=lambda db, log, recipients, ctx: [(phone, log.text, "render-test", 1) for phone in recipients],
+        ),
+        patch("app.services.sms_dispatch_service.SmsLog") as mock_log,
+    ):
+        mock_log.side_effect = lambda **kwargs: SimpleNamespace(id=1, **kwargs)
+
         await svc.dispatch_einsatzinfo(
-            org_id=1, alarm_type_code="T1",
-            address="Hauptstr. 1", ort="Wolfurt",
-            meldung="Test", einsatzgrund=None,
-            is_exercise=False, leitstellennummer="fu26303655",
+            org_id=1,
+            alarm_type_code="T1",
+            address="Hauptstr. 1",
+            ort="Wolfurt",
+            meldung="Test",
+            einsatzgrund=None,
+            is_exercise=False,
+            leitstellennummer="fu26303655",
         )
 
     assert any("fu26303655" in text for text in sent_texts)
 
 
 # ── send_bulk ──────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_send_bulk_counts_successes():

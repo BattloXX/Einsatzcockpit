@@ -6,12 +6,13 @@ Erweiterungen:
   3. SMS-Empfang (SmsInbox) + Weiterleitungsregeln nach Absendernummer
      (Teams-Webhook und/oder SMS an Gruppen/Mitglieder/Ad-hoc-Nummern)
 """
+
 from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import JSON, BigInteger, Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.tenant import TenantScoped
@@ -24,6 +25,7 @@ if TYPE_CHECKING:
 
 class SmsGroup(TenantScoped, Base):
     """Benannte Gruppe von Mitgliedern fuer den SMS-Versand."""
+
     __tablename__ = "sms_group"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
@@ -40,14 +42,13 @@ class SmsGroup(TenantScoped, Base):
 
 class SmsGroupMember(Base):
     """Assoziation: Mitglied ist Mitglied einer SMS-Gruppe."""
+
     __tablename__ = "sms_group_member"
 
     sms_group_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("sms_group.id", ondelete="CASCADE"), primary_key=True
     )
-    member_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("member.id", ondelete="CASCADE"), primary_key=True
-    )
+    member_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("member.id", ondelete="CASCADE"), primary_key=True)
 
     group: Mapped[SmsGroup] = relationship(back_populates="members")
     member: Mapped[Member] = relationship(lazy="joined")
@@ -61,6 +62,7 @@ class SmsEinsatzinfoRecipient(TenantScoped, Base):
 
     Genau eines von group_id / member_id ist gesetzt.
     """
+
     __tablename__ = "sms_einsatzinfo_recipient"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
@@ -87,6 +89,7 @@ class SmsEinsatzinfoRecipient(TenantScoped, Base):
 
 class SmsLog(TenantScoped, Base):
     """Protokolleintrag fuer jeden SMS-Versand (automatisch oder manuell)."""
+
     __tablename__ = "sms_log"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
@@ -109,12 +112,8 @@ class SmsLog(TenantScoped, Base):
         BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
     )
 
-    triggered_by: Mapped[User | None] = relationship(
-        "User", foreign_keys=[triggered_by_user_id], lazy="joined"
-    )
-    recipients: Mapped[list[SmsLogRecipient]] = relationship(
-        back_populates="sms_log", cascade="all, delete-orphan"
-    )
+    triggered_by: Mapped[User | None] = relationship("User", foreign_keys=[triggered_by_user_id], lazy="joined")
+    recipients: Mapped[list[SmsLogRecipient]] = relationship(back_populates="sms_log", cascade="all, delete-orphan")
 
     @property
     def is_running(self) -> bool:
@@ -123,13 +122,12 @@ class SmsLog(TenantScoped, Base):
 
 class SmsLogRecipient(Base):
     """Snapshot eines einzelnen Versandversuchs innerhalb eines SMS-Protokolls."""
+
     __tablename__ = "sms_log_recipient"
     __table_args__ = (Index("ix_sms_log_recipient_sms_log_id", "sms_log_id"),)
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    sms_log_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("sms_log.id", ondelete="CASCADE"), nullable=False
-    )
+    sms_log_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("sms_log.id", ondelete="CASCADE"), nullable=False)
     member_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("member.id", ondelete="SET NULL"), nullable=True
     )
@@ -144,6 +142,8 @@ class SmsLogRecipient(Base):
     provider: Mapped[str | None] = mapped_column(String(20), nullable=True)
     gateway_label: Mapped[str | None] = mapped_column(String(100), nullable=True)
     lease_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    dispatch_job_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    dispatch_status: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     sms_log: Mapped[SmsLog] = relationship(back_populates="recipients")
     member: Mapped[Member | None] = relationship(lazy="joined")
@@ -153,6 +153,7 @@ class SmsForwardRule(TenantScoped, Base):
     """Verarbeitungsregel fuer empfangene SMS: matcht auf Absendernummer,
     leitet an Teams-Webhook und/oder SMS-Ziele (Gruppen/Mitglieder/Ad-hoc) weiter.
     """
+
     __tablename__ = "sms_forward_rule"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
@@ -188,14 +189,13 @@ class SmsForwardRule(TenantScoped, Base):
 
 class SmsForwardRuleGroup(Base):
     """Assoziation: Weiterleitungsregel -> SMS-Gruppe."""
+
     __tablename__ = "sms_forward_rule_group"
 
     rule_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("sms_forward_rule.id", ondelete="CASCADE"), primary_key=True
     )
-    group_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("sms_group.id", ondelete="CASCADE"), primary_key=True
-    )
+    group_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("sms_group.id", ondelete="CASCADE"), primary_key=True)
 
     rule: Mapped[SmsForwardRule] = relationship(back_populates="groups")
     group: Mapped[SmsGroup] = relationship(lazy="joined")
@@ -203,14 +203,13 @@ class SmsForwardRuleGroup(Base):
 
 class SmsForwardRuleMember(Base):
     """Assoziation: Weiterleitungsregel -> einzelnes Mitglied."""
+
     __tablename__ = "sms_forward_rule_member"
 
     rule_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("sms_forward_rule.id", ondelete="CASCADE"), primary_key=True
     )
-    member_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("member.id", ondelete="CASCADE"), primary_key=True
-    )
+    member_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("member.id", ondelete="CASCADE"), primary_key=True)
 
     rule: Mapped[SmsForwardRule] = relationship(back_populates="members")
     member: Mapped[Member] = relationship(lazy="joined")
@@ -218,13 +217,12 @@ class SmsForwardRuleMember(Base):
 
 class SmsInbox(TenantScoped, Base):
     """Protokolleintrag fuer jede ueber das Gateway empfangene SMS."""
+
     __tablename__ = "sms_inbox"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     # org_id via TenantScoped
-    received_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(UTC), index=True
-    )
+    received_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), index=True)
     from_number: Mapped[str] = mapped_column(String(30), nullable=False)
     text: Mapped[str] = mapped_column(Text, nullable=False)
     gateway_token_id: Mapped[int | None] = mapped_column(
@@ -238,3 +236,70 @@ class SmsInbox(TenantScoped, Base):
     forward_summary: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     matched_rule: Mapped[SmsForwardRule | None] = relationship(lazy="joined")
+
+
+class SmsDispatchJob(TenantScoped, Base):
+    """Dauerhafter logischer SMS-Auftrag; finale Zustaende werden niemals automatisch geoeffnet."""
+
+    __tablename__ = "sms_dispatch_job"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    org_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("fire_dept.id", ondelete="CASCADE"), nullable=False)
+    job_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    phone: Mapped[str] = mapped_column(String(40), nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="queued")
+    generation: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    claim_token: Mapped[str | None] = mapped_column(String(32))
+    claimed_by: Mapped[str | None] = mapped_column(String(96))
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime)
+    next_attempt_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    providers: Mapped[list] = mapped_column(JSON, nullable=False)
+    provider_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    provider: Mapped[str | None] = mapped_column(String(20))
+    preferred_gateway_id: Mapped[int | None] = mapped_column(BigInteger)
+    gateway_id: Mapped[int | None] = mapped_column(BigInteger)
+    connection_id: Mapped[str | None] = mapped_column(String(32))
+    protocol: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    may_have_sent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    received_at: Mapped[datetime | None] = mapped_column(DateTime)
+    attempted_at: Mapped[datetime | None] = mapped_column(DateTime)
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime)
+    delivery_status: Mapped[str] = mapped_column(String(20), nullable=False, default="unverified")
+    error: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime)
+    __table_args__ = (
+        UniqueConstraint("org_id", "job_key", name="uq_sms_dispatch_job_key"),
+        Index("ix_sms_dispatch_due", "status", "next_attempt_at", "lease_until"),
+        Index("ix_sms_dispatch_gateway", "org_id", "gateway_id", "status"),
+    )
+
+
+class SmsDispatchAttempt(TenantScoped, Base):
+    """Versuchsgeneration mit beweisbarer Grenze vor einem externen Versand."""
+
+    __tablename__ = "sms_dispatch_attempt"
+    job_id: Mapped[str] = mapped_column(
+        String(32), ForeignKey("sms_dispatch_job.id", ondelete="CASCADE"), primary_key=True
+    )
+    generation: Mapped[int] = mapped_column(Integer, primary_key=True)
+    org_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("fire_dept.id", ondelete="CASCADE"), nullable=False)
+    provider: Mapped[str | None] = mapped_column(String(20))
+    gateway_id: Mapped[int | None] = mapped_column(BigInteger)
+    protocol: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    route_id: Mapped[str | None] = mapped_column(String(32))
+    grant_route_id: Mapped[str | None] = mapped_column(String(32))
+    outcome: Mapped[str] = mapped_column(String(20), nullable=False, default="claimed")
+    error: Mapped[str | None] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class SmsDispatchCursor(TenantScoped, Base):
+    """Orgweite Auswahl/Rotation, auch fuer parallel anfragende Worker."""
+
+    __tablename__ = "sms_dispatch_cursor"
+    org_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("fire_dept.id", ondelete="CASCADE"), primary_key=True)
+    last_gateway_id: Mapped[int | None] = mapped_column(BigInteger)

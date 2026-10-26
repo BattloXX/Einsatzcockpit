@@ -508,10 +508,22 @@ async def sms_gateway_ws(websocket: WebSocket):
                 await websocket.send_text(json.dumps({"type": "pong"}))
             elif msg_type == "pong":
                 pass
-            elif msg_type == "sms.result":
-                job_id = msg.get("id")
-                if isinstance(job_id, str):
-                    await asyncio.to_thread(gateway_routing.record_result, connection, token.token_hash, job_id, msg)
+            elif msg_type == "hello":
+                from app.services import sms_outbox
+                controls, abandoned = await asyncio.to_thread(sms_outbox.hello, connection, token.token_hash, msg)
+                await sms_outbox.notify(controls)
+                for notice in abandoned:
+                    await websocket.send_json(notice)
+            elif msg_type in ("sms.ack", "sms.attempt", "sms.result"):
+                from app.services import sms_outbox
+                applied, controls, status = await asyncio.to_thread(sms_outbox.event, connection, token.token_hash, msg)
+                await sms_outbox.notify(controls)
+                identity = sms_outbox.parse_wire(msg)
+                if applied and identity:
+                    await asyncio.to_thread(sms_outbox.project, org_id, identity[0])
+                if msg_type == "sms.result" and status is not None:
+                    await websocket.send_json({"type": "sms.result.ack", "id": msg.get("id"),
+                                               "status": status, "applied": applied})
             elif msg_type == "sms.received":
                 from_number = msg.get("from", "")
                 text = msg.get("text", "")
@@ -601,35 +613,20 @@ def connected_gateway_token_ids_ordered(org_id: int) -> list[int]:
     return sorted(connected_gateway_token_ids(org_id), key=lambda tid: (priorities.get(tid, 100), -tid))
 
 
-async def dispatch_sms(
-    org_id: int, job_id: str, to: str, text: str, timeout: float = 15.0,
-    preferred_gateway_token_id: int | None = None,
-) -> dict:
-    """Adressierte SMS-Zustellung, Ergebnis auch ueber Worker-/Redis-Grenzen."""
-    entries = await asyncio.to_thread(gateway_routing.targets, "sms", org_id)
-    priorities = await asyncio.to_thread(_load_gateway_priorities, org_id)
-    entries.sort(key=lambda c: priorities.get(c.gateway_id, _DEFAULT_GATEWAY_PRIORITY))
-    if not entries:
+async def dispatch_sms(org_id: int, job_id: str, to: str, text: str, timeout: float = 15.0,
+                       preferred_gateway_token_id: int | None = None) -> dict:
+    """Kompatible Gateway-API, Geschaeftszustand und Generation liegen in der SMS-Outbox."""
+    from app.services.sms_service import SmsContext, send_sms
+    if not is_sms_gateway_connected(org_id):
+        from app.services import sms_outbox
+        await asyncio.to_thread(sms_outbox.ensure, org_id, job_id, to, text, ["gateway"], preferred_gateway_token_id)
         raise RuntimeError(f"Kein SMS-Gateway fuer org_id={org_id} verbunden")
-    if preferred_gateway_token_id in {c.gateway_id for c in entries}:
-        entries.sort(key=lambda c: c.gateway_id != preferred_gateway_token_id)
-    else:
-        last = _sms_last_gateway.get(org_id)
-        start = next((i + 1 for i, c in enumerate(entries) if c.gateway_id == last), 0)
-        entries = entries[start:] + entries[:start]
-        _sms_last_gateway[org_id] = entries[0].gateway_id
-    for connection in entries:
-        item_id = await gateway_routing.send(connection,
-            {"type": "sms.send", "id": job_id, "to": to, "text": text}, ttl=timeout, job_key=job_id)
-        try:
-            result = await gateway_routing.wait_result(item_id, org_id, timeout)
-            return {**result, "gateway_token_id": connection.gateway_id}
-        except TimeoutError:
-            raise RuntimeError(f"SMS-Gateway Timeout fuer Job {job_id}") from None
-        except RuntimeError:
-            # Nur definitiv fehlgeschlagene Socket-Zustellung versucht ein anderes Geraet.
-            continue
-    raise RuntimeError(f"Kein erreichbares SMS-Gateway fuer org_id={org_id}")
+    result = await send_sms(org_id, to, text, timeout=timeout, ctx=SmsContext(org_id, ["gateway"], None),
+                            job_id=job_id, preferred_gateway_token_id=preferred_gateway_token_id)
+    if result.status not in ("sent", "failed"):
+        raise RuntimeError(f"SMS-Gateway Timeout oder unklarer Versand fuer Job {job_id}")
+    return {"ok": bool(result), "status": result.status, "job_id": result.job_id,
+            "gateway_token_id": result.gateway_token_id, "error": result.error}
 
 
 # ── Print & Alarm Gateway (ECPG) WebSocket ─────────────────────────────────────

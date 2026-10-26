@@ -939,9 +939,10 @@ async def sende_zugangs_sms(
     now = _now()
     result = None
     try:
-        result = await send_sms(lage.org_id, leader.phone_e164, text, timeout=15)
+        result = await send_sms(lage.org_id, leader.phone_e164, text, timeout=15, job_id=f"gk-versand:{row.id}")
         success = bool(getattr(result, "success", result is True))
-        status = "gesendet" if success else "fehlgeschlagen"
+        status = "gesendet" if success else "unklar" if getattr(result, "status", None) in (
+            "queued", "claimed", "dispatched", "acknowledged", "uncertain") else "fehlgeschlagen"
         error = None if success else _kurzer_fehler(None)
     except TimeoutError:
         success, status, error = False, "unklar", "Ergebnis unbekannt – bitte beim Gruppenkommandanten nachfragen"
@@ -964,6 +965,8 @@ async def sende_zugangs_sms(
             success=success,
             sent_at=now,
             provider=getattr(result, "provider", None),
+            dispatch_job_id=getattr(result, "job_id", None),
+            dispatch_status=getattr(result, "status", None),
         )
     )
     db.add(log)
@@ -1058,9 +1061,13 @@ async def sende_auto_sms(auftrag: AutoSmsAuftrag) -> None:
         chars, _encoding, segments = sms_laenge(text)
         now, result = _now(), None
         try:
-            result = await send_sms(auftrag.org_id, phone, text, timeout=15)
+            result = await send_sms(auftrag.org_id, phone, text, timeout=15, job_id=f"gk-versand:{row.id}")
             success = bool(getattr(result, "success", result is True))
             status, error = ("gesendet", None) if success else ("fehlgeschlagen", _kurzer_fehler(None))
+            if not success and getattr(result, "status", None) in (
+                "queued", "claimed", "dispatched", "acknowledged", "uncertain"
+            ):
+                status, error = "unklar", "Versandbestaetigung ausstehend oder Ergebnis unbekannt; nicht erneut senden"
         except TimeoutError:
             success, status, error = False, "unklar", "Ergebnis unbekannt – bitte beim Gruppenkommandanten nachfragen"
         except Exception:
@@ -1069,7 +1076,8 @@ async def sende_auto_sms(auftrag: AutoSmsAuftrag) -> None:
                      text=schwaerze_link(text), recipient_count=1,
                      success_count=1 if success else 0, provider=getattr(result, "provider", None), completed_at=now)
         log.recipients.append(SmsLogRecipient(phone_number=phone, name="Gruppenkommandant", success=success,
-                                              sent_at=now, provider=getattr(result, "provider", None)))
+            sent_at=now, provider=getattr(result, "provider", None), dispatch_job_id=getattr(result, "job_id", None),
+            dispatch_status=getattr(result, "status", None)))
         db.add(log)
         row.status, row.fehler, row.ziel_maske, row.zeichen, row.segmente, row.abgeschlossen_at = (
             status, error, _mask_phone(phone), chars, segments, now)

@@ -45,16 +45,21 @@ def _mock_dispatch(monkeypatch, outcomes: list[bool]) -> None:
 
     async def fake_bulk(org, jobs, ctx, callback):
         results = []
-        for (phone, _), success in zip(jobs, outcomes, strict=True):
+        for (phone, *_), success in zip(jobs, outcomes, strict=True):
             result = SmsSendResult(
-                phone, success, datetime.now(UTC).replace(tzinfo=None), "gateway", "Test",
+                phone,
+                success,
+                datetime.now(UTC).replace(tzinfo=None),
+                "gateway",
+                "Test",
             )
             await callback(result)
             results.append(result)
         return results
 
     monkeypatch.setattr(
-        "app.services.api_message_dispatch_loop._send_bulk_with_progress", fake_bulk,
+        "app.services.api_message_dispatch_loop._send_bulk_with_progress",
+        fake_bulk,
     )
 
 
@@ -85,7 +90,11 @@ def test_gateway_alle_empfaenger_erfolgreich(client, messaging_key, monkeypatch)
     [([True, False], "partial"), ([False, False], "failed")],
 )
 def test_gateway_versandfehler_bleiben_http_200(
-    client, messaging_key, monkeypatch, outcomes, expected_status,
+    client,
+    messaging_key,
+    monkeypatch,
+    outcomes,
+    expected_status,
 ):
     raw, _ = messaging_key
     _mock_dispatch(monkeypatch, outcomes)
@@ -136,9 +145,14 @@ def test_gateway_sync_empfaengerlimit(client, messaging_key, monkeypatch):
 def test_gateway_auth(client, setup_db):
     payload = {"to": "+436641234567", "body": "Probealarm"}
     assert client.post("/api/v1/sms/send", json=payload).status_code == 422
-    assert client.post(
-        "/api/v1/sms/send", json=payload, headers={"X-API-Key": "ungueltig"},
-    ).status_code == 401
+    assert (
+        client.post(
+            "/api/v1/sms/send",
+            json=payload,
+            headers={"X-API-Key": "ungueltig"},
+        ).status_code
+        == 401
+    )
     raw = generate_api_key()
     db = SessionLocal()
     set_tenant_context(db, None)
@@ -148,9 +162,14 @@ def test_gateway_auth(client, setup_db):
         db.commit()
     finally:
         db.close()
-    assert client.post(
-        "/api/v1/sms/send", json=payload, headers={"X-API-Key": raw},
-    ).status_code == 403
+    assert (
+        client.post(
+            "/api/v1/sms/send",
+            json=payload,
+            headers={"X-API-Key": raw},
+        ).status_code
+        == 403
+    )
 
 
 def test_gateway_provider_und_tageslimit(client, messaging_key, monkeypatch):
@@ -168,7 +187,9 @@ def test_gateway_provider_und_tageslimit(client, messaging_key, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_gateway_auftrag_wird_nicht_erneut_dispatcht(
-    client, messaging_key, monkeypatch,
+    client,
+    messaging_key,
+    monkeypatch,
 ):
     raw, _ = messaging_key
     _mock_dispatch(monkeypatch, [True])
@@ -180,3 +201,26 @@ async def test_gateway_auftrag_wird_nicht_erneut_dispatcht(
         assert await dispatch_once(db) == 0
     finally:
         db.close()
+
+
+@pytest.mark.parametrize("state", ["queued", "uncertain"])
+def test_gateway_native_pending_and_uncertain_are_not_success(client, messaging_key, monkeypatch, state):
+    from app.models.sms import SmsDispatchJob
+    from app.services.sms_service import SmsDeliveryResult
+
+    raw, org_id = messaging_key
+    monkeypatch.setattr("app.routers.api_messaging.sms_available", lambda *_: True)
+
+    async def send(org, phone, text, **kwargs):
+        with SessionLocal() as db:
+            set_tenant_context(db, None)
+            job = db.query(SmsDispatchJob).filter_by(org_id=org, job_key=kwargs["job_id"]).one()
+            job.status = state
+            db.commit()
+            return SmsDeliveryResult(False, job_id=job.id, status=state)
+
+    monkeypatch.setattr("app.services.sms_service.send_sms", send)
+    response = _post(client, raw)
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == ("pending" if state == "queued" else "uncertain")
+    assert response.json()["gesendet"] == 0

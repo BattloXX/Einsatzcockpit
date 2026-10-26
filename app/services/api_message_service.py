@@ -178,6 +178,11 @@ def create_message(
             max_attempts=1 if kanal == "sms" else 3,
         ))
     db.flush()
+    if kanal == "sms":
+        from app.services.api_message_dispatch_loop import queue_sms
+        queue_sms(db, message, db.query(ApiMessageRecipient).filter(
+            ApiMessageRecipient.org_id == api_key.org_id, ApiMessageRecipient.message_id == message.id,
+            ApiMessageRecipient.status == "queued").all())
     return message, False
 
 

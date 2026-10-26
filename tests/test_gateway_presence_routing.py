@@ -145,7 +145,7 @@ print(json.dumps(asyncio.run(run())),flush=True)
             process.stdin.flush()
             message = _recv(socket, {"sms": "sms.send", "linux": "print_job", "windows_agent": "job_available"}[kind])
             if kind == "sms":
-                socket.send_json({"type": "sms.result", "id": str(job_id), "ok": True})
+                socket.send_json({"type": "sms.result", "id": message["id"], "ok": True})
             elif kind == "linux":
                 socket.send_json({"type": "job_status", "payload": {"job_id": job_id, "status": "done"}})
             else:

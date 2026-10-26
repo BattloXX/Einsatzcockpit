@@ -14,7 +14,7 @@ from app.db import SessionLocal
 from app.models.incident import Incident, IncidentAlarmJob, IncidentLog
 
 logger = logging.getLogger("einsatzleiter.alarm_outbox")
-TERMINAL = {"sent", "suppressed", "failed"}
+TERMINAL = {"sent", "suppressed", "failed", "uncertain"}
 CHANNELS = ("sms", "push", "teams", "mail")
 _LEASE = timedelta(minutes=5)
 _running_incident_tasks: set[asyncio.Task] = set()
@@ -113,12 +113,14 @@ async def _send_sms(db: Session, incident: Incident, job: IncidentAlarmJob) -> t
         planspiel_run_id=incident.planspiel_run_id,
     )
     if result is None:
-        return "sent", None
-    if result.sent or result.handed_off:
+        return "uncertain", "keine Versandbestaetigung"
+    if result.status in ("pending", "uncertain", "failed"):
+        return "retry" if result.status == "pending" else result.status, result.reason
+    if result.sent:
         if result.reason:
             return "sent", result.reason
         return "sent", f"gesendet an {result.recipient_count}"
-    return "suppressed", result.reason
+    return ("retry" if result.handed_off else "suppressed"), result.reason
 
 
 async def _send_push(db: Session, incident: Incident, job: IncidentAlarmJob) -> tuple[str, str | None]:
@@ -218,9 +220,12 @@ async def _run_claimed(job_id: int) -> None:
         else:
             job.status = outcome
             job.last_error = reason
-            job.finished_at = _now()
+            job.finished_at = _now() if outcome in TERMINAL else None
+            if outcome == "retry":
+                # Nur den persistenten Status abgleichen, keine neue SMS erzeugen.
+                job.next_attempt_at = _now() + timedelta(seconds=10)
         job.lease_until = None
-        if job.channel == "sms":
+        if job.channel == "sms" and job.status in TERMINAL:
             sms_text = "Alarmierung SMS: gesendet"
             if job.status == "sent" and job.last_error:
                 sms_text += f" ({job.last_error})"
@@ -228,7 +233,7 @@ async def _run_claimed(job_id: int) -> None:
                 incident_id=incident.id, author_name="System",
                 level="info" if job.status == "sent" else "warning",
                 text=sms_text if job.status == "sent"
-                else f"Alarmierung SMS uebersprungen: {job.last_error}",
+                else f"Alarmierung SMS {job.status}: {job.last_error or 'keine Annahmebestaetigung'}",
             ))
         if job.channel == "teams":
             db.add(IncidentLog(

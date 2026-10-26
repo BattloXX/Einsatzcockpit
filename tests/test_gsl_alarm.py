@@ -4,7 +4,6 @@ Lage — unabhaengig von der stichwortbezogenen Einsatzinfo. Muster: test_sms_ei
 from __future__ import annotations
 
 import os
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -63,70 +62,43 @@ async def test_dispatch_gsl_alarm_skips_exercise_when_not_configured():
 
 
 @pytest.mark.asyncio
-async def test_dispatch_gsl_alarm_sends_default_text_and_logs():
+@pytest.mark.parametrize(("custom", "exercise", "expected"), [
+    (None, False, "Geraetehaus"),
+    ("Achtung: {lage} - alle einruecken!", True, "[UEBUNG] Achtung: Waldbrand Bregenzerwald - alle einruecken!"),
+])
+async def test_gsl_alarm_persists_and_confirms_native_sms(monkeypatch, sms_outbox_state, custom, exercise, expected):
+    from app.models.master import Member, OrgSettings
+    from app.models.sms import SmsLog
     from app.services import sms_dispatch_service as svc
-
-    org_settings = MagicMock()
-    org_settings.gsl_alarm_enabled = True
-    org_settings.gsl_alarm_text = None
-
-    member = MagicMock()
-    mock_db = MagicMock()
-    mock_db.query.return_value.filter.return_value.first.return_value = org_settings
-
-    sent_texts: list[str] = []
-
-    async def fake_send_bulk(org_id, jobs, ctx=None):
-        for _, text in jobs:
-            sent_texts.append(text)
-        return [SimpleNamespace(phone_number=phone, success=True, sent_at=MagicMock())
-                for phone, _ in jobs]
-
-    with patch("app.routers.ws.is_sms_gateway_connected", return_value=True), \
-         patch("app.services.sms_dispatch_service.SessionLocal", return_value=mock_db), \
-         patch("app.services.sms_dispatch_service.set_tenant_context"), \
-         patch("app.services.sms_dispatch_service.collect_einsatzinfo_recipients",
-               return_value={"+4366099999": member}), \
-         patch("app.services.sms_dispatch_service.send_bulk_detailed", side_effect=fake_send_bulk), \
-         patch("app.services.sms_dispatch_service.write_audit"), \
-         patch("app.services.sms_dispatch_service.SmsLog"):
-        await svc.dispatch_gsl_alarm(org_id=1, lage_name="Lage Test", is_exercise=False)
-
-    assert len(sent_texts) == 1
-    assert "Geraetehaus" in sent_texts[0]
-
-
-@pytest.mark.asyncio
-async def test_dispatch_gsl_alarm_custom_text_with_lage_placeholder():
-    from app.services import sms_dispatch_service as svc
-
-    org_settings = MagicMock()
-    org_settings.gsl_alarm_enabled = True
-    org_settings.gsl_alarm_text = "Achtung: {lage} - alle einruecken!"
-
-    member = MagicMock()
-    mock_db = MagicMock()
-    mock_db.query.return_value.filter.return_value.first.return_value = org_settings
-
-    sent_texts: list[str] = []
-
-    async def fake_send_bulk(org_id, jobs, ctx=None):
-        for _, text in jobs:
-            sent_texts.append(text)
-        return [SimpleNamespace(phone_number=phone, success=True, sent_at=MagicMock())
-                for phone, _ in jobs]
-
-    with patch("app.routers.ws.is_sms_gateway_connected", return_value=True), \
-         patch("app.services.sms_dispatch_service.SessionLocal", return_value=mock_db), \
-         patch("app.services.sms_dispatch_service.set_tenant_context"), \
-         patch("app.services.sms_dispatch_service.collect_einsatzinfo_recipients",
-               return_value={"+4366099999": member}), \
-         patch("app.services.sms_dispatch_service.send_bulk_detailed", side_effect=fake_send_bulk), \
-         patch("app.services.sms_dispatch_service.write_audit"), \
-         patch("app.services.sms_dispatch_service.SmsLog"):
-        await svc.dispatch_gsl_alarm(org_id=1, lage_name="Waldbrand Bregenzerwald", is_exercise=True)
-
-    assert sent_texts == ["[UEBUNG] Achtung: Waldbrand Bregenzerwald - alle einruecken!"]
+    from app.services.sms_outbox import database
+    from tests.gateway_helpers import CaptureSocket, bind, cleanup
+    c, socket = bind(socket=CaptureSocket(reply=True))
+    with database() as db:
+        cfg = db.query(OrgSettings).filter_by(org_id=1).first()
+        if cfg is None:
+            cfg = OrgSettings(org_id=1)
+            db.add(cfg)
+        previous = bool(cfg.gsl_alarm_enabled), cfg.gsl_alarm_text
+        cfg.gsl_alarm_enabled, cfg.gsl_alarm_text = True, custom
+        member = Member(org_id=1, firstname="SMS", lastname="Test", phone="+4366099999", active=True)
+        db.add(member)
+        db.commit()
+        db.refresh(member)
+        db.expunge(member)
+    monkeypatch.setattr(svc, "collect_einsatzinfo_recipients", lambda *args, **kwargs: {member.phone: member})
+    monkeypatch.setattr("app.services.exercise_guard.darf_extern", lambda *args, **kwargs: True)
+    try:
+        await svc.dispatch_gsl_alarm(1, "Waldbrand Bregenzerwald", exercise)
+        assert len(socket.sent) == 1 and expected in socket.sent[0]["text"]
+        with database() as db:
+            log = db.query(SmsLog).filter_by(org_id=1, source="gsl_alarm").order_by(SmsLog.id.desc()).first()
+            assert log.success_count == 1 and log.completed_at is not None
+    finally:
+        cleanup(c)
+        with database() as db:
+            cfg = db.query(OrgSettings).filter_by(org_id=1).one()
+            cfg.gsl_alarm_enabled, cfg.gsl_alarm_text = previous
+            db.commit()
 
 
 # ── post_gsl_alarm_card (Teams) ───────────────────────────────────────────────

@@ -317,6 +317,7 @@ class SmsGatewayToken(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    sms_protocol: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     connection_token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     connection_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     worker_id: Mapped[str | None] = mapped_column(String(96), nullable=True)

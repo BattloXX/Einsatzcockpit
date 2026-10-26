@@ -1,4 +1,5 @@
 """EUS Message Send API: Authentifizierung und SMS-Versand."""
+
 from __future__ import annotations
 
 import asyncio
@@ -15,7 +16,11 @@ logger = logging.getLogger("einsatzleiter.sms.eus")
 
 
 class EusSmsError(RuntimeError):
-    """EUS-Token-Erwerb oder SMS-Versand ist fehlgeschlagen."""
+    """Fehler mit expliziter Aussage, ob nachweislich kein SMS-Aufruf angenommen wurde."""
+
+    def __init__(self, message: str, *, safe_not_sent: bool = False):
+        super().__init__(message)
+        self.safe_not_sent = safe_not_sent
 
 
 @dataclass(frozen=True)
@@ -61,13 +66,17 @@ def normalize_base_url(raw: str | None) -> str:
         or parsed.username
         or parsed.password
     ):
-        raise EusSmsError("Ungueltige EUS-Serveradresse")
+        raise EusSmsError("Ungueltige EUS-Serveradresse", safe_not_sent=True)
     return value
 
 
 async def _acquire_token(
-    org_id: int, base_url: str, client_id: str, client_secret: str,
-    timeout: int, force: bool = False,
+    org_id: int,
+    base_url: str,
+    client_id: str,
+    client_secret: str,
+    timeout: int,
+    force: bool = False,
 ) -> str:
     now = time.time()
     vorheriger_cache = _token_cache.get(org_id)
@@ -84,19 +93,25 @@ async def _acquire_token(
                 return cached[0]
 
         client = await _get_http_client()
-        response = await client.post(
-            f"{base_url}/oauthapi/login",
-            data={"grant_type": "client_credentials", "client_id": client_id,
-                  "client_secret": client_secret},
-            timeout=timeout,
-        )
+        try:
+            response = await client.post(
+                f"{base_url}/oauthapi/login",
+                data={"grant_type": "client_credentials", "client_id": client_id, "client_secret": client_secret},
+                timeout=timeout,
+            )
+        except httpx.HTTPError as exc:
+            raise EusSmsError("EUS-Authentifizierung nicht erreichbar", safe_not_sent=True) from exc
         if not 200 <= response.status_code < 300:
-            raise EusSmsError(f"HTTP {response.status_code}: {response.text[:400]}")
-        data = response.json()
+            raise EusSmsError(f"HTTP {response.status_code}", safe_not_sent=True)
+        try:
+            data = response.json()
+            expires_in = float(data.get("expires_in", 3600))
+        except (ValueError, AttributeError, TypeError) as exc:
+            raise EusSmsError("Ungueltige Token-Antwort", safe_not_sent=True) from exc
         token = data.get("access_token")
         if not token:
-            raise EusSmsError("Token-Antwort ohne access_token")
-        _token_cache[org_id] = (str(token), now + float(data.get("expires_in", 3600)))
+            raise EusSmsError("Token-Antwort ohne access_token", safe_not_sent=True)
+        _token_cache[org_id] = (str(token), now + expires_in)
         return str(token)
 
 
@@ -115,27 +130,21 @@ async def send_via_eus(cfg: EusConfig, to: str, text: str) -> None:
                 json=payload,
                 timeout=timeout,
             )
-        return await client.post(
-            f"{base_url}/messageapi/send", headers=headers, json=payload, timeout=timeout
-        )
+        return await client.post(f"{base_url}/messageapi/send", headers=headers, json=payload, timeout=timeout)
 
     if cfg.auth_mode == "oauth":
-        token = await _acquire_token(
-            cfg.org_id, base_url, cfg.client_id, cfg.client_secret, timeout
-        )
+        token = await _acquire_token(cfg.org_id, base_url, cfg.client_id, cfg.client_secret, timeout)
         response = await attempt(token)
         if response.status_code in (401, 403):
-            token = await _acquire_token(
-                cfg.org_id, base_url, cfg.client_id, cfg.client_secret, timeout, force=True
-            )
+            token = await _acquire_token(cfg.org_id, base_url, cfg.client_id, cfg.client_secret, timeout, force=True)
             response = await attempt(token)
     elif cfg.auth_mode == "basic":
         response = await attempt()
     else:
-        raise EusSmsError("Ungueltiger EUS-Authentifizierungsmodus")
+        raise EusSmsError("Ungueltiger EUS-Authentifizierungsmodus", safe_not_sent=True)
 
     if not 200 <= response.status_code < 300:
         from app.services.sms_service import _mask
-        logger.error("EUS-SMS an %s fehlgeschlagen (Org %s): HTTP %s",
-                     _mask(to), cfg.org_id, response.status_code)
-        raise EusSmsError(f"HTTP {response.status_code}: {response.text[:400]}")
+
+        logger.error("EUS-SMS an %s fehlgeschlagen (Org %s): HTTP %s", _mask(to), cfg.org_id, response.status_code)
+        raise EusSmsError(f"HTTP {response.status_code}", safe_not_sent=response.status_code in (401, 403))

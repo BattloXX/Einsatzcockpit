@@ -114,6 +114,7 @@ def begin(
         values.update(last_seen_at=moment, status="online")
     else:
         values["last_used_at"] = moment
+        values["sms_protocol"] = 1
     changed = (
         db.query(model)
         .filter(model.org_id == org_id, model.id == gateway_id, *authenticated(model, kind, token_hash))

@@ -26,11 +26,22 @@ class CaptureSocket:
         message = json.loads(raw)
         self.sent.append(message)
         if self.reply:
-            job = str(message.get("id"))
-            result = (
-                {"id": job, "ok": True} if self.connection.kind == "sms" else {"job_id": int(job), "status": "done"}
-            )
-            await asyncio.to_thread(routing.record_result, self.connection, self.token_hash, job, result)
+            if self.connection.kind == "sms":
+                from app.services import sms_outbox
+                if message["type"] not in ("sms.prepare", "sms.commit", "sms.send"):
+                    return
+                response = {"id": message["id"], "job_id": message.get("job_id"),
+                            "generation": message.get("generation")}
+                if message["type"] == "sms.prepare":
+                    response["type"] = "sms.ack"
+                else:
+                    response.update(type="sms.result", ok=True, provider_accepted=True, outcome="sent")
+                _, controls, _ = await asyncio.to_thread(sms_outbox.event, self.connection, self.token_hash, response)
+                await sms_outbox.notify(controls)
+            else:
+                job = str(message.get("id"))
+                result = {"job_id": int(job), "status": "done"}
+                await asyncio.to_thread(routing.record_result, self.connection, self.token_hash, job, result)
 
     async def close(self, code=1000):
         self.closed.append(code)

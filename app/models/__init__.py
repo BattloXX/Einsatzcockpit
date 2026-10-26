@@ -233,6 +233,9 @@ from app.models.road_closure import (
     RoadClosureTeamsConfig,
 )
 from app.models.sms import (
+    SmsDispatchAttempt,
+    SmsDispatchCursor,
+    SmsDispatchJob,
     SmsEinsatzinfoRecipient,
     SmsForwardRule,
     SmsForwardRuleGroup,
@@ -393,6 +396,9 @@ __all__ = [
     "SmsGroup",
     "SmsGroupMember",
     "SmsEinsatzinfoRecipient",
+    "SmsDispatchJob",
+    "SmsDispatchAttempt",
+    "SmsDispatchCursor",
     "SmsLog",
     "SmsInbox",
     "SmsForwardRule",

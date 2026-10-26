@@ -7,6 +7,8 @@ import pytest
 from app.routers import ws
 from tests.gateway_helpers import CaptureSocket, bind, cleanup
 
+pytestmark = pytest.mark.usefixtures("sms_outbox_state")
+
 
 @pytest.fixture
 def gateways():
@@ -29,22 +31,21 @@ async def test_dispatch_no_gateway_raises():
         await ws.dispatch_sms(123456, "job-x", "+43660000", "hi")
 
 
-async def test_dispatch_prunes_dead_and_uses_live(gateways):
+async def test_legacy_dead_socket_is_not_blindly_retried_on_live_gateway(gateways):
     live, socket = gateways()
     dead, _ = gateways(dead=True)
-    result = await ws.dispatch_sms(1, "job-prune", "+43660111", "hallo", timeout=2)
-    assert result["ok"] and result["gateway_token_id"] == live.gateway_id
-    assert socket.sent
+    with pytest.raises(RuntimeError, match="Timeout oder unklarer"):
+        await ws.dispatch_sms(1, "job-prune", "+43660111", "hallo", timeout=0.1)
+    assert not socket.sent  # Ein fehlgeschlagener Socket-Send beweist keinen Nichtversand.
     assert dead.gateway_id not in ws.connected_gateway_token_ids(1)
     assert live.gateway_id in ws.connected_gateway_token_ids(1)
 
 
-async def test_dispatch_all_dead_raises_and_empties_registry(gateways):
+async def test_dispatch_dead_socket_never_reports_success(gateways):
     gateways(dead=True)
     gateways(dead=True)
-    with pytest.raises(RuntimeError, match="Kein erreichbares"):
-        await ws.dispatch_sms(1, "job-alldead", "+43660222", "x")
-    assert not ws.connected_gateway_token_ids(1)
+    with pytest.raises(RuntimeError, match="Timeout oder unklarer"):
+        await ws.dispatch_sms(1, "job-alldead", "+43660222", "x", timeout=0.1)
 
 
 async def test_dispatch_timeout_is_not_retried(gateways):

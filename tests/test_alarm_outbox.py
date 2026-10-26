@@ -23,6 +23,8 @@ from app.services.einsatzinfo_mail_service import EinsatzinfoMailResult
 from app.services.sms_dispatch_service import EinsatzinfoDispatchResult
 from app.services.teams_alarm_service import TeamsDispatchResult
 
+pytestmark = pytest.mark.usefixtures("sms_outbox_state")
+
 
 def _db_incident(*, code="B2", exercise=False):
     db = SessionLocal()
@@ -346,22 +348,20 @@ async def test_sms_idempotency_and_stale_recipient_job_id(setup_db, monkeypatch)
     )
     db.add(recipient)
     db.commit()
-    seen = []
-
-    async def send(_org, jobs, ctx=None, on_result=None):
-        seen.extend(jobs)
-        result = svc.SmsSendResult(jobs[0][0], True, datetime.now(UTC).replace(tzinfo=None), "gateway")
-        await on_result(result)
-        return [result]
-
-    monkeypatch.setattr("app.services.sms_service.sms_available", lambda *args: True)
+    from app.services import sms_outbox
+    from tests.gateway_helpers import CaptureSocket, bind, cleanup
+    c, socket = bind(socket=CaptureSocket(reply=True))
     monkeypatch.setattr("app.services.sms_service.resolve_sms_config", lambda *args: SmsContext(1, ["gateway"], None))
-    monkeypatch.setattr(svc, "send_bulk_detailed", send)
     try:
-        assert await svc.retry_pending_einsatzinfo(1) == 1
-        assert seen[0][2] == f"alarm-{recipient.id}"
+        assert await svc.retry_pending_einsatzinfo(1) == 0  # Queue-Handoff ist kein Versandzaehler.
+        db.expire_all()
+        assert recipient.dispatch_job_id
+        state = sms_outbox.snapshot(1, recipient.dispatch_job_id)
+        assert state["status"] == "sent"
+        assert socket.sent[0]["job_id"] == recipient.dispatch_job_id
         assert db.query(SmsLog).filter_by(source="alarm", incident_id=incident.id).count() == 1
     finally:
+        cleanup(c)
         db.close()
 
 

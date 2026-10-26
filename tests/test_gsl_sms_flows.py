@@ -1,4 +1,5 @@
 """GSL-Formulare ueber den echten SMS-Dispatcher mit Android-Rueckmeldung."""
+import asyncio
 import json
 import re
 from uuid import uuid4
@@ -11,6 +12,7 @@ from app.models.major_incident import CitizenReport, MajorIncident
 from app.models.verleih import VerleihAusleihe
 from app.routers import ui_major_incident, ws
 from app.services import verleih_service
+from tests.gateway_helpers import bind, cleanup
 from tests.test_gsl_sektoren import _login, _user_lage
 
 
@@ -22,14 +24,18 @@ class AndroidGateway:
     async def send_text(self, payload):
         job = json.loads(payload)
         self.jobs.append(job)
-        ws._sms_pending[job["id"]].set_result({
+        from app.services import sms_outbox
+        await asyncio.to_thread(sms_outbox.event, self.connection, self.token_hash, {
             "type": "sms.result", "id": job["id"], "ok": self.ok,
             "error": None if self.ok else "SmsManager resultCode=1",
         })
 
+    async def close(self, code=1000):
+        pass
+
 
 @pytest.fixture
-def sms_context():
+def sms_context(sms_outbox_state):
     username = f"sms-flows-{uuid4().hex}"
     lage_id, org_id = _user_lage(username, username)
     token = uuid4().hex
@@ -45,11 +51,22 @@ def sms_context():
             ui_major_incident._pending_verifications.pop(key, None)
 
 
+@pytest.fixture
+def android_gateway():
+    connections = []
+    def create(org_id, ok=True, **kwargs):
+        connection, gateway = bind(org_id=org_id, socket=AndroidGateway(ok), **kwargs)
+        connections.append(connection)
+        return gateway
+    yield create
+    for connection in connections:
+        cleanup(connection)
+
+
 @pytest.mark.parametrize("ok", [True, False])
-def test_citizen_sms_and_verification(client, sms_context, ok):
+def test_citizen_sms_and_verification(client, sms_context, android_gateway, ok):
     _, lage_id, org_id, token = sms_context
-    gateway = AndroidGateway(ok)
-    ws._sms_gateways[org_id] = [(999999, gateway)]
+    gateway = android_gateway(org_id, ok)
     client.cookies.clear()
     assert client.get(f"/melden/{token}").status_code == 200
     response = client.post(f"/melden/{token}", data={
@@ -85,7 +102,7 @@ def test_citizen_sms_and_verification(client, sms_context, ok):
 
 @pytest.mark.parametrize("action", ["pin-senden", "sms-ausleih", "erinnerung-manuell"])
 @pytest.mark.parametrize("ok", [True, False])
-def test_loan_sms_actions_use_android_result(client, sms_context, action, ok):
+def test_loan_sms_actions_use_android_result(client, sms_context, android_gateway, action, ok):
     username, lage_id, org_id, _ = sms_context
     with SessionLocal() as db:
         set_tenant_context(db, None)
@@ -94,8 +111,7 @@ def test_loan_sms_actions_use_android_result(client, sms_context, action, ok):
             [{"bezeichnung": "Pumpe", "menge": 1}], None,
         )
         loan_id = loan.id
-    gateway = AndroidGateway(ok)
-    ws._sms_gateways[org_id] = [(999999, gateway)]
+    gateway = android_gateway(org_id, ok)
     _login(client, username)
     response = client.post(f"/lage/{lage_id}/verleih/{loan_id}/{action}", data={
         "_csrf": client.cookies.get("ec_csrf"), "sms_text": "Test Ausleihe",
@@ -118,10 +134,9 @@ def test_loan_sms_actions_use_android_result(client, sms_context, action, ok):
         assert re.search(r"SMS konnte nicht gesendet werden", response.text)
 
 
-def test_citizen_and_loan_share_gateway_rotation(client, sms_context):
+def test_citizen_and_loan_share_gateway_rotation(client, sms_context, android_gateway):
     username, lage_id, org_id, token = sms_context
-    first, second = AndroidGateway(True), AndroidGateway(True)
-    ws._sms_gateways[org_id] = [(10, first), (20, second)]
+    first, second = android_gateway(org_id), android_gateway(org_id)
     client.cookies.clear()
     client.get(f"/melden/{token}")
     submitted = client.post(f"/melden/{token}", data={
