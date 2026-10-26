@@ -2484,13 +2484,14 @@ async def test_kachelmann_api(
 # ── Server-Log-Viewer ─────────────────────────────────────────────────────────
 
 @router.get("/system/server-log", response_class=HTMLResponse)
-async def server_log_page(
+def server_log_page(
     request: Request,
     n: int = 500,
     level: str = "DEBUG",
     _=Depends(require_role("system_admin")),
+    db: Session = Depends(get_db),
 ):
-    from app.log_buffer import get_entries
+    from app.log_buffer import get_entries, worker_note
     level = level.upper()
     if level not in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"):
         level = "DEBUG"
@@ -2502,7 +2503,7 @@ async def server_log_page(
         "n": n,
         "level": level,
         "total": len(entries),
-        "worker_note": True,
+        "worker_note": worker_note(db),
     })
 
 
@@ -2528,19 +2529,20 @@ async def server_log_raw(
 
 
 @router.get("/system/server-log/json")
-async def server_log_json(
+def server_log_json(
     request: Request,
     n: int = 200,
     level: str = "DEBUG",
     _=Depends(require_role("system_admin")),
+    db: Session = Depends(get_db),
 ):
-    from app.log_buffer import get_entries
+    from app.log_buffer import get_entries, worker_note
     level = level.upper()
     if level not in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"):
         level = "DEBUG"
     n = max(50, min(n, 2000))
     entries = get_entries(n=n, min_level_name=level)
-    return {"entries": entries, "total": len(entries)}
+    return {"entries": entries, "total": len(entries), "worker_note": worker_note(db)}
 
 
 # ── Backup / Export ───────────────────────────────────────────────────────────

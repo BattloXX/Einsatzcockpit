@@ -26,7 +26,7 @@ from app.db import SessionLocal
 from app.models.incident import Incident
 from app.models.major_incident import MajorIncident
 from app.models.user import SmsGatewayToken, User
-from app.services import gateway_presence, gateway_routing, lft_presence, ws_bus
+from app.services import gateway_presence, gateway_routing, lft_presence, shared_cache, ws_bus
 from app.services.broadcast import EINHEIT_WS_OFFSET, LAGE_WS_OFFSET, ORG_WS_OFFSET, broadcast_org, manager
 from app.services.gk_zugang_service import COOKIE as GK_COOKIE
 from app.services.gk_zugang_service import QR_COOKIE, sitzung_pruefen_mit_grund
@@ -60,13 +60,46 @@ _print_agent_sessions: dict[WebSocket, tuple[int, int, str, str]] = {}
 _job_pending: dict[str, asyncio.Future] = {}
 # org_id → letzter Serial-Fan-Out-Status {enabled, listening, clients} (best effort, live).
 _passthrough_status: dict[int, dict] = {}
+_passthrough_last_warning = -float("inf")
 
 
-def get_passthrough_status(org_id: int | None) -> dict | None:
-    """Letzter gemeldeter Serial-Fan-Out-Status der Org (oder None)."""
+def _passthrough_failure() -> None:
+    global _passthrough_last_warning
+    now = time.monotonic()
+    if now - _passthrough_last_warning >= 60:
+        _passthrough_last_warning = now
+        logger.warning("Passthrough-Redis nicht verfügbar; lokaler Betrieb")
+
+
+async def set_passthrough_status(org_id: int, payload: dict) -> None:
+    value = {"enabled": bool(payload.get("enabled")),
+             "listening": bool(payload.get("listening")),
+             "clients": int(payload.get("clients") or 0)}
+    _passthrough_status[org_id] = value
+    try:
+        connection = shared_cache.client()
+        if connection is not None:
+            # Gateway meldet periodisch; Intervall unbekannt, daher großzügige TTL.
+            await connection.set(f"ecp:passthrough:{org_id}", json.dumps(value), ex=120)
+    except Exception:
+        _passthrough_failure()
+
+
+async def get_passthrough_status(org_id: int | None) -> dict | None:
+    """Letzter lokaler oder gemeinsam gecachter Serial-Fan-Out-Status der Org."""
     if org_id is None:
         return None
-    return _passthrough_status.get(org_id)
+    value = _passthrough_status.get(org_id)
+    if value is not None:
+        return value
+    try:
+        connection = shared_cache.client()
+        if connection is not None:
+            raw = await connection.get(f"ecp:passthrough:{org_id}")
+            return json.loads(raw) if raw else None
+    except Exception:
+        _passthrough_failure()
+    return None
 
 
 # Close-Codes per RFC6455 (4000-4999 ist Application-Range)
@@ -883,12 +916,7 @@ async def print_gateway_ws(websocket: WebSocket):
                                         apply_printer_status, msg.get("payload") or {})
                 await broadcast_org(org_id, {"type": "printer_report", "gateway_id": gateway_id})
             elif mtype == "passthrough_status":
-                p = msg.get("payload") or {}
-                _passthrough_status[org_id] = {
-                    "enabled": bool(p.get("enabled")),
-                    "listening": bool(p.get("listening")),
-                    "clients": int(p.get("clients") or 0),
-                }
+                await set_passthrough_status(org_id, msg.get("payload") or {})
             elif mtype == "alarm_notice":
                 # Signal – der verbindliche Ingest läuft über REST POST /alarms.
                 logger.info("ECPG alarm_notice (org_id=%s): %s", org_id,

@@ -32,6 +32,9 @@ Der Accesslog enthält Methode/Pfad ohne Querystring oder Referer.
 SMS-Presence läuft ohne Touch nach 60 Sekunden ab (Cloud-Ping nach 30 Sekunden
 Leerlauf, App-Pong erneuert die Presence); Linux und Windows bleiben bei 90 Sekunden.
 
+Der In-Memory-Fallback für Wetterstationsverläufe gilt pro Worker; bei mehreren
+Workern wird die separate Wetter-DB benötigt.
+
 ## DB-Verbindungsbudget
 
 `DB_POOL_SIZE` und `DB_MAX_OVERFLOW` gelten je Worker (Standard: 10/30).

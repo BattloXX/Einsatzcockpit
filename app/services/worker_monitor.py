@@ -29,11 +29,18 @@ def _job_counts(db, model, org_id, active, expiry, now):
             "overdue": query.filter(expiry <= now).count(), "states": counts}
 
 
+def active_workers(db, now: datetime | None = None) -> list[WorkerRuntime]:
+    """Nicht abgelaufene Worker aus der gemeinsamen Laufzeitregistrierung."""
+    now = presence.utc(now)
+    return db.query(WorkerRuntime).filter(WorkerRuntime.expires_at > now)\
+        .order_by(WorkerRuntime.worker_id).all()
+
+
 def snapshot(db, org_id: int, now: datetime | None = None) -> dict:
     now = presence.utc(now)
     recent = db.query(WorkerRuntime).filter(WorkerRuntime.heartbeat_at > now - timedelta(days=1))\
         .order_by(WorkerRuntime.worker_id).all()
-    workers = [worker for worker in recent if worker.expires_at > now]
+    workers = active_workers(db, now)
     leaders = [w for w in workers if w.is_leader]
     worker_rows = []
     for worker in workers:

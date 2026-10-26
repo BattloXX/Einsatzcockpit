@@ -410,7 +410,7 @@ def gateway_detail(
         "doc_labels": RULE_DOCUMENT_LABELS,
         "objekt_element_labels": OBJEKT_ELEMENT_LABELS,
         "trigger_labels": TRIGGER_LABELS,
-        "passthrough_status": get_passthrough_status(user.org_id),
+        "passthrough_status": run_async(get_passthrough_status, user.org_id),
         "redis_status": ws_bus.status(),
     })
 

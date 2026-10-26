@@ -5,6 +5,7 @@ Modul über get_entries() abgefragt werden (z.B. für den Admin-Log-Viewer).
 """
 import collections
 import logging
+import os
 import threading
 import time
 
@@ -69,3 +70,14 @@ def get_entries(n: int = 500, min_level_name: str = "DEBUG") -> list[dict]:
 
 def get_text(n: int = 500, min_level_name: str = "DEBUG") -> str:
     return _handler.as_text(n, min_level_name)
+
+
+def worker_note(db) -> str | None:
+    """Herkunft des lokalen Puffers bei mehreren aktiven Workern anzeigen."""
+    from app.services.gateway_presence import worker_id
+    from app.services.worker_monitor import active_workers
+
+    if len(active_workers(db)) > 1:
+        return (f"Protokoll von Worker {worker_id()} (Prozess {os.getpid()}) – "
+                "andere Worker führen eigene Puffer")
+    return None
