@@ -258,17 +258,6 @@ def _result(item_id: str, org_id: int):
         return row.state, row.result
 
 
-async def wait_result(item_id: str, org_id: int, timeout: float) -> dict:  # noqa: ASYNC109
-    async with asyncio.timeout(timeout):
-        while True:
-            state_value, result = await asyncio.to_thread(_result, item_id, org_id)
-            if result is not None:
-                return result
-            if state_value in ("failed", "expired"):
-                raise RuntimeError("Gateway-Verbindung nicht mehr zustellbar")
-            await asyncio.sleep(0.05)
-
-
 def purge_old_messages() -> int:
     """Leader-Wartung: alte Transportnachrichten in kleinen Transaktionen loeschen."""
     cutoff = presence.utc() - timedelta(days=1)

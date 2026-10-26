@@ -102,7 +102,8 @@ async def test_live_print_dispatch_ueber_redis(fake_redis):
     try:
         item_id = routing._enqueue(connection, {"type": "print_job", "id": "5150"}, 5, "5150")
         assert await ws_bus.publish(ws_bus.CH_GW, routing.envelope(connection, item_id))
-        result = await routing.wait_result(item_id, 1, 3)
+        assert await _wait_until(lambda: routing._result(item_id, 1)[1] is not None, timeout=3)
+        _, result = routing._result(item_id, 1)
         assert result["status"] == "done"
         assert await _wait_until(lambda: bool(socket.sent))
         await ws_bus.publish(ws_bus.CH_GW, routing.envelope(connection, item_id))

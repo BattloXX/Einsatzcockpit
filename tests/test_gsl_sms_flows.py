@@ -47,7 +47,6 @@ def sms_context(sms_outbox_state):
         db.commit()
     yield username, lage_id, org_id, token
     ws._sms_gateways.pop(org_id, None)
-    ws._sms_last_gateway.pop(org_id, None)
     with SessionLocal() as db:
         db.query(CitizenReportVerification).filter_by(org_id=org_id, major_incident_id=lage_id).delete()
         db.commit()

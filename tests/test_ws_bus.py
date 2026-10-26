@@ -6,7 +6,7 @@ umgeleitet – so wird die Redis-Fan-out an alle Worker (inkl. Publisher) simuli
 """
 from __future__ import annotations
 
-import asyncio
+from unittest.mock import AsyncMock
 
 from app.services import ws_bus
 
@@ -74,15 +74,12 @@ async def test_broadcast_mit_bus_publiziert_und_liefert(monkeypatch):
 
 # ── Bus-Handler (CH_GW): Gateway-Ebene ──────────────────────────────────────────
 
-async def test_unaddressed_legacy_status_cannot_resolve_another_workers_future():
+async def test_unaddressed_legacy_status_is_ignored(monkeypatch):
     import app.routers.ws as ws
-    future = asyncio.get_running_loop().create_future()
-    ws._job_pending["999991"] = future
-    try:
-        await ws._bus_gateway_deliver({"kind": "job_status", "job_id": 999991, "payload": {"status": "done"}})
-        assert not future.done()
-    finally:
-        ws._job_pending.pop("999991", None)
+    deliver = AsyncMock()
+    monkeypatch.setattr(ws.gateway_routing, "deliver", deliver)
+    await ws._bus_gateway_deliver({"kind": "job_status", "job_id": 999991, "payload": {"status": "done"}})
+    deliver.assert_not_awaited()
 
 
 async def test_bus_dispatch_offline_gateway_remains_queued(monkeypatch):

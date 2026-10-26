@@ -13,7 +13,6 @@ pytestmark = pytest.mark.usefixtures("sms_outbox_state")
 @pytest.fixture
 def gateways():
     connections = []
-    ws._sms_last_gateway.clear()
 
     def create(org_id=1, *, priority=100, reply=True, dead=False):
         connection, socket = bind(org_id=org_id, priority=priority, socket=CaptureSocket(reply=reply, dead=dead))
@@ -23,7 +22,6 @@ def gateways():
     yield create
     for connection in connections:
         cleanup(connection)
-    ws._sms_last_gateway.clear()
 
 
 async def test_dispatch_no_gateway_raises():

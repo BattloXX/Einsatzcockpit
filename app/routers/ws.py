@@ -36,28 +36,22 @@ logger = logging.getLogger("einsatzleiter.ws")
 router = APIRouter()
 
 # ── SMS-Gateway Registry ───────────────────────────────────────────────────────
-# org_id → (token_id, WebSocket)-Paare aktiver Gateway-Verbindungen. token_id wird
-# mitgefuehrt, damit dispatch_sms() nach SmsGatewayToken.priority sortieren kann statt
-# rein nach Verbindungszeit.
+# Nur Socket-Halter dieses Workers, nie Verfügbarkeitsquelle (gateway_presence/gateway_routing).
+# org_id → (token_id, WebSocket)-Paare aktiver Gateway-Verbindungen.
 _sms_gateways: dict[int, list[tuple[int, WebSocket]]] = defaultdict(list)
 SMS_GATEWAY_IDLE_PING_S = 30.0
 SMS_GATEWAY_DEAD_AFTER_S = 120.0
-# job_id → asyncio.Future für sms.result-Rückmeldung
-_sms_pending: dict[str, asyncio.Future] = {}
-# org_id -> zuletzt fuer eine Einzel-SMS ausgewaehltes Gateway.
-_sms_last_gateway: dict[int, int] = {}
 # asyncio behaelt Tasks nur schwach; diese Referenzen verhindern, dass ein
 # Nachversand zwischen Gateway-Connect und Abschluss eingesammelt wird.
 _sms_nachversand_tasks: set[asyncio.Task] = set()
 
 # ── Print & Alarm Gateway (ECPG) Registry ──────────────────────────────────────
+# Nur Socket-Halter dieses Workers, nie Verfügbarkeitsquelle (gateway_presence/gateway_routing).
 # org_id → (gateway_id, WebSocket)-Paare aktiver Gateway-Verbindungen.
 _print_gateways: dict[int, list[tuple[int, WebSocket]]] = defaultdict(list)
 # org_id → (gateway_id, WebSocket)-Paare verbundener Windows-Druckagents (/ws/print-agent).
 _print_agents: dict[int, list[tuple[int, WebSocket]]] = defaultdict(list)
 _print_agent_sessions: dict[WebSocket, tuple[int, int, str, str]] = {}
-# job_id(str) → Future für die erste job_status-Rückmeldung (dispatch_print_job)
-_job_pending: dict[str, asyncio.Future] = {}
 # org_id → letzter Serial-Fan-Out-Status {enabled, listening, clients} (best effort, live).
 _passthrough_status: dict[int, dict] = {}
 _passthrough_last_warning = -float("inf")
@@ -559,11 +553,6 @@ def _discard_gateway(org_id: int, websocket: WebSocket) -> None:
     for entry in list(gateways):
         if entry[1] is websocket:
             gateways.remove(entry)
-    if not gateways:
-        _sms_last_gateway.pop(org_id, None)
-
-
-_DEFAULT_GATEWAY_PRIORITY = 100
 
 
 def _load_gateway_priorities(org_id: int) -> dict[int, int]:
@@ -586,19 +575,6 @@ def _load_gateway_priorities(org_id: int) -> dict[int, int]:
 def connected_gateway_token_ids(org_id: int) -> set[int]:
     """Token-IDs aller aktuell verbundenen SMS-Gateways fuer die Admin-Ansicht."""
     return {c.gateway_id for c in gateway_routing.targets("sms", org_id)}
-
-
-def _ordered_sms_gateway_entries(org_id: int) -> list[tuple[int, WebSocket]]:
-    """Ein Platz je Geraet; bei Reconnect nur dessen neuesten Socket verwenden."""
-    newest: dict[int, WebSocket] = {}
-    for token_id, websocket in reversed(_sms_gateways.get(org_id, [])):
-        newest.setdefault(token_id, websocket)
-    if not newest:
-        return []
-    entries = list(newest.items())
-    priorities = _load_gateway_priorities(org_id)
-    entries.sort(key=lambda entry: priorities.get(entry[0], _DEFAULT_GATEWAY_PRIORITY))
-    return entries
 
 
 def connected_gateway_token_ids_ordered(org_id: int) -> list[int]:
@@ -1151,39 +1127,11 @@ def _discard_print_agent(org_id: int, websocket: WebSocket) -> None:
             agents.remove(entry)
 
 
-def connected_print_agent_ids(org_id: int) -> set[int]:
-    """Gateway-IDs aller an DIESEM Worker verbundenen Windows-Druckagents."""
-    return {gateway_id for gateway_id, _ in _print_agents.get(org_id, [])}
-
-
 def _mark_agent_offline(org_id: int, gateway_id: int, connection_id: str) -> bool:
     from app.services.print_agent_presence import end
     with SessionLocal() as db:
         set_tenant_context(db, None)
         return end(db, org_id, gateway_id, connection_id)
-
-
-async def _send_to_local_agents(org_id: int, gateway_ids: set, message: dict) -> bool:
-    """Stellt eine Nachricht an die an DIESEM Worker verbundenen, adressierten Agents zu."""
-    payload = json.dumps(message, ensure_ascii=False)
-    sent = False
-    for gateway_id, ws in list(_print_agents.get(org_id, [])):
-        if gateway_id not in gateway_ids:
-            continue
-        session = _print_agent_sessions.get(ws)
-        if session is not None:
-            from app.services import print_agent_presence
-            with SessionLocal() as db:
-                set_tenant_context(db, None)
-                state = print_agent_presence.state(db, session[0], session[1], session[3], session[2])
-            if state != "connected":
-                continue
-        try:
-            await ws.send_text(payload)
-            sent = True
-        except Exception:
-            _discard_print_agent(org_id, ws)
-    return sent
 
 
 async def push_agent_message(org_id: int, gateway_ids: list[int], message: dict) -> None:

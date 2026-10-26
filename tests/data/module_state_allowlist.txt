@@ -1,0 +1,85 @@
+
+# Caches (neu berechenbar bzw. erneut ladbar, pro Worker zulässig)
+app.routers.ui_infoscreen_alarm:_wetter_cache
+app.routers.ui_map_tiles:_tile_cache
+app.routers.ui_weather:_panel_summaries
+app.services.address_autocomplete:_cache
+app.services.eus_sms_service:_token_cache
+app.services.hoehen_service:_cache
+app.services.hydrant_service:_cache
+app.services.kachelmann_service:_key_cache
+app.services.o365_mail_service:_token_cache
+app.services.osm_street_service:_CACHE
+app.services.sso_service:_jwks_cache
+app.services.staticmap_service:_RENDER_CACHE
+app.services.staticmap_service:_ROAD_CLOSURE_RENDER_CACHE
+app.services.suche.vektor:_faehigkeiten
+app.services.weather_service:_cache
+
+# Socket-Halter dieses Workers (Verfügbarkeit ausschließlich über Presence/Routing)
+app.routers.ws:_print_agent_sessions
+app.routers.ws:_print_agents
+app.routers.ws:_print_gateways
+app.routers.ws:_sms_gateways
+app.services.gateway_routing:_sockets
+
+# Leader-only Loop-Zustand (bestehende Poller und deren Hilfszustand)
+app.services.alarm_outbox:_running_incident_tasks
+app.services.dibos.dibos_capture:_active_traces
+app.services.dibos.dibos_enrich:_background_tasks
+app.services.dibos.dibos_enrich:_fallback_active
+app.services.dibos.dibos_enrich:_ignored_f30_probe_numbers
+app.services.dibos.dibos_enrich:_ignored_f30_probe_order
+app.services.dibos.dibos_loop:_last_enrich_fingerprint
+app.services.dibos.dibos_loop:_last_public_events_at
+app.services.dibos.dibos_loop:_org_clients
+app.services.dibos.dibos_loop:_previous_event_numbers
+app.services.lis.lis_capture:_active_captures
+app.services.lis.lis_health:_last_ok
+app.services.lis.lis_loop:_last_started_at
+app.services.lis.lis_loop:_org_clients
+app.services.lis.lis_sync:_autoprint_tasks
+app.services.lis.lis_sync:_released_vehicle_misses
+app.services.lis.lis_sync:_tasks_retry_after
+app.services.mail_graph_poller:_last_started_at
+app.services.mail_imap_poller:_last_started_at
+
+# Lokale Task-, Client- und Lock-Halter (keine workerübergreifende Koordination)
+app.routers.ui_planspiel_admin:_osm_tasks
+app.routers.ws:_sms_nachversand_tasks
+app.services.eus_sms_service:_token_locks
+app.services.leader_lock:_locks
+app.services.shared_cache:_clients
+app.services.sms_dispatch_service:_einsatzinfo_nachversand_locks
+app.services.weather_compare:_locks
+app.services.weather_service:_flights
+
+# Lokale CRDT-Rooms und Sync-Hilfszustand (DB-Persistenz, Redis-Verteilung)
+app.services.lagedokument_collab:_applying_remote_awareness
+app.services.lagedokument_collab:_applying_remote_update
+app.services.lagedokument_collab:_dirty
+app.services.lagedokument_collab:_room_org
+app.services.lagedokument_collab:_room_tasks
+app.services.lagedokument_collab:_rooms
+app.services.lagedokument_collab:_save_tasks
+
+# Bestehende Diagnose-, Messwert- und Statuspuffer (IST-Stand, keine neuen Zustände)
+app.routers.csp_report:_reports
+app.routers.ws:_passthrough_status
+app.services.abfluss_service:_store
+app.services.device_auth_failure_service:_last_flush
+app.services.device_auth_failure_service:_pending
+app.services.weather_health:_health
+app.services.weather_health:_logged
+app.services.weather_service:_UNKNOWN_PROVIDERS
+app.services.weather_station_service:_station_history
+app.services.ws_bus:_last_warning
+
+# Registries beim Import (Adapter und lokale Bus-Callbacks)
+app.services.suche.quellen:ADAPTER
+app.services.ws_bus:_handlers
+app.services.ws_bus:_reconnect_callbacks
+
+# Statische Tabellen, Labels und Konfiguration (mutable Literale beim Import)
+app.routers.ui_wasserstelle:_ERLAUBTE_STATUS
+app.routers.ui_wasserstelle:_ERLAUBTE_TYPEN
