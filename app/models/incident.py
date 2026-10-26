@@ -307,6 +307,8 @@ class IncidentVehicle(Base):
     # — nötig für SetOperationUnitStatus, wenn der Status vom Einsatzcockpit aus zurück ins LIS
     # geschrieben wird. Wird von lis_sync.py::_sync_vehicle_status() gepflegt.
     lis_operation_unit_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    lis_pushed_status: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    lis_pushed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     incident: Mapped[Incident] = relationship(back_populates="vehicles")
     column: Mapped[IncidentColumn] = relationship(back_populates="vehicles")

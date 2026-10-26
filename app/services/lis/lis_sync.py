@@ -8,11 +8,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import time
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import func
+from sqlalchemy import func, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -42,9 +41,6 @@ _BACKFILL_INTERVAL = timedelta(hours=24)
 _autoprint_tasks: set[asyncio.Task] = set()
 _tasks_retry_after: dict[int, datetime] = {}
 _released_vehicle_misses: dict[int, int] = {}
-# IncidentVehicle.id -> (LIS-Prefix, monotonic) des zuletzt erfolgreich ans LIS gesendeten Status.
-# Verhindert identische Wiederholungen und schuetzt frisch lokal gesetzte Status vor dem Poll.
-_lokal_gepushter_status: dict[int, tuple[str, float]] = {}
 _PUSH_SCHUTZFENSTER_S = 30.0
 _PUSH_VERSUCHE = 3
 _PUSH_BACKOFF_S = (1.0, 3.0)
@@ -412,11 +408,12 @@ def _sync_vehicle_status(
             if (
                 mapped_status
                 and incident_vehicle.unit_status != mapped_status
-                and not _lokal_status_geschuetzt(incident_vehicle.id, incident_vehicle.unit_status)
+                and not _lokal_status_geschuetzt(incident_vehicle)
             ):
                 try:
                     set_unit_status(db, incident_vehicle, mapped_status)
-                    _lokal_gepushter_status.pop(incident_vehicle.id, None)
+                    incident_vehicle.lis_pushed_status = None
+                    incident_vehicle.lis_pushed_at = None
                     changed = True
                 except ValueError:
                     logger.warning("Ungültiger gemappter Status %r für Fahrzeug %s", mapped_status, vehicle_master.id)
@@ -1249,15 +1246,13 @@ async def _sync_organization_with_client(
 
 
 # ── Fahrzeugstatus vom Einsatzcockpit zurück ins LIS schreiben (opt-in) ──────
-def _lokal_status_geschuetzt(incident_vehicle_id: int, lokaler_status: str | None) -> bool:
+def _lokal_status_geschuetzt(vehicle: IncidentVehicle) -> bool:
     """True, wenn der lokale Status innerhalb des Schutzfensters an LIS gesendet wurde."""
-    eintrag = _lokal_gepushter_status.get(incident_vehicle_id)
-    if not eintrag or not lokaler_status:
+    if not vehicle.lis_pushed_status or not vehicle.lis_pushed_at or not vehicle.unit_status:
         return False
-    prefix, zeitpunkt = eintrag
     return (
-        prefix == unit_status_to_lis_prefix(lokaler_status)
-        and time.monotonic() - zeitpunkt < _PUSH_SCHUTZFENSTER_S
+        vehicle.lis_pushed_status == unit_status_to_lis_prefix(vehicle.unit_status)
+        and (datetime.now(UTC).replace(tzinfo=None) - vehicle.lis_pushed_at).total_seconds() < _PUSH_SCHUTZFENSTER_S
     )
 
 
@@ -1277,18 +1272,15 @@ async def push_vehicle_status_to_lis(incident_vehicle_id: int, status: str) -> N
     prefix = unit_status_to_lis_prefix(status)
     if not prefix:
         return
-    letzter = _lokal_gepushter_status.get(incident_vehicle_id)
-    if letzter and letzter[0] == prefix:
-        # Identischer Status wurde bereits erfolgreich gesendet - keine erneute Uebertragung.
-        logger.debug("LIS-Status-Push fuer IncidentVehicle %s uebersprungen (unveraendert %s)",
-                     incident_vehicle_id, prefix)
-        return
-
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
-        vehicle = db.get(IncidentVehicle, incident_vehicle_id)
+        vehicle = db.get(IncidentVehicle, incident_vehicle_id, populate_existing=True)
         if not vehicle or not vehicle.lis_operation_unit_id:
+            return
+        if vehicle.lis_pushed_status == prefix and _lokal_status_geschuetzt(vehicle):
+            logger.debug("LIS-Status-Push fuer IncidentVehicle %s uebersprungen (unveraendert %s)",
+                         incident_vehicle_id, prefix)
             return
         if vehicle.vehicle_master and vehicle.vehicle_master.is_external:
             # Fremde Organisationen (inkl. automatisch aus LIS übernommene externe
@@ -1348,7 +1340,11 @@ async def push_vehicle_status_to_lis(incident_vehicle_id: int, status: str) -> N
                     if versuch < _PUSH_VERSUCHE:
                         await asyncio.sleep(_PUSH_BACKOFF_S[min(versuch - 1, len(_PUSH_BACKOFF_S) - 1)])
                     continue
-                _lokal_gepushter_status[incident_vehicle_id] = (prefix, time.monotonic())
+                db.execute(
+                    update(IncidentVehicle)
+                    .where(IncidentVehicle.id == incident_vehicle_id, IncidentVehicle.incident_id == incident.id)
+                    .values(lis_pushed_status=prefix, lis_pushed_at=datetime.now(UTC).replace(tzinfo=None))
+                )
                 logger.info(
                     "Fahrzeugstatus %s (IncidentVehicle %s) zurück ins LIS geschrieben (Org %s)",
                     status, incident_vehicle_id, incident.primary_org_id,
