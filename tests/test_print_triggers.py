@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi import BackgroundTasks
@@ -159,13 +160,16 @@ def test_alarm_route_schedules_trigger_only_for_new_ingest(
     gateway = SimpleNamespace(id=9, org_id=7)
     ingest = SimpleNamespace(
         id=11,
-        einsatz_id=None,
+        einsatz_id=12,
         parse_status="parsed",
+        process_status="applied",
         dedup_action=dedup_action,
     )
-    db = SimpleNamespace(commit=lambda: None, info={})
+    db = MagicMock(info={})
+    db.query.return_value.filter.return_value.first.return_value = None
     monkeypatch.setattr(api, "_resolve_gateway_from_bearer", lambda _request, _db: gateway)
-    monkeypatch.setattr(serial, "ingest_alarm", lambda *_args, **_kwargs: (ingest, created))
+    monkeypatch.setattr(serial, "store_raw", lambda *_args, **_kwargs: (ingest, created))
+    monkeypatch.setattr(serial, "process_ingest", lambda *_args, **_kwargs: ingest)
     tasks = BackgroundTasks()
 
     api.ingest_alarm(_AlarmRequest(uuid.uuid4().hex), tasks, db)

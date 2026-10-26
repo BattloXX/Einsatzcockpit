@@ -10,8 +10,10 @@ und scopen selbst – Pairing über den Code, Alarme über das Device-Token, Art
 """
 from __future__ import annotations
 
+import base64
 import logging
 import time
+from datetime import datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
@@ -25,6 +27,7 @@ from app.db import get_db
 from app.models.gateway import Gateway
 
 logger = logging.getLogger("einsatzleiter.gateway")
+alarm_logger = logging.getLogger("einsatzleiter.alarm")
 router = APIRouter(prefix="/api/v1", tags=["gateway"])
 
 
@@ -74,7 +77,7 @@ def pair(request: Request, db: Session = Depends(get_db)):
 def ingest_alarm(
     request: Request, background_tasks: BackgroundTasks, db: Session = Depends(get_db)
 ):
-    """Nimmt einen seriell empfangenen Alarm entgegen (idempotent via Rohtext-Hash)."""
+    """Nimmt einen seriell empfangenen Alarm entgegen (idempotent via Sequenz oder Rohtext-Hash)."""
     set_tenant_context(db, None)
     gateway = _resolve_gateway_from_bearer(request, db)
     if gateway is None:
@@ -82,90 +85,71 @@ def ingest_alarm(
     assert gateway.org_id is not None  # Gateway wird immer mit org_id angelegt
 
     data = run_async(request.json)
+    raw_bytes = None
+    if data.get("raw_bytes_b64") is not None:
+        try:
+            raw_bytes = base64.b64decode(data["raw_bytes_b64"], validate=True)
+        except (ValueError, TypeError):
+            alarm_logger.warning("Ungueltige Alarm-Bytes ignoriert (gateway %s)", gateway.id)
+        if raw_bytes is not None and len(raw_bytes) > 65536:
+            alarm_logger.warning("Alarm-Bytes auf 64 KiB gekuerzt (gateway %s)", gateway.id)
+            raw_bytes = raw_bytes[:65536]
     raw_text = data.get("raw_text") or ""
+    if not raw_text and raw_bytes is not None:
+        try:
+            raw_text = raw_bytes.decode(data.get("charset") or "utf-8", errors="replace")
+        except LookupError:
+            alarm_logger.warning("Unbekannter Alarm-Zeichensatz (gateway %s)", gateway.id)
+            raw_text = raw_bytes.decode("utf-8", errors="replace")
     if not raw_text:
         raise HTTPException(status_code=400, detail="raw_text fehlt")
     parse_status = data.get("parse_status") or ("parsed" if data.get("parsed") else "parse_failed")
+    sequence = data.get("sequence")
+    if sequence is not None and type(sequence) is not int:
+        alarm_logger.warning("Ungueltige Alarm-Sequenz ignoriert (gateway %s)", gateway.id)
+        sequence = None
+    received_at = None
+    if data.get("received_at"):
+        try:
+            received_at = datetime.fromisoformat(str(data["received_at"]).replace("Z", "+00:00"))
+        except ValueError:
+            alarm_logger.warning("Ungueltige Alarm-Empfangszeit ignoriert (gateway %s)", gateway.id)
+    # source_addr und incomplete werden akzeptiert; P1a hat dafuer keine DB-Spalten.
+    from app.services.serial_alarm_service import process_ingest, store_raw
 
-    from app.services.serial_alarm_service import ingest_alarm as _ingest
-
-    ingest, created = _ingest(
+    ingest, created = store_raw(
         db,
         org_id=gateway.org_id,
         gateway_id=gateway.id,
         raw_text=raw_text,
+        raw_bytes=raw_bytes,
         charset=data.get("charset"),
         parsed=data.get("parsed"),
         parse_status=parse_status,
+        sequence=sequence,
+        received_at_gateway=received_at,
     )
-    if created and ingest.einsatz_id:
-        from app.models.incident import Incident
-        from app.services.alarm_outbox import enqueue_incident_alarm
-
-        incident = db.get(Incident, ingest.einsatz_id)
-        if incident is not None:
-            enqueue_incident_alarm(
-                db, incident, org_id=gateway.org_id, source="gateway",
-                push_url=f"/einsatz/{incident.id}", base_url=str(request.base_url),
-            )
-    db.commit()
-
     if created:
-        from app.services.print_dispatcher import autoprint_alarm_background
-        background_tasks.add_task(autoprint_alarm_background, ingest.id)
+        ingest_id = ingest.id
+        try:
+            ingest = process_ingest(db, ingest_id)
+        except Exception:
+            db.rollback()
+            alarm_logger.exception("Alarm-Verarbeitung fehlgeschlagen (ingest %s)", ingest_id)
+        if ingest.process_status == "applied" and ingest.einsatz_id:
+            from app.services.alarm_apply_service import nachlauf
 
-    # Board/Infoscreen live informieren + Objekt-Verknüpfung nachziehen.
-    # Wie bei UI-/API-/LIS-Anlage: Geocoding (setzt Koordinaten) und Objekt-Matching
-    # (BMA-Nr./Adresse; Geo-Stufe folgt nach dem Geocoding) als Background-Task.
-    # Ohne das wurden bei Gateway-Alarmen nie Objekte automatisch verknüpft.
-    if created and ingest.einsatz_id:
-        from app.models.incident import Incident
-        inc = db.get(Incident, ingest.einsatz_id)
-        if inc is not None:
-            from app.services.incident_notify import incident_alarm_started, notify_incident_created
-            if not incident_alarm_started(db, inc.id):
-                run_async(
-                    notify_incident_created, db, inc,
-                    org_id=gateway.org_id, triggered_by_user_id=None,
-                    push_url=f"/einsatz/{inc.id}", base_url=str(request.base_url),
-                    background_tasks=background_tasks, source="gateway",
-                )
-            try:
-                from app.services.broadcast import broadcast_org
-                from app.services.exercise_guard import darf_extern
-                run_async(broadcast_org, gateway.org_id, {
-                        "type": "incident_created",
-                        "incident_id": ingest.einsatz_id,
-                        "alarm": inc.alarm_type_code,
-                        "alarm_erlaubt": darf_extern(
-                            "ws_alarm",
-                            is_exercise=inc.is_exercise,
-                            org_id=gateway.org_id,
-                            db=db,
-                            planspiel_run_id=inc.planspiel_run_id,
-                        ),
-                        "alarm_type_code": inc.alarm_type_code,
-                        "is_exercise": inc.is_exercise,
-                    })
-            except Exception:
-                pass
-            if inc.lat is None and (inc.address_street or inc.address_city):
-                from app.routers.api_v1 import _geocode_incident
-                background_tasks.add_task(
-                    _geocode_incident, inc.id,
-                    inc.address_street, inc.address_no, inc.address_city,
-                )
-            from app.services.objekt_matching_service import match_incident_background
-            background_tasks.add_task(match_incident_background, inc.id)
-            if ingest.dedup_action == "created":
-                from app.services.print_dispatcher import autoprint_incident_background
-                background_tasks.add_task(autoprint_incident_background, inc.id)
+            nachlauf(
+                db, ingest, org_id=gateway.org_id,
+                background_tasks=background_tasks, base_url=str(request.base_url),
+            )
 
     return {
         "ingest_id": ingest.id,
         "duplicate": not created,
         "einsatz_id": ingest.einsatz_id,
         "parse_status": ingest.parse_status,
+        "process_status": ingest.process_status,
     }
 
 
