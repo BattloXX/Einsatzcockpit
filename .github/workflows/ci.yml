@@ -92,6 +92,8 @@ jobs:
       - env:
           DATABASE_URL: mysql+pymysql://einsatzleiter:testpass@127.0.0.1:3306/einsatzleiter_test
           SECRET_KEY: test-secret-key
+          # Nur fuer Tests, die eine eigene temporaere Datenbank anlegen (CREATE/DROP DATABASE).
+          MARIADB_ADMIN_URL: mysql+pymysql://root:root@127.0.0.1:3306/einsatzleiter_test
         run: |
           alembic upgrade head
           python -m app.seed_data

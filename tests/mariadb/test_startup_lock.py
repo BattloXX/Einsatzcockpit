@@ -1,6 +1,6 @@
 """Paralleler Erststart in einer leeren, isolierten MariaDB-Testdatenbank.
 
-MARIADB_TEST_URL benoetigt CREATE/DROP DATABASE fuer diese temporaere Datenbank.
+MARIADB_ADMIN_URL (Konto mit CREATE/DROP DATABASE) legt diese temporaere Datenbank an.
 SQLite kann den verbindungsgebundenen GET_LOCK nicht abbilden.
 """
 
@@ -20,11 +20,14 @@ from app.models.user import Role, User, UserRole
 from app.seed_data import ROLES
 from app.services.startup_lock import startup_lock
 
-pytestmark = pytest.mark.skipif(not os.environ.get("MARIADB_TEST_URL"), reason="MARIADB_TEST_URL fehlt")
+pytestmark = pytest.mark.skipif(
+    not os.environ.get("MARIADB_TEST_URL") or not os.environ.get("MARIADB_ADMIN_URL"),
+    reason="MARIADB_TEST_URL oder MARIADB_ADMIN_URL fehlt",
+)
 
 
 def test_parallel_first_and_repeated_bootstrap(monkeypatch, caplog):
-    control = create_engine(os.environ["MARIADB_TEST_URL"], isolation_level="AUTOCOMMIT")
+    control = create_engine(os.environ["MARIADB_ADMIN_URL"], isolation_level="AUTOCOMMIT")
     database = "ecp_bootstrap_test_" + uuid4().hex
     engine = create_engine(control.url.set(database=database), pool_size=6)
     sessions = sessionmaker(engine, autoflush=False)
