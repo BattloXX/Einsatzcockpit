@@ -105,7 +105,7 @@ def test_new_fields_sequence_duplicate_and_merged_run_nachlauf(alarm_api):
     assert result["duplicate"] is False and result["process_status"] == "applied"
     row = saved(result["ingest_id"])
     assert row.gateway_id == gateway_id and row.sequence == 42 and row.raw_bytes == raw
-    assert row.received_at_gateway == datetime(2026, 10, 26, 10)
+    assert row.received_at_gateway == datetime(2026, 10, 26, 10)  # noqa: DTZ001
     assert row.dedup_action == "created"
     initial_jobs = jobs(result["einsatz_id"])
     assert {channel for _, channel in initial_jobs} == {"sms", "push", "teams", "mail"}
@@ -123,7 +123,7 @@ def test_new_fields_sequence_duplicate_and_merged_run_nachlauf(alarm_api):
     assert merged_result["duplicate"] is False and merged_result["process_status"] == "applied"
     assert merged_result["einsatz_id"] == result["einsatz_id"]
     assert saved(merged_result["ingest_id"]).dedup_action == "merged"
-    # Bisheriges Verhalten: auch verknuepfte Einsaetze durchlaufen den Nachlauf (Outbox idempotent), nur ohne incident_print.
+    # Bisheriges Verhalten: auch verknuepfte Einsaetze durchlaufen den Nachlauf (Outbox idempotent).
     assert calls == ["broadcast", "alarm_print", "geocode", "match"] and jobs(result["einsatz_id"]) == initial_jobs
     with SessionLocal() as db:
         set_tenant_context(db, None)
