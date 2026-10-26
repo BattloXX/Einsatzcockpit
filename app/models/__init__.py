@@ -6,6 +6,7 @@ from app.models.atemschutz_pruefung import (
 )
 from app.models.bma_import import BmaImportSatz, OrgBmaImportConfig
 from app.models.breathing import BreathingTroop, PressureLog, TroopMember
+from app.models.citizen_verification import CitizenReportVerification
 from app.models.dibos import OrgDibosConfig
 from app.models.dienst_monitor import (  # noqa: F401 -- registriert ORM-Modelle
     DienstMonitorLog,
@@ -291,6 +292,7 @@ from app.models.wordpress_report import WordPressReportConfig
 from app.models.worker_runtime import WorkerRuntime  # noqa: F401
 
 __all__ = [
+    "CitizenReportVerification",
     "SearchChunk",
     "SearchDocument",
     "SearchOutbox",

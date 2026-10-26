@@ -6,11 +6,13 @@ from uuid import uuid4
 
 import pytest
 
+from app.core.security import hash_api_key
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
+from app.models.citizen_verification import CitizenReportVerification
 from app.models.major_incident import CitizenReport, MajorIncident
 from app.models.verleih import VerleihAusleihe
-from app.routers import ui_major_incident, ws
+from app.routers import ws
 from app.services import verleih_service
 from tests.gateway_helpers import bind, cleanup
 from tests.test_gsl_sektoren import _login, _user_lage
@@ -46,9 +48,9 @@ def sms_context(sms_outbox_state):
     yield username, lage_id, org_id, token
     ws._sms_gateways.pop(org_id, None)
     ws._sms_last_gateway.pop(org_id, None)
-    for key, pending in list(ui_major_incident._pending_verifications.items()):
-        if pending["lage_id"] == lage_id:
-            ui_major_incident._pending_verifications.pop(key, None)
+    with SessionLocal() as db:
+        db.query(CitizenReportVerification).filter_by(org_id=org_id, major_incident_id=lage_id).delete()
+        db.commit()
 
 
 @pytest.fixture
@@ -82,15 +84,19 @@ def test_citizen_sms_and_verification(client, sms_context, android_gateway, ok):
         assert db.query(CitizenReport).filter_by(major_incident_id=lage_id).count() == 0
     if not ok:
         assert "SMS konnte nicht gesendet werden" in response.text
-        assert not any(p["lage_id"] == lage_id for p in ui_major_incident._pending_verifications.values())
+        with SessionLocal() as db:
+            set_tenant_context(db, None)
+            assert db.query(CitizenReportVerification).filter_by(major_incident_id=lage_id).count() == 0
         return
-    verify_token, pending = next(
-        (key, value) for key, value in ui_major_incident._pending_verifications.items()
-        if value["lage_id"] == lage_id
-    )
-    assert pending["pin"] in gateway.jobs[0]["text"]
+    verify_token = re.search(r'/verify/([^"/]+)', response.text).group(1)
+    pin = re.search(r"Bestätigungscode lautet (\d{4})", gateway.jobs[0]["text"]).group(1)
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        pending = db.query(CitizenReportVerification).filter_by(major_incident_id=lage_id).one()
+        assert pending.token_hash == hash_api_key(verify_token)
+        assert pending.pin_hash == hash_api_key(f"{verify_token}:{pin}")
     verified = client.post(f"/melden/{token}/verify/{verify_token}", data={
-        "_csrf": client.cookies.get("ec_csrf"), "pin": pending["pin"],
+        "_csrf": client.cookies.get("ec_csrf"), "pin": pin,
     })
     assert verified.status_code == 200
     with SessionLocal() as db:

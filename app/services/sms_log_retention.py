@@ -10,6 +10,7 @@ from app.db import SessionLocal
 from app.models.master import FireDept
 from app.models.org_sms import OrgSmsConfig
 from app.models.sms import SmsDispatchJob, SmsLog, SmsLogRecipient
+from app.services.citizen_verification_service import purge_citizen_verifications
 
 logger = logging.getLogger("einsatzleiter.sms_log_retention")
 
@@ -65,6 +66,8 @@ def purge_sms_logs_for_org(
     set_tenant_context(db, None)
     total = 0
     try:
+        total += purge_citizen_verifications(db, org_id)
+        db.commit()
         config = db.query(OrgSmsConfig).filter(OrgSmsConfig.org_id == org_id).first()
         days = (
             retention_days
@@ -77,7 +80,7 @@ def purge_sms_logs_for_org(
             else (config.log_retention_max_count if config else DEFAULT_RETENTION_MAX_COUNT)
         )
         if days <= 0 and max_count <= 0:
-            return 0
+            return total
 
         if days > 0:
             reference = now or datetime.now(UTC).replace(tzinfo=None)

@@ -257,6 +257,7 @@ _TENANT_TABLE_NAMES: frozenset[str] = frozenset({
     # ~95 manuelle _check_org_access()-Aufrufe in ui_major_incident.py geschützt;
     # ein vergessener Aufruf wäre ein Cross-Tenant-IDOR ohne DB-seitigen Schutz.
     "major_incident",
+    "citizen_report_verification",
     "incident_site",
     # GSL-Einheitenmodus (TenantScoped via Mixin)
     "einheit_aktion",
