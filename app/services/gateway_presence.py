@@ -15,7 +15,7 @@ from typing import Any
 from uuid import uuid4
 
 from sqlalchemy import case
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, lazyload
 
 from app.models.gateway import Gateway
 from app.models.user import SmsGatewayToken
@@ -143,7 +143,9 @@ def state(
         .filter(model.org_id == org_id, model.id == gateway_id, *authenticated(model, kind, token_hash))
         .populate_existing()
     )
-    row = query.with_for_update().first() if lock else query.first()
+    # Zugehoerige Org/weitere Beziehungen nicht mitsperren: FK-Checks anderer
+    # Queue-Transaktionen brauchen dort Shared Locks und duerfen nicht zyklisch warten.
+    row = query.options(lazyload("*")).with_for_update().first() if lock else query.first()
     if row is None:
         return "authentication_failed"
     if getattr(row, "connection_token_hash" if kind == SMS else "agent_connection_token_hash") != token_hash:

@@ -51,7 +51,9 @@ def detach(connection: presence.Connection) -> None:
 
 
 def _db():
-    db = SessionLocal()
+    from app.services.db_transactions import current_read_session
+
+    db = current_read_session(SessionLocal)
     set_tenant_context(db, None)
     return db
 

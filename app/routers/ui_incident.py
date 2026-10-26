@@ -1,4 +1,5 @@
 """UI Router – Einsatz-Board (HTMX-Endpoints)."""
+import asyncio
 import base64
 import hashlib
 import io
@@ -67,6 +68,7 @@ from app.services.ai_service import is_enabled as ai_is_enabled
 from app.services.alarm_service import get_alarm_type_by_code
 from app.services.breathing_service import breathing_effective_enabled
 from app.services.broadcast import broadcast_org, manager
+from app.services.db_transactions import commit_db_operation
 from app.services.incident_service import (
     _lis_enabled_for_org,
     add_section_column,
@@ -1985,22 +1987,20 @@ def create_task(
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "recorder")),
 ):
-    incident = _incident_or_404(incident_id, db)
     seiten = _seiten_ids_pruefen(request, seiten_ids)
-    task = add_task(
-        db, incident, title, detail or None,
-        user_id=request.state.user.id, column_id=column_id,
-    )
-    # Einheit direkt mit-zuweisen — column_id bleibt erhalten, damit der Auftrag
-    # gleichzeitig auf dem Board UND in der Fahrzeug-Karte sichtbar ist
-    # (analog assign_task_to_vehicle).
-    if vehicle_id:
-        task.vehicle_id = vehicle_id
-    if note.strip():
-        db.add(IncidentLog(incident_id=incident_id, text=note.strip(),
-                           user_id=request.state.user.id, author_name=get_author_name(request)))
-    prepend_card(db, task.column_id, "task", task.id)
-    db.commit()
+    def erstellen():
+        incident = _incident_or_404(incident_id, db)
+        task = add_task(db, incident, title, detail or None,
+                        user_id=request.state.user.id, column_id=column_id)
+        if vehicle_id:
+            task.vehicle_id = vehicle_id
+        if note.strip():
+            db.add(IncidentLog(incident_id=incident_id, text=note.strip(),
+                               user_id=request.state.user.id, author_name=get_author_name(request)))
+        prepend_card(db, task.column_id, "task", task.id)
+        return task
+
+    task = commit_db_operation(db, erstellen, label="task.create")
     _objektseiten_uebernehmen(db, request, "task", task, seiten)
     run_async(manager.broadcast, incident_id, {
         "type": "task_created", "task_id": task.id, "column_id": task.column_id,
@@ -2505,15 +2505,16 @@ async def create_message(
     db: Session = Depends(get_db),
     _=Depends(require_role("incident_leader", "admin", "recorder")),
 ):
-    incident = _incident_or_404(incident_id, db)
     seiten = _seiten_ids_pruefen(request, seiten_ids)
     from app.services.incident_service import add_message
-    msg = add_message(
-        db, incident, title=title, detail=detail, status=status,
-        due_after_min=due_after_min, vehicle_id=vehicle_id,
-        author_name=get_author_name(request), user_id=request.state.user.id,
-    )
-    db.commit()
+
+    def erstellen():
+        incident = _incident_or_404(incident_id, db)
+        return add_message(db, incident, title=title, detail=detail, status=status,
+                           due_after_min=due_after_min, vehicle_id=vehicle_id,
+                           author_name=get_author_name(request), user_id=request.state.user.id)
+
+    msg = await asyncio.to_thread(commit_db_operation, db, erstellen, label="message.create")
     _objektseiten_uebernehmen(db, request, "message", msg, seiten)
     # Optional: Dateien direkt beim Anlegen anhängen
     errors: list[str] = []

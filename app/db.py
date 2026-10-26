@@ -11,6 +11,7 @@ from app.config import settings
 engine = create_engine(
     settings.DATABASE_URL,
     pool_pre_ping=True,
+    hide_parameters=True,  # SQL-Fehler duerfen keine SMS-Inhalte oder Tokenwerte protokollieren.
     pool_recycle=300,
     pool_size=10,
     # Audit PR 7: DB-lastige Routen laufen als sync def im anyio-Threadpool

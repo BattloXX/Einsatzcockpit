@@ -1,0 +1,13 @@
+# Explizit mit -f zusaetzlich zu docker-compose.yml waehlen; wird nicht automatisch geladen.
+services:
+  app:
+    stop_grace_period: 150s
+    command:
+      - gunicorn
+      - --config
+      - /app/deploy/proposals/multi-worker/gunicorn.conf.py
+      - app.main:app
+    environment:
+      ECP_GUNICORN_WORKERS: ${ECP_GUNICORN_WORKERS:-1}
+      ECP_GUNICORN_BIND: 0.0.0.0:8092
+      LEADER_LOCK_PATH: /app/app_storage/background-leader.lock

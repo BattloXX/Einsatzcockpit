@@ -20,6 +20,26 @@ from app.services import sms_outbox as outbox
 pytestmark = pytest.mark.skipif(not os.environ.get("MARIADB_TEST_URL"), reason="MARIADB_TEST_URL fehlt")
 
 
+def test_queue_isolation_survives_commit_and_keeps_global_engine_unchanged():
+    from app.services.db_transactions import current_read_session
+
+    engine = create_engine(os.environ["MARIADB_TEST_URL"])
+    sessions = sessionmaker(engine)
+    try:
+        with engine.connect() as connection:
+            default = connection.get_isolation_level()
+        with current_read_session(sessions) as db:
+            for _ in range(3):
+                assert db.connection().get_isolation_level() == "READ COMMITTED"
+                db.commit()
+            db.rollback()
+            assert db.connection().get_isolation_level() == "READ COMMITTED"
+        with sessions() as db:
+            assert db.connection().get_isolation_level() == default
+    finally:
+        engine.dispose()
+
+
 def test_four_workers_claim_once_and_respect_shared_capacity(monkeypatch):
     engine = create_engine(os.environ["MARIADB_TEST_URL"], pool_size=12)
     sessions = sessionmaker(engine, expire_on_commit=False)

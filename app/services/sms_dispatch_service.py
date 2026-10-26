@@ -24,6 +24,7 @@ from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.master import AlarmType, FireDept, OrgSettings
 from app.models.sms import SmsEinsatzinfoRecipient, SmsLog, SmsLogRecipient
+from app.services.db_transactions import current_read_session
 
 # app.routers.ws muss lazy importiert bleiben (Kreisabhaengigkeit)
 
@@ -171,7 +172,7 @@ async def send_bulk_detailed(
     if gateway_ids:
         from app.models.user import SmsGatewayToken
 
-        db = SessionLocal()
+        db = current_read_session(SessionLocal)
         set_tenant_context(db, None)
         try:
             gateway_rows = (
@@ -307,7 +308,7 @@ def _markiere_abgelaufene_einsatzinfo(db: Session, org_id: int, now: datetime) -
 
 
 def persistent_log_result(org_id: int, log_id: int) -> EinsatzinfoDispatchResult:
-    db = SessionLocal()
+    db = current_read_session(SessionLocal)
     set_tenant_context(db, None)
     try:
         db.query(SmsLog).filter(SmsLog.org_id == org_id, SmsLog.id == log_id).one()
@@ -372,7 +373,7 @@ async def retry_pending_einsatzinfo(org_id: int) -> int:
     from app.services.sms_service import resolve_sms_config
 
     async with _nachversand_lock(org_id):
-        db = SessionLocal()
+        db = current_read_session(SessionLocal)
         set_tenant_context(db, None)
         try:
             now = datetime.now(UTC).replace(tzinfo=None)
@@ -417,7 +418,7 @@ async def einsatzinfo_nachversand_loop() -> None:
     from app.models.master import FireDept
 
     while True:
-        db = SessionLocal()
+        db = current_read_session(SessionLocal)
         set_tenant_context(db, None)
         try:
             org_ids = [row[0] for row in db.query(FireDept.id).all()]
@@ -442,7 +443,7 @@ async def dispatch_manual_sms(
     """Fuehrt einen bereits protokollierten manuellen Versand im Hintergrund aus."""
     from app.services.sms_service import resolve_sms_config
 
-    db = SessionLocal()
+    db = current_read_session(SessionLocal)
     set_tenant_context(db, None)
     try:
         log_entry = db.query(SmsLog).filter(SmsLog.id == log_id, SmsLog.org_id == org_id).first()
@@ -522,7 +523,7 @@ async def dispatch_einsatzinfo(
     """
     from app.services.sms_service import resolve_sms_config, sms_available
 
-    db = SessionLocal()
+    db = current_read_session(SessionLocal)
     set_tenant_context(db, None)  # system-level: alle Orgs sichtbar fuer Subqueries
     try:
         if incident_id is not None:
@@ -833,7 +834,7 @@ async def dispatch_gsl_alarm(
         logger.debug("Kein SMS-Provider verfuegbar (org_id=%d) - GSL-Alarm-SMS uebersprungen", org_id)
         return
 
-    db = SessionLocal()
+    db = current_read_session(SessionLocal)
     set_tenant_context(db, None)
     try:
         sms_ctx = resolve_sms_config(org_id, db)

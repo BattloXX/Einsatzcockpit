@@ -11,9 +11,11 @@ und scopen selbst – Pairing über den Code, Alarme über das Device-Token, Art
 from __future__ import annotations
 
 import logging
+import time
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.core.async_bridge import run_async
@@ -184,7 +186,26 @@ def get_artifact(job_id: int, sig: str = "", db: Session = Depends(get_db)):
     if job is None or job.org_id != org_id:
         raise HTTPException(status_code=404, detail="Auftrag nicht gefunden")
     try:
-        pdf = render_job_pdf(db, job)
+        for attempt in range(3):
+            try:
+                pdf = render_job_pdf(db, job)
+                break
+            except OperationalError as error:
+                args = getattr(error.orig, "args", ())
+                code = args[0] if args else None
+                if code not in (1020, 1213) or attempt == 2:
+                    raise
+                # Dieser GET hat keine physische Aussenwirkung. MariaDB verwirft
+                # bei Snapshot-Konflikt/Deadlock die Transaktion; komplett neu lesen.
+                db.rollback()
+                logger.warning(
+                    "Artefakt-Transaktion wiederholen (job=%s, code=%s, attempt=%s)", job_id, code, attempt + 1
+                )
+                time.sleep(0.02 * (attempt + 1))
+                refreshed = db.get(PrintJob, job_id)
+                if refreshed is None or refreshed.org_id != org_id:
+                    raise HTTPException(status_code=404, detail="Auftrag nicht gefunden")
+                job = refreshed
     except ArtifactError as exc:
         # Kein Broadcast: Die Historie hat keinen Live-Listener und wird beim Reload geladen.
         mark_job_failed(db, job, f"Rendern fehlgeschlagen: {exc}")

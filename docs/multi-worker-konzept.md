@@ -104,3 +104,12 @@ Shutdown-Drain entkoppelter Tasks/Threads, Redis-Liveness und gemeinsame Betrieb
 auf der vorhandenen Systemstatus-Seite. Die vier in der Nachprüfung gefundenen Fehler
 (alte `sendet`-SMS, Windows-Recovery bei Spoolerfehlern, Linux-CUPS-Unklarheit und
 Linux-Abbruch während Download) sind dort mit Korrekturen und Regressionstests dokumentiert.
+
+## Phase 6 und Aktivierungsvorschlag
+
+[Phase 6](multi-worker-phase6.md) führt die isolierte Gesamtabnahme mit echten
+Gunicorn-Workern, MariaDB, Redis, Browsern und simulierten Gateway-Protokollclients
+zusammen. Die [Rollout-Anleitung](multi-worker-rollout.md) beschreibt die optionalen
+Konfigurationsvorschläge und den Rückweg zu einem Worker. Geräteabnahme und
+produktive Freigabe bleiben offen; die bestehenden produktiven Startdateien
+wurden nicht verändert.

@@ -15,6 +15,7 @@ from uuid import uuid4
 import httpx
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import lazyload
 
 from app.config import settings
 from app.core.tenant import set_tenant_context
@@ -38,7 +39,9 @@ _task: asyncio.Task | None = None
 
 
 def database():
-    db = SessionLocal()
+    from app.services.db_transactions import current_read_session
+
+    db = current_read_session(SessionLocal)
     set_tenant_context(db, None)
     return db
 
@@ -292,13 +295,11 @@ def _prepare(org_id, job_id, token, eus_available: bool, eus_timeout: int):
         if db.get_bind().dialect.name == "sqlite":
             # SQLite ignoriert FOR UPDATE. Auch dort Cursor und Kapazitaet atomar lesen/aendern.
             db.connection().exec_driver_sql("BEGIN IMMEDIATE")
-        else:
-            # Nach dem Warten auf den Org-Cursor muss die Kapazitaetsabfrage den
-            # letzten Commit sehen, keinen vorher erzeugten Repeatable-Read-Snapshot.
-            db.connection(execution_options={"isolation_level": "READ COMMITTED"})
+        # database() setzt fuer MariaDB READ COMMITTED vor der ersten Query.
         cursor = _cursor(db, org_id)
         gateways = (
             db.query(SmsGatewayToken)
+            .options(lazyload("*"))
             .filter(SmsGatewayToken.org_id == org_id)
             .order_by(SmsGatewayToken.id)
             .with_for_update()

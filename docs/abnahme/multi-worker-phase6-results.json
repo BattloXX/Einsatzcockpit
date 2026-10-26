@@ -1,0 +1,595 @@
+{
+  "created_at": "2026-10-26T12:09:48.505203+00:00",
+  "cloud_base_commit": "8b265aee",
+  "source_branch": "feat/multi-worker-phase6",
+  "scope": "isolated_protocol_acceptance",
+  "production_approved": false,
+  "hardware_accepted": false,
+  "stages_3_4_workers": "not_run_pending_approved_2_worker_production_stage",
+  "gateway_source_commits": {
+    "android": "e5f11a3",
+    "linux": "b34b578",
+    "windows": "965c5cd"
+  },
+  "versions": {
+    "gunicorn": "26.2.0",
+    "uvicorn": "0.54.0",
+    "SQLAlchemy": "2.1.5",
+    "redis": "8.1.0",
+    "PyMySQL": "1.2.3",
+    "playwright": "1.64.0"
+  },
+  "docker_images": {
+    "mariadb:12.3": {
+      "id": "sha256:99c125f103f5d081ebbc9ffe064e63daf7f688ac33a5f7f29af2d7260a96debf",
+      "repo_digests": [
+        "mariadb@sha256:99c125f103f5d081ebbc9ffe064e63daf7f688ac33a5f7f29af2d7260a96debf"
+      ]
+    },
+    "redis:7-alpine": {
+      "id": "sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2",
+      "repo_digests": [
+        "redis@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2"
+      ]
+    }
+  },
+  "source_sha256": {
+    "app/db.py": "9697877981b5a1466372bb5914a19d2a4ac766f413ab4c9643b614485c8d23e1",
+    "app/routers/gateway_api.py": "a133cba87e825aee3448a96c1068a2ac6871d02d7860ec6966f869b8ab5f5850",
+    "app/routers/ui_incident.py": "c1893cb1705ea4ef944c257191c663712ed4ada60332fb536db3224c8c75907f",
+    "app/services/db_transactions.py": "53cfbcdd981737634230b02e8a69a9ac276b5c48a3a204bdc9e86261fa3fbf9c",
+    "app/services/gateway_presence.py": "0eec2b2d10e3f485a200051d3f86127022fbb03f6aca1daf9fcd808381da2e7e",
+    "app/services/gateway_routing.py": "a0b51d2f3d858d255e34d4b5bcbe73ad4b061fc452bb02e47dfaa72733bb9c98",
+    "app/services/incident_qr_service.py": "b4a7869b289a5e0d469d19d516c66e9a93df194bcf5c264122bf9d4930716e52",
+    "app/services/incident_service.py": "c168154e50c25b86a595433e36febeee49b26e0933653e1baa5d52c4f40753d2",
+    "app/services/sms_dispatch_service.py": "01e3b8e385284107725703182f8e737aeadc4308e9fe29334d8bc646ccf635a1",
+    "app/services/sms_outbox.py": "c2f90e52a7d05b1753394f998ff2b7a02a062aabe5d01f48eee66dbd27bf38f4",
+    "e2e/multi_worker/__init__.py": "f1ccd30b5d791aade8cf44a6ef3e4f4b974bf5d8016d3d21fbff1c2b4405ff4a",
+    "e2e/multi_worker/acceptance_app.py": "89579bcb70bac1ee794183a9db8b1484c8b271baca11b986ebcc6b4da4f07237",
+    "e2e/multi_worker/conftest.py": "f187f8b0f6ee0faeafa96f7353372e6b2da5c8f88305067f68b8d2bccfc9ae56",
+    "e2e/multi_worker/lab.py": "6804f23be3fa9be471ddd20d224393df91d3a86925adc52c0872fa4a60891a8f",
+    "e2e/multi_worker/peers.py": "601670c968e4996ff2f8a6bc3ed458183796ceb1ab628415cca45a931fc7879d",
+    "e2e/multi_worker/test_acceptance.py": "3afa072d37ae69032df3e4dd67aad5cafe617fdb830fc24e9fbc5d2d299c6df6",
+    "e2e/multi_worker/test_browser_and_health.py": "a461ec2272f5f62f8b52607228c348c1f235959afdbf3c97a200ae500f2c93a9",
+    "deploy/proposals/multi-worker/gunicorn.conf.py": "90371f1414b1a4fe6537ff01af93c96bec7ddf988c3d7adcf3fc1edfe6eb74dc"
+  },
+  "source_sha256_scope": "final reviewed sources; single-worker run used stricter first-poll assertion",
+  "previous_runs": [
+    {
+      "scope": "initial_linux_smoke",
+      "outcome": "failed",
+      "finding": "concurrent_qr_principal_creation"
+    },
+    {
+      "scope": "first_complete_two_worker_run",
+      "passed": 12,
+      "failed": 1,
+      "finding": "parallel_browser_insert_mariadb_1020"
+    },
+    {
+      "scope": "browser_after_fix",
+      "passed": 1,
+      "failed": 0
+    },
+    {
+      "scope": "two_workers_before_session_bind_hardening",
+      "passed": 13,
+      "failed": 0
+    },
+    {
+      "scope": "two_worker_repetition_with_single_poll_test_assumption",
+      "passed": 11,
+      "failed": 2,
+      "finding": "valid_skip_locked_empty_poll_and_aborted_case_left_queued_job"
+    }
+  ],
+  "final_runs": [
+    {
+      "workers": 2,
+      "mariadb": "12.3.3-MariaDB-ubu2404",
+      "harness_variant": "bounded_skip_locked_poll",
+      "exit_code": 0,
+      "pytest": [
+        {
+          "test": "e2e/multi_worker/test_acceptance.py::test_00_real_shared_configuration",
+          "outcome": "passed",
+          "duration_s": 5.07468241895549
+        },
+        {
+          "test": "e2e/multi_worker/test_acceptance.py::test_01_alarm_sms_across_workers",
+          "outcome": "passed",
+          "duration_s": 1.0170217689592391
+        },
+        {
+          "test": "e2e/multi_worker/test_acceptance.py::test_02_parallel_sms",
+          "outcome": "passed",
+          "duration_s": 3.2543081560870633
+        },
+        {
+          "test": "e2e/multi_worker/test_acceptance.py::test_03_gateway_abort_and_late_sms_result",
+          "outcome": "passed",
+          "duration_s": 60.80149567301851
+        },
+        {
+          "test": "e2e/multi_worker/test_acceptance.py::test_04_linux_print_across_workers",
+          "outcome": "passed",
+          "duration_s": 3.6207131799310446
+        },
+        {
+          "test": "e2e/multi_worker/test_acceptance.py::test_05_windows_print_across_workers",
+          "outcome": "passed",
+          "duration_s": 1.470590322976932
+        },
+        {
+          "test": "e2e/multi_worker/test_acceptance.py::test_06_two_agents_priority_takeover_and_uncertain",
+          "outcome": "passed",
+          "duration_s": 65.37851333594881
+        },
+        {
+          "test": "e2e/multi_worker/test_acceptance.py::test_07_worker_crash_during_open_print",
+          "outcome": "passed",
+          "duration_s": 26.54389838699717
+        },
+        {
+          "test": "e2e/multi_worker/test_acceptance.py::test_08_redis_outage_persistent_jobs_and_reconnect",
+          "outcome": "passed",
+          "duration_s": 16.977979355026037
+        },
+        {
+          "test": "e2e/multi_worker/test_browser_and_health.py::test_09_parallel_browser_editing_and_reconnect",
+          "outcome": "passed",
+          "duration_s": 6.276401728042401
+        },
+        {
+          "test": "e2e/multi_worker/test_browser_and_health.py::test_11_tenant_isolation_and_token_revocation",
+          "outcome": "passed",
+          "duration_s": 5.398324989946559
+        },
+        {
+          "test": "e2e/multi_worker/test_browser_and_health.py::test_12_leader_failover_and_gateway_expiry",
+          "outcome": "passed",
+          "duration_s": 90.04595627496019
+        },
+        {
+          "test": "e2e/multi_worker/test_browser_and_health.py::test_13_job_accounting_and_diagnostic_logs",
+          "outcome": "passed",
+          "duration_s": 0.00682824500836432
+        }
+      ],
+      "protocol_facts": [
+        {
+          "outcome": "passed",
+          "case": "shared_configuration",
+          "worker_ids": [
+            "worker-1",
+            "worker-2"
+          ],
+          "configuration_hash": "9d478f9b5eceb95b3df9a9fae597506871832ffb721e98108b5826111014d1ce",
+          "redis_connected": true
+        },
+        {
+          "outcome": "passed",
+          "case": "alarm_sms",
+          "job_ids": [
+            "7dd9129b9c514b81815750f2f8fc9651"
+          ],
+          "origin": "worker-1",
+          "gateway_worker": "worker-2",
+          "routing_workers": [
+            "worker-1"
+          ],
+          "simulated_submissions": 1,
+          "delivery_verified": false,
+          "job_status": "sent"
+        },
+        {
+          "outcome": "passed",
+          "case": "parallel_sms",
+          "jobs": 12,
+          "job_ids": [
+            "2ef5739df7324a9595fa31ead50367a8",
+            "0a7893e1d7524d84a600477fe882945b",
+            "fdc8b70b42934d3c9bf0de282092ab7c",
+            "7fa05f57617f414d843848a73f92152a",
+            "c051e80efd3543d5bb642dda30b3e224",
+            "788e723aebda4bd9be4318e872b1cddd",
+            "7f4420c2f83e4f8bae87f493a1e48a91",
+            "86a712b84a71481eb77483bdf3167c7f",
+            "c7dd9afe2e604ec1bf948958ef065096",
+            "6097d8656abe409489762ca9e472e4ac",
+            "c28c799ea66a4ccca344b6927645d14d",
+            "fb1c9c2916e4480b80d4a61e70f4f4c5"
+          ],
+          "simulated_submissions": 12
+        },
+        {
+          "outcome": "passed",
+          "case": "sms_abort",
+          "job_id": "1ed2b7ade30f46f6bd911b24e22b92e7",
+          "generation": 1,
+          "simulated_submissions": 1,
+          "late_result_ignored": true,
+          "job_status": "uncertain"
+        },
+        {
+          "outcome": "passed",
+          "case": "linux_print",
+          "job_ids": [
+            1,
+            2,
+            3
+          ],
+          "statuses": [
+            "done",
+            "done",
+            "done"
+          ],
+          "routing_workers": [
+            "worker-1",
+            "worker-1",
+            "worker-1"
+          ],
+          "simulated_submissions": 3
+        },
+        {
+          "outcome": "passed",
+          "case": "windows_print",
+          "job_id": 4,
+          "origin": "worker-1",
+          "gateway_worker": "worker-2",
+          "hints": 1,
+          "generation": 1,
+          "simulated_submissions": 1
+        },
+        {
+          "outcome": "passed",
+          "case": "two_windows_agents",
+          "takeover_job": 5,
+          "takeover_generation": 2,
+          "uncertain_job": 6,
+          "simulated_submissions": {
+            "5": 1,
+            "6": 1
+          },
+          "automatic_reprint": false
+        },
+        {
+          "outcome": "passed",
+          "case": "worker_crash_open_job",
+          "job_id": 7,
+          "old_worker": "worker-1",
+          "new_worker": "worker-3",
+          "simulated_submissions": 1,
+          "recovery_job": 8,
+          "job_status": "uncertain"
+        },
+        {
+          "outcome": "passed",
+          "case": "redis_restart",
+          "sms_job": "7a9bc7116463432e84c5df92e01007cf",
+          "linux_job": 9,
+          "windows_job": 10,
+          "windows_hint_omitted": true,
+          "echo_repeats": 3,
+          "duplicate_submissions": 0,
+          "monitoring_reported_outage": true
+        },
+        {
+          "outcome": "passed",
+          "case": "parallel_browsers",
+          "incident_id": 1,
+          "browser_contexts": 2,
+          "websocket_worker": "worker-2",
+          "second_websocket_worker": "worker-3",
+          "messages": 2,
+          "tasks": 2,
+          "lost_updates": 0
+        },
+        {
+          "outcome": "passed",
+          "case": "browser_reconnect",
+          "incident_id": 1,
+          "missed_message_recovered": true
+        },
+        {
+          "outcome": "passed",
+          "case": "tenant_isolation",
+          "foreign_ack_rejected": true,
+          "foreign_http_rejected": true,
+          "foreign_websocket_rejected": true,
+          "monitoring_scoped": true,
+          "revoked_gateway_offline": true
+        },
+        {
+          "outcome": "passed",
+          "case": "leader_failover",
+          "old_worker": "worker-2",
+          "new_worker": "worker-3",
+          "observed_replacement_seconds": 21.98,
+          "gateway_offline_after_seconds": 89.81,
+          "gateway_ttl_seconds": 90
+        },
+        {
+          "outcome": "passed",
+          "case": "job_accounting",
+          "states": {
+            "sms": {
+              "sent": 15,
+              "failed": 0,
+              "uncertain": 1
+            },
+            "print": {
+              "done": 8,
+              "failed": 0,
+              "uncertain": 2
+            }
+          },
+          "unfinished_jobs": 0,
+          "secret_leaks": 0
+        }
+      ]
+    },
+    {
+      "workers": 1,
+      "mariadb": "12.3.3-MariaDB-ubu2404",
+      "harness_variant": "stricter_first_poll_grant_assertion",
+      "exit_code": 0,
+      "pytest": [
+        {
+          "test": "e2e/multi_worker/test_acceptance.py::test_00_real_shared_configuration",
+          "outcome": "passed",
+          "duration_s": 5.18077598605305
+        },
+        {
+          "test": "e2e/multi_worker/test_acceptance.py::test_01_alarm_sms_across_workers",
+          "outcome": "passed",
+          "duration_s": 1.145786884939298
+        },
+        {
+          "test": "e2e/multi_worker/test_acceptance.py::test_02_parallel_sms",
+          "outcome": "passed",
+          "duration_s": 3.332650242955424
+        },
+        {
+          "test": "e2e/multi_worker/test_acceptance.py::test_03_gateway_abort_and_late_sms_result",
+          "outcome": "passed",
+          "duration_s": 61.055734567926265
+        },
+        {
+          "test": "e2e/multi_worker/test_acceptance.py::test_04_linux_print_across_workers",
+          "outcome": "passed",
+          "duration_s": 6.649370096041821
+        },
+        {
+          "test": "e2e/multi_worker/test_acceptance.py::test_05_windows_print_across_workers",
+          "outcome": "passed",
+          "duration_s": 2.036266505951062
+        },
+        {
+          "test": "e2e/multi_worker/test_acceptance.py::test_06_two_agents_priority_takeover_and_uncertain",
+          "outcome": "passed",
+          "duration_s": 76.03294624306727
+        },
+        {
+          "test": "e2e/multi_worker/test_acceptance.py::test_07_worker_crash_during_open_print",
+          "outcome": "passed",
+          "duration_s": 24.96888218494132
+        },
+        {
+          "test": "e2e/multi_worker/test_acceptance.py::test_08_redis_outage_persistent_jobs_and_reconnect",
+          "outcome": "passed",
+          "duration_s": 15.271280835033394
+        },
+        {
+          "test": "e2e/multi_worker/test_browser_and_health.py::test_09_parallel_browser_editing_and_reconnect",
+          "outcome": "passed",
+          "duration_s": 7.2415448050014675
+        },
+        {
+          "test": "e2e/multi_worker/test_browser_and_health.py::test_11_tenant_isolation_and_token_revocation",
+          "outcome": "passed",
+          "duration_s": 5.279014892061241
+        },
+        {
+          "test": "e2e/multi_worker/test_browser_and_health.py::test_12_leader_failover_and_gateway_expiry",
+          "outcome": "passed",
+          "duration_s": 89.16972180595621
+        },
+        {
+          "test": "e2e/multi_worker/test_browser_and_health.py::test_13_job_accounting_and_diagnostic_logs",
+          "outcome": "passed",
+          "duration_s": 0.007711595040746033
+        }
+      ],
+      "protocol_facts": [
+        {
+          "outcome": "passed",
+          "case": "shared_configuration",
+          "worker_ids": [
+            "worker-1"
+          ],
+          "configuration_hash": "491b3f859231bae751ced54bbef1399f4c59f800f9dbeab0902db2e7b2064c67",
+          "redis_connected": true
+        },
+        {
+          "outcome": "passed",
+          "case": "alarm_sms",
+          "job_ids": [
+            "9282e8f0517d444ea99a48ebc5f5d9c9"
+          ],
+          "origin": "worker-1",
+          "gateway_worker": "worker-1",
+          "routing_workers": [
+            "worker-1"
+          ],
+          "simulated_submissions": 1,
+          "delivery_verified": false,
+          "job_status": "sent"
+        },
+        {
+          "outcome": "passed",
+          "case": "parallel_sms",
+          "jobs": 12,
+          "job_ids": [
+            "722a8e7ed3b5426c86961eab4a622266",
+            "557dbb9c8b53443ab13b8820f6cc9aa1",
+            "32f2b033fb1f4e8db1d4846d4e68dea1",
+            "b326599969ef4c84b2026b72d6abe2f6",
+            "3c3186e1fd6d46a78ff4f02643375d00",
+            "6907b7d3205c44ef9dd33edb8efce078",
+            "69d356f4ca334d67bfda83f7d82cd4c7",
+            "8de59570d4df4d9eb26ed04e0e9fd31a",
+            "ebe8a6f046c1492cb81ac1071a4d5ab7",
+            "6e64e2c463564c7eb6fcde3296b970db",
+            "b2e7023b00334b13a4a3c6b0f768de70",
+            "13f39cce4eaf495fa0cc958de325d808"
+          ],
+          "simulated_submissions": 12
+        },
+        {
+          "outcome": "passed",
+          "case": "sms_abort",
+          "job_id": "cef8b23c65fc468d98a5c0f4848dc64b",
+          "generation": 1,
+          "simulated_submissions": 1,
+          "late_result_ignored": true,
+          "job_status": "uncertain"
+        },
+        {
+          "outcome": "passed",
+          "case": "linux_print",
+          "job_ids": [
+            1,
+            2,
+            3
+          ],
+          "statuses": [
+            "done",
+            "done",
+            "done"
+          ],
+          "routing_workers": [
+            "worker-1",
+            "worker-1",
+            "worker-1"
+          ],
+          "simulated_submissions": 3
+        },
+        {
+          "outcome": "passed",
+          "case": "windows_print",
+          "job_id": 4,
+          "origin": "worker-1",
+          "gateway_worker": "worker-1",
+          "hints": 1,
+          "generation": 1,
+          "simulated_submissions": 1
+        },
+        {
+          "outcome": "passed",
+          "case": "two_windows_agents",
+          "takeover_job": 5,
+          "takeover_generation": 2,
+          "uncertain_job": 6,
+          "simulated_submissions": {
+            "5": 1,
+            "6": 1
+          },
+          "automatic_reprint": false
+        },
+        {
+          "outcome": "passed",
+          "case": "worker_crash_open_job",
+          "job_id": 7,
+          "old_worker": "worker-1",
+          "new_worker": "worker-2",
+          "simulated_submissions": 1,
+          "recovery_job": 8,
+          "job_status": "uncertain"
+        },
+        {
+          "outcome": "passed",
+          "case": "redis_restart",
+          "sms_job": "23f173a89004437d9e02ddc4691890ca",
+          "linux_job": 9,
+          "windows_job": 10,
+          "windows_hint_omitted": true,
+          "echo_repeats": 3,
+          "duplicate_submissions": 0,
+          "monitoring_reported_outage": true
+        },
+        {
+          "outcome": "passed",
+          "case": "parallel_browsers",
+          "incident_id": 1,
+          "browser_contexts": 2,
+          "websocket_worker": "worker-2",
+          "second_websocket_worker": "worker-2",
+          "messages": 2,
+          "tasks": 2,
+          "lost_updates": 0
+        },
+        {
+          "outcome": "passed",
+          "case": "browser_reconnect",
+          "incident_id": 1,
+          "missed_message_recovered": true
+        },
+        {
+          "outcome": "passed",
+          "case": "tenant_isolation",
+          "foreign_ack_rejected": true,
+          "foreign_http_rejected": true,
+          "foreign_websocket_rejected": true,
+          "monitoring_scoped": true,
+          "revoked_gateway_offline": true
+        },
+        {
+          "outcome": "passed",
+          "case": "leader_failover",
+          "old_worker": "worker-2",
+          "new_worker": "worker-3",
+          "observed_replacement_seconds": 16.07,
+          "gateway_offline_after_seconds": 89.03,
+          "gateway_ttl_seconds": 90
+        },
+        {
+          "outcome": "passed",
+          "case": "job_accounting",
+          "states": {
+            "sms": {
+              "sent": 15,
+              "failed": 0,
+              "uncertain": 1
+            },
+            "print": {
+              "done": 8,
+              "failed": 0,
+              "uncertain": 2
+            }
+          },
+          "unfinished_jobs": 0,
+          "secret_leaks": 0
+        }
+      ]
+    }
+  ],
+  "additional_checks": {
+    "sms_print_routing_background_regression": "440 passed, 4 skipped, 48 warnings in 121.61s (0:02:01)",
+    "board_and_upload_regression": "35 passed, 67 warnings in 14.58s",
+    "focused_transaction_config_and_redaction": "32 passed, 43 warnings in 4.04s",
+    "mariadb_concurrent_transactions_and_isolation": "7 passed, 42 warnings in 2.62s",
+    "ruff": "passed",
+    "mypy": "passed (9 affected modules)",
+    "compose_proposals": "validated worker values 1/2/3/4 and 150s stop grace without deployment"
+  },
+  "remaining_risks": [
+    "physical_alarm_sms_and_real_provider_fallback_not_accepted",
+    "physical_linux_windows_and_two_pc_print_not_accepted",
+    "gateway_presence_crash_detection_bounded_by_90s_ttl",
+    "file_leader_lock_single_host_only",
+    "lagefuehrung_soft_presence_and_locks_still_worker_local",
+    "full_map_and_yjs_collaboration_during_redis_outage_not_accepted",
+    "target_host_versions_and_representative_load_not_verified"
+  ]
+}
