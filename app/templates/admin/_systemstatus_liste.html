@@ -67,7 +67,7 @@
 {% for worker in runtime.workers %}
 <details class="mt-4">
   <summary style="overflow-wrap:anywhere">{{ worker.worker_id }} · {{ 'Leader' if worker.leader else 'Worker' }} · Heartbeat {{ worker.heartbeat_at|local_datetime }}</summary>
-  {% if worker.leader_error %}<p class="alert alert--danger">Leader-Lock nicht verfügbar: {{ worker.leader_error }}.</p>{% endif %}
+  {% if worker.leader_error %}<p class="alert alert--error">Leader-Lock nicht verfügbar: {{ worker.leader_error }}.</p>{% endif %}
   <p>Redis-Subscriber: {{ 'verbunden' if worker.redis.subscriber_connected else 'getrennt' }}.
     Publish-Fehler: {{ worker.redis.publish_failures or 0 }} · Subscriber-Abbrüche: {{ worker.redis.subscriber_failures or 0 }}.
     {% if worker.redis.last_error %}Letztes Ereignis: {{ worker.redis.last_error }} ({{ worker.redis.last_error_at|local_datetime }}).{% endif %}</p>

@@ -49,6 +49,8 @@ def _lade_faellige() -> list[dict]:
         )
         result = []
         for a in faellige:
+            if a.erinnerung_geplant_at is None or a.org_id is None:
+                continue
             key = f"verleih-reminder:{a.id}:{a.erinnerung_geplant_at.isoformat()}"
             previous = (
                 db.query(SmsDispatchJob)

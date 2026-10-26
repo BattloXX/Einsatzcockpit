@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
 import pytest
 
@@ -175,7 +174,7 @@ async def test_retention_deletes_inbox_row_but_keeps_assigned_message(setup_db, 
         db.close()
 
 
-def test_main_registers_mail_zuordnung_loop():
-    source = (Path(__file__).parents[1] / "app/main.py").read_text()
-    assert "from app.services.mail_zuordnung_loop import mail_zuordnung_loop" in source
-    assert "mail_zuordnung_loop()," in source
+def test_main_registers_mail_zuordnung_loop(monkeypatch):
+    from tests.background_loop_helpers import registered_background_loop_names
+
+    assert "mail_zuordnung_loop" in registered_background_loop_names(monkeypatch)

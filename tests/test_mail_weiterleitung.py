@@ -454,10 +454,9 @@ def test_system_admin_crud_catch_all_und_testmail(client, cfg, versand):
         db.close()
 
 
-def test_loop_ist_registriert_und_abschaltbar():
-    import inspect
+def test_loop_ist_registriert_und_abschaltbar(monkeypatch):
+    from tests.background_loop_helpers import registered_background_loop_names
 
-    import app.main as main
-    assert "mail_weiterleitung_loop()" in inspect.getsource(main)
+    assert "mail_weiterleitung_loop" in registered_background_loop_names(monkeypatch)
     from app.config import settings
     assert settings.MAIL_WEITERLEITUNG_LOOP_ENABLED in (True, False)
