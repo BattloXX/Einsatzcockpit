@@ -28,7 +28,7 @@ from app.core.dependencies import _resolve_current_org
 from app.core.multi_account import ACCOUNTS_COOKIE, add_account, load_accounts, set_accounts_cookie
 from app.core.security import pruefe_geraete_session, unsign_native_link_token, unsign_session
 from app.core.tenant import set_tenant_context
-from app.db import SessionLocal
+from app.db import SessionLocal, engine
 from app.mcp import download_router as mcp_download_router
 from app.mcp import router as mcp_router
 from app.mcp import upload_router as mcp_upload_router
@@ -347,16 +347,17 @@ async def lifespan(app: FastAPI):
     from app.services import linux_print_service
     await linux_print_service.start()
 
-    # Bootstrap admin on first start
-    _bootstrap_admin()
+    from app.services.startup_lock import startup_lock
 
-    # Separate Wetter-DB (Zeitreihe lokaler Stationen) initialisieren, falls konfiguriert.
-    try:
-        from app.db_weather import init_weather_db
+    # Auch create_all der separaten Wetter-DB ueber die Haupt-DB serialisieren.
+    with startup_lock(engine):
+        _bootstrap_admin()
+        try:
+            from app.db_weather import init_weather_db
 
-        init_weather_db()
-    except Exception as exc:  # Wetter ist unkritisch – Start nie blockieren.
-        logger.warning("Wetter-DB-Init übersprungen: %s", exc)
+            init_weather_db()
+        except Exception as exc:  # Wetter ist unkritisch – Start nie blockieren.
+            logger.warning("Wetter-DB-Init übersprungen: %s", exc)
 
     # Der Lock ist die Sicherheitsgrenze. DB-Heartbeats dienen nur der Diagnose.
     runtime = BackgroundRuntime(settings.LEADER_LOCK_PATH, _start_background_loops)
@@ -432,9 +433,10 @@ def _bootstrap_admin() -> None:
             logger.warning("Beim nächsten Login bitte Passwort ändern.")
             logger.warning("=" * 70)
     except IntegrityError:
-        # Another worker seeded concurrently — benign race, safe to ignore
         db.rollback()
-        logger.debug("Bootstrap-Seed: paralleler Worker war schneller (IntegrityError)")
+        if db.query(User).first() is None:
+            raise
+        logger.warning("Bootstrap-Seed: paralleler Worker war schneller (IntegrityError); Benutzer existiert")
     except Exception:
         # C1: Echte Seed-/Bootstrap-Fehler (z. B. Migrationsstand) dürfen nicht
         # still verschwinden — der Start läuft weiter, aber der Fehler muss ins Log.
