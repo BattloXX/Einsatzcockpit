@@ -251,6 +251,8 @@ _TENANT_TABLE_NAMES: frozenset[str] = frozenset({
     "mailing_link_click",
     "member_tag",
     "alarm_ingest",
+    "alarm_parser_regelsatz",
+    "alarm_parser_testfall",
     "print_rule",
     "org_mail_eingang",
     # GSL/Großschadenslage (SEC-1 Defense-in-Depth-Backstop) — bisher nur durch

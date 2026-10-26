@@ -18,6 +18,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.models.gateway import PARSE_FAILED, AlarmIngest
+from app.services.alarm_parser import AlarmParseResult, parse_alarm
+from app.services.alarm_parser.katalog import baue_kontext
+from app.services.alarm_parser.laufzeit import aktiver_regelsatz
 
 logger = logging.getLogger("einsatzleiter.alarm")
 
@@ -128,14 +131,14 @@ def process_ingest(
         # Savepoint: bei Fehlern nur die Einsatzanlage zurueckrollen. Der Claim
         # bleibt bis zum Commit gesperrt, auch waehrend wir error protokollieren.
         with db.begin_nested():
+            parsed = _parse_ingest(db, ingest, org_id)
             incident, action = _create_or_link_incident(
-                db, org_id, ingest.parsed, ingest.parse_status, ingest.raw_text,
+                db, org_id, parsed, ingest.parse_status, ingest.raw_text,
             )
             if incident is not None:
                 ingest.einsatz_id = incident.id
                 ingest.dedup_action = action
             ingest.process_status = "applied"
-            ingest.process_error = None
             ingest.applied_at = datetime.now(UTC).replace(tzinfo=None)
             db.flush()
     except Exception as exc:
@@ -150,6 +153,48 @@ def process_ingest(
     if ingest.process_status == "applied" and on_applied is not None:
         on_applied(ingest)
     return ingest
+
+
+def _parse_ingest(db: Session, ingest: AlarmIngest, org_id: int) -> dict:
+    """Cloud-Ergebnis speichern und kompatible Werte fuer die Einsatzanlage bauen."""
+    gespeichert = ingest.parsed or {}
+    gateway = gespeichert.get("gateway_parsed") if "gateway_parsed" in gespeichert else ingest.parsed
+    fallback = gateway or {}
+    ingest.process_error = None
+    ingest.parser_version = "0"
+    ingest.leitstellennummer = None
+    try:
+        regeln = aktiver_regelsatz(db, org_id)
+        ingest.parser_version = regeln.version
+        result = parse_alarm(ingest.raw_text, baue_kontext(db, org_id), regeln)
+        if "parser_fehler" in result.hinweise:
+            raise ValueError("Parser meldet parser_fehler")
+        ingest.leitstellennummer = result.leitstellennummer
+        ingest.parsed = {**result.to_dict(), "gateway_parsed": gateway}
+        ingest.parse_status = "parsed" if result.status in ("ok", "teilweise") else PARSE_FAILED
+        parsed = {
+            "alarm_type_code": result.alarm_type_code,
+            "street": result.strasse,
+            "house_no": result.hausnummer,
+            "city": result.gemeinde,
+            "started_at": result.alarmzeit,
+            "reason": " > ".join(filter(None, [result.meldebild, *result.zusatzinfo])) or None,
+            "is_exercise": result.ist_uebung,
+        }
+        for feld, wert in fallback.items():
+            if (result.status == "unklar" or parsed.get(feld) in (None, "", False)) and wert is not None:
+                parsed[feld] = wert
+        return parsed
+    except Exception as exc:
+        logger.exception("Cloud-Parser fehlgeschlagen (Ingest %s, org %s)", ingest.id, org_id)
+        ingest.process_error = f"Cloud-Parser: {exc}"
+        ingest.parse_status = PARSE_FAILED
+        fehler = AlarmParseResult(
+            original_text=ingest.raw_text, rest_text=ingest.raw_text,
+            parser_version=ingest.parser_version, hinweise=["parser_fehler"],
+        )
+        ingest.parsed = {**fehler.to_dict(), "gateway_parsed": gateway}
+        return fallback
 
 
 def ingest_alarm(

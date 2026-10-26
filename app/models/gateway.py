@@ -493,6 +493,49 @@ class AlarmIngest(TenantScoped, Base):
     )
 
 
+class AlarmParserRegelsatz(TenantScoped, Base):
+    """Versionierte Parserregeln einer Organisation."""
+    __tablename__ = "alarm_parser_regelsatz"
+
+    id: Mapped[int] = mapped_column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="entwurf", server_default="entwurf")
+    regeln: Mapped[dict] = mapped_column(JSON, nullable=False)
+    notiz: Mapped[str | None] = mapped_column(Text, nullable=True)
+    basis_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    erstellt_von_user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+    quelle: Mapped[str] = mapped_column(String(20), nullable=False, default="ui", server_default="ui")
+    erstellt_am: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC).replace(tzinfo=None))
+    aktiviert_am: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    aktiviert_von_user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+
+    __table_args__ = (
+        UniqueConstraint("org_id", "version", name="uq_alarm_parser_regelsatz_org_version"),
+    )
+
+
+class AlarmParserTestfall(TenantScoped, Base):
+    """Erwartetes Parserergebnis fuer einen anonymisierten Rohtext."""
+    __tablename__ = "alarm_parser_testfall"
+
+    id: Mapped[int] = mapped_column(BigInteger().with_variant(Integer, "sqlite"), primary_key=True)
+    titel: Mapped[str] = mapped_column(String(200), nullable=False)
+    rohtext: Mapped[str] = mapped_column(Text, nullable=False)
+    erwartet: Mapped[dict] = mapped_column(JSON, nullable=False)
+    ingest_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("alarm_ingest.id", ondelete="SET NULL"), nullable=True
+    )
+    aktiv: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="1")
+    quelle: Mapped[str] = mapped_column(String(20), nullable=False, default="ui", server_default="ui")
+    erstellt_von_user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+
+
 class PrintRule(TenantScoped, Base):
     """Automatik-Druckregel (Phase 4). Wird vom PrintDispatcher auf Domain-Events
     ausgewertet."""

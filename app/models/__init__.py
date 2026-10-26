@@ -40,6 +40,8 @@ from app.models.foerderstrecke import (
 )
 from app.models.gateway import (
     AlarmIngest,
+    AlarmParserRegelsatz,
+    AlarmParserTestfall,
     Gateway,
     GatewayMessage,
     Printer,
@@ -483,6 +485,8 @@ __all__ = [
     "PrinterAgentRoute",
     "PrintJob",
     "AlarmIngest",
+    "AlarmParserRegelsatz",
+    "AlarmParserTestfall",
     "PrintRule",
     "UASDevice",
     "UASPilot",
