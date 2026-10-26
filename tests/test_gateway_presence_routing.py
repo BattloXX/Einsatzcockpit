@@ -37,6 +37,11 @@ def retention_messages(monkeypatch):
             ),
         ))
     with routing._db() as db:
+        # Andere Tests koennen queued-Nachrichten dieses Workers zurueckgelassen haben;
+        # _due() liefert maximal 100 und wuerde sonst fremde IDs enthalten.
+        db.query(GatewayMessage).filter(
+            GatewayMessage.worker_id == presence.worker_id(), GatewayMessage.state == "queued",
+        ).execution_options(include_all_tenants=True).delete(synchronize_session=False)
         db.add_all(rows)
         db.commit()
         ids = [row.id for row in rows]
