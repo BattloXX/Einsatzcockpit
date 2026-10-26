@@ -201,3 +201,22 @@ def test_raw_bytes_are_limited_to_64_kib(alarm_api, caplog):
     assert response.status_code == 200
     assert saved(response.json()["ingest_id"]).raw_bytes == b"x" * 65536
     assert "64 KiB" in caplog.text
+
+
+def test_request_does_not_repeat_recovery_nachlauf(alarm_api, monkeypatch):
+    post, _, calls = alarm_api
+    original = serial_alarm_service.process_ingest
+
+    def recovered(db, ingest_id, **kwargs):
+        # Recovery hat vor dem Request-Claim bereits verarbeitet und alarmiert.
+        # Der Request verliert den Claim und darf keinen Nachlauf mehr starten.
+        with SessionLocal() as worker:
+            set_tenant_context(worker, None)
+            original(worker, ingest_id)
+        return original(db, ingest_id, **kwargs)
+
+    monkeypatch.setattr(serial_alarm_service, "process_ingest", recovered)
+    response = post(payload())
+    assert response.status_code == 200
+    assert response.json()["process_status"] == "applied"
+    assert calls == []

@@ -169,7 +169,11 @@ def test_alarm_route_schedules_trigger_only_for_new_ingest(
     db.query.return_value.filter.return_value.first.return_value = None
     monkeypatch.setattr(api, "_resolve_gateway_from_bearer", lambda _request, _db: gateway)
     monkeypatch.setattr(serial, "store_raw", lambda *_args, **_kwargs: (ingest, created))
-    monkeypatch.setattr(serial, "process_ingest", lambda *_args, **_kwargs: ingest)
+    def process_ingest(*_args, on_applied, **_kwargs):
+        on_applied(ingest)
+        return ingest
+
+    monkeypatch.setattr(serial, "process_ingest", process_ingest)
     tasks = BackgroundTasks()
 
     api.ingest_alarm(_AlarmRequest(uuid.uuid4().hex), tasks, db)

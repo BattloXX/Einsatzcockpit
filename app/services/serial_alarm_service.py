@@ -9,11 +9,13 @@ from __future__ import annotations
 
 import hashlib
 import logging
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.models.gateway import PARSE_FAILED, AlarmIngest
 
@@ -80,11 +82,17 @@ def store_raw(
     return ingest, True
 
 
-def process_ingest(db: Session, ingest_id: int) -> AlarmIngest:
+def process_ingest(
+    db: Session, ingest_id: int, *, org_id: int | None = None,
+    on_applied: Callable[[AlarmIngest], None] | None = None,
+    claim_filter: ColumnElement[bool] | None = None,
+) -> AlarmIngest:
     """Verarbeitet eine gespeicherte ID genau einmal; Fehler erhalten die Rohdaten."""
     # Nur die Org-Zuordnung anhand der internen ID ermitteln. Alle folgenden
     # Datensatzabfragen und Mutationen sind explizit auf diese Org eingeschraenkt.
     org_lookup = select(AlarmIngest.org_id).where(AlarmIngest.id == ingest_id)
+    if org_id is not None:
+        org_lookup = org_lookup.where(AlarmIngest.org_id == org_id)
     context_org = db.info.get("current_org_id")
     if context_org is not None:
         org_lookup = org_lookup.where(AlarmIngest.org_id == context_org)
@@ -98,13 +106,24 @@ def process_ingest(db: Session, ingest_id: int) -> AlarmIngest:
                 .execution_options(include_all_tenants=True).populate_existing().one())
 
     ingest = load()
+    now = datetime.now(UTC).replace(tzinfo=None)
     claimed = (db.query(AlarmIngest)
                .filter(AlarmIngest.id == ingest_id, AlarmIngest.org_id == org_id,
-                       AlarmIngest.process_status.in_(("stored", "error")))
+                       or_(
+                           AlarmIngest.process_status.in_(("stored", "error")),
+                           and_(AlarmIngest.process_status == "processing", or_(
+                               AlarmIngest.lease_until <= now,
+                               and_(AlarmIngest.lease_until.is_(None),
+                                    AlarmIngest.received_at < now - timedelta(minutes=2)),
+                           )),
+                       ), *([claim_filter] if claim_filter is not None else []))
                .execution_options(include_all_tenants=True)
-               .update({AlarmIngest.process_status: "processing"}, synchronize_session=False))
+               .update({AlarmIngest.process_status: "processing",
+                        AlarmIngest.lease_until: now + timedelta(minutes=2),
+                        AlarmIngest.parsed_at: now}, synchronize_session=False))
     if claimed != 1:
         return load()
+    ingest = load()
     try:
         # Savepoint: bei Fehlern nur die Einsatzanlage zurueckrollen. Der Claim
         # bleibt bis zum Commit gesperrt, auch waehrend wir error protokollieren.
@@ -125,7 +144,11 @@ def process_ingest(db: Session, ingest_id: int) -> AlarmIngest:
         ingest.process_status = "error"
         ingest.process_error = str(exc)
     ingest.process_attempts = (ingest.process_attempts or 0) + 1
+    ingest.lease_until = None
     db.commit()
+    # Nur der Gewinner des atomaren Claims darf den Nachlauf ausloesen.
+    if ingest.process_status == "applied" and on_applied is not None:
+        on_applied(ingest)
     return ingest
 
 

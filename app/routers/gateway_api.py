@@ -24,7 +24,7 @@ from app.core.async_bridge import run_async
 from app.core.security import hash_api_key
 from app.core.tenant import set_tenant_context
 from app.db import get_db
-from app.models.gateway import Gateway
+from app.models.gateway import AlarmIngest, Gateway
 
 logger = logging.getLogger("einsatzleiter.gateway")
 alarm_logger = logging.getLogger("einsatzleiter.alarm")
@@ -131,12 +131,13 @@ def ingest_alarm(
     )
     if created:
         ingest_id = ingest.id
+        applied_here: list[AlarmIngest] = []
         try:
-            ingest = process_ingest(db, ingest_id)
+            ingest = process_ingest(db, ingest_id, on_applied=applied_here.append)
         except Exception:
             db.rollback()
             alarm_logger.exception("Alarm-Verarbeitung fehlgeschlagen (ingest %s)", ingest_id)
-        if ingest.process_status == "applied" and ingest.einsatz_id:
+        if applied_here and ingest.einsatz_id:
             from app.services.alarm_apply_service import nachlauf
 
             nachlauf(
