@@ -6,6 +6,7 @@ monkeypatcht aber DibosClient/is_trace_running/start_trace_for_org — kein echt
 Netzwerkzugriff nötig.
 """
 import asyncio
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -91,7 +92,7 @@ def test_check_org_starts_trace_when_events_nonempty(monkeypatch):
     started = []
 
     monkeypatch.setattr(dibos_client, "DibosClient", lambda *a, **kw: _FakeClient([{"eventNumber": "f1"}]))
-    monkeypatch.setattr(dibos_capture, "is_trace_running", lambda org_id: False)
+    monkeypatch.setattr(dibos_capture, "is_trace_running", AsyncMock(return_value=False))
 
     async def fake_start(org_id, duration_minutes=120):
         started.append((org_id, duration_minutes))
@@ -114,7 +115,7 @@ def test_check_org_skips_when_events_empty(monkeypatch):
 
     started = []
     monkeypatch.setattr(dibos_client, "DibosClient", lambda *a, **kw: _FakeClient([]))
-    monkeypatch.setattr(dibos_capture, "is_trace_running", lambda org_id: False)
+    monkeypatch.setattr(dibos_capture, "is_trace_running", AsyncMock(return_value=False))
 
     async def fake_start(org_id, duration_minutes=120):
         started.append(org_id)
@@ -137,7 +138,7 @@ def test_check_org_skips_when_trace_already_running(monkeypatch):
 
     started = []
     monkeypatch.setattr(dibos_client, "DibosClient", lambda *a, **kw: _FakeClient([{"eventNumber": "f1"}]))
-    monkeypatch.setattr(dibos_capture, "is_trace_running", lambda org_id: True)
+    monkeypatch.setattr(dibos_capture, "is_trace_running", AsyncMock(return_value=True))
 
     async def fake_start(org_id, duration_minutes=120):
         started.append(org_id)
@@ -242,7 +243,7 @@ def test_check_org_enriches_without_starting_trace_when_only_enrich_enabled(monk
 
     events = [{"eventNumber": "f1"}]
     monkeypatch.setattr(dibos_client, "DibosClient", lambda *a, **kw: _FakeClient(events))
-    monkeypatch.setattr(dibos_capture, "is_trace_running", lambda org_id: False)
+    monkeypatch.setattr(dibos_capture, "is_trace_running", AsyncMock(return_value=False))
 
     started = []
 
@@ -277,7 +278,7 @@ def test_check_org_skips_enrichment_when_events_empty(monkeypatch):
         db.close()
 
     monkeypatch.setattr(dibos_client, "DibosClient", lambda *a, **kw: _FakeClient([]))
-    monkeypatch.setattr(dibos_capture, "is_trace_running", lambda org_id: False)
+    monkeypatch.setattr(dibos_capture, "is_trace_running", AsyncMock(return_value=False))
 
     enrich_calls = []
 
@@ -313,7 +314,7 @@ def test_check_org_enriches_closed_public_event_when_current_events_empty(monkey
         dibos_client, "DibosClient",
         lambda *a, **kw: _FakeClient([], public_events=public_events),
     )
-    monkeypatch.setattr(dibos_capture, "is_trace_running", lambda org_id: False)
+    monkeypatch.setattr(dibos_capture, "is_trace_running", AsyncMock(return_value=False))
     enrich_calls = []
 
     async def fake_enrich_and_broadcast(org_id, raw_events, **kwargs):
@@ -364,7 +365,7 @@ def test_check_org_does_both_when_both_enabled(monkeypatch):
 
     events = [{"eventNumber": "f1"}]
     monkeypatch.setattr(dibos_client, "DibosClient", lambda *a, **kw: _FakeClient(events))
-    monkeypatch.setattr(dibos_capture, "is_trace_running", lambda org_id: False)
+    monkeypatch.setattr(dibos_capture, "is_trace_running", AsyncMock(return_value=False))
 
     started = []
 
@@ -403,7 +404,7 @@ def test_check_org_polls_and_enriches_while_trace_is_running(monkeypatch):
         dibos_client, "DibosClient",
         lambda *a, **kw: client_built.append(True) or _FakeClient([{"eventNumber": "f1"}]),
     )
-    monkeypatch.setattr(dibos_capture, "is_trace_running", lambda org_id: True)
+    monkeypatch.setattr(dibos_capture, "is_trace_running", AsyncMock(return_value=True))
 
     async def fake_enrich_and_broadcast(*args, **kwargs):
         enrich_calls.append(args)
@@ -536,7 +537,7 @@ def test_check_org_ignores_f30_proberuf_for_fast_path_public_and_trace(monkeypat
         dibos_client, "DibosClient",
         lambda *args, **kwargs: _RecordingClient([event], calls=calls),
     )
-    monkeypatch.setattr(dibos_capture, "is_trace_running", lambda org_id: False)
+    monkeypatch.setattr(dibos_capture, "is_trace_running", AsyncMock(return_value=False))
 
     async def fake_start(*args, **kwargs):
         started.append(True)

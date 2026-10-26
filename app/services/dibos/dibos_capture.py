@@ -34,6 +34,7 @@ import zipfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from app.services import org_job_state
 from app.services.background_runtime import create_leader_task
 from app.services.dibos.dibos_client import (
     DibosClient,
@@ -42,6 +43,7 @@ from app.services.dibos.dibos_client import (
     parse_radios,
     parse_units,
 )
+from app.services.gateway_presence import worker_id
 
 logger = logging.getLogger("einsatzleiter.dibos.capture")
 
@@ -86,11 +88,8 @@ _LIVE_PARSERS = {
     "GetCurrentRadios": ("radios", parse_radios),
 }
 
-# In-Memory-Registry laufender Aufzeichnungen je Org (verhindert Doppelstart,
-# erlaubt Status-Abfrage/Abbruch aus dem Admin-UI). Geht bei Neustart verloren,
-# was für ein Diagnose-Werkzeug unkritisch ist.
+# Lokale Task-Referenzen für direkten Abbruch; Status und Sperre liegen im Backend.
 _active_traces: dict[int, asyncio.Task] = {}
-_active_run_ids: dict[int, str] = {}
 
 
 class ExchangeRecorder:
@@ -234,6 +233,7 @@ async def capture_traffic(
     recorder: ExchangeRecorder,
     duration_minutes: float,
     poll_interval_seconds: int,
+    job_token: str | None = None,
 ) -> Path:
     """Pollt read-only echte DIBOS-Daten für duration_minutes und zeichnet jeden
     Austausch über recorder.record() auf (via client._on_exchange)."""
@@ -243,6 +243,8 @@ async def capture_traffic(
     empty_since: datetime | None = None
     try:
         while True:
+            if job_token and await org_job_state.cancel_requested("dibos", recorder.org_id, job_token):
+                raise asyncio.CancelledError
             events = await _capture_once(client, recorder)
             if events:
                 saw_events = True
@@ -283,21 +285,20 @@ async def capture_traffic(
     return recorder.out_dir
 
 
-def is_trace_running(org_id: int) -> bool:
-    task = _active_traces.get(org_id)
-    return task is not None and not task.done()
+async def is_trace_running(org_id: int) -> bool:
+    return bool((await org_job_state.status("dibos", org_id))["running"])
 
 
-def _current_run_id(org_id: int) -> str | None:
-    return _active_run_ids.get(org_id) if is_trace_running(org_id) else None
+async def _current_run_id(org_id: int) -> str | None:
+    return (await org_job_state.status("dibos", org_id))["run_id"]
 
 
-def cancel_trace(org_id: int) -> bool:
+async def cancel_trace(org_id: int) -> bool:
     task = _active_traces.get(org_id)
     if task and not task.done():
         task.cancel()
         return True
-    return False
+    return await org_job_state.request_cancel("dibos", org_id)
 
 
 async def start_trace_for_org(org_id: int, duration_minutes: float = 120) -> str:
@@ -307,13 +308,13 @@ async def start_trace_for_org(org_id: int, duration_minutes: float = 120) -> str
     Wirft ValueError, wenn die Org nicht vollständig konfiguriert ist oder
     bereits eine Aufzeichnung läuft.
     """
-    if is_trace_running(org_id):
+    if await is_trace_running(org_id):
         raise ValueError("Für diese Organisation läuft bereits eine Aufzeichnung.")
 
     # Opportunistische Bereinigung, falls der tägliche Retention-Loop seit dem
     # letzten Start noch nicht gelaufen ist (z.B. kurz nach einem Neustart).
     try:
-        purge_old_traces()
+        await purge_old_traces()
     except Exception:
         logger.exception("Opportunistische DIBOS-Trace-Bereinigung fehlgeschlagen")
 
@@ -344,27 +345,44 @@ async def start_trace_for_org(org_id: int, duration_minutes: float = 120) -> str
         db.close()
 
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    out_dir = trace_run_dir(org_id, run_id)
-    recorder = ExchangeRecorder(out_dir, org_id, run_id)
-    client = DibosClient(
-        base_url, gateway_user, gateway_password, service_user, service_password,
-        host=host, ag=ag, on_exchange=recorder.record,
-    )
+    token = await org_job_state.try_start(
+        "dibos", org_id, org_job_state.TTL_S, worker_id(), run_id=run_id)
+    if token is None:
+        raise ValueError("Für diese Organisation läuft bereits eine Aufzeichnung.")
+    try:
+        out_dir = trace_run_dir(org_id, run_id)
+        recorder = ExchangeRecorder(out_dir, org_id, run_id)
+        client = DibosClient(
+            base_url, gateway_user, gateway_password, service_user, service_password,
+            host=host, ag=ag, on_exchange=recorder.record,
+        )
+    except BaseException:
+        await org_job_state.finish("dibos", org_id, token)
+        raise
 
     task = create_leader_task(
-        capture_traffic(client, recorder, duration_minutes, poll_interval_seconds)
+        org_job_state.backend.run(
+            "dibos", org_id, token, lambda: capture_traffic(
+                client, recorder, duration_minutes, poll_interval_seconds, token))
     )
     _active_traces[org_id] = task
-    _active_run_ids[org_id] = run_id
+
+    def completed(done: asyncio.Task) -> None:
+        if _active_traces.get(org_id) is done:
+            _active_traces.pop(org_id, None)
+        create_leader_task(org_job_state.finish("dibos", org_id, token))
+
+    task.add_done_callback(completed)
     logger.info("DIBOS-Trace gestartet: Org %s, Dauer %s min, run_id %s", org_id, duration_minutes, run_id)
     return run_id
 
 
-def list_traces(org_id: int) -> list[dict]:
+async def list_traces(org_id: int) -> list[dict]:
     """Listet vorhandene Aufzeichnungsläufe einer Org (aus den summary.json-Dateien)."""
     org_dir = TRACE_ROOT / str(org_id)
     if not org_dir.is_dir():
         return []
+    current_run_id = await _current_run_id(org_id)
     runs = []
     for run_dir in sorted(org_dir.iterdir(), reverse=True):
         summary_path = run_dir / "summary.json"
@@ -375,7 +393,7 @@ def list_traces(org_id: int) -> list[dict]:
         except (ValueError, OSError):
             continue
         data["run_dir"] = run_dir.name
-        data["running"] = run_dir.name == _current_run_id(org_id)
+        data["running"] = run_dir.name == current_run_id
         runs.append(data)
     return runs
 
@@ -398,10 +416,10 @@ def _parse_run_id(run_id: str) -> datetime | None:
         return None
 
 
-def delete_trace(org_id: int, run_id: str) -> bool:
+async def delete_trace(org_id: int, run_id: str) -> bool:
     """Löscht einen einzelnen Aufzeichnungslauf. Läuft er noch, wird er zuerst abgebrochen."""
-    if run_id == _current_run_id(org_id):
-        cancel_trace(org_id)
+    if run_id == await _current_run_id(org_id):
+        await cancel_trace(org_id)
     run_dir = trace_run_dir(org_id, run_id)
     if not run_dir.is_dir():
         return False
@@ -409,17 +427,17 @@ def delete_trace(org_id: int, run_id: str) -> bool:
     return True
 
 
-def purge_old_traces(retention_days: int = TRACE_RETENTION_DAYS) -> int:
+async def purge_old_traces(retention_days: int = TRACE_RETENTION_DAYS) -> int:
     """Löscht alle Aufzeichnungsläufe (aller Orgs), die älter als retention_days sind.
 
     Läuft ein Trace noch, wird er nie automatisch gelöscht — unabhängig vom Alter
     (Schutz über _current_run_id). Gibt die Anzahl gelöschter Läufe zurück.
     """
-    if not TRACE_ROOT.is_dir():
+    if not await asyncio.to_thread(TRACE_ROOT.is_dir):
         return 0
     cutoff = datetime.now(UTC) - timedelta(days=retention_days)
     deleted = 0
-    for org_dir in TRACE_ROOT.iterdir():
+    for org_dir in await asyncio.to_thread(lambda: list(TRACE_ROOT.iterdir())):
         if not org_dir.is_dir():
             continue
         try:
@@ -427,12 +445,12 @@ def purge_old_traces(retention_days: int = TRACE_RETENTION_DAYS) -> int:
         except ValueError:
             continue
         for run_dir in org_dir.iterdir():
-            if not run_dir.is_dir() or run_dir.name == _current_run_id(org_id):
+            if not run_dir.is_dir() or run_dir.name == await _current_run_id(org_id):
                 continue
             started = _parse_run_id(run_dir.name)
             if started is None or started >= cutoff:
                 continue
-            shutil.rmtree(run_dir, ignore_errors=True)
+            await asyncio.to_thread(shutil.rmtree, run_dir, ignore_errors=True)
             deleted += 1
     if deleted:
         logger.info(
@@ -467,6 +485,6 @@ async def dibos_trace_retention_loop() -> None:
     while True:
         await asyncio.sleep(_seconds_until_next(_PURGE_HOUR, _PURGE_MINUTE))
         try:
-            await asyncio.to_thread(purge_old_traces)
+            await purge_old_traces()
         except Exception:
             logger.exception("Fehler im DIBOS-Trace-Retention-Loop")

@@ -344,7 +344,7 @@ async def _check_org(org_id: int, config_id: int) -> None:
     if not events:
         return
 
-    if auto_trace_on_event and not is_trace_running(org_id):
+    if auto_trace_on_event and not await is_trace_running(org_id):
         logger.info(
             "dibos_poll_loop: Org %s hat %d aktive(n) Einsatz/Einsätze - starte Auto-Trace",
             org_id, len(events),

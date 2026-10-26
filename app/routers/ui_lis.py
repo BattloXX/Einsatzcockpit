@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app.config import settings
+from app.core.async_bridge import run_async
 from app.core.audit import write_audit
 from app.core.crypto import encrypt_secret
 from app.core.permissions import (
@@ -74,7 +75,7 @@ def lis_settings_page(
         from app.services.lis.lis_capture import CAPTURE_RETENTION_DAYS, list_captures
         capture_retention_days = CAPTURE_RETENTION_DAYS
         if effective_org_id:
-            captures = list_captures(effective_org_id)
+            captures = run_async(list_captures, effective_org_id)
 
     return templates.TemplateResponse(request, "admin/settings_lis.html", {
         "user": user,
@@ -194,13 +195,13 @@ async def lis_test_connection(
 # ("org_admin","admin"), sondern require_system_admin — die Aufzeichnungen
 # enthalten Anrufer-/Mannschaftsdaten im Klartext und werden lokal gespeichert.
 
-def _captures_response(request: Request, db, user: User, org_id: int | None):
-    from app.services.lis.lis_capture import CAPTURE_RETENTION_DAYS, list_captures
+def _captures_response(request: Request, db, user: User, org_id: int | None, captures: list[dict]):
+    from app.services.lis.lis_capture import CAPTURE_RETENTION_DAYS
     org = db.query(FireDept).filter(FireDept.id == org_id).first() if org_id else None
     return templates.TemplateResponse(request, "admin/_lis_captures.html", {
         "user": user,
         "org": org,
-        "captures": list_captures(org_id) if org_id else [],
+        "captures": captures,
         "capture_retention_days": CAPTURE_RETENTION_DAYS,
     })
 
@@ -212,7 +213,9 @@ def lis_capture_status(
     user: User = Depends(require_system_admin),
     org_id: int | None = None,
 ):
-    return _captures_response(request, db, user, org_id)
+    from app.services.lis.lis_capture import list_captures
+    captures = run_async(list_captures, org_id) if org_id else []
+    return _captures_response(request, db, user, org_id, captures)
 
 
 @router.post("/lis/capture/start")
@@ -223,7 +226,7 @@ async def lis_capture_start(
     target_org_id: int = Form(...),
     duration_minutes: float = Form(120),
 ):
-    from app.services.lis.lis_capture import start_capture_for_org
+    from app.services.lis.lis_capture import list_captures, start_capture_for_org
     duration = max(5.0, min(duration_minutes or 120, 480.0))  # 5 min .. 8 h
     try:
         run_id = await start_capture_for_org(target_org_id, duration)
@@ -233,7 +236,8 @@ async def lis_capture_start(
         db.commit()
     except ValueError:
         pass  # z.B. "läuft bereits" oder unvollständige Config — Liste zeigt aktuellen Stand ohnehin
-    return _captures_response(request, db, user, target_org_id)
+    captures = await list_captures(target_org_id)
+    return _captures_response(request, db, user, target_org_id, captures)
 
 
 @router.post("/lis/capture/auto-toggle")
@@ -266,12 +270,13 @@ def lis_capture_cancel(
     user: User = Depends(require_system_admin),
     target_org_id: int = Form(...),
 ):
-    from app.services.lis.lis_capture import cancel_capture
-    cancel_capture(target_org_id)
+    from app.services.lis.lis_capture import cancel_capture, list_captures
+    run_async(cancel_capture, target_org_id)
     write_audit(db, "lis.capture.cancelled", org_id=target_org_id, user_id=user.id,
                 payload={"run_id": run_id}, ip=request.client.host if request.client else None)
     db.commit()
-    return _captures_response(request, db, user, target_org_id)
+    captures = run_async(list_captures, target_org_id)
+    return _captures_response(request, db, user, target_org_id, captures)
 
 
 @router.post("/lis/capture/{run_id}/delete")
@@ -282,12 +287,13 @@ def lis_capture_delete(
     user: User = Depends(require_system_admin),
     target_org_id: int = Form(...),
 ):
-    from app.services.lis.lis_capture import delete_capture
-    delete_capture(target_org_id, run_id)
+    from app.services.lis.lis_capture import delete_capture, list_captures
+    run_async(delete_capture, target_org_id, run_id)
     write_audit(db, "lis.capture.deleted", org_id=target_org_id, user_id=user.id,
                 payload={"run_id": run_id}, ip=request.client.host if request.client else None)
     db.commit()
-    return _captures_response(request, db, user, target_org_id)
+    captures = run_async(list_captures, target_org_id)
+    return _captures_response(request, db, user, target_org_id, captures)
 
 # Bewusst KEIN HTTP-Download-Endpoint für die Aufzeichnungen: Die Rohdaten
 # enthalten personenbezogene Daten (Anrufer, Mannschaft) — Abruf ausschließlich

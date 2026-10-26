@@ -32,6 +32,8 @@ from app.models.planspiel import (
 )
 from app.models.user import User
 from app.routers.ui_planspiel import require_planspiel_enabled
+from app.services import org_job_state
+from app.services.gateway_presence import worker_id
 from app.services.geo_service import validate_geojson_polygon
 from app.services.planspiel_katalog_service import (
     aktiv_setzen,
@@ -683,7 +685,7 @@ def _settings_context(request: Request, db: Session, user: User, **extra: Any) -
         "zuordnungen": mappings,
     }
     context.update(_pool_context(request, db, user))
-    context["osm_laeuft"] = bool((_osm_importe.get(_org(user)) or {}).get("laeuft"))
+    context["osm_laeuft"] = run_async(org_job_state.status, "osm", org_id)["running"]
     context.update(extra)
     return context
 
@@ -801,35 +803,36 @@ def pool_aufbauen_post(
         return _pool_result(request, db, user, str(exc), fehler=True)
 
 
-# Laufende OSM-Importe je Organisation (Prozess-lokal, Produktion läuft mit einem Worker)
-_osm_importe: dict[int, dict[str, Any]] = {}
+# Task-Referenzen bleiben lokal; Laufstatus und Ergebnis liegen im gemeinsamen Backend.
 _osm_tasks: set[asyncio.Task[None]] = set()
 
 
-async def _osm_import_ausfuehren(org_id: int) -> None:
+async def _osm_import_ausfuehren(org_id: int, token: str) -> None:
     try:
         result = await osm_importieren(SessionLocal, org_id)
-        _osm_importe[org_id] = {
+        job = {
             "laeuft": False,
             "meldung": f"OSM-Import fertig: {result.neu} neu, {result.aktualisiert} aktualisiert",
             "fehler": False,
         }
     except (OsmImportFehler, GebietFehlt) as exc:
-        _osm_importe[org_id] = {"laeuft": False, "meldung": str(exc), "fehler": True}
+        job = {"laeuft": False, "meldung": str(exc), "fehler": True}
     except Exception:
         logger.exception("Planspiel-OSM-Import für Org %s fehlgeschlagen", org_id)
-        _osm_importe[org_id] = {
+        job = {
             "laeuft": False, "meldung": "OSM-Import fehlgeschlagen: interner Fehler.", "fehler": True,
         }
 
+    await org_job_state.finish("osm", org_id, token, job)
 
-def _osm_status_antwort(request: Request, db: Session, user: User):
+
+async def _osm_status_antwort(request: Request, db: Session, user: User):
     org_id = _org(user)
-    job = _osm_importe.get(org_id)
-    if job and job["laeuft"]:
+    state = await org_job_state.status("osm", org_id)
+    if state["running"]:
         return templates.TemplateResponse(request, "planspiel/admin/_osm_laeuft.html", {})
+    job = await org_job_state.pop_result("osm", org_id)
     if job:
-        _osm_importe.pop(org_id, None)
         context = _pool_context(request, db, user)
         context["meldung"] = job["meldung"]
         context["fehler"] = job["fehler"]
@@ -845,15 +848,25 @@ async def pool_osm_post(
     _guard: None = Depends(require_planspiel_enabled),
 ):
     org_id = _org(user)
-    job = _osm_importe.get(org_id)
-    if not (job and job["laeuft"]):
-        _osm_importe[org_id] = {"laeuft": True}
-        _settings_audit(db, "adresspool_osm", user)
-        db.commit()
-        task = asyncio.create_task(_osm_import_ausfuehren(org_id))
-        _osm_tasks.add(task)
-        task.add_done_callback(_osm_tasks.discard)
-    return _osm_status_antwort(request, db, user)
+    token = await org_job_state.try_start("osm", org_id, org_job_state.TTL_S, worker_id())
+    if token:
+        try:
+            _settings_audit(db, "adresspool_osm", user)
+            db.commit()
+            task = asyncio.create_task(org_job_state.backend.run(
+                "osm", org_id, token, lambda: _osm_import_ausfuehren(org_id, token)))
+            _osm_tasks.add(task)
+            def completed(done: asyncio.Task) -> None:
+                _osm_tasks.discard(done)
+                cleanup = asyncio.create_task(org_job_state.finish("osm", org_id, token))
+                _osm_tasks.add(cleanup)
+                cleanup.add_done_callback(_osm_tasks.discard)
+
+            task.add_done_callback(completed)
+        except BaseException:
+            await org_job_state.finish("osm", org_id, token)
+            raise
+    return await _osm_status_antwort(request, db, user)
 
 
 @router.get("/adresspool/osm/status")
@@ -863,7 +876,7 @@ def pool_osm_status(
     user: User = Depends(require_role("org_admin")),
     _guard: None = Depends(require_planspiel_enabled),
 ):
-    return _osm_status_antwort(request, db, user)
+    return run_async(_osm_status_antwort, request, db, user)
 
 
 @router.post("/adresspool/punkt")
