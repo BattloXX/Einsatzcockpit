@@ -28,6 +28,7 @@ _redis = None
 _subscribed = False
 _pubsub_task: asyncio.Task | None = None
 _handlers: dict[str, Callable[[dict], Awaitable[None]]] = {}
+_reconnect_callbacks: list[Callable[[], Awaitable[None]]] = []
 _diagnostics: dict = {"publish_failures": 0, "subscriber_failures": 0, "reconnects": 0}
 _publisher_ok = False
 _last_warning: dict[str, float] = {}
@@ -71,6 +72,12 @@ def register(channel: str, handler: Callable[[dict], Awaitable[None]]) -> None:
     Muss vor ``start()`` erfolgen, damit ``start()`` alle Kanäle abonniert.
     """
     _handlers[channel] = handler
+
+
+def on_reconnect(callback: Callable[[], Awaitable[None]]) -> None:
+    """Nach jeder bestaetigten Subscription aufrufen, auch beim ersten Connect."""
+    if callback not in _reconnect_callbacks:
+        _reconnect_callbacks.append(callback)
 
 
 async def publish(channel: str, message: dict) -> bool:
@@ -142,6 +149,11 @@ async def _connect():
     _publisher_ok = True
     _diagnostics["last_connected_at"] = _now()
     _diagnostics["reconnects"] += 1
+    for callback in list(_reconnect_callbacks):
+        try:
+            await callback()
+        except Exception:
+            _failure("reconnect_callback_failed")
     return pubsub
 
 

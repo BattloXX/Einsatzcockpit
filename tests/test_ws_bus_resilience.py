@@ -16,6 +16,14 @@ def isolate(monkeypatch):
 
 @pytest.mark.usefixtures("isolate")
 async def test_disconnect_and_close_failure_reconnect_and_resubscribe_all(monkeypatch, caplog):
+    reconnected = []
+
+    async def on_reconnect():
+        assert ws_bus._subscribed
+        assert ws_bus._redis is not None
+        reconnected.append(True)
+
+    monkeypatch.setattr(ws_bus, "_reconnect_callbacks", [on_reconnect])
     delivered = []
     complete = asyncio.Event()
     channels = [ws_bus.CH_WS, ws_bus.CH_GW, ws_bus.CH_LAGEDOKUMENT, ws_bus.CH_LAGEDOKUMENT_AWARENESS]
@@ -68,6 +76,7 @@ async def test_disconnect_and_close_failure_reconnect_and_resubscribe_all(monkey
         assert all(set(c.sub.channels) == set(channels) for c in clients)
         assert ws_bus.status()["connected"]
         assert ws_bus.status()["subscriber_failures"] == 1
+        assert len(reconnected) == 2
         assert "SECRET_TOKEN" not in caplog.text
     finally:
         await ws_bus.stop()
