@@ -21,10 +21,11 @@ class _CapWS:
 
 def _route_publish_to_handlers(monkeypatch) -> None:
     """Simuliert Redis: publish() ruft synchron den lokalen Kanal-Handler auf."""
-    async def fake_publish(channel: str, message: dict) -> None:
+    async def fake_publish(channel: str, message: dict) -> bool:
         handler = ws_bus._handlers.get(channel)
         if handler is not None:
             await handler(message)
+        return True
     monkeypatch.setattr(ws_bus, "publish", fake_publish)
 
 

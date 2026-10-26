@@ -1,10 +1,9 @@
 """WebSocket connection manager – pub/sub per incident, major incident, and org.
 
 Worker-übergreifend: Broadcasts laufen über den Redis-Bus (app.services.ws_bus),
-falls REDIS_URL gesetzt ist. Dann publiziert ``broadcast`` nur auf Redis; die
-tatsächliche Zustellung an die lokalen Sockets erledigt ausschließlich der Bus-
-Handler (``_bus_deliver``) – auf jedem Worker, inkl. des Publishers. Ohne Redis
-(Dev / -w 1) wird direkt lokal zugestellt (``_deliver_local``).
+falls REDIS_URL gesetzt ist. Bei erfolgreichem Publish stellt der Bus-Handler
+(``_bus_deliver``) auf jedem Worker zu, inkl. des Publishers. Ohne Redis
+(Dev / -w 1) oder bei fehlgeschlagenem Publish wird direkt lokal zugestellt.
 """
 import asyncio
 import json
@@ -93,17 +92,17 @@ class ConnectionManager:
         origin = _request_client_id.get()
         if origin and "origin" not in event:
             event = {**event, "origin": origin}
-        if ws_bus.enabled():
-            await ws_bus.publish(ws_bus.CH_WS, {"key": incident_id, "event": event})
-        else:
-            await self._deliver_local(incident_id, event)
+        if ws_bus.enabled() and await ws_bus.publish(ws_bus.CH_WS, {"key": incident_id, "event": event}):
+            return
+        # Browser auf anderen Workern bleiben im Ausfall ohne Live-Event und holen beim WS-Reconnect nach.
+        await self._deliver_local(incident_id, event)
 
     async def broadcast_all(self, event: dict) -> None:
         """Broadcast to every connected client (e.g. new incident created)."""
-        if ws_bus.enabled():
-            await ws_bus.publish(ws_bus.CH_WS, {"key": _ALL_KEY, "event": event})
-        else:
-            await self._deliver_all_local(event)
+        if ws_bus.enabled() and await ws_bus.publish(ws_bus.CH_WS, {"key": _ALL_KEY, "event": event}):
+            return
+        # Browser auf anderen Workern bleiben im Ausfall ohne Live-Event und holen beim WS-Reconnect nach.
+        await self._deliver_all_local(event)
 
 
 manager = ConnectionManager()
