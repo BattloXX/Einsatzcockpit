@@ -17,6 +17,48 @@ from tests.gateway_helpers import CaptureSocket, bind, cleanup
 pytestmark = pytest.mark.usefixtures("sms_outbox_state")
 
 
+async def test_run_once_limits_parallel_drives(monkeypatch):
+    ids = {outbox.ensure(1, f"parallel-{i}", "+43660000", "Alarm", ["gateway"])
+           for i in range(outbox.MAX_PARALLEL_DRIVES * 3)}
+    running, peak = 0, 0
+    driven = []
+
+    async def drive(org_id, job_id):
+        nonlocal running, peak
+        assert org_id == 1
+        running += 1
+        peak = max(peak, running)
+        try:
+            await asyncio.sleep(0)
+            driven.append(job_id)
+        finally:
+            running -= 1
+
+    monkeypatch.setattr(outbox, "drive", drive)
+    await outbox.run_once()
+    assert peak == outbox.MAX_PARALLEL_DRIVES
+    assert len(driven) == len(ids) and set(driven) == ids
+
+
+async def test_run_once_skips_future_queued_job(monkeypatch):
+    due = outbox.ensure(1, "due", "+43660000", "Alarm", ["gateway"])
+    future = outbox.ensure(1, "future", "+43660000", "Alarm", ["gateway"])
+    with outbox.database() as db:
+        db.query(Job).filter(Job.org_id == 1, Job.id == future).update(
+            {"next_attempt_at": presence.utc() + timedelta(hours=1)}, synchronize_session=False
+        )
+        db.commit()
+    driven = []
+
+    async def drive(org_id, job_id):
+        driven.append((org_id, job_id))
+
+    monkeypatch.setattr(outbox, "drive", drive)
+    await outbox.run_once()
+    assert driven == [(1, due)]
+    assert outbox.snapshot(1, future)["status"] == "queued"
+
+
 @pytest.fixture
 def sms_state():
     created = []

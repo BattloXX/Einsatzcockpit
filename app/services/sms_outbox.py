@@ -35,6 +35,7 @@ logger = logging.getLogger("einsatzleiter.sms_outbox")
 TERMINAL = ("sent", "failed", "uncertain")
 ACTIVE = ("claimed", "dispatched", "acknowledged")
 LEASE_S = 60
+MAX_PARALLEL_DRIVES = 8
 MAX_IN_FLIGHT = 7
 _task: asyncio.Task | None = None
 
@@ -789,10 +790,13 @@ async def send(org_id, phone, text, *, job_key, ctx, preferred=None, recipient_i
 
 async def run_once():
     await asyncio.to_thread(sweep)
+    now = presence.utc()
     with database() as db:
         jobs = (
             db.query(Job.org_id, Job.id)
-            .filter(Job.status.notin_(TERMINAL))
+            # drive() beginnt mit claim(), das ausschliesslich faellige queued-Jobs
+            # verarbeitet. Abgelaufene aktive Leases behandelt sweep() davor.
+            .filter(Job.status == "queued", Job.next_attempt_at <= now, Job.expires_at > now)
             .execution_options(include_all_tenants=True)
             .order_by(Job.next_attempt_at)
             .limit(100)
@@ -816,7 +820,13 @@ async def run_once():
             .limit(100)
             .all()
         )
-    await asyncio.gather(*(drive(org, jid) for org, jid in jobs))
+    semaphore = asyncio.Semaphore(MAX_PARALLEL_DRIVES)
+
+    async def limited_drive(org, jid):
+        async with semaphore:
+            await drive(org, jid)
+
+    await asyncio.gather(*(limited_drive(org, jid) for org, jid in jobs))
     for org, jid in projections:
         await asyncio.to_thread(project, org, jid)
 

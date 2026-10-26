@@ -6,7 +6,7 @@ from uuid import uuid4
 
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
-from app.models.gateway import Gateway, PrintJob
+from app.models.gateway import Gateway, GatewayMessage, PrintJob
 from app.models.user import SmsGatewayToken
 from app.services import gateway_routing as routing
 
@@ -82,6 +82,13 @@ def cleanup(connection):
     with SessionLocal() as db:
         set_tenant_context(db, None)
         model = SmsGatewayToken if connection.kind == "sms" else Gateway
+        # SQLite kann Gateway-/PrintJob-IDs wiederverwenden; alte Routen duerfen
+        # dadurch nicht zum naechsten Test gehoeren (kein FK auf gateway_id).
+        db.query(GatewayMessage).filter(
+            GatewayMessage.org_id == connection.org_id,
+            GatewayMessage.gateway_kind == connection.kind,
+            GatewayMessage.gateway_id == connection.gateway_id,
+        ).delete()
         if connection.kind != "sms":
             db.query(PrintJob).filter(PrintJob.org_id == connection.org_id,
                                       PrintJob.gateway_id == connection.gateway_id).delete()

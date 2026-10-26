@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     DATABASE_URL: str = "mysql+pymysql://einsatzleiter:pw@127.0.0.1:3306/einsatzleiter"
+    DB_POOL_SIZE: int = 10
+    DB_MAX_OVERFLOW: int = 30
     SECRET_KEY: str = SECRET_KEY_PLACEHOLDER
     # Separater HMAC-Schlüssel für ableitbare GSL-Zugangstoken. Darf nie der
     # SESSION/SECRET_KEY selbst sein, damit beide Schlüssel unabhängig rotieren.

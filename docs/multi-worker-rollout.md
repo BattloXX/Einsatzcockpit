@@ -29,6 +29,24 @@ ein früherer harter Abbruch ist weiterhin
 über Claims/`uncertain` abgesichert, aber kein erfolgreicher Drain.
 Der Accesslog enthält Methode/Pfad ohne Querystring oder Referer.
 
+## DB-Verbindungsbudget
+
+`DB_POOL_SIZE` und `DB_MAX_OVERFLOW` gelten je Worker (Standard: 10/30).
+Empfehlung: 2 Worker mit 10/20, 3 mit 8/15, 4 mit 8/12.
+Der Gunicorn-Vorschlag warnt beim Master-Start, wenn
+`Worker * (Pool + Overflow) + 20 Reserve > DB_MAX_CONNECTIONS` (Standard: 151).
+Die Reserve ist fuer Wetter-DB, Migrationen und Administration einzuplanen;
+weitere Anwendungen auf demselben DB-Server brauchen zusaetzliches Budget.
+Die Warnung verhindert den Start nicht.
+
+Am Zielhost MariaDB mit `SHOW VARIABLES LIKE 'max_connections';` pruefen und
+`DB_MAX_CONNECTIONS` auf das tatsaechliche Limit setzen. Poolwerte und Limit
+als Prozess-Umgebungsvariablen auch dem Gunicorn-Master bereitstellen.
+Bei Bedarf MariaDB bewusst hoeher konfigurieren, etwa im Compose-Override
+beim DB-Service mit `command: ["--max-connections=300"]`; Speicherbedarf und
+vorhandene Startoptionen dabei beruecksichtigen. `DB_MAX_CONNECTIONS` allein
+aendert das MariaDB-Limit nicht.
+
 ## Voraussetzungen und Freigabegrenzen
 
 1. Vollständige Cloud-Änderungen der Phasen 2–6 samt Review integrieren. Ein
