@@ -22,6 +22,8 @@ from app.models.user import SmsGatewayToken
 
 SMS = "sms"
 TTL_S = 90
+# Cloud pingt nach 30 s Leerlauf; Apps antworten mit pong: touch etwa alle 30 s.
+SMS_TTL_S = 60
 
 
 def utc(now: datetime | None = None) -> datetime:
@@ -107,7 +109,7 @@ def begin(
         cid: connection_id,
         wid: owner or worker_id(),
         connected: moment,
-        expiry: moment + timedelta(seconds=TTL_S),
+        expiry: moment + timedelta(seconds=SMS_TTL_S if kind == SMS else TTL_S),
     }
     values["connection_token_hash" if kind == SMS else "agent_connection_token_hash"] = token_hash
     if kind != SMS:
@@ -168,7 +170,7 @@ def touch(
 ) -> bool:
     model, cid, _wid, _connected, expiry, hb = fields(kind)
     moment = utc(now)
-    values: dict[Any, Any] = {expiry: moment + timedelta(seconds=TTL_S)}
+    values: dict[Any, Any] = {expiry: moment + timedelta(seconds=SMS_TTL_S if kind == SMS else TTL_S)}
     if heartbeat:
         values[hb] = moment
     if kind != SMS:

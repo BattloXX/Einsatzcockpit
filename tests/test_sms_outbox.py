@@ -98,6 +98,134 @@ async def prepare(gateway, *, key=None, providers=None):
     return jid, {"id": message["id"], "job_id": jid, "generation": message["generation"]}
 
 
+@pytest.mark.parametrize("second_gateway", [False, True])
+async def test_receipt_timeout_retries_another_gateway_or_only_target(sms_state, monkeypatch, second_gateway):
+    first, socket = sms_state(priority=1)
+    other, other_socket = sms_state(priority=20) if second_gateway else (first, socket)
+    jid, wire = await prepare((first, socket))
+    before = presence.utc()
+    original_utc = presence.utc
+    monkeypatch.setattr(presence, "utc", lambda now=None: original_utc(now) if now is not None else before)
+    outbox.sweep()
+    assert outbox.snapshot(1, jid)["status"] == "dispatched"
+    later = before + timedelta(seconds=outbox.RECEIPT_TIMEOUT_S + 1)
+    monkeypatch.setattr(presence, "utc", lambda now=None: original_utc(now) if now is not None else later)
+    outbox.sweep()
+    assert outbox.snapshot(1, jid)["status"] == "queued"
+    with outbox.database() as db:
+        assert db.get(Attempt, (jid, 1)).outcome == "receipt_timeout"
+    await outbox.drive(1, jid, SmsContext(1, ["gateway"], None))
+    state = outbox.snapshot(1, jid)
+    assert state["generation"] == 2 and state["gateway_token_id"] == other.gateway_id
+    assert other_socket.sent[-1]["generation"] == 2
+    assert not outbox.event(first, socket.token_hash, {**wire, "type": "sms.ack"})[0]
+
+
+async def test_receipt_timeout_filters_all_failed_gateways_before_fallback(sms_state, monkeypatch):
+    first, socket = sms_state(priority=1)
+    second, _ = sms_state(priority=20)
+    third, _ = sms_state(priority=30)
+    jid, _ = await prepare((first, socket))
+    later = presence.utc()
+    original_utc = presence.utc
+    monkeypatch.setattr(presence, "utc", lambda now=None: original_utc(now) if now is not None else later)
+    for target in (second, third):
+        later += timedelta(seconds=outbox.RECEIPT_TIMEOUT_S + 1)
+        outbox.sweep()
+        await outbox.drive(1, jid, SmsContext(1, ["gateway"], None))
+        assert outbox.snapshot(1, jid)["gateway_token_id"] == target.gateway_id
+    later += timedelta(seconds=outbox.RECEIPT_TIMEOUT_S + 1)
+    outbox.sweep()
+    await outbox.drive(1, jid, SmsContext(1, ["gateway"], None))
+    assert outbox.snapshot(1, jid)["status"] == "dispatched"
+
+
+@pytest.mark.parametrize("guard", ["received", "ack", "may_have_sent", "delivered_grant"])
+async def test_receipt_timeout_preserves_possible_send(sms_state, monkeypatch, guard):
+    from app.models.gateway import GatewayMessage
+
+    c, socket = sms_state()
+    jid, wire = await prepare((c, socket))
+    if guard == "ack":
+        _, controls, _ = outbox.event(c, socket.token_hash, {**wire, "type": "sms.ack"})
+        await outbox.notify(controls)
+    else:
+        with outbox.database() as db:
+            job = db.get(Job, jid)
+            if guard == "received":
+                job.received_at = presence.utc()
+            elif guard == "may_have_sent":
+                job.may_have_sent = True
+            else:
+                attempt = db.get(Attempt, (jid, 1))
+                grant_id = outbox.route(db, c, {"type": "sms.commit"}, job_key=wire["id"])
+                db.get(GatewayMessage, grant_id).state = "delivered"
+                attempt.grant_route_id = grant_id
+            db.commit()
+    before = outbox.snapshot(1, jid)
+    later = presence.utc() + timedelta(seconds=outbox.RECEIPT_TIMEOUT_S + 1)
+    monkeypatch.setattr(presence, "utc", lambda: later)
+    outbox.sweep()
+    assert outbox.snapshot(1, jid) == before
+    with outbox.database() as db:
+        assert db.get(Attempt, (jid, 1)).outcome != "receipt_timeout"
+    expire(jid)
+    outbox.sweep()
+    assert outbox.snapshot(1, jid)["status"] == ("queued" if guard == "received" else "uncertain")
+
+
+async def test_receipt_timeout_uses_dispatch_time_and_cancels_queued_grants(sms_state, monkeypatch):
+    from app.models.gateway import GatewayMessage
+
+    c, socket = sms_state()
+    jid = outbox.ensure(1, "delayed-prepare", "+43660000", "Alarm", ["gateway"])
+    token = outbox.claim(1, jid)
+    later = presence.utc() + timedelta(seconds=20)
+    original_utc = presence.utc
+    monkeypatch.setattr(presence, "utc", lambda now=None: original_utc(now) if now is not None else later)
+    provider, routes = outbox._prepare(1, jid, token, False, 15)
+    assert provider == "gateway"
+    await outbox.notify(routes)
+    outbox.sweep()
+    assert outbox.snapshot(1, jid)["status"] == "dispatched"
+    with outbox.database() as db:
+        attempt = db.get(Attempt, (jid, 1))
+        assert attempt.created_at == later
+        grant_ids = [outbox.route(db, c, {"type": "sms.commit"}, job_key=f"{jid}:1") for _ in range(2)]
+        db.commit()
+    later += timedelta(seconds=outbox.RECEIPT_TIMEOUT_S + 1)
+    outbox.sweep()
+    assert outbox.snapshot(1, jid)["status"] == "queued"
+    with outbox.database() as db:
+        assert all(db.get(GatewayMessage, gid).state == "expired" for gid in grant_ids)
+
+
+@pytest.mark.parametrize("in_chain", [False, True])
+async def test_receipt_timeout_respects_provider_fallback_chain(sms_state, monkeypatch, in_chain):
+    c, socket = sms_state()
+    providers = ["gateway", "eus"] if in_chain else ["gateway"]
+    jid, _ = await prepare((c, socket), providers=providers)
+    later = presence.utc() + timedelta(seconds=outbox.RECEIPT_TIMEOUT_S + 1)
+    original_utc = presence.utc
+    monkeypatch.setattr(presence, "utc", lambda now=None: original_utc(now) if now is not None else later)
+    outbox.sweep()
+    token = outbox.claim(1, jid)
+    provider, _ = outbox._prepare(1, jid, token, True, 15)
+    assert provider == ("eus" if in_chain else "gateway")
+
+
+async def test_lease_not_dispatched_excludes_previous_gateway(sms_state):
+    c, socket = sms_state(priority=1)
+    other, _ = sms_state(priority=20)
+    jid, _ = await prepare((c, socket))
+    expire(jid)
+    outbox.sweep()
+    with outbox.database() as db:
+        assert db.get(Attempt, (jid, 1)).outcome == "not_dispatched"
+    await outbox.drive(1, jid, SmsContext(1, ["gateway"], None))
+    assert outbox.snapshot(1, jid)["gateway_token_id"] == other.gateway_id
+
+
 async def test_ack_is_not_send_and_duplicates_do_not_create_second_commit(sms_state):
     c, socket = sms_state()
     jid, wire = await prepare((c, socket))

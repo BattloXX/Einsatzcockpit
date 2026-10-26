@@ -21,6 +21,26 @@ from tests.gateway_helpers import CaptureSocket, bind, cleanup
 from tests.test_print_agent_ws import _anlegen, _auth, _job, _recv
 
 
+@pytest.mark.parametrize("kind,ttl", [("sms", 60), ("linux", 90), ("windows_agent", 90)])
+def test_presence_kind_ttl_for_begin_and_touch(kind, ttl):
+    connection, socket = bind(kind)
+    try:
+        start = connection.expires_at - timedelta(seconds=ttl)
+        with SessionLocal() as db:
+            set_tenant_context(db, None)
+            assert presence.connections(db, kind, 1, connection.gateway_id, start + timedelta(seconds=ttl - 1))
+            assert not presence.connections(db, kind, 1, connection.gateway_id, start + timedelta(seconds=ttl))
+            touched = start + timedelta(seconds=30)
+            assert presence.touch(db, kind, 1, connection.gateway_id, socket.token_hash,
+                                  connection.connection_id, touched)
+            snapshot = presence.describe(db, kind, 1, connection.gateway_id, touched)
+            assert snapshot["expires_at"] == touched + timedelta(seconds=ttl)
+            assert presence.connections(db, kind, 1, connection.gateway_id, touched + timedelta(seconds=ttl - 1))
+            assert not presence.connections(db, kind, 1, connection.gateway_id, touched + timedelta(seconds=ttl))
+    finally:
+        cleanup(connection)
+
+
 @pytest.mark.parametrize("kind", ["sms", "linux", "windows_agent"])
 def test_presence_owner_ttl_reconnect_and_tenant_fencing(kind):
     connection, _ = bind(kind)
@@ -41,8 +61,9 @@ def test_presence_owner_ttl_reconnect_and_tenant_fencing(kind):
             assert not presence.touch(db, kind, 1, row.id, token, connection.connection_id, now)
             current = presence.connections(db, kind, 1, row.id, now)[0]
             assert current.connection_id == newer and current.worker_id == "worker-b"
-            assert not presence.connections(db, kind, 1, row.id, now + timedelta(seconds=91))
-            assert not presence.touch(db, kind, 1, row.id, token, newer, now + timedelta(seconds=91))
+            ttl = presence.SMS_TTL_S if kind == "sms" else presence.TTL_S
+            assert not presence.connections(db, kind, 1, row.id, now + timedelta(seconds=ttl + 1))
+            assert not presence.touch(db, kind, 1, row.id, token, newer, now + timedelta(seconds=ttl + 1))
     finally:
         cleanup(connection)
 

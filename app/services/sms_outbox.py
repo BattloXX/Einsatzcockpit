@@ -35,6 +35,7 @@ logger = logging.getLogger("einsatzleiter.sms_outbox")
 TERMINAL = ("sent", "failed", "uncertain")
 ACTIVE = ("claimed", "dispatched", "acknowledged")
 LEASE_S = 60
+RECEIPT_TIMEOUT_S = 10
 MAX_PARALLEL_DRIVES = 8
 MAX_IN_FLIGHT = 7
 _task: asyncio.Task | None = None
@@ -320,6 +321,19 @@ def _prepare(org_id, job_id, token, eus_available: bool, eus_timeout: int):
             .filter(Attempt.org_id == org_id, Attempt.job_id == job.id, Attempt.generation == job.generation)
             .one()
         )
+        previous = (
+            db.query(Attempt)
+            .filter(
+                Attempt.org_id == org_id, Attempt.job_id == job.id, Attempt.generation < job.generation,
+                Attempt.gateway_id.isnot(None),
+            )
+            .order_by(Attempt.generation.desc())
+            .all()
+        )
+        last_outcomes: dict[int, str] = {}
+        for prior in previous:
+            last_outcomes.setdefault(prior.gateway_id, prior.outcome)
+        excluded = {gid for gid, outcome in last_outcomes.items() if outcome in ("receipt_timeout", "not_dispatched")}
         now = presence.utc()
         if job.lease_until <= now:
             return None, []
@@ -332,6 +346,9 @@ def _prepare(org_id, job_id, token, eus_available: bool, eus_timeout: int):
                 break
             if provider == "gateway":
                 online = [gw for gw in gateways if presence.online(gw) and gw.worker_id]
+                alternatives = [gw for gw in online if gw.id not in excluded]
+                if alternatives or (eus_available and "eus" in job.providers[index + 1:]):
+                    online = alternatives
                 free = [
                     gw
                     for gw in online
@@ -368,6 +385,8 @@ def _prepare(org_id, job_id, token, eus_available: bool, eus_timeout: int):
         job.provider_index = index
         job.provider = attempt.provider = "eus" if selected == "eus" else "gateway"
         job.status = attempt.outcome = "dispatched"
+        # Dispatch-Zeitpunkt der Generation; Job.attempted_at bleibt dem Telefon vorbehalten.
+        attempt.created_at = now
         job.lease_until = now + timedelta(seconds=max(LEASE_S, eus_timeout * 4 + 30) if selected == "eus" else LEASE_S)
         if selected == "eus":
             job.may_have_sent = True
@@ -612,11 +631,21 @@ def _cancel_queued(db, org_id, route_id):
 
 def sweep():
     now = presence.utc()
+    receipt_due = (
+        (Job.status == "dispatched") & (Job.provider == "gateway")
+        & Job.received_at.is_(None) & Job.may_have_sent.is_(False)
+        & (Attempt.created_at < now - timedelta(seconds=RECEIPT_TIMEOUT_S))
+    )
     with database() as db:
         ids = (
             db.query(Job.org_id, Job.id)
+            .outerjoin(
+                Attempt, (Attempt.org_id == Job.org_id) & (Attempt.job_id == Job.id)
+                & (Attempt.generation == Job.generation),
+            )
             .filter(
                 or_(
+                    receipt_due,
                     (Job.status.in_(ACTIVE)) & (Job.lease_until <= now),
                     (Job.status == "queued") & (Job.expires_at <= now),
                 )
@@ -632,8 +661,6 @@ def sweep():
                 continue
             if job.status == "queued" and job.expires_at > now:
                 continue
-            if job.status in ACTIVE and (job.lease_until is None or job.lease_until > now):
-                continue
             if job.status == "queued":
                 job.status, job.error, job.finished_at = "failed", "queue_expired_without_send", now
             else:
@@ -642,8 +669,16 @@ def sweep():
                     .filter(Attempt.org_id == org_id, Attempt.job_id == jid, Attempt.generation == job.generation)
                     .one()
                 )
+                receipt_timeout = (
+                    job.status == "dispatched" and job.provider == "gateway"
+                    and job.received_at is None and not job.may_have_sent
+                    and attempt.created_at < now - timedelta(seconds=RECEIPT_TIMEOUT_S)
+                )
+                lease_expired = job.lease_until is not None and job.lease_until <= now
+                if not receipt_timeout and not lease_expired:
+                    continue
                 safe = job.status == "claimed" or not job.may_have_sent
-                if not safe and job.provider == "gateway":
+                if job.provider == "gateway":
                     if job.protocol >= 2:
                         grants = (
                             db.query(GatewayMessage)
@@ -656,7 +691,7 @@ def sweep():
                             .all()
                         )
                         grants = [g for g in grants if g.message.get("type") == "sms.commit"]
-                        safe = bool(grants) and all(g.state == "queued" for g in grants)
+                        safe = (bool(grants) or not job.may_have_sent) and all(g.state == "queued" for g in grants)
                         if safe:
                             safe = all(_cancel_queued(db, org_id, g.id) for g in grants)
                     else:
@@ -664,12 +699,17 @@ def sweep():
                 if safe:
                     if attempt.route_id:
                         _cancel_queued(db, org_id, attempt.route_id)
-                    attempt.outcome, attempt.finished_at = "not_dispatched", now
+                    attempt.outcome = "receipt_timeout" if receipt_timeout else "not_dispatched"
+                    attempt.finished_at = now
                     job.status, job.may_have_sent = "queued", False
                     job.claim_token, job.lease_until = None, None
                     job.next_attempt_at = now
-                else:
+                elif lease_expired:
                     _complete(db, job, attempt, "uncertain", "lease_expired_after_possible_send")
+                else:
+                    # Auch teilweise Stornierungen bei unsicherem Frueh-Reset zurueckrollen.
+                    db.rollback()
+                    continue
             db.commit()
 
 
