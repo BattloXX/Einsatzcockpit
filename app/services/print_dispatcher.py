@@ -19,7 +19,6 @@ from app.models.gateway import (
     JOB_DONE,
     JOB_FAILED,
     JOB_PRINTING,
-    JOB_QUEUED,
     JOB_SENT,
     JOB_SOURCE_MANUAL,
     JOB_SOURCE_RULE,
@@ -162,6 +161,10 @@ def create_print_job(
         if existing is not None:
             return existing, False
 
+    from datetime import UTC, datetime
+
+    from app.services.print_agent_service import hat_agent_routen
+    agent_delivery = hat_agent_routen(db, printer_id)
     job = PrintJob(
         org_id=org_id,
         gateway_id=gateway_id,
@@ -175,6 +178,8 @@ def create_print_job(
         artifact_ref=artifact_ref,
         options=options or {},
         idempotency_key=key,
+        delivery="lease" if agent_delivery else "push",
+        queued_at=datetime.now(UTC).replace(tzinfo=None) if agent_delivery else None,
         created_by_id=created_by_id,
         fallback_of_job_id=fallback_of_job_id,
     )
@@ -186,6 +191,7 @@ def create_print_job(
         existing = (
             db.query(PrintJob)
             .filter(PrintJob.idempotency_key == key)
+            .with_for_update()
             .execution_options(include_all_tenants=True)
             .first()
         )
@@ -225,32 +231,13 @@ async def dispatch_job(db: Session, job: PrintJob) -> dict:
     # (A4/A3, Hoch/Quer) bestimmt das @page-CSS der Druckseite (preferCSSPageSize).
     if is_html_render(job):
         payload["render_kind"] = "html"
-    # attempts + 'sent' VOR dem Await committen und danach den Status NICHT erneut
-    # schreiben: Den Laufzeit-Status (printing/done/failed) besitzt der Gateway-Callback
-    # `_apply_job_status` (eigene Session). Ein zweiter Commit hier nach dem Await
-    # kollidierte mit diesem Callback auf derselben print_job-Zeile → MariaDB-Fehler
-    # 1020 „Record has changed since last read" (Prod-Log 2026-07-08).
-    job.attempts = (job.attempts or 0) + 1
-    job.status = JOB_SENT
+    # Der atomare Push-Claim und der Transport werden gemeinsam gespeichert.
+    # Wiederholte Dispatcher-Aufrufe erzeugen keinen zweiten physischen Auftrag.
     db.commit()
-    assert job.org_id is not None  # create_print_job() setzt org_id immer
-    try:
-        result = await dispatch_print_job(job.org_id, job.id, payload)
-    except RuntimeError as exc:
-        # Bewusst kein Fallback: Ist kein Gateway verbunden, ist auch ein Ersatzdrucker
-        # derselben Organisation nicht erreichbar.
-        db.refresh(job)
-        job.status = JOB_FAILED
-        job.error = str(exc)[:500]
-        db.commit()
-        logger.warning("Druckauftrag %s nicht zustellbar: %s", job.id, exc)
-        return {"job_id": job.id, "status": JOB_FAILED, "error": str(exc)}
-
-    # Erfolgreich übergeben. Endstatus kommt asynchron via job_status → _apply_job_status.
-    if result.get("note"):
-        logger.info("Druckauftrag %s zugestellt: %s", job.id, result["note"])
-    return {"job_id": job.id, "status": result.get("status") or JOB_SENT,
-            "error": result.get("error")}
+    assert job.org_id is not None
+    result = await dispatch_print_job(job.org_id, job.id, payload)
+    db.refresh(job)
+    return result
 
 
 async def _dispatch_job_to_agents(db: Session, job: PrintJob) -> dict:
@@ -262,7 +249,7 @@ async def _dispatch_job_to_agents(db: Session, job: PrintJob) -> dict:
     gateway_ids = print_agent_service.enqueue_for_agents(db, job)
     await notify_agents_job_available(job.org_id, gateway_ids, [job.id])
     logger.info("Druckauftrag %s für Druckagents %s eingereiht", job.id, gateway_ids)
-    return {"job_id": job.id, "status": JOB_QUEUED, "error": None}
+    return {"job_id": job.id, "status": job.status, "error": None}
 
 
 def mark_job_failed(db: Session, job: PrintJob, grund: str) -> bool:
@@ -270,11 +257,15 @@ def mark_job_failed(db: Session, job: PrintJob, grund: str) -> bool:
 
     True, wenn der Status gewechselt hat.
     """
-    from app.models.gateway import JOB_TERMINAL
+    from app.models.gateway import JOB_TERMINAL, JOB_UNCERTAIN
 
-    if job.status in JOB_TERMINAL:
+    job = db.query(PrintJob).filter(PrintJob.id == job.id, PrintJob.org_id == job.org_id).with_for_update(
+    ).populate_existing().one()
+    if job.status in JOB_TERMINAL | {JOB_UNCERTAIN}:
         return False
-    job.status = JOB_FAILED
+    job.status = JOB_UNCERTAIN if job.phase in ("submitting", "spooled") or (
+        job.delivery == "push" and job.status in ("sent", "printing") and not job.lease_token
+    ) else JOB_FAILED
     job.error = grund[:500]
     db.commit()
     return True
@@ -288,11 +279,14 @@ def escalate_stale_job(db: Session, job_id: int, grund: str) -> bool:
     ist trotz Tenant-Tabelle zulaessig, weil der Filter ueber den eindeutigen
     Primaerschluessel genau eine Zeile adressiert.
     """
-    treffer = (
-        db.query(PrintJob)
-        .filter(PrintJob.id == job_id, PrintJob.status.in_((JOB_SENT, JOB_PRINTING)))
-        .update({"status": JOB_FAILED, "error": grund[:500]}, synchronize_session=False)
-    )
+    from app.models.gateway import JOB_UNCERTAIN
+    job = db.get(PrintJob, job_id)
+    if job is None:
+        return False
+    treffer = db.query(PrintJob).filter(PrintJob.id == job_id, PrintJob.org_id == job.org_id,
+        PrintJob.status.in_((JOB_SENT, JOB_PRINTING)), PrintJob.aktualisiert_am == job.aktualisiert_am).update(
+            {"status": JOB_UNCERTAIN, "error": grund[:500]}, synchronize_session=False)
+
     db.commit()
     return treffer == 1
 
@@ -310,7 +304,7 @@ async def dispatch_fallback_for_failed_job(job_id: int) -> PrintJob | None:
     set_tenant_context(db, None)
     try:
         job = db.get(PrintJob, job_id)
-        if job is None or job.source != JOB_SOURCE_RULE or job.rule_id is None:
+        if job is None or job.status != JOB_FAILED or job.source != JOB_SOURCE_RULE or job.rule_id is None:
             return None
         if job.fallback_of_job_id is not None:
             return None

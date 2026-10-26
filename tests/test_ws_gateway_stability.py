@@ -55,13 +55,25 @@ def sms(monkeypatch):
 
         return call
 
-    token = SimpleNamespace(org_id=997301, id=31)
+    token = SimpleNamespace(org_id=997301, id=31, token_hash="test-hash")
     monkeypatch.setattr(ws, "_resolve_sms_gateway_token", threaded("resolve", token))
     monkeypatch.setattr(ws, "_touch_sms_gateway_token", threaded("touch"))
     monkeypatch.setattr(ws, "_heartbeat_sms_gateway_token", threaded("heartbeat"))
     monkeypatch.setattr(ws, "_sms_receive_enabled", threaded("config", False))
     monkeypatch.setattr(ws, "record_inbound_sms", threaded("inbound", 42))
     monkeypatch.setattr(ws, "_start_sms_nachversand", lambda _org_id: None)
+    from datetime import timedelta
+
+    from app.services import gateway_presence as presence
+    connection = presence.Connection("sms", token.org_id, token.id, "test-cid", "test-worker",
+                                     presence.utc() + timedelta(seconds=90))
+    monkeypatch.setattr(ws.gateway_routing, "begin", threaded("begin", connection))
+    monkeypatch.setattr(ws.gateway_routing, "state", threaded("state", "connected"))
+    monkeypatch.setattr(ws.gateway_routing, "touch", threaded("heartbeat", True))
+    monkeypatch.setattr(ws.gateway_routing, "end", threaded("end", True))
+    monkeypatch.setattr(ws.gateway_routing, "attach", lambda *_args: None)
+    monkeypatch.setattr(ws.gateway_routing, "detach", lambda *_args: None)
+
     yield token, calls
     ws._sms_gateways.pop(token.org_id, None)
 
@@ -106,7 +118,8 @@ async def test_sms_idle_ping_then_dead_close(sms, monkeypatch, caplog):
     assert {"type": "ping"} in socket.sent
     assert socket.closed == [(4408, "idle timeout")]
     assert ws._sms_gateways[token.org_id] == []
-    assert calls == ["resolve", "touch", "config"]
+    assert {"resolve", "touch", "begin", "config", "state", "end"} <= set(calls)
+    assert "heartbeat" not in calls
     assert "code=4408" in caplog.text
 
 

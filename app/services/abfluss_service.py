@@ -2,17 +2,19 @@
 
 Daten: Werte werden aus der HTML-Seite der jeweiligen Messstation extrahiert.
 Cache: Aktueller Wert + HQ-Referenzwerte werden je Station im Arbeitsspeicher gehalten
-       (keine DB-Persistenz, kein Neustart-Recovery).
+       (HQ-Referenzwerte zusätzlich im gemeinsamen Redis-Cache, falls konfiguriert).
 TTL:   Scrape alle 10 Minuten, HQ-Werte alle 24 Stunden neu laden.
 """
 import asyncio
 import logging
 import re
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 
 import httpx
+
+from app.services import shared_cache
 
 logger = logging.getLogger("einsatzleiter.abfluss")
 
@@ -234,6 +236,7 @@ async def refresh_station(org_id: int, hzbnr: str, name: str, beschreibung: str 
         if needs_hq_refresh:
             st.hq_werte = hq
             st.hq_abfragezeit = now
+        await shared_cache.set(f"abfluss:hq:{org_id}:{hzbnr}", asdict(st.hq_werte), _HQ_TTL_S)
 
     return st
 
@@ -281,10 +284,14 @@ def sparkline_data(st: _StationState) -> dict:
     return {"points": " ".join(pts), "width": W, "height": H}
 
 
-def get_hq_werte(org_id: int, hzbnr: str) -> HQWerte | None:
+async def get_hq_werte(org_id: int, hzbnr: str) -> HQWerte | None:
     """Gibt gecachte HQ-Referenzwerte einer Station zurück, oder None."""
     st = _store.get(org_id, {}).get(hzbnr)
-    return st.hq_werte if st else None
+    if st and st.hq_abfragezeit is not None:
+        return st.hq_werte
+    # Als Dict speichern: der Cache-Decoder erlaubt nur bekannte Wetter-Dataclasses.
+    cached = await shared_cache.get(f"abfluss:hq:{org_id}:{hzbnr}")
+    return HQWerte(**cached) if isinstance(cached, dict) else st.hq_werte if st else None
 
 
 def remove_station(org_id: int, hzbnr: str) -> None:

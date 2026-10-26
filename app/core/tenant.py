@@ -235,6 +235,10 @@ _TENANT_TABLE_NAMES: frozenset[str] = frozenset({
     "foerder_maschinist_token",
     # Print & Alarm Gateway (ECPG) – TenantScoped via Mixin
     "gateway",
+    "gateway_message",
+    "sms_dispatch_job",
+    "sms_dispatch_attempt",
+    "sms_dispatch_cursor",
     "printer",
     "printer_agent_route",
     "print_job",
@@ -253,6 +257,7 @@ _TENANT_TABLE_NAMES: frozenset[str] = frozenset({
     # ~95 manuelle _check_org_access()-Aufrufe in ui_major_incident.py geschützt;
     # ein vergessener Aufruf wäre ein Cross-Tenant-IDOR ohne DB-seitigen Schutz.
     "major_incident",
+    "citizen_report_verification",
     "incident_site",
     # GSL-Einheitenmodus (TenantScoped via Mixin)
     "einheit_aktion",

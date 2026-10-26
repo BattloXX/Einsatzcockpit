@@ -90,7 +90,7 @@ class GatewaySendRequest(BaseModel):
 
 
 class GatewaySendResponse(BaseModel):
-    status: Literal["sent", "failed"]
+    status: Literal["sent", "failed", "pending", "uncertain"]
     id: int
     gesendet: int
     fehlgeschlagen: int
@@ -182,7 +182,9 @@ async def send_sms_gateway(
         body_text=payload.body, initial_status="sending",
     )
     await send_message_now(db, message)
-    status = "sent" if message.status == "sent" else "failed"
+    status = "pending" if message.status in ("queued", "sending") else message.status
+    if status not in ("sent", "pending", "uncertain"):
+        status = "failed"
     response = {
         "status": status,
         "id": message.id,
@@ -191,6 +193,10 @@ async def send_sms_gateway(
     }
     if status == "failed":
         response["error"] = "SMS-Versand fehlgeschlagen"
+    elif status == "uncertain":
+        response["error"] = "Versandergebnis unklar; kein automatischer Neuversand"
+    elif status == "pending":
+        response["error"] = "Versandbestaetigung ausstehend; Status ueber Auftrags-ID abfragen"
     write_audit(
         db, "api.sms.gateway_send", org_id=api_key.org_id, api_key_id=api_key.id,
         entity_type="api_message", entity_id=message.id,

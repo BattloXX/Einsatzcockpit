@@ -126,7 +126,9 @@ def test_autosave_aktualisiert_updated_at(setup_db):
         db.close()
 
     time.sleep(0.01)
-    collab._save_ydoc_state(lage_id, b"\x00fake-state", org_id)
+    from pycrdt import Doc
+
+    collab._save_ydoc_state(lage_id, Doc().get_update(), org_id)
 
     db = SessionLocal()
     set_tenant_context(db, None)

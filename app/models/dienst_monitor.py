@@ -14,6 +14,10 @@ DIENST_LABELS = {
     "alarm_seriell": "Alarm seriell (W&T)",
     "alarm_dibos": "Alarm DIBOS",
     "alarm_outbox": "Alarm-Outbox",
+    "worker_runtime": "Worker und Leader",
+    "redis_bus": "Redis-Bus",
+    "sms_jobs": "SMS-Aufträge",
+    "print_jobs": "Druckaufträge",
 }
 
 

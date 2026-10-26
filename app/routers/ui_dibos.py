@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from app.config import settings
+from app.core.async_bridge import run_async
 from app.core.audit import write_audit
 from app.core.crypto import encrypt_secret
 from app.core.permissions import (
@@ -78,7 +79,7 @@ def dibos_settings_page(
         from app.services.dibos.dibos_capture import TRACE_RETENTION_DAYS, list_traces
         trace_retention_days = TRACE_RETENTION_DAYS
         if effective_org_id:
-            traces = list_traces(effective_org_id)
+            traces = run_async(list_traces, effective_org_id)
 
     return templates.TemplateResponse(request, "admin/settings_dibos.html", {
         "user": user,
@@ -288,13 +289,13 @@ async def dibos_test_connection(
 # ("org_admin","admin"), sondern require_system_admin — die Aufzeichnungen
 # enthalten Anruferdaten im Klartext und werden lokal gespeichert.
 
-def _traces_response(request: Request, db, user: User, org_id: int | None):
-    from app.services.dibos.dibos_capture import TRACE_RETENTION_DAYS, list_traces
+def _traces_response(request: Request, db, user: User, org_id: int | None, traces: list[dict]):
+    from app.services.dibos.dibos_capture import TRACE_RETENTION_DAYS
     org = db.query(FireDept).filter(FireDept.id == org_id).first() if org_id else None
     return templates.TemplateResponse(request, "admin/_dibos_traces.html", {
         "user": user,
         "org": org,
-        "traces": list_traces(org_id) if org_id else [],
+        "traces": traces,
         "trace_retention_days": TRACE_RETENTION_DAYS,
     })
 
@@ -306,7 +307,9 @@ def dibos_trace_status(
     user: User = Depends(require_system_admin),
     org_id: int | None = None,
 ):
-    return _traces_response(request, db, user, org_id)
+    from app.services.dibos.dibos_capture import list_traces
+    traces = run_async(list_traces, org_id) if org_id else []
+    return _traces_response(request, db, user, org_id, traces)
 
 
 @router.post("/dibos/trace/start")
@@ -317,7 +320,7 @@ async def dibos_trace_start(
     target_org_id: int = Form(...),
     duration_minutes: float = Form(120),
 ):
-    from app.services.dibos.dibos_capture import start_trace_for_org
+    from app.services.dibos.dibos_capture import list_traces, start_trace_for_org
     duration = max(5.0, min(duration_minutes or 120, 480.0))  # 5 min .. 8 h
     try:
         run_id = await start_trace_for_org(target_org_id, duration)
@@ -327,7 +330,8 @@ async def dibos_trace_start(
         db.commit()
     except ValueError:
         pass  # z.B. "läuft bereits" oder unvollständige Config — Liste zeigt aktuellen Stand ohnehin
-    return _traces_response(request, db, user, target_org_id)
+    traces = await list_traces(target_org_id)
+    return _traces_response(request, db, user, target_org_id, traces)
 
 
 @router.post("/dibos/trace/{run_id}/cancel")
@@ -338,12 +342,13 @@ def dibos_trace_cancel(
     user: User = Depends(require_system_admin),
     target_org_id: int = Form(...),
 ):
-    from app.services.dibos.dibos_capture import cancel_trace
-    cancel_trace(target_org_id)
+    from app.services.dibos.dibos_capture import cancel_trace, list_traces
+    run_async(cancel_trace, target_org_id)
     write_audit(db, "dibos.trace.cancelled", org_id=target_org_id, user_id=user.id,
                 payload={"run_id": run_id}, ip=request.client.host if request.client else None)
     db.commit()
-    return _traces_response(request, db, user, target_org_id)
+    traces = run_async(list_traces, target_org_id)
+    return _traces_response(request, db, user, target_org_id, traces)
 
 
 @router.post("/dibos/trace/{run_id}/delete")
@@ -354,12 +359,13 @@ def dibos_trace_delete(
     user: User = Depends(require_system_admin),
     target_org_id: int = Form(...),
 ):
-    from app.services.dibos.dibos_capture import delete_trace
-    delete_trace(target_org_id, run_id)
+    from app.services.dibos.dibos_capture import delete_trace, list_traces
+    run_async(delete_trace, target_org_id, run_id)
     write_audit(db, "dibos.trace.deleted", org_id=target_org_id, user_id=user.id,
                 payload={"run_id": run_id}, ip=request.client.host if request.client else None)
     db.commit()
-    return _traces_response(request, db, user, target_org_id)
+    traces = run_async(list_traces, target_org_id)
+    return _traces_response(request, db, user, target_org_id, traces)
 
 
 @router.get("/dibos/trace/{run_id}/live", response_class=HTMLResponse)

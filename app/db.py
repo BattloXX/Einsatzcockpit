@@ -11,12 +11,13 @@ from app.config import settings
 engine = create_engine(
     settings.DATABASE_URL,
     pool_pre_ping=True,
+    hide_parameters=True,  # SQL-Fehler duerfen keine SMS-Inhalte oder Tokenwerte protokollieren.
     pool_recycle=300,
-    pool_size=10,
+    pool_size=settings.DB_POOL_SIZE,
     # Audit PR 7: DB-lastige Routen laufen als sync def im anyio-Threadpool
-    # (Default: 40 Threads). pool_size + max_overflow muss diese 40 abdecken,
-    # sonst blockieren Threads beim Warten auf eine Pool-Connection.
-    max_overflow=30,
+    # (Default: 40 Threads). Der Standard deckt diese 40 ab; bei mehreren Workern
+    # kleinere Pools gegen das gesamte DB-Verbindungsbudget abwaegen.
+    max_overflow=settings.DB_MAX_OVERFLOW,
 )
 
 _slow_query_logger = logging.getLogger("einsatzleiter.slow_query")

@@ -199,7 +199,7 @@ async def test_sms_dispatch_schreibt_status_und_protokoll(messaging_key, monkeyp
 
         async def fake_bulk(org, jobs, ctx, callback):
             results = []
-            for index, (phone, _) in enumerate(jobs):
+            for index, (phone, *_) in enumerate(jobs):
                 result = SmsSendResult(phone, index == 0, datetime.now(UTC).replace(tzinfo=None), "gateway", None)
                 await callback(result)
                 results.append(result)

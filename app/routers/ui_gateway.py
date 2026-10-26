@@ -410,7 +410,7 @@ def gateway_detail(
         "doc_labels": RULE_DOCUMENT_LABELS,
         "objekt_element_labels": OBJEKT_ELEMENT_LABELS,
         "trigger_labels": TRIGGER_LABELS,
-        "passthrough_status": get_passthrough_status(user.org_id),
+        "passthrough_status": run_async(get_passthrough_status, user.org_id),
         "redis_status": ws_bus.status(),
     })
 
@@ -1400,28 +1400,34 @@ async def resolve_uncertain_job(
 
     if action not in AUFLOESUNG_LABELS:
         raise HTTPException(status_code=400, detail="Unbekannte Aktion")
-    job = db.get(PrintJob, job_id)
-    if job is None or job.org_id != user.org_id:
+    job = db.query(PrintJob).filter(PrintJob.id == job_id, PrintJob.org_id == user.org_id).with_for_update().first()
+    if job is None:
         raise HTTPException(status_code=404, detail="Druckauftrag nicht gefunden")
     assert user.org_id is not None
     gw_id = job.gateway_id
+    ersatz = None
     if job.status == JOB_UNCERTAIN:
         hinweis = f"{AUFLOESUNG_LABELS[action]} (geprüft von {user.display_name or user.username})"
-        job.status = JOB_DONE if action == "done" else JOB_CANCELED
-        job.error = (hinweis + (f" – {job.error}" if job.error else ""))[:500]
-        db.commit()
-        logger.info("Unklarer Druckauftrag %s aufgelöst: %s (user_id=%s)", job.id, action, user.id)
-        await broadcast_org(user.org_id, {"type": "print_job_status", "job_id": job.id,
-                                          "status": job.status})
-        if action == "reprint":
+        target = JOB_DONE if action == "done" else JOB_CANCELED
+        won = db.query(PrintJob).filter(PrintJob.id == job.id, PrintJob.org_id == user.org_id,
+            PrintJob.status == JOB_UNCERTAIN).update({"status": target,
+                "error": (hinweis + (f" – {job.error}" if job.error else ""))[:500]}, synchronize_session=False)
+        db.refresh(job)
+        if won and action == "reprint":
             ersatz, _created = create_print_job(
                 db, org_id=user.org_id, gateway_id=job.gateway_id, printer_id=job.printer_id,
                 document_type=job.document_type, source="manual", incident_id=job.incident_id,
                 gsl_id=job.gsl_id, objekt_id=job.objekt_id, artifact_ref=job.artifact_ref,
                 options=dict(job.options or {}), created_by_id=user.id, fallback_of_job_id=job.id,
+                request_key=f"uncertain-resolution:{job.id}",
             )
-            db.commit()
+        db.commit()
+        if won:
+            await broadcast_org(user.org_id, {"type": "print_job_status", "job_id": job.id, "status": job.status})
+        if ersatz is not None:
             await dispatch_job(db, ersatz)
+    else:
+        db.commit()
     if request.headers.get("HX-Request") == "true":
         gw = _gw_or_404(db, user.org_id, gw_id)
         context = _historie_context(db, gw)

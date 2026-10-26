@@ -605,6 +605,13 @@ def _create_default_messages(db: Session, incident: Incident, alarm: AlarmType |
     db.flush()
 
 
+def _lock_column_for_insert(db: Session, column_id: int | None) -> None:
+    if column_id is not None:
+        # Vor dem Child-INSERT sperren, nicht erst nach dessen FK-Shared-Lock.
+        # populate_existing verhindert eine alte card_order aus der Identity Map.
+        db.query(IncidentColumn).filter(IncidentColumn.id == column_id).populate_existing().with_for_update().one()
+
+
 def add_task(
     db: Session,
     incident: Incident,
@@ -616,6 +623,7 @@ def add_task(
     if column_id is None:
         tasks_col = _get_column(incident, "tasks")
         column_id = tasks_col.id if tasks_col else None
+    _lock_column_for_insert(db, column_id)
     task = Task(
         incident_id=incident.id,
         column_id=column_id,
@@ -1175,6 +1183,7 @@ def add_message(
     due_sec = due_after_min * 60 if due_after_min > 0 else None
     due_at = incident.started_at + timedelta(seconds=due_sec) if due_sec else None
     msgs_col = _get_column(incident, "messages")
+    _lock_column_for_insert(db, msgs_col.id if msgs_col else None)
     msg = Message(
         incident_id=incident.id,
         column_id=msgs_col.id if msgs_col else None,

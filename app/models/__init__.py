@@ -6,6 +6,7 @@ from app.models.atemschutz_pruefung import (
 )
 from app.models.bma_import import BmaImportSatz, OrgBmaImportConfig
 from app.models.breathing import BreathingTroop, PressureLog, TroopMember
+from app.models.citizen_verification import CitizenReportVerification
 from app.models.dibos import OrgDibosConfig
 from app.models.dienst_monitor import (  # noqa: F401 -- registriert ORM-Modelle
     DienstMonitorLog,
@@ -40,6 +41,7 @@ from app.models.foerderstrecke import (
 from app.models.gateway import (
     AlarmIngest,
     Gateway,
+    GatewayMessage,
     Printer,
     PrinterAgentRoute,
     PrintJob,
@@ -232,6 +234,9 @@ from app.models.road_closure import (
     RoadClosureTeamsConfig,
 )
 from app.models.sms import (
+    SmsDispatchAttempt,
+    SmsDispatchCursor,
+    SmsDispatchJob,
     SmsEinsatzinfoRecipient,
     SmsForwardRule,
     SmsForwardRuleGroup,
@@ -284,8 +289,10 @@ from app.models.wasserstelle import Wasserstelle
 from app.models.weather import WeatherDashboardToken, WeatherReading, WeatherStation
 from app.models.weather_alert import WeatherAlertLog, WeatherAlertRule, WeatherAlertState
 from app.models.wordpress_report import WordPressReportConfig
+from app.models.worker_runtime import WorkerRuntime  # noqa: F401
 
 __all__ = [
+    "CitizenReportVerification",
     "SearchChunk",
     "SearchDocument",
     "SearchOutbox",
@@ -392,6 +399,9 @@ __all__ = [
     "SmsGroup",
     "SmsGroupMember",
     "SmsEinsatzinfoRecipient",
+    "SmsDispatchJob",
+    "SmsDispatchAttempt",
+    "SmsDispatchCursor",
     "SmsLog",
     "SmsInbox",
     "SmsForwardRule",
@@ -468,6 +478,7 @@ __all__ = [
     "FoerderMaschinistToken",
     "HoehenCache",
     "Gateway",
+    "GatewayMessage",
     "Printer",
     "PrinterAgentRoute",
     "PrintJob",

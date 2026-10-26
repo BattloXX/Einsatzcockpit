@@ -46,6 +46,7 @@ from datetime import UTC, datetime
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.services.background_runtime import create_leader_task
 from app.services.dibos.dibos_client import parse_events
 
 logger = logging.getLogger("einsatzleiter.dibos.enrich")
@@ -1145,14 +1146,15 @@ _background_tasks: set[asyncio.Task] = set()
 def _start_background(coro, label: str, incident_id: int) -> None:
     """Startet langsame Folgearbeit (Druck, Mail/SMS an Objektkontakte, WordPress)
     entkoppelt vom Poll-Loop; Fehler werden nur geloggt."""
-    task = asyncio.create_task(coro)
+    task = create_leader_task(coro)
     _background_tasks.add(task)
 
     def _done(finished: asyncio.Task) -> None:
         _background_tasks.discard(finished)
         if not finished.cancelled() and finished.exception() is not None:
             logger.error(
-                "%s fehlgeschlagen (Einsatz %s)", label, incident_id, exc_info=finished.exception(),
+                "%s fehlgeschlagen (Einsatz %s, error=%s)", label, incident_id,
+                type(finished.exception()).__name__,
             )
 
     task.add_done_callback(_done)

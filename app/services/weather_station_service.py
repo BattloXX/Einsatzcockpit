@@ -30,6 +30,7 @@ from app.models.weather import WeatherReading, WeatherStation
 logger = logging.getLogger("einsatzleiter.weather")
 
 # In-Memory-Ringpuffer: bis zu 48 h Verlauf pro Station (Fallback ohne Wetter-DB).
+# Dieser Fallback gilt pro Worker; bei mehreren Workern wird die Wetter-DB benötigt.
 # station_id → deque von SimpleNamespace-Objekten (ts + alle FIELDS)
 _HISTORY_MAX = 2880  # 48 h bei 1 Push/min
 _station_history: dict[int, deque] = {}

@@ -1455,7 +1455,7 @@ async def weather_infoscreen(
         # HQ-Schwellen als Y-Positionen für Sparkline-Markierungen
         sl = abfluss_sparklines.get(av["hzbnr"])
         if sl and sl.get("min") is not None and sl.get("max") is not None:
-            hq = _abf_svc.get_hq_werte(org.id, av["hzbnr"])
+            hq = await _abf_svc.get_hq_werte(org.id, av["hzbnr"])
             if hq:
                 y_range = (sl["max"] - sl["min"]) or 0.001
                 for hq_name, hq_val, color in [

@@ -7,7 +7,7 @@
      hx-trigger="every 2s" hx-target="#smsLogDetailsContent" hx-swap="innerHTML"{% endif %}>
   {% if log_entry.is_running %}
   <div class="alert alert--info">
-    {{ recipients|length }} von {{ log_entry.recipient_count }} bereits bearbeitet, Versand laeuft...
+    {{ log_entry.success_count }} von {{ log_entry.recipient_count }} vom Modem/Provider angenommen; weitere Auftraege offen.
   </div>
   {% endif %}
   {% if recipients %}
@@ -17,7 +17,7 @@
         <tr>
           <th>Telefonnummer</th>
           <th>Name</th>
-          <th>Zeitpunkt</th>
+          <th>Annahmezeit</th>
           <th>Status</th>
           <th>Gateway</th>
         </tr>
@@ -27,12 +27,24 @@
         <tr>
           <td data-label="Telefonnummer">{{ recipient.phone_number }}</td>
           <td data-label="Name">{{ recipient.name or '-' }}</td>
-          <td data-label="Zeitpunkt" style="white-space:nowrap;">{{ recipient.sent_at|local_datetime_sec }}</td>
+          <td data-label="Annahmezeit" style="white-space:nowrap;">{{ recipient.sent_at|local_datetime_sec if recipient.success else '-' }}</td>
           <td data-label="Status">
             {% if recipient.success %}
-            <span style="color:var(--green-light, #4ade80);">Erfolgreich</span>
+            <span style="color:var(--green-light, #4ade80);">Vom Modem/Provider angenommen</span>
+            <small>Zustellung an Empfaenger nicht belegt</small>
+            {% elif recipient.dispatch_status == 'uncertain' or recipient.provider == 'uncertain' %}
+            <span style="color:var(--red-light, #f87171);">Versandergebnis unklar – kein automatischer Neuversand</span>
+            {% elif recipient.dispatch_status == 'acknowledged' %}
+            Gateway hat Auftrag empfangen; Versandbestaetigung ausstehend
+            {% elif recipient.dispatch_status in ('queued', 'claimed', 'dispatched') or recipient.provider in ('ausstehend', 'sendet') %}
+            Auftrag gespeichert; Versandbestaetigung ausstehend
             {% else %}
             <span style="color:var(--red-light, #f87171);">Fehlgeschlagen</span>
+            {% endif %}
+            {% set job = job_states.get(recipient.dispatch_job_id) %}
+            {% if job %}
+            {% if job.received_at %}<small>Gateway-Empfang: {{ job.received_at|local_datetime_sec }}</small>{% endif %}
+            {% if job.attempted_at %}<small>Versandversuch: {{ job.attempted_at|local_datetime_sec }}</small>{% endif %}
             {% endif %}
           </td>
           <td data-label="Gateway">{{ recipient.gateway_label or (recipient.provider|upper if recipient.provider else '-') }}</td>

@@ -29,6 +29,9 @@ import zipfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from app.services import org_job_state
+from app.services.background_runtime import create_leader_task
+from app.services.gateway_presence import worker_id
 from app.services.lis.lis_client import LisClient, LisClientError
 
 logger = logging.getLogger("einsatzleiter.lis.capture")
@@ -49,11 +52,8 @@ _PASSWORD_RE = re.compile(
 # nach dieser Frist automatisch löschen (siehe purge_old_captures()).
 CAPTURE_RETENTION_DAYS = 7
 
-# In-Memory-Registry laufender Aufzeichnungen je Org (verhindert Doppelstart,
-# erlaubt Status-Abfrage/Abbruch aus dem Admin-UI). Geht bei Neustart verloren,
-# was für ein Diagnose-Werkzeug unkritisch ist.
+# Lokale Task-Referenzen für direkten Abbruch; Status und Sperre liegen im Backend.
 _active_captures: dict[int, asyncio.Task] = {}
-_active_run_ids: dict[int, str] = {}
 
 
 class ExchangeRecorder:
@@ -184,6 +184,7 @@ async def capture_traffic(
     organization_id: str,
     duration_minutes: float,
     poll_interval_seconds: int,
+    job_token: str | None = None,
 ) -> Path:
     """Pollt read-only echte LIS-Daten für duration_minutes und zeichnet jeden
     SOAP-Austausch über recorder.record() auf (via client._on_exchange, das der
@@ -193,6 +194,8 @@ async def capture_traffic(
     no_open_since: datetime | None = None
     try:
         while True:
+            if job_token and await org_job_state.cancel_requested("lis", recorder.org_id, job_token):
+                raise asyncio.CancelledError
             has_open_operation = await _capture_once(client, recorder, organization_id)
             if has_open_operation:
                 no_open_since = None
@@ -236,21 +239,20 @@ async def capture_traffic(
     return recorder.out_dir
 
 
-def is_capture_running(org_id: int) -> bool:
-    task = _active_captures.get(org_id)
-    return task is not None and not task.done()
+async def is_capture_running(org_id: int) -> bool:
+    return bool((await org_job_state.status("lis", org_id))["running"])
 
 
-def _current_run_id(org_id: int) -> str | None:
-    return _active_run_ids.get(org_id) if is_capture_running(org_id) else None
+async def _current_run_id(org_id: int) -> str | None:
+    return (await org_job_state.status("lis", org_id))["run_id"]
 
 
-def cancel_capture(org_id: int) -> bool:
+async def cancel_capture(org_id: int) -> bool:
     task = _active_captures.get(org_id)
     if task and not task.done():
         task.cancel()
         return True
-    return False
+    return await org_job_state.request_cancel("lis", org_id)
 
 
 async def start_capture_for_org(
@@ -263,13 +265,13 @@ async def start_capture_for_org(
     Wirft ValueError, wenn die Org nicht vollständig konfiguriert ist oder
     bereits eine Aufzeichnung läuft.
     """
-    if is_capture_running(org_id):
+    if await is_capture_running(org_id):
         raise ValueError("Für diese Organisation läuft bereits eine Aufzeichnung.")
 
     # Opportunistische Bereinigung, falls der tägliche Retention-Loop seit dem
     # letzten Start noch nicht gelaufen ist (z.B. kurz nach einem Neustart).
     try:
-        purge_old_captures()
+        await purge_old_captures()
     except Exception:
         logger.exception("Opportunistische LIS-Capture-Bereinigung fehlgeschlagen")
 
@@ -297,37 +299,53 @@ async def start_capture_for_org(
         db.close()
 
     run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    out_dir = capture_run_dir(org_id, run_id)
-    recorder = ExchangeRecorder(out_dir, org_id, run_id)
-    client = LisClient(
-        base_url, site, username, password, on_exchange=recorder.record,
-        project_id=project_id, password_is_hash=password_is_hash,
-        organization_id=organization_id,
-    )
-
-    # Muss vor GetTasks einmal aufgerufen werden, sonst NullReferenceException auf dem
-    # LIS-Server (siehe select_operation()-Docstring in lis_client.py). Fehler hier
-    # sollen die Aufzeichnung nicht verhindern — sie ist ein Diagnose-Werkzeug und
-    # soll auch dann noch GetOperationsInRange/GetOperationUnits aufzeichnen können.
+    token = await org_job_state.try_start(
+        "lis", org_id, org_job_state.TTL_S, worker_id(), run_id=run_id)
+    if token is None:
+        raise ValueError("Für diese Organisation läuft bereits eine Aufzeichnung.")
     try:
-        await client.select_operation(organization_id)
-    except LisClientError:
-        logger.exception("LIS-Capture: SelectOperation für Org %s fehlgeschlagen", org_id)
+        out_dir = capture_run_dir(org_id, run_id)
+        recorder = ExchangeRecorder(out_dir, org_id, run_id)
+        client = LisClient(
+            base_url, site, username, password, on_exchange=recorder.record,
+            project_id=project_id, password_is_hash=password_is_hash,
+            organization_id=organization_id,
+        )
+        # Muss vor GetTasks einmal aufgerufen werden, sonst NullReferenceException auf dem
+        # LIS-Server (siehe select_operation()-Docstring in lis_client.py). Fehler hier
+        # sollen die Aufzeichnung nicht verhindern — sie ist ein Diagnose-Werkzeug und
+        # soll auch dann noch GetOperationsInRange/GetOperationUnits aufzeichnen können.
+        try:
+            await client.select_operation(organization_id)
+        except LisClientError:
+            logger.exception("LIS-Capture: SelectOperation für Org %s fehlgeschlagen", org_id)
+    except BaseException:
+        await org_job_state.finish("lis", org_id, token)
+        raise
 
-    task = asyncio.create_task(
-        capture_traffic(client, recorder, organization_id, duration_minutes, poll_interval_seconds)
+    task = create_leader_task(
+        org_job_state.backend.run(
+            "lis", org_id, token, lambda: capture_traffic(
+                client, recorder, organization_id, duration_minutes, poll_interval_seconds, token))
     )
     _active_captures[org_id] = task
-    _active_run_ids[org_id] = run_id
+
+    def completed(done: asyncio.Task) -> None:
+        if _active_captures.get(org_id) is done:
+            _active_captures.pop(org_id, None)
+        create_leader_task(org_job_state.finish("lis", org_id, token))
+
+    task.add_done_callback(completed)
     logger.info("LIS-Capture gestartet: Org %s, Dauer %s min, run_id %s", org_id, duration_minutes, run_id)
     return run_id
 
 
-def list_captures(org_id: int) -> list[dict]:
+async def list_captures(org_id: int) -> list[dict]:
     """Listet vorhandene Aufzeichnungsläufe einer Org (aus den summary.json-Dateien)."""
     org_dir = CAPTURE_ROOT / str(org_id)
     if not org_dir.is_dir():
         return []
+    current_run_id = await _current_run_id(org_id)
     runs = []
     for run_dir in sorted(org_dir.iterdir(), reverse=True):
         summary_path = run_dir / "summary.json"
@@ -338,7 +356,7 @@ def list_captures(org_id: int) -> list[dict]:
         except (ValueError, OSError):
             continue
         data["run_dir"] = run_dir.name
-        data["running"] = run_dir.name == _current_run_id(org_id)
+        data["running"] = run_dir.name == current_run_id
         runs.append(data)
     return runs
 
@@ -350,10 +368,10 @@ def _parse_run_id(run_id: str) -> datetime | None:
         return None
 
 
-def delete_capture(org_id: int, run_id: str) -> bool:
+async def delete_capture(org_id: int, run_id: str) -> bool:
     """Löscht einen einzelnen Aufzeichnungslauf. Läuft er noch, wird er zuerst abgebrochen."""
-    if run_id == _current_run_id(org_id):
-        cancel_capture(org_id)
+    if run_id == await _current_run_id(org_id):
+        await cancel_capture(org_id)
     run_dir = capture_run_dir(org_id, run_id)
     if not run_dir.is_dir():
         return False
@@ -362,18 +380,18 @@ def delete_capture(org_id: int, run_id: str) -> bool:
     return True
 
 
-def purge_old_captures(retention_days: int = CAPTURE_RETENTION_DAYS) -> int:
+async def purge_old_captures(retention_days: int = CAPTURE_RETENTION_DAYS) -> int:
     """Löscht alle Aufzeichnungsläufe (aller Orgs), die älter als retention_days sind.
 
     Läuft ein Capture noch, wird er nie automatisch gelöscht — unabhängig vom Alter
     (Schutz über _current_run_id). Gibt die Anzahl gelöschter Läufe zurück.
     """
-    if not CAPTURE_ROOT.is_dir():
+    if not await asyncio.to_thread(CAPTURE_ROOT.is_dir):
         return 0
     import shutil
     cutoff = datetime.now(UTC) - timedelta(days=retention_days)
     deleted = 0
-    for org_dir in CAPTURE_ROOT.iterdir():
+    for org_dir in await asyncio.to_thread(lambda: list(CAPTURE_ROOT.iterdir())):
         if not org_dir.is_dir():
             continue
         try:
@@ -381,12 +399,12 @@ def purge_old_captures(retention_days: int = CAPTURE_RETENTION_DAYS) -> int:
         except ValueError:
             continue
         for run_dir in org_dir.iterdir():
-            if not run_dir.is_dir() or run_dir.name == _current_run_id(org_id):
+            if not run_dir.is_dir() or run_dir.name == await _current_run_id(org_id):
                 continue
             started = _parse_run_id(run_dir.name)
             if started is None or started >= cutoff:
                 continue
-            shutil.rmtree(run_dir, ignore_errors=True)
+            await asyncio.to_thread(shutil.rmtree, run_dir, ignore_errors=True)
             deleted += 1
     if deleted:
         logger.info(
@@ -421,6 +439,6 @@ async def lis_capture_retention_loop() -> None:
     while True:
         await asyncio.sleep(_seconds_until_next(_PURGE_HOUR, _PURGE_MINUTE))
         try:
-            await asyncio.to_thread(purge_old_captures)
+            await purge_old_captures()
         except Exception:
             logger.exception("Fehler im LIS-Capture-Retention-Loop")

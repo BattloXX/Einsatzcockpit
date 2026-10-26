@@ -1,4 +1,5 @@
 """Aufbewahrung des SMS-Versandprotokolls."""
+import asyncio
 from datetime import datetime, timedelta
 
 import pytest
@@ -146,3 +147,24 @@ def test_recipient_rows_cascade_with_log(retention_db):
     db = _session(retention_db)
     assert db.get(SmsLogRecipient, recipient_id) is None
     db.close()
+
+
+def test_main_registers_sms_log_retention_loop(monkeypatch):
+    from tests.background_loop_helpers import registered_background_loop_names
+
+    assert "sms_log_retention_loop" in registered_background_loop_names(monkeypatch)
+
+
+async def test_retention_loop_purges_gateway_messages(monkeypatch):
+    calls = []
+
+    async def sleep(_delay):
+        if calls:
+            raise asyncio.CancelledError
+
+    monkeypatch.setattr(sms_log_retention.asyncio, "sleep", sleep)
+    monkeypatch.setattr(sms_log_retention, "purge_old_messages", lambda: calls.append("gateway"))
+    monkeypatch.setattr(sms_log_retention, "purge_all_sms_logs", lambda: calls.append("sms") or 0)
+    with pytest.raises(asyncio.CancelledError):
+        await sms_log_retention.sms_log_retention_loop()
+    assert calls == ["gateway", "sms"]

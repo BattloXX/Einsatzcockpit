@@ -10,6 +10,7 @@ Ersetzt die auf dieser (Windows-)Maschine nicht mögliche echte 2-Prozess-Varian
 nur dadurch, dass zwei Prozesse denselben Redis abonnieren – exakt das, was fakeredis
 über einen gemeinsamen FakeServer nachbildet.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -23,6 +24,7 @@ from app.services import ws_bus
 def fake_redis(monkeypatch):
     import fakeredis
     import fakeredis.aioredis as far
+
     server = fakeredis.FakeServer()
 
     def _from_url(url, **kw):  # noqa: ARG001
@@ -64,7 +66,7 @@ class _RaisingClient:
         pass
 
 
-async def _wait_until(cond, timeout=2.0):
+async def _wait_until(cond, timeout=2.0):  # noqa: ASYNC109
     loop = asyncio.get_event_loop()
     end = loop.time() + timeout
     while loop.time() < end:
@@ -77,6 +79,7 @@ async def _wait_until(cond, timeout=2.0):
 async def test_live_broadcast_ueber_redis(fake_redis):
     """PUBLISH auf CH_WS erreicht über den echten Subscriber-Loop die lokalen Sockets."""
     from app.services import broadcast
+
     await ws_bus.start()
     assert ws_bus.enabled()
     sock = _CapWS()
@@ -90,32 +93,22 @@ async def test_live_broadcast_ueber_redis(fake_redis):
         await ws_bus.stop()
 
 
-async def test_live_print_dispatch_ueber_redis(fake_redis, monkeypatch):
-    """print_job fließt über Redis zum Gateway; job_status löst das Future auf."""
-    import app.routers.ws as ws
-    org_id, job_id = 880002, 5150
+async def test_live_print_dispatch_ueber_redis(fake_redis):
+    from app.services import gateway_routing as routing
+    from tests.gateway_helpers import CaptureSocket, bind, cleanup
+
+    connection, socket = bind("linux", socket=CaptureSocket(reply=True))
     await ws_bus.start()
-    monkeypatch.setattr(ws, "gateway_online", lambda o: True)  # DB-Heartbeat umgehen
-
-    class _GwWS:
-        def __init__(self) -> None:
-            self.sent: list[str] = []
-
-        async def send_text(self, payload: str) -> None:
-            self.sent.append(payload)
-            # Gateway antwortet – wie der echte ws-Handler – mit job_status auf den Bus.
-            await ws.ws_bus.publish(ws.ws_bus.CH_GW, {
-                "kind": "job_status", "org_id": org_id, "job_id": job_id,
-                "payload": {"job_id": job_id, "status": "done"},
-            })
-
-    gw = _GwWS()
-    ws._print_gateways[org_id] = [(1, gw)]
     try:
-        result = await ws.dispatch_print_job(org_id, job_id, {"job_id": job_id}, timeout=3.0)
+        item_id = routing._enqueue(connection, {"type": "print_job", "id": "5150"}, 5, "5150")
+        assert await ws_bus.publish(ws_bus.CH_GW, routing.envelope(connection, item_id))
+        assert await _wait_until(lambda: routing._result(item_id, 1)[1] is not None, timeout=3)
+        _, result = routing._result(item_id, 1)
         assert result["status"] == "done"
-        assert gw.sent, "Gateway hätte den print_job über Redis erhalten müssen"
+        assert await _wait_until(lambda: bool(socket.sent))
+        await ws_bus.publish(ws_bus.CH_GW, routing.envelope(connection, item_id))
+        await asyncio.sleep(0.05)
+        assert len(socket.sent) == 1
     finally:
-        ws._print_gateways.pop(org_id, None)
-        ws._job_pending.pop(str(job_id), None)
+        cleanup(connection)
         await ws_bus.stop()

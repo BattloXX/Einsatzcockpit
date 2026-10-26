@@ -147,9 +147,7 @@ def test_beendeter_run_hat_keine_spaeten_jobs():
         check.close()
 
 
-def test_main_registriert_planspiel_loop():
-    from pathlib import Path
+def test_main_registriert_planspiel_loop(monkeypatch):
+    from tests.background_loop_helpers import registered_background_loop_names
 
-    source = (Path(__file__).parents[1] / "app" / "main.py").read_text()
-    assert "from app.services.planspiel_loop import planspiel_loop" in source
-    assert "planspiel_loop()," in source
+    assert "planspiel_loop" in registered_background_loop_names(monkeypatch)

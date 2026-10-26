@@ -42,7 +42,8 @@ def _anlegen(org_id: int, *, kind=GATEWAY_KIND_WINDOWS_AGENT, routen=True) -> di
     set_tenant_context(db, None)
     try:
         gw = Gateway(org_id=org_id, name="Kommandofunk PC A", kind=kind,
-                     device_token_hash=hash_api_key(token), status=GATEWAY_STATUS_ONLINE,
+                     device_token_hash=hash_api_key(token), agent_connection_token_hash=hash_api_key(token),
+                     status=GATEWAY_STATUS_ONLINE,
                      last_seen_at=_jetzt(), agent_connection_id=uuid4().hex,
                      agent_presence_expires_at=_jetzt() + timedelta(seconds=90))
         db.add(gw)
@@ -210,7 +211,7 @@ def test_fehlschlag_nach_uebergabe_loest_ersatzdruck_aus(client, monkeypatch):
         _recv(ws, "intent_result")
         ws.send_text(json.dumps({"type": "job_status", "id": "f", "payload": {
             "job_id": job_id, "lease_token": token, "status": "failed", "phase": "submitting",
-            "error": "Queue fehlt"}}))
+            "error": "Queue fehlt", "not_submitted": True}}))
         _recv(ws, "ack")
     assert _laden(job_id).status == JOB_FAILED
     assert aufrufe == [job_id]
@@ -288,7 +289,7 @@ def test_dispatch_job_ohne_agent_route_bleibt_push(monkeypatch):
 
     gesendet = []
 
-    async def push(org_id, job_id, payload, timeout=20.0):
+    async def push(org_id, job_id, payload, timeout=20.0):  # noqa: ASYNC109
         gesendet.append(job_id)
         return {"job_id": job_id, "status": JOB_SENT}
 

@@ -152,7 +152,7 @@ def test_capture_once_skips_operations_without_id(tmp_path):
 
 # ── Retention: alte Läufe löschen, laufende nie ──────────────────────────────
 
-def test_purge_old_captures_deletes_expired_runs(tmp_path, monkeypatch):
+async def test_purge_old_captures_deletes_expired_runs(tmp_path, monkeypatch):
     import app.services.lis.lis_capture as mod
     monkeypatch.setattr(mod, "CAPTURE_ROOT", tmp_path)
 
@@ -166,14 +166,14 @@ def test_purge_old_captures_deletes_expired_runs(tmp_path, monkeypatch):
     (old_dir / "summary.json").write_text("{}", encoding="utf-8")
     (fresh_dir / "summary.json").write_text("{}", encoding="utf-8")
 
-    deleted = purge_old_captures()
+    deleted = await purge_old_captures()
 
     assert deleted == 1
     assert not old_dir.exists()
     assert fresh_dir.exists()
 
 
-def test_purge_old_captures_never_deletes_running_capture(tmp_path, monkeypatch):
+async def test_purge_old_captures_never_deletes_running_capture(tmp_path, monkeypatch):
     import app.services.lis.lis_capture as mod
     monkeypatch.setattr(mod, "CAPTURE_ROOT", tmp_path)
 
@@ -184,15 +184,12 @@ def test_purge_old_captures_never_deletes_running_capture(tmp_path, monkeypatch)
     (run_dir / "summary.json").write_text("{}", encoding="utf-8")
 
     # Simuliert eine laufende Aufzeichnung für diese Org/run_id
-    monkeypatch.setattr(mod, "_active_run_ids", {org_id: old_run_id})
+    from app.services import org_job_state
+    backend = org_job_state.Backend()
+    monkeypatch.setattr(org_job_state, "status", backend.status)
+    await backend.try_start("lis", org_id, 120, "worker", run_id=old_run_id)
 
-    class _AlwaysRunningTask:
-        def done(self):
-            return False
-
-    monkeypatch.setattr(mod, "_active_captures", {org_id: _AlwaysRunningTask()})
-
-    deleted = purge_old_captures()
+    deleted = await purge_old_captures()
 
     assert deleted == 0
     assert run_dir.exists()

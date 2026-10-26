@@ -47,6 +47,10 @@ def _gateway_frisch(gateway, now: datetime) -> bool:
     if gateway.is_windows_agent:
         from app.services.print_agent_presence import online
         return online(gateway, now)
+    if gateway.agent_connected_at is not None:
+        from app.services.gateway_presence import online
+
+        return online(gateway, now)
     config = gateway.wut_config or {}
     try:
         interval = max(15, int(config.get("health_interval_s", 60)))
@@ -132,6 +136,8 @@ def pruefe_dienste(db: Session, org_id: int, now: datetime | None = None) -> lis
             frisch = heartbeat is not None and jetzt - heartbeat <= timedelta(minutes=10)
             if token.id in connected:
                 state, detail = "ok", "WebSocket verbunden; SMS-Versand ist sofort moeglich."
+            elif token.connected_at is not None:
+                state, detail = "down", "Keine gueltige WebSocket-Presence; Gateway ist fuer Versand offline."
             elif frisch:
                 state, detail = "ok", "Nur Heartbeat innerhalb der letzten 10 Minuten; aktuell nicht verbunden."
             elif heartbeat is None:
@@ -246,7 +252,8 @@ def pruefe_dienste(db: Session, org_id: int, now: datetime | None = None) -> lis
         job for job, finished_at in failed_with_finished
         if finished_at is not None and finished_at >= jetzt - timedelta(hours=24)
     ]
-    if haengend or fehlgeschlagen:
+    unklar = [job for job in jobs if job.status == "uncertain"]
+    if haengend or fehlgeschlagen or unklar:
         oldest = min((created_at for _, created_at in open_with_created if created_at is not None), default=jetzt)
         age = int((jetzt - oldest).total_seconds())
         detail = f"{len(haengend)} Alarmierungsauftraege seit ueber 2 Minuten offen (aeltester {age} s)"
@@ -256,12 +263,18 @@ def pruefe_dienste(db: Session, org_id: int, now: datetime | None = None) -> lis
         else:
             detail += "."
         outbox_state = "down"
+        if unklar:
+            detail += f" {len(unklar)} Alarmierungsauftraege mit unklarem Ergebnis (uncertain)."
+            if not haengend and not fehlgeschlagen:
+                outbox_state = "teilweise"
     else:
         outbox_state = "ok"
         detail = f"Keine haengenden Alarmierungsauftraege ({len(open_jobs)} offen)."
     outbox_teile = (DienstTeil("alarm_outbox", "Alarm-Outbox", outbox_state, detail),)
     outbox = DienstCheck("alarm_outbox", outbox_state, detail, True, outbox_teile)
-    return [print_check, sms_check, serial, dibos, outbox]
+    from app.services.worker_monitor import checks, snapshot
+
+    return [print_check, sms_check, serial, dibos, outbox, *checks(snapshot(db, org_id, jetzt))]
 
 
 def entscheide(

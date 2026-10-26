@@ -240,6 +240,7 @@ class Gateway(TenantScoped, Base):
     """Ein Gateway-Container je Standort. Gehoert zu genau einer Org."""
     __tablename__ = "gateway"
 
+    print_protocol: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(150), nullable=False)
     standort: Mapped[str | None] = mapped_column(String(200), nullable=True)
@@ -259,6 +260,8 @@ class Gateway(TenantScoped, Base):
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     version: Mapped[str | None] = mapped_column(String(40), nullable=True)
     # Befristete, workeruebergreifende Windows-Agent-Verbindung (keine Secrets).
+    agent_connection_token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    agent_worker_id: Mapped[str | None] = mapped_column(String(96), nullable=True)
     agent_connection_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     agent_connected_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     agent_heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -403,6 +406,7 @@ class PrintJob(TenantScoped, Base):
     delivery: Mapped[str] = mapped_column(
         String(10), nullable=False, default=DELIVERY_PUSH, server_default=DELIVERY_PUSH
     )
+    push_route_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     lease_gateway_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("gateway.id", ondelete="SET NULL"), nullable=True
     )
@@ -507,3 +511,26 @@ class PrintRule(TenantScoped, Base):
     @property
     def trigger_label(self) -> str:
         return TRIGGER_LABELS.get(self.trigger, self.trigger)
+
+
+class GatewayMessage(TenantScoped, Base):
+    """Befristete, adressierte Transportzustellung; keine SMS-/Druck-Geschaeftsqueue."""
+    __tablename__ = "gateway_message"
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    org_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("fire_dept.id", ondelete="CASCADE"), nullable=False)
+    gateway_kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    gateway_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    connection_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    worker_id: Mapped[str] = mapped_column(String(96), nullable=False)
+    message: Mapped[dict] = mapped_column(JSON, nullable=False)
+    job_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    state: Mapped[str] = mapped_column(String(16), nullable=False, default="queued")
+    result: Mapped[dict | None] = mapped_column(JSON(none_as_null=True), nullable=True)
+    error: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    __table_args__ = (
+        Index("ix_gateway_message_due", "worker_id", "state", "expires_at"),
+        Index("ix_gateway_message_result", "org_id", "gateway_kind", "gateway_id", "job_key"),
+        Index("ix_gateway_message_created", "created_at"),
+    )

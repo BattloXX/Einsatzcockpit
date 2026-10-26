@@ -190,22 +190,31 @@ async def test_sms_gateway_sms_kanal_wird_uebersprungen():
 
 
 def test_gateway_aggregation_serial_unknown_und_sms_ohne_heartbeat(monkeypatch):
+    from uuid import uuid4
+
     from app.db import SessionLocal
     from app.models.gateway import Gateway
+    from app.models.master import FireDept
     from app.models.user import SmsGatewayToken
     from app.services.dienst_monitor_service import pruefe_dienste
-    db = SessionLocal(); set_tenant_context(db, None)
+    db = SessionLocal()
+    set_tenant_context(db, None)
     now = datetime.now(UTC).replace(tzinfo=None)
+    org = FireDept(slug="dm-isolated-" + uuid4().hex, name="Monitor isolation")
+    db.add(org)
+    db.commit()
+    org_id = org.id
     try:
-        frisch = Gateway(org_id=1, name="Frisch", device_token_hash="dm-frisch",
+        frisch = Gateway(org_id=org_id, name="Frisch", device_token_hash="dm-frisch",
                          last_seen_at=now, serial_connected=True, wut_config={"host": "wt-a"})
-        alt = Gateway(org_id=1, name="Alt", standort="Depot", device_token_hash="dm-alt",
+        alt = Gateway(org_id=org_id, name="Alt", standort="Depot", device_token_hash="dm-alt",
                       last_seen_at=now - timedelta(hours=1), serial_connected=False,
                       wut_config={"host": "wt-b"})
-        token = SmsGatewayToken(org_id=1, label="Altclient", token_hash="dm-sms-ohne-heartbeat")
-        db.add_all([frisch, alt, token]); db.commit()
+        token = SmsGatewayToken(org_id=org_id, label="Altclient", token_hash="dm-sms-ohne-heartbeat")
+        db.add_all([frisch, alt, token])
+        db.commit()
         monkeypatch.setattr("app.routers.ws.connected_gateway_token_ids", lambda _org_id: set())
-        checks = {c.key: c for c in pruefe_dienste(db, 1, now)}
+        checks = {c.key: c for c in pruefe_dienste(db, org_id, now)}
         assert checks["print_gateway"].state == "teilweise"
         assert "Alt" in checks["print_gateway"].detail and "Frisch" not in checks["print_gateway"].detail
         assert {t.name for t in checks["print_gateway"].teile} == {"Frisch", "Alt"}
@@ -216,7 +225,9 @@ def test_gateway_aggregation_serial_unknown_und_sms_ohne_heartbeat(monkeypatch):
     finally:
         db.query(SmsGatewayToken).filter(SmsGatewayToken.token_hash == "dm-sms-ohne-heartbeat").delete()
         db.query(Gateway).filter(Gateway.device_token_hash.in_(["dm-frisch", "dm-alt"])).delete()
-        db.commit(); db.close()
+        db.query(FireDept).filter(FireDept.id == org_id).delete()
+        db.commit()
+        db.close()
 
 
 def test_sms_gateway_aggregation_teilweise_down_und_ok(monkeypatch):

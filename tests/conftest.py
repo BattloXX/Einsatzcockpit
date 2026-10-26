@@ -1,3 +1,4 @@
+# ruff: noqa: E402 -- Testumgebung muss vor den App-Imports gesetzt sein.
 import os
 import shutil
 import sys
@@ -6,8 +7,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import BigInteger, create_engine
-from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.compiler import compiles
+from sqlalchemy.orm import sessionmaker
 
 # pytest lädt diese Datei je nach Importpfad als ``conftest`` oder
 # ``tests.conftest``. Tests importieren ihre gemeinsamen Fixtures über den
@@ -61,11 +62,11 @@ os.environ["MAIL_GRAPH_POLL_ENABLED"] = "false"
 # Nachschlagewerk-Sync oben), aber ohne diesen Schalter wuerde ein langsamer/
 # Abruf gegen die BMA-Webplattform ausloesen - hart aus, analog.
 
+from app.core import security as _security
 from app.core.tenant import set_tenant_context
 from app.db import Base, get_db
 from app.main import app
 from app.seed_data import seed
-from app.core import security as _security
 
 # Passwort-Hashes in Tests mit minimalem bcrypt-Kostenfaktor: 12 Runden kosten pro Benutzer
 # bzw. Login ~0,2 s lokal und mehr in der CI – bei tausenden Tests der größte Einzelposten.
@@ -90,7 +91,6 @@ def reset_lis_in_memory_state():
 
     lis_sync._tasks_retry_after.clear()
     lis_sync._released_vehicle_misses.clear()
-    lis_sync._lokal_gepushter_status.clear()
     lis_loop._org_clients.clear()
     lis_loop._last_started_at.clear()
     from app.services import device_auth_failure_service
@@ -98,7 +98,6 @@ def reset_lis_in_memory_state():
     yield
     lis_sync._tasks_retry_after.clear()
     lis_sync._released_vehicle_misses.clear()
-    lis_sync._lokal_gepushter_status.clear()
     lis_loop._org_clients.clear()
     lis_loop._last_started_at.clear()
 
@@ -182,3 +181,31 @@ def client():
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def sms_outbox_state():
+    """Dauerhafte Job-IDs/Cursor sind pro Test isoliert (wie echte neue DBs)."""
+    from app.models.api_message import ApiMessage, ApiMessageRecipient
+    from app.models.sms import SmsDispatchAttempt, SmsDispatchCursor, SmsDispatchJob, SmsLog, SmsLogRecipient
+    from app.services.sms_outbox import database
+    def clear():
+        with database() as db:
+            log_ids = [r[0] for r in db.query(SmsLogRecipient.sms_log_id).join(SmsDispatchJob,
+                SmsDispatchJob.id == SmsLogRecipient.dispatch_job_id).execution_options(include_all_tenants=True)]
+            api_ids = [r[0] for r in db.query(ApiMessageRecipient.message_id).join(SmsDispatchJob,
+                SmsDispatchJob.id == ApiMessageRecipient.dispatch_job_id).execution_options(include_all_tenants=True)]
+            db.query(ApiMessageRecipient).filter(ApiMessageRecipient.message_id.in_(api_ids)).execution_options(
+                include_all_tenants=True).delete(synchronize_session=False)
+            db.query(ApiMessage).filter(ApiMessage.id.in_(api_ids)).execution_options(
+                include_all_tenants=True).delete(synchronize_session=False)
+            db.query(SmsLogRecipient).filter(SmsLogRecipient.sms_log_id.in_(log_ids)).delete(synchronize_session=False)
+            db.query(SmsLog).filter(SmsLog.id.in_(log_ids)).execution_options(
+                include_all_tenants=True).delete(synchronize_session=False)
+            db.query(SmsDispatchAttempt).execution_options(include_all_tenants=True).delete()
+            db.query(SmsDispatchJob).execution_options(include_all_tenants=True).delete()
+            db.query(SmsDispatchCursor).execution_options(include_all_tenants=True).delete()
+            db.commit()
+    clear()
+    yield
+    clear()

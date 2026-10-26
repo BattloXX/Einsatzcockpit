@@ -211,7 +211,7 @@ def test_exchange_recorder_masks_password_in_request_file(tmp_path, request_byte
 
 # ── Retention: alte Läufe löschen, laufende nie ─────────────────────────────
 
-def test_purge_old_traces_deletes_expired_runs(tmp_path, monkeypatch):
+async def test_purge_old_traces_deletes_expired_runs(tmp_path, monkeypatch):
     import app.services.dibos.dibos_capture as mod
     monkeypatch.setattr(mod, "TRACE_ROOT", tmp_path)
 
@@ -225,14 +225,14 @@ def test_purge_old_traces_deletes_expired_runs(tmp_path, monkeypatch):
     (old_dir / "summary.json").write_text("{}", encoding="utf-8")
     (fresh_dir / "summary.json").write_text("{}", encoding="utf-8")
 
-    deleted = purge_old_traces()
+    deleted = await purge_old_traces()
 
     assert deleted == 1
     assert not old_dir.exists()
     assert fresh_dir.exists()
 
 
-def test_purge_old_traces_never_deletes_running_trace(tmp_path, monkeypatch):
+async def test_purge_old_traces_never_deletes_running_trace(tmp_path, monkeypatch):
     import app.services.dibos.dibos_capture as mod
     monkeypatch.setattr(mod, "TRACE_ROOT", tmp_path)
 
@@ -242,15 +242,12 @@ def test_purge_old_traces_never_deletes_running_trace(tmp_path, monkeypatch):
     run_dir.mkdir(parents=True)
     (run_dir / "summary.json").write_text("{}", encoding="utf-8")
 
-    monkeypatch.setattr(mod, "_active_run_ids", {org_id: old_run_id})
+    from app.services import org_job_state
+    backend = org_job_state.Backend()
+    monkeypatch.setattr(org_job_state, "status", backend.status)
+    await backend.try_start("dibos", org_id, 120, "worker", run_id=old_run_id)
 
-    class _AlwaysRunningTask:
-        def done(self):
-            return False
-
-    monkeypatch.setattr(mod, "_active_traces", {org_id: _AlwaysRunningTask()})
-
-    deleted = purge_old_traces()
+    deleted = await purge_old_traces()
 
     assert deleted == 0
     assert run_dir.exists()

@@ -316,12 +316,10 @@ async def test_verbindung_testen(graph):
     assert ok and text == "Verbindung erfolgreich, 7 Nachrichten im Posteingang"
 
 
-def test_main_registers_mail_graph_loop():
-    from pathlib import Path
+def test_main_registers_mail_graph_loop(monkeypatch):
+    from tests.background_loop_helpers import registered_background_loop_names
 
-    source = (Path(__file__).parents[1] / "app/main.py").read_text()
-    assert "from app.services.mail_graph_poller import mail_graph_poll_loop" in source
-    assert "mail_graph_poll_loop()," in source
+    assert "mail_graph_poll_loop" in registered_background_loop_names(monkeypatch)
 
 
 @pytest.mark.asyncio

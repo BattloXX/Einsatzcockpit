@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -141,10 +140,10 @@ def test_error_backoff_lease_and_unexpected_error(db, monkeypatch):
     assert route.status == "error" and route.routing_error == "Interner Fehler bei der Routenberechnung"
 
 
-def test_main_registers_incident_route_loop():
-    source = (Path(__file__).parents[1] / "app" / "main.py").read_text()
-    assert "from app.services.incident_route_loop import incident_route_loop" in source
-    assert "incident_route_loop()," in source
+def test_main_registers_incident_route_loop(monkeypatch):
+    from tests.background_loop_helpers import registered_background_loop_names
+
+    assert "incident_route_loop" in registered_background_loop_names(monkeypatch)
 
 
 def test_running_mit_abgelaufenem_lease_wird_wieder_aufgenommen(db):

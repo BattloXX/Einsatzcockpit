@@ -67,4 +67,5 @@ class ApiMessageRecipient(TenantScoped, Base):
     max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime, default=_utcnow)
     sent_at: Mapped[datetime | None] = mapped_column(DateTime)
+    dispatch_job_id: Mapped[str | None] = mapped_column(String(32), index=True)
     message: Mapped[ApiMessage] = relationship(back_populates="recipients")

@@ -1636,15 +1636,15 @@ def test_vehicle_location_deduplicates_with_and_without_major_incident():
 
 # ── ECP-05: Status nur bei Aenderung ans LIS, begrenzter Retry, Poll-Schutzfenster ──
 
-def _push_setup(monkeypatch, fail_times=0):
+def _push_setup(monkeypatch, fail_times=0, lis_reference_id="ecp05_fzg"):
     import app.db as appdb
     from app.models.lis import OrgLisConfig
 
     monkeypatch.setattr(appdb, "SessionLocal", TestingSession)
-    lis_sync._lokal_gepushter_status.clear()
     db = _session()
-    incident, _, iv = _make_incident_with_vehicle(db, ORG_ID, lis_reference_id="ecp05_fzg")
+    incident, _, iv = _make_incident_with_vehicle(db, ORG_ID, lis_reference_id=lis_reference_id)
     iv.lis_operation_unit_id = "unit-ecp05"
+    iv.unit_status = "Am Einsatzort"
     cfg = db.query(OrgLisConfig).filter(OrgLisConfig.org_id == ORG_ID).first() or OrgLisConfig(org_id=ORG_ID)
     cfg.enabled = True
     cfg.push_vehicle_status = True
@@ -1687,6 +1687,9 @@ def test_push_identischer_status_wird_nicht_erneut_gesendet(monkeypatch):
     asyncio.run(lis_sync.push_vehicle_status_to_lis(iv_id, "Am Einsatzort"))
     asyncio.run(lis_sync.push_vehicle_status_to_lis(iv_id, "Am Einsatzort"))
     assert calls == [("unit-ecp05", "s5")]
+    with _session() as db:
+        db.get(IncidentVehicle, iv_id).unit_status = "Einsatz übernommen"
+        db.commit()
     asyncio.run(lis_sync.push_vehicle_status_to_lis(iv_id, "Einsatz übernommen"))
     assert calls[-1] == ("unit-ecp05", "s4") and len(calls) == 2
 
@@ -1710,28 +1713,115 @@ def test_push_gibt_nach_maximalen_versuchen_auf(monkeypatch):
     iv_id, calls = _push_setup(monkeypatch, fail_times=99)
     asyncio.run(lis_sync.push_vehicle_status_to_lis(iv_id, "Am Einsatzort"))
     assert calls == []
-    assert iv_id not in lis_sync._lokal_gepushter_status
+    with _session() as db:
+        iv = db.get(IncidentVehicle, iv_id)
+        assert iv.lis_pushed_status is None
+        assert iv.lis_pushed_at is None
 
 
 def test_poll_ueberschreibt_frisch_gepushten_lokalen_status_nicht():
-    lis_sync._lokal_gepushter_status.clear()
     db = _session()
     try:
         org = db.get(FireDept, ORG_ID)
         incident, _, iv = _make_incident_with_vehicle(db, ORG_ID, lis_reference_id="ecp05_poll")
         iv.unit_status = "Am Einsatzort"
         db.flush()
-        lis_sync._lokal_gepushter_status[iv.id] = ("S5", lis_sync.time.monotonic())
+        iv.lis_pushed_status = "S5"
+        iv.lis_pushed_at = datetime.now(UTC).replace(tzinfo=None)
         unit = {"Id": "u1", "ReferenceId": "ecp05_poll", "UnitType": {"Type": "Vehicle"},
                 "OperationUnitStatusType": {"Label": "S4 - zum Einsatzort"}}
         lis_sync._sync_vehicle_status(db, org, incident, [unit])
         assert iv.unit_status == "Am Einsatzort"
         # Nach Ablauf des Schutzfensters gewinnt das LIS wieder
-        lis_sync._lokal_gepushter_status[iv.id] = ("S5", lis_sync.time.monotonic() - 999)
+        iv.lis_pushed_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(seconds=999)
         lis_sync._sync_vehicle_status(db, org, incident, [unit])
         assert iv.unit_status == "Einsatz übernommen"
-        assert iv.id not in lis_sync._lokal_gepushter_status
+        assert iv.lis_pushed_status is None
+        assert iv.lis_pushed_at is None
     finally:
         db.rollback()
         db.close()
-        lis_sync._lokal_gepushter_status.clear()
+
+
+def _push_worker():
+    """Eigene Modulinstanz: Request-Worker teilen ausschliesslich die DB."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("lis_sync_worker", lis_sync.__file__)
+    worker = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(worker)
+    worker.LisClient = lis_sync.LisClient
+    return worker
+
+
+def test_push_auf_anderem_worker_schuetzt_poll_bis_fenster_ablaeuft(monkeypatch):
+    iv_id, calls = _push_setup(monkeypatch, lis_reference_id="worker_poll")
+    worker = _push_worker()
+    before = datetime.now(UTC).replace(tzinfo=None)
+    asyncio.run(worker.push_vehicle_status_to_lis(iv_id, "Am Einsatzort"))
+    assert calls == [("unit-ecp05", "s5")]
+    # Neue Session und andere Modulinstanz als beim Push: kein Prozesszustand traegt den Schutz.
+    with _session() as db:
+        org = db.get(FireDept, ORG_ID)
+        iv = db.get(IncidentVehicle, iv_id)
+        incident = db.get(Incident, iv.incident_id)
+        assert iv.lis_pushed_status == "S5"
+        assert before <= iv.lis_pushed_at <= datetime.now(UTC).replace(tzinfo=None)
+        assert iv.lis_pushed_at.tzinfo is None
+        unit = {"Id": "unit-ecp05", "ReferenceId": "worker_poll", "UnitType": {"Type": "Vehicle"},
+                "OperationUnitStatusType": {"Label": "S4 - zum Einsatzort"}}
+        lis_sync._sync_vehicle_status(db, org, incident, [unit])
+        db.commit()
+    with _session() as db:
+        iv = db.get(IncidentVehicle, iv_id)
+        assert iv.unit_status == "Am Einsatzort"
+        assert iv.lis_pushed_status == "S5"
+        iv.lis_pushed_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(
+            seconds=lis_sync._PUSH_SCHUTZFENSTER_S + 1,
+        )
+        db.commit()
+    with _session() as db:
+        iv = db.get(IncidentVehicle, iv_id)
+        lis_sync._sync_vehicle_status(db, db.get(FireDept, ORG_ID), db.get(Incident, iv.incident_id), [unit])
+        db.commit()
+    with _session() as db:
+        iv = db.get(IncidentVehicle, iv_id)
+        assert iv.unit_status == "Einsatz übernommen"
+        assert iv.lis_pushed_status is None
+        assert iv.lis_pushed_at is None
+
+
+def test_push_a_b_a_ueber_zwei_worker_sendet_dreimal(monkeypatch):
+    iv_id, calls = _push_setup(monkeypatch)
+    worker1, worker2 = _push_worker(), _push_worker()
+    for worker, status in (
+        (worker1, "Am Einsatzort"), (worker2, "Einsatz übernommen"), (worker1, "Am Einsatzort"),
+    ):
+        with _session() as db:
+            db.get(IncidentVehicle, iv_id).unit_status = status
+            db.commit()
+        asyncio.run(worker.push_vehicle_status_to_lis(iv_id, status))
+    assert calls == [("unit-ecp05", "s5"), ("unit-ecp05", "s4"), ("unit-ecp05", "s5")]
+    with _session() as db:
+        assert db.get(IncidentVehicle, iv_id).lis_pushed_status == "S5"
+
+
+def test_push_identischer_status_nach_schutzfenster_wird_erneut_gesendet(monkeypatch):
+    iv_id, calls = _push_setup(monkeypatch)
+    asyncio.run(lis_sync.push_vehicle_status_to_lis(iv_id, "Am Einsatzort"))
+    with _session() as db:
+        iv = db.get(IncidentVehicle, iv_id)
+        iv.lis_pushed_at -= timedelta(seconds=lis_sync._PUSH_SCHUTZFENSTER_S + 1)
+        db.commit()
+    asyncio.run(lis_sync.push_vehicle_status_to_lis(iv_id, "Am Einsatzort"))
+    assert calls == [("unit-ecp05", "s5"), ("unit-ecp05", "s5")]
+
+
+def test_push_dedup_nur_wenn_lokaler_status_noch_entspricht(monkeypatch):
+    iv_id, calls = _push_setup(monkeypatch)
+    asyncio.run(lis_sync.push_vehicle_status_to_lis(iv_id, "Am Einsatzort"))
+    with _session() as db:
+        db.get(IncidentVehicle, iv_id).unit_status = "Einsatz übernommen"
+        db.commit()
+    asyncio.run(lis_sync.push_vehicle_status_to_lis(iv_id, "Am Einsatzort"))
+    assert calls == [("unit-ecp05", "s5"), ("unit-ecp05", "s5")]

@@ -119,12 +119,10 @@ async def test_login_failure_does_not_advance_marker(setup_db, imap):
         db.close()
 
 
-def test_main_registers_mail_imap_loop():
-    from pathlib import Path
+def test_main_registers_mail_imap_loop(monkeypatch):
+    from tests.background_loop_helpers import registered_background_loop_names
 
-    source = (Path(__file__).parents[1] / "app/main.py").read_text()
-    assert "from app.services.mail_imap_poller import mail_imap_poll_loop" in source
-    assert "mail_imap_poll_loop()," in source
+    assert "mail_imap_poll_loop" in registered_background_loop_names(monkeypatch)
 
 
 # ── Datengetriebener Fake für Folgeläufe, Limits und Zuordnung ───────────────

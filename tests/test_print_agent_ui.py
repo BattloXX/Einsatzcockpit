@@ -39,6 +39,7 @@ def _agent(name="PC A", queues=None, online=True) -> int:
                 "identity": {"ip": "10.0.0.50"}, "capabilities": {"media": ["A4", "A3"], "duplex": True},
             }]},
         )
+        gw.agent_connection_token_hash = gw.device_token_hash
         db.add(gw)
         db.commit()
         return gw.id

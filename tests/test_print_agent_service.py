@@ -34,7 +34,7 @@ from app.models.gateway import (
 from app.services import print_agent_service as svc
 from tests.conftest import TEST_DB_URL
 
-NOW = datetime(2026, 1, 1, 12, 0)
+NOW = datetime(2026, 1, 1, 12, 0)  # noqa: DTZ001 -- DB-Zeitstempel sind naive UTC.
 _org_ids = itertools.count(992000 + (uuid4().int % 5000) * 10)
 _engine = None
 
@@ -70,6 +70,7 @@ def _agent(db, org_id, name, *, online=True, seen=NOW):
         agent_connection_id=uuid4().hex if online else None,
         agent_presence_expires_at=seen + timedelta(seconds=90) if online else None,
     )
+    gateway.agent_connection_token_hash = gateway.device_token_hash
     db.add(gateway)
     db.flush()
     return gateway
@@ -409,13 +410,13 @@ def test_abruffehler_reiht_neu_ein_bis_zum_dritten_versuch(db):
         zeit += timedelta(seconds=1)
 
 
-def test_spoolerfehler_nach_uebergabe_failed_mit_ersatzdruck(db):
+def test_spoolerfehler_nach_uebergabe_uncertain_ohne_ersatzdruck(db):
     a, _b, printer, _ra, _rb = _kommandofunk(db)
     job = _job(db, printer)
     grant = _bis_gespoolt(db, a, job)
     ergebnis = svc.apply_agent_status(db, a, job.id, grant["lease_token"], JOB_FAILED, "spooled",
                                       None, "Druckauftrag wurde abgebrochen", NOW)
-    assert (ergebnis["status"], ergebnis["fallback"], ergebnis["requeued"]) == (JOB_FAILED, True, False)
+    assert (ergebnis["status"], ergebnis["fallback"], ergebnis["requeued"]) == (JOB_UNCERTAIN, False, False)
 
 
 def test_abgelehnte_uebergabe_failed_mit_ersatzdruck(db):
@@ -424,7 +425,7 @@ def test_abgelehnte_uebergabe_failed_mit_ersatzdruck(db):
     grant = svc.lease_jobs(db, a, 1, NOW)[0]
     svc.print_intent(db, a, job.id, grant["lease_token"], NOW)
     ergebnis = svc.apply_agent_status(db, a, job.id, grant["lease_token"], JOB_FAILED, "submitting",
-                                      None, "Queue fehlt", NOW)
+                                      None, "Queue fehlt", NOW, not_submitted=True)
     assert (ergebnis["status"], ergebnis["fallback"]) == (JOB_FAILED, True)
 
 
@@ -511,3 +512,30 @@ def test_enqueue_und_config_sync(db):
     sync = svc.agent_config_sync(db, a)
     assert [route["route_id"] for route in sync["routes"]] == [ra.id]
     assert sync["routes"][0]["printer_name"] == "Kommandofunk"
+
+
+def test_repeated_enqueue_never_resets_active_or_uncertain_lease(db):
+    a, _b, printer, _ra, _rb = _kommandofunk(db)
+    job = _job(db, printer)
+    grant = svc.lease_jobs(db, a, 1, NOW)[0]
+    svc.print_intent(db, a, job.id, grant["lease_token"], NOW)
+    svc.enqueue_for_agents(db, job)
+    assert job.status == JOB_SENT and job.phase == PHASE_SUBMITTING
+    svc.apply_agent_status(db, a, job.id, grant["lease_token"], JOB_UNCERTAIN, "submitting", None, None, NOW)
+    svc.enqueue_for_agents(db, job)
+    assert job.status == JOB_UNCERTAIN
+
+
+def test_stale_fetch_failure_cannot_requeue_after_parallel_intent(db, monkeypatch):
+    from types import SimpleNamespace
+    a, _b, printer, _ra, _rb = _kommandofunk(db)
+    job = _job(db, printer)
+    grant = svc.lease_jobs(db, a, 1, NOW)[0]
+    stale = SimpleNamespace(id=job.id, lease_gateway_id=a.id, lease_token=grant["lease_token"],
+        status=JOB_SENT, phase=job.phase, attempts=job.attempts, lease_generation=job.lease_generation)
+    assert svc.print_intent(db, a, job.id, grant["lease_token"], NOW)[0]
+    monkeypatch.setattr(svc, "_job", lambda *args: stale)
+    result = svc.apply_agent_status(db, a, job.id, grant["lease_token"], JOB_FAILED, "fetching", None, "download", NOW)
+    assert result["result"] == "stale"
+    db.refresh(job)
+    assert job.status == JOB_SENT and job.phase == PHASE_SUBMITTING

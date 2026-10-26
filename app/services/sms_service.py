@@ -1,14 +1,13 @@
 """Providerneutraler SMS-Dispatcher mit optionalem Fallback."""
+
 from __future__ import annotations
 
 import logging
 import uuid
 from dataclasses import dataclass, field
 
-import httpx
-
 from app.config import settings
-from app.services.eus_sms_service import EusConfig, EusSmsError, send_via_eus
+from app.services.eus_sms_service import EusConfig, send_via_eus  # noqa: F401
 
 logger = logging.getLogger("einsatzleiter.sms")
 
@@ -26,6 +25,9 @@ class SmsDeliveryResult:
     success: bool
     provider: str | None = None
     gateway_token_id: int | None = None
+    job_id: str | None = None
+    status: str | None = None
+    error: str | None = None
 
     def __bool__(self) -> bool:
         return self.success
@@ -52,8 +54,10 @@ def resolve_sms_config(org_id: int, db=None) -> SmsContext:
         if settings.EUS_SMS_ENABLED and cfg.eus_enabled and cfg.is_eus_fully_configured:
             try:
                 eus = EusConfig(
-                    org_id=org_id, base_url=cfg.eus_base_url or "",
-                    auth_mode=cfg.eus_auth_mode, client_id=cfg.eus_client_id or "",
+                    org_id=org_id,
+                    base_url=cfg.eus_base_url or "",
+                    auth_mode=cfg.eus_auth_mode,
+                    client_id=cfg.eus_client_id or "",
                     client_secret=decrypt_secret(cfg.eus_client_secret_enc or ""),
                     timeout=cfg.eus_timeout,
                 )
@@ -73,56 +77,41 @@ def resolve_sms_config(org_id: int, db=None) -> SmsContext:
 
 def sms_available(org_id: int, db=None) -> bool:
     from app.routers.ws import is_sms_gateway_connected
+
     ctx = resolve_sms_config(org_id, db)
-    return any(name == "eus" or (name == "gateway" and is_sms_gateway_connected(org_id))
-               for name in ctx.chain)
+    return any(name == "eus" or (name == "gateway" and is_sms_gateway_connected(org_id)) for name in ctx.chain)
 
 
 async def send_sms(
-    org_id: int, to: str, text: str, timeout: float = 15.0,
+    org_id: int,
+    to: str,
+    text: str,
+    timeout: float = 15.0,
     ctx: SmsContext | None = None,
     preferred_gateway_token_id: int | None = None,
     job_id: str | None = None,
+    recipient_id: int | None = None,
 ) -> SmsDeliveryResult:
-    from app.routers.ws import dispatch_sms
+    from app.services import sms_outbox
+
     ctx = ctx or resolve_sms_config(org_id)
-    last_provider: str | None = None
-    last_gateway_token_id: int | None = None
-    for provider in ctx.chain:
-        ctx.providers_used.add(provider)
-        last_provider = provider
-        try:
-            if provider == "gateway":
-                if preferred_gateway_token_id is None:
-                    result = await dispatch_sms(org_id, job_id or str(uuid.uuid4()), to, text, timeout=timeout)
-                else:
-                    result = await dispatch_sms(
-                        org_id,
-                        job_id or str(uuid.uuid4()),
-                        to,
-                        text,
-                        timeout=timeout,
-                        preferred_gateway_token_id=preferred_gateway_token_id,
-                    )
-                last_gateway_token_id = result.get("gateway_token_id")
-                if not result.get("ok", False):
-                    raise RuntimeError(str(result.get("error") or "Gateway-Fehler"))
-            elif provider == "eus" and ctx.eus:
-                await send_via_eus(ctx.eus, to, text)
-            else:
-                continue
-            return SmsDeliveryResult(
-                success=True,
-                provider=provider,
-                gateway_token_id=result.get("gateway_token_id") if provider == "gateway" else None,
-            )
-        except (RuntimeError, EusSmsError, httpx.HTTPError) as exc:
-            logger.warning("SMS-Provider %s fuer %s fehlgeschlagen: %s",
-                           provider, _mask(to), exc)
+    state = await sms_outbox.send(
+        org_id,
+        to,
+        text,
+        job_key=job_id or uuid.uuid4().hex,
+        ctx=ctx,
+        preferred=preferred_gateway_token_id,
+        recipient_id=recipient_id,
+        timeout=timeout,
+    )
     return SmsDeliveryResult(
-        success=False,
-        provider=last_provider,
-        gateway_token_id=last_gateway_token_id,
+        success=state["status"] == "sent",
+        provider=state["provider"],
+        gateway_token_id=state["gateway_token_id"],
+        job_id=state["job_id"],
+        status=state["status"],
+        error=state["error"],
     )
 
 

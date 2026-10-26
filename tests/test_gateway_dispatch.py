@@ -1,86 +1,81 @@
 """ECPG dispatch_print_job: Zustellung an verbundene Gateways, Pruning toter
 Sockets, Timeout → 'sent' (kein Doppeldruck). Muster test_sms_gateway_dispatch."""
+
 from __future__ import annotations
+
+from uuid import uuid4
 
 import pytest
 
-
-class _DeadWS:
-    async def send_text(self, payload: str) -> None:
-        raise RuntimeError("Socket tot")
-
-
-class _SilentWS:
-    def __init__(self) -> None:
-        self.sent: list[str] = []
-
-    async def send_text(self, payload: str) -> None:
-        self.sent.append(payload)
+from app.core.tenant import set_tenant_context
+from app.db import SessionLocal
+from app.models.gateway import PrintJob
+from tests.gateway_helpers import CaptureSocket, bind, cleanup
 
 
-class _LiveWS:
-    """Löst die zugehörige job_status-Future sofort mit 'done' auf."""
-    def __init__(self, job_id: int) -> None:
-        self.key = str(job_id)
-        self.sent: list[str] = []
-
-    async def send_text(self, payload: str) -> None:
-        import app.routers.ws as ws
-        self.sent.append(payload)
-        fut = ws._job_pending.get(self.key)
-        if fut and not fut.done():
-            fut.set_result({"job_id": int(self.key), "status": "done"})
+def make_job(connection):
+    with SessionLocal() as db:
+        set_tenant_context(db, None)
+        job = PrintJob(
+            org_id=connection.org_id,
+            gateway_id=connection.gateway_id,
+            document_type="einsatzinfo",
+            idempotency_key=uuid4().hex,
+        )
+        db.add(job)
+        db.commit()
+        return job.id
 
 
 async def test_dispatch_no_gateway_raises():
     import app.routers.ws as ws
-    with pytest.raises(RuntimeError, match="Kein Gateway"):
+
+    with pytest.raises(RuntimeError, match="Druckauftrag"):
         await ws.dispatch_print_job(770001, 1, {"job_id": 1})
 
 
 async def test_dispatch_live_returns_status():
     import app.routers.ws as ws
-    org_id, job_id = 770002, 42
-    live = _LiveWS(job_id)
-    ws._print_gateways[org_id] = [(1, live)]
+
+    connection, socket = bind("linux", socket=CaptureSocket(reply=True))
+    job_id = make_job(connection)
     try:
-        result = await ws.dispatch_print_job(org_id, job_id, {"job_id": job_id}, timeout=2.0)
-        assert result["status"] == "done"
-        assert live.sent, "Gateway hätte senden müssen"
+        result = await ws.dispatch_print_job(1, job_id, {"job_id": job_id}, timeout=2)
+        assert result["status"] == "done" and len(socket.sent) == 1
     finally:
-        ws._print_gateways.pop(org_id, None)
-        ws._job_pending.pop(str(job_id), None)
+        cleanup(connection)
 
 
-async def test_dispatch_prunes_dead_and_uses_live():
+async def test_dead_target_never_sends_to_another_gateway():
     import app.routers.ws as ws
-    org_id, job_id = 770003, 43
-    live = _LiveWS(job_id)
-    dead = _DeadWS()
-    ws._print_gateways[org_id] = [(1, live), (2, dead)]  # dead = neueste → zuerst versucht
+
+    dead, _ = bind("linux", socket=CaptureSocket(dead=True))
+    other, other_socket = bind("linux", socket=CaptureSocket(reply=True))
+    job_id = make_job(dead)
     try:
-        result = await ws.dispatch_print_job(org_id, job_id, {"job_id": job_id}, timeout=2.0)
-        assert result["status"] == "done"
-        assert (2, dead) not in ws._print_gateways[org_id]
-        assert (1, live) in ws._print_gateways[org_id]
+        result = await ws.dispatch_print_job(1, job_id, {"job_id": job_id}, timeout=2)
+        assert result["status"] == "uncertain"
+        assert not other_socket.sent
+        assert not ws.gateway_online_id(dead.gateway_id, 1)
+        assert ws.gateway_online_id(other.gateway_id, 1)
     finally:
-        ws._print_gateways.pop(org_id, None)
-        ws._job_pending.pop(str(job_id), None)
+        cleanup(dead)
+        cleanup(other)
 
 
 async def test_dispatch_timeout_returns_sent_not_retried():
-    """Senden ok, keine Antwort → 'sent' (Gateway spoolt), keine zweite Verbindung."""
     import app.routers.ws as ws
-    org_id, job_id = 770004, 44
-    a, b = _SilentWS(), _SilentWS()
-    ws._print_gateways[org_id] = [(1, a), (2, b)]
+
+    connection, socket = bind("linux")
+    other, other_socket = bind("linux")
+    job_id = make_job(connection)
     try:
-        result = await ws.dispatch_print_job(org_id, job_id, {"job_id": job_id}, timeout=0.1)
+        result = await ws.dispatch_print_job(1, job_id, {"job_id": job_id}, timeout=0.15)
         assert result["status"] == "sent"
-        assert len(a.sent) + len(b.sent) == 1  # nur eine Verbindung kontaktiert
+        assert len(socket.sent) == 1 and not other_socket.sent
     finally:
-        ws._print_gateways.pop(org_id, None)
-        ws._job_pending.pop(str(job_id), None)
+        cleanup(connection)
+        cleanup(other)
 
 
 def test_ein_gateway_trennt_anderes_bleibt_verbunden():
@@ -166,22 +161,36 @@ async def test_dispatch_job_commits_sent_before_await_no_status_overwrite(monkey
     printer = Printer(org_id=1, gateway_id=gateway.id, name="Legacy-Ziel", uri="ipp://example.test")
     db.add(printer)
     db.flush()
-    job = PrintJob(org_id=1, gateway_id=gateway.id, printer_id=printer.id, document_type="einsatzinfo",
-                   idempotency_key="race-" + uuid.uuid4().hex, status=JOB_QUEUED)
+    job = PrintJob(
+        org_id=1,
+        gateway_id=gateway.id,
+        printer_id=printer.id,
+        document_type="einsatzinfo",
+        idempotency_key="race-" + uuid.uuid4().hex,
+        status=JOB_QUEUED,
+    )
     db.add(job)
     db.commit()
 
-    async def fake_dispatch(org_id, job_id, payload, timeout=20.0):
+    async def fake_dispatch(org_id, job_id, payload, timeout=20.0):  # noqa: ASYNC109
+        from app.services.linux_print_service import prepare
+        prepare(org_id, job_id, payload)
         return {"job_id": job_id, "status": "done"}
+
+    # Echte Presence fuer den atomaren Claim, der jetzt die Vorab-Transaktion besitzt.
+    from app.services import gateway_routing
+    gateway.device_token_hash = uuid.uuid4().hex
+    db.commit()
+    gateway_routing.begin("linux", 1, gateway.id, gateway.device_token_hash)
     monkeypatch.setattr(ws, "dispatch_print_job", fake_dispatch)
     monkeypatch.setattr("app.services.print_artifact_service.artifact_url", lambda j: "http://x/a")
 
     try:
         result = await pd.dispatch_job(db, job)
         db.refresh(job)
-        assert job.status == JOB_SENT       # NICHT 'done' – das schreibt der Callback
+        assert job.status == JOB_SENT  # NICHT 'done' – das schreibt der Callback
         assert job.attempts == 1
-        assert result["status"] == "done"   # Rückgabe für den Aufrufer bleibt erhalten
+        assert result["status"] == "done"  # Rückgabe für den Aufrufer bleibt erhalten
     finally:
         db.close()
 
@@ -200,7 +209,10 @@ def test_apply_job_status_guards_transitions():
         jobs = []
         for status in ("sent", "done", "canceled"):
             job = PrintJob(
-                org_id=880001, gateway_id=1, document_type="einsatzinfo", status=status,
+                org_id=880001,
+                gateway_id=1,
+                document_type="einsatzinfo",
+                status=status,
                 idempotency_key=f"status-{uuid.uuid4().hex}",
             )
             db.add(job)

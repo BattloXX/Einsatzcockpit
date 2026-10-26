@@ -79,8 +79,10 @@ def _strip_html_to_text(html: str) -> str:
     return unescape(text).strip()
 
 
-def _save_ydoc_state(lage_id: int, state: bytes, org_id: int) -> None:
+def _save_ydoc_state(lage_id: int, state: bytes, org_id: int) -> bytes:
     from datetime import UTC, datetime
+
+    from pycrdt import Doc
 
     from app.core.tenant import set_tenant_context
     from app.db import SessionLocal
@@ -89,13 +91,21 @@ def _save_ydoc_state(lage_id: int, state: bytes, org_id: int) -> None:
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
-        dok = db.query(LageDokument).filter(LageDokument.major_incident_id == lage_id).first()
+        dok = db.query(LageDokument).filter(
+            LageDokument.major_incident_id == lage_id,
+        ).with_for_update().first()
+        merged: Doc = Doc()
+        if dok is not None and dok.ydoc_state:
+            merged.apply_update(dok.ydoc_state)
+        merged.apply_update(state)
         if dok is None:
             dok = LageDokument(major_incident_id=lage_id, org_id=org_id, updated_at=datetime.now(UTC))
             db.add(dok)
-        dok.ydoc_state = state
+        merged_state = merged.get_update()
+        dok.ydoc_state = merged_state
         dok.updated_at = datetime.now(UTC)
         db.commit()
+        return merged_state
     finally:
         db.close()
 
@@ -117,27 +127,63 @@ async def _publish_update(lage_id: int, update: bytes) -> None:
     })
 
 
+async def _request_sync(lage_id: int, room: YRoom) -> None:
+    from app.services.gateway_presence import worker_id
+
+    await ws_bus.publish(ws_bus.CH_LAGEDOKUMENT, {
+        "lage_id": lage_id,
+        "sync_request": base64.b64encode(room.ydoc.get_state()).decode("ascii"),
+        "worker": worker_id(),
+    })
+
+
+async def _sync_rooms() -> None:
+    for lage_id, room in list(_rooms.items()):
+        await _request_sync(lage_id, room)
+
+
+def _apply_remote_update(lage_id: int, room: YRoom, update: bytes) -> None:
+    _applying_remote_update.add(lage_id)
+    try:
+        room.ydoc.apply_update(update)
+    finally:
+        _applying_remote_update.discard(lage_id)
+
+
 async def _bus_deliver_update(payload: dict) -> None:
     """Bus-Handler (CH_LAGEDOKUMENT): wendet ein auf einem anderen Worker
     entstandenes Update auf den lokalen Room an (No-Op, falls hier kein
     lokaler Room fuer diese Lage offen ist)."""
     lage_id = payload.get("lage_id")
     update_b64 = payload.get("update")
-    if lage_id is None or not update_b64:
+    if lage_id is None:
         return
     room = _rooms.get(lage_id)
     if room is None:
+        return
+    if "sync_request" in payload:
+        from app.services.gateway_presence import worker_id
+
+        if payload.get("worker") == worker_id():
+            return
+        try:
+            state_vector = base64.b64decode(payload["sync_request"], validate=True)
+            update = room.ydoc.get_update(state_vector)
+        except Exception:
+            logger.exception("Lagedokument %s: ungueltigen Sync-Request ignoriert", lage_id)
+            return
+        # Yjs kodiert auch ein leeres Update mit zwei Nullbytes.
+        if update and update != b"\x00\x00":
+            await _publish_update(lage_id, update)
+        return
+    if not update_b64:
         return
     try:
         update = base64.b64decode(update_b64)
     except Exception:
         logger.exception("Lagedokument %s: ungueltiges Bus-Update ignoriert", lage_id)
         return
-    _applying_remote_update.add(lage_id)
-    try:
-        room.ydoc.apply_update(update)
-    finally:
-        _applying_remote_update.discard(lage_id)
+    _apply_remote_update(lage_id, room, update)
 
 
 def _on_room_message(lage_id: int, message: bytes) -> bool:
@@ -193,6 +239,7 @@ async def _bus_deliver_awareness(payload: dict) -> None:
 # auf Modulebene (nicht erst lazy im WS-Handler), siehe dortiger Kommentar.
 ws_bus.register(ws_bus.CH_LAGEDOKUMENT, _bus_deliver_update)
 ws_bus.register(ws_bus.CH_LAGEDOKUMENT_AWARENESS, _bus_deliver_awareness)
+ws_bus.on_reconnect(_sync_rooms)
 
 
 async def _debounced_saver(lage_id: int, org_id: int) -> None:
@@ -204,7 +251,8 @@ async def _debounced_saver(lage_id: int, org_id: int) -> None:
         if _dirty.get(lage_id):
             _dirty[lage_id] = False
             state = room.ydoc.get_update()
-            await asyncio.to_thread(_save_ydoc_state, lage_id, state, org_id)
+            merged_state = await asyncio.to_thread(_save_ydoc_state, lage_id, state, org_id)
+            _apply_remote_update(lage_id, room, merged_state)
 
 
 async def get_or_create_room(lage_id: int, org_id: int) -> YRoom:
@@ -243,6 +291,8 @@ async def get_or_create_room(lage_id: int, org_id: int) -> YRoom:
         _room_tasks[lage_id] = asyncio.create_task(room.start())
         await room.started.wait()
         _save_tasks[lage_id] = asyncio.create_task(_debounced_saver(lage_id, org_id))
+        if ws_bus.enabled():
+            await _request_sync(lage_id, room)
         return room
 
 
@@ -257,7 +307,8 @@ async def release_room_if_empty(lage_id: int) -> None:
             org_id = _room_org.get(lage_id)
             if org_id is not None:
                 state = room.ydoc.get_update()
-                await asyncio.to_thread(_save_ydoc_state, lage_id, state, org_id)
+                merged_state = await asyncio.to_thread(_save_ydoc_state, lage_id, state, org_id)
+                _apply_remote_update(lage_id, room, merged_state)
         save_task = _save_tasks.pop(lage_id, None)
         if save_task:
             save_task.cancel()

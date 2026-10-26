@@ -6,12 +6,14 @@ Prüft alle 60 Sekunden ob fällige Erinnerungen vorhanden sind:
 - erinnerung_gesendet_at is None
 - telefon not null
 """
+
 import asyncio
 import logging
 from datetime import UTC, datetime
 
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
+from app.models.sms import SmsDispatchJob
 from app.models.verleih import VerleihAusleihe, VerleihStatus
 from app.services import verleih_service as svc
 
@@ -20,6 +22,7 @@ logger = logging.getLogger("einsatzleiter.verleih_erinnerung")
 
 async def verleih_erinnerung_loop() -> None:
     from app.services.loop_utils import iteration_watch
+
     while True:
         await asyncio.sleep(60)
         try:
@@ -44,21 +47,36 @@ def _lade_faellige() -> list[dict]:
             )
             .all()
         )
-        return [
-            {
-                "id": a.id,
-                "org_id": a.org_id,
-                "telefon": a.telefon,
-                "text": svc.get_sms_erinnerung_text(db, a.org_id, a),  # type: ignore[arg-type]
-            }
-            for a in faellige
-        ]
+        result = []
+        for a in faellige:
+            if a.erinnerung_geplant_at is None or a.org_id is None:
+                continue
+            key = f"verleih-reminder:{a.id}:{a.erinnerung_geplant_at.isoformat()}"
+            previous = (
+                db.query(SmsDispatchJob)
+                .filter(SmsDispatchJob.org_id == a.org_id, SmsDispatchJob.job_key == key)
+                .first()
+            )
+            result.append(
+                {
+                    "id": a.id,
+                    "org_id": a.org_id,
+                    "job_key": key,
+                    "telefon": previous.phone if previous else a.telefon,
+                    "text": previous.text if previous else svc.get_sms_erinnerung_text(db, a.org_id, a),
+                }
+            )
+        return result
 
 
-def _markiere_gesendet(ausleihe_id: int) -> None:
+def _markiere_gesendet(org_id: int, ausleihe_id: int) -> None:
     with SessionLocal() as db:
         set_tenant_context(db, None)
-        ausleihe = db.get(VerleihAusleihe, ausleihe_id)
+        ausleihe = (
+            db.query(VerleihAusleihe)
+            .filter(VerleihAusleihe.org_id == org_id, VerleihAusleihe.id == ausleihe_id)
+            .first()
+        )
         if ausleihe is not None and ausleihe.erinnerung_gesendet_at is None:
             ausleihe.erinnerung_gesendet_at = datetime.now(UTC)
             db.commit()
@@ -69,12 +87,13 @@ async def _check_fällige_erinnerungen() -> None:
 
     for item in await asyncio.to_thread(_lade_faellige):
         try:
-            ok = await send_sms(item["org_id"], item["telefon"], item["text"])
+            ok = await send_sms(item["org_id"], item["telefon"], item["text"], job_id=item["job_key"])
             if ok:
-                await asyncio.to_thread(_markiere_gesendet, item["id"])
+                await asyncio.to_thread(_markiere_gesendet, item["org_id"], item["id"])
                 logger.info(
                     "Erinnerungs-SMS gesendet: Ausleihe %s, Org %s",
-                    item["id"], item["org_id"],
+                    item["id"],
+                    item["org_id"],
                 )
             else:
                 logger.warning("Erinnerungs-SMS fehlgeschlagen: Ausleihe %s", item["id"])

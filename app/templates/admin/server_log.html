@@ -10,12 +10,7 @@
       <h1>Server-Log</h1>
       <p class="page-header__sub">
         In-Memory-Ringpuffer der letzten Lognachrichten dieses Server-Prozesses.
-        {% if worker_note %}
-        <span class="text-muted" style="font-size:.82rem;">
-          (Bei mehreren Gunicorn-Worker-Prozessen zeigt dieser Viewer nur den Puffer des gerade
-          antwortenden Workers.)
-        </span>
-        {% endif %}
+        <span id="workerNote" class="text-muted" style="font-size:.82rem;"{% if not worker_note %} hidden{% endif %}>{{ worker_note or "" }}</span>
       </p>
     </div>
   </div>
@@ -144,6 +139,9 @@ async function fetchLog() {
     });
     if (!res.ok) return;
     const data = await res.json();
+    const note = document.getElementById('workerNote');
+    note.textContent = data.worker_note || '';
+    note.hidden = !data.worker_note;
     const out = document.getElementById('logOutput');
 
     // Sicher via DOM-Methoden – kein innerHTML, kein XSS-Risiko

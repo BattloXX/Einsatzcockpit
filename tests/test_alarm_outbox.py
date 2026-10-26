@@ -23,6 +23,8 @@ from app.services.einsatzinfo_mail_service import EinsatzinfoMailResult
 from app.services.sms_dispatch_service import EinsatzinfoDispatchResult
 from app.services.teams_alarm_service import TeamsDispatchResult
 
+pytestmark = pytest.mark.usefixtures("sms_outbox_state")
+
 
 def _db_incident(*, code="B2", exercise=False):
     db = SessionLocal()
@@ -327,13 +329,17 @@ async def test_exercise_suppresses_channels_and_wakes_push(setup_db, monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_sms_idempotency_and_stale_recipient_job_id(setup_db, monkeypatch):
-    """The dispatch boundary owns both SmsLog idempotency and stable retry IDs."""
+@pytest.mark.parametrize("legacy_provider,expected", [("sendet", "uncertain"), ("ausstehend", "sent")])
+@pytest.mark.parametrize("age_minutes", [2, 62])
+async def test_sms_idempotency_and_stale_recipient_job_id(
+    setup_db, monkeypatch, legacy_provider, expected, age_minutes
+):
+    """Nur nachweislich wartende Alt-Empfaenger automatisch versenden."""
     from app.services import sms_dispatch_service as svc
     from app.services.sms_service import SmsContext
 
     db, incident = _db_incident()
-    now = datetime.now(UTC).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=age_minutes)
     log = SmsLog(
         org_id=1, sent_at=now, source="alarm", alarm_type_code="B2", text="Text",
         recipient_count=1, incident_id=incident.id,
@@ -342,26 +348,34 @@ async def test_sms_idempotency_and_stale_recipient_job_id(setup_db, monkeypatch)
     db.flush()
     recipient = SmsLogRecipient(
         sms_log_id=log.id, phone_number="+43660123456", success=False, sent_at=now,
-        provider="sendet", lease_until=now - timedelta(seconds=1),
+        provider=legacy_provider, lease_until=now - timedelta(seconds=1),
     )
     db.add(recipient)
     db.commit()
-    seen = []
-
-    async def send(_org, jobs, ctx=None, on_result=None):
-        seen.extend(jobs)
-        result = svc.SmsSendResult(jobs[0][0], True, datetime.now(UTC).replace(tzinfo=None), "gateway")
-        await on_result(result)
-        return [result]
-
-    monkeypatch.setattr("app.services.sms_service.sms_available", lambda *args: True)
+    from app.services import sms_outbox
+    from tests.gateway_helpers import CaptureSocket, bind, cleanup
+    c, socket = bind(socket=CaptureSocket(reply=True))
     monkeypatch.setattr("app.services.sms_service.resolve_sms_config", lambda *args: SmsContext(1, ["gateway"], None))
-    monkeypatch.setattr(svc, "send_bulk_detailed", send)
     try:
-        assert await svc.retry_pending_einsatzinfo(1) == 1
-        assert seen[0][2] == f"alarm-{recipient.id}"
+        assert await svc.retry_pending_einsatzinfo(1) == 0  # Queue-Handoff ist kein Versandzaehler.
+        db.expire_all()
+        if legacy_provider == "ausstehend" and age_minutes > 60:
+            assert recipient.provider == "verworfen" and not recipient.dispatch_job_id and not socket.sent
+            return
+        assert recipient.dispatch_job_id
+        state = sms_outbox.snapshot(1, recipient.dispatch_job_id)
+        assert state["status"] == expected
+        if expected == "sent":
+            assert socket.sent[0]["job_id"] == recipient.dispatch_job_id
+        else:
+            assert not socket.sent
+            assert recipient.dispatch_status == recipient.provider == "uncertain"
+            assert log.completed_at is not None
+            await svc.retry_pending_einsatzinfo(1)
+            assert not socket.sent
         assert db.query(SmsLog).filter_by(source="alarm", incident_id=incident.id).count() == 1
     finally:
+        cleanup(c)
         db.close()
 
 

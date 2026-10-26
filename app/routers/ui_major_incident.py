@@ -4,7 +4,6 @@ import hashlib
 import io
 import json
 import logging
-import random
 import secrets
 from datetime import UTC, datetime, timedelta
 from typing import cast
@@ -33,6 +32,7 @@ from app.core.permissions import has_role, require_role, same_org_or_system_admi
 from app.core.rate_limit import limiter as _limiter
 from app.core.security import (
     get_author_name,
+    hash_api_key,
     hash_pin,
     sign_lage_pin_access_token,
     sign_session,
@@ -42,6 +42,7 @@ from app.core.security import (
 )
 from app.core.templating import templates
 from app.db import get_db
+from app.models.citizen_verification import CitizenReportVerification
 from app.models.incident import Incident
 from app.models.major_incident import (
     AUFTRAGSART_LABEL,
@@ -118,9 +119,6 @@ router = APIRouter(dependencies=[Depends(einheit_geraet_nur_lesen)])
 
 logger = logging.getLogger("einsatzleiter.major_incident")
 
-
-# Pending phone verifications: verify_token → {pin, expires_at, ...}
-_pending_verifications: dict[str, dict] = {}
 
 def _get_mi_features(db: Session, org_id: int | None = None) -> dict[str, bool]:
     """Effektive MI-Feature-Flags (SystemSettings AND OrgSettings), siehe mi_feature_service."""
@@ -3225,11 +3223,26 @@ def _mask_phone(phone: str) -> str:
     return "***"
 
 
-def _cleanup_pending_verifications() -> None:
-    now = datetime.now(UTC)
-    expired = [k for k, v in _pending_verifications.items() if v["expires_at"] < now]
-    for k in expired:
-        _pending_verifications.pop(k, None)
+def _citizen_verification(db: Session, token: str, verify_token: str, now: datetime):
+    lage = db.query(MajorIncident).filter(MajorIncident.public_token == token).first()
+    if lage is None:
+        return None, None
+    pending = db.query(CitizenReportVerification).filter(
+        CitizenReportVerification.token_hash == hash_api_key(verify_token),
+        CitizenReportVerification.org_id == lage.org_id,
+        CitizenReportVerification.major_incident_id == lage.id,
+        CitizenReportVerification.expires_at > now,
+        CitizenReportVerification.consumed_at.is_(None),
+        CitizenReportVerification.attempts < 5,
+    ).first()
+    return lage, pending
+
+
+def _verification_expired() -> HTMLResponse:
+    return HTMLResponse(
+        "<h2>Dieser Verifizierungslink ist abgelaufen. Bitte erneut versuchen.</h2>",
+        status_code=410,
+    )
 
 
 # ── Bürgermeldeportal – öffentliche Seiten (kein Auth) ───────────────────────
@@ -3319,14 +3332,19 @@ async def buerger_submit(
     logger.info("Bürger-Portal submit: org_id=%s sms=%s phone=%s", lage.org_id, gw_connected, _mask_phone(phone))
 
     if gw_connected:
-        _cleanup_pending_verifications()
-        pin = f"{random.randint(0, 9999):04d}"
+        from app.services.citizen_verification_service import purge_citizen_verifications
+
+        purge_citizen_verifications(db, lage.org_id)
+        pin = f"{secrets.randbelow(10000):04d}"
         verify_token = secrets.token_urlsafe(24)
-        _pending_verifications[verify_token] = {
-            "pin": pin,
-            "expires_at": datetime.now(UTC) + timedelta(minutes=10),
-            "phone": phone,
-            "form_data": {
+        pending = CitizenReportVerification(
+            token_hash=hash_api_key(verify_token),
+            org_id=lage.org_id,
+            major_incident_id=lage.id,
+            pin_hash=hash_api_key(f"{verify_token}:{pin}"),
+            phone=phone,
+            expires_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(minutes=10),
+            form_data={
                 "description": description.strip(),
                 "reporter_name": reporter_name.strip() or None,
                 "reporter_contact": phone or None,
@@ -3334,11 +3352,12 @@ async def buerger_submit(
                 "strasse": strasse.strip() or None,
                 "lat": lat,
                 "lng": lng,
+                "photo_fn": photo_fn,
+                "source_ip": source_ip,
             },
-            "photo_fn": photo_fn,
-            "lage_id": lage.id,
-            "source_ip": source_ip,
-        }
+        )
+        db.add(pending)
+        db.commit()
         sms_ok = await send_sms(lage.org_id, phone, f"{org_name_str}: Ihr Bestätigungscode lautet {pin}")
         logger.info("Bürger-Portal SMS-Ergebnis: ok=%s phone=%s", sms_ok, _mask_phone(phone))
         if sms_ok:
@@ -3350,7 +3369,8 @@ async def buerger_submit(
                 "org_name": org_name_str,
             })
         # SMS fehlgeschlagen → Fehlerseite zeigen, nicht still durchfallen
-        _pending_verifications.pop(verify_token, None)
+        db.delete(pending)
+        db.commit()
         return templates.TemplateResponse(request, "incident_major/public_sms_error.html", {
             "lage": lage,
             "token": token,
@@ -3383,17 +3403,14 @@ def buerger_verify_get(
     verify_token: str,
     db: Session = Depends(get_db),
 ):
-    pending = _pending_verifications.get(verify_token)
-    if not pending or pending["expires_at"] < datetime.now(UTC):
-        return HTMLResponse("<h2>Dieser Verifizierungslink ist ungültig oder abgelaufen.</h2>", status_code=410)
-    lage = db.get(MajorIncident, pending["lage_id"])
-    if not lage:
-        return HTMLResponse("<h2>Lage nicht gefunden.</h2>", status_code=404)
+    lage, pending = _citizen_verification(db, token, verify_token, datetime.now(UTC).replace(tzinfo=None))
+    if pending is None:
+        return _verification_expired()
     return templates.TemplateResponse(request, "incident_major/public_verify.html", {
         "lage": lage,
         "token": token,
         "verify_token": verify_token,
-        "phone_masked": _mask_phone(pending["phone"]),
+        "phone_masked": _mask_phone(pending.phone),
         "org_name": "",
         "error": None,
     })
@@ -3407,20 +3424,29 @@ def buerger_verify_post(
     pin: str = Form(...),
     db: Session = Depends(get_db),
 ):
-    now = datetime.now(UTC)
-    pending = _pending_verifications.get(verify_token)
+    now = datetime.now(UTC).replace(tzinfo=None)
+    lage, pending = _citizen_verification(db, token, verify_token, now)
+    if pending is None:
+        return _verification_expired()
 
-    if not pending or pending["expires_at"] < now:
-        return HTMLResponse(
-            "<h2>Dieser Verifizierungslink ist abgelaufen. Bitte erneut versuchen.</h2>",
-            status_code=410,
+    # Alle Mutationen explizit scopen; Tenant-Listener filtert nur SELECTs.
+    valid = db.query(CitizenReportVerification).filter(
+        CitizenReportVerification.token_hash == pending.token_hash,
+        CitizenReportVerification.org_id == lage.org_id,
+        CitizenReportVerification.major_incident_id == lage.id,
+        CitizenReportVerification.expires_at > now,
+        CitizenReportVerification.consumed_at.is_(None),
+        CitizenReportVerification.attempts < 5,
+    )
+    if not secrets.compare_digest(hash_api_key(f"{verify_token}:{pin.strip()}"), pending.pin_hash):
+        changed = valid.update(
+            {CitizenReportVerification.attempts: CitizenReportVerification.attempts + 1},
+            synchronize_session=False,
         )
-
-    lage = db.get(MajorIncident, pending["lage_id"])
-    if not lage:
-        raise HTTPException(status_code=404)
-
-    if pin.strip() != pending["pin"]:
+        db.commit()
+        db.refresh(pending)
+        if changed != 1 or pending.attempts >= 5:
+            return _verification_expired()
         org_name = ""
         try:
             if lage.org_id:
@@ -3432,14 +3458,16 @@ def buerger_verify_post(
             "lage": lage,
             "token": token,
             "verify_token": verify_token,
-            "phone_masked": _mask_phone(pending["phone"]),
+            "phone_masked": _mask_phone(pending.phone),
             "org_name": org_name,
             "error": "Falscher PIN. Bitte prüfen Sie Ihre SMS und versuchen Sie es erneut.",
         }, status_code=200)
 
-    # PIN korrekt → Meldung anlegen
-    _pending_verifications.pop(verify_token, None)
-    fd = pending["form_data"]
+    # Verbrauch und Meldung bilden eine Transaktion, auch bei parallelen Workern.
+    if valid.update({CitizenReportVerification.consumed_at: now}, synchronize_session=False) != 1:
+        db.rollback()
+        return _verification_expired()
+    fd = pending.form_data
     db.add(CitizenReport(
         major_incident_id=lage.id,
         reporter_name=fd.get("reporter_name"),
@@ -3449,10 +3477,10 @@ def buerger_verify_post(
         lat=fd.get("lat"),
         lng=fd.get("lng"),
         description=fd["description"],
-        photo_filename=pending.get("photo_fn"),
+        photo_filename=fd.get("photo_fn"),
         status="new",
         phone_verified=True,
-        source_ip=pending.get("source_ip"),
+        source_ip=fd.get("source_ip"),
     ))
     db.commit()
     return templates.TemplateResponse(request, "incident_major/public_danke.html",

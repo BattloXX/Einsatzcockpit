@@ -705,8 +705,12 @@ def sms_send_details(
         .order_by(SmsLogRecipient.sent_at, SmsLogRecipient.id)
         .all()
     )
+    from app.models.sms import SmsDispatchJob
+    job_states = {job.id: job for job in db.query(SmsDispatchJob).filter(
+        SmsDispatchJob.org_id == org_id,
+        SmsDispatchJob.id.in_([r.dispatch_job_id for r in recipients if r.dispatch_job_id])).all()}
     return templates.TemplateResponse(request, "admin/_sms_log_details.html", {
-        "user": user, "log_entry": log_entry, "recipients": recipients,
+        "user": user, "log_entry": log_entry, "recipients": recipients, "job_states": job_states,
     })
 
 
@@ -809,6 +813,10 @@ def sms_send_execute(
     )
     db.add(log_entry)
     db.flush()
+    from app.services.sms_outbox import queue_log
+    from app.services.sms_service import resolve_sms_config
+
+    queue_log(db, log_entry, phones, resolve_sms_config(org_id, db))
     db.commit()
     background_tasks.add_task(
         dispatch_manual_sms,
