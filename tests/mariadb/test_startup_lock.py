@@ -6,16 +6,18 @@ SQLite kann den verbindungsgebundenen GET_LOCK nicht abbilden.
 
 import os
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from threading import Barrier
 from uuid import uuid4
 
 import pytest
+from alembic.config import Config
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
+from alembic import command
 from app import cli, main
 from app.core.tenant import set_tenant_context
-from app.db import Base
 from app.models.user import Role, User, UserRole
 from app.seed_data import ROLES
 from app.services.startup_lock import startup_lock
@@ -38,7 +40,12 @@ def test_parallel_first_and_repeated_bootstrap(monkeypatch, caplog):
     try:
         with control.connect() as connection:
             connection.execute(text(f"CREATE DATABASE `{database}`"))
-        Base.metadata.create_all(engine)
+        # Schema wie produktiv ueber Alembic; create_all weicht bei FK-Typen von den Migrationen ab.
+        monkeypatch.setattr(main.settings, "DATABASE_URL", engine.url.render_as_string(hide_password=False))
+        # Ohne ini-Datei: env.py ruft dann kein fileConfig auf, das Test-Logging bleibt intakt.
+        alembic_config = Config()
+        alembic_config.set_main_option("script_location", str(Path(__file__).resolve().parents[2] / "alembic"))
+        command.upgrade(alembic_config, "head")
         for _ in range(2):
             barrier = Barrier(2)
 
