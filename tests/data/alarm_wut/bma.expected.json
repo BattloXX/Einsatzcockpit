@@ -1,0 +1,28 @@
+{
+  "leitstellennummer": "f26000006",
+  "stichwort": "f14",
+  "alarm_type_code": "F14",
+  "gemeinde": "Wolfurt",
+  "ortsteil": null,
+  "strasse": "Fr\u00fchlingstra\u00dfe",
+  "hausnummer": "10",
+  "adresszusatz": null,
+  "lagezusatz": null,
+  "meldebild": "BMA 1234 Melder 2/3 Melderbereich 7",
+  "alarmzeit": "2026-01-01T11:00:00",
+  "melder": "2/3",
+  "melderbereich": "7",
+  "weitere_codes": [],
+  "sonderkennzeichen": [],
+  "zusatzinfo": [],
+  "hinweise": [],
+  "bma": [
+    "1234"
+  ],
+  "original_text": "f26000006 f14 wolfurt fruehlingstrasse 10 > BMA 1234 Melder 2/3 Melderbereich 7 (01.01.2026 12:00 Uhr)",
+  "rest_text": "",
+  "status": "ok",
+  "qualitaet": 100,
+  "parser_version": "0",
+  "ist_uebung": false
+}

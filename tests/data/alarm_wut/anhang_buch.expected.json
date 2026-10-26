@@ -1,0 +1,32 @@
+{
+  "leitstellennummer": "f26007798",
+  "stichwort": "f3",
+  "alarm_type_code": "F3",
+  "gemeinde": "Buch",
+  "ortsteil": "Koss",
+  "strasse": null,
+  "hausnummer": null,
+  "adresszusatz": null,
+  "lagezusatz": "oestlich im wald",
+  "meldebild": "beginnender waldbrand",
+  "alarmzeit": "2026-09-03T18:28:00",
+  "melder": null,
+  "melderbereich": null,
+  "weitere_codes": [
+    "r1"
+  ],
+  "sonderkennzeichen": [],
+  "zusatzinfo": [
+    "ca25 - 30m2"
+  ],
+  "hinweise": [
+    "hausnummer_fehlt"
+  ],
+  "bma": [],
+  "original_text": "f26007798 f3,r1 buch koss oestlich im wald > beginnender waldbrand ca25 - 30m2 (03.09.2026 20:28 Uhr)",
+  "rest_text": "",
+  "status": "ok",
+  "qualitaet": 90,
+  "parser_version": "0",
+  "ist_uebung": false
+}
