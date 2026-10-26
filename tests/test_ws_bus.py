@@ -8,8 +8,6 @@ from __future__ import annotations
 
 import asyncio
 
-import pytest
-
 from app.services import ws_bus
 
 
@@ -86,12 +84,22 @@ async def test_unaddressed_legacy_status_cannot_resolve_another_workers_future()
         ws._job_pending.pop("999991", None)
 
 
-async def test_bus_dispatch_no_gateway_raises(monkeypatch):
+async def test_bus_dispatch_offline_gateway_remains_queued(monkeypatch):
     import app.routers.ws as ws
+    from app.services import gateway_routing as routing
+    from tests.gateway_helpers import bind, cleanup
+    from tests.test_gateway_dispatch import make_job
+
     monkeypatch.setattr(ws.ws_bus, "enabled", lambda: True)
-    monkeypatch.setattr(ws, "gateway_online", lambda org_id: False)
-    with pytest.raises(RuntimeError, match="Kein Gateway"):
-        await ws.dispatch_print_job(773001, 1, {"job_id": 1})
+    connection, socket = bind("linux")
+    job_id = make_job(connection)
+    routing.end(connection)
+    try:
+        result = await ws.dispatch_print_job(connection.org_id, job_id, {"job_id": job_id}, timeout=0)
+        assert result["status"] == "queued"
+        assert not socket.sent
+    finally:
+        cleanup(connection)
 
 
 async def test_addressed_dispatch_and_publisher_echo_deliver_once(monkeypatch):

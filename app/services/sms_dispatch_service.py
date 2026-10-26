@@ -376,6 +376,20 @@ async def retry_pending_einsatzinfo(org_id: int) -> int:
         set_tenant_context(db, None)
         try:
             now = datetime.now(UTC).replace(tzinfo=None)
+            ctx = resolve_sms_config(org_id, db)
+            # Auch alte 'sendet'-Eintraege ausserhalb des Nachversandfensters sind
+            # unklar, nicht nachweislich ungesendet. Vor dem Verwerfen migrieren.
+            legacy_logs = db.query(SmsLog).join(SmsLogRecipient).filter(
+                SmsLog.org_id == org_id, SmsLog.source == "alarm", SmsLog.completed_at.is_(None),
+                SmsLogRecipient.provider == "sendet", SmsLogRecipient.dispatch_job_id.is_(None),
+            ).distinct().all()
+            for log in legacy_logs:
+                rows = db.query(SmsLogRecipient).filter(
+                    SmsLogRecipient.sms_log_id == log.id, SmsLogRecipient.provider == "sendet",
+                    SmsLogRecipient.dispatch_job_id.is_(None),
+                ).all()
+                sms_outbox.queue_log(db, log, {r.phone_number: (r.name, r.member_id) for r in rows}, ctx)
+            db.flush()
             _markiere_abgelaufene_einsatzinfo(db, org_id, now)
             logs = (
                 db.query(SmsLog)
@@ -387,7 +401,6 @@ async def retry_pending_einsatzinfo(org_id: int) -> int:
                 )
                 .all()
             )
-            ctx = resolve_sms_config(org_id, db)
             for log in logs:
                 rows = db.query(SmsLogRecipient).filter(SmsLogRecipient.sms_log_id == log.id).all()
                 # Migration alter offener Logs: gleicher Job-Key und Inhalt bei jedem Nachversand.

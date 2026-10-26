@@ -12,6 +12,8 @@ from app.config import settings
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
 from app.models.incident import Incident, IncidentAlarmJob, IncidentLog
+from app.services.background_runtime import create_leader_task
+from app.services.loop_utils import iteration_watch
 
 logger = logging.getLogger("einsatzleiter.alarm_outbox")
 TERMINAL = {"sent", "suppressed", "failed", "uncertain"}
@@ -79,9 +81,20 @@ def enqueue_incident_alarm(
 def _claim(db: Session, job: IncidentAlarmJob, now: datetime) -> bool:
     due = and_(IncidentAlarmJob.status.in_(("pending", "retry")), IncidentAlarmJob.next_attempt_at <= now)
     stale = and_(IncidentAlarmJob.status == "sending", IncidentAlarmJob.lease_until < now)
+    # Nur SMS besitzen stabile, dauerhaft deduplizierte Unterauftraege. Andere
+    # Kanaele nach moeglichem externem Versand niemals an einen zweiten Worker geben.
+    if job.channel != "sms":
+        db.execute(update(IncidentAlarmJob).where(
+            IncidentAlarmJob.id == job.id, IncidentAlarmJob.org_id == job.org_id, stale,
+        ).values(status="uncertain", lease_until=None, finished_at=now,
+                 last_error="Worker-Kontakt nach Versandbeginn verloren; Ergebnis pruefen"))
+        db.commit()
+        eligible = due
+    else:
+        eligible = or_(due, stale)
     result = db.execute(
         update(IncidentAlarmJob)
-        .where(IncidentAlarmJob.id == job.id, IncidentAlarmJob.org_id == job.org_id, or_(due, stale))
+        .where(IncidentAlarmJob.id == job.id, IncidentAlarmJob.org_id == job.org_id, eligible)
         .values(status="sending", lease_until=now + _LEASE,
                 attempt_count=IncidentAlarmJob.attempt_count + 1)
     )
@@ -193,12 +206,12 @@ def _retry_at(channel: str, attempt: int, now: datetime) -> datetime | None:
     return now + timedelta(seconds=delays[attempt - 1]) if attempt <= len(delays) else None
 
 
-async def _run_claimed(job_id: int) -> None:
+async def _run_claimed(job_id: int, generation: int) -> None:
     db = SessionLocal()
     set_tenant_context(db, None)
     try:
         job = db.get(IncidentAlarmJob, job_id)
-        if job is None:
+        if job is None or job.status != "sending" or job.attempt_count != generation:
             return
         incident = db.get(Incident, job.incident_id)
         if incident is None:
@@ -210,13 +223,13 @@ async def _run_claimed(job_id: int) -> None:
             }[job.channel]
             outcome, reason = await sender(db, incident, job)
         except Exception as exc:
-            logger.exception("Alarmkanal fehlgeschlagen (job=%s, Einsatz %s)", job.id, incident.id)
+            logger.error("Alarmkanal fehlgeschlagen (job=%s, error=%s)", job.id, type(exc).__name__)
             now = _now()
             retry_at = _retry_at(job.channel, job.attempt_count, now)
             job.status = "retry" if retry_at else "failed"
             job.next_attempt_at = retry_at or now
             job.finished_at = now if retry_at is None else None
-            job.last_error = str(exc)[:2000]
+            job.last_error = type(exc).__name__
         else:
             job.status = outcome
             job.last_error = reason
@@ -225,6 +238,16 @@ async def _run_claimed(job_id: int) -> None:
                 # Nur den persistenten Status abgleichen, keine neue SMS erzeugen.
                 job.next_attempt_at = _now() + timedelta(seconds=10)
         job.lease_until = None
+        # Ein alter Worker darf nach Lease-Recovery keine neuere Generation oder
+        # ein terminales uncertain ueberschreiben. Die Zeilensperre bleibt bis Commit.
+        result = db.execute(update(IncidentAlarmJob).where(
+            IncidentAlarmJob.id == job_id, IncidentAlarmJob.org_id == job.org_id,
+            IncidentAlarmJob.status == "sending", IncidentAlarmJob.attempt_count == generation,
+        ).values(status=job.status, lease_until=None, last_error=job.last_error,
+                 next_attempt_at=job.next_attempt_at, finished_at=job.finished_at))
+        if getattr(result, "rowcount", 0) != 1:
+            db.rollback()
+            return
         if job.channel == "sms" and job.status in TERMINAL:
             sms_text = "Alarmierung SMS: gesendet"
             if job.status == "sent" and job.last_error:
@@ -255,9 +278,9 @@ async def _run_claimed(job_id: int) -> None:
             ))
         db.commit()
         _finish_if_done(db, incident, job.org_id, job.context.get("triggered_by_user_id"))
-    except Exception:
+    except Exception as exc:
         db.rollback()
-        logger.exception("Alarm-Outbox fehlgeschlagen (job=%s)", job_id)
+        logger.error("Alarm-Outbox fehlgeschlagen (job=%s, error=%s)", job_id, type(exc).__name__)
     finally:
         db.close()
 
@@ -277,7 +300,7 @@ def _finish_if_done(db: Session, incident: Incident, org_id: int | None, user_id
     write_audit(db, "incident.alarm_finished", org_id=org_id, user_id=user_id, incident_id=incident.id, payload=payload)
     db.add(IncidentLog(incident_id=incident.id, author_name="System", level="info", text="Alarmierung abgeschlossen"))
     db.commit()
-    logger.info("Alarmierung abgeschlossen (Einsatz %s): %s", incident.id, payload)
+    logger.info("Alarmierung abgeschlossen (Einsatz %s, Kanaele=%s)", incident.id, len(jobs))
 
 
 async def process_incident_alarm(incident_id: int) -> None:
@@ -286,10 +309,18 @@ async def process_incident_alarm(incident_id: int) -> None:
     try:
         now = _now()
         jobs = db.query(IncidentAlarmJob).filter(IncidentAlarmJob.incident_id == incident_id).all()
-        claimed = [job.id for job in jobs if _claim(db, job, now)]
+        claimed = [(job.id, job.attempt_count) for job in jobs if _claim(db, job, now)]
     finally:
         db.close()
-    await asyncio.gather(*(_run_claimed(job_id) for job_id in claimed))
+    await asyncio.gather(*(_run_claimed(job_id, generation) for job_id, generation in claimed))
+    # Eine reine Recovery zu uncertain startet keinen Sender, muss den Alarm aber
+    # ebenfalls abschliessen koennen.
+    if not claimed:
+        with SessionLocal() as db:
+            set_tenant_context(db, None)
+            incident = db.get(Incident, incident_id)
+            if incident is not None:
+                _finish_if_done(db, incident, incident.primary_org_id, None)
 
 
 async def run_alarm_outbox_once() -> list[asyncio.Task]:
@@ -308,7 +339,7 @@ async def run_alarm_outbox_once() -> list[asyncio.Task]:
     for incident_id in ids:
         if str(incident_id) in running_ids:
             continue
-        task = asyncio.create_task(process_incident_alarm(incident_id), name=str(incident_id))
+        task = create_leader_task(process_incident_alarm(incident_id), name=str(incident_id))
         _running_incident_tasks.add(task)
         task.add_done_callback(_running_incident_tasks.discard)
         started.append(task)
@@ -316,9 +347,18 @@ async def run_alarm_outbox_once() -> list[asyncio.Task]:
 
 
 async def alarm_outbox_loop() -> None:
-    while True:
-        try:
-            await run_alarm_outbox_once()
-        except Exception:
-            logger.exception("Alarm-Outbox-Iteration fehlgeschlagen")
-        await asyncio.sleep(5)
+    try:
+        while True:
+            try:
+                with iteration_watch(logger, "alarm_outbox_loop", 5):
+                    await run_alarm_outbox_once()
+            except Exception as exc:
+                logger.error("Alarm-Outbox-Iteration fehlgeschlagen (error=%s)", type(exc).__name__)
+            await asyncio.sleep(5)
+    finally:
+        # Diese Kinder sind keine Root-Loops. Ohne Drain koennten sie nach einer
+        # Lock-Freigabe parallel zum neuen Leader weitersenden.
+        pending = list(_running_incident_tasks)
+        for task in pending:
+            task.cancel()
+        await asyncio.gather(*pending, return_exceptions=True)

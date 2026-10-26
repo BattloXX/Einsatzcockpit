@@ -329,13 +329,17 @@ async def test_exercise_suppresses_channels_and_wakes_push(setup_db, monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_sms_idempotency_and_stale_recipient_job_id(setup_db, monkeypatch):
-    """The dispatch boundary owns both SmsLog idempotency and stable retry IDs."""
+@pytest.mark.parametrize("legacy_provider,expected", [("sendet", "uncertain"), ("ausstehend", "sent")])
+@pytest.mark.parametrize("age_minutes", [2, 62])
+async def test_sms_idempotency_and_stale_recipient_job_id(
+    setup_db, monkeypatch, legacy_provider, expected, age_minutes
+):
+    """Nur nachweislich wartende Alt-Empfaenger automatisch versenden."""
     from app.services import sms_dispatch_service as svc
     from app.services.sms_service import SmsContext
 
     db, incident = _db_incident()
-    now = datetime.now(UTC).replace(tzinfo=None)
+    now = datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=age_minutes)
     log = SmsLog(
         org_id=1, sent_at=now, source="alarm", alarm_type_code="B2", text="Text",
         recipient_count=1, incident_id=incident.id,
@@ -344,7 +348,7 @@ async def test_sms_idempotency_and_stale_recipient_job_id(setup_db, monkeypatch)
     db.flush()
     recipient = SmsLogRecipient(
         sms_log_id=log.id, phone_number="+43660123456", success=False, sent_at=now,
-        provider="sendet", lease_until=now - timedelta(seconds=1),
+        provider=legacy_provider, lease_until=now - timedelta(seconds=1),
     )
     db.add(recipient)
     db.commit()
@@ -355,10 +359,20 @@ async def test_sms_idempotency_and_stale_recipient_job_id(setup_db, monkeypatch)
     try:
         assert await svc.retry_pending_einsatzinfo(1) == 0  # Queue-Handoff ist kein Versandzaehler.
         db.expire_all()
+        if legacy_provider == "ausstehend" and age_minutes > 60:
+            assert recipient.provider == "verworfen" and not recipient.dispatch_job_id and not socket.sent
+            return
         assert recipient.dispatch_job_id
         state = sms_outbox.snapshot(1, recipient.dispatch_job_id)
-        assert state["status"] == "sent"
-        assert socket.sent[0]["job_id"] == recipient.dispatch_job_id
+        assert state["status"] == expected
+        if expected == "sent":
+            assert socket.sent[0]["job_id"] == recipient.dispatch_job_id
+        else:
+            assert not socket.sent
+            assert recipient.dispatch_status == recipient.provider == "uncertain"
+            assert log.completed_at is not None
+            await svc.retry_pending_einsatzinfo(1)
+            assert not socket.sent
         assert db.query(SmsLog).filter_by(source="alarm", incident_id=incident.id).count() == 1
     finally:
         cleanup(c)

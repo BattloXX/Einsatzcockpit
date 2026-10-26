@@ -24,7 +24,7 @@ manuelle Behandlung unklarer Ausgaben. Die dokumentierten Windows-Protokollfixes
 (Intent-IDs, Renewal, Download-Prüfung, PR #6) sind in der geprüften main-Basis
 `afbf064` enthalten; der Cloud-Presence-Vorläufer ist Migration `0306`. Die neue gemeinsame
 Presence verwendet diese vorhandenen Komponenten weiter. Neue additive Migrationen
-`0312` bis `0314` gehören zu den Feature-Branches und werden hier nicht als bereits
+`0312` bis `0315` gehören zu den Feature-Branches und werden hier nicht als bereits
 produktiv ausgerollt behauptet.
 
 Ursprünglich kritisch waren SMS-Antworten in lokalen Futures, erneutes Dispatchen ohne
@@ -69,6 +69,7 @@ Windows-Druckagent betroffen. Die Einzelphasen führen Dateien und Protokollfeld
 | `0312` Phase 2 | Gemeinsame Owner-/Token-/TTL-Felder und adressierte Transportqueue |
 | `0313` Phase 3 | SMS-Job, Versuche, Auswahlcursor und Protokoll-/Empfängerzuordnung |
 | `0314` Phase 4 | Linux-Protokollfähigkeit und persistente Push-Transportzuordnung |
+| `0315` Phase 5 | Ablaufende Worker-Heartbeats und gemeinsame Loop-/Redis-Diagnose |
 
 Vorhandene Druckjobs, SMS-Logs, Tokens und Windows-Intent-/Lease-Daten bleiben erhalten.
 Die tatsächlichen Client-Journale müssen ebenso gesichert werden wie die Cloud-DB.
@@ -95,3 +96,11 @@ zurücksetzen. Additive DB-Spalten können bei einem Code-Rollback stehen bleibe
 Datenbank-Downgrades erst nach Drain, Sicherung und geprüftem Statusabgleich ausführen.
 Die Einzelphasen beschreiben die jeweiligen Grenzen. Produktive Freigabe und eine
 Erhöhung auf zwei bis vier Gunicorn-Worker bleiben bis zur physischen Abnahme offen.
+
+## Phase 5 und Nachprüfung
+
+[Phase 5](multi-worker-phase5.md) ergänzt einen Fail-closed-Leader mit Übernahme,
+Shutdown-Drain entkoppelter Tasks/Threads, Redis-Liveness und gemeinsame Betriebsdiagnose
+auf der vorhandenen Systemstatus-Seite. Die vier in der Nachprüfung gefundenen Fehler
+(alte `sendet`-SMS, Windows-Recovery bei Spoolerfehlern, Linux-CUPS-Unklarheit und
+Linux-Abbruch während Download) sind dort mit Korrekturen und Regressionstests dokumentiert.

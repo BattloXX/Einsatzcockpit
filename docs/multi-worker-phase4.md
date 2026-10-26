@@ -206,3 +206,16 @@ keine Journale löschen. Windows-Journal und Cloud-Leases ebenfalls erhalten; ei
 altes Binary kennt den neuen Nichtübergabe-Nachweis nicht. Gemischte Versionen sind
 protokollkompatibel, besitzen aber jeweils nur die beschriebenen Sicherheitsnachweise.
 Eine erhöhte Workerzahl wird erst nach der Geräteabnahme freigegeben.
+
+
+## Korrekturen nach der Nachprüfung
+
+Die mit [Phase 5](multi-worker-phase5.md) nachgezogenen Client-Korrekturen schließen
+drei zusätzliche Fehlerpfade: Windows-Recovery isoliert Spoolersuchfehler je Job
+und persistiert `uncertain` samt Ergebnis-Outbox, bevor der Agent die Cloud startet.
+Linux behandelt fehlende CUPS-Statusinformationen nach begrenzter Abklärung als
+`uncertain`, hält diese Abklärung über Neustarts fest und sendet dabei keine
+vermeintlichen Fortschritts-Replays. Atomare Zustandsgrenzen verhindern, dass
+verspätete Downloads, Retry-Fehler oder Polls abgebrochene Jobs reaktivieren.
+Das gilt für das Legacy-Protokoll und v2. Beide Gateway-Updates sind für diese
+Korrekturen erforderlich; die physische Geräteabnahme bleibt separat offen.

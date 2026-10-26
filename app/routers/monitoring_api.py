@@ -14,6 +14,7 @@ from app.db import SessionLocal
 from app.models.dienst_monitor import DIENST_LABELS, DienstMonitorToken, DienstStatus
 from app.models.master import OrgSettings, SystemSettings
 from app.services.dienst_monitor_service import dienst_zustand, pruefe_dienste
+from app.services.worker_monitor import snapshot
 
 router = APIRouter(tags=["Monitoring"])
 
@@ -98,11 +99,18 @@ def dienste(request: Request):
         loop = db.get(SystemSettings, "dienst_monitor_last_run")
         gesamt = "down" if down else ("teilweise" if teilweise else "ok")
         return JSONResponse(
-            {"gesamt": gesamt, "dienste": ausgabe, "loop_letzter_lauf": loop.value if loop else None},
+            {"gesamt": gesamt, "dienste": ausgabe, "loop_letzter_lauf": loop.value if loop else None,
+             "runtime": _json_runtime(snapshot(db, org_id))},
             status_code=503 if down else (207 if teilweise else 200),
         )
     finally:
         db.close()
+
+
+def _json_runtime(data: dict) -> dict:
+    from fastapi.encoders import jsonable_encoder
+
+    return jsonable_encoder(data)
 
 
 @router.get("/health/dienst/{key}", include_in_schema=False)

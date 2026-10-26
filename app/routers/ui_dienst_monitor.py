@@ -26,6 +26,7 @@ def _context(request: Request, db, user: User, org_id: int, **extra) -> dict:
     from app.models.dienst_monitor import DIENST_LABELS, DienstMonitorLog, DienstMonitorToken, DienstStatus
     from app.models.master import FireDept, OrgSettings, SystemSettings
     from app.services.dienst_monitor_service import dienst_zustand, pruefe_dienste
+    from app.services.worker_monitor import snapshot
 
     org = db.get(FireDept, org_id)
     settings = db.query(OrgSettings).filter(OrgSettings.org_id == org_id).first()
@@ -57,6 +58,7 @@ def _context(request: Request, db, user: User, org_id: int, **extra) -> dict:
         "loop_letzter_lauf_dt": loop_letzter_lauf_dt,
         "labels": DIENST_LABELS,
         "dienst_keys": list(DIENST_LABELS.keys()),
+        "runtime": snapshot(db, org_id, jetzt),
         "tokens": db.query(DienstMonitorToken)
         .filter(DienstMonitorToken.org_id == org_id)
         .order_by(DienstMonitorToken.created_at.desc())

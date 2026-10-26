@@ -288,6 +288,7 @@ from app.models.wasserstelle import Wasserstelle
 from app.models.weather import WeatherDashboardToken, WeatherReading, WeatherStation
 from app.models.weather_alert import WeatherAlertLog, WeatherAlertRule, WeatherAlertState
 from app.models.wordpress_report import WordPressReportConfig
+from app.models.worker_runtime import WorkerRuntime  # noqa: F401
 
 __all__ = [
     "SearchChunk",

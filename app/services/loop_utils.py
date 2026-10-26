@@ -20,8 +20,16 @@ from contextlib import contextmanager
 def iteration_watch(logger: logging.Logger, name: str, interval_s: float) -> Iterator[None]:
     """Misst eine Loop-Iteration und warnt bei Überschreitung des Intervalls."""
     start = time.monotonic()
+    from app.services.background_runtime import record_iteration
+
+    record_iteration(name, "running", interval_s=interval_s)
     try:
         yield
+    except BaseException:
+        record_iteration(name, "failed")
+        raise
+    else:
+        record_iteration(name, "ok")
     finally:
         dauer = time.monotonic() - start
         if dauer > interval_s:

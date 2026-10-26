@@ -21,6 +21,7 @@ from app.models.incident import IncidentColumn, IncidentLog, IncidentVehicle, Me
 from app.models.lis import LisSyncedObject, OrgLisConfig
 from app.models.major_incident import VehiclePosition
 from app.models.master import FireDept, VehicleMaster
+from app.services.background_runtime import create_leader_task
 from app.services.incident_service import _next_display_order, append_card, create_incident, set_unit_status
 from app.services.lis.lis_client import LisClient, LisClientError
 from app.services.lis.lis_geo import lis_unit_coords_to_wgs84
@@ -53,15 +54,17 @@ def _starte_autoprint(incident_id: int) -> None:
     """Autoprint nach dem LIS-Commit verwaltet im laufenden Event-Loop starten."""
     from app.services.print_dispatcher import autoprint_incident_background
 
-    task = asyncio.create_task(autoprint_incident_background(incident_id))
+    task = create_leader_task(autoprint_incident_background(incident_id))
     _autoprint_tasks.add(task)
 
     def _fertig(t: asyncio.Task) -> None:
         _autoprint_tasks.discard(t)
+        if t.cancelled():
+            return
         try:
             t.result()
-        except Exception:
-            logger.exception("LIS-Auto-Druck fehlgeschlagen (Einsatz %s)", incident_id)
+        except Exception as exc:
+            logger.error("LIS-Auto-Druck fehlgeschlagen (Einsatz %s, error=%s)", incident_id, type(exc).__name__)
 
     task.add_done_callback(_fertig)
 

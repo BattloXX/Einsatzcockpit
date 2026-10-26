@@ -29,6 +29,7 @@ import zipfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from app.services.background_runtime import create_leader_task
 from app.services.lis.lis_client import LisClient, LisClientError
 
 logger = logging.getLogger("einsatzleiter.lis.capture")
@@ -314,7 +315,7 @@ async def start_capture_for_org(
     except LisClientError:
         logger.exception("LIS-Capture: SelectOperation für Org %s fehlgeschlagen", org_id)
 
-    task = asyncio.create_task(
+    task = create_leader_task(
         capture_traffic(client, recorder, organization_id, duration_minutes, poll_interval_seconds)
     )
     _active_captures[org_id] = task

@@ -78,10 +78,13 @@ def enqueue_in(
     providers: list[str],
     preferred: int | None = None,
     recipient_id: int | None = None,
+    *,
+    uncertain_legacy: bool = False,
 ) -> str:
     if not 0 < len(job_key) <= 128:
         raise ValueError("Ungueltige SMS-Job-ID")
     payload_hash = hashlib.sha256((phone + "\0" + text).encode()).hexdigest()
+    legacy_error = "Legacy-Versand bereits begonnen; Ergebnis unbekannt, kein automatischer Neuversand"
     job = db.query(Job).filter(Job.org_id == org_id, Job.job_key == job_key).first()
     if job is None:
         now = presence.utc()
@@ -97,6 +100,10 @@ def enqueue_in(
             next_attempt_at=now,
             expires_at=now + timedelta(hours=1),
             created_at=now,
+            status="uncertain" if uncertain_legacy else "queued",
+            may_have_sent=uncertain_legacy,
+            finished_at=now if uncertain_legacy else None,
+            error=legacy_error if uncertain_legacy else None,
         )
         try:
             with db.begin_nested():
@@ -108,6 +115,17 @@ def enqueue_in(
                 raise
     if job.payload_hash != payload_hash:
         raise ValueError("SMS-Job-ID wurde mit anderem Inhalt wiederverwendet")
+    if uncertain_legacy and job.status not in TERMINAL:
+        job = db.query(Job).filter(Job.org_id == org_id, Job.id == job.id).with_for_update().populate_existing().one()
+    if uncertain_legacy and job.status not in TERMINAL:
+        # Alte 'sendet'-Zeilen besitzen keinen belastbaren Nichtversandnachweis.
+        # Noch innerhalb derselben Transaktion sperren, bevor ein Claim sichtbar wird.
+        job.status, job.may_have_sent = "uncertain", True
+        job.finished_at, job.lease_until = presence.utc(), None
+        job.error = legacy_error
+        for attempt in db.query(Attempt).filter(Attempt.org_id == org_id, Attempt.job_id == job.id):
+            _cancel_queued(db, org_id, attempt.route_id)
+            _cancel_queued(db, org_id, attempt.grant_route_id)
     if recipient_id is not None:
         recipient = (
             db.query(SmsLogRecipient)
@@ -143,6 +161,7 @@ def queue_log(db, log: SmsLog, recipients: dict, ctx) -> list[tuple]:
     db.query(SmsLog).filter(SmsLog.org_id == log.org_id, SmsLog.id == log.id).with_for_update().one()
     existing = {r.phone_number: r for r in db.query(SmsLogRecipient).filter(SmsLogRecipient.sms_log_id == log.id)}
     jobs = []
+    migrated_uncertain = False
     for phone, details in recipients.items():
         row = existing.get(phone)
         if row is not None and (row.success or row.dispatch_status in TERMINAL):
@@ -168,12 +187,26 @@ def queue_log(db, log: SmsLog, recipients: dict, ctx) -> list[tuple]:
             if log.source == "alarm" and log.incident_id is not None
             else f"{log.source}:{log.id}:{address_key}"
         )
-        enqueue_in(db, log.org_id, key, phone, log.text, ctx.chain, recipient_id=row.id)
+        legacy_sending = row.dispatch_job_id is None and row.provider == "sendet"
+        enqueue_in(db, log.org_id, key, phone, log.text, ctx.chain, recipient_id=row.id,
+                   uncertain_legacy=legacy_sending)
+        if legacy_sending:
+            migrated_uncertain = True
+            known = db.get(Job, row.dispatch_job_id)
+            row.success = known.status == "sent"
+            row.provider = (known.provider or "sent") if row.success else known.status
+            row.lease_until = None
         if log.source == "alarm":
             db.query(Job).filter(
                 Job.org_id == log.org_id, Job.id == row.dispatch_job_id, Job.status == "queued"
             ).update({"expires_at": log.sent_at.replace(tzinfo=None) + timedelta(hours=1)}, synchronize_session=False)
         jobs.append((phone, log.text, key, row.id))
+    if migrated_uncertain:
+        db.flush()
+        rows = db.query(SmsLogRecipient).filter(SmsLogRecipient.sms_log_id == log.id).all()
+        if all(r.success or r.dispatch_status in TERMINAL for r in rows):
+            log.completed_at = presence.utc()
+            log.success_count = sum(r.success for r in rows)
     return jobs
 
 

@@ -34,6 +34,7 @@ import zipfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from app.services.background_runtime import create_leader_task
 from app.services.dibos.dibos_client import (
     DibosClient,
     DibosClientError,
@@ -350,7 +351,7 @@ async def start_trace_for_org(org_id: int, duration_minutes: float = 120) -> str
         host=host, ag=ag, on_exchange=recorder.record,
     )
 
-    task = asyncio.create_task(
+    task = create_leader_task(
         capture_traffic(client, recorder, duration_minutes, poll_interval_seconds)
     )
     _active_traces[org_id] = task

@@ -180,3 +180,15 @@ versteht weiterhin das alte `sms.send`, die neue Cloud bedient alte Gateways kon
 Ein gemischtes Cloud-Rollout mit alter und neuer Alarm-Outbox ist nicht freigegeben.
 `alembic downgrade 0312` entfernt die neue Historie und ist ausschließlich nach gesichertem,
 abgeschlossenem Abgleich zulässig; für einen schnellen Rollback ist es ungeeignet.
+
+
+## Sicherheitskorrektur nach der Nachprüfung
+
+Mit [Phase 5](multi-worker-phase5.md) werden alte, nicht zugeordnete `sendet`-
+Empfänger konservativ als persistente `uncertain`-Jobs übernommen, auch außerhalb
+des Nachversandfensters. Eine abgelaufene alte Lease beweist keinen Nichtversand.
+Diese Empfänger lösen keinen neuen Gateway-/Providerauftrag aus. Nachweislich noch
+wartende Alt-Empfänger bleiben innerhalb der Alarmfrist versendbar. Bestehende
+terminale Jobs und ihre stabile ID werden bei der Zuordnung erhalten.
+Regressionen prüfen alte und aktuelle Logs, bekannte terminale Ergebnisse,
+mehrfachen Nachversand und fehlende automatische Sends. Die Geräteabnahme bleibt offen.

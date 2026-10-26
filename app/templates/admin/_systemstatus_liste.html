@@ -30,3 +30,54 @@
   </article>
   {% endfor %}
 </div>
+
+<h3 class="mt-4">Worker und Auftragsverarbeitung</h3>
+<p>{{ runtime.worker_count }} aktive App-/Gunicorn-Worker (Heartbeat höchstens 20 Sekunden alt).
+  Leader: <span style="overflow-wrap:anywhere">{{ runtime.leader_workers|join(', ') or 'kein aktiver Leader' }}</span>.
+  Letzter erfolgreicher Loop-Durchlauf: {{ runtime.last_success_at|local_datetime if runtime.last_success_at else 'noch nicht bestätigt' }}.</p>
+<p>Verbundene SMS-Gateways: <strong>{{ runtime.sms_connected }}</strong> ·
+  verbundene Drucker-Gateways: <strong>{{ runtime.print_connected }}</strong>.
+  Redis: {{ runtime.redis.connected_workers }}/{{ runtime.redis.configured_workers }} konfigurierte Worker verbunden.</p>
+<div class="table-scroll">
+  <table class="table">
+    <thead><tr><th>Aufträge</th><th>Offen</th><th>Überfällig</th><th>Überfällige ACKs</th><th>Uncertain</th></tr></thead>
+    <tbody>
+      {% for label, jobs in [('SMS', runtime.sms_jobs), ('Druck', runtime.print_jobs)] %}
+      <tr><td>{{ label }}</td><td>{{ jobs.open }}</td><td>{{ jobs.overdue }}</td><td>{{ jobs.overdue_acks }}</td>
+        <td><span class="badge {{ 'badge--warn' if jobs.uncertain else 'badge--active' }}">{{ jobs.uncertain }}</span></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="text-muted">Offen bedeutet noch nicht abgeschlossen. Eine Redis-Bestätigung ist kein Versand- oder Drucknachweis.
+  Unklare Aufträge müssen vor einem Nachdruck oder erneuten SMS-Versand geprüft werden.</p>
+<div class="table-scroll">
+  <table class="table">
+    <thead><tr><th>Gateway</th><th>Typ</th><th>Verbindung</th><th>Letzter Heartbeat</th><th>Presence gültig bis</th></tr></thead>
+    <tbody>
+      {% for gateway in runtime.gateways %}
+      <tr><td>{{ gateway.name }}</td><td>{{ {'sms': 'SMS', 'linux': 'Linux', 'windows_agent': 'Windows'}.get(gateway.kind, gateway.kind) }}</td>
+        <td><span class="badge {{ 'badge--active' if gateway.online else 'badge--closed' }}">{{ 'Online' if gateway.online else 'Offline' }}</span></td>
+        <td>{{ gateway.heartbeat_at|local_datetime if gateway.heartbeat_at else 'noch keiner' }}</td>
+        <td>{{ gateway.expires_at|local_datetime if gateway.expires_at else '–' }}</td></tr>
+      {% else %}<tr><td colspan="5">Keine Gateways eingerichtet.</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+{% for worker in runtime.workers %}
+<details class="mt-4">
+  <summary style="overflow-wrap:anywhere">{{ worker.worker_id }} · {{ 'Leader' if worker.leader else 'Worker' }} · Heartbeat {{ worker.heartbeat_at|local_datetime }}</summary>
+  {% if worker.leader_error %}<p class="alert alert--danger">Leader-Lock nicht verfügbar: {{ worker.leader_error }}.</p>{% endif %}
+  <p>Redis-Subscriber: {{ 'verbunden' if worker.redis.subscriber_connected else 'getrennt' }}.
+    Publish-Fehler: {{ worker.redis.publish_failures or 0 }} · Subscriber-Abbrüche: {{ worker.redis.subscriber_failures or 0 }}.
+    {% if worker.redis.last_error %}Letztes Ereignis: {{ worker.redis.last_error }} ({{ worker.redis.last_error_at|local_datetime }}).{% endif %}</p>
+  <div class="table-scroll"><table class="table">
+    <thead><tr><th>Hintergrund-Loop</th><th>Status</th><th>Letzter Erfolg</th><th>Letzter Fehler</th></tr></thead>
+    <tbody>{% for entry in worker.loops %}<tr><td>{{ entry.name }}</td>
+      <td><span class="badge {{ 'badge--warn' if entry.overdue or entry.state == 'failed' else 'badge--active' }}">{{ 'überfällig' if entry.overdue else {'active': 'aktiv', 'running': 'läuft', 'ok': 'OK', 'stopped': 'beendet / deaktiviert', 'failed': 'Fehler'}.get(entry.state, entry.state) }}</span></td>
+      <td>{{ entry.last_success_at|local_datetime if entry.last_success_at else 'noch nicht bestätigt' }}</td>
+      <td>{{ entry.last_failure_at|local_datetime if entry.last_failure_at else '–' }}</td></tr>
+    {% else %}<tr><td colspan="4">Keine Loop-Diagnose vorhanden.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</details>
+{% endfor %}

@@ -137,7 +137,7 @@ from app.routers import (
     ui_weather,
     ws,
 )
-from app.services.leader_lock import LeaderLock
+from app.services.background_runtime import BackgroundRuntime, supervised_loop
 from app.services.suche.outbox import registriere_listener
 
 registriere_listener()
@@ -268,24 +268,24 @@ def _start_background_loops() -> list[asyncio.Task]:
     from app.services.weather_retention import weather_retention_loop
 
     loops = (
-        autoclose_loop(), _breathing_watchdog_loop(), task_reminder_loop(), print_job_watchdog_loop(),
-        print_agent_sweep_loop(), suche_outbox_loop(),
-        gsl_lagemeldung_reminder_loop(), gk_versand_aufraeum_loop(), verleih_erinnerung_loop(), probe_erinnerung_loop(),
-        weather_retention_loop(), ai_log_retention_loop(), mcp_upload_retention_loop(),
-        sms_log_retention_loop(), einsatzinfo_nachversand_loop(), alarm_outbox_loop(), road_closure_notification_loop(),
-        vehicle_position_retention_loop(), weather_alert_loop(), dienst_monitor_loop(), abfluss_poll_loop(),
-        lis_poll_loop(), lis_capture_retention_loop(), dibos_poll_loop(), dibos_trace_retention_loop(),
-        nachschlagewerk_sync_loop(), org_backup_loop(), mailing_dispatch_loop(),
-        api_message_dispatch_loop(), mailing_schedule_loop(),
-        resend_inbound_retention_loop(),
-        mail_imap_poll_loop(),
-        mail_graph_poll_loop(),
-        mail_zuordnung_loop(),
-        mail_weiterleitung_loop(),
-        incident_route_loop(),
-        planspiel_loop(),
+        autoclose_loop, _breathing_watchdog_loop, task_reminder_loop, print_job_watchdog_loop,
+        print_agent_sweep_loop, suche_outbox_loop,
+        gsl_lagemeldung_reminder_loop, gk_versand_aufraeum_loop, verleih_erinnerung_loop, probe_erinnerung_loop,
+        weather_retention_loop, ai_log_retention_loop, mcp_upload_retention_loop,
+        sms_log_retention_loop, einsatzinfo_nachversand_loop, alarm_outbox_loop, road_closure_notification_loop,
+        vehicle_position_retention_loop, weather_alert_loop, dienst_monitor_loop, abfluss_poll_loop,
+        lis_poll_loop, lis_capture_retention_loop, dibos_poll_loop, dibos_trace_retention_loop,
+        nachschlagewerk_sync_loop, org_backup_loop, mailing_dispatch_loop,
+        api_message_dispatch_loop, mailing_schedule_loop,
+        resend_inbound_retention_loop,
+        mail_imap_poll_loop,
+        mail_graph_poll_loop,
+        mail_zuordnung_loop,
+        mail_weiterleitung_loop,
+        incident_route_loop,
+        planspiel_loop,
     )
-    return [asyncio.create_task(loop) for loop in loops]
+    return [asyncio.create_task(supervised_loop(loop), name=loop.__name__) for loop in loops]
 
 
 @asynccontextmanager
@@ -358,46 +358,20 @@ async def lifespan(app: FastAPI):
     except Exception as exc:  # Wetter ist unkritisch – Start nie blockieren.
         logger.warning("Wetter-DB-Init übersprungen: %s", exc)
 
-    # Hintergrund-Loops laufen nur in einem Worker (Datei-Lock je Host). Sonst pollt
-    # jeder Gunicorn-Worker DIBOS/LIS und sendet SMS/Teams-Nachversand doppelt.
-    leader = LeaderLock(settings.LEADER_LOCK_PATH)
+    # Der Lock ist die Sicherheitsgrenze. DB-Heartbeats dienen nur der Diagnose.
+    runtime = BackgroundRuntime(settings.LEADER_LOCK_PATH, _start_background_loops)
     background_tasks: list[asyncio.Task] = []
-    # Jede Worker-Loop ueberwachen, unabhaengig vom Leader-Lock.
     if settings.LOOP_LAG_WARN_MS > 0:
         background_tasks.append(asyncio.create_task(_loop_lag_monitor()))
-    leader_watcher: asyncio.Task | None = None
-    try:
-        acquired = not settings.TESTING and leader.try_acquire()
-    except Exception:
-        # Fail open: ein Worker ohne Alarm-Loops wäre schlimmer als doppelte Loops.
-        logger.warning("Leader-Lock nicht verfuegbar, Hintergrund-Loops starten trotzdem", exc_info=True)
-        acquired = True
-    if acquired:
-        background_tasks.extend(_start_background_loops())
-        logger.info("Hintergrund-Loops aktiv in PID %s", os.getpid())
-    elif not settings.TESTING:
-        logger.info("Hintergrund-Loops laufen in einem anderen Worker (PID %s wartet)", os.getpid())
-
-        async def _wait_for_leadership() -> None:
-            while True:
-                await asyncio.sleep(15)
-                try:
-                    if not leader.try_acquire():
-                        continue
-                except Exception:
-                    logger.warning("Leader-Lock-Uebernahme fehlgeschlagen", exc_info=True)
-                    continue
-                background_tasks.extend(_start_background_loops())
-                logger.info("Hintergrund-Loops uebernommen in PID %s", os.getpid())
-                return
-
-        leader_watcher = asyncio.create_task(_wait_for_leadership())
+    if not settings.TESTING:
+        await runtime.start()
     else:
         logger.info("Hintergrund-Loops im Testmodus deaktiviert")
 
     try:
         yield
     finally:
+        await runtime.stop_tasks()
         await mcp_session_context.__aexit__(None, None, None)
         from app.services import ws_bus
 
@@ -408,21 +382,19 @@ async def lifespan(app: FastAPI):
         from app.services.teams_alarm_service import aclose_teams_client
 
         await aclose_teams_client()
-        if leader_watcher is not None:
-            leader_watcher.cancel()
-        for t in background_tasks:
-            t.cancel()
-        for t in [*background_tasks, *([leader_watcher] if leader_watcher else [])]:
+        for task in background_tasks:
+            task.cancel()
+        await asyncio.gather(*background_tasks, return_exceptions=True)
+        # Cancel beendet to_thread-Arbeit nicht. Vor Freigabe des Locks muessen
+        # auch diese Arbeiten enden; bei Haengern beendet Gunicorn den Prozess.
+        if runtime.is_leader:
+            await asyncio.get_running_loop().shutdown_default_executor()
+        if not settings.TESTING:
             try:
-                await t
-            except asyncio.CancelledError:
-                continue
-            except Exception:
-                logger.warning("Hintergrund-Task beim Beenden fehlgeschlagen", exc_info=True)
-        try:
-            leader.release()
-        except Exception:
-            logger.warning("Leader-Lock konnte nicht freigegeben werden", exc_info=True)
+                runtime.write_heartbeat(stopped=True)
+            except Exception as exc:
+                logger.warning("Worker-Abmeldung nicht gespeichert (error=%s)", type(exc).__name__)
+        runtime.release()
 
 
 def _bootstrap_admin() -> None:
