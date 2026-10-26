@@ -586,7 +586,7 @@ function incidentBoard(incidentId, alarm, startedAt) {
         'ai_suggestions_ready', 'card_moved',
         'column_renamed', 'column_updated', 'column_created', 'column_deleted',
         'columns_reordered', 'alarm_type_changed', 'address_updated',
-        'incident_leader_changed', 'ai_hints_ready',
+        'incident_leader_changed', 'ai_hints_ready', 'incident_updated',
       ]).has(type);
     },
 
@@ -836,6 +836,7 @@ function incidentBoard(incidentId, alarm, startedAt) {
         case 'objektgefahren':
         case 'incident_geocoded':
         case 'incident_reopened':
+        case 'incident_updated':
         case 'log_updated':
           this._queueResync(incidentId);
           break;

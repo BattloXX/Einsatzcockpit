@@ -81,8 +81,9 @@ def test_new_duplicate_after_days_and_changed_message(db, caplog):
     assert changed.dedup_action == "merged" and changed.version_no == 2
     assert first.einsatz_id == duplicate.einsatz_id == changed.einsatz_id
     db.refresh(inc)
-    assert {attr.key: getattr(inc, attr.key) for attr in inspect(Incident).column_attrs} == before
-    assert db.query(IncidentLog).filter(IncidentLog.incident_id == inc.id).count() == logs
+    assert inc.report_text.startswith(before["report_text"] + "\n\n--- Nachtrag v2 ")
+    assert inc.report_text.endswith("weitere Information")
+    assert db.query(IncidentLog).filter(IncidentLog.incident_id == inc.id).count() > logs
     assert db.query(Incident).filter(Incident.primary_org_id == first.org_id).count() == 1
 
 

@@ -960,7 +960,7 @@
       try {
         var ev = JSON.parse(e.data);
         if ((ev.type === "incident_created" && ev.alarm_erlaubt !== false) || ev.type === "objekt_match" ||
-            ev.type === "incident_closed" || ev.type === "gsl_changed" ||
+            ev.type === "incident_updated" || ev.type === "incident_closed" || ev.type === "gsl_changed" ||
             ev.type === "vehicle_status" || ev.type === "vehicles_changed" || ev.type === "incident_route_updated") {
           letzterModus = null; // Neuaufbau erzwingen
           aktualisieren();
