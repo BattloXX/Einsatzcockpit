@@ -6,6 +6,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import and_, or_, update
+from sqlalchemy.exc import StatementError
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -229,7 +230,10 @@ async def _run_claimed(job_id: int, generation: int) -> None:
             job.status = "retry" if retry_at else "failed"
             job.next_attempt_at = retry_at or now
             job.finished_at = now if retry_at is None else None
-            job.last_error = type(exc).__name__
+            # SQL-Fehler koennen SQL und Parameter enthalten; nur andere Meldungen
+            # fuer die Admin-Diagnose speichern, niemals im Anwendungslog ausgeben.
+            message = "Datenbankfehler (Details unterdrueckt)" if isinstance(exc, StatementError) else str(exc)
+            job.last_error = f"{type(exc).__name__}: {' '.join(message.split())[:200]}"
         else:
             job.status = outcome
             job.last_error = reason
@@ -249,6 +253,7 @@ async def _run_claimed(job_id: int, generation: int) -> None:
             db.rollback()
             return
         if job.channel == "sms" and job.status in TERMINAL:
+            status_text = {"suppressed": "uebersprungen", "failed": "fehlgeschlagen", "uncertain": "unklar"}
             sms_text = "Alarmierung SMS: gesendet"
             if job.status == "sent" and job.last_error:
                 sms_text += f" ({job.last_error})"
@@ -256,7 +261,7 @@ async def _run_claimed(job_id: int, generation: int) -> None:
                 incident_id=incident.id, author_name="System",
                 level="info" if job.status == "sent" else "warning",
                 text=sms_text if job.status == "sent"
-                else f"Alarmierung SMS {job.status}: {job.last_error or 'keine Annahmebestaetigung'}",
+                else f"Alarmierung SMS {status_text[job.status]}: {job.last_error or 'keine Annahmebestaetigung'}",
             ))
         if job.channel == "teams":
             db.add(IncidentLog(
@@ -298,7 +303,11 @@ def _finish_if_done(db: Session, incident: Incident, org_id: int | None, user_id
         return
     payload = {job.channel: {"status": job.status, "reason": job.last_error} for job in jobs}
     write_audit(db, "incident.alarm_finished", org_id=org_id, user_id=user_id, incident_id=incident.id, payload=payload)
-    db.add(IncidentLog(incident_id=incident.id, author_name="System", level="info", text="Alarmierung abgeschlossen"))
+    # Bereits beim Anlegen unterdrueckte Alarme haben ihren gemeinsamen Logeintrag.
+    if not all(job.status == "suppressed" and job.context.get("suppressed_reason") for job in jobs):
+        db.add(IncidentLog(
+            incident_id=incident.id, author_name="System", level="info", text="Alarmierung abgeschlossen",
+        ))
     db.commit()
     logger.info("Alarmierung abgeschlossen (Einsatz %s, Kanaele=%s)", incident.id, len(jobs))
 

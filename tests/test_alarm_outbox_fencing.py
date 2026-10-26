@@ -2,11 +2,37 @@ import asyncio
 from datetime import timedelta
 
 import pytest
+from sqlalchemy.exc import StatementError
 
 from app.models.incident import IncidentAlarmJob
 from app.services import alarm_outbox as alarm
 from app.services.sms_outbox import database
 from tests.test_alarm_outbox import _aufraeumen, _db_incident
+
+
+@pytest.mark.parametrize("error,expected", [
+    (RuntimeError("kaputt\r\nnaechste Zeile"), "RuntimeError: kaputt naechste Zeile"),
+    (RuntimeError("x" * 250), "RuntimeError: " + "x" * 200),
+    (StatementError("PRIVATE_MESSAGE", "SELECT 'PRIVATE_SQL'", {"token": "PRIVATE_TOKEN"}, RuntimeError()),
+     "StatementError: Datenbankfehler (Details unterdrueckt)"),
+])
+async def test_channel_error_diagnostic_is_bounded_and_sql_details_stay_hidden(monkeypatch, caplog, error, expected):
+    db, incident = _db_incident()
+    async def sender(*args):
+        raise error
+    monkeypatch.setattr(alarm, "_send_sms", sender)
+    job = IncidentAlarmJob(org_id=1, incident_id=incident.id, channel="sms", status="pending",
+                           next_attempt_at=alarm._now(), context={})
+    db.add(job)
+    db.commit()
+    try:
+        await alarm.process_incident_alarm(incident.id)
+        db.refresh(job)
+        assert job.status == "retry" and job.last_error == expected
+        assert "PRIVATE_" not in caplog.text
+        assert "kaputt" not in caplog.text
+    finally:
+        _aufraeumen(db, incident)
 
 
 @pytest.mark.parametrize("channel", ["teams", "push", "mail"])

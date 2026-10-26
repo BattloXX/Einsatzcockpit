@@ -2,6 +2,7 @@
 
 import io
 from datetime import UTC, datetime, timedelta
+from functools import partial
 from uuid import uuid4
 
 import pytest
@@ -14,6 +15,7 @@ from app.models.user import User
 from app.services import print_agent_service as agent
 from app.services.print_artifact_service import artifact_url
 from tests.conftest import TestingSession
+from tests.gateway_helpers import CaptureSocket
 from tests.test_dokumentviewer import dokument_pdf
 from tests.test_dokumentviewer import dokumente as dokumente
 from tests.test_katplan_k1b import login
@@ -233,8 +235,10 @@ def station(dokumente, monkeypatch):
         flag.value = "true"
         db.query(OrgSettings).filter_by(org_id=dokumente["org_id"]).one().gateway_module_enabled = True
         now = datetime.now(UTC).replace(tzinfo=None)
+        token_hash = uuid4().hex
         gateway = Gateway(org_id=dokumente["org_id"], name="Windows Station", kind="windows_agent",
-                          device_token_hash=uuid4().hex, status="online", last_seen_at=now,
+                          device_token_hash=token_hash, status="online", last_seen_at=now,
+                          agent_connection_token_hash=token_hash, agent_worker_id="test-worker",
                           agent_connection_id=uuid4().hex, agent_presence_expires_at=now + timedelta(seconds=90))
         db.add(gateway)
         db.flush()
@@ -347,14 +351,10 @@ def test_station_original_a3_und_fremder_drucker(client, dokumente, station):
 
 def test_linux_push_verwendet_selbe_auswahl_und_nur_clientoptionen(client, dokumente, station, monkeypatch):
     from app.routers import ws
+    from app.services import gateway_routing as routing
+    from app.services import linux_print_service
 
-    sent = []
-
-    async def dispatch(org_id, job_id, payload):
-        sent.append(payload)
-        return {"status": "sent"}
-
-    monkeypatch.setattr(ws, "dispatch_print_job", dispatch)
+    monkeypatch.setattr(ws, "dispatch_print_job", partial(linux_print_service.dispatch, wait_seconds=0))
     with TestingSession() as db:
         set_tenant_context(db, None)
         gateway = db.get(Gateway, station["gateway_id"])
@@ -362,11 +362,20 @@ def test_linux_push_verwendet_selbe_auswahl_und_nur_clientoptionen(client, dokum
         db.get(PrinterAgentRoute, station["route_id"]).aktiv = False
         db.get(Printer, station["printer_id"]).status = {
             "reachable": True, "checked_at": datetime.now(UTC).isoformat()}
+        token_hash = gateway.device_token_hash
         db.commit()
-    login(client, dokumente, "org_admin")
-    response = post(client, "/druck/viewer/auftrag", **jobdaten(client, dokumente, station))
-    assert response.status_code == 200, response.text
-    assert response.json()["status"] == "sent" and response.json()["confirmed"] is False
-    assert len(sent) == 1
-    assert sent[0]["options"] == {"copies": 2, "duplex": "off", "media": "A3"}
-    assert len(pdf(client.get(sent[0]["artifact_url"])).pages) == 12
+    connection = routing.begin("linux", dokumente["org_id"], station["gateway_id"], token_hash)
+    socket = CaptureSocket()
+    routing.attach(connection, token_hash, socket)
+    try:
+        login(client, dokumente, "org_admin")
+        response = post(client, "/druck/viewer/auftrag", **jobdaten(client, dokumente, station))
+        assert response.status_code == 200, response.text
+        assert response.json()["status"] == "sent" and response.json()["confirmed"] is False
+        sent = [message["payload"] for message in socket.sent]
+        assert len(sent) == 1
+        assert sent[0]["options"] == {"copies": 2, "duplex": "off", "media": "A3"}
+        assert len(pdf(client.get(sent[0]["artifact_url"])).pages) == 12
+    finally:
+        routing.detach(connection)
+        routing.end(connection)
