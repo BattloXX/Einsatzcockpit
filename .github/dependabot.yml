@@ -34,6 +34,11 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      # anthropic bleibt auf <2 gepinnt: SDK 2 bricht die Typen in app/services/ai_service.py
+      # (mypy). Erst mit eigener Migration anheben.
+      - dependency-name: "anthropic"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
