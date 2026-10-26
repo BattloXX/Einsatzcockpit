@@ -1,0 +1,32 @@
+{
+  "leitstellennummer": "f26007737",
+  "stichwort": "f11",
+  "alarm_type_code": "F11",
+  "gemeinde": "Lauterach",
+  "ortsteil": null,
+  "strasse": "bad lerchenau",
+  "hausnummer": "12",
+  "adresszusatz": null,
+  "lagezusatz": null,
+  "meldebild": "patientenrettung aus 1 og",
+  "alarmzeit": "2026-09-01T17:31:00",
+  "melder": null,
+  "melderbereich": null,
+  "weitere_codes": [
+    "r2"
+  ],
+  "sonderkennzeichen": [
+    "_drehleiter"
+  ],
+  "zusatzinfo": [
+    "rettung vor ort"
+  ],
+  "hinweise": [],
+  "bma": [],
+  "original_text": "f26007737 f11 _drehleiter,r2 lauterach bad lerchenau 12 patientenrettung aus 1 og rettung vor ort (01.09.2026 19:31 Uhr)",
+  "rest_text": "",
+  "status": "ok",
+  "qualitaet": 100,
+  "parser_version": "0",
+  "ist_uebung": false
+}

@@ -1,0 +1,1 @@
+f26000002 t2,r1,r2 _drehleiter Wolfurt Fruehlingstrasse 8 > probealarm (01.01.2026 12:00 Uhr)

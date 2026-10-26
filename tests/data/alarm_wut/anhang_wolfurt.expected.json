@@ -1,0 +1,30 @@
+{
+  "leitstellennummer": "f26008809",
+  "stichwort": "f2",
+  "alarm_type_code": "F2",
+  "gemeinde": "Wolfurt",
+  "ortsteil": null,
+  "strasse": "Fr\u00fchlingstra\u00dfe",
+  "hausnummer": null,
+  "adresszusatz": "naehe hnr 11",
+  "lagezusatz": null,
+  "meldebild": "brand container",
+  "alarmzeit": "2026-10-06T00:15:00",
+  "melder": null,
+  "melderbereich": null,
+  "weitere_codes": [],
+  "sonderkennzeichen": [],
+  "zusatzinfo": [
+    "notrufer nicht mehr vorort"
+  ],
+  "hinweise": [
+    "hausnummer_fehlt"
+  ],
+  "bma": [],
+  "original_text": "f26008809 f2 wolfurt fruehlingstrasse naehe hnr 11 > brand container > notrufer nicht mehr vorort (06.10.2026 02:15 Uhr)",
+  "rest_text": "",
+  "status": "ok",
+  "qualitaet": 100,
+  "parser_version": "0",
+  "ist_uebung": false
+}

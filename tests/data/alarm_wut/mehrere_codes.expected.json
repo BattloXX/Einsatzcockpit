@@ -1,0 +1,31 @@
+{
+  "leitstellennummer": "f26000002",
+  "stichwort": "t2",
+  "alarm_type_code": "T2",
+  "gemeinde": "Wolfurt",
+  "ortsteil": null,
+  "strasse": "Fr\u00fchlingstra\u00dfe",
+  "hausnummer": "8",
+  "adresszusatz": null,
+  "lagezusatz": null,
+  "meldebild": "probealarm",
+  "alarmzeit": "2026-01-01T11:00:00",
+  "melder": null,
+  "melderbereich": null,
+  "weitere_codes": [
+    "r1",
+    "r2"
+  ],
+  "sonderkennzeichen": [
+    "_drehleiter"
+  ],
+  "zusatzinfo": [],
+  "hinweise": [],
+  "bma": [],
+  "original_text": "f26000002 t2,r1,r2 _drehleiter Wolfurt Fruehlingstrasse 8 > probealarm (01.01.2026 12:00 Uhr)",
+  "rest_text": "",
+  "status": "ok",
+  "qualitaet": 100,
+  "parser_version": "0",
+  "ist_uebung": true
+}
