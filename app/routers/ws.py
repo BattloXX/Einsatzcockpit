@@ -14,6 +14,7 @@ import time
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from uuid import uuid4
 
 import anyio
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -25,7 +26,7 @@ from app.db import SessionLocal
 from app.models.incident import Incident
 from app.models.major_incident import MajorIncident
 from app.models.user import SmsGatewayToken, User
-from app.services import gateway_presence, gateway_routing, ws_bus
+from app.services import gateway_presence, gateway_routing, lft_presence, ws_bus
 from app.services.broadcast import EINHEIT_WS_OFFSET, LAGE_WS_OFFSET, ORG_WS_OFFSET, broadcast_org, manager
 from app.services.gk_zugang_service import COOKIE as GK_COOKIE
 from app.services.gk_zugang_service import QR_COOKIE, sitzung_pruefen_mit_grund
@@ -59,38 +60,6 @@ _print_agent_sessions: dict[WebSocket, tuple[int, int, str, str]] = {}
 _job_pending: dict[str, asyncio.Future] = {}
 # org_id → letzter Serial-Fan-Out-Status {enabled, listening, clients} (best effort, live).
 _passthrough_status: dict[int, dict] = {}
-
-
-# ── Lageführung: Presence + Soft-Locks (Phase 2) ────────────────────────────────
-# Piggybackt auf dem bestehenden /ws/incident/{id}-Kanal statt einem eigenen Endpoint —
-# nur Clients mit offener Lagekarte senden lagefuehrung.presence.*-Nachrichten, reine
-# Board-Betrachter bleiben unsichtbar. Per-Worker In-Memory (Muster _sms_gateways/
-# _passthrough_status oben); die Broadcasts selbst laufen über manager.broadcast() und
-# damit bereits über ws_bus/Redis falls konfiguriert — nur die Locks sind pro Worker
-# autoritativ (bewusst "weich": die eigentliche Konfliktsicherung läuft über
-# version/409 in ui_lagefuehrung.py, ein Soft-Lock ist nur eine UI-Hilfe).
-_LFT_LOCK_TTL_SECONDS = 15
-
-# incident_id -> {websocket: {"user_id": int, "name": str}}
-_lft_presence: dict[int, dict[WebSocket, dict]] = defaultdict(dict)
-# incident_id -> {feature_id: {"user_id": int, "name": str, "expires_at": float}}
-_lft_locks: dict[int, dict[int, dict]] = defaultdict(dict)
-
-
-def _lft_presence_list(incident_id: int) -> list[dict]:
-    return [
-        {"user_id": info["user_id"], "name": info["name"]}
-        for info in _lft_presence.get(incident_id, {}).values()
-    ]
-
-
-def _lft_purge_expired_locks(incident_id: int) -> None:
-    now = time.monotonic()
-    locks = _lft_locks.get(incident_id)
-    if not locks:
-        return
-    for fid in [fid for fid, lock in locks.items() if lock["expires_at"] <= now]:
-        del locks[fid]
 
 
 def get_passthrough_status(org_id: int | None) -> dict | None:
@@ -162,6 +131,7 @@ async def incident_ws(websocket: WebSocket, incident_id: int):
 
     await manager.connect(incident_id, websocket)
     lft_joined = False
+    lft_connection_id = uuid4().hex
     try:
         while True:
             data = await websocket.receive_text()
@@ -175,32 +145,27 @@ async def incident_ws(websocket: WebSocket, incident_id: int):
             msg_type = msg.get("type") if isinstance(msg, dict) else None
 
             if msg_type in ("lagefuehrung.presence.join", "lagefuehrung.presence.heartbeat"):
-                _lft_presence[incident_id][websocket] = {"user_id": user.id, "name": user.display_name}
+                await lft_presence.backend.touch(incident_id, lft_connection_id, user.id, user.display_name)
                 lft_joined = True
                 await manager.broadcast(incident_id, {
                     "type": "lagefuehrung.presence.changed",
-                    "users": _lft_presence_list(incident_id),
+                    "users": await lft_presence.backend.users(incident_id),
                 })
             elif msg_type == "lagefuehrung.feature.editing":
                 feature_id = msg.get("feature_id")
                 if not isinstance(feature_id, int):
                     continue
-                _lft_purge_expired_locks(incident_id)
-                existing = _lft_locks[incident_id].get(feature_id)
-                if not existing or existing["user_id"] == user.id:
-                    _lft_locks[incident_id][feature_id] = {
-                        "user_id": user.id, "name": user.display_name,
-                        "expires_at": time.monotonic() + _LFT_LOCK_TTL_SECONDS,
-                    }
+                if await lft_presence.backend.acquire(incident_id, lft_connection_id, feature_id,
+                                                      user.id, user.display_name):
                     await manager.broadcast(incident_id, {
                         "type": "lagefuehrung.feature.locked",
                         "feature_id": feature_id, "user_id": user.id, "name": user.display_name,
                     })
             elif msg_type == "lagefuehrung.feature.released":
                 feature_id = msg.get("feature_id")
-                lock = _lft_locks.get(incident_id, {}).get(feature_id)
-                if lock and lock["user_id"] == user.id:
-                    del _lft_locks[incident_id][feature_id]
+                if not isinstance(feature_id, int):
+                    continue
+                if await lft_presence.backend.release(incident_id, feature_id, user.id):
                     await manager.broadcast(incident_id, {
                         "type": "lagefuehrung.feature.unlocked", "feature_id": feature_id,
                     })
@@ -209,16 +174,12 @@ async def incident_ws(websocket: WebSocket, incident_id: int):
         pass
     finally:
         await manager.disconnect(incident_id, websocket)
-        if lft_joined:
-            _lft_presence[incident_id].pop(websocket, None)
-            locks = _lft_locks.get(incident_id, {})
-            released = [fid for fid, lock in locks.items() if lock["user_id"] == user.id]
-            for fid in released:
-                del locks[fid]
+        released = await lft_presence.backend.disconnect(incident_id, lft_connection_id)
+        if lft_joined or released:
             try:
                 await manager.broadcast(incident_id, {
                     "type": "lagefuehrung.presence.changed",
-                    "users": _lft_presence_list(incident_id),
+                    "users": await lft_presence.backend.users(incident_id),
                 })
                 for fid in released:
                     await manager.broadcast(incident_id, {

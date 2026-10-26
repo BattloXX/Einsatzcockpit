@@ -309,29 +309,24 @@ def test_pdf_lagebericht_liefert_pdf(client):
 
 # ── P2-E: Presence-/Lock-Registries (ws.py, ohne echte WS-Verbindung) ────────────
 
-def test_presence_und_lock_registry_funktionen():
-    from app.routers.ws import _lft_locks, _lft_presence, _lft_presence_list, _lft_purge_expired_locks
+async def test_presence_und_lock_registry_funktionen(monkeypatch):
+    from app.config import settings
+    from app.services.lft_presence import Backend
 
+    monkeypatch.setattr(settings, "REDIS_URL", "")
+    backend = Backend()
     incident_id = 999001  # isolierte Test-ID, kollidiert nicht mit echten Einsätzen
-    _lft_presence[incident_id].clear()
-    _lft_locks[incident_id].clear()
-
-    class _FakeWs:
-        pass
-    ws1, ws2 = _FakeWs(), _FakeWs()
-
-    _lft_presence[incident_id][ws1] = {"user_id": 1, "name": "Alice"}
-    _lft_presence[incident_id][ws2] = {"user_id": 2, "name": "Bob"}
-    users = _lft_presence_list(incident_id)
+    await backend.touch(incident_id, "ws1", 1, "Alice")
+    await backend.touch(incident_id, "ws2", 2, "Bob")
+    users = await backend.users(incident_id)
     assert {u["name"] for u in users} == {"Alice", "Bob"}
 
-    _lft_locks[incident_id][42] = {"user_id": 1, "name": "Alice", "expires_at": time.monotonic() - 1}
-    _lft_purge_expired_locks(incident_id)
-    assert 42 not in _lft_locks[incident_id]
+    assert await backend.acquire(incident_id, "ws1", 42, 1, "Alice")
+    backend._locks[incident_id][42]["expires_at"] = time.monotonic() - 1
+    assert await backend.acquire(incident_id, "ws2", 42, 2, "Bob")
 
-    _lft_locks[incident_id][43] = {"user_id": 1, "name": "Alice", "expires_at": time.monotonic() + 30}
-    _lft_purge_expired_locks(incident_id)
-    assert 43 in _lft_locks[incident_id]
-
-    _lft_presence[incident_id].clear()
-    _lft_locks[incident_id].clear()
+    assert await backend.acquire(incident_id, "ws1", 43, 1, "Alice")
+    assert not await backend.acquire(incident_id, "ws2", 43, 2, "Bob")
+    assert await backend.disconnect(incident_id, "ws1") == [43]
+    assert await backend.disconnect(incident_id, "ws2") == [42]
+    assert await backend.users(incident_id) == []
