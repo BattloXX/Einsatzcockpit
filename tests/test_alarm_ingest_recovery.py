@@ -6,10 +6,11 @@ from threading import Barrier
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import and_, func
 
 from app.core.tenant import set_tenant_context
 from app.db import SessionLocal
-from app.models.gateway import Gateway
+from app.models.gateway import AlarmIngest, Gateway
 from app.models.incident import Incident
 from app.services import alarm_ingest_recovery as recovery
 from app.services import alarm_ingest_retention as retention
@@ -39,6 +40,11 @@ def context(setup_db, monkeypatch):
     monkeypatch.setattr(recovery.settings, "PUBLIC_BASE_URL", "https://alarm.example")
     with SessionLocal() as db:
         set_tenant_context(db, None)
+        # Andere Tests lassen absichtlich gespeicherte/fehlerhafte Rohdaten zurueck.
+        # Nur die in diesem Test angelegten Ingests duerfen dessen Nachlauf zaehlen.
+        letzter = db.query(func.max(AlarmIngest.id)).filter(AlarmIngest.org_id.in_((1, 2))).scalar() or 0
+        eligible = recovery._eligible
+        monkeypatch.setattr(recovery, "_eligible", lambda now: and_(eligible(now), AlarmIngest.id > letzter))
         yield db, calls, finished
         db.rollback()
 

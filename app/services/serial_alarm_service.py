@@ -131,9 +131,8 @@ def process_ingest(
         # Savepoint: bei Fehlern nur die Einsatzanlage zurueckrollen. Der Claim
         # bleibt bis zum Commit gesperrt, auch waehrend wir error protokollieren.
         with db.begin_nested():
-            parsed = _parse_ingest(db, ingest, org_id)
             incident, action = _create_or_link_incident(
-                db, org_id, parsed, ingest.parse_status, ingest.raw_text,
+                db, org_id, ingest,
             )
             if incident is not None:
                 ingest.einsatz_id = incident.id
@@ -217,63 +216,11 @@ def ingest_alarm(
     return ingest, created
 
 
-def _create_or_link_incident(
-    db: Session, org_id: int, parsed: dict | None, parse_status: str, raw_text: str
-):
-    """Legt einen Einsatz an oder verknüpft mit einem passenden (LIS/API-)Einsatz.
+def _create_or_link_incident(db: Session, org_id: int, ingest: AlarmIngest):
+    """Kompatibler Delegationspunkt fuer die Einsatzzuordnung."""
+    from app.services.alarm_apply_service import wende_an
 
-    Gibt (incident|None, action) zurück. action ∈ created|merged.
-    """
-    from app.services.incident_service import create_incident
-    from app.services.lis.lis_matching import find_matching_incident
-
-    p = parsed or {}
-    alarm_code = p.get("alarm_type_code") or FALLBACK_ALARM_CODE
-    started_at = _parse_dt(p.get("started_at"))
-    street = p.get("street")
-    city = p.get("city")
-    reason = p.get("reason") or (raw_text[:200] if parse_status == PARSE_FAILED else None)
-
-    # Dedup gegen bereits vorhandene (LIS/API) Einsätze
-    match = None
-    try:
-        match = find_matching_incident(
-            db, org_id,
-            alarm_type_code=alarm_code,
-            street=street,
-            city=city,
-            started_at=started_at,
-            report_text=raw_text,
-        )
-    except Exception as exc:  # Matching darf den Ingest nie blockieren
-        logger.warning("Alarm-Matching fehlgeschlagen (org %s): %s", org_id, exc)
-
-    if match is not None:
-        logger.info("Serieller Alarm mit vorhandenem Einsatz %s verknüpft (org %s)", match.id, org_id)
-        return match, "merged"
-
-    # reject_near_duplicates bewusst NICHT gesetzt (Default False): find_matching_incident()
-    # oben hat bereits sorgfaeltig geprueft und nichts gefunden - siehe lis_sync.py fuer
-    # dieselbe Begruendung.
-    incident, _ = create_incident(
-        db,
-        alarm_code,
-        started_at=started_at,
-        is_exercise=bool(p.get("is_exercise")),
-        address_street=street,
-        address_no=p.get("house_no"),
-        address_city=city,
-        report_text=raw_text,
-        reason=reason,
-        primary_org_id=org_id,
-    )
-    # Herkunft markieren (Feld source falls vorhanden)
-    if hasattr(incident, "source"):
-        incident.source = "serial"
-    db.flush()
-    logger.info("Einsatz %s aus seriellem Alarm angelegt (org %s, parse=%s)",
-                incident.id, org_id, parse_status)
-    return incident, "created"
+    return wende_an(db, ingest, org_id)
 
 
 def _parse_dt(value) -> datetime | None:

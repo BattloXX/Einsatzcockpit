@@ -60,6 +60,8 @@ def run_alarm_ingest_recovery_once() -> None:
                 set_tenant_context(db, None)
 
                 def after_applied(ingest: AlarmIngest, org_id: int = org_id) -> None:
+                    if ingest.dedup_action == "duplicate":
+                        return
                     tasks = BackgroundTasks()
                     alarm_apply_service.nachlauf(
                         db, ingest, org_id=org_id, background_tasks=tasks,

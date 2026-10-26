@@ -482,11 +482,13 @@ class AlarmIngest(TenantScoped, Base):
     einsatz_id: Mapped[int | None] = mapped_column(
         BigInteger, ForeignKey("incident.id", ondelete="SET NULL"), nullable=True
     )
-    # created / merged
+    version_no: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # created / merged / duplicate
     dedup_action: Mapped[str | None] = mapped_column(String(20), nullable=True)
     received_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC))
 
     __table_args__ = (
+        Index("ix_alarm_ingest_einsatz_version", "einsatz_id", "version_no"),
         Index("ix_alarm_ingest_org_received", "org_id", "received_at"),
         UniqueConstraint("gateway_id", "sequence", name="uq_alarm_ingest_gateway_sequence"),
         Index("ix_alarm_ingest_org_nummer_hash", "org_id", "leitstellennummer", "content_hash"),

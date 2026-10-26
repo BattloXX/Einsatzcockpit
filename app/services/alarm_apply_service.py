@@ -4,12 +4,103 @@ from __future__ import annotations
 import logging
 
 from fastapi import BackgroundTasks
+from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.async_bridge import run_async
-from app.models.gateway import AlarmIngest
+from app.models.gateway import PARSE_FAILED, AlarmIngest
+from app.models.incident import Incident
 
 logger = logging.getLogger("einsatzleiter.alarm")
+
+
+def wende_an(db: Session, ingest: AlarmIngest, org_id: int) -> tuple[Incident | None, str]:
+    """Ordnet einen Cloud-Alarm zu; Feld-Merge folgt separat in P4b."""
+    from app.services.incident_service import create_incident
+    from app.services.lis.lis_matching import find_matching_incident
+    from app.services.serial_alarm_service import FALLBACK_ALARM_CODE, _parse_dt, _parse_ingest
+
+    p = _parse_ingest(db, ingest, org_id)
+    nummer = ingest.leitstellennummer
+    alarm_code = p.get("alarm_type_code") or FALLBACK_ALARM_CODE
+    started_at = _parse_dt(p.get("started_at"))
+    street, city = p.get("street"), p.get("city")
+    reason = p.get("reason") or (ingest.raw_text[:200] if ingest.parse_status == PARSE_FAILED else None)
+
+    def nummer_treffer() -> Incident | None:
+        # Locking Read sieht unter MariaDB REPEATABLE READ auch den Gewinner
+        # eines parallelen Inserts, ohne den aeusseren Claim zurueckzurollen.
+        return db.query(Incident).filter(
+            Incident.primary_org_id == org_id, Incident.lis_operation_number == nummer,
+        ).populate_existing().with_for_update().first()
+
+    match = None
+    try:
+        match = find_matching_incident(
+            db, org_id, alarm_type_code=alarm_code, street=street, city=city,
+            started_at=started_at, report_text=ingest.raw_text,
+            lis_operation_number=nummer,
+        )
+    except Exception as exc:  # Matching darf den Ingest nie blockieren
+        logger.warning("Alarm-Matching fehlgeschlagen (org %s): %s", org_id, exc)
+
+    action = "merged"
+    if match is None:
+        try:
+            # Auch Tokens, Spalten und Audit der unterlegenen Anlage zurueckrollen.
+            with db.begin_nested():
+                match, _ = create_incident(
+                    db, alarm_code, started_at=started_at,
+                    is_exercise=bool(p.get("is_exercise")), address_street=street,
+                    address_no=p.get("house_no"), address_city=city,
+                    report_text=ingest.raw_text, reason=reason, primary_org_id=org_id,
+                )
+                match.lis_operation_number = nummer
+                if hasattr(match, "source"):
+                    match.source = "serial"
+                db.flush()
+            action = "created"
+        except IntegrityError:
+            if not nummer:
+                raise
+            match = nummer_treffer()
+            if match is None:
+                raise
+            logger.info("Alarm-Anlage-Race zur Nummer %s (org %s): Einsatz %s", nummer, org_id, match.id)
+
+    # Inhaltsdedup ohne Zeitfenster, nur innerhalb desselben Einsatzes und Tenants.
+    original = None
+    if nummer and ingest.content_hash:
+        original = db.query(AlarmIngest).filter(
+            AlarmIngest.org_id == org_id, AlarmIngest.einsatz_id == match.id,
+            AlarmIngest.leitstellennummer == nummer,
+            AlarmIngest.content_hash == ingest.content_hash,
+            AlarmIngest.id != ingest.id, AlarmIngest.process_status == "applied",
+        ).order_by(AlarmIngest.id).first()
+    if original is not None:
+        ingest.einsatz_id = match.id
+        ingest.version_no = original.version_no
+        logger.info("Identischer Alarm-Inhalt (ingest %s, Einsatz %s, org %s)", ingest.id, match.id, org_id)
+        return match, "duplicate"
+
+    if nummer and not match.lis_operation_number:
+        try:
+            with db.begin_nested():
+                match.lis_operation_number = nummer
+                db.flush()
+        except IntegrityError:
+            logger.info("Leitstellennummer %s bereits belegt (org %s), Zuordnung bleibt", nummer, org_id)
+
+    version = db.query(func.max(AlarmIngest.version_no)).filter(
+        AlarmIngest.org_id == org_id, AlarmIngest.einsatz_id == match.id,
+        AlarmIngest.id != ingest.id,
+    ).scalar()
+    # Absichtlich kein UNIQUE: parallele Folgenachrichten duerfen dieselbe Version erhalten.
+    ingest.einsatz_id = match.id
+    ingest.version_no = (version or 0) + 1
+    logger.info("Serieller Alarm %s: Einsatz %s, Version %s (org %s)", action, match.id, ingest.version_no, org_id)
+    return match, action
 
 
 def nachlauf(
