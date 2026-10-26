@@ -224,7 +224,7 @@ def test_alle_incident_created_broadcasts_behalten_alarm_code_und_neues_flag():
     files = [
         "app/routers/ui_incident.py",
         "app/routers/api_v1.py",
-        "app/routers/gateway_api.py",
+        "app/services/alarm_apply_service.py",
         "app/services/dibos/dibos_enrich.py",
         "app/services/lis/lis_sync.py",
     ]

@@ -231,6 +231,8 @@ def _start_background_loops() -> list[asyncio.Task]:
     """Startet alle Hintergrund-Loops; läuft nur im Worker mit dem Leader-Lock."""
     from app.services.abfluss_poll_loop import abfluss_poll_loop
     from app.services.ai_log_retention import ai_log_retention_loop
+    from app.services.alarm_ingest_recovery import alarm_ingest_recovery_loop
+    from app.services.alarm_ingest_retention import alarm_ingest_retention_loop
     from app.services.alarm_outbox import alarm_outbox_loop
     from app.services.api_message_dispatch_loop import api_message_dispatch_loop
     from app.services.autoclose import autoclose_loop
@@ -272,6 +274,7 @@ def _start_background_loops() -> list[asyncio.Task]:
         print_agent_sweep_loop, suche_outbox_loop,
         gsl_lagemeldung_reminder_loop, gk_versand_aufraeum_loop, verleih_erinnerung_loop, probe_erinnerung_loop,
         weather_retention_loop, ai_log_retention_loop, mcp_upload_retention_loop,
+        alarm_ingest_recovery_loop, alarm_ingest_retention_loop,
         sms_log_retention_loop, einsatzinfo_nachversand_loop, alarm_outbox_loop, road_closure_notification_loop,
         vehicle_position_retention_loop, weather_alert_loop, dienst_monitor_loop, abfluss_poll_loop,
         lis_poll_loop, lis_capture_retention_loop, dibos_poll_loop, dibos_trace_retention_loop,

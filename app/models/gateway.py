@@ -8,7 +8,7 @@ Entitaeten:
 - Gateway  – ein Container je Standort (Pairing per Einmal-Code → Device-Token)
 - Printer  – Netzwerkdrucker, je Gateway, aus Discovery/manuell, im Web-UI aktiviert
 - PrintJob – ein Druckauftrag (manuell oder aus Druckregel), idempotent
-- AlarmIngest – seriell empfangener Alarm (Phase 3), idempotent via raw_hash
+- AlarmIngest – seriell empfangener Alarm mit getrenntem Verarbeitungsstatus
 - PrintRule  – Automatik-Druckregeln (Phase 4)
 
 Alle Tabellen sind TenantScoped (org-isoliert) und in _TENANT_TABLE_NAMES
@@ -28,10 +28,12 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
 )
+from sqlalchemy.dialects.mysql import MEDIUMBLOB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.tenant import TenantScoped
@@ -450,16 +452,30 @@ class PrintJob(TenantScoped, Base):
 
 
 class AlarmIngest(TenantScoped, Base):
-    """Seriell empfangener Alarm (Phase 3). raw_hash macht den Ingest idempotent
-    gegen Retries und verhindert Doppel-Einsaetze."""
+    """Dauerhaft gespeicherte Rohdaten mit getrenntem Verarbeitungsstatus."""
     __tablename__ = "alarm_ingest"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     gateway_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("gateway.id", ondelete="CASCADE"), nullable=False
     )
-    raw_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    raw_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     raw_text: Mapped[str] = mapped_column(Text, nullable=False)
+    raw_bytes: Mapped[bytes | None] = mapped_column(
+        LargeBinary().with_variant(MEDIUMBLOB(), "mysql", "mariadb"), nullable=True
+    )
+    source: Mapped[str | None] = mapped_column(String(20), server_default="wut", nullable=True)
+    received_at_gateway: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    sequence: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    process_status: Mapped[str | None] = mapped_column(String(20), server_default="applied", nullable=True)
+    process_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    process_attempts: Mapped[int | None] = mapped_column(Integer, server_default="0", nullable=True)
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    parser_version: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    parsed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    leitstellennummer: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     charset: Mapped[str | None] = mapped_column(String(20), nullable=True)
     parsed: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     parse_status: Mapped[str] = mapped_column(String(20), nullable=False, default=PARSE_OK)
@@ -472,6 +488,8 @@ class AlarmIngest(TenantScoped, Base):
 
     __table_args__ = (
         Index("ix_alarm_ingest_org_received", "org_id", "received_at"),
+        UniqueConstraint("gateway_id", "sequence", name="uq_alarm_ingest_gateway_sequence"),
+        Index("ix_alarm_ingest_org_nummer_hash", "org_id", "leitstellennummer", "content_hash"),
     )
 
 
