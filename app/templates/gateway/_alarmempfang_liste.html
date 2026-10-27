@@ -1,0 +1,19 @@
+<div id="alarm-liste" hx-get="/gateway/{{ gw.id }}/alarmempfang" hx-trigger="every 15s, alarm-ingest-refresh from:body" hx-include="#alarm-filter" hx-swap="outerHTML">
+  <p>Gateway: {{ 'Online' if connected else 'Offline' }} | Alarmleitung: {{ 'Verbunden' if gw.serial_connected else ('Getrennt' if gw.serial_connected is sameas false else 'Unbekannt') }}</p>
+  <p>Letztes Lebenszeichen: {{ gw.last_seen_at|local_datetime_sec or '-' }}<br>
+    Letzter erfolgreicher Empfang: {{ letzter_empfang|local_datetime_sec or '-' }}<br>
+    Letzte Leitstellennummer: {{ letzte_nummer or '-' }}</p>
+  <p>Heute: <strong>{{ zaehler.empfangen }}</strong> empfangen / <strong>{{ zaehler.verarbeitet }}</strong> verarbeitet /
+    <strong>{{ zaehler.fehlerhaft }}</strong> fehlerhaft / <strong>{{ zaehler.duplikate }}</strong> Duplikate</p>
+  <div class="table-scroll"><table class="table">
+    <thead><tr><th>Zeit</th><th>Nummer</th><th>Stichwort</th><th>Ort</th><th>Status</th><th>Qualität / Parse-Status</th><th>Version</th><th>Einsatz</th></tr></thead>
+    <tbody>{% for ingest in ingests %}{% set p = ingest.parsed or {} %}
+      <tr><td><a href="/gateway/{{ gw.id }}/alarmempfang/{{ ingest.id }}" hx-get="/gateway/{{ gw.id }}/alarmempfang/{{ ingest.id }}" hx-target="#alarm-detail">{{ ingest.received_at|local_datetime_sec }}</a></td>
+        <td>{{ ingest.leitstellennummer or '-' }}</td><td>{{ p.get('alarm_type_code') or '-' }}</td>
+        <td>{{ p.get('gemeinde') or p.get('city') or '-' }}</td><td>{{ ingest.process_status or '-' }}</td>
+        <td>{{ p.get('qualitaet', '-') }} / {{ ingest.parse_status }}</td><td>{{ ingest.version_no or '-' }}</td>
+        <td>{% if ingest.einsatz_id %}<a href="/einsatz/{{ ingest.einsatz_id }}">#{{ ingest.einsatz_id }}</a>{% else %}-{% endif %}</td></tr>
+    {% else %}<tr><td colspan="8">Keine Alarmempfänge im gewählten Zeitraum.</td></tr>{% endfor %}</tbody>
+  </table></div>
+  <p>Höchstens die letzten 200 Einträge.</p>
+</div>

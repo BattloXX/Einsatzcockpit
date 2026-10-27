@@ -1,3 +1,6 @@
+{% for warnung in alarmempfang_warnungen|default([]) %}
+<p class="alert alert--warn" role="status">{{ warnung }}</p>
+{% endfor %}
 <div class="grid grid--cards">
   {% for check in checks %}
   {% set row = status_rows.get(check.key) %}

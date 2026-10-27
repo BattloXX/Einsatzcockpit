@@ -145,6 +145,10 @@ def ingest_alarm(
                 background_tasks=background_tasks, base_url=str(request.base_url),
             )
 
+    if created:
+        from app.services.alarm_apply_service import melde_ingest_geaendert
+        melde_ingest_geaendert(ingest)
+
     return {
         "ingest_id": ingest.id,
         "duplicate": not created,

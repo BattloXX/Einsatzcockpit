@@ -135,3 +135,41 @@ gespoolt und nachgeholt.
 **Verwandt:** [Print & Alarm Gateway einrichten (Installation)](Installation-Print-Alarm-Gateway) ·
 [LIS/IPR-Anbindung](Administration-LIS-Anbindung) ·
 [Objektverwaltung](Administration-Objektverwaltung)
+
+
+## Alarmempfang und Diagnose
+
+Der Gateway-Tab **Alarmempfang** ist für `org_admin` und `admin` sichtbar. Er zeigt
+Gateway- und Leitungsverbindung, den letzten gespeicherten Empfang und die heutigen
+Zähler in der Zeitzone der Organisation. Status, Zeitraum (heute, 7 oder 30 Tage) und
+Teile der Leitstellennummer filtern die letzten maximal 200 Einträge. Die Ansicht
+aktualisiert sich alle 15 Sekunden und nach Aktionen ohne Neuladen.
+
+Ein Empfang öffnet die Diagnose mit Originaltext, Hex-Auszug (maximal 4 KiB),
+Parserfeldern, Hinweisen, Resttext, Qualität, Parserversion, Gateway-Parservergleich,
+Versionen derselben Nummer, Einsatz und Fehlertext. Versuchsanzahl und Zeitpunkt des
+letzten Versuchs sind verfügbar; eine vollständige Historie einzelner Versuche wird
+im aktuellen Datenmodell nicht gespeichert. Rohbytes werden 12 Monate aufbewahrt;
+danach bleibt der Text erhalten.
+
+**Neu verarbeiten** verwendet den aktuell aktiven Cloud-Regelsatz. Ohne Einsatz läuft
+die normale, über die Leitstellennummer idempotente Einsatzzuordnung. Bei einem
+verknüpften Einsatz werden ausschließlich Felder mit Herkunft `alarm` aktualisiert;
+manuelle Korrekturen bleiben geschützt. Die vorhandene Version bleibt erhalten,
+es gibt keine Nachalarmierung und keinen Nachlauf-Druck. Die Aktion wird auditiert
+und im Einsatzjournal vermerkt.
+
+**Als geprüft markieren** ist nur bei `needs_review` oder `error` möglich. Der
+Fehlertext wird geleert. Nur mit verknüpftem Einsatz wird der Status `applied`
+gesetzt; ohne Einsatz bleibt der Status erhalten und die Prüfung steht im Audit.
+Es wird kein zusätzlicher Status `reviewed` eingeführt.
+
+Bei mindestens fünf fehlerhaften oder zu prüfenden Empfängen innerhalb von 24 Stunden
+zeigt die Dienstüberwachung einen Hinweis an. Dieser Hinweis versendet keine Alarme.
+
+Das Gateway kann abgeschnittene Übertragungen als `incomplete` melden. Die Cloud
+speichert derzeit keinen eigenen `incomplete`-Status; für die Diagnose Originaltext,
+Parserhinweise und die lokale Gateway-Statusseite prüfen. Der Instanz-Lock im
+Gateway verhindert, dass mehrere Container dieselbe W&T-Verbindung gleichzeitig
+lesen. Ein Lock-Konflikt muss am Gateway behoben werden; Cloud-Wiederverarbeitung
+ersetzt keine fehlenden Bytes.

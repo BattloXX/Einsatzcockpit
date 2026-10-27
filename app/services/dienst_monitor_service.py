@@ -400,3 +400,19 @@ def record_probe(org_id: int, key: str, ok: bool, fehler: str | None = None) -> 
         db.commit()
     finally:
         db.close()
+
+
+def alarmempfang_warnungen(db: Session, org_id: int, now: datetime | None = None) -> list[str]:
+    """Reine Anzeigehinweise; bewusst kein DienstCheck und kein Alarmkanal."""
+    from app.models.gateway import AlarmIngest
+
+    jetzt = _naive_utc(now or datetime.now(UTC))
+    assert jetzt is not None
+    anzahl = db.query(AlarmIngest).filter(
+        AlarmIngest.org_id == org_id, AlarmIngest.process_status.in_(("error", "needs_review")),
+        AlarmIngest.received_at >= jetzt - timedelta(hours=24), AlarmIngest.received_at <= jetzt,
+    ).count()
+    if anzahl < 5:
+        return []
+    return [f"Alarmempfang: {anzahl} fehlerhafte oder zu pruefende Ingests binnen 24 Stunden. "
+            "Diagnose im Gateway-Tab Alarmempfang."]

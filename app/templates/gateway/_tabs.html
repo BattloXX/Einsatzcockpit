@@ -2,5 +2,6 @@
 <nav class="gwx-tabs" role="tablist" aria-label="Gateway-Verwaltung">
   <a class="gwx-tabs__item{{ ' gwx-tabs__item--active' if active == 'gateway' else '' }}" href="/gateway/{{ gw_id }}" role="tab" aria-selected="{{ 'true' if active == 'gateway' else 'false' }}">{{ icon("printer", size="sm") }} Gateway &amp; Drucker</a>
   <a class="gwx-tabs__item{{ ' gwx-tabs__item--active' if active == 'regeln' else '' }}" href="/gateway/{{ gw_id }}/druckregeln" role="tab" aria-selected="{{ 'true' if active == 'regeln' else 'false' }}">{{ icon("settings", size="sm") }} Druckregeln</a>
+  <a class="gwx-tabs__item{{ ' gwx-tabs__item--active' if active == 'alarmempfang' else '' }}" href="/gateway/{{ gw_id }}/alarmempfang" role="tab" aria-selected="{{ 'true' if active == 'alarmempfang' else 'false' }}">{{ icon("clipboard-list", size="sm") }} Alarmempfang</a>
 </nav>
 {%- endmacro %}
