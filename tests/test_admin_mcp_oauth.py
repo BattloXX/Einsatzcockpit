@@ -260,7 +260,7 @@ def test_csrf_and_expired_code(client, admin_env):
 
 def test_ui_revokes_only_admin_tokens_without_epoch(client, admin_env):
     values = tokens(client, admin_env)
-    client.cookies.set("session", sign_session(admin_env["id"]))
+    client.cookies.set("session", sign_session(admin_env["id"]), domain="testserver.local", path="/")
     assert client.get("/admin/system-einstellungen").status_code == 200
     result = client.post("/admin/system-einstellungen/admin-mcp/zugang", data={
         "user_id": admin_env["id"], "enabled": "false", "_csrf": client.cookies["ec_csrf"]}, follow_redirects=False)
@@ -280,10 +280,12 @@ def test_ui_mfa_freshness_and_global_kill_switch(client, admin_env):
         db.add(AdminTotp(user_id=admin_env["id"], secret_enc=encrypt_secret(totp.generate_secret()),
                          confirmed_at=utcnow()))
         db.commit()
-    client.cookies.set("session", sign_session(admin_env["id"], mfa_at=now - 600, session_started_at=now - 700))
+    client.cookies.set("session", sign_session(admin_env["id"], mfa_at=now - 600, session_started_at=now - 700),
+                       domain="testserver.local", path="/")
     data = {"user_id": admin_env["id"], "enabled": "true", "_csrf": client.cookies["ec_csrf"]}
     assert client.post("/admin/system-einstellungen/admin-mcp/zugang", data=data).status_code == 403
-    client.cookies.set("session", sign_session(admin_env["id"], mfa_at=now, session_started_at=now))
+    client.cookies.set("session", sign_session(admin_env["id"], mfa_at=now, session_started_at=now),
+                       domain="testserver.local", path="/")
     result = client.post("/admin/system-einstellungen/admin-mcp/zugang", data=data, follow_redirects=False)
     assert result.status_code == 303
     with SessionLocal() as db:
